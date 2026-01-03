@@ -20,6 +20,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Scene/Scene.h>
@@ -27,6 +28,8 @@
 
 #include "../Common/AsyncEngineApp.h"
 #include "../Common/SingleViewExample.h"
+#include "FlyCameraController.h"
+#include "OrbitCameraController.h"
 
 namespace oxygen::data {
 class SceneAsset;
@@ -100,9 +103,7 @@ private:
   auto InitInputBindings() noexcept -> bool;
   auto EnsureFallbackCamera(const int width, const int height) -> void;
   auto EnsureActiveCameraViewport(const int width, const int height) -> void;
-  auto SyncOrbitFromActiveCamera() -> void;
-  auto SyncTurntableFromActiveCamera() -> void;
-  auto ApplyOrbitAndZoom() -> void;
+  auto ApplyOrbitAndZoom(time::CanonicalDuration delta_time) -> void;
   auto EnsureViewCameraRegistered() -> void;
 
   auto DrawDebugOverlay(engine::FrameContext& context) -> void;
@@ -117,8 +118,6 @@ private:
   scene::SceneNode active_camera_;
   scene::NodeHandle registered_view_camera_ {};
 
-  scene::NodeHandle orbit_camera_ {};
-
   std::optional<PendingSceneSwap> pending_scene_swap_;
   std::shared_ptr<SceneLoader> scene_loader_;
 
@@ -127,34 +126,23 @@ private:
   std::shared_ptr<oxygen::input::Action> zoom_out_action_;
   std::shared_ptr<oxygen::input::Action> rmb_action_;
   std::shared_ptr<oxygen::input::Action> orbit_action_;
-  std::shared_ptr<oxygen::input::InputMappingContext> camera_controls_ctx_;
+  std::shared_ptr<oxygen::input::Action> move_fwd_action_;
+  std::shared_ptr<oxygen::input::Action> move_bwd_action_;
+  std::shared_ptr<oxygen::input::Action> move_left_action_;
+  std::shared_ptr<oxygen::input::Action> move_right_action_;
+  std::shared_ptr<oxygen::input::Action> move_up_action_;
+  std::shared_ptr<oxygen::input::Action> move_down_action_;
+  std::shared_ptr<oxygen::input::Action> fly_plane_lock_action_;
+  std::shared_ptr<oxygen::input::Action> fly_boost_action_;
+  std::shared_ptr<oxygen::input::InputMappingContext> orbit_controls_ctx_;
+  std::shared_ptr<oxygen::input::InputMappingContext> fly_controls_ctx_;
 
-  glm::vec3 camera_target_ { 0.0f, 0.0f, 0.0f };
+  enum class CameraMode { kOrbit, kFly };
+  CameraMode camera_mode_ { CameraMode::kOrbit };
+  std::unique_ptr<OrbitCameraController> orbit_controller_;
+  std::unique_ptr<FlyCameraController> fly_controller_;
 
-  enum class OrbitMode {
-    kTrackball = 0,
-    kTurntable = 1,
-  };
-
-  OrbitMode orbit_mode_ { OrbitMode::kTrackball };
-
-  // Trackball-style orbit state (Blender-like): rotate the view quaternion,
-  // and derive camera position from a fixed local offset so the target stays
-  // centered.
-  glm::quat orbit_rot_ { 1.0f, 0.0f, 0.0f, 0.0f }; // Camera local rotation
-  glm::vec3 orbit_offset_local_ { 0.0f, 1.0f, 0.0f };
-  float orbit_distance_ { 6.0f };
-  float orbit_sensitivity_ { 0.01f };
-
-  // Turntable orbit state (Blender-like horizon lock): yaw/pitch around a fixed
-  // world-up axis (Z). Allows crossing the pole by flipping the up-vector.
-  float turntable_yaw_ { 0.0f };
-  float turntable_pitch_ { 0.0f };
-  bool turntable_inverted_ { false };
-
-  float zoom_step_ { 0.75f };
-  float min_cam_distance_ { 1.25f };
-  float max_cam_distance_ { 40.0f };
+  auto UpdateActiveCameraInputContext() -> void;
 
   // UI state.
   std::array<char, 512> pak_path_ {};
@@ -180,6 +168,8 @@ private:
   // Debug/instrumentation.
   bool logged_gameplay_tick_ { false };
   bool was_orbiting_last_frame_ { false };
+
+  bool pending_sync_active_camera_ { false };
 };
 
 } // namespace oxygen::examples::render_scene

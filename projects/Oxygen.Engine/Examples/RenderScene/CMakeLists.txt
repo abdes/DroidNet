@@ -43,6 +43,10 @@ add_executable(
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"
+  "OrbitCameraController.h"
+  "OrbitCameraController.cpp"
+  "FlyCameraController.h"
+  "FlyCameraController.cpp"
 )
 
 set_target_properties(

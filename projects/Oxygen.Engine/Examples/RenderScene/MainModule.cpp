@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -352,6 +353,29 @@ auto EnumerateFbxFiles(const std::filesystem::path& fbx_dir)
 
 namespace oxygen::examples::render_scene {
 
+auto MainModule::UpdateActiveCameraInputContext() -> void
+{
+  if (!app_.input_system) {
+    return;
+  }
+
+  if (camera_mode_ == CameraMode::kOrbit) {
+    if (orbit_controls_ctx_) {
+      app_.input_system->ActivateMappingContext(orbit_controls_ctx_);
+    }
+    if (fly_controls_ctx_) {
+      app_.input_system->DeactivateMappingContext(fly_controls_ctx_);
+    }
+  } else {
+    if (orbit_controls_ctx_) {
+      app_.input_system->DeactivateMappingContext(orbit_controls_ctx_);
+    }
+    if (fly_controls_ctx_) {
+      app_.input_system->ActivateMappingContext(fly_controls_ctx_);
+    }
+  }
+}
+
 class SceneLoader : public std::enable_shared_from_this<SceneLoader> {
 public:
   SceneLoader(
@@ -629,8 +653,8 @@ private:
     // Ensure we have a camera if none was found in the scene
     if (!swap_.active_camera.IsAlive()) {
       swap_.active_camera = swap_.scene->CreateNode("MainCamera");
-      // Stable, non-singular pose: look along Y with Z-up.
-      const glm::vec3 cam_pos(0.0F, 5.0F, 0.0F);
+      // Stable, elevated pose: look at origin with Z-up.
+      const glm::vec3 cam_pos(10.0F, 10.0F, 10.0F);
       const glm::vec3 cam_target(0.0F, 0.0F, 0.0F);
       auto tf = swap_.active_camera.GetTransform();
       tf.SetLocalPosition(cam_pos);
@@ -704,6 +728,9 @@ auto MainModule::OnAttached(
     return false;
   }
 
+  // Ensure the correct mapping context is active for the initial mode.
+  UpdateActiveCameraInputContext();
+
   content_root_ = FindRenderSceneContentRoot();
   asset_importer_ = std::make_unique<content::import::AssetImporter>();
 
@@ -738,6 +765,13 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
 
       scene_ = std::move(swap.scene);
       active_camera_ = std::move(swap.active_camera);
+      if (active_camera_.IsAlive()) {
+        orbit_controller_ = std::make_unique<OrbitCameraController>();
+        orbit_controller_->SyncFromTransform(active_camera_);
+        fly_controller_ = std::make_unique<FlyCameraController>();
+        fly_controller_->SetLookSensitivity(0.0015f);
+        fly_controller_->SyncFromTransform(active_camera_);
+      }
       registered_view_camera_ = scene::NodeHandle();
       scene_loader_->MarkConsumed();
     } else if (scene_loader_->IsFailed()) {
@@ -761,12 +795,20 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   DCHECK_NOTNULL_F(app_window_);
   DCHECK_NOTNULL_F(scene_);
 
-  UpdateFrameContext(context, [this](int w, int h) {
+  UpdateFrameContext(context, [this, &context](int w, int h) {
     last_viewport_w_ = w;
     last_viewport_h_ = h;
     EnsureActiveCameraViewport(w, h);
-    ApplyOrbitAndZoom();
-    EnsureViewCameraRegistered();
+
+    if (pending_sync_active_camera_ && active_camera_.IsAlive()) {
+      if (camera_mode_ == CameraMode::kOrbit && orbit_controller_) {
+        orbit_controller_->SyncFromTransform(active_camera_);
+      } else if (camera_mode_ == CameraMode::kFly && fly_controller_) {
+        fly_controller_->SyncFromTransform(active_camera_);
+      }
+
+      pending_sync_active_camera_ = false;
+    }
   });
   if (!app_window_->GetWindow()) {
     co_return;
@@ -940,14 +982,18 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   co_return;
 }
 
-auto MainModule::OnGameplay(engine::FrameContext& /*context*/) -> co::Co<>
+auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
 {
   if (!logged_gameplay_tick_) {
     logged_gameplay_tick_ = true;
     LOG_F(WARNING, "RenderScene: OnGameplay is running");
   }
 
-  // Keep camera updates in scene mutation for immediate transform propagation.
+  // Input edges are finalized during kInput earlier in the frame (mirrors the
+  // InputSystem example). Apply camera controls here so WASD/Shift/Space and
+  // mouse deltas are visible in the same frame.
+  ApplyOrbitAndZoom(context.GetGameDeltaTime());
+
   co_return;
 }
 
@@ -956,6 +1002,7 @@ auto MainModule::InitInputBindings() noexcept -> bool
   using oxygen::input::Action;
   using oxygen::input::ActionTriggerChain;
   using oxygen::input::ActionTriggerDown;
+  using oxygen::input::ActionTriggerPulse;
   using oxygen::input::ActionTriggerTap;
   using oxygen::input::ActionValueType;
   using oxygen::input::InputActionMapping;
@@ -975,15 +1022,40 @@ auto MainModule::InitInputBindings() noexcept -> bool
   rmb_action_ = std::make_shared<Action>("rmb", ActionValueType::kBool);
   orbit_action_
     = std::make_shared<Action>("camera orbit", ActionValueType::kAxis2D);
+  move_fwd_action_
+    = std::make_shared<Action>("move fwd", ActionValueType::kBool);
+  move_bwd_action_
+    = std::make_shared<Action>("move bwd", ActionValueType::kBool);
+  move_left_action_
+    = std::make_shared<Action>("move left", ActionValueType::kBool);
+  move_right_action_
+    = std::make_shared<Action>("move right", ActionValueType::kBool);
+  move_up_action_ = std::make_shared<Action>("move up", ActionValueType::kBool);
+  move_down_action_
+    = std::make_shared<Action>("move down", ActionValueType::kBool);
+  fly_plane_lock_action_
+    = std::make_shared<Action>("fly plane lock", ActionValueType::kBool);
+  fly_boost_action_
+    = std::make_shared<Action>("fly boost", ActionValueType::kBool);
 
   app_.input_system->AddAction(zoom_in_action_);
   app_.input_system->AddAction(zoom_out_action_);
   app_.input_system->AddAction(rmb_action_);
   app_.input_system->AddAction(orbit_action_);
+  app_.input_system->AddAction(move_fwd_action_);
+  app_.input_system->AddAction(move_bwd_action_);
+  app_.input_system->AddAction(move_left_action_);
+  app_.input_system->AddAction(move_right_action_);
+  app_.input_system->AddAction(move_up_action_);
+  app_.input_system->AddAction(move_down_action_);
+  app_.input_system->AddAction(fly_plane_lock_action_);
+  app_.input_system->AddAction(fly_boost_action_);
 
-  LOG_F(WARNING, "RenderScene: Added actions (zoom_in/zoom_out/rmb/orbit)");
+  LOG_F(
+    WARNING, "RenderScene: Added actions (zoom_in/zoom_out/rmb/orbit/move)");
 
-  camera_controls_ctx_ = std::make_shared<InputMappingContext>("camera");
+  // Orbit-only mapping context: wheel zoom + orbit/look (MouseXY gated by RMB)
+  orbit_controls_ctx_ = std::make_shared<InputMappingContext>("camera orbit");
   {
     // Zoom in: Mouse wheel up
     {
@@ -993,7 +1065,7 @@ auto MainModule::InitInputBindings() noexcept -> bool
       const auto mapping = std::make_shared<InputActionMapping>(
         zoom_in_action_, InputSlots::MouseWheelUp);
       mapping->AddTrigger(trigger);
-      camera_controls_ctx_->AddMapping(mapping);
+      orbit_controls_ctx_->AddMapping(mapping);
     }
 
     // Zoom out: Mouse wheel down
@@ -1004,7 +1076,7 @@ auto MainModule::InitInputBindings() noexcept -> bool
       const auto mapping = std::make_shared<InputActionMapping>(
         zoom_out_action_, InputSlots::MouseWheelDown);
       mapping->AddTrigger(trigger);
-      camera_controls_ctx_->AddMapping(mapping);
+      orbit_controls_ctx_->AddMapping(mapping);
     }
 
     // RMB helper mapping
@@ -1015,7 +1087,7 @@ auto MainModule::InitInputBindings() noexcept -> bool
       const auto mapping = std::make_shared<InputActionMapping>(
         rmb_action_, InputSlots::RightMouseButton);
       mapping->AddTrigger(trig_down);
-      camera_controls_ctx_->AddMapping(mapping);
+      orbit_controls_ctx_->AddMapping(mapping);
     }
 
     // Orbit mapping: MouseXY with an implicit chain requiring RMB.
@@ -1033,331 +1105,176 @@ auto MainModule::InitInputBindings() noexcept -> bool
         orbit_action_, InputSlots::MouseXY);
       mapping->AddTrigger(trig_move);
       mapping->AddTrigger(rmb_chain);
-      camera_controls_ctx_->AddMapping(mapping);
+      orbit_controls_ctx_->AddMapping(mapping);
     }
-
-    app_.input_system->AddMappingContext(camera_controls_ctx_, 10);
-    app_.input_system->ActivateMappingContext(camera_controls_ctx_);
   }
 
+  // Fly-only mapping context: keyboard movement + mouse-look (MouseXY gated by
+  // RMB). We keep the same actions, but isolate the mappings.
+  fly_controls_ctx_ = std::make_shared<InputMappingContext>("camera fly");
+  {
+    // RMB helper mapping (shared action)
+    {
+      const auto trig_down = std::make_shared<ActionTriggerDown>();
+      trig_down->MakeExplicit();
+      trig_down->SetActuationThreshold(0.1F);
+      const auto mapping = std::make_shared<InputActionMapping>(
+        rmb_action_, InputSlots::RightMouseButton);
+      mapping->AddTrigger(trig_down);
+      fly_controls_ctx_->AddMapping(mapping);
+    }
+
+    // Mouse look mapping: MouseXY with RMB prerequisite.
+    {
+      const auto trig_move = std::make_shared<ActionTriggerDown>();
+      trig_move->MakeExplicit();
+      trig_move->SetActuationThreshold(0.0F);
+
+      const auto rmb_chain = std::make_shared<ActionTriggerChain>();
+      rmb_chain->SetLinkedAction(rmb_action_);
+      rmb_chain->MakeImplicit();
+      rmb_chain->RequirePrerequisiteHeld(true);
+
+      const auto mapping = std::make_shared<InputActionMapping>(
+        orbit_action_, InputSlots::MouseXY);
+      mapping->AddTrigger(trig_move);
+      mapping->AddTrigger(rmb_chain);
+      fly_controls_ctx_->AddMapping(mapping);
+    }
+
+    auto add_bool_mapping = [&](const std::shared_ptr<Action>& action,
+                              const auto& slot) {
+      const auto mapping = std::make_shared<InputActionMapping>(action, slot);
+      const auto trigger = std::make_shared<ActionTriggerPulse>();
+      trigger->MakeExplicit();
+      trigger->SetActuationThreshold(0.1F);
+      mapping->AddTrigger(trigger);
+      fly_controls_ctx_->AddMapping(mapping);
+    };
+
+    add_bool_mapping(move_fwd_action_, InputSlots::W);
+    add_bool_mapping(move_bwd_action_, InputSlots::S);
+    add_bool_mapping(move_left_action_, InputSlots::A);
+    add_bool_mapping(move_right_action_, InputSlots::D);
+    add_bool_mapping(move_up_action_, InputSlots::E);
+    add_bool_mapping(move_down_action_, InputSlots::Q);
+    add_bool_mapping(fly_plane_lock_action_, InputSlots::Space);
+    add_bool_mapping(fly_boost_action_, InputSlots::LeftShift);
+  }
+
+  // Register both contexts; only one will be active at a time.
+  app_.input_system->AddMappingContext(orbit_controls_ctx_, 10);
+  app_.input_system->AddMappingContext(fly_controls_ctx_, 10);
+  UpdateActiveCameraInputContext();
+
   LOG_F(WARNING,
-    "RenderScene: Activated mapping context 'camera' (priority={})", 10);
+    "RenderScene: Registered camera input contexts (orbit+fly) priority={} ",
+    10);
 
   return true;
 }
 
-auto MainModule::ApplyOrbitAndZoom() -> void
+auto MainModule::ApplyOrbitAndZoom(time::CanonicalDuration delta_time) -> void
 {
   if (!active_camera_.IsAlive()) {
     return;
   }
 
-  const auto camera_handle = active_camera_.GetHandle();
-  if (orbit_camera_ != camera_handle) {
-    orbit_camera_ = camera_handle;
+  if (camera_mode_ == CameraMode::kOrbit) {
+    if (!orbit_controller_) {
+      return;
+    }
 
-    // Orbit control assumes the camera transform is in a stable (root) space.
-    // Imported cameras may be parented under animated or offset hierarchies;
-    // in that case, treating the camera's local axes as world axes causes
-    // orbit drift and eventually mixes dx/dy behavior.
-    if (scene_ && !active_camera_.IsRoot()) {
-      const bool ok = scene_->MakeNodeRoot(active_camera_);
-      if (!ok) {
-        LOG_F(WARNING,
-          "RenderScene: Failed to make active camera a root node; orbit may "
-          "feel unstable");
+    // Zoom via mouse wheel actions
+    if (zoom_in_action_ && zoom_in_action_->WasTriggeredThisFrame()) {
+      orbit_controller_->AddZoomInput(1.0f);
+    }
+    if (zoom_out_action_ && zoom_out_action_->WasTriggeredThisFrame()) {
+      orbit_controller_->AddZoomInput(-1.0f);
+    }
+
+    // Orbit via MouseXY deltas for this frame
+    if (orbit_action_
+      && orbit_action_->GetValueType()
+        == oxygen::input::ActionValueType::kAxis2D) {
+      glm::vec2 orbit_delta(0.0f);
+      for (const auto& tr : orbit_action_->GetFrameTransitions()) {
+        const auto& v = tr.value_at_transition.GetAs<oxygen::Axis2D>();
+        orbit_delta.x += v.x;
+        orbit_delta.y += v.y;
+      }
+
+      if (std::abs(orbit_delta.x) > 0.0f || std::abs(orbit_delta.y) > 0.0f) {
+        orbit_controller_->AddOrbitInput(orbit_delta);
       }
     }
 
-    SyncOrbitFromActiveCamera();
-    SyncTurntableFromActiveCamera();
-  }
-
-  // Zoom via mouse wheel actions
-  if (zoom_in_action_ && zoom_in_action_->WasTriggeredThisFrame()) {
-    orbit_distance_
-      = (std::max)(orbit_distance_ - zoom_step_, min_cam_distance_);
-    LOG_F(
-      WARNING, "RenderScene: Zoom in -> orbit_distance={}", orbit_distance_);
-  }
-  if (zoom_out_action_ && zoom_out_action_->WasTriggeredThisFrame()) {
-    orbit_distance_
-      = (std::min)(orbit_distance_ + zoom_step_, max_cam_distance_);
-    LOG_F(
-      WARNING, "RenderScene: Zoom out -> orbit_distance={}", orbit_distance_);
-  }
-
-  // Keep the local offset consistent with distance.
-  // Camera forward is -Z (see MakeLookRotationFromPosition), so the vector from
-  // target to camera is +Z in camera local space.
-  orbit_offset_local_ = glm::vec3(0.0f, 0.0f, orbit_distance_);
-
-  glm::vec2 orbit_delta(0.0F);
-  bool has_orbit_delta = false;
-
-  // Orbit via MouseXY deltas for this frame
-  if (orbit_action_
-    && orbit_action_->GetValueType()
-      == oxygen::input::ActionValueType::kAxis2D) {
-    for (const auto& tr : orbit_action_->GetFrameTransitions()) {
-      const auto& v = tr.value_at_transition.GetAs<oxygen::Axis2D>();
-      orbit_delta.x += v.x;
-      orbit_delta.y += v.y;
+    orbit_controller_->Update(active_camera_, delta_time);
+  } else if (camera_mode_ == CameraMode::kFly) {
+    if (!fly_controller_) {
+      return;
     }
 
-    if (std::abs(orbit_delta.x) > 0.0f || std::abs(orbit_delta.y) > 0.0f) {
-      has_orbit_delta = true;
-      if (!was_orbiting_last_frame_) {
-        LOG_F(WARNING, "RenderScene: Orbit start (delta_x={} delta_y={})",
-          orbit_delta.x, orbit_delta.y);
-      }
-
-      was_orbiting_last_frame_ = true;
-    } else {
-      was_orbiting_last_frame_ = false;
+    if (fly_boost_action_) {
+      fly_controller_->SetBoostActive(fly_boost_action_->IsOngoing());
     }
-  } else {
-    was_orbiting_last_frame_ = false;
-  }
-
-  // Trackball orbit for a camera (viewport navigation): rotate around the
-  // *current* view axes so horizontal mouse motion stays purely horizontal on
-  // screen, and vertical stays purely vertical. This matches the expected
-  // behavior for trackball view orbit.
-  //
-  // "Iron Orbit" logic: The camera is rigidly locked to a sphere (orbit) and
-  // slides along it based on screen-space input. We do NOT constrain the
-  // up-vector, allowing the camera to pass the pole (and become upside down)
-  // without any singularity or forced roll.
-  if (has_orbit_delta) {
-    if (orbit_mode_ == OrbitMode::kTrackball) {
-      // Blender-style trackball (see Blender's `transform_mode_trackball.cc`):
-      // Compute a rotation vector (axis * angle) in WORLD space as a linear
-      // combination of the current view X/Y axes.
-      //
-      // Mouse mapping parity with Blender's INPUT_TRACKBALL:
-      //   phi[0] ~= (start_y - current_y) * factor  -> -dy
-      //   phi[1] ~= (current_x - start_x) * factor  -> +dx
-      //
-      // Then:
-      //   rot_vec = view_x * phi[0] + view_y * phi[1]
-      //   angle   = |rot_vec|
-      //   axis    = rot_vec / angle
-      //   orbit_rot = angleAxis(angle, axis) * orbit_rot
-      const float phi0 = -orbit_delta.y * orbit_sensitivity_;
-      const float phi1 = orbit_delta.x * orbit_sensitivity_;
-
-      const glm::vec3 view_x_ws
-        = glm::normalize(orbit_rot_ * glm::vec3(1.0F, 0.0F, 0.0F));
-      const glm::vec3 view_y_ws
-        = glm::normalize(orbit_rot_ * glm::vec3(0.0F, 1.0F, 0.0F));
-
-      const glm::vec3 rot_vec_ws = (view_x_ws * phi0) + (view_y_ws * phi1);
-      const float angle = glm::length(rot_vec_ws);
-      if (angle > 1e-8F) {
-        const glm::vec3 axis_ws = rot_vec_ws / angle;
-        const glm::quat delta = glm::angleAxis(angle, axis_ws);
-        orbit_rot_ = glm::normalize(delta * orbit_rot_);
-      }
-    } else {
-      // Turntable: yaw around world-up (Z) and pitch around the derived right.
-      // We keep the horizon level by rebuilding orientation from position.
-      const float yaw_step = orbit_delta.x * orbit_sensitivity_;
-      const float pitch_step = orbit_delta.y * orbit_sensitivity_;
-
-      // Blender parity: when upside down, reverse yaw direction so mouse-left
-      // still yaws left on screen.
-      turntable_yaw_ += turntable_inverted_ ? -yaw_step : yaw_step;
-
-      // To keep turntable stable and horizon-locked across the poles, keep the
-      // stored pitch in [-pi/2, +pi/2] and "wrap" across poles by reflecting
-      // pitch and rotating yaw by pi (same camera position on the sphere).
-      //
-      // When inverted, the pitch accumulator must run in the opposite
-      // direction to keep mouse dy mapping continuous.
-      const float signed_pitch_step
-        = turntable_inverted_ ? -pitch_step : pitch_step;
-      turntable_pitch_ += signed_pitch_step;
-
-      constexpr float kPi = std::numbers::pi_v<float>;
-      constexpr float kHalfPi = 0.5F * std::numbers::pi_v<float>;
-      constexpr float kTwoPi = 2.0F * std::numbers::pi_v<float>;
-      constexpr float kPoleEpsilon = 1e-5F;
-
-      while (turntable_pitch_ > kHalfPi) {
-        turntable_pitch_ = kPi - turntable_pitch_;
-        turntable_yaw_ += kPi;
-        turntable_inverted_ = !turntable_inverted_;
-      }
-      while (turntable_pitch_ < -kHalfPi) {
-        turntable_pitch_ = -kPi - turntable_pitch_;
-        turntable_yaw_ += kPi;
-        turntable_inverted_ = !turntable_inverted_;
-      }
-
-      // Avoid exact poles where yaw is undefined.
-      turntable_pitch_ = std::clamp(
-        turntable_pitch_, -kHalfPi + kPoleEpsilon, kHalfPi - kPoleEpsilon);
-
-      // Keep yaw bounded to avoid precision loss.
-      turntable_yaw_ = std::remainder(turntable_yaw_, kTwoPi);
+    if (fly_plane_lock_action_) {
+      fly_controller_->SetPlaneLockActive(fly_plane_lock_action_->IsOngoing());
     }
-  }
 
-  glm::vec3 cam_pos(0.0F);
-  if (orbit_mode_ == OrbitMode::kTurntable) {
-    const float cos_pitch = std::cos(turntable_pitch_);
-    const float sin_pitch = std::sin(turntable_pitch_);
-    const float cos_yaw = std::cos(turntable_yaw_);
-    const float sin_yaw = std::sin(turntable_yaw_);
-
-    const glm::vec3 dir_ws(sin_yaw * cos_pitch, cos_yaw * cos_pitch, sin_pitch);
-
-    cam_pos = camera_target_ + (dir_ws * orbit_distance_);
-
-    const glm::vec3 world_up(0.0F, 0.0F, turntable_inverted_ ? -1.0F : 1.0F);
-    const glm::vec3 forward_ws = glm::normalize(camera_target_ - cam_pos);
-
-    glm::vec3 right_ws = glm::cross(forward_ws, world_up);
-    const float right_len2 = glm::dot(right_ws, right_ws);
-    if (right_len2 <= 1e-8F) {
-      // At/near the poles `world_up` is parallel to `forward_ws`.
-      // Use yaw to define a stable horizon-locked right axis.
-      // For yaw=0 (looking from +Y), Right should be -X (if world-up is +Z).
-      const float sign = turntable_inverted_ ? 1.0F : -1.0F;
-      right_ws
-        = glm::normalize(glm::vec3(sign * cos_yaw, -sign * sin_yaw, 0.0F));
-    } else {
-      right_ws = right_ws / std::sqrt(right_len2);
+    // Zoom via mouse wheel actions (adjust speed)
+    if (zoom_in_action_ && zoom_in_action_->WasTriggeredThisFrame()) {
+      const float speed = fly_controller_->GetMoveSpeed();
+      fly_controller_->SetMoveSpeed(std::min(speed * 1.2f, 1000.0f));
     }
-    const glm::vec3 up_ws = glm::cross(right_ws, forward_ws);
+    if (zoom_out_action_ && zoom_out_action_->WasTriggeredThisFrame()) {
+      const float speed = fly_controller_->GetMoveSpeed();
+      fly_controller_->SetMoveSpeed(std::max(speed / 1.2f, 0.1f));
+    }
 
-    glm::mat4 view_basis(1.0F);
-    view_basis[0] = glm::vec4(right_ws, 0.0F);
-    view_basis[1] = glm::vec4(up_ws, 0.0F);
-    view_basis[2] = glm::vec4(-forward_ws, 0.0F);
-    orbit_rot_ = glm::normalize(glm::quat_cast(view_basis));
-  } else {
-    cam_pos = camera_target_ + (orbit_rot_ * orbit_offset_local_);
+    // Look via MouseXY deltas
+    if (orbit_action_
+      && orbit_action_->GetValueType()
+        == oxygen::input::ActionValueType::kAxis2D) {
+      glm::vec2 look_delta(0.0f);
+      for (const auto& tr : orbit_action_->GetFrameTransitions()) {
+        const auto& v = tr.value_at_transition.GetAs<oxygen::Axis2D>();
+        look_delta.x += v.x;
+        look_delta.y += v.y;
+      }
+
+      if (std::abs(look_delta.x) > 0.0f || std::abs(look_delta.y) > 0.0f) {
+        fly_controller_->AddRotationInput(look_delta);
+      }
+    }
+
+    // Move via WASD/QE
+    glm::vec3 move_input(0.0f);
+    if (move_fwd_action_ && move_fwd_action_->IsOngoing()) {
+      move_input.z += 1.0f;
+    }
+    if (move_bwd_action_ && move_bwd_action_->IsOngoing()) {
+      move_input.z -= 1.0f;
+    }
+    if (move_left_action_ && move_left_action_->IsOngoing()) {
+      move_input.x -= 1.0f;
+    }
+    if (move_right_action_ && move_right_action_->IsOngoing()) {
+      move_input.x += 1.0f;
+    }
+    if (move_up_action_ && move_up_action_->IsOngoing()) {
+      move_input.y += 1.0f;
+    }
+    if (move_down_action_ && move_down_action_->IsOngoing()) {
+      move_input.y -= 1.0f;
+    }
+
+    if (glm::length(move_input) > 0.0f) {
+      fly_controller_->AddMovementInput(move_input);
+    }
+
+    fly_controller_->Update(active_camera_, delta_time);
   }
-
-  auto tf = active_camera_.GetTransform();
-
-  constexpr float kPosEpsilon = 1e-6F;
-  constexpr float kRotDotEpsilon = 1e-6F;
-
-  const auto current_pos_opt = tf.GetLocalPosition();
-  const auto current_rot_opt = tf.GetLocalRotation();
-
-  auto new_rot = orbit_rot_;
-
-  bool position_changed = true;
-  if (current_pos_opt) {
-    const glm::vec3 delta = *current_pos_opt - cam_pos;
-    position_changed = glm::dot(delta, delta) > (kPosEpsilon * kPosEpsilon);
-  }
-
-  bool rotation_changed = true;
-  if (current_rot_opt) {
-    const float dot = std::abs(glm::dot(*current_rot_opt, new_rot));
-    rotation_changed = dot < (1.0F - kRotDotEpsilon);
-  }
-
-  // Avoid re-writing identical TRS every frame; setters mark transforms dirty
-  // and will cause scene traversal to recompute world transforms.
-  if (position_changed) {
-    tf.SetLocalPosition(cam_pos);
-  }
-  if (rotation_changed) {
-    tf.SetLocalRotation(new_rot);
-  }
-}
-
-auto MainModule::SyncOrbitFromActiveCamera() -> void
-{
-  if (!active_camera_.IsAlive()) {
-    return;
-  }
-
-  auto tf = active_camera_.GetTransform();
-  const auto cam_pos_opt = tf.GetLocalPosition();
-  const auto cam_rot_opt = tf.GetLocalRotation();
-  if (!cam_pos_opt || !cam_rot_opt) {
-    return;
-  }
-
-  const auto cam_pos = *cam_pos_opt;
-  const auto cam_rot = *cam_rot_opt;
-
-  // Orbit target: keep orbiting around the scene center (origin).
-  // We only sync the controller's yaw/pitch/distance from the camera pose.
-  camera_target_ = glm::vec3(0.0f, 0.0f, 0.0f);
-
-  const glm::vec3 offset = cam_pos - camera_target_;
-  const float dist_len2 = glm::dot(offset, offset);
-  if (dist_len2 <= 1e-8f) {
-    orbit_distance_ = 6.0f;
-    orbit_rot_ = glm::normalize(MakeLookRotationFromPosition(
-      glm::vec3(0.0F, orbit_distance_, 0.0F), camera_target_));
-    orbit_offset_local_ = glm::vec3(0.0f, 0.0f, orbit_distance_);
-    was_orbiting_last_frame_ = false;
-    return;
-  }
-
-  const float distance
-    = std::clamp(std::sqrt(dist_len2), min_cam_distance_, max_cam_distance_);
-  orbit_distance_ = distance;
-
-  orbit_rot_ = glm::normalize(cam_rot);
-  orbit_offset_local_ = glm::vec3(0.0f, 0.0f, orbit_distance_);
-
-  was_orbiting_last_frame_ = false;
-}
-
-auto MainModule::SyncTurntableFromActiveCamera() -> void
-{
-  if (!active_camera_.IsAlive()) {
-    return;
-  }
-
-  auto tf = active_camera_.GetTransform();
-  const auto cam_pos_opt = tf.GetLocalPosition();
-  const auto cam_rot_opt = tf.GetLocalRotation();
-  if (!cam_pos_opt || !cam_rot_opt) {
-    return;
-  }
-
-  const glm::vec3 cam_pos = *cam_pos_opt;
-  const glm::quat cam_rot = *cam_rot_opt;
-
-  const glm::vec3 offset = cam_pos - camera_target_;
-  const float dist_len2 = glm::dot(offset, offset);
-  if (dist_len2 <= 1e-8F) {
-    turntable_yaw_ = 0.0F;
-    turntable_pitch_ = 0.0F;
-    return;
-  }
-
-  const float inv_dist = 1.0F / std::sqrt(dist_len2);
-  const glm::vec3 dir_ws = offset * inv_dist;
-
-  const glm::vec3 cam_up_ws
-    = glm::normalize(cam_rot * glm::vec3(0.0F, 1.0F, 0.0F));
-  turntable_inverted_ = glm::dot(cam_up_ws, glm::vec3(0.0F, 0.0F, 1.0F)) < 0.0F;
-
-  constexpr float kPi = std::numbers::pi_v<float>;
-  constexpr float kHalfPi = 0.5F * std::numbers::pi_v<float>;
-  constexpr float kTwoPi = 2.0F * std::numbers::pi_v<float>;
-  constexpr float kPoleEpsilon = 1e-5F;
-
-  const float yaw = std::atan2(dir_ws.x, dir_ws.y);
-
-  const float xy_len = std::sqrt((dir_ws.x * dir_ws.x) + (dir_ws.y * dir_ws.y));
-  const float pitch_basic = std::atan2(dir_ws.z, xy_len);
-
-  turntable_yaw_ = std::remainder(yaw, kTwoPi);
-  turntable_pitch_
-    = std::clamp(pitch_basic, -kHalfPi + kPoleEpsilon, kHalfPi - kPoleEpsilon);
 }
 
 auto MainModule::EnsureViewCameraRegistered() -> void
@@ -1439,11 +1356,16 @@ auto MainModule::EnsureFallbackCamera(const int width, const int height) -> void
 
     // Start with a stable, non-singular pose: look along the Y axis with Z-up.
     // This makes it unambiguous whether imported assets are rotated.
-    const glm::vec3 cam_pos(0.0F, 5.0F, 0.0F);
+    const glm::vec3 cam_pos(10.0F, 10.0F, 10.0F);
     const glm::vec3 cam_target(0.0F, 0.0F, 0.0F);
     auto tf = active_camera_.GetTransform();
     tf.SetLocalPosition(cam_pos);
     tf.SetLocalRotation(MakeLookRotationFromPosition(cam_pos, cam_target));
+
+    orbit_controller_ = std::make_unique<OrbitCameraController>();
+    orbit_controller_->SyncFromTransform(active_camera_);
+    fly_controller_ = std::make_unique<FlyCameraController>();
+    fly_controller_->SyncFromTransform(active_camera_);
   }
 
   if (!active_camera_.HasCamera()) {
@@ -1586,13 +1508,94 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
   ImGui::Separator();
   ImGui::TextUnformatted("Camera / Axis Debug");
 
-  int orbit_mode_ui = (orbit_mode_ == OrbitMode::kTrackball) ? 0 : 1;
-  if (ImGui::Combo("Orbit Mode", &orbit_mode_ui, "Trackball\0Turntable\0")) {
-    orbit_mode_
-      = (orbit_mode_ui == 0) ? OrbitMode::kTrackball : OrbitMode::kTurntable;
-    SyncOrbitFromActiveCamera();
-    SyncTurntableFromActiveCamera();
-    was_orbiting_last_frame_ = false;
+  ImGui::Separator();
+  ImGui::TextUnformatted("Input Debug");
+  {
+    const auto& io = ImGui::GetIO();
+    ImGui::Text("ImGui WantCaptureKeyboard: %s",
+      io.WantCaptureKeyboard ? "true" : "false");
+    ImGui::Text(
+      "ImGui WantCaptureMouse: %s", io.WantCaptureMouse ? "true" : "false");
+
+    auto action_state
+      = [](const std::shared_ptr<oxygen::input::Action>& a) -> const char* {
+      if (!a) {
+        return "<null>";
+      }
+      if (a->WasCanceledThisFrame()) {
+        return "Canceled";
+      }
+      if (a->WasCompletedThisFrame()) {
+        return "Completed";
+      }
+      if (a->WasTriggeredThisFrame()) {
+        return "Triggered";
+      }
+      if (a->WasReleasedThisFrame()) {
+        return "Released";
+      }
+      if (a->IsOngoing()) {
+        return "Ongoing";
+      }
+      if (a->WasValueUpdatedThisFrame()) {
+        return "Updated";
+      }
+      return "Idle";
+    };
+
+    auto show_bool = [&](const char* label,
+                       const std::shared_ptr<oxygen::input::Action>& a) {
+      ImGui::Text("%-10s  state=%-9s ongoing=%d trig=%d rel=%d", label,
+        action_state(a), (a && a->IsOngoing()) ? 1 : 0,
+        (a && a->WasTriggeredThisFrame()) ? 1 : 0,
+        (a && a->WasReleasedThisFrame()) ? 1 : 0);
+    };
+
+    show_bool("W", move_fwd_action_);
+    show_bool("S", move_bwd_action_);
+    show_bool("A", move_left_action_);
+    show_bool("D", move_right_action_);
+    show_bool("Shift", fly_boost_action_);
+    show_bool("Space", fly_plane_lock_action_);
+    show_bool("RMB", rmb_action_);
+
+    // MouseXY delta accumulation (same pattern used for orbit/look).
+    glm::vec2 mouse_delta(0.0f);
+    if (orbit_action_
+      && orbit_action_->GetValueType()
+        == oxygen::input::ActionValueType::kAxis2D) {
+      for (const auto& tr : orbit_action_->GetFrameTransitions()) {
+        const auto& v = tr.value_at_transition.GetAs<oxygen::Axis2D>();
+        mouse_delta.x += v.x;
+        mouse_delta.y += v.y;
+      }
+    }
+    ImGui::Text("MouseXY delta: (%.3f, %.3f)", mouse_delta.x, mouse_delta.y);
+  }
+
+  {
+    int mode_ui = (camera_mode_ == CameraMode::kOrbit) ? 0 : 1;
+    if (ImGui::Combo("Camera Mode", &mode_ui, "Orbit\0Fly\0")) {
+      camera_mode_ = (mode_ui == 0) ? CameraMode::kOrbit : CameraMode::kFly;
+
+      // Swap input contexts immediately (user expectation: orbit mappings in
+      // orbit mode, fly mappings in fly mode).
+      UpdateActiveCameraInputContext();
+
+      pending_sync_active_camera_ = true;
+    }
+  }
+
+  if (camera_mode_ == CameraMode::kOrbit && orbit_controller_) {
+    int orbit_mode_ui
+      = (orbit_controller_->GetMode() == OrbitMode::kTrackball) ? 0 : 1;
+    if (ImGui::Combo("Orbit Mode", &orbit_mode_ui, "Trackball\0Turntable\0")) {
+      orbit_controller_->SetMode(
+        (orbit_mode_ui == 0) ? OrbitMode::kTrackball : OrbitMode::kTurntable);
+      orbit_controller_->SyncFromTransform(active_camera_);
+    }
+  } else if (camera_mode_ == CameraMode::kFly && fly_controller_) {
+    ImGui::Text("Fly Speed: %.2f", fly_controller_->GetMoveSpeed());
   }
 
   if (!active_camera_.IsAlive()) {
@@ -1602,14 +1605,10 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
     glm::vec3 cam_pos { 0.0F, 0.0F, 0.0F };
     glm::quat cam_rot { 1.0F, 0.0F, 0.0F, 0.0F };
 
-    if (auto wp = tf.GetWorldPosition()) {
-      cam_pos = *wp;
-    } else if (auto lp = tf.GetLocalPosition()) {
+    if (auto lp = tf.GetLocalPosition()) {
       cam_pos = *lp;
     }
-    if (auto wr = tf.GetWorldRotation()) {
-      cam_rot = *wr;
-    } else if (auto lr = tf.GetLocalRotation()) {
+    if (auto lr = tf.GetLocalRotation()) {
       cam_rot = *lr;
     }
 
