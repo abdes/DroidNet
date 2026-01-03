@@ -36,9 +36,6 @@
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
@@ -60,67 +57,6 @@ using oxygen::scene::SceneNodeFlags;
 #endif
 
 namespace {
-
-auto BuildFloorPlaneGeometry() -> std::shared_ptr<oxygen::data::GeometryAsset>
-{
-  using oxygen::data::MaterialAsset;
-  using oxygen::data::MeshBuilder;
-  using oxygen::data::Vertex;
-  using oxygen::data::pak::GeometryAssetDesc;
-  using oxygen::data::pak::MeshViewDesc;
-
-  constexpr unsigned int kSegments = 32;
-  constexpr float kSize = 10.0F;
-
-  auto plane_data
-    = oxygen::data::MakePlaneMeshAsset(kSegments, kSegments, kSize);
-  if (!plane_data) {
-    return nullptr;
-  }
-
-  std::vector<Vertex> vertices = std::move(plane_data->first);
-  std::vector<uint32_t> indices = std::move(plane_data->second);
-
-  // Ensure the plane is visible from both sides under backface culling by
-  // adding a second copy of every triangle with reversed winding.
-  const auto original_index_count = indices.size();
-  indices.reserve(original_index_count * 2);
-  for (std::size_t i = 0; i + 2 < original_index_count; i += 3) {
-    indices.push_back(indices[i]);
-    indices.push_back(indices[i + 2]);
-    indices.push_back(indices[i + 1]);
-  }
-
-  auto mesh = MeshBuilder(0, "FloorPlaneLOD0")
-                .WithVertices(vertices)
-                .WithIndices(indices)
-                .BeginSubMesh("default", MaterialAsset::CreateDefault())
-                .WithMeshView(MeshViewDesc {
-                  .first_index = 0,
-                  .index_count = static_cast<uint32_t>(indices.size()),
-                  .first_vertex = 0,
-                  .vertex_count = static_cast<uint32_t>(vertices.size()),
-                })
-                .EndSubMesh()
-                .Build();
-
-  GeometryAssetDesc geo_desc {};
-  geo_desc.lod_count = 1;
-  const auto bb_min = mesh->BoundingBoxMin();
-  const auto bb_max = mesh->BoundingBoxMax();
-  geo_desc.bounding_box_min[0] = bb_min.x;
-  geo_desc.bounding_box_min[1] = bb_min.y;
-  geo_desc.bounding_box_min[2] = bb_min.z;
-  geo_desc.bounding_box_max[0] = bb_max.x;
-  geo_desc.bounding_box_max[1] = bb_max.y;
-  geo_desc.bounding_box_max[2] = bb_max.z;
-
-  return std::make_shared<oxygen::data::GeometryAsset>(
-    oxygen::data::AssetKey { .guid = oxygen::data::GenerateAssetGuid() },
-    geo_desc,
-    std::vector<std::shared_ptr<oxygen::data::Mesh>> { std::move(mesh) });
-}
-
 #if defined(OXYGEN_WINDOWS)
 
 class ScopedCoInitialize {
@@ -524,18 +460,6 @@ private:
     if (valid_renderables > 0) {
       LOG_F(INFO, "SceneLoader: Assigned {} geometries from cache.",
         valid_renderables);
-    }
-
-    // Minimal floor plane: root node at origin.
-    if (auto floor_geo = BuildFloorPlaneGeometry(); floor_geo) {
-      auto floor = swap_.scene->CreateNode("Floor");
-      auto tf = floor.GetTransform();
-      tf.SetLocalPosition(glm::vec3(0.0F, 0.0F, 0.0F));
-      tf.SetLocalRotation(glm::quat(1.0F, 0.0F, 0.0F, 0.0F));
-      tf.SetLocalScale(glm::vec3(1.0F, 1.0F, 1.0F));
-      floor.GetRenderable().SetGeometry(std::move(floor_geo));
-    } else {
-      LOG_F(WARNING, "SceneLoader: Failed to build floor plane geometry");
     }
 
     // Pick or create an active camera.
