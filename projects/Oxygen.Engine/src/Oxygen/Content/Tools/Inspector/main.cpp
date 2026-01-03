@@ -239,50 +239,62 @@ auto RunDumpIndex(const DumpOptions& opts) -> int
 auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts)
   -> std::unique_ptr<Cli>
 {
+  auto validate_root = Option::Positional("cooked_root")
+                         .About("Loose cooked root directory")
+                         .Required()
+                         .WithValue<std::string>()
+                         .StoreTo(&validate_opts.cooked_root)
+                         .Build();
+
+  auto validate_quiet = Option::WithKey("quiet")
+                          .About("Do not print on success")
+                          .Short("q")
+                          .Long("quiet")
+                          .WithValue<bool>()
+                          .StoreTo(&validate_opts.quiet)
+                          .Build();
+
   const std::shared_ptr<Command> validate_cmd
     = CommandBuilder("validate-root")
         .About("Validate a loose cooked root (index + files).")
-        .WithOption(Option::Positional("cooked_root")
-            .About("Loose cooked root directory")
-            .Required()
-            .WithValue<std::string>()
-            .StoreTo(&validate_opts.cooked_root)
-            .Build())
-        .WithOption(Option::WithKey("quiet")
-            .About("Do not print on success")
-            .Short("q")
-            .Long("quiet")
-            .WithValue<bool>()
-            .StoreTo(&validate_opts.quiet)
-            .Build());
+        .WithPositionalArguments(validate_root)
+        .WithOption(std::move(validate_quiet));
+
+  auto dump_root = Option::Positional("cooked_root")
+                     .About("Loose cooked root directory")
+                     .Required()
+                     .WithValue<std::string>()
+                     .StoreTo(&dump_opts.cooked_root)
+                     .Build();
+
+  auto dump_assets = Option::WithKey("assets")
+                       .About("Dump asset entries")
+                       .Long("assets")
+                       .WithValue<bool>()
+                       .StoreTo(&dump_opts.assets)
+                       .Build();
+
+  auto dump_files = Option::WithKey("files")
+                      .About("Dump file records")
+                      .Long("files")
+                      .WithValue<bool>()
+                      .StoreTo(&dump_opts.files)
+                      .Build();
+
+  auto dump_digests = Option::WithKey("digests")
+                        .About("Include SHA-256 digests")
+                        .Long("digests")
+                        .WithValue<bool>()
+                        .StoreTo(&dump_opts.show_digests)
+                        .Build();
 
   const std::shared_ptr<Command> dump_cmd
     = CommandBuilder("dump-index")
         .About("Dump container.index.bin contents (validated).")
-        .WithOption(Option::Positional("cooked_root")
-            .About("Loose cooked root directory")
-            .Required()
-            .WithValue<std::string>()
-            .StoreTo(&dump_opts.cooked_root)
-            .Build())
-        .WithOption(Option::WithKey("assets")
-            .About("Dump asset entries")
-            .Long("assets")
-            .WithValue<bool>()
-            .StoreTo(&dump_opts.assets)
-            .Build())
-        .WithOption(Option::WithKey("files")
-            .About("Dump file records")
-            .Long("files")
-            .WithValue<bool>()
-            .StoreTo(&dump_opts.files)
-            .Build())
-        .WithOption(Option::WithKey("digests")
-            .About("Include SHA-256 digests")
-            .Long("digests")
-            .WithValue<bool>()
-            .StoreTo(&dump_opts.show_digests)
-            .Build());
+        .WithPositionalArguments(dump_root)
+        .WithOption(std::move(dump_assets))
+        .WithOption(std::move(dump_files))
+        .WithOption(std::move(dump_digests));
 
   return CliBuilder()
     .ProgramName(std::string(kProgramName))
