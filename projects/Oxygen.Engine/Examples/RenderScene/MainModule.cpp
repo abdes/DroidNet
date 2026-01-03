@@ -1365,6 +1365,12 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
                       / request.loose_cooked_layout.index_file_name;
                     inspection->LoadFromFile(index_path);
 
+                    const auto expected_scene_name = p.stem().string();
+                    const auto expected_virtual_path
+                      = request.loose_cooked_layout.SceneVirtualPath(
+                        expected_scene_name);
+
+                    std::optional<data::AssetKey> matching_scene_key;
                     std::optional<data::AssetKey> first_scene_key;
                     std::string first_scene_path;
                     for (const auto& a : inspection->Assets()) {
@@ -1372,13 +1378,17 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
                         != static_cast<uint8_t>(data::AssetType::kScene)) {
                         continue;
                       }
+                      if (a.virtual_path == expected_virtual_path) {
+                        matching_scene_key = a.key;
+                      }
                       if (!first_scene_key
                         || a.virtual_path < first_scene_path) {
                         first_scene_key = a.key;
                         first_scene_path = a.virtual_path;
                       }
                     }
-                    return first_scene_key;
+                    return matching_scene_key ? matching_scene_key
+                                              : first_scene_key;
 
                   } catch (const std::exception& e) {
                     LOG_F(ERROR, "RenderScene: FBX cook failed: {}", e.what());
