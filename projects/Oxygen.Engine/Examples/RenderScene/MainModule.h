@@ -7,7 +7,9 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <filesystem>
+#include <future>
 #include <memory>
 #include <optional>
 #include <string>
@@ -107,6 +109,7 @@ private:
   auto EnsureViewCameraRegistered() -> void;
 
   auto DrawDebugOverlay(engine::FrameContext& context) -> void;
+  auto DrawCameraControls(engine::FrameContext& context) -> void;
 
   struct SceneListItem {
     std::string virtual_path;
@@ -158,6 +161,10 @@ private:
   std::filesystem::path content_root_;
   std::optional<std::filesystem::path> pending_fbx_import_path_;
   std::unique_ptr<content::import::AssetImporter> asset_importer_;
+
+  std::future<std::optional<data::AssetKey>> fbx_import_future_;
+  std::atomic<bool> is_importing_fbx_ { false };
+  std::string importing_fbx_path_;
 
   bool pending_load_scene_ { false };
   std::optional<data::AssetKey> pending_scene_key_;

@@ -861,34 +861,22 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     }
   }
 
-  if (pending_fbx_import_path_) {
-    const auto fbx_path = std::move(*pending_fbx_import_path_);
-    pending_fbx_import_path_.reset();
+  if (fbx_import_future_.valid()
+    && fbx_import_future_.wait_for(std::chrono::seconds(0))
+      == std::future_status::ready) {
+    is_importing_fbx_ = false;
+    const auto result = fbx_import_future_.get();
+    if (result) {
+      pending_scene_key_ = *result;
+      pending_load_scene_ = true;
 
-    const auto cooked_root
-      = std::filesystem::absolute(content_root_ / ".cooked");
-    std::error_code ec;
-    (void)std::filesystem::create_directories(cooked_root, ec);
-
-    if (!asset_importer_) {
-      asset_importer_ = std::make_unique<content::import::AssetImporter>();
-    }
-
-    try {
-      content::import::ImportRequest request {};
-      request.source_path = fbx_path;
-      request.cooked_root = cooked_root;
-      request.options.naming_strategy
-        = std::make_shared<content::import::NormalizeNamingStrategy>();
-
-      (void)asset_importer_->ImportToLooseCooked(request);
+      const auto cooked_root
+        = std::filesystem::absolute(content_root_ / ".cooked");
 
       if (!loose_inspection_) {
         loose_inspection_ = std::make_unique<content::LooseCookedInspection>();
       }
-
-      const auto index_path
-        = cooked_root / request.loose_cooked_layout.index_file_name;
+      const auto index_path = cooked_root / "container.index.bin";
       loose_inspection_->LoadFromFile(index_path);
 
       auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
@@ -896,29 +884,8 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
         asset_loader->ClearMounts();
         asset_loader->AddLooseCookedRoot(cooked_root);
       }
-
-      std::optional<data::AssetKey> first_scene_key;
-      std::string first_scene_path;
-      for (const auto& a : loose_inspection_->Assets()) {
-        if (a.asset_type != static_cast<uint8_t>(data::AssetType::kScene)) {
-          continue;
-        }
-        if (!first_scene_key || a.virtual_path < first_scene_path) {
-          first_scene_key = a.key;
-          first_scene_path = a.virtual_path;
-        }
-      }
-
-      if (first_scene_key) {
-        pending_scene_key_ = *first_scene_key;
-        pending_load_scene_ = true;
-      } else {
-        LOG_F(ERROR,
-          "RenderScene: Cooked FBX produced no scene assets (fbx={})",
-          fbx_path.string());
-      }
-    } catch (const std::exception& e) {
-      LOG_F(ERROR, "RenderScene: FBX cook failed: {}", e.what());
+    } else {
+      LOG_F(ERROR, "RenderScene: FBX import failed or produced no scene.");
     }
   }
 
@@ -1310,6 +1277,7 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
   }
 
   DrawDebugOverlay(context);
+  DrawCameraControls(context);
   co_return;
 }
 
@@ -1429,18 +1397,74 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
 
   if (ImGui::BeginTabBar("ContentSource")) {
     if (ImGui::BeginTabItem("FBX")) {
-      const auto fbx_dir = content_root_ / "fbx";
-      const auto files = EnumerateFbxFiles(fbx_dir);
+      if (is_importing_fbx_) {
+        ImGui::Text("Importing FBX: %s", importing_fbx_path_.c_str());
+        // Indeterminate progress bar
+        const float time = static_cast<float>(ImGui::GetTime());
+        ImGui::ProgressBar(
+          -1.0f * time * 0.2f, ImVec2(kScenesListWidth, 0.0f), "Importing...");
+      } else {
+        const auto fbx_dir = content_root_ / "fbx";
+        const auto files = EnumerateFbxFiles(fbx_dir);
 
-      if (ImGui::BeginListBox(
-            "FBX##Fbx", ImVec2(kScenesListWidth, kScenesListHeight))) {
-        for (const auto& p : files) {
-          const auto name = p.filename().string();
-          if (ImGui::Selectable(name.c_str(), false)) {
-            pending_fbx_import_path_ = p;
+        if (ImGui::BeginListBox(
+              "FBX##Fbx", ImVec2(kScenesListWidth, kScenesListHeight))) {
+          for (const auto& p : files) {
+            const auto name = p.filename().string();
+            if (ImGui::Selectable(name.c_str(), false)) {
+              importing_fbx_path_ = p.string();
+              is_importing_fbx_ = true;
+
+              const auto cooked_root
+                = std::filesystem::absolute(content_root_ / ".cooked");
+
+              fbx_import_future_ = std::async(std::launch::async,
+                [p, cooked_root]() -> std::optional<data::AssetKey> {
+                  std::error_code ec;
+                  (void)std::filesystem::create_directories(cooked_root, ec);
+
+                  auto importer
+                    = std::make_unique<content::import::AssetImporter>();
+
+                  try {
+                    content::import::ImportRequest request {};
+                    request.source_path = p;
+                    request.cooked_root = cooked_root;
+                    request.options.naming_strategy = std::make_shared<
+                      content::import::NormalizeNamingStrategy>();
+
+                    (void)importer->ImportToLooseCooked(request);
+
+                    auto inspection
+                      = std::make_unique<content::LooseCookedInspection>();
+                    const auto index_path = cooked_root
+                      / request.loose_cooked_layout.index_file_name;
+                    inspection->LoadFromFile(index_path);
+
+                    std::optional<data::AssetKey> first_scene_key;
+                    std::string first_scene_path;
+                    for (const auto& a : inspection->Assets()) {
+                      if (a.asset_type
+                        != static_cast<uint8_t>(data::AssetType::kScene)) {
+                        continue;
+                      }
+                      if (!first_scene_key
+                        || a.virtual_path < first_scene_path) {
+                        first_scene_key = a.key;
+                        first_scene_path = a.virtual_path;
+                      }
+                    }
+                    return first_scene_key;
+
+                  } catch (const std::exception& e) {
+                    LOG_F(ERROR, "RenderScene: FBX cook failed: {}", e.what());
+                    return std::nullopt;
+                  }
+                });
+            }
           }
+          ImGui::EndListBox();
         }
-        ImGui::EndListBox();
       }
 
       ImGui::EndTabItem();
@@ -1505,7 +1529,20 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
     ImGui::EndTabBar();
   }
 
-  ImGui::Separator();
+  ImGui::End();
+}
+
+auto MainModule::DrawCameraControls(engine::FrameContext& /*context*/) -> void
+{
+  ImGui::SetNextWindowPos(ImVec2(550, 20), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiCond_FirstUseEver);
+
+  if (!ImGui::Begin(
+        "Camera Controls", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::End();
+    return;
+  }
+
   ImGui::TextUnformatted("Camera / Axis Debug");
 
   ImGui::Separator();
