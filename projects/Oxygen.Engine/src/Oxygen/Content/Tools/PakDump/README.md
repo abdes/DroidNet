@@ -109,7 +109,10 @@ Material descriptors receive special handling:
 
 - All header + material-specific fields printed with labels
 - Base color, normal scale, metalness, roughness, AO values
-- Associated texture indices
+- Core + Tier 1/2 texture indices (emissive, specular, sheen, clearcoat,
+   transmission, thickness)
+- Tier 1/2 scalar parameters (emissive factor, alpha cutoff, IOR, specular
+   factor, sheen factor, clearcoat/transmission/volume parameters)
 - Shader stage bitmask drives enumeration of appended shader reference blocks
 - Each shader reference shows its Unique ID & hash; optional hex dump
 

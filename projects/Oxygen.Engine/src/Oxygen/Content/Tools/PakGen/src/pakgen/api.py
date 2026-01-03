@@ -75,7 +75,6 @@ def build_pak(options: BuildOptions) -> BuildResult:  # implemented stub
     spec_model = load_models(options.input_spec)
     assets_list = list(spec_model.assets)
     spec_dict = {
-        "name": options.input_spec.stem,
         "version": getattr(spec_model, "version", 1),
         "content_version": getattr(spec_model, "content_version", 0),
         "buffers": spec_model.buffers,

@@ -11,11 +11,12 @@ from pakgen.packing.constants import (
     MESH_DESC_SIZE,
     SUBMESH_DESC_SIZE,
     MESH_VIEW_DESC_SIZE,
+    ASSET_HEADER_SIZE,
 )
 
 
 def _header_builder(_):
-    return b"\x00" * 32
+    return b"\x00" * ASSET_HEADER_SIZE
 
 
 def _shader_refs_builder(_):

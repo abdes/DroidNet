@@ -20,7 +20,7 @@ assets:
     alignment: 1
     lods:
       - name: lod0
-        mesh_type: 0
+        mesh_type: 1
         submeshes:
           - name: sm0
             material: MatA
@@ -36,7 +36,7 @@ assets:
     alignment: 1
     lods:
       - name: lod0
-        mesh_type: 0
+        mesh_type: 1
         submeshes:
           - name: sm0
             material: MatA
@@ -52,7 +52,7 @@ assets:
     alignment: 1
     lods:
       - name: lod0
-        mesh_type: 0
+        mesh_type: 1
         submeshes:
           - name: sm0
             material: MatA

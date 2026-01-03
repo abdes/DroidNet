@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cstring>
 #include <span>
 #include <vector>
@@ -13,6 +14,7 @@
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -51,6 +53,8 @@ class MaterialLoaderBasicTest : public testing::Test {
 protected:
   using MockStream = oxygen::content::testing::MockStream;
   using Writer = oxygen::serio::Writer<MockStream>;
+  using MaterialAssetDesc = oxygen::data::pak::MaterialAssetDesc;
+  using ShaderReferenceDesc = oxygen::data::pak::ShaderReferenceDesc;
 
   MaterialLoaderBasicTest()
     : desc_writer_(desc_stream_)
@@ -58,6 +62,56 @@ protected:
     , desc_reader_(desc_stream_)
     , data_reader_(data_stream_)
   {
+  }
+
+  auto WriteMaterialDescriptor(const MaterialAssetDesc& desc,
+    std::span<const ShaderReferenceDesc> shader_refs = {}) -> void
+  {
+    auto pack = desc_writer_.ScopedAlignment(1);
+    ASSERT_TRUE(desc_writer_.WriteBlob(
+      std::as_bytes(std::span<const MaterialAssetDesc, 1>(&desc, 1))));
+    for (const ShaderReferenceDesc& ref : shader_refs) {
+      ASSERT_TRUE(desc_writer_.WriteBlob(
+        std::as_bytes(std::span<const ShaderReferenceDesc, 1>(&ref, 1))));
+    }
+    EXPECT_TRUE(desc_stream_.Seek(0));
+  }
+
+  static auto MakeMaterialDescriptor(const char* name) -> MaterialAssetDesc
+  {
+    MaterialAssetDesc desc {};
+    desc.header.asset_type
+      = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
+    std::memset(desc.header.name, 0, sizeof(desc.header.name));
+    if (name != nullptr) {
+      const auto src_len = std::strlen(name);
+      const auto copy_len = (src_len < (sizeof(desc.header.name) - 1))
+        ? src_len
+        : (sizeof(desc.header.name) - 1);
+      std::memcpy(desc.header.name, name, copy_len);
+      desc.header.name[copy_len] = '\0';
+    }
+    desc.header.version = 1;
+    desc.material_domain
+      = static_cast<uint8_t>(oxygen::data::MaterialDomain::kOpaque);
+    return desc;
+  }
+
+  static auto MakeShaderReferenceDesc(const char* unique_id, uint64_t hash)
+    -> ShaderReferenceDesc
+  {
+    ShaderReferenceDesc desc {};
+    std::memset(desc.shader_unique_id, 0, sizeof(desc.shader_unique_id));
+    if (unique_id != nullptr) {
+      const auto src_len = std::strlen(unique_id);
+      const auto copy_len = (src_len < (sizeof(desc.shader_unique_id) - 1))
+        ? src_len
+        : (sizeof(desc.shader_unique_id) - 1);
+      std::memcpy(desc.shader_unique_id, unique_id, copy_len);
+      desc.shader_unique_id[copy_len] = '\0';
+    }
+    desc.shader_hash = hash;
+    return desc;
   }
 
   //! Helper method to create LoaderContext for testing.
@@ -127,7 +181,6 @@ NOLINT_TEST_F(
   MaterialLoaderBasicTest, LoadMaterial_ValidInput_ReturnsMaterialAsset)
 {
   using oxygen::ShaderType;
-  using oxygen::content::testing::ParseHexDumpWithOffset;
   using oxygen::data::AssetType;
   using oxygen::data::MaterialDomain;
   using ::testing::AllOf;
@@ -138,105 +191,28 @@ NOLINT_TEST_F(
   using ::testing::SizeIs;
 
   // Arrange
-  // clang-format off
-  // material_hexdump: MaterialAssetDesc (256 bytes)
-  // Field layout:
-  //   0x00: header.asset_type           = 1           (01)
-  //   0x01: header.name                 = "Test Material" (54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00 ...)
-  //   0x41: header.version              = 1           (01)
-  //   0x42: header.streaming_priority   = 0           (00)
-  //   0x43: header.content_hash         = 0           (00 00 00 00 00 00 00 00)
-  //   0x4B: header.variant_flags        = 0           (00 00 00 00)
-  //   0x4F: header.reserved[16]         = {0}
-  //   0x5F: material_domain             = 1           (01)
-  //   0x60: flags                       = 0xAABBCCDD  (DD CC BB AA)
-  //   0x64: shader_stages               = 0x8 | 0x80  (88 00 00 00)
-  //   0x68: base_color[0]               = 0.1f        (CC CC CC 3D)
-  //   0x6C: base_color[1]               = 0.2f        (CD CC 4C 3E)
-  //   0x70: base_color[2]               = 0.3f        (9A 99 99 3E)
-  //   0x74: base_color[3]               = 0.4f        (CD CC CC 3E)
-  //   0x78: normal_scale                = 1.5f        (00 00 C0 3F)
-  //   0x7C: metalness                   = 0.7f        (33 33 33 3F)
-  //   0x80: roughness                   = 0.2f        (CD CC 4C 3E)
-  //   0x84: ambient_occlusion           = 0.9f        (66 66 66 3F)
-  //   0x88: base_color_texture          = 42          (2A 00 00 00)
-  //   0x8C: normal_texture              = 43          (2B 00 00 00)
-  //   0x90: metallic_texture            = 44          (2C 00 00 00)
-  //   0x94: roughness_texture           = 45          (2D 00 00 00)
-  //   0x98: ambient_occlusion_texture   = 46          (2E 00 00 00)
-  //   0x9C: reserved_textures[8]        = {0}
-  //   0xBC: reserved[68]                = {0}
-  //   0xFF: (end of MaterialAssetDesc, followed by ShaderReferenceDesc array)
-  // clang-format on
-  const std::string material_hexdump = R"(
-     0: 01 54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00
-    16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    48: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    64: 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01
-    96: DD CC BB AA 88 00 00 00 CC CC CC 3D CD CC 4C 3E
-   112: 9A 99 99 3E CD CC CC 3E 00 00 C0 3F 33 33 33 3F
-   128: CD CC 4C 3E 66 66 66 3F 2A 00 00 00 2B 00 00 00
-   144: 2C 00 00 00 2D 00 00 00 2E 00 00 00 00 00 00 00
-   160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   176: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   192: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   208: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   224: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   240: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-  )";
+  auto desc = MakeMaterialDescriptor("Test Material");
+  desc.flags = 0xAABBCCDDu;
+  desc.shader_stages = 0x88u;
+  desc.base_color[0] = 0.1f;
+  desc.base_color[1] = 0.2f;
+  desc.base_color[2] = 0.3f;
+  desc.base_color[3] = 0.4f;
+  desc.normal_scale = 1.5f;
+  desc.metalness = oxygen::data::Unorm16(0.7f);
+  desc.roughness = oxygen::data::Unorm16(0.2f);
+  desc.ambient_occlusion = oxygen::data::Unorm16(0.9f);
+  desc.base_color_texture = 42u;
+  desc.normal_texture = 43u;
+  desc.metallic_texture = 44u;
+  desc.roughness_texture = 45u;
+  desc.ambient_occlusion_texture = 46u;
 
-  // ShaderReferenceDesc 1: VS@main.vert, hash=0x1111
-  //   0x00: name = "VS@main.vert"
-  //   0x80: hash = 11 11 00 00 00 00 00 00
-  const std::string shader1_hexdump = R"(
-     0: 56 53 40 6D 61 69 6E 2E 76 65 72 74 00 00 00 00
-    16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    48: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    64: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    96: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   112: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   128: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   144: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   176: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   192: 11 11 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   208: 00 00 00 00 00 00 00 00
-  )";
-
-  // ShaderReferenceDesc 2: PS@main.frag, hash=0x2222
-  //   0x00: name = "PS@main.frag"
-  //   0x80: hash = 22 22 00 00 00 00 00 00
-  const std::string shader2_hexdump = R"(
-     0: 50 53 40 6D 61 69 6E 2E 66 72 61 67 00 00 00 00
-    16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    48: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    64: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    96: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   112: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   128: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   144: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   176: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   192: 22 22 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   208: 00 00 00 00 00 00 00 00
-  )";
-
-  {
-    auto pack = desc_writer_.ScopedAlignment(1);
-    auto mat_buf = ParseHexDumpWithOffset(material_hexdump, 256);
-    ASSERT_TRUE(desc_writer_.WriteBlob(mat_buf));
-    auto sh1_buf = ParseHexDumpWithOffset(shader1_hexdump, 216);
-    ASSERT_TRUE(desc_writer_.WriteBlob(sh1_buf));
-    auto sh2_buf = ParseHexDumpWithOffset(shader2_hexdump, 216);
-    ASSERT_TRUE(desc_writer_.WriteBlob(sh2_buf));
-  }
-  EXPECT_TRUE(desc_stream_.Seek(0));
+  const std::array<ShaderReferenceDesc, 2> shader_descs {
+    MakeShaderReferenceDesc("VS@main.vert", 0x1111u),
+    MakeShaderReferenceDesc("PS@main.frag", 0x2222u),
+  };
+  WriteMaterialDescriptor(desc, shader_descs);
 
   // Act
 
@@ -251,9 +227,9 @@ NOLINT_TEST_F(
   EXPECT_EQ(asset->GetMaterialDomain(), MaterialDomain::kOpaque);
   EXPECT_EQ(asset->GetFlags(), 0xAABBCCDDu);
   EXPECT_FLOAT_EQ(asset->GetNormalScale(), 1.5f);
-  EXPECT_FLOAT_EQ(asset->GetMetalness(), 0.7f);
-  EXPECT_FLOAT_EQ(asset->GetRoughness(), 0.2f);
-  EXPECT_FLOAT_EQ(asset->GetAmbientOcclusion(), 0.9f);
+  EXPECT_NEAR(asset->GetMetalness(), 0.7f, 1.0f / 65535.0f);
+  EXPECT_NEAR(asset->GetRoughness(), 0.2f, 1.0f / 65535.0f);
+  EXPECT_NEAR(asset->GetAmbientOcclusion(), 0.9f, 1.0f / 65535.0f);
 
   EXPECT_THAT(asset->GetBaseColor(),
     ::testing::Pointwise(
@@ -331,67 +307,27 @@ NOLINT_TEST_F(
   MaterialLoaderBasicTest, LoadMaterial_ZeroTextureIndices_NoDependencies)
 {
   using oxygen::content::internal::ResourceRef;
-  using oxygen::content::testing::ParseHexDumpWithOffset;
   using oxygen::data::AssetType;
   using oxygen::data::MaterialDomain;
   using oxygen::data::TextureResource;
 
-  // Arrange: Material with all texture indices = 0
-  // clang-format off
-  // material_hexdump: MaterialAssetDesc (256 bytes)
-  // Field layout:
-  //   0x00: header.asset_type           = 1           (01)
-  //   0x01: header.name                 = "Test Material" (54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00 ...)
-  //   0x41: header.version              = 1           (01)
-  //   0x42: header.streaming_priority   = 0           (00)
-  //   0x43: header.content_hash         = 0           (00 00 00 00 00 00 00 00)
-  //   0x4B: header.variant_flags        = 0           (00 00 00 00)
-  //   0x4F: header.reserved[16]         = {0}
-  //   0x5F: material_domain             = 1           (01)
-  //   0x60: flags                       = 0           (00 00 00 00)
-  //   0x64: shader_stages               = 0           (00 00 00 00)
-  //   0x68: base_color[0]               = 1.0f        (00 00 80 3F)
-  //   0x6C: base_color[1]               = 1.0f        (00 00 80 3F)
-  //   0x70: base_color[2]               = 1.0f        (00 00 80 3F)
-  //   0x74: base_color[3]               = 1.0f        (00 00 80 3F)
-  //   0x78: normal_scale                = 1.0f        (00 00 80 3F)
-  //   0x7C: metalness                   = 1.0f        (00 00 80 3F)
-  //   0x80: roughness                   = 1.0f        (00 00 80 3F)
-  //   0x84: ambient_occlusion           = 1.0f        (00 00 80 3F)
-  //   0x88: base_color_texture          = 0           (00 00 00 00)
-  //   0x8C: normal_texture              = 0           (00 00 00 00)
-  //   0x90: metallic_texture            = 0           (00 00 00 00)
-  //   0x94: roughness_texture           = 0           (00 00 00 00)
-  //   0x98: ambient_occlusion_texture   = 0           (00 00 00 00)
-  //   0x9C: reserved_textures[8]        = {0}
-  //   0xBC: reserved[68]                = {0}
-  //   0xFF: (end of MaterialAssetDesc, no shader references follow)
-  // clang-format on
-  const std::string material_hexdump = R"(
-     0: 01 54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00
-    16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    48: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    64: 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01
-    96: 00 00 00 00 00 00 00 00 00 00 80 3F 00 00 80 3F
-   112: 00 00 80 3F 00 00 80 3F 00 00 80 3F 00 00 80 3F
-   128: 00 00 80 3F 00 00 80 3F 00 00 00 00 00 00 00 00
-   144: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   176: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   192: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   208: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   224: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   240: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-  )";
-
-  {
-    auto pack = desc_writer_.ScopedAlignment(1);
-    auto mat_buf = ParseHexDumpWithOffset(material_hexdump, 256);
-    ASSERT_TRUE(desc_writer_.WriteBlob(mat_buf));
-  }
-  EXPECT_TRUE(desc_stream_.Seek(0));
+  // Arrange
+  auto desc = MakeMaterialDescriptor("Test Material");
+  desc.shader_stages = 0;
+  desc.base_color[0] = 1.0f;
+  desc.base_color[1] = 1.0f;
+  desc.base_color[2] = 1.0f;
+  desc.base_color[3] = 1.0f;
+  desc.normal_scale = 1.0f;
+  desc.metalness = oxygen::data::Unorm16(1.0f);
+  desc.roughness = oxygen::data::Unorm16(1.0f);
+  desc.ambient_occlusion = oxygen::data::Unorm16(1.0f);
+  desc.base_color_texture = 0;
+  desc.normal_texture = 0;
+  desc.metallic_texture = 0;
+  desc.roughness_texture = 0;
+  desc.ambient_occlusion_texture = 0;
+  WriteMaterialDescriptor(desc);
 
   // Act
   auto [context, collector] = CreateDecodeLoaderContext();
@@ -413,33 +349,8 @@ NOLINT_TEST_F(
 //! Test: Non-parse-only loads require a dependency collector.
 NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_NoCollector_Throws)
 {
-  using oxygen::content::testing::ParseHexDumpWithOffset;
-
-  const std::string material_hexdump = R"(
-     0: 01 54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00
-    16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    48: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    64: 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01
-    96: 00 00 00 00 00 00 00 00 00 00 80 3F 00 00 80 3F
-   112: 00 00 80 3F 00 00 80 3F 00 00 80 3F 00 00 80 3F
-   128: 00 00 80 3F 00 00 80 3F 2A 00 00 00 00 00 00 00
-   144: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   176: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   192: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   208: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   224: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   240: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-  )";
-
-  {
-    auto pack = desc_writer_.ScopedAlignment(1);
-    auto mat_buf = ParseHexDumpWithOffset(material_hexdump, 256);
-    ASSERT_TRUE(desc_writer_.WriteBlob(mat_buf));
-  }
-  EXPECT_TRUE(desc_stream_.Seek(0));
+  auto desc = MakeMaterialDescriptor("Test Material");
+  WriteMaterialDescriptor(desc);
 
   auto context = CreateLoaderContext();
   context.parse_only = false;
@@ -457,89 +368,17 @@ NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_NoCollector_Throws)
 NOLINT_TEST_F(MaterialLoaderBasicTest, LoadMaterial_SingleShaderStage_Works)
 {
   using oxygen::ShaderType;
-  using oxygen::content::testing::ParseHexDumpWithOffset;
   using oxygen::data::AssetType;
   using ::testing::AllOf;
   using ::testing::Property;
 
-  // Arrange: Material with only vertex shader (bit 3 set)
-  // clang-format off
-  // material_hexdump: MaterialAssetDesc (256 bytes)
-  // Field layout:
-  //   0x00: header.asset_type           = 1           (01)
-  //   0x01: header.name                 = "Test Material" (54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00 ...)
-  //   0x41: header.version              = 1           (01)
-  //   0x42: header.streaming_priority   = 0           (00)
-  //   0x43: header.content_hash         = 0           (00 00 00 00 00 00 00 00)
-  //   0x4B: header.variant_flags        = 0           (00 00 00 00)
-  //   0x4F: header.reserved[16]         = {0}
-  //   0x5F: material_domain             = 1           (01)
-  //   0x60: flags                       = 0           (00 00 00 00)
-  //   0x64: shader_stages               = 0x8         (08 00 00 00)
-  //   0x68: base_color[0]               = 1.0f        (00 00 80 3F)
-  //   0x6C: base_color[1]               = 1.0f        (00 00 80 3F)
-  //   0x70: base_color[2]               = 1.0f        (00 00 80 3F)
-  //   0x74: base_color[3]               = 1.0f        (00 00 80 3F)
-  //   0x78: normal_scale                = 1.0f        (00 00 80 3F)
-  //   0x7C: metalness                   = 1.0f        (00 00 80 3F)
-  //   0x80: roughness                   = 1.0f        (00 00 80 3F)
-  //   0x84: ambient_occlusion           = 1.0f        (00 00 80 3F)
-  //   0x88: base_color_texture          = 0           (00 00 00 00)
-  //   0x8C: normal_texture              = 0           (00 00 00 00)
-  //   0x90: metallic_texture            = 0           (00 00 00 00)
-  //   0x94: roughness_texture           = 0           (00 00 00 00)
-  //   0x98: ambient_occlusion_texture   = 0           (00 00 00 00)
-  //   0x9C: reserved_textures[8]        = {0}
-  //   0xBC: reserved[68]                = {0}
-  //   0xFF: (end of MaterialAssetDesc, followed by ShaderReferenceDesc array)
-  // clang-format on
-  const std::string material_hexdump = R"(
-     0: 01 54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00
-    16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    48: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    64: 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01
-    96: 00 00 00 00 08 00 00 00 00 00 80 3F 00 00 80 3F
-   112: 00 00 80 3F 00 00 80 3F 00 00 80 3F 00 00 80 3F
-   128: 00 00 80 3F 00 00 80 3F 00 00 00 00 00 00 00 00
-   144: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   176: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   192: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   208: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   224: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   240: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-  )";
-
-  // ShaderReferenceDesc: VertexShader, hash=0xBBAA
-  //   0x00: name = "VertexShader"
-  //   0xC0: hash = AA BB 00 00 00 00 00 00
-  const std::string shader_hexdump = R"(
-     0: 56 65 72 74 65 78 53 68 61 64 65 72 00 00 00 00
-    16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    48: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    64: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    96: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   112: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   128: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   144: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   176: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   192: AA BB 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   208: 00 00 00 00 00 00 00 00
-  )";
-
-  {
-    auto pack = desc_writer_.ScopedAlignment(1);
-    auto mat_buf = ParseHexDumpWithOffset(material_hexdump, 256);
-    ASSERT_TRUE(desc_writer_.WriteBlob(mat_buf));
-    auto sh_buf = ParseHexDumpWithOffset(shader_hexdump, 216);
-    ASSERT_TRUE(desc_writer_.WriteBlob(sh_buf));
-  }
-  EXPECT_TRUE(desc_stream_.Seek(0));
+  // Arrange
+  auto desc = MakeMaterialDescriptor("Test Material");
+  desc.shader_stages = 0x8u;
+  const std::array<ShaderReferenceDesc, 1> shader_descs {
+    MakeShaderReferenceDesc("VertexShader", 0xBBAAu),
+  };
+  WriteMaterialDescriptor(desc, shader_descs);
 
   // Act
   auto context = CreateLoaderContext();
@@ -568,24 +407,8 @@ NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_ShaderReadFailure_Throws)
   using oxygen::content::testing::ParseHexDumpWithOffset;
 
   // Arrange: Material indicating 1 shader but insufficient data
-  const std::string material_hexdump = R"(
-     0: 01 54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00
-    16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    48: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    64: 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01
-    96: 00 00 00 00 08 00 00 00 00 00 80 3F 00 00 80 3F
-   112: 00 00 80 3F 00 00 80 3F 00 00 80 3F 00 00 80 3F
-   128: 00 00 80 3F 00 00 80 3F 00 00 00 00 00 00 00 00
-   144: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   176: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   192: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   208: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   224: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   240: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-  )";
+  auto desc = MakeMaterialDescriptor("Test Material");
+  desc.shader_stages = 0x8u;
 
   // Incomplete shader data (needs 216 bytes but only provide 50)
   const std::string partial_shader_hexdump = R"(
@@ -597,8 +420,8 @@ NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_ShaderReadFailure_Throws)
 
   {
     auto pack = desc_writer_.ScopedAlignment(1);
-    auto mat_buf = ParseHexDumpWithOffset(material_hexdump, 256);
-    ASSERT_TRUE(desc_writer_.WriteBlob(mat_buf));
+    ASSERT_TRUE(desc_writer_.WriteBlob(
+      std::as_bytes(std::span<const MaterialAssetDesc, 1>(&desc, 1))));
     auto sh_buf = ParseHexDumpWithOffset(partial_shader_hexdump, 50);
     ASSERT_TRUE(desc_writer_.WriteBlob(sh_buf));
   }
@@ -614,36 +437,12 @@ NOLINT_TEST_F(
   MaterialLoaderBasicTest, LoadMaterial_NonZeroTexture_CollectsDependency)
 {
   using oxygen::content::internal::ResourceRef;
-  using oxygen::content::testing::ParseHexDumpWithOffset;
   using oxygen::data::TextureResource;
 
-  // Arrange: Create minimal material with a single non-zero texture index
-  // Set base_color_texture = 42 (at offset 0x88)
-  const std::string material_hexdump = R"(
-     0: 01 54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00
-    16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    48: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    64: 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01
-    96: 00 00 00 00 00 00 00 00 00 00 80 3F 00 00 80 3F
-   112: 00 00 80 3F 00 00 80 3F 00 00 80 3F 00 00 80 3F
-   128: 00 00 80 3F 00 00 80 3F 2A 00 00 00 00 00 00 00
-   144: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   176: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   192: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   208: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   224: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-   240: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-  )";
-
-  {
-    auto pack = desc_writer_.ScopedAlignment(1);
-    auto mat_buf = ParseHexDumpWithOffset(material_hexdump, 256);
-    ASSERT_TRUE(desc_writer_.WriteBlob(mat_buf));
-  }
-  EXPECT_TRUE(desc_stream_.Seek(0));
+  // Arrange
+  auto desc = MakeMaterialDescriptor("Test Material");
+  desc.base_color_texture = 42u;
+  WriteMaterialDescriptor(desc);
 
   auto [context, collector] = CreateDecodeLoaderContext();
   (void)LoadMaterialAsset(std::move(context));

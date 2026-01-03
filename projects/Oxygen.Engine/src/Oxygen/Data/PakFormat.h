@@ -12,11 +12,11 @@
 #include <limits>
 
 #include <Oxygen/Base/NamedType.h>
-#include <Oxygen/Data/HalfFloat.h>
-#include <Oxygen/Data/Unorm16.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/MeshType.h>
+#include <Oxygen/Data/Unorm16.h>
 
 //! Oxygen PAK file binary format specification
 /**!
@@ -103,7 +103,8 @@ constexpr ResourceIndexT kNoResourceIndex = 0;
 //! index of `0` cannot unambiguously mean "no texture" for materials.
 constexpr uint32_t kMaterialFlag_NoTextureSampling = (1u << 0);
 
-//! Material flag indicating that the material should be treated as double-sided.
+//! Material flag indicating that the material should be treated as
+//! double-sided.
 //!
 //! When set, the renderer should disable backface culling for this material.
 constexpr uint32_t kMaterialFlag_DoubleSided = (1u << 1);
@@ -572,8 +573,7 @@ struct MaterialAssetDesc {
   // --- Additional scalar parameters (Tier 1/2) ---
   // Emissive
   HalfFloat emissive_factor[3]
-    = { HalfFloat { 0.0f }, HalfFloat { 0.0f },
-        HalfFloat { 0.0f } };
+    = { HalfFloat { 0.0f }, HalfFloat { 0.0f }, HalfFloat { 0.0f } };
   // Alpha
   Unorm16 alpha_cutoff = Unorm16 { 0.5f };
   // Dielectric response
@@ -581,8 +581,7 @@ struct MaterialAssetDesc {
   Unorm16 specular_factor = Unorm16 { 1.0f };
   // Sheen (KHR_materials_sheen)
   HalfFloat sheen_color_factor[3]
-    = { HalfFloat { 0.0f }, HalfFloat { 0.0f },
-        HalfFloat { 0.0f } };
+    = { HalfFloat { 0.0f }, HalfFloat { 0.0f }, HalfFloat { 0.0f } };
   // Clearcoat (KHR_materials_clearcoat)
   Unorm16 clearcoat_factor = Unorm16 { 0.0f };
   Unorm16 clearcoat_roughness = Unorm16 { 0.0f };
@@ -590,8 +589,7 @@ struct MaterialAssetDesc {
   Unorm16 transmission_factor = Unorm16 { 0.0f };
   Unorm16 thickness_factor = Unorm16 { 0.0f };
   HalfFloat attenuation_color[3]
-    = { HalfFloat { 1.0f }, HalfFloat { 1.0f },
-        HalfFloat { 1.0f } };
+    = { HalfFloat { 1.0f }, HalfFloat { 1.0f }, HalfFloat { 1.0f } };
   float attenuation_distance = 0.0f;
 
   uint8_t reserved[40] = {};
@@ -825,24 +823,27 @@ static_assert(sizeof(SceneStringTable) == 8);
  Describes a scene (level) asset. As with all asset descriptors in this file,
  `AssetHeader` is the first field.
 
- The descriptor is followed by:
+ The descriptor payload is a packed byte blob (no implicit padding) and is
+ followed by:
 
  - `NodeRecord nodes[nodes.count];` at `nodes.offset`
- - `RenderableRecord renderables[renderables.count];` at `renderables.offset`
  - a packed, NUL-terminated UTF-8 scene string table blob described by
    `scene_strings`
+ - optional component tables (e.g. `RenderableRecord[]`) described by the
+   component table directory at `component_table_directory_offset`
 
-  `nodes.entry_size` and `renderables.entry_size` MUST match the corresponding
-  struct sizes for the scene format version.
+ `nodes.entry_size` MUST match the corresponding struct size for the scene
+ format version. Component tables declare their own `entry_size` via
+ `SceneComponentTableDesc::table.entry_size`.
 
-  Strings are stored back-to-back and sized to their actual length.
-  `NodeRecord::scene_name_offset` is a byte offset into the scene string table.
-  The scene string table MUST start with a single `\0` byte so that offset
-  `0` refers to the empty string.
+ Strings are stored back-to-back and sized to their actual length.
+ `NodeRecord::scene_name_offset` is a byte offset into the scene string table.
+ The scene string table MUST start with a single `\0` byte so that offset `0`
+ refers to the empty string.
 
-    @note Scene graph indices have no sentinel values by contract. Indices are
-      always valid for their type; out-of-range indices are treated as
-      errors by loaders/tooling.
+ @note Scene graph indices have no sentinel values by contract. Indices are
+   always valid for their type; out-of-range indices are treated as errors by
+   loaders/tooling.
 */
 #pragma pack(push, 1)
 struct SceneAssetDesc {
@@ -861,14 +862,15 @@ struct SceneAssetDesc {
 #pragma pack(pop)
 static_assert(sizeof(SceneAssetDesc) == 256);
 
-//! Scene component table directory entry (future extension point).
+//! Scene component table directory entry.
 /*!
  Describes an optional component table attached to scene nodes.
 
  All offsets are bytes relative to the start of the descriptor payload.
 
- @note This is reserved for future format versions. v1 packers SHOULD emit
-   `component_tables.count == 0`.
+ @note This is a forward-compatible extension point. Loaders may ignore unknown
+   component types. Known component tables are typically sorted by `node_index`
+   for efficient loading.
 */
 #pragma pack(push, 1)
 struct SceneComponentTableDesc {

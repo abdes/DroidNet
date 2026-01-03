@@ -39,6 +39,7 @@ m_gtest_program(
     "AssetLoader_async_test.cpp"
     "AssetLoader_basic_test.cpp"
     "AssetLoader_buffer_test.cpp"
+    "FbxImporter_units_axes_test.cpp"
     "AssetLoader_cancellation_test.cpp"
     "AssetLoader_deps_test.cpp"
     "AssetLoader_geometry_test.cpp"
@@ -65,3 +66,23 @@ target_compile_definitions(
 # Ensure the Loaders tests run only after PakGen editable install so the
 # pakgen CLI is available for any dynamic pack builds performed by tests.
 add_dependencies("${META_MODULE_NAME}.Loaders.Tests" pakgen_editable_install)
+
+# -- Importers Test Programs ---------------------------------------------------
+
+m_gtest_program(
+  Importers
+  SOURCES
+    "ImageDecode_test.cpp"
+    "FbxImporter_fake_test.cpp"
+    "FbxImporter_materials_test.cpp"
+    "FbxImporter_geometry_test.cpp"
+    "FbxImporter_scene_test.cpp"
+    "FbxImporter_units_axes_test.cpp"
+    "FbxImporterTest.h"
+    "LooseCookedWriter_test.cpp"
+)
+target_compile_definitions(
+  Oxygen.Content.Importers.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
+)

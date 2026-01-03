@@ -65,18 +65,50 @@ public:
         mat.base_color[1], mat.base_color[2], mat.base_color[3]),
       8);
     PrintUtils::Field("Normal Scale", mat.normal_scale, 8);
-    PrintUtils::Field(
-      "Metalness", mat.metalness.ToFloat(), 8);
-    PrintUtils::Field(
-      "Roughness", mat.roughness.ToFloat(), 8);
-    PrintUtils::Field("Ambient Occlusion",
-      mat.ambient_occlusion.ToFloat(), 8);
+    PrintUtils::Field("Metalness", mat.metalness.ToFloat(), 8);
+    PrintUtils::Field("Roughness", mat.roughness.ToFloat(), 8);
+    PrintUtils::Field("Ambient Occlusion", mat.ambient_occlusion.ToFloat(), 8);
     PrintUtils::Field("Base Color Texture", mat.base_color_texture, 8);
     PrintUtils::Field("Normal Texture", mat.normal_texture, 8);
     PrintUtils::Field("Metallic Texture", mat.metallic_texture, 8);
     PrintUtils::Field("Roughness Texture", mat.roughness_texture, 8);
     PrintUtils::Field(
       "Ambient Occlusion Texture", mat.ambient_occlusion_texture, 8);
+
+    PrintUtils::Field("Emissive Texture", mat.emissive_texture, 8);
+    PrintUtils::Field("Specular Texture", mat.specular_texture, 8);
+    PrintUtils::Field("Sheen Color Texture", mat.sheen_color_texture, 8);
+    PrintUtils::Field("Clearcoat Texture", mat.clearcoat_texture, 8);
+    PrintUtils::Field(
+      "Clearcoat Normal Texture", mat.clearcoat_normal_texture, 8);
+    PrintUtils::Field("Transmission Texture", mat.transmission_texture, 8);
+    PrintUtils::Field("Thickness Texture", mat.thickness_texture, 8);
+
+    PrintUtils::Field("Emissive Factor",
+      fmt::format("[{:.3f}, {:.3f}, {:.3f}]", mat.emissive_factor[0].ToFloat(),
+        mat.emissive_factor[1].ToFloat(), mat.emissive_factor[2].ToFloat()),
+      8);
+    PrintUtils::Field("Alpha Cutoff", mat.alpha_cutoff.ToFloat(), 8);
+    PrintUtils::Field("IOR", mat.ior, 8);
+    PrintUtils::Field("Specular Factor", mat.specular_factor.ToFloat(), 8);
+    PrintUtils::Field("Sheen Color Factor",
+      fmt::format("[{:.3f}, {:.3f}, {:.3f}]",
+        mat.sheen_color_factor[0].ToFloat(),
+        mat.sheen_color_factor[1].ToFloat(),
+        mat.sheen_color_factor[2].ToFloat()),
+      8);
+    PrintUtils::Field("Clearcoat Factor", mat.clearcoat_factor.ToFloat(), 8);
+    PrintUtils::Field(
+      "Clearcoat Roughness", mat.clearcoat_roughness.ToFloat(), 8);
+    PrintUtils::Field(
+      "Transmission Factor", mat.transmission_factor.ToFloat(), 8);
+    PrintUtils::Field("Thickness Factor", mat.thickness_factor.ToFloat(), 8);
+    PrintUtils::Field("Attenuation Color",
+      fmt::format("[{:.3f}, {:.3f}, {:.3f}]",
+        mat.attenuation_color[0].ToFloat(), mat.attenuation_color[1].ToFloat(),
+        mat.attenuation_color[2].ToFloat()),
+      8);
+    PrintUtils::Field("Attenuation Distance", mat.attenuation_distance, 8);
     std::cout << "\n";
 
     const size_t num_refs = std::popcount(mat.shader_stages);

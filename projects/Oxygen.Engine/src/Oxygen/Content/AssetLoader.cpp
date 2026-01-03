@@ -213,14 +213,12 @@ auto AssetLoader::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
   // than the one that runs the engine loop (e.g., editor creates the engine on
   // the UI thread). Bind ownership to the activation thread, which is the
   // engine thread in normal operation.
-  LOG_F(INFO,
-    "AssetLoader::ActivateAsync thread={} previous_owner={}",
-    std::hash<std::thread::id>{}(std::this_thread::get_id()),
-    std::hash<std::thread::id>{}(owning_thread_id_));
+  LOG_F(INFO, "AssetLoader::ActivateAsync thread={} previous_owner={}",
+    std::hash<std::thread::id> {}(std::this_thread::get_id()),
+    std::hash<std::thread::id> {}(owning_thread_id_));
   owning_thread_id_ = std::this_thread::get_id();
-  LOG_F(INFO,
-    "AssetLoader::ActivateAsync bound owner={}",
-    std::hash<std::thread::id>{}(owning_thread_id_));
+  LOG_F(INFO, "AssetLoader::ActivateAsync bound owner={}",
+    std::hash<std::thread::id> {}(owning_thread_id_));
   return co::OpenNursery(nursery_, std::move(started));
 }
 
@@ -338,10 +336,9 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
 
 auto AssetLoader::ClearMounts() -> void
 {
-  LOG_F(INFO,
-    "AssetLoader::ClearMounts thread={} owner={}",
-    std::hash<std::thread::id>{}(std::this_thread::get_id()),
-    std::hash<std::thread::id>{}(owning_thread_id_));
+  LOG_F(INFO, "AssetLoader::ClearMounts thread={} owner={}",
+    std::hash<std::thread::id> {}(std::this_thread::get_id()),
+    std::hash<std::thread::id> {}(owning_thread_id_));
   AssertOwningThread();
   impl_->sources.clear();
   impl_->source_ids.clear();
@@ -606,10 +603,21 @@ void AssetLoader::StartLoadTexture(ResourceKey key, TextureCallback on_complete)
       "AssetLoader requires a thread pool for StartLoadTexture");
   }
 
+  LOG_F(INFO, "AssetLoader: StartLoadTexture {}", to_string(key));
+
   nursery_->Start(
     [this, key, on_complete = std::move(on_complete)]() mutable -> co::Co<> {
       try {
         auto res = co_await LoadTextureAsync(key);
+        if (res) {
+          LOG_F(INFO,
+            "AssetLoader: Texture ready {} ({}x{}, format={}, bytes={})",
+            to_string(key), res->GetWidth(), res->GetHeight(),
+            oxygen::to_string(res->GetFormat()), res->GetDataSize());
+        } else {
+          LOG_F(WARNING, "AssetLoader: Texture load returned null {}",
+            to_string(key));
+        }
         on_complete(std::move(res));
       } catch (const std::exception& e) {
         LOG_F(ERROR, "StartLoadTexture failed: {}", e.what());
@@ -1423,6 +1431,8 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
           co_return cached;
         }
 
+        LOG_F(INFO, "AssetLoader: Decode TextureResource {}", to_string(key));
+
         const internal::InternalResourceKey internal_key(key);
         const uint16_t source_id = internal_key.GetPakIndex();
         const auto resource_index = internal_key.GetResourceIndex();
@@ -1479,7 +1489,9 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
           prepared.loader = loader_it->second;
         }
 
-        LOG_F(2, "scheduling texture decode on thread pool");
+        LOG_F(INFO,
+          "AssetLoader: Scheduling TextureResource decode {} on thread pool",
+          to_string(key));
         auto decoded = co_await thread_pool_->Run(
           [this, source_id, prepared = std::move(prepared)]() mutable {
             ScopedCurrentSourceId source_guard(source_id);
@@ -1509,6 +1521,12 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
         }
 
         content_cache_.Store(key_hash, decoded);
+
+        LOG_F(INFO,
+          "AssetLoader: Decoded TextureResource {} ({}x{}, format={}, "
+          "bytes={})",
+          to_string(key), decoded->GetWidth(), decoded->GetHeight(),
+          oxygen::to_string(decoded->GetFormat()), decoded->GetDataSize());
         co_return decoded;
       } catch (const co::TaskCancelledException& e) {
         throw OperationCancelledException(e.what());

@@ -20,7 +20,7 @@ namespace oxygen::content {
 //! Resolve virtual paths to AssetKey using mounted cooked indexes.
 /*!
  A VirtualPathResolver is an editor/tooling helper that maps an editor-facing
- virtual path (e.g. "/Content/Materials/Wood.mat") to a runtime-facing
+ virtual path (e.g. "/.cooked/Materials/Wood.omat") to a runtime-facing
  `data::AssetKey`.
 
  This resolver is intentionally separate from `AssetLoader`:

@@ -9,11 +9,14 @@
 
 #include "./AssetLoader_test.h"
 
+#include <Oxygen/Content/Import/LooseCookedLayout.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 
 using oxygen::content::testing::AssetLoaderBasicTest;
 
 namespace {
+
+using oxygen::content::import::LooseCookedLayout;
 
 //! Fixture for AssetLoader dependency tests
 class LooseCookedIndexTest : public AssetLoaderBasicTest { };
@@ -39,21 +42,21 @@ NOLINT_TEST_F(
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root / "assets");
+  std::filesystem::create_directories(cooked_root);
   const auto index_path = cooked_root / "container.index.bin";
 
   {
-    std::ofstream out(cooked_root / "assets" / "Abc.bin", std::ios::binary);
+    std::ofstream out(cooked_root / "Abc.bin", std::ios::binary);
     out.write("abc", 3);
   }
 
   std::string strings;
   strings.push_back('\0');
   const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += "assets/Abc.bin";
+  strings += "Abc.bin";
   strings.push_back('\0');
   const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += "/Content/Abc.bin";
+  strings += "/.cooked/Abc.bin";
   strings.push_back('\0');
 
   IndexHeader header {};
@@ -281,7 +284,7 @@ NOLINT_TEST_F(LooseCookedIndexTest,
 
   std::string strings;
   strings.push_back('\0');
-  strings += "assets/A.bin";
+  strings += "A.bin";
   strings.push_back('\0');
 
   IndexHeader header {};
@@ -330,7 +333,7 @@ NOLINT_TEST_F(LooseCookedIndexTest,
   std::string strings;
   strings.push_back('\0');
   const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += "assets/A.bin";
+  strings += "A.bin";
   strings.push_back('\0');
   const auto off_vpath = static_cast<uint32_t>(strings.size());
   strings += "Content/A.bin"; // Invalid: missing leading '/'
@@ -393,10 +396,10 @@ NOLINT_TEST_F(
   std::string strings;
   strings.push_back('\0');
   const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += "assets/A.bin";
+  strings += "A.bin";
   strings.push_back('\0');
   const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += "/Content/../A.bin"; // Invalid: contains '..'
+  strings += "/.cooked/../A.bin"; // Invalid: contains '..'
   strings.push_back('\0');
 
   IndexHeader header {};
@@ -456,10 +459,10 @@ NOLINT_TEST_F(
   std::string strings;
   strings.push_back('\0');
   const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += "assets\\A.bin"; // Invalid: contains '\\'
+  strings += "Materials\\A.bin"; // Invalid: contains '\\'
   strings.push_back('\0');
   const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += "/Content/A.bin";
+  strings += "/.cooked/A.bin";
   strings.push_back('\0');
 
   IndexHeader header {};
@@ -519,7 +522,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_UnknownFileKind_Throws)
   std::string strings;
   strings.push_back('\0');
   const auto off_path = static_cast<uint32_t>(strings.size());
-  strings += "resources/unknown.bin";
+  strings += "Resources/unknown.bin";
   strings.push_back('\0');
 
   IndexHeader header {};
@@ -575,7 +578,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DuplicateFileKind_Throws)
   std::string strings;
   strings.push_back('\0');
   const auto off_a = static_cast<uint32_t>(strings.size());
-  strings += "resources/textures.table";
+  strings += "Resources/textures.table";
   strings.push_back('\0');
 
   IndexHeader header {};
@@ -636,16 +639,16 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DuplicateAssetKey_Throws)
   std::string strings;
   strings.push_back('\0');
   const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += "assets/A.bin";
+  strings += "A.bin";
   strings.push_back('\0');
   const auto off_vpath_a = static_cast<uint32_t>(strings.size());
-  strings += "/Content/A.bin";
+  strings += "/.cooked/A.bin";
   strings.push_back('\0');
   const auto off_desc_b = static_cast<uint32_t>(strings.size());
-  strings += "assets/B.bin";
+  strings += "B.bin";
   strings.push_back('\0');
   const auto off_vpath_b = static_cast<uint32_t>(strings.size());
-  strings += "/Content/B.bin";
+  strings += "/.cooked/B.bin";
   strings.push_back('\0');
 
   IndexHeader header {};
@@ -714,17 +717,17 @@ NOLINT_TEST_F(
   std::string strings;
   strings.push_back('\0');
   const auto off_desc_a = static_cast<uint32_t>(strings.size());
-  strings += "assets/A.bin";
+  strings += "A.bin";
   strings.push_back('\0');
   const auto off_desc_b = static_cast<uint32_t>(strings.size());
-  strings += "assets/B.bin";
+  strings += "B.bin";
   strings.push_back('\0');
 
   const auto off_vpath_1 = static_cast<uint32_t>(strings.size());
-  strings += "/Content/Same.bin";
+  strings += "/.cooked/Same.bin";
   strings.push_back('\0');
   const auto off_vpath_2 = static_cast<uint32_t>(strings.size());
-  strings += "/Content/Same.bin";
+  strings += "/.cooked/Same.bin";
   strings.push_back('\0');
 
   IndexHeader header {};
@@ -789,12 +792,14 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_TableWithoutData_Throws)
   using oxygen::data::loose_cooked::v1::FileRecord;
   using oxygen::data::loose_cooked::v1::IndexHeader;
   using oxygen::data::pak::MaterialAssetDesc;
+
+  const LooseCookedLayout layout {};
   using oxygen::data::pak::TextureResourceDesc;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root / "assets");
-  std::filesystem::create_directories(cooked_root / "resources");
+  std::filesystem::create_directories(cooked_root / layout.materials_subdir);
+  std::filesystem::create_directories(cooked_root / layout.resources_dir);
   const auto index_path = cooked_root / "container.index.bin";
 
   // Write a minimal textures.table (fallback + one record) but do not write
@@ -803,7 +808,8 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_TableWithoutData_Throws)
   TextureResourceDesc test_desc {};
   {
     std::ofstream out(
-      cooked_root / "resources" / "textures.table", std::ios::binary);
+      cooked_root / layout.resources_dir / layout.textures_table_file_name,
+      std::ios::binary);
     out.write(reinterpret_cast<const char*>(&fallback_desc),
       static_cast<std::streamsize>(sizeof(fallback_desc)));
     out.write(reinterpret_cast<const char*>(&test_desc),
@@ -814,8 +820,10 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_TableWithoutData_Throws)
   material_desc.header.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
   material_desc.header.version = 1;
   {
+    const auto material_file
+      = LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
     std::ofstream out(
-      cooked_root / "assets" / "TestMaterial.mat", std::ios::binary);
+      cooked_root / layout.materials_subdir / material_file, std::ios::binary);
     out.write(reinterpret_cast<const char*>(&material_desc),
       static_cast<std::streamsize>(sizeof(material_desc)));
   }
@@ -824,13 +832,14 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_TableWithoutData_Throws)
   std::string strings;
   strings.push_back('\0');
   const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += "assets/TestMaterial.mat";
+  strings += std::string(layout.materials_subdir) + "/"
+    + LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
   strings.push_back('\0');
   const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += "/Content/TestMaterial.mat";
+  strings += layout.MaterialVirtualPath("TestMaterial");
   strings.push_back('\0');
   const auto off_tex_table = static_cast<uint32_t>(strings.size());
-  strings += "resources/textures.table";
+  strings += layout.TexturesTableRelPath();
   strings.push_back('\0');
 
   IndexHeader header {};
@@ -897,7 +906,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DataWithoutTable_Throws)
   std::string strings;
   strings.push_back('\0');
   const auto off_tex_data = static_cast<uint32_t>(strings.size());
-  strings += "resources/textures.data";
+  strings += "Resources/textures.data";
   strings.push_back('\0');
 
   IndexHeader header {};
@@ -949,9 +958,11 @@ NOLINT_TEST_F(
   using oxygen::data::loose_cooked::v1::IndexHeader;
   using oxygen::data::pak::TextureResourceDesc;
 
+  const LooseCookedLayout layout {};
+
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root / "resources");
+  std::filesystem::create_directories(cooked_root / layout.resources_dir);
   const auto index_path = cooked_root / "container.index.bin";
 
   // Write minimal resources.
@@ -959,7 +970,8 @@ NOLINT_TEST_F(
   TextureResourceDesc test_desc {};
   {
     std::ofstream out(
-      cooked_root / "resources" / "textures.table", std::ios::binary);
+      cooked_root / layout.resources_dir / layout.textures_table_file_name,
+      std::ios::binary);
     out.write(reinterpret_cast<const char*>(&fallback_desc),
       static_cast<std::streamsize>(sizeof(fallback_desc)));
     out.write(reinterpret_cast<const char*>(&test_desc),
@@ -967,16 +979,17 @@ NOLINT_TEST_F(
   }
   {
     std::ofstream out(
-      cooked_root / "resources" / "textures.data", std::ios::binary);
+      cooked_root / layout.resources_dir / layout.textures_data_file_name,
+      std::ios::binary);
   }
 
   std::string strings;
   strings.push_back('\0');
   const auto off_table = static_cast<uint32_t>(strings.size());
-  strings += "resources/textures.table";
+  strings += layout.TexturesTableRelPath();
   strings.push_back('\0');
   const auto off_data = static_cast<uint32_t>(strings.size());
-  strings += "resources/textures.data";
+  strings += layout.TexturesDataRelPath();
   strings.push_back('\0');
 
   IndexHeader header {};
@@ -1034,17 +1047,21 @@ NOLINT_TEST_F(
   using oxygen::data::loose_cooked::v1::IndexHeader;
   using oxygen::data::pak::MaterialAssetDesc;
 
+  const LooseCookedLayout layout {};
+
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root / "assets");
+  std::filesystem::create_directories(cooked_root / layout.materials_subdir);
   const auto index_path = cooked_root / "container.index.bin";
 
   MaterialAssetDesc material_desc {};
   material_desc.header.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
   material_desc.header.version = 1;
   {
+    const auto material_file
+      = LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
     std::ofstream out(
-      cooked_root / "assets" / "TestMaterial.mat", std::ios::binary);
+      cooked_root / layout.materials_subdir / material_file, std::ios::binary);
     out.write(reinterpret_cast<const char*>(&material_desc),
       static_cast<std::streamsize>(sizeof(material_desc)));
   }
@@ -1052,10 +1069,11 @@ NOLINT_TEST_F(
   std::string strings;
   strings.push_back('\0');
   const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += "assets/TestMaterial.mat";
+  strings += std::string(layout.materials_subdir) + "/"
+    + LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
   strings.push_back('\0');
   const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += "/Content/TestMaterial.mat";
+  strings += layout.MaterialVirtualPath("TestMaterial");
   strings.push_back('\0');
 
   IndexHeader header {};
@@ -1204,7 +1222,7 @@ NOLINT_TEST_F(
   std::string strings;
   strings.push_back('\0');
   const auto off_file = static_cast<uint32_t>(strings.size());
-  strings += "resources/textures.table";
+  strings += "Resources/textures.table";
   strings.push_back('\0');
 
   IndexHeader header {};
