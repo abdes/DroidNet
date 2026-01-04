@@ -6,11 +6,10 @@
 
 #pragma once
 
-#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
-#include <span>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -25,52 +24,21 @@
 
 namespace oxygen::graphics {
 
-struct CompiledShaderInfo {
+struct ShaderModule {
   ShaderRequest request {};
   uint64_t cache_key { 0 };
-  uint64_t source_hash { 0 };
-  size_t compiled_bloc_size { 0 };
-  std::chrono::system_clock::time_point compile_time;
-
-  // Default constructor
-  CompiledShaderInfo() = default;
-
-  // Parameterized constructor
-  CompiledShaderInfo(ShaderRequest shader_request, const uint64_t shader_key,
-    const uint64_t hash, const size_t size,
-    const std::chrono::system_clock::time_point time) noexcept
-    : request(std::move(shader_request))
-    , cache_key(shader_key)
-    , source_hash(hash)
-    , compiled_bloc_size(size)
-    , compile_time(time)
-  {
-  }
-};
-
-struct CompiledShader {
-  CompiledShaderInfo info;
   std::shared_ptr<IShaderByteCode> bytecode;
+  std::vector<std::byte> reflection_blob;
 };
 
 class ShaderManager : public Composition {
 public:
   struct Config {
-    std::string backend_name { "Default" };
+    std::string backend_name { "d3d12" };
     std::string archive_file_name { "shaders.bin" };
 
     //! Directory containing the shader archive.
     std::filesystem::path archive_dir;
-
-    //! Directory containing shader sources.
-    std::filesystem::path source_dir;
-
-    //! Additional include directories for shader compilation.
-    std::vector<std::filesystem::path> include_dirs;
-
-    std::span<const ShaderInfo> shaders;
-
-    std::shared_ptr<ShaderCompiler> compiler;
   };
 
   OXGN_GFX_API explicit ShaderManager(Config config)
@@ -86,35 +54,27 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(ShaderManager);
   OXYGEN_DEFAULT_MOVABLE(ShaderManager);
 
-  // Core archive operations
-  //! Loads shader bytecode and metadata from the archive file
-  OXGN_GFX_API auto Load() -> void;
-  //! Persists shader bytecode and metadata to the archive file
-  OXGN_GFX_API auto Save() const -> void;
-  //! Removes all shaders from the archive
-  OXGN_GFX_API auto Clear() noexcept -> void;
+  //! Loads shader bytecode and metadata from the archive file.
+  /*!
+   This is a strict operation: any failure to read, parse, or validate the
+   shader library aborts loading and throws an exception.
 
-  // Shader management
-  //! Adds pre-compiled shader bytecode to the archive
-  OXGN_GFX_NDAPI auto AddCompiledShader(CompiledShader shader) -> bool;
+   @throw std::runtime_error if the shader library is missing or invalid.
+  */
+  OXGN_GFX_API auto Load() -> void;
+
+  //! Removes all shaders from the cache.
+  OXGN_GFX_API auto Clear() noexcept -> void;
   //! Retrieves compiled shader bytecode by canonical request.
   OXGN_GFX_NDAPI auto GetShaderBytecode(const ShaderRequest& request) const
     -> std::shared_ptr<IShaderByteCode>;
 
-  // State queries
-  //! Checks if a shader exists in the archive
+  //! Checks if a shader exists in the archive.
   OXGN_GFX_NDAPI auto HasShader(const ShaderRequest& request) const noexcept
     -> bool;
-  //! Returns profiles of all shaders that need recompilation
-  OXGN_GFX_NDAPI auto GetOutdatedShaders() const -> std::vector<ShaderInfo>;
-  //! Returns the total number of shaders in the archive
-  OXGN_GFX_NDAPI auto GetShaderCount() const noexcept -> size_t;
 
-  // Update operations
-  //! Compiles all shaders whose source files have changed
-  OXGN_GFX_API auto UpdateOutdatedShaders() -> void;
-  //! Forces recompilation of all shaders in the archive
-  OXGN_GFX_NDAPI auto RecompileAll() -> bool;
+  //! Returns the total number of shaders in the archive.
+  OXGN_GFX_NDAPI auto GetShaderCount() const noexcept -> size_t;
 
   [[nodiscard]] auto GetName() const noexcept
   {
@@ -122,19 +82,11 @@ public:
   }
 
 private:
-  //! Initialize tha shader manager by loading the archive file and checking if
-  //! it is up-to-date with the source files, compiling them as needed.
+  //! Initialize the shader manager by loading the archive file.
   OXGN_GFX_API auto Initialize() -> void;
 
-  //! Checks if a shader source file has been modified since last compilation
-  [[nodiscard]] auto IsShaderOutdated(const ShaderInfo& shader) const -> bool;
-
-  //! Compiles shader from profile and adds it to the archive
-  [[nodiscard]] auto CompileAndAddShader(const ShaderInfo& profile) -> bool;
-
   Config config_ {};
-  std::unordered_map<uint64_t, CompiledShader> shader_cache_;
-  std::vector<ShaderInfo> shader_infos_;
+  std::unordered_map<uint64_t, ShaderModule> shader_cache_;
   std::filesystem::path archive_path_;
 };
 

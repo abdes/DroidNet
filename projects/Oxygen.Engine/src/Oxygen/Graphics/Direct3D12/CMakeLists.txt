@@ -22,24 +22,6 @@ asap_push_module("${META_MODULE_NAME}")
 find_package(glm CONFIG REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
-# Define the path to the DXC compiler
-set(dxc_arch "")
-if(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
-  set(dxc_arch "x64")
-elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86")
-  set(dxc_arch "x86")
-elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64")
-  set(dxc_arch "arm64")
-else()
-  message(
-    FATAL_ERROR
-    "Unsupported processor architecture: ${CMAKE_SYSTEM_PROCESSOR}"
-  )
-endif()
-set(dxc_lib_path "${CMAKE_SOURCE_DIR}/packages/DXC/lib/${dxc_arch}")
-set(dxc_inc_path "${CMAKE_SOURCE_DIR}/packages/DXC/inc")
-set(dxc_bin_path "${CMAKE_SOURCE_DIR}/packages/DXC/bin/${dxc_arch}")
-
 # ==============================================================================
 # Build instructions
 # ==============================================================================
@@ -115,8 +97,7 @@ set(
   "ImGui/imgui_impl_dx12.h"
   "Shaders/EngineShaders.cpp"
   "Shaders/EngineShaders.h"
-  "Shaders/ShaderCompiler.cpp"
-  "Shaders/ShaderCompiler.h"
+  "Shaders/EngineShaderCatalog.h"
   "Texture.cpp"
   "ImGui/ImGuiBackend.cpp"
 )
@@ -153,8 +134,6 @@ target_compile_definitions(
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_D3D12_STATIC>
 )
 
-target_include_directories(${META_MODULE_TARGET} PRIVATE "${dxc_inc_path}")
-target_link_directories(${META_MODULE_TARGET} PRIVATE ${dxc_lib_path})
 target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
@@ -165,25 +144,17 @@ target_link_libraries(
     oxygen::imgui
     glm::glm
     nlohmann_json::nlohmann_json
-    dxcompiler
     d3dcompiler
     d3d12
     dxgi
     dxguid
 )
 
-# Custom command to copy the dxcompiler dll to the build output directory
-add_custom_command(
-  TARGET ${META_MODULE_TARGET}
-  POST_BUILD
-  COMMAND
-    ${CMAKE_COMMAND} -E copy_if_different "${dxc_bin_path}/dxcompiler.dll"
-    "$<TARGET_FILE_DIR:${META_MODULE_TARGET}>"
-)
-
 # ------------------------------------------------------------------------------
 # Shader compilation
 # ------------------------------------------------------------------------------
+
+add_subdirectory("Tools/ShaderBake")
 
 add_subdirectory("Shaders")
 
@@ -204,23 +175,5 @@ oxygen_module_install(
   TARGETS
     ${META_MODULE_TARGET}
 )
-
-# dxcompiler is required for this module. Fail configure early if the runtime
-# DLL is not present in the expected package location so the user can fix the
-# package layout before attempting to build or install.
-if(WIN32)
-  if(NOT EXISTS "${dxc_bin_path}/dxcompiler.dll")
-    message(FATAL_ERROR
-      "dxcompiler.dll not found at: ${dxc_bin_path}/dxcompiler.dll\n"
-      "Please install the DXC package into ${CMAKE_SOURCE_DIR}/packages/DXC/"
-    )
-  endif()
-
-  # Install the dxcompiler runtime alongside the module binaries so redistributable
-  # packages include the DXC runtime next to the built DLLs.
-  install(FILES "${dxc_bin_path}/dxcompiler.dll"
-    DESTINATION ${OXYGEN_INSTALL_SHARED}
-  )
-endif()
 
 asap_pop_module("${META_MODULE_NAME}")
