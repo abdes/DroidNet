@@ -13,8 +13,10 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Renderer/Types/DrawIndex.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -120,6 +122,17 @@ protected:
   OXGN_RNDR_NDAPI auto Context() const -> const RenderContext&;
   auto LastBuiltPsoDesc() const -> const auto& { return last_built_pso_desc_; }
 
+  //! Set the pass-level RootConstants payload for this pass execution.
+  /*!
+   This binds the `g_PassConstantsIndex` root constant (DWORD1 at `b2, space0`)
+   once per pass.
+  */
+  auto SetPassConstantsIndex(ShaderVisibleIndex pass_constants_index) noexcept
+    -> void
+  {
+    pass_constants_index_ = pass_constants_index;
+  }
+
   virtual auto DoPrepareResources(graphics::CommandRecorder& recorder)
     -> co::Co<>
     = 0;
@@ -139,10 +152,10 @@ protected:
 
 private:
   auto BindDrawIndexConstant(
-    graphics::CommandRecorder& recorder, uint32_t draw_index) const -> void;
+    graphics::CommandRecorder& recorder, DrawIndex draw_index) const -> void;
 
   auto BindPassConstantsIndexConstant(graphics::CommandRecorder& recorder,
-    uint32_t pass_constants_index) const -> void;
+    ShaderVisibleIndex pass_constants_index) const -> void;
 
   auto BindSceneConstantsBuffer(graphics::CommandRecorder& recorder) const
     -> void;
@@ -161,6 +174,8 @@ private:
   // Track the last built pipeline state object (PSO) description and hash, so
   // we can properly manage their caching and retrieval.
   std::optional<graphics::GraphicsPipelineDesc> last_built_pso_desc_;
+
+  ShaderVisibleIndex pass_constants_index_ { kInvalidShaderVisibleIndex };
 };
 
 } // namespace oxygen::engine
