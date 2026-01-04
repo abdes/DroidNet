@@ -63,6 +63,7 @@ set(
   "SceneCameraViewResolver.h"
   "ScenePrep/CollectionConfig.h"
   "ScenePrep/FinalizationConfig.h"
+  "Types/DrawIndex.h"
   "Types/DrawMetadata.h"
   "Types/MaterialConstants.h"
   "Types/PassMask.h"

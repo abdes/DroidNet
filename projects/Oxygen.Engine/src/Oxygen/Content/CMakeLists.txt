@@ -92,6 +92,7 @@ set(
   "Import/Importer.h"
   "Import/ImportDiagnostics.h"
   "Import/ImportFormat.h"
+  "Import/Layout.h"
   "Import/Naming.h"
   "Import/ImportOptions.h"
   "Import/ImportReport.h"
@@ -102,6 +103,7 @@ set(
   "Import/fbx/ufbx.h"
   "Import/fbx/ufbx.c"
   "Import/gltf/cgltf.h"
+  "Import/stb/stb_image.h"
 )
 
 target_sources(
