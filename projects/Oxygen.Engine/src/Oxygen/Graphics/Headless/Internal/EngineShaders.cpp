@@ -55,27 +55,27 @@ EngineShaders::EngineShaders()
     static const std::array<ShaderRequest, 5> kEngineShaderRequests = {
       ShaderRequest {
         .stage = oxygen::ShaderType::kVertex,
-        .source_path = "FullScreenTriangle.hlsl",
+        .source_path = "Passes/Forward/ForwardMesh.hlsl",
         .entry_point = "VS",
       },
       ShaderRequest {
         .stage = oxygen::ShaderType::kPixel,
-        .source_path = "FullScreenTriangle.hlsl",
+        .source_path = "Passes/Forward/ForwardMesh.hlsl",
         .entry_point = "PS",
       },
       ShaderRequest {
         .stage = oxygen::ShaderType::kVertex,
-        .source_path = "DepthPrePass.hlsl",
+        .source_path = "Passes/Depth/DepthPrePass.hlsl",
         .entry_point = "VS",
       },
       ShaderRequest {
         .stage = oxygen::ShaderType::kPixel,
-        .source_path = "DepthPrePass.hlsl",
+        .source_path = "Passes/Depth/DepthPrePass.hlsl",
         .entry_point = "PS",
       },
       ShaderRequest {
         .stage = oxygen::ShaderType::kCompute,
-        .source_path = "LightCulling.hlsl",
+        .source_path = "Passes/Lighting/LightCulling.hlsl",
         .entry_point = "CS",
       },
     };

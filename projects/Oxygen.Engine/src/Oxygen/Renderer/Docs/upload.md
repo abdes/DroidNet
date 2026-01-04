@@ -259,7 +259,7 @@ lifetime/generation, validation, and type safety.
       timestamp strategies (preserve/omit/git-sha).
   - Files: `src/Oxygen/Renderer/RenderPass.h/.cpp`,
     `src/Oxygen/Renderer/Renderer.cpp`,
-    `src/Oxygen/Graphics/Direct3D12/Shaders/FullScreenTriangle.hlsl`,
+    `src/Oxygen/Graphics/Direct3D12/Shaders/Passes/Forward/ForwardMesh.hlsl`,
     `src/Oxygen/Core/Bindless/Generated.Constants.h`,
     `src/Oxygen/Core/Bindless/Generated.RootSignature.h`,
     `src/Oxygen/Core/Bindless/Generated.Meta.h`,
@@ -623,7 +623,7 @@ these names for clarity:
 - `bindless_indices_slot`          -> `b1` (Range 0, Scene constants / indices
   table)  # Implementation note: the current codebase uses `b1` (see
   `src/Oxygen/Renderer/Renderer.cpp`) and shaders (e.g.
-  `src/Oxygen/Graphics/Direct3D12/Shaders/FullScreenTriangle.hlsl`). Update both
+  `src/Oxygen/Graphics/Direct3D12/Shaders/Passes/Forward/ForwardMesh.hlsl`). Update both
   code and shaders via a single source-of-truth header to avoid drift.
 - `bindless_geometry_slot`         -> `t0` (Range 1, VB/IB/Transforms; unified
   SRV table)

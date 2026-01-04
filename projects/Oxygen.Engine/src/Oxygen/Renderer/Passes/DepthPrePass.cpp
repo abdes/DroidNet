@@ -390,12 +390,12 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   return GraphicsPipelineDesc::Builder()
     .SetVertexShader(ShaderRequest {
       .stage = ShaderType::kVertex,
-      .source_path = "DepthPrePass.hlsl",
+      .source_path = "Passes/Depth/DepthPrePass.hlsl",
       .entry_point = "VS",
     })
     .SetPixelShader(ShaderRequest {
       .stage = ShaderType::kPixel,
-      .source_path = "DepthPrePass.hlsl",
+      .source_path = "Passes/Depth/DepthPrePass.hlsl",
       .entry_point = "PS",
     })
     .SetPrimitiveTopology(PrimitiveType::kTriangleList)

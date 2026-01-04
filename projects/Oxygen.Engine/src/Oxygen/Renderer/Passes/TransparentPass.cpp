@@ -199,12 +199,12 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   return GraphicsPipelineDesc::Builder()
     .SetVertexShader(graphics::ShaderRequest {
       .stage = ShaderType::kVertex,
-      .source_path = "FullScreenTriangle.hlsl",
+      .source_path = "Passes/Forward/ForwardMesh.hlsl",
       .entry_point = "VS",
     })
     .SetPixelShader(graphics::ShaderRequest {
       .stage = ShaderType::kPixel,
-      .source_path = "FullScreenTriangle.hlsl",
+      .source_path = "Passes/Forward/ForwardMesh.hlsl",
       .entry_point = "PS",
     })
     .SetPrimitiveTopology(PrimitiveType::kTriangleList)
