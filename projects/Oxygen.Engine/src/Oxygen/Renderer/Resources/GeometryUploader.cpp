@@ -317,24 +317,11 @@ auto GeometryUploader::Impl::GetOrAllocate(
   }
 
   const auto& mesh = *geometry.mesh;
-
-  LOG_F(2, "mesh name     = {}", mesh.GetName());
-  LOG_F(2, "mesh vertices = {}", mesh.Vertices().size());
-  LOG_F(2, "mesh indices  = {}", mesh.IndexBuffer().Count());
-
-  // Enhanced validation with detailed error messages
-  std::string error_msg;
-  if (!ValidateMesh(mesh, error_msg)) {
-    LOG_F(ERROR, "GeometryUploader::GetOrAllocate failed: {}", error_msg);
-    DCHECK_F(false, "GetOrAllocate received invalid mesh: {}", error_msg);
-    return engine::sceneprep::kInvalidGeometryHandle;
-  }
-
   const GeometryIdentityKey key {
     .asset_key = geometry.asset_key,
     .lod_index = geometry.lod_index,
   };
-  LOG_F(2, "lod index    = {}", key.lod_index);
+  DLOG_F(2, "lod index    = {}", key.lod_index);
   if (const auto it = mesh_identity_to_handle_.find(key);
     it != mesh_identity_to_handle_.end()) {
     const auto h = it->second;
@@ -348,6 +335,20 @@ auto GeometryUploader::Impl::GetOrAllocate(
     // If the mesh instance changed for the same stable identity (hot-reload),
     // update and mark dirty to ensure data is reuploaded.
     if (entry.mesh != geometry.mesh) {
+      // Validate only when we see a new mesh instance. This avoids repeated
+      // O(N) scans on cache hits.
+      DLOG_F(2, "mesh name     = {}", mesh.GetName());
+      DLOG_F(2, "mesh vertices = {}", mesh.Vertices().size());
+      DLOG_F(2, "mesh indices  = {}", mesh.IndexBuffer().Count());
+
+      std::string error_msg;
+      if (!ValidateMesh(mesh, error_msg)) {
+        LOG_F(ERROR, "GeometryUploader::GetOrAllocate hot-reload ignored: {}",
+          error_msg);
+        DCHECK_F(false, "GetOrAllocate received invalid mesh: {}", error_msg);
+        return h;
+      }
+
       entry.mesh = geometry.mesh;
       entry.is_dirty = true;
 
@@ -367,6 +368,18 @@ auto GeometryUploader::Impl::GetOrAllocate(
     }
 
     return h;
+  }
+
+  // New identity: validate once before allocating resources.
+  DLOG_F(2, "mesh name     = {}", mesh.GetName());
+  DLOG_F(2, "mesh vertices = {}", mesh.Vertices().size());
+  DLOG_F(2, "mesh indices  = {}", mesh.IndexBuffer().Count());
+
+  std::string error_msg;
+  if (!ValidateMesh(mesh, error_msg)) {
+    LOG_F(ERROR, "GeometryUploader::GetOrAllocate failed: {}", error_msg);
+    DCHECK_F(false, "GetOrAllocate received invalid mesh: {}", error_msg);
+    return engine::sceneprep::kInvalidGeometryHandle;
   }
 
   // Not found or collision mismatch: allocate new handle
