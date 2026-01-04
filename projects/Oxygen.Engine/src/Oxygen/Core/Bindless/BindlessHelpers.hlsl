@@ -120,7 +120,7 @@ static inline float4x4 BX_LoadWorldMatrix(uint transformsSlot, uint transformInd
 {
     if (BX_IsValidSlot(transformsSlot)) {
         StructuredBuffer<float4x4> worlds = ResourceDescriptorHeap[transformsSlot];
-        return worlds[transformOffset];
+        return worlds[transformIndex];
     }
     // Identity
     return float4x4(1,0,0,0,

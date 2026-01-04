@@ -14,6 +14,10 @@
 // - The root signature uses one table (t0-unbounded, space0) + direct CBVs.
 //   See MainModule.cpp and CommandRecorder.cpp for details.
 
+#include "Renderer/SceneConstants.hlsli"
+#include "Renderer/DrawMetadata.hlsli"
+#include "Renderer/MaterialConstants.hlsli"
+
 #include "MaterialFlags.hlsli"
 
 // Define vertex structure to match the CPU-side Vertex struct
@@ -26,67 +30,8 @@ struct Vertex {
     float4 color;
 };
 
+#include "Core/Bindless/BindlessHelpers.hlsl"
 
-// Structured buffer for per-draw metadata (matches C++ DrawMetadata)
-struct DrawMetadata {
-    // --- Geometry buffers ---
-    uint vertex_buffer_index;            // Bindless index into vertex buffer table
-    uint index_buffer_index;             // Bindless index into index buffer table
-    uint first_index;                    // Start index within index buffer
-    int  base_vertex;                    // Base vertex offset
-
-    // --- Draw configuration ---
-    uint is_indexed;                     // 0 = non-indexed, 1 = indexed
-    uint instance_count;                 // Number of instances
-    uint index_count;                    // Number of indices (undefined if non-indexed)
-    uint vertex_count;                   // Number of vertices (undefined if indexed)
-    uint material_handle;                // Stable material handle (registry)
-
-    // --- Transform & instance indirection ---
-    uint transform_index;                // Index into transform arrays
-    uint instance_metadata_buffer_index; // Bindless index into instance metadata buffer
-    uint instance_metadata_offset;       // Offset into instance metadata buffer
-    uint flags;                          // Bitfield: visibility, pass mask, etc.
-    uint padding[3];                     // Padding to 64 bytes
-};
-
-// Material constants structure (matches C++ MaterialConstants struct layout)
-struct MaterialConstants {
-    float4 base_color;                      // RGBA fallback color
-    float metalness;                        // Metalness scalar
-    float roughness;                        // Roughness scalar
-    float normal_scale;                     // Normal map scale
-    float ambient_occlusion;                // AO scalar
-    uint base_color_texture_index;          // Texture indices (bindless)
-    uint normal_texture_index;
-    uint metallic_texture_index;
-    uint roughness_texture_index;
-    uint ambient_occlusion_texture_index;
-    uint flags;                             // Material flags
-    float2 uv_scale;                        // UV scale (tiling)
-    float2 uv_offset;                       // UV offset
-    uint _pad0;                             // Padding for alignment
-    uint _pad1;                             // Padding for alignment
-};
-
-// Constant buffer for scene-wide data. This is typically bound directly as a
-// root CBV (not indexed from the descriptor heap), allowing fast and efficient
-// updates for per-frame or per-draw constants.
-cbuffer SceneConstants : register(b1) {
-    float4x4 view_matrix;                     // 64 bytes
-    float4x4 projection_matrix;               // 64-bytes
-    float3 camera_position;                   // 12-bytes
-    uint frame_slot;                          // 4-bytes
-    uint64_t frame_seq_num;                   // 8-bytes
-    float time_seconds;                       // 4-bytes
-    uint _pad0;                               // 4-bytes
-
-    // Dynamic bindless slots for the SRVs for various resource types.
-    uint bindless_draw_metadata_slot;         // 4 bytes
-    uint bindless_transforms_slot;            // 4 bytes
-    uint bindless_normal_matrices_slot;       // 4 bytes
-    uint bindless_material_constants_slot;    // 4 bytes
-} // Total is 176 bytes
 
 // Root constants b2 (shared root param index with engine)
 // ABI layout:
@@ -204,7 +149,7 @@ VSOutput VS(uint vertexID : SV_VertexID) {
     VSOutput output;
 
     // Access per-draw metadata buffer through dynamic slot; skip if unavailable.
-    if (bindless_draw_metadata_slot == 0xFFFFFFFFu) {
+    if (bindless_draw_metadata_slot == K_INVALID_BINDLESS_INDEX) {
         // Fallback: no geometry; output origin.
         output.position = float4(0,0,0,1);
         output.color = float3(1,0,1); // debug magenta

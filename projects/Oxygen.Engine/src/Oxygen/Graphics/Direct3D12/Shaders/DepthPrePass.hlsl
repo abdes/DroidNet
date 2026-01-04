@@ -14,6 +14,10 @@
 // - The root signature uses one table (t0-unbounded, space0) + direct CBVs.
 //   See MainModule.cpp and CommandRecorder.cpp for details.
 
+#include "Renderer/SceneConstants.hlsli"
+#include "Renderer/DrawMetadata.hlsli"
+#include "Renderer/MaterialConstants.hlsli"
+
 struct VertexData
 {
     float3 position;
@@ -24,51 +28,11 @@ struct VertexData
     float4 color;
 };
 
-// Structured buffer for per-draw metadata (matches C++ DrawMetadata)
-struct DrawMetadata {
-    // --- Geometry buffers ---
-    uint vertex_buffer_index;            // Bindless index into vertex buffer table
-    uint index_buffer_index;             // Bindless index into index buffer table
-    uint first_index;                    // Start index within index buffer
-    int  base_vertex;                    // Base vertex offset
-
-    // --- Draw configuration ---
-    uint is_indexed;                     // 0 = non-indexed, 1 = indexed
-    uint instance_count;                 // Number of instances
-    uint index_count;                    // Number of indices (undefined if non-indexed)
-    uint vertex_count;                   // Number of vertices (undefined if indexed)
-    uint material_handle;                // Stable material handle (registry)
-
-    // --- Transform & instance indirection ---
-    uint transform_index;                // Index into transform arrays
-    uint instance_metadata_buffer_index; // Bindless index into instance metadata buffer
-    uint instance_metadata_offset;       // Offset into instance metadata buffer
-    uint flags;                          // Bitfield: visibility, pass mask, etc.
-    uint padding[3];                     // Padding to 64 bytes
-};
-
+#define BX_VERTEX_TYPE VertexData
+#include "Core/Bindless/BindlessHelpers.hlsl"
 
 // Access to the bindless descriptor heap (SM 6.6+)
 // No resource declarations needed - ResourceDescriptorHeap provides direct access
-
-// Constant buffer for scene-wide data. This is typically bound directly as a
-// root CBV (not indexed from the descriptor heap), allowing fast and efficient
-// updates for per-frame or per-draw constants.
-cbuffer SceneConstants : register(b1) {
-    float4x4 view_matrix;                     // 64 bytes
-    float4x4 projection_matrix;               // 64-bytes
-    float3 camera_position;                   // 12-bytes
-    uint frame_slot;                          // 4-bytes
-    uint64_t frame_seq_num;                   // 8-bytes
-    float time_seconds;                       // 4-bytes
-    uint _pad0;                               // 4-bytes
-
-    // Dynamic bindless slots for the SRVs for various resource types.
-    uint bindless_draw_metadata_slot;         // 4 bytes
-    uint bindless_transforms_slot;            // 4 bytes
-    uint bindless_normal_matrices_slot;       // 4 bytes
-    uint bindless_material_constants_slot;    // 4 bytes
-} // Total is 176 bytes
 
 // Root constants b2 (shared root param index with engine)
 // ABI layout:
@@ -113,7 +77,7 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID) {
     VS_OUTPUT_DEPTH output;
 
     // Access the DrawMetadata buffer using the dynamic slot from scene constants.
-    if (bindless_draw_metadata_slot == 0xFFFFFFFFu) {
+    if (bindless_draw_metadata_slot == K_INVALID_BINDLESS_INDEX) {
         // No geometry bound; output position safely (could early return). Use vertexID as trivial position.
         output.clipSpacePosition = float4(0,0,0,1);
         return output;
