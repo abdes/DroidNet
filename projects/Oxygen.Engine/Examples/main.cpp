@@ -75,7 +75,7 @@ auto main(int argc, char** argv) noexcept -> int
     loguru::g_preamble_date = false;
     loguru::g_preamble_file = true;
     loguru::g_preamble_verbose = false;
-    loguru::g_preamble_time = false;
+    loguru::g_preamble_time = true;
     loguru::g_preamble_uptime = false;
     loguru::g_preamble_thread = true;
     loguru::g_preamble_header = false;
