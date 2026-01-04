@@ -135,14 +135,18 @@ void LogDxcFailureReport(const DxcFailureContext& ctx, std::string_view reason,
 
 auto MakeDxcArguments(const wchar_t* profile_name,
   const std::string& entry_point_utf8,
-  const std::vector<std::filesystem::path>& include_dirs) -> DxcCompileArgs
+  const std::vector<std::filesystem::path>& include_dirs,
+  const std::map<std::wstring, std::wstring>& global_defines,
+  const std::vector<oxygen::graphics::ShaderDefine>& request_defines)
+  -> DxcCompileArgs
 {
   DxcCompileArgs args {};
 
   std::wstring entry_point;
   oxygen::string_utils::Utf8ToWide(entry_point_utf8, entry_point);
 
-  args.argv_storage.reserve(16U + (include_dirs.size() * 2U));
+  args.argv_storage.reserve(16U + (include_dirs.size() * 2U)
+    + global_defines.size() + request_defines.size());
 
   args.argv_storage.emplace_back(L"-Ges");
   args.argv_storage.emplace_back(L"-enable-16bit-types");
@@ -156,6 +160,42 @@ auto MakeDxcArguments(const wchar_t* profile_name,
     }
     args.argv_storage.emplace_back(L"-I");
     args.argv_storage.emplace_back(include_dir.wstring());
+  }
+
+  // Global compiler defines first, then request defines (request wins).
+  for (const auto& [name, value] : global_defines) {
+    if (name.empty()) {
+      continue;
+    }
+
+    std::wstring def_arg = L"-D";
+    def_arg += name;
+    if (!value.empty()) {
+      def_arg += L"=";
+      def_arg += value;
+    }
+    args.argv_storage.emplace_back(std::move(def_arg));
+  }
+
+  for (const auto& def : request_defines) {
+    if (def.name.empty()) {
+      continue;
+    }
+
+    std::wstring name_w;
+    oxygen::string_utils::Utf8ToWide(def.name, name_w);
+
+    std::wstring def_arg = L"-D";
+    def_arg += name_w;
+
+    if (def.value.has_value()) {
+      std::wstring value_w;
+      oxygen::string_utils::Utf8ToWide(*def.value, value_w);
+      def_arg += L"=";
+      def_arg += value_w;
+    }
+
+    args.argv_storage.emplace_back(std::move(def_arg));
   }
 
 #if !defined(NDEBUG)
@@ -337,8 +377,8 @@ auto ShaderCompiler::CompileFromSource(const std::u8string& shader_source,
     static_cast<UINT32>(shader_source.size()), CP_UTF8,
     src_blob.GetAddressOf()));
 
-  auto args = MakeDxcArguments(
-    profile_name, shader_info.entry_point, options.include_dirs);
+  auto args = MakeDxcArguments(profile_name, shader_info.entry_point,
+    options.include_dirs, GetConfig().global_defines, options.defines);
 
   //// Add defines to arguments
   // for (const auto& define : defines)

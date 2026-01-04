@@ -32,6 +32,14 @@ public:
      directory.
     */
     std::vector<std::filesystem::path> include_dirs;
+
+    //! Preprocessor defines to apply for this compilation.
+    /*!
+     Defines in this list are appended after
+     `ShaderCompiler::Config::global_defines`. Backend compilers should treat
+     later definitions as higher precedence.
+    */
+    std::vector<ShaderDefine> defines {};
   };
 
   struct Config {

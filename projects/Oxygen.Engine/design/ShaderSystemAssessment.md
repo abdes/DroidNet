@@ -703,7 +703,7 @@ reach the final spec in this document.
      - New canonicalization component (location TBD in code, but used by both the offline builder and runtime loader).
      - New unit tests in an existing test suite (e.g. under `src/Oxygen/Graphics/Common/Test/`).
 
-9. [ ] **Extend the compiler options and DXC argument emission to support request defines.**
+9. [X] **Extend the compiler options and DXC argument emission to support request defines.**
    - Current gaps:
      - `src/Oxygen/Graphics/Common/ShaderCompiler.h`: `ShaderCompileOptions` only carries `include_dirs`.
      - `src/Oxygen/Graphics/Direct3D12/Shaders/ShaderCompiler.cpp`: has commented-out code for adding `-D` defines; currently emits none.
@@ -712,6 +712,10 @@ reach the final spec in this document.
      - Ensure DXC include roots match §5.2 exactly:
        - `<workspace_root>/src/Oxygen`
        - `<workspace_root>/src/Oxygen/Graphics/Direct3D12/Shaders`
+   - Implemented:
+     - `src/Oxygen/Graphics/Common/ShaderCompiler.h`: `ShaderCompileOptions` now carries `defines`.
+     - `src/Oxygen/Graphics/Common/ShaderManager.cpp`: plumbs request `defines` into compile options.
+     - `src/Oxygen/Graphics/Direct3D12/Shaders/ShaderCompiler.cpp`: emits DXC `-D` for global defines, then request defines (request takes precedence).
 
 10. [ ] **Create the renderer contract HLSL includes and remove contract redeclarations from entry shaders.**
     - Current state (violates §2 and §5.4):
