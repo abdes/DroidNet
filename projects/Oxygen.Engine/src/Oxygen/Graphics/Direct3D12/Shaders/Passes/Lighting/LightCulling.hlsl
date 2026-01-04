@@ -5,20 +5,34 @@
 //===----------------------------------------------------------------------===//
 
 // Forward+ Light Culling Compute Shader
-// Performs tiled light culling for Forward+ rendering pipeline
-// Processes screen tiles (16x16 pixels) to determine which lights affect each tile
+// Performs tiled light culling for Forward+ rendering.
+//
+// === Bindless-only Discipline (final) ===
+// - SceneConstants is bound as a root CBV at b1, space0 (authoritative include).
+// - RootConstants is bound at b2, space0 (fixed ABI).
+// - All SRVs/UAVs are accessed via SM 6.6 descriptor heaps using heap indices
+//   stored in pass constants.
+// - This shader declares zero register-bound SRVs/UAVs/samplers.
 
-// === Bindless Rendering Contract ===
-// - The engine provides a single shader-visible CBV_SRV_UAV heap.
-// - Root constant buffer (b0) contains indices for bindless resource access
-// - Scene constants (b1) bound directly as root CBV for per-frame data
-// - All other resources accessed through bindless arrays using indices from b0
-// - UAV buffers for output light lists are also part of the bindless system,
-//   accessed via indices from b0
+#include "Renderer/SceneConstants.hlsli"
+#include "Renderer/DrawMetadata.hlsli" // Required by BindlessHelpers.hlsl.
+#include "Renderer/MaterialConstants.hlsli" // Required by BindlessHelpers.hlsl.
+
+#define BX_VERTEX_TYPE uint4
+#include "Core/Bindless/BindlessHelpers.hlsl"
+
+// Root constants b2 (shared root param index with engine)
+// ABI layout:
+//   g_DrawIndex          : unused for dispatch
+//   g_PassConstantsIndex : heap index of a CBV holding pass constants
+cbuffer RootConstants : register(b2, space0) {
+    uint g_DrawIndex;
+    uint g_PassConstantsIndex;
+}
 
 // Tile configuration for Forward+ light culling
-#define TILE_SIZE 16
-#define MAX_LIGHTS_PER_TILE 64
+static const uint TILE_SIZE = 16;
+static const uint MAX_LIGHTS_PER_TILE = 64;
 
 // Matches the CPU-side GPULight structure (80 bytes, 16-byte aligned)
 struct GPULight {
@@ -34,28 +48,22 @@ struct GPULight {
     float padding[3];           // Padding to reach 80 bytes (16-byte alignment)
 };
 
-// Constant buffer for bindless resource access
-cbuffer ResourceIndices : register(b0) {
-    uint g_DepthTextureIndex;       // Global index into g_BindlessTextures[] for depth buffer
-    uint g_LightBufferIndex;        // Global index into g_BindlessStructuredBuffers[] for light data
-    uint g_LightListBufferIndex;    // Global index into g_BindlessRWBuffers[] for per-tile light lists
-    uint g_LightCountBufferIndex;   // Global index into g_BindlessRWBuffers[] for per-tile light counts
-};
+// Pass constants for the light culling dispatch.
+// This CBV is fetched via ResourceDescriptorHeap[g_PassConstantsIndex].
+struct LightCullingPassConstants
+{
+    // Resources (heap indices)
+    uint depth_texture_index;     // TEXTURES domain: Texture2D<float> depth
+    uint light_buffer_index;      // GLOBAL_SRV domain: StructuredBuffer<GPULight>
+    uint light_list_uav_index;    // GLOBAL_SRV domain: RWStructuredBuffer<uint>
+    uint light_count_uav_index;   // GLOBAL_SRV domain: RWStructuredBuffer<uint>
 
-// Scene constants bound directly as root CBV for performance
-cbuffer SceneConstants : register(b1) {
-    matrix viewMatrix;              // View matrix
-    matrix projectionMatrix;        // Projection matrix
-    matrix invProjectionMatrix;     // Inverse projection matrix
-    float2 screenDimensions;        // Screen width and height in pixels
-    uint numLights;                 // Total number of lights in the scene
-    uint padding;                   // Padding for alignment
+    // Dispatch parameters
+    float4x4 inv_projection_matrix;
+    float2 screen_dimensions;     // pixels
+    uint num_lights;
+    uint _pad0;
 };
-
-// Bindless resource declarations
-Texture2D g_BindlessTextures[] : register(t0, space0);
-StructuredBuffer<GPULight> g_BindlessStructuredBuffers[] : register(t0, space1);
-RWStructuredBuffer<uint> g_BindlessRWBuffers[] : register(u0, space2);
 
 // Group shared memory for tile-based processing
 groupshared uint s_TileLightCount;
@@ -66,7 +74,8 @@ groupshared float s_DepthTileMin[TILE_SIZE * TILE_SIZE];
 groupshared float s_DepthTileMax[TILE_SIZE * TILE_SIZE];
 
 // Convert screen coordinates to view space position
-float3 ScreenToView(float2 screenPos, float depth) {
+float3 ScreenToView(float2 screenPos, float depth, float2 screenDimensions,
+                    float4x4 invProjectionMatrix) {
     // Convert screen coordinates to normalized device coordinates
     float2 ndc = (screenPos / screenDimensions) * 2.0 - 1.0;
     ndc.y = -ndc.y; // Flip Y coordinate for typical DirectX-style screen coords
@@ -90,14 +99,16 @@ static float4 ComputeOrientedPlane(float3 pA, float3 pB, float3 pC, float3 frust
 
 // Calculate tile frustum bounds in view space
 // Outputs 6 view-space planes with normals pointing inward into the frustum.
-void CalculateTileFrustum(uint2 tileID, out float4 frustumPlanes[6]) {
+void CalculateTileFrustum(uint2 tileID, float2 screen_dimensions,
+                          float4x4 inv_projection_matrix,
+                          out float4 frustumPlanes[6]) {
     // Calculate tile bounds in screen space
     float2 tileMin = tileID * TILE_SIZE;
     float2 tileMax = (tileID + 1) * TILE_SIZE;
 
     // Clamp to screen bounds
     tileMin = max(tileMin, float2(0, 0));
-    tileMax = min(tileMax, screenDimensions);
+    tileMax = min(tileMax, screen_dimensions);
 
     // Use shared memory depth bounds (these are normalized 0-1 depth values)
     float normMinDepth = s_TileDepthMin;
@@ -105,14 +116,22 @@ void CalculateTileFrustum(uint2 tileID, out float4 frustumPlanes[6]) {
 
     // Calculate frustum corner points in view space
     float3 frustumCorners[8];
-    frustumCorners[0] = ScreenToView(float2(tileMin.x, tileMin.y), normMinDepth); // Near bottom-left (NBL)
-    frustumCorners[1] = ScreenToView(float2(tileMax.x, tileMin.y), normMinDepth); // Near bottom-right (NBR)
-    frustumCorners[2] = ScreenToView(float2(tileMax.x, tileMax.y), normMinDepth); // Near top-right (NTR)
-    frustumCorners[3] = ScreenToView(float2(tileMin.x, tileMax.y), normMinDepth); // Near top-left (NTL)
-    frustumCorners[4] = ScreenToView(float2(tileMin.x, tileMin.y), normMaxDepth); // Far bottom-left (FBL)
-    frustumCorners[5] = ScreenToView(float2(tileMax.x, tileMin.y), normMaxDepth); // Far bottom-right (FBR)
-    frustumCorners[6] = ScreenToView(float2(tileMax.x, tileMax.y), normMaxDepth); // Far top-right (FTR)
-    frustumCorners[7] = ScreenToView(float2(tileMin.x, tileMax.y), normMaxDepth); // Far top-left (FTL)
+    frustumCorners[0] = ScreenToView(float2(tileMin.x, tileMin.y), normMinDepth,
+                                     screen_dimensions, inv_projection_matrix); // NBL
+    frustumCorners[1] = ScreenToView(float2(tileMax.x, tileMin.y), normMinDepth,
+                                     screen_dimensions, inv_projection_matrix); // NBR
+    frustumCorners[2] = ScreenToView(float2(tileMax.x, tileMax.y), normMinDepth,
+                                     screen_dimensions, inv_projection_matrix); // NTR
+    frustumCorners[3] = ScreenToView(float2(tileMin.x, tileMax.y), normMinDepth,
+                                     screen_dimensions, inv_projection_matrix); // NTL
+    frustumCorners[4] = ScreenToView(float2(tileMin.x, tileMin.y), normMaxDepth,
+                                     screen_dimensions, inv_projection_matrix); // FBL
+    frustumCorners[5] = ScreenToView(float2(tileMax.x, tileMin.y), normMaxDepth,
+                                     screen_dimensions, inv_projection_matrix); // FBR
+    frustumCorners[6] = ScreenToView(float2(tileMax.x, tileMax.y), normMaxDepth,
+                                     screen_dimensions, inv_projection_matrix); // FTR
+    frustumCorners[7] = ScreenToView(float2(tileMin.x, tileMax.y), normMaxDepth,
+                                     screen_dimensions, inv_projection_matrix); // FTL
 
     // Calculate the geometric center of the frustum, used to ensure normals point inward.
     float3 frustumCenter = (frustumCorners[0] + frustumCorners[1] + frustumCorners[2] + frustumCorners[3] +
@@ -135,7 +154,7 @@ void CalculateTileFrustum(uint2 tileID, out float4 frustumPlanes[6]) {
 // Test if a light intersects with the tile frustum
 bool TestLightInFrustum(GPULight light, float4 frustumPlanes[6]) { // Removed minDepth, maxDepth parameters
     // Transform light position to view space
-    float3 lightPosView = mul(viewMatrix, float4(light.position, 1.0)).xyz;
+    float3 lightPosView = mul(view_matrix, float4(light.position, 1.0)).xyz;
 
     // Test light type
     if (light.type == 0) { // Directional light
@@ -168,6 +187,34 @@ bool TestLightInFrustum(GPULight light, float4 frustumPlanes[6]) { // Removed mi
 [shader("compute")]
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
 void CS(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint groupIndex : SV_GroupIndex) {
+    // Fetch pass constants from the bindless heap.
+    if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX) {
+        return;
+    }
+    if (!BX_IN_GLOBAL_SRV(g_PassConstantsIndex)) {
+        return;
+    }
+
+    ConstantBuffer<LightCullingPassConstants> pass_constants =
+        ResourceDescriptorHeap[g_PassConstantsIndex];
+
+    const float2 screen_dimensions = pass_constants.screen_dimensions;
+    const float4x4 inv_projection_matrix = pass_constants.inv_projection_matrix;
+    const uint num_lights = pass_constants.num_lights;
+
+    // Validate required resources.
+    const uint depth_texture_index = pass_constants.depth_texture_index;
+    const uint light_buffer_index = pass_constants.light_buffer_index;
+    const uint light_list_uav_index = pass_constants.light_list_uav_index;
+    const uint light_count_uav_index = pass_constants.light_count_uav_index;
+
+    if (!BX_IN_TEXTURES(depth_texture_index) ||
+        !BX_IN_GLOBAL_SRV(light_buffer_index) ||
+        !BX_IN_GLOBAL_SRV(light_list_uav_index) ||
+        !BX_IN_GLOBAL_SRV(light_count_uav_index)) {
+        return;
+    }
+
     // Calculate tile coordinates
     uint2 tileID = groupID.xy;
     uint2 pixelCoord = groupID.xy * TILE_SIZE + groupThreadID.xy;
@@ -183,8 +230,9 @@ void CS(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint
 
     // Sample depth buffer to determine tile depth bounds
     float depth = 1.0f;
-    if (all(pixelCoord < uint2(screenDimensions))) { // Boundary check
-        depth = g_BindlessTextures[g_DepthTextureIndex].Load(int3(pixelCoord, 0)).r;
+    if (all(pixelCoord < uint2(screen_dimensions))) { // Boundary check
+        Texture2D<float> depth_tex = ResourceDescriptorHeap[depth_texture_index];
+        depth = depth_tex.Load(int3(pixelCoord, 0)).r;
     }
     s_DepthTileMin[groupIndex] = depth;
     s_DepthTileMax[groupIndex] = depth;
@@ -210,16 +258,17 @@ void CS(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint
 
     // Calculate tile frustum
     float4 frustumPlanes[6];
-    CalculateTileFrustum(tileID, frustumPlanes);
+    CalculateTileFrustum(tileID, screen_dimensions, inv_projection_matrix, frustumPlanes);
 
     // Process lights in batches (each thread processes multiple lights)
-    uint lightsPerThread = (numLights + (TILE_SIZE * TILE_SIZE) - 1) / (TILE_SIZE * TILE_SIZE);
+    uint lightsPerThread = (num_lights + (TILE_SIZE * TILE_SIZE) - 1) / (TILE_SIZE * TILE_SIZE);
     uint startLightIndex = groupIndex * lightsPerThread;
-    uint endLightIndex = min(startLightIndex + lightsPerThread, numLights);
+    uint endLightIndex = min(startLightIndex + lightsPerThread, num_lights);
 
     // Test lights against tile frustum
     for (uint lightIndex = startLightIndex; lightIndex < endLightIndex; lightIndex++) {
-        GPULight light = g_BindlessStructuredBuffers[g_LightBufferIndex][lightIndex];
+        StructuredBuffer<GPULight> lights = ResourceDescriptorHeap[light_buffer_index];
+        GPULight light = lights[lightIndex];
 
         if (TestLightInFrustum(light, frustumPlanes)) {
             uint listIndex;
@@ -236,18 +285,21 @@ void CS(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint
 
     // Write results to output buffers (first thread in group)
     if (groupIndex == 0) {
-        uint tileIndex = tileID.y * ((uint(screenDimensions.x) + TILE_SIZE - 1) / TILE_SIZE) + tileID.x;
+        uint tiles_x = ((uint(screen_dimensions.x) + TILE_SIZE - 1) / TILE_SIZE);
+        uint tileIndex = tileID.y * tiles_x + tileID.x;
 
         // Clamp light count to maximum
         uint finalLightCount = min(s_TileLightCount, MAX_LIGHTS_PER_TILE);
 
         // Write light count for this tile
-        g_BindlessRWBuffers[g_LightCountBufferIndex][tileIndex] = finalLightCount;
+        RWStructuredBuffer<uint> light_counts = ResourceDescriptorHeap[light_count_uav_index];
+        light_counts[tileIndex] = finalLightCount;
 
         // Write light indices for this tile
         uint baseIndex = tileIndex * MAX_LIGHTS_PER_TILE;
         for (uint i = 0; i < finalLightCount; i++) {
-            g_BindlessRWBuffers[g_LightListBufferIndex][baseIndex + i] = s_TileLightIndices[i];
+            RWStructuredBuffer<uint> light_list = ResourceDescriptorHeap[light_list_uav_index];
+            light_list[baseIndex + i] = s_TileLightIndices[i];
         }
     }
 }
