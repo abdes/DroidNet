@@ -697,7 +697,7 @@ reach the final spec in this document.
      - Keep a *log-only* helper that formats `<STAGE>@<source_path>:<entry_point>`.
      - Delete or repurpose `ShaderReference`’s unique-id assumptions.
 
-8. [ ] **Implement strict canonicalization + validation for shader requests and use it as the only key.**
+8. [X] **Implement strict canonicalization + validation for shader requests and use it as the only key.**
    - Target rules are §3.2 (relative normalized paths, identifier validation, define validation, duplicate forbid, sorted defines).
    - Scope:
      - New canonicalization component (location TBD in code, but used by both the offline builder and runtime loader).

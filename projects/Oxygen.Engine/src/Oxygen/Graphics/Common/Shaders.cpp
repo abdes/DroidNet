@@ -222,6 +222,8 @@ auto ShaderRequestHash::operator()(const ShaderRequest& request) const noexcept
 
 auto ComputeShaderRequestKey(const ShaderRequest& request) -> uint64_t
 {
+  const auto canonical = CanonicalizeShaderRequest(ShaderRequest { request });
+
   auto seed = uint64_t { 0 };
 
   const auto mix = [&seed](const uint64_t value) {
@@ -230,14 +232,14 @@ auto ComputeShaderRequestKey(const ShaderRequest& request) -> uint64_t
   };
 
   mix(static_cast<uint64_t>(
-    static_cast<std::underlying_type_t<ShaderType>>(request.stage)));
+    static_cast<std::underlying_type_t<ShaderType>>(canonical.stage)));
 
   mix(oxygen::ComputeFNV1a64(
-    request.source_path.data(), request.source_path.size()));
+    canonical.source_path.data(), canonical.source_path.size()));
   mix(oxygen::ComputeFNV1a64(
-    request.entry_point.data(), request.entry_point.size()));
+    canonical.entry_point.data(), canonical.entry_point.size()));
 
-  for (const auto& def : request.defines) {
+  for (const auto& def : canonical.defines) {
     mix(oxygen::ComputeFNV1a64(def.name.data(), def.name.size()));
     if (def.value.has_value()) {
       mix(oxygen::ComputeFNV1a64(def.value->data(), def.value->size()));
