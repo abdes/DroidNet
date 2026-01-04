@@ -70,9 +70,14 @@ cbuffer SceneConstants : register(b1) {
     uint bindless_material_constants_slot;    // 4 bytes
 } // Total is 176 bytes
 
-// Draw index passed as a root constant (32-bit value at register b2)
-cbuffer DrawIndexConstant : register(b2) {
+// Root constants b2 (shared root param index with engine)
+// ABI layout:
+//   g_DrawIndex          : per-draw index into DrawMetadata
+//   g_PassConstantsIndex : per-pass payload (typically a bindless index for
+//                          pass-level constants)
+cbuffer RootConstants : register(b2, space0) {
     uint g_DrawIndex;
+    uint g_PassConstantsIndex;
 }
 
 // Output structure for the Vertex Shader

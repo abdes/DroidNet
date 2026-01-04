@@ -159,6 +159,19 @@ def render_cpp_root_signature(root_sig: List[Dict[str, Any]]) -> Dict[str, str]:
     structs_lines: List[str] = []
     table_entries: List[str] = []
 
+    def _emit_comment_block(lines: List[str], comment: Any) -> None:
+        if comment is None:
+            return
+        text = str(comment).strip("\n")
+        if not text:
+            return
+        for raw in text.splitlines():
+            line = raw.rstrip()
+            if not line:
+                lines.append("//")
+            else:
+                lines.append(f"// {line}")
+
     def _norm(name: str) -> str:
         return domains_mod._normalize_acronyms(name)
 
@@ -186,6 +199,8 @@ def render_cpp_root_signature(root_sig: List[Dict[str, Any]]) -> Dict[str, str]:
         # counts for root_constants
         if p.get("type") == "root_constants":
             n = int(p.get("num_32bit_values", 0))
+
+            _emit_comment_block(counts_lines, p.get("comment"))
             counts_lines.append(
                 f"static constexpr uint32_t k{cname}ConstantsCount = {n}U;"
             )

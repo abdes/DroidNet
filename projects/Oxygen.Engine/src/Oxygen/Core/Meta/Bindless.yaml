@@ -14,7 +14,7 @@
 #       "yaml.validate": true
 # ------------------------------------------------------------------------------
 meta:
-  version: "1.0.1"
+  version: "1.1.0"
   description: >
     Authoritative bindless system specification for Oxygen.
     Generated headers files should be used by C++ and HLSL.
@@ -202,9 +202,14 @@ root_signature:
     register_space: space0
 
   - type: root_constants
-    name: "DrawIndex"
+    name: "RootConstants"
     index: 3
     visibility: ALL
     shader_register: b2
     register_space: space0
-    num_32bit_values: 1
+    num_32bit_values: 2
+    comment: |
+      Root constants at b2, space0 (2×32-bit).
+      - DWORD0: g_DrawIndex (per-draw index into DrawMetadata).
+      - DWORD1: g_PassConstantsIndex (per-pass payload; typically a bindless
+        index for pass-level constants).

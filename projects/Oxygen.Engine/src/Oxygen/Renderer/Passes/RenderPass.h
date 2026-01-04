@@ -141,6 +141,9 @@ private:
   auto BindDrawIndexConstant(
     graphics::CommandRecorder& recorder, uint32_t draw_index) const -> void;
 
+  auto BindPassConstantsIndexConstant(graphics::CommandRecorder& recorder,
+    uint32_t pass_constants_index) const -> void;
+
   auto BindSceneConstantsBuffer(graphics::CommandRecorder& recorder) const
     -> void;
   auto BindIndicesBuffer(graphics::CommandRecorder& recorder) const -> void;

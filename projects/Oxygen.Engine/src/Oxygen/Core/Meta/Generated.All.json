@@ -1,9 +1,9 @@
 {
   "source": "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml",
-  "source_version": "1.0.1",
+  "source_version": "1.1.0",
   "tool_version": "1.2.2",
-  "generated": "2025-09-21 09:06:31",
-  "schema_version": "1.0.0",
+  "generated": "2026-01-04 14:03:03",
+  "schema_version": "1.0.1",
   "defaults": {
     "invalid_index": 4294967295
   },
@@ -202,14 +202,15 @@
     },
     {
       "type": "root_constants",
-      "name": "DrawIndex",
+      "name": "RootConstants",
       "index": 3,
       "visibility": [
         "ALL"
       ],
       "shader_register": "b2",
       "register_space": "space0",
-      "num_32bit_values": 1
+      "num_32bit_values": 2,
+      "comment": "Root constants at b2, space0 (2\u00d732-bit).\n- DWORD0: g_DrawIndex (per-draw index into DrawMetadata).\n- DWORD1: g_PassConstantsIndex (per-pass payload; typically a bindless\n  index for pass-level constants).\n"
     }
   ]
 }
