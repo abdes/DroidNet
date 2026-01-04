@@ -74,7 +74,7 @@ public:
   OXGN_D3D12_NDAPI auto CreateBuffer(const BufferDesc& desc) const
     -> std::shared_ptr<graphics::Buffer> override;
 
-  OXGN_D3D12_NDAPI auto GetShader(std::string_view unique_id) const
+  OXGN_D3D12_NDAPI auto GetShader(const ShaderRequest& request) const
     -> std::shared_ptr<IShaderByteCode> override;
 
   //=== Device Manager Internal API ===-------------------------------------//

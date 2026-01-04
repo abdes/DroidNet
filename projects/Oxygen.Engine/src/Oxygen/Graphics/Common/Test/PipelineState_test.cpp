@@ -4,13 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Common/PipelineState.h>
-#include <Oxygen/Testing/GTest.h>
-#include <gmock/gmock.h>
+#include <functional>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
+#include <vector>
+
+#include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Graphics/Common/PipelineState.h>
 
 using oxygen::Format;
+using namespace oxygen;
 using namespace oxygen::graphics;
 
 namespace {
@@ -28,15 +34,25 @@ MATCHER_P(
 NOLINT_TEST(GraphicsPipelineDescTest, BuilderBasicUsage)
 { // Create a basic graphics pipeline using the builder pattern
   const auto pipeline = GraphicsPipelineDesc::Builder()
-                          .SetVertexShader({ "test_vertex_shader" })
-                          .SetPixelShader({ "test_pixel_shader" })
+                          .SetVertexShader({
+                            .stage = ShaderType::kVertex,
+                            .source_path = "test_vertex_shader",
+                            .entry_point = "VSMain",
+                          })
+                          .SetPixelShader({
+                            .stage = ShaderType::kPixel,
+                            .source_path = "test_pixel_shader",
+                            .entry_point = "PSMain",
+                          })
                           .SetFramebufferLayout(
                             { .color_target_formats = { Format::kRGBA8UNorm } })
                           .Build(); // Verify the shaders were set
   EXPECT_TRUE(pipeline.VertexShader().has_value());
-  EXPECT_EQ(pipeline.VertexShader()->shader, "test_vertex_shader");
+  EXPECT_EQ(pipeline.VertexShader()->source_path, "test_vertex_shader");
+  EXPECT_EQ(pipeline.VertexShader()->entry_point, "VSMain");
   EXPECT_TRUE(pipeline.PixelShader().has_value());
-  EXPECT_EQ(pipeline.PixelShader()->shader, "test_pixel_shader");
+  EXPECT_EQ(pipeline.PixelShader()->source_path, "test_pixel_shader");
+  EXPECT_EQ(pipeline.PixelShader()->entry_point, "PSMain");
 
   // Verify optional shaders are not set
   EXPECT_FALSE(pipeline.GeometryShader().has_value());
@@ -48,9 +64,21 @@ NOLINT_TEST(GraphicsPipelineDescTest, BuilderFullConfiguration)
 {
   const auto pipeline
     = GraphicsPipelineDesc::Builder {}
-        .SetVertexShader({ "test_vs", "VSMain" })
-        .SetPixelShader({ "test_ps", "PSMain" })
-        .SetGeometryShader({ "test_gs", "GSMain" })
+        .SetVertexShader({
+          .stage = ShaderType::kVertex,
+          .source_path = "test_vs",
+          .entry_point = "VSMain",
+        })
+        .SetPixelShader({
+          .stage = ShaderType::kPixel,
+          .source_path = "test_ps",
+          .entry_point = "PSMain",
+        })
+        .SetGeometryShader({
+          .stage = ShaderType::kGeometry,
+          .source_path = "test_gs",
+          .entry_point = "GSMain",
+        })
         .SetPrimitiveTopology(PrimitiveType::kTriangleStrip)
         .SetRasterizerState({ .fill_mode = FillMode::kWireFrame,
           .cull_mode = CullMode::kNone,
@@ -67,16 +95,16 @@ NOLINT_TEST(GraphicsPipelineDescTest, BuilderFullConfiguration)
           .sample_count = 1 })
         .Build(); // Verify full configuration
   EXPECT_TRUE(pipeline.VertexShader().has_value());
-  EXPECT_EQ(pipeline.VertexShader()->shader, "test_vs");
-  EXPECT_EQ(pipeline.VertexShader()->entry_point_name, "VSMain");
+  EXPECT_EQ(pipeline.VertexShader()->source_path, "test_vs");
+  EXPECT_EQ(pipeline.VertexShader()->entry_point, "VSMain");
 
   EXPECT_TRUE(pipeline.PixelShader().has_value());
-  EXPECT_EQ(pipeline.PixelShader()->shader, "test_ps");
-  EXPECT_EQ(pipeline.PixelShader()->entry_point_name, "PSMain");
+  EXPECT_EQ(pipeline.PixelShader()->source_path, "test_ps");
+  EXPECT_EQ(pipeline.PixelShader()->entry_point, "PSMain");
 
   EXPECT_TRUE(pipeline.GeometryShader().has_value());
-  EXPECT_EQ(pipeline.GeometryShader()->shader, "test_gs");
-  EXPECT_EQ(pipeline.GeometryShader()->entry_point_name, "GSMain");
+  EXPECT_EQ(pipeline.GeometryShader()->source_path, "test_gs");
+  EXPECT_EQ(pipeline.GeometryShader()->entry_point, "GSMain");
 
   EXPECT_EQ(pipeline.PrimitiveTopology(), PrimitiveType::kTriangleStrip);
 
@@ -108,8 +136,16 @@ NOLINT_TEST(GraphicsPipelineDescTest, MultipleBlendTargets)
 {
   const auto pipeline
     = GraphicsPipelineDesc::Builder {}
-        .SetVertexShader({ "test_vs" })
-        .SetPixelShader({ "test_ps" })
+        .SetVertexShader({
+          .stage = ShaderType::kVertex,
+          .source_path = "test_vs",
+          .entry_point = "VSMain",
+        })
+        .SetPixelShader({
+          .stage = ShaderType::kPixel,
+          .source_path = "test_ps",
+          .entry_point = "PSMain",
+        })
         .AddBlendTarget({ .blend_enable = true,
           .src_blend = BlendFactor::kOne,
           .dest_blend = BlendFactor::kOne,
@@ -135,10 +171,14 @@ NOLINT_TEST(GraphicsPipelineDescTest, MultipleBlendTargets)
 NOLINT_TEST(ComputePipelineDescTest, BuilderBasicUsage)
 {
   const auto pipeline = ComputePipelineDesc::Builder()
-                          .SetComputeShader({ "test_compute", "CSMain" })
+                          .SetComputeShader({
+                            .stage = ShaderType::kCompute,
+                            .source_path = "test_compute",
+                            .entry_point = "CSMain",
+                          })
                           .Build();
-  EXPECT_EQ(pipeline.ComputeShader().shader, "test_compute");
-  EXPECT_EQ(pipeline.ComputeShader().entry_point_name, "CSMain");
+  EXPECT_EQ(pipeline.ComputeShader().source_path, "test_compute");
+  EXPECT_EQ(pipeline.ComputeShader().entry_point, "CSMain");
 }
 
 NOLINT_TEST(ComputePipelineDescTest, MissingShaderThrows)
@@ -152,7 +192,11 @@ NOLINT_TEST(GraphicsPipelineDescTest, MissingVertexShaderThrows)
 {
   NOLINT_EXPECT_THROW(
     [[maybe_unused]] auto pipeline = GraphicsPipelineDesc::Builder {}
-      .SetPixelShader({ "test_ps" })
+      .SetPixelShader({
+        .stage = ShaderType::kPixel,
+        .source_path = "test_ps",
+        .entry_point = "PSMain",
+      })
       .SetFramebufferLayout({ .color_target_formats = { Format::kRGBA8UNorm } })
       .Build(),
     std::runtime_error);
@@ -162,7 +206,11 @@ NOLINT_TEST(GraphicsPipelineDescTest, MissingPixelShaderThrows)
 {
   NOLINT_EXPECT_THROW(
     [[maybe_unused]] auto pipeline = GraphicsPipelineDesc::Builder {}
-      .SetVertexShader({ "test_vs" })
+      .SetVertexShader({
+        .stage = ShaderType::kVertex,
+        .source_path = "test_vs",
+        .entry_point = "VSMain",
+      })
       .SetFramebufferLayout({ .color_target_formats = { Format::kRGBA8UNorm } })
       .Build(),
     std::runtime_error);
@@ -172,8 +220,16 @@ NOLINT_TEST(GraphicsPipelineDescTest, EmptyFramebufferLayoutThrows)
 {
   NOLINT_EXPECT_THROW(
     [[maybe_unused]] auto pipeline = GraphicsPipelineDesc::Builder {}
-      .SetVertexShader({ "test_vs" })
-      .SetPixelShader({ "test_ps" })
+      .SetVertexShader({
+        .stage = ShaderType::kVertex,
+        .source_path = "test_vs",
+        .entry_point = "VSMain",
+      })
+      .SetPixelShader({
+        .stage = ShaderType::kPixel,
+        .source_path = "test_ps",
+        .entry_point = "PSMain",
+      })
       .SetFramebufferLayout({}) // Empty framebuffer layout
       .Build(),
     std::runtime_error);
@@ -183,8 +239,16 @@ NOLINT_TEST(GraphicsPipelineDescTest, ValidMinimalConfiguration)
 {
   // This should not throw - minimal valid configuration with color target
   const auto pipeline = GraphicsPipelineDesc::Builder {}
-                          .SetVertexShader({ "test_vs" })
-                          .SetPixelShader({ "test_ps" })
+                          .SetVertexShader({
+                            .stage = ShaderType::kVertex,
+                            .source_path = "test_vs",
+                            .entry_point = "VSMain",
+                          })
+                          .SetPixelShader({
+                            .stage = ShaderType::kPixel,
+                            .source_path = "test_ps",
+                            .entry_point = "PSMain",
+                          })
                           .SetFramebufferLayout(
                             { .color_target_formats = { Format::kRGBA8UNorm } })
                           .Build();
@@ -199,8 +263,16 @@ NOLINT_TEST(GraphicsPipelineDescTest, ValidDepthOnlyConfiguration)
   // This should not throw - depth-only configuration is valid
   const auto pipeline
     = GraphicsPipelineDesc::Builder {}
-        .SetVertexShader({ "test_vs" })
-        .SetPixelShader({ "test_ps" })
+        .SetVertexShader({
+          .stage = ShaderType::kVertex,
+          .source_path = "test_vs",
+          .entry_point = "VSMain",
+        })
+        .SetPixelShader({
+          .stage = ShaderType::kPixel,
+          .source_path = "test_ps",
+          .entry_point = "PSMain",
+        })
         .SetFramebufferLayout({ .depth_stencil_format = Format::kDepth32 })
         .Build();
 
@@ -240,8 +312,16 @@ NOLINT_TEST(GraphicsPipelineDescTest, AddRootBinding)
 
   // Add each binding individually
   auto pipeline = GraphicsPipelineDesc::Builder {}
-                    .SetVertexShader({ "vs" })
-                    .SetPixelShader({ "ps" })
+                    .SetVertexShader({
+                      .stage = ShaderType::kVertex,
+                      .source_path = "vs",
+                      .entry_point = "main",
+                    })
+                    .SetPixelShader({
+                      .stage = ShaderType::kPixel,
+                      .source_path = "ps",
+                      .entry_point = "main",
+                    })
                     .SetFramebufferLayout(
                       { .color_target_formats = { Format::kRGBA8UNorm } })
                     .AddRootBinding(push)
@@ -267,8 +347,16 @@ NOLINT_TEST(GraphicsPipelineDescTest, AddRootBinding)
   // Add all at once using SetRootBindings
   std::vector<RootBindingItem> all = { push, buffer, texture, table };
   auto pipeline2 = GraphicsPipelineDesc::Builder {}
-                     .SetVertexShader({ "vs" })
-                     .SetPixelShader({ "ps" })
+                     .SetVertexShader({
+                       .stage = ShaderType::kVertex,
+                       .source_path = "vs",
+                       .entry_point = "main",
+                     })
+                     .SetPixelShader({
+                       .stage = ShaderType::kPixel,
+                       .source_path = "ps",
+                       .entry_point = "main",
+                     })
                      .SetFramebufferLayout(
                        { .color_target_formats = { Format::kRGBA8UNorm } })
                      .SetRootBindings(all)
@@ -288,8 +376,16 @@ NOLINT_TEST(GraphicsPipelineDescTest, AddRootBinding)
   std::vector<RootBindingItem> bindings = { push };
   EXPECT_THROW(
     (void)GraphicsPipelineDesc::Builder {}
-      .SetVertexShader({ "vs" })
-      .SetPixelShader({ "ps" })
+      .SetVertexShader({
+        .stage = ShaderType::kVertex,
+        .source_path = "vs",
+        .entry_point = "main",
+      })
+      .SetPixelShader({
+        .stage = ShaderType::kPixel,
+        .source_path = "ps",
+        .entry_point = "main",
+      })
       .SetFramebufferLayout({ .color_target_formats = { Format::kRGBA8UNorm } })
       .SetRootBindings(bindings)
       .AddRootBinding(buffer),
@@ -297,8 +393,16 @@ NOLINT_TEST(GraphicsPipelineDescTest, AddRootBinding)
   // Mutual exclusion: SetRootBindings after AddRootBinding should throw
   EXPECT_THROW(
     (void)GraphicsPipelineDesc::Builder {}
-      .SetVertexShader({ "vs" })
-      .SetPixelShader({ "ps" })
+      .SetVertexShader({
+        .stage = ShaderType::kVertex,
+        .source_path = "vs",
+        .entry_point = "main",
+      })
+      .SetPixelShader({
+        .stage = ShaderType::kPixel,
+        .source_path = "ps",
+        .entry_point = "main",
+      })
       .SetFramebufferLayout({ .color_target_formats = { Format::kRGBA8UNorm } })
       .AddRootBinding(push)
       .SetRootBindings(bindings),
@@ -333,7 +437,11 @@ NOLINT_TEST(ComputePipelineDescTest, AddRootBinding)
 
   // Add each binding individually
   auto pipeline = ComputePipelineDesc::Builder {}
-                    .SetComputeShader({ "cs" })
+                    .SetComputeShader({
+                      .stage = ShaderType::kCompute,
+                      .source_path = "cs",
+                      .entry_point = "main",
+                    })
                     .AddRootBinding(push)
                     .AddRootBinding(buffer)
                     .AddRootBinding(texture)
@@ -353,7 +461,11 @@ NOLINT_TEST(ComputePipelineDescTest, AddRootBinding)
   // Add all at once using SetRootBindings
   std::vector<RootBindingItem> all = { push, buffer, texture, table };
   auto pipeline2 = ComputePipelineDesc::Builder {}
-                     .SetComputeShader({ "cs" })
+                     .SetComputeShader({
+                       .stage = ShaderType::kCompute,
+                       .source_path = "cs",
+                       .entry_point = "main",
+                     })
                      .SetRootBindings(all)
                      .Build();
   auto span2 = pipeline2.RootBindings();
@@ -370,13 +482,21 @@ NOLINT_TEST(ComputePipelineDescTest, AddRootBinding)
   // Mutual exclusion: AddRootBinding after SetRootBindings should throw
   std::vector<RootBindingItem> bindings = { push };
   EXPECT_THROW((void)ComputePipelineDesc::Builder {}
-                 .SetComputeShader({ "cs" })
+                 .SetComputeShader({
+                   .stage = ShaderType::kCompute,
+                   .source_path = "cs",
+                   .entry_point = "main",
+                 })
                  .SetRootBindings(bindings)
                  .AddRootBinding(buffer),
     std::logic_error);
   // Mutual exclusion: SetRootBindings after AddRootBinding should throw
   EXPECT_THROW((void)ComputePipelineDesc::Builder {}
-                 .SetComputeShader({ "cs" })
+                 .SetComputeShader({
+                   .stage = ShaderType::kCompute,
+                   .source_path = "cs",
+                   .entry_point = "main",
+                 })
                  .AddRootBinding(push)
                  .SetRootBindings(bindings),
     std::logic_error);
@@ -424,20 +544,44 @@ NOLINT_TEST(GraphicsPipelineDescTest, Hashing)
 {
   // Minimal valid pipeline
   auto pipeline1 = GraphicsPipelineDesc::Builder {}
-                     .SetVertexShader({ "vs" })
-                     .SetPixelShader({ "ps" })
+                     .SetVertexShader({
+                       .stage = ShaderType::kVertex,
+                       .source_path = "vs",
+                       .entry_point = "main",
+                     })
+                     .SetPixelShader({
+                       .stage = ShaderType::kPixel,
+                       .source_path = "ps",
+                       .entry_point = "main",
+                     })
                      .SetFramebufferLayout(
                        { .color_target_formats = { Format::kRGBA8UNorm } })
                      .Build();
   auto pipeline2 = GraphicsPipelineDesc::Builder {}
-                     .SetVertexShader({ "vs" })
-                     .SetPixelShader({ "ps" })
+                     .SetVertexShader({
+                       .stage = ShaderType::kVertex,
+                       .source_path = "vs",
+                       .entry_point = "main",
+                     })
+                     .SetPixelShader({
+                       .stage = ShaderType::kPixel,
+                       .source_path = "ps",
+                       .entry_point = "main",
+                     })
                      .SetFramebufferLayout(
                        { .color_target_formats = { Format::kRGBA8UNorm } })
                      .Build();
   auto pipeline3 = GraphicsPipelineDesc::Builder {}
-                     .SetVertexShader({ "vs2" })
-                     .SetPixelShader({ "ps" })
+                     .SetVertexShader({
+                       .stage = ShaderType::kVertex,
+                       .source_path = "vs2",
+                       .entry_point = "main",
+                     })
+                     .SetPixelShader({
+                       .stage = ShaderType::kPixel,
+                       .source_path = "ps",
+                       .entry_point = "main",
+                     })
                      .SetFramebufferLayout(
                        { .color_target_formats = { Format::kRGBA8UNorm } })
                      .Build();
@@ -461,12 +605,27 @@ NOLINT_TEST(GraphicsPipelineDescTest, Hashing)
 
 NOLINT_TEST(ComputePipelineDescTest, Hashing)
 {
-  auto pipeline1
-    = ComputePipelineDesc::Builder {}.SetComputeShader({ "cs" }).Build();
-  auto pipeline2
-    = ComputePipelineDesc::Builder {}.SetComputeShader({ "cs" }).Build();
-  auto pipeline3
-    = ComputePipelineDesc::Builder {}.SetComputeShader({ "cs2" }).Build();
+  auto pipeline1 = ComputePipelineDesc::Builder {}
+                     .SetComputeShader({
+                       .stage = ShaderType::kCompute,
+                       .source_path = "cs",
+                       .entry_point = "CSMain",
+                     })
+                     .Build();
+  auto pipeline2 = ComputePipelineDesc::Builder {}
+                     .SetComputeShader({
+                       .stage = ShaderType::kCompute,
+                       .source_path = "cs",
+                       .entry_point = "CSMain",
+                     })
+                     .Build();
+  auto pipeline3 = ComputePipelineDesc::Builder {}
+                     .SetComputeShader({
+                       .stage = ShaderType::kCompute,
+                       .source_path = "cs2",
+                       .entry_point = "CSMain",
+                     })
+                     .Build();
 
   std::hash<ComputePipelineDesc> hasher;
   EXPECT_EQ(hasher(pipeline1), hasher(pipeline2));
@@ -489,11 +648,21 @@ NOLINT_TEST(ComputePipelineDescTest, Hashing)
 NOLINT_TEST(GraphicsPipelineDescTest, Hashing_AllFieldsAffectHash)
 {
   struct Baseline {
-    ShaderStageDesc vs { "vs", "VSMain" };
-    ShaderStageDesc ps { "ps", "PSMain" };
-    ShaderStageDesc gs { "gs", "GSMain" };
-    ShaderStageDesc hs { "hs", "HSMain" };
-    ShaderStageDesc ds { "ds", "DSMain" };
+    ShaderRequest vs {
+      .stage = ShaderType::kVertex, .source_path = "vs", .entry_point = "VSMain"
+    };
+    ShaderRequest ps {
+      .stage = ShaderType::kPixel, .source_path = "ps", .entry_point = "PSMain"
+    };
+    ShaderRequest gs { .stage = ShaderType::kGeometry,
+      .source_path = "gs",
+      .entry_point = "GSMain" };
+    ShaderRequest hs {
+      .stage = ShaderType::kHull, .source_path = "hs", .entry_point = "HSMain"
+    };
+    ShaderRequest ds {
+      .stage = ShaderType::kDomain, .source_path = "ds", .entry_point = "DSMain"
+    };
     PrimitiveType primitive_topology = PrimitiveType::kTriangleStrip;
     RasterizerStateDesc rasterizer { .fill_mode = FillMode::kWireFrame,
       .cull_mode = CullMode::kNone,
@@ -542,26 +711,32 @@ NOLINT_TEST(GraphicsPipelineDescTest, Hashing_AllFieldsAffectHash)
     std::function<void(Baseline&)> apply;
   };
   std::vector<Delta> deltas = {
-    { "VertexShader.shader not included in hash",
-      [](Baseline& b) { b.vs.shader = "vs2"; } },
-    { "VertexShader.entry_point_name not included in hash",
-      [](Baseline& b) { b.vs.entry_point_name = "VSMain2"; } },
-    { "PixelShader.shader not included in hash",
-      [](Baseline& b) { b.ps.shader = "ps2"; } },
-    { "PixelShader.entry_point_name not included in hash",
-      [](Baseline& b) { b.ps.entry_point_name = "PSMain2"; } },
-    { "GeometryShader.shader not included in hash",
-      [](Baseline& b) { b.gs.shader = "gs2"; } },
-    { "GeometryShader.entry_point_name not included in hash",
-      [](Baseline& b) { b.gs.entry_point_name = "GSMain2"; } },
-    { "HullShader.shader not included in hash",
-      [](Baseline& b) { b.hs.shader = "hs2"; } },
-    { "HullShader.entry_point_name not included in hash",
-      [](Baseline& b) { b.hs.entry_point_name = "HSMain2"; } },
-    { "DomainShader.shader not included in hash",
-      [](Baseline& b) { b.ds.shader = "ds2"; } },
-    { "DomainShader.entry_point_name not included in hash",
-      [](Baseline& b) { b.ds.entry_point_name = "DSMain2"; } },
+    { "VertexShader.source_path not included in hash",
+      [](Baseline& b) { b.vs.source_path = "vs2"; } },
+    { "VertexShader.entry_point not included in hash",
+      [](Baseline& b) { b.vs.entry_point = "VSMain2"; } },
+    { "VertexShader.defines not included in hash",
+      [](Baseline& b) {
+        b.vs.defines = {
+          ShaderDefine { .name = "FOO", .value = "1" },
+        };
+      } },
+    { "PixelShader.source_path not included in hash",
+      [](Baseline& b) { b.ps.source_path = "ps2"; } },
+    { "PixelShader.entry_point not included in hash",
+      [](Baseline& b) { b.ps.entry_point = "PSMain2"; } },
+    { "GeometryShader.source_path not included in hash",
+      [](Baseline& b) { b.gs.source_path = "gs2"; } },
+    { "GeometryShader.entry_point not included in hash",
+      [](Baseline& b) { b.gs.entry_point = "GSMain2"; } },
+    { "HullShader.source_path not included in hash",
+      [](Baseline& b) { b.hs.source_path = "hs2"; } },
+    { "HullShader.entry_point not included in hash",
+      [](Baseline& b) { b.hs.entry_point = "HSMain2"; } },
+    { "DomainShader.source_path not included in hash",
+      [](Baseline& b) { b.ds.source_path = "ds2"; } },
+    { "DomainShader.entry_point not included in hash",
+      [](Baseline& b) { b.ds.entry_point = "DSMain2"; } },
     { "PrimitiveTopology not included in hash",
       [](Baseline& b) { b.primitive_topology = PrimitiveType::kLineList; } },
     { "RasterizerState.fill_mode not included in hash",
@@ -625,7 +800,9 @@ NOLINT_TEST(GraphicsPipelineDescTest, Hashing_AllFieldsAffectHash)
 NOLINT_TEST(ComputePipelineDescTest, Hashing_AllFieldsAffectHash)
 {
   struct Baseline {
-    ShaderStageDesc cs { "cs", "CSMain" };
+    ShaderRequest cs { .stage = ShaderType::kCompute,
+      .source_path = "cs",
+      .entry_point = "CSMain" };
     std::vector<RootBindingItem> root_bindings { RootBindingItem(
       { .binding_slot_desc = { 0, 0 },
         .visibility = ShaderStageFlags::kAll,
@@ -650,10 +827,16 @@ NOLINT_TEST(ComputePipelineDescTest, Hashing_AllFieldsAffectHash)
     std::function<void(Baseline&)> apply;
   };
   std::vector<Delta> deltas = {
-    { "ComputeShader.shader not included in hash",
-      [](Baseline& b) { b.cs.shader = "cs2"; } },
-    { "ComputeShader.entry_point_name not included in hash",
-      [](Baseline& b) { b.cs.entry_point_name = "CSMain2"; } },
+    { "ComputeShader.source_path not included in hash",
+      [](Baseline& b) { b.cs.source_path = "cs2"; } },
+    { "ComputeShader.entry_point not included in hash",
+      [](Baseline& b) { b.cs.entry_point = "CSMain2"; } },
+    { "ComputeShader.defines not included in hash",
+      [](Baseline& b) {
+        b.cs.defines = {
+          ShaderDefine { .name = "BAR" },
+        };
+      } },
     { "RootBindings not included in hash",
       [](Baseline& b) {
         b.root_bindings = { RootBindingItem({ .binding_slot_desc = { 0, 0 },

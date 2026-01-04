@@ -15,6 +15,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 #include <Oxygen/OxCo/Co.h>
@@ -173,7 +174,7 @@ public:
     -> std::shared_ptr<graphics::CommandList>;
 
   [[nodiscard]] virtual OXGN_GFX_API auto GetShader(
-    std::string_view unique_id) const
+    const graphics::ShaderRequest& request) const
     -> std::shared_ptr<graphics::IShaderByteCode>
     = 0;
 

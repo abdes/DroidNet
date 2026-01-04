@@ -303,7 +303,7 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   using graphics::RasterizerStateDesc;
   using graphics::RootBindingDesc;
   using graphics::RootBindingItem;
-  using graphics::ShaderStageDesc;
+  using graphics::ShaderRequest;
   using graphics::ShaderStageFlags;
 
   // Determine requested rasterizer fill mode from configuration (default solid)
@@ -382,10 +382,16 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     static_cast<int>(requested_fill), static_cast<int>(raster_cull_mode));
 
   return GraphicsPipelineDesc::Builder()
-    .SetVertexShader(ShaderStageDesc { .shader
-      = MakeShaderIdentifier(ShaderType::kVertex, "FullScreenTriangle.hlsl") })
-    .SetPixelShader(ShaderStageDesc { .shader
-      = MakeShaderIdentifier(ShaderType::kPixel, "FullScreenTriangle.hlsl") })
+    .SetVertexShader(ShaderRequest {
+      .stage = ShaderType::kVertex,
+      .source_path = "FullScreenTriangle.hlsl",
+      .entry_point = "VS",
+    })
+    .SetPixelShader(ShaderRequest {
+      .stage = ShaderType::kPixel,
+      .source_path = "FullScreenTriangle.hlsl",
+      .entry_point = "PS",
+    })
     .SetPrimitiveTopology(PrimitiveType::kTriangleList)
     .SetRasterizerState(raster_desc)
     .SetDepthStencilState(ds_desc)

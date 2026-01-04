@@ -11,6 +11,7 @@
 
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Config/PathFinderConfig.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 
 namespace oxygen::graphics {
 
@@ -26,7 +27,7 @@ namespace d3d12 {
     explicit EngineShaders(oxygen::PathFinderConfig path_finder_config);
     ~EngineShaders() override;
 
-    [[nodiscard]] auto GetShader(std::string_view unique_id) const
+    [[nodiscard]] auto GetShader(const ShaderRequest& request) const
       -> std::shared_ptr<IShaderByteCode>;
 
   private:

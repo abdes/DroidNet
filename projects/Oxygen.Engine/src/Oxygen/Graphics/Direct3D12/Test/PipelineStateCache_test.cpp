@@ -33,6 +33,7 @@
 #include "./Mocks/MockRootSignature.h"
 
 using oxygen::Format;
+using oxygen::ShaderType;
 using oxygen::graphics::ComputePipelineDesc;
 using oxygen::graphics::DescriptorTableBinding;
 using oxygen::graphics::DirectBufferBinding;
@@ -60,7 +61,7 @@ public:
 
   // NOLINTBEGIN
   // clang-format off
-  MOCK_METHOD(std::shared_ptr<oxygen::graphics::IShaderByteCode>, GetShader, (std::string_view), (const, override));
+  MOCK_METHOD(std::shared_ptr<oxygen::graphics::IShaderByteCode>, GetShader, (const oxygen::graphics::ShaderRequest&), (const, override));
   MOCK_METHOD(std::unique_ptr<oxygen::graphics::Surface>, CreateSurface, (std::weak_ptr<oxygen::platform::Window>, oxygen::observer_ptr<oxygen::graphics::CommandQueue>), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandQueue>, CreateCommandQueue, (const oxygen::graphics::QueueKey&, oxygen::graphics::QueueRole), (override));
   MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandList>, CreateCommandListImpl, (oxygen::graphics::QueueRole, std::string_view), (override));
@@ -363,8 +364,12 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_BindlessCbvSrvTable)
     };
   const auto pipeline_desc
     = GraphicsPipelineDesc::Builder {}
-        .SetVertexShader({ .shader = "test_vs" })
-        .SetPixelShader({ .shader = "test_ps" })
+        .SetVertexShader({ .stage = ShaderType::kVertex,
+          .source_path = "test_vs",
+          .entry_point = "VSMain" })
+        .SetPixelShader({ .stage = ShaderType::kPixel,
+          .source_path = "test_ps",
+          .entry_point = "PSMain" })
         .SetFramebufferLayout(
           { .color_target_formats = { Format::kRGBA8UNorm } })
         // Single descriptor table with CBV and SRV ranges
@@ -395,8 +400,10 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_DirectCbvSrvTable)
 {
   const auto pipeline_desc
         = GraphicsPipelineDesc::Builder {}
-              .SetVertexShader({ .shader = "test_vs" })
-              .SetPixelShader({ .shader = "test_ps" })
+              .SetVertexShader(
+                { .stage = ShaderType::kVertex, .source_path = "test_vs", .entry_point = "VSMain" })
+              .SetPixelShader(
+                { .stage = ShaderType::kPixel, .source_path = "test_ps", .entry_point = "PSMain" })
               .SetFramebufferLayout({ .color_target_formats = { Format::kRGBA8UNorm } })
               // Direct CBV binding at root parameter 0
               .AddRootBinding(RootBindingDesc {
@@ -439,8 +446,10 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_PushConstantsOnly)
 {
   const auto pipeline_desc
         = GraphicsPipelineDesc::Builder {}
-              .SetVertexShader({ .shader = "test_vs" })
-              .SetPixelShader({ .shader = "test_ps" })
+              .SetVertexShader(
+                { .stage = ShaderType::kVertex, .source_path = "test_vs", .entry_point = "VSMain" })
+              .SetPixelShader(
+                { .stage = ShaderType::kPixel, .source_path = "test_ps", .entry_point = "PSMain" })
               .SetFramebufferLayout(
                   { .color_target_formats = { Format::kRGBA8UNorm } })
               // 16 DWORDs of push constants at b0
@@ -471,8 +480,10 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_SamplerTable)
 {
   const auto pipeline_desc
         = GraphicsPipelineDesc::Builder {}
-              .SetVertexShader({ .shader = "test_vs" })
-              .SetPixelShader({ .shader = "test_ps" })
+              .SetVertexShader(
+                { .stage = ShaderType::kVertex, .source_path = "test_vs", .entry_point = "VSMain" })
+              .SetPixelShader(
+                { .stage = ShaderType::kPixel, .source_path = "test_ps", .entry_point = "PSMain" })
               .SetFramebufferLayout(
                   { .color_target_formats = { Format::kRGBA8UNorm } })
               // Sampler descriptor table
@@ -507,7 +518,8 @@ NOLINT_TEST_F(PipelineStateCacheTest, ComputePipeline_BindlessCbvSrv)
 {
   const auto pipeline_desc
         = ComputePipelineDesc::Builder {}
-              .SetComputeShader({ .shader = "test_cs" })
+        .SetComputeShader(
+          { .stage = ShaderType::kCompute, .source_path = "test_cs", .entry_point = "CSMain" })
               // CBV+SRV descriptor table (same as graphics but different flags
               // expected)
               .AddRootBinding(RootBindingDesc {
@@ -549,8 +561,10 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_MixedParameters)
 {
   const auto pipeline_desc
         = GraphicsPipelineDesc::Builder {}
-              .SetVertexShader({ .shader = "test_vs" })
-              .SetPixelShader({ .shader = "test_ps" })
+              .SetVertexShader(
+                { .stage = ShaderType::kVertex, .source_path = "test_vs", .entry_point = "VSMain" })
+              .SetPixelShader(
+                { .stage = ShaderType::kPixel, .source_path = "test_ps", .entry_point = "PSMain" })
               .SetFramebufferLayout({ .color_target_formats = { Format::kRGBA8UNorm } })
               // Push constants at root parameter 0
               .AddRootBinding(RootBindingDesc {
@@ -598,8 +612,10 @@ NOLINT_TEST_F(PipelineStateCacheTest, ShaderVisibilityMapping)
   // Test different shader stage visibility flags
   const auto pipeline_desc
         = GraphicsPipelineDesc::Builder {}
-              .SetVertexShader({ .shader = "test_vs" })
-              .SetPixelShader({ .shader = "test_ps" })
+              .SetVertexShader(
+                { .stage = ShaderType::kVertex, .source_path = "test_vs", .entry_point = "VSMain" })
+              .SetPixelShader(
+                { .stage = ShaderType::kPixel, .source_path = "test_ps", .entry_point = "PSMain" })
               .SetFramebufferLayout(
                   { .color_target_formats = { Format::kRGBA8UNorm } })
               // Vertex-only CBV
@@ -644,8 +660,10 @@ NOLINT_TEST_F(PipelineStateCacheTest, RegisterSpaceMapping)
 {
   const auto pipeline_desc
         = GraphicsPipelineDesc::Builder {}
-              .SetVertexShader({ .shader = "test_vs" })
-              .SetPixelShader({ .shader = "test_ps" })
+              .SetVertexShader(
+                { .stage = ShaderType::kVertex, .source_path = "test_vs", .entry_point = "VSMain" })
+              .SetPixelShader(
+                { .stage = ShaderType::kPixel, .source_path = "test_ps", .entry_point = "PSMain" })
               .SetFramebufferLayout(
                   { .color_target_formats = { Format::kRGBA8UNorm } })
               // CBV at register b2, space 1
@@ -684,8 +702,12 @@ NOLINT_TEST_F(PipelineStateCacheTest, InvalidRootParameterIndex)
   // to use implicit indexing based on order.
 
   const auto pipeline_desc = GraphicsPipelineDesc::Builder {}
-                               .SetVertexShader({ .shader = "test_vs" })
-                               .SetPixelShader({ .shader = "test_ps" })
+                               .SetVertexShader({ .stage = ShaderType::kVertex,
+                                 .source_path = "test_vs",
+                                 .entry_point = "VSMain" })
+                               .SetPixelShader({ .stage = ShaderType::kPixel,
+                                 .source_path = "test_ps",
+                                 .entry_point = "PSMain" })
                                .SetFramebufferLayout({ .color_target_formats
                                  = { Format::kRGBA8UNorm } })
                                .Build();
@@ -701,8 +723,12 @@ NOLINT_TEST_F(PipelineStateCacheTest, CachingBehavior)
 {
   const auto pipeline_desc
     = GraphicsPipelineDesc::Builder {}
-        .SetVertexShader({ .shader = "test_vs" })
-        .SetPixelShader({ .shader = "test_ps" })
+        .SetVertexShader({ .stage = ShaderType::kVertex,
+          .source_path = "test_vs",
+          .entry_point = "VSMain" })
+        .SetPixelShader({ .stage = ShaderType::kPixel,
+          .source_path = "test_ps",
+          .entry_point = "PSMain" })
         .SetFramebufferLayout(
           { .color_target_formats = { Format::kRGBA8UNorm } })
         .AddRootBinding(RootBindingDesc {

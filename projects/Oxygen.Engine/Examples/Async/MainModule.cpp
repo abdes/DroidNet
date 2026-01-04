@@ -1081,11 +1081,17 @@ auto MainModule::SetupShaders() -> void
   const auto gfx = app_.gfx_weak.lock();
 
   // Verify that the shaders can be loaded by the Graphics backend
-  const auto vertex_shader = gfx->GetShader(graphics::MakeShaderIdentifier(
-    ShaderType::kVertex, "FullScreenTriangle.hlsl"));
+  const auto vertex_shader = gfx->GetShader(graphics::ShaderRequest {
+    .stage = ShaderType::kVertex,
+    .source_path = "FullScreenTriangle.hlsl",
+    .entry_point = "VS",
+  });
 
-  const auto pixel_shader = gfx->GetShader(graphics::MakeShaderIdentifier(
-    ShaderType::kPixel, "FullScreenTriangle.hlsl"));
+  const auto pixel_shader = gfx->GetShader(graphics::ShaderRequest {
+    .stage = ShaderType::kPixel,
+    .source_path = "FullScreenTriangle.hlsl",
+    .entry_point = "PS",
+  });
 
   CHECK_NOTNULL_F(
     vertex_shader, "Failed to load FullScreenTriangle vertex shader");

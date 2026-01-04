@@ -409,7 +409,7 @@ public:
   {
     return {};
   }
-  [[nodiscard]] auto GetShader(std::string_view /*unique_id*/) const
+  [[nodiscard]] auto GetShader(const graphics::ShaderRequest& /*request*/) const
     -> std::shared_ptr<graphics::IShaderByteCode> override
   {
     return {};

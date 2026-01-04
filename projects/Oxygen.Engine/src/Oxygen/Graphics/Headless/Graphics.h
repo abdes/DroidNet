@@ -46,7 +46,7 @@ public:
     observer_ptr<graphics::CommandQueue> command_queue) const
     -> std::shared_ptr<Surface> override;
 
-  [[nodiscard]] auto GetShader(std::string_view unique_id) const
+  [[nodiscard]] auto GetShader(const ShaderRequest& request) const
     -> std::shared_ptr<IShaderByteCode> override;
 
 protected:

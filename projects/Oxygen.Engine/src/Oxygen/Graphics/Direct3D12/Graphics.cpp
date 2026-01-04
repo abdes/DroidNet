@@ -336,10 +336,10 @@ auto Graphics::CreateSurfaceFromNative(void* /*native_handle*/,
   return std::static_pointer_cast<Surface>(surface);
 }
 
-auto Graphics::GetShader(const std::string_view unique_id) const
+auto Graphics::GetShader(const ShaderRequest& request) const
   -> std::shared_ptr<IShaderByteCode>
 {
-  return GetComponent<EngineShaders>().GetShader(unique_id);
+  return GetComponent<EngineShaders>().GetShader(request);
 }
 
 auto Graphics::CreateTexture(const TextureDesc& desc) const

@@ -132,15 +132,6 @@ enum class PrimitiveType : uint8_t {
 };
 OXGN_GFX_API auto to_string(PrimitiveType value) -> std::string;
 
-//! Describes a single programmable shader stage.
-struct ShaderStageDesc {
-  std::string
-    shader; //!< Unique string ID of the compiled shader (see ShaderManager).
-  std::optional<std::string> entry_point_name {};
-
-  auto operator==(const ShaderStageDesc&) const -> bool = default;
-};
-
 //! Configures how primitives are rasterized, including fill mode, culling,
 //! depth bias, and multisampling options.
 struct RasterizerStateDesc {
@@ -418,35 +409,35 @@ public:
   auto operator==(const GraphicsPipelineDesc&) const -> bool = default;
 
   [[nodiscard]] constexpr auto VertexShader() const noexcept
-    -> const std::optional<ShaderStageDesc>&
+    -> const std::optional<ShaderRequest>&
   {
     return vertex_shader_;
   }
 
   //! Get pixel/fragment shader stage.
   [[nodiscard]] constexpr auto PixelShader() const noexcept
-    -> const std::optional<ShaderStageDesc>&
+    -> const std::optional<ShaderRequest>&
   {
     return pixel_shader_;
   }
 
   //! Get geometry shader stage.
   [[nodiscard]] constexpr auto GeometryShader() const noexcept
-    -> const std::optional<ShaderStageDesc>&
+    -> const std::optional<ShaderRequest>&
   {
     return geometry_shader_;
   }
 
   //! Get hull/tessellation control shader stage.
   [[nodiscard]] constexpr auto HullShader() const noexcept
-    -> const std::optional<ShaderStageDesc>&
+    -> const std::optional<ShaderRequest>&
   {
     return hull_shader_;
   }
 
   //! Get domain/tessellation evaluation shader stage.
   [[nodiscard]] constexpr auto DomainShader() const noexcept
-    -> const std::optional<ShaderStageDesc>&
+    -> const std::optional<ShaderRequest>&
   {
     return domain_shader_;
   }
@@ -503,13 +494,12 @@ private:
   friend class Builder;
   GraphicsPipelineDesc() = default; // Only constructed by Builder.
 
-  std::optional<ShaderStageDesc> vertex_shader_; //!< Vertex shader stage.
-  std::optional<ShaderStageDesc>
-    pixel_shader_; //!< Pixel/fragment shader stage.
-  std::optional<ShaderStageDesc> geometry_shader_; //!< Geometry shader stage.
-  std::optional<ShaderStageDesc>
+  std::optional<ShaderRequest> vertex_shader_; //!< Vertex shader stage.
+  std::optional<ShaderRequest> pixel_shader_; //!< Pixel/fragment shader stage.
+  std::optional<ShaderRequest> geometry_shader_; //!< Geometry shader stage.
+  std::optional<ShaderRequest>
     hull_shader_; //!< Hull/tessellation control shader.
-  std::optional<ShaderStageDesc>
+  std::optional<ShaderRequest>
     domain_shader_; //!< Domain/tessellation evaluation shader.
 
   PrimitiveType primitive_topology_ {
@@ -537,36 +527,76 @@ public:
   OXYGEN_DEFAULT_MOVABLE(Builder)
 
   //! Set vertex shader stage.
-  auto SetVertexShader(ShaderStageDesc shader) && -> Builder&&
+  auto SetVertexShader(ShaderRequest shader) && -> Builder&&
   {
+    if (shader.stage != ShaderType::kVertex) {
+      throw std::invalid_argument(
+        "SetVertexShader requires ShaderRequest.stage == kVertex");
+    }
+    if (shader.source_path.empty() || shader.entry_point.empty()) {
+      throw std::invalid_argument(
+        "SetVertexShader requires non-empty source_path and entry_point");
+    }
     desc_.vertex_shader_ = std::move(shader);
     return std::move(*this);
   }
 
   //! Set pixel/fragment shader stage.
-  auto SetPixelShader(ShaderStageDesc shader) && -> Builder&&
+  auto SetPixelShader(ShaderRequest shader) && -> Builder&&
   {
+    if (shader.stage != ShaderType::kPixel) {
+      throw std::invalid_argument(
+        "SetPixelShader requires ShaderRequest.stage == kPixel");
+    }
+    if (shader.source_path.empty() || shader.entry_point.empty()) {
+      throw std::invalid_argument(
+        "SetPixelShader requires non-empty source_path and entry_point");
+    }
     desc_.pixel_shader_ = std::move(shader);
     return std::move(*this);
   }
 
   //! Set geometry shader stage.
-  auto SetGeometryShader(ShaderStageDesc shader) && -> Builder&&
+  auto SetGeometryShader(ShaderRequest shader) && -> Builder&&
   {
+    if (shader.stage != ShaderType::kGeometry) {
+      throw std::invalid_argument(
+        "SetGeometryShader requires ShaderRequest.stage == kGeometry");
+    }
+    if (shader.source_path.empty() || shader.entry_point.empty()) {
+      throw std::invalid_argument(
+        "SetGeometryShader requires non-empty source_path and entry_point");
+    }
     desc_.geometry_shader_ = std::move(shader);
     return std::move(*this);
   }
 
   //! Set hull/tessellation control shader stage.
-  auto SetHullShader(ShaderStageDesc shader) && -> Builder&&
+  auto SetHullShader(ShaderRequest shader) && -> Builder&&
   {
+    if (shader.stage != ShaderType::kHull) {
+      throw std::invalid_argument(
+        "SetHullShader requires ShaderRequest.stage == kHull");
+    }
+    if (shader.source_path.empty() || shader.entry_point.empty()) {
+      throw std::invalid_argument(
+        "SetHullShader requires non-empty source_path and entry_point");
+    }
     desc_.hull_shader_ = std::move(shader);
     return std::move(*this);
   }
 
   //! Set domain/tessellation evaluation shader stage.
-  auto SetDomainShader(ShaderStageDesc shader) && -> Builder&&
+  auto SetDomainShader(ShaderRequest shader) && -> Builder&&
   {
+    if (shader.stage != ShaderType::kDomain) {
+      throw std::invalid_argument(
+        "SetDomainShader requires ShaderRequest.stage == kDomain");
+    }
+    if (shader.source_path.empty() || shader.entry_point.empty()) {
+      throw std::invalid_argument(
+        "SetDomainShader requires non-empty source_path and entry_point");
+    }
     desc_.domain_shader_ = std::move(shader);
     return std::move(*this);
   }
@@ -694,7 +724,7 @@ public:
   auto operator==(const ComputePipelineDesc&) const -> bool = default;
 
   [[nodiscard]] constexpr auto ComputeShader() const noexcept
-    -> const ShaderStageDesc&
+    -> const ShaderRequest&
   {
     return compute_shader_;
   }
@@ -714,13 +744,13 @@ public:
 
 private:
   friend class Builder;
-  explicit ComputePipelineDesc(ShaderStageDesc shader, std::string debug_name)
+  explicit ComputePipelineDesc(ShaderRequest shader, std::string debug_name)
     : compute_shader_(std::move(shader))
     , debug_name_(std::move(debug_name))
   {
   }
 
-  ShaderStageDesc compute_shader_;
+  ShaderRequest compute_shader_;
   std::string debug_name_;
   std::vector<RootBindingItem> root_bindings_;
 };
@@ -735,8 +765,16 @@ public:
   OXYGEN_DEFAULT_MOVABLE(Builder)
 
   //! Set compute shader stage.
-  auto SetComputeShader(ShaderStageDesc shader) && -> Builder&&
+  auto SetComputeShader(ShaderRequest shader) && -> Builder&&
   {
+    if (shader.stage != ShaderType::kCompute) {
+      throw std::invalid_argument(
+        "SetComputeShader requires ShaderRequest.stage == kCompute");
+    }
+    if (shader.source_path.empty() || shader.entry_point.empty()) {
+      throw std::invalid_argument(
+        "SetComputeShader requires non-empty source_path and entry_point");
+    }
     compute_shader_ = std::move(shader);
     has_compute_shader_ = true;
     return std::move(*this);
@@ -786,7 +824,7 @@ public:
   }
 
 private:
-  ShaderStageDesc compute_shader_;
+  ShaderRequest compute_shader_;
   bool has_compute_shader_ = false;
   std::string debug_name_ { "ComputePipeline" };
   std::vector<RootBindingItem> root_bindings_;

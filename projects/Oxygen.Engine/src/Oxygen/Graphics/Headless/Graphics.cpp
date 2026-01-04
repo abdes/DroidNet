@@ -107,11 +107,12 @@ auto Graphics::CreateSurfaceFromNative(void* /*native_handle*/,
   return std::make_shared<HeadlessSurface>("headless-surface-from-native");
 }
 
-auto Graphics::GetShader(std::string_view unique_id) const
+auto Graphics::GetShader(const ShaderRequest& request) const
   -> std::shared_ptr<IShaderByteCode>
 {
   auto& shaders = GetComponent<internal::EngineShaders>();
-  return shaders.GetShader(unique_id);
+  const auto id = MakeShaderIdentifier(request);
+  return shaders.GetShader(id);
 }
 
 auto Graphics::CreateCommandListImpl(QueueRole role,

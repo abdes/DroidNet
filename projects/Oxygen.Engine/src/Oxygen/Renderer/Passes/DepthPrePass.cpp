@@ -345,13 +345,12 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   using graphics::DirectBufferBinding;
   using graphics::FillMode;
   using graphics::FramebufferLayoutDesc;
-  using graphics::MakeShaderIdentifier;
   using graphics::PrimitiveType;
   using graphics::PushConstantsBinding;
   using graphics::RasterizerStateDesc;
   using graphics::RootBindingDesc;
   using graphics::RootBindingItem;
-  using graphics::ShaderStageDesc;
+  using graphics::ShaderRequest;
   using graphics::ShaderStageFlags;
 
   // Note: ignoring user-configured fill_mode for the depth pass
@@ -389,11 +388,15 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   auto generated_bindings = BuildRootBindings();
 
   return GraphicsPipelineDesc::Builder()
-    .SetVertexShader(ShaderStageDesc {
-      .shader = MakeShaderIdentifier(ShaderType::kVertex, "DepthPrePass.hlsl"),
+    .SetVertexShader(ShaderRequest {
+      .stage = ShaderType::kVertex,
+      .source_path = "DepthPrePass.hlsl",
+      .entry_point = "VS",
     })
-    .SetPixelShader(ShaderStageDesc {
-      .shader = MakeShaderIdentifier(ShaderType::kPixel, "DepthPrePass.hlsl"),
+    .SetPixelShader(ShaderRequest {
+      .stage = ShaderType::kPixel,
+      .source_path = "DepthPrePass.hlsl",
+      .entry_point = "PS",
     })
     .SetPrimitiveTopology(PrimitiveType::kTriangleList)
     .SetRasterizerState(raster_desc)

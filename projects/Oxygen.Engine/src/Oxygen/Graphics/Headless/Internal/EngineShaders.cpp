@@ -53,11 +53,11 @@ EngineShaders::EngineShaders()
 
   try {
     static constexpr std::array<std::string_view, 5> kEngineShaderIds = {
-      std::string_view("VS@FullScreenTriangle.hlsl"),
-      std::string_view("PS@FullScreenTriangle.hlsl"),
-      std::string_view("VS@DepthPrePass.hlsl"),
-      std::string_view("PS@DepthPrePass.hlsl"),
-      std::string_view("CS@LightCulling.hlsl"),
+      std::string_view("VS@FullScreenTriangle.hlsl#VS"),
+      std::string_view("PS@FullScreenTriangle.hlsl#PS"),
+      std::string_view("VS@DepthPrePass.hlsl#VS"),
+      std::string_view("PS@DepthPrePass.hlsl#PS"),
+      std::string_view("CS@LightCulling.hlsl#CS"),
     };
 
     for (const auto id : kEngineShaderIds) {

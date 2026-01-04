@@ -28,7 +28,8 @@
 
 using oxygen::Overloads;
 using oxygen::graphics::FramebufferLayoutDesc;
-using oxygen::graphics::ShaderStageDesc;
+using oxygen::graphics::MakeShaderIdentifier;
+using oxygen::graphics::ShaderRequest;
 using oxygen::graphics::d3d12::Graphics;
 using oxygen::graphics::d3d12::detail::GetDxgiFormatMapping;
 using oxygen::graphics::d3d12::detail::PipelineStateCache;
@@ -37,12 +38,12 @@ namespace dx = oxygen::graphics::d3d12::dx;
 
 namespace {
 
-auto LoadShaderBytecode(const Graphics* gfx, const ShaderStageDesc& desc)
+auto LoadShaderBytecode(const Graphics* gfx, const ShaderRequest& desc)
   -> D3D12_SHADER_BYTECODE
 {
-  const auto shader = gfx->GetShader(desc.shader);
+  const auto shader = gfx->GetShader(desc);
   if (!shader) {
-    throw std::runtime_error("Shader not found: " + desc.shader);
+    throw std::runtime_error("Shader not found: " + MakeShaderIdentifier(desc));
   }
   return { shader->Data(), shader->Size() };
 }
