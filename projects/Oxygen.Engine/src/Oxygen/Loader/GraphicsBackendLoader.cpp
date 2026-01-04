@@ -34,6 +34,37 @@ using oxygen::loader::detail::PlatformServices;
 
 namespace {
 
+auto EscapeJsonString(std::string_view input) -> std::string
+{
+  std::string out;
+  out.reserve(input.size());
+
+  for (const char ch : input) {
+    switch (ch) {
+    case '\\':
+      out += "\\\\";
+      break;
+    case '"':
+      out += "\\\"";
+      break;
+    case '\n':
+      out += "\\n";
+      break;
+    case '\r':
+      out += "\\r";
+      break;
+    case '\t':
+      out += "\\t";
+      break;
+    default:
+      out += ch;
+      break;
+    }
+  }
+
+  return out;
+}
+
 //! Gets the DLL filename for a graphics backend module.
 /*!
  Constructs the appropriate DLL filename based on the backend type. The filename
@@ -114,8 +145,8 @@ auto SerializeConfigToJson(
 
   // Add optional card name if present
   if (config.preferred_card_name.has_value()) {
-    json += R"(  "preferred_card_name": ")" + config.preferred_card_name.value()
-      + "\",\n";
+    json += R"(  "preferred_card_name": ")"
+      + EscapeJsonString(config.preferred_card_name.value()) + "\",\n";
   }
 
   // Add optional device ID if present
@@ -123,6 +154,17 @@ auto SerializeConfigToJson(
     json += R"(  "preferred_card_device_id": )"
       + std::to_string(config.preferred_card_device_id.value()) + ",\n";
   }
+
+  // Add path finder configuration (serializable, used by the backend for
+  // deterministic path resolution).
+  json += "  \"path_finder\": {\n";
+  json += R"(    "workspace_root_path": ")"
+    + EscapeJsonString(config.path_finder_config.WorkspaceRootPath().string())
+    + "\",\n";
+  json += R"(    "shader_library_path": ")"
+    + EscapeJsonString(config.path_finder_config.ShaderLibraryPath().string())
+    + "\"\n";
+  json += "  },\n";
 
   // Add extra configuration (removing the enclosing braces)
   std::string extra = config.extra;

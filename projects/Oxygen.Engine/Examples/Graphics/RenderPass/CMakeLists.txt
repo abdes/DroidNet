@@ -31,6 +31,7 @@ add_executable(
   "MainModule.cpp"
   "MainModule.h"
   "main_impl.cpp"
+  "../../Common/WorkspaceRoot.h"
   "../../main.cpp"
 )
 set_target_properties(

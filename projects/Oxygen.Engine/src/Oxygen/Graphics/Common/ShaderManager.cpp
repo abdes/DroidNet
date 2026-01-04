@@ -250,43 +250,17 @@ inline auto Load(AnyReader& reader, ShaderType& value) -> Result<void>
 } // namespace oxygen::serio
 
 namespace {
-
-// Helper: Get the workspace root depending on environment (local or CI)
-auto GetWorkspaceRoot() -> std::filesystem::path
-{
-  // Detect GitHub Actions CI for running tests during CI
-  const auto github_actions = GetEnvVar("GITHUB_ACTIONS");
-  if (github_actions.has_value() && *github_actions == "true") {
-    // Use GITHUB_WORKSPACE as base if set
-    const auto github_workspace = GetEnvVar("GITHUB_WORKSPACE");
-    if (github_workspace.has_value()) {
-      return *github_workspace;
-    }
-    auto cwd = std::filesystem::current_path();
-    LOG_F(WARNING, "GITHUB_WORKSPACE not set, using current directory: {}",
-      cwd.string());
-    return cwd;
-  }
-  // FIXME: replace hardcoded path
-  // Local/dev: use hardcoded project root
-  return "F:/projects/DroidNet/projects/Oxygen.Engine/";
-}
-
 auto GetArchivePath(const ShaderManager::Config& config)
   -> std::filesystem::path
 {
-  std::filesystem::path archive_path = GetWorkspaceRoot();
-
-  if (config.archive_dir) {
-    archive_path /= *config.archive_dir;
-    // Ensure the archive directory exists
-    try {
-      create_directories(archive_path);
-    } catch (const std::filesystem::filesystem_error& e) {
-      LOG_F(ERROR, "Failed to create archive directory `{}`: {}",
-        archive_path.string(), e.what());
-      throw;
-    }
+  std::filesystem::path archive_path = config.archive_dir;
+  // Ensure the archive directory exists
+  try {
+    create_directories(archive_path);
+  } catch (const std::filesystem::filesystem_error& e) {
+    LOG_F(ERROR, "Failed to create archive directory `{}`: {}",
+      archive_path.string(), e.what());
+    throw;
   }
 
   archive_path /= config.archive_file_name;
@@ -301,8 +275,7 @@ auto ShaderManager::Initialize() -> void
 {
   DCHECK_NOTNULL_F(config_.compiler, "Shader compiler not set.");
   DCHECK_F(!config_.shaders.empty(), "No shaders specified.");
-  DCHECK_F(
-    config_.source_dir.has_value(), "No shader source directory specified");
+  DCHECK_F(!config_.source_dir.empty(), "No shader source directory specified");
 
   shader_infos_.assign(config_.shaders.begin(), config_.shaders.end());
 
@@ -352,11 +325,10 @@ auto ShaderManager::IsShaderOutdated(const ShaderInfo& shader) const -> bool
   // Check file exists and hash matches
   const auto& info = it->second.info;
   std::vector<std::filesystem::path> include_dirs;
-  if (config_.source_dir.has_value()) {
-    include_dirs.emplace_back(GetWorkspaceRoot() / config_.source_dir.value());
-  }
+
+  include_dirs.emplace_back(config_.source_dir);
   for (const auto& dir : config_.include_dirs) {
-    include_dirs.emplace_back(GetWorkspaceRoot() / dir);
+    include_dirs.emplace_back(dir);
   }
 
   if (const auto current_hash
@@ -551,19 +523,15 @@ void ShaderManager::Clear() noexcept
 
 auto ShaderManager::CompileAndAddShader(const ShaderInfo& profile) -> bool
 {
-  DCHECK_F(
-    config_.source_dir.has_value(), "No shader source directory specified");
+  DCHECK_F(!config_.source_dir.empty(), "No shader source directory specified");
 
-  // Use workspace root as base for source_path
-  std::filesystem::path source_path = GetWorkspaceRoot();
-  source_path /= config_.source_dir.value();
-  source_path /= profile.relative_path;
+  std::filesystem::path source_path
+    = config_.source_dir / profile.relative_path;
 
   ShaderCompiler::ShaderCompileOptions compile_options {};
-  compile_options.include_dirs.emplace_back(
-    GetWorkspaceRoot() / config_.source_dir.value());
+  compile_options.include_dirs.emplace_back(config_.source_dir);
   for (const auto& dir : config_.include_dirs) {
-    compile_options.include_dirs.emplace_back(GetWorkspaceRoot() / dir);
+    compile_options.include_dirs.emplace_back(dir);
   }
 
   auto bytecode

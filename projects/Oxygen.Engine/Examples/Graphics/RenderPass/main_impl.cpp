@@ -25,6 +25,8 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
 
+#include "../../Common/WorkspaceRoot.h"
+
 #include <MainModule.h>
 
 using oxygen::Graphics;
@@ -40,147 +42,161 @@ using oxygen::examples::MainModule;
 namespace {
 
 struct MyEngine {
-    std::shared_ptr<oxygen::Platform> platform;
-    std::weak_ptr<Graphics> gfx_weak;
+  std::shared_ptr<oxygen::Platform> platform;
+  std::weak_ptr<Graphics> gfx_weak;
 };
 
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 bool is_running { false };
 void EventLoopRun(const MyEngine& engine)
 {
-    // TODO: This is the game engine main loop.
+  // TODO: This is the game engine main loop.
 
-    // Track the last render time
-    auto last_render_time = std::chrono::steady_clock::now();
+  // Track the last render time
+  auto last_render_time = std::chrono::steady_clock::now();
 
-    while (is_running) {
-        if (engine.gfx_weak.expired()) {
-            LOG_F(ERROR, "Graphics backend is no longer available");
-            is_running = false;
-            break;
-        }
-        auto gfx = engine.gfx_weak.lock();
-
-        // Physics
-        // Sleep for a while to simulate physics
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-        // Input Events
-        engine.platform->Async().PollOne();
-        engine.platform->Events().PollOne();
-
-        // Game logic
-        // Sleep for a while to simulate game logic updates
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-        // Render (only if at least 20 milliseconds has passed since the last render)
-        auto now = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_render_time).count() >= 20) {
-            try {
-                gfx->Render();
-                last_render_time = now;
-            } catch (const std::exception& ex) {
-                LOG_F(ERROR, "Unhandled exception caught during rendering: {}", ex.what());
-                is_running = false;
-                break;
-            }
-        }
-
-        // Check for Pause/Resume
+  while (is_running) {
+    if (engine.gfx_weak.expired()) {
+      LOG_F(ERROR, "Graphics backend is no longer available");
+      is_running = false;
+      break;
     }
+    auto gfx = engine.gfx_weak.lock();
+
+    // Physics
+    // Sleep for a while to simulate physics
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    // Input Events
+    engine.platform->Async().PollOne();
+    engine.platform->Events().PollOne();
+
+    // Game logic
+    // Sleep for a while to simulate game logic updates
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    // Render (only if at least 20 milliseconds has passed since the last
+    // render)
+    auto now = std::chrono::steady_clock::now();
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(
+          now - last_render_time)
+          .count()
+      >= 20) {
+      try {
+        gfx->Render();
+        last_render_time = now;
+      } catch (const std::exception& ex) {
+        LOG_F(
+          ERROR, "Unhandled exception caught during rendering: {}", ex.what());
+        is_running = false;
+        break;
+      }
+    }
+
+    // Check for Pause/Resume
+  }
 }
 } // namespace
 
-template <>
-struct oxygen::co::EventLoopTraits<MyEngine> {
-    static void Run(const MyEngine& engine) { EventLoopRun(engine); }
-    static void Stop(MyEngine& /*engine*/) { is_running = false; }
-    static auto IsRunning(const MyEngine& /*engine*/) -> bool { return is_running; }
-    static auto EventLoopId(const MyEngine& engine) -> EventLoopID { return EventLoopID(&engine); }
+template <> struct oxygen::co::EventLoopTraits<MyEngine> {
+  static void Run(const MyEngine& engine) { EventLoopRun(engine); }
+  static void Stop(MyEngine& /*engine*/) { is_running = false; }
+  static auto IsRunning(const MyEngine& /*engine*/) -> bool
+  {
+    return is_running;
+  }
+  static auto EventLoopId(const MyEngine& engine) -> EventLoopID
+  {
+    return EventLoopID(&engine);
+  }
 };
 
 namespace {
 
-auto AsyncMain(
-    std::shared_ptr<Platform> platform,
-    std::weak_ptr<Graphics> gfx_weak) -> oxygen::co::Co<int>
+auto AsyncMain(std::shared_ptr<Platform> platform,
+  std::weak_ptr<Graphics> gfx_weak) -> oxygen::co::Co<int>
 {
-    // Create the application main module
-    auto main_module = std::make_unique<MainModule>(platform, gfx_weak);
+  // Create the application main module
+  auto main_module = std::make_unique<MainModule>(platform, gfx_weak);
 
-    // NOLINTNEXTLINE(*-capturing-lambda-coroutines, *-reference-coroutine-parameters)
-    OXCO_WITH_NURSERY(n)
-    {
-        is_running = true;
+  // NOLINTNEXTLINE(*-capturing-lambda-coroutines,
+  // *-reference-coroutine-parameters)
+  OXCO_WITH_NURSERY(n)
+  {
+    is_running = true;
 
-        // Activate and run child live objects with our nursery.
+    // Activate and run child live objects with our nursery.
 
-        co_await n.Start(&Platform::ActivateAsync, std::ref(*platform));
-        platform->Run();
+    co_await n.Start(&Platform::ActivateAsync, std::ref(*platform));
+    platform->Run();
 
-        DCHECK_F(!gfx_weak.expired());
-        auto gfx = gfx_weak.lock();
-        co_await n.Start(&Graphics::ActivateAsync, std::ref(*gfx));
-        gfx->Run();
+    DCHECK_F(!gfx_weak.expired());
+    auto gfx = gfx_weak.lock();
+    co_await n.Start(&Graphics::ActivateAsync, std::ref(*gfx));
+    gfx->Run();
 
-        co_await n.Start(&MainModule::StartAsync, std::ref(*main_module));
-        main_module->Run();
+    co_await n.Start(&MainModule::StartAsync, std::ref(*main_module));
+    main_module->Run();
 
-        // Terminate the application when the last window (main window) is
-        // closed
-        n.Start([&platform, &gfx_weak, &n, &main_module]() -> oxygen::co::Co<> {
-            co_await platform->Windows().LastWindowClosed();
-            LOG_F(INFO, "Last window is closed -> wrapping up");
+    // Terminate the application when the last window (main window) is
+    // closed
+    n.Start([&platform, &gfx_weak, &n, &main_module]() -> oxygen::co::Co<> {
+      co_await platform->Windows().LastWindowClosed();
+      LOG_F(INFO, "Last window is closed -> wrapping up");
 
-            try {
-                main_module.reset();
-            } catch (...) {
-                LOG_F(ERROR, "Main module shutdown with error");
-            }
+      try {
+        main_module.reset();
+      } catch (...) {
+        LOG_F(ERROR, "Main module shutdown with error");
+      }
 
-            // Explicitly stop the child live objects. Although this is not
-            // strictly required, it is a good practice to do so and ensures a
-            // controlled shutdown.
-            platform->Stop();
+      // Explicitly stop the child live objects. Although this is not
+      // strictly required, it is a good practice to do so and ensures a
+      // controlled shutdown.
+      platform->Stop();
 
-            // Stop the render thread
-            DCHECK_F(!gfx_weak.expired());
-            gfx_weak.lock()->Stop();
+      // Stop the render thread
+      DCHECK_F(!gfx_weak.expired());
+      gfx_weak.lock()->Stop();
 
-            // Cancel the main nursery to stop all background async tasks and
-            // return control to `main()`
-            n.Cancel();
-        });
+      // Cancel the main nursery to stop all background async tasks and
+      // return control to `main()`
+      n.Cancel();
+    });
 
-        // Wait for all tasks to complete
-        co_return oxygen::co::kJoin;
-    };
-    co_return EXIT_SUCCESS;
+    // Wait for all tasks to complete
+    co_return oxygen::co::kJoin;
+  };
+  co_return EXIT_SUCCESS;
 }
 
 } // namespace
 
 extern "C" void MainImpl(std::span<const char*> /*args*/)
 {
-    // Create the platform
-    auto platform = std::make_shared<Platform>(PlatformConfig { .headless = false });
+  // Create the platform
+  auto platform
+    = std::make_shared<Platform>(PlatformConfig { .headless = false });
 
-    // Load the graphics backend
-    GraphicsConfig gfx_config {
-        .enable_debug = true,
-        .enable_validation = false,
-        .headless = false,
-        .extra = {},
-    };
-    auto& loader = oxygen::GraphicsBackendLoader::GetInstance();
-    auto gfx_weak = loader.LoadBackend(BackendType::kDirect3D12, gfx_config);
-    CHECK_F(!gfx_weak.expired()); // Expect a valid graphics backend, or abort
+  // Load the graphics backend
+  GraphicsConfig gfx_config {
+    .enable_debug = true,
+    .enable_validation = false,
+    .headless = false,
+    .extra = {},
+    .path_finder_config = oxygen::PathFinderConfig::Create()
+      .WithWorkspaceRoot(oxygen::examples::common::FindWorkspaceRoot())
+      .Build(),
+  };
+  auto& loader = oxygen::GraphicsBackendLoader::GetInstance();
+  auto gfx_weak = loader.LoadBackend(BackendType::kDirect3D12, gfx_config);
+  CHECK_F(!gfx_weak.expired()); // Expect a valid graphics backend, or abort
 
-    // Transfer control to the asynchronous main loop
-    MyEngine engine { platform, gfx_weak };
-    oxygen::co::Run(engine, AsyncMain(platform, gfx_weak));
+  // Transfer control to the asynchronous main loop
+  MyEngine engine { platform, gfx_weak };
+  oxygen::co::Run(engine, AsyncMain(platform, gfx_weak));
 
-    // Explicit destruction order due to dependencies.
-    platform.reset();
-    gfx_weak.reset();
+  // Explicit destruction order due to dependencies.
+  platform.reset();
+  gfx_weak.reset();
 }

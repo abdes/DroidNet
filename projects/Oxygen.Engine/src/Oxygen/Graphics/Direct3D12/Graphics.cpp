@@ -212,6 +212,33 @@ Graphics::Graphics(const SerializedBackendConfig& config)
   nlohmann::json jsonConfig
     = nlohmann::json::parse(config.json_data, config.json_data + config.size);
 
+  oxygen::PathFinderConfig path_finder_config {};
+  if (jsonConfig.contains("path_finder")) {
+    const auto& pf = jsonConfig["path_finder"];
+    std::filesystem::path workspace_root;
+    std::filesystem::path shader_library;
+
+    if (pf.contains("workspace_root_path")) {
+      workspace_root = pf["workspace_root_path"].get<std::string>();
+    }
+    if (pf.contains("shader_library_path")) {
+      shader_library = pf["shader_library_path"].get<std::string>();
+    }
+
+    if (!workspace_root.empty() || !shader_library.empty()) {
+      auto builder = oxygen::PathFinderConfig::Create();
+      if (!workspace_root.empty()) {
+        builder
+          = std::move(builder).WithWorkspaceRoot(std::move(workspace_root));
+      }
+      if (!shader_library.empty()) {
+        builder
+          = std::move(builder).WithShaderLibraryPath(std::move(shader_library));
+      }
+      path_finder_config = std::move(builder).Build();
+    }
+  }
+
   DeviceManagerDesc desc {};
   if (jsonConfig.contains("enable_debug")) {
     desc.enable_debug = jsonConfig["enable_debug"].get<bool>();
@@ -220,7 +247,7 @@ Graphics::Graphics(const SerializedBackendConfig& config)
     enable_vsync_ = jsonConfig["enable_vsync"].get<bool>();
   }
   AddComponent<DeviceManager>(desc);
-  AddComponent<EngineShaders>();
+  AddComponent<EngineShaders>(std::move(path_finder_config));
   AddComponent<DescriptorAllocatorComponent>();
   AddComponent<detail::PipelineStateCache>(this);
 }
