@@ -112,7 +112,7 @@ OXGN_GFX_NDAPI auto CanonicalizeShaderRequest(ShaderRequest request)
  indexing) because it does not depend on platform-specific `std::hash`
  behavior.
 
- @note The input must be canonicalized via `CanonicalizeShaderRequest()`.
+ @note The key is computed from the canonicalized form of the request.
 */
 OXGN_GFX_NDAPI auto ComputeShaderRequestKey(const ShaderRequest& request)
   -> uint64_t;

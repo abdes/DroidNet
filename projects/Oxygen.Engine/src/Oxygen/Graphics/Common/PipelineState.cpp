@@ -13,9 +13,11 @@
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 
 namespace {
 using oxygen::HashCombine;
+using oxygen::graphics::CanonicalizeShaderRequest;
 using oxygen::graphics::RootBindingItem;
 using oxygen::graphics::ShaderDefine;
 using oxygen::graphics::ShaderRequest;
@@ -40,16 +42,19 @@ inline void HashShaderDefines(
     HashCombine(seed, def.name);
     if (def.value) {
       HashCombine(seed, *def.value);
+    } else {
+      HashCombine(seed, uint32_t { 0xA5A5A5A5u });
     }
   }
 }
 
 inline void HashShaderRequest(size_t& seed, const ShaderRequest& req)
 {
-  HashCombine(seed, static_cast<int>(req.stage));
-  HashCombine(seed, req.source_path);
-  HashCombine(seed, req.entry_point);
-  HashShaderDefines(seed, req.defines);
+  const auto canonical = CanonicalizeShaderRequest(ShaderRequest(req));
+  HashCombine(seed, static_cast<int>(canonical.stage));
+  HashCombine(seed, canonical.source_path);
+  HashCombine(seed, canonical.entry_point);
+  HashShaderDefines(seed, canonical.defines);
 }
 
 inline void HashRootBindings(
