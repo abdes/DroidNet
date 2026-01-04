@@ -36,6 +36,8 @@ set(
   OXYGEN_CONFIG_HEADERS
   "EngineConfig.h"
   "GraphicsConfig.h"
+  "PathFinder.h"
+  "PathFinderConfig.h"
   "PlatformConfig.h"
   "RendererConfig.h"
 )

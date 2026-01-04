@@ -7,10 +7,13 @@
 #pragma once
 
 #include <atomic>
+#include <filesystem>
 #include <memory>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/Queues.h> // SharedTransferQueueStrategy
+
+#include "WorkspaceRoot.h"
 
 namespace oxygen {
 
@@ -34,6 +37,9 @@ namespace oxygen::examples::common {
 struct AsyncEngineApp {
   bool headless { false };
   bool fullscreen { false };
+
+  //! Workspace root used for path resolution.
+  std::filesystem::path workspace_root {};
 
   // Graphics queues setup shared across subsystems
   oxygen::graphics::SharedTransferQueueStrategy queue_strategy;

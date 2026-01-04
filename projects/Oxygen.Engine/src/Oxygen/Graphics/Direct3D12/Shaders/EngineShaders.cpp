@@ -11,6 +11,7 @@
 #include <type_traits>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/ShaderManager.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
@@ -65,18 +66,28 @@ const std::array<ShaderInfo, 7> kEngineShaders = {
 };
 } // namespace
 
-EngineShaders::EngineShaders()
+EngineShaders::EngineShaders(oxygen::PathFinderConfig path_finder_config)
+  : path_finder_config_(std::move(path_finder_config))
 {
   LOG_SCOPE_F(INFO, "Engine Shaders");
+
+  const auto shared_config
+    = std::make_shared<const oxygen::PathFinderConfig>(path_finder_config_);
+  const oxygen::PathFinder path_finder(
+    shared_config, std::filesystem::current_path());
+  const auto workspace_root = path_finder.WorkspaceRoot();
 
   // Load engine shaders
   compiler_ = std::make_shared<ShaderCompiler>(
     ShaderCompiler::Config { .name = "DXC" });
-  // TODO: Make this better by not hard-coding the path
+
   ShaderManager::Config shader_manager_config {
     .backend_name = "Direct3D12",
-    .archive_dir = R"(bin\Oxygen)",
-    .source_dir = R"(src\Oxygen\Graphics\Direct3D12\Shaders)",
+    .archive_dir = workspace_root / "bin/Oxygen",
+    .source_dir = workspace_root / "src/Oxygen/Graphics/Direct3D12/Shaders",
+    .include_dirs = {
+      workspace_root / "src/Oxygen",
+    },
     .shaders = std::span(kEngineShaders),
     .compiler = compiler_,
   };

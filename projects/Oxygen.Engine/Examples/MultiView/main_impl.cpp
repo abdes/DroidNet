@@ -50,7 +50,6 @@ namespace co = oxygen::co;
 namespace g = oxygen::graphics;
 
 namespace {
-
 auto EventLoopRun(const oxygen::examples::common::AsyncEngineApp& app) -> void
 {
   while (app.running.load(std::memory_order_relaxed)) {
@@ -92,7 +91,8 @@ auto RegisterEngineModules(oxygen::examples::common::AsyncEngineApp& app)
 {
   LOG_F(INFO, "Registering engine modules...");
 
-  auto register_module = [&](std::unique_ptr<engine::EngineModule> module) -> void {
+  auto register_module
+    = [&](std::unique_ptr<engine::EngineModule> module) -> void {
     const bool registered = app.engine->RegisterModule(std::move(module));
     if (!registered) {
       LOG_F(ERROR, "Failed to register module");
@@ -100,8 +100,8 @@ auto RegisterEngineModules(oxygen::examples::common::AsyncEngineApp& app)
     }
   };
 
-  auto input_sys = std::make_unique<engine::InputSystem>(
-    app.platform->Input().ForRead());
+  auto input_sys
+    = std::make_unique<engine::InputSystem>(app.platform->Input().ForRead());
   app.input_system = o::observer_ptr { input_sys.get() };
   register_module(std::move(input_sys));
 
@@ -158,11 +158,11 @@ auto AsyncMain(oxygen::examples::common::AsyncEngineApp& app, uint32_t frames)
 
 extern "C" auto MainImpl(std::span<const char*> args) -> void
 {
-  using oxygen::clap::Option;
-  using oxygen::clap::Command;
-  using oxygen::clap::CommandBuilder;
   using oxygen::clap::CliBuilder;
   using oxygen::clap::CmdLineArgumentsError;
+  using oxygen::clap::Command;
+  using oxygen::clap::CommandBuilder;
+  using oxygen::clap::Option;
 
   uint32_t frames = 0U;
   uint32_t target_fps = 100U;
@@ -244,6 +244,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .thread_pool_size = (std::min)(4U, std::thread::hardware_concurrency()),
     });
 
+    app.workspace_root = o::examples::common::FindWorkspaceRoot();
+
     const o::GraphicsConfig gfx_config {
       .enable_debug = true,
       .enable_validation = false,
@@ -251,6 +253,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .headless = headless,
       .enable_vsync = enable_vsync,
       .extra = {},
+      .path_finder_config = o::PathFinderConfig::Create()
+        .WithWorkspaceRoot(app.workspace_root)
+        .Build(),
     };
     const auto& loader = o::GraphicsBackendLoader::GetInstance();
     app.gfx_weak = loader.LoadBackend(

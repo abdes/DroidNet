@@ -128,7 +128,8 @@ auto RegisterEngineModules(oxygen::examples::common::AsyncEngineApp& app)
 
     // Graphics main module (replaces RenderController/RenderThread pattern)
     app.renderer = observer_ptr { renderer_unique.get() };
-    register_module(std::make_unique<oxygen::examples::textured_cube::MainModule>(app));
+    register_module(
+      std::make_unique<oxygen::examples::textured_cube::MainModule>(app));
 
     // Register as module
     register_module(std::move(renderer_unique));
@@ -277,6 +278,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .thread_pool_size = (std::min)(4u, std::thread::hardware_concurrency()),
     });
 
+    app.workspace_root = oxygen::examples::common::FindWorkspaceRoot();
+
     // Load the graphics backend
     const GraphicsConfig gfx_config {
       .enable_debug = true,
@@ -285,6 +288,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .headless = headless,
       .enable_vsync = enable_vsync,
       .extra = {},
+      .path_finder_config = PathFinderConfig::Create()
+        .WithWorkspaceRoot(app.workspace_root)
+        .Build(),
     };
     const auto& loader = GraphicsBackendLoader::GetInstance();
     app.gfx_weak = loader.LoadBackend(

@@ -27,8 +27,8 @@
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
-#include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
@@ -281,6 +281,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .thread_pool_size = (std::min)(4u, std::thread::hardware_concurrency()),
     });
 
+    app.workspace_root = oxygen::examples::common::FindWorkspaceRoot();
+
     // Load the graphics backend
     const GraphicsConfig gfx_config {
       .enable_debug = true,
@@ -289,6 +291,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .headless = headless,
       .enable_vsync = enable_vsync,
       .extra = {},
+      .path_finder_config = PathFinderConfig::Create()
+        .WithWorkspaceRoot(app.workspace_root)
+        .Build(),
     };
     const auto& loader = GraphicsBackendLoader::GetInstance();
     app.gfx_weak = loader.LoadBackend(

@@ -10,7 +10,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
-#include <optional>
 #include <span>
 #include <string>
 #include <unordered_map>
@@ -62,17 +61,14 @@ public:
     std::string backend_name { "Default" };
     std::string archive_file_name { "shaders.bin" };
 
-    // TODO: make a final solution for shader locations
-    // Currently these are relative paths to the project root.
-    std::optional<std::string> archive_dir;
-    std::optional<std::string> source_dir;
+    //! Directory containing the shader archive.
+    std::filesystem::path archive_dir;
+
+    //! Directory containing shader sources.
+    std::filesystem::path source_dir;
 
     //! Additional include directories for shader compilation.
-    //!
-    //! Paths are relative to the project root (same convention as
-    //! @ref source_dir). The shader manager will always add @ref source_dir as
-    //! an include directory when it is provided.
-    std::vector<std::string> include_dirs;
+    std::vector<std::filesystem::path> include_dirs;
 
     std::span<const ShaderInfo> shaders;
 

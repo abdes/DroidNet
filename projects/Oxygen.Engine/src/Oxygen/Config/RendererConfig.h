@@ -9,16 +9,21 @@
 #include <cstddef>
 #include <string>
 
+#include <Oxygen/Config/PathFinderConfig.h>
+
 namespace oxygen {
 
 struct RendererConfig {
-  // Upload queue key to use for staging/upload recording. Renderer will set
-  // this into the UploadPolicy passed to the UploadCoordinator. This field
-  // is required; do not default-initialize.
+  //! Immutable configuration for path resolution.
+  PathFinderConfig path_finder_config {};
+
+  //! Upload queue key to use for staging/upload recording. Renderer will set
+  //! this into the UploadPolicy passed to the UploadCoordinator. This field
+  //! is required; do not default-initialize.
   std::string upload_queue_key;
 
-  // Maximum number of simultaneously prepared views the renderer keeps alive
-  // before evicting the least-recently-used entry. Default keeps legacy 8.
+  //! Maximum number of simultaneously prepared views the renderer keeps alive
+  //! before evicting the least-recently-used entry. Default keeps legacy 8.
   std::size_t max_active_views { 8 };
 };
 

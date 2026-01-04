@@ -7,8 +7,11 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <string>
+
+#include <Oxygen/Config/PathFinderConfig.h>
 
 namespace oxygen {
 
@@ -51,6 +54,11 @@ struct GraphicsConfig {
 
   //! Backend-specific configuration as a JSON string.
   std::string extra = "{}";
+
+  //! Serializable path resolution configuration.
+  //!
+  //! @note This must remain 100% serializable across DLL boundaries.
+  PathFinderConfig path_finder_config {};
 };
 
 //! Configuration structure passed to backends during creation. A C-compatible
