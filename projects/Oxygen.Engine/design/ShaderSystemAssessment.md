@@ -4,7 +4,8 @@ Date: 2026-01-04
 
 ## Non-negotiable constraints
 
-1. **No backward-compat shims.** Every call site and shader will be migrated to the final API and final file layout.
+1. **No backward-compat shims (engine passes).** Every engine-owned call site and shader will be migrated to the final API and final file layout.
+   - **Explicit exception (ImGui renderer backend):** the D3D12 ImGui backend remains an upstream-style “legacy pipeline” with its own root signature and texture binding model, and is **excluded** from the engine ABI/reflection validation gates described in §4.4/§15.
 2. **Single source of truth for shader binaries.** The engine loads one artifact format. No dual “CMake .cso” vs “runtime archive” paths.
 3. **Human-readable shader requests at PSO call sites.** Render code must express: stage, path, entry point, defines. Render code must never traffic in hashes.
 4. **GPU contracts are authoritative and identical in C++ and HLSL.** No re-declaration of engine structs in entry shaders.
@@ -13,7 +14,9 @@ Date: 2026-01-04
 
 ## 1) Authoritative binding & root signature contract (D3D12)
 
-This is the bindless root signature contract that all passes share.
+This is the bindless root signature contract that all engine-owned passes share.
+
+ImGui is a deliberate exception: it is rendered through the upstream DX12 backend pipeline (own root signature/PSO) and is excluded from the ABI/reflection validation gates.
 
 **Source of truth (generated):** `src/Oxygen/Core/Bindless/Generated.RootSignature.h`.
 
@@ -738,7 +741,7 @@ reach the final spec in this document.
       - Update all render-pass PSO creation call sites that currently pass flat filenames.
       - Update shader compilation inputs (see step 14) to discover/pass the new paths.
 
-12. [ ] **Rewrite LightCulling to comply with bindless-only rules and RootConstants.**
+12. [X] **Rewrite LightCulling to comply with bindless-only rules and RootConstants.**
     - Current shader is incompatible with this spec:
       - `src/Oxygen/Graphics/Direct3D12/Shaders/LightCulling.hlsl` declares a separate `cbuffer ResourceIndices : register(b0)` and uses register-bound SRVs/UAVs in explicit spaces.
     - Target:
@@ -747,14 +750,17 @@ reach the final spec in this document.
         - Uses `g_PassConstantsIndex` to fetch its pass constants CBV from `ResourceDescriptorHeap`
         - Declares **zero** register-bound SRVs/UAVs/samplers
 
-13. [ ] **Resolve ImGui’s current root-constant usage against the new ABI.**
-    - Current:
-      - `src/Oxygen/Graphics/Direct3D12/Shaders/ImGui.hlsl` uses `cbuffer ImGuiPackedIndices : register(b2)` for a packed texture/sampler index.
-    - Target constraint:
-      - `b2, space0` is reserved for the engine’s fixed two 32-bit root constants.
-    - Required work:
-      - Move per-draw UI texture selection out of ad-hoc root constants and into the standardized mechanism (either via `DrawMetadata` + `g_DrawIndex`, or via a UI-specific per-draw indirection buffer referenced by pass constants).
-      - Update the D3D12 ImGui integration code that sets root parameters (likely under `src/Oxygen/Graphics/Direct3D12/ImGui/`) to bind root constants per the new ABI.
+13. [X] **Resolve ImGui’s current root-constant usage against the new ABI.**
+    - Decision (Option A, normative): **Do not rewrite ImGui to conform to the engine ABI.** Treat ImGui rendering as a “legacy pipeline” that is allowed to use a different root signature and binding model.
+    - Current (fact):
+      - Runtime rendering is delegated to the upstream D3D12 backend under `src/Oxygen/Graphics/Direct3D12/ImGui/` (see `imgui_impl_dx12.cpp`), which creates its own root signature/PSO and binds textures via `ImTextureID` → `D3D12_GPU_DESCRIPTOR_HANDLE`.
+      - The engine also compiles an engine shader at `src/Oxygen/Graphics/Direct3D12/Shaders/Passes/Ui/ImGui.hlsl`, but that shader/ABI is not authoritative for the runtime ImGui backend.
+    - Target constraint (engine ABI):
+      - For engine-owned passes, `b2, space0` remains reserved for the engine’s fixed two 32-bit root constants.
+    - Required work (policy + gates, not a backend rewrite):
+      - Ensure the offline builder/runtime reflection validator (step 15) can **exclude** the ImGui backend shaders/PSOs from the engine ABI checks (root-constants meaning, bindless-only discipline, contract-include requirements).
+      - Document and enforce that ImGui rendering is a separate pipeline boundary: it must not rely on `SceneConstants`/`RootConstants` nor on engine bindless domain guards.
+      - Optional clean-up (when convenient): avoid compiling/packaging the engine-managed `Passes/Ui/ImGui.hlsl` unless it is actually used by an engine-owned UI pass.
 
 14. [ ] **Replace the existing runtime “shader archive” with the final `shaders.bin` format and a build-time producer.**
     - Current archive system is not the spec format:
