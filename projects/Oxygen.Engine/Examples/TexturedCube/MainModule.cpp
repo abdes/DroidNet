@@ -219,7 +219,8 @@ auto FlipRgba8Vertically(std::span<std::byte> rgba8, const std::uint32_t width,
   }
 
   constexpr std::size_t kBytesPerPixel = 4U;
-  const std::size_t row_bytes = static_cast<std::size_t>(width) * kBytesPerPixel;
+  const std::size_t row_bytes
+    = static_cast<std::size_t>(width) * kBytesPerPixel;
   const std::size_t expected_size
     = row_bytes * static_cast<std::size_t>(height);
   if (rgba8.size() < expected_size) {
@@ -243,8 +244,7 @@ auto FlipRgba8Vertically(std::span<std::byte> rgba8, const std::uint32_t width,
 }
 
 auto ApplyUvOriginFix(const glm::vec2 scale, const glm::vec2 offset,
-  const bool flip_u, const bool flip_v)
-  -> std::pair<glm::vec2, glm::vec2>
+  const bool flip_u, const bool flip_v) -> std::pair<glm::vec2, glm::vec2>
 {
   glm::vec2 out_scale = scale;
   glm::vec2 out_offset = offset;
@@ -289,14 +289,14 @@ auto MakeLookRotationFromPosition(const glm::vec3& position,
 
 auto ResolveBaseColorTextureResourceIndex(
   oxygen::examples::textured_cube::MainModule::TextureIndexMode mode,
-  std::uint32_t custom_resource_index) -> oxygen::data::pak::v1::ResourceIndexT
+  std::uint32_t custom_resource_index) -> oxygen::data::pak::v2::ResourceIndexT
 {
-  using oxygen::data::pak::v1::ResourceIndexT;
+  using oxygen::data::pak::v2::ResourceIndexT;
   using enum oxygen::examples::textured_cube::MainModule::TextureIndexMode;
 
   switch (mode) {
   case kFallback:
-    return oxygen::data::pak::v1::kFallbackResourceIndex;
+    return oxygen::data::pak::v2::kFallbackResourceIndex;
   case kCustom:
     return static_cast<ResourceIndexT>(custom_resource_index);
   case kForcedError:
@@ -306,7 +306,7 @@ auto ResolveBaseColorTextureResourceIndex(
 }
 
 auto MakeCubeMaterial(const char* name, const glm::vec4& rgba,
-  oxygen::data::pak::v1::ResourceIndexT base_color_texture_resource_index,
+  oxygen::data::pak::v2::ResourceIndexT base_color_texture_resource_index,
   oxygen::content::ResourceKey base_color_texture_key,
   oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::kOpaque)
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
@@ -417,10 +417,12 @@ auto MainModule::GetEffectiveUvTransform() const
   // either by normalizing the texture at upload time (preferred) or by
   // normalizing UVs via the material UV transform.
   if (orientation_fix_mode_ == OrientationFixMode::kNormalizeUvInTransform) {
-    if (uv_origin_ != UvOrigin::kTopLeft && image_origin_ == ImageOrigin::kTopLeft) {
+    if (uv_origin_ != UvOrigin::kTopLeft
+      && image_origin_ == ImageOrigin::kTopLeft) {
       fix_v = !fix_v;
     }
-    if (uv_origin_ == UvOrigin::kTopLeft && image_origin_ != ImageOrigin::kTopLeft) {
+    if (uv_origin_ == UvOrigin::kTopLeft
+      && image_origin_ != ImageOrigin::kTopLeft) {
       fix_v = !fix_v;
     }
   }
@@ -538,8 +540,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     if (png_rgba8_.empty() || png_width_ == 0U || png_height_ == 0U) {
       png_status_message_ = "No decoded PNG pixels";
     } else {
-      auto asset_loader
-        = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+      auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
       if (!asset_loader) {
         png_status_message_ = "AssetLoader unavailable";
       } else {
@@ -572,7 +573,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
           FlipRgba8Vertically(rgba8, png_width_, png_height_);
         }
 
-        using oxygen::data::pak::v1::TextureResourceDesc;
+        using oxygen::data::pak::v2::TextureResourceDesc;
 
         const auto AlignUp = [](const std::size_t value,
                                const std::size_t alignment) -> std::size_t {
@@ -604,9 +605,9 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
         }
 
         TextureResourceDesc desc {};
-        desc.data_offset = static_cast<oxygen::data::pak::v1::OffsetT>(
+        desc.data_offset = static_cast<oxygen::data::pak::v2::OffsetT>(
           sizeof(TextureResourceDesc));
-        desc.size_bytes = static_cast<oxygen::data::pak::v1::DataBlobSizeT>(
+        desc.size_bytes = static_cast<oxygen::data::pak::v2::DataBlobSizeT>(
           rgba8_padded.size());
         desc.texture_type
           = static_cast<std::uint8_t>(oxygen::TextureType::kTexture2D);
@@ -978,8 +979,7 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
   {
     int mode = static_cast<int>(texture_index_mode_);
     const bool mode_changed = ImGui::RadioButton(
-      "Forced error", &mode,
-      static_cast<int>(TextureIndexMode::kForcedError));
+      "Forced error", &mode, static_cast<int>(TextureIndexMode::kForcedError));
     ImGui::SameLine();
     const bool mode_changed_2 = ImGui::RadioButton(
       "Fallback (0)", &mode, static_cast<int>(TextureIndexMode::kFallback));
@@ -1094,12 +1094,10 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
 
     {
       int mode = static_cast<int>(orientation_fix_mode_);
-      const bool m0 = ImGui::RadioButton(
-        "Fix: normalize texture on upload", &mode,
-        static_cast<int>(OrientationFixMode::kNormalizeTextureOnUpload));
-      const bool m1 = ImGui::RadioButton(
-        "Fix: normalize UV in transform", &mode,
-        static_cast<int>(OrientationFixMode::kNormalizeUvInTransform));
+      const bool m0 = ImGui::RadioButton("Fix: normalize texture on upload",
+        &mode, static_cast<int>(OrientationFixMode::kNormalizeTextureOnUpload));
+      const bool m1 = ImGui::RadioButton("Fix: normalize UV in transform",
+        &mode, static_cast<int>(OrientationFixMode::kNormalizeUvInTransform));
       const bool m2 = ImGui::RadioButton(
         "Fix: none", &mode, static_cast<int>(OrientationFixMode::kNone));
 
@@ -1110,9 +1108,8 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
 
         const bool prev_upload
           = (prev == OrientationFixMode::kNormalizeTextureOnUpload);
-        const bool next_upload
-          = (orientation_fix_mode_
-            == OrientationFixMode::kNormalizeTextureOnUpload);
+        const bool next_upload = (orientation_fix_mode_
+          == OrientationFixMode::kNormalizeTextureOnUpload);
         if ((prev_upload || next_upload) && !png_rgba8_.empty()) {
           png_reupload_requested_ = next_upload;
         }

@@ -97,19 +97,43 @@ protected:
     return desc;
   }
 
-  static auto MakeShaderReferenceDesc(const char* unique_id, uint64_t hash)
-    -> ShaderReferenceDesc
+  static auto MakeShaderReferenceDesc(oxygen::ShaderType shader_type,
+    const char* source_path, const char* entry_point, const char* defines,
+    uint64_t hash) -> ShaderReferenceDesc
   {
     ShaderReferenceDesc desc {};
-    std::memset(desc.shader_unique_id, 0, sizeof(desc.shader_unique_id));
-    if (unique_id != nullptr) {
-      const auto src_len = std::strlen(unique_id);
-      const auto copy_len = (src_len < (sizeof(desc.shader_unique_id) - 1))
+    desc.shader_type = static_cast<uint8_t>(shader_type);
+
+    std::memset(desc.source_path, 0, sizeof(desc.source_path));
+    if (source_path != nullptr) {
+      const auto src_len = std::strlen(source_path);
+      const auto copy_len = (src_len < (sizeof(desc.source_path) - 1))
         ? src_len
-        : (sizeof(desc.shader_unique_id) - 1);
-      std::memcpy(desc.shader_unique_id, unique_id, copy_len);
-      desc.shader_unique_id[copy_len] = '\0';
+        : (sizeof(desc.source_path) - 1);
+      std::memcpy(desc.source_path, source_path, copy_len);
+      desc.source_path[copy_len] = '\0';
     }
+
+    std::memset(desc.entry_point, 0, sizeof(desc.entry_point));
+    if (entry_point != nullptr) {
+      const auto src_len = std::strlen(entry_point);
+      const auto copy_len = (src_len < (sizeof(desc.entry_point) - 1))
+        ? src_len
+        : (sizeof(desc.entry_point) - 1);
+      std::memcpy(desc.entry_point, entry_point, copy_len);
+      desc.entry_point[copy_len] = '\0';
+    }
+
+    std::memset(desc.defines, 0, sizeof(desc.defines));
+    if (defines != nullptr) {
+      const auto src_len = std::strlen(defines);
+      const auto copy_len = (src_len < (sizeof(desc.defines) - 1))
+        ? src_len
+        : (sizeof(desc.defines) - 1);
+      std::memcpy(desc.defines, defines, copy_len);
+      desc.defines[copy_len] = '\0';
+    }
+
     desc.shader_hash = hash;
     return desc;
   }
@@ -209,8 +233,9 @@ NOLINT_TEST_F(
   desc.ambient_occlusion_texture = 46u;
 
   const std::array<ShaderReferenceDesc, 2> shader_descs {
-    MakeShaderReferenceDesc("VS@main.vert", 0x1111u),
-    MakeShaderReferenceDesc("PS@main.frag", 0x2222u),
+    MakeShaderReferenceDesc(
+      ShaderType::kVertex, "main.vert", "VS", "", 0x1111u),
+    MakeShaderReferenceDesc(ShaderType::kPixel, "main.frag", "PS", "", 0x2222u),
   };
   WriteMaterialDescriptor(desc, shader_descs);
 
@@ -249,8 +274,9 @@ NOLINT_TEST_F(
   EXPECT_THAT(shaders[0],
     AllOf(Property(
             &oxygen::data::ShaderReference::GetShaderType, ShaderType::kVertex),
-      Property(
-        &oxygen::data::ShaderReference::GetShaderUniqueId, Eq("VS@main.vert")),
+      Property(&oxygen::data::ShaderReference::GetSourcePath, Eq("main.vert")),
+      Property(&oxygen::data::ShaderReference::GetEntryPoint, Eq("VS")),
+      Property(&oxygen::data::ShaderReference::GetDefines, Eq("")),
       Property(
         &oxygen::data::ShaderReference::GetShaderSourceHash, Eq(0x1111u))));
 
@@ -258,8 +284,9 @@ NOLINT_TEST_F(
   EXPECT_THAT(shaders[1],
     AllOf(Property(
             &oxygen::data::ShaderReference::GetShaderType, ShaderType::kPixel),
-      Property(
-        &oxygen::data::ShaderReference::GetShaderUniqueId, Eq("PS@main.frag")),
+      Property(&oxygen::data::ShaderReference::GetSourcePath, Eq("main.frag")),
+      Property(&oxygen::data::ShaderReference::GetEntryPoint, Eq("PS")),
+      Property(&oxygen::data::ShaderReference::GetDefines, Eq("")),
       Property(
         &oxygen::data::ShaderReference::GetShaderSourceHash, Eq(0x2222u))));
 }
@@ -376,7 +403,8 @@ NOLINT_TEST_F(MaterialLoaderBasicTest, LoadMaterial_SingleShaderStage_Works)
   auto desc = MakeMaterialDescriptor("Test Material");
   desc.shader_stages = 0x8u;
   const std::array<ShaderReferenceDesc, 1> shader_descs {
-    MakeShaderReferenceDesc("VertexShader", 0xBBAAu),
+    MakeShaderReferenceDesc(
+      ShaderType::kVertex, "VertexShader", "VS", "", 0xBBAAu),
   };
   WriteMaterialDescriptor(desc, shader_descs);
 
@@ -392,7 +420,9 @@ NOLINT_TEST_F(MaterialLoaderBasicTest, LoadMaterial_SingleShaderStage_Works)
     AllOf(Property(
             &oxygen::data::ShaderReference::GetShaderType, ShaderType::kVertex),
       Property(
-        &oxygen::data::ShaderReference::GetShaderUniqueId, Eq("VertexShader")),
+        &oxygen::data::ShaderReference::GetSourcePath, Eq("VertexShader")),
+      Property(&oxygen::data::ShaderReference::GetEntryPoint, Eq("VS")),
+      Property(&oxygen::data::ShaderReference::GetDefines, Eq("")),
       Property(
         &oxygen::data::ShaderReference::GetShaderSourceHash, Eq(0xBBAAu))));
 }
@@ -410,7 +440,7 @@ NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_ShaderReadFailure_Throws)
   auto desc = MakeMaterialDescriptor("Test Material");
   desc.shader_stages = 0x8u;
 
-  // Incomplete shader data (needs 216 bytes but only provide 50)
+  // Incomplete shader data (needs 424 bytes but only provide 50)
   const std::string partial_shader_hexdump = R"(
      0: 56 65 72 74 65 78 53 68 61 64 65 72 00 00 00 00
     16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00

@@ -613,25 +613,62 @@ def pack_material_asset_descriptor(
     return desc
 
 
-def pack_shader_reference_entries(shader_refs: List[Dict[str, Any]]) -> bytes:
+def pack_shader_reference_entries(
+    shader_stages: int, shader_refs: List[Dict[str, Any]]
+) -> bytes:
     """Pack variable shader reference entries following a material descriptor.
 
-    Each reference structure mirrors ShaderReferenceDesc in PakFormat.h:
-    - shader_unique_id: 192 bytes (UTF-8, null padded)
+    Each reference structure mirrors ShaderReferenceDesc in PakFormat.h (v2):
+    - shader_type: 1 byte (ShaderType enum value)
+    - reserved0: 7 bytes
+    - source_path: 120 bytes (UTF-8, null padded)
+    - entry_point: 32 bytes (UTF-8, null padded)
+    - defines: 256 bytes (UTF-8, null padded)
     - shader_hash: 8 bytes (uint64)
-    - reserved: 16 bytes
-    Total = 216 bytes.
+    Total = 424 bytes.
     """
+    # Assign stages from the shader_stages bitfield in ascending set-bit order.
+    stages: List[int] = [i for i in range(32) if (shader_stages & (1 << i))]
+    if len(stages) != len(shader_refs):
+        raise PakError(
+            "E_SHADER_REFS",
+            f"shader_references count ({len(shader_refs)}) must match popcount(shader_stages) ({len(stages)})",
+        )
+
     out = b""
-    for ref in shader_refs:
-        unique_id = ref.get("shader_unique_id") or ref.get("id") or ""
-        if not isinstance(unique_id, str):
-            unique_id = str(unique_id)
-        raw = unique_id.encode("utf-8")[:191]
-        unique_bytes = raw + b"\x00" * (192 - len(raw))
+    for stage, ref in zip(stages, shader_refs):
+        source_path = ref.get("source_path")
+        entry_point = ref.get("entry_point")
+        defines = ref.get("defines", "")
+
+        if not isinstance(source_path, str) or not source_path:
+            raise PakError(
+                "E_SHADER_REF", "source_path must be a non-empty string"
+            )
+        if not isinstance(entry_point, str) or not entry_point:
+            raise PakError(
+                "E_SHADER_REF", "entry_point must be a non-empty string"
+            )
+        if not isinstance(defines, str):
+            defines = str(defines)
+
+        src_raw = source_path.encode("utf-8")[:119]
+        src_bytes = src_raw + b"\x00" * (120 - len(src_raw))
+        ep_raw = entry_point.encode("utf-8")[:31]
+        ep_bytes = ep_raw + b"\x00" * (32 - len(ep_raw))
+        def_raw = defines.encode("utf-8")[:255]
+        def_bytes = def_raw + b"\x00" * (256 - len(def_raw))
+
         shader_hash = int(ref.get("shader_hash", 0)) & 0xFFFFFFFFFFFFFFFF
-        reserved = b"\x00" * 16
-        entry = unique_bytes + struct.pack("<Q", shader_hash) + reserved
+        reserved0 = b"\x00" * 7
+        entry = (
+            struct.pack("<B", stage)
+            + reserved0
+            + src_bytes
+            + ep_bytes
+            + def_bytes
+            + struct.pack("<Q", shader_hash)
+        )
         if len(entry) != SHADER_REF_DESC_SIZE:
             raise PakError(
                 "E_SIZE",

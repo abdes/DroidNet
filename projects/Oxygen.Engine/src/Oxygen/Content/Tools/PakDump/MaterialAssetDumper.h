@@ -27,7 +27,7 @@ namespace oxygen::content::pakdump {
 class MaterialAssetDumper final : public AssetDumper {
 public:
   void Dump(const oxygen::content::PakFile& pak,
-    const oxygen::data::pak::v1::AssetDirectoryEntry& entry, DumpContext& ctx,
+    const oxygen::data::pak::v2::AssetDirectoryEntry& entry, DumpContext& ctx,
     const size_t idx) const override
   {
     using oxygen::data::pak::MaterialAssetDesc;
@@ -139,10 +139,19 @@ public:
       }
 
       std::cout << "      [" << i << "] ShaderReferenceDesc:\n";
-      PrintUtils::Field("Unique ID",
-        std::string(shader_ref.shader_unique_id,
-          strnlen(
-            shader_ref.shader_unique_id, sizeof(shader_ref.shader_unique_id))),
+      PrintUtils::Field(
+        "Shader Type", static_cast<int>(shader_ref.shader_type), 10);
+      PrintUtils::Field("Source Path",
+        std::string(shader_ref.source_path,
+          strnlen(shader_ref.source_path, sizeof(shader_ref.source_path))),
+        10);
+      PrintUtils::Field("Entry Point",
+        std::string(shader_ref.entry_point,
+          strnlen(shader_ref.entry_point, sizeof(shader_ref.entry_point))),
+        10);
+      PrintUtils::Field("Defines",
+        std::string(shader_ref.defines,
+          strnlen(shader_ref.defines, sizeof(shader_ref.defines))),
         10);
       PrintUtils::Field("Shader Hash",
         asset_dump_helpers::ToHexString(shader_ref.shader_hash), 10);

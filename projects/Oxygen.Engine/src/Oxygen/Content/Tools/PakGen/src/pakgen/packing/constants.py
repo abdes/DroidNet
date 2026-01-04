@@ -19,7 +19,7 @@ SCENE_DESC_SIZE: Final = 256
 MESH_DESC_SIZE: Final = 105
 SUBMESH_DESC_SIZE: Final = 108
 MESH_VIEW_DESC_SIZE: Final = 16
-SHADER_REF_DESC_SIZE: Final = 216  # ShaderReferenceDesc (see PakFormat.h)
+SHADER_REF_DESC_SIZE: Final = 424  # ShaderReferenceDesc (see PakFormat.h)
 
 DATA_ALIGNMENT: Final = 256
 TABLE_ALIGNMENT: Final = 16

@@ -28,7 +28,6 @@ using oxygen::engine::TransparentPass;
 using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::GraphicsPipelineDesc;
-using oxygen::graphics::MakeShaderIdentifier;
 using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::Texture;

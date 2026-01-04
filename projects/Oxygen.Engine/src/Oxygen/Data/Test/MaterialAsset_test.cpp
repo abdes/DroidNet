@@ -146,15 +146,19 @@ NOLINT_TEST(MaterialAssetConsistencyTest, ShaderRefsMatchStageMask)
     | (1u << static_cast<uint32_t>(ShaderType::kPixel));
 
   ShaderReferenceDesc vs_desc {};
-  std::memcpy(vs_desc.shader_unique_id, "VS@Path/Vert.hlsl", 18);
+  vs_desc.shader_type = static_cast<uint8_t>(ShaderType::kVertex);
+  std::memcpy(vs_desc.source_path, "Path/Vert.hlsl", 14);
+  std::memcpy(vs_desc.entry_point, "VS", 2);
   vs_desc.shader_hash = 0x1234ULL;
   ShaderReferenceDesc ps_desc {};
-  std::memcpy(ps_desc.shader_unique_id, "PS@Path/Frag.hlsl", 18);
+  ps_desc.shader_type = static_cast<uint8_t>(ShaderType::kPixel);
+  std::memcpy(ps_desc.source_path, "Path/Frag.hlsl", 14);
+  std::memcpy(ps_desc.entry_point, "PS", 2);
   ps_desc.shader_hash = 0x5678ULL;
 
   std::vector<ShaderReference> refs;
-  refs.emplace_back(ShaderType::kVertex, vs_desc);
-  refs.emplace_back(ShaderType::kPixel, ps_desc);
+  refs.emplace_back(vs_desc);
+  refs.emplace_back(ps_desc);
 
   // Act
   MaterialAsset material { desc, refs };
@@ -181,16 +185,19 @@ NOLINT_TEST(ShaderReferenceBasicTest, ConstructionAndAccessors)
 
   // Arrange
   ShaderReferenceDesc desc {};
-  constexpr const char* kId = "VS@shaders/Basic.vert";
-  std::memcpy(desc.shader_unique_id, kId, std::strlen(kId));
+  desc.shader_type = static_cast<uint8_t>(ShaderType::kVertex);
+  std::memcpy(desc.source_path, "shaders/Basic.vert", 18);
+  std::memcpy(desc.entry_point, "VS", 2);
   desc.shader_hash = 0xCAFEBABECAFELL; // Arbitrary hash
 
   // Act
-  ShaderReference ref { ShaderType::kVertex, desc };
+  ShaderReference ref { desc };
 
   // Assert
   EXPECT_EQ(ref.GetShaderType(), ShaderType::kVertex);
-  EXPECT_EQ(ref.GetShaderUniqueId(), kId);
+  EXPECT_EQ(ref.GetSourcePath(), "shaders/Basic.vert");
+  EXPECT_EQ(ref.GetEntryPoint(), "VS");
+  EXPECT_EQ(ref.GetDefines(), "");
   EXPECT_EQ(ref.GetShaderSourceHash(), 0xCAFEBABECAFELL);
 }
 

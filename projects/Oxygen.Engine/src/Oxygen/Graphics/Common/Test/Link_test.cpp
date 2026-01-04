@@ -9,12 +9,15 @@
 #include <Oxygen/Graphics/Common/Shaders.h>
 
 using oxygen::ShaderType;
-using oxygen::graphics::MakeShaderIdentifier;
+using oxygen::graphics::FormatShaderLogKey;
 
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
-  const auto id
-    = MakeShaderIdentifier(ShaderType::kVertex, "shaders/vertex.glsl");
-  std::cout << id << '\n';
+  const oxygen::graphics::ShaderInfo shader_info {
+    .type = ShaderType::kVertex,
+    .relative_path = "shaders/vertex.glsl",
+    .entry_point = "main",
+  };
+  std::cout << FormatShaderLogKey(shader_info) << '\n';
   return 0;
 }

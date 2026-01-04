@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <string>
@@ -91,44 +93,52 @@ struct ShaderInfo {
   std::string entry_point { "main" }; //!< Entry point function name.
 };
 
-//! Generates a unique identifier string for a shader.
+//! Canonicalizes and validates a shader request.
 /*!
- \param shader_type The type of the shader.
- \param relative_path The path to the shader source file, relative to the engine
-        shaders directory.
- \param entry_point The entry point function name.
- \param defines Optional preprocessor defines that affect compilation.
- \return A unique string identifier for the shader.
- \see MakeShaderIdentifier(const ShaderInfo&)
+ Applies the shader request canonicalization rules:
+
+ - `source_path` must be relative, normalized and use forward slashes.
+ - `entry_point` must be a valid identifier.
+ - `defines` are validated, de-duplicated by name, and sorted by name.
+
+ @throw std::invalid_argument if the request is invalid.
 */
-OXGN_GFX_NDAPI auto MakeShaderIdentifier(ShaderType shader_type,
-  const std::string& relative_path, std::string_view entry_point,
-  std::span<const ShaderDefine> defines) -> std::string;
+OXGN_GFX_NDAPI auto CanonicalizeShaderRequest(ShaderRequest request)
+  -> ShaderRequest;
 
-//! Generates a unique identifier string for a shader.
-/*! Convenience overload using entry point `main` and no defines. */
-OXGN_GFX_NDAPI inline auto MakeShaderIdentifier(
-  ShaderType shader_type, const std::string& relative_path) -> std::string
-{
-  return MakeShaderIdentifier(shader_type, relative_path, "main", {});
-}
-
-//! Generates a unique identifier string for a shader request.
-OXGN_GFX_NDAPI inline auto MakeShaderIdentifier(const ShaderRequest& request)
-  -> std::string
-{
-  return MakeShaderIdentifier(
-    request.stage, request.source_path, request.entry_point, request.defines);
-}
-
-//! Generates a unique identifier string for a shader using ShaderInfo.
+//! Computes a stable 64-bit cache key for a canonicalized shader request.
 /*!
- \see MakeShaderIdentifier(ShaderType, const std::string&)
+ The returned key is suitable for persistent cache identity (e.g. archive
+ indexing) because it does not depend on platform-specific `std::hash`
+ behavior.
+
+ @note The input must be canonicalized via `CanonicalizeShaderRequest()`.
 */
-[[nodiscard]] inline auto MakeShaderIdentifier(const ShaderInfo& shader)
-{
-  return MakeShaderIdentifier(
-    shader.type, shader.relative_path, shader.entry_point, {});
-}
+OXGN_GFX_NDAPI auto ComputeShaderRequestKey(const ShaderRequest& request)
+  -> uint64_t;
+
+//! Formats a shader request for logging/debugging.
+/*! Format: `<STAGE>@<source_path>:<entry_point>` */
+OXGN_GFX_NDAPI auto FormatShaderLogKey(const ShaderRequest& request)
+  -> std::string;
+
+//! Formats a ShaderInfo entry for logging/debugging.
+/*! Format: `<STAGE>@<relative_path>:<entry_point>` */
+OXGN_GFX_NDAPI auto FormatShaderLogKey(const ShaderInfo& shader_info)
+  -> std::string;
+
+//! Hash for ShaderRequest (assumes canonicalized requests).
+struct ShaderRequestHash {
+  auto operator()(const ShaderRequest& request) const noexcept -> size_t;
+};
+
+//! Equality for ShaderRequest (assumes canonicalized requests).
+struct ShaderRequestEq {
+  auto operator()(const ShaderRequest& a, const ShaderRequest& b) const noexcept
+    -> bool
+  {
+    return a == b;
+  }
+};
 
 } // namespace oxygen::graphics

@@ -13,6 +13,7 @@
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 
 namespace oxygen::graphics::headless::internal {
 
@@ -26,12 +27,11 @@ public:
   EngineShaders(const EngineShaders&) = delete;
   auto operator=(const EngineShaders&) -> EngineShaders& = delete;
 
-  [[nodiscard]] auto GetShader(std::string_view id) const
+  [[nodiscard]] auto GetShader(const ShaderRequest& request) const
     -> std::shared_ptr<IShaderByteCode>;
 
 private:
-  mutable std::unordered_map<std::string, std::shared_ptr<IShaderByteCode>>
-    cache_;
+  mutable std::unordered_map<uint64_t, std::shared_ptr<IShaderByteCode>> cache_;
 };
 
 } // namespace oxygen::graphics::headless::internal

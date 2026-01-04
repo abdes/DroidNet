@@ -49,9 +49,9 @@ auto ShaderCompiler::CompileFromFile(const path& shader_full_path,
     merged.include_dirs.emplace_back(shader_full_path.parent_path());
     return CompileFromSource(shader_source, shader_info, merged);
   } catch (const std::exception& e) {
-    LOG_F(ERROR, "Failed to compile shader `{}`: {}",
-      MakeShaderIdentifier(shader_info.type, shader_full_path.string()),
-      e.what());
+    LOG_F(ERROR, "Failed to compile shader `{}` from `{}`: {}",
+      oxygen::graphics::FormatShaderLogKey(shader_info),
+      shader_full_path.string(), e.what());
     return nullptr;
   }
 }

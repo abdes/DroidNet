@@ -38,7 +38,9 @@ class AudioResource:
 
 @dataclass(slots=True)
 class ShaderReference:
-    shader_unique_id: str
+    source_path: str
+    entry_point: str
+    defines: str = ""
     shader_hash: int = 0
 
 

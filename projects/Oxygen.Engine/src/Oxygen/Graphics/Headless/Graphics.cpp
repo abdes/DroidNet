@@ -6,6 +6,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Headless/Bindless/AllocationStrategy.h>
 #include <Oxygen/Graphics/Headless/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Headless/Buffer.h>
@@ -111,8 +112,7 @@ auto Graphics::GetShader(const ShaderRequest& request) const
   -> std::shared_ptr<IShaderByteCode>
 {
   auto& shaders = GetComponent<internal::EngineShaders>();
-  const auto id = MakeShaderIdentifier(request);
-  return shaders.GetShader(id);
+  return shaders.GetShader(request);
 }
 
 auto Graphics::CreateCommandListImpl(QueueRole role,

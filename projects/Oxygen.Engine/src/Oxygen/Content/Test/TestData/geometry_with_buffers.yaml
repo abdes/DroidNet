@@ -1,5 +1,5 @@
 # Geometry with buffer dependencies - simplified for testing
-version: 1
+version: 2
 content_version: 1
 
 # Define default empty buffer (index 0) - required in all PAK files
@@ -72,9 +72,13 @@ assets:
 
     # Shader references for vertex and pixel shaders
     shader_references:
-      - shader_unique_id: "VS@FullScreenTriangle.hlsl"
+      - source_path: "FullScreenTriangle.hlsl"
+        entry_point: "VS"
+        defines: ""
         shader_hash: 0x1234567890abcdef
-      - shader_unique_id: "PS@FullScreenTriangle.hlsl"
+      - source_path: "FullScreenTriangle.hlsl"
+        entry_point: "PS"
+        defines: ""
         shader_hash: 0xfedcba0987654321
 
   - name: "buffered_geometry"

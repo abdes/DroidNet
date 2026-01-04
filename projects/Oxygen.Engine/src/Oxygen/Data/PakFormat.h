@@ -52,7 +52,7 @@
 
 // TODO: Define constants for hash algorithm enumeration
 
-namespace oxygen::data::pak::v1 {
+namespace oxygen::data::pak::v2 {
 
 //=== Type Aliases ===--------------------------------------------------------//
 
@@ -145,7 +145,7 @@ constexpr DataBlobSizeT kDataBlobMaxSize
 #pragma pack(push, 1)
 struct PakHeader {
   char magic[8] = { 'O', 'X', 'P', 'A', 'K', 0, 0, 0 };
-  uint16_t version = 1; // Format version
+  uint16_t version = 2; // Format version
   uint16_t content_version = 0; // Content version
   uint8_t guid[16] = {}; // Unique identifier for this PAK
   // Reserved for future use
@@ -410,32 +410,31 @@ struct AudioResourceDesc {
 #pragma pack(pop)
 static_assert(sizeof(AudioResourceDesc) == 32);
 
-//! Shader descriptor (64 bytes)
+//! Shader descriptor (424 bytes)
 /*!
   Describes a shader stage for material or pipeline binding. Does not contain
   bytecode; only metadata and lookup information.
 
-  - `shader_unique_id`: Unique identifier for the shader (e.g.,
-    VS@path/to/file.hlsl), maixmum size is 200 bytes including null terminator,
-    padded with null bytes.
-  - `shader_hash`: 64-bit hash of the shader source for validation.
-
-  @note Shader stage can be inferred from the component of `unique_id` before
-  the '@'.
-  @note The engine uses `shader_unique_id` and/or `shader_hash` to locate and
-  validate the correct bytecode blob in the external pre-compiled shaders file
-  at runtime.
+  - `shader_type`: Shader stage (ShaderType enum value).
+  - `source_path`: Canonical repo-relative shader source path (forward slashes,
+    normalized, no absolute paths).
+  - `entry_point`: Explicit entry point name.
+  - `defines`: Canonical defines string for compilation (sorted, unique names).
+  - `shader_hash`: 64-bit hash of shader source for validation.
 */
 #pragma pack(push, 1)
 struct ShaderReferenceDesc {
-  char shader_unique_id[192] = {}; // Shader unique identifier
-  uint64_t shader_hash = 0; // Hash of source for validation
+  uint8_t shader_type = 0; // ShaderType enum value
+  uint8_t reserved0[7] = {};
 
-  // Reserved for future use
-  uint8_t reserved[16] = {};
+  char source_path[120] = {}; // Null-terminated, null-padded
+  char entry_point[32] = {}; // Null-terminated, null-padded
+  char defines[256] = {}; // Null-terminated, null-padded (may be empty)
+
+  uint64_t shader_hash = 0; // Hash of source for validation
 };
 #pragma pack(pop)
-static_assert(sizeof(ShaderReferenceDesc) == 216);
+static_assert(sizeof(ShaderReferenceDesc) == 424);
 
 // -----------------------------------------------------------------------------
 // Assets
@@ -989,9 +988,9 @@ struct OrthographicCameraRecord {
 #pragma pack(pop)
 static_assert(sizeof(OrthographicCameraRecord) == 40);
 
-} // namespace oxygen::data::pak::v1
+} // namespace oxygen::data::pak::v2
 
 namespace oxygen::data::pak {
 //! Default namespace alias for latest version of the PAK format
-using namespace v1;
+using namespace v2;
 } // namespace oxygen::data::pak

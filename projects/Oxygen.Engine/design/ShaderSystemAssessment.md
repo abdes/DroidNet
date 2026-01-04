@@ -687,7 +687,7 @@ reach the final spec in this document.
      - Pipeline desc hashing: `src/Oxygen/Graphics/Common/PipelineState.cpp` currently hashes only the `shader` string and optional entry point.
      - All PSO builders and tests that construct shader stages (see `src/Oxygen/Graphics/*/Test/*PipelineState*`).
 
-7. [ ] **Remove `MakeShaderIdentifier()` from cache identity and migrate all call sites.**
+7. [X] **Remove `MakeShaderIdentifier()` from cache identity and migrate all call sites.**
    - Current identity coupling:
      - `src/Oxygen/Graphics/Common/Shaders.{h,cpp}` defines `MakeShaderIdentifier()`.
      - `src/Oxygen/Data/ShaderReference.cpp` assumes the shader type can be inferred from the identifier format.

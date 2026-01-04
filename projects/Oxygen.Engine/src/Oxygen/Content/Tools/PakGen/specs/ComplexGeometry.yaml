@@ -1,4 +1,4 @@
-version: 1
+version: 2
 content_version: 42
 
 # Complex Geometry Asset Specification
@@ -214,9 +214,13 @@ assets:
 
     # Shader references
     shader_references:
-      - shader_unique_id: "StandardPBR_VS"
+      - source_path: "StandardPBR.hlsl"
+        entry_point: "VS"
+        defines: ""
         shader_hash: 0xABCDEF01
-      - shader_unique_id: "StandardPBR_PS"
+      - source_path: "StandardPBR.hlsl"
+        entry_point: "PS"
+        defines: ""
         shader_hash: 0x23456789
 
   # Cockpit Glass Material (Transparent cockpit)
@@ -242,9 +246,13 @@ assets:
       normal_texture: "CockpitGlass_Normal"
 
     shader_references:
-      - shader_unique_id: "TransparentPBR_VS"
+      - source_path: "TransparentPBR.hlsl"
+        entry_point: "VS"
+        defines: ""
         shader_hash: 0x34567890
-      - shader_unique_id: "TransparentPBR_PS"
+      - source_path: "TransparentPBR.hlsl"
+        entry_point: "PS"
+        defines: ""
         shader_hash: 0x45678901
 
   # Engine Glow Material (Emissive engines)
@@ -269,9 +277,13 @@ assets:
       base_color_texture: "EngineGlow_Diffuse"
 
     shader_references:
-      - shader_unique_id: "EmissivePBR_VS"
+      - source_path: "EmissivePBR.hlsl"
+        entry_point: "VS"
+        defines: ""
         shader_hash: 0x56789012
-      - shader_unique_id: "EmissivePBR_PS"
+      - source_path: "EmissivePBR.hlsl"
+        entry_point: "PS"
+        defines: ""
         shader_hash: 0x67890123
 
   # Weapon Material (Metallic weapon parts)
@@ -297,9 +309,13 @@ assets:
       normal_texture: "Weapon_Normal"
 
     shader_references:
-      - shader_unique_id: "StandardPBR_VS"
+      - source_path: "StandardPBR.hlsl"
+        entry_point: "VS"
+        defines: ""
         shader_hash: 0xABCDEF01
-      - shader_unique_id: "StandardPBR_PS"
+      - source_path: "StandardPBR.hlsl"
+        entry_point: "PS"
+        defines: ""
         shader_hash: 0x23456789
 
   # ==========================================================================

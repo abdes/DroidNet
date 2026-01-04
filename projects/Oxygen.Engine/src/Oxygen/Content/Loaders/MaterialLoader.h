@@ -254,10 +254,15 @@ inline auto LoadMaterialAsset(LoaderContext context)
     if ((shader_stage_bits & (1u << i)) != 0) {
       auto shader_result = reader.Read<ShaderReferenceDesc>();
       check_result(shader_result, "ShaderReferenceDesc");
-      auto stage = static_cast<ShaderType>(i);
-      shader_refs.emplace_back(stage, shader_result.value());
-      LOG_F(INFO, "   shader stage {} : {} (hash: 0x{:016X})", i,
-        shader_refs.back().GetShaderUniqueId(),
+      shader_refs.emplace_back(shader_result.value());
+      const auto expected_stage = static_cast<ShaderType>(i);
+      if (shader_refs.back().GetShaderType() != expected_stage) {
+        throw std::runtime_error(
+          "ShaderReferenceDesc stage mismatch vs shader_stages bitfield");
+      }
+      LOG_F(INFO, "   shader stage {} : {}:{} (defines: '{}', hash: 0x{:016X})",
+        i, shader_refs.back().GetSourcePath(),
+        shader_refs.back().GetEntryPoint(), shader_refs.back().GetDefines(),
         shader_refs.back().GetShaderSourceHash());
     }
   }
