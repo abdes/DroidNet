@@ -1083,20 +1083,18 @@ auto MainModule::SetupShaders() -> void
   // Verify that the shaders can be loaded by the Graphics backend
   const auto vertex_shader = gfx->GetShader(graphics::ShaderRequest {
     .stage = ShaderType::kVertex,
-    .source_path = "FullScreenTriangle.hlsl",
+    .source_path = "Passes/Forward/ForwardMesh.hlsl",
     .entry_point = "VS",
   });
 
   const auto pixel_shader = gfx->GetShader(graphics::ShaderRequest {
     .stage = ShaderType::kPixel,
-    .source_path = "FullScreenTriangle.hlsl",
+    .source_path = "Passes/Forward/ForwardMesh.hlsl",
     .entry_point = "PS",
   });
 
-  CHECK_NOTNULL_F(
-    vertex_shader, "Failed to load FullScreenTriangle vertex shader");
-  CHECK_NOTNULL_F(
-    pixel_shader, "Failed to load FullScreenTriangle pixel shader");
+  CHECK_NOTNULL_F(vertex_shader, "Failed to load ForwardMesh vertex shader");
+  CHECK_NOTNULL_F(pixel_shader, "Failed to load ForwardMesh pixel shader");
 
   LOG_F(INFO, "Engine shaders loaded successfully");
 }

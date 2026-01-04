@@ -23,8 +23,8 @@ namespace oxygen::engine {
     the transparent pass flag (bit1) set.
 
   This initial implementation reuses the generic bindless mesh shader
-  (FullScreenTriangle.hlsl) and relies on the per-record flags written by
-  Renderer::FinalizeScenePrepSoA. Blending state currently mirrors the
+  (Passes/Forward/ForwardMesh.hlsl) and relies on the per-record flags written
+  by Renderer::FinalizeScenePrepSoA. Blending state currently mirrors the
   default ShaderPass pipeline (depth test on, depth write off); future work
   will introduce explicit blend state customization and ordering validation
   (back-to-front or OIT).

@@ -29,37 +29,37 @@ const std::array<ShaderInfo, 7> kEngineShaders = {
   {
     {
       .type = ShaderType::kPixel,
-      .relative_path = "FullScreenTriangle.hlsl",
+      .relative_path = "Passes/Forward/ForwardMesh.hlsl",
       .entry_point = "PS",
     },
     {
       .type = ShaderType::kVertex,
-      .relative_path = "FullScreenTriangle.hlsl",
+      .relative_path = "Passes/Forward/ForwardMesh.hlsl",
       .entry_point = "VS",
     },
     {
       .type = ShaderType::kPixel,
-      .relative_path = "DepthPrePass.hlsl",
+      .relative_path = "Passes/Depth/DepthPrePass.hlsl",
       .entry_point = "PS",
     },
     {
       .type = ShaderType::kVertex,
-      .relative_path = "DepthPrePass.hlsl",
+      .relative_path = "Passes/Depth/DepthPrePass.hlsl",
       .entry_point = "VS",
     },
     {
       .type = ShaderType::kCompute,
-      .relative_path = "LightCulling.hlsl",
+      .relative_path = "Passes/Lighting/LightCulling.hlsl",
       .entry_point = "CS",
     },
     {
       .type = ShaderType::kVertex,
-      .relative_path = "ImGui.hlsl",
+      .relative_path = "Passes/Ui/ImGui.hlsl",
       .entry_point = "VS",
     },
     {
       .type = ShaderType::kPixel,
-      .relative_path = "ImGui.hlsl",
+      .relative_path = "Passes/Ui/ImGui.hlsl",
       .entry_point = "PS",
     },
   },

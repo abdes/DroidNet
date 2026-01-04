@@ -730,7 +730,7 @@ reach the final spec in this document.
         - `#include "Core/Bindless/BindlessHelpers.hlsl"`
       - Delete duplicated struct declarations from entry shaders.
 
-11. [ ] **Restructure D3D12 shader sources into the final pass-oriented layout and update references.**
+11. [X] **Restructure D3D12 shader sources into the final pass-oriented layout and update references.**
     - Current layout (flat): `src/Oxygen/Graphics/Direct3D12/Shaders/*.hlsl` (`DepthPrePass.hlsl`, `FullScreenTriangle.hlsl`, `LightCulling.hlsl`, `ImGui.hlsl`).
     - Target layout (per §5.3): `Passes/<PassName>/<File>.hlsl`.
     - Scope:

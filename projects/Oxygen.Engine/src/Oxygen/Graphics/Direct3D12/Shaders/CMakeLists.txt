@@ -8,7 +8,7 @@
 # Shader compilation
 # ------------------------------------------------------------------------------
 
-set(SHADER_FullScreenTriangle_TYPES "VS;PS")
+set(SHADER_ForwardMesh_TYPES "VS;PS")
 set(SHADER_DepthPrePass_TYPES "VS;PS")
 set(SHADER_LightCulling_TYPES "CS")
 set(SHADER_ImGui_TYPES "VS;PS")
@@ -53,11 +53,11 @@ set(DEFAULT_VS_ENTRY_POINT "VS")
 set(DEFAULT_PS_ENTRY_POINT "PS")
 set(DEFAULT_CS_ENTRY_POINT "CS")
 
-# Find all HLSL files in the Shaders subdirectory
-file(GLOB HLSL_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsl")
+# Find all HLSL entrypoints under the pass-oriented shader layout
+file(GLOB_RECURSE HLSL_FILES "${CMAKE_CURRENT_SOURCE_DIR}/Passes/*.hlsl")
 
 # Shared include files (HLSL headers)
-file(GLOB HLSLI_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsli")
+file(GLOB_RECURSE HLSLI_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsli")
 
 # Create a custom target for compiling shaders
 add_custom_target(
