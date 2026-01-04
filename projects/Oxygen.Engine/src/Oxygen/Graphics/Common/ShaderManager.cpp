@@ -645,6 +645,7 @@ auto ShaderManager::CompileAndAddShader(const ShaderInfo& profile) -> bool
   for (const auto& dir : config_.include_dirs) {
     compile_options.include_dirs.emplace_back(dir);
   }
+  compile_options.defines = request.defines;
 
   auto bytecode
     = config_.compiler->CompileFromFile(source_path, profile, compile_options);
