@@ -13,8 +13,8 @@
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Surface.h>
 // Required for direct access to the QueueManager component in tests
 #include <Oxygen/Graphics/Common/Internal/QueueManager.h>
 #include <unordered_set>
@@ -99,7 +99,7 @@ public:
   MOCK_METHOD((const DescriptorAllocator&), GetDescriptorAllocator, (), (const, override));
   MOCK_METHOD((std::unique_ptr<Surface>), CreateSurface, (std::weak_ptr<Window>, observer_ptr<CommandQueue>), (const, override));
   MOCK_METHOD((std::shared_ptr<Surface>), CreateSurfaceFromNative, (void*, observer_ptr<CommandQueue>), (const, override));
-  MOCK_METHOD((std::shared_ptr<IShaderByteCode>), GetShader, (std::string_view), (const, override));
+  MOCK_METHOD((std::shared_ptr<IShaderByteCode>), GetShader, (const ShaderRequest&), (const, override));
   MOCK_METHOD((std::shared_ptr<Texture>), CreateTexture, (const TextureDesc&), (const, override));
   MOCK_METHOD((std::shared_ptr<Texture>), CreateTextureFromNativeObject, (const TextureDesc&, const NativeResource&), (const, override));
   MOCK_METHOD((std::shared_ptr<Buffer>), CreateBuffer, (const BufferDesc&), (const, override));

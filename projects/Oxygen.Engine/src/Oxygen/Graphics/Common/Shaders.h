@@ -6,7 +6,11 @@
 
 #pragma once
 
+#include <optional>
+#include <span>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/ShaderType.h>
@@ -54,6 +58,27 @@ OXYGEN_DEFINE_FLAGS_OPERATORS(ShaderStageFlags)
 //! String representation of enum values in `ShaderStageFlags`.
 OXGN_GFX_API auto to_string(ShaderStageFlags value) -> std::string;
 
+//! A single shader define used for compilation and cache identity.
+struct ShaderDefine {
+  std::string name;
+  std::optional<std::string> value {};
+
+  auto operator==(const ShaderDefine&) const -> bool = default;
+};
+
+//! Human-readable shader request used at PSO call sites.
+/*!
+ Carries shader stage, source path, entry point and optional defines.
+*/
+struct ShaderRequest {
+  ShaderType stage { ShaderType::kVertex };
+  std::string source_path;
+  std::string entry_point;
+  std::vector<ShaderDefine> defines {};
+
+  auto operator==(const ShaderRequest&) const -> bool = default;
+};
+
 //! Information describing a shader for pipeline creation.
 /*!
  \note The shader name is the file name component of the path including the
@@ -71,11 +96,30 @@ struct ShaderInfo {
  \param shader_type The type of the shader.
  \param relative_path The path to the shader source file, relative to the engine
         shaders directory.
+ \param entry_point The entry point function name.
+ \param defines Optional preprocessor defines that affect compilation.
  \return A unique string identifier for the shader.
  \see MakeShaderIdentifier(const ShaderInfo&)
 */
-OXGN_GFX_NDAPI auto MakeShaderIdentifier(
-  ShaderType shader_type, const std::string& relative_path) -> std::string;
+OXGN_GFX_NDAPI auto MakeShaderIdentifier(ShaderType shader_type,
+  const std::string& relative_path, std::string_view entry_point,
+  std::span<const ShaderDefine> defines) -> std::string;
+
+//! Generates a unique identifier string for a shader.
+/*! Convenience overload using entry point `main` and no defines. */
+OXGN_GFX_NDAPI inline auto MakeShaderIdentifier(
+  ShaderType shader_type, const std::string& relative_path) -> std::string
+{
+  return MakeShaderIdentifier(shader_type, relative_path, "main", {});
+}
+
+//! Generates a unique identifier string for a shader request.
+OXGN_GFX_NDAPI inline auto MakeShaderIdentifier(const ShaderRequest& request)
+  -> std::string
+{
+  return MakeShaderIdentifier(
+    request.stage, request.source_path, request.entry_point, request.defines);
+}
 
 //! Generates a unique identifier string for a shader using ShaderInfo.
 /*!
@@ -83,7 +127,8 @@ OXGN_GFX_NDAPI auto MakeShaderIdentifier(
 */
 [[nodiscard]] inline auto MakeShaderIdentifier(const ShaderInfo& shader)
 {
-  return MakeShaderIdentifier(shader.type, shader.relative_path);
+  return MakeShaderIdentifier(
+    shader.type, shader.relative_path, shader.entry_point, {});
 }
 
 } // namespace oxygen::graphics

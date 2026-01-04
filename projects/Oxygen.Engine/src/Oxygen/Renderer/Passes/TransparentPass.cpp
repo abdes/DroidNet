@@ -198,10 +198,16 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
 
   // NOTE: Reuse existing bindless mesh shader (see ShaderPass rationale).
   return GraphicsPipelineDesc::Builder()
-    .SetVertexShader(graphics::ShaderStageDesc { .shader
-      = MakeShaderIdentifier(ShaderType::kVertex, "FullScreenTriangle.hlsl") })
-    .SetPixelShader(graphics::ShaderStageDesc { .shader
-      = MakeShaderIdentifier(ShaderType::kPixel, "FullScreenTriangle.hlsl") })
+    .SetVertexShader(graphics::ShaderRequest {
+      .stage = ShaderType::kVertex,
+      .source_path = "FullScreenTriangle.hlsl",
+      .entry_point = "VS",
+    })
+    .SetPixelShader(graphics::ShaderRequest {
+      .stage = ShaderType::kPixel,
+      .source_path = "FullScreenTriangle.hlsl",
+      .entry_point = "PS",
+    })
     .SetPrimitiveTopology(PrimitiveType::kTriangleList)
     .SetRasterizerState(raster_desc)
     .SetDepthStencilState(ds_desc)

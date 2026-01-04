@@ -673,7 +673,7 @@ reach the final spec in this document.
      - `src/Oxygen/Renderer/Passes/RenderPass.{h,cpp}` and every pass that issues draws/dispatches.
      - Any `CommandRecorder` helpers needed to set *multiple* 32-bit root constants in one call.
 
-6. [ ] **Replace shader stage descriptors in pipeline descriptions with the final request shape.**
+6. [X] **Replace shader stage descriptors in pipeline descriptions with the final request shape.**
    - Current API surface:
      - `src/Oxygen/Graphics/Common/PipelineState.h`: `graphics::ShaderStageDesc` is `{ std::string shader; std::optional<std::string> entry_point_name; }` where `shader` is a string ID.
      - That string ID is currently produced by `MakeShaderIdentifier()` which does *not* include entry point or defines.

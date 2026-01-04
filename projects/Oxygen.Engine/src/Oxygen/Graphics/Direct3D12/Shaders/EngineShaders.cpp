@@ -96,8 +96,9 @@ EngineShaders::EngineShaders(oxygen::PathFinderConfig path_finder_config)
 
 EngineShaders::~EngineShaders() { LOG_SCOPE_F(INFO, "Engine Shaders cleanup"); }
 
-auto EngineShaders::GetShader(std::string_view unique_id) const
+auto EngineShaders::GetShader(const ShaderRequest& request) const
   -> std::shared_ptr<IShaderByteCode>
 {
-  return shaders_->GetShaderBytecode(unique_id);
+  const auto id = MakeShaderIdentifier(request);
+  return shaders_->GetShaderBytecode(id);
 }
