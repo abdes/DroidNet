@@ -144,6 +144,15 @@ public:
   //! Get the PAK GUID from the header.
   OXGN_CNTT_NDAPI auto Guid() const noexcept -> data::SourceKey;
 
+  //! Validate the PAK CRC32 integrity hash, if present.
+  /*!
+   If the footer's `pak_crc32` is zero, validation is skipped.
+
+   @throw std::runtime_error if CRC32 validation is requested by the caller and
+     the computed CRC32 does not match the footer.
+  */
+  OXGN_CNTT_API auto ValidateCrc32Integrity() const -> void;
+
   //=== Resource Table Access ===---------------------------------------------//
 
   //! Get the resource table for buffers.

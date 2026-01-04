@@ -13,6 +13,8 @@
 
 #include <cstring>
 
+#include <array>
+
 using oxygen::content::PakFile;
 using oxygen::data::AssetKey;
 using oxygen::data::pak::AssetDirectoryEntry;
@@ -23,6 +25,90 @@ using oxygen::data::pak::PakHeader;
 
 namespace {
 
+auto ComputeCrc32Ieee(std::span<const std::byte> bytes, uint32_t state) noexcept
+  -> uint32_t
+{
+  // Standard IEEE CRC32 (poly 0x04C11DB7 reflected => 0xEDB88320), reflected
+  // in/out, init 0xFFFFFFFF, final XOR 0xFFFFFFFF.
+  static constexpr auto kPoly = 0xEDB88320u;
+
+  auto table = []() consteval {
+    std::array<uint32_t, 256> t {};
+    for (uint32_t i = 0; i < 256; ++i) {
+      uint32_t c = i;
+      for (int j = 0; j < 8; ++j) {
+        c = (c & 1u) ? (kPoly ^ (c >> 1u)) : (c >> 1u);
+      }
+      t[i] = c;
+    }
+    return t;
+  }();
+
+  uint32_t crc = state;
+  for (const auto b : bytes) {
+    const auto u_b = static_cast<uint8_t>(b);
+    crc = table[(crc ^ u_b) & 0xFFu] ^ (crc >> 8u);
+  }
+  return crc;
+}
+
+auto ComputePakCrc32(const std::filesystem::path& pak_path,
+  const size_t file_size, const size_t crc_field_absolute_offset) -> uint32_t
+{
+  oxygen::serio::FileStream<> stream(pak_path, std::ios::in);
+  oxygen::serio::Reader<oxygen::serio::FileStream<>> reader(stream);
+
+  constexpr size_t kChunkSize = 256 * 1024;
+  std::array<std::byte, kChunkSize> buffer {};
+
+  uint32_t crc = 0xFFFFFFFFu;
+  size_t offset = 0;
+
+  while (offset < file_size) {
+    const auto remaining = file_size - offset;
+    const auto to_read = (std::min)(remaining, buffer.size());
+
+    auto blob_result
+      = reader.ReadBlobInto(std::span<std::byte>(buffer.data(), to_read));
+    if (!blob_result) {
+      throw std::runtime_error(
+        "Failed to read pak for CRC32: " + blob_result.error().message());
+    }
+
+    // The PakGen tool computes the CRC32 over the entire file while *skipping*
+    // the 4-byte pak_crc32 field itself (i.e., those bytes are excluded from
+    // the CRC stream). Note that skipping is not equivalent to hashing four
+    // zero bytes.
+    const auto chunk_start = offset;
+    const auto chunk_end = offset + to_read;
+    const auto crc_skip_start
+      = (std::max)(chunk_start, crc_field_absolute_offset);
+    const auto crc_skip_end
+      = (std::min)(chunk_end, crc_field_absolute_offset + sizeof(uint32_t));
+
+    if (crc_skip_start < crc_skip_end) {
+      const auto rel_start = crc_skip_start - chunk_start;
+      const auto rel_end = crc_skip_end - chunk_start;
+
+      if (rel_start > 0) {
+        crc = ComputeCrc32Ieee(
+          std::span<const std::byte>(buffer.data(), rel_start), crc);
+      }
+      if (rel_end < to_read) {
+        crc = ComputeCrc32Ieee(std::span<const std::byte>(
+                                 buffer.data() + rel_end, to_read - rel_end),
+          crc);
+      }
+    } else {
+      crc = ComputeCrc32Ieee(
+        std::span<const std::byte>(buffer.data(), to_read), crc);
+    }
+
+    offset += to_read;
+  }
+
+  return crc ^ 0xFFFFFFFFu;
+}
 // Helper to open a FileStream and throw with logging on error
 auto OpenFileStream(const std::filesystem::path& path)
   -> std::unique_ptr<oxygen::serio::FileStream<>>
@@ -134,6 +220,43 @@ auto PakFile::ReadFooter(serio::FileStream<>* stream) -> void
     LOG_F(ERROR, "Invalid pak file footer magic");
     throw std::runtime_error("Invalid pak file footer magic");
   }
+}
+
+auto PakFile::ValidateCrc32Integrity() const -> void
+{
+  // Footer declares that CRC32 validation should be skipped.
+  if (footer_.pak_crc32 == 0) {
+    LOG_F(INFO, "PakFile: CRC32 validation skipped (pak_crc32=0) path={}",
+      file_path_.string());
+    return;
+  }
+
+  auto size_result = meta_stream_->Size();
+  if (!size_result) {
+    throw std::runtime_error("Failed to get pak file size for CRC32: "
+      + size_result.error().message());
+  }
+
+  const auto file_size = size_result.value();
+  if (file_size < sizeof(PakFooter)) {
+    throw std::runtime_error("Pak file too small for CRC32 validation");
+  }
+
+  const size_t crc_field_absolute_offset
+    = (file_size - sizeof(PakFooter)) + offsetof(PakFooter, pak_crc32);
+
+  const auto computed
+    = ComputePakCrc32(file_path_, file_size, crc_field_absolute_offset);
+
+  if (computed != footer_.pak_crc32) {
+    LOG_F(ERROR,
+      "PakFile: CRC32 mismatch path={} expected=0x{:08x} actual=0x{:08x}",
+      file_path_.string(), footer_.pak_crc32, computed);
+    throw std::runtime_error("Pak CRC32 mismatch");
+  }
+
+  LOG_F(INFO, "PakFile: CRC32 OK path={} crc32=0x{:08x}", file_path_.string(),
+    computed);
 }
 
 auto PakFile::ReadBrowseIndex(

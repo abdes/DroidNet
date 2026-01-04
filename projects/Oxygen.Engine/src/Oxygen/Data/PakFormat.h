@@ -235,8 +235,8 @@ struct PakFooter {
 
   // -- CRC32 Integrity --
   // CRC32 covers the *entire* file, including the footer and footer magic
-  // bytes, EXCEPT these 4 bytes (`pak_crc32`) which are treated as zero /
-  // skipped during calculation.
+  // bytes, EXCEPT these 4 bytes (`pak_crc32`) which are excluded (skipped)
+  // from the CRC stream during calculation.
   // Standard IEEE CRC32 parameters: polynomial 0x04C11DB7, initial value
   // 0xFFFFFFFF, reflect in/out, final XOR 0xFFFFFFFF.
   // A value of 0 indicates that integrity validation SHOULD be skipped.
