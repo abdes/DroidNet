@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -13,6 +14,7 @@
 #include <string_view>
 #include <variant>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/ResourceTable.h>
@@ -108,11 +110,15 @@ public:
   OXYGEN_TYPED(PakFileSource)
 
 public:
-  explicit PakFileSource(const std::filesystem::path& pak_path)
+  explicit PakFileSource(
+    const std::filesystem::path& pak_path, const bool verify_content_hashes)
     : pak_(pak_path)
     , debug_name_(pak_.FilePath().string())
     , footer_(ReadFooter(pak_path))
   {
+    if (verify_content_hashes) {
+      pak_.ValidateCrc32Integrity();
+    }
   }
 
   ~PakFileSource() override = default;
@@ -300,11 +306,13 @@ public:
   OXYGEN_TYPED(LooseCookedSource)
 
 public:
-  explicit LooseCookedSource(const std::filesystem::path& cooked_root)
+  explicit LooseCookedSource(
+    const std::filesystem::path& cooked_root, const bool verify_content_hashes)
     : cooked_root_(cooked_root)
     , debug_name_(cooked_root_.string())
     , index_(
         LooseCookedIndex::LoadFromFile(cooked_root_ / "container.index.bin"))
+    , verify_content_hashes_(verify_content_hashes)
   {
     using oxygen::data::loose_cooked::v1::FileKind;
 
@@ -447,6 +455,8 @@ private:
     oxygen::data::loose_cooked::v1::FileKind kind,
     const std::filesystem::path& absolute_path) const -> void
   {
+    const auto t0 = std::chrono::steady_clock::now();
+
     std::error_code ec;
     if (!std::filesystem::exists(absolute_path, ec) || ec) {
       throw std::runtime_error(
@@ -473,26 +483,74 @@ private:
 
     const auto expected_sha_opt = index_.FindFileSha256(kind);
     if (!expected_sha_opt) {
+      const auto t1 = std::chrono::steady_clock::now();
+      LOG_F(INFO,
+        "LooseCookedSource: validated file record kind={} path={} time_ms={}",
+        static_cast<int>(kind), absolute_path.string(),
+        std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
       return;
     }
 
     Sha256Digest expected = {};
     std::copy_n(expected_sha_opt->data(), expected.size(), expected.begin());
     if (IsAllZero(expected)) {
+      const auto t1 = std::chrono::steady_clock::now();
+      LOG_F(INFO,
+        "LooseCookedSource: validated file record kind={} path={} time_ms={} "
+        "(sha_skipped_all_zero)",
+        static_cast<int>(kind), absolute_path.string(),
+        std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
       return;
     }
 
+    if (!verify_content_hashes_) {
+      const auto t1 = std::chrono::steady_clock::now();
+      LOG_F(INFO,
+        "LooseCookedSource: validated file record kind={} path={} time_ms={} "
+        "(sha_disabled)",
+        static_cast<int>(kind), absolute_path.string(),
+        std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
+      return;
+    }
+
+    const auto t_sha0 = std::chrono::steady_clock::now();
     const auto actual_sha = ComputeFileSha256(absolute_path);
+    const auto t_sha1 = std::chrono::steady_clock::now();
     if (actual_sha != expected) {
       throw std::runtime_error(
         "Loose cooked file SHA-256 mismatch: " + absolute_path.string());
     }
+
+    const auto t1 = std::chrono::steady_clock::now();
+    LOG_F(INFO,
+      "LooseCookedSource: validated file record kind={} path={} time_ms={} "
+      "(sha_ms={})",
+      static_cast<int>(kind), absolute_path.string(),
+      std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count(),
+      std::chrono::duration_cast<std::chrono::milliseconds>(t_sha1 - t_sha0)
+        .count());
   }
 
   auto ValidateDescriptorFilesExistAndMatchIndex() const -> void
   {
+    const auto keys = index_.GetAllAssetKeys();
+    LOG_F(INFO,
+      "LooseCookedSource: validating descriptors begin root={} assets={} "
+      "verify_hashes={}",
+      cooked_root_.string(), keys.size(),
+      verify_content_hashes_ ? "yes" : "no");
+
+    const auto t0 = std::chrono::steady_clock::now();
+    std::chrono::nanoseconds stat_time { 0 };
+    std::chrono::nanoseconds sha_time { 0 };
+    size_t sha_assets = 0;
+    size_t sha_disabled = 0;
+    size_t sha_skipped_all_zero = 0;
+    size_t sha_missing = 0;
+
     std::error_code ec;
-    for (const auto& key : index_.GetAllAssetKeys()) {
+    for (const auto& key : keys) {
+      const auto t_stat0 = std::chrono::steady_clock::now();
       const auto rel_opt = index_.FindDescriptorRelPath(key);
       const auto size_opt = index_.FindDescriptorSize(key);
       const auto sha_opt = index_.FindDescriptorSha256(key);
@@ -518,18 +576,46 @@ private:
           + " actual=" + std::to_string(actual_size));
       }
 
+      const auto t_stat1 = std::chrono::steady_clock::now();
+      stat_time += std::chrono::duration_cast<std::chrono::nanoseconds>(
+        t_stat1 - t_stat0);
+
       if (sha_opt) {
         Sha256Digest expected = {};
         std::copy_n(sha_opt->data(), expected.size(), expected.begin());
         if (!IsAllZero(expected)) {
-          const auto actual_sha = ComputeFileSha256(abs);
-          if (actual_sha != expected) {
-            throw std::runtime_error(
-              "Loose cooked descriptor SHA-256 mismatch: " + abs.string());
+          if (verify_content_hashes_) {
+            const auto t_sha0 = std::chrono::steady_clock::now();
+            const auto actual_sha = ComputeFileSha256(abs);
+            const auto t_sha1 = std::chrono::steady_clock::now();
+            sha_time += std::chrono::duration_cast<std::chrono::nanoseconds>(
+              t_sha1 - t_sha0);
+            ++sha_assets;
+            if (actual_sha != expected) {
+              throw std::runtime_error(
+                "Loose cooked descriptor SHA-256 mismatch: " + abs.string());
+            }
+          } else {
+            ++sha_disabled;
           }
+        } else {
+          ++sha_skipped_all_zero;
         }
+      } else {
+        ++sha_missing;
       }
     }
+
+    const auto t1 = std::chrono::steady_clock::now();
+    LOG_F(INFO,
+      "LooseCookedSource: validating descriptors end root={} assets={} "
+      "time_ms={} stat_ms={} sha_ms={} sha_assets={} sha_disabled={} "
+      "sha_skipped={} sha_missing={}",
+      cooked_root_.string(), keys.size(),
+      std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count(),
+      std::chrono::duration_cast<std::chrono::milliseconds>(stat_time).count(),
+      std::chrono::duration_cast<std::chrono::milliseconds>(sha_time).count(),
+      sha_assets, sha_disabled, sha_skipped_all_zero, sha_missing);
   }
 
   auto InitializeBufferTable() -> void
@@ -658,6 +744,8 @@ private:
   std::filesystem::path cooked_root_;
   std::string debug_name_;
   LooseCookedIndex index_;
+
+  bool verify_content_hashes_ { false };
 
   std::optional<std::filesystem::path> buffers_table_path_;
   std::optional<std::filesystem::path> textures_table_path_;

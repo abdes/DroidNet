@@ -180,6 +180,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
   uint32_t frames = 0U;
   uint32_t target_fps = 100U; // desired frame pacing
   bool enable_vsync = true;
+  bool verify_hashes = false;
   oxygen::examples::common::AsyncEngineApp app {};
   app.headless = false;
 
@@ -220,6 +221,15 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .UserFriendlyName("vsync")
         .StoreTo(&enable_vsync)
         .Build());
+    default_command.WithOption(Option::WithKey("verify-hashes")
+        .About("Enable hash-based content integrity verification when mounting "
+               "content sources (PAK CRC32, loose cooked SHA-256)")
+        .Long("verify-hashes")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .UserFriendlyName("verify-hashes")
+        .StoreTo(&verify_hashes)
+        .Build());
 
     auto cli = CliBuilder()
                  .ProgramName("render-scene")
@@ -243,6 +253,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     LOG_F(INFO, "Parsed fps option = {}", target_fps);
     LOG_F(INFO, "Parsed fullscreen option = {}", app.fullscreen);
     LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
+    LOG_F(INFO, "Parsed verify-hashes option = {}", verify_hashes);
     LOG_F(INFO, "Starting async engine engine for {} frames (target {} fps)",
       frames, target_fps);
 
@@ -282,6 +293,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .target_fps = target_fps,
         .frame_count = frames,
         .enable_asset_loader = true,
+        .asset_loader = { .verify_content_hashes = verify_hashes, },
         .timing = {
           .pacing_safety_margin = 250us,
         }

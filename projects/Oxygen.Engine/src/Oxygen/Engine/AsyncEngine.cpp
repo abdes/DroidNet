@@ -891,6 +891,7 @@ auto AsyncEngine::InitializeDetachedServices() -> void
     const auto tag = oxygen::content::internal::EngineTagFactory::Get();
     content::AssetLoaderConfig asset_loader_cfg {
       .thread_pool = observer_ptr<co::ThreadPool> { &platform_->Threads() },
+      .verify_content_hashes = config_.asset_loader.verify_content_hashes,
     };
     asset_loader_
       = std::make_unique<content::AssetLoader>(tag, asset_loader_cfg);

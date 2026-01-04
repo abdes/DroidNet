@@ -70,6 +70,12 @@ struct EngineConfig {
   //! When true, AsyncEngine will construct the shared AssetLoader service.
   bool enable_asset_loader { false }; //!< Default false for test suites.
 
+  //! Configuration for the AssetLoader service when enabled.
+  struct AssetLoaderServiceConfig {
+    //! Enable hash-based content integrity verification during mounts.
+    bool verify_content_hashes { false };
+  } asset_loader;
+
   GraphicsConfig graphics; //!< Graphics configuration.
   TimingConfig timing; //!< Frame timing and fixed timestep configuration.
 };

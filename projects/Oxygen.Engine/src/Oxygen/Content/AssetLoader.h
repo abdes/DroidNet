@@ -75,6 +75,16 @@ struct AssetLoaderConfig final {
    @note Defaults to false (online).
   */
   bool work_offline { false };
+
+  //! Enable hash-based integrity verification when mounting content sources.
+  /*!
+   When true, AssetLoader will ask mounted content sources to verify their
+   integrity hashes (e.g. PAK CRC32, loose cooked SHA-256) during mount.
+
+   @note Defaults to false to avoid the potentially expensive full-file hashing
+     of large resource blobs during development.
+  */
+  bool verify_content_hashes { false };
 };
 
 class AssetLoader : public oxygen::co::LiveObject, public IAssetLoader {
@@ -106,6 +116,19 @@ public:
 
   OXGN_CNTT_API auto AddLooseCookedRoot(const std::filesystem::path& path)
     -> void;
+
+  //! Enable/disable hash verification for future mounts.
+  /*!
+   Controls whether newly mounted content sources verify integrity hashes.
+
+   @note This does not retroactively re-verify already mounted sources.
+    @note This is primarily intended for tooling and examples; production code
+      should typically configure this via engine/service config.
+  */
+  OXGN_CNTT_API auto SetVerifyContentHashes(bool enable) -> void;
+
+  [[nodiscard]] OXGN_CNTT_API auto VerifyContentHashesEnabled() const noexcept
+    -> bool;
 
   //! Clear all mounted roots and pak files.
   OXGN_CNTT_API auto ClearMounts() -> void;
@@ -794,6 +817,8 @@ private:
   observer_ptr<co::ThreadPool> thread_pool_ {};
 
   bool work_offline_ { false };
+
+  bool verify_content_hashes_ { false };
 
   //=== In-flight Deduplication (Phase 2) ===--------------------------------//
 

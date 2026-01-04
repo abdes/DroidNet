@@ -19,7 +19,14 @@ namespace {
 using oxygen::content::import::LooseCookedLayout;
 
 //! Fixture for AssetLoader dependency tests
-class LooseCookedIndexTest : public AssetLoaderBasicTest { };
+class LooseCookedIndexTest : public AssetLoaderBasicTest {
+protected:
+  auto SetUp() -> void override
+  {
+    AssetLoaderBasicTest::SetUp();
+    asset_loader_->SetVerifyContentHashes(true);
+  }
+};
 
 auto FillTestGuid(oxygen::data::loose_cooked::v1::IndexHeader& header) -> void
 {

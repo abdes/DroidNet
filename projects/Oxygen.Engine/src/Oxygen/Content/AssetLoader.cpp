@@ -192,6 +192,7 @@ AssetLoader::AssetLoader(
 
   thread_pool_ = config.thread_pool;
   work_offline_ = config.work_offline;
+  verify_content_hashes_ = config.verify_content_hashes;
 
   // Register asset loaders
   RegisterLoader(loaders::LoadGeometryAsset);
@@ -201,6 +202,19 @@ AssetLoader::AssetLoader(
   // Register resource loaders
   RegisterLoader(loaders::LoadBufferResource);
   RegisterLoader(loaders::LoadTextureResource);
+}
+
+auto AssetLoader::SetVerifyContentHashes(const bool enable) -> void
+{
+  AssertOwningThread();
+  verify_content_hashes_ = enable;
+  LOG_F(INFO, "AssetLoader: verify_content_hashes={}",
+    verify_content_hashes_ ? "enabled" : "disabled");
+}
+
+auto AssetLoader::VerifyContentHashesEnabled() const noexcept -> bool
+{
+  return verify_content_hashes_;
 }
 
 AssetLoader::~AssetLoader() = default;
@@ -251,7 +265,8 @@ auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
   std::filesystem::path normalized = std::filesystem::weakly_canonical(path);
   const auto pak_index = static_cast<uint16_t>(impl_->pak_paths.size());
 
-  auto new_source = std::make_unique<internal::PakFileSource>(normalized);
+  auto new_source = std::make_unique<internal::PakFileSource>(
+    normalized, verify_content_hashes_);
 #if !defined(NDEBUG)
   {
     const auto source_key = new_source->GetSourceKey();
@@ -295,7 +310,8 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
   AssertOwningThread();
   std::filesystem::path normalized = std::filesystem::weakly_canonical(path);
 
-  auto new_source = std::make_unique<internal::LooseCookedSource>(normalized);
+  auto new_source = std::make_unique<internal::LooseCookedSource>(
+    normalized, verify_content_hashes_);
 #if !defined(NDEBUG)
   {
     const auto source_key = new_source->GetSourceKey();
