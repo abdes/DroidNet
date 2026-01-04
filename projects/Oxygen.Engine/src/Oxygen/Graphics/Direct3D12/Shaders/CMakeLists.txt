@@ -71,6 +71,8 @@ set(
   DXC_COMMON_OPTIONS
   ${dxc_enable_advanced_features}
   -I
+  "${PROJECT_SOURCE_DIR}/src/Oxygen"
+  -I
   "${CMAKE_CURRENT_SOURCE_DIR}"
   $<$<CONFIG:Debug>:${dxc_debug_symbol}>
   $<$<CONFIG:Debug>:${dxc_optimization_debug}>

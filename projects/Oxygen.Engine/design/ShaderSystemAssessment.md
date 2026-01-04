@@ -717,7 +717,7 @@ reach the final spec in this document.
      - `src/Oxygen/Graphics/Common/ShaderManager.cpp`: plumbs request `defines` into compile options.
      - `src/Oxygen/Graphics/Direct3D12/Shaders/ShaderCompiler.cpp`: emits DXC `-D` for global defines, then request defines (request takes precedence).
 
-10. [ ] **Create the renderer contract HLSL includes and remove contract redeclarations from entry shaders.**
+10. [X] **Create the renderer contract HLSL includes and remove contract redeclarations from entry shaders.**
     - Current state (violates §2 and §5.4):
       - `src/Oxygen/Graphics/Direct3D12/Shaders/DepthPrePass.hlsl` and `FullScreenTriangle.hlsl` re-declare `SceneConstants`, `DrawMetadata`, and (for fullscreen) `MaterialConstants`.
     - Target:
