@@ -7,10 +7,10 @@
 
 // Generated file - do not edit.
 // Source: projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml
-// Source-Version: 1.0.1
-// Schema-Version: 1.0.0
+// Source-Version: 1.1.0
+// Schema-Version: 1.0.1
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2025-09-21 09:06:31
+// Generated: 2026-01-04 14:03:03
 
 #pragma once
 
@@ -27,18 +27,22 @@ enum class RootParam : uint32_t {
   kBindlessSrvTable = 0,
   kSamplerTable = 1,
   kSceneConstants = 2,
-  kDrawIndex = 3,
+  kRootConstants = 3,
   kCount = 4,
 };
 
 // Root constants counts (32-bit values)
-static constexpr uint32_t kDrawIndexConstantsCount = 1U;
+// Root constants at b2, space0 (2×32-bit).
+// - DWORD0: g_DrawIndex (per-draw index into DrawMetadata).
+// - DWORD1: g_PassConstantsIndex (per-pass payload; typically a bindless
+//   index for pass-level constants).
+static constexpr uint32_t kRootConstantsConstantsCount = 2U;
 
 // Register/space bindings (for validation or RS construction)
 static constexpr uint32_t kSceneConstantsRegister = 1u; // 'b1'
 static constexpr uint32_t kSceneConstantsSpace = 0u; // 'space0'
-static constexpr uint32_t kDrawIndexRegister = 2u; // 'b2'
-static constexpr uint32_t kDrawIndexSpace = 0u; // 'space0'
+static constexpr uint32_t kRootConstantsRegister = 2u; // 'b2'
+static constexpr uint32_t kRootConstantsSpace = 0u; // 'space0'
 
 // Rich runtime descriptors and table
 
@@ -76,7 +80,7 @@ static constexpr std::array<RootParamDesc, 4> kRootParamTable = { {
   RootParamDesc{ RootParamKind::DescriptorTable, 0U, 0U, std::span<const RootParamRange>{ kRootParam0Ranges.data(), kRootParam0Ranges.size() }, static_cast<uint32_t>(kRootParam0Ranges.size()), 0U },
   RootParamDesc{ RootParamKind::DescriptorTable, 0U, 0U, std::span<const RootParamRange>{ kRootParam1Ranges.data(), kRootParam1Ranges.size() }, static_cast<uint32_t>(kRootParam1Ranges.size()), 0U },
   RootParamDesc{ RootParamKind::CBV, 1U, 0U, std::span<const RootParamRange>{}, 0U, 0U },
-  RootParamDesc{ RootParamKind::RootConstants, 2U, 0U, std::span<const RootParamRange>{}, 0U, 1U },
+  RootParamDesc{ RootParamKind::RootConstants, 2U, 0U, std::span<const RootParamRange>{}, 0U, 2U },
 } };
 
 static constexpr auto kRootParamTableCount = static_cast<uint32_t>(kRootParamTable.size());

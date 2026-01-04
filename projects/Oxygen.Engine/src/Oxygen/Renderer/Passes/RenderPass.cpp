@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Composition/ObjectMetadata.h>
+#include <Oxygen/Core/Bindless/Generated.Constants.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -59,6 +60,7 @@ auto RenderPass::Execute(
   // Do these after the pipeline state is set.
   BindIndicesBuffer(recorder);
   BindSceneConstantsBuffer(recorder);
+  BindPassConstantsIndexConstant(recorder, oxygen::kInvalidBindlessIndex);
 
   try {
     co_await DoExecute(recorder);
@@ -126,18 +128,39 @@ auto RenderPass::BindDrawIndexConstant(
 
   constexpr auto root_param_index
     = static_cast<std::span<const graphics::RootBindingItem>::size_type>(
-      binding::RootParam::kDrawIndex);
+      binding::RootParam::kRootConstants);
   const auto& root_param = LastBuiltPsoDesc()->RootBindings()[root_param_index];
 
   DCHECK_F(std::holds_alternative<PushConstantsBinding>(root_param.data),
     "Expected root parameter {}'s data to be PushConstantsBinding",
     root_param_index);
 
-  // Bind the draw index as a root constant (32-bit value)
+  // Bind the draw index root constant (first 32-bit value)
   recorder.SetGraphicsRoot32BitConstant(
     root_param.GetRootParameterIndex(), // should be binding 3 for draw index
     draw_index,
     0); // offset within the constant (0 for single 32-bit value)
+}
+
+auto RenderPass::BindPassConstantsIndexConstant(
+  CommandRecorder& recorder, uint32_t pass_constants_index) const -> void
+{
+  using graphics::PushConstantsBinding;
+
+  DCHECK_F(LastBuiltPsoDesc().has_value());
+
+  constexpr auto root_param_index
+    = static_cast<std::span<const graphics::RootBindingItem>::size_type>(
+      binding::RootParam::kRootConstants);
+  const auto& root_param = LastBuiltPsoDesc()->RootBindings()[root_param_index];
+
+  DCHECK_F(std::holds_alternative<PushConstantsBinding>(root_param.data),
+    "Expected root parameter {}'s data to be PushConstantsBinding",
+    root_param_index);
+
+  // Bind the pass constants index root constant (second 32-bit value)
+  recorder.SetGraphicsRoot32BitConstant(
+    root_param.GetRootParameterIndex(), pass_constants_index, 1);
 }
 
 auto RenderPass::IssueDrawCallsOverPass(

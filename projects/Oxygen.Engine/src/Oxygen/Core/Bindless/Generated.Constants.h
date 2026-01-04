@@ -6,10 +6,10 @@
 
 // Generated file - do not edit.
 // Source: projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml
-// Source-Version: 1.0.1
-// Schema-Version: 1.0.0
+// Source-Version: 1.1.0
+// Schema-Version: 1.0.1
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2025-09-21 09:06:31
+// Generated: 2026-01-04 14:03:03
 
 #pragma once
 

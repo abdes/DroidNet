@@ -7,9 +7,9 @@
 
 // Generated file - do not edit.
 // Source: projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml
-// Source-Version: 1.0.1
+// Source-Version: 1.1.0
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2025-09-21 09:06:31
+// Generated: 2026-01-04 14:03:03
 
 #pragma once
 
@@ -21,11 +21,11 @@ static constexpr const char kD3D12HeapStrategyJson[] = R"OXJ(
 {
   "$meta": {
     "source": "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml",
-    "source_version": "1.0.1",
+    "source_version": "1.1.0",
     "tool_version": "1.2.2",
-    "generated": "2025-09-21 09:06:31",
+    "generated": "2026-01-04 14:03:03",
     "format": "D3D12HeapStrategy/2",
-    "schema_version": "1.0.0"
+    "schema_version": "1.0.1"
   },
   "heaps": {
     "CBV_SRV_UAV:cpu": {

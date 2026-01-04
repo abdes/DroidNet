@@ -21,13 +21,18 @@
 Texture2D<float4> ImGuiTextures[] : register(t0, space0);
 SamplerState       ImGuiSamplers[] : register(s0, space0);
 
-// Root constant b2 (shared root param index with engine)
-// Packed value layout (no RS change needed):
+// Root constants b2 (shared root param index with engine)
+// ABI layout:
+//   g_DrawIndex          : per-draw draw index
+//   g_PassConstantsIndex : per-pass payload (future: heap index for pass CBV)
+//
+// For now, ImGui uses g_PassConstantsIndex as a packed texture/sampler value:
 //   bits [20:0]   -> Texture SRV index (max ~2,097,151)
 //   bits [31:21]  -> Sampler index     (max 2047)
-cbuffer ImGuiPackedIndices : register(b2)
+cbuffer RootConstants : register(b2, space0)
 {
-    uint g_TexSampPacked;
+    uint g_DrawIndex;
+    uint g_PassConstantsIndex;
 };
 
 struct VSInput
@@ -58,8 +63,8 @@ PSInput VS(VSInput v)
 [shader("pixel")]
 float4 PS(PSInput input) : SV_Target
 {
-    const uint texIndex = (g_TexSampPacked & 0x001FFFFFu); // 21 bits
-    const uint sampIndex = (g_TexSampPacked >> 21);         // 11 bits
+    const uint texIndex = (g_PassConstantsIndex & 0x001FFFFFu); // 21 bits
+    const uint sampIndex = (g_PassConstantsIndex >> 21);         // 11 bits
 
     // Sample with provided indices (assumed valid per backend packing)
     float4 texel = ImGuiTextures[texIndex].Sample(ImGuiSamplers[sampIndex], input.uv);

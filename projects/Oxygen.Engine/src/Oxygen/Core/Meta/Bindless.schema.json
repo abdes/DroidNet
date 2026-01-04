@@ -1,6 +1,6 @@
 {
     "$id": "https://example.org/bindless/Spec.schema.json",
-    "x-oxygen-schema-version": "1.0.0",
+    "x-oxygen-schema-version": "1.0.1",
     "title": "BindingSlots",
     "description": "JSON Schema for the BindingSlots YAML used by BindlessCodeGen",
     "type": "object",
@@ -274,6 +274,10 @@
                         "type": "integer",
                         "minimum": 1,
                         "description": "If type == cbv and this field is present, defines an array root descriptor"
+                    },
+                    "comment": {
+                        "type": "string",
+                        "description": "Optional documentation for this root signature parameter; may be emitted into generated headers."
                     }
                 },
                 "additionalProperties": false,
