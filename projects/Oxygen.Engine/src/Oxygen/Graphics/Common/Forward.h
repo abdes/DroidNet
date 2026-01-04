@@ -25,7 +25,6 @@ namespace graphics {
   class CommandRecorder;
   class IShaderByteCode;
   class DeferredReclaimer;
-  class ShaderCompiler;
   class Surface;
   class SynchronizationCounter;
   class WindowSurface;

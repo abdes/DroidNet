@@ -2,16 +2,6 @@
 
 Date: 2026-01-04
 
-## Non-negotiable constraints
-
-1. **No backward-compat shims (engine passes).** Every engine-owned call site and shader will be migrated to the final API and final file layout.
-   - **Explicit exception (ImGui renderer backend):** the D3D12 ImGui backend remains an upstream-style “legacy pipeline” with its own root signature and texture binding model, and is **excluded** from the engine ABI/reflection validation gates described in §4.4/§15.
-2. **Single source of truth for shader binaries.** The engine loads one artifact format. No dual “CMake .cso” vs “runtime archive” paths.
-3. **Human-readable shader requests at PSO call sites.** Render code must express: stage, path, entry point, defines. Render code must never traffic in hashes.
-4. **GPU contracts are authoritative and identical in C++ and HLSL.** No re-declaration of engine structs in entry shaders.
-5. **Deterministic paths.** No absolute paths embedded in shader metadata; no hard-coded workspace roots.
-6. **Strong types for critical identities/indices.** C++ APIs must use Oxygen strong types (`NamedType` skills) and existing core types (`ShaderVisibleIndex`, bindless handles, etc.) for indices/handles and other critical identities. Raw integers are not acceptable for those. Plain strings are acceptable for shader paths/entry points/define text as long as they are strictly validated and canonicalized.
-
 ## 1) Authoritative binding & root signature contract (D3D12)
 
 This is the bindless root signature contract that all engine-owned passes share.
@@ -452,7 +442,7 @@ This is a strict binary format.
 **Header:**
 
 - magic: `"OXSL"` (uint32)
-- version: `2` (uint32)
+- version: `1` (uint32)
 - backend: fixed-size string `"d3d12"` (8 bytes, zero-padded)
 - toolchain_hash: uint64 (hash of DXC version + fixed arguments schema)
 - module_count: uint32
@@ -491,10 +481,8 @@ The build pipeline produces reflection from DXC for every module in
 - `shader_model_major`, `shader_model_minor`
 - `numthreads_x`, `numthreads_y`, `numthreads_z` (zero for non-compute stages)
 - Declared register bindings:
-  - list of CBVs with `{register, space, byte_size}`
-  - list of SRVs with `{register, space}`
-  - list of UAVs with `{register, space}`
-  - list of samplers with `{register, space}`
+  - list of resources with `{kind, type, register, space, count, name}`
+  - for CBVs, `byte_size` is also stored and validated
 
 **Runtime validation rules (D3D12, final):**
 
@@ -503,8 +491,13 @@ The build pipeline produces reflection from DXC for every module in
    - `numthreads_x > 0`, `numthreads_y > 0`, `numthreads_z > 0`.
    - When `stage != CS`, all `numthreads_*` are `0`.
 3. The only register-bound constant buffers are the engine contracts:
-   - `SceneConstants` at `b1, space0` with `byte_size == sizeof(oxygen::engine::SceneConstants::GpuData)`.
-   - `RootConstants` at `b2, space0` with `byte_size == (2 * sizeof(uint32_t))`.
+
+   - `SceneConstants` at `b1, space0` with `byte_size == 176`.
+
+   - `RootConstants` at `b2, space0` with `byte_size == 16` (DXC reports HLSL
+    `cbuffer` sizes rounded up to 16-byte alignment; payload is still two
+    32-bit root constants).
+
 4. There are zero additional register-bound CBVs.
 5. There are zero register-bound SRVs.
 6. There are zero register-bound UAVs.
@@ -587,215 +580,3 @@ Shader compilation MUST set these include roots:
 - Must include the SceneConstants contract include (see §5.4) and bind `SceneConstants` at `b1, space0`.
 - Must use `g_PassConstantsIndex` to fetch its pass constants CBV from `ResourceDescriptorHeap`.
 - Must not declare an alternative SceneConstants and must not declare its own bindless indexing scheme.
-
-## 7) Implementation plan (ordered checklist)
-
-This checklist is intentionally grounded in the current Oxygen.Engine codebase.
-Each step calls out *where the current behavior lives* and what must change to
-reach the final spec in this document.
-
-1. [X] Introduce `PathFinderConfig` + `PathFinder` construction API in the Config module.
-   - Target API:
-     - `src/Oxygen/Config/PathFinderConfig.h` (serializable)
-     - `src/Oxygen/Config/IPathFinder.h` (optional interface; implementations are module-local)
-   - Migration requirement:
-     - Move `workspace_root_path` / `shader_library_path` out of `src/Oxygen/Config/RendererConfig.h` into `PathFinderConfig`.
-     - Ensure all configs that must cross DLL boundaries carry only `PathFinderConfig` (or its serialized form), never `std::shared_ptr<IPathFinder>`.
-     - Decide the internal construction entry point (e.g. `MakePathFinder(PathFinderConfig)`), usable from both the main executable and the backend DLL.
-
-2. [X] **Eliminate hard-coded workspace roots and unify path resolution.**
-   - Current hard-coded behavior:
-     - `src/Oxygen/Graphics/Common/ShaderManager.cpp`: `GetWorkspaceRoot()` returns a *hard-coded* local path (`"F:/projects/DroidNet/projects/Oxygen.Engine/"`) for non-CI runs and uses `std::filesystem::current_path()` as a fallback in CI.
-     - `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.cpp`: hard-codes `.archive_dir = R"(bin\Oxygen)"` and `.source_dir = R"(src\Oxygen\Graphics\Direct3D12\Shaders)"` with a TODO comment.
-   - Required refactor:
-     - Remove *all* workspace-root guessing and hard-coded paths from `ShaderManager` and the D3D12 shader catalog.
-     - Use `PathFinderConfig` as the single configurable input and a locally-constructed `PathFinder` as the single way to:
-       - resolve workspace root
-       - resolve the shader library path
-       - derive shader include roots
-     - Ensure no code outside the loader references `PlatformServices` for path resolution.
-     - Plumb `PathFinderConfig` through the graphics/renderer initialization entry points so shader compilation/build tooling (offline) and runtime loading share the same canonical path rules.
-
-3. [X] **Inventory and pin down all current shader system entry points and call sites.**
-   - Runtime shader compilation + caching currently flows through:
-     - `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.{h,cpp}` (constructs a `ShaderManager` and exposes `EngineShaders::GetShader(unique_id)`)
-     - `src/Oxygen/Graphics/Common/ShaderManager.{h,cpp}` (builds/loads/saves the `OXSH` archive and recompiles when sources change)
-     - `src/Oxygen/Graphics/Direct3D12/Shaders/ShaderCompiler.{h,cpp}` + `src/Oxygen/Graphics/Common/ShaderCompiler.{h,cpp}` (DXC compile + shared compile plumbing)
-   - Runtime bytecode fetch entry points (D3D12):
-     - `src/Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.cpp`:
-       - PSO creation loads bytecode via `gfx->GetShader(desc.shader)`.
-       - `graphics::ShaderStageDesc::entry_point_name` is currently *not* used here; it only affects pipeline hashing (`src/Oxygen/Graphics/Common/PipelineState.cpp`).
-     - `src/Oxygen/Graphics/Direct3D12/Graphics.cpp`:
-       - `Graphics::GetShader(unique_id)` delegates to the D3D12 `EngineShaders` instance.
-   - Runtime bytecode fetch entry points (Headless):
-     - `src/Oxygen/Graphics/Headless/Internal/EngineShaders.cpp`:
-       - `EngineShaders::GetShader(unique_id)` generates deterministic fake “bytecode” keyed by the unique-id string.
-       - Pre-warms a small fixed set of shader IDs (hard-coded `"VS@..."`/`"PS@..."`/`"CS@..."` literals).
-   - Pipeline call sites currently reference shaders via string IDs built by:
-     - `src/Oxygen/Graphics/Common/Shaders.{h,cpp}` (`MakeShaderIdentifier(ShaderType, relative_path)` produces `"<STAGE>@<path>"`)
-     - Used in render passes:
-       - `src/Oxygen/Renderer/Passes/DepthPrePass.cpp`
-       - `src/Oxygen/Renderer/Passes/ShaderPass.cpp`
-       - `src/Oxygen/Renderer/Passes/TransparentPass.cpp`
-     - Also used internally by the shader system:
-       - `src/Oxygen/Graphics/Common/ShaderManager.cpp` (uses `MakeShaderIdentifier(profile)` as a cache key / archive unique-id)
-       - `src/Oxygen/Graphics/Common/ShaderCompiler.cpp` (formats identifiers for error messages)
-   - Data-level unique-id coupling (PAK/material pipeline):
-     - `src/Oxygen/Data/PakFormat.h` (`ShaderReferenceDesc::shader_unique_id` stores `"<STAGE>@<path>"`; stage inferred from prefix before `@`)
-     - `src/Oxygen/Data/ShaderReference.cpp` (documents the same assumption; references `MakeShaderIdentifier()`)
-     - Tests that encode/assume the same format:
-       - `src/Oxygen/Data/Test/MaterialAsset_test.cpp`
-       - `src/Oxygen/Content/Test/MaterialLoader_test.cpp`
-
-4. [X] **Update bindless root-constants ABI (b2, space0) to the final 2×32-bit layout.**
-   - Current ABI (implemented):
-     - `src/Oxygen/Core/Meta/Bindless.yaml` defines `RootConstants` (root param index 3, `b2, space0`) with `num_32bit_values: 2`.
-     - `src/Oxygen/Core/Bindless/Generated.RootSignature.h` declares `RootParam::kRootConstants` with `kRootConstantsConstantsCount = 2`.
-     - `src/Oxygen/Renderer/Passes/RenderPass.cpp`:
-       - Binds `g_PassConstantsIndex` (offset 1) once per pass to `oxygen::kInvalidBindlessIndex`.
-       - Binds `g_DrawIndex` (offset 0) per draw via `BindDrawIndexConstant()`.
-     - HLSL entry shaders now declare `cbuffer RootConstants : register(b2, space0)` with:
-       - `uint g_DrawIndex;`
-       - `uint g_PassConstantsIndex;`
-
-5. [X] **Refactor RenderPass binding API to match the new root constants contract.**
-   - Current:
-     - `src/Oxygen/Renderer/Passes/RenderPass.{h,cpp}` binds `g_DrawIndex` per draw and `g_PassConstantsIndex` once per pass, but previously used raw integers.
-   - Target:
-     - Provide pass-level binding for `g_PassConstantsIndex` (set once per pass/dispatch) and draw-level binding for `g_DrawIndex`.
-     - Introduce/standardize the strong types required by the spec:
-       - `DrawIndex` (strong type over `uint32_t`)
-       - `oxygen::ShaderVisibleIndex` for `g_PassConstantsIndex` (using `oxygen::kInvalidShaderVisibleIndex` sentinel).
-   - Implemented:
-     - `src/Oxygen/Renderer/Types/DrawIndex.h` introduces `oxygen::engine::DrawIndex`.
-     - `src/Oxygen/Renderer/Passes/RenderPass.{h,cpp}` now:
-       - uses `DrawIndex` for `g_DrawIndex` binding.
-       - uses `oxygen::ShaderVisibleIndex` for `g_PassConstantsIndex` binding.
-       - defaults `g_PassConstantsIndex` to `oxygen::kInvalidShaderVisibleIndex` and exposes `SetPassConstantsIndex()`.
-   - Scope:
-     - `src/Oxygen/Renderer/Passes/RenderPass.{h,cpp}` and every pass that issues draws/dispatches.
-     - Any `CommandRecorder` helpers needed to set *multiple* 32-bit root constants in one call.
-
-6. [X] **Replace shader stage descriptors in pipeline descriptions with the final request shape.**
-   - Current API surface:
-     - `src/Oxygen/Graphics/Common/PipelineState.h`: `graphics::ShaderStageDesc` is `{ std::string shader; std::optional<std::string> entry_point_name; }` where `shader` is a string ID.
-     - That string ID is currently produced by `MakeShaderIdentifier()` which does *not* include entry point or defines.
-   - Target API surface (per §3):
-     - Replace `graphics::ShaderStageDesc` with a request that carries:
-       - stage (`oxygen::ShaderType`)
-       - `source_path` (normalized, forward slashes, repo-relative)
-       - `entry_point` (required)
-       - per-request `defines` (validated/sorted)
-   - Scope:
-     - Pipeline desc hashing: `src/Oxygen/Graphics/Common/PipelineState.cpp` currently hashes only the `shader` string and optional entry point.
-     - All PSO builders and tests that construct shader stages (see `src/Oxygen/Graphics/*/Test/*PipelineState*`).
-
-7. [X] **Remove `MakeShaderIdentifier()` from cache identity and migrate all call sites.**
-   - Current identity coupling:
-     - `src/Oxygen/Graphics/Common/Shaders.{h,cpp}` defines `MakeShaderIdentifier()`.
-     - `src/Oxygen/Data/ShaderReference.cpp` assumes the shader type can be inferred from the identifier format.
-     - Render passes call `MakeShaderIdentifier()` directly when creating PSOs.
-   - Target:
-     - Identity is derived only from canonicalized requests (source path + entry point + defines + compiler environment).
-     - Keep a *log-only* helper that formats `<STAGE>@<source_path>:<entry_point>`.
-     - Delete or repurpose `ShaderReference`’s unique-id assumptions.
-
-8. [X] **Implement strict canonicalization + validation for shader requests and use it as the only key.**
-   - Target rules are §3.2 (relative normalized paths, identifier validation, define validation, duplicate forbid, sorted defines).
-   - Scope:
-     - New canonicalization component (location TBD in code, but used by both the offline builder and runtime loader).
-     - New unit tests in an existing test suite (e.g. under `src/Oxygen/Graphics/Common/Test/`).
-
-9. [X] **Extend the compiler options and DXC argument emission to support request defines.**
-   - Current gaps:
-     - `src/Oxygen/Graphics/Common/ShaderCompiler.h`: `ShaderCompileOptions` only carries `include_dirs`.
-     - `src/Oxygen/Graphics/Direct3D12/Shaders/ShaderCompiler.cpp`: has commented-out code for adding `-D` defines; currently emits none.
-   - Target:
-     - Add per-request defines to `ShaderCompileOptions` and emit DXC `-D` for *global defines* (`ShaderCompiler::Config::global_defines`) plus request defines.
-     - Ensure DXC include roots match §5.2 exactly:
-       - `<workspace_root>/src/Oxygen`
-       - `<workspace_root>/src/Oxygen/Graphics/Direct3D12/Shaders`
-   - Implemented:
-     - `src/Oxygen/Graphics/Common/ShaderCompiler.h`: `ShaderCompileOptions` now carries `defines`.
-     - `src/Oxygen/Graphics/Common/ShaderManager.cpp`: plumbs request `defines` into compile options.
-     - `src/Oxygen/Graphics/Direct3D12/Shaders/ShaderCompiler.cpp`: emits DXC `-D` for global defines, then request defines (request takes precedence).
-
-10. [X] **Create the renderer contract HLSL includes and remove contract redeclarations from entry shaders.**
-    - Current state (violates §2 and §5.4):
-      - `src/Oxygen/Graphics/Direct3D12/Shaders/DepthPrePass.hlsl` and `FullScreenTriangle.hlsl` re-declare `SceneConstants`, `DrawMetadata`, and (for fullscreen) `MaterialConstants`.
-    - Target:
-      - Add the contract includes in `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/`:
-        - `SceneConstants.hlsli`, `DrawMetadata.hlsli`, `MaterialConstants.hlsli`
-      - Update all entry shaders to include:
-        - `#include "Renderer/SceneConstants.hlsli"`
-        - `#include "Renderer/DrawMetadata.hlsli"`
-        - `#include "Renderer/MaterialConstants.hlsli"`
-        - `#include "Core/Bindless/BindlessHelpers.hlsl"`
-      - Delete duplicated struct declarations from entry shaders.
-
-11. [X] **Restructure D3D12 shader sources into the final pass-oriented layout and update references.**
-    - Current layout (flat): `src/Oxygen/Graphics/Direct3D12/Shaders/*.hlsl` (`DepthPrePass.hlsl`, `FullScreenTriangle.hlsl`, `LightCulling.hlsl`, `ImGui.hlsl`).
-    - Target layout (per §5.3): `Passes/<PassName>/<File>.hlsl`.
-    - Scope:
-      - Update the “engine shader catalog” currently defined in `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.cpp` (`kEngineShaders` list).
-      - Update all render-pass PSO creation call sites that currently pass flat filenames.
-      - Update shader compilation inputs (see step 14) to discover/pass the new paths.
-
-12. [X] **Rewrite LightCulling to comply with bindless-only rules and RootConstants.**
-    - Current shader is incompatible with this spec:
-      - `src/Oxygen/Graphics/Direct3D12/Shaders/LightCulling.hlsl` declares a separate `cbuffer ResourceIndices : register(b0)` and uses register-bound SRVs/UAVs in explicit spaces.
-    - Target:
-      - Replace it with `src/Oxygen/Graphics/Direct3D12/Shaders/Passes/Lighting/LightCulling.hlsl` that:
-        - Binds `SceneConstants` at `b1, space0` (contract include)
-        - Uses `g_PassConstantsIndex` to fetch its pass constants CBV from `ResourceDescriptorHeap`
-        - Declares **zero** register-bound SRVs/UAVs/samplers
-
-13. [X] **Resolve ImGui’s current root-constant usage against the new ABI.**
-    - Decision (Option A, normative): **Do not rewrite ImGui to conform to the engine ABI.** Treat ImGui rendering as a “legacy pipeline” that is allowed to use a different root signature and binding model.
-    - Current (fact):
-      - Runtime rendering is delegated to the upstream D3D12 backend under `src/Oxygen/Graphics/Direct3D12/ImGui/` (see `imgui_impl_dx12.cpp`), which creates its own root signature/PSO and binds textures via `ImTextureID` → `D3D12_GPU_DESCRIPTOR_HANDLE`.
-      - The engine also compiles an engine shader at `src/Oxygen/Graphics/Direct3D12/Shaders/Passes/Ui/ImGui.hlsl`, but that shader/ABI is not authoritative for the runtime ImGui backend.
-    - Target constraint (engine ABI):
-      - For engine-owned passes, `b2, space0` remains reserved for the engine’s fixed two 32-bit root constants.
-    - Required work (policy + gates, not a backend rewrite):
-      - Ensure the offline builder/runtime reflection validator (step 15) can **exclude** the ImGui backend shaders/PSOs from the engine ABI checks (root-constants meaning, bindless-only discipline, contract-include requirements).
-      - Document and enforce that ImGui rendering is a separate pipeline boundary: it must not rely on `SceneConstants`/`RootConstants` nor on engine bindless domain guards.
-      - Optional clean-up (when convenient): avoid compiling/packaging the engine-managed `Passes/Ui/ImGui.hlsl` unless it is actually used by an engine-owned UI pass.
-
-14. [ ] **Replace the existing runtime “shader archive” with the final `shaders.bin` format and a build-time producer.**
-    - Current archive system is not the spec format:
-      - `src/Oxygen/Graphics/Common/ShaderManager.cpp` writes `kArchiveMagic = "OXSH"`, `kArchiveVersion = 1` and stores bytecode + source hashes; it also recompiles at runtime.
-    - Target:
-      - Implement the §4.3 `OXSL` / version 2 `shaders.bin` format with module table + DXIL + reflection payload.
-      - Implement an offline build step that produces `bin/Oxygen/shaders.bin`.
-    - Scope:
-      - Rework the build pipeline currently in `src/Oxygen/Graphics/Direct3D12/Shaders/CMakeLists.txt` (which today compiles individual `.cso` files) so the build produces *one* authoritative artifact.
-
-15. [ ] **Implement the runtime shader library loader + reflection validation gates.**
-    - Target behavior (hard rule): runtime never invokes DXC.
-    - Scope:
-      - Replace `EngineShaders` + `ShaderManager` runtime compilation flow with a loader that:
-        - Resolves the shader library path via `PathFinderConfig`/`PathFinder` per §4.2
-        - Loads `shaders.bin`
-        - Validates reflection per §4.4 (ABI + bindless-only discipline)
-        - Provides lookups by canonical request identity
-
-16. [ ] **Delete runtime shader compilation and all dual-path shader loading.**
-    - Remove/retire:
-      - Runtime recompilation/update logic in `src/Oxygen/Graphics/Common/ShaderManager.{h,cpp}`.
-      - Hard-coded workspace-root logic (`GetWorkspaceRoot()`), and any code paths that depend on local filesystem shader sources at runtime.
-    - Ensure the engine loads shaders *exclusively* from the shader library path resolved by `PathFinderConfig`/`PathFinder`.
-
-17. [ ] **Add a CI/build gate for shader discipline violations.**
-    - Enforce (at minimum):
-      - no contract redeclarations in entry shaders (only includes)
-      - includes only from the two allowed source locations (§5.1) and only via canonical include strings (§5.4)
-      - zero register-bound SRVs/UAVs/samplers (bindless-only)
-    - Implementation options grounded in current code:
-      - Extend the offline builder to fail the build when reflection validation fails.
-      - Optionally reuse/replace the include-scanning logic already present in `src/Oxygen/Graphics/Common/ShaderManager.cpp` (`ExtractQuotedIncludes` / `ResolveIncludePath`) as a build-time linter.
-
-18. [ ] **Add unit tests that lock down the refactor’s invariants.**
-    - Canonicalization: paths, entry points, defines (sorting + duplicate rejection).
-    - Workspace root / library path resolution: `IPathFinder` behavior (including “empty means working dir”).
-    - Library validation: rejection of illegal bindings (e.g. the current `LightCulling.hlsl` pattern should be a known failing case).

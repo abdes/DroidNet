@@ -43,7 +43,17 @@ auto CreateBackend(const oxygen::SerializedBackendConfig& config) -> void*
 {
   auto& backend = GetBackendInternal();
   if (!backend) {
-    backend = std::make_shared<oxygen::graphics::d3d12::Graphics>(config);
+    try {
+      backend = std::make_shared<oxygen::graphics::d3d12::Graphics>(config);
+    } catch (const std::exception& ex) {
+      LOG_F(ERROR, "Failed to create D3D12 backend: {}", ex.what());
+      backend.reset();
+      return nullptr;
+    } catch (...) {
+      LOG_F(ERROR, "Failed to create D3D12 backend: unknown error");
+      backend.reset();
+      return nullptr;
+    }
   }
   return backend.get();
 }

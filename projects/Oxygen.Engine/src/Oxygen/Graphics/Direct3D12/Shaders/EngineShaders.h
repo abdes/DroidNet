@@ -15,7 +15,6 @@
 
 namespace oxygen::graphics {
 
-class ShaderCompiler;
 class ShaderManager;
 class IShaderByteCode;
 
@@ -32,7 +31,6 @@ namespace d3d12 {
 
   private:
     oxygen::PathFinderConfig path_finder_config_;
-    std::shared_ptr<ShaderCompiler> compiler_ {};
     std::unique_ptr<ShaderManager> shaders_ {};
   };
 
