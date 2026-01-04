@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Composition/ObjectMetadata.h>
-#include <Oxygen/Core/Bindless/Generated.Constants.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -60,7 +60,7 @@ auto RenderPass::Execute(
   // Do these after the pipeline state is set.
   BindIndicesBuffer(recorder);
   BindSceneConstantsBuffer(recorder);
-  BindPassConstantsIndexConstant(recorder, oxygen::kInvalidBindlessIndex);
+  BindPassConstantsIndexConstant(recorder, pass_constants_index_);
 
   try {
     co_await DoExecute(recorder);
@@ -120,7 +120,7 @@ auto RenderPass::BindIndicesBuffer(CommandRecorder& recorder) const -> void
 }
 
 auto RenderPass::BindDrawIndexConstant(
-  CommandRecorder& recorder, uint32_t draw_index) const -> void
+  CommandRecorder& recorder, DrawIndex draw_index) const -> void
 {
   using graphics::PushConstantsBinding;
 
@@ -138,12 +138,12 @@ auto RenderPass::BindDrawIndexConstant(
   // Bind the draw index root constant (first 32-bit value)
   recorder.SetGraphicsRoot32BitConstant(
     root_param.GetRootParameterIndex(), // should be binding 3 for draw index
-    draw_index,
+    draw_index.get(),
     0); // offset within the constant (0 for single 32-bit value)
 }
 
-auto RenderPass::BindPassConstantsIndexConstant(
-  CommandRecorder& recorder, uint32_t pass_constants_index) const -> void
+auto RenderPass::BindPassConstantsIndexConstant(CommandRecorder& recorder,
+  ShaderVisibleIndex pass_constants_index) const -> void
 {
   using graphics::PushConstantsBinding;
 
@@ -160,7 +160,7 @@ auto RenderPass::BindPassConstantsIndexConstant(
 
   // Bind the pass constants index root constant (second 32-bit value)
   recorder.SetGraphicsRoot32BitConstant(
-    root_param.GetRootParameterIndex(), pass_constants_index, 1);
+    root_param.GetRootParameterIndex(), pass_constants_index.get(), 1);
 }
 
 auto RenderPass::IssueDrawCallsOverPass(
@@ -238,7 +238,7 @@ auto RenderPass::EmitDrawRange(CommandRecorder& recorder,
       continue;
     }
     try {
-      BindDrawIndexConstant(recorder, draw_index);
+      BindDrawIndexConstant(recorder, DrawIndex { draw_index });
       recorder.Draw(md.is_indexed ? md.index_count : md.vertex_count, 1, 0, 0);
       ++emitted_count;
     } catch (const std::exception& ex) {
