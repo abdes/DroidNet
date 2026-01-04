@@ -89,12 +89,17 @@ inline auto Load(AnyReader& reader, data::pak::ShaderReferenceDesc& desc)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(desc.shader_type));
+  CHECK_RESULT(reader.Forward(std::size(desc.reserved0)));
   CHECK_RESULT(reader.ReadBlobInto(
-    std::span(reinterpret_cast<std::byte*>(desc.shader_unique_id),
-      std::size(desc.shader_unique_id))));
-  CHECK_RESULT(reader.ReadInto(desc.shader_hash));
+    std::span(reinterpret_cast<std::byte*>(desc.source_path),
+      std::size(desc.source_path))));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::span(reinterpret_cast<std::byte*>(desc.entry_point),
+      std::size(desc.entry_point))));
   CHECK_RESULT(reader.ReadBlobInto(std::span(
-    reinterpret_cast<std::byte*>(desc.reserved), std::size(desc.reserved))));
+    reinterpret_cast<std::byte*>(desc.defines), std::size(desc.defines))));
+  CHECK_RESULT(reader.ReadInto(desc.shader_hash));
   return {};
 }
 

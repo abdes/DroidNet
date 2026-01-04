@@ -855,26 +855,18 @@ namespace {
     // ufbx `front` axis is the "Back" direction (opposite of Forward).
     // To map Source Forward (-Z) to Oxygen Forward (-Y), we need a rotation.
     //
-    // We construct a Right-Handed basis for the target space:
-    //   Right = -X (maps Source Right +X to -X)
-    //   Up    = +Z (maps Source Up +Y to +Z)
-    //   Front = +Y (maps Source Back +Z to +Y)
+    // Oxygen "world" basis is:
+    //   Right   = +X
+    //   Up      = +Z
+    //   Forward = -Y
     //
-    // Check Determinant(-X, Z, Y):
-    //   -X = (-1, 0, 0)
-    //   Z  = ( 0, 0, 1)
-    //   Y  = ( 0, 1, 0)
-    //   Det = -1 * (0*0 - 1*1) = 1. (Right-Handed)
+    // ufbx uses `front` to mean "Back" (opposite of Forward), so we set:
+    //   Front = +Y  (Back)
     //
-    // Mapping check:
-    //   Source Forward (-Z) -> M * (0,0,-1) = - (Col 2) = - (+Y) = -Y.
-    //   This matches Oxygen Forward (-Y).
-    //
-    // Note: Oxygen's "Right" constant is +X, but for a character facing -Y,
-    // the "Natural Right" is -X. This basis aligns the model's natural right
-    // to -X.
+    // Note: (Right, Up, Front) is not required to satisfy
+    // cross(Right, Up) == Front because Front is *Back*.
     return ufbx_coordinate_axes {
-      .right = UFBX_COORDINATE_AXIS_NEGATIVE_X,
+      .right = UFBX_COORDINATE_AXIS_POSITIVE_X,
       .up = UFBX_COORDINATE_AXIS_POSITIVE_Z,
       .front = UFBX_COORDINATE_AXIS_POSITIVE_Y,
     };
@@ -1040,6 +1032,15 @@ namespace {
       // Prefer modifying geometry to ensure vertex positions (and compatible
       // linear terms) are scaled/rotated as required by import policy.
       opts.space_conversion = UFBX_SPACE_CONVERSION_MODIFY_GEOMETRY;
+
+      // When converting between left-handed and right-handed conventions ufbx
+      // mirrors the scene along a chosen axis.
+      //
+      // Oxygen world is Z-up (Oxygen/Core/Constants.h). Mirroring along Z is
+      // therefore the most destructive choice as it flips "up" and can make
+      // imported scenes appear upside-down. Prefer mirroring along the world
+      // forward/back axis instead.
+      opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Y;
 
       const auto& coordinate_policy = request.options.coordinate;
       if (coordinate_policy.unit_normalization

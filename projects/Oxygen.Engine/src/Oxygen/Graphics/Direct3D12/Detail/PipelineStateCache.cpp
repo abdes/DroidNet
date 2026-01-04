@@ -20,6 +20,7 @@
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Converters.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
@@ -27,8 +28,9 @@
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
 using oxygen::Overloads;
+using oxygen::graphics::CanonicalizeShaderRequest;
+using oxygen::graphics::FormatShaderLogKey;
 using oxygen::graphics::FramebufferLayoutDesc;
-using oxygen::graphics::MakeShaderIdentifier;
 using oxygen::graphics::ShaderRequest;
 using oxygen::graphics::d3d12::Graphics;
 using oxygen::graphics::d3d12::detail::GetDxgiFormatMapping;
@@ -43,7 +45,8 @@ auto LoadShaderBytecode(const Graphics* gfx, const ShaderRequest& desc)
 {
   const auto shader = gfx->GetShader(desc);
   if (!shader) {
-    throw std::runtime_error("Shader not found: " + MakeShaderIdentifier(desc));
+    throw std::runtime_error(std::string("Shader not found: ")
+      + FormatShaderLogKey(CanonicalizeShaderRequest(ShaderRequest(desc))));
   }
   return { shader->Data(), shader->Size() };
 }

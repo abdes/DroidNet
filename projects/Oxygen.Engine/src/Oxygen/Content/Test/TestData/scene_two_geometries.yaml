@@ -1,5 +1,5 @@
 # Scene asset with renderables referencing two different geometries
-version: 1
+version: 2
 content_version: 1
 
 buffers:
@@ -39,9 +39,13 @@ assets:
     base_color: [0.0, 1.0, 0.0, 1.0]
 
     shader_references:
-      - shader_unique_id: "VS@FullScreenTriangle.hlsl"
+      - source_path: "FullScreenTriangle.hlsl"
+        entry_point: "VS"
+        defines: ""
         shader_hash: 0x1234567890abcdef
-      - shader_unique_id: "PS@FullScreenTriangle.hlsl"
+      - source_path: "FullScreenTriangle.hlsl"
+        entry_point: "PS"
+        defines: ""
         shader_hash: 0xfedcba0987654321
 
   - name: "test_geometry"

@@ -99,6 +99,5 @@ EngineShaders::~EngineShaders() { LOG_SCOPE_F(INFO, "Engine Shaders cleanup"); }
 auto EngineShaders::GetShader(const ShaderRequest& request) const
   -> std::shared_ptr<IShaderByteCode>
 {
-  const auto id = MakeShaderIdentifier(request);
-  return shaders_->GetShaderBytecode(id);
+  return shaders_->GetShaderBytecode(request);
 }

@@ -298,7 +298,10 @@ def _write_assets_and_directory_from_plan(
             # Emit shader reference entries (variable extra) based on plan size
             shader_refs = raw_spec.get("shader_references", []) or []
             if shader_refs and asset_plan.variable_extra_size:
-                shader_blob = pack_shader_reference_entries(shader_refs)
+                shader_stages = int(raw_spec.get("shader_stages", 0))
+                shader_blob = pack_shader_reference_entries(
+                    shader_stages, shader_refs
+                )
                 if len(shader_blob) != asset_plan.variable_extra_size:
                     raise RuntimeError(
                         "Shader refs size mismatch plan=%d actual=%d"

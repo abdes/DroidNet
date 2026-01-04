@@ -2,10 +2,15 @@
 # The cube's vertex/index data is embedded inline (data_hex) and matches
 # oxygen::data::MakeCubeMeshAsset() (see src/Oxygen/Data/Procedural/Cube.cpp).
 
-version: 1
+version: 2
 content_version: 1
 
 buffers:
+  - name: default_empty_buffer
+    data_hex: ""
+    size: 0
+    usage: 0
+
   - name: cube_vb
     # oxygen::data::BufferResource::UsageFlags::kVertexBuffer
     usage: 1
@@ -83,7 +88,14 @@ buffers:
       1000000011000000120000001000000012000000130000001400000016000000
       15000000140000001700000016000000
 
-textures: []
+textures:
+  - name: default_texture
+    width: 1
+    height: 1
+    format: 30
+    texture_type: 3
+    compression_type: 0
+    data_hex: "ffffffff"
 audios: []
 
 assets:

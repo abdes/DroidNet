@@ -31,7 +31,6 @@ using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::DescriptorAllocator;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::Framebuffer;
-using oxygen::graphics::MakeShaderIdentifier;
 using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceRegistry;
 using oxygen::graphics::ResourceViewType;

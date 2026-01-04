@@ -72,7 +72,7 @@ inline auto PrintAssetDescriptorHexPreview(
 }
 
 inline auto PrintAssetHeaderFields(
-  const oxygen::data::pak::v1::AssetHeader& h, const int indent = 8) -> void
+  const oxygen::data::pak::v2::AssetHeader& h, const int indent = 8) -> void
 {
   PrintUtils::Field("Asset Type", static_cast<int>(h.asset_type), indent);
   PrintUtils::Field(
@@ -118,7 +118,7 @@ inline auto PrintAssetHeaderFields(
 }
 
 inline auto PrintAssetMetadata(
-  const oxygen::data::pak::v1::AssetDirectoryEntry& e) -> void
+  const oxygen::data::pak::v2::AssetDirectoryEntry& e) -> void
 {
   std::cout << "    --- asset metadata ---\n";
   PrintUtils::Field("Asset Type",
@@ -131,7 +131,7 @@ inline auto PrintAssetMetadata(
 
 [[nodiscard]] inline auto ReadDescriptorBytes(
   const oxygen::content::PakFile& pak,
-  const oxygen::data::pak::v1::AssetDirectoryEntry& entry)
+  const oxygen::data::pak::v2::AssetDirectoryEntry& entry)
   -> std::optional<std::vector<std::byte>>
 {
   try {

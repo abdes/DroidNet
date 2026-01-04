@@ -28,7 +28,7 @@ public:
   virtual ~AssetDumper() = default;
 
   virtual void Dump(const oxygen::content::PakFile& pak,
-    const oxygen::data::pak::v1::AssetDirectoryEntry& entry, DumpContext& ctx,
+    const oxygen::data::pak::v2::AssetDirectoryEntry& entry, DumpContext& ctx,
     size_t idx) const
     = 0;
 };

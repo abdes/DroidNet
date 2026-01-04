@@ -24,6 +24,11 @@ FORMAT_RGBA8_UNORM = 30
 FORMAT_R32_UINT = 10
 
 
+_DEFAULT_EMPTY_BUFFER_NAME = "default_empty_buffer"
+_DEFAULT_TEXTURE_NAME = "default_texture"
+_DEFAULT_MATERIAL_NAME = "DefaultMaterial"
+
+
 def generate_guid() -> str:
     return uuid.uuid4().hex
 
@@ -65,6 +70,66 @@ class GLBToPakSpec:
             if buf.uri:
                 buf_path = glb_path.parent / buf.uri
                 self.buffer_data = buf_path.read_bytes()
+
+        self._ensure_v2_defaults()
+
+    def _existing_names(self, entries: List[Dict[str, Any]]) -> set[str]:
+        out: set[str] = set()
+        for e in entries:
+            n = e.get("name")
+            if isinstance(n, str) and n:
+                out.add(n)
+        return out
+
+    def _unique_resource_name(
+        self,
+        name: str,
+        *,
+        existing: set[str],
+        reserved: set[str],
+    ) -> str:
+        base = name if isinstance(name, str) and name else "Resource"
+        candidate = base
+        suffix = 1
+        while candidate in existing or candidate in reserved:
+            candidate = f"{base}_{suffix}"
+            suffix += 1
+        existing.add(candidate)
+        return candidate
+
+    def _ensure_v2_defaults(self) -> None:
+        # PakGen v2 requires:
+        # - default empty buffer at index 0
+        # - default texture at index 0
+        # The converter may also emit materials that reference textures; having a
+        # known index-0 fallback keeps specs robust.
+
+        existing_buffers = self._existing_names(self.buffers)
+        if _DEFAULT_EMPTY_BUFFER_NAME not in existing_buffers:
+            self.buffers.insert(
+                0,
+                {
+                    "name": _DEFAULT_EMPTY_BUFFER_NAME,
+                    "data_hex": "",
+                    "size": 0,
+                    "usage": 0,
+                },
+            )
+
+        existing_textures = self._existing_names(self.textures)
+        if _DEFAULT_TEXTURE_NAME not in existing_textures:
+            self.textures.insert(
+                0,
+                {
+                    "name": _DEFAULT_TEXTURE_NAME,
+                    "width": 1,
+                    "height": 1,
+                    "format": FORMAT_RGBA8_UNORM,
+                    "texture_type": TEXTURE_TYPE_2D,
+                    "compression_type": 0,
+                    "data_hex": "ffffffff",
+                },
+            )
 
     def get_accessor_data(self, accessor_idx: int) -> Optional[np.ndarray]:
         """Decode accessor payload.
@@ -311,6 +376,16 @@ class GLBToPakSpec:
         vb_name = f"{mesh_name}_vb"
         ib_name = f"{mesh_name}_ib"
 
+        # Avoid clobbering reserved v2 names.
+        reserved_buffers = {_DEFAULT_EMPTY_BUFFER_NAME}
+        existing_buffers = self._existing_names(self.buffers)
+        vb_name = self._unique_resource_name(
+            vb_name, existing=existing_buffers, reserved=reserved_buffers
+        )
+        ib_name = self._unique_resource_name(
+            ib_name, existing=existing_buffers, reserved=reserved_buffers
+        )
+
         def _emit_blob(
             resource_list: List[Dict[str, Any]],
             *,
@@ -406,9 +481,12 @@ class GLBToPakSpec:
                 "asset_key": generate_guid(),
                 "material_domain": 1,  # kOpaque
                 "flags": 1,  # kMaterialFlag_NoTextureSampling
+                "shader_stages": 0,
                 "base_color": base_color,
+                "normal_scale": 1.0,
                 "metalness": pbr.metallicFactor if pbr else 0.0,
                 "roughness": pbr.roughnessFactor if pbr else 1.0,
+                "ambient_occlusion": 1.0,
                 "texture_refs": {},
             }
 
@@ -427,21 +505,22 @@ class GLBToPakSpec:
 
             self.assets.append(asset)
 
-        # Add default material if referenced but not defined
-        if (
-            "DefaultMaterial" in self.processed_materials
-            and "DefaultMaterial" not in defined_materials
-        ):
+        # PakGen v2 convenience: always provide a DefaultMaterial, even if the
+        # source asset didn't define one.
+        if _DEFAULT_MATERIAL_NAME not in defined_materials:
             self.assets.append(
                 {
                     "type": "material",
-                    "name": "DefaultMaterial",
+                    "name": _DEFAULT_MATERIAL_NAME,
                     "asset_key": generate_guid(),
                     "material_domain": 1,  # kOpaque
                     "flags": 1,  # kMaterialFlag_NoTextureSampling
+                    "shader_stages": 0,
                     "base_color": [1.0, 1.0, 1.0, 1.0],
+                    "normal_scale": 1.0,
                     "metalness": 0.0,
                     "roughness": 1.0,
+                    "ambient_occlusion": 1.0,
                     "texture_refs": {},
                 }
             )
@@ -453,10 +532,16 @@ class GLBToPakSpec:
 
         tex_name = image.name or f"Texture_{image_idx}"
 
-        # Check if already processed
-        for t in self.textures:
-            if t["name"] == tex_name:
-                return tex_name
+        # Avoid colliding with the required v2 default texture name.
+        if tex_name == _DEFAULT_TEXTURE_NAME:
+            tex_name = f"{tex_name}_gltf"
+
+        # Ensure uniqueness against existing + reserved names.
+        reserved_textures = {_DEFAULT_TEXTURE_NAME}
+        existing_textures = self._existing_names(self.textures)
+        tex_name = self._unique_resource_name(
+            tex_name, existing=existing_textures, reserved=reserved_textures
+        )
 
         # Extract image data
         from PIL import Image as PILImage
@@ -492,6 +577,7 @@ class GLBToPakSpec:
                             "width": width,
                             "height": height,
                             "texture_type": TEXTURE_TYPE_2D,
+                            "compression_type": 0,
                             "format": FORMAT_RGBA8_UNORM,
                             "data_hex": raw_data.hex(),
                         }
@@ -516,6 +602,7 @@ class GLBToPakSpec:
                             "width": width,
                             "height": height,
                             "texture_type": TEXTURE_TYPE_2D,
+                            "compression_type": 0,
                             "format": FORMAT_RGBA8_UNORM,
                             "file": rel,
                         }
@@ -602,10 +689,11 @@ class GLBToPakSpec:
         self.process_materials()
 
         return {
-            "version": 1,
+            "version": 2,
             "content_version": 1,
             "buffers": self.buffers,
             "textures": self.textures,
+            "audios": [],
             "assets": self.assets,
         }
 

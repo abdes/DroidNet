@@ -85,7 +85,7 @@ Implement concrete, backend-specific subclasses for at least the following
   `ShaderByteCode.h`)
   - Provide a compiler that produces `IShaderByteCode` wrappers compatible with
     backend (DXIL/SPIR-V). Shader manager expects to be able to
-    `GetShaderBytecode()` by unique id.
+    `GetShaderBytecode()` by canonical shader request.
 
 - `Surface` / `WindowSurface` (`Surface.h` and detail `WindowSurface`)
   - Implement swapchain/backbuffer creation, `Present()`, and backbuffer

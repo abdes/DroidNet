@@ -171,15 +171,15 @@ auto ComputeSourceHashWithIncludes(const std::filesystem::path& source_path,
   return static_cast<uint64_t>(seed);
 }
 
-auto IsSourceFileNewer(const CompiledShaderInfo& info) -> bool
+auto IsSourceFileNewer(const std::filesystem::path& source_path,
+  const std::chrono::system_clock::time_point compile_time) -> bool
 {
-  const std::filesystem::path source_path(info.source_file_path);
   if (!exists(source_path)) {
     return true;
   }
 
   const auto file_time = last_write_time(source_path);
-  const auto compile_time = info.compile_time;
+  const auto compile_time_tp = compile_time;
 
   // Convert file_time to system_clock::time_point
   const auto file_time_tp
@@ -187,14 +187,14 @@ auto IsSourceFileNewer(const CompiledShaderInfo& info) -> bool
       file_time - std::filesystem::file_time_type::clock::now()
       + std::chrono::system_clock::now());
 
-  return file_time_tp > compile_time;
+  return file_time_tp > compile_time_tp;
 }
 
 } // namespace
 
 namespace {
 constexpr uint32_t kArchiveMagic = 0x4F585348; // "OXSH"
-constexpr uint32_t kArchiveVersion = 1;
+constexpr uint32_t kArchiveVersion = 2;
 } // namespace
 
 struct ArchiveHeader {
@@ -295,18 +295,20 @@ auto ShaderManager::AddCompiledShader(CompiledShader shader) -> bool
     return false;
   }
 
-  shader_cache_[shader.info.shader_unique_id] = std::move(shader);
+  if (shader.info.cache_key == 0) {
+    return false;
+  }
+
+  shader_cache_[shader.info.cache_key] = std::move(shader);
   return true;
 }
 
-auto ShaderManager::GetShaderBytecode(std::string_view unique_id) const
+auto ShaderManager::GetShaderBytecode(const ShaderRequest& request) const
   -> std::shared_ptr<IShaderByteCode>
 {
-  const auto it
-    = std::ranges::find_if(shader_cache_, [&](const auto& pair) -> auto {
-        return pair.second.info.shader_unique_id == unique_id;
-      });
-
+  const auto canonical = CanonicalizeShaderRequest(ShaderRequest(request));
+  const auto key = ComputeShaderRequestKey(canonical);
+  const auto it = shader_cache_.find(key);
   if (it == shader_cache_.end()) {
     return nullptr;
   }
@@ -316,8 +318,15 @@ auto ShaderManager::GetShaderBytecode(std::string_view unique_id) const
 
 auto ShaderManager::IsShaderOutdated(const ShaderInfo& shader) const -> bool
 {
-  const auto& shader_id = MakeShaderIdentifier(shader);
-  const auto it = shader_cache_.find(shader_id);
+  const auto canonical = CanonicalizeShaderRequest(ShaderRequest {
+    .stage = shader.type,
+    .source_path = shader.relative_path,
+    .entry_point = shader.entry_point,
+    .defines = {},
+  });
+  const auto key = ComputeShaderRequestKey(canonical);
+
+  const auto it = shader_cache_.find(key);
   if (it == shader_cache_.end()) {
     return true;
   }
@@ -331,13 +340,16 @@ auto ShaderManager::IsShaderOutdated(const ShaderInfo& shader) const -> bool
     include_dirs.emplace_back(dir);
   }
 
+  const std::filesystem::path source_path
+    = config_.source_dir / std::filesystem::path(info.request.source_path);
+
   if (const auto current_hash
-    = ComputeSourceHashWithIncludes(info.source_file_path, include_dirs);
+    = ComputeSourceHashWithIncludes(source_path, include_dirs);
     current_hash != info.source_hash) {
     return true;
   }
 
-  return IsSourceFileNewer(info);
+  return IsSourceFileNewer(source_path, info.compile_time);
 }
 
 auto ShaderManager::GetOutdatedShaders() const -> std::vector<ShaderInfo>
@@ -407,17 +419,48 @@ auto ShaderManager::Save() const -> void
   }
 
   for (const auto& [info, bytecode] : shader_cache_ | std::views::values) {
-    if (auto result = writer.Write(info.shader_type); !result.has_value()) {
+    const auto stage
+      = static_cast<std::underlying_type_t<ShaderType>>(info.request.stage);
+    if (auto result = writer.Write(stage); !result.has_value()) {
       throw std::runtime_error("archive saving error: shader type");
     }
-    if (auto result = writer.Write<std::string>(info.shader_unique_id);
-      !result.has_value()) {
-      throw std::runtime_error("archive saving error: shader unique id");
+
+    if (auto result = writer.Write(info.cache_key); !result.has_value()) {
+      throw std::runtime_error("archive saving error: shader cache key");
     }
-    if (auto result = writer.Write<std::string>(info.source_file_path);
+
+    if (auto result = writer.Write<std::string>(info.request.source_path);
       !result.has_value()) {
       throw std::runtime_error("archive saving error: source file path");
     }
+
+    if (auto result = writer.Write<std::string>(info.request.entry_point);
+      !result.has_value()) {
+      throw std::runtime_error("archive saving error: entry point");
+    }
+
+    if (auto result = writer.Write(info.request.defines.size());
+      !result.has_value()) {
+      throw std::runtime_error("archive saving error: defines count");
+    }
+    for (const auto& def : info.request.defines) {
+      if (auto result = writer.Write<std::string>(def.name);
+        !result.has_value()) {
+        throw std::runtime_error("archive saving error: define name");
+      }
+
+      const uint8_t has_value = def.value.has_value() ? uint8_t { 1 } : 0;
+      if (auto result = writer.Write(has_value); !result.has_value()) {
+        throw std::runtime_error("archive saving error: define has value");
+      }
+      if (has_value != 0) {
+        if (auto result = writer.Write<std::string>(*def.value);
+          !result.has_value()) {
+          throw std::runtime_error("archive saving error: define value");
+        }
+      }
+    }
+
     if (auto result = writer.Write(info.source_hash); !result.has_value()) {
       throw std::runtime_error("archive saving error: source hash");
     }
@@ -450,33 +493,85 @@ void ShaderManager::Load()
 
   auto header = reader.Read<ArchiveHeader>();
   if (!header.has_value()) {
-    throw std::runtime_error(
-      "archive loading error: " + header.error().message());
+    LOG_F(WARNING, "Shader archive read failed ({}); discarding archive at: {}",
+      header.error().message(), archive_path_.string());
+    shader_cache_.clear();
+    std::error_code ec;
+    std::filesystem::remove(archive_path_, ec);
+    return;
   }
 
   if (header.value().magic != kArchiveMagic
     || header.value().version != kArchiveVersion) {
-    throw std::runtime_error("archive loading error: invalid header");
+    LOG_F(WARNING,
+      "Shader archive header mismatch (expected magic=0x{:08x} version={}, "
+      "got magic=0x{:08x} version={}); discarding archive at: {}",
+      kArchiveMagic, kArchiveVersion, header.value().magic,
+      header.value().version, archive_path_.string());
+    shader_cache_.clear();
+    std::error_code ec;
+    std::filesystem::remove(archive_path_, ec);
+    return;
   }
 
   shader_cache_.clear();
   for (size_t i = 0; i < header.value().shader_count; ++i) {
-    auto shader_type = reader.Read<ShaderType>();
-    if (!shader_type.has_value()) {
+    auto shader_type_value = reader.Read<std::underlying_type_t<ShaderType>>();
+    if (!shader_type_value.has_value()) {
       throw std::runtime_error(
-        "archive loading error: " + shader_type.error().message());
+        "archive loading error: " + shader_type_value.error().message());
     }
 
-    auto unique_id = reader.Read<std::string>();
-    if (!unique_id.has_value()) {
+    auto cache_key = reader.Read<uint64_t>();
+    if (!cache_key.has_value()) {
       throw std::runtime_error(
-        "archive loading error: " + unique_id.error().message());
+        "archive loading error: " + cache_key.error().message());
     }
 
     auto source_path = reader.Read<std::string>();
     if (!source_path.has_value()) {
       throw std::runtime_error(
         "archive loading error: " + source_path.error().message());
+    }
+
+    auto entry_point = reader.Read<std::string>();
+    if (!entry_point.has_value()) {
+      throw std::runtime_error(
+        "archive loading error: " + entry_point.error().message());
+    }
+
+    auto defines_count = reader.Read<size_t>();
+    if (!defines_count.has_value()) {
+      throw std::runtime_error(
+        "archive loading error: " + defines_count.error().message());
+    }
+
+    std::vector<ShaderDefine> defines;
+    defines.reserve(defines_count.value());
+    for (size_t d = 0; d < defines_count.value(); ++d) {
+      auto name = reader.Read<std::string>();
+      if (!name.has_value()) {
+        throw std::runtime_error(
+          "archive loading error: " + name.error().message());
+      }
+      auto has_value = reader.Read<uint8_t>();
+      if (!has_value.has_value()) {
+        throw std::runtime_error(
+          "archive loading error: " + has_value.error().message());
+      }
+
+      std::optional<std::string> value;
+      if (has_value.value() != 0) {
+        auto v = reader.Read<std::string>();
+        if (!v.has_value()) {
+          throw std::runtime_error(
+            "archive loading error: " + v.error().message());
+        }
+        value = v.move_value();
+      }
+
+      defines.emplace_back(
+        ShaderDefine { .name = name.move_value(), .value = std::move(value) });
     }
 
     auto source_hash = reader.Read<uint64_t>();
@@ -503,14 +598,22 @@ void ShaderManager::Load()
         "archive loading error: " + binary_data.error().message());
     }
 
-    CompiledShaderInfo info { shader_type.value(), unique_id.value(),
-      source_path.value(), source_hash.value(), bloc_size.value(),
+    const auto stage = static_cast<ShaderType>(shader_type_value.value());
+    auto request = CanonicalizeShaderRequest(ShaderRequest {
+      .stage = stage,
+      .source_path = source_path.value(),
+      .entry_point = entry_point.value(),
+      .defines = std::move(defines),
+    });
+
+    CompiledShaderInfo info { std::move(request), cache_key.value(),
+      source_hash.value(), bloc_size.value(),
       std::chrono::system_clock::time_point(
         std::chrono::milliseconds(compile_time_ms.value())) };
 
     auto bytecode = std::make_shared<ShaderByteCode<std::vector<uint32_t>>>(
       binary_data.move_value());
-    shader_cache_[info.shader_unique_id]
+    shader_cache_[info.cache_key]
       = { .info = info, .bytecode = std::move(bytecode) };
   }
 }
@@ -525,8 +628,17 @@ auto ShaderManager::CompileAndAddShader(const ShaderInfo& profile) -> bool
 {
   DCHECK_F(!config_.source_dir.empty(), "No shader source directory specified");
 
+  const auto request = CanonicalizeShaderRequest(ShaderRequest {
+    .stage = profile.type,
+    .source_path = profile.relative_path,
+    .entry_point = profile.entry_point,
+    .defines = {},
+  });
+
+  const auto cache_key = ComputeShaderRequestKey(request);
+
   std::filesystem::path source_path
-    = config_.source_dir / profile.relative_path;
+    = config_.source_dir / std::filesystem::path(request.source_path);
 
   ShaderCompiler::ShaderCompileOptions compile_options {};
   compile_options.include_dirs.emplace_back(config_.source_dir);
@@ -543,19 +655,18 @@ auto ShaderManager::CompileAndAddShader(const ShaderInfo& profile) -> bool
   const auto source_hash
     = ComputeSourceHashWithIncludes(source_path, compile_options.include_dirs);
 
-  CompiledShaderInfo info { profile.type, MakeShaderIdentifier(profile),
-    source_path.string(), source_hash, bytecode->Size(),
+  CompiledShaderInfo info { request, cache_key, source_hash, bytecode->Size(),
     std::chrono::system_clock::now() };
 
   return AddCompiledShader(
     { .info = std::move(info), .bytecode = std::move(bytecode) });
 }
 
-auto ShaderManager::HasShader(std::string_view unique_id) const noexcept -> bool
+auto ShaderManager::HasShader(const ShaderRequest& request) const noexcept
+  -> bool
 {
-  return std::ranges::any_of(shader_cache_, [&](const auto& pair) -> auto {
-    return pair.second.info.shader_unique_id == unique_id;
-  });
+  const auto canonical = CanonicalizeShaderRequest(ShaderRequest(request));
+  return shader_cache_.contains(ComputeShaderRequestKey(canonical));
 }
 
 auto ShaderManager::GetShaderCount() const noexcept -> size_t

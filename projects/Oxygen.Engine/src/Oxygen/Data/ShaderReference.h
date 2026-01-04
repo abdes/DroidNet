@@ -23,29 +23,18 @@ namespace oxygen::data {
  not a first-class asset: it is not named or globally identified, but is
  included inline after a material asset descriptor.
 
- ### Binary Encoding (PAK v1, 216 bytes)
+ ### Binary Encoding (PAK v2, 424 bytes)
 
- ```text
- offset size name               description
- ------ ---- ------------------ ---------------------------------------------
- 0x00   192  shader_unique_id   Shader unique identifier (null-terminated,
- padded) 0xC0   8    shader_hash        64-bit hash of shader source for
- validation 0xC8   16   reserved           Reserved for future use
- ```
-
- - `shader_unique_id`: Unique identifier for the shader (e.g.,
-   VS@path/to/file.hlsl), maximum size is 192 bytes including null terminator,
-   padded with null bytes.
- - `shader_hash`: 64-bit hash of the shader source for validation.
+ Stores a structured shader request (stage, source path, entry point, defines)
+ plus a source hash for validation.
 
  @see ShaderReferenceDesc, MaterialAssetDesc
 */
 class ShaderReference : public oxygen::Object {
   OXYGEN_TYPED(ShaderReference)
 public:
-  explicit ShaderReference(ShaderType stage, pak::ShaderReferenceDesc desc)
-    : stage_(stage)
-    , desc_(std::move(desc))
+  explicit ShaderReference(pak::ShaderReferenceDesc desc)
+    : desc_(std::move(desc))
   {
   }
 
@@ -54,15 +43,20 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(ShaderReference)
   OXYGEN_DEFAULT_MOVABLE(ShaderReference)
 
-  //! Returns the shader unique identifier in the format commonly used by the
-  //! engine.
-  OXGN_DATA_NDAPI auto GetShaderUniqueId() const noexcept -> std::string_view;
+  //! Returns the canonical shader source path.
+  OXGN_DATA_NDAPI auto GetSourcePath() const noexcept -> std::string_view;
+
+  //! Returns the shader entry point.
+  OXGN_DATA_NDAPI auto GetEntryPoint() const noexcept -> std::string_view;
+
+  //! Returns the canonical defines string (may be empty).
+  OXGN_DATA_NDAPI auto GetDefines() const noexcept -> std::string_view;
 
   //! Returns the shader type (aka. the pipeline stage at which the shadershould
   //! be used).
   [[nodiscard]] auto GetShaderType() const noexcept -> ShaderType
   {
-    return stage_;
+    return static_cast<ShaderType>(desc_.shader_type);
   }
 
   //! Returns the shader source hash for validation.
@@ -76,7 +70,6 @@ public:
   }
 
 private:
-  ShaderType stage_;
   pak::ShaderReferenceDesc desc_ {};
 };
 

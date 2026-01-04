@@ -26,9 +26,8 @@
 namespace oxygen::graphics {
 
 struct CompiledShaderInfo {
-  ShaderType shader_type { ShaderType::kVertex };
-  std::string shader_unique_id;
-  std::string source_file_path;
+  ShaderRequest request {};
+  uint64_t cache_key { 0 };
   uint64_t source_hash { 0 };
   size_t compiled_bloc_size { 0 };
   std::chrono::system_clock::time_point compile_time;
@@ -37,12 +36,11 @@ struct CompiledShaderInfo {
   CompiledShaderInfo() = default;
 
   // Parameterized constructor
-  CompiledShaderInfo(const ShaderType type, std::string unique_id,
-    std::string path, const uint64_t hash, const size_t size,
+  CompiledShaderInfo(ShaderRequest shader_request, const uint64_t shader_key,
+    const uint64_t hash, const size_t size,
     const std::chrono::system_clock::time_point time) noexcept
-    : shader_type(type)
-    , shader_unique_id(std::move(unique_id))
-    , source_file_path(std::move(path))
+    : request(std::move(shader_request))
+    , cache_key(shader_key)
     , source_hash(hash)
     , compiled_bloc_size(size)
     , compile_time(time)
@@ -99,13 +97,13 @@ public:
   // Shader management
   //! Adds pre-compiled shader bytecode to the archive
   OXGN_GFX_NDAPI auto AddCompiledShader(CompiledShader shader) -> bool;
-  //! Retrieves compiled shader bytecode by name
-  OXGN_GFX_NDAPI auto GetShaderBytecode(std::string_view unique_id) const
+  //! Retrieves compiled shader bytecode by canonical request.
+  OXGN_GFX_NDAPI auto GetShaderBytecode(const ShaderRequest& request) const
     -> std::shared_ptr<IShaderByteCode>;
 
   // State queries
   //! Checks if a shader exists in the archive
-  OXGN_GFX_NDAPI auto HasShader(std::string_view unique_id) const noexcept
+  OXGN_GFX_NDAPI auto HasShader(const ShaderRequest& request) const noexcept
     -> bool;
   //! Returns profiles of all shaders that need recompilation
   OXGN_GFX_NDAPI auto GetOutdatedShaders() const -> std::vector<ShaderInfo>;
@@ -135,7 +133,7 @@ private:
   [[nodiscard]] auto CompileAndAddShader(const ShaderInfo& profile) -> bool;
 
   Config config_ {};
-  std::unordered_map<std::string, CompiledShader> shader_cache_;
+  std::unordered_map<uint64_t, CompiledShader> shader_cache_;
   std::vector<ShaderInfo> shader_infos_;
   std::filesystem::path archive_path_;
 };
