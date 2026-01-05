@@ -9,6 +9,9 @@
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Detail/GraphData.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/PointLight.h>
+#include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
@@ -22,6 +25,10 @@ using oxygen::scene::detail::GraphData;
 // Camera type aliases for brevity and clarity
 using PerspectiveCamera = oxygen::scene::PerspectiveCamera;
 using OrthographicCamera = oxygen::scene::OrthographicCamera;
+
+using DirectionalLight = oxygen::scene::DirectionalLight;
+using PointLight = oxygen::scene::PointLight;
+using SpotLight = oxygen::scene::SpotLight;
 
 // =============================================================================
 // SceneNode Validator Implementations
@@ -636,6 +643,214 @@ auto SceneNode::HasCamera() noexcept -> bool
 
       return state.node_impl->HasComponent<PerspectiveCamera>()
         || state.node_impl->HasComponent<OrthographicCamera>();
+    });
+}
+
+//=== Light Attachment ===----------------------------------------------------//
+
+/*!
+ Attaches a light component to this SceneNode. Only one light component can be
+ attached at a time (DirectionalLight, PointLight, or SpotLight). If a light
+ already exists, this method will fail and return false.
+
+ @param light Unique pointer to the light component to attach. Must be a
+ DirectionalLight, PointLight, or SpotLight. Ownership is transferred.
+ @return True if the light was successfully attached; false if a light already
+ exists, the node is invalid, or the light type is unsupported.
+
+ @note Only one light component can be attached at a time.
+ @warning Passing a null pointer or an unsupported light type will fail.
+ @see DetachLight, ReplaceLight, GetLight
+*/
+auto SceneNode::AttachLight(std::unique_ptr<Component> light) noexcept -> bool
+{
+  if (!light) {
+    LOG_F(ERROR, "Cannot attach a null light. SceneNode: {}",
+      nostd::to_string(*this));
+    return false;
+  }
+
+  return SafeCall(
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      const bool already_exists
+        = state.node_impl->HasComponent<DirectionalLight>()
+        || state.node_impl->HasComponent<PointLight>()
+        || state.node_impl->HasComponent<SpotLight>();
+      if (already_exists) {
+        LOG_F(ERROR,
+          "SceneNode {} already has a light component. Cannot attach another.",
+          nostd::to_string(*this));
+        return false;
+      }
+
+      const auto type_id = light->GetTypeId();
+      if (type_id == DirectionalLight::ClassTypeId()) {
+        state.node_impl->AddComponent<DirectionalLight>(std::move(light));
+        return true;
+      }
+      if (type_id == PointLight::ClassTypeId()) {
+        state.node_impl->AddComponent<PointLight>(std::move(light));
+        return true;
+      }
+      if (type_id == SpotLight::ClassTypeId()) {
+        state.node_impl->AddComponent<SpotLight>(std::move(light));
+        return true;
+      }
+
+      LOG_F(ERROR, "Unsupported light type: {}/{}. SceneNode: {}", type_id,
+        light->GetTypeNamePretty(), nostd::to_string(*this));
+      return false;
+    });
+}
+
+/*!
+ Detaches the light component from this SceneNode, if present.
+
+ @return True if a light component was detached; false if no light was attached
+ or the node is invalid.
+
+ @note Safe to call even if no light is attached.
+ @see AttachLight, ReplaceLight, GetLight
+*/
+auto SceneNode::DetachLight() noexcept -> bool
+{
+  return SafeCall(
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      bool removed = false;
+      if (state.node_impl->HasComponent<DirectionalLight>()) {
+        state.node_impl->RemoveComponent<DirectionalLight>();
+        removed = true;
+      }
+      if (state.node_impl->HasComponent<PointLight>()) {
+        state.node_impl->RemoveComponent<PointLight>();
+        removed = true;
+      }
+      if (state.node_impl->HasComponent<SpotLight>()) {
+        state.node_impl->RemoveComponent<SpotLight>();
+        removed = true;
+      }
+      return removed;
+    });
+}
+
+/*!
+ Replaces the current light component with a new one. If no light exists, this
+ acts as an attach operation.
+
+ @param light Unique pointer to the new light component. Must be a
+ DirectionalLight, PointLight, or SpotLight. Ownership is transferred.
+ @return True if the light was successfully replaced or attached; false if the
+ node is invalid, the light is null, or the light type is unsupported.
+
+ @note Replacement may change the concrete light type.
+ @warning Passing a null pointer or an unsupported light type will fail.
+ @see AttachLight, DetachLight, GetLight
+*/
+auto SceneNode::ReplaceLight(std::unique_ptr<Component> light) noexcept -> bool
+{
+  if (!light) {
+    LOG_F(ERROR, "Cannot attach a null light. SceneNode: {}",
+      nostd::to_string(*this));
+    return false;
+  }
+
+  return SafeCall(
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      const auto type_id = light->GetTypeId();
+      if (type_id != DirectionalLight::ClassTypeId()
+        && type_id != PointLight::ClassTypeId()
+        && type_id != SpotLight::ClassTypeId()) {
+        LOG_F(ERROR, "Unsupported light type: {}/{}. SceneNode: {}", type_id,
+          light->GetTypeNamePretty(), nostd::to_string(*this));
+        return false;
+      }
+
+      if (state.node_impl->HasComponent<DirectionalLight>()) {
+        state.node_impl->RemoveComponent<DirectionalLight>();
+      }
+      if (state.node_impl->HasComponent<PointLight>()) {
+        state.node_impl->RemoveComponent<PointLight>();
+      }
+      if (state.node_impl->HasComponent<SpotLight>()) {
+        state.node_impl->RemoveComponent<SpotLight>();
+      }
+
+      if (type_id == DirectionalLight::ClassTypeId()) {
+        state.node_impl->AddComponent<DirectionalLight>(std::move(light));
+        return true;
+      }
+      if (type_id == PointLight::ClassTypeId()) {
+        state.node_impl->AddComponent<PointLight>(std::move(light));
+        return true;
+      }
+      state.node_impl->AddComponent<SpotLight>(std::move(light));
+      return true;
+    });
+}
+
+/*!
+ Gets the attached light component if present.
+
+ @return An optional reference to the attached light component (Directional,
+ Point, or Spot), or std::nullopt if no light is attached or the node is
+ invalid.
+
+ @see AttachLight, DetachLight, ReplaceLight
+*/
+auto SceneNode::GetLight() noexcept
+  -> std::optional<std::reference_wrapper<Component>>
+{
+  return SafeCall(NodeIsValidAndInScene(),
+    [&](const SafeCallState& state) noexcept
+      -> std::optional<std::reference_wrapper<Component>> {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      if (state.node_impl->HasComponent<DirectionalLight>()) {
+        return std::ref(state.node_impl->GetComponent<DirectionalLight>());
+      }
+      if (state.node_impl->HasComponent<PointLight>()) {
+        return std::ref(state.node_impl->GetComponent<PointLight>());
+      }
+      if (state.node_impl->HasComponent<SpotLight>()) {
+        return std::ref(state.node_impl->GetComponent<SpotLight>());
+      }
+      return std::nullopt;
+    });
+}
+
+/*!
+ Checks if a light component is attached to this SceneNode.
+
+ @return True if a light component (DirectionalLight, PointLight, or SpotLight)
+ is attached; false otherwise or if the node is invalid.
+
+ @see AttachLight, DetachLight, ReplaceLight, GetLight
+*/
+auto SceneNode::HasLight() noexcept -> bool
+{
+  return SafeCall(
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      return state.node_impl->HasComponent<DirectionalLight>()
+        || state.node_impl->HasComponent<PointLight>()
+        || state.node_impl->HasComponent<SpotLight>();
     });
 }
 

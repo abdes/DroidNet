@@ -31,7 +31,10 @@ Status: Living design/spec document.
 
 - No commitment yet to a specific lighting technique (forward+, clustered, deferred, RT, etc.).
 - No area/mesh lights, IES profiles, or volumetrics in the first iteration.
-- No scene serialization format.
+- No new scene serialization format design work is required in this document.
+  Lights are expected to be persisted using Oxygen’s existing scene/component
+  persistence pipeline (PAK / loose-cooked), the same way other node-attached
+  components are handled.
 - No editor UI spec.
 
 ---
@@ -731,3 +734,113 @@ case; Forward+ keeps shading in the material pass while bounding the light work.
 - Visibility: node invisible (`kVisible == false`) ⇒ light does not affect the world even if `affects_world` is true.
 - One light per node: yes.
 - Shadow ownership: both node flag `kCastsShadows` and per-light shadow settings in the light component.
+
+---
+
+## 9. Implementation Task List (Trackable)
+
+This section turns the spec into an executable checklist, minimizing new
+infrastructure and explicitly reusing existing Oxygen patterns:
+
+- Scene component composition and dependencies (same as Camera components)
+- SceneNode attachment API shape (same as `AttachCamera/DetachCamera/...`)
+- PAK / loose-cooked scene component tables (already used for Renderables and Cameras)
+- Renderer ScenePrep collection/finalization pipeline (existing traversal and per-frame state)
+
+> Guiding rule: **don’t invent a new system** if an equivalent exists for
+> cameras/renderables/scene assets.
+
+### 9.1 Scene: Light components and APIs (mirrors Camera)
+
+- [x] Add `DirectionalLight`, `PointLight`, `SpotLight` components under `src/Oxygen/Scene/Light/`.
+  - Must use `OXYGEN_COMPONENT(...)` and require `oxygen::scene::detail::TransformComponent` (same as `PerspectiveCamera` / `OrthographicCamera`).
+  - Include common authored fields: `affects_world`, `color_rgb`, `intensity`, `mobility`, `casts_shadows`, `shadow`, and optional `exposure_compensation_ev`.
+- [x] Implement `UpdateDependencies(...)` for each light component to cache the owning node’s `TransformComponent*` (same pattern as Camera).
+- [x] Add `SceneNode` light attachment API in `src/Oxygen/Scene/SceneNode.h/.cpp`:
+  - `AttachLight(std::unique_ptr<Component>) -> bool`
+  - `DetachLight() -> bool`
+  - `ReplaceLight(std::unique_ptr<Component>) -> bool`
+  - `HasLight() -> bool`
+  - `GetLightAs<T>() -> optional<ref<T>>`
+  - Semantics must match Camera behavior (null checks, supported-type checks, and “only one light per node”).
+- [x] Add unit tests mirroring `src/Oxygen/Scene/Test/SceneNode_camera_test.cpp`:
+  - Attach works for each type
+  - Attach fails when a light already exists (including cross-type)
+  - Detach removes and returns false when none
+  - Replace replaces and acts like attach when none
+  - `GetLightAs<T>` returns nullopt on mismatch
+
+### 9.2 Scene-global environment (optional but specified)
+
+- [ ] Implement `SceneEnvironment` as a `Scene`-attached component (not node-attached) consistent with Scene being a `Composition`.
+  - Minimal first pass: data-only component + attach/get convenience API.
+  - Defer GPU resource build/caching to the renderer.
+- [ ] Add unit tests for attach/replace/get on `Scene` (mirroring patterns used elsewhere for Composition-backed objects).
+
+### 9.3 Persistence: PAK / loose-cooked scene component tables (no new format)
+
+Oxygen already supports per-node component tables in cooked scenes:
+
+- PAK schema: `SceneAssetDesc` + `SceneComponentTableDesc` in `src/Oxygen/Data/PakFormat.h`
+- Loader validation: `src/Oxygen/Content/Loaders/SceneLoader.h`
+- Zero-copy access: `src/Oxygen/Data/SceneAsset.h`
+
+Tasks:
+
+- [ ] Extend `oxygen::data::ComponentType` (FourCC) in `src/Oxygen/Data/ComponentType.h` with light kinds (e.g. `DLIT`, `PLIT`, `SLIT`).
+- [ ] Add packed PAK record structs in `src/Oxygen/Data/PakFormat.h` for each light kind.
+  - Must include `node_index` and fields needed to reconstruct component state.
+  - Keep struct sizes explicit (static_assert) and stable.
+- [ ] Extend `oxygen::data::SceneAsset` type mapping (`ComponentTraits<>`) in `src/Oxygen/Data/SceneAsset.h` for the new record types.
+- [ ] Extend `SceneLoader` table validation in `src/Oxygen/Content/Loaders/SceneLoader.h` to recognize light tables (entry_size, node_index range, invariants).
+- [ ] Add a content/loader test proving “scene assets can carry lights” end-to-end (parse/validate) without requiring editor tooling.
+  - Pattern reference: camera table emission checks in `src/Oxygen/Content/Test/FbxImporter_scene_test.cpp`.
+
+### 9.4 Renderer integration: extraction and publication (Stage 5A)
+
+Renderer already expects a lighting rollout (see `src/Oxygen/Renderer/Docs/implementation_plan.md` and `src/Oxygen/Renderer/Docs/lighting_overview.md`).
+
+- [ ] Add CPU-side extracted light snapshot types (e.g., `RendererLights` / `SceneLightSet`) in renderer code.
+  - Must be POD-style and frame-stable (safe to hand to passes).
+- [ ] Implement a light extraction step that:
+  - walks nodes with light components,
+  - resolves world-space position/direction from transforms,
+  - applies the spec’s gates (`kVisible` and `kCastsShadows` interactions),
+  - outputs separate directional/point/spot arrays.
+- [ ] Ensure the traversal does not miss lights on nodes without `RenderableComponent`.
+  - Current `ScenePrepPipeline` frame-phase traversal skips nodes without renderables; update the pipeline or add a parallel light traversal so “light-only” nodes still contribute.
+
+### 9.5 Renderer: SceneConstants + single-light shading (Stage 5B)
+
+- [ ] Extend `src/Oxygen/Renderer/Types/SceneConstants.h` GPU payload with minimal lighting constants:
+  - ambient
+  - one directional light (dir/color/intensity)
+  - `num_lights` and bindless slots as needed by later stages
+- [ ] Populate constants from extraction deterministically (e.g., “first enabled directional”).
+- [ ] Update the forward shading path to consume these constants and render a lit result.
+
+### 9.6 Renderer: multi-light bindless buffer (Stage 5C) and culling (later)
+
+- [ ] Add bindless structured buffer for lights and upload per-frame extracted arrays.
+  - Follow bindless conventions: no new root bindings; use a bindless slot index.
+- [ ] Shader loops over `min(num_lights, MAX_LIGHTS_PS)` for correctness (no culling yet).
+- [ ] Implement per-view culling + Forward+ light grid (compute) once correctness is established.
+
+### 9.7 Shadows (incremental)
+
+- [ ] Plumb shadow settings through extraction and GPU payloads even if shadow passes are stubbed.
+- [ ] Implement shadow passes incrementally:
+  - Directional CSM first
+  - Spot shadows next
+  - Point shadows last (technique choice is renderer-specific)
+
+### 9.8 Example & sanity validation
+
+- [ ] Add/update an example scene that includes:
+  - one directional “Sun” node
+  - several point lights
+  - a moving camera
+- [ ] Validate visually:
+  - direction convention (`Forward`)
+  - `kVisible` hard-gates contribution
+  - deterministic behavior across frames

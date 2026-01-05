@@ -664,7 +664,7 @@ API, data mapping, renderer bridge, and trackable tasks.
 
 **Timeline:** 1-2 months per component type (Mesh, Light)
 
-### Priority 2: Serialization Infrastructure (Deferred)
+### Priority 2: Serialization Infrastructure
 
 - Design and implement scene save/load with component-aware serialization.
 - Integrate with the Composition system for automatic component serialization.
