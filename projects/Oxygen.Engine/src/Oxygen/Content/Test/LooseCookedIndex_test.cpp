@@ -825,7 +825,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_TableWithoutData_Throws)
 
   MaterialAssetDesc material_desc {};
   material_desc.header.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
-  material_desc.header.version = 1;
+  material_desc.header.version = oxygen::data::pak::v2::kMaterialAssetVersion;
   {
     const auto material_file
       = LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
@@ -1063,7 +1063,7 @@ NOLINT_TEST_F(
 
   MaterialAssetDesc material_desc {};
   material_desc.header.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
-  material_desc.header.version = 1;
+  material_desc.header.version = oxygen::data::pak::v2::kMaterialAssetVersion;
   {
     const auto material_file
       = LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");

@@ -88,7 +88,7 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
       = (std::min)(sizeof(desc.header.name) - 1, std::strlen(default_name));
     std::memcpy(desc.header.name, default_name, copy_len);
     desc.header.name[copy_len] = '\0';
-    desc.header.version = 1;
+    desc.header.version = pak::kMaterialAssetVersion;
     desc.header.streaming_priority = 255; // Lowest priority
     desc.header.content_hash = 0; // No specific content hash
     desc.header.variant_flags = 0;
@@ -125,7 +125,8 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
     desc.transmission_texture = pak::kFallbackResourceIndex;
     desc.thickness_texture = pak::kFallbackResourceIndex;
 
-    std::fill(std::begin(desc.reserved), std::end(desc.reserved), uint8_t { 0 });
+    std::fill(
+      std::begin(desc.reserved), std::end(desc.reserved), uint8_t { 0 });
 
     // No shader references initially - renderer will provide appropriate
     // shaders

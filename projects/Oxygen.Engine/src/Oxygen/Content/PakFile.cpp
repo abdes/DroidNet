@@ -173,10 +173,15 @@ auto PakFile::ReadHeader(serio::FileStream<>* stream) -> void
     throw std::runtime_error("Invalid pak file header magic");
   }
 
-  if (header_.version != 2) {
-    LOG_F(ERROR, "Unsupported PAK format version: {} (expected 2)",
+  if (header_.version != 2 && header_.version != 3) {
+    LOG_F(ERROR, "Unsupported PAK format version: {} (expected 2 or 3)",
       header_.version);
     throw std::runtime_error("Unsupported PAK format version");
+  }
+
+  if (header_.version == 2) {
+    LOG_F(
+      WARNING, "Loading legacy PAK v2 container. Consider regenerating as v3.");
   }
 }
 

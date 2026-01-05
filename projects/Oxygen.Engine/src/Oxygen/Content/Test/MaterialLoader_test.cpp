@@ -91,7 +91,7 @@ protected:
       std::memcpy(desc.header.name, name, copy_len);
       desc.header.name[copy_len] = '\0';
     }
-    desc.header.version = 1;
+    desc.header.version = oxygen::data::pak::kMaterialAssetVersion;
     desc.material_domain
       = static_cast<uint8_t>(oxygen::data::MaterialDomain::kOpaque);
     return desc;

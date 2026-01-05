@@ -98,7 +98,7 @@ class GLBToPakSpec:
         return candidate
 
     def _ensure_v2_defaults(self) -> None:
-        # PakGen v2 requires:
+        # PakGen v3 requires:
         # - default empty buffer at index 0
         # - default texture at index 0
         # The converter may also emit materials that reference textures; having a
@@ -505,7 +505,7 @@ class GLBToPakSpec:
 
             self.assets.append(asset)
 
-        # PakGen v2 convenience: always provide a DefaultMaterial, even if the
+        # PakGen convenience: always provide a DefaultMaterial, even if the
         # source asset didn't define one.
         if _DEFAULT_MATERIAL_NAME not in defined_materials:
             self.assets.append(
@@ -689,7 +689,7 @@ class GLBToPakSpec:
         self.process_materials()
 
         return {
-            "version": 2,
+            "version": 3,
             "content_version": 1,
             "buffers": self.buffers,
             "textures": self.textures,

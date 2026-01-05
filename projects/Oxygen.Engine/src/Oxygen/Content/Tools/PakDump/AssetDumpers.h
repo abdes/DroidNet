@@ -8,11 +8,15 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <iostream>
 #include <memory>
+#include <string>
 #include <unordered_map>
 
 #include <Oxygen/Data/AssetType.h>
+
+#include <Oxygen/OxCo/Co.h>
 
 #include "AssetDumper.h"
 #include "DumpContext.h"
@@ -69,10 +73,11 @@ public:
   {
   }
 
-  auto Dump(const oxygen::content::PakFile& pak, DumpContext& ctx) const -> void
+  auto DumpAsync(const oxygen::content::PakFile& pak, DumpContext& ctx,
+    oxygen::content::AssetLoader& asset_loader) const -> oxygen::co::Co<>
   {
     if (!ctx.show_directory) {
-      return;
+      co_return;
     }
 
     PrintUtils::Separator("ASSET DIRECTORY");
@@ -82,8 +87,21 @@ public:
 
     for (size_t i = 0; i < dir.size(); ++i) {
       const auto& entry = dir[i];
-      registry_.Get(entry.asset_type).Dump(pak, entry, ctx, i);
+      try {
+        co_await registry_.Get(entry.asset_type)
+          .DumpAsync(pak, entry, ctx, i, asset_loader);
+      } catch (const std::exception& ex) {
+        std::cerr << "ERROR: failed to dump asset #" << i
+                  << " (type=" << static_cast<int>(entry.asset_type)
+                  << "): " << ex.what() << "\n\n";
+      } catch (...) {
+        std::cerr << "ERROR: failed to dump asset #" << i
+                  << " (type=" << static_cast<int>(entry.asset_type)
+                  << "): unknown exception\n\n";
+      }
     }
+
+    co_return;
   }
 
 private:

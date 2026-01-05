@@ -1,8 +1,8 @@
-# PakGen spec for a minimal RenderScene demo pak containing a single cube scene.
+# PakGen spec for a minimal RenderScene demo pak containing a small cube scene.
 # The cube's vertex/index data is embedded inline (data_hex) and matches
 # oxygen::data::MakeCubeMeshAsset() (see src/Oxygen/Data/Procedural/Cube.cpp).
 
-version: 2
+version: 3
 content_version: 1
 
 buffers:
@@ -112,6 +112,28 @@ assets:
     roughness: 0.18
     ambient_occlusion: 1.0
 
+  - type: material
+    name: MatCubeB
+    asset_key: "9f1c2a3b4d5e6f708192a3b4c5d6e7f1"
+    alignment: 1
+    material_domain: 1
+    shader_stages: 0
+    base_color: [1.0, 0.35, 0.25, 0.5]
+    metalness: 0.5
+    roughness: 0.18
+    ambient_occlusion: 1.0
+
+  - type: material
+    name: MatCubeC
+    asset_key: "9f1c2a3b4d5e6f708192a3b4c5d6e7f2"
+    alignment: 1
+    material_domain: 1
+    shader_stages: 0
+    base_color: [0.25, 0.6, 1.0, 1.0]
+    metalness: 0.2
+    roughness: 0.7
+    ambient_occlusion: 1.0
+
   - type: geometry
     name: GeoCube
     asset_key: "1a2b3c4d5e6f708192a3b4c5d6e7f809"
@@ -128,6 +150,54 @@ assets:
         submeshes:
           - name: full
             material: MatCube
+            bounding_box_min: [-0.5, -0.5, -0.5]
+            bounding_box_max: [0.5, 0.5, 0.5]
+            mesh_views:
+              - first_index: 0
+                index_count: 36
+                first_vertex: 0
+                vertex_count: 24
+
+  - type: geometry
+    name: GeoCubeB
+    asset_key: "1a2b3c4d5e6f708192a3b4c5d6e7f80a"
+    alignment: 1
+    bounding_box_min: [-0.5, -0.5, -0.5]
+    bounding_box_max: [0.5, 0.5, 0.5]
+    lods:
+      - name: lod0
+        mesh_type: 1
+        vertex_buffer: cube_vb
+        index_buffer: cube_ib
+        bounding_box_min: [-0.5, -0.5, -0.5]
+        bounding_box_max: [0.5, 0.5, 0.5]
+        submeshes:
+          - name: full
+            material: MatCubeB
+            bounding_box_min: [-0.5, -0.5, -0.5]
+            bounding_box_max: [0.5, 0.5, 0.5]
+            mesh_views:
+              - first_index: 0
+                index_count: 36
+                first_vertex: 0
+                vertex_count: 24
+
+  - type: geometry
+    name: GeoCubeC
+    asset_key: "1a2b3c4d5e6f708192a3b4c5d6e7f80b"
+    alignment: 1
+    bounding_box_min: [-0.5, -0.5, -0.5]
+    bounding_box_max: [0.5, 0.5, 0.5]
+    lods:
+      - name: lod0
+        mesh_type: 1
+        vertex_buffer: cube_vb
+        index_buffer: cube_ib
+        bounding_box_min: [-0.5, -0.5, -0.5]
+        bounding_box_max: [0.5, 0.5, 0.5]
+        submeshes:
+          - name: full
+            material: MatCubeC
             bounding_box_min: [-0.5, -0.5, -0.5]
             bounding_box_max: [0.5, 0.5, 0.5]
             mesh_views:
@@ -154,6 +224,22 @@ assets:
         rotation: [0.0, 0.0, 0.0, 1.0]
         scale: [1.0, 1.0, 1.0]
 
+      - name: CubeB
+        parent: 0
+        node_id: "00112233445566778899aabbccddeeff"
+        flags: 0
+        translation: [2.0, 0.0, -1.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [0.8, 0.8, 0.8]
+
+      - name: CubeC
+        parent: 0
+        node_id: "ffeeddccbbaa99887766554433221100"
+        flags: 0
+        translation: [-2.0, 0.0, -1.5]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.25, 0.6, 1.25]
+
       - name: MainCamera
         parent: 0
         node_id: "fedcba0987654321fedcba0987654321"
@@ -162,14 +248,88 @@ assets:
         rotation: [0.0, 0.0, 0.0, 1.0]
         scale: [1.0, 1.0, 1.0]
 
+      - name: Sun
+        parent: 0
+        node_id: "0a0b0c0d0e0f10111213141516171819"
+        flags: 0
+        translation: [0.0, 2.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: FillLight
+        parent: 0
+        node_id: "102030405060708090a0b0c0d0e0f000"
+        flags: 0
+        translation: [1.5, 1.2, 2.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: SpotRig
+        parent: 0
+        node_id: "0f0e0d0c0b0a09080706050403020100"
+        flags: 0
+        translation: [-1.5, 2.0, 2.5]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
     renderables:
       - node_index: 1
         geometry: GeoCube
         visible: true
 
-    perspective_cameras:
       - node_index: 2
+        geometry: GeoCubeB
+        visible: true
+
+      - node_index: 3
+        geometry: GeoCubeC
+        visible: true
+
+    perspective_cameras:
+      - node_index: 4
         fov_y: 0.785398
         aspect_ratio: 1.777778
         near_plane: 0.1
         far_plane: 100.0
+
+    directional_lights:
+      - node_index: 5
+        affects_world: true
+        color_rgb: [1.0, 0.98, 0.92]
+        intensity: 2.0
+        mobility: 0
+        casts_shadows: 1
+        angular_size_radians: 0.01
+        environment_contribution: true
+
+    point_lights:
+      - node_index: 6
+        affects_world: true
+        color_rgb: [1.0, 0.35, 0.25]
+        intensity: 18.0
+        casts_shadows: 0
+        range: 8.0
+        attenuation_model: 0
+        decay_exponent: 2.0
+        source_radius: 0.05
+
+    spot_lights:
+      - node_index: 7
+        affects_world: true
+        color_rgb: [0.25, 0.6, 1.0]
+        intensity: 25.0
+        casts_shadows: 0
+        range: 12.0
+        attenuation_model: 0
+        decay_exponent: 2.0
+        inner_cone_angle_radians: 0.25
+        outer_cone_angle_radians: 0.45
+        source_radius: 0.02
+
+    environment:
+      sky_atmosphere:
+        sun_disk_enabled: true
+
+      post_process_volume:
+        tone_mapper: 0
+        exposure_mode: 1

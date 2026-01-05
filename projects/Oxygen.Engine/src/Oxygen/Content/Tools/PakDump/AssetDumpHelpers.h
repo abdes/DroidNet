@@ -74,14 +74,27 @@ inline auto PrintAssetDescriptorHexPreview(
 inline auto PrintAssetHeaderFields(
   const oxygen::data::pak::v2::AssetHeader& h, const int indent = 8) -> void
 {
-  PrintUtils::Field("Asset Type", static_cast<int>(h.asset_type), indent);
   PrintUtils::Field(
     "Name", std::string(h.name, strnlen(h.name, sizeof(h.name))), indent);
-  PrintUtils::Field("Version", static_cast<int>(h.version), indent);
+  PrintUtils::Field("Format Version", static_cast<int>(h.version), indent);
   PrintUtils::Field(
     "Streaming Priority", static_cast<int>(h.streaming_priority), indent);
   PrintUtils::Field("Content Hash", ToHexString(h.content_hash), indent);
   PrintUtils::Field("Variant Flags", ToHexString(h.variant_flags), indent);
+}
+
+[[nodiscard]] inline auto TryReadAssetHeader(const std::vector<std::byte>& data)
+  -> std::optional<oxygen::data::pak::v2::AssetHeader>
+{
+  using oxygen::data::pak::v2::AssetHeader;
+
+  if (data.size() < sizeof(AssetHeader)) {
+    return std::nullopt;
+  }
+
+  AssetHeader header {};
+  std::memcpy(&header, data.data(), sizeof(header));
+  return header;
 }
 
 [[nodiscard]] inline auto FormatVec3(const float v[3]) -> std::string

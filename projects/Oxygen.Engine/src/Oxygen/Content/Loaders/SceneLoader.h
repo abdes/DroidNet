@@ -124,6 +124,114 @@ namespace detail {
     }
   }
 
+  inline auto ValidateTrailingEnvironmentBlock(
+    const std::span<const std::byte> bytes, const size_t payload_end) -> void
+  {
+    if (payload_end > bytes.size()) {
+      throw std::runtime_error("scene asset payload end out of bounds");
+    }
+
+    if (payload_end + sizeof(oxygen::data::pak::SceneEnvironmentBlockHeader)
+      > bytes.size()) {
+      return;
+    }
+
+    oxygen::data::pak::SceneEnvironmentBlockHeader header {};
+    std::memcpy(&header,
+      bytes
+        .subspan(
+          payload_end, sizeof(oxygen::data::pak::SceneEnvironmentBlockHeader))
+        .data(),
+      sizeof(header));
+
+    if (header.byte_size
+      < sizeof(oxygen::data::pak::SceneEnvironmentBlockHeader)) {
+      throw std::runtime_error("scene environment block byte_size too small");
+    }
+
+    const size_t env_end = payload_end + header.byte_size;
+    if (env_end > bytes.size() || env_end < payload_end) {
+      throw std::runtime_error("scene environment block out of bounds");
+    }
+
+    size_t cursor
+      = payload_end + sizeof(oxygen::data::pak::SceneEnvironmentBlockHeader);
+    for (uint32_t i = 0; i < header.systems_count; ++i) {
+      if (cursor + sizeof(oxygen::data::pak::SceneEnvironmentSystemRecordHeader)
+        > env_end) {
+        throw std::runtime_error(
+          "scene environment record header out of bounds");
+      }
+
+      oxygen::data::pak::SceneEnvironmentSystemRecordHeader record_header {};
+      std::memcpy(&record_header,
+        bytes
+          .subspan(cursor,
+            sizeof(oxygen::data::pak::SceneEnvironmentSystemRecordHeader))
+          .data(),
+        sizeof(record_header));
+
+      if (record_header.record_size
+        < sizeof(oxygen::data::pak::SceneEnvironmentSystemRecordHeader)) {
+        throw std::runtime_error("scene environment record_size too small");
+      }
+
+      const size_t record_end = cursor + record_header.record_size;
+      if (record_end > env_end || record_end < cursor) {
+        throw std::runtime_error("scene environment record out of bounds");
+      }
+
+      const auto type
+        = static_cast<oxygen::data::pak::EnvironmentComponentType>(
+          record_header.system_type);
+      switch (type) {
+      case oxygen::data::pak::EnvironmentComponentType::kSkyAtmosphere:
+        if (record_header.record_size
+          != sizeof(oxygen::data::pak::SkyAtmosphereEnvironmentRecord)) {
+          throw std::runtime_error(
+            "scene environment SkyAtmosphere record size mismatch");
+        }
+        break;
+      case oxygen::data::pak::EnvironmentComponentType::kVolumetricClouds:
+        if (record_header.record_size
+          != sizeof(oxygen::data::pak::VolumetricCloudsEnvironmentRecord)) {
+          throw std::runtime_error(
+            "scene environment VolumetricClouds record size mismatch");
+        }
+        break;
+      case oxygen::data::pak::EnvironmentComponentType::kSkyLight:
+        if (record_header.record_size
+          != sizeof(oxygen::data::pak::SkyLightEnvironmentRecord)) {
+          throw std::runtime_error(
+            "scene environment SkyLight record size mismatch");
+        }
+        break;
+      case oxygen::data::pak::EnvironmentComponentType::kSkySphere:
+        if (record_header.record_size
+          != sizeof(oxygen::data::pak::SkySphereEnvironmentRecord)) {
+          throw std::runtime_error(
+            "scene environment SkySphere record size mismatch");
+        }
+        break;
+      case oxygen::data::pak::EnvironmentComponentType::kPostProcessVolume:
+        if (record_header.record_size
+          != sizeof(oxygen::data::pak::PostProcessVolumeEnvironmentRecord)) {
+          throw std::runtime_error(
+            "scene environment PostProcessVolume record size mismatch");
+        }
+        break;
+      default:
+        break;
+      }
+
+      cursor = record_end;
+    }
+
+    if (cursor != env_end) {
+      throw std::runtime_error("scene environment block has trailing bytes");
+    }
+  }
+
 } // namespace detail
 
 //! Loader for scene assets.
@@ -156,6 +264,13 @@ inline auto LoadSceneAsset(LoaderContext context)
     != data::AssetType::kScene) {
     throw std::runtime_error("invalid asset type for scene descriptor");
   }
+
+  // Scene descriptor format versioning is per-asset (AssetHeader::version),
+  // independent from the PAK container format version.
+  // v2: no trailing SceneEnvironment block.
+  // v3: trailing SceneEnvironment block is required (empty allowed).
+  const bool expects_environment_block
+    = desc.header.version >= oxygen::data::pak::v3::kSceneAssetVersion;
 
   // Compute the full payload size from the descriptor ranges.
   size_t end = sizeof(data::pak::SceneAssetDesc);
@@ -208,6 +323,26 @@ inline auto LoadSceneAsset(LoaderContext context)
   auto blob_res = reader.ReadBlob(end);
   detail::CheckResult(blob_res, "ReadBlob(scene_payload)");
   std::vector<std::byte> bytes = std::move(*blob_res);
+
+  const size_t payload_end = end;
+  if (expects_environment_block) {
+    data::pak::SceneEnvironmentBlockHeader env_header {};
+    const auto header_res = reader.ReadBlob(sizeof(env_header));
+    detail::CheckResult(header_res, "ReadBlob(scene_environment_header)");
+    std::memcpy(&env_header, (*header_res).data(), sizeof(env_header));
+    if (env_header.byte_size < sizeof(data::pak::SceneEnvironmentBlockHeader)) {
+      throw std::runtime_error("scene environment block byte_size too small");
+    }
+
+    const size_t tail_size
+      = env_header.byte_size - sizeof(data::pak::SceneEnvironmentBlockHeader);
+    const auto tail_res = reader.ReadBlob(tail_size);
+    detail::CheckResult(tail_res, "ReadBlob(scene_environment_block)");
+
+    bytes.reserve(bytes.size() + sizeof(env_header) + tail_size);
+    bytes.insert(bytes.end(), (*header_res).begin(), (*header_res).end());
+    bytes.insert(bytes.end(), (*tail_res).begin(), (*tail_res).end());
+  }
 
   // Full validation (loader responsibility).
   const auto bytes_span = std::span<const std::byte>(bytes);
@@ -280,8 +415,19 @@ inline auto LoadSceneAsset(LoaderContext context)
       detail::ValidateComponentTable<
         oxygen::data::pak::OrthographicCameraRecord>(
         table_bytes, entry.table.count, entry.table.entry_size, node_count);
+    } else if (type == oxygen::data::ComponentType::kDirectionalLight) {
+      detail::ValidateComponentTable<oxygen::data::pak::DirectionalLightRecord>(
+        table_bytes, entry.table.count, entry.table.entry_size, node_count);
+    } else if (type == oxygen::data::ComponentType::kPointLight) {
+      detail::ValidateComponentTable<oxygen::data::pak::PointLightRecord>(
+        table_bytes, entry.table.count, entry.table.entry_size, node_count);
+    } else if (type == oxygen::data::ComponentType::kSpotLight) {
+      detail::ValidateComponentTable<oxygen::data::pak::SpotLightRecord>(
+        table_bytes, entry.table.count, entry.table.entry_size, node_count);
     }
   }
+
+  detail::ValidateTrailingEnvironmentBlock(bytes_span, payload_end);
 
   if (!context.parse_only) {
     if (!context.dependency_collector) {
