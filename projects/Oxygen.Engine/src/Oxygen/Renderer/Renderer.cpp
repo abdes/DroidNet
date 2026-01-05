@@ -35,6 +35,7 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/Internal/SceneConstantsManager.h>
+#include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderContextPool.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -177,9 +178,14 @@ auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
       observer_ptr { geom_uploader.get() }, observer_ptr { mat_binder.get() },
       observer_ptr { inline_transfers_.get() });
 
-    scene_prep_state_
-      = std::make_unique<sceneprep::ScenePrepState>(std::move(geom_uploader),
-        std::move(xform_uploader), std::move(mat_binder), std::move(emitter));
+    auto light_manager
+      = std::make_unique<renderer::LightManager>(observer_ptr { gfx.get() },
+        observer_ptr { inline_staging_provider_.get() },
+        observer_ptr { inline_transfers_.get() });
+
+    scene_prep_state_ = std::make_unique<sceneprep::ScenePrepState>(
+      std::move(geom_uploader), std::move(xform_uploader),
+      std::move(mat_binder), std::move(emitter), std::move(light_manager));
     texture_binder_ = std::move(texture_binder);
   }
   return true;
@@ -362,6 +368,24 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
     scene_const_cpu_.SetBindlessDrawMetadataSlot(
       BindlessDrawMetadataSlot(draw_metadata_srv.get()),
       SceneConstants::kRenderer);
+  }
+
+  if (auto light_manager = scene_prep_state_->GetLightManager()) {
+    const auto dir_srv = light_manager->GetDirectionalLightsSrvIndex();
+    const auto dir_shadows_srv = light_manager->GetDirectionalShadowsSrvIndex();
+    const auto pos_srv = light_manager->GetPositionalLightsSrvIndex();
+
+    DLOG_F(3, "Directional Lights: {}", dir_srv);
+    DLOG_F(3, "Directional Shadows: {}", dir_shadows_srv);
+    DLOG_F(3, "Positional Lights: {}", pos_srv);
+
+    scene_const_cpu_.SetBindlessDirectionalLightsSlot(
+      BindlessDirectionalLightsSlot(dir_srv.get()), SceneConstants::kRenderer);
+    scene_const_cpu_.SetBindlessDirectionalShadowsSlot(
+      BindlessDirectionalShadowsSlot(dir_shadows_srv.get()),
+      SceneConstants::kRenderer);
+    scene_const_cpu_.SetBindlessPositionalLightsSlot(
+      BindlessPositionalLightsSlot(pos_srv.get()), SceneConstants::kRenderer);
   }
 
   co_return;
@@ -818,6 +842,9 @@ auto Renderer::OnFrameStart(FrameContext& context) -> void
   scene_prep_state_->GetMaterialBinder()->OnFrameStart(tag, frame_slot);
   if (auto emitter = scene_prep_state_->GetDrawMetadataEmitter()) {
     emitter->OnFrameStart(tag, frame_sequence, frame_slot);
+  }
+  if (auto light_manager = scene_prep_state_->GetLightManager()) {
+    light_manager->OnFrameStart(tag, frame_sequence, frame_slot);
   }
 }
 

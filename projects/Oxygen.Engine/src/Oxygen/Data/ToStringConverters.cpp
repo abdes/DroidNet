@@ -58,6 +58,9 @@ auto oxygen::data::to_string(oxygen::data::ComponentType value) noexcept
     case ComponentType::kRenderable:         return "MESH";
     case ComponentType::kPerspectiveCamera:  return "PCAM";
     case ComponentType::kOrthographicCamera: return "OCAM";
+    case ComponentType::kDirectionalLight:   return "DLIT";
+    case ComponentType::kPointLight:         return "PLIT";
+    case ComponentType::kSpotLight:          return "SLIT";
     // clang-format on
   }
 

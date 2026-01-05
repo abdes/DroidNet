@@ -474,6 +474,9 @@ static_assert(sizeof(AssetHeader) == 95);
 
 //=== Material Asset ===------------------------------------------------------//
 
+//! Material asset descriptor version for PAK v2.
+constexpr uint8_t kMaterialAssetVersion = 1;
+
 //! Material asset descriptor (256 bytes)
 /*!
   Describes a material asset for physically-based rendering (PBR) and other
@@ -601,6 +604,9 @@ struct MaterialAssetDesc {
 static_assert(sizeof(MaterialAssetDesc) == 256);
 
 //=== Geometry Asset ===------------------------------------------------------//
+
+//! Geometry asset descriptor version for PAK v2.
+constexpr uint8_t kGeometryAssetVersion = 1;
 
 //! Geometry asset descriptor (256 bytes)
 /*!
@@ -776,6 +782,11 @@ struct MeshViewDesc {
 static_assert(sizeof(MeshViewDesc) == 16);
 
 //=== Scene Asset ===---------------------------------------------------------//
+
+//! Scene asset descriptor version for PAK v2.
+//!
+//! @note PAK v2 scenes do not include the trailing SceneEnvironment block.
+constexpr uint8_t kSceneAssetVersion = 1;
 
 //! Scene data table descriptor (16 bytes).
 /*!
@@ -990,7 +1001,308 @@ static_assert(sizeof(OrthographicCameraRecord) == 40);
 
 } // namespace oxygen::data::pak::v2
 
+namespace oxygen::data::pak::v3 {
+
+//=== Version Notes ===------------------------------------------------------//
+
+//! PAK file format v3.
+/*!
+ v3 bumps the container `PakHeader::version` while preserving the overall
+ container layout (header/footer/directory). The primary v3 change relevant
+ to scenes is the introduction of a trailing SceneEnvironment block stored
+ after the Scene asset payload.
+*/
+
+using namespace v2;
+
+//! Material asset descriptor version for PAK v3.
+constexpr uint8_t kMaterialAssetVersion = v2::kMaterialAssetVersion;
+
+//! Geometry asset descriptor version for PAK v3.
+constexpr uint8_t kGeometryAssetVersion = v2::kGeometryAssetVersion;
+
+//! Scene asset descriptor version for PAK v3.
+//!
+//! @note PAK v3 scenes include a trailing SceneEnvironment block (empty
+//! allowed).
+constexpr uint8_t kSceneAssetVersion = 2;
+
+//=== PAK Header (v3) ===----------------------------------------------------//
+
+//! Fixed-size header at the start of the PAK file (256 bytes)
+/*!
+ Layout matches v2. The `version` default is updated to 3.
+*/
+#pragma pack(push, 1)
+struct PakHeader {
+  char magic[8] = { 'O', 'X', 'P', 'A', 'K', 0, 0, 0 };
+  uint16_t version = 3; // Format version
+  uint16_t content_version = 0; // Content version
+  uint8_t guid[16] = {}; // Unique identifier for this PAK
+  // Reserved for future use
+  uint8_t reserved[228] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(PakHeader) == 256);
+
+//=== Scene: Lights and Environment (v3) -----------------------------------//
+
+//! Environment system type tags used by scene persistence.
+enum class EnvironmentComponentType : uint32_t {
+  kSkyAtmosphere = 0,
+  kVolumetricClouds = 1,
+  kFog = 2,
+  kSkyLight = 3,
+  kSkySphere = 4,
+  kPostProcessVolume = 5,
+};
+
+//! Header for the trailing SceneEnvironment block.
+/*!
+ The environment block is stored immediately after the Scene payload.
+
+ - `byte_size` includes this header and all following system records.
+ - The block is always present for v3 scene descriptors.
+   A scene with "no environment" uses `systems_count == 0` and
+   `byte_size == sizeof(SceneEnvironmentBlockHeader)`.
+*/
+#pragma pack(push, 1)
+struct SceneEnvironmentBlockHeader {
+  uint32_t byte_size = 0;
+  uint32_t systems_count = 0;
+  uint8_t reserved[8] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(SceneEnvironmentBlockHeader) == 16);
+
+//! Header for a single environment-system record in the trailing block.
+/*!
+ - `system_type` is an `EnvironmentComponentType` enum value.
+ - `record_size` is the byte size of the entire record, including this header.
+   Unknown `system_type` values can be skipped using `record_size`.
+*/
+#pragma pack(push, 1)
+struct SceneEnvironmentSystemRecordHeader {
+  uint32_t system_type = 0;
+  uint32_t record_size = 0;
+};
+#pragma pack(pop)
+static_assert(sizeof(SceneEnvironmentSystemRecordHeader) == 8);
+
+//! Packed SkyAtmosphere environment record.
+#pragma pack(push, 1)
+struct SkyAtmosphereEnvironmentRecord {
+  SceneEnvironmentSystemRecordHeader header = {
+    .system_type
+    = static_cast<uint32_t>(EnvironmentComponentType::kSkyAtmosphere),
+    .record_size = sizeof(SkyAtmosphereEnvironmentRecord),
+  };
+
+  float planet_radius_m = 6360000.0F;
+  float atmosphere_height_m = 80000.0F;
+
+  float ground_albedo_rgb[3] = { 0.1F, 0.1F, 0.1F };
+
+  float rayleigh_scattering_rgb[3] = { 5.8e-6F, 13.5e-6F, 33.1e-6F };
+  float rayleigh_scale_height_m = 8000.0F;
+
+  float mie_scattering_rgb[3] = { 21.0e-6F, 21.0e-6F, 21.0e-6F };
+  float mie_scale_height_m = 1200.0F;
+  float mie_g = 0.8F;
+
+  float absorption_rgb[3] = { 0.0F, 0.0F, 0.0F };
+  float absorption_scale_height_m = 25000.0F;
+
+  float multi_scattering_factor = 1.0F;
+
+  uint32_t sun_disk_enabled = 1;
+  float sun_disk_angular_radius_radians = 0.004675F;
+
+  float aerial_perspective_distance_scale = 1.0F;
+};
+#pragma pack(pop)
+static_assert(sizeof(SkyAtmosphereEnvironmentRecord) == 96);
+
+//! Packed VolumetricClouds environment record.
+#pragma pack(push, 1)
+struct VolumetricCloudsEnvironmentRecord {
+  SceneEnvironmentSystemRecordHeader header = {
+    .system_type
+    = static_cast<uint32_t>(EnvironmentComponentType::kVolumetricClouds),
+    .record_size = sizeof(VolumetricCloudsEnvironmentRecord),
+  };
+
+  float base_altitude_m = 1500.0F;
+  float layer_thickness_m = 4000.0F;
+
+  float coverage = 0.5F;
+  float density = 0.5F;
+
+  float albedo_rgb[3] = { 0.9F, 0.9F, 0.9F };
+  float extinction_scale = 1.0F;
+  float phase_g = 0.6F;
+
+  float wind_dir_ws[3] = { 1.0F, 0.0F, 0.0F };
+  float wind_speed_mps = 10.0F;
+
+  float shadow_strength = 0.8F;
+};
+#pragma pack(pop)
+static_assert(sizeof(VolumetricCloudsEnvironmentRecord) == 64);
+
+//! Packed SkyLight (IBL) environment record.
+#pragma pack(push, 1)
+struct SkyLightEnvironmentRecord {
+  SceneEnvironmentSystemRecordHeader header = {
+    .system_type = static_cast<uint32_t>(EnvironmentComponentType::kSkyLight),
+    .record_size = sizeof(SkyLightEnvironmentRecord),
+  };
+
+  uint32_t source = 0; // SkyLightSource
+  uint8_t reserved0[12] = {};
+
+  AssetKey cubemap_asset = {};
+
+  float intensity = 1.0F;
+  float tint_rgb[3] = { 1.0F, 1.0F, 1.0F };
+
+  float diffuse_intensity = 1.0F;
+  float specular_intensity = 1.0F;
+};
+#pragma pack(pop)
+static_assert(sizeof(SkyLightEnvironmentRecord) == 64);
+
+//! Packed SkySphere environment record.
+#pragma pack(push, 1)
+struct SkySphereEnvironmentRecord {
+  SceneEnvironmentSystemRecordHeader header = {
+    .system_type = static_cast<uint32_t>(EnvironmentComponentType::kSkySphere),
+    .record_size = sizeof(SkySphereEnvironmentRecord),
+  };
+
+  uint32_t source = 0; // SkySphereSource
+  uint8_t reserved0[12] = {};
+
+  AssetKey cubemap_asset = {};
+
+  float solid_color_rgb[3] = { 0.0F, 0.0F, 0.0F };
+  float intensity = 1.0F;
+  float rotation_radians = 0.0F;
+  float tint_rgb[3] = { 1.0F, 1.0F, 1.0F };
+};
+#pragma pack(pop)
+static_assert(sizeof(SkySphereEnvironmentRecord) == 72);
+
+//! Packed PostProcessVolume environment record.
+#pragma pack(push, 1)
+struct PostProcessVolumeEnvironmentRecord {
+  SceneEnvironmentSystemRecordHeader header = {
+    .system_type
+    = static_cast<uint32_t>(EnvironmentComponentType::kPostProcessVolume),
+    .record_size = sizeof(PostProcessVolumeEnvironmentRecord),
+  };
+
+  uint32_t tone_mapper = 0; // ToneMapper
+  uint32_t exposure_mode = 1; // ExposureMode
+  float exposure_compensation_ev = 0.0F;
+
+  float auto_exposure_min_ev = -6.0F;
+  float auto_exposure_max_ev = 16.0F;
+  float auto_exposure_speed_up = 3.0F;
+  float auto_exposure_speed_down = 1.0F;
+
+  float bloom_intensity = 0.0F;
+  float bloom_threshold = 1.0F;
+
+  float saturation = 1.0F;
+  float contrast = 1.0F;
+  float vignette_intensity = 0.0F;
+};
+#pragma pack(pop)
+static_assert(sizeof(PostProcessVolumeEnvironmentRecord) == 56);
+
+//! Common shadow settings packed into light component records.
+#pragma pack(push, 1)
+struct LightShadowSettingsRecord {
+  float bias = 0.0F;
+  float normal_bias = 0.0F;
+  uint32_t contact_shadows = 0;
+  uint8_t resolution_hint = 1; // ShadowResolutionHint
+  uint8_t reserved[3] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(LightShadowSettingsRecord) == 16);
+
+//! Common authored properties shared by all light records.
+#pragma pack(push, 1)
+struct LightCommonRecord {
+  uint32_t affects_world = 1;
+  float color_rgb[3] = { 1.0F, 1.0F, 1.0F };
+  float intensity = 1.0F;
+
+  uint8_t mobility = 0; // LightMobility
+  uint8_t casts_shadows = 0;
+  uint8_t reserved0[2] = {};
+
+  LightShadowSettingsRecord shadow = {};
+  float exposure_compensation_ev = 0.0F;
+  uint8_t reserved1[4] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(LightCommonRecord) == 48);
+
+//! Packed directional light component record.
+#pragma pack(push, 1)
+struct DirectionalLightRecord {
+  SceneNodeIndexT node_index = 0;
+  LightCommonRecord common = {};
+  float angular_size_radians = 0.0F;
+  uint32_t environment_contribution = 0;
+
+  uint32_t cascade_count = 4;
+  float cascade_distances[4] = { 0.0F, 0.0F, 0.0F, 0.0F };
+  float distribution_exponent = 1.0F;
+
+  uint8_t reserved[12] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(DirectionalLightRecord) == 96);
+
+//! Packed point light component record.
+#pragma pack(push, 1)
+struct PointLightRecord {
+  SceneNodeIndexT node_index = 0;
+  LightCommonRecord common = {};
+  float range = 10.0F;
+  uint8_t attenuation_model = 0; // AttenuationModel
+  uint8_t reserved0[3] = {};
+  float decay_exponent = 2.0F;
+  float source_radius = 0.0F;
+  uint8_t reserved1[12] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(PointLightRecord) == 80);
+
+//! Packed spot light component record.
+#pragma pack(push, 1)
+struct SpotLightRecord {
+  SceneNodeIndexT node_index = 0;
+  LightCommonRecord common = {};
+  float range = 10.0F;
+  uint8_t attenuation_model = 0; // AttenuationModel
+  uint8_t reserved0[3] = {};
+  float decay_exponent = 2.0F;
+  float inner_cone_angle_radians = 0.4F;
+  float outer_cone_angle_radians = 0.6F;
+  float source_radius = 0.0F;
+  uint8_t reserved1[12] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(SpotLightRecord) == 88);
+
+} // namespace oxygen::data::pak::v3
+
 namespace oxygen::data::pak {
 //! Default namespace alias for latest version of the PAK format
-using namespace v2;
+using namespace v3;
 } // namespace oxygen::data::pak

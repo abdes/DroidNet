@@ -13,6 +13,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Resources/DrawMetadataEmitter.h>
 #include <Oxygen/Renderer/Resources/GeometryUploader.h>
 #include <Oxygen/Renderer/Resources/MaterialBinder.h>
@@ -40,11 +41,13 @@ public:
     std::unique_ptr<renderer::resources::TransformUploader> transform,
     std::unique_ptr<renderer::resources::MaterialBinder> material,
     std::unique_ptr<renderer::resources::DrawMetadataEmitter> draw_emitter
-    = nullptr) noexcept
+    = nullptr,
+    std::unique_ptr<renderer::LightManager> light_manager = nullptr) noexcept
     : geometry_uploader_(std::move(geometry))
     , transform_mgr_(std::move(transform))
     , material_binder_(std::move(material))
     , draw_emitter_(std::move(draw_emitter))
+    , light_manager_(std::move(light_manager))
   {
   }
 
@@ -54,6 +57,7 @@ public:
   ~ScenePrepState()
   {
     // Ordered destruction of members
+    light_manager_.reset();
     draw_emitter_.reset();
     material_binder_.reset();
     transform_mgr_.reset();
@@ -135,6 +139,13 @@ public:
     return observer_ptr(draw_emitter_.get());
   }
 
+  //! Get non-owning observer to light manager (maybe nullptr).
+  constexpr auto GetLightManager() const noexcept
+    -> observer_ptr<renderer::LightManager>
+  {
+    return observer_ptr(light_manager_.get());
+  }
+
   //! Reset per-frame data while preserving persistent caches.
   auto ResetFrameData() -> void
   {
@@ -196,6 +207,9 @@ private:
 
   //! Dynamic draw metadata builder and uploader (no atlas; fully dynamic)
   std::unique_ptr<renderer::resources::DrawMetadataEmitter> draw_emitter_;
+
+  //! Per-frame light collection and transient upload manager.
+  std::unique_ptr<renderer::LightManager> light_manager_;
 
   //! Cached ordered list of scene nodes that were processed during the
   //! Frame-phase and passed the pre-filter. The pointers are non-owning and

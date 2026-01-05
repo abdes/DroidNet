@@ -7,13 +7,14 @@
 #pragma once
 
 #include <algorithm>
-#include <bit>
+#include <any>
 #include <cstddef>
 #include <cstring>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
@@ -22,7 +23,10 @@
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormatSerioLoaders.h>
 #include <Oxygen/Data/api_export.h>
+#include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/Reader.h>
 
 namespace oxygen::data {
 
@@ -41,6 +45,18 @@ template <> struct ComponentTraits<pak::PerspectiveCameraRecord> {
 
 template <> struct ComponentTraits<pak::OrthographicCameraRecord> {
   static constexpr ComponentType kType = ComponentType::kOrthographicCamera;
+};
+
+template <> struct ComponentTraits<pak::DirectionalLightRecord> {
+  static constexpr ComponentType kType = ComponentType::kDirectionalLight;
+};
+
+template <> struct ComponentTraits<pak::PointLightRecord> {
+  static constexpr ComponentType kType = ComponentType::kPointLight;
+};
+
+template <> struct ComponentTraits<pak::SpotLightRecord> {
+  static constexpr ComponentType kType = ComponentType::kSpotLight;
 };
 
 //! Represents a loaded Scene asset.
@@ -78,6 +94,13 @@ template <> struct ComponentTraits<pak::OrthographicCameraRecord> {
 class SceneAsset final : public Asset {
   OXYGEN_TYPED(SceneAsset)
 public:
+  //! View over a single environment-system record stored in the environment
+  //! block.
+  struct EnvironmentSystemRecordView {
+    pak::SceneEnvironmentSystemRecordHeader header {};
+    std::span<const std::byte> bytes {};
+  };
+
   //! Constructs a SceneAsset from a raw data blob.
   /*!
     @param key The stable asset key.
@@ -138,6 +161,45 @@ public:
   //! Returns the root node (always index 0).
   OXGN_DATA_NDAPI auto GetRootNode() const noexcept -> const pak::NodeRecord&;
 
+  //=== Environment Access (v3+) ===----------------------------------------//
+
+  //! Returns true if this scene carries a trailing environment block.
+  OXGN_DATA_NDAPI auto HasEnvironmentBlock() const noexcept -> bool
+  {
+    return has_environment_block_;
+  }
+
+  //! Gets the parsed environment block header (if present).
+  OXGN_DATA_NDAPI auto GetEnvironmentBlockHeader() const noexcept
+    -> const pak::SceneEnvironmentBlockHeader*
+  {
+    return has_environment_block_ ? &environment_block_header_ : nullptr;
+  }
+
+  //! Returns a stable view over environment-system records.
+  OXGN_DATA_NDAPI auto GetEnvironmentSystemRecords() const noexcept
+    -> std::span<const EnvironmentSystemRecordView>
+  {
+    return environment_system_records_;
+  }
+
+  // Typed environment access (v3+). These return structs as defined in the
+  // PAK format, not runtime Scene objects.
+  OXGN_DATA_NDAPI auto TryGetSkyAtmosphereEnvironment() const
+    -> std::optional<pak::SkyAtmosphereEnvironmentRecord>;
+
+  OXGN_DATA_NDAPI auto TryGetVolumetricCloudsEnvironment() const
+    -> std::optional<pak::VolumetricCloudsEnvironmentRecord>;
+
+  OXGN_DATA_NDAPI auto TryGetSkyLightEnvironment() const
+    -> std::optional<pak::SkyLightEnvironmentRecord>;
+
+  OXGN_DATA_NDAPI auto TryGetSkySphereEnvironment() const
+    -> std::optional<pak::SkySphereEnvironmentRecord>;
+
+  OXGN_DATA_NDAPI auto TryGetPostProcessVolumeEnvironment() const
+    -> std::optional<pak::PostProcessVolumeEnvironmentRecord>;
+
   //=== Component Access ===--------------------------------------------------//
 
   //! Returns a view of all components of the specified type.
@@ -148,7 +210,7 @@ public:
   template <typename T>
   [[nodiscard]] auto GetComponents() const noexcept -> std::span<const T>
   {
-    // Map C++ type to ComponentType enum using Traits
+    // Map C++ type to ComponentType enum using Traits.
     constexpr ComponentType type = ComponentTraits<T>::kType;
     const auto* entry = FindComponentTableEntry(type);
     if (entry == nullptr || entry->count == 0) {
@@ -161,9 +223,39 @@ public:
       return {};
     }
 
-    const std::byte* start = data_.subspan(entry->offset).data();
-    const auto* typed = std::bit_cast<const T*>(start);
-    return { typed, entry->count };
+    // Component tables are stored packed (alignment 1). Exposing them via
+    // unaligned typed pointers is UB in Release builds. Decode field-by-field
+    // into an aligned cache and return a stable view.
+    const auto it = component_cache_.find(type);
+    if (it == component_cache_.end()) {
+      const size_t bytes_size = entry->count * sizeof(T);
+      const auto bytes = data_.subspan(entry->offset, bytes_size);
+
+      std::vector<std::byte> buffer;
+      buffer.assign(bytes.begin(), bytes.end());
+
+      oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
+      oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+      auto pack = reader.ScopedAlignment(1);
+
+      std::vector<T> decoded;
+      decoded.resize(entry->count);
+      for (size_t i = 0; i < entry->count; ++i) {
+        const auto res = reader.ReadInto(decoded[i]);
+        if (!res) {
+          DCHECK_F(false,
+            "SceneAsset failed to deserialize component table (validated by "
+            "loader)");
+          return {};
+        }
+      }
+
+      component_cache_.insert_or_assign(type, std::move(decoded));
+    }
+
+    const auto& cached = std::any_cast<const std::vector<T>&>(
+      component_cache_.find(type)->second);
+    return { cached.data(), cached.size() };
   }
 
   //! Finds the component of type T attached to the specified node.
@@ -216,8 +308,12 @@ private:
   pak::SceneAssetDesc desc_ {};
 
   // Cached pointers for fast access
-  const pak::NodeRecord* nodes_ptr_ { nullptr };
   size_t node_count_ { 0 };
+
+  // Nodes are stored packed (alignment 1). Decode lazily into an aligned
+  // cache to avoid unaligned typed pointers.
+  mutable std::vector<pak::NodeRecord> nodes_cache_ {};
+  mutable bool nodes_cache_valid_ { false };
 
   const char* string_table_ptr_ { nullptr };
   size_t string_table_size_ { 0 };
@@ -230,6 +326,18 @@ private:
     uint32_t entry_size;
   };
   std::vector<ComponentTableEntry> component_tables_;
+
+  // Optional trailing environment block.
+  bool has_environment_block_ { false };
+  pak::SceneEnvironmentBlockHeader environment_block_header_ {};
+  std::vector<EnvironmentSystemRecordView> environment_system_records_;
+
+  // Decoded component tables, keyed by ComponentType.
+  mutable std::unordered_map<ComponentType, std::any> component_cache_ {};
+
+  template <typename RecordT>
+  auto TryGetEnvironmentRecordAs(pak::EnvironmentComponentType type) const
+    -> std::optional<RecordT>;
 };
 
 } // namespace oxygen::data

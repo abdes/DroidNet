@@ -51,6 +51,7 @@ set(
   OXYGEN_RENDERER_HEADERS
   "api_export.h"
   "Errors.h"
+  "LightManager.h"
   "Upload/Errors.h"
   "Passes/DepthPrePass.h"
   "Passes/RenderPass.h"
@@ -63,10 +64,15 @@ set(
   "SceneCameraViewResolver.h"
   "ScenePrep/CollectionConfig.h"
   "ScenePrep/FinalizationConfig.h"
+  "Types/DirectionalLightBasic.h"
+  "Types/DirectionalLightShadows.h"
   "Types/DrawIndex.h"
   "Types/DrawMetadata.h"
+  "Types/EnvironmentDynamicData.h"
+  "Types/EnvironmentStaticData.h"
   "Types/MaterialConstants.h"
   "Types/PassMask.h"
+  "Types/PositionalLightData.h"
   "Types/SceneConstants.h"
 )
 set(
@@ -74,6 +80,7 @@ set(
   "Internal/RenderScope.h"
   "Internal/SceneConstantsManager.cpp"
   "Internal/SceneConstantsManager.h"
+  "LightManager.cpp"
   "Passes/DepthPrePass.cpp"
   "Passes/RenderPass.cpp"
   "Passes/ShaderPass.cpp"

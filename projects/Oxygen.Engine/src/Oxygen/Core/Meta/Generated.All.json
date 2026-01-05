@@ -2,7 +2,7 @@
   "source": "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml",
   "source_version": "1.1.0",
   "tool_version": "1.2.2",
-  "generated": "2026-01-04 14:03:03",
+  "generated": "2026-01-05 18:09:06",
   "schema_version": "1.0.1",
   "defaults": {
     "invalid_index": 4294967295
@@ -18,6 +18,17 @@
       "domain_base": 0,
       "capacity": 1,
       "comment": "Scene constants CBV"
+    },
+    {
+      "id": "environment_dynamic",
+      "name": "EnvironmentDynamic",
+      "kind": "CBV",
+      "register": "b3",
+      "heap_index": 0,
+      "root_table": "EnvironmentDynamicData",
+      "domain_base": 0,
+      "capacity": 1,
+      "comment": "Environment dynamic data CBV, updated by the engine per-frame"
     },
     {
       "id": "srv_global",
@@ -118,6 +129,11 @@
       "heap": "CBV_SRV_UAV:cpu",
       "local_base": 0
     },
+    "environment_dynamic": {
+      "domain": "environment_dynamic",
+      "heap": "CBV_SRV_UAV:cpu",
+      "local_base": 1
+    },
     "srv_global": {
       "domain": "srv_global",
       "heap": "CBV_SRV_UAV:gpu",
@@ -143,6 +159,10 @@
     "SceneConstantsSlot": {
       "domain": "scene",
       "comment": "CBV scene slot (b1)"
+    },
+    "EnvironmentDynamicDataSlot": {
+      "domain": "environment_dynamic",
+      "comment": "CBV environment dynamic slot (b3)"
     },
     "kInvalidBindlessIndex": {
       "value": "invalid_index",
@@ -211,6 +231,16 @@
       "register_space": "space0",
       "num_32bit_values": 2,
       "comment": "Root constants at b2, space0 (2\u00d732-bit).\n- DWORD0: g_DrawIndex (per-draw index into DrawMetadata).\n- DWORD1: g_PassConstantsIndex (per-pass payload; typically a bindless\n  index for pass-level constants).\n"
+    },
+    {
+      "type": "cbv",
+      "name": "EnvironmentDynamicData",
+      "index": 4,
+      "visibility": [
+        "ALL"
+      ],
+      "shader_register": "b3",
+      "register_space": "space0"
     }
   ]
 }

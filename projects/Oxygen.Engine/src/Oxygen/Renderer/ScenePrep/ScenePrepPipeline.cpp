@@ -59,6 +59,9 @@ auto ScenePrepPipeline::Collect(const scene::Scene& scene,
     state.ReserveCapacityForItems(items.size());
 
     for (const auto& node_impl : items) {
+      if (const auto light_manager = state.GetLightManager()) {
+        light_manager->CollectFromNode(node_impl);
+      }
       if (!node_impl.HasComponent<scene::detail::RenderableComponent>()) {
         // Skip node if RenderItemProto construction fails (missing components)
         continue;

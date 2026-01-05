@@ -22,6 +22,7 @@ from .constants import (
     DIRECTORY_ENTRY_SIZE,
     FOOTER_SIZE,
     SHADER_REF_DESC_SIZE,
+    SCENE_ASSET_VERSION_CURRENT,
 )
 from .errors import PakError
 
@@ -44,6 +45,404 @@ __all__ = [
 _COMPONENT_TYPE_RENDERABLE = 0x4853454D  # 'MESH'
 _COMPONENT_TYPE_PERSPECTIVE_CAMERA = 0x4D414350  # 'PCAM'
 _COMPONENT_TYPE_ORTHOGRAPHIC_CAMERA = 0x4D41434F  # 'OCAM'
+_COMPONENT_TYPE_DIRECTIONAL_LIGHT = 0x54494C44  # 'DLIT'
+_COMPONENT_TYPE_POINT_LIGHT = 0x54494C50  # 'PLIT'
+_COMPONENT_TYPE_SPOT_LIGHT = 0x54494C53  # 'SLIT'
+
+_ENV_SYSTEM_SKY_ATMOSPHERE = 0
+_ENV_SYSTEM_VOLUMETRIC_CLOUDS = 1
+_ENV_SYSTEM_FOG = 2
+_ENV_SYSTEM_SKY_LIGHT = 3
+_ENV_SYSTEM_SKY_SPHERE = 4
+_ENV_SYSTEM_POST_PROCESS_VOLUME = 5
+
+
+def _vec3(vals: Any, default: list[float]) -> tuple[float, float, float]:
+    if not isinstance(vals, list) or len(vals) != 3:
+        return float(default[0]), float(default[1]), float(default[2])
+    return float(vals[0]), float(vals[1]), float(vals[2])
+
+
+def _u32_bool(value: Any, default: int = 0) -> int:
+    if value is None:
+        return int(default)
+    return 1 if bool(value) else 0
+
+
+def _u8(value: Any, default: int = 0) -> int:
+    if value is None:
+        return int(default) & 0xFF
+    return int(value) & 0xFF
+
+
+def _f(value: Any, default: float = 0.0) -> float:
+    if value is None:
+        return float(default)
+    return float(value)
+
+
+def _pack_light_shadow_settings_record(shadow: Dict[str, Any] | None) -> bytes:
+    shadow = shadow or {}
+    bias = _f(shadow.get("bias"), 0.0)
+    normal_bias = _f(shadow.get("normal_bias"), 0.0)
+    contact_shadows = _u32_bool(shadow.get("contact_shadows"), 0)
+    resolution_hint = _u8(shadow.get("resolution_hint"), 1)
+    out = (
+        struct.pack("<ffI", bias, normal_bias, int(contact_shadows))
+        + struct.pack("<B", int(resolution_hint))
+        + b"\x00" * 3
+    )
+    if len(out) != 16:
+        raise PakError(
+            "E_SIZE", f"LightShadowSettingsRecord size mismatch: {len(out)}"
+        )
+    return out
+
+
+def _pack_light_common_record(light: Dict[str, Any]) -> bytes:
+    affects_world = _u32_bool(light.get("affects_world"), 1)
+    color = light.get("color_rgb", light.get("color", [1.0, 1.0, 1.0]))
+    cr, cg, cb = _vec3(color, [1.0, 1.0, 1.0])
+    intensity = _f(light.get("intensity"), 1.0)
+    mobility = _u8(light.get("mobility"), 0)
+    casts_shadows = _u8(light.get("casts_shadows"), 0)
+    shadow = _pack_light_shadow_settings_record(light.get("shadow"))
+    exposure_comp = _f(light.get("exposure_compensation_ev"), 0.0)
+
+    out = (
+        struct.pack("<I3ff", int(affects_world), cr, cg, cb, intensity)
+        + struct.pack("<BB", int(mobility), int(casts_shadows))
+        + b"\x00" * 2
+        + shadow
+        + struct.pack("<f", exposure_comp)
+        + b"\x00" * 4
+    )
+    if len(out) != 48:
+        raise PakError("E_SIZE", f"LightCommonRecord size mismatch: {len(out)}")
+    return out
+
+
+def _pack_directional_light_record(
+    light: Dict[str, Any], *, node_count: int
+) -> bytes:
+    node_index = light.get("node_index", 0)
+    if (
+        not isinstance(node_index, int)
+        or node_index < 0
+        or node_index >= node_count
+    ):
+        raise PakError(
+            "E_REF", f"DirectionalLight node_index out of range: {node_index}"
+        )
+
+    common = _pack_light_common_record(light)
+    angular_size = _f(light.get("angular_size_radians"), 0.0)
+    env_contrib = _u32_bool(light.get("environment_contribution"), 0)
+    cascade_count = int(light.get("cascade_count", 4) or 0)
+    if cascade_count < 0 or cascade_count > 4:
+        raise PakError(
+            "E_RANGE",
+            f"DirectionalLight cascade_count out of range: {cascade_count}",
+        )
+    distances = light.get("cascade_distances", [0.0, 0.0, 0.0, 0.0])
+    if not isinstance(distances, list) or len(distances) != 4:
+        distances = [0.0, 0.0, 0.0, 0.0]
+    cascade_distances = [float(d) for d in distances]
+    distribution = _f(light.get("distribution_exponent"), 1.0)
+
+    out = (
+        struct.pack("<I", int(node_index))
+        + common
+        + struct.pack("<f", angular_size)
+        + struct.pack("<I", int(env_contrib))
+        + struct.pack("<I", int(cascade_count))
+        + struct.pack("<4f", *cascade_distances)
+        + struct.pack("<f", distribution)
+        + b"\x00" * 12
+    )
+    if len(out) != 96:
+        raise PakError(
+            "E_SIZE", f"DirectionalLightRecord size mismatch: {len(out)}"
+        )
+    return out
+
+
+def _pack_point_light_record(
+    light: Dict[str, Any], *, node_count: int
+) -> bytes:
+    node_index = light.get("node_index", 0)
+    if (
+        not isinstance(node_index, int)
+        or node_index < 0
+        or node_index >= node_count
+    ):
+        raise PakError(
+            "E_REF", f"PointLight node_index out of range: {node_index}"
+        )
+
+    common = _pack_light_common_record(light)
+    rng = _f(light.get("range"), 10.0)
+    attenuation_model = _u8(light.get("attenuation_model"), 0)
+    decay = _f(light.get("decay_exponent"), 2.0)
+    source_radius = _f(light.get("source_radius"), 0.0)
+
+    out = (
+        struct.pack("<I", int(node_index))
+        + common
+        + struct.pack("<f", rng)
+        + struct.pack("<B", int(attenuation_model))
+        + b"\x00" * 3
+        + struct.pack("<f", decay)
+        + struct.pack("<f", source_radius)
+        + b"\x00" * 12
+    )
+    if len(out) != 80:
+        raise PakError("E_SIZE", f"PointLightRecord size mismatch: {len(out)}")
+    return out
+
+
+def _pack_spot_light_record(light: Dict[str, Any], *, node_count: int) -> bytes:
+    node_index = light.get("node_index", 0)
+    if (
+        not isinstance(node_index, int)
+        or node_index < 0
+        or node_index >= node_count
+    ):
+        raise PakError(
+            "E_REF", f"SpotLight node_index out of range: {node_index}"
+        )
+
+    common = _pack_light_common_record(light)
+    rng = _f(light.get("range"), 10.0)
+    attenuation_model = _u8(light.get("attenuation_model"), 0)
+    decay = _f(light.get("decay_exponent"), 2.0)
+    inner = _f(light.get("inner_cone_angle_radians"), 0.4)
+    outer = _f(light.get("outer_cone_angle_radians"), 0.6)
+    source_radius = _f(light.get("source_radius"), 0.0)
+
+    out = (
+        struct.pack("<I", int(node_index))
+        + common
+        + struct.pack("<f", rng)
+        + struct.pack("<B", int(attenuation_model))
+        + b"\x00" * 3
+        + struct.pack("<f", decay)
+        + struct.pack("<f", inner)
+        + struct.pack("<f", outer)
+        + struct.pack("<f", source_radius)
+        + b"\x00" * 12
+    )
+    if len(out) != 88:
+        raise PakError("E_SIZE", f"SpotLightRecord size mismatch: {len(out)}")
+    return out
+
+
+def _pack_env_record_header(system_type: int, record_size: int) -> bytes:
+    return struct.pack("<II", int(system_type), int(record_size))
+
+
+def _pack_sky_atmosphere_environment_record(spec: Dict[str, Any]) -> bytes:
+    planet_radius_m = _f(spec.get("planet_radius_m"), 6360000.0)
+    atmosphere_height_m = _f(spec.get("atmosphere_height_m"), 80000.0)
+    ga = spec.get("ground_albedo_rgb", [0.1, 0.1, 0.1])
+    ground_albedo = _vec3(ga, [0.1, 0.1, 0.1])
+    rs = spec.get("rayleigh_scattering_rgb", [5.8e-6, 13.5e-6, 33.1e-6])
+    rayleigh = _vec3(rs, [5.8e-6, 13.5e-6, 33.1e-6])
+    rayleigh_scale = _f(spec.get("rayleigh_scale_height_m"), 8000.0)
+    ms = spec.get("mie_scattering_rgb", [21.0e-6, 21.0e-6, 21.0e-6])
+    mie = _vec3(ms, [21.0e-6, 21.0e-6, 21.0e-6])
+    mie_scale = _f(spec.get("mie_scale_height_m"), 1200.0)
+    mie_g = _f(spec.get("mie_g"), 0.8)
+    ab = spec.get("absorption_rgb", [0.0, 0.0, 0.0])
+    absorption = _vec3(ab, [0.0, 0.0, 0.0])
+    absorption_scale = _f(spec.get("absorption_scale_height_m"), 25000.0)
+    multi_scattering = _f(spec.get("multi_scattering_factor"), 1.0)
+    sun_disk_enabled = _u32_bool(spec.get("sun_disk_enabled"), 1)
+    sun_disk_radius = _f(spec.get("sun_disk_angular_radius_radians"), 0.004675)
+    aerial_scale = _f(spec.get("aerial_perspective_distance_scale"), 1.0)
+
+    record_size = 96
+    out = (
+        _pack_env_record_header(_ENV_SYSTEM_SKY_ATMOSPHERE, record_size)
+        + struct.pack("<ff", planet_radius_m, atmosphere_height_m)
+        + struct.pack("<3f", *ground_albedo)
+        + struct.pack("<3f", *rayleigh)
+        + struct.pack("<f", rayleigh_scale)
+        + struct.pack("<3f", *mie)
+        + struct.pack("<f", mie_scale)
+        + struct.pack("<f", mie_g)
+        + struct.pack("<3f", *absorption)
+        + struct.pack("<f", absorption_scale)
+        + struct.pack("<f", multi_scattering)
+        + struct.pack("<I", int(sun_disk_enabled))
+        + struct.pack("<f", sun_disk_radius)
+        + struct.pack("<f", aerial_scale)
+    )
+    if len(out) != record_size:
+        raise PakError(
+            "E_SIZE",
+            f"SkyAtmosphereEnvironmentRecord size mismatch: {len(out)}",
+        )
+    return out
+
+
+def _pack_volumetric_clouds_environment_record(spec: Dict[str, Any]) -> bytes:
+    base_altitude = _f(spec.get("base_altitude_m"), 1500.0)
+    thickness = _f(spec.get("layer_thickness_m"), 4000.0)
+    coverage = _f(spec.get("coverage"), 0.5)
+    density = _f(spec.get("density"), 0.5)
+    albedo = _vec3(spec.get("albedo_rgb", [0.9, 0.9, 0.9]), [0.9, 0.9, 0.9])
+    extinction = _f(spec.get("extinction_scale"), 1.0)
+    phase_g = _f(spec.get("phase_g"), 0.6)
+    wind_dir = _vec3(spec.get("wind_dir_ws", [1.0, 0.0, 0.0]), [1.0, 0.0, 0.0])
+    wind_speed = _f(spec.get("wind_speed_mps"), 10.0)
+    shadow_strength = _f(spec.get("shadow_strength"), 0.8)
+
+    record_size = 64
+    out = (
+        _pack_env_record_header(_ENV_SYSTEM_VOLUMETRIC_CLOUDS, record_size)
+        + struct.pack("<ff", base_altitude, thickness)
+        + struct.pack("<ff", coverage, density)
+        + struct.pack("<3f", *albedo)
+        + struct.pack("<f", extinction)
+        + struct.pack("<f", phase_g)
+        + struct.pack("<3f", *wind_dir)
+        + struct.pack("<f", wind_speed)
+        + struct.pack("<f", shadow_strength)
+    )
+    if len(out) != record_size:
+        raise PakError(
+            "E_SIZE",
+            f"VolumetricCloudsEnvironmentRecord size mismatch: {len(out)}",
+        )
+    return out
+
+
+def _pack_sky_light_environment_record(spec: Dict[str, Any]) -> bytes:
+    source = int(spec.get("source", 0) or 0)
+    cubemap = _asset_key_bytes(spec.get("cubemap_asset"))
+    intensity = _f(spec.get("intensity"), 1.0)
+    tint = _vec3(spec.get("tint_rgb", [1.0, 1.0, 1.0]), [1.0, 1.0, 1.0])
+    diffuse = _f(spec.get("diffuse_intensity"), 1.0)
+    specular = _f(spec.get("specular_intensity"), 1.0)
+
+    record_size = 64
+    out = (
+        _pack_env_record_header(_ENV_SYSTEM_SKY_LIGHT, record_size)
+        + struct.pack("<I", source)
+        + b"\x00" * 12
+        + cubemap
+        + struct.pack("<f", intensity)
+        + struct.pack("<3f", *tint)
+        + struct.pack("<f", diffuse)
+        + struct.pack("<f", specular)
+    )
+    if len(out) != record_size:
+        raise PakError(
+            "E_SIZE", f"SkyLightEnvironmentRecord size mismatch: {len(out)}"
+        )
+    return out
+
+
+def _pack_sky_sphere_environment_record(spec: Dict[str, Any]) -> bytes:
+    source = int(spec.get("source", 0) or 0)
+    cubemap = _asset_key_bytes(spec.get("cubemap_asset"))
+    solid_color = _vec3(
+        spec.get("solid_color_rgb", [0.0, 0.0, 0.0]), [0.0, 0.0, 0.0]
+    )
+    intensity = _f(spec.get("intensity"), 1.0)
+    rotation = _f(spec.get("rotation_radians"), 0.0)
+    tint = _vec3(spec.get("tint_rgb", [1.0, 1.0, 1.0]), [1.0, 1.0, 1.0])
+
+    record_size = 72
+    out = (
+        _pack_env_record_header(_ENV_SYSTEM_SKY_SPHERE, record_size)
+        + struct.pack("<I", source)
+        + b"\x00" * 12
+        + cubemap
+        + struct.pack("<3f", *solid_color)
+        + struct.pack("<f", intensity)
+        + struct.pack("<f", rotation)
+        + struct.pack("<3f", *tint)
+    )
+    if len(out) != record_size:
+        raise PakError(
+            "E_SIZE", f"SkySphereEnvironmentRecord size mismatch: {len(out)}"
+        )
+    return out
+
+
+def _pack_post_process_volume_environment_record(spec: Dict[str, Any]) -> bytes:
+    tone_mapper = int(spec.get("tone_mapper", 0) or 0)
+    exposure_mode = int(spec.get("exposure_mode", 1) or 0)
+    exposure_comp = _f(spec.get("exposure_compensation_ev"), 0.0)
+    ae_min = _f(spec.get("auto_exposure_min_ev"), -6.0)
+    ae_max = _f(spec.get("auto_exposure_max_ev"), 16.0)
+    ae_up = _f(spec.get("auto_exposure_speed_up"), 3.0)
+    ae_down = _f(spec.get("auto_exposure_speed_down"), 1.0)
+    bloom_intensity = _f(spec.get("bloom_intensity"), 0.0)
+    bloom_threshold = _f(spec.get("bloom_threshold"), 1.0)
+    saturation = _f(spec.get("saturation"), 1.0)
+    contrast = _f(spec.get("contrast"), 1.0)
+    vignette = _f(spec.get("vignette_intensity"), 0.0)
+
+    record_size = 56
+    out = (
+        _pack_env_record_header(_ENV_SYSTEM_POST_PROCESS_VOLUME, record_size)
+        + struct.pack("<II", tone_mapper, exposure_mode)
+        + struct.pack("<f", exposure_comp)
+        + struct.pack("<ffff", ae_min, ae_max, ae_up, ae_down)
+        + struct.pack("<ff", bloom_intensity, bloom_threshold)
+        + struct.pack("<fff", saturation, contrast, vignette)
+    )
+    if len(out) != record_size:
+        raise PakError(
+            "E_SIZE",
+            f"PostProcessVolumeEnvironmentRecord size mismatch: {len(out)}",
+        )
+    return out
+
+
+def _pack_scene_environment_block(scene: Dict[str, Any]) -> bytes:
+    env = scene.get("environment")
+    if env is None:
+        env = {}
+    if not isinstance(env, dict):
+        raise PakError("E_TYPE", "scene.environment must be an object")
+
+    records: list[bytes] = []
+    sky_atmosphere = env.get("sky_atmosphere")
+    if isinstance(sky_atmosphere, dict):
+        records.append(_pack_sky_atmosphere_environment_record(sky_atmosphere))
+    volumetric_clouds = env.get("volumetric_clouds")
+    if isinstance(volumetric_clouds, dict):
+        records.append(
+            _pack_volumetric_clouds_environment_record(volumetric_clouds)
+        )
+    sky_light = env.get("sky_light")
+    if isinstance(sky_light, dict):
+        records.append(_pack_sky_light_environment_record(sky_light))
+    sky_sphere = env.get("sky_sphere")
+    if isinstance(sky_sphere, dict):
+        records.append(_pack_sky_sphere_environment_record(sky_sphere))
+    post_process = env.get("post_process_volume")
+    if isinstance(post_process, dict):
+        records.append(
+            _pack_post_process_volume_environment_record(post_process)
+        )
+
+    records.sort(key=lambda b: struct.unpack_from("<I", b, 0)[0])
+    systems_count = len(records)
+    byte_size = 16 + sum(len(r) for r in records)
+    header = struct.pack(
+        "<II8s", int(byte_size), int(systems_count), b"\x00" * 8
+    )
+    if len(header) != 16:
+        raise PakError(
+            "E_SIZE",
+            f"SceneEnvironmentBlockHeader size mismatch: {len(header)}",
+        )
+    return header + b"".join(records)
 
 
 def _asset_key_bytes(value: Any) -> bytes:
@@ -234,10 +633,15 @@ def pack_scene_asset_descriptor_and_payload(
     - SceneComponentTableDesc[] directory (optional)
     - component table record data (optional)
 
-    Currently supported component tables:
+    Supported component tables:
     - RenderableRecord table (component_type 'MESH')
     - PerspectiveCameraRecord table (component_type 'PCAM')
     - OrthographicCameraRecord table (component_type 'OCAM')
+    - DirectionalLightRecord table (component_type 'DLIT')
+    - PointLightRecord table (component_type 'PLIT')
+    - SpotLightRecord table (component_type 'SLIT')
+
+    The payload always includes a trailing SceneEnvironment block (empty allowed).
     """
     nodes = scene.get("nodes", []) or []
     if not isinstance(nodes, list):
@@ -288,6 +692,34 @@ def pack_scene_asset_descriptor_and_payload(
         for c in ortho_cameras
     )
 
+    directional_lights = scene.get("directional_lights", []) or []
+    if not isinstance(directional_lights, list):
+        raise PakError("E_TYPE", "scene.directional_lights must be a list")
+    directional_lights = [l for l in directional_lights if isinstance(l, dict)]
+    directional_lights.sort(key=lambda l: int(l.get("node_index", 0) or 0))
+    directional_light_records = b"".join(
+        _pack_directional_light_record(l, node_count=node_count)
+        for l in directional_lights
+    )
+
+    point_lights = scene.get("point_lights", []) or []
+    if not isinstance(point_lights, list):
+        raise PakError("E_TYPE", "scene.point_lights must be a list")
+    point_lights = [l for l in point_lights if isinstance(l, dict)]
+    point_lights.sort(key=lambda l: int(l.get("node_index", 0) or 0))
+    point_light_records = b"".join(
+        _pack_point_light_record(l, node_count=node_count) for l in point_lights
+    )
+
+    spot_lights = scene.get("spot_lights", []) or []
+    if not isinstance(spot_lights, list):
+        raise PakError("E_TYPE", "scene.spot_lights must be a list")
+    spot_lights = [l for l in spot_lights if isinstance(l, dict)]
+    spot_lights.sort(key=lambda l: int(l.get("node_index", 0) or 0))
+    spot_light_records = b"".join(
+        _pack_spot_light_record(l, node_count=node_count) for l in spot_lights
+    )
+
     # Offsets (relative to descriptor start)
     nodes_offset = SCENE_DESC_SIZE
     nodes_bytes = len(node_records)
@@ -322,6 +754,33 @@ def pack_scene_asset_descriptor_and_payload(
                 ortho_camera_records,
             )
         )
+    if directional_light_records:
+        component_tables.append(
+            (
+                _COMPONENT_TYPE_DIRECTIONAL_LIGHT,
+                len(directional_lights),
+                96,
+                directional_light_records,
+            )
+        )
+    if point_light_records:
+        component_tables.append(
+            (
+                _COMPONENT_TYPE_POINT_LIGHT,
+                len(point_lights),
+                80,
+                point_light_records,
+            )
+        )
+    if spot_light_records:
+        component_tables.append(
+            (
+                _COMPONENT_TYPE_SPOT_LIGHT,
+                len(spot_lights),
+                88,
+                spot_light_records,
+            )
+        )
 
     component_tables.sort(key=lambda t: t[0])
 
@@ -351,6 +810,8 @@ def pack_scene_asset_descriptor_and_payload(
 
     # SceneAssetDesc
     scene.setdefault("type", "scene")
+    # Scene descriptor version. Mirrors pak::v3::kSceneAssetVersion.
+    scene.setdefault("version", SCENE_ASSET_VERSION_CURRENT)
     header = header_builder(scene)
     nodes_table = struct.pack("<QII", nodes_offset, node_count, 68)
     scene_strings = struct.pack("<II", strings_offset, strings_size)
@@ -377,6 +838,8 @@ def pack_scene_asset_descriptor_and_payload(
         + b"".join(component_entries)
         + b"".join(component_data)
     )
+
+    payload += _pack_scene_environment_block(scene)
     return desc, payload
 
 

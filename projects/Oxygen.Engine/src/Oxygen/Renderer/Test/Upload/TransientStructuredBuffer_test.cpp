@@ -6,6 +6,9 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <cstddef>
+#include <cstdint>
+
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Renderer/Test/Upload/RingBufferStagingFixture.h>
 #include <Oxygen/Renderer/Upload/Errors.h>
@@ -81,6 +84,45 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
   EXPECT_EQ(alloc2.sequence, frame::SequenceNumber { 1 });
   EXPECT_EQ(alloc1.slot, frame::Slot { 0 });
   EXPECT_EQ(alloc2.slot, frame::Slot { 0 });
+}
+
+//! Ensures mapped pointers are stride-aligned even when the staging provider
+//! only guarantees a smaller power-of-two alignment.
+NOLINT_TEST_F(TransientStructuredBufferTest,
+  StrideAlignmentAdjustsMappedPointerWhenOffsetsMisaligned)
+{
+  // Arrange: small alignment to reproduce cross-stride misalignment.
+  auto provider = MakeRingBuffer(SlotCount { 1 }, 16u);
+  SetStagingProvider(provider);
+  ASSERT_NE(provider, nullptr);
+
+  // Two transient buffers share the same ring but use different strides.
+  TransientStructuredBuffer a(GfxPtr(), Staging(), 16);
+  TransientStructuredBuffer b(GfxPtr(), Staging(), 48);
+
+  const auto seq = frame::SequenceNumber { 1 };
+  const auto slot = frame::Slot { 0 };
+  a.OnFrameStart(seq, slot);
+  b.OnFrameStart(seq, slot);
+
+  // Act
+  auto a_alloc = a.Allocate(1);
+  ASSERT_TRUE(a_alloc.has_value());
+  auto b_alloc = b.Allocate(1);
+  ASSERT_TRUE(b_alloc.has_value());
+
+  // Assert
+  auto* a_ptr = static_cast<std::byte*>(a_alloc->mapped_ptr);
+  auto* b_ptr = static_cast<std::byte*>(b_alloc->mapped_ptr);
+  ASSERT_NE(a_ptr, nullptr);
+  ASSERT_NE(b_ptr, nullptr);
+
+  // First allocation consumes 32 bytes in the ring due to over-allocation and
+  // 16-byte ring alignment. The second allocation would start at byte offset
+  // 32, which is not aligned to 48. The transient buffer must shift the mapped
+  // pointer forward to the next 48-byte boundary.
+  const auto delta = static_cast<std::uint64_t>(b_ptr - a_ptr);
+  EXPECT_EQ(delta, 48u);
 }
 
 NOLINT_TEST_F(TransientStructuredBufferTest, AllocateZeroIsNoOpSuccess)

@@ -848,6 +848,16 @@ def compute_pak_plan(
     RENDERABLE_RECORD_SIZE = 36
     PERSPECTIVE_CAMERA_RECORD_SIZE = 32
     ORTHOGRAPHIC_CAMERA_RECORD_SIZE = 40
+    DIRECTIONAL_LIGHT_RECORD_SIZE = 96
+    POINT_LIGHT_RECORD_SIZE = 80
+    SPOT_LIGHT_RECORD_SIZE = 88
+
+    ENV_BLOCK_HEADER_SIZE = 16
+    ENV_SKY_ATMOSPHERE_RECORD_SIZE = 96
+    ENV_VOLUMETRIC_CLOUDS_RECORD_SIZE = 64
+    ENV_SKY_LIGHT_RECORD_SIZE = 64
+    ENV_SKY_SPHERE_RECORD_SIZE = 72
+    ENV_POST_PROCESS_VOLUME_RECORD_SIZE = 56
 
     def _scene_string_table_size(nodes_list: List[Dict[str, Any]]) -> int:
         offsets: dict[str, int] = {"": 0}
@@ -896,6 +906,32 @@ def compute_pak_plan(
             1 for c in ortho_cameras_list if isinstance(c, dict)
         )
 
+        directional_lights_list = scene_spec.get("directional_lights", []) or []
+        directional_lights_list = (
+            directional_lights_list
+            if isinstance(directional_lights_list, list)
+            else []
+        )
+        directional_light_count = sum(
+            1 for l in directional_lights_list if isinstance(l, dict)
+        )
+
+        point_lights_list = scene_spec.get("point_lights", []) or []
+        point_lights_list = (
+            point_lights_list if isinstance(point_lights_list, list) else []
+        )
+        point_light_count = sum(
+            1 for l in point_lights_list if isinstance(l, dict)
+        )
+
+        spot_lights_list = scene_spec.get("spot_lights", []) or []
+        spot_lights_list = (
+            spot_lights_list if isinstance(spot_lights_list, list) else []
+        )
+        spot_light_count = sum(
+            1 for l in spot_lights_list if isinstance(l, dict)
+        )
+
         component_table_count = 0
         if renderable_count > 0:
             component_table_count += 1
@@ -903,18 +939,45 @@ def compute_pak_plan(
             component_table_count += 1
         if ortho_camera_count > 0:
             component_table_count += 1
+        if directional_light_count > 0:
+            component_table_count += 1
+        if point_light_count > 0:
+            component_table_count += 1
+        if spot_light_count > 0:
+            component_table_count += 1
         component_dir_bytes = component_table_count * COMPONENT_TABLE_DESC_SIZE
         component_data_bytes = (
             renderable_count * RENDERABLE_RECORD_SIZE
             + camera_count * PERSPECTIVE_CAMERA_RECORD_SIZE
             + ortho_camera_count * ORTHOGRAPHIC_CAMERA_RECORD_SIZE
+            + directional_light_count * DIRECTIONAL_LIGHT_RECORD_SIZE
+            + point_light_count * POINT_LIGHT_RECORD_SIZE
+            + spot_light_count * SPOT_LIGHT_RECORD_SIZE
         )
+
+        env_size = ENV_BLOCK_HEADER_SIZE
+        env_spec = scene_spec.get("environment")
+        if env_spec is not None:
+            if not isinstance(env_spec, dict):
+                raise ValueError("scene.environment must be an object")
+
+            if isinstance(env_spec.get("sky_atmosphere"), dict):
+                env_size += ENV_SKY_ATMOSPHERE_RECORD_SIZE
+            if isinstance(env_spec.get("volumetric_clouds"), dict):
+                env_size += ENV_VOLUMETRIC_CLOUDS_RECORD_SIZE
+            if isinstance(env_spec.get("sky_light"), dict):
+                env_size += ENV_SKY_LIGHT_RECORD_SIZE
+            if isinstance(env_spec.get("sky_sphere"), dict):
+                env_size += ENV_SKY_SPHERE_RECORD_SIZE
+            if isinstance(env_spec.get("post_process_volume"), dict):
+                env_size += ENV_POST_PROCESS_VOLUME_RECORD_SIZE
 
         variable_size = (
             node_count * NODE_RECORD_SIZE
             + strings_size
             + component_dir_bytes
             + component_data_bytes
+            + env_size
         )
 
         sname = ""
