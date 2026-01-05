@@ -112,8 +112,8 @@ This section defines the “names and meanings” expected by both Scene and Ren
 - `enum class ShadowResolutionHint { Low, Medium, High, Ultra };`
   A hint to the renderer; the renderer may clamp to platform budgets.
 
-- `enum class EnvironmentSource { SkyboxCubemap, ProceduralSky };`
-  Used by the scene-global environment system.
+- `enum class EnvironmentComponentType { SkyAtmosphere, VolumetricClouds, Fog, SkyLight, SkySphere, PostProcessVolume };`
+  Used by the SceneEnvironment persistence layer to tag environment-system records.
 
 - `enum class AttenuationModel { InverseSquare, Linear, CustomExponent };`
   - `InverseSquare` is the physically-based default.
@@ -453,38 +453,48 @@ not be modeled as node-attached lights because they:
 
 #### Representation in the Scene system
 
-The environment is represented as a component attached to the `Scene` (not to
-`SceneNodeImpl`). This matches Oxygen’s Composition philosophy: the `Scene`
-already owns global state (name/metadata), and the environment is global state.
+The environment is represented by a dedicated **SceneEnvironment** object that
+is:
 
-Proposed component: `SceneEnvironment` (name not final; concept is).
+- **Not a node** (it does not exist in the scene graph).
+- **Not a component of `Scene`**.
+- A **Composition** in its own right, containing a variable set of
+  components that implement environment systems.
 
-Must-have fields:
+The `Scene` **owns** the SceneEnvironment when one is present:
 
-- `bool affects_world`
-  Authoring toggle for whether the environment contributes to rendering.
+- A `Scene` may or may not have a SceneEnvironment at runtime.
+- If present, the SceneEnvironment’s lifetime does not extend beyond the Scene.
+- Ownership is transferred into the Scene (API takes `std::unique_ptr`).
 
-- `EnvironmentSource source`
-  `SkyboxCubemap` | `ProceduralSky` (initial implementation may support only
-  `SkyboxCubemap`).
+#### Environment systems (domain) and components (implementation)
 
-- `Skybox cubemap` (HDR)
-  A reference to an HDR cubemap asset (or a source asset that can be converted
-  to a cubemap at import time).
+From a renderer point of view, SceneEnvironment is a collection of
+environment systems. In the Scene implementation, each environment system is
+represented by a component attached to the SceneEnvironment Composition.
 
-- `float intensity`
-  Scalar multiplier for environment radiance in HDR linear space.
+Initial set (can evolve):
 
-- `float rotation_yaw`
-  Yaw rotation around world +Z (Z-up) to align the environment with the world.
-  (Roll/pitch are intentionally omitted for simplicity; can be added later if
-  required.)
+- Sky Atmosphere
+- Volumetric Clouds
+- Fog (Exponential Height or Volumetric)
+- Sky Light (IBL)
+- Sky Sphere
+- Post Process Volume
 
-Optional (authoring/debug convenience):
+Each environment system’s component is responsible for its authored parameters
+and runtime behavior.
 
-- `float exposure_compensation_ev` (default 0)
-  Same semantics as per-light EV trim: effective multiplier is
-  $2^{exposure\_compensation\_ev}$.
+#### Scene API shape (ownership + non-owning access)
+
+The Scene owns the environment (when present), but callers only get a
+non-owning view:
+
+- `Scene::HasEnvironment() -> bool`
+- `Scene::GetEnvironment() -> observer_ptr<SceneEnvironment>` (returns `nullptr` when absent)
+- `Scene::GetEnvironment() const -> observer_ptr<const SceneEnvironment>` (returns `nullptr` when absent)
+- `Scene::SetEnvironment(std::unique_ptr<SceneEnvironment>) -> void` (transfers ownership into the Scene)
+- `Scene::ClearEnvironment() -> void`
 
 #### Exposure and tonemapping
 
@@ -498,20 +508,24 @@ Optional (authoring/debug convenience):
 
 The skybox is a **background pass** rendered from the active camera:
 
-- Sample the environment cubemap using the camera’s view direction.
-- Apply environment rotation (yaw about +Z) before sampling.
-- Apply environment intensity (and optional EV trim).
+- Resolve a background source from the SceneEnvironment environment systems (if present):
+  - prefer **Sky Atmosphere** when present (procedural sky),
+  - otherwise use **Sky Sphere** when present (textured/cubemap sky),
+  - otherwise render no sky background.
+- Evaluate the chosen background using the camera’s view direction.
+- Apply any system-specific authored transforms/intensity (as defined by that system’s component).
 - Skybox rendering is gated by:
-  - environment `affects_world`, and
-  - the scene having a valid environment source.
+  - a SceneEnvironment being present on the Scene, and
+  - at least one sky/background system being present and enabled.
 
 The skybox should be considered purely visual background; it does not cast
 shadows. (Shadowing of sky/atmosphere is a separate feature.)
 
 #### How environment lighting (IBL) is evaluated
 
-The renderer extracts the environment once per scene update and builds (or
-reuses cached) GPU resources for image-based lighting:
+The renderer extracts the SceneEnvironment once per scene update and builds
+(or reuses cached) GPU resources for image-based lighting when a **Sky Light**
+system is present and enabled:
 
 - **Diffuse irradiance** (low-frequency convolution)
 - **Specular prefilter** (mip chain / roughness preintegration)
@@ -671,8 +685,8 @@ passes. Exact technique is flexible; the required *data flow* is what matters.
     - deferred lighting after G-buffer.
 
 - **Environment / IBL pass contribution**
-  - If `SceneEnvironment.affects_world` is true:
-    - skybox background pass uses the environment source (Section 7.2), and
+  - If a SceneEnvironment is present and its relevant systems are enabled:
+    - skybox background pass uses the sky system(s) (Section 7.2), and
     - shading uses irradiance/prefiltered environment + BRDF LUT.
 
 #### Forward+ pipeline integration (Oxygen)
@@ -772,10 +786,17 @@ infrastructure and explicitly reusing existing Oxygen patterns:
 
 ### 9.2 Scene-global environment (optional but specified)
 
-- [ ] Implement `SceneEnvironment` as a `Scene`-attached component (not node-attached) consistent with Scene being a `Composition`.
-  - Minimal first pass: data-only component + attach/get convenience API.
-  - Defer GPU resource build/caching to the renderer.
-- [ ] Add unit tests for attach/replace/get on `Scene` (mirroring patterns used elsewhere for Composition-backed objects).
+This section has been revised: SceneEnvironment is **not** a `Scene` component.
+
+- [ ] Implement `SceneEnvironment` as a standalone `Composition` with components that implement a variable set of environment systems.
+  - Environment systems include: Sky Atmosphere, Volumetric Clouds, Fog, Sky Light, Sky Sphere, Post Process Volume.
+  - Each environment system is represented by a component with its own authored parameters.
+- [ ] Add `Scene` APIs with optional semantics:
+  - `HasEnvironment() -> bool`
+  - `GetEnvironment() -> observer_ptr<SceneEnvironment>` (returns `nullptr` when absent)
+  - `SetEnvironment(std::unique_ptr<SceneEnvironment>) -> void` (transfers ownership)
+  - `ClearEnvironment() -> void`
+- [ ] Add unit tests for Scene ↔ SceneEnvironment association semantics.
 
 ### 9.3 Persistence: PAK / loose-cooked scene component tables (no new format)
 
@@ -788,13 +809,34 @@ Oxygen already supports per-node component tables in cooked scenes:
 Tasks:
 
 - [ ] Extend `oxygen::data::ComponentType` (FourCC) in `src/Oxygen/Data/ComponentType.h` with light kinds (e.g. `DLIT`, `PLIT`, `SLIT`).
+- [ ] Persist SceneEnvironment as a **separate environment block** that follows the Scene payload in the PAK.
+  - The environment block is stored immediately after the Scene descriptor payload (similar in spirit to “descriptor followed by attached payload” patterns used by other assets).
+  - The environment block is always present after a Scene payload. A scene with “no environment” uses an empty header (`systems_count == 0`).
+  - This layout must be documented in `src/Oxygen/Data/PakFormat.h` alongside the Scene asset format.
+- [ ] Define a packed `SceneEnvironmentBlockHeader` in `src/Oxygen/Data/PakFormat.h`.
+  - Must include at minimum: `systems_count`.
+  - May include environment-global settings not tied to a specific system.
+  - Must include enough information to parse/skip the block safely (e.g., total block byte size) while remaining forward-compatible.
+- [ ] Define packed environment system record formats in `src/Oxygen/Data/PakFormat.h`.
+  - Each record begins with a small record header that includes the environment system type (`EnvironmentComponentType`) and record byte size.
+  - Following the record header, store that environment system’s serialized properties.
+  - Unknown environment system types must be skippable using the record byte size.
 - [ ] Add packed PAK record structs in `src/Oxygen/Data/PakFormat.h` for each light kind.
   - Must include `node_index` and fields needed to reconstruct component state.
   - Keep struct sizes explicit (static_assert) and stable.
-- [ ] Extend `oxygen::data::SceneAsset` type mapping (`ComponentTraits<>`) in `src/Oxygen/Data/SceneAsset.h` for the new record types.
+- [ ] Extend `oxygen::data::SceneAsset` in `src/Oxygen/Data/SceneAsset.h` with optional access to the associated environment block.
+  - Access must be separate from node component tables.
+  - The accessor must expose the environment block header and a safe view over its environment-system records.
 - [ ] Extend `SceneLoader` table validation in `src/Oxygen/Content/Loaders/SceneLoader.h` to recognize light tables (entry_size, node_index range, invariants).
+- [ ] Extend loader validation to recognize and validate the trailing environment block.
+  - Enforce that the environment block header is always present after the Scene payload.
+  - Validate `systems_count` against available bytes.
+  - Validate each record header (type enum range if known, record byte size non-zero, bounds).
+  - Validate system-specific invariants for known types.
 - [ ] Add a content/loader test proving “scene assets can carry lights” end-to-end (parse/validate) without requiring editor tooling.
   - Pattern reference: camera table emission checks in `src/Oxygen/Content/Test/FbxImporter_scene_test.cpp`.
+- [ ] Add a content/loader test proving “scene assets can carry SceneEnvironment” end-to-end (parse/validate).
+  - Include: empty environment block (0 components), and a populated block with multiple system records.
 
 ### 9.4 Renderer integration: extraction and publication (Stage 5A)
 

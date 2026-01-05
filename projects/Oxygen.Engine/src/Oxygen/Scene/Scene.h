@@ -7,6 +7,7 @@
 #pragma once
 
 #include <bitset>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -14,6 +15,7 @@
 #include <type_traits>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scene/api_export.h>
@@ -25,6 +27,7 @@ template <typename T> class ResourceTable;
 namespace oxygen::scene {
 
 class SceneQuery;
+class SceneEnvironment;
 template <typename SceneT> class SceneTraversal;
 
 //! Root of the Oxygen scene graph.
@@ -103,6 +106,39 @@ public:
 
   //! Gets the unique ID of this scene (0-255).
   OXGN_SCN_NDAPI auto GetId() const noexcept { return scene_id_; }
+
+  //=== Scene-Global Environment (Optional) ===------------------------------//
+
+  //! Returns true if the scene has an environment attached.
+  OXGN_SCN_NDAPI auto HasEnvironment() const noexcept -> bool
+  {
+    return environment_ != nullptr;
+  }
+
+  //! Gets the scene environment (non-owning), or nullptr when absent.
+  OXGN_SCN_NDAPI auto GetEnvironment() noexcept
+    -> observer_ptr<SceneEnvironment>
+  {
+    return observer_ptr<SceneEnvironment>(environment_.get());
+  }
+
+  //! Gets the scene environment (non-owning), or nullptr when absent.
+  OXGN_SCN_NDAPI auto GetEnvironment() const noexcept
+    -> observer_ptr<const SceneEnvironment>
+  {
+    return observer_ptr<const SceneEnvironment>(environment_.get());
+  }
+
+  //! Sets (replaces) the scene environment, taking ownership.
+  /*!
+   @param environment The new environment. Passing nullptr clears the current
+     environment.
+  */
+  OXGN_SCN_API auto SetEnvironment(
+    std::unique_ptr<SceneEnvironment> environment) noexcept -> void;
+
+  //! Removes the current scene environment (if any).
+  OXGN_SCN_API auto ClearEnvironment() noexcept -> void;
 
   //=== Node Factories - Creation ===-----------------------------------------//
 
@@ -549,6 +585,8 @@ private:
   std::shared_ptr<NodeTable> nodes_;
   //!< Set of root nodes for robust, duplicate-free management.
   std::vector<NodeHandle> root_nodes_;
+
+  std::unique_ptr<SceneEnvironment> environment_;
 
   //! Unique ID for this scene (0-255)
   SceneId scene_id_;

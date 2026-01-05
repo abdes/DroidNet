@@ -16,6 +16,7 @@
 #include <Oxygen/Base/ResourceTable.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Scene/Detail/Scene_safecall_impl.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/SceneQuery.h>
 #include <Oxygen/Scene/SceneTraversal.h>
 
@@ -198,7 +199,16 @@ void Scene::Clear() noexcept
 {
   nodes_->Clear();
   root_nodes_.clear();
+  environment_.reset();
 }
+
+auto Scene::SetEnvironment(
+  std::unique_ptr<SceneEnvironment> environment) noexcept -> void
+{
+  environment_ = std::move(environment);
+}
+
+auto Scene::ClearEnvironment() noexcept -> void { environment_.reset(); }
 
 auto Scene::GetParent(SceneNode& node) const noexcept
   -> std::optional<SceneNode>
