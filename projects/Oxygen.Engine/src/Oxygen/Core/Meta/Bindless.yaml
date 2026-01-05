@@ -34,6 +34,16 @@ domains:
     capacity: 1
     comment: "Scene constants CBV"
 
+  - id: environment_dynamic
+    name: "EnvironmentDynamic"
+    kind: CBV
+    register: b3
+    heap_index: 0
+    root_table: EnvironmentDynamicData
+    domain_base: 0
+    capacity: 1
+    comment: "Environment dynamic data CBV, updated by the engine per-frame"
+
   - id: srv_global
     name: "GlobalSRV"
     kind: SRV
@@ -79,6 +89,9 @@ symbols:
   SceneConstantsSlot:
     domain: scene
     comment: "CBV scene slot (b1)"
+  EnvironmentDynamicDataSlot:
+    domain: environment_dynamic
+    comment: "CBV environment dynamic slot (b3)"
   kInvalidBindlessIndex:
     value: invalid_index
     comment: "invalid sentinel (0xFFFFFFFF)"
@@ -153,6 +166,10 @@ mappings:
     heap: "CBV_SRV_UAV:cpu"
     local_base: 0
 
+  - domain: environment_dynamic
+    heap: "CBV_SRV_UAV:cpu"
+    local_base: 1
+
   - domain: srv_global
     heap: "CBV_SRV_UAV:gpu"
     local_base: 1
@@ -213,3 +230,10 @@ root_signature:
       - DWORD0: g_DrawIndex (per-draw index into DrawMetadata).
       - DWORD1: g_PassConstantsIndex (per-pass payload; typically a bindless
         index for pass-level constants).
+
+  - type: cbv
+    name: "EnvironmentDynamicData"
+    index: 4
+    visibility: ALL
+    shader_register: b3
+    register_space: space0

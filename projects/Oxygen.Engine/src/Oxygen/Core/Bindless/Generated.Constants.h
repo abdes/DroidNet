@@ -9,7 +9,7 @@
 // Source-Version: 1.1.0
 // Schema-Version: 1.0.1
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-01-04 14:03:03
+// Generated: 2026-01-05 18:09:06
 
 #pragma once
 
@@ -25,6 +25,11 @@ namespace engine::binding {
 
   static constexpr uint32_t kSceneDomainBase = 0U;
   static constexpr uint32_t kSceneCapacity = 1U;
+
+  // Environment dynamic data CBV, updated by the engine per-frame
+
+  static constexpr uint32_t kEnvironmentDynamicDomainBase = 0U;
+  static constexpr uint32_t kEnvironmentDynamicCapacity = 1U;
 
   // Unified global bindless table
 
