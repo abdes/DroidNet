@@ -41,6 +41,7 @@ patterns, and best practices.
 ### Transform Order
 
 Transforms are applied in the standard order:
+
 1. **Scale** - Applied first
 2. **Rotation** - Applied second (Euler angles: X, Y, Z order)
 3. **Translation** - Applied last
@@ -50,7 +51,7 @@ Transforms are applied in the standard order:
 ### Root Object
 
 | Property | Type | Required | Description |
-|----------|------|----------|-------------|
+| -------- | ---- | -------- | ----------- |
 | `nodes` | array | ✓ | Array of root scene nodes |
 | `metadata` | object | ✗ | Optional template metadata |
 | `version` | string | ✗ | Schema version for compatibility |
@@ -58,7 +59,7 @@ Transforms are applied in the standard order:
 ### SceneNode Object
 
 | Property | Type | Required | Description |
-|----------|------|----------|-------------|
+| -------- | ---- | -------- | ----------- |
 | `name` | string | ✗ | Explicit node name (auto-generated if omitted) |
 | `transform` | object | ✗ | Local transformation data |
 | `flags` | object | ✗ | Node behavior flags |
@@ -67,7 +68,7 @@ Transforms are applied in the standard order:
 ### Transform Object
 
 | Property | Type | Default | Description |
-|----------|------|---------|-------------|
+| -------- | ---- | ------- | ----------- |
 | `position` | [x, y, z] | [0, 0, 0] | Local position in meters |
 | `rotation` | [x, y, z] | [0, 0, 0] | Euler angles in degrees |
 | `scale` | [x, y, z] | [1, 1, 1] | Scale factors |
@@ -75,7 +76,7 @@ Transforms are applied in the standard order:
 ### NodeFlags Object
 
 | Property | Type | Default | Description |
-|----------|------|---------|-------------|
+| -------- | ---- | ------- | ----------- |
 | `visible` | boolean | true | Visibility flag (implemented) |
 | `static` | boolean | false | Static hint (reserved) |
 | `castsShadows` | boolean | true | Shadow casting (reserved) |
@@ -195,6 +196,7 @@ Transforms are applied in the standard order:
 ```
 
 Names will be auto-generated based on the current `NameGenerator`:
+
 - `DefaultNameGenerator`: "Child0", "Child1", "Child2"
 - `PositionalNameGenerator`: "First", "Second", "Third"
 
@@ -350,6 +352,7 @@ try {
 ### Error Messages
 
 The factory provides detailed error messages for:
+
 - JSON parsing errors with line/column information
 - Schema validation failures with property paths
 - Runtime creation failures with node context
@@ -398,21 +401,25 @@ The schema is designed for extensibility:
 ## API Notes
 
 ### Singleton Pattern
+
 - TestSceneFactory uses the singleton pattern
 - Access via `TestSceneFactory::Instance()`
 - Thread-safe initialization (C++11 guarantees)
 
 ### Method Chaining
+
 - Most configuration methods return `TestSceneFactory&` for chaining
 - Example: `factory.Reset().SetDefaultCapacity(1024).ResetNameGenerator()`
 
 ### Template System
+
 - **Removed**: Template registration and `CreateFromTemplate` are not part of
   the current API
 - Use `CreateFromJson` for all JSON-based scene creation
 - Pattern-based methods available for common structures
 
 ### Memory Management
+
 - Factory returns `std::shared_ptr<Scene>` for automatic lifetime management
 - Name generators managed internally via `std::unique_ptr`
 - No manual memory management required
@@ -420,6 +427,7 @@ The schema is designed for extensibility:
 ## Migration Notes
 
 If upgrading from earlier versions:
+
 - Template registration methods have been removed
 - Use `CreateFromJson` instead of `CreateFromTemplate`
 - Pattern-based creation methods provide common structures without JSON
