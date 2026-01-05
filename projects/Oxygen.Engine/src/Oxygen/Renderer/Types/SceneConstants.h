@@ -72,6 +72,54 @@ struct BindlessMaterialConstantsSlot {
   constexpr operator uint32_t() const noexcept { return value; }
 };
 
+struct BindlessEnvironmentStaticSlot {
+  uint32_t value;
+  explicit constexpr BindlessEnvironmentStaticSlot(
+    const uint32_t v = kInvalidDescriptorSlot)
+    : value(v)
+  {
+  }
+  constexpr auto operator<=>(const BindlessEnvironmentStaticSlot&) const
+    = default;
+  constexpr operator uint32_t() const noexcept { return value; }
+};
+
+struct BindlessDirectionalLightsSlot {
+  uint32_t value;
+  explicit constexpr BindlessDirectionalLightsSlot(
+    const uint32_t v = kInvalidDescriptorSlot)
+    : value(v)
+  {
+  }
+  constexpr auto operator<=>(const BindlessDirectionalLightsSlot&) const
+    = default;
+  constexpr operator uint32_t() const noexcept { return value; }
+};
+
+struct BindlessDirectionalShadowsSlot {
+  uint32_t value;
+  explicit constexpr BindlessDirectionalShadowsSlot(
+    const uint32_t v = kInvalidDescriptorSlot)
+    : value(v)
+  {
+  }
+  constexpr auto operator<=>(const BindlessDirectionalShadowsSlot&) const
+    = default;
+  constexpr operator uint32_t() const noexcept { return value; }
+};
+
+struct BindlessPositionalLightsSlot {
+  uint32_t value;
+  explicit constexpr BindlessPositionalLightsSlot(
+    const uint32_t v = kInvalidDescriptorSlot)
+    : value(v)
+  {
+  }
+  constexpr auto operator<=>(const BindlessPositionalLightsSlot&) const
+    = default;
+  constexpr operator uint32_t() const noexcept { return value; }
+};
+
 struct MonotonicVersion {
   uint64_t value { 0 };
   explicit constexpr MonotonicVersion(const uint64_t v = 0)
@@ -153,12 +201,18 @@ public:
     uint32_t bindless_normal_matrices_slot { kInvalidDescriptorSlot };
     uint32_t bindless_material_constants_slot { kInvalidDescriptorSlot };
     // Aligned at 16 bytes here
+
+    uint32_t bindless_env_static_slot { kInvalidDescriptorSlot };
+    uint32_t bindless_directional_lights_slot { kInvalidDescriptorSlot };
+    uint32_t bindless_directional_shadows_slot { kInvalidDescriptorSlot };
+    uint32_t bindless_positional_lights_slot { kInvalidDescriptorSlot };
+    // Aligned at 16 bytes here
   };
   // ReSharper restore CppInconsistentNaming
   static_assert(
     sizeof(GpuData) % 16 == 0, "GpuData size must be 16-byte aligned");
   static_assert(
-    sizeof(GpuData) == 176, "GpuData size must match HLSL cbuffer packing");
+    sizeof(GpuData) == 192, "GpuData size must match HLSL cbuffer packing");
 
   SceneConstants() = default;
   OXYGEN_DEFAULT_COPYABLE(SceneConstants)
@@ -196,6 +250,21 @@ public:
   OXGN_RNDR_API auto SetBindlessMaterialConstantsSlot(
     BindlessMaterialConstantsSlot slot, RendererTag) noexcept
     -> SceneConstants&;
+
+  OXGN_RNDR_API auto SetBindlessEnvironmentStaticSlot(
+    BindlessEnvironmentStaticSlot slot, RendererTag) noexcept
+    -> SceneConstants&;
+
+  OXGN_RNDR_API auto SetBindlessDirectionalLightsSlot(
+    BindlessDirectionalLightsSlot slot, RendererTag) noexcept
+    -> SceneConstants&;
+
+  OXGN_RNDR_API auto SetBindlessDirectionalShadowsSlot(
+    BindlessDirectionalShadowsSlot slot, RendererTag) noexcept
+    -> SceneConstants&;
+
+  OXGN_RNDR_API auto SetBindlessPositionalLightsSlot(
+    BindlessPositionalLightsSlot slot, RendererTag) noexcept -> SceneConstants&;
 
   // Getters use GetXXX to avoid conflicts with strong types
   [[nodiscard]] auto GetViewMatrix() const noexcept { return view_matrix_; }
@@ -236,6 +305,27 @@ public:
     return bindless_material_constants_slot_;
   }
 
+  [[nodiscard]] constexpr auto GetBindlessEnvironmentStaticSlot() const noexcept
+  {
+    return bindless_env_static_slot_;
+  }
+
+  [[nodiscard]] constexpr auto GetBindlessDirectionalLightsSlot() const noexcept
+  {
+    return bindless_directional_lights_slot_;
+  }
+
+  [[nodiscard]] constexpr auto
+  GetBindlessDirectionalShadowsSlot() const noexcept
+  {
+    return bindless_directional_shadows_slot_;
+  }
+
+  [[nodiscard]] constexpr auto GetBindlessPositionalLightsSlot() const noexcept
+  {
+    return bindless_positional_lights_slot_;
+  }
+
   // Monotonic version counter; incremented on any mutation.
   [[nodiscard]] constexpr auto GetVersion() const noexcept { return version_; }
 
@@ -258,6 +348,13 @@ private:
       .bindless_normal_matrices_slot = bindless_normal_matrices_slot_.value,
       .bindless_material_constants_slot
       = bindless_material_constants_slot_.value,
+
+      .bindless_env_static_slot = bindless_env_static_slot_.value,
+      .bindless_directional_lights_slot
+      = bindless_directional_lights_slot_.value,
+      .bindless_directional_shadows_slot
+      = bindless_directional_shadows_slot_.value,
+      .bindless_positional_lights_slot = bindless_positional_lights_slot_.value,
     };
   }
 
@@ -274,6 +371,11 @@ private:
   BindlessWorldsSlot bindless_transforms_slot_ {};
   BindlessNormalsSlot bindless_normal_matrices_slot_ {};
   BindlessMaterialConstantsSlot bindless_material_constants_slot_ {};
+
+  BindlessEnvironmentStaticSlot bindless_env_static_slot_ {};
+  BindlessDirectionalLightsSlot bindless_directional_lights_slot_ {};
+  BindlessDirectionalShadowsSlot bindless_directional_shadows_slot_ {};
+  BindlessPositionalLightsSlot bindless_positional_lights_slot_ {};
 
   // Versioning + cache
   MonotonicVersion version_ { 0 };
