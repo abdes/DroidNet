@@ -338,22 +338,30 @@ private:
 auto PakFileDumper::DumpAsync(const PakFile& pak, AssetLoader& asset_loader)
   -> oxygen::co::Co<>
 {
-  using namespace PrintUtils;
-  Separator("PAK FILE ANALYSIS: " + ctx_.pak_path.filename().string());
-  Field("File Path", ctx_.pak_path.string());
-  Field("File Size",
-    std::to_string(std::filesystem::file_size(ctx_.pak_path)) + " bytes");
-  std::cout << "\n";
-  PrintPakHeader(pak);
-  PrintPakFooter(pak);
-  ResourceTableDumperRegistry resource_registry;
-  ResourceTablesDumper resource_tables_dumper(resource_registry);
-  co_await resource_tables_dumper.DumpAsync(pak, ctx_, asset_loader);
-  oxygen::content::pakdump::AssetDumperRegistry registry;
-  oxygen::content::pakdump::AssetDirectoryDumper dir_dumper(registry);
-  dir_dumper.Dump(pak, ctx_);
-  Separator("ANALYSIS COMPLETE");
-  co_return;
+  try {
+    using namespace PrintUtils;
+    Separator("PAK FILE ANALYSIS: " + ctx_.pak_path.filename().string());
+    Field("File Path", ctx_.pak_path.string());
+    Field("File Size",
+      std::to_string(std::filesystem::file_size(ctx_.pak_path)) + " bytes");
+    std::cout << "\n";
+    PrintPakHeader(pak);
+    PrintPakFooter(pak);
+    ResourceTableDumperRegistry resource_registry;
+    ResourceTablesDumper resource_tables_dumper(resource_registry);
+    co_await resource_tables_dumper.DumpAsync(pak, ctx_, asset_loader);
+    oxygen::content::pakdump::AssetDumperRegistry registry;
+    oxygen::content::pakdump::AssetDirectoryDumper dir_dumper(registry);
+    co_await dir_dumper.DumpAsync(pak, ctx_, asset_loader);
+    Separator("ANALYSIS COMPLETE");
+    co_return;
+  } catch (const std::exception& ex) {
+    std::cerr << "ERROR: PakDump failed: " << ex.what() << "\n";
+    co_return;
+  } catch (...) {
+    std::cerr << "ERROR: PakDump failed: unknown exception\n";
+    co_return;
+  }
 }
 
 void PakFileDumper::PrintPakHeader(const PakFile& pak)
@@ -367,7 +375,10 @@ void PakFileDumper::PrintPakHeader(const PakFile& pak)
   Field("Format Version", pak.FormatVersion());
   Field("Content Version", pak.ContentVersion());
   Field("GUID", oxygen::data::to_string(pak.Guid()));
-  Field("Header Size", std::to_string(sizeof(PakHeader)) + " bytes");
+  Field("Header Size",
+    std::to_string(
+      pak.FormatVersion() == 2 ? sizeof(v2::PakHeader) : sizeof(v3::PakHeader))
+      + " bytes");
   std::cout << "\n";
 }
 

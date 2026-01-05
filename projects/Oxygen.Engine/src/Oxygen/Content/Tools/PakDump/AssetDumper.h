@@ -8,9 +8,12 @@
 
 #include <cstddef>
 
+#include <Oxygen/OxCo/Co.h>
+
 #include "DumpContext.h"
 
 namespace oxygen::content {
+class AssetLoader;
 class PakFile;
 } // namespace oxygen::content
 
@@ -27,9 +30,10 @@ class AssetDumper {
 public:
   virtual ~AssetDumper() = default;
 
-  virtual void Dump(const oxygen::content::PakFile& pak,
+  virtual auto DumpAsync(const oxygen::content::PakFile& pak,
     const oxygen::data::pak::v2::AssetDirectoryEntry& entry, DumpContext& ctx,
-    size_t idx) const
+    size_t idx, oxygen::content::AssetLoader& asset_loader) const
+    -> oxygen::co::Co<>
     = 0;
 };
 

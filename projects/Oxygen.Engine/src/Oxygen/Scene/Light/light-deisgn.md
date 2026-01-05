@@ -788,15 +788,15 @@ infrastructure and explicitly reusing existing Oxygen patterns:
 
 This section has been revised: SceneEnvironment is **not** a `Scene` component.
 
-- [ ] Implement `SceneEnvironment` as a standalone `Composition` with components that implement a variable set of environment systems.
+- [X] Implement `SceneEnvironment` as a standalone `Composition` with components that implement a variable set of environment systems.
   - Environment systems include: Sky Atmosphere, Volumetric Clouds, Fog, Sky Light, Sky Sphere, Post Process Volume.
   - Each environment system is represented by a component with its own authored parameters.
-- [ ] Add `Scene` APIs with optional semantics:
+- [X] Add `Scene` APIs with optional semantics:
   - `HasEnvironment() -> bool`
   - `GetEnvironment() -> observer_ptr<SceneEnvironment>` (returns `nullptr` when absent)
   - `SetEnvironment(std::unique_ptr<SceneEnvironment>) -> void` (transfers ownership)
   - `ClearEnvironment() -> void`
-- [ ] Add unit tests for Scene ↔ SceneEnvironment association semantics.
+- [X] Add unit tests for Scene ↔ SceneEnvironment association semantics.
 
 ### 9.3 Persistence: PAK / loose-cooked scene component tables (no new format)
 

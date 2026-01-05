@@ -218,8 +218,11 @@ auto main(int argc, char** argv) -> int
     });
 
     return 0;
-  } catch (const std::exception& /*ex*/) {
-    // The error is already printed by the CLI parser.
+  } catch (const std::exception& ex) {
+    std::cerr << "ERROR: " << ex.what() << "\n";
+    return 2;
+  } catch (...) {
+    std::cerr << "ERROR: unknown exception\n";
     return 2;
   }
 }

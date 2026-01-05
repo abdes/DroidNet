@@ -26,10 +26,13 @@ namespace oxygen::content::pakdump {
 //! Dumps material asset descriptors.
 class MaterialAssetDumper final : public AssetDumper {
 public:
-  void Dump(const oxygen::content::PakFile& pak,
+  auto DumpAsync(const oxygen::content::PakFile& pak,
     const oxygen::data::pak::v2::AssetDirectoryEntry& entry, DumpContext& ctx,
-    const size_t idx) const override
+    const size_t idx, oxygen::content::AssetLoader& asset_loader) const
+    -> oxygen::co::Co<> override
   {
+    (void)asset_loader;
+
     using oxygen::data::pak::MaterialAssetDesc;
     using oxygen::data::pak::ShaderReferenceDesc;
 
@@ -40,20 +43,21 @@ public:
     const auto data = asset_dump_helpers::ReadDescriptorBytes(pak, entry);
     if (!data) {
       std::cout << "    Failed to read asset descriptor data\n\n";
-      return;
+      co_return;
     }
 
     asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);
     if (data->size() < sizeof(MaterialAssetDesc)) {
       std::cout << "    MaterialAssetDesc: (insufficient data)\n\n";
-      return;
+      co_return;
     }
 
     MaterialAssetDesc mat {};
     std::memcpy(&mat, data->data(), sizeof(mat));
 
+    asset_dump_helpers::PrintAssetHeaderFields(mat.header, 4);
+
     std::cout << "    --- Material Descriptor Fields ---\n";
-    asset_dump_helpers::PrintAssetHeaderFields(mat.header);
 
     PrintUtils::Field(
       "Material Domain", static_cast<int>(mat.material_domain), 8);
@@ -114,7 +118,7 @@ public:
     const size_t num_refs = std::popcount(mat.shader_stages);
     if (num_refs == 0) {
       std::cout << "\n";
-      return;
+      co_return;
     }
 
     const size_t required_bytes
@@ -123,7 +127,7 @@ public:
       std::cout << "    Shader References (" << num_refs
                 << "): (not present in descriptor: need " << required_bytes
                 << " bytes, have " << data->size() << ")\n\n";
-      return;
+      co_return;
     }
 
     std::cout << "    Shader References (" << num_refs << "):\n";
@@ -168,6 +172,7 @@ public:
     }
 
     std::cout << "\n";
+    co_return;
   }
 };
 

@@ -87,6 +87,6 @@ def test_build_pak_with_scene_asset(tmp_path: Path):
         if asset_type == 3:
             seen_scene = True
             # 256-byte fixed header + nodes(2*68) + strings(\0Root\0Child\0) +
-            # component dir(20) + one renderable(36).
-            assert desc_size == 460
+            # component dir(20) + one renderable(36) + env block header(16).
+            assert desc_size == 476
     assert seen_scene

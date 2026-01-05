@@ -134,6 +134,12 @@ auto AssetLoaderLoadingTest::CreateTestAssetKey(const std::string& name)
     const auto bytes = { 0x55, 0x55, 0x55, 0x55, 0x66, 0x66, 0x77, 0x77, 0x88,
       0x88, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99 };
     std::ranges::copy(bytes, key.guid.begin());
+  } else if (name == "test_scene_lights_env") {
+    // Matches scene_with_lights_and_environment.yaml:
+    // "77777777-8888-9999-aaaa-bbbbbbbbbbbb"
+    const auto bytes = { 0x77, 0x77, 0x77, 0x77, 0x88, 0x88, 0x99, 0x99, 0xaa,
+      0xaa, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb };
+    std::ranges::copy(bytes, key.guid.begin());
   } else if (name == "test_scene_invalid_unknown_geometry") {
     // Matches scene_invalid_unknown_geometry.yaml:
     // "66666666-7777-8888-9999-aaaaaaaaaaaa"
