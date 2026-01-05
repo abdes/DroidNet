@@ -212,6 +212,57 @@ public:
       : std::nullopt;
   }
 
+  //=== Light Attachment ===--------------------------------------------------//
+
+  //! Attaches a light component to this SceneNode. If a light already exists,
+  //! this will fail.
+  OXGN_SCN_API auto AttachLight(std::unique_ptr<Component> light) noexcept
+    -> bool;
+
+  //! Detaches the light component from this SceneNode, if present.
+  OXGN_SCN_API auto DetachLight() noexcept -> bool;
+
+  //! Replaces the current light component with a new one. If no light exists,
+  //! this acts as attach.
+  OXGN_SCN_API auto ReplaceLight(std::unique_ptr<Component> light) noexcept
+    -> bool;
+
+  //! Checks if this SceneNode has an attached light component.
+  OXGN_SCN_NDAPI auto HasLight() noexcept -> bool;
+
+  //! Gets the attached light as the specified type T.
+  /*!
+   Returns the attached light component as the specified type T if present and
+   of the correct type.
+
+   @tparam T The light type to cast to (DirectionalLight, PointLight, or
+   SpotLight).
+   @return An optional reference to the attached light as type T, or
+   std::nullopt if no light is attached or the requested type does not match
+   the actual light type.
+
+   ### Usage Examples
+   ```cpp
+   auto light = node.GetLightAs<PointLight>();
+   if (light) {
+     // Use light->get() as PointLight
+   }
+   ```
+
+   @see AttachLight, DetachLight, ReplaceLight
+  */
+  template <typename T>
+  auto GetLightAs() noexcept -> std::optional<std::reference_wrapper<T>>
+  {
+    const auto light_opt = GetLight();
+    if (!light_opt) {
+      return std::nullopt;
+    }
+    return light_opt->get().GetTypeId() == T::ClassTypeId()
+      ? std::optional { std::ref(static_cast<T&>(light_opt->get())) }
+      : std::nullopt;
+  }
+
   //=== Name Access ===-------------------------------------------------------//
 
   //! Gets the name of this SceneNode, or an empty string if invalid.
@@ -231,6 +282,10 @@ private:
 
   //! Gets the attached camera component if present.
   OXGN_SCN_NDAPI auto GetCamera() noexcept
+    -> std::optional<std::reference_wrapper<Component>>;
+
+  //! Gets the attached light component if present.
+  OXGN_SCN_NDAPI auto GetLight() noexcept
     -> std::optional<std::reference_wrapper<Component>>;
 
   // Logging for SafeCall errors
