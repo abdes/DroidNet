@@ -46,6 +46,9 @@
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/PointLight.h>
+#include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Types/Flags.h>
 
 using oxygen::scene::SceneNodeFlags;
@@ -377,20 +380,27 @@ private:
     swap_.scene = std::make_shared<scene::Scene>("RenderScene");
 
     // Instantiate nodes (synchronous part)
+    using oxygen::data::pak::DirectionalLightRecord;
     using oxygen::data::pak::NodeRecord;
     using oxygen::data::pak::OrthographicCameraRecord;
     using oxygen::data::pak::PerspectiveCameraRecord;
+    using oxygen::data::pak::PointLightRecord;
     using oxygen::data::pak::RenderableRecord;
+    using oxygen::data::pak::SpotLightRecord;
 
     const auto nodes = asset->GetNodes();
     runtime_nodes_.reserve(nodes.size());
 
     LOG_F(INFO,
       "SceneLoader: Scene summary: nodes={} renderables={} "
-      "perspective_cameras={} orthographic_cameras={}",
+      "perspective_cameras={} orthographic_cameras={} "
+      "directional_lights={} point_lights={} spot_lights={}",
       nodes.size(), asset->GetComponents<RenderableRecord>().size(),
       asset->GetComponents<PerspectiveCameraRecord>().size(),
-      asset->GetComponents<OrthographicCameraRecord>().size());
+      asset->GetComponents<OrthographicCameraRecord>().size(),
+      asset->GetComponents<DirectionalLightRecord>().size(),
+      asset->GetComponents<PointLightRecord>().size(),
+      asset->GetComponents<SpotLightRecord>().size());
 
     for (size_t i = 0; i < nodes.size(); ++i) {
       const NodeRecord& node = nodes[i];
@@ -460,6 +470,169 @@ private:
     if (valid_renderables > 0) {
       LOG_F(INFO, "SceneLoader: Assigned {} geometries from cache.",
         valid_renderables);
+    }
+
+    // Instantiate light components (synchronous).
+    const auto ApplyCommonLight
+      = [](scene::CommonLightProperties& dst,
+          const oxygen::data::pak::LightCommonRecord& src) {
+          dst.affects_world = (src.affects_world != 0U);
+          dst.color_rgb
+            = { src.color_rgb[0], src.color_rgb[1], src.color_rgb[2] };
+          dst.intensity = src.intensity;
+          dst.mobility = static_cast<scene::LightMobility>(src.mobility);
+          dst.casts_shadows = (src.casts_shadows != 0U);
+          dst.shadow.bias = src.shadow.bias;
+          dst.shadow.normal_bias = src.shadow.normal_bias;
+          dst.shadow.contact_shadows = (src.shadow.contact_shadows != 0U);
+          dst.shadow.resolution_hint = static_cast<scene::ShadowResolutionHint>(
+            src.shadow.resolution_hint);
+          dst.exposure_compensation_ev = src.exposure_compensation_ev;
+        };
+
+    int attached_directional = 0;
+    for (const DirectionalLightRecord& rec :
+      asset->GetComponents<DirectionalLightRecord>()) {
+      const auto node_index = static_cast<size_t>(rec.node_index);
+      if (node_index >= runtime_nodes_.size()) {
+        continue;
+      }
+
+      auto light = std::make_unique<scene::DirectionalLight>();
+      ApplyCommonLight(light->Common(), rec.common);
+      light->SetAngularSizeRadians(rec.angular_size_radians);
+      light->SetEnvironmentContribution(rec.environment_contribution != 0U);
+
+      auto& csm = light->CascadedShadows();
+      csm.cascade_count = std::clamp<std::uint32_t>(
+        rec.cascade_count, 1U, scene::kMaxShadowCascades);
+      for (std::uint32_t i = 0U; i < scene::kMaxShadowCascades; ++i) {
+        // NOLINTNEXTLINE(*-pro-bounds-constant-array-index)
+        csm.cascade_distances[i] = rec.cascade_distances[i];
+      }
+      csm.distribution_exponent = rec.distribution_exponent;
+
+      const bool attached
+        = runtime_nodes_[node_index].ReplaceLight(std::move(light));
+      if (attached) {
+        attached_directional++;
+      } else {
+        LOG_F(WARNING,
+          "SceneLoader: Failed to attach DirectionalLight to node_index={}",
+          node_index);
+      }
+    }
+
+    // Ensure a sunlight exists even when the scene asset provides no valid
+    // directional light component. Avoid LookAt() here because world transforms
+    // are not guaranteed to be available during the load/instantiation phase.
+    if (attached_directional == 0) {
+      auto sun_node = swap_.scene->CreateNode("Sun");
+      auto sun_tf = sun_node.GetTransform();
+      sun_tf.SetLocalPosition(glm::vec3(0.0F, 0.0F, 0.0F));
+
+      // Set a natural sun direction (angled, not straight down).
+      // Convention: engine forward is -Y and Z-up.
+      // We compute a rotation that maps local Forward (-Y) to the desired
+      // world-space ray direction (from light toward the scene).
+      const glm::vec3 from_dir(0.0F, -1.0F, 0.0F);
+      const glm::vec3 to_dir = glm::normalize(glm::vec3(-1.0F, -0.6F, -1.4F));
+
+      const float cos_theta
+        = std::clamp(glm::dot(from_dir, to_dir), -1.0F, 1.0F);
+      glm::quat sun_rot(1.0F, 0.0F, 0.0F, 0.0F);
+      if (cos_theta < 0.9999F) {
+        if (cos_theta > -0.9999F) {
+          const glm::vec3 axis = glm::normalize(glm::cross(from_dir, to_dir));
+          const float angle = std::acos(cos_theta);
+          sun_rot = glm::angleAxis(angle, axis);
+        } else {
+          // Opposite vectors: pick a stable orthogonal axis.
+          const glm::vec3 axis = glm::vec3(0.0F, 0.0F, 1.0F);
+          sun_rot = glm::angleAxis(glm::pi<float>(), axis);
+        }
+      }
+
+      sun_tf.SetLocalRotation(sun_rot);
+
+      auto sun_light = std::make_unique<scene::DirectionalLight>();
+      sun_light->Common().affects_world = true;
+      sun_light->Common().color_rgb = { 1.0F, 0.98F, 0.92F };
+      sun_light->Common().intensity = 2.0F;
+      sun_light->Common().mobility = scene::LightMobility::kRealtime;
+      sun_light->Common().casts_shadows = true;
+      sun_light->SetAngularSizeRadians(0.01F);
+      sun_light->SetEnvironmentContribution(true);
+
+      const bool attached = sun_node.ReplaceLight(std::move(sun_light));
+      if (!attached) {
+        LOG_F(WARNING, "SceneLoader: Failed to attach fallback Sun light");
+      } else {
+        attached_directional++;
+      }
+    }
+
+    int attached_point = 0;
+    for (const PointLightRecord& rec :
+      asset->GetComponents<PointLightRecord>()) {
+      const auto node_index = static_cast<size_t>(rec.node_index);
+      if (node_index >= runtime_nodes_.size()) {
+        continue;
+      }
+
+      auto light = std::make_unique<scene::PointLight>();
+      ApplyCommonLight(light->Common(), rec.common);
+      light->SetRange(std::abs(rec.range));
+      light->SetAttenuationModel(
+        static_cast<scene::AttenuationModel>(rec.attenuation_model));
+      light->SetDecayExponent(rec.decay_exponent);
+      light->SetSourceRadius(std::abs(rec.source_radius));
+
+      const bool attached
+        = runtime_nodes_[node_index].ReplaceLight(std::move(light));
+      if (attached) {
+        attached_point++;
+      } else {
+        LOG_F(WARNING,
+          "SceneLoader: Failed to attach PointLight to node_index={}",
+          node_index);
+      }
+    }
+
+    int attached_spot = 0;
+    for (const SpotLightRecord& rec : asset->GetComponents<SpotLightRecord>()) {
+      const auto node_index = static_cast<size_t>(rec.node_index);
+      if (node_index >= runtime_nodes_.size()) {
+        continue;
+      }
+
+      auto light = std::make_unique<scene::SpotLight>();
+      ApplyCommonLight(light->Common(), rec.common);
+      light->SetRange(std::abs(rec.range));
+      light->SetAttenuationModel(
+        static_cast<scene::AttenuationModel>(rec.attenuation_model));
+      light->SetDecayExponent(rec.decay_exponent);
+      light->SetConeAnglesRadians(
+        rec.inner_cone_angle_radians, rec.outer_cone_angle_radians);
+      light->SetSourceRadius(std::abs(rec.source_radius));
+
+      const bool attached
+        = runtime_nodes_[node_index].ReplaceLight(std::move(light));
+      if (attached) {
+        attached_spot++;
+      } else {
+        LOG_F(WARNING,
+          "SceneLoader: Failed to attach SpotLight to node_index={}",
+          node_index);
+      }
+    }
+
+    if (attached_directional + attached_point + attached_spot > 0) {
+      LOG_F(INFO,
+        "SceneLoader: Attached lights: directional={} point={} spot={} "
+        "(total={})",
+        attached_directional, attached_point, attached_spot,
+        attached_directional + attached_point + attached_spot);
     }
 
     // Pick or create an active camera.
@@ -604,6 +777,37 @@ private:
       = swap_.active_camera.GetCameraAs<scene::OrthographicCamera>();
       ortho_ref) {
       ortho_ref->get().SetViewport(viewport);
+    }
+
+    // Dump the runtime scene hierarchy (once per load).
+    LOG_F(INFO, "SceneLoader: Runtime scene hierarchy:");
+    const auto PrintNodeLine = [](scene::SceneNode& node, const int depth) {
+      const std::string indent(static_cast<size_t>(depth * 2), ' ');
+      const bool has_renderable = node.GetRenderable().HasGeometry();
+      const bool has_camera = node.HasCamera();
+      const bool has_light = node.HasLight();
+      LOG_F(INFO, "{}- {}{}{}{}", indent, node.GetName().c_str(),
+        has_renderable ? " [R]" : "", has_camera ? " [C]" : "",
+        has_light ? " [L]" : "");
+    };
+
+    const auto PrintSubtree
+      = [&](const auto& self, scene::SceneNode node, const int depth) -> void {
+      if (!node.IsAlive()) {
+        return;
+      }
+
+      PrintNodeLine(node, depth);
+
+      auto child = node.GetFirstChild();
+      while (child) {
+        self(self, *child, depth + 1);
+        child = child->GetNextSibling();
+      }
+    };
+
+    for (auto& root : swap_.scene->GetRootNodes()) {
+      PrintSubtree(PrintSubtree, root, 0);
     }
 
     ready_ = true;

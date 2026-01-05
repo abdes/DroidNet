@@ -37,11 +37,13 @@ m_gtest_program(Frustum SOURCES "Frustum_test.cpp")
 m_gtest_program(
   ScenePrep
   SOURCES
+    "Fakes/Graphics.h"
     "ScenePrep/ScenePrepHelpers.h"
     "ScenePrep/ScenePrepTestFixture.h"
     "ScenePrep/CollectionConfig_test.cpp"
     "ScenePrep/EmitPerVisibleSubmesh_test.cpp"
     "ScenePrep/ExtractionPreFilter_test.cpp"
+    "ScenePrep/LightManager_pipeline_integration_test.cpp"
     "ScenePrep/MeshResolver_test.cpp"
     "ScenePrep/RenderItemProto_test.cpp"
     "ScenePrep/ScenePrepPipeline_collection_test.cpp"
@@ -169,6 +171,19 @@ m_gtest_program(
 )
 target_compile_definitions(
   Oxygen.Renderer.TransformUploader.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
+)
+
+# LightManager unit tests
+m_gtest_program(
+  LightManager
+  SOURCES
+    "Fakes/Graphics.h"
+    "LightManager_basic_test.cpp"
+)
+target_compile_definitions(
+  Oxygen.Renderer.LightManager.Tests
   PRIVATE
     OXYGEN_ENGINE_TESTING
 )

@@ -4,11 +4,11 @@ Status: Living roadmap for achieving feature completeness of the Oxygen
 Renderer. Scope: Engine-side rendering layer (Renderer, RenderPass subclasses,
 RenderContext integration) – not editor UI or tooling.
 
-**Last Updated**: December 28, 2025
+**Last Updated**: January 5, 2026
 
-**Document Status**: This document is now caught up with the actual implementation
-state as of December 2025. Completed phases (1–4) are documented in this revision
-rather than extracted, for continuity. Phases 5+ reflect work remaining.
+**Document Status**: Phase 5 (Lighting Integration) rewritten to reflect complete
+Scene-side implementation and provide detailed, implementable renderer tasks.
+Phases 1–4 remain complete as of December 2025.
 
 Keep this document updated at the end of every meaningful change (additions,
 refactors, removed scope). Use concise checklists; link to design docs instead
@@ -59,50 +59,75 @@ Legend: [ ] pending, [~] in progress, [x] done, [d] deferred, [r] removed.
 * [x] ScenePrep documentation complete (scene_prep.md - current as of Dec 2025)
 * [x] Texture binding fully implemented (texture-binder.md - current as of Dec 2025)
 
-## Phase 5 – Lighting Foundations (Types → Basic Shading → Multi-Light) [pending]
+## Phase 5 – Lighting Integration [pending]
 
-**Status**: Not started yet. All tasks below are pending implementation.
+### Stage 5A – LightManager & Extraction [ ]
 
-Rationale: Introduce lighting capability from first principles before any
-culling. All GPU buffers follow the engine's bindless design: lights-related
-buffers are accessed via indices in the global bindless table, not as
-root-signature bindings. Root constants are only used for the existing per-draw
-`g_DrawIndex`.
+Single class that collects lights during traversal and uploads to GPU.
 
-### Stage 5A – Light types & scene integration [ ]
+**Tasks:**
 
-* [ ] Types: `DirectionalLight { direction_ws, color_rgb, intensity, enabled }`, `PointLight { position_ws, radius, color_rgb, intensity, enabled }`.
-* [ ] Scene: `LightComponent` attachable to `SceneNode` (Directional or Point; Spot [d]). Defaults documented; units clarified (cd or unitless).
-* [ ] Extraction: Extend Phase 4 extraction to collect enabled lights into a per-frame `RendererLights` CPU snapshot (arrays of directional/point lights).
-* [ ] RenderContext: Publish a read-only view of collected lights; no GPU upload yet.
-* [ ] Docs: Create `lighting_overview.md` (units/spaces/limits) and `scene_lights.md` (LightComponent doc); update `passes/data_flow.md` with "Lights Collection" step.
+* [X] Update Bindless Module
+* [X] GPU structs
+* [X] Environment structs
+* [X] LightManager
+* [X] Integrate into ScenePrepPipeline::Collect()
+* [X] Root Signature Update
+* [X] Extend SceneConstants::GpuData
+* [X] Shader update
 
-### Stage 5B – Basic shading (single light; constants only) [ ]
+---
 
-* [ ] Shaders: Add simple Lambert diffuse (+ optional Blinn-Phong specular) path using a single directional light.
-* [ ] Constants: Extend `SceneConstants` with lighting fields: `ambient_color`, `dir_light_direction`, `dir_light_color`, `dir_light_intensity`, and `num_lights`.
-* [ ] Renderer: Pick the first enabled directional light from extraction and populate constants (fallback to ambient-only if none).
-* [ ] Docs: Create `shading_model.md` (math notes, gamma, spaces).
+### Stage 5B – Clustered Light Culling [ ]
 
-### Stage 5C – Multiple lights (bindless buffer SRV; no culling) [ ]
+Implement a Compute Shader to assign lights to 3D frustum clusters (Clustered Shading).
 
-* [ ] GPU buffers: Create a structured buffer SRV for lights as a bindless resource (AoS layout; 32-byte aligned entries). Do NOT add a root binding; declare a bindless slot (e.g., `kLightsBufferSlot`) in `bindless_conventions.md`.
-* [ ] Shaders: Loop over `min(num_lights, MAX_LIGHTS_PS)` accumulating direct lighting. Support Point and Directional lights; Spot [d].
-* [ ] Renderer: Upload the per-frame CPU lights array to the GPU buffer (dirty tracked). Set `SceneConstants.num_lights` and the bindless index for `g_Lights` according to established conventions.
-* [ ] Docs: Update `bindless_conventions.md` with the lights buffer slot and struct packing; create `passes/shader_pass_lighting.md` to describe consumption.
+**Tasks:**
 
-### Stage 5D – Optional per-draw light selection (CPU) [ ]
+* [ ] **Cluster Config**:
+  * Define cluster grid dimensions (e.g., 16 x 9 x 24).
+  * Add `ClusterConfig` to `EnvironmentDynamicData` (scale/bias for logarithmic Z-binning).
+* [ ] **LightCulling.hlsl (Compute)**:
+  * **Inputs**: `PositionalLightData` buffer, Depth Prepass SRV (optional for tighter culling, or just AABB intersection).
+  * **Logic**:
+    1. Compute Cluster AABB (screen tile + depth slice).
+    2. Intersect Sphere/Cone vs AABB.
+    3. Append light indices to `GlobalLightIndexList`.
+    4. Write `{offset, count}` to `ClusterGrid` (RWStructuredBuffer or RWTexture3D).
+  * **Safety**: Hard cap lights per cluster (e.g., 64 or 128).
+* [ ] **LightCullingPass** (`src/Oxygen/Renderer/RenderPass/LightCullingPass.h/.cpp`):
+  * Dispatches the compute shader.
+  * Manages `ClusterGrid` and `GlobalLightIndexList` buffers.
+  * Exposes SRV indices for the grid and index list.
+* [ ] **ShaderPass Integration**:
+  * `ForwardMesh.hlsl`:
+    * Compute Cluster Index from `SV_Position.xy` and Linear Depth.
+    * Read `ClusterGrid[cluster_index]` to get offset/count.
+    * Loop `GlobalLightIndexList` from offset.
+* [ ] **Add to KnownPassTypes**.
 
-* [ ] Data layout (bindless):
-  * Buffer A (SRV): `PerDrawLightRange[draw_index] = {offset, count}`
-  * Buffer B (SRV): `LightIndices[]` (flat uint list)
-* [ ] CPU assignment: For each `RenderItem`, sphere–AABB test to pick nearby point lights, clamp per-draw count (e.g., 8–16).
-* [ ] Shaders: Use `g_DrawIndex` to read the range and then index into `LightIndices`. If range is empty, fall back to global list.
-* [ ] Bindless: Reserve two additional SRV slots for these buffers; no new root bindings.
+---
 
-**Deliverable for Phase 5**: Basic lit shading with a single directional light (5B),
-expanded to multiple lights via one bindless lights buffer (5C). Optional CPU
-per-draw selection (5D) improves performance.
+### Stage 5C – Per-Draw Light Assignment [deferred] [ ]
+
+Assign bounded light subset per draw for shadows and performance cap.
+
+**Deferred until shadow mapping phase.** Design preserved here.
+
+**Tasks:**
+
+* [ ] **LightManager::AssignPerDraw()**: Score positional lights by importance,
+  select top-N per object. Store `{offset, count}` in per-draw buffer.
+* [ ] **Extend DrawMetadata**: Reuse padding slot for `light_range_offset`.
+* [ ] **GPU buffers**: `PerDrawLightRanges`, `PerDrawLightIndices`.
+* [ ] **Shader path**: If `light_range_offset != ~0u`, use per-draw list.
+  Else fall back to tile list or global loop.
+* [ ] **Quality setting**: `renderer.per_draw_light_assignment` (default off).
+
+---
+
+**Deliverable**: Scene-driven lighting via bindless buffers. Forward+ tile
+culling for positional lights. Per-draw assignment deferred to shadow phase.
 
 ## Phase 6 – DrawPacket Introduction & Opaque Submission Refactor [pending]
 
@@ -247,6 +272,11 @@ Tasks:
 
 ## Revision History
 
+* **January 5, 2026**: Phase 5 (Lighting Integration) completely rewritten.
+  Scene-side lighting is now complete (components, APIs, PAK persistence).
+  Renderer-side plan restructured into 5 concrete stages (5A–5E) with specific
+  file locations, struct definitions, and test requirements. Cross-references
+  to `light-deisgn.md` and `lighting_overview.md` added; no content duplication.
 * **December 28, 2025**: Document caught up with actual implementation state.
   All phases 1–4 marked complete with verification. Phase 5+ status verified
   as pending. TransparentPass verified as implemented and integrated. Added

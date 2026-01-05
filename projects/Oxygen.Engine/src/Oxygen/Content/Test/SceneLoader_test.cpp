@@ -83,7 +83,7 @@ protected:
     SceneAssetDesc desc {};
     desc.header.asset_type
       = static_cast<uint8_t>(oxygen::data::AssetType::kScene);
-    desc.header.version = 1;
+    desc.header.version = oxygen::data::pak::v2::kSceneAssetVersion;
 
     // Layout:
     // [SceneAssetDesc][NodeRecord x1][StringTable "\0root\0"][Directory

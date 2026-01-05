@@ -2126,6 +2126,7 @@ namespace {
       using oxygen::data::pak::RenderableRecord;
       using oxygen::data::pak::SceneAssetDesc;
       using oxygen::data::pak::SceneComponentTableDesc;
+      using oxygen::data::pak::SceneEnvironmentBlockHeader;
 
       const auto scene_name = BuildSceneName(request);
       const auto virtual_path
@@ -2390,7 +2391,8 @@ namespace {
       desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
       TruncateAndNullTerminate(
         desc.header.name, sizeof(desc.header.name), scene_name);
-      desc.header.version = 1;
+      // Scene descriptor v2+ includes a trailing SceneEnvironment block.
+      desc.header.version = oxygen::data::pak::kSceneAssetVersion;
 
       desc.nodes.offset = sizeof(SceneAssetDesc);
       desc.nodes.count = static_cast<uint32_t>(nodes.size());
@@ -2477,6 +2479,12 @@ namespace {
         (void)writer.WriteBlob(std::as_bytes(
           std::span<const SceneComponentTableDesc>(component_dir)));
       }
+
+      SceneEnvironmentBlockHeader env_header {};
+      env_header.byte_size = sizeof(SceneEnvironmentBlockHeader);
+      env_header.systems_count = 0;
+      (void)writer.WriteBlob(std::as_bytes(
+        std::span<const SceneEnvironmentBlockHeader, 1>(&env_header, 1)));
 
       const auto bytes = stream.Data();
 

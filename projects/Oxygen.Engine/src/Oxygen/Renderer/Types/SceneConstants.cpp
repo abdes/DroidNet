@@ -124,6 +124,50 @@ auto SceneConstants::SetBindlessMaterialConstantsSlot(
   return *this;
 }
 
+auto SceneConstants::SetBindlessEnvironmentStaticSlot(
+  const BindlessEnvironmentStaticSlot slot, RendererTag) noexcept
+  -> SceneConstants&
+{
+  if (bindless_env_static_slot_ != slot) {
+    bindless_env_static_slot_ = slot;
+    version_ = version_.Next();
+  }
+  return *this;
+}
+
+auto SceneConstants::SetBindlessDirectionalLightsSlot(
+  const BindlessDirectionalLightsSlot slot, RendererTag) noexcept
+  -> SceneConstants&
+{
+  if (bindless_directional_lights_slot_ != slot) {
+    bindless_directional_lights_slot_ = slot;
+    version_ = version_.Next();
+  }
+  return *this;
+}
+
+auto SceneConstants::SetBindlessDirectionalShadowsSlot(
+  const BindlessDirectionalShadowsSlot slot, RendererTag) noexcept
+  -> SceneConstants&
+{
+  if (bindless_directional_shadows_slot_ != slot) {
+    bindless_directional_shadows_slot_ = slot;
+    version_ = version_.Next();
+  }
+  return *this;
+}
+
+auto SceneConstants::SetBindlessPositionalLightsSlot(
+  const BindlessPositionalLightsSlot slot, RendererTag) noexcept
+  -> SceneConstants&
+{
+  if (bindless_positional_lights_slot_ != slot) {
+    bindless_positional_lights_slot_ = slot;
+    version_ = version_.Next();
+  }
+  return *this;
+}
+
 auto SceneConstants::GetSnapshot() const noexcept -> const GpuData&
 {
   if (cached_version_ != version_) {

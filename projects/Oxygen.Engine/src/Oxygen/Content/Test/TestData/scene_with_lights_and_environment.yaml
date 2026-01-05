@@ -1,0 +1,76 @@
+# Scene asset with lights and a SceneEnvironment block (v3)
+version: 3
+content_version: 1
+
+buffers:
+  - name: "default_empty_buffer"
+    data_hex: ""
+    size: 0
+    usage: 0
+
+textures:
+  - name: "default_texture"
+    width: 1
+    height: 1
+    format: 30
+    texture_type: 3
+    compression_type: 0
+    data_hex: "ffffffff"
+
+audios: []
+
+assets:
+  - name: "test_scene_lights_env"
+    type: "scene"
+    asset_key: "77777777-8888-9999-aaaa-bbbbbbbbbbbb"
+    nodes:
+      - name: "root"
+        parent: 0
+      - name: "sun"
+        parent: 0
+      - name: "lamp"
+        parent: 0
+
+    directional_lights:
+      - node_index: 1
+        affects_world: true
+        color_rgb: [1.0, 0.98, 0.92]
+        intensity: 2.0
+        mobility: 0
+        casts_shadows: 1
+        shadow:
+          bias: 0.001
+          normal_bias: 0.5
+          contact_shadows: false
+          resolution_hint: 1
+        angular_size_radians: 0.01
+        environment_contribution: true
+        cascade_count: 4
+        cascade_distances: [10.0, 30.0, 80.0, 200.0]
+        distribution_exponent: 1.0
+
+    point_lights:
+      - node_index: 2
+        affects_world: true
+        color_rgb: [1.0, 0.7, 0.4]
+        intensity: 8.0
+        mobility: 0
+        casts_shadows: 0
+        range: 15.0
+        attenuation_model: 0
+        decay_exponent: 2.0
+        source_radius: 0.05
+
+    environment:
+      sky_atmosphere:
+        planet_radius_m: 6360000.0
+        atmosphere_height_m: 80000.0
+        sun_disk_enabled: true
+
+      post_process_volume:
+        tone_mapper: 0
+        exposure_mode: 1
+        exposure_compensation_ev: 0.0
+        bloom_intensity: 0.0
+        bloom_threshold: 1.0
+        vignette_intensity: 0.0

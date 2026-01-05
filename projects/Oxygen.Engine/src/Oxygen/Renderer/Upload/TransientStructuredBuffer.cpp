@@ -13,6 +13,22 @@
 #include <Oxygen/Renderer/Upload/Errors.h>
 #include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
 
+namespace {
+
+[[nodiscard]] constexpr auto AlignUpToMultiple(const std::uint64_t value,
+  const std::uint64_t multiple) noexcept -> std::uint64_t
+{
+  // Stride alignment for StructuredBuffer SRVs is not necessarily a power of
+  // two, so we cannot use bit tricks.
+  if (multiple == 0) {
+    return value;
+  }
+  const auto rem = value % multiple;
+  return rem == 0 ? value : (value + (multiple - rem));
+}
+
+} // namespace
+
 namespace oxygen::engine::upload {
 
 TransientStructuredBuffer::TransientStructuredBuffer(observer_ptr<Graphics> gfx,
@@ -82,14 +98,43 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
 
   const auto size_bytes = static_cast<std::uint64_t>(element_count) * stride_;
 
-  auto result = staging_->Allocate(SizeBytes { size_bytes }, "TransientBuffer");
+  // D3D12 structured SRV invariants:
+  // - The SRV byte offset must be aligned to the structure stride.
+  // - Staging providers typically only guarantee a fixed power-of-two
+  //   alignment, which is insufficient when multiple structured buffers with
+  //   different strides share the same ring.
+  //
+  // We therefore over-allocate and align the SRV offset inside the returned
+  // allocation, adjusting the mapped pointer we return to match.
+  const auto request_bytes
+    = size_bytes + (static_cast<std::uint64_t>(stride_) - 1ULL);
+
+  auto result
+    = staging_->Allocate(SizeBytes { request_bytes }, "TransientBuffer");
   if (!result) {
     auto ec = make_error_code(result.error());
     LOG_F(ERROR, "Allocation from staging buffer failed: {} (code {})",
       ec.message(), ec.value());
     return std::unexpected(ec);
   }
-  slot.allocation = std::move(*result);
+
+  auto allocation = std::move(*result);
+  const auto u_base_offset = allocation.Offset().get();
+  const auto u_aligned_offset
+    = AlignUpToMultiple(u_base_offset, static_cast<std::uint64_t>(stride_));
+  const auto u_delta = u_aligned_offset - u_base_offset;
+
+  if (u_delta > request_bytes - size_bytes) {
+    LOG_F(ERROR,
+      "TransientStructuredBuffer::Allocate internal stride alignment failed "
+      "(stride={} base_offset={} aligned_offset={} request_bytes={} "
+      "size_bytes={})",
+      stride_, u_base_offset, u_aligned_offset, request_bytes, size_bytes);
+    return std::unexpected(make_error_code(UploadError::kInvalidRequest));
+  }
+
+  const auto* aligned_ptr = allocation.Ptr() + u_delta;
+  slot.allocation = std::move(allocation);
 
   if (inline_transfers_) {
     inline_transfers_->NotifyInlineWrite(
@@ -109,8 +154,7 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
 
   graphics::BufferViewDescription view_desc;
   view_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
-  view_desc.range
-    = { slot.allocation->Offset().get(), slot.allocation->Size().get() };
+  view_desc.range = { u_aligned_offset, size_bytes };
   view_desc.stride = stride_;
   view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
 
@@ -135,7 +179,7 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
 
       TransientAllocation out {};
       out.srv = srv_index;
-      out.mapped_ptr = slot.allocs.back().allocation->Ptr();
+      out.mapped_ptr = const_cast<std::byte*>(aligned_ptr);
       out.sequence = current_frame_;
       out.slot = current_slot_;
       LOG_F(1,

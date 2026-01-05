@@ -46,6 +46,8 @@
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Light/PointLight.h>
+#include <Oxygen/Scene/Light/SpotLight.h>
 
 #if defined(OXYGEN_WINDOWS)
 #  include <shobjidl_core.h>
@@ -287,6 +289,57 @@ auto MakeLookRotationFromPosition(const glm::vec3& position,
   return glm::quat_cast(look_matrix);
 }
 
+auto MakeLookRotationMinusYForwardFromPosition(const glm::vec3& position,
+  const glm::vec3& target, const glm::vec3& up_direction = { 0.0F, 0.0F, 1.0F })
+  -> glm::quat
+{
+  const auto to_target = target - position;
+  const float len2 = glm::dot(to_target, to_target);
+  if (len2 <= 1e-8F) {
+    return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
+  }
+
+  // Oxygen world convention: RIGHT-HANDED, Z-UP, FORWARD = -Y.
+  // We want the node's local forward (-Y) to point toward the target.
+  const glm::vec3 forward = glm::normalize(to_target);
+
+  glm::vec3 up = up_direction;
+  const float up_len2 = glm::dot(up, up);
+  if (up_len2 <= 1e-8F) {
+    up = { 0.0F, 0.0F, 1.0F };
+  } else {
+    up = glm::normalize(up);
+  }
+
+  // Guard against degeneracy.
+  if (std::abs(glm::dot(forward, up)) > 0.999F) {
+    up = { 1.0F, 0.0F, 0.0F };
+  }
+
+  // Right-handed basis: right = up x forward.
+  glm::vec3 right = glm::cross(up, forward);
+  const float right_len2 = glm::dot(right, right);
+  if (right_len2 <= 1e-8F) {
+    return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
+  }
+  right = glm::normalize(right);
+
+  // Re-orthogonalize up.
+  up = glm::normalize(glm::cross(forward, right));
+
+  // Local axes in world space (columns): +X=right, +Y=back, +Z=up.
+  const glm::vec3 back = -forward;
+
+  glm::mat4 m(1.0F);
+  // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
+  m[0] = glm::vec4(right, 0.0F);
+  m[1] = glm::vec4(back, 0.0F);
+  m[2] = glm::vec4(up, 0.0F);
+  // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
+
+  return glm::quat_cast(m);
+}
+
 auto ResolveBaseColorTextureResourceIndex(
   oxygen::examples::textured_cube::MainModule::TextureIndexMode mode,
   std::uint32_t custom_resource_index) -> oxygen::data::pak::v2::ResourceIndexT
@@ -502,6 +555,71 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     cube_node_ = scene_->CreateNode("Cube");
     cube_node_.GetTransform().SetLocalPosition({ 0.0f, 0.0f, 0.0f });
     cube_needs_rebuild_ = true;
+  }
+
+  if (!point_light_node_.IsAlive()) {
+    point_light_node_ = scene_->CreateNode("Sun");
+    point_light_node_.GetTransform().SetLocalPosition({ 3.0f, 3.0f, 3.0f });
+
+    auto point_light = std::make_unique<scene::PointLight>();
+    point_light->Common().intensity = 2500.0F;
+    point_light->Common().color_rgb = { 1.0F, 0.98F, 0.95F };
+    point_light->SetRange(25.0F);
+
+    const bool attached = point_light_node_.AttachLight(std::move(point_light));
+    CHECK_F(attached, "Failed to attach PointLight to Sun");
+  }
+
+  {
+    struct FaceSpotSpec {
+      const char* name;
+      glm::vec3 position;
+      glm::vec3 up;
+    };
+
+    // One spotlight per cube face (±X/±Y/±Z), aimed at the cube center.
+    // Important: avoid using Transform::LookAt() here because it may require
+    // up-to-date world transforms. We compute a local rotation from math.
+    constexpr std::array<FaceSpotSpec, 6> kSpots = {
+      FaceSpotSpec { "Spot+X", { 2.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
+      FaceSpotSpec { "Spot-X", { -2.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
+      FaceSpotSpec { "Spot+Y", { 0.0f, 2.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
+      FaceSpotSpec { "Spot-Y", { 0.0f, -2.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
+
+      // For ±Z faces, choose Y as 'up' so forward x up is not degenerate.
+      FaceSpotSpec { "Spot+Z", { 0.0f, 0.0f, 2.0f }, { 0.0f, 1.0f, 0.0f } },
+      FaceSpotSpec { "Spot-Z", { 0.0f, 0.0f, -2.0f }, { 0.0f, 1.0f, 0.0f } },
+    };
+
+    constexpr float kSpotIntensity = 900.0F;
+    constexpr float kSpotRange = 10.0F;
+    constexpr float kInnerConeDeg = 18.0F;
+    constexpr float kOuterConeDeg = 32.0F;
+
+    for (std::size_t i = 0; i < kSpots.size(); ++i) {
+      const auto& spec = kSpots[i];
+      auto& node = face_spot_light_nodes_[i];
+
+      if (!node.IsAlive()) {
+        node = scene_->CreateNode(spec.name);
+        node.GetTransform().SetLocalPosition(spec.position);
+        node.GetTransform().SetLocalRotation(
+          MakeLookRotationMinusYForwardFromPosition(
+            spec.position, { 0.0f, 0.0f, 0.0f }, spec.up));
+      }
+
+      if (!node.HasLight()) {
+        auto spot_light = std::make_unique<scene::SpotLight>();
+        spot_light->Common().intensity = kSpotIntensity;
+        spot_light->Common().color_rgb = { 1.0F, 1.0F, 1.0F };
+        spot_light->SetRange(kSpotRange);
+        spot_light->SetConeAnglesRadians(
+          glm::radians(kInnerConeDeg), glm::radians(kOuterConeDeg));
+
+        const bool attached = node.AttachLight(std::move(spot_light));
+        CHECK_F(attached, "Failed to attach SpotLight");
+      }
+    }
   }
 
   if (png_load_requested_) {

@@ -65,6 +65,7 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   using oxygen::data::loose_cooked::v1::IndexHeader;
   using oxygen::data::pak::NodeRecord;
   using oxygen::data::pak::SceneAssetDesc;
+  using oxygen::data::pak::SceneEnvironmentBlockHeader;
 
   const oxygen::content::import::LooseCookedLayout layout {};
 
@@ -74,7 +75,7 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   SceneAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
   std::snprintf(desc.header.name, sizeof(desc.header.name), "%s", "TestScene");
-  desc.header.version = 1;
+  desc.header.version = oxygen::data::pak::kSceneAssetVersion;
 
   desc.nodes.offset = sizeof(SceneAssetDesc);
   desc.nodes.count = 1;
@@ -91,12 +92,20 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   node.node_flags = 0;
 
   const size_t total_size
-    = static_cast<size_t>(desc.scene_strings.offset + desc.scene_strings.size);
+    = static_cast<size_t>(desc.scene_strings.offset + desc.scene_strings.size)
+    + sizeof(SceneEnvironmentBlockHeader);
   std::vector<std::byte> bytes(total_size);
   std::memcpy(bytes.data(), &desc, sizeof(desc));
   std::memcpy(bytes.data() + desc.nodes.offset, &node, sizeof(node));
   std::memcpy(
     bytes.data() + desc.scene_strings.offset, kStrings, sizeof(kStrings) - 1);
+
+  SceneEnvironmentBlockHeader env_header {};
+  env_header.byte_size = sizeof(SceneEnvironmentBlockHeader);
+  env_header.systems_count = 0;
+  std::memcpy(
+    bytes.data() + desc.scene_strings.offset + desc.scene_strings.size,
+    &env_header, sizeof(env_header));
 
   const auto descriptor_relpath
     = std::string(layout.scenes_subdir) + "/TestScene.scene";
@@ -479,6 +488,86 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
         });
       EXPECT_TRUE(has_b);
 #endif
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
+}
+
+//! Test: AssetLoader loads a scene with lights + environment block.
+/*!
+ Scenario: Build a v3 PAK with a scene containing one directional light, one
+ point light, and a trailing SceneEnvironment block.
+
+ Verify that:
+ - The scene loads successfully.
+ - Light component tables are available via `GetComponents<T>()`.
+ - The environment block header and records are exposed.
+*/
+NOLINT_TEST_F(AssetLoaderSceneTest,
+  LoadAsset_SceneWithLightsAndEnvironment_ParsesComponentsAndEnvironment)
+{
+  const auto pak_path = GeneratePakFile("scene_with_lights_and_environment");
+  const auto scene_key = CreateTestAssetKey("test_scene_lights_env");
+
+  TestEventLoop el;
+
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+
+    loader.RegisterLoader(oxygen::content::loaders::LoadSceneAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      loader.AddPakFile(pak_path);
+
+      const auto scene = co_await loader.LoadAssetAsync<SceneAsset>(scene_key);
+      EXPECT_THAT(scene, NotNull());
+      if (!scene) {
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      }
+
+      const auto directional
+        = scene->GetComponents<oxygen::data::pak::DirectionalLightRecord>();
+      EXPECT_EQ(directional.size(), 1U);
+      if (directional.size() == 1U) {
+        EXPECT_EQ(directional[0].node_index, 1U);
+      }
+
+      const auto points
+        = scene->GetComponents<oxygen::data::pak::PointLightRecord>();
+      EXPECT_EQ(points.size(), 1U);
+      if (points.size() == 1U) {
+        EXPECT_EQ(points[0].node_index, 2U);
+      }
+
+      const auto spots
+        = scene->GetComponents<oxygen::data::pak::SpotLightRecord>();
+      EXPECT_TRUE(spots.empty());
+
+      EXPECT_TRUE(scene->HasEnvironmentBlock());
+      const auto* env_header = scene->GetEnvironmentBlockHeader();
+      EXPECT_NE(env_header, nullptr);
+      EXPECT_EQ(env_header->systems_count, 2U);
+      EXPECT_EQ(env_header->byte_size, 168U);
+
+      const auto env_records = scene->GetEnvironmentSystemRecords();
+      EXPECT_EQ(env_records.size(), 2U);
+      EXPECT_EQ(env_records[0].header.system_type,
+        static_cast<uint32_t>(
+          oxygen::data::pak::EnvironmentComponentType::kSkyAtmosphere));
+      EXPECT_EQ(env_records[1].header.system_type,
+        static_cast<uint32_t>(
+          oxygen::data::pak::EnvironmentComponentType::kPostProcessVolume));
 
       loader.Stop();
       co_return oxygen::co::kJoin;

@@ -23,10 +23,13 @@ namespace oxygen::content::pakdump {
 //! Dumps geometry asset descriptors.
 class GeometryAssetDumper final : public AssetDumper {
 public:
-  void Dump(const oxygen::content::PakFile& pak,
+  auto DumpAsync(const oxygen::content::PakFile& pak,
     const oxygen::data::pak::v2::AssetDirectoryEntry& entry, DumpContext& ctx,
-    const size_t idx) const override
+    const size_t idx, oxygen::content::AssetLoader& asset_loader) const
+    -> oxygen::co::Co<> override
   {
+    (void)asset_loader;
+
     using oxygen::data::MeshType;
     using oxygen::data::pak::GeometryAssetDesc;
     using oxygen::data::pak::MeshDesc;
@@ -40,20 +43,21 @@ public:
     const auto data = asset_dump_helpers::ReadDescriptorBytes(pak, entry);
     if (!data) {
       std::cout << "    Failed to read asset descriptor data\n\n";
-      return;
+      co_return;
     }
 
     asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);
     if (data->size() < sizeof(GeometryAssetDesc)) {
       std::cout << "    GeometryAssetDesc: (insufficient data)\n\n";
-      return;
+      co_return;
     }
 
     GeometryAssetDesc geo {};
     std::memcpy(&geo, data->data(), sizeof(geo));
 
+    asset_dump_helpers::PrintAssetHeaderFields(geo.header, 4);
+
     std::cout << "    --- Geometry Descriptor Fields ---\n";
-    asset_dump_helpers::PrintAssetHeaderFields(geo.header);
     PrintUtils::Field("LOD Count", geo.lod_count, 8);
     PrintUtils::Field(
       "AABB Min", asset_dump_helpers::FormatVec3(geo.bounding_box_min), 8);
@@ -63,7 +67,7 @@ public:
 
     if (geo.lod_count == 0) {
       std::cout << "\n";
-      return;
+      co_return;
     }
 
     const size_t mesh_desc_bytes
@@ -73,7 +77,7 @@ public:
       std::cout << "    MeshDesc array (" << geo.lod_count
                 << "): (not present in descriptor: need at least "
                 << min_required << " bytes, have " << data->size() << ")\n\n";
-      return;
+      co_return;
     }
 
     size_t offset = sizeof(GeometryAssetDesc);
@@ -220,6 +224,7 @@ public:
     }
 
     std::cout << "\n";
+    co_return;
   }
 };
 

@@ -10,7 +10,7 @@
 // Source-Version: 1.1.0
 // Schema-Version: 1.0.1
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-01-04 14:03:03
+// Generated: 2026-01-05 18:09:06
 
 #pragma once
 
@@ -28,7 +28,8 @@ enum class RootParam : uint32_t {
   kSamplerTable = 1,
   kSceneConstants = 2,
   kRootConstants = 3,
-  kCount = 4,
+  kEnvironmentDynamicData = 4,
+  kCount = 5,
 };
 
 // Root constants counts (32-bit values)
@@ -43,6 +44,8 @@ static constexpr uint32_t kSceneConstantsRegister = 1u; // 'b1'
 static constexpr uint32_t kSceneConstantsSpace = 0u; // 'space0'
 static constexpr uint32_t kRootConstantsRegister = 2u; // 'b2'
 static constexpr uint32_t kRootConstantsSpace = 0u; // 'space0'
+static constexpr uint32_t kEnvironmentDynamicDataRegister = 3u; // 'b3'
+static constexpr uint32_t kEnvironmentDynamicDataSpace = 0u; // 'space0'
 
 // Rich runtime descriptors and table
 
@@ -76,11 +79,12 @@ static constexpr std::array<RootParamRange, 1> kRootParam1Ranges = { {
     RootParamRange{ RangeType::Sampler, 0U, 0U, 256U },
 } };
 
-static constexpr std::array<RootParamDesc, 4> kRootParamTable = { {
+static constexpr std::array<RootParamDesc, 5> kRootParamTable = { {
   RootParamDesc{ RootParamKind::DescriptorTable, 0U, 0U, std::span<const RootParamRange>{ kRootParam0Ranges.data(), kRootParam0Ranges.size() }, static_cast<uint32_t>(kRootParam0Ranges.size()), 0U },
   RootParamDesc{ RootParamKind::DescriptorTable, 0U, 0U, std::span<const RootParamRange>{ kRootParam1Ranges.data(), kRootParam1Ranges.size() }, static_cast<uint32_t>(kRootParam1Ranges.size()), 0U },
   RootParamDesc{ RootParamKind::CBV, 1U, 0U, std::span<const RootParamRange>{}, 0U, 0U },
   RootParamDesc{ RootParamKind::RootConstants, 2U, 0U, std::span<const RootParamRange>{}, 0U, 2U },
+  RootParamDesc{ RootParamKind::CBV, 3U, 0U, std::span<const RootParamRange>{}, 0U, 0U },
 } };
 
 static constexpr auto kRootParamTableCount = static_cast<uint32_t>(kRootParamTable.size());
