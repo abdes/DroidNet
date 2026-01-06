@@ -96,6 +96,8 @@ public:
   //! objects (called after swapchain/surface reconfiguration).
   OXGN_IMGUI_API auto RecreateDeviceObjects() -> void;
 
+  auto IsWitinFrameScope() const noexcept { return frame_started_; }
+
 private:
   std::shared_ptr<Platform> platform_ {};
   std::unique_ptr<platform::imgui::ImGuiSdl3Backend> platform_backend_ {};
