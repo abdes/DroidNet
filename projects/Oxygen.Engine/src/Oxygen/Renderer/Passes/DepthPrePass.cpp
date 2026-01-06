@@ -306,9 +306,65 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   // NOTE: Transparent draws are intentionally excluded from the depth pre-pass
   // to prevent them from writing depth and later occluding opaque color when
   // blended (would produce the previously observed inverted transparency).
-  // Only PassMaskBit::kOpaqueOrMasked are accepted here.
-  IssueDrawCallsOverPass(
-    recorder, oxygen::engine::PassMaskBit::kOpaqueOrMasked);
+  // Depth-writing geometry is split into two explicit buckets:
+  // - Opaque  : VS-only depth path (no alpha test).
+  // - Masked  : Alpha-tested depth path (PS clip).
+
+  const auto psf = Context().current_view.prepared_frame;
+  if (!psf || !psf->IsValid() || psf->draw_metadata_bytes.empty()) {
+    Context().RegisterPass(this);
+    co_return;
+  }
+  if (psf->partitions.empty()) {
+    // Partitions are required for correct PSO selection; without them we would
+    // not know whether to use the opaque or masked shader path.
+    LOG_F(ERROR, "DepthPrePass: partitions are missing; nothing will be drawn");
+    Context().RegisterPass(this);
+    co_return;
+  }
+
+  DCHECK_F(pso_opaque_single_.has_value());
+  DCHECK_F(pso_opaque_double_.has_value());
+  DCHECK_F(pso_masked_single_.has_value());
+  DCHECK_F(pso_masked_double_.has_value());
+
+  const auto* records = reinterpret_cast<const engine::DrawMetadata*>(
+    psf->draw_metadata_bytes.data());
+
+  uint32_t emitted_count = 0;
+  uint32_t skipped_invalid = 0;
+  uint32_t draw_errors = 0;
+
+  for (const auto& pr : psf->partitions) {
+    if (!pr.pass_mask.IsSet(oxygen::engine::PassMaskBit::kOpaque)
+      && !pr.pass_mask.IsSet(oxygen::engine::PassMaskBit::kMasked)) {
+      continue;
+    }
+
+    const bool is_masked
+      = pr.pass_mask.IsSet(oxygen::engine::PassMaskBit::kMasked);
+    const bool is_double_sided
+      = pr.pass_mask.IsSet(oxygen::engine::PassMaskBit::kDoubleSided);
+
+    const auto& pso_desc = [&]() -> const graphics::GraphicsPipelineDesc& {
+      if (is_masked) {
+        return is_double_sided ? *pso_masked_double_ : *pso_masked_single_;
+      }
+      return is_double_sided ? *pso_opaque_double_ : *pso_opaque_single_;
+    }();
+
+    recorder.SetPipelineState(pso_desc);
+
+    EmitDrawRange(recorder, records, pr.begin, pr.end, emitted_count,
+      skipped_invalid, draw_errors);
+  }
+
+  if (emitted_count > 0 || skipped_invalid > 0 || draw_errors > 0) {
+    DLOG_F(2,
+      "DepthPrePass: emitted={}, skipped_invalid={}, errors={} "
+      "(partition-aware)",
+      emitted_count, skipped_invalid, draw_errors);
+  }
 
   Context().RegisterPass(this);
   co_return;
@@ -434,21 +490,14 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   using graphics::ShaderRequest;
   using graphics::ShaderStageFlags;
 
-  // Note: ignoring user-configured fill_mode for the depth pass
-  const RasterizerStateDesc raster_desc {
-    .fill_mode = oxygen::graphics::FillMode::kSolid,
-    .cull_mode = CullMode::kBack,
-    .front_counter_clockwise = true, // Default winding order for front faces
-
-    // D3D12_RASTERIZER_DESC::MultisampleEnable is for controlling antialiasing
-    // behavior on lines and edges, not strictly for enabling/disabling MSAA
-    // sample processing for a texture. The sample_count in
-    // FramebufferLayoutDesc and the texture itself dictate MSAA. It's often
-    // left false unless specific line/edge AA is needed.
-    //
-    // Or `depth_texture.GetDesc().sample_count > 1` if specifically needed for
-    // rasterizer stage
-    .multisample_enable = false,
+  // Note: ignoring user-configured fill_mode for the depth pass.
+  const auto MakeRasterDesc = [](CullMode cull_mode) -> RasterizerStateDesc {
+    return RasterizerStateDesc {
+      .fill_mode = oxygen::graphics::FillMode::kSolid,
+      .cull_mode = cull_mode,
+      .front_counter_clockwise = true,
+      .multisample_enable = false,
+    };
   };
 
   constexpr DepthStencilStateDesc ds_desc {
@@ -468,23 +517,41 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   // Build root bindings from generated table
   auto generated_bindings = BuildRootBindings();
 
-  return GraphicsPipelineDesc::Builder()
-    .SetVertexShader(ShaderRequest {
-      .stage = ShaderType::kVertex,
-      .source_path = "Passes/Depth/DepthPrePass.hlsl",
-      .entry_point = "VS",
-    })
-    .SetPixelShader(ShaderRequest {
-      .stage = ShaderType::kPixel,
-      .source_path = "Passes/Depth/DepthPrePass.hlsl",
-      .entry_point = "PS",
-    })
-    .SetPrimitiveTopology(PrimitiveType::kTriangleList)
-    .SetRasterizerState(raster_desc)
-    .SetDepthStencilState(ds_desc)
-    .SetBlendState({})
-    .SetFramebufferLayout(fb_layout_desc)
-    .SetRootBindings(std::span<const RootBindingItem>(
-      generated_bindings.data(), generated_bindings.size()))
-    .Build();
+  const auto BuildDesc = [&](CullMode cull_mode, std::string_view vs_entry,
+                           std::string_view ps_entry) -> GraphicsPipelineDesc {
+    return GraphicsPipelineDesc::Builder()
+      .SetVertexShader(ShaderRequest {
+        .stage = ShaderType::kVertex,
+        .source_path = "Passes/Depth/DepthPrePass.hlsl",
+        .entry_point = std::string { vs_entry },
+      })
+      .SetPixelShader(ShaderRequest {
+        .stage = ShaderType::kPixel,
+        .source_path = "Passes/Depth/DepthPrePass.hlsl",
+        .entry_point = std::string { ps_entry },
+      })
+      .SetPrimitiveTopology(PrimitiveType::kTriangleList)
+      .SetRasterizerState(MakeRasterDesc(cull_mode))
+      .SetDepthStencilState(ds_desc)
+      .SetBlendState({})
+      .SetFramebufferLayout(fb_layout_desc)
+      .SetRootBindings(std::span<const RootBindingItem>(
+        generated_bindings.data(), generated_bindings.size()))
+      .Build();
+  };
+
+  // Keep VS/PS entry points valid for offline shader compilation.
+  // Partition-aware variants are compiled on demand via explicit entry points.
+  pso_opaque_single_
+    = BuildDesc(CullMode::kBack, "VS_OpaqueDepth", "PS_OpaqueDepth");
+  pso_opaque_double_
+    = BuildDesc(CullMode::kNone, "VS_OpaqueDepth", "PS_OpaqueDepth");
+  pso_masked_single_
+    = BuildDesc(CullMode::kBack, "VS_MaskedDepth", "PS_MaskedDepth");
+  pso_masked_double_
+    = BuildDesc(CullMode::kNone, "VS_MaskedDepth", "PS_MaskedDepth");
+
+  // The base class needs a single descriptor to cache and bind initially.
+  // Use the most common variant as the default.
+  return *pso_opaque_single_;
 }

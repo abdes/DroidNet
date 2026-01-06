@@ -270,7 +270,7 @@ static_assert(RenderItemDataExtractor<decltype(SubMeshVisibilityFilter)>);
 
  @see ExtractionPreFilter, MeshResolver, SubMeshVisibilityFilter
 */
-inline auto EmitPerVisibleSubmesh(const ScenePrepContext& /*ctx*/,
+inline auto EmitPerVisibleSubmesh(const ScenePrepContext& ctx,
   ScenePrepState& state, RenderItemProto& item) noexcept -> void
 {
   CHECK_F(!item.IsDropped());
@@ -285,6 +285,16 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& /*ctx*/,
 
   const auto lod = item.ResolvedMeshIndex();
   const auto& submeshes = item.ResolvedMesh()->SubMeshes();
+
+  float sort_distance2 = 0.0F;
+  if (ctx.HasView()) {
+    const auto cam_pos = ctx.GetView().CameraPosition();
+    const auto sphere = item.Renderable().GetWorldBoundingSphere();
+    const glm::vec3 center { sphere.x, sphere.y, sphere.z };
+    const glm::vec3 d = center - cam_pos;
+    sort_distance2 = glm::dot(d, d);
+  }
+
   for (auto index : visible_submeshes) {
     struct ResolvedMaterial {
       std::shared_ptr<const data::MaterialAsset> resolved;
@@ -336,6 +346,7 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& /*ctx*/,
       .material = std::move(mat_ref),
       .material_handle = mat_handle,
       .world_bounding_sphere = item.Renderable().GetWorldBoundingSphere(),
+      .sort_distance2 = sort_distance2,
       .transform_handle = item.GetTransformHandle(),
       .cast_shadows = item.CastsShadows(),
       .receive_shadows = item.ReceivesShadows(),

@@ -15,7 +15,7 @@ namespace oxygen::graphics::d3d12 {
 
 // Specification of engine shaders. Each entry is a ShaderProfile corresponding
 // to one of the shaders we want to automatically compile, package and load.
-inline const std::array<ShaderInfo, 7> kEngineShaders = {
+inline const std::array<ShaderInfo, 12> kEngineShaders = {
   {
     {
       .type = ShaderType::kPixel,
@@ -23,6 +23,11 @@ inline const std::array<ShaderInfo, 7> kEngineShaders = {
       .entry_point = "PS",
     },
     {
+      .type = ShaderType::kPixel,
+      .relative_path = "Passes/Forward/ForwardMesh.hlsl",
+      .entry_point = "PS_Masked",
+    },
+    {
       .type = ShaderType::kVertex,
       .relative_path = "Passes/Forward/ForwardMesh.hlsl",
       .entry_point = "VS",
@@ -33,9 +38,29 @@ inline const std::array<ShaderInfo, 7> kEngineShaders = {
       .entry_point = "PS",
     },
     {
+      .type = ShaderType::kPixel,
+      .relative_path = "Passes/Depth/DepthPrePass.hlsl",
+      .entry_point = "PS_OpaqueDepth",
+    },
+    {
+      .type = ShaderType::kPixel,
+      .relative_path = "Passes/Depth/DepthPrePass.hlsl",
+      .entry_point = "PS_MaskedDepth",
+    },
+    {
       .type = ShaderType::kVertex,
       .relative_path = "Passes/Depth/DepthPrePass.hlsl",
       .entry_point = "VS",
+    },
+    {
+      .type = ShaderType::kVertex,
+      .relative_path = "Passes/Depth/DepthPrePass.hlsl",
+      .entry_point = "VS_OpaqueDepth",
+    },
+    {
+      .type = ShaderType::kVertex,
+      .relative_path = "Passes/Depth/DepthPrePass.hlsl",
+      .entry_point = "VS_MaskedDepth",
     },
     {
       .type = ShaderType::kCompute,

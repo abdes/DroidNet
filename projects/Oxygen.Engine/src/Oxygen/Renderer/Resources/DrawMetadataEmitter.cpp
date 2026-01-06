@@ -29,38 +29,36 @@ auto ClassifyMaterialPassMask(const oxygen::data::MaterialAsset* mat)
   -> oxygen::engine::PassMask
 {
   if (!mat) {
-    return oxygen::engine::PassMask {
-      oxygen::engine::PassMaskBit::kOpaqueOrMasked,
-    };
+    return oxygen::engine::PassMask { oxygen::engine::PassMaskBit::kOpaque };
   }
   const auto domain = mat->GetMaterialDomain();
-  const auto base = mat->GetBaseColor();
-  const float alpha = base[3];
-  const bool is_opaque_domain
-    = (domain == oxygen::data::MaterialDomain::kOpaque);
-  const bool is_masked_domain
-    = (domain == oxygen::data::MaterialDomain::kMasked);
-  DLOG_F(2,
-    "Material classify: name='{}' domain={} alpha={:.3f} is_opaque={} "
-    "is_masked={}",
-    mat->GetAssetName(), static_cast<int>(domain), alpha, is_opaque_domain,
-    is_masked_domain);
-  if (is_opaque_domain && alpha >= 0.999f) {
-    return oxygen::engine::PassMask {
-      oxygen::engine::PassMaskBit::kOpaqueOrMasked,
-    };
+
+  oxygen::engine::PassMask mask {};
+  switch (domain) {
+  case oxygen::data::MaterialDomain::kOpaque:
+    mask.Set(oxygen::engine::PassMaskBit::kOpaque);
+    break;
+  case oxygen::data::MaterialDomain::kAlphaBlended:
+    mask.Set(oxygen::engine::PassMaskBit::kTransparent);
+    break;
+  case oxygen::data::MaterialDomain::kMasked:
+    mask.Set(oxygen::engine::PassMaskBit::kMasked);
+    break;
+  default:
+    mask.Set(oxygen::engine::PassMaskBit::kTransparent);
+    break;
   }
-  if (is_masked_domain) {
-    return oxygen::engine::PassMask {
-      oxygen::engine::PassMaskBit::kOpaqueOrMasked
-    };
+
+  // Double-sided is explicit and data-driven via the PAK material flag.
+  // Render passes use it to pick appropriate cull mode.
+  if (mat->IsDoubleSided()) {
+    mask.Set(oxygen::engine::PassMaskBit::kDoubleSided);
   }
-  DLOG_F(2,
-    " -> classified as Transparent (flags={}) due to domain {} and "
-    "alpha={:.3f}",
-    oxygen::engine::PassMask { oxygen::engine::PassMaskBit::kTransparent },
-    static_cast<int>(domain), alpha);
-  return oxygen::engine::PassMask { oxygen::engine::PassMaskBit::kTransparent };
+
+  DLOG_F(2, "Material classify: name='{}' domain={} flags=0x{:08X} -> {}",
+    mat->GetAssetName(), static_cast<int>(domain), mat->GetFlags(),
+    oxygen::engine::to_string(mask));
+  return mask;
 }
 
 } // namespace
@@ -191,6 +189,22 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
     DCHECK_F(!dm.flags.IsEmpty(), "flags cannot be empty after assignment");
 
     this->Cpu().push_back(dm);
+
+    const std::uint8_t bucket_order
+      = dm.flags.IsSet(oxygen::engine::PassMaskBit::kOpaque)
+      ? static_cast<std::uint8_t>(0)
+      : (dm.flags.IsSet(oxygen::engine::PassMaskBit::kMasked)
+            ? static_cast<std::uint8_t>(1)
+            : static_cast<std::uint8_t>(2));
+    keys_.push_back(SortingKey {
+      .pass_mask = dm.flags,
+      .bucket_order = bucket_order,
+      .sort_distance2 = item.sort_distance2,
+      .material_index = dm.material_handle,
+      .vb_srv = dm.vertex_buffer_index,
+      .ib_srv = dm.index_buffer_index,
+    });
+
     ++total_emits_;
   }
 }
@@ -202,15 +216,27 @@ auto DrawMetadataEmitter::SortAndPartition() -> void
 
 auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
 {
-  keys_.clear();
-  keys_.reserve(Cpu().size());
-  for (const auto& d : Cpu()) {
-    keys_.push_back(SortingKey {
-      .pass_mask = d.flags,
-      .material_index = d.material_handle,
-      .vb_srv = d.vertex_buffer_index,
-      .ib_srv = d.index_buffer_index,
-    });
+  if (keys_.size() != Cpu().size()) {
+    // Fallback path: rebuild keys from DrawMetadata only. This loses
+    // view-relative sorting information but preserves deterministic ordering.
+    keys_.clear();
+    keys_.reserve(Cpu().size());
+    for (const auto& d : Cpu()) {
+      const std::uint8_t bucket_order
+        = d.flags.IsSet(oxygen::engine::PassMaskBit::kOpaque)
+        ? static_cast<std::uint8_t>(0)
+        : (d.flags.IsSet(oxygen::engine::PassMaskBit::kMasked)
+              ? static_cast<std::uint8_t>(1)
+              : static_cast<std::uint8_t>(2));
+      keys_.push_back(SortingKey {
+        .pass_mask = d.flags,
+        .bucket_order = bucket_order,
+        .sort_distance2 = 0.0F,
+        .material_index = d.material_handle,
+        .vb_srv = d.vertex_buffer_index,
+        .ib_srv = d.index_buffer_index,
+      });
+    }
   }
 
   const auto t_sort_begin = std::chrono::high_resolution_clock::now();
@@ -228,6 +254,17 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
     perm.begin(), perm.end(), [&](std::uint32_t a, std::uint32_t b) {
       const auto& ka = keys_[a];
       const auto& kb = keys_[b];
+      if (ka.bucket_order != kb.bucket_order) {
+        return ka.bucket_order < kb.bucket_order;
+      }
+
+      // Transparent: strict back-to-front ordering by distance first.
+      if (ka.bucket_order == 2) {
+        if (ka.sort_distance2 != kb.sort_distance2) {
+          return ka.sort_distance2 > kb.sort_distance2;
+        }
+      }
+
       if (ka.pass_mask != kb.pass_mask) {
         return ka.pass_mask < kb.pass_mask;
       }

@@ -206,3 +206,71 @@ float4 PS(VSOutput input) : SV_Target0 {
     // linear lighting reads correctly on display.
     return float4(LinearToSrgb(shaded), base_a);
 }
+
+[shader("pixel")]
+float4 PS_Masked(VSOutput input) : SV_Target0 {
+    // Alpha-test for cutout materials.
+    // This must match the depth pre-pass cutout behavior so the depth buffer
+    // and color pass agree on visibility.
+    if (bindless_draw_metadata_slot != K_INVALID_BINDLESS_INDEX
+        && bindless_material_constants_slot != K_INVALID_BINDLESS_INDEX) {
+        StructuredBuffer<DrawMetadata> draw_meta_buffer =
+            ResourceDescriptorHeap[bindless_draw_metadata_slot];
+        DrawMetadata meta = draw_meta_buffer[g_DrawIndex];
+
+        StructuredBuffer<MaterialConstants> materials =
+            ResourceDescriptorHeap[bindless_material_constants_slot];
+        MaterialConstants mat = materials[meta.material_handle];
+
+        const bool alpha_test_enabled =
+            (mat.flags & MATERIAL_FLAG_ALPHA_TEST) != 0u;
+        if (alpha_test_enabled) {
+            const bool no_texture_sampling =
+                (mat.flags & MATERIAL_FLAG_NO_TEXTURE_SAMPLING) != 0u;
+
+            const float2 uv = input.uv * mat.uv_scale + mat.uv_offset;
+
+            float alpha = 1.0f;
+            if (!no_texture_sampling
+                && mat.opacity_texture_index != K_INVALID_BINDLESS_INDEX) {
+                Texture2D<float4> opacity_tex =
+                    ResourceDescriptorHeap[mat.opacity_texture_index];
+                SamplerState samp = SamplerDescriptorHeap[0];
+                alpha = opacity_tex.Sample(samp, uv).a;
+            }
+
+            float cutoff = mat.alpha_cutoff;
+            if (cutoff <= 0.0f) {
+                cutoff = 0.5f;
+            }
+            clip(alpha - cutoff);
+        }
+    }
+
+    MaterialSurface surf = EvaluateMaterialSurface(
+        input.world_pos,
+        input.world_normal,
+        input.world_tangent,
+        input.world_bitangent,
+        input.uv,
+        g_DrawIndex);
+
+    const float3 base_rgb = surf.base_rgb;
+    const float  metalness = surf.metalness;
+    const float  roughness = surf.roughness;
+    const float3 N = surf.N;
+    const float3 V = surf.V;
+    const float NdotV = saturate(dot(N, V));
+
+    float3 F0 = float3(0.04, 0.04, 0.04);
+    F0 = lerp(F0, base_rgb, metalness);
+
+    float3 direct = float3(0.0, 0.0, 0.0);
+    direct += AccumulateDirectionalLights(
+        N, V, NdotV, F0, base_rgb, metalness, roughness);
+    direct += AccumulatePositionalLights(
+        input.world_pos, N, V, NdotV, F0, base_rgb, metalness, roughness);
+
+    const float3 shaded = direct * input.color;
+    return float4(LinearToSrgb(shaded), 1.0f);
+}

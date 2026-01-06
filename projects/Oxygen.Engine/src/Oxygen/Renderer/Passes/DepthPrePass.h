@@ -173,6 +173,21 @@ private:
   graphics::NativeView pass_constants_cbv_ {};
   ShaderVisibleIndex pass_constants_index_ { kInvalidShaderVisibleIndex };
 
+  //! Cached pipeline state descriptions for partition-aware execution.
+  /*!
+   The depth pre-pass needs distinct PSOs to handle:
+    - Opaque vs. masked (alpha-tested) shading paths.
+    - Single-sided vs. double-sided rasterization (cull back vs. cull none).
+
+   These are cached as descriptions and selected per partition during
+   execution. This avoids legacy combined buckets and enables optimal shader
+   paths.
+  */
+  std::optional<graphics::GraphicsPipelineDesc> pso_opaque_single_ {};
+  std::optional<graphics::GraphicsPipelineDesc> pso_opaque_double_ {};
+  std::optional<graphics::GraphicsPipelineDesc> pso_masked_single_ {};
+  std::optional<graphics::GraphicsPipelineDesc> pso_masked_double_ {};
+
   //! Current viewport for the pass.
   std::optional<ViewPort> viewport_ {};
 

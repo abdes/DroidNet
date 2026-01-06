@@ -20,6 +20,7 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
+#include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
@@ -134,11 +135,51 @@ auto TransparentPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     recorder.SetRenderTargets(std::span(&rtv, 1), std::nullopt);
   }
 
-  // Issue only transparent draws; RenderPass logs emitted count.
-  // TODO(engine): Implement proper back-to-front ordering (or OIT) inside the
-  // transparent partition; current order is deterministic but not depth-sorted
-  // which can cause incorrect blending for overlapping transparent geometry.
-  IssueDrawCallsOverPass(recorder, oxygen::engine::PassMaskBit::kTransparent);
+  DCHECK_F(pso_single_sided_.has_value());
+  DCHECK_F(pso_double_sided_.has_value());
+
+  // Transparent draws require strict back-to-front ordering across all
+  // transparent materials. We therefore ignore partitions and render the
+  // already-sorted draw list in order, selecting cull mode per draw.
+  const auto* psf = Context().current_view.prepared_frame.get();
+  if (!psf || !psf->IsValid() || psf->draw_metadata_bytes.empty()) {
+    Context().RegisterPass(this);
+    co_return;
+  }
+
+  const auto* records = reinterpret_cast<const engine::DrawMetadata*>(
+    psf->draw_metadata_bytes.data());
+  const auto record_count = static_cast<uint32_t>(
+    psf->draw_metadata_bytes.size() / sizeof(engine::DrawMetadata));
+
+  const graphics::GraphicsPipelineDesc* current_pso = nullptr;
+  uint32_t emitted_count = 0;
+  uint32_t skipped_invalid = 0;
+  uint32_t draw_errors = 0;
+
+  for (uint32_t draw_index = 0; draw_index < record_count; ++draw_index) {
+    const auto& md = records[draw_index];
+    if (!md.flags.IsSet(oxygen::engine::PassMaskBit::kTransparent)) {
+      continue;
+    }
+
+    const bool is_double_sided
+      = md.flags.IsSet(oxygen::engine::PassMaskBit::kDoubleSided);
+    const auto& pso_desc
+      = is_double_sided ? *pso_double_sided_ : *pso_single_sided_;
+    if (current_pso != &pso_desc) {
+      recorder.SetPipelineState(pso_desc);
+      current_pso = &pso_desc;
+    }
+
+    EmitDrawRange(recorder, records, draw_index, draw_index + 1, emitted_count,
+      skipped_invalid, draw_errors);
+  }
+
+  if (emitted_count > 0 || skipped_invalid > 0 || draw_errors > 0) {
+    DLOG_F(2, "TransparentPass: emitted={}, skipped_invalid={}, errors={}",
+      emitted_count, skipped_invalid, draw_errors);
+  }
   Context().RegisterPass(this);
   co_return;
 }
@@ -167,10 +208,17 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
 
   const auto requested_fill
     = config_ ? config_->fill_mode : oxygen::graphics::FillMode::kSolid;
-  const RasterizerStateDesc raster_desc { .fill_mode = requested_fill,
-    .cull_mode = CullMode::kNone,
-    .front_counter_clockwise = true,
-    .multisample_enable = false };
+
+  const auto MakeRasterDesc = [&](CullMode cull_mode) -> RasterizerStateDesc {
+    const auto effective_cull
+      = (requested_fill == FillMode::kWireFrame) ? CullMode::kNone : cull_mode;
+    return RasterizerStateDesc {
+      .fill_mode = requested_fill,
+      .cull_mode = effective_cull,
+      .front_counter_clockwise = true,
+      .multisample_enable = false,
+    };
+  };
 
   DepthStencilStateDesc ds_desc { .depth_test_enable
     = (GetDepthTexture() != nullptr),
@@ -195,41 +243,44 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   // Generated root binding items (indices + descriptor tables)
   auto generated_bindings = BuildRootBindings();
 
-  // NOTE: Reuse existing bindless mesh shader (see ShaderPass rationale).
-  return GraphicsPipelineDesc::Builder()
-    .SetVertexShader(graphics::ShaderRequest {
-      .stage = ShaderType::kVertex,
-      .source_path = "Passes/Forward/ForwardMesh.hlsl",
-      .entry_point = "VS",
-    })
-    .SetPixelShader(graphics::ShaderRequest {
-      .stage = ShaderType::kPixel,
-      .source_path = "Passes/Forward/ForwardMesh.hlsl",
-      .entry_point = "PS",
-    })
-    .SetPrimitiveTopology(PrimitiveType::kTriangleList)
-    .SetRasterizerState(raster_desc)
-    .SetDepthStencilState(ds_desc)
-    // Enable standard alpha blending for transparent surfaces.
-    // We already have BlendTargetDesc (PipelineState.h); previous TODO was
-    // stale. Using straight (non-premultiplied) alpha convention:
-    //   Color:   SrcColor * SrcAlpha + DestColor * (1 - SrcAlpha)
-    //   Alpha:   SrcAlpha * 1 + DestAlpha * (1 - SrcAlpha)
-    // If/when premultiplied alpha is adopted switch src_blend to kOne.
-    .SetBlendState({ graphics::BlendTargetDesc {
-      .blend_enable = true,
-      .src_blend = graphics::BlendFactor::kSrcAlpha,
-      .dest_blend = graphics::BlendFactor::kInvSrcAlpha,
-      .blend_op = graphics::BlendOp::kAdd,
-      .src_blend_alpha = graphics::BlendFactor::kOne,
-      .dest_blend_alpha = graphics::BlendFactor::kInvSrcAlpha,
-      .blend_op_alpha = graphics::BlendOp::kAdd,
-      .write_mask = graphics::ColorWriteMask::kAll,
-    } })
-    .SetFramebufferLayout(fb_layout_desc)
-    .SetRootBindings(std::span<const graphics::RootBindingItem>(
-      generated_bindings.data(), generated_bindings.size()))
-    .Build();
+  const auto BuildDesc = [&](CullMode cull_mode) -> GraphicsPipelineDesc {
+    return GraphicsPipelineDesc::Builder()
+      .SetVertexShader(graphics::ShaderRequest {
+        .stage = ShaderType::kVertex,
+        .source_path = "Passes/Forward/ForwardMesh.hlsl",
+        .entry_point = "VS",
+      })
+      .SetPixelShader(graphics::ShaderRequest {
+        .stage = ShaderType::kPixel,
+        .source_path = "Passes/Forward/ForwardMesh.hlsl",
+        .entry_point = "PS",
+      })
+      .SetPrimitiveTopology(PrimitiveType::kTriangleList)
+      .SetRasterizerState(MakeRasterDesc(cull_mode))
+      .SetDepthStencilState(ds_desc)
+      // Enable standard alpha blending for transparent surfaces.
+      // Straight (non-premultiplied) alpha convention:
+      //   Color:   SrcColor * SrcAlpha + DestColor * (1 - SrcAlpha)
+      //   Alpha:   SrcAlpha * 1 + DestAlpha * (1 - SrcAlpha)
+      .SetBlendState({ graphics::BlendTargetDesc {
+        .blend_enable = true,
+        .src_blend = graphics::BlendFactor::kSrcAlpha,
+        .dest_blend = graphics::BlendFactor::kInvSrcAlpha,
+        .blend_op = graphics::BlendOp::kAdd,
+        .src_blend_alpha = graphics::BlendFactor::kOne,
+        .dest_blend_alpha = graphics::BlendFactor::kInvSrcAlpha,
+        .blend_op_alpha = graphics::BlendOp::kAdd,
+        .write_mask = graphics::ColorWriteMask::kAll,
+      } })
+      .SetFramebufferLayout(fb_layout_desc)
+      .SetRootBindings(std::span<const graphics::RootBindingItem>(
+        generated_bindings.data(), generated_bindings.size()))
+      .Build();
+  };
+
+  pso_single_sided_ = BuildDesc(CullMode::kBack);
+  pso_double_sided_ = BuildDesc(CullMode::kNone);
+  return *pso_double_sided_;
 }
 
 auto TransparentPass::NeedRebuildPipelineState() const -> bool

@@ -113,6 +113,10 @@ public:
 private:
   struct SortingKey {
     oxygen::engine::PassMask pass_mask {};
+    std::uint8_t bucket_order { 0 };
+    std::uint8_t _pad0 { 0 };
+    std::uint16_t _pad1 { 0 };
+    float sort_distance2 { 0.0F };
     std::uint32_t material_index { 0 };
     ShaderVisibleIndex vb_srv {};
     ShaderVisibleIndex ib_srv {};
