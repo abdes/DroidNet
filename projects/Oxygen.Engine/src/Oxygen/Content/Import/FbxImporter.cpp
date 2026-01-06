@@ -746,6 +746,16 @@ namespace {
         const auto roughness_tex = emit::SelectRoughnessTexture(*material);
         const auto ao_tex = emit::SelectAmbientOcclusionTexture(*material);
 
+        // If metallic and roughness reference the same underlying file
+        // texture, treat it as a packed map using glTF semantics
+        // (R=AO, G=roughness, B=metalness). This is common for assets authored
+        // in glTF workflows and exported through FBX.
+        if (emit::ResolveFileTexture(metallic_tex) != nullptr
+          && emit::ResolveFileTexture(metallic_tex)
+            == emit::ResolveFileTexture(roughness_tex)) {
+          desc.flags |= oxygen::data::pak::kMaterialFlag_GltfOrmPacked;
+        }
+
         const auto base_color_index = emit::GetOrCreateTextureResourceIndex(
           request, out, textures, base_color_tex);
         const auto normal_index = emit::GetOrCreateTextureResourceIndex(
