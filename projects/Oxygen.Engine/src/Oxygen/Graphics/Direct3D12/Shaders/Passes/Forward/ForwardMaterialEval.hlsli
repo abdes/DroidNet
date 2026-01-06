@@ -127,20 +127,63 @@ MaterialSurface EvaluateMaterialSurface(
         }
 
         // Scalar maps
-        if (!no_texture_sampling && mat.metallic_texture_index != 0xFFFFFFFFu) {
-            Texture2D<float4> m_tex = ResourceDescriptorHeap[mat.metallic_texture_index];
-            SamplerState samp = SamplerDescriptorHeap[0];
-            s.metalness *= saturate(m_tex.Sample(samp, uv).r);
+        const bool is_orm_packed = (mat.flags & MATERIAL_FLAG_GLTF_ORM_PACKED) != 0u;
+        bool use_orm_packed = is_orm_packed;
+
+        // If the packed flag isn't set, still support the common case where
+        // ORM is authored as a single texture wired into all three slots.
+        uint orm_tex_index = 0xFFFFFFFFu;
+        if (!use_orm_packed) {
+            const uint idx = mat.metallic_texture_index;
+            if (idx != 0xFFFFFFFFu && idx == mat.roughness_texture_index
+                && idx == mat.ambient_occlusion_texture_index) {
+                use_orm_packed = true;
+                orm_tex_index = idx;
+            }
+        } else {
+            orm_tex_index = (mat.roughness_texture_index != 0xFFFFFFFFu)
+                ? mat.roughness_texture_index
+                : ((mat.metallic_texture_index != 0xFFFFFFFFu)
+                    ? mat.metallic_texture_index
+                    : mat.ambient_occlusion_texture_index);
         }
-        if (!no_texture_sampling && mat.roughness_texture_index != 0xFFFFFFFFu) {
-            Texture2D<float4> r_tex = ResourceDescriptorHeap[mat.roughness_texture_index];
+
+        if (!no_texture_sampling && use_orm_packed && orm_tex_index != 0xFFFFFFFFu) {
+            Texture2D<float4> orm_tex = ResourceDescriptorHeap[orm_tex_index];
             SamplerState samp = SamplerDescriptorHeap[0];
-            s.roughness *= saturate(r_tex.Sample(samp, uv).r);
-        }
-        if (!no_texture_sampling && mat.ambient_occlusion_texture_index != 0xFFFFFFFFu) {
-            Texture2D<float4> ao_tex = ResourceDescriptorHeap[mat.ambient_occlusion_texture_index];
-            SamplerState samp = SamplerDescriptorHeap[0];
-            s.ao *= saturate(ao_tex.Sample(samp, uv).r);
+            const float3 orm = saturate(orm_tex.Sample(samp, uv).rgb);
+
+            // glTF ORM packing:
+            // - AO:       R
+            // - Roughness:G
+            // - Metalness:B
+            s.roughness *= orm.g;
+            s.metalness *= orm.b;
+
+            // Prefer dedicated AO map if provided separately.
+            if (mat.ambient_occlusion_texture_index != 0xFFFFFFFFu
+                && mat.ambient_occlusion_texture_index != orm_tex_index) {
+                Texture2D<float4> ao_tex = ResourceDescriptorHeap[mat.ambient_occlusion_texture_index];
+                s.ao *= saturate(ao_tex.Sample(samp, uv).r);
+            } else {
+                s.ao *= orm.r;
+            }
+        } else {
+            if (!no_texture_sampling && mat.metallic_texture_index != 0xFFFFFFFFu) {
+                Texture2D<float4> m_tex = ResourceDescriptorHeap[mat.metallic_texture_index];
+                SamplerState samp = SamplerDescriptorHeap[0];
+                s.metalness *= saturate(m_tex.Sample(samp, uv).r);
+            }
+            if (!no_texture_sampling && mat.roughness_texture_index != 0xFFFFFFFFu) {
+                Texture2D<float4> r_tex = ResourceDescriptorHeap[mat.roughness_texture_index];
+                SamplerState samp = SamplerDescriptorHeap[0];
+                s.roughness *= saturate(r_tex.Sample(samp, uv).r);
+            }
+            if (!no_texture_sampling && mat.ambient_occlusion_texture_index != 0xFFFFFFFFu) {
+                Texture2D<float4> ao_tex = ResourceDescriptorHeap[mat.ambient_occlusion_texture_index];
+                SamplerState samp = SamplerDescriptorHeap[0];
+                s.ao *= saturate(ao_tex.Sample(samp, uv).r);
+            }
         }
     }
 
