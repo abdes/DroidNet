@@ -18,6 +18,10 @@
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/MaterialConstants.hlsli"
 
+#include "Passes/Depth/DepthPrePassConstants.hlsli"
+
+#include "MaterialFlags.hlsli"
+
 struct VertexData
 {
     float3 position;
@@ -46,7 +50,8 @@ cbuffer RootConstants : register(b2, space0) {
 
 // Output structure for the Vertex Shader
 struct VS_OUTPUT_DEPTH {
-    float4 clipSpacePosition : SV_POSITION;
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
 };
 
 // -----------------------------------------------------------------------------
@@ -73,52 +78,26 @@ struct VS_OUTPUT_DEPTH {
 // Transforms vertices to clip space for depth buffer population.
 // Entry point should match the identifier used in PipelineStateDesc (e.g., "DepthOnlyVS").
 [shader("vertex")]
-VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID) {
-    VS_OUTPUT_DEPTH output;
+VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
+    (void)instanceID;
 
-    // Access the DrawMetadata buffer using the dynamic slot from scene constants.
-    if (bindless_draw_metadata_slot == K_INVALID_BINDLESS_INDEX) {
-        // No geometry bound; output position safely (could early return). Use vertexID as trivial position.
-        output.clipSpacePosition = float4(0,0,0,1);
+    VS_OUTPUT_DEPTH output;
+    output.position = float4(0, 0, 0, 1);
+    output.uv = float2(0, 0);
+
+    DrawMetadata meta;
+    if (!BX_LoadDrawMetadata(bindless_draw_metadata_slot, g_DrawIndex, meta)) {
         return output;
     }
-    StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[bindless_draw_metadata_slot];
-    // Use the draw index from the root constant to index into the DrawMetadata array
-    DrawMetadata meta = draw_meta_buffer[g_DrawIndex];
 
-    uint vertex_buffer_index = meta.vertex_buffer_index;
-    uint index_buffer_index = meta.index_buffer_index;
+    const uint actual_vertex_index = BX_ResolveVertexIndex(meta, vertexID);
+    const VertexData v = BX_LoadVertex(meta.vertex_buffer_index, actual_vertex_index);
+    output.uv = v.texcoord;
 
-    uint actual_vertex_index;
-    if (meta.is_indexed) {
-        // For indexed rendering, get the index buffer and read the actual vertex index
-        StructuredBuffer<uint> index_buffer = ResourceDescriptorHeap[index_buffer_index];
-        actual_vertex_index = index_buffer[meta.first_index + vertexID] + (uint)meta.base_vertex;
-    } else {
-        // For non-indexed rendering, use the vertex ID directly
-        actual_vertex_index = vertexID + (uint)meta.base_vertex;
-    }
-
-    // Access vertex data using ResourceDescriptorHeap
-    StructuredBuffer<VertexData> vertex_buffer = ResourceDescriptorHeap[vertex_buffer_index];
-    VertexData currentVertex = vertex_buffer[actual_vertex_index];
-
-    // Fetch world matrix and transform position from object to world, then to view and projection
-    float4x4 world_matrix;
-    if (bindless_transforms_slot != 0xFFFFFFFFu) {
-        StructuredBuffer<float4x4> worlds = ResourceDescriptorHeap[bindless_transforms_slot];
-        // Use explicit offset provided in per-draw metadata
-    world_matrix = worlds[meta.transform_index];
-    } else {
-        world_matrix = float4x4(1,0,0,0,
-                                0,1,0,0,
-                                0,0,1,0,
-                                0,0,0,1);
-    }
-    float4 world_pos = mul(world_matrix, float4(currentVertex.position, 1.0f));
-    float4 view_pos = mul(view_matrix, world_pos);
-    output.clipSpacePosition = mul(projection_matrix, view_pos);
-
+    const float4x4 world_matrix = BX_LoadWorldMatrix(bindless_transforms_slot, meta.transform_index);
+    const float4 world_pos = mul(world_matrix, float4(v.position, 1.0f));
+    const float4 view_pos = mul(view_matrix, world_pos);
+    output.position = mul(projection_matrix, view_pos);
     return output;
 }
 
@@ -128,11 +107,44 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID) {
 // Entry point should match the identifier used in PipelineStateDesc (e.g., "MinimalPS").
 [shader("pixel")]
 void PS(VS_OUTPUT_DEPTH input) {
-    // Intentionally empty.
-    // Depth writes are handled by the GPU's rasterizer and depth test unit
-    // based on the SV_POSITION output from the vertex shader and the
-    // depth/stencil state configured in the pipeline state object.
-    // If alpha testing were required for this depth pass (e.g., for foliage textures),
-    // you would implement it using the bindless system as follows:
-    // ...
+    // Depth writes are handled by fixed function; PS exists only to optionally
+    // discard masked fragments so they don't contribute to the depth buffer.
+
+    if (!BX_IsValidSlot(bindless_draw_metadata_slot) ||
+        !BX_IsValidSlot(bindless_material_constants_slot)) {
+        return;
+    }
+
+    StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[bindless_draw_metadata_slot];
+    const DrawMetadata meta = draw_meta_buffer[g_DrawIndex];
+
+    StructuredBuffer<MaterialConstants> materials = ResourceDescriptorHeap[bindless_material_constants_slot];
+    const MaterialConstants mat = materials[meta.material_handle];
+
+    const bool alpha_test_enabled = (mat.flags & MATERIAL_FLAG_ALPHA_TEST) != 0u;
+    if (!alpha_test_enabled) {
+        return;
+    }
+
+    float alpha = mat.base_color.a;
+
+    const bool no_texture_sampling =
+        (mat.flags & MATERIAL_FLAG_NO_TEXTURE_SAMPLING) != 0u;
+
+    if (!no_texture_sampling && mat.opacity_texture_index != K_INVALID_BINDLESS_INDEX) {
+        const float2 uv = input.uv * mat.uv_scale + mat.uv_offset;
+        Texture2D<float4> opacity_tex = ResourceDescriptorHeap[mat.opacity_texture_index];
+        SamplerState samp = SamplerDescriptorHeap[0];
+        const float4 texel = opacity_tex.Sample(samp, uv);
+        alpha *= texel.a;
+    }
+
+    float cutoff = mat.alpha_cutoff;
+    if (cutoff <= 0.0f && g_PassConstantsIndex != K_INVALID_BINDLESS_INDEX) {
+        ConstantBuffer<DepthPrePassConstants> pass_constants =
+            ResourceDescriptorHeap[g_PassConstantsIndex];
+        cutoff = pass_constants.alpha_cutoff_default;
+    }
+
+    clip(alpha - cutoff);
 }

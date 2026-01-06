@@ -28,9 +28,11 @@ Fields (match shader order):
   - metallic_texture_index (uint)
   - roughness_texture_index (uint)
   - ambient_occlusion_texture_index (uint)
+  - opacity_texture_index (uint)
   - flags (uint)
-  - _pad0 (float)
-  - _pad1 (float)
+  - alpha_cutoff (float)
+  - uv_scale (float2)
+  - uv_offset (float2)
 
 The final two floats pad to a 16-byte multiple so the struct size is root-CBV
 friendly. Provided as a whole-snapshot API similar to SceneConstants.
@@ -46,11 +48,11 @@ struct MaterialConstants {
   uint32_t metallic_texture_index { 0 };
   uint32_t roughness_texture_index { 0 };
   uint32_t ambient_occlusion_texture_index { 0 };
+  uint32_t opacity_texture_index { 0 };
   uint32_t flags { 0 };
+  float alpha_cutoff { 0.5F };
   glm::vec2 uv_scale { 1.0F, 1.0F };
   glm::vec2 uv_offset { 0.0F, 0.0F };
-  uint32_t _pad0 { 0 };
-  uint32_t _pad1 { 0 };
 };
 static_assert(sizeof(MaterialConstants) % 16 == 0,
   "MaterialConstants size must be 16-byte aligned");

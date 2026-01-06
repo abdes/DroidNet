@@ -20,11 +20,11 @@ struct MaterialConstants
     uint metallic_texture_index;
     uint roughness_texture_index;
     uint ambient_occlusion_texture_index;
+    uint opacity_texture_index;
     uint flags;
+    float alpha_cutoff;
     float2 uv_scale;
     float2 uv_offset;
-    uint _pad0;
-    uint _pad1;
 };
 
 #endif  // OXYGEN_D3D12_SHADERS_RENDERER_MATERIALCONSTANTS_HLSLI

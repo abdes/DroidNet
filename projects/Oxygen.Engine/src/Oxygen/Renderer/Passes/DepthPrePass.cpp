@@ -4,8 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstring>
 #include <stdexcept>
 #include <utility>
+
+#include <cstring>
 
 #include <fmt/format.h>
 
@@ -41,10 +44,33 @@ using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::Texture;
 
+namespace {
+
+struct DepthPrePassConstantsSnapshot {
+  float alpha_cutoff_default { 0.5F };
+  uint32_t _pad0 { 0 };
+  uint32_t _pad1 { 0 };
+  uint32_t _pad2 { 0 };
+};
+static_assert(sizeof(DepthPrePassConstantsSnapshot) == 16);
+
+} // namespace
+
 DepthPrePass::DepthPrePass(std::shared_ptr<Config> config)
   : RenderPass(config->debug_name)
   , config_(std::move(config))
 {
+}
+
+DepthPrePass::~DepthPrePass()
+{
+  if (pass_constants_buffer_ && pass_constants_mapped_ptr_) {
+    pass_constants_buffer_->UnMap();
+    pass_constants_mapped_ptr_ = nullptr;
+  }
+  pass_constants_cbv_ = {};
+  pass_constants_index_ = kInvalidShaderVisibleIndex;
+  pass_constants_buffer_.reset();
 }
 
 //! Sets the viewport for the depth pre-pass.
@@ -135,6 +161,61 @@ auto DepthPrePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
       *config_->depth_texture, graphics::ResourceStates::kDepthWrite);
     recorder.FlushBarriers();
   }
+
+  // Ensure pass-level constants are available via g_PassConstantsIndex.
+  // This is a small, shader-visible CBV used for fallback values.
+  if (!pass_constants_buffer_
+    || pass_constants_index_ == kInvalidShaderVisibleIndex) {
+    auto& graphics = Context().GetGraphics();
+    auto& registry = graphics.GetResourceRegistry();
+    auto& allocator = graphics.GetDescriptorAllocator();
+
+    const graphics::BufferDesc desc {
+      .size_bytes = 256u,
+      .usage = graphics::BufferUsage::kConstant,
+      .memory = graphics::BufferMemory::kUpload,
+      .debug_name = std::string { GetName() } + "_PassConstants",
+    };
+
+    pass_constants_buffer_ = graphics.CreateBuffer(desc);
+    if (!pass_constants_buffer_) {
+      throw std::runtime_error(
+        "DepthPrePass: Failed to create pass constants buffer");
+    }
+    pass_constants_buffer_->SetName(desc.debug_name);
+
+    pass_constants_mapped_ptr_
+      = pass_constants_buffer_->Map(0, desc.size_bytes);
+    if (!pass_constants_mapped_ptr_) {
+      throw std::runtime_error(
+        "DepthPrePass: Failed to map pass constants buffer");
+    }
+    const DepthPrePassConstantsSnapshot snapshot {};
+    std::memcpy(pass_constants_mapped_ptr_, &snapshot, sizeof(snapshot));
+
+    graphics::BufferViewDescription cbv_view_desc;
+    cbv_view_desc.view_type = ResourceViewType::kConstantBuffer;
+    cbv_view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
+    cbv_view_desc.range = { 0u, desc.size_bytes };
+
+    auto cbv_handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
+      graphics::DescriptorVisibility::kShaderVisible);
+    if (!cbv_handle.IsValid()) {
+      throw std::runtime_error(
+        "DepthPrePass: Failed to allocate CBV descriptor handle");
+    }
+    pass_constants_index_ = allocator.GetShaderVisibleIndex(cbv_handle);
+
+    registry.Register(pass_constants_buffer_);
+    pass_constants_cbv_ = registry.RegisterView(
+      *pass_constants_buffer_, std::move(cbv_handle), cbv_view_desc);
+    if (!pass_constants_cbv_->IsValid()) {
+      throw std::runtime_error(
+        "DepthPrePass: Failed to register pass constants CBV");
+    }
+  }
+
+  SetPassConstantsIndex(pass_constants_index_);
 
   co_return;
 }

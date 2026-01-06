@@ -139,6 +139,12 @@ public:
     return desc_.ambient_occlusion.ToFloat();
   }
 
+  //! Returns the alpha cutoff threshold for alpha-tested materials.
+  [[nodiscard]] auto GetAlphaCutoff() const noexcept -> float
+  {
+    return desc_.alpha_cutoff.ToFloat();
+  }
+
   //! Returns the index of the base color texture.
   [[nodiscard]] auto GetBaseColorTexture() const noexcept -> pak::ResourceIndexT
   {

@@ -95,7 +95,7 @@ public:
   OXGN_RNDR_API explicit DepthPrePass(std::shared_ptr<Config> config);
 
   //! Destructor.
-  ~DepthPrePass() override = default;
+  ~DepthPrePass() override;
 
   OXYGEN_DEFAULT_COPYABLE(DepthPrePass)
   OXYGEN_DEFAULT_MOVABLE(DepthPrePass)
@@ -166,6 +166,12 @@ private:
 
   //! Configuration for the depth pre-pass.
   std::shared_ptr<Config> config_;
+
+  //! Pass-level constants (bindless CBV) for depth pre-pass.
+  std::shared_ptr<graphics::Buffer> pass_constants_buffer_;
+  void* pass_constants_mapped_ptr_ { nullptr };
+  graphics::NativeView pass_constants_cbv_ {};
+  ShaderVisibleIndex pass_constants_index_ { kInvalidShaderVisibleIndex };
 
   //! Current viewport for the pass.
   std::optional<ViewPort> viewport_ {};
