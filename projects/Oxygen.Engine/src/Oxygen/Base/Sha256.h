@@ -18,38 +18,56 @@ namespace oxygen::base {
 
 using Sha256Digest = std::array<uint8_t, 32>;
 
-//! Incremental SHA-256 implementation.
+//! High-performance incremental SHA-256 implementation.
 /*!
- Provides a small incremental SHA-256 implementation for hashing memory and
- files.
+ Provides an optimized SHA-256 implementation with:
+ - Hardware acceleration via Intel SHA-NI when available (5-10x faster)
+ - Optimized software fallback with loop unrolling
+ - Runtime CPU feature detection
 
  @note This API is used by higher-level modules (e.g. Content validation).
 */
 class Sha256 final {
 public:
   static constexpr size_t kDigestSize = 32;
+  static constexpr size_t kBlockSize = 64;
 
   OXYGEN_BASE_API Sha256() noexcept;
 
+  //! Update the hash with additional data (streaming interface).
   OXYGEN_BASE_API auto Update(std::span<const std::byte> data) noexcept -> void;
 
+  //! Finalize and return the digest. Hasher state is reset after this call.
   OXGN_BASE_NDAPI auto Finalize() noexcept -> Sha256Digest;
 
-private:
-  auto ProcessBlock_(std::span<const std::byte, 64> block) noexcept -> void;
+  //! Check if hardware SHA-NI acceleration is available on this CPU.
+  OXGN_BASE_NDAPI static auto HasHardwareSupport() noexcept -> bool;
 
-  uint64_t total_bits_ = 0;
-  std::array<std::byte, 64> buffer_ = {};
+private:
+  auto ProcessBlocks_(const std::byte* data, size_t block_count) noexcept
+    -> void;
+  auto ProcessBlocksSoftware_(
+    const std::byte* data, size_t block_count) noexcept -> void;
+#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+  auto ProcessBlocksShaNi_(const std::byte* data, size_t block_count) noexcept
+    -> void;
+#endif
+
+  uint64_t total_bytes_ = 0;
+  std::array<std::byte, kBlockSize> buffer_ = {};
   size_t buffer_size_ = 0;
-  std::array<uint32_t, 8> state_ = {};
+  alignas(16) std::array<uint32_t, 8> state_ = {};
 };
 
+//! Compute SHA-256 of a memory buffer in one call.
 OXGN_BASE_NDAPI auto ComputeSha256(std::span<const std::byte> data) noexcept
   -> Sha256Digest;
 
+//! Compute SHA-256 of a file.
 OXGN_BASE_NDAPI auto ComputeFileSha256(const std::filesystem::path& path)
   -> Sha256Digest;
 
+//! Check if a digest is all zeros.
 OXGN_BASE_NDAPI auto IsAllZero(const Sha256Digest& digest) noexcept -> bool;
 
 } // namespace oxygen::base
