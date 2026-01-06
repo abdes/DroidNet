@@ -106,12 +106,12 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
   uploader_ = std::make_unique<upload::UploadCoordinator>(
     observer_ptr { gfx.get() }, policy);
   upload_staging_provider_
-    = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16, 0.5f);
+    = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16);
 
   inline_transfers_ = std::make_unique<upload::InlineTransfersCoordinator>(
     observer_ptr { gfx.get() });
   inline_staging_provider_
-    = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16, 0.5f);
+    = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16);
   inline_transfers_->RegisterProvider(inline_staging_provider_);
 
   // Initialize scene constants manager for per-view, per-slot Upload heap

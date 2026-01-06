@@ -118,6 +118,11 @@ public:
     // Buffer management
     std::uint32_t buffer_growth_count { 0 }; // How many times buffer grew
     std::uint64_t current_buffer_size { 0 };
+    std::uint64_t max_buffer_size { 0 };
+
+    // Partition telemetry (for partitioned providers).
+    frame::Slot active_partition { 0 };
+    frame::SlotCount partitions_count { 1 };
 
     // Map/unmap tracking
     std::uint32_t map_calls { 0 };

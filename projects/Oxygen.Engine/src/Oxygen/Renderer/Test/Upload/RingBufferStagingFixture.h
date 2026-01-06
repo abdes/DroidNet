@@ -46,6 +46,9 @@ protected:
       = after.buffer_growth_count - before.buffer_growth_count;
     d.current_buffer_size
       = after.current_buffer_size - before.current_buffer_size;
+    d.max_buffer_size = after.max_buffer_size; // peak, not delta-friendly
+    d.active_partition = after.active_partition;
+    d.partitions_count = after.partitions_count;
     d.map_calls = after.map_calls - before.map_calls;
     d.unmap_calls = after.unmap_calls - before.unmap_calls;
     d.implementation_info = after.implementation_info;
@@ -59,7 +62,8 @@ protected:
   // UploadCoordinator (UploaderTag path).
   auto SimulateFrameStart(frame::Slot slot) -> void
   {
-    auto tag = oxygen::engine::upload::internal::InlineCoordinatorTagFactory::Get();
+    auto tag
+      = oxygen::engine::upload::internal::InlineCoordinatorTagFactory::Get();
     Staging().OnFrameStart(tag, slot);
   }
 };

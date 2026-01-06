@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <exception>
 #include <limits>
 #include <memory>
@@ -46,6 +47,13 @@
 namespace oxygen::renderer::resources {
 
 namespace {
+
+  // Limit how much CPU-visible staging memory TextureBinder can consume per
+  // frame. This directly bounds RingBufferStaging growth (per partition) and
+  // avoids multi-GB upload buffers when many large textures become ready at
+  // once.
+  constexpr std::size_t kMaxTextureUploadBytesPerFrame
+    = 128ULL * 1024ULL * 1024ULL;
 
   struct UploadLayout {
     std::vector<engine::upload::UploadSubresource> dst_subresources;
@@ -237,8 +245,8 @@ namespace {
     std::optional<UploadLayoutFailure> layout_failure;
   };
 
-  [[nodiscard]] auto PrepareTexture2DUpload(
-    const Graphics& gfx, const data::TextureResource& tex_res)
+  [[nodiscard]] auto PrepareTexture2DUpload(const Graphics& gfx,
+    const data::TextureResource& tex_res, const content::ResourceKey key)
     -> std::variant<PreparedTexture2DUpload, PrepareTexture2DUploadFailure>
   {
     // Build GPU texture description.
@@ -251,13 +259,16 @@ namespace {
     desc.mip_levels = tex_res.GetMipCount();
     desc.array_size = tex_res.GetArrayLayers();
     desc.is_shader_resource = true;
-    desc.debug_name = "TextureBinder.Loaded";
+    desc.debug_name = std::string("Texture(") + content::to_string(key) + ")";
 
     constexpr std::size_t kRowPitchAlignment = 256U;
     constexpr std::size_t kMipPlacementAlignment = 512U;
 
     const auto& format_info = graphics::detail::GetFormatInfo(desc.format);
     if (format_info.block_size != 1U || format_info.bytes_per_block == 0U) {
+      // TODO(oxygen): Add support for block-compressed texture formats (BCn).
+      // This requires correct block-aware upload layout (row/slice pitch and
+      // subresource sizing) and must keep D3D12 copy alignment requirements.
       return PrepareTexture2DUploadFailure {
         .reason = PrepareTexture2DUploadFailure::Reason::kUnsupportedFormat,
       };
@@ -280,7 +291,9 @@ namespace {
     std::shared_ptr<graphics::Texture> new_texture;
     try {
       new_texture = gfx.CreateTexture(desc);
-    } catch (const std::exception&) {
+    } catch (const std::exception& e) {
+      LOG_F(ERROR, "CreateTexture threw during async load for {}: {}", key,
+        e.what());
       return PrepareTexture2DUploadFailure {
         .reason
         = PrepareTexture2DUploadFailure::Reason::kCreateTextureException,
@@ -288,6 +301,7 @@ namespace {
     }
 
     if (!new_texture) {
+      LOG_F(ERROR, "CreateTexture returned null during async load for {}", key);
       return PrepareTexture2DUploadFailure {
         .reason
         = PrepareTexture2DUploadFailure::Reason::kCreateTextureReturnedNull,
@@ -429,6 +443,11 @@ private:
     bool alive { true };
   };
 
+  struct PendingUpload {
+    content::ResourceKey key;
+    std::shared_ptr<data::TextureResource> resource;
+  };
+
   auto CreatePlaceholderTexture(std::optional<content::ResourceKey> for_key)
     -> std::shared_ptr<graphics::Texture>;
   auto CreateErrorTexture() -> std::shared_ptr<graphics::Texture>;
@@ -437,6 +456,8 @@ private:
 
   auto OnTextureResourceLoaded(content::ResourceKey resource_key,
     std::shared_ptr<data::TextureResource> tex_res) -> void;
+
+  auto SubmitQueuedTextureUploads(std::size_t max_bytes) -> void;
 
   auto HandleLoadFailure(content::ResourceKey resource_key, TextureEntry& entry,
     FailurePolicy policy,
@@ -467,6 +488,9 @@ private:
   std::shared_ptr<CallbackGate> callback_gate_;
 
   std::unordered_map<content::ResourceKey, TextureEntry> texture_map_;
+
+  std::mutex pending_uploads_mutex_;
+  std::deque<PendingUpload> pending_uploads_;
 
   // The singleton global placeholder and error textures.
   std::shared_ptr<graphics::Texture> placeholder_texture_;
@@ -802,6 +826,8 @@ auto TextureBinder::Impl::OnFrameStart() -> void
     entry.pending_ticket.reset();
     entry.pending_view_desc.reset();
   }
+
+  SubmitQueuedTextureUploads(kMaxTextureUploadBytesPerFrame);
 }
 
 auto TextureBinder::Impl::OnFrameEnd() -> void { }
@@ -959,99 +985,13 @@ auto TextureBinder::Impl::OnTextureResourceLoaded(
   // NOLINTNEXTLINE(*-unnecessary-value-param) - moved from a lambda capture
   std::shared_ptr<data::TextureResource> tex_res) -> void
 {
-  DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
-  DCHECK_NOTNULL_F(uploader_, "UploadCoordinator cannot be null");
-  DCHECK_NOTNULL_F(staging_provider_, "StagingProvider cannot be null");
-
-  TextureEntry* entry_ptr = this->FindEntryOrLog(resource_key);
-  if (entry_ptr == nullptr) {
-    return;
-  }
-
-  DLOG_SCOPE_F(2, "TextureBinder texture load");
-  DLOG_F(2, "resource: {}", resource_key);
-
-  auto& entry = *entry_ptr;
-  if (!tex_res) {
-    DLOG_F(2, "result: tex_res is null");
-    LOG_F(WARNING, "Async texture load returned null for resource {}",
-      resource_key);
-    this->HandleLoadFailure(
-      resource_key, entry, FailurePolicy::kBindErrorTexture, nullptr);
-    return;
-  }
-
-  DLOG_F(2, "format: {}", tex_res->GetFormat());
-  DLOG_F(2, "size: {}x{}x{}", tex_res->GetWidth(), tex_res->GetHeight(),
-    tex_res->GetDepth());
-  DLOG_F(2, "mips: {}", tex_res->GetMipCount());
-  DLOG_F(2, "layers: {}", tex_res->GetArrayLayers());
-  DLOG_F(2, "data_alignment: {}", tex_res->GetDataAlignment());
-  DLOG_F(2, "data_bytes: {}", tex_res->GetData().size());
-
-  const auto prepared_result = PrepareTexture2DUpload(*gfx_, *tex_res);
-  if (std::holds_alternative<PrepareTexture2DUploadFailure>(prepared_result)) {
-    const auto& failure
-      = std::get<PrepareTexture2DUploadFailure>(prepared_result);
-    switch (failure.reason) {
-    case PrepareTexture2DUploadFailure::Reason::kUnsupportedFormat:
-      LOG_F(ERROR, "TextureBinder upload only supports non-BC formats");
-      break;
-    case PrepareTexture2DUploadFailure::Reason::kUnsupportedDepth:
-      LOG_F(ERROR, "TextureBinder async upload only supports 2D textures");
-      break;
-    case PrepareTexture2DUploadFailure::Reason::kBadDataAlignment:
-      LOG_F(ERROR,
-        "TextureBinder expects cooked texture data alignment {} bytes; got {}",
-        failure.expected_alignment, failure.actual_alignment);
-      break;
-    case PrepareTexture2DUploadFailure::Reason::kCreateTextureException:
-      LOG_F(ERROR, "CreateTexture threw during async load");
-      break;
-    case PrepareTexture2DUploadFailure::Reason::kCreateTextureReturnedNull:
-      LOG_F(ERROR, "CreateTexture returned null during async load");
-      break;
-    case PrepareTexture2DUploadFailure::Reason::kLayoutFailure: {
-      DCHECK_F(failure.layout_failure.has_value());
-      const auto& lf = *failure.layout_failure;
-
-      DLOG_F(2, "failure: upload layout");
-
-      switch (lf.reason) {
-      case UploadLayoutFailure::Reason::kDataTooSmall:
-        LOG_F(ERROR,
-          "TextureResource data too small: mip {} layer {} offset {} need {} "
-          "bytes (total {})",
-          lf.mip, lf.layer, lf.offset, lf.required_bytes, lf.total_bytes);
-        break;
-      case UploadLayoutFailure::Reason::kMipAlignmentOverflow:
-        LOG_F(ERROR,
-          "TextureResource mip alignment overflow: mip {} offset {} padding "
-          "{} (total {})",
-          lf.mip, lf.offset, lf.required_bytes, lf.total_bytes);
-        break;
-      case UploadLayoutFailure::Reason::kArithmeticOverflow:
-        LOG_F(ERROR,
-          "TextureResource upload layout arithmetic overflow: mip {} offset "
-          "{} (total {})",
-          lf.mip, lf.offset, lf.total_bytes);
-        break;
-      }
-      break;
-    }
-    }
-
-    this->HandleLoadFailure(
-      resource_key, entry, FailurePolicy::kBindErrorTexture, nullptr);
-    return;
-  }
-
-  PreparedTexture2DUpload prepared
-    = std::get<PreparedTexture2DUpload>(prepared_result);
-  this->SubmitTextureUpload(resource_key, entry, prepared.desc,
-    std::move(prepared.new_texture),
-    std::move(prepared.layout.dst_subresources),
-    std::move(prepared.layout.src_view), prepared.layout.trailing_bytes);
+  // This callback may execute off the render thread. Do not touch render
+  // thread-owned state here (e.g. texture_map_, SRV descriptors).
+  std::scoped_lock lock(pending_uploads_mutex_);
+  pending_uploads_.push_back(PendingUpload {
+    .key = resource_key,
+    .resource = std::move(tex_res),
+  });
 }
 
 auto TextureBinder::Impl::FindEntryOrLog(
@@ -1064,6 +1004,135 @@ auto TextureBinder::Impl::FindEntryOrLog(
     return nullptr;
   }
   return &it->second;
+}
+
+auto TextureBinder::Impl::SubmitQueuedTextureUploads(
+  const std::size_t max_bytes) -> void
+{
+  DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
+  DCHECK_NOTNULL_F(uploader_, "UploadCoordinator cannot be null");
+  DCHECK_NOTNULL_F(staging_provider_, "StagingProvider cannot be null");
+
+  std::size_t submitted_bytes = 0U;
+
+  for (;;) {
+    if (submitted_bytes >= max_bytes) {
+      return;
+    }
+
+    PendingUpload pending;
+    {
+      std::scoped_lock lock(pending_uploads_mutex_);
+      if (pending_uploads_.empty()) {
+        return;
+      }
+      pending = std::move(pending_uploads_.front());
+      pending_uploads_.pop_front();
+    }
+
+    TextureEntry* entry_ptr = this->FindEntryOrLog(pending.key);
+    if (entry_ptr == nullptr) {
+      continue;
+    }
+    auto& entry = *entry_ptr;
+
+    if (!pending.resource) {
+      LOG_F(WARNING, "Async texture load returned null for resource {}",
+        pending.key);
+      this->HandleLoadFailure(
+        pending.key, entry, FailurePolicy::kBindErrorTexture, nullptr);
+      continue;
+    }
+
+    const auto data_bytes = pending.resource->GetDataSize();
+    if (data_bytes > max_bytes && submitted_bytes == 0U) {
+      LOG_F(WARNING,
+        "TextureBinder: texture {} requires {} bytes; exceeds per-frame "
+        "budget {}. Submitting anyway.",
+        pending.key, data_bytes, max_bytes);
+    } else if (submitted_bytes + data_bytes > max_bytes) {
+      {
+        std::scoped_lock lock(pending_uploads_mutex_);
+        pending_uploads_.push_front(std::move(pending));
+      }
+      return;
+    }
+
+    DLOG_F(2, "format: {}", pending.resource->GetFormat());
+    DLOG_F(2, "size: {}x{}x{}", pending.resource->GetWidth(),
+      pending.resource->GetHeight(), pending.resource->GetDepth());
+    DLOG_F(2, "mips: {}", pending.resource->GetMipCount());
+    DLOG_F(2, "layers: {}", pending.resource->GetArrayLayers());
+    DLOG_F(2, "data_alignment: {}", pending.resource->GetDataAlignment());
+    DLOG_F(2, "data_bytes: {}", pending.resource->GetData().size());
+
+    const auto prepared_result
+      = PrepareTexture2DUpload(*gfx_, *pending.resource, pending.key);
+    if (std::holds_alternative<PrepareTexture2DUploadFailure>(
+          prepared_result)) {
+      const auto& failure
+        = std::get<PrepareTexture2DUploadFailure>(prepared_result);
+      switch (failure.reason) {
+      case PrepareTexture2DUploadFailure::Reason::kUnsupportedFormat:
+        LOG_F(ERROR, "TextureBinder upload only supports non-BC formats");
+        break;
+      case PrepareTexture2DUploadFailure::Reason::kUnsupportedDepth:
+        LOG_F(ERROR, "TextureBinder async upload only supports 2D textures");
+        break;
+      case PrepareTexture2DUploadFailure::Reason::kBadDataAlignment:
+        LOG_F(ERROR,
+          "TextureBinder expects cooked texture data alignment {} bytes; got "
+          "{}",
+          failure.expected_alignment, failure.actual_alignment);
+        break;
+      case PrepareTexture2DUploadFailure::Reason::kCreateTextureException:
+        LOG_F(ERROR, "CreateTexture threw during async load");
+        break;
+      case PrepareTexture2DUploadFailure::Reason::kCreateTextureReturnedNull:
+        LOG_F(ERROR, "CreateTexture returned null during async load");
+        break;
+      case PrepareTexture2DUploadFailure::Reason::kLayoutFailure: {
+        DCHECK_F(failure.layout_failure.has_value());
+        const auto& lf = *failure.layout_failure;
+
+        switch (lf.reason) {
+        case UploadLayoutFailure::Reason::kDataTooSmall:
+          LOG_F(ERROR,
+            "TextureResource data too small: mip {} layer {} offset {} need {} "
+            "bytes (total {})",
+            lf.mip, lf.layer, lf.offset, lf.required_bytes, lf.total_bytes);
+          break;
+        case UploadLayoutFailure::Reason::kMipAlignmentOverflow:
+          LOG_F(ERROR,
+            "TextureResource mip alignment overflow: mip {} offset {} padding "
+            "{} (total {})",
+            lf.mip, lf.offset, lf.required_bytes, lf.total_bytes);
+          break;
+        case UploadLayoutFailure::Reason::kArithmeticOverflow:
+          LOG_F(ERROR,
+            "TextureResource upload layout arithmetic overflow: mip {} offset "
+            "{} (total {})",
+            lf.mip, lf.offset, lf.total_bytes);
+          break;
+        }
+        break;
+      }
+      }
+
+      this->HandleLoadFailure(
+        pending.key, entry, FailurePolicy::kBindErrorTexture, nullptr);
+      continue;
+    }
+
+    PreparedTexture2DUpload prepared
+      = std::get<PreparedTexture2DUpload>(prepared_result);
+    this->SubmitTextureUpload(pending.key, entry, prepared.desc,
+      std::move(prepared.new_texture),
+      std::move(prepared.layout.dst_subresources),
+      std::move(prepared.layout.src_view), prepared.layout.trailing_bytes);
+
+    submitted_bytes += data_bytes;
+  }
 }
 
 auto TextureBinder::Impl::SubmitTextureUpload(
