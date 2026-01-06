@@ -32,7 +32,8 @@ namespace oxygen::data {
  0x0C   4    usage_flags      Buffer usage and access flags (bitfield)
  0x10   4    element_stride   Stride of each element in bytes (1 = raw)
  0x14   1    element_format   Buffer element format enum value
- 0x15   11   reserved         Reserved for future use
+ 0x15   8    content_hash     First 8 bytes of SHA256 of buffer data
+ 0x1D   3    reserved         Reserved for future use (must be 0)
  ```
 
  @see BufferResourceDesc for interpretation of fields.
@@ -92,6 +93,12 @@ public:
   [[nodiscard]] auto GetElementStride() const noexcept
   {
     return desc_.element_stride;
+  }
+
+  //! Returns the per-resource content hash from the descriptor.
+  [[nodiscard]] auto GetContentHash() const noexcept -> uint64_t
+  {
+    return desc_.content_hash;
   }
 
   //! Returns the element format. If 0, buffer is raw bytes (Format::kUnknown).

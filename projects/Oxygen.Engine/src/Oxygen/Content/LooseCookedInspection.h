@@ -45,7 +45,6 @@ public:
       = data::loose_cooked::v1::FileKind::kUnknown;
     std::string relpath;
     uint64_t size = 0;
-    std::optional<base::Sha256Digest> sha256;
   };
 
   OXGN_CNTT_API LooseCookedInspection();

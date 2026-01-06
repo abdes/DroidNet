@@ -481,54 +481,11 @@ private:
         + " actual=" + std::to_string(actual_size));
     }
 
-    const auto expected_sha_opt = index_.FindFileSha256(kind);
-    if (!expected_sha_opt) {
-      const auto t1 = std::chrono::steady_clock::now();
-      LOG_F(INFO,
-        "LooseCookedSource: validated file record kind={} path={} time_ms={}",
-        static_cast<int>(kind), absolute_path.string(),
-        std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
-      return;
-    }
-
-    Sha256Digest expected = {};
-    std::copy_n(expected_sha_opt->data(), expected.size(), expected.begin());
-    if (IsAllZero(expected)) {
-      const auto t1 = std::chrono::steady_clock::now();
-      LOG_F(INFO,
-        "LooseCookedSource: validated file record kind={} path={} time_ms={} "
-        "(sha_skipped_all_zero)",
-        static_cast<int>(kind), absolute_path.string(),
-        std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
-      return;
-    }
-
-    if (!verify_content_hashes_) {
-      const auto t1 = std::chrono::steady_clock::now();
-      LOG_F(INFO,
-        "LooseCookedSource: validated file record kind={} path={} time_ms={} "
-        "(sha_disabled)",
-        static_cast<int>(kind), absolute_path.string(),
-        std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
-      return;
-    }
-
-    const auto t_sha0 = std::chrono::steady_clock::now();
-    const auto actual_sha = ComputeFileSha256(absolute_path);
-    const auto t_sha1 = std::chrono::steady_clock::now();
-    if (actual_sha != expected) {
-      throw std::runtime_error(
-        "Loose cooked file SHA-256 mismatch: " + absolute_path.string());
-    }
-
     const auto t1 = std::chrono::steady_clock::now();
     LOG_F(INFO,
-      "LooseCookedSource: validated file record kind={} path={} time_ms={} "
-      "(sha_ms={})",
+      "LooseCookedSource: validated file record kind={} path={} time_ms={}",
       static_cast<int>(kind), absolute_path.string(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(t_sha1 - t_sha0)
-        .count());
+      std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
   }
 
   auto ValidateDescriptorFilesExistAndMatchIndex() const -> void

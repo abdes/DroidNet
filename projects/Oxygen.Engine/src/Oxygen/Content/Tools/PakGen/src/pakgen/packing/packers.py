@@ -1147,13 +1147,17 @@ def pack_buffer_resource_descriptor(
     usage_flags = resource_spec.get("usage", 0)
     element_stride = resource_spec.get("stride", 0)
     element_format = resource_spec.get("format", 0)
+    content_hash = (
+        int(resource_spec.get("content_hash", 0)) & 0xFFFFFFFFFFFFFFFF
+    )
     desc = (
         struct.pack("<Q", data_offset)
         + struct.pack("<I", data_size)
         + struct.pack("<I", usage_flags)
         + struct.pack("<I", element_stride)
         + struct.pack("<B", element_format)
-        + b"\x00" * 11
+        + struct.pack("<Q", content_hash)
+        + b"\x00" * 3
     )
     if len(desc) != 32:
         raise PakError(
@@ -1175,6 +1179,9 @@ def pack_texture_resource_descriptor(
     mip_levels = resource_spec.get("mip_levels", 1)
     format_val = resource_spec.get("format", 0)
     alignment = resource_spec.get("alignment", 256)
+    content_hash = (
+        int(resource_spec.get("content_hash", 0)) & 0xFFFFFFFFFFFFFFFF
+    )
     desc = (
         struct.pack("<Q", data_offset)
         + struct.pack("<I", data_size)
@@ -1187,7 +1194,8 @@ def pack_texture_resource_descriptor(
         + struct.pack("<H", mip_levels)
         + struct.pack("<B", format_val)
         + struct.pack("<H", alignment)
-        + b"\x00" * 9
+        + struct.pack("<Q", content_hash)
+        + b"\x00"
     )
     if len(desc) != 40:
         raise PakError(

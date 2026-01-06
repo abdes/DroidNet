@@ -85,12 +85,6 @@ auto LooseCookedInspection::LoadFromFile(
       out.size = *size;
     }
 
-    if (const auto sha = index.FindFileSha256(kind); sha) {
-      base::Sha256Digest digest = {};
-      std::copy_n(sha->begin(), digest.size(), digest.begin());
-      out.sha256 = digest;
-    }
-
     impl_->files.push_back(std::move(out));
   }
 }

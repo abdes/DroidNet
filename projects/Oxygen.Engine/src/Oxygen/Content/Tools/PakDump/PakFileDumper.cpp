@@ -174,6 +174,8 @@ public:
               nostd::to_string(buffer_resource->GetElementFormat()), 8);
             Field("Usage Flags",
               nostd::to_string(buffer_resource->GetUsageFlags()), 8);
+            Field("Content Hash",
+              ToHexString(buffer_resource->GetContentHash()), 8);
             std::string buffer_type;
             if (buffer_resource->IsRaw()) {
               buffer_type = "Raw";
@@ -248,6 +250,8 @@ public:
             Field("Format", nostd::to_string(texture_resource->GetFormat()), 8);
             Field("Texture Type",
               nostd::to_string(texture_resource->GetTextureType()), 8);
+            Field("Content Hash",
+              ToHexString(texture_resource->GetContentHash()), 8);
             if (ctx.show_resource_data) {
               PrintResourceData(
                 texture_resource->GetData(), "Texture", ctx.max_data_bytes);

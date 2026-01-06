@@ -313,10 +313,13 @@ static_assert(sizeof(PakBrowseIndexEntry) == 24);
 // Resource Descriptors
 // -----------------------------------------------------------------------------
 
-//! Texture resource table entry (32 bytes)
+//! Texture resource table entry (40 bytes)
 /*!
   @note Texture `format` must be one of the core type `Format` enum values.
   @note Textures are always aligned to 256 bytes.
+  @note `content_hash` stores the first 8 bytes of the SHA256 of the texture
+  data. Used for fast deduplication during incremental imports without
+  re-reading the data file.
 */
 #pragma pack(push, 1)
 struct TextureResourceDesc {
@@ -332,8 +335,8 @@ struct TextureResourceDesc {
   uint8_t format; // Texture format enum
   uint16_t alignment; // 256 for textures
 
-  // Reserved for future use
-  uint8_t reserved[9] = {};
+  uint64_t content_hash = 0; // First 8 bytes of SHA256 of texture data
+  uint8_t reserved[1] = {}; // Reserved for future use
 };
 #pragma pack(pop)
 static_assert(sizeof(TextureResourceDesc) == 40);
@@ -378,6 +381,9 @@ static_assert(sizeof(TextureResourceDesc) == 40);
     0x200: Immutable         (never updated after creation)
     ```
 
+  @note `content_hash` stores the first 8 bytes of the SHA256 of the buffer
+  data. Used for fast deduplication during incremental imports.
+
   @note The `reserved` field is for future expansion and must be
   zero-initialized.
 */
@@ -388,7 +394,8 @@ struct BufferResourceDesc {
   uint32_t usage_flags = 0; //!< Usage hints (see above)
   uint32_t element_stride = 0; //!< 1 for raw buffers, 0 when unused
   uint8_t element_format = 0; //!< Format enum value (0 = raw or structured)
-  uint8_t reserved[11] = {}; //!< Reserved for future use (must be zero)
+  uint64_t content_hash = 0; //!< First 8 bytes of SHA256 of buffer data
+  uint8_t reserved[3] = {}; //!< Reserved for future use (must be zero)
 };
 #pragma pack(pop)
 static_assert(sizeof(BufferResourceDesc) == 32);

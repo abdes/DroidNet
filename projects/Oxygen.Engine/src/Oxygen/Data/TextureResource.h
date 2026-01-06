@@ -43,7 +43,8 @@ namespace oxygen::data {
  0x1A   2    mip_levels       Number of mipmap levels
  0x1C   1    format           Texture format enum value
  0x1D   2    alignment        Required alignment (default 256)
- texture_type) 0x1F   9    reserved         Reserved for future use
+ 0x1F   8    content_hash     First 8 bytes of SHA256 of texture data
+ 0x27   1    reserved         Reserved for future use (must be 0)
  ```
 
  @see TextureResourceDesc, MaterialAssetDesc
@@ -115,6 +116,12 @@ public:
   [[nodiscard]] auto GetDataAlignment() const noexcept -> uint16_t
   {
     return desc_.alignment;
+  }
+
+  //! Returns the per-resource content hash from the descriptor.
+  [[nodiscard]] auto GetContentHash() const noexcept -> uint64_t
+  {
+    return desc_.content_hash;
   }
 
   //! Returns an immutable span of the loaded texture data.

@@ -115,7 +115,7 @@ auto DumpHexSha256(std::ostream& os,
 auto DumpFileRecords(
   const std::span<const oxygen::content::LooseCookedInspection::FileEntry>
     entries,
-  std::ostream& os, const bool show_digests) -> void
+  std::ostream& os) -> void
 {
   bool any = false;
   for (const auto& e : entries) {
@@ -123,15 +123,6 @@ auto DumpFileRecords(
 
     os << "- " << FileKindToString(e.kind) << ": path='" << e.relpath << "'";
     os << " size=" << e.size;
-
-    if (show_digests) {
-      if (e.sha256) {
-        os << " sha256=";
-        DumpHexSha256(os,
-          std::span<const uint8_t, oxygen::data::loose_cooked::v1::kSha256Size>(
-            e.sha256->data(), e.sha256->size()));
-      }
-    }
 
     os << "\n";
   }
@@ -226,7 +217,7 @@ auto RunDumpIndex(const DumpOptions& opts) -> int
 
     if (dump_files) {
       std::cout << "\n[file_records]\n";
-      DumpFileRecords(inspection.Files(), std::cout, opts.show_digests);
+      DumpFileRecords(inspection.Files(), std::cout);
     }
 
     return 0;

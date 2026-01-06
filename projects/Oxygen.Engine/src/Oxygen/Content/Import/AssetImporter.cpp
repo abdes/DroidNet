@@ -55,6 +55,12 @@ namespace {
       writer_.WriteFile(kind, relpath, bytes);
     }
 
+    auto RegisterExternalFile(const data::loose_cooked::v1::FileKind kind,
+      const std::string_view relpath) -> void override
+    {
+      writer_.RegisterExternalFile(kind, relpath);
+    }
+
     auto OnMaterialsWritten(const uint32_t count) -> void override
     {
       report_.materials_written += count;
