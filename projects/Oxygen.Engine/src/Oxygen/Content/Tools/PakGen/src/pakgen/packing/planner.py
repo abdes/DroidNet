@@ -23,6 +23,78 @@ from .constants import (
 )
 from ..utils.io import read_data_from_spec
 
+
+def _align_up(value: int, alignment: int) -> int:
+    if alignment <= 0:
+        return value
+    return ((value + alignment - 1) // alignment) * alignment
+
+
+def _maybe_pad_texture_payload(entry: Dict[str, Any], data: bytes) -> bytes:
+    """Pad small uncompressed RGBA8 texture payloads for D3D12 row-pitch rules.
+
+    The runtime upload path aligns row pitch to 256 bytes. When authors embed
+    small textures (e.g., 1x1, 2x2) via data_hex, they typically provide only
+    tightly packed texels (4 * w * h bytes). That will fail at runtime because
+    the uploader expects each row padded to 256 bytes.
+
+    We only auto-pad the common case we use in demos:
+    - texture_type == 3 (2D)
+    - compression_type == 0 (raw)
+    - format == 30 (RGBA8_UNORM)
+    - mip_levels == 1, array_layers == 1, depth == 1
+
+    For very large inferred required sizes we fail early rather than allocate
+    huge padding buffers silently.
+    """
+
+    if not data:
+        return data
+
+    try:
+        texture_type = int(entry.get("texture_type", 0))
+        compression_type = int(entry.get("compression_type", 0))
+        fmt = int(entry.get("format", 0))
+        width = int(entry.get("width", 0))
+        height = int(entry.get("height", 0))
+        depth = int(entry.get("depth", 1))
+        array_layers = int(entry.get("array_layers", 1))
+        mip_levels = int(entry.get("mip_levels", 1))
+    except Exception:
+        return data
+
+    if (
+        texture_type != 3
+        or compression_type != 0
+        or fmt != 30
+        or mip_levels != 1
+        or array_layers != 1
+        or depth != 1
+    ):
+        return data
+
+    if width <= 0 or height <= 0:
+        return data
+
+    bytes_per_pixel = 4
+    row_pitch = _align_up(width * bytes_per_pixel, 256)
+    required = row_pitch * height
+
+    if len(data) >= required:
+        return data
+
+    max_autopad_bytes = 16 * 1024 * 1024  # 16 MiB safety cap
+    if required > max_autopad_bytes:
+        raise ValueError(
+            "Embedded texture payload too small for inferred row-pitch layout "
+            f"(name={entry.get('name')!r} format=RGBA8_UNORM width={width} height={height} "
+            f"required_bytes={required} actual_bytes={len(data)}). "
+            "Provide pre-padded rows or use an external file payload."
+        )
+
+    return data + b"\x00" * (required - len(data))
+
+
 # ---------------------------------------------------------------------------
 # Existing collection result dataclasses
 # ---------------------------------------------------------------------------
@@ -287,6 +359,16 @@ def collect_resources(
                     data = read_data_from_spec(
                         entry, base_dir, max_size=max_size
                     )
+                    if rtype == "texture":
+                        padded = _maybe_pad_texture_payload(entry, data)
+                        if len(padded) != len(data):
+                            rep.warning(
+                                "Padded texture payload for row-pitch alignment",
+                                name=name,
+                                original_bytes=len(data),
+                                padded_bytes=len(padded),
+                            )
+                        data = padded
                 except Exception as e:
                     rep.error(f"Failed to read {rtype} data for '{name}': {e}")
                     raise

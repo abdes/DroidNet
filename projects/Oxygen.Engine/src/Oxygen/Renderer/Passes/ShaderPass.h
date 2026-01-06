@@ -83,6 +83,12 @@ private:
 
   //! Configuration for the depth pre-pass.
   std::shared_ptr<Config> config_;
+
+  //! Cached pipeline state descriptions for partition-aware execution.
+  std::optional<graphics::GraphicsPipelineDesc> pso_opaque_single_ {};
+  std::optional<graphics::GraphicsPipelineDesc> pso_opaque_double_ {};
+  std::optional<graphics::GraphicsPipelineDesc> pso_masked_single_ {};
+  std::optional<graphics::GraphicsPipelineDesc> pso_masked_double_ {};
 };
 
 } // namespace oxygen::engine

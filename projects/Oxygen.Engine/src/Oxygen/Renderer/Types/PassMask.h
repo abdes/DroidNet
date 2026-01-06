@@ -23,23 +23,27 @@ namespace oxygen::engine {
  * reserved and documented for design continuity.
  *
  * Active bits:
- *  - kOpaqueOrMasked : Depth writing surfaces (opaque or alpha test grouped)
- *  - kTransparent    : Alpha blended surfaces (depth read, no depth write)
+ *  - kDoubleSided  : Disable backface culling for this draw.
+ *  - kOpaque       : Depth-writing opaque surfaces.
+ *  - kMasked       : Depth-writing alpha-tested (cutout) surfaces.
+ *  - kTransparent  : Alpha blended surfaces (depth read, no depth write).
  *
  * Reserved (not yet produced):
- *  - kAdditive       : Additive/emissive order-independent
- *  - kTransmission   : Refraction / glass / subsurface
- *  - kDecal          : Projected decals
- *  - kUi             : Overlay / UI
+ *  - kAdditive     : Additive/emissive order-dependent.
+ *  - kTransmission : Refraction / glass / subsurface.
+ *  - kDecal        : Projected decals.
+ *  - kUi           : Overlay / UI.
  */
 enum class PassMaskBit : uint32_t {
   kNone = 0u,
-  kOpaqueOrMasked = 1u << 0,
-  kTransparent = 1u << 1,
-  kAdditive = 1u << 2,
-  kTransmission = 1u << 3,
-  kDecal = 1u << 4,
-  kUi = 1u << 5,
+  kDoubleSided = 1u << 0,
+  kOpaque = 1u << 1,
+  kMasked = 1u << 2,
+  kTransparent = 1u << 3,
+  kAdditive = 1u << 4,
+  kTransmission = 1u << 5,
+  kDecal = 1u << 6,
+  kUi = 1u << 7,
 };
 
 using PassMaskBase = oxygen::NamedType<uint32_t,
@@ -126,7 +130,9 @@ inline auto to_string(PassMask mask) -> std::string
     std::string_view name;
   };
   static constexpr Entry kTable[] = {
-    { PassMaskBit::kOpaqueOrMasked, "OpaqueOrMasked" },
+    { PassMaskBit::kDoubleSided, "DoubleSided" },
+    { PassMaskBit::kOpaque, "Opaque" },
+    { PassMaskBit::kMasked, "Masked" },
     { PassMaskBit::kTransparent, "Transparent" },
     { PassMaskBit::kAdditive, "Additive" },
     { PassMaskBit::kTransmission, "Transmission" },

@@ -31,6 +31,11 @@ struct RenderItemData {
 
   // Cached scene state
   glm::vec4 world_bounding_sphere { 0.0f, 0.0f, 0.0f, 0.0f };
+
+  // View-relative squared distance used for transparent sorting.
+  // This is computed during ScenePrep collection when a view is available.
+  float sort_distance2 = 0.0f;
+
   // Stable reference into TransformUploader
   TransformHandle transform_handle { 0U };
 

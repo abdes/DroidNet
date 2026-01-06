@@ -101,6 +101,18 @@ public:
     return desc_.flags;
   }
 
+  //! Returns whether this material is double-sided.
+  /*!
+   Double-sided is an explicit material property (encoded in the PAK material
+   flags). Render passes use it to disable backface culling.
+
+   @return True if the material should be treated as double-sided.
+  */
+  [[nodiscard]] auto IsDoubleSided() const noexcept -> bool
+  {
+    return (GetFlags() & pak::kMaterialFlag_DoubleSided) != 0u;
+  }
+
   //! Returns the shader references for all stages used by this material.
   [[nodiscard]] auto GetShaders() const noexcept
     -> std::span<const ShaderReference>

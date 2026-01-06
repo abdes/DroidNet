@@ -77,8 +77,9 @@ struct VS_OUTPUT_DEPTH {
 // Vertex Shader: DepthOnlyVS
 // Transforms vertices to clip space for depth buffer population.
 // Entry point should match the identifier used in PipelineStateDesc (e.g., "DepthOnlyVS").
-[shader("vertex")]
-VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
+VS_OUTPUT_DEPTH VS_DepthCommon(uint vertexID : SV_VertexID,
+    uint instanceID : SV_InstanceID)
+{
     (void)instanceID;
 
     VS_OUTPUT_DEPTH output;
@@ -101,12 +102,34 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
     return output;
 }
 
+// Engine shader catalog entry point (precompiled).
+[shader("vertex")]
+VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
+{
+    return VS_DepthCommon(vertexID, instanceID);
+}
+
+// Partition-aware depth variants.
+[shader("vertex")]
+VS_OUTPUT_DEPTH VS_OpaqueDepth(uint vertexID : SV_VertexID,
+    uint instanceID : SV_InstanceID)
+{
+    return VS_DepthCommon(vertexID, instanceID);
+}
+
+[shader("vertex")]
+VS_OUTPUT_DEPTH VS_MaskedDepth(uint vertexID : SV_VertexID,
+    uint instanceID : SV_InstanceID)
+{
+    return VS_DepthCommon(vertexID, instanceID);
+}
+
 // Pixel Shader: MinimalPS
 // This shader is minimal as no color output is needed for the depth pre-pass.
 // The pipeline state should be configured with no color render targets.
 // Entry point should match the identifier used in PipelineStateDesc (e.g., "MinimalPS").
-[shader("pixel")]
-void PS(VS_OUTPUT_DEPTH input) {
+void PS_MaskedCommon(VS_OUTPUT_DEPTH input)
+{
     // Depth writes are handled by fixed function; PS exists only to optionally
     // discard masked fragments so they don't contribute to the depth buffer.
 
@@ -147,4 +170,24 @@ void PS(VS_OUTPUT_DEPTH input) {
     }
 
     clip(alpha - cutoff);
+}
+
+// Engine shader catalog entry point (precompiled).
+[shader("pixel")]
+void PS(VS_OUTPUT_DEPTH input)
+{
+    PS_MaskedCommon(input);
+}
+
+// Partition-aware depth variants.
+[shader("pixel")]
+void PS_OpaqueDepth(VS_OUTPUT_DEPTH input)
+{
+    (void)input;
+}
+
+[shader("pixel")]
+void PS_MaskedDepth(VS_OUTPUT_DEPTH input)
+{
+    PS_MaskedCommon(input);
 }

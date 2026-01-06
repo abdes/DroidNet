@@ -7,6 +7,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 
 #include <Oxygen/Renderer/Passes/RenderPass.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -62,6 +63,9 @@ private:
   auto GetDepthTexture() const -> const graphics::Texture*; // nullable
 
   std::shared_ptr<Config> config_;
+
+  std::optional<graphics::GraphicsPipelineDesc> pso_single_sided_ {};
+  std::optional<graphics::GraphicsPipelineDesc> pso_double_sided_ {};
 };
 
 } // namespace oxygen::engine

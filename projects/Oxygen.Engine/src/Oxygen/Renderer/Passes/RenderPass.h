@@ -122,6 +122,17 @@ protected:
   OXGN_RNDR_NDAPI auto Context() const -> const RenderContext&;
   auto LastBuiltPsoDesc() const -> const auto& { return last_built_pso_desc_; }
 
+  //! Bind the per-draw root constant identifying the draw record.
+  /*!
+   Derived passes that need to switch pipeline state per partition can use this
+   helper while iterating ranges directly.
+
+   @param recorder Command recorder used to bind the constant.
+   @param draw_index Index into PreparedSceneFrame draw metadata.
+  */
+  auto BindDrawIndexConstant(
+    graphics::CommandRecorder& recorder, DrawIndex draw_index) const -> void;
+
   //! Set the pass-level RootConstants payload for this pass execution.
   /*!
    This binds the `g_PassConstantsIndex` root constant (DWORD1 at `b2, space0`)
@@ -144,6 +155,13 @@ protected:
   OXGN_RNDR_NDAPI static auto BuildRootBindings()
     -> std::vector<graphics::RootBindingItem>;
 
+  //! Emit draws for a half-open [begin, end) range with robust error
+  //! handling. Increments counters for emitted, skipped invalid, and errors.
+  auto EmitDrawRange(graphics::CommandRecorder& recorder,
+    const DrawMetadata* records, uint32_t begin, uint32_t end,
+    uint32_t& emitted_count, uint32_t& skipped_invalid,
+    uint32_t& draw_errors) const noexcept -> void;
+
   // Issue draw calls over a specific pass partition.
   // Iterates PreparedSceneFrame partitions and emits draws only within the
   // ranges whose pass_mask includes the requested bit. Logs emitted count.
@@ -151,22 +169,12 @@ protected:
     PassMaskBit pass_bit) const noexcept -> void;
 
 private:
-  auto BindDrawIndexConstant(
-    graphics::CommandRecorder& recorder, DrawIndex draw_index) const -> void;
-
   auto BindPassConstantsIndexConstant(graphics::CommandRecorder& recorder,
     ShaderVisibleIndex pass_constants_index) const -> void;
 
   auto BindSceneConstantsBuffer(graphics::CommandRecorder& recorder) const
     -> void;
   auto BindIndicesBuffer(graphics::CommandRecorder& recorder) const -> void;
-
-  //! Emit draws for a half-open [begin, end) range with robust error
-  //! handling. Increments counters for emitted, skipped invalid, and errors.
-  auto EmitDrawRange(graphics::CommandRecorder& recorder,
-    const DrawMetadata* records, uint32_t begin, uint32_t end,
-    uint32_t& emitted_count, uint32_t& skipped_invalid,
-    uint32_t& draw_errors) const noexcept -> void;
 
   //! Current render context.
   const RenderContext* context_ { nullptr };

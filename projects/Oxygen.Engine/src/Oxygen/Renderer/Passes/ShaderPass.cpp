@@ -212,9 +212,58 @@ auto ShaderPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   SetupViewPortAndScissors(recorder);
   SetupRenderTargets(recorder);
-  // Emit only opaque/masked partition; transparent handled by TransparentPass.
-  IssueDrawCallsOverPass(
-    recorder, oxygen::engine::PassMaskBit::kOpaqueOrMasked);
+
+  // Emit opaque and masked partitions; transparent handled by TransparentPass.
+  const auto psf = Context().current_view.prepared_frame;
+  if (!psf || !psf->IsValid() || psf->draw_metadata_bytes.empty()) {
+    Context().RegisterPass(this);
+    co_return;
+  }
+  if (psf->partitions.empty()) {
+    LOG_F(ERROR, "ShaderPass: partitions are missing; nothing will be drawn");
+    Context().RegisterPass(this);
+    co_return;
+  }
+
+  DCHECK_F(pso_opaque_single_.has_value());
+  DCHECK_F(pso_opaque_double_.has_value());
+  DCHECK_F(pso_masked_single_.has_value());
+  DCHECK_F(pso_masked_double_.has_value());
+
+  const auto* records = reinterpret_cast<const engine::DrawMetadata*>(
+    psf->draw_metadata_bytes.data());
+
+  uint32_t emitted_count = 0;
+  uint32_t skipped_invalid = 0;
+  uint32_t draw_errors = 0;
+
+  for (const auto& pr : psf->partitions) {
+    if (!pr.pass_mask.IsSet(oxygen::engine::PassMaskBit::kOpaque)
+      && !pr.pass_mask.IsSet(oxygen::engine::PassMaskBit::kMasked)) {
+      continue;
+    }
+
+    const bool is_masked
+      = pr.pass_mask.IsSet(oxygen::engine::PassMaskBit::kMasked);
+    const bool is_double_sided
+      = pr.pass_mask.IsSet(oxygen::engine::PassMaskBit::kDoubleSided);
+
+    const auto& pso_desc = [&]() -> const graphics::GraphicsPipelineDesc& {
+      if (is_masked) {
+        return is_double_sided ? *pso_masked_double_ : *pso_masked_single_;
+      }
+      return is_double_sided ? *pso_opaque_double_ : *pso_opaque_single_;
+    }();
+    recorder.SetPipelineState(pso_desc);
+
+    EmitDrawRange(recorder, records, pr.begin, pr.end, emitted_count,
+      skipped_invalid, draw_errors);
+  }
+
+  if (emitted_count > 0 || skipped_invalid > 0 || draw_errors > 0) {
+    DLOG_F(2, "ShaderPass: emitted={}, skipped_invalid={}, errors={}",
+      emitted_count, skipped_invalid, draw_errors);
+  }
 
   Context().RegisterPass(this);
 
@@ -308,18 +357,18 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   // Determine requested rasterizer fill mode from configuration (default solid)
   const auto requested_fill
     = config_ ? config_->fill_mode : oxygen::graphics::FillMode::kSolid;
-  // Set up rasterizer and blend state for standard color rendering
-  // Choose culling based on requested fill mode: when wireframe is
-  // requested disable culling so edges for all faces are visible.
-  const auto raster_cull_mode = (requested_fill == FillMode::kWireFrame)
-    ? CullMode::kNone
-    : CullMode::kBack;
 
-  const RasterizerStateDesc raster_desc {
-    .fill_mode = requested_fill,
-    .cull_mode = raster_cull_mode,
-    .front_counter_clockwise = true,
-    .multisample_enable = false,
+  const auto MakeRasterDesc = [&](CullMode cull_mode) -> RasterizerStateDesc {
+    // When wireframe is requested disable culling so edges for all faces are
+    // visible.
+    const auto effective_cull
+      = (requested_fill == FillMode::kWireFrame) ? CullMode::kNone : cull_mode;
+    return RasterizerStateDesc {
+      .fill_mode = requested_fill,
+      .cull_mode = effective_cull,
+      .front_counter_clockwise = true,
+      .multisample_enable = false,
+    };
   };
 
   // Determine if a depth attachment is present
@@ -371,31 +420,40 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   // switch to a non-existent "Mesh.hlsl" believing the fullscreen shader was a
   // placeholder; that was incorrect and caused a runtime "Shader not found"
   // error (VS@Mesh.hlsl). We revert to the existing shader identifiers here.
-  // Emit diagnostic log for rasterizer settings used to build the PSO.
-  // Creation-time rasterizer info is purely diagnostic — keep it debug-only
-  // to avoid polluting normal logs.
-  DLOG_F(2, "[ShaderPass] CreatePipelineStateDesc: fill_mode={}, cull_mode={}",
-    static_cast<int>(requested_fill), static_cast<int>(raster_cull_mode));
+  const auto BuildDesc = [&](CullMode cull_mode,
+                           std::string_view ps_entry) -> GraphicsPipelineDesc {
+    return GraphicsPipelineDesc::Builder()
+      .SetVertexShader(ShaderRequest {
+        .stage = ShaderType::kVertex,
+        .source_path = "Passes/Forward/ForwardMesh.hlsl",
+        .entry_point = "VS",
+      })
+      .SetPixelShader(ShaderRequest {
+        .stage = ShaderType::kPixel,
+        .source_path = "Passes/Forward/ForwardMesh.hlsl",
+        .entry_point = std::string { ps_entry },
+      })
+      .SetPrimitiveTopology(PrimitiveType::kTriangleList)
+      .SetRasterizerState(MakeRasterDesc(cull_mode))
+      .SetDepthStencilState(ds_desc)
+      .SetBlendState({})
+      .SetFramebufferLayout(fb_layout_desc)
+      .SetRootBindings(std::span<const RootBindingItem>(
+        generated_bindings.data(), generated_bindings.size()))
+      .Build();
+  };
 
-  return GraphicsPipelineDesc::Builder()
-    .SetVertexShader(ShaderRequest {
-      .stage = ShaderType::kVertex,
-      .source_path = "Passes/Forward/ForwardMesh.hlsl",
-      .entry_point = "VS",
-    })
-    .SetPixelShader(ShaderRequest {
-      .stage = ShaderType::kPixel,
-      .source_path = "Passes/Forward/ForwardMesh.hlsl",
-      .entry_point = "PS",
-    })
-    .SetPrimitiveTopology(PrimitiveType::kTriangleList)
-    .SetRasterizerState(raster_desc)
-    .SetDepthStencilState(ds_desc)
-    .SetBlendState({})
-    .SetFramebufferLayout(fb_layout_desc)
-    .SetRootBindings(std::span<const RootBindingItem>(
-      generated_bindings.data(), generated_bindings.size()))
-    .Build();
+  // Partition-aware variants.
+  pso_opaque_single_ = BuildDesc(CullMode::kBack, "PS");
+  pso_opaque_double_ = BuildDesc(CullMode::kNone, "PS");
+  pso_masked_single_ = BuildDesc(CullMode::kBack, "PS_Masked");
+  pso_masked_double_ = BuildDesc(CullMode::kNone, "PS_Masked");
+
+  // Emit diagnostic log for rasterizer settings used to build the PSO.
+  DLOG_F(2, "[ShaderPass] CreatePipelineStateDesc: fill_mode={}",
+    static_cast<int>(requested_fill));
+
+  return *pso_opaque_single_;
 }
 
 /*!
