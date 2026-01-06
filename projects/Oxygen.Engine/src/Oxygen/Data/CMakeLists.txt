@@ -63,6 +63,7 @@ set(
   "MaterialDomain.h"
   "MeshType.h"
   "PakFormat.h"
+  "PakFormatSerioLoaders.h"
   "ProceduralMeshes.h"
   "SceneAsset.h"
   "ShaderReference.h"
