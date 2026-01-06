@@ -1394,15 +1394,21 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
   if (!app_window_->GetWindow()) {
     co_return;
   }
+  auto imgui_module_ref
+    = app_.engine ? app_.engine->GetModule<imgui::ImGuiModule>() : std::nullopt;
 
-  if (auto imgui_module_ref = app_.engine
-      ? app_.engine->GetModule<imgui::ImGuiModule>()
-      : std::nullopt) {
-    auto& imgui_module = imgui_module_ref->get();
-    if (auto* imgui_context = imgui_module.GetImGuiContext()) {
-      ImGui::SetCurrentContext(imgui_context);
-    }
+  if (!imgui_module_ref) {
+    co_return;
   }
+  auto& imgui_module = imgui_module_ref->get();
+  if (!imgui_module.IsWitinFrameScope()) {
+    co_return;
+  }
+  auto* imgui_context = imgui_module.GetImGuiContext();
+  if (imgui_context == nullptr) {
+    co_return;
+  }
+  ImGui::SetCurrentContext(imgui_context);
 
   DrawDebugOverlay(context);
   DrawCameraControls(context);
