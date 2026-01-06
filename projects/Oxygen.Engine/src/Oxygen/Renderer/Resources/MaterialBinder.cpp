@@ -211,17 +211,29 @@ auto SerializeMaterialConstants(
     material.resolved_asset->GetAmbientOcclusionTextureKey(),
     material.resolved_asset->GetAmbientOcclusionTexture());
 
-  // Copy flags
+  // Copy flags; ensure alpha-test is set for masked domain.
   constants.flags = material.resolved_asset->GetFlags();
+  if (material.resolved_asset->GetMaterialDomain()
+    == oxygen::data::MaterialDomain::kMasked) {
+    constants.flags |= oxygen::data::pak::kMaterialFlag_AlphaTest;
+  }
+
+  constants.alpha_cutoff = material.resolved_asset->GetAlphaCutoff();
+
+  // Opacity is currently sourced from the base color texture alpha.
+  // If texture sampling is disabled, keep it invalid to skip sampling.
+  const auto alpha_test_enabled
+    = (constants.flags & oxygen::data::pak::kMaterialFlag_AlphaTest) != 0U;
+  if (alpha_test_enabled) {
+    constants.opacity_texture_index = constants.base_color_texture_index;
+  } else {
+    constants.opacity_texture_index = oxygen::kInvalidShaderVisibleIndex.get();
+  }
 
   // Default UV transform (identity). Runtime/editor can override via
   // MaterialBinder::OverrideUvTransform.
   constants.uv_scale = { 1.0F, 1.0F };
   constants.uv_offset = { 0.0F, 0.0F };
-
-  // Padding fields are already initialized to 0
-  constants._pad0 = 0;
-  constants._pad1 = 0;
 
   return constants;
 }
