@@ -50,8 +50,170 @@ namespace oxygen::content::import {
 
 namespace {
 
+  using std::string_view_literals::operator""sv;
+
   using oxygen::data::AssetKey;
   using oxygen::data::AssetType;
+
+  [[nodiscard]] auto ToFloat(const ufbx_real v) noexcept -> float;
+
+  [[nodiscard]] auto TryFindRealProp(const ufbx_props& props,
+    const char* name) noexcept -> std::optional<ufbx_real>
+  {
+    const auto* prop = ufbx_find_prop(&props, name);
+    if (prop == nullptr) {
+      return std::nullopt;
+    }
+    if ((prop->flags & UFBX_PROP_FLAG_VALUE_REAL) == 0) {
+      return std::nullopt;
+    }
+    return prop->value_real;
+  }
+
+  [[nodiscard]] auto TryFindBoolProp(
+    const ufbx_props& props, const char* name) noexcept -> std::optional<bool>
+  {
+    const auto* prop = ufbx_find_prop(&props, name);
+    if (prop == nullptr) {
+      return std::nullopt;
+    }
+    if ((prop->flags & UFBX_PROP_FLAG_VALUE_INT) == 0) {
+      return std::nullopt;
+    }
+    return prop->value_int != 0;
+  }
+
+  [[nodiscard]] auto TryFindVec3Prop(const ufbx_props& props,
+    const char* name) noexcept -> std::optional<ufbx_vec3>
+  {
+    const auto* prop = ufbx_find_prop(&props, name);
+    if (prop == nullptr) {
+      return std::nullopt;
+    }
+    if ((prop->flags & UFBX_PROP_FLAG_VALUE_VEC3) == 0) {
+      return std::nullopt;
+    }
+    return prop->value_vec3;
+  }
+
+  [[nodiscard]] auto ToRadiansHeuristic(const ufbx_real angle) noexcept -> float
+  {
+    // FBX commonly stores angles in degrees; ufbx does not annotate units for
+    // `ufbx_light::inner_angle/outer_angle`. Use a conservative heuristic:
+    // treat values > 2*pi as degrees.
+    const auto a = static_cast<float>(angle);
+    constexpr float kTwoPi = 2.0F * std::numbers::pi_v<float>;
+    if (a > kTwoPi + 1e-3F) {
+      return a * (std::numbers::pi_v<float> / 180.0F);
+    }
+    return a;
+  }
+
+  [[nodiscard]] auto ResolveLightRange(const ufbx_light& light) noexcept
+    -> std::optional<float>
+  {
+    // Try a selection of commonly exported properties. If none are found,
+    // preserve engine defaults.
+    for (const auto* name : {
+           "FarAttenuationEnd",
+           "DecayStart",
+           "Range",
+           "Radius",
+           "FalloffEnd",
+         }) {
+      if (const auto v = TryFindRealProp(light.props, name); v.has_value()) {
+        const auto f = ToFloat(*v);
+        if (f > 0.0F) {
+          return f;
+        }
+      }
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] auto ResolveLightSourceRadius(const ufbx_light& light) noexcept
+    -> std::optional<float>
+  {
+    for (const auto* name : {
+           "SourceRadius",
+           "AreaRadius",
+           "Radius",
+         }) {
+      if (const auto v = TryFindRealProp(light.props, name); v.has_value()) {
+        const auto f = ToFloat(*v);
+        if (f >= 0.0F) {
+          return f;
+        }
+      }
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] auto MapDecayToAttenuation(const ufbx_light_decay decay)
+    -> std::pair<std::uint8_t, float>
+  {
+    // oxygen::scene::AttenuationModel underlying values are written into pak.
+    // 0: kInverseSquare, 1: kLinear, 2: kCustomExponent
+    switch (decay) {
+    case UFBX_LIGHT_DECAY_LINEAR:
+      return { 1, 1.0F };
+    case UFBX_LIGHT_DECAY_QUADRATIC:
+      return { 0, 2.0F };
+    case UFBX_LIGHT_DECAY_CUBIC:
+      return { 2, 3.0F };
+    case UFBX_LIGHT_DECAY_NONE:
+    default:
+      return { 2, 0.0F };
+    }
+  }
+
+  auto FillLightCommon(const ufbx_light& light,
+    oxygen::data::pak::LightCommonRecord& out) noexcept -> void
+  {
+    out.affects_world = light.cast_light ? 1U : 0U;
+    // Light colors are authored HDR in many DCCs; preserve values as-is and
+    // only clamp negative inputs.
+    out.color_rgb[0] = std::max(0.0F, ToFloat(light.color.x));
+    out.color_rgb[1] = std::max(0.0F, ToFloat(light.color.y));
+    out.color_rgb[2] = std::max(0.0F, ToFloat(light.color.z));
+    out.intensity = std::max(0.0F, ToFloat(light.intensity));
+
+    // Default to realtime mobility.
+    out.mobility = 0;
+    out.casts_shadows = light.cast_shadows ? 1U : 0U;
+
+    // Try to enrich from optional properties when present.
+    if (const auto v = TryFindBoolProp(light.props, "CastShadows");
+      v.has_value()) {
+      out.casts_shadows = v.value() ? 1U : 0U;
+    }
+    if (const auto v = TryFindBoolProp(light.props, "CastLight");
+      v.has_value()) {
+      out.affects_world = v.value() ? 1U : 0U;
+    }
+
+    if (const auto v = TryFindVec3Prop(light.props, "Color"); v.has_value()) {
+      out.color_rgb[0] = std::max(0.0F, ToFloat(v->x));
+      out.color_rgb[1] = std::max(0.0F, ToFloat(v->y));
+      out.color_rgb[2] = std::max(0.0F, ToFloat(v->z));
+    }
+    if (const auto v = TryFindRealProp(light.props, "ExposureCompensation");
+      v.has_value()) {
+      out.exposure_compensation_ev = ToFloat(*v);
+    }
+    if (const auto v = TryFindRealProp(light.props, "ShadowBias");
+      v.has_value()) {
+      out.shadow.bias = ToFloat(*v);
+    }
+    if (const auto v = TryFindRealProp(light.props, "ShadowNormalBias");
+      v.has_value()) {
+      out.shadow.normal_bias = ToFloat(*v);
+    }
+    if (const auto v = TryFindBoolProp(light.props, "ContactShadows");
+      v.has_value()) {
+      out.shadow.contact_shadows = v.value() ? 1U : 0U;
+    }
+  }
 
   [[nodiscard]] auto ToStringView(const ufbx_string& s) -> std::string_view
   {
@@ -1086,14 +1248,14 @@ namespace {
       const auto material_count = static_cast<uint32_t>(scene->materials.count);
       const auto mesh_count = static_cast<uint32_t>(scene->meshes.count);
       const auto node_count = static_cast<uint32_t>(scene->nodes.count);
-      // ufbx also keeps a direct list of camera objects; logging both helps
-      // distinguish "no camera exported" from "camera exists but not attached
-      // to any node" scenarios.
+      // ufbx also keeps direct lists of attribute objects (camera/light);
+      // logging helps distinguish "not exported" from "exists but unattached".
       const auto camera_count = static_cast<uint32_t>(scene->cameras.count);
+      const auto light_count = static_cast<uint32_t>(scene->lights.count);
       LOG_F(INFO,
-        "FBX scene loaded: {} materials, {} meshes, {} nodes, {} cameras. "
-        "SwapYZ={}",
-        material_count, mesh_count, node_count, camera_count,
+        "FBX scene loaded: {} materials, {} meshes, {} nodes, {} cameras, "
+        "{} lights. SwapYZ={}",
+        material_count, mesh_count, node_count, camera_count, light_count,
         request.options.coordinate.swap_yz_axes);
 
       const auto want_materials
@@ -1580,6 +1742,22 @@ namespace {
         return index;
       };
 
+      // Helper to find nodes that reference a specific mesh
+      auto FindNodesForMesh
+        = [&](const ufbx_mesh* target_mesh) -> std::vector<const ufbx_node*> {
+        std::vector<const ufbx_node*> nodes;
+        for (size_t ni = 0; ni < scene.nodes.count; ++ni) {
+          const auto* node = scene.nodes.data[ni];
+          if (node != nullptr && node->mesh == target_mesh) {
+            nodes.push_back(node);
+          }
+        }
+        return nodes;
+      };
+
+      // Track used geometry names to detect collisions
+      std::unordered_map<std::string, uint32_t> geometry_name_usage_count;
+
       const auto mesh_count = static_cast<uint32_t>(scene.meshes.count);
       for (uint32_t i = 0; i < mesh_count; ++i) {
         const auto* mesh = scene.meshes.data[i];
@@ -1621,7 +1799,43 @@ namespace {
         }
 
         const auto authored_name = ToStringView(mesh->name);
-        const auto mesh_name = BuildMeshName(authored_name, request, i);
+        auto mesh_name = BuildMeshName(authored_name, request, i);
+        const auto original_mesh_name = mesh_name;
+
+        // Check for name collision and disambiguate using node name if needed
+        if (const auto it = geometry_name_usage_count.find(mesh_name);
+          it != geometry_name_usage_count.end()) {
+          // Collision detected - must rename
+          const auto collision_ordinal = it->second;
+          std::string new_name;
+
+          // Try to find a node that references this mesh
+          const auto nodes = FindNodesForMesh(mesh);
+          if (!nodes.empty()) {
+            const auto* node = nodes.front();
+            const auto node_name = ToStringView(node->name);
+            if (!node_name.empty()) {
+              // Use pattern: NodeName_MeshName
+              const auto prefix = mesh_name.starts_with("G_") ? ""sv : "G_"sv;
+              new_name = std::string(prefix) + std::string(node_name) + "_"
+                + std::string(authored_name.empty()
+                    ? ("Mesh_" + std::to_string(i))
+                    : authored_name);
+            }
+          }
+
+          // Fallback: if we couldn't use a node name, append ordinal
+          if (new_name.empty()) {
+            new_name = mesh_name + "_" + std::to_string(collision_ordinal);
+          }
+
+          LOG_F(INFO,
+            "Geometry name collision detected for '{}', renamed to '{}'",
+            original_mesh_name.c_str(), new_name.c_str());
+          mesh_name = std::move(new_name);
+        }
+        // Always track the original name to detect future collisions
+        geometry_name_usage_count[original_mesh_name]++;
 
         const bool has_uv = mesh->vertex_uv.exists
           && mesh->vertex_uv.values.data != nullptr
@@ -2120,13 +2334,16 @@ namespace {
     {
       using oxygen::data::AssetType;
       using oxygen::data::ComponentType;
+      using oxygen::data::pak::DirectionalLightRecord;
       using oxygen::data::pak::NodeRecord;
       using oxygen::data::pak::OrthographicCameraRecord;
       using oxygen::data::pak::PerspectiveCameraRecord;
+      using oxygen::data::pak::PointLightRecord;
       using oxygen::data::pak::RenderableRecord;
       using oxygen::data::pak::SceneAssetDesc;
       using oxygen::data::pak::SceneComponentTableDesc;
       using oxygen::data::pak::SceneEnvironmentBlockHeader;
+      using oxygen::data::pak::SpotLightRecord;
 
       const auto scene_name = BuildSceneName(request);
       const auto virtual_path
@@ -2159,8 +2376,20 @@ namespace {
       std::vector<OrthographicCameraRecord> orthographic_cameras;
       orthographic_cameras.reserve(static_cast<size_t>(scene.nodes.count));
 
+      std::vector<DirectionalLightRecord> directional_lights;
+      directional_lights.reserve(static_cast<size_t>(scene.nodes.count));
+
+      std::vector<PointLightRecord> point_lights;
+      point_lights.reserve(static_cast<size_t>(scene.nodes.count));
+
+      std::vector<SpotLightRecord> spot_lights;
+      spot_lights.reserve(static_cast<size_t>(scene.nodes.count));
+
       size_t camera_attr_total = 0;
       size_t camera_attr_skipped = 0;
+
+      size_t light_attr_total = 0;
+      size_t light_attr_skipped = 0;
 
       struct NodeRef final {
         const ufbx_node* node = nullptr;
@@ -2320,6 +2549,109 @@ namespace {
           }
         }
 
+        if (n->light != nullptr) {
+          const auto* light = n->light;
+          ++light_attr_total;
+
+          const auto type = light->type;
+          const auto [atten_model, decay_exponent]
+            = MapDecayToAttenuation(light->decay);
+
+          switch (type) {
+          case UFBX_LIGHT_DIRECTIONAL: {
+            DirectionalLightRecord rec_light {};
+            rec_light.node_index = index;
+            FillLightCommon(*light, rec_light.common);
+
+            // Best-effort authored properties.
+            if (const auto v = TryFindRealProp(light->props, "AngularSize");
+              v.has_value()) {
+              rec_light.angular_size_radians = ToRadiansHeuristic(*v);
+            } else if (const auto v2
+              = TryFindRealProp(light->props, "AngularDiameter");
+              v2.has_value()) {
+              rec_light.angular_size_radians = ToRadiansHeuristic(*v2);
+            }
+
+            if (const auto v
+              = TryFindBoolProp(light->props, "EnvironmentContribution");
+              v.has_value()) {
+              rec_light.environment_contribution = v.value() ? 1U : 0U;
+            }
+
+            directional_lights.push_back(rec_light);
+            break;
+          }
+
+          case UFBX_LIGHT_POINT:
+          case UFBX_LIGHT_AREA:
+          case UFBX_LIGHT_VOLUME: {
+            PointLightRecord rec_light {};
+            rec_light.node_index = index;
+            FillLightCommon(*light, rec_light.common);
+
+            rec_light.attenuation_model = atten_model;
+            rec_light.decay_exponent = decay_exponent;
+
+            if (const auto range = ResolveLightRange(*light);
+              range.has_value()) {
+              rec_light.range = range.value();
+            }
+            if (const auto r = ResolveLightSourceRadius(*light);
+              r.has_value()) {
+              rec_light.source_radius = r.value();
+            }
+
+            if (type != UFBX_LIGHT_POINT) {
+              ++light_attr_skipped;
+              ImportDiagnostic diag {
+                .severity = ImportSeverity::kWarning,
+                .code = "fbx.light.unsupported_type",
+                .message
+                = "unsupported FBX light type converted to point light",
+                .source_path = request.source_path.string(),
+                .object_path = std::string(name),
+              };
+              out.AddDiagnostic(std::move(diag));
+            }
+
+            point_lights.push_back(rec_light);
+            break;
+          }
+
+          case UFBX_LIGHT_SPOT: {
+            SpotLightRecord rec_light {};
+            rec_light.node_index = index;
+            FillLightCommon(*light, rec_light.common);
+
+            rec_light.attenuation_model = atten_model;
+            rec_light.decay_exponent = decay_exponent;
+
+            if (const auto range = ResolveLightRange(*light);
+              range.has_value()) {
+              rec_light.range = range.value();
+            }
+            if (const auto r = ResolveLightSourceRadius(*light);
+              r.has_value()) {
+              rec_light.source_radius = r.value();
+            }
+
+            const float inner = ToRadiansHeuristic(light->inner_angle);
+            const float outer = ToRadiansHeuristic(light->outer_angle);
+            rec_light.inner_cone_angle_radians = std::max(0.0F, inner);
+            rec_light.outer_cone_angle_radians
+              = std::max(rec_light.inner_cone_angle_radians, outer);
+
+            spot_lights.push_back(rec_light);
+            break;
+          }
+
+          default:
+            ++light_attr_skipped;
+            break;
+          }
+        }
+
         ++ordinal;
 
         for (size_t i = 0; i < n->children.count; ++i) {
@@ -2345,11 +2677,30 @@ namespace {
           return a.node_index < b.node_index;
         });
 
+      std::sort(directional_lights.begin(), directional_lights.end(),
+        [](const DirectionalLightRecord& a, const DirectionalLightRecord& b) {
+          return a.node_index < b.node_index;
+        });
+      std::sort(point_lights.begin(), point_lights.end(),
+        [](const PointLightRecord& a, const PointLightRecord& b) {
+          return a.node_index < b.node_index;
+        });
+      std::sort(spot_lights.begin(), spot_lights.end(),
+        [](const SpotLightRecord& a, const SpotLightRecord& b) {
+          return a.node_index < b.node_index;
+        });
+
       LOG_F(INFO,
         "Scene cameras: camera_attrs={} skipped_attrs={} perspective={} "
         "ortho={}",
         camera_attr_total, camera_attr_skipped, perspective_cameras.size(),
         orthographic_cameras.size());
+
+      LOG_F(INFO,
+        "Scene lights: light_attrs={} skipped_or_converted_attrs={} dir={} "
+        "point={} spot={}",
+        light_attr_total, light_attr_skipped, directional_lights.size(),
+        point_lights.size(), spot_lights.size());
       for (const auto& cam : perspective_cameras) {
         const auto name = (cam.node_index < node_refs.size())
           ? node_refs[cam.node_index].name
@@ -2410,7 +2761,7 @@ namespace {
       const auto strings_bytes = std::span<const std::byte>(strings);
 
       std::vector<SceneComponentTableDesc> component_dir;
-      component_dir.reserve(3);
+      component_dir.reserve(6);
 
       auto table_cursor = static_cast<oxygen::data::pak::OffsetT>(
         sizeof(SceneAssetDesc) + nodes_bytes.size() + strings_bytes.size());
@@ -2456,6 +2807,46 @@ namespace {
           orthographic_cameras.size() * sizeof(OrthographicCameraRecord));
       }
 
+      if (!directional_lights.empty()) {
+        component_dir.push_back(SceneComponentTableDesc {
+          .component_type
+          = static_cast<uint32_t>(ComponentType::kDirectionalLight),
+          .table = {
+            .offset = table_cursor,
+            .count = static_cast<uint32_t>(directional_lights.size()),
+            .entry_size = sizeof(DirectionalLightRecord),
+          },
+        });
+        table_cursor += static_cast<oxygen::data::pak::OffsetT>(
+          directional_lights.size() * sizeof(DirectionalLightRecord));
+      }
+
+      if (!point_lights.empty()) {
+        component_dir.push_back(SceneComponentTableDesc {
+          .component_type = static_cast<uint32_t>(ComponentType::kPointLight),
+          .table = {
+            .offset = table_cursor,
+            .count = static_cast<uint32_t>(point_lights.size()),
+            .entry_size = sizeof(PointLightRecord),
+          },
+        });
+        table_cursor += static_cast<oxygen::data::pak::OffsetT>(
+          point_lights.size() * sizeof(PointLightRecord));
+      }
+
+      if (!spot_lights.empty()) {
+        component_dir.push_back(SceneComponentTableDesc {
+          .component_type = static_cast<uint32_t>(ComponentType::kSpotLight),
+          .table = {
+            .offset = table_cursor,
+            .count = static_cast<uint32_t>(spot_lights.size()),
+            .entry_size = sizeof(SpotLightRecord),
+          },
+        });
+        table_cursor += static_cast<oxygen::data::pak::OffsetT>(
+          spot_lights.size() * sizeof(SpotLightRecord));
+      }
+
       desc.component_table_directory_offset = table_cursor;
       desc.component_table_count = static_cast<uint32_t>(component_dir.size());
 
@@ -2474,6 +2865,18 @@ namespace {
       if (!orthographic_cameras.empty()) {
         (void)writer.WriteBlob(std::as_bytes(
           std::span<const OrthographicCameraRecord>(orthographic_cameras)));
+      }
+      if (!directional_lights.empty()) {
+        (void)writer.WriteBlob(std::as_bytes(
+          std::span<const DirectionalLightRecord>(directional_lights)));
+      }
+      if (!point_lights.empty()) {
+        (void)writer.WriteBlob(
+          std::as_bytes(std::span<const PointLightRecord>(point_lights)));
+      }
+      if (!spot_lights.empty()) {
+        (void)writer.WriteBlob(
+          std::as_bytes(std::span<const SpotLightRecord>(spot_lights)));
       }
       if (!component_dir.empty()) {
         (void)writer.WriteBlob(std::as_bytes(
