@@ -31,8 +31,11 @@ StagingProvider::~StagingProvider()
   LOG_F(INFO, "allocations/frame : {}", ps.allocations_this_frame);
   LOG_F(INFO, "avg alloc size    : {} bytes", ps.avg_allocation_size);
   LOG_F(INFO, "buffer grown      : {} times", ps.buffer_growth_count);
-  LOG_F(INFO, "buffer size       : {} bytes", ps.current_buffer_size);
+  LOG_F(INFO, "current size      : {} bytes", ps.current_buffer_size);
+  LOG_F(INFO, "max size          : {} bytes", ps.max_buffer_size);
   LOG_F(INFO, "map/unmap calls   : {}/{}", ps.map_calls, ps.unmap_calls);
+  LOG_F(INFO, "active partition  : {}/{}", ps.active_partition,
+    ps.partitions_count);
   if (!ps.implementation_info.empty()) {
     LOG_F(INFO, "{}", ps.implementation_info);
   }

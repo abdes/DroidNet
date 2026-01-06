@@ -26,6 +26,8 @@ constexpr auto AlignUp(std::uint64_t v, std::uint64_t a) -> std::uint64_t
 
 constexpr std::uint64_t kInitialBytesPerPartition = 10ULL * 1024ULL * 1024ULL;
 
+constexpr std::uint32_t kIdleFramesBeforeShrink = 120U;
+
 } // namespace
 
 namespace oxygen::engine::upload {
@@ -93,12 +95,119 @@ auto RingBufferStaging::RetireCompleted(UploaderTag, FenceValue completed)
   }
 }
 
+// Notify of frame slot change without RTTI
+auto RingBufferStaging::OnFrameStart(UploaderTag, frame::Slot slot) -> void
+{
+  OnFrameStartInternal(slot);
+}
+
+auto RingBufferStaging::OnFrameStartInternal(const frame::Slot slot) -> void
+{
+  // Observe whether the previous frame used the staging buffer.
+  if (Stats().allocations_this_frame == 0U) {
+    ++consecutive_idle_frames_;
+  } else {
+    consecutive_idle_frames_ = 0U;
+  }
+
+  SetActivePartition(slot);
+  Stats().active_partition = active_partition_;
+  Stats().partitions_count = partitions_count_;
+  Stats().allocations_this_frame = 0; // Reset frame counter
+
+  MaybeShrinkAfterIdle("RingBufferStaging.IdleTrim");
+}
+
+auto RingBufferStaging::MaybeShrinkAfterIdle(const std::string_view debug_name)
+  -> void
+{
+  // Only trim after sustained idleness, and only if the buffer is meaningfully
+  // above the baseline. This avoids shrink/grow thrash.
+  if (consecutive_idle_frames_ < kIdleFramesBeforeShrink) {
+    return;
+  }
+  if (capacity_per_partition_ <= 2ULL * kInitialBytesPerPartition) {
+    return;
+  }
+
+  // Trim back to the initial per-partition capacity.
+  const auto aligned_per_partition
+    = AlignUp(kInitialBytesPerPartition, alignment_);
+
+  const auto old_total_capacity = capacity_;
+  const auto old_per_partition = capacity_per_partition_;
+
+  const auto result = RecreateBuffer(aligned_per_partition, debug_name);
+  if (!result) {
+    const auto error_code
+      = oxygen::engine::upload::make_error_code(result.error());
+    LOG_F(
+      WARNING, "RingBufferStaging: idle trim failed: {}", error_code.message());
+    return;
+  }
+
+  LOG_F(INFO,
+    "RingBufferStaging: trimmed upload buffer after {} idle frames: total {} "
+    "-> {} bytes, per-partition {} -> {} bytes",
+    consecutive_idle_frames_, old_total_capacity, capacity_, old_per_partition,
+    capacity_per_partition_);
+
+  consecutive_idle_frames_ = 0U;
+}
+
+auto RingBufferStaging::RecreateBuffer(
+  const std::uint64_t aligned_per_partition, const std::string_view debug_name)
+  -> std::expected<void, UploadError>
+{
+  const auto total_capacity
+    = aligned_per_partition * static_cast<std::uint64_t>(partitions_count_);
+
+  BufferDesc desc;
+  desc.size_bytes = total_capacity;
+  desc.usage = BufferUsage::kNone;
+  desc.memory = BufferMemory::kUpload;
+  desc.debug_name = std::string(debug_name);
+
+  UnMap();
+  graphics::DeferredObjectRelease(buffer_, gfx_->GetDeferredReclaimer());
+
+  UploadError error_code;
+  try {
+    buffer_ = gfx_->CreateBuffer(desc);
+    gfx_->GetResourceRegistry().Register(buffer_);
+    auto map_result = Map();
+    if (map_result) {
+      capacity_per_partition_ = aligned_per_partition;
+      capacity_ = total_capacity;
+      Stats().current_buffer_size = buffer_->GetSize();
+      Stats().max_buffer_size
+        = (std::max)(Stats().max_buffer_size, Stats().current_buffer_size);
+
+      // Reset partition bookkeeping on buffer recreation.
+      std::ranges::fill(heads_, 0ULL);
+      partition_last_seen_retire_count_.assign(heads_.size(), retire_count_);
+      return {};
+    }
+    error_code = map_result.error();
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "RingBufferStaging buffer recreate failed ({}): {}",
+      total_capacity, ex.what());
+    error_code = UploadError::kStagingAllocFailed;
+  }
+
+  buffer_ = nullptr;
+  mapped_ptr_ = nullptr;
+  return std::unexpected(error_code);
+}
+
 auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
   std::string_view debug_name) -> std::expected<void, UploadError>
 {
   const auto head = heads_.empty() ? 0ULL : heads_[active_partition_];
   if (capacity_per_partition_ >= head + required && buffer_) {
     Stats().current_buffer_size = buffer_->GetSize();
+    Stats().max_buffer_size
+      = (std::max)(Stats().max_buffer_size, Stats().current_buffer_size);
     return {};
   }
 
@@ -107,7 +216,12 @@ auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
   const auto grow = current > 0
     ? static_cast<std::uint64_t>(current * (1.0 + static_cast<double>(slack_)))
     : baseline;
-  const auto new_per_partition = (std::max)(required, grow);
+  // Grow to fit the current bump head plus the new allocation.
+  // Using only `required` here can under-size the new partition capacity,
+  // which may cause repeated growth and (worse) allow an allocation that
+  // would overflow the active partition.
+  const auto needed = head + required;
+  const auto new_per_partition = (std::max)(needed, grow);
   const auto aligned_per_partition = AlignUp(new_per_partition, alignment_);
   const auto total_capacity
     = aligned_per_partition * static_cast<std::uint64_t>(partitions_count_);
@@ -135,6 +249,8 @@ auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
       capacity_per_partition_ = aligned_per_partition;
       capacity_ = total_capacity;
       Stats().current_buffer_size = buffer_->GetSize();
+      Stats().max_buffer_size
+        = (std::max)(Stats().max_buffer_size, Stats().current_buffer_size);
       return {};
     }
     error_code = map_result.error();
@@ -151,6 +267,17 @@ auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
 
 RingBufferStaging::~RingBufferStaging()
 {
+  // Ensure implementation-specific stats (partition/capacity) are populated
+  // before the base StagingProvider destructor logs telemetry.
+  if (buffer_) {
+    Stats().current_buffer_size = buffer_->GetSize();
+    Stats().max_buffer_size
+      = (std::max)(Stats().max_buffer_size, Stats().current_buffer_size);
+  }
+  Stats().active_partition = active_partition_;
+  Stats().partitions_count = partitions_count_;
+  FinalizeStats();
+
   if (buffer_ && buffer_->IsMapped()) {
     buffer_->UnMap();
     Stats().unmap_calls++;
@@ -164,8 +291,7 @@ RingBufferStaging::~RingBufferStaging()
 auto RingBufferStaging::OnFrameStart(InlineCoordinatorTag, frame::Slot slot)
   -> void
 {
-  SetActivePartition(slot);
-  Stats().allocations_this_frame = 0; // Reset frame counter
+  OnFrameStartInternal(slot);
 }
 
 auto RingBufferStaging::FinalizeStats() -> void

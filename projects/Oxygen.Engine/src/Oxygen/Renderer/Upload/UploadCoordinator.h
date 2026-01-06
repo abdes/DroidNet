@@ -30,6 +30,10 @@ class Graphics;
 
 namespace oxygen::engine::upload {
 
+// Default growth factor for ring staging buffers. This is the single source of
+// truth for RingBufferStaging slack unless a call site explicitly overrides it.
+inline constexpr float kDefaultRingBufferStagingSlack = 0.25f;
+
 // Forward declaration to avoid including UploadPlanner.h in the header
 struct BufferUploadPlan;
 
@@ -50,8 +54,8 @@ public:
 
   ~UploadCoordinator() = default;
 
-  OXGN_RNDR_API auto CreateRingBufferStaging(
-    frame::SlotCount partitions, std::uint32_t alignment, float slack = 0.5f)
+  OXGN_RNDR_API auto CreateRingBufferStaging(frame::SlotCount partitions,
+    std::uint32_t alignment, float slack = kDefaultRingBufferStagingSlack)
     -> std::shared_ptr<StagingProvider>;
 
   // Provider-aware submissions

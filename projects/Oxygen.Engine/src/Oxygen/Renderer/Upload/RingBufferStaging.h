@@ -44,7 +44,7 @@ class RingBufferStaging final : public StagingProvider {
 
 public:
   explicit RingBufferStaging(UploaderTag tag, observer_ptr<Graphics> gfx,
-    frame::SlotCount partitions, std::uint32_t alignment, float slack = 0.5f)
+    frame::SlotCount partitions, std::uint32_t alignment, float slack)
     : StagingProvider(tag)
     , gfx_(gfx)
     , partitions_count_(partitions)
@@ -64,6 +64,10 @@ public:
   auto RetireCompleted(UploaderTag, FenceValue completed) -> void override;
 
   // Notify of frame slot change without RTTI
+  OXGN_RNDR_API auto OnFrameStart(UploaderTag, frame::Slot slot)
+    -> void override;
+
+  // Notify of frame slot change without RTTI
   OXGN_RNDR_API auto OnFrameStart(InlineCoordinatorTag, frame::Slot slot)
     -> void override;
 
@@ -71,6 +75,13 @@ protected:
   auto FinalizeStats() -> void override;
 
 private:
+  auto OnFrameStartInternal(frame::Slot slot) -> void;
+
+  auto MaybeShrinkAfterIdle(std::string_view debug_name) -> void;
+
+  auto RecreateBuffer(std::uint64_t aligned_per_partition,
+    std::string_view debug_name) -> std::expected<void, UploadError>;
+
   // Select active partition (frame slot) and reset its bump pointer.
   auto SetActivePartition(frame::Slot slot) noexcept -> void
   {
@@ -116,7 +127,7 @@ private:
   std::vector<std::uint64_t> heads_ {}; // bump per partition
   std::uint64_t capacity_ { 0 }; // total bytes
   std::uint32_t alignment_;
-  float slack_ { 0.5f };
+  float slack_ { 0.0f };
 
   // Retirement observation: incremented on RetireCompleted(); at Allocate()
   // we record the current value per active partition. On reuse, if no new
@@ -124,6 +135,10 @@ private:
   std::uint64_t retire_count_ { 0ULL };
   std::vector<std::uint64_t> partition_last_seen_retire_count_ {};
   FenceValue last_completed_fence_ { 0 };
+
+  // Idle trimming: if no allocations happen for a while, shrink back toward the
+  // initial size to reclaim CPU-visible upload memory after large bursts.
+  std::uint32_t consecutive_idle_frames_ { 0U };
 };
 
 } // namespace oxygen::engine::upload
