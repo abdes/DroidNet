@@ -192,7 +192,6 @@ namespace {
     FileKind kind = FileKind::kUnknown;
     std::string relpath;
     uint64_t size = 0;
-    std::array<uint8_t, data::loose_cooked::v1::kSha256Size> sha256 = {};
   };
 
   auto WriteBinaryFile(const std::filesystem::path& path,
@@ -297,16 +296,38 @@ struct LooseCookedWriter::Impl final {
     const auto path_on_disk = cooked_root_ / std::filesystem::path(relpath);
     WriteBinaryFile(path_on_disk, bytes);
 
-    std::optional<base::Sha256Digest> digest;
-    if (compute_sha256_) {
-      digest = base::ComputeSha256(bytes);
+    StoredFile record {
+      .kind = kind,
+      .relpath = std::string(relpath),
+      .size = static_cast<uint64_t>(bytes.size()),
+    };
+
+    files_.insert_or_assign(kind, record);
+  }
+
+  auto RegisterExternalFile(const FileKind kind, std::string_view relpath)
+    -> void
+  {
+    ValidateRelativePath(relpath);
+
+    const auto path_on_disk = cooked_root_ / std::filesystem::path(relpath);
+
+    std::error_code ec;
+    if (!std::filesystem::exists(path_on_disk, ec)) {
+      throw std::runtime_error(
+        "RegisterExternalFile: file does not exist: " + path_on_disk.string());
+    }
+
+    const auto size = std::filesystem::file_size(path_on_disk, ec);
+    if (ec) {
+      throw std::runtime_error("RegisterExternalFile: failed to get file size: "
+        + path_on_disk.string());
     }
 
     StoredFile record {
       .kind = kind,
       .relpath = std::string(relpath),
-      .size = static_cast<uint64_t>(bytes.size()),
-      .sha256 = CopyDigestOrZero(digest),
+      .size = size,
     };
 
     files_.insert_or_assign(kind, record);
@@ -363,12 +384,6 @@ struct LooseCookedWriter::Impl final {
         .size = f.size,
       };
 
-      if (!IsAllZeros(f.sha256)) {
-        base::Sha256Digest digest {};
-        std::copy_n(f.sha256.begin(), digest.size(), digest.begin());
-        rec.sha256 = digest;
-      }
-
       out.files.push_back(std::move(rec));
     }
 
@@ -422,7 +437,6 @@ private:
       for (const auto kind : index.GetAllFileKinds()) {
         const auto rel = index.FindFileRelPath(kind);
         const auto size = index.FindFileSize(kind);
-        const auto sha = index.FindFileSha256(kind);
         if (!rel || !size) {
           continue;
         }
@@ -432,11 +446,6 @@ private:
           .relpath = std::string(*rel),
           .size = *size,
         };
-
-        if (sha.has_value()) {
-          std::copy_n(
-            sha->begin(), record.sha256.size(), record.sha256.begin());
-        }
 
         files_.insert_or_assign(kind, record);
       }
@@ -564,9 +573,6 @@ private:
       record.kind = f.kind;
       record.relpath_offset = strings.Add(f.relpath);
       record.size = f.size;
-      static_assert(sizeof(record.sha256) == sizeof(f.sha256));
-      std::copy_n(std::begin(f.sha256), std::size(record.sha256),
-        std::begin(record.sha256));
 
       file_records.push_back(record);
     }
@@ -672,6 +678,12 @@ auto LooseCookedWriter::WriteFile(const FileKind kind, std::string_view relpath,
   const std::span<const std::byte> bytes) -> void
 {
   impl_->WriteFile(kind, relpath, bytes);
+}
+
+auto LooseCookedWriter::RegisterExternalFile(
+  const FileKind kind, std::string_view relpath) -> void
+{
+  impl_->RegisterExternalFile(kind, relpath);
 }
 
 auto LooseCookedWriter::Finish() -> LooseCookedWriteResult

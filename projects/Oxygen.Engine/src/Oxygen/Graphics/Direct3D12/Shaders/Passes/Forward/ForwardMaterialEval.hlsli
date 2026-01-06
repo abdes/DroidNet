@@ -36,6 +36,10 @@ MaterialSurface EvaluateMaterialSurface(
     s.ao        = 1.0;
 
     s.N = SafeNormalize(world_normal);
+    // Fallback for degenerate normals from vertex data
+    if (dot(s.N, s.N) < 0.5) {
+        s.N = float3(0.0, 1.0, 0.0);
+    }
     s.V = SafeNormalize(camera_position - world_pos);
 
     if (bindless_draw_metadata_slot != 0xFFFFFFFFu &&
@@ -76,28 +80,50 @@ MaterialSurface EvaluateMaterialSurface(
             n_ts.xy *= mat.normal_scale;
             n_ts = SafeNormalize(float3(n_ts.xy, max(n_ts.z, 1e-4)));
 
+            float3 NN = SafeNormalize(world_normal);
+            // Fallback if geometric normal is degenerate
+            if (dot(NN, NN) < 0.5) {
+                NN = float3(0.0, 1.0, 0.0);
+            }
+
             float3 T = SafeNormalize(world_tangent);
             float3 B_in = world_bitangent;
-            float3 NN = SafeNormalize(world_normal);
 
             // Orthonormalize TBN to reduce artifacts.
             T = T - NN * dot(NN, T);
-            if (dot(T, T) <= 1e-16) {
+            if (dot(T, T) <= 1e-6) {
                 // Degenerate tangent (e.g., tangent parallel to normal). Choose a
                 // stable orthogonal axis so we don't introduce NaNs.
-                const float3 axis = (abs(NN.z) < 0.999) ? float3(0.0, 0.0, 1.0)
-                                                        : float3(0.0, 1.0, 0.0);
-                T = cross(axis, NN);
+                const float3 axis = (abs(NN.y) > 0.9) ? float3(1.0, 0.0, 0.0)
+                                                      : float3(0.0, 1.0, 0.0);
+                T = cross(NN, axis);
             }
             T = SafeNormalize(T);
+            // Double-check T is valid
+            if (dot(T, T) < 0.5) {
+                T = float3(1.0, 0.0, 0.0);
+            }
 
             // Preserve TBN handedness (mirrored UVs) when possible.
             const float3 B_from_cross = cross(NN, T);
             const float handedness = (dot(B_from_cross, B_in) < 0.0) ? -1.0 : 1.0;
-            const float3 B = SafeNormalize(B_from_cross * handedness);
+            float3 B = SafeNormalize(B_from_cross * handedness);
+            if (dot(B, B) < 0.5) {
+                B = cross(NN, T);
+            }
 
-            float3x3 TBN = float3x3(T, B, NN);
-            s.N = SafeNormalize(mul(TBN, n_ts));
+            // Transform tangent-space normal to world space.
+            // TBN basis vectors (T, B, NN) are columns of the transform matrix.
+            // n_ws = T * n_ts.x + B * n_ts.y + NN * n_ts.z
+            float3 perturbed_N = T * n_ts.x + B * n_ts.y + NN * n_ts.z;
+            perturbed_N = SafeNormalize(perturbed_N);
+
+            // Validate the perturbed normal - if it's zero or points sharply away
+            // from the geometric normal (> 90 degrees), fall back to geometric normal
+            if (dot(perturbed_N, perturbed_N) < 0.5 || dot(perturbed_N, NN) < 0.0) {
+                perturbed_N = NN;
+            }
+            s.N = perturbed_N;
         }
 
         // Scalar maps

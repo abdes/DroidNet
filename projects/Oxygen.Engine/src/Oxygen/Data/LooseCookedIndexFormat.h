@@ -140,9 +140,11 @@ struct FileRecord {
   uint32_t relpath_offset = 0; // e.g. "resources/buffers.table"
 
   SizeT size = 0;
-  uint8_t sha256[kSha256Size] = {};
 
-  uint8_t reserved1[16] = {};
+  // NOTE: File-level SHA256 was removed in favor of per-resource content_hash
+  // stored in TextureResourceDesc/BufferResourceDesc. Append-only data files
+  // invalidate whole-file hashes on each append.
+  uint8_t reserved1[48] = {};
 };
 #pragma pack(pop)
 static_assert(sizeof(FileRecord) == 64);

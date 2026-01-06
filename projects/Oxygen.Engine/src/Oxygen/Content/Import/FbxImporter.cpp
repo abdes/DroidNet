@@ -26,12 +26,22 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Content/Import/CookedContentWriter.h>
 #include <Oxygen/Content/Import/ImageDecode.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
 #include <Oxygen/Content/Import/ImportFormat.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/Import/Importer.h>
 #include <Oxygen/Content/Import/LooseCookedLayout.h>
+#include <Oxygen/Content/Import/emit/BufferEmitter.h>
+#include <Oxygen/Content/Import/emit/ResourceAppender.h>
+#include <Oxygen/Content/Import/emit/TextureEmitter.h>
+#include <Oxygen/Content/Import/util/Constants.h>
+#include <Oxygen/Content/Import/util/CoordTransform.h>
+#include <Oxygen/Content/Import/util/Signature.h>
+#include <Oxygen/Content/Import/util/StringUtils.h>
+#include <Oxygen/Content/Import/util/TangentGen.h>
+#include <Oxygen/Content/Import/util/TextureRepack.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -55,7 +65,19 @@ namespace {
   using oxygen::data::AssetKey;
   using oxygen::data::AssetType;
 
-  [[nodiscard]] auto ToFloat(const ufbx_real v) noexcept -> float;
+  // Import utilities from refactored modules
+  using util::Clamp01;
+  using util::MakeDeterministicAssetKey;
+  using util::MakeRandomAssetKey;
+  using util::StartsWithIgnoreCase;
+  using util::ToFloat;
+  using util::TruncateAndNullTerminate;
+
+  using coord::ApplySwapYZDirIfEnabled;
+  using coord::ApplySwapYZIfEnabled;
+  using coord::EngineCameraTargetAxes;
+  using coord::EngineWorldTargetAxes;
+  using coord::ToGlmMat4;
 
   [[nodiscard]] auto TryFindRealProp(const ufbx_props& props,
     const char* name) noexcept -> std::optional<ufbx_real>
@@ -220,47 +242,8 @@ namespace {
     return std::string_view(s.data, s.length);
   }
 
-  [[nodiscard]] auto MakeDeterministicAssetKey(std::string_view virtual_path)
-    -> AssetKey
-  {
-    const auto bytes = std::as_bytes(
-      std::span(virtual_path.data(), static_cast<size_t>(virtual_path.size())));
-    const auto digest = oxygen::base::ComputeSha256(bytes);
-
-    AssetKey key {};
-    std::copy_n(digest.begin(), key.guid.size(), key.guid.begin());
-    return key;
-  }
-
-  [[nodiscard]] auto MakeRandomAssetKey() -> AssetKey
-  {
-    AssetKey key {};
-    key.guid = oxygen::data::GenerateAssetGuid();
-    return key;
-  }
-
-  [[nodiscard]] auto StartsWithIgnoreCase(
-    std::string_view str, std::string_view prefix) -> bool
-  {
-    if (str.size() < prefix.size()) {
-      return false;
-    }
-    return std::equal(
-      prefix.begin(), prefix.end(), str.begin(), [](char a, char b) {
-        return std::tolower(static_cast<unsigned char>(a))
-          == std::tolower(static_cast<unsigned char>(b));
-      });
-  }
-
-  [[nodiscard]] auto Clamp01(const float v) noexcept -> float
-  {
-    return std::clamp(v, 0.0F, 1.0F);
-  }
-
-  [[nodiscard]] auto ToFloat(const ufbx_real v) noexcept -> float
-  {
-    return static_cast<float>(v);
-  }
+  // MakeDeterministicAssetKey, MakeRandomAssetKey, StartsWithIgnoreCase,
+  // Clamp01, ToFloat are now imported from util::
 
   [[nodiscard]] auto BuildMaterialName(std::string_view authored,
     const ImportRequest& request, const uint32_t ordinal) -> std::string
@@ -360,795 +343,35 @@ namespace {
     return scene_name + "/" + std::string(name);
   }
 
-  auto TruncateAndNullTerminate(
-    char* dst, const size_t dst_size, std::string_view s) -> void
-  {
-    if (dst == nullptr || dst_size == 0) {
-      return;
-    }
-
-    std::fill_n(dst, dst_size, '\0');
-    const auto copy_len = (std::min)(dst_size - 1, s.size());
-    std::copy_n(s.data(), copy_len, dst);
-  }
-
-  [[nodiscard]] auto AlignUp(const uint64_t value, const uint64_t alignment)
-    -> uint64_t
-  {
-    if (alignment <= 1) {
-      return value;
-    }
-
-    const auto remainder = value % alignment;
-    if (remainder == 0) {
-      return value;
-    }
-    return value + (alignment - remainder);
-  }
-
-  [[nodiscard]] auto Sha256ToHex(const oxygen::base::Sha256Digest& digest)
-    -> std::string
-  {
-    static constexpr char kHex[] = "0123456789abcdef";
-    std::string out;
-    out.resize(digest.size() * 2);
-    for (size_t i = 0; i < digest.size(); ++i) {
-      const auto b = digest[i];
-      out[i * 2 + 0] = kHex[(b >> 4) & 0x0F];
-      out[i * 2 + 1] = kHex[b & 0x0F];
-    }
-    return out;
-  }
-
-  [[nodiscard]] auto NormalizeTexturePathId(std::filesystem::path p)
-    -> std::string
-  {
-    if (p.empty()) {
-      return {};
-    }
-
-    p = p.lexically_normal();
-    auto out = p.generic_string();
-
-#if defined(_WIN32)
-    std::transform(out.begin(), out.end(), out.begin(), [](const char c) {
-      return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    });
-#endif
-
-    return out;
-  }
-
-  [[nodiscard]] auto RepackRgba8ToRowPitchAligned(
-    const std::span<const std::byte> rgba8_tight, const uint32_t width,
-    const uint32_t height, const uint64_t row_pitch_alignment)
-    -> std::vector<std::byte>
-  {
-    constexpr uint64_t kBytesPerPixel = 4;
-    const auto tight_row_bytes = static_cast<uint64_t>(width) * kBytesPerPixel;
-    const auto row_pitch = AlignUp(tight_row_bytes, row_pitch_alignment);
-    const auto total_bytes = row_pitch * static_cast<uint64_t>(height);
-
-    std::vector<std::byte> out;
-    out.resize(static_cast<size_t>(total_bytes), std::byte { 0 });
-
-    const auto tight_total_bytes
-      = tight_row_bytes * static_cast<uint64_t>(height);
-    if (rgba8_tight.size() < static_cast<size_t>(tight_total_bytes)) {
-      return out;
-    }
-
-    for (uint32_t y = 0; y < height; ++y) {
-      const auto src_row_offset
-        = static_cast<size_t>(static_cast<uint64_t>(y) * tight_row_bytes);
-      const auto dst_row_offset
-        = static_cast<size_t>(static_cast<uint64_t>(y) * row_pitch);
-      std::copy_n(rgba8_tight.data() + src_row_offset,
-        static_cast<size_t>(tight_row_bytes), out.data() + dst_row_offset);
-    }
-    return out;
-  }
-
-  struct TextureEmission final {
-    using TextureResourceDesc = oxygen::data::pak::TextureResourceDesc;
-
-    std::vector<TextureResourceDesc> table;
-    std::vector<std::byte> data;
-    std::unordered_map<const ufbx_texture*, uint32_t> index_by_file_texture;
-    std::unordered_map<std::string, uint32_t> index_by_texture_id;
-    std::unordered_map<std::string, uint32_t> index_by_signature;
-  };
-
-  [[nodiscard]] auto MakeTextureSignature(
-    const oxygen::data::pak::TextureResourceDesc& desc,
-    const std::span<const std::byte> bytes) -> std::string
-  {
-    const auto digest = oxygen::base::ComputeSha256(bytes);
-
-    std::string signature;
-    signature.reserve(128);
-    signature.append(Sha256ToHex(digest));
-    signature.push_back(':');
-    signature.append(std::to_string(desc.width));
-    signature.push_back('x');
-    signature.append(std::to_string(desc.height));
-    signature.push_back(':');
-    signature.append(std::to_string(desc.mip_levels));
-    signature.push_back(':');
-    signature.append(std::to_string(desc.format));
-    signature.push_back(':');
-    signature.append(std::to_string(desc.alignment));
-    signature.push_back(':');
-    signature.append(std::to_string(desc.size_bytes));
-    return signature;
-  }
-
-  [[nodiscard]] auto TryReadWholeFileBytes(const std::filesystem::path& path)
-    -> std::optional<std::vector<std::byte>>
-  {
-    std::error_code ec;
-    if (!std::filesystem::exists(path, ec)
-      || !std::filesystem::is_regular_file(path, ec)) {
-      return std::nullopt;
-    }
-
-    const auto size_u64 = std::filesystem::file_size(path, ec);
-    if (ec) {
-      return std::nullopt;
-    }
-    if (size_u64 == 0) {
-      return std::vector<std::byte> {};
-    }
-    if (size_u64
-      > static_cast<uint64_t>((std::numeric_limits<size_t>::max)())) {
-      return std::nullopt;
-    }
-
-    std::ifstream stream(path, std::ios::binary);
-    if (!stream.is_open()) {
-      return std::nullopt;
-    }
-
-    std::vector<std::byte> bytes;
-    bytes.resize(static_cast<size_t>(size_u64));
-    stream.read(reinterpret_cast<char*>(bytes.data()),
-      static_cast<std::streamsize>(bytes.size()));
-    if (!stream.good() && !stream.eof()) {
-      return std::nullopt;
-    }
-    return bytes;
-  }
-
-  auto LoadExistingTextureResourcesIfPresent(const std::filesystem::path& root,
-    const LooseCookedLayout& layout, CookedContentWriter& out,
-    TextureEmission& textures) -> void
-  {
-    using TextureResourceDesc = oxygen::data::pak::TextureResourceDesc;
-
-    const auto table_path
-      = root / std::filesystem::path(layout.TexturesTableRelPath());
-    const auto data_path
-      = root / std::filesystem::path(layout.TexturesDataRelPath());
-
-    const auto table_bytes_opt = TryReadWholeFileBytes(table_path);
-    const auto data_bytes_opt = TryReadWholeFileBytes(data_path);
-    if (!table_bytes_opt.has_value() && !data_bytes_opt.has_value()) {
-      return;
-    }
-    if (!table_bytes_opt.has_value() || !data_bytes_opt.has_value()) {
-      ImportDiagnostic diag {
-        .severity = ImportSeverity::kError,
-        .code = "loose_cooked.missing_texture_pair",
-        .message
-        = "existing cooked root has only one of textures.table/textures.data",
-        .source_path = {},
-        .object_path = {},
-      };
-      out.AddDiagnostic(std::move(diag));
-      throw std::runtime_error(
-        "Existing cooked root is missing textures.table or textures.data");
-    }
-
-    const auto& table_bytes = *table_bytes_opt;
-    const auto& data_bytes = *data_bytes_opt;
-
-    if (table_bytes.size() % sizeof(TextureResourceDesc) != 0U) {
-      ImportDiagnostic diag {
-        .severity = ImportSeverity::kError,
-        .code = "loose_cooked.corrupt_textures_table",
-        .message
-        = "textures.table size is not a multiple of TextureResourceDesc",
-        .source_path = {},
-        .object_path = table_path.string(),
-      };
-      out.AddDiagnostic(std::move(diag));
-      throw std::runtime_error("Existing textures.table appears corrupt");
-    }
-
-    const auto count = table_bytes.size() / sizeof(TextureResourceDesc);
-    textures.table.resize(count);
-    if (!table_bytes.empty()) {
-      std::memcpy(
-        textures.table.data(), table_bytes.data(), table_bytes.size());
-    }
-
-    textures.data = data_bytes;
-
-    textures.index_by_signature.clear();
-    textures.index_by_signature.reserve(textures.table.size());
-    for (uint32_t ti = 1; ti < textures.table.size(); ++ti) {
-      const auto& desc = textures.table[ti];
-      const auto begin = static_cast<uint64_t>(desc.data_offset);
-      const auto size = static_cast<uint64_t>(desc.size_bytes);
-      if (size == 0) {
-        continue;
-      }
-      if (begin > textures.data.size()
-        || size > textures.data.size() - static_cast<size_t>(begin)) {
-        ImportDiagnostic diag {
-          .severity = ImportSeverity::kError,
-          .code = "loose_cooked.corrupt_textures_data",
-          .message = "textures.table entry points outside textures.data",
-          .source_path = {},
-          .object_path = table_path.string(),
-        };
-        out.AddDiagnostic(std::move(diag));
-        throw std::runtime_error("Existing textures.data appears corrupt");
-      }
-
-      const auto bytes = std::span<const std::byte>(
-        textures.data.data() + static_cast<size_t>(begin),
-        static_cast<size_t>(size));
-      textures.index_by_signature.emplace(
-        MakeTextureSignature(desc, bytes), ti);
-    }
-    LOG_F(INFO, "Loaded existing textures: count={} bytes={}",
-      textures.table.size(), textures.data.size());
-  }
-
-  auto LoadExistingBufferResourcesIfPresent(const std::filesystem::path& root,
-    const LooseCookedLayout& layout, CookedContentWriter& out,
-    std::vector<oxygen::data::pak::BufferResourceDesc>& buffers_table,
-    std::vector<std::byte>& buffers_data) -> void
-  {
-    using BufferResourceDesc = oxygen::data::pak::BufferResourceDesc;
-
-    const auto table_path
-      = root / std::filesystem::path(layout.BuffersTableRelPath());
-    const auto data_path
-      = root / std::filesystem::path(layout.BuffersDataRelPath());
-
-    const auto table_bytes_opt = TryReadWholeFileBytes(table_path);
-    const auto data_bytes_opt = TryReadWholeFileBytes(data_path);
-    if (!table_bytes_opt.has_value() && !data_bytes_opt.has_value()) {
-      return;
-    }
-    if (!table_bytes_opt.has_value() || !data_bytes_opt.has_value()) {
-      ImportDiagnostic diag {
-        .severity = ImportSeverity::kError,
-        .code = "loose_cooked.missing_buffer_pair",
-        .message
-        = "existing cooked root has only one of buffers.table/buffers.data",
-        .source_path = {},
-        .object_path = {},
-      };
-      out.AddDiagnostic(std::move(diag));
-      throw std::runtime_error(
-        "Existing cooked root is missing buffers.table or buffers.data");
-    }
-
-    const auto& table_bytes = *table_bytes_opt;
-    const auto& data_bytes = *data_bytes_opt;
-
-    if (table_bytes.size() % sizeof(BufferResourceDesc) != 0U) {
-      ImportDiagnostic diag {
-        .severity = ImportSeverity::kError,
-        .code = "loose_cooked.corrupt_buffers_table",
-        .message = "buffers.table size is not a multiple of BufferResourceDesc",
-        .source_path = {},
-        .object_path = table_path.string(),
-      };
-      out.AddDiagnostic(std::move(diag));
-      throw std::runtime_error("Existing buffers.table appears corrupt");
-    }
-
-    const auto count = table_bytes.size() / sizeof(BufferResourceDesc);
-    buffers_table.resize(count);
-    if (!table_bytes.empty()) {
-      std::memcpy(buffers_table.data(), table_bytes.data(), table_bytes.size());
-    }
-
-    buffers_data = data_bytes;
-    LOG_F(INFO, "Loaded existing buffers: count={} bytes={}",
-      buffers_table.size(), buffers_data.size());
-  }
-
-  [[nodiscard]] auto ResolveFileTexture(const ufbx_texture* texture)
-    -> const ufbx_texture*
-  {
-    if (texture == nullptr) {
-      return nullptr;
-    }
-
-    if (texture->file_textures.count > 0) {
-      return texture->file_textures.data[0];
-    }
-
-    return texture;
-  }
-
-  [[nodiscard]] auto TextureIdString(const ufbx_texture& texture)
-    -> std::string_view
-  {
-    if (texture.relative_filename.length > 0) {
-      return ToStringView(texture.relative_filename);
-    }
-    if (texture.filename.length > 0) {
-      return ToStringView(texture.filename);
-    }
-    if (texture.name.length > 0) {
-      return ToStringView(texture.name);
-    }
-    return {};
-  }
-
-  [[nodiscard]] auto MakeDeterministicPixelRGBA8(std::string_view id)
-    -> std::array<std::byte, 4>
-  {
-    if (id.empty()) {
-      return { std::byte { 0x7F }, std::byte { 0x7F }, std::byte { 0x7F },
-        std::byte { 0xFF } };
-    }
-
-    const auto bytes
-      = std::as_bytes(std::span(id.data(), static_cast<size_t>(id.size())));
-    const auto digest = oxygen::base::ComputeSha256(bytes);
-    return { std::byte { digest[0] }, std::byte { digest[1] },
-      std::byte { digest[2] }, std::byte { 0xFF } };
-  }
-
-  auto AppendAligned(std::vector<std::byte>& blob,
-    const std::span<const std::byte> bytes, const uint64_t alignment)
-    -> uint64_t
-  {
-    const auto begin = static_cast<uint64_t>(blob.size());
-    const auto aligned = AlignUp(begin, alignment);
-    if (aligned > begin) {
-      blob.resize(static_cast<size_t>(aligned), std::byte { 0 });
-    }
-    const auto offset = static_cast<uint64_t>(blob.size());
-    blob.insert(blob.end(), bytes.begin(), bytes.end());
-    return offset;
-  }
-
-  auto EnsureFallbackTexture(TextureEmission& out) -> void
-  {
-    if (!out.table.empty()) {
-      return;
-    }
-
-    using oxygen::data::pak::TextureResourceDesc;
-
-    constexpr uint64_t kRowPitchAlignment = 256;
-
-    // Index 0 is reserved and must exist.
-    // Use a 1x1 white RGBA8, packed with a 256-byte row pitch to satisfy
-    // the TextureBinder upload contract.
-    const std::array<std::byte, 4> white = { std::byte { 0xFF },
-      std::byte { 0xFF }, std::byte { 0xFF }, std::byte { 0xFF } };
-    const auto packed = RepackRgba8ToRowPitchAligned(
-      std::span<const std::byte>(white.data(), white.size()), 1, 1,
-      kRowPitchAlignment);
-    const auto data_offset = AppendAligned(out.data,
-      std::span<const std::byte>(packed.data(), packed.size()),
-      kRowPitchAlignment);
-
-    TextureResourceDesc desc {};
-    desc.data_offset = data_offset;
-    desc.size_bytes = static_cast<uint32_t>(packed.size());
-    desc.texture_type = static_cast<uint8_t>(oxygen::TextureType::kTexture2D);
-    desc.compression_type = 0;
-    desc.width = 1;
-    desc.height = 1;
-    desc.depth = 1;
-    desc.array_layers = 1;
-    desc.mip_levels = 1;
-    desc.format = static_cast<uint8_t>(oxygen::Format::kRGBA8UNorm);
-    desc.alignment = static_cast<uint32_t>(kRowPitchAlignment);
-
-    out.table.push_back(desc);
-  }
-
-  [[nodiscard]] auto GetOrCreateTextureResourceIndex(
-    const ImportRequest& request, CookedContentWriter& cooked_out,
-    TextureEmission& out, const ufbx_texture* texture) -> uint32_t
-  {
-    constexpr uint64_t kRowPitchAlignment = 256;
-
-    const auto* file_tex = ResolveFileTexture(texture);
-    if (file_tex == nullptr) {
-      return 0;
-    }
-
-    EnsureFallbackTexture(out);
-
-    if (const auto it = out.index_by_file_texture.find(file_tex);
-      it != out.index_by_file_texture.end()) {
-      return it->second;
-    }
-
-    const auto id = TextureIdString(*file_tex);
-    auto decoded = ImageDecodeResult {};
-    const bool is_embedded = (texture != nullptr
-      && texture->content.data != nullptr && texture->content.size > 0);
-
-    std::string texture_id;
-    std::filesystem::path resolved;
-
-    if (is_embedded) {
-      const auto bytes = std::span<const std::byte>(
-        reinterpret_cast<const std::byte*>(texture->content.data),
-        texture->content.size);
-      texture_id
-        = "embedded:" + Sha256ToHex(oxygen::base::ComputeSha256(bytes));
-      if (const auto it = out.index_by_texture_id.find(texture_id);
-        it != out.index_by_texture_id.end()) {
-        out.index_by_file_texture.insert_or_assign(file_tex, it->second);
-        return it->second;
-      }
-      decoded = DecodeImageRgba8FromMemory(bytes);
-    } else {
-      auto rel = ToStringView(file_tex->relative_filename);
-      auto abs = ToStringView(file_tex->filename);
-
-      if (rel.empty() && abs.empty()) {
-        const auto rel_prop
-          = ufbx_find_string(&file_tex->props, "RelativeFilename", {});
-        const auto abs_prop
-          = ufbx_find_string(&file_tex->props, "FileName", {});
-        if (rel_prop.length > 0) {
-          rel = ToStringView(rel_prop);
-        }
-        if (abs_prop.length > 0) {
-          abs = ToStringView(abs_prop);
-        }
-      }
-
-      if (rel.empty() && abs.empty() && texture != nullptr) {
-        rel = ToStringView(texture->relative_filename);
-        abs = ToStringView(texture->filename);
-        if (rel.empty() && abs.empty()) {
-          const auto rel_prop
-            = ufbx_find_string(&texture->props, "RelativeFilename", {});
-          const auto abs_prop
-            = ufbx_find_string(&texture->props, "FileName", {});
-          if (rel_prop.length > 0) {
-            rel = ToStringView(rel_prop);
-          }
-          if (abs_prop.length > 0) {
-            abs = ToStringView(abs_prop);
-          }
-        }
-      }
-      if (!rel.empty()) {
-        resolved = request.source_path.parent_path()
-          / std::filesystem::path(std::string(rel));
-      } else if (!abs.empty()) {
-        const auto abs_path = std::filesystem::path(std::string(abs));
-        resolved = abs_path.is_absolute()
-          ? abs_path
-          : (request.source_path.parent_path() / abs_path);
-      }
-
-      texture_id = !resolved.empty() ? NormalizeTexturePathId(resolved)
-                                     : std::string(id);
-
-      if (!texture_id.empty()) {
-        if (const auto it = out.index_by_texture_id.find(texture_id);
-          it != out.index_by_texture_id.end()) {
-          out.index_by_file_texture.insert_or_assign(file_tex, it->second);
-          return it->second;
-        }
-      }
-
-      if (!resolved.empty()) {
-        decoded = DecodeImageRgba8FromFile(resolved);
-      } else {
-        decoded.error = "texture has no filename or embedded content";
-      }
-    }
-
-    std::span<const std::byte> pixels;
-    uint32_t width = 1;
-    uint32_t height = 1;
-    std::array<std::byte, 4> placeholder_pixel = {};
-    bool used_placeholder = false;
-
-    if (decoded.Succeeded() && decoded.image->width > 0
-      && decoded.image->height > 0 && !decoded.image->pixels.empty()) {
-      pixels = std::span<const std::byte>(
-        decoded.image->pixels.data(), decoded.image->pixels.size());
-      width = decoded.image->width;
-      height = decoded.image->height;
-    } else {
-      used_placeholder = true;
-      if (!decoded.error.empty()) {
-        ImportDiagnostic diag {
-          .severity = ImportSeverity::kWarning,
-          .code = "fbx.texture_decode_failed",
-          .message = "failed to decode texture '" + std::string(id)
-            + "': " + decoded.error + "; using 1x1 placeholder",
-          .source_path = request.source_path.string(),
-          .object_path = std::string(id),
-        };
-        cooked_out.AddDiagnostic(std::move(diag));
-      }
-
-      placeholder_pixel = MakeDeterministicPixelRGBA8(id);
-      pixels = std::span<const std::byte>(
-        placeholder_pixel.data(), placeholder_pixel.size());
-      width = 1;
-      height = 1;
-    }
-
-    const auto packed_pixels
-      = RepackRgba8ToRowPitchAligned(pixels, width, height, kRowPitchAlignment);
-
-    TextureEmission::TextureResourceDesc desc {};
-    desc.data_offset = 0;
-    desc.size_bytes = static_cast<uint32_t>(packed_pixels.size());
-    desc.texture_type = static_cast<uint8_t>(oxygen::TextureType::kTexture2D);
-    desc.compression_type = 0;
-    desc.width = width;
-    desc.height = height;
-    desc.depth = 1;
-    desc.array_layers = 1;
-    desc.mip_levels = 1;
-    desc.format = static_cast<uint8_t>(oxygen::Format::kRGBA8UNorm);
-    desc.alignment = static_cast<uint32_t>(kRowPitchAlignment);
-
-    const auto signature = MakeTextureSignature(desc,
-      std::span<const std::byte>(packed_pixels.data(), packed_pixels.size()));
-    if (const auto it = out.index_by_signature.find(signature);
-      it != out.index_by_signature.end()) {
-      const auto existing_index = it->second;
-      out.index_by_file_texture.insert_or_assign(file_tex, existing_index);
-      if (!texture_id.empty()) {
-        out.index_by_texture_id.insert_or_assign(texture_id, existing_index);
-      }
-      LOG_F(INFO,
-        "Reuse texture '{}' ({}x{}, bytes={}, embedded={}, placeholder={}) -> "
-        "index {}",
-        std::string(id).c_str(), width, height, pixels.size(), is_embedded,
-        used_placeholder, existing_index);
-      return existing_index;
-    }
-
-    const auto data_offset = AppendAligned(out.data,
-      std::span<const std::byte>(packed_pixels.data(), packed_pixels.size()),
-      kRowPitchAlignment);
-
-    desc.data_offset = data_offset;
-
-    LOG_F(INFO,
-      "Emit texture '{}' ({}x{}, bytes={}, embedded={}, placeholder={}) -> "
-      "index {}",
-      std::string(id).c_str(), width, height, pixels.size(), is_embedded,
-      used_placeholder, out.table.size());
-
-    const auto index = static_cast<uint32_t>(out.table.size());
-    out.table.push_back(desc);
-    out.index_by_file_texture.insert_or_assign(file_tex, index);
-    if (!texture_id.empty()) {
-      out.index_by_texture_id.insert_or_assign(texture_id, index);
-    }
-    out.index_by_signature.emplace(signature, index);
-    return index;
-  }
-
-  [[nodiscard]] auto SelectBaseColorTexture(const ufbx_material& material)
-    -> const ufbx_texture*
-  {
-    const auto& pbr = material.pbr.base_color;
-    // Some exporters leave `texture_enabled` unset even when a valid texture
-    // connection exists. Prefer the pointer presence while honoring
-    // `feature_disabled`.
-    if (!pbr.feature_disabled && pbr.texture != nullptr) {
-      return pbr.texture;
-    }
-    const auto& fbx = material.fbx.diffuse_color;
-    if (!fbx.feature_disabled && fbx.texture != nullptr) {
-      return fbx.texture;
-    }
-    return nullptr;
-  }
-
-  [[nodiscard]] auto SelectNormalTexture(const ufbx_material& material)
-    -> const ufbx_texture*
-  {
-    const auto& pbr = material.pbr.normal_map;
-    if (!pbr.feature_disabled && pbr.texture != nullptr) {
-      return pbr.texture;
-    }
-    const auto& fbx = material.fbx.normal_map;
-    if (!fbx.feature_disabled && fbx.texture != nullptr) {
-      return fbx.texture;
-    }
-    return nullptr;
-  }
-
-  [[nodiscard]] auto SelectMetallicTexture(const ufbx_material& material)
-    -> const ufbx_texture*
-  {
-    const auto& pbr = material.pbr.metalness;
-    if (!pbr.feature_disabled && pbr.texture != nullptr) {
-      return pbr.texture;
-    }
-    return nullptr;
-  }
-
-  [[nodiscard]] auto SelectRoughnessTexture(const ufbx_material& material)
-    -> const ufbx_texture*
-  {
-    const auto& pbr = material.pbr.roughness;
-    if (!pbr.feature_disabled && pbr.texture != nullptr) {
-      return pbr.texture;
-    }
-    return nullptr;
-  }
-
-  [[nodiscard]] auto SelectAmbientOcclusionTexture(
-    const ufbx_material& material) -> const ufbx_texture*
-  {
-    const auto& pbr = material.pbr.ambient_occlusion;
-    if (!pbr.feature_disabled && pbr.texture != nullptr) {
-      return pbr.texture;
-    }
-    return nullptr;
-  }
-
-  [[nodiscard]] auto EngineWorldTargetAxes() -> ufbx_coordinate_axes
-  {
-    // Oxygen engine world conventions (Oxygen/Core/Constants.h):
-    //   - Right-handed
-    //   - Z-up
-    //   - Forward = -Y
-    //
-    // ufbx `front` axis is the "Back" direction (opposite of Forward).
-    // To map Source Forward (-Z) to Oxygen Forward (-Y), we need a rotation.
-    //
-    // Oxygen "world" basis is:
-    //   Right   = +X
-    //   Up      = +Z
-    //   Forward = -Y
-    //
-    // ufbx uses `front` to mean "Back" (opposite of Forward), so we set:
-    //   Front = +Y  (Back)
-    //
-    // Note: (Right, Up, Front) is not required to satisfy
-    // cross(Right, Up) == Front because Front is *Back*.
-    return ufbx_coordinate_axes {
-      .right = UFBX_COORDINATE_AXIS_POSITIVE_X,
-      .up = UFBX_COORDINATE_AXIS_POSITIVE_Z,
-      .front = UFBX_COORDINATE_AXIS_POSITIVE_Y,
-    };
-  }
-
-  [[nodiscard]] auto EngineCameraTargetAxes() -> ufbx_coordinate_axes
-  {
-    // Oxygen camera/view conventions (Oxygen/Core/Constants.h):
-    //   view forward = -Z, up = +Y, right = +X
-    // ufbx stores `front` as the opposite of forward.
-    return ufbx_coordinate_axes {
-      .right = UFBX_COORDINATE_AXIS_POSITIVE_X,
-      .up = UFBX_COORDINATE_AXIS_POSITIVE_Y,
-      .front = UFBX_COORDINATE_AXIS_POSITIVE_Z,
-    };
-  }
-
-  [[nodiscard]] auto ComputeTargetUnitMeters(
-    const CoordinateConversionPolicy& policy) -> std::optional<ufbx_real>
-  {
-    switch (policy.unit_normalization) {
-    case UnitNormalizationPolicy::kNormalizeToMeters:
-      return 1.0;
-    case UnitNormalizationPolicy::kPreserveSource:
-      return std::nullopt;
-    case UnitNormalizationPolicy::kApplyCustomFactor: {
-      if (!(policy.custom_unit_scale > 0.0F)) {
-        return std::nullopt;
-      }
-      return static_cast<ufbx_real>(1.0 / policy.custom_unit_scale);
-    }
-    }
-
-    return std::nullopt;
-  }
-
-  [[nodiscard]] auto SwapYZMatrix() -> ufbx_matrix
-  {
-    // Permutation matrix that swaps Y/Z components.
-    // `ufbx_matrix` is column-major: cols[0..2] are basis vectors.
-    return ufbx_matrix {
-      .cols = {
-        { 1.0, 0.0, 0.0 },
-        { 0.0, 0.0, 1.0 },
-        { 0.0, 1.0, 0.0 },
-        { 0.0, 0.0, 0.0 },
-      },
-    };
-  }
-
-  [[nodiscard]] auto ApplySwapYZIfEnabled(
-    const CoordinateConversionPolicy& policy, const ufbx_transform& t)
-    -> ufbx_transform
-  {
-    if (!policy.swap_yz_axes) {
-      return t;
-    }
-
-    // Apply a similarity transform: M' = P * M * P^{-1}.
-    // For a pure axis permutation, P^{-1} == P.
-    const auto p = SwapYZMatrix();
-    const auto m = ufbx_transform_to_matrix(&t);
-    const auto pm = ufbx_matrix_mul(&p, &m);
-    const auto pmp = ufbx_matrix_mul(&pm, &p);
-    return ufbx_matrix_to_transform(&pmp);
-  }
-
-  [[nodiscard]] auto ApplySwapYZIfEnabled(
-    const CoordinateConversionPolicy& policy, const ufbx_vec3 v) -> ufbx_vec3
-  {
-    if (!policy.swap_yz_axes) {
-      return v;
-    }
-
-    const auto p = SwapYZMatrix();
-    return ufbx_transform_position(&p, v);
-  }
-
-  [[nodiscard]] auto ApplySwapYZDirIfEnabled(
-    const CoordinateConversionPolicy& policy, const ufbx_vec3 v) -> ufbx_vec3
-  {
-    if (!policy.swap_yz_axes) {
-      return v;
-    }
-
-    const auto p = SwapYZMatrix();
-    return ufbx_transform_direction(&p, v);
-  }
-
-  [[nodiscard]] auto ApplySwapYZIfEnabled(
-    const CoordinateConversionPolicy& policy, const ufbx_matrix& m)
-    -> ufbx_matrix
-  {
-    if (!policy.swap_yz_axes) {
-      return m;
-    }
-
-    const auto p = SwapYZMatrix();
-    const auto pm = ufbx_matrix_mul(&p, &m);
-    const auto pmp = ufbx_matrix_mul(&pm, &p);
-    return pmp;
-  }
-
-  [[nodiscard]] auto ToGlmMat4(const ufbx_matrix& m) -> glm::mat4
-  {
-    // ufbx_matrix is an affine 4x3 matrix in column-major form.
-    // cols[0..2] are basis vectors, cols[3] is translation.
-    glm::mat4 out(1.0F);
-    // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
-    out[0] = glm::vec4(static_cast<float>(m.cols[0].x),
-      static_cast<float>(m.cols[0].y), static_cast<float>(m.cols[0].z), 0.0F);
-    out[1] = glm::vec4(static_cast<float>(m.cols[1].x),
-      static_cast<float>(m.cols[1].y), static_cast<float>(m.cols[1].z), 0.0F);
-    out[2] = glm::vec4(static_cast<float>(m.cols[2].x),
-      static_cast<float>(m.cols[2].y), static_cast<float>(m.cols[2].z), 0.0F);
-    out[3] = glm::vec4(static_cast<float>(m.cols[3].x),
-      static_cast<float>(m.cols[3].y), static_cast<float>(m.cols[3].z), 1.0F);
-    // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
-    return out;
-  }
+  // TruncateAndNullTerminate is now imported from util::
+  // AlignUp is now in util::TextureRepack.h
+  // Sha256ToHex is now in util::Signature.h
+
+  // NormalizeTexturePathId is now in emit/TextureEmitter.h
+  // RepackRgba8ToRowPitchAligned is now in util/TextureRepack.h
+
+  // TextureEmission struct is replaced by emit::TextureEmissionState
+  // MakeTextureSignature is now in util/Signature.h
+  // TryReadWholeFileBytes is now in emit/ResourceAppender.cpp
+
+  // Texture loading functions moved to emit/ResourceAppender.cpp:
+  // - LoadExistingTextureResourcesIfPresent -> emit::InitTextureEmissionState
+  // - LoadExistingBufferResourcesIfPresent -> emit::InitBufferEmissionState
+
+  // Texture selection functions moved to emit/TextureEmitter.h:
+  // - ResolveFileTexture
+  // - TextureIdString
+  // - SelectBaseColorTexture/Normal/Metallic/Roughness/AmbientOcclusion
+  // - EnsureFallbackTexture
+  // - GetOrCreateTextureResourceIndex
+
+  // Coordinate transform functions moved to util/CoordTransform.h:
+  // - EngineWorldTargetAxes
+  // - EngineCameraTargetAxes
+  // - ComputeTargetUnitMeters
+  // - SwapYZMatrix
+  // - ApplySwapYZIfEnabled (all overloads)
+  // - ToGlmMat4
 
   struct ImportedGeometry final {
     const ufbx_mesh* mesh = nullptr;
@@ -1223,7 +446,7 @@ namespace {
       }
 
       if (const auto target_unit_meters
-        = ComputeTargetUnitMeters(coordinate_policy);
+        = coord::ComputeTargetUnitMeters(coordinate_policy);
         target_unit_meters.has_value()) {
         opts.target_unit_meters = *target_unit_meters;
       }
@@ -1286,11 +509,18 @@ namespace {
         throw std::runtime_error("FBX scene import requires geometry");
       }
 
-      TextureEmission textures;
+      emit::TextureEmissionState textures;
       if (want_textures) {
-        LoadExistingTextureResourcesIfPresent(
-          cooked_root, request.loose_cooked_layout, out, textures);
-        EnsureFallbackTexture(textures);
+        const auto textures_table_path = cooked_root
+          / std::filesystem::path(
+            request.loose_cooked_layout.TexturesTableRelPath());
+        const auto textures_data_path = cooked_root
+          / std::filesystem::path(
+            request.loose_cooked_layout.TexturesDataRelPath());
+        textures = emit::InitTextureEmissionState(
+          textures_table_path, textures_data_path);
+        emit::BuildTextureSignatureIndex(textures, textures_data_path);
+        emit::EnsureFallbackTexture(textures);
       }
 
       uint32_t written_materials = 0;
@@ -1334,7 +564,7 @@ namespace {
   private:
     static auto WriteMaterials_(const ufbx_scene& scene,
       const ImportRequest& request, CookedContentWriter& out,
-      TextureEmission& textures, const bool want_textures,
+      emit::TextureEmissionState& textures, const bool want_textures,
       uint32_t& written_materials, std::vector<AssetKey>& out_keys) -> void
     {
       const auto count = static_cast<uint32_t>(scene.materials.count);
@@ -1363,7 +593,8 @@ namespace {
     [[nodiscard]] static auto WriteOneMaterial_(const ImportRequest& request,
       CookedContentWriter& out, std::string_view material_name,
       const uint32_t ordinal, const ufbx_material* material,
-      TextureEmission& textures, const bool want_textures) -> AssetKey
+      emit::TextureEmissionState& textures, const bool want_textures)
+      -> AssetKey
     {
       const auto storage_name
         = NamespaceImportedAssetName(request, material_name);
@@ -1509,22 +740,22 @@ namespace {
       }
 
       if (want_textures && material != nullptr) {
-        const auto base_color_tex = SelectBaseColorTexture(*material);
-        const auto normal_tex = SelectNormalTexture(*material);
-        const auto metallic_tex = SelectMetallicTexture(*material);
-        const auto roughness_tex = SelectRoughnessTexture(*material);
-        const auto ao_tex = SelectAmbientOcclusionTexture(*material);
+        const auto base_color_tex = emit::SelectBaseColorTexture(*material);
+        const auto normal_tex = emit::SelectNormalTexture(*material);
+        const auto metallic_tex = emit::SelectMetallicTexture(*material);
+        const auto roughness_tex = emit::SelectRoughnessTexture(*material);
+        const auto ao_tex = emit::SelectAmbientOcclusionTexture(*material);
 
-        const auto base_color_index = GetOrCreateTextureResourceIndex(
+        const auto base_color_index = emit::GetOrCreateTextureResourceIndex(
           request, out, textures, base_color_tex);
-        const auto normal_index
-          = GetOrCreateTextureResourceIndex(request, out, textures, normal_tex);
-        const auto metallic_index = GetOrCreateTextureResourceIndex(
+        const auto normal_index = emit::GetOrCreateTextureResourceIndex(
+          request, out, textures, normal_tex);
+        const auto metallic_index = emit::GetOrCreateTextureResourceIndex(
           request, out, textures, metallic_tex);
-        const auto roughness_index = GetOrCreateTextureResourceIndex(
+        const auto roughness_index = emit::GetOrCreateTextureResourceIndex(
           request, out, textures, roughness_tex);
-        const auto ao_index
-          = GetOrCreateTextureResourceIndex(request, out, textures, ao_tex);
+        const auto ao_index = emit::GetOrCreateTextureResourceIndex(
+          request, out, textures, ao_tex);
 
         desc.base_color_texture = base_color_index;
         desc.normal_texture = normal_index;
@@ -1555,19 +786,22 @@ namespace {
     }
 
     static auto WriteTextures_(const ImportRequest& request,
-      CookedContentWriter& out, const TextureEmission& textures) -> void
+      CookedContentWriter& out, emit::TextureEmissionState& textures) -> void
     {
       using oxygen::data::loose_cooked::v1::FileKind;
       using oxygen::data::pak::TextureResourceDesc;
+
+      // Close the data file appender (flushes any pending writes)
+      emit::CloseAppender(textures.appender);
 
       if (textures.table.empty()) {
         return;
       }
 
-      LOG_F(INFO, "Emit textures table: count={} bytes={} -> '{}' / '{}'",
-        textures.table.size(), textures.data.size(),
-        request.loose_cooked_layout.TexturesTableRelPath().c_str(),
-        request.loose_cooked_layout.TexturesDataRelPath().c_str());
+      LOG_F(INFO, "Emit textures table: count={} data_file='{}' -> table='{}'",
+        textures.table.size(),
+        request.loose_cooked_layout.TexturesDataRelPath().c_str(),
+        request.loose_cooked_layout.TexturesTableRelPath().c_str());
 
       oxygen::serio::MemoryStream table_stream;
       oxygen::serio::Writer<oxygen::serio::MemoryStream> table_writer(
@@ -1580,9 +814,9 @@ namespace {
         request.loose_cooked_layout.TexturesTableRelPath(),
         table_stream.Data());
 
-      out.WriteFile(FileKind::kTexturesData,
-        request.loose_cooked_layout.TexturesDataRelPath(),
-        std::span<const std::byte>(textures.data.data(), textures.data.size()));
+      // Register the externally-written data file
+      out.RegisterExternalFile(FileKind::kTexturesData,
+        request.loose_cooked_layout.TexturesDataRelPath());
     }
 
     static auto WriteGeometry_(const ufbx_scene& scene,
@@ -1601,47 +835,18 @@ namespace {
       using oxygen::data::pak::MeshViewDesc;
       using oxygen::data::pak::SubMeshDesc;
 
-      std::vector<BufferResourceDesc> buffers_table;
-      std::vector<std::byte> buffers_data;
-
       const auto cooked_root = request.cooked_root.value_or(
         std::filesystem::absolute(request.source_path.parent_path()));
-      LoadExistingBufferResourcesIfPresent(cooked_root,
-        request.loose_cooked_layout, out, buffers_table, buffers_data);
+      const auto buffers_table_path = cooked_root
+        / std::filesystem::path(
+          request.loose_cooked_layout.BuffersTableRelPath());
+      const auto buffers_data_path = cooked_root
+        / std::filesystem::path(
+          request.loose_cooked_layout.BuffersDataRelPath());
 
-      std::unordered_map<std::string, uint32_t> buffer_index_by_signature;
-      buffer_index_by_signature.reserve(buffers_table.size());
-      for (uint32_t bi = 0; bi < buffers_table.size(); ++bi) {
-        const auto& desc = buffers_table[bi];
-        const auto begin = static_cast<uint64_t>(desc.data_offset);
-        const auto size = static_cast<uint64_t>(desc.size_bytes);
-        if (size == 0) {
-          continue;
-        }
-        if (begin > buffers_data.size()
-          || size > buffers_data.size() - static_cast<size_t>(begin)) {
-          continue;
-        }
-
-        const auto bytes = std::span<const std::byte>(
-          buffers_data.data() + static_cast<size_t>(begin),
-          static_cast<size_t>(size));
-        const auto digest = oxygen::base::ComputeSha256(bytes);
-
-        std::string signature;
-        signature.reserve(96);
-        signature.append(Sha256ToHex(digest));
-        signature.push_back(':');
-        signature.append(std::to_string(desc.usage_flags));
-        signature.push_back(':');
-        signature.append(std::to_string(desc.element_stride));
-        signature.push_back(':');
-        signature.append(std::to_string(desc.element_format));
-        signature.push_back(':');
-        signature.append(std::to_string(desc.size_bytes));
-
-        buffer_index_by_signature.emplace(std::move(signature), bi);
-      }
+      auto buffers
+        = emit::InitBufferEmissionState(buffers_table_path, buffers_data_path);
+      emit::BuildBufferSignatureIndex(buffers, buffers_data_path);
 
       auto effective_material_keys = material_keys;
       if (effective_material_keys.empty()) {
@@ -1689,58 +894,6 @@ namespace {
           }
         }
       }
-
-      auto append_bytes = [&](std::span<const std::byte> bytes,
-                            const uint64_t alignment) {
-        const auto begin = static_cast<uint64_t>(buffers_data.size());
-        const auto aligned = AlignUp(begin, alignment);
-        if (aligned > begin) {
-          buffers_data.resize(static_cast<size_t>(aligned), std::byte { 0 });
-        }
-        const auto offset = static_cast<uint64_t>(buffers_data.size());
-        buffers_data.insert(buffers_data.end(), bytes.begin(), bytes.end());
-        return offset;
-      };
-
-      auto GetOrCreateBufferIndex
-        = [&](const std::span<const std::byte> bytes, const uint64_t alignment,
-            const uint32_t usage_flags, const uint32_t element_stride,
-            const uint8_t element_format) -> uint32_t {
-        if (bytes.empty()) {
-          return 0;
-        }
-
-        const auto digest = oxygen::base::ComputeSha256(bytes);
-
-        std::string signature;
-        signature.reserve(96);
-        signature.append(Sha256ToHex(digest));
-        signature.push_back(':');
-        signature.append(std::to_string(usage_flags));
-        signature.push_back(':');
-        signature.append(std::to_string(element_stride));
-        signature.push_back(':');
-        signature.append(std::to_string(element_format));
-        signature.push_back(':');
-        signature.append(std::to_string(bytes.size()));
-
-        if (const auto it = buffer_index_by_signature.find(signature);
-          it != buffer_index_by_signature.end()) {
-          return it->second;
-        }
-
-        BufferResourceDesc desc {};
-        desc.data_offset = append_bytes(bytes, alignment);
-        desc.size_bytes = static_cast<uint32_t>(bytes.size());
-        desc.usage_flags = usage_flags;
-        desc.element_stride = element_stride;
-        desc.element_format = element_format;
-
-        const auto index = static_cast<uint32_t>(buffers_table.size());
-        buffers_table.push_back(desc);
-        buffer_index_by_signature.emplace(std::move(signature), index);
-        return index;
-      };
 
       // Helper to find nodes that reference a specific mesh
       auto FindNodesForMesh
@@ -1849,11 +1002,11 @@ namespace {
             if (mat == nullptr) {
               continue;
             }
-            if (SelectBaseColorTexture(*mat) != nullptr
-              || SelectNormalTexture(*mat) != nullptr
-              || SelectMetallicTexture(*mat) != nullptr
-              || SelectRoughnessTexture(*mat) != nullptr
-              || SelectAmbientOcclusionTexture(*mat) != nullptr) {
+            if (emit::SelectBaseColorTexture(*mat) != nullptr
+              || emit::SelectNormalTexture(*mat) != nullptr
+              || emit::SelectMetallicTexture(*mat) != nullptr
+              || emit::SelectRoughnessTexture(*mat) != nullptr
+              || emit::SelectAmbientOcclusionTexture(*mat) != nullptr) {
               has_any_material_texture = true;
               break;
             }
@@ -1925,8 +1078,14 @@ namespace {
             && mesh->vertex_tangent.indices.data != nullptr) {
             auto t = mesh->vertex_tangent[idx];
             t = ApplySwapYZDirIfEnabled(request.options.coordinate, t);
-            v.tangent = { static_cast<float>(t.x), static_cast<float>(t.y),
-              static_cast<float>(t.z) };
+            // Validate for NaN and finite values before using
+            const auto tx = static_cast<float>(t.x);
+            const auto ty = static_cast<float>(t.y);
+            const auto tz = static_cast<float>(t.z);
+            if (std::isfinite(tx) && std::isfinite(ty) && std::isfinite(tz)) {
+              v.tangent = { tx, ty, tz };
+            }
+            // else: keep default tangent, will be fixed in final validation
           }
 
           if (preserve_authored_tangents && mesh->vertex_bitangent.exists
@@ -1934,8 +1093,14 @@ namespace {
             && mesh->vertex_bitangent.indices.data != nullptr) {
             auto b = mesh->vertex_bitangent[idx];
             b = ApplySwapYZDirIfEnabled(request.options.coordinate, b);
-            v.bitangent = { static_cast<float>(b.x), static_cast<float>(b.y),
-              static_cast<float>(b.z) };
+            // Validate for NaN and finite values before using
+            const auto bx = static_cast<float>(b.x);
+            const auto by = static_cast<float>(b.y);
+            const auto bz = static_cast<float>(b.z);
+            if (std::isfinite(bx) && std::isfinite(by) && std::isfinite(bz)) {
+              v.bitangent = { bx, by, bz };
+            }
+            // else: keep default bitangent, will be fixed in final validation
           }
 
           if (mesh->vertex_color.exists
@@ -2133,26 +1298,90 @@ namespace {
             if (n_len > 1e-8F) {
               n /= n_len;
             } else {
-              n = glm::vec3(0.0F, 1.0F, 0.0F);
+              n = glm::vec3(0.0F, 0.0F, 1.0F); // Default up in Z-up system
             }
 
             glm::vec3 t = tan1[vi];
             if (glm::length(t) < 1e-8F) {
-              continue;
+              // No accumulated tangent - generate a fallback perpendicular to
+              // normal Choose an axis that isn't parallel to the normal
+              const glm::vec3 axis = (std::abs(n.z) < 0.9F)
+                ? glm::vec3(0.0F, 0.0F, 1.0F)
+                : glm::vec3(1.0F, 0.0F, 0.0F);
+              t = glm::normalize(glm::cross(n, axis));
+            } else {
+              // Gram-Schmidt orthonormalization
+              t = glm::normalize(t - n * glm::dot(n, t));
             }
-
-            // Gram-Schmidt orthonormalization
-            t = glm::normalize(t - n * glm::dot(n, t));
 
             glm::vec3 b = glm::cross(n, t);
             if (glm::dot(b, tan2[vi]) < 0.0F) {
               b = -b;
             }
-            b = glm::normalize(b);
+            const auto b_len = glm::length(b);
+            if (b_len > 1e-8F) {
+              b = b / b_len;
+            } else {
+              // Fallback bitangent
+              b = glm::normalize(glm::cross(n, t));
+            }
 
             vertices[vi].normal = n;
             vertices[vi].tangent = t;
             vertices[vi].bitangent = b;
+          }
+        }
+
+        // Final validation pass: fix any zero-length, NaN, or Inf
+        // tangents/bitangents This handles cases where authored tangents exist
+        // but are invalid
+        for (size_t vi = 0; vi < vertices.size(); ++vi) {
+          auto& v = vertices[vi];
+
+          // Check for NaN or Inf in tangent/bitangent
+          const bool t_has_nan = !std::isfinite(v.tangent.x)
+            || !std::isfinite(v.tangent.y) || !std::isfinite(v.tangent.z);
+          const bool b_has_nan = !std::isfinite(v.bitangent.x)
+            || !std::isfinite(v.bitangent.y) || !std::isfinite(v.bitangent.z);
+
+          const auto t_len = t_has_nan ? 0.0F : glm::length(v.tangent);
+          const auto b_len = b_has_nan ? 0.0F : glm::length(v.bitangent);
+
+          // Tangents should be normalized (length ~1.0). If too short or
+          // invalid, regenerate. We accept a range of 0.5 to 2.0 to allow for
+          // minor precision issues, but anything outside that is suspicious.
+          constexpr float kMinValidLen = 0.5F;
+          constexpr float kMaxValidLen = 2.0F;
+          const bool t_invalid
+            = t_has_nan || t_len < kMinValidLen || t_len > kMaxValidLen;
+          const bool b_invalid
+            = b_has_nan || b_len < kMinValidLen || b_len > kMaxValidLen;
+
+          if (t_invalid || b_invalid) {
+            // Generate fallback TBN from normal
+            glm::vec3 n = v.normal;
+            // Also check for NaN/Inf in normal
+            if (!std::isfinite(n.x) || !std::isfinite(n.y)
+              || !std::isfinite(n.z) || glm::length(n) < 1e-6F) {
+              n = glm::vec3(0.0F, 0.0F, 1.0F); // Z-up default
+            } else {
+              n = glm::normalize(n);
+            }
+
+            // Choose axis not parallel to normal
+            const glm::vec3 axis = (std::abs(n.z) < 0.9F)
+              ? glm::vec3(0.0F, 0.0F, 1.0F)
+              : glm::vec3(1.0F, 0.0F, 0.0F);
+
+            glm::vec3 t = glm::normalize(glm::cross(n, axis));
+            glm::vec3 b = glm::normalize(glm::cross(n, t));
+
+            v.tangent = t;
+            v.bitangent = b;
+          } else {
+            // Normalize valid tangents to ensure unit length
+            v.tangent = glm::normalize(v.tangent);
+            v.bitangent = glm::normalize(v.bitangent);
           }
         }
 
@@ -2163,9 +1392,9 @@ namespace {
         const auto vb_usage_flags
           = static_cast<uint32_t>(BufferResource::UsageFlags::kVertexBuffer)
           | static_cast<uint32_t>(BufferResource::UsageFlags::kStatic);
-        const auto vb_index
-          = GetOrCreateBufferIndex(vb_bytes, vb_stride, vb_usage_flags,
-            vb_stride, static_cast<uint8_t>(oxygen::Format::kUnknown));
+        const auto vb_index = emit::GetOrCreateBufferResourceIndex(buffers,
+          vb_bytes, vb_stride, vb_usage_flags, vb_stride,
+          static_cast<uint8_t>(oxygen::Format::kUnknown));
 
         std::vector<SubMeshDesc> submeshes;
         submeshes.reserve(buckets.size());
@@ -2231,9 +1460,9 @@ namespace {
         const auto ib_usage_flags
           = static_cast<uint32_t>(BufferResource::UsageFlags::kIndexBuffer)
           | static_cast<uint32_t>(BufferResource::UsageFlags::kStatic);
-        const auto ib_index
-          = GetOrCreateBufferIndex(ib_bytes, alignof(uint32_t), ib_usage_flags,
-            0, static_cast<uint8_t>(oxygen::Format::kR32UInt));
+        const auto ib_index = emit::GetOrCreateBufferResourceIndex(buffers,
+          ib_bytes, alignof(uint32_t), ib_usage_flags, 0,
+          static_cast<uint8_t>(oxygen::Format::kR32UInt));
 
         // --- Emit geometry asset descriptor (desc + mesh + submesh + view) ---
         const auto storage_mesh_name
@@ -2308,23 +1537,31 @@ namespace {
         written_geometry += 1;
       }
 
-      if (buffers_table.empty()) {
+      // Close the data file appender (flushes any pending writes)
+      emit::CloseAppender(buffers.appender);
+
+      if (buffers.table.empty()) {
         return;
       }
+
+      LOG_F(INFO, "Emit buffers table: count={} data_file='{}' -> table='{}'",
+        buffers.table.size(),
+        request.loose_cooked_layout.BuffersDataRelPath().c_str(),
+        request.loose_cooked_layout.BuffersTableRelPath().c_str());
 
       oxygen::serio::MemoryStream table_stream;
       oxygen::serio::Writer<oxygen::serio::MemoryStream> table_writer(
         table_stream);
       const auto pack = table_writer.ScopedAlignment(1);
       (void)table_writer.WriteBlob(
-        std::as_bytes(std::span<const BufferResourceDesc>(buffers_table)));
+        std::as_bytes(std::span<const BufferResourceDesc>(buffers.table)));
 
       out.WriteFile(FileKind::kBuffersTable,
         request.loose_cooked_layout.BuffersTableRelPath(), table_stream.Data());
 
-      out.WriteFile(FileKind::kBuffersData,
-        request.loose_cooked_layout.BuffersDataRelPath(),
-        std::span<const std::byte>(buffers_data.data(), buffers_data.size()));
+      // Register the externally-written data file
+      out.RegisterExternalFile(FileKind::kBuffersData,
+        request.loose_cooked_layout.BuffersDataRelPath());
     }
 
     static auto WriteScene_(const ufbx_scene& scene,

@@ -1019,7 +1019,6 @@ NOLINT_TEST_F(
   table_record.kind = FileKind::kTexturesTable;
   table_record.relpath_offset = off_table;
   table_record.size = sizeof(TextureResourceDesc) * 2;
-  table_record.sha256[0] = 0x01; // Non-zero, intentionally incorrect
 
   FileRecord data_record {};
   data_record.kind = FileKind::kTexturesData;

@@ -45,7 +45,6 @@ struct LooseCookedFileRecord final {
   std::string relpath;
 
   uint64_t size = 0;
-  std::optional<base::Sha256Digest> sha256;
 };
 
 //! Result of writing a loose cooked container.
@@ -148,6 +147,19 @@ public:
   */
   OXGN_CNTT_API auto WriteFile(data::loose_cooked::v1::FileKind kind,
     std::string_view relpath, std::span<const std::byte> bytes) -> void;
+
+  //! Register an externally-written file.
+  /*!
+   This is used when the data file was written directly (e.g., by
+   append-only ResourceAppender) rather than through WriteFile().
+   The file must already exist on disk at the given relpath.
+
+   @param kind The file kind to register.
+   @param relpath Container-relative file path.
+   @throw std::runtime_error if the file does not exist.
+  */
+  OXGN_CNTT_API auto RegisterExternalFile(
+    data::loose_cooked::v1::FileKind kind, std::string_view relpath) -> void;
 
   //! Finalize and write the loose cooked index.
   /*!

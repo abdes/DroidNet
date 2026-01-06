@@ -86,16 +86,10 @@ public:
     data::loose_cooked::v1::FileKind kind) const noexcept
     -> std::optional<uint64_t>;
 
-  [[nodiscard]] auto FindFileSha256(
-    data::loose_cooked::v1::FileKind kind) const noexcept
-    -> std::optional<
-      std::span<const uint8_t, data::loose_cooked::v1::kSha256Size>>;
-
 private:
   struct FileInfo {
     uint32_t relpath_offset = 0;
     uint64_t size = 0;
-    std::array<uint8_t, data::loose_cooked::v1::kSha256Size> sha256 = {};
   };
 
   struct FileKindHash {

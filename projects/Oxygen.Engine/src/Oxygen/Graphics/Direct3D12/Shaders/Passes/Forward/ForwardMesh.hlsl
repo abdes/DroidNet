@@ -170,6 +170,60 @@ VSOutput VS(uint vertexID : SV_VertexID) {
 
 [shader("pixel")]
 float4 PS(VSOutput input) : SV_Target0 {
+    // DEBUG MODE - set to -1 for normal rendering, or 0-7 for debug:
+    // 0 = world normal, 1 = tangent, 2 = bitangent, 3 = final normal,
+    // 4 = NdotV, 5 = tangent length, 6 = bitangent length, 7 = NaN check
+    const int DEBUG_MODE = -1; // <-- NORMAL RENDERING
+
+    float3 N = SafeNormalize(input.world_normal);
+    float3 T = input.world_tangent;
+    float3 B = input.world_bitangent;
+
+    // Fix degenerate tangents at runtime
+    if (dot(T, T) < 1e-6) {
+        float3 axis = (abs(N.z) < 0.9) ? float3(0, 0, 1) : float3(1, 0, 0);
+        T = normalize(cross(N, axis));
+        B = normalize(cross(N, T));
+    }
+    T = SafeNormalize(T);
+    if (dot(B, B) < 1e-6) {
+        B = normalize(cross(N, T));
+    }
+    B = SafeNormalize(B);
+
+    float3 V = SafeNormalize(camera_position - input.world_pos);
+
+    // Debug visualization modes
+    if (DEBUG_MODE == 0) {
+        return float4(N * 0.5 + 0.5, 1.0);
+    } else if (DEBUG_MODE == 1) {
+        return float4(T * 0.5 + 0.5, 1.0);
+    } else if (DEBUG_MODE == 2) {
+        return float4(B * 0.5 + 0.5, 1.0);
+    } else if (DEBUG_MODE == 3) {
+        MaterialSurface surf = EvaluateMaterialSurface(
+            input.world_pos, input.world_normal, input.world_tangent,
+            input.world_bitangent, input.uv, g_DrawIndex);
+        return float4(surf.N * 0.5 + 0.5, 1.0);
+    } else if (DEBUG_MODE == 4) {
+        float NdotV = saturate(dot(N, V));
+        return float4(NdotV, NdotV, NdotV, 1.0);
+    } else if (DEBUG_MODE == 5) {
+        float len = length(input.world_tangent);
+        return float4(len, len, len, 1.0);
+    } else if (DEBUG_MODE == 6) {
+        float len = length(input.world_bitangent);
+        return float4(len, len, len, 1.0);
+    } else if (DEBUG_MODE == 7) {
+        float3 t = input.world_tangent;
+        if (isnan(t.x) || isnan(t.y) || isnan(t.z)) return float4(1, 1, 0, 1);
+        float len = length(t);
+        if (len < 0.001) return float4(1, 0, 0, 1);
+        if (len > 1.5) return float4(0, 0, 1, 1);
+        return float4(0, len, 0, 1);
+    }
+
+    // Normal rendering path
     MaterialSurface surf = EvaluateMaterialSurface(
         input.world_pos,
         input.world_normal,
@@ -182,15 +236,11 @@ float4 PS(VSOutput input) : SV_Target0 {
     const float  base_a   = surf.base_a;
     const float  metalness = surf.metalness;
     const float  roughness = surf.roughness;
-    const float3 N = surf.N;
-    const float3 V = surf.V;
+    N = surf.N;
+    V = surf.V;
     const float NdotV = saturate(dot(N, V));
 
-    // -------------------------------------------------------------------------
     // Direct lighting (GGX specular + Lambert diffuse)
-    // -------------------------------------------------------------------------
-
-    // Base reflectance
     float3 F0 = float3(0.04, 0.04, 0.04);
     F0 = lerp(F0, base_rgb, metalness);
 
@@ -198,12 +248,11 @@ float4 PS(VSOutput input) : SV_Target0 {
     direct += AccumulateDirectionalLights(N, V, NdotV, F0, base_rgb, metalness, roughness);
     direct += AccumulatePositionalLights(input.world_pos, N, V, NdotV, F0, base_rgb, metalness, roughness);
 
-    // Strict lighting: do not add ambient or fallback terms. If the scene has
-    // no contributing lights, it should render unlit.
-    const float3 shaded = direct * input.color;
+    // Ambient term
+    const float ambient_strength = 0.02f;
+    const float3 ambient = base_rgb * (1.0f - metalness) * ambient_strength;
+    const float3 shaded = (direct + ambient) * input.color;
 
-    // Output to the swapchain backbuffer (RGBA8_UNORM). Encode to sRGB so
-    // linear lighting reads correctly on display.
     return float4(LinearToSrgb(shaded), base_a);
 }
 
@@ -271,6 +320,8 @@ float4 PS_Masked(VSOutput input) : SV_Target0 {
     direct += AccumulatePositionalLights(
         input.world_pos, N, V, NdotV, F0, base_rgb, metalness, roughness);
 
-    const float3 shaded = direct * input.color;
+    const float ambient_strength = 0.02f;
+    const float3 ambient = base_rgb * (1.0f - metalness) * ambient_strength;
+    const float3 shaded = (direct + ambient) * input.color;
     return float4(LinearToSrgb(shaded), 1.0f);
 }

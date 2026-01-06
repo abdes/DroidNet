@@ -86,9 +86,6 @@ inline auto Load(AnyReader& reader, data::loose_cooked::v1::FileRecord& record)
   CHECK_RESULT(reader.ReadInto(record.reserved0));
   CHECK_RESULT(reader.ReadInto(record.relpath_offset));
   CHECK_RESULT(reader.ReadInto(record.size));
-  CHECK_RESULT(reader.ReadBlobInto(std::span(
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-    reinterpret_cast<std::byte*>(record.sha256), std::size(record.sha256))));
   CHECK_RESULT(reader.Forward(std::size(record.reserved1)));
   return {};
 }

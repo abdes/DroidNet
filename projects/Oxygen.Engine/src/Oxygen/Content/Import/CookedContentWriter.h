@@ -63,6 +63,19 @@ public:
     std::string_view relpath, std::span<const std::byte> bytes) -> void
     = 0;
 
+  //! Register an externally-written file.
+  /*!
+   This is used when the data file was written directly (e.g., by
+   append-only ResourceAppender) rather than through WriteFile().
+   The file must already exist on disk at the given relpath.
+
+   @param kind The file kind to register.
+   @param relpath Container-relative file path.
+  */
+  virtual auto RegisterExternalFile(
+    data::loose_cooked::v1::FileKind kind, std::string_view relpath) -> void
+    = 0;
+
   //! Report summary counts for UI/telemetry.
   virtual auto OnMaterialsWritten(uint32_t count) -> void = 0;
   virtual auto OnGeometryWritten(uint32_t count) -> void = 0;

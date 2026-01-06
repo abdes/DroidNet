@@ -104,6 +104,20 @@ set(
   "Import/fbx/ufbx.c"
   "Import/gltf/cgltf.h"
   "Import/stb/stb_image.h"
+  # Import utilities
+  "Import/util/Constants.h"
+  "Import/util/CoordTransform.h"
+  "Import/util/Signature.h"
+  "Import/util/StringUtils.h"
+  "Import/util/TangentGen.h"
+  "Import/util/TextureRepack.h"
+  # Import emitters
+  "Import/emit/BufferEmitter.h"
+  "Import/emit/BufferEmitter.cpp"
+  "Import/emit/ResourceAppender.h"
+  "Import/emit/ResourceAppender.cpp"
+  "Import/emit/TextureEmitter.h"
+  "Import/emit/TextureEmitter.cpp"
 )
 
 target_sources(

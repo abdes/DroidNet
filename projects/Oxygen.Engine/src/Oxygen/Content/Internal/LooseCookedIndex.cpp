@@ -446,9 +446,6 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
         .relpath_offset = record.relpath_offset,
         .size = record.size,
       };
-      static_assert(sizeof(info.sha256) == sizeof(record.sha256));
-      std::copy_n(
-        std::begin(record.sha256), info.sha256.size(), info.sha256.begin());
 
       out.kind_to_file_.insert_or_assign(record.kind, info);
       out.file_kinds_.push_back(record.kind);
@@ -600,19 +597,6 @@ auto LooseCookedIndex::FindFileSize(FileKind kind) const noexcept
     return std::nullopt;
   }
   return it->second.size;
-}
-
-auto LooseCookedIndex::FindFileSha256(FileKind kind) const noexcept
-  -> std::optional<
-    std::span<const uint8_t, oxygen::data::loose_cooked::v1::kSha256Size>>
-{
-  const auto it = kind_to_file_.find(kind);
-  if (it == kind_to_file_.end()) {
-    return std::nullopt;
-  }
-
-  return std::span<const uint8_t, oxygen::data::loose_cooked::v1::kSha256Size>(
-    it->second.sha256);
 }
 
 } // namespace oxygen::content::internal
