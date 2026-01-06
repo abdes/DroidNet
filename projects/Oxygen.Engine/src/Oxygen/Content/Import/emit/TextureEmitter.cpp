@@ -301,6 +301,19 @@ auto GetOrCreateTextureResourceIndex(const ImportRequest& request,
   } else {
     used_placeholder = true;
     if (!decoded.error.empty()) {
+      if (!resolved.empty()) {
+        LOG_F(WARNING,
+          "FBX import: failed to load texture '{}' (embedded={}, path='{}'): "
+          "{}; using 1x1 placeholder",
+          std::string(id).c_str(), is_embedded,
+          resolved.generic_string().c_str(), decoded.error.c_str());
+      } else {
+        LOG_F(WARNING,
+          "FBX import: failed to load texture '{}' (embedded={}): {} "
+          "using 1x1 placeholder",
+          std::string(id).c_str(), is_embedded, decoded.error.c_str());
+      }
+
       ImportDiagnostic diag {
         .severity = ImportSeverity::kWarning,
         .code = "fbx.texture_decode_failed",

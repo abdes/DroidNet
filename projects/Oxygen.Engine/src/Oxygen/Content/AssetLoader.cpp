@@ -1187,6 +1187,10 @@ auto AssetLoader::BindGeometryRuntimePointers(data::GeometryAsset& asset,
 
       auto mat_it = materials_by_key.find(mat_key);
       if (mat_it == materials_by_key.end() || !mat_it->second) {
+        LOG_F(WARNING,
+          "AssetLoader: Material asset not found for submesh {} (key={}), "
+          "using default material.",
+          i, oxygen::data::to_string(mat_key));
         mesh.SetSubMeshMaterial(i, MaterialAsset::CreateDefault());
         continue;
       }
