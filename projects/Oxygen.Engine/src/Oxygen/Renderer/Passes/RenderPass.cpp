@@ -239,7 +239,10 @@ auto RenderPass::EmitDrawRange(CommandRecorder& recorder,
     }
     try {
       BindDrawIndexConstant(recorder, DrawIndex { draw_index });
-      recorder.Draw(md.is_indexed ? md.index_count : md.vertex_count, 1, 0, 0);
+      // Use instance_count for GPU instancing; defaults to 1 for non-batched
+      // draws
+      recorder.Draw(md.is_indexed ? md.index_count : md.vertex_count,
+        md.instance_count, 0, 0);
       ++emitted_count;
     } catch (const std::exception& ex) {
       ++draw_errors;

@@ -78,8 +78,6 @@ struct VS_OUTPUT_DEPTH {
 [shader("vertex")]
 VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
 {
-    (void)instanceID;
-
     VS_OUTPUT_DEPTH output;
     output.position = float4(0, 0, 0, 1);
     output.uv = float2(0, 0);
@@ -93,7 +91,9 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
     const VertexData v = BX_LoadVertex(meta.vertex_buffer_index, actual_vertex_index);
     output.uv = v.texcoord;
 
-    const float4x4 world_matrix = BX_LoadWorldMatrix(bindless_transforms_slot, meta.transform_index);
+    // Use per-instance transform (handles GPU instancing automatically)
+    const float4x4 world_matrix = BX_LoadInstanceWorldMatrix(
+        bindless_transforms_slot, bindless_instance_data_slot, meta, instanceID);
     const float4 world_pos = mul(world_matrix, float4(v.position, 1.0f));
     const float4 view_pos = mul(view_matrix, world_pos);
     output.position = mul(projection_matrix, view_pos);

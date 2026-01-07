@@ -25,6 +25,8 @@ from ..packing.constants import (
     MAX_LODS_PER_GEOMETRY,
     MAX_SUBMESHES_PER_LOD,
     MAX_MESH_VIEWS_PER_SUBMESH,
+    YAML_SCHEMA_VERSION_CURRENT,
+    YAML_SCHEMA_VERSION_MIN,
 )
 
 
@@ -49,6 +51,41 @@ def _err(
 
 def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
     errors: List[ValidationErrorRecord] = []
+
+    # Validate schema version first
+    version = spec.get("version", 1)
+    if not isinstance(version, int) or version < YAML_SCHEMA_VERSION_MIN:
+        _err(
+            errors,
+            "E_VERSION",
+            f"Schema version must be >= {YAML_SCHEMA_VERSION_MIN}",
+            "version",
+        )
+    elif version > YAML_SCHEMA_VERSION_CURRENT:
+        _err(
+            errors,
+            "E_VERSION_FUTURE",
+            f"Schema version {version} not supported (max: {YAML_SCHEMA_VERSION_CURRENT})",
+            "version",
+        )
+
+    # Check for 'generate' directive usage with version < 4
+    assets_list = spec.get("assets", [])
+    if isinstance(assets_list, list) and version < 4:
+        has_generate = any(
+            isinstance(node, dict) and node.get("generate") is not None
+            for asset in assets_list
+            if isinstance(asset, dict)
+            for node in (asset.get("nodes") or [])
+        )
+        if has_generate:
+            _err(
+                errors,
+                "W_VERSION_MISMATCH",
+                "Using 'generate' directive requires version >= 4; update to 'version: 4'",
+                "version",
+            )
+
     # Top-level required keys (version allowed default)
     for key in ["buffers", "textures", "audios"]:
         if key in spec and not isinstance(spec[key], list):

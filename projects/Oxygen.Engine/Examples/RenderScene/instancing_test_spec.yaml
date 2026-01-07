@@ -1,0 +1,222 @@
+# PakGen spec for GPU Instancing test scene.
+# This scene uses the 'generate' directive to procedurally create 1000 cubes
+# arranged in a 10x10x10 grid, demonstrating GPU instancing capabilities.
+#
+# Schema version 4 adds the 'generate' directive for procedural node expansion.
+
+version: 3
+content_version: 1
+
+# -----------------------------------------------------------------------------
+# Resources: Reuse cube geometry data from the main example
+# -----------------------------------------------------------------------------
+
+buffers:
+  - name: default_empty_buffer
+    data_hex: ""
+    size: 0
+    usage: 0
+
+  - name: cube_vb
+    # oxygen::data::BufferResource::UsageFlags::kVertexBuffer
+    usage: 1
+    # Structured buffer of oxygen::data::Vertex (18 float32 = 72 bytes)
+    stride: 72
+    format: 0
+    data_hex: |
+      000000bf000000bf000000bf0000000000000000000080bf0000000000000000
+      0000803f00000000000000000000000000000000000000000000803f0000803f
+      0000803f0000803f0000003f000000bf000000bf0000000000000000000080bf
+      0000803f000000000000803f0000000000000000000000000000000000000000
+      0000803f0000803f0000803f0000803f0000003f0000003f000000bf00000000
+      00000000000080bf0000803f0000803f0000803f000000000000000000000000
+      00000000000000000000803f0000803f0000803f0000803f000000bf0000003f
+      000000bf0000000000000000000080bf000000000000803f0000803f00000000
+      000000000000000000000000000000000000803f0000803f0000803f0000803f
+      000000bf000000bf0000003f00000000000000000000803f0000000000000000
+      0000803f00000000000000000000000000000000000000000000803f0000803f
+      0000803f0000803f0000003f000000bf0000003f00000000000000000000803f
+      0000803f000000000000803f0000000000000000000000000000000000000000
+      0000803f0000803f0000803f0000803f0000003f0000003f0000003f00000000
+      000000000000803f0000803f0000803f0000803f000000000000000000000000
+      00000000000000000000803f0000803f0000803f0000803f000000bf0000003f
+      0000003f00000000000000000000803f000000000000803f0000803f00000000
+      000000000000000000000000000000000000803f0000803f0000803f0000803f
+      000000bf000000bf000000bf000080bf00000000000000000000000000000000
+      000000000000803f000000000000000000000000000000000000803f0000803f
+      0000803f0000803f000000bf0000003f000000bf000080bf0000000000000000
+      0000803f00000000000000000000803f00000000000000000000000000000000
+      0000803f0000803f0000803f0000803f000000bf0000003f0000003f000080bf
+      00000000000000000000803f0000803f000000000000803f0000000000000000
+      00000000000000000000803f0000803f0000803f0000803f000000bf000000bf
+      0000003f000080bf0000000000000000000000000000803f000000000000803f
+      000000000000000000000000000000000000803f0000803f0000803f0000803f
+      0000003f000000bf000000bf0000803f00000000000000000000000000000000
+      000000000000803f000000000000000000000000000000000000803f0000803f
+      0000803f0000803f0000003f0000003f000000bf0000803f0000000000000000
+      0000803f00000000000000000000803f00000000000000000000000000000000
+      0000803f0000803f0000803f0000803f0000003f0000003f0000003f0000803f
+      00000000000000000000803f0000803f000000000000803f0000000000000000
+      00000000000000000000803f0000803f0000803f0000803f0000003f000000bf
+      0000003f0000803f0000000000000000000000000000803f000000000000803f
+      000000000000000000000000000000000000803f0000803f0000803f0000803f
+      000000bf000000bf000000bf00000000000080bf000000000000000000000000
+      0000803f00000000000000000000000000000000000000000000803f0000803f
+      0000803f0000803f0000003f000000bf000000bf00000000000080bf00000000
+      0000803f000000000000803f0000000000000000000000000000000000000000
+      0000803f0000803f0000803f0000803f0000003f000000bf0000003f00000000
+      000080bf000000000000803f0000803f0000803f000000000000000000000000
+      00000000000000000000803f0000803f0000803f0000803f000000bf000000bf
+      0000003f00000000000080bf00000000000000000000803f0000803f00000000
+      000000000000000000000000000000000000803f0000803f0000803f0000803f
+      000000bf0000003f000000bf000000000000803f000000000000000000000000
+      0000803f00000000000000000000000000000000000000000000803f0000803f
+      0000803f0000803f0000003f0000003f000000bf000000000000803f00000000
+      0000803f000000000000803f0000000000000000000000000000000000000000
+      0000803f0000803f0000803f0000803f0000003f0000003f0000003f00000000
+      0000803f000000000000803f0000803f0000803f000000000000000000000000
+      00000000000000000000803f0000803f0000803f0000803f000000bf0000003f
+      0000003f000000000000803f00000000000000000000803f0000803f00000000
+      000000000000000000000000000000000000803f0000803f0000803f0000803f
+
+  - name: cube_ib
+    # oxygen::data::BufferResource::UsageFlags::kIndexBuffer
+    usage: 2
+    stride: 0
+    format: 10  # R32_UINT
+    data_hex: |
+      0000000002000000010000000000000003000000020000000400000005000000
+      06000000040000000600000007000000080000000a0000000900000008000000
+      0b0000000a0000000c0000000d0000000e0000000c0000000e0000000f000000
+      1000000011000000120000001000000012000000130000001400000016000000
+      15000000140000001700000016000000
+
+# -----------------------------------------------------------------------------
+# Assets
+# -----------------------------------------------------------------------------
+
+assets:
+  # ---------------------------------------------------------------------------
+  # Materials
+  # ---------------------------------------------------------------------------
+
+  - type: material
+    name: MatInstanced
+    asset_key: "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf"
+    alignment: 1
+    material_domain: 1
+    shader_stages: 0
+    # Bright color for visibility
+    base_color: [0.2, 0.7, 0.9, 1.0]
+    metalness: 0.0
+    roughness: 0.25
+    ambient_occlusion: 1.0
+
+  # ---------------------------------------------------------------------------
+  # Geometry
+  # ---------------------------------------------------------------------------
+
+  - type: geometry
+    name: GeoCube
+    asset_key: "b0b1b2b3b4b5b6b7b8b9babbbcbdbebf"
+    alignment: 1
+    bounding_box_min: [-0.5, -0.5, -0.5]
+    bounding_box_max: [0.5, 0.5, 0.5]
+    lods:
+      - name: lod0
+        mesh_type: 1
+        vertex_buffer: cube_vb
+        index_buffer: cube_ib
+        bounding_box_min: [-0.5, -0.5, -0.5]
+        bounding_box_max: [0.5, 0.5, 0.5]
+        submeshes:
+          - name: full
+            material: MatInstanced
+            bounding_box_min: [-0.5, -0.5, -0.5]
+            bounding_box_max: [0.5, 0.5, 0.5]
+            mesh_views:
+              - first_index: 0
+                index_count: 36
+                first_vertex: 0
+                vertex_count: 24
+
+  # ---------------------------------------------------------------------------
+  # Scene: 1000 instanced cubes in 10x10x10 grid
+  # ---------------------------------------------------------------------------
+
+  - type: scene
+    name: InstancingTestScene
+    asset_key: "c0c1c2c3c4c5c6c7c8c9cacbcccdcecf"
+
+    nodes:
+      # Root node (index 0)
+      - name: Root
+        node_id: "00000000000000000000000000000000"
+        flags: 0
+        translation: [0.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      # Camera node (index 1)
+      - name: MainCamera
+        parent: 0
+        node_id: "11111111111111111111111111111111"
+        flags: 0
+        # Position camera to see the full 10x10x10 grid
+        translation: [0.0, 12.0, 35.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      # Directional light (index 2)
+      - name: Sun
+        parent: 0
+        node_id: "22222222222222222222222222222222"
+        flags: 0
+        translation: [10.0, 20.0, 10.0]
+        # Aim the sun downward: rotate +45° about +X
+        rotation: [0.3826834, 0.0, 0.0, 0.9238795]
+        scale: [1.0, 1.0, 1.0]
+
+      # =========================================================================
+      # PROCEDURAL NODES: 1000 cubes in a 10x10x10 grid
+      # =========================================================================
+      # The 'generate' directive expands this single template into 1000 nodes.
+      # Each generated node will be named "Cube_0" through "Cube_999".
+      # Renderables are auto-generated for nodes with geometry reference.
+      - name: Cube
+        parent: 0
+        geometry: GeoCube
+        generate:
+          layout: grid
+          grid:
+            count: [10, 10, 10]  # 1000 cubes total
+            spacing: 2.5         # 2.5 units between cube centers
+            center: true         # Center grid around origin
+
+    # Note: renderables are auto-generated by the 'generate' directive
+    # when the template node references a geometry.
+
+    perspective_cameras:
+      - node_index: 1
+        fov_y: 0.785398       # 45 degrees
+        aspect_ratio: 1.777778
+        near_plane: 0.1
+        far_plane: 500.0
+
+    directional_lights:
+      - node_index: 2
+        affects_world: true
+        color_rgb: [1.0, 0.98, 0.92]
+        intensity: 2.5
+        mobility: 0
+        casts_shadows: 0
+        angular_size_radians: 0.01
+        environment_contribution: true
+
+    environment:
+      sky_atmosphere:
+        sun_disk_enabled: true
+
+      post_process_volume:
+        tone_mapper: 0
+        exposure_mode: 1

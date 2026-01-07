@@ -110,7 +110,43 @@ public:
   OXGN_RNDR_NDAPI auto GetPartitions() const noexcept
     -> std::span<const oxygen::engine::PreparedSceneFrame::PartitionRange>;
 
+  //! Shader-visible SRV index for the instance data buffer.
+  /*!
+   Returns the bindless SRV index for the per-instance transform index buffer.
+   Used by shaders to look up per-instance transforms when instance_count > 1.
+   Returns kInvalidShaderVisibleIndex if no instancing is active this frame.
+  */
+  OXGN_RNDR_NDAPI auto GetInstanceDataSrvIndex() const noexcept
+    -> ShaderVisibleIndex;
+
 private:
+  //! Batching key for grouping identical draws for GPU instancing.
+  /*!
+   All fields must match for two draws to be batched together. The key includes
+   geometry identity (vertex/index buffers, offsets) and material handle.
+  */
+  struct BatchingKey {
+    ShaderVisibleIndex vertex_buffer_index {};
+    ShaderVisibleIndex index_buffer_index {};
+    std::uint32_t first_index { 0 };
+    std::int32_t base_vertex { 0 };
+    std::uint32_t material_handle { 0 };
+    std::uint32_t index_count { 0 };
+    std::uint32_t vertex_count { 0 };
+    std::uint32_t is_indexed { 0 };
+    oxygen::engine::PassMask flags {};
+
+    [[nodiscard]] constexpr auto operator==(const BatchingKey&) const noexcept
+      -> bool
+      = default;
+  };
+
+  //! Hash functor for BatchingKey.
+  struct BatchingKeyHash {
+    [[nodiscard]] auto operator()(const BatchingKey& key) const noexcept
+      -> std::size_t;
+  };
+
   struct SortingKey {
     oxygen::engine::PassMask pass_mask {};
     std::uint8_t bucket_order { 0 };
@@ -130,6 +166,14 @@ private:
 
   auto BuildSortingAndPartitions() -> void;
 
+  //! Applies GPU instancing by batching identical draws.
+  /*!
+   Groups draws with matching BatchingKey, collapses them into single draws
+   with instance_count > 1, and populates the instance data buffer with
+   per-instance transform indices.
+  */
+  auto ApplyInstancingBatches() -> void;
+
 private:
   // Core state
   observer_ptr<Graphics> gfx_;
@@ -146,6 +190,11 @@ private:
   // Sorting & partitions
   std::vector<SortingKey> keys_;
   std::vector<oxygen::engine::PreparedSceneFrame::PartitionRange> partitions_;
+
+  // GPU instancing: per-instance transform indices
+  std::vector<std::uint32_t> instance_transform_indices_;
+  engine::upload::TransientStructuredBuffer instance_data_buffer_;
+  ShaderVisibleIndex instance_data_srv_index_ { kInvalidShaderVisibleIndex };
 
   // Telemetry
   std::chrono::microseconds last_sort_time_ { 0 };

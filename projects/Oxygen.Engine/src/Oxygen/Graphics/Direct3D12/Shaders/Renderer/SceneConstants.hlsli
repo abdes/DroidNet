@@ -7,7 +7,7 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_SCENECONSTANTS_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_SCENECONSTANTS_HLSLI
 
-// Mirrors oxygen::engine::SceneConstants::GpuData (sizeof = 192)
+// Mirrors oxygen::engine::SceneConstants::GpuData (sizeof = 208)
 cbuffer SceneConstants : register(b1, space0)
 {
     float4x4 view_matrix;
@@ -27,6 +27,9 @@ cbuffer SceneConstants : register(b1, space0)
     uint bindless_directional_lights_slot;
     uint bindless_directional_shadows_slot;
     uint bindless_positional_lights_slot;
+
+    uint bindless_instance_data_slot;
+    uint _pad1[3];
 };
 
 #endif  // OXYGEN_D3D12_SHADERS_RENDERER_SCENECONSTANTS_HLSLI

@@ -693,8 +693,10 @@ def compute_pak_plan(
     for m in build_plan.assets.material_assets:
         if not isinstance(m, dict):
             continue
-        spec = m.get("spec") if isinstance(m.get("spec"), dict) else {}
-        name = spec.get("name") if isinstance(spec.get("name"), str) else ""
+        spec = m.get("spec")
+        spec = spec if isinstance(spec, dict) else {}
+        name = spec.get("name", "")
+        name = name if isinstance(name, str) else ""
         key = m.get("asset_key", b"\x00" * 16)
         if isinstance(key, (bytes, bytearray)):
             key_bytes = bytes(key)

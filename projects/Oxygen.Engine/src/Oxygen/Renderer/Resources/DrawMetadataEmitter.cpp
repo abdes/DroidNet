@@ -8,6 +8,7 @@
 #include <cstring>
 #include <limits>
 #include <span>
+#include <unordered_map>
 
 #include <fmt/format.h>
 
@@ -79,6 +80,9 @@ DrawMetadataEmitter::DrawMetadataEmitter(observer_ptr<Graphics> gfx,
   , draw_metadata_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(oxygen::engine::DrawMetadata)),
       inline_transfers_, "DrawMetadataEmitter.Draws")
+  , instance_data_buffer_(gfx_, *staging_provider_,
+      static_cast<std::uint32_t>(sizeof(std::uint32_t)), inline_transfers_,
+      "DrawMetadataEmitter.InstanceData")
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DCHECK_NOTNULL_F(staging_provider_, "StagingProvider cannot be null");
@@ -103,8 +107,11 @@ auto DrawMetadataEmitter::OnFrameStart(renderer::RendererTag,
   Cpu().clear();
   keys_.clear();
   partitions_.clear();
+  instance_transform_indices_.clear();
   draw_metadata_buffer_.OnFrameStart(sequence, slot);
+  instance_data_buffer_.OnFrameStart(sequence, slot);
   draw_metadata_srv_index_ = kInvalidShaderVisibleIndex;
+  instance_data_srv_index_ = kInvalidShaderVisibleIndex;
   ++frames_started_count_;
 }
 
@@ -211,6 +218,8 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
 
 auto DrawMetadataEmitter::SortAndPartition() -> void
 {
+  // Apply GPU instancing batches before sorting
+  ApplyInstancingBatches();
   BuildSortingAndPartitions();
 }
 
@@ -363,6 +372,27 @@ auto DrawMetadataEmitter::EnsureFrameResources() -> void
   // view when the emitter is used in per-view mode; callers should query the
   // SRV index after Finalize/EnsureFrameResources.
   draw_metadata_srv_index_ = alloc.srv;
+
+  // Upload instance data buffer if we have instanced draws
+  if (!instance_transform_indices_.empty()) {
+    const auto instance_count
+      = static_cast<std::uint32_t>(instance_transform_indices_.size());
+    auto instance_result = instance_data_buffer_.Allocate(instance_count);
+    if (!instance_result) {
+      LOG_F(ERROR, "DrawMetadataEmitter: instance data allocation failed: {}",
+        instance_result.error().message());
+      return;
+    }
+    const auto instance_alloc = *instance_result;
+    auto* instance_ptr = instance_alloc.mapped_ptr;
+    if (instance_ptr) {
+      std::memcpy(instance_ptr, instance_transform_indices_.data(),
+        instance_transform_indices_.size() * sizeof(std::uint32_t));
+      instance_data_srv_index_ = instance_alloc.srv;
+      DLOG_F(1, "DrawMetadataEmitter: uploaded {} instance transform indices",
+        instance_count);
+    }
+  }
 }
 
 auto DrawMetadataEmitter::GetDrawMetadataSrvIndex() const -> ShaderVisibleIndex
@@ -383,6 +413,136 @@ auto DrawMetadataEmitter::GetPartitions() const noexcept
   -> std::span<const oxygen::engine::PreparedSceneFrame::PartitionRange>
 {
   return { partitions_.data(), partitions_.size() };
+}
+
+auto DrawMetadataEmitter::GetInstanceDataSrvIndex() const noexcept
+  -> ShaderVisibleIndex
+{
+  return instance_data_srv_index_;
+}
+
+auto DrawMetadataEmitter::BatchingKeyHash::operator()(
+  const BatchingKey& key) const noexcept -> std::size_t
+{
+  std::size_t hash = 0;
+  oxygen::HashCombine(hash, key.vertex_buffer_index.get());
+  oxygen::HashCombine(hash, key.index_buffer_index.get());
+  oxygen::HashCombine(hash, key.first_index);
+  oxygen::HashCombine(hash, static_cast<std::uint32_t>(key.base_vertex));
+  oxygen::HashCombine(hash, key.material_handle);
+  oxygen::HashCombine(hash, key.index_count);
+  oxygen::HashCombine(hash, key.vertex_count);
+  oxygen::HashCombine(hash, key.is_indexed);
+  oxygen::HashCombine(hash, key.flags.get());
+  return hash;
+}
+
+auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
+{
+  if (Cpu().empty()) {
+    return;
+  }
+
+  // Build map from batching key to list of draw indices
+  std::unordered_map<BatchingKey, std::vector<std::uint32_t>, BatchingKeyHash>
+    batch_map;
+  batch_map.reserve(Cpu().size());
+
+  for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(Cpu().size()); ++i) {
+    const auto& dm = Cpu()[i];
+    const BatchingKey key {
+      .vertex_buffer_index = dm.vertex_buffer_index,
+      .index_buffer_index = dm.index_buffer_index,
+      .first_index = dm.first_index,
+      .base_vertex = dm.base_vertex,
+      .material_handle = dm.material_handle,
+      .index_count = dm.index_count,
+      .vertex_count = dm.vertex_count,
+      .is_indexed = dm.is_indexed,
+      .flags = dm.flags,
+    };
+    batch_map[key].push_back(i);
+  }
+
+  // Check if any batching is possible
+  bool has_batches = false;
+  for (const auto& [key, indices] : batch_map) {
+    if (indices.size() > 1) {
+      has_batches = true;
+      break;
+    }
+  }
+
+  if (!has_batches) {
+    // No batching opportunities - keep single-instance draws
+    return;
+  }
+
+  // Rebuild cpu_ with batched draws and populate instance data
+  std::vector<oxygen::engine::DrawMetadata> batched_cpu;
+  std::vector<SortingKey> batched_keys;
+  batched_cpu.reserve(batch_map.size());
+  batched_keys.reserve(batch_map.size());
+  instance_transform_indices_.clear();
+  instance_transform_indices_.reserve(Cpu().size());
+
+  for (const auto& [key, indices] : batch_map) {
+    const auto instance_count = static_cast<std::uint32_t>(indices.size());
+
+    // Use first draw as representative
+    auto dm = Cpu()[indices[0]];
+    dm.instance_count = instance_count;
+
+    if (instance_count > 1) {
+      // Multi-instance: record offset into instance data buffer
+      dm.instance_metadata_offset
+        = static_cast<std::uint32_t>(instance_transform_indices_.size());
+      dm.instance_metadata_buffer_index = 1; // Signal that instance data is
+                                             // used
+
+      // Append all transform indices for this batch
+      for (const auto draw_idx : indices) {
+        instance_transform_indices_.push_back(Cpu()[draw_idx].transform_index);
+      }
+    } else {
+      // Single instance: no instance data needed
+      dm.instance_metadata_offset = 0;
+      dm.instance_metadata_buffer_index = 0;
+    }
+
+    batched_cpu.push_back(dm);
+
+    // Build sorting key for this batched draw
+    const std::uint8_t bucket_order
+      = dm.flags.IsSet(oxygen::engine::PassMaskBit::kOpaque)
+      ? static_cast<std::uint8_t>(0)
+      : (dm.flags.IsSet(oxygen::engine::PassMaskBit::kMasked)
+            ? static_cast<std::uint8_t>(1)
+            : static_cast<std::uint8_t>(2));
+
+    // For batched draws, use the average sort distance (or first item's)
+    float batch_sort_distance2 = 0.0F;
+    if (!indices.empty() && indices[0] < keys_.size()) {
+      batch_sort_distance2 = keys_[indices[0]].sort_distance2;
+    }
+
+    batched_keys.push_back(SortingKey {
+      .pass_mask = dm.flags,
+      .bucket_order = bucket_order,
+      .sort_distance2 = batch_sort_distance2,
+      .material_index = dm.material_handle,
+      .vb_srv = dm.vertex_buffer_index,
+      .ib_srv = dm.index_buffer_index,
+    });
+  }
+
+  Cpu().swap(batched_cpu);
+  keys_.swap(batched_keys);
+
+  DLOG_F(1,
+    "DrawMetadataEmitter: batched {} draws into {} batches, {} instance "
+    "indices",
+    total_emits_, Cpu().size(), instance_transform_indices_.size());
 }
 
 } // namespace oxygen::renderer::resources

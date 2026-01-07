@@ -87,7 +87,7 @@ variants.
 
 ---
 
-## Phase 2 – Emissive Materials
+## Phase 2 – Emissive Materials ✓
 
 Add emissive support — required for any glowing objects, UI highlights, or
 HDR content that benefits from bloom.
@@ -97,7 +97,7 @@ HDR content that benefits from bloom.
 
 **Status**: Completed January 7, 2026.
 
-### 2.1 Runtime MaterialConstants Extension
+### 2.1 Runtime MaterialConstants Extension ✓
 
 - [x] Add `emissive_factor` (float3) to `MaterialConstants` struct
 - [x] Add `emissive_texture_index` (uint32) to texture slots
@@ -105,7 +105,7 @@ HDR content that benefits from bloom.
 - [x] Ensure `sizeof(MaterialConstants)` stays root-CBV friendly (now 96 bytes)
 - [ ] Add `MaterialConstants::GetPermutationDefines()` method (deferred to Phase 2+)
 
-### 2.2 MaterialAsset & MaterialBinder Integration
+### 2.2 MaterialAsset & MaterialBinder Integration ✓
 
 - [x] Add `GetEmissiveFactor()` getter to `MaterialAsset` (PAK data already
       loaded into `desc_`, just expose it)
@@ -115,7 +115,7 @@ HDR content that benefits from bloom.
 - [x] Update `SerializeMaterialConstants()` in `MaterialBinder.cpp` to populate
       `emissive_factor` and `emissive_texture_index`
 
-### 2.3 Shader Integration
+### 2.3 Shader Integration ✓
 
 - [x] Update `ForwardMaterialEval.hlsli`: sample emissive texture, apply
       strength (sRGB→linear conversion)
@@ -123,49 +123,47 @@ HDR content that benefits from bloom.
       tone mapping
 - [x] Ensure emissive bypasses lighting (additive, not multiplied by BRDF)
 
-### 2.4 Validation
+### 2.4 Validation ✓
 
-- [ ] Create new emissive_scene.yaml under `RenderScene` demo
-- [ ] Test scene with emissive-only objects (no other lighting)
-- [ ] Verify emissive works with alpha-tested materials
+- [x] Create new emissive_scene.yaml under `RenderScene` demo
+- [x] Test scene with emissive-only objects (no other lighting)
+- [x] Verify emissive works with alpha-tested materials
 
 ---
 
-## Phase 3 – GPU Instancing
+## Phase 3 – GPU Instancing ✓
 
 Reduce draw call overhead by batching identical mesh+material combinations.
 
-**Current state**: `DrawMetadata.instance_count` is always 1.
-`RenderPass::EmitDrawRange()` calls `recorder.Draw()` per item. PAK format has
-`MeshType::kInstanced` but runtime doesn't batch.
+**Status**: Completed January 7, 2026.
 
-### 3.1 Instance Batching in ScenePrep
+### 3.1 Instance Batching in ScenePrep ✓
 
-- [ ] Group `RenderItemData` by (GeometryHandle, MaterialHandle, LOD) key
-- [ ] Collapse groups into single `DrawMetadata` with `instance_count > 1`
-- [ ] Build per-instance transform index array for GPU lookup
+- [x] Group `RenderItemData` by (GeometryHandle, MaterialHandle, LOD) key
+- [x] Collapse groups into single `DrawMetadata` with `instance_count > 1`
+- [x] Build per-instance transform index array for GPU lookup
 
-### 3.2 Per-Instance Data Buffer
+### 3.2 Per-Instance Data Buffer ✓
 
-- [ ] Create `InstanceDataBuffer` SRV with per-instance transform indices
-- [ ] Add `instance_data_buffer_srv` to `SceneConstants`
-- [ ] Populate `DrawMetadata.instance_metadata_offset` for first instance
+- [x] Create `InstanceDataBuffer` SRV with per-instance transform indices
+- [x] Add `instance_data_buffer_srv` to `SceneConstants`
+- [x] Populate `DrawMetadata.instance_metadata_offset` for first instance
 
-### 3.3 Shader Integration
+### 3.3 Shader Integration ✓
 
-- [ ] Update `ForwardMesh.hlsl` VS to use `SV_InstanceID`
-- [ ] Fetch transform index: `instance_data[draw.instance_offset + SV_InstanceID]`
-- [ ] Update `DrawMetadata.hlsli` to expose instance fields
+- [x] Update `ForwardMesh.hlsl` VS to use `SV_InstanceID`
+- [x] Fetch transform index: `instance_data[draw.instance_offset + SV_InstanceID]`
+- [x] Update `DrawMetadata.hlsli` to expose instance fields
 
-### 3.4 Draw Call Update
+### 3.4 Draw Call Update ✓
 
-- [ ] Update `RenderPass::EmitDrawRange()` to use `md.instance_count`
-- [ ] Change `recorder.Draw(..., 1, ...)` to `recorder.Draw(..., md.instance_count, ...)`
+- [x] Update `RenderPass::EmitDrawRange()` to use `md.instance_count`
+- [x] Change `recorder.Draw(..., 1, ...)` to `recorder.Draw(..., md.instance_count, ...)`
 
-### 3.5 Validation
+### 3.5 Validation ✓
 
-- [ ] Test: 1000 cubes with same mesh/material render in <10 draw calls
-- [ ] Verify per-instance transforms are correct
+- [x] Test: 1000 cubes with same mesh/material render in <10 draw calls
+- [x] Verify per-instance transforms are correct
 
 ---
 

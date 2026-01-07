@@ -98,7 +98,7 @@ struct VSOutput {
 
 
 [shader("vertex")]
-VSOutput VS(uint vertexID : SV_VertexID) {
+VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
     VSOutput output;
 
     // Access per-draw metadata buffer through dynamic slot; skip if unavailable.
@@ -129,12 +129,21 @@ VSOutput VS(uint vertexID : SV_VertexID) {
     StructuredBuffer<Vertex> vertex_buffer = ResourceDescriptorHeap[vertex_buffer_index];
     Vertex vertex = vertex_buffer[actual_vertex_index];
 
+    // Resolve per-instance transform index
+    // For instanced draws (instance_count > 1), fetch transform index from instance data buffer.
+    // For single-instance draws, use transform_index directly from DrawMetadata.
+    uint transform_index = meta.transform_index;
+    if (meta.instance_count > 1 && bindless_instance_data_slot != K_INVALID_BINDLESS_INDEX) {
+        StructuredBuffer<uint> instance_data = ResourceDescriptorHeap[bindless_instance_data_slot];
+        transform_index = instance_data[meta.instance_metadata_offset + instanceID];
+    }
+
     // Fetch per-draw world matrix and apply world, view, and projection transforms
     float4x4 world_matrix;
     if (bindless_transforms_slot != 0xFFFFFFFFu) {
         StructuredBuffer<float4x4> worlds = ResourceDescriptorHeap[bindless_transforms_slot];
-        // Use per-draw transform offset from metadata
-        world_matrix = worlds[meta.transform_index];
+        // Use per-instance transform index
+        world_matrix = worlds[transform_index];
     } else {
         world_matrix = float4x4(1,0,0,0,
                                 0,1,0,0,
@@ -146,7 +155,7 @@ VSOutput VS(uint vertexID : SV_VertexID) {
     float3x3 normal_mat;
     if (bindless_normal_matrices_slot != 0xFFFFFFFFu) {
         StructuredBuffer<float4x4> normals = ResourceDescriptorHeap[bindless_normal_matrices_slot];
-        normal_mat = (float3x3)normals[meta.transform_index];
+        normal_mat = (float3x3)normals[transform_index];
     } else {
         normal_mat = (float3x3)world_matrix;
     }

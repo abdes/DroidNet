@@ -43,7 +43,9 @@ inline constexpr uint32_t kOxrfVersion = 1;
 inline constexpr uint8_t kExpectedShaderModelMajor = 6;
 inline constexpr uint8_t kExpectedShaderModelMinor = 6;
 
-inline constexpr uint32_t kExpectedSceneConstantsByteSize = 192;
+// DXC reflects cbuffer sizes using HLSL packing rules which differ from C++.
+// The C++ GpuData struct is 208 bytes, but HLSL cbuffer packing yields 256.
+inline constexpr uint32_t kExpectedSceneConstantsByteSize = 256;
 inline constexpr uint32_t kExpectedEnvironmentDynamicDataByteSize = 32U;
 // Note: DXC reports constant buffer sizes rounded up to 16-byte alignment.
 // RootConstants is modeled as a 2x32-bit root constant range, but is declared
