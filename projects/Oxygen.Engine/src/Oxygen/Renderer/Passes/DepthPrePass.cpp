@@ -30,6 +30,7 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
+#include <Oxygen/Renderer/Types/MaterialPermutations.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 
 using oxygen::Scissors;
@@ -517,18 +518,26 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   // Build root bindings from generated table
   auto generated_bindings = BuildRootBindings();
 
-  const auto BuildDesc = [&](CullMode cull_mode, std::string_view vs_entry,
-                           std::string_view ps_entry) -> GraphicsPipelineDesc {
+  // Depth pre-pass uses shader defines (e.g., ALPHA_TEST) to differentiate
+  // between opaque and masked paths. The same entry points (VS, PS) compile
+  // into different variants based on active defines.
+  using graphics::ShaderDefine;
+
+  const auto BuildDesc
+    = [&](CullMode cull_mode,
+        std::vector<ShaderDefine> defines) -> GraphicsPipelineDesc {
     return GraphicsPipelineDesc::Builder()
       .SetVertexShader(ShaderRequest {
         .stage = ShaderType::kVertex,
         .source_path = "Passes/Depth/DepthPrePass.hlsl",
-        .entry_point = std::string { vs_entry },
+        .entry_point = "VS",
+        .defines = defines,
       })
       .SetPixelShader(ShaderRequest {
         .stage = ShaderType::kPixel,
         .source_path = "Passes/Depth/DepthPrePass.hlsl",
-        .entry_point = std::string { ps_entry },
+        .entry_point = "PS",
+        .defines = defines,
       })
       .SetPrimitiveTopology(PrimitiveType::kTriangleList)
       .SetRasterizerState(MakeRasterDesc(cull_mode))
@@ -540,16 +549,16 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
       .Build();
   };
 
-  // Keep VS/PS entry points valid for offline shader compilation.
-  // Partition-aware variants are compiled on demand via explicit entry points.
+  // Partition-aware variants using shader defines.
+  // ALPHA_TEST define enables alpha-tested (masked) path in pixel shader.
   pso_opaque_single_
-    = BuildDesc(CullMode::kBack, "VS_OpaqueDepth", "PS_OpaqueDepth");
+    = BuildDesc(CullMode::kBack, ToDefines(permutation::kOpaqueDefines));
   pso_opaque_double_
-    = BuildDesc(CullMode::kNone, "VS_OpaqueDepth", "PS_OpaqueDepth");
+    = BuildDesc(CullMode::kNone, ToDefines(permutation::kOpaqueDefines));
   pso_masked_single_
-    = BuildDesc(CullMode::kBack, "VS_MaskedDepth", "PS_MaskedDepth");
+    = BuildDesc(CullMode::kBack, ToDefines(permutation::kMaskedDefines));
   pso_masked_double_
-    = BuildDesc(CullMode::kNone, "VS_MaskedDepth", "PS_MaskedDepth");
+    = BuildDesc(CullMode::kNone, ToDefines(permutation::kMaskedDefines));
 
   // The base class needs a single descriptor to cache and bind initially.
   // Use the most common variant as the default.

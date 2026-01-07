@@ -91,6 +91,8 @@ struct ShaderInfo {
   std::string relative_path; //!< Path to the shader source file, relative to
                              //!< the engine shaders directory.
   std::string entry_point { "main" }; //!< Entry point function name.
+  std::vector<ShaderDefine>
+    defines {}; //!< Preprocessor defines for permutations.
 };
 
 //! Canonicalizes and validates a shader request.

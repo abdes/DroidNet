@@ -23,6 +23,7 @@
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Renderer/Types/MaterialPermutations.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 
 using oxygen::engine::ShaderPass;
@@ -412,26 +413,27 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   // Build root bindings from generated table
   auto generated_bindings = BuildRootBindings();
 
-  // NOTE: The engine currently ships only a single general-purpose VS/PS pair
-  // named Passes/Forward/ForwardMesh.hlsl (formerly FullScreenTriangle.hlsl).
-  // Despite the legacy name, the HLSL file already
-  // contains logic to fetch vertex & index data via bindless descriptors and
-  // perform standard mesh vertex transforms. The previous change attempted to
-  // switch to a non-existent "Mesh.hlsl" believing the fullscreen shader was a
-  // placeholder; that was incorrect and caused a runtime "Shader not found"
-  // error (VS@Mesh.hlsl). We revert to the existing shader identifiers here.
-  const auto BuildDesc = [&](CullMode cull_mode,
-                           std::string_view ps_entry) -> GraphicsPipelineDesc {
+  // NOTE: The engine uses Passes/Forward/ForwardMesh.hlsl for forward shading.
+  // Material permutations are driven by shader defines (e.g., ALPHA_TEST)
+  // rather than separate entry points. This allows the same PS entry point
+  // to compile into different variants based on active defines.
+  using graphics::ShaderDefine;
+
+  const auto BuildDesc
+    = [&](CullMode cull_mode,
+        std::vector<ShaderDefine> defines) -> GraphicsPipelineDesc {
     return GraphicsPipelineDesc::Builder()
       .SetVertexShader(ShaderRequest {
         .stage = ShaderType::kVertex,
         .source_path = "Passes/Forward/ForwardMesh.hlsl",
         .entry_point = "VS",
+        .defines = defines,
       })
       .SetPixelShader(ShaderRequest {
         .stage = ShaderType::kPixel,
         .source_path = "Passes/Forward/ForwardMesh.hlsl",
-        .entry_point = std::string { ps_entry },
+        .entry_point = "PS",
+        .defines = defines,
       })
       .SetPrimitiveTopology(PrimitiveType::kTriangleList)
       .SetRasterizerState(MakeRasterDesc(cull_mode))
@@ -443,11 +445,16 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
       .Build();
   };
 
-  // Partition-aware variants.
-  pso_opaque_single_ = BuildDesc(CullMode::kBack, "PS");
-  pso_opaque_double_ = BuildDesc(CullMode::kNone, "PS");
-  pso_masked_single_ = BuildDesc(CullMode::kBack, "PS_Masked");
-  pso_masked_double_ = BuildDesc(CullMode::kNone, "PS_Masked");
+  // Partition-aware variants using shader defines.
+  // ALPHA_TEST define enables alpha-tested (masked) path in pixel shader.
+  pso_opaque_single_
+    = BuildDesc(CullMode::kBack, ToDefines(permutation::kOpaqueDefines));
+  pso_opaque_double_
+    = BuildDesc(CullMode::kNone, ToDefines(permutation::kOpaqueDefines));
+  pso_masked_single_
+    = BuildDesc(CullMode::kBack, ToDefines(permutation::kMaskedDefines));
+  pso_masked_double_
+    = BuildDesc(CullMode::kNone, ToDefines(permutation::kMaskedDefines));
 
   // Emit diagnostic log for rasterizer settings used to build the PSO.
   DLOG_F(2, "[ShaderPass] CreatePipelineStateDesc: fill_mode={}",

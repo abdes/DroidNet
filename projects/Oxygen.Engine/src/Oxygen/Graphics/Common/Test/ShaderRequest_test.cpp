@@ -187,4 +187,90 @@ NOLINT_TEST(ShaderRequestTest, ComputeShaderRequestKey_RejectsInvalidRequest)
     static_cast<void>(ComputeShaderRequestKey(req)), std::invalid_argument);
 }
 
+//! Same shader with different defines produces different cache keys.
+//! This validates that material permutations (e.g., ALPHA_TEST) result in
+//! distinct PSO variants.
+NOLINT_TEST(ShaderRequestTest, DifferentDefines_ProduceDifferentKeys)
+{
+  // Opaque path: no defines
+  auto opaque_request = ShaderRequest {
+    .stage = ShaderType::kPixel,
+    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .entry_point = "PS",
+    .defines = {},
+  };
+
+  // Masked path: ALPHA_TEST=1
+  auto masked_request = ShaderRequest {
+    .stage = ShaderType::kPixel,
+    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .entry_point = "PS",
+    .defines = {
+      ShaderDefine { .name = "ALPHA_TEST", .value = std::string { "1" } },
+    },
+  };
+
+  const auto opaque_key = ComputeShaderRequestKey(opaque_request);
+  const auto masked_key = ComputeShaderRequestKey(masked_request);
+
+  // Different defines must produce different keys
+  EXPECT_NE(opaque_key, masked_key);
+}
+
+//! Identical defines produce identical cache keys (PSO reuse).
+NOLINT_TEST(ShaderRequestTest, IdenticalDefines_ProduceSameKey)
+{
+  auto request_a = ShaderRequest {
+    .stage = ShaderType::kPixel,
+    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .entry_point = "PS",
+    .defines = {
+      ShaderDefine { .name = "ALPHA_TEST", .value = std::string { "1" } },
+    },
+  };
+
+  auto request_b = ShaderRequest {
+    .stage = ShaderType::kPixel,
+    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .entry_point = "PS",
+    .defines = {
+      ShaderDefine { .name = "ALPHA_TEST", .value = std::string { "1" } },
+    },
+  };
+
+  const auto key_a = ComputeShaderRequestKey(request_a);
+  const auto key_b = ComputeShaderRequestKey(request_b);
+
+  // Identical requests must produce identical keys
+  EXPECT_EQ(key_a, key_b);
+}
+
+//! Multiple defines produce a key different from single define.
+NOLINT_TEST(ShaderRequestTest, MultipleDefines_ProduceDifferentKeyFromSingle)
+{
+  auto single_define = ShaderRequest {
+    .stage = ShaderType::kPixel,
+    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .entry_point = "PS",
+    .defines = {
+      ShaderDefine { .name = "ALPHA_TEST", .value = std::string { "1" } },
+    },
+  };
+
+  auto multiple_defines = ShaderRequest {
+    .stage = ShaderType::kPixel,
+    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .entry_point = "PS",
+    .defines = {
+      ShaderDefine { .name = "ALPHA_TEST", .value = std::string { "1" } },
+      ShaderDefine { .name = "HAS_EMISSIVE", .value = std::string { "1" } },
+    },
+  };
+
+  const auto single_key = ComputeShaderRequestKey(single_define);
+  const auto multi_key = ComputeShaderRequestKey(multiple_defines);
+
+  EXPECT_NE(single_key, multi_key);
+}
+
 } // namespace
