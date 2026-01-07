@@ -53,138 +53,7 @@
 
 using oxygen::scene::SceneNodeFlags;
 
-#if defined(OXYGEN_WINDOWS)
-#  include <shobjidl_core.h>
-#  include <windows.h>
-#  include <wrl/client.h>
-#endif
-
 namespace {
-#if defined(OXYGEN_WINDOWS)
-
-class ScopedCoInitialize {
-public:
-  ScopedCoInitialize()
-  {
-    const HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    initialized_ = SUCCEEDED(hr);
-    // If COM is already initialized in a different mode, we proceed without
-    // owning CoUninitialize() for this scope.
-    if (hr == RPC_E_CHANGED_MODE) {
-      initialized_ = false;
-    }
-  }
-
-  ~ScopedCoInitialize()
-  {
-    if (initialized_) {
-      CoUninitialize();
-    }
-  }
-
-  ScopedCoInitialize(const ScopedCoInitialize&) = delete;
-  ScopedCoInitialize& operator=(const ScopedCoInitialize&) = delete;
-  ScopedCoInitialize(ScopedCoInitialize&&) = delete;
-  ScopedCoInitialize& operator=(ScopedCoInitialize&&) = delete;
-
-private:
-  bool initialized_ { false };
-};
-
-auto TryBrowseForPakFile(std::string& out_utf8_path) -> bool
-{
-  ScopedCoInitialize com;
-
-  Microsoft::WRL::ComPtr<IFileOpenDialog> dlg;
-  const HRESULT hr = CoCreateInstance(
-    CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg));
-  if (FAILED(hr) || !dlg) {
-    return false;
-  }
-
-  constexpr COMDLG_FILTERSPEC kFilters[] = {
-    { L"Oxygen PAK files (*.pak)", L"*.pak" },
-    { L"All files (*.*)", L"*.*" },
-  };
-  (void)dlg->SetFileTypes(static_cast<UINT>(std::size(kFilters)), kFilters);
-  (void)dlg->SetDefaultExtension(L"pak");
-
-  const HRESULT show_hr = dlg->Show(nullptr);
-  if (FAILED(show_hr)) {
-    return false;
-  }
-
-  Microsoft::WRL::ComPtr<IShellItem> item;
-  if (FAILED(dlg->GetResult(&item)) || !item) {
-    return false;
-  }
-
-  PWSTR wide_path = nullptr;
-  const HRESULT name_hr = item->GetDisplayName(SIGDN_FILESYSPATH, &wide_path);
-  if (FAILED(name_hr) || !wide_path) {
-    return false;
-  }
-
-  std::string utf8;
-  oxygen::string_utils::WideToUtf8(wide_path, utf8);
-  CoTaskMemFree(wide_path);
-
-  if (utf8.empty()) {
-    return false;
-  }
-
-  out_utf8_path = std::move(utf8);
-  return true;
-}
-
-auto TryBrowseForLooseCookedIndexFile(std::string& out_utf8_path) -> bool
-{
-  ScopedCoInitialize com;
-
-  Microsoft::WRL::ComPtr<IFileOpenDialog> dlg;
-  const HRESULT hr = CoCreateInstance(
-    CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg));
-  if (FAILED(hr) || !dlg) {
-    return false;
-  }
-
-  constexpr COMDLG_FILTERSPEC kFilters[] = {
-    { L"Loose cooked index (container.index.bin)", L"container.index.bin" },
-    { L"Binary files (*.bin)", L"*.bin" },
-    { L"All files (*.*)", L"*.*" },
-  };
-  (void)dlg->SetFileTypes(static_cast<UINT>(std::size(kFilters)), kFilters);
-  (void)dlg->SetDefaultExtension(L"bin");
-
-  const HRESULT show_hr = dlg->Show(nullptr);
-  if (FAILED(show_hr)) {
-    return false;
-  }
-
-  Microsoft::WRL::ComPtr<IShellItem> item;
-  if (FAILED(dlg->GetResult(&item)) || !item) {
-    return false;
-  }
-
-  PWSTR wide_path = nullptr;
-  const HRESULT name_hr = item->GetDisplayName(SIGDN_FILESYSPATH, &wide_path);
-  if (FAILED(name_hr) || !wide_path) {
-    return false;
-  }
-
-  std::string utf8;
-  oxygen::string_utils::WideToUtf8(wide_path, utf8);
-  CoTaskMemFree(wide_path);
-
-  if (utf8.empty()) {
-    return false;
-  }
-
-  out_utf8_path = std::move(utf8);
-  return true;
-}
-
-#endif
 
 auto MakeLookRotationFromPosition(const glm::vec3& position,
   const glm::vec3& target, const glm::vec3& up_direction = { 0.0F, 0.0F, 1.0F })
@@ -253,39 +122,6 @@ auto FindRenderSceneContentRoot() -> std::filesystem::path
   }
 
   return std::filesystem::current_path();
-}
-
-auto EnumerateFbxFiles(const std::filesystem::path& fbx_dir)
-  -> std::vector<std::filesystem::path>
-{
-  std::vector<std::filesystem::path> files;
-
-  std::error_code ec;
-  if (!std::filesystem::exists(fbx_dir, ec)
-    || !std::filesystem::is_directory(fbx_dir, ec)) {
-    return files;
-  }
-
-  for (const auto& entry : std::filesystem::directory_iterator(fbx_dir, ec)) {
-    if (ec) {
-      break;
-    }
-    if (!entry.is_regular_file(ec)) {
-      continue;
-    }
-
-    const auto p = entry.path();
-    if (p.extension() == ".fbx") {
-      files.push_back(p);
-    }
-  }
-
-  std::sort(files.begin(), files.end(),
-    [](const std::filesystem::path& a, const std::filesystem::path& b) {
-      return a.filename().string() < b.filename().string();
-    });
-
-  return files;
 }
 
 } // namespace
@@ -829,8 +665,6 @@ private:
 MainModule::MainModule(const oxygen::examples::common::AsyncEngineApp& app)
   : Base(app)
 {
-  std::snprintf(pak_path_.data(), pak_path_.size(), "%s", "");
-  std::snprintf(loose_index_path_.data(), loose_index_path_.size(), "%s", "");
   content_root_ = FindRenderSceneContentRoot();
 }
 
@@ -860,7 +694,9 @@ auto MainModule::OnAttached(
   UpdateActiveCameraInputContext();
 
   content_root_ = FindRenderSceneContentRoot();
-  asset_importer_ = std::make_unique<content::import::AssetImporter>();
+
+  // Initialize UI panels
+  InitializeUIPanels();
 
   LOG_F(WARNING, "RenderScene: InitInputBindings ok");
   return true;
@@ -868,7 +704,6 @@ auto MainModule::OnAttached(
 
 void MainModule::OnShutdown() noexcept
 {
-  ui_pak_.reset();
   scene_.reset();
   scene_loader_.reset();
   active_camera_ = {};
@@ -894,11 +729,21 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
       scene_ = std::move(swap.scene);
       active_camera_ = std::move(swap.active_camera);
       if (active_camera_.IsAlive()) {
+        // Store initial camera pose for reset functionality
+        auto tf = active_camera_.GetTransform();
+        if (auto pos = tf.GetLocalPosition()) {
+          initial_camera_position_ = *pos;
+        }
+        if (auto rot = tf.GetLocalRotation()) {
+          initial_camera_rotation_ = *rot;
+        }
+
         orbit_controller_ = std::make_unique<OrbitCameraController>();
         orbit_controller_->SyncFromTransform(active_camera_);
         fly_controller_ = std::make_unique<FlyCameraController>();
         fly_controller_->SetLookSensitivity(0.0015f);
         fly_controller_->SyncFromTransform(active_camera_);
+        UpdateCameraControlPanelConfig();
       }
       registered_view_camera_ = scene::NodeHandle();
       scene_loader_->MarkConsumed();
@@ -937,125 +782,29 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 
       pending_sync_active_camera_ = false;
     }
+
+    // Process deferred camera reset
+    if (pending_reset_camera_ && active_camera_.IsAlive()) {
+      auto transform = active_camera_.GetTransform();
+      transform.SetLocalPosition(initial_camera_position_);
+      transform.SetLocalRotation(initial_camera_rotation_);
+
+      if (camera_mode_ == CameraMode::kOrbit && orbit_controller_) {
+        orbit_controller_->SyncFromTransform(active_camera_);
+      } else if (camera_mode_ == CameraMode::kFly && fly_controller_) {
+        fly_controller_->SyncFromTransform(active_camera_);
+      }
+
+      pending_reset_camera_ = false;
+      LOG_F(INFO, "Camera reset to initial pose");
+    }
   });
   if (!app_window_->GetWindow()) {
     co_return;
   }
 
-  if (pending_mount_pak_) {
-    pending_mount_pak_ = false;
-
-    pak_scenes_.clear();
-    ui_pak_.reset();
-
-    const std::filesystem::path pak_path { std::string { pak_path_.data() } };
-    if (!pak_path.empty()) {
-      try {
-        ui_pak_ = std::make_unique<content::PakFile>(pak_path);
-
-        if (ui_pak_->HasBrowseIndex()) {
-          for (const auto& be : ui_pak_->BrowseIndex()) {
-            const auto entry = ui_pak_->FindEntry(be.asset_key);
-            if (!entry) {
-              continue;
-            }
-            if (entry->asset_type
-              != static_cast<uint8_t>(data::AssetType::kScene)) {
-              continue;
-            }
-
-            pak_scenes_.push_back(SceneListItem {
-              .virtual_path = be.virtual_path,
-              .key = be.asset_key,
-            });
-          }
-          std::sort(pak_scenes_.begin(), pak_scenes_.end(),
-            [](const SceneListItem& a, const SceneListItem& b) {
-              return a.virtual_path < b.virtual_path;
-            });
-        }
-
-        auto asset_loader
-          = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
-        if (asset_loader) {
-          asset_loader->ClearMounts();
-          asset_loader->AddPakFile(pak_path);
-        }
-      } catch (const std::exception& e) {
-        LOG_F(ERROR, "Failed to open/mount PAK: {}", e.what());
-        ui_pak_.reset();
-        pak_scenes_.clear();
-      }
-    }
-  }
-
-  if (fbx_import_future_.valid()
-    && fbx_import_future_.wait_for(std::chrono::seconds(0))
-      == std::future_status::ready) {
-    is_importing_fbx_ = false;
-    const auto result = fbx_import_future_.get();
-    if (result) {
-      pending_scene_key_ = *result;
-      pending_load_scene_ = true;
-
-      const auto cooked_root
-        = std::filesystem::absolute(content_root_ / ".cooked");
-
-      if (!loose_inspection_) {
-        loose_inspection_ = std::make_unique<content::LooseCookedInspection>();
-      }
-      const auto index_path = cooked_root / "container.index.bin";
-      loose_inspection_->LoadFromFile(index_path);
-
-      auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
-      if (asset_loader) {
-        asset_loader->ClearMounts();
-        asset_loader->AddLooseCookedRoot(cooked_root);
-      }
-    } else {
-      LOG_F(ERROR, "RenderScene: FBX import failed or produced no scene.");
-    }
-  }
-
-  if (pending_load_loose_index_) {
-    pending_load_loose_index_ = false;
-
-    loose_scenes_.clear();
-    if (!loose_inspection_) {
-      loose_inspection_ = std::make_unique<content::LooseCookedInspection>();
-    }
-
-    const std::filesystem::path index_path { std::string {
-      loose_index_path_.data() } };
-    if (!index_path.empty()) {
-      try {
-        loose_inspection_->LoadFromFile(index_path);
-        for (const auto& a : loose_inspection_->Assets()) {
-          if (a.asset_type != static_cast<uint8_t>(data::AssetType::kScene)) {
-            continue;
-          }
-          loose_scenes_.push_back(SceneListItem {
-            .virtual_path = a.virtual_path,
-            .key = a.key,
-          });
-        }
-        std::sort(loose_scenes_.begin(), loose_scenes_.end(),
-          [](const SceneListItem& a, const SceneListItem& b) {
-            return a.virtual_path < b.virtual_path;
-          });
-
-        auto asset_loader
-          = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
-        if (asset_loader) {
-          asset_loader->ClearMounts();
-          asset_loader->AddLooseCookedRoot(index_path.parent_path());
-        }
-      } catch (const std::exception& e) {
-        LOG_F(ERROR, "Failed to load loose cooked index: {}", e.what());
-        loose_scenes_.clear();
-      }
-    }
-  }
+  // Panel updates happen here before scene loading
+  UpdateUIPanels();
 
   if (pending_load_scene_) {
     pending_load_scene_ = false;
@@ -1410,8 +1159,7 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
   }
   ImGui::SetCurrentContext(imgui_context);
 
-  DrawDebugOverlay(context);
-  DrawCameraControls(context);
+  DrawUI();
   co_return;
 }
 
@@ -1460,14 +1208,21 @@ auto MainModule::EnsureFallbackCamera(const int width, const int height) -> void
     // This makes it unambiguous whether imported assets are rotated.
     const glm::vec3 cam_pos(10.0F, 10.0F, 10.0F);
     const glm::vec3 cam_target(0.0F, 0.0F, 0.0F);
+    const glm::quat cam_rot = MakeLookRotationFromPosition(cam_pos, cam_target);
+
     auto tf = active_camera_.GetTransform();
     tf.SetLocalPosition(cam_pos);
-    tf.SetLocalRotation(MakeLookRotationFromPosition(cam_pos, cam_target));
+    tf.SetLocalRotation(cam_rot);
+
+    initial_camera_position_ = cam_pos;
+    initial_camera_target_ = cam_target;
+    initial_camera_rotation_ = cam_rot;
 
     orbit_controller_ = std::make_unique<OrbitCameraController>();
     orbit_controller_->SyncFromTransform(active_camera_);
     fly_controller_ = std::make_unique<FlyCameraController>();
     fly_controller_->SyncFromTransform(active_camera_);
+    UpdateCameraControlPanelConfig();
   }
 
   if (!active_camera_.HasCamera()) {
@@ -1515,319 +1270,81 @@ auto MainModule::EnsureActiveCameraViewport(const int width, const int height)
   EnsureFallbackCamera(width, height);
 }
 
-auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
+auto MainModule::InitializeUIPanels() -> void
 {
-  ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(520, 250), ImGuiCond_FirstUseEver);
-
-  if (!ImGui::Begin(
-        "RenderScene", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-    ImGui::End();
-    return;
-  }
-
-  constexpr float kScenesListWidth = 480.0F;
-  constexpr float kScenesListHeight = 220.0F;
-
-  if (ImGui::BeginTabBar("ContentSource")) {
-    if (ImGui::BeginTabItem("FBX")) {
-      if (is_importing_fbx_) {
-        ImGui::Text("Importing FBX: %s", importing_fbx_path_.c_str());
-        // Indeterminate progress bar
-        const float time = static_cast<float>(ImGui::GetTime());
-        ImGui::ProgressBar(
-          -1.0f * time * 0.2f, ImVec2(kScenesListWidth, 0.0f), "Importing...");
-      } else {
-        const auto fbx_dir = content_root_ / "fbx";
-        const auto files = EnumerateFbxFiles(fbx_dir);
-
-        if (ImGui::BeginListBox(
-              "FBX##Fbx", ImVec2(kScenesListWidth, kScenesListHeight))) {
-          for (const auto& p : files) {
-            const auto name = p.filename().string();
-            if (ImGui::Selectable(name.c_str(), false)) {
-              importing_fbx_path_ = p.string();
-              is_importing_fbx_ = true;
-
-              const auto cooked_root
-                = std::filesystem::absolute(content_root_ / ".cooked");
-
-              fbx_import_future_ = std::async(std::launch::async,
-                [p, cooked_root]() -> std::optional<data::AssetKey> {
-                  std::error_code ec;
-                  (void)std::filesystem::create_directories(cooked_root, ec);
-
-                  auto importer
-                    = std::make_unique<content::import::AssetImporter>();
-
-                  try {
-                    content::import::ImportRequest request {};
-                    request.source_path = p;
-                    request.cooked_root = cooked_root;
-                    request.options.naming_strategy = std::make_shared<
-                      content::import::NormalizeNamingStrategy>();
-
-                    (void)importer->ImportToLooseCooked(request);
-
-                    auto inspection
-                      = std::make_unique<content::LooseCookedInspection>();
-                    const auto index_path = cooked_root
-                      / request.loose_cooked_layout.index_file_name;
-                    inspection->LoadFromFile(index_path);
-
-                    const auto expected_scene_name = p.stem().string();
-                    const auto expected_virtual_path
-                      = request.loose_cooked_layout.SceneVirtualPath(
-                        expected_scene_name);
-
-                    std::optional<data::AssetKey> matching_scene_key;
-                    std::optional<data::AssetKey> first_scene_key;
-                    std::string first_scene_path;
-                    for (const auto& a : inspection->Assets()) {
-                      if (a.asset_type
-                        != static_cast<uint8_t>(data::AssetType::kScene)) {
-                        continue;
-                      }
-                      if (a.virtual_path == expected_virtual_path) {
-                        matching_scene_key = a.key;
-                      }
-                      if (!first_scene_key
-                        || a.virtual_path < first_scene_path) {
-                        first_scene_key = a.key;
-                        first_scene_path = a.virtual_path;
-                      }
-                    }
-                    return matching_scene_key ? matching_scene_key
-                                              : first_scene_key;
-
-                  } catch (const std::exception& e) {
-                    LOG_F(ERROR, "RenderScene: FBX cook failed: {}", e.what());
-                    return std::nullopt;
-                  }
-                });
-            }
-          }
-          ImGui::EndListBox();
-        }
-      }
-
-      ImGui::EndTabItem();
+  // Configure content loader panel
+  ui::ContentLoaderPanel::Config loader_config;
+  loader_config.content_root = content_root_;
+  loader_config.on_scene_load_requested = [this](const data::AssetKey& key) {
+    pending_scene_key_ = key;
+    pending_load_scene_ = true;
+  };
+  loader_config.on_pak_mounted = [this](const std::filesystem::path& path) {
+    auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+    if (asset_loader) {
+      asset_loader->ClearMounts();
+      asset_loader->AddPakFile(path);
     }
-
-    if (ImGui::BeginTabItem("PAK")) {
-#if defined(OXYGEN_WINDOWS)
-      if (ImGui::Button("Pick PAK...")) {
-        std::string chosen;
-        if (TryBrowseForPakFile(chosen)) {
-          std::snprintf(
-            pak_path_.data(), pak_path_.size(), "%s", chosen.c_str());
-          pending_mount_pak_ = true;
-        }
-      }
-
-      if (ImGui::BeginListBox(
-            "Scenes##Pak", ImVec2(kScenesListWidth, kScenesListHeight))) {
-        for (int i = 0; i < static_cast<int>(pak_scenes_.size()); ++i) {
-          const auto& s = pak_scenes_[static_cast<size_t>(i)];
-          if (ImGui::Selectable(s.virtual_path.c_str(), false)) {
-            pending_scene_key_ = s.key;
-            pending_load_scene_ = true;
-          }
-        }
-        ImGui::EndListBox();
-      }
-#else
-      ImGui::TextUnformatted("PAK picking is only supported on Windows.");
-#endif
-      ImGui::EndTabItem();
+  };
+  loader_config.on_loose_index_loaded = [this](
+                                          const std::filesystem::path& path) {
+    auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+    if (asset_loader) {
+      asset_loader->ClearMounts();
+      asset_loader->AddLooseCookedRoot(path.parent_path());
     }
+  };
+  content_loader_panel_.Initialize(loader_config);
 
-    if (ImGui::BeginTabItem("Loose Cooked")) {
-#if defined(OXYGEN_WINDOWS)
-      if (ImGui::Button("Pick Index...")) {
-        std::string chosen;
-        if (TryBrowseForLooseCookedIndexFile(chosen)) {
-          std::snprintf(loose_index_path_.data(), loose_index_path_.size(),
-            "%s", chosen.c_str());
-          pending_load_loose_index_ = true;
-        }
-      }
-
-      if (ImGui::BeginListBox(
-            "Scenes##Loose", ImVec2(kScenesListWidth, kScenesListHeight))) {
-        for (int i = 0; i < static_cast<int>(loose_scenes_.size()); ++i) {
-          const auto& s = loose_scenes_[static_cast<size_t>(i)];
-          if (ImGui::Selectable(s.virtual_path.c_str(), false)) {
-            pending_scene_key_ = s.key;
-            pending_load_scene_ = true;
-          }
-        }
-        ImGui::EndListBox();
-      }
-#else
-      ImGui::TextUnformatted(
-        "Loose cooked index picking is only supported on Windows.");
-#endif
-      ImGui::EndTabItem();
-    }
-    ImGui::EndTabBar();
-  }
-
-  ImGui::End();
+  // Configure camera control panel
+  UpdateCameraControlPanelConfig();
 }
 
-auto MainModule::DrawCameraControls(engine::FrameContext& /*context*/) -> void
+auto MainModule::UpdateCameraControlPanelConfig() -> void
 {
-  ImGui::SetNextWindowPos(ImVec2(550, 20), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiCond_FirstUseEver);
+  ui::CameraControlConfig camera_config;
+  camera_config.active_camera = &active_camera_;
+  camera_config.orbit_controller = orbit_controller_.get();
+  camera_config.fly_controller = fly_controller_.get();
+  camera_config.move_fwd_action = move_fwd_action_.get();
+  camera_config.move_bwd_action = move_bwd_action_.get();
+  camera_config.move_left_action = move_left_action_.get();
+  camera_config.move_right_action = move_right_action_.get();
+  camera_config.fly_boost_action = fly_boost_action_.get();
+  camera_config.fly_plane_lock_action = fly_plane_lock_action_.get();
+  camera_config.rmb_action = rmb_action_.get();
+  camera_config.orbit_action = orbit_action_.get();
 
-  if (!ImGui::Begin(
-        "Camera Controls", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-    ImGui::End();
-    return;
-  }
+  camera_config.on_mode_changed = [this](ui::CameraControlMode mode) {
+    camera_mode_ = (mode == ui::CameraControlMode::kOrbit) ? CameraMode::kOrbit
+                                                           : CameraMode::kFly;
+    UpdateActiveCameraInputContext();
+    pending_sync_active_camera_ = true;
+  };
 
-  ImGui::TextUnformatted("Camera / Axis Debug");
+  camera_config.on_reset_requested = [this]() { ResetCameraToInitialPose(); };
 
-  ImGui::Separator();
-  ImGui::TextUnformatted("Input Debug");
-  {
-    const auto& io = ImGui::GetIO();
-    ImGui::Text("ImGui WantCaptureKeyboard: %s",
-      io.WantCaptureKeyboard ? "true" : "false");
-    ImGui::Text(
-      "ImGui WantCaptureMouse: %s", io.WantCaptureMouse ? "true" : "false");
+  camera_control_panel_.UpdateConfig(camera_config);
 
-    auto action_state
-      = [](const std::shared_ptr<oxygen::input::Action>& a) -> const char* {
-      if (!a) {
-        return "<null>";
-      }
-      if (a->WasCanceledThisFrame()) {
-        return "Canceled";
-      }
-      if (a->WasCompletedThisFrame()) {
-        return "Completed";
-      }
-      if (a->WasTriggeredThisFrame()) {
-        return "Triggered";
-      }
-      if (a->WasReleasedThisFrame()) {
-        return "Released";
-      }
-      if (a->IsOngoing()) {
-        return "Ongoing";
-      }
-      if (a->WasValueUpdatedThisFrame()) {
-        return "Updated";
-      }
-      return "Idle";
-    };
+  // Sync mode
+  const auto ui_mode = (camera_mode_ == CameraMode::kOrbit)
+    ? ui::CameraControlMode::kOrbit
+    : ui::CameraControlMode::kFly;
+  camera_control_panel_.SetMode(ui_mode);
+}
 
-    auto show_bool = [&](const char* label,
-                       const std::shared_ptr<oxygen::input::Action>& a) {
-      ImGui::Text("%-10s  state=%-9s ongoing=%d trig=%d rel=%d", label,
-        action_state(a), (a && a->IsOngoing()) ? 1 : 0,
-        (a && a->WasTriggeredThisFrame()) ? 1 : 0,
-        (a && a->WasReleasedThisFrame()) ? 1 : 0);
-    };
+auto MainModule::UpdateUIPanels() -> void { content_loader_panel_.Update(); }
 
-    show_bool("W", move_fwd_action_);
-    show_bool("S", move_bwd_action_);
-    show_bool("A", move_left_action_);
-    show_bool("D", move_right_action_);
-    show_bool("Shift", fly_boost_action_);
-    show_bool("Space", fly_plane_lock_action_);
-    show_bool("RMB", rmb_action_);
+auto MainModule::DrawUI() -> void
+{
+  content_loader_panel_.Draw();
+  camera_control_panel_.Draw();
+}
 
-    // MouseXY delta accumulation (same pattern used for orbit/look).
-    glm::vec2 mouse_delta(0.0f);
-    if (orbit_action_
-      && orbit_action_->GetValueType()
-        == oxygen::input::ActionValueType::kAxis2D) {
-      for (const auto& tr : orbit_action_->GetFrameTransitions()) {
-        const auto& v = tr.value_at_transition.GetAs<oxygen::Axis2D>();
-        mouse_delta.x += v.x;
-        mouse_delta.y += v.y;
-      }
-    }
-    ImGui::Text("MouseXY delta: (%.3f, %.3f)", mouse_delta.x, mouse_delta.y);
-  }
-
-  {
-    int mode_ui = (camera_mode_ == CameraMode::kOrbit) ? 0 : 1;
-    if (ImGui::Combo("Camera Mode", &mode_ui, "Orbit\0Fly\0")) {
-      camera_mode_ = (mode_ui == 0) ? CameraMode::kOrbit : CameraMode::kFly;
-
-      // Swap input contexts immediately (user expectation: orbit mappings in
-      // orbit mode, fly mappings in fly mode).
-      UpdateActiveCameraInputContext();
-
-      pending_sync_active_camera_ = true;
-    }
-  }
-
-  if (camera_mode_ == CameraMode::kOrbit && orbit_controller_) {
-    int orbit_mode_ui
-      = (orbit_controller_->GetMode() == OrbitMode::kTrackball) ? 0 : 1;
-    if (ImGui::Combo("Orbit Mode", &orbit_mode_ui, "Trackball\0Turntable\0")) {
-      orbit_controller_->SetMode(
-        (orbit_mode_ui == 0) ? OrbitMode::kTrackball : OrbitMode::kTurntable);
-      orbit_controller_->SyncFromTransform(active_camera_);
-    }
-  } else if (camera_mode_ == CameraMode::kFly && fly_controller_) {
-    ImGui::Text("Fly Speed: %.2f", fly_controller_->GetMoveSpeed());
-  }
-
-  if (!active_camera_.IsAlive()) {
-    ImGui::TextUnformatted("Active camera: <none>");
-  } else {
-    auto tf = active_camera_.GetTransform();
-    glm::vec3 cam_pos { 0.0F, 0.0F, 0.0F };
-    glm::quat cam_rot { 1.0F, 0.0F, 0.0F, 0.0F };
-
-    if (auto lp = tf.GetLocalPosition()) {
-      cam_pos = *lp;
-    }
-    if (auto lr = tf.GetLocalRotation()) {
-      cam_rot = *lr;
-    }
-
-    const glm::vec3 forward = cam_rot * glm::vec3(0.0F, 0.0F, -1.0F);
-    const glm::vec3 up = cam_rot * glm::vec3(0.0F, 1.0F, 0.0F);
-    const glm::vec3 right = cam_rot * glm::vec3(1.0F, 0.0F, 0.0F);
-
-    ImGui::Text(
-      "cam_pos:   (%.3f, %.3f, %.3f)", cam_pos.x, cam_pos.y, cam_pos.z);
-    ImGui::Text(
-      "forward:   (%.3f, %.3f, %.3f)", forward.x, forward.y, forward.z);
-    ImGui::Text("up:        (%.3f, %.3f, %.3f)", up.x, up.y, up.z);
-    ImGui::Text("right:     (%.3f, %.3f, %.3f)", right.x, right.y, right.z);
-
-    const auto safe_norm = [](const glm::vec3& v) -> glm::vec3 {
-      const float len2 = glm::dot(v, v);
-      if (len2 <= 0.0F) {
-        return glm::vec3(0.0F);
-      }
-      return v / std::sqrt(len2);
-    };
-
-    const glm::vec3 fwd_n = safe_norm(forward);
-    const glm::vec3 up_n = safe_norm(up);
-
-    const glm::vec3 world_pos_y(0.0F, 1.0F, 0.0F);
-    const glm::vec3 world_neg_y(0.0F, -1.0F, 0.0F);
-    const glm::vec3 world_pos_z(0.0F, 0.0F, 1.0F);
-
-    ImGui::Text("dot(fwd,+Y)=%.3f  dot(fwd,-Y)=%.3f",
-      glm::dot(fwd_n, world_pos_y), glm::dot(fwd_n, world_neg_y));
-    ImGui::Text(
-      "dot(up,+Z)=%.3f (expect ~1.0 if Z-up)", glm::dot(up_n, world_pos_z));
-
-    ImGui::Text("world up (+Z): (0.0, 0.0, 1.0)");
-  }
-
-  ImGui::End();
+auto MainModule::ResetCameraToInitialPose() -> void
+{
+  // Defer the actual reset to OnSceneMutation when transforms are valid
+  pending_reset_camera_ = true;
 }
 
 } // namespace oxygen::examples::render_scene

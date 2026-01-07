@@ -28,6 +28,8 @@
 #include "../Common/SingleViewExample.h"
 #include "FlyCameraController.h"
 #include "OrbitCameraController.h"
+#include "UI/CameraControlPanel.h"
+#include "UI/ContentLoaderPanel.h"
 
 namespace oxygen::data {
 class SceneAsset;
@@ -99,18 +101,15 @@ public:
 
 private:
   auto InitInputBindings() noexcept -> bool;
+  auto InitializeUIPanels() -> void;
+  auto UpdateCameraControlPanelConfig() -> void;
   auto EnsureFallbackCamera(const int width, const int height) -> void;
   auto EnsureActiveCameraViewport(const int width, const int height) -> void;
   auto ApplyOrbitAndZoom(time::CanonicalDuration delta_time) -> void;
   auto EnsureViewCameraRegistered() -> void;
 
-  auto DrawDebugOverlay(engine::FrameContext& context) -> void;
-  auto DrawCameraControls(engine::FrameContext& context) -> void;
-
-  struct SceneListItem {
-    std::string virtual_path;
-    data::AssetKey key {};
-  };
+  auto UpdateUIPanels() -> void;
+  auto DrawUI() -> void;
 
   // Scene and rendering.
   std::shared_ptr<scene::Scene> scene_;
@@ -142,28 +141,19 @@ private:
   std::unique_ptr<FlyCameraController> fly_controller_;
 
   auto UpdateActiveCameraInputContext() -> void;
+  auto ResetCameraToInitialPose() -> void;
 
-  // UI state.
-  std::array<char, 512> pak_path_ {};
-  bool pending_mount_pak_ { false };
-  std::unique_ptr<content::PakFile> ui_pak_;
-  std::vector<SceneListItem> pak_scenes_;
+  // UI panels
+  ui::ContentLoaderPanel content_loader_panel_;
+  ui::CameraControlPanel camera_control_panel_;
 
-  std::array<char, 512> loose_index_path_ {};
-  bool pending_load_loose_index_ { false };
-  std::unique_ptr<content::LooseCookedInspection> loose_inspection_;
-  std::vector<SceneListItem> loose_scenes_;
-
+  // Content and scene state
   std::filesystem::path content_root_;
-  std::optional<std::filesystem::path> pending_fbx_import_path_;
-  std::unique_ptr<content::import::AssetImporter> asset_importer_;
-
-  std::future<std::optional<data::AssetKey>> fbx_import_future_;
-  std::atomic<bool> is_importing_fbx_ { false };
-  std::string importing_fbx_path_;
-
   bool pending_load_scene_ { false };
   std::optional<data::AssetKey> pending_scene_key_;
+  glm::vec3 initial_camera_position_ { 10.0F, 10.0F, 10.0F };
+  glm::vec3 initial_camera_target_ { 0.0F, 0.0F, 0.0F };
+  glm::quat initial_camera_rotation_ { 1.0F, 0.0F, 0.0F, 0.0F };
 
   int last_viewport_w_ { 0 };
   int last_viewport_h_ { 0 };
@@ -173,6 +163,7 @@ private:
   bool was_orbiting_last_frame_ { false };
 
   bool pending_sync_active_camera_ { false };
+  bool pending_reset_camera_ { false };
 };
 
 } // namespace oxygen::examples::render_scene

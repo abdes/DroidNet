@@ -48,6 +48,18 @@ add_executable(
   "OrbitCameraController.cpp"
   "FlyCameraController.h"
   "FlyCameraController.cpp"
+  "UI/FilePicker.h"
+  "UI/FilePicker.cpp"
+  "UI/FbxLoaderPanel.h"
+  "UI/FbxLoaderPanel.cpp"
+  "UI/PakLoaderPanel.h"
+  "UI/PakLoaderPanel.cpp"
+  "UI/LooseCookedLoaderPanel.h"
+  "UI/LooseCookedLoaderPanel.cpp"
+  "UI/CameraControlPanel.h"
+  "UI/CameraControlPanel.cpp"
+  "UI/ContentLoaderPanel.h"
+  "UI/ContentLoaderPanel.cpp"
 )
 
 set_target_properties(
