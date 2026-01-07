@@ -34,8 +34,10 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/Internal/SceneConstantsManager.h>
 #include <Oxygen/Renderer/LightManager.h>
+#include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderContextPool.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -120,6 +122,12 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
     observer_ptr { gfx.get() },
     static_cast<std::uint32_t>(sizeof(SceneConstants::GpuData)));
 
+  // Initialize environment dynamic data manager for b3 CBV (cluster slots,
+  // exposure, etc.)
+  env_dynamic_manager_
+    = std::make_unique<internal::EnvironmentDynamicDataManager>(
+      observer_ptr { gfx.get() });
+
   // Initialize the render-context pool helper used to claim per-frame
   // render contexts during PreRender/Render phases.
   render_context_pool_ = std::make_unique<RenderContextPool>();
@@ -127,6 +135,7 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
 
 Renderer::~Renderer()
 {
+  env_dynamic_manager_.reset();
   scene_const_manager_.reset();
   scene_prep_state_.reset();
   uploader_.reset();
@@ -200,6 +209,21 @@ auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
   return graphics_ptr;
 }
 
+auto Renderer::GetStagingProvider() -> upload::StagingProvider&
+{
+  DCHECK_NOTNULL_F(
+    inline_staging_provider_, "StagingProvider is not initialized");
+  return *inline_staging_provider_;
+}
+
+auto Renderer::GetInlineTransfersCoordinator()
+  -> upload::InlineTransfersCoordinator&
+{
+  DCHECK_NOTNULL_F(
+    inline_transfers_, "InlineTransfersCoordinator is not initialized");
+  return *inline_transfers_;
+}
+
 auto Renderer::OverrideMaterialUvTransform(const data::MaterialAsset& material,
   const glm::vec2 uv_scale, const glm::vec2 uv_offset) -> bool
 {
@@ -213,6 +237,52 @@ auto Renderer::OverrideMaterialUvTransform(const data::MaterialAsset& material,
   }
 
   return materials->OverrideUvTransform(material, uv_scale, uv_offset);
+}
+
+auto Renderer::PrepareEnvironmentDynamicData(
+  ViewId view_id, const RenderContext& context) -> uint64_t
+{
+  EnvironmentDynamicData env_data {};
+
+  // Populate cluster buffer slots from LightCullingPass if available
+  if (const auto* light_culling = context.GetPass<LightCullingPass>()) {
+    env_data.bindless_cluster_grid_slot
+      = light_culling->GetClusterGridSrvIndex().get();
+    env_data.bindless_cluster_index_list_slot
+      = light_culling->GetLightIndexListSrvIndex().get();
+
+    // Copy cluster config dimensions
+    const auto& config = light_culling->GetClusterConfig();
+    const auto dims = light_culling->GetGridDimensions();
+    env_data.cluster_dim_x = dims.x;
+    env_data.cluster_dim_y = dims.y;
+    env_data.cluster_dim_z = dims.z;
+    env_data.tile_size_px = config.tile_size_px;
+    env_data.z_near = config.z_near;
+    env_data.z_far = config.z_far;
+
+    // Compute Z-binning parameters for clustered mode
+    if (dims.z > 1) {
+      const float log_range = std::log2(config.z_far / config.z_near);
+      env_data.z_scale = static_cast<float>(dims.z) / log_range;
+      env_data.z_bias = -env_data.z_scale * std::log2(config.z_near);
+    }
+  }
+
+  // TODO: Populate exposure, white_point from post-process/camera settings
+  // For now use defaults (exposure=1.0, white_point=1.0)
+
+  auto buffer_info
+    = env_dynamic_manager_->WriteEnvironmentData(view_id, env_data);
+  if (!buffer_info.buffer) {
+    LOG_F(ERROR,
+      "PrepareEnvironmentDynamicData: Failed to write environment data for "
+      "view {}",
+      view_id.get());
+    return 0;
+  }
+
+  return buffer_info.buffer->GetGPUVirtualAddress();
 }
 
 auto Renderer::RegisterView(
@@ -550,6 +620,9 @@ auto Renderer::WireContext(RenderContext& render_context,
   DLOG_SCOPE_FUNCTION(3);
 
   render_context.scene_constants = scene_consts;
+  render_context.frame_slot = frame_slot_;
+  render_context.frame_sequence = frame_seq_num;
+
   const auto graphics_ptr = gfx_weak_.lock();
   if (!graphics_ptr) {
     throw std::runtime_error("Graphics expired in Renderer::WireContext");
@@ -840,6 +913,10 @@ auto Renderer::OnFrameStart(FrameContext& context) -> void
   auto frame_slot = context.GetFrameSlot();
   auto frame_sequence = context.GetFrameSequenceNumber();
 
+  // Store frame lifecycle state for RenderContext propagation
+  frame_slot_ = frame_slot;
+  frame_seq_num = frame_sequence;
+
   // Initialize Upload Coordinator and its staging providers for the new frame
   // slot BEFORE any uploaders start allocating from them.
   inline_transfers_->OnFrameStart(tag, frame_slot);
@@ -847,6 +924,7 @@ auto Renderer::OnFrameStart(FrameContext& context) -> void
   // then uploaders and scene constants manager
   texture_binder_->OnFrameStart();
   scene_const_manager_->OnFrameStart(frame_slot);
+  env_dynamic_manager_->OnFrameStart(frame_slot);
   scene_prep_state_->GetTransformUploader()->OnFrameStart(
     tag, frame_sequence, frame_slot);
   scene_prep_state_->GetGeometryUploader()->OnFrameStart(tag, frame_slot);

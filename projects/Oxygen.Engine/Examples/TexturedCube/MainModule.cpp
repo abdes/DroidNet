@@ -47,7 +47,6 @@
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Light/PointLight.h>
-#include <Oxygen/Scene/Light/SpotLight.h>
 
 #if defined(OXYGEN_WINDOWS)
 #  include <shobjidl_core.h>
@@ -387,7 +386,7 @@ auto MakeCubeMaterial(const char* name, const glm::vec4& rgba,
 
   desc.normal_scale = 1.0f;
   desc.metalness = Unorm16 { 0.0f };
-  desc.roughness = Unorm16 { 0.6f };
+  desc.roughness = Unorm16 { 0.75f };
   desc.ambient_occlusion = Unorm16 { 1.0f };
 
   desc.base_color_texture = base_color_texture_resource_index;
@@ -559,67 +558,28 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 
   if (!point_light_node_.IsAlive()) {
     point_light_node_ = scene_->CreateNode("Sun");
-    point_light_node_.GetTransform().SetLocalPosition({ 3.0f, 3.0f, 3.0f });
+    point_light_node_.GetTransform().SetLocalPosition({ 7.0f, -6.0f, 5.5f });
 
     auto point_light = std::make_unique<scene::PointLight>();
-    point_light->Common().intensity = 2500.0F;
+    point_light->Common().intensity = 180.0F;
     point_light->Common().color_rgb = { 1.0F, 0.98F, 0.95F };
-    point_light->SetRange(25.0F);
+    point_light->SetRange(35.0F);
 
     const bool attached = point_light_node_.AttachLight(std::move(point_light));
     CHECK_F(attached, "Failed to attach PointLight to Sun");
   }
 
-  {
-    struct FaceSpotSpec {
-      const char* name;
-      glm::vec3 position;
-      glm::vec3 up;
-    };
+  if (!fill_light_node_.IsAlive()) {
+    fill_light_node_ = scene_->CreateNode("Fill");
+    fill_light_node_.GetTransform().SetLocalPosition({ -6.0f, 5.0f, 3.0f });
 
-    // One spotlight per cube face (±X/±Y/±Z), aimed at the cube center.
-    // Important: avoid using Transform::LookAt() here because it may require
-    // up-to-date world transforms. We compute a local rotation from math.
-    constexpr std::array<FaceSpotSpec, 6> kSpots = {
-      FaceSpotSpec { "Spot+X", { 2.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
-      FaceSpotSpec { "Spot-X", { -2.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
-      FaceSpotSpec { "Spot+Y", { 0.0f, 2.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
-      FaceSpotSpec { "Spot-Y", { 0.0f, -2.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
+    auto fill_light = std::make_unique<scene::PointLight>();
+    fill_light->Common().intensity = 80.0F;
+    fill_light->Common().color_rgb = { 0.85F, 0.90F, 1.0F };
+    fill_light->SetRange(45.0F);
 
-      // For ±Z faces, choose Y as 'up' so forward x up is not degenerate.
-      FaceSpotSpec { "Spot+Z", { 0.0f, 0.0f, 2.0f }, { 0.0f, 1.0f, 0.0f } },
-      FaceSpotSpec { "Spot-Z", { 0.0f, 0.0f, -2.0f }, { 0.0f, 1.0f, 0.0f } },
-    };
-
-    constexpr float kSpotIntensity = 900.0F;
-    constexpr float kSpotRange = 10.0F;
-    constexpr float kInnerConeDeg = 18.0F;
-    constexpr float kOuterConeDeg = 32.0F;
-
-    for (std::size_t i = 0; i < kSpots.size(); ++i) {
-      const auto& spec = kSpots[i];
-      auto& node = face_spot_light_nodes_[i];
-
-      if (!node.IsAlive()) {
-        node = scene_->CreateNode(spec.name);
-        node.GetTransform().SetLocalPosition(spec.position);
-        node.GetTransform().SetLocalRotation(
-          MakeLookRotationMinusYForwardFromPosition(
-            spec.position, { 0.0f, 0.0f, 0.0f }, spec.up));
-      }
-
-      if (!node.HasLight()) {
-        auto spot_light = std::make_unique<scene::SpotLight>();
-        spot_light->Common().intensity = kSpotIntensity;
-        spot_light->Common().color_rgb = { 1.0F, 1.0F, 1.0F };
-        spot_light->SetRange(kSpotRange);
-        spot_light->SetConeAnglesRadians(
-          glm::radians(kInnerConeDeg), glm::radians(kOuterConeDeg));
-
-        const bool attached = node.AttachLight(std::move(spot_light));
-        CHECK_F(attached, "Failed to attach SpotLight");
-      }
-    }
+    const bool attached = fill_light_node_.AttachLight(std::move(fill_light));
+    CHECK_F(attached, "Failed to attach PointLight to Fill");
   }
 
   if (png_load_requested_) {

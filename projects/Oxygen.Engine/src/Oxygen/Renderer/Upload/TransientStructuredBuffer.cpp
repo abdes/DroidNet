@@ -246,8 +246,10 @@ auto TransientStructuredBuffer::ReleaseSlotView(SlotData& slot) -> void
     // If we have a stray single view, attempt unregister with the backing
     // buffer if available.
     if (slot.allocation.has_value()) {
-      gfx_->GetResourceRegistry().UnRegisterView(
-        slot.allocation->Buffer(), slot.native_view);
+      auto& registry = gfx_->GetResourceRegistry();
+      if (registry.Contains(slot.allocation->Buffer())) {
+        registry.UnRegisterView(slot.allocation->Buffer(), slot.native_view);
+      }
     }
   } catch (const std::exception& e) {
     LOG_F(ERROR,
@@ -272,9 +274,18 @@ auto TransientStructuredBuffer::ReleaseAllocView(SlotAlloc& slot) -> void
     return;
   }
 
+  auto& registry = gfx_->GetResourceRegistry();
+  if (!registry.Contains(slot.allocation->Buffer())) {
+    // Shutdown/teardown case: the backing buffer and its views may already have
+    // been removed from the registry. Avoid logging errors and just clear our
+    // local bookkeeping.
+    slot.srv_index = kInvalidShaderVisibleIndex;
+    slot.native_view = {};
+    return;
+  }
+
   try {
-    gfx_->GetResourceRegistry().UnRegisterView(
-      slot.allocation->Buffer(), slot.native_view);
+    registry.UnRegisterView(slot.allocation->Buffer(), slot.native_view);
     LOG_F(1, "TransientStructuredBuffer::ReleaseAllocView released srv={}",
       slot.srv_index.get());
   } catch (const std::exception& e) {

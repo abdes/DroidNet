@@ -115,12 +115,20 @@ private:
   auto UpdateAnimations(double delta_time) -> void;
   auto UpdateSceneMutations(float delta_time) -> void;
 
+  //! Ensures a spotlight exists as a child of the main camera node.
+  auto EnsureCameraSpotLight() -> void;
+
+  //! Updates the sun direction/intensity from the current local time.
+  auto UpdateSunFromLocalTime() -> void;
+
   //! Debug overlay methods.
   auto DrawDebugOverlay(engine::FrameContext& context) -> void;
   auto DrawPerformancePanel() -> void;
   auto DrawFrameActionsPanel() -> void;
   auto DrawSceneInfoPanel() -> void;
   auto DrawRenderPassesPanel() -> void;
+  auto DrawSunLightPanel() -> void;
+  auto DrawSpotLightPanel() -> void;
   auto TrackPhaseStart(const std::string& phase_name) -> void;
   auto TrackPhaseEnd() -> void;
   auto TrackFrameAction(const std::string& action) -> void;
@@ -183,6 +191,15 @@ private:
   //! Scene nodes for the example.
   scene::SceneNode multisubmesh_; // Per-submesh visibility/overrides
   scene::SceneNode main_camera_; // "MainCamera"
+  scene::SceneNode sun_light_; // "Sun" directional light
+  scene::SceneNode camera_spot_light_; // Child of main camera
+
+  // Sun time-of-day behavior (simple local-time driven cycle).
+  bool sun_follow_local_time_ { true };
+  float sun_day_intensity_ { 2.0F };
+  float sun_night_intensity_ { 0.05F };
+  float sun_intensity_gamma_ { 1.6F };
+  float sun_azimuth_offset_radians_ { 0.0F };
 
   //! Animation state (quad rotation removed; sphere orbits, camera fixed).
   int last_vis_toggle_ { -1 };

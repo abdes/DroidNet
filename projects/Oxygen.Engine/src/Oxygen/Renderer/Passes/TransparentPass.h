@@ -9,7 +9,7 @@
 #include <memory>
 #include <optional>
 
-#include <Oxygen/Renderer/Passes/RenderPass.h>
+#include <Oxygen/Renderer/Passes/GraphicsRenderPass.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::graphics {
@@ -34,7 +34,7 @@ namespace oxygen::engine {
   (see TODO in Renderer.cpp). They will be replaced by a centralized strongly
   typed enum before expanding the taxonomy (additive, decals, transmission).
 */
-class TransparentPass : public RenderPass {
+class TransparentPass : public GraphicsRenderPass {
 public:
   struct Config {
     std::shared_ptr<graphics::Texture> color_texture; //!< Target color RT

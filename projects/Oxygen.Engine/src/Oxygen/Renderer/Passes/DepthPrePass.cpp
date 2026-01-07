@@ -58,7 +58,7 @@ static_assert(sizeof(DepthPrePassConstantsSnapshot) == 16);
 } // namespace
 
 DepthPrePass::DepthPrePass(std::shared_ptr<Config> config)
-  : RenderPass(config->debug_name)
+  : GraphicsRenderPass(config->debug_name)
   , config_(std::move(config))
 {
 }

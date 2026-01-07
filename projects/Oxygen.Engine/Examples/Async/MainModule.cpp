@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <ctime>
 #include <numbers>
 #include <random>
 #include <string>
@@ -56,6 +57,8 @@
 #include <Oxygen/Renderer/SceneCameraViewResolver.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 
@@ -79,6 +82,49 @@ using oxygen::scene::PerspectiveCamera;
 namespace {
 constexpr std::uint32_t kWindowWidth = 1600;
 constexpr std::uint32_t kWindowHeight = 900;
+
+auto RotationFromForwardToDir(const glm::vec3& to_dir) -> glm::quat
+{
+  const glm::vec3 from_dir = oxygen::space::move::Forward;
+  const glm::vec3 to = glm::normalize(to_dir);
+  const float cos_theta = std::clamp(glm::dot(from_dir, to), -1.0F, 1.0F);
+
+  if (cos_theta >= 0.9999F) {
+    return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
+  }
+
+  if (cos_theta <= -0.9999F) {
+    // Opposite vectors: pick a stable orthogonal axis.
+    const glm::vec3 axis = oxygen::space::move::Up;
+    return glm::angleAxis(std::numbers::pi_v<float>, axis);
+  }
+
+  const glm::vec3 axis = glm::normalize(glm::cross(from_dir, to));
+  const float angle = std::acos(cos_theta);
+  return glm::angleAxis(angle, axis);
+}
+
+struct LocalTimeOfDay {
+  int hour = 0;
+  int minute = 0;
+  int second = 0;
+  double day_fraction = 0.0;
+};
+
+auto GetLocalTimeOfDayNow() -> LocalTimeOfDay
+{
+  const std::time_t t = std::time(nullptr);
+  std::tm tm_local {};
+  localtime_s(&tm_local, &t);
+
+  LocalTimeOfDay tod;
+  tod.hour = tm_local.tm_hour;
+  tod.minute = tm_local.tm_min;
+  tod.second = tm_local.tm_sec;
+  const int seconds = (tod.hour * 3600) + (tod.minute * 60) + tod.second;
+  tod.day_fraction = static_cast<double>(seconds) / 86400.0;
+  return tod;
+}
 
 // Helper: make a solid-color material asset snapshot
 auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
@@ -787,8 +833,12 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   current_frame_tracker_.scene_mutation_occurred = true;
   TrackFrameAction("Scene mutation phase started");
 
-  UpdateFrameContext(context,
-    [this](int width, int height) { EnsureMainCamera(width, height); });
+  UpdateFrameContext(context, [this](int width, int height) {
+    EnsureMainCamera(width, height);
+    EnsureCameraSpotLight();
+  });
+
+  UpdateSunFromLocalTime();
 
   // Handle scene mutations (material overrides, visibility changes)
   // Use the engine-provided frame start time so all modules use a
@@ -803,6 +853,82 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   TrackFrameAction("Scene mutations updated");
   TrackPhaseEnd();
   co_return;
+}
+
+auto MainModule::EnsureCameraSpotLight() -> void
+{
+  if (!scene_ || !main_camera_.IsAlive()) {
+    return;
+  }
+
+  if (!camera_spot_light_.IsAlive()) {
+    auto child_opt = scene_->CreateChildNode(main_camera_, "CameraSpotLight");
+    if (!child_opt.has_value()) {
+      return;
+    }
+    camera_spot_light_ = std::move(child_opt.value());
+    camera_spot_light_.GetTransform().SetLocalPosition(glm::vec3(0.0F));
+    // Camera rotation is produced by glm::quatLookAtRH(), which treats local
+    // forward as -Z. Lights use engine forward = -Y.
+    // Apply a constant correction so the spotlight points exactly where the
+    // camera looks.
+    const glm::quat spot_correction
+      = glm::angleAxis(glm::half_pi<float>(), glm::vec3(1.0F, 0.0F, 0.0F));
+    camera_spot_light_.GetTransform().SetLocalRotation(spot_correction);
+  }
+
+  if (camera_spot_light_.IsAlive() && !camera_spot_light_.HasLight()) {
+    auto light = std::make_unique<scene::SpotLight>();
+    light->Common().affects_world = true;
+    light->Common().color_rgb = { 1.0F, 1.0F, 1.0F };
+    light->Common().intensity = 18.0F;
+    light->Common().mobility = scene::LightMobility::kRealtime;
+    light->Common().casts_shadows = false;
+    light->SetRange(35.0F);
+    light->SetAttenuationModel(scene::AttenuationModel::kInverseSquare);
+    light->SetConeAnglesRadians(glm::radians(12.0F), glm::radians(26.0F));
+    light->SetSourceRadius(0.0F);
+
+    const bool attached = camera_spot_light_.ReplaceLight(std::move(light));
+    CHECK_F(attached, "Failed to attach SpotLight to CameraSpotLight");
+  }
+}
+
+auto MainModule::UpdateSunFromLocalTime() -> void
+{
+  if (!sun_follow_local_time_ || !sun_light_.IsAlive()) {
+    return;
+  }
+
+  const auto tod = GetLocalTimeOfDayNow();
+
+  // Simple day cycle driven by local time.
+  // - Sunrise around 06:00, noon around 12:00, sunset around 18:00.
+  // This is not a geographic solar model; it is a deterministic time-of-day
+  // visualization.
+  const double day_t = tod.day_fraction;
+  const double azimuth = (day_t * 2.0 * std::numbers::pi)
+    + static_cast<double>(sun_azimuth_offset_radians_);
+  const double phase = (day_t - 0.25) * 2.0 * std::numbers::pi;
+  const double altitude = std::sin(phase); // [-1, 1]
+
+  const glm::vec3 horiz(static_cast<float>(std::cos(azimuth)), 0.0F,
+    static_cast<float>(std::sin(azimuth)));
+
+  // Light ray direction points from the light toward the scene.
+  const glm::vec3 to_dir = glm::normalize(
+    glm::vec3(horiz.x, static_cast<float>(-altitude), horiz.z));
+
+  sun_light_.GetTransform().SetLocalRotation(RotationFromForwardToDir(to_dir));
+
+  if (auto sun_ref = sun_light_.GetLightAs<scene::DirectionalLight>()) {
+    auto& sun = sun_ref->get();
+    const float daylight
+      = std::clamp(static_cast<float>((std::max)(0.0, altitude)), 0.0F, 1.0F);
+    const float shaped = std::pow(daylight, sun_intensity_gamma_);
+    sun.Common().intensity = sun_night_intensity_
+      + (sun_day_intensity_ - sun_night_intensity_) * shaped;
+  }
 }
 
 auto MainModule::OnTransformPropagation(engine::FrameContext& context)
@@ -1194,6 +1320,50 @@ auto MainModule::EnsureExampleScene() -> void
   multisubmesh_.GetRenderable().SetGeometry(quad2sm_geo);
   multisubmesh_.GetTransform().SetLocalPosition(glm::vec3(0.0F));
   multisubmesh_.GetTransform().SetLocalRotation(glm::quat(1, 0, 0, 0));
+
+  // Add a sunlight for the scene.
+  if (!sun_light_.IsAlive()) {
+    sun_light_ = scene_->CreateNode("Sun");
+    auto sun_tf = sun_light_.GetTransform();
+    sun_tf.SetLocalPosition(glm::vec3(0.0F, 0.0F, 0.0F));
+
+    // Set a natural sun direction (angled, not straight down).
+    // Convention: engine forward is -Y and Z-up.
+    // We compute a rotation that maps local Forward (-Y) to the desired
+    // world-space ray direction (from light toward the scene).
+    const glm::vec3 from_dir(0.0F, -1.0F, 0.0F);
+    const glm::vec3 to_dir = glm::normalize(glm::vec3(-1.0F, -0.6F, -1.4F));
+
+    const float cos_theta = std::clamp(glm::dot(from_dir, to_dir), -1.0F, 1.0F);
+    glm::quat sun_rot(1.0F, 0.0F, 0.0F, 0.0F);
+    if (cos_theta < 0.9999F) {
+      if (cos_theta > -0.9999F) {
+        const glm::vec3 axis = glm::normalize(glm::cross(from_dir, to_dir));
+        const float angle = std::acos(cos_theta);
+        sun_rot = glm::angleAxis(angle, axis);
+      } else {
+        // Opposite vectors: pick a stable orthogonal axis.
+        const glm::vec3 axis = glm::vec3(0.0F, 0.0F, 1.0F);
+        sun_rot = glm::angleAxis(std::numbers::pi_v<float>, axis);
+      }
+    }
+    sun_tf.SetLocalRotation(sun_rot);
+  }
+
+  if (sun_light_.IsAlive() && !sun_light_.HasLight()) {
+    auto sun_light = std::make_unique<scene::DirectionalLight>();
+    sun_light->Common().affects_world = true;
+    sun_light->Common().color_rgb = { 1.0F, 0.98F, 0.92F };
+    sun_light->Common().intensity = 2.0F;
+    sun_light->Common().mobility = scene::LightMobility::kRealtime;
+    sun_light->Common().casts_shadows = true;
+    sun_light->SetAngularSizeRadians(0.01F);
+    sun_light->SetEnvironmentContribution(true);
+
+    const bool attached = sun_light_.ReplaceLight(std::move(sun_light));
+    CHECK_F(attached, "Failed to attach DirectionalLight to Sun");
+  }
+
   // Set up a default flight path for the camera drone
   InitializeDefaultFlightPath();
 
@@ -1380,10 +1550,177 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& context) -> void
         ImGui::EndTabItem();
       }
 
+      if (ImGui::BeginTabItem("Sun")) {
+        DrawSunLightPanel();
+        ImGui::EndTabItem();
+      }
+
+      if (ImGui::BeginTabItem("Spotlight")) {
+        DrawSpotLightPanel();
+        ImGui::EndTabItem();
+      }
+
       ImGui::EndTabBar();
     }
   }
   ImGui::End();
+}
+
+auto MainModule::DrawSunLightPanel() -> void
+{
+  ImGui::Text("Sun (Directional Light)");
+  ImGui::Separator();
+
+  const auto tod = GetLocalTimeOfDayNow();
+  ImGui::Text("Local time: %02d:%02d:%02d", tod.hour, tod.minute, tod.second);
+
+  ImGui::Checkbox("Follow local time", &sun_follow_local_time_);
+
+  ImGui::SliderFloat("Day Intensity", &sun_day_intensity_, 0.0F, 20.0F, "%.2f");
+  ImGui::SliderFloat(
+    "Night Intensity", &sun_night_intensity_, 0.0F, 2.0F, "%.3f");
+  ImGui::SliderFloat(
+    "Intensity Gamma", &sun_intensity_gamma_, 0.2F, 4.0F, "%.2f");
+  ImGui::SliderAngle(
+    "Azimuth Offset", &sun_azimuth_offset_radians_, -180.0F, 180.0F);
+
+  if (!sun_light_.IsAlive() || !sun_light_.HasLight()) {
+    ImGui::Spacing();
+    ImGui::TextColored(
+      ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "[ERROR] Sun node/light missing");
+    return;
+  }
+
+  auto sun_ref = sun_light_.GetLightAs<scene::DirectionalLight>();
+  if (!sun_ref) {
+    ImGui::TextColored(
+      ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "[ERROR] Sun is not a DirectionalLight");
+    return;
+  }
+
+  auto& sun = sun_ref->get();
+
+  bool affects_world = sun.Common().affects_world;
+  if (ImGui::Checkbox("Affects world", &affects_world)) {
+    sun.Common().affects_world = affects_world;
+  }
+
+  bool casts_shadows = sun.Common().casts_shadows;
+  if (ImGui::Checkbox("Casts shadows", &casts_shadows)) {
+    sun.Common().casts_shadows = casts_shadows;
+  }
+
+  bool env = sun.GetEnvironmentContribution();
+  if (ImGui::Checkbox("Environment contribution", &env)) {
+    sun.SetEnvironmentContribution(env);
+  }
+
+  float color[3] = { sun.Common().color_rgb.x, sun.Common().color_rgb.y,
+    sun.Common().color_rgb.z };
+  if (ImGui::ColorEdit3("Color", color)) {
+    sun.Common().color_rgb = { color[0], color[1], color[2] };
+  }
+
+  float intensity = sun.Common().intensity;
+  if (ImGui::SliderFloat(
+        "Intensity (current)", &intensity, 0.0F, 20.0F, "%.2f")) {
+    sun.Common().intensity = intensity;
+  }
+
+  float angular_size = sun.GetAngularSizeRadians();
+  if (ImGui::SliderAngle("Angular size", &angular_size, 0.0F, 5.0F)) {
+    sun.SetAngularSizeRadians(angular_size);
+  }
+
+  float ev = sun.Common().exposure_compensation_ev;
+  if (ImGui::SliderFloat(
+        "Exposure compensation (EV)", &ev, -8.0F, 8.0F, "%.2f")) {
+    sun.Common().exposure_compensation_ev = ev;
+  }
+}
+
+auto MainModule::DrawSpotLightPanel() -> void
+{
+  ImGui::Text("Camera Spotlight (child of MainCamera)");
+  ImGui::Separator();
+
+  if (!camera_spot_light_.IsAlive() || !camera_spot_light_.HasLight()) {
+    ImGui::TextColored(
+      ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "[WARN] Spotlight not created yet");
+    if (ImGui::Button("Create spotlight")) {
+      EnsureCameraSpotLight();
+    }
+    return;
+  }
+
+  auto spot_ref = camera_spot_light_.GetLightAs<scene::SpotLight>();
+  if (!spot_ref) {
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+      "[ERROR] CameraSpotLight is not a SpotLight");
+    return;
+  }
+
+  auto& spot = spot_ref->get();
+
+  bool affects_world = spot.Common().affects_world;
+  if (ImGui::Checkbox("Affects world", &affects_world)) {
+    spot.Common().affects_world = affects_world;
+  }
+
+  bool casts_shadows = spot.Common().casts_shadows;
+  if (ImGui::Checkbox("Casts shadows", &casts_shadows)) {
+    spot.Common().casts_shadows = casts_shadows;
+  }
+
+  float color[3] = { spot.Common().color_rgb.x, spot.Common().color_rgb.y,
+    spot.Common().color_rgb.z };
+  if (ImGui::ColorEdit3("Color", color)) {
+    spot.Common().color_rgb = { color[0], color[1], color[2] };
+  }
+
+  float intensity = spot.Common().intensity;
+  if (ImGui::SliderFloat("Intensity", &intensity, 0.0F, 50.0F, "%.2f")) {
+    spot.Common().intensity = intensity;
+  }
+
+  float range = spot.GetRange();
+  if (ImGui::SliderFloat("Range", &range, 0.1F, 2000.0F, "%.1f")) {
+    spot.SetRange(range);
+  }
+
+  float inner = spot.GetInnerConeAngleRadians();
+  float outer = spot.GetOuterConeAngleRadians();
+  ImGui::SliderAngle("Inner cone", &inner, 0.0F, 89.0F);
+  ImGui::SliderAngle("Outer cone", &outer, 0.0F, 89.0F);
+  if (outer < inner) {
+    outer = inner;
+  }
+  spot.SetConeAnglesRadians(inner, outer);
+
+  int attenuation_model = static_cast<int>(spot.GetAttenuationModel());
+  const char* attenuation_items[]
+    = { "InverseSquare", "Linear", "CustomExponent" };
+  if (ImGui::Combo("Attenuation", &attenuation_model, attenuation_items,
+        IM_ARRAYSIZE(attenuation_items))) {
+    spot.SetAttenuationModel(
+      static_cast<scene::AttenuationModel>(attenuation_model));
+  }
+
+  float decay_exp = spot.GetDecayExponent();
+  if (ImGui::SliderFloat("Decay exponent", &decay_exp, 0.5F, 8.0F, "%.2f")) {
+    spot.SetDecayExponent(decay_exp);
+  }
+
+  float source_radius = spot.GetSourceRadius();
+  if (ImGui::SliderFloat("Source radius", &source_radius, 0.0F, 2.0F, "%.2f")) {
+    spot.SetSourceRadius(source_radius);
+  }
+
+  float ev = spot.Common().exposure_compensation_ev;
+  if (ImGui::SliderFloat(
+        "Exposure compensation (EV)", &ev, -8.0F, 8.0F, "%.2f")) {
+    spot.Common().exposure_compensation_ev = ev;
+  }
 }
 
 auto MainModule::DrawPerformancePanel() -> void

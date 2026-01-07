@@ -11,7 +11,7 @@
 #include <string>
 
 #include <Oxygen/Graphics/Common/NativeObject.h>
-#include <Oxygen/Renderer/Passes/RenderPass.h>
+#include <Oxygen/Renderer/Passes/GraphicsRenderPass.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::graphics {
@@ -44,7 +44,7 @@ struct ShaderPassConfig {
 
 //! Shading pass: draws geometry and applies lighting in a Forward+ or forward
 //! pipeline.
-class ShaderPass : public RenderPass {
+class ShaderPass : public GraphicsRenderPass {
 public:
   //! Configuration for the depth pre-pass.
   using Config = ShaderPassConfig;

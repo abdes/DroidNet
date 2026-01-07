@@ -63,6 +63,7 @@ class MaterialAsset;
 namespace oxygen::engine {
 class RenderContextPool;
 namespace internal {
+  class EnvironmentDynamicDataManager;
   class SceneConstantsManager;
 } // namespace internal
 namespace upload {
@@ -194,6 +195,37 @@ public:
   //! Returns the Graphics system used by this renderer.
   OXGN_RNDR_API auto GetGraphics() -> std::shared_ptr<Graphics>;
 
+  //=== Upload Services ===---------------------------------------------------//
+
+  //! Returns the staging provider for transient GPU buffer allocation.
+  /*!
+   Render passes should use this to allocate transient buffers that live for
+   the current frame only. The provider is obtained via RenderContext during
+   pass execution:
+
+   ```cpp
+   auto& staging = context.GetRenderer().GetStagingProvider();
+   ```
+
+   @return Reference to the shared staging provider.
+  */
+  [[nodiscard]] OXGN_RNDR_API auto GetStagingProvider()
+    -> upload::StagingProvider&;
+
+  //! Returns the inline transfers coordinator for immediate GPU uploads.
+  /*!
+   Used for uploading constant buffers and small per-frame data directly into
+   the command stream without deferred copy queues.
+
+   ```cpp
+   auto& transfers = context.GetRenderer().GetInlineTransfersCoordinator();
+   ```
+
+   @return Reference to the inline transfers coordinator.
+  */
+  [[nodiscard]] OXGN_RNDR_API auto GetInlineTransfersCoordinator()
+    -> upload::InlineTransfersCoordinator&;
+
   //! Override a material's UV transform used by the shader.
   /*!
    This is intended for editor and runtime authoring workflows. It updates the
@@ -212,6 +244,18 @@ public:
   OXGN_RNDR_API auto OverrideMaterialUvTransform(
     const data::MaterialAsset& material, glm::vec2 uv_scale,
     glm::vec2 uv_offset) -> bool;
+
+  //! Populate and upload EnvironmentDynamicData for a view.
+  /*!
+   Call after LightCullingPass executes to wire cluster buffer slots into the
+   environment CBV. The buffer is bound at root signature slot b3.
+
+   @param view_id View identifier for per-view buffer management.
+   @param context Render context with access to registered passes.
+   @return GPU virtual address of the uploaded buffer, or 0 on failure.
+  */
+  OXGN_RNDR_API auto PrepareEnvironmentDynamicData(
+    ViewId view_id, const RenderContext& context) -> uint64_t;
 
 private:
   //! Build frame data for a specific view (scene prep, culling, draw list).
@@ -265,6 +309,9 @@ private:
   SceneConstants scene_const_cpu_;
   std::unique_ptr<internal::SceneConstantsManager> scene_const_manager_;
 
+  // Environment dynamic data manager for root CBV at b3 (cluster slots, etc.)
+  std::unique_ptr<internal::EnvironmentDynamicDataManager> env_dynamic_manager_;
+
   // Persistent ScenePrep state (caches transforms/materials/geometry across
   // frames). ResetFrameData() is invoked each RunScenePrep while retaining
   // deduplicated caches inside contained managers.
@@ -273,6 +320,9 @@ private:
 
   // Frame sequence number from FrameContext
   frame::SequenceNumber frame_seq_num { 0ULL };
+
+  // Frame slot from FrameContext (stored during OnFrameStart for RenderContext)
+  frame::Slot frame_slot_ { frame::kInvalidSlot };
 
   // Upload coordinator: manages buffer/texture uploads and completion.
   std::unique_ptr<upload::UploadCoordinator> uploader_;

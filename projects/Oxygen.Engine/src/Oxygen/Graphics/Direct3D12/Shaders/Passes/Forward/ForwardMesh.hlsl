@@ -53,7 +53,7 @@ cbuffer RootConstants : register(b2, space0) {
 }
 
 // Root CBV b3: per-frame, frequently accessed environment data.
-ConstantBuffer<EnvironmentDynamicData> g_EnvDyn : register(b3, space0);
+ConstantBuffer<EnvironmentDynamicData> EnvironmentDynamicData : register(b3, space0);
 
 // Access to the bindless descriptor heap
 // Modern SM 6.6+ approach using ResourceDescriptorHeap for direct heap indexing
@@ -296,10 +296,20 @@ float4 PS(VSOutput input) : SV_Target0 {
 
     float3 direct = float3(0.0, 0.0, 0.0);
     direct += AccumulateDirectionalLights(N, V, NdotV, F0, base_rgb, metalness, roughness);
-    direct += AccumulatePositionalLights(input.world_pos, N, V, NdotV, F0, base_rgb, metalness, roughness);
+
+    // Use clustered lighting for positional lights when available.
+    // Compute linear depth from fragment world position and camera.
+    const float linear_depth = length(camera_position - input.world_pos);
+    direct += AccumulatePositionalLightsClustered(
+        input.world_pos,
+        input.position.xy,  // SV_POSITION gives screen position in pixels
+        linear_depth,
+        N, V, NdotV, F0,
+        base_rgb, metalness, roughness,
+        EnvironmentDynamicData);
 
     // Ambient term
-    const float ambient_strength = 0.02f;
+    const float ambient_strength = 0.0f;
     const float3 ambient = base_rgb * (1.0f - metalness) * ambient_strength;
     const float3 shaded = (direct + ambient) * input.color;
 
