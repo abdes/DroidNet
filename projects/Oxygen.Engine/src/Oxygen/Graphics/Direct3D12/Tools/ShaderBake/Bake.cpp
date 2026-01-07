@@ -32,6 +32,8 @@
 
 using oxygen::graphics::ShaderInfo;
 using oxygen::graphics::d3d12::kEngineShaders;
+using oxygen::graphics::d3d12::ShaderEntry;
+using oxygen::graphics::d3d12::ToShaderInfo;
 using oxygen::graphics::d3d12::tools::shader_bake::DxcShaderCompiler;
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
@@ -162,22 +164,43 @@ namespace {
   }
 
   auto BakeEngineShaders(const BakeArgs& args, DxcShaderCompiler& compiler,
-    const DxcShaderCompiler::CompileOptions& options)
+    const DxcShaderCompiler::CompileOptions& base_options)
     -> std::optional<std::vector<ModuleRecord>>
   {
     std::vector<ModuleRecord> modules;
     modules.reserve(kEngineShaders.size());
 
     size_t index = 0;
-    for (const auto& shader : kEngineShaders) {
+    for (const auto& entry : kEngineShaders) {
       ++index;
-      LOG_F(INFO, "[{}/{}] {}:{}", index, kEngineShaders.size(),
-        shader.relative_path, shader.entry_point);
+
+      // Convert constexpr ShaderEntry to runtime ShaderInfo
+      const auto shader = ToShaderInfo(entry);
+
+      // Build per-shader compile options with the shader's defines.
+      DxcShaderCompiler::CompileOptions shader_options = base_options;
+      shader_options.defines = shader.defines;
+
+      std::string defines_str;
+      for (const auto& def : shader.defines) {
+        if (!defines_str.empty()) {
+          defines_str += ",";
+        }
+        defines_str += def.name;
+        if (def.value) {
+          defines_str += "=" + *def.value;
+        }
+      }
+      LOG_F(INFO, "[{}/{}] {}:{}{}{}", index, kEngineShaders.size(),
+        shader.relative_path, shader.entry_point,
+        defines_str.empty() ? "" : " [",
+        defines_str.empty() ? "" : defines_str + "]");
 
       const auto shader_file = args.shader_source_root / shader.relative_path;
       const auto source = ReadFileUtf8(shader_file);
 
-      auto bytecode = compiler.CompileFromSource(source, shader, options);
+      auto bytecode
+        = compiler.CompileFromSource(source, shader, shader_options);
       if (!bytecode) {
         LOG_F(ERROR, "Failed to compile {}:{}", shader.relative_path,
           shader.entry_point);
@@ -223,7 +246,7 @@ namespace {
         .stage = m.info.type,
         .source_path = m.info.relative_path,
         .entry_point = m.info.entry_point,
-        .defines = {},
+        .defines = m.info.defines,
         .dxil = std::span<const std::byte>(m.dxil),
         .reflection = std::span<const std::byte>(m.reflection),
       });

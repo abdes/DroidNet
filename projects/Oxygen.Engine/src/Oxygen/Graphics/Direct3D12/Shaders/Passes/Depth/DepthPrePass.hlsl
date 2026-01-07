@@ -74,11 +74,9 @@ struct VS_OUTPUT_DEPTH {
 // Until such features are introduced, no shader changes are required.
 
 
-// Vertex Shader: DepthOnlyVS
-// Transforms vertices to clip space for depth buffer population.
-// Entry point should match the identifier used in PipelineStateDesc (e.g., "DepthOnlyVS").
-VS_OUTPUT_DEPTH VS_DepthCommon(uint vertexID : SV_VertexID,
-    uint instanceID : SV_InstanceID)
+// Vertex Shader: transforms vertices to clip space for depth buffer population.
+[shader("vertex")]
+VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
 {
     (void)instanceID;
 
@@ -102,37 +100,13 @@ VS_OUTPUT_DEPTH VS_DepthCommon(uint vertexID : SV_VertexID,
     return output;
 }
 
-// Engine shader catalog entry point (precompiled).
-[shader("vertex")]
-VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
+// Pixel Shader: depth-only pass with optional alpha-test.
+// When ALPHA_TEST is defined, performs alpha-test clip for masked materials.
+// When ALPHA_TEST is not defined, this is a no-op (opaque depth path).
+[shader("pixel")]
+void PS(VS_OUTPUT_DEPTH input)
 {
-    return VS_DepthCommon(vertexID, instanceID);
-}
-
-// Partition-aware depth variants.
-[shader("vertex")]
-VS_OUTPUT_DEPTH VS_OpaqueDepth(uint vertexID : SV_VertexID,
-    uint instanceID : SV_InstanceID)
-{
-    return VS_DepthCommon(vertexID, instanceID);
-}
-
-[shader("vertex")]
-VS_OUTPUT_DEPTH VS_MaskedDepth(uint vertexID : SV_VertexID,
-    uint instanceID : SV_InstanceID)
-{
-    return VS_DepthCommon(vertexID, instanceID);
-}
-
-// Pixel Shader: MinimalPS
-// This shader is minimal as no color output is needed for the depth pre-pass.
-// The pipeline state should be configured with no color render targets.
-// Entry point should match the identifier used in PipelineStateDesc (e.g., "MinimalPS").
-void PS_MaskedCommon(VS_OUTPUT_DEPTH input)
-{
-    // Depth writes are handled by fixed function; PS exists only to optionally
-    // discard masked fragments so they don't contribute to the depth buffer.
-
+#ifdef ALPHA_TEST
     if (!BX_IsValidSlot(bindless_draw_metadata_slot) ||
         !BX_IsValidSlot(bindless_material_constants_slot)) {
         return;
@@ -170,24 +144,7 @@ void PS_MaskedCommon(VS_OUTPUT_DEPTH input)
     }
 
     clip(alpha - cutoff);
-}
-
-// Engine shader catalog entry point (precompiled).
-[shader("pixel")]
-void PS(VS_OUTPUT_DEPTH input)
-{
-    PS_MaskedCommon(input);
-}
-
-// Partition-aware depth variants.
-[shader("pixel")]
-void PS_OpaqueDepth(VS_OUTPUT_DEPTH input)
-{
+#else
     (void)input;
-}
-
-[shader("pixel")]
-void PS_MaskedDepth(VS_OUTPUT_DEPTH input)
-{
-    PS_MaskedCommon(input);
+#endif
 }

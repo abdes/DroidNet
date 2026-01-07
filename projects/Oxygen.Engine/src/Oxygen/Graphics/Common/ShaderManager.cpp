@@ -424,8 +424,6 @@ auto ShaderManager::Load() -> void
         .defines = m.defines,
       });
 
-      LOG_F(INFO, "Loaded shader module: {}", FormatShaderLogKey(request));
-
       ValidateReflectionOrThrow(request, m.reflection_blob);
 
       const auto cache_key = ComputeShaderRequestKey(request);

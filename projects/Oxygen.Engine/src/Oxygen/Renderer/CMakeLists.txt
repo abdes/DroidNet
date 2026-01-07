@@ -71,6 +71,7 @@ set(
   "Types/EnvironmentDynamicData.h"
   "Types/EnvironmentStaticData.h"
   "Types/MaterialConstants.h"
+  "Types/MaterialPermutations.h"
   "Types/PassMask.h"
   "Types/PositionalLightData.h"
   "Types/SceneConstants.h"

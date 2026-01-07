@@ -1,289 +1,459 @@
-# Renderer Module Implementation Plan (Living Document)
+# Renderer Module Implementation Plan
 
-Status: Living roadmap for achieving feature completeness of the Oxygen
-Renderer. Scope: Engine-side rendering layer (Renderer, RenderPass subclasses,
-RenderContext integration) – not editor UI or tooling.
+Living roadmap for achieving feature completeness of the Oxygen Renderer.
 
-**Last Updated**: January 5, 2026
+**Last Updated**: January 7, 2026
 
-**Document Status**: Phase 5 (Lighting Integration) rewritten to reflect complete
-Scene-side implementation and provide detailed, implementable renderer tasks.
-Phases 1–4 remain complete as of December 2025.
+Cross‑References: [bindless_conventions.md](bindless_conventions.md) |
+[scene_prep.md](scene_prep.md) | [shader-system.md](shader-system.md) |
+[passes/design-overview.md](passes/design-overview.md) |
+[lighting_overview.md](lighting_overview.md)
 
-Keep this document updated at the end of every meaningful change (additions,
-refactors, removed scope). Use concise checklists; link to design docs instead
-of duplicating content.
-
-Cross‑References:
-
-* Pass lifecycle & conventions: render_pass_lifecycle.md, bindless_conventions.md
-* Scene preparation (fully documented): scene_prep.md
-* Texture binding (fully documented): texture-binder.md
-* Render context & pass registry: render_graph.md
-* Existing passes: passes/depth_pre_pass.md, passes/shader_pass.md, passes/transparent_pass.md
-* Patterns & data flow: render_graph_patterns.md, data_flow.md
-* Render items: render_items.md
-
-Legend: [ ] pending, [~] in progress, [x] done, [d] deferred, [r] removed.
-
-## Completed Phases (Summary)
-
-### Phase 1 – Material Constants & Renderer Snapshot [x]
-
-* [x] Material constants snapshot implemented and owned by Renderer
-* [x] Example migrated to use Renderer setters
-* [x] Bindless indices buffer management integrated
-* [x] Dirty tracking & just-in-time upload implemented
-
-### Phase 2 – Mesh Resources & Bindless Abstraction [x]
-
-* [x] Mesh SRVs (vertex/index) created and owned by Renderer
-* [x] Cached in `MeshGpuResources` with stable SRV indices
-* [x] `EnsureMeshResources()` idempotent; first call allocates, subsequent calls reuse
-* [x] DrawResourceIndices automatically updated
-* [x] Documentation in `bindless_conventions.md` fully current (updated Dec 2025)
-
-### Phase 3 – RenderItemsList & Scene Integration [x]
-
-* [x] `RenderItemsList` container implemented and integrated into Renderer
-* [x] CPU frustum culling for visibility filtering
-* [x] `RenderContext` updated with per-view SoA support (`PreparedSceneFrame`)
-* [x] Example migrated to container-based item management
-
-### Phase 4 – ScenePrep Pipeline & Frame Building [x]
-
-* [x] Full ScenePrep two-phase system implemented (Collection + Finalization)
-* [x] `Renderer::BuildFrame()` integrates extraction with view culling
-* [x] View/Frustum abstractions complete
-* [x] Example migrated to new frame building API
-* [x] ScenePrep documentation complete (scene_prep.md - current as of Dec 2025)
-* [x] Texture binding fully implemented (texture-binder.md - current as of Dec 2025)
-
-## Phase 5 – Lighting Integration [pending]
-
-### Stage 5A – LightManager & Extraction [ ]
-
-Single class that collects lights during traversal and uploads to GPU.
-
-**Tasks:**
-
-* [X] Update Bindless Module
-* [X] GPU structs
-* [X] Environment structs
-* [X] LightManager
-* [X] Integrate into ScenePrepPipeline::Collect()
-* [X] Root Signature Update
-* [X] Extend SceneConstants::GpuData
-* [X] Shader update
+Legend: `[ ]` pending | `[~]` in progress | `[x]` done
 
 ---
 
-### Stage 5B – Clustered Light Culling [ ]
+## Current State (Baseline)
 
-Implement a Compute Shader to assign lights to 3D frustum clusters (Clustered Shading).
+Renderer core is functional with a minimal Forward+ foundation:
 
-**Tasks:**
-
-* [ ] **Cluster Config**:
-  * Define cluster grid dimensions (e.g., 16 x 9 x 24).
-  * Add `ClusterConfig` to `EnvironmentDynamicData` (scale/bias for logarithmic Z-binning).
-* [ ] **LightCulling.hlsl (Compute)**:
-  * **Inputs**: `PositionalLightData` buffer, Depth Prepass SRV (optional for tighter culling, or just AABB intersection).
-  * **Logic**:
-    1. Compute Cluster AABB (screen tile + depth slice).
-    2. Intersect Sphere/Cone vs AABB.
-    3. Append light indices to `GlobalLightIndexList`.
-    4. Write `{offset, count}` to `ClusterGrid` (RWStructuredBuffer or RWTexture3D).
-  * **Safety**: Hard cap lights per cluster (e.g., 64 or 128).
-* [ ] **LightCullingPass** (`src/Oxygen/Renderer/RenderPass/LightCullingPass.h/.cpp`):
-  * Dispatches the compute shader.
-  * Manages `ClusterGrid` and `GlobalLightIndexList` buffers.
-  * Exposes SRV indices for the grid and index list.
-* [ ] **ShaderPass Integration**:
-  * `ForwardMesh.hlsl`:
-    * Compute Cluster Index from `SV_Position.xy` and Linear Depth.
-    * Read `ClusterGrid[cluster_index]` to get offset/count.
-    * Loop `GlobalLightIndexList` from offset.
-* [ ] **Add to KnownPassTypes**.
-
----
-
-### Stage 5C – Per-Draw Light Assignment [deferred] [ ]
-
-Assign bounded light subset per draw for shadows and performance cap.
-
-**Deferred until shadow mapping phase.** Design preserved here.
-
-**Tasks:**
-
-* [ ] **LightManager::AssignPerDraw()**: Score positional lights by importance,
-  select top-N per object. Store `{offset, count}` in per-draw buffer.
-* [ ] **Extend DrawMetadata**: Reuse padding slot for `light_range_offset`.
-* [ ] **GPU buffers**: `PerDrawLightRanges`, `PerDrawLightIndices`.
-* [ ] **Shader path**: If `light_range_offset != ~0u`, use per-draw list.
-  Else fall back to tile list or global loop.
-* [ ] **Quality setting**: `renderer.per_draw_light_assignment` (default off).
+- **Bindless architecture**: SM 6.6 `ResourceDescriptorHeap[]` indexing, stable
+  root signature (t0 unbounded SRV, s0 sampler table, b1 SceneConstants CBV,
+  b2 root constants, b3 EnvironmentDynamicData CBV)
+- **ScenePrep pipeline**: Two-phase Collection → Finalization with CPU frustum
+  culling and per-view `PreparedSceneFrame`
+- **Render passes**: `DepthPrePass`, `ShaderPass`, `TransparentPass` with 4 PSO
+  variants each (opaque/masked × single/double-sided)
+- **Lighting**: `LightManager` extracts scene lights; GPU buffers uploaded via
+  transient buffers; shaders loop all lights per pixel (**no culling**)
+- **Materials (basic)**: Runtime `MaterialConstants` has 6 texture slots (base
+  color, normal, metallic, roughness, AO, opacity); GGX specular + Lambert
+  diffuse; alpha test support; UV transform; ORM packed texture detection.
+  **PAK format has full PBR**: `MaterialAssetDesc` includes emissive, clearcoat,
+  transmission, sheen, specular, IOR — `MaterialLoader` reads all fields but
+  `MaterialAsset` only exposes basic PBR getters. **Gap**: add getters to
+  `MaterialAsset`, extend `MaterialConstants`, update `MaterialBinder`,
+  implement in shaders. **Not in PAK**: height/parallax, SSS, anisotropy
+- **Shader permutations (infrastructure)**: `ShaderDefine` struct, `ShaderRequest`
+  with defines, `DxcShaderCompiler` per-request compilation, OXSL shader library
+  format with define-keyed caching, `ComputeShaderRequestKey()` for stable cache
+  identity. Passes now use `ALPHA_TEST` define for masked variants.
+- **Geometry (basic)**: PAK format supports LOD (`lod_count`, `MeshDesc[]`),
+  AABB per geometry/mesh/submesh, `MeshType` enum (Standard, Procedural,
+  Skinned, MorphTarget, Instanced, Collision, Navigation, Billboard, Voxel).
+  `GeometryAsset` stores LOD meshes; `GeometryUploader` interns GPU buffers.
+  `Vertex` struct: position, normal, texcoord, tangent, bitangent, color.
+  LOD selection policies exist (`FixedPolicy`, `DistancePolicy`,
+  `ScreenSpaceErrorPolicy`). Per-submesh frustum culling in `ScenePrep`.
+  **Gaps**: (a) `Vertex` has NO bone weights/indices — skinned meshes can't
+  render, (b) No morph target storage — blend shapes not supported,
+  (c) `GeometryLoader` only handles `kStandard`/`kProcedural` — skips skinned,
+  (d) `DrawMetadata.instance_count` always 1 — no GPU instancing batching,
+  (e) No hierarchical culling (BVH/octree) — flat per-submesh only
 
 ---
 
-**Deliverable**: Scene-driven lighting via bindless buffers. Forward+ tile
-culling for positional lights. Per-draw assignment deferred to shadow phase.
+## Phase 1 – Shader Permutation Wiring ✓
 
-## Phase 6 – DrawPacket Introduction & Opaque Submission Refactor [pending]
+Connect existing permutation infrastructure to render passes for material-driven
+variants.
 
-Goal: Transition passes to consume low-level `DrawPacket` for sorting & future instancing.
+**Status**: Completed January 7, 2026.
 
-**Status**: Not started. This phase will refactor passes to consume pre-sorted draw packets instead of the current direct item iteration.
+### 1.1 Define Standard Material Permutation Defines ✓
 
-Tasks:
+- [x] Create `MaterialPermutations.h` with standard define names:
+  - `HAS_EMISSIVE`, `HAS_CLEARCOAT`, `HAS_TRANSMISSION`, `HAS_HEIGHT_MAP`
+  - `ALPHA_TEST`, `DOUBLE_SIDED` (replace current hardcoded PSO selection)
+- [x] Document define naming convention in `shader-system.md` (§3.4)
 
-* [ ] Define `DrawPacket` struct (final field table per design doc in render_items.md).
-* [ ] Implement packet builder: consumes validated `RenderItemsList` → opaque packets.
-* [ ] Opaque sort key (material | mesh | depth bucket) & integration into ShaderPass.
-* [ ] Update `RenderContext` to expose packet spans; DepthPrePass may still read bounds directly (evaluate necessity).
-* [ ] Debug asserts: packet build only after all items validated & scene constants set.
-* [ ] Optional basic instancing grouping (hash mesh + material) [d].
-* [ ] Unit tests: packet sort determinism, bounding volume transform correctness, malformed bounds assert.
-* [ ] Docs: render_items.md (finalization), implementation_plan.md references updated, performance note (packet build vs direct submission).
+### 1.2 Pass Permutation Integration ✓
 
-## Phase 7 – Transparent Pass (Basic Sorting) [x — implementation exists]
+- [x] Refactor `ShaderPass::CreatePipelineStateDesc()` to build `ShaderRequest`
+      with defines from material flags
+- [x] Update `DepthPrePass` similarly
+- [x] Cache PSO by full `ShaderRequest` hash (already supported by
+      `PipelineStateCache`)
 
-**Status**: `TransparentPass` implemented and integrated into KnownPassTypes.
-Basic sorting and back-to-front ordering framework in place.
+### 1.3 Material-to-Define Mapping ✓
 
-Goal: Support alpha blended geometry after opaque packet pipeline stable.
+- [x] Map material flags to defines during draw submission (partition-based)
+- [x] Ensure PSO lookup uses material-derived defines
 
-Tasks:
+### 1.4 Validation ✓
 
-* [x] Populate `transparent_draw_list` (from extraction in Phase 4).
-* [x] Implement `TransparentPass` (color target, depth read, blend-enabled PSO, depth read-only transitions).
-* [ ] Back-to-front CPU sort by camera distance (64-bit key: depth | material | mesh documented in render_items.md).
-* [ ] Docs updates: Create passes/transparent_pass.md, update data_flow.md, bindless_conventions.md pass table.
+- [x] Test: same shader with different defines produces different PSOs
+- [x] Test: identical defines reuse cached PSO
 
-Deferred: OIT techniques.
+---
 
-## Phase 8 – Post Process Pass (Tone Map Stub) [pending]
+## Phase 2 – Emissive Materials
 
-Goal: Full-screen post step reading prior color target.
+Add emissive support — required for any glowing objects, UI highlights, or
+HDR content that benefits from bloom.
 
-**Status**: Not started.
+**PAK format status**: `MaterialAssetDesc` already has `emissive_texture` and
+`emissive_factor[3]` (HalfFloat). No format changes needed.
 
-Tasks:
+### 2.1 Runtime MaterialConstants Extension
 
-* [ ] `PostProcessPass` (inputs: previous color SRV, scene constants) output: framebuffer color (or target override).
-* [ ] Basic tone map (linear → gamma) via fullscreen shader.
-* [ ] Ensure PSO root layout compatibility (reuse SRV table; append texture SRV binding only if needed – document if added).
-* [ ] Update bindless_conventions.md if new binding.
-* [ ] Docs: Create passes/post_process_pass.md.
+- [ ] Add `emissive_factor` (float3) to `MaterialConstants` struct
+- [ ] Add `emissive_texture_index` (uint32) to texture slots
+- [ ] Update HLSL `MaterialConstants.hlsli` to match (maintain 16-byte alignment)
+- [ ] Ensure `sizeof(MaterialConstants)` stays root-CBV friendly
+- [ ] Add `MaterialConstants::GetPermutationDefines()` method (deferred to Phase 2+)
 
-Deferred: Bloom, HDR exposure, FX chain.
+### 2.2 MaterialAsset & MaterialBinder Integration
 
-## Phase 9 – Resource Lifetime & Memory Optimizations [pending]
+- [ ] Add `GetEmissiveFactor()` getter to `MaterialAsset` (PAK data already
+      loaded into `desc_`, just expose it)
+- [ ] Add `GetEmissiveTexture()` and `GetEmissiveTextureKey()` getters
+- [ ] Extend `texture_resource_keys_` vector to include emissive slot
+- [ ] Update `MaterialLoader` to populate emissive resource key
+- [ ] Update `SerializeMaterialConstants()` in `MaterialBinder.cpp` to populate
+      `emissive_factor` and `emissive_texture_index`
 
-Goal: Prepare for more passes & memory pressure.
+### 2.3 Shader Integration
 
-**Status**: Partial (texture binder has pooling; buffer aliasing not yet implemented).
+- [ ] Update `ForwardMaterialEval.hlsli`: sample emissive texture, apply
+      strength
+- [ ] Update `ForwardMesh.hlsl` PS: add emissive to final output before
+      tone mapping
+- [ ] Ensure emissive bypasses lighting (additive, not multiplied by BRDF)
 
-Tasks:
+### 2.4 Validation
 
-* [~] Transient texture aliasing plan (texture binder.md specifies async loading; GPU aliasing deferred).
-* [ ] Evaluate buffer reuse for light grids / post-process intermediates (pooling).
-* [ ] Metrics counters (buffers created, evicted meshes/frame) – debug log.
-* [ ] gpu_resource_management.md: metrics & pooling section.
-* [ ] Plan SoA culling arrays (centers, radii, layer bits) design note.
-* [ ] Evaluate static vs dynamic item partition for culling + sorting reuse.
+- [ ] Test scene with emissive-only objects (no other lighting)
+- [ ] Verify emissive works with alpha-tested materials
 
-Eviction (deferred but tracked here; not urgent)
+---
 
-* [ ] Wire `EvictUnusedMeshResources(current_frame)` into frame orchestration
-  (e.g., end of `PostExecute`).
-* [ ] On eviction/unregister, call
-  `ResourceRegistry::UnRegisterResource(*vertex_buffer)` and
-  `...(*index_buffer)` to release SRV views/descriptors before buffers are
-  destroyed.
-* [ ] Ensure `UnregisterMesh(mesh)` uses the same unregistration logic and
-  notifies the policy.
-* [ ] Add unit test: register views → evict → views unregistered and descriptor
-  count drops; cache entry removed.
-* [ ] Add metrics: evicted meshes/frame, descriptors freed/frame; log summary in
-  debug builds.
+## Phase 3 – GPU Instancing
 
-Deferred: Actual aliasing implementation (Phase 10 if complexity warrants).
+Reduce draw call overhead by batching identical mesh+material combinations.
 
-## Phase 10 – Visibility & Performance Enhancements [pending]
+**Current state**: `DrawMetadata.instance_count` is always 1.
+`RenderPass::EmitDrawRange()` calls `recorder.Draw()` per item. PAK format has
+`MeshType::kInstanced` but runtime doesn't batch.
 
-Goal: Improve culling fidelity & reduce overdraw.
+### 3.1 Instance Batching in ScenePrep
 
-**Status**: Basic CPU frustum culling implemented in Phase 4. Advanced culling deferred.
+- [ ] Group `RenderItemData` by (GeometryHandle, MaterialHandle, LOD) key
+- [ ] Collapse groups into single `DrawMetadata` with `instance_count > 1`
+- [ ] Build per-instance transform index array for GPU lookup
 
-Tasks:
+### 3.2 Per-Instance Data Buffer
 
-* [ ] Hierarchical frustum culling (BVH or loose octree) – pre CollectRenderItems.
-* [ ] Depth pre-pass early Z stats toggle & logging (optional).
-* [ ] Per-pass timing via timestamp queries (if backend supports).
-* [ ] Frame timing summary (debug logging integration).
-* [ ] Optional SoA culling path (toggle + benchmark).
-* [ ] Per-item motion vector groundwork (store previous transform).
-* [ ] LOD selection policy (screen-space error heuristic) during extraction.
+- [ ] Create `InstanceDataBuffer` SRV with per-instance transform indices
+- [ ] Add `instance_data_buffer_srv` to `SceneConstants`
+- [ ] Populate `DrawMetadata.instance_metadata_offset` for first instance
 
-Deferred: Occlusion culling (software depth buffer) / GPU queries.
+### 3.3 Shader Integration
 
-## Phase 11 – Advanced Light Culling (GPU Compute) [pending]
+- [ ] Update `ForwardMesh.hlsl` VS to use `SV_InstanceID`
+- [ ] Fetch transform index: `instance_data[draw.instance_offset + SV_InstanceID]`
+- [ ] Update `DrawMetadata.hlsli` to expose instance fields
 
-**Prereq**: Phase 5 Stage B stable.
+### 3.4 Draw Call Update
 
-**Status**: Not started.
+- [ ] Update `RenderPass::EmitDrawRange()` to use `md.instance_count`
+- [ ] Change `recorder.Draw(..., 1, ...)` to `recorder.Draw(..., md.instance_count, ...)`
 
-Tasks:
+### 3.5 Validation
 
-* [ ] Compute pipeline for clustering (new shader) – descriptor plan + docs.
-* [ ] Depth linearization or pyramid generation (DepthPrePass extension or new pass).
-* [ ] Replace CPU tile assignment with GPU buffers consumed in ShaderPass.
-* [ ] Update passes/light_culling_pass.md (GPU path & fallback docs).
-* [ ] Integrate GPU light index buffer consumption into ShaderPass / DrawPacket.
+- [ ] Test: 1000 cubes with same mesh/material render in <10 draw calls
+- [ ] Verify per-instance transforms are correct
 
-Deferred: Temporal light list reuse.
+---
 
-## Phase 12 – Quality / Hardening [pending]
+## Phase 4 – Clustered Light Culling
 
-Goal: Stabilize for broader engine integration & long-term maintenance.
+Enable Forward+ light culling so pixels evaluate only relevant lights.
 
-**Status**: Not started.
+### 4.1 Cluster Infrastructure
 
-Tasks:
+- [ ] Define `ClusterConfig` struct: grid dimensions (16×9×24), near/far,
+      Z-binning scale/bias
+- [ ] Add `ClusterConfig` to `EnvironmentDynamicData` (b3 CBV)
+- [ ] Create `ClusterGrid` and `GlobalLightIndexList` GPU buffer types
 
-* [ ] Unit tests: EvictionPolicy (LRU age logic), RenderPass rebuild conditions.
-* [ ] Integration tests: pass sequence transition correctness (mock CommandRecorder capture).
-* [ ] Failure modes validated (missing depth texture → exception) logged & tested.
-* [ ] Doxygen pass for all public Renderer / RenderPass APIs.
-* [ ] Final doc sweep – ensure README links current.
-* [ ] Unit tests: Sorting key stability (opaque + transparent) once keys implemented.
-* [ ] Unit tests: LOD selection heuristic boundaries.
-* [ ] Benchmarks: AoS vs SoA culling performance.
-* [ ] Validation: Assert `UpdateComputedProperties` invoked before render graph (debug build).
+### 4.2 Light Culling Compute Pass
 
-## Deferred / Explicitly Out of Scope (Reassess Later)
+- [ ] Create `LightCullingPass` class in `src/Oxygen/Renderer/Passes/`
+- [ ] Implement `LightCulling.hlsl` compute shader:
+  - Compute cluster AABB, intersect light spheres/cones
+  - Write `{offset, count}` to `ClusterGrid`
+  - Cap lights per cluster (64 max)
+- [ ] Dispatch after DepthPrePass, before ShaderPass
 
-* Full generic render graph with automated resource lifetime solver.
-* Editor-driven dynamic graph editing.
-* Advanced order-independent transparency (per-pixel linked lists, weighted
-  blended, etc.).
-* Ray tracing integration.
+### 4.3 ShaderPass Integration
+
+- [ ] Update `ForwardMesh.hlsl`: compute cluster index from screen position +
+      linear depth
+- [ ] Replace all-lights loop with cluster-based lookup
+
+### 4.4 Validation
+
+- [ ] Visual test: scene with 50+ point lights
+- [ ] Performance comparison: before/after
+
+---
+
+## Phase 5 – Post-Process Pass & Bloom
+
+Add fullscreen post-processing with bloom to make emissive materials shine.
+
+### 5.1 PostProcessPass Implementation
+
+- [ ] Create `PostProcessPass` class in `src/Oxygen/Renderer/Passes/`
+- [ ] Create `PostProcess.hlsl` fullscreen triangle shader
+- [ ] Tone mapping: ACES filmic or Reinhard
+
+### 5.2 Bloom Effect
+
+- [ ] Implement brightness threshold extraction pass
+- [ ] Implement separable Gaussian blur (downsample → blur → upsample chain)
+- [ ] Composite bloom with tone-mapped color
+- [ ] Expose bloom intensity/threshold in `GpuPostProcessParams`
+
+### 5.3 Render Graph Integration
+
+- [ ] Add after TransparentPass in example render graph
+- [ ] Manage intermediate bloom textures
+
+---
+
+## Phase 6 – Transparent Sorting
+
+Enable correct alpha blending with back-to-front ordering.
+
+### 6.1 Depth-Based Sort Key
+
+- [ ] Add `camera_distance` to `RenderItemData` during extraction
+- [ ] Implement 64-bit sort key: `(depth << 32) | (material << 16) | mesh`
+
+### 6.2 Transparent Partition Sorting
+
+- [ ] Sort transparent partition by descending camera distance
+- [ ] Update `PreparedSceneFrame` to expose sorted draw range
+
+### 6.3 Documentation
+
+- [ ] Create `passes/transparent_pass.md`
+
+---
+
+## Phase 7 – Shadow Mapping (Directional)
+
+Add basic shadow support for the primary directional light.
+
+### 7.1 Shadow Map Resources
+
+- [ ] Create shadow map texture (2048×2048 depth)
+- [ ] Allocate SRV slot in bindless heap
+
+### 7.2 ShadowPass Implementation
+
+- [ ] Create `ShadowPass` class: depth-only from light perspective
+- [ ] Compute light-space view/projection matrices
+
+### 7.3 Shader Integration
+
+- [ ] Add shadow sampling to `ForwardDirectLighting.hlsli`
+- [ ] PCF filtering (2×2 or 3×3)
+
+---
+
+## Phase 8 – Skinned Mesh Rendering
+
+Enable skeletal animation for characters and creatures.
+
+**Current state**: PAK format has `MeshType::kSkinned`. `Vertex` struct has NO
+bone weights/indices. `GeometryLoader` skips skinned meshes. No skeleton/bone
+hierarchy runtime. No animation system integration.
+
+### 8.1 Vertex Format Extension
+
+- [ ] Add `bone_indices` (uint4) to `Vertex` struct — up to 4 bones per vertex
+- [ ] Add `bone_weights` (float4) to `Vertex` struct — normalized weights
+- [ ] Update HLSL vertex input layout in `ForwardMesh.hlsl`
+- [ ] Ensure backwards compatibility: detect skinned vs static by mesh type
+
+### 8.2 Skeleton Runtime
+
+- [ ] Define `Skeleton` class: bone hierarchy, bind poses, inverse bind matrices
+- [ ] Define `SkeletonInstance` class: per-instance bone transforms
+- [ ] Create bone transform buffer SRV (structured buffer of float4x3)
+
+### 8.3 PAK Format for Skinned Meshes
+
+- [ ] Define `SkinnedMeshInfo` union variant in `MeshDesc.info`
+- [ ] Include skeleton asset reference, bone count, weights buffer reference
+- [ ] Update `GeometryLoader` to handle `kSkinned` mesh type
+
+### 8.4 Shader Integration
+
+- [ ] Add `HAS_SKINNING` shader permutation define
+- [ ] Implement vertex skinning in VS: blend position/normal by bone weights
+- [ ] Fetch bone matrices from `bone_transform_buffer[bone_indices[i]]`
+
+### 8.5 Bone Matrix Upload
+
+- [ ] Upload bone matrices via transient buffer each frame
+- [ ] Bone transform update is caller's responsibility (animation system)
+
+---
+
+## Phase 9 – Advanced PBR: Clear Coat
+
+Add clear coat layer for automotive paint, wet surfaces, lacquered wood.
+
+**PAK format status**: `MaterialAssetDesc` already has `clearcoat_texture`,
+`clearcoat_normal_texture`, `clearcoat_factor` (Unorm16), and
+`clearcoat_roughness` (Unorm16). No format changes needed.
+
+### 9.1 Runtime MaterialConstants Extension
+
+- [ ] Add `clearcoat_factor` (float, 0-1) to `MaterialConstants`
+- [ ] Add `clearcoat_roughness` (float) to `MaterialConstants`
+- [ ] Add `clearcoat_texture_index` (uint32)
+- [ ] Add `clearcoat_normal_texture_index` (uint32)
+- [ ] Update HLSL `MaterialConstants.hlsli` to match
+
+### 9.2 MaterialAsset & MaterialBinder Integration
+
+- [ ] Add clearcoat getters to `MaterialAsset`: `GetClearcoatFactor()`,
+      `GetClearcoatRoughness()`, `GetClearcoatTexture()`,
+      `GetClearcoatNormalTexture()` + resource key variants
+- [ ] Extend `texture_resource_keys_` for clearcoat slots
+- [ ] Update `MaterialLoader` to populate clearcoat resource keys
+- [ ] Update `SerializeMaterialConstants()` to populate clearcoat fields
+
+### 9.3 Shader Implementation
+
+- [ ] Add second specular lobe in `ForwardPbr.hlsli`
+- [ ] Attenuate base layer by clearcoat Fresnel
+- [ ] Sample clearcoat normal if provided, else use base normal
+
+---
+
+## Phase 10 – Material Instances
+
+Enable per-object material parameter overrides without duplicating assets.
+
+### 10.1 Runtime Override System
+
+- [ ] Define `MaterialOverride` struct: parameter ID → value map
+- [ ] Add `SetMaterialOverride()` API to `SceneNode::Renderable`
+- [ ] Store overrides in scene node, resolve during extraction
+
+### 10.2 GPU Upload Path
+
+- [ ] Merge base material + overrides into final `MaterialConstants`
+- [ ] Cache merged constants per unique (material + overrides) combination
+
+---
+
+## Phase 11 – Resource Management
+
+Improve GPU memory efficiency.
+
+### 11.1 Mesh Eviction
+
+- [ ] Implement `EvictUnusedMeshResources(frame_id, age_threshold)`
+
+### 11.2 Buffer Pooling
+
+- [ ] Pool light grid/index buffers
+- [ ] Pool post-process intermediates
+
+### 11.3 Metrics
+
+- [ ] Debug counters: allocations, evictions, peak usage
+
+---
+
+## Ongoing – Performance & Quality
+
+Continuous improvements, not milestones:
+
+- Hierarchical culling (BVH/octree) when profiling shows extraction bottleneck
+- Per-pass GPU timing queries
+- Screen-space error LOD selection (integrate with existing policies)
+- Unit tests for sort keys, cluster math, eviction
+- Doxygen for public APIs
+
+---
+
+## Deferred (Reassess Later)
+
+**Rendering Features**:
+
+- Order-independent transparency (per-pixel linked lists, weighted blended)
+- Cascade shadow maps
+- Point/spot light shadows
+- Volumetric lighting
+- Screen-space reflections
+- Ambient occlusion (SSAO/GTAO)
+
+**Advanced Geometry (require PAK/Vertex extension)**:
+
+- Morph targets — PAK has `kMorphTarget` enum, but no `MorphTargetInfo` struct
+  or morph buffer handling
+- Billboard meshes — PAK has `kBillboard` enum, no runtime support
+- Voxel meshes — PAK has `kVoxel` enum, no runtime support
+- Collision/navigation meshes — PAK has `kCollision`/`kNavigation`, physics
+  integration needed
+
+**Advanced Materials (require PAK format extension)**:
+
+- Height/parallax mapping — no PAK fields, high friction for visual payoff
+- Subsurface scattering (skin, wax, foliage) — no PAK fields
+- Anisotropy (hair, brushed metal) — no PAK fields
+- Detail textures / secondary UV — no PAK fields
+
+**Advanced Materials (already in PAK, lower priority)**:
+
+- Transmission (glass, thin foliage) — PAK has `transmission_factor`, etc.
+- Sheen (cloth, fabric) — PAK has `sheen_color_texture`, `sheen_color_factor[3]`
+- Specular/IOR override — PAK has `specular_texture`, `specular_factor`, `ior`
+- Decals
+
+**Infrastructure**:
+
+- Material shader graph / node editor
+- Hot reload for materials/shaders
+- Ray tracing integration
+- Automated render graph resource solver
+
+---
 
 ## Revision History
 
-* **January 5, 2026**: Phase 5 (Lighting Integration) completely rewritten.
-  Scene-side lighting is now complete (components, APIs, PAK persistence).
-  Renderer-side plan restructured into 5 concrete stages (5A–5E) with specific
-  file locations, struct definitions, and test requirements. Cross-references
-  to `light-deisgn.md` and `lighting_overview.md` added; no content duplication.
-* **December 28, 2025**: Document caught up with actual implementation state.
-  All phases 1–4 marked complete with verification. Phase 5+ status verified
-  as pending. TransparentPass verified as implemented and integrated. Added
-  current documentation references (scene_prep.md, texture-binder.md). Updated
-  cross-references and scoping.
-* **August 14, 2025**: Phase 4 marked complete; example migrated.
-* **August 14, 2025**: Phase 3 marked complete; RenderItemsList integrated.
-* **August 13, 2025**: Reorganized phases for fast example migration (added
-  Phases 1–4 migration checkpoints, renumbered subsequent phases).
-* **August 13, 2025 (original)**: Initial plan baseline roadmap.
+- **January 7, 2026**: Consolidated plan from 16 to 11 phases. Removed Draw
+  Packet Abstraction (redundant with GPU Instancing). Moved Transmission to
+  deferred (niche use case). Moved Height/Parallax to deferred (requires PAK
+  changes). Converted Performance/Hardening to Ongoing section. Trimmed
+  validation noise tasks.
+- **January 7, 2026**: Added comprehensive geometry analysis to baseline. Found:
+  PAK format supports LOD, multiple mesh types (Standard, Skinned, MorphTarget,
+  etc.), but `Vertex` struct has NO bone weights/indices, `GeometryLoader` only
+  handles Standard/Procedural. Added Phase 3 (GPU Instancing) and Phase 8
+  (Skinned Mesh Rendering). Reorganized phases by game engine value: instancing
+  moved from Phase 13 to Phase 3. Total phases now 16.
+- **January 7, 2026**: Grounded all tasks in actual codebase analysis. Found:
+  PAK format (`MaterialAssetDesc`) has emissive, clearcoat, transmission, sheen,
+  specular, IOR fields. `MaterialLoader` reads them all. But `MaterialAsset`
+  only has basic PBR getters (base_color, metalness, roughness, normal, AO).
+  `MaterialConstants` runtime struct is minimal. Fixed phases 2/8/9 to include:
+  (a) add getters to `MaterialAsset`, (b) extend `MaterialConstants`,
+  (c) update `SerializeMaterialConstants()` in `MaterialBinder`, (d) shaders.
+- **January 7, 2026**: Added Phase 1 (Shader Permutation Wiring) to connect
+  existing shader compilation infrastructure to render passes. Renumbered all
+  subsequent phases. Removed shader permutations from deferred list.
+- **January 7, 2026**: Major update. Added material system phases (Emissive,
+  Height/Parallax, Clear Coat, Transmission, Material Instances). Reordered
+  phases to deliver highest-value features first. Corrected baseline to
+  accurately reflect material system limitations.
+- **January 7, 2026**: Initial rewrite from legacy format.
+- **December 2025**: Phases 1–4 (original numbering) completed.

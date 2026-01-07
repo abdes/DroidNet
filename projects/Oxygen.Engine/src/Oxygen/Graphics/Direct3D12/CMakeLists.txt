@@ -98,6 +98,7 @@ set(
   "Shaders/EngineShaders.cpp"
   "Shaders/EngineShaders.h"
   "Shaders/EngineShaderCatalog.h"
+  "Shaders/ShaderCatalogBuilder.h"
   "Texture.cpp"
   "ImGui/ImGuiBackend.cpp"
 )

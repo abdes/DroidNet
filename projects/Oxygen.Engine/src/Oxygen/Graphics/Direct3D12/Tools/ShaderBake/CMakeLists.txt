@@ -59,6 +59,7 @@ add_executable(
   "Reflect.h"
   "main.cpp"
   "../../Shaders/EngineShaderCatalog.h"
+  "../../Shaders/ShaderCatalogBuilder.h"
 )
 
 # Convenience build target: allow building by module name (matches OUTPUT_NAME)
