@@ -17,7 +17,7 @@
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
-#include <Oxygen/Renderer/Passes/RenderPass.h>
+#include <Oxygen/Renderer/Passes/GraphicsRenderPass.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::graphics {
@@ -74,7 +74,7 @@ struct DepthPrePassConfig {
  engine's coroutine-based render pipeline, allowing for asynchronous resource
  preparation and execution.
 */
-class DepthPrePass : public RenderPass {
+class DepthPrePass : public GraphicsRenderPass {
 public:
   //! Configuration for the depth pre-pass.
   using Config = DepthPrePassConfig;
@@ -122,6 +122,16 @@ public:
   }
   auto HasClearColor() const -> bool { return clear_color_.has_value(); }
 
+  //! Provides const access to the depth texture specified in the configuration.
+  /*!
+   Used by other passes (e.g., LightCullingPass) that need to read the depth
+   buffer populated by this pass.
+
+   @return Reference to the depth texture configured for this pass.
+  */
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetDepthTexture() const
+    -> const graphics::Texture&;
+
 protected:
   auto DoPrepareResources(graphics::CommandRecorder& recorder)
     -> co::Co<> override;
@@ -131,9 +141,6 @@ protected:
   auto NeedRebuildPipelineState() const -> bool override;
 
 private:
-  //! Provides const access to the depth texture specified in the configuration.
-  [[nodiscard]] auto GetDepthTexture() const -> const graphics::Texture&;
-
   //! List of mesh or draw call identifiers to render in the pre-pass.
   /*!
    In a Forward+ rendering pipeline, this list should contain all geometry

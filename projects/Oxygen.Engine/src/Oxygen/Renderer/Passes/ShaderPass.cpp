@@ -38,7 +38,7 @@ using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::Texture;
 
 ShaderPass::ShaderPass(std::shared_ptr<ShaderPassConfig> config)
-  : RenderPass(config ? config->debug_name : "ShaderPass")
+  : GraphicsRenderPass(config ? config->debug_name : "ShaderPass")
   , config_(std::move(config))
 {
 }

@@ -47,10 +47,11 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     std::array { EntryPoint { kPixel, "PS" }, EntryPoint { kVertex, "VS" } },
     std::array<std::string_view, 1> { "ALPHA_TEST" }
   },
-  // Light culling compute shader (no permutations)
+  // Light culling compute shader (tile-based or clustered mode)
   ShaderFileSpec {
     "Passes/Lighting/LightCulling.hlsl",
-    std::array { EntryPoint { kCompute, "CS" } }
+    std::array { EntryPoint { kCompute, "CS" } },
+    std::array<std::string_view, 1> { "CLUSTERED" }
   },
   // ImGui UI shaders (no permutations)
   ShaderFileSpec {
@@ -61,6 +62,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // clang-format on
 
 // Compile-time verification
-static_assert(kEngineShaders.size() == 11, "Expected 11 shader entries");
+static_assert(kEngineShaders.size() == 12, "Expected 12 shader entries");
 
 } // namespace oxygen::graphics::d3d12

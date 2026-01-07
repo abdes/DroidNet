@@ -6,9 +6,12 @@
 
 #include "RenderGraph.h"
 
+#include "AsyncEngineApp.h"
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -16,7 +19,8 @@ using namespace oxygen;
 
 namespace oxygen::examples::common {
 
-RenderGraph::RenderGraph(const AsyncEngineApp&) noexcept
+RenderGraph::RenderGraph(const AsyncEngineApp& app) noexcept
+  : app_(&app)
 {
   // Nothing to do eagerly — pass objects are created lazily in
   // SetupRenderPasses() on demand. Keeping construction cheap allows
@@ -80,6 +84,19 @@ auto RenderGraph::SetupRenderPasses() -> void
     transparent_pass_
       = std::make_shared<engine::TransparentPass>(transparent_pass_config_);
   }
+
+  // Light culling pass (requires Graphics for transient buffer allocation)
+  if (!light_culling_pass_config_) {
+    light_culling_pass_config_
+      = std::make_shared<engine::LightCullingPassConfig>();
+    light_culling_pass_config_->debug_name = "LightCullingPass";
+  }
+  if (!light_culling_pass_ && app_) {
+    if (auto gfx = app_->gfx_weak.lock()) {
+      light_culling_pass_ = std::make_shared<engine::LightCullingPass>(
+        observer_ptr(gfx.get()), light_culling_pass_config_);
+    }
+  }
 }
 
 auto RenderGraph::ClearBackbufferReferences() -> void
@@ -87,8 +104,8 @@ auto RenderGraph::ClearBackbufferReferences() -> void
   LOG_SCOPE_F(1, "RenderGraph::ClearBackbufferReferences");
 
   if (transparent_pass_config_) {
-      transparent_pass_config_->color_texture.reset();
-      transparent_pass_config_->depth_texture.reset();
+    transparent_pass_config_->color_texture.reset();
+    transparent_pass_config_->depth_texture.reset();
   }
 
   if (shader_pass_config_) {
@@ -180,6 +197,14 @@ auto RenderGraph::RunPasses(const oxygen::engine::RenderContext& ctx,
   if (depth_pass_) {
     co_await depth_pass_->PrepareResources(ctx, recorder);
     co_await depth_pass_->Execute(ctx, recorder);
+    ctx.RegisterPass<engine::DepthPrePass>(depth_pass_.get());
+  }
+
+  // Light Culling Pass execution (after depth, before shading)
+  if (light_culling_pass_) {
+    co_await light_culling_pass_->PrepareResources(ctx, recorder);
+    co_await light_culling_pass_->Execute(ctx, recorder);
+    ctx.RegisterPass<engine::LightCullingPass>(light_culling_pass_.get());
   }
 
   // Shader Pass execution

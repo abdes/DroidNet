@@ -10,6 +10,7 @@
 
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
+#include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
@@ -91,6 +92,17 @@ public:
     return transparent_pass_config_;
   }
 
+  auto GetLightCullingPass()
+    -> std::shared_ptr<oxygen::engine::LightCullingPass>&
+  {
+    return light_culling_pass_;
+  }
+  auto GetLightCullingPassConfig()
+    -> std::shared_ptr<oxygen::engine::LightCullingPassConfig>&
+  {
+    return light_culling_pass_config_;
+  }
+
   // Helpers for per-frame attachment management. Examples frequently need to
   // assign the current swapchain framebuffer to the render-context and wire
   // the pass configs to the back-buffer textures. These convenience helpers
@@ -133,6 +145,13 @@ private:
   std::shared_ptr<oxygen::engine::TransparentPass> transparent_pass_ {};
   std::shared_ptr<oxygen::engine::TransparentPass::Config>
     transparent_pass_config_ {};
+
+  std::shared_ptr<oxygen::engine::LightCullingPass> light_culling_pass_ {};
+  std::shared_ptr<oxygen::engine::LightCullingPassConfig>
+    light_culling_pass_config_ {};
+
+  // Reference to app for accessing Graphics
+  const AsyncEngineApp* app_ { nullptr };
 
   // Shared per-frame render context used by example modules.
   oxygen::engine::RenderContext render_context_ {};

@@ -34,7 +34,7 @@ using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::Texture;
 
 TransparentPass::TransparentPass(std::shared_ptr<Config> config)
-  : RenderPass(config ? config->debug_name : "TransparentPass")
+  : GraphicsRenderPass(config ? config->debug_name : "TransparentPass")
   , config_(std::move(config))
 {
 }

@@ -64,15 +64,17 @@ template <typename T> struct PassIndexOf<T, PassTypeList<>> {
 
 // Forward declare the know pass classes here.
 class DepthPrePass;
+class LightCullingPass;
 class ShaderPass;
-class TransparentPass; // newly added transparent geometry pass
+class TransparentPass;
 
 /*!
  Defines the list of all known render pass types for the current render graph.
  The order of types determines their index. Only append new types to maintain
  binary compatibility. Update this list as new passes are added.
 */
-using KnownPassTypes = PassTypeList<DepthPrePass, ShaderPass, TransparentPass>;
+using KnownPassTypes
+  = PassTypeList<DepthPrePass, LightCullingPass, ShaderPass, TransparentPass>;
 
 //! The number of known pass types, used for static array sizing and sanity
 //! checks.
@@ -148,6 +150,20 @@ struct RenderContext {
 
   //! Active view iteration state for the currently-executing view.
   ViewSpecific current_view {};
+
+  //! Current frame slot for resource allocation.
+  /*!
+   Set by the Renderer before render graph execution. Passes use this to
+   coordinate transient resource allocations with the frame lifecycle.
+  */
+  frame::Slot frame_slot { frame::kInvalidSlot };
+
+  //! Current frame sequence number.
+  /*!
+   Monotonically increasing frame counter. Passes use this to detect frame
+   boundaries and synchronize per-frame state.
+  */
+  frame::SequenceNumber frame_sequence { 0 };
 
   //! Map of per-view outputs captured by the renderer. Keys are `ViewId`.
   std::unordered_map<oxygen::ViewId, observer_ptr<graphics::Framebuffer>>
@@ -245,6 +261,9 @@ private:
     // Reset per-view transient state and clear cached per-view outputs
     current_view = ViewSpecific {};
     view_outputs.clear();
+    // Reset frame lifecycle state
+    frame_slot = frame::kInvalidSlot;
+    frame_sequence = frame::SequenceNumber {};
   }
   mutable observer_ptr<Renderer> renderer_ { nullptr };
   mutable observer_ptr<oxygen::Graphics> graphics_ { nullptr };

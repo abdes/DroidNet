@@ -111,7 +111,7 @@ private:
   scene::SceneNode main_camera_;
   scene::SceneNode cube_node_;
   scene::SceneNode point_light_node_;
-  std::array<scene::SceneNode, 6> face_spot_light_nodes_ {};
+  scene::SceneNode fill_light_node_;
 
   std::shared_ptr<oxygen::input::Action> zoom_in_action_;
   std::shared_ptr<oxygen::input::Action> zoom_out_action_;
