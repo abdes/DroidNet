@@ -129,6 +129,30 @@ static inline float4x4 BX_LoadWorldMatrix(uint transformsSlot, uint transformInd
                     0,0,0,1);
 }
 
+// Resolve per-instance transform index for GPU instancing.
+// For instanced draws (instance_count > 1), fetches from instance data buffer.
+// For single-instance draws, returns meta.transform_index directly.
+static inline uint BX_ResolveTransformIndex(const DrawMetadata meta,
+                                            uint instanceDataSlot,
+                                            uint instanceID)
+{
+    if (meta.instance_count > 1 && BX_IsValidSlot(instanceDataSlot)) {
+        StructuredBuffer<uint> instance_data = ResourceDescriptorHeap[instanceDataSlot];
+        return instance_data[meta.instance_metadata_offset + instanceID];
+    }
+    return meta.transform_index;
+}
+
+// Load a world matrix for a specific instance (handles GPU instancing).
+static inline float4x4 BX_LoadInstanceWorldMatrix(uint transformsSlot,
+                                                   uint instanceDataSlot,
+                                                   const DrawMetadata meta,
+                                                   uint instanceID)
+{
+    const uint transformIndex = BX_ResolveTransformIndex(meta, instanceDataSlot, instanceID);
+    return BX_LoadWorldMatrix(transformsSlot, transformIndex);
+}
+
 // Load a material constants record from a materials buffer slot
 static inline BX_MATERIAL_TYPE BX_LoadMaterial(uint materialsSlot, uint materialIndex)
 {

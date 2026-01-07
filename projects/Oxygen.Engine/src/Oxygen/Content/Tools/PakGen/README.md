@@ -43,11 +43,11 @@ pytest -q
 PakGen exposes a single executable `pakgen` with subcommands:
 
 | Subcommand | Purpose |
-|-----------|---------|
-| `build`   | Build a pak from a spec file. |
-| `plan`    | Compute & print layout (no write). |
-| `diff`    | Deep diff two existing pak files. |
-| `validate`| (Reserved) Validate a spec only. |
+| ---------- | ------- |
+| `build` | Build a pak from a spec file. |
+| `plan` | Compute & print layout (no write). |
+| `diff` | Deep diff two existing pak files. |
+| `validate` | (Reserved) Validate a spec only. |
 | `inspect` | (Reserved) Inspect a pak file. |
 
 Global flags:
@@ -177,6 +177,121 @@ A spec groups resources (buffers, textures, audio) and higher‑level assets
 
 (See `pak_gene_refactor.md` for the deeper model and phase roadmap.)
 
+### Schema Version
+
+The current schema version is **4**. Use `version: 4` in your spec files to
+access all features. Older versions (1–3) remain supported for backward
+compatibility.
+
+---
+
+## Procedural Node Generation
+
+Schema version 4 introduces the `generate` directive for scene nodes, enabling
+procedural expansion of template nodes into many concrete instances with
+computed transforms. This is ideal for instancing test scenes, grids, rings,
+and scattered objects.
+
+### Basic Usage
+
+```yaml
+version: 4
+
+assets:
+  - type: scene
+    name: TestScene
+    nodes:
+      - name: Root
+
+      - name: Cube
+        parent: 0
+        geometry: GeoCube
+        generate:
+          layout: grid
+          grid:
+            count: [10, 10, 10]  # 1000 cubes
+            spacing: 2.5
+            center: true
+```
+
+The template node expands into `Cube_0`, `Cube_1`, ... `Cube_999` with unique
+transforms and deterministic UUIDs. Renderables are auto‑generated for nodes
+referencing a geometry.
+
+### Supported Layouts
+
+| Layout | Description | Key Parameters |
+| ------ | ----------- | -------------- |
+| `grid` | 3D grid arrangement | `count`, `spacing`, `center`, `offset` |
+| `linear` | Single line/row | `count`, `direction`, `spacing`, `start` |
+| `circle` | Circular arrangement | `count`, `radius`, `center`, `face_center` |
+| `scatter` | Randomized positions | `count`, `bounds`, `seed` |
+
+### Layout Parameters
+
+#### Grid
+
+```yaml
+generate:
+  layout: grid
+  grid:
+    count: [10, 10, 10]      # [X, Y, Z] node counts (required)
+    spacing: 2.0             # Uniform or [sx, sy, sz] per-axis
+    center: true             # Center grid at origin (default: true)
+    offset: [0, 0, 0]        # Additional translation
+```
+
+#### Linear
+
+```yaml
+generate:
+  layout: linear
+  linear:
+    count: 100               # Number of nodes
+    direction: [1, 0, 0]     # Direction vector (normalized)
+    spacing: 1.5             # Distance between nodes
+    start: [0, 0, 0]         # Starting position
+```
+
+#### Circle
+
+```yaml
+generate:
+  layout: circle
+  circle:
+    count: 12                # Number of nodes
+    radius: 5.0              # Circle radius
+    center: [0, 0, 0]        # Circle center
+    face_center: true        # Rotate nodes to face center
+```
+
+#### Scatter
+
+```yaml
+generate:
+  layout: scatter
+  scatter:
+    count: 200               # Number of nodes
+    seed: 42                 # Random seed for reproducibility
+    bounds:
+      min: [-10, 0, -10]
+      max: [10, 5, 10]
+```
+
+### Generated Output
+
+For each template node with `generate`:
+
+- **Names**: `{template_name}_{index}` (e.g., `Cube_0`, `Cube_1`, ...)
+- **Node IDs**: Deterministic UUIDs based on template name + index
+- **Transforms**: 4×4 column‑major matrices with layout‑computed positions
+- **Renderables**: Auto‑generated if template references a `geometry`
+
+### Limits
+
+- Maximum 100,000 nodes per `generate` directive (safety limit)
+- Expansion occurs at spec‑load time, before validation and packing
+
 ---
 
 ## Testing & Invariants
@@ -236,7 +351,7 @@ BSD 3‑Clause – see [LICENSE](../../../../../../LICENSE).
 ## Quick Reference
 
 | Task | Command |
-|------|---------|
+| ---- | ------- |
 | Build pak | `pakgen build spec.yaml out.pak` |
 | Deterministic build + manifest | `pakgen build spec.yaml out.pak --deterministic --emit-manifest out.manifest.json` |
 | Plan only (human) | `pakgen plan spec.yaml` |

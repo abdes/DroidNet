@@ -10,6 +10,7 @@
 #include <span>
 #include <vector>
 
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 
 namespace oxygen::engine {
@@ -53,10 +54,21 @@ struct PreparedSceneFrame {
 
   // Bindless SRV indices captured at ScenePrep finalization time
   // These must be captured immediately after Finalize to ensure consistency
-  uint32_t bindless_worlds_slot = 0xFFFFFFFF;
-  uint32_t bindless_normals_slot = 0xFFFFFFFF;
-  uint32_t bindless_materials_slot = 0xFFFFFFFF;
-  uint32_t bindless_draw_metadata_slot = 0xFFFFFFFF;
+  oxygen::ShaderVisibleIndex bindless_worlds_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex bindless_normals_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex bindless_materials_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex bindless_draw_metadata_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex bindless_instance_data_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
 
   [[nodiscard]] auto IsValid() const noexcept -> bool
   {

@@ -120,6 +120,18 @@ struct BindlessPositionalLightsSlot {
   constexpr operator uint32_t() const noexcept { return value; }
 };
 
+//! Bindless slot for per-instance data buffer (GPU instancing).
+struct BindlessInstanceDataSlot {
+  uint32_t value;
+  explicit constexpr BindlessInstanceDataSlot(
+    const uint32_t v = kInvalidDescriptorSlot)
+    : value(v)
+  {
+  }
+  constexpr auto operator<=>(const BindlessInstanceDataSlot&) const = default;
+  constexpr operator uint32_t() const noexcept { return value; }
+};
+
 struct MonotonicVersion {
   uint64_t value { 0 };
   explicit constexpr MonotonicVersion(const uint64_t v = 0)
@@ -207,12 +219,22 @@ public:
     uint32_t bindless_directional_shadows_slot { kInvalidDescriptorSlot };
     uint32_t bindless_positional_lights_slot { kInvalidDescriptorSlot };
     // Aligned at 16 bytes here
+
+    uint32_t bindless_instance_data_slot { kInvalidDescriptorSlot };
+    uint32_t _pad1[3] { 0, 0, 0 }; // padding to 16-byte alignment
+    // Aligned at 16 bytes here
+
+    // Additional padding to match HLSL cbuffer packing (DXC reflects 256 bytes)
+    // HLSL's uint64_t has stricter alignment requirements that cause different
+    // packing than C++. We add explicit padding to ensure the C++ struct
+    // matches what the GPU expects.
+    uint32_t _hlsl_packing_pad[12] { 0 }; // 48 bytes: 208 + 48 = 256
   };
   // ReSharper restore CppInconsistentNaming
   static_assert(
     sizeof(GpuData) % 16 == 0, "GpuData size must be 16-byte aligned");
   static_assert(
-    sizeof(GpuData) == 192, "GpuData size must match HLSL cbuffer packing");
+    sizeof(GpuData) == 256, "GpuData size must match HLSL cbuffer packing");
 
   SceneConstants() = default;
   OXYGEN_DEFAULT_COPYABLE(SceneConstants)
@@ -265,6 +287,9 @@ public:
 
   OXGN_RNDR_API auto SetBindlessPositionalLightsSlot(
     BindlessPositionalLightsSlot slot, RendererTag) noexcept -> SceneConstants&;
+
+  OXGN_RNDR_API auto SetBindlessInstanceDataSlot(
+    BindlessInstanceDataSlot slot, RendererTag) noexcept -> SceneConstants&;
 
   // Getters use GetXXX to avoid conflicts with strong types
   [[nodiscard]] auto GetViewMatrix() const noexcept { return view_matrix_; }
@@ -326,6 +351,11 @@ public:
     return bindless_positional_lights_slot_;
   }
 
+  [[nodiscard]] constexpr auto GetBindlessInstanceDataSlot() const noexcept
+  {
+    return bindless_instance_data_slot_;
+  }
+
   // Monotonic version counter; incremented on any mutation.
   [[nodiscard]] constexpr auto GetVersion() const noexcept { return version_; }
 
@@ -355,6 +385,8 @@ private:
       .bindless_directional_shadows_slot
       = bindless_directional_shadows_slot_.value,
       .bindless_positional_lights_slot = bindless_positional_lights_slot_.value,
+
+      .bindless_instance_data_slot = bindless_instance_data_slot_.value,
     };
   }
 
@@ -376,12 +408,20 @@ private:
   BindlessDirectionalLightsSlot bindless_directional_lights_slot_ {};
   BindlessDirectionalShadowsSlot bindless_directional_shadows_slot_ {};
   BindlessPositionalLightsSlot bindless_positional_lights_slot_ {};
+  BindlessInstanceDataSlot bindless_instance_data_slot_ {};
 
   // Versioning + cache
   MonotonicVersion version_ { 0 };
   mutable MonotonicVersion cached_version_ { (
     std::numeric_limits<uint64_t>::max)() };
+#ifdef _MSC_VER
+#  pragma warning(push)
+#  pragma warning(disable : 4324) // structure was padded due to alignment
+#endif
   mutable GpuData cached_ {};
+#ifdef _MSC_VER
+#  pragma warning(pop)
+#endif
 };
 
 } // namespace oxygen::engine

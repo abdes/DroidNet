@@ -34,6 +34,18 @@ SCENE_ASSET_VERSION_V2: Final = 1
 SCENE_ASSET_VERSION_V3: Final = 2
 SCENE_ASSET_VERSION_CURRENT: Final = SCENE_ASSET_VERSION_V3
 
+# YAML Schema version constants (for PakGen tool compatibility).
+# These govern the YAML specification format, not the binary PAK format.
+YAML_SCHEMA_VERSION_V3: Final = 3  # Legacy schema
+YAML_SCHEMA_VERSION_V4: Final = (
+    4  # Adds 'generate' directive for procedural nodes
+)
+YAML_SCHEMA_VERSION_CURRENT: Final = YAML_SCHEMA_VERSION_V4
+YAML_SCHEMA_VERSION_MIN: Final = 1  # Minimum supported version
+
+# Limits for procedural node generation
+MAX_GENERATED_NODES: Final = 100_000  # Safety limit per scene
+
 DATA_ALIGNMENT: Final = 256
 TABLE_ALIGNMENT: Final = 16
 
@@ -104,6 +116,11 @@ __all__ = [
     "SCENE_ASSET_VERSION_V2",
     "SCENE_ASSET_VERSION_V3",
     "SCENE_ASSET_VERSION_CURRENT",
+    "YAML_SCHEMA_VERSION_V3",
+    "YAML_SCHEMA_VERSION_V4",
+    "YAML_SCHEMA_VERSION_CURRENT",
+    "YAML_SCHEMA_VERSION_MIN",
+    "MAX_GENERATED_NODES",
     "DATA_ALIGNMENT",
     "TABLE_ALIGNMENT",
     "RESOURCE_ENTRY_SIZES",

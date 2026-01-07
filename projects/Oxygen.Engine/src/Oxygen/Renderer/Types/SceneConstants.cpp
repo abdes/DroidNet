@@ -168,6 +168,16 @@ auto SceneConstants::SetBindlessPositionalLightsSlot(
   return *this;
 }
 
+auto SceneConstants::SetBindlessInstanceDataSlot(
+  const BindlessInstanceDataSlot slot, RendererTag) noexcept -> SceneConstants&
+{
+  if (bindless_instance_data_slot_ != slot) {
+    bindless_instance_data_slot_ = slot;
+    version_ = version_.Next();
+  }
+  return *this;
+}
+
 auto SceneConstants::GetSnapshot() const noexcept -> const GpuData&
 {
   if (cached_version_ != version_) {

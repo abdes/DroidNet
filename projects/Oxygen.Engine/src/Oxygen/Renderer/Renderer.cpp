@@ -368,6 +368,13 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
     scene_const_cpu_.SetBindlessDrawMetadataSlot(
       BindlessDrawMetadataSlot(draw_metadata_srv.get()),
       SceneConstants::kRenderer);
+
+    // Set instance data slot for GPU instancing
+    const auto instance_data_srv = emitter->GetInstanceDataSrvIndex();
+    DLOG_F(3, "Instance Data: {}", instance_data_srv);
+    scene_const_cpu_.SetBindlessInstanceDataSlot(
+      BindlessInstanceDataSlot(instance_data_srv.get()),
+      SceneConstants::kRenderer);
   }
 
   if (auto light_manager = scene_prep_state_->GetLightManager()) {
@@ -629,18 +636,22 @@ auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
   DLOG_F(3, "  normals: {}", prepared.bindless_normals_slot);
   DLOG_F(3, "materials: {}", prepared.bindless_materials_slot);
   DLOG_F(3, " metadata: {}", prepared.bindless_draw_metadata_slot);
+  DLOG_F(3, " instance: {}", prepared.bindless_instance_data_slot);
 
   view_scene_consts.SetBindlessWorldsSlot(
-    BindlessWorldsSlot(prepared.bindless_worlds_slot),
+    BindlessWorldsSlot(prepared.bindless_worlds_slot.get()),
     SceneConstants::kRenderer);
   view_scene_consts.SetBindlessNormalMatricesSlot(
-    BindlessNormalsSlot(prepared.bindless_normals_slot),
+    BindlessNormalsSlot(prepared.bindless_normals_slot.get()),
     SceneConstants::kRenderer);
   view_scene_consts.SetBindlessMaterialConstantsSlot(
-    BindlessMaterialConstantsSlot(prepared.bindless_materials_slot),
+    BindlessMaterialConstantsSlot(prepared.bindless_materials_slot.get()),
     SceneConstants::kRenderer);
   view_scene_consts.SetBindlessDrawMetadataSlot(
-    BindlessDrawMetadataSlot(prepared.bindless_draw_metadata_slot),
+    BindlessDrawMetadataSlot(prepared.bindless_draw_metadata_slot.get()),
+    SceneConstants::kRenderer);
+  view_scene_consts.SetBindlessInstanceDataSlot(
+    BindlessInstanceDataSlot(prepared.bindless_instance_data_slot.get()),
     SceneConstants::kRenderer);
 
   const auto& proj_matrix = resolved_it->second.ProjectionMatrix();
@@ -729,20 +740,20 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
     // overwritten when the next view calls Finalize. Store them in THIS view's
     // prepared_frame so OnRender can use the correct indices.
     if (const auto transforms = scene_prep_state_->GetTransformUploader()) {
-      prepared_frame.bindless_worlds_slot
-        = transforms->GetWorldsSrvIndex().get();
+      prepared_frame.bindless_worlds_slot = transforms->GetWorldsSrvIndex();
       DLOG_F(3, " captured worlds: {}", prepared_frame.bindless_worlds_slot);
-      prepared_frame.bindless_normals_slot
-        = transforms->GetNormalsSrvIndex().get();
+      prepared_frame.bindless_normals_slot = transforms->GetNormalsSrvIndex();
       DLOG_F(3, "captured normals: {}", prepared_frame.bindless_normals_slot);
     }
     if (const auto materials = scene_prep_state_->GetMaterialBinder()) {
       prepared_frame.bindless_materials_slot
-        = materials->GetMaterialsSrvIndex().get();
+        = materials->GetMaterialsSrvIndex();
     }
     if (auto emitter = scene_prep_state_->GetDrawMetadataEmitter()) {
       prepared_frame.bindless_draw_metadata_slot
-        = emitter->GetDrawMetadataSrvIndex().get();
+        = emitter->GetDrawMetadataSrvIndex();
+      prepared_frame.bindless_instance_data_slot
+        = emitter->GetInstanceDataSrvIndex();
     }
   }
 
