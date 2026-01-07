@@ -1016,7 +1016,7 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key)
         };
 
         std::vector<ResourceKey> texture_keys;
-        texture_keys.reserve(5);
+        texture_keys.reserve(6);
         texture_keys.push_back(
           make_texture_key(decoded->GetBaseColorTexture()));
         texture_keys.push_back(make_texture_key(decoded->GetNormalTexture()));
@@ -1025,6 +1025,7 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key)
           make_texture_key(decoded->GetRoughnessTexture()));
         texture_keys.push_back(
           make_texture_key(decoded->GetAmbientOcclusionTexture()));
+        texture_keys.push_back(make_texture_key(decoded->GetEmissiveTexture()));
         decoded->SetTextureResourceKeys(std::move(texture_keys));
       }
 

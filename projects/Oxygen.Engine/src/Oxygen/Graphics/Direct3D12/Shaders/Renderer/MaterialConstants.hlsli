@@ -7,7 +7,7 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_MATERIALCONSTANTS_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_MATERIALCONSTANTS_HLSLI
 
-// ABI: must match sizeof(oxygen::engine::MaterialConstants) == 80
+// ABI: must match sizeof(oxygen::engine::MaterialConstants) == 96
 struct MaterialConstants
 {
     float4 base_color;
@@ -25,6 +25,8 @@ struct MaterialConstants
     float alpha_cutoff;
     float2 uv_scale;
     float2 uv_offset;
+    float3 emissive_factor;
+    uint emissive_texture_index;
 };
 
 #endif  // OXYGEN_D3D12_SHADERS_RENDERER_MATERIALCONSTANTS_HLSLI

@@ -13,6 +13,7 @@ struct MaterialSurface
     float  metalness;
     float  roughness;
     float  ao;
+    float3 emissive;
 
     float3 N;
     float3 V;
@@ -34,6 +35,7 @@ MaterialSurface EvaluateMaterialSurface(
     s.metalness = 0.0;
     s.roughness = 1.0;
     s.ao        = 1.0;
+    s.emissive  = float3(0.0, 0.0, 0.0);
 
     s.N = SafeNormalize(world_normal);
     // Fallback for degenerate normals from vertex data
@@ -184,6 +186,17 @@ MaterialSurface EvaluateMaterialSurface(
                 SamplerState samp = SamplerDescriptorHeap[0];
                 s.ao *= saturate(ao_tex.Sample(samp, uv).r);
             }
+        }
+
+        // Emissive: self-illumination that bypasses BRDF.
+        // Start with the constant factor, then modulate by texture if present.
+        s.emissive = mat.emissive_factor;
+        if (!no_texture_sampling && mat.emissive_texture_index != 0xFFFFFFFFu) {
+            Texture2D<float4> emissive_tex = ResourceDescriptorHeap[mat.emissive_texture_index];
+            SamplerState samp = SamplerDescriptorHeap[0];
+            // Emissive textures are typically sRGB-encoded.
+            float3 emissive_sample = SrgbToLinear(emissive_tex.Sample(samp, uv).rgb);
+            s.emissive *= emissive_sample;
         }
     }
 

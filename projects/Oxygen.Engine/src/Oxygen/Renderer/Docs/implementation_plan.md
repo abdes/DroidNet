@@ -95,34 +95,37 @@ HDR content that benefits from bloom.
 **PAK format status**: `MaterialAssetDesc` already has `emissive_texture` and
 `emissive_factor[3]` (HalfFloat). No format changes needed.
 
+**Status**: Completed January 7, 2026.
+
 ### 2.1 Runtime MaterialConstants Extension
 
-- [ ] Add `emissive_factor` (float3) to `MaterialConstants` struct
-- [ ] Add `emissive_texture_index` (uint32) to texture slots
-- [ ] Update HLSL `MaterialConstants.hlsli` to match (maintain 16-byte alignment)
-- [ ] Ensure `sizeof(MaterialConstants)` stays root-CBV friendly
+- [x] Add `emissive_factor` (float3) to `MaterialConstants` struct
+- [x] Add `emissive_texture_index` (uint32) to texture slots
+- [x] Update HLSL `MaterialConstants.hlsli` to match (maintain 16-byte alignment)
+- [x] Ensure `sizeof(MaterialConstants)` stays root-CBV friendly (now 96 bytes)
 - [ ] Add `MaterialConstants::GetPermutationDefines()` method (deferred to Phase 2+)
 
 ### 2.2 MaterialAsset & MaterialBinder Integration
 
-- [ ] Add `GetEmissiveFactor()` getter to `MaterialAsset` (PAK data already
+- [x] Add `GetEmissiveFactor()` getter to `MaterialAsset` (PAK data already
       loaded into `desc_`, just expose it)
-- [ ] Add `GetEmissiveTexture()` and `GetEmissiveTextureKey()` getters
-- [ ] Extend `texture_resource_keys_` vector to include emissive slot
-- [ ] Update `MaterialLoader` to populate emissive resource key
-- [ ] Update `SerializeMaterialConstants()` in `MaterialBinder.cpp` to populate
+- [x] Add `GetEmissiveTexture()` and `GetEmissiveTextureKey()` getters
+- [x] Extend `texture_resource_keys_` vector to include emissive slot (index 5)
+- [x] Update `AssetLoader` to populate emissive resource key
+- [x] Update `SerializeMaterialConstants()` in `MaterialBinder.cpp` to populate
       `emissive_factor` and `emissive_texture_index`
 
 ### 2.3 Shader Integration
 
-- [ ] Update `ForwardMaterialEval.hlsli`: sample emissive texture, apply
-      strength
-- [ ] Update `ForwardMesh.hlsl` PS: add emissive to final output before
+- [x] Update `ForwardMaterialEval.hlsli`: sample emissive texture, apply
+      strength (sRGB→linear conversion)
+- [x] Update `ForwardMesh.hlsl` PS: add emissive to final output before
       tone mapping
-- [ ] Ensure emissive bypasses lighting (additive, not multiplied by BRDF)
+- [x] Ensure emissive bypasses lighting (additive, not multiplied by BRDF)
 
 ### 2.4 Validation
 
+- [ ] Create new emissive_scene.yaml under `RenderScene` demo
 - [ ] Test scene with emissive-only objects (no other lighting)
 - [ ] Verify emissive works with alpha-tested materials
 

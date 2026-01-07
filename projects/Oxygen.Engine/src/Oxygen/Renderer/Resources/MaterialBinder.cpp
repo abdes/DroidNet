@@ -235,6 +235,14 @@ auto SerializeMaterialConstants(
   constants.uv_scale = { 1.0F, 1.0F };
   constants.uv_offset = { 0.0F, 0.0F };
 
+  // Emissive: factor and texture for self-illumination / glow.
+  const auto emissive_factor = material.resolved_asset->GetEmissiveFactor();
+  constants.emissive_factor
+    = { emissive_factor[0], emissive_factor[1], emissive_factor[2] };
+  constants.emissive_texture_index
+    = ResolveTextureIndex(material.resolved_asset->GetEmissiveTextureKey(),
+      material.resolved_asset->GetEmissiveTexture());
+
   return constants;
 }
 

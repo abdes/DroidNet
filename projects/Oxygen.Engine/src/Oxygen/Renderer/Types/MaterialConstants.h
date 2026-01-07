@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <glm/vec2.hpp>
+#include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Renderer/api_export.h>
@@ -53,7 +54,11 @@ struct MaterialConstants {
   float alpha_cutoff { 0.5F };
   glm::vec2 uv_scale { 1.0F, 1.0F };
   glm::vec2 uv_offset { 0.0F, 0.0F };
+  glm::vec3 emissive_factor { 0.0F, 0.0F, 0.0F };
+  uint32_t emissive_texture_index { 0xFFFFFFFFU };
 };
+static_assert(sizeof(MaterialConstants) == 96,
+  "MaterialConstants size must be 96 bytes (6 x 16-byte rows)");
 static_assert(sizeof(MaterialConstants) % 16 == 0,
   "MaterialConstants size must be 16-byte aligned");
 

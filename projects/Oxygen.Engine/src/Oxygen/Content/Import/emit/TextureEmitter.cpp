@@ -148,6 +148,19 @@ auto SelectAmbientOcclusionTexture(const ufbx_material& material)
   return nullptr;
 }
 
+auto SelectEmissiveTexture(const ufbx_material& material) -> const ufbx_texture*
+{
+  const auto& pbr = material.pbr.emission_color;
+  if (!pbr.feature_disabled && pbr.texture != nullptr) {
+    return pbr.texture;
+  }
+  const auto& fbx = material.fbx.emission_color;
+  if (!fbx.feature_disabled && fbx.texture != nullptr) {
+    return fbx.texture;
+  }
+  return nullptr;
+}
+
 auto EnsureFallbackTexture(TextureEmissionState& state) -> void
 {
   if (!state.table.empty()) {
