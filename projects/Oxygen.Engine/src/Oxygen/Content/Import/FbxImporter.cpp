@@ -83,6 +83,48 @@ namespace {
   using coord::EngineWorldTargetAxes;
   using coord::ToGlmMat4;
 
+  /// Returns a human-readable name for a ufbx shader type.
+  [[nodiscard]] constexpr auto ShaderTypeName(ufbx_shader_type type) noexcept
+    -> const char*
+  {
+    switch (type) {
+    case UFBX_SHADER_FBX_LAMBERT:
+      return "FBX_LAMBERT";
+    case UFBX_SHADER_FBX_PHONG:
+      return "FBX_PHONG";
+    case UFBX_SHADER_OSL_STANDARD_SURFACE:
+      return "OSL_STANDARD_SURFACE";
+    case UFBX_SHADER_ARNOLD_STANDARD_SURFACE:
+      return "ARNOLD_STANDARD_SURFACE";
+    case UFBX_SHADER_3DS_MAX_PHYSICAL_MATERIAL:
+      return "3DS_MAX_PHYSICAL";
+    case UFBX_SHADER_3DS_MAX_PBR_METAL_ROUGH:
+      return "3DS_MAX_PBR_METAL_ROUGH";
+    case UFBX_SHADER_3DS_MAX_PBR_SPEC_GLOSS:
+      return "3DS_MAX_PBR_SPEC_GLOSS";
+    case UFBX_SHADER_GLTF_MATERIAL:
+      return "GLTF_MATERIAL";
+    case UFBX_SHADER_OPENPBR_MATERIAL:
+      return "OPENPBR_MATERIAL";
+    case UFBX_SHADER_SHADERFX_GRAPH:
+      return "SHADERFX_GRAPH";
+    case UFBX_SHADER_BLENDER_PHONG:
+      return "BLENDER_PHONG";
+    case UFBX_SHADER_WAVEFRONT_MTL:
+      return "WAVEFRONT_MTL";
+    default:
+      return "UNKNOWN";
+    }
+  }
+
+  /// Returns true if the shader type supports PBR metalness/roughness workflow.
+  [[nodiscard]] constexpr auto IsPbrShader(const ufbx_material& mat) noexcept
+    -> bool
+  {
+    return mat.shader_type >= UFBX_SHADER_OSL_STANDARD_SURFACE
+      || mat.features.pbr.enabled;
+  }
+
   // Geometry and scene emission, FBX helpers, and naming helpers live in
   // dedicated modules under Import/emit, Import/fbx, and Import/util.
 
@@ -414,9 +456,9 @@ namespace {
           }
         }
 
-        LOG_F(INFO, "Material '{}': shader_type={} model='{}' is_lambert={}",
-          fbx_material_name, (int)material->shader_type, shading_model,
-          is_lambert);
+        LOG_F(INFO, "Material '{}': shader={}{}", fbx_material_name,
+          ShaderTypeName(material->shader_type),
+          IsPbrShader(*material) ? " (PBR)" : "");
 
         // Lambert materials in FBX often have garbage/default specular values.
         // UE5 imports them as 0.5 (default PBR specular).
@@ -464,6 +506,36 @@ namespace {
             ToFloat(material->pbr.ambient_occlusion.value_real)) };
         }
 
+        // Extract emissive factor from PBR or FBX properties.
+        // Emissive is HDR-capable (not clamped to 0-1).
+        {
+          ufbx_vec4 emission = { 0.0, 0.0, 0.0, 0.0 };
+          float emission_factor = 1.0F;
+
+          if (material->pbr.emission_color.has_value
+            && material->pbr.emission_color.value_components >= 3) {
+            emission = material->pbr.emission_color.value_vec4;
+          } else if (material->fbx.emission_color.has_value
+            && material->fbx.emission_color.value_components >= 3) {
+            const auto ec = material->fbx.emission_color.value_vec3;
+            emission = { ec.x, ec.y, ec.z, 0.0 };
+          }
+
+          if (material->pbr.emission_factor.has_value) {
+            emission_factor = ToFloat(material->pbr.emission_factor.value_real);
+          } else if (material->fbx.emission_factor.has_value) {
+            emission_factor = ToFloat(material->fbx.emission_factor.value_real);
+          }
+
+          // Emissive values can exceed 1.0 for HDR glow effects.
+          desc.emissive_factor[0]
+            = oxygen::data::HalfFloat { ToFloat(emission.x) * emission_factor };
+          desc.emissive_factor[1]
+            = oxygen::data::HalfFloat { ToFloat(emission.y) * emission_factor };
+          desc.emissive_factor[2]
+            = oxygen::data::HalfFloat { ToFloat(emission.z) * emission_factor };
+        }
+
         if (material->pbr.normal_map.has_value) {
           desc.normal_scale
             = (std::max)(0.0F, ToFloat(material->pbr.normal_map.value_real));
@@ -486,6 +558,7 @@ namespace {
         const auto metallic_tex = emit::SelectMetallicTexture(*material);
         const auto roughness_tex = emit::SelectRoughnessTexture(*material);
         const auto ao_tex = emit::SelectAmbientOcclusionTexture(*material);
+        const auto emissive_tex = emit::SelectEmissiveTexture(*material);
 
         // If metallic and roughness reference the same underlying file
         // texture, treat it as a packed map using glTF semantics
@@ -507,15 +580,18 @@ namespace {
           request, out, textures, roughness_tex);
         const auto ao_index = emit::GetOrCreateTextureResourceIndex(
           request, out, textures, ao_tex);
+        const auto emissive_index = emit::GetOrCreateTextureResourceIndex(
+          request, out, textures, emissive_tex);
 
         desc.base_color_texture = base_color_index;
         desc.normal_texture = normal_index;
         desc.metallic_texture = metallic_index;
         desc.roughness_texture = roughness_index;
         desc.ambient_occlusion_texture = ao_index;
+        desc.emissive_texture = emissive_index;
 
         if (base_color_index != 0 || normal_index != 0 || metallic_index != 0
-          || roughness_index != 0 || ao_index != 0) {
+          || roughness_index != 0 || ao_index != 0 || emissive_index != 0) {
           desc.flags &= ~oxygen::data::pak::kMaterialFlag_NoTextureSampling;
         }
       }

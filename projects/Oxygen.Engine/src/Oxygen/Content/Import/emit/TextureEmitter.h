@@ -79,4 +79,8 @@ auto EnsureFallbackTexture(TextureEmissionState& state) -> void;
 [[nodiscard]] auto SelectAmbientOcclusionTexture(const ufbx_material& material)
   -> const ufbx_texture*;
 
+//! Selects the emissive texture from a material.
+[[nodiscard]] auto SelectEmissiveTexture(const ufbx_material& material)
+  -> const ufbx_texture*;
+
 } // namespace oxygen::content::import::emit

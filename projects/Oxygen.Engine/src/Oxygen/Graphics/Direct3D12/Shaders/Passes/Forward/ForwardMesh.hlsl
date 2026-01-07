@@ -294,11 +294,15 @@ float4 PS(VSOutput input) : SV_Target0 {
     const float3 ambient = base_rgb * (1.0f - metalness) * ambient_strength;
     const float3 shaded = (direct + ambient) * input.color;
 
+    // Emissive: additive self-illumination that bypasses lighting.
+    // Applied after shading but before tone mapping.
+    const float3 final_color = shaded + surf.emissive;
+
     // Output alpha: for ALPHA_TEST path use 1.0 (already clipped), else use
     // base_a for potential transparent blending in TransparentPass.
 #ifdef ALPHA_TEST
-    return float4(LinearToSrgb(shaded), 1.0f);
+    return float4(LinearToSrgb(final_color), 1.0f);
 #else
-    return float4(LinearToSrgb(shaded), surf.base_a);
+    return float4(LinearToSrgb(final_color), surf.base_a);
 #endif
 }

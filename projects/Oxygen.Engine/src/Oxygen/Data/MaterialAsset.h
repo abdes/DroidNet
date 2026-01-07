@@ -188,6 +188,22 @@ public:
     return desc_.ambient_occlusion_texture;
   }
 
+  //! Returns the emissive factor as RGB floats.
+  [[nodiscard]] auto GetEmissiveFactor() const noexcept -> std::array<float, 3>
+  {
+    return {
+      desc_.emissive_factor[0].ToFloat(),
+      desc_.emissive_factor[1].ToFloat(),
+      desc_.emissive_factor[2].ToFloat(),
+    };
+  }
+
+  //! Returns the index of the emissive texture.
+  [[nodiscard]] auto GetEmissiveTexture() const noexcept -> pak::ResourceIndexT
+  {
+    return desc_.emissive_texture;
+  }
+
   //! Creates a default material for procedural meshes and fallback scenarios.
   OXGN_DATA_NDAPI static auto CreateDefault()
     -> std::shared_ptr<const MaterialAsset>;
@@ -261,6 +277,15 @@ public:
   {
     if (texture_resource_keys_.size() > 4) {
       return texture_resource_keys_[4];
+    }
+    return oxygen::content::ResourceKey { 0 };
+  }
+
+  [[nodiscard]] auto GetEmissiveTextureKey() const noexcept
+    -> oxygen::content::ResourceKey
+  {
+    if (texture_resource_keys_.size() > 5) {
+      return texture_resource_keys_[5];
     }
     return oxygen::content::ResourceKey { 0 };
   }

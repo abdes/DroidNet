@@ -240,7 +240,8 @@ namespace {
       if (SelectBaseColorTexture(*mat) != nullptr || SelectNormalTexture(*mat)
         || SelectMetallicTexture(*mat) != nullptr
         || SelectRoughnessTexture(*mat) != nullptr
-        || SelectAmbientOcclusionTexture(*mat) != nullptr) {
+        || SelectAmbientOcclusionTexture(*mat) != nullptr
+        || SelectEmissiveTexture(*mat) != nullptr) {
         has_any_material_texture = true;
         break;
       }
