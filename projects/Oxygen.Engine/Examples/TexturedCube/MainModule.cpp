@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -46,6 +47,9 @@
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 
 #if defined(OXYGEN_WINDOWS)
@@ -56,6 +60,9 @@
 #endif
 
 namespace {
+
+using oxygen::Quat;
+using oxygen::Vec3;
 
 #if defined(OXYGEN_WINDOWS)
 
@@ -134,7 +141,53 @@ auto TryBrowseForPngFile(std::string& out_utf8_path) -> bool
   return true;
 }
 
-auto DecodePngRgba8Wic(const std::filesystem::path& file_path,
+auto TryBrowseForImageFile(std::string& out_utf8_path) -> bool
+{
+  ScopedCoInitialize com;
+
+  Microsoft::WRL::ComPtr<IFileOpenDialog> dlg;
+  const HRESULT hr = CoCreateInstance(
+    CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg));
+  if (FAILED(hr) || !dlg) {
+    return false;
+  }
+
+  constexpr COMDLG_FILTERSPEC kFilters[] = {
+    { L"Images (*.jpg;*.jpeg;*.png)", L"*.jpg;*.jpeg;*.png" },
+    { L"All files (*.*)", L"*.*" },
+  };
+  (void)dlg->SetFileTypes(static_cast<UINT>(std::size(kFilters)), kFilters);
+  (void)dlg->SetDefaultExtension(L"jpg");
+
+  const HRESULT show_hr = dlg->Show(nullptr);
+  if (FAILED(show_hr)) {
+    return false;
+  }
+
+  Microsoft::WRL::ComPtr<IShellItem> item;
+  if (FAILED(dlg->GetResult(&item)) || !item) {
+    return false;
+  }
+
+  PWSTR wide_path = nullptr;
+  const HRESULT name_hr = item->GetDisplayName(SIGDN_FILESYSPATH, &wide_path);
+  if (FAILED(name_hr) || !wide_path) {
+    return false;
+  }
+
+  std::string utf8;
+  oxygen::string_utils::WideToUtf8(wide_path, utf8);
+  CoTaskMemFree(wide_path);
+
+  if (utf8.empty()) {
+    return false;
+  }
+
+  out_utf8_path = std::move(utf8);
+  return true;
+}
+
+auto DecodeImageRgba8Wic(const std::filesystem::path& file_path,
   std::vector<std::byte>& out_rgba8, std::uint32_t& out_width,
   std::uint32_t& out_height, std::string& out_error) -> bool
 {
@@ -211,6 +264,252 @@ auto DecodePngRgba8Wic(const std::filesystem::path& file_path,
 }
 
 #endif
+
+auto AlignUpSize(const std::size_t value, const std::size_t alignment)
+  -> std::size_t
+{
+  if (alignment == 0U) {
+    return value;
+  }
+  const auto mask = alignment - 1U;
+  return (value + mask) & ~mask;
+}
+
+auto TryEstimateSunRayDirFromCubemapFace(const std::vector<std::byte>& rgba8,
+  const std::uint32_t face_size, const std::uint32_t face_index,
+  Vec3& out_sun_ray_dir_ws) -> bool
+{
+  if (face_size == 0U || face_index >= 6U) {
+    return false;
+  }
+
+  constexpr std::size_t kBytesPerPixel = 4U;
+  constexpr std::size_t kRowPitchAlignment = 256U;
+  const std::size_t face_bytes_per_row
+    = static_cast<std::size_t>(face_size) * kBytesPerPixel;
+  const std::size_t row_pitch
+    = AlignUpSize(face_bytes_per_row, kRowPitchAlignment);
+  const std::size_t slice_pitch
+    = row_pitch * static_cast<std::size_t>(face_size);
+  const std::size_t required_bytes = slice_pitch * 6U;
+  if (rgba8.size() < required_bytes) {
+    return false;
+  }
+
+  // Find the brightest pixel on the chosen face.
+  std::uint32_t best_x = face_size / 2U;
+  std::uint32_t best_y = face_size / 2U;
+  float best_luma = -1.0f;
+
+  const std::size_t face_base
+    = static_cast<std::size_t>(face_index) * slice_pitch;
+  for (std::uint32_t y = 0U; y < face_size; ++y) {
+    const std::size_t row_base
+      = face_base + static_cast<std::size_t>(y) * row_pitch;
+    for (std::uint32_t x = 0U; x < face_size; ++x) {
+      const std::size_t off = row_base + static_cast<std::size_t>(x) * 4U;
+      const auto r = std::to_integer<std::uint8_t>(rgba8[off + 0U]);
+      const auto g = std::to_integer<std::uint8_t>(rgba8[off + 1U]);
+      const auto b = std::to_integer<std::uint8_t>(rgba8[off + 2U]);
+      const float rf = static_cast<float>(r) / 255.0f;
+      const float gf = static_cast<float>(g) / 255.0f;
+      const float bf = static_cast<float>(b) / 255.0f;
+      const float luma = 0.2126f * rf + 0.7152f * gf + 0.0722f * bf;
+      if (luma > best_luma) {
+        best_luma = luma;
+        best_x = x;
+        best_y = y;
+      }
+    }
+  }
+
+  // Convert that pixel to a world-space sun direction.
+  // We assume the sun is on the +Y cubemap face, and use a DirectX-style
+  // mapping where for +Y: dir = normalize( u, 1, -v ).
+  const float u
+    = (static_cast<float>(best_x) + 0.5f) / static_cast<float>(face_size);
+  const float v
+    = (static_cast<float>(best_y) + 0.5f) / static_cast<float>(face_size);
+  const float u_ndc = 2.0f * u - 1.0f;
+  const float v_ndc = 2.0f * v - 1.0f;
+
+  const Vec3 dir_to_sun = glm::normalize(Vec3 { u_ndc, 1.0f, -v_ndc });
+  if (!std::isfinite(dir_to_sun.x) || !std::isfinite(dir_to_sun.y)
+    || !std::isfinite(dir_to_sun.z)) {
+    return false;
+  }
+
+  // DirectionalLight direction convention in this demo: use the direction
+  // *toward* the sun (so the light appears to come from that direction).
+  out_sun_ray_dir_ws = dir_to_sun;
+  return true;
+}
+
+auto MakeRotationFromForwardToDirWs(const Vec3& dir_ws) -> Quat
+{
+  const Vec3 from = glm::normalize(oxygen::space::move::Forward);
+  const Vec3 to = glm::normalize(dir_ws);
+  const float d = glm::dot(from, to);
+  if (d > 0.9999f) {
+    return Quat { 1.0f, 0.0f, 0.0f, 0.0f };
+  }
+  if (d < -0.9999f) {
+    // 180-degree flip; pick a stable axis not parallel to "from".
+    Vec3 axis = glm::cross(from, oxygen::space::move::Up);
+    if (glm::dot(axis, axis) < 1e-6f) {
+      axis = glm::cross(from, oxygen::space::move::Right);
+    }
+    axis = glm::normalize(axis);
+    return glm::angleAxis(glm::pi<float>(), axis);
+  }
+
+  Vec3 axis = glm::cross(from, to);
+  const float axis_len2 = glm::dot(axis, axis);
+  if (axis_len2 < 1e-8f) {
+    return Quat { 1.0f, 0.0f, 0.0f, 0.0f };
+  }
+  axis = glm::normalize(axis);
+  const float angle = std::acos(std::clamp(d, -1.0f, 1.0f));
+  return glm::angleAxis(angle, axis);
+}
+
+auto TryBuildCubemapRgba8FromImageLayout(const std::vector<std::byte>& rgba8,
+  const std::uint32_t width, const std::uint32_t height,
+  std::vector<std::byte>& out_padded_faces, std::uint32_t& out_face_size,
+  std::string& out_error) -> bool
+{
+  out_padded_faces.clear();
+  out_face_size = 0U;
+  out_error.clear();
+
+  if (rgba8.empty() || width == 0U || height == 0U) {
+    out_error = "Invalid image";
+    return false;
+  }
+
+  constexpr std::size_t kBytesPerPixel = 4U;
+  const std::size_t expected_bytes = static_cast<std::size_t>(width)
+    * static_cast<std::size_t>(height) * kBytesPerPixel;
+  if (rgba8.size() < expected_bytes) {
+    out_error = "Decoded pixel buffer too small";
+    return false;
+  }
+
+  enum class Layout : std::uint8_t {
+    kStripHorizontal,
+    kStripVertical,
+    kCrossHorizontal,
+    kCrossVertical,
+  };
+
+  std::optional<Layout> layout;
+  std::uint32_t face_size = 0U;
+
+  // Supported layouts:
+  // - Strip: 6x1 or 1x6 faces
+  // - Cross: 4x3 (horizontal cross) or 3x4 (vertical cross)
+  if (width == height * 6U) {
+    layout = Layout::kStripHorizontal;
+    face_size = height;
+  } else if (height == width * 6U) {
+    layout = Layout::kStripVertical;
+    face_size = width;
+  } else if (width % 4U == 0U && height % 3U == 0U
+    && (width / 4U) == (height / 3U)) {
+    layout = Layout::kCrossHorizontal;
+    face_size = width / 4U;
+  } else if (width % 3U == 0U && height % 4U == 0U
+    && (width / 3U) == (height / 4U)) {
+    layout = Layout::kCrossVertical;
+    face_size = width / 3U;
+  } else {
+    out_error = "Skybox image must be: 6x1 strip, 1x6 strip, 4x3 cross, or 3x4 "
+                "cross (square faces)";
+    return false;
+  }
+
+  if (face_size == 0U) {
+    out_error = "Invalid skybox face size";
+    return false;
+  }
+
+  constexpr std::size_t kRowPitchAlignment = 256U;
+  const std::size_t face_bytes_per_row
+    = static_cast<std::size_t>(face_size) * kBytesPerPixel;
+  const std::size_t row_pitch
+    = AlignUpSize(face_bytes_per_row, kRowPitchAlignment);
+  const std::size_t slice_pitch
+    = row_pitch * static_cast<std::size_t>(face_size);
+
+  out_padded_faces.resize(slice_pitch * 6U);
+  std::memset(out_padded_faces.data(), 0, out_padded_faces.size());
+
+  const std::size_t src_stride
+    = static_cast<std::size_t>(width) * kBytesPerPixel;
+
+  auto CopyFace
+    = [&](const std::uint32_t dst_face, const std::uint32_t src_face_x,
+        const std::uint32_t src_face_y) -> void {
+    const std::size_t dst_slice_offset
+      = static_cast<std::size_t>(dst_face) * slice_pitch;
+    const std::uint32_t base_x = src_face_x * face_size;
+    const std::uint32_t base_y = src_face_y * face_size;
+
+    for (std::uint32_t y = 0U; y < face_size; ++y) {
+      const std::uint32_t src_x_px = base_x;
+      const std::uint32_t src_y_px = base_y + y;
+      const std::size_t src_offset
+        = static_cast<std::size_t>(src_y_px) * src_stride
+        + static_cast<std::size_t>(src_x_px) * kBytesPerPixel;
+      const std::size_t dst_offset
+        = dst_slice_offset + static_cast<std::size_t>(y) * row_pitch;
+      std::memcpy(out_padded_faces.data() + dst_offset,
+        rgba8.data() + src_offset, face_bytes_per_row);
+    }
+  };
+
+  // D3D cube face order (array slice): +X, -X, +Y, -Y, +Z, -Z
+  switch (*layout) {
+  case Layout::kStripHorizontal:
+    for (std::uint32_t face = 0U; face < 6U; ++face) {
+      CopyFace(face, face, 0U);
+    }
+    break;
+  case Layout::kStripVertical:
+    for (std::uint32_t face = 0U; face < 6U; ++face) {
+      CopyFace(face, 0U, face);
+    }
+    break;
+  case Layout::kCrossHorizontal:
+    // Cross layout (4x3):
+    //         +Y
+    //  -X  +Z  +X  -Z
+    //         -Y
+    CopyFace(0U, 2U, 1U); // +X
+    CopyFace(1U, 0U, 1U); // -X
+    CopyFace(2U, 1U, 0U); // +Y
+    CopyFace(3U, 1U, 2U); // -Y
+    CopyFace(4U, 1U, 1U); // +Z
+    CopyFace(5U, 3U, 1U); // -Z
+    break;
+  case Layout::kCrossVertical:
+    // Cross layout (3x4):
+    //         +Y
+    //  -X  +Z  +X
+    //         -Y
+    //         -Z
+    CopyFace(0U, 2U, 1U); // +X
+    CopyFace(1U, 0U, 1U); // -X
+    CopyFace(2U, 1U, 0U); // +Y
+    CopyFace(3U, 1U, 2U); // -Y
+    CopyFace(4U, 1U, 1U); // +Z
+    CopyFace(5U, 1U, 3U); // -Z
+    break;
+  }
+
+  out_face_size = face_size;
+  return true;
+}
 
 auto FlipRgba8Vertically(std::span<std::byte> rgba8, const std::uint32_t width,
   const std::uint32_t height) -> void
@@ -558,15 +857,27 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 
   if (!point_light_node_.IsAlive()) {
     point_light_node_ = scene_->CreateNode("Sun");
-    point_light_node_.GetTransform().SetLocalPosition({ 7.0f, -6.0f, 5.5f });
+    point_light_node_.GetTransform().SetLocalPosition({ 0.0f, -20.0f, 20.0f });
 
-    auto point_light = std::make_unique<scene::PointLight>();
-    point_light->Common().intensity = 180.0F;
-    point_light->Common().color_rgb = { 1.0F, 0.98F, 0.95F };
-    point_light->SetRange(35.0F);
+    auto sun_light = std::make_unique<scene::DirectionalLight>();
+    sun_light->Common().intensity = 12.0F;
+    sun_light->Common().color_rgb = { 1.0F, 0.98F, 0.95F };
+    sun_light->SetIsSunLight(true);
+    sun_light->SetEnvironmentContribution(true);
 
-    const bool attached = point_light_node_.AttachLight(std::move(point_light));
-    CHECK_F(attached, "Failed to attach PointLight to Sun");
+    const bool attached = point_light_node_.AttachLight(std::move(sun_light));
+    CHECK_F(attached, "Failed to attach DirectionalLight to Sun");
+  }
+
+  // If we have a skybox-derived sun direction, keep the Sun node aligned.
+  if (skybox_sun_ray_dir_valid_ && point_light_node_.IsAlive()) {
+    auto tf = point_light_node_.GetTransform();
+    const Vec3 dir = glm::normalize(skybox_sun_ray_dir_ws_);
+    const Quat rot = MakeRotationFromForwardToDirWs(dir);
+    tf.SetLocalRotation(rot);
+
+    // Position the node along the sun's apparent direction (purely for debug).
+    tf.SetLocalPosition(camera_target_ + dir * 50.0f);
   }
 
   if (!fill_light_node_.IsAlive()) {
@@ -597,7 +908,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
         png_status_message_ = "PNG loading only supported on Windows";
 #else
         std::string decode_error;
-        if (!DecodePngRgba8Wic(
+        if (!DecodeImageRgba8Wic(
               png_path, png_rgba8_, png_width_, png_height_, decode_error)) {
           png_status_message_
             = decode_error.empty() ? "PNG decode failed" : decode_error;
@@ -607,6 +918,128 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 #endif
       }
     }
+  }
+
+  if (skybox_load_requested_) {
+    skybox_load_requested_ = false;
+
+    const std::filesystem::path img_path { std::string {
+      skybox_path_.data() } };
+    if (img_path.empty()) {
+      skybox_status_message_ = "No skybox path provided";
+    } else {
+      auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+      if (!asset_loader) {
+        skybox_status_message_ = "AssetLoader unavailable";
+      } else {
+#if !defined(OXYGEN_WINDOWS)
+        skybox_status_message_ = "Skybox loading only supported on Windows";
+#else
+        std::string decode_error;
+        if (!DecodeImageRgba8Wic(img_path, skybox_rgba8_, skybox_width_,
+              skybox_height_, decode_error)) {
+          skybox_status_message_
+            = decode_error.empty() ? "Skybox decode failed" : decode_error;
+        } else {
+          skybox_reupload_requested_ = true;
+        }
+#endif
+      }
+    }
+  }
+
+  if (skybox_reupload_requested_) {
+    skybox_reupload_requested_ = false;
+
+#if !defined(OXYGEN_WINDOWS)
+    skybox_status_message_ = "Skybox upload only supported on Windows";
+#else
+    if (skybox_rgba8_.empty() || skybox_width_ == 0U || skybox_height_ == 0U) {
+      skybox_status_message_ = "No decoded skybox pixels";
+    } else {
+      auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+      if (!asset_loader) {
+        skybox_status_message_ = "AssetLoader unavailable";
+      } else {
+        std::vector<std::byte> cubemap_padded;
+        std::uint32_t face_size = 0U;
+        std::string pack_error;
+        if (!TryBuildCubemapRgba8FromImageLayout(skybox_rgba8_, skybox_width_,
+              skybox_height_, cubemap_padded, face_size, pack_error)) {
+          skybox_status_message_
+            = pack_error.empty() ? "Skybox pack failed" : pack_error;
+        } else {
+          // Estimate sun direction from the +Y face (face index 2).
+          Vec3 sun_ray_dir_ws { 0.0f, -1.0f, 0.0f };
+          skybox_sun_ray_dir_valid_ = TryEstimateSunRayDirFromCubemapFace(
+            cubemap_padded, face_size, 2U, sun_ray_dir_ws);
+          if (skybox_sun_ray_dir_valid_) {
+            skybox_sun_ray_dir_ws_ = sun_ray_dir_ws;
+          }
+
+          using oxygen::data::pak::v2::TextureResourceDesc;
+
+          // Use a fresh key each upload so the renderer doesn't keep an older
+          // bindless entry for the same key.
+          skybox_texture_key_ = asset_loader->MintSyntheticTextureKey();
+
+          TextureResourceDesc desc {};
+          desc.data_offset = static_cast<oxygen::data::pak::v2::OffsetT>(
+            sizeof(TextureResourceDesc));
+          desc.size_bytes = static_cast<oxygen::data::pak::v2::DataBlobSizeT>(
+            cubemap_padded.size());
+          desc.texture_type
+            = static_cast<std::uint8_t>(oxygen::TextureType::kTextureCube);
+          desc.compression_type = 0;
+          desc.width = face_size;
+          desc.height = face_size;
+          desc.depth = 1;
+          desc.array_layers = 6;
+          desc.mip_levels = 1;
+          desc.format = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNorm);
+          desc.alignment = 256;
+
+          std::vector<std::uint8_t> packed;
+          packed.resize(sizeof(TextureResourceDesc) + cubemap_padded.size());
+          std::memcpy(packed.data(), &desc, sizeof(TextureResourceDesc));
+          std::memcpy(packed.data() + sizeof(TextureResourceDesc),
+            cubemap_padded.data(), cubemap_padded.size());
+
+          auto tex = co_await asset_loader->LoadResourceAsync<
+            oxygen::data::TextureResource>(
+            oxygen::content::CookedResourceData<oxygen::data::TextureResource> {
+              .key = skybox_texture_key_,
+              .bytes
+              = std::span<const std::uint8_t>(packed.data(), packed.size()),
+            });
+          if (!tex) {
+            skybox_status_message_ = "Skybox texture decode failed";
+          } else {
+            skybox_last_face_size_ = static_cast<int>(face_size);
+            skybox_status_message_ = "Loaded";
+
+            // Apply as scene sky.
+            auto env = scene_->GetEnvironment();
+            if (!env) {
+              auto new_env = std::make_unique<scene::SceneEnvironment>();
+              auto& sky = new_env->AddSystem<scene::environment::SkySphere>();
+              sky.SetSource(scene::environment::SkySphereSource::kCubemap);
+              sky.SetCubemapResource(skybox_texture_key_);
+              scene_->SetEnvironment(std::move(new_env));
+            } else {
+              auto sky = env->TryGetSystem<scene::environment::SkySphere>();
+              if (!sky) {
+                auto& sky_ref = env->AddSystem<scene::environment::SkySphere>();
+                sky = observer_ptr<scene::environment::SkySphere>(&sky_ref);
+              }
+              sky->SetSource(scene::environment::SkySphereSource::kCubemap);
+              sky->SetCubemapResource(skybox_texture_key_);
+            }
+          }
+        }
+      }
+    }
+#endif
   }
 
   if (png_reupload_requested_) {
@@ -1100,6 +1533,33 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
     if (png_last_width_ > 0 && png_last_height_ > 0) {
       ImGui::Text("Last PNG: %dx%d", png_last_width_, png_last_height_);
     }
+  }
+
+  ImGui::Separator();
+  ImGui::TextUnformatted("Skybox:");
+
+  ImGui::InputText("Skybox path", skybox_path_.data(), skybox_path_.size());
+  if (ImGui::Button("Browse skybox...")) {
+#if defined(OXYGEN_WINDOWS)
+    std::string chosen;
+    if (TryBrowseForImageFile(chosen)) {
+      std::snprintf(
+        skybox_path_.data(), skybox_path_.size(), "%s", chosen.c_str());
+    }
+#endif
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Load skybox")) {
+    skybox_load_requested_ = true;
+    skybox_status_message_.clear();
+  }
+
+  if (!skybox_status_message_.empty()) {
+    ImGui::Text("Skybox: %s", skybox_status_message_.c_str());
+  }
+  if (skybox_last_face_size_ > 0) {
+    ImGui::Text("Last skybox face: %dx%d", skybox_last_face_size_,
+      skybox_last_face_size_);
   }
 
   ImGui::Separator();

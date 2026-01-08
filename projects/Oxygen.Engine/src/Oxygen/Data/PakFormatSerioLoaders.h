@@ -293,6 +293,7 @@ inline auto Load(AnyReader& reader, data::pak::DirectionalLightRecord& r)
   CHECK_RESULT(reader.ReadInto(r.common));
   CHECK_RESULT(reader.ReadInto(r.angular_size_radians));
   CHECK_RESULT(reader.ReadInto(r.environment_contribution));
+  CHECK_RESULT(reader.ReadInto(r.is_sun_light));
 
   CHECK_RESULT(reader.ReadInto(r.cascade_count));
   for (auto& v : r.cascade_distances) {

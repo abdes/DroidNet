@@ -153,6 +153,20 @@ private:
   std::uint32_t png_width_ { 0U };
   std::uint32_t png_height_ { 0U };
 
+  std::array<char, 512> skybox_path_ {};
+  bool skybox_load_requested_ { false };
+  bool skybox_reupload_requested_ { false };
+  std::string skybox_status_message_ {};
+  int skybox_last_face_size_ { 0 };
+  oxygen::content::ResourceKey skybox_texture_key_ { 0U };
+
+  std::vector<std::byte> skybox_rgba8_ {};
+  std::uint32_t skybox_width_ { 0U };
+  std::uint32_t skybox_height_ { 0U };
+
+  bool skybox_sun_ray_dir_valid_ { false };
+  glm::vec3 skybox_sun_ray_dir_ws_ { 0.0f, -1.0f, 0.0f };
+
   glm::vec3 camera_target_ { 0.0f, 0.0f, 0.0f };
   float orbit_yaw_rad_ { -glm::half_pi<float>() };
   float orbit_pitch_rad_ { 0.0f };
