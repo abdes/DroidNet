@@ -4,8 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cmath>
+
 #include <glm/gtc/matrix_inverse.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 
 namespace oxygen {
@@ -19,8 +22,16 @@ ResolvedView::ResolvedView(const Params& p)
   , pixel_jitter_(p.view_config.pixel_jitter)
   , reverse_z_(p.view_config.reverse_z)
   , mirrored_(p.view_config.mirrored)
+  , near_plane_(p.near_plane)
+  , far_plane_(p.far_plane)
   , depth_range_(p.depth_range)
 {
+  CHECK_F(std::isfinite(near_plane_) && near_plane_ > 0.0F,
+    "ResolvedView: near_plane must be finite and > 0 (got %f)", near_plane_);
+  CHECK_F(std::isfinite(far_plane_) && far_plane_ > near_plane_,
+    "ResolvedView: far_plane must be finite and > near_plane (got %f)",
+    far_plane_);
+
   inv_view_ = glm::affineInverse(view_);
   inv_proj_ = glm::inverse(proj_);
   view_proj_ = proj_ * view_;

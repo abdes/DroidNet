@@ -16,6 +16,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -219,6 +220,10 @@ namespace {
     };
 
     std::vector<NodeRef> node_refs;
+
+    // Mirrors `nodes`/`node_refs` order. Used to avoid emitting duplicate
+    // components when we perform fallback light attachment.
+    std::vector<std::uint8_t> node_light_emitted;
   };
 
   [[nodiscard]] auto FindGeometryKey(const ufbx_mesh* mesh,
@@ -318,6 +323,9 @@ namespace {
     const std::string_view name) -> void
   {
     ++build.light_attr_total;
+    if (node_index < build.node_light_emitted.size()) {
+      build.node_light_emitted[node_index] = 1U;
+    }
 
     const auto [atten_model, decay_exponent]
       = MapDecayToAttenuation(light.decay);
@@ -411,6 +419,67 @@ namespace {
     }
   }
 
+  auto AddMissingLightComponentsFromSceneList(const ufbx_scene& scene,
+    const ImportRequest& request, CookedContentWriter& out, SceneBuild& build)
+    -> void
+  {
+    if (scene.lights.count == 0 || build.node_refs.empty()) {
+      return;
+    }
+
+    std::unordered_map<const ufbx_node*, uint32_t> node_to_index;
+    node_to_index.reserve(build.node_refs.size());
+    for (const auto& r : build.node_refs) {
+      if (r.node != nullptr) {
+        node_to_index.emplace(r.node, r.index);
+      }
+    }
+
+    size_t instances_total = 0;
+    size_t instances_emitted = 0;
+    size_t instances_missing_nodes = 0;
+
+    for (size_t i = 0; i < scene.lights.count; ++i) {
+      const auto* light = scene.lights.data[i];
+      if (light == nullptr) {
+        continue;
+      }
+
+      for (size_t j = 0; j < light->instances.count; ++j) {
+        const auto* node = light->instances.data[j];
+        ++instances_total;
+
+        const auto it = node_to_index.find(node);
+        if (it == node_to_index.end()) {
+          ++instances_missing_nodes;
+          continue;
+        }
+
+        const uint32_t node_index = it->second;
+        if (node_index >= build.node_light_emitted.size()) {
+          ++instances_missing_nodes;
+          continue;
+        }
+
+        if (build.node_light_emitted[node_index] != 0U) {
+          continue;
+        }
+
+        const auto& ref = build.node_refs[node_index];
+        AddLightComponents(build, *light, node_index, request, out, ref.name);
+        ++instances_emitted;
+      }
+    }
+
+    if (instances_emitted > 0 || instances_missing_nodes > 0) {
+      LOG_F(INFO,
+        "Scene lights fallback: scene_lights={} instances={} emitted={} "
+        "missing_nodes={}",
+        scene.lights.count, instances_total, instances_emitted,
+        instances_missing_nodes);
+    }
+  }
+
   auto TraverseScene(const ufbx_scene& scene, const ImportRequest& request,
     CookedContentWriter& out, const std::vector<ImportedGeometry>& geometry,
     const std::string_view virtual_path, const ufbx_node* node,
@@ -459,6 +528,7 @@ namespace {
       .index = index,
       .name = name,
     });
+    build.node_light_emitted.push_back(0U);
 
     if (const auto geo_key = FindGeometryKey(node->mesh, geometry);
       geo_key.has_value()) {
@@ -696,6 +766,8 @@ auto WriteSceneAsset(const ufbx_scene& scene, const ImportRequest& request,
   uint32_t ordinal = 0;
   TraverseScene(scene, request, out, geometry, virtual_path, scene.root_node, 0,
     {}, ordinal, build);
+
+  AddMissingLightComponentsFromSceneList(scene, request, out, build);
 
   SortSceneComponents(build);
   LogSceneComponents(build);

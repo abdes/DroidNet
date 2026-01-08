@@ -20,6 +20,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -210,6 +211,16 @@ auto ShaderPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
 auto ShaderPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
   LOG_SCOPE_FUNCTION(2);
+
+  // Bind EnvironmentDynamicData from LightCullingPass for Forward+ lighting
+  if (const auto* light_culling = Context().GetPass<LightCullingPass>()) {
+    if (const auto env_addr = light_culling->GetEnvironmentCbvAddress();
+      env_addr != 0) {
+      recorder.SetGraphicsRootConstantBufferView(
+        static_cast<uint32_t>(binding::RootParam::kEnvironmentDynamicData),
+        env_addr);
+    }
+  }
 
   SetupViewPortAndScissors(recorder);
   SetupRenderTargets(recorder);
@@ -413,27 +424,59 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   // Build root bindings from generated table
   auto generated_bindings = BuildRootBindings();
 
-  // NOTE: The engine uses Passes/Forward/ForwardMesh.hlsl for forward shading.
-  // Material permutations are driven by shader defines (e.g., ALPHA_TEST)
-  // rather than separate entry points. This allows the same PS entry point
-  // to compile into different variants based on active defines.
+  // NOTE: The engine uses separate ForwardMesh_VS.hlsl and ForwardMesh_PS.hlsl
+  // for forward shading. Material permutations are driven by shader defines
+  // (e.g., ALPHA_TEST) rather than separate entry points.
+  //
+  // Debug visualization modes are controlled via boolean defines like
+  // DEBUG_LIGHT_HEATMAP, etc.
   using graphics::ShaderDefine;
+
+  // Determine debug mode from config
+  const ShaderDebugMode debug_mode
+    = config_ ? config_->debug_mode : ShaderDebugMode::kDisabled;
+
+  // Cache debug mode for rebuild detection
+  last_built_debug_mode_ = debug_mode;
+
+  // Map ShaderDebugMode to the corresponding define name
+  const auto GetDebugDefineName = [](ShaderDebugMode mode) -> const char* {
+    switch (mode) {
+    case ShaderDebugMode::kLightCullingHeatMap:
+      return "DEBUG_LIGHT_HEATMAP";
+    case ShaderDebugMode::kDepthSlice:
+      return "DEBUG_DEPTH_SLICE";
+    case ShaderDebugMode::kClusterIndex:
+      return "DEBUG_CLUSTER_INDEX";
+    default:
+      return nullptr;
+    }
+  };
 
   const auto BuildDesc
     = [&](CullMode cull_mode,
         std::vector<ShaderDefine> defines) -> GraphicsPipelineDesc {
+    // Add debug define if a debug mode is active
+    std::vector<ShaderDefine> ps_defines = defines;
+    if (const char* debug_define = GetDebugDefineName(debug_mode)) {
+      ps_defines.push_back(ShaderDefine {
+        .name = debug_define,
+        .value = "1",
+      });
+    }
+
     return GraphicsPipelineDesc::Builder()
       .SetVertexShader(ShaderRequest {
         .stage = ShaderType::kVertex,
-        .source_path = "Passes/Forward/ForwardMesh.hlsl",
+        .source_path = "Passes/Forward/ForwardMesh_VS.hlsl",
         .entry_point = "VS",
-        .defines = defines,
+        .defines = {}, // Vertex shader has no permutations
       })
       .SetPixelShader(ShaderRequest {
         .stage = ShaderType::kPixel,
-        .source_path = "Passes/Forward/ForwardMesh.hlsl",
+        .source_path = "Passes/Forward/ForwardMesh_PS.hlsl",
         .entry_point = "PS",
-        .defines = defines,
+        .defines = ps_defines,
       })
       .SetPrimitiveTopology(PrimitiveType::kTriangleList)
       .SetRasterizerState(MakeRasterDesc(cull_mode))
@@ -489,6 +532,13 @@ auto ShaderPass::NeedRebuildPipelineState() const -> bool
   const auto requested_fill
     = config_ ? config_->fill_mode : oxygen::graphics::FillMode::kSolid;
   if (last_built->RasterizerState().fill_mode != requested_fill) {
+    return true;
+  }
+
+  // Rebuild if debug mode changed (requires different shaders)
+  const ShaderDebugMode current_debug_mode
+    = config_ ? config_->debug_mode : ShaderDebugMode::kDisabled;
+  if (last_built_debug_mode_ != current_debug_mode) {
     return true;
   }
 

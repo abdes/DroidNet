@@ -17,6 +17,7 @@ void ContentLoaderPanel::Initialize(const Config& config)
   fbx_config.fbx_directory = config.content_root / "fbx";
   fbx_config.cooked_output_directory = config.content_root / ".cooked";
   fbx_config.on_scene_ready = config.on_scene_load_requested;
+  fbx_config.on_index_loaded = config.on_loose_index_loaded;
   fbx_panel_.Initialize(fbx_config);
 
   // Configure PAK loader panel

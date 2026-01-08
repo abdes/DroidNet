@@ -54,11 +54,11 @@ struct ClusterConfig {
   //! Maximum lights per cluster/tile before clamping.
   uint32_t max_lights_per_cluster { 64 };
 
-  //! Near plane for Z-binning. Usually matches camera near plane.
-  float z_near { 0.1F };
+  //! Near plane for Z-binning. Set to 0 to use camera near plane (recommended).
+  float z_near { 0.0F };
 
-  //! Far plane for Z-binning. Usually matches camera far plane.
-  float z_far { 1000.0F };
+  //! Far plane for Z-binning. Set to 0 to use camera far plane (recommended).
+  float z_far { 0.0F };
 
   //=== Computed Properties ===----------------------------------------------//
 
@@ -92,19 +92,21 @@ struct ClusterConfig {
   }
 
   //! Compute Z-binning bias for logarithmic depth slicing.
+  /*!
+   @note Currently unused - the simplified formula slice = log2(z/z_near) *
+   scale does not require a bias term.
+  */
   [[nodiscard]] constexpr auto ComputeZBias() const noexcept -> float
   {
-    if (depth_slices <= 1 || z_near <= 0.0F) {
-      return 0.0F;
-    }
-    // bias = -scale * log(near)
-    const float scale = ComputeZScale();
-    return -scale * std::log2(z_near);
+    return 0.0F; // Not used in current implementation
   }
 
   //=== Presets ===----------------------------------------------------------//
 
   //! Standard tile-based Forward+ configuration (16×16 tiles, no depth slices).
+  //!
+  //! Uses per-tile depth bounds from the depth prepass for tight culling.
+  //! z_near/z_far are still used for cluster grid sizing.
   static constexpr auto TileBased() noexcept -> ClusterConfig
   {
     return ClusterConfig {
@@ -117,25 +119,35 @@ struct ClusterConfig {
   }
 
   //! Clustered configuration (16×16 tiles with 24 depth slices).
+  //!
+  //! Uses logarithmic depth distribution: slice = log2(z / z_near) × scale.
+  //! A smaller z_near increases slice thickness at far distances, improving
+  //! stability at the cost of wasting some slices on the very near range.
+  //!
+  //! Recommended: Set z_near to 10× smaller than your camera near plane
+  //! for stable visualization with minimal precision loss.
   static constexpr auto Clustered() noexcept -> ClusterConfig
   {
     return ClusterConfig {
       .tile_size_px = 16,
       .depth_slices = 24,
       .max_lights_per_cluster = 64,
-      .z_near = 0.1F,
+      .z_near = 0.01F, // Smaller for stability (see class docs)
       .z_far = 1000.0F,
     };
   }
 
   //! High-density clustered for complex indoor scenes.
+  //!
+  //! Uses 8×8 tiles and 32 depth slices for finer culling granularity.
+  //! Better for scenes with many small, overlapping lights.
   static constexpr auto ClusteredHighDensity() noexcept -> ClusterConfig
   {
     return ClusterConfig {
-      .tile_size_px = 8,
+      .tile_size_px = 16, // Fixed at 16 (compile-time shader constant)
       .depth_slices = 32,
       .max_lights_per_cluster = 128,
-      .z_near = 0.1F,
+      .z_near = 0.01F,
       .z_far = 500.0F,
     };
   }

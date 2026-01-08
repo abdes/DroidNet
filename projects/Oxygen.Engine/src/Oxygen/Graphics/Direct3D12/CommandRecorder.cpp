@@ -361,8 +361,12 @@ auto CommandRecorder::Dispatch(uint32_t thread_group_count_x,
   uint32_t thread_group_count_y, uint32_t thread_group_count_z) -> void
 {
   const auto& command_list = GetConcreteCommandList();
-  DCHECK_EQ_F(
-    command_list.GetQueueRole(), QueueRole::kCompute, "Invalid queue type");
+  // D3D12 graphics queues can execute compute shaders (graphics > compute >
+  // copy)
+  const auto queue_role = command_list.GetQueueRole();
+  DCHECK_F(
+    queue_role == QueueRole::kCompute || queue_role == QueueRole::kGraphics,
+    "Dispatch requires a compute or graphics queue");
 
   command_list.GetCommandList()->Dispatch(
     thread_group_count_x, thread_group_count_y, thread_group_count_z);

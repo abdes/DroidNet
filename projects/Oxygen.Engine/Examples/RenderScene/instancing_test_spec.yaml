@@ -177,6 +177,393 @@ assets:
         rotation: [0.3826834, 0.0, 0.0, 0.9238795]
         scale: [1.0, 1.0, 1.0]
 
+      # Point lights around the cube grid (indices 3-18)
+      - name: Light_0
+        parent: 0
+        node_id: "33333333333333333333333333333333"
+        flags: 0
+        translation: [18.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_1
+        parent: 0
+        node_id: "44444444444444444444444444444444"
+        flags: 0
+        translation: [-18.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_2
+        parent: 0
+        node_id: "55555555555555555555555555555555"
+        flags: 0
+        translation: [0.0, 0.0, 18.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_3
+        parent: 0
+        node_id: "66666666666666666666666666666666"
+        flags: 0
+        translation: [0.0, 0.0, -18.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_4
+        parent: 0
+        node_id: "77777777777777777777777777777777"
+        flags: 0
+        translation: [12.7, 0.0, 12.7]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_5
+        parent: 0
+        node_id: "88888888888888888888888888888888"
+        flags: 0
+        translation: [-12.7, 0.0, 12.7]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_6
+        parent: 0
+        node_id: "99999999999999999999999999999999"
+        flags: 0
+        translation: [12.7, 0.0, -12.7]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_7
+        parent: 0
+        node_id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        flags: 0
+        translation: [-12.7, 0.0, -12.7]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_8
+        parent: 0
+        node_id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        flags: 0
+        translation: [15.0, 15.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_9
+        parent: 0
+        node_id: "cccccccccccccccccccccccccccccccc"
+        flags: 0
+        translation: [-15.0, 15.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_10
+        parent: 0
+        node_id: "dddddddddddddddddddddddddddddddd"
+        flags: 0
+        translation: [0.0, 15.0, 15.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_11
+        parent: 0
+        node_id: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        flags: 0
+        translation: [0.0, 15.0, -15.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_12
+        parent: 0
+        node_id: "ffffffffffffffffffffffffffffffff"
+        flags: 0
+        translation: [15.0, -15.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_13
+        parent: 0
+        node_id: "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0"
+        flags: 0
+        translation: [-15.0, -15.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_14
+        parent: 0
+        node_id: "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1"
+        flags: 0
+        translation: [0.0, -15.0, 15.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_15
+        parent: 0
+        node_id: "f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2"
+        flags: 0
+        translation: [0.0, -15.0, -15.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      # Additional lights INSIDE the grid for overlapping coverage
+      - name: Light_16
+        parent: 0
+        node_id: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        flags: 0
+        translation: [0.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_17
+        parent: 0
+        node_id: "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2"
+        flags: 0
+        translation: [5.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_18
+        parent: 0
+        node_id: "a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3"
+        flags: 0
+        translation: [-5.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_19
+        parent: 0
+        node_id: "a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4"
+        flags: 0
+        translation: [0.0, 0.0, 5.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_20
+        parent: 0
+        node_id: "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5"
+        flags: 0
+        translation: [0.0, 0.0, -5.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_21
+        parent: 0
+        node_id: "a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6"
+        flags: 0
+        translation: [5.0, 0.0, 5.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_22
+        parent: 0
+        node_id: "a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7"
+        flags: 0
+        translation: [-5.0, 0.0, 5.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_23
+        parent: 0
+        node_id: "a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8"
+        flags: 0
+        translation: [5.0, 0.0, -5.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_24
+        parent: 0
+        node_id: "a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9"
+        flags: 0
+        translation: [-5.0, 0.0, -5.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_25
+        parent: 0
+        node_id: "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+        flags: 0
+        translation: [0.0, 5.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_26
+        parent: 0
+        node_id: "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+        flags: 0
+        translation: [0.0, -5.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_27
+        parent: 0
+        node_id: "b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3"
+        flags: 0
+        translation: [3.0, 3.0, 3.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_28
+        parent: 0
+        node_id: "b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4"
+        flags: 0
+        translation: [-3.0, 3.0, 3.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_29
+        parent: 0
+        node_id: "b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5"
+        flags: 0
+        translation: [3.0, -3.0, 3.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_30
+        parent: 0
+        node_id: "b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6"
+        flags: 0
+        translation: [-3.0, -3.0, 3.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_31
+        parent: 0
+        node_id: "b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7"
+        flags: 0
+        translation: [3.0, 3.0, -3.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      # More lights with huge range to create red zones
+      - name: Light_32
+        parent: 0
+        node_id: "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1"
+        flags: 0
+        translation: [0.0, 2.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_33
+        parent: 0
+        node_id: "c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2"
+        flags: 0
+        translation: [0.0, -2.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_34
+        parent: 0
+        node_id: "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3"
+        flags: 0
+        translation: [2.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_35
+        parent: 0
+        node_id: "c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4"
+        flags: 0
+        translation: [-2.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_36
+        parent: 0
+        node_id: "c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5"
+        flags: 0
+        translation: [0.0, 0.0, 2.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_37
+        parent: 0
+        node_id: "c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6"
+        flags: 0
+        translation: [0.0, 0.0, -2.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_38
+        parent: 0
+        node_id: "c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7"
+        flags: 0
+        translation: [1.0, 1.0, 1.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_39
+        parent: 0
+        node_id: "c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8"
+        flags: 0
+        translation: [-1.0, 1.0, 1.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_40
+        parent: 0
+        node_id: "c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9"
+        flags: 0
+        translation: [1.0, -1.0, 1.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_41
+        parent: 0
+        node_id: "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+        flags: 0
+        translation: [-1.0, -1.0, 1.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_42
+        parent: 0
+        node_id: "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2"
+        flags: 0
+        translation: [1.0, 1.0, -1.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_43
+        parent: 0
+        node_id: "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3"
+        flags: 0
+        translation: [-1.0, 1.0, -1.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_44
+        parent: 0
+        node_id: "d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4"
+        flags: 0
+        translation: [1.0, -1.0, -1.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_45
+        parent: 0
+        node_id: "d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5"
+        flags: 0
+        translation: [-1.0, -1.0, -1.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_46
+        parent: 0
+        node_id: "d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6"
+        flags: 0
+        translation: [4.0, 4.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Light_47
+        parent: 0
+        node_id: "d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7"
+        flags: 0
+        translation: [-4.0, 4.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
       # =========================================================================
       # PROCEDURAL NODES: 1000 cubes in a 10x10x10 grid
       # =========================================================================
@@ -212,6 +599,404 @@ assets:
         casts_shadows: 0
         angular_size_radians: 0.01
         environment_contribution: true
+
+    point_lights:
+      # 8 lights around perimeter at mid-height
+      - node_index: 3
+        light_type: 0  # Point light
+        color_rgb: [1.0, 0.3, 0.3]
+        intensity: 80.0
+        range: 6.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 4
+        light_type: 0
+        color_rgb: [0.3, 1.0, 0.3]
+        intensity: 80.0
+        range: 6.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 5
+        light_type: 0
+        color_rgb: [0.3, 0.3, 1.0]
+        intensity: 80.0
+        range: 6.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 6
+        light_type: 0
+        color_rgb: [1.0, 1.0, 0.3]
+        intensity: 80.0
+        range: 6.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 7
+        light_type: 0
+        color_rgb: [1.0, 0.3, 1.0]
+        intensity: 80.0
+        range: 6.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 8
+        light_type: 0
+        color_rgb: [0.3, 1.0, 1.0]
+        intensity: 80.0
+        range: 6.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 9
+        light_type: 0
+        color_rgb: [1.0, 0.6, 0.3]
+        intensity: 80.0
+        range: 6.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 10
+        light_type: 0
+        color_rgb: [0.6, 0.3, 1.0]
+        intensity: 80.0
+        range: 6.0
+        mobility: 0
+        casts_shadows: 0
+
+      # 4 lights above
+      - node_index: 11
+        light_type: 0
+        color_rgb: [1.0, 1.0, 1.0]
+        intensity: 100.0
+        range: 7.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 12
+        light_type: 0
+        color_rgb: [1.0, 0.8, 0.8]
+        intensity: 100.0
+        range: 7.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 13
+        light_type: 0
+        color_rgb: [0.8, 1.0, 0.8]
+        intensity: 100.0
+        range: 7.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 14
+        light_type: 0
+        color_rgb: [0.8, 0.8, 1.0]
+        intensity: 100.0
+        range: 7.0
+        mobility: 0
+        casts_shadows: 0
+
+      # 4 lights below
+      - node_index: 15
+        light_type: 0
+        color_rgb: [1.0, 0.5, 0.2]
+        intensity: 90.0
+        range: 7.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 16
+        light_type: 0
+        color_rgb: [0.2, 1.0, 0.5]
+        intensity: 90.0
+        range: 7.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 17
+        light_type: 0
+        color_rgb: [0.5, 0.2, 1.0]
+        intensity: 90.0
+        range: 7.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 18
+        light_type: 0
+        color_rgb: [1.0, 1.0, 0.5]
+        intensity: 90.0
+        range: 7.0
+        mobility: 0
+        casts_shadows: 0
+
+      # Clustered lights in center - these overlap to create yellow/red zones
+      - node_index: 19
+        light_type: 0
+        color_rgb: [1.0, 1.0, 1.0]
+        intensity: 50.0
+        range: 8.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 20
+        light_type: 0
+        color_rgb: [1.0, 0.8, 0.6]
+        intensity: 50.0
+        range: 8.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 21
+        light_type: 0
+        color_rgb: [0.6, 1.0, 0.8]
+        intensity: 50.0
+        range: 8.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 22
+        light_type: 0
+        color_rgb: [0.8, 0.6, 1.0]
+        intensity: 50.0
+        range: 8.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 23
+        light_type: 0
+        color_rgb: [1.0, 0.5, 0.5]
+        intensity: 50.0
+        range: 8.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 24
+        light_type: 0
+        color_rgb: [0.5, 1.0, 0.5]
+        intensity: 50.0
+        range: 8.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 25
+        light_type: 0
+        color_rgb: [0.5, 0.5, 1.0]
+        intensity: 50.0
+        range: 8.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 26
+        light_type: 0
+        color_rgb: [1.0, 1.0, 0.5]
+        intensity: 50.0
+        range: 8.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 27
+        light_type: 0
+        color_rgb: [0.5, 1.0, 1.0]
+        intensity: 50.0
+        range: 8.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 28
+        light_type: 0
+        color_rgb: [1.0, 0.5, 1.0]
+        intensity: 50.0
+        range: 8.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 29
+        light_type: 0
+        color_rgb: [0.9, 0.9, 0.9]
+        intensity: 50.0
+        range: 8.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 30
+        light_type: 0
+        color_rgb: [0.8, 0.8, 0.6]
+        intensity: 50.0
+        range: 8.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 31
+        light_type: 0
+        color_rgb: [0.6, 0.8, 0.8]
+        intensity: 50.0
+        range: 8.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 32
+        light_type: 0
+        color_rgb: [0.8, 0.6, 0.8]
+        intensity: 50.0
+        range: 8.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 33
+        light_type: 0
+        color_rgb: [1.0, 0.7, 0.4]
+        intensity: 50.0
+        range: 8.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 34
+        light_type: 0
+        color_rgb: [0.4, 1.0, 0.7]
+        intensity: 50.0
+        range: 8.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 35
+        light_type: 0
+        color_rgb: [0.7, 0.4, 1.0]
+        intensity: 50.0
+        range: 8.0
+        mobility: 0
+        casts_shadows: 0
+
+      # Even more lights with huge range for red zones
+      - node_index: 36
+        light_type: 0
+        color_rgb: [1.0, 1.0, 1.0]
+        intensity: 40.0
+        range: 10.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 37
+        light_type: 0
+        color_rgb: [1.0, 0.9, 0.8]
+        intensity: 40.0
+        range: 10.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 38
+        light_type: 0
+        color_rgb: [0.8, 1.0, 0.9]
+        intensity: 40.0
+        range: 10.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 39
+        light_type: 0
+        color_rgb: [0.9, 0.8, 1.0]
+        intensity: 40.0
+        range: 10.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 40
+        light_type: 0
+        color_rgb: [1.0, 0.7, 0.7]
+        intensity: 40.0
+        range: 10.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 41
+        light_type: 0
+        color_rgb: [0.7, 1.0, 0.7]
+        intensity: 40.0
+        range: 10.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 42
+        light_type: 0
+        color_rgb: [0.7, 0.7, 1.0]
+        intensity: 40.0
+        range: 10.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 43
+        light_type: 0
+        color_rgb: [1.0, 1.0, 0.7]
+        intensity: 40.0
+        range: 10.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 44
+        light_type: 0
+        color_rgb: [0.7, 1.0, 1.0]
+        intensity: 40.0
+        range: 10.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 45
+        light_type: 0
+        color_rgb: [1.0, 0.7, 1.0]
+        intensity: 40.0
+        range: 10.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 46
+        light_type: 0
+        color_rgb: [0.9, 0.9, 0.7]
+        intensity: 40.0
+        range: 10.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 47
+        light_type: 0
+        color_rgb: [0.7, 0.9, 0.9]
+        intensity: 40.0
+        range: 10.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 48
+        light_type: 0
+        color_rgb: [0.9, 0.7, 0.9]
+        intensity: 40.0
+        range: 10.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 49
+        light_type: 0
+        color_rgb: [1.0, 0.6, 0.6]
+        intensity: 40.0
+        range: 10.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 50
+        light_type: 0
+        color_rgb: [0.6, 1.0, 0.6]
+        intensity: 40.0
+        range: 10.0
+        mobility: 0
+        casts_shadows: 0
+
+      - node_index: 51
+        light_type: 0
+        color_rgb: [0.6, 0.6, 1.0]
+        intensity: 40.0
+        range: 10.0
+        mobility: 0
+        casts_shadows: 0
 
     environment:
       sky_atmosphere:

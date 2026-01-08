@@ -56,7 +56,7 @@ NOLINT_TEST(MaterialPermutationsTest, DefineNames_PassCanonicalization)
 {
   auto req = ShaderRequest {
     .stage = ShaderType::kPixel,
-    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .source_path = "Passes/Forward/ForwardMesh_PS.hlsl",
     .entry_point = "PS",
     .defines = {
       ShaderDefine { .name = std::string { kAlphaTest }, .value = "1" },
@@ -72,7 +72,7 @@ NOLINT_TEST(MaterialPermutationsTest, AllDefines_CanBeCombined)
 {
   auto req = ShaderRequest {
     .stage = ShaderType::kPixel,
-    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .source_path = "Passes/Forward/ForwardMesh_PS.hlsl",
     .entry_point = "PS",
     .defines = {
       ShaderDefine { .name = std::string { kAlphaTest }, .value = "1" },

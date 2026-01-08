@@ -38,6 +38,16 @@ namespace oxygen::engine {
  - Full 3D grid with logarithmic depth slices
  - Z-binning: slice = log2(z / z_near) * z_scale + z_bias
 
+ ### Ownership and Future Extension
+
+ Currently owned and uploaded by **LightCullingPass**, which populates cluster
+ data and uses default values (1.0) for exposure/white_point.
+
+ When post-process/auto-exposure is implemented, the owning pass has two
+ options:
+ 1. Query the LightCullingPass buffer and overwrite exposure fields, or
+ 2. Split into separate CBVs (ClusterData on b3, ExposureData on b4).
+
  @warning This struct must remain 16-byte aligned for D3D12 root CBV bindings.
  @see ClusterConfig, LightCullingPass
 */

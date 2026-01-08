@@ -141,6 +141,17 @@ void FbxLoaderPanel::Update()
   import_state_.is_importing = false;
   const auto result = import_state_.import_future.get();
 
+  if (result) {
+    const auto cooked_root
+      = std::filesystem::absolute(config_.cooked_output_directory);
+    const auto index_path = cooked_root
+      / content::import::ImportRequest {}.loose_cooked_layout.index_file_name;
+
+    if (config_.on_index_loaded) {
+      config_.on_index_loaded(index_path);
+    }
+  }
+
   if (result && config_.on_scene_ready) {
     config_.on_scene_ready(*result);
   } else if (!result) {

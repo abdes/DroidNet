@@ -7,6 +7,8 @@
 #ifndef OXYGEN_D3D12_SHADERS_PASSES_LIGHTING_CLUSTERLOOKUP_HLSLI
 #define OXYGEN_D3D12_SHADERS_PASSES_LIGHTING_CLUSTERLOOKUP_HLSLI
 
+#include "Core/Bindless/Generated.BindlessLayout.hlsl"
+
 // Cluster/tile lookup utilities for Forward+ light culling.
 //
 // This header provides functions to compute cluster indices from screen
@@ -57,9 +59,11 @@ uint ComputeClusterIndex(
     // Compute Z slice
     uint z_slice = 0;
     if (cluster_dims.z > 1) {
-        // Logarithmic depth slicing: slice = log2(z / near) * scale + bias
+        // Logarithmic depth slicing: slice = log2(z / z_near) * scale
+        // where scale = depth_slices / log2(z_far / z_near)
+        // Note: z_bias is not used in this simplified formula
         float z_ratio = max(linear_depth / z_near, 1.0);
-        z_slice = uint(log2(z_ratio) * z_scale + z_bias);
+        z_slice = uint(log2(z_ratio) * z_scale);
         z_slice = clamp(z_slice, 0u, cluster_dims.z - 1u);
     }
 

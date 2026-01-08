@@ -26,6 +26,8 @@ auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node)
     rp.view_matrix = Mat4(1.0F);
     rp.proj_matrix = Mat4(1.0F);
     rp.depth_range = NdcDepthRange::ZeroToOne;
+    rp.near_plane = 0.1F;
+    rp.far_plane = 1000.0F;
     return ResolvedView(rp);
   }
 
@@ -54,12 +56,19 @@ auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node)
 
   // Projection from camera component
   Mat4 proj_m { 1.0F };
+  float near_plane = 0.1F;
+  float far_plane = 1000.0F;
   // Engine canonical NDC: Z range [0,1]
   NdcDepthRange src_range = NdcDepthRange::ZeroToOne;
   if (auto cam = camera_node.GetCameraAs<scene::PerspectiveCamera>()) {
     proj_m = cam->get().ProjectionMatrix();
+    near_plane = cam->get().GetNearPlane();
+    far_plane = cam->get().GetFarPlane();
   } else if (auto camo = camera_node.GetCameraAs<scene::OrthographicCamera>()) {
     proj_m = camo->get().ProjectionMatrix();
+    const auto ext = camo->get().GetExtents();
+    near_plane = ext[4];
+    far_plane = ext[5];
   }
 
   // Build final view config: derive viewport from camera if present
@@ -81,6 +90,8 @@ auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node)
   rp.proj_matrix = proj_m;
   rp.depth_range = NdcDepthRange::ZeroToOne;
   rp.camera_position = cam_pos;
+  rp.near_plane = near_plane;
+  rp.far_plane = far_plane;
 
   return ResolvedView(rp);
 }

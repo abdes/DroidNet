@@ -25,6 +25,9 @@ namespace oxygen::examples::render_scene::ui {
 //! Callback invoked when a scene is ready to be loaded
 using SceneLoadCallback = std::function<void(const data::AssetKey&)>;
 
+//! Callback invoked when a loose cooked index is available
+using IndexLoadCallback = std::function<void(const std::filesystem::path&)>;
+
 //! State for FBX file import operation
 struct FbxImportState {
   bool is_importing { false };
@@ -37,6 +40,7 @@ struct FbxLoaderConfig {
   std::filesystem::path fbx_directory;
   std::filesystem::path cooked_output_directory;
   SceneLoadCallback on_scene_ready;
+  IndexLoadCallback on_index_loaded;
 };
 
 //! FBX file loader and importer panel

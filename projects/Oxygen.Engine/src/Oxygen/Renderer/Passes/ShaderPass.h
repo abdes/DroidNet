@@ -11,6 +11,7 @@
 #include <string>
 
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Renderer/Passes/GraphicsRenderPass.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -26,6 +27,20 @@ namespace oxygen::engine {
 
 struct RenderContext;
 
+//! Debug visualization mode for the shader pass.
+//!
+//! These modes correspond to boolean defines in ForwardMesh_PS.hlsl.
+//! The shader is compiled with different defines to create specialized
+//! visualization variants.
+enum class ShaderDebugMode : int {
+  kDisabled = 0, //!< Normal PBR rendering (default)
+
+  // Light culling debug modes
+  kLightCullingHeatMap = 1, //!< Heat map of lights per cluster
+  kDepthSlice = 2, //!< Visualize depth slice (clustered mode)
+  kClusterIndex = 3, //!< Visualize cluster index as checkerboard
+};
+
 //! Configuration for a shading pass (main geometry + lighting).
 struct ShaderPassConfig {
   //! Optional explicit color texture to render into (overrides framebuffer if
@@ -40,6 +55,8 @@ struct ShaderPassConfig {
   std::string debug_name { "ShaderPass" };
   //! Rasterization fill mode for this pass.
   graphics::FillMode fill_mode { graphics::FillMode::kSolid };
+  //! Debug visualization mode (see ShaderDebugMode).
+  ShaderDebugMode debug_mode { ShaderDebugMode::kDisabled };
 };
 
 //! Shading pass: draws geometry and applies lighting in a Forward+ or forward
@@ -83,6 +100,9 @@ private:
 
   //! Configuration for the depth pre-pass.
   std::shared_ptr<Config> config_;
+
+  //! Cached debug mode from last PSO build
+  ShaderDebugMode last_built_debug_mode_ { ShaderDebugMode::kDisabled };
 
   //! Cached pipeline state descriptions for partition-aware execution.
   std::optional<graphics::GraphicsPipelineDesc> pso_opaque_single_ {};

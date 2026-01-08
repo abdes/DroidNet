@@ -185,6 +185,24 @@ auto FormatShaderLogKey(const ShaderRequest& request) -> std::string
   out += request.source_path;
   out += ':';
   out += request.entry_point;
+
+  // Append defines if present
+  if (!request.defines.empty()) {
+    out += " [";
+    bool first = true;
+    for (const auto& def : request.defines) {
+      if (!first)
+        out += ',';
+      first = false;
+      out += def.name;
+      if (def.value.has_value()) {
+        out += '=';
+        out += *def.value;
+      }
+    }
+    out += ']';
+  }
+
   return out;
 }
 

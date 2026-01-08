@@ -79,6 +79,10 @@ namespace sceneprep {
 
 } // namespace oxygen::engine
 
+namespace oxygen::renderer {
+class LightManager;
+} // namespace oxygen::renderer
+
 namespace oxygen::renderer::resources {
 class GeometryUploader;
 class TransformUploader;
@@ -225,6 +229,17 @@ public:
   */
   [[nodiscard]] OXGN_RNDR_API auto GetInlineTransfersCoordinator()
     -> upload::InlineTransfersCoordinator&;
+
+  //! Returns the light manager for accessing scene light data.
+  /*!
+   Provides access to the light manager which collects scene lights and
+   maintains GPU-ready structured buffers for lighting. Render passes use
+   this to obtain SRV indices for positional lights during culling.
+
+   @return Observer pointer to the light manager, or nullptr if not available.
+  */
+  [[nodiscard]] OXGN_RNDR_API auto GetLightManager() const noexcept
+    -> observer_ptr<renderer::LightManager>;
 
   //! Override a material's UV transform used by the shader.
   /*!
