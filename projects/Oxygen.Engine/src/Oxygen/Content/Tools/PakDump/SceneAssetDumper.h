@@ -196,6 +196,82 @@ public:
       scene->GetComponents<SpotLightRecord>().size());
     std::cout << "\n";
 
+    const auto DumpDirectionalLights = [&]() -> void {
+      const auto lights = scene->GetComponents<DirectionalLightRecord>();
+      if (lights.empty()) {
+        return;
+      }
+
+      std::cout << "    Directional Lights (" << lights.size() << "):";
+      std::cout << "\n";
+
+      for (size_t i = 0; i < lights.size(); ++i) {
+        DirectionalLightRecord rec {};
+        std::memcpy(&rec, lights.data() + i, sizeof(DirectionalLightRecord));
+
+        std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
+        PrintUtils::Field("IsSunLight", rec.is_sun_light != 0U, 10);
+        PrintUtils::Field(
+          "Environment Contrib", rec.environment_contribution != 0U, 10);
+      }
+
+      std::cout << "\n";
+    };
+
+    const auto DumpPointLights = [&]() -> void {
+      const auto lights = scene->GetComponents<PointLightRecord>();
+      if (lights.empty()) {
+        return;
+      }
+
+      std::cout << "    Point Lights (" << lights.size() << "):";
+      std::cout << "\n";
+
+      for (size_t i = 0; i < lights.size(); ++i) {
+        PointLightRecord rec {};
+        std::memcpy(&rec, lights.data() + i, sizeof(PointLightRecord));
+
+        std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
+        PrintUtils::Field("Range", rec.range, 10);
+        PrintUtils::Field(
+          "Attenuation Model", static_cast<int>(rec.attenuation_model), 10);
+        PrintUtils::Field("Decay Exponent", rec.decay_exponent, 10);
+        PrintUtils::Field("Source Radius", rec.source_radius, 10);
+      }
+
+      std::cout << "\n";
+    };
+
+    const auto DumpSpotLights = [&]() -> void {
+      const auto lights = scene->GetComponents<SpotLightRecord>();
+      if (lights.empty()) {
+        return;
+      }
+
+      std::cout << "    Spot Lights (" << lights.size() << "):";
+      std::cout << "\n";
+
+      for (size_t i = 0; i < lights.size(); ++i) {
+        SpotLightRecord rec {};
+        std::memcpy(&rec, lights.data() + i, sizeof(SpotLightRecord));
+
+        std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
+        PrintUtils::Field("Range", rec.range, 10);
+        PrintUtils::Field(
+          "Attenuation Model", static_cast<int>(rec.attenuation_model), 10);
+        PrintUtils::Field("Decay Exponent", rec.decay_exponent, 10);
+        PrintUtils::Field("Inner Cone (rad)", rec.inner_cone_angle_radians, 10);
+        PrintUtils::Field("Outer Cone (rad)", rec.outer_cone_angle_radians, 10);
+        PrintUtils::Field("Source Radius", rec.source_radius, 10);
+      }
+
+      std::cout << "\n";
+    };
+
+    DumpDirectionalLights();
+    DumpPointLights();
+    DumpSpotLights();
+
     // v3+ scenes: validated trailing SceneEnvironment block.
     if (!scene->HasEnvironmentBlock()) {
       std::cout << "    SceneEnvironment Block: (not present)\n\n";

@@ -16,6 +16,7 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Renderer/Resources/IResourceBinder.h>
 #include <Oxygen/Renderer/Types/EnvironmentStaticData.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -51,7 +52,8 @@ namespace oxygen::engine::internal {
 class EnvironmentStaticDataManager {
 public:
   OXGN_RNDR_API explicit EnvironmentStaticDataManager(
-    observer_ptr<Graphics> gfx);
+    observer_ptr<Graphics> gfx,
+    observer_ptr<renderer::resources::IResourceBinder> texture_binder);
 
   OXGN_RNDR_API ~EnvironmentStaticDataManager();
 
@@ -81,6 +83,7 @@ private:
     = static_cast<std::uint32_t>(sizeof(EnvironmentStaticData));
 
   observer_ptr<Graphics> gfx_;
+  observer_ptr<renderer::resources::IResourceBinder> texture_binder_;
   frame::Slot current_slot_ { frame::kInvalidSlot };
 
   EnvironmentStaticData cpu_snapshot_ {};

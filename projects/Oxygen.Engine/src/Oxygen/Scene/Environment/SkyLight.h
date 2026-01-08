@@ -6,8 +6,8 @@
 
 #pragma once
 
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Constants.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Scene/Environment/EnvironmentSystem.h>
 
 namespace oxygen::scene::environment {
@@ -53,16 +53,17 @@ public:
     return source_;
   }
 
-  //! Sets the cubemap asset key (used when source is kSpecifiedCubemap).
-  auto SetCubemapAsset(const data::AssetKey& key) noexcept -> void
+  //! Sets the cubemap resource key (used when source is kSpecifiedCubemap).
+  auto SetCubemapResource(const content::ResourceKey& key) noexcept -> void
   {
-    cubemap_asset_ = key;
+    cubemap_resource_ = key;
   }
 
-  //! Gets the cubemap asset key.
-  [[nodiscard]] auto GetCubemapAsset() const noexcept -> const data::AssetKey&
+  //! Gets the cubemap resource key.
+  [[nodiscard]] auto GetCubemapResource() const noexcept
+    -> const content::ResourceKey&
   {
-    return cubemap_asset_;
+    return cubemap_resource_;
   }
 
   //! Sets intensity multiplier (unitless).
@@ -112,7 +113,7 @@ public:
 
 private:
   SkyLightSource source_ = SkyLightSource::kCapturedScene;
-  data::AssetKey cubemap_asset_ {};
+  content::ResourceKey cubemap_resource_ {};
 
   float intensity_ = 1.0F;
   Vec3 tint_rgb_ { 1.0F, 1.0F, 1.0F };

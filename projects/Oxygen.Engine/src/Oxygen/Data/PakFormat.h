@@ -1266,11 +1266,13 @@ struct DirectionalLightRecord {
   float angular_size_radians = 0.0F;
   uint32_t environment_contribution = 0;
 
+  uint32_t is_sun_light = 0;
+
   uint32_t cascade_count = 4;
   float cascade_distances[4] = { 0.0F, 0.0F, 0.0F, 0.0F };
   float distribution_exponent = 1.0F;
 
-  uint8_t reserved[12] = {};
+  uint8_t reserved[8] = {};
 };
 #pragma pack(pop)
 static_assert(sizeof(DirectionalLightRecord) == 96);

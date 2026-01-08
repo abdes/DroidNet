@@ -120,23 +120,6 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
     = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16);
   inline_transfers_->RegisterProvider(inline_staging_provider_);
 
-  // Initialize scene constants manager for per-view, per-slot Upload heap
-  // buffers
-  scene_const_manager_ = std::make_unique<internal::SceneConstantsManager>(
-    observer_ptr { gfx.get() },
-    static_cast<std::uint32_t>(sizeof(SceneConstants::GpuData)));
-
-  // Initialize environment dynamic data manager for b3 CBV (cluster slots,
-  // exposure, etc.)
-  env_dynamic_manager_
-    = std::make_unique<internal::EnvironmentDynamicDataManager>(
-      observer_ptr { gfx.get() });
-
-  // Initialize environment static data single-owner manager (bindless SRV).
-  env_static_manager_
-    = std::make_unique<internal::EnvironmentStaticDataManager>(
-      observer_ptr { gfx.get() });
-
   // Initialize the render-context pool helper used to claim per-frame
   // render contexts during PreRender/Render phases.
   render_context_pool_ = std::make_unique<RenderContextPool>();
@@ -206,6 +189,25 @@ auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
       std::move(geom_uploader), std::move(xform_uploader),
       std::move(mat_binder), std::move(emitter), std::move(light_manager));
     texture_binder_ = std::move(texture_binder);
+
+    // Initialize scene constants manager for per-view, per-slot Upload heap
+    // buffers.
+    scene_const_manager_ = std::make_unique<internal::SceneConstantsManager>(
+      observer_ptr { gfx.get() },
+      static_cast<std::uint32_t>(sizeof(SceneConstants::GpuData)));
+
+    // Initialize environment dynamic data manager for b3 CBV (cluster slots,
+    // exposure, etc.).
+    env_dynamic_manager_
+      = std::make_unique<internal::EnvironmentDynamicDataManager>(
+        observer_ptr { gfx.get() });
+
+    // Initialize environment static data single-owner manager (bindless SRV).
+    // TextureBinder is passed directly to the constructor for cubemap
+    // resolution.
+    env_static_manager_
+      = std::make_unique<internal::EnvironmentStaticDataManager>(
+        observer_ptr { gfx.get() }, observer_ptr { texture_binder_.get() });
   }
   return true;
 }

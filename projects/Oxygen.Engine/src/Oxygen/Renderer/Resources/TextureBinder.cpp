@@ -231,6 +231,7 @@ namespace {
 
   struct PrepareTexture2DUploadFailure {
     enum class Reason : uint8_t {
+      kUnsupportedTextureType,
       kUnsupportedFormat,
       kUnsupportedDepth,
       kBadDataAlignment,
@@ -251,7 +252,18 @@ namespace {
   {
     // Build GPU texture description.
     graphics::TextureDesc desc;
-    desc.texture_type = TextureType::kTexture2D;
+    desc.texture_type = tex_res.GetTextureType();
+    switch (desc.texture_type) {
+    case TextureType::kTexture2D:
+    case TextureType::kTexture2DArray:
+    case TextureType::kTextureCube:
+      break;
+    default:
+      return PrepareTexture2DUploadFailure {
+        .reason
+        = PrepareTexture2DUploadFailure::Reason::kUnsupportedTextureType,
+      };
+    }
     desc.format = tex_res.GetFormat();
     desc.width = tex_res.GetWidth();
     desc.height = tex_res.GetHeight();
@@ -277,6 +289,14 @@ namespace {
     if (desc.depth != 1U) {
       return PrepareTexture2DUploadFailure {
         .reason = PrepareTexture2DUploadFailure::Reason::kUnsupportedDepth,
+      };
+    }
+
+    if (desc.texture_type == TextureType::kTextureCube
+      && desc.array_size != 6U) {
+      return PrepareTexture2DUploadFailure {
+        .reason
+        = PrepareTexture2DUploadFailure::Reason::kUnsupportedTextureType,
       };
     }
 
@@ -1073,6 +1093,11 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
       const auto& failure
         = std::get<PrepareTexture2DUploadFailure>(prepared_result);
       switch (failure.reason) {
+      case PrepareTexture2DUploadFailure::Reason::kUnsupportedTextureType:
+        LOG_F(ERROR,
+          "TextureBinder async upload only supports 2D textures, 2D arrays, "
+          "and cubemaps");
+        break;
       case PrepareTexture2DUploadFailure::Reason::kUnsupportedFormat:
         LOG_F(ERROR, "TextureBinder upload only supports non-BC formats");
         break;

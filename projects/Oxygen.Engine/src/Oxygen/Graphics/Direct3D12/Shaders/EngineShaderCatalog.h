@@ -84,6 +84,15 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     std::array { EntryPoint { kCompute, "CS" } },
     std::array<std::string_view, 1> { "CLUSTERED" }
   },
+  // Sky sphere shaders (no permutations)
+  ShaderFileSpec {
+    "Passes/Sky/SkySphere_VS.hlsl",
+    std::array { EntryPoint { kVertex, "VS" } }
+  },
+  ShaderFileSpec {
+    "Passes/Sky/SkySphere_PS.hlsl",
+    std::array { EntryPoint { kPixel, "PS" } }
+  },
   // ImGui UI shaders (no permutations)
   ShaderFileSpec {
     "Passes/Ui/ImGui.hlsl",
@@ -100,8 +109,10 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ForwardMesh_PS DEBUG_CLUSTER_INDEX: 4
 // - DepthPrePass: 4 (2 entries x 2 permutations)
 // - LightCulling: 2 (1 entry x 2 permutations)
+// - SkySphere_VS: 1 entry
+// - SkySphere_PS: 1 entry
 // - ImGui: 2 (2 entries x 1 permutation)
-// Total: 1 + 2 + 4 + 4 + 4 + 4 + 2 + 2 = 23
-static_assert(kEngineShaders.size() == 23, "Expected 23 shader entries");
+// Total: 1 + 2 + 4 + 4 + 4 + 4 + 2 + 1 + 1 + 2 = 25
+static_assert(kEngineShaders.size() == 25, "Expected 25 shader entries");
 
 } // namespace oxygen::graphics::d3d12

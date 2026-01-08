@@ -74,6 +74,23 @@ public:
     return environment_contribution_;
   }
 
+  //! Designates this light as the sun for atmospheric systems.
+  /*!
+   When true, this directional light's direction is used by atmospheric systems
+   (fog inscattering, sky atmosphere, etc.). Only the first enabled
+   DirectionalLight with is_sun_light=true is used.
+  */
+  auto SetIsSunLight(const bool is_sun) noexcept -> void
+  {
+    is_sun_light_ = is_sun;
+  }
+
+  //! Returns true if this light is designated as the sun for atmosphere.
+  [[nodiscard]] auto IsSunLight() const noexcept -> bool
+  {
+    return is_sun_light_;
+  }
+
   //! Gets the cascaded shadow settings.
   OXGN_SCN_NDAPI auto CascadedShadows() noexcept -> CascadedShadowSettings&
   {
@@ -96,6 +113,7 @@ private:
   CommonLightProperties common_ {};
   float angular_size_radians_ = 0.0F;
   bool environment_contribution_ = false;
+  bool is_sun_light_ = false;
   CascadedShadowSettings csm_ {};
   detail::TransformComponent* transform_ { nullptr };
 };

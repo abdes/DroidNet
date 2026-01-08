@@ -71,6 +71,7 @@ template <typename T> struct PassIndexOf<T, PassTypeList<>> {
 class DepthPrePass;
 class LightCullingPass;
 class ShaderPass;
+class SkyPass;
 class TransparentPass;
 
 /*!
@@ -78,8 +79,8 @@ class TransparentPass;
  The order of types determines their index. Only append new types to maintain
  binary compatibility. Update this list as new passes are added.
 */
-using KnownPassTypes
-  = PassTypeList<DepthPrePass, LightCullingPass, ShaderPass, TransparentPass>;
+using KnownPassTypes = PassTypeList<DepthPrePass, LightCullingPass, ShaderPass,
+  SkyPass, TransparentPass>;
 
 //! The number of known pass types, used for static array sizing and sanity
 //! checks.

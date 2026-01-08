@@ -46,6 +46,8 @@
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
@@ -215,6 +217,37 @@ private:
 
     swap_.scene = std::make_shared<scene::Scene>("RenderScene");
 
+    if (auto sky_sphere_record = asset->TryGetSkySphereEnvironment();
+      sky_sphere_record) {
+      auto environment = std::make_unique<scene::SceneEnvironment>();
+      auto& sky_sphere
+        = environment->AddSystem<scene::environment::SkySphere>();
+
+      if (sky_sphere_record->source
+        == static_cast<std::uint32_t>(
+          scene::environment::SkySphereSource::kSolidColor)) {
+        sky_sphere.SetSource(scene::environment::SkySphereSource::kSolidColor);
+      } else {
+        LOG_F(WARNING,
+          "SceneLoader: SkySphere cubemap source is not supported in this "
+          "example yet; forcing solid color");
+        sky_sphere.SetSource(scene::environment::SkySphereSource::kSolidColor);
+      }
+
+      sky_sphere.SetSolidColorRgb(
+        oxygen::Vec3 { sky_sphere_record->solid_color_rgb[0],
+          sky_sphere_record->solid_color_rgb[1],
+          sky_sphere_record->solid_color_rgb[2] });
+      sky_sphere.SetIntensity(sky_sphere_record->intensity);
+      sky_sphere.SetRotationRadians(sky_sphere_record->rotation_radians);
+      sky_sphere.SetTintRgb(oxygen::Vec3 { sky_sphere_record->tint_rgb[0],
+        sky_sphere_record->tint_rgb[1], sky_sphere_record->tint_rgb[2] });
+
+      swap_.scene->SetEnvironment(std::move(environment));
+      LOG_F(INFO,
+        "SceneLoader: Applied SkySphere environment (solid color source)");
+    }
+
     // Instantiate nodes (synchronous part)
     using oxygen::data::pak::DirectionalLightRecord;
     using oxygen::data::pak::NodeRecord;
@@ -338,6 +371,7 @@ private:
       ApplyCommonLight(light->Common(), rec.common);
       light->SetAngularSizeRadians(rec.angular_size_radians);
       light->SetEnvironmentContribution(rec.environment_contribution != 0U);
+      light->SetIsSunLight(rec.is_sun_light != 0U);
 
       auto& csm = light->CascadedShadows();
       csm.cascade_count = std::clamp<std::uint32_t>(

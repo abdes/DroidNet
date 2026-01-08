@@ -97,6 +97,15 @@ auto RenderGraph::SetupRenderPasses() -> void
         observer_ptr(gfx.get()), light_culling_pass_config_);
     }
   }
+
+  // Sky pass (after opaque, before transparent)
+  if (!sky_pass_config_) {
+    sky_pass_config_ = std::make_shared<engine::SkyPassConfig>();
+    sky_pass_config_->debug_name = "SkyPass";
+  }
+  if (!sky_pass_) {
+    sky_pass_ = std::make_shared<engine::SkyPass>(sky_pass_config_);
+  }
 }
 
 auto RenderGraph::ClearBackbufferReferences() -> void
@@ -211,6 +220,12 @@ auto RenderGraph::RunPasses(const oxygen::engine::RenderContext& ctx,
   if (shader_pass_) {
     co_await shader_pass_->PrepareResources(ctx, recorder);
     co_await shader_pass_->Execute(ctx, recorder);
+  }
+
+  // Sky Pass execution (after opaque geometry, before transparent)
+  if (sky_pass_) {
+    co_await sky_pass_->PrepareResources(ctx, recorder);
+    co_await sky_pass_->Execute(ctx, recorder);
   }
 
   // Transparent Pass execution

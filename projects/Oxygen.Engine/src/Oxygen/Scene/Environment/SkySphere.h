@@ -6,8 +6,8 @@
 
 #pragma once
 
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Constants.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Scene/Environment/EnvironmentSystem.h>
 
 namespace oxygen::scene::environment {
@@ -51,16 +51,17 @@ public:
     return source_;
   }
 
-  //! Sets cubemap asset key (used when source is kCubemap).
-  auto SetCubemapAsset(const data::AssetKey& key) noexcept -> void
+  //! Sets cubemap resource key (used when source is kCubemap).
+  auto SetCubemapResource(const content::ResourceKey& key) noexcept -> void
   {
-    cubemap_asset_ = key;
+    cubemap_resource_ = key;
   }
 
-  //! Gets cubemap asset key.
-  [[nodiscard]] auto GetCubemapAsset() const noexcept -> const data::AssetKey&
+  //! Gets cubemap resource key.
+  [[nodiscard]] auto GetCubemapResource() const noexcept
+    -> const content::ResourceKey&
   {
-    return cubemap_asset_;
+    return cubemap_resource_;
   }
 
   //! Sets solid background color (linear RGB).
@@ -110,7 +111,7 @@ public:
 
 private:
   SkySphereSource source_ = SkySphereSource::kCubemap;
-  data::AssetKey cubemap_asset_ {};
+  content::ResourceKey cubemap_resource_ {};
   Vec3 solid_color_rgb_ { 0.0F, 0.0F, 0.0F };
 
   float intensity_ = 1.0F;

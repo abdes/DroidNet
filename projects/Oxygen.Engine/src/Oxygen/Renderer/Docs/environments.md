@@ -45,7 +45,7 @@ Environment systems are authored as components under `SceneEnvironment`:
 - `VolumetricClouds`
 - `PostProcessVolume`
 
-The scene owns authored data; the renderer owns GPU resources derived from it.
+**Hydration Policy**: Following the engine's established pattern, the application is responsible for hydrating these components by resolving `data::AssetKey` references into `data::TextureAsset` pointers (via the `AssetLoader`) before the scene is submitted for rendering. The `Scene` components store these resolved asset pointers.
 
 ### GPU-Facing Payloads
 
@@ -89,53 +89,61 @@ The scene owns authored data; the renderer owns GPU resources derived from it.
 
 ### Task 3 — Wire Exposure into EnvironmentDynamicData (MVP)
 
-**Objective**: populate a single resolved exposure scalar named `exposure` in `EnvironmentDynamicData` so forward shading has deterministic exposure inputs.
+**Status**: Completed
 
-**Steps**
+- Implemented per-view exposure resolution in the `Renderer`, applying exposure compensation from `PostProcessVolume` ($2^{EV}$) and wiring the resolved scalar into the global dynamic CBV (b3) for consumption by forward shaders.
 
-1. Define MVP mapping from camera + authored post-process to dynamic exposure:
-	 - Default: `exposure = 1.0`.
-	 - If authored `exposure_compensation` exists, apply it multiplicatively.
-	 - Do not introduce physical camera parameters in this phase.
+### Task 4 — Atmospheric Foundation (Sky + Fog Integration)
 
-2. Ensure the existing per-view dynamic data upload path writes these values.
+Implement a robust, extensible foundation that integrates sky rendering and distance-based fog into the unified data pipeline.
+
+**4.0: Renderer Upload Infrastructure Fixes**
+
+- **`UploadPlanner` Update**: Enhance `PlanTexture2D` and `PlanTexture3D` to support "Full Upload" defaults.
+  - When `subresources` is empty, the planner must now generate regions for **all mip levels and all array slices** (faces) defined by the destination texture descriptor, instead of just the first mip.
+  - This is a prerequisite for correctly uploading environmental cubemaps with full mip chains.
+
+**4.1: Shared Atmosphere HLSL (`AtmosphereHelpers.hlsli`)**
+
+- Define `GetAtmosphericFog(worldPos, cameraPos, fogParams)`: Returns a fog transmittance and inscattering color.
+- Implement exponential-height fog (density, height falloff).
+- Standardize the "Inscattering" color to be derived from the sky/sun state if `fog.use_sky_color` is enabled.
+
+**4.2: Atmospheric Render Passes (`SkyPass`)**
+
+- **Engine C++**: Implement `SkyPass.h` and `SkyPass.cpp` in `src/Oxygen/Renderer/Passes/`.
+  - Inherit from `GraphicsRenderPass`.
+  - Configure for **"Fullscreen Triangle"**: No input layout, no vertex buffers bound.
+  - Pipeline State: `Depth Test: EQUAL`, `Depth Write: Disabled`, `Cull: None`.
+- **Render Graph Integration**: Update `Examples/Common/RenderGraph.cpp` to include the new `SkyPass`.
+  - Add to `RunPasses` sequence: DepthPrePass -> LightCulling -> **SkyPass** -> Opaque Shading.
+- **Resource Wiring**:
+  - Update `EnvironmentStaticDataManager` to resolve hydrated `data::TextureAsset` pointers from the scene into bindless SRV indices using the `TextureBinder`.
+  - Ensure `EnvironmentStaticData.sky_cubemap_index` is correctly populated.
+- **Shaders**: Implement `SkySphere_VS.hlsl` (vertex-less triangle) and `SkySphere_PS.hlsl`.
+- **Exposure**: Apply `EnvironmentDynamicData.exposure` to ensure the sky is physically matched with scene lighting.
+
+**4.3: Forward Integration**
+
+- Call `ApplyAtmosphericFog` in `ForwardMesh_PS` and any other forward-shading passes (e.g., Unlit, Debug).
+- Ensure fog is applied *after* lighting but *before* final exposure (or handled consistently with light-metering).
 
 **Exit Criteria**
 
-- Forward shaders see stable exposure values (even if tonemapping is not implemented yet).
+- A visible, exposure-correct sky background (cubemap or procedural).
+- Analytical fog correctly attenuating objects based on world-space distance and height.
+- All new shaders registered in the `ShaderCatalog`.
 
-### Task 4 — First Render Integration (Choose Minimal Feature Set)
+### Task 5 — Shader Catalog & Boilerplate Update
 
-Pick the smallest set that produces visible correctness improvements without adding major new pipelines.
-
-**Option A (recommended first): Forward fog (no new pass)**
-
-- Implement exponential-height fog application in `ForwardMesh_PS` based on `EnvironmentStaticData.fog`.
-- Keep volumetric fog as disabled/stub.
-
-**Option B: Sky background pass (one new pass)**
-
-- Add a simple sky pass (fullscreen triangle) that renders:
-  -solid color sky, or
-  -specified cubemap sky.
-- Run before opaque forward shading.
-
-**Exit Criteria**
-
-- At least one environment system produces visible output and is fully fed by the unified environment data path.
-
-### Task 5 — Shader Catalog Registration (Required for Any New Shaders)
-
-**Objective**: ensure every new shader is declared in the compile-time shader catalog.
+**Objective**: Formalize the new shaders and ensure the system is ready for production scaling.
 
 **Steps**
 
-- For each new shader file, add a `ShaderFileSpec` entry with:
-  -path
-  -entry point(s)
-  -minimal boolean permutations (prefer runtime branching on enums first)
-
-Update the compile-time shader count assertion accordingly.
+- Register `SkySphere_VS` and `SkySphere_PS` in the compile-time `ShaderCatalog`.
+- Create a reusable `FullscreenTriangle.hlsli` in `src/Oxygen/Graphics/Direct3D12/Shaders/Include/` to provide `GetFullscreenTrianglePos(uint vertexID)`.
+- Ensure the `Graphics` layer's `CreatePipelineStateDesc` supports an empty `InputLayout` for vertex-less draws.
+- Update the renderer's `PipelineLibrary` or pass-specific PSO creation to cache the new Sky PSOs.
 
 ## Integration Notes
 
@@ -154,11 +162,12 @@ This phase must define a single policy and apply it consistently.
 The renderer owns:
 
 - The environment static SRV buffer allocation and upload.
+- The mapping of `data::TextureAsset` to bindless SRV indices (via `TextureBinder`).
 - Any derived GPU resources (sky cubemaps, LUTs, cloud textures) when those are implemented.
 
 The scene owns:
 
-- Authored parameters only (no GPU resources).
+- Authored parameters and hydrated CPU assets (`std::shared_ptr<data::TextureAsset>`).
 
 ## Open Questions (to resolve during Task 0/1)
 

@@ -138,6 +138,13 @@ def _pack_directional_light_record(
     common = _pack_light_common_record(light)
     angular_size = _f(light.get("angular_size_radians"), 0.0)
     env_contrib = _u32_bool(light.get("environment_contribution"), 0)
+    is_sun_light = _u32_bool(
+        light.get(
+            "is_sun_light",
+            light.get("is_sunlight", light.get("IsSunLight")),
+        ),
+        0,
+    )
     cascade_count = int(light.get("cascade_count", 4) or 0)
     if cascade_count < 0 or cascade_count > 4:
         raise PakError(
@@ -155,10 +162,11 @@ def _pack_directional_light_record(
         + common
         + struct.pack("<f", angular_size)
         + struct.pack("<I", int(env_contrib))
+        + struct.pack("<I", int(is_sun_light))
         + struct.pack("<I", int(cascade_count))
         + struct.pack("<4f", *cascade_distances)
         + struct.pack("<f", distribution)
-        + b"\x00" * 12
+        + b"\x00" * 8
     )
     if len(out) != 96:
         raise PakError(

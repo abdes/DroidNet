@@ -96,8 +96,10 @@ namespace {
 } // namespace
 
 EnvironmentStaticDataManager::EnvironmentStaticDataManager(
-  observer_ptr<Graphics> gfx)
+  observer_ptr<Graphics> gfx,
+  observer_ptr<renderer::resources::IResourceBinder> texture_binder)
   : gfx_(gfx)
+  , texture_binder_(texture_binder)
 {
   slot_needs_upload_.fill(true);
 }
@@ -136,6 +138,7 @@ auto EnvironmentStaticDataManager::UpdateIfNeeded(const RenderContext& context)
   observer_ptr<const scene::SceneEnvironment> env = nullptr;
   if (const auto scene_ptr = context.GetScene()) {
     env = scene_ptr->GetEnvironment();
+    BuildFromSceneEnvironment(env);
   }
 
   UploadIfNeeded();
@@ -197,8 +200,17 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
       next.sky_light.diffuse_intensity = sky_light->GetDiffuseIntensity();
       next.sky_light.specular_intensity = sky_light->GetSpecularIntensity();
 
-      // Asset binding not implemented in Phase 1.5.
-      next.sky_light.cubemap_slot = kInvalidDescriptorSlot;
+      // Resolve cubemap ResourceKey to shader-visible index via TextureBinder.
+      if (texture_binder_
+        && sky_light->GetSource()
+          == scene::environment::SkyLightSource::kSpecifiedCubemap
+        && !sky_light->GetCubemapResource().IsPlaceholder()) {
+        const auto slot
+          = texture_binder_->GetOrAllocate(sky_light->GetCubemapResource());
+        next.sky_light.cubemap_slot = slot.get();
+      } else {
+        next.sky_light.cubemap_slot = kInvalidDescriptorSlot;
+      }
     }
 
     if (const auto sky_sphere
@@ -211,8 +223,17 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
       next.sky_sphere.rotation_radians = sky_sphere->GetRotationRadians();
       next.sky_sphere.tint_rgb = sky_sphere->GetTintRgb();
 
-      // Asset binding not implemented in Phase 1.5.
-      next.sky_sphere.cubemap_slot = kInvalidDescriptorSlot;
+      // Resolve cubemap ResourceKey to shader-visible index via TextureBinder.
+      if (texture_binder_
+        && sky_sphere->GetSource()
+          == scene::environment::SkySphereSource::kCubemap
+        && !sky_sphere->GetCubemapResource().IsPlaceholder()) {
+        const auto slot
+          = texture_binder_->GetOrAllocate(sky_sphere->GetCubemapResource());
+        next.sky_sphere.cubemap_slot = slot.get();
+      } else {
+        next.sky_sphere.cubemap_slot = kInvalidDescriptorSlot;
+      }
     }
 
     if (const auto clouds
