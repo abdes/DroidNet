@@ -80,20 +80,12 @@ The scene owns authored data; the renderer owns GPU resources derived from it.
 
 ### Task 2 — HLSL Access Helpers + Validation Gates
 
-**Objective**: standardize and enforce safe access patterns for environment data.
+**Status**: Completed
 
-**Steps**
-
-1. Add an HLSL helper to fetch `EnvironmentStaticData` from the bindless SRV slot:
-	 - Must check invalid-slot sentinel.
-	 - Must satisfy the project’s bindless domain validation conventions.
-	 - **Mandatory**: environment-aware shaders must use this helper (no direct ad-hoc heap indexing).
-
-2. Add a small helper for `EnvironmentDynamicData` usage as needed (already root CBV at `b3`).
-
-**Deliverables**
-
-- A single canonical HLSL helper used by all environment-aware shaders.
+- Created `EnvironmentHelpers.hlsli` as the canonical access path for environment data.
+- Implemented `LoadEnvironmentStaticData` with mandatory bindless index validation and domain guards.
+- Standardized `EnvironmentDynamicData` as a global root CBV (b3) and provided helpers for common environment queries.
+- Refactored forward shaders to use these helpers, ensuring safe and consistent data consumption.
 
 ### Task 3 — Wire Exposure into EnvironmentDynamicData (MVP)
 

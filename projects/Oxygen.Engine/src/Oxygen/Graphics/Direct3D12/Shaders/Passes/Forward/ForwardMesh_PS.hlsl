@@ -17,8 +17,7 @@
 //!   DEBUG_CLUSTER_INDEX: Visualize cluster boundaries as checkerboard
 
 #include "Renderer/SceneConstants.hlsli"
-#include "Renderer/EnvironmentDynamicData.hlsli"
-#include "Renderer/EnvironmentStaticData.hlsli"
+#include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/DirectionalLightBasic.hlsli"
 #include "Renderer/PositionalLightData.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
@@ -49,9 +48,6 @@ cbuffer RootConstants : register(b2, space0) {
     uint g_DrawIndex;
     uint g_PassConstantsIndex;
 }
-
-// Root CBV b3: per-frame, frequently accessed environment data.
-ConstantBuffer<EnvironmentDynamicData> EnvironmentDynamicData : register(b3, space0);
 
 // Vertex shader output / Pixel shader input (must match ForwardMesh_VS.hlsl)
 struct VSOutput {
@@ -182,36 +178,21 @@ float4 PS(VSOutput input) : SV_Target0 {
     // Common cluster lookup for all light culling debug modes
     const uint cluster_grid_slot = EnvironmentDynamicData.bindless_cluster_grid_slot;
 
-    if (cluster_grid_slot == K_INVALID_BINDLESS_INDEX) {
+        if (cluster_grid_slot == K_INVALID_BINDLESS_INDEX) {
         return float4(1.0, 0.0, 1.0, 1.0); // Magenta = no cluster grid
     }
-
-    const uint3 cluster_dims = uint3(EnvironmentDynamicData.cluster_dim_x,
-                                     EnvironmentDynamicData.cluster_dim_y,
-                                     EnvironmentDynamicData.cluster_dim_z);
-    const float2 screen_dims = float2(EnvironmentDynamicData.cluster_dim_x * EnvironmentDynamicData.tile_size_px,
-                                      EnvironmentDynamicData.cluster_dim_y * EnvironmentDynamicData.tile_size_px);
 
     const float3 view_pos = mul(view_matrix, float4(input.world_pos, 1.0)).xyz;
     const float linear_depth = max(-view_pos.z, 0.0);
 
-    const uint cluster_index = ComputeClusterIndex(
-        input.position.xy,
-        linear_depth,
-        screen_dims,
-        cluster_dims,
-        EnvironmentDynamicData.tile_size_px,
-        EnvironmentDynamicData.z_near,
-        EnvironmentDynamicData.z_scale,
-        EnvironmentDynamicData.z_bias);
-
+    const uint cluster_index = GetClusterIndex(input.position.xy, linear_depth);
     ClusterLightInfo cluster_info = GetClusterLightInfo(cluster_grid_slot, cluster_index);
 
     // Compute tile/slice for visualization
-    uint tile_x = uint(input.position.x) / EnvironmentDynamicData.tile_size_px;
-    uint tile_y = uint(input.position.y) / EnvironmentDynamicData.tile_size_px;
-    uint tiles_per_slice = cluster_dims.x * cluster_dims.y;
-    uint z_slice = cluster_index / tiles_per_slice;
+    const uint3 cluster_dims = GetClusterDimensions();
+    const uint tile_x = uint(input.position.x) / EnvironmentDynamicData.tile_size_px;
+    const uint tile_y = uint(input.position.y) / EnvironmentDynamicData.tile_size_px;
+    const uint z_slice = cluster_index / (cluster_dims.x * cluster_dims.y);
 
 #ifdef DEBUG_LIGHT_HEATMAP
     // Heat map: light count (black -> green -> yellow -> red)
@@ -276,13 +257,12 @@ float4 PS(VSOutput input) : SV_Target0 {
     // Use clustered lighting for positional lights
     const float3 view_pos = mul(view_matrix, float4(input.world_pos, 1.0)).xyz;
     const float linear_depth = max(-view_pos.z, 0.0);
-    direct += AccumulatePositionalLightsClustered(
+        direct += AccumulatePositionalLightsClustered(
         input.world_pos,
         input.position.xy,
         linear_depth,
         N, V, NdotV, F0,
-        base_rgb, metalness, roughness,
-        EnvironmentDynamicData);
+        base_rgb, metalness, roughness);
 
     // Ambient term
     const float ambient_strength = 0.0f;

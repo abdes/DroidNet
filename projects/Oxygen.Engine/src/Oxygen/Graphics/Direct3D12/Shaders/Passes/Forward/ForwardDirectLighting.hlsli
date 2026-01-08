@@ -4,6 +4,7 @@
 #include "Renderer/DirectionalLightBasic.hlsli"
 #include "Renderer/PositionalLightData.hlsli"
 #include "Passes/Forward/ForwardPbr.hlsli"
+#include "Renderer/EnvironmentHelpers.hlsli"
 
 // Safety caps for fallback loops (pre-clustered culling).
 #ifndef MAX_DIRECTIONAL_LIGHTS
@@ -187,7 +188,7 @@ float3 AccumulatePositionalLights(
 // @param screen_pos  Fragment screen position (pixels)
 // @param linear_depth  Linear depth from camera (world units)
 // @param N, V, NdotV, F0, base_rgb, metalness, roughness  PBR parameters
-// @param env_dyn  EnvironmentDynamicData from b3 CBV
+// @param material_... attributes
 // @return Accumulated direct lighting contribution
 float3 AccumulatePositionalLightsClustered(
     float3 world_pos,
@@ -199,17 +200,16 @@ float3 AccumulatePositionalLightsClustered(
     float3 F0,
     float3 base_rgb,
     float  metalness,
-    float  roughness,
-    EnvironmentDynamicData env_dyn)
+    float  roughness)
 {
     // Check if cluster buffers are available
-    const uint cluster_grid_slot = env_dyn.bindless_cluster_grid_slot;
-    const uint light_list_slot = env_dyn.bindless_cluster_index_list_slot;
+    const uint cluster_grid_slot = EnvironmentDynamicData.bindless_cluster_grid_slot;
+    const uint light_list_slot = EnvironmentDynamicData.bindless_cluster_index_list_slot;
 
     const bool has_cluster_data = (cluster_grid_slot != K_INVALID_BINDLESS_INDEX)
                                && (light_list_slot != K_INVALID_BINDLESS_INDEX)
-                               && (env_dyn.cluster_dim_x > 0)
-                               && (env_dyn.cluster_dim_y > 0);
+                               && (EnvironmentDynamicData.cluster_dim_x > 0)
+                               && (EnvironmentDynamicData.cluster_dim_y > 0);
 
     // Fall back to brute-force if no cluster data
     if (!has_cluster_data) {
@@ -218,21 +218,7 @@ float3 AccumulatePositionalLightsClustered(
     }
 
     // Compute cluster index
-    const uint3 cluster_dims = uint3(env_dyn.cluster_dim_x,
-                                     env_dyn.cluster_dim_y,
-                                     env_dyn.cluster_dim_z);
-    const float2 screen_dims = float2(env_dyn.cluster_dim_x * env_dyn.tile_size_px,
-                                      env_dyn.cluster_dim_y * env_dyn.tile_size_px);
-
-    const uint cluster_index = ComputeClusterIndex(
-        screen_pos,
-        linear_depth,
-        screen_dims,
-        cluster_dims,
-        env_dyn.tile_size_px,
-        env_dyn.z_near,
-        env_dyn.z_scale,
-        env_dyn.z_bias);
+    const uint cluster_index = GetClusterIndex(screen_pos, linear_depth);
 
     // Get cluster light info
     ClusterLightInfo cluster_info = GetClusterLightInfo(cluster_grid_slot, cluster_index);
