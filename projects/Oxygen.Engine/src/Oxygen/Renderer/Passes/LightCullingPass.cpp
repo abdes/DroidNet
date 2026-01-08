@@ -594,7 +594,6 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
                            &compute_z_scale]() {
     const EnvironmentDynamicData env_data {
       .exposure = 1.0F, // TODO: from post-process/camera
-      .white_point = 1.0F, // TODO: from tonemapping settings
       .bindless_cluster_grid_slot = impl_->cluster_grid_srv.get(),
       .bindless_cluster_index_list_slot = impl_->light_index_list_srv.get(),
       .cluster_dim_x = impl_->grid_dims.x,
