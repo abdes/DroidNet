@@ -10,6 +10,7 @@
 #include <memory>
 #include <unordered_map>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
@@ -51,38 +52,44 @@ namespace oxygen::engine::internal {
 */
 class EnvironmentDynamicDataManager {
 public:
-  struct BufferInfo {
-    std::shared_ptr<graphics::Buffer> buffer;
-    void* mapped_ptr { nullptr };
-  };
-
-  OXGN_RNDR_API EnvironmentDynamicDataManager(observer_ptr<Graphics> gfx);
+  OXGN_RNDR_API explicit EnvironmentDynamicDataManager(
+    observer_ptr<Graphics> gfx);
 
   OXGN_RNDR_API ~EnvironmentDynamicDataManager();
+
+  OXYGEN_MAKE_NON_COPYABLE(EnvironmentDynamicDataManager)
+  OXYGEN_DEFAULT_MOVABLE(EnvironmentDynamicDataManager)
 
   //! Set active frame slot for upcoming allocations.
   OXGN_RNDR_API auto OnFrameStart(frame::Slot slot) -> void;
 
-  //! Get or create buffer for current slot + view_id.
-  OXGN_RNDR_API auto GetOrCreateBuffer(ViewId view_id) -> BufferInfo;
+  //! Set exposure for a specific view.
+  OXGN_RNDR_API auto SetExposure(ViewId view_id, float exposure) -> void;
 
-  //! Write EnvironmentDynamicData snapshot into the per-slot per-view buffer.
+  //! Set clustered culling configuration for a specific view.
+  OXGN_RNDR_API auto SetCullingData(ViewId view_id, uint32_t grid_slot,
+    uint32_t index_list_slot, uint32_t dim_x, uint32_t dim_y, uint32_t dim_z,
+    uint32_t tile_size_px) -> void;
+
+  //! Set Z-binning parameters for a specific view.
+  OXGN_RNDR_API auto SetZBinning(ViewId view_id, float z_near, float z_far,
+    float z_scale, float z_bias) -> void;
+
+  //! Resolve data and upload to GPU if dirty for the current frame slot.
   /*!
-   Returns BufferInfo for convenience; logs and returns an empty BufferInfo
-   on failure.
-
-   @param view_id The view identifier.
-   @param data The environment data to upload.
-   @return BufferInfo with buffer and mapped pointer.
+   This call is idempotent for a given view within the same frame slot.
+   Subsequent calls will only perform an upload if data has been updated
+   via setters.
   */
-  OXGN_RNDR_API auto WriteEnvironmentData(
-    ViewId view_id, const EnvironmentDynamicData& data) -> BufferInfo;
+  OXGN_RNDR_API auto UpdateIfNeeded(ViewId view_id) -> void;
 
-  //! Get current frame slot.
-  [[nodiscard]] auto GetCurrentSlot() const noexcept -> frame::Slot
-  {
-    return current_slot_;
-  }
+  //! Get the GPU virtual address for the current slot's buffer for a view.
+  [[nodiscard]] OXGN_RNDR_API auto GetGpuVirtualAddress(ViewId view_id)
+    -> uint64_t;
+
+  //! Get the buffer for the current slot for a view.
+  [[nodiscard]] OXGN_RNDR_API auto GetBuffer(ViewId view_id)
+    -> std::shared_ptr<graphics::Buffer>;
 
 private:
   struct BufferKey {
@@ -98,14 +105,37 @@ private:
   struct BufferKeyHash {
     auto operator()(const BufferKey& key) const noexcept -> std::size_t
     {
-      return std::hash<std::uint32_t> {}(key.slot.get())
-        ^ (std::hash<std::uint64_t> {}(key.view_id.get()) << 1);
+      std::size_t h = 0;
+      oxygen::HashCombine(h, key.slot);
+      oxygen::HashCombine(h, key.view_id);
+      return h;
     }
+  };
+
+  struct BufferInfo {
+    std::shared_ptr<graphics::Buffer> buffer;
+    void* mapped_ptr { nullptr };
+  };
+
+  struct ViewState {
+    EnvironmentDynamicData data {};
+    std::array<bool, frame::kFramesInFlight.get()> slot_dirty_ {};
   };
 
   observer_ptr<Graphics> gfx_;
   frame::Slot current_slot_ { frame::kInvalidSlot };
+
+  std::unordered_map<ViewId, ViewState> view_states_;
   std::unordered_map<BufferKey, BufferInfo, BufferKeyHash> buffers_;
+
+  auto GetOrCreateBuffer(ViewId view_id) -> BufferInfo;
+
+  //! Mark all frame slots dirty for a view, forced an update on next access.
+  /*!
+   Used when canonical CPU state changes, ensuring all GPU buffers in the
+   ring-buffer rotation eventually receive the update.
+  */
+  auto MarkAllSlotsDirty(ViewId view_id) -> void;
 };
 
 } // namespace oxygen::engine::internal

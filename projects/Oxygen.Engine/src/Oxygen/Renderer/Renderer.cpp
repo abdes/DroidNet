@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <bit>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -53,6 +54,8 @@
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Scene.h>
 
 // Implementation of RendererTagFactory. Provides access to RendererTag
@@ -253,52 +256,6 @@ auto Renderer::OverrideMaterialUvTransform(const data::MaterialAsset& material,
   }
 
   return materials->OverrideUvTransform(material, uv_scale, uv_offset);
-}
-
-auto Renderer::PrepareEnvironmentDynamicData(
-  ViewId view_id, const RenderContext& context) -> uint64_t
-{
-  EnvironmentDynamicData env_data {};
-
-  // Populate cluster buffer slots from LightCullingPass if available
-  if (const auto* light_culling = context.GetPass<LightCullingPass>()) {
-    env_data.bindless_cluster_grid_slot
-      = light_culling->GetClusterGridSrvIndex().get();
-    env_data.bindless_cluster_index_list_slot
-      = light_culling->GetLightIndexListSrvIndex().get();
-
-    // Copy cluster config dimensions
-    const auto& config = light_culling->GetClusterConfig();
-    const auto dims = light_culling->GetGridDimensions();
-    env_data.cluster_dim_x = dims.x;
-    env_data.cluster_dim_y = dims.y;
-    env_data.cluster_dim_z = dims.z;
-    env_data.tile_size_px = config.tile_size_px;
-    env_data.z_near = config.z_near;
-    env_data.z_far = config.z_far;
-
-    // Compute Z-binning parameters for clustered mode
-    if (dims.z > 1) {
-      const float log_range = std::log2(config.z_far / config.z_near);
-      env_data.z_scale = static_cast<float>(dims.z) / log_range;
-      env_data.z_bias = -env_data.z_scale * std::log2(config.z_near);
-    }
-  }
-
-  // TODO: Populate exposure from camera/post-process settings.
-  // For now use the default (exposure=1.0).
-
-  auto buffer_info
-    = env_dynamic_manager_->WriteEnvironmentData(view_id, env_data);
-  if (!buffer_info.buffer) {
-    LOG_F(ERROR,
-      "PrepareEnvironmentDynamicData: Failed to write environment data for "
-      "view {}",
-      view_id.get());
-    return 0;
-  }
-
-  return buffer_info.buffer->GetGPUVirtualAddress();
 }
 
 auto Renderer::RegisterView(
@@ -773,6 +730,10 @@ auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
   }
 
   WireContext(render_context, buffer_info.buffer);
+  render_context.env_dynamic_manager.reset(env_dynamic_manager_.get());
+
+  // Resolve and set exposure for the view.
+  UpdateViewExposure(view_id, render_context);
 
   // Populate render_context.current_view
   render_context.current_view.view_id = view_id;
@@ -780,6 +741,30 @@ auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
   render_context.current_view.prepared_frame.reset(&prepared_it->second);
 
   return true;
+}
+
+auto Renderer::UpdateViewExposure(ViewId view_id, RenderContext& render_context)
+  -> float
+{
+  // Default: exposure = 1.0. If authored exposure_compensation exists, apply it
+  // multiplicatively. In Phase 1.5, we do not support physical camera
+  // parameters.
+  float exposure = 1.0F;
+
+  if (const auto scene_ptr = render_context.GetScene()) {
+    if (const auto env = scene_ptr->GetEnvironment()) {
+      if (const auto pp
+        = env->TryGetSystem<scene::environment::PostProcessVolume>();
+        pp && pp->IsEnabled()) {
+        // Scene authoring stores EV; GPU expects a multi-view resolved
+        // multiplier.
+        exposure *= std::exp2(pp->GetExposureCompensationEv());
+      }
+    }
+  }
+
+  env_dynamic_manager_->SetExposure(view_id, exposure);
+  return exposure;
 }
 
 auto Renderer::ExecuteRenderGraphForView(ViewId view_id,

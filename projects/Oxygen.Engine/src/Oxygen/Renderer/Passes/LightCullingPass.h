@@ -175,16 +175,6 @@ public:
   [[nodiscard]] OXGN_RNDR_NDAPI auto GetGridDimensions() const noexcept
     -> ClusterConfig::GridDimensions;
 
-  //! GPU virtual address of the EnvironmentDynamicData CBV.
-  /*!
-   Returns the address of the constant buffer containing cluster grid slots,
-   dimensions, and Z-binning parameters. Bound to root signature slot b3.
-
-   @return GPU virtual address, or 0 if buffer not yet created.
-  */
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetEnvironmentCbvAddress() const noexcept
-    -> uint64_t;
-
 protected:
   //=== ComputeRenderPass Interface
   //===-----------------------------------------//
