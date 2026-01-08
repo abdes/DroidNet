@@ -37,6 +37,10 @@ namespace oxygen::engine {
 class Renderer;
 class RenderPass;
 
+namespace internal {
+  class EnvironmentDynamicDataManager;
+}
+
 //=== Pass Type List and Compile-Time Indexing ===----------------------------//
 
 template <typename... Ts> struct PassTypeList {
@@ -122,6 +126,13 @@ struct RenderContext {
    @note This field is mandatory.
   */
   std::shared_ptr<const graphics::Buffer> scene_constants;
+
+  //! Per-view environment dynamic data manager.
+  /*!
+   Supports root CBV binding at b3. Shaders query cluster indices and exposure
+   from this buffer.
+  */
+  observer_ptr<internal::EnvironmentDynamicDataManager> env_dynamic_manager;
 
   //! The constant buffer containing material constants for the current render
   //! item.

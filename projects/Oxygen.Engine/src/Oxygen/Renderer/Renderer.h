@@ -261,18 +261,6 @@ public:
     const data::MaterialAsset& material, glm::vec2 uv_scale,
     glm::vec2 uv_offset) -> bool;
 
-  //! Populate and upload EnvironmentDynamicData for a view.
-  /*!
-   Call after LightCullingPass executes to wire cluster buffer slots into the
-   environment CBV. The buffer is bound at root signature slot b3.
-
-   @param view_id View identifier for per-view buffer management.
-   @param context Render context with access to registered passes.
-   @return GPU virtual address of the uploaded buffer, or 0 on failure.
-  */
-  OXGN_RNDR_API auto PrepareEnvironmentDynamicData(
-    ViewId view_id, const RenderContext& context) -> uint64_t;
-
 private:
   //! Build frame data for a specific view (scene prep, culling, draw list).
   /*!\n    Internal method called by OnPreRender for each registered view.
@@ -309,6 +297,15 @@ private:
 
   auto PrepareAndWireSceneConstantsForView(ViewId view_id,
     const FrameContext& frame_context, RenderContext& render_context) -> bool;
+
+  //! Resolve exposure for the view based on camera and post-process settings.
+  /*!
+   Calculates the resolved exposure multiplier ($2^-EV$) and updates the
+   EnvironmentDynamicDataManager.
+   @return The resolved exposure multiplier.
+  */
+  auto UpdateViewExposure(ViewId view_id, RenderContext& render_context)
+    -> float;
 
   // Execute the view's render graph factory (awaits the coroutine). Returns
   // true on successful completion, false on exception.

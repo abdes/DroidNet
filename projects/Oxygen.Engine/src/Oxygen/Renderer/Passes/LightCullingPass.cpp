@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cmath>
 #include <cstring>
 #include <stdexcept>
 #include <unordered_map>
@@ -26,12 +27,16 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/EnvironmentDynamicData.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Scene.h>
 
 using oxygen::engine::LightCullingPass;
 using oxygen::engine::LightCullingPassConfig;
@@ -120,12 +125,11 @@ struct LightCullingPass::Impl {
   ShaderVisibleIndex pass_constants_index { kInvalidShaderVisibleIndex };
   void* pass_constants_mapped_ptr { nullptr };
 
-  // EnvironmentDynamicData CBV (owned by this pass, bound to b3)
-  std::shared_ptr<Buffer> env_data_buffer;
-  void* env_data_mapped_ptr { nullptr };
-
   // Track last built cluster mode to detect PSO rebuild needs
   uint32_t last_built_depth_slices { 0 };
+
+  // Track last logged grid dimensions to avoid spam
+  uint32_t last_logged_z { 0 };
 
   Impl(observer_ptr<Graphics> gfx_, std::shared_ptr<Config> config_)
     : gfx(gfx_)
@@ -141,10 +145,6 @@ struct LightCullingPass::Impl {
     if (pass_constants_buffer && pass_constants_mapped_ptr) {
       pass_constants_buffer->UnMap();
       pass_constants_mapped_ptr = nullptr;
-    }
-    if (env_data_buffer && env_data_mapped_ptr) {
-      env_data_buffer->UnMap();
-      env_data_mapped_ptr = nullptr;
     }
     // GPU buffers (cluster_grid_buffer, light_index_list_buffer) are cleaned
     // up automatically via shared_ptr. Associated descriptors are managed by
@@ -282,43 +282,6 @@ struct LightCullingPass::Impl {
     pass_constants_cbv = registry.RegisterView(
       *pass_constants_buffer, std::move(cbv_handle), cbv_view_desc);
     // RegisterView internally validates and throws on failure
-  }
-
-  //! Create the EnvironmentDynamicData CBV buffer (bound to b3).
-  /*!
-   This buffer holds cluster grid slots, dimensions, and Z-binning parameters
-   that shaders need for Forward+ light lookup. Owned entirely by this pass.
-  */
-  auto EnsureEnvDataBuffer() -> void
-  {
-    if (env_data_buffer) {
-      return;
-    }
-
-    // Size must be 256-byte aligned for root CBV
-    constexpr uint32_t kEnvDataBufferSize = 256u;
-    static_assert(sizeof(EnvironmentDynamicData) <= kEnvDataBufferSize,
-      "EnvironmentDynamicData exceeds CBV buffer size");
-
-    const graphics::BufferDesc desc {
-      .size_bytes = kEnvDataBufferSize,
-      .usage = graphics::BufferUsage::kConstant,
-      .memory = graphics::BufferMemory::kUpload,
-      .debug_name = name + "_EnvDynamicData",
-    };
-
-    env_data_buffer = gfx->CreateBuffer(desc);
-    if (!env_data_buffer) {
-      throw std::runtime_error(
-        "LightCullingPass: Failed to create env data buffer");
-    }
-    env_data_buffer->SetName(desc.debug_name);
-
-    env_data_mapped_ptr = env_data_buffer->Map(0, desc.size_bytes);
-    if (!env_data_mapped_ptr) {
-      throw std::runtime_error(
-        "LightCullingPass: Failed to map env data buffer");
-    }
   }
 
   //! Create or resize GPU buffers for cluster grid output.
@@ -497,15 +460,14 @@ auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
     = cluster_cfg.ComputeGridDimensions(screen_width, screen_height);
 
   // Debug: Log grid dimensions when they change
-  static uint32_t last_logged_z = 0;
-  if (impl_->grid_dims.z != last_logged_z) {
+  if (impl_->grid_dims.z != impl_->last_logged_z) {
     LOG_F(INFO,
       "LightCullingPass: config={} grid_dims={}x{}x{} depth_slices={} "
       "z_scale={:.3f}",
-      static_cast<void*>(impl_->config.get()), impl_->grid_dims.x,
+      static_cast<const void*>(impl_->config.get()), impl_->grid_dims.x,
       impl_->grid_dims.y, impl_->grid_dims.z, cluster_cfg.depth_slices,
       cluster_cfg.ComputeZScale());
-    last_logged_z = impl_->grid_dims.z;
+    impl_->last_logged_z = impl_->grid_dims.z;
   }
 
   // Ensure GPU buffers exist with sufficient capacity
@@ -560,9 +522,6 @@ auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 
 auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
-  // Ensure EnvironmentDynamicData buffer exists
-  impl_->EnsureEnvDataBuffer();
-
   // Get effective z_near/z_far from camera if not explicitly set in config
   // Config value of 0 means "use camera"
   const auto& cluster_cfg = impl_->config->cluster;
@@ -578,7 +537,7 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     }
   }
 
-  // Compute z_scale using effective values
+  // Calculate Z-binning parameters
   auto compute_z_scale = [&]() -> float {
     if (cluster_cfg.depth_slices <= 1 || effective_z_near <= 0.0F
       || effective_z_far <= effective_z_near) {
@@ -587,36 +546,26 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     const float log_ratio = std::log2(effective_z_far / effective_z_near);
     return static_cast<float>(cluster_cfg.depth_slices) / log_ratio;
   };
+  const float z_scale = compute_z_scale();
+  const float z_bias = cluster_cfg.ComputeZBias();
 
-  // Helper to populate and upload EnvironmentDynamicData CBV
-  // Uses SRV indices for pixel shader read access
-  auto upload_env_data = [this, &cluster_cfg, effective_z_near, effective_z_far,
-                           &compute_z_scale]() {
-    const EnvironmentDynamicData env_data {
-      .exposure = 1.0F, // TODO: from post-process/camera
-      .bindless_cluster_grid_slot = impl_->cluster_grid_srv.get(),
-      .bindless_cluster_index_list_slot = impl_->light_index_list_srv.get(),
-      .cluster_dim_x = impl_->grid_dims.x,
-      .cluster_dim_y = impl_->grid_dims.y,
-      .cluster_dim_z = impl_->grid_dims.z,
-      .tile_size_px = cluster_cfg.tile_size_px,
-      .z_near = effective_z_near,
-      .z_far = effective_z_far,
-      .z_scale = compute_z_scale(),
-      .z_bias = cluster_cfg.ComputeZBias(),
-    };
-    std::memcpy(impl_->env_data_mapped_ptr, &env_data, sizeof(env_data));
+  // Wire clustered data into EnvironmentDynamicDataManager (root CBV b3)
+  if (auto manager = Context().env_dynamic_manager) {
+    const auto view_id = Context().current_view.view_id;
 
-    // Diagnostic: log env data when it changes
-    static uint32_t last_env_z_dim = 0;
-    if (env_data.cluster_dim_z != last_env_z_dim) {
-      LOG_F(INFO,
-        "LightCullingPass env_data: cluster_dims={}x{}x{}, z_scale={:.4f}",
-        env_data.cluster_dim_x, env_data.cluster_dim_y, env_data.cluster_dim_z,
-        env_data.z_scale);
-      last_env_z_dim = env_data.cluster_dim_z;
-    }
-  };
+    const auto u_grid_srv = impl_->cluster_grid_srv.get();
+    const auto u_index_list_srv = impl_->light_index_list_srv.get();
+
+    manager->SetCullingData(view_id, u_grid_srv, u_index_list_srv,
+      impl_->grid_dims.x, impl_->grid_dims.y, impl_->grid_dims.z,
+      cluster_cfg.tile_size_px);
+
+    manager->SetZBinning(
+      view_id, effective_z_near, effective_z_far, z_scale, z_bias);
+
+    // Resolve and upload to GPU
+    manager->UpdateIfNeeded(view_id);
+  }
 
   if (impl_->cluster_grid_uav == kInvalidShaderVisibleIndex
     || impl_->light_index_list_uav == kInvalidShaderVisibleIndex) {
@@ -649,8 +598,6 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
       graphics::ResourceStates::kShaderResource);
     recorder.FlushBarriers();
 
-    // Upload environment data so shaders can bind b3 correctly
-    upload_env_data();
     co_return;
   }
 
@@ -676,8 +623,8 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     .tile_size_px = cluster_cfg.tile_size_px,
     .z_near = effective_z_near,
     .z_far = effective_z_far,
-    .z_scale = compute_z_scale(),
-    .z_bias = cluster_cfg.ComputeZBias(),
+    .z_scale = z_scale,
+    .z_bias = z_bias,
   };
 
   std::memcpy(impl_->pass_constants_mapped_ptr, &constants, sizeof(constants));
@@ -706,9 +653,6 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     *impl_->light_index_list_buffer, graphics::ResourceStates::kShaderResource);
   recorder.FlushBarriers();
 
-  // Upload EnvironmentDynamicData CBV for subsequent shading passes
-  upload_env_data();
-
   co_return;
 }
 
@@ -733,14 +677,6 @@ auto LightCullingPass::GetGridDimensions() const noexcept
   -> ClusterConfig::GridDimensions
 {
   return impl_->grid_dims;
-}
-
-auto LightCullingPass::GetEnvironmentCbvAddress() const noexcept -> uint64_t
-{
-  if (impl_->env_data_buffer) {
-    return impl_->env_data_buffer->GetGPUVirtualAddress();
-  }
-  return 0;
 }
 
 //=== ComputeRenderPass Virtual Methods ===---------------------------------//
