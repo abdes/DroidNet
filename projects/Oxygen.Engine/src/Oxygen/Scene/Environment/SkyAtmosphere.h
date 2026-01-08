@@ -8,7 +8,6 @@
 
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Environment/EnvironmentSystem.h>
-#include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene::environment {
 
@@ -40,7 +39,7 @@ public:
   }
 
   //! Gets the planet radius (meters).
-  OXGN_SCN_NDAPI auto GetPlanetRadiusMeters() const noexcept -> float
+  [[nodiscard]] auto GetPlanetRadiusMeters() const noexcept -> float
   {
     return planet_radius_m_;
   }
@@ -52,7 +51,7 @@ public:
   }
 
   //! Gets the atmosphere height (meters).
-  OXGN_SCN_NDAPI auto GetAtmosphereHeightMeters() const noexcept -> float
+  [[nodiscard]] auto GetAtmosphereHeightMeters() const noexcept -> float
   {
     return atmosphere_height_m_;
   }
@@ -64,7 +63,7 @@ public:
   }
 
   //! Gets ground albedo (linear RGB).
-  OXGN_SCN_NDAPI auto GetGroundAlbedoRgb() const noexcept -> const Vec3&
+  [[nodiscard]] auto GetGroundAlbedoRgb() const noexcept -> const Vec3&
   {
     return ground_albedo_rgb_;
   }
@@ -76,7 +75,7 @@ public:
   }
 
   //! Gets Rayleigh scattering coefficient (1 / meter, RGB).
-  OXGN_SCN_NDAPI auto GetRayleighScatteringRgb() const noexcept -> const Vec3&
+  [[nodiscard]] auto GetRayleighScatteringRgb() const noexcept -> const Vec3&
   {
     return rayleigh_scattering_rgb_;
   }
@@ -88,7 +87,7 @@ public:
   }
 
   //! Gets Rayleigh scale height (meters).
-  OXGN_SCN_NDAPI auto GetRayleighScaleHeightMeters() const noexcept -> float
+  [[nodiscard]] auto GetRayleighScaleHeightMeters() const noexcept -> float
   {
     return rayleigh_scale_height_m_;
   }
@@ -100,7 +99,7 @@ public:
   }
 
   //! Gets Mie scattering coefficient (1 / meter, RGB).
-  OXGN_SCN_NDAPI auto GetMieScatteringRgb() const noexcept -> const Vec3&
+  [[nodiscard]] auto GetMieScatteringRgb() const noexcept -> const Vec3&
   {
     return mie_scattering_rgb_;
   }
@@ -112,7 +111,7 @@ public:
   }
 
   //! Gets Mie scale height (meters).
-  OXGN_SCN_NDAPI auto GetMieScaleHeightMeters() const noexcept -> float
+  [[nodiscard]] auto GetMieScaleHeightMeters() const noexcept -> float
   {
     return mie_scale_height_m_;
   }
@@ -121,7 +120,7 @@ public:
   auto SetMieAnisotropy(const float g) noexcept -> void { mie_g_ = g; }
 
   //! Gets Mie anisotropy g.
-  OXGN_SCN_NDAPI auto GetMieAnisotropy() const noexcept -> float
+  [[nodiscard]] auto GetMieAnisotropy() const noexcept -> float
   {
     return mie_g_;
   }
@@ -133,7 +132,7 @@ public:
   }
 
   //! Gets absorption coefficient (1 / meter, RGB).
-  OXGN_SCN_NDAPI auto GetAbsorptionRgb() const noexcept -> const Vec3&
+  [[nodiscard]] auto GetAbsorptionRgb() const noexcept -> const Vec3&
   {
     return absorption_rgb_;
   }
@@ -145,7 +144,7 @@ public:
   }
 
   //! Gets absorption scale height (meters).
-  OXGN_SCN_NDAPI auto GetAbsorptionScaleHeightMeters() const noexcept -> float
+  [[nodiscard]] auto GetAbsorptionScaleHeightMeters() const noexcept -> float
   {
     return absorption_scale_height_m_;
   }
@@ -157,7 +156,7 @@ public:
   }
 
   //! Gets multi-scattering factor.
-  OXGN_SCN_NDAPI auto GetMultiScatteringFactor() const noexcept -> float
+  [[nodiscard]] auto GetMultiScatteringFactor() const noexcept -> float
   {
     return multi_scattering_factor_;
   }
@@ -169,7 +168,7 @@ public:
   }
 
   //! Returns whether the sun disk is enabled.
-  OXGN_SCN_NDAPI auto GetSunDiskEnabled() const noexcept -> bool
+  [[nodiscard]] auto GetSunDiskEnabled() const noexcept -> bool
   {
     return sun_disk_enabled_;
   }
@@ -181,7 +180,7 @@ public:
   }
 
   //! Gets the sun disk angular radius (radians).
-  OXGN_SCN_NDAPI auto GetSunDiskAngularRadiusRadians() const noexcept -> float
+  [[nodiscard]] auto GetSunDiskAngularRadiusRadians() const noexcept -> float
   {
     return sun_disk_angular_radius_radians_;
   }
@@ -193,8 +192,7 @@ public:
   }
 
   //! Gets aerial perspective distance scale.
-  OXGN_SCN_NDAPI auto GetAerialPerspectiveDistanceScale() const noexcept
-    -> float
+  [[nodiscard]] auto GetAerialPerspectiveDistanceScale() const noexcept -> float
   {
     return aerial_perspective_distance_scale_;
   }

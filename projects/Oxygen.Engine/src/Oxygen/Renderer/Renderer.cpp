@@ -35,6 +35,7 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
+#include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Internal/SceneConstantsManager.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
@@ -128,6 +129,11 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
     = std::make_unique<internal::EnvironmentDynamicDataManager>(
       observer_ptr { gfx.get() });
 
+  // Initialize environment static data single-owner manager (bindless SRV).
+  env_static_manager_
+    = std::make_unique<internal::EnvironmentStaticDataManager>(
+      observer_ptr { gfx.get() });
+
   // Initialize the render-context pool helper used to claim per-frame
   // render contexts during PreRender/Render phases.
   render_context_pool_ = std::make_unique<RenderContextPool>();
@@ -136,6 +142,7 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
 Renderer::~Renderer()
 {
   env_dynamic_manager_.reset();
+  env_static_manager_.reset();
   scene_const_manager_.reset();
   scene_prep_state_.reset();
   uploader_.reset();
@@ -363,6 +370,10 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
   render_context_
     = observer_ptr { &render_context_pool_->Acquire(context.GetFrameSlot()) };
 
+  render_context_->scene = observer_ptr<const scene::Scene> {
+    context.GetScene().get(),
+  };
+
   // Clear the per-frame and per-view state (per-frame caches are refreshed
   // at the start of PreRender). Deferred cleanup of unregistered views is
   // performed at frame end (OnFrameEnd) to avoid destroying entries while
@@ -374,6 +385,14 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
   resolved_views_.clear();
   prepared_frames_.clear();
   per_view_storage_.clear();
+
+  // Build and publish environment static data once per frame.
+  if (env_static_manager_) {
+    env_static_manager_->UpdateIfNeeded(*render_context_);
+    scene_const_cpu_.SetBindlessEnvironmentStaticSlot(
+      BindlessEnvironmentStaticSlot(env_static_manager_->GetSrvIndex().get()),
+      SceneConstants::kRenderer);
+  }
 
   // Iterate all views registered in FrameContext and prepare each one
   auto views_range = context.GetViews();
@@ -934,6 +953,9 @@ auto Renderer::OnFrameStart(FrameContext& context) -> void
   texture_binder_->OnFrameStart();
   scene_const_manager_->OnFrameStart(frame_slot);
   env_dynamic_manager_->OnFrameStart(frame_slot);
+  if (env_static_manager_) {
+    env_static_manager_->OnFrameStart(frame_slot);
+  }
   scene_prep_state_->GetTransformUploader()->OnFrameStart(
     tag, frame_sequence, frame_slot);
   scene_prep_state_->GetGeometryUploader()->OnFrameStart(tag, frame_slot);

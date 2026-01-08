@@ -8,7 +8,6 @@
 
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Environment/EnvironmentSystem.h>
-#include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene::environment {
 
@@ -43,13 +42,13 @@ public:
   auto SetModel(const FogModel model) noexcept -> void { model_ = model; }
 
   //! Gets the fog model.
-  OXGN_SCN_NDAPI auto GetModel() const noexcept -> FogModel { return model_; }
+  [[nodiscard]] auto GetModel() const noexcept -> FogModel { return model_; }
 
   //! Sets base density (unitless).
   auto SetDensity(const float density) noexcept -> void { density_ = density; }
 
   //! Gets base density.
-  OXGN_SCN_NDAPI auto GetDensity() const noexcept -> float { return density_; }
+  [[nodiscard]] auto GetDensity() const noexcept -> float { return density_; }
 
   //! Sets height falloff (unitless).
   auto SetHeightFalloff(const float falloff) noexcept -> void
@@ -58,7 +57,7 @@ public:
   }
 
   //! Gets height falloff.
-  OXGN_SCN_NDAPI auto GetHeightFalloff() const noexcept -> float
+  [[nodiscard]] auto GetHeightFalloff() const noexcept -> float
   {
     return height_falloff_;
   }
@@ -70,7 +69,7 @@ public:
   }
 
   //! Gets height offset (meters).
-  OXGN_SCN_NDAPI auto GetHeightOffsetMeters() const noexcept -> float
+  [[nodiscard]] auto GetHeightOffsetMeters() const noexcept -> float
   {
     return height_offset_m_;
   }
@@ -82,7 +81,7 @@ public:
   }
 
   //! Gets start distance (meters).
-  OXGN_SCN_NDAPI auto GetStartDistanceMeters() const noexcept -> float
+  [[nodiscard]] auto GetStartDistanceMeters() const noexcept -> float
   {
     return start_distance_m_;
   }
@@ -94,7 +93,7 @@ public:
   }
 
   //! Gets maximum opacity.
-  OXGN_SCN_NDAPI auto GetMaxOpacity() const noexcept -> float
+  [[nodiscard]] auto GetMaxOpacity() const noexcept -> float
   {
     return max_opacity_;
   }
@@ -103,7 +102,7 @@ public:
   auto SetAlbedoRgb(const Vec3& rgb) noexcept -> void { albedo_rgb_ = rgb; }
 
   //! Gets fog albedo.
-  OXGN_SCN_NDAPI auto GetAlbedoRgb() const noexcept -> const Vec3&
+  [[nodiscard]] auto GetAlbedoRgb() const noexcept -> const Vec3&
   {
     return albedo_rgb_;
   }
@@ -112,7 +111,7 @@ public:
   auto SetAnisotropy(const float g) noexcept -> void { anisotropy_g_ = g; }
 
   //! Gets anisotropy.
-  OXGN_SCN_NDAPI auto GetAnisotropy() const noexcept -> float
+  [[nodiscard]] auto GetAnisotropy() const noexcept -> float
   {
     return anisotropy_g_;
   }
@@ -124,7 +123,7 @@ public:
   }
 
   //! Gets scattering intensity.
-  OXGN_SCN_NDAPI auto GetScatteringIntensity() const noexcept -> float
+  [[nodiscard]] auto GetScatteringIntensity() const noexcept -> float
   {
     return scattering_intensity_;
   }

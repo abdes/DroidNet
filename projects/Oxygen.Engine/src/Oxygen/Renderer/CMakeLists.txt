@@ -84,6 +84,8 @@ set(
   OXYGEN_RENDERER_PRIVATE_SOURCES
   "Internal/EnvironmentDynamicDataManager.cpp"
   "Internal/EnvironmentDynamicDataManager.h"
+  "Internal/EnvironmentStaticDataManager.cpp"
+  "Internal/EnvironmentStaticDataManager.h"
   "Internal/RenderScope.h"
   "Internal/SceneConstantsManager.cpp"
   "Internal/SceneConstantsManager.h"
