@@ -41,7 +41,7 @@ namespace oxygen::engine {
  ### Ownership and Future Extension
 
  Currently owned and uploaded by **LightCullingPass**, which populates cluster
- data and uses default values (1.0) for exposure/white_point.
+ data and uses a default value (1.0) for exposure.
 
  When post-process/auto-exposure is implemented, the owning pass has two
  options:
@@ -52,9 +52,8 @@ namespace oxygen::engine {
  @see ClusterConfig, LightCullingPass
 */
 struct alignas(16) EnvironmentDynamicData {
-  // Exposure and tonemapping
+  // Exposure
   float exposure { 1.0F };
-  float white_point { 1.0F };
 
   // Cluster grid bindless slots (from LightCullingPass)
   uint32_t bindless_cluster_grid_slot { kInvalidDescriptorSlot };

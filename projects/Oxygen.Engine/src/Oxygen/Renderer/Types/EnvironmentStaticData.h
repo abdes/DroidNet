@@ -19,62 +19,47 @@ namespace oxygen::engine {
 //! GPU-facing fog model selection.
 /*!
  Values are a renderer-side ABI for shaders.
-
- - `kDisabled` is used when the fog system is absent or disabled.
 */
 enum class FogModel : uint32_t {
   kExponentialHeight = 0u,
   kVolumetric = 1u,
-  kDisabled = 2u,
 };
 
 //! GPU-facing sky light source selection.
 /*!
  Values are a renderer-side ABI for shaders.
-
- - `kDisabled` is used when the sky light system is absent or disabled.
 */
 enum class SkyLightSource : uint32_t {
   kCapturedScene = 0u,
   kSpecifiedCubemap = 1u,
-  kDisabled = 2u,
 };
 
 //! GPU-facing sky background source selection.
 /*!
  Values are a renderer-side ABI for shaders.
-
- - `kDisabled` is used when the sky sphere system is absent or disabled.
 */
 enum class SkySphereSource : uint32_t {
   kCubemap = 0u,
   kSolidColor = 1u,
-  kDisabled = 2u,
 };
 
 //! GPU-facing tonemapper selection.
 /*!
  Values are a renderer-side ABI for shaders.
-
- - `kDisabled` is used when post processing is absent or disabled.
 */
 enum class ToneMapper : uint32_t {
   kAcesFitted = 0u,
   kReinhard = 1u,
   kNone = 2u,
-  kDisabled = 3u,
 };
 
 //! GPU-facing exposure behavior.
 /*!
  Values are a renderer-side ABI for shaders.
-
- - `kDisabled` is used when post processing is absent or disabled.
 */
 enum class ExposureMode : uint32_t {
   kManual = 0u,
   kAuto = 1u,
-  kDisabled = 2u,
 };
 
 //! GPU-facing fog parameters.
@@ -94,8 +79,8 @@ struct alignas(16) GpuFogParams {
 
   float anisotropy_g { 0.0F };
   float scattering_intensity { 1.0F };
-  FogModel model { FogModel::kDisabled };
-  uint32_t _pad0 { 0 };
+  FogModel model { FogModel::kExponentialHeight };
+  uint32_t enabled { 0u };
 };
 static_assert(
   sizeof(GpuFogParams) % 16 == 0, "GpuFogParams size must be 16-byte aligned");
@@ -151,8 +136,7 @@ static_assert(sizeof(GpuSkyAtmosphereParams) == 128,
  Layout mirrors the HLSL struct `GpuSkyLightParams`.
 
  `cubemap_slot` is a shader-visible descriptor slot (bindless SRV). When the
- sky light is disabled or missing, `source` should be
- `SkyLightSource::kDisabled` and `cubemap_slot` should be
+ sky light is disabled or missing, set `enabled = 0` and set `cubemap_slot` to
  `kInvalidDescriptorSlot`.
 */
 struct alignas(16) GpuSkyLightParams {
@@ -161,12 +145,17 @@ struct alignas(16) GpuSkyLightParams {
 
   float diffuse_intensity { 1.0F };
   float specular_intensity { 1.0F };
-  SkyLightSource source { SkyLightSource::kDisabled };
+  SkyLightSource source { SkyLightSource::kCapturedScene };
+  uint32_t enabled { 0u };
+
   uint32_t cubemap_slot { kInvalidDescriptorSlot };
+  uint32_t _pad0 { 0u };
+  uint32_t _pad1 { 0u };
+  uint32_t _pad2 { 0u };
 };
 static_assert(sizeof(GpuSkyLightParams) % 16 == 0,
   "GpuSkyLightParams size must be 16-byte aligned");
-static_assert(sizeof(GpuSkyLightParams) == 32,
+static_assert(sizeof(GpuSkyLightParams) == 48,
   "GpuSkyLightParams size must match HLSL packing");
 
 //! GPU-facing sky sphere background parameters.
@@ -174,8 +163,7 @@ static_assert(sizeof(GpuSkyLightParams) == 32,
  Layout mirrors the HLSL struct `GpuSkySphereParams`.
 
  `cubemap_slot` is a shader-visible descriptor slot (bindless SRV). When the
- sky sphere is disabled or missing, `source` should be
- `SkySphereSource::kDisabled`.
+ sky sphere is disabled or missing, set `enabled = 0`.
 */
 struct alignas(16) GpuSkySphereParams {
   glm::vec3 solid_color_rgb { 0.0F, 0.0F, 0.0F };
@@ -184,10 +172,10 @@ struct alignas(16) GpuSkySphereParams {
   glm::vec3 tint_rgb { 1.0F, 1.0F, 1.0F };
   float rotation_radians { 0.0F };
 
-  SkySphereSource source { SkySphereSource::kDisabled };
+  SkySphereSource source { SkySphereSource::kCubemap };
+  uint32_t enabled { 0u };
   uint32_t cubemap_slot { kInvalidDescriptorSlot };
-  uint32_t _pad0 { 0 };
-  uint32_t _pad1 { 0 };
+  uint32_t _pad0 { 0u };
 };
 static_assert(sizeof(GpuSkySphereParams) % 16 == 0,
   "GpuSkySphereParams size must be 16-byte aligned");
@@ -223,12 +211,9 @@ static_assert(sizeof(GpuVolumetricCloudParams) == 64,
 //! GPU-facing post process parameters.
 /*!
  Layout mirrors the HLSL struct `GpuPostProcessParams`.
-
- When post processing is disabled or missing, set `tone_mapper` to
- `ToneMapper::kDisabled` and `exposure_mode` to `ExposureMode::kDisabled`.
 */
 struct alignas(16) GpuPostProcessParams {
-  float exposure_compensation_ev { 0.0F };
+  float exposure_compensation { 1.0F };
   float auto_exposure_min_ev { -6.0F };
   float auto_exposure_max_ev { 16.0F };
   float auto_exposure_speed_up { 3.0F };
@@ -240,12 +225,17 @@ struct alignas(16) GpuPostProcessParams {
 
   float contrast { 1.0F };
   float vignette_intensity { 0.0F };
-  ToneMapper tone_mapper { ToneMapper::kDisabled };
-  ExposureMode exposure_mode { ExposureMode::kDisabled };
+  uint32_t enabled { 0u };
+  uint32_t _pad0 { 0u };
+
+  ToneMapper tone_mapper { ToneMapper::kAcesFitted };
+  ExposureMode exposure_mode { ExposureMode::kManual };
+  uint32_t _pad1 { 0u };
+  uint32_t _pad2 { 0u };
 };
 static_assert(sizeof(GpuPostProcessParams) % 16 == 0,
   "GpuPostProcessParams size must be 16-byte aligned");
-static_assert(sizeof(GpuPostProcessParams) == 48,
+static_assert(sizeof(GpuPostProcessParams) == 64,
   "GpuPostProcessParams size must match HLSL packing");
 
 //! GPU-facing environment payload uploaded as a bindless SRV.
@@ -269,7 +259,7 @@ struct alignas(16) EnvironmentStaticData {
 };
 static_assert(sizeof(EnvironmentStaticData) % 16 == 0,
   "EnvironmentStaticData size must be 16-byte aligned");
-static_assert(sizeof(EnvironmentStaticData) == 368,
+static_assert(sizeof(EnvironmentStaticData) == 400,
   "EnvironmentStaticData size must match HLSL packing");
 
 } // namespace oxygen::engine

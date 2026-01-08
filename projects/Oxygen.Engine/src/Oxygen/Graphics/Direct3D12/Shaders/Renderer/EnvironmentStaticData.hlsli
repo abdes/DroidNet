@@ -9,24 +9,19 @@
 
 static const uint FOG_MODEL_EXPONENTIAL_HEIGHT = 0u;
 static const uint FOG_MODEL_VOLUMETRIC = 1u;
-static const uint FOG_MODEL_DISABLED = 2u;
 
 static const uint SKY_LIGHT_SOURCE_CAPTURED_SCENE = 0u;
 static const uint SKY_LIGHT_SOURCE_SPECIFIED_CUBEMAP = 1u;
-static const uint SKY_LIGHT_SOURCE_DISABLED = 2u;
 
 static const uint SKY_SPHERE_SOURCE_CUBEMAP = 0u;
 static const uint SKY_SPHERE_SOURCE_SOLID_COLOR = 1u;
-static const uint SKY_SPHERE_SOURCE_DISABLED = 2u;
 
 static const uint TONEMAPPER_ACES_FITTED = 0u;
 static const uint TONEMAPPER_REINHARD = 1u;
 static const uint TONEMAPPER_NONE = 2u;
-static const uint TONEMAPPER_DISABLED = 3u;
 
 static const uint EXPOSURE_MODE_MANUAL = 0u;
 static const uint EXPOSURE_MODE_AUTO = 1u;
-static const uint EXPOSURE_MODE_DISABLED = 2u;
 
 // Mirrors oxygen::engine::GpuFogParams (sizeof = 48)
 struct GpuFogParams
@@ -42,7 +37,7 @@ struct GpuFogParams
     float anisotropy_g;
     float scattering_intensity;
     uint model;
-    uint _pad0;
+    uint enabled;
 };
 
 // Mirrors oxygen::engine::GpuSkyAtmosphereParams (sizeof = 128)
@@ -81,7 +76,7 @@ struct GpuSkyAtmosphereParams
     float _reserved7;
 };
 
-// Mirrors oxygen::engine::GpuSkyLightParams (sizeof = 32)
+// Mirrors oxygen::engine::GpuSkyLightParams (sizeof = 48)
 struct GpuSkyLightParams
 {
     float3 tint_rgb;
@@ -90,7 +85,12 @@ struct GpuSkyLightParams
     float diffuse_intensity;
     float specular_intensity;
     uint source;
+    uint enabled;
+
     uint cubemap_slot;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
 };
 
 // Mirrors oxygen::engine::GpuSkySphereParams (sizeof = 48)
@@ -103,9 +103,9 @@ struct GpuSkySphereParams
     float rotation_radians;
 
     uint source;
+    uint enabled;
     uint cubemap_slot;
     uint _pad0;
-    uint _pad1;
 };
 
 // Mirrors oxygen::engine::GpuVolumetricCloudParams (sizeof = 64)
@@ -128,10 +128,10 @@ struct GpuVolumetricCloudParams
     uint _pad0;
 };
 
-// Mirrors oxygen::engine::GpuPostProcessParams (sizeof = 48)
+// Mirrors oxygen::engine::GpuPostProcessParams (sizeof = 64)
 struct GpuPostProcessParams
 {
-    float exposure_compensation_ev;
+    float exposure_compensation;
     float auto_exposure_min_ev;
     float auto_exposure_max_ev;
     float auto_exposure_speed_up;
@@ -143,11 +143,16 @@ struct GpuPostProcessParams
 
     float contrast;
     float vignette_intensity;
+    uint enabled;
+    uint _pad0;
+
     uint tone_mapper;
     uint exposure_mode;
+    uint _pad1;
+    uint _pad2;
 };
 
-// Mirrors oxygen::engine::EnvironmentStaticData (sizeof = 368)
+// Mirrors oxygen::engine::EnvironmentStaticData (sizeof = 400)
 struct EnvironmentStaticData
 {
     GpuFogParams fog;

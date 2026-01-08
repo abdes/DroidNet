@@ -278,8 +278,8 @@ auto Renderer::PrepareEnvironmentDynamicData(
     }
   }
 
-  // TODO: Populate exposure, white_point from post-process/camera settings
-  // For now use defaults (exposure=1.0, white_point=1.0)
+  // TODO: Populate exposure from camera/post-process settings.
+  // For now use the default (exposure=1.0).
 
   auto buffer_info
     = env_dynamic_manager_->WriteEnvironmentData(view_id, env_data);
