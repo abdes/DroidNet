@@ -44,7 +44,7 @@ auto RenderGraph::SetupRenderPasses() -> void
   if (!shader_pass_config_) {
     shader_pass_config_ = std::make_shared<engine::ShaderPassConfig>();
     shader_pass_config_->clear_color
-      = graphics::Color { 0.1F, 0.2F, 0.38F, 1.0F };
+      = graphics::Color { 0.04F, 0.04F, 0.04F, 1.0F };
     shader_pass_config_->debug_name = "ShaderPass";
   }
   if (!shader_pass_) {
