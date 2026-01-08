@@ -7,7 +7,6 @@
 #pragma once
 
 #include <Oxygen/Composition/Component.h>
-#include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene::environment {
 
@@ -35,7 +34,7 @@ public:
   auto SetEnabled(const bool enabled) noexcept -> void { enabled_ = enabled; }
 
   //! Returns whether this system is enabled.
-  OXGN_SCN_NDAPI auto IsEnabled() const noexcept -> bool { return enabled_; }
+  [[nodiscard]] auto IsEnabled() const noexcept -> bool { return enabled_; }
 
 private:
   bool enabled_ = true;

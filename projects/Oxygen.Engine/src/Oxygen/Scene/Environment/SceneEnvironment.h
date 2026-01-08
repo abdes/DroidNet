@@ -19,7 +19,6 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Scene/Environment/EnvironmentSystem.h>
-#include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene {
 
@@ -114,7 +113,7 @@ public:
   }
 
   //! Returns the number of systems currently present.
-  OXGN_SCN_NDAPI auto GetSystemCount() const noexcept -> std::size_t
+  [[nodiscard]] auto GetSystemCount() const noexcept -> std::size_t
   {
     return systems_.size();
   }
@@ -128,7 +127,7 @@ public:
    @warning Entries contain non-owning pointers; they are only valid while the
             corresponding systems remain present in this environment.
   */
-  OXGN_SCN_NDAPI auto GetSystems() const noexcept
+  [[nodiscard]] auto GetSystems() const noexcept
     -> std::span<const SystemEntry>
   {
     return systems_;

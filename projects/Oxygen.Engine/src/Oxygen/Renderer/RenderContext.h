@@ -29,6 +29,7 @@ class CommandRecorder;
 
 namespace oxygen::scene {
 class Light;
+class Scene;
 } // namespace oxygen::scene
 
 namespace oxygen::engine {
@@ -169,6 +170,20 @@ struct RenderContext {
   std::unordered_map<oxygen::ViewId, observer_ptr<graphics::Framebuffer>>
     view_outputs;
 
+  //! Scene for the current frame.
+  /*!
+   Set by the Renderer during frame preparation. This is a non-owning pointer
+   and must not be cached beyond the current frame.
+  */
+  observer_ptr<const oxygen::scene::Scene> scene { nullptr };
+
+  //! Returns the active scene for the current frame.
+  [[nodiscard]] auto GetScene() const noexcept
+    -> observer_ptr<const oxygen::scene::Scene>
+  {
+    return scene;
+  }
+
   //=== Renderer / Graphics ===-----------------------------------------------//
 
   //! The renderer executing the render graph. Guaranteed to be non-null during
@@ -261,6 +276,7 @@ private:
     // Reset per-view transient state and clear cached per-view outputs
     current_view = ViewSpecific {};
     view_outputs.clear();
+    scene.reset(nullptr);
     // Reset frame lifecycle state
     frame_slot = frame::kInvalidSlot;
     frame_sequence = frame::SequenceNumber {};

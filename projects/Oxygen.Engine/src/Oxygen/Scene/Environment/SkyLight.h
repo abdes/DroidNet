@@ -9,7 +9,6 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Scene/Environment/EnvironmentSystem.h>
-#include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene::environment {
 
@@ -49,7 +48,7 @@ public:
   }
 
   //! Gets the sky light source.
-  OXGN_SCN_NDAPI auto GetSource() const noexcept -> SkyLightSource
+  [[nodiscard]] auto GetSource() const noexcept -> SkyLightSource
   {
     return source_;
   }
@@ -61,7 +60,7 @@ public:
   }
 
   //! Gets the cubemap asset key.
-  OXGN_SCN_NDAPI auto GetCubemapAsset() const noexcept -> const data::AssetKey&
+  [[nodiscard]] auto GetCubemapAsset() const noexcept -> const data::AssetKey&
   {
     return cubemap_asset_;
   }
@@ -73,7 +72,7 @@ public:
   }
 
   //! Gets intensity.
-  OXGN_SCN_NDAPI auto GetIntensity() const noexcept -> float
+  [[nodiscard]] auto GetIntensity() const noexcept -> float
   {
     return intensity_;
   }
@@ -82,7 +81,7 @@ public:
   auto SetTintRgb(const Vec3& rgb) noexcept -> void { tint_rgb_ = rgb; }
 
   //! Gets tint.
-  OXGN_SCN_NDAPI auto GetTintRgb() const noexcept -> const Vec3&
+  [[nodiscard]] auto GetTintRgb() const noexcept -> const Vec3&
   {
     return tint_rgb_;
   }
@@ -94,7 +93,7 @@ public:
   }
 
   //! Gets diffuse contribution multiplier.
-  OXGN_SCN_NDAPI auto GetDiffuseIntensity() const noexcept -> float
+  [[nodiscard]] auto GetDiffuseIntensity() const noexcept -> float
   {
     return diffuse_intensity_;
   }
@@ -106,7 +105,7 @@ public:
   }
 
   //! Gets specular contribution multiplier.
-  OXGN_SCN_NDAPI auto GetSpecularIntensity() const noexcept -> float
+  [[nodiscard]] auto GetSpecularIntensity() const noexcept -> float
   {
     return specular_intensity_;
   }

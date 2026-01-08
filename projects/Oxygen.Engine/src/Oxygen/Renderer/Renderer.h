@@ -64,6 +64,7 @@ namespace oxygen::engine {
 class RenderContextPool;
 namespace internal {
   class EnvironmentDynamicDataManager;
+  class EnvironmentStaticDataManager;
   class SceneConstantsManager;
 } // namespace internal
 namespace upload {
@@ -326,6 +327,9 @@ private:
 
   // Environment dynamic data manager for root CBV at b3 (cluster slots, etc.)
   std::unique_ptr<internal::EnvironmentDynamicDataManager> env_dynamic_manager_;
+
+  // Environment static data single-owner manager (bindless SRV).
+  std::unique_ptr<internal::EnvironmentStaticDataManager> env_static_manager_;
 
   // Persistent ScenePrep state (caches transforms/materials/geometry across
   // frames). ResetFrameData() is invoked each RunScenePrep while retaining

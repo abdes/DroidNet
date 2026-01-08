@@ -8,7 +8,6 @@
 
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Environment/EnvironmentSystem.h>
-#include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene::environment {
 
@@ -53,7 +52,7 @@ public:
   }
 
   //! Gets the tone mapper.
-  OXGN_SCN_NDAPI auto GetToneMapper() const noexcept -> ToneMapper
+  [[nodiscard]] auto GetToneMapper() const noexcept -> ToneMapper
   {
     return tone_mapper_;
   }
@@ -65,7 +64,7 @@ public:
   }
 
   //! Gets exposure mode.
-  OXGN_SCN_NDAPI auto GetExposureMode() const noexcept -> ExposureMode
+  [[nodiscard]] auto GetExposureMode() const noexcept -> ExposureMode
   {
     return exposure_mode_;
   }
@@ -77,7 +76,7 @@ public:
   }
 
   //! Gets exposure compensation in EV.
-  OXGN_SCN_NDAPI auto GetExposureCompensationEv() const noexcept -> float
+  [[nodiscard]] auto GetExposureCompensationEv() const noexcept -> float
   {
     return exposure_compensation_ev_;
   }
@@ -91,13 +90,13 @@ public:
   }
 
   //! Gets auto-exposure minimum EV.
-  OXGN_SCN_NDAPI auto GetAutoExposureMinEv() const noexcept -> float
+  [[nodiscard]] auto GetAutoExposureMinEv() const noexcept -> float
   {
     return auto_exposure_min_ev_;
   }
 
   //! Gets auto-exposure maximum EV.
-  OXGN_SCN_NDAPI auto GetAutoExposureMaxEv() const noexcept -> float
+  [[nodiscard]] auto GetAutoExposureMaxEv() const noexcept -> float
   {
     return auto_exposure_max_ev_;
   }
@@ -111,13 +110,13 @@ public:
   }
 
   //! Gets auto-exposure speed up (EV per second).
-  OXGN_SCN_NDAPI auto GetAutoExposureSpeedUp() const noexcept -> float
+  [[nodiscard]] auto GetAutoExposureSpeedUp() const noexcept -> float
   {
     return auto_exposure_speed_up_;
   }
 
   //! Gets auto-exposure speed down (EV per second).
-  OXGN_SCN_NDAPI auto GetAutoExposureSpeedDown() const noexcept -> float
+  [[nodiscard]] auto GetAutoExposureSpeedDown() const noexcept -> float
   {
     return auto_exposure_speed_down_;
   }
@@ -129,7 +128,7 @@ public:
   }
 
   //! Gets bloom intensity.
-  OXGN_SCN_NDAPI auto GetBloomIntensity() const noexcept -> float
+  [[nodiscard]] auto GetBloomIntensity() const noexcept -> float
   {
     return bloom_intensity_;
   }
@@ -141,7 +140,7 @@ public:
   }
 
   //! Gets bloom threshold.
-  OXGN_SCN_NDAPI auto GetBloomThreshold() const noexcept -> float
+  [[nodiscard]] auto GetBloomThreshold() const noexcept -> float
   {
     return bloom_threshold_;
   }
@@ -153,7 +152,7 @@ public:
   }
 
   //! Gets saturation.
-  OXGN_SCN_NDAPI auto GetSaturation() const noexcept -> float
+  [[nodiscard]] auto GetSaturation() const noexcept -> float
   {
     return saturation_;
   }
@@ -165,7 +164,7 @@ public:
   }
 
   //! Gets contrast.
-  OXGN_SCN_NDAPI auto GetContrast() const noexcept -> float
+  [[nodiscard]] auto GetContrast() const noexcept -> float
   {
     return contrast_;
   }
@@ -177,7 +176,7 @@ public:
   }
 
   //! Gets vignette intensity.
-  OXGN_SCN_NDAPI auto GetVignetteIntensity() const noexcept -> float
+  [[nodiscard]] auto GetVignetteIntensity() const noexcept -> float
   {
     return vignette_intensity_;
   }

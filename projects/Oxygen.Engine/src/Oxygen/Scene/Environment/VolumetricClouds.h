@@ -8,7 +8,6 @@
 
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Environment/EnvironmentSystem.h>
-#include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene::environment {
 
@@ -40,7 +39,7 @@ public:
   }
 
   //! Gets the base altitude of the cloud layer (meters).
-  OXGN_SCN_NDAPI auto GetBaseAltitudeMeters() const noexcept -> float
+  [[nodiscard]] auto GetBaseAltitudeMeters() const noexcept -> float
   {
     return base_altitude_m_;
   }
@@ -52,7 +51,7 @@ public:
   }
 
   //! Gets the thickness of the cloud layer (meters).
-  OXGN_SCN_NDAPI auto GetLayerThicknessMeters() const noexcept -> float
+  [[nodiscard]] auto GetLayerThicknessMeters() const noexcept -> float
   {
     return layer_thickness_m_;
   }
@@ -64,22 +63,19 @@ public:
   }
 
   //! Gets coverage.
-  OXGN_SCN_NDAPI auto GetCoverage() const noexcept -> float
-  {
-    return coverage_;
-  }
+  [[nodiscard]] auto GetCoverage() const noexcept -> float { return coverage_; }
 
   //! Sets density in [0, 1].
   auto SetDensity(const float density) noexcept -> void { density_ = density; }
 
   //! Gets density.
-  OXGN_SCN_NDAPI auto GetDensity() const noexcept -> float { return density_; }
+  [[nodiscard]] auto GetDensity() const noexcept -> float { return density_; }
 
   //! Sets single-scattering albedo (linear RGB).
   auto SetAlbedoRgb(const Vec3& rgb) noexcept -> void { albedo_rgb_ = rgb; }
 
   //! Gets single-scattering albedo (linear RGB).
-  OXGN_SCN_NDAPI auto GetAlbedoRgb() const noexcept -> const Vec3&
+  [[nodiscard]] auto GetAlbedoRgb() const noexcept -> const Vec3&
   {
     return albedo_rgb_;
   }
@@ -91,7 +87,7 @@ public:
   }
 
   //! Gets extinction scale.
-  OXGN_SCN_NDAPI auto GetExtinctionScale() const noexcept -> float
+  [[nodiscard]] auto GetExtinctionScale() const noexcept -> float
   {
     return extinction_scale_;
   }
@@ -100,7 +96,7 @@ public:
   auto SetPhaseAnisotropy(const float g) noexcept -> void { phase_g_ = g; }
 
   //! Gets phase anisotropy.
-  OXGN_SCN_NDAPI auto GetPhaseAnisotropy() const noexcept -> float
+  [[nodiscard]] auto GetPhaseAnisotropy() const noexcept -> float
   {
     return phase_g_;
   }
@@ -112,7 +108,7 @@ public:
   }
 
   //! Gets wind direction in world space.
-  OXGN_SCN_NDAPI auto GetWindDirectionWs() const noexcept -> const Vec3&
+  [[nodiscard]] auto GetWindDirectionWs() const noexcept -> const Vec3&
   {
     return wind_dir_ws_;
   }
@@ -124,7 +120,7 @@ public:
   }
 
   //! Gets wind speed (meters per second).
-  OXGN_SCN_NDAPI auto GetWindSpeedMps() const noexcept -> float
+  [[nodiscard]] auto GetWindSpeedMps() const noexcept -> float
   {
     return wind_speed_mps_;
   }
@@ -136,7 +132,7 @@ public:
   }
 
   //! Gets cloud shadow strength.
-  OXGN_SCN_NDAPI auto GetShadowStrength() const noexcept -> float
+  [[nodiscard]] auto GetShadowStrength() const noexcept -> float
   {
     return shadow_strength_;
   }
