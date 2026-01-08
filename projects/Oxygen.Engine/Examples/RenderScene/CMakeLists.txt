@@ -60,6 +60,8 @@ add_executable(
   "UI/CameraControlPanel.cpp"
   "UI/ContentLoaderPanel.h"
   "UI/ContentLoaderPanel.cpp"
+  "UI/LightCullingDebugPanel.h"
+  "UI/LightCullingDebugPanel.cpp"
 )
 
 set_target_properties(

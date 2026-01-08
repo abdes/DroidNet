@@ -83,6 +83,81 @@ namespace {
   using coord::EngineWorldTargetAxes;
   using coord::ToGlmMat4;
 
+  [[nodiscard]] constexpr auto LightTypeName(
+    const ufbx_light_type type) noexcept -> const char*
+  {
+    switch (type) {
+    case UFBX_LIGHT_POINT:
+      return "POINT";
+    case UFBX_LIGHT_DIRECTIONAL:
+      return "DIRECTIONAL";
+    case UFBX_LIGHT_SPOT:
+      return "SPOT";
+    case UFBX_LIGHT_AREA:
+      return "AREA";
+    case UFBX_LIGHT_VOLUME:
+      return "VOLUME";
+    default:
+      return "UNKNOWN";
+    }
+  }
+
+  [[nodiscard]] constexpr auto LightDecayName(
+    const ufbx_light_decay decay) noexcept -> const char*
+  {
+    switch (decay) {
+    case UFBX_LIGHT_DECAY_NONE:
+      return "NONE";
+    case UFBX_LIGHT_DECAY_LINEAR:
+      return "LINEAR";
+    case UFBX_LIGHT_DECAY_QUADRATIC:
+      return "QUADRATIC";
+    case UFBX_LIGHT_DECAY_CUBIC:
+      return "CUBIC";
+    default:
+      return "UNKNOWN";
+    }
+  }
+
+  auto LogUfbxLights(const ufbx_scene& scene) -> void
+  {
+    if (scene.lights.count == 0) {
+      return;
+    }
+
+    constexpr size_t kMaxInstancesToLog = 16;
+
+    for (size_t i = 0; i < scene.lights.count; ++i) {
+      const auto* light = scene.lights.data[i];
+      if (light == nullptr) {
+        continue;
+      }
+
+      const auto light_name = fbx::ToStringView(light->name);
+      LOG_F(INFO,
+        "UFBX light[{}]: name='{}' type={} decay={} intensity={} "
+        "color=({}, {}, {}) cast_light={} cast_shadows={} instances={}",
+        i, std::string(light_name).c_str(), LightTypeName(light->type),
+        LightDecayName(light->decay), util::ToFloat(light->intensity),
+        util::ToFloat(light->color.x), util::ToFloat(light->color.y),
+        util::ToFloat(light->color.z), light->cast_light, light->cast_shadows,
+        light->instances.count);
+
+      const auto count = static_cast<size_t>(light->instances.count);
+      const auto to_log = (std::min)(count, kMaxInstancesToLog);
+      for (size_t j = 0; j < to_log; ++j) {
+        const auto* node = light->instances.data[j];
+        const auto node_name = (node != nullptr) ? fbx::ToStringView(node->name)
+                                                 : std::string_view {};
+        LOG_F(INFO, "  - instance[{}]: node='{}'", j,
+          std::string(node_name).c_str());
+      }
+      if (count > to_log) {
+        LOG_F(INFO, "  - ... ({} more instances)", count - to_log);
+      }
+    }
+  }
+
   /// Returns a human-readable name for a ufbx shader type.
   [[nodiscard]] constexpr auto ShaderTypeName(ufbx_shader_type type) noexcept
     -> const char*
@@ -260,6 +335,8 @@ namespace {
         "{} lights. SwapYZ={}",
         material_count, mesh_count, node_count, camera_count, light_count,
         request.options.coordinate.swap_yz_axes);
+
+      LogUfbxLights(*scene);
 
       const auto want_materials
         = (request.options.import_content & ImportContentFlags::kMaterials)

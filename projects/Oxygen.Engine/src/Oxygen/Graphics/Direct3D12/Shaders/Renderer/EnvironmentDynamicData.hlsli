@@ -7,7 +7,7 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTDYNAMICDATA_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTDYNAMICDATA_HLSLI
 
-// Mirrors oxygen::engine::EnvironmentDynamicData (sizeof = 64)
+// Mirrors oxygen::engine::EnvironmentDynamicData (sizeof = 48)
 // Per-frame environment payload bound as root CBV at b3.
 struct EnvironmentDynamicData
 {

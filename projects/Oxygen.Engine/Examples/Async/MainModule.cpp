@@ -1209,13 +1209,13 @@ auto MainModule::SetupShaders() -> void
   // Verify that the shaders can be loaded by the Graphics backend
   const auto vertex_shader = gfx->GetShader(graphics::ShaderRequest {
     .stage = ShaderType::kVertex,
-    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .source_path = "Passes/Forward/ForwardMesh_VS.hlsl",
     .entry_point = "VS",
   });
 
   const auto pixel_shader = gfx->GetShader(graphics::ShaderRequest {
     .stage = ShaderType::kPixel,
-    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .source_path = "Passes/Forward/ForwardMesh_PS.hlsl",
     .entry_point = "PS",
   });
 

@@ -195,7 +195,7 @@ NOLINT_TEST(ShaderRequestTest, DifferentDefines_ProduceDifferentKeys)
   // Opaque path: no defines
   auto opaque_request = ShaderRequest {
     .stage = ShaderType::kPixel,
-    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .source_path = "Passes/Forward/ForwardMesh_PS.hlsl",
     .entry_point = "PS",
     .defines = {},
   };
@@ -203,7 +203,7 @@ NOLINT_TEST(ShaderRequestTest, DifferentDefines_ProduceDifferentKeys)
   // Masked path: ALPHA_TEST=1
   auto masked_request = ShaderRequest {
     .stage = ShaderType::kPixel,
-    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .source_path = "Passes/Forward/ForwardMesh_PS.hlsl",
     .entry_point = "PS",
     .defines = {
       ShaderDefine { .name = "ALPHA_TEST", .value = std::string { "1" } },
@@ -222,7 +222,7 @@ NOLINT_TEST(ShaderRequestTest, IdenticalDefines_ProduceSameKey)
 {
   auto request_a = ShaderRequest {
     .stage = ShaderType::kPixel,
-    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .source_path = "Passes/Forward/ForwardMesh_PS.hlsl",
     .entry_point = "PS",
     .defines = {
       ShaderDefine { .name = "ALPHA_TEST", .value = std::string { "1" } },
@@ -231,7 +231,7 @@ NOLINT_TEST(ShaderRequestTest, IdenticalDefines_ProduceSameKey)
 
   auto request_b = ShaderRequest {
     .stage = ShaderType::kPixel,
-    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .source_path = "Passes/Forward/ForwardMesh_PS.hlsl",
     .entry_point = "PS",
     .defines = {
       ShaderDefine { .name = "ALPHA_TEST", .value = std::string { "1" } },
@@ -250,7 +250,7 @@ NOLINT_TEST(ShaderRequestTest, MultipleDefines_ProduceDifferentKeyFromSingle)
 {
   auto single_define = ShaderRequest {
     .stage = ShaderType::kPixel,
-    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .source_path = "Passes/Forward/ForwardMesh_PS.hlsl",
     .entry_point = "PS",
     .defines = {
       ShaderDefine { .name = "ALPHA_TEST", .value = std::string { "1" } },
@@ -259,7 +259,7 @@ NOLINT_TEST(ShaderRequestTest, MultipleDefines_ProduceDifferentKeyFromSingle)
 
   auto multiple_defines = ShaderRequest {
     .stage = ShaderType::kPixel,
-    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .source_path = "Passes/Forward/ForwardMesh_PS.hlsl",
     .entry_point = "PS",
     .defines = {
       ShaderDefine { .name = "ALPHA_TEST", .value = std::string { "1" } },

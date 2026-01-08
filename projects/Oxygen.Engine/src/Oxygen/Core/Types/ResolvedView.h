@@ -7,6 +7,7 @@
 #pragma once
 
 #include <glm/glm.hpp>
+#include <limits>
 #include <optional>
 
 #include <Oxygen/Core/Types/Frustum.h>
@@ -27,6 +28,11 @@ public:
     glm::mat4 proj_matrix { 1.0f };
     std::optional<glm::vec3> camera_position {};
     NdcDepthRange depth_range = NdcDepthRange::ZeroToOne; // default D3D
+
+    // Camera clip planes in view-space units.
+    // These must reflect the camera used to build the projection matrix.
+    float near_plane = 0.1F;
+    float far_plane = 1000.0F;
   };
 
   OXGN_CORE_API explicit ResolvedView(const Params& p);
@@ -75,6 +81,9 @@ public:
     return depth_range_;
   }
 
+  [[nodiscard]] auto NearPlane() const noexcept -> float { return near_plane_; }
+  [[nodiscard]] auto FarPlane() const noexcept -> float { return far_plane_; }
+
 private:
   View config_ {};
   glm::mat4 view_ { 1.0f };
@@ -90,6 +99,9 @@ private:
   bool reverse_z_ = false;
   bool mirrored_ = false;
   glm::vec3 camera_position_ { 0.0f, 0.0f, 0.0f };
+
+  float near_plane_ { 0.1F };
+  float far_plane_ { 1000.0F };
 
   float focal_length_pixels_ = 0.0f;
   Frustum frustum_ {};

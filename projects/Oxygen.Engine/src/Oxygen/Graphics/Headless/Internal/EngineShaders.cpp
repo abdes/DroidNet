@@ -55,12 +55,12 @@ EngineShaders::EngineShaders()
     static const std::array<ShaderRequest, 5> kEngineShaderRequests = {
       ShaderRequest {
         .stage = oxygen::ShaderType::kVertex,
-        .source_path = "Passes/Forward/ForwardMesh.hlsl",
+        .source_path = "Passes/Forward/ForwardMesh_VS.hlsl",
         .entry_point = "VS",
       },
       ShaderRequest {
         .stage = oxygen::ShaderType::kPixel,
-        .source_path = "Passes/Forward/ForwardMesh.hlsl",
+        .source_path = "Passes/Forward/ForwardMesh_PS.hlsl",
         .entry_point = "PS",
       },
       ShaderRequest {

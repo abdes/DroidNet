@@ -1298,6 +1298,24 @@ auto MainModule::InitializeUIPanels() -> void
 
   // Configure camera control panel
   UpdateCameraControlPanelConfig();
+
+  // Configure light culling debug panel
+  if (auto render_graph = GetRenderGraph()) {
+    ui::LightCullingDebugConfig debug_config;
+    debug_config.shader_pass_config = render_graph->GetShaderPassConfig().get();
+    debug_config.light_culling_pass_config
+      = render_graph->GetLightCullingPassConfig().get();
+    debug_config.initial_mode = ui::ShaderDebugMode::kDisabled;
+
+    // Callback to invalidate PSO when cluster mode changes
+    debug_config.on_cluster_mode_changed = [this]() {
+      // The LightCullingPass will detect the config change via
+      // NeedRebuildPipelineState() and rebuild on next frame
+      LOG_F(INFO, "Light culling mode changed, PSO will rebuild next frame");
+    };
+
+    light_culling_debug_panel_.Initialize(debug_config);
+  }
 }
 
 auto MainModule::UpdateCameraControlPanelConfig() -> void
@@ -1333,12 +1351,32 @@ auto MainModule::UpdateCameraControlPanelConfig() -> void
   camera_control_panel_.SetMode(ui_mode);
 }
 
-auto MainModule::UpdateUIPanels() -> void { content_loader_panel_.Update(); }
+auto MainModule::UpdateUIPanels() -> void
+{
+  content_loader_panel_.Update();
+
+  // Update light culling debug panel config if render graph exists
+  if (auto render_graph = GetRenderGraph()) {
+    ui::LightCullingDebugConfig debug_config;
+    debug_config.shader_pass_config = render_graph->GetShaderPassConfig().get();
+    debug_config.light_culling_pass_config
+      = render_graph->GetLightCullingPassConfig().get();
+    debug_config.initial_mode = light_culling_debug_panel_.GetDebugMode();
+
+    // Callback to invalidate PSO when cluster mode changes
+    debug_config.on_cluster_mode_changed = [this]() {
+      LOG_F(INFO, "Light culling mode changed, PSO will rebuild next frame");
+    };
+
+    light_culling_debug_panel_.UpdateConfig(debug_config);
+  }
+}
 
 auto MainModule::DrawUI() -> void
 {
   content_loader_panel_.Draw();
   camera_control_panel_.Draw();
+  light_culling_debug_panel_.Draw();
 }
 
 auto MainModule::ResetCameraToInitialPose() -> void

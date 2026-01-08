@@ -165,7 +165,7 @@ bool TestLightInFrustum(PositionalLightData light, float4 frustumPlanes[6]) {
         return false;
     }
 
-    // Transform light position to view space
+    // Transform light position to view space for frustum testing
     float3 lightPosView = mul(view_matrix, float4(light.position_ws, 1.0)).xyz;
 
     // Get light type from flags
@@ -178,11 +178,19 @@ bool TestLightInFrustum(PositionalLightData light, float4 frustumPlanes[6]) {
 
     float lightRadius = light.range;
 
-    // Test against all six frustum planes (sphere vs. plane).
+    // Test against frustum planes (sphere vs. plane).
     // Normals of frustumPlanes are assumed to point inward towards the frustum's interior.
     // A sphere is outside a plane if its signed distance from the plane is less than -radius.
     // distance = dot(plane_normal, sphere_center) + plane_d.
+    //
+    // CRITICAL: We do NOT test against the near plane (index 4).
+    // Lights behind the camera can still illuminate geometry in front of the camera.
+    // Testing against near plane causes the diagonal lighting boundary artifact.
+    // Only test side frustum planes (left/right/top/bottom) and far plane.
+    // frustumPlanes indices: [0]=left, [1]=right, [2]=bottom, [3]=top, [4]=near, [5]=far
     for (int i = 0; i < 6; i++) {
+        if (i == 4) continue; // Skip near plane test - critical for correct lighting
+
         float distance = dot(frustumPlanes[i].xyz, lightPosView) + frustumPlanes[i].w;
         if (distance < -lightRadius) {
             return false; // Sphere is entirely outside this plane, thus outside the frustum
@@ -217,7 +225,10 @@ void CS(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint
     const uint light_list_uav_index = pass_constants.light_list_uav_index;
     const uint light_count_uav_index = pass_constants.light_count_uav_index;
 
-    if (!BX_IN_TEXTURES(depth_texture_index) ||
+    // Validate resource indices are in valid bindless ranges.
+    // Note: depth texture SRV is allocated from GLOBAL_SRV domain (not TEXTURES)
+    // because it's a dynamically created view, not a loaded texture asset.
+    if (!BX_IN_GLOBAL_SRV(depth_texture_index) ||
         !BX_IN_GLOBAL_SRV(light_buffer_index) ||
         !BX_IN_GLOBAL_SRV(light_list_uav_index) ||
         !BX_IN_GLOBAL_SRV(light_count_uav_index)) {
@@ -270,20 +281,30 @@ void CS(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint
         // Clustered: compute slice bounds from logarithmic Z config
 #if CLUSTERED
         // Clustered: compute depth bounds for this Z-slice
-        // Using logarithmic slicing: slice = log2(z / near) * scale + bias
+        // Logarithmic slicing formula: slice = log2(z / z_near) * scale
+        // where scale = depth_slices / log2(z_far / z_near)
+        //
+        // Inverse: z = z_near * 2^(slice / scale)
         float z_scale = pass_constants.z_scale;
-        float z_bias = pass_constants.z_bias;
         float z_near = pass_constants.z_near;
         float z_far = pass_constants.z_far;
 
-        // Inverse: z = near * 2^((slice - bias) / scale)
-        float slice_near = z_near * exp2((float(clusterID.z) - z_bias) / z_scale);
-        float slice_far = z_near * exp2((float(clusterID.z + 1) - z_bias) / z_scale);
+        // Compute linear depth bounds for this slice
+        // slice_near_linear is the near edge of this slice (closer to camera)
+        // slice_far_linear is the far edge of this slice (farther from camera)
+        float slice_near_linear = z_near * exp2(float(clusterID.z) / z_scale);
+        float slice_far_linear = z_near * exp2(float(clusterID.z + 1) / z_scale);
 
-        // Convert linear depth to normalized depth (0=near, 1=far for reverse-Z)
-        // Note: Adjust this based on your depth buffer convention
-        s_ClusterDepthMin = saturate((z_far - slice_far) / (z_far - z_near));
-        s_ClusterDepthMax = saturate((z_far - slice_near) / (z_far - z_near));
+        // Clamp to valid range
+        slice_near_linear = clamp(slice_near_linear, z_near, z_far);
+        slice_far_linear = clamp(slice_far_linear, z_near, z_far);
+
+        // Convert linear depth to NDC depth for standard D3D12 (0=near, 1=far)
+        // Formula: ndc = (1 - z_near/z) * z_far / (z_far - z_near)
+        // At z=z_near: ndc=0, At z=z_far: ndc=1
+        float range = z_far - z_near;
+        s_ClusterDepthMin = (1.0 - z_near / slice_near_linear) * z_far / range;  // Near edge (smaller NDC)
+        s_ClusterDepthMax = (1.0 - z_near / slice_far_linear) * z_far / range;   // Far edge (larger NDC)
 #else
         // Tile-based: use the per-tile min/max from depth reduction
         s_ClusterDepthMin = clamp(s_DepthTileMin[0], 0.0f, 1.0f);

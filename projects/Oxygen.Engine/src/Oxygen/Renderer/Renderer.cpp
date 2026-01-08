@@ -224,6 +224,15 @@ auto Renderer::GetInlineTransfersCoordinator()
   return *inline_transfers_;
 }
 
+auto Renderer::GetLightManager() const noexcept
+  -> observer_ptr<renderer::LightManager>
+{
+  if (!scene_prep_state_) {
+    return nullptr;
+  }
+  return scene_prep_state_->GetLightManager();
+}
+
 auto Renderer::OverrideMaterialUvTransform(const data::MaterialAsset& material,
   const glm::vec2 uv_scale, const glm::vec2 uv_offset) -> bool
 {

@@ -30,6 +30,7 @@
 #include "OrbitCameraController.h"
 #include "UI/CameraControlPanel.h"
 #include "UI/ContentLoaderPanel.h"
+#include "UI/LightCullingDebugPanel.h"
 
 namespace oxygen::data {
 class SceneAsset;
@@ -146,6 +147,7 @@ private:
   // UI panels
   ui::ContentLoaderPanel content_loader_panel_;
   ui::CameraControlPanel camera_control_panel_;
+  ui::LightCullingDebugPanel light_culling_debug_panel_;
 
   // Content and scene state
   std::filesystem::path content_root_;

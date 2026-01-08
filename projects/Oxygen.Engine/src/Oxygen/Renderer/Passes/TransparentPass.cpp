@@ -19,6 +19,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
@@ -63,6 +64,16 @@ auto TransparentPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 auto TransparentPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
   LOG_SCOPE_FUNCTION(2);
+
+  // Bind EnvironmentDynamicData from LightCullingPass for Forward+ lighting
+  if (const auto* light_culling = Context().GetPass<LightCullingPass>()) {
+    if (const auto env_addr = light_culling->GetEnvironmentCbvAddress();
+      env_addr != 0) {
+      recorder.SetGraphicsRootConstantBufferView(
+        static_cast<uint32_t>(binding::RootParam::kEnvironmentDynamicData),
+        env_addr);
+    }
+  }
 
   // Minimal RT binding path identical to ShaderPass helper logic (inline to
   // avoid duplication until a shared helper is extracted).
@@ -247,12 +258,12 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
     return GraphicsPipelineDesc::Builder()
       .SetVertexShader(graphics::ShaderRequest {
         .stage = ShaderType::kVertex,
-        .source_path = "Passes/Forward/ForwardMesh.hlsl",
+        .source_path = "Passes/Forward/ForwardMesh_VS.hlsl",
         .entry_point = "VS",
       })
       .SetPixelShader(graphics::ShaderRequest {
         .stage = ShaderType::kPixel,
-        .source_path = "Passes/Forward/ForwardMesh.hlsl",
+        .source_path = "Passes/Forward/ForwardMesh_PS.hlsl",
         .entry_point = "PS",
       })
       .SetPrimitiveTopology(PrimitiveType::kTriangleList)

@@ -109,6 +109,8 @@ protected:
       .width = 0.0f,
       .height = viewport_height };
     p.camera_position = cam_pos;
+    p.near_plane = 0.1F;
+    p.far_plane = 1000.0F;
     SetView(p);
   }
 
@@ -126,6 +128,8 @@ protected:
       .width = viewport,
       .height = viewport };
     p.camera_position = eye;
+    p.near_plane = znear;
+    p.far_plane = zfar;
     SetView(p);
   }
 
@@ -194,7 +198,8 @@ protected:
   // Provide a default (empty) ResolvedView so tests can emplace a context in
   // SetUp without explicitly calling a Configure* helper.
   std::shared_ptr<oxygen::ResolvedView> view_
-    = std::make_shared<oxygen::ResolvedView>(oxygen::ResolvedView::Params {});
+    = std::make_shared<oxygen::ResolvedView>(oxygen::ResolvedView::Params {
+      .near_plane = 0.1F, .far_plane = 1000.0F });
   std::optional<ScenePrepContext> ctx_;
   std::unique_ptr<ScenePrepState> state_;
   std::optional<RenderItemProto> proto_;

@@ -65,6 +65,8 @@ protected:
       .height = 600,
     };
     vp.camera_position = { 0.0f, 0.0f, 5.0f };
+    vp.near_plane = 0.1F;
+    vp.far_plane = 1000.0F;
     view_ = std::make_shared<oxygen::ResolvedView>(vp);
 
     state_
@@ -96,7 +98,8 @@ private:
   SceneNode root_b_ {};
   SceneNode child_of_a_ {};
   std::shared_ptr<oxygen::ResolvedView> view_
-    = std::make_shared<oxygen::ResolvedView>(oxygen::ResolvedView::Params {});
+    = std::make_shared<oxygen::ResolvedView>(oxygen::ResolvedView::Params {
+      .near_plane = 0.1F, .far_plane = 1000.0F });
   std::unique_ptr<sceneprep::ScenePrepState> state_ {};
 };
 
