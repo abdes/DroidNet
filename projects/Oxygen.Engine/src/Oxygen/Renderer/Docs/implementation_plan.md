@@ -111,23 +111,24 @@ Supports both tile-based (2D) and clustered (3D) configurations.
   - Default = tile-based; attachment presence triggers clustered mode
   - **TODO**: Implement after Override Attachments (Phase 3) is complete
 
-### 1.5 Environment Systems Integration (TODO)
+### 1.5 Environment Systems Integration [~]
 
-Environment systems that feed `EnvironmentDynamicData` CBV (b3) are not yet
-implemented. These systems will populate additional fields beyond clustering:
-
-- [ ] **Sky System**: Sky color/radiance for ambient term
-  - `sky_color_top`, `sky_color_horizon`, `sky_cubemap_slot`
-  - Affects ambient lighting and reflection probes
-- [ ] **Atmosphere System**: Procedural sky scattering
-  - Rayleigh/Mie coefficients, sun direction, planetary radius
-  - Alternative to static sky cubemap
-- [ ] **Fog System**: Distance and height fog
-  - `fog_color`, `fog_density`, `fog_height_falloff`, `fog_start_distance`
-  - Applied as post-lighting compositing in pixel shader
-- [ ] **Exposure System**: Auto-exposure and tone mapping parameters
-  - `exposure_value`, `exposure_min/max`, `adaptation_speed`
-  - Feeds into PostProcessPass (Phase 6)
+- [x] GPU plumbing: `EnvironmentStaticDataManager` builds bindless SRV from `SceneEnvironment`, resolves cubemap `ResourceKey` via `TextureBinder`, uploads per-frame slots, publishes `SceneConstants.bindless_env_static_slot`; `EnvironmentDynamicData` (b3) kept in sync with HLSL and per-view exposure via `Renderer::UpdateViewExposure()`.
+- [x] Baseline render hooks: `SkyPass` fullscreen triangle after ShaderPass (depth-read, no clear); `SkySphere_PS/VS` consume `EnvironmentStaticData`; `ForwardMesh_PS` applies analytic fog via `AtmosphereHelpers.hlsli` with fallback sun dir when no directional light is bound.
+- [x] SkyLight IBL in forward shading: sample sky cubemap for diffuse (lowest mip) and roughness-mapped specular, apply tint/intensity/diffuse/specular gains, add exposure from `EnvironmentDynamicData`.
+- [x] Sky exposure: `SkySphere_PS` multiplies sky color by exposure.
+- [x] Specular IBL BRDF approx: apply split-sum approximation (no LUT) to specular IBL in `ForwardMesh_PS` and metalness-masked diffuse IBL.
+- [ ] SkyAtmosphere real implementation: replace gradient placeholder with LUT-based sky (transmittance/sky-view), add precompute pass + bindless LUT slots, feed sun direction from designated directional light, support aerial perspective toggle in forward shading.
+- [ ] SkyLight capture path: support `kCapturedScene` by rendering sky/background into cubemap, convolving diffuse and specular prefilter, caching BRDF LUT; fall back to `kInvalidDescriptorSlot` when unavailable.
+- [x] BRDF LUT asset/binding: generate BRDF integration LUT at runtime
+  (RG16F, Hammersley GGX) via `BrdfLutManager`, bind slot into
+  `sky_light.brdf_lut_slot` through `EnvironmentStaticDataManager`; shaders
+  sample when valid, fallback to analytic approx otherwise. LUT upload is
+  async; while pending, GetOrCreateLut returns an invalid slot so consumers
+  must keep the analytic fallback path.
+- [ ] Volumetric clouds: consume `GpuVolumetricCloudParams` to raymarch low-res cloud color/transmittance (temporal reprojection), composite into sky before transparents, optional shadow mask for sun light.
+- [ ] PostProcessVolume runtime: honor `GpuPostProcessParams` (tone mapper, bloom, exposure mode/min/max/speeds, saturation/contrast/vignette); implement luminance reduction + temporal adaptation driving `EnvironmentDynamicData.exposure`; wire bloom/tonemap once PostProcessPass (Phase 6) lands.
+- [ ] Tooling + demos: hydrate environment systems in sample scenes (`SceneEnvironment` creation + SkySphere/SkyLight/PostProcessVolume defaults), ensure cubemap assets packaged and bindless slots visible in ImGui debug, add toggles to enable/disable sky/fog/exposure paths for validation.
 
 ---
 
