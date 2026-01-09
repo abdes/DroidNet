@@ -426,6 +426,8 @@ private:
       sun_tf.SetLocalRotation(sun_rot);
 
       auto sun_light = std::make_unique<scene::DirectionalLight>();
+      sun_light->SetIsSunLight(true);
+      sun_light->SetEnvironmentContribution(true);
       sun_light->Common().affects_world = true;
       sun_light->Common().color_rgb = { 1.0F, 0.98F, 0.92F };
       sun_light->Common().intensity = 2.0F;

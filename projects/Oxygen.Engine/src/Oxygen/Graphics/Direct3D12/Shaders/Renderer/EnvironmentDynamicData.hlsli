@@ -7,7 +7,7 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTDYNAMICDATA_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTDYNAMICDATA_HLSLI
 
-// Mirrors oxygen::engine::EnvironmentDynamicData (sizeof = 48)
+// Mirrors oxygen::engine::EnvironmentDynamicData (sizeof = 80)
 // Per-frame environment payload bound as root CBV at b3.
 struct EnvironmentDynamicData
 {
@@ -29,6 +29,16 @@ struct EnvironmentDynamicData
     float z_far;
     float z_scale;
     float z_bias;
+
+    // Designated sun light (toward the sun, not incoming radiance).
+    float3 sun_direction_ws;
+    float sun_illuminance;
+
+    // 1 = sun fields valid; 0 = fallback to default sun.
+    uint sun_valid;
+    float _pad_sun0;
+    float _pad_sun1;
+    float _pad_sun2;
 };
 
 #endif  // OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTDYNAMICDATA_HLSLI

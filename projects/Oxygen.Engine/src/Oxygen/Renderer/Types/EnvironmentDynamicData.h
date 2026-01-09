@@ -8,6 +8,8 @@
 
 #include <cstdint>
 
+#include <glm/vec3.hpp>
+
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -70,10 +72,22 @@ struct alignas(16) EnvironmentDynamicData {
   float z_far { 1000.0F };
   float z_scale { 0.0F };
   float z_bias { 0.0F };
+
+  // Designated sun light (toward the sun, not incoming radiance).
+  glm::vec3 sun_direction_ws { 0.0F, 1.0F, 0.0F };
+  float sun_illuminance { 0.0F };
+
+  // 1 = sun fields valid; 0 = fallback to default sun.
+  uint32_t sun_valid { 0u };
+  float _pad_sun0 { 0.0F };
+  float _pad_sun1 { 0.0F };
+  float _pad_sun2 { 0.0F };
 };
+static_assert(alignof(EnvironmentDynamicData) == 16,
+  "EnvironmentDynamicData must stay 16-byte aligned for root CBV");
 static_assert(sizeof(EnvironmentDynamicData) % 16 == 0,
   "EnvironmentDynamicData size must be 16-byte aligned");
-static_assert(sizeof(EnvironmentDynamicData) == 48,
-  "EnvironmentDynamicData size must match HLSL packing");
+static_assert(sizeof(EnvironmentDynamicData) == 80,
+  "EnvironmentDynamicData size must match HLSL packing (std140 float3 pads)");
 
 } // namespace oxygen::engine

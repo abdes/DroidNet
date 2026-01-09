@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <bit>
 #include <cmath>
 #include <cstdint>
@@ -82,6 +83,51 @@ using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferUsage;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::SingleQueueStrategy;
+
+namespace {
+
+struct SunLightSelection {
+  glm::vec3 direction_to_sun { 0.0F, 1.0F, 0.0F };
+  float illuminance { 0.0F };
+  bool valid { false };
+};
+
+auto SelectSunLight(std::span<const oxygen::engine::DirectionalLightBasic> dir)
+  -> SunLightSelection
+{
+  SunLightSelection best_flagged;
+  SunLightSelection best_any;
+
+  for (const auto& light : dir) {
+    const bool is_sun = (light.flags
+                          & static_cast<std::uint32_t>(
+                            oxygen::engine::DirectionalLightFlags::kSunLight))
+      != 0U;
+
+    // Simple illuminance proxy: peak channel * intensity.
+    const float peak_rgb = (std::max)(light.color_rgb.x,
+      (std::max)(light.color_rgb.y, light.color_rgb.z));
+    const float illum = light.intensity * peak_rgb;
+
+    SunLightSelection candidate {
+      .direction_to_sun = -glm::normalize(light.direction_ws),
+      .illuminance = illum,
+      .valid = true,
+    };
+
+    auto& bucket = is_sun ? best_flagged : best_any;
+    if (!bucket.valid || candidate.illuminance > bucket.illuminance) {
+      bucket = candidate;
+    }
+  }
+
+  if (best_flagged.valid) {
+    return best_flagged;
+  }
+  return best_any;
+}
+
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Renderer Implementation
@@ -850,6 +896,16 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
         = emitter->GetDrawMetadataSrvIndex();
       prepared_frame.bindless_instance_data_slot
         = emitter->GetInstanceDataSrvIndex();
+    }
+
+    if (env_dynamic_manager_) {
+      const oxygen::observer_ptr<renderer::LightManager> light_mgr
+        = scene_prep_state_->GetLightManager();
+      if (light_mgr) {
+        const auto sun = SelectSunLight(light_mgr->GetDirectionalLights());
+        env_dynamic_manager_->SetSunLight(
+          view_id, sun.direction_to_sun, sun.illuminance, sun.valid);
+      }
     }
   }
 

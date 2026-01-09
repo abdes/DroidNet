@@ -332,20 +332,13 @@ float4 PS(VSOutput input) : SV_Target0 {
     if (LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data)
         && env_data.fog.enabled)
     {
-        // Get sun direction from first enabled sun directional light.
-        // TODO: In a full implementation, this would come from a designated sun
-        // light. For now, use a default sun direction if no lights are available.
-        float3 sun_dir = normalize(float3(0.5f, 0.707f, 0.5f)); // Default sun
-
-        // Check if we have directional lights and use the first one's direction
-        if (bindless_directional_lights_slot != K_INVALID_BINDLESS_INDEX)
+        // Use designated sun direction from dynamic environment data.
+        float3 sun_dir = EnvironmentDynamicData.sun_direction_ws;
+        if (EnvironmentDynamicData.sun_valid == 0)
         {
-            StructuredBuffer<DirectionalLightBasic> dir_lights =
-                ResourceDescriptorHeap[bindless_directional_lights_slot];
-            // Use the first light's direction as the sun (negative because light
-            // points toward surface, sun_dir points toward sun)
-            sun_dir = -normalize(dir_lights[0].direction_ws.xyz);
+            sun_dir = float3(0.5f, 0.707f, 0.5f);
         }
+        sun_dir = normalize(sun_dir);
 
         AtmosphericFogResult fog = GetAtmosphericFog(
             env_data,
