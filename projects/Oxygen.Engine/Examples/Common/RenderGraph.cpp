@@ -14,6 +14,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Renderer/Renderer.h>
 
 using namespace oxygen;
 
@@ -105,6 +106,25 @@ auto RenderGraph::SetupRenderPasses() -> void
   }
   if (!sky_pass_) {
     sky_pass_ = std::make_shared<engine::SkyPass>(sky_pass_config_);
+  }
+
+  // Sky Atmosphere LUT compute pass (requires LUT manager from Renderer)
+  // The LUT manager is owned by Renderer; we just configure and create the pass
+  if (!sky_atmo_lut_pass_config_ && app_ && app_->renderer) {
+    if (auto* lut_manager
+      = app_->renderer->GetSkyAtmosphereLutManager().get()) {
+      sky_atmo_lut_pass_config_
+        = std::make_shared<engine::SkyAtmosphereLutComputePassConfig>();
+      sky_atmo_lut_pass_config_->lut_manager = observer_ptr(lut_manager);
+      sky_atmo_lut_pass_config_->debug_name = "SkyAtmosphereLutComputePass";
+    }
+  }
+  if (!sky_atmo_lut_pass_ && sky_atmo_lut_pass_config_ && app_) {
+    if (auto gfx = app_->gfx_weak.lock()) {
+      sky_atmo_lut_pass_
+        = std::make_shared<engine::SkyAtmosphereLutComputePass>(
+          observer_ptr(gfx.get()), sky_atmo_lut_pass_config_);
+    }
   }
 }
 
@@ -202,6 +222,13 @@ auto RenderGraph::PrepareForWireframeRenderFrame(
 auto RenderGraph::RunPasses(const oxygen::engine::RenderContext& ctx,
   oxygen::graphics::CommandRecorder& recorder) -> co::Co<>
 {
+  // Sky Atmosphere LUT Compute Pass (runs early, only when LUTs need
+  // regeneration)
+  if (sky_atmo_lut_pass_) {
+    co_await sky_atmo_lut_pass_->PrepareResources(ctx, recorder);
+    co_await sky_atmo_lut_pass_->Execute(ctx, recorder);
+  }
+
   // Depth Pre-Pass execution
   if (depth_pass_) {
     co_await depth_pass_->PrepareResources(ctx, recorder);

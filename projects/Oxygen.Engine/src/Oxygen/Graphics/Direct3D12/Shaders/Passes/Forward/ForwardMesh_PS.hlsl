@@ -18,7 +18,8 @@
 
 #include "Renderer/SceneConstants.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
-#include "Renderer/AtmosphereHelpers.hlsli"
+// NOTE: AtmosphereHelpers.hlsli removed - fake fog deleted, use Aerial Perspective.
+#include "Renderer/AerialPerspective.hlsli"
 #include "Renderer/DirectionalLightBasic.hlsli"
 #include "Renderer/PositionalLightData.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
@@ -325,29 +326,33 @@ float4 PS(VSOutput input) : SV_Target0 {
     // Emissive
     float3 final_color = shaded + surf.emissive;
 
-    // Apply camera exposure
-    final_color *= GetExposure();
-
-    // Apply atmospheric fog
-    if (LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data)
-        && env_data.fog.enabled)
+    // Apply aerial perspective atmospheric effects.
+    if (LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data))
     {
-        // Use designated sun direction from dynamic environment data.
-        float3 sun_dir = EnvironmentDynamicData.sun_direction_ws;
-        if (EnvironmentDynamicData.sun_valid == 0)
+        if (ShouldUseLutAerialPerspective(env_data.atmosphere))
         {
-            sun_dir = float3(0.5f, 0.707f, 0.5f);
+            // Get designated sun direction from dynamic environment data.
+            // GetSunDirectionWS() returns override direction if enabled.
+            float3 sun_dir = GetSunDirectionWS();
+            // Only use fallback if there's no valid sun AND no override enabled
+            if (EnvironmentDynamicData.sun_valid == 0 && !IsOverrideSunEnabled())
+            {
+                sun_dir = float3(0.5f, 0.707f, 0.5f);
+            }
+            sun_dir = normalize(sun_dir);
+
+            AerialPerspectiveResult ap = ComputeAerialPerspective(
+                env_data,
+                input.world_pos,
+                camera_position,
+                sun_dir);
+
+            final_color = ApplyAerialPerspective(final_color, ap);
         }
-        sun_dir = normalize(sun_dir);
-
-        AtmosphericFogResult fog = GetAtmosphericFog(
-            env_data,
-            input.world_pos,
-            camera_position,
-            sun_dir);
-
-        final_color = ApplyAtmosphericFog(final_color, fog);
     }
+
+    // Apply camera exposure after lighting + atmosphere.
+    final_color *= GetExposure();
 
 #ifdef ALPHA_TEST
     return float4(LinearToSrgb(final_color), 1.0f);

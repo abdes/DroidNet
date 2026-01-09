@@ -31,6 +31,7 @@ class SceneEnvironment;
 namespace oxygen::engine::internal {
 
 class IBrdfLutProvider;
+class ISkyAtmosphereLutProvider;
 
 //! Single-owner builder/uploader for bindless EnvironmentStaticData.
 /*!
@@ -56,7 +57,8 @@ public:
   OXGN_RNDR_API explicit EnvironmentStaticDataManager(
     observer_ptr<Graphics> gfx,
     observer_ptr<renderer::resources::IResourceBinder> texture_binder,
-    observer_ptr<IBrdfLutProvider> brdf_lut_provider);
+    observer_ptr<IBrdfLutProvider> brdf_lut_provider,
+    observer_ptr<ISkyAtmosphereLutProvider> sky_atmo_lut_provider = nullptr);
 
   OXGN_RNDR_API ~EnvironmentStaticDataManager();
 
@@ -88,6 +90,7 @@ private:
   observer_ptr<Graphics> gfx_;
   observer_ptr<renderer::resources::IResourceBinder> texture_binder_;
   observer_ptr<IBrdfLutProvider> brdf_lut_provider_;
+  observer_ptr<ISkyAtmosphereLutProvider> sky_atmo_lut_provider_;
   frame::Slot current_slot_ { frame::kInvalidSlot };
 
   EnvironmentStaticData cpu_snapshot_ {};

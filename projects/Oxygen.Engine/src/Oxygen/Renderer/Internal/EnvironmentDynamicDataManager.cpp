@@ -111,20 +111,104 @@ auto EnvironmentDynamicDataManager::SetZBinning(ViewId view_id, float z_near,
   }
 }
 
-auto EnvironmentDynamicDataManager::SetSunLight(ViewId view_id,
-  const glm::vec3& direction, const float illuminance, const bool valid) -> void
+auto EnvironmentDynamicDataManager::SetSunState(
+  ViewId view_id, const SunState& sun) -> void
 {
   auto& state = view_states_[view_id];
   bool dirty = false;
-  dirty |= (state.data.sun_direction_ws != direction);
-  dirty |= (state.data.sun_illuminance != illuminance);
-  const auto valid_flag = valid ? 1u : 0u;
+  dirty
+    |= (glm::vec3(state.data.sun_direction_ws_illuminance) != sun.direction_ws);
+  dirty |= (state.data.sun_direction_ws_illuminance.w != sun.illuminance);
+  dirty |= (glm::vec3(state.data.sun_color_rgb_intensity) != sun.color_rgb);
+  dirty |= (state.data.sun_color_rgb_intensity.w != sun.intensity);
+  const auto valid_flag = sun.enabled ? 1u : 0u;
   dirty |= (state.data.sun_valid != valid_flag);
 
   if (dirty) {
-    state.data.sun_direction_ws = direction;
-    state.data.sun_illuminance = illuminance;
+    state.data.sun_direction_ws_illuminance
+      = glm::vec4(sun.direction_ws, sun.illuminance);
+    state.data.sun_color_rgb_intensity
+      = glm::vec4(sun.color_rgb, sun.intensity);
     state.data.sun_valid = valid_flag;
+    MarkAllSlotsDirty(view_id);
+  }
+}
+
+auto EnvironmentDynamicDataManager::SetAtmosphereScattering(ViewId view_id,
+  const float aerial_distance_scale, const float aerial_scattering_strength)
+  -> void
+{
+  auto& state = view_states_[view_id];
+  bool dirty = false;
+  dirty
+    |= (state.data.aerial_perspective_distance_scale != aerial_distance_scale);
+  dirty
+    |= (state.data.aerial_scattering_strength != aerial_scattering_strength);
+
+  if (dirty) {
+    state.data.aerial_perspective_distance_scale = aerial_distance_scale;
+    state.data.aerial_scattering_strength = aerial_scattering_strength;
+    MarkAllSlotsDirty(view_id);
+  }
+}
+
+auto EnvironmentDynamicDataManager::SetAtmosphereFrameContext(ViewId view_id,
+  const glm::vec3& planet_center_ws, const glm::vec3& planet_up_ws,
+  const float camera_altitude_m, const float sky_view_lut_slice,
+  const float planet_to_sun_cos_zenith) -> void
+{
+  auto& state = view_states_[view_id];
+  bool dirty = false;
+  dirty |= (glm::vec3(state.data.planet_center_ws_pad) != planet_center_ws);
+  dirty
+    |= (glm::vec3(state.data.planet_up_ws_camera_altitude_m) != planet_up_ws);
+  dirty |= (state.data.planet_up_ws_camera_altitude_m.w != camera_altitude_m);
+  dirty |= (state.data.sky_view_lut_slice_cos_zenith.x != sky_view_lut_slice);
+  dirty
+    |= (state.data.sky_view_lut_slice_cos_zenith.y != planet_to_sun_cos_zenith);
+
+  if (dirty) {
+    state.data.planet_center_ws_pad
+      = glm::vec4(planet_center_ws, 0.0F); // w is padding
+    state.data.planet_up_ws_camera_altitude_m
+      = glm::vec4(planet_up_ws, camera_altitude_m);
+    state.data.sky_view_lut_slice_cos_zenith
+      = glm::vec4(sky_view_lut_slice, planet_to_sun_cos_zenith, 0.0F, 0.0F);
+    MarkAllSlotsDirty(view_id);
+  }
+}
+
+auto EnvironmentDynamicDataManager::SetAtmosphereFlags(
+  ViewId view_id, const std::uint32_t atmosphere_flags) -> void
+{
+  auto& state = view_states_[view_id];
+  if (state.data.atmosphere_flags != atmosphere_flags) {
+    state.data.atmosphere_flags = atmosphere_flags;
+    MarkAllSlotsDirty(view_id);
+  }
+}
+
+auto EnvironmentDynamicDataManager::SetAtmosphereSunOverride(
+  ViewId view_id, const SunState& sun) -> void
+{
+  auto& state = view_states_[view_id];
+  bool dirty = false;
+  dirty |= (glm::vec3(state.data.override_sun_direction_ws_illuminance)
+    != sun.direction_ws);
+  dirty
+    |= (state.data.override_sun_direction_ws_illuminance.w != sun.illuminance);
+  dirty |= (glm::vec3(state.data.override_sun_color_rgb_intensity)
+    != sun.color_rgb);
+  dirty |= (state.data.override_sun_color_rgb_intensity.w != sun.intensity);
+  const auto enabled_flag = sun.enabled ? 1u : 0u;
+  dirty |= (state.data.override_sun_flags.x != enabled_flag);
+
+  if (dirty) {
+    state.data.override_sun_direction_ws_illuminance
+      = glm::vec4(sun.direction_ws, sun.illuminance);
+    state.data.override_sun_color_rgb_intensity
+      = glm::vec4(sun.color_rgb, sun.intensity);
+    state.data.override_sun_flags.x = enabled_flag;
     MarkAllSlotsDirty(view_id);
   }
 }

@@ -191,6 +191,9 @@ public:
   OXGN_DATA_NDAPI auto TryGetVolumetricCloudsEnvironment() const
     -> std::optional<pak::VolumetricCloudsEnvironmentRecord>;
 
+  OXGN_DATA_NDAPI auto TryGetFogEnvironment() const
+    -> std::optional<pak::FogEnvironmentRecord>;
+
   OXGN_DATA_NDAPI auto TryGetSkyLightEnvironment() const
     -> std::optional<pak::SkyLightEnvironmentRecord>;
 

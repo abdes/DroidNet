@@ -63,14 +63,14 @@ struct GpuSkyAtmosphereParams
     uint enabled;
 
     float3 absorption_rgb;
-    float _pad0;
+    uint transmittance_lut_slot;
 
-    float _reserved0;
-    float _reserved1;
-    float _reserved2;
-    float _reserved3;
+    uint sky_view_lut_slot;
+    float transmittance_lut_width;
+    float transmittance_lut_height;
+    float sky_view_lut_width;
 
-    float _reserved4;
+    float sky_view_lut_height;
     float _reserved5;
     float _reserved6;
     float _reserved7;

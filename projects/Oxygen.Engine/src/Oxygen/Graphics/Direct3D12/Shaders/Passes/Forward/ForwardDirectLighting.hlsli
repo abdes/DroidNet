@@ -5,6 +5,7 @@
 #include "Renderer/PositionalLightData.hlsli"
 #include "Passes/Forward/ForwardPbr.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
+#include "Renderer/EnvironmentDynamicData.hlsli"
 
 // Safety caps for fallback loops (pre-clustered culling).
 #ifndef MAX_DIRECTIONAL_LIGHTS
@@ -26,6 +27,11 @@ float3 AccumulateDirectionalLights(
 {
     float3 direct = float3(0.0, 0.0, 0.0);
 
+    // Check if sun override is enabled
+    const bool use_sun_override = IsOverrideSunEnabled();
+    const float3 override_sun_dir = GetOverrideSunDirectionWS();
+    const float  override_sun_illum = GetOverrideSunIlluminance();
+
     if (bindless_directional_lights_slot != K_INVALID_BINDLESS_INDEX
         && BX_IN_GLOBAL_SRV(bindless_directional_lights_slot)) {
         StructuredBuffer<DirectionalLightBasic> dir_lights =
@@ -42,9 +48,28 @@ float3 AccumulateDirectionalLights(
                 continue;
             }
 
-            // Scene publishes dl.direction_ws as incoming ray direction
-            // (from light toward the scene). Shading expects surface->light.
-            const float3 L = SafeNormalize(-dl.direction_ws);
+            // Check if this is the sun light and we have an override
+            const bool is_sun = (dl.flags & DIRECTIONAL_LIGHT_FLAG_SUN_LIGHT) != 0u;
+
+            float3 light_dir_ws;
+            float  light_intensity;
+            float3 light_color;
+
+            if (is_sun && use_sun_override) {
+                // Use override sun direction (already points toward sun)
+                light_dir_ws = override_sun_dir;
+                // Override illuminance normalized by original intensity
+                light_intensity = override_sun_illum / max(dl.intensity, 0.001);
+                light_color = dl.color_rgb;
+            } else {
+                // Scene publishes dl.direction_ws as incoming ray direction
+                // (from light toward the scene). Shading expects surface->light.
+                light_dir_ws = -dl.direction_ws;
+                light_intensity = dl.intensity;
+                light_color = dl.color_rgb;
+            }
+
+            const float3 L = SafeNormalize(light_dir_ws);
             const float  NdotL = saturate(dot(N, L));
             if (NdotL <= 0.0) {
                 continue;
@@ -66,7 +91,7 @@ float3 AccumulateDirectionalLights(
             const float3 kD = (1.0 - kS) * (1.0 - metalness);
             const float3 diffuse = kD * base_rgb / kPi;
 
-            direct += (diffuse + specular) * dl.color_rgb * dl.intensity * NdotL;
+            direct += (diffuse + specular) * light_color * light_intensity * NdotL;
         }
     }
 

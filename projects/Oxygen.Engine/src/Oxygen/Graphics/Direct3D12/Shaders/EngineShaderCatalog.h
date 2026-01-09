@@ -84,6 +84,15 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     std::array { EntryPoint { kCompute, "CS" } },
     std::array<std::string_view, 1> { "CLUSTERED" }
   },
+  // Sky atmosphere LUT compute shaders (no permutations)
+  ShaderFileSpec {
+    "Passes/Atmosphere/TransmittanceLut_CS.hlsl",
+    std::array { EntryPoint { kCompute, "CS" } }
+  },
+  ShaderFileSpec {
+    "Passes/Atmosphere/SkyViewLut_CS.hlsl",
+    std::array { EntryPoint { kCompute, "CS" } }
+  },
   // Sky sphere shaders (no permutations)
   ShaderFileSpec {
     "Passes/Sky/SkySphere_VS.hlsl",
@@ -109,10 +118,12 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ForwardMesh_PS DEBUG_CLUSTER_INDEX: 4
 // - DepthPrePass: 4 (2 entries x 2 permutations)
 // - LightCulling: 2 (1 entry x 2 permutations)
+// - TransmittanceLut_CS: 1 entry
+// - SkyViewLut_CS: 1 entry
 // - SkySphere_VS: 1 entry
 // - SkySphere_PS: 1 entry
 // - ImGui: 2 (2 entries x 1 permutation)
-// Total: 1 + 2 + 4 + 4 + 4 + 4 + 2 + 1 + 1 + 2 = 25
-static_assert(kEngineShaders.size() == 25, "Expected 25 shader entries");
+// Total: 1 + 2 + 4 + 4 + 4 + 4 + 2 + 1 + 1 + 1 + 1 + 2 = 27
+static_assert(kEngineShaders.size() == 27, "Expected 27 shader entries");
 
 } // namespace oxygen::graphics::d3d12

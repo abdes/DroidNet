@@ -116,6 +116,7 @@ inline auto Load(AnyReader& reader,
   auto pack = reader.ScopedAlignment(1);
 
   CHECK_RESULT(reader.ReadInto(r.header));
+  CHECK_RESULT(reader.ReadInto(r.enabled));
   CHECK_RESULT(reader.ReadInto(r.planet_radius_m));
   CHECK_RESULT(reader.ReadInto(r.atmosphere_height_m));
 
@@ -143,6 +144,8 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(r.sun_disk_enabled));
   CHECK_RESULT(reader.ReadInto(r.sun_disk_angular_radius_radians));
   CHECK_RESULT(reader.ReadInto(r.aerial_perspective_distance_scale));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { r._reserved })));
 
   return {};
 }
@@ -153,6 +156,7 @@ inline auto Load(AnyReader& reader,
   auto pack = reader.ScopedAlignment(1);
 
   CHECK_RESULT(reader.ReadInto(r.header));
+  CHECK_RESULT(reader.ReadInto(r.enabled));
   CHECK_RESULT(reader.ReadInto(r.base_altitude_m));
   CHECK_RESULT(reader.ReadInto(r.layer_thickness_m));
   CHECK_RESULT(reader.ReadInto(r.coverage));
@@ -169,6 +173,32 @@ inline auto Load(AnyReader& reader,
   }
   CHECK_RESULT(reader.ReadInto(r.wind_speed_mps));
   CHECK_RESULT(reader.ReadInto(r.shadow_strength));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { r._reserved })));
+
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::FogEnvironmentRecord& r)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+
+  CHECK_RESULT(reader.ReadInto(r.header));
+  CHECK_RESULT(reader.ReadInto(r.enabled));
+  CHECK_RESULT(reader.ReadInto(r.model));
+  CHECK_RESULT(reader.ReadInto(r.density));
+  CHECK_RESULT(reader.ReadInto(r.height_falloff));
+  CHECK_RESULT(reader.ReadInto(r.height_offset_m));
+  CHECK_RESULT(reader.ReadInto(r.start_distance_m));
+  CHECK_RESULT(reader.ReadInto(r.max_opacity));
+  for (auto& v : r.albedo_rgb) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  CHECK_RESULT(reader.ReadInto(r.anisotropy_g));
+  CHECK_RESULT(reader.ReadInto(r.scattering_intensity));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { r._reserved })));
 
   return {};
 }
@@ -179,9 +209,8 @@ inline auto Load(AnyReader& reader, data::pak::SkyLightEnvironmentRecord& r)
   auto pack = reader.ScopedAlignment(1);
 
   CHECK_RESULT(reader.ReadInto(r.header));
+  CHECK_RESULT(reader.ReadInto(r.enabled));
   CHECK_RESULT(reader.ReadInto(r.source));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { r.reserved0 })));
 
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span { r.cubemap_asset.guid })));
@@ -192,6 +221,8 @@ inline auto Load(AnyReader& reader, data::pak::SkyLightEnvironmentRecord& r)
   }
   CHECK_RESULT(reader.ReadInto(r.diffuse_intensity));
   CHECK_RESULT(reader.ReadInto(r.specular_intensity));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { r._reserved })));
 
   return {};
 }
@@ -202,9 +233,8 @@ inline auto Load(AnyReader& reader, data::pak::SkySphereEnvironmentRecord& r)
   auto pack = reader.ScopedAlignment(1);
 
   CHECK_RESULT(reader.ReadInto(r.header));
+  CHECK_RESULT(reader.ReadInto(r.enabled));
   CHECK_RESULT(reader.ReadInto(r.source));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { r.reserved0 })));
 
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span { r.cubemap_asset.guid })));
@@ -217,6 +247,8 @@ inline auto Load(AnyReader& reader, data::pak::SkySphereEnvironmentRecord& r)
   for (auto& v : r.tint_rgb) {
     CHECK_RESULT(reader.ReadInto(v));
   }
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { r._reserved })));
 
   return {};
 }
@@ -227,6 +259,7 @@ inline auto Load(AnyReader& reader,
   auto pack = reader.ScopedAlignment(1);
 
   CHECK_RESULT(reader.ReadInto(r.header));
+  CHECK_RESULT(reader.ReadInto(r.enabled));
   CHECK_RESULT(reader.ReadInto(r.tone_mapper));
   CHECK_RESULT(reader.ReadInto(r.exposure_mode));
   CHECK_RESULT(reader.ReadInto(r.exposure_compensation_ev));
@@ -239,6 +272,8 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(r.saturation));
   CHECK_RESULT(reader.ReadInto(r.contrast));
   CHECK_RESULT(reader.ReadInto(r.vignette_intensity));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { r._reserved })));
 
   return {};
 }

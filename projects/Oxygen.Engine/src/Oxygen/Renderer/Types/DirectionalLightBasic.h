@@ -50,7 +50,7 @@ The struct is padded to a 16-byte multiple for predictable HLSL packing.
 struct alignas(16) DirectionalLightBasic {
   glm::vec3 color_rgb { 1.0F, 1.0F, 1.0F };
   float intensity { 1.0F };
-  glm::vec3 direction_ws { 0.0F, -1.0F, 0.0F };
+  glm::vec3 direction_ws { 0.0F, 0.0F, -1.0F };
   float angular_size_radians { 0.0F };
 
   // Indices/flags are kept in a 16-byte register for predictable packing.

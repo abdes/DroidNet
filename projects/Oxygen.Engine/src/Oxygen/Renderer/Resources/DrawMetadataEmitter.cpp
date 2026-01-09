@@ -36,6 +36,7 @@ auto ClassifyMaterialPassMask(const oxygen::data::MaterialAsset* mat)
 
   oxygen::engine::PassMask mask {};
   switch (domain) {
+  case oxygen::data::MaterialDomain::kUnknown:
   case oxygen::data::MaterialDomain::kOpaque:
     mask.Set(oxygen::engine::PassMaskBit::kOpaque);
     break;
@@ -45,8 +46,21 @@ auto ClassifyMaterialPassMask(const oxygen::data::MaterialAsset* mat)
   case oxygen::data::MaterialDomain::kMasked:
     mask.Set(oxygen::engine::PassMaskBit::kMasked);
     break;
-  default:
+  case oxygen::data::MaterialDomain::kDecal:
+  case oxygen::data::MaterialDomain::kUserInterface:
+  case oxygen::data::MaterialDomain::kPostProcess:
+    // These material domains do not have dedicated rendering paths yet in the
+    // example render-graph. Classify them as transparent to avoid writing depth
+    // for alpha-blended style content and to keep them out of the opaque depth
+    // pre-pass.
     mask.Set(oxygen::engine::PassMaskBit::kTransparent);
+    break;
+  default:
+    LOG_F(WARNING,
+      "Material '{}' has unsupported domain {} (flags=0x{:08X}); "
+      "classifying as Opaque",
+      mat->GetAssetName(), static_cast<int>(domain), mat->GetFlags());
+    mask.Set(oxygen::engine::PassMaskBit::kOpaque);
     break;
   }
 

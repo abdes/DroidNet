@@ -62,6 +62,10 @@ add_executable(
   "UI/ContentLoaderPanel.cpp"
   "UI/LightCullingDebugPanel.h"
   "UI/LightCullingDebugPanel.cpp"
+  "UI/EnvironmentDebugPanel.h"
+  "UI/EnvironmentDebugPanel.cpp"
+  "UI/AxesWidget.h"
+  "UI/AxesWidget.cpp"
 )
 
 set_target_properties(

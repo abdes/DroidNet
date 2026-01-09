@@ -284,7 +284,9 @@ auto BrdfLutManager::CreateTexture(const LutKey& key)
   desc.is_shader_resource = true;
   desc.is_uav = false;
   desc.is_render_target = false;
-  desc.initial_state = graphics::ResourceStates::kCopyDest;
+  // Use kCommon initial state for copy queue compatibility.
+  // Copy queues use implicit promotion from COMMON to COPY_DEST.
+  desc.initial_state = graphics::ResourceStates::kCommon;
 
   auto texture = gfx_->CreateTexture(desc);
   if (!texture) {

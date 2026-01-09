@@ -140,8 +140,12 @@ public:
   //! SetComputeRootDescriptorTable) for the previously bound heaps. This
   //! assumes that descriptor heaps and a compatible root signature have
   //! already been bound to the command list.
+  //! @param heaps The shader-visible heaps to bind.
+  //! @param is_compute If true, uses SetComputeRootDescriptorTable; otherwise
+  //!                   uses SetGraphicsRootDescriptorTable.
   auto SetupDescriptorTables(
-    std::span<const detail::ShaderVisibleHeapInfo> heaps) const -> void;
+    std::span<const detail::ShaderVisibleHeapInfo> heaps, bool is_compute) const
+    -> void;
 
 protected:
   auto ExecuteBarriers(std::span<const graphics::detail::Barrier> barriers)

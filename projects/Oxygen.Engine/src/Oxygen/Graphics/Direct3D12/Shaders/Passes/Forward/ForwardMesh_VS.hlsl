@@ -38,9 +38,6 @@ cbuffer RootConstants : register(b2, space0) {
     uint g_PassConstantsIndex;
 }
 
-// Root CBV b3: per-frame, frequently accessed environment data.
-ConstantBuffer<EnvironmentDynamicData> EnvironmentDynamicData : register(b3, space0);
-
 // Vertex shader output / Pixel shader input
 struct VSOutput {
     float4 position : SV_POSITION;
@@ -63,9 +60,9 @@ VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
         output.color = float3(1,0,1); // debug magenta
         output.uv = float2(0,0);
         output.world_pos = float3(0,0,0);
-        output.world_normal = float3(0,1,0);
+        output.world_normal = float3(0,0,1);   // Z is up
         output.world_tangent = float3(1,0,0);
-        output.world_bitangent = float3(0,0,1);
+        output.world_bitangent = float3(0,1,0);
         return output;
     }
     StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[bindless_draw_metadata_slot];

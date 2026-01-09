@@ -113,15 +113,15 @@ struct alignas(16) GpuSkyAtmosphereParams {
   uint32_t sun_disk_enabled { 1u };
   uint32_t enabled { 0u };
 
-  glm::vec3 absorption_rgb { 0.0F, 0.0F, 0.0F };
-  float _pad0 { 0.0F };
+  glm::vec3 absorption_rgb { 0.65e-6F, 1.881e-6F, 0.085e-6F };
+  std::uint32_t transmittance_lut_slot { kInvalidDescriptorSlot };
 
-  float _reserved0 { 0.0F };
-  float _reserved1 { 0.0F };
-  float _reserved2 { 0.0F };
-  float _reserved3 { 0.0F };
+  std::uint32_t sky_view_lut_slot { kInvalidDescriptorSlot };
+  float transmittance_lut_width { 0.0F };
+  float transmittance_lut_height { 0.0F };
+  float sky_view_lut_width { 0.0F };
 
-  float _reserved4 { 0.0F };
+  float sky_view_lut_height { 0.0F };
   float _reserved5 { 0.0F };
   float _reserved6 { 0.0F };
   float _reserved7 { 0.0F };

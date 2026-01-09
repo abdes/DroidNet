@@ -197,6 +197,23 @@ public:
     return aerial_perspective_distance_scale_;
   }
 
+  //! Sets aerial perspective scattering strength (unitless).
+  /*!
+   Controls the strength of LUT-based aerial perspective applied to scene
+   geometry. This is intentionally separate from `multi_scattering_factor`,
+   which affects sky scattering in the sky-view LUT.
+  */
+  auto SetAerialScatteringStrength(const float strength) noexcept -> void
+  {
+    aerial_scattering_strength_ = strength;
+  }
+
+  //! Gets aerial perspective scattering strength.
+  [[nodiscard]] auto GetAerialScatteringStrength() const noexcept -> float
+  {
+    return aerial_scattering_strength_;
+  }
+
 private:
   float planet_radius_m_ = 6360000.0F;
   float atmosphere_height_m_ = 80000.0F;
@@ -211,7 +228,8 @@ private:
   float mie_scale_height_m_ = 1200.0F;
   float mie_g_ = 0.8F;
 
-  Vec3 absorption_rgb_ { 0.0F, 0.0F, 0.0F };
+  // Ozone-like absorption baseline (1 / meter).
+  Vec3 absorption_rgb_ { 0.65e-6F, 1.881e-6F, 0.085e-6F };
   float absorption_scale_height_m_ = 25000.0F;
 
   float multi_scattering_factor_ = 1.0F;
@@ -220,6 +238,8 @@ private:
   float sun_disk_angular_radius_radians_ = 0.004675F;
 
   float aerial_perspective_distance_scale_ = 1.0F;
+
+  float aerial_scattering_strength_ = 1.0F;
 };
 
 } // namespace oxygen::scene::environment

@@ -6,14 +6,50 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
-#include <glm/vec3.hpp>
+#include <glm/vec4.hpp>
 
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine {
+
+//! Bitfield flags for atmosphere rendering features.
+/*!
+ Controls which atmosphere rendering path is used and enables debug features.
+ These flags must match the HLSL constants in AerialPerspective.hlsli.
+*/
+enum class AtmosphereFlags : uint32_t {
+  kNone = 0x0,
+  kUseLut = 0x1, //!< Use LUT sampling when LUTs are available.
+  kVisualizeLut = 0x2, //!< Debug: render LUT as overlay.
+  kForceAnalytic = 0x4, //!< Force analytic fog fallback (ignore LUT).
+  kOverrideSun = 0x8, //!< Use debug override sun direction/intensity.
+};
+
+//! Bitwise OR for AtmosphereFlags.
+constexpr auto operator|(AtmosphereFlags lhs, AtmosphereFlags rhs) noexcept
+  -> AtmosphereFlags
+{
+  return static_cast<AtmosphereFlags>(
+    static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
+}
+
+//! Bitwise AND for AtmosphereFlags.
+constexpr auto operator&(AtmosphereFlags lhs, AtmosphereFlags rhs) noexcept
+  -> AtmosphereFlags
+{
+  return static_cast<AtmosphereFlags>(
+    static_cast<uint32_t>(lhs) & static_cast<uint32_t>(rhs));
+}
+
+//! Check if a flag is set.
+constexpr auto HasFlag(uint32_t flags, AtmosphereFlags flag) noexcept -> bool
+{
+  return (flags & static_cast<uint32_t>(flag)) != 0;
+}
 
 //! Per-frame environment payload consumed directly by shaders.
 /*!
@@ -61,6 +97,9 @@ struct alignas(16) EnvironmentDynamicData {
   uint32_t bindless_cluster_grid_slot { kInvalidDescriptorSlot };
   uint32_t bindless_cluster_index_list_slot { kInvalidDescriptorSlot };
 
+  // Padding to complete the first 16-byte register.
+  uint32_t _pad0 { 0u };
+
   // Cluster grid dimensions
   uint32_t cluster_dim_x { 0 };
   uint32_t cluster_dim_y { 0 };
@@ -73,21 +112,61 @@ struct alignas(16) EnvironmentDynamicData {
   float z_scale { 0.0F };
   float z_bias { 0.0F };
 
-  // Designated sun light (toward the sun, not incoming radiance).
-  glm::vec3 sun_direction_ws { 0.0F, 1.0F, 0.0F };
-  float sun_illuminance { 0.0F };
+  // Per-view aerial perspective controls (SkyAtmosphere).
+  float aerial_perspective_distance_scale { 1.0F };
+  float aerial_scattering_strength { 1.0F };
+
+  // Atmospheric debug/feature flags (bitfield)
+  // bit0: use LUT sampling when available
+  // bit1: visualize LUT
+  // bit2: force analytic fallback (ignore LUT)
+  // bit3: use override sun values
+  uint32_t atmosphere_flags { 0u };
 
   // 1 = sun fields valid; 0 = fallback to default sun.
   uint32_t sun_valid { 0u };
-  float _pad_sun0 { 0.0F };
-  float _pad_sun1 { 0.0F };
-  float _pad_sun2 { 0.0F };
+
+  // Designated sun light (toward the sun, not incoming radiance).
+  // xyz = direction (Z-up: +Y with 30° elevation), w = illuminance.
+  glm::vec4 sun_direction_ws_illuminance { 0.0F, 0.866F, 0.5F, 0.0F };
+
+  // Planet/frame context for atmospheric sampling.
+  // xyz = planet center (below Z=0 ground). w = padding (unused).
+  // Note: planet_radius is in EnvironmentStaticData (static parameter).
+  glm::vec4 planet_center_ws_pad { 0.0F, 0.0F, -6360000.0F, 0.0F };
+
+  // xyz = planet up, w = camera altitude (m).
+  glm::vec4 planet_up_ws_camera_altitude_m { 0.0F, 0.0F, 1.0F, 0.0F };
+
+  // x = sky view LUT slice, y = planet_to_sun_cos_zenith.
+  glm::vec4 sky_view_lut_slice_cos_zenith { 0.0F, 0.0F, 0.0F, 0.0F };
+
+  // Debug override sun for testing.
+  // xyz = direction (Z-up: +Y with 30° elevation), w = illuminance.
+  glm::vec4 override_sun_direction_ws_illuminance { 0.0F, 0.866F, 0.5F, 0.0F };
+
+  // x = override_sun_enabled; remaining lanes reserved for future flags.
+  glm::uvec4 override_sun_flags { 0u, 0u, 0u, 0u };
+
+  // Sun spectral payload.
+  // xyz = color_rgb (linear, not premultiplied), w = intensity.
+  glm::vec4 sun_color_rgb_intensity { 1.0F, 1.0F, 1.0F, 1.0F };
+
+  // Override sun spectral payload.
+  // xyz = color_rgb (linear, not premultiplied), w = intensity.
+  glm::vec4 override_sun_color_rgb_intensity { 1.0F, 1.0F, 1.0F, 1.0F };
 };
 static_assert(alignof(EnvironmentDynamicData) == 16,
   "EnvironmentDynamicData must stay 16-byte aligned for root CBV");
 static_assert(sizeof(EnvironmentDynamicData) % 16 == 0,
   "EnvironmentDynamicData size must be 16-byte aligned");
-static_assert(sizeof(EnvironmentDynamicData) == 80,
-  "EnvironmentDynamicData size must match HLSL packing (std140 float3 pads)");
+static_assert(sizeof(EnvironmentDynamicData) == 192,
+  "EnvironmentDynamicData size must match HLSL cbuffer packing");
+
+static_assert(offsetof(EnvironmentDynamicData, cluster_dim_x) == 16,
+  "EnvironmentDynamicData layout mismatch: cluster_dim_x offset");
+static_assert(
+  offsetof(EnvironmentDynamicData, sun_direction_ws_illuminance) == 64,
+  "EnvironmentDynamicData layout mismatch: sun block offset");
 
 } // namespace oxygen::engine

@@ -20,6 +20,7 @@
 
 #include <imgui.h>
 
+#include <glm/ext/matrix_transform.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -46,8 +47,13 @@
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
+#include <Oxygen/Scene/Environment/VolumetricClouds.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
@@ -217,9 +223,57 @@ private:
 
     swap_.scene = std::make_shared<scene::Scene>("RenderScene");
 
-    if (auto sky_sphere_record = asset->TryGetSkySphereEnvironment();
-      sky_sphere_record) {
-      auto environment = std::make_unique<scene::SceneEnvironment>();
+    // Check for mutually exclusive sky systems
+    const auto sky_atmo_record = asset->TryGetSkyAtmosphereEnvironment();
+    const auto sky_sphere_record = asset->TryGetSkySphereEnvironment();
+
+    const bool sky_atmo_enabled
+      = sky_atmo_record && sky_atmo_record->enabled != 0U;
+    const bool sky_sphere_enabled
+      = sky_sphere_record && sky_sphere_record->enabled != 0U;
+
+    if (sky_atmo_enabled && sky_sphere_enabled) {
+      LOG_F(WARNING,
+        "SceneLoader: Both SkyAtmosphere and SkySphere are enabled in the "
+        "scene. They are mutually exclusive; SkyAtmosphere will be used.");
+    }
+
+    auto environment = std::make_unique<scene::SceneEnvironment>();
+
+    // SkyAtmosphere takes priority over SkySphere
+    if (sky_atmo_enabled) {
+      auto& atmo = environment->AddSystem<scene::environment::SkyAtmosphere>();
+      atmo.SetPlanetRadiusMeters(sky_atmo_record->planet_radius_m);
+      atmo.SetAtmosphereHeightMeters(sky_atmo_record->atmosphere_height_m);
+      atmo.SetGroundAlbedoRgb(
+        oxygen::Vec3 { sky_atmo_record->ground_albedo_rgb[0],
+          sky_atmo_record->ground_albedo_rgb[1],
+          sky_atmo_record->ground_albedo_rgb[2] });
+      atmo.SetRayleighScatteringRgb(
+        oxygen::Vec3 { sky_atmo_record->rayleigh_scattering_rgb[0],
+          sky_atmo_record->rayleigh_scattering_rgb[1],
+          sky_atmo_record->rayleigh_scattering_rgb[2] });
+      atmo.SetRayleighScaleHeightMeters(
+        sky_atmo_record->rayleigh_scale_height_m);
+      atmo.SetMieScatteringRgb(
+        oxygen::Vec3 { sky_atmo_record->mie_scattering_rgb[0],
+          sky_atmo_record->mie_scattering_rgb[1],
+          sky_atmo_record->mie_scattering_rgb[2] });
+      atmo.SetMieScaleHeightMeters(sky_atmo_record->mie_scale_height_m);
+      atmo.SetMieAnisotropy(sky_atmo_record->mie_g);
+      atmo.SetAbsorptionRgb(oxygen::Vec3 { sky_atmo_record->absorption_rgb[0],
+        sky_atmo_record->absorption_rgb[1],
+        sky_atmo_record->absorption_rgb[2] });
+      atmo.SetAbsorptionScaleHeightMeters(
+        sky_atmo_record->absorption_scale_height_m);
+      atmo.SetMultiScatteringFactor(sky_atmo_record->multi_scattering_factor);
+      atmo.SetSunDiskEnabled(sky_atmo_record->sun_disk_enabled != 0U);
+      atmo.SetSunDiskAngularRadiusRadians(
+        sky_atmo_record->sun_disk_angular_radius_radians);
+      atmo.SetAerialPerspectiveDistanceScale(
+        sky_atmo_record->aerial_perspective_distance_scale);
+      LOG_F(INFO, "SceneLoader: Applied SkyAtmosphere environment");
+    } else if (sky_sphere_enabled) {
       auto& sky_sphere
         = environment->AddSystem<scene::environment::SkySphere>();
 
@@ -242,11 +296,86 @@ private:
       sky_sphere.SetRotationRadians(sky_sphere_record->rotation_radians);
       sky_sphere.SetTintRgb(oxygen::Vec3 { sky_sphere_record->tint_rgb[0],
         sky_sphere_record->tint_rgb[1], sky_sphere_record->tint_rgb[2] });
-
-      swap_.scene->SetEnvironment(std::move(environment));
       LOG_F(INFO,
         "SceneLoader: Applied SkySphere environment (solid color source)");
     }
+
+    // Load Fog environment
+    if (const auto fog_record = asset->TryGetFogEnvironment();
+      fog_record && fog_record->enabled != 0U) {
+      auto& fog = environment->AddSystem<scene::environment::Fog>();
+      fog.SetModel(
+        static_cast<scene::environment::FogModel>(fog_record->model));
+      fog.SetDensity(fog_record->density);
+      fog.SetHeightFalloff(fog_record->height_falloff);
+      fog.SetHeightOffsetMeters(fog_record->height_offset_m);
+      fog.SetStartDistanceMeters(fog_record->start_distance_m);
+      fog.SetMaxOpacity(fog_record->max_opacity);
+      fog.SetAlbedoRgb(oxygen::Vec3 { fog_record->albedo_rgb[0],
+        fog_record->albedo_rgb[1], fog_record->albedo_rgb[2] });
+      fog.SetAnisotropy(fog_record->anisotropy_g);
+      fog.SetScatteringIntensity(fog_record->scattering_intensity);
+      LOG_F(INFO, "SceneLoader: Applied Fog environment");
+    }
+
+    // Load SkyLight environment
+    if (const auto sky_light_record = asset->TryGetSkyLightEnvironment();
+      sky_light_record && sky_light_record->enabled != 0U) {
+      auto& sky_light = environment->AddSystem<scene::environment::SkyLight>();
+      sky_light.SetSource(static_cast<scene::environment::SkyLightSource>(
+        sky_light_record->source));
+      // Note: cubemap asset loading not implemented in this example yet
+      sky_light.SetIntensity(sky_light_record->intensity);
+      sky_light.SetTintRgb(oxygen::Vec3 { sky_light_record->tint_rgb[0],
+        sky_light_record->tint_rgb[1], sky_light_record->tint_rgb[2] });
+      sky_light.SetDiffuseIntensity(sky_light_record->diffuse_intensity);
+      sky_light.SetSpecularIntensity(sky_light_record->specular_intensity);
+      LOG_F(INFO, "SceneLoader: Applied SkyLight environment");
+    }
+
+    // Load VolumetricClouds environment
+    if (const auto clouds_record = asset->TryGetVolumetricCloudsEnvironment();
+      clouds_record && clouds_record->enabled != 0U) {
+      auto& clouds
+        = environment->AddSystem<scene::environment::VolumetricClouds>();
+      clouds.SetBaseAltitudeMeters(clouds_record->base_altitude_m);
+      clouds.SetLayerThicknessMeters(clouds_record->layer_thickness_m);
+      clouds.SetCoverage(clouds_record->coverage);
+      clouds.SetDensity(clouds_record->density);
+      clouds.SetAlbedoRgb(oxygen::Vec3 { clouds_record->albedo_rgb[0],
+        clouds_record->albedo_rgb[1], clouds_record->albedo_rgb[2] });
+      clouds.SetExtinctionScale(clouds_record->extinction_scale);
+      clouds.SetPhaseAnisotropy(clouds_record->phase_g);
+      clouds.SetWindDirectionWs(oxygen::Vec3 { clouds_record->wind_dir_ws[0],
+        clouds_record->wind_dir_ws[1], clouds_record->wind_dir_ws[2] });
+      clouds.SetWindSpeedMps(clouds_record->wind_speed_mps);
+      clouds.SetShadowStrength(clouds_record->shadow_strength);
+      LOG_F(INFO, "SceneLoader: Applied VolumetricClouds environment");
+    }
+
+    // Load PostProcessVolume environment
+    if (const auto pp_record = asset->TryGetPostProcessVolumeEnvironment();
+      pp_record && pp_record->enabled != 0U) {
+      auto& pp
+        = environment->AddSystem<scene::environment::PostProcessVolume>();
+      pp.SetToneMapper(
+        static_cast<scene::environment::ToneMapper>(pp_record->tone_mapper));
+      pp.SetExposureMode(static_cast<scene::environment::ExposureMode>(
+        pp_record->exposure_mode));
+      pp.SetExposureCompensationEv(pp_record->exposure_compensation_ev);
+      pp.SetAutoExposureRangeEv(
+        pp_record->auto_exposure_min_ev, pp_record->auto_exposure_max_ev);
+      pp.SetAutoExposureAdaptationSpeeds(
+        pp_record->auto_exposure_speed_up, pp_record->auto_exposure_speed_down);
+      pp.SetBloomIntensity(pp_record->bloom_intensity);
+      pp.SetBloomThreshold(pp_record->bloom_threshold);
+      pp.SetSaturation(pp_record->saturation);
+      pp.SetContrast(pp_record->contrast);
+      pp.SetVignetteIntensity(pp_record->vignette_intensity);
+      LOG_F(INFO, "SceneLoader: Applied PostProcessVolume environment");
+    }
+
+    swap_.scene->SetEnvironment(std::move(environment));
 
     // Instantiate nodes (synchronous part)
     using oxygen::data::pak::DirectionalLightRecord;
@@ -1240,9 +1369,9 @@ auto MainModule::EnsureFallbackCamera(const int width, const int height) -> void
   if (!active_camera_.IsAlive()) {
     active_camera_ = scene_->CreateNode("MainCamera");
 
-    // Start with a stable, non-singular pose: look along the Y axis with Z-up.
-    // This makes it unambiguous whether imported assets are rotated.
-    const glm::vec3 cam_pos(10.0F, 10.0F, 10.0F);
+    // Camera at -Y axis looking at origin with Z-up.
+    // User is at (0, -15, 0) watching the scene at origin.
+    const glm::vec3 cam_pos(0.0F, -15.0F, 0.0F);
     const glm::vec3 cam_target(0.0F, 0.0F, 0.0F);
     const glm::quat cam_rot = MakeLookRotationFromPosition(cam_pos, cam_target);
 
@@ -1352,6 +1481,19 @@ auto MainModule::InitializeUIPanels() -> void
 
     light_culling_debug_panel_.Initialize(debug_config);
   }
+
+  // Configure environment debug panel
+  ui::EnvironmentDebugConfig env_config;
+  env_config.scene = scene_;
+  if (auto* renderer = ResolveRenderer()) {
+    env_config.renderer = renderer;
+  }
+  env_config.on_atmosphere_params_changed = []() {
+    LOG_F(INFO, "Atmosphere parameters changed, LUTs will regenerate");
+  };
+  env_config.on_exposure_changed
+    = []() { LOG_F(INFO, "Exposure settings changed"); };
+  environment_debug_panel_.Initialize(env_config);
 }
 
 auto MainModule::UpdateCameraControlPanelConfig() -> void
@@ -1406,6 +1548,19 @@ auto MainModule::UpdateUIPanels() -> void
 
     light_culling_debug_panel_.UpdateConfig(debug_config);
   }
+
+  // Update environment debug panel when scene is available
+  if (scene_) {
+    ui::EnvironmentDebugConfig env_config;
+    env_config.scene = scene_;
+    env_config.renderer = ResolveRenderer();
+    environment_debug_panel_.UpdateConfig(env_config);
+
+    // Apply any pending UI changes to the scene during mutation phase
+    if (environment_debug_panel_.HasPendingChanges()) {
+      environment_debug_panel_.ApplyPendingChanges();
+    }
+  }
 }
 
 auto MainModule::DrawUI() -> void
@@ -1413,6 +1568,36 @@ auto MainModule::DrawUI() -> void
   content_loader_panel_.Draw();
   camera_control_panel_.Draw();
   light_culling_debug_panel_.Draw();
+  environment_debug_panel_.Draw();
+
+  // Draw axes widget with current camera view matrix
+  if (active_camera_.IsAlive()) {
+    // Compute view matrix from camera transform
+    glm::vec3 cam_pos { 0.0F, 0.0F, 0.0F };
+    glm::quat cam_rot { 1.0F, 0.0F, 0.0F, 0.0F };
+
+    const auto& tf = active_camera_.GetTransform();
+    if (auto wp = tf.GetWorldPosition()) {
+      cam_pos = *wp;
+    } else if (auto lp = tf.GetLocalPosition()) {
+      cam_pos = *lp;
+    }
+    if (auto wr = tf.GetWorldRotation()) {
+      cam_rot = *wr;
+    } else if (auto lr = tf.GetLocalRotation()) {
+      cam_rot = *lr;
+    }
+
+    // Engine view-space conventions: Forward = -Z, Up = +Y
+    // (from space::look in Constants.h)
+    constexpr glm::vec3 kViewForward { 0.0F, 0.0F, -1.0F };
+    constexpr glm::vec3 kViewUp { 0.0F, 1.0F, 0.0F };
+    const glm::vec3 forward = cam_rot * kViewForward;
+    const glm::vec3 up = cam_rot * kViewUp;
+    const glm::mat4 view_matrix = glm::lookAt(cam_pos, cam_pos + forward, up);
+
+    axes_widget_.Draw(view_matrix);
+  }
 }
 
 auto MainModule::ResetCameraToInitialPose() -> void

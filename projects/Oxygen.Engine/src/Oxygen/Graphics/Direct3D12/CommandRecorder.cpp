@@ -240,7 +240,8 @@ auto CommandRecorder::SetupDescriptorHeaps(
 }
 
 auto CommandRecorder::SetupDescriptorTables(
-  const std::span<const detail::ShaderVisibleHeapInfo> heaps) const -> void
+  const std::span<const detail::ShaderVisibleHeapInfo> heaps,
+  const bool is_compute) const -> void
 {
   // Modern bindless approach: bind root descriptor tables for heaps that have
   // been bound previously via SetupDescriptorHeaps(). The command list must
@@ -248,39 +249,32 @@ auto CommandRecorder::SetupDescriptorTables(
   auto* d3d12_command_list = GetConcreteCommandList().GetCommandList();
   DCHECK_NOTNULL_F(d3d12_command_list);
 
-  auto queue_role = GetCommandList().GetQueueRole();
+  // Validate queue role supports the requested binding type
+  const auto queue_role = GetCommandList().GetQueueRole();
   DCHECK_F(
     queue_role == QueueRole::kGraphics || queue_role == QueueRole::kCompute,
     "Invalid command list type for SetupDescriptorTables. Expected Graphics or "
     "Compute, got: {}",
     static_cast<int>(queue_role));
+  // Compute can only run on Graphics or Compute queues
+  // Graphics can only run on Graphics queue
+  DCHECK_F(is_compute || queue_role == QueueRole::kGraphics,
+    "Graphics root tables require a Graphics queue command list");
 
-  auto set_table = [this, d3d12_command_list, queue_role](const UINT root_index,
+  auto set_table = [d3d12_command_list, is_compute](const UINT root_index,
                      const D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle) {
-    if (queue_role == QueueRole::kGraphics) {
-      DLOG_F(3,
-        "recorder: SetGraphicsRootDescriptorTable for command list: {}, root "
-        "index={}, gpu_handle={}",
-        GetConcreteCommandList().GetName(), root_index, gpu_handle.ptr);
+    if (is_compute) {
+      d3d12_command_list->SetComputeRootDescriptorTable(root_index, gpu_handle);
+    } else {
       d3d12_command_list->SetGraphicsRootDescriptorTable(
         root_index, gpu_handle);
-    } else if (queue_role == QueueRole::kCompute) {
-      d3d12_command_list->SetComputeRootDescriptorTable(root_index, gpu_handle);
     }
   };
 
   for (const auto& heap_info : heaps) {
     if (heap_info.heap_type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) {
-      // Bind the single unbounded SRV descriptor table
-      // The shader uses ResourceDescriptorHeap to access all resources by
-      // global index
-      DLOG_F(4,
-        "recorder: binding SRV heap gpu_handle.ptr={} for command list: {}",
-        heap_info.gpu_handle.ptr, GetConcreteCommandList().GetName());
       set_table(kRootIndex_UnboundedSRV_Table, heap_info.gpu_handle);
-
     } else if (heap_info.heap_type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER) {
-      // Bind the sampler descriptor heap to the sampler table
       set_table(kRootIndex_Sampler_Table, heap_info.gpu_handle);
     } else {
       DLOG_F(WARNING,
@@ -397,7 +391,8 @@ auto CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc) -> void
   // heaps first, set the root signature, then bind root descriptor tables.
   SetupDescriptorHeaps(allocator.GetShaderVisibleHeaps());
   d3d12_command_list->SetGraphicsRootSignature(root_signature);
-  SetupDescriptorTables(allocator.GetShaderVisibleHeaps());
+  SetupDescriptorTables(
+    allocator.GetShaderVisibleHeaps(), /*is_compute=*/false);
 
   d3d12_command_list->SetPipelineState(pipeline_state);
 }
@@ -424,15 +419,10 @@ auto CommandRecorder::SetPipelineState(ComputePipelineDesc desc) -> void
       graphics->GetDescriptorAllocator()));
   // Ensure descriptor heaps are bound before setting a compute root signature
   // which may depend on directly-indexed sampler/SRV heaps. Bind heaps, set
-  // root signature and then bind root descriptor tables.
+  // root signature, then bind root descriptor tables.
   SetupDescriptorHeaps(allocator.GetShaderVisibleHeaps());
   d3d12_command_list->SetComputeRootSignature(root_signature);
-  SetupDescriptorTables(allocator.GetShaderVisibleHeaps());
-  // Use the compute-specific root signature binder so we match command list
-  // expectations for compute workloads.
-  d3d12_command_list->SetComputeRootSignature(root_signature);
-
-  // Name them for debugging
+  SetupDescriptorTables(allocator.GetShaderVisibleHeaps(), /*is_compute=*/true);
 
   d3d12_command_list->SetPipelineState(pipeline_state);
 }

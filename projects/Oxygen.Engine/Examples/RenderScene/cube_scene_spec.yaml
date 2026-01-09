@@ -333,17 +333,22 @@ assets:
         parent: 0
         node_id: "fedcba0987654321fedcba0987654321"
         flags: 0
-        translation: [0.0, 0.0, 5.0]
-        rotation: [0.0, 0.0, 0.0, 1.0]
+        # Camera at -Y axis looking at origin (Z-up world).
+        translation: [0.0, -15.0, 0.0]
+        # Rotation to look along +Y with Z-up.
+        # Rotate -90° about X so Forward (-Y local) becomes +Y world.
+        rotation: [-0.70710678, 0.0, 0.0, 0.70710678]
         scale: [1.0, 1.0, 1.0]
 
       - name: Sun
         parent: 0
         node_id: "0a0b0c0d0e0f10111213141516171819"
         flags: 0
-        translation: [5.0, 2.0, 0.0]
-        # Aim the sun downward: rotate +90° about +X so Forward (-Y) becomes -Z.
-        rotation: [0.70710678, 0.0, 0.0, 0.70710678]
+        # Sun positioned in +Y, +Z direction (in front and above from default camera).
+        translation: [0.0, 5.0, 8.0]
+        # Rotate +60° about +X axis so Forward (-Y) points toward -Y,-Z (light direction).
+        # This places the sun at ~60° elevation, visible from camera at (0,-15,0).
+        rotation: [0.5, 0.0, 0.0, 0.8660254]
         scale: [1.0, 1.0, 1.0]
 
       - name: FillLight
@@ -428,57 +433,94 @@ assets:
         # Marks this directional light as the scene's sun.
         is_sun_light: true
 
-    point_lights:
-      - node_index: 6
-        affects_world: true
-        color_rgb: [1.0, 0.35, 0.25]
-        intensity: 18.0
-        casts_shadows: 0
-        range: 8.0
-        attenuation_model: 0
-        decay_exponent: 2.0
-        source_radius: 0.05
+    # point_lights:
+    #   - node_index: 6
+    #     affects_world: true
+    #     color_rgb: [1.0, 0.35, 0.25]
+    #     intensity: 18.0
+    #     casts_shadows: 0
+    #     range: 8.0
+    #     attenuation_model: 0
+    #     decay_exponent: 2.0
+    #     source_radius: 0.05
 
-      - node_index: 9
-        affects_world: true
-        color_rgb: [1.0, 1.0, 1.0]
-        intensity: 60.0
-        casts_shadows: 0
-        range: 3.0
-        attenuation_model: 0
-        decay_exponent: 2.0
-        source_radius: 0.02
+    #   - node_index: 9
+    #     affects_world: true
+    #     color_rgb: [1.0, 1.0, 1.0]
+    #     intensity: 60.0
+    #     casts_shadows: 0
+    #     range: 3.0
+    #     attenuation_model: 0
+    #     decay_exponent: 2.0
+    #     source_radius: 0.02
 
-    spot_lights:
-      - node_index: 7
-        affects_world: true
-        color_rgb: [0.25, 0.6, 1.0]
-        intensity: 25.0
-        casts_shadows: 0
-        range: 12.0
-        attenuation_model: 0
-        decay_exponent: 2.0
-        inner_cone_angle_radians: 0.25
-        outer_cone_angle_radians: 0.45
-        source_radius: 0.02
+    # spot_lights:
+    #   - node_index: 7
+    #     affects_world: true
+    #     color_rgb: [0.25, 0.6, 1.0]
+    #     intensity: 25.0
+    #     casts_shadows: 0
+    #     range: 12.0
+    #     attenuation_model: 0
+    #     decay_exponent: 2.0
+    #     inner_cone_angle_radians: 0.25
+    #     outer_cone_angle_radians: 0.45
+    #     source_radius: 0.02
 
-      - node_index: 8
-        affects_world: true
-        color_rgb: [1.0, 1.0, 1.0]
-        intensity: 35.0
-        casts_shadows: 0
-        range: 6.0
-        attenuation_model: 0
-        decay_exponent: 2.0
-        inner_cone_angle_radians: 0.18
-        outer_cone_angle_radians: 0.30
-        source_radius: 0.02
+    #   - node_index: 8
+    #     affects_world: true
+    #     color_rgb: [1.0, 1.0, 1.0]
+    #     intensity: 35.0
+    #     casts_shadows: 0
+    #     range: 6.0
+    #     attenuation_model: 0
+    #     decay_exponent: 2.0
+    #     inner_cone_angle_radians: 0.18
+    #     outer_cone_angle_radians: 0.30
+    #     source_radius: 0.02
 
     environment:
       sky_sphere:
-        # SkySphereSource: 0 = Cubemap, 1 = SolidColor
+        enabled: true
         source: 1
-        # Linear RGB (bluish)
         solid_color_rgb: [0.25, 0.45, 0.90]
         intensity: 1.0
         tint_rgb: [1.0, 1.0, 1.0]
+
+      sky_atmosphere:
+        enabled: false
+        planet_radius_m: 6360000.0
+        atmosphere_height_m: 80000.0
+        ground_albedo_rgb: [0.1, 0.1, 0.1]
+        rayleigh_scale_height_m: 8000.0
+        mie_scale_height_m: 1200.0
+        mie_anisotropy: 0.8
+        multi_scattering_factor: 1.0
+        sun_disk_enabled: true
+        sun_disk_angular_radius_rad: 0.004675
+        aerial_perspective_distance_scale: 1.0
+
+      fog:
+        enabled: false
+        model: 0
+        density: 0.01
+        height_falloff: 0.5
+        height_offset_m: 0.0
+        start_distance_m: 10.0
+        max_opacity: 1.0
+        albedo_rgb: [0.8, 0.85, 0.9]
+        anisotropy: 0.0
+        scattering_intensity: 1.0
+
+      post_process:
+        enabled: true
+        tone_mapper: 1
+        exposure_mode: 0
+        exposure_compensation_ev: 0.0
+        auto_exposure_min_ev: -4.0
+        auto_exposure_max_ev: 16.0
+        bloom_intensity: 0.0
+        bloom_threshold: 1.0
+        saturation: 1.0
+        contrast: 1.0
+        vignette: 0.0

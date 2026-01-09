@@ -1105,6 +1105,8 @@ struct SkyAtmosphereEnvironmentRecord {
     .record_size = sizeof(SkyAtmosphereEnvironmentRecord),
   };
 
+  uint32_t enabled = 1; //!< Whether this system is enabled (boolean).
+
   float planet_radius_m = 6360000.0F;
   float atmosphere_height_m = 80000.0F;
 
@@ -1126,9 +1128,11 @@ struct SkyAtmosphereEnvironmentRecord {
   float sun_disk_angular_radius_radians = 0.004675F;
 
   float aerial_perspective_distance_scale = 1.0F;
+
+  uint8_t _reserved[16] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(SkyAtmosphereEnvironmentRecord) == 96);
+static_assert(sizeof(SkyAtmosphereEnvironmentRecord) == 116);
 
 //! Packed VolumetricClouds environment record.
 #pragma pack(push, 1)
@@ -1138,6 +1142,8 @@ struct VolumetricCloudsEnvironmentRecord {
     = static_cast<uint32_t>(EnvironmentComponentType::kVolumetricClouds),
     .record_size = sizeof(VolumetricCloudsEnvironmentRecord),
   };
+
+  uint32_t enabled = 1; //!< Whether this system is enabled (boolean).
 
   float base_altitude_m = 1500.0F;
   float layer_thickness_m = 4000.0F;
@@ -1153,9 +1159,36 @@ struct VolumetricCloudsEnvironmentRecord {
   float wind_speed_mps = 10.0F;
 
   float shadow_strength = 0.8F;
+
+  uint8_t _reserved[16] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(VolumetricCloudsEnvironmentRecord) == 64);
+static_assert(sizeof(VolumetricCloudsEnvironmentRecord) == 84);
+
+//! Packed Fog environment record.
+#pragma pack(push, 1)
+struct FogEnvironmentRecord {
+  SceneEnvironmentSystemRecordHeader header = {
+    .system_type = static_cast<uint32_t>(EnvironmentComponentType::kFog),
+    .record_size = sizeof(FogEnvironmentRecord),
+  };
+
+  uint32_t enabled = 1; //!< Whether this system is enabled (boolean).
+
+  uint32_t model = 0; //!< FogModel (0=ExponentialHeight, 1=Volumetric).
+  float density = 0.01F;
+  float height_falloff = 0.2F;
+  float height_offset_m = 0.0F;
+  float start_distance_m = 0.0F;
+  float max_opacity = 1.0F;
+  float albedo_rgb[3] = { 1.0F, 1.0F, 1.0F };
+  float anisotropy_g = 0.0F;
+  float scattering_intensity = 1.0F;
+
+  uint8_t _reserved[16] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(FogEnvironmentRecord) == 72);
 
 //! Packed SkyLight (IBL) environment record.
 #pragma pack(push, 1)
@@ -1165,8 +1198,9 @@ struct SkyLightEnvironmentRecord {
     .record_size = sizeof(SkyLightEnvironmentRecord),
   };
 
+  uint32_t enabled = 1; //!< Whether this system is enabled (boolean).
+
   uint32_t source = 0; // SkyLightSource
-  uint8_t reserved0[12] = {};
 
   AssetKey cubemap_asset = {};
 
@@ -1175,9 +1209,11 @@ struct SkyLightEnvironmentRecord {
 
   float diffuse_intensity = 1.0F;
   float specular_intensity = 1.0F;
+
+  uint8_t _reserved[16] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(SkyLightEnvironmentRecord) == 64);
+static_assert(sizeof(SkyLightEnvironmentRecord) == 72);
 
 //! Packed SkySphere environment record.
 #pragma pack(push, 1)
@@ -1187,8 +1223,9 @@ struct SkySphereEnvironmentRecord {
     .record_size = sizeof(SkySphereEnvironmentRecord),
   };
 
+  uint32_t enabled = 1; //!< Whether this system is enabled (boolean).
+
   uint32_t source = 0; // SkySphereSource
-  uint8_t reserved0[12] = {};
 
   AssetKey cubemap_asset = {};
 
@@ -1196,9 +1233,11 @@ struct SkySphereEnvironmentRecord {
   float intensity = 1.0F;
   float rotation_radians = 0.0F;
   float tint_rgb[3] = { 1.0F, 1.0F, 1.0F };
+
+  uint8_t _reserved[16] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(SkySphereEnvironmentRecord) == 72);
+static_assert(sizeof(SkySphereEnvironmentRecord) == 80);
 
 //! Packed PostProcessVolume environment record.
 #pragma pack(push, 1)
@@ -1208,6 +1247,8 @@ struct PostProcessVolumeEnvironmentRecord {
     = static_cast<uint32_t>(EnvironmentComponentType::kPostProcessVolume),
     .record_size = sizeof(PostProcessVolumeEnvironmentRecord),
   };
+
+  uint32_t enabled = 1; //!< Whether this system is enabled (boolean).
 
   uint32_t tone_mapper = 0; // ToneMapper
   uint32_t exposure_mode = 1; // ExposureMode
@@ -1224,9 +1265,11 @@ struct PostProcessVolumeEnvironmentRecord {
   float saturation = 1.0F;
   float contrast = 1.0F;
   float vignette_intensity = 0.0F;
+
+  uint8_t _reserved[16] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(PostProcessVolumeEnvironmentRecord) == 56);
+static_assert(sizeof(PostProcessVolumeEnvironmentRecord) == 76);
 
 //! Common shadow settings packed into light component records.
 #pragma pack(push, 1)
