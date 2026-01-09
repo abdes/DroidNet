@@ -2,7 +2,7 @@
 
 Living roadmap for achieving feature completeness of the Oxygen Renderer.
 
-**Last Updated**: January 7, 2026
+**Last Updated**: January 10, 2026
 
 Cross‑References: [bindless_conventions.md](bindless_conventions.md) |
 [scene_prep.md](scene_prep.md) | [shader-system.md](shader-system.md) |
@@ -118,14 +118,103 @@ Supports both tile-based (2D) and clustered (3D) configurations.
 - [x] SkyLight IBL in forward shading: sample sky cubemap for diffuse (lowest mip) and roughness-mapped specular, apply tint/intensity/diffuse/specular gains, add exposure from `EnvironmentDynamicData`.
 - [x] Sky exposure: `SkySphere_PS` multiplies sky color by exposure.
 - [x] Specular IBL BRDF approx: apply split-sum approximation (no LUT) to specular IBL in `ForwardMesh_PS` and metalness-masked diffuse IBL.
-- [ ] SkyAtmosphere real implementation:
-  - [ ] Add `SkyAtmospherePrecomputePass` to generate transmittance and sky-view LUTs (RG16F), allocate persistent textures, and publish bindless SRV slots.
-  - [ ] Plumb LUT slots through `EnvironmentStaticData`/`SceneEnvironment` and `SkyLight` structs; update `EnvironmentStaticDataManager` to upload slots and exposure.
-  - [ ] Extend **static** payloads (C++ + HLSL) to carry bindless SRV indices and sizes for transmittance/sky-view LUTs; keep physical atmosphere scalars untouched.
-  - [ ] Extend **dynamic** payloads (C++ + HLSL) to carry per-view aerial-perspective toggle, LUT handles needed by forward shading, and the authoritative sun direction selected from the designated directional light.
-  - [ ] Replace gradient placeholder in sky shaders with LUT sampling path; drive sun direction from the designated directional light (fallback to first bound directional).
-  - [ ] Add aerial perspective scattering in `ForwardMesh_PS` guarded by a toggle flag in `EnvironmentDynamicData`; keep analytic fog as fallback.
-  - [ ] Validate LUT precompute and sampling on both HDR and LDR output paths; expose debug ImGui to visualize LUTs and sun parameters.
+- [~] SkyAtmosphere real implementation (end-to-end):
+
+  **Phase A – LUT Infrastructure**
+
+  1) [x] **Create `SkyAtmosphereLutManager` class**
+     - Location: `src/Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h/.cpp`
+     - Owns persistent textures: transmittance LUT (256×64, RG16F) and
+       sky-view LUT (192×108, RGBA16F)
+     - Tracks dirty state via hash of atmosphere parameters
+     - Publishes `ShaderVisibleIndex` for each LUT via bindless heap
+     - Interface: `GetTransmittanceLutSlot()`, `GetSkyViewLutSlot()`,
+       `GetTransmittanceLutSize()`, `GetSkyViewLutSize()`, `IsDirty()`,
+       `MarkClean()`, `UpdateParameters(const GpuSkyAtmosphereParams&)`
+     - Follows `BrdfLutManager` pattern for resource lifecycle
+
+  2) [x] **Create transmittance LUT compute shader**
+     - Location: `Shaders/Passes/Atmosphere/TransmittanceLut_CS.hlsl`
+     - Thread group: 8×8×1, dispatch covers 256×64 texture
+     - Implements optical depth integration along view ray
+     - Output: RG16F (Rayleigh + Mie extinction)
+     - Reads atmosphere params from `EnvironmentStaticData`
+     - Uses standard transmittance UV parameterization:
+       `u = (cos_zenith + 0.15) / 1.15`, `v = sqrt(altitude / atmo_height)`
+
+  3) [x] **Create sky-view LUT compute shader**
+     - Location: `Shaders/Passes/Atmosphere/SkyViewLut_CS.hlsl`
+     - Thread group: 8×8×1, dispatch covers 192×108 texture
+     - Performs single-scattering raymarch with transmittance LUT sampling
+     - Output: RGBA16F (inscattered radiance RGB, transmittance A)
+     - UV parameterization: `u = azimuth / 2π`, `v = (cos_zenith + 1) / 2`
+     - Requires sun direction from `EnvironmentDynamicData`
+
+  4) [x] **Create `SkyAtmosphereLutComputePass`**
+     - Location: `src/Oxygen/Renderer/Passes/SkyAtmosphereLutComputePass.h/.cpp`
+     - Derives from `ComputeRenderPass`
+     - Config: pointer to `SkyAtmosphereLutManager`
+     - On `Execute()`: dispatch transmittance CS, barrier, dispatch sky-view CS
+     - Only executes when `manager.IsDirty()` returns true
+     - Calls `manager.MarkClean()` after successful execution
+
+  **Phase B – Integration**
+
+  1) [x] **Wire LUT manager into `EnvironmentStaticDataManager`**
+     - Add `observer_ptr<SkyAtmosphereLutManager>` to constructor
+     - In `BuildFromSceneEnvironment()`, populate:
+       - `next.atmosphere.transmittance_lut_slot = lut_mgr->GetTransmittanceLutSlot()`
+       - `next.atmosphere.sky_view_lut_slot = lut_mgr->GetSkyViewLutSlot()`
+       - `next.atmosphere.transmittance_lut_width/height`
+       - `next.atmosphere.sky_view_lut_width/height`
+     - Call `lut_mgr->UpdateParameters(next.atmosphere)` to trigger dirty check
+
+  2) [x] **Update `SkySphere_PS.hlsl` with LUT sampling**
+     - Create `Shaders/Renderer/SkyAtmosphereSampling.hlsli`:
+       - `SampleTransmittanceLut(float cos_zenith, float altitude)`
+       - `SampleSkyViewLut(float3 view_dir, float3 sun_dir, float altitude)`
+       - `ComputeSunDisk(float3 view_dir, float3 sun_dir, float angular_radius)`
+     - In `SkySphere_PS.hlsl` when `env_data.atmosphere.enabled`:
+       - Check if `transmittance_lut_slot != K_INVALID_BINDLESS_INDEX`
+       - If valid: sample sky-view LUT + sun disk
+       - If invalid: keep current gradient fallback
+     - Apply exposure from `EnvironmentDynamicData`
+
+  3) [x] **Add RenderGraph integration**
+     - In `Examples/Common/RenderGraph.h/.cpp`:
+       - Add `sky_atmosphere_lut_pass_` and `sky_atmosphere_lut_pass_config_`
+       - Create pass in `SetupRenderPasses()` (requires `Graphics*`)
+     - In `RunPasses()`: execute before `SkyPass` (but can run early in frame)
+     - Pass only dispatches when LUT manager reports dirty
+     - For production: move to `Renderer` class internal pass list
+
+  **Phase C – Aerial Perspective**
+
+  1) [x] **Add aerial perspective to `ForwardMesh_PS`**
+     - Location: `Shaders/Renderer/AerialPerspective.hlsli`
+     - `ShouldUseLutAerialPerspective(atmo)` checks LUT validity and flags
+     - `ComputeAerialPerspective(env_data, world_pos, camera_pos, sun_dir)`:
+       - Samples transmittance LUT for optical depth along view ray
+       - Approximates inscatter from sky-view LUT scaled by opacity
+       - Returns `AerialPerspectiveResult{inscatter, transmittance}`
+     - `ApplyAerialPerspective(color, ap)` blends result onto lit color
+     - In `ForwardMesh_PS.hlsl` after lighting accumulation:
+       - Checks `ATMOSPHERE_USE_LUT` flag via `ShouldUseLutAerialPerspective()`
+       - If enabled: applies LUT-based aerial perspective
+       - If disabled or LUT invalid: falls back to existing analytic fog
+     - C++ `AtmosphereFlags` enum mirrors HLSL constants
+     - `Renderer::PrepareView()` sets `kUseLut` when LUTs are generated
+
+  **Phase D – Validation & Debug**
+
+  1) [ ] **Add ImGui debug overlay**
+     - In example ImGui code (e.g., `MainModule.cpp`):
+       - Show LUT validity, resolution, dirty state
+       - Show sun direction/illuminance from `EnvironmentDynamicData`
+       - Add checkbox to force analytic fallback (sets `atmosphere_flags` bit)
+       - Add checkbox to visualize LUT (render LUT as overlay quad)
+     - Add RenderDoc markers in compute pass for easy capture
+
   - [x] Bullet-proof designated sun pipeline:
     - [x] Select canonical sun on CPU: prefer `DirectionalLight::IsSunLight()` flagged light; if multiple, pick highest intensity; fallback to first directional if none flagged.
     - [x] Surface sun direction/intensity into environment data: add fields to **dynamic** payload (C++/HLSL) for sun direction (toward sun) and luminance scale, and fill them per view during ScenePrep/renderer update.
@@ -403,6 +492,82 @@ Improve GPU memory efficiency.
 
 ---
 
+## Phase 12 – Volumetric Fog
+
+Implement real volumetric fog as a screen-space or froxel-based effect.
+
+> **Note**: A previous per-mesh fog implementation was removed because it was
+> mutually exclusive with Aerial Perspective (never ran when AP was enabled),
+> only affected mesh surfaces (no atmospheric haze), and was redundant since
+> Aerial Perspective already provides physically-based distance attenuation.
+> This phase implements a proper volumetric fog system.
+
+### 12.1 Design Decisions
+
+- [ ] Choose implementation approach:
+  - **Froxel-based**: 3D volume texture (frustum-aligned voxels), raymarch in
+    compute, temporal reprojection. Higher quality, works with local lights.
+  - **Screen-space**: Per-pixel raymarch in post-process, simpler but no
+    light scattering from positional lights.
+  - **Hybrid**: Screen-space with clustered light contribution lookup.
+- [ ] Define relationship with Aerial Perspective:
+  - Option A: Replace AP when fog enabled (fog takes over distance effects)
+  - Option B: Combine additively (fog on top of AP inscattering)
+  - Option C: User choice via `FogMode` enum
+
+### 12.2 Fog Volume Infrastructure
+
+- [ ] Create `VolumetricFogPass` class in `src/Oxygen/Renderer/Passes/`
+- [ ] Create froxel volume texture (e.g., 160×90×128, RGBA16F)
+- [ ] Define `GpuVolumetricFogParams` struct:
+  - `density`, `height_falloff`, `height_offset`
+  - `albedo_rgb`, `anisotropy_g`, `scattering_intensity`
+  - `temporal_blend_factor`, `max_distance`
+  - `extinction_coefficient`, `ambient_contribution`
+- [ ] Add to `EnvironmentStaticData` alongside existing `GpuFogParams`
+
+### 12.3 Fog Density Computation (Compute Pass)
+
+- [ ] Create `VolumetricFogDensity_CS.hlsl`:
+  - Thread group: 8×8×1, dispatch covers froxel grid
+  - Sample noise texture for density variation
+  - Apply exponential height falloff
+  - Write scattering + extinction to froxel volume
+- [ ] Support local fog volumes (box/sphere regions with custom density)
+- [ ] Inject positional light contributions into froxels (clustered lookup)
+
+### 12.4 Fog Raymarch & Accumulation
+
+- [ ] Create `VolumetricFogRaymarch_CS.hlsl`:
+  - Front-to-back raymarch through froxel volume
+  - Accumulate inscattering with extinction
+  - Apply Henyey-Greenstein phase function for sun scattering
+  - Output: integrated inscatter RGB + transmittance A
+- [ ] Temporal reprojection using motion vectors:
+  - Blend with previous frame's fog result
+  - Handle disocclusion with confidence weights
+
+### 12.5 Fog Application
+
+- [ ] Create `VolumetricFogApply_PS.hlsl` post-process:
+  - Sample fog accumulation texture
+  - Blend with scene color: `color = color * transmittance + inscatter`
+- [ ] Insert after `TransparentPass`, before `PostProcessPass`
+- [ ] Option to apply during forward pass (sample froxel in `ForwardMesh_PS`)
+
+### 12.6 Debug Panel Integration
+
+- [ ] Add Fog section back to `EnvironmentDebugPanel`:
+  - Enable/disable toggle
+  - Density, height falloff, height offset sliders
+  - Albedo color picker
+  - Anisotropy, scattering intensity sliders
+  - Max distance, temporal blend controls
+- [ ] Add fog volume visualization mode (render froxel slices)
+- [ ] Add fog-only debug view (show inscatter without scene)
+
+---
+
 ## Ongoing – Performance & Quality
 
 Continuous improvements, not milestones:
@@ -422,7 +587,6 @@ Continuous improvements, not milestones:
 - Order-independent transparency (per-pixel linked lists, weighted blended)
 - Cascade shadow maps
 - Point/spot light shadows
-- Volumetric lighting
 - Screen-space reflections
 - Ambient occlusion (SSAO/GTAO)
 
@@ -466,6 +630,11 @@ Continuous improvements, not milestones:
 
 ## Revision History
 
+- **January 10, 2026**: Added Phase 12 – Volumetric Fog. Removed previous
+  per-mesh fog implementation (was redundant with Aerial Perspective and only
+  affected mesh surfaces). New phase covers froxel-based volumetric fog with
+  temporal reprojection, light scattering, and proper screen-space haze.
+  Total: 12 phases.
 - **January 7, 2026**: Merged completed phases (Shader Permutations, Emissive,
   GPU Instancing) into Current State. Added phases for override_slots.md design:
   Light Channel Masks (Phase 2), Override Attachments (Phase 3), Material

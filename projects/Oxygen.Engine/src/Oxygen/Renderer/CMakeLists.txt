@@ -59,6 +59,7 @@ set(
   "Passes/LightCullingPass.h"
   "Passes/RenderPass.h"
   "Passes/ShaderPass.h"
+  "Passes/SkyAtmosphereLutComputePass.h"
   "Passes/SkyPass.h"
   "Passes/TransparentPass.h"
   "PreparedSceneFrame.h"
@@ -80,6 +81,7 @@ set(
   "Types/PassMask.h"
   "Types/PositionalLightData.h"
   "Types/SceneConstants.h"
+  "Types/SunState.h"
 )
 set(
   OXYGEN_RENDERER_PRIVATE_SOURCES
@@ -89,6 +91,8 @@ set(
   "Internal/BrdfLutManager.h"
   "Internal/EnvironmentStaticDataManager.cpp"
   "Internal/EnvironmentStaticDataManager.h"
+  "Internal/SkyAtmosphereLutManager.cpp"
+  "Internal/SkyAtmosphereLutManager.h"
   "Internal/RenderScope.h"
   "Internal/SceneConstantsManager.cpp"
   "Internal/SceneConstantsManager.h"
@@ -99,6 +103,7 @@ set(
   "Passes/LightCullingPass.cpp"
   "Passes/RenderPass.cpp"
   "Passes/ShaderPass.cpp"
+  "Passes/SkyAtmosphereLutComputePass.cpp"
   "Passes/SkyPass.cpp"
   "Passes/TransparentPass.cpp"
   "PreparedSceneFrame.cpp"

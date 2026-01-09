@@ -40,6 +40,7 @@
 #include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Internal/SceneConstantsManager.h>
+#include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
@@ -51,6 +52,7 @@
 #include <Oxygen/Renderer/ScenePrep/FinalizationConfig.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
+#include <Oxygen/Renderer/Types/EnvironmentDynamicData.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
@@ -58,7 +60,10 @@
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Scene.h>
+#include <glm/common.hpp>
+#include <glm/geometric.hpp>
 
 // Implementation of RendererTagFactory. Provides access to RendererTag
 // capability tokens, only from the engine core. When building tests, allow
@@ -87,7 +92,10 @@ using oxygen::graphics::SingleQueueStrategy;
 namespace {
 
 struct SunLightSelection {
-  glm::vec3 direction_to_sun { 0.0F, 1.0F, 0.0F };
+  // Default sun at +Y direction with 30° elevation (Z-up)
+  glm::vec3 direction_to_sun { 0.0F, 0.866F, 0.5F };
+  glm::vec3 color_rgb { 1.0F, 1.0F, 1.0F };
+  float intensity { 0.0F };
   float illuminance { 0.0F };
   bool valid { false };
 };
@@ -111,6 +119,8 @@ auto SelectSunLight(std::span<const oxygen::engine::DirectionalLightBasic> dir)
 
     SunLightSelection candidate {
       .direction_to_sun = -glm::normalize(light.direction_ws),
+      .color_rgb = light.color_rgb,
+      .intensity = light.intensity,
       .illuminance = illum,
       .valid = true,
     };
@@ -255,13 +265,18 @@ auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
       observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
       observer_ptr { upload_staging_provider_.get() });
 
+    // Create sky atmosphere LUT manager for transmittance and sky-view LUTs.
+    sky_atmo_lut_manager_ = std::make_unique<internal::SkyAtmosphereLutManager>(
+      observer_ptr { gfx.get() });
+
     // Initialize environment static data single-owner manager (bindless SRV).
     // TextureBinder is passed directly to the constructor for cubemap
     // resolution.
     env_static_manager_
       = std::make_unique<internal::EnvironmentStaticDataManager>(
         observer_ptr { gfx.get() }, observer_ptr { texture_binder_.get() },
-        observer_ptr { brdf_lut_manager_.get() });
+        observer_ptr { brdf_lut_manager_.get() },
+        observer_ptr { sky_atmo_lut_manager_.get() });
   }
   return true;
 }
@@ -297,6 +312,34 @@ auto Renderer::GetLightManager() const noexcept
     return nullptr;
   }
   return scene_prep_state_->GetLightManager();
+}
+
+auto Renderer::GetSkyAtmosphereLutManager() const noexcept
+  -> observer_ptr<internal::SkyAtmosphereLutManager>
+{
+  return observer_ptr { sky_atmo_lut_manager_.get() };
+}
+
+//=== Debug Overrides ===-----------------------------------------------------//
+
+auto Renderer::SetAtmosphereDebugFlags(const uint32_t flags) -> void
+{
+  atmosphere_debug_flags_ = flags;
+}
+
+auto Renderer::GetAtmosphereDebugFlags() const noexcept -> uint32_t
+{
+  return atmosphere_debug_flags_;
+}
+
+auto Renderer::SetSunOverride(const SunState& sun) -> void
+{
+  sun_override_ = sun;
+}
+
+auto Renderer::GetSunOverride() const noexcept -> const SunState&
+{
+  return sun_override_;
 }
 
 auto Renderer::OverrideMaterialUvTransform(const data::MaterialAsset& material,
@@ -903,8 +946,104 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
         = scene_prep_state_->GetLightManager();
       if (light_mgr) {
         const auto sun = SelectSunLight(light_mgr->GetDirectionalLights());
-        env_dynamic_manager_->SetSunLight(
-          view_id, sun.direction_to_sun, sun.illuminance, sun.valid);
+        const SunState scene_sun
+          = (sun.valid
+              && glm::dot(sun.direction_to_sun, sun.direction_to_sun) > 0.0F)
+          ? SunState::FromDirectionAndLight(
+              sun.direction_to_sun, sun.color_rgb, sun.intensity, true)
+          : kNoSun;
+        env_dynamic_manager_->SetSunState(view_id, scene_sun);
+
+        // Populate SkyAtmosphere per-view context. Defaults stay conservative
+        // until LUT precompute is wired; analytic fallback stays enabled.
+        float aerial_distance_scale = 1.0F;
+        float aerial_scattering_strength = 1.0F;
+        std::uint32_t atmosphere_flags = 0u;
+        // Planet center positioned below Z=0 ground plane so camera at Z>=0
+        // is on/above surface. Default radius places center at Z=-6360km.
+        float planet_radius_m = 6'360'000.0F;
+        glm::vec3 planet_center_ws { 0.0F, 0.0F, -planet_radius_m };
+        glm::vec3 planet_up_ws { 0.0F, 0.0F, 1.0F };
+        float camera_altitude_m = 0.0F;
+        float sky_view_lut_slice = 0.0F;
+        float planet_to_sun_cos_zenith = 0.0F;
+
+        // Compute effective sun state: use override if enabled, else scene sun.
+        SunState effective_sun
+          = sun_override_.enabled ? sun_override_ : scene_sun;
+
+        if (auto env = scene.GetEnvironment()) {
+          if (const auto atmo
+            = env->TryGetSystem<scene::environment::SkyAtmosphere>();
+            atmo && atmo->IsEnabled()) {
+            aerial_distance_scale = atmo->GetAerialPerspectiveDistanceScale();
+            aerial_scattering_strength = atmo->GetAerialScatteringStrength();
+            planet_radius_m = atmo->GetPlanetRadiusMeters();
+
+            // Update planet center to keep Z=0 as ground level.
+            planet_center_ws = glm::vec3(0.0F, 0.0F, -planet_radius_m);
+
+            // LUT availability is checked later when merging with debug flags.
+            // The debug UI controls whether aerial perspective is enabled.
+
+            const auto camera_pos = view.CameraPosition();
+            camera_altitude_m = glm::max(
+              glm::length(camera_pos - planet_center_ws) - planet_radius_m,
+              0.0F);
+            // Use effective sun's cos_zenith for atmosphere.
+            planet_to_sun_cos_zenith
+              = effective_sun.enabled ? effective_sun.cos_zenith : 0.0F;
+          }
+        }
+
+        env_dynamic_manager_->SetAtmosphereScattering(
+          view_id, aerial_distance_scale, aerial_scattering_strength);
+        // Note: planet_radius_m is in EnvironmentStaticData, not passed here.
+        env_dynamic_manager_->SetAtmosphereFrameContext(view_id,
+          planet_center_ws, planet_up_ws, camera_altitude_m, sky_view_lut_slice,
+          planet_to_sun_cos_zenith);
+
+        // Merge debug flags with computed atmosphere flags.
+        // Debug flags control whether aerial perspective is enabled at all.
+        const uint32_t debug_flags = atmosphere_debug_flags_;
+
+        // Only enable LUT mode if:
+        // 1. The debug UI has kUseLut set (user wants it enabled), AND
+        // 2. LUTs are actually available
+        if ((debug_flags & static_cast<uint32_t>(AtmosphereFlags::kUseLut))
+          != 0) {
+          if (sky_atmo_lut_manager_
+            && sky_atmo_lut_manager_->HasBeenGenerated()) {
+            atmosphere_flags |= static_cast<uint32_t>(AtmosphereFlags::kUseLut);
+          }
+        }
+        // If user chose force analytic mode
+        if ((debug_flags
+              & static_cast<uint32_t>(AtmosphereFlags::kForceAnalytic))
+          != 0) {
+          // Debug override: force analytic, clear LUT flag.
+          atmosphere_flags &= ~static_cast<uint32_t>(AtmosphereFlags::kUseLut);
+          atmosphere_flags
+            |= static_cast<uint32_t>(AtmosphereFlags::kForceAnalytic);
+        }
+        if ((debug_flags
+              & static_cast<uint32_t>(AtmosphereFlags::kVisualizeLut))
+          != 0) {
+          atmosphere_flags
+            |= static_cast<uint32_t>(AtmosphereFlags::kVisualizeLut);
+        }
+        if (sun_override_.enabled) {
+          atmosphere_flags
+            |= static_cast<uint32_t>(AtmosphereFlags::kOverrideSun);
+        }
+
+        env_dynamic_manager_->SetAtmosphereFlags(view_id, atmosphere_flags);
+        env_dynamic_manager_->SetAtmosphereSunOverride(view_id, sun_override_);
+
+        // Update LUT manager with effective sun for regeneration.
+        if (sky_atmo_lut_manager_) {
+          sky_atmo_lut_manager_->UpdateSunState(effective_sun);
+        }
       }
     }
   }

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -17,6 +18,7 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/Types/EnvironmentDynamicData.h>
+#include <Oxygen/Renderer/Types/SunState.h>
 #include <Oxygen/Renderer/api_export.h>
 #include <glm/vec3.hpp>
 
@@ -76,9 +78,27 @@ public:
   OXGN_RNDR_API auto SetZBinning(ViewId view_id, float z_near, float z_far,
     float z_scale, float z_bias) -> void;
 
-  //! Set the designated sun direction and illuminance for a view.
-  OXGN_RNDR_API auto SetSunLight(ViewId view_id, const glm::vec3& direction,
-    float illuminance, bool valid) -> void;
+  //! Set the designated sun state for a view.
+  OXGN_RNDR_API auto SetSunState(ViewId view_id, const SunState& sun) -> void;
+
+  //! Set aerial perspective strength/scales for SkyAtmosphere.
+  OXGN_RNDR_API auto SetAtmosphereScattering(ViewId view_id,
+    float aerial_distance_scale, float aerial_scattering_strength) -> void;
+
+  //! Set per-frame planet and camera context for atmosphere sampling.
+  //! Note: planet_radius is NOT passed here - it's in EnvironmentStaticData.
+  OXGN_RNDR_API auto SetAtmosphereFrameContext(ViewId view_id,
+    const glm::vec3& planet_center_ws, const glm::vec3& planet_up_ws,
+    float camera_altitude_m, float sky_view_lut_slice,
+    float planet_to_sun_cos_zenith) -> void;
+
+  //! Set debug/feature flags for the atmospheric pipeline.
+  OXGN_RNDR_API auto SetAtmosphereFlags(
+    ViewId view_id, uint32_t atmosphere_flags) -> void;
+
+  //! Set optional override sun values for atmosphere debugging.
+  OXGN_RNDR_API auto SetAtmosphereSunOverride(
+    ViewId view_id, const SunState& sun) -> void;
 
   //! Resolve data and upload to GPU if dirty for the current frame slot.
   /*!

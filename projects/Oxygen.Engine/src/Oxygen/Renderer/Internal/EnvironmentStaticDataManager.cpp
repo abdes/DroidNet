@@ -13,6 +13,7 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/Internal/BrdfLutManager.h>
+#include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
@@ -99,10 +100,12 @@ namespace {
 EnvironmentStaticDataManager::EnvironmentStaticDataManager(
   observer_ptr<Graphics> gfx,
   observer_ptr<renderer::resources::IResourceBinder> texture_binder,
-  observer_ptr<IBrdfLutProvider> brdf_lut_provider)
+  observer_ptr<IBrdfLutProvider> brdf_lut_provider,
+  observer_ptr<ISkyAtmosphereLutProvider> sky_atmo_lut_provider)
   : gfx_(gfx)
   , texture_binder_(texture_binder)
   , brdf_lut_provider_(brdf_lut_provider)
+  , sky_atmo_lut_provider_(sky_atmo_lut_provider)
 {
   slot_needs_upload_.fill(true);
 }
@@ -199,6 +202,34 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
         = atmo->GetSunDiskAngularRadiusRadians();
       next.atmosphere.aerial_perspective_distance_scale
         = atmo->GetAerialPerspectiveDistanceScale();
+
+      // Populate LUT slots from the sky atmosphere LUT provider.
+      if (sky_atmo_lut_provider_) {
+        const auto transmittance_slot
+          = sky_atmo_lut_provider_->GetTransmittanceLutSlot();
+        const auto sky_view_slot = sky_atmo_lut_provider_->GetSkyViewLutSlot();
+
+        next.atmosphere.transmittance_lut_slot
+          = transmittance_slot != kInvalidShaderVisibleIndex
+          ? transmittance_slot.get()
+          : kInvalidDescriptorSlot;
+        next.atmosphere.sky_view_lut_slot
+          = sky_view_slot != kInvalidShaderVisibleIndex
+          ? sky_view_slot.get()
+          : kInvalidDescriptorSlot;
+
+        const auto [trans_w, trans_h]
+          = sky_atmo_lut_provider_->GetTransmittanceLutSize();
+        const auto [sky_w, sky_h] = sky_atmo_lut_provider_->GetSkyViewLutSize();
+
+        next.atmosphere.transmittance_lut_width = static_cast<float>(trans_w);
+        next.atmosphere.transmittance_lut_height = static_cast<float>(trans_h);
+        next.atmosphere.sky_view_lut_width = static_cast<float>(sky_w);
+        next.atmosphere.sky_view_lut_height = static_cast<float>(sky_h);
+
+        // Update the LUT manager's parameters to trigger dirty tracking.
+        sky_atmo_lut_provider_->UpdateParameters(next.atmosphere);
+      }
     }
 
     if (const auto sky_light
@@ -230,6 +261,14 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
     if (const auto sky_sphere
       = env->TryGetSystem<scene::environment::SkySphere>();
       sky_sphere && sky_sphere->IsEnabled()) {
+      // Warn if both SkyAtmosphere and SkySphere are enabled (mutually
+      // exclusive; SkyAtmosphere takes priority in the shader).
+      if (next.atmosphere.enabled != 0U) {
+        DLOG_F(WARNING,
+          "Both SkyAtmosphere and SkySphere are enabled. They are mutually "
+          "exclusive; SkyAtmosphere will take priority for sky rendering.");
+      }
+
       next.sky_sphere.enabled = 1u;
       next.sky_sphere.source = ToGpuSkySphereSource(sky_sphere->GetSource());
       next.sky_sphere.solid_color_rgb = sky_sphere->GetSolidColorRgb();

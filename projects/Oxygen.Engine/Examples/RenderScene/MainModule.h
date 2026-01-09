@@ -28,8 +28,10 @@
 #include "../Common/SingleViewExample.h"
 #include "FlyCameraController.h"
 #include "OrbitCameraController.h"
+#include "UI/AxesWidget.h"
 #include "UI/CameraControlPanel.h"
 #include "UI/ContentLoaderPanel.h"
+#include "UI/EnvironmentDebugPanel.h"
 #include "UI/LightCullingDebugPanel.h"
 
 namespace oxygen::data {
@@ -148,12 +150,14 @@ private:
   ui::ContentLoaderPanel content_loader_panel_;
   ui::CameraControlPanel camera_control_panel_;
   ui::LightCullingDebugPanel light_culling_debug_panel_;
+  ui::EnvironmentDebugPanel environment_debug_panel_;
+  ui::AxesWidget axes_widget_;
 
   // Content and scene state
   std::filesystem::path content_root_;
   bool pending_load_scene_ { false };
   std::optional<data::AssetKey> pending_scene_key_;
-  glm::vec3 initial_camera_position_ { 10.0F, 10.0F, 10.0F };
+  glm::vec3 initial_camera_position_ { 0.0F, -15.0F, 0.0F };
   glm::vec3 initial_camera_target_ { 0.0F, 0.0F, 0.0F };
   glm::quat initial_camera_rotation_ { 1.0F, 0.0F, 0.0F, 0.0F };
 

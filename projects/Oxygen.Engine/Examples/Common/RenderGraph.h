@@ -12,6 +12,7 @@
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
+#include <Oxygen/Renderer/Passes/SkyAtmosphereLutComputePass.h>
 #include <Oxygen/Renderer/Passes/SkyPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
@@ -113,6 +114,18 @@ public:
     return sky_pass_config_;
   }
 
+  auto GetSkyAtmosphereLutComputePass()
+    -> std::shared_ptr<oxygen::engine::SkyAtmosphereLutComputePass>&
+  {
+    return sky_atmo_lut_pass_;
+  }
+
+  auto GetSkyAtmosphereLutComputePassConfig()
+    -> std::shared_ptr<oxygen::engine::SkyAtmosphereLutComputePassConfig>&
+  {
+    return sky_atmo_lut_pass_config_;
+  }
+
   // Helpers for per-frame attachment management. Examples frequently need to
   // assign the current swapchain framebuffer to the render-context and wire
   // the pass configs to the back-buffer textures. These convenience helpers
@@ -158,6 +171,11 @@ private:
 
   std::shared_ptr<oxygen::engine::SkyPass> sky_pass_ {};
   std::shared_ptr<oxygen::engine::SkyPassConfig> sky_pass_config_ {};
+
+  std::shared_ptr<oxygen::engine::SkyAtmosphereLutComputePass>
+    sky_atmo_lut_pass_ {};
+  std::shared_ptr<oxygen::engine::SkyAtmosphereLutComputePassConfig>
+    sky_atmo_lut_pass_config_ {};
 
   std::shared_ptr<oxygen::engine::LightCullingPass> light_culling_pass_ {};
   std::shared_ptr<oxygen::engine::LightCullingPassConfig>

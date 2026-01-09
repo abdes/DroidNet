@@ -72,7 +72,7 @@ struct alignas(16) PositionalLightData {
   float intensity { 1.0F };
 
   // Register 2
-  glm::vec3 direction_ws { 0.0F, -1.0F, 0.0F };
+  glm::vec3 direction_ws { 0.0F, 0.0F, -1.0F };
   // Packed flags. See PositionalLightType and PositionalLightFlags.
   uint32_t flags { 0 };
 

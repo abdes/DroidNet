@@ -1,0 +1,232 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#pragma once
+
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+
+#include <glm/vec3.hpp>
+
+// Forward declarations
+namespace oxygen::scene {
+class Scene;
+} // namespace oxygen::scene
+
+namespace oxygen::engine {
+class Renderer;
+} // namespace oxygen::engine
+
+namespace oxygen::scene::environment {
+class SkyAtmosphere;
+class SkySphere;
+class SkyLight;
+// NOTE: Fog class not used - use Aerial Perspective instead.
+class PostProcessVolume;
+} // namespace oxygen::scene::environment
+
+namespace oxygen::engine::internal {
+class SkyAtmosphereLutManager;
+} // namespace oxygen::engine::internal
+
+namespace oxygen::examples::render_scene::ui {
+
+//! Atmosphere flags for debug UI control.
+//! Must match AtmosphereFlags in EnvironmentDynamicData.h
+enum class AtmosphereDebugFlags : uint32_t {
+  kNone = 0x0,
+  kUseLut = 0x1,
+  kVisualizeLut = 0x2,
+  kForceAnalytic = 0x4,
+  kOverrideSun = 0x8,
+};
+
+//! Configuration for the environment debug panel.
+struct EnvironmentDebugConfig {
+  //! Scene to inspect/modify (can be null when no scene is loaded).
+  std::shared_ptr<oxygen::scene::Scene> scene { nullptr };
+
+  //! Renderer to query LUT state from.
+  oxygen::engine::Renderer* renderer { nullptr };
+
+  //! Callback invoked when atmosphere parameters change (triggers LUT regen).
+  std::function<void()> on_atmosphere_params_changed {};
+
+  //! Callback invoked when exposure changes.
+  std::function<void()> on_exposure_changed {};
+};
+
+//! Comprehensive environment system debug panel.
+/*!
+ Provides ImGui controls for all scene environment systems:
+
+ - **SkyAtmosphere**: Physical sky parameters, LUT status, aerial perspective
+ - **SkySphere**: Background source, cubemap, solid color
+ - **SkyLight**: IBL source, tint, intensity
+ - **PostProcessVolume**: Exposure, bloom, color grading
+ - **Sun Override**: Manual sun direction for testing
+
+ ### Design Goals
+
+ 1. **Read-Modify-Write Safety**: Changes are applied during the correct frame
+    phase (OnSceneMutation or OnGameplay) to avoid race conditions.
+
+ 2. **State Consistency**: The panel caches current values and only writes back
+    when user makes changes, preventing feedback loops.
+
+ 3. **Modular Sections**: Each environment system has its own collapsible
+    section for clean organization.
+
+ 4. **Debug Information**: Shows internal renderer state like LUT validity,
+    sun selection, and frame timing.
+
+ ### Usage
+
+ ```cpp
+ EnvironmentDebugPanel panel;
+
+ // In initialization:
+ EnvironmentDebugConfig config;
+ config.scene = scene_;
+ config.renderer = &renderer;
+ panel.Initialize(config);
+
+ // In OnGuiUpdate:
+ panel.Draw();
+
+ // In OnSceneMutation (if HasPendingChanges()):
+ panel.ApplyPendingChanges();
+ ```
+*/
+class EnvironmentDebugPanel {
+public:
+  EnvironmentDebugPanel() = default;
+  ~EnvironmentDebugPanel() = default;
+
+  EnvironmentDebugPanel(const EnvironmentDebugPanel&) = delete;
+  auto operator=(const EnvironmentDebugPanel&)
+    -> EnvironmentDebugPanel& = delete;
+  EnvironmentDebugPanel(EnvironmentDebugPanel&&) = default;
+  auto operator=(EnvironmentDebugPanel&&) -> EnvironmentDebugPanel& = default;
+
+  //! Initialize or update the panel configuration.
+  void Initialize(const EnvironmentDebugConfig& config);
+
+  //! Update configuration (e.g., when scene changes).
+  void UpdateConfig(const EnvironmentDebugConfig& config);
+
+  //! Draw the ImGui panel. Call during OnGuiUpdate.
+  void Draw();
+
+  //! Returns true if there are pending changes to apply.
+  [[nodiscard]] auto HasPendingChanges() const -> bool;
+
+  //! Apply pending changes to the scene. Call during OnSceneMutation.
+  void ApplyPendingChanges();
+
+  //! Get current atmosphere debug flags for renderer.
+  [[nodiscard]] auto GetAtmosphereFlags() const -> uint32_t;
+
+  //! Get sun override direction (valid when override enabled).
+  [[nodiscard]] auto GetSunOverrideDirection() const -> glm::vec3;
+
+  //! Get sun override intensity (valid when override enabled).
+  [[nodiscard]] auto GetSunOverrideIntensity() const -> float;
+
+  //! Get sun override color (valid when override enabled).
+  [[nodiscard]] auto GetSunOverrideColor() const -> glm::vec3;
+
+  //! Check if sun override is enabled.
+  [[nodiscard]] auto IsSunOverrideEnabled() const -> bool;
+
+private:
+  //=== UI Drawing Methods ===-----------------------------------------------//
+  void DrawSkyAtmosphereSection();
+  void DrawSkySphereSection();
+  void DrawSkyLightSection();
+  // NOTE: Fog UI removed - use Aerial Perspective instead. Real fog TBD.
+  void DrawPostProcessSection();
+  void DrawSunOverrideSection();
+  void DrawRendererDebugSection();
+
+  //=== Helper Methods ===---------------------------------------------------//
+  void SyncFromScene();
+  void SyncDebugFlagsFromRenderer();
+  void MarkDirty();
+
+  //=== Configuration ===----------------------------------------------------//
+  EnvironmentDebugConfig config_ {};
+  bool initialized_ { false };
+
+  //=== Cached State ===-----------------------------------------------------//
+  // SkyAtmosphere
+  bool sky_atmo_enabled_ { false };
+  float planet_radius_km_ { 6360.0F };
+  float atmosphere_height_km_ { 80.0F };
+  glm::vec3 ground_albedo_ { 0.1F, 0.1F, 0.1F };
+  float rayleigh_scale_height_km_ { 8.0F };
+  float mie_scale_height_km_ { 1.2F };
+  float mie_anisotropy_ { 0.8F };
+  float multi_scattering_ { 1.0F };
+  bool sun_disk_enabled_ { true };
+  float sun_disk_radius_deg_ { 0.268F };
+  float aerial_perspective_scale_ { 1.0F };
+  float aerial_scattering_strength_ { 1.0F };
+
+  // SkySphere
+  bool sky_sphere_enabled_ { false };
+  int sky_sphere_source_ { 0 }; // 0=Cubemap, 1=SolidColor
+  glm::vec3 sky_sphere_solid_color_ { 0.2F, 0.3F, 0.5F };
+  float sky_sphere_intensity_ { 1.0F };
+  float sky_sphere_rotation_deg_ { 0.0F };
+
+  // SkyLight
+  bool sky_light_enabled_ { false };
+  int sky_light_source_ { 0 }; // 0=CapturedScene, 1=SpecifiedCubemap
+  glm::vec3 sky_light_tint_ { 1.0F, 1.0F, 1.0F };
+  float sky_light_intensity_ { 1.0F };
+  float sky_light_diffuse_ { 1.0F };
+  float sky_light_specular_ { 1.0F };
+
+  // NOTE: Fog member variables removed - use Aerial Perspective instead.
+  // Real volumetric fog system to be implemented in the future.
+
+  // PostProcess
+  bool post_process_enabled_ { false };
+  int tone_mapper_ { 0 }; // 0=ACES, 1=Reinhard, 2=None
+  int exposure_mode_ { 0 }; // 0=Manual, 1=Auto
+  float exposure_compensation_ev_ { 0.0F };
+  float auto_exposure_min_ev_ { -4.0F };
+  float auto_exposure_max_ev_ { 16.0F };
+  float auto_exposure_speed_up_ { 3.0F };
+  float auto_exposure_speed_down_ { 1.0F };
+  float bloom_intensity_ { 0.0F };
+  float bloom_threshold_ { 1.0F };
+  float saturation_ { 1.0F };
+  float contrast_ { 1.0F };
+  float vignette_ { 0.0F };
+
+  // Sun Light Override (controls the DirectionalLight marked as sun)
+  bool sun_override_enabled_ { false };
+  float sun_override_azimuth_deg_ { 45.0F };
+  float sun_override_elevation_deg_ { 45.0F };
+  float sun_override_intensity_ { 3.0F };
+  glm::vec3 sun_override_color_ { 1.0F, 1.0F, 1.0F };
+
+  // Atmosphere Debug Flags
+  bool use_lut_ { true };
+  bool visualize_lut_ { false };
+  bool force_analytic_ { false };
+
+  //=== Pending Change Tracking ===------------------------------------------//
+  bool pending_changes_ { false };
+  bool needs_sync_ { true };
+};
+
+} // namespace oxygen::examples::render_scene::ui

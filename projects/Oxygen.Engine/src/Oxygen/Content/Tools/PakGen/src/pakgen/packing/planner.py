@@ -937,11 +937,12 @@ def compute_pak_plan(
     SPOT_LIGHT_RECORD_SIZE = 88
 
     ENV_BLOCK_HEADER_SIZE = 16
-    ENV_SKY_ATMOSPHERE_RECORD_SIZE = 96
-    ENV_VOLUMETRIC_CLOUDS_RECORD_SIZE = 64
-    ENV_SKY_LIGHT_RECORD_SIZE = 64
-    ENV_SKY_SPHERE_RECORD_SIZE = 72
-    ENV_POST_PROCESS_VOLUME_RECORD_SIZE = 56
+    ENV_SKY_ATMOSPHERE_RECORD_SIZE = 116
+    ENV_VOLUMETRIC_CLOUDS_RECORD_SIZE = 84
+    ENV_FOG_RECORD_SIZE = 72
+    ENV_SKY_LIGHT_RECORD_SIZE = 72
+    ENV_SKY_SPHERE_RECORD_SIZE = 80
+    ENV_POST_PROCESS_VOLUME_RECORD_SIZE = 76
 
     def _scene_string_table_size(nodes_list: List[Dict[str, Any]]) -> int:
         offsets: dict[str, int] = {"": 0}
@@ -1049,6 +1050,8 @@ def compute_pak_plan(
                 env_size += ENV_SKY_ATMOSPHERE_RECORD_SIZE
             if isinstance(env_spec.get("volumetric_clouds"), dict):
                 env_size += ENV_VOLUMETRIC_CLOUDS_RECORD_SIZE
+            if isinstance(env_spec.get("fog"), dict):
+                env_size += ENV_FOG_RECORD_SIZE
             if isinstance(env_spec.get("sky_light"), dict):
                 env_size += ENV_SKY_LIGHT_RECORD_SIZE
             if isinstance(env_spec.get("sky_sphere"), dict):

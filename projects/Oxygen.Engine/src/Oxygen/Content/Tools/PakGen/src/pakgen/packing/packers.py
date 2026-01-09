@@ -250,6 +250,7 @@ def _pack_env_record_header(system_type: int, record_size: int) -> bytes:
 
 
 def _pack_sky_atmosphere_environment_record(spec: Dict[str, Any]) -> bytes:
+    enabled = _u32_bool(spec.get("enabled"), 1)
     planet_radius_m = _f(spec.get("planet_radius_m"), 6360000.0)
     atmosphere_height_m = _f(spec.get("atmosphere_height_m"), 80000.0)
     ga = spec.get("ground_albedo_rgb", [0.1, 0.1, 0.1])
@@ -269,9 +270,10 @@ def _pack_sky_atmosphere_environment_record(spec: Dict[str, Any]) -> bytes:
     sun_disk_radius = _f(spec.get("sun_disk_angular_radius_radians"), 0.004675)
     aerial_scale = _f(spec.get("aerial_perspective_distance_scale"), 1.0)
 
-    record_size = 96
+    record_size = 116
     out = (
         _pack_env_record_header(_ENV_SYSTEM_SKY_ATMOSPHERE, record_size)
+        + struct.pack("<I", int(enabled))
         + struct.pack("<ff", planet_radius_m, atmosphere_height_m)
         + struct.pack("<3f", *ground_albedo)
         + struct.pack("<3f", *rayleigh)
@@ -285,6 +287,7 @@ def _pack_sky_atmosphere_environment_record(spec: Dict[str, Any]) -> bytes:
         + struct.pack("<I", int(sun_disk_enabled))
         + struct.pack("<f", sun_disk_radius)
         + struct.pack("<f", aerial_scale)
+        + b"\x00" * 16
     )
     if len(out) != record_size:
         raise PakError(
@@ -295,6 +298,7 @@ def _pack_sky_atmosphere_environment_record(spec: Dict[str, Any]) -> bytes:
 
 
 def _pack_volumetric_clouds_environment_record(spec: Dict[str, Any]) -> bytes:
+    enabled = _u32_bool(spec.get("enabled"), 1)
     base_altitude = _f(spec.get("base_altitude_m"), 1500.0)
     thickness = _f(spec.get("layer_thickness_m"), 4000.0)
     coverage = _f(spec.get("coverage"), 0.5)
@@ -306,9 +310,10 @@ def _pack_volumetric_clouds_environment_record(spec: Dict[str, Any]) -> bytes:
     wind_speed = _f(spec.get("wind_speed_mps"), 10.0)
     shadow_strength = _f(spec.get("shadow_strength"), 0.8)
 
-    record_size = 64
+    record_size = 84
     out = (
         _pack_env_record_header(_ENV_SYSTEM_VOLUMETRIC_CLOUDS, record_size)
+        + struct.pack("<I", int(enabled))
         + struct.pack("<ff", base_altitude, thickness)
         + struct.pack("<ff", coverage, density)
         + struct.pack("<3f", *albedo)
@@ -317,6 +322,7 @@ def _pack_volumetric_clouds_environment_record(spec: Dict[str, Any]) -> bytes:
         + struct.pack("<3f", *wind_dir)
         + struct.pack("<f", wind_speed)
         + struct.pack("<f", shadow_strength)
+        + b"\x00" * 16
     )
     if len(out) != record_size:
         raise PakError(
@@ -327,6 +333,7 @@ def _pack_volumetric_clouds_environment_record(spec: Dict[str, Any]) -> bytes:
 
 
 def _pack_sky_light_environment_record(spec: Dict[str, Any]) -> bytes:
+    enabled = _u32_bool(spec.get("enabled"), 1)
     source = int(spec.get("source", 0) or 0)
     cubemap = _asset_key_bytes(spec.get("cubemap_asset"))
     intensity = _f(spec.get("intensity"), 1.0)
@@ -334,16 +341,17 @@ def _pack_sky_light_environment_record(spec: Dict[str, Any]) -> bytes:
     diffuse = _f(spec.get("diffuse_intensity"), 1.0)
     specular = _f(spec.get("specular_intensity"), 1.0)
 
-    record_size = 64
+    record_size = 72
     out = (
         _pack_env_record_header(_ENV_SYSTEM_SKY_LIGHT, record_size)
+        + struct.pack("<I", int(enabled))
         + struct.pack("<I", source)
-        + b"\x00" * 12
         + cubemap
         + struct.pack("<f", intensity)
         + struct.pack("<3f", *tint)
         + struct.pack("<f", diffuse)
         + struct.pack("<f", specular)
+        + b"\x00" * 16
     )
     if len(out) != record_size:
         raise PakError(
@@ -353,6 +361,7 @@ def _pack_sky_light_environment_record(spec: Dict[str, Any]) -> bytes:
 
 
 def _pack_sky_sphere_environment_record(spec: Dict[str, Any]) -> bytes:
+    enabled = _u32_bool(spec.get("enabled"), 1)
     source = int(spec.get("source", 0) or 0)
     cubemap = _asset_key_bytes(spec.get("cubemap_asset"))
     solid_color = _vec3(
@@ -362,16 +371,17 @@ def _pack_sky_sphere_environment_record(spec: Dict[str, Any]) -> bytes:
     rotation = _f(spec.get("rotation_radians"), 0.0)
     tint = _vec3(spec.get("tint_rgb", [1.0, 1.0, 1.0]), [1.0, 1.0, 1.0])
 
-    record_size = 72
+    record_size = 80
     out = (
         _pack_env_record_header(_ENV_SYSTEM_SKY_SPHERE, record_size)
+        + struct.pack("<I", int(enabled))
         + struct.pack("<I", source)
-        + b"\x00" * 12
         + cubemap
         + struct.pack("<3f", *solid_color)
         + struct.pack("<f", intensity)
         + struct.pack("<f", rotation)
         + struct.pack("<3f", *tint)
+        + b"\x00" * 16
     )
     if len(out) != record_size:
         raise PakError(
@@ -381,6 +391,7 @@ def _pack_sky_sphere_environment_record(spec: Dict[str, Any]) -> bytes:
 
 
 def _pack_post_process_volume_environment_record(spec: Dict[str, Any]) -> bytes:
+    enabled = _u32_bool(spec.get("enabled"), 1)
     tone_mapper = int(spec.get("tone_mapper", 0) or 0)
     exposure_mode = int(spec.get("exposure_mode", 1) or 0)
     exposure_comp = _f(spec.get("exposure_compensation_ev"), 0.0)
@@ -394,19 +405,56 @@ def _pack_post_process_volume_environment_record(spec: Dict[str, Any]) -> bytes:
     contrast = _f(spec.get("contrast"), 1.0)
     vignette = _f(spec.get("vignette_intensity"), 0.0)
 
-    record_size = 56
+    record_size = 76
     out = (
         _pack_env_record_header(_ENV_SYSTEM_POST_PROCESS_VOLUME, record_size)
+        + struct.pack("<I", int(enabled))
         + struct.pack("<II", tone_mapper, exposure_mode)
         + struct.pack("<f", exposure_comp)
         + struct.pack("<ffff", ae_min, ae_max, ae_up, ae_down)
         + struct.pack("<ff", bloom_intensity, bloom_threshold)
         + struct.pack("<fff", saturation, contrast, vignette)
+        + b"\x00" * 16
     )
     if len(out) != record_size:
         raise PakError(
             "E_SIZE",
             f"PostProcessVolumeEnvironmentRecord size mismatch: {len(out)}",
+        )
+    return out
+
+
+def _pack_fog_environment_record(spec: Dict[str, Any]) -> bytes:
+    enabled = _u32_bool(spec.get("enabled"), 1)
+    model = int(spec.get("model", 0) or 0)
+    density = _f(spec.get("density"), 0.01)
+    height_falloff = _f(spec.get("height_falloff"), 0.2)
+    height_offset_m = _f(spec.get("height_offset_m"), 0.0)
+    start_distance_m = _f(spec.get("start_distance_m"), 0.0)
+    max_opacity = _f(spec.get("max_opacity"), 1.0)
+    albedo = _vec3(spec.get("albedo_rgb", [1.0, 1.0, 1.0]), [1.0, 1.0, 1.0])
+    anisotropy_g = _f(spec.get("anisotropy_g"), 0.0)
+    scattering_intensity = _f(spec.get("scattering_intensity"), 1.0)
+
+    record_size = 72
+    out = (
+        _pack_env_record_header(_ENV_SYSTEM_FOG, record_size)
+        + struct.pack("<I", int(enabled))
+        + struct.pack("<I", model)
+        + struct.pack("<f", density)
+        + struct.pack("<f", height_falloff)
+        + struct.pack("<f", height_offset_m)
+        + struct.pack("<f", start_distance_m)
+        + struct.pack("<f", max_opacity)
+        + struct.pack("<3f", *albedo)
+        + struct.pack("<f", anisotropy_g)
+        + struct.pack("<f", scattering_intensity)
+        + b"\x00" * 16
+    )
+    if len(out) != record_size:
+        raise PakError(
+            "E_SIZE",
+            f"FogEnvironmentRecord size mismatch: {len(out)}",
         )
     return out
 
@@ -427,6 +475,9 @@ def _pack_scene_environment_block(scene: Dict[str, Any]) -> bytes:
         records.append(
             _pack_volumetric_clouds_environment_record(volumetric_clouds)
         )
+    fog = env.get("fog")
+    if isinstance(fog, dict):
+        records.append(_pack_fog_environment_record(fog))
     sky_light = env.get("sky_light")
     if isinstance(sky_light, dict):
         records.append(_pack_sky_light_environment_record(sky_light))

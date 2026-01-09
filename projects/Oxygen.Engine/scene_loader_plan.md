@@ -133,6 +133,36 @@ Design, formats, and requirements live in:
 - [ ] **(E4)** Ensure scene-driven loads rely on dependency collection (scene→geometry, geometry→materials/textures) rather than bespoke imperative loads.
 - [ ] **(E5)** Add minimal runtime logging/assertions so failures are actionable (missing assets, missing dependencies, missing scene nodes).
 
+---
+
+## Milestone M5 — Environment System Loading (Post-Demo Polish)
+
+These tasks ensure all environment systems from the scene spec are fully loaded
+and instantiated at runtime. SkyAtmosphere and SkySphere loading is complete;
+the rest are pending.
+
+### M5.1 Complete environment system loading in SceneLoader
+
+- [x] **(ENV1)** Add `enabled` flag to all environment records in `PakFormat.h`.
+- [x] **(ENV2)** Add missing `FogEnvironmentRecord` to `PakFormat.h`.
+- [x] **(ENV3)** Update `packers.py` to emit `enabled` flag for all environment records.
+- [x] **(ENV4)** Add `_pack_fog_environment_record()` to `packers.py`.
+- [x] **(ENV5)** Update SceneLoader to respect `enabled` flag for SkyAtmosphere/SkySphere.
+- [x] **(ENV6)** Add `TryGetFogEnvironment()` accessor to `SceneAsset`.
+- [x] **(ENV7)** Load Fog environment system in SceneLoader (MainModule.cpp or equivalent).
+- [x] **(ENV8)** Add `TryGetSkyLightEnvironment()` accessor to `SceneAsset`.
+- [x] **(ENV9)** Load SkyLight environment system in SceneLoader.
+- [x] **(ENV10)** Add `TryGetVolumetricCloudsEnvironment()` accessor to `SceneAsset`.
+- [x] **(ENV11)** Load VolumetricClouds environment system in SceneLoader.
+- [x] **(ENV12)** Add `TryGetPostProcessVolumeEnvironment()` accessor to `SceneAsset`.
+- [x] **(ENV13)** Load PostProcessVolume environment system in SceneLoader.
+
+### M5.2 Environment system UI mutual exclusivity
+
+- [x] **(ENV14)** Ensure UI (EnvironmentDebugPanel) treats SkyAtmosphere and SkySphere as mutually exclusive.
+- [x] **(ENV15)** Log warning in SceneLoader if both SkyAtmosphere and SkySphere are enabled.
+- [x] **(ENV16)** Log warning in renderer (EnvironmentStaticDataManager) when prioritizing SkyAtmosphere over SkySphere.
+
 ## Change log
 
 - 30 Dec 2025: Created plan file (no implementation started).
@@ -141,3 +171,8 @@ Design, formats, and requirements live in:
 - 30 Dec 2025: Implemented Scene loader + AssetLoader integration and added
   `SceneLoader_test.cpp`. End-to-end `AssetLoader_scene_loading_test.cpp` is
   still pending.
+- 31 Dec 2025: Added Milestone M5 for environment system loading. Fixed PAK
+  format to include `enabled` flag for all environment records. Added missing
+  `FogEnvironmentRecord` to PakFormat.h and fog packer to packers.py. Updated
+  SceneLoader to respect `enabled` flag. Added mutual exclusivity handling for
+  SkyAtmosphere/SkySphere in UI, SceneLoader, and renderer.

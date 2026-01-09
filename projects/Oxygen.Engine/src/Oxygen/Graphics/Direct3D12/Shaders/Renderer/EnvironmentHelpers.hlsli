@@ -38,14 +38,6 @@ static inline bool LoadEnvironmentStaticData(uint bindless_slot, uint frame_slot
 }
 
 /**
- * Global declaration for the EnvironmentDynamicData root CBV.
- *
- * This payload contains high-frequency environment data like exposure and clustered lighting
- * configuration. It is bound at the engine-reserved root CBV slot b3.
- */
-ConstantBuffer<EnvironmentDynamicData> EnvironmentDynamicData : register(b3, space0);
-
-/**
  * Helper to fetch the current exposure from the dynamic environment data.
  *
  * @return The resolved exposure value for the current view.

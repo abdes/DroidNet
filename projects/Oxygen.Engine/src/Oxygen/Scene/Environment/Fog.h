@@ -140,7 +140,7 @@ private:
   Vec3 albedo_rgb_ { 1.0F, 1.0F, 1.0F };
 
   float anisotropy_g_ = 0.0F;
-  float scattering_intensity_ = 1.0F;
+  float scattering_intensity_ = 0.0F; // Default 0 for simple exponential fog
 };
 
 } // namespace oxygen::scene::environment

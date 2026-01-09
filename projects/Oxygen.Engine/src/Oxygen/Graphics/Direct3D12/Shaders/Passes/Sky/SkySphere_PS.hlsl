@@ -7,14 +7,16 @@
 //! Sky Sphere Pixel Shader
 //!
 //! Renders the sky background with priority:
-//! 1. SkyAtmosphere (procedural) - if enabled
+//! 1. SkyAtmosphere (procedural) - if enabled and LUTs available
 //! 2. SkySphere cubemap - if enabled and source is kCubemap
 //! 3. SkySphere solid color - if enabled and source is kSolidColor
 //! 4. Black fallback
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
+#include "Renderer/EnvironmentDynamicData.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/SceneConstants.hlsli"
+#include "Renderer/SkyAtmosphereSampling.hlsli"
 
 //! Input from vertex shader.
 struct SkyPSInput
@@ -28,17 +30,17 @@ struct SkyPSInput
 //!
 //! @param cubemap_slot Bindless SRV index for the cubemap.
 //! @param view_dir World-space view direction (normalized).
-//! @param rotation_radians Azimuth rotation around world up (Y axis).
+//! @param rotation_radians Azimuth rotation around world up (Z axis).
 //! @return Sampled color (linear RGB).
 float3 SampleSkyboxCubemap(uint cubemap_slot, float3 view_dir, float rotation_radians)
 {
-    // Apply rotation around Y axis.
+    // Apply rotation around Z axis (Z is up).
     float cos_rot = cos(rotation_radians);
     float sin_rot = sin(rotation_radians);
     float3 rotated_dir;
-    rotated_dir.x = view_dir.x * cos_rot + view_dir.z * sin_rot;
-    rotated_dir.y = view_dir.y;
-    rotated_dir.z = -view_dir.x * sin_rot + view_dir.z * cos_rot;
+    rotated_dir.x = view_dir.x * cos_rot - view_dir.y * sin_rot;
+    rotated_dir.y = view_dir.x * sin_rot + view_dir.y * cos_rot;
+    rotated_dir.z = view_dir.z;
 
     // Sample the cubemap.
     TextureCube<float4> cubemap = ResourceDescriptorHeap[cubemap_slot];
@@ -64,12 +66,43 @@ float4 PS(SkyPSInput input) : SV_TARGET
     // Priority 1: SkyAtmosphere (procedural)
     if (env_data.atmosphere.enabled)
     {
-        // TODO: Implement procedural atmosphere rendering.
-        // For now, use a simple sky gradient as placeholder.
-        float up_factor = saturate(view_dir.y * 0.5f + 0.5f);
-        float3 horizon_color = float3(0.8f, 0.85f, 0.95f);
-        float3 zenith_color = float3(0.3f, 0.5f, 0.9f);
-        sky_color = lerp(horizon_color, zenith_color, up_factor);
+        // Check if LUTs are available for physically-based sky rendering.
+        if (env_data.atmosphere.sky_view_lut_slot != K_INVALID_BINDLESS_INDEX)
+        {
+            // Use precomputed LUTs for atmospheric scattering.
+            // GetSunDirectionWS() returns override direction if enabled.
+            float3 sun_dir = GetSunDirectionWS();
+            float3 sun_luminance = GetSunLuminanceRGB();
+
+            // Default sun direction if none is set and no override.
+            if (!HasSunLight() && !IsOverrideSunEnabled())
+            {
+                sun_dir = normalize(float3(0.5, 0.5, 0.5));
+                sun_luminance = float3(1.0, 1.0, 1.0);
+            }
+
+            // Get planet/camera parameters for horizon-aware LUT sampling.
+            // Planet radius from static data, camera altitude from dynamic data.
+            float planet_radius = env_data.atmosphere.planet_radius_m;
+            float camera_altitude = GetCameraAltitudeM();
+
+            sky_color = ComputeAtmosphereSkyColor(
+                env_data.atmosphere,
+                view_dir,
+                sun_dir,
+                sun_luminance,
+                planet_radius,
+                camera_altitude);
+        }
+        else
+        {
+            // Fallback: simple sky gradient when LUTs are not yet generated.
+            // Z is up in world space.
+            float up_factor = saturate(view_dir.z * 0.5f + 0.5f);
+            float3 horizon_color = float3(0.8f, 0.85f, 0.95f);
+            float3 zenith_color = float3(0.3f, 0.5f, 0.9f);
+            sky_color = lerp(horizon_color, zenith_color, up_factor);
+        }
     }
     // Priority 2: SkySphere cubemap
     else if (env_data.sky_sphere.enabled

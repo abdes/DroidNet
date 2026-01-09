@@ -35,6 +35,7 @@
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
+#include <Oxygen/Renderer/Types/SunState.h>
 #include <Oxygen/Renderer/api_export.h>
 #include <mutex>
 
@@ -67,6 +68,7 @@ namespace internal {
   class EnvironmentStaticDataManager;
   class SceneConstantsManager;
   class BrdfLutManager;
+  class SkyAtmosphereLutManager;
 } // namespace internal
 namespace upload {
   class UploadCoordinator;
@@ -243,6 +245,48 @@ public:
   [[nodiscard]] OXGN_RNDR_API auto GetLightManager() const noexcept
     -> observer_ptr<renderer::LightManager>;
 
+  //! Returns the sky atmosphere LUT manager.
+  /*!
+   Provides access to the LUT manager that maintains transmittance and sky-view
+   lookup textures for physically-based atmospheric scattering. The compute
+   pass uses this to dispatch LUT generation when atmosphere parameters change.
+
+   @return Observer pointer to the LUT manager, or nullptr if not initialized.
+  */
+  [[nodiscard]] OXGN_RNDR_API auto GetSkyAtmosphereLutManager() const noexcept
+    -> observer_ptr<internal::SkyAtmosphereLutManager>;
+
+  //=== Debug Overrides ===---------------------------------------------------//
+
+  //! Set debug override flags for atmosphere rendering.
+  /*!
+   When set, these flags augment the automatically computed atmosphere flags.
+   Use `AtmosphereFlags::kForceAnalytic` to disable LUT sampling.
+   Use `AtmosphereFlags::kVisualizeLut` for debug visualization.
+
+   @param flags Bitfield of AtmosphereFlags to apply.
+  */
+  OXGN_RNDR_API auto SetAtmosphereDebugFlags(uint32_t flags) -> void;
+
+  //! Get current debug override flags for atmosphere rendering.
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetAtmosphereDebugFlags() const noexcept
+    -> uint32_t;
+
+  //! Set debug sun direction override for atmosphere rendering.
+  /*!
+   When enabled, the atmosphere system uses this sun direction instead of
+   the scene's directional lights. Useful for testing lighting without
+   modifying scene content.
+
+   @param sun The sun state to use as override. Set sun.enabled=false to
+   disable.
+  */
+  OXGN_RNDR_API auto SetSunOverride(const SunState& sun) -> void;
+
+  //! Get the current sun override state.
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetSunOverride() const noexcept
+    -> const SunState&;
+
   //! Override a material's UV transform used by the shader.
   /*!
    This is intended for editor and runtime authoring workflows. It updates the
@@ -329,6 +373,9 @@ private:
   // Manages pre-integrated BRDF lookup tables for IBL.
   std::unique_ptr<internal::BrdfLutManager> brdf_lut_manager_;
 
+  // Manages sky atmosphere LUT textures (transmittance, sky-view).
+  std::unique_ptr<internal::SkyAtmosphereLutManager> sky_atmo_lut_manager_;
+
   // Environment static data single-owner manager (bindless SRV).
   std::unique_ptr<internal::EnvironmentStaticDataManager> env_static_manager_;
 
@@ -395,6 +442,10 @@ private:
   };
 
   std::unordered_map<ViewId, PerViewStorage> per_view_storage_;
+
+  // Debug override state for sun light.
+  uint32_t atmosphere_debug_flags_ { 0u };
+  SunState sun_override_ { kNoSun }; //!< Override sun state for debugging
 };
 
 } // namespace oxygen::engine

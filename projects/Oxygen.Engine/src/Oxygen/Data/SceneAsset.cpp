@@ -383,6 +383,13 @@ auto SceneAsset::TryGetVolumetricCloudsEnvironment() const
     pak::EnvironmentComponentType::kVolumetricClouds);
 }
 
+auto SceneAsset::TryGetFogEnvironment() const
+  -> std::optional<pak::FogEnvironmentRecord>
+{
+  return TryGetEnvironmentRecordAs<pak::FogEnvironmentRecord>(
+    pak::EnvironmentComponentType::kFog);
+}
+
 auto SceneAsset::TryGetSkyLightEnvironment() const
   -> std::optional<pak::SkyLightEnvironmentRecord>
 {
