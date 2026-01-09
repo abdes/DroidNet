@@ -18,6 +18,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/Types/EnvironmentDynamicData.h>
 #include <Oxygen/Renderer/api_export.h>
+#include <glm/vec3.hpp>
 
 namespace oxygen::engine::internal {
 
@@ -74,6 +75,10 @@ public:
   //! Set Z-binning parameters for a specific view.
   OXGN_RNDR_API auto SetZBinning(ViewId view_id, float z_near, float z_far,
     float z_scale, float z_bias) -> void;
+
+  //! Set the designated sun direction and illuminance for a view.
+  OXGN_RNDR_API auto SetSunLight(ViewId view_id, const glm::vec3& direction,
+    float illuminance, bool valid) -> void;
 
   //! Resolve data and upload to GPU if dirty for the current frame slot.
   /*!

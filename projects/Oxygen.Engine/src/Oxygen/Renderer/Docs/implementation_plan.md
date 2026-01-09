@@ -118,7 +118,20 @@ Supports both tile-based (2D) and clustered (3D) configurations.
 - [x] SkyLight IBL in forward shading: sample sky cubemap for diffuse (lowest mip) and roughness-mapped specular, apply tint/intensity/diffuse/specular gains, add exposure from `EnvironmentDynamicData`.
 - [x] Sky exposure: `SkySphere_PS` multiplies sky color by exposure.
 - [x] Specular IBL BRDF approx: apply split-sum approximation (no LUT) to specular IBL in `ForwardMesh_PS` and metalness-masked diffuse IBL.
-- [ ] SkyAtmosphere real implementation: replace gradient placeholder with LUT-based sky (transmittance/sky-view), add precompute pass + bindless LUT slots, feed sun direction from designated directional light, support aerial perspective toggle in forward shading.
+- [ ] SkyAtmosphere real implementation:
+  - [ ] Add `SkyAtmospherePrecomputePass` to generate transmittance and sky-view LUTs (RG16F), allocate persistent textures, and publish bindless SRV slots.
+  - [ ] Plumb LUT slots through `EnvironmentStaticData`/`SceneEnvironment` and `SkyLight` structs; update `EnvironmentStaticDataManager` to upload slots and exposure.
+  - [ ] Extend **static** payloads (C++ + HLSL) to carry bindless SRV indices and sizes for transmittance/sky-view LUTs; keep physical atmosphere scalars untouched.
+  - [ ] Extend **dynamic** payloads (C++ + HLSL) to carry per-view aerial-perspective toggle, LUT handles needed by forward shading, and the authoritative sun direction selected from the designated directional light.
+  - [ ] Replace gradient placeholder in sky shaders with LUT sampling path; drive sun direction from the designated directional light (fallback to first bound directional).
+  - [ ] Add aerial perspective scattering in `ForwardMesh_PS` guarded by a toggle flag in `EnvironmentDynamicData`; keep analytic fog as fallback.
+  - [ ] Validate LUT precompute and sampling on both HDR and LDR output paths; expose debug ImGui to visualize LUTs and sun parameters.
+  - [x] Bullet-proof designated sun pipeline:
+    - [x] Select canonical sun on CPU: prefer `DirectionalLight::IsSunLight()` flagged light; if multiple, pick highest intensity; fallback to first directional if none flagged.
+    - [x] Surface sun direction/intensity into environment data: add fields to **dynamic** payload (C++/HLSL) for sun direction (toward sun) and luminance scale, and fill them per view during ScenePrep/renderer update.
+    - [x] Update `LightManager` outputs to publish the chosen sun (index or baked direction) so ScenePrep can populate environment dynamic data without shader-side heuristics.
+    - [x] Consume the authoritative sun in shaders: remove “first directional light” fallback in `ForwardMesh_PS`/sky/fog paths and read the dynamic payload sun fields; keep a final hardcoded direction only if no sun is available.
+    - [x] Add validation hooks: debug overlay/ImGui showing the selected sun id, direction, and intensity, and a renderdoc-friendly marker to confirm binding.
 - [ ] SkyLight capture path: support `kCapturedScene` by rendering sky/background into cubemap, convolving diffuse and specular prefilter, caching BRDF LUT; fall back to `kInvalidDescriptorSlot` when unavailable.
 - [x] BRDF LUT asset/binding: generate BRDF integration LUT at runtime
   (RG16F, Hammersley GGX) via `BrdfLutManager`, bind slot into

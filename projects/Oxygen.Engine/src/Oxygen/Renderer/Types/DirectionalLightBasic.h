@@ -32,6 +32,7 @@ enum class DirectionalLightFlags : uint32_t {
   kCastsShadows = OXYGEN_FLAG(1),
   kContactShadows = OXYGEN_FLAG(2),
   kEnvironmentContribution = OXYGEN_FLAG(3),
+  kSunLight = OXYGEN_FLAG(4),
 };
 
 OXYGEN_DEFINE_FLAGS_OPERATORS(DirectionalLightFlags)

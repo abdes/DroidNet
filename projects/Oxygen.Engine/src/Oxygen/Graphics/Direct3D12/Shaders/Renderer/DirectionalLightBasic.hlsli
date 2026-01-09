@@ -11,6 +11,7 @@ static const uint DIRECTIONAL_LIGHT_FLAG_AFFECTS_WORLD = 1u << 0;
 static const uint DIRECTIONAL_LIGHT_FLAG_CASTS_SHADOWS = 1u << 1;
 static const uint DIRECTIONAL_LIGHT_FLAG_CONTACT_SHADOWS = 1u << 2;
 static const uint DIRECTIONAL_LIGHT_FLAG_ENV_CONTRIBUTION = 1u << 3;
+static const uint DIRECTIONAL_LIGHT_FLAG_SUN_LIGHT = 1u << 4;
 
 struct DirectionalLightBasic
 {

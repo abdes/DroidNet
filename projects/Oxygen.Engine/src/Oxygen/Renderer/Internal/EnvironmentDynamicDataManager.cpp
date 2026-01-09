@@ -111,6 +111,24 @@ auto EnvironmentDynamicDataManager::SetZBinning(ViewId view_id, float z_near,
   }
 }
 
+auto EnvironmentDynamicDataManager::SetSunLight(ViewId view_id,
+  const glm::vec3& direction, const float illuminance, const bool valid) -> void
+{
+  auto& state = view_states_[view_id];
+  bool dirty = false;
+  dirty |= (state.data.sun_direction_ws != direction);
+  dirty |= (state.data.sun_illuminance != illuminance);
+  const auto valid_flag = valid ? 1u : 0u;
+  dirty |= (state.data.sun_valid != valid_flag);
+
+  if (dirty) {
+    state.data.sun_direction_ws = direction;
+    state.data.sun_illuminance = illuminance;
+    state.data.sun_valid = valid_flag;
+    MarkAllSlotsDirty(view_id);
+  }
+}
+
 auto EnvironmentDynamicDataManager::UpdateIfNeeded(ViewId view_id) -> void
 {
   if (current_slot_ == frame::kInvalidSlot) {

@@ -60,8 +60,8 @@ constexpr std::uint32_t kInvalidShadowIndex = 0xFFFFFFFFu;
 
 [[nodiscard]] auto PackDirectionalFlags(
   const oxygen::scene::CommonLightProperties& common,
-  const bool effective_casts_shadows,
-  const bool environment_contribution) noexcept -> std::uint32_t
+  const bool effective_casts_shadows, const bool environment_contribution,
+  const bool is_sun_light) noexcept -> std::uint32_t
 {
   using oxygen::engine::DirectionalLightFlags;
 
@@ -77,6 +77,9 @@ constexpr std::uint32_t kInvalidShadowIndex = 0xFFFFFFFFu;
   }
   if (environment_contribution) {
     flags |= DirectionalLightFlags::kEnvironmentContribution;
+  }
+  if (is_sun_light) {
+    flags |= DirectionalLightFlags::kSunLight;
   }
 
   return static_cast<std::uint32_t>(flags);
@@ -220,8 +223,8 @@ auto LightManager::CollectFromNode(const scene::SceneNodeImpl& node) -> void
     out.shadow_index = effective_casts_shadows
       ? static_cast<std::uint32_t>(dir_shadows_.size())
       : kInvalidShadowIndex;
-    out.flags = PackDirectionalFlags(
-      common, effective_casts_shadows, light.GetEnvironmentContribution());
+    out.flags = PackDirectionalFlags(common, effective_casts_shadows,
+      light.GetEnvironmentContribution(), light.IsSunLight());
 
     dir_basic_.push_back(out);
 
