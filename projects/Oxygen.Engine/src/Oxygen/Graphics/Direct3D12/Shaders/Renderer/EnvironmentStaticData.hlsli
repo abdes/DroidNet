@@ -88,7 +88,7 @@ struct GpuSkyLightParams
     uint enabled;
 
     uint cubemap_slot;
-    uint _pad0;
+    uint brdf_lut_slot;
     uint _pad1;
     uint _pad2;
 };

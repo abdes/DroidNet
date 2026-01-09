@@ -66,6 +66,7 @@ namespace internal {
   class EnvironmentDynamicDataManager;
   class EnvironmentStaticDataManager;
   class SceneConstantsManager;
+  class BrdfLutManager;
 } // namespace internal
 namespace upload {
   class UploadCoordinator;
@@ -324,6 +325,9 @@ private:
 
   // Environment dynamic data manager for root CBV at b3 (cluster slots, etc.)
   std::unique_ptr<internal::EnvironmentDynamicDataManager> env_dynamic_manager_;
+
+  // Manages pre-integrated BRDF lookup tables for IBL.
+  std::unique_ptr<internal::BrdfLutManager> brdf_lut_manager_;
 
   // Environment static data single-owner manager (bindless SRV).
   std::unique_ptr<internal::EnvironmentStaticDataManager> env_static_manager_;

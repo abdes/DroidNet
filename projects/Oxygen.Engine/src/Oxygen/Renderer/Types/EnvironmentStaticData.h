@@ -149,7 +149,7 @@ struct alignas(16) GpuSkyLightParams {
   uint32_t enabled { 0u };
 
   uint32_t cubemap_slot { kInvalidDescriptorSlot };
-  uint32_t _pad0 { 0u };
+  uint32_t brdf_lut_slot { kInvalidDescriptorSlot };
   uint32_t _pad1 { 0u };
   uint32_t _pad2 { 0u };
 };

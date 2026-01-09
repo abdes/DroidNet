@@ -35,6 +35,7 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Renderer/Internal/BrdfLutManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Internal/SceneConstantsManager.h>
@@ -128,6 +129,7 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
 Renderer::~Renderer()
 {
   env_dynamic_manager_.reset();
+  brdf_lut_manager_.reset();
   env_static_manager_.reset();
   scene_const_manager_.reset();
   scene_prep_state_.reset();
@@ -202,12 +204,18 @@ auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
       = std::make_unique<internal::EnvironmentDynamicDataManager>(
         observer_ptr { gfx.get() });
 
+    // Precompute and bind BRDF integration LUTs (bindless SRV slot provider).
+    brdf_lut_manager_ = std::make_unique<internal::BrdfLutManager>(
+      observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
+      observer_ptr { upload_staging_provider_.get() });
+
     // Initialize environment static data single-owner manager (bindless SRV).
     // TextureBinder is passed directly to the constructor for cubemap
     // resolution.
     env_static_manager_
       = std::make_unique<internal::EnvironmentStaticDataManager>(
-        observer_ptr { gfx.get() }, observer_ptr { texture_binder_.get() });
+        observer_ptr { gfx.get() }, observer_ptr { texture_binder_.get() },
+        observer_ptr { brdf_lut_manager_.get() });
   }
   return true;
 }

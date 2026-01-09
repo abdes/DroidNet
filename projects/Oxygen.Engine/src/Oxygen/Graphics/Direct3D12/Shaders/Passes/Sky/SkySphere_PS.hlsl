@@ -95,5 +95,8 @@ float4 PS(SkyPSInput input) : SV_TARGET
     }
     // Priority 4: Black fallback (sky_color already initialized to black)
 
+    // Apply exposure so sky matches scene brightness.
+    sky_color *= GetExposure();
+
     return float4(sky_color, 1.0f);
 }

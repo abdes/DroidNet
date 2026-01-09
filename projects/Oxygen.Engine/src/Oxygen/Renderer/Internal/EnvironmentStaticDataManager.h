@@ -30,6 +30,8 @@ class SceneEnvironment;
 
 namespace oxygen::engine::internal {
 
+class IBrdfLutProvider;
+
 //! Single-owner builder/uploader for bindless EnvironmentStaticData.
 /*!
  Maintains a canonical CPU-side EnvironmentStaticData snapshot derived from the
@@ -53,7 +55,8 @@ class EnvironmentStaticDataManager {
 public:
   OXGN_RNDR_API explicit EnvironmentStaticDataManager(
     observer_ptr<Graphics> gfx,
-    observer_ptr<renderer::resources::IResourceBinder> texture_binder);
+    observer_ptr<renderer::resources::IResourceBinder> texture_binder,
+    observer_ptr<IBrdfLutProvider> brdf_lut_provider);
 
   OXGN_RNDR_API ~EnvironmentStaticDataManager();
 
@@ -84,6 +87,7 @@ private:
 
   observer_ptr<Graphics> gfx_;
   observer_ptr<renderer::resources::IResourceBinder> texture_binder_;
+  observer_ptr<IBrdfLutProvider> brdf_lut_provider_;
   frame::Slot current_slot_ { frame::kInvalidSlot };
 
   EnvironmentStaticData cpu_snapshot_ {};
@@ -94,6 +98,7 @@ private:
 
   graphics::NativeView srv_view_ {};
   ShaderVisibleIndex srv_index_ { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex brdf_lut_slot_ { kInvalidShaderVisibleIndex };
 
   auto BuildFromSceneEnvironment(
     observer_ptr<const scene::SceneEnvironment> env) -> void;

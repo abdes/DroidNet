@@ -110,7 +110,7 @@ private:
   std::shared_ptr<scene::Scene> scene_;
   scene::SceneNode main_camera_;
   scene::SceneNode cube_node_;
-  scene::SceneNode point_light_node_;
+  scene::SceneNode sun_node_;
   scene::SceneNode fill_light_node_;
 
   std::shared_ptr<oxygen::input::Action> zoom_in_action_;
@@ -160,12 +160,19 @@ private:
   int skybox_last_face_size_ { 0 };
   oxygen::content::ResourceKey skybox_texture_key_ { 0U };
 
+  float sky_light_intensity_ { 1.0f };
+  float sky_light_diffuse_intensity_ { 1.0f };
+  float sky_light_specular_intensity_ { 1.0f };
+
+  float sun_intensity_ { 12.0f };
+  glm::vec3 sun_color_rgb_ { 1.0f, 0.98f, 0.95f };
+
   std::vector<std::byte> skybox_rgba8_ {};
   std::uint32_t skybox_width_ { 0U };
   std::uint32_t skybox_height_ { 0U };
 
-  bool skybox_sun_ray_dir_valid_ { false };
-  glm::vec3 skybox_sun_ray_dir_ws_ { 0.0f, -1.0f, 0.0f };
+  bool sun_ray_dir_from_skybox_ { false };
+  glm::vec3 sun_ray_dir_ws_ { 0.35f, -0.45f, -1.0f };
 
   glm::vec3 camera_target_ { 0.0f, 0.0f, 0.0f };
   float orbit_yaw_rad_ { -glm::half_pi<float>() };

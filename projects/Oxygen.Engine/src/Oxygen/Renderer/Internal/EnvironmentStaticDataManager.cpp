@@ -12,6 +12,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Renderer/Internal/BrdfLutManager.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
@@ -97,9 +98,11 @@ namespace {
 
 EnvironmentStaticDataManager::EnvironmentStaticDataManager(
   observer_ptr<Graphics> gfx,
-  observer_ptr<renderer::resources::IResourceBinder> texture_binder)
+  observer_ptr<renderer::resources::IResourceBinder> texture_binder,
+  observer_ptr<IBrdfLutProvider> brdf_lut_provider)
   : gfx_(gfx)
   , texture_binder_(texture_binder)
+  , brdf_lut_provider_(brdf_lut_provider)
 {
   slot_needs_upload_.fill(true);
 }
@@ -148,6 +151,14 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
   observer_ptr<const scene::SceneEnvironment> env) -> void
 {
   EnvironmentStaticData next {};
+
+  if (brdf_lut_provider_) {
+    const auto slot = brdf_lut_provider_->GetOrCreateLut();
+    if (slot != brdf_lut_slot_) {
+      brdf_lut_slot_ = slot;
+      MarkAllSlotsDirty();
+    }
+  }
 
   if (env) {
     if (const auto fog = env->TryGetSystem<scene::environment::Fog>();
@@ -199,6 +210,9 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
       next.sky_light.tint_rgb = sky_light->GetTintRgb();
       next.sky_light.diffuse_intensity = sky_light->GetDiffuseIntensity();
       next.sky_light.specular_intensity = sky_light->GetSpecularIntensity();
+      next.sky_light.brdf_lut_slot
+        = brdf_lut_slot_ != kInvalidShaderVisibleIndex ? brdf_lut_slot_.get()
+                                                       : kInvalidDescriptorSlot;
 
       // Resolve cubemap ResourceKey to shader-visible index via TextureBinder.
       if (texture_binder_

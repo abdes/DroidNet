@@ -48,6 +48,7 @@
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
@@ -275,6 +276,8 @@ auto AlignUpSize(const std::size_t value, const std::size_t alignment)
   return (value + mask) & ~mask;
 }
 
+const Vec3 kDefaultSunRayDirWs = glm::normalize(Vec3 { 0.35F, -0.45F, -1.0F });
+
 auto TryEstimateSunRayDirFromCubemapFace(const std::vector<std::byte>& rgba8,
   const std::uint32_t face_size, const std::uint32_t face_index,
   Vec3& out_sun_ray_dir_ws) -> bool
@@ -323,9 +326,8 @@ auto TryEstimateSunRayDirFromCubemapFace(const std::vector<std::byte>& rgba8,
     }
   }
 
-  // Convert that pixel to a world-space sun direction.
-  // We assume the sun is on the +Y cubemap face, and use a DirectX-style
-  // mapping where for +Y: dir = normalize( u, 1, -v ).
+  // Convert that pixel to a world-space sun direction using the standard
+  // DirectX cubemap face orientation so +Z maps to world up.
   const float u
     = (static_cast<float>(best_x) + 0.5f) / static_cast<float>(face_size);
   const float v
@@ -333,7 +335,24 @@ auto TryEstimateSunRayDirFromCubemapFace(const std::vector<std::byte>& rgba8,
   const float u_ndc = 2.0f * u - 1.0f;
   const float v_ndc = 2.0f * v - 1.0f;
 
-  const Vec3 dir_to_sun = glm::normalize(Vec3 { u_ndc, 1.0f, -v_ndc });
+  const Vec3 dir_to_sun = [&]() -> Vec3 {
+    switch (face_index) {
+    case 0U: // +X
+      return glm::normalize(Vec3 { 1.0f, v_ndc, -u_ndc });
+    case 1U: // -X
+      return glm::normalize(Vec3 { -1.0f, v_ndc, u_ndc });
+    case 2U: // +Y
+      return glm::normalize(Vec3 { u_ndc, 1.0f, -v_ndc });
+    case 3U: // -Y
+      return glm::normalize(Vec3 { u_ndc, -1.0f, v_ndc });
+    case 4U: // +Z
+      return glm::normalize(Vec3 { u_ndc, -v_ndc, 1.0f });
+    case 5U: // -Z
+      return glm::normalize(Vec3 { -u_ndc, -v_ndc, -1.0f });
+    default:
+      return glm::normalize(Vec3 { 0.0f, 1.0f, 0.0f });
+    }
+  }();
   if (!std::isfinite(dir_to_sun.x) || !std::isfinite(dir_to_sun.y)
     || !std::isfinite(dir_to_sun.z)) {
     return false;
@@ -855,29 +874,70 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     cube_needs_rebuild_ = true;
   }
 
-  if (!point_light_node_.IsAlive()) {
-    point_light_node_ = scene_->CreateNode("Sun");
-    point_light_node_.GetTransform().SetLocalPosition({ 0.0f, -20.0f, 20.0f });
+  if (auto env = scene_->GetEnvironment(); !env) {
+    auto new_env = std::make_unique<scene::SceneEnvironment>();
+    auto& sky = new_env->AddSystem<scene::environment::SkySphere>();
+    sky.SetSource(scene::environment::SkySphereSource::kSolidColor);
+    sky.SetSolidColorRgb(Vec3 { 0.06F, 0.08F, 0.12F });
+    sky.SetIntensity(1.0F);
+
+    auto& sky_light = new_env->AddSystem<scene::environment::SkyLight>();
+    sky_light.SetIntensity(sky_light_intensity_);
+    sky_light.SetDiffuseIntensity(sky_light_diffuse_intensity_);
+    sky_light.SetSpecularIntensity(sky_light_specular_intensity_);
+    sky_light.SetTintRgb(Vec3 { 1.0F, 1.0F, 1.0F });
+    sky_light.SetSource(scene::environment::SkyLightSource::kCapturedScene);
+
+    scene_->SetEnvironment(std::move(new_env));
+  } else if (env) {
+    if (!env->TryGetSystem<scene::environment::SkySphere>()) {
+      auto& sky = env->AddSystem<scene::environment::SkySphere>();
+      sky.SetSource(scene::environment::SkySphereSource::kSolidColor);
+      sky.SetSolidColorRgb(Vec3 { 0.06F, 0.08F, 0.12F });
+      sky.SetIntensity(1.0F);
+    }
+    if (!env->TryGetSystem<scene::environment::SkyLight>()) {
+      auto& sky_light = env->AddSystem<scene::environment::SkyLight>();
+      sky_light.SetIntensity(sky_light_intensity_);
+      sky_light.SetDiffuseIntensity(sky_light_diffuse_intensity_);
+      sky_light.SetSpecularIntensity(sky_light_specular_intensity_);
+      sky_light.SetTintRgb(Vec3 { 1.0F, 1.0F, 1.0F });
+      sky_light.SetSource(scene::environment::SkyLightSource::kCapturedScene);
+    }
+  }
+
+  if (!sun_node_.IsAlive()) {
+    sun_node_ = scene_->CreateNode("Sun");
+    sun_node_.GetTransform().SetLocalPosition({ 0.0f, -20.0f, 20.0f });
 
     auto sun_light = std::make_unique<scene::DirectionalLight>();
-    sun_light->Common().intensity = 12.0F;
-    sun_light->Common().color_rgb = { 1.0F, 0.98F, 0.95F };
+    sun_light->Common().intensity = sun_intensity_;
+    sun_light->Common().color_rgb = sun_color_rgb_;
     sun_light->SetIsSunLight(true);
     sun_light->SetEnvironmentContribution(true);
 
-    const bool attached = point_light_node_.AttachLight(std::move(sun_light));
+    const bool attached = sun_node_.AttachLight(std::move(sun_light));
     CHECK_F(attached, "Failed to attach DirectionalLight to Sun");
   }
 
-  // If we have a skybox-derived sun direction, keep the Sun node aligned.
-  if (skybox_sun_ray_dir_valid_ && point_light_node_.IsAlive()) {
-    auto tf = point_light_node_.GetTransform();
-    const Vec3 dir = glm::normalize(skybox_sun_ray_dir_ws_);
+  if (sun_node_.IsAlive()) {
+    auto tf = sun_node_.GetTransform();
+    const Vec3 dir = sun_ray_dir_from_skybox_ ? glm::normalize(sun_ray_dir_ws_)
+                                              : kDefaultSunRayDirWs;
     const Quat rot = MakeRotationFromForwardToDirWs(dir);
     tf.SetLocalRotation(rot);
 
     // Position the node along the sun's apparent direction (purely for debug).
     tf.SetLocalPosition(camera_target_ + dir * 50.0f);
+
+    // Refresh sun light with UI-driven values each frame so tweaks stick.
+    if (auto sun_light = sun_node_.GetLightAs<scene::DirectionalLight>()) {
+      auto& light = sun_light->get();
+      light.Common().intensity = sun_intensity_;
+      light.Common().color_rgb = sun_color_rgb_;
+      light.SetEnvironmentContribution(true);
+      light.SetIsSunLight(true);
+    }
   }
 
   if (!fill_light_node_.IsAlive()) {
@@ -969,12 +1029,13 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
           skybox_status_message_
             = pack_error.empty() ? "Skybox pack failed" : pack_error;
         } else {
-          // Estimate sun direction from the +Y face (face index 2).
-          Vec3 sun_ray_dir_ws { 0.0f, -1.0f, 0.0f };
-          skybox_sun_ray_dir_valid_ = TryEstimateSunRayDirFromCubemapFace(
-            cubemap_padded, face_size, 2U, sun_ray_dir_ws);
-          if (skybox_sun_ray_dir_valid_) {
-            skybox_sun_ray_dir_ws_ = sun_ray_dir_ws;
+          // Estimate sun direction from the +Z face (face index 4) to match
+          // Oxygen's Z-up convention.
+          Vec3 sun_ray_dir_ws { 0.0f, 0.0f, 1.0f };
+          sun_ray_dir_from_skybox_ = TryEstimateSunRayDirFromCubemapFace(
+            cubemap_padded, face_size, 4U, sun_ray_dir_ws);
+          if (sun_ray_dir_from_skybox_) {
+            sun_ray_dir_ws_ = sun_ray_dir_ws;
           }
 
           using oxygen::data::pak::v2::TextureResourceDesc;
@@ -1018,13 +1079,24 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
             skybox_last_face_size_ = static_cast<int>(face_size);
             skybox_status_message_ = "Loaded";
 
-            // Apply as scene sky.
+            // Apply as scene sky and enable sky lighting from the same cubemap.
             auto env = scene_->GetEnvironment();
             if (!env) {
               auto new_env = std::make_unique<scene::SceneEnvironment>();
               auto& sky = new_env->AddSystem<scene::environment::SkySphere>();
               sky.SetSource(scene::environment::SkySphereSource::kCubemap);
               sky.SetCubemapResource(skybox_texture_key_);
+
+              auto& sky_light
+                = new_env->AddSystem<scene::environment::SkyLight>();
+              sky_light.SetSource(
+                scene::environment::SkyLightSource::kSpecifiedCubemap);
+              sky_light.SetCubemapResource(skybox_texture_key_);
+              sky_light.SetIntensity(sky_light_intensity_);
+              sky_light.SetDiffuseIntensity(sky_light_diffuse_intensity_);
+              sky_light.SetSpecularIntensity(sky_light_specular_intensity_);
+              sky_light.SetTintRgb(Vec3 { 1.0F, 1.0F, 1.0F });
+
               scene_->SetEnvironment(std::move(new_env));
             } else {
               auto sky = env->TryGetSystem<scene::environment::SkySphere>();
@@ -1034,6 +1106,22 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
               }
               sky->SetSource(scene::environment::SkySphereSource::kCubemap);
               sky->SetCubemapResource(skybox_texture_key_);
+
+              auto sky_light
+                = env->TryGetSystem<scene::environment::SkyLight>();
+              if (!sky_light) {
+                auto& sky_light_ref
+                  = env->AddSystem<scene::environment::SkyLight>();
+                sky_light
+                  = observer_ptr<scene::environment::SkyLight>(&sky_light_ref);
+              }
+              sky_light->SetSource(
+                scene::environment::SkyLightSource::kSpecifiedCubemap);
+              sky_light->SetCubemapResource(skybox_texture_key_);
+              sky_light->SetIntensity(sky_light_intensity_);
+              sky_light->SetDiffuseIntensity(sky_light_diffuse_intensity_);
+              sky_light->SetSpecularIntensity(sky_light_specular_intensity_);
+              sky_light->SetTintRgb(Vec3 { 1.0F, 1.0F, 1.0F });
             }
           }
         }
@@ -1481,266 +1569,341 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
   ImGui::BulletText("Mouse wheel: zoom");
   ImGui::BulletText("RMB + mouse drag: orbit");
 
-  ImGui::Separator();
-  ImGui::TextUnformatted("Texture:");
+  if (ImGui::BeginTabBar("DemoTabs")) {
+    // Materials / UV tab
+    if (ImGui::BeginTabItem("Materials/UV")) {
+      ImGui::Separator();
+      ImGui::TextUnformatted("Texture:");
 
-  bool changed = false;
-  bool rebuild_requested = false;
-  bool uv_transform_changed = false;
-  {
-    int mode = static_cast<int>(texture_index_mode_);
-    const bool mode_changed = ImGui::RadioButton(
-      "Forced error", &mode, static_cast<int>(TextureIndexMode::kForcedError));
-    ImGui::SameLine();
-    const bool mode_changed_2 = ImGui::RadioButton(
-      "Fallback (0)", &mode, static_cast<int>(TextureIndexMode::kFallback));
-    ImGui::SameLine();
-    const bool mode_changed_3 = ImGui::RadioButton(
-      "Custom", &mode, static_cast<int>(TextureIndexMode::kCustom));
+      bool mat_changed = false;
+      bool rebuild_requested = false;
+      bool uv_transform_changed = false;
 
-    changed |= (mode_changed || mode_changed_2 || mode_changed_3);
-    rebuild_requested |= (mode_changed || mode_changed_2 || mode_changed_3);
-    texture_index_mode_ = static_cast<TextureIndexMode>(mode);
-  }
+      {
+        int mode = static_cast<int>(texture_index_mode_);
+        const bool mode_changed = ImGui::RadioButton("Forced error", &mode,
+          static_cast<int>(TextureIndexMode::kForcedError));
+        ImGui::SameLine();
+        const bool mode_changed_2 = ImGui::RadioButton(
+          "Fallback (0)", &mode, static_cast<int>(TextureIndexMode::kFallback));
+        ImGui::SameLine();
+        const bool mode_changed_3 = ImGui::RadioButton(
+          "Custom", &mode, static_cast<int>(TextureIndexMode::kCustom));
 
-  if (texture_index_mode_ == TextureIndexMode::kCustom) {
-    int custom_idx = static_cast<int>(custom_texture_resource_index_);
-    if (ImGui::InputInt("Resource index", &custom_idx)) {
-      custom_idx = (std::max)(0, custom_idx);
-      custom_texture_resource_index_ = static_cast<std::uint32_t>(custom_idx);
-      changed = true;
-      rebuild_requested = true;
-    }
+        mat_changed |= (mode_changed || mode_changed_2 || mode_changed_3);
+        rebuild_requested |= (mode_changed || mode_changed_2 || mode_changed_3);
+        texture_index_mode_ = static_cast<TextureIndexMode>(mode);
+      }
 
-    ImGui::InputText("PNG path", png_path_.data(), png_path_.size());
-    if (ImGui::Button("Browse...")) {
+      if (texture_index_mode_ == TextureIndexMode::kCustom) {
+        int custom_idx = static_cast<int>(custom_texture_resource_index_);
+        if (ImGui::InputInt("Resource index", &custom_idx)) {
+          custom_idx = (std::max)(0, custom_idx);
+          custom_texture_resource_index_
+            = static_cast<std::uint32_t>(custom_idx);
+          mat_changed = true;
+          rebuild_requested = true;
+        }
+
+        ImGui::InputText("PNG path", png_path_.data(), png_path_.size());
+        if (ImGui::Button("Browse...")) {
 #if defined(OXYGEN_WINDOWS)
-      std::string chosen;
-      if (TryBrowseForPngFile(chosen)) {
-        std::snprintf(png_path_.data(), png_path_.size(), "%s", chosen.c_str());
-      }
+          std::string chosen;
+          if (TryBrowseForPngFile(chosen)) {
+            std::snprintf(
+              png_path_.data(), png_path_.size(), "%s", chosen.c_str());
+          }
 #endif
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Load PNG")) {
-      png_load_requested_ = true;
-      png_status_message_.clear();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Load PNG")) {
+          png_load_requested_ = true;
+          png_status_message_.clear();
+        }
+
+        if (!png_status_message_.empty()) {
+          ImGui::Text("PNG: %s", png_status_message_.c_str());
+        }
+        if (png_last_width_ > 0 && png_last_height_ > 0) {
+          ImGui::Text("Last PNG: %dx%d", png_last_width_, png_last_height_);
+        }
+      }
+
+      ImGui::Separator();
+      ImGui::TextUnformatted("UV:");
+
+      constexpr float kUvScaleMin = 0.01f;
+      constexpr float kUvScaleMax = 64.0f;
+      constexpr float kUvOffsetMin = -64.0f;
+      constexpr float kUvOffsetMax = 64.0f;
+
+      auto SanitizeFinite = [](float v, float fallback) -> float {
+        return std::isfinite(v) ? v : fallback;
+      };
+
+      float uv_scale[2] = { uv_scale_.x, uv_scale_.y };
+      if (ImGui::DragFloat2("UV scale", uv_scale, 0.01f, kUvScaleMin,
+            kUvScaleMax, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+        const glm::vec2 new_scale {
+          std::clamp(
+            SanitizeFinite(uv_scale[0], 1.0f), kUvScaleMin, kUvScaleMax),
+          std::clamp(
+            SanitizeFinite(uv_scale[1], 1.0f), kUvScaleMin, kUvScaleMax),
+        };
+        if (new_scale != uv_scale_) {
+          uv_scale_ = new_scale;
+          mat_changed = true;
+          uv_transform_changed = true;
+        }
+      }
+
+      float uv_offset[2] = { uv_offset_.x, uv_offset_.y };
+      if (ImGui::DragFloat2("UV offset", uv_offset, 0.01f, kUvOffsetMin,
+            kUvOffsetMax, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+        const glm::vec2 new_offset {
+          std::clamp(
+            SanitizeFinite(uv_offset[0], 0.0f), kUvOffsetMin, kUvOffsetMax),
+          std::clamp(
+            SanitizeFinite(uv_offset[1], 0.0f), kUvOffsetMin, kUvOffsetMax),
+        };
+        if (new_offset != uv_offset_) {
+          uv_offset_ = new_offset;
+          mat_changed = true;
+          uv_transform_changed = true;
+        }
+      }
+
+      if (ImGui::Button("Reset UV")) {
+        uv_scale_ = { 1.0f, 1.0f };
+        uv_offset_ = { 0.0f, 0.0f };
+        mat_changed = true;
+        uv_transform_changed = true;
+      }
+
+      ImGui::Separator();
+      ImGui::TextUnformatted("Orientation:");
+
+      if (ImGui::Button("Apply recommended settings")) {
+        orientation_fix_mode_ = OrientationFixMode::kNormalizeTextureOnUpload;
+        uv_origin_ = UvOrigin::kBottomLeft;
+        image_origin_ = ImageOrigin::kTopLeft;
+        extra_flip_u_ = false;
+        extra_flip_v_ = false;
+        uv_transform_changed = true;
+        if (!png_rgba8_.empty()) {
+          png_reupload_requested_ = true;
+        }
+      }
+
+      if (ImGui::CollapsingHeader("Advanced", ImGuiTreeNodeFlags_None)) {
+        ImGui::TextUnformatted(
+          "These controls exist to understand and debug origin mismatches.");
+
+        {
+          int mode = static_cast<int>(orientation_fix_mode_);
+          const bool m0
+            = ImGui::RadioButton("Fix: normalize texture on upload", &mode,
+              static_cast<int>(OrientationFixMode::kNormalizeTextureOnUpload));
+          const bool m1
+            = ImGui::RadioButton("Fix: normalize UV in transform", &mode,
+              static_cast<int>(OrientationFixMode::kNormalizeUvInTransform));
+          const bool m2 = ImGui::RadioButton(
+            "Fix: none", &mode, static_cast<int>(OrientationFixMode::kNone));
+
+          if (m0 || m1 || m2) {
+            const auto prev = orientation_fix_mode_;
+            orientation_fix_mode_ = static_cast<OrientationFixMode>(mode);
+            uv_transform_changed = true;
+
+            const bool prev_upload
+              = (prev == OrientationFixMode::kNormalizeTextureOnUpload);
+            const bool next_upload = (orientation_fix_mode_
+              == OrientationFixMode::kNormalizeTextureOnUpload);
+            if ((prev_upload || next_upload) && !png_rgba8_.empty()) {
+              png_reupload_requested_ = next_upload;
+            }
+          }
+        }
+
+        {
+          int uv_origin = static_cast<int>(uv_origin_);
+          if (ImGui::RadioButton("UV origin: bottom-left (authoring)",
+                &uv_origin, static_cast<int>(UvOrigin::kBottomLeft))) {
+            uv_origin_ = static_cast<UvOrigin>(uv_origin);
+            uv_transform_changed = true;
+            if (!png_rgba8_.empty()
+              && orientation_fix_mode_
+                == OrientationFixMode::kNormalizeTextureOnUpload) {
+              png_reupload_requested_ = true;
+            }
+          }
+          if (ImGui::RadioButton("UV origin: top-left", &uv_origin,
+                static_cast<int>(UvOrigin::kTopLeft))) {
+            uv_origin_ = static_cast<UvOrigin>(uv_origin);
+            uv_transform_changed = true;
+            if (!png_rgba8_.empty()
+              && orientation_fix_mode_
+                == OrientationFixMode::kNormalizeTextureOnUpload) {
+              png_reupload_requested_ = true;
+            }
+          }
+        }
+
+        {
+          int img_origin = static_cast<int>(image_origin_);
+          if (ImGui::RadioButton("Image origin: top-left (PNG/WIC)",
+                &img_origin, static_cast<int>(ImageOrigin::kTopLeft))) {
+            image_origin_ = static_cast<ImageOrigin>(img_origin);
+            uv_transform_changed = true;
+            if (!png_rgba8_.empty()
+              && orientation_fix_mode_
+                == OrientationFixMode::kNormalizeTextureOnUpload) {
+              png_reupload_requested_ = true;
+            }
+          }
+          if (ImGui::RadioButton("Image origin: bottom-left", &img_origin,
+                static_cast<int>(ImageOrigin::kBottomLeft))) {
+            image_origin_ = static_cast<ImageOrigin>(img_origin);
+            uv_transform_changed = true;
+            if (!png_rgba8_.empty()
+              && orientation_fix_mode_
+                == OrientationFixMode::kNormalizeTextureOnUpload) {
+              png_reupload_requested_ = true;
+            }
+          }
+        }
+
+        {
+          bool flip_u = extra_flip_u_;
+          bool flip_v = extra_flip_v_;
+          if (ImGui::Checkbox("Extra flip U", &flip_u)) {
+            extra_flip_u_ = flip_u;
+            uv_transform_changed = true;
+          }
+          ImGui::SameLine();
+          if (ImGui::Checkbox("Extra flip V", &flip_v)) {
+            extra_flip_v_ = flip_v;
+            uv_transform_changed = true;
+          }
+        }
+
+        if (!png_rgba8_.empty()
+          && orientation_fix_mode_
+            == OrientationFixMode::kNormalizeTextureOnUpload
+          && ImGui::Button("Re-upload PNG")) {
+          png_reupload_requested_ = true;
+          png_status_message_.clear();
+        }
+      }
+
+      if (uv_transform_changed && cube_material_) {
+        if (auto* renderer = ResolveRenderer(); renderer) {
+          const auto [effective_uv_scale, effective_uv_offset]
+            = GetEffectiveUvTransform();
+          (void)renderer->OverrideMaterialUvTransform(
+            *cube_material_, effective_uv_scale, effective_uv_offset);
+        }
+      }
+
+      if (rebuild_requested) {
+        cube_needs_rebuild_ = true;
+      }
+
+      const auto res_index = ResolveBaseColorTextureResourceIndex(
+        texture_index_mode_, custom_texture_resource_index_);
+      ImGui::Text("BaseColorTexture resource index: %u",
+        static_cast<std::uint32_t>(res_index));
+
+      ImGui::EndTabItem();
     }
 
-    if (!png_status_message_.empty()) {
-      ImGui::Text("PNG: %s", png_status_message_.c_str());
-    }
-    if (png_last_width_ > 0 && png_last_height_ > 0) {
-      ImGui::Text("Last PNG: %dx%d", png_last_width_, png_last_height_);
-    }
-  }
+    // Lighting tab
+    if (ImGui::BeginTabItem("Lighting")) {
+      ImGui::Separator();
+      ImGui::TextUnformatted("Skybox:");
 
-  ImGui::Separator();
-  ImGui::TextUnformatted("Skybox:");
-
-  ImGui::InputText("Skybox path", skybox_path_.data(), skybox_path_.size());
-  if (ImGui::Button("Browse skybox...")) {
+      ImGui::InputText("Skybox path", skybox_path_.data(), skybox_path_.size());
+      if (ImGui::Button("Browse skybox...")) {
 #if defined(OXYGEN_WINDOWS)
-    std::string chosen;
-    if (TryBrowseForImageFile(chosen)) {
-      std::snprintf(
-        skybox_path_.data(), skybox_path_.size(), "%s", chosen.c_str());
-    }
+        std::string chosen;
+        if (TryBrowseForImageFile(chosen)) {
+          std::snprintf(
+            skybox_path_.data(), skybox_path_.size(), "%s", chosen.c_str());
+        }
 #endif
-  }
-  ImGui::SameLine();
-  if (ImGui::Button("Load skybox")) {
-    skybox_load_requested_ = true;
-    skybox_status_message_.clear();
-  }
-
-  if (!skybox_status_message_.empty()) {
-    ImGui::Text("Skybox: %s", skybox_status_message_.c_str());
-  }
-  if (skybox_last_face_size_ > 0) {
-    ImGui::Text("Last skybox face: %dx%d", skybox_last_face_size_,
-      skybox_last_face_size_);
-  }
-
-  ImGui::Separator();
-  ImGui::TextUnformatted("UV:");
-
-  constexpr float kUvScaleMin = 0.01f;
-  constexpr float kUvScaleMax = 64.0f;
-  constexpr float kUvOffsetMin = -64.0f;
-  constexpr float kUvOffsetMax = 64.0f;
-
-  auto SanitizeFinite = [](float v, float fallback) -> float {
-    return std::isfinite(v) ? v : fallback;
-  };
-
-  float uv_scale[2] = { uv_scale_.x, uv_scale_.y };
-  if (ImGui::DragFloat2("UV scale", uv_scale, 0.01f, kUvScaleMin, kUvScaleMax,
-        "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-    const glm::vec2 new_scale {
-      std::clamp(SanitizeFinite(uv_scale[0], 1.0f), kUvScaleMin, kUvScaleMax),
-      std::clamp(SanitizeFinite(uv_scale[1], 1.0f), kUvScaleMin, kUvScaleMax),
-    };
-    if (new_scale != uv_scale_) {
-      uv_scale_ = new_scale;
-      changed = true;
-      uv_transform_changed = true;
-    }
-  }
-
-  float uv_offset[2] = { uv_offset_.x, uv_offset_.y };
-  if (ImGui::DragFloat2("UV offset", uv_offset, 0.01f, kUvOffsetMin,
-        kUvOffsetMax, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-    const glm::vec2 new_offset {
-      std::clamp(
-        SanitizeFinite(uv_offset[0], 0.0f), kUvOffsetMin, kUvOffsetMax),
-      std::clamp(
-        SanitizeFinite(uv_offset[1], 0.0f), kUvOffsetMin, kUvOffsetMax),
-    };
-    if (new_offset != uv_offset_) {
-      uv_offset_ = new_offset;
-      changed = true;
-      uv_transform_changed = true;
-    }
-  }
-
-  if (ImGui::Button("Reset UV")) {
-    uv_scale_ = { 1.0f, 1.0f };
-    uv_offset_ = { 0.0f, 0.0f };
-    changed = true;
-    uv_transform_changed = true;
-  }
-
-  ImGui::Separator();
-  ImGui::TextUnformatted("Orientation:");
-
-  if (ImGui::Button("Apply recommended settings")) {
-    orientation_fix_mode_ = OrientationFixMode::kNormalizeTextureOnUpload;
-    uv_origin_ = UvOrigin::kBottomLeft;
-    image_origin_ = ImageOrigin::kTopLeft;
-    extra_flip_u_ = false;
-    extra_flip_v_ = false;
-    uv_transform_changed = true;
-    if (!png_rgba8_.empty()) {
-      png_reupload_requested_ = true;
-    }
-  }
-
-  if (ImGui::CollapsingHeader("Advanced", ImGuiTreeNodeFlags_None)) {
-    ImGui::TextUnformatted(
-      "These controls exist to understand and debug origin mismatches.");
-
-    {
-      int mode = static_cast<int>(orientation_fix_mode_);
-      const bool m0 = ImGui::RadioButton("Fix: normalize texture on upload",
-        &mode, static_cast<int>(OrientationFixMode::kNormalizeTextureOnUpload));
-      const bool m1 = ImGui::RadioButton("Fix: normalize UV in transform",
-        &mode, static_cast<int>(OrientationFixMode::kNormalizeUvInTransform));
-      const bool m2 = ImGui::RadioButton(
-        "Fix: none", &mode, static_cast<int>(OrientationFixMode::kNone));
-
-      if (m0 || m1 || m2) {
-        const auto prev = orientation_fix_mode_;
-        orientation_fix_mode_ = static_cast<OrientationFixMode>(mode);
-        uv_transform_changed = true;
-
-        const bool prev_upload
-          = (prev == OrientationFixMode::kNormalizeTextureOnUpload);
-        const bool next_upload = (orientation_fix_mode_
-          == OrientationFixMode::kNormalizeTextureOnUpload);
-        if ((prev_upload || next_upload) && !png_rgba8_.empty()) {
-          png_reupload_requested_ = next_upload;
-        }
-      }
-    }
-
-    {
-      int uv_origin = static_cast<int>(uv_origin_);
-      if (ImGui::RadioButton("UV origin: bottom-left (authoring)", &uv_origin,
-            static_cast<int>(UvOrigin::kBottomLeft))) {
-        uv_origin_ = static_cast<UvOrigin>(uv_origin);
-        uv_transform_changed = true;
-        if (!png_rgba8_.empty()
-          && orientation_fix_mode_
-            == OrientationFixMode::kNormalizeTextureOnUpload) {
-          png_reupload_requested_ = true;
-        }
-      }
-      if (ImGui::RadioButton("UV origin: top-left", &uv_origin,
-            static_cast<int>(UvOrigin::kTopLeft))) {
-        uv_origin_ = static_cast<UvOrigin>(uv_origin);
-        uv_transform_changed = true;
-        if (!png_rgba8_.empty()
-          && orientation_fix_mode_
-            == OrientationFixMode::kNormalizeTextureOnUpload) {
-          png_reupload_requested_ = true;
-        }
-      }
-    }
-
-    {
-      int img_origin = static_cast<int>(image_origin_);
-      if (ImGui::RadioButton("Image origin: top-left (PNG/WIC)", &img_origin,
-            static_cast<int>(ImageOrigin::kTopLeft))) {
-        image_origin_ = static_cast<ImageOrigin>(img_origin);
-        uv_transform_changed = true;
-        if (!png_rgba8_.empty()
-          && orientation_fix_mode_
-            == OrientationFixMode::kNormalizeTextureOnUpload) {
-          png_reupload_requested_ = true;
-        }
-      }
-      if (ImGui::RadioButton("Image origin: bottom-left", &img_origin,
-            static_cast<int>(ImageOrigin::kBottomLeft))) {
-        image_origin_ = static_cast<ImageOrigin>(img_origin);
-        uv_transform_changed = true;
-        if (!png_rgba8_.empty()
-          && orientation_fix_mode_
-            == OrientationFixMode::kNormalizeTextureOnUpload) {
-          png_reupload_requested_ = true;
-        }
-      }
-    }
-
-    {
-      bool flip_u = extra_flip_u_;
-      bool flip_v = extra_flip_v_;
-      if (ImGui::Checkbox("Extra flip U", &flip_u)) {
-        extra_flip_u_ = flip_u;
-        uv_transform_changed = true;
       }
       ImGui::SameLine();
-      if (ImGui::Checkbox("Extra flip V", &flip_v)) {
-        extra_flip_v_ = flip_v;
-        uv_transform_changed = true;
+      if (ImGui::Button("Load skybox")) {
+        skybox_load_requested_ = true;
+        skybox_status_message_.clear();
       }
+
+      if (!skybox_status_message_.empty()) {
+        ImGui::Text("Skybox: %s", skybox_status_message_.c_str());
+      }
+      if (skybox_last_face_size_ > 0) {
+        ImGui::Text("Last skybox face: %dx%d", skybox_last_face_size_,
+          skybox_last_face_size_);
+      }
+
+      ImGui::Separator();
+      ImGui::TextUnformatted("Sky light:");
+
+      bool skylight_changed = false;
+      if (ImGui::SliderFloat("SkyLight intensity", &sky_light_intensity_, 0.0f,
+            8.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
+        skylight_changed = true;
+      }
+      if (ImGui::SliderFloat("SkyLight diffuse", &sky_light_diffuse_intensity_,
+            0.0f, 4.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
+        skylight_changed = true;
+      }
+      if (ImGui::SliderFloat("SkyLight specular",
+            &sky_light_specular_intensity_, 0.0f, 4.0f, "%.2f",
+            ImGuiSliderFlags_AlwaysClamp)) {
+        skylight_changed = true;
+      }
+
+      if (skylight_changed) {
+        if (auto env = scene_ ? scene_->GetEnvironment() : nullptr; env) {
+          if (auto sky_light
+            = env->TryGetSystem<scene::environment::SkyLight>()) {
+            sky_light->SetIntensity(sky_light_intensity_);
+            sky_light->SetDiffuseIntensity(sky_light_diffuse_intensity_);
+            sky_light->SetSpecularIntensity(sky_light_specular_intensity_);
+          }
+        }
+      }
+
+      ImGui::Separator();
+      ImGui::TextUnformatted("Sun (directional):");
+      bool sun_changed = false;
+      if (ImGui::SliderFloat("Sun intensity", &sun_intensity_, 0.0f, 30.0f,
+            "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
+        sun_changed = true;
+      }
+      float sun_color[3]
+        = { sun_color_rgb_.x, sun_color_rgb_.y, sun_color_rgb_.z };
+      if (ImGui::ColorEdit3("Sun color", sun_color,
+            ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR)) {
+        sun_color_rgb_ = { sun_color[0], sun_color[1], sun_color[2] };
+        sun_changed = true;
+      }
+      if (sun_changed) {
+        if (sun_node_.IsAlive()) {
+          if (auto light = sun_node_.GetLightAs<scene::DirectionalLight>()) {
+            auto& light_ref = light->get();
+            light_ref.Common().intensity = sun_intensity_;
+            light_ref.Common().color_rgb = sun_color_rgb_;
+          }
+        }
+      }
+
+      ImGui::EndTabItem();
     }
 
-    if (!png_rgba8_.empty()
-      && orientation_fix_mode_ == OrientationFixMode::kNormalizeTextureOnUpload
-      && ImGui::Button("Re-upload PNG")) {
-      png_reupload_requested_ = true;
-      png_status_message_.clear();
-    }
+    ImGui::EndTabBar();
   }
-
-  if (uv_transform_changed && cube_material_) {
-    if (auto* renderer = ResolveRenderer(); renderer) {
-      const auto [effective_uv_scale, effective_uv_offset]
-        = GetEffectiveUvTransform();
-      (void)renderer->OverrideMaterialUvTransform(
-        *cube_material_, effective_uv_scale, effective_uv_offset);
-    }
-  }
-
-  if (rebuild_requested) {
-    cube_needs_rebuild_ = true;
-  }
-
-  const auto res_index = ResolveBaseColorTextureResourceIndex(
-    texture_index_mode_, custom_texture_resource_index_);
-  ImGui::Text("BaseColorTexture resource index: %u",
-    static_cast<std::uint32_t>(res_index));
 
   ImGui::Separator();
   ImGui::Text("Orbit yaw:   %.3f rad", orbit_yaw_rad_);
