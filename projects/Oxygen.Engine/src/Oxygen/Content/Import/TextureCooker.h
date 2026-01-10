@@ -16,6 +16,7 @@
 #include <Oxygen/Content/Import/ScratchImage.h>
 #include <Oxygen/Content/Import/TextureImportDesc.h>
 #include <Oxygen/Content/Import/TextureImportError.h>
+#include <Oxygen/Content/Import/TextureImportTypes.h>
 #include <Oxygen/Content/Import/TexturePackingPolicy.h>
 #include <Oxygen/Content/Import/TextureSourceAssembly.h>
 #include <Oxygen/Content/api_export.h>
@@ -24,74 +25,6 @@
 #include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content::import {
-
-//===----------------------------------------------------------------------===//
-// Cooked Texture Descriptor
-//===----------------------------------------------------------------------===//
-
-//! Runtime descriptor for a cooked texture (goes into textures.table).
-/*!
-  Contains all metadata needed by the runtime to create a texture resource.
-  This is the in-memory representation that will be serialized into the
-  cooked asset.
-*/
-struct TextureResourceDesc {
-  //! Type of texture (2D, 3D, Cube, etc.).
-  TextureType texture_type = TextureType::kTexture2D;
-
-  //! Width in pixels at mip 0.
-  uint32_t width = 0;
-
-  //! Height in pixels at mip 0.
-  uint32_t height = 0;
-
-  //! Depth for 3D textures at mip 0, otherwise 1.
-  uint16_t depth = 1;
-
-  //! Number of array layers (6 for cube maps).
-  uint16_t array_layers = 1;
-
-  //! Number of mip levels.
-  uint16_t mip_levels = 1;
-
-  //! Pixel format of the stored data.
-  Format format = Format::kUnknown;
-
-  //! Packing policy identifier (e.g., "d3d12", "tight").
-  std::string packing_policy_id;
-
-  //! Content hash for deduplication (XXH3).
-  uint64_t content_hash = 0;
-};
-
-//===----------------------------------------------------------------------===//
-// Cooked Texture Payload
-//===----------------------------------------------------------------------===//
-
-//! Result of cooking a texture.
-/*!
-  Contains the runtime descriptor and the complete payload bytes including
-  header, layout table, and subresource data.
-
-  ### Payload Format
-
-  The payload is structured as:
-  1. **Header** (fixed size): TextureResourceDesc serialized
-  2. **Layout Table** (variable): SubresourceLayout array
-  3. **Subresource Data** (variable): Aligned pixel data for each subresource
-
-  @see TextureResourceDesc, SubresourceLayout
-*/
-struct CookedTexturePayload {
-  //! Runtime descriptor (will be serialized into textures.table).
-  TextureResourceDesc desc;
-
-  //! Complete payload bytes (header + layout table + subresource data).
-  std::vector<std::byte> payload;
-
-  //! Subresource layouts for the payload.
-  std::vector<data::pak::SubresourceLayout> layouts;
-};
 
 //===----------------------------------------------------------------------===//
 // Texture Cooker API
