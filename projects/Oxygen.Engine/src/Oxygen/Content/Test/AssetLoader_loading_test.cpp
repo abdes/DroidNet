@@ -10,6 +10,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <vector>
 
 #include "./AssetLoader_test.h"
 #include <Oxygen/Base/ObserverPtr.h>
@@ -28,6 +29,8 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+
+#include "Utils/PakUtils.h"
 
 using testing::IsNull;
 using testing::NotNull;
@@ -103,18 +106,14 @@ auto WriteLooseCookedMaterialWithTexture(
   std::filesystem::create_directories(cooked_root / layout.resources_dir);
 
   // Arrange: write texture data
-  const std::vector<std::byte> tex_data = {
-    std::byte { 0x11 },
-    std::byte { 0x22 },
-    std::byte { 0x33 },
-    std::byte { 0x44 },
-  };
+  const auto tex_payload
+    = oxygen::content::testing::MakeV4TexturePayload(4U, std::byte { 0x11 });
   {
     std::ofstream out(
       cooked_root / layout.resources_dir / layout.textures_data_file_name,
       std::ios::binary);
-    out.write(reinterpret_cast<const char*>(tex_data.data()),
-      static_cast<std::streamsize>(tex_data.size()));
+    out.write(reinterpret_cast<const char*>(tex_payload.data()),
+      static_cast<std::streamsize>(tex_payload.size()));
   }
 
   // Arrange: write texture table (2 entries: fallback + test texture)
@@ -133,7 +132,7 @@ auto WriteLooseCookedMaterialWithTexture(
 
   TextureResourceDesc test_desc {};
   test_desc.data_offset = 0;
-  test_desc.size_bytes = static_cast<uint32_t>(tex_data.size());
+  test_desc.size_bytes = static_cast<uint32_t>(tex_payload.size());
   test_desc.texture_type = 3; // TextureType::kTexture2D
   test_desc.compression_type = 0;
   test_desc.width = 1;
@@ -229,7 +228,7 @@ auto WriteLooseCookedMaterialWithTexture(
   FileRecord tex_data_record {};
   tex_data_record.kind = FileKind::kTexturesData;
   tex_data_record.relpath_offset = off_tex_data;
-  tex_data_record.size = static_cast<uint64_t>(tex_data.size());
+  tex_data_record.size = static_cast<uint64_t>(tex_payload.size());
 
   const auto index_path = cooked_root / "container.index.bin";
   std::ofstream index_out(index_path, std::ios::binary);

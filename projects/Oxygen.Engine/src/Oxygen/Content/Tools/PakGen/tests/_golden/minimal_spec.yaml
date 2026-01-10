@@ -1,6 +1,6 @@
 # Golden spec used to generate tests/_golden/minimal_ref.pak
 
-version: 3
+version: 4
 content_version: 1
 
 buffers: []

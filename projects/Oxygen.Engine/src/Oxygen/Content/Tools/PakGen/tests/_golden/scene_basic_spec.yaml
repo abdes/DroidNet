@@ -1,7 +1,7 @@
 # Golden spec used to generate tests/_golden/scene_basic.pak
 # Purpose: manual + automated binary-format validation (directory entries, offsets, CRC).
 
-version: 3
+version: 4
 content_version: 1
 
 buffers: []

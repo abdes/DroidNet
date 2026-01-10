@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
 import hashlib
 import json
+import struct
 import time
 import uuid
 
@@ -30,25 +31,55 @@ def _align_up(value: int, alignment: int) -> int:
     return ((value + alignment - 1) // alignment) * alignment
 
 
-def _maybe_pad_texture_payload(entry: Dict[str, Any], data: bytes) -> bytes:
-    """Pad small uncompressed RGBA8 texture payloads for D3D12 row-pitch rules.
+def _parse_texture_packing_policy(
+    entry: Dict[str, Any],
+) -> Tuple[int, int, int]:
+    """Return (policy_id, row_pitch_alignment, placement_alignment)."""
 
-    The runtime upload path aligns row pitch to 256 bytes. When authors embed
-    small textures (e.g., 1x1, 2x2) via data_hex, they typically provide only
-    tightly packed texels (4 * w * h bytes). That will fail at runtime because
-    the uploader expects each row padded to 256 bytes.
+    policy = entry.get("packing_policy", entry.get("packing", "d3d12"))
+    if isinstance(policy, str):
+        p = policy.strip().lower()
+        if p in ("d3d12", "dx12"):
+            return 1, 256, 512
+        if p in ("tight", "tightpacked", "tight_packed"):
+            return 2, 1, 4
+    if isinstance(policy, int):
+        if policy == 1:
+            return 1, 256, 512
+        if policy == 2:
+            return 2, 1, 4
+    # Default to D3D12 since the runtime upload path requires aligned rows.
+    return 1, 256, 512
 
-    We only auto-pad the common case we use in demos:
-    - texture_type == 3 (2D)
-    - compression_type == 0 (raw)
-    - format == 30 (RGBA8_UNORM)
-    - mip_levels == 1, array_layers == 1, depth == 1
 
-    For very large inferred required sizes we fail early rather than allocate
-    huge padding buffers silently.
+def _is_v4_texture_payload(data: bytes) -> bool:
+    # v4 texture payloads start with magic 'OTX1'.
+    return len(data) >= 4 and data[:4] == b"OTX1"
+
+
+def _ensure_v4_texture_payload(entry: Dict[str, Any], data: bytes) -> bytes:
+    """Ensure texture payload uses v4 layout (TexturePayloadHeader + layouts).
+
+    If the payload is already v4 (starts with 'OTX1'), it is returned unchanged.
+    Otherwise, PakGen wraps legacy raw data into a single-subresource v4 payload.
+
+    Current wrapping only supports 2D uncompressed RGBA8 (format=30) with a
+    single mip and single array layer.
     """
 
     if not data:
+        return data
+
+    if _is_v4_texture_payload(data):
+        if len(data) >= 28:
+            try:
+                _magic, _policy, _flags, _sub_count, _total, _lo, _do, ch = (
+                    struct.unpack("<IBBHIIIQ", data[:28])
+                )
+                entry["content_hash"] = int(ch) & 0xFFFFFFFFFFFFFFFF
+            except Exception:
+                # Keep original payload; descriptor hash remains spec-provided.
+                pass
         return data
 
     try:
@@ -61,7 +92,9 @@ def _maybe_pad_texture_payload(entry: Dict[str, Any], data: bytes) -> bytes:
         array_layers = int(entry.get("array_layers", 1))
         mip_levels = int(entry.get("mip_levels", 1))
     except Exception:
-        return data
+        raise ValueError(
+            f"Invalid texture metadata for v4 payload wrapping: name={entry.get('name')!r}"
+        )
 
     if (
         texture_type != 3
@@ -71,28 +104,83 @@ def _maybe_pad_texture_payload(entry: Dict[str, Any], data: bytes) -> bytes:
         or array_layers != 1
         or depth != 1
     ):
-        return data
-
-    if width <= 0 or height <= 0:
-        return data
-
-    bytes_per_pixel = 4
-    row_pitch = _align_up(width * bytes_per_pixel, 256)
-    required = row_pitch * height
-
-    if len(data) >= required:
-        return data
-
-    max_autopad_bytes = 16 * 1024 * 1024  # 16 MiB safety cap
-    if required > max_autopad_bytes:
         raise ValueError(
-            "Embedded texture payload too small for inferred row-pitch layout "
-            f"(name={entry.get('name')!r} format=RGBA8_UNORM width={width} height={height} "
-            f"required_bytes={required} actual_bytes={len(data)}). "
-            "Provide pre-padded rows or use an external file payload."
+            "Non-v4 texture payloads are not supported for this texture shape; "
+            "provide a pre-cooked v4 payload (must start with 'OTX1'). "
+            f"(name={entry.get('name')!r} texture_type={texture_type} compression_type={compression_type} "
+            f"format={fmt} mips={mip_levels} layers={array_layers} depth={depth})"
         )
 
-    return data + b"\x00" * (required - len(data))
+    if width <= 0 or height <= 0:
+        raise ValueError(
+            f"Invalid texture dimensions for v4 payload wrapping: {width}x{height}"
+        )
+
+    packing_policy, row_pitch_alignment, placement_alignment = (
+        _parse_texture_packing_policy(entry)
+    )
+
+    bytes_per_pixel = 4
+    row_pitch = _align_up(width * bytes_per_pixel, row_pitch_alignment)
+    required = row_pitch * height
+
+    row_bytes = width * bytes_per_pixel
+    tight_size = row_bytes * height
+    if row_pitch_alignment > 1 and height > 1 and len(data) == tight_size:
+        # Expand tightly packed rows into an explicitly row-pitched layout.
+        out = bytearray(required)
+        for y in range(height):
+            src_off = y * row_bytes
+            dst_off = y * row_pitch
+            out[dst_off : dst_off + row_bytes] = data[
+                src_off : src_off + row_bytes
+            ]
+        data = bytes(out)
+
+    if len(data) < required:
+        max_autopad_bytes = 16 * 1024 * 1024  # 16 MiB safety cap
+        if required > max_autopad_bytes:
+            raise ValueError(
+                "Embedded texture payload too small for inferred row-pitch layout "
+                f"(name={entry.get('name')!r} format=RGBA8_UNORM width={width} height={height} "
+                f"required_bytes={required} actual_bytes={len(data)}). "
+                "Provide pre-padded rows or use an external file payload."
+            )
+        data = data + b"\x00" * (required - len(data))
+
+    # Match engine convention: first 8 bytes of SHA256 of the pixel/block data.
+    content_hash = int.from_bytes(hashlib.sha256(data).digest()[:8], "little")
+    # Keep descriptor hash consistent with payload hash.
+    entry["content_hash"] = content_hash
+
+    # v4 header + single layout.
+    layouts_offset = 28
+    subresource_count = 1
+    layouts_size = 12 * subresource_count
+    layouts_end = layouts_offset + layouts_size
+    data_offset = _align_up(layouts_end, placement_alignment)
+
+    total_payload_size = data_offset + required
+    header = struct.pack(
+        "<IBBHIIIQ",
+        0x3158544F,  # 'OTX1'
+        packing_policy,
+        0,  # flags
+        subresource_count,
+        total_payload_size,
+        layouts_offset,
+        data_offset,
+        content_hash,
+    )
+    layout0 = struct.pack("<III", 0, row_pitch, required)
+    padding = b"\x00" * (data_offset - layouts_end)
+    payload = header + layout0 + padding + data
+    if len(payload) != total_payload_size:
+        raise RuntimeError(
+            "v4 texture payload size mismatch: "
+            f"expected={total_payload_size} actual={len(payload)}"
+        )
+    return payload
 
 
 # ---------------------------------------------------------------------------
@@ -360,15 +448,15 @@ def collect_resources(
                         entry, base_dir, max_size=max_size
                     )
                     if rtype == "texture":
-                        padded = _maybe_pad_texture_payload(entry, data)
-                        if len(padded) != len(data):
+                        wrapped = _ensure_v4_texture_payload(entry, data)
+                        if len(wrapped) != len(data):
                             rep.warning(
-                                "Padded texture payload for row-pitch alignment",
+                                "Wrapped legacy texture payload into v4 'OTX1' container",
                                 name=name,
                                 original_bytes=len(data),
-                                padded_bytes=len(padded),
+                                wrapped_bytes=len(wrapped),
                             )
-                        data = padded
+                        data = wrapped
                 except Exception as e:
                     rep.error(f"Failed to read {rtype} data for '{name}': {e}")
                     raise
@@ -404,6 +492,7 @@ def collect_resources(
                         "name": fallback_name,
                         "texture_type": 3,
                         "compression_type": 0,
+                        "packing_policy": "d3d12",
                         "width": 1,
                         "height": 1,
                         "depth": 1,
@@ -413,10 +502,9 @@ def collect_resources(
                         "alignment": 256,
                         "data_hex": "ffffffff",
                     }
-                    # NOTE: D3D12 upload paths often align row pitch to 256
-                    # bytes. A 1x1 RGBA8 subresource therefore needs at least
-                    # 256 bytes of data for a successful upload.
-                    fallback_data = b"\xff\xff\xff\xff" + b"\x00" * (256 - 4)
+                    fallback_data = _ensure_v4_texture_payload(
+                        fallback_spec, b"\xff\xff\xff\xff"
+                    )
 
                     # Insert at the front and shift all existing indices by +1.
                     data_blobs[rtype].insert(0, fallback_data)
@@ -1161,7 +1249,7 @@ def compute_pak_plan(
         footer=footer_plan,
         padding=padding_stats,
         file_size=cursor,
-        version=int(build_plan.spec.get("version", 1)),
+        version=4,
         content_version=int(build_plan.spec.get("content_version", 0)),
         guid=pak_guid,
         deterministic=deterministic,

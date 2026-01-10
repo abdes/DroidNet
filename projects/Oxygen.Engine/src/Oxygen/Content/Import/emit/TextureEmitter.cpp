@@ -13,11 +13,10 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Content/Import/ImageDecode.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
+#include <Oxygen/Content/Import/emit/TextureEmissionUtils.h>
 #include <Oxygen/Content/Import/util/Constants.h>
 #include <Oxygen/Content/Import/util/Signature.h>
-#include <Oxygen/Content/Import/util/TextureRepack.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 
@@ -167,44 +166,33 @@ auto EnsureFallbackTexture(TextureEmissionState& state) -> void
     return;
   }
 
-  using oxygen::data::pak::TextureResourceDesc;
+  // Index 0 is reserved: a 1x1 white RGBA8 placeholder texture.
+  // Use the cooker to create it with proper packing.
+  CookerConfig config {};
+  auto fallback = CreatePlaceholderTexture("_fallback_white_", config);
 
-  // Index 0 is reserved and must exist.
-  // Use a 1x1 white RGBA8, packed with a 256-byte row pitch.
-  const std::array<std::byte, 4> white = { std::byte { 0xFF },
-    std::byte { 0xFF }, std::byte { 0xFF }, std::byte { 0xFF } };
-
-  const auto packed = util::RepackRgba8ToRowPitchAligned(
-    std::span<const std::byte>(white.data(), white.size()), 1, 1,
-    util::kRowPitchAlignment);
-
-  const auto content_hash = util::ComputeContentHash(
-    std::span<const std::byte>(packed.data(), packed.size()));
+  // Override the placeholder color to pure white
+  if (fallback.payload.size() >= 4) {
+    fallback.payload[0] = std::byte { 0xFF };
+    fallback.payload[1] = std::byte { 0xFF };
+    fallback.payload[2] = std::byte { 0xFF };
+    fallback.payload[3] = std::byte { 0xFF };
+  }
 
   const auto data_offset = AppendResource(state.appender,
-    std::span<const std::byte>(packed.data(), packed.size()),
+    std::span<const std::byte>(
+      fallback.payload.data(), fallback.payload.size()),
     util::kRowPitchAlignment);
 
-  TextureResourceDesc desc {};
+  auto desc = fallback.desc;
   desc.data_offset = data_offset;
-  desc.size_bytes = static_cast<uint32_t>(packed.size());
-  desc.texture_type = static_cast<uint8_t>(oxygen::TextureType::kTexture2D);
-  desc.compression_type = 0;
-  desc.width = 1;
-  desc.height = 1;
-  desc.depth = 1;
-  desc.array_layers = 1;
-  desc.mip_levels = 1;
-  desc.format = static_cast<uint8_t>(oxygen::Format::kRGBA8UNorm);
-  desc.alignment = static_cast<uint32_t>(util::kRowPitchAlignment);
-  desc.content_hash = content_hash;
 
   state.table.push_back(desc);
 }
 
-auto GetOrCreateTextureResourceIndex(const ImportRequest& request,
+auto GetOrCreateTextureResourceIndexWithCooker(const ImportRequest& request,
   CookedContentWriter& cooked_out, TextureEmissionState& state,
-  const ufbx_texture* texture) -> uint32_t
+  const ufbx_texture* texture, const CookerConfig& config) -> uint32_t
 {
   const auto* file_tex = ResolveFileTexture(texture);
   if (file_tex == nullptr) {
@@ -220,25 +208,25 @@ auto GetOrCreateTextureResourceIndex(const ImportRequest& request,
   }
 
   const auto id = TextureIdString(*file_tex);
-  auto decoded = ImageDecodeResult {};
   const bool is_embedded = (texture != nullptr
     && texture->content.data != nullptr && texture->content.size > 0);
 
   std::string texture_id;
   std::filesystem::path resolved;
+  std::span<const std::byte> source_bytes;
+  std::vector<std::byte> file_bytes;
 
   if (is_embedded) {
-    const auto bytes = std::span<const std::byte>(
+    source_bytes = std::span<const std::byte>(
       reinterpret_cast<const std::byte*>(texture->content.data),
       texture->content.size);
-    texture_id
-      = "embedded:" + util::Sha256ToHex(oxygen::base::ComputeSha256(bytes));
+    texture_id = "embedded:"
+      + util::Sha256ToHex(oxygen::base::ComputeSha256(source_bytes));
     if (const auto it = state.index_by_texture_id.find(texture_id);
       it != state.index_by_texture_id.end()) {
       state.index_by_file_texture.insert_or_assign(file_tex, it->second);
       return it->second;
     }
-    decoded = DecodeImageRgba8FromMemory(bytes);
   } else {
     auto rel = ToStringView(file_tex->relative_filename);
     auto abs = ToStringView(file_tex->filename);
@@ -292,82 +280,47 @@ auto GetOrCreateTextureResourceIndex(const ImportRequest& request,
       }
     }
 
+    // Read file bytes for cooker
     if (!resolved.empty()) {
-      decoded = DecodeImageRgba8FromFile(resolved);
-    } else {
-      decoded.error = "texture has no filename or embedded content";
-    }
-  }
-
-  std::span<const std::byte> pixels;
-  uint32_t width = 1;
-  uint32_t height = 1;
-  std::array<std::byte, 4> placeholder_pixel = {};
-  bool used_placeholder = false;
-
-  if (decoded.Succeeded() && decoded.image->width > 0
-    && decoded.image->height > 0 && !decoded.image->pixels.empty()) {
-    pixels = std::span<const std::byte>(
-      decoded.image->pixels.data(), decoded.image->pixels.size());
-    width = decoded.image->width;
-    height = decoded.image->height;
-  } else {
-    used_placeholder = true;
-    if (!decoded.error.empty()) {
-      if (!resolved.empty()) {
-        LOG_F(WARNING,
-          "FBX import: failed to load texture '{}' (embedded={}, path='{}'): "
-          "{}; using 1x1 placeholder",
-          std::string(id).c_str(), is_embedded,
-          resolved.generic_string().c_str(), decoded.error.c_str());
-      } else {
-        LOG_F(WARNING,
-          "FBX import: failed to load texture '{}' (embedded={}): {} "
-          "using 1x1 placeholder",
-          std::string(id).c_str(), is_embedded, decoded.error.c_str());
+      const auto opt_bytes = TryReadWholeFileBytes(resolved);
+      if (opt_bytes.has_value()) {
+        file_bytes = std::move(opt_bytes.value());
+        source_bytes
+          = std::span<const std::byte>(file_bytes.data(), file_bytes.size());
       }
-
-      ImportDiagnostic diag {
-        .severity = ImportSeverity::kWarning,
-        .code = "fbx.texture_decode_failed",
-        .message = "failed to decode texture '" + std::string(id)
-          + "': " + decoded.error + "; using 1x1 placeholder",
-        .source_path = request.source_path.string(),
-        .object_path = std::string(id),
-      };
-      cooked_out.AddDiagnostic(std::move(diag));
     }
-
-    placeholder_pixel = MakeDeterministicPixelRGBA8(id);
-    pixels = std::span<const std::byte>(
-      placeholder_pixel.data(), placeholder_pixel.size());
-    width = 1;
-    height = 1;
   }
 
-  const auto packed_pixels = util::RepackRgba8ToRowPitchAligned(
-    pixels, width, height, util::kRowPitchAlignment);
+  // Cook texture with fallback to placeholder
+  auto cooked = CookTextureWithFallback(source_bytes, config, texture_id);
 
-  // Compute content hash before building descriptor
-  const auto content_hash = util::ComputeContentHash(
-    std::span<const std::byte>(packed_pixels.data(), packed_pixels.size()));
+  if (cooked.is_placeholder) {
+    if (!resolved.empty()) {
+      LOG_F(WARNING,
+        "FBX import: failed to load texture '{}' (embedded={}, path='{}'): "
+        "using 1x1 placeholder",
+        std::string(id).c_str(), is_embedded,
+        resolved.generic_string().c_str());
+    } else {
+      LOG_F(WARNING,
+        "FBX import: failed to load texture '{}' (embedded={}): "
+        "using 1x1 placeholder",
+        std::string(id).c_str(), is_embedded);
+    }
 
-  TextureEmissionState::TextureResourceDesc desc {};
-  desc.data_offset = 0;
-  desc.size_bytes = static_cast<uint32_t>(packed_pixels.size());
-  desc.texture_type = static_cast<uint8_t>(oxygen::TextureType::kTexture2D);
-  desc.compression_type = 0;
-  desc.width = width;
-  desc.height = height;
-  desc.depth = 1;
-  desc.array_layers = 1;
-  desc.mip_levels = 1;
-  desc.format = static_cast<uint8_t>(oxygen::Format::kRGBA8UNorm);
-  desc.alignment = static_cast<uint32_t>(util::kRowPitchAlignment);
-  desc.content_hash = content_hash;
+    ImportDiagnostic diag {
+      .severity = ImportSeverity::kWarning,
+      .code = "fbx.texture_decode_failed",
+      .message = "failed to decode texture '" + std::string(id)
+        + "'; using 1x1 placeholder",
+      .source_path = request.source_path.string(),
+      .object_path = std::string(id),
+    };
+    cooked_out.AddDiagnostic(std::move(diag));
+  }
 
   // Build signature using stored hash
-  const auto signature = util::MakeTextureSignatureFromStoredHash(desc);
+  const auto signature = util::MakeTextureSignatureFromStoredHash(cooked.desc);
 
   // Check for duplicate by signature
   if (const auto it = state.index_by_signature.find(signature);
@@ -378,25 +331,29 @@ auto GetOrCreateTextureResourceIndex(const ImportRequest& request,
       state.index_by_texture_id.insert_or_assign(texture_id, existing_index);
     }
     LOG_F(INFO,
-      "Reuse texture '{}' ({}x{}, bytes={}, embedded={}, placeholder={}) -> "
-      "index {}",
-      std::string(id).c_str(), width, height, pixels.size(), is_embedded,
-      used_placeholder, existing_index);
+      "Reuse texture '{}' ({}x{}, mips={}, format={}, embedded={}, "
+      "placeholder={}) -> index {}",
+      std::string(id).c_str(), cooked.desc.width, cooked.desc.height,
+      cooked.desc.mip_levels, cooked.desc.format, is_embedded,
+      cooked.is_placeholder, existing_index);
     return existing_index;
   }
 
   // Append new texture to data file
   const auto data_offset = AppendResource(state.appender,
-    std::span<const std::byte>(packed_pixels.data(), packed_pixels.size()),
+    std::span<const std::byte>(cooked.payload.data(), cooked.payload.size()),
     util::kRowPitchAlignment);
 
+  // Update descriptor with data offset
+  auto desc = cooked.desc;
   desc.data_offset = data_offset;
 
   LOG_F(INFO,
-    "Emit texture '{}' ({}x{}, bytes={}, embedded={}, placeholder={}) -> "
-    "index {}",
-    std::string(id).c_str(), width, height, pixels.size(), is_embedded,
-    used_placeholder, state.table.size());
+    "Emit texture '{}' ({}x{}, mips={}, format={}, bytes={}, embedded={}, "
+    "placeholder={}) -> index {}",
+    std::string(id).c_str(), desc.width, desc.height, desc.mip_levels,
+    desc.format, cooked.payload.size(), is_embedded, cooked.is_placeholder,
+    state.table.size());
 
   const auto index = static_cast<uint32_t>(state.table.size());
   state.table.push_back(desc);

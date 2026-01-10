@@ -1354,7 +1354,149 @@ static_assert(sizeof(SpotLightRecord) == 88);
 
 } // namespace oxygen::data::pak::v3
 
+namespace oxygen::data::pak::v4 {
+
+//=== Version Notes ===------------------------------------------------------//
+
+//! PAK file format v4.
+/*!
+ v4 introduces structured texture payloads with explicit subresource layouts.
+ This enables GPU-upload-ready textures with backend-specific packing (D3D12
+ row pitch alignment, placement alignment) without runtime recomputation of
+ offsets.
+
+ ### Breaking Changes
+
+ - **PAK version bump**: `PakHeader::version` changes from `3` to `4`.
+ - **Binary incompatibility**: v4 PAK files cannot be read by v3 loaders.
+ - **Texture data format change**: texture payloads now start with
+   `TexturePayloadHeader` instead of raw pixel/block data.
+*/
+
+using namespace v3;
+
+//! Scene asset descriptor version for PAK v4.
+constexpr uint8_t kSceneAssetVersion = v3::kSceneAssetVersion;
+
+//! Material asset descriptor version for PAK v4.
+constexpr uint8_t kMaterialAssetVersion = v3::kMaterialAssetVersion;
+
+//! Geometry asset descriptor version for PAK v4.
+constexpr uint8_t kGeometryAssetVersion = v3::kGeometryAssetVersion;
+
+//=== PAK Header (v4) ===----------------------------------------------------//
+
+#pragma pack(push, 1)
+struct PakHeader {
+  char magic[8] = { 'O', 'X', 'P', 'A', 'K', 0, 0, 0 };
+  uint16_t version = 4; //!< Format version (4 for this version)
+  uint16_t content_version = 0; //!< Content version
+  uint8_t guid[16] = {}; //!< Unique identifier for this PAK
+  uint8_t reserved[228] = {}; //!< Reserved for future use
+};
+#pragma pack(pop)
+static_assert(sizeof(PakHeader) == 256);
+
+//=== Texture Payload Structures (v4) ===------------------------------------//
+
+//! Packing policy identifier stored in texture payload headers.
+/*!
+  Identifies the alignment and packing strategy used for subresource data
+  within a texture payload. The runtime loader uses this to correctly
+  interpret offsets and pitches.
+*/
+enum class TexturePackingPolicyId : uint8_t {
+  kD3D12 = 1, //!< D3D12 alignment: 256-byte row pitch, 512-byte subresource
+  kTightPacked = 2, //!< Minimal alignment; suitable for Vulkan or offline tools
+};
+
+//! Extensibility flags for texture payloads.
+/*!
+  Provides optional metadata about the texture payload content.
+*/
+enum class TexturePayloadFlags : uint8_t {
+  kNone = 0,
+  kPremultipliedAlpha = (1 << 0), //!< Alpha is premultiplied
+  kTailMipsUncompressed
+  = (1 << 1), //!< Tail mips stored uncompressed (reserved)
+  // Bits 2-7 reserved for future use.
+};
+
+//! Bitwise OR for TexturePayloadFlags.
+[[nodiscard]] constexpr auto operator|(TexturePayloadFlags lhs,
+  TexturePayloadFlags rhs) noexcept -> TexturePayloadFlags
+{
+  return static_cast<TexturePayloadFlags>(
+    static_cast<uint8_t>(lhs) | static_cast<uint8_t>(rhs));
+}
+
+//! Bitwise AND for TexturePayloadFlags.
+[[nodiscard]] constexpr auto operator&(TexturePayloadFlags lhs,
+  TexturePayloadFlags rhs) noexcept -> TexturePayloadFlags
+{
+  return static_cast<TexturePayloadFlags>(
+    static_cast<uint8_t>(lhs) & static_cast<uint8_t>(rhs));
+}
+
+//! Check if a flag is set.
+[[nodiscard]] constexpr auto HasFlag(
+  TexturePayloadFlags flags, TexturePayloadFlags flag) noexcept -> bool
+{
+  return (static_cast<uint8_t>(flags) & static_cast<uint8_t>(flag)) != 0;
+}
+
+//! Per-subresource layout descriptor within a texture payload.
+/*!
+ Stored as an array immediately after `TexturePayloadHeader`.
+ Subresources are ordered: layer 0 mips 0..N-1, layer 1 mips 0..N-1, ...
+*/
+#pragma pack(push, 1)
+struct SubresourceLayout {
+  uint32_t offset_bytes = 0; //!< Offset from start of payload data section
+  uint32_t row_pitch_bytes = 0; //!< Row pitch (may include alignment padding)
+  uint32_t size_bytes = 0; //!< Total bytes of this subresource
+};
+#pragma pack(pop)
+static_assert(sizeof(SubresourceLayout) == 12);
+
+//! Magic value for texture payload headers: 'OTX1' as little-endian.
+inline constexpr uint32_t kTexturePayloadMagic = 0x3158544F;
+
+//! Header at the start of each texture's payload data in `textures.data`.
+/*!
+ The runtime loader reads this header to determine subresource layout without
+ hardcoding backend-specific alignment rules.
+
+ ### Memory Layout
+
+ ```
+ TexturePayloadHeader (28 bytes)
+ SubresourceLayout[subresource_count] (12 bytes each)
+ [padding to data_offset_bytes]
+ Pixel/block data for all subresources
+ ```
+
+ @note `layouts_offset_bytes` is typically `sizeof(TexturePayloadHeader)` (28).
+ @note `data_offset_bytes` is `layouts_offset_bytes + 12 * subresource_count`,
+       possibly padded for alignment.
+*/
+#pragma pack(push, 1)
+struct TexturePayloadHeader {
+  uint32_t magic = kTexturePayloadMagic; //!< 'OTX1' for validation
+  uint8_t packing_policy = 0; //!< TexturePackingPolicyId
+  uint8_t flags = 0; //!< TexturePayloadFlags
+  uint16_t subresource_count = 0; //!< array_layers * mip_levels
+  uint32_t total_payload_size = 0; //!< Total size including header
+  uint32_t layouts_offset_bytes = 0; //!< Offset to SubresourceLayout array
+  uint32_t data_offset_bytes = 0; //!< Offset to pixel/block data
+  uint64_t content_hash = 0; //!< Content hash for validation
+};
+#pragma pack(pop)
+static_assert(sizeof(TexturePayloadHeader) == 28);
+
+} // namespace oxygen::data::pak::v4
+
 namespace oxygen::data::pak {
 //! Default namespace alias for latest version of the PAK format
-using namespace v3;
+using namespace v4;
 } // namespace oxygen::data::pak

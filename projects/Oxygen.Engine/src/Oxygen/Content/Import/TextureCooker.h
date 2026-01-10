@@ -1,0 +1,263 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <span>
+#include <string>
+#include <vector>
+
+#include <Oxygen/Content/Import/ScratchImage.h>
+#include <Oxygen/Content/Import/TextureImportDesc.h>
+#include <Oxygen/Content/Import/TextureImportError.h>
+#include <Oxygen/Content/Import/TexturePackingPolicy.h>
+#include <Oxygen/Content/Import/TextureSourceAssembly.h>
+#include <Oxygen/Content/api_export.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/PakFormat.h>
+
+namespace oxygen::content::import {
+
+//===----------------------------------------------------------------------===//
+// Cooked Texture Descriptor
+//===----------------------------------------------------------------------===//
+
+//! Runtime descriptor for a cooked texture (goes into textures.table).
+/*!
+  Contains all metadata needed by the runtime to create a texture resource.
+  This is the in-memory representation that will be serialized into the
+  cooked asset.
+*/
+struct TextureResourceDesc {
+  //! Type of texture (2D, 3D, Cube, etc.).
+  TextureType texture_type = TextureType::kTexture2D;
+
+  //! Width in pixels at mip 0.
+  uint32_t width = 0;
+
+  //! Height in pixels at mip 0.
+  uint32_t height = 0;
+
+  //! Depth for 3D textures at mip 0, otherwise 1.
+  uint16_t depth = 1;
+
+  //! Number of array layers (6 for cube maps).
+  uint16_t array_layers = 1;
+
+  //! Number of mip levels.
+  uint16_t mip_levels = 1;
+
+  //! Pixel format of the stored data.
+  Format format = Format::kUnknown;
+
+  //! Packing policy identifier (e.g., "d3d12", "tight").
+  std::string packing_policy_id;
+
+  //! Content hash for deduplication (XXH3).
+  uint64_t content_hash = 0;
+};
+
+//===----------------------------------------------------------------------===//
+// Cooked Texture Payload
+//===----------------------------------------------------------------------===//
+
+//! Result of cooking a texture.
+/*!
+  Contains the runtime descriptor and the complete payload bytes including
+  header, layout table, and subresource data.
+
+  ### Payload Format
+
+  The payload is structured as:
+  1. **Header** (fixed size): TextureResourceDesc serialized
+  2. **Layout Table** (variable): SubresourceLayout array
+  3. **Subresource Data** (variable): Aligned pixel data for each subresource
+
+  @see TextureResourceDesc, SubresourceLayout
+*/
+struct CookedTexturePayload {
+  //! Runtime descriptor (will be serialized into textures.table).
+  TextureResourceDesc desc;
+
+  //! Complete payload bytes (header + layout table + subresource data).
+  std::vector<std::byte> payload;
+
+  //! Subresource layouts for the payload.
+  std::vector<data::pak::SubresourceLayout> layouts;
+};
+
+//===----------------------------------------------------------------------===//
+// Texture Cooker API
+//===----------------------------------------------------------------------===//
+
+//! Cook a single-source texture from raw image bytes.
+/*!
+  Main entry point for cooking textures from a single source image file.
+  Handles the complete pipeline:
+
+  1. **Decode**: Source bytes → working format (RGBA8 or RGBA32Float)
+  2. **Transform**: Color space conversion, HDR processing
+  3. **Mip Generation**: Full chain, limited count, or none
+  4. **Content Processing**: Normal map handling, etc.
+  5. **Compression**: BC7 encoding if requested
+  6. **Packing**: Aligned layout according to packing policy
+
+  @param source_bytes Raw bytes of the source image (PNG, JPG, HDR, EXR, etc.)
+  @param desc         Import descriptor specifying how to cook the texture
+  @param policy       Packing policy for the target backend
+  @return Cooked payload on success, or TextureImportError on failure
+
+  @see ApplyPreset for easy descriptor configuration
+  @see TextureSourceSet for multi-source textures (cubemaps, arrays)
+*/
+[[nodiscard]] OXGN_CNTT_API auto CookTexture(
+  std::span<const std::byte> source_bytes, const TextureImportDesc& desc,
+  const ITexturePackingPolicy& policy)
+  -> std::expected<CookedTexturePayload, TextureImportError>;
+
+//! Cook a texture from an already-decoded ScratchImage.
+/*!
+  Use this overload when you have already decoded/processed the image
+  (e.g., after equirectangular-to-cubemap conversion).
+
+  Skips the decode stage and proceeds directly to:
+  1. **Transform**: Color space conversion, HDR processing
+  2. **Mip Generation**: Full chain, limited count, or none
+  3. **Content Processing**: Normal map handling, etc.
+  4. **Compression**: BC7 encoding if requested
+  5. **Packing**: Aligned layout according to packing policy
+
+  @param image  Pre-decoded ScratchImage (takes ownership via move)
+  @param desc   Import descriptor specifying how to cook the texture
+  @param policy Packing policy for the target backend
+  @return Cooked payload on success, or TextureImportError on failure
+
+  @see ConvertEquirectangularToCube for HDR panorama → cubemap workflow
+*/
+[[nodiscard]] OXGN_CNTT_API auto CookTexture(ScratchImage&& image,
+  const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
+  -> std::expected<CookedTexturePayload, TextureImportError>;
+
+//! Cook a multi-source texture (cube maps, arrays, 3D volumes).
+/*!
+  Assembles multiple source files into a single texture.
+
+  Each source in the TextureSourceSet is decoded and placed into the
+  appropriate subresource position (array layer, mip level, depth slice).
+
+  @param sources Set of source files mapped to subresources
+  @param desc    Import descriptor specifying how to cook the texture
+  @param policy  Packing policy for the target backend
+  @return Cooked payload on success, or TextureImportError on failure
+
+  ### Example: Cube Map from 6 Face Images
+
+  ```cpp
+  TextureSourceSet sources;
+  sources.AddCubeFace(CubeFace::kPositiveX, LoadFile("sky_px.hdr"), "px");
+  sources.AddCubeFace(CubeFace::kNegativeX, LoadFile("sky_nx.hdr"), "nx");
+  // ... add remaining faces
+
+  TextureImportDesc desc;
+  ApplyPreset(desc, TexturePreset::kHdrEnvironment);
+  desc.texture_type = TextureType::kTextureCube;
+
+  auto result = CookTexture(sources, desc, D3D12PackingPolicy::Instance());
+  ```
+
+  @see TextureSourceSet for source assembly helpers
+  @see ApplyPreset for easy descriptor configuration
+*/
+[[nodiscard]] OXGN_CNTT_API auto CookTexture(const TextureSourceSet& sources,
+  const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
+  -> std::expected<CookedTexturePayload, TextureImportError>;
+
+//===----------------------------------------------------------------------===//
+// Internal Pipeline Stages (Exposed for Testing)
+//===----------------------------------------------------------------------===//
+
+namespace detail {
+
+  //! Decode source bytes to a working format ScratchImage.
+  /*!
+    @param source_bytes Raw source image data
+    @param desc         Import descriptor with decode options
+    @return Decoded ScratchImage or error
+  */
+  [[nodiscard]] OXGN_CNTT_API auto DecodeSource(
+    std::span<const std::byte> source_bytes, const TextureImportDesc& desc)
+    -> std::expected<ScratchImage, TextureImportError>;
+
+  //! Convert image to the working format for processing.
+  /*!
+    Ensures the image is in a format suitable for processing:
+    - LDR content: RGBA8UNorm or RGBA32Float
+    - HDR content: RGBA32Float
+
+    @param image Decoded image
+    @param desc  Import descriptor
+    @return Converted image or error
+  */
+  [[nodiscard]] OXGN_CNTT_API auto ConvertToWorkingFormat(
+    ScratchImage&& image, const TextureImportDesc& desc)
+    -> std::expected<ScratchImage, TextureImportError>;
+
+  //! Apply content-specific processing (normal maps, HDR, etc.).
+  /*!
+    @param image Working format image
+    @param desc  Import descriptor
+    @return Processed image or error
+  */
+  [[nodiscard]] OXGN_CNTT_API auto ApplyContentProcessing(
+    ScratchImage&& image, const TextureImportDesc& desc)
+    -> std::expected<ScratchImage, TextureImportError>;
+
+  //! Generate mip chain according to mip policy.
+  /*!
+    @param image Single-mip image
+    @param desc  Import descriptor with mip settings
+    @return Image with mip chain or error
+  */
+  [[nodiscard]] OXGN_CNTT_API auto GenerateMips(
+    ScratchImage&& image, const TextureImportDesc& desc)
+    -> std::expected<ScratchImage, TextureImportError>;
+
+  //! Convert to output format (including BC7 compression).
+  /*!
+    @param image Processed image with mips
+    @param desc  Import descriptor with output format settings
+    @return Output format image or error
+  */
+  [[nodiscard]] OXGN_CNTT_API auto ConvertToOutputFormat(
+    ScratchImage&& image, const TextureImportDesc& desc)
+    -> std::expected<ScratchImage, TextureImportError>;
+
+  //! Pack subresource data according to policy.
+  /*!
+    @param image  Final image in output format
+    @param policy Packing policy for alignment
+    @return Packed payload bytes
+  */
+  [[nodiscard]] OXGN_CNTT_API auto PackSubresources(const ScratchImage& image,
+    const ITexturePackingPolicy& policy) -> std::vector<std::byte>;
+
+  //! Compute content hash for deduplication.
+  /*!
+    Uses XXH3 to hash the complete payload for content-based deduplication.
+
+    @param payload Payload bytes to hash
+    @return 64-bit content hash
+  */
+  [[nodiscard]] OXGN_CNTT_API auto ComputeContentHash(
+    std::span<const std::byte> payload) noexcept -> uint64_t;
+
+} // namespace detail
+
+} // namespace oxygen::content::import

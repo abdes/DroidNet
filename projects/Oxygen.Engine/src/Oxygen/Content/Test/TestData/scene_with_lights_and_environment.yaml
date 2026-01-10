@@ -1,5 +1,5 @@
 # Scene asset with lights and a SceneEnvironment block (v3)
-version: 3
+version: 4
 content_version: 1
 
 buffers:

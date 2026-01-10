@@ -72,7 +72,9 @@ add_dependencies("${META_MODULE_NAME}.Loaders.Tests" pakgen_editable_install)
 m_gtest_program(
   Importers
   SOURCES
+    "Bc7Encoder_test.cpp"
     "ImageDecode_test.cpp"
+    "ImageProcessing_test.cpp"
     "FbxImporter_fake_test.cpp"
     "FbxImporter_materials_test.cpp"
     "FbxImporter_geometry_test.cpp"
@@ -80,6 +82,12 @@ m_gtest_program(
     "FbxImporter_units_axes_test.cpp"
     "FbxImporterTest.h"
     "LooseCookedWriter_test.cpp"
+    "ScratchImage_test.cpp"
+    "TextureCooker_basic_test.cpp"
+    "TextureImportPresets_test.cpp"
+    "TexturePackingPolicy_test.cpp"
+    "TextureSourceAssembly_test.cpp"
+    "TextureEmissionUtils_test.cpp"
 )
 target_compile_definitions(
   Oxygen.Content.Importers.Tests

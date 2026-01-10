@@ -27,6 +27,11 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/Import/ImageDecode.h>
+#include <Oxygen/Content/Import/TextureCooker.h>
+#include <Oxygen/Content/Import/TextureImportPresets.h>
+#include <Oxygen/Content/Import/TexturePackingPolicy.h>
+#include <Oxygen/Content/Import/TextureSourceAssembly.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/ViewPort.h>
@@ -55,7 +60,6 @@
 
 #if defined(OXYGEN_WINDOWS)
 #  include <shobjidl_core.h>
-#  include <wincodec.h>
 #  include <windows.h>
 #  include <wrl/client.h>
 #endif
@@ -67,112 +71,51 @@ using oxygen::Vec3;
 
 #if defined(OXYGEN_WINDOWS)
 
-class ScopedCoInitialize {
-public:
-  ScopedCoInitialize()
-  {
-    const HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    initialized_ = SUCCEEDED(hr);
-    // If COM is already initialized in a different mode, we proceed without
-    // owning CoUninitialize() for this scope.
-    if (hr == RPC_E_CHANGED_MODE) {
-      initialized_ = false;
-    }
-  }
-
-  ~ScopedCoInitialize()
-  {
-    if (initialized_) {
-      CoUninitialize();
-    }
-  }
-
-  ScopedCoInitialize(const ScopedCoInitialize&) = delete;
-  ScopedCoInitialize& operator=(const ScopedCoInitialize&) = delete;
-  ScopedCoInitialize(ScopedCoInitialize&&) = delete;
-  ScopedCoInitialize& operator=(ScopedCoInitialize&&) = delete;
-
-private:
-  bool initialized_ { false };
-};
-
-auto TryBrowseForPngFile(std::string& out_utf8_path) -> bool
-{
-  ScopedCoInitialize com;
-
-  Microsoft::WRL::ComPtr<IFileOpenDialog> dlg;
-  const HRESULT hr = CoCreateInstance(
-    CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg));
-  if (FAILED(hr) || !dlg) {
-    return false;
-  }
-
-  constexpr COMDLG_FILTERSPEC kFilters[] = {
-    { L"PNG images (*.png)", L"*.png" },
-    { L"All files (*.*)", L"*.*" },
-  };
-  (void)dlg->SetFileTypes(static_cast<UINT>(std::size(kFilters)), kFilters);
-  (void)dlg->SetDefaultExtension(L"png");
-
-  const HRESULT show_hr = dlg->Show(nullptr);
-  if (FAILED(show_hr)) {
-    return false;
-  }
-
-  Microsoft::WRL::ComPtr<IShellItem> item;
-  if (FAILED(dlg->GetResult(&item)) || !item) {
-    return false;
-  }
-
-  PWSTR wide_path = nullptr;
-  const HRESULT name_hr = item->GetDisplayName(SIGDN_FILESYSPATH, &wide_path);
-  if (FAILED(name_hr) || !wide_path) {
-    return false;
-  }
-
-  std::string utf8;
-  oxygen::string_utils::WideToUtf8(wide_path, utf8);
-  CoTaskMemFree(wide_path);
-
-  if (utf8.empty()) {
-    return false;
-  }
-
-  out_utf8_path = std::move(utf8);
-  return true;
-}
-
 auto TryBrowseForImageFile(std::string& out_utf8_path) -> bool
 {
-  ScopedCoInitialize com;
+  // Initialize COM for this scope
+  const HRESULT hr_init = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  const bool should_uninit = SUCCEEDED(hr_init);
+
+  auto cleanup = [should_uninit]() {
+    if (should_uninit) {
+      CoUninitialize();
+    }
+  };
 
   Microsoft::WRL::ComPtr<IFileOpenDialog> dlg;
   const HRESULT hr = CoCreateInstance(
     CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg));
   if (FAILED(hr) || !dlg) {
+    cleanup();
     return false;
   }
 
   constexpr COMDLG_FILTERSPEC kFilters[] = {
-    { L"Images (*.jpg;*.jpeg;*.png)", L"*.jpg;*.jpeg;*.png" },
+    { L"Images (*.jpg;*.jpeg;*.png;*.hdr;*.exr)",
+      L"*.jpg;*.jpeg;*.png;*.hdr;*.exr" },
+    { L"HDR/EXR (*.hdr;*.exr)", L"*.hdr;*.exr" },
     { L"All files (*.*)", L"*.*" },
   };
   (void)dlg->SetFileTypes(static_cast<UINT>(std::size(kFilters)), kFilters);
-  (void)dlg->SetDefaultExtension(L"jpg");
+  (void)dlg->SetDefaultExtension(L"hdr");
 
   const HRESULT show_hr = dlg->Show(nullptr);
   if (FAILED(show_hr)) {
+    cleanup();
     return false;
   }
 
   Microsoft::WRL::ComPtr<IShellItem> item;
   if (FAILED(dlg->GetResult(&item)) || !item) {
+    cleanup();
     return false;
   }
 
   PWSTR wide_path = nullptr;
   const HRESULT name_hr = item->GetDisplayName(SIGDN_FILESYSPATH, &wide_path);
   if (FAILED(name_hr) || !wide_path) {
+    cleanup();
     return false;
   }
 
@@ -180,87 +123,13 @@ auto TryBrowseForImageFile(std::string& out_utf8_path) -> bool
   oxygen::string_utils::WideToUtf8(wide_path, utf8);
   CoTaskMemFree(wide_path);
 
+  cleanup();
+
   if (utf8.empty()) {
     return false;
   }
 
   out_utf8_path = std::move(utf8);
-  return true;
-}
-
-auto DecodeImageRgba8Wic(const std::filesystem::path& file_path,
-  std::vector<std::byte>& out_rgba8, std::uint32_t& out_width,
-  std::uint32_t& out_height, std::string& out_error) -> bool
-{
-  out_rgba8.clear();
-  out_width = 0;
-  out_height = 0;
-
-  ScopedCoInitialize com;
-
-  std::wstring wide_path;
-  oxygen::string_utils::Utf8ToWide(file_path.u8string(), wide_path);
-
-  Microsoft::WRL::ComPtr<IWICImagingFactory> factory;
-  HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr,
-    CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory));
-  if (FAILED(hr) || !factory) {
-    out_error = "WIC factory unavailable";
-    return false;
-  }
-
-  Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
-  hr = factory->CreateDecoderFromFilename(wide_path.c_str(), nullptr,
-    GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder);
-  if (FAILED(hr) || !decoder) {
-    out_error = "Failed to open/decode image";
-    return false;
-  }
-
-  Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
-  hr = decoder->GetFrame(0, &frame);
-  if (FAILED(hr) || !frame) {
-    out_error = "Failed to read image frame";
-    return false;
-  }
-
-  UINT w = 0;
-  UINT h = 0;
-  hr = frame->GetSize(&w, &h);
-  if (FAILED(hr) || w == 0 || h == 0) {
-    out_error = "Invalid image size";
-    return false;
-  }
-
-  Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
-  hr = factory->CreateFormatConverter(&converter);
-  if (FAILED(hr) || !converter) {
-    out_error = "Failed to create WIC format converter";
-    return false;
-  }
-
-  hr = converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppRGBA,
-    WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom);
-  if (FAILED(hr)) {
-    out_error = "Failed to convert to RGBA8";
-    return false;
-  }
-
-  const std::uint32_t stride = static_cast<std::uint32_t>(w) * 4U;
-  const std::size_t size_bytes
-    = static_cast<std::size_t>(stride) * static_cast<std::size_t>(h);
-  out_rgba8.resize(size_bytes);
-
-  hr = converter->CopyPixels(nullptr, stride, static_cast<UINT>(size_bytes),
-    reinterpret_cast<BYTE*>(out_rgba8.data()));
-  if (FAILED(hr)) {
-    out_error = "Failed to copy pixels";
-    out_rgba8.clear();
-    return false;
-  }
-
-  out_width = static_cast<std::uint32_t>(w);
-  out_height = static_cast<std::uint32_t>(h);
   return true;
 }
 
@@ -560,6 +429,30 @@ auto FlipRgba8Vertically(std::span<std::byte> rgba8, const std::uint32_t width,
     std::memcpy(row0, row1, row_bytes);
     std::memcpy(row1, tmp.data(), row_bytes);
   }
+}
+
+//! Read a file into a byte vector.
+auto ReadFileBytes(const std::filesystem::path& path,
+  std::vector<std::byte>& out_bytes, std::string& out_error) -> bool
+{
+  out_bytes.clear();
+  std::ifstream file(path, std::ios::binary | std::ios::ate);
+  if (!file.is_open()) {
+    out_error = "Failed to open file";
+    return false;
+  }
+
+  const auto file_size = file.tellg();
+  file.seekg(0, std::ios::beg);
+
+  out_bytes.resize(static_cast<std::size_t>(file_size));
+  if (!file.read(reinterpret_cast<char*>(out_bytes.data()),
+        static_cast<std::streamsize>(file_size))) {
+    out_error = "Failed to read file";
+    out_bytes.clear();
+    return false;
+  }
+  return true;
 }
 
 auto ApplyUvOriginFix(const glm::vec2 scale, const glm::vec2 offset,
@@ -953,29 +846,151 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     CHECK_F(attached, "Failed to attach PointLight to Fill");
   }
 
-  if (png_load_requested_) {
-    png_load_requested_ = false;
+  if (img_load_requested_) {
+    img_load_requested_ = false;
 
-    const std::filesystem::path png_path { std::string { png_path_.data() } };
-    if (png_path.empty()) {
-      png_status_message_ = "No PNG path provided";
+    const std::filesystem::path img_path { std::string { img_path_.data() } };
+    if (img_path.empty()) {
+      img_status_message_ = "No image path provided";
     } else {
       auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
       if (!asset_loader) {
-        png_status_message_ = "AssetLoader unavailable";
+        img_status_message_ = "AssetLoader unavailable";
       } else {
-#if !defined(OXYGEN_WINDOWS)
-        png_status_message_ = "PNG loading only supported on Windows";
-#else
-        std::string decode_error;
-        if (!DecodeImageRgba8Wic(
-              png_path, png_rgba8_, png_width_, png_height_, decode_error)) {
-          png_status_message_
-            = decode_error.empty() ? "PNG decode failed" : decode_error;
+        // Read file and cook using the high-level texture import API
+        using namespace oxygen::content::import;
+        std::string error;
+        std::vector<std::byte> file_bytes;
+
+        if (!ReadFileBytes(img_path, file_bytes, error)) {
+          img_status_message_ = error;
         } else {
-          png_reupload_requested_ = true;
+          // Check if source is HDR format (for user feedback)
+          const bool source_is_hdr
+            = IsHdrFormat(file_bytes, img_path.extension().string());
+
+          // Configure import descriptor using presets
+          TextureImportDesc desc;
+          ApplyPreset(desc, TexturePreset::kAlbedo);
+          desc.source_id = img_path.filename().string();
+          desc.mip_policy
+            = generate_mips_ ? MipPolicy::kFullChain : MipPolicy::kNone;
+
+          // HDR handling: user controls whether to tonemap
+          // Use kError mode so the bake_hdr_to_ldr flag is respected.
+          desc.hdr_handling = HdrHandling::kError;
+          desc.bake_hdr_to_ldr = tonemap_hdr_to_ldr_;
+          desc.exposure_ev = hdr_exposure_ev_;
+
+          // Output format from user selection
+          switch (img_output_format_idx_) {
+          case 0: // RGBA8 (works with TextureBinder)
+            desc.output_format = oxygen::Format::kRGBA8UNormSRGB;
+            desc.bc7_quality = Bc7Quality::kNone;
+            break;
+          case 1: // BC7 (importer works, TextureBinder upload fails)
+            desc.output_format = oxygen::Format::kBC7UNormSRGB;
+            desc.bc7_quality = Bc7Quality::kDefault;
+            break;
+          case 2: // RGBA16F (importer works, TextureBinder upload fails)
+            desc.output_format = oxygen::Format::kRGBA16Float;
+            desc.bc7_quality = Bc7Quality::kNone;
+            break;
+          case 3: // RGBA32F (importer works, TextureBinder upload fails)
+            desc.output_format = oxygen::Format::kRGBA32Float;
+            desc.bc7_quality = Bc7Quality::kNone;
+            break;
+          default:
+            desc.output_format = oxygen::Format::kRGBA8UNormSRGB;
+            desc.bc7_quality = Bc7Quality::kNone;
+            break;
+          }
+
+          // Cook the texture
+          auto cooked
+            = CookTexture(file_bytes, desc, D3D12PackingPolicy::Instance());
+
+          if (!cooked.has_value()) {
+            // Provide better error message for common HDR→LDR mistake
+            if (cooked.error() == TextureImportError::kHdrRequiresFloatFormat
+              && source_is_hdr && !tonemap_hdr_to_ldr_) {
+              img_status_message_ = "HDR image requires 'Tonemap HDR to LDR' "
+                                    "enabled for RGBA8 output";
+            } else {
+              img_status_message_ = to_string(cooked.error());
+            }
+          } else {
+            // Use a fresh key each upload so the renderer doesn't keep an
+            // older bindless entry for the same key.
+            custom_texture_key_ = asset_loader->MintSyntheticTextureKey();
+
+            // Keep a non-zero resource index for the material-side demo path.
+            if (custom_texture_resource_index_ == 0U) {
+              custom_texture_resource_index_ = 1U;
+            } else {
+              ++custom_texture_resource_index_;
+            }
+
+            // Build the packed buffer with descriptor + payload
+            using oxygen::data::pak::v2::TextureResourceDesc;
+            TextureResourceDesc pak_desc {};
+            pak_desc.data_offset = static_cast<oxygen::data::pak::v2::OffsetT>(
+              sizeof(TextureResourceDesc));
+            pak_desc.size_bytes
+              = static_cast<oxygen::data::pak::v2::DataBlobSizeT>(
+                cooked->payload.size());
+            pak_desc.texture_type
+              = static_cast<std::uint8_t>(cooked->desc.texture_type);
+            pak_desc.compression_type = 0;
+            pak_desc.width = cooked->desc.width;
+            pak_desc.height = cooked->desc.height;
+            pak_desc.depth = cooked->desc.depth;
+            pak_desc.array_layers = cooked->desc.array_layers;
+            pak_desc.mip_levels = cooked->desc.mip_levels;
+            pak_desc.format = static_cast<std::uint8_t>(cooked->desc.format);
+            pak_desc.alignment = 256;
+
+            std::vector<std::uint8_t> packed;
+            packed.resize(sizeof(TextureResourceDesc) + cooked->payload.size());
+            std::memcpy(packed.data(), &pak_desc, sizeof(TextureResourceDesc));
+            std::memcpy(packed.data() + sizeof(TextureResourceDesc),
+              cooked->payload.data(), cooked->payload.size());
+
+            auto tex = co_await asset_loader
+                         ->LoadResourceAsync<oxygen::data::TextureResource>(
+                           oxygen::content::CookedResourceData<
+                             oxygen::data::TextureResource> {
+                             .key = custom_texture_key_,
+                             .bytes = std::span<const std::uint8_t>(
+                               packed.data(), packed.size()),
+                           });
+
+            if (!tex) {
+              img_status_message_ = "Upload failed (TextureBinder limitation?)";
+            } else {
+              img_last_width_ = static_cast<int>(tex->GetWidth());
+              img_last_height_ = static_cast<int>(tex->GetHeight());
+
+              // Build informative status message showing what was cooked
+              std::string status = "Loaded";
+              if (source_is_hdr) {
+                status += tonemap_hdr_to_ldr_ ? " (HDR→LDR)" : " (HDR)";
+              }
+              // Show output format
+              constexpr const char* kShortFormats[]
+                = { "RGBA8", "BC7", "RGBA16F", "RGBA32F" };
+              if (img_output_format_idx_ >= 0 && img_output_format_idx_ < 4) {
+                status += " [";
+                status += kShortFormats[img_output_format_idx_];
+                status += "]";
+              }
+              img_status_message_ = status;
+
+              texture_index_mode_ = TextureIndexMode::kCustom;
+              cube_needs_rebuild_ = true;
+            }
+          }
         }
-#endif
       }
     }
   }
@@ -992,259 +1007,267 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
       if (!asset_loader) {
         skybox_status_message_ = "AssetLoader unavailable";
       } else {
-#if !defined(OXYGEN_WINDOWS)
-        skybox_status_message_ = "Skybox loading only supported on Windows";
-#else
-        std::string decode_error;
-        if (!DecodeImageRgba8Wic(img_path, skybox_rgba8_, skybox_width_,
-              skybox_height_, decode_error)) {
-          skybox_status_message_
-            = decode_error.empty() ? "Skybox decode failed" : decode_error;
+        // Unified skybox loading path with manual layout/format control
+        using namespace oxygen::content::import;
+
+        std::string error;
+        std::vector<std::byte> file_bytes;
+
+        if (!ReadFileBytes(img_path, file_bytes, error)) {
+          skybox_status_message_ = error;
         } else {
-          skybox_reupload_requested_ = true;
-        }
-#endif
-      }
-    }
-  }
+          // Decode the image
+          DecodeOptions decode_opts;
+          decode_opts.flip_y = skybox_flip_y_;
+          decode_opts.force_rgba = true;
+          decode_opts.extension_hint = img_path.extension().string();
 
-  if (skybox_reupload_requested_) {
-    skybox_reupload_requested_ = false;
-
-#if !defined(OXYGEN_WINDOWS)
-    skybox_status_message_ = "Skybox upload only supported on Windows";
-#else
-    if (skybox_rgba8_.empty() || skybox_width_ == 0U || skybox_height_ == 0U) {
-      skybox_status_message_ = "No decoded skybox pixels";
-    } else {
-      auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
-      if (!asset_loader) {
-        skybox_status_message_ = "AssetLoader unavailable";
-      } else {
-        std::vector<std::byte> cubemap_padded;
-        std::uint32_t face_size = 0U;
-        std::string pack_error;
-        if (!TryBuildCubemapRgba8FromImageLayout(skybox_rgba8_, skybox_width_,
-              skybox_height_, cubemap_padded, face_size, pack_error)) {
-          skybox_status_message_
-            = pack_error.empty() ? "Skybox pack failed" : pack_error;
-        } else {
-          // Estimate sun direction from the +Z face (face index 4) to match
-          // Oxygen's Z-up convention.
-          Vec3 sun_ray_dir_ws { 0.0f, 0.0f, 1.0f };
-          sun_ray_dir_from_skybox_ = TryEstimateSunRayDirFromCubemapFace(
-            cubemap_padded, face_size, 4U, sun_ray_dir_ws);
-          if (sun_ray_dir_from_skybox_) {
-            sun_ray_dir_ws_ = sun_ray_dir_ws;
-          }
-
-          using oxygen::data::pak::v2::TextureResourceDesc;
-
-          // Use a fresh key each upload so the renderer doesn't keep an older
-          // bindless entry for the same key.
-          skybox_texture_key_ = asset_loader->MintSyntheticTextureKey();
-
-          TextureResourceDesc desc {};
-          desc.data_offset = static_cast<oxygen::data::pak::v2::OffsetT>(
-            sizeof(TextureResourceDesc));
-          desc.size_bytes = static_cast<oxygen::data::pak::v2::DataBlobSizeT>(
-            cubemap_padded.size());
-          desc.texture_type
-            = static_cast<std::uint8_t>(oxygen::TextureType::kTextureCube);
-          desc.compression_type = 0;
-          desc.width = face_size;
-          desc.height = face_size;
-          desc.depth = 1;
-          desc.array_layers = 6;
-          desc.mip_levels = 1;
-          desc.format = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNorm);
-          desc.alignment = 256;
-
-          std::vector<std::uint8_t> packed;
-          packed.resize(sizeof(TextureResourceDesc) + cubemap_padded.size());
-          std::memcpy(packed.data(), &desc, sizeof(TextureResourceDesc));
-          std::memcpy(packed.data() + sizeof(TextureResourceDesc),
-            cubemap_padded.data(), cubemap_padded.size());
-
-          auto tex = co_await asset_loader->LoadResourceAsync<
-            oxygen::data::TextureResource>(
-            oxygen::content::CookedResourceData<oxygen::data::TextureResource> {
-              .key = skybox_texture_key_,
-              .bytes
-              = std::span<const std::uint8_t>(packed.data(), packed.size()),
-            });
-          if (!tex) {
-            skybox_status_message_ = "Skybox texture decode failed";
+          auto decoded = DecodeToScratchImage(file_bytes, decode_opts);
+          if (!decoded.has_value()) {
+            skybox_status_message_ = to_string(decoded.error());
           } else {
-            skybox_last_face_size_ = static_cast<int>(face_size);
-            skybox_status_message_ = "Loaded";
+            // Convert to cubemap based on selected layout
+            std::optional<ScratchImage> cube_scratch;
+            std::string layout_error;
 
-            // Apply as scene sky and enable sky lighting from the same cubemap.
-            auto env = scene_->GetEnvironment();
-            if (!env) {
-              auto new_env = std::make_unique<scene::SceneEnvironment>();
-              auto& sky = new_env->AddSystem<scene::environment::SkySphere>();
-              sky.SetSource(scene::environment::SkySphereSource::kCubemap);
-              sky.SetCubemapResource(skybox_texture_key_);
+            if (skybox_layout_ == SkyboxLayout::kEquirectangular) {
+              // Equirectangular -> cubemap conversion
+              EquirectToCubeOptions cube_opts;
+              cube_opts.face_size
+                = static_cast<std::uint32_t>(skybox_cube_face_size_);
+              cube_opts.sample_filter = MipFilter::kKaiser;
 
-              auto& sky_light
-                = new_env->AddSystem<scene::environment::SkyLight>();
-              sky_light.SetSource(
-                scene::environment::SkyLightSource::kSpecifiedCubemap);
-              sky_light.SetCubemapResource(skybox_texture_key_);
-              sky_light.SetIntensity(sky_light_intensity_);
-              sky_light.SetDiffuseIntensity(sky_light_diffuse_intensity_);
-              sky_light.SetSpecularIntensity(sky_light_specular_intensity_);
-              sky_light.SetTintRgb(Vec3 { 1.0F, 1.0F, 1.0F });
-
-              scene_->SetEnvironment(std::move(new_env));
+              auto cube_result
+                = ConvertEquirectangularToCube(decoded.value(), cube_opts);
+              if (!cube_result.has_value()) {
+                layout_error = to_string(cube_result.error());
+              } else {
+                cube_scratch = std::move(*cube_result);
+              }
             } else {
-              auto sky = env->TryGetSystem<scene::environment::SkySphere>();
-              if (!sky) {
-                auto& sky_ref = env->AddSystem<scene::environment::SkySphere>();
-                sky = observer_ptr<scene::environment::SkySphere>(&sky_ref);
-              }
-              sky->SetSource(scene::environment::SkySphereSource::kCubemap);
-              sky->SetCubemapResource(skybox_texture_key_);
+              // Cross/strip layout - extract faces from the decoded image
+              const auto& meta = decoded->Meta();
+              auto view = decoded->GetImage(0, 0);
 
-              auto sky_light
-                = env->TryGetSystem<scene::environment::SkyLight>();
-              if (!sky_light) {
-                auto& sky_light_ref
-                  = env->AddSystem<scene::environment::SkyLight>();
-                sky_light
-                  = observer_ptr<scene::environment::SkyLight>(&sky_light_ref);
+              std::vector<std::byte> rgba8_pixels(
+                view.pixels.begin(), view.pixels.end());
+              std::vector<std::byte> cubemap_padded;
+              std::uint32_t face_size = 0U;
+
+              if (!TryBuildCubemapRgba8FromImageLayout(rgba8_pixels, meta.width,
+                    meta.height, cubemap_padded, face_size, layout_error)) {
+                // layout_error already set
+              } else {
+                // Build a ScratchImage from the extracted faces
+                ScratchImageMeta cube_meta;
+                cube_meta.texture_type = oxygen::TextureType::kTextureCube;
+                cube_meta.width = face_size;
+                cube_meta.height = face_size;
+                cube_meta.depth = 1;
+                cube_meta.array_layers = 6;
+                cube_meta.mip_levels = 1;
+                cube_meta.format = oxygen::Format::kRGBA8UNorm;
+
+                auto scratch = ScratchImage::Create(cube_meta);
+                if (!scratch.IsValid()) {
+                  layout_error = "Failed to allocate cubemap";
+                } else {
+                  // Copy each face
+                  constexpr std::size_t kBytesPerPixel = 4U;
+                  constexpr std::size_t kSrcRowPitchAlign = 256U;
+                  const std::size_t src_row_pitch = AlignUpSize(
+                    face_size * kBytesPerPixel, kSrcRowPitchAlign);
+                  const std::size_t src_slice_pitch = src_row_pitch * face_size;
+
+                  for (uint16_t face = 0; face < 6; ++face) {
+                    auto dst_span = scratch.GetMutablePixels(face, 0);
+                    auto dst_view = scratch.GetImage(face, 0);
+                    const std::size_t src_face_offset = face * src_slice_pitch;
+                    const std::byte* src_face_ptr
+                      = cubemap_padded.data() + src_face_offset;
+
+                    for (uint32_t y = 0; y < face_size; ++y) {
+                      const std::size_t src_row_offset = y * src_row_pitch;
+                      const std::size_t dst_row_offset = y
+                        * static_cast<std::size_t>(dst_view.row_pitch_bytes);
+                      std::memcpy(dst_span.data() + dst_row_offset,
+                        src_face_ptr + src_row_offset,
+                        face_size * kBytesPerPixel);
+                    }
+                  }
+                  cube_scratch = std::move(scratch);
+                }
               }
-              sky_light->SetSource(
-                scene::environment::SkyLightSource::kSpecifiedCubemap);
-              sky_light->SetCubemapResource(skybox_texture_key_);
-              sky_light->SetIntensity(sky_light_intensity_);
-              sky_light->SetDiffuseIntensity(sky_light_diffuse_intensity_);
-              sky_light->SetSpecularIntensity(sky_light_specular_intensity_);
-              sky_light->SetTintRgb(Vec3 { 1.0F, 1.0F, 1.0F });
+            }
+
+            if (!layout_error.empty()) {
+              skybox_status_message_ = layout_error;
+            } else if (!cube_scratch.has_value()) {
+              skybox_status_message_ = "Failed to build cubemap";
+            } else {
+              // Determine output format based on user selection
+              oxygen::Format output_fmt = oxygen::Format::kRGBA8UNormSRGB;
+              bool use_bc7 = false;
+              bool needs_hdr_to_ldr = false;
+              const char* format_name = "RGBA8";
+
+              switch (skybox_output_format_) {
+              case SkyboxOutputFormat::kRGBA8:
+                output_fmt = oxygen::Format::kRGBA8UNormSRGB;
+                needs_hdr_to_ldr = true;
+                format_name = "RGBA8";
+                break;
+              case SkyboxOutputFormat::kRGBA16Float:
+                output_fmt = oxygen::Format::kRGBA16Float;
+                format_name = "RGBA16F";
+                break;
+              case SkyboxOutputFormat::kRGBA32Float:
+                output_fmt = oxygen::Format::kRGBA32Float;
+                format_name = "RGBA32F";
+                break;
+              case SkyboxOutputFormat::kBC7:
+                output_fmt = oxygen::Format::kBC7UNormSRGB;
+                use_bc7 = true;
+                needs_hdr_to_ldr = true;
+                format_name = "BC7";
+                break;
+              }
+
+              // Build import descriptor
+              TextureImportDesc desc;
+              ApplyPreset(desc, TexturePreset::kHdrEnvironment);
+              desc.source_id = img_path.filename().string();
+              desc.width = cube_scratch->Meta().width;
+              desc.height = cube_scratch->Meta().height;
+              desc.array_layers = 6;
+              desc.texture_type = oxygen::TextureType::kTextureCube;
+              desc.output_format = output_fmt;
+              desc.bake_hdr_to_ldr = needs_hdr_to_ldr;
+              desc.mip_policy = MipPolicy::kNone;
+              if (use_bc7) {
+                desc.bc7_quality = Bc7Quality::kDefault;
+              }
+
+              // Cook the cubemap
+              auto cooked = CookTexture(
+                std::move(*cube_scratch), desc, D3D12PackingPolicy::Instance());
+
+              if (!cooked.has_value()) {
+                skybox_status_message_ = to_string(cooked.error());
+              } else {
+                // Build PAK descriptor
+                using oxygen::data::pak::v2::TextureResourceDesc;
+                TextureResourceDesc pak_desc {};
+                pak_desc.data_offset
+                  = static_cast<oxygen::data::pak::v2::OffsetT>(
+                    sizeof(TextureResourceDesc));
+                pak_desc.size_bytes
+                  = static_cast<oxygen::data::pak::v2::DataBlobSizeT>(
+                    cooked->payload.size());
+                pak_desc.texture_type
+                  = static_cast<std::uint8_t>(cooked->desc.texture_type);
+                pak_desc.compression_type = 0;
+                pak_desc.width = cooked->desc.width;
+                pak_desc.height = cooked->desc.height;
+                pak_desc.depth = cooked->desc.depth;
+                pak_desc.array_layers = cooked->desc.array_layers;
+                pak_desc.mip_levels = cooked->desc.mip_levels;
+                pak_desc.format
+                  = static_cast<std::uint8_t>(cooked->desc.format);
+                pak_desc.alignment = 256;
+
+                // Use a fresh key each upload
+                skybox_texture_key_ = asset_loader->MintSyntheticTextureKey();
+
+                std::vector<std::uint8_t> packed;
+                packed.resize(
+                  sizeof(TextureResourceDesc) + cooked->payload.size());
+                std::memcpy(
+                  packed.data(), &pak_desc, sizeof(TextureResourceDesc));
+                std::memcpy(packed.data() + sizeof(TextureResourceDesc),
+                  cooked->payload.data(), cooked->payload.size());
+
+                auto tex = co_await asset_loader
+                             ->LoadResourceAsync<oxygen::data::TextureResource>(
+                               oxygen::content::CookedResourceData<
+                                 oxygen::data::TextureResource> {
+                                 .key = skybox_texture_key_,
+                                 .bytes = std::span<const std::uint8_t>(
+                                   packed.data(), packed.size()),
+                               });
+
+                if (!tex) {
+                  skybox_status_message_ = "Skybox texture upload failed";
+                } else {
+                  skybox_last_face_size_
+                    = static_cast<int>(cube_scratch->Meta().width);
+                  skybox_status_message_
+                    = std::string("Loaded (") + format_name + ")";
+
+                  // Apply as scene sky and enable sky lighting
+                  auto env = scene_->GetEnvironment();
+                  if (!env) {
+                    auto new_env = std::make_unique<scene::SceneEnvironment>();
+                    auto& sky
+                      = new_env->AddSystem<scene::environment::SkySphere>();
+                    sky.SetSource(
+                      scene::environment::SkySphereSource::kCubemap);
+                    sky.SetCubemapResource(skybox_texture_key_);
+
+                    auto& sky_light
+                      = new_env->AddSystem<scene::environment::SkyLight>();
+                    sky_light.SetSource(
+                      scene::environment::SkyLightSource::kSpecifiedCubemap);
+                    sky_light.SetCubemapResource(skybox_texture_key_);
+                    sky_light.SetIntensity(sky_light_intensity_);
+                    sky_light.SetDiffuseIntensity(sky_light_diffuse_intensity_);
+                    sky_light.SetSpecularIntensity(
+                      sky_light_specular_intensity_);
+                    sky_light.SetTintRgb(Vec3 { 1.0F, 1.0F, 1.0F });
+
+                    scene_->SetEnvironment(std::move(new_env));
+                  } else {
+                    auto sky
+                      = env->TryGetSystem<scene::environment::SkySphere>();
+                    if (!sky) {
+                      auto& sky_ref
+                        = env->AddSystem<scene::environment::SkySphere>();
+                      sky
+                        = observer_ptr<scene::environment::SkySphere>(&sky_ref);
+                    }
+                    sky->SetSource(
+                      scene::environment::SkySphereSource::kCubemap);
+                    sky->SetCubemapResource(skybox_texture_key_);
+
+                    auto sky_light
+                      = env->TryGetSystem<scene::environment::SkyLight>();
+                    if (!sky_light) {
+                      auto& sky_light_ref
+                        = env->AddSystem<scene::environment::SkyLight>();
+                      sky_light = observer_ptr<scene::environment::SkyLight>(
+                        &sky_light_ref);
+                    }
+                    sky_light->SetSource(
+                      scene::environment::SkyLightSource::kSpecifiedCubemap);
+                    sky_light->SetCubemapResource(skybox_texture_key_);
+                    sky_light->SetIntensity(sky_light_intensity_);
+                    sky_light->SetDiffuseIntensity(
+                      sky_light_diffuse_intensity_);
+                    sky_light->SetSpecularIntensity(
+                      sky_light_specular_intensity_);
+                    sky_light->SetTintRgb(Vec3 { 1.0F, 1.0F, 1.0F });
+                  }
+                }
+              }
             }
           }
         }
       }
     }
-#endif
   }
 
-  if (png_reupload_requested_) {
-    png_reupload_requested_ = false;
-
-#if !defined(OXYGEN_WINDOWS)
-    png_status_message_ = "PNG upload only supported on Windows";
-#else
-    if (png_rgba8_.empty() || png_width_ == 0U || png_height_ == 0U) {
-      png_status_message_ = "No decoded PNG pixels";
-    } else {
-      auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
-      if (!asset_loader) {
-        png_status_message_ = "AssetLoader unavailable";
-      } else {
-        // Use a fresh key each upload so the renderer doesn't keep an older
-        // bindless entry for the same key.
-        custom_texture_key_ = asset_loader->MintSyntheticTextureKey();
-
-        // Keep a non-zero resource index for the material-side demo path.
-        if (custom_texture_resource_index_ == 0U) {
-          custom_texture_resource_index_ = 1U;
-        } else {
-          ++custom_texture_resource_index_;
-        }
-
-        std::vector<std::byte> rgba8 = png_rgba8_;
-
-        bool flip_on_upload = false;
-        if (orientation_fix_mode_
-          == OrientationFixMode::kNormalizeTextureOnUpload) {
-          if (uv_origin_ != UvOrigin::kTopLeft
-            && image_origin_ == ImageOrigin::kTopLeft) {
-            flip_on_upload = true;
-          }
-          if (uv_origin_ == UvOrigin::kTopLeft
-            && image_origin_ != ImageOrigin::kTopLeft) {
-            flip_on_upload = true;
-          }
-        }
-        if (flip_on_upload) {
-          FlipRgba8Vertically(rgba8, png_width_, png_height_);
-        }
-
-        using oxygen::data::pak::v2::TextureResourceDesc;
-
-        const auto AlignUp = [](const std::size_t value,
-                               const std::size_t alignment) -> std::size_t {
-          if (alignment == 0U) {
-            return value;
-          }
-          const auto mask = alignment - 1U;
-          return (value + mask) & ~mask;
-        };
-
-        // TextureBinder expects cooked texture data to be row-pitch aligned
-        // to 256 bytes when the resource advertises alignment=256.
-        constexpr std::size_t kRowPitchAlignment = 256U;
-        constexpr std::size_t kBytesPerPixel = 4U; // RGBA8
-        const std::size_t bytes_per_row
-          = static_cast<std::size_t>(png_width_) * kBytesPerPixel;
-        const std::size_t row_pitch
-          = AlignUp(bytes_per_row, kRowPitchAlignment);
-        const std::size_t padded_size
-          = row_pitch * static_cast<std::size_t>(png_height_);
-
-        std::vector<std::byte> rgba8_padded;
-        rgba8_padded.resize(padded_size);
-        for (std::uint32_t y = 0; y < png_height_; ++y) {
-          const auto dst_offset = static_cast<std::size_t>(y) * row_pitch;
-          const auto src_offset = static_cast<std::size_t>(y) * bytes_per_row;
-          std::memcpy(rgba8_padded.data() + dst_offset,
-            rgba8.data() + src_offset, bytes_per_row);
-        }
-
-        TextureResourceDesc desc {};
-        desc.data_offset = static_cast<oxygen::data::pak::v2::OffsetT>(
-          sizeof(TextureResourceDesc));
-        desc.size_bytes = static_cast<oxygen::data::pak::v2::DataBlobSizeT>(
-          rgba8_padded.size());
-        desc.texture_type
-          = static_cast<std::uint8_t>(oxygen::TextureType::kTexture2D);
-        desc.compression_type = 0;
-        desc.width = png_width_;
-        desc.height = png_height_;
-        desc.depth = 1;
-        desc.array_layers = 1;
-        desc.mip_levels = 1;
-        desc.format = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNorm);
-        desc.alignment = 256;
-
-        std::vector<std::uint8_t> packed;
-        packed.resize(sizeof(TextureResourceDesc) + rgba8_padded.size());
-        std::memcpy(packed.data(), &desc, sizeof(TextureResourceDesc));
-        std::memcpy(packed.data() + sizeof(TextureResourceDesc),
-          rgba8_padded.data(), rgba8_padded.size());
-
-        auto tex = co_await asset_loader->LoadResourceAsync<
-          oxygen::data::TextureResource>(
-          oxygen::content::CookedResourceData<oxygen::data::TextureResource> {
-            .key = custom_texture_key_,
-            .bytes
-            = std::span<const std::uint8_t>(packed.data(), packed.size()),
-          });
-        if (!tex) {
-          png_status_message_ = "Texture buffer decode failed";
-        } else {
-          png_last_width_ = static_cast<int>(tex->GetWidth());
-          png_last_height_ = static_cast<int>(tex->GetHeight());
-          png_status_message_ = "Loaded";
-          texture_index_mode_ = TextureIndexMode::kCustom;
-          cube_needs_rebuild_ = true;
-        }
-      }
-    }
-#endif
-  }
+  // Legacy PNG reupload path is no longer needed - the high-level CookTexture
+  // API handles everything including mip generation and BC7 compression.
 
   if (cube_needs_rebuild_) {
     const auto res_index = ResolveBaseColorTextureResourceIndex(
@@ -1332,12 +1355,21 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
     co_return;
   }
 
-  if (auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>()) {
-    auto& imgui_module = imgui_module_ref->get();
-    if (auto* imgui_context = imgui_module.GetImGuiContext()) {
-      ImGui::SetCurrentContext(imgui_context);
-    }
+  auto imgui_module_ref
+    = app_.engine ? app_.engine->GetModule<imgui::ImGuiModule>() : std::nullopt;
+
+  if (!imgui_module_ref) {
+    co_return;
   }
+  auto& imgui_module = imgui_module_ref->get();
+  if (!imgui_module.IsWitinFrameScope()) {
+    co_return;
+  }
+  auto* imgui_context = imgui_module.GetImGuiContext();
+  if (imgui_context == nullptr) {
+    co_return;
+  }
+  ImGui::SetCurrentContext(imgui_context);
 
   DrawDebugOverlay(context);
 
@@ -1596,36 +1628,59 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
       }
 
       if (texture_index_mode_ == TextureIndexMode::kCustom) {
-        int custom_idx = static_cast<int>(custom_texture_resource_index_);
-        if (ImGui::InputInt("Resource index", &custom_idx)) {
-          custom_idx = (std::max)(0, custom_idx);
-          custom_texture_resource_index_
-            = static_cast<std::uint32_t>(custom_idx);
-          mat_changed = true;
-          rebuild_requested = true;
-        }
-
-        ImGui::InputText("PNG path", png_path_.data(), png_path_.size());
+        ImGui::InputText("Image path", img_path_.data(), img_path_.size());
         if (ImGui::Button("Browse...")) {
 #if defined(OXYGEN_WINDOWS)
           std::string chosen;
-          if (TryBrowseForPngFile(chosen)) {
+          if (TryBrowseForImageFile(chosen)) {
             std::snprintf(
-              png_path_.data(), png_path_.size(), "%s", chosen.c_str());
+              img_path_.data(), img_path_.size(), "%s", chosen.c_str());
           }
 #endif
         }
         ImGui::SameLine();
-        if (ImGui::Button("Load PNG")) {
-          png_load_requested_ = true;
-          png_status_message_.clear();
+        if (ImGui::Button("Load Image")) {
+          img_load_requested_ = true;
+          img_status_message_.clear();
         }
 
-        if (!png_status_message_.empty()) {
-          ImGui::Text("PNG: %s", png_status_message_.c_str());
+        // Output format selection
+        constexpr const char* kFormatNames[] = {
+          "RGBA8 sRGB",
+          "BC7 sRGB (upload fails)",
+          "RGBA16F (upload fails)",
+          "RGBA32F (upload fails)",
+        };
+        ImGui::SetNextItemWidth(180.0f);
+        ImGui::Combo("Output format", &img_output_format_idx_, kFormatNames,
+          IM_ARRAYSIZE(kFormatNames));
+        if (ImGui::IsItemHovered()) {
+          ImGui::SetTooltip(
+            "RGBA8: Works end-to-end (LDR only)\n"
+            "BC7: Importer works, TextureBinder upload not implemented\n"
+            "RGBA16F/32F: For HDR content, upload not implemented");
         }
-        if (png_last_width_ > 0 && png_last_height_ > 0) {
-          ImGui::Text("Last PNG: %dx%d", png_last_width_, png_last_height_);
+
+        ImGui::Checkbox("Generate mips", &generate_mips_);
+
+        ImGui::Checkbox("Tonemap HDR to LDR", &tonemap_hdr_to_ldr_);
+        if (ImGui::IsItemHovered()) {
+          ImGui::SetTooltip("Converts HDR (float) content to LDR (8-bit).\n"
+                            "Required when: HDR input + RGBA8/BC7 output.\n"
+                            "Disable for: HDR input + RGBA16F/32F output.");
+        }
+        if (tonemap_hdr_to_ldr_) {
+          ImGui::SameLine();
+          ImGui::SetNextItemWidth(100.0f);
+          ImGui::DragFloat(
+            "Exposure (EV)", &hdr_exposure_ev_, 0.1f, -10.0f, 10.0f, "%.1f");
+        }
+
+        if (!img_status_message_.empty()) {
+          ImGui::Text("Status: %s", img_status_message_.c_str());
+        }
+        if (img_last_width_ > 0 && img_last_height_ > 0) {
+          ImGui::Text("Last image: %dx%d", img_last_width_, img_last_height_);
         }
       }
 
@@ -1690,14 +1745,11 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
         extra_flip_u_ = false;
         extra_flip_v_ = false;
         uv_transform_changed = true;
-        if (!png_rgba8_.empty()) {
-          png_reupload_requested_ = true;
-        }
       }
 
       if (ImGui::CollapsingHeader("Advanced", ImGuiTreeNodeFlags_None)) {
         ImGui::TextUnformatted(
-          "These controls exist to understand and debug origin mismatches.");
+          "These controls affect UV transform visualization.");
 
         {
           int mode = static_cast<int>(orientation_fix_mode_);
@@ -1711,17 +1763,8 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
             "Fix: none", &mode, static_cast<int>(OrientationFixMode::kNone));
 
           if (m0 || m1 || m2) {
-            const auto prev = orientation_fix_mode_;
             orientation_fix_mode_ = static_cast<OrientationFixMode>(mode);
             uv_transform_changed = true;
-
-            const bool prev_upload
-              = (prev == OrientationFixMode::kNormalizeTextureOnUpload);
-            const bool next_upload = (orientation_fix_mode_
-              == OrientationFixMode::kNormalizeTextureOnUpload);
-            if ((prev_upload || next_upload) && !png_rgba8_.empty()) {
-              png_reupload_requested_ = next_upload;
-            }
           }
         }
 
@@ -1731,45 +1774,25 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
                 &uv_origin, static_cast<int>(UvOrigin::kBottomLeft))) {
             uv_origin_ = static_cast<UvOrigin>(uv_origin);
             uv_transform_changed = true;
-            if (!png_rgba8_.empty()
-              && orientation_fix_mode_
-                == OrientationFixMode::kNormalizeTextureOnUpload) {
-              png_reupload_requested_ = true;
-            }
           }
           if (ImGui::RadioButton("UV origin: top-left", &uv_origin,
                 static_cast<int>(UvOrigin::kTopLeft))) {
             uv_origin_ = static_cast<UvOrigin>(uv_origin);
             uv_transform_changed = true;
-            if (!png_rgba8_.empty()
-              && orientation_fix_mode_
-                == OrientationFixMode::kNormalizeTextureOnUpload) {
-              png_reupload_requested_ = true;
-            }
           }
         }
 
         {
           int img_origin = static_cast<int>(image_origin_);
-          if (ImGui::RadioButton("Image origin: top-left (PNG/WIC)",
-                &img_origin, static_cast<int>(ImageOrigin::kTopLeft))) {
+          if (ImGui::RadioButton("Image origin: top-left (PNG)", &img_origin,
+                static_cast<int>(ImageOrigin::kTopLeft))) {
             image_origin_ = static_cast<ImageOrigin>(img_origin);
             uv_transform_changed = true;
-            if (!png_rgba8_.empty()
-              && orientation_fix_mode_
-                == OrientationFixMode::kNormalizeTextureOnUpload) {
-              png_reupload_requested_ = true;
-            }
           }
           if (ImGui::RadioButton("Image origin: bottom-left", &img_origin,
                 static_cast<int>(ImageOrigin::kBottomLeft))) {
             image_origin_ = static_cast<ImageOrigin>(img_origin);
             uv_transform_changed = true;
-            if (!png_rgba8_.empty()
-              && orientation_fix_mode_
-                == OrientationFixMode::kNormalizeTextureOnUpload) {
-              png_reupload_requested_ = true;
-            }
           }
         }
 
@@ -1786,14 +1809,6 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
             uv_transform_changed = true;
           }
         }
-
-        if (!png_rgba8_.empty()
-          && orientation_fix_mode_
-            == OrientationFixMode::kNormalizeTextureOnUpload
-          && ImGui::Button("Re-upload PNG")) {
-          png_reupload_requested_ = true;
-          png_status_message_.clear();
-        }
       }
 
       if (uv_transform_changed && cube_material_) {
@@ -1808,11 +1823,6 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
       if (rebuild_requested) {
         cube_needs_rebuild_ = true;
       }
-
-      const auto res_index = ResolveBaseColorTextureResourceIndex(
-        texture_index_mode_, custom_texture_resource_index_);
-      ImGui::Text("BaseColorTexture resource index: %u",
-        static_cast<std::uint32_t>(res_index));
 
       ImGui::EndTabItem();
     }
@@ -1836,6 +1846,67 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
       if (ImGui::Button("Load skybox")) {
         skybox_load_requested_ = true;
         skybox_status_message_.clear();
+      }
+
+      // Layout selection
+      {
+        constexpr const char* kLayoutNames[] = { "Equirectangular (2:1)",
+          "Horizontal Cross (4x3)", "Vertical Cross (3x4)",
+          "Horizontal Strip (6x1)", "Vertical Strip (1x6)" };
+        int layout_idx = static_cast<int>(skybox_layout_);
+        if (ImGui::Combo("Layout", &layout_idx, kLayoutNames,
+              IM_ARRAYSIZE(kLayoutNames))) {
+          skybox_layout_ = static_cast<SkyboxLayout>(layout_idx);
+        }
+      }
+
+      // Output format selection
+      {
+        constexpr const char* kFormatNames[]
+          = { "RGBA8 (LDR)", "RGBA16F (HDR)", "RGBA32F (HDR)", "BC7 (LDR)" };
+        int format_idx = static_cast<int>(skybox_output_format_);
+        if (ImGui::Combo("Output format", &format_idx, kFormatNames,
+              IM_ARRAYSIZE(kFormatNames))) {
+          skybox_output_format_ = static_cast<SkyboxOutputFormat>(format_idx);
+        }
+      }
+
+      // Face size (for equirectangular conversion) - power-of-two only
+      if (skybox_layout_ == SkyboxLayout::kEquirectangular) {
+        constexpr int kFaceSizes[] = { 128, 256, 512, 1024, 2048 };
+        constexpr const char* kFaceSizeNames[]
+          = { "128", "256", "512", "1024", "2048" };
+
+        // Find current index
+        int current_idx = 2; // Default to 512
+        for (int i = 0; i < IM_ARRAYSIZE(kFaceSizes); ++i) {
+          if (kFaceSizes[i] == skybox_cube_face_size_) {
+            current_idx = i;
+            break;
+          }
+        }
+
+        if (ImGui::Combo("Cube face size", &current_idx, kFaceSizeNames,
+              IM_ARRAYSIZE(kFaceSizeNames))) {
+          skybox_cube_face_size_ = kFaceSizes[current_idx];
+          // Reload texture when face size changes
+          skybox_load_requested_ = true;
+        }
+        if (ImGui::IsItemHovered()) {
+          ImGui::SetTooltip(
+            "Resolution of each cube map face (must be power-of-two)");
+        }
+      }
+
+      // Flip Y checkbox
+      if (ImGui::Checkbox("Flip Y", &skybox_flip_y_)) {
+        // Reload texture when flip Y changes
+        skybox_load_requested_ = true;
+      }
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(
+          "Flip image vertically during decode. Enable for standard "
+          "equirectangular HDRIs where Y=0 is at the top.");
       }
 
       if (!skybox_status_message_.empty()) {

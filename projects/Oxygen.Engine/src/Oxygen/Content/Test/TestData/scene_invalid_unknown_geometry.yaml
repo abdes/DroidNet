@@ -1,5 +1,5 @@
 # Invalid scene spec: renderable references a missing geometry asset
-version: 1
+version: 4
 content_version: 1
 
 buffers:

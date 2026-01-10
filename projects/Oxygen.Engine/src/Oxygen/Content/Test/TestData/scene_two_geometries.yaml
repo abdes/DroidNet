@@ -1,5 +1,5 @@
 # Scene asset with renderables referencing two different geometries
-version: 2
+version: 4
 content_version: 1
 
 buffers:

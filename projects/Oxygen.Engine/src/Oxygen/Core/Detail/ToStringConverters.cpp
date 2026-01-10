@@ -9,6 +9,7 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/Scissors.h>
@@ -18,6 +19,18 @@
 #include <Oxygen/Core/Types/ViewPort.h>
 
 // ReSharper disable StringLiteralTypo
+
+auto oxygen::to_string(const ColorSpace value) -> const char*
+{
+  switch (value) {
+    // clang-format off
+    case ColorSpace::kLinear: return "Linear";
+    case ColorSpace::kSRGB:   return "sRGB";
+    // clang-format on
+  }
+
+  return "__NotSupported__";
+}
 
 auto oxygen::to_string(const Format value) -> const char*
 {

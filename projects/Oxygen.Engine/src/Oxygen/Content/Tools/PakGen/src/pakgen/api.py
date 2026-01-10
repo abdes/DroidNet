@@ -75,7 +75,8 @@ def build_pak(options: BuildOptions) -> BuildResult:  # implemented stub
     spec_model = load_models(options.input_spec)
     assets_list = list(spec_model.assets)
     spec_dict = {
-        "version": getattr(spec_model, "version", 1),
+        # PakGen emits PAK format v4 only.
+        "version": 4,
         "content_version": getattr(spec_model, "content_version", 0),
         "buffers": spec_model.buffers,
         "textures": spec_model.textures,
@@ -218,7 +219,8 @@ def plan_dry_run(
     assets_list = list(spec_model.assets)
     spec_dict = {
         "name": Path(spec_path).stem,
-        "version": getattr(spec_model, "version", 1),
+        # PakGen emits PAK format v4 only.
+        "version": 4,
         "content_version": getattr(spec_model, "content_version", 0),
         "buffers": spec_model.buffers,
         "textures": spec_model.textures,

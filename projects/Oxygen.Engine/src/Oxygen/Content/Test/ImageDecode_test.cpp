@@ -4,7 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cstddef>
+#include <cstring>
 #include <filesystem>
 #include <span>
 #include <string_view>
@@ -13,6 +15,8 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Content/Import/ImageDecode.h>
+#include <Oxygen/Content/Import/TextureImportError.h>
+#include <Oxygen/Core/Types/Format.h>
 
 #include "FbxImporterTest.h"
 
@@ -143,6 +147,275 @@ NOLINT_TEST_F(ImageDecodeTest, DecodeFromMemory_InvalidBytesFails)
   // Assert
   EXPECT_FALSE(result.Succeeded());
   EXPECT_FALSE(result.error.empty());
+}
+
+// ===========================================================================
+// Phase 2: Format Detection Tests
+// ===========================================================================
+
+using oxygen::Format;
+using oxygen::content::import::DecodeOptions;
+using oxygen::content::import::DecodeToScratchImage;
+using oxygen::content::import::IsExrSignature;
+using oxygen::content::import::IsHdrFormat;
+using oxygen::content::import::IsHdrSignature;
+
+//! Test: IsExrSignature detects EXR magic bytes.
+/*!\
+ Verifies detection of OpenEXR magic number: 0x76 0x2F 0x31 0x01.
+*/
+NOLINT_TEST_F(ImageDecodeTest, IsExrSignature_DetectsValidMagic)
+{
+  // Arrange
+  const std::array<std::byte, 8> exr_magic
+    = { std::byte { 0x76 }, std::byte { 0x2F }, std::byte { 0x31 },
+        std::byte { 0x01 }, std::byte { 0x00 }, std::byte { 0x00 },
+        std::byte { 0x00 }, std::byte { 0x00 } };
+
+  // Act & Assert
+  EXPECT_TRUE(IsExrSignature(exr_magic));
+}
+
+//! Test: IsExrSignature rejects non-EXR bytes.
+/*!\
+ Verifies that arbitrary bytes are not detected as EXR.
+*/
+NOLINT_TEST_F(ImageDecodeTest, IsExrSignature_RejectsNonExr)
+{
+  // Arrange
+  const std::array<std::byte, 8> non_exr = { std::byte { 0x89 },
+    std::byte { 'P' }, std::byte { 'N' }, std::byte { 'G' }, std::byte { 0x00 },
+    std::byte { 0x00 }, std::byte { 0x00 }, std::byte { 0x00 } };
+
+  // Act & Assert
+  EXPECT_FALSE(IsExrSignature(non_exr));
+}
+
+//! Test: IsExrSignature handles empty input.
+/*!\
+ Verifies graceful handling of empty byte spans.
+*/
+NOLINT_TEST_F(ImageDecodeTest, IsExrSignature_HandlesEmpty)
+{
+  // Arrange
+  const std::span<const std::byte> empty;
+
+  // Act & Assert
+  EXPECT_FALSE(IsExrSignature(empty));
+}
+
+//! Test: IsHdrSignature detects Radiance HDR format.
+/*!\
+ Verifies detection of "#?RADIANCE" signature.
+*/
+NOLINT_TEST_F(ImageDecodeTest, IsHdrSignature_DetectsRadiance)
+{
+  // Arrange
+  const std::string_view radiance_header = "#?RADIANCE\n";
+  const auto* data = reinterpret_cast<const std::byte*>(radiance_header.data());
+  const std::span<const std::byte> bytes(data, radiance_header.size());
+
+  // Act & Assert
+  EXPECT_TRUE(IsHdrSignature(bytes));
+}
+
+//! Test: IsHdrSignature detects RGBE format.
+/*!\
+ Verifies detection of "#?RGBE" signature.
+*/
+NOLINT_TEST_F(ImageDecodeTest, IsHdrSignature_DetectsRgbe)
+{
+  // Arrange
+  const std::string_view rgbe_header = "#?RGBE\n";
+  const auto* data = reinterpret_cast<const std::byte*>(rgbe_header.data());
+  const std::span<const std::byte> bytes(data, rgbe_header.size());
+
+  // Act & Assert
+  EXPECT_TRUE(IsHdrSignature(bytes));
+}
+
+//! Test: IsHdrSignature rejects non-HDR data.
+/*!\
+ Verifies that arbitrary text is not detected as HDR.
+*/
+NOLINT_TEST_F(ImageDecodeTest, IsHdrSignature_RejectsNonHdr)
+{
+  // Arrange
+  const std::string_view non_hdr = "Hello, World!";
+  const auto* data = reinterpret_cast<const std::byte*>(non_hdr.data());
+  const std::span<const std::byte> bytes(data, non_hdr.size());
+
+  // Act & Assert
+  EXPECT_FALSE(IsHdrSignature(bytes));
+}
+
+//! Test: IsHdrFormat uses extension hint for EXR.
+/*!\
+ Verifies .exr extension is recognized as HDR format.
+*/
+NOLINT_TEST_F(ImageDecodeTest, IsHdrFormat_RecognizesExrExtension)
+{
+  // Arrange
+  const std::array<std::byte, 4> random_data = { std::byte { 0x00 },
+    std::byte { 0x01 }, std::byte { 0x02 }, std::byte { 0x03 } };
+
+  // Act & Assert
+  EXPECT_TRUE(IsHdrFormat(random_data, ".exr"));
+  EXPECT_TRUE(IsHdrFormat(random_data, ".EXR"));
+}
+
+//! Test: IsHdrFormat uses extension hint for HDR.
+/*!\
+ Verifies .hdr extension is recognized as HDR format.
+*/
+NOLINT_TEST_F(ImageDecodeTest, IsHdrFormat_RecognizesHdrExtension)
+{
+  // Arrange
+  const std::array<std::byte, 4> random_data = { std::byte { 0x00 },
+    std::byte { 0x01 }, std::byte { 0x02 }, std::byte { 0x03 } };
+
+  // Act & Assert
+  EXPECT_TRUE(IsHdrFormat(random_data, ".hdr"));
+  EXPECT_TRUE(IsHdrFormat(random_data, ".HDR"));
+}
+
+// ===========================================================================
+// Phase 2: Unified Decode API Tests
+// ===========================================================================
+
+//! Test: DecodeToScratchImage decodes LDR BMP to RGBA8.
+/*!\
+ Verifies unified decode produces ScratchImage with RGBA8UNorm for LDR.
+*/
+NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImage_LdrBmpProducesRgba8)
+{
+  // Arrange
+  const auto bmp = MakeBmp2x2();
+  DecodeOptions options {};
+  options.force_rgba = true;
+
+  // Act
+  auto result = DecodeToScratchImage(bmp, options);
+
+  // Assert
+  ASSERT_TRUE(result.has_value())
+    << "Decode failed with error: " << static_cast<int>(result.error());
+  EXPECT_EQ(result->Meta().width, 2u);
+  EXPECT_EQ(result->Meta().height, 2u);
+  EXPECT_EQ(result->Meta().format, Format::kRGBA8UNorm);
+}
+
+//! Test: DecodeToScratchImage applies Y-flip correctly.
+/*!\
+ Verifies flip_y option inverts the image vertically.
+*/
+NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImage_FlipsY)
+{
+  // Arrange
+  const auto bmp = MakeBmp2x2();
+  DecodeOptions options {};
+  options.flip_y = true;
+  options.force_rgba = true;
+
+  // Act
+  auto normal_result
+    = DecodeToScratchImage(bmp, DecodeOptions { .force_rgba = true });
+  auto flipped_result = DecodeToScratchImage(bmp, options);
+
+  // Assert
+  ASSERT_TRUE(normal_result.has_value());
+  ASSERT_TRUE(flipped_result.has_value());
+
+  // Get top-left pixel from both images
+  auto normal_view = normal_result->GetImage(0, 0);
+  auto flipped_view = flipped_result->GetImage(0, 0);
+
+  // Top row of normal should equal bottom row of flipped
+  const auto* normal_top = normal_view.pixels.data();
+  const auto row_pitch = normal_view.row_pitch_bytes;
+  const auto* flipped_bottom = flipped_view.pixels.data()
+    + static_cast<size_t>(normal_result->Meta().height - 1) * row_pitch;
+
+  EXPECT_EQ(std::memcmp(normal_top, flipped_bottom, row_pitch), 0);
+}
+
+//! Test: DecodeToScratchImage fails gracefully on empty input.
+/*!\
+ Verifies error handling for empty byte spans.
+*/
+NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImage_EmptyInputFails)
+{
+  // Arrange
+  const std::span<const std::byte> empty;
+  DecodeOptions options {};
+
+  // Act
+  auto result = DecodeToScratchImage(empty, options);
+
+  // Assert
+  EXPECT_FALSE(result.has_value());
+}
+
+//! Test: DecodeToScratchImage fails gracefully on corrupt data.
+/*!\
+ Verifies error handling for invalid image data.
+*/
+NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImage_CorruptDataFails)
+{
+  // Arrange
+  const std::array<std::byte, 8> garbage
+    = { std::byte { 0x12 }, std::byte { 0x34 }, std::byte { 0x56 },
+        std::byte { 0x78 }, std::byte { 0x9A }, std::byte { 0xBC },
+        std::byte { 0xDE }, std::byte { 0xF0 } };
+  DecodeOptions options {};
+
+  // Act
+  auto result = DecodeToScratchImage(garbage, options);
+
+  // Assert
+  EXPECT_FALSE(result.has_value());
+}
+
+//! Test: DecodeToScratchImage from file works with LDR BMP.
+/*!\
+ Verifies file-based decode produces valid ScratchImage.
+*/
+NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImage_FromFile_LdrBmp)
+{
+  // Arrange
+  const auto temp_dir = MakeTempDir("decode_to_scratch_file");
+  const auto path = temp_dir / "test.bmp";
+  const auto bmp = MakeBmp2x2();
+  WriteBinaryFile(path, std::span<const std::byte>(bmp.data(), bmp.size()));
+  DecodeOptions options { .force_rgba = true };
+
+  // Act
+  auto result = DecodeToScratchImage(path, options);
+
+  // Assert
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->Meta().width, 2u);
+  EXPECT_EQ(result->Meta().height, 2u);
+  EXPECT_EQ(result->Meta().format, Format::kRGBA8UNorm);
+}
+
+//! Test: DecodeToScratchImage from file fails for non-existent file.
+/*!\
+ Verifies file not found error is returned.
+*/
+NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImage_FromFile_NotFoundFails)
+{
+  // Arrange
+  const std::filesystem::path non_existent = "/non/existent/file.bmp";
+  DecodeOptions options {};
+
+  // Act
+  auto result = DecodeToScratchImage(non_existent, options);
+
+  // Assert
+  EXPECT_FALSE(result.has_value());
+  EXPECT_EQ(
+    result.error(), oxygen::content::import::TextureImportError::kFileNotFound);
 }
 
 } // namespace
