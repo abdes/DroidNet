@@ -98,6 +98,7 @@ class OxygenConan(ConanFile):
         self.requires("json-schema-validator/2.4.0")
         self.requires("stduuid/1.2.3")
         self.requires("magic_enum/0.9.7")
+        self.requires("tinyexr/1.0.12")
 
         # Record test-only dependencies so we can skip them during deploy.
         # The test_requires call accepts a reference like 'gtest/master'.
@@ -124,6 +125,14 @@ class OxygenConan(ConanFile):
         # Link to test frameworks always as static libs
         self.options["gtest"].shared = False
         self.options["catch2"].shared = False
+
+        # Enable tinyexr to build with threading and OpenMP support when available
+        try:
+            self.options["tinyexr"].with_thread = True
+            self.options["tinyexr"].with_openmp = True
+        except Exception:
+            # If tinyexr isn't present in this configuration, ignore silently
+            pass
 
     def generate(self):
         tc = CMakeToolchain(self)

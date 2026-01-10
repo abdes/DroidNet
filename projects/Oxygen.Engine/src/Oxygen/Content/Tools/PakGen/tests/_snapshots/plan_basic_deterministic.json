@@ -2,7 +2,7 @@
   "assets": [
     {
       "alignment": 16,
-      "descriptor_offset": 1024,
+      "descriptor_offset": 2816,
       "descriptor_size": 256,
       "key": "00000000000000000000000000000000",
       "name": "mat0",
@@ -12,7 +12,7 @@
     },
     {
       "alignment": 1,
-      "descriptor_offset": 1280,
+      "descriptor_offset": 3072,
       "descriptor_size": 256,
       "key": "00000000000000000000000000000000",
       "name": "geo0",
@@ -23,7 +23,7 @@
   ],
   "browse_index": {
     "entry_count": 2,
-    "offset": 1904,
+    "offset": 3696,
     "padding_before": 0,
     "size": 82,
     "string_table_size": 10
@@ -32,23 +32,22 @@
   "deterministic": true,
   "directory": {
     "asset_count": 2,
-    "offset": 1776,
+    "offset": 3568,
     "padding_before": 11,
     "size": 128
   },
-  "file_size": 2242,
+  "file_size": 4034,
   "footer": {
-    "offset": 1986,
+    "offset": 3778,
     "size": 256
   },
   "padding": {
     "by_section": {
       "assets_region": 128,
       "directory": 11,
-      "region_buffer": 253,
       "table_texture": 12
     },
-    "total": 404
+    "total": 151
   },
   "regions": [
     {
@@ -57,14 +56,14 @@
       "offset": 256,
       "padding_after": 0,
       "padding_before": 0,
-      "size": 259
+      "size": 2304
     },
     {
       "alignment": 256,
       "name": "buffer",
-      "offset": 768,
+      "offset": 2560,
       "padding_after": 0,
-      "padding_before": 253,
+      "padding_before": 0,
       "size": 4
     },
     {
@@ -89,14 +88,14 @@
       "count": 2,
       "entry_size": 40,
       "name": "texture",
-      "offset": 784,
+      "offset": 2576,
       "padding_before": 12
     },
     {
       "count": 1,
       "entry_size": 32,
       "name": "buffer",
-      "offset": 864,
+      "offset": 2656,
       "padding_before": 0
     },
     {
@@ -107,5 +106,5 @@
       "padding_before": 0
     }
   ],
-  "version": 1
+  "version": 4
 }

@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <thread>
@@ -214,14 +215,25 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
   using namespace std::chrono_literals;
 
   // Arrange
-  const std::string hexdump = R"(
-     0: 00 01 00 00 00 00 00 00 1F 01 00 00 04 00 80 00
-    16: 00 00 40 00 00 00 01 00 06 00 05 00 02 00 01 00
-    32: 00 00 00 00 00 00 00 00
-  )";
   constexpr std::size_t kDataOffset = 256;
-  constexpr std::size_t kSizeBytes = 287;
-  constexpr uint8_t kFill = 0x99;
+  constexpr uint32_t kPixelBytes = 287;
+  constexpr std::byte kFill = std::byte { 0x99 };
+
+  oxygen::data::pak::TextureResourceDesc desc {};
+  desc.data_offset = static_cast<uint64_t>(kDataOffset);
+  desc.texture_type = 3; // TextureType::kTexture2D
+  desc.compression_type = 0;
+  desc.width = 128;
+  desc.height = 64;
+  desc.depth = 1;
+  desc.array_layers = 1;
+  desc.mip_levels = 1;
+  desc.format = 0;
+  desc.alignment = 256;
+
+  const auto payload
+    = oxygen::content::testing::MakeV4TexturePayload(kPixelBytes, kFill);
+  desc.size_bytes = static_cast<uint32_t>(payload.size());
 
   TestEventLoop el;
 
@@ -238,7 +250,9 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
     loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
 
     const auto key = loader.MintSyntheticTextureKey();
-    auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
+    std::vector<uint8_t> bytes(kDataOffset + payload.size(), 0);
+    std::memcpy(bytes.data(), &desc, sizeof(desc));
+    std::memcpy(bytes.data() + kDataOffset, payload.data(), payload.size());
 
     OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
     {
@@ -256,11 +270,11 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
       EXPECT_EQ(resource->GetWidth(), 128u);
       EXPECT_EQ(resource->GetHeight(), 64u);
       EXPECT_EQ(resource->GetDepth(), 1u);
-      EXPECT_EQ(resource->GetArrayLayers(), 6u);
-      EXPECT_EQ(resource->GetMipCount(), 5u);
-      EXPECT_EQ(resource->GetData().size(), kSizeBytes);
+      EXPECT_EQ(resource->GetArrayLayers(), 1u);
+      EXPECT_EQ(resource->GetMipCount(), 1u);
+      EXPECT_EQ(resource->GetData().size(), kPixelBytes);
       EXPECT_THAT(
-        resource->GetData(), ::testing::Each(static_cast<uint8_t>(kFill)));
+        resource->GetData(), ::testing::Each(std::to_integer<uint8_t>(kFill)));
 
       auto cached = loader.GetResource<TextureResource>(key);
       EXPECT_THAT(cached, NotNull());

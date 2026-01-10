@@ -647,18 +647,27 @@ namespace {
           desc.flags |= oxygen::data::pak::kMaterialFlag_GltfOrmPacked;
         }
 
-        const auto base_color_index = emit::GetOrCreateTextureResourceIndex(
-          request, out, textures, base_color_tex);
-        const auto normal_index = emit::GetOrCreateTextureResourceIndex(
-          request, out, textures, normal_tex);
-        const auto metallic_index = emit::GetOrCreateTextureResourceIndex(
-          request, out, textures, metallic_tex);
-        const auto roughness_index = emit::GetOrCreateTextureResourceIndex(
-          request, out, textures, roughness_tex);
-        const auto ao_index = emit::GetOrCreateTextureResourceIndex(
-          request, out, textures, ao_tex);
-        const auto emissive_index = emit::GetOrCreateTextureResourceIndex(
-          request, out, textures, emissive_tex);
+        // Default cooker config: no mips, no BC7 (simple RGBA8 pass-through)
+        emit::CookerConfig cooker_config {};
+        cooker_config.generate_mips = false;
+
+        const auto base_color_index
+          = emit::GetOrCreateTextureResourceIndexWithCooker(
+            request, out, textures, base_color_tex, cooker_config);
+        const auto normal_index
+          = emit::GetOrCreateTextureResourceIndexWithCooker(
+            request, out, textures, normal_tex, cooker_config);
+        const auto metallic_index
+          = emit::GetOrCreateTextureResourceIndexWithCooker(
+            request, out, textures, metallic_tex, cooker_config);
+        const auto roughness_index
+          = emit::GetOrCreateTextureResourceIndexWithCooker(
+            request, out, textures, roughness_tex, cooker_config);
+        const auto ao_index = emit::GetOrCreateTextureResourceIndexWithCooker(
+          request, out, textures, ao_tex, cooker_config);
+        const auto emissive_index
+          = emit::GetOrCreateTextureResourceIndexWithCooker(
+            request, out, textures, emissive_tex, cooker_config);
 
         desc.base_color_texture = base_color_index;
         desc.normal_texture = normal_index;

@@ -2,7 +2,7 @@
   "assets": [
     {
       "alignment": 16,
-      "descriptor_offset": 1536,
+      "descriptor_offset": 5632,
       "descriptor_size": 256,
       "key": "00000000000000000000000000000000",
       "name": "mat_a",
@@ -12,7 +12,7 @@
     },
     {
       "alignment": 16,
-      "descriptor_offset": 1792,
+      "descriptor_offset": 5888,
       "descriptor_size": 256,
       "key": "00000000000000000000000000000000",
       "name": "mat_b",
@@ -22,7 +22,7 @@
     },
     {
       "alignment": 1,
-      "descriptor_offset": 2048,
+      "descriptor_offset": 6144,
       "descriptor_size": 256,
       "key": "00000000000000000000000000000000",
       "name": "geo_a",
@@ -32,7 +32,7 @@
     },
     {
       "alignment": 1,
-      "descriptor_offset": 2533,
+      "descriptor_offset": 6629,
       "descriptor_size": 256,
       "key": "00000000000000000000000000000000",
       "name": "geo_b",
@@ -43,7 +43,7 @@
   ],
   "browse_index": {
     "entry_count": 4,
-    "offset": 3056,
+    "offset": 7152,
     "padding_before": 0,
     "size": 144,
     "string_table_size": 24
@@ -52,23 +52,22 @@
   "deterministic": true,
   "directory": {
     "asset_count": 4,
-    "offset": 2800,
+    "offset": 6896,
     "padding_before": 11,
     "size": 256
   },
-  "file_size": 3456,
+  "file_size": 7552,
   "footer": {
-    "offset": 3200,
+    "offset": 7296,
     "size": 256
   },
   "padding": {
     "by_section": {
       "assets_region": 48,
       "directory": 11,
-      "region_buffer": 248,
       "table_buffer": 8
     },
-    "total": 315
+    "total": 67
   },
   "regions": [
     {
@@ -77,14 +76,14 @@
       "offset": 256,
       "padding_after": 0,
       "padding_before": 0,
-      "size": 520
+      "size": 4864
     },
     {
       "alignment": 256,
       "name": "buffer",
-      "offset": 1024,
+      "offset": 5120,
       "padding_after": 0,
-      "padding_before": 248,
+      "padding_before": 0,
       "size": 272
     },
     {
@@ -109,14 +108,14 @@
       "count": 3,
       "entry_size": 40,
       "name": "texture",
-      "offset": 1296,
+      "offset": 5392,
       "padding_before": 0
     },
     {
       "count": 2,
       "entry_size": 32,
       "name": "buffer",
-      "offset": 1424,
+      "offset": 5520,
       "padding_before": 8
     },
     {
@@ -127,5 +126,5 @@
       "padding_before": 0
     }
   ],
-  "version": 1
+  "version": 4
 }

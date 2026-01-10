@@ -1,5 +1,5 @@
 # Buffer resources only for testing resource loading
-version: 1
+version: 4
 content_version: 1
 
 # Define default empty buffer (index 0) - required in all PAK files

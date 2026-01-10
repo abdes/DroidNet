@@ -142,16 +142,36 @@ private:
   std::vector<std::shared_ptr<oxygen::data::GeometryAsset>>
     retired_cube_geometries_;
 
-  std::array<char, 512> png_path_ {};
-  bool png_load_requested_ { false };
-  bool png_reupload_requested_ { false };
-  std::string png_status_message_ {};
-  int png_last_width_ { 0 };
-  int png_last_height_ { 0 };
+  std::array<char, 512> img_path_ {};
+  bool img_load_requested_ { false };
+  std::string img_status_message_ {};
+  int img_last_width_ { 0 };
+  int img_last_height_ { 0 };
 
-  std::vector<std::byte> png_rgba8_ {};
-  std::uint32_t png_width_ { 0U };
-  std::uint32_t png_height_ { 0U };
+  // Importer test options
+  int img_output_format_idx_ { 0 }; // 0=RGBA8, 1=BC7, 2=RGBA16F, 3=RGBA32F
+  bool generate_mips_ { true };
+  bool tonemap_hdr_to_ldr_ { false }; // Default OFF - let user choose
+  float hdr_exposure_ev_ { 0.0F };
+
+  //=== Skybox Settings ===---------------------------------------------------//
+
+  //! Layout of the input skybox image.
+  enum class SkyboxLayout : int {
+    kEquirectangular = 0, //!< 2:1 panorama
+    kHorizontalCross = 1, //!< 4x3 cross layout
+    kVerticalCross = 2, //!< 3x4 cross layout
+    kHorizontalStrip = 3, //!< 6x1 strip
+    kVerticalStrip = 4, //!< 1x6 strip
+  };
+
+  //! Output format for the skybox cubemap.
+  enum class SkyboxOutputFormat : int {
+    kRGBA8 = 0, //!< LDR 8-bit
+    kRGBA16Float = 1, //!< HDR 16-bit float
+    kRGBA32Float = 2, //!< HDR 32-bit float
+    kBC7 = 3, //!< BC7 compressed (LDR)
+  };
 
   std::array<char, 512> skybox_path_ {};
   bool skybox_load_requested_ { false };
@@ -159,6 +179,10 @@ private:
   std::string skybox_status_message_ {};
   int skybox_last_face_size_ { 0 };
   oxygen::content::ResourceKey skybox_texture_key_ { 0U };
+  SkyboxLayout skybox_layout_ { SkyboxLayout::kEquirectangular };
+  SkyboxOutputFormat skybox_output_format_ { SkyboxOutputFormat::kRGBA8 };
+  int skybox_cube_face_size_ { 512 };
+  bool skybox_flip_y_ { false }; //!< Flip Y for standard equirectangular HDRIs
 
   float sky_light_intensity_ { 1.0f };
   float sky_light_diffuse_intensity_ { 1.0f };

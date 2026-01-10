@@ -236,6 +236,30 @@ auto Store(AnyWriter& writer, T value) -> Result<void>
     std::span(reinterpret_cast<const std::byte*>(&value), sizeof(T)));
 }
 
+//! Serializes trivially copyable POD types by raw byte copy.
+/*! Aligns to the natural alignment of T and writes the in-memory
+    representation without endianness conversion. Intended for packed
+    structs used in asset formats (e.g., PAK descriptors).
+
+ @tparam T Trivially copyable non-arithmetic POD type
+ @param writer Writer to serialize to
+ @param value Value to serialize
+ @return Result of the write operation
+
+ @see Store, AnyWriter
+*/
+template <typename T>
+auto Store(AnyWriter& writer, const T& value) -> Result<void>
+  requires(std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>
+    && !std::is_integral_v<T> && !std::is_floating_point_v<T>)
+{
+  static_assert(std::has_unique_object_representations_v<T>,
+    "Type must have a unique object representation for binary serialization");
+  CHECK_RESULT(writer.AlignTo(alignof(T)));
+  const auto bytes = std::as_bytes(std::span(&value, static_cast<size_t>(1)));
+  return writer.WriteBlob(bytes);
+}
+
 //! Serializes a std::string as a 32-bit length prefix followed by raw bytes.
 /*!
  Encodes the string as a 32-bit unsigned length (platform endianness), followed

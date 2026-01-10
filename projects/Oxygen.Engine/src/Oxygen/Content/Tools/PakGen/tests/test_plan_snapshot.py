@@ -16,7 +16,19 @@ def _spec() -> dict:
         "version": 1,
         "content_version": 1,
         "textures": [
-            {"name": "t0", "width": 4, "height": 4, "data": "AAA"},
+            {
+                "name": "t0",
+                "texture_type": 3,
+                "compression_type": 0,
+                "width": 4,
+                "height": 4,
+                "depth": 1,
+                "array_layers": 1,
+                "mip_levels": 1,
+                "format": 30,
+                "alignment": 256,
+                "data_hex": "ff" * (4 * 4 * 4),
+            },
         ],
         "buffers": [
             {"name": "b0", "stride": 4, "data": "BBBB"},

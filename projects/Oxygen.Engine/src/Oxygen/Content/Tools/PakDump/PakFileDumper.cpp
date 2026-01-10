@@ -16,6 +16,7 @@
 #include <optional>
 #include <span>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -122,6 +123,98 @@ auto FooterMagicOk(const PakFooter& footer) -> bool
   constexpr std::string_view kFooterMagic = "OXPAKEND";
   return std::string_view(footer.footer_magic, sizeof(footer.footer_magic))
     == kFooterMagic;
+}
+
+auto TexturePackingPolicyName(uint8_t policy) -> std::string_view
+{
+  switch (policy) {
+  case 1:
+    return "D3D12";
+  case 2:
+    return "TightPacked";
+  default:
+    return "Unknown";
+  }
+}
+
+auto PrintV4TexturePayloadSummary(std::span<const uint8_t> payload, int indent)
+  -> void
+{
+  using namespace PrintUtils;
+  if (payload.size() < sizeof(v4::TexturePayloadHeader)) {
+    Field("Texture Payload", "Too small to contain v4 header", indent);
+    return;
+  }
+
+  v4::TexturePayloadHeader header {};
+  std::memcpy(&header, payload.data(), sizeof(header));
+  if (header.magic != v4::kTexturePayloadMagic) {
+    Field("Texture Payload", "Missing v4 magic (expected 'OTX1')", indent);
+    return;
+  }
+
+  Field("Payload Magic", "OTX1", indent);
+  Field("Packing Policy",
+    fmt::format("{} ({})", static_cast<int>(header.packing_policy),
+      TexturePackingPolicyName(header.packing_policy)),
+    indent);
+  Field("Flags", fmt::format("0x{:02x}", header.flags), indent);
+  Field("Subresources", std::to_string(header.subresource_count), indent);
+  Field(
+    "Total Payload Size", std::to_string(header.total_payload_size), indent);
+  Field("Layouts Offset", ToHexString(header.layouts_offset_bytes), indent);
+  Field("Data Offset", ToHexString(header.data_offset_bytes), indent);
+  Field("Payload Content Hash", ToHexString(header.content_hash), indent);
+
+  if (header.total_payload_size != payload.size()) {
+    Field("Payload Size Check",
+      fmt::format("mismatch (header={} actual={})", header.total_payload_size,
+        payload.size()),
+      indent);
+  }
+
+  const auto layouts_offset = static_cast<size_t>(header.layouts_offset_bytes);
+  const auto data_offset = static_cast<size_t>(header.data_offset_bytes);
+  const auto layout_count = static_cast<size_t>(header.subresource_count);
+  const auto layouts_bytes = layout_count * sizeof(v4::SubresourceLayout);
+
+  if (layouts_offset + layouts_bytes > payload.size()) {
+    Field("Layouts", "Out of bounds", indent);
+    return;
+  }
+  if (data_offset > payload.size()) {
+    Field("Data Section", "Out of bounds", indent);
+    return;
+  }
+
+  constexpr size_t kMaxLayoutsToPrint = 16;
+  const auto count = (std::min)(layout_count, kMaxLayoutsToPrint);
+  if (count == 0) {
+    return;
+  }
+
+  std::cout << std::string(static_cast<size_t>(indent), ' ')
+            << "Subresource Layouts (" << count
+            << (layout_count > count ? " shown" : "") << "):\n";
+  for (size_t i = 0; i < count; ++i) {
+    v4::SubresourceLayout layout {};
+    const auto offset = layouts_offset + i * sizeof(v4::SubresourceLayout);
+    std::memcpy(&layout, payload.data() + offset, sizeof(layout));
+    const auto abs_data_offset
+      = data_offset + static_cast<size_t>(layout.offset_bytes);
+    const auto end = abs_data_offset + static_cast<size_t>(layout.size_bytes);
+    const auto within_bounds = end <= payload.size();
+
+    std::cout << std::string(static_cast<size_t>(indent), ' ') << "  [" << i
+              << "] offset=" << ToHexString(layout.offset_bytes)
+              << " row_pitch=" << layout.row_pitch_bytes
+              << " size=" << layout.size_bytes
+              << (within_bounds ? "" : " (oob)") << "\n";
+  }
+  if (layout_count > kMaxLayoutsToPrint) {
+    std::cout << std::string(static_cast<size_t>(indent), ' ') << "  ... ("
+              << (layout_count - kMaxLayoutsToPrint) << " more)\n";
+  }
 }
 
 } // namespace
@@ -252,6 +345,9 @@ public:
               nostd::to_string(texture_resource->GetTextureType()), 8);
             Field("Content Hash",
               ToHexString(texture_resource->GetContentHash()), 8);
+            if (ctx.verbose) {
+              PrintV4TexturePayloadSummary(texture_resource->GetData(), 8);
+            }
             if (ctx.show_resource_data) {
               PrintResourceData(
                 texture_resource->GetData(), "Texture", ctx.max_data_bytes);
@@ -343,6 +439,10 @@ auto PakFileDumper::DumpAsync(const PakFile& pak, AssetLoader& asset_loader)
   -> oxygen::co::Co<>
 {
   try {
+    if (pak.FormatVersion() != 4) {
+      throw std::runtime_error(fmt::format(
+        "PakDump supports PAK v4 only; found version {}", pak.FormatVersion()));
+    }
     using namespace PrintUtils;
     Separator("PAK FILE ANALYSIS: " + ctx_.pak_path.filename().string());
     Field("File Path", ctx_.pak_path.string());
@@ -379,10 +479,7 @@ void PakFileDumper::PrintPakHeader(const PakFile& pak)
   Field("Format Version", pak.FormatVersion());
   Field("Content Version", pak.ContentVersion());
   Field("GUID", oxygen::data::to_string(pak.Guid()));
-  Field("Header Size",
-    std::to_string(
-      pak.FormatVersion() == 2 ? sizeof(v2::PakHeader) : sizeof(v3::PakHeader))
-      + " bytes");
+  Field("Header Size", std::to_string(sizeof(v4::PakHeader)) + " bytes");
   std::cout << "\n";
 }
 

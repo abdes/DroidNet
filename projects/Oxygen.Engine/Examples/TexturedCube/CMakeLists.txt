@@ -72,6 +72,7 @@ target_link_libraries(
     oxygen::graphics-direct3d12
     oxygen::renderer
     oxygen::loader
+    oxygen::content
 )
 
 if(WIN32)

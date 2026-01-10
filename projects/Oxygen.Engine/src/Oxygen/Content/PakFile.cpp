@@ -14,6 +14,7 @@
 #include <cstring>
 
 #include <array>
+#include <string>
 
 using oxygen::content::PakFile;
 using oxygen::data::AssetKey;
@@ -173,15 +174,12 @@ auto PakFile::ReadHeader(serio::FileStream<>* stream) -> void
     throw std::runtime_error("Invalid pak file header magic");
   }
 
-  if (header_.version != 2 && header_.version != 3) {
-    LOG_F(ERROR, "Unsupported PAK format version: {} (expected 2 or 3)",
-      header_.version);
-    throw std::runtime_error("Unsupported PAK format version");
-  }
-
-  if (header_.version == 2) {
-    LOG_F(
-      WARNING, "Loading legacy PAK v2 container. Consider regenerating as v3.");
+  if (header_.version != 4) {
+    const auto msg = std::string("Unsupported PAK format version: ")
+      + std::to_string(header_.version)
+      + " (this build loads v4 only). Please upgrade/regenerate the PAK as v4.";
+    LOG_F(ERROR, "{}", msg);
+    throw std::runtime_error(msg);
   }
 }
 

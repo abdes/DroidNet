@@ -14,6 +14,7 @@
 #include <Oxygen/Content/Import/CookedContentWriter.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/Import/emit/ResourceAppender.h>
+#include <Oxygen/Content/Import/emit/TextureEmissionUtils.h>
 #include <Oxygen/Content/Import/fbx/ufbx.h>
 
 namespace oxygen::content::import::emit {
@@ -26,20 +27,22 @@ namespace oxygen::content::import::emit {
 */
 auto EnsureFallbackTexture(TextureEmissionState& state) -> void;
 
-//! Gets or creates a texture resource index for a ufbx texture.
+//! Gets or creates a texture resource index using the cooker pipeline.
 /*!
- Handles embedded textures, file textures, and creates placeholder
- textures when loading fails. Uses signature-based deduplication.
+ Enhanced version that uses the texture cooker for mip generation and
+ optional BC7 compression. Falls back to placeholder on decode failure.
 
  @param request The import request with source path info.
  @param cooked_out Writer for diagnostics.
  @param state The texture emission state.
  @param texture The ufbx texture (may be null).
+ @param config Cooker configuration for mips, compression, and packing.
  @return The texture resource index (0 for fallback).
 */
-[[nodiscard]] auto GetOrCreateTextureResourceIndex(const ImportRequest& request,
-  CookedContentWriter& cooked_out, TextureEmissionState& state,
-  const ufbx_texture* texture) -> uint32_t;
+[[nodiscard]] auto GetOrCreateTextureResourceIndexWithCooker(
+  const ImportRequest& request, CookedContentWriter& cooked_out,
+  TextureEmissionState& state, const ufbx_texture* texture,
+  const CookerConfig& config) -> uint32_t;
 
 //! Resolves a ufbx texture to its file texture.
 /*!

@@ -4,7 +4,7 @@
 #
 # Schema version 4 adds the 'generate' directive for procedural node expansion.
 
-version: 3
+version: 4
 content_version: 1
 
 # -----------------------------------------------------------------------------

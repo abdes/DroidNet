@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <span>
 #include <stdexcept>
 #include <vector>
@@ -27,13 +28,13 @@ namespace oxygen::data {
  a first-class asset: it is not named or globally identified, but is referenced
  by index in the textures resource table from materials or geometry.
 
- ### Binary Encoding (PAK v1, 40 bytes)
+ ### Resource Descriptor Encoding (PAK v4, 40 bytes)
 
  ```text
  offset size name             description
  ------ ---- ---------------- ---------------------------------------------
  0x00   8    data_offset      Absolute offset to texture data in PAK file
- 0x08   4    size_bytes        Size of texture data in bytes
+ 0x08   4    size_bytes        Size of cooked texture payload in bytes
  0x0C   1    texture_type     Texture type/dimension (enum)
  0x0D   1    compression_type Compression type (enum)
  0x0E   4    width            Texture width in pixels
@@ -43,9 +44,29 @@ namespace oxygen::data {
  0x1A   2    mip_levels       Number of mipmap levels
  0x1C   1    format           Texture format enum value
  0x1D   2    alignment        Required alignment (default 256)
- 0x1F   8    content_hash     First 8 bytes of SHA256 of texture data
+ 0x1F   8    content_hash     First 8 bytes of SHA256 of pixel/block data
  0x27   1    reserved         Reserved for future use (must be 0)
  ```
+
+ ### Texture Payload Encoding (PAK v4)
+
+ `data_offset` points at a cooked texture payload stored in the textures
+ resource data blob. Payloads are **v4-only** and start with a
+ `pak::TexturePayloadHeader` (magic `pak::kTexturePayloadMagic`, "OTX1").
+
+ ```text
+ offset size name
+ ------ ---- -----------------------------
+ 0x00   28   TexturePayloadHeader
+ 0x1C   ...  SubresourceLayout[subresource_count]
+ ...    ...  Padding up to data_offset_bytes
+ ...    ...  Pixel\/block data region
+ ```
+
+ `subresource_count` is expected to be `array_layers * mip_levels`.
+
+ @note `GetPayload()` returns the full payload (header + layouts + data).
+ @note `GetData()` returns only the pixel\/block data region.
 
  @see TextureResourceDesc, MaterialAssetDesc
 */
@@ -56,13 +77,14 @@ public:
   //! Type alias for the descriptor type used by this resource.
   using DescT = pak::TextureResourceDesc;
 
-  /*! Constructs a TextureResource with descriptor and exclusive data ownership.
+  /*! Constructs a TextureResource with descriptor and exclusive payload
+      ownership.
       @param desc Texture resource descriptor from PAK file.
-      @param data Raw texture data buffer (ownership transferred).
+      @param data Cooked texture payload buffer (ownership transferred).
   */
   TextureResource(pak::TextureResourceDesc desc, std::vector<uint8_t> data)
     : desc_(std::move(desc))
-    , data_(std::move(data))
+    , payload_(std::move(data))
   {
     Validate();
   }
@@ -77,7 +99,12 @@ public:
     return desc_.data_offset;
   }
 
-  [[nodiscard]] auto GetDataSize() const noexcept { return data_.size(); }
+  //! Returns the size in bytes of the pixel/block data region (excludes the
+  //! payload header and layout table).
+  [[nodiscard]] auto GetDataSize() const noexcept -> std::size_t
+  {
+    return payload_data_size_bytes_;
+  }
 
   OXGN_DATA_NDAPI auto GetTextureType() const noexcept -> TextureType;
 
@@ -124,22 +151,135 @@ public:
     return desc_.content_hash;
   }
 
-  //! Returns an immutable span of the loaded texture data.
+  //! Returns an immutable span of the pixel/block data region.
   [[nodiscard]] auto GetData() const noexcept -> std::span<const uint8_t>
   {
-    return std::span<const uint8_t>(data_.data(), data_.size());
+    return std::span<const uint8_t>(
+      payload_.data() + payload_data_offset_bytes_, payload_data_size_bytes_);
+  }
+
+  //! Returns the full cooked payload bytes (header + layouts + data).
+  [[nodiscard]] auto GetPayload() const noexcept -> std::span<const uint8_t>
+  {
+    return std::span<const uint8_t>(payload_.data(), payload_.size());
+  }
+
+  //! Returns the parsed payload header.
+  [[nodiscard]] auto GetPayloadHeader() const noexcept
+    -> const pak::TexturePayloadHeader&
+  {
+    return payload_header_;
+  }
+
+  //! Returns the parsed subresource layouts stored in the payload.
+  [[nodiscard]] auto GetSubresourceLayouts() const noexcept
+    -> std::span<const pak::SubresourceLayout>
+  {
+    return subresource_layouts_;
   }
 
 private:
   pak::TextureResourceDesc desc_ {};
-  std::vector<uint8_t> data_;
+  pak::TexturePayloadHeader payload_header_ {};
+  std::vector<pak::SubresourceLayout> subresource_layouts_ {};
+  std::vector<uint8_t> payload_;
+  std::size_t payload_data_offset_bytes_ = 0;
+  std::size_t payload_data_size_bytes_ = 0;
+
+  //! Parses a v4 format payload (with TexturePayloadHeader).
+  void ParseV4Payload()
+  {
+    const auto payload_size = payload_.size();
+    std::memcpy(
+      &payload_header_, payload_.data(), sizeof(pak::TexturePayloadHeader));
+
+    const auto expected_subresources = static_cast<std::uint32_t>(
+      static_cast<std::uint64_t>(desc_.array_layers) * desc_.mip_levels);
+    if (payload_header_.subresource_count != expected_subresources) {
+      throw std::invalid_argument(
+        "TextureResource: subresource count mismatch");
+    }
+
+    if (payload_header_.total_payload_size != payload_size) {
+      throw std::invalid_argument(
+        "TextureResource: payload size mismatch with header");
+    }
+
+    const auto layouts_offset
+      = static_cast<std::size_t>(payload_header_.layouts_offset_bytes);
+    const auto data_offset
+      = static_cast<std::size_t>(payload_header_.data_offset_bytes);
+    const auto layout_count
+      = static_cast<std::size_t>(payload_header_.subresource_count);
+    const auto layouts_bytes = layout_count * sizeof(pak::SubresourceLayout);
+
+    if (layouts_offset < sizeof(pak::TexturePayloadHeader)
+      || layouts_offset > payload_size) {
+      throw std::invalid_argument("TextureResource: invalid layouts offset");
+    }
+
+    if (layouts_bytes > payload_size
+      || layouts_offset > payload_size - layouts_bytes) {
+      throw std::invalid_argument(
+        "TextureResource: layout table exceeds payload bounds");
+    }
+
+    if (data_offset < layouts_offset + layouts_bytes
+      || data_offset > payload_size) {
+      throw std::invalid_argument(
+        "TextureResource: invalid data offset in payload header");
+    }
+
+    subresource_layouts_.resize(layout_count);
+    std::memcpy(subresource_layouts_.data(), payload_.data() + layouts_offset,
+      layouts_bytes);
+
+    payload_data_offset_bytes_ = data_offset;
+    payload_data_size_bytes_ = payload_size - payload_data_offset_bytes_;
+
+    std::size_t required_data_size = 0;
+    for (const auto& layout : subresource_layouts_) {
+      const auto offset_in_data = static_cast<std::size_t>(layout.offset_bytes);
+      const auto size_bytes = static_cast<std::size_t>(layout.size_bytes);
+
+      if (offset_in_data > payload_data_size_bytes_
+        || size_bytes > payload_data_size_bytes_ - offset_in_data) {
+        throw std::invalid_argument(
+          "TextureResource: subresource layout exceeds payload bounds");
+      }
+
+      required_data_size
+        = (std::max)(required_data_size, offset_in_data + size_bytes);
+    }
+
+    if (required_data_size > payload_data_size_bytes_) {
+      throw std::invalid_argument(
+        "TextureResource: payload data truncated for subresources");
+    }
+  }
+
+  void ParsePayload()
+  {
+    if (payload_.size() < sizeof(pak::TexturePayloadHeader)) {
+      throw std::invalid_argument("TextureResource: payload too small");
+    }
+
+    uint32_t magic = 0;
+    std::memcpy(&magic, payload_.data(), sizeof(magic));
+    if (magic != pak::kTexturePayloadMagic) {
+      throw std::invalid_argument("TextureResource: invalid payload magic");
+    }
+
+    ParseV4Payload();
+  }
 
   void Validate()
   {
-    // Alignment invariant (spec states 256 for textures)
-    if (desc_.alignment != 256) {
-      throw std::invalid_argument("TextureResource: alignment must be 256");
+    if (desc_.alignment == 0) {
+      throw std::invalid_argument("TextureResource: alignment must be > 0");
     }
+
+    ParsePayload();
 
     // Basic dimension checks
     if (desc_.width == 0) {
@@ -218,10 +358,9 @@ private:
       throw std::invalid_argument("TextureResource: mip_levels exceed limit");
     }
 
-    // Data size consistency
-    if (desc_.size_bytes != data_.size()) {
+    if (desc_.size_bytes != payload_.size()) {
       throw std::invalid_argument(
-        "TextureResource: descriptor size_bytes mismatch with data size");
+        "TextureResource: descriptor size_bytes mismatch with payload size");
     }
   }
 };

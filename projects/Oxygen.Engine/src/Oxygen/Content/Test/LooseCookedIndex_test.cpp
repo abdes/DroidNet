@@ -950,14 +950,19 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DataWithoutTable_Throws)
     { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
 }
 
-//! Test: File-record SHA-256 mismatch rejects the root
+//! Test: File-record legacy SHA bytes are ignored
 /*!
- Scenario: Writes textures.table and textures.data with correct sizes, but
- provides a non-zero, incorrect SHA-256 in the index for textures.table.
- Verifies that mounting fails.
+ Scenario: The loose cooked index v1 used to store file-level SHA-256 digests
+ in file records. That field has been removed and replaced with reserved bytes.
+
+ Writes textures.table and textures.data with correct sizes, and fills the
+ reserved bytes of the textures.table FileRecord with non-zero data to emulate
+ a legacy SHA-256 field.
+
+ Verifies that mounting succeeds.
 */
 NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRoot_FileRecordShaMismatch_Throws)
+  LooseCookedIndexTest, AddLooseCookedRoot_FileRecordLegacyShaBytes_Ignored)
 {
   using oxygen::data::loose_cooked::v1::AssetEntry;
   using oxygen::data::loose_cooked::v1::FileKind;
@@ -1019,6 +1024,7 @@ NOLINT_TEST_F(
   table_record.kind = FileKind::kTexturesTable;
   table_record.relpath_offset = off_table;
   table_record.size = sizeof(TextureResourceDesc) * 2;
+  std::ranges::fill(table_record.reserved1, static_cast<uint8_t>(0xAB));
 
   FileRecord data_record {};
   data_record.kind = FileKind::kTexturesData;
@@ -1035,8 +1041,7 @@ NOLINT_TEST_F(
   }
 
   // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
+  EXPECT_NO_THROW({ asset_loader_->AddLooseCookedRoot(cooked_root); });
 }
 
 //! Test: Descriptor SHA-256 mismatch rejects the root

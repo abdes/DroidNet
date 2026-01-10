@@ -145,6 +145,10 @@ def inspect_pak(path: str | Path) -> Dict[str, Any]:
     p = Path(path)
     data = p.read_bytes()
     header = parse_header(data)
+    if header.get("version") != 4:
+        raise ValueError(
+            f"PakGen inspector supports PAK v4 only; found version {header.get('version')}"
+        )
     footer = parse_footer(data)
     real_crc_offset = len(data) - 12
     real_crc32 = struct.unpack_from("<I", data, real_crc_offset)[0]

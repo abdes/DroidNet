@@ -497,7 +497,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
 
 //! Test: AssetLoader loads a scene with lights + environment block.
 /*!
- Scenario: Build a v3 PAK with a scene containing one directional light, one
+ Scenario: Build a PAK with a scene containing one directional light, one
  point light, and a trailing SceneEnvironment block.
 
  Verify that:
@@ -558,7 +558,10 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
       const auto* env_header = scene->GetEnvironmentBlockHeader();
       EXPECT_NE(env_header, nullptr);
       EXPECT_EQ(env_header->systems_count, 2U);
-      EXPECT_EQ(env_header->byte_size, 168U);
+      EXPECT_EQ(env_header->byte_size,
+        sizeof(oxygen::data::pak::SceneEnvironmentBlockHeader)
+          + sizeof(oxygen::data::pak::SkyAtmosphereEnvironmentRecord)
+          + sizeof(oxygen::data::pak::PostProcessVolumeEnvironmentRecord));
 
       const auto env_records = scene->GetEnvironmentSystemRecords();
       EXPECT_EQ(env_records.size(), 2U);

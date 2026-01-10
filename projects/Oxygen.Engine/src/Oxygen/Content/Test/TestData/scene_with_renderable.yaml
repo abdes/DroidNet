@@ -1,5 +1,5 @@
 # Scene asset with a renderable geometry dependency
-version: 2
+version: 4
 content_version: 1
 
 # Define default empty buffer (index 0) - required in all PAK files

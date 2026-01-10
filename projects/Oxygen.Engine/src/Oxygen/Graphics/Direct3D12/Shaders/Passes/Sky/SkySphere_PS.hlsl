@@ -29,12 +29,12 @@ struct SkyPSInput
 //! Samples a cubemap using the view direction with optional rotation.
 //!
 //! @param cubemap_slot Bindless SRV index for the cubemap.
-//! @param view_dir World-space view direction (normalized).
+//! @param view_dir World-space view direction (normalized, Z-up convention).
 //! @param rotation_radians Azimuth rotation around world up (Z axis).
 //! @return Sampled color (linear RGB).
 float3 SampleSkyboxCubemap(uint cubemap_slot, float3 view_dir, float rotation_radians)
 {
-    // Apply rotation around Z axis (Z is up).
+    // Apply rotation around Z axis (Z is up in world space).
     float cos_rot = cos(rotation_radians);
     float sin_rot = sin(rotation_radians);
     float3 rotated_dir;
@@ -42,11 +42,17 @@ float3 SampleSkyboxCubemap(uint cubemap_slot, float3 view_dir, float rotation_ra
     rotated_dir.y = view_dir.x * sin_rot + view_dir.y * cos_rot;
     rotated_dir.z = view_dir.z;
 
+    // Convert from Oxygen Z-up to D3D Y-up convention for cubemap sampling.
+    // Oxygen: X=right, Y=forward, Z=up
+    // D3D:    X=right, Y=up,      Z=forward
+    // So we swizzle: d3d.xyz = oxygen.xzy
+    float3 d3d_dir = float3(rotated_dir.x, rotated_dir.z, rotated_dir.y);
+
     // Sample the cubemap.
     TextureCube<float4> cubemap = ResourceDescriptorHeap[cubemap_slot];
     SamplerState linear_sampler = SamplerDescriptorHeap[0]; // Assume sampler 0 is linear.
 
-    return cubemap.Sample(linear_sampler, rotated_dir).rgb;
+    return cubemap.Sample(linear_sampler, d3d_dir).rgb;
 }
 
 float4 PS(SkyPSInput input) : SV_TARGET

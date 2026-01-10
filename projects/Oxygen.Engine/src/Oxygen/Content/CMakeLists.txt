@@ -19,6 +19,8 @@ asap_push_module("${META_MODULE_NAME}")
 # Dependencies
 # ------------------------------------------------------------------------------
 
+find_package(tinyexr CONFIG REQUIRED)
+
 # ==============================================================================
 # Build instructions
 # ==============================================================================
@@ -61,6 +63,24 @@ set(
   "ResourceTypeList.h"
   "SourceToken.h"
   "IAssetLoader.h"
+  # Imporeters - External code
+  "Import/AssetImporter.h"
+  "Import/CookedContentWriter.h"
+  "Import/Importer.h"
+  "Import/ImportDiagnostics.h"
+  "Import/ImportFormat.h"
+  "Import/Layout.h"
+  "Import/Naming.h"
+  "Import/ImportOptions.h"
+  "Import/ImportedGeometry.h"
+  "Import/ImportReport.h"
+  "Import/ImportRequest.h"
+  "Import/LooseCookedLayout.h"
+  "Import/LooseCookedWriter.h"
+  "Import/TextureImportTypes.h"
+  "Import/TextureImportError.h"
+  "Import/TextureImportDesc.h"
+  "Import/ScratchImage.h"
 )
 set(
   OXYGEN_CONTENT_PRIVATE_SOURCES
@@ -83,29 +103,33 @@ set(
   "Loaders/TextureLoader.h"
   "Loaders/Helpers.h"
   # Imporeters - Internal code
-  "Import/AssetImporter.h"
   "Import/AssetImporter.cpp"
   "Import/FbxImporter.cpp"
   "Import/ImageDecode.h"
   "Import/ImageDecode.cpp"
-  "Import/CookedContentWriter.h"
-  "Import/Importer.h"
-  "Import/ImportDiagnostics.h"
-  "Import/ImportFormat.h"
-  "Import/Layout.h"
-  "Import/Naming.h"
-  "Import/ImportOptions.h"
-  "Import/ImportedGeometry.h"
-  "Import/ImportReport.h"
-  "Import/ImportRequest.h"
-  "Import/LooseCookedLayout.h"
-  "Import/LooseCookedWriter.h"
+  "Import/ImageProcessing.h"
+  "Import/ImageProcessing.cpp"
   "Import/LooseCookedWriter.cpp"
   "Import/fbx/ufbx.h"
   "Import/fbx/ufbx.c"
   "Import/fbx/UfbxUtils.h"
   "Import/gltf/cgltf.h"
   "Import/stb/stb_image.h"
+  "Import/bc7enc/bc7enc.cpp"
+  "Import/bc7enc/bc7enc.h"
+  "Import/bc7/Bc7Encoder.h"
+  "Import/bc7/Bc7Encoder.cpp"
+  "Import/TextureImportTypes.cpp"
+  "Import/TextureImportDesc.cpp"
+  "Import/TexturePackingPolicy.h"
+  "Import/TexturePackingPolicy.cpp"
+  "Import/TextureCooker.h"
+  "Import/TextureCooker.cpp"
+  "Import/TextureImportPresets.h"
+  "Import/TextureImportPresets.cpp"
+  "Import/TextureSourceAssembly.h"
+  "Import/TextureSourceAssembly.cpp"
+  "Import/ScratchImage.cpp"
   # Import utilities
   "Import/util/Constants.h"
   "Import/util/CoordTransform.h"
@@ -117,6 +141,8 @@ set(
   # Import emitters
   "Import/emit/BufferEmitter.h"
   "Import/emit/BufferEmitter.cpp"
+  "Import/emit/TextureEmissionUtils.h"
+  "Import/emit/TextureEmissionUtils.cpp"
   "Import/emit/SceneEmitter.cpp"
   "Import/emit/SceneEmitter.h"
   "Import/emit/GeometryEmitter.h"
@@ -140,6 +166,13 @@ target_sources(
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 
+# Enable OpenMP for bc7enc source only: /openmp for MSVC, -fopenmp otherwise
+set_source_files_properties(
+  "Import/bc7enc/bc7enc.cpp"
+  PROPERTIES
+    COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:MSVC>:/openmp>$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fopenmp>"
+)
+
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
@@ -153,6 +186,8 @@ target_link_libraries(
     oxygen::base
     oxygen::composition
     oxygen::data
+  PRIVATE
+    tinyexr::tinyexr
 )
 
 # ------------------------------------------------------------------------------
