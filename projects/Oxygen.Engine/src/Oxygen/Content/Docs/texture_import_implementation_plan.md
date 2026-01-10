@@ -28,9 +28,9 @@ Establish core types, enums, and in-memory representations.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 1.1.1 | Define `oxygen::ColorSpace` enum (`kLinear`, `kSRGB`) in Core/Types | ☑ |
-| 1.1.2 | Add `to_string(ColorSpace)` function | ☑ |
-| 1.1.3 | Add static_assert for uint8_t size (PAK compatibility) | ☑ |
+| 1.1.1 | Define `oxygen::ColorSpace` enum (`kLinear`, `kSRGB`) in Core/Types | ✅ |
+| 1.1.2 | Add `to_string(ColorSpace)` function | ✅ |
+| 1.1.3 | Add static_assert for uint8_t size (PAK compatibility) | ✅ |
 
 ### 1.2 Texture Import Types
 
@@ -42,11 +42,11 @@ Establish core types, enums, and in-memory representations.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 1.2.1 | Define `TextureIntent` enum (kAlbedo, kNormalTS, kRoughness, kMetallic, kAO, kEmissive, kOpacity, kORMPacked, kHdrEnvironment, kHdrLightProbe, kData) | ☑ |
-| 1.2.2 | Define `MipPolicy` enum (`kNone`, `kFullChain`, `kMaxCount`) | ☑ |
-| 1.2.3 | Define `MipFilter` enum (`kBox`, `kKaiser`, `kLanczos`) | ☑ |
-| 1.2.4 | Define `Bc7Quality` enum (`kNone`, `kFast`, `kDefault`, `kHigh`) — renamed from `Compression` for clarity | ☑ |
-| 1.2.5 | Add `to_string()` functions for each enum | ☑ |
+| 1.2.1 | Define `TextureIntent` enum (kAlbedo, kNormalTS, kRoughness, kMetallic, kAO, kEmissive, kOpacity, kORMPacked, kHdrEnvironment, kHdrLightProbe, kData) | ✅ |
+| 1.2.2 | Define `MipPolicy` enum (`kNone`, `kFullChain`, `kMaxCount`) | ✅ |
+| 1.2.3 | Define `MipFilter` enum (`kBox`, `kKaiser`, `kLanczos`) | ✅ |
+| 1.2.4 | Define `Bc7Quality` enum (`kNone`, `kFast`, `kDefault`, `kHigh`) — renamed from `Compression` for clarity | ✅ |
+| 1.2.5 | Add `to_string()` functions for each enum | ✅ |
 
 ### 1.3 Texture Import Error Taxonomy
 
@@ -58,12 +58,12 @@ Establish core types, enums, and in-memory representations.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 1.3.1 | Define `TextureImportError` enum with decode errors (kUnsupportedFormat, kCorruptedData, kDecodeFailed, kOutOfMemory) | ☑ |
-| 1.3.2 | Add validation errors (kInvalidDimensions, kDimensionMismatch, kArrayLayerCountInvalid, kDepthInvalidFor2D) | ☑ |
-| 1.3.3 | Add cook errors (kMipGenerationFailed, kCompressionFailed, kOutputFormatInvalid, kHdrRequiresFloatFormat) | ☑ |
-| 1.3.4 | Add I/O errors (kFileNotFound, kFileReadFailed, kWriteFailed) | ☑ |
-| 1.3.5 | Add `to_string(TextureImportError)` function | ☑ |
-| 1.3.6 | Add `IsDecodeError()`, `IsValidationError()`, `IsCookError()`, `IsIoError()` category helpers | ☑ |
+| 1.3.1 | Define `TextureImportError` enum with decode errors (kUnsupportedFormat, kCorruptedData, kDecodeFailed, kOutOfMemory) | ✅ |
+| 1.3.2 | Add validation errors (kInvalidDimensions, kDimensionMismatch, kArrayLayerCountInvalid, kDepthInvalidFor2D) | ✅ |
+| 1.3.3 | Add cook errors (kMipGenerationFailed, kCompressionFailed, kOutputFormatInvalid, kHdrRequiresFloatFormat) | ✅ |
+| 1.3.4 | Add I/O errors (kFileNotFound, kFileReadFailed, kWriteFailed) | ✅ |
+| 1.3.5 | Add `to_string(TextureImportError)` function | ✅ |
+| 1.3.6 | Add `IsDecodeError()`, `IsValidationError()`, `IsCookError()`, `IsIoError()` category helpers | ✅ |
 
 ### 1.4 TextureImportDesc Structure
 
@@ -75,18 +75,18 @@ Establish core types, enums, and in-memory representations.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 1.4.1 | Define `TextureImportDesc` struct with all required fields | ☑ |
-| 1.4.2 | Add identity fields (`source_id`) | ☑ |
-| 1.4.3 | Add shape/dimensionality fields (`texture_type`, `width`, `height`, `depth`, `array_layers`) | ☑ |
-| 1.4.4 | Add content intent field (`intent`) | ☑ |
-| 1.4.5 | Add decode options (`flip_y_on_decode`, `force_rgba_on_decode`) | ☑ |
-| 1.4.6 | Add color/sampling policy fields (`color_space`) | ☑ |
-| 1.4.7 | Add normal map convention fields (`flip_normal_green`, `renormalize_normals_in_mips`) | ☑ |
-| 1.4.8 | Add mip policy fields (`mip_policy`, `max_mip_levels`, `mip_filter`, `mip_filter_space`) | ☑ |
-| 1.4.9 | Add output format field (`output_format` using `oxygen::Format`) | ☑ |
-| 1.4.10 | Add BC7 quality field (`bc7_quality` using `Bc7Quality` enum) | ☑ |
-| 1.4.11 | Add HDR handling fields (`bake_hdr_to_ldr`, `exposure_ev`) | ☑ |
-| 1.4.12 | Add `Validate()` method returning `std::optional<TextureImportError>` | ☑ |
+| 1.4.1 | Define `TextureImportDesc` struct with all required fields | ✅ |
+| 1.4.2 | Add identity fields (`source_id`) | ✅ |
+| 1.4.3 | Add shape/dimensionality fields (`texture_type`, `width`, `height`, `depth`, `array_layers`) | ✅ |
+| 1.4.4 | Add content intent field (`intent`) | ✅ |
+| 1.4.5 | Add decode options (`flip_y_on_decode`, `force_rgba_on_decode`) | ✅ |
+| 1.4.6 | Add color/sampling policy fields (`color_space`) | ✅ |
+| 1.4.7 | Add normal map convention fields (`flip_normal_green`, `renormalize_normals_in_mips`) | ✅ |
+| 1.4.8 | Add mip policy fields (`mip_policy`, `max_mip_levels`, `mip_filter`, `mip_filter_space`) | ✅ |
+| 1.4.9 | Add output format field (`output_format` using `oxygen::Format`) | ✅ |
+| 1.4.10 | Add BC7 quality field (`bc7_quality` using `Bc7Quality` enum) | ✅ |
+| 1.4.11 | Add HDR handling fields (`bake_hdr_to_ldr`, `exposure_ev`) | ✅ |
+| 1.4.12 | Add `Validate()` method returning `std::optional<TextureImportError>` | ✅ |
 
 ### 1.5 ImageView and ScratchImage
 
@@ -99,15 +99,15 @@ Establish core types, enums, and in-memory representations.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 1.5.1 | Define `ImageView` struct (width, height, format, row_pitch_bytes, pixels span) | ☑ |
-| 1.5.2 | Define `ScratchImage` class with metadata and storage | ☑ |
-| 1.5.3 | Implement `Meta()` accessor | ☑ |
-| 1.5.4 | Implement `GetImage(array_layer, mip)` method | ☑ |
-| 1.5.5 | Implement allocation/initialization helpers | ☑ |
-| 1.5.6 | Implement `ComputeMipCount()` static helper | ☑ |
-| 1.5.7 | Implement `ComputeSubresourceIndex()` helper | ☑ |
-| 1.5.8 | Implement `ComputeMipDimensions()` helper | ☑ |
-| 1.5.9 | Add unit tests for `ScratchImage` | ☑ |
+| 1.5.1 | Define `ImageView` struct (width, height, format, row_pitch_bytes, pixels span) | ✅ |
+| 1.5.2 | Define `ScratchImage` class with metadata and storage | ✅ |
+| 1.5.3 | Implement `Meta()` accessor | ✅ |
+| 1.5.4 | Implement `GetImage(array_layer, mip)` method | ✅ |
+| 1.5.5 | Implement allocation/initialization helpers | ✅ |
+| 1.5.6 | Implement `ComputeMipCount()` static helper | ✅ |
+| 1.5.7 | Implement `ComputeSubresourceIndex()` helper | ✅ |
+| 1.5.8 | Implement `ComputeMipDimensions()` helper | ✅ |
+| 1.5.9 | Add unit tests for `ScratchImage` | ✅ |
 
 ### 1.6 PAK Format v4 Structures
 
@@ -117,16 +117,16 @@ Establish core types, enums, and in-memory representations.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 1.6.1 | Create `oxygen::data::pak::v4` namespace | ☑ |
-| 1.6.2 | Define `TexturePackingPolicyId` enum (`kD3D12`, `kTightPacked`) | ☑ |
-| 1.6.3 | Define `TexturePayloadFlags` enum | ☑ |
-| 1.6.4 | Define `SubresourceLayout` struct (12 bytes packed) | ☑ |
-| 1.6.5 | Define `kTexturePayloadMagic` constant (`'OTX1'`) | ☑ |
-| 1.6.6 | Define `TexturePayloadHeader` struct (28 bytes packed) | ☑ |
-| 1.6.7 | Update `PakHeader::version` to 4 in v4 namespace | ☑ |
-| 1.6.8 | Add `using namespace v4;` alias in `oxygen::data::pak` | ☑ |
-| 1.6.9 | Add static_asserts for struct sizes | ☑ |
-| 1.6.10 | Document breaking changes in header comments | ☑ |
+| 1.6.1 | Create `oxygen::data::pak::v4` namespace | ✅ |
+| 1.6.2 | Define `TexturePackingPolicyId` enum (`kD3D12`, `kTightPacked`) | ✅ |
+| 1.6.3 | Define `TexturePayloadFlags` enum | ✅ |
+| 1.6.4 | Define `SubresourceLayout` struct (12 bytes packed) | ✅ |
+| 1.6.5 | Define `kTexturePayloadMagic` constant (`'OTX1'`) | ✅ |
+| 1.6.6 | Define `TexturePayloadHeader` struct (28 bytes packed) | ✅ |
+| 1.6.7 | Update `PakHeader::version` to 4 in v4 namespace | ✅ |
+| 1.6.8 | Add `using namespace v4;` alias in `oxygen::data::pak` | ✅ |
+| 1.6.9 | Add static_asserts for struct sizes | ✅ |
+| 1.6.10 | Document breaking changes in header comments | ✅ |
 
 ---
 
@@ -145,10 +145,10 @@ Extend the existing decode layer to support HDR formats and produce `ScratchImag
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 2.1.1 | Implement EXR signature detection function (`IsExrSignature()`) | ☑ |
-| 2.1.2 | Implement `DecodeExrToFloat()` internal function using tinyexr API | ☑ |
-| 2.1.3 | Handle tinyexr error codes and map to `TextureImportError` | ☑ |
-| 2.1.4 | Add unit tests for EXR decoding | ☑ |
+| 2.1.1 | Implement EXR signature detection function (`IsExrSignature()`) | ✅ |
+| 2.1.2 | Implement `DecodeExrToFloat()` internal function using tinyexr API | ✅ |
+| 2.1.3 | Handle tinyexr error codes and map to `TextureImportError` | ✅ |
+| 2.1.4 | Add unit tests for EXR decoding | ✅ |
 
 ### 2.2 Extended stb_image Support
 
@@ -159,9 +159,9 @@ Extend the existing decode layer to support HDR formats and produce `ScratchImag
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 2.2.1 | Implement `.hdr` format detection | ☑ |
-| 2.2.2 | Implement `DecodeHdrToFloat()` using `stbi_loadf` | ☑ |
-| 2.2.3 | Add unit tests for HDR decoding | ☑ |
+| 2.2.1 | Implement `.hdr` format detection | ✅ |
+| 2.2.2 | Implement `DecodeHdrToFloat()` using `stbi_loadf` | ✅ |
+| 2.2.3 | Add unit tests for HDR decoding | ✅ |
 
 ### 2.3 Unified Decode API
 
@@ -172,14 +172,14 @@ Extend the existing decode layer to support HDR formats and produce `ScratchImag
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 2.3.1 | Define `DecodeOptions` struct | ☑ |
-| 2.3.2 | Implement `DecodeToScratchImage()` unified entry point | ☑ |
-| 2.3.3 | Implement format detection (EXR signature, HDR extension, fallback to stb_image) | ☑ |
-| 2.3.4 | Ensure LDR outputs `PixelFormat::kRGBA8_UNorm` | ☑ |
-| 2.3.5 | Ensure HDR outputs `PixelFormat::kRGBA32_Float` | ☑ |
-| 2.3.6 | Implement Y-flip option | ☑ |
-| 2.3.7 | Implement force-RGBA option | ☑ |
-| 2.3.8 | Add comprehensive unit tests for unified decoder | ☑ |
+| 2.3.1 | Define `DecodeOptions` struct | ✅ |
+| 2.3.2 | Implement `DecodeToScratchImage()` unified entry point | ✅ |
+| 2.3.3 | Implement format detection (EXR signature, HDR extension, fallback to stb_image) | ✅ |
+| 2.3.4 | Ensure LDR outputs `PixelFormat::kRGBA8_UNorm` | ✅ |
+| 2.3.5 | Ensure HDR outputs `PixelFormat::kRGBA32_Float` | ✅ |
+| 2.3.6 | Implement Y-flip option | ✅ |
+| 2.3.7 | Implement force-RGBA option | ✅ |
+| 2.3.8 | Add comprehensive unit tests for unified decoder | ✅ |
 
 ---
 
@@ -198,54 +198,54 @@ Implement mip generation, color space conversion, and content-specific processin
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 3.1.1 | Implement `image::color::SrgbToLinear(float)` function | ☑ |
-| 3.1.2 | Implement `image::color::LinearToSrgb(float)` function | ☑ |
-| 3.1.3 | Implement `image::color::SrgbToLinear(float4)` for RGBA | ☑ |
-| 3.1.4 | Implement `image::color::LinearToSrgb(float4)` for RGBA | ☑ |
-| 3.1.5 | Implement whole-image conversion helpers | ☑ |
-| 3.1.6 | Add unit tests for color space conversion | ☑ |
+| 3.1.1 | Implement `image::color::SrgbToLinear(float)` function | ✅ |
+| 3.1.2 | Implement `image::color::LinearToSrgb(float)` function | ✅ |
+| 3.1.3 | Implement `image::color::SrgbToLinear(float4)` for RGBA | ✅ |
+| 3.1.4 | Implement `image::color::LinearToSrgb(float4)` for RGBA | ✅ |
+| 3.1.5 | Implement whole-image conversion helpers | ✅ |
+| 3.1.6 | Add unit tests for color space conversion | ✅ |
 
 ### 3.2 HDR Processing (`image::hdr`)
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 3.2.1 | Implement `image::hdr::ApplyExposure()` | ☑ |
-| 3.2.2 | Implement `image::hdr::AcesTonemap()` (ACES fitted) | ☑ |
-| 3.2.3 | Implement `image::hdr::BakeToLdr()` pipeline (exposure → tonemap → quantize) | ☑ |
-| 3.2.4 | Add unit tests for HDR processing | ☑ |
+| 3.2.1 | Implement `image::hdr::ApplyExposure()` | ✅ |
+| 3.2.2 | Implement `image::hdr::AcesTonemap()` (ACES fitted) | ✅ |
+| 3.2.3 | Implement `image::hdr::BakeToLdr()` pipeline (exposure → tonemap → quantize) | ✅ |
+| 3.2.4 | Add unit tests for HDR processing | ✅ |
 
 ### 3.3 Mip Filter Kernels (`image::mip`)
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 3.3.1 | Implement `image::mip::BesselI0()` (modified Bessel function) | ☑ |
-| 3.3.2 | Implement `image::mip::KaiserWindow(x, alpha)` function | ☑ |
-| 3.3.3 | Implement `image::mip::LanczosKernel(x, a)` function | ☑ |
-| 3.3.4 | Implement 1D separable filter application | ☑ |
-| 3.3.5 | Implement 2D box filter (2×2 average) | ☑ |
-| 3.3.6 | Implement 2D Kaiser filter (separable) | ☑ |
-| 3.3.7 | Implement 2D Lanczos filter (separable) | ☑ |
-| 3.3.8 | Add unit tests for filter kernels | ☑ |
+| 3.3.1 | Implement `image::mip::BesselI0()` (modified Bessel function) | ✅ |
+| 3.3.2 | Implement `image::mip::KaiserWindow(x, alpha)` function | ✅ |
+| 3.3.3 | Implement `image::mip::LanczosKernel(x, a)` function | ✅ |
+| 3.3.4 | Implement 1D separable filter application | ✅ |
+| 3.3.5 | Implement 2D box filter (2×2 average) | ✅ |
+| 3.3.6 | Implement 2D Kaiser filter (separable) | ✅ |
+| 3.3.7 | Implement 2D Lanczos filter (separable) | ✅ |
+| 3.3.8 | Add unit tests for filter kernels | ✅ |
 
 ### 3.4 Mip Generation (`image::mip`)
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 3.4.1 | Implement `image::mip::ComputeMipCount(width, height)` | ☑ |
-| 3.4.2 | Implement `image::mip::GenerateChain2D()` for 2D textures | ☑ |
-| 3.4.3 | Implement `image::mip::GenerateChain3D()` for 3D textures | ☑ |
-| 3.4.4 | Implement sRGB→linear conversion before filtering | ☑ |
-| 3.4.5 | Implement linear→sRGB conversion after filtering (when needed) | ☑ |
-| 3.4.6 | Add unit tests for mip generation | ☑ |
+| 3.4.1 | Implement `image::mip::ComputeMipCount(width, height)` | ✅ |
+| 3.4.2 | Implement `image::mip::GenerateChain2D()` for 2D textures | ✅ |
+| 3.4.3 | Implement `image::mip::GenerateChain3D()` for 3D textures | ✅ |
+| 3.4.4 | Implement sRGB→linear conversion before filtering | ✅ |
+| 3.4.5 | Implement linear→sRGB conversion after filtering (when needed) | ✅ |
+| 3.4.6 | Add unit tests for mip generation | ✅ |
 
 ### 3.5 Content-Specific Processing (`image::content`)
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 3.5.1 | Implement `image::content::RenormalizeNormal()` per-texel | ☑ |
-| 3.5.2 | Implement `image::content::GenerateNormalMapMips()` with renormalization option | ☑ |
-| 3.5.3 | Implement `image::content::FlipNormalGreen()` for normal maps | ☑ |
-| 3.5.4 | Add unit tests for content-specific processing | ☑ |
+| 3.5.1 | Implement `image::content::RenormalizeNormal()` per-texel | ✅ |
+| 3.5.2 | Implement `image::content::GenerateNormalMapMips()` with renormalization option | ✅ |
+| 3.5.3 | Implement `image::content::FlipNormalGreen()` for normal maps | ✅ |
+| 3.5.4 | Add unit tests for content-specific processing | ✅ |
 
 ---
 
@@ -262,11 +262,11 @@ Integrate bc7enc for optional BC7 compression.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 4.1.1 | Implement thread-safe one-time `bc7enc_compress_block_init()` wrapper | ☑ |
-| 4.1.2 | Define `Bc7EncoderParams` struct for quality tiers | ☑ |
-| 4.1.3 | Implement `Bc7EncodeBlock()` wrapper function | ☑ |
-| 4.1.4 | Implement perceptual vs linear weight selection | ☑ |
-| 4.1.5 | Add unit tests for single block encoding | ☑ |
+| 4.1.1 | Implement thread-safe one-time `bc7enc_compress_block_init()` wrapper | ✅ |
+| 4.1.2 | Define `Bc7EncoderParams` struct for quality tiers | ✅ |
+| 4.1.3 | Implement `Bc7EncodeBlock()` wrapper function | ✅ |
+| 4.1.4 | Implement perceptual vs linear weight selection | ✅ |
+| 4.1.5 | Add unit tests for single block encoding | ✅ |
 
 ### 4.2 Full Texture BC7 Encoding
 
@@ -277,12 +277,12 @@ Integrate bc7enc for optional BC7 compression.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 4.2.1 | Implement block iteration (blocks_x, blocks_y calculation) | ☑ |
-| 4.2.2 | Implement edge handling with border replication | ☑ |
-| 4.2.3 | Implement `EncodeSurfaceBc7()` for single mip | ☑ |
-| 4.2.4 | Implement `EncodeTextureBc7()` for full texture with all mips | ☑ |
-| 4.2.5 | Implement quality tier mapping to bc7enc parameters | ☑ |
-| 4.2.6 | Add unit tests for full texture encoding | ☑ |
+| 4.2.1 | Implement block iteration (blocks_x, blocks_y calculation) | ✅ |
+| 4.2.2 | Implement edge handling with border replication | ✅ |
+| 4.2.3 | Implement `EncodeSurfaceBc7()` for single mip | ✅ |
+| 4.2.4 | Implement `EncodeTextureBc7()` for full texture with all mips | ✅ |
+| 4.2.5 | Implement quality tier mapping to bc7enc parameters | ✅ |
+| 4.2.6 | Add unit tests for full texture encoding | ✅ |
 
 ### 4.3 Parallel BC7 Encoding (Optional)
 
@@ -310,10 +310,10 @@ Implement backend-specific texture packing strategies.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 5.1.1 | Define `ITexturePackingPolicy` interface | ☑ |
-| 5.1.2 | Define `Id()` method | ☑ |
-| 5.1.3 | Define `AlignRowPitchBytes()` method | ☑ |
-| 5.1.4 | Define `AlignSubresourceOffset()` method | ☑ |
+| 5.1.1 | Define `ITexturePackingPolicy` interface | ✅ |
+| 5.1.2 | Define `Id()` method | ✅ |
+| 5.1.3 | Define `AlignRowPitchBytes()` method | ✅ |
+| 5.1.4 | Define `AlignSubresourceOffset()` method | ✅ |
 
 ### 5.2 D3D12 Packing Policy
 
@@ -324,10 +324,10 @@ Implement backend-specific texture packing strategies.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 5.2.1 | Define `kD3D12RowPitchAlignment = 256` constant | ☑ |
-| 5.2.2 | Define `kD3D12SubresourcePlacementAlignment = 512` constant | ☑ |
-| 5.2.3 | Implement `D3D12PackingPolicy` class | ☑ |
-| 5.2.4 | Add unit tests for D3D12 packing alignment | ☑ |
+| 5.2.1 | Define `kD3D12RowPitchAlignment = 256` constant | ✅ |
+| 5.2.2 | Define `kD3D12SubresourcePlacementAlignment = 512` constant | ✅ |
+| 5.2.3 | Implement `D3D12PackingPolicy` class | ✅ |
+| 5.2.4 | Add unit tests for D3D12 packing alignment | ✅ |
 
 ### 5.3 Tight Packed Policy
 
@@ -338,9 +338,9 @@ Implement backend-specific texture packing strategies.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 5.3.1 | Implement `TightPackedPolicy` class | ☑ |
-| 5.3.2 | Implement minimal alignment (4-byte subresource offset) | ☑ |
-| 5.3.3 | Add unit tests for tight packing | ☑ |
+| 5.3.1 | Implement `TightPackedPolicy` class | ✅ |
+| 5.3.2 | Implement minimal alignment (4-byte subresource offset) | ✅ |
+| 5.3.3 | Add unit tests for tight packing | ✅ |
 
 ### 5.4 Subresource Layout Computation
 
@@ -351,12 +351,12 @@ Implement backend-specific texture packing strategies.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 5.4.1 | Implement `ComputeBytesPerPixel(Format)` helper | ☑ |
-| 5.4.2 | Implement `ComputeRowBytes()` for uncompressed formats | ☑ |
-| 5.4.3 | Implement `ComputeRowBytes()` for BC7 formats | ☑ |
-| 5.4.4 | Implement `ComputeSubresourceLayouts()` for full texture | ☑ |
-| 5.4.5 | Implement `ComputeTotalPayloadSize()` | ☑ |
-| 5.4.6 | Add unit tests for layout computation | ☑ |
+| 5.4.1 | Implement `ComputeBytesPerPixel(Format)` helper | ✅ |
+| 5.4.2 | Implement `ComputeRowBytes()` for uncompressed formats | ✅ |
+| 5.4.3 | Implement `ComputeRowBytes()` for BC7 formats | ✅ |
+| 5.4.4 | Implement `ComputeSubresourceLayouts()` for full texture | ✅ |
+| 5.4.5 | Implement `ComputeTotalPayloadSize()` | ✅ |
+| 5.4.6 | Add unit tests for layout computation | ✅ |
 
 ---
 
@@ -375,16 +375,16 @@ Create the main cooking pipeline that orchestrates all components.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 6.1.1 | Define `CookedTexturePayload` struct (desc + payload bytes) | ☑ |
-| 6.1.2 | Implement `CookTexture(span<byte>, desc, policy)` for single-source textures | ☑ |
-| 6.1.3 | Implement `CookTexture(TextureSourceSet, desc, policy)` for multi-source textures | ☑ |
-| 6.1.4 | Implement decode → working format pipeline | ☑ |
-| 6.1.5 | Implement mip generation step | ☑ |
-| 6.1.6 | Implement content-specific processing dispatch | ☑ |
-| 6.1.7 | Implement BC7 encoding step (when output is BC7) | ☑ |
-| 6.1.8 | Implement payload header + layout table writing | ☑ |
-| 6.1.9 | Implement subresource data packing | ☑ |
-| 6.1.10 | Implement content hash computation | ☑ |
+| 6.1.1 | Define `CookedTexturePayload` struct (desc + payload bytes) | ✅ |
+| 6.1.2 | Implement `CookTexture(span<byte>, desc, policy)` for single-source textures | ✅ |
+| 6.1.3 | Implement `CookTexture(TextureSourceSet, desc, policy)` for multi-source textures | ✅ |
+| 6.1.4 | Implement decode → working format pipeline | ✅ |
+| 6.1.5 | Implement mip generation step | ✅ |
+| 6.1.6 | Implement content-specific processing dispatch | ✅ |
+| 6.1.7 | Implement BC7 encoding step (when output is BC7) | ✅ |
+| 6.1.8 | Implement payload header + layout table writing | ✅ |
+| 6.1.9 | Implement subresource data packing | ✅ |
+| 6.1.10 | Implement content hash computation | ✅ |
 
 ### 6.2 Validation
 
@@ -394,13 +394,13 @@ Create the main cooking pipeline that orchestrates all components.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 6.2.1 | Implement texture type vs array_layers validation | ☑ |
-| 6.2.2 | Implement cube map layer count validation (multiple of 6) | ☑ |
-| 6.2.3 | Implement 3D texture depth validation | ☑ |
-| 6.2.4 | Implement HDR input vs output format validation | ☑ |
-| 6.2.5 | Implement dimension limit validation | ☑ |
-| 6.2.6 | Implement intent vs format compatibility validation | ☑ |
-| 6.2.7 | Add unit tests for all validation rules | ☑ |
+| 6.2.1 | Implement texture type vs array_layers validation | ✅ |
+| 6.2.2 | Implement cube map layer count validation (multiple of 6) | ✅ |
+| 6.2.3 | Implement 3D texture depth validation | ✅ |
+| 6.2.4 | Implement HDR input vs output format validation | ✅ |
+| 6.2.5 | Implement dimension limit validation | ✅ |
+| 6.2.6 | Implement intent vs format compatibility validation | ✅ |
+| 6.2.7 | Add unit tests for all validation rules | ✅ |
 
 ### 6.3 Unit Tests
 
@@ -410,16 +410,16 @@ Create the main cooking pipeline that orchestrates all components.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 6.3.1 | Test LDR 2D texture cooking | ☑ |
-| 6.3.2 | Test LDR 2D texture with mips | ☑ |
-| 6.3.3 | Test BC7 encoding path | ☑ |
+| 6.3.1 | Test LDR 2D texture cooking | ✅ |
+| 6.3.2 | Test LDR 2D texture with mips | ✅ |
+| 6.3.3 | Test BC7 encoding path | ✅ |
 | 6.3.4 | Test HDR to float16 path | ☐ |
 | 6.3.5 | Test HDR bake to LDR path | ☐ |
-| 6.3.6 | Test normal map with renormalization | ☑ |
+| 6.3.6 | Test normal map with renormalization | ✅ |
 | 6.3.7 | Test 3D texture mip generation | ☐ |
 | 6.3.8 | Test cube map assembly | ☐ |
 | 6.3.9 | Test array texture assembly | ☐ |
-| 6.3.10 | Test D3D12 vs TightPacked layouts | ☑ |
+| 6.3.10 | Test D3D12 vs TightPacked layouts | ✅ |
 
 ---
 
@@ -567,7 +567,56 @@ Update runtime loader to handle v4 payloads.
 
 ---
 
-## Phase 12: Tools Updates
+## Phase 12: TextureBinder BC7 Support
+
+Add block-compressed texture format support to the renderer's `TextureBinder`.
+
+> **Context:** `TextureBinder::PrepareTexture2DUpload()` currently rejects block-compressed formats (`block_size != 1`). BC7 textures require block-aware upload layout calculations (4×4 block size, 16 bytes/block) and correct D3D12 copy alignment.
+
+### 12.1 Block-Compressed Format Handling
+
+**Files to modify:**
+
+- `src/Oxygen/Renderer/Resources/TextureBinder.cpp`
+
+| Task | Description | Status |
+| ---- | ----------- | ------ |
+| 12.1.1 | Remove `block_size != 1` early-exit in `PrepareTexture2DUpload()` | ☐ |
+| 12.1.2 | Compute BC row pitch: `ceil(width/4) * bytes_per_block` | ☐ |
+| 12.1.3 | Compute BC slice pitch: `row_pitch * ceil(height/4)` | ☐ |
+| 12.1.4 | Handle BC mip dimensions (min 1 block per dimension) | ☐ |
+| 12.1.5 | Align BC row pitch to D3D12 requirements (256 bytes) | ☐ |
+| 12.1.6 | Update upload layout to use block-aware subresource sizes | ☐ |
+
+### 12.2 SRV View Descriptor Updates
+
+**Files to modify:**
+
+- `src/Oxygen/Renderer/Resources/TextureBinder.cpp`
+
+| Task | Description | Status |
+| ---- | ----------- | ------ |
+| 12.2.1 | Update `MakeTextureSrvViewDesc()` to use actual texture format | ☐ |
+| 12.2.2 | Remove hardcoded `Format::kRGBA8UNorm` in view creation | ☐ |
+| 12.2.3 | Use `tex_res.GetFormat()` for SRV view descriptors | ☐ |
+
+### 12.3 Unit Tests
+
+**Files to create/modify:**
+
+- `src/Oxygen/Renderer/Test/Resources/TextureBinder_bc7_test.cpp`
+
+| Task | Description | Status |
+| ---- | ----------- | ------ |
+| 12.3.1 | Test BC7 texture upload (single mip) | ☐ |
+| 12.3.2 | Test BC7 texture upload (full mip chain) | ☐ |
+| 12.3.3 | Test BC7 cubemap upload | ☐ |
+| 12.3.4 | Test BC7 with non-power-of-two dimensions | ☐ |
+| 12.3.5 | Verify correct block alignment in upload buffer | ☐ |
+
+---
+
+## Phase 13: Tools Updates
 
 Update asset tools for v4 compatibility.
 
@@ -591,12 +640,12 @@ Update asset tools for v4 compatibility.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 12.2.1 | Parse and display `TexturePayloadHeader` | ✅ |
-| 12.2.2 | Decode and display packing policy | ✅ |
-| 12.2.3 | List subresource layouts | ✅ |
-| 12.2.4 | Handle v3/v4 version detection | ✅ |
+| 13.2.1 | Parse and display `TexturePayloadHeader` | ✅ |
+| 13.2.2 | Decode and display packing policy | ✅ |
+| 13.2.3 | List subresource layouts | ✅ |
+| 13.2.4 | Handle v3/v4 version detection | ✅ |
 
-### 12.3 Inspector Updates
+### 13.3 Inspector Updates
 
 **Files to modify:**
 
@@ -604,15 +653,15 @@ Update asset tools for v4 compatibility.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 12.3.1 | Validate magic and version | ✅ |
+| 13.3.1 | Validate magic and version | ✅ |
 
 ---
 
-## Phase 13: Integration Testing
+## Phase 14: Integration Testing
 
 End-to-end validation of the complete pipeline.
 
-### 13.1 Integration Tests
+### 14.1 Integration Tests
 
 **Files to create:**
 
@@ -620,16 +669,16 @@ End-to-end validation of the complete pipeline.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 13.1.1 | Test PNG → BC7 → load → render | ☐ |
-| 13.1.2 | Test EXR → float16 → load → render | ☐ |
-| 13.1.3 | Test HDR → BC7 (baked) → load → render | ☐ |
-| 13.1.4 | Test cube map assembly → load → render | ☐ |
-| 13.1.5 | Test 2D array texture → load → render | ☐ |
-| 13.1.6 | Test 3D texture → load → render | ☐ |
-| 13.1.7 | Test incremental cooking (deduplication) | ☐ |
-| 13.1.8 | Test v3→v4 migration path | ☐ |
+| 14.1.1 | Test PNG → BC7 → load → render | ☐ |
+| 14.1.2 | Test EXR → float16 → load → render | ☐ |
+| 14.1.3 | Test HDR → BC7 (baked) → load → render | ☐ |
+| 14.1.4 | Test cube map assembly → load → render | ☐ |
+| 14.1.5 | Test 2D array texture → load → render | ☐ |
+| 14.1.6 | Test 3D texture → load → render | ☐ |
+| 14.1.7 | Test incremental cooking (deduplication) | ☐ |
+| 14.1.8 | Test v3→v4 migration path | ☐ |
 
-### 13.2 Example Application
+### 14.2 Example Application
 
 **Files to create/modify:**
 
@@ -637,31 +686,31 @@ End-to-end validation of the complete pipeline.
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 13.2.1 | Update example to use BC7 textures | ☑ |
-| 13.2.2 | Add HDR environment example | ☑ |
-| 13.2.3 | Document example usage | ☑ |
+| 14.2.1 | Update example to use BC7 textures | ✅ |
+| 14.2.2 | Add HDR environment example | ✅ |
+| 14.2.3 | Document example usage | ✅ |
 
 ---
 
-## Phase 14: Documentation
+## Phase 15: Documentation
 
-### 14.1 API Documentation
-
-| Task | Description | Status |
-| ---- | ----------- | ------ |
-| 14.1.1 | Add Doxygen comments to all public APIs | ☐ |
-| 14.1.2 | Document `TextureImportDesc` field semantics | ☐ |
-| 14.1.3 | Document preset usage | ☐ |
-| 14.1.4 | Document packing policies | ☐ |
-
-### 14.2 User Documentation
+### 15.1 API Documentation
 
 | Task | Description | Status |
 | ---- | ----------- | ------ |
-| 14.2.1 | Update README with texture import workflow | ☐ |
-| 14.2.2 | Document supported input formats | ☐ |
-| 14.2.3 | Document output format selection | ☐ |
-| 14.2.4 | Document manifest format (if implemented) | ☐ |
+| 15.1.1 | Add Doxygen comments to all public APIs | ☐ |
+| 15.1.2 | Document `TextureImportDesc` field semantics | ☐ |
+| 15.1.3 | Document preset usage | ☐ |
+| 15.1.4 | Document packing policies | ☐ |
+
+### 15.2 User Documentation
+
+| Task | Description | Status |
+| ---- | ----------- | ------ |
+| 15.2.1 | Update README with texture import workflow | ☐ |
+| 15.2.2 | Document supported input formats | ☐ |
+| 15.2.3 | Document output format selection | ☐ |
+| 15.2.4 | Document manifest format (if implemented) | ☐ |
 
 ---
 
@@ -698,13 +747,16 @@ Phase 9 ◄────┴──────────────────
 Phase 11 ◄───┴───────────────────────────────────────────────────┤
              │                                                   │
              v                                                   │
-Phase 12 ◄───┴───────────────────────────────────────────────────┤
+Phase 12 ◄───┴─── (TextureBinder BC7 - depends on Phase 11) ─────┤
              │                                                   │
              v                                                   │
-Phase 13 ◄───┴───────────────────────────────────────────────────┘
+Phase 13 ◄───┴───────────────────────────────────────────────────┤
+             │                                                   │
+             v                                                   │
+Phase 14 ◄───┴───────────────────────────────────────────────────┘
              │
              v
-Phase 14 (can run in parallel with any phase)
+Phase 15 (can run in parallel with any phase)
 ```
 
 ---
@@ -724,10 +776,11 @@ Phase 14 (can run in parallel with any phase)
 | 9 | 10 | Emitter Integration |
 | 10 | 5 | Texture Manifest (Optional) |
 | 11 | 5 | Runtime Loader Updates |
-| 12 | 10 | Tools Updates |
-| 13 | 11 | Integration Testing |
-| 14 | 6 | Documentation |
-| **Total** | **189** | |
+| 12 | 14 | TextureBinder BC7 Support |
+| 13 | 10 | Tools Updates |
+| 14 | 11 | Integration Testing |
+| 15 | 8 | Documentation |
+| **Total** | **203** | |
 
 ---
 
@@ -741,3 +794,4 @@ Phase 14 (can run in parallel with any phase)
 | 2026-01-10 | 1.3 | - | Clarified CookTexture API: two overloads (single-source, multi-source via TextureSourceSet), both taking TextureImportDesc; tinyexr already integrated |
 | 2026-01-10 | 1.4 | - | Moved API design to design document (texture_import.md); implementation plan now references design doc |
 | 2026-01-10 | 1.5 | - | Phase 3: Consolidated into single ImageProcessing.h/cpp with nested namespaces (image::color, image::hdr, image::mip, image::content) |
+| 2026-01-11 | 1.6 | - | Added Phase 12: TextureBinder BC7 Support for block-compressed texture upload in renderer |
