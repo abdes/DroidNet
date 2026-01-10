@@ -325,6 +325,12 @@ auto Renderer::GetSkyAtmosphereLutManager() const noexcept
 auto Renderer::SetAtmosphereDebugFlags(const uint32_t flags) -> void
 {
   atmosphere_debug_flags_ = flags;
+
+  // Forward flags to LUT manager so the sky-view LUT can use them during
+  // compute dispatch. The LUT manager will mark itself dirty if flags change.
+  if (sky_atmo_lut_manager_) {
+    sky_atmo_lut_manager_->SetAtmosphereFlags(flags);
+  }
 }
 
 auto Renderer::GetAtmosphereDebugFlags() const noexcept -> uint32_t

@@ -68,6 +68,17 @@ auto SkyAtmosphereLutManager::IsDirty() const noexcept -> bool
 
 auto SkyAtmosphereLutManager::MarkClean() noexcept -> void { dirty_ = false; }
 
+auto SkyAtmosphereLutManager::MarkDirty() noexcept -> void { dirty_ = true; }
+
+auto SkyAtmosphereLutManager::SetAtmosphereFlags(uint32_t flags) noexcept
+  -> void
+{
+  if (atmosphere_flags_ != flags) {
+    atmosphere_flags_ = flags;
+    dirty_ = true;
+  }
+}
+
 auto SkyAtmosphereLutManager::HasBeenGenerated() const noexcept -> bool
 {
   return luts_generated_;

@@ -135,6 +135,28 @@ public:
   //! Clears the dirty flag after LUT regeneration.
   OXGN_RNDR_API auto MarkClean() noexcept -> void;
 
+  //! Forces LUTs to regenerate on next frame.
+  /*!
+   Use when external state affecting LUT generation changes (e.g., debug flags).
+  */
+  OXGN_RNDR_API auto MarkDirty() noexcept -> void;
+
+  //! Sets atmosphere debug/feature flags for LUT generation.
+  /*!
+   These flags affect how the sky-view LUT is computed (e.g., use ambient term
+   instead of Rayleigh phase function). If the flags change, the LUTs are
+   marked dirty and will regenerate.
+
+   @param flags Bitfield of AtmosphereFlags values.
+  */
+  OXGN_RNDR_API auto SetAtmosphereFlags(uint32_t flags) noexcept -> void;
+
+  //! Returns the current atmosphere flags.
+  [[nodiscard]] auto GetAtmosphereFlags() const noexcept -> uint32_t
+  {
+    return atmosphere_flags_;
+  }
+
   //! Returns true if LUTs have been generated at least once.
   /*!
    When true, the LUT textures are in SRV state (ready for sampling).
@@ -286,6 +308,7 @@ private:
 
   CachedParams cached_params_ {};
   SunState sun_state_ {};
+  uint32_t atmosphere_flags_ { 0 }; //!< Debug/feature flags for LUT generation
   bool dirty_ { true };
   bool resources_created_ { false };
   bool luts_generated_ { false }; //!< True after first successful compute

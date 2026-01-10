@@ -339,7 +339,8 @@ float3 ComputeAtmosphereSkyColor(
     float camera_altitude)
 {
     // Sample sky-view LUT for inscattered radiance.
-    // The LUT already includes twilight attenuation baked in during generation.
+    // The LUT stores physically-based inscatter: transmittance naturally handles
+    // sunset/twilight dimming as light travels through longer atmospheric paths.
     float4 sky_sample = SampleSkyViewLut(
         atmo.sky_view_lut_slot,
         atmo.sky_view_lut_width,

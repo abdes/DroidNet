@@ -50,6 +50,11 @@ struct SkyViewLutPassConstants
     uint transmittance_height;      // Transmittance LUT height
     float camera_altitude_m;        // Camera altitude above ground
     float sun_cos_zenith;           // Cosine of sun zenith angle (sun_dir.z)
+
+    uint atmosphere_flags;          // Debug/feature flags (kUseAmbientTerm, etc.)
+    uint _pad0;                     // Padding for 16-byte alignment
+    uint _pad1;
+    uint _pad2;
 };
 
 // Thread group size: 8x8 threads per group
@@ -63,6 +68,9 @@ static const uint MAX_SCATTERING_SAMPLES = 256;
 // Mathematical constants
 static const float PI = 3.14159265359;
 static const float TWO_PI = 6.28318530718;
+
+// Atmosphere feature flag bits (matches C++ AtmosphereFlags enum)
+
 
 
 
@@ -151,11 +159,11 @@ float RaySphereIntersect(float3 origin, float3 dir, float radius)
 //! Samples the transmittance LUT.
 //!
 //! @param altitude Altitude above ground in meters.
-//! @param cos_zenith Cosine of zenith angle.
+//! @param cos_zenith Cosine of zenith angle (toward sun).
 //! @param atmo Atmosphere parameters.
 //! @param transmittance_lut Transmittance LUT texture.
 //! @param lut_size LUT dimensions.
-//! @return (Rayleigh transmittance, Mie transmittance).
+//! @return Optical depth (Rayleigh, Mie, Absorption).
 float3 SampleTransmittanceLutOpticalDepth(
     float altitude,
     float cos_zenith,
@@ -164,16 +172,31 @@ float3 SampleTransmittanceLutOpticalDepth(
     SamplerState linear_sampler,
     uint2 lut_size)
 {
-    // Convert to UV
+    // Compute the local horizon angle at this sample's altitude.
+    // At altitude h, the horizon is where the ray is tangent to the planet:
+    // cos(horizon_zenith) = -sqrt(1 - (R/(R+h))^2)
+    //
+    // If the sun direction points below this horizon, the PLANET blocks the
+    // sun's rays from reaching this sample. This is the fundamental physics
+    // of sunset/night: Earth rotates and physically blocks the sun.
+    float r = atmo.planet_radius_m + altitude;
+    float rho = atmo.planet_radius_m / r;
+    float cos_horizon = -sqrt(max(0.0, 1.0 - rho * rho));
+
+    // Hard cutoff: if sun is below local horizon, planet blocks it completely.
+    // The planet is a solid body - there's no "soft" transition here.
+    if (cos_zenith < cos_horizon)
+    {
+        // Sun blocked by planet - zero transmittance (infinite optical depth)
+        return float3(1e6, 1e6, 1e6);
+    }
+
+    // Sun is visible from this sample - look up transmittance through atmosphere
     float u = (cos_zenith + 0.15) / 1.15;
     float v = sqrt(altitude / atmo.atmosphere_height_m);
-
-    // Clamp to valid range
     u = clamp(u, 0.0, 1.0);
     v = clamp(v, 0.0, 1.0);
 
-    // Sample with bilinear filtering.
-    // RGB stores optical depth integrals for Rayleigh/Mie/Absorption.
     return transmittance_lut.SampleLevel(linear_sampler, float2(u, v), 0).rgb;
 }
 
@@ -235,6 +258,7 @@ float HenyeyGreensteinPhase(float cos_theta, float g)
 //! @param transmittance_lut Optical-depth LUT (Rayleigh/Mie/Abs).
 //! @param linear_sampler Linear sampler.
 //! @param lut_size Transmittance LUT size.
+//! @param atmosphere_flags Bitfield of AtmosphereFlags for debug options.
 //! @return (inscattered_radiance.rgb, total_transmittance).
 float4 ComputeSingleScattering(
     float3 origin,
@@ -245,85 +269,87 @@ float4 ComputeSingleScattering(
     GpuSkyAtmosphereParams atmo,
     Texture2D<float4> transmittance_lut,
     SamplerState linear_sampler,
-    uint2 lut_size)
+    uint2 lut_size,
+    uint atmosphere_flags)
 {
     float3 inscatter = float3(0.0, 0.0, 0.0);
 
     // Adaptive step count: more steps near the horizon/twilight.
     // Oxygen is strictly Z-up.
     const float horizon_factor_view = saturate(1.0 - abs(view_dir.z));
-    const float twilight_factor = saturate(1.0 - abs(sun_dir.z));
-    const float horizon_factor = max(horizon_factor_view, twilight_factor);
-    const uint num_steps = (uint)lerp((float)MIN_SCATTERING_SAMPLES,
-                                     (float)MAX_SCATTERING_SAMPLES,
-                                     horizon_factor);
 
-    float step_size = ray_length / float(max(1u, num_steps));
+    // During twilight, use maximum samples always.
+    // sun_dir.z < 0.05 means sun below ~3° elevation.
+    const bool is_twilight = (sun_dir.z < 0.05);
+    const uint num_steps = is_twilight ? 2048u :
+        (uint)lerp((float)MIN_SCATTERING_SAMPLES,
+                   (float)MAX_SCATTERING_SAMPLES,
+                   horizon_factor_view);
 
     // Phase function evaluation
     float cos_theta = dot(view_dir, sun_dir);
+
+    // Rayleigh phase function: (3/16π)(1 + cos²θ)
+    // Combined with multiple scattering approximation to avoid dark sky at 90° from sun.
     float rayleigh_phase = RayleighPhase(cos_theta);
 
-    // Sun elevation: sun_dir.z = sin(elevation) for Z-up coordinate system
-    // Positive = above horizon, negative = below horizon
-    float sun_sin_elevation = sun_dir.z;
+    // Use the user-specified Mie anisotropy directly.
+    // The Henyey-Greenstein phase function with positive g (0.7-0.9 typical)
+    // creates forward scattering toward the sun, which is physically correct.
+    float mie_phase = HenyeyGreensteinPhase(cos_theta, atmo.mie_g);
 
-    // Horizon-linked Mie anisotropy:
-    // The Mie phase function creates an intense forward-scattering aureole that
-    // becomes problematic at low sun angles where long atmospheric paths amplify
-    // the effect. We progressively reduce anisotropy as sun approaches horizon.
+    // Multiple scattering approximation (Hillaire 2020, Bruneton 2017):
+    // Single scattering alone makes the sky too dark at 90° from the sun because
+    // it misses light that bounces multiple times through the atmosphere.
     //
-    // - Above 30° elevation: full user-specified mie_g
-    // - Between 30° and 0°: linear interpolation to minimum anisotropy
-    // - At/below horizon: use minimum anisotropy
-    static const float kMinMieG = 0.1;          // Nearly isotropic at horizon
-    static const float kFullMieElevation = 0.5; // sin(30°)
-
-    // Use max(0, ...) so below-horizon doesn't affect mie_g further
-    float elevation_blend = saturate(max(0.0, sun_sin_elevation) / kFullMieElevation);
-    float effective_mie_g = lerp(kMinMieG, atmo.mie_g, elevation_blend);
-    float mie_phase = HenyeyGreensteinPhase(cos_theta, effective_mie_g);
-
-    // Sun intensity factor for twilight:
-    // - Above horizon (elevation >= 0): full intensity
-    // - At horizon (0°): drop to ~0.3 immediately
-    // - From 0° to -10°: gradual fade to 0
-    // - Below -10°: night (0)
+    // The key insight is that multiple scattering is approximately ISOTROPIC -
+    // light bounces so many times it loses its angular dependency. So we add
+    // an isotropic term (phase = 1/(4π) ≈ 0.0796, but we normalize differently)
+    // that's NOT scaled by the single-scattering phase function.
     //
-    // sin(-10°) ≈ -0.17
-    static const float kTwilightEnd = -0.17; // sin(-10°)
-
-    float sun_intensity_factor;
-    if (sun_sin_elevation >= 0.0)
-    {
-        // Sun above horizon: full intensity
-        sun_intensity_factor = 1.0;
-    }
-    else if (sun_sin_elevation >= kTwilightEnd)
-    {
-        // Twilight: 0° to -10°, fade from 0.3 to 0
-        // Use smoothstep for non-linear fade (faster at start, slower at end)
-        float t = sun_sin_elevation / kTwilightEnd; // 0 at horizon, 1 at -10°
-        sun_intensity_factor = 0.3 * (1.0 - smoothstep(0.0, 1.0, t));
-    }
-    else
-    {
-        // Night (below -10°)
-        sun_intensity_factor = 0.0;
-    }
-
-        // Multi-scattering approximation: boost single scattering.
-        // The slider remains 0..1, but maps to a wider and more useful range.
-        float multi_scatter_boost
-            = lerp(1.0, 3.0, saturate(atmo.multi_scattering_factor));
+    // multi_scattering_factor controls the strength:
+    // - 0.0 = single scattering only (dark at 90° from sun)
+    // - 1.0 = full approximation (realistic ambient brightness)
+    //
+    // We compute this as a blend between phase-weighted (single) and unweighted
+    // (multiple) scattering. The unweighted term uses the average Rayleigh phase
+    // which is 1/(4π) integrated over the sphere, but since we're adding to
+    // single scattering, we use a normalized isotropic phase of 1.0.
+    float ms_factor = saturate(atmo.multi_scattering_factor);
 
     float3 accumulated_optical_depth = float3(0.0, 0.0, 0.0);
 
+    // Exponential altitude sampling (per Nishita et al. 1993):
+    // Atmospheric density falls off exponentially with altitude, so we should
+    // sample more densely at lower altitudes where density is higher.
+    //
+    // During twilight we rely on high sample count (256) with uniform sampling
+    // to properly resolve the shadow boundary.
+    const float exp_scale = is_twilight ? 0.0 : 4.0;
+
     for (uint i = 0; i < num_steps; ++i)
     {
-        // Mid-point sampling (stable). Higher LUT resolution + higher sample
-        // counts reduce visible striping without introducing coherent noise.
-        float t = (float(i) + 0.5) * step_size;
+        float u_mid = (float(i) + 0.5) / float(num_steps);
+        float t;
+        float step_size;
+
+        if (exp_scale > 0.01)
+        {
+            // Exponential sampling: concentrate samples at start of ray (lower altitude).
+            float exp_warp = (1.0 - exp(-exp_scale * u_mid)) / (1.0 - exp(-exp_scale));
+            t = exp_warp * ray_length;
+
+            // Step size = derivative of the mapping.
+            step_size = ray_length * exp_scale * exp(-exp_scale * u_mid)
+                      / (1.0 - exp(-exp_scale)) / float(num_steps);
+        }
+        else
+        {
+            // Uniform sampling for twilight.
+            t = u_mid * ray_length;
+            step_size = ray_length / float(num_steps);
+        }
+
         float3 sample_pos = origin + view_dir * t;
 
         float altitude = length(sample_pos) - atmo.planet_radius_m;
@@ -352,14 +378,33 @@ float4 ComputeSingleScattering(
         float3 od_mid = accumulated_optical_depth + od_step * 0.5;
         float3 view_transmittance = TransmittanceFromOpticalDepth(od_mid, atmo);
 
-        // Scattering coefficient (per meter) at the sample.
-        float3 sigma_s = atmo.rayleigh_scattering_rgb * density_rayleigh * rayleigh_phase
-                       + atmo.mie_scattering_rgb * density_mie * mie_phase;
+        // === Scattering with Multiple Scattering Approximation ===
+        //
+        // Single scattering: light from sun -> scatter once -> camera
+        // Uses angular-dependent phase functions (Rayleigh, Mie).
+        float3 sigma_s_single = atmo.rayleigh_scattering_rgb * density_rayleigh * rayleigh_phase
+                              + atmo.mie_scattering_rgb * density_mie * mie_phase;
 
-        // Inscattered radiance contribution (per unit sun radiance).
-        // Apply sun_intensity_factor to simulate sunset dimming.
-        inscatter += sun_transmittance * view_transmittance * sigma_s
-                   * step_size * multi_scatter_boost * sun_intensity_factor;
+        // Multiple scattering approximation (Hillaire 2020):
+        // Light that has bounced multiple times loses angular dependency and
+        // becomes approximately isotropic. We add this as a phase-independent
+        // term that brightens the sky uniformly, especially at 90° from sun
+        // where single scattering alone is too dark.
+        //
+        // Both single and multiple scattering use the SAME sun_transmittance
+        // because all atmospheric light ultimately comes from the sun. At sunset
+        // and twilight, sun_transmittance naturally goes to zero, correctly
+        // transitioning to night. The brightness boost comes from the isotropic
+        // term itself (no phase function attenuation), not from artificial
+        // transmittance inflation.
+        float3 sigma_s_multi = (atmo.rayleigh_scattering_rgb * density_rayleigh
+                              + atmo.mie_scattering_rgb * density_mie) * ms_factor;
+
+        // Combined: single scattering (phase-dependent) + multiple scattering (isotropic)
+        // Both terms are attenuated by sun_transmittance for correct twilight behavior.
+        float3 sigma_s = sigma_s_single + sigma_s_multi;
+
+        inscatter += sun_transmittance * view_transmittance * sigma_s * step_size;
 
         accumulated_optical_depth += od_step;
     }
@@ -391,12 +436,12 @@ float4 ComputeSingleScattering(
                                      * atmo.multi_scattering_factor;
     }
 
-        // View-path transmittance (luminance proxy).
-        float3 view_transmittance_end
-            = TransmittanceFromOpticalDepth(accumulated_optical_depth, atmo);
-        float total_transmittance = saturate(Luminance(view_transmittance_end));
+    // View-path transmittance (luminance proxy).
+    float3 view_transmittance_end
+        = TransmittanceFromOpticalDepth(accumulated_optical_depth, atmo);
+    float total_transmittance = saturate(Luminance(view_transmittance_end));
 
-        return float4(inscatter, total_transmittance);
+    return float4(inscatter, total_transmittance);
 }
 
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, 1)]
@@ -469,10 +514,13 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         uint2 lut_size = uint2(pass_constants.transmittance_width,
                                pass_constants.transmittance_height);
 
+        // Get atmosphere flags from pass constants (set by LUT manager)
+        uint atmosphere_flags = pass_constants.atmosphere_flags;
+
         // Compute single scattering with ground bounce contribution
         result = ComputeSingleScattering(
             origin, view_dir, sun_dir, ray_length, hits_ground, atmo,
-            transmittance_lut, linear_sampler, lut_size);
+            transmittance_lut, linear_sampler, lut_size, atmosphere_flags);
     }
 
     // Write result

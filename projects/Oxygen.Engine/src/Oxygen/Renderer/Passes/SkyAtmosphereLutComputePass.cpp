@@ -66,9 +66,16 @@ struct alignas(16) SkyViewLutPassConstants {
   uint32_t transmittance_height { 0 };
   float camera_altitude_m { 0.0F };
   float sun_cos_zenith { 0.0F }; // Cosine of sun zenith angle (sun_dir.z)
+
+  uint32_t atmosphere_flags {
+    0
+  }; // Debug/feature flags (kUseAmbientTerm, etc.)
+  uint32_t _pad0 { 0 };
+  uint32_t _pad1 { 0 };
+  uint32_t _pad2 { 0 };
 };
-static_assert(sizeof(SkyViewLutPassConstants) == 32,
-  "SkyViewLutPassConstants must be 32 bytes");
+static_assert(sizeof(SkyViewLutPassConstants) == 48,
+  "SkyViewLutPassConstants must be 48 bytes");
 
 // Thread group size must match HLSL shaders
 constexpr uint32_t kThreadGroupSizeX = 8;
@@ -461,6 +468,10 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
       .transmittance_height = transmittance_height,
       .camera_altitude_m = camera_altitude_m,
       .sun_cos_zenith = manager->GetSunState().cos_zenith,
+      .atmosphere_flags = manager->GetAtmosphereFlags(),
+      ._pad0 = 0,
+      ._pad1 = 0,
+      ._pad2 = 0,
     };
     std::memcpy(
       impl_->sky_view_constants_mapped, &constants, sizeof(constants));
