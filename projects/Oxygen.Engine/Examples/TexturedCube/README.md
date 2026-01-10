@@ -1,7 +1,8 @@
 # Oxygen.Examples.TexturedCube
 
-A minimal sample inspired by the InputSystem example that demonstrates the
-engine's texture import pipeline with BC7 compression and HDR environment support.
+A minimal sample that demonstrates the engine's texture import pipeline with
+BC7 compression and HDR environment support. It serves as a **testbed for the
+texture importer**, allowing manual control over layout and format selection.
 
 It renders a cube and exercises bindless texture sampling. The sample showcases
 the new texture import system including:
@@ -10,6 +11,7 @@ the new texture import system including:
 - **Mip map generation** with Kaiser/Lanczos filtering
 - **HDR environment loading** from equirectangular panoramas (.hdr, .exr)
 - **Equirectangular to cubemap conversion** for skybox rendering
+- **Multiple skybox layouts** (equirectangular, cross, strip)
 
 ## Controls
 
@@ -27,10 +29,20 @@ the new texture import system including:
 
 ### HDR Environment (Lighting Tab)
 
-- **Browse/Load skybox**: Load HDR/EXR equirectangular panorama files
-- **HDR environment checkbox**: Enable equirectangular → cubemap conversion
-- **BC7 (bake to LDR)**: Tonemap HDR to LDR and compress with BC7
-- **Cube face size**: Configure cubemap resolution (128–2048)
+- **Browse/Load skybox**: Load HDR/EXR equirectangular panoramas or cross/strip layouts
+- **Layout**: Select input image layout:
+  - Equirectangular (2:1) — standard HDR panorama format
+  - Horizontal Cross (4×3) — cross layout with faces arranged horizontally
+  - Vertical Cross (3×4) — cross layout with faces arranged vertically
+  - Horizontal Strip (6×1) — all 6 faces in a row
+  - Vertical Strip (1×6) — all 6 faces in a column
+- **Output format**: Select output texture format:
+  - RGBA8 (LDR) — 8-bit uncompressed
+  - RGBA16F (HDR) — 16-bit float for HDR preservation
+  - RGBA32F (HDR) — 32-bit float for maximum precision
+  - BC7 (LDR) — GPU-compressed with tonemapping
+- **Cube face size**: Resolution per face (128–2048, power-of-two only, equirectangular only)
+- **Flip Y**: Flip image vertically during decode (enable for standard HDRIs)
 - **Sky light controls**: Adjust IBL intensity, diffuse, and specular contributions
 
 ## Supported Image Formats
@@ -50,6 +62,8 @@ the new texture import system including:
 - BC7 compression is performed at runtime using the bc7enc library.
 - HDR environments are tonemapped using ACES when BC7 compression is enabled.
 - The equirectangular to cubemap conversion uses Kaiser filtering for quality.
+- Cube face size should be power-of-two (128, 256, 512, 1024, 2048).
+- For equirectangular panoramas, optimal face size ≈ source height / 2.
 
 ## Texture Playground
 
@@ -79,7 +93,16 @@ The sample uses the new texture import pipeline with support for:
 
 1. Go to the "Lighting" tab
 2. Click "Browse skybox..." and select an .hdr or .exr file
-3. Enable "HDR environment"
-4. Optionally enable "BC7 (bake to LDR)" for compressed skybox
-5. Adjust "Cube face size" as needed (512 is a good default)
-6. Click "Load skybox"
+3. Select "Equirectangular (2:1)" layout (default for most HDRIs)
+4. Select output format (RGBA16F for HDR, BC7 for compressed LDR)
+5. Set "Cube face size" (512 or 1024 recommended)
+6. Enable "Flip Y" if the skybox appears upside-down
+7. Click "Load skybox"
+
+### Loading a Cross/Strip Layout Skybox
+
+1. Go to the "Lighting" tab
+2. Click "Browse skybox..." and select your cross or strip image
+3. Select the matching layout (e.g., "Horizontal Cross (4×3)")
+4. Select output format
+5. Click "Load skybox"
