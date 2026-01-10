@@ -61,6 +61,7 @@ When the texture index mode is set to **Custom**, you can:
 - Generate mip maps for improved filtering
 
 The sample uses the new texture import pipeline with support for:
+
 - stb_image for LDR formats (PNG, JPG, BMP)
 - stb_image for Radiance HDR
 - tinyexr for OpenEXR
