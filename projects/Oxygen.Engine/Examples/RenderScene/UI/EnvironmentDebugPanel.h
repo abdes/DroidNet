@@ -216,7 +216,7 @@ private:
   bool sun_override_enabled_ { false };
   float sun_override_azimuth_deg_ { 45.0F };
   float sun_override_elevation_deg_ { 45.0F };
-  float sun_override_intensity_ { 3.0F };
+  float sun_override_intensity_ { 2.0F };
   glm::vec3 sun_override_color_ { 1.0F, 1.0F, 1.0F };
 
   // Atmosphere Debug Flags

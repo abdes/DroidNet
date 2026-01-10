@@ -45,6 +45,8 @@
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Platform/Input.h>
+#include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
+#include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
@@ -1485,11 +1487,17 @@ auto MainModule::InitializeUIPanels() -> void
   // Configure environment debug panel
   ui::EnvironmentDebugConfig env_config;
   env_config.scene = scene_;
-  if (auto* renderer = ResolveRenderer()) {
+  auto* renderer = ResolveRenderer();
+  if (renderer) {
     env_config.renderer = renderer;
   }
-  env_config.on_atmosphere_params_changed = []() {
+  env_config.on_atmosphere_params_changed = [renderer]() {
     LOG_F(INFO, "Atmosphere parameters changed, LUTs will regenerate");
+    if (renderer) {
+      if (auto lut_mgr = renderer->GetSkyAtmosphereLutManager()) {
+        lut_mgr->MarkDirty();
+      }
+    }
   };
   env_config.on_exposure_changed
     = []() { LOG_F(INFO, "Exposure settings changed"); };
@@ -1553,7 +1561,19 @@ auto MainModule::UpdateUIPanels() -> void
   if (scene_) {
     ui::EnvironmentDebugConfig env_config;
     env_config.scene = scene_;
-    env_config.renderer = ResolveRenderer();
+    auto* renderer = ResolveRenderer();
+    env_config.renderer = renderer;
+    // IMPORTANT: Re-set the callbacks (they get cleared if not set)
+    env_config.on_atmosphere_params_changed = [renderer]() {
+      LOG_F(INFO, "Atmosphere parameters changed, LUTs will regenerate");
+      if (renderer) {
+        if (auto lut_mgr = renderer->GetSkyAtmosphereLutManager()) {
+          lut_mgr->MarkDirty();
+        }
+      }
+    };
+    env_config.on_exposure_changed
+      = []() { LOG_F(INFO, "Exposure settings changed"); };
     environment_debug_panel_.UpdateConfig(env_config);
 
     // Apply any pending UI changes to the scene during mutation phase

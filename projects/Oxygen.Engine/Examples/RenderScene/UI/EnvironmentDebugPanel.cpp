@@ -218,7 +218,7 @@ void EnvironmentDebugPanel::DrawSunOverrideSection()
       MarkDirty();
     }
 
-    if (ImGui::SliderFloat("Elevation (deg)", &sun_override_elevation_deg_,
+    if (ImGui::DragFloat("Elevation (deg)", &sun_override_elevation_deg_, 0.1F,
           -90.0F, 90.0F, "%.1f")) {
       MarkDirty();
     }
@@ -827,18 +827,11 @@ void EnvironmentDebugPanel::ApplyPendingChanges()
 
   // Update renderer debug overrides
   if (config_.renderer) {
-    // Set atmosphere debug flags
-    uint32_t debug_flags = 0u;
-    if (use_lut_) {
-      debug_flags |= static_cast<uint32_t>(AtmosphereDebugFlags::kUseLut);
-    }
-    if (force_analytic_) {
-      debug_flags
-        |= static_cast<uint32_t>(AtmosphereDebugFlags::kForceAnalytic);
-    }
-    if (visualize_lut_) {
-      debug_flags |= static_cast<uint32_t>(AtmosphereDebugFlags::kVisualizeLut);
-    }
+    // Set atmosphere debug flags (use the centralized GetAtmosphereFlags
+    // method)
+    const uint32_t debug_flags = GetAtmosphereFlags();
+    LOG_F(INFO, "ApplyPendingChanges: Setting atmosphere debug flags=0x{:x}",
+      debug_flags);
     config_.renderer->SetAtmosphereDebugFlags(debug_flags);
 
     // Set sun light override (direction, intensity, color)
