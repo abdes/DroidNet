@@ -87,7 +87,7 @@ NOLINT_TEST_F(TexturePresetAlbedoTest, SetsCorrectValues)
 
   // Assert
   EXPECT_EQ(desc.intent, TextureIntent::kAlbedo);
-  EXPECT_EQ(desc.color_space, ColorSpace::kSRGB);
+  EXPECT_EQ(desc.source_color_space, ColorSpace::kSRGB);
   EXPECT_EQ(desc.mip_policy, MipPolicy::kFullChain);
   EXPECT_EQ(desc.mip_filter, MipFilter::kKaiser);
   EXPECT_EQ(desc.output_format, Format::kBC7UNormSRGB);
@@ -107,7 +107,7 @@ NOLINT_TEST_F(TexturePresetNormalTest, SetsCorrectValues)
 
   // Assert
   EXPECT_EQ(desc.intent, TextureIntent::kNormalTS);
-  EXPECT_EQ(desc.color_space, ColorSpace::kLinear);
+  EXPECT_EQ(desc.source_color_space, ColorSpace::kLinear);
   EXPECT_TRUE(desc.renormalize_normals_in_mips);
   EXPECT_EQ(desc.output_format, Format::kBC7UNorm);
   EXPECT_EQ(desc.bc7_quality, Bc7Quality::kDefault);
@@ -126,7 +126,7 @@ NOLINT_TEST_F(TexturePresetORMPackedTest, SetsCorrectValues)
 
   // Assert
   EXPECT_EQ(desc.intent, TextureIntent::kORMPacked);
-  EXPECT_EQ(desc.color_space, ColorSpace::kLinear);
+  EXPECT_EQ(desc.source_color_space, ColorSpace::kLinear);
   EXPECT_EQ(desc.output_format, Format::kBC7UNorm);
   EXPECT_EQ(desc.bc7_quality, Bc7Quality::kDefault);
 }
@@ -144,7 +144,7 @@ NOLINT_TEST_F(TexturePresetUITest, UsesLanczosFilter)
 
   // Assert
   EXPECT_EQ(desc.mip_filter, MipFilter::kLanczos);
-  EXPECT_EQ(desc.color_space, ColorSpace::kSRGB);
+  EXPECT_EQ(desc.source_color_space, ColorSpace::kSRGB);
   EXPECT_EQ(desc.output_format, Format::kBC7UNormSRGB);
 }
 
@@ -166,7 +166,7 @@ NOLINT_TEST_F(TexturePresetHdrEnvironmentTest, SetsCorrectValues)
   // Assert
   EXPECT_EQ(desc.intent, TextureIntent::kHdrEnvironment);
   EXPECT_EQ(desc.texture_type, TextureType::kTextureCube);
-  EXPECT_EQ(desc.color_space, ColorSpace::kLinear);
+  EXPECT_EQ(desc.source_color_space, ColorSpace::kLinear);
   EXPECT_EQ(desc.output_format, Format::kRGBA16Float);
   EXPECT_EQ(desc.bc7_quality, Bc7Quality::kNone);
 }
@@ -184,7 +184,7 @@ NOLINT_TEST_F(TexturePresetHdrLightProbeTest, SetsCorrectValues)
 
   // Assert
   EXPECT_EQ(desc.intent, TextureIntent::kHdrLightProbe);
-  EXPECT_EQ(desc.color_space, ColorSpace::kLinear);
+  EXPECT_EQ(desc.source_color_space, ColorSpace::kLinear);
   EXPECT_EQ(desc.output_format, Format::kRGBA16Float);
   EXPECT_EQ(desc.bc7_quality, Bc7Quality::kNone);
 }
@@ -203,7 +203,7 @@ NOLINT_TEST_F(MakeDescFromPresetTest, CreatesDescriptorWithPreset)
 
   // Assert
   EXPECT_EQ(desc.intent, TextureIntent::kAlbedo);
-  EXPECT_EQ(desc.color_space, ColorSpace::kSRGB);
+  EXPECT_EQ(desc.source_color_space, ColorSpace::kSRGB);
   EXPECT_EQ(desc.output_format, Format::kBC7UNormSRGB);
 }
 

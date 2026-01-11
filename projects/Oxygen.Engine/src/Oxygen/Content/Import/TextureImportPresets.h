@@ -25,6 +25,7 @@ namespace oxygen::content::import {
   - `kRoughness`, `kMetallic`, `kAO`: Single-channel masks, linear
   - `kORMPacked`: Combined ORM texture (R=AO, G=Roughness, B=Metallic)
   - `kEmissive`: Emissive color with sRGB, BC7 compression
+  - `kHeightMap`: Displacement/parallax map with R16UNorm for precision
   - `kUI`: Sharp text/icons with Lanczos filter
 
   ### HDR Presets
@@ -47,6 +48,7 @@ enum class TexturePreset : uint8_t {
   kHdrEnvironment = 8,   //!< HDR environment skybox
   kHdrLightProbe  = 9,   //!< HDR light probe for IBL
   kData           = 10,  //!< Generic data texture
+  kHeightMap      = 11,  //!< Height / displacement map (high precision)
   // clang-format on
 };
 

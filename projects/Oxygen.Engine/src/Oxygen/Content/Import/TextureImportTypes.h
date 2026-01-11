@@ -41,6 +41,7 @@ enum class TextureIntent : uint8_t {
   kHdrEnvironment = 8,   //!< HDR environment map (linear float)
   kHdrLightProbe  = 9,   //!< HDR light probe (linear float)
   kData           = 10,  //!< Generic data texture (linear, no special handling)
+  kHeightMap      = 11,  //!< Height / displacement map (linear, single channel, high precision)
   // clang-format on
 };
 

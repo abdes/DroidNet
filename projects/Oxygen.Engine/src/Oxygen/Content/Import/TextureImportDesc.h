@@ -45,7 +45,7 @@ namespace oxygen::content::import {
   desc.width = 1024;
   desc.height = 1024;
   desc.intent = TextureIntent::kAlbedo;
-  desc.color_space = ColorSpace::kSRGB;
+  desc.source_color_space = ColorSpace::kSRGB;
   desc.output_format = Format::kBC7UNormSRGB;
   desc.bc7_quality = Bc7Quality::kDefault;
 
@@ -98,8 +98,25 @@ struct TextureImportDesc {
 
   //=== Color / Sampling Policy ===-------------------------------------------//
 
-  //! Color space of the source image.
-  ColorSpace color_space = ColorSpace::kLinear;
+  //! Color space of the source image data.
+  /*!
+    Specifies how the pixel values in the source image should be interpreted.
+    This is authoring intent, not metadata extracted from the file.
+
+    - `kSRGB`: Source pixels are in sRGB gamma space (typical for albedo,
+      emissive, UI textures). Processing may convert to linear for filtering.
+    - `kLinear`: Source pixels are linear (typical for normal maps, roughness,
+      metallic, data textures).
+
+    @note This field cannot be reliably inferred from image files. PNG/JPEG
+    do not always encode color space metadata, and even when present it may
+    be incorrect. The preset or user must specify the correct value.
+
+    @note The `output_format` field specifies both the bit format AND the
+    color space interpretation for the final stored texture (e.g.,
+    `kRGBA8UNormSRGB` vs `kRGBA8UNorm`).
+  */
+  ColorSpace source_color_space = ColorSpace::kLinear;
 
   //=== Normal Map Options ===------------------------------------------------//
 

@@ -77,6 +77,24 @@ auto ComputeSurfaceBytes(const uint32_t width, const uint32_t height,
 // Subresource Layout Computation
 //===----------------------------------------------------------------------===//
 
+//! Compute subresource layouts for texture packing.
+/*!
+  CRITICAL: Subresource ordering MUST be MIP-MAJOR to match D3D12 conventions.
+
+  D3D12 subresource indexing formula:
+    SubresourceIndex = MipSlice + (ArraySlice * MipLevels)
+
+  This means data must be laid out as:
+    Mip0/Layer0, Mip0/Layer1, ..., Mip0/LayerN,
+    Mip1/Layer0, Mip1/Layer1, ..., Mip1/LayerN,
+    ...
+
+  NOT layer-major (Layer0/Mip0, Layer0/Mip1, ...) which would cause
+  the GPU to read the wrong face data for cubemaps and texture arrays.
+
+  The upload code in TextureBinder::BuildTexture2DUploadLayout also uses
+  MIP-MAJOR ordering, so these MUST match.
+*/
 auto ComputeSubresourceLayouts(const ScratchImageMeta& meta,
   const ITexturePackingPolicy& policy) -> std::vector<SubresourceLayout>
 {
@@ -87,8 +105,11 @@ auto ComputeSubresourceLayouts(const ScratchImageMeta& meta,
 
   uint64_t current_offset = 0;
 
-  for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
-    for (uint16_t mip = 0; mip < meta.mip_levels; ++mip) {
+  // D3D12 subresource indexing is MIP-MAJOR:
+  //   SubresourceIndex = MipSlice + ArraySlice * MipLevels
+  // So we iterate mip in outer loop, layer in inner loop.
+  for (uint16_t mip = 0; mip < meta.mip_levels; ++mip) {
+    for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
       SubresourceLayout layout;
 
       // Compute dimensions at this mip level

@@ -12,6 +12,8 @@
 #include <stdexcept>
 #include <utility>
 
+#include <Oxygen/Base/Logging.h>
+
 namespace oxygen::content::import {
 
 //=== CubeFace to_string
@@ -134,13 +136,13 @@ auto ComputeCubeDirection(const CubeFace face, const float u,
   return CubeFaceDirection { x / length, y / length, z / length };
 }
 
-//! Compute direction for D3D Y-up cubemap convention.
+//! Compute direction for standard GPU cubemap convention (D3D/OpenGL/Vulkan).
 auto ComputeCubeDirectionD3D(const CubeFace face, const float u,
   const float v) noexcept -> CubeFaceDirection
 {
-  // Map [0,1] UV coordinates to [-1,+1] face coordinates
-  // In texture space: u=0 is left, u=1 is right (same as math)
-  // In texture space: v=0 is TOP, v=1 is BOTTOM (opposite of math)
+  // Map [0,1] UV coordinates to [-1,+1] face coordinates.
+  // In texture space: u=0 is left, u=1 is right.
+  // In texture space: v=0 is TOP, v=1 is BOTTOM (opposite of math Y).
   const float s = 2.0F * u - 1.0F; // -1 (left) to +1 (right)
   const float t = 1.0F - 2.0F * v; // +1 at v=0 (top), -1 at v=1 (bottom)
 
@@ -477,7 +479,7 @@ auto ConvertEquirectangularToCube(
         const float v
           = (static_cast<float>(y) + 0.5F) / static_cast<float>(face_size);
 
-        // Compute 3D direction using D3D Y-up cubemap convention
+        // Compute direction in standard GPU cubemap convention.
         const auto dir = ComputeCubeDirectionD3D(face, u, v);
 
         // Convert to equirect UV
@@ -505,6 +507,331 @@ auto ConvertEquirectangularToCube(
   }
 
   return ::oxygen::Ok(std::move(cube));
+}
+
+//=== CubeMapImageLayout to_string
+//===---------------------------------------===//
+
+auto to_string(const CubeMapImageLayout layout) -> const char*
+{
+  switch (layout) {
+  case CubeMapImageLayout::kUnknown:
+    return "Unknown";
+  case CubeMapImageLayout::kHorizontalStrip:
+    return "HorizontalStrip";
+  case CubeMapImageLayout::kVerticalStrip:
+    return "VerticalStrip";
+  case CubeMapImageLayout::kHorizontalCross:
+    return "HorizontalCross";
+  case CubeMapImageLayout::kVerticalCross:
+    return "VerticalCross";
+  }
+  return "Unknown";
+}
+
+//=== Cube Map Layout Detection
+//===------------------------------------------===//
+
+auto DetectCubeMapLayout(const uint32_t width, const uint32_t height) noexcept
+  -> std::optional<CubeMapLayoutDetection>
+{
+  if (width == 0 || height == 0) {
+    return std::nullopt;
+  }
+
+  // Check horizontal strip: 6:1 aspect
+  if (width == height * 6) {
+    return CubeMapLayoutDetection {
+      .layout = CubeMapImageLayout::kHorizontalStrip,
+      .face_size = height,
+    };
+  }
+
+  // Check vertical strip: 1:6 aspect
+  if (height == width * 6) {
+    return CubeMapLayoutDetection {
+      .layout = CubeMapImageLayout::kVerticalStrip,
+      .face_size = width,
+    };
+  }
+
+  // Check horizontal cross: 4:3 aspect with square faces
+  if (width % 4 == 0 && height % 3 == 0) {
+    const uint32_t face_w = width / 4;
+    const uint32_t face_h = height / 3;
+    if (face_w == face_h && face_w > 0) {
+      return CubeMapLayoutDetection {
+        .layout = CubeMapImageLayout::kHorizontalCross,
+        .face_size = face_w,
+      };
+    }
+  }
+
+  // Check vertical cross: 3:4 aspect with square faces
+  if (width % 3 == 0 && height % 4 == 0) {
+    const uint32_t face_w = width / 3;
+    const uint32_t face_h = height / 4;
+    if (face_w == face_h && face_w > 0) {
+      return CubeMapLayoutDetection {
+        .layout = CubeMapImageLayout::kVerticalCross,
+        .face_size = face_w,
+      };
+    }
+  }
+
+  return std::nullopt;
+}
+
+auto DetectCubeMapLayout(const ScratchImage& image) noexcept
+  -> std::optional<CubeMapLayoutDetection>
+{
+  if (!image.IsValid()) {
+    return std::nullopt;
+  }
+  const auto& meta = image.Meta();
+  return DetectCubeMapLayout(meta.width, meta.height);
+}
+
+//=== Cube Map Face Extraction
+//===-------------------------------------------===//
+
+namespace {
+
+  //! Face position in a layout grid (in units of face_size).
+  struct FaceGridPos {
+    uint32_t x; //!< Column index
+    uint32_t y; //!< Row index
+  };
+
+  //! Get face grid positions for horizontal strip layout.
+  /*!
+    Strip layout: +X, -X, +Y, -Y, +Z, -Z from left to right.
+  */
+  constexpr auto GetHorizontalStripFacePos(const CubeFace face) -> FaceGridPos
+  {
+    const auto face_idx = static_cast<uint32_t>(face);
+    return { .x = face_idx, .y = 0 };
+  }
+
+  //! Get face grid positions for vertical strip layout.
+  /*!
+    Strip layout: +X, -X, +Y, -Y, +Z, -Z from top to bottom.
+  */
+  constexpr auto GetVerticalStripFacePos(const CubeFace face) -> FaceGridPos
+  {
+    const auto face_idx = static_cast<uint32_t>(face);
+    return { .x = 0, .y = face_idx };
+  }
+
+  //! Get face grid positions for horizontal cross layout.
+  /*!
+    Horizontal cross layout (4 columns, 3 rows):
+    ```
+        [+Y]           <- row 0, col 1
+    [-X][+Z][+X][-Z]   <- row 1, cols 0-3
+        [-Y]           <- row 2, col 1
+    ```
+  */
+  constexpr auto GetHorizontalCrossFacePos(const CubeFace face) -> FaceGridPos
+  {
+    switch (face) {
+    case CubeFace::kPositiveX:
+      return { .x = 2, .y = 1 };
+    case CubeFace::kNegativeX:
+      return { .x = 0, .y = 1 };
+    case CubeFace::kPositiveY:
+      return { .x = 1, .y = 0 };
+    case CubeFace::kNegativeY:
+      return { .x = 1, .y = 2 };
+    case CubeFace::kPositiveZ:
+      return { .x = 1, .y = 1 };
+    case CubeFace::kNegativeZ:
+      return { .x = 3, .y = 1 };
+    }
+    return { .x = 0, .y = 0 };
+  }
+
+  //! Get face grid positions for vertical cross layout.
+  /*!
+    Vertical cross layout (3 columns, 4 rows):
+    ```
+        [+Y]        <- row 0, col 1
+    [-X][+Z][+X]    <- row 1, cols 0-2
+        [-Y]        <- row 2, col 1
+        [-Z]        <- row 3, col 1
+    ```
+  */
+  constexpr auto GetVerticalCrossFacePos(const CubeFace face) -> FaceGridPos
+  {
+    switch (face) {
+    case CubeFace::kPositiveX:
+      return { .x = 2, .y = 1 };
+    case CubeFace::kNegativeX:
+      return { .x = 0, .y = 1 };
+    case CubeFace::kPositiveY:
+      return { .x = 1, .y = 0 };
+    case CubeFace::kNegativeY:
+      return { .x = 1, .y = 2 };
+    case CubeFace::kPositiveZ:
+      return { .x = 1, .y = 1 };
+    case CubeFace::kNegativeZ:
+      return { .x = 1, .y = 3 };
+    }
+    return { .x = 0, .y = 0 };
+  }
+
+  //! Get face grid position for any layout.
+  auto GetFaceGridPos(const CubeMapImageLayout layout, const CubeFace face)
+    -> FaceGridPos
+  {
+    switch (layout) {
+    case CubeMapImageLayout::kHorizontalStrip:
+      return GetHorizontalStripFacePos(face);
+    case CubeMapImageLayout::kVerticalStrip:
+      return GetVerticalStripFacePos(face);
+    case CubeMapImageLayout::kHorizontalCross:
+      return GetHorizontalCrossFacePos(face);
+    case CubeMapImageLayout::kVerticalCross:
+      return GetVerticalCrossFacePos(face);
+    case CubeMapImageLayout::kUnknown:
+      break;
+    }
+    return { .x = 0, .y = 0 };
+  }
+
+  //! Get bytes per pixel for a format.
+  auto GetBytesPerPixel(const Format format) -> std::size_t
+  {
+    switch (format) {
+    case Format::kRGBA8UNorm:
+    case Format::kRGBA8UNormSRGB:
+    case Format::kBGRA8UNorm:
+    case Format::kBGRA8UNormSRGB:
+      return 4;
+    case Format::kRGBA16Float:
+      return 8;
+    case Format::kRGBA32Float:
+      return 16;
+    case Format::kR8UNorm:
+      return 1;
+    case Format::kR16UNorm:
+    case Format::kR16Float:
+      return 2;
+    case Format::kR32Float:
+    case Format::kRG16Float:
+      return 4;
+    case Format::kRG32Float:
+      return 8;
+    default:
+      return 0;
+    }
+  }
+
+  //! Copy a face region from source to destination.
+  /*!
+    Copies a square region from the source image to the destination pixels.
+    Handles row pitch differences between source and destination.
+  */
+  auto CopyFaceRegion(const std::span<const std::byte> src_pixels,
+    const uint32_t src_row_pitch, const FaceGridPos& grid_pos,
+    const uint32_t face_size, const std::size_t bytes_per_pixel,
+    std::span<std::byte> dst_pixels, const uint32_t dst_row_pitch) -> void
+  {
+    const uint32_t src_base_x = grid_pos.x * face_size;
+    const uint32_t src_base_y = grid_pos.y * face_size;
+    const std::size_t face_row_bytes = face_size * bytes_per_pixel;
+
+    for (uint32_t y = 0; y < face_size; ++y) {
+      const std::size_t src_offset
+        = static_cast<std::size_t>(src_base_y + y) * src_row_pitch
+        + static_cast<std::size_t>(src_base_x) * bytes_per_pixel;
+      const std::size_t dst_offset
+        = static_cast<std::size_t>(y) * dst_row_pitch;
+
+      std::memcpy(dst_pixels.data() + dst_offset,
+        src_pixels.data() + src_offset, face_row_bytes);
+    }
+  }
+
+} // namespace
+
+auto ExtractCubeFacesFromLayout(
+  const ScratchImage& layout_image, const CubeMapImageLayout layout)
+  -> oxygen::Result<ScratchImage, TextureImportError>
+{
+  if (!layout_image.IsValid()) {
+    return ::oxygen::Err(TextureImportError::kDecodeFailed);
+  }
+
+  if (layout == CubeMapImageLayout::kUnknown) {
+    return ::oxygen::Err(TextureImportError::kInvalidDimensions);
+  }
+
+  // Detect face size from layout
+  const auto& meta = layout_image.Meta();
+  const auto detection = DetectCubeMapLayout(meta.width, meta.height);
+  if (!detection.has_value() || detection->layout != layout) {
+    return ::oxygen::Err(TextureImportError::kDimensionMismatch);
+  }
+
+  const uint32_t face_size = detection->face_size;
+  const std::size_t bytes_per_pixel = GetBytesPerPixel(meta.format);
+  if (bytes_per_pixel == 0) {
+    return ::oxygen::Err(TextureImportError::kUnsupportedFormat);
+  }
+
+  DLOG_F(INFO, "ExtractCubeFacesFromLayout: {}x{} {} -> {}px faces", meta.width,
+    meta.height, to_string(layout), face_size);
+
+  // Create output cube map scratch image
+  ScratchImageMeta cube_meta {
+    .texture_type = TextureType::kTextureCube,
+    .width = face_size,
+    .height = face_size,
+    .depth = 1,
+    .array_layers = kCubeFaceCount,
+    .mip_levels = 1,
+    .format = meta.format,
+  };
+
+  ScratchImage cube = ScratchImage::Create(cube_meta);
+  if (!cube.IsValid()) {
+    return ::oxygen::Err(TextureImportError::kOutOfMemory);
+  }
+
+  // Get source image data
+  const auto src_view = layout_image.GetImage(0, 0);
+  const auto src_row_pitch = src_view.row_pitch_bytes;
+
+  // Extract each face
+  for (uint16_t face_idx = 0; face_idx < kCubeFaceCount; ++face_idx) {
+    const auto face = static_cast<CubeFace>(face_idx);
+    const auto grid_pos = GetFaceGridPos(layout, face);
+
+    auto dst_pixels = cube.GetMutablePixels(face_idx, 0);
+    const auto dst_view = cube.GetImage(face_idx, 0);
+    const auto dst_row_pitch = dst_view.row_pitch_bytes;
+
+    CopyFaceRegion(src_view.pixels, src_row_pitch, grid_pos, face_size,
+      bytes_per_pixel, dst_pixels, dst_row_pitch);
+  }
+
+  return ::oxygen::Ok(std::move(cube));
+}
+
+auto ExtractCubeFacesFromLayout(const ScratchImage& layout_image)
+  -> oxygen::Result<ScratchImage, TextureImportError>
+{
+  if (!layout_image.IsValid()) {
+    return ::oxygen::Err(TextureImportError::kDecodeFailed);
+  }
+
+  const auto detection = DetectCubeMapLayout(layout_image);
+  if (!detection.has_value()) {
+    return ::oxygen::Err(TextureImportError::kDimensionMismatch);
+  }
+
+  return ExtractCubeFacesFromLayout(layout_image, detection->layout);
 }
 
 } // namespace oxygen::content::import

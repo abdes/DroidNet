@@ -24,6 +24,7 @@ auto to_string(const TextureIntent value) -> const char*
     case TextureIntent::kHdrEnvironment: return "HdrEnvironment";
     case TextureIntent::kHdrLightProbe:  return "HdrLightProbe";
     case TextureIntent::kData:           return "Data";
+    case TextureIntent::kHeightMap:      return "HeightMap";
     // clang-format on
   }
 

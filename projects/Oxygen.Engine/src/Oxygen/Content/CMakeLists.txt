@@ -19,6 +19,7 @@ asap_push_module("${META_MODULE_NAME}")
 # Dependencies
 # ------------------------------------------------------------------------------
 
+find_package(glm CONFIG REQUIRED)
 find_package(tinyexr CONFIG REQUIRED)
 
 # ==============================================================================
@@ -130,9 +131,12 @@ set(
   "Import/TextureSourceAssembly.h"
   "Import/TextureSourceAssembly.cpp"
   "Import/ScratchImage.cpp"
+  "Import/TextureImporter.h"
+  "Import/TextureImporter.cpp"
   # Import utilities
   "Import/util/Constants.h"
   "Import/util/CoordTransform.h"
+  "Import/util/HalfFloatConvert.h"
   "Import/util/ImportNaming.h"
   "Import/util/Signature.h"
   "Import/util/StringUtils.h"
@@ -187,6 +191,7 @@ target_link_libraries(
     oxygen::composition
     oxygen::data
   PRIVATE
+    glm::glm
     tinyexr::tinyexr
 )
 
