@@ -7,14 +7,17 @@
 #include <Oxygen/Content/Import/TextureCooker.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 #include <limits>
 #include <optional>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/ImageDecode.h>
 #include <Oxygen/Content/Import/ImageProcessing.h>
 #include <Oxygen/Content/Import/TextureSourceAssembly.h>
 #include <Oxygen/Content/Import/bc7/Bc7Encoder.h>
+#include <Oxygen/Content/Import/util/HalfFloatConvert.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Data/PakFormat.h>
 
@@ -49,16 +52,27 @@ namespace {
     // Dimensions may be inferred from the decoded image. However, if the user
     // provides one dimension, they must provide both.
     if ((desc.width == 0) != (desc.height == 0)) {
+      LOG_F(WARNING,
+        "TextureCooker: invalid dimensions - width and height must both be "
+        "specified or both be zero (got {}x{}) for '{}'",
+        desc.width, desc.height, desc.source_id);
       return TextureImportError::kInvalidDimensions;
     }
 
     // Depth is only meaningful for 3D textures.
     if (desc.texture_type != TextureType::kTexture3D && desc.depth != 1) {
+      LOG_F(WARNING,
+        "TextureCooker: depth {} specified for non-3D texture type for '{}'",
+        desc.depth, desc.source_id);
       return TextureImportError::kDepthInvalidFor2D;
     }
 
     // Mip policy configuration.
     if (desc.mip_policy == MipPolicy::kMaxCount && desc.max_mip_levels == 0) {
+      LOG_F(WARNING,
+        "TextureCooker: mip_policy is kMaxCount but max_mip_levels is 0 for "
+        "'{}'",
+        desc.source_id);
       return TextureImportError::kInvalidMipPolicy;
     }
 
@@ -66,16 +80,29 @@ namespace {
     // did not request baking, the output must be float.
     if (IsHdrIntent(desc.intent) && !desc.bake_hdr_to_ldr
       && !IsFloatFormat(desc.output_format)) {
+      LOG_F(WARNING,
+        "TextureCooker: HDR intent {} requires float output format, "
+        "but got {} (set bake_hdr_to_ldr=true or use float format) for '{}'",
+        to_string(desc.intent), to_string(desc.output_format), desc.source_id);
       return TextureImportError::kHdrRequiresFloatFormat;
     }
 
     // BC7 quality vs output format consistency.
     if (desc.bc7_quality != Bc7Quality::kNone
       && !IsBc7Format(desc.output_format)) {
+      LOG_F(WARNING,
+        "TextureCooker: bc7_quality is {} but output_format is {} "
+        "(not BC7) for '{}'",
+        to_string(desc.bc7_quality), to_string(desc.output_format),
+        desc.source_id);
       return TextureImportError::kIntentFormatMismatch;
     }
     if (IsBc7Format(desc.output_format)
       && desc.bc7_quality == Bc7Quality::kNone) {
+      LOG_F(WARNING,
+        "TextureCooker: output_format is {} but bc7_quality is kNone "
+        "(BC7 format requires compression quality) for '{}'",
+        to_string(desc.output_format), desc.source_id);
       return TextureImportError::kIntentFormatMismatch;
     }
 
@@ -88,6 +115,9 @@ namespace {
     -> std::optional<TextureImportError>
   {
     if (decoded_meta.width == 0 || decoded_meta.height == 0) {
+      LOG_F(WARNING,
+        "TextureCooker: decoded image has zero dimensions ({}x{}) for '{}'",
+        decoded_meta.width, decoded_meta.height, desc.source_id);
       return TextureImportError::kInvalidDimensions;
     }
 
@@ -95,6 +125,11 @@ namespace {
     if (desc.width != 0 && desc.height != 0) {
       if (decoded_meta.width != desc.width
         || decoded_meta.height != desc.height) {
+        LOG_F(WARNING,
+          "TextureCooker: dimension mismatch - descriptor specifies {}x{} "
+          "but decoded image is {}x{} for '{}'",
+          desc.width, desc.height, decoded_meta.width, decoded_meta.height,
+          desc.source_id);
         return TextureImportError::kDimensionMismatch;
       }
     }
@@ -246,6 +281,53 @@ namespace {
     return result;
   }
 
+  //! Convert RGBA32Float image to RGBA16Float.
+  /*!
+   Converts 32-bit float values to 16-bit half float using GLM.
+
+   \param source RGBA32Float format image
+   \return RGBA16Float image, or invalid image on failure
+  */
+  [[nodiscard]] auto ConvertFloat32ToFloat16(const ScratchImage& source)
+    -> ScratchImage
+  {
+    if (!source.IsValid() || source.Meta().format != Format::kRGBA32Float) {
+      return {};
+    }
+
+    const auto& meta = source.Meta();
+    auto result = ScratchImage::Create(ScratchImageMeta {
+      .width = meta.width,
+      .height = meta.height,
+      .depth = meta.depth,
+      .array_layers = meta.array_layers,
+      .mip_levels = meta.mip_levels,
+      .format = Format::kRGBA16Float,
+    });
+    if (!result.IsValid()) {
+      return {};
+    }
+
+    // Convert each subresource
+    for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
+      for (uint16_t mip = 0; mip < meta.mip_levels; ++mip) {
+        const auto src_view = source.GetImage(layer, mip);
+        auto dst_pixels = result.GetMutablePixels(layer, mip);
+
+        const auto* src_ptr
+          = reinterpret_cast<const float*>(src_view.pixels.data());
+        auto* dst_ptr = reinterpret_cast<uint16_t*>(dst_pixels.data());
+
+        const size_t pixel_count = src_view.width * src_view.height;
+        util::ConvertRgba32FloatToRgba16Float(
+          std::span { src_ptr, pixel_count * 4 },
+          std::span { dst_ptr, pixel_count * 4 }, pixel_count);
+      }
+    }
+
+    return result;
+  }
+
   //=== FNV-1a Hash ===-------------------------------------------------------//
 
   [[nodiscard]] constexpr auto Fnv1a64(
@@ -274,6 +356,9 @@ namespace detail {
     const TextureImportDesc& desc)
     -> oxygen::Result<ScratchImage, TextureImportError>
   {
+    DCHECK_F(
+      !source_bytes.empty(), "DecodeSource: source_bytes must not be empty");
+
     DecodeOptions options {
       .flip_y = desc.flip_y_on_decode,
       .force_rgba = desc.force_rgba_on_decode,
@@ -286,7 +371,16 @@ namespace detail {
       options.extension_hint = desc.source_id.substr(dot_pos);
     }
 
-    return DecodeToScratchImage(source_bytes, options);
+    auto result = DecodeToScratchImage(source_bytes, options);
+    if (!result) {
+      LOG_F(WARNING, "TextureCooker: failed to decode source '{}' (error: {})",
+        desc.source_id, to_string(result.error()));
+    } else {
+      DLOG_F(INFO, "TextureCooker: decoded '{}' as {}x{} {}", desc.source_id,
+        result->Meta().width, result->Meta().height,
+        to_string(result->Meta().format));
+    }
+    return result;
   }
 
   auto ConvertToWorkingFormat(
@@ -300,6 +394,9 @@ namespace detail {
     (void)desc; // Currently unused but may be needed for future conversions
 
     if (!image.IsValid()) {
+      LOG_F(WARNING,
+        "TextureCooker: ConvertToWorkingFormat received invalid image for '{}'",
+        desc.source_id);
       return ::oxygen::Err(TextureImportError::kDecodeFailed);
     }
 
@@ -311,6 +408,9 @@ namespace detail {
     -> oxygen::Result<ScratchImage, TextureImportError>
   {
     if (!image.IsValid()) {
+      LOG_F(WARNING,
+        "TextureCooker: ApplyContentProcessing received invalid image for '{}'",
+        desc.source_id);
       return ::oxygen::Err(TextureImportError::kDecodeFailed);
     }
 
@@ -362,7 +462,7 @@ namespace detail {
     }
 
     // Color space conversion for sRGB content
-    if (desc.color_space == ColorSpace::kSRGB
+    if (desc.source_color_space == ColorSpace::kSRGB
       && result.Meta().format == Format::kRGBA8UNorm) {
       // Convert to linear for processing if needed
       // Note: Mip generation will handle color space internally
@@ -457,13 +557,38 @@ namespace detail {
       return ::oxygen::Ok(std::move(compressed));
     }
 
-    // Float format output
-    if (IsFloatFormat(output_format)) {
+    // Float format output - handle RGBA16Float and RGBA32Float separately
+    if (output_format == Format::kRGBA16Float) {
+      // RGBA16Float: convert from RGBA32Float or RGBA8
       if (current_format == Format::kRGBA32Float) {
-        // Already in float format
+        auto half_image = ConvertFloat32ToFloat16(image);
+        if (!half_image.IsValid()) {
+          return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+        }
+        return ::oxygen::Ok(std::move(half_image));
+      }
+      // Convert RGBA8 to float32 first, then to float16
+      if (current_format == Format::kRGBA8UNorm
+        || current_format == Format::kRGBA8UNormSRGB) {
+        auto float32_image = ConvertRgba8ToFloat32(image);
+        if (!float32_image.IsValid()) {
+          return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+        }
+        auto half_image = ConvertFloat32ToFloat16(float32_image);
+        if (!half_image.IsValid()) {
+          return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+        }
+        return ::oxygen::Ok(std::move(half_image));
+      }
+      return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+    }
+
+    if (output_format == Format::kRGBA32Float) {
+      if (current_format == Format::kRGBA32Float) {
+        // Already in float32 format
         return ::oxygen::Ok(std::move(image));
       }
-      // Convert RGBA8 to float
+      // Convert RGBA8 to float32
       if (current_format == Format::kRGBA8UNorm
         || current_format == Format::kRGBA8UNormSRGB) {
         auto float_image = ConvertRgba8ToFloat32(image);
@@ -496,6 +621,27 @@ namespace detail {
     return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
   }
 
+  //! Pack all subresources into a contiguous buffer with proper alignment.
+  /*!
+    CRITICAL: Subresource ordering MUST be MIP-MAJOR to match D3D12 conventions.
+
+    D3D12 subresource indexing formula:
+      SubresourceIndex = MipSlice + (ArraySlice * MipLevels)
+
+    This means we iterate: for (mip) { for (layer) { ... } }
+
+    Data layout in output buffer:
+      Mip0/Layer0, Mip0/Layer1, ..., Mip0/LayerN,
+      Mip1/Layer0, Mip1/Layer1, ..., Mip1/LayerN,
+      ...
+
+    This ordering MUST match:
+      - ComputeSubresourceLayouts() in TexturePackingPolicy.cpp
+      - BuildTexture2DUploadLayout() in TextureBinder.cpp
+
+    Using layer-major ordering (layer outer, mip inner) will cause cubemap
+    faces to be scrambled on the GPU!
+  */
   auto PackSubresources(const ScratchImage& image,
     const ITexturePackingPolicy& policy) -> std::vector<std::byte>
   {
@@ -503,19 +649,24 @@ namespace detail {
       return {};
     }
 
-    // Compute layouts
+    // Compute layouts (uses MIP-MAJOR ordering)
     auto layouts = ComputeSubresourceLayouts(image.Meta(), policy);
     const uint64_t total_size = ComputeTotalPayloadSize(layouts);
 
     // Allocate output buffer
     std::vector<std::byte> payload(total_size);
 
-    // Copy each subresource with proper alignment
+    // Copy each subresource with proper alignment.
+    // IMPORTANT: Must iterate MIP-MAJOR (mip outer, layer inner) to match
+    // the layout order from ComputeSubresourceLayouts and D3D12 expectations.
+    // D3D12 subresource indexing is MIP-MAJOR:
+    //   SubresourceIndex = MipSlice + ArraySlice * MipLevels
+    // So we iterate mip in outer loop, layer in inner loop.
     size_t layout_index = 0;
     const auto& meta = image.Meta();
 
-    for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
-      for (uint16_t mip = 0; mip < meta.mip_levels; ++mip) {
+    for (uint16_t mip = 0; mip < meta.mip_levels; ++mip) {
+      for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
         const auto& layout = layouts[layout_index++];
         const auto src_view = image.GetImage(layer, mip);
 
@@ -571,6 +722,10 @@ namespace {
     const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
     -> oxygen::Result<CookedTexturePayload, TextureImportError>
   {
+    DLOG_F(INFO, "CookFromScratchImage: {}x{} layers={} mips={} format={}",
+      image.Meta().width, image.Meta().height, image.Meta().array_layers,
+      image.Meta().mip_levels, static_cast<int>(image.Meta().format));
+
     // Post-decode validation (uses decoded/assembled image metadata).
     if (auto error = ValidatePostDecode(desc, image.Meta())) {
       return ::oxygen::Err(*error);
@@ -600,11 +755,38 @@ namespace {
       return ::oxygen::Err(output.error());
     }
 
+    DLOG_F(INFO, "CookFromScratchImage: output {}x{} layers={} mips={} fmt={}",
+      output->Meta().width, output->Meta().height, output->Meta().array_layers,
+      output->Meta().mip_levels, static_cast<int>(output->Meta().format));
+
     // Stage 6: Pack subresources (data region only)
     auto payload_data = detail::PackSubresources(*output, policy);
 
     // Compute layouts
     const auto raw_layouts = ComputeSubresourceLayouts(output->Meta(), policy);
+
+    // Determine final format.
+    // The ScratchImage format may differ from desc.output_format in cases where
+    // the data is bit-identical but the format interpretation differs (e.g.,
+    // kRGBA8UNorm vs kRGBA8UNormSRGB). Use the requested output_format when
+    // the storage is compatible.
+    Format final_format = output->Meta().format;
+    const Format requested = desc.output_format;
+
+    // Handle sRGB reinterpretation for RGBA8 formats
+    if ((output->Meta().format == Format::kRGBA8UNorm
+          || output->Meta().format == Format::kRGBA8UNormSRGB)
+      && (requested == Format::kRGBA8UNorm
+        || requested == Format::kRGBA8UNormSRGB)) {
+      final_format = requested;
+    }
+    // Handle BC7 sRGB variants (encoder sets the correct format)
+    if ((output->Meta().format == Format::kBC7UNorm
+          || output->Meta().format == Format::kBC7UNormSRGB)
+      && (requested == Format::kBC7UNorm
+        || requested == Format::kBC7UNormSRGB)) {
+      final_format = requested;
+    }
 
     // Map layouts to PAK representation (32-bit offsets/pitches)
     std::vector<data::pak::SubresourceLayout> layouts;
@@ -678,7 +860,7 @@ namespace {
     result.desc.depth = output->Meta().depth;
     result.desc.array_layers = output->Meta().array_layers;
     result.desc.mip_levels = output->Meta().mip_levels;
-    result.desc.format = output->Meta().format;
+    result.desc.format = final_format;
     result.desc.packing_policy_id = std::string(policy.Id());
     result.desc.content_hash = header.content_hash;
     result.payload = std::move(final_payload);

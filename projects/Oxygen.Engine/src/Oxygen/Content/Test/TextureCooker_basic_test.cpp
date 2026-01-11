@@ -445,7 +445,7 @@ NOLINT_TEST_F(TextureCookerNormalMapTest, CooksNormalMap)
   desc.width = 2;
   desc.height = 2;
   desc.intent = TextureIntent::kNormalTS;
-  desc.color_space = ColorSpace::kLinear;
+  desc.source_color_space = ColorSpace::kLinear;
   desc.output_format = Format::kRGBA8UNorm;
   desc.mip_policy = MipPolicy::kNone;
   desc.renormalize_normals_in_mips = true;

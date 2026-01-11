@@ -47,6 +47,16 @@ add_executable(
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"
+  "CameraController.h"
+  "CameraController.cpp"
+  "TextureLoadingService.h"
+  "TextureLoadingService.cpp"
+  "SkyboxManager.h"
+  "SkyboxManager.cpp"
+  "SceneSetup.h"
+  "SceneSetup.cpp"
+  "DebugUI.h"
+  "DebugUI.cpp"
 )
 
 set_target_properties(

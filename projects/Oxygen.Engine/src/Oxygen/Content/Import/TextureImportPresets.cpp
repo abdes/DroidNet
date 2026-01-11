@@ -33,6 +33,8 @@ auto to_string(const TexturePreset value) -> const char*
     return "HdrLightProbe";
   case TexturePreset::kData:
     return "Data";
+  case TexturePreset::kHeightMap:
+    return "HeightMap";
   }
   return "Unknown";
 }
@@ -128,6 +130,15 @@ auto GetPresetMetadata(const TexturePreset preset) noexcept
       .is_hdr = false,
       .uses_bc7 = false,
     };
+
+  case TexturePreset::kHeightMap:
+    return {
+      .name = "Height / Displacement Map",
+      .description
+      = "Height map for displacement or parallax mapping (R16UNorm)",
+      .is_hdr = false,
+      .uses_bc7 = false,
+    };
   }
 
   return {
@@ -144,7 +155,7 @@ void ApplyPreset(TextureImportDesc& desc, const TexturePreset preset) noexcept
   desc.intent = TextureIntent::kData;
   desc.flip_y_on_decode = false;
   desc.force_rgba_on_decode = true;
-  desc.color_space = ColorSpace::kLinear;
+  desc.source_color_space = ColorSpace::kLinear;
   desc.flip_normal_green = false;
   desc.renormalize_normals_in_mips = false;
   desc.mip_policy = MipPolicy::kFullChain;
@@ -159,7 +170,7 @@ void ApplyPreset(TextureImportDesc& desc, const TexturePreset preset) noexcept
   switch (preset) {
   case TexturePreset::kAlbedo:
     desc.intent = TextureIntent::kAlbedo;
-    desc.color_space = ColorSpace::kSRGB;
+    desc.source_color_space = ColorSpace::kSRGB;
     desc.mip_filter_space = ColorSpace::kSRGB;
     desc.output_format = Format::kBC7UNormSRGB;
     desc.bc7_quality = Bc7Quality::kDefault;
@@ -167,7 +178,7 @@ void ApplyPreset(TextureImportDesc& desc, const TexturePreset preset) noexcept
 
   case TexturePreset::kNormal:
     desc.intent = TextureIntent::kNormalTS;
-    desc.color_space = ColorSpace::kLinear;
+    desc.source_color_space = ColorSpace::kLinear;
     desc.renormalize_normals_in_mips = true;
     desc.output_format = Format::kBC7UNorm;
     desc.bc7_quality = Bc7Quality::kDefault;
@@ -175,35 +186,35 @@ void ApplyPreset(TextureImportDesc& desc, const TexturePreset preset) noexcept
 
   case TexturePreset::kRoughness:
     desc.intent = TextureIntent::kRoughness;
-    desc.color_space = ColorSpace::kLinear;
+    desc.source_color_space = ColorSpace::kLinear;
     desc.output_format = Format::kBC7UNorm;
     desc.bc7_quality = Bc7Quality::kDefault;
     break;
 
   case TexturePreset::kMetallic:
     desc.intent = TextureIntent::kMetallic;
-    desc.color_space = ColorSpace::kLinear;
+    desc.source_color_space = ColorSpace::kLinear;
     desc.output_format = Format::kBC7UNorm;
     desc.bc7_quality = Bc7Quality::kDefault;
     break;
 
   case TexturePreset::kAO:
     desc.intent = TextureIntent::kAO;
-    desc.color_space = ColorSpace::kLinear;
+    desc.source_color_space = ColorSpace::kLinear;
     desc.output_format = Format::kBC7UNorm;
     desc.bc7_quality = Bc7Quality::kDefault;
     break;
 
   case TexturePreset::kORMPacked:
     desc.intent = TextureIntent::kORMPacked;
-    desc.color_space = ColorSpace::kLinear;
+    desc.source_color_space = ColorSpace::kLinear;
     desc.output_format = Format::kBC7UNorm;
     desc.bc7_quality = Bc7Quality::kDefault;
     break;
 
   case TexturePreset::kEmissive:
     desc.intent = TextureIntent::kEmissive;
-    desc.color_space = ColorSpace::kSRGB;
+    desc.source_color_space = ColorSpace::kSRGB;
     desc.mip_filter_space = ColorSpace::kSRGB;
     desc.output_format = Format::kBC7UNormSRGB;
     desc.bc7_quality = Bc7Quality::kDefault;
@@ -211,7 +222,7 @@ void ApplyPreset(TextureImportDesc& desc, const TexturePreset preset) noexcept
 
   case TexturePreset::kUI:
     desc.intent = TextureIntent::kData;
-    desc.color_space = ColorSpace::kSRGB;
+    desc.source_color_space = ColorSpace::kSRGB;
     desc.mip_filter = MipFilter::kLanczos;
     desc.mip_filter_space = ColorSpace::kSRGB;
     desc.output_format = Format::kBC7UNormSRGB;
@@ -221,22 +232,29 @@ void ApplyPreset(TextureImportDesc& desc, const TexturePreset preset) noexcept
   case TexturePreset::kHdrEnvironment:
     desc.intent = TextureIntent::kHdrEnvironment;
     desc.texture_type = TextureType::kTextureCube;
-    desc.color_space = ColorSpace::kLinear;
+    desc.source_color_space = ColorSpace::kLinear;
     desc.output_format = Format::kRGBA16Float;
     desc.bc7_quality = Bc7Quality::kNone;
     break;
 
   case TexturePreset::kHdrLightProbe:
     desc.intent = TextureIntent::kHdrLightProbe;
-    desc.color_space = ColorSpace::kLinear;
+    desc.source_color_space = ColorSpace::kLinear;
     desc.output_format = Format::kRGBA16Float;
     desc.bc7_quality = Bc7Quality::kNone;
     break;
 
   case TexturePreset::kData:
     desc.intent = TextureIntent::kData;
-    desc.color_space = ColorSpace::kLinear;
+    desc.source_color_space = ColorSpace::kLinear;
     desc.output_format = Format::kRGBA8UNorm;
+    desc.bc7_quality = Bc7Quality::kNone;
+    break;
+
+  case TexturePreset::kHeightMap:
+    desc.intent = TextureIntent::kHeightMap;
+    desc.source_color_space = ColorSpace::kLinear;
+    desc.output_format = Format::kR16UNorm;
     desc.bc7_quality = Bc7Quality::kNone;
     break;
   }

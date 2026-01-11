@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -396,6 +397,147 @@ struct EquirectToCubeOptions {
 */
 [[nodiscard]] OXGN_CNTT_API auto ConvertEquirectangularToCube(
   const ScratchImage& equirect, const EquirectToCubeOptions& options)
+  -> oxygen::Result<ScratchImage, TextureImportError>;
+
+//===----------------------------------------------------------------------===//
+// Cube Map Layout Detection and Extraction
+//===----------------------------------------------------------------------===//
+
+//! Layout of a cube map within a single image.
+/*!
+  Identifies how 6 cube faces are arranged within a single source image.
+
+  ### Supported Layouts
+
+  | Layout            | Aspect | Face Arrangement                          |
+  | ----------------- | ------ | ----------------------------------------- |
+  | kHorizontalStrip  | 6:1    | Left-to-right: +X, -X, +Y, -Y, +Z, -Z     |
+  | kVerticalStrip    | 1:6    | Top-to-bottom: +X, -X, +Y, -Y, +Z, -Z     |
+  | kHorizontalCross  | 4:3    | Standard cross (see diagram below)        |
+  | kVerticalCross    | 3:4    | Vertical cross (see diagram below)        |
+
+  ### Cross Layout Diagrams
+
+  **Horizontal Cross (4:3):**
+  ```
+      [+Y]
+  [-X][+Z][+X][-Z]
+      [-Y]
+  ```
+
+  **Vertical Cross (3:4):**
+  ```
+      [+Y]
+  [-X][+Z][+X]
+      [-Y]
+      [-Z]
+  ```
+
+  @see DetectCubeMapLayout, ExtractCubeFacesFromLayout
+*/
+enum class CubeMapImageLayout : uint8_t {
+  // clang-format off
+  kUnknown         = 0,  //!< Cannot detect or invalid layout
+  kHorizontalStrip = 1,  //!< 6:1 aspect, faces in a row
+  kVerticalStrip   = 2,  //!< 1:6 aspect, faces in a column
+  kHorizontalCross = 3,  //!< 4:3 aspect, cross arrangement
+  kVerticalCross   = 4,  //!< 3:4 aspect, vertical cross arrangement
+  // clang-format on
+};
+
+//! String representation of CubeMapImageLayout enum values.
+OXGN_CNTT_NDAPI auto to_string(CubeMapImageLayout layout) -> const char*;
+
+//! Result of cube map layout detection.
+/*!
+  Contains the detected layout type and computed face size. The face size
+  is derived from the image dimensions and is always square.
+*/
+struct CubeMapLayoutDetection {
+  CubeMapImageLayout layout = CubeMapImageLayout::kUnknown; //!< Detected layout
+  uint32_t face_size = 0; //!< Size of each square face in pixels
+};
+
+//! Detect cube map layout from image dimensions.
+/*!
+  Analyzes image width and height to determine if they match a known
+  cube map layout. All layouts require square faces.
+
+  @param width  Image width in pixels
+  @param height Image height in pixels
+  @return Detection result, or nullopt if no valid layout detected
+
+  ### Detection Rules
+
+  | Condition                          | Detected Layout     | Face Size |
+  | ---------------------------------- | ------------------- | --------- |
+  | width == height * 6                | kHorizontalStrip    | height    |
+  | height == width * 6                | kVerticalStrip      | width     |
+  | width % 4 == 0, height % 3 == 0,   |                     |           |
+  |   width/4 == height/3              | kHorizontalCross    | width/4   |
+  | width % 3 == 0, height % 4 == 0,   |                     |           |
+  |   width/3 == height/4              | kVerticalCross      | width/3   |
+
+  @see ExtractCubeFacesFromLayout
+*/
+[[nodiscard]] OXGN_CNTT_API auto DetectCubeMapLayout(uint32_t width,
+  uint32_t height) noexcept -> std::optional<CubeMapLayoutDetection>;
+
+//! Detect cube map layout from a ScratchImage.
+/*!
+  Convenience overload that extracts dimensions from the image metadata.
+
+  @param image Source image to analyze
+  @return Detection result, or nullopt if no valid layout detected
+
+  @see DetectCubeMapLayout(uint32_t, uint32_t)
+*/
+[[nodiscard]] OXGN_CNTT_API auto DetectCubeMapLayout(
+  const ScratchImage& image) noexcept -> std::optional<CubeMapLayoutDetection>;
+
+//! Extract 6 cube faces from a layout image.
+/*!
+  Extracts the 6 cube faces from a single image containing all faces arranged
+  in one of the supported layouts. The output is a single ScratchImage with
+  `texture_type = kTextureCube` and `array_layers = 6`.
+
+  ### Face Mapping
+
+  All layouts use GPU-standard face ordering: +X, -X, +Y, -Y, +Z, -Z.
+
+  **Strip layouts** assume faces are in this order from left-to-right
+  (horizontal) or top-to-bottom (vertical).
+
+  **Cross layouts** use standard cube map cross conventions:
+  - Center face is +Z (front)
+  - Adjacent faces are -X (left), +X (right), +Y (top), -Y (bottom)
+  - Opposite face is -Z (back)
+
+  @param layout_image Source image containing all 6 faces
+  @param layout       Layout type (must not be kUnknown)
+  @return Assembled cube map ScratchImage on success, or error
+
+  @note This function handles format-independent extraction. The pixel format
+        of the output matches the input.
+
+  @see DetectCubeMapLayout, AssembleCubeFromFaces
+*/
+[[nodiscard]] OXGN_CNTT_API auto ExtractCubeFacesFromLayout(
+  const ScratchImage& layout_image, CubeMapImageLayout layout)
+  -> oxygen::Result<ScratchImage, TextureImportError>;
+
+//! Extract cube faces with automatic layout detection.
+/*!
+  Convenience function that detects the layout and extracts faces in one call.
+
+  @param layout_image Source image containing all 6 faces
+  @return Assembled cube map ScratchImage on success, or error if layout
+          cannot be detected or extraction fails
+
+  @see DetectCubeMapLayout, ExtractCubeFacesFromLayout
+*/
+[[nodiscard]] OXGN_CNTT_API auto ExtractCubeFacesFromLayout(
+  const ScratchImage& layout_image)
   -> oxygen::Result<ScratchImage, TextureImportError>;
 
 } // namespace oxygen::content::import

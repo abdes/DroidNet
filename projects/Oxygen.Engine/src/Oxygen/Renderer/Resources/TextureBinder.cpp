@@ -91,6 +91,26 @@ namespace {
     return (value + mask) & ~mask;
   }
 
+  //! Build upload layout for 2D textures, 2D arrays, and cubemaps.
+  /*!
+    CRITICAL: Subresource ordering MUST be MIP-MAJOR to match D3D12 conventions.
+
+    D3D12 subresource indexing formula:
+      SubresourceIndex = MipSlice + (ArraySlice * MipLevels)
+
+    This means we iterate: for (mip) { for (layer) { ... } }
+
+    Expected data layout from cooker:
+      Mip0/Layer0, Mip0/Layer1, ..., Mip0/LayerN,
+      Mip1/Layer0, Mip1/Layer1, ..., Mip1/LayerN,
+      ...
+
+    This ordering MUST match:
+      - ComputeSubresourceLayouts() in TexturePackingPolicy.cpp
+      - PackSubresources() in TextureCooker.cpp
+
+    If the cooker uses layer-major ordering, cubemap faces will be scrambled!
+  */
   [[nodiscard]] auto BuildTexture2DUploadLayout(
     const graphics::TextureDesc& desc,
     const graphics::detail::FormatInfo& format_info,
@@ -111,6 +131,7 @@ namespace {
     std::size_t offset = 0U;
     const std::size_t total_data_size = data_bytes.size();
 
+    // IMPORTANT: MIP-MAJOR iteration (mip outer, layer inner)
     for (std::uint32_t mip = 0; mip < mip_count; ++mip) {
       const auto mip_w = (std::max)(desc.width >> mip, 1U);
       const auto mip_h = (std::max)(desc.height >> mip, 1U);
