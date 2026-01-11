@@ -8,11 +8,11 @@
 
 #include <array>
 #include <cstdint>
-#include <expected>
 #include <span>
 #include <string>
 #include <vector>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Content/Import/ScratchImage.h>
 #include <Oxygen/Content/Import/TextureImportError.h>
 #include <Oxygen/Content/Import/TextureImportTypes.h>
@@ -353,7 +353,7 @@ inline constexpr std::array<CubeFaceBasis, kCubeFaceCount> kGpuCubeFaceBases = {
 */
 [[nodiscard]] OXGN_CNTT_API auto AssembleCubeFromFaces(
   std::span<const ScratchImage, kCubeFaceCount> faces)
-  -> std::expected<ScratchImage, TextureImportError>;
+  -> oxygen::Result<ScratchImage, TextureImportError>;
 
 //! Options for equirectangular to cube map conversion.
 /*!
@@ -396,6 +396,6 @@ struct EquirectToCubeOptions {
 */
 [[nodiscard]] OXGN_CNTT_API auto ConvertEquirectangularToCube(
   const ScratchImage& equirect, const EquirectToCubeOptions& options)
-  -> std::expected<ScratchImage, TextureImportError>;
+  -> oxygen::Result<ScratchImage, TextureImportError>;
 
 } // namespace oxygen::content::import

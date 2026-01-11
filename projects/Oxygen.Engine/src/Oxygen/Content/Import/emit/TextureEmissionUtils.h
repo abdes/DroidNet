@@ -20,11 +20,11 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <expected>
 #include <optional>
 #include <span>
 #include <string>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Content/Import/TextureCooker.h>
 #include <Oxygen/Content/Import/TextureImportDesc.h>
 #include <Oxygen/Content/Import/TextureImportError.h>
@@ -114,7 +114,7 @@ struct CookedEmissionResult {
 [[nodiscard]] OXGN_CNTT_API auto CookTextureForEmission(
   std::span<const std::byte> source_bytes, const CookerConfig& config,
   std::string_view texture_id = {})
-  -> std::expected<CookedEmissionResult, TextureImportError>;
+  -> oxygen::Result<CookedEmissionResult, TextureImportError>;
 
 //! Cook texture bytes with fallback to placeholder.
 /*!

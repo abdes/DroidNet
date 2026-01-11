@@ -81,7 +81,7 @@ inline auto Load(AnyReader& reader, data::loose_cooked::v1::FileRecord& record)
     record.kind = static_cast<FileKind>(kind_u);
     break;
   default:
-    return std::make_error_code(std::errc::invalid_argument);
+    return ::oxygen::Err(std::errc::invalid_argument);
   }
   CHECK_RESULT(reader.ReadInto(record.reserved0));
   CHECK_RESULT(reader.ReadInto(record.relpath_offset));
