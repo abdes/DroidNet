@@ -8,11 +8,11 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <expected>
 #include <span>
 #include <string>
 #include <vector>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Content/Import/ScratchImage.h>
 #include <Oxygen/Content/Import/TextureImportDesc.h>
 #include <Oxygen/Content/Import/TextureImportError.h>
@@ -53,7 +53,7 @@ namespace oxygen::content::import {
 [[nodiscard]] OXGN_CNTT_API auto CookTexture(
   std::span<const std::byte> source_bytes, const TextureImportDesc& desc,
   const ITexturePackingPolicy& policy)
-  -> std::expected<CookedTexturePayload, TextureImportError>;
+  -> oxygen::Result<CookedTexturePayload, TextureImportError>;
 
 //! Cook a texture from an already-decoded ScratchImage.
 /*!
@@ -76,7 +76,7 @@ namespace oxygen::content::import {
 */
 [[nodiscard]] OXGN_CNTT_API auto CookTexture(ScratchImage&& image,
   const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
-  -> std::expected<CookedTexturePayload, TextureImportError>;
+  -> oxygen::Result<CookedTexturePayload, TextureImportError>;
 
 //! Cook a multi-source texture (cube maps, arrays, 3D volumes).
 /*!
@@ -110,7 +110,7 @@ namespace oxygen::content::import {
 */
 [[nodiscard]] OXGN_CNTT_API auto CookTexture(const TextureSourceSet& sources,
   const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
-  -> std::expected<CookedTexturePayload, TextureImportError>;
+  -> oxygen::Result<CookedTexturePayload, TextureImportError>;
 
 //===----------------------------------------------------------------------===//
 // Internal Pipeline Stages (Exposed for Testing)
@@ -126,7 +126,7 @@ namespace detail {
   */
   [[nodiscard]] OXGN_CNTT_API auto DecodeSource(
     std::span<const std::byte> source_bytes, const TextureImportDesc& desc)
-    -> std::expected<ScratchImage, TextureImportError>;
+    -> oxygen::Result<ScratchImage, TextureImportError>;
 
   //! Convert image to the working format for processing.
   /*!
@@ -140,7 +140,7 @@ namespace detail {
   */
   [[nodiscard]] OXGN_CNTT_API auto ConvertToWorkingFormat(
     ScratchImage&& image, const TextureImportDesc& desc)
-    -> std::expected<ScratchImage, TextureImportError>;
+    -> oxygen::Result<ScratchImage, TextureImportError>;
 
   //! Apply content-specific processing (normal maps, HDR, etc.).
   /*!
@@ -150,7 +150,7 @@ namespace detail {
   */
   [[nodiscard]] OXGN_CNTT_API auto ApplyContentProcessing(
     ScratchImage&& image, const TextureImportDesc& desc)
-    -> std::expected<ScratchImage, TextureImportError>;
+    -> oxygen::Result<ScratchImage, TextureImportError>;
 
   //! Generate mip chain according to mip policy.
   /*!
@@ -160,7 +160,7 @@ namespace detail {
   */
   [[nodiscard]] OXGN_CNTT_API auto GenerateMips(
     ScratchImage&& image, const TextureImportDesc& desc)
-    -> std::expected<ScratchImage, TextureImportError>;
+    -> oxygen::Result<ScratchImage, TextureImportError>;
 
   //! Convert to output format (including BC7 compression).
   /*!
@@ -170,7 +170,7 @@ namespace detail {
   */
   [[nodiscard]] OXGN_CNTT_API auto ConvertToOutputFormat(
     ScratchImage&& image, const TextureImportDesc& desc)
-    -> std::expected<ScratchImage, TextureImportError>;
+    -> oxygen::Result<ScratchImage, TextureImportError>;
 
   //! Pack subresource data according to policy.
   /*!

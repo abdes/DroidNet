@@ -80,5 +80,6 @@ m_gtest_program(Hash SOURCES "Hash_test.cpp")
 m_gtest_program(Sha256 SOURCES "Sha256_test.cpp")
 
 m_gtest_program(NoInline SOURCES "NoInline_test.cpp")
+m_gtest_program(Result SOURCES "Result_test.cpp")
 m_gtest_program(ReturnAddress SOURCES "ReturnAddress_test.cpp")
 m_gtest_program(Unreachable SOURCES "Unreachable_test.cpp")

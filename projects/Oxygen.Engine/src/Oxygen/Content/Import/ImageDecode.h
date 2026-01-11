@@ -8,13 +8,13 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <expected>
 #include <filesystem>
 #include <optional>
 #include <span>
 #include <string>
 #include <vector>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Content/Import/ScratchImage.h>
 #include <Oxygen/Content/Import/TextureImportError.h>
 #include <Oxygen/Content/api_export.h>
@@ -122,7 +122,7 @@ struct DecodeOptions {
 */
 [[nodiscard]] OXGN_CNTT_API auto DecodeToScratchImage(
   std::span<const std::byte> bytes, const DecodeOptions& options = {})
-  -> std::expected<ScratchImage, TextureImportError>;
+  -> oxygen::Result<ScratchImage, TextureImportError>;
 
 //! Decode an image file into a ScratchImage.
 /*!
@@ -135,6 +135,6 @@ struct DecodeOptions {
 */
 [[nodiscard]] OXGN_CNTT_API auto DecodeToScratchImage(
   const std::filesystem::path& path, const DecodeOptions& options = {})
-  -> std::expected<ScratchImage, TextureImportError>;
+  -> oxygen::Result<ScratchImage, TextureImportError>;
 
 } // namespace oxygen::content::import

@@ -32,11 +32,11 @@ auto MemoryStream::Write(const std::byte* data, const size_t size) noexcept
   -> Result<void>
 {
   if (data == nullptr && size > 0) {
-    return std::make_error_code(std::errc::invalid_argument);
+    return ::oxygen::Err(std::errc::invalid_argument);
   }
 
   if (size > (std::numeric_limits<size_t>::max)() - pos_) {
-    return std::make_error_code(std::errc::value_too_large);
+    return ::oxygen::Err(std::errc::value_too_large);
   }
 
   auto buffer = GetBuffer();
@@ -45,11 +45,12 @@ auto MemoryStream::Write(const std::byte* data, const size_t size) noexcept
       try {
         internal_buffer_.resize(pos_ + size);
       } catch (const std::bad_alloc&) {
-        return std::make_error_code(std::errc::not_enough_memory);
+        return ::oxygen::Err(
+          std::make_error_code(std::errc::not_enough_memory));
       }
       buffer = std::span(internal_buffer_);
     } else {
-      return std::make_error_code(std::errc::no_buffer_space);
+      return ::oxygen::Err(std::errc::no_buffer_space);
     }
   }
 
@@ -64,19 +65,19 @@ auto MemoryStream::Read(std::byte* data, const size_t size) noexcept
   -> Result<void>
 {
   if (data == nullptr && size > 0) {
-    return std::make_error_code(std::errc::invalid_argument);
+    return ::oxygen::Err(std::errc::invalid_argument);
   }
 
   const auto buffer = GetBuffer();
   if (pos_ >= buffer.size()) {
-    return std::make_error_code(std::errc::io_error);
+    return ::oxygen::Err(std::errc::io_error);
   }
 
   const auto available = buffer.size() - pos_;
   const auto read_size = (std::min)(size, available);
 
   if (read_size < size) {
-    return std::make_error_code(std::errc::io_error);
+    return ::oxygen::Err(std::errc::io_error);
   }
 
   if (size > 0) {
@@ -90,12 +91,15 @@ auto MemoryStream::Read(std::byte* data, const size_t size) noexcept
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 auto MemoryStream::Flush() noexcept -> Result<void> { return {}; }
 
-auto MemoryStream::Position() const noexcept -> Result<size_t> { return pos_; }
+auto MemoryStream::Position() const noexcept -> Result<size_t>
+{
+  return ::oxygen::Ok(pos_);
+}
 
 auto MemoryStream::Seek(const size_t pos) noexcept -> Result<void>
 {
   if (const auto buffer = GetBuffer(); pos > buffer.size()) {
-    return std::make_error_code(std::errc::invalid_seek);
+    return ::oxygen::Err(std::errc::invalid_seek);
   }
   pos_ = pos;
   return {};
@@ -104,7 +108,7 @@ auto MemoryStream::Seek(const size_t pos) noexcept -> Result<void>
 auto MemoryStream::Size() const noexcept -> Result<size_t>
 {
   const auto buffer = GetBuffer();
-  return buffer.size();
+  return ::oxygen::Ok(buffer.size());
 }
 
 auto MemoryStream::Data() const noexcept -> std::span<const std::byte>
@@ -128,7 +132,7 @@ auto MemoryStream::Clear() -> void
 auto MemoryStream::Backward(const size_t offset) noexcept -> Result<void>
 {
   if (offset > pos_) {
-    return std::make_error_code(std::errc::io_error);
+    return ::oxygen::Err(std::errc::io_error);
   }
   pos_ -= offset;
   return {};
@@ -138,7 +142,7 @@ auto MemoryStream::Forward(const size_t offset) noexcept -> Result<void>
 {
   const auto buffer = GetBuffer();
   if (pos_ + offset > buffer.size()) {
-    return std::make_error_code(std::errc::io_error);
+    return ::oxygen::Err(std::errc::io_error);
   }
   pos_ += offset;
   return {};

@@ -56,7 +56,7 @@ public:
     CHECK_RESULT(ReadInto(size));
     if (size > max_size) {
       size = 0;
-      return std::make_error_code(std::errc::value_too_large);
+      return ::oxygen::Err(std::errc::value_too_large);
     }
 
     return {};
@@ -78,7 +78,7 @@ public:
   {
     T value;
     CHECK_RESULT(ReadInto(value));
-    return value;
+    return ::oxygen::Ok(std::move(value));
   }
 
   template <typename T>
@@ -87,12 +87,12 @@ public:
     try {
       auto result = Load(*this, value);
       if (!result) {
-        return result.error();
+        return ::oxygen::Err(result.error());
       }
       return {};
     } catch (const std::exception& ex) {
       LOG_F(ERROR, "ADL specialization of Load failed: {}", ex.what());
-      return std::make_error_code(std::errc::io_error);
+      return ::oxygen::Err(std::errc::io_error);
     }
   }
 };
@@ -151,14 +151,14 @@ public:
     -> Result<std::vector<std::byte>> override
   {
     if (size == 0) {
-      return std::vector<std::byte> {};
+      return ::oxygen::Ok(std::vector<std::byte> {});
     }
     std::vector<std::byte> buffer(size);
     auto result = stream_.get().Read(buffer.data(), size);
     if (!result) {
-      return result.error();
+      return ::oxygen::Err(result.error());
     }
-    return buffer;
+    return ::oxygen::Ok(std::move(buffer));
   }
 
   [[nodiscard]] auto ReadBlobInto(std::span<std::byte> buffer) noexcept
@@ -192,7 +192,7 @@ public:
 
     const auto current_pos = stream_.get().Position();
     if (!current_pos) {
-      return current_pos.error();
+      return ::oxygen::Err(current_pos.error());
     }
 
     const size_t padding

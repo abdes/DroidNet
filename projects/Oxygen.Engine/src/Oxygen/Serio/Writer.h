@@ -48,7 +48,7 @@ public:
     const limits::SequenceSizeType max) noexcept -> Result<void>
   {
     if (size > max) {
-      return std::make_error_code(std::errc::value_too_large);
+      return ::oxygen::Err(std::errc::value_too_large);
     }
     CHECK_RESULT(AlignTo(alignof(limits::SequenceSizeType)));
     CHECK_RESULT(Write(size));
@@ -72,7 +72,7 @@ public:
       return Store(*this, value);
     } catch (const std::exception& ex) {
       LOG_F(ERROR, "ADL specialization of Store failed: {}", ex.what());
-      return std::make_error_code(std::errc::io_error);
+      return ::oxygen::Err(std::errc::io_error);
     }
   }
 };
@@ -153,7 +153,7 @@ public:
 
     const auto current_pos = stream_.get().Position();
     if (!current_pos) {
-      return current_pos.error();
+      return ::oxygen::Err(current_pos.error());
     }
 
     const size_t padding
@@ -277,7 +277,7 @@ auto Store(AnyWriter& writer, const T& value) -> Result<void>
 inline auto Store(AnyWriter& writer, const std::string& value) -> Result<void>
 {
   if (value.length() > limits::kMaxStringLength) {
-    return std::make_error_code(std::errc::value_too_large);
+    return ::oxygen::Err(std::errc::value_too_large);
   }
 
   // Write the length of the string, bounds-checked and properly aligned.
@@ -311,7 +311,7 @@ template <typename T>
 auto Store(AnyWriter& writer, const std::vector<T>& value) -> Result<void>
 {
   if (value.size() > limits::kMaxArrayLength) {
-    return std::make_error_code(std::errc::message_size);
+    return ::oxygen::Err(std::errc::message_size);
   }
 
   // Write the size of the array, bounds-checked and properly aligned.

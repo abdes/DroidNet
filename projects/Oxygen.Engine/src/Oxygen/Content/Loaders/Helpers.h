@@ -226,7 +226,7 @@ namespace oxygen::content::loaders {
   uint16_t u_value = 0;
   auto result = reader.ReadInto(u_value);
   if (!result) {
-    return result.error();
+    return ::oxygen::Err(result.error());
   }
   out = data::Unorm16 { u_value };
   return {};
@@ -238,7 +238,7 @@ namespace oxygen::content::loaders {
   uint16_t u_value = 0;
   auto result = reader.ReadInto(u_value);
   if (!result) {
-    return result.error();
+    return ::oxygen::Err(result.error());
   }
   out = data::HalfFloat { u_value };
   return {};

@@ -323,21 +323,21 @@ auto FileStream<StreamType>::Write(
     return {};
   }
   if (data == nullptr && size > 0) {
-    return std::make_error_code(std::errc::invalid_argument);
+    return ::oxygen::Err(std::errc::invalid_argument);
   }
   if (size
     > static_cast<size_t>((std::numeric_limits<std::streamsize>::max)())) {
-    return std::make_error_code(std::errc::invalid_argument);
+    return ::oxygen::Err(std::errc::invalid_argument);
   }
   try {
     stream_->write(data, static_cast<std::streamsize>(size));
     if (stream_->fail()) {
       stream_->clear();
-      return std::make_error_code(std::errc::io_error);
+      return ::oxygen::Err(std::errc::io_error);
     }
     return {};
   } catch (const std::exception& /*ex*/) {
-    return std::make_error_code(std::errc::io_error);
+    return ::oxygen::Err(std::errc::io_error);
   }
 }
 
@@ -349,25 +349,25 @@ auto FileStream<StreamType>::Read(std::byte* data, const size_t size) noexcept
     return {};
   }
   if (data == nullptr && size > 0) {
-    return std::make_error_code(std::errc::invalid_argument);
+    return ::oxygen::Err(std::errc::invalid_argument);
   }
   if (size
     > static_cast<size_t>((std::numeric_limits<std::streamsize>::max)())) {
-    return std::make_error_code(std::errc::invalid_argument);
+    return ::oxygen::Err(std::errc::invalid_argument);
   }
   try {
     stream_->read(data, static_cast<std::streamsize>(size));
     if (stream_->fail() && !stream_->eof()) {
       stream_->clear();
-      return std::make_error_code(std::errc::io_error);
+      return ::oxygen::Err(std::errc::io_error);
     }
     if (stream_->eof()) {
       stream_->clear();
-      return std::make_error_code(std::errc::no_buffer_space);
+      return ::oxygen::Err(std::errc::no_buffer_space);
     }
     return {};
   } catch (const std::exception& /*ex*/) {
-    return std::make_error_code(std::errc::io_error);
+    return ::oxygen::Err(std::errc::io_error);
   }
 }
 
@@ -378,11 +378,11 @@ auto FileStream<StreamType>::Flush() noexcept -> Result<void>
     stream_->flush();
     if (stream_->fail()) {
       stream_->clear();
-      return std::make_error_code(std::errc::io_error);
+      return ::oxygen::Err(std::errc::io_error);
     }
     return {};
   } catch (const std::exception& /*ex*/) {
-    return std::make_error_code(std::errc::io_error);
+    return ::oxygen::Err(std::errc::io_error);
   }
 }
 
@@ -393,11 +393,11 @@ auto FileStream<StreamType>::Position() const noexcept -> Result<size_t>
     const auto pos = stream_->tellg();
     if (pos < 0) {
       stream_->clear();
-      return std::make_error_code(std::errc::io_error);
+      return ::oxygen::Err(std::errc::io_error);
     }
-    return static_cast<size_t>(pos);
+    return ::oxygen::Ok(static_cast<size_t>(pos));
   } catch (const std::exception& /*ex*/) {
-    return std::make_error_code(std::errc::io_error);
+    return ::oxygen::Err(std::errc::io_error);
   }
 }
 
@@ -407,26 +407,26 @@ auto FileStream<StreamType>::Seek(const size_t pos) noexcept -> Result<void>
   try {
     if (pos
       > static_cast<size_t>((std::numeric_limits<std::streamoff>::max)())) {
-      return std::make_error_code(std::errc::invalid_argument);
+      return ::oxygen::Err(std::errc::invalid_argument);
     }
 
     const auto size_result = this->Size();
     if (!size_result) {
-      return size_result.error();
+      return ::oxygen::Err(size_result.error());
     }
     if (pos > size_result.value()) {
-      return std::make_error_code(std::errc::invalid_argument);
+      return ::oxygen::Err(std::errc::invalid_argument);
     }
 
     stream_->seekg(static_cast<std::streamoff>(pos), std::ios::beg);
     if (stream_->fail()) {
       stream_->clear();
-      return std::make_error_code(std::errc::io_error);
+      return ::oxygen::Err(std::errc::io_error);
     }
 
     return {};
   } catch (const std::exception& /*ex*/) {
-    return std::make_error_code(std::errc::io_error);
+    return ::oxygen::Err(std::errc::io_error);
   }
 }
 
@@ -437,7 +437,7 @@ auto FileStream<StreamType>::Size() const noexcept -> Result<size_t>
     const auto current = stream_->tellg();
     if (current < 0) {
       stream_->clear();
-      return std::make_error_code(std::errc::io_error);
+      return ::oxygen::Err(std::errc::io_error);
     }
 
     stream_->seekg(0, std::ios::end);
@@ -447,7 +447,7 @@ auto FileStream<StreamType>::Size() const noexcept -> Result<size_t>
       if (stream_->fail()) {
         stream_->clear();
       }
-      return std::make_error_code(std::errc::io_error);
+      return ::oxygen::Err(std::errc::io_error);
     }
 
     const auto size = stream_->tellg();
@@ -457,18 +457,18 @@ auto FileStream<StreamType>::Size() const noexcept -> Result<size_t>
       if (stream_->fail()) {
         stream_->clear();
       }
-      return std::make_error_code(std::errc::value_too_large);
+      return ::oxygen::Err(std::errc::value_too_large);
     }
 
     stream_->seekg(current, std::ios::beg);
     if (stream_->fail()) {
       stream_->clear();
-      return std::make_error_code(std::errc::io_error);
+      return ::oxygen::Err(std::errc::io_error);
     }
 
-    return static_cast<size_t>(size);
+    return ::oxygen::Ok(static_cast<size_t>(size));
   } catch (const std::exception& /*ex*/) {
-    return std::make_error_code(std::errc::io_error);
+    return ::oxygen::Err(std::errc::io_error);
   }
 }
 
@@ -480,11 +480,11 @@ auto FileStream<StreamType>::Backward(const size_t offset) noexcept
     stream_->seekg(-static_cast<std::streamoff>(offset), std::ios::cur);
     if (stream_->fail()) {
       stream_->clear();
-      return std::make_error_code(std::errc::io_error);
+      return ::oxygen::Err(std::errc::io_error);
     }
     return {};
   } catch (const std::exception& /*ex*/) {
-    return std::make_error_code(std::errc::io_error);
+    return ::oxygen::Err(std::errc::io_error);
   }
 }
 
@@ -496,11 +496,11 @@ auto FileStream<StreamType>::Forward(const size_t offset) noexcept
     stream_->seekg(static_cast<std::streamoff>(offset), std::ios::cur);
     if (stream_->fail()) {
       stream_->clear();
-      return std::make_error_code(std::errc::io_error);
+      return ::oxygen::Err(std::errc::io_error);
     }
     return {};
   } catch (const std::exception& /*ex*/) {
-    return std::make_error_code(std::errc::io_error);
+    return ::oxygen::Err(std::errc::io_error);
   }
 }
 
@@ -511,11 +511,11 @@ auto FileStream<StreamType>::SeekEnd() noexcept -> Result<void>
     stream_->seekg(0, std::ios::end);
     if (stream_->fail()) {
       stream_->clear();
-      return std::make_error_code(std::errc::io_error);
+      return ::oxygen::Err(std::errc::io_error);
     }
     return {};
   } catch (const std::exception& /*ex*/) {
-    return std::make_error_code(std::errc::io_error);
+    return ::oxygen::Err(std::errc::io_error);
   }
 }
 

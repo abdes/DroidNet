@@ -139,10 +139,10 @@ auto MakeImportDescFromConfig(
 
 auto CookTextureForEmission(std::span<const std::byte> source_bytes,
   const CookerConfig& config, std::string_view texture_id)
-  -> std::expected<CookedEmissionResult, TextureImportError>
+  -> oxygen::Result<CookedEmissionResult, TextureImportError>
 {
   if (source_bytes.empty()) {
-    return std::unexpected(TextureImportError::kFileNotFound);
+    return ::oxygen::Err(TextureImportError::kFileNotFound);
   }
 
   // Decode image first to get dimensions
@@ -153,7 +153,7 @@ auto CookTextureForEmission(std::span<const std::byte> source_bytes,
   }
   auto decoded = DecodeToScratchImage(source_bytes, decode_options);
   if (!decoded.has_value()) {
-    return std::unexpected(decoded.error());
+    return ::oxygen::Err(decoded.error());
   }
 
   const auto& meta = decoded->Meta();
@@ -168,7 +168,7 @@ auto CookTextureForEmission(std::span<const std::byte> source_bytes,
 
   auto result = CookTexture(source_bytes, desc, policy);
   if (!result.has_value()) {
-    return std::unexpected(result.error());
+    return ::oxygen::Err(result.error());
   }
 
   CookedEmissionResult emission_result {};
@@ -177,7 +177,7 @@ auto CookTextureForEmission(std::span<const std::byte> source_bytes,
   emission_result.payload = std::move(result.value().payload);
   emission_result.is_placeholder = false;
 
-  return emission_result;
+  return ::oxygen::Ok(emission_result);
 }
 
 auto CookTextureWithFallback(std::span<const std::byte> source_bytes,
