@@ -65,6 +65,13 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(ResourceStateTracker)
 
   template <Trackable T>
+  [[nodiscard]] auto IsResourceTracked(const T& resource) const -> bool
+  {
+    NativeResource native_object = resource.GetNativeResource();
+    return tracking_.contains(native_object);
+  }
+
+  template <Trackable T>
   auto BeginTrackingResourceState(const T& resource,
     const ResourceStates initial_state, const bool keep_initial_state = false)
     -> void

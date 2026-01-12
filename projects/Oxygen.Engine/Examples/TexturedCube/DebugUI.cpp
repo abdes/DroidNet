@@ -17,6 +17,7 @@
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 
@@ -483,6 +484,70 @@ auto DebugUI::DrawLightingTab(oxygen::observer_ptr<scene::Scene> scene) -> void
   ImGui::TextUnformatted("Sky light:");
 
   bool skylight_changed = false;
+
+  bool has_valid_ibl_source = false;
+  const char* ibl_source_label = "None";
+  if (scene) {
+    if (auto env = scene->GetEnvironment(); env) {
+      const auto sky_light = env->TryGetSystem<scene::environment::SkyLight>();
+      const auto sky_sphere
+        = env->TryGetSystem<scene::environment::SkySphere>();
+
+      const bool skylight_has_cubemap = sky_light && sky_light->IsEnabled()
+        && sky_light->GetSource()
+          == scene::environment::SkyLightSource::kSpecifiedCubemap
+        && !sky_light->GetCubemapResource().IsPlaceholder();
+      const bool skysphere_has_cubemap = sky_sphere && sky_sphere->IsEnabled()
+        && sky_sphere->GetSource()
+          == scene::environment::SkySphereSource::kCubemap
+        && !sky_sphere->GetCubemapResource().IsPlaceholder();
+
+      if (skylight_has_cubemap) {
+        has_valid_ibl_source = true;
+        ibl_source_label = "SkyLight cubemap";
+      } else if (skysphere_has_cubemap) {
+        has_valid_ibl_source = true;
+        ibl_source_label = "SkySphere cubemap";
+      } else if (sky_light && sky_light->IsEnabled()
+        && sky_light->GetSource()
+          == scene::environment::SkyLightSource::kCapturedScene) {
+        ibl_source_label = "Captured scene (not available)";
+      } else {
+        ibl_source_label = "None";
+      }
+    } else {
+      ibl_source_label = "No SceneEnvironment";
+    }
+  } else {
+    ibl_source_label = "No Scene";
+  }
+
+  ImGui::Text("IBL source: %s", ibl_source_label);
+  if (has_valid_ibl_source) {
+    ImGui::TextDisabled(
+      "Tip: This demo cube is fairly rough (blurry reflections). For an "
+      "obvious change, temporarily reduce direct light and diffuse IBL.");
+  }
+
+  if (has_valid_ibl_source) {
+    if (ImGui::Button("Focus: IBL specular")) {
+      // Make the specular contribution stand out by minimizing competing terms.
+      lighting_state_.sky_light_intensity = 8.0f;
+      lighting_state_.sky_light_diffuse = 0.0f;
+      lighting_state_.sky_light_specular = 4.0f;
+      lighting_state_.sun_intensity = 0.0f;
+      skylight_changed = true;
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+        "Sets:\n"
+        "- Sun intensity = 0\n"
+        "- SkyLight intensity = 8\n"
+        "- SkyLight diffuse = 0\n"
+        "- SkyLight specular = 4\n\n"
+        "Expected: the cube brightens with environment-colored reflections.");
+    }
+  }
   if (ImGui::SliderFloat("SkyLight intensity",
         &lighting_state_.sky_light_intensity, 0.0f, 8.0f, "%.2f",
         ImGuiSliderFlags_AlwaysClamp)) {
@@ -492,11 +557,27 @@ auto DebugUI::DrawLightingTab(oxygen::observer_ptr<scene::Scene> scene) -> void
         0.0f, 4.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
     skylight_changed = true;
   }
+
+  const bool disable_specular = !has_valid_ibl_source;
+  if (disable_specular) {
+    ImGui::TextDisabled("Specular needs an IBL cubemap");
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+        "SkyLight specular is only visible when the renderer has a valid "
+        "environment cubemap to sample.\n\n"
+        "Valid sources:\n"
+        "- SkyLight source = Specified Cubemap (with a loaded skybox)\n"
+        "- SkySphere source = Cubemap (with a loaded skybox)");
+    }
+  }
+
+  ImGui::BeginDisabled(disable_specular);
   if (ImGui::SliderFloat("SkyLight specular",
         &lighting_state_.sky_light_specular, 0.0f, 4.0f, "%.2f",
         ImGuiSliderFlags_AlwaysClamp)) {
     skylight_changed = true;
   }
+  ImGui::EndDisabled();
 
   if (skylight_changed && scene) {
     if (auto env = scene->GetEnvironment(); env) {

@@ -256,6 +256,16 @@ public:
   [[nodiscard]] OXGN_RNDR_API auto GetSkyAtmosphereLutManager() const noexcept
     -> observer_ptr<internal::SkyAtmosphereLutManager>;
 
+  //! Returns the environment static data manager.
+  /*!
+   Provides access to the static environment data like BRDF LUTs.
+
+   @return Observer pointer to the manager, or nullptr if not initialized.
+  */
+  [[nodiscard]] OXGN_RNDR_API auto
+  GetEnvironmentStaticDataManager() const noexcept
+    -> observer_ptr<internal::EnvironmentStaticDataManager>;
+
   //=== Debug Overrides ===---------------------------------------------------//
 
   //! Set debug override flags for atmosphere rendering.

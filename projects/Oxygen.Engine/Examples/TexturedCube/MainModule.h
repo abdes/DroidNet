@@ -47,7 +47,8 @@ namespace oxygen::examples::textured_cube {
  - Mouse wheel: zoom in/out
  - RMB + mouse drag: orbit camera
 
- @see CameraController, TextureLoadingService, SkyboxManager, SceneSetup, DebugUI
+ @see CameraController, TextureLoadingService, SkyboxManager, SceneSetup,
+ DebugUI
 */
 class MainModule final : public common::SingleViewExample {
   OXYGEN_TYPED(MainModule)
@@ -111,7 +112,7 @@ private:
 
   // State
   SceneSetup::TextureIndexMode texture_index_mode_ {
-    SceneSetup::TextureIndexMode::kForcedError
+    SceneSetup::TextureIndexMode::kFallback
   };
   std::uint32_t custom_texture_resource_index_ { 0U };
   oxygen::content::ResourceKey custom_texture_key_ { 0U };

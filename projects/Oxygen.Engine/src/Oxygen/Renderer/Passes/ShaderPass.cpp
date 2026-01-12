@@ -21,6 +21,7 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
+#include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
@@ -78,6 +79,12 @@ auto ShaderPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
     && fb->GetDescriptor().depth_attachment.texture) {
     recorder.RequireResourceState(*fb->GetDescriptor().depth_attachment.texture,
       graphics::ResourceStates::kDepthRead);
+  }
+
+  // Ensure environment static resources (e.g. BRDF LUT) are in correct state
+  if (auto* env_static
+    = Context().GetRenderer().GetEnvironmentStaticDataManager().get()) {
+    env_static->EnforceBarriers(recorder);
   }
 
   recorder.FlushBarriers();

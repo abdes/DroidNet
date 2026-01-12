@@ -102,6 +102,12 @@ void CommandRecorder::RecordQueueWait(uint64_t value)
 // -- Private non-template dispatch method implementations for Buffer
 
 // ReSharper disable once CppMemberFunctionMayBeConst
+bool CommandRecorder::DoIsResourceTracked(const Buffer& resource) const
+{
+  return resource_state_tracker_->IsResourceTracked(resource);
+}
+
+// ReSharper disable once CppMemberFunctionMayBeConst
 void CommandRecorder::DoBeginTrackingResourceState(const Buffer& resource,
   const ResourceStates initial_state, const bool keep_initial_state)
 {
@@ -139,6 +145,12 @@ void CommandRecorder::DoRequireResourceStateFinal(
 }
 
 // -- Private non-template dispatch method implementations for Texture
+
+// ReSharper disable once CppMemberFunctionMayBeConst
+bool CommandRecorder::DoIsResourceTracked(const Texture& resource) const
+{
+  return resource_state_tracker_->IsResourceTracked(resource);
+}
 
 // ReSharper disable once CppMemberFunctionMayBeConst
 void CommandRecorder::DoBeginTrackingResourceState(const Texture& resource,

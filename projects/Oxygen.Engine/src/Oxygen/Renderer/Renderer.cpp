@@ -320,6 +320,12 @@ auto Renderer::GetSkyAtmosphereLutManager() const noexcept
   return observer_ptr { sky_atmo_lut_manager_.get() };
 }
 
+auto Renderer::GetEnvironmentStaticDataManager() const noexcept
+  -> observer_ptr<internal::EnvironmentStaticDataManager>
+{
+  return observer_ptr { env_static_manager_.get() };
+}
+
 //=== Debug Overrides ===-----------------------------------------------------//
 
 auto Renderer::SetAtmosphereDebugFlags(const uint32_t flags) -> void

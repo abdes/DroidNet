@@ -253,6 +253,19 @@ public:
   */
 
   template <Trackable T>
+  [[nodiscard]] auto IsResourceTracked(const T& resource) const -> bool
+  {
+    if constexpr (IsBuffer<T>) {
+      return DoIsResourceTracked(static_cast<const Buffer&>(resource));
+    } else if constexpr (IsTexture<T>) {
+      return DoIsResourceTracked(static_cast<const Texture&>(resource));
+    } else {
+      static_assert(
+        always_false_v<T>, "Unsupported resource type for IsResourceTracked");
+    }
+  }
+
+  template <Trackable T>
   auto BeginTrackingResourceState(const T& resource,
     const ResourceStates initial_state, const bool keep_initial_state = false)
     -> void
@@ -370,6 +383,9 @@ private:
   //! @{
   //! Private non-template dispatch methods for resource state tracking and
   //! barrier management.
+
+  OXGN_GFX_API auto DoIsResourceTracked(const Buffer& resource) const -> bool;
+  OXGN_GFX_API auto DoIsResourceTracked(const Texture& resource) const -> bool;
 
   OXGN_GFX_API auto DoBeginTrackingResourceState(const Buffer& resource,
     ResourceStates initial_state, bool keep_initial_state) -> void;

@@ -10,6 +10,7 @@
 #include <cstring>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/Internal/BrdfLutManager.h>
@@ -150,15 +151,45 @@ auto EnvironmentStaticDataManager::UpdateIfNeeded(const RenderContext& context)
   UploadIfNeeded();
 }
 
+auto EnvironmentStaticDataManager::EnforceBarriers(
+  graphics::CommandRecorder& recorder) -> void
+{
+  if (brdf_lut_texture_) {
+    // If not yet transitioned, start from kCommon (upload/decay state)
+    // and transition to kShaderResource.
+    // If already transitioned, start from kShaderResource.
+    // NEVER restore to initial state (keep_initial_state = false) so it stays
+    // in kShaderResource on the Graphics queue.
+    const auto initial_state = brdf_lut_transitioned_
+      ? graphics::ResourceStates::kShaderResource
+      : graphics::ResourceStates::kCommon;
+
+    // IMPORTANT: force_submit=true. If the resource is already tracked in
+    // kShaderResource, we still want to ensure this tracking intent is
+    // registered to the command recorder so it can validate the state.
+    if (!recorder.IsResourceTracked(*brdf_lut_texture_)) {
+      recorder.BeginTrackingResourceState(
+        *brdf_lut_texture_, initial_state, false);
+    }
+    recorder.RequireResourceState(
+      *brdf_lut_texture_, graphics::ResourceStates::kShaderResource);
+
+    recorder.FlushBarriers();
+    brdf_lut_transitioned_ = true;
+  }
+}
+
 auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
   observer_ptr<const scene::SceneEnvironment> env) -> void
 {
   EnvironmentStaticData next {};
 
   if (brdf_lut_provider_) {
-    const auto slot = brdf_lut_provider_->GetOrCreateLut();
+    const auto [tex, slot] = brdf_lut_provider_->GetOrCreateLut();
     if (slot != brdf_lut_slot_) {
       brdf_lut_slot_ = slot;
+      brdf_lut_texture_ = tex;
+      brdf_lut_transitioned_ = false;
       MarkAllSlotsDirty();
     }
   }
