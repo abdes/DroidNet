@@ -182,6 +182,71 @@ NOLINT_TEST_F(
   }
 }
 
+//! ComputeNormalMatrix returns the rotation matrix for pure rotations.
+NOLINT_TEST_F(TransformUploaderBasicTest,
+  ComputeNormalMatrixPureRotationReturnsRotationMatrix)
+{
+  // Arrange
+  constexpr auto identity = glm::mat4 { 1.0F };
+  const auto world = glm::rotate(
+    identity, glm::radians(37.0F), glm::vec3 { 0.0F, 0.0F, 1.0F });
+  auto& uploader = TransformUploaderRef();
+  uploader.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
+
+  // Act
+  uploader.GetOrAllocate(world);
+  const auto normals = uploader.GetNormalMatrices();
+
+  // Assert
+  EXPECT_EQ(normals.size(), 1);
+  const auto& normal_mat = normals.front();
+
+  const glm::mat3 expected_3x3 = glm::mat3 { world };
+  for (int c = 0; c < 3; ++c) {
+    for (int r = 0; r < 3; ++r) {
+      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+      EXPECT_FLOAT_EQ(normal_mat[c][r], expected_3x3[c][r])
+        << "Mismatch at [" << c << "][" << r << "]";
+    }
+  }
+}
+
+//! ComputeNormalMatrix uses inverse-transpose for rotation+non-uniform scale.
+NOLINT_TEST_F(TransformUploaderBasicTest,
+  ComputeNormalMatrixRotationNonUniformScaleMatchesInverseTranspose)
+{
+  // Arrange
+  constexpr auto identity = glm::mat4 { 1.0F };
+  const auto rot = glm::rotate(
+    identity, glm::radians(25.0F), glm::vec3 { 0.0F, 1.0F, 0.0F });
+  const auto scl = glm::scale(identity, glm::vec3 { 2.0F, 1.0F, 0.5F });
+  const auto world = rot * scl;
+  auto& uploader = TransformUploaderRef();
+  uploader.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
+
+  // Act
+  uploader.GetOrAllocate(world);
+  const auto normals = uploader.GetNormalMatrices();
+
+  // Assert
+  EXPECT_EQ(normals.size(), 1);
+  const auto& normal_mat = normals.front();
+
+  const glm::mat3 upper_3x3 { world };
+  const glm::mat3 expected_3x3 = glm::transpose(glm::inverse(upper_3x3));
+
+  constexpr float kEps = 1e-5F;
+  for (int c = 0; c < 3; ++c) {
+    for (int r = 0; r < 3; ++r) {
+      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+      EXPECT_NEAR(normal_mat[c][r], expected_3x3[c][r], kEps)
+        << "Mismatch at [" << c << "][" << r << "]";
+    }
+  }
+}
+
 //! EnsureFrameResources allocates GPU buffers for transforms.
 NOLINT_TEST_F(TransformUploaderBasicTest,
   EnsureFrameResourcesAllocatesBuffersReturnsValidSrvIndices)

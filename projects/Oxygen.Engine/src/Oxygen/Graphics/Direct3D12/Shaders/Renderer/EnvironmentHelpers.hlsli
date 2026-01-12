@@ -83,4 +83,23 @@ static inline uint3 GetClusterDimensions()
                  EnvironmentDynamicData.cluster_dim_z);
 }
 
+/**
+ * Converts an Oxygen world-space direction (Z-up) to the direction used for
+ * sampling GPU cubemaps (Y-up).
+ *
+ * Oxygen world convention (see `oxygen::space::move`):
+ *   X = right, Y = back, Z = up  (so forward is -Y)
+ * GPU cubemap convention used by our cooking/sampling path:
+ *   X = right, Y = up, Z = forward
+ *
+ * Therefore:
+ *   gpu.x = oxy.x
+ *   gpu.y = oxy.z
+ *   gpu.z = -oxy.y
+ */
+static inline float3 CubemapSamplingDirFromOxygenWS(float3 dir_ws)
+{
+    return float3(dir_ws.x, dir_ws.z, -dir_ws.y);
+}
+
 #endif // OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTHELPERS_HLSLI

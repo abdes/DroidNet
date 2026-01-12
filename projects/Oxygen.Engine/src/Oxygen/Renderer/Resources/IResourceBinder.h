@@ -78,6 +78,24 @@ public:
   [[nodiscard]] virtual auto GetOrAllocate(const content::ResourceKey& key)
     -> ShaderVisibleIndex
     = 0;
+
+  //! Returns whether a resolved resource is ready for shader sampling.
+  /*!
+   Indicates whether `key` is expected to resolve to its final descriptor
+   contents (not a temporary placeholder binding).
+
+   Implementations may conservatively return `true` for non-placeholder keys if
+   they do not track readiness.
+
+   @param key Opaque resource identifier.
+   @return `true` if sampling the index returned by GetOrAllocate(key) should
+           read the intended final data.
+  */
+  [[nodiscard]] virtual auto IsResourceReady(
+    const content::ResourceKey& key) const noexcept -> bool
+  {
+    return !key.IsPlaceholder();
+  }
 };
 
 } // namespace oxygen::renderer::resources

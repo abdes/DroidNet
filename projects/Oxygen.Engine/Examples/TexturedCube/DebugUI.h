@@ -24,6 +24,7 @@ struct ImGuiContext;
 
 namespace oxygen::engine {
 class Renderer;
+struct ShaderPassConfig;
 } // namespace oxygen::engine
 
 namespace oxygen::data {
@@ -81,6 +82,18 @@ public:
     float hdr_exposure_ev { 0.0f };
   };
 
+  //! State for the demo surface material.
+  struct SurfaceState {
+    // Default: reflective metal (not pure chrome).
+    float metalness { 0.85f };
+    float roughness { 0.12f };
+
+    // When enabled, the material skips texture sampling and uses a constant
+    // base color. This is useful to isolate PBR+IBL behavior.
+    bool use_constant_base_color { false };
+    glm::vec3 constant_base_color_rgb { 0.82f, 0.82f, 0.82f };
+  };
+
   //! State for skybox UI.
   struct SkyboxState {
     std::array<char, 512> path {};
@@ -128,6 +141,7 @@ public:
     SceneSetup::TextureIndexMode& texture_mode,
     std::uint32_t& custom_texture_resource_index,
     oxygen::observer_ptr<oxygen::engine::Renderer> renderer,
+    oxygen::engine::ShaderPassConfig* shader_pass_config,
     const std::shared_ptr<const oxygen::data::MaterialAsset>& cube_material,
     bool& cube_needs_rebuild) -> void;
 
@@ -164,6 +178,9 @@ public:
   //! Get UV state for reading/writing.
   auto GetUvState() -> UvState& { return uv_state_; }
 
+  //! Get surface state for reading/writing.
+  auto GetSurfaceState() -> SurfaceState& { return surface_state_; }
+
   //! Get lighting state for reading/writing.
   auto GetLightingState() -> LightingState& { return lighting_state_; }
 
@@ -178,9 +195,12 @@ private:
     const std::shared_ptr<const oxygen::data::MaterialAsset>& cube_material,
     bool& cube_needs_rebuild) -> void;
 
-  auto DrawLightingTab(oxygen::observer_ptr<scene::Scene> scene) -> void;
+  auto DrawLightingTab(oxygen::observer_ptr<scene::Scene> scene,
+    oxygen::observer_ptr<oxygen::engine::Renderer> renderer,
+    oxygen::engine::ShaderPassConfig* shader_pass_config) -> void;
 
   TextureState texture_state_;
+  SurfaceState surface_state_;
   SkyboxState skybox_state_;
   UvState uv_state_;
   LightingState lighting_state_;

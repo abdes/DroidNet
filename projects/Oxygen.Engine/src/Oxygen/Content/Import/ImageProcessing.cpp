@@ -422,16 +422,140 @@ namespace image::mip {
     }
 
     void DownsampleSeparable2D(const ImageView& src, std::span<std::byte> dst,
-      uint32_t dst_width, uint32_t dst_height, Format format,
-      KernelFunc /*kernel*/, float /*kernel_param*/)
+      uint32_t dst_width, uint32_t dst_height, Format format, KernelFunc kernel,
+      float /*kernel_param*/)
     {
-      // For simplicity, use the box filter approach for now
-      // A full separable implementation would require an intermediate buffer
-      // TODO: Implement proper separable filtering for higher quality
-      DownsampleBox2D(src, dst, dst_width, dst_height, format);
+      if (dst_width == 0 || dst_height == 0) {
+        return;
+      }
 
-      // Apply kernel weights (simplified - proper implementation would do
-      // horizontal then vertical pass)
+      // 1. Allocate intermediate buffer for separable (two-pass) filtering.
+      // We use float precision for intermediate results to minimize error
+      // accumulation. Buffer size is DstWidth * SrcHeight (after X pass, before
+      // Y pass).
+      const uint32_t temp_width = dst_width;
+      const uint32_t temp_height = src.height;
+      std::vector<float> temp_buffer(
+        static_cast<size_t>(temp_width) * temp_height * 4);
+
+      // Both Kaiser and Lanczos-3 implementations in this file utilize a radius
+      // approx 3.0 pixels.
+      // - Kaiser: kWidth = 3.0 (hardcoded)
+      // - Lanczos: a = 3 (from wrapper)
+      const float kernel_width = 3.0F;
+
+      // Helper for 1D resampling
+      auto resample_1d = [&](uint32_t src_size, uint32_t dst_size,
+                           auto sample_src, auto write_dst) {
+        const float scale
+          = static_cast<float>(dst_size) / static_cast<float>(src_size);
+        const float support_scale = (scale < 1.0F) ? (1.0F / scale) : 1.0F;
+        const float radius = kernel_width * support_scale;
+
+        for (uint32_t i = 0; i < dst_size; ++i) {
+          const float center = (static_cast<float>(i) + 0.5F) / scale;
+          const int start = static_cast<int>(std::floor(center - radius));
+          const int end = static_cast<int>(std::ceil(center + radius));
+
+          std::array<float, 4> val = { 0.0F, 0.0F, 0.0F, 0.0F };
+          float weight_sum = 0.0F;
+
+          for (int j = start; j < end; ++j) {
+            const float dist = (static_cast<float>(j) + 0.5F - center);
+            const float weight = kernel(dist / support_scale, 0.0F);
+
+            const int src_idx
+              = std::clamp(j, 0, static_cast<int>(src_size) - 1);
+
+            std::array<float, 4> pixel {};
+            sample_src(static_cast<uint32_t>(src_idx), pixel);
+
+            for (int c = 0; c < 4; ++c) {
+              val[c] += pixel[c] * weight;
+            }
+            weight_sum += weight;
+          }
+
+          if (std::abs(weight_sum) > 1e-6F) {
+            const float inv_w = 1.0F / weight_sum;
+            for (int c = 0; c < 4; ++c) {
+              val[c] *= inv_w;
+            }
+          }
+
+          write_dst(i, val);
+        }
+      };
+
+      // 2. Pass 1: Horizontal Resampling (Rows)
+      //    Src (W x H) -> Temp (DstW x H)
+      for (uint32_t y = 0; y < src.height; ++y) {
+        resample_1d(
+          src.width, temp_width,
+          [&](uint32_t src_x, std::array<float, 4>& out) {
+            size_t offset = 0;
+            if (format == Format::kRGBA32Float) {
+              offset = static_cast<size_t>(y) * src.row_pitch_bytes
+                + static_cast<size_t>(src_x) * 16;
+              const auto* p
+                = reinterpret_cast<const float*>(src.pixels.data() + offset);
+              for (int c = 0; c < 4; ++c) {
+                out[c] = p[c];
+              }
+            } else { // RGBA8
+              offset = static_cast<size_t>(y) * src.row_pitch_bytes
+                + static_cast<size_t>(src_x) * 4;
+              const auto* p
+                = reinterpret_cast<const uint8_t*>(src.pixels.data() + offset);
+              for (int c = 0; c < 4; ++c) {
+                out[c]
+                  = static_cast<float>(p[c]); // Keep 0..255 range for precision
+              }
+            }
+          },
+          [&](uint32_t dst_x, const std::array<float, 4>& in) {
+            const size_t offset
+              = (static_cast<size_t>(y) * temp_width + dst_x) * 4;
+            float* p = temp_buffer.data() + offset;
+            for (int c = 0; c < 4; ++c) {
+              p[c] = in[c];
+            }
+          });
+      }
+
+      // 3. Pass 2: Vertical Resampling (Columns)
+      //    Temp (DstW x H) -> Dst (DstW x DstH)
+      for (uint32_t x = 0; x < dst_width; ++x) {
+        resample_1d(
+          temp_height, dst_height,
+          [&](uint32_t src_y, std::array<float, 4>& out) {
+            const size_t offset
+              = (static_cast<size_t>(src_y) * temp_width + x) * 4;
+            const float* p = temp_buffer.data() + offset;
+            for (int c = 0; c < 4; ++c) {
+              out[c] = p[c];
+            }
+          },
+          [&](uint32_t dst_y, const std::array<float, 4>& in) {
+            if (format == Format::kRGBA32Float) {
+              const size_t offset
+                = (static_cast<size_t>(dst_y) * dst_width + x) * 4;
+              auto* p = reinterpret_cast<float*>(dst.data())
+                + offset; // tight packing assumed
+              for (int c = 0; c < 4; ++c) {
+                p[c] = in[c];
+              }
+            } else { // RGBA8
+              const size_t offset
+                = (static_cast<size_t>(dst_y) * dst_width + x) * 4;
+              auto* p = reinterpret_cast<uint8_t*>(dst.data()) + offset;
+              for (int c = 0; c < 4; ++c) {
+                p[c] = static_cast<uint8_t>(
+                  std::clamp(in[c] + 0.5F, 0.0F, 255.0F));
+              }
+            }
+          });
+      }
     }
 
   } // namespace

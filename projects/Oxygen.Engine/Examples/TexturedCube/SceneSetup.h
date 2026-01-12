@@ -87,7 +87,9 @@ public:
     std::uint32_t custom_resource_index,
     oxygen::content::ResourceKey custom_texture_key,
     oxygen::content::ResourceKey forced_error_key, glm::vec2 uv_scale,
-    glm::vec2 uv_offset) -> std::shared_ptr<const oxygen::data::MaterialAsset>;
+    glm::vec2 uv_offset, float metalness, float roughness,
+    glm::vec4 base_color_rgba, bool disable_texture_sampling)
+    -> std::shared_ptr<const oxygen::data::MaterialAsset>;
 
   //! Ensure lighting nodes exist and are configured.
   auto EnsureLighting(const SunLightParams& sun, const FillLightParams& fill)
@@ -128,11 +130,13 @@ private:
   std::shared_ptr<scene::Scene> scene_;
 
   scene::SceneNode cube_node_;
+  scene::SceneNode comparison_cube_node_;
   scene::SceneNode sun_node_;
   scene::SceneNode fill_light_node_;
 
   std::shared_ptr<const oxygen::data::MaterialAsset> cube_material_;
   std::shared_ptr<oxygen::data::GeometryAsset> cube_geometry_;
+  std::shared_ptr<oxygen::data::GeometryAsset> comparison_cube_geometry_;
   std::vector<std::shared_ptr<oxygen::data::GeometryAsset>>
     retired_cube_geometries_;
 };

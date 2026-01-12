@@ -76,7 +76,8 @@ auto ResolveBaseColorTextureResourceIndex(
 
 auto MakeCubeMaterial(const char* name, const glm::vec4& rgba,
   oxygen::data::pak::v2::ResourceIndexT base_color_texture_resource_index,
-  oxygen::content::ResourceKey base_color_texture_key,
+  oxygen::content::ResourceKey base_color_texture_key, float metalness,
+  float roughness, bool disable_texture_sampling,
   oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::kOpaque)
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
 {
@@ -93,7 +94,9 @@ auto MakeCubeMaterial(const char* name, const glm::vec4& rgba,
   desc.header.version = 1;
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(domain);
-  desc.flags = 0;
+  desc.flags = disable_texture_sampling
+    ? oxygen::data::pak::kMaterialFlag_NoTextureSampling
+    : 0U;
   desc.shader_stages = 0;
 
   desc.base_color[0] = rgba.r;
@@ -103,11 +106,8 @@ auto MakeCubeMaterial(const char* name, const glm::vec4& rgba,
 
   desc.normal_scale = 1.0f;
 
-  // Intentionally glossy by default so specular (direct + IBL) is obvious.
-  // Keep it non-metallic so specular remains visible even when the base color
-  // texture is missing/black (dielectric F0 stays around ~0.04).
-  desc.metalness = Unorm16 { 0.0f };
-  desc.roughness = Unorm16 { 0.05f };
+  desc.metalness = Unorm16 { std::clamp(metalness, 0.0f, 1.0f) };
+  desc.roughness = Unorm16 { std::clamp(roughness, 0.0f, 1.0f) };
   desc.ambient_occlusion = Unorm16 { 1.0f };
 
   desc.base_color_texture = base_color_texture_resource_index;
@@ -128,6 +128,55 @@ auto MakeCubeMaterial(const char* name, const glm::vec4& rgba,
 auto BuildCubeGeometry(
   const std::shared_ptr<const oxygen::data::MaterialAsset>& material,
   const glm::vec2 /*uv_scale*/, const glm::vec2 /*uv_offset*/)
+  -> std::shared_ptr<oxygen::data::GeometryAsset>
+{
+  using oxygen::data::MeshBuilder;
+  using oxygen::data::Vertex;
+  using oxygen::data::pak::GeometryAssetDesc;
+  using oxygen::data::pak::MeshViewDesc;
+
+  // Use a procedural UV sphere instead of a cube so IBL reflections are easier
+  // to validate (smooth normal variation across the surface).
+  auto sphere_data = oxygen::data::MakeSphereMeshAsset(32, 64);
+  if (!sphere_data) {
+    return nullptr;
+  }
+
+  std::vector<Vertex> vertices = sphere_data->first;
+
+  auto mesh
+    = MeshBuilder(0, "SphereLOD0")
+        .WithVertices(vertices)
+        .WithIndices(sphere_data->second)
+        .BeginSubMesh("full", material)
+        .WithMeshView(MeshViewDesc {
+          .first_index = 0,
+          .index_count = static_cast<uint32_t>(sphere_data->second.size()),
+          .first_vertex = 0,
+          .vertex_count = static_cast<uint32_t>(vertices.size()),
+        })
+        .EndSubMesh()
+        .Build();
+
+  GeometryAssetDesc geo_desc {};
+  geo_desc.lod_count = 1;
+  const auto bb_min = mesh->BoundingBoxMin();
+  const auto bb_max = mesh->BoundingBoxMax();
+  geo_desc.bounding_box_min[0] = bb_min.x;
+  geo_desc.bounding_box_min[1] = bb_min.y;
+  geo_desc.bounding_box_min[2] = bb_min.z;
+  geo_desc.bounding_box_max[0] = bb_max.x;
+  geo_desc.bounding_box_max[1] = bb_max.y;
+  geo_desc.bounding_box_max[2] = bb_max.z;
+
+  return std::make_shared<oxygen::data::GeometryAsset>(
+    oxygen::data::AssetKey { .guid = oxygen::data::GenerateAssetGuid() },
+    geo_desc,
+    std::vector<std::shared_ptr<oxygen::data::Mesh>> { std::move(mesh) });
+}
+
+auto BuildComparisonCubeGeometry(
+  const std::shared_ptr<const oxygen::data::MaterialAsset>& material)
   -> std::shared_ptr<oxygen::data::GeometryAsset>
 {
   using oxygen::data::MeshBuilder;
@@ -191,9 +240,19 @@ auto SceneSetup::EnsureCubeNode() -> scene::SceneNode
   }
 
   if (!cube_node_.IsAlive()) {
-    cube_node_ = scene_->CreateNode("Cube");
-    cube_node_.GetTransform().SetLocalPosition({ 0.0f, 0.0f, 0.0f });
+    cube_node_ = scene_->CreateNode("Sphere");
   }
+
+  // Place the sphere above the cube (Z-up world).
+  cube_node_.GetTransform().SetLocalPosition({ 0.0f, 0.0f, 3.0f });
+
+  if (!comparison_cube_node_.IsAlive()) {
+    comparison_cube_node_ = scene_->CreateNode("Cube");
+  }
+
+  // Make the cube the scene center and scale it up for easier inspection.
+  comparison_cube_node_.GetTransform().SetLocalPosition({ 0.0f, 0.0f, 0.0f });
+  comparison_cube_node_.GetTransform().SetLocalScale({ 4.0f, 4.0f, 4.0f });
 
   return cube_node_;
 }
@@ -202,11 +261,11 @@ auto SceneSetup::RebuildCube(TextureIndexMode texture_mode,
   std::uint32_t custom_resource_index,
   oxygen::content::ResourceKey custom_texture_key,
   oxygen::content::ResourceKey forced_error_key, glm::vec2 uv_scale,
-  glm::vec2 uv_offset) -> std::shared_ptr<const oxygen::data::MaterialAsset>
+  glm::vec2 uv_offset, float metalness, float roughness,
+  glm::vec4 base_color_rgba, bool disable_texture_sampling)
+  -> std::shared_ptr<const oxygen::data::MaterialAsset>
 {
-  if (!cube_node_.IsAlive()) {
-    EnsureCubeNode();
-  }
+  EnsureCubeNode();
 
   const auto res_index
     = ResolveBaseColorTextureResourceIndex(texture_mode, custom_resource_index);
@@ -224,14 +283,26 @@ auto SceneSetup::RebuildCube(TextureIndexMode texture_mode,
     }
   }();
 
-  cube_material_ = MakeCubeMaterial(
-    "CubeMat", { 1.0f, 1.0f, 1.0f, 1.0f }, res_index, base_color_key);
+  cube_material_ = MakeCubeMaterial("CubeMat", base_color_rgba, res_index,
+    base_color_key, metalness, roughness, disable_texture_sampling);
 
   auto cube_geo = BuildCubeGeometry(cube_material_, uv_scale, uv_offset);
-  if (cube_geo) {
+  auto comparison_geo = BuildComparisonCubeGeometry(cube_material_);
+
+  if (cube_geo || comparison_geo) {
     RetireCurrentGeometry();
-    cube_geometry_ = std::move(cube_geo);
-    cube_node_.GetRenderable().SetGeometry(cube_geometry_);
+
+    if (cube_geo) {
+      cube_geometry_ = std::move(cube_geo);
+      cube_node_.GetRenderable().SetGeometry(cube_geometry_);
+    }
+
+    if (comparison_geo) {
+      comparison_cube_geometry_ = std::move(comparison_geo);
+      comparison_cube_node_.GetRenderable().SetGeometry(
+        comparison_cube_geometry_);
+    }
+
     CleanupRetiredGeometries();
   }
 
@@ -313,11 +384,13 @@ auto SceneSetup::EnsureEnvironment(const EnvironmentParams& params) -> void
     auto new_env = std::make_unique<scene::SceneEnvironment>();
 
     auto& sky = new_env->AddSystem<scene::environment::SkySphere>();
+    sky.SetEnabled(true);
     sky.SetSource(scene::environment::SkySphereSource::kSolidColor);
     sky.SetSolidColorRgb(params.solid_sky_color);
     sky.SetIntensity(params.sky_intensity);
 
     auto& sky_light = new_env->AddSystem<scene::environment::SkyLight>();
+    sky_light.SetEnabled(true);
     sky_light.SetIntensity(params.sky_light_intensity);
     sky_light.SetDiffuseIntensity(params.sky_light_diffuse);
     sky_light.SetSpecularIntensity(params.sky_light_specular);
@@ -328,12 +401,14 @@ auto SceneSetup::EnsureEnvironment(const EnvironmentParams& params) -> void
   } else {
     if (!env->TryGetSystem<scene::environment::SkySphere>()) {
       auto& sky = env->AddSystem<scene::environment::SkySphere>();
+      sky.SetEnabled(true);
       sky.SetSource(scene::environment::SkySphereSource::kSolidColor);
       sky.SetSolidColorRgb(params.solid_sky_color);
       sky.SetIntensity(params.sky_intensity);
     }
     if (!env->TryGetSystem<scene::environment::SkyLight>()) {
       auto& sky_light = env->AddSystem<scene::environment::SkyLight>();
+      sky_light.SetEnabled(true);
       sky_light.SetIntensity(params.sky_light_intensity);
       sky_light.SetDiffuseIntensity(params.sky_light_diffuse);
       sky_light.SetSpecularIntensity(params.sky_light_specular);
@@ -347,6 +422,10 @@ auto SceneSetup::RetireCurrentGeometry() -> void
 {
   if (cube_geometry_) {
     retired_cube_geometries_.push_back(cube_geometry_);
+  }
+
+  if (comparison_cube_geometry_) {
+    retired_cube_geometries_.push_back(comparison_cube_geometry_);
   }
 }
 

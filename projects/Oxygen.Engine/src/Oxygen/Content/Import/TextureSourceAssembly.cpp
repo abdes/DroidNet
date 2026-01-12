@@ -382,27 +382,24 @@ namespace {
     Maps a normalized direction vector to UV coordinates in an equirectangular
     (latitude-longitude) projection.
 
-    @param dir Normalized direction vector in D3D/OpenGL Y-up convention
-    (X=right, Y=up, Z=forward)
+    @param dir Normalized direction vector in standard GPU cubemap convention
+    (X=right, Y=up, Z=forward).
     @return UV coordinates where u=[0,1] is longitude and v=[0,1] is latitude
   */
   auto DirectionToEquirectUV(const CubeFaceDirection& dir)
     -> std::pair<float, float>
   {
-    // Input is in D3D Y-up convention (X=right, Y=up, Z=forward)
-
-    // Standard equirectangular mapping:
-    // theta (longitude) = atan2(x, z) in [-π, π], wrapping around Y axis
-    // phi (latitude) = asin(y) in [-π/2, π/2], elevation from XZ plane
+    // Input direction is in standard GPU cubemap convention:
+    //   X = right, Y = up, Z = forward.
+    // Equirectangular mapping:
+    //   theta (longitude) = atan2(x, z) in [-π, π], wrapping around +Y axis.
+    //   phi (latitude)    = asin(y) in [-π/2, π/2], elevation from XZ plane.
     const float theta = std::atan2(dir.x, dir.z);
     const float phi = std::asin(std::clamp(dir.y, -1.0F, 1.0F));
 
-    // Map to [0, 1] UV coordinates
-    // u: 0 = -π (left edge), 1 = +π (right edge)
-    // In texture coordinates, v=0 is TOP of image (north pole/sky)
-    // and v=1 is BOTTOM (south pole/ground), so we flip:
-    // phi = +π/2 (looking up) → v = 0 (top of texture)
-    // phi = -π/2 (looking down) → v = 1 (bottom of texture)
+    // Map to [0, 1] UV coordinates.
+    // u: θ=0 (Forward +Z) maps to u=0.5.
+    // v: φ=π/2 (Up +Y) maps to v=0 (top of texture).
     const float u = (theta / std::numbers::pi_v<float> + 1.0F) * 0.5F;
     const float v = 0.5F - phi / std::numbers::pi_v<float>;
 

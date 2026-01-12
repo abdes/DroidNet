@@ -822,20 +822,27 @@ auto ImportCubeMapFromEquirect(const std::filesystem::path& equirect_path,
   uint32_t face_size, TexturePreset preset, const ITexturePackingPolicy& policy)
   -> oxygen::Result<TextureImportResult, TextureImportError>
 {
-  // Load equirectangular panorama
-  auto equirect = LoadTexture(equirect_path);
+  TextureImportDesc desc = MakeDescFromPreset(preset);
+  return ImportCubeMapFromEquirect(equirect_path, face_size, desc, policy);
+}
+
+auto ImportCubeMapFromEquirect(const std::filesystem::path& equirect_path,
+  uint32_t face_size, const TextureImportDesc& desc,
+  const ITexturePackingPolicy& policy)
+  -> oxygen::Result<TextureImportResult, TextureImportError>
+{
+  // Load equirectangular panorama using the descriptor (respects
+  // flip_y_on_decode)
+  auto equirect = LoadTexture(equirect_path, desc);
   if (!equirect) {
     return ::oxygen::Err(equirect.error());
   }
 
-  // For HDR conversion, we need the image in float format
-  // If it's already float, use it directly; otherwise, conversion is needed
+  // For HDR conversion, we need the image in float format.
   ScratchImage float_image;
   if (equirect->Meta().format == Format::kRGBA32Float) {
     float_image = std::move(*equirect);
   } else {
-    // Need to convert RGBA8 to float for proper sampling
-    // Create float version
     const auto& meta = equirect->Meta();
     auto float_scratch = ScratchImage::Create(ScratchImageMeta {
       .texture_type = TextureType::kTexture2D,
@@ -851,7 +858,6 @@ auto ImportCubeMapFromEquirect(const std::filesystem::path& equirect_path,
       return ::oxygen::Err(TextureImportError::kOutOfMemory);
     }
 
-    // Convert pixels
     const auto src_view = equirect->GetImage(0, 0);
     auto dst_pixels = float_scratch.GetMutablePixels(0, 0);
     const auto* src_ptr = src_view.pixels.data();
@@ -868,10 +874,9 @@ auto ImportCubeMapFromEquirect(const std::filesystem::path& equirect_path,
     float_image = std::move(float_scratch);
   }
 
-  // Convert to cube map
   EquirectToCubeOptions options {
     .face_size = face_size,
-    .sample_filter = MipFilter::kKaiser,
+    .sample_filter = desc.mip_filter,
   };
 
   auto cube = ConvertEquirectangularToCube(float_image, options);
@@ -879,16 +884,14 @@ auto ImportCubeMapFromEquirect(const std::filesystem::path& equirect_path,
     return ::oxygen::Err(cube.error());
   }
 
-  // Create descriptor from preset
-  TextureImportDesc desc = MakeDescFromPreset(preset);
-  desc.texture_type = TextureType::kTextureCube;
-  desc.width = face_size;
-  desc.height = face_size;
-  desc.array_layers = kCubeFaceCount;
-  desc.source_id = equirect_path.string();
+  TextureImportDesc cube_desc = desc;
+  cube_desc.texture_type = TextureType::kTextureCube;
+  cube_desc.width = face_size;
+  cube_desc.height = face_size;
+  cube_desc.array_layers = kCubeFaceCount;
+  cube_desc.source_id = equirect_path.string();
 
-  // Cook the texture
-  auto cooked = CookTexture(std::move(*cube), desc, policy);
+  auto cooked = CookTexture(std::move(*cube), cube_desc, policy);
   if (!cooked) {
     return ::oxygen::Err(cooked.error());
   }
@@ -896,7 +899,7 @@ auto ImportCubeMapFromEquirect(const std::filesystem::path& equirect_path,
   TextureImportResult result {
     .payload = std::move(*cooked),
     .source_path = equirect_path.string(),
-    .applied_preset = preset,
+    .applied_preset = TexturePreset::kData, // Custom descriptor, no preset
   };
 
   return ::oxygen::Ok(std::move(result));

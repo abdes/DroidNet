@@ -39,6 +39,11 @@ enum class ShaderDebugMode : int {
   kLightCullingHeatMap = 1, //!< Heat map of lights per cluster
   kDepthSlice = 2, //!< Visualize depth slice (clustered mode)
   kClusterIndex = 3, //!< Visualize cluster index as checkerboard
+
+  // IBL debug modes
+  kIblSpecular = 4, //!< Visualize IBL specular (prefilter map sampling)
+  kIblRawSky = 5, //!< Visualize raw sky cubemap sampling (no prefilter)
+  kIblRawSkyViewDir = 6, //!< Visualize raw sky cubemap (view direction)
 };
 
 //! Configuration for a shading pass (main geometry + lighting).

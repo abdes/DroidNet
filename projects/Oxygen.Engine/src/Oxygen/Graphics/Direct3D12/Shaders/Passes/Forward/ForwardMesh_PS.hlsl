@@ -15,6 +15,9 @@
 //!   DEBUG_LIGHT_HEATMAP: Heat map of lights per cluster (black->green->yellow->red)
 //!   DEBUG_DEPTH_SLICE: Visualize depth slices with distinct cycling colors
 //!   DEBUG_CLUSTER_INDEX: Visualize cluster boundaries as checkerboard
+//!   DEBUG_IBL_SPECULAR: Visualize IBL specular sampling (prefilter map)
+//!   DEBUG_IBL_RAW_SKY: Visualize raw sky cubemap sampling (no prefilter)
+//!   DEBUG_IBL_RAW_SKY_VIEWDIR: Visualize raw sky cubemap (view direction)
 
 #include "Renderer/SceneConstants.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
@@ -75,7 +78,7 @@ struct VSOutput {
 //=== Debug Visualization Helpers ===----------------------------------------//
 
 // Check if any debug mode is active
-#if defined(DEBUG_LIGHT_HEATMAP) || defined(DEBUG_DEPTH_SLICE) || defined(DEBUG_CLUSTER_INDEX)
+#if defined(DEBUG_LIGHT_HEATMAP) || defined(DEBUG_DEPTH_SLICE) || defined(DEBUG_CLUSTER_INDEX) || defined(DEBUG_IBL_SPECULAR) || defined(DEBUG_IBL_RAW_SKY) || defined(DEBUG_IBL_RAW_SKY_VIEWDIR)
 #define DEBUG_MODE_ACTIVE 1
 #endif
 
@@ -100,8 +103,6 @@ float3 HeatMapColor(float t) {
 
     return lerp(colors[idx], colors[idx + 1], localT);
 }
-
-// Rainbow}
 
 // Visualize depth slice as a rainbow gradient
 float3 DepthSliceColor(uint slice, uint max_slices) {
@@ -187,10 +188,165 @@ float4 PS(VSOutput input) : SV_Target0 {
     //=== Debug Visualization Modes ===---------------------------------------//
 
 #ifdef DEBUG_MODE_ACTIVE
+
+#if defined(DEBUG_IBL_SPECULAR)
+    // IBL specular visualization: sample the prefilter map (if available) and
+    // show it directly.
+    // Important: keep this mode purely geometric to avoid normal-map / TBN
+    // issues obscuring cubemap direction bugs.
+    const float3 N = SafeNormalize(input.world_normal);
+    const float3 V = SafeNormalize(camera_position - input.world_pos);
+    const float roughness = 0.0f; // mirror to make direction errors obvious
+
+    EnvironmentStaticData env_data;
+    float3 ibl_specular = 0.0f;
+
+    uint ibl_cubemap_slot = K_INVALID_BINDLESS_INDEX;
+    if (LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data)
+        && env_data.sky_light.enabled)
+    {
+        ibl_cubemap_slot = env_data.sky_light.cubemap_slot;
+        if (ibl_cubemap_slot == K_INVALID_BINDLESS_INDEX
+            && env_data.sky_sphere.enabled
+            && env_data.sky_sphere.cubemap_slot != K_INVALID_BINDLESS_INDEX)
+        {
+            ibl_cubemap_slot = env_data.sky_sphere.cubemap_slot;
+        }
+    }
+
+    if (ibl_cubemap_slot != K_INVALID_BINDLESS_INDEX)
+    {
+        TextureCube<float4> sky_cube = ResourceDescriptorHeap[ibl_cubemap_slot];
+        SamplerState linear_sampler = SamplerDescriptorHeap[0];
+
+        const float3 R = reflect(-V, N);
+        const float3 cube_R = CubemapSamplingDirFromOxygenWS(R);
+
+        if (env_data.sky_light.prefilter_map_slot != K_INVALID_BINDLESS_INDEX)
+        {
+            TextureCube<float4> pref_map = ResourceDescriptorHeap[env_data.sky_light.prefilter_map_slot];
+            // For mirror roughness=0, sample mip 0.
+            ibl_specular = pref_map.SampleLevel(linear_sampler, cube_R, 0.0f).rgb;
+        }
+        else
+        {
+            // Fallback to skybox sampling if no prefilter map is available.
+            ibl_specular = sky_cube.SampleLevel(linear_sampler, cube_R, 0.0f).rgb;
+        }
+
+        const float3 sky_tint = env_data.sky_light.tint_rgb * env_data.sky_light.intensity;
+        ibl_specular *= sky_tint * env_data.sky_light.specular_intensity;
+    }
+
+    // Scale HDR down for a readable visualization.
+    return float4(ibl_specular * 0.1f, 1.0f);
+#elif defined(DEBUG_IBL_RAW_SKY)
+    // Raw sky cubemap visualization: sample the source cubemap directly.
+    //
+    // If this looks distorted, the issue is in cubemap sampling/orientation
+    // (direction swizzle, face order/rotation, or source cubemap cooking).
+    // Important: use the geometric world normal and view vector here.
+    // This avoids any normal-map/tangent-space issues and isolates cubemap
+    // sampling and source cubemap correctness.
+    const float3 N = SafeNormalize(input.world_normal);
+    const float3 V = SafeNormalize(camera_position - input.world_pos);
+
+    EnvironmentStaticData env_data;
+    float3 raw_sky = 0.0f;
+
+    uint ibl_cubemap_slot = K_INVALID_BINDLESS_INDEX;
+    if (LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data)
+        && env_data.sky_light.enabled)
+    {
+        ibl_cubemap_slot = env_data.sky_light.cubemap_slot;
+        if (ibl_cubemap_slot == K_INVALID_BINDLESS_INDEX
+            && env_data.sky_sphere.enabled
+            && env_data.sky_sphere.cubemap_slot != K_INVALID_BINDLESS_INDEX)
+        {
+            ibl_cubemap_slot = env_data.sky_sphere.cubemap_slot;
+        }
+    }
+
+    if (ibl_cubemap_slot != K_INVALID_BINDLESS_INDEX)
+    {
+        TextureCube<float4> sky_cube = ResourceDescriptorHeap[ibl_cubemap_slot];
+        SamplerState linear_sampler = SamplerDescriptorHeap[0];
+
+        const float3 R = reflect(-V, N);
+        const float3 cube_R = CubemapSamplingDirFromOxygenWS(R);
+
+        raw_sky = sky_cube.SampleLevel(linear_sampler, cube_R, 0).rgb;
+
+        const float3 sky_tint = env_data.sky_light.tint_rgb * env_data.sky_light.intensity;
+        raw_sky *= sky_tint;
+    }
+
+    // Scale HDR down for a readable visualization.
+    return float4(raw_sky * 0.1f, 1.0f);
+#elif defined(DEBUG_IBL_RAW_SKY_VIEWDIR)
+    // Raw sky cubemap sampled using the camera ray direction.
+    //
+    // This is the same concept as a skybox: sample by the camera ray through
+    // the pixel, not by (camera_position - world_pos) which depends on the
+    // shaded surface position and will look like a 'transparent sphere'.
+    // If this doesn't match the sky background, the cubemap cook and/or
+    // CubemapSamplingDirFromOxygenWS mapping is wrong.
+
+    EnvironmentStaticData env_data;
+    float3 raw_sky = 0.0f;
+
+    uint ibl_cubemap_slot = K_INVALID_BINDLESS_INDEX;
+    if (LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data)
+        && env_data.sky_light.enabled)
+    {
+        ibl_cubemap_slot = env_data.sky_light.cubemap_slot;
+        if (ibl_cubemap_slot == K_INVALID_BINDLESS_INDEX
+            && env_data.sky_sphere.enabled
+            && env_data.sky_sphere.cubemap_slot != K_INVALID_BINDLESS_INDEX)
+        {
+            ibl_cubemap_slot = env_data.sky_sphere.cubemap_slot;
+        }
+    }
+
+    if (ibl_cubemap_slot != K_INVALID_BINDLESS_INDEX)
+    {
+        TextureCube<float4> sky_cube = ResourceDescriptorHeap[ibl_cubemap_slot];
+        SamplerState linear_sampler = SamplerDescriptorHeap[0];
+
+        const float2 screen_dims = float2(
+            (float)(EnvironmentDynamicData.cluster_dim_x * EnvironmentDynamicData.tile_size_px),
+            (float)(EnvironmentDynamicData.cluster_dim_y * EnvironmentDynamicData.tile_size_px));
+
+        // Convert SV_Position.xy (pixel coords) to NDC.
+        const float2 uv = input.position.xy / max(screen_dims, 1.0.xx);
+        const float2 ndc = float2(uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f);
+
+        // Reconstruct a view-space ray from NDC.
+        // View space is right-handed in this renderer (forward is -Z), see
+        // linear_depth = max(-view_pos.z, 0).
+        const float proj_x = projection_matrix[0][0];
+        const float proj_y = projection_matrix[1][1];
+        const float3 ray_vs = SafeNormalize(
+            float3(ndc.x / max(proj_x, 1e-6f), ndc.y / max(proj_y, 1e-6f), -1.0f));
+
+        // Transform ray to world space using inverse view rotation.
+        const float3x3 view_rot = (float3x3)view_matrix;
+        const float3 ray_ws = SafeNormalize(mul(transpose(view_rot), ray_vs));
+
+        const float3 cube_dir = CubemapSamplingDirFromOxygenWS(ray_ws);
+        raw_sky = sky_cube.SampleLevel(linear_sampler, cube_dir, 0).rgb;
+
+        const float3 sky_tint = env_data.sky_light.tint_rgb * env_data.sky_light.intensity;
+        raw_sky *= sky_tint;
+    }
+
+    return float4(raw_sky * 0.1f, 1.0f);
+#endif
+
     // Common cluster lookup for all light culling debug modes
     const uint cluster_grid_slot = EnvironmentDynamicData.bindless_cluster_grid_slot;
 
-        if (cluster_grid_slot == K_INVALID_BINDLESS_INDEX) {
+    if (cluster_grid_slot == K_INVALID_BINDLESS_INDEX) {
         return float4(1.0, 0.0, 1.0, 1.0); // Magenta = no cluster grid
     }
 
@@ -284,11 +440,22 @@ float4 PS(VSOutput input) : SV_Target0 {
     bool has_brdf_lut = false;
     Texture2D<float2> brdf_lut;
 
+    uint ibl_cubemap_slot = K_INVALID_BINDLESS_INDEX;
     if (LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data)
-        && env_data.sky_light.enabled
-        && env_data.sky_light.cubemap_slot != K_INVALID_BINDLESS_INDEX)
+        && env_data.sky_light.enabled)
     {
-        TextureCube<float4> sky_cube = ResourceDescriptorHeap[env_data.sky_light.cubemap_slot];
+        ibl_cubemap_slot = env_data.sky_light.cubemap_slot;
+        if (ibl_cubemap_slot == K_INVALID_BINDLESS_INDEX
+            && env_data.sky_sphere.enabled
+            && env_data.sky_sphere.cubemap_slot != K_INVALID_BINDLESS_INDEX)
+        {
+            ibl_cubemap_slot = env_data.sky_sphere.cubemap_slot;
+        }
+    }
+
+    if (ibl_cubemap_slot != K_INVALID_BINDLESS_INDEX)
+    {
+        TextureCube<float4> sky_cube = ResourceDescriptorHeap[ibl_cubemap_slot];
         SamplerState linear_sampler = SamplerDescriptorHeap[0];
         has_brdf_lut = env_data.sky_light.brdf_lut_slot != K_INVALID_BINDLESS_INDEX;
         if (has_brdf_lut)
@@ -301,11 +468,33 @@ float4 PS(VSOutput input) : SV_Target0 {
         const float max_mip = max(0.0f, (float)cube_levels - 1.0f);
 
         const float3 R = reflect(-V, N);
-        // Approximate specular prefilter using mip selection from roughness
-        ibl_specular = sky_cube.SampleLevel(linear_sampler, R, max_mip * roughness).rgb;
 
-        // Diffuse approximation from lowest mip
-        ibl_diffuse = sky_cube.SampleLevel(linear_sampler, N, max_mip).rgb;
+        const float3 cube_R = CubemapSamplingDirFromOxygenWS(R);
+        const float3 cube_N = CubemapSamplingDirFromOxygenWS(N);
+
+        // Check for generated IBL maps (Irradiance + Prefilter)
+        if (env_data.sky_light.irradiance_map_slot != K_INVALID_BINDLESS_INDEX
+            && env_data.sky_light.prefilter_map_slot != K_INVALID_BINDLESS_INDEX)
+        {
+             TextureCube<float4> irr_map = ResourceDescriptorHeap[env_data.sky_light.irradiance_map_slot];
+             TextureCube<float4> pref_map = ResourceDescriptorHeap[env_data.sky_light.prefilter_map_slot];
+
+             // Diffuse from Irradiance Map (Mip 0)
+             ibl_diffuse = irr_map.SampleLevel(linear_sampler, cube_N, 0).rgb;
+
+             // Specular from Prefilter Map
+             uint pf_w, pf_h, pf_levels;
+             pref_map.GetDimensions(0, pf_w, pf_h, pf_levels);
+             float pf_max_mip = max(0.0f, (float)pf_levels - 1.0f);
+
+             ibl_specular = pref_map.SampleLevel(linear_sampler, cube_R, pf_max_mip * roughness).rgb;
+        }
+        else
+        {
+            // Fallback: Approximate from raw skybox (Incorrect but legacy behavior)
+            ibl_specular = sky_cube.SampleLevel(linear_sampler, cube_R, max_mip * roughness).rgb;
+            ibl_diffuse = sky_cube.SampleLevel(linear_sampler, cube_N, max_mip).rgb;
+        }
 
         const float3 sky_tint = env_data.sky_light.tint_rgb * env_data.sky_light.intensity;
         ibl_diffuse *= sky_tint * env_data.sky_light.diffuse_intensity;
@@ -314,7 +503,25 @@ float4 PS(VSOutput input) : SV_Target0 {
 
     const float3 ambient = ibl_diffuse * base_rgb * (1.0f - metalness);
     const float3 spec_brdf = EnvBrdfApprox(F0, roughness, NdotV);
-    const float3 shaded = (direct + ibl_specular * (has_brdf_lut ? 1.0f : spec_brdf) + ambient) * input.color;
+    float3 ibl_specular_term = ibl_specular * spec_brdf;
+
+    // If a BRDF LUT is provided, prefer the LUT-based split-sum.
+    // Defensive fallback: if the LUT samples as ~0 (or NaN), keep the analytic
+    // approximation so IBL specular doesn't disappear.
+    if (has_brdf_lut && ibl_cubemap_slot != K_INVALID_BINDLESS_INDEX)
+    {
+        SamplerState linear_sampler = SamplerDescriptorHeap[0];
+        const float2 brdf = brdf_lut.SampleLevel(linear_sampler, float2(NdotV, roughness), 0).rg;
+
+        const bool brdf_is_nan = any(isnan(brdf));
+        const bool brdf_is_effectively_zero = max(brdf.x, brdf.y) <= 1e-5;
+        if (!brdf_is_nan && !brdf_is_effectively_zero)
+        {
+            ibl_specular_term = ibl_specular * (F0 * brdf.x + brdf.y);
+        }
+    }
+
+    const float3 shaded = (direct + ibl_specular_term + ambient) * input.color;
 
     // Emissive
     float3 final_color = shaded + surf.emissive;

@@ -78,6 +78,18 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     std::array { EntryPoint { kPixel, "PS" } },
     std::array<std::string_view, 2> { "DEBUG_IBL_SPECULAR", "ALPHA_TEST" }
   },
+  // Forward pass pixel shader: DEBUG_IBL_RAW_SKY with ALPHA_TEST permutation
+  ShaderFileSpec {
+    "Passes/Forward/ForwardMesh_PS.hlsl",
+    std::array { EntryPoint { kPixel, "PS" } },
+    std::array<std::string_view, 2> { "DEBUG_IBL_RAW_SKY", "ALPHA_TEST" }
+  },
+  // Forward pass pixel shader: DEBUG_IBL_RAW_SKY_VIEWDIR with ALPHA_TEST permutation
+  ShaderFileSpec {
+    "Passes/Forward/ForwardMesh_PS.hlsl",
+    std::array { EntryPoint { kPixel, "PS" } },
+    std::array<std::string_view, 2> { "DEBUG_IBL_RAW_SKY_VIEWDIR", "ALPHA_TEST" }
+  },
   // Depth pre-pass: VS and PS with ALPHA_TEST permutation
   ShaderFileSpec {
     "Passes/Depth/DepthPrePass.hlsl",
@@ -108,6 +120,21 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     "Passes/Sky/SkySphere_PS.hlsl",
     std::array { EntryPoint { kPixel, "PS" } }
   },
+  // Sky capture shaders (no permutations)
+  ShaderFileSpec {
+    "Passes/Sky/SkyCapture_VS.hlsl",
+    std::array { EntryPoint { kVertex, "VS" } }
+  },
+  ShaderFileSpec {
+    "Passes/Sky/SkyCapture_PS.hlsl",
+    std::array { EntryPoint { kPixel, "PS" } }
+  },
+  // IBL filtering compute shaders (no permutations)
+  ShaderFileSpec {
+    "Renderer/IblFiltering.hlsl",
+    std::array { EntryPoint { kCompute, "CS_IrradianceConvolution" },
+      EntryPoint { kCompute, "CS_SpecularPrefilter" } }
+  },
   // ImGui UI shaders (no permutations)
   ShaderFileSpec {
     "Passes/Ui/ImGui.hlsl",
@@ -119,18 +146,17 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // Compile-time verification:
 // - ForwardMesh_VS: 1 entry
 // - ForwardMesh_PS base: 2 (with/without ALPHA_TEST)
-// - ForwardMesh_PS DEBUG_LIGHT_HEATMAP: 4 (2x2 for debug and ALPHA_TEST)
-// - ForwardMesh_PS DEBUG_DEPTH_SLICE: 4
-// - ForwardMesh_PS DEBUG_CLUSTER_INDEX: 4
-// - ForwardMesh_PS DEBUG_IBL_SPECULAR: 4
+// - ForwardMesh_PS DEBUG_*: 4 each (debug define x ALPHA_TEST)
 // - DepthPrePass: 4 (2 entries x 2 permutations)
 // - LightCulling: 2 (1 entry x 2 permutations)
 // - TransmittanceLut_CS: 1 entry
 // - SkyViewLut_CS: 1 entry
 // - SkySphere_VS: 1 entry
 // - SkySphere_PS: 1 entry
-// - ImGui: 2 (2 entries x 1 permutation)
-// Total: 1 + 2 + 4 + 4 + 4 + 4 + 4 + 2 + 1 + 1 + 1 + 1 + 2 = 31
-static_assert(kEngineShaders.size() == 31, "Expected 31 shader entries");
+// - SkyCapture_VS/PS: 2 entries
+// - IblFiltering: 2 entries
+// - ImGui: 2 entries
+// Total: 43
+static_assert(kEngineShaders.size() == 43, "Expected 43 shader entries");
 
 } // namespace oxygen::graphics::d3d12

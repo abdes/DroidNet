@@ -6,8 +6,11 @@
 
 #include "SkyboxManager.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <filesystem>
+#include <string>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/TextureImporter.h>
@@ -71,16 +74,34 @@ auto SkyboxManager::LoadSkyboxAsync(const std::string& file_path,
     break;
   }
 
-  const auto ext = img_path.extension().string();
+  std::string ext = img_path.extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(),
+    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   const bool is_hdr_source = (ext == ".hdr") || (ext == ".exr");
 
   std::optional<TextureImportResult> cooked_result;
 
   if (options.layout == Layout::kEquirectangular) {
-    // Use the high-level equirectangular import API
+    TextureImportDesc desc;
+    desc.texture_type = TextureType::kTextureCube;
+    desc.intent
+      = is_hdr_source ? TextureIntent::kHdrEnvironment : TextureIntent::kData;
+    desc.source_color_space
+      = is_hdr_source ? ColorSpace::kLinear : ColorSpace::kSRGB;
+    desc.output_format = output_fmt;
+    desc.bc7_quality = use_bc7 ? Bc7Quality::kDefault : Bc7Quality::kNone;
+    desc.source_id = img_path.string();
+    desc.flip_y_on_decode = options.flip_y;
+
+    // Be explicit about mip generation: IBL specular relies on sampling across
+    // the mip chain for roughness-based filtering.
+    desc.mip_policy = MipPolicy::kFullChain;
+    desc.mip_filter = MipFilter::kKaiser;
+    desc.mip_filter_space = ColorSpace::kLinear;
+
     auto equirect_result = ImportCubeMapFromEquirect(img_path,
-      static_cast<uint32_t>(options.cube_face_size),
-      TexturePreset::kHdrEnvironment, D3D12PackingPolicy::Instance());
+      static_cast<uint32_t>(options.cube_face_size), desc,
+      D3D12PackingPolicy::Instance());
 
     if (!equirect_result.has_value()) {
       result.status_message = to_string(equirect_result.error());
@@ -140,7 +161,7 @@ auto SkyboxManager::LoadSkyboxAsync(const std::string& file_path,
   pak_desc.array_layers = payload.desc.array_layers;
   pak_desc.mip_levels = payload.desc.mip_levels;
   pak_desc.format = static_cast<std::uint8_t>(payload.desc.format);
-  pak_desc.alignment = 256;
+  pak_desc.alignment = 256U;
 
   // Mint a fresh key
   current_resource_key_ = asset_loader_->MintSyntheticTextureKey();
@@ -183,10 +204,12 @@ auto SkyboxManager::ApplyToScene(const SkyLightParams& params) -> void
     auto new_env = std::make_unique<scene::SceneEnvironment>();
 
     auto& sky = new_env->AddSystem<scene::environment::SkySphere>();
+    sky.SetEnabled(true);
     sky.SetSource(scene::environment::SkySphereSource::kCubemap);
     sky.SetCubemapResource(current_resource_key_);
 
     auto& sky_light = new_env->AddSystem<scene::environment::SkyLight>();
+    sky_light.SetEnabled(true);
     sky_light.SetSource(scene::environment::SkyLightSource::kSpecifiedCubemap);
     sky_light.SetCubemapResource(current_resource_key_);
     sky_light.SetIntensity(params.intensity);
@@ -201,6 +224,7 @@ auto SkyboxManager::ApplyToScene(const SkyLightParams& params) -> void
       auto& sky_ref = env->AddSystem<scene::environment::SkySphere>();
       sky = observer_ptr<scene::environment::SkySphere>(&sky_ref);
     }
+    sky->SetEnabled(true);
     sky->SetSource(scene::environment::SkySphereSource::kCubemap);
     sky->SetCubemapResource(current_resource_key_);
 
@@ -209,6 +233,7 @@ auto SkyboxManager::ApplyToScene(const SkyLightParams& params) -> void
       auto& sky_light_ref = env->AddSystem<scene::environment::SkyLight>();
       sky_light = observer_ptr<scene::environment::SkyLight>(&sky_light_ref);
     }
+    sky_light->SetEnabled(true);
     sky_light->SetSource(scene::environment::SkyLightSource::kSpecifiedCubemap);
     sky_light->SetCubemapResource(current_resource_key_);
     sky_light->SetIntensity(params.intensity);

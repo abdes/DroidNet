@@ -191,15 +191,33 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 
     glm::vec2 uv_scale { 1.0f, 1.0f };
     glm::vec2 uv_offset { 0.0f, 0.0f };
+    float metalness = 0.85f;
+    float roughness = 0.12f;
+    glm::vec4 base_color_rgba { 1.0f, 1.0f, 1.0f, 1.0f };
+    bool disable_texture_sampling = false;
     if (debug_ui_) {
       auto [scale, offset] = debug_ui_->GetEffectiveUvTransform();
       uv_scale = scale;
       uv_offset = offset;
+
+      auto& surface = debug_ui_->GetSurfaceState();
+      metalness = surface.metalness;
+      roughness = surface.roughness;
+
+      if (surface.use_constant_base_color) {
+        base_color_rgba = { surface.constant_base_color_rgb, 1.0f };
+        // The fallback texture is a valid texture and would be sampled if we
+        // didn't explicitly disable sampling here. When the user requests a
+        // constant base color, we must set the flag to ensure the solid color
+        // is used without modulation by the fallback texture.
+        disable_texture_sampling = true;
+      }
     }
 
     auto material = scene_setup_->RebuildCube(texture_index_mode_,
       custom_texture_resource_index_, custom_texture_key_, forced_error_key_,
-      uv_scale, uv_offset);
+      uv_scale, uv_offset, metalness, roughness, base_color_rgba,
+      disable_texture_sampling);
 
     if (material) {
       cube_needs_rebuild_ = false;
@@ -268,8 +286,16 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
   ImGui::SetCurrentContext(imgui_context);
 
   if (debug_ui_ && camera_controller_) {
+    oxygen::engine::ShaderPassConfig* shader_pass_config = nullptr;
+    if (auto rg = GetRenderGraph(); rg) {
+      if (auto cfg = rg->GetShaderPassConfig(); cfg) {
+        shader_pass_config = cfg.get();
+      }
+    }
+
     debug_ui_->Draw(context, *camera_controller_, texture_index_mode_,
       custom_texture_resource_index_, observer_ptr { ResolveRenderer() },
+      shader_pass_config,
       scene_setup_ ? scene_setup_->GetCubeMaterial() : nullptr,
       cube_needs_rebuild_);
   }
