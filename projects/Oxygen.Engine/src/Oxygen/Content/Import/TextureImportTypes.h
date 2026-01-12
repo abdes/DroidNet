@@ -76,13 +76,13 @@ OXGN_CNTT_NDAPI auto to_string(MipPolicy value) -> const char*;
   | Filter     | Quality | Performance | Use case |
   |------------|---------|-------------|----------|
   | `kBox`     | Lowest  | Fastest     | Previews, masks |
-  | `kKaiser`  | Good    | Moderate    | General-purpose (default) |
+  | `kKaiser`  | Good    | Moderate    | General-purpose (opt-in) |
   | `kLanczos` | Best    | Slowest     | High-quality final assets, UI, text |
 */
 enum class MipFilter : uint8_t {
   // clang-format off
-  kBox     = 0,  //!< 2x2 average — fast, slight aliasing on high-frequency content
-  kKaiser  = 1,  //!< Kaiser-windowed sinc (alpha=4, width=6) — good quality, default
+  kBox     = 0,  //!< 2x2 average — fast, slight aliasing on high-frequency content (default)
+  kKaiser  = 1,  //!< Kaiser-windowed sinc (alpha=4, width=6) — good quality, opt-in
   kLanczos = 2,  //!< Lanczos-3 (a=3, width=6) — sharpest, minor ringing artifacts
   // clang-format on
 };

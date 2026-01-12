@@ -135,7 +135,7 @@ struct TextureImportDesc {
   uint8_t max_mip_levels = 1;
 
   //! Filter kernel for mip generation.
-  MipFilter mip_filter = MipFilter::kKaiser;
+  MipFilter mip_filter = MipFilter::kBox;
 
   //! Color space for mip filtering (typically linear for correct results).
   ColorSpace mip_filter_space = ColorSpace::kLinear;
