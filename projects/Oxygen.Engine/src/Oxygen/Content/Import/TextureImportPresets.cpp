@@ -160,7 +160,7 @@ void ApplyPreset(TextureImportDesc& desc, const TexturePreset preset) noexcept
   desc.renormalize_normals_in_mips = false;
   desc.mip_policy = MipPolicy::kFullChain;
   desc.max_mip_levels = 1;
-  desc.mip_filter = MipFilter::kKaiser;
+  desc.mip_filter = MipFilter::kBox;
   desc.mip_filter_space = ColorSpace::kLinear;
   desc.output_format = Format::kRGBA8UNorm;
   desc.bc7_quality = Bc7Quality::kNone;

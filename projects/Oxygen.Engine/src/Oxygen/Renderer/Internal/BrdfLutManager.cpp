@@ -7,6 +7,7 @@
 #include "BrdfLutManager.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -41,6 +42,8 @@
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
 namespace oxygen::engine::internal {
+
+using namespace std::chrono_literals;
 
 using graphics::TextureDesc;
 using oxygen::TextureType;
@@ -182,6 +185,48 @@ auto BrdfLutManager::GetOrCreateLut(const Params params) -> LutResult
   const LutKey key { params.resolution, params.sample_count,
     Format::kRG16Float };
   if (auto* entry = EnsureLut(key)) {
+    if (entry->pending_generation.has_value()) {
+      const auto status = entry->pending_generation->wait_for(0ms);
+      if (status != std::future_status::ready) {
+        return LutResult { nullptr,
+          ShaderVisibleIndex { kInvalidShaderVisibleIndex } };
+      }
+
+      const auto data = entry->pending_generation->get();
+      entry->pending_generation.reset();
+
+      if (!uploader_) {
+        LOG_F(WARNING,
+          "BRDF LUT generation completed but uploader is unavailable");
+        return LutResult { nullptr,
+          ShaderVisibleIndex { kInvalidShaderVisibleIndex } };
+      }
+
+      const auto ticket = UploadTexture(key, *entry->texture,
+        std::span<const std::byte>(data.data(), data.size()));
+      if (!ticket.has_value()) {
+        LOG_F(ERROR, "BRDF LUT upload submission failed");
+
+        if (auto it = luts_.find(key); it != luts_.end()) {
+          auto& registry = gfx_->GetResourceRegistry();
+          if (it->second.texture && registry.Contains(*it->second.texture)) {
+            if (it->second.srv_view.get().IsValid()) {
+              registry.UnRegisterView(*it->second.texture, it->second.srv_view);
+            }
+            registry.UnRegisterResource(*it->second.texture);
+          }
+          luts_.erase(it);
+        }
+
+        return LutResult { nullptr,
+          ShaderVisibleIndex { kInvalidShaderVisibleIndex } };
+      }
+
+      entry->pending_ticket = ticket;
+      return LutResult { nullptr,
+        ShaderVisibleIndex { kInvalidShaderVisibleIndex } };
+    }
+
     if (entry->pending_ticket.has_value()) {
       if (!uploader_) {
         LOG_F(WARNING,
@@ -254,12 +299,6 @@ auto BrdfLutManager::EnsureLut(const LutKey& key) -> LutEntry*
 
   gfx_->GetResourceRegistry().Register(texture);
 
-  const auto ticket = UploadTexture(key, *texture);
-  if (!ticket.has_value()) {
-    gfx_->GetResourceRegistry().UnRegisterResource(*texture);
-    return nullptr;
-  }
-
   auto srv = CreateSrv(key, texture);
   if (!srv) {
     gfx_->GetResourceRegistry().UnRegisterResource(*texture);
@@ -270,7 +309,9 @@ auto BrdfLutManager::EnsureLut(const LutKey& key) -> LutEntry*
   entry.texture = std::move(texture);
   entry.srv_view = std::move(srv->view);
   entry.srv_index = srv->index;
-  entry.pending_ticket = ticket;
+  entry.pending_generation.emplace(std::async(std::launch::async, [key] {
+    return GenerateLutData(key);
+  }));
 
   auto [it, inserted] = luts_.emplace(key, std::move(entry));
   DCHECK_F(inserted, "Failed to insert BRDF LUT entry");
@@ -310,8 +351,24 @@ auto BrdfLutManager::UploadTexture(const LutKey& key,
   graphics::Texture& texture) -> std::optional<upload::UploadTicket>
 {
   const auto data = GenerateLutData(key);
+  return UploadTexture(
+    key, texture, std::span<const std::byte>(data.data(), data.size()));
+}
+
+auto BrdfLutManager::UploadTexture(const LutKey& key, graphics::Texture& texture,
+  const std::span<const std::byte> data) -> std::optional<upload::UploadTicket>
+{
   if (data.empty()) {
     LOG_F(ERROR, "BRDF LUT generation failed (empty data)");
+    return std::nullopt;
+  }
+
+  const auto expected_bytes = static_cast<std::size_t>(key.resolution)
+    * static_cast<std::size_t>(key.resolution) * sizeof(std::uint32_t);
+  if (data.size() != expected_bytes) {
+    LOG_F(ERROR,
+      "BRDF LUT data size mismatch (expected={}, got={})", expected_bytes,
+      data.size());
     return std::nullopt;
   }
 
@@ -322,7 +379,7 @@ auto BrdfLutManager::UploadTexture(const LutKey& key,
 
   upload::UploadTextureSourceView src_view;
   src_view.subresources.push_back(upload::UploadTextureSourceSubresource {
-    .bytes = std::span<const std::byte>(data.data(), data.size()),
+    .bytes = data,
     .row_pitch = row_pitch,
     .slice_pitch = slice_pitch,
   });

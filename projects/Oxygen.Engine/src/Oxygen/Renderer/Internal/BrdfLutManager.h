@@ -8,8 +8,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <future>
 #include <memory>
 #include <optional>
+#include <span>
 #include <unordered_map>
 #include <vector>
 
@@ -97,6 +99,7 @@ private:
     std::shared_ptr<graphics::Texture> texture;
     graphics::NativeView srv_view {};
     ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
+    std::optional<std::future<std::vector<std::byte>>> pending_generation {};
     std::optional<upload::UploadTicket> pending_ticket {};
   };
 
@@ -111,6 +114,8 @@ private:
     -> std::shared_ptr<graphics::Texture>;
   [[nodiscard]] auto UploadTexture(const LutKey& key,
     graphics::Texture& texture) -> std::optional<upload::UploadTicket>;
+  [[nodiscard]] auto UploadTexture(const LutKey& key, graphics::Texture& texture,
+    std::span<const std::byte> data) -> std::optional<upload::UploadTicket>;
 
   struct SrvAllocation {
     graphics::NativeView view;
