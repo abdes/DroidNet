@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstdint>
+#include <limits>
 #include <memory>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -31,6 +32,7 @@ class SceneEnvironment;
 namespace oxygen::engine::internal {
 
 class IBrdfLutProvider;
+class IblManager;
 class ISkyAtmosphereLutProvider;
 
 //! Single-owner builder/uploader for bindless EnvironmentStaticData.
@@ -58,6 +60,7 @@ public:
     observer_ptr<Graphics> gfx,
     observer_ptr<renderer::resources::IResourceBinder> texture_binder,
     observer_ptr<IBrdfLutProvider> brdf_lut_provider,
+    observer_ptr<IblManager> ibl_manager,
     observer_ptr<ISkyAtmosphereLutProvider> sky_atmo_lut_provider = nullptr);
 
   OXGN_RNDR_API ~EnvironmentStaticDataManager();
@@ -98,6 +101,43 @@ public:
     return brdf_lut_texture_;
   }
 
+  //! Returns the current shader-visible slot for the BRDF LUT.
+  /*!
+   When the LUT is not ready, this returns kInvalidShaderVisibleIndex.
+  */
+  [[nodiscard]] auto GetBrdfLutSlot() const noexcept -> ShaderVisibleIndex
+  {
+    return brdf_lut_slot_;
+  }
+
+  //! Returns the IblManager.
+  [[nodiscard]] auto GetIblManager() const noexcept -> observer_ptr<IblManager>
+  {
+    return ibl_manager_;
+  }
+
+  //! Returns the current SkyLight cubemap slot.
+  [[nodiscard]] auto GetSkyLightCubemapSlot() const noexcept
+    -> ShaderVisibleIndex
+  {
+    if (cpu_snapshot_.sky_light.enabled
+      && cpu_snapshot_.sky_light.cubemap_slot != kInvalidDescriptorSlot) {
+      return ShaderVisibleIndex { cpu_snapshot_.sky_light.cubemap_slot };
+    }
+    return kInvalidShaderVisibleIndex;
+  }
+
+  //! Returns the current SkySphere cubemap slot.
+  [[nodiscard]] auto GetSkySphereCubemapSlot() const noexcept
+    -> ShaderVisibleIndex
+  {
+    if (cpu_snapshot_.sky_sphere.enabled
+      && cpu_snapshot_.sky_sphere.cubemap_slot != kInvalidDescriptorSlot) {
+      return ShaderVisibleIndex { cpu_snapshot_.sky_sphere.cubemap_slot };
+    }
+    return kInvalidShaderVisibleIndex;
+  }
+
 private:
   static constexpr std::uint32_t kStrideBytes
     = static_cast<std::uint32_t>(sizeof(EnvironmentStaticData));
@@ -105,6 +145,7 @@ private:
   observer_ptr<Graphics> gfx_;
   observer_ptr<renderer::resources::IResourceBinder> texture_binder_;
   observer_ptr<IBrdfLutProvider> brdf_lut_provider_;
+  observer_ptr<IblManager> ibl_manager_;
   observer_ptr<ISkyAtmosphereLutProvider> sky_atmo_lut_provider_;
   frame::Slot current_slot_ { frame::kInvalidSlot };
 
@@ -119,6 +160,28 @@ private:
   graphics::NativeView srv_view_ {};
   ShaderVisibleIndex srv_index_ { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex brdf_lut_slot_ { kInvalidShaderVisibleIndex };
+
+  // Publish diagnostics (used to avoid log spam by emitting only on state
+  // transitions). These track decisions made in BuildFromSceneEnvironment.
+  bool publish_diag_initialized_ { false };
+  std::uint32_t last_published_skylight_source_
+    = (std::numeric_limits<std::uint32_t>::max)();
+  std::uint32_t last_published_skylight_cubemap_slot_ {
+    kInvalidDescriptorSlot
+  };
+  bool last_published_skylight_cubemap_ready_ { false };
+
+  std::uint32_t last_published_skysphere_source_
+    = (std::numeric_limits<std::uint32_t>::max)();
+  std::uint32_t last_published_skysphere_cubemap_slot_ {
+    kInvalidDescriptorSlot
+  };
+  bool last_published_skysphere_cubemap_ready_ { false };
+
+  bool last_published_ibl_has_source_ { false };
+  std::uint32_t last_published_ibl_source_slot_ { kInvalidDescriptorSlot };
+  bool last_published_ibl_is_dirty_ { false };
+  bool last_published_ibl_outputs_ { false };
 
   auto BuildFromSceneEnvironment(
     observer_ptr<const scene::SceneEnvironment> env) -> void;

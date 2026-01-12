@@ -63,6 +63,7 @@ class MaterialAsset;
 
 namespace oxygen::engine {
 class RenderContextPool;
+class IblComputePass;
 namespace internal {
   class EnvironmentDynamicDataManager;
   class EnvironmentStaticDataManager;
@@ -94,6 +95,9 @@ class TextureBinder;
 } // namespace oxygen::renderer::resources
 
 namespace oxygen::engine {
+namespace internal {
+  class IblManager;
+} // namesapce internal
 
 struct MaterialConstants;
 
@@ -268,6 +272,12 @@ public:
 
   //=== Debug Overrides ===---------------------------------------------------//
 
+  //! Force an IBL regeneration on the next frame.
+  /*!
+   This is intended for interactive debugging.
+  */
+  OXGN_RNDR_API auto RequestIblRegeneration() noexcept -> void;
+
   //! Set debug override flags for atmosphere rendering.
   /*!
    When set, these flags augment the automatically computed atmosphere flags.
@@ -386,6 +396,11 @@ private:
   // Manages sky atmosphere LUT textures (transmittance, sky-view).
   std::unique_ptr<internal::SkyAtmosphereLutManager> sky_atmo_lut_manager_;
 
+  // Manages Image Based Lighting (Irradiance/Prefilter)
+  std::unique_ptr<internal::IblManager> ibl_manager_;
+
+  std::unique_ptr<IblComputePass> ibl_compute_pass_;
+
   // Environment static data single-owner manager (bindless SRV).
   std::unique_ptr<internal::EnvironmentStaticDataManager> env_static_manager_;
 
@@ -427,6 +442,9 @@ private:
 
   std::unique_ptr<RenderContextPool> render_context_pool_;
   observer_ptr<RenderContext> render_context_ {};
+
+  // Render Passes
+  // NOTE: IBL compute generation is currently not wired in this build.
 
   // Cache of prepared frames from OnPreRender, used in OnRender to ensure
   // each view renders with its own draw list (not the last view's data)

@@ -8,8 +8,9 @@
 # Shader baking (Task 14): build-time OXSL v1 library
 # ------------------------------------------------------------------------------
 
-# Find all HLSL entrypoints under the pass-oriented shader layout
-file(GLOB_RECURSE HLSL_FILES "${CMAKE_CURRENT_SOURCE_DIR}/Passes/*.hlsl")
+# Find all HLSL entrypoints under the shader layout.
+# Note: some entrypoints (e.g. IBL filtering) live outside Passes/.
+file(GLOB_RECURSE HLSL_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsl")
 
 # Shared include files (HLSL headers)
 file(GLOB_RECURSE HLSLI_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsli")

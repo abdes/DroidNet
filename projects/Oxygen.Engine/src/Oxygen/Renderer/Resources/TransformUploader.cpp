@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <span>
 
 #include <fmt/format.h>
@@ -201,54 +202,20 @@ auto TransformUploader::GetNormalMatrices() const noexcept
 auto TransformUploader::ComputeNormalMatrix(const glm::mat4& world) noexcept
   -> glm::mat4
 {
-  // Extract upper-left 3x3
-  // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
-  const float a00 = world[0][0];
-  const float a01 = world[0][1];
-  const float a02 = world[0][2];
-  const float a10 = world[1][0];
-  const float a11 = world[1][1];
-  const float a12 = world[1][2];
-  const float a20 = world[2][0];
-  const float a21 = world[2][1];
-  const float a22 = world[2][2];
-  // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
-
-  // Compute determinant
-  const float det = (a00 * (a11 * a22 - a12 * a21))
-    - (a01 * (a10 * a22 - a12 * a20)) + (a02 * (a10 * a21 - a11 * a20));
+  const glm::mat3 upper_3x3 { world };
+  const float det = glm::determinant(upper_3x3);
 
   constexpr float kDetEps = 1e-12F;
   if (!std::isfinite(det) || std::fabs(det) <= kDetEps) {
     return glm::mat4 { 1.0F };
   }
 
-  const float inv_det = 1.0F / det;
+  const glm::mat3 normal_3x3 = glm::transpose(glm::inverse(upper_3x3));
 
-  // Inverse of 3x3 (cofactor matrix transposed)
-  const float i00 = (a11 * a22 - a12 * a21) * inv_det;
-  const float i01 = (a02 * a21 - a01 * a22) * inv_det;
-  const float i02 = (a01 * a12 - a02 * a11) * inv_det;
-  const float i10 = (a12 * a20 - a10 * a22) * inv_det;
-  const float i11 = (a00 * a22 - a02 * a20) * inv_det;
-  const float i12 = (a02 * a10 - a00 * a12) * inv_det;
-  const float i20 = (a10 * a21 - a11 * a20) * inv_det;
-  const float i21 = (a01 * a20 - a00 * a21) * inv_det;
-  const float i22 = (a00 * a11 - a01 * a10) * inv_det;
-
-  // Transpose to get inverse-transpose
   glm::mat4 result { 1.0F };
-  // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
-  result[0][0] = i00;
-  result[0][1] = i10;
-  result[0][2] = i20;
-  result[1][0] = i01;
-  result[1][1] = i11;
-  result[1][2] = i21;
-  result[2][0] = i02;
-  result[2][1] = i12;
-  result[2][2] = i22;
-  // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
+  result[0] = glm::vec4 { normal_3x3[0], 0.0F };
+  result[1] = glm::vec4 { normal_3x3[1], 0.0F };
+  result[2] = glm::vec4 { normal_3x3[2], 0.0F };
   return result;
 }
 

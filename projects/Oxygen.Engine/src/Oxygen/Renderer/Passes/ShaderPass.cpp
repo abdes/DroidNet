@@ -211,9 +211,11 @@ auto ShaderPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
                    : nullptr,
     GetClearColor().r, GetClearColor().g, GetClearColor().b, GetClearColor().a);
 
-  recorder.ClearFramebuffer(*Context().framebuffer,
-    std::vector<std::optional<graphics::Color>> { GetClearColor() },
-    std::nullopt, std::nullopt);
+  if (const auto* fb_to_clear = GetFramebuffer()) {
+    recorder.ClearFramebuffer(*fb_to_clear,
+      std::vector<std::optional<graphics::Color>> { GetClearColor() },
+      std::nullopt, std::nullopt);
+  }
 }
 
 auto ShaderPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
@@ -458,6 +460,12 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
       return "DEBUG_DEPTH_SLICE";
     case ShaderDebugMode::kClusterIndex:
       return "DEBUG_CLUSTER_INDEX";
+    case ShaderDebugMode::kIblSpecular:
+      return "DEBUG_IBL_SPECULAR";
+    case ShaderDebugMode::kIblRawSky:
+      return "DEBUG_IBL_RAW_SKY";
+    case ShaderDebugMode::kIblRawSkyViewDir:
+      return "DEBUG_IBL_RAW_SKY_VIEWDIR";
     default:
       return nullptr;
     }

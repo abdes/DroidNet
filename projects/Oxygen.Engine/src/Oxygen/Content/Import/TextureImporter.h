@@ -112,12 +112,12 @@ OXGN_CNTT_NDAPI auto DetectPresetFromFilename(
   ### Usage Example
 
   ```cpp
-  /\/ Load and inspect before cooking
+  // Load and inspect before cooking
   auto image = LoadTexture("textures\/mystery.png");
   if (image) {
     const auto& meta = image->Meta();
     if (meta.format == Format::kRGBA32Float) {
-      /\/ It's HDR, use HDR preset
+      // It's HDR, use HDR preset
       auto result = CookImportedTexture(std::move(*image),
                                 TexturePreset::kHdrEnvironment,
                                 D3D12PackingPolicy::Instance());
@@ -203,7 +203,7 @@ OXGN_CNTT_NDAPI auto LoadTextures(std::span<const std::filesystem::path> paths)
   ### Usage Example
 
   ```cpp
-  /\/ Load, inspect, then cook with appropriate preset
+  // Load, inspect, then cook with appropriate preset
   auto image = LoadTexture("textures\/mystery.png");
   if (image) {
     TexturePreset preset = image->Meta().format == Format::kRGBA32Float
@@ -252,11 +252,11 @@ OXGN_CNTT_NDAPI auto CookScratchImage(ScratchImage&& image,
   ### Usage Example
 
   ```cpp
-  \/\/ Simple import with auto-detection
+  // Simple import with auto-detection
   auto result = ImportTexture("textures\/brick_albedo.png",
                               D3D12PackingPolicy::Instance());
   if (result) {
-    \/\/ Use result->payload
+    // Use result->payload
   }
   ```
 
@@ -450,6 +450,25 @@ OXGN_CNTT_NDAPI auto ImportCubeMap(const std::filesystem::path& base_path,
 OXGN_CNTT_NDAPI auto ImportCubeMapFromEquirect(
   const std::filesystem::path& equirect_path, uint32_t face_size,
   TexturePreset preset, const ITexturePackingPolicy& policy)
+  -> oxygen::Result<TextureImportResult, TextureImportError>;
+
+//! Import a cube map from an equirectangular panorama with a custom descriptor.
+/*!
+  Use this overload when you need full control over the import configuration
+  (for example, `flip_y_on_decode`, output format, and mip policy).
+
+  The provided descriptor is used to load the panorama (respecting
+  `flip_y_on_decode`) and to cook the resulting cubemap.
+
+  @param equirect_path Path to the equirectangular panorama
+  @param face_size     Output cube face resolution (square, in pixels)
+  @param desc          Custom import descriptor
+  @param policy        Packing policy for the target backend
+  @return Import result on success, or error
+*/
+OXGN_CNTT_NDAPI auto ImportCubeMapFromEquirect(
+  const std::filesystem::path& equirect_path, uint32_t face_size,
+  const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
   -> oxygen::Result<TextureImportResult, TextureImportError>;
 
 //! Import a cube map from a single image containing all faces in a layout.

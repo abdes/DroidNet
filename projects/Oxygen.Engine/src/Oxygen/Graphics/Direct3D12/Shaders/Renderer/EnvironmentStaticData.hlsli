@@ -89,8 +89,8 @@ struct GpuSkyLightParams
 
     uint cubemap_slot;
     uint brdf_lut_slot;
-    uint _pad1;
-    uint _pad2;
+    uint irradiance_map_slot;
+    uint prefilter_map_slot;
 };
 
 // Mirrors oxygen::engine::GpuSkySphereParams (sizeof = 48)

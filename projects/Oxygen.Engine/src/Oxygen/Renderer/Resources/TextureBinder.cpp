@@ -457,6 +457,8 @@ public:
   auto OnFrameEnd() -> void;
   auto GetOrAllocate(const content::ResourceKey& resource_key)
     -> ShaderVisibleIndex;
+  [[nodiscard]] auto IsResourceReady(
+    const content::ResourceKey& resource_key) const noexcept -> bool;
   [[nodiscard]] auto GetErrorTextureIndex() const -> ShaderVisibleIndex;
 
 private:
@@ -558,6 +560,12 @@ TextureBinder::~TextureBinder() = default;
 
 auto TextureBinder::OnFrameStart() -> void { impl_->OnFrameStart(); }
 
+auto TextureBinder::IsResourceReady(
+  const content::ResourceKey& key) const noexcept -> bool
+{
+  return impl_->IsResourceReady(key);
+}
+
 /*!
  TextureBinder frame-end hook.
 
@@ -576,6 +584,29 @@ auto TextureBinder::GetOrAllocate(const content::ResourceKey& resource_key)
   -> ShaderVisibleIndex
 {
   return impl_->GetOrAllocate(resource_key);
+}
+
+auto TextureBinder::Impl::IsResourceReady(
+  const content::ResourceKey& resource_key) const noexcept -> bool
+{
+  if (resource_key.IsPlaceholder()) {
+    return false;
+  }
+
+  const auto it = texture_map_.find(resource_key);
+  if (it == texture_map_.end()) {
+    // The fast-path placeholder binding does not create entries.
+    return false;
+  }
+
+  const auto& entry = it->second;
+  if (entry.load_failed) {
+    return false;
+  }
+  if (entry.pending_ticket.has_value()) {
+    return false;
+  }
+  return !entry.is_placeholder;
 }
 
 auto TextureBinder::Impl::GetOrAllocate(

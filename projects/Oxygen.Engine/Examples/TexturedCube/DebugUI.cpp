@@ -14,9 +14,12 @@
 #include <imgui.h>
 
 #include <Oxygen/Base/StringUtils.h>
+#include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
+#include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
+
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
@@ -30,31 +33,32 @@
 namespace {
 
 #if defined(OXYGEN_WINDOWS)
-
 auto TryBrowseForImageFile(std::string& out_utf8_path) -> bool
 {
-  const HRESULT hr_init = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-  const bool should_uninit = SUCCEEDED(hr_init);
+  out_utf8_path.clear();
 
-  auto cleanup = [should_uninit]() {
-    if (should_uninit) {
+  const HRESULT init_hr = CoInitializeEx(
+    nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+  const bool co_initialized = SUCCEEDED(init_hr);
+
+  auto cleanup = [&]() noexcept {
+    if (co_initialized) {
       CoUninitialize();
     }
   };
 
   Microsoft::WRL::ComPtr<IFileOpenDialog> dlg;
-  const HRESULT hr = CoCreateInstance(
+  const HRESULT create_hr = CoCreateInstance(
     CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg));
-  if (FAILED(hr) || !dlg) {
+  if (FAILED(create_hr) || !dlg) {
     cleanup();
     return false;
   }
 
   constexpr COMDLG_FILTERSPEC kFilters[] = {
-    { L"Images (*.jpg;*.jpeg;*.png;*.hdr;*.exr)",
-      L"*.jpg;*.jpeg;*.png;*.hdr;*.exr" },
-    { L"HDR/EXR (*.hdr;*.exr)", L"*.hdr;*.exr" },
-    { L"All files (*.*)", L"*.*" },
+    { L"Image files", L"*.hdr;*.exr;*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.dds" },
+    { L"HDR images", L"*.hdr;*.exr" },
+    { L"All files", L"*.*" },
   };
   (void)dlg->SetFileTypes(static_cast<UINT>(std::size(kFilters)), kFilters);
   (void)dlg->SetDefaultExtension(L"hdr");
@@ -139,6 +143,7 @@ auto DebugUI::Draw(engine::FrameContext& context,
   const CameraController& camera, SceneSetup::TextureIndexMode& texture_mode,
   std::uint32_t& custom_texture_resource_index,
   oxygen::observer_ptr<oxygen::engine::Renderer> renderer,
+  oxygen::engine::ShaderPassConfig* shader_pass_config,
   const std::shared_ptr<const oxygen::data::MaterialAsset>& cube_material,
   bool& cube_needs_rebuild) -> void
 {
@@ -163,7 +168,7 @@ auto DebugUI::Draw(engine::FrameContext& context,
     }
 
     if (ImGui::BeginTabItem("Lighting")) {
-      DrawLightingTab(context.GetScene());
+      DrawLightingTab(context.GetScene(), renderer, shader_pass_config);
       ImGui::EndTabItem();
     }
 
@@ -187,7 +192,6 @@ auto DebugUI::DrawMaterialsTab(SceneSetup::TextureIndexMode& texture_mode,
   ImGui::Separator();
   ImGui::TextUnformatted("Texture:");
 
-  bool mat_changed = false;
   bool rebuild_requested = false;
   bool uv_transform_changed = false;
 
@@ -202,7 +206,6 @@ auto DebugUI::DrawMaterialsTab(SceneSetup::TextureIndexMode& texture_mode,
     const bool mode_changed_3 = ImGui::RadioButton(
       "Custom", &mode, static_cast<int>(SceneSetup::TextureIndexMode::kCustom));
 
-    mat_changed |= (mode_changed || mode_changed_2 || mode_changed_3);
     rebuild_requested |= (mode_changed || mode_changed_2 || mode_changed_3);
     texture_mode = static_cast<SceneSetup::TextureIndexMode>(mode);
   }
@@ -268,6 +271,63 @@ auto DebugUI::DrawMaterialsTab(SceneSetup::TextureIndexMode& texture_mode,
   ImGui::Separator();
   ImGui::TextUnformatted("UV:");
 
+  ImGui::Separator();
+  ImGui::TextUnformatted("Surface:");
+
+  if (ImGui::Button("Preset: reflective metal")) {
+    surface_state_.metalness = 0.85f;
+    surface_state_.roughness = 0.12f;
+    rebuild_requested = true;
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Preset: mirror")) {
+    surface_state_.metalness = 1.0f;
+    surface_state_.roughness = 0.02f;
+    rebuild_requested = true;
+  }
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip(
+      "Mirror preset still uses the PBR pipeline; it just sets parameters.\n"
+      "For strong reflections, load a skybox so IBL is available.");
+  }
+
+  if (ImGui::SliderFloat("Metalness", &surface_state_.metalness, 0.0f, 1.0f,
+        "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+    rebuild_requested = true;
+  }
+
+  if (ImGui::SliderFloat("Roughness", &surface_state_.roughness, 0.0f, 1.0f,
+        "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+    rebuild_requested = true;
+  }
+
+  ImGui::Separator();
+  ImGui::TextUnformatted("Base color:");
+
+  if (ImGui::Checkbox("Use constant base color (disable texture sampling)",
+        &surface_state_.use_constant_base_color)) {
+    rebuild_requested = true;
+  }
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip(
+      "Disables *all* material texture sampling and uses a constant base "
+      "color.\n"
+      "This is the fastest way to confirm PBR+IBL reflections are working.\n\n"
+      "Why this matters: in metallic workflow, if the base-color texture is "
+      "black, F0 becomes black and specular IBL will be black too.");
+  }
+
+  ImGui::BeginDisabled(!surface_state_.use_constant_base_color);
+  float rgb[3] = { surface_state_.constant_base_color_rgb.x,
+    surface_state_.constant_base_color_rgb.y,
+    surface_state_.constant_base_color_rgb.z };
+  if (ImGui::ColorEdit3("Constant color", rgb,
+        ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR)) {
+    surface_state_.constant_base_color_rgb = { rgb[0], rgb[1], rgb[2] };
+    rebuild_requested = true;
+  }
+  ImGui::EndDisabled();
+
   constexpr float kUvScaleMin = 0.01f;
   constexpr float kUvScaleMax = 64.0f;
   constexpr float kUvOffsetMin = -64.0f;
@@ -286,7 +346,6 @@ auto DebugUI::DrawMaterialsTab(SceneSetup::TextureIndexMode& texture_mode,
     };
     if (new_scale != uv_state_.scale) {
       uv_state_.scale = new_scale;
-      mat_changed = true;
       uv_transform_changed = true;
     }
   }
@@ -302,7 +361,6 @@ auto DebugUI::DrawMaterialsTab(SceneSetup::TextureIndexMode& texture_mode,
     };
     if (new_offset != uv_state_.offset) {
       uv_state_.offset = new_offset;
-      mat_changed = true;
       uv_transform_changed = true;
     }
   }
@@ -310,7 +368,6 @@ auto DebugUI::DrawMaterialsTab(SceneSetup::TextureIndexMode& texture_mode,
   if (ImGui::Button("Reset UV")) {
     uv_state_.scale = { 1.0f, 1.0f };
     uv_state_.offset = { 0.0f, 0.0f };
-    mat_changed = true;
     uv_transform_changed = true;
   }
 
@@ -399,7 +456,9 @@ auto DebugUI::DrawMaterialsTab(SceneSetup::TextureIndexMode& texture_mode,
   }
 }
 
-auto DebugUI::DrawLightingTab(oxygen::observer_ptr<scene::Scene> scene) -> void
+auto DebugUI::DrawLightingTab(oxygen::observer_ptr<scene::Scene> scene,
+  oxygen::observer_ptr<oxygen::engine::Renderer> renderer,
+  oxygen::engine::ShaderPassConfig* shader_pass_config) -> void
 {
   ImGui::Separator();
   ImGui::TextUnformatted("Skybox:");
@@ -480,8 +539,106 @@ auto DebugUI::DrawLightingTab(oxygen::observer_ptr<scene::Scene> scene) -> void
       skybox_state_.last_face_size);
   }
 
+  if (renderer) {
+    if (const auto env_static = renderer->GetEnvironmentStaticDataManager();
+      env_static) {
+      const auto brdf_slot = env_static->GetBrdfLutSlot();
+      const bool brdf_ready = brdf_slot != kInvalidShaderVisibleIndex;
+
+      ImGui::Text("BRDF LUT: %s (slot=%u)", brdf_ready ? "ready" : "pending",
+        brdf_ready ? brdf_slot.get() : 0U);
+      if (!brdf_ready && ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(
+          "BRDF LUT is generated/uploaded asynchronously.\n"
+          "While pending, Real(PBR) may temporarily fall back to an analytic "
+          "approximation.");
+      }
+    }
+  }
+
   ImGui::Separator();
   ImGui::TextUnformatted("Sky light:");
+
+  if (shader_pass_config) {
+    ImGui::SeparatorText("Shader debug");
+
+    constexpr const char* kShaderModeNames[] = {
+      "Real (PBR)",
+      "Debug: light culling heat map",
+      "Debug: depth slice",
+      "Debug: cluster index",
+      "Debug: IBL specular (prefilter)",
+      "Debug: raw sky cubemap (reflect)",
+      "Debug: raw sky cubemap (camera ray)",
+    };
+
+    int mode_idx = 0;
+    switch (shader_pass_config->debug_mode) {
+    case oxygen::engine::ShaderDebugMode::kLightCullingHeatMap:
+      mode_idx = 1;
+      break;
+    case oxygen::engine::ShaderDebugMode::kDepthSlice:
+      mode_idx = 2;
+      break;
+    case oxygen::engine::ShaderDebugMode::kClusterIndex:
+      mode_idx = 3;
+      break;
+    case oxygen::engine::ShaderDebugMode::kIblSpecular:
+      mode_idx = 4;
+      break;
+    case oxygen::engine::ShaderDebugMode::kIblRawSky:
+      mode_idx = 5;
+      break;
+    case oxygen::engine::ShaderDebugMode::kIblRawSkyViewDir:
+      mode_idx = 6;
+      break;
+    case oxygen::engine::ShaderDebugMode::kDisabled:
+    default:
+      mode_idx = 0;
+      break;
+    }
+
+    ImGui::SetNextItemWidth(260.0F);
+    if (ImGui::Combo("Shader mode", &mode_idx, kShaderModeNames,
+          IM_ARRAYSIZE(kShaderModeNames))) {
+      switch (mode_idx) {
+      case 1:
+        shader_pass_config->debug_mode
+          = oxygen::engine::ShaderDebugMode::kLightCullingHeatMap;
+        break;
+      case 2:
+        shader_pass_config->debug_mode
+          = oxygen::engine::ShaderDebugMode::kDepthSlice;
+        break;
+      case 3:
+        shader_pass_config->debug_mode
+          = oxygen::engine::ShaderDebugMode::kClusterIndex;
+        break;
+      case 4:
+        shader_pass_config->debug_mode
+          = oxygen::engine::ShaderDebugMode::kIblSpecular;
+        break;
+      case 5:
+        shader_pass_config->debug_mode
+          = oxygen::engine::ShaderDebugMode::kIblRawSky;
+        break;
+      case 6:
+        shader_pass_config->debug_mode
+          = oxygen::engine::ShaderDebugMode::kIblRawSkyViewDir;
+        break;
+      default:
+        shader_pass_config->debug_mode
+          = oxygen::engine::ShaderDebugMode::kDisabled;
+        break;
+      }
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+        "Real (PBR) renders the normal forward shading path.\n"
+        "Debug modes swap in a specialized pixel shader variant.\n"
+        "Note: changing this recompiles the ShaderPass PSO.");
+    }
+  }
 
   bool skylight_changed = false;
 
@@ -525,8 +682,22 @@ auto DebugUI::DrawLightingTab(oxygen::observer_ptr<scene::Scene> scene) -> void
   ImGui::Text("IBL source: %s", ibl_source_label);
   if (has_valid_ibl_source) {
     ImGui::TextDisabled(
-      "Tip: This demo cube is fairly rough (blurry reflections). For an "
-      "obvious change, temporarily reduce direct light and diffuse IBL.");
+      "Tip: temporarily reduce direct light and diffuse IBL.");
+  }
+
+  if (renderer) {
+    ImGui::SeparatorText("IBL status");
+
+    const bool can_regenerate = has_valid_ibl_source;
+    ImGui::BeginDisabled(!can_regenerate);
+    if (ImGui::Button("Regenerate IBL now")) {
+      renderer->RequestIblRegeneration();
+    }
+    ImGui::EndDisabled();
+    if (!can_regenerate && ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+        "Load a skybox first so SkyLight/SkySphere has a cubemap source.");
+    }
   }
 
   if (has_valid_ibl_source) {

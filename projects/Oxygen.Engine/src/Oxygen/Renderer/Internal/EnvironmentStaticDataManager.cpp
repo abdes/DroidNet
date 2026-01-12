@@ -8,12 +8,14 @@
 
 #include <cmath>
 #include <cstring>
+#include <limits>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/Internal/BrdfLutManager.h>
+#include <Oxygen/Renderer/Internal/IblManager.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Scene/Environment/Fog.h>
@@ -102,10 +104,12 @@ EnvironmentStaticDataManager::EnvironmentStaticDataManager(
   observer_ptr<Graphics> gfx,
   observer_ptr<renderer::resources::IResourceBinder> texture_binder,
   observer_ptr<IBrdfLutProvider> brdf_lut_provider,
+  observer_ptr<IblManager> ibl_manager,
   observer_ptr<ISkyAtmosphereLutProvider> sky_atmo_lut_provider)
   : gfx_(gfx)
   , texture_binder_(texture_binder)
   , brdf_lut_provider_(brdf_lut_provider)
+  , ibl_manager_(ibl_manager)
   , sky_atmo_lut_provider_(sky_atmo_lut_provider)
 {
   slot_needs_upload_.fill(true);
@@ -183,6 +187,23 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
   observer_ptr<const scene::SceneEnvironment> env) -> void
 {
   EnvironmentStaticData next {};
+
+  // Capture publish decisions so we can log only on transitions.
+  // Defaults represent "not publishing".
+  std::uint32_t published_skylight_source
+    = (std::numeric_limits<std::uint32_t>::max)();
+  std::uint32_t published_skylight_cubemap_slot = kInvalidDescriptorSlot;
+  bool published_skylight_cubemap_ready = false;
+
+  std::uint32_t published_skysphere_source
+    = (std::numeric_limits<std::uint32_t>::max)();
+  std::uint32_t published_skysphere_cubemap_slot = kInvalidDescriptorSlot;
+  bool published_skysphere_cubemap_ready = false;
+
+  bool published_ibl_has_source = false;
+  std::uint32_t published_ibl_source_slot = kInvalidDescriptorSlot;
+  bool published_ibl_is_dirty = false;
+  bool published_ibl_outputs = false;
 
   if (brdf_lut_provider_) {
     const auto [tex, slot] = brdf_lut_provider_->GetOrCreateLut();
@@ -268,6 +289,8 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
       sky_light && sky_light->IsEnabled()) {
       next.sky_light.enabled = 1u;
       next.sky_light.source = ToGpuSkyLightSource(sky_light->GetSource());
+      published_skylight_source
+        = static_cast<std::uint32_t>(next.sky_light.source);
       next.sky_light.intensity = sky_light->GetIntensity();
       next.sky_light.tint_rgb = sky_light->GetTintRgb();
       next.sky_light.diffuse_intensity = sky_light->GetDiffuseIntensity();
@@ -281,9 +304,16 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
         && sky_light->GetSource()
           == scene::environment::SkyLightSource::kSpecifiedCubemap
         && !sky_light->GetCubemapResource().IsPlaceholder()) {
-        const auto slot
-          = texture_binder_->GetOrAllocate(sky_light->GetCubemapResource());
-        next.sky_light.cubemap_slot = slot.get();
+        const auto key = sky_light->GetCubemapResource();
+        const auto slot = texture_binder_->GetOrAllocate(key);
+        published_skylight_cubemap_ready
+          = texture_binder_->IsResourceReady(key);
+        published_skylight_cubemap_slot = slot.get();
+        if (published_skylight_cubemap_ready) {
+          next.sky_light.cubemap_slot = slot.get();
+        } else {
+          next.sky_light.cubemap_slot = kInvalidDescriptorSlot;
+        }
       } else {
         next.sky_light.cubemap_slot = kInvalidDescriptorSlot;
       }
@@ -302,6 +332,8 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
 
       next.sky_sphere.enabled = 1u;
       next.sky_sphere.source = ToGpuSkySphereSource(sky_sphere->GetSource());
+      published_skysphere_source
+        = static_cast<std::uint32_t>(next.sky_sphere.source);
       next.sky_sphere.solid_color_rgb = sky_sphere->GetSolidColorRgb();
       next.sky_sphere.intensity = sky_sphere->GetIntensity();
       next.sky_sphere.rotation_radians = sky_sphere->GetRotationRadians();
@@ -312,11 +344,64 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
         && sky_sphere->GetSource()
           == scene::environment::SkySphereSource::kCubemap
         && !sky_sphere->GetCubemapResource().IsPlaceholder()) {
-        const auto slot
-          = texture_binder_->GetOrAllocate(sky_sphere->GetCubemapResource());
-        next.sky_sphere.cubemap_slot = slot.get();
+        const auto key = sky_sphere->GetCubemapResource();
+        const auto slot = texture_binder_->GetOrAllocate(key);
+        published_skysphere_cubemap_ready
+          = texture_binder_->IsResourceReady(key);
+        published_skysphere_cubemap_slot = slot.get();
+        if (published_skysphere_cubemap_ready) {
+          next.sky_sphere.cubemap_slot = slot.get();
+        } else {
+          next.sky_sphere.cubemap_slot = kInvalidDescriptorSlot;
+        }
       } else {
         next.sky_sphere.cubemap_slot = kInvalidDescriptorSlot;
+      }
+    }
+
+    // Bind IBL resources when SkyLight is enabled and we have a valid
+    // environment cubemap source to filter.
+    //
+    // Source selection for filtering is done by IblComputePass. Here, we only
+    // publish the output map slots when inputs are valid.
+    if (next.sky_light.enabled != 0U && ibl_manager_) {
+      const bool has_source
+        = next.sky_light.cubemap_slot != kInvalidDescriptorSlot
+        || (next.sky_sphere.enabled != 0U
+          && next.sky_sphere.cubemap_slot != kInvalidDescriptorSlot);
+
+      published_ibl_has_source = has_source;
+
+      if (has_source && ibl_manager_->EnsureResourcesCreated()) {
+        const ShaderVisibleIndex source_slot
+          = (next.sky_light.cubemap_slot != kInvalidDescriptorSlot)
+          ? ShaderVisibleIndex { next.sky_light.cubemap_slot }
+          : ShaderVisibleIndex { next.sky_sphere.cubemap_slot };
+
+        published_ibl_source_slot = source_slot.get();
+        published_ibl_is_dirty = ibl_manager_->IsDirty(source_slot);
+
+        // Only publish the output slots once the IBL maps are known to be
+        // generated for the currently selected source cubemap.
+        //
+        // This prevents sampling from uninitialized UAV-initial-state
+        // textures (which would appear black), especially visible when the
+        // demo focuses on IBL specular and disables competing terms.
+        if (!published_ibl_is_dirty) {
+          next.sky_light.irradiance_map_slot
+            = ibl_manager_->GetIrradianceMapSlot().get();
+          next.sky_light.prefilter_map_slot
+            = ibl_manager_->GetPrefilterMapSlot().get();
+          published_ibl_outputs = true;
+        } else {
+          next.sky_light.irradiance_map_slot = kInvalidDescriptorSlot;
+          next.sky_light.prefilter_map_slot = kInvalidDescriptorSlot;
+          published_ibl_outputs = false;
+        }
+      } else {
+        next.sky_light.irradiance_map_slot = kInvalidDescriptorSlot;
+        next.sky_light.prefilter_map_slot = kInvalidDescriptorSlot;
+        published_ibl_outputs = false;
       }
     }
 
@@ -363,8 +448,67 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
   }
 
   if (std::memcmp(&next, &cpu_snapshot_, sizeof(EnvironmentStaticData)) != 0) {
+    // Useful diagnostics for IBL troubleshooting.
+    LOG_F(2,
+      "EnvironmentStaticData changed: "
+      "SkyLight(en={}, src={}, cube={}, irr={}, pref={}, brdf={}, I={}, D={}, "
+      "S={}) SkySphere(en={}, src={}, cube={})",
+      next.sky_light.enabled, static_cast<uint32_t>(next.sky_light.source),
+      next.sky_light.cubemap_slot, next.sky_light.irradiance_map_slot,
+      next.sky_light.prefilter_map_slot, next.sky_light.brdf_lut_slot,
+      next.sky_light.intensity, next.sky_light.diffuse_intensity,
+      next.sky_light.specular_intensity, next.sky_sphere.enabled,
+      static_cast<uint32_t>(next.sky_sphere.source),
+      next.sky_sphere.cubemap_slot);
+
     cpu_snapshot_ = next;
     MarkAllSlotsDirty();
+  }
+
+  // Emit publish-decision logs when the manager's output policy changes.
+  // This avoids guessing when a slot is being withheld vs published.
+  const bool diag_changed = !publish_diag_initialized_
+    || last_published_skylight_source_ != published_skylight_source
+    || last_published_skylight_cubemap_slot_ != published_skylight_cubemap_slot
+    || last_published_skylight_cubemap_ready_
+      != published_skylight_cubemap_ready
+    || last_published_skysphere_source_ != published_skysphere_source
+    || last_published_skysphere_cubemap_slot_
+      != published_skysphere_cubemap_slot
+    || last_published_skysphere_cubemap_ready_
+      != published_skysphere_cubemap_ready
+    || last_published_ibl_has_source_ != published_ibl_has_source
+    || last_published_ibl_source_slot_ != published_ibl_source_slot
+    || last_published_ibl_is_dirty_ != published_ibl_is_dirty
+    || last_published_ibl_outputs_ != published_ibl_outputs;
+
+  if (diag_changed) {
+    LOG_F(2,
+      "EnvStatic publish policy: SkyLight(src={}, requested_slot={}, ready={}, "
+      "published_slot={}, I={}, D={}, S={}) "
+      "SkySphere(src={}, requested_slot={}, ready={}, published_slot={}) "
+      "IBL(has_source={}, src_slot={}, dirty={}, "
+      "publish_outputs={}, irr={}, pref={})",
+      published_skylight_source, published_skylight_cubemap_slot,
+      published_skylight_cubemap_ready, next.sky_light.cubemap_slot,
+      next.sky_light.intensity, next.sky_light.diffuse_intensity,
+      next.sky_light.specular_intensity, published_skysphere_source,
+      published_skysphere_cubemap_slot, published_skysphere_cubemap_ready,
+      next.sky_sphere.cubemap_slot, published_ibl_has_source,
+      published_ibl_source_slot, published_ibl_is_dirty, published_ibl_outputs,
+      next.sky_light.irradiance_map_slot, next.sky_light.prefilter_map_slot);
+
+    publish_diag_initialized_ = true;
+    last_published_skylight_source_ = published_skylight_source;
+    last_published_skylight_cubemap_slot_ = published_skylight_cubemap_slot;
+    last_published_skylight_cubemap_ready_ = published_skylight_cubemap_ready;
+    last_published_skysphere_source_ = published_skysphere_source;
+    last_published_skysphere_cubemap_slot_ = published_skysphere_cubemap_slot;
+    last_published_skysphere_cubemap_ready_ = published_skysphere_cubemap_ready;
+    last_published_ibl_has_source_ = published_ibl_has_source;
+    last_published_ibl_source_slot_ = published_ibl_source_slot;
+    last_published_ibl_is_dirty_ = published_ibl_is_dirty;
+    last_published_ibl_outputs_ = published_ibl_outputs;
   }
 }
 
@@ -392,6 +536,16 @@ auto EnvironmentStaticDataManager::UploadIfNeeded() -> void
   if (!slot_needs_upload_[slot_index]) {
     return;
   }
+
+  LOG_F(2,
+    "EnvStatic upload: frame_slot={} skylight(cube={}, irr={}, pref={}, "
+    "brdf={}) "
+    "skysphere(cube={})",
+    slot_index, cpu_snapshot_.sky_light.cubemap_slot,
+    cpu_snapshot_.sky_light.irradiance_map_slot,
+    cpu_snapshot_.sky_light.prefilter_map_slot,
+    cpu_snapshot_.sky_light.brdf_lut_slot,
+    cpu_snapshot_.sky_sphere.cubemap_slot);
 
   const auto offset_bytes
     = static_cast<std::size_t>(slot_index) * sizeof(EnvironmentStaticData);
@@ -456,6 +610,11 @@ auto EnvironmentStaticDataManager::EnsureResourcesCreated() -> void
     *buffer_, std::move(handle), view_desc);
 
   srv_index_ = srv_index;
+
+  LOG_F(INFO,
+    "EnvStatic resources created: srv_index={}, stride_bytes={}, "
+    "total_bytes={}",
+    srv_index_.get(), kStrideBytes, total_bytes);
   MarkAllSlotsDirty();
 }
 

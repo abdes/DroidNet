@@ -119,6 +119,9 @@ public:
   [[nodiscard]] OXGN_RNDR_NDAPI auto GetOrAllocate(
     const content::ResourceKey& resource_key) -> ShaderVisibleIndex override;
 
+  [[nodiscard]] OXGN_RNDR_NDAPI auto IsResourceReady(
+    const content::ResourceKey& key) const noexcept -> bool override;
+
 private:
   class Impl;
   std::unique_ptr<Impl> impl_;

@@ -39,9 +39,11 @@
 #include <Oxygen/Renderer/Internal/BrdfLutManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
+#include <Oxygen/Renderer/Internal/IblManager.h>
 #include <Oxygen/Renderer/Internal/SceneConstantsManager.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/LightManager.h>
+#include <Oxygen/Renderer/Passes/IblComputePass.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderContextPool.h>
@@ -269,6 +271,10 @@ auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
     sky_atmo_lut_manager_ = std::make_unique<internal::SkyAtmosphereLutManager>(
       observer_ptr { gfx.get() });
 
+    // Initialize IBL Manager
+    ibl_manager_
+      = std::make_unique<internal::IblManager>(observer_ptr { gfx.get() });
+
     // Initialize environment static data single-owner manager (bindless SRV).
     // TextureBinder is passed directly to the constructor for cubemap
     // resolution.
@@ -276,7 +282,10 @@ auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
       = std::make_unique<internal::EnvironmentStaticDataManager>(
         observer_ptr { gfx.get() }, observer_ptr { texture_binder_.get() },
         observer_ptr { brdf_lut_manager_.get() },
+        observer_ptr { ibl_manager_.get() },
         observer_ptr { sky_atmo_lut_manager_.get() });
+
+    ibl_compute_pass_ = std::make_unique<IblComputePass>("IblComputePass");
   }
   return true;
 }
@@ -327,6 +336,15 @@ auto Renderer::GetEnvironmentStaticDataManager() const noexcept
 }
 
 //=== Debug Overrides ===-----------------------------------------------------//
+
+auto Renderer::RequestIblRegeneration() noexcept -> void
+{
+  if (!ibl_compute_pass_) {
+    return;
+  }
+
+  ibl_compute_pass_->RequestRegenerationOnce();
+}
 
 auto Renderer::SetAtmosphereDebugFlags(const uint32_t flags) -> void
 {
@@ -594,6 +612,7 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
     }
   }
 
+  bool ran_ibl_compute_this_frame = false;
   for (const auto& [view_id, factory] : graphs_snapshot) {
     DLOG_SCOPE_F(2, fmt::format("View {}", nostd::to_string(view_id)).c_str());
 
@@ -644,6 +663,17 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
         // skip this view's render graph.
         update_view_state(view_id, false);
         continue;
+      }
+
+      if (!ran_ibl_compute_this_frame && ibl_compute_pass_) {
+        try {
+          co_await ibl_compute_pass_->PrepareResources(
+            *render_context_, *recorder);
+          co_await ibl_compute_pass_->Execute(*render_context_, *recorder);
+        } catch (const std::exception& ex) {
+          LOG_F(ERROR, "IblComputePass failed: {}", ex.what());
+        }
+        ran_ibl_compute_this_frame = true;
       }
 
       // Execute the registered render graph for this view
