@@ -159,7 +159,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     SkyboxManager::LoadOptions options {
       .layout = static_cast<SkyboxManager::Layout>(sky_state.layout_idx),
       .output_format
-        = static_cast<SkyboxManager::OutputFormat>(sky_state.output_format_idx),
+      = static_cast<SkyboxManager::OutputFormat>(sky_state.output_format_idx),
       .cube_face_size = sky_state.cube_face_size,
       .flip_y = sky_state.flip_y,
     };
@@ -269,8 +269,7 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
 
   if (debug_ui_ && camera_controller_) {
     debug_ui_->Draw(context, *camera_controller_, texture_index_mode_,
-      custom_texture_resource_index_,
-      observer_ptr { ResolveRenderer() },
+      custom_texture_resource_index_, observer_ptr { ResolveRenderer() },
       scene_setup_ ? scene_setup_->GetCubeMaterial() : nullptr,
       cube_needs_rebuild_);
   }
@@ -292,7 +291,8 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
   if (auto rg = GetRenderGraph(); rg) {
     rg->SetupRenderPasses();
 
-    if (auto shader_pass_config = rg->GetShaderPassConfig(); shader_pass_config) {
+    if (auto shader_pass_config = rg->GetShaderPassConfig();
+      shader_pass_config) {
       shader_pass_config->clear_color
         = graphics::Color { 0.08F, 0.08F, 0.10F, 1.0F };
       shader_pass_config->debug_name = "ShaderPass";

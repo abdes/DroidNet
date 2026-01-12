@@ -177,7 +177,7 @@ BrdfLutManager::~BrdfLutManager()
   }
 }
 
-auto BrdfLutManager::GetOrCreateLut(const Params params) -> ShaderVisibleIndex
+auto BrdfLutManager::GetOrCreateLut(const Params params) -> LutResult
 {
   const LutKey key { params.resolution, params.sample_count,
     Format::kRG16Float };
@@ -186,13 +186,19 @@ auto BrdfLutManager::GetOrCreateLut(const Params params) -> ShaderVisibleIndex
       if (!uploader_) {
         LOG_F(WARNING,
           "BRDF LUT upload ticket pending but uploader is unavailable");
-        return ShaderVisibleIndex { kInvalidShaderVisibleIndex };
+        return LutResult { nullptr,
+          ShaderVisibleIndex { kInvalidShaderVisibleIndex } };
       }
 
       const auto result = uploader_->TryGetResult(*entry->pending_ticket);
       if (!result.has_value()) {
-        return ShaderVisibleIndex { kInvalidShaderVisibleIndex };
+        LOG_F(WARNING, "BRDF LUT upload PENDING, ticket_id={}, fence={}",
+          entry->pending_ticket->id.get(), entry->pending_ticket->fence.get());
+        return LutResult { nullptr,
+          ShaderVisibleIndex { kInvalidShaderVisibleIndex } };
       }
+
+      LOG_F(WARNING, "BRDF LUT upload COMPLETED, success={}", result->success);
 
       if (!result->success) {
         if (result->error.has_value()) {
@@ -214,7 +220,8 @@ auto BrdfLutManager::GetOrCreateLut(const Params params) -> ShaderVisibleIndex
           luts_.erase(it);
         }
 
-        return ShaderVisibleIndex { kInvalidShaderVisibleIndex };
+        return LutResult { nullptr,
+          ShaderVisibleIndex { kInvalidShaderVisibleIndex } };
       }
 
       entry->pending_ticket.reset();
@@ -223,9 +230,10 @@ auto BrdfLutManager::GetOrCreateLut(const Params params) -> ShaderVisibleIndex
         entry->srv_index.get());
     }
 
-    return entry->srv_index;
+    return LutResult { entry->texture, entry->srv_index };
   }
-  return ShaderVisibleIndex { kInvalidShaderVisibleIndex };
+  return LutResult { nullptr,
+    ShaderVisibleIndex { kInvalidShaderVisibleIndex } };
 }
 
 auto BrdfLutManager::EnsureLut(const LutKey& key) -> LutEntry*

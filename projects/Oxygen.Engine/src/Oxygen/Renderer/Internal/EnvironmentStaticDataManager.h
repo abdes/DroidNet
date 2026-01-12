@@ -77,10 +77,25 @@ public:
   */
   OXGN_RNDR_API auto UpdateIfNeeded(const RenderContext& context) -> void;
 
+  //! Enforce resource state barriers for owned textures (e.g. BRDF LUT).
+  /*!
+   Call this on the graphics command recorder before rendering to ensure
+   textures uploaded on copy queues are correctly transitioned to SRV state.
+  */
+  OXGN_RNDR_API auto EnforceBarriers(graphics::CommandRecorder& recorder)
+    -> void;
+
   //! Shader-visible SRV index for the environment static data.
   [[nodiscard]] auto GetSrvIndex() const noexcept -> ShaderVisibleIndex
   {
     return srv_index_;
+  }
+
+  //! Returns the BRDF LUT texture if available.
+  [[nodiscard]] auto GetBrdfLutTexture() const noexcept
+    -> std::shared_ptr<graphics::Texture>
+  {
+    return brdf_lut_texture_;
   }
 
 private:
@@ -97,6 +112,8 @@ private:
   std::array<bool, frame::kFramesInFlight.get()> slot_needs_upload_ {};
 
   std::shared_ptr<graphics::Buffer> buffer_;
+  std::shared_ptr<graphics::Texture> brdf_lut_texture_;
+  bool brdf_lut_transitioned_ { false };
   void* mapped_ptr_ { nullptr };
 
   graphics::NativeView srv_view_ {};

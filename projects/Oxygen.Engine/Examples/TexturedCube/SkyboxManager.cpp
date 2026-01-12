@@ -49,13 +49,11 @@ auto SkyboxManager::LoadSkyboxAsync(const std::string& file_path,
   // Determine output format
   oxygen::Format output_fmt = oxygen::Format::kRGBA8UNormSRGB;
   bool use_bc7 = false;
-  bool needs_hdr_to_ldr = false;
   const char* format_name = "RGBA8";
 
   switch (options.output_format) {
   case OutputFormat::kRGBA8:
     output_fmt = oxygen::Format::kRGBA8UNormSRGB;
-    needs_hdr_to_ldr = true;
     format_name = "RGBA8";
     break;
   case OutputFormat::kRGBA16Float:
@@ -69,10 +67,12 @@ auto SkyboxManager::LoadSkyboxAsync(const std::string& file_path,
   case OutputFormat::kBC7:
     output_fmt = oxygen::Format::kBC7UNormSRGB;
     use_bc7 = true;
-    needs_hdr_to_ldr = true;
     format_name = "BC7";
     break;
   }
+
+  const auto ext = img_path.extension().string();
+  const bool is_hdr_source = (ext == ".hdr") || (ext == ".exr");
 
   std::optional<TextureImportResult> cooked_result;
 
@@ -92,12 +92,20 @@ auto SkyboxManager::LoadSkyboxAsync(const std::string& file_path,
     // layout detection, face extraction, and cooking automatically
     TextureImportDesc desc;
     desc.texture_type = TextureType::kTextureCube;
-    desc.intent = TextureIntent::kData; // Generic cube map
-    desc.source_color_space = ColorSpace::kSRGB;
+    desc.intent
+      = is_hdr_source ? TextureIntent::kHdrEnvironment : TextureIntent::kData;
+    desc.source_color_space
+      = is_hdr_source ? ColorSpace::kLinear : ColorSpace::kSRGB;
     desc.output_format = output_fmt;
     desc.bc7_quality = use_bc7 ? Bc7Quality::kDefault : Bc7Quality::kNone;
     desc.source_id = img_path.string();
     desc.flip_y_on_decode = options.flip_y;
+
+    // Be explicit about mip generation: IBL specular relies on sampling across
+    // the mip chain for roughness-based filtering.
+    desc.mip_policy = MipPolicy::kFullChain;
+    desc.mip_filter = MipFilter::kKaiser;
+    desc.mip_filter_space = ColorSpace::kLinear;
 
     auto layout_result = ImportCubeMapFromLayoutImage(
       img_path, desc, D3D12PackingPolicy::Instance());
@@ -158,7 +166,8 @@ auto SkyboxManager::LoadSkyboxAsync(const std::string& file_path,
 
   result.success = true;
   result.face_size = static_cast<int>(payload.desc.width);
-  result.status_message = std::string("Loaded (") + format_name + ")";
+  result.status_message = std::string("Loaded (") + format_name
+    + ", mips=" + std::to_string(payload.desc.mip_levels) + ")";
 
   co_return result;
 }

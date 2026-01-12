@@ -18,7 +18,6 @@
 
 #include "Renderer/SceneConstants.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
-// NOTE: AtmosphereHelpers.hlsli removed - fake fog deleted, use Aerial Perspective.
 #include "Renderer/AerialPerspective.hlsli"
 #include "Renderer/DirectionalLightBasic.hlsli"
 #include "Renderer/PositionalLightData.hlsli"
@@ -311,12 +310,6 @@ float4 PS(VSOutput input) : SV_Target0 {
         const float3 sky_tint = env_data.sky_light.tint_rgb * env_data.sky_light.intensity;
         ibl_diffuse *= sky_tint * env_data.sky_light.diffuse_intensity;
         ibl_specular *= sky_tint * env_data.sky_light.specular_intensity;
-
-        if (has_brdf_lut)
-        {
-            const float2 brdf_terms = brdf_lut.Sample(linear_sampler, float2(NdotV, roughness)).rg;
-            ibl_specular *= F0 * brdf_terms.x + brdf_terms.y;
-        }
     }
 
     const float3 ambient = ibl_diffuse * base_rgb * (1.0f - metalness);

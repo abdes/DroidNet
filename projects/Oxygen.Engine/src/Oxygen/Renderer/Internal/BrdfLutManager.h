@@ -42,12 +42,17 @@ struct BrdfLutParams {
 
 inline constexpr BrdfLutParams kDefaultBrdfLutParams { 256u, 128u };
 
+struct LutResult {
+  std::shared_ptr<graphics::Texture> texture;
+  ShaderVisibleIndex index { kInvalidShaderVisibleIndex };
+};
+
 class IBrdfLutProvider {
 public:
   virtual ~IBrdfLutProvider() = default;
 
   [[nodiscard]] virtual auto GetOrCreateLut(
-    BrdfLutParams params = kDefaultBrdfLutParams) -> ShaderVisibleIndex
+    BrdfLutParams params = kDefaultBrdfLutParams) -> LutResult
     = 0;
 };
 
@@ -69,7 +74,7 @@ public:
 
   //! Returns a shader-visible index for a BRDF LUT, creating it if missing.
   [[nodiscard]] OXGN_RNDR_API auto GetOrCreateLut(
-    Params params = kDefaultParams) -> ShaderVisibleIndex override;
+    Params params = kDefaultParams) -> LutResult override;
 
 private:
   struct LutKey {

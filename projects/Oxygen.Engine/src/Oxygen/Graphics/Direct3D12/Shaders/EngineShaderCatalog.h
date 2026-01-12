@@ -72,6 +72,12 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     std::array { EntryPoint { kPixel, "PS" } },
     std::array<std::string_view, 2> { "DEBUG_CLUSTER_INDEX", "ALPHA_TEST" }
   },
+  // Forward pass pixel shader: DEBUG_IBL_SPECULAR with ALPHA_TEST permutation
+  ShaderFileSpec {
+    "Passes/Forward/ForwardMesh_PS.hlsl",
+    std::array { EntryPoint { kPixel, "PS" } },
+    std::array<std::string_view, 2> { "DEBUG_IBL_SPECULAR", "ALPHA_TEST" }
+  },
   // Depth pre-pass: VS and PS with ALPHA_TEST permutation
   ShaderFileSpec {
     "Passes/Depth/DepthPrePass.hlsl",
@@ -116,6 +122,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ForwardMesh_PS DEBUG_LIGHT_HEATMAP: 4 (2x2 for debug and ALPHA_TEST)
 // - ForwardMesh_PS DEBUG_DEPTH_SLICE: 4
 // - ForwardMesh_PS DEBUG_CLUSTER_INDEX: 4
+// - ForwardMesh_PS DEBUG_IBL_SPECULAR: 4
 // - DepthPrePass: 4 (2 entries x 2 permutations)
 // - LightCulling: 2 (1 entry x 2 permutations)
 // - TransmittanceLut_CS: 1 entry
@@ -123,7 +130,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - SkySphere_VS: 1 entry
 // - SkySphere_PS: 1 entry
 // - ImGui: 2 (2 entries x 1 permutation)
-// Total: 1 + 2 + 4 + 4 + 4 + 4 + 2 + 1 + 1 + 1 + 1 + 2 = 27
-static_assert(kEngineShaders.size() == 27, "Expected 27 shader entries");
+// Total: 1 + 2 + 4 + 4 + 4 + 4 + 4 + 2 + 1 + 1 + 1 + 1 + 2 = 31
+static_assert(kEngineShaders.size() == 31, "Expected 31 shader entries");
 
 } // namespace oxygen::graphics::d3d12

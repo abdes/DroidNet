@@ -102,8 +102,12 @@ auto MakeCubeMaterial(const char* name, const glm::vec4& rgba,
   desc.base_color[3] = rgba.a;
 
   desc.normal_scale = 1.0f;
+
+  // Intentionally glossy by default so specular (direct + IBL) is obvious.
+  // Keep it non-metallic so specular remains visible even when the base color
+  // texture is missing/black (dielectric F0 stays around ~0.04).
   desc.metalness = Unorm16 { 0.0f };
-  desc.roughness = Unorm16 { 0.75f };
+  desc.roughness = Unorm16 { 0.05f };
   desc.ambient_occlusion = Unorm16 { 1.0f };
 
   desc.base_color_texture = base_color_texture_resource_index;
