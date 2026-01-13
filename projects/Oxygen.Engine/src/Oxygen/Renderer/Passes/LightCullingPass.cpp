@@ -30,6 +30,7 @@
 #include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
+#include <Oxygen/Renderer/Passes/LightCullingData.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -556,9 +557,17 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     const auto u_grid_srv = impl_->cluster_grid_srv.get();
     const auto u_index_list_srv = impl_->light_index_list_srv.get();
 
-    manager->SetCullingData(view_id, u_grid_srv, u_index_list_srv,
-      impl_->grid_dims.x, impl_->grid_dims.y, impl_->grid_dims.z,
-      cluster_cfg.tile_size_px);
+    // Aggregate culling data into a single struct to simplify the API.
+    LightCullingData cull_data {
+      .bindless_cluster_grid_slot = u_grid_srv,
+      .bindless_cluster_index_list_slot = u_index_list_srv,
+      .cluster_dim_x = impl_->grid_dims.x,
+      .cluster_dim_y = impl_->grid_dims.y,
+      .cluster_dim_z = impl_->grid_dims.z,
+      .tile_size_px = cluster_cfg.tile_size_px,
+    };
+
+    manager->SetLightCullingData(view_id, cull_data);
 
     manager->SetZBinning(
       view_id, effective_z_near, effective_z_far, z_scale, z_bias);

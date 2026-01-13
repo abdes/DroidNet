@@ -11,16 +11,18 @@
 #include <memory>
 #include <unordered_map>
 
+#include <glm/vec3.hpp>
+
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Renderer/Passes/LightCullingData.h>
 #include <Oxygen/Renderer/Types/EnvironmentDynamicData.h>
 #include <Oxygen/Renderer/Types/SunState.h>
 #include <Oxygen/Renderer/api_export.h>
-#include <glm/vec3.hpp>
 
 namespace oxygen::engine::internal {
 
@@ -66,13 +68,29 @@ public:
   //! Set active frame slot for upcoming allocations.
   OXGN_RNDR_API auto OnFrameStart(frame::Slot slot) -> void;
 
+  //! Resolve data and upload to GPU if dirty for the current frame slot.
+  /*!
+   This call is idempotent for a given view within the same frame slot.
+   Subsequent calls will only perform an upload if data has been updated
+   via setters.
+  */
+  OXGN_RNDR_API auto UpdateIfNeeded(ViewId view_id) -> void;
+
+  //! Get the GPU virtual address for the current slot's buffer for a view.
+  OXGN_RNDR_NDAPI auto GetGpuVirtualAddress(ViewId view_id) -> uint64_t;
+
+  //! Get the buffer for the current slot for a view.
+  OXGN_RNDR_NDAPI auto GetBuffer(ViewId view_id)
+    -> std::shared_ptr<graphics::Buffer>;
+
   //! Set exposure for a specific view.
   OXGN_RNDR_API auto SetExposure(ViewId view_id, float exposure) -> void;
 
   //! Set clustered culling configuration for a specific view.
-  OXGN_RNDR_API auto SetCullingData(ViewId view_id, uint32_t grid_slot,
-    uint32_t index_list_slot, uint32_t dim_x, uint32_t dim_y, uint32_t dim_z,
-    uint32_t tile_size_px) -> void;
+
+  //! Structured setter for light culling data.
+  OXGN_RNDR_API auto SetLightCullingData(
+    ViewId view_id, const LightCullingData& data) -> void;
 
   //! Set Z-binning parameters for a specific view.
   OXGN_RNDR_API auto SetZBinning(ViewId view_id, float z_near, float z_far,
@@ -99,21 +117,6 @@ public:
   //! Set optional override sun values for atmosphere debugging.
   OXGN_RNDR_API auto SetAtmosphereSunOverride(
     ViewId view_id, const SunState& sun) -> void;
-
-  //! Resolve data and upload to GPU if dirty for the current frame slot.
-  /*!
-   This call is idempotent for a given view within the same frame slot.
-   Subsequent calls will only perform an upload if data has been updated
-   via setters.
-  */
-  OXGN_RNDR_API auto UpdateIfNeeded(ViewId view_id) -> void;
-
-  //! Get the GPU virtual address for the current slot's buffer for a view.
-  OXGN_RNDR_NDAPI auto GetGpuVirtualAddress(ViewId view_id) -> uint64_t;
-
-  //! Get the buffer for the current slot for a view.
-  OXGN_RNDR_NDAPI auto GetBuffer(ViewId view_id)
-    -> std::shared_ptr<graphics::Buffer>;
 
 private:
   struct BufferKey {
