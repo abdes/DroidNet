@@ -6,13 +6,17 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include <glm/vec3.hpp>
+
+#include "../SkyboxManager.h"
 
 // Forward declarations
 namespace oxygen::scene {
@@ -130,6 +134,34 @@ public:
   //! Apply pending changes to the scene. Call during OnSceneMutation.
   void ApplyPendingChanges();
 
+  //! Request that the panel resync its cached state from the scene.
+  /*!
+   This is useful when an external system (e.g. an async skybox load) modifies
+   the scene environment outside of `ApplyPendingChanges`.
+  */
+  void RequestResync() { needs_sync_ = true; }
+
+  struct SkyboxLoadRequest {
+    std::string path;
+    SkyboxManager::LoadOptions options;
+  };
+
+  //! Returns true if the user requested a skybox load.
+  [[nodiscard]] auto IsSkyboxLoadRequested() const -> bool
+  {
+    return skybox_load_requested_;
+  }
+
+  //! Take and clear the pending skybox load request.
+  auto TakeSkyboxLoadRequest() -> std::optional<SkyboxLoadRequest>;
+
+  //! Update the skybox status text shown in the UI.
+  void SetSkyboxLoadStatus(std::string_view status, int face_size,
+    oxygen::content::ResourceKey resource_key);
+
+  //! Get the current sky light parameters from the UI cache.
+  [[nodiscard]] auto GetSkyLightParams() const -> SkyboxManager::SkyLightParams;
+
   //! Get current atmosphere debug flags for renderer.
   [[nodiscard]] auto GetAtmosphereFlags() const -> uint32_t;
 
@@ -185,6 +217,19 @@ private:
   glm::vec3 sky_sphere_solid_color_ { 0.2F, 0.3F, 0.5F };
   float sky_sphere_intensity_ { 1.0F };
   float sky_sphere_rotation_deg_ { 0.0F };
+
+  // Skybox load UI (disk -> synthetic cubemap)
+  std::array<char, 260> skybox_path_ {};
+  int skybox_layout_idx_ { 0 };
+  int skybox_output_format_idx_ { 0 };
+  int skybox_face_size_ { 512 };
+  bool skybox_flip_y_ { false };
+  bool skybox_tonemap_hdr_to_ldr_ { false };
+  float skybox_hdr_exposure_ev_ { 0.0F };
+  bool skybox_load_requested_ { false };
+  std::string skybox_status_message_ {};
+  int skybox_last_face_size_ { 0 };
+  oxygen::content::ResourceKey skybox_last_resource_key_ { 0U };
 
   // SkyLight
   bool sky_light_enabled_ { false };

@@ -334,6 +334,17 @@ auto Renderer::GetIblManager() const noexcept
   return observer_ptr { ibl_manager_.get() };
 }
 
+auto Renderer::DumpEstimatedTextureMemory(const std::size_t top_n) const -> void
+{
+  if (!texture_binder_) {
+    LOG_F(
+      WARNING, "TextureBinder is not initialized; cannot dump texture memory");
+    return;
+  }
+
+  texture_binder_->DumpEstimatedTextureMemory(top_n);
+}
+
 //=== Debug Overrides ===-----------------------------------------------------//
 
 auto Renderer::RequestIblRegeneration() noexcept -> void

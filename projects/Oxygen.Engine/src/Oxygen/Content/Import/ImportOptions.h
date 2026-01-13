@@ -8,6 +8,8 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
+#include <stop_token>
 #include <string>
 #include <type_traits>
 
@@ -15,6 +17,8 @@
 #include <Oxygen/Content/api_export.h>
 
 #include <Oxygen/Content/Import/Naming.h>
+#include <Oxygen/Content/Import/TextureImportTypes.h>
+#include <Oxygen/Core/Types/Format.h>
 
 namespace oxygen::content::import {
 
@@ -265,6 +269,10 @@ struct ImportOptions final {
 
   CoordinateConversionPolicy coordinate = {};
 
+  //! Cooperative cancellation token for long-running imports.
+  /*! Importers should periodically check this token and abort promptly. */
+  std::stop_token stop_token {};
+
   //! Optional naming strategy applied to imported nodes and assets.
   /*!
    If set, the importer should call this hook when assigning names to scene
@@ -330,6 +338,41 @@ struct ImportOptions final {
     explicit semantics.
   */
   bool ignore_non_mesh_primitives = true;
+
+  //! Texture import tuning for emission-time cooking.
+  /*!
+   When enabled, FBX import uses the texture cooker to generate mip chains and
+   select output formats (including optional BC7 compression). This can
+   significantly reduce runtime GPU memory use compared to pass-through
+   uncompressed textures.
+  */
+  struct TextureTuning final {
+    //! Enable texture cooking overrides.
+    bool enabled = false;
+
+    //! Mip chain generation policy.
+    MipPolicy mip_policy = MipPolicy::kNone;
+
+    //! Maximum mip levels when @p mip_policy is `MipPolicy::kMaxCount`.
+    uint8_t max_mip_levels = 1;
+
+    //! Mip filter kernel used when generating mips.
+    MipFilter mip_filter = MipFilter::kKaiser;
+
+    //! Output format for color textures (e.g., base color, emissive).
+    Format color_output_format = Format::kBC7UNormSRGB;
+
+    //! Output format for data textures (e.g., normal, ORM).
+    Format data_output_format = Format::kBC7UNorm;
+
+    //! BC7 compression quality tier (applies only for BC7 outputs).
+    Bc7Quality bc7_quality = Bc7Quality::kDefault;
+
+    //! Packing policy ID ("d3d12" or "tight").
+    std::string packing_policy_id = "d3d12";
+  };
+
+  TextureTuning texture_tuning = {};
 };
 
 } // namespace oxygen::content::import

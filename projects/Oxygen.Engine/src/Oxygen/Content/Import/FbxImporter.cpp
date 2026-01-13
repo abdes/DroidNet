@@ -18,6 +18,7 @@
 #include <numbers>
 #include <optional>
 #include <span>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -158,6 +159,20 @@ namespace {
     }
   }
 
+  struct UfbxCancelContext {
+    std::stop_token stop_token;
+  };
+
+  auto UfbxProgressCallback(void* user, const ufbx_progress*)
+    -> ufbx_progress_result
+  {
+    const auto* ctx = static_cast<const UfbxCancelContext*>(user);
+    if (ctx != nullptr && ctx->stop_token.stop_requested()) {
+      return UFBX_PROGRESS_CANCEL;
+    }
+    return UFBX_PROGRESS_CONTINUE;
+  }
+
   /// Returns a human-readable name for a ufbx shader type.
   [[nodiscard]] constexpr auto ShaderTypeName(ufbx_shader_type type) noexcept
     -> const char*
@@ -258,6 +273,14 @@ namespace {
       ufbx_load_opts opts {};
       ufbx_error error {};
 
+      UfbxCancelContext cancel_ctx { .stop_token = request.options.stop_token };
+      if (request.options.stop_token.stop_requested()) {
+        throw std::runtime_error("FBX import cancelled");
+      }
+
+      opts.progress_cb.fn = &UfbxProgressCallback;
+      opts.progress_cb.user = &cancel_ctx;
+
       // Always normalize coordinate system to Oxygen engine space.
       opts.target_axes = EngineWorldTargetAxes();
       opts.target_camera_axes = EngineCameraTargetAxes();
@@ -312,6 +335,10 @@ namespace {
         = ufbx_load_file(source_path_str.c_str(), &opts, &error);
       if (scene == nullptr) {
         const auto desc = fbx::ToStringView(error.description);
+        if (error.type == UFBX_ERROR_CANCELLED
+          || request.options.stop_token.stop_requested()) {
+          throw std::runtime_error("FBX import cancelled");
+        }
         ImportDiagnostic diag {
           .severity = ImportSeverity::kError,
           .code = "fbx.parse_failed",
@@ -647,27 +674,49 @@ namespace {
           desc.flags |= oxygen::data::pak::kMaterialFlag_GltfOrmPacked;
         }
 
-        // Default cooker config: no mips, no BC7 (simple RGBA8 pass-through)
-        emit::CookerConfig cooker_config {};
-        cooker_config.generate_mips = false;
+        emit::CookerConfig color_config {};
+        emit::CookerConfig data_config {};
+
+        if (request.options.texture_tuning.enabled) {
+          const auto& tuning = request.options.texture_tuning;
+
+          color_config.mip_policy = tuning.mip_policy;
+          color_config.max_mip_levels = tuning.max_mip_levels;
+          color_config.mip_filter = tuning.mip_filter;
+          color_config.output_format_override = tuning.color_output_format;
+          color_config.bc7_quality = tuning.bc7_quality;
+          color_config.packing_policy_id = tuning.packing_policy_id;
+
+          data_config.mip_policy = tuning.mip_policy;
+          data_config.max_mip_levels = tuning.max_mip_levels;
+          data_config.mip_filter = tuning.mip_filter;
+          data_config.output_format_override = tuning.data_output_format;
+          data_config.bc7_quality = tuning.bc7_quality;
+          data_config.packing_policy_id = tuning.packing_policy_id;
+        } else {
+          // Preserve historical behavior when tuning is disabled: no mips,
+          // pass-through decoded format.
+          color_config.mip_policy = MipPolicy::kNone;
+          data_config.mip_policy = MipPolicy::kNone;
+        }
 
         const auto base_color_index
           = emit::GetOrCreateTextureResourceIndexWithCooker(
-            request, out, textures, base_color_tex, cooker_config);
+            request, out, textures, base_color_tex, color_config);
         const auto normal_index
           = emit::GetOrCreateTextureResourceIndexWithCooker(
-            request, out, textures, normal_tex, cooker_config);
+            request, out, textures, normal_tex, data_config);
         const auto metallic_index
           = emit::GetOrCreateTextureResourceIndexWithCooker(
-            request, out, textures, metallic_tex, cooker_config);
+            request, out, textures, metallic_tex, data_config);
         const auto roughness_index
           = emit::GetOrCreateTextureResourceIndexWithCooker(
-            request, out, textures, roughness_tex, cooker_config);
+            request, out, textures, roughness_tex, data_config);
         const auto ao_index = emit::GetOrCreateTextureResourceIndexWithCooker(
-          request, out, textures, ao_tex, cooker_config);
+          request, out, textures, ao_tex, data_config);
         const auto emissive_index
           = emit::GetOrCreateTextureResourceIndexWithCooker(
-            request, out, textures, emissive_tex, cooker_config);
+            request, out, textures, emissive_tex, color_config);
 
         desc.base_color_texture = base_color_index;
         desc.normal_texture = normal_index;

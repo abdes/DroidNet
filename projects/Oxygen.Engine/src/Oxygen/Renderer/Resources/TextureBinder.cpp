@@ -9,11 +9,13 @@
 #include <cstdint>
 #include <deque>
 #include <exception>
+#include <iomanip>
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -95,6 +97,79 @@ namespace {
       return IsBc7Format(format);
     }
     return true;
+  }
+
+  [[nodiscard]] constexpr auto SafeAddSizeT(const std::size_t a,
+    const std::size_t b) noexcept -> std::optional<std::size_t>
+  {
+    if (a > (std::numeric_limits<std::size_t>::max)() - b) {
+      return std::nullopt;
+    }
+    return a + b;
+  }
+
+  [[nodiscard]] auto EstimateTextureBytes(const graphics::TextureDesc& desc,
+    const graphics::detail::FormatInfo& fmt) -> std::optional<std::size_t>
+  {
+    if (desc.width == 0U || desc.height == 0U || desc.mip_levels == 0U
+      || desc.array_size == 0U) {
+      return std::size_t { 0U };
+    }
+    if (fmt.bytes_per_block == 0U || fmt.block_size == 0U) {
+      return std::nullopt;
+    }
+
+    const std::size_t block = static_cast<std::size_t>(fmt.block_size);
+    const std::size_t bpb = static_cast<std::size_t>(fmt.bytes_per_block);
+
+    std::size_t total = 0U;
+    for (std::uint32_t layer = 0U; layer < desc.array_size; ++layer) {
+      (void)layer;
+      for (std::uint32_t mip = 0U; mip < desc.mip_levels; ++mip) {
+        const auto mip_w = (std::max)(desc.width >> mip, 1U);
+        const auto mip_h = (std::max)(desc.height >> mip, 1U);
+
+        const auto blocks_x
+          = (static_cast<std::size_t>(mip_w) + block - 1U) / block;
+        const auto blocks_y
+          = (static_cast<std::size_t>(mip_h) + block - 1U) / block;
+
+        if (blocks_x > (std::numeric_limits<std::size_t>::max)() / bpb) {
+          return std::nullopt;
+        }
+        const auto row_bytes = blocks_x * bpb;
+        if (blocks_y > 0U
+          && row_bytes > (std::numeric_limits<std::size_t>::max)() / blocks_y) {
+          return std::nullopt;
+        }
+        const auto mip_bytes = row_bytes * blocks_y;
+
+        const auto next = SafeAddSizeT(total, mip_bytes);
+        if (!next.has_value()) {
+          return std::nullopt;
+        }
+        total = *next;
+      }
+    }
+
+    return total;
+  }
+
+  [[nodiscard]] auto PrettyBytes(const std::size_t bytes) -> std::string
+  {
+    static constexpr std::array<const char*, 5> kUnits
+      = { "B", "KiB", "MiB", "GiB", "TiB" };
+
+    double value = static_cast<double>(bytes);
+    std::size_t unit = 0U;
+    while (value >= 1024.0 && unit + 1U < kUnits.size()) {
+      value /= 1024.0;
+      ++unit;
+    }
+
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(2) << value << ' ' << kUnits[unit];
+    return oss.str();
   }
 
   //! Build upload layout for 2D textures, 2D arrays, and cubemaps.
@@ -463,6 +538,7 @@ public:
   [[nodiscard]] auto IsResourceReady(
     const content::ResourceKey& resource_key) const noexcept -> bool;
   [[nodiscard]] auto GetErrorTextureIndex() const -> ShaderVisibleIndex;
+  auto DumpEstimatedTextureMemory(std::size_t top_n) const -> void;
 
 private:
   enum class FailurePolicy : uint8_t {
@@ -580,6 +656,12 @@ auto TextureBinder::IsResourceReady(
  cycles.
 */
 auto TextureBinder::OnFrameEnd() -> void { impl_->OnFrameEnd(); }
+
+auto TextureBinder::DumpEstimatedTextureMemory(const std::size_t top_n) const
+  -> void
+{
+  impl_->DumpEstimatedTextureMemory(top_n);
+}
 
 // Index-based allocation has been removed. Use the ResourceKey-only API.
 
@@ -910,6 +992,71 @@ auto TextureBinder::Impl::OnFrameEnd() -> void { }
 auto TextureBinder::Impl::GetErrorTextureIndex() const -> ShaderVisibleIndex
 {
   return error_text_svi_;
+}
+
+auto TextureBinder::Impl::DumpEstimatedTextureMemory(
+  const std::size_t top_n) const -> void
+{
+  if (top_n == 0U) {
+    return;
+  }
+
+  struct Record {
+    content::ResourceKey key;
+    graphics::TextureDesc desc;
+    std::size_t bytes;
+  };
+
+  std::vector<Record> records;
+  records.reserve(texture_map_.size());
+
+  std::size_t total_bytes = 0U;
+  std::size_t count = 0U;
+
+  for (const auto& [key, entry] : texture_map_) {
+    if (!entry.texture) {
+      continue;
+    }
+
+    const auto& desc = entry.texture->GetDescriptor();
+    const auto& fmt = graphics::detail::GetFormatInfo(desc.format);
+    const auto bytes_opt = EstimateTextureBytes(desc, fmt);
+    if (!bytes_opt.has_value()) {
+      continue;
+    }
+
+    records.push_back(Record {
+      .key = key,
+      .desc = desc,
+      .bytes = *bytes_opt,
+    });
+
+    const auto next = SafeAddSizeT(total_bytes, *bytes_opt);
+    if (next.has_value()) {
+      total_bytes = *next;
+    } else {
+      total_bytes = (std::numeric_limits<std::size_t>::max)();
+    }
+    ++count;
+  }
+
+  std::sort(records.begin(), records.end(),
+    [](const Record& a, const Record& b) { return a.bytes > b.bytes; });
+
+  const auto emit_count = (std::min)(records.size(), top_n);
+
+  LOG_F(INFO,
+    "TextureBinder: estimated GPU texture memory: total={} across {} textures "
+    "(top {} shown)",
+    PrettyBytes(total_bytes).c_str(), count, emit_count);
+
+  for (std::size_t i = 0U; i < emit_count; ++i) {
+    const auto& r = records[i];
+    LOG_F(INFO, "  #{} {}: {} ({}, {}x{}x{}, mips={}, layers={})", i + 1U,
+      r.key, PrettyBytes(r.bytes).c_str(), to_string(r.desc.format),
+      r.desc.width, r.desc.height, r.desc.depth, r.desc.mip_levels,
+      r.desc.array_size);
+  }
 }
 
 //=== Private Implementation =================================================//

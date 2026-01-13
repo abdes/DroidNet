@@ -10,7 +10,9 @@
 #include <array>
 #include <atomic>
 #include <cstring>
+#include <execution>
 #include <mutex>
+#include <numeric>
 
 #include <Oxygen/Content/Import/bc7enc/bc7enc.h>
 
@@ -185,23 +187,26 @@ auto EncodeSurface(const ImageView& source, const Bc7EncoderParams& params)
   bc7enc_compress_block_params bc7_params;
   ConfigureBlockParams(bc7_params, params);
 
-  // Encode each block
-  std::array<std::byte, 64> block_pixels {};
+  // Encode each block (parallelized across block rows).
+  std::vector<uint32_t> block_rows(blocks_y);
+  std::iota(block_rows.begin(), block_rows.end(), 0U);
+  std::for_each(std::execution::par, block_rows.begin(), block_rows.end(),
+    [&](const uint32_t by) {
+      std::array<std::byte, 64> block_pixels {};
 
-  for (uint32_t by = 0; by < blocks_y; ++by) {
-    for (uint32_t bx = 0; bx < blocks_x; ++bx) {
-      // Extract 4x4 block with border replication
-      ExtractBlock(source, bx, by, block_pixels);
+      for (uint32_t bx = 0; bx < blocks_x; ++bx) {
+        // Extract 4x4 block with border replication
+        ExtractBlock(source, bx, by, block_pixels);
 
-      // Compute output offset
-      const size_t block_index = static_cast<size_t>(by) * blocks_x + bx;
-      const size_t output_offset = block_index * kBc7BlockSizeBytes;
+        // Compute output offset
+        const size_t block_index = static_cast<size_t>(by) * blocks_x + bx;
+        const size_t output_offset = block_index * kBc7BlockSizeBytes;
 
-      // Encode block
-      bc7enc_compress_block(compressed_data.data() + output_offset,
-        block_pixels.data(), &bc7_params);
-    }
-  }
+        // Encode block
+        bc7enc_compress_block(compressed_data.data() + output_offset,
+          block_pixels.data(), &bc7_params);
+      }
+    });
 
   // Create output ScratchImage with BC7 format
   return ScratchImage::CreateFromData(source.width, source.height,
@@ -254,8 +259,7 @@ auto EncodeTexture(const ScratchImage& source, const Bc7EncoderParams& params)
   ConfigureBlockParams(bc7_params, params);
 
   // Encode each subresource
-  size_t output_offset = 0;
-  std::array<std::byte, 64> block_pixels {};
+  size_t subresource_base_offset = 0;
 
   for (uint16_t layer = 0; layer < src_meta.array_layers; ++layer) {
     for (uint16_t mip = 0; mip < src_meta.mip_levels; ++mip) {
@@ -264,18 +268,30 @@ auto EncodeTexture(const ScratchImage& source, const Bc7EncoderParams& params)
       const uint32_t blocks_x = ComputeBlockCount(src_view.width);
       const uint32_t blocks_y = ComputeBlockCount(src_view.height);
 
-      for (uint32_t by = 0; by < blocks_y; ++by) {
-        for (uint32_t bx = 0; bx < blocks_x; ++bx) {
-          // Extract block
-          ExtractBlock(src_view, bx, by, block_pixels);
+      const size_t surface_size
+        = ComputeBc7SurfaceSize(src_view.width, src_view.height);
+      const size_t surface_base = subresource_base_offset;
 
-          // Encode block
-          bc7enc_compress_block(output_storage.data() + output_offset,
-            block_pixels.data(), &bc7_params);
+      std::vector<uint32_t> block_rows(blocks_y);
+      std::iota(block_rows.begin(), block_rows.end(), 0U);
+      std::for_each(std::execution::par, block_rows.begin(), block_rows.end(),
+        [&](const uint32_t by) {
+          std::array<std::byte, 64> block_pixels {};
 
-          output_offset += kBc7BlockSizeBytes;
-        }
-      }
+          for (uint32_t bx = 0; bx < blocks_x; ++bx) {
+            // Extract block
+            ExtractBlock(src_view, bx, by, block_pixels);
+
+            // Encode block
+            const size_t block_index = static_cast<size_t>(by) * blocks_x + bx;
+            const size_t output_offset
+              = surface_base + block_index * kBc7BlockSizeBytes;
+            bc7enc_compress_block(output_storage.data() + output_offset,
+              block_pixels.data(), &bc7_params);
+          }
+        });
+
+      subresource_base_offset += surface_size;
     }
   }
 
@@ -287,7 +303,129 @@ auto EncodeTexture(const ScratchImage& source, const Bc7EncoderParams& params)
   }
 
   // Copy encoded data to the result
-  output_offset = 0;
+  size_t output_offset = 0;
+  for (uint16_t layer = 0; layer < dst_meta.array_layers; ++layer) {
+    for (uint16_t mip = 0; mip < dst_meta.mip_levels; ++mip) {
+      auto dst_pixels = result.GetMutablePixels(layer, mip);
+      const size_t surface_size = dst_pixels.size();
+
+      std::memcpy(
+        dst_pixels.data(), output_storage.data() + output_offset, surface_size);
+
+      output_offset += surface_size;
+    }
+  }
+
+  return result;
+}
+
+auto EncodeTexture(const ScratchImage& source, const Bc7EncoderParams& params,
+  const std::stop_token stop_token) -> ScratchImage
+{
+  if (stop_token.stop_requested()) {
+    return {};
+  }
+
+  if (!source.IsValid()) {
+    return {};
+  }
+
+  const auto& src_meta = source.Meta();
+
+  // Validate input format
+  if (src_meta.format != Format::kRGBA8UNorm) {
+    return {}; // Only RGBA8 supported
+  }
+
+  // Ensure encoder is initialized
+  if (!g_encoder_initialized.load(std::memory_order_acquire)) {
+    InitializeEncoder();
+  }
+
+  // Create output metadata
+  ScratchImageMeta dst_meta = src_meta;
+  dst_meta.format = Format::kBC7UNorm;
+
+  // Calculate total output size
+  size_t total_size = 0;
+  for (uint16_t layer = 0; layer < src_meta.array_layers; ++layer) {
+    for (uint16_t mip = 0; mip < src_meta.mip_levels; ++mip) {
+      const uint32_t mip_width
+        = ScratchImage::ComputeMipDimension(src_meta.width, mip);
+      const uint32_t mip_height
+        = ScratchImage::ComputeMipDimension(src_meta.height, mip);
+      total_size += ComputeBc7SurfaceSize(mip_width, mip_height);
+    }
+  }
+
+  // Allocate output storage
+  std::vector<std::byte> output_storage(total_size);
+
+  // Configure bc7enc parameters
+  bc7enc_compress_block_params bc7_params;
+  ConfigureBlockParams(bc7_params, params);
+
+  // Encode each subresource
+  size_t subresource_base_offset = 0;
+
+  for (uint16_t layer = 0; layer < src_meta.array_layers; ++layer) {
+    for (uint16_t mip = 0; mip < src_meta.mip_levels; ++mip) {
+      if (stop_token.stop_requested()) {
+        return {};
+      }
+
+      const auto src_view = source.GetImage(layer, mip);
+
+      const uint32_t blocks_x = ComputeBlockCount(src_view.width);
+      const uint32_t blocks_y = ComputeBlockCount(src_view.height);
+
+      const size_t surface_size
+        = ComputeBc7SurfaceSize(src_view.width, src_view.height);
+      const size_t surface_base = subresource_base_offset;
+
+      std::vector<uint32_t> block_rows(blocks_y);
+      std::iota(block_rows.begin(), block_rows.end(), 0U);
+      std::for_each(std::execution::par, block_rows.begin(), block_rows.end(),
+        [&](const uint32_t by) {
+          if (stop_token.stop_requested()) {
+            return;
+          }
+
+          std::array<std::byte, 64> block_pixels {};
+
+          for (uint32_t bx = 0; bx < blocks_x; ++bx) {
+            if (stop_token.stop_requested()) {
+              return;
+            }
+
+            // Extract block
+            ExtractBlock(src_view, bx, by, block_pixels);
+
+            // Encode block
+            const size_t block_index = static_cast<size_t>(by) * blocks_x + bx;
+            const size_t output_offset
+              = surface_base + block_index * kBc7BlockSizeBytes;
+            bc7enc_compress_block(output_storage.data() + output_offset,
+              block_pixels.data(), &bc7_params);
+          }
+        });
+
+      subresource_base_offset += surface_size;
+    }
+  }
+
+  if (stop_token.stop_requested()) {
+    return {};
+  }
+
+  // Create output ScratchImage
+  ScratchImage result = ScratchImage::Create(dst_meta);
+  if (!result.IsValid()) {
+    return {};
+  }
+
+  // Copy encoded data to the result
+  size_t output_offset = 0;
   for (uint16_t layer = 0; layer < dst_meta.array_layers; ++layer) {
     for (uint16_t mip = 0; mip < dst_meta.mip_levels; ++mip) {
       auto dst_pixels = result.GetMutablePixels(layer, mip);
@@ -313,6 +451,17 @@ auto EncodeTexture(const ScratchImage& source, const Bc7Quality quality)
   }
 
   return EncodeTexture(source, Bc7EncoderParams::FromQuality(quality));
+}
+
+auto EncodeTexture(const ScratchImage& source, const Bc7Quality quality,
+  const std::stop_token stop_token) -> ScratchImage
+{
+  if (quality == Bc7Quality::kNone) {
+    return {};
+  }
+
+  return EncodeTexture(
+    source, Bc7EncoderParams::FromQuality(quality), stop_token);
 }
 
 } // namespace oxygen::content::import::bc7

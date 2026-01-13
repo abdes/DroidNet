@@ -4,26 +4,30 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "EnvironmentDebugPanel.h"
-
+#include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <numbers>
+#include <string>
 
 #include <imgui.h>
 
 #include <glm/geometric.hpp>
 #include <glm/trigonometric.hpp>
 
+#include <Oxygen/Base/Platforms.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/SunState.h>
-// NOTE: Fog.h include removed - fog UI removed, use Aerial Perspective.
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
+
+#include "EnvironmentDebugPanel.h"
+#include "FilePicker.h"
 
 namespace oxygen::examples::render_scene::ui {
 
@@ -46,6 +50,35 @@ namespace {
     const float cos_el = std::cos(el_rad);
     return glm::vec3(
       cos_el * std::cos(az_rad), cos_el * std::sin(az_rad), std::sin(el_rad));
+  }
+
+  auto MakeSkyboxFilePickerConfig() -> FilePickerConfig
+  {
+    FilePickerConfig config;
+    config.filters = {
+      { L"Skybox images (*.hdr;*.exr;*.png;*.jpg;*.jpeg;*.tga;*.bmp)",
+        L"*.hdr;*.exr;*.png;*.jpg;*.jpeg;*.tga;*.bmp" },
+      { L"HDR images (*.hdr;*.exr)", L"*.hdr;*.exr" },
+      { L"LDR images (*.png;*.jpg;*.jpeg;*.tga;*.bmp)",
+        L"*.png;*.jpg;*.jpeg;*.tga;*.bmp" },
+      { L"All files (*.*)", L"*.*" },
+    };
+    config.default_extension = L"hdr";
+    config.title = L"Select Skybox Image";
+    return config;
+  }
+
+  auto CopyPathToBuffer(
+    const std::filesystem::path& path, std::span<char> buffer) -> void
+  {
+    if (buffer.empty()) {
+      return;
+    }
+    const std::string s = path.string();
+    const std::size_t to_copy
+      = std::min(buffer.size() - 1, static_cast<std::size_t>(s.size()));
+    std::memcpy(buffer.data(), s.data(), to_copy);
+    buffer[to_copy] = '\0';
   }
 
 } // namespace
@@ -408,9 +441,75 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
   }
 
   if (sky_sphere_source_ == 0) { // Cubemap
-    ImGui::TextColored(
-      ImVec4(1.0F, 0.7F, 0.0F, 1.0F), "Cubemap source not yet implemented");
-    ImGui::TextDisabled("Use Solid Color for now");
+    const auto key = sky->GetCubemapResource();
+    ImGui::Text(
+      "Cubemap ResourceKey: %llu", static_cast<unsigned long long>(key.get()));
+    if (key.IsPlaceholder()) {
+      ImGui::TextColored(
+        ImVec4(1.0F, 0.7F, 0.0F, 1.0F), "No cubemap bound (placeholder)");
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Text("Skybox Loader");
+    ImGui::TextDisabled(
+      "Loads an image from disk, cooks it to a cubemap, and binds it.");
+
+    ImGui::PushItemWidth(280);
+    ImGui::InputText("Path##Skybox", skybox_path_.data(), skybox_path_.size());
+    ImGui::PopItemWidth();
+
+#if defined(OXYGEN_WINDOWS)
+    ImGui::SameLine();
+    if (ImGui::Button("Browse...##Skybox")) {
+      auto picker_config = MakeSkyboxFilePickerConfig();
+
+      // If the user already entered a path, use its parent as the starting dir.
+      const std::filesystem::path current_path(
+        std::string(skybox_path_.data()));
+      if (!current_path.empty() && current_path.has_parent_path()) {
+        picker_config.initial_directory = current_path.parent_path();
+      }
+
+      if (const auto selected_path = ShowFilePicker(picker_config)) {
+        CopyPathToBuffer(*selected_path,
+          std::span<char>(skybox_path_.data(), skybox_path_.size()));
+      }
+    }
+#endif
+
+    const char* layouts[] = { "Equirectangular", "Horizontal Cross",
+      "Vertical Cross", "Horizontal Strip", "Vertical Strip" };
+    ImGui::Combo("Layout##Skybox", &skybox_layout_idx_, layouts, 5);
+
+    const char* formats[] = { "RGBA8", "RGBA16F", "RGBA32F", "BC7" };
+    ImGui::Combo("Output##Skybox", &skybox_output_format_idx_, formats, 4);
+
+    ImGui::DragInt("Face Size##Skybox", &skybox_face_size_, 16, 16, 4096);
+    ImGui::Checkbox("Flip Y##Skybox", &skybox_flip_y_);
+
+    const bool output_is_ldr
+      = (skybox_output_format_idx_ == 0) || (skybox_output_format_idx_ == 3);
+    if (output_is_ldr) {
+      ImGui::Checkbox("HDR->LDR Tonemap##Skybox", &skybox_tonemap_hdr_to_ldr_);
+      ImGui::DragFloat("HDR Exposure (EV)##Skybox", &skybox_hdr_exposure_ev_,
+        0.1F, -16.0F, 16.0F, "%.2f");
+    }
+
+    if (ImGui::Button("Load Skybox##Skybox")) {
+      skybox_load_requested_ = true;
+      skybox_status_message_.clear();
+    }
+    ImGui::SameLine();
+    if (!skybox_status_message_.empty()) {
+      ImGui::Text("%s", skybox_status_message_.c_str());
+    }
+
+    if (skybox_last_face_size_ > 0) {
+      ImGui::Text("Last face size: %d", skybox_last_face_size_);
+      ImGui::Text("Last ResourceKey: %llu",
+        static_cast<unsigned long long>(skybox_last_resource_key_.get()));
+    }
   } else { // Solid color
     if (ImGui::ColorEdit3("Color##SkySphere", &sky_sphere_solid_color_.x)) {
       MarkDirty();
@@ -437,10 +536,9 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
   auto* light
     = env ? env->TryGetSystem<scene::environment::SkyLight>().get() : nullptr;
 
-  // IBL requires a cubemap which is not yet implemented
-  ImGui::TextColored(ImVec4(1.0F, 0.5F, 0.0F, 1.0F), "IBL not yet implemented");
   ImGui::TextDisabled(
-    "Requires sky capture or cubemap loading (not available)");
+    "IBL is active when SkyLight is enabled and a cubemap is available\n"
+    "(SkyLight specified cubemap, or SkySphere cubemap).");
   ImGui::Spacing();
 
   if (!light) {
@@ -468,7 +566,19 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
     MarkDirty();
   }
 
-  ImGui::TextDisabled("(Settings saved but have no effect yet)");
+  if (sky_light_source_ == 1) {
+    const auto key = light->GetCubemapResource();
+    ImGui::Text(
+      "Cubemap ResourceKey: %llu", static_cast<unsigned long long>(key.get()));
+    if (key.IsPlaceholder()) {
+      ImGui::TextColored(ImVec4(1.0F, 0.7F, 0.0F, 1.0F),
+        "No SkyLight cubemap bound; SkySphere cubemap may still drive IBL");
+    }
+  } else {
+    ImGui::TextDisabled(
+      "Captured-scene mode may not provide a cubemap yet; SkySphere cubemap\n"
+      "can still drive IBL if present.");
+  }
 
   if (ImGui::ColorEdit3("Tint##SkyLight", &sky_light_tint_.x)) {
     MarkDirty();
@@ -491,6 +601,47 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
 
   ImGui::PopItemWidth();
   ImGui::Unindent();
+}
+
+auto EnvironmentDebugPanel::TakeSkyboxLoadRequest()
+  -> std::optional<SkyboxLoadRequest>
+{
+  if (!skybox_load_requested_) {
+    return std::nullopt;
+  }
+  skybox_load_requested_ = false;
+
+  SkyboxLoadRequest req;
+  req.path = std::string(skybox_path_.data());
+  req.options.layout
+    = static_cast<SkyboxManager::Layout>(std::clamp(skybox_layout_idx_, 0, 4));
+  req.options.output_format = static_cast<SkyboxManager::OutputFormat>(
+    std::clamp(skybox_output_format_idx_, 0, 3));
+  req.options.cube_face_size = std::clamp(skybox_face_size_, 16, 4096);
+  req.options.flip_y = skybox_flip_y_;
+  req.options.tonemap_hdr_to_ldr = skybox_tonemap_hdr_to_ldr_;
+  req.options.hdr_exposure_ev = skybox_hdr_exposure_ev_;
+  return req;
+}
+
+void EnvironmentDebugPanel::SetSkyboxLoadStatus(std::string_view status,
+  int face_size, oxygen::content::ResourceKey resource_key)
+{
+  skybox_status_message_ = std::string(status);
+  skybox_last_face_size_ = face_size;
+  skybox_last_resource_key_ = resource_key;
+  needs_sync_ = true;
+}
+
+auto EnvironmentDebugPanel::GetSkyLightParams() const
+  -> SkyboxManager::SkyLightParams
+{
+  return SkyboxManager::SkyLightParams {
+    .intensity = sky_light_intensity_,
+    .diffuse_intensity = sky_light_diffuse_,
+    .specular_intensity = sky_light_specular_,
+    .tint_rgb = sky_light_tint_,
+  };
 }
 
 // NOTE: DrawFogSection removed - use Aerial Perspective from SkyAtmosphere.

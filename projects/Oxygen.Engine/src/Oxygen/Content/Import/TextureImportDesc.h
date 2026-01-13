@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <stop_token>
 #include <string>
 
 #include <Oxygen/Content/Import/TextureImportError.h>
@@ -149,6 +150,12 @@ struct TextureImportDesc {
 
   //! BC7 compression quality tier (kNone to disable).
   Bc7Quality bc7_quality = Bc7Quality::kNone;
+
+  //=== Cancellation ===-----------------------------------------------------//
+
+  //! Cooperative cancellation token.
+  /*! Long-running cook stages should check and abort promptly. */
+  std::stop_token stop_token {};
 
   //=== HDR Handling ===------------------------------------------------------//
 

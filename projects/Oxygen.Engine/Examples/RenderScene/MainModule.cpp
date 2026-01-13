@@ -285,8 +285,10 @@ private:
         sky_sphere.SetSource(scene::environment::SkySphereSource::kSolidColor);
       } else {
         LOG_F(WARNING,
-          "SceneLoader: SkySphere cubemap source is not supported in this "
-          "example yet; forcing solid color");
+          "SceneLoader: SkySphere cubemap source requested, but scene-authored "
+          "cubemap AssetKey resolution is not implemented in this example. "
+          "Keeping solid color; use the Environment panel Skybox Loader to "
+          "bind a cubemap at runtime.");
         sky_sphere.SetSource(scene::environment::SkySphereSource::kSolidColor);
       }
 
@@ -326,7 +328,14 @@ private:
       auto& sky_light = environment->AddSystem<scene::environment::SkyLight>();
       sky_light.SetSource(static_cast<scene::environment::SkyLightSource>(
         sky_light_record->source));
-      // Note: cubemap asset loading not implemented in this example yet
+      if (sky_light.GetSource()
+        == scene::environment::SkyLightSource::kSpecifiedCubemap) {
+        LOG_F(INFO,
+          "SceneLoader: SkyLight specifies a cubemap AssetKey, but this "
+          "example "
+          "does not yet resolve it to a ResourceKey. Use the Environment panel "
+          "Skybox Loader to bind a cubemap at runtime.");
+      }
       sky_light.SetIntensity(sky_light_record->intensity);
       sky_light.SetTintRgb(oxygen::Vec3 { sky_light_record->tint_rgb[0],
         sky_light_record->tint_rgb[1], sky_light_record->tint_rgb[2] });
@@ -871,6 +880,7 @@ auto MainModule::OnAttached(
 
 void MainModule::OnShutdown() noexcept
 {
+  content_loader_panel_.GetFbxPanel().CancelImport();
   scene_.reset();
   scene_loader_.reset();
   active_camera_ = {};
@@ -927,6 +937,19 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
   if (!scene_) {
     scene_ = std::make_shared<scene::Scene>("RenderScene");
   }
+
+  // Keep the skybox helper bound to the current scene.
+  if (skybox_manager_scene_ != scene_.get()) {
+    auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+    if (asset_loader) {
+      skybox_manager_ = std::make_unique<SkyboxManager>(
+        observer_ptr { asset_loader.get() }, scene_);
+      skybox_manager_scene_ = scene_.get();
+    } else {
+      skybox_manager_.reset();
+      skybox_manager_scene_ = nullptr;
+    }
+  }
   context.SetScene(observer_ptr { scene_.get() });
 }
 
@@ -972,6 +995,23 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 
   // Panel updates happen here before scene loading
   UpdateUIPanels();
+
+  // Handle skybox load requests from the environment debug panel.
+  if (scene_ && skybox_manager_) {
+    if (auto req = environment_debug_panel_.TakeSkyboxLoadRequest()) {
+      auto result
+        = co_await skybox_manager_->LoadSkyboxAsync(req->path, req->options);
+
+      environment_debug_panel_.SetSkyboxLoadStatus(
+        result.status_message, result.face_size, result.resource_key);
+
+      if (result.success) {
+        skybox_manager_->ApplyToScene(
+          environment_debug_panel_.GetSkyLightParams());
+        environment_debug_panel_.RequestResync();
+      }
+    }
+  }
 
   if (pending_load_scene_) {
     pending_load_scene_ = false;
@@ -1445,6 +1485,11 @@ auto MainModule::InitializeUIPanels() -> void
   loader_config.on_scene_load_requested = [this](const data::AssetKey& key) {
     pending_scene_key_ = key;
     pending_load_scene_ = true;
+  };
+  loader_config.on_dump_texture_memory = [this](const std::size_t top_n) {
+    if (auto* renderer = ResolveRenderer()) {
+      renderer->DumpEstimatedTextureMemory(top_n);
+    }
   };
   loader_config.on_pak_mounted = [this](const std::filesystem::path& path) {
     auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
