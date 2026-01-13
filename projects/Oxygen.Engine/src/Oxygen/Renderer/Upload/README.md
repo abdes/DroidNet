@@ -1,262 +1,356 @@
 # Upload Module
 
-The Upload module provides a unified, deterministic path to stage and submit
-buffer/texture uploads to the GPU. It centralizes footprint planning, staging
-allocation, command recording, submission, and completion tracking behind a
-small, renderer-internal, coroutine-friendly API.
+Unified CPU-to-GPU data transfer subsystem for the Oxygen renderer, providing deterministic staging allocation, optimal batch planning, and fence-based completion tracking with coroutine support.
 
-## Quick tour (what it does)
+## Architecture Overview
 
-- Plans copy footprints/regions: `UploadPlanner` for buffers, 2D/3D/cube
-  textures.
-- Allocates CPU-visible staging: `StagingProvider` implementations return
-  persistently mapped regions (or mapped-on-demand) for filling.
-  - Implementations of `StagingProvider` return persistently mapped regions
-    (or mapped-on-demand) for filling. The repository provides a
-    `RingBufferStaging` implementation (partitioned per frame). Other
-    provider strategies (single-buffer, pinned mappings, etc.) may be
-    implemented by clients as needed.
-- Records and submits copy commands on a transfer queue when available, else
-  the graphics queue.
-- Tracks completion and basic stats via GPU fence values: `UploadTracker`.
+The Upload module solves the inherent complexity of CPU-to-GPU data transfer by decoupling **memory management** (staging providers), **transfer optimization** (planners), **execution** (coordinators), and **completion tracking** (trackers). This separation enables flexible staging strategies while maintaining optimal batch coalescing and zero-copy inline writes.
 
-- Uses `UploadPolicy` for alignment constants and batching scaffolding.
+```mermaid
+graph TB
+    Client[Client Code] --> |Submit Requests| Coordinator[UploadCoordinator]
+    Coordinator --> |Plan| Planner[UploadPlanner]
+    Coordinator --> |Allocate| Provider[StagingProvider]
+    Coordinator --> |Record| Queue[Transfer/Graphics Queue]
+    Coordinator --> |Track| Tracker[UploadTracker]
 
-End-to-end flow: Submit → Plan → Stage/Fill → Record copy → Submit → Register
-ticket → RetireCompleted polls fence and notifies providers for recycling.
+    Planner --> |Optimize| Planner
+    Provider --> |Recycle| Provider
+    Queue --> |Signal| Fence[GPU Fence]
+    Fence --> |Notify| Tracker
+    Tracker --> |Retire| Provider
 
-## Key components and responsibilities
-
-- UploadCoordinator
-  - Orchestrates planning, staging, command recording, submission, and
-    completion tracking.
-  - Source: `UploadCoordinator.h/.cpp`.
-- UploadPlanner
-  - Computes buffer coalescing and texture subresource regions using
-    `UploadPolicy` row/placement alignment and `FormatInfo`.
-  - Merges contiguous regions and groups by destination buffer, minimizing copy
-    operations and state transitions.
-  - Source: `UploadPlanner.h/.cpp`.
-- StagingProvider (abstract)
-  - Contract for CPU-visible staging allocations; returns an `Allocation`
-    with buffer, offset, size, and pointer.
-  - Can recycle in `RetireCompleted(fence)` and receive per-frame ticks via
-    `OnFrameStart(Slot)`.
-  - Source: `StagingProvider.h`.
-  - Implementations:
-    - RingBufferStaging: one persistently mapped upload buffer, partitioned by
-      frames-in-flight; bump-allocates per active partition; alignment is
-      required (power-of-two). Source: `RingBufferStaging.h/.cpp`.
-- UploadTracker
-  - Fence-based ticketing with blocking and coroutine-friendly waits;
-    aggregates `UploadStats`.
-  - Frame-slot-based cleanup: discards all entries created for the same frame
-    slot than the current one, but ina previous frame cycle.
-  - Source: `UploadTracker.h/.cpp`, `UploadDiagnostics.h`.
-- UploadPolicy
-  - Policy constants: batch limits, row/placement/buffer copy alignments,
-    and time-slice knobs. Source: `UploadPolicy.h/.cpp`.
-
-## Public API at a glance
-
-See `UploadCoordinator.h` for complete signatures. Highlights:
-
-- Submissions (provider-aware):
-- `Submit(const UploadRequest&, StagingProvider&)` → `std::expected<UploadTicket, UploadError>`
-- `SubmitMany(std::span<const UploadRequest>, StagingProvider&)` → `std::expected<std::vector<UploadTicket>, UploadError>`
-- Note: callers must provide a `StagingProvider` instance (for example
-    one created by `UploadCoordinator::CreateRingBufferStaging`).
-- Waiting and results:
-  - `IsComplete(UploadTicket)`, `TryGetResult(UploadTicket)`
-  - `Await(UploadTicket)`, `AwaitAll(span<UploadTicket>)`
-- Async helpers (OxCo):
-- `SubmitAsync(...)`, `SubmitManyAsync(...)`
-- `AwaitAsync(UploadTicket)`, `AwaitAllAsync(span<UploadTicket>)`
-- Frame lifecycle and control:
-- `OnFrameStart(renderer::RendererTag, frame::Slot)` — call this at the
-    start of each frame so the coordinator can advance tracker and notify
-    registered `StagingProvider`s (e.g., `RingBufferStaging`).
-- `Cancel(UploadTicket)` best-effort cancellation.
-
-## Usage examples
-
-### Synchronous buffer upload (default provider)
-
-```cpp
-std::vector<std::byte> data = /* ... */;
-
-// Create a staging provider suitable for your renderer; choose partitions
-// (frames in flight) and alignment based on element stride.
-auto provider = upload.CreateRingBufferStaging(frame::SlotCount{3}, 256u);
-
-oxygen::engine::upload::UploadRequest req {
-  .kind = oxygen::engine::upload::UploadKind::kBuffer,
-  .debug_name = "MyBufferUpload",
-  .desc = oxygen::engine::upload::UploadBufferDesc{
-    .dst = my_device_buffer,
-    .size_bytes = static_cast<uint64_t>(data.size()),
-    .dst_offset = 0,
-  },
-  .data = oxygen::engine::upload::UploadDataView{ std::span<const std::byte>(data) },
-};
-
-auto ticket_exp = upload.Submit(req, *provider);
-if (!ticket_exp) {
-  // handle submit error (UploadError)
-}
-auto ticket = *ticket_exp;
-auto result_exp = upload.Await(ticket);
-if (!result_exp) {
-  // handle await error (UploadError)
-}
-auto result = *result_exp;
+    style Coordinator fill:#4a9eff
+    style Planner fill:#7fba00
+    style Provider fill:#f7941d
+    style Tracker fill:#00a4ef
 ```
 
-### Provider-aware batch of buffers (coalesced staging)
+### Design Philosophy
 
-```cpp
-using namespace oxygen;
-using namespace oxygen::engine::upload;
+The module embodies three key principles:
 
-// Create a ring-buffer staging provider via the coordinator. Choose an
-// appropriate partitions count and alignment for your renderer's
-// frames-in-flight and element stride.
-auto provider = upload.CreateRingBufferStaging(frame::SlotCount{3}, 256u);
+1. **Explicit Staging Control**: No hidden allocations—callers provide `StagingProvider` instances, enabling fine-grained control over memory strategy (ring buffers, persistent mappings, per-queue staging).
 
-std::array<UploadRequest, 2> reqs = {
-  UploadRequest{
-    .kind = UploadKind::kBuffer,
-    .debug_name = "Mesh.IB",
-    .desc = UploadBufferDesc{ .dst = index_buffer, .size_bytes = ib_bytes, .dst_offset = 0 },
-    .data = UploadDataView{ ib_view },
-  },
-  UploadRequest{
-    .kind = UploadKind::kBuffer,
-    .debug_name = "Mesh.VB",
-    .desc = UploadBufferDesc{ .dst = vertex_buffer, .size_bytes = vb_bytes, .dst_offset = 0 },
-    .data = UploadDataView{ vb_view },
-  },
-};
+2. **Batch Optimization**: `UploadPlanner` coalesces adjacent buffer copies targeting the same destination, reducing API overhead and minimizing resource state transitions.
 
-auto tickets_exp = upload.SubmitMany(reqs, *provider);
-if (!tickets_exp) {
-  // handle submit-many error
-}
-auto tickets = *tickets_exp;
-auto results_exp = upload.AwaitAll(tickets);
-if (!results_exp) {
-  // handle await-all error
-}
-auto results = *results_exp;
+3. **Coroutine-First Async**: Built atop OxCo's coroutine infrastructure, all waits are non-blocking with deterministic fence-based completion instead of ad-hoc polling.
+
+## Core Components
+
+### UploadCoordinator
+
+Orchestrates the full pipeline: request validation → planning → staging allocation → command recording → submission → ticket registration. Manages both **staging-based transfers** (UploadCoordinator) and **inline writes** (InlineTransfersCoordinator) with unified lifecycle hooks.
+
+**Key Responsibilities:**
+
+- Queue selection (prefers dedicated transfer queue when available)
+- Resource state transitions post-copy (buffers derive from `BufferUsage`, textures default to `kCommon`)
+- Frame-driven lifecycle via `OnFrameStart(slot)` to advance trackers and notify providers
+- Shutdown coordination: `Shutdown()` waits for in-flight uploads before renderer teardown
+
+**Why Two Coordinators?**
+
+- `UploadCoordinator`: Handles **staging + copy** pattern (allocate → memcpy → CopyBufferRegion)
+- `InlineTransfersCoordinator`: Handles **direct writes** to upload heap memory read by GPU over PCIe (used by `TransientStructuredBuffer`)
+
+### UploadPlanner
+
+Optimizes copy operations through three-stage buffer planning and texture subresource footprint calculation:
+
+```mermaid
+graph LR
+    A[Input Requests] --> B[Stage 1: Validate & Pack]
+    B --> C[Stage 2: Sort by Destination]
+    C --> D[Stage 3: Coalesce Contiguous]
+    D --> E[BufferUploadPlan]
+
+    F[Texture Requests] --> G[Compute Layouts]
+    G --> H[Apply Alignment]
+    H --> I[TextureUploadPlan]
+
+    style B fill:#7fba00
+    style D fill:#7fba00
+    style G fill:#7fba00
 ```
 
-### Texture2D upload with subresource regions
+**Buffer Optimization:**
+
+- Filters invalid requests (null dst, zero size)
+- Sorts by destination buffer handle for batching
+- Merges contiguous regions when both `dst_offset` and `src_offset` align
+- Assigns aligned `src_offset` per policy (`buffer_copy_alignment`, typically 4 bytes)
+
+**Texture Footprint:**
+
+- Computes row/slice pitch from `FormatInfo` (bits-per-pixel, block compression)
+- Applies D3D12/Vulkan alignment (`row_pitch_alignment=256`, `placement_alignment=512`)
+- Outputs `TextureUploadRegion` with byte offsets for `CopyBufferToTexture`
+
+### StagingProvider (Abstract)
+
+Contract for CPU-visible memory providers. The repository provides `RingBufferStaging`; callers can implement custom strategies (e.g., pinned mappings, CUDA interop buffers).
+
+**Lifecycle Hooks:**
+
+- `Allocate(SizeBytes)` → returns `Allocation` with mapped pointer
+- `RetireCompleted(FenceValue)` → enables recycling of GPU-finished allocations
+- `OnFrameStart(Slot)` → advance frame-in-flight partitions
+
+**Allocation Contract:**
+
+- Returned pointer must remain valid until GPU signals completion fence
+- Destructor unmaps buffer if still held (defensive; coordinator typically moves ownership)
+- Alignment is provider-specific (RingBuffer requires power-of-two alignment matching element stride)
+
+### UploadTracker
+
+Fence-based completion tracking with both blocking and coroutine-friendly waits. Tracks tickets by monotonic `FenceValue`, aggregates per-upload stats (bytes, debug names), and implements frame-slot cleanup to prevent stale entry accumulation.
+
+**Key Features:**
+
+- `Register(FenceValue, bytes, debug_name)` → returns `UploadTicket`
+- `Await(TicketId)` → blocks until fence reaches ticket's value
+- `AwaitAsync(TicketId)` → co_awaits on `co::Value<FenceValue>` (non-blocking)
+- `OnFrameStart(slot)` → discards entries for recycled slots from previous frame cycles
+- `AwaitAllPending()` → shutdown helper that waits for all outstanding tickets
+
+### UploadPolicy
+
+Encapsulates alignment requirements and queue selection derived from D3D12/Vulkan specs and the Graphics module's `QueuesStrategy`:
 
 ```cpp
-using namespace oxygen::engine::upload;
-
-UploadRequest tex_req {
-  .kind = UploadKind::kTexture2D,
-  .debug_name = "AlbedoAtlas",
-  .desc = UploadTextureDesc{ .dst = my_texture, .width = 0, .height = 0, .depth = 1 },
-  .subresources = { UploadSubresource{ .mip = 0, .array_slice = 0, .x = 0, .y = 0,
-                                       .width = 256, .height = 256 } },
-  .data = UploadDataView{ /* contiguous texel bytes for the planned regions */ },
+struct UploadPolicy {
+  struct AlignmentPolicy {
+    Alignment row_pitch_alignment { 256U };      // D3D12_TEXTURE_DATA_PITCH_ALIGNMENT
+    Alignment placement_alignment { 512U };      // D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT
+    Alignment buffer_copy_alignment { 4U };      // Relaxed (NVIDIA recommends 16)
+  };
+  QueueKey upload_queue_key;  // Determined by Graphics::QueuesStrategy
 };
-
-// Submit with an explicit provider (e.g., ring-buffer staging created above)
-auto tex_ticket_exp = upload.Submit(tex_req, *provider);
-if (!tex_ticket_exp) {
-  // handle submit error
-}
-auto tex_ticket = *tex_ticket_exp;
-auto tex_res_exp = upload.Await(tex_ticket);
-if (!tex_res_exp) {
-  // handle await error
-}
-auto r = *tex_res_exp;
 ```
 
-## How planning and recording work
+**Queue Strategy Integration:** The `upload_queue_key` is obtained from the Graphics module's `QueuesStrategy::KeyFor(QueueRole::kTransfer)`, which may return a dedicated transfer queue, a universal graphics queue, or any strategy-defined queue. The Upload module is agnostic to the strategy—it simply uses the provided key. This design allows strategies like `SharedTransferQueueStrategy` (separate queues) or `SingleQueueStrategy` (universal queue) to be swapped without changing Upload code.
 
-- Buffer batches: `UploadPlanner::PlanBuffers` filters valid requests, sorts by
-  destination, assigns aligned staging offsets, optionally merges contiguous
-  regions, and returns a total staging size plus per-copy regions. The
-  coordinator fills one staging allocation and records multiple `CopyBuffer`
-  calls, minimizing state transitions per destination.
-- Texture2D/3D/Cube: planners compute row/slice pitches from
-  `oxygen::graphics::detail::GetFormatInfo`, apply row/placement alignment from
-  `UploadPolicy`, and output `TextureUploadRegion` entries. The coordinator then
-  records `CopyBufferToTexture` for those regions.
-- State transitions:
-  - Buffers: steady post-copy state derives from `BufferUsage` (index, vertex,
-    constant, storage → shader resource). See `UploadCoordinator.cpp`.
-  - Textures: currently returned to `ResourceStates::kCommon`.
-- Queue selection: prefers transfer queue if available, else graphics. See
-  `ChooseUploadQueueKey` in `UploadCoordinator.cpp`.
+**Design Note:** `buffer_copy_alignment` is deliberately relaxed (4 bytes) to support arbitrary vertex/index layouts. For performance-critical paths, consider 16-byte alignment.
 
-## Providers and lifecycle
+## Direct Write Pattern: TransientStructuredBuffer & AtlasBuffer
 
-- RingBufferStaging
-  - One persistently mapped buffer partitioned by frames-in-flight; bump
-    allocates within the active partition; caller must call
-    `SetActivePartition(Slot)` (or rely on `OnFrameStart`) each frame.
-  - Alignment is required (power-of-two), typically the element stride or 256.
-  - Retire is a no-op; reuse happens when the active partition changes.
-- Allocation lifetime and unmap
-  - `StagingProvider::Allocation` will unmap its buffer in its destructor if it
-    still holds the buffer and it is mapped.
-  - The coordinator moves the staging buffer into a deferred reclaimer that
-    unmaps and releases it after GPU completion, so the allocation’s own unmap
-    is typically bypassed for submissions (by design).
+Two complementary strategies for dynamic GPU-visible data:
 
-## Limitations and future enhancements
+### TransientStructuredBuffer (Direct Write)
 
-The list below reflects current code behavior and intended improvements.
+Wraps `RingBufferStaging` for per-frame upload-heap allocations that the GPU reads directly (no copy commands).
 
-Current limitations
+**When to Use:**
 
-- Queue strategy is a fixed heuristic (prefer transfer, else graphics); not
-  policy- or config-driven yet. Ref: `ChooseUploadQueueKey`.
-- Texture steady states are minimal (post-copy → `kCommon`). No steady-state
-  selection based on usage yet.
-- `RingBufferStaging` requires explicit alignment and external per-frame slot
-  selection; there is no centralized coordinator-driven frame tick beyond
-  `OnFrameStart(Slot)`.
-- Batch splitting by size/region/time is not implemented; large batches are
-  recorded as-is if planned.
-- Producer callback is a simple boolean fill (`bool(span<byte>)`). No
-  streaming/chunked producers yet.
-- Provider-focused unit tests are minimal; most coverage targets planning and
-  coordinator flows. See tests under `../Test/`.
+- High-frequency updates (every frame): transforms, particles, draw commands
+- Latency-sensitive scenarios where copy overhead exceeds PCIe read cost
 
-Planned enhancements
+**Trade-offs:**
 
-- Introduce a policy-driven queue strategy integrated with renderer config and
-  device capabilities.
-- Add per-usage texture steady-state transitions post-copy.
-- Implement batch splitting limits via `UploadPolicy::Batching` and time-slice
-  knobs.
-- Extend producer API to support streaming/chunked writes and offset-based
-  fills.
-- Improve diagnostics: per-frame latency, arena usage, queue/fence labeling,
-  and provider-capacity reporting.
-- Expand test coverage to include provider behaviors and coordinator-provider
-  integration edge cases.
+- ✅ Zero copy overhead, simple synchronization (N-buffering via ring)
+- ⚠️ Slower GPU reads (PCIe vs VRAM), requires alignment = stride
 
-## References (source of truth)
+**Flow:**
 
-- UploadCoordinator: `./UploadCoordinator.h`, `./UploadCoordinator.cpp`
-- UploadPlanner: `./UploadPlanner.h`, `./UploadPlanner.cpp`
-- UploadPolicy: `./UploadPolicy.h`, `./UploadPolicy.cpp`
-- UploadTracker & stats: `./UploadTracker.h`, `./UploadTracker.cpp`,
-  `./UploadDiagnostics.h`
-- Staging contract: `./StagingProvider.h`
-- Providers: `./RingBufferStaging.h` (provided). Other providers may be
-   implemented by the caller and used by passing them to the coordinator's
-   `Submit`/`SubmitMany` APIs.
-  `./RingBufferStaging.cpp`
-- Tests: `../Test/Upload*` (planner, tracker, and coordinator scenarios)
+```mermaid
+sequenceDiagram
+    participant App
+    participant TSB as TransientStructuredBuffer
+    participant Ring as RingBufferStaging
+    participant GPU
 
-Related design notes: see `./upload-enhanced-solution.md` for the step-by-step
-plan and acceptance criteria for future enhancements.
+    App->>TSB: Allocate(count)
+    TSB->>Ring: Allocate(count * stride)
+    Ring-->>TSB: mapped_ptr
+    TSB->>TSB: Create SRV
+    TSB-->>App: {srv, ptr}
+    App->>App: memcpy data to ptr
+    App->>GPU: Bind srv & dispatch
+    GPU->>GPU: Read via PCIe
+```
+
+### AtlasBuffer (Staging + Copy)
+
+Manages device-local structured buffer with stable SRV, using UploadCoordinator for element-level staging copies.
+
+**When to Use:**
+
+- Persistent data with infrequent updates (material properties, static geometry)
+- GPU-read-heavy workloads where VRAM bandwidth justifies copy cost
+
+**Trade-offs:**
+
+- ✅ Fast GPU reads (VRAM), element-level recycling with frame-deferred cleanup
+- ⚠️ Copy overhead, requires explicit `EnsureCapacity()` for growth
+
+**Flow:**
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant Atlas as AtlasBuffer
+    participant Coord as UploadCoordinator
+    participant GPU
+
+    App->>Atlas: Allocate()
+    Atlas-->>App: ElementRef{idx}
+    App->>Atlas: MakeUploadDesc(ref, data)
+    Atlas-->>App: UploadBufferDesc
+    App->>Coord: Submit(desc)
+    Coord->>Coord: Allocate staging
+    Coord->>GPU: CopyBufferRegion
+    App->>Atlas: Release(ref, slot)
+    Atlas->>Atlas: Defer recycle to slot
+```
+
+## API Usage Patterns
+
+### Basic Synchronous Upload
+
+```cpp
+auto provider = coordinator.CreateRingBufferStaging(frame::SlotCount{3}, 256u);
+
+UploadRequest req{
+  .kind = UploadKind::kBuffer,
+  .desc = UploadBufferDesc{.dst = buffer, .size_bytes = size, .dst_offset = 0},
+  .data = UploadDataView{data_span}
+};
+
+auto ticket = coordinator.Submit(req, *provider).value();
+coordinator.Await(ticket).value();  // Blocks until GPU completion
+```
+
+### Batch Upload with Coalescing
+
+```cpp
+std::vector<UploadRequest> requests = /* multiple buffers */;
+auto tickets = coordinator.SubmitMany(requests, *provider).value();
+coordinator.AwaitAll(tickets).value();  // Single fence wait for all
+```
+
+### Coroutine-Friendly Async
+
+```cpp
+co::Task<void> UploadMeshAsync(UploadCoordinator& coordinator, auto& provider) {
+  auto ticket = co_await coordinator.SubmitAsync(req, provider);
+  auto result = co_await coordinator.AwaitAsync(ticket);
+  // Non-blocking, scheduler-friendly wait
+}
+```
+
+### Transient Buffer (Direct Write)
+
+```cpp
+TransientStructuredBuffer transforms{gfx, staging, sizeof(Transform)};
+transforms.OnFrameStart(sequence, slot);
+
+auto alloc = transforms.Allocate(count).value();
+std::memcpy(alloc.mapped_ptr, data, count * sizeof(Transform));
+cmd_list.SetSRV(slot, alloc.srv);  // GPU reads from upload heap
+```
+
+## Frame Lifecycle Integration
+
+```mermaid
+sequenceDiagram
+    participant Renderer
+    participant Coordinator
+    participant Tracker
+    participant Provider
+
+    Renderer->>Coordinator: OnFrameStart(slot)
+    Coordinator->>Tracker: OnFrameStart(slot)
+    Tracker->>Tracker: Cleanup slot entries
+    Coordinator->>Provider: OnFrameStart(slot)
+    Provider->>Provider: Advance partition
+
+    Note over Renderer: Render frame...
+
+    Renderer->>Coordinator: Submit(requests)
+    Coordinator->>Tracker: Register(fence)
+
+    Note over GPU: Execute transfers...
+
+    GPU->>Tracker: Signal fence
+    Tracker->>Provider: RetireCompleted(fence)
+```
+
+**Critical Invariant:** Always call `OnFrameStart(slot)` before submitting uploads for that frame. Providers like `RingBufferStaging` depend on this to advance partitions and prevent overwrites.
+
+## Architecture Rationale
+
+### Why Separate Providers?
+
+**Problem:** Different use cases demand conflicting strategies:
+
+- Scene loading: large sequential allocations, infrequent
+- Per-frame data: small allocations, high churn, N-buffering required
+
+**Solution:** Abstract `StagingProvider` allows specialized implementations without coordinator changes. RingBuffer handles per-frame; future: PooledStaging for async loading.
+
+### Why Two-Stage Planning?
+
+**Problem:** Naive per-request copies cause:
+
+- Excessive `CopyBufferRegion` calls (API overhead)
+- Redundant resource state transitions
+- Fragmented staging allocations
+
+**Solution:** `UploadPlanner` sorts + coalesces → single staging alloc + minimal copies per destination.
+
+### Why Fence-Based Tracking?
+
+**Problem:** Polling readback buffers or query heaps for completion is error-prone and non-deterministic.
+
+**Solution:** GPU fence values provide:
+
+- Monotonic ordering (ticket A < B ⟹ A completes before B)
+- Coroutine-friendly via `co::Value<FenceValue>` (non-blocking waits)
+- Frame-slot cleanup prevents stale entry buildup
+
+### Why Delegate Queue Strategy to Graphics Module?
+
+**Problem:** Upload needs shouldn't dictate queue topology—different platforms and workloads benefit from different strategies (single universal queue vs dedicated transfer).
+
+**Solution:** Upload module receives `QueueKey` from `Graphics::QueuesStrategy`, enabling strategies like:
+
+- `SingleQueueStrategy`: All work on one universal graphics queue (mobile, integrated GPUs)
+- `SharedTransferQueueStrategy`: Dedicated async transfer queue (discrete GPUs, streaming workloads)
+- Custom strategies: Per-workload queues, priority-based selection
+
+The Upload module remains strategy-agnostic—it simply records to the provided queue key.
+
+## Known Limitations & Future Work
+
+### Current Constraints
+
+1. **Texture States:** Post-copy textures default to `kCommon`. No usage-derived steady-state transitions yet.
+
+2. **Batch Splitting:** Large batches recorded as-is; no size/time-slice enforcement per `UploadPolicy::Batching` limits.
+
+3. **Producer API:** Boolean fill callback; no streaming/chunked writes for oversized textures.
+
+### Planned Enhancements
+
+- Per-usage texture steady-state transitions (e.g., `ShaderResource` for samplers)
+- Batch splitting with time-slice budgets for frame-time-sensitive paths
+- Streaming producer API for partial texture uploads
+- Enhanced diagnostics: per-frame latency histograms, arena fragmentation metrics
+
+## References
+
+| Component | Header | Implementation |
+| --------- | ------ | -------------- |
+| Coordinator (Staging) | [UploadCoordinator.h](UploadCoordinator.h) | [UploadCoordinator.cpp](UploadCoordinator.cpp) |
+| Coordinator (Inline) | [InlineTransfersCoordinator.h](InlineTransfersCoordinator.h) | [InlineTransfersCoordinator.cpp](InlineTransfersCoordinator.cpp) |
+| Planner | [UploadPlanner.h](UploadPlanner.h) | [UploadPlanner.cpp](UploadPlanner.cpp) |
+| Tracker | [UploadTracker.h](UploadTracker.h) | [UploadTracker.cpp](UploadTracker.cpp) |
+| Provider Contract | [StagingProvider.h](StagingProvider.h) | [StagingProvider.cpp](StagingProvider.cpp) |
+| Ring Buffer | [RingBufferStaging.h](RingBufferStaging.h) | [RingBufferStaging.cpp](RingBufferStaging.cpp) |
+| Transient Buffer | [TransientStructuredBuffer.h](TransientStructuredBuffer.h) | [TransientStructuredBuffer.cpp](TransientStructuredBuffer.cpp) |
+| Atlas Buffer | [AtlasBuffer.h](AtlasBuffer.h) | [AtlasBuffer.cpp](AtlasBuffer.cpp) |
+| Policy | [UploadPolicy.h](UploadPolicy.h) | [UploadPolicy.cpp](UploadPolicy.cpp) |
+| Types | [Types.h](Types.h) | - |
+| Errors | [Errors.h](Errors.h) | [Errors.cpp](Errors.cpp) |
