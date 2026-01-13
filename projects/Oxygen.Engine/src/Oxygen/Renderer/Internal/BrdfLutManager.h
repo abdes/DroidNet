@@ -47,6 +47,14 @@ inline constexpr BrdfLutParams kDefaultBrdfLutParams { 256u, 128u };
 struct LutResult {
   std::shared_ptr<graphics::Texture> texture;
   ShaderVisibleIndex index { kInvalidShaderVisibleIndex };
+
+  static constexpr auto Err() noexcept
+  {
+    return LutResult {
+      .texture = nullptr,
+      .index = ShaderVisibleIndex { kInvalidShaderVisibleIndex },
+    };
+  }
 };
 
 class IBrdfLutProvider {
@@ -114,8 +122,9 @@ private:
     -> std::shared_ptr<graphics::Texture>;
   [[nodiscard]] auto UploadTexture(const LutKey& key,
     graphics::Texture& texture) -> std::optional<upload::UploadTicket>;
-  [[nodiscard]] auto UploadTexture(const LutKey& key, graphics::Texture& texture,
-    std::span<const std::byte> data) -> std::optional<upload::UploadTicket>;
+  [[nodiscard]] auto UploadTexture(const LutKey& key,
+    graphics::Texture& texture, std::span<const std::byte> data)
+    -> std::optional<upload::UploadTicket>;
 
   struct SrvAllocation {
     graphics::NativeView view;
