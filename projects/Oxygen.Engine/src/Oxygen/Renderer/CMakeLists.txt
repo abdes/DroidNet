@@ -58,7 +58,6 @@ set(
   "Passes/GraphicsRenderPass.h"
   "Passes/IblComputePass.h"
   "Passes/LightCullingPass.h"
-  "Passes/LightCullingData.h"
   "Passes/RenderPass.h"
   "Passes/ShaderPass.h"
   "Passes/SkyAtmosphereLutComputePass.h"

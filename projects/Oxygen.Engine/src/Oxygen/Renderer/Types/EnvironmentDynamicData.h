@@ -12,7 +12,6 @@
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Renderer/Types/SceneConstants.h>
-#include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine {
 
@@ -50,6 +49,36 @@ constexpr auto HasFlag(uint32_t flags, AtmosphereFlags flag) noexcept -> bool
 {
   return (flags & static_cast<uint32_t>(flag)) != 0;
 }
+
+struct ClusterGridSlot {
+  ShaderVisibleIndex value;
+  explicit constexpr ClusterGridSlot(
+    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+    : value(v)
+  {
+  }
+  constexpr auto IsValid() const noexcept
+  {
+    return value != kInvalidShaderVisibleIndex;
+  }
+  constexpr auto operator<=>(const ClusterGridSlot&) const = default;
+  constexpr operator uint32_t() const noexcept { return value.get(); }
+};
+
+struct ClusterIndexListSlot {
+  ShaderVisibleIndex value;
+  explicit constexpr ClusterIndexListSlot(
+    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+    : value(v)
+  {
+  }
+  constexpr auto IsValid() const noexcept
+  {
+    return value != kInvalidShaderVisibleIndex;
+  }
+  constexpr auto operator<=>(const ClusterIndexListSlot&) const = default;
+  constexpr operator uint32_t() const noexcept { return value.get(); }
+};
 
 //! Per-frame environment payload consumed directly by shaders.
 /*!
@@ -94,8 +123,8 @@ struct alignas(16) EnvironmentDynamicData {
   float exposure { 1.0F };
 
   // Cluster grid bindless slots (from LightCullingPass)
-  uint32_t bindless_cluster_grid_slot { kInvalidDescriptorSlot };
-  uint32_t bindless_cluster_index_list_slot { kInvalidDescriptorSlot };
+  ClusterGridSlot bindless_cluster_grid_slot {};
+  ClusterIndexListSlot bindless_cluster_index_list_slot {};
 
   // Padding to complete the first 16-byte register.
   uint32_t _pad0 { 0u };
@@ -168,5 +197,16 @@ static_assert(offsetof(EnvironmentDynamicData, cluster_dim_x) == 16,
 static_assert(
   offsetof(EnvironmentDynamicData, sun_direction_ws_illuminance) == 64,
   "EnvironmentDynamicData layout mismatch: sun block offset");
+
+//! Simple POD to aggregate light-culling related binding/configuration data
+//! passed from the culling pass into the environment dynamic data manager.
+struct LightCullingData {
+  ClusterGridSlot bindless_cluster_grid_slot {};
+  ClusterIndexListSlot bindless_cluster_index_list_slot {};
+  uint32_t cluster_dim_x { 0 };
+  uint32_t cluster_dim_y { 0 };
+  uint32_t cluster_dim_z { 0 };
+  uint32_t tile_size_px { 16 };
+};
 
 } // namespace oxygen::engine

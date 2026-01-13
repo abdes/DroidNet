@@ -14,7 +14,6 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Renderer/Passes/RenderPass.h>
-#include <Oxygen/Renderer/Types/SceneConstants.h>
 
 namespace oxygen::engine::internal {
 class IblManager;
@@ -68,8 +67,8 @@ public:
 private:
   //! Must match HLSL `IblFilteringPassConstants` in Renderer/IblFiltering.hlsl.
   struct alignas(16) IblFilteringPassConstants {
-    uint32_t source_cubemap_slot { kInvalidDescriptorSlot };
-    uint32_t target_uav_slot { kInvalidDescriptorSlot };
+    ShaderVisibleIndex source_cubemap_slot { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex target_uav_slot { kInvalidShaderVisibleIndex };
     float roughness { 0.0F };
     uint32_t face_size { 0 };
   };
