@@ -354,11 +354,11 @@ auto GeometryUploader::Impl::GetOrAllocate(
 
       // Do not render with stale SRVs; publish only after new upload completes.
       if (entry.pending_vertex_srv_index == kInvalidShaderVisibleIndex
-        && entry.vertex_srv_index != kInvalidShaderVisibleIndex) {
+        && entry.vertex_srv_index.IsValid()) {
         entry.pending_vertex_srv_index = entry.vertex_srv_index;
       }
       if (entry.pending_index_srv_index == kInvalidShaderVisibleIndex
-        && entry.index_srv_index != kInvalidShaderVisibleIndex) {
+        && entry.index_srv_index.IsValid()) {
         entry.pending_index_srv_index = entry.index_srv_index;
       }
       entry.vertex_srv_index = kInvalidShaderVisibleIndex;
@@ -475,11 +475,11 @@ auto GeometryUploader::Impl::Update(engine::sceneprep::GeometryHandle handle,
   // Hot-reload semantics: invalidate published SRVs and only republish once the
   // new data upload completes.
   if (entry.pending_vertex_srv_index == kInvalidShaderVisibleIndex
-    && entry.vertex_srv_index != kInvalidShaderVisibleIndex) {
+    && entry.vertex_srv_index.IsValid()) {
     entry.pending_vertex_srv_index = entry.vertex_srv_index;
   }
   if (entry.pending_index_srv_index == kInvalidShaderVisibleIndex
-    && entry.index_srv_index != kInvalidShaderVisibleIndex) {
+    && entry.index_srv_index.IsValid()) {
     entry.pending_index_srv_index = entry.index_srv_index;
   }
   entry.vertex_srv_index = kInvalidShaderVisibleIndex;
@@ -605,12 +605,11 @@ auto GeometryUploader::Impl::UploadBuffers() -> void
       }
     }
 
-    const bool vertex_pending_or_ready
-      = entry.vertex_srv_index != kInvalidShaderVisibleIndex
+    const bool vertex_pending_or_ready = entry.vertex_srv_index.IsValid()
       || entry.pending_vertex_ticket.has_value();
     const bool index_required = entry.mesh->IsIndexed();
     const bool index_pending_or_ready = !index_required
-      || entry.index_srv_index != kInvalidShaderVisibleIndex
+      || entry.index_srv_index.IsValid()
       || entry.pending_index_ticket.has_value();
 
     // Keep dirty until all required uploads are at least pending. This ensures
@@ -813,7 +812,7 @@ auto GeometryUploader::Impl::RetireCompletedUploads() -> void
         entry.is_dirty = true;
       } else {
         // Only publish indices after data is known good.
-        if (pending != kInvalidShaderVisibleIndex) {
+        if (pending.IsValid()) {
           published = pending;
         }
         DLOG_F(2, "GeometryUploader: Upload completed successfully ({} bytes)",
@@ -843,10 +842,9 @@ auto GeometryUploader::Impl::RetireCompletedUploads() -> void
     }
 
     // Dirty until all required resources are published.
-    const bool vertex_ready
-      = entry.vertex_srv_index != kInvalidShaderVisibleIndex;
-    const bool index_ready = !entry.mesh->IsIndexed()
-      || entry.index_srv_index != kInvalidShaderVisibleIndex;
+    const bool vertex_ready = entry.vertex_srv_index.IsValid();
+    const bool index_ready
+      = !entry.mesh->IsIndexed() || entry.index_srv_index.IsValid();
     entry.is_dirty = !(vertex_ready && index_ready);
   }
 

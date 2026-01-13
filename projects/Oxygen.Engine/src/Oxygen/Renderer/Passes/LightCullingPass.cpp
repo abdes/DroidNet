@@ -12,7 +12,6 @@
 
 #include <fmt/format.h>
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_inverse.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.h>
@@ -30,15 +29,13 @@
 #include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
-#include <Oxygen/Renderer/Passes/LightCullingData.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/EnvironmentDynamicData.h>
-#include <Oxygen/Scene/Environment/PostProcessVolume.h>
-#include <Oxygen/Scene/Environment/SceneEnvironment.h>
-#include <Oxygen/Scene/Scene.h>
 
+using oxygen::kInvalidShaderVisibleIndex;
+using oxygen::ShaderVisibleIndex;
 using oxygen::engine::LightCullingPass;
 using oxygen::engine::LightCullingPassConfig;
 using oxygen::graphics::Buffer;
@@ -54,10 +51,10 @@ namespace {
 */
 struct alignas(16) LightCullingPassConstants {
   // Resources (heap indices)
-  uint32_t depth_texture_index { oxygen::engine::kInvalidDescriptorSlot };
-  uint32_t light_buffer_index { oxygen::engine::kInvalidDescriptorSlot };
-  uint32_t light_list_uav_index { oxygen::engine::kInvalidDescriptorSlot };
-  uint32_t light_count_uav_index { oxygen::engine::kInvalidDescriptorSlot };
+  ShaderVisibleIndex depth_texture_index { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex light_buffer_index { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex light_list_uav_index { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex light_count_uav_index { kInvalidShaderVisibleIndex };
 
   // Dispatch parameters
   glm::mat4 inv_projection_matrix { 1.0F };
@@ -238,8 +235,7 @@ struct LightCullingPass::Impl {
 
   auto EnsurePassConstantsBuffer() -> void
   {
-    if (pass_constants_buffer
-      && pass_constants_index != kInvalidShaderVisibleIndex) {
+    if (pass_constants_buffer && pass_constants_index.IsValid()) {
       return;
     }
 
@@ -554,13 +550,11 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   if (auto manager = Context().env_dynamic_manager) {
     const auto view_id = Context().current_view.view_id;
 
-    const auto u_grid_srv = impl_->cluster_grid_srv.get();
-    const auto u_index_list_srv = impl_->light_index_list_srv.get();
-
     // Aggregate culling data into a single struct to simplify the API.
     LightCullingData cull_data {
-      .bindless_cluster_grid_slot = u_grid_srv,
-      .bindless_cluster_index_list_slot = u_index_list_srv,
+      .bindless_cluster_grid_slot = ClusterGridSlot { impl_->cluster_grid_srv },
+      .bindless_cluster_index_list_slot
+      = ClusterIndexListSlot { impl_->light_index_list_srv },
       .cluster_dim_x = impl_->grid_dims.x,
       .cluster_dim_y = impl_->grid_dims.y,
       .cluster_dim_z = impl_->grid_dims.z,
@@ -615,10 +609,10 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   // Update pass constants - use UAV indices for compute shader write
   LightCullingPassConstants constants {
-    .depth_texture_index = depth_srv_index.get(),
-    .light_buffer_index = positional_lights_srv.get(),
-    .light_list_uav_index = impl_->light_index_list_uav.get(),
-    .light_count_uav_index = impl_->cluster_grid_uav.get(),
+    .depth_texture_index = depth_srv_index,
+    .light_buffer_index = positional_lights_srv,
+    .light_list_uav_index = impl_->light_index_list_uav,
+    .light_count_uav_index = impl_->cluster_grid_uav,
     .inv_projection_matrix = Context().current_view.resolved_view
       ? Context().current_view.resolved_view->InverseProjection()
       : glm::mat4 { 1.0F },

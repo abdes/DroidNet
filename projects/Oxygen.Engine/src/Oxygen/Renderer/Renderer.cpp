@@ -5,13 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <bit>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <memory>
-#include <numeric>
-#include <ranges>
 #include <shared_mutex>
 #include <span>
 #include <stdexcept>
@@ -21,7 +17,9 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Base/Hash.h>
+#include <glm/common.hpp>
+#include <glm/geometric.hpp>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -34,7 +32,6 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
-#include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/Internal/BrdfLutManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
@@ -44,7 +41,6 @@
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/IblComputePass.h>
-#include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderContextPool.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -56,7 +52,6 @@
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Renderer/Types/EnvironmentDynamicData.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
-#include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
@@ -64,8 +59,6 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Scene.h>
-#include <glm/common.hpp>
-#include <glm/geometric.hpp>
 
 // Implementation of RendererTagFactory. Provides access to RendererTag
 // capability tokens, only from the engine core. When building tests, allow
@@ -483,7 +476,7 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
     auto tag = oxygen::renderer::internal::RendererTagFactory::Get();
     env_static_manager_->UpdateIfNeeded(tag, *render_context_);
     scene_const_cpu_.SetBindlessEnvironmentStaticSlot(
-      BindlessEnvironmentStaticSlot(env_static_manager_->GetSrvIndex().get()),
+      BindlessEnvironmentStaticSlot(env_static_manager_->GetSrvIndex()),
       SceneConstants::kRenderer);
   }
 
@@ -540,32 +533,29 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
     DLOG_F(3, "Worlds: {}", worlds_srv);
     DLOG_F(3, "Normals: {}", normals_srv);
     scene_const_cpu_.SetBindlessWorldsSlot(
-      BindlessWorldsSlot(worlds_srv.get()), SceneConstants::kRenderer);
+      BindlessWorldsSlot(worlds_srv), SceneConstants::kRenderer);
     scene_const_cpu_.SetBindlessNormalMatricesSlot(
-      BindlessNormalsSlot(normals_srv.get()), SceneConstants::kRenderer);
+      BindlessNormalsSlot(normals_srv), SceneConstants::kRenderer);
   }
 
   if (const auto materials = scene_prep_state_->GetMaterialBinder()) {
     const auto materials_srv = materials->GetMaterialsSrvIndex();
     DLOG_F(3, "Materials: {}", materials_srv);
     scene_const_cpu_.SetBindlessMaterialConstantsSlot(
-      BindlessMaterialConstantsSlot(materials_srv.get()),
-      SceneConstants::kRenderer);
+      BindlessMaterialConstantsSlot(materials_srv), SceneConstants::kRenderer);
   }
 
   if (auto emitter = scene_prep_state_->GetDrawMetadataEmitter()) {
     const auto draw_metadata_srv = emitter->GetDrawMetadataSrvIndex();
     DLOG_F(3, "Draw Metadata: {}", draw_metadata_srv);
     scene_const_cpu_.SetBindlessDrawMetadataSlot(
-      BindlessDrawMetadataSlot(draw_metadata_srv.get()),
-      SceneConstants::kRenderer);
+      BindlessDrawMetadataSlot(draw_metadata_srv), SceneConstants::kRenderer);
 
     // Set instance data slot for GPU instancing
     const auto instance_data_srv = emitter->GetInstanceDataSrvIndex();
     DLOG_F(3, "Instance Data: {}", instance_data_srv);
     scene_const_cpu_.SetBindlessInstanceDataSlot(
-      BindlessInstanceDataSlot(instance_data_srv.get()),
-      SceneConstants::kRenderer);
+      BindlessInstanceDataSlot(instance_data_srv), SceneConstants::kRenderer);
   }
 
   if (auto light_manager = scene_prep_state_->GetLightManager()) {
@@ -578,12 +568,12 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
     DLOG_F(3, "Positional Lights: {}", pos_srv);
 
     scene_const_cpu_.SetBindlessDirectionalLightsSlot(
-      BindlessDirectionalLightsSlot(dir_srv.get()), SceneConstants::kRenderer);
+      BindlessDirectionalLightsSlot(dir_srv), SceneConstants::kRenderer);
     scene_const_cpu_.SetBindlessDirectionalShadowsSlot(
-      BindlessDirectionalShadowsSlot(dir_shadows_srv.get()),
+      BindlessDirectionalShadowsSlot(dir_shadows_srv),
       SceneConstants::kRenderer);
     scene_const_cpu_.SetBindlessPositionalLightsSlot(
-      BindlessPositionalLightsSlot(pos_srv.get()), SceneConstants::kRenderer);
+      BindlessPositionalLightsSlot(pos_srv), SceneConstants::kRenderer);
   }
 
   co_return;
@@ -845,19 +835,19 @@ auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
   DLOG_F(3, " instance: {}", prepared.bindless_instance_data_slot);
 
   view_scene_consts.SetBindlessWorldsSlot(
-    BindlessWorldsSlot(prepared.bindless_worlds_slot.get()),
+    BindlessWorldsSlot(prepared.bindless_worlds_slot),
     SceneConstants::kRenderer);
   view_scene_consts.SetBindlessNormalMatricesSlot(
-    BindlessNormalsSlot(prepared.bindless_normals_slot.get()),
+    BindlessNormalsSlot(prepared.bindless_normals_slot),
     SceneConstants::kRenderer);
   view_scene_consts.SetBindlessMaterialConstantsSlot(
-    BindlessMaterialConstantsSlot(prepared.bindless_materials_slot.get()),
+    BindlessMaterialConstantsSlot(prepared.bindless_materials_slot),
     SceneConstants::kRenderer);
   view_scene_consts.SetBindlessDrawMetadataSlot(
-    BindlessDrawMetadataSlot(prepared.bindless_draw_metadata_slot.get()),
+    BindlessDrawMetadataSlot(prepared.bindless_draw_metadata_slot),
     SceneConstants::kRenderer);
   view_scene_consts.SetBindlessInstanceDataSlot(
-    BindlessInstanceDataSlot(prepared.bindless_instance_data_slot.get()),
+    BindlessInstanceDataSlot(prepared.bindless_instance_data_slot),
     SceneConstants::kRenderer);
 
   const auto& proj_matrix = resolved_it->second.ProjectionMatrix();

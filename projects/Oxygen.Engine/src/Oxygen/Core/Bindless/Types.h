@@ -11,12 +11,21 @@
 #include <functional>
 #include <string>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Core/Bindless/Generated.Constants.h>
 #include <Oxygen/Core/api_export.h>
 
 namespace oxygen {
+
+namespace detail {
+  using BindlessHeapIndexBase = NamedType<uint32_t, struct BindlessHeapIndexTag,
+    // clang-format off
+  Hashable,
+  Comparable,
+  Printable>; // clang-format on
+} // namespace detail
 
 //! Strong type representing an index into a bindless heap, managed by an engine
 //! descriptor allocator.
@@ -31,11 +40,23 @@ namespace oxygen {
 
  @see ShaderVisibleIndex
 */
-using BindlessHeapIndex = NamedType<uint32_t, struct BindlessHeapIndexTag,
-  // clang-format off
+struct BindlessHeapIndex : detail::BindlessHeapIndexBase {
+  using Base = detail::BindlessHeapIndexBase;
+  using detail::BindlessHeapIndexBase::BindlessHeapIndexBase;
+  constexpr auto IsValid() const noexcept
+  {
+    return this->get() != kInvalidBindlessIndex;
+  }
+};
+
+namespace detail {
+  using ShaderVisibleIndexBase
+    = NamedType<uint32_t, struct ShaderVisibleIndexTag,
+      // clang-format off
   Hashable,
   Comparable,
   Printable>; // clang-format on
+} // namespace detail
 
 //! Strongly-typed shader-visible bindless index (32-bit).
 /*!
@@ -50,11 +71,14 @@ using BindlessHeapIndex = NamedType<uint32_t, struct BindlessHeapIndexTag,
 
  @see BindlessHeapIndex
 */
-using ShaderVisibleIndex = NamedType<uint32_t, struct ShaderVisibleIndexTag,
-  // clang-format off
-  Hashable,
-  Comparable,
-  Printable>; // clang-format on
+struct ShaderVisibleIndex : detail::ShaderVisibleIndexBase {
+  using Base = detail::ShaderVisibleIndexBase;
+  using detail::ShaderVisibleIndexBase::ShaderVisibleIndexBase;
+  constexpr auto IsValid() const noexcept
+  {
+    return this->get() != kInvalidBindlessIndex;
+  }
+};
 
 //! Strong type representing a count of bindless items (descriptors, indices,
 //! etc.).
@@ -328,3 +352,24 @@ namespace bindless {
 } // namespace bindless
 
 } // namespace oxygen
+
+// Provide std::hash specializations for our strong types so they can be used
+// directly in unordered containers. We use the project's HashCombine helper to
+// compute the hash from the underlying numeric value.
+namespace std {
+template <> struct hash<::oxygen::BindlessHeapIndex> {
+  [[nodiscard]] size_t operator()(
+    const ::oxygen::BindlessHeapIndex& v) const noexcept
+  {
+    return std::hash<uint32_t> {}(v.get());
+  }
+};
+
+template <> struct hash<::oxygen::ShaderVisibleIndex> {
+  [[nodiscard]] size_t operator()(
+    const ::oxygen::ShaderVisibleIndex& v) const noexcept
+  {
+    return std::hash<uint32_t> {}(v.get());
+  }
+};
+} // namespace std

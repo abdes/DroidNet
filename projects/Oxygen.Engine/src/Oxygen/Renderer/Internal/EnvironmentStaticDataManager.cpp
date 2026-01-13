@@ -6,7 +6,6 @@
 
 #include <cmath>
 #include <cstring>
-#include <limits>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -283,13 +282,9 @@ auto EnvironmentStaticDataManager::PopulateAtmosphere(
       const auto sky_view_slot = sky_lut_provider_->GetSkyViewLutSlot();
 
       next.atmosphere.transmittance_lut_slot
-        = transmittance_slot != kInvalidShaderVisibleIndex
-        ? transmittance_slot.get()
-        : kInvalidDescriptorSlot;
+        = TransmittanceLutSlot { transmittance_slot };
 
-      next.atmosphere.sky_view_lut_slot
-        = sky_view_slot != kInvalidShaderVisibleIndex ? sky_view_slot.get()
-                                                      : kInvalidDescriptorSlot;
+      next.atmosphere.sky_view_lut_slot = SkyViewLutSlot { sky_view_slot };
 
       const auto [trans_w, trans_h]
         = sky_lut_provider_->GetTransmittanceLutSize();
@@ -317,9 +312,7 @@ auto EnvironmentStaticDataManager::PopulateSkyLight(
     next.sky_light.tint_rgb = sky_light->GetTintRgb();
     next.sky_light.diffuse_intensity = sky_light->GetDiffuseIntensity();
     next.sky_light.specular_intensity = sky_light->GetSpecularIntensity();
-    next.sky_light.brdf_lut_slot = brdf_lut_slot_ != kInvalidShaderVisibleIndex
-      ? brdf_lut_slot_.get()
-      : kInvalidDescriptorSlot;
+    next.sky_light.brdf_lut_slot = BrdfLutSlot { brdf_lut_slot_ };
 
     if (texture_binder_
       && sky_light->GetSource()
@@ -328,14 +321,10 @@ auto EnvironmentStaticDataManager::PopulateSkyLight(
       const auto key = sky_light->GetCubemapResource();
       const auto slot = texture_binder_->GetOrAllocate(key);
       const bool cubemap_ready = texture_binder_->IsResourceReady(key);
-      const auto cubemap_slot = slot.get();
-      if (cubemap_ready) {
-        next.sky_light.cubemap_slot = cubemap_slot;
-      } else {
-        next.sky_light.cubemap_slot = kInvalidDescriptorSlot;
-      }
+      next.sky_light.cubemap_slot
+        = CubeMapSlot { cubemap_ready ? slot : kInvalidShaderVisibleIndex };
     } else {
-      next.sky_light.cubemap_slot = kInvalidDescriptorSlot;
+      next.sky_light.cubemap_slot = CubeMapSlot { kInvalidShaderVisibleIndex };
     }
   }
 }
@@ -366,15 +355,11 @@ auto EnvironmentStaticDataManager::PopulateSkySphere(
       && !sky_sphere->GetCubemapResource().IsPlaceholder()) {
       const auto key = sky_sphere->GetCubemapResource();
       const auto slot = texture_binder_->GetOrAllocate(key);
-      const bool ss_cubemap_ready = texture_binder_->IsResourceReady(key);
-      const auto ss_cubemap_slot = slot.get();
-      if (ss_cubemap_ready) {
-        next.sky_sphere.cubemap_slot = ss_cubemap_slot;
-      } else {
-        next.sky_sphere.cubemap_slot = kInvalidDescriptorSlot;
-      }
+      const bool cubemap_ready = texture_binder_->IsResourceReady(key);
+      next.sky_sphere.cubemap_slot
+        = CubeMapSlot { cubemap_ready ? slot : kInvalidShaderVisibleIndex };
     } else {
-      next.sky_sphere.cubemap_slot = kInvalidDescriptorSlot;
+      next.sky_sphere.cubemap_slot = CubeMapSlot { kInvalidShaderVisibleIndex };
     }
   }
 }
@@ -386,31 +371,25 @@ auto EnvironmentStaticDataManager::PopulateIbl(EnvironmentStaticData& next)
     return;
   }
 
-  const bool has_source = next.sky_light.cubemap_slot != kInvalidDescriptorSlot
+  const bool has_source = next.sky_light.cubemap_slot.IsValid()
     || (next.sky_sphere.enabled != 0U
-      && next.sky_sphere.cubemap_slot != kInvalidDescriptorSlot);
+      && next.sky_sphere.cubemap_slot.IsValid());
 
   if (!has_source) {
-    next.sky_light.irradiance_map_slot = kInvalidDescriptorSlot;
-    next.sky_light.prefilter_map_slot = kInvalidDescriptorSlot;
+    next.sky_light.irradiance_map_slot = IrradianceMapSlot {};
+    next.sky_light.prefilter_map_slot = PrefilterMapSlot {};
     return;
   }
 
-  const ShaderVisibleIndex source_slot
-    = (next.sky_light.cubemap_slot != kInvalidDescriptorSlot)
-    ? ShaderVisibleIndex { next.sky_light.cubemap_slot }
-    : ShaderVisibleIndex { next.sky_sphere.cubemap_slot };
+  const auto source_slot
+    = ShaderVisibleIndex { next.sky_light.cubemap_slot.IsValid()
+          ? next.sky_light.cubemap_slot
+          : next.sky_sphere.cubemap_slot };
 
   const auto outputs = ibl_provider_->QueryOutputsFor(source_slot);
 
-  next.sky_light.irradiance_map_slot
-    = outputs.irradiance != kInvalidShaderVisibleIndex
-    ? outputs.irradiance.get()
-    : kInvalidDescriptorSlot;
-
-  next.sky_light.prefilter_map_slot
-    = outputs.prefilter != kInvalidShaderVisibleIndex ? outputs.prefilter.get()
-                                                      : kInvalidDescriptorSlot;
+  next.sky_light.irradiance_map_slot = IrradianceMapSlot { outputs.irradiance };
+  next.sky_light.prefilter_map_slot = PrefilterMapSlot { outputs.prefilter };
 }
 
 auto EnvironmentStaticDataManager::PopulateClouds(
@@ -485,12 +464,20 @@ auto EnvironmentStaticDataManager::UploadIfNeeded() -> void
   }
 
   DLOG_SCOPE_F(2, "Uploading environment static data");
-  auto format_slot = [](std::uint32_t slot) -> std::string {
-    if (slot == kInvalidDescriptorSlot) {
-      return "not ready";
-    }
-    return nostd::to_string(ShaderVisibleIndex { slot });
-  };
+  auto format_slot =
+    []<typename T>
+    requires requires(const T& v) {
+      { v.IsValid() } -> std::convertible_to<bool>;
+      { static_cast<std::uint32_t>(v) };
+    }(const T& slot)
+  -> std::string {
+      if (!slot.IsValid()) {
+        return "not ready";
+      }
+
+      return nostd::to_string(
+        ShaderVisibleIndex { static_cast<std::uint32_t>(slot) });
+    };
   // clang-format off
   DLOG_F(2, "frame_slot = {}", slot_index);
   {

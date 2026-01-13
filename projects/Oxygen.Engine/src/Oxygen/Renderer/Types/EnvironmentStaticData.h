@@ -7,12 +7,10 @@
 #pragma once
 
 #include <cstdint>
-#include <type_traits>
 
 #include <glm/vec3.hpp>
 
-#include <Oxygen/Renderer/Types/SceneConstants.h>
-#include <Oxygen/Renderer/api_export.h>
+#include <Oxygen/Core/Bindless/Types.h>
 
 namespace oxygen::engine {
 
@@ -87,6 +85,36 @@ static_assert(
 static_assert(
   sizeof(GpuFogParams) == 48, "GpuFogParams size must match HLSL packing");
 
+struct TransmittanceLutSlot {
+  ShaderVisibleIndex value;
+  explicit constexpr TransmittanceLutSlot(
+    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+    : value(v)
+  {
+  }
+  constexpr auto IsValid() const noexcept
+  {
+    return value != kInvalidShaderVisibleIndex;
+  }
+  constexpr auto operator<=>(const TransmittanceLutSlot&) const = default;
+  constexpr operator uint32_t() const noexcept { return value.get(); }
+};
+
+struct SkyViewLutSlot {
+  ShaderVisibleIndex value;
+  explicit constexpr SkyViewLutSlot(
+    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+    : value(v)
+  {
+  }
+  constexpr auto IsValid() const noexcept
+  {
+    return value != kInvalidShaderVisibleIndex;
+  }
+  constexpr auto operator<=>(const SkyViewLutSlot&) const = default;
+  constexpr operator uint32_t() const noexcept { return value.get(); }
+};
+
 //! GPU-facing sky atmosphere parameters.
 /*!
  Layout mirrors the HLSL struct `GpuSkyAtmosphereParams`.
@@ -114,9 +142,9 @@ struct alignas(16) GpuSkyAtmosphereParams {
   uint32_t enabled { 0u };
 
   glm::vec3 absorption_rgb { 0.65e-6F, 1.881e-6F, 0.085e-6F };
-  std::uint32_t transmittance_lut_slot { kInvalidDescriptorSlot };
+  TransmittanceLutSlot transmittance_lut_slot {};
 
-  std::uint32_t sky_view_lut_slot { kInvalidDescriptorSlot };
+  std::uint32_t sky_view_lut_slot { SkyViewLutSlot {} };
   float transmittance_lut_width { 0.0F };
   float transmittance_lut_height { 0.0F };
   float sky_view_lut_width { 0.0F };
@@ -130,6 +158,66 @@ static_assert(sizeof(GpuSkyAtmosphereParams) % 16 == 0,
   "GpuSkyAtmosphereParams size must be 16-byte aligned");
 static_assert(sizeof(GpuSkyAtmosphereParams) == 128,
   "GpuSkyAtmosphereParams size must match HLSL packing");
+
+struct CubeMapSlot {
+  ShaderVisibleIndex value;
+  explicit constexpr CubeMapSlot(
+    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+    : value(v)
+  {
+  }
+  constexpr auto IsValid() const noexcept
+  {
+    return value != kInvalidShaderVisibleIndex;
+  }
+  constexpr auto operator<=>(const CubeMapSlot&) const = default;
+  constexpr operator uint32_t() const noexcept { return value.get(); }
+};
+
+struct BrdfLutSlot {
+  ShaderVisibleIndex value;
+  explicit constexpr BrdfLutSlot(
+    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+    : value(v)
+  {
+  }
+  constexpr auto IsValid() const noexcept
+  {
+    return value != kInvalidShaderVisibleIndex;
+  }
+  constexpr auto operator<=>(const BrdfLutSlot&) const = default;
+  constexpr operator uint32_t() const noexcept { return value.get(); }
+};
+
+struct IrradianceMapSlot {
+  ShaderVisibleIndex value;
+  explicit constexpr IrradianceMapSlot(
+    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+    : value(v)
+  {
+  }
+  constexpr auto IsValid() const noexcept
+  {
+    return value != kInvalidShaderVisibleIndex;
+  }
+  constexpr auto operator<=>(const IrradianceMapSlot&) const = default;
+  constexpr operator uint32_t() const noexcept { return value.get(); }
+};
+
+struct PrefilterMapSlot {
+  ShaderVisibleIndex value;
+  explicit constexpr PrefilterMapSlot(
+    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+    : value(v)
+  {
+  }
+  constexpr auto IsValid() const noexcept
+  {
+    return value != kInvalidShaderVisibleIndex;
+  }
+  constexpr auto operator<=>(const PrefilterMapSlot&) const = default;
+  constexpr operator uint32_t() const noexcept { return value.get(); }
+};
 
 //! GPU-facing sky light (IBL) parameters.
 /*!
@@ -148,11 +236,11 @@ struct alignas(16) GpuSkyLightParams {
   SkyLightSource source { SkyLightSource::kCapturedScene };
   uint32_t enabled { 0u };
 
-  uint32_t cubemap_slot { kInvalidDescriptorSlot };
-  uint32_t brdf_lut_slot { kInvalidDescriptorSlot };
+  CubeMapSlot cubemap_slot {};
+  BrdfLutSlot brdf_lut_slot {};
   // Added slots for IBL maps
-  uint32_t irradiance_map_slot { kInvalidDescriptorSlot };
-  uint32_t prefilter_map_slot { kInvalidDescriptorSlot };
+  IrradianceMapSlot irradiance_map_slot {};
+  PrefilterMapSlot prefilter_map_slot {};
 };
 static_assert(sizeof(GpuSkyLightParams) % 16 == 0,
   "GpuSkyLightParams size must be 16-byte aligned");
@@ -175,7 +263,7 @@ struct alignas(16) GpuSkySphereParams {
 
   SkySphereSource source { SkySphereSource::kCubemap };
   uint32_t enabled { 0u };
-  uint32_t cubemap_slot { kInvalidDescriptorSlot };
+  CubeMapSlot cubemap_slot {};
   uint32_t _pad0 { 0u };
 };
 static_assert(sizeof(GpuSkySphereParams) % 16 == 0,

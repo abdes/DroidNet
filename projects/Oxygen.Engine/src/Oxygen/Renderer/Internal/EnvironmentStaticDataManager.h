@@ -133,7 +133,7 @@ public:
     -> ShaderVisibleIndex
   {
     if (cpu_snapshot_.sky_light.enabled
-      && cpu_snapshot_.sky_light.cubemap_slot != kInvalidDescriptorSlot) {
+      && cpu_snapshot_.sky_light.cubemap_slot.IsValid()) {
       return ShaderVisibleIndex { cpu_snapshot_.sky_light.cubemap_slot };
     }
     return kInvalidShaderVisibleIndex;
@@ -144,7 +144,7 @@ public:
     -> ShaderVisibleIndex
   {
     if (cpu_snapshot_.sky_sphere.enabled
-      && cpu_snapshot_.sky_sphere.cubemap_slot != kInvalidDescriptorSlot) {
+      && cpu_snapshot_.sky_sphere.cubemap_slot.IsValid()) {
       return ShaderVisibleIndex { cpu_snapshot_.sky_sphere.cubemap_slot };
     }
     return kInvalidShaderVisibleIndex;

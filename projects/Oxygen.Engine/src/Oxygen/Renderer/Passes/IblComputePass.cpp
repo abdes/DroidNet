@@ -4,13 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "IblComputePass.h"
-
 #include <algorithm>
-#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
-#include <string_view>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.h>
@@ -27,6 +23,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Internal/IblManager.h>
+#include <Oxygen/Renderer/Passes/IblComputePass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 
@@ -121,9 +118,8 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
     = regeneration_requested_.load(std::memory_order_acquire);
 
   const auto current_outputs = ibl_manager->QueryOutputsFor(source_slot);
-  if (current_outputs.irradiance != kInvalidShaderVisibleIndex
-    && current_outputs.prefilter != kInvalidShaderVisibleIndex
-    && !regeneration_requested) {
+  if (current_outputs.irradiance.IsValid()
+    && current_outputs.prefilter.IsValid() && !regeneration_requested) {
     co_return;
   }
 
@@ -258,7 +254,7 @@ auto IblComputePass::EnsurePipelineStateDescs() -> void
 auto IblComputePass::ResolveSourceCubemapSlot() const noexcept
   -> ShaderVisibleIndex
 {
-  if (explicit_source_slot_ != kInvalidShaderVisibleIndex) {
+  if (explicit_source_slot_.IsValid()) {
     return explicit_source_slot_;
   }
 
@@ -269,12 +265,12 @@ auto IblComputePass::ResolveSourceCubemapSlot() const noexcept
   }
 
   const auto sky_light_slot = env_manager->GetSkyLightCubemapSlot();
-  if (sky_light_slot != kInvalidShaderVisibleIndex) {
+  if (sky_light_slot.IsValid()) {
     return sky_light_slot;
   }
 
   const auto sky_sphere_slot = env_manager->GetSkySphereCubemapSlot();
-  if (sky_sphere_slot != kInvalidShaderVisibleIndex) {
+  if (sky_sphere_slot.IsValid()) {
     return sky_sphere_slot;
   }
 
@@ -316,8 +312,8 @@ auto IblComputePass::DispatchIrradiance(graphics::CommandRecorder& recorder,
   recorder.FlushBarriers();
 
   IblFilteringPassConstants constants {
-    .source_cubemap_slot = source_slot.get(),
-    .target_uav_slot = uav_slot.get(),
+    .source_cubemap_slot = source_slot,
+    .target_uav_slot = uav_slot,
     .roughness = 0.0F,
     .face_size = ibl.GetConfig().irradiance_size,
   };
@@ -420,8 +416,8 @@ auto IblComputePass::DispatchPrefilter(graphics::CommandRecorder& recorder,
     }
 
     IblFilteringPassConstants constants {
-      .source_cubemap_slot = source_slot.get(),
-      .target_uav_slot = uav_slot.get(),
+      .source_cubemap_slot = source_slot,
+      .target_uav_slot = uav_slot,
       .roughness = roughness,
       .face_size = mip_size,
     };

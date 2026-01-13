@@ -105,8 +105,7 @@ public:
     //! sequence and therefore is still valid for consumption.
     auto IsValid(frame::SequenceNumber seq) const noexcept -> bool
     {
-      return sequence == seq && srv != kInvalidShaderVisibleIndex
-        && mapped_ptr != nullptr;
+      return sequence == seq && srv.IsValid() && mapped_ptr != nullptr;
     }
   };
 

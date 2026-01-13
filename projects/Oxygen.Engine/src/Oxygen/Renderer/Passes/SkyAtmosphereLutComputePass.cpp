@@ -11,7 +11,6 @@
 
 #include <fmt/format.h>
 #include <glm/glm.hpp>
-#include <glm/gtc/type_ptr.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.h>
@@ -23,13 +22,14 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
-#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Passes/SkyAtmosphereLutComputePass.h>
 #include <Oxygen/Renderer/RenderContext.h>
-#include <Oxygen/Renderer/Types/EnvironmentStaticData.h>
 
+using oxygen::kInvalidShaderVisibleIndex;
+using oxygen::ShaderVisibleIndex;
 using oxygen::engine::SkyAtmosphereLutComputePass;
 using oxygen::engine::SkyAtmosphereLutComputePassConfig;
 using oxygen::graphics::Buffer;
@@ -44,7 +44,7 @@ namespace {
  Layout must match `TransmittanceLutPassConstants` in TransmittanceLut_CS.hlsl.
 */
 struct alignas(16) TransmittanceLutPassConstants {
-  uint32_t output_uav_index { oxygen::engine::kInvalidDescriptorSlot };
+  ShaderVisibleIndex output_uav_index { kInvalidShaderVisibleIndex };
   uint32_t output_width { 0 };
   uint32_t output_height { 0 };
   uint32_t _pad0 { 0 };
@@ -57,8 +57,8 @@ static_assert(sizeof(TransmittanceLutPassConstants) == 16,
  Layout must match `SkyViewLutPassConstants` in SkyViewLut_CS.hlsl.
 */
 struct alignas(16) SkyViewLutPassConstants {
-  uint32_t output_uav_index { oxygen::engine::kInvalidDescriptorSlot };
-  uint32_t transmittance_srv_index { oxygen::engine::kInvalidDescriptorSlot };
+  ShaderVisibleIndex output_uav_index { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex transmittance_srv_index { kInvalidShaderVisibleIndex };
   uint32_t output_width { 0 };
   uint32_t output_height { 0 };
 
@@ -412,7 +412,7 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
   {
     // Update transmittance pass constants
     TransmittanceLutPassConstants constants {
-      .output_uav_index = transmittance_uav.get(),
+      .output_uav_index = transmittance_uav,
       .output_width = transmittance_width,
       .output_height = transmittance_height,
       ._pad0 = 0,
@@ -460,8 +460,8 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
   {
     // Update sky-view pass constants
     SkyViewLutPassConstants constants {
-      .output_uav_index = sky_view_uav.get(),
-      .transmittance_srv_index = transmittance_srv.get(),
+      .output_uav_index = sky_view_uav,
+      .transmittance_srv_index = transmittance_srv,
       .output_width = sky_view_width,
       .output_height = sky_view_height,
       .transmittance_width = transmittance_width,
