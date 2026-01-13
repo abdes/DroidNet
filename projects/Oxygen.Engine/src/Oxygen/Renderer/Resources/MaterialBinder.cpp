@@ -156,7 +156,7 @@ auto SerializeMaterialConstants(
   // Resolve texture resource keys to bindless SRV indices.
   //
   // Important semantics (must match shader code):
-  // - `oxygen::kInvalidShaderVisibleIndex` (0xFFFFFFFFu) means "do not sample"
+  // - `oxygen::kInvalidShaderVisibleIndex` means "do not sample"
   //   (use scalar fallback only).
   // - Valid indices (including 0) are sampled from the bindless heap.
   //
@@ -168,6 +168,8 @@ auto SerializeMaterialConstants(
     = (material.resolved_asset->GetFlags()
         & oxygen::data::pak::kMaterialFlag_NoTextureSampling)
     != 0U;
+
+  const auto kDoNotSample = oxygen::kInvalidShaderVisibleIndex.get();
 
   const auto ResolveTextureIndex
     = [&texture_binder, no_texture_sampling](
@@ -195,21 +197,32 @@ auto SerializeMaterialConstants(
       .get();
   };
 
+  // For normal/ORM slots there is no "fallback texture". If the texture is
+  // missing (including authored fallback index), do not sample and rely on
+  // scalar defaults in the shader.
+  const auto ResolveOptionalTextureIndex
+    = [kDoNotSample, &texture_binder, no_texture_sampling](
+        const oxygen::content::ResourceKey key) -> uint32_t {
+    if (no_texture_sampling) {
+      return kDoNotSample;
+    }
+    if (key.get() == 0U) {
+      return kDoNotSample;
+    }
+    return texture_binder.GetOrAllocate(key).get();
+  };
+
   constants.base_color_texture_index
     = ResolveTextureIndex(material.resolved_asset->GetBaseColorTextureKey(),
       material.resolved_asset->GetBaseColorTexture());
-  constants.normal_texture_index
-    = ResolveTextureIndex(material.resolved_asset->GetNormalTextureKey(),
-      material.resolved_asset->GetNormalTexture());
-  constants.metallic_texture_index
-    = ResolveTextureIndex(material.resolved_asset->GetMetallicTextureKey(),
-      material.resolved_asset->GetMetallicTexture());
-  constants.roughness_texture_index
-    = ResolveTextureIndex(material.resolved_asset->GetRoughnessTextureKey(),
-      material.resolved_asset->GetRoughnessTexture());
-  constants.ambient_occlusion_texture_index = ResolveTextureIndex(
-    material.resolved_asset->GetAmbientOcclusionTextureKey(),
-    material.resolved_asset->GetAmbientOcclusionTexture());
+  constants.normal_texture_index = ResolveOptionalTextureIndex(
+    material.resolved_asset->GetNormalTextureKey());
+  constants.metallic_texture_index = ResolveOptionalTextureIndex(
+    material.resolved_asset->GetMetallicTextureKey());
+  constants.roughness_texture_index = ResolveOptionalTextureIndex(
+    material.resolved_asset->GetRoughnessTextureKey());
+  constants.ambient_occlusion_texture_index = ResolveOptionalTextureIndex(
+    material.resolved_asset->GetAmbientOcclusionTextureKey());
 
   // Copy flags; ensure alpha-test is set for masked domain.
   constants.flags = material.resolved_asset->GetFlags();

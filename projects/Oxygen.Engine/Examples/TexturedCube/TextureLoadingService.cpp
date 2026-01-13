@@ -103,12 +103,12 @@ auto TextureLoadingService::LoadTextureAsync(const std::string& file_path,
   const auto& payload = cooked->payload;
 
   // Build the packed buffer with descriptor + payload
-  using oxygen::data::pak::v2::TextureResourceDesc;
+  using oxygen::data::pak::TextureResourceDesc;
   TextureResourceDesc pak_desc {};
   pak_desc.data_offset
-    = static_cast<oxygen::data::pak::v2::OffsetT>(sizeof(TextureResourceDesc));
+    = static_cast<oxygen::data::pak::OffsetT>(sizeof(TextureResourceDesc));
   pak_desc.size_bytes
-    = static_cast<oxygen::data::pak::v2::DataBlobSizeT>(payload.payload.size());
+    = static_cast<oxygen::data::pak::DataBlobSizeT>(payload.payload.size());
   pak_desc.texture_type = static_cast<std::uint8_t>(payload.desc.texture_type);
   pak_desc.compression_type = 0;
   pak_desc.width = payload.desc.width;
@@ -117,7 +117,7 @@ auto TextureLoadingService::LoadTextureAsync(const std::string& file_path,
   pak_desc.array_layers = payload.desc.array_layers;
   pak_desc.mip_levels = payload.desc.mip_levels;
   pak_desc.format = static_cast<std::uint8_t>(payload.desc.format);
-  pak_desc.alignment = 256;
+  pak_desc.alignment = 256U;
 
   std::vector<std::uint8_t> packed;
   packed.resize(sizeof(TextureResourceDesc) + payload.payload.size());
@@ -133,7 +133,7 @@ auto TextureLoadingService::LoadTextureAsync(const std::string& file_path,
       });
 
   if (!tex) {
-    result.status_message = "Upload failed (TextureBinder limitation?)";
+    result.status_message = "Upload failed";
     co_return result;
   }
 

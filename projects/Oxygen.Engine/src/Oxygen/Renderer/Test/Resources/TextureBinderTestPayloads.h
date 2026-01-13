@@ -204,7 +204,7 @@ namespace detail {
   return bytes;
 }
 
-[[nodiscard]] inline auto MakeInvalidTightPackedTexture1x1Rgba8Payload()
+[[nodiscard]] inline auto MakeTightPackedTexture1x1Rgba8Payload()
   -> std::vector<uint8_t>
 {
   using data::pak::SubresourceLayout;
@@ -225,8 +225,7 @@ namespace detail {
 
   constexpr std::array<uint8_t, 4> pixel { 0xFF, 0xFF, 0xFF, 0xFF };
 
-  // Intentionally tight-packed (row pitch 4, not 256): violates D3D12 copy
-  // assumptions and must be rejected by TextureBinder upload layout.
+  // Tight-packed (row pitch 4): valid cooked payload.
   const std::vector<std::uint8_t> data_region(pixel.begin(), pixel.end());
   const std::array<SubresourceLayout, 1> layouts {
     SubresourceLayout {
@@ -235,6 +234,107 @@ namespace detail {
       .size_bytes = 4U,
     },
   };
+
+  auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
+  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
+
+  std::vector<uint8_t> bytes;
+  bytes.resize(sizeof(desc) + payload.size());
+  const auto bytes_span = std::as_writable_bytes(std::span { bytes });
+  detail::CopyBytes(
+    bytes_span.subspan(0, sizeof(desc)), std::as_bytes(std::span { &desc, 1 }));
+  detail::CopyBytes(bytes_span.subspan(sizeof(desc), payload.size()),
+    std::as_bytes(std::span { payload }));
+  return bytes;
+}
+
+[[nodiscard]] inline auto MakeInvalidTexture1x1Rgba8Payload_RowPitchTooSmall()
+  -> std::vector<uint8_t>
+{
+  using data::pak::SubresourceLayout;
+  using data::pak::TextureResourceDesc;
+
+  TextureResourceDesc desc {};
+  desc.data_offset = sizeof(desc);
+  // desc.size_bytes set after v4 payload is built.
+  desc.texture_type = static_cast<uint8_t>(TextureType::kTexture2D);
+  desc.compression_type = 0;
+  desc.width = 1U;
+  desc.height = 1U;
+  desc.depth = 1U;
+  desc.array_layers = 1U;
+  desc.mip_levels = 1U;
+  desc.format = static_cast<uint8_t>(Format::kRGBA8UNorm);
+  desc.alignment = 256U; // NOLINT(*-magic-numbers)
+
+  // Invalid: row pitch is smaller than bytes_per_row (RGBA8 => 4 bytes).
+  const std::vector<std::uint8_t> data_region { 0xFF, 0xFF, 0xFF };
+  const std::array<SubresourceLayout, 1> layouts {
+    SubresourceLayout {
+      .offset_bytes = 0U,
+      .row_pitch_bytes = 3U,
+      .size_bytes = 3U,
+    },
+  };
+
+  auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
+  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
+
+  std::vector<uint8_t> bytes;
+  bytes.resize(sizeof(desc) + payload.size());
+  const auto bytes_span = std::as_writable_bytes(std::span { bytes });
+  detail::CopyBytes(
+    bytes_span.subspan(0, sizeof(desc)), std::as_bytes(std::span { &desc, 1 }));
+  detail::CopyBytes(bytes_span.subspan(sizeof(desc), payload.size()),
+    std::as_bytes(std::span { payload }));
+  return bytes;
+}
+
+[[nodiscard]] inline auto MakeCookedTexture8x8Bc7MipChainPayload()
+  -> std::vector<uint8_t>
+{
+  using data::pak::SubresourceLayout;
+  using data::pak::TextureResourceDesc;
+
+  TextureResourceDesc desc {};
+  desc.data_offset = sizeof(desc);
+  // desc.size_bytes set after v4 payload is built.
+  desc.texture_type = static_cast<uint8_t>(TextureType::kTexture2D);
+  desc.compression_type = 0;
+  desc.width = 8U;
+  desc.height = 8U;
+  desc.depth = 1U;
+  desc.array_layers = 1U;
+  desc.mip_levels = 4U; // 8x8, 4x4, 2x2, 1x1
+  desc.format = static_cast<uint8_t>(Format::kBC7UNorm);
+  desc.alignment = 256U; // NOLINT(*-magic-numbers)
+
+  // BC7: 4x4 blocks, 16 bytes per block.
+  // D3D12-style cooked layout: row pitch aligned to 256, placement aligned to
+  // 512. For 8x8: blocks_x=2, blocks_y=2 => bytes_per_row=32 -> row_pitch=256
+  // => size=512. For smaller mips: blocks_x=1, blocks_y=1 => size=256.
+  constexpr std::array<SubresourceLayout, 4> layouts {
+    SubresourceLayout {
+      .offset_bytes = 0U, .row_pitch_bytes = 256U, .size_bytes = 512U },
+    SubresourceLayout {
+      .offset_bytes = 512U, .row_pitch_bytes = 256U, .size_bytes = 256U },
+    SubresourceLayout {
+      .offset_bytes = 1024U, .row_pitch_bytes = 256U, .size_bytes = 256U },
+    SubresourceLayout {
+      .offset_bytes = 1536U, .row_pitch_bytes = 256U, .size_bytes = 256U },
+  };
+
+  constexpr std::size_t kDataRegionSize = 1792U;
+  std::vector<std::uint8_t> data_region(kDataRegionSize, 0U);
+
+  // Populate the first block of each mip with a distinct pattern.
+  for (std::size_t mip = 0; mip < layouts.size(); ++mip) {
+    const auto base = static_cast<std::size_t>(layouts[mip].offset_bytes);
+    for (std::size_t i = 0; i < 16U; ++i) {
+      data_region[base + i]
+        = static_cast<std::uint8_t>(0xA0U + (mip * 0x10U) + i);
+    }
+  }
 
   auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
   desc.size_bytes = static_cast<std::uint32_t>(payload.size());

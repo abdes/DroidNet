@@ -44,8 +44,8 @@ MaterialSurface EvaluateMaterialSurface(
     }
     s.V = SafeNormalize(camera_position - world_pos);
 
-    if (bindless_draw_metadata_slot != 0xFFFFFFFFu &&
-        bindless_material_constants_slot != 0xFFFFFFFFu) {
+    if (bindless_draw_metadata_slot != K_INVALID_BINDLESS_INDEX &&
+        bindless_material_constants_slot != K_INVALID_BINDLESS_INDEX) {
         StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[bindless_draw_metadata_slot];
         DrawMetadata meta = draw_meta_buffer[draw_index];
 
@@ -63,7 +63,8 @@ MaterialSurface EvaluateMaterialSurface(
         const bool no_texture_sampling =
             (mat.flags & MATERIAL_FLAG_NO_TEXTURE_SAMPLING) != 0u;
 
-        if (!no_texture_sampling && mat.base_color_texture_index != 0xFFFFFFFFu) {
+        if (!no_texture_sampling
+            && mat.base_color_texture_index != K_INVALID_BINDLESS_INDEX) {
             Texture2D<float4> base_tex = ResourceDescriptorHeap[mat.base_color_texture_index];
             SamplerState samp = SamplerDescriptorHeap[0];
             float4 texel = base_tex.Sample(samp, uv);
@@ -75,7 +76,8 @@ MaterialSurface EvaluateMaterialSurface(
         }
 
         // Normal map (tangent-space)
-        if (!no_texture_sampling && mat.normal_texture_index != 0xFFFFFFFFu) {
+        if (!no_texture_sampling
+            && mat.normal_texture_index != K_INVALID_BINDLESS_INDEX) {
             Texture2D<float4> nrm_tex = ResourceDescriptorHeap[mat.normal_texture_index];
             SamplerState samp = SamplerDescriptorHeap[0];
             float3 n_ts = DecodeNormalTS(nrm_tex.Sample(samp, uv).xyz);
@@ -134,23 +136,24 @@ MaterialSurface EvaluateMaterialSurface(
 
         // If the packed flag isn't set, still support the common case where
         // ORM is authored as a single texture wired into all three slots.
-        uint orm_tex_index = 0xFFFFFFFFu;
+        uint orm_tex_index = K_INVALID_BINDLESS_INDEX;
         if (!use_orm_packed) {
             const uint idx = mat.metallic_texture_index;
-            if (idx != 0xFFFFFFFFu && idx == mat.roughness_texture_index
+            if (idx != K_INVALID_BINDLESS_INDEX && idx == mat.roughness_texture_index
                 && idx == mat.ambient_occlusion_texture_index) {
                 use_orm_packed = true;
                 orm_tex_index = idx;
             }
         } else {
-            orm_tex_index = (mat.roughness_texture_index != 0xFFFFFFFFu)
+            orm_tex_index = (mat.roughness_texture_index != K_INVALID_BINDLESS_INDEX)
                 ? mat.roughness_texture_index
-                : ((mat.metallic_texture_index != 0xFFFFFFFFu)
+                : ((mat.metallic_texture_index != K_INVALID_BINDLESS_INDEX)
                     ? mat.metallic_texture_index
                     : mat.ambient_occlusion_texture_index);
         }
 
-        if (!no_texture_sampling && use_orm_packed && orm_tex_index != 0xFFFFFFFFu) {
+        if (!no_texture_sampling && use_orm_packed
+            && orm_tex_index != K_INVALID_BINDLESS_INDEX) {
             Texture2D<float4> orm_tex = ResourceDescriptorHeap[orm_tex_index];
             SamplerState samp = SamplerDescriptorHeap[0];
             const float3 orm = saturate(orm_tex.Sample(samp, uv).rgb);
@@ -163,7 +166,7 @@ MaterialSurface EvaluateMaterialSurface(
             s.metalness *= orm.b;
 
             // Prefer dedicated AO map if provided separately.
-            if (mat.ambient_occlusion_texture_index != 0xFFFFFFFFu
+            if (mat.ambient_occlusion_texture_index != K_INVALID_BINDLESS_INDEX
                 && mat.ambient_occlusion_texture_index != orm_tex_index) {
                 Texture2D<float4> ao_tex = ResourceDescriptorHeap[mat.ambient_occlusion_texture_index];
                 s.ao *= saturate(ao_tex.Sample(samp, uv).r);
@@ -171,17 +174,20 @@ MaterialSurface EvaluateMaterialSurface(
                 s.ao *= orm.r;
             }
         } else {
-            if (!no_texture_sampling && mat.metallic_texture_index != 0xFFFFFFFFu) {
+            if (!no_texture_sampling
+                && mat.metallic_texture_index != K_INVALID_BINDLESS_INDEX) {
                 Texture2D<float4> m_tex = ResourceDescriptorHeap[mat.metallic_texture_index];
                 SamplerState samp = SamplerDescriptorHeap[0];
                 s.metalness *= saturate(m_tex.Sample(samp, uv).r);
             }
-            if (!no_texture_sampling && mat.roughness_texture_index != 0xFFFFFFFFu) {
+            if (!no_texture_sampling
+                && mat.roughness_texture_index != K_INVALID_BINDLESS_INDEX) {
                 Texture2D<float4> r_tex = ResourceDescriptorHeap[mat.roughness_texture_index];
                 SamplerState samp = SamplerDescriptorHeap[0];
                 s.roughness *= saturate(r_tex.Sample(samp, uv).r);
             }
-            if (!no_texture_sampling && mat.ambient_occlusion_texture_index != 0xFFFFFFFFu) {
+            if (!no_texture_sampling
+                && mat.ambient_occlusion_texture_index != K_INVALID_BINDLESS_INDEX) {
                 Texture2D<float4> ao_tex = ResourceDescriptorHeap[mat.ambient_occlusion_texture_index];
                 SamplerState samp = SamplerDescriptorHeap[0];
                 s.ao *= saturate(ao_tex.Sample(samp, uv).r);
@@ -191,7 +197,8 @@ MaterialSurface EvaluateMaterialSurface(
         // Emissive: self-illumination that bypasses BRDF.
         // Start with the constant factor, then modulate by texture if present.
         s.emissive = mat.emissive_factor;
-        if (!no_texture_sampling && mat.emissive_texture_index != 0xFFFFFFFFu) {
+        if (!no_texture_sampling
+            && mat.emissive_texture_index != K_INVALID_BINDLESS_INDEX) {
             Texture2D<float4> emissive_tex = ResourceDescriptorHeap[mat.emissive_texture_index];
             SamplerState samp = SamplerDescriptorHeap[0];
             // Emissive textures are typically sRGB-encoded.

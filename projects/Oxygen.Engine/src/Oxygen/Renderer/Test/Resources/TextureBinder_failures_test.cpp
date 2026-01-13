@@ -20,7 +20,8 @@ using oxygen::content::ResourceKey;
 using oxygen::renderer::testing::FakeGraphics;
 using oxygen::renderer::testing::MakeCookedTexture1x1Rgba8Payload;
 using oxygen::renderer::testing::MakeCookedTexture4x4Bc1Payload;
-using oxygen::renderer::testing::MakeInvalidTightPackedTexture1x1Rgba8Payload;
+using oxygen::renderer::testing::
+  MakeInvalidTexture1x1Rgba8Payload_RowPitchTooSmall;
 using oxygen::renderer::testing::TextureBinderTest;
 
 [[nodiscard]] auto GetTextureDebugName(const oxygen::graphics::Texture* texture)
@@ -175,17 +176,17 @@ NOLINT_TEST_F(TextureBinderFailureTest, ForcedError_IsDeterministic)
 }
 
 //! Cooked texture layout violations must be rejected deterministically.
-/*! The binder expects cooked mip blobs to use a 256-byte row pitch and a
-    512-byte mip placement alignment. If the payload violates these
-    assumptions, the binder must repoint to the error texture and must not
-    allocate additional descriptors on subsequent calls.
+/*! The binder validates cooked payload layouts against the texture descriptor
+    and format metadata (block size and bytes per block). If the payload's
+    layout table is inconsistent (e.g., row pitch too small), the binder must
+    repoint to the shared error texture and keep the SRV index stable.
 */
 NOLINT_TEST_F(TextureBinderFailureTest, InvalidCookedLayout_Rejected)
 {
   // Arrange
   const auto before = AllocatedSrvCount();
   const ResourceKey key = Loader().MintSyntheticTextureKey();
-  const auto payload = MakeInvalidTightPackedTexture1x1Rgba8Payload();
+  const auto payload = MakeInvalidTexture1x1Rgba8Payload_RowPitchTooSmall();
   Loader().PreloadCookedTexture(key, std::span(payload.data(), payload.size()));
 
   Gfx().srv_view_log_.events.clear();

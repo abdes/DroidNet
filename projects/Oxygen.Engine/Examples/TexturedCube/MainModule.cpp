@@ -162,6 +162,8 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
       = static_cast<SkyboxManager::OutputFormat>(sky_state.output_format_idx),
       .cube_face_size = sky_state.cube_face_size,
       .flip_y = sky_state.flip_y,
+      .tonemap_hdr_to_ldr = sky_state.tonemap_hdr_to_ldr,
+      .hdr_exposure_ev = sky_state.hdr_exposure_ev,
     };
 
     auto result = co_await skybox_manager_->LoadSkyboxAsync(

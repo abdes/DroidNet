@@ -79,6 +79,12 @@ auto SkyboxManager::LoadSkyboxAsync(const std::string& file_path,
     [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   const bool is_hdr_source = (ext == ".hdr") || (ext == ".exr");
 
+  const bool is_ldr_output = (output_fmt == oxygen::Format::kRGBA8UNormSRGB)
+    || (output_fmt == oxygen::Format::kBC7UNormSRGB);
+  const bool should_tonemap_hdr_to_ldr = is_hdr_source && is_ldr_output;
+  const bool tonemap_forced
+    = should_tonemap_hdr_to_ldr && !options.tonemap_hdr_to_ldr;
+
   std::optional<TextureImportResult> cooked_result;
 
   if (options.layout == Layout::kEquirectangular) {
@@ -92,6 +98,11 @@ auto SkyboxManager::LoadSkyboxAsync(const std::string& file_path,
     desc.bc7_quality = use_bc7 ? Bc7Quality::kDefault : Bc7Quality::kNone;
     desc.source_id = img_path.string();
     desc.flip_y_on_decode = options.flip_y;
+
+    desc.hdr_handling = should_tonemap_hdr_to_ldr ? HdrHandling::kTonemapAuto
+                                                  : HdrHandling::kError;
+    desc.bake_hdr_to_ldr = should_tonemap_hdr_to_ldr;
+    desc.exposure_ev = options.hdr_exposure_ev;
 
     // Be explicit about mip generation: IBL specular relies on sampling across
     // the mip chain for roughness-based filtering.
@@ -122,6 +133,11 @@ auto SkyboxManager::LoadSkyboxAsync(const std::string& file_path,
     desc.source_id = img_path.string();
     desc.flip_y_on_decode = options.flip_y;
 
+    desc.hdr_handling = should_tonemap_hdr_to_ldr ? HdrHandling::kTonemapAuto
+                                                  : HdrHandling::kError;
+    desc.bake_hdr_to_ldr = should_tonemap_hdr_to_ldr;
+    desc.exposure_ev = options.hdr_exposure_ev;
+
     // Be explicit about mip generation: IBL specular relies on sampling across
     // the mip chain for roughness-based filtering.
     desc.mip_policy = MipPolicy::kFullChain;
@@ -147,12 +163,12 @@ auto SkyboxManager::LoadSkyboxAsync(const std::string& file_path,
   const auto& payload = cooked_result->payload;
 
   // Build PAK descriptor
-  using oxygen::data::pak::v2::TextureResourceDesc;
+  using oxygen::data::pak::TextureResourceDesc;
   TextureResourceDesc pak_desc {};
   pak_desc.data_offset
-    = static_cast<oxygen::data::pak::v2::OffsetT>(sizeof(TextureResourceDesc));
+    = static_cast<oxygen::data::pak::OffsetT>(sizeof(TextureResourceDesc));
   pak_desc.size_bytes
-    = static_cast<oxygen::data::pak::v2::DataBlobSizeT>(payload.payload.size());
+    = static_cast<oxygen::data::pak::DataBlobSizeT>(payload.payload.size());
   pak_desc.texture_type = static_cast<std::uint8_t>(payload.desc.texture_type);
   pak_desc.compression_type = 0;
   pak_desc.width = payload.desc.width;
@@ -188,6 +204,8 @@ auto SkyboxManager::LoadSkyboxAsync(const std::string& file_path,
   result.success = true;
   result.face_size = static_cast<int>(payload.desc.width);
   result.status_message = std::string("Loaded (") + format_name
+    + (should_tonemap_hdr_to_ldr ? ", HDR->LDR" : "")
+    + (tonemap_forced ? " [auto]" : "")
     + ", mips=" + std::to_string(payload.desc.mip_levels) + ")";
 
   co_return result;
