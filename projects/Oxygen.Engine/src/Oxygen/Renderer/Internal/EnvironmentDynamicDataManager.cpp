@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "EnvironmentDynamicDataManager.h"
-
 #include <cstring>
 
-#include <Oxygen/Base/Logging.h>
 #include <fmt/format.h>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 
 namespace oxygen::engine::internal {
 
@@ -29,6 +29,11 @@ EnvironmentDynamicDataManager::EnvironmentDynamicDataManager(
   observer_ptr<Graphics> gfx)
   : gfx_(gfx)
 {
+  // These are contractual, their absence would indicate a serious logic error,
+  // and will abort. The lifetime of the environment dynamic data manager is
+  // managed by the renderer, which ensures a valid Graphics pointer for as long
+  // as the manager is being used.
+  CHECK_NOTNULL_F(gfx_, "expecting valid Graphics pointer");
 }
 
 EnvironmentDynamicDataManager::~EnvironmentDynamicDataManager()
@@ -68,26 +73,29 @@ auto EnvironmentDynamicDataManager::SetExposure(ViewId view_id, float exposure)
   }
 }
 
-auto EnvironmentDynamicDataManager::SetCullingData(ViewId view_id,
-  uint32_t grid_slot, uint32_t index_list_slot, uint32_t dim_x, uint32_t dim_y,
-  uint32_t dim_z, uint32_t tile_size_px) -> void
+// SetLightCullingData now contains the logic previously in SetCullingData.
+auto EnvironmentDynamicDataManager::SetLightCullingData(
+  ViewId view_id, const LightCullingData& data) -> void
 {
   auto& state = view_states_[view_id];
   bool dirty = false;
-  dirty |= (state.data.bindless_cluster_grid_slot != grid_slot);
-  dirty |= (state.data.bindless_cluster_index_list_slot != index_list_slot);
-  dirty |= (state.data.cluster_dim_x != dim_x);
-  dirty |= (state.data.cluster_dim_y != dim_y);
-  dirty |= (state.data.cluster_dim_z != dim_z);
-  dirty |= (state.data.tile_size_px != tile_size_px);
+  dirty |= (state.data.bindless_cluster_grid_slot
+    != data.bindless_cluster_grid_slot);
+  dirty |= (state.data.bindless_cluster_index_list_slot
+    != data.bindless_cluster_index_list_slot);
+  dirty |= (state.data.cluster_dim_x != data.cluster_dim_x);
+  dirty |= (state.data.cluster_dim_y != data.cluster_dim_y);
+  dirty |= (state.data.cluster_dim_z != data.cluster_dim_z);
+  dirty |= (state.data.tile_size_px != data.tile_size_px);
 
   if (dirty) {
-    state.data.bindless_cluster_grid_slot = grid_slot;
-    state.data.bindless_cluster_index_list_slot = index_list_slot;
-    state.data.cluster_dim_x = dim_x;
-    state.data.cluster_dim_y = dim_y;
-    state.data.cluster_dim_z = dim_z;
-    state.data.tile_size_px = tile_size_px;
+    state.data.bindless_cluster_grid_slot = data.bindless_cluster_grid_slot;
+    state.data.bindless_cluster_index_list_slot
+      = data.bindless_cluster_index_list_slot;
+    state.data.cluster_dim_x = data.cluster_dim_x;
+    state.data.cluster_dim_y = data.cluster_dim_y;
+    state.data.cluster_dim_z = data.cluster_dim_z;
+    state.data.tile_size_px = data.tile_size_px;
     MarkAllSlotsDirty(view_id);
   }
 }
@@ -249,12 +257,9 @@ auto EnvironmentDynamicDataManager::GetBuffer(ViewId view_id)
 auto EnvironmentDynamicDataManager::GetOrCreateBuffer(ViewId view_id)
   -> BufferInfo
 {
-  if (current_slot_ == frame::kInvalidSlot) {
-    LOG_F(ERROR,
-      "EnvironmentDynamicDataManager::GetOrCreateBuffer called without valid "
-      "frame slot");
-    return {};
-  }
+  DCHECK_F(current_slot_ != frame::kInvalidSlot,
+    "proper use of the environment dynamic data manager requires calling its "
+    "OnFrameStart() method every frame, and before any use");
 
   const BufferKey key { current_slot_, view_id };
 
