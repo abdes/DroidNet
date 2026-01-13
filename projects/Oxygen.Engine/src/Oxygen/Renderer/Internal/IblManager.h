@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -15,6 +16,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Renderer/Internal/IIblProvider.h>
 
 namespace oxygen::graphics {
 class Texture;
@@ -22,7 +24,16 @@ class Texture;
 
 namespace oxygen::engine::internal {
 
-class IblManager {
+class IblPassTag {
+  friend struct IblPassTagFactory;
+  IblPassTag() noexcept = default;
+};
+
+struct IblPassTagFactory {
+  static auto Get() noexcept -> IblPassTag;
+};
+
+class IblManager : public IIblProvider {
 public:
   OXYGEN_MAKE_NON_COPYABLE(IblManager);
   OXYGEN_MAKE_NON_MOVABLE(IblManager);
@@ -35,51 +46,41 @@ public:
   explicit IblManager(observer_ptr<Graphics> gfx, Config config = {});
   ~IblManager();
 
-  //! Ensures resources (textures, views) are created.
-  //! @return True if successful.
-  auto EnsureResourcesCreated() -> bool;
-
-  //! Returns the Shader Resource View index for the diffuse irradiance map.
-  [[nodiscard]] auto GetIrradianceMapSlot() const noexcept
-    -> ShaderVisibleIndex;
-
-  //! Returns the Shader Resource View index for the specular prefilter map.
-  [[nodiscard]] auto GetPrefilterMapSlot() const noexcept -> ShaderVisibleIndex;
-
-  //! Returns the UAV index for a specific mip of the prefilter map.
-  [[nodiscard]] auto GetPrefilterMapUavSlot(uint32_t mip_level) const noexcept
-    -> ShaderVisibleIndex;
-
-  //! Returns the UAV index for the irradiance map.
-  [[nodiscard]] auto GetIrradianceMapUavSlot() const noexcept
-    -> ShaderVisibleIndex;
-
-  //! Returns the Irradiance map texture.
-  [[nodiscard]] auto GetIrradianceMap() const noexcept
-    -> observer_ptr<graphics::Texture>;
-
-  //! Returns the Prefilter map texture.
-  [[nodiscard]] auto GetPrefilterMap() const noexcept
-    -> observer_ptr<graphics::Texture>;
-
-  //! Returns the source cubemap slot that was used for the last generation.
-  [[nodiscard]] auto GetLastSourceCubemapSlot() const noexcept
-    -> ShaderVisibleIndex
-  {
-    return last_source_cubemap_slot_;
-  }
-
-  //! Marks that generation has completed for the given source slot.
-  auto MarkGenerated(ShaderVisibleIndex source_slot) -> void;
-
-  //! Checks if the given source slot is different from the last cached one.
-  [[nodiscard]] auto IsDirty(ShaderVisibleIndex source_slot) const noexcept
-    -> bool;
-
   [[nodiscard]] auto GetConfig() const noexcept -> const Config&
   {
     return config_;
   }
+
+  //! Ensures resources (textures, views) are created.
+  //! @return True if successful.
+  auto EnsureResourcesCreated() -> bool;
+
+  //! Query current outputs and generation for a source slot.
+  [[nodiscard]] auto QueryOutputsFor(
+    ShaderVisibleIndex source_slot) const noexcept
+    -> IIblProvider::OutputMaps override;
+
+  // -- Interface reserved for IblComputePass only -----------------------------
+
+  //! Returns the UAV index for a specific mip of the prefilter map.
+  [[nodiscard]] auto GetPrefilterMapUavSlot(
+    IblPassTag tag, uint32_t mip_level) const noexcept -> ShaderVisibleIndex;
+
+  //! Returns the UAV index for the irradiance map.
+  [[nodiscard]] auto GetIrradianceMapUavSlot(IblPassTag tag) const noexcept
+    -> ShaderVisibleIndex;
+
+  //! Returns the Irradiance map texture.
+  [[nodiscard]] auto GetIrradianceMap(IblPassTag tag) const noexcept
+    -> observer_ptr<graphics::Texture>;
+
+  //! Returns the Prefilter map texture.
+  [[nodiscard]] auto GetPrefilterMap(IblPassTag tag) const noexcept
+    -> observer_ptr<graphics::Texture>;
+
+  //! Marks that generation has completed for the given source slot and
+  //! advances the generation token.
+  auto MarkGenerated(IblPassTag tag, ShaderVisibleIndex source_slot) -> void;
 
 private:
   struct MapResources {
@@ -103,6 +104,8 @@ private:
   bool resources_created_ { false };
 
   ShaderVisibleIndex last_source_cubemap_slot_ { kInvalidShaderVisibleIndex };
+
+  std::atomic<std::uint64_t> generation_ { 1ULL };
 
   MapResources irradiance_map_;
   MapResources prefilter_map_;

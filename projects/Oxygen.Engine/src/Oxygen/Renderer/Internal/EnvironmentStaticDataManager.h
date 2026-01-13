@@ -32,7 +32,7 @@ class SceneEnvironment;
 namespace oxygen::engine::internal {
 
 class IBrdfLutProvider;
-class IblManager;
+class IIblProvider;
 class ISkyAtmosphereLutProvider;
 
 //! Single-owner builder/uploader for bindless EnvironmentStaticData.
@@ -60,7 +60,7 @@ public:
     observer_ptr<Graphics> gfx,
     observer_ptr<renderer::resources::IResourceBinder> texture_binder,
     observer_ptr<IBrdfLutProvider> brdf_lut_provider,
-    observer_ptr<IblManager> ibl_manager,
+    observer_ptr<IIblProvider> ibl_manager,
     observer_ptr<ISkyAtmosphereLutProvider> sky_atmo_lut_provider = nullptr);
 
   OXGN_RNDR_API ~EnvironmentStaticDataManager();
@@ -110,12 +110,6 @@ public:
     return brdf_lut_slot_;
   }
 
-  //! Returns the IblManager.
-  [[nodiscard]] auto GetIblManager() const noexcept -> observer_ptr<IblManager>
-  {
-    return ibl_manager_;
-  }
-
   //! Returns the current SkyLight cubemap slot.
   [[nodiscard]] auto GetSkyLightCubemapSlot() const noexcept
     -> ShaderVisibleIndex
@@ -145,7 +139,7 @@ private:
   observer_ptr<Graphics> gfx_;
   observer_ptr<renderer::resources::IResourceBinder> texture_binder_;
   observer_ptr<IBrdfLutProvider> brdf_lut_provider_;
-  observer_ptr<IblManager> ibl_manager_;
+  observer_ptr<IIblProvider> ibl_manager_;
   observer_ptr<ISkyAtmosphereLutProvider> sky_atmo_lut_provider_;
   frame::Slot current_slot_ { frame::kInvalidSlot };
 

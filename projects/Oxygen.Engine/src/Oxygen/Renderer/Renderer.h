@@ -268,6 +268,10 @@ public:
   OXGN_RNDR_NDAPI auto GetEnvironmentStaticDataManager() const noexcept
     -> observer_ptr<internal::EnvironmentStaticDataManager>;
 
+  //! Returns the IBL manager (non-owning observer).
+  OXGN_RNDR_NDAPI auto GetIblManager() const noexcept
+    -> observer_ptr<internal::IblManager>;
+
   //=== Debug Overrides ===---------------------------------------------------//
 
   //! Force an IBL regeneration on the next frame.

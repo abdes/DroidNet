@@ -15,7 +15,7 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/Internal/BrdfLutManager.h>
-#include <Oxygen/Renderer/Internal/IblManager.h>
+#include <Oxygen/Renderer/Internal/IIblProvider.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Scene/Environment/Fog.h>
@@ -104,7 +104,7 @@ EnvironmentStaticDataManager::EnvironmentStaticDataManager(
   observer_ptr<Graphics> gfx,
   observer_ptr<renderer::resources::IResourceBinder> texture_binder,
   observer_ptr<IBrdfLutProvider> brdf_lut_provider,
-  observer_ptr<IblManager> ibl_manager,
+  observer_ptr<IIblProvider> ibl_manager,
   observer_ptr<ISkyAtmosphereLutProvider> sky_atmo_lut_provider)
   : gfx_(gfx)
   , texture_binder_(texture_binder)
@@ -379,25 +379,27 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
           : ShaderVisibleIndex { next.sky_sphere.cubemap_slot };
 
         published_ibl_source_slot = source_slot.get();
-        published_ibl_is_dirty = ibl_manager_->IsDirty(source_slot);
 
-        // Only publish the output slots once the IBL maps are known to be
-        // generated for the currently selected source cubemap.
-        //
-        // This prevents sampling from uninitialized UAV-initial-state
-        // textures (which would appear black), especially visible when the
-        // demo focuses on IBL specular and disables competing terms.
-        if (!published_ibl_is_dirty) {
-          next.sky_light.irradiance_map_slot
-            = ibl_manager_->GetIrradianceMapSlot().get();
-          next.sky_light.prefilter_map_slot
-            = ibl_manager_->GetPrefilterMapSlot().get();
-          published_ibl_outputs = true;
+        const auto outputs = ibl_manager_->QueryOutputsFor(source_slot);
+
+        const bool irr_ready = outputs.irradiance != kInvalidShaderVisibleIndex;
+        const bool pref_ready = outputs.prefilter != kInvalidShaderVisibleIndex;
+
+        published_ibl_is_dirty = !(irr_ready && pref_ready);
+
+        if (irr_ready) {
+          next.sky_light.irradiance_map_slot = outputs.irradiance.get();
         } else {
           next.sky_light.irradiance_map_slot = kInvalidDescriptorSlot;
-          next.sky_light.prefilter_map_slot = kInvalidDescriptorSlot;
-          published_ibl_outputs = false;
         }
+
+        if (pref_ready) {
+          next.sky_light.prefilter_map_slot = outputs.prefilter.get();
+        } else {
+          next.sky_light.prefilter_map_slot = kInvalidDescriptorSlot;
+        }
+
+        published_ibl_outputs = (irr_ready && pref_ready);
       } else {
         next.sky_light.irradiance_map_slot = kInvalidDescriptorSlot;
         next.sky_light.prefilter_map_slot = kInvalidDescriptorSlot;
