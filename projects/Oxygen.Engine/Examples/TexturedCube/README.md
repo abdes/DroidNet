@@ -94,8 +94,10 @@ The sample uses the new texture import pipeline with support for:
 1. Go to the "Lighting" tab
 2. Click "Browse skybox..." and select an .hdr or .exr file
 3. Select "Equirectangular (2:1)" layout (default for most HDRIs)
-4. Select output format (RGBA16F for HDR, BC7 for compressed LDR)
+4. Select output format (RGBA16F/32F for HDR, or BC7/RGBA8 for tonemapped LDR)
 5. Set "Cube face size" (512 or 1024 recommended)
+   - When using an LDR output format, tonemapping is enabled automatically and
+     an Exposure (EV) control is shown.
 6. Enable "Flip Y" if the skybox appears upside-down
 7. Click "Load skybox"
 

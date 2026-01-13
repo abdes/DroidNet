@@ -71,6 +71,10 @@ public:
     OutputFormat output_format { OutputFormat::kRGBA8 };
     int cube_face_size { 512 };
     bool flip_y { false };
+
+    // HDR handling: required when cooking HDR sources to LDR formats.
+    bool tonemap_hdr_to_ldr { false };
+    float hdr_exposure_ev { 0.0f };
   };
 
   //! Sky lighting parameters.

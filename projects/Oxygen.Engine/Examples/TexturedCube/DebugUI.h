@@ -104,6 +104,10 @@ public:
     int output_format_idx { 0 };
     int cube_face_size { 512 };
     bool flip_y { false };
+
+    // HDR handling: only applies to HDR sources (.hdr/.exr).
+    bool tonemap_hdr_to_ldr { false };
+    float hdr_exposure_ev { 0.0f };
   };
 
   //! State for UV transformation UI.

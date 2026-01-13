@@ -21,6 +21,8 @@ namespace {
 using oxygen::content::ResourceKey;
 using oxygen::renderer::testing::FakeGraphics;
 using oxygen::renderer::testing::MakeCookedTexture1x1Rgba8Payload;
+using oxygen::renderer::testing::MakeCookedTexture8x8Bc7MipChainPayload;
+using oxygen::renderer::testing::MakeTightPackedTexture1x1Rgba8Payload;
 using oxygen::renderer::testing::TextureBinderTest;
 
 [[nodiscard]] auto GetTextureDebugName(const oxygen::graphics::Texture* texture)
@@ -263,6 +265,108 @@ NOLINT_TEST_F(
 
   EXPECT_NE(normal_texture_after, normal_texture_before);
   EXPECT_NE(GetTextureDebugName(normal_texture_after), "ErrorTexture");
+}
+
+//! Tight-packed cooked layouts must upload and repoint correctly.
+/*! Verifies that TextureBinder consumes the payload layout table rather than
+    enforcing D3D12-only alignment assumptions (row pitch 256, placement 512).
+*/
+NOLINT_TEST_F(TextureBinderUploadTest, TightPackedPayload_UploadsAndRepoints)
+{
+  // Arrange
+  const auto payload = MakeTightPackedTexture1x1Rgba8Payload();
+  const ResourceKey key
+    = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
+
+  Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+
+  auto q
+    = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
+      oxygen::graphics::QueueRole::kTransfer));
+  ASSERT_NE(q, nullptr);
+
+  Gfx().srv_view_log_.events.clear();
+
+  const auto index = TexBinder().GetOrAllocate(key);
+  const auto u_index = index.get();
+
+  const auto expected_placeholder_name = MakePlaceholderDebugName(key);
+  const auto creations_after_allocate
+    = CountSrvViewCreationsForIndex(Gfx(), u_index);
+  ASSERT_GE(creations_after_allocate, 1U);
+
+  const auto* const texture_before = LastSrvViewTextureForIndex(Gfx(), u_index);
+  ASSERT_NE(texture_before, nullptr);
+  EXPECT_EQ(GetTextureDebugName(texture_before), expected_placeholder_name);
+
+  // Drive completion and drain.
+  q->QueueSignalCommand((std::numeric_limits<std::uint64_t>::max)());
+  Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 2 });
+  TexBinder().OnFrameStart();
+  Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 3 });
+  TexBinder().OnFrameStart();
+
+  // Assert: repointed once and not to the error texture.
+  EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), u_index),
+    creations_after_allocate + 1U);
+  const auto* const texture_after = LastSrvViewTextureForIndex(Gfx(), u_index);
+  ASSERT_NE(texture_after, nullptr);
+  EXPECT_NE(GetTextureDebugName(texture_after), expected_placeholder_name);
+  EXPECT_NE(GetTextureDebugName(texture_after), "ErrorTexture");
+}
+
+//! BC7 mip chains must upload and repoint correctly.
+/*! Ensures the binder supports block-compressed textures by consuming cooked
+    layout tables and using full-subresource upload descriptors for all mips.
+*/
+NOLINT_TEST_F(TextureBinderUploadTest, Bc7MipChain_UploadsAndRepoints)
+{
+  // Arrange
+  const auto payload = MakeCookedTexture8x8Bc7MipChainPayload();
+  const ResourceKey key
+    = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
+
+  Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+
+  auto q
+    = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
+      oxygen::graphics::QueueRole::kTransfer));
+  ASSERT_NE(q, nullptr);
+
+  Gfx().srv_view_log_.events.clear();
+
+  const auto index = TexBinder().GetOrAllocate(key);
+  const auto u_index = index.get();
+
+  const auto expected_placeholder_name = MakePlaceholderDebugName(key);
+  const auto creations_after_allocate
+    = CountSrvViewCreationsForIndex(Gfx(), u_index);
+  ASSERT_GE(creations_after_allocate, 1U);
+
+  const auto* const texture_before = LastSrvViewTextureForIndex(Gfx(), u_index);
+  ASSERT_NE(texture_before, nullptr);
+  EXPECT_EQ(GetTextureDebugName(texture_before), expected_placeholder_name);
+
+  // Drive completion and drain.
+  q->QueueSignalCommand((std::numeric_limits<std::uint64_t>::max)());
+  Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 2 });
+  TexBinder().OnFrameStart();
+  Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 3 });
+  TexBinder().OnFrameStart();
+
+  // Assert: repointed once and not to the error texture.
+  EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), u_index),
+    creations_after_allocate + 1U);
+  const auto* const texture_after = LastSrvViewTextureForIndex(Gfx(), u_index);
+  ASSERT_NE(texture_after, nullptr);
+  EXPECT_NE(GetTextureDebugName(texture_after), expected_placeholder_name);
+  EXPECT_NE(GetTextureDebugName(texture_after), "ErrorTexture");
 }
 
 //! Reserved keys do not allocate per-entry descriptors and never repoint.

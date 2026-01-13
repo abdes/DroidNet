@@ -63,155 +63,176 @@ namespace {
 
   struct UploadLayoutFailure {
     enum class Reason : uint8_t {
-      kDataTooSmall,
-      kMipAlignmentOverflow,
+      kLayoutCountMismatch,
+      kSubresourceOutOfBounds,
+      kRowPitchTooSmall,
+      kSizeMismatch,
       kArithmeticOverflow,
     };
 
-    Reason reason { Reason::kDataTooSmall };
+    Reason reason { Reason::kSubresourceOutOfBounds };
     std::uint32_t mip { 0U };
     std::uint32_t layer { 0U };
     std::size_t offset { 0U };
-    std::size_t required_bytes { 0U };
+    std::size_t expected_value { 0U };
+    std::size_t actual_value { 0U };
     std::size_t total_bytes { 0U };
   };
 
-  [[nodiscard]] auto AlignUpSize(
-    const std::size_t value, const std::size_t alignment) -> std::size_t
+  [[nodiscard]] constexpr auto IsBc7Format(const Format format) noexcept -> bool
   {
-    if (alignment == 0U) {
-      return value;
+    return format == Format::kBC7UNorm || format == Format::kBC7UNormSRGB;
+  }
+
+  [[nodiscard]] auto IsSupportedTextureFormat(const Format format,
+    const graphics::detail::FormatInfo& info) noexcept -> bool
+  {
+    if (info.bytes_per_block == 0U || info.block_size == 0U) {
+      return false;
     }
-    DCHECK_F(
-      (alignment & (alignment - 1U)) == 0U, "alignment must be a power of two");
-    const auto mask = alignment - 1U;
-    if (value > (std::numeric_limits<std::size_t>::max)() - mask) {
-      return (std::numeric_limits<std::size_t>::max)();
+    // Engine only supports uncompressed formats and BC7.
+    if (info.block_size > 1U) {
+      return IsBc7Format(format);
     }
-    return (value + mask) & ~mask;
+    return true;
   }
 
   //! Build upload layout for 2D textures, 2D arrays, and cubemaps.
   /*!
-    CRITICAL: Subresource ordering MUST be LAYER-MAJOR to match D3D12
-    subresource indexing.
+    Uses the cooked payload's subresource layout table as the authoritative
+    source of offsets and pitches.
 
-    D3D12 subresource indexing formula:
-      SubresourceIndex = MipSlice + (ArraySlice * MipLevels)
+    Subresource ordering MUST be layer-major (layer outer, mip inner) to match
+    both the cooker and D3D12 subresource indexing.
 
-    This means we iterate: for (layer) { for (mip) { ... } }
-
-    Expected data layout from cooker:
-      Layer0/Mip0, Layer0/Mip1, ..., Layer0/MipN,
-      Layer1/Mip0, Layer1/Mip1, ..., Layer1/MipN,
-      ...
-
-    This ordering MUST match:
-      - ComputeSubresourceLayouts() in TexturePackingPolicy.cpp
-      - PackSubresources() in TextureCooker.cpp
-
-    This ordering MUST match the cooker to avoid scrambled array layers.
+    The produced UploadSubresource entries always represent full-subresource
+    uploads (width/height == 0), which is required for BC formats where small
+    mips are not multiples of the block size.
   */
-  [[nodiscard]] auto BuildTexture2DUploadLayout(
+  [[nodiscard]] auto BuildTexture2DUploadLayoutFromPayload(
     const graphics::TextureDesc& desc,
     const graphics::detail::FormatInfo& format_info,
     const std::span<const std::byte> data_bytes,
-    const std::size_t row_pitch_alignment,
-    const std::size_t mip_placement_alignment)
+    const std::span<const data::pak::SubresourceLayout> layouts)
     -> std::variant<UploadLayout, UploadLayoutFailure>
   {
     UploadLayout layout;
+
     const std::uint32_t mip_count = desc.mip_levels;
     const std::uint32_t array_layers = desc.array_size;
-
-    layout.dst_subresources.reserve(
-      static_cast<std::size_t>(mip_count) * array_layers);
-    layout.src_view.subresources.reserve(
-      static_cast<std::size_t>(mip_count) * array_layers);
-
-    std::size_t offset = 0U;
     const std::size_t total_data_size = data_bytes.size();
 
-    // IMPORTANT: layer-major iteration (layer outer, mip inner)
+    const std::size_t expected_subresources
+      = static_cast<std::size_t>(mip_count)
+      * static_cast<std::size_t>(array_layers);
+    if (layouts.size() != expected_subresources) {
+      return UploadLayoutFailure {
+        .reason = UploadLayoutFailure::Reason::kLayoutCountMismatch,
+        .mip = 0U,
+        .layer = 0U,
+        .offset = 0U,
+        .expected_value = expected_subresources,
+        .actual_value = layouts.size(),
+        .total_bytes = total_data_size,
+      };
+    }
+
+    layout.dst_subresources.reserve(expected_subresources);
+    layout.src_view.subresources.reserve(expected_subresources);
+
+    std::size_t max_end = 0U;
+
     for (std::uint32_t layer = 0; layer < array_layers; ++layer) {
       for (std::uint32_t mip = 0; mip < mip_count; ++mip) {
-        const auto aligned_offset
-          = AlignUpSize(offset, mip_placement_alignment);
-        if (aligned_offset == (std::numeric_limits<std::size_t>::max)()) {
-          return UploadLayoutFailure {
-            .reason = UploadLayoutFailure::Reason::kArithmeticOverflow,
-            .mip = mip,
-            .layer = layer,
-            .offset = offset,
-            .required_bytes = 0U,
-            .total_bytes = total_data_size,
-          };
-        }
-        if (aligned_offset > total_data_size) {
-          return UploadLayoutFailure {
-            .reason = UploadLayoutFailure::Reason::kMipAlignmentOverflow,
-            .mip = mip,
-            .layer = layer,
-            .offset = offset,
-            .required_bytes = aligned_offset - offset,
-            .total_bytes = total_data_size,
-          };
-        }
-        offset = aligned_offset;
+        const std::size_t idx
+          = static_cast<std::size_t>(layer) * mip_count + mip;
+        const auto& sr_layout = layouts[idx];
 
         const auto mip_w = (std::max)(desc.width >> mip, 1U);
         const auto mip_h = (std::max)(desc.height >> mip, 1U);
-        const auto bytes_per_block = format_info.bytes_per_block;
-        if (bytes_per_block == 0U
-          || mip_w > (std::numeric_limits<std::size_t>::max)()
-              / static_cast<std::size_t>(bytes_per_block)) {
+
+        const auto block = static_cast<std::size_t>(format_info.block_size);
+        const auto bpb = static_cast<std::size_t>(format_info.bytes_per_block);
+        if (block == 0U || bpb == 0U) {
           return UploadLayoutFailure {
             .reason = UploadLayoutFailure::Reason::kArithmeticOverflow,
             .mip = mip,
             .layer = layer,
-            .offset = offset,
-            .required_bytes = 0U,
+            .offset = 0U,
+            .expected_value = 0U,
+            .actual_value = 0U,
             .total_bytes = total_data_size,
           };
         }
 
-        const auto bytes_per_row
-          = static_cast<std::size_t>(mip_w) * bytes_per_block;
-        const auto row_pitch = AlignUpSize(bytes_per_row, row_pitch_alignment);
-        if (row_pitch == (std::numeric_limits<std::size_t>::max)()) {
+        const auto blocks_x
+          = (static_cast<std::size_t>(mip_w) + block - 1U) / block;
+        const auto blocks_y
+          = (static_cast<std::size_t>(mip_h) + block - 1U) / block;
+
+        if (blocks_x > (std::numeric_limits<std::size_t>::max)() / bpb) {
           return UploadLayoutFailure {
             .reason = UploadLayoutFailure::Reason::kArithmeticOverflow,
             .mip = mip,
             .layer = layer,
-            .offset = offset,
-            .required_bytes = 0U,
+            .offset = 0U,
+            .expected_value = 0U,
+            .actual_value = 0U,
             .total_bytes = total_data_size,
           };
         }
 
-        if (mip_h > 0U
-          && row_pitch > (std::numeric_limits<std::size_t>::max)()
-              / static_cast<std::size_t>(mip_h)) {
+        const auto min_row_bytes = blocks_x * bpb;
+        const auto row_pitch
+          = static_cast<std::size_t>(sr_layout.row_pitch_bytes);
+        if (row_pitch < min_row_bytes) {
+          return UploadLayoutFailure {
+            .reason = UploadLayoutFailure::Reason::kRowPitchTooSmall,
+            .mip = mip,
+            .layer = layer,
+            .offset = static_cast<std::size_t>(sr_layout.offset_bytes),
+            .expected_value = min_row_bytes,
+            .actual_value = row_pitch,
+            .total_bytes = total_data_size,
+          };
+        }
+
+        if (blocks_y > 0U
+          && row_pitch > (std::numeric_limits<std::size_t>::max)() / blocks_y) {
           return UploadLayoutFailure {
             .reason = UploadLayoutFailure::Reason::kArithmeticOverflow,
             .mip = mip,
             .layer = layer,
-            .offset = offset,
-            .required_bytes = 0U,
+            .offset = static_cast<std::size_t>(sr_layout.offset_bytes),
+            .expected_value = 0U,
+            .actual_value = 0U,
             .total_bytes = total_data_size,
           };
         }
 
-        const auto slice_pitch = row_pitch * static_cast<std::size_t>(mip_h);
-
-        if (offset > total_data_size
-          || slice_pitch > (total_data_size - offset)) {
+        const auto expected_size = row_pitch * blocks_y;
+        const auto size_bytes = static_cast<std::size_t>(sr_layout.size_bytes);
+        if (size_bytes != expected_size) {
           return UploadLayoutFailure {
-            .reason = UploadLayoutFailure::Reason::kDataTooSmall,
+            .reason = UploadLayoutFailure::Reason::kSizeMismatch,
+            .mip = mip,
+            .layer = layer,
+            .offset = static_cast<std::size_t>(sr_layout.offset_bytes),
+            .expected_value = expected_size,
+            .actual_value = size_bytes,
+            .total_bytes = total_data_size,
+          };
+        }
+
+        const auto offset = static_cast<std::size_t>(sr_layout.offset_bytes);
+        if (offset > total_data_size || size_bytes > total_data_size - offset) {
+          return UploadLayoutFailure {
+            .reason = UploadLayoutFailure::Reason::kSubresourceOutOfBounds,
             .mip = mip,
             .layer = layer,
             .offset = offset,
-            .required_bytes = slice_pitch,
+            .expected_value = size_bytes,
+            .actual_value = total_data_size - offset,
             .total_bytes = total_data_size,
           };
         }
@@ -219,27 +240,27 @@ namespace {
         layout.dst_subresources.push_back(engine::upload::UploadSubresource {
           .mip = mip,
           .array_slice = layer,
-          .x = 0,
-          .y = 0,
-          .z = 0,
-          .width = mip_w,
-          .height = mip_h,
-          .depth = 1,
+          .x = 0U,
+          .y = 0U,
+          .z = 0U,
+          .width = 0U,
+          .height = 0U,
+          .depth = 1U,
         });
 
         layout.src_view.subresources.push_back(
           engine::upload::UploadTextureSourceSubresource {
-            .bytes = data_bytes.subspan(offset, slice_pitch),
-            .row_pitch = static_cast<std::uint32_t>(row_pitch),
-            .slice_pitch = static_cast<std::uint32_t>(slice_pitch),
+            .bytes = data_bytes.subspan(offset, size_bytes),
+            .row_pitch = sr_layout.row_pitch_bytes,
+            .slice_pitch = sr_layout.size_bytes,
           });
 
-        offset += slice_pitch;
+        max_end = (std::max)(max_end, offset + size_bytes);
       }
     }
 
     layout.trailing_bytes
-      = (offset <= total_data_size) ? (total_data_size - offset) : 0U;
+      = (max_end <= total_data_size) ? (total_data_size - max_end) : 0U;
     return layout;
   }
 
@@ -254,15 +275,12 @@ namespace {
       kUnsupportedTextureType,
       kUnsupportedFormat,
       kUnsupportedDepth,
-      kBadDataAlignment,
       kCreateTextureException,
       kCreateTextureReturnedNull,
       kLayoutFailure,
     };
 
     Reason reason { Reason::kCreateTextureReturnedNull };
-    std::uint32_t expected_alignment { 0U };
-    std::uint32_t actual_alignment { 0U };
     std::optional<UploadLayoutFailure> layout_failure;
   };
 
@@ -293,14 +311,8 @@ namespace {
     desc.is_shader_resource = true;
     desc.debug_name = std::string("Texture(") + content::to_string(key) + ")";
 
-    constexpr std::size_t kRowPitchAlignment = 256U;
-    constexpr std::size_t kMipPlacementAlignment = 512U;
-
     const auto& format_info = graphics::detail::GetFormatInfo(desc.format);
-    if (format_info.block_size != 1U || format_info.bytes_per_block == 0U) {
-      // TODO(oxygen): Add support for block-compressed texture formats (BCn).
-      // This requires correct block-aware upload layout (row/slice pitch and
-      // subresource sizing) and must keep D3D12 copy alignment requirements.
+    if (!IsSupportedTextureFormat(desc.format, format_info)) {
       return PrepareTexture2DUploadFailure {
         .reason = PrepareTexture2DUploadFailure::Reason::kUnsupportedFormat,
       };
@@ -317,14 +329,6 @@ namespace {
       return PrepareTexture2DUploadFailure {
         .reason
         = PrepareTexture2DUploadFailure::Reason::kUnsupportedTextureType,
-      };
-    }
-
-    if (tex_res.GetDataAlignment() != kRowPitchAlignment) {
-      return PrepareTexture2DUploadFailure {
-        .reason = PrepareTexture2DUploadFailure::Reason::kBadDataAlignment,
-        .expected_alignment = static_cast<std::uint32_t>(kRowPitchAlignment),
-        .actual_alignment = tex_res.GetDataAlignment(),
       };
     }
 
@@ -351,8 +355,8 @@ namespace {
     const auto& data_span = tex_res.GetData();
     const auto data_bytes = std::as_bytes(data_span);
 
-    const auto layout_result = BuildTexture2DUploadLayout(desc, format_info,
-      data_bytes, kRowPitchAlignment, kMipPlacementAlignment);
+    const auto layout_result = BuildTexture2DUploadLayoutFromPayload(
+      desc, format_info, data_bytes, tex_res.GetSubresourceLayouts());
     if (std::holds_alternative<UploadLayoutFailure>(layout_result)) {
       return PrepareTexture2DUploadFailure {
         .reason = PrepareTexture2DUploadFailure::Reason::kLayoutFailure,
@@ -1150,16 +1154,11 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
           "and cubemaps");
         break;
       case PrepareTexture2DUploadFailure::Reason::kUnsupportedFormat:
-        LOG_F(ERROR, "TextureBinder upload only supports non-BC formats");
+        LOG_F(ERROR,
+          "TextureBinder upload only supports uncompressed and BC7 formats");
         break;
       case PrepareTexture2DUploadFailure::Reason::kUnsupportedDepth:
         LOG_F(ERROR, "TextureBinder async upload only supports 2D textures");
-        break;
-      case PrepareTexture2DUploadFailure::Reason::kBadDataAlignment:
-        LOG_F(ERROR,
-          "TextureBinder expects cooked texture data alignment {} bytes; got "
-          "{}",
-          failure.expected_alignment, failure.actual_alignment);
         break;
       case PrepareTexture2DUploadFailure::Reason::kCreateTextureException:
         LOG_F(ERROR, "CreateTexture threw during async load");
@@ -1172,23 +1171,35 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
         const auto& lf = *failure.layout_failure;
 
         switch (lf.reason) {
-        case UploadLayoutFailure::Reason::kDataTooSmall:
+        case UploadLayoutFailure::Reason::kLayoutCountMismatch:
           LOG_F(ERROR,
-            "TextureResource data too small: mip {} layer {} offset {} need {} "
-            "bytes (total {})",
-            lf.mip, lf.layer, lf.offset, lf.required_bytes, lf.total_bytes);
+            "TextureResource layout count mismatch: expected {} layouts, got "
+            "{}",
+            lf.expected_value, lf.actual_value);
           break;
-        case UploadLayoutFailure::Reason::kMipAlignmentOverflow:
+        case UploadLayoutFailure::Reason::kSubresourceOutOfBounds:
           LOG_F(ERROR,
-            "TextureResource mip alignment overflow: mip {} offset {} padding "
-            "{} (total {})",
-            lf.mip, lf.offset, lf.required_bytes, lf.total_bytes);
+            "TextureResource subresource out of bounds: mip {} layer {} offset "
+            "{} size {} (available {})",
+            lf.mip, lf.layer, lf.offset, lf.expected_value, lf.actual_value);
+          break;
+        case UploadLayoutFailure::Reason::kRowPitchTooSmall:
+          LOG_F(ERROR,
+            "TextureResource row pitch too small: mip {} layer {} offset {} "
+            "need >= {} bytes, got {}",
+            lf.mip, lf.layer, lf.offset, lf.expected_value, lf.actual_value);
+          break;
+        case UploadLayoutFailure::Reason::kSizeMismatch:
+          LOG_F(ERROR,
+            "TextureResource subresource size mismatch: mip {} layer {} offset "
+            "{} expected {} bytes, got {}",
+            lf.mip, lf.layer, lf.offset, lf.expected_value, lf.actual_value);
           break;
         case UploadLayoutFailure::Reason::kArithmeticOverflow:
           LOG_F(ERROR,
-            "TextureResource upload layout arithmetic overflow: mip {} offset "
-            "{} (total {})",
-            lf.mip, lf.offset, lf.total_bytes);
+            "TextureResource upload layout arithmetic overflow: mip {} layer "
+            "{}",
+            lf.mip, lf.layer);
           break;
         }
         break;

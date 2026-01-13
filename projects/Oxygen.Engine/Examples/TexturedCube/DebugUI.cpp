@@ -7,8 +7,10 @@
 #include "DebugUI.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 
 #include <imgui.h>
@@ -56,7 +58,7 @@ auto TryBrowseForImageFile(std::string& out_utf8_path) -> bool
   }
 
   constexpr COMDLG_FILTERSPEC kFilters[] = {
-    { L"Image files", L"*.hdr;*.exr;*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.dds" },
+    { L"Image files", L"*.hdr;*.exr;*.png;*.jpg;*.jpeg;*.tga;*.bmp" },
     { L"HDR images", L"*.hdr;*.exr" },
     { L"All files", L"*.*" },
   };
@@ -230,18 +232,17 @@ auto DebugUI::DrawMaterialsTab(SceneSetup::TextureIndexMode& texture_mode,
 
     constexpr const char* kFormatNames[] = {
       "RGBA8 sRGB",
-      "BC7 sRGB (upload fails)",
-      "RGBA16F (upload fails)",
-      "RGBA32F (upload fails)",
+      "BC7 sRGB",
+      "RGBA16F",
+      "RGBA32F",
     };
     ImGui::SetNextItemWidth(180.0f);
     ImGui::Combo("Output format", &texture_state_.output_format_idx,
       kFormatNames, IM_ARRAYSIZE(kFormatNames));
     if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
-        "RGBA8: Works end-to-end (LDR only)\n"
-        "BC7: Importer works, TextureBinder upload not implemented\n"
-        "RGBA16F/32F: For HDR content, upload not implemented");
+      ImGui::SetTooltip("RGBA8: Uncompressed LDR\n"
+                        "BC7: GPU-compressed LDR (recommended for shipping)\n"
+                        "RGBA16F/32F: HDR-friendly formats (larger VRAM)");
     }
 
     ImGui::Checkbox("Generate mips", &texture_state_.generate_mips);
@@ -491,10 +492,43 @@ auto DebugUI::DrawLightingTab(oxygen::observer_ptr<scene::Scene> scene,
 
   // Output format selection
   {
-    constexpr const char* kFormatNames[]
-      = { "RGBA8 (LDR)", "RGBA16F (HDR)", "RGBA32F (HDR)", "BC7 (LDR)" };
+    constexpr const char* kFormatNames[] = { "RGBA8 sRGB (LDR)",
+      "RGBA16F (HDR)", "RGBA32F (HDR)", "BC7 sRGB (LDR)" };
     ImGui::Combo("Output format", &skybox_state_.output_format_idx,
       kFormatNames, IM_ARRAYSIZE(kFormatNames));
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("RGBA8: Uncompressed LDR\n"
+                        "BC7: GPU-compressed LDR (useful after tonemapping)\n"
+                        "RGBA16F/32F: HDR-friendly formats (larger VRAM)");
+    }
+  }
+
+  const std::string sky_path { skybox_state_.path.data() };
+  std::filesystem::path sky_fs_path { sky_path };
+  std::string sky_ext = sky_fs_path.extension().string();
+  std::transform(sky_ext.begin(), sky_ext.end(), sky_ext.begin(),
+    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  const bool is_hdr_source = (sky_ext == ".hdr") || (sky_ext == ".exr");
+  const bool is_ldr_output = (skybox_state_.output_format_idx == 0)
+    || (skybox_state_.output_format_idx == 3);
+
+  if (is_hdr_source && is_ldr_output) {
+    // HDR environments cannot be cooked to LDR formats without tonemapping.
+    // Force it on to avoid a confusing import-time error.
+    skybox_state_.tonemap_hdr_to_ldr = true;
+
+    ImGui::BeginDisabled(true);
+    ImGui::Checkbox("Tonemap HDR to LDR", &skybox_state_.tonemap_hdr_to_ldr);
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(100.0f);
+    ImGui::DragFloat("Exposure (EV)", &skybox_state_.hdr_exposure_ev, 0.1f,
+      -10.0f, 10.0f, "%.1f");
+
+    ImGui::TextDisabled("HDR input + LDR output: tonemapping enabled");
+  } else {
+    skybox_state_.tonemap_hdr_to_ldr = false;
   }
 
   // Face size (for equirectangular conversion)
