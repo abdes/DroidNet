@@ -155,14 +155,16 @@ BrdfLutManager::BrdfLutManager(observer_ptr<Graphics> gfx,
   , uploader_(uploader)
   , staging_(staging_provider)
 {
+  // These are required dependencies, not guaranteeing them and not guaranteeing
+  // that they will survive for the lifetime of the BRDF LUT Manager is a logic
+  // error that will abort.
+  CHECK_NOTNULL_F(gfx_, "expecting a valid Graphics instance");
+  CHECK_NOTNULL_F(uploader_, "expecting a valid UploadCoordinator instance");
+  CHECK_NOTNULL_F(staging_, "expecting a valid StagingProvider instance");
 }
 
 BrdfLutManager::~BrdfLutManager()
 {
-  if (!gfx_) {
-    return;
-  }
-
   auto& registry = gfx_->GetResourceRegistry();
   for (auto& [unused_key, entry] : luts_) {
     (void)unused_key;
@@ -182,91 +184,65 @@ BrdfLutManager::~BrdfLutManager()
 
 auto BrdfLutManager::GetOrCreateLut(const Params params) -> LutResult
 {
-  const LutKey key { params.resolution, params.sample_count,
-    Format::kRG16Float };
+  const LutKey key {
+    .resolution = params.resolution,
+    .sample_count = params.sample_count,
+    .format = Format::kRG16Float,
+  };
   if (auto* entry = EnsureLut(key)) {
-    if (entry->pending_generation.has_value()) {
+    if (entry->pending_generation) {
       const auto status = entry->pending_generation->wait_for(0ms);
       if (status != std::future_status::ready) {
-        return LutResult { nullptr,
-          ShaderVisibleIndex { kInvalidShaderVisibleIndex } };
+        return LutResult::Err();
       }
 
       const auto data = entry->pending_generation->get();
       entry->pending_generation.reset();
 
-      if (!uploader_) {
-        LOG_F(WARNING,
-          "BRDF LUT generation completed but uploader is unavailable");
-        return LutResult { nullptr,
-          ShaderVisibleIndex { kInvalidShaderVisibleIndex } };
-      }
-
       const auto ticket = UploadTexture(key, *entry->texture,
         std::span<const std::byte>(data.data(), data.size()));
-      if (!ticket.has_value()) {
+      if (!ticket) {
         LOG_F(ERROR, "BRDF LUT upload submission failed");
 
         if (auto it = luts_.find(key); it != luts_.end()) {
           auto& registry = gfx_->GetResourceRegistry();
-          if (it->second.texture && registry.Contains(*it->second.texture)) {
-            if (it->second.srv_view.get().IsValid()) {
-              registry.UnRegisterView(*it->second.texture, it->second.srv_view);
-            }
-            registry.UnRegisterResource(*it->second.texture);
-          }
+          // Completely unregister the texture and any associated views.
+          DCHECK_NOTNULL_F(it->second.texture);
+          registry.UnRegisterResource(*it->second.texture);
           luts_.erase(it);
         }
 
-        return LutResult { nullptr,
-          ShaderVisibleIndex { kInvalidShaderVisibleIndex } };
+        return LutResult::Err();
       }
 
       entry->pending_ticket = ticket;
-      return LutResult { nullptr,
-        ShaderVisibleIndex { kInvalidShaderVisibleIndex } };
+      return LutResult::Err();
     }
 
     if (entry->pending_ticket.has_value()) {
-      if (!uploader_) {
-        LOG_F(WARNING,
-          "BRDF LUT upload ticket pending but uploader is unavailable");
-        return LutResult { nullptr,
-          ShaderVisibleIndex { kInvalidShaderVisibleIndex } };
-      }
-
       const auto result = uploader_->TryGetResult(*entry->pending_ticket);
       if (!result.has_value()) {
-        LOG_F(WARNING, "BRDF LUT upload PENDING, ticket_id={}, fence={}",
+        LOG_F(1, "BRDF LUT upload PENDING, ticket_id={}, fence={}",
           entry->pending_ticket->id.get(), entry->pending_ticket->fence.get());
-        return LutResult { nullptr,
-          ShaderVisibleIndex { kInvalidShaderVisibleIndex } };
+        return LutResult::Err();
       }
 
-      LOG_F(WARNING, "BRDF LUT upload COMPLETED, success={}", result->success);
+      LOG_F(1, "BRDF LUT upload COMPLETED, success={}", result->success);
 
-      if (!result->success) {
-        if (result->error.has_value()) {
-          const std::error_code ec = result->error.value();
-          LOG_F(ERROR, "BRDF LUT upload failed: [{}] {}", ec.category().name(),
-            ec.message());
-        } else {
-          LOG_F(ERROR, "BRDF LUT upload failed with unknown error");
-        }
+      if (result->error) {
+        const std::error_code ec = result->error.value();
+        LOG_F(ERROR, "BRDF LUT upload failed: [{}] {}", ec.category().name(),
+          ec.message());
 
         if (auto it = luts_.find(key); it != luts_.end()) {
           auto& registry = gfx_->GetResourceRegistry();
-          if (it->second.texture && registry.Contains(*it->second.texture)) {
-            if (it->second.srv_view.get().IsValid()) {
-              registry.UnRegisterView(*it->second.texture, it->second.srv_view);
-            }
-            registry.UnRegisterResource(*it->second.texture);
-          }
+          // Completely unregister the texture and any associated views.
+          DCHECK_NOTNULL_F(it->second.texture);
+          registry.UnRegisterResource(*it->second.texture);
           luts_.erase(it);
         }
 
-        return LutResult { nullptr,
-          ShaderVisibleIndex { kInvalidShaderVisibleIndex } };
+        return LutResult::Err();
       }
 
       entry->pending_ticket.reset();
@@ -277,8 +253,7 @@ auto BrdfLutManager::GetOrCreateLut(const Params params) -> LutResult
 
     return LutResult { entry->texture, entry->srv_index };
   }
-  return LutResult { nullptr,
-    ShaderVisibleIndex { kInvalidShaderVisibleIndex } };
+  return LutResult::Err();
 }
 
 auto BrdfLutManager::EnsureLut(const LutKey& key) -> LutEntry*
@@ -287,16 +262,12 @@ auto BrdfLutManager::EnsureLut(const LutKey& key) -> LutEntry*
     return std::addressof(it->second);
   }
 
-  if (!gfx_ || !uploader_ || !staging_) {
-    LOG_F(ERROR, "BrdfLutManager missing dependencies");
-    return nullptr;
-  }
-
+  // Create the texture and a SRV, and transfer ownership to the resource
+  // registry for tracking.
   auto texture = CreateTexture(key);
   if (!texture) {
     return nullptr;
   }
-
   gfx_->GetResourceRegistry().Register(texture);
 
   auto srv = CreateSrv(key, texture);
@@ -309,9 +280,8 @@ auto BrdfLutManager::EnsureLut(const LutKey& key) -> LutEntry*
   entry.texture = std::move(texture);
   entry.srv_view = std::move(srv->view);
   entry.srv_index = srv->index;
-  entry.pending_generation.emplace(std::async(std::launch::async, [key] {
-    return GenerateLutData(key);
-  }));
+  entry.pending_generation.emplace(
+    std::async(std::launch::async, [key] { return GenerateLutData(key); }));
 
   auto [it, inserted] = luts_.emplace(key, std::move(entry));
   DCHECK_F(inserted, "Failed to insert BRDF LUT entry");
@@ -339,11 +309,10 @@ auto BrdfLutManager::CreateTexture(const LutKey& key)
 
   auto texture = gfx_->CreateTexture(desc);
   if (!texture) {
-    LOG_F(ERROR, "BrdfLutManager failed to create texture");
+    LOG_F(ERROR, "Failed to create texture for the BRDF LUT");
     return nullptr;
   }
 
-  texture->SetName(desc.debug_name);
   return texture;
 }
 
@@ -351,24 +320,25 @@ auto BrdfLutManager::UploadTexture(const LutKey& key,
   graphics::Texture& texture) -> std::optional<upload::UploadTicket>
 {
   const auto data = GenerateLutData(key);
-  return UploadTexture(
-    key, texture, std::span<const std::byte>(data.data(), data.size()));
-}
-
-auto BrdfLutManager::UploadTexture(const LutKey& key, graphics::Texture& texture,
-  const std::span<const std::byte> data) -> std::optional<upload::UploadTicket>
-{
   if (data.empty()) {
     LOG_F(ERROR, "BRDF LUT generation failed (empty data)");
     return std::nullopt;
   }
+  return UploadTexture(
+    key, texture, std::span<const std::byte>(data.data(), data.size()));
+}
+
+auto BrdfLutManager::UploadTexture(const LutKey& key,
+  graphics::Texture& texture, const std::span<const std::byte> data)
+  -> std::optional<upload::UploadTicket>
+{
+  DCHECK_F(!data.empty(), "BRDF LUT data must not be empty");
 
   const auto expected_bytes = static_cast<std::size_t>(key.resolution)
     * static_cast<std::size_t>(key.resolution) * sizeof(std::uint32_t);
   if (data.size() != expected_bytes) {
-    LOG_F(ERROR,
-      "BRDF LUT data size mismatch (expected={}, got={})", expected_bytes,
-      data.size());
+    LOG_F(ERROR, "BRDF LUT data size mismatch (expected={}, got={})",
+      expected_bytes, data.size());
     return std::nullopt;
   }
 
@@ -461,22 +431,27 @@ auto BrdfLutManager::GenerateLutData(const LutKey& key)
     return {};
   }
 
-  const auto texel_count
-    = static_cast<std::size_t>(key.resolution) * key.resolution;
+  const std::uint32_t resolution = key.resolution;
+  const std::size_t texel_count
+    = static_cast<std::size_t>(resolution) * resolution;
+
+  // Allocate raw byte storage for GPU upload, with a size that is multiple of
+  // texel size (4 bytes for RG16F)
   std::vector<std::byte> data(texel_count * sizeof(std::uint32_t));
 
-  std::size_t offset = 0U;
-  const float inv_resolution = 1.0F / static_cast<float>(key.resolution);
+  // Create a typed view over the byte buffer
+  auto* texel_ptr = reinterpret_cast<std::uint32_t*>(data.data());
+  std::span<std::uint32_t> texels(texel_ptr, texel_count);
 
-  for (std::uint32_t y = 0; y < key.resolution; ++y) {
-    const float roughness = (static_cast<float>(y) + 0.5F) * inv_resolution;
-    for (std::uint32_t x = 0; x < key.resolution; ++x) {
-      const float n_dot_v = (static_cast<float>(x) + 0.5F) * inv_resolution;
+  const float inv_resolution = 1.0f / static_cast<float>(resolution);
+
+  for (std::uint32_t y = 0; y < resolution; ++y) {
+    const float roughness = (static_cast<float>(y) + 0.5f) * inv_resolution;
+    for (std::uint32_t x = 0; x < resolution; ++x) {
+      const float n_dot_v = (static_cast<float>(x) + 0.5f) * inv_resolution;
       const glm::vec2 integrated
         = IntegrateBrdf(n_dot_v, roughness, key.sample_count);
-      const std::uint32_t packed = PackHalf2x16(integrated);
-      std::memcpy(data.data() + offset, &packed, sizeof(packed));
-      offset += sizeof(packed);
+      texels[y * resolution + x] = PackHalf2x16(integrated);
     }
   }
 
