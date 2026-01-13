@@ -19,6 +19,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Renderer/Internal/IBrdfLutProvider.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -36,35 +37,6 @@ class StagingProvider;
 } // namespace oxygen::engine::upload
 
 namespace oxygen::engine::internal {
-
-struct BrdfLutParams {
-  uint32_t resolution { 0u };
-  uint32_t sample_count { 0u };
-};
-
-inline constexpr BrdfLutParams kDefaultBrdfLutParams { 256u, 128u };
-
-struct LutResult {
-  std::shared_ptr<graphics::Texture> texture;
-  ShaderVisibleIndex index { kInvalidShaderVisibleIndex };
-
-  static constexpr auto Err() noexcept
-  {
-    return LutResult {
-      .texture = nullptr,
-      .index = ShaderVisibleIndex { kInvalidShaderVisibleIndex },
-    };
-  }
-};
-
-class IBrdfLutProvider {
-public:
-  virtual ~IBrdfLutProvider() = default;
-
-  [[nodiscard]] virtual auto GetOrCreateLut(
-    BrdfLutParams params = kDefaultBrdfLutParams) -> LutResult
-    = 0;
-};
 
 //! Generates and binds BRDF integration lookup tables (LUTs).
 class BrdfLutManager : public IBrdfLutProvider {

@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "SkyAtmosphereLutManager.h"
-
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
@@ -17,6 +15,7 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Types/EnvironmentStaticData.h>
 
 namespace oxygen::engine::internal {

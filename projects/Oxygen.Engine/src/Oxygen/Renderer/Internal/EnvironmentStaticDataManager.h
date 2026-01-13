@@ -139,8 +139,8 @@ private:
   observer_ptr<Graphics> gfx_;
   observer_ptr<renderer::resources::IResourceBinder> texture_binder_;
   observer_ptr<IBrdfLutProvider> brdf_lut_provider_;
-  observer_ptr<IIblProvider> ibl_manager_;
-  observer_ptr<ISkyAtmosphereLutProvider> sky_atmo_lut_provider_;
+  observer_ptr<IIblProvider> ibl_provider_;
+  observer_ptr<ISkyAtmosphereLutProvider> sky_lut_provider_;
   frame::Slot current_slot_ { frame::kInvalidSlot };
 
   EnvironmentStaticData cpu_snapshot_ {};

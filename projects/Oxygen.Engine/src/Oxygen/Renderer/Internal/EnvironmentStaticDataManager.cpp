@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "EnvironmentStaticDataManager.h"
-
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -14,7 +12,8 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
-#include <Oxygen/Renderer/Internal/BrdfLutManager.h>
+#include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
+#include <Oxygen/Renderer/Internal/IBrdfLutProvider.h>
 #include <Oxygen/Renderer/Internal/IIblProvider.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/RenderContext.h>
@@ -109,28 +108,37 @@ EnvironmentStaticDataManager::EnvironmentStaticDataManager(
   : gfx_(gfx)
   , texture_binder_(texture_binder)
   , brdf_lut_provider_(brdf_lut_provider)
-  , ibl_manager_(ibl_manager)
-  , sky_atmo_lut_provider_(sky_atmo_lut_provider)
+  , ibl_provider_(ibl_manager)
+  , sky_lut_provider_(sky_atmo_lut_provider)
 {
+  // These are required dependencies, not guaranteeing them and not guaranteeing
+  // that they will survive for the lifetime of the BRDF LUT Manager is a logic
+  // error that will abort.
+  CHECK_NOTNULL_F(gfx_, "expecting a valid Graphics instance");
+  CHECK_NOTNULL_F(texture_binder_, "expecting a valid resource binder");
+  CHECK_NOTNULL_F(brdf_lut_provider_, "expecting a valid BRDF LUT provider");
+  CHECK_NOTNULL_F(ibl_provider_, "expecting a valid IBL provider");
+  CHECK_NOTNULL_F(sky_lut_provider_, "expecting a valid sky LUT provider");
+
   slot_needs_upload_.fill(true);
 }
 
 EnvironmentStaticDataManager::~EnvironmentStaticDataManager()
 {
-  if (gfx_ && buffer_) {
-    auto& registry = gfx_->GetResourceRegistry();
-    if (registry.Contains(*buffer_)) {
-      if (srv_view_.get().IsValid()) {
-        registry.UnRegisterView(*buffer_, srv_view_);
-      }
-      registry.UnRegisterResource(*buffer_);
-    }
-
-    srv_view_ = {};
-    srv_index_ = kInvalidShaderVisibleIndex;
+  if (buffer_ == nullptr) {
+    return;
   }
 
-  if (buffer_ && mapped_ptr_) {
+  auto& registry = gfx_->GetResourceRegistry();
+  if (registry.Contains(*buffer_)) {
+    // Unregister the buffer and all its views.
+    registry.UnRegisterResource(*buffer_);
+  }
+
+  srv_view_ = {};
+  srv_index_ = kInvalidShaderVisibleIndex;
+
+  if (mapped_ptr_) {
     buffer_->UnMap();
     mapped_ptr_ = nullptr;
   }
@@ -256,10 +264,10 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
         = atmo->GetAerialPerspectiveDistanceScale();
 
       // Populate LUT slots from the sky atmosphere LUT provider.
-      if (sky_atmo_lut_provider_) {
+      if (sky_lut_provider_) {
         const auto transmittance_slot
-          = sky_atmo_lut_provider_->GetTransmittanceLutSlot();
-        const auto sky_view_slot = sky_atmo_lut_provider_->GetSkyViewLutSlot();
+          = sky_lut_provider_->GetTransmittanceLutSlot();
+        const auto sky_view_slot = sky_lut_provider_->GetSkyViewLutSlot();
 
         next.atmosphere.transmittance_lut_slot
           = transmittance_slot != kInvalidShaderVisibleIndex
@@ -271,8 +279,8 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
           : kInvalidDescriptorSlot;
 
         const auto [trans_w, trans_h]
-          = sky_atmo_lut_provider_->GetTransmittanceLutSize();
-        const auto [sky_w, sky_h] = sky_atmo_lut_provider_->GetSkyViewLutSize();
+          = sky_lut_provider_->GetTransmittanceLutSize();
+        const auto [sky_w, sky_h] = sky_lut_provider_->GetSkyViewLutSize();
 
         next.atmosphere.transmittance_lut_width = static_cast<float>(trans_w);
         next.atmosphere.transmittance_lut_height = static_cast<float>(trans_h);
@@ -280,7 +288,7 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
         next.atmosphere.sky_view_lut_height = static_cast<float>(sky_h);
 
         // Update the LUT manager's parameters to trigger dirty tracking.
-        sky_atmo_lut_provider_->UpdateParameters(next.atmosphere);
+        sky_lut_provider_->UpdateParameters(next.atmosphere);
       }
     }
 
@@ -364,7 +372,7 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
     //
     // Source selection for filtering is done by IblComputePass. Here, we only
     // publish the output map slots when inputs are valid.
-    if (next.sky_light.enabled != 0U && ibl_manager_) {
+    if (next.sky_light.enabled != 0U && ibl_provider_) {
       const bool has_source
         = next.sky_light.cubemap_slot != kInvalidDescriptorSlot
         || (next.sky_sphere.enabled != 0U
@@ -372,7 +380,7 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
 
       published_ibl_has_source = has_source;
 
-      if (has_source && ibl_manager_->EnsureResourcesCreated()) {
+      if (has_source && ibl_provider_->EnsureResourcesCreated()) {
         const ShaderVisibleIndex source_slot
           = (next.sky_light.cubemap_slot != kInvalidDescriptorSlot)
           ? ShaderVisibleIndex { next.sky_light.cubemap_slot }
@@ -380,7 +388,7 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
 
         published_ibl_source_slot = source_slot.get();
 
-        const auto outputs = ibl_manager_->QueryOutputsFor(source_slot);
+        const auto outputs = ibl_provider_->QueryOutputsFor(source_slot);
 
         const bool irr_ready = outputs.irradiance != kInvalidShaderVisibleIndex;
         const bool pref_ready = outputs.prefilter != kInvalidShaderVisibleIndex;
@@ -516,12 +524,9 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
 
 auto EnvironmentStaticDataManager::UploadIfNeeded() -> void
 {
-  if (current_slot_ == frame::kInvalidSlot) {
-    LOG_F(ERROR,
-      "EnvironmentStaticDataManager::UploadIfNeeded called without valid "
-      "frame slot");
-    return;
-  }
+  DCHECK_F(current_slot_ != frame::kInvalidSlot,
+    "proper use of the environment static data manager requires calling its "
+    "OnFrameStart() method every frame, and before any use");
 
   EnsureResourcesCreated();
   if (!buffer_ || !mapped_ptr_ || srv_index_ == kInvalidShaderVisibleIndex) {
@@ -530,8 +535,8 @@ auto EnvironmentStaticDataManager::UploadIfNeeded() -> void
 
   const auto slot_index = CurrentSlotIndex();
   if (slot_index >= slot_needs_upload_.size()) {
-    LOG_F(
-      ERROR, "EnvironmentStaticDataManager: invalid slot index {}", slot_index);
+    LOG_F(ERROR, "Slot index {} is out of range (must be < {})", slot_index,
+      slot_needs_upload_.size());
     return;
   }
 
@@ -539,15 +544,24 @@ auto EnvironmentStaticDataManager::UploadIfNeeded() -> void
     return;
   }
 
-  LOG_F(2,
-    "EnvStatic upload: frame_slot={} skylight(cube={}, irr={}, pref={}, "
-    "brdf={}) "
-    "skysphere(cube={})",
-    slot_index, cpu_snapshot_.sky_light.cubemap_slot,
-    cpu_snapshot_.sky_light.irradiance_map_slot,
-    cpu_snapshot_.sky_light.prefilter_map_slot,
-    cpu_snapshot_.sky_light.brdf_lut_slot,
-    cpu_snapshot_.sky_sphere.cubemap_slot);
+  DLOG_SCOPE_F(2, "Uploading environment static data");
+  auto format_slot = [](std::uint32_t slot) -> std::string {
+    if (slot == kInvalidDescriptorSlot) {
+      return "not ready";
+    }
+    return nostd::to_string(ShaderVisibleIndex { slot });
+  };
+  // clang-format off
+  DLOG_F(2, "frame_slot = {}", slot_index);
+  {
+    DLOG_SCOPE_F(2, "skylight");
+    DLOG_F(2, "      cube = {}", format_slot(cpu_snapshot_.sky_light.cubemap_slot));
+    DLOG_F(2, "irradiance = {}", format_slot(cpu_snapshot_.sky_light.irradiance_map_slot));
+    DLOG_F(2, " prefilter = {}", format_slot(cpu_snapshot_.sky_light.prefilter_map_slot));
+    DLOG_F(2, "      brdf = {}", format_slot(cpu_snapshot_.sky_light.brdf_lut_slot));
+  }
+  DLOG_F(2, "skysphere cube = {}", format_slot(cpu_snapshot_.sky_sphere.cubemap_slot));
+  // clang-format on
 
   const auto offset_bytes
     = static_cast<std::size_t>(slot_index) * sizeof(EnvironmentStaticData);
@@ -562,29 +576,31 @@ auto EnvironmentStaticDataManager::EnsureResourcesCreated() -> void
     return;
   }
 
+  DLOG_SCOPE_FUNCTION(1);
+
   const auto total_bytes = static_cast<std::uint64_t>(kStrideBytes)
     * static_cast<std::uint64_t>(frame::kFramesInFlight.get());
 
   const BufferDesc desc {
     .size_bytes = total_bytes,
-    .usage = BufferUsage::kNone,
+    .usage = BufferUsage::kNone, // TODO: verify if we need any usage flags
     .memory = BufferMemory::kUpload,
     .debug_name = "EnvironmentStaticData",
   };
 
   buffer_ = gfx_->CreateBuffer(desc);
   if (!buffer_) {
-    LOG_F(ERROR, "EnvironmentStaticDataManager: failed to create buffer");
+    LOG_F(ERROR,
+      "-failed-: could not create buffer for environment static data upload");
     return;
   }
 
-  buffer_->SetName(desc.debug_name);
-
+  // Must register before creating views.
   gfx_->GetResourceRegistry().Register(buffer_);
 
   mapped_ptr_ = buffer_->Map();
   if (!mapped_ptr_) {
-    LOG_F(ERROR, "EnvironmentStaticDataManager: failed to map buffer");
+    LOG_F(ERROR, "-failed-: map buffer for environment static data upload");
     buffer_.reset();
     return;
   }
@@ -594,18 +610,17 @@ auto EnvironmentStaticDataManager::EnsureResourcesCreated() -> void
     = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
       graphics::DescriptorVisibility::kShaderVisible);
   if (!handle.IsValid()) {
-    LOG_F(ERROR, "EnvironmentStaticDataManager: descriptor allocation failed");
+    LOG_F(ERROR, "-failed-: descriptor for environment static data SRV");
     return;
   }
 
-  graphics::BufferViewDescription view_desc;
-  view_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
-  view_desc.range = { 0u, total_bytes };
-  view_desc.stride = kStrideBytes;
-  view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-
-  DCHECK_F(gfx_->GetResourceRegistry().Contains(*buffer_),
-    "EnvironmentStaticData buffer not registered in ResourceRegistry");
+  graphics::BufferViewDescription view_desc {
+    .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
+    .format = oxygen::Format::kUnknown, // TODO: verify if we need a format here
+    .range = { 0u, total_bytes },
+    .stride = kStrideBytes,
+  };
 
   const auto srv_index = allocator.GetShaderVisibleIndex(handle);
   srv_view_ = gfx_->GetResourceRegistry().RegisterView(
@@ -613,15 +628,16 @@ auto EnvironmentStaticDataManager::EnsureResourcesCreated() -> void
 
   srv_index_ = srv_index;
 
-  LOG_F(INFO,
-    "EnvStatic resources created: srv_index={}, stride_bytes={}, "
-    "total_bytes={}",
-    srv_index_.get(), kStrideBytes, total_bytes);
+  DLOG_F(1, "srv index = {}", srv_index_.get());
+  DLOG_F(1, "   stride = {} (bytes)", kStrideBytes);
+  DLOG_F(1, "    total = {} (bytes)", total_bytes);
+
   MarkAllSlotsDirty();
 }
 
 auto EnvironmentStaticDataManager::MarkAllSlotsDirty() -> void
 {
+  DLOG_F(2, "Marking all slots as needing upload");
   slot_needs_upload_.fill(true);
 }
 
