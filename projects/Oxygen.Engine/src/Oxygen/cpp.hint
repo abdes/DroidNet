@@ -46,5 +46,5 @@
 #define OXGN_RNDR_API __declspec(dllexport)
 #define OXGN_RNDR_API __declspec(dllimport)
 #define OXGN_RNDR_API __attribute__((visibility("default")))
-#define OXGN_RNDR_NDAPI [[nodiscard]] OXGN_RNDR_API
-#define OXGN_CNTT_NDAPI [[nodiscard]] OXGN_CNTT_API
+#define OXGN_RNDR_NDAPI OXGN_RNDR_NDAPI
+#define OXGN_CNTT_NDAPI OXGN_CNTT_NDAPI

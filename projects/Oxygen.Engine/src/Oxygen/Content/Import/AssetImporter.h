@@ -55,12 +55,12 @@ public:
 
    @throw std::runtime_error on hard failures (IO, parse errors).
   */
-  [[nodiscard]] OXGN_CNTT_NDAPI auto ImportToLooseCooked(
-    const ImportRequest& request) -> ImportReport;
+  OXGN_CNTT_NDAPI auto ImportToLooseCooked(const ImportRequest& request)
+    -> ImportReport;
 
 protected:
   //! Detect an import format; protected to allow test overrides.
-  [[nodiscard]] OXGN_CNTT_NDAPI virtual auto DetectFormat(
+  OXGN_CNTT_NDAPI virtual auto DetectFormat(
     const std::filesystem::path& path) const -> ImportFormat;
 
 private:

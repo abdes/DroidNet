@@ -116,10 +116,10 @@ public:
   //! Must be called once per frame after all rendering.
   OXGN_RNDR_API auto OnFrameEnd() -> void;
 
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetOrAllocate(
-    const content::ResourceKey& resource_key) -> ShaderVisibleIndex override;
+  OXGN_RNDR_NDAPI auto GetOrAllocate(const content::ResourceKey& resource_key)
+    -> ShaderVisibleIndex override;
 
-  [[nodiscard]] OXGN_RNDR_NDAPI auto IsResourceReady(
+  OXGN_RNDR_NDAPI auto IsResourceReady(
     const content::ResourceKey& key) const noexcept -> bool override;
 
 private:

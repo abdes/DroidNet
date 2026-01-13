@@ -121,7 +121,7 @@ OXGN_CNTT_API void ApplyPreset(
   @param preset Preset to apply
   @return New descriptor with preset applied
 */
-[[nodiscard]] OXGN_CNTT_NDAPI auto MakeDescFromPreset(
-  TexturePreset preset) noexcept -> TextureImportDesc;
+OXGN_CNTT_NDAPI auto MakeDescFromPreset(TexturePreset preset) noexcept
+  -> TextureImportDesc;
 
 } // namespace oxygen::content::import

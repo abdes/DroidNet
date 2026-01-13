@@ -33,6 +33,7 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Shared.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Renderer/api_export.h>
 #include <Oxygen/content/EngineTag.h>
 #include <Oxygen/content/ResourceKey.h>
 #include <Oxygen/data/AssetKey.h>
@@ -95,14 +96,14 @@ public:
   using IAssetLoader::TextureCallback;
 
   //! LiveObject contract
-  [[nodiscard]] OXGN_CNTT_API auto ActivateAsync(co::TaskStarted<> started = {})
+  OXGN_CNTT_NDAPI auto ActivateAsync(co::TaskStarted<> started = {})
     -> co::Co<> override;
 
   OXGN_CNTT_API void Run() override;
 
   OXGN_CNTT_API void Stop() override;
 
-  [[nodiscard]] OXGN_CNTT_API auto IsRunning() const -> bool override;
+  OXGN_CNTT_NDAPI auto IsRunning() const -> bool override;
 
   //! Engine-only capability token is required for construction.
   OXGN_CNTT_API explicit AssetLoader(
@@ -127,8 +128,7 @@ public:
   */
   OXGN_CNTT_API auto SetVerifyContentHashes(bool enable) -> void;
 
-  [[nodiscard]] OXGN_CNTT_API auto VerifyContentHashesEnabled() const noexcept
-    -> bool;
+  OXGN_CNTT_NDAPI auto VerifyContentHashesEnabled() const noexcept -> bool;
 
   //! Clear all mounted roots and pak files.
   OXGN_CNTT_API auto ClearMounts() -> void;
@@ -604,11 +604,9 @@ public:
    @note Only AssetLoader is permitted to construct ResourceKeys. Callers must
          treat the key as opaque.
   */
-  [[nodiscard]] OXGN_CNTT_API auto MintSyntheticTextureKey()
-    -> ResourceKey override;
+  OXGN_CNTT_NDAPI auto MintSyntheticTextureKey() -> ResourceKey override;
 
-  [[nodiscard]] OXGN_CNTT_API auto MintSyntheticBufferKey()
-    -> ResourceKey override;
+  OXGN_CNTT_NDAPI auto MintSyntheticBufferKey() -> ResourceKey override;
 
   //! Register a load function for assets or resources (unified interface)
   /*!

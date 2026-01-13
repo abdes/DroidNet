@@ -109,11 +109,10 @@ public:
   OXGN_RNDR_API auto UpdateIfNeeded(ViewId view_id) -> void;
 
   //! Get the GPU virtual address for the current slot's buffer for a view.
-  [[nodiscard]] OXGN_RNDR_API auto GetGpuVirtualAddress(ViewId view_id)
-    -> uint64_t;
+  OXGN_RNDR_NDAPI auto GetGpuVirtualAddress(ViewId view_id) -> uint64_t;
 
   //! Get the buffer for the current slot for a view.
-  [[nodiscard]] OXGN_RNDR_API auto GetBuffer(ViewId view_id)
+  OXGN_RNDR_NDAPI auto GetBuffer(ViewId view_id)
     -> std::shared_ptr<graphics::Buffer>;
 
 private:

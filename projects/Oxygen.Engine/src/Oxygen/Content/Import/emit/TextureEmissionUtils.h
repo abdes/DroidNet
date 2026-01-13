@@ -81,12 +81,11 @@ struct CookedEmissionResult {
   @param policy_id The policy ID ("d3d12" or "tight")
   @return Pointer to the policy (static lifetime)
 */
-[[nodiscard]] OXGN_CNTT_API auto GetPackingPolicy(const std::string& policy_id)
+OXGN_CNTT_NDAPI auto GetPackingPolicy(const std::string& policy_id)
   -> const ITexturePackingPolicy&;
 
 //! Get the default packing policy for the current platform.
-[[nodiscard]] OXGN_CNTT_API auto GetDefaultPackingPolicy()
-  -> const ITexturePackingPolicy&;
+OXGN_CNTT_NDAPI auto GetDefaultPackingPolicy() -> const ITexturePackingPolicy&;
 
 //! Create a TextureImportDesc from CookerConfig.
 /*!
@@ -97,9 +96,8 @@ struct CookedEmissionResult {
   @param texture_id Optional texture identifier for diagnostics
   @return TextureImportDesc for the cooker
 */
-[[nodiscard]] OXGN_CNTT_API auto MakeImportDescFromConfig(
-  const CookerConfig& config, std::string_view texture_id = {})
-  -> TextureImportDesc;
+OXGN_CNTT_NDAPI auto MakeImportDescFromConfig(const CookerConfig& config,
+  std::string_view texture_id = {}) -> TextureImportDesc;
 
 //! Cook texture bytes using the texture cooker.
 /*!
@@ -111,7 +109,7 @@ struct CookedEmissionResult {
   @param texture_id   Identifier for logging/diagnostics
   @return Cooked result or error
 */
-[[nodiscard]] OXGN_CNTT_API auto CookTextureForEmission(
+OXGN_CNTT_NDAPI auto CookTextureForEmission(
   std::span<const std::byte> source_bytes, const CookerConfig& config,
   std::string_view texture_id = {})
   -> oxygen::Result<CookedEmissionResult, TextureImportError>;
@@ -126,7 +124,7 @@ struct CookedEmissionResult {
   @param texture_id   Identifier for placeholder color and diagnostics
   @return Cooked result (always succeeds, may be placeholder)
 */
-[[nodiscard]] OXGN_CNTT_API auto CookTextureWithFallback(
+OXGN_CNTT_NDAPI auto CookTextureWithFallback(
   std::span<const std::byte> source_bytes, const CookerConfig& config,
   std::string_view texture_id) -> CookedEmissionResult;
 
@@ -139,9 +137,8 @@ struct CookedEmissionResult {
   @param config     Cooker configuration for packing
   @return Cooked placeholder result
 */
-[[nodiscard]] OXGN_CNTT_API auto CreatePlaceholderTexture(
-  std::string_view texture_id, const CookerConfig& config)
-  -> CookedEmissionResult;
+OXGN_CNTT_NDAPI auto CreatePlaceholderTexture(std::string_view texture_id,
+  const CookerConfig& config) -> CookedEmissionResult;
 
 //! Convert CookedTexturePayload to PAK format descriptor.
 /*!
@@ -152,8 +149,7 @@ struct CookedEmissionResult {
   @param data_offset Offset where payload will be written in data file
   @return PAK-format descriptor
 */
-[[nodiscard]] OXGN_CNTT_API auto ToPakDescriptor(
-  const CookedTexturePayload& payload, uint64_t data_offset)
-  -> oxygen::data::pak::TextureResourceDesc;
+OXGN_CNTT_NDAPI auto ToPakDescriptor(const CookedTexturePayload& payload,
+  uint64_t data_offset) -> oxygen::data::pak::TextureResourceDesc;
 
 } // namespace oxygen::content::import::emit

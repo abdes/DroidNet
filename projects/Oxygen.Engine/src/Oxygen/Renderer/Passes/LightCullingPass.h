@@ -155,7 +155,7 @@ public:
    The cluster grid contains `uint2(light_offset, light_count)` per cluster.
    Use `EnvironmentDynamicData.bindless_cluster_grid_slot` to pass to shaders.
   */
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetClusterGridSrvIndex() const noexcept
+  OXGN_RNDR_NDAPI auto GetClusterGridSrvIndex() const noexcept
     -> ShaderVisibleIndex;
 
   //! Shader-visible SRV index for the light index list buffer.
@@ -164,15 +164,15 @@ public:
    Use `EnvironmentDynamicData.bindless_cluster_index_list_slot` to pass to
    shaders.
   */
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetLightIndexListSrvIndex() const noexcept
+  OXGN_RNDR_NDAPI auto GetLightIndexListSrvIndex() const noexcept
     -> ShaderVisibleIndex;
 
   //! Get the current cluster configuration.
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetClusterConfig() const noexcept
+  OXGN_RNDR_NDAPI auto GetClusterConfig() const noexcept
     -> const ClusterConfig&;
 
   //! Get computed grid dimensions for the current frame.
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetGridDimensions() const noexcept
+  OXGN_RNDR_NDAPI auto GetGridDimensions() const noexcept
     -> ClusterConfig::GridDimensions;
 
 protected:

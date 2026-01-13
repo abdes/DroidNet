@@ -221,8 +221,7 @@ public:
 
    @return Reference to the shared staging provider.
   */
-  [[nodiscard]] OXGN_RNDR_API auto GetStagingProvider()
-    -> upload::StagingProvider&;
+  OXGN_RNDR_NDAPI auto GetStagingProvider() -> upload::StagingProvider&;
 
   //! Returns the inline transfers coordinator for immediate GPU uploads.
   /*!
@@ -235,7 +234,7 @@ public:
 
    @return Reference to the inline transfers coordinator.
   */
-  [[nodiscard]] OXGN_RNDR_API auto GetInlineTransfersCoordinator()
+  OXGN_RNDR_NDAPI auto GetInlineTransfersCoordinator()
     -> upload::InlineTransfersCoordinator&;
 
   //! Returns the light manager for accessing scene light data.
@@ -246,7 +245,7 @@ public:
 
    @return Observer pointer to the light manager, or nullptr if not available.
   */
-  [[nodiscard]] OXGN_RNDR_API auto GetLightManager() const noexcept
+  OXGN_RNDR_NDAPI auto GetLightManager() const noexcept
     -> observer_ptr<renderer::LightManager>;
 
   //! Returns the sky atmosphere LUT manager.
@@ -257,7 +256,7 @@ public:
 
    @return Observer pointer to the LUT manager, or nullptr if not initialized.
   */
-  [[nodiscard]] OXGN_RNDR_API auto GetSkyAtmosphereLutManager() const noexcept
+  OXGN_RNDR_NDAPI auto GetSkyAtmosphereLutManager() const noexcept
     -> observer_ptr<internal::SkyAtmosphereLutManager>;
 
   //! Returns the environment static data manager.
@@ -266,8 +265,7 @@ public:
 
    @return Observer pointer to the manager, or nullptr if not initialized.
   */
-  [[nodiscard]] OXGN_RNDR_API auto
-  GetEnvironmentStaticDataManager() const noexcept
+  OXGN_RNDR_NDAPI auto GetEnvironmentStaticDataManager() const noexcept
     -> observer_ptr<internal::EnvironmentStaticDataManager>;
 
   //=== Debug Overrides ===---------------------------------------------------//
@@ -289,8 +287,7 @@ public:
   OXGN_RNDR_API auto SetAtmosphereDebugFlags(uint32_t flags) -> void;
 
   //! Get current debug override flags for atmosphere rendering.
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetAtmosphereDebugFlags() const noexcept
-    -> uint32_t;
+  OXGN_RNDR_NDAPI auto GetAtmosphereDebugFlags() const noexcept -> uint32_t;
 
   //! Set debug sun direction override for atmosphere rendering.
   /*!
@@ -304,8 +301,7 @@ public:
   OXGN_RNDR_API auto SetSunOverride(const SunState& sun) -> void;
 
   //! Get the current sun override state.
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetSunOverride() const noexcept
-    -> const SunState&;
+  OXGN_RNDR_NDAPI auto GetSunOverride() const noexcept -> const SunState&;
 
   //! Override a material's UV transform used by the shader.
   /*!

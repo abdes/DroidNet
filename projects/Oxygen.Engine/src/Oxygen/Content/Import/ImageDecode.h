@@ -80,8 +80,8 @@ struct DecodeOptions {
   @param bytes Input data to check (at least 4 bytes recommended)
   @return True if the data appears to be EXR format
 */
-[[nodiscard]] OXGN_CNTT_API auto IsExrSignature(
-  std::span<const std::byte> bytes) noexcept -> bool;
+OXGN_CNTT_NDAPI auto IsExrSignature(std::span<const std::byte> bytes) noexcept
+  -> bool;
 
 //! Check if a byte buffer appears to contain Radiance HDR data.
 /*!
@@ -90,8 +90,8 @@ struct DecodeOptions {
   @param bytes Input data to check
   @return True if the data appears to be HDR format
 */
-[[nodiscard]] OXGN_CNTT_API auto IsHdrSignature(
-  std::span<const std::byte> bytes) noexcept -> bool;
+OXGN_CNTT_NDAPI auto IsHdrSignature(std::span<const std::byte> bytes) noexcept
+  -> bool;
 
 //! Check if the input data is a high dynamic range format.
 /*!
@@ -101,7 +101,7 @@ struct DecodeOptions {
   @param extension   Optional file extension hint (e.g., ".exr", ".hdr")
   @return True if the data is HDR format
 */
-[[nodiscard]] OXGN_CNTT_API auto IsHdrFormat(std::span<const std::byte> bytes,
+OXGN_CNTT_NDAPI auto IsHdrFormat(std::span<const std::byte> bytes,
   std::string_view extension = {}) noexcept -> bool;
 
 //! Decode an image from memory into a ScratchImage.
@@ -120,7 +120,7 @@ struct DecodeOptions {
   @param options Decode options (flip, force RGBA, extension hint)
   @return ScratchImage on success, or TextureImportError on failure
 */
-[[nodiscard]] OXGN_CNTT_API auto DecodeToScratchImage(
+OXGN_CNTT_NDAPI auto DecodeToScratchImage(
   std::span<const std::byte> bytes, const DecodeOptions& options = {})
   -> oxygen::Result<ScratchImage, TextureImportError>;
 
@@ -133,7 +133,7 @@ struct DecodeOptions {
   @param options Decode options (flip, force RGBA)
   @return ScratchImage on success, or TextureImportError on failure
 */
-[[nodiscard]] OXGN_CNTT_API auto DecodeToScratchImage(
+OXGN_CNTT_NDAPI auto DecodeToScratchImage(
   const std::filesystem::path& path, const DecodeOptions& options = {})
   -> oxygen::Result<ScratchImage, TextureImportError>;
 

@@ -83,8 +83,8 @@ public:
   OXYGEN_DEFAULT_MOVABLE(BrdfLutManager)
 
   //! Returns a shader-visible index for a BRDF LUT, creating it if missing.
-  [[nodiscard]] OXGN_RNDR_API auto GetOrCreateLut(
-    Params params = kDefaultParams) -> LutResult override;
+  OXGN_RNDR_NDAPI auto GetOrCreateLut(Params params = kDefaultParams)
+    -> LutResult override;
 
 private:
   struct LutKey {
