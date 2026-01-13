@@ -335,6 +335,12 @@ auto Renderer::GetEnvironmentStaticDataManager() const noexcept
   return observer_ptr { env_static_manager_.get() };
 }
 
+auto Renderer::GetIblManager() const noexcept
+  -> observer_ptr<internal::IblManager>
+{
+  return observer_ptr { ibl_manager_.get() };
+}
+
 //=== Debug Overrides ===-----------------------------------------------------//
 
 auto Renderer::RequestIblRegeneration() noexcept -> void

@@ -30,6 +30,15 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 
+// Implementation of IblPassTagFactory. Provides access to IblPassTag capability
+// tokens, only from the IblComputePass. When building tests, allow tests to
+// override by defining OXYGEN_ENGINE_TESTING.
+#if !defined(OXYGEN_ENGINE_TESTING)
+namespace oxygen::engine::internal {
+auto IblPassTagFactory::Get() noexcept -> IblPassTag { return IblPassTag {}; }
+} // namespace oxygen::engine::internal
+#endif
+
 namespace {
 
 constexpr uint32_t kThreadGroupSize = 8;
@@ -78,7 +87,7 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
   }
   logged_missing_env_manager_ = false;
 
-  auto ibl_manager = env_manager->GetIblManager();
+  auto ibl_manager = Context().GetRenderer().GetIblManager();
   if (!ibl_manager) {
     if (!logged_missing_ibl_manager_) {
       LOG_F(WARNING, "IblComputePass: IblManager unavailable; skipping");
@@ -111,7 +120,10 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
   const bool regeneration_requested
     = regeneration_requested_.load(std::memory_order_acquire);
 
-  if (!ibl_manager->IsDirty(source_slot) && !regeneration_requested) {
+  const auto current_outputs = ibl_manager->QueryOutputsFor(source_slot);
+  if (current_outputs.irradiance != kInvalidShaderVisibleIndex
+    && current_outputs.prefilter != kInvalidShaderVisibleIndex
+    && !regeneration_requested) {
     co_return;
   }
 
@@ -119,8 +131,7 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
     source_slot.get());
 
   LOG_F(2, "IblComputePass: targets (irr_srv={}, pref_srv={})",
-    ibl_manager->GetIrradianceMapSlot().get(),
-    ibl_manager->GetPrefilterMapSlot().get());
+    current_outputs.irradiance.get(), current_outputs.prefilter.get());
 
   EnsurePassConstantsBuffer();
 
@@ -142,16 +153,18 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
   DispatchPrefilter(recorder, *ibl_manager, source_slot);
 
   recorder.FlushBarriers();
-  ibl_manager->MarkGenerated(source_slot);
+  auto tag = oxygen::engine::internal::IblPassTagFactory::Get();
+  ibl_manager->MarkGenerated(tag, source_slot);
 
   if (regeneration_requested) {
     regeneration_requested_.store(false, std::memory_order_release);
   }
 
+  const auto final_outputs = ibl_manager->QueryOutputsFor(source_slot);
   LOG_F(INFO,
     "IblComputePass: IBL generated (source={}, irr_srv={}, pref_srv={})",
-    source_slot.get(), ibl_manager->GetIrradianceMapSlot().get(),
-    ibl_manager->GetPrefilterMapSlot().get());
+    source_slot.get(), final_outputs.irradiance.get(),
+    final_outputs.prefilter.get());
 
   co_return;
 }
@@ -271,13 +284,15 @@ auto IblComputePass::ResolveSourceCubemapSlot() const noexcept
 auto IblComputePass::DispatchIrradiance(graphics::CommandRecorder& recorder,
   internal::IblManager& ibl, const ShaderVisibleIndex source_slot) -> void
 {
-  auto target = ibl.GetIrradianceMap();
+  auto tag = oxygen::engine::internal::IblPassTagFactory::Get();
+
+  auto target = ibl.GetIrradianceMap(tag);
   if (!target) {
     LOG_F(WARNING, "IblComputePass: irradiance target texture missing");
     return;
   }
 
-  const auto uav_slot = ibl.GetIrradianceMapUavSlot();
+  const auto uav_slot = ibl.GetIrradianceMapUavSlot(tag);
   if (uav_slot == kInvalidShaderVisibleIndex) {
     LOG_F(WARNING, "IblComputePass: irradiance UAV slot missing");
     return;
@@ -342,7 +357,9 @@ auto IblComputePass::DispatchIrradiance(graphics::CommandRecorder& recorder,
 auto IblComputePass::DispatchPrefilter(graphics::CommandRecorder& recorder,
   internal::IblManager& ibl, const ShaderVisibleIndex source_slot) -> void
 {
-  auto target = ibl.GetPrefilterMap();
+  auto tag = oxygen::engine::internal::IblPassTagFactory::Get();
+
+  auto target = ibl.GetPrefilterMap(tag);
   if (!target) {
     LOG_F(WARNING, "IblComputePass: prefilter target texture missing");
     return;
@@ -395,7 +412,7 @@ auto IblComputePass::DispatchPrefilter(graphics::CommandRecorder& recorder,
       ? static_cast<float>(mip) / static_cast<float>(mips - 1U)
       : 0.0F;
 
-    const auto uav_slot = ibl.GetPrefilterMapUavSlot(mip);
+    const auto uav_slot = ibl.GetPrefilterMapUavSlot(tag, mip);
     if (uav_slot == kInvalidShaderVisibleIndex) {
       LOG_F(
         WARNING, "IblComputePass: prefilter UAV slot missing for mip {}", mip);

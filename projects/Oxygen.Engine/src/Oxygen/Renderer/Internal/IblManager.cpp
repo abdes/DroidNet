@@ -205,18 +205,8 @@ auto IblManager::CreateViews(MapResources& map) -> bool
   return true;
 }
 
-auto IblManager::GetIrradianceMapSlot() const noexcept -> ShaderVisibleIndex
-{
-  return irradiance_map_.srv_index;
-}
-
-auto IblManager::GetPrefilterMapSlot() const noexcept -> ShaderVisibleIndex
-{
-  return prefilter_map_.srv_index;
-}
-
-auto IblManager::GetPrefilterMapUavSlot(uint32_t mip_level) const noexcept
-  -> ShaderVisibleIndex
+auto IblManager::GetPrefilterMapUavSlot(
+  IblPassTag /*tag*/, uint32_t mip_level) const noexcept -> ShaderVisibleIndex
 {
   if (mip_level < prefilter_map_.uav_indices.size()) {
     return prefilter_map_.uav_indices[mip_level];
@@ -224,7 +214,8 @@ auto IblManager::GetPrefilterMapUavSlot(uint32_t mip_level) const noexcept
   return kInvalidShaderVisibleIndex;
 }
 
-auto IblManager::GetIrradianceMapUavSlot() const noexcept -> ShaderVisibleIndex
+auto IblManager::GetIrradianceMapUavSlot(IblPassTag /*tag*/) const noexcept
+  -> ShaderVisibleIndex
 {
   if (!irradiance_map_.uav_indices.empty()) {
     return irradiance_map_.uav_indices[0];
@@ -232,28 +223,44 @@ auto IblManager::GetIrradianceMapUavSlot() const noexcept -> ShaderVisibleIndex
   return kInvalidShaderVisibleIndex;
 }
 
-auto IblManager::GetIrradianceMap() const noexcept
+auto IblManager::GetIrradianceMap(IblPassTag /*tag*/) const noexcept
   -> observer_ptr<graphics::Texture>
 {
   return observer_ptr(irradiance_map_.texture.get());
 }
 
-auto IblManager::GetPrefilterMap() const noexcept
+auto IblManager::GetPrefilterMap(IblPassTag /*tag*/) const noexcept
   -> observer_ptr<graphics::Texture>
 {
   return observer_ptr(prefilter_map_.texture.get());
 }
 
-auto IblManager::MarkGenerated(ShaderVisibleIndex source_slot) -> void
+auto IblManager::MarkGenerated(
+  IblPassTag /*tag*/, ShaderVisibleIndex source_slot) -> void
 {
   last_source_cubemap_slot_ = source_slot;
+  generation_.fetch_add(1, std::memory_order_acq_rel);
 }
 
-auto IblManager::IsDirty(ShaderVisibleIndex source_slot) const noexcept -> bool
+auto IblManager::QueryOutputsFor(ShaderVisibleIndex source_slot) const noexcept
+  -> IIblProvider::OutputMaps
 {
+  IIblProvider::OutputMaps out {};
+  out.generation = generation_.load(std::memory_order_acquire);
+
+  if (!resources_created_)
+    return out;
+
   if (source_slot == kInvalidShaderVisibleIndex)
-    return false;
-  return source_slot != last_source_cubemap_slot_;
+    return out;
+
+  // Only publish outputs when they were generated for the requested source.
+  if (last_source_cubemap_slot_ != source_slot)
+    return out;
+
+  out.irradiance = irradiance_map_.srv_index;
+  out.prefilter = prefilter_map_.srv_index;
+  return out;
 }
 
 } // namespace oxygen::engine::internal
