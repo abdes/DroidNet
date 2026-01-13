@@ -352,10 +352,23 @@ namespace {
 
 namespace detail {
 
+  [[nodiscard]] auto CheckCancelled(const TextureImportDesc& desc) noexcept
+    -> std::optional<TextureImportError>
+  {
+    if (desc.stop_token.stop_requested()) {
+      return TextureImportError::kCancelled;
+    }
+    return std::nullopt;
+  }
+
   auto DecodeSource(const std::span<const std::byte> source_bytes,
     const TextureImportDesc& desc)
     -> oxygen::Result<ScratchImage, TextureImportError>
   {
+    if (auto cancelled = CheckCancelled(desc)) {
+      return ::oxygen::Err(*cancelled);
+    }
+
     DCHECK_F(
       !source_bytes.empty(), "DecodeSource: source_bytes must not be empty");
 
@@ -387,6 +400,10 @@ namespace detail {
     ScratchImage&& image, const TextureImportDesc& desc)
     -> oxygen::Result<ScratchImage, TextureImportError>
   {
+    if (auto cancelled = CheckCancelled(desc)) {
+      return ::oxygen::Err(*cancelled);
+    }
+
     // For now, the decoder already produces RGBA8 or RGBA32Float
     // which are valid working formats.
     // Future: may need to expand channels or convert between formats
@@ -407,6 +424,10 @@ namespace detail {
     ScratchImage&& image, const TextureImportDesc& desc)
     -> oxygen::Result<ScratchImage, TextureImportError>
   {
+    if (auto cancelled = CheckCancelled(desc)) {
+      return ::oxygen::Err(*cancelled);
+    }
+
     if (!image.IsValid()) {
       LOG_F(WARNING,
         "TextureCooker: ApplyContentProcessing received invalid image for '{}'",
@@ -474,6 +495,10 @@ namespace detail {
   auto GenerateMips(ScratchImage&& image, const TextureImportDesc& desc)
     -> oxygen::Result<ScratchImage, TextureImportError>
   {
+    if (auto cancelled = CheckCancelled(desc)) {
+      return ::oxygen::Err(*cancelled);
+    }
+
     if (!image.IsValid()) {
       return ::oxygen::Err(TextureImportError::kDecodeFailed);
     }
@@ -521,6 +546,10 @@ namespace detail {
     ScratchImage&& image, const TextureImportDesc& desc)
     -> oxygen::Result<ScratchImage, TextureImportError>
   {
+    if (auto cancelled = CheckCancelled(desc)) {
+      return ::oxygen::Err(*cancelled);
+    }
+
     if (!image.IsValid()) {
       return ::oxygen::Err(TextureImportError::kDecodeFailed);
     }
@@ -550,8 +579,12 @@ namespace detail {
       }
 
       bc7::InitializeEncoder();
-      auto compressed = bc7::EncodeTexture(input_image, desc.bc7_quality);
+      auto compressed
+        = bc7::EncodeTexture(input_image, desc.bc7_quality, desc.stop_token);
       if (!compressed.IsValid()) {
+        if (desc.stop_token.stop_requested()) {
+          return ::oxygen::Err(TextureImportError::kCancelled);
+        }
         return ::oxygen::Err(TextureImportError::kCompressionFailed);
       }
       return ::oxygen::Ok(std::move(compressed));

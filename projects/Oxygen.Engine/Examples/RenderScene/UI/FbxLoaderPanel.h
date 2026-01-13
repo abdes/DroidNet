@@ -9,11 +9,14 @@
 #include <atomic>
 #include <filesystem>
 #include <functional>
-#include <future>
+#include <mutex>
 #include <optional>
+#include <stop_token>
 #include <string>
+#include <thread>
 #include <vector>
 
+#include <Oxygen/Content/Import/ImportOptions.h>
 #include <Oxygen/Data/AssetKey.h>
 
 namespace oxygen::content::import {
@@ -30,9 +33,22 @@ using IndexLoadCallback = std::function<void(const std::filesystem::path&)>;
 
 //! State for FBX file import operation
 struct FbxImportState {
-  bool is_importing { false };
+  std::atomic_bool is_importing { false };
+  std::atomic_bool cancel_requested { false };
+  std::atomic_bool completion_ready { false };
   std::string importing_path;
-  std::future<std::optional<data::AssetKey>> import_future;
+
+  std::jthread import_thread;
+
+  struct Completion {
+    bool cancelled { false };
+    std::optional<data::AssetKey> scene_key;
+    std::filesystem::path index_path;
+    std::string error;
+  };
+
+  std::mutex completion_mutex;
+  Completion completion;
 };
 
 //! Configuration for FBX loader panel
@@ -41,6 +57,9 @@ struct FbxLoaderConfig {
   std::filesystem::path cooked_output_directory;
   SceneLoadCallback on_scene_ready;
   IndexLoadCallback on_index_loaded;
+
+  //! Optional callback to dump runtime texture memory telemetry.
+  std::function<void(std::size_t)> on_dump_texture_memory;
 };
 
 //! FBX file loader and importer panel
@@ -103,7 +122,7 @@ public:
   //! Check if currently importing an FBX file
   [[nodiscard]] auto IsImporting() const -> bool
   {
-    return import_state_.is_importing;
+    return import_state_.is_importing.load(std::memory_order_relaxed);
   }
 
   //! Get path of currently importing file
@@ -112,14 +131,36 @@ public:
     return import_state_.importing_path;
   }
 
+  //! Request cancellation of an ongoing import.
+  void CancelImport();
+
 private:
   void StartImport(const std::filesystem::path& fbx_path);
   auto EnumerateFbxFiles() const -> std::vector<std::filesystem::path>;
+
+  auto DrawTextureTuningUi() -> void;
 
   FbxLoaderConfig config_;
   FbxImportState import_state_;
   std::vector<std::filesystem::path> cached_fbx_files_;
   bool files_cached_ { false };
+
+  // Import-time texture cooking overrides.
+  content::import::ImportOptions::TextureTuning texture_tuning_ {
+    .enabled = true,
+    .mip_policy = content::import::MipPolicy::kFullChain,
+    .max_mip_levels = 10,
+    .mip_filter = content::import::MipFilter::kKaiser,
+    .color_output_format = Format::kBC7UNormSRGB,
+    .data_output_format = Format::kBC7UNorm,
+    .bc7_quality = content::import::Bc7Quality::kDefault,
+    .packing_policy_id = "d3d12",
+  };
+
+  bool auto_dump_texture_memory_ { true };
+  int auto_dump_delay_frames_ { 180 };
+  int pending_auto_dump_frames_ { 0 };
+  int dump_top_n_ { 20 };
 };
 
 } // namespace oxygen::examples::render_scene::ui

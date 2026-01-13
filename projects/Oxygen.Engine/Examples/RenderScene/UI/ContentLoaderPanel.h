@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <cstddef>
+#include <filesystem>
+#include <functional>
 #include <memory>
 
 #include "CameraControlPanel.h"
@@ -72,6 +75,8 @@ public:
     SceneLoadCallback on_scene_load_requested;
     PakMountCallback on_pak_mounted;
     IndexLoadCallback on_loose_index_loaded;
+    //! Optional callback to dump runtime texture memory telemetry.
+    std::function<void(std::size_t)> on_dump_texture_memory;
   };
 
   //! Initialize panel with configuration

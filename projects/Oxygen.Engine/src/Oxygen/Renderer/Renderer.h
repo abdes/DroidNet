@@ -8,6 +8,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -206,6 +207,16 @@ public:
 
   //! Returns the Graphics system used by this renderer.
   OXGN_RNDR_API auto GetGraphics() -> std::shared_ptr<Graphics>;
+
+  //! Dump estimated GPU texture memory usage for debugging.
+  /*!
+   Logs an estimated memory breakdown for the largest textures currently
+   tracked by the renderer's texture binder.
+
+   @param top_n Number of textures to include in the sorted output.
+   */
+  OXGN_RNDR_API auto DumpEstimatedTextureMemory(std::size_t top_n) const
+    -> void;
 
   //=== Upload Services ===---------------------------------------------------//
 

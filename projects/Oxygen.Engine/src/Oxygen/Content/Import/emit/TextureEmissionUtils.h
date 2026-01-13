@@ -23,7 +23,9 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <stop_token>
 #include <string>
+#include <string_view>
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Content/Import/TextureCooker.h>
@@ -48,14 +50,25 @@ struct CookerConfig {
   //! Whether to use the texture cooker for processing.
   bool enabled = true;
 
-  //! Whether to generate mip maps.
-  bool generate_mips = true;
+  //! Mip chain generation policy.
+  MipPolicy mip_policy = MipPolicy::kNone;
 
-  //! Whether to use BC7 compression.
-  bool use_bc7_compression = false;
+  //! Maximum mip levels when @p mip_policy is `MipPolicy::kMaxCount`.
+  uint8_t max_mip_levels = 1;
+
+  //! Mip filter kernel for mip generation.
+  MipFilter mip_filter = MipFilter::kKaiser;
+
+  //! Optional override for the cooked output format.
+  /*!
+   When unset, the emission pipeline preserves the decoded image format
+   (pass-through). When set, the cooker will convert and/or compress to the
+   requested format.
+  */
+  std::optional<Format> output_format_override;
 
   //! BC7 quality preset if compression is enabled.
-  Bc7Quality bc7_quality = Bc7Quality::kDefault;
+  Bc7Quality bc7_quality = Bc7Quality::kNone;
 
   //! Packing policy ID ("d3d12" or "tight").
   std::string packing_policy_id = "d3d12";
@@ -112,7 +125,7 @@ OXGN_CNTT_NDAPI auto MakeImportDescFromConfig(const CookerConfig& config,
 */
 OXGN_CNTT_NDAPI auto CookTextureForEmission(
   std::span<const std::byte> source_bytes, const CookerConfig& config,
-  std::string_view texture_id = {})
+  std::string_view texture_id = {}, std::stop_token stop_token = {})
   -> oxygen::Result<CookedEmissionResult, TextureImportError>;
 
 //! Cook texture bytes with fallback to placeholder.
@@ -127,7 +140,8 @@ OXGN_CNTT_NDAPI auto CookTextureForEmission(
 */
 OXGN_CNTT_NDAPI auto CookTextureWithFallback(
   std::span<const std::byte> source_bytes, const CookerConfig& config,
-  std::string_view texture_id) -> CookedEmissionResult;
+  std::string_view texture_id, std::stop_token stop_token = {})
+  -> CookedEmissionResult;
 
 //! Create a placeholder texture for a missing source texture.
 /*!

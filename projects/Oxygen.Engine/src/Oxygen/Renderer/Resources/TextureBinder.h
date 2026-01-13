@@ -116,6 +116,14 @@ public:
   //! Must be called once per frame after all rendering.
   OXGN_RNDR_API auto OnFrameEnd() -> void;
 
+  //! Log a summary of the largest resident textures.
+  /*!
+   Estimates per-texture GPU memory use from the runtime texture descriptor
+   (format, dimensions, mips, array layers) and logs the top-N entries.
+  */
+  OXGN_RNDR_API auto DumpEstimatedTextureMemory(std::size_t top_n) const
+    -> void;
+
   OXGN_RNDR_NDAPI auto GetOrAllocate(const content::ResourceKey& resource_key)
     -> ShaderVisibleIndex override;
 

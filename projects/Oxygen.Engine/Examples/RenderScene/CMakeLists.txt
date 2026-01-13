@@ -44,6 +44,8 @@ add_executable(
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"
+  "SkyboxManager.h"
+  "SkyboxManager.cpp"
   "OrbitCameraController.h"
   "OrbitCameraController.cpp"
   "FlyCameraController.h"

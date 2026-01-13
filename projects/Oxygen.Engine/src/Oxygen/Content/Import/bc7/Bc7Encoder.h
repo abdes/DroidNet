@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <span>
+#include <stop_token>
 
 #include <Oxygen/Content/Import/ScratchImage.h>
 #include <Oxygen/Content/Import/TextureImportTypes.h>
@@ -104,6 +105,11 @@ OXGN_CNTT_NDAPI auto EncodeSurface(
 OXGN_CNTT_NDAPI auto EncodeTexture(
   const ScratchImage& source, const Bc7EncoderParams& params) -> ScratchImage;
 
+//! Encode a full texture with cooperative cancellation.
+/*! @see EncodeTexture(const ScratchImage&, const Bc7EncoderParams&) */
+OXGN_CNTT_NDAPI auto EncodeTexture(const ScratchImage& source,
+  const Bc7EncoderParams& params, std::stop_token stop_token) -> ScratchImage;
+
 //! Encode a full texture using a Bc7Quality preset.
 /*!
   Convenience overload that maps Bc7Quality to Bc7EncoderParams.
@@ -114,6 +120,11 @@ OXGN_CNTT_NDAPI auto EncodeTexture(
 */
 OXGN_CNTT_NDAPI auto EncodeTexture(
   const ScratchImage& source, Bc7Quality quality) -> ScratchImage;
+
+//! Encode a full texture using a Bc7Quality preset with cancellation.
+/*! @see EncodeTexture(const ScratchImage&, Bc7Quality) */
+OXGN_CNTT_NDAPI auto EncodeTexture(const ScratchImage& source,
+  Bc7Quality quality, std::stop_token stop_token) -> ScratchImage;
 
 //! Compute the number of BC7 blocks in one dimension.
 /*!

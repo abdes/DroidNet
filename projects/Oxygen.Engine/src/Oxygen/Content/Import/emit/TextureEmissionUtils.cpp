@@ -234,18 +234,23 @@ auto MakeImportDescFromConfig(
   desc.array_layers = 1;
 
   // Mip generation
-  if (config.generate_mips) {
-    desc.mip_policy = MipPolicy::kFullChain;
-    desc.mip_filter = MipFilter::kKaiser;
-  } else {
-    desc.mip_policy = MipPolicy::kNone;
+  desc.mip_policy = config.mip_policy;
+  desc.mip_filter = config.mip_filter;
+  if (config.mip_policy == MipPolicy::kMaxCount) {
+    desc.max_mip_levels = config.max_mip_levels;
   }
 
-  // BC7 compression
-  if (config.use_bc7_compression) {
-    desc.bc7_quality = config.bc7_quality;
-  } else {
-    desc.bc7_quality = Bc7Quality::kNone;
+  // Output format / BC7 consistency.
+  if (config.output_format_override.has_value()) {
+    desc.output_format = *config.output_format_override;
+    if (desc.output_format == Format::kBC7UNorm
+      || desc.output_format == Format::kBC7UNormSRGB) {
+      desc.bc7_quality = (config.bc7_quality == Bc7Quality::kNone)
+        ? Bc7Quality::kDefault
+        : config.bc7_quality;
+    } else {
+      desc.bc7_quality = Bc7Quality::kNone;
+    }
   }
 
   // Set identifier for diagnostics
@@ -257,9 +262,14 @@ auto MakeImportDescFromConfig(
 }
 
 auto CookTextureForEmission(std::span<const std::byte> source_bytes,
-  const CookerConfig& config, std::string_view texture_id)
+  const CookerConfig& config, std::string_view texture_id,
+  const std::stop_token stop_token)
   -> oxygen::Result<CookedEmissionResult, TextureImportError>
 {
+  if (stop_token.stop_requested()) {
+    return ::oxygen::Err(TextureImportError::kCancelled);
+  }
+
   if (source_bytes.empty()) {
     return ::oxygen::Err(TextureImportError::kFileNotFound);
   }
@@ -279,11 +289,16 @@ auto CookTextureForEmission(std::span<const std::byte> source_bytes,
 
   const auto& policy = GetPackingPolicy(config.packing_policy_id);
   auto desc = MakeImportDescFromConfig(config, texture_id);
+  desc.stop_token = stop_token;
 
   // Set dimensions from decoded image
   desc.width = meta.width;
   desc.height = meta.height;
-  desc.output_format = meta.format;
+
+  if (!config.output_format_override.has_value()) {
+    desc.output_format = meta.format;
+    desc.bc7_quality = Bc7Quality::kNone;
+  }
 
   auto result = CookTexture(source_bytes, desc, policy);
   if (!result.has_value()) {
@@ -300,12 +315,17 @@ auto CookTextureForEmission(std::span<const std::byte> source_bytes,
 }
 
 auto CookTextureWithFallback(std::span<const std::byte> source_bytes,
-  const CookerConfig& config, std::string_view texture_id)
-  -> CookedEmissionResult
+  const CookerConfig& config, std::string_view texture_id,
+  const std::stop_token stop_token) -> CookedEmissionResult
 {
-  auto result = CookTextureForEmission(source_bytes, config, texture_id);
+  auto result
+    = CookTextureForEmission(source_bytes, config, texture_id, stop_token);
   if (result.has_value()) {
     return std::move(result.value());
+  }
+
+  if (stop_token.stop_requested()) {
+    return CreatePlaceholderForMissingTexture(texture_id, config);
   }
 
   LOG_F(WARNING, "Failed to cook texture '{}': error {}; using placeholder",
