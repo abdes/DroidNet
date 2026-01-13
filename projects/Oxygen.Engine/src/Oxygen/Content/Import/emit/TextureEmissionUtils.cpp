@@ -6,7 +6,10 @@
 
 #include <Oxygen/Content/Import/emit/TextureEmissionUtils.h>
 
+#include <algorithm>
 #include <array>
+#include <cstring>
+#include <limits>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Sha256.h>
@@ -18,6 +21,122 @@
 namespace oxygen::content::import::emit {
 
 namespace {
+
+  [[nodiscard]] auto ToPackingPolicyId(const std::string_view id) noexcept
+    -> std::optional<oxygen::data::pak::TexturePackingPolicyId>
+  {
+    if (id == "d3d12") {
+      return oxygen::data::pak::TexturePackingPolicyId::kD3D12;
+    }
+    if (id == "tight") {
+      return oxygen::data::pak::TexturePackingPolicyId::kTightPacked;
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] auto BuildPlaceholderPayloadV4(
+    const ITexturePackingPolicy& policy,
+    const oxygen::data::pak::TexturePackingPolicyId policy_id,
+    const std::array<std::byte, 4> pixel_rgba8) -> std::vector<std::byte>
+  {
+    const uint32_t unaligned_pitch = 4;
+    const uint32_t aligned_pitch = policy.AlignRowPitchBytes(unaligned_pitch);
+
+    const uint32_t layouts_offset
+      = static_cast<uint32_t>(sizeof(oxygen::data::pak::TexturePayloadHeader));
+    const uint32_t layouts_bytes
+      = static_cast<uint32_t>(sizeof(oxygen::data::pak::SubresourceLayout));
+
+    const uint64_t data_offset64
+      = policy.AlignSubresourceOffset(layouts_offset + layouts_bytes);
+    if (data_offset64 > std::numeric_limits<uint32_t>::max()) {
+      return {};
+    }
+    const auto data_offset_bytes = static_cast<uint32_t>(data_offset64);
+
+    const uint64_t payload_data_size = aligned_pitch;
+    const uint64_t total_payload64 = data_offset64 + payload_data_size;
+    if (total_payload64 > std::numeric_limits<uint32_t>::max()) {
+      return {};
+    }
+
+    oxygen::data::pak::TexturePayloadHeader header {};
+    header.magic = oxygen::data::pak::kTexturePayloadMagic;
+    header.packing_policy = static_cast<uint8_t>(policy_id);
+    header.flags
+      = static_cast<uint8_t>(oxygen::data::pak::TexturePayloadFlags::kNone);
+    header.subresource_count = 1;
+    header.total_payload_size = static_cast<uint32_t>(total_payload64);
+    header.layouts_offset_bytes = layouts_offset;
+    header.data_offset_bytes = data_offset_bytes;
+
+    const oxygen::data::pak::SubresourceLayout layout {
+      .offset_bytes = 0,
+      .row_pitch_bytes = aligned_pitch,
+      .size_bytes = aligned_pitch,
+    };
+
+    std::vector<std::byte> payload(header.total_payload_size, std::byte { 0 });
+    std::memcpy(payload.data(), &header, sizeof(header));
+    std::memcpy(payload.data() + layouts_offset, &layout, sizeof(layout));
+
+    std::copy(pixel_rgba8.begin(), pixel_rgba8.end(),
+      payload.begin() + static_cast<std::ptrdiff_t>(data_offset_bytes));
+
+    header.content_hash
+      = detail::ComputeContentHash(std::span<const std::byte>(payload));
+    std::memcpy(payload.data(), &header, sizeof(header));
+
+    return payload;
+  }
+
+  [[nodiscard]] auto CreatePlaceholderTextureWithPixel(std::string_view id,
+    const CookerConfig& config, const std::array<std::byte, 4> pixel_rgba8)
+    -> CookedEmissionResult
+  {
+    const auto& policy = GetPackingPolicy(config.packing_policy_id);
+    const auto policy_id_opt = ToPackingPolicyId(policy.Id());
+    if (!policy_id_opt.has_value()) {
+      LOG_F(ERROR,
+        "CreatePlaceholderTextureWithPixel: unknown packing policy id '{}'; "
+        "falling back to d3d12",
+        std::string(policy.Id()).c_str());
+    }
+    const auto policy_id = policy_id_opt.value_or(
+      oxygen::data::pak::TexturePackingPolicyId::kD3D12);
+
+    auto payload = BuildPlaceholderPayloadV4(policy, policy_id, pixel_rgba8);
+    if (payload.empty()) {
+      LOG_F(ERROR,
+        "CreatePlaceholderTextureWithPixel: failed to build v4 payload for "
+        "'{}'",
+        std::string(id).c_str());
+    }
+
+    oxygen::data::pak::TexturePayloadHeader header {};
+    if (payload.size() >= sizeof(header)) {
+      std::memcpy(&header, payload.data(), sizeof(header));
+    }
+
+    CookedEmissionResult result {};
+    result.payload = std::move(payload);
+    result.is_placeholder = true;
+
+    result.desc.data_offset = 0; // Will be set when appended
+    result.desc.size_bytes = static_cast<uint32_t>(result.payload.size());
+    result.desc.texture_type = static_cast<uint8_t>(TextureType::kTexture2D);
+    result.desc.compression_type = 0;
+    result.desc.width = 1;
+    result.desc.height = 1;
+    result.desc.depth = 1;
+    result.desc.array_layers = 1;
+    result.desc.mip_levels = 1;
+    result.desc.format = static_cast<uint8_t>(Format::kRGBA8UNorm);
+    result.desc.alignment = static_cast<uint16_t>(policy.AlignRowPitchBytes(1));
+    result.desc.content_hash = header.content_hash;
+
+    return result;
+  }
 
   //! D3D12 packing policy (256-byte row pitch, 512-byte subresource alignment).
   class D3D12PackingPolicy final : public ITexturePackingPolicy {
@@ -192,46 +311,22 @@ auto CookTextureWithFallback(std::span<const std::byte> source_bytes,
   LOG_F(WARNING, "Failed to cook texture '{}': error {}; using placeholder",
     std::string(texture_id).c_str(), static_cast<int>(result.error()));
 
-  return CreatePlaceholderTexture(texture_id, config);
+  return CreatePlaceholderForMissingTexture(texture_id, config);
 }
 
-auto CreatePlaceholderTexture(std::string_view texture_id,
+auto CreatePlaceholderForMissingTexture(std::string_view texture_id,
   const CookerConfig& config) -> CookedEmissionResult
 {
-  const auto& policy = GetPackingPolicy(config.packing_policy_id);
+  return CreatePlaceholderTextureWithPixel(
+    texture_id, config, MakeDeterministicPixelRGBA8(texture_id));
+}
 
-  // Create 1x1 RGBA8 placeholder
-  const auto pixel = MakeDeterministicPixelRGBA8(texture_id);
-
-  // Compute aligned row pitch (for 1 pixel of RGBA8 = 4 bytes)
-  const uint32_t unaligned_pitch = 4;
-  const uint32_t aligned_pitch = policy.AlignRowPitchBytes(unaligned_pitch);
-
-  // Create payload with aligned pitch
-  std::vector<std::byte> payload(aligned_pitch, std::byte { 0 });
-  std::copy(pixel.begin(), pixel.end(), payload.begin());
-
-  // Compute content hash
-  const uint64_t content_hash = detail::ComputeContentHash(payload);
-
-  CookedEmissionResult result {};
-  result.payload = std::move(payload);
-  result.is_placeholder = true;
-
-  result.desc.data_offset = 0; // Will be set when appended
-  result.desc.size_bytes = static_cast<uint32_t>(result.payload.size());
-  result.desc.texture_type = static_cast<uint8_t>(TextureType::kTexture2D);
-  result.desc.compression_type = 0;
-  result.desc.width = 1;
-  result.desc.height = 1;
-  result.desc.depth = 1;
-  result.desc.array_layers = 1;
-  result.desc.mip_levels = 1;
-  result.desc.format = static_cast<uint8_t>(Format::kRGBA8UNorm);
-  result.desc.alignment = static_cast<uint16_t>(aligned_pitch);
-  result.desc.content_hash = content_hash;
-
-  return result;
+auto CreateFallbackTexture(const CookerConfig& config) -> CookedEmissionResult
+{
+  const std::array<std::byte, 4> white_pixel { std::byte { 0xFF },
+    std::byte { 0xFF }, std::byte { 0xFF }, std::byte { 0xFF } };
+  return CreatePlaceholderTextureWithPixel(
+    "_fallback_white_", config, white_pixel);
 }
 
 auto ToPakDescriptor(const CookedTexturePayload& payload, uint64_t data_offset)

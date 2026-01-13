@@ -89,7 +89,7 @@ NOLINT_TEST_F(TexturePresetAlbedoTest, SetsCorrectValues)
   EXPECT_EQ(desc.intent, TextureIntent::kAlbedo);
   EXPECT_EQ(desc.source_color_space, ColorSpace::kSRGB);
   EXPECT_EQ(desc.mip_policy, MipPolicy::kFullChain);
-  EXPECT_EQ(desc.mip_filter, MipFilter::kKaiser);
+  EXPECT_EQ(desc.mip_filter, MipFilter::kBox);
   EXPECT_EQ(desc.output_format, Format::kBC7UNormSRGB);
   EXPECT_EQ(desc.bc7_quality, Bc7Quality::kDefault);
 }

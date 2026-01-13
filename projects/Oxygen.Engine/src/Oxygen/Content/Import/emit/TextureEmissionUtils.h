@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -128,17 +129,31 @@ OXGN_CNTT_NDAPI auto CookTextureWithFallback(
   std::span<const std::byte> source_bytes, const CookerConfig& config,
   std::string_view texture_id) -> CookedEmissionResult;
 
-//! Create a fallback placeholder texture.
+//! Create a placeholder texture for a missing source texture.
 /*!
-  Creates a 1x1 RGBA8 placeholder texture with a deterministic color
-  based on the texture ID.
+  Creates a 1x1 RGBA8 placeholder texture for a specific missing texture.
+  The pixel color is derived deterministically from @p texture_id so that
+  different missing textures can be visually distinguished and deduplicated
+  consistently.
 
   @param texture_id Identifier for color generation
   @param config     Cooker configuration for packing
   @return Cooked placeholder result
 */
-OXGN_CNTT_NDAPI auto CreatePlaceholderTexture(std::string_view texture_id,
-  const CookerConfig& config) -> CookedEmissionResult;
+OXGN_CNTT_NDAPI auto CreatePlaceholderForMissingTexture(
+  std::string_view texture_id, const CookerConfig& config)
+  -> CookedEmissionResult;
+
+//! Create the reserved global fallback texture.
+/*!
+  Creates the reserved fallback texture (index 0 in the textures table).
+  This is a 1x1 white RGBA8 texture emitted with a valid PAK v4 payload.
+
+  @param config Cooker configuration for packing
+  @return Cooked fallback texture result
+*/
+OXGN_CNTT_NDAPI auto CreateFallbackTexture(const CookerConfig& config)
+  -> CookedEmissionResult;
 
 //! Convert CookedTexturePayload to PAK format descriptor.
 /*!

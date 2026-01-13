@@ -180,7 +180,14 @@ NOLINT_TEST_F(TextureBinderUploadTest, CompletionNotObservedWithoutOnFrameStart)
   ASSERT_NE(still_placeholder, nullptr);
   EXPECT_EQ(GetTextureDebugName(still_placeholder), expected_placeholder_name);
 
-  // Now drain completions.
+  // Drain completions.
+  //
+  // Note: OnFrameStart() only submits and records an upload ticket. Upload
+  // completion becomes observable after UploadCoordinator advances at least
+  // one frame with the ticket present.
+  TexBinder().OnFrameStart();
+  Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 3 });
   TexBinder().OnFrameStart();
 
   // Assert: repoint occurs once draining happens.
@@ -240,6 +247,9 @@ NOLINT_TEST_F(
   q->QueueSignalCommand((std::numeric_limits<std::uint64_t>::max)());
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 2 });
+  TexBinder().OnFrameStart();
+  Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 3 });
   TexBinder().OnFrameStart();
 
   // Assert: normal key repoints once.

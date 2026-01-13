@@ -24,6 +24,21 @@ namespace oxygen::renderer::testing {
 
 namespace detail {
 
+  [[nodiscard]] inline auto AlignUpSize(const std::size_t value,
+    const std::size_t alignment) noexcept -> std::size_t
+  {
+    if (alignment == 0U) {
+      return value;
+    }
+
+    const auto mask = alignment - 1U;
+    if ((alignment & mask) != 0U) {
+      return value;
+    }
+
+    return (value + mask) & ~mask;
+  }
+
   inline auto CopyBytes(const std::span<std::byte> destination,
     const std::span<const std::byte> source) noexcept -> void
   {
@@ -39,6 +54,67 @@ namespace detail {
     std::array<std::byte, sizeof(T)> storage {};
     CopyBytes(storage, bytes.subspan(0, storage.size()));
     return std::bit_cast<T>(storage);
+  }
+
+  template <typename T>
+  inline auto WriteTrivial(const std::span<std::byte> destination,
+    const std::size_t offset, const T& value) noexcept -> void
+  {
+    static_assert(std::is_trivially_copyable_v<T>);
+
+    if (offset + sizeof(T) > destination.size()) {
+      return;
+    }
+
+    std::array<std::byte, sizeof(T)> storage {};
+    storage = std::bit_cast<std::array<std::byte, sizeof(T)>>(value);
+    CopyBytes(destination.subspan(offset, storage.size()), storage);
+  }
+
+  [[nodiscard]] inline auto BuildV4TexturePayload(
+    const data::pak::TextureResourceDesc& desc,
+    const std::span<const data::pak::SubresourceLayout> layouts,
+    const std::span<const std::uint8_t> data_region) -> std::vector<uint8_t>
+  {
+    using data::pak::SubresourceLayout;
+    using data::pak::TexturePayloadHeader;
+
+    constexpr std::size_t kDataOffsetAlignment = 256U;
+
+    const auto layout_bytes = layouts.size() * sizeof(SubresourceLayout);
+    const auto layouts_offset = sizeof(TexturePayloadHeader);
+    const auto unaligned_data_offset = layouts_offset + layout_bytes;
+    const auto data_offset
+      = AlignUpSize(unaligned_data_offset, kDataOffsetAlignment);
+
+    const auto total_payload_size = data_offset + data_region.size();
+
+    TexturePayloadHeader header {};
+    header.magic = data::pak::kTexturePayloadMagic;
+    header.packing_policy = 0U;
+    header.flags = 0U;
+    header.subresource_count = static_cast<std::uint16_t>(layouts.size());
+    header.total_payload_size = static_cast<std::uint32_t>(total_payload_size);
+    header.layouts_offset_bytes = static_cast<std::uint32_t>(layouts_offset);
+    header.data_offset_bytes = static_cast<std::uint32_t>(data_offset);
+    header.content_hash = desc.content_hash;
+
+    std::vector<std::uint8_t> payload(total_payload_size);
+    const auto payload_bytes = std::as_writable_bytes(std::span { payload });
+
+    WriteTrivial(payload_bytes, 0U, header);
+
+    if (!layouts.empty()) {
+      CopyBytes(payload_bytes.subspan(layouts_offset, layout_bytes),
+        std::as_bytes(layouts));
+    }
+
+    if (!data_region.empty()) {
+      CopyBytes(payload_bytes.subspan(data_offset, data_region.size()),
+        std::as_bytes(data_region));
+    }
+
+    return payload;
   }
 
 } // namespace detail
@@ -83,12 +159,12 @@ namespace detail {
 [[nodiscard]] inline auto MakeCookedTexture1x1Rgba8Payload()
   -> std::vector<uint8_t>
 {
+  using data::pak::SubresourceLayout;
   using data::pak::TextureResourceDesc;
 
   TextureResourceDesc desc {};
   desc.data_offset = sizeof(desc);
-  // Cooked data uses a 256-byte row pitch for D3D12-compatible copies.
-  desc.size_bytes = 256U; // NOLINT(*-magic-numbers)
+  // desc.size_bytes set after v4 payload is built.
   desc.texture_type = static_cast<uint8_t>(TextureType::kTexture2D);
   desc.compression_type = 0;
   desc.width = 1U;
@@ -101,25 +177,42 @@ namespace detail {
 
   constexpr std::array<uint8_t, 4> pixel { 0xFF, 0xFF, 0xFF, 0xFF };
 
+  // Cooked data uses a 256-byte row pitch for D3D12-compatible copies.
+  std::vector<std::uint8_t> data_region(256U); // NOLINT(*-magic-numbers)
+  detail::CopyBytes(
+    std::as_writable_bytes(std::span { data_region }).subspan(0, pixel.size()),
+    std::as_bytes(std::span { pixel }));
+
+  const std::array<SubresourceLayout, 1> layouts {
+    SubresourceLayout {
+      .offset_bytes = 0U,
+      .row_pitch_bytes = 256U, // NOLINT(*-magic-numbers)
+      .size_bytes = 256U, // NOLINT(*-magic-numbers)
+    },
+  };
+
+  auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
+  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
+
   std::vector<uint8_t> bytes;
-  bytes.resize(sizeof(desc) + 256U); // NOLINT(*-magic-numbers)
+  bytes.resize(sizeof(desc) + payload.size());
   const auto bytes_span = std::as_writable_bytes(std::span { bytes });
   detail::CopyBytes(
     bytes_span.subspan(0, sizeof(desc)), std::as_bytes(std::span { &desc, 1 }));
-  detail::CopyBytes(bytes_span.subspan(sizeof(desc), pixel.size()),
-    std::as_bytes(std::span { pixel }));
+  detail::CopyBytes(bytes_span.subspan(sizeof(desc), payload.size()),
+    std::as_bytes(std::span { payload }));
   return bytes;
 }
 
 [[nodiscard]] inline auto MakeInvalidTightPackedTexture1x1Rgba8Payload()
   -> std::vector<uint8_t>
 {
+  using data::pak::SubresourceLayout;
   using data::pak::TextureResourceDesc;
 
   TextureResourceDesc desc {};
   desc.data_offset = sizeof(desc);
-  // Intentionally tight-packed (row pitch 4, not 256): violates D4.
-  desc.size_bytes = 4U;
+  // desc.size_bytes set after v4 payload is built.
   desc.texture_type = static_cast<uint8_t>(TextureType::kTexture2D);
   desc.compression_type = 0;
   desc.width = 1U;
@@ -132,24 +225,39 @@ namespace detail {
 
   constexpr std::array<uint8_t, 4> pixel { 0xFF, 0xFF, 0xFF, 0xFF };
 
+  // Intentionally tight-packed (row pitch 4, not 256): violates D3D12 copy
+  // assumptions and must be rejected by TextureBinder upload layout.
+  const std::vector<std::uint8_t> data_region(pixel.begin(), pixel.end());
+  const std::array<SubresourceLayout, 1> layouts {
+    SubresourceLayout {
+      .offset_bytes = 0U,
+      .row_pitch_bytes = 4U,
+      .size_bytes = 4U,
+    },
+  };
+
+  auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
+  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
+
   std::vector<uint8_t> bytes;
-  bytes.resize(sizeof(desc) + pixel.size());
+  bytes.resize(sizeof(desc) + payload.size());
   const auto bytes_span = std::as_writable_bytes(std::span { bytes });
   detail::CopyBytes(
     bytes_span.subspan(0, sizeof(desc)), std::as_bytes(std::span { &desc, 1 }));
-  detail::CopyBytes(bytes_span.subspan(sizeof(desc), pixel.size()),
-    std::as_bytes(std::span { pixel }));
+  detail::CopyBytes(bytes_span.subspan(sizeof(desc), payload.size()),
+    std::as_bytes(std::span { payload }));
   return bytes;
 }
 
 [[nodiscard]] inline auto MakeCookedTexture4x4Bc1Payload()
   -> std::vector<uint8_t>
 {
+  using data::pak::SubresourceLayout;
   using data::pak::TextureResourceDesc;
 
   TextureResourceDesc desc {};
   desc.data_offset = sizeof(desc);
-  desc.size_bytes = 1024U; // NOLINT(*-magic-numbers)
+  // desc.size_bytes set after v4 payload is built.
   desc.texture_type = static_cast<uint8_t>(TextureType::kTexture2D);
   desc.compression_type = 0;
   desc.width = 4U;
@@ -160,11 +268,25 @@ namespace detail {
   desc.format = static_cast<uint8_t>(Format::kBC1UNorm);
   desc.alignment = 256U; // NOLINT(*-magic-numbers)
 
+  std::vector<std::uint8_t> data_region(1024U); // NOLINT(*-magic-numbers)
+  const std::array<SubresourceLayout, 1> layouts {
+    SubresourceLayout {
+      .offset_bytes = 0U,
+      .row_pitch_bytes = 256U, // NOLINT(*-magic-numbers)
+      .size_bytes = 1024U, // NOLINT(*-magic-numbers)
+    },
+  };
+
+  auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
+  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
+
   std::vector<uint8_t> bytes;
-  bytes.resize(sizeof(desc) + 1024U); // NOLINT(*-magic-numbers)
+  bytes.resize(sizeof(desc) + payload.size());
   const auto bytes_span = std::as_writable_bytes(std::span { bytes });
   detail::CopyBytes(
     bytes_span.subspan(0, sizeof(desc)), std::as_bytes(std::span { &desc, 1 }));
+  detail::CopyBytes(bytes_span.subspan(sizeof(desc), payload.size()),
+    std::as_bytes(std::span { payload }));
   return bytes;
 }
 
