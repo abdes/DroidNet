@@ -480,7 +480,8 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
 
   // Build and publish environment static data once per frame.
   if (env_static_manager_) {
-    env_static_manager_->UpdateIfNeeded(*render_context_);
+    auto tag = oxygen::renderer::internal::RendererTagFactory::Get();
+    env_static_manager_->UpdateIfNeeded(tag, *render_context_);
     scene_const_cpu_.SetBindlessEnvironmentStaticSlot(
       BindlessEnvironmentStaticSlot(env_static_manager_->GetSrvIndex().get()),
       SceneConstants::kRenderer);
@@ -1192,7 +1193,7 @@ auto Renderer::OnFrameStart(FrameContext& context) -> void
   scene_const_manager_->OnFrameStart(frame_slot);
   env_dynamic_manager_->OnFrameStart(frame_slot);
   if (env_static_manager_) {
-    env_static_manager_->OnFrameStart(frame_slot);
+    env_static_manager_->OnFrameStart(tag, frame_slot);
   }
   scene_prep_state_->GetTransformUploader()->OnFrameStart(
     tag, frame_sequence, frame_slot);

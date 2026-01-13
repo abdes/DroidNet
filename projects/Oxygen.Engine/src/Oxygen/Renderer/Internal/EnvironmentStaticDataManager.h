@@ -8,18 +8,25 @@
 
 #include <array>
 #include <cstdint>
-#include <limits>
 #include <memory>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Resources/IResourceBinder.h>
 #include <Oxygen/Renderer/Types/EnvironmentStaticData.h>
 #include <Oxygen/Renderer/api_export.h>
+
+namespace oxygen {
+class Graphics;
+namespace graphics {
+  class Texture;
+  class CommandRecorder;
+} // namespace graphics
+} // namespace oxygen::graphics
 
 namespace oxygen::engine {
 struct RenderContext;
@@ -51,8 +58,17 @@ class ISkyAtmosphereLutProvider;
  the manager marks all slots as needing upload; each slot is refreshed the next
  time it becomes current.
 
- @note This manager does not implement a monotonic versioning mechanism.
-       It tracks only content changes (dirty) and per-slot upload needs.
+ ### Usage & Threading
+ This class is single-owner and not thread-safe: all public methods must be
+ called from the renderer thread (or otherwise externally synchronized).
+ Call `OnFrameStart(renderer::RendererTag tag, frame::Slot slot)` at the start
+ of each frame (before `UpdateIfNeeded`) to set the active frame slot used for
+ uploads. `UpdateIfNeeded(renderer::RendererTag tag, const RenderContext&)`
+ rebuilds the CPU snapshot from the provided `RenderContext` and will schedule
+ an upload for the current slot when necessary.
+
+ The manager integrates with BRDF LUT, IBL and sky-atmosphere providers and
+ with a bindless texture binder to publish shader-visible descriptor slots.
 */
 class EnvironmentStaticDataManager {
 public:
@@ -69,7 +85,8 @@ public:
   OXYGEN_DEFAULT_MOVABLE(EnvironmentStaticDataManager)
 
   //! Set the active frame slot for upcoming uploads.
-  OXGN_RNDR_API auto OnFrameStart(frame::Slot slot) -> void;
+  OXGN_RNDR_API auto OnFrameStart(renderer::RendererTag tag, frame::Slot slot)
+    -> void;
 
   //! Rebuild CPU snapshot from the scene environment.
   /*!
@@ -78,7 +95,8 @@ public:
 
    @param context Render context for the current frame.
   */
-  OXGN_RNDR_API auto UpdateIfNeeded(const RenderContext& context) -> void;
+  OXGN_RNDR_API auto UpdateIfNeeded(
+    renderer::RendererTag tag, const RenderContext& context) -> void;
 
   //! Enforce resource state barriers for owned textures (e.g. BRDF LUT).
   /*!
@@ -144,7 +162,12 @@ private:
   frame::Slot current_slot_ { frame::kInvalidSlot };
 
   EnvironmentStaticData cpu_snapshot_ {};
-  std::array<bool, frame::kFramesInFlight.get()> slot_needs_upload_ {};
+  // Monotonic snapshot id and per-slot uploaded snapshot ids.
+  // When the CPU snapshot changes, increment `snapshot_id_` so every slot
+  // becomes implicitly dirty. Each slot records the snapshot id it last
+  // uploaded; when it differs from `snapshot_id_` the slot needs upload.
+  std::uint64_t snapshot_id_ { 1 };
+  std::array<std::uint64_t, frame::kFramesInFlight.get()> slot_uploaded_id_ {};
 
   std::shared_ptr<graphics::Buffer> buffer_;
   std::shared_ptr<graphics::Texture> brdf_lut_texture_;
@@ -155,30 +178,24 @@ private:
   ShaderVisibleIndex srv_index_ { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex brdf_lut_slot_ { kInvalidShaderVisibleIndex };
 
-  // Publish diagnostics (used to avoid log spam by emitting only on state
-  // transitions). These track decisions made in BuildFromSceneEnvironment.
-  bool publish_diag_initialized_ { false };
-  std::uint32_t last_published_skylight_source_
-    = (std::numeric_limits<std::uint32_t>::max)();
-  std::uint32_t last_published_skylight_cubemap_slot_ {
-    kInvalidDescriptorSlot
-  };
-  bool last_published_skylight_cubemap_ready_ { false };
-
-  std::uint32_t last_published_skysphere_source_
-    = (std::numeric_limits<std::uint32_t>::max)();
-  std::uint32_t last_published_skysphere_cubemap_slot_ {
-    kInvalidDescriptorSlot
-  };
-  bool last_published_skysphere_cubemap_ready_ { false };
-
-  bool last_published_ibl_has_source_ { false };
-  std::uint32_t last_published_ibl_source_slot_ { kInvalidDescriptorSlot };
-  bool last_published_ibl_is_dirty_ { false };
-  bool last_published_ibl_outputs_ { false };
-
+  // Build helpers split out of the original monolithic method.
   auto BuildFromSceneEnvironment(
     observer_ptr<const scene::SceneEnvironment> env) -> void;
+
+  auto ProcessBrdfLut() -> void;
+  auto PopulateFog(observer_ptr<const scene::SceneEnvironment> env,
+    EnvironmentStaticData& next) -> void;
+  auto PopulateAtmosphere(observer_ptr<const scene::SceneEnvironment> env,
+    EnvironmentStaticData& next) -> void;
+  auto PopulateSkyLight(observer_ptr<const scene::SceneEnvironment> env,
+    EnvironmentStaticData& next) -> void;
+  auto PopulateSkySphere(observer_ptr<const scene::SceneEnvironment> env,
+    EnvironmentStaticData& next) -> void;
+  auto PopulateIbl(EnvironmentStaticData& next) -> void;
+  auto PopulateClouds(observer_ptr<const scene::SceneEnvironment> env,
+    EnvironmentStaticData& next) -> void;
+  auto PopulatePostProcess(observer_ptr<const scene::SceneEnvironment> env,
+    EnvironmentStaticData& next) -> void;
   auto UploadIfNeeded() -> void;
 
   auto EnsureResourcesCreated() -> void;

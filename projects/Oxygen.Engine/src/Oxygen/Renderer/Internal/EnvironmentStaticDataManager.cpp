@@ -11,6 +11,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Internal/IBrdfLutProvider.h>
@@ -120,7 +121,9 @@ EnvironmentStaticDataManager::EnvironmentStaticDataManager(
   CHECK_NOTNULL_F(ibl_provider_, "expecting a valid IBL provider");
   CHECK_NOTNULL_F(sky_lut_provider_, "expecting a valid sky LUT provider");
 
-  slot_needs_upload_.fill(true);
+  // Ensure uploaded ids are zero so the initial snapshot (id=1)
+  // will be considered not-yet-uploaded for all slots.
+  slot_uploaded_id_.fill(0);
 }
 
 EnvironmentStaticDataManager::~EnvironmentStaticDataManager()
@@ -146,13 +149,14 @@ EnvironmentStaticDataManager::~EnvironmentStaticDataManager()
   buffer_.reset();
 }
 
-auto EnvironmentStaticDataManager::OnFrameStart(frame::Slot slot) -> void
+auto EnvironmentStaticDataManager::OnFrameStart(
+  renderer::RendererTag /*tag*/, frame::Slot slot) -> void
 {
   current_slot_ = slot;
 }
 
-auto EnvironmentStaticDataManager::UpdateIfNeeded(const RenderContext& context)
-  -> void
+auto EnvironmentStaticDataManager::UpdateIfNeeded(
+  renderer::RendererTag /*tag*/, const RenderContext& context) -> void
 {
   observer_ptr<const scene::SceneEnvironment> env = nullptr;
   if (const auto scene_ptr = context.GetScene()) {
@@ -196,23 +200,27 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
 {
   EnvironmentStaticData next {};
 
-  // Capture publish decisions so we can log only on transitions.
-  // Defaults represent "not publishing".
-  std::uint32_t published_skylight_source
-    = (std::numeric_limits<std::uint32_t>::max)();
-  std::uint32_t published_skylight_cubemap_slot = kInvalidDescriptorSlot;
-  bool published_skylight_cubemap_ready = false;
+  // Handle BRDF LUT provider and possible changes to the LUT slot.
+  ProcessBrdfLut();
 
-  std::uint32_t published_skysphere_source
-    = (std::numeric_limits<std::uint32_t>::max)();
-  std::uint32_t published_skysphere_cubemap_slot = kInvalidDescriptorSlot;
-  bool published_skysphere_cubemap_ready = false;
+  if (env) {
+    PopulateFog(env, next);
+    PopulateAtmosphere(env, next);
+    PopulateSkyLight(env, next);
+    PopulateSkySphere(env, next);
+    PopulateIbl(next);
+    PopulateClouds(env, next);
+    PopulatePostProcess(env, next);
+  }
 
-  bool published_ibl_has_source = false;
-  std::uint32_t published_ibl_source_slot = kInvalidDescriptorSlot;
-  bool published_ibl_is_dirty = false;
-  bool published_ibl_outputs = false;
+  if (std::memcmp(&next, &cpu_snapshot_, sizeof(EnvironmentStaticData)) != 0) {
+    cpu_snapshot_ = next;
+    MarkAllSlotsDirty();
+  }
+}
 
+auto EnvironmentStaticDataManager::ProcessBrdfLut() -> void
+{
   if (brdf_lut_provider_) {
     const auto [tex, slot] = brdf_lut_provider_->GetOrCreateLut();
     if (slot != brdf_lut_slot_) {
@@ -222,303 +230,234 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
       MarkAllSlotsDirty();
     }
   }
+}
 
-  if (env) {
-    if (const auto fog = env->TryGetSystem<scene::environment::Fog>();
-      fog && fog->IsEnabled()) {
-      next.fog.enabled = 1u;
-      next.fog.model = ToGpuFogModel(fog->GetModel());
-      next.fog.density = fog->GetDensity();
-      next.fog.height_falloff = fog->GetHeightFalloff();
-      next.fog.height_offset_m = fog->GetHeightOffsetMeters();
-      next.fog.start_distance_m = fog->GetStartDistanceMeters();
-      next.fog.max_opacity = fog->GetMaxOpacity();
-      next.fog.albedo_rgb = fog->GetAlbedoRgb();
-      next.fog.anisotropy_g = fog->GetAnisotropy();
-      next.fog.scattering_intensity = fog->GetScatteringIntensity();
+auto EnvironmentStaticDataManager::PopulateFog(
+  observer_ptr<const scene::SceneEnvironment> env, EnvironmentStaticData& next)
+  -> void
+{
+  if (const auto fog = env->TryGetSystem<scene::environment::Fog>();
+    fog && fog->IsEnabled()) {
+    next.fog.enabled = 1u;
+    next.fog.model = ToGpuFogModel(fog->GetModel());
+    next.fog.density = fog->GetDensity();
+    next.fog.height_falloff = fog->GetHeightFalloff();
+    next.fog.height_offset_m = fog->GetHeightOffsetMeters();
+    next.fog.start_distance_m = fog->GetStartDistanceMeters();
+    next.fog.max_opacity = fog->GetMaxOpacity();
+    next.fog.albedo_rgb = fog->GetAlbedoRgb();
+    next.fog.anisotropy_g = fog->GetAnisotropy();
+    next.fog.scattering_intensity = fog->GetScatteringIntensity();
+  }
+}
+
+auto EnvironmentStaticDataManager::PopulateAtmosphere(
+  observer_ptr<const scene::SceneEnvironment> env, EnvironmentStaticData& next)
+  -> void
+{
+  if (const auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>();
+    atmo && atmo->IsEnabled()) {
+    next.atmosphere.enabled = 1u;
+    next.atmosphere.planet_radius_m = atmo->GetPlanetRadiusMeters();
+    next.atmosphere.atmosphere_height_m = atmo->GetAtmosphereHeightMeters();
+    next.atmosphere.ground_albedo_rgb = atmo->GetGroundAlbedoRgb();
+    next.atmosphere.rayleigh_scattering_rgb = atmo->GetRayleighScatteringRgb();
+    next.atmosphere.rayleigh_scale_height_m
+      = atmo->GetRayleighScaleHeightMeters();
+    next.atmosphere.mie_scattering_rgb = atmo->GetMieScatteringRgb();
+    next.atmosphere.mie_scale_height_m = atmo->GetMieScaleHeightMeters();
+    next.atmosphere.mie_g = atmo->GetMieAnisotropy();
+    next.atmosphere.absorption_rgb = atmo->GetAbsorptionRgb();
+    next.atmosphere.absorption_scale_height_m
+      = atmo->GetAbsorptionScaleHeightMeters();
+    next.atmosphere.multi_scattering_factor = atmo->GetMultiScatteringFactor();
+    next.atmosphere.sun_disk_enabled = atmo->GetSunDiskEnabled() ? 1u : 0u;
+    next.atmosphere.sun_disk_angular_radius_radians
+      = atmo->GetSunDiskAngularRadiusRadians();
+    next.atmosphere.aerial_perspective_distance_scale
+      = atmo->GetAerialPerspectiveDistanceScale();
+
+    if (sky_lut_provider_) {
+      const auto transmittance_slot
+        = sky_lut_provider_->GetTransmittanceLutSlot();
+      const auto sky_view_slot = sky_lut_provider_->GetSkyViewLutSlot();
+
+      next.atmosphere.transmittance_lut_slot
+        = transmittance_slot != kInvalidShaderVisibleIndex
+        ? transmittance_slot.get()
+        : kInvalidDescriptorSlot;
+
+      next.atmosphere.sky_view_lut_slot
+        = sky_view_slot != kInvalidShaderVisibleIndex ? sky_view_slot.get()
+                                                      : kInvalidDescriptorSlot;
+
+      const auto [trans_w, trans_h]
+        = sky_lut_provider_->GetTransmittanceLutSize();
+      const auto [sky_w, sky_h] = sky_lut_provider_->GetSkyViewLutSize();
+
+      next.atmosphere.transmittance_lut_width = static_cast<float>(trans_w);
+      next.atmosphere.transmittance_lut_height = static_cast<float>(trans_h);
+      next.atmosphere.sky_view_lut_width = static_cast<float>(sky_w);
+      next.atmosphere.sky_view_lut_height = static_cast<float>(sky_h);
+
+      sky_lut_provider_->UpdateParameters(next.atmosphere);
     }
+  }
+}
 
-    if (const auto atmo
-      = env->TryGetSystem<scene::environment::SkyAtmosphere>();
-      atmo && atmo->IsEnabled()) {
-      next.atmosphere.enabled = 1u;
-      next.atmosphere.planet_radius_m = atmo->GetPlanetRadiusMeters();
-      next.atmosphere.atmosphere_height_m = atmo->GetAtmosphereHeightMeters();
-      next.atmosphere.ground_albedo_rgb = atmo->GetGroundAlbedoRgb();
-      next.atmosphere.rayleigh_scattering_rgb
-        = atmo->GetRayleighScatteringRgb();
-      next.atmosphere.rayleigh_scale_height_m
-        = atmo->GetRayleighScaleHeightMeters();
-      next.atmosphere.mie_scattering_rgb = atmo->GetMieScatteringRgb();
-      next.atmosphere.mie_scale_height_m = atmo->GetMieScaleHeightMeters();
-      next.atmosphere.mie_g = atmo->GetMieAnisotropy();
-      next.atmosphere.absorption_rgb = atmo->GetAbsorptionRgb();
-      next.atmosphere.absorption_scale_height_m
-        = atmo->GetAbsorptionScaleHeightMeters();
-      next.atmosphere.multi_scattering_factor
-        = atmo->GetMultiScatteringFactor();
-      next.atmosphere.sun_disk_enabled = atmo->GetSunDiskEnabled() ? 1u : 0u;
-      next.atmosphere.sun_disk_angular_radius_radians
-        = atmo->GetSunDiskAngularRadiusRadians();
-      next.atmosphere.aerial_perspective_distance_scale
-        = atmo->GetAerialPerspectiveDistanceScale();
+auto EnvironmentStaticDataManager::PopulateSkyLight(
+  observer_ptr<const scene::SceneEnvironment> env, EnvironmentStaticData& next)
+  -> void
+{
+  if (const auto sky_light = env->TryGetSystem<scene::environment::SkyLight>();
+    sky_light && sky_light->IsEnabled()) {
+    next.sky_light.enabled = 1u;
+    next.sky_light.source = ToGpuSkyLightSource(sky_light->GetSource());
+    next.sky_light.intensity = sky_light->GetIntensity();
+    next.sky_light.tint_rgb = sky_light->GetTintRgb();
+    next.sky_light.diffuse_intensity = sky_light->GetDiffuseIntensity();
+    next.sky_light.specular_intensity = sky_light->GetSpecularIntensity();
+    next.sky_light.brdf_lut_slot = brdf_lut_slot_ != kInvalidShaderVisibleIndex
+      ? brdf_lut_slot_.get()
+      : kInvalidDescriptorSlot;
 
-      // Populate LUT slots from the sky atmosphere LUT provider.
-      if (sky_lut_provider_) {
-        const auto transmittance_slot
-          = sky_lut_provider_->GetTransmittanceLutSlot();
-        const auto sky_view_slot = sky_lut_provider_->GetSkyViewLutSlot();
-
-        next.atmosphere.transmittance_lut_slot
-          = transmittance_slot != kInvalidShaderVisibleIndex
-          ? transmittance_slot.get()
-          : kInvalidDescriptorSlot;
-        next.atmosphere.sky_view_lut_slot
-          = sky_view_slot != kInvalidShaderVisibleIndex
-          ? sky_view_slot.get()
-          : kInvalidDescriptorSlot;
-
-        const auto [trans_w, trans_h]
-          = sky_lut_provider_->GetTransmittanceLutSize();
-        const auto [sky_w, sky_h] = sky_lut_provider_->GetSkyViewLutSize();
-
-        next.atmosphere.transmittance_lut_width = static_cast<float>(trans_w);
-        next.atmosphere.transmittance_lut_height = static_cast<float>(trans_h);
-        next.atmosphere.sky_view_lut_width = static_cast<float>(sky_w);
-        next.atmosphere.sky_view_lut_height = static_cast<float>(sky_h);
-
-        // Update the LUT manager's parameters to trigger dirty tracking.
-        sky_lut_provider_->UpdateParameters(next.atmosphere);
-      }
-    }
-
-    if (const auto sky_light
-      = env->TryGetSystem<scene::environment::SkyLight>();
-      sky_light && sky_light->IsEnabled()) {
-      next.sky_light.enabled = 1u;
-      next.sky_light.source = ToGpuSkyLightSource(sky_light->GetSource());
-      published_skylight_source
-        = static_cast<std::uint32_t>(next.sky_light.source);
-      next.sky_light.intensity = sky_light->GetIntensity();
-      next.sky_light.tint_rgb = sky_light->GetTintRgb();
-      next.sky_light.diffuse_intensity = sky_light->GetDiffuseIntensity();
-      next.sky_light.specular_intensity = sky_light->GetSpecularIntensity();
-      next.sky_light.brdf_lut_slot
-        = brdf_lut_slot_ != kInvalidShaderVisibleIndex ? brdf_lut_slot_.get()
-                                                       : kInvalidDescriptorSlot;
-
-      // Resolve cubemap ResourceKey to shader-visible index via TextureBinder.
-      if (texture_binder_
-        && sky_light->GetSource()
-          == scene::environment::SkyLightSource::kSpecifiedCubemap
-        && !sky_light->GetCubemapResource().IsPlaceholder()) {
-        const auto key = sky_light->GetCubemapResource();
-        const auto slot = texture_binder_->GetOrAllocate(key);
-        published_skylight_cubemap_ready
-          = texture_binder_->IsResourceReady(key);
-        published_skylight_cubemap_slot = slot.get();
-        if (published_skylight_cubemap_ready) {
-          next.sky_light.cubemap_slot = slot.get();
-        } else {
-          next.sky_light.cubemap_slot = kInvalidDescriptorSlot;
-        }
+    if (texture_binder_
+      && sky_light->GetSource()
+        == scene::environment::SkyLightSource::kSpecifiedCubemap
+      && !sky_light->GetCubemapResource().IsPlaceholder()) {
+      const auto key = sky_light->GetCubemapResource();
+      const auto slot = texture_binder_->GetOrAllocate(key);
+      const bool cubemap_ready = texture_binder_->IsResourceReady(key);
+      const auto cubemap_slot = slot.get();
+      if (cubemap_ready) {
+        next.sky_light.cubemap_slot = cubemap_slot;
       } else {
         next.sky_light.cubemap_slot = kInvalidDescriptorSlot;
       }
+    } else {
+      next.sky_light.cubemap_slot = kInvalidDescriptorSlot;
+    }
+  }
+}
+
+auto EnvironmentStaticDataManager::PopulateSkySphere(
+  observer_ptr<const scene::SceneEnvironment> env, EnvironmentStaticData& next)
+  -> void
+{
+  if (const auto sky_sphere
+    = env->TryGetSystem<scene::environment::SkySphere>();
+    sky_sphere && sky_sphere->IsEnabled()) {
+    if (next.atmosphere.enabled != 0U) {
+      DLOG_F(WARNING,
+        "Both SkyAtmosphere and SkySphere are enabled. They are mutually "
+        "exclusive; SkyAtmosphere will take priority for sky rendering.");
     }
 
-    if (const auto sky_sphere
-      = env->TryGetSystem<scene::environment::SkySphere>();
-      sky_sphere && sky_sphere->IsEnabled()) {
-      // Warn if both SkyAtmosphere and SkySphere are enabled (mutually
-      // exclusive; SkyAtmosphere takes priority in the shader).
-      if (next.atmosphere.enabled != 0U) {
-        DLOG_F(WARNING,
-          "Both SkyAtmosphere and SkySphere are enabled. They are mutually "
-          "exclusive; SkyAtmosphere will take priority for sky rendering.");
-      }
+    next.sky_sphere.enabled = 1u;
+    next.sky_sphere.source = ToGpuSkySphereSource(sky_sphere->GetSource());
+    next.sky_sphere.solid_color_rgb = sky_sphere->GetSolidColorRgb();
+    next.sky_sphere.intensity = sky_sphere->GetIntensity();
+    next.sky_sphere.rotation_radians = sky_sphere->GetRotationRadians();
+    next.sky_sphere.tint_rgb = sky_sphere->GetTintRgb();
 
-      next.sky_sphere.enabled = 1u;
-      next.sky_sphere.source = ToGpuSkySphereSource(sky_sphere->GetSource());
-      published_skysphere_source
-        = static_cast<std::uint32_t>(next.sky_sphere.source);
-      next.sky_sphere.solid_color_rgb = sky_sphere->GetSolidColorRgb();
-      next.sky_sphere.intensity = sky_sphere->GetIntensity();
-      next.sky_sphere.rotation_radians = sky_sphere->GetRotationRadians();
-      next.sky_sphere.tint_rgb = sky_sphere->GetTintRgb();
-
-      // Resolve cubemap ResourceKey to shader-visible index via TextureBinder.
-      if (texture_binder_
-        && sky_sphere->GetSource()
-          == scene::environment::SkySphereSource::kCubemap
-        && !sky_sphere->GetCubemapResource().IsPlaceholder()) {
-        const auto key = sky_sphere->GetCubemapResource();
-        const auto slot = texture_binder_->GetOrAllocate(key);
-        published_skysphere_cubemap_ready
-          = texture_binder_->IsResourceReady(key);
-        published_skysphere_cubemap_slot = slot.get();
-        if (published_skysphere_cubemap_ready) {
-          next.sky_sphere.cubemap_slot = slot.get();
-        } else {
-          next.sky_sphere.cubemap_slot = kInvalidDescriptorSlot;
-        }
+    if (texture_binder_
+      && sky_sphere->GetSource()
+        == scene::environment::SkySphereSource::kCubemap
+      && !sky_sphere->GetCubemapResource().IsPlaceholder()) {
+      const auto key = sky_sphere->GetCubemapResource();
+      const auto slot = texture_binder_->GetOrAllocate(key);
+      const bool ss_cubemap_ready = texture_binder_->IsResourceReady(key);
+      const auto ss_cubemap_slot = slot.get();
+      if (ss_cubemap_ready) {
+        next.sky_sphere.cubemap_slot = ss_cubemap_slot;
       } else {
         next.sky_sphere.cubemap_slot = kInvalidDescriptorSlot;
       }
-    }
-
-    // Bind IBL resources when SkyLight is enabled and we have a valid
-    // environment cubemap source to filter.
-    //
-    // Source selection for filtering is done by IblComputePass. Here, we only
-    // publish the output map slots when inputs are valid.
-    if (next.sky_light.enabled != 0U && ibl_provider_) {
-      const bool has_source
-        = next.sky_light.cubemap_slot != kInvalidDescriptorSlot
-        || (next.sky_sphere.enabled != 0U
-          && next.sky_sphere.cubemap_slot != kInvalidDescriptorSlot);
-
-      published_ibl_has_source = has_source;
-
-      if (has_source && ibl_provider_->EnsureResourcesCreated()) {
-        const ShaderVisibleIndex source_slot
-          = (next.sky_light.cubemap_slot != kInvalidDescriptorSlot)
-          ? ShaderVisibleIndex { next.sky_light.cubemap_slot }
-          : ShaderVisibleIndex { next.sky_sphere.cubemap_slot };
-
-        published_ibl_source_slot = source_slot.get();
-
-        const auto outputs = ibl_provider_->QueryOutputsFor(source_slot);
-
-        const bool irr_ready = outputs.irradiance != kInvalidShaderVisibleIndex;
-        const bool pref_ready = outputs.prefilter != kInvalidShaderVisibleIndex;
-
-        published_ibl_is_dirty = !(irr_ready && pref_ready);
-
-        if (irr_ready) {
-          next.sky_light.irradiance_map_slot = outputs.irradiance.get();
-        } else {
-          next.sky_light.irradiance_map_slot = kInvalidDescriptorSlot;
-        }
-
-        if (pref_ready) {
-          next.sky_light.prefilter_map_slot = outputs.prefilter.get();
-        } else {
-          next.sky_light.prefilter_map_slot = kInvalidDescriptorSlot;
-        }
-
-        published_ibl_outputs = (irr_ready && pref_ready);
-      } else {
-        next.sky_light.irradiance_map_slot = kInvalidDescriptorSlot;
-        next.sky_light.prefilter_map_slot = kInvalidDescriptorSlot;
-        published_ibl_outputs = false;
-      }
-    }
-
-    if (const auto clouds
-      = env->TryGetSystem<scene::environment::VolumetricClouds>();
-      clouds && clouds->IsEnabled()) {
-      next.clouds.enabled = 1u;
-      next.clouds.base_altitude_m = clouds->GetBaseAltitudeMeters();
-      next.clouds.layer_thickness_m = clouds->GetLayerThicknessMeters();
-      next.clouds.coverage = clouds->GetCoverage();
-      next.clouds.density = clouds->GetDensity();
-      next.clouds.albedo_rgb = clouds->GetAlbedoRgb();
-      next.clouds.extinction_scale = clouds->GetExtinctionScale();
-      next.clouds.phase_g = clouds->GetPhaseAnisotropy();
-      next.clouds.wind_dir_ws = clouds->GetWindDirectionWs();
-      next.clouds.wind_speed_mps = clouds->GetWindSpeedMps();
-      next.clouds.shadow_strength = clouds->GetShadowStrength();
-    }
-
-    if (const auto pp
-      = env->TryGetSystem<scene::environment::PostProcessVolume>();
-      pp && pp->IsEnabled()) {
-      next.post_process.enabled = 1u;
-      next.post_process.tone_mapper = ToGpuToneMapper(pp->GetToneMapper());
-      next.post_process.exposure_mode
-        = ToGpuExposureMode(pp->GetExposureMode());
-
-      // Scene authoring stores EV; GPU expects a multiplier.
-      next.post_process.exposure_compensation
-        = std::exp2(pp->GetExposureCompensationEv());
-
-      next.post_process.auto_exposure_min_ev = pp->GetAutoExposureMinEv();
-      next.post_process.auto_exposure_max_ev = pp->GetAutoExposureMaxEv();
-      next.post_process.auto_exposure_speed_up = pp->GetAutoExposureSpeedUp();
-      next.post_process.auto_exposure_speed_down
-        = pp->GetAutoExposureSpeedDown();
-
-      next.post_process.bloom_intensity = pp->GetBloomIntensity();
-      next.post_process.bloom_threshold = pp->GetBloomThreshold();
-      next.post_process.saturation = pp->GetSaturation();
-      next.post_process.contrast = pp->GetContrast();
-      next.post_process.vignette_intensity = pp->GetVignetteIntensity();
+    } else {
+      next.sky_sphere.cubemap_slot = kInvalidDescriptorSlot;
     }
   }
+}
 
-  if (std::memcmp(&next, &cpu_snapshot_, sizeof(EnvironmentStaticData)) != 0) {
-    // Useful diagnostics for IBL troubleshooting.
-    LOG_F(2,
-      "EnvironmentStaticData changed: "
-      "SkyLight(en={}, src={}, cube={}, irr={}, pref={}, brdf={}, I={}, D={}, "
-      "S={}) SkySphere(en={}, src={}, cube={})",
-      next.sky_light.enabled, static_cast<uint32_t>(next.sky_light.source),
-      next.sky_light.cubemap_slot, next.sky_light.irradiance_map_slot,
-      next.sky_light.prefilter_map_slot, next.sky_light.brdf_lut_slot,
-      next.sky_light.intensity, next.sky_light.diffuse_intensity,
-      next.sky_light.specular_intensity, next.sky_sphere.enabled,
-      static_cast<uint32_t>(next.sky_sphere.source),
-      next.sky_sphere.cubemap_slot);
-
-    cpu_snapshot_ = next;
-    MarkAllSlotsDirty();
+auto EnvironmentStaticDataManager::PopulateIbl(EnvironmentStaticData& next)
+  -> void
+{
+  if (next.sky_light.enabled == 0U || !ibl_provider_) {
+    return;
   }
 
-  // Emit publish-decision logs when the manager's output policy changes.
-  // This avoids guessing when a slot is being withheld vs published.
-  const bool diag_changed = !publish_diag_initialized_
-    || last_published_skylight_source_ != published_skylight_source
-    || last_published_skylight_cubemap_slot_ != published_skylight_cubemap_slot
-    || last_published_skylight_cubemap_ready_
-      != published_skylight_cubemap_ready
-    || last_published_skysphere_source_ != published_skysphere_source
-    || last_published_skysphere_cubemap_slot_
-      != published_skysphere_cubemap_slot
-    || last_published_skysphere_cubemap_ready_
-      != published_skysphere_cubemap_ready
-    || last_published_ibl_has_source_ != published_ibl_has_source
-    || last_published_ibl_source_slot_ != published_ibl_source_slot
-    || last_published_ibl_is_dirty_ != published_ibl_is_dirty
-    || last_published_ibl_outputs_ != published_ibl_outputs;
+  const bool has_source = next.sky_light.cubemap_slot != kInvalidDescriptorSlot
+    || (next.sky_sphere.enabled != 0U
+      && next.sky_sphere.cubemap_slot != kInvalidDescriptorSlot);
 
-  if (diag_changed) {
-    LOG_F(2,
-      "EnvStatic publish policy: SkyLight(src={}, requested_slot={}, ready={}, "
-      "published_slot={}, I={}, D={}, S={}) "
-      "SkySphere(src={}, requested_slot={}, ready={}, published_slot={}) "
-      "IBL(has_source={}, src_slot={}, dirty={}, "
-      "publish_outputs={}, irr={}, pref={})",
-      published_skylight_source, published_skylight_cubemap_slot,
-      published_skylight_cubemap_ready, next.sky_light.cubemap_slot,
-      next.sky_light.intensity, next.sky_light.diffuse_intensity,
-      next.sky_light.specular_intensity, published_skysphere_source,
-      published_skysphere_cubemap_slot, published_skysphere_cubemap_ready,
-      next.sky_sphere.cubemap_slot, published_ibl_has_source,
-      published_ibl_source_slot, published_ibl_is_dirty, published_ibl_outputs,
-      next.sky_light.irradiance_map_slot, next.sky_light.prefilter_map_slot);
+  if (!has_source) {
+    next.sky_light.irradiance_map_slot = kInvalidDescriptorSlot;
+    next.sky_light.prefilter_map_slot = kInvalidDescriptorSlot;
+    return;
+  }
 
-    publish_diag_initialized_ = true;
-    last_published_skylight_source_ = published_skylight_source;
-    last_published_skylight_cubemap_slot_ = published_skylight_cubemap_slot;
-    last_published_skylight_cubemap_ready_ = published_skylight_cubemap_ready;
-    last_published_skysphere_source_ = published_skysphere_source;
-    last_published_skysphere_cubemap_slot_ = published_skysphere_cubemap_slot;
-    last_published_skysphere_cubemap_ready_ = published_skysphere_cubemap_ready;
-    last_published_ibl_has_source_ = published_ibl_has_source;
-    last_published_ibl_source_slot_ = published_ibl_source_slot;
-    last_published_ibl_is_dirty_ = published_ibl_is_dirty;
-    last_published_ibl_outputs_ = published_ibl_outputs;
+  const ShaderVisibleIndex source_slot
+    = (next.sky_light.cubemap_slot != kInvalidDescriptorSlot)
+    ? ShaderVisibleIndex { next.sky_light.cubemap_slot }
+    : ShaderVisibleIndex { next.sky_sphere.cubemap_slot };
+
+  const auto outputs = ibl_provider_->QueryOutputsFor(source_slot);
+
+  next.sky_light.irradiance_map_slot
+    = outputs.irradiance != kInvalidShaderVisibleIndex
+    ? outputs.irradiance.get()
+    : kInvalidDescriptorSlot;
+
+  next.sky_light.prefilter_map_slot
+    = outputs.prefilter != kInvalidShaderVisibleIndex ? outputs.prefilter.get()
+                                                      : kInvalidDescriptorSlot;
+}
+
+auto EnvironmentStaticDataManager::PopulateClouds(
+  observer_ptr<const scene::SceneEnvironment> env, EnvironmentStaticData& next)
+  -> void
+{
+  if (const auto clouds
+    = env->TryGetSystem<scene::environment::VolumetricClouds>();
+    clouds && clouds->IsEnabled()) {
+    next.clouds.enabled = 1u;
+    next.clouds.base_altitude_m = clouds->GetBaseAltitudeMeters();
+    next.clouds.layer_thickness_m = clouds->GetLayerThicknessMeters();
+    next.clouds.coverage = clouds->GetCoverage();
+    next.clouds.density = clouds->GetDensity();
+    next.clouds.albedo_rgb = clouds->GetAlbedoRgb();
+    next.clouds.extinction_scale = clouds->GetExtinctionScale();
+    next.clouds.phase_g = clouds->GetPhaseAnisotropy();
+    next.clouds.wind_dir_ws = clouds->GetWindDirectionWs();
+    next.clouds.wind_speed_mps = clouds->GetWindSpeedMps();
+    next.clouds.shadow_strength = clouds->GetShadowStrength();
+  }
+}
+
+auto EnvironmentStaticDataManager::PopulatePostProcess(
+  observer_ptr<const scene::SceneEnvironment> env, EnvironmentStaticData& next)
+  -> void
+{
+  if (const auto pp
+    = env->TryGetSystem<scene::environment::PostProcessVolume>();
+    pp && pp->IsEnabled()) {
+    next.post_process.enabled = 1u;
+    next.post_process.tone_mapper = ToGpuToneMapper(pp->GetToneMapper());
+    next.post_process.exposure_mode = ToGpuExposureMode(pp->GetExposureMode());
+
+    next.post_process.exposure_compensation
+      = std::exp2(pp->GetExposureCompensationEv());
+
+    next.post_process.auto_exposure_min_ev = pp->GetAutoExposureMinEv();
+    next.post_process.auto_exposure_max_ev = pp->GetAutoExposureMaxEv();
+    next.post_process.auto_exposure_speed_up = pp->GetAutoExposureSpeedUp();
+    next.post_process.auto_exposure_speed_down = pp->GetAutoExposureSpeedDown();
+
+    next.post_process.bloom_intensity = pp->GetBloomIntensity();
+    next.post_process.bloom_threshold = pp->GetBloomThreshold();
+    next.post_process.saturation = pp->GetSaturation();
+    next.post_process.contrast = pp->GetContrast();
+    next.post_process.vignette_intensity = pp->GetVignetteIntensity();
   }
 }
 
@@ -534,13 +473,14 @@ auto EnvironmentStaticDataManager::UploadIfNeeded() -> void
   }
 
   const auto slot_index = CurrentSlotIndex();
-  if (slot_index >= slot_needs_upload_.size()) {
+  if (slot_index >= slot_uploaded_id_.size()) {
     LOG_F(ERROR, "Slot index {} is out of range (must be < {})", slot_index,
-      slot_needs_upload_.size());
+      slot_uploaded_id_.size());
     return;
   }
 
-  if (!slot_needs_upload_[slot_index]) {
+  // If this slot already uploaded the current snapshot, nothing to do.
+  if (slot_uploaded_id_[slot_index] == snapshot_id_) {
     return;
   }
 
@@ -567,7 +507,7 @@ auto EnvironmentStaticDataManager::UploadIfNeeded() -> void
     = static_cast<std::size_t>(slot_index) * sizeof(EnvironmentStaticData);
   std::memcpy(static_cast<std::byte*>(mapped_ptr_) + offset_bytes,
     &cpu_snapshot_, sizeof(EnvironmentStaticData));
-  slot_needs_upload_[slot_index] = false;
+  slot_uploaded_id_[slot_index] = snapshot_id_;
 }
 
 auto EnvironmentStaticDataManager::EnsureResourcesCreated() -> void
@@ -637,8 +577,8 @@ auto EnvironmentStaticDataManager::EnsureResourcesCreated() -> void
 
 auto EnvironmentStaticDataManager::MarkAllSlotsDirty() -> void
 {
-  DLOG_F(2, "Marking all slots as needing upload");
-  slot_needs_upload_.fill(true);
+  DLOG_F(2, "Marking all slots as needing upload (invalidating snapshot)");
+  ++snapshot_id_;
 }
 
 } // namespace oxygen::engine::internal
