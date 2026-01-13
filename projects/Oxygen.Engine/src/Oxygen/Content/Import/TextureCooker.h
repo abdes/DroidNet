@@ -50,9 +50,8 @@ namespace oxygen::content::import {
   @see ApplyPreset for easy descriptor configuration
   @see TextureSourceSet for multi-source textures (cubemaps, arrays)
 */
-[[nodiscard]] OXGN_CNTT_API auto CookTexture(
-  std::span<const std::byte> source_bytes, const TextureImportDesc& desc,
-  const ITexturePackingPolicy& policy)
+OXGN_CNTT_NDAPI auto CookTexture(std::span<const std::byte> source_bytes,
+  const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
   -> oxygen::Result<CookedTexturePayload, TextureImportError>;
 
 //! Cook a texture from an already-decoded ScratchImage.
@@ -74,7 +73,7 @@ namespace oxygen::content::import {
 
   @see ConvertEquirectangularToCube for HDR panorama → cubemap workflow
 */
-[[nodiscard]] OXGN_CNTT_API auto CookTexture(ScratchImage&& image,
+OXGN_CNTT_NDAPI auto CookTexture(ScratchImage&& image,
   const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
   -> oxygen::Result<CookedTexturePayload, TextureImportError>;
 
@@ -108,7 +107,7 @@ namespace oxygen::content::import {
   @see TextureSourceSet for source assembly helpers
   @see ApplyPreset for easy descriptor configuration
 */
-[[nodiscard]] OXGN_CNTT_API auto CookTexture(const TextureSourceSet& sources,
+OXGN_CNTT_NDAPI auto CookTexture(const TextureSourceSet& sources,
   const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
   -> oxygen::Result<CookedTexturePayload, TextureImportError>;
 
@@ -124,7 +123,7 @@ namespace detail {
     @param desc         Import descriptor with decode options
     @return Decoded ScratchImage or error
   */
-  [[nodiscard]] OXGN_CNTT_API auto DecodeSource(
+  OXGN_CNTT_NDAPI auto DecodeSource(
     std::span<const std::byte> source_bytes, const TextureImportDesc& desc)
     -> oxygen::Result<ScratchImage, TextureImportError>;
 
@@ -138,7 +137,7 @@ namespace detail {
     @param desc  Import descriptor
     @return Converted image or error
   */
-  [[nodiscard]] OXGN_CNTT_API auto ConvertToWorkingFormat(
+  OXGN_CNTT_NDAPI auto ConvertToWorkingFormat(
     ScratchImage&& image, const TextureImportDesc& desc)
     -> oxygen::Result<ScratchImage, TextureImportError>;
 
@@ -148,7 +147,7 @@ namespace detail {
     @param desc  Import descriptor
     @return Processed image or error
   */
-  [[nodiscard]] OXGN_CNTT_API auto ApplyContentProcessing(
+  OXGN_CNTT_NDAPI auto ApplyContentProcessing(
     ScratchImage&& image, const TextureImportDesc& desc)
     -> oxygen::Result<ScratchImage, TextureImportError>;
 
@@ -158,7 +157,7 @@ namespace detail {
     @param desc  Import descriptor with mip settings
     @return Image with mip chain or error
   */
-  [[nodiscard]] OXGN_CNTT_API auto GenerateMips(
+  OXGN_CNTT_NDAPI auto GenerateMips(
     ScratchImage&& image, const TextureImportDesc& desc)
     -> oxygen::Result<ScratchImage, TextureImportError>;
 
@@ -168,7 +167,7 @@ namespace detail {
     @param desc  Import descriptor with output format settings
     @return Output format image or error
   */
-  [[nodiscard]] OXGN_CNTT_API auto ConvertToOutputFormat(
+  OXGN_CNTT_NDAPI auto ConvertToOutputFormat(
     ScratchImage&& image, const TextureImportDesc& desc)
     -> oxygen::Result<ScratchImage, TextureImportError>;
 
@@ -178,7 +177,7 @@ namespace detail {
     @param policy Packing policy for alignment
     @return Packed payload bytes
   */
-  [[nodiscard]] OXGN_CNTT_API auto PackSubresources(const ScratchImage& image,
+  OXGN_CNTT_NDAPI auto PackSubresources(const ScratchImage& image,
     const ITexturePackingPolicy& policy) -> std::vector<std::byte>;
 
   //! Compute content hash for deduplication.
@@ -188,7 +187,7 @@ namespace detail {
     @param payload Payload bytes to hash
     @return 64-bit content hash
   */
-  [[nodiscard]] OXGN_CNTT_API auto ComputeContentHash(
+  OXGN_CNTT_NDAPI auto ComputeContentHash(
     std::span<const std::byte> payload) noexcept -> uint64_t;
 
 } // namespace detail

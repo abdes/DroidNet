@@ -129,8 +129,7 @@ public:
 
    @return Reference to the depth texture configured for this pass.
   */
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetDepthTexture() const
-    -> const graphics::Texture&;
+  OXGN_RNDR_NDAPI auto GetDepthTexture() const -> const graphics::Texture&;
 
 protected:
   auto DoPrepareResources(graphics::CommandRecorder& recorder)

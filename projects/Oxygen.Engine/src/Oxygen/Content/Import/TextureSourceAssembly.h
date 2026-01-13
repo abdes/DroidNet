@@ -195,8 +195,7 @@ public:
     @return Reference to the source at the given index
     @throws std::out_of_range if index is out of bounds
   */
-  [[nodiscard]] OXGN_CNTT_API auto GetSource(size_t index) const
-    -> const TextureSource&;
+  OXGN_CNTT_NDAPI auto GetSource(size_t index) const -> const TextureSource&;
 
 private:
   std::vector<TextureSource> sources_;
@@ -328,7 +327,7 @@ inline constexpr std::array<CubeFaceBasis, kCubeFaceCount> kGpuCubeFaceBases = {
   @param v    Vertical coordinate (0 = bottom, 1 = top)
   @return Normalized direction vector (magnitude = 1)
 */
-[[nodiscard]] OXGN_CNTT_API auto ComputeCubeDirection(
+OXGN_CNTT_NDAPI auto ComputeCubeDirection(
   CubeFace face, float u, float v) noexcept -> CubeFaceDirection;
 
 //! Assemble a cube map from 6 individual face images.
@@ -352,7 +351,7 @@ inline constexpr std::array<CubeFaceBasis, kCubeFaceCount> kGpuCubeFaceBases = {
   auto cube = AssembleCubeFromFaces(faces);
   ```
 */
-[[nodiscard]] OXGN_CNTT_API auto AssembleCubeFromFaces(
+OXGN_CNTT_NDAPI auto AssembleCubeFromFaces(
   std::span<const ScratchImage, kCubeFaceCount> faces)
   -> oxygen::Result<ScratchImage, TextureImportError>;
 
@@ -395,7 +394,7 @@ struct EquirectToCubeOptions {
   auto cube = ConvertEquirectangularToCube(hdr.value(), opts);
   ```
 */
-[[nodiscard]] OXGN_CNTT_API auto ConvertEquirectangularToCube(
+OXGN_CNTT_NDAPI auto ConvertEquirectangularToCube(
   const ScratchImage& equirect, const EquirectToCubeOptions& options)
   -> oxygen::Result<ScratchImage, TextureImportError>;
 
@@ -480,7 +479,7 @@ struct CubeMapLayoutDetection {
 
   @see ExtractCubeFacesFromLayout
 */
-[[nodiscard]] OXGN_CNTT_API auto DetectCubeMapLayout(uint32_t width,
+OXGN_CNTT_NDAPI auto DetectCubeMapLayout(uint32_t width,
   uint32_t height) noexcept -> std::optional<CubeMapLayoutDetection>;
 
 //! Detect cube map layout from a ScratchImage.
@@ -492,8 +491,8 @@ struct CubeMapLayoutDetection {
 
   @see DetectCubeMapLayout(uint32_t, uint32_t)
 */
-[[nodiscard]] OXGN_CNTT_API auto DetectCubeMapLayout(
-  const ScratchImage& image) noexcept -> std::optional<CubeMapLayoutDetection>;
+OXGN_CNTT_NDAPI auto DetectCubeMapLayout(const ScratchImage& image) noexcept
+  -> std::optional<CubeMapLayoutDetection>;
 
 //! Extract 6 cube faces from a layout image.
 /*!
@@ -522,7 +521,7 @@ struct CubeMapLayoutDetection {
 
   @see DetectCubeMapLayout, AssembleCubeFromFaces
 */
-[[nodiscard]] OXGN_CNTT_API auto ExtractCubeFacesFromLayout(
+OXGN_CNTT_NDAPI auto ExtractCubeFacesFromLayout(
   const ScratchImage& layout_image, CubeMapImageLayout layout)
   -> oxygen::Result<ScratchImage, TextureImportError>;
 
@@ -536,7 +535,7 @@ struct CubeMapLayoutDetection {
 
   @see DetectCubeMapLayout, ExtractCubeFacesFromLayout
 */
-[[nodiscard]] OXGN_CNTT_API auto ExtractCubeFacesFromLayout(
+OXGN_CNTT_NDAPI auto ExtractCubeFacesFromLayout(
   const ScratchImage& layout_image)
   -> oxygen::Result<ScratchImage, TextureImportError>;
 

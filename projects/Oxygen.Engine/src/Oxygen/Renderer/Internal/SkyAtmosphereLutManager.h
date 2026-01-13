@@ -130,7 +130,7 @@ public:
     -> void override;
 
   //! Returns true if LUTs need regeneration.
-  [[nodiscard]] OXGN_RNDR_NDAPI auto IsDirty() const noexcept -> bool;
+  OXGN_RNDR_NDAPI auto IsDirty() const noexcept -> bool;
 
   //! Clears the dirty flag after LUT regeneration.
   OXGN_RNDR_API auto MarkClean() noexcept -> void;
@@ -162,7 +162,7 @@ public:
    When true, the LUT textures are in SRV state (ready for sampling).
    When false, they're still in their creation state (UAV).
   */
-  [[nodiscard]] OXGN_RNDR_NDAPI auto HasBeenGenerated() const noexcept -> bool;
+  OXGN_RNDR_NDAPI auto HasBeenGenerated() const noexcept -> bool;
 
   //! Marks that LUTs have been successfully generated.
   /*!
@@ -178,14 +178,14 @@ public:
   /*!
    Returns `kInvalidShaderVisibleIndex` if resources are not yet created.
   */
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetTransmittanceLutSlot() const noexcept
+  OXGN_RNDR_NDAPI auto GetTransmittanceLutSlot() const noexcept
     -> ShaderVisibleIndex override;
 
   //! Returns shader-visible SRV index for the sky-view LUT.
   /*!
    Returns `kInvalidShaderVisibleIndex` if resources are not yet created.
   */
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetSkyViewLutSlot() const noexcept
+  OXGN_RNDR_NDAPI auto GetSkyViewLutSlot() const noexcept
     -> ShaderVisibleIndex override;
 
   //! Returns transmittance LUT dimensions.
@@ -233,14 +233,14 @@ public:
   /*!
    @return The transmittance LUT texture, or nullptr if not yet created.
   */
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetTransmittanceLutTexture() const noexcept
+  OXGN_RNDR_NDAPI auto GetTransmittanceLutTexture() const noexcept
     -> observer_ptr<graphics::Texture>;
 
   //! Returns the sky-view LUT texture (for UAV binding in compute pass).
   /*!
    @return The sky-view LUT texture, or nullptr if not yet created.
   */
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetSkyViewLutTexture() const noexcept
+  OXGN_RNDR_NDAPI auto GetSkyViewLutTexture() const noexcept
     -> observer_ptr<graphics::Texture>;
 
   //! Returns shader-visible UAV index for the transmittance LUT.
@@ -248,7 +248,7 @@ public:
    Used by the compute pass to bind the LUT as a write target.
    Returns `kInvalidShaderVisibleIndex` if resources are not yet created.
   */
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetTransmittanceLutUavSlot() const noexcept
+  OXGN_RNDR_NDAPI auto GetTransmittanceLutUavSlot() const noexcept
     -> ShaderVisibleIndex;
 
   //! Returns shader-visible UAV index for the sky-view LUT.
@@ -256,7 +256,7 @@ public:
    Used by the compute pass to bind the LUT as a write target.
    Returns `kInvalidShaderVisibleIndex` if resources are not yet created.
   */
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetSkyViewLutUavSlot() const noexcept
+  OXGN_RNDR_NDAPI auto GetSkyViewLutUavSlot() const noexcept
     -> ShaderVisibleIndex;
 
   //! Ensures textures and descriptors are created.

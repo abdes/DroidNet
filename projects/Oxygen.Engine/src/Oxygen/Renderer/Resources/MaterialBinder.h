@@ -127,16 +127,15 @@ public:
     std::shared_ptr<const data::MaterialAsset> material) -> void;
 
   //! Check if a handle is valid.
-  [[nodiscard]] OXGN_RNDR_API auto IsHandleValid(
+  OXGN_RNDR_NDAPI auto IsHandleValid(
     oxygen::engine::sceneprep::MaterialHandle handle) const -> bool;
 
   //! Returns the bindless descriptor heap index for the materials SRV.
   //! REQUIRES: EnsureFrameResources() must have been called this frame.
-  [[nodiscard]] OXGN_RNDR_API auto GetMaterialsSrvIndex() const
-    -> ShaderVisibleIndex;
+  OXGN_RNDR_NDAPI auto GetMaterialsSrvIndex() const -> ShaderVisibleIndex;
 
   //! Get read-only access to all material constants.
-  [[nodiscard]] OXGN_RNDR_API auto GetMaterialConstants() const noexcept
+  OXGN_RNDR_NDAPI auto GetMaterialConstants() const noexcept
     -> std::span<const oxygen::engine::MaterialConstants>;
 
   //! Overrides UV scale/offset for an existing material instance.

@@ -145,7 +145,7 @@ public:
     @param height Base height in pixels
     @return Number of mip levels in a full chain
   */
-  [[nodiscard]] OXGN_CNTT_API static auto ComputeMipCount(
+  OXGN_CNTT_NDAPI static auto ComputeMipCount(
     uint32_t width, uint32_t height) noexcept -> uint32_t;
 
   //! Compute the linear subresource index.
@@ -189,7 +189,7 @@ public:
     @param meta Metadata describing the texture
     @return Initialized ScratchImage, or empty if allocation fails
   */
-  [[nodiscard]] OXGN_CNTT_API static auto Create(const ScratchImageMeta& meta)
+  OXGN_CNTT_NDAPI static auto Create(const ScratchImageMeta& meta)
     -> ScratchImage;
 
   //! Create a ScratchImage from existing pixel data (single mip, single layer).
@@ -204,9 +204,9 @@ public:
     @param pixel_data    Pixel data (moved into the ScratchImage)
     @return Initialized ScratchImage
   */
-  [[nodiscard]] OXGN_CNTT_API static auto CreateFromData(uint32_t width,
-    uint32_t height, Format format, uint32_t row_pitch,
-    std::vector<std::byte> pixel_data) -> ScratchImage;
+  OXGN_CNTT_NDAPI static auto CreateFromData(uint32_t width, uint32_t height,
+    Format format, uint32_t row_pitch, std::vector<std::byte> pixel_data)
+    -> ScratchImage;
 
   //=== Accessors
   //===----------------------------------------------------------//
@@ -229,8 +229,8 @@ public:
     @param mip_level   Mip level index (0 = highest resolution)
     @return ImageView for the specified subresource
   */
-  [[nodiscard]] OXGN_CNTT_API auto GetImage(
-    uint16_t array_layer, uint16_t mip_level) const -> ImageView;
+  OXGN_CNTT_NDAPI auto GetImage(uint16_t array_layer, uint16_t mip_level) const
+    -> ImageView;
 
   //! Get mutable access to a specific subresource's pixel data.
   /*!
@@ -238,7 +238,7 @@ public:
     @param mip_level   Mip level index
     @return Mutable span of pixel data
   */
-  [[nodiscard]] OXGN_CNTT_API auto GetMutablePixels(
+  OXGN_CNTT_NDAPI auto GetMutablePixels(
     uint16_t array_layer, uint16_t mip_level) -> std::span<std::byte>;
 
   //! Get the total number of subresources.

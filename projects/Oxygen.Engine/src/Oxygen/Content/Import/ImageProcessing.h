@@ -32,7 +32,7 @@ namespace image::color {
     @param srgb sRGB component value in [0, 1]
     @return Linear component value
   */
-  [[nodiscard]] OXGN_CNTT_API auto SrgbToLinear(float srgb) noexcept -> float;
+  OXGN_CNTT_NDAPI auto SrgbToLinear(float srgb) noexcept -> float;
 
   //! Convert a single linear component to sRGB space.
   /*!
@@ -43,23 +43,23 @@ namespace image::color {
     @param linear Linear component value in [0, 1]
     @return sRGB component value
   */
-  [[nodiscard]] OXGN_CNTT_API auto LinearToSrgb(float linear) noexcept -> float;
+  OXGN_CNTT_NDAPI auto LinearToSrgb(float linear) noexcept -> float;
 
   //! Convert RGBA from sRGB to linear space (alpha unchanged).
   /*!
     @param rgba sRGB RGBA values, each in [0, 1]
     @return Linear RGBA values
   */
-  [[nodiscard]] OXGN_CNTT_API auto SrgbToLinear(
-    std::array<float, 4> rgba) noexcept -> std::array<float, 4>;
+  OXGN_CNTT_NDAPI auto SrgbToLinear(std::array<float, 4> rgba) noexcept
+    -> std::array<float, 4>;
 
   //! Convert RGBA from linear to sRGB space (alpha unchanged).
   /*!
     @param rgba Linear RGBA values, each in [0, 1]
     @return sRGB RGBA values
   */
-  [[nodiscard]] OXGN_CNTT_API auto LinearToSrgb(
-    std::array<float, 4> rgba) noexcept -> std::array<float, 4>;
+  OXGN_CNTT_NDAPI auto LinearToSrgb(std::array<float, 4> rgba) noexcept
+    -> std::array<float, 4>;
 
   //! Convert an entire ScratchImage from sRGB to linear space.
   /*!
@@ -95,7 +95,7 @@ namespace image::hdr {
     @param exposure Exposure value in stops (EV)
     @return Exposure-adjusted RGBA values
   */
-  [[nodiscard]] OXGN_CNTT_API auto ApplyExposure(
+  OXGN_CNTT_NDAPI auto ApplyExposure(
     std::array<float, 4> rgba, float exposure) noexcept -> std::array<float, 4>;
 
   //! Apply ACES fitted tonemapping to HDR pixel values.
@@ -106,8 +106,8 @@ namespace image::hdr {
     @param rgba Linear HDR RGBA values
     @return Tonemapped LDR RGBA values in [0, 1]
   */
-  [[nodiscard]] OXGN_CNTT_API auto AcesTonemap(
-    std::array<float, 4> rgba) noexcept -> std::array<float, 4>;
+  OXGN_CNTT_NDAPI auto AcesTonemap(std::array<float, 4> rgba) noexcept
+    -> std::array<float, 4>;
 
   //! Bake HDR image to LDR using exposure and tonemapping.
   /*!
@@ -117,8 +117,8 @@ namespace image::hdr {
     @param exposure   Exposure value in stops (EV)
     @return LDR image (RGBA8UNorm)
   */
-  [[nodiscard]] OXGN_CNTT_API auto BakeToLdr(
-    const ScratchImage& hdr_image, float exposure) -> ScratchImage;
+  OXGN_CNTT_NDAPI auto BakeToLdr(const ScratchImage& hdr_image, float exposure)
+    -> ScratchImage;
 
 } // namespace image::hdr
 
@@ -135,7 +135,7 @@ namespace image::mip {
     @param x Input value
     @return I0(x)
   */
-  [[nodiscard]] OXGN_CNTT_API auto BesselI0(float x) noexcept -> float;
+  OXGN_CNTT_NDAPI auto BesselI0(float x) noexcept -> float;
 
   //! Compute Kaiser window value.
   /*!
@@ -143,8 +143,7 @@ namespace image::mip {
     @param alpha Shape parameter (higher = sharper cutoff)
     @return Window value
   */
-  [[nodiscard]] OXGN_CNTT_API auto KaiserWindow(float x, float alpha) noexcept
-    -> float;
+  OXGN_CNTT_NDAPI auto KaiserWindow(float x, float alpha) noexcept -> float;
 
   //! Compute Lanczos kernel value.
   /*!
@@ -152,8 +151,7 @@ namespace image::mip {
     @param a Lanczos parameter (typically 2 or 3)
     @return Kernel value
   */
-  [[nodiscard]] OXGN_CNTT_API auto LanczosKernel(float x, int a) noexcept
-    -> float;
+  OXGN_CNTT_NDAPI auto LanczosKernel(float x, int a) noexcept -> float;
 
   //! Compute the number of mip levels for given dimensions.
   /*!
@@ -161,8 +159,8 @@ namespace image::mip {
     @param height Base height in pixels
     @return Number of mip levels for a full chain
   */
-  [[nodiscard]] OXGN_CNTT_API auto ComputeMipCount(
-    uint32_t width, uint32_t height) noexcept -> uint32_t;
+  OXGN_CNTT_NDAPI auto ComputeMipCount(uint32_t width, uint32_t height) noexcept
+    -> uint32_t;
 
   //! Generate a full mip chain for a 2D texture.
   /*!
@@ -174,7 +172,7 @@ namespace image::mip {
     @param color_space Color space of the source image
     @return New ScratchImage with full mip chain
   */
-  [[nodiscard]] OXGN_CNTT_API auto GenerateChain2D(const ScratchImage& source,
+  OXGN_CNTT_NDAPI auto GenerateChain2D(const ScratchImage& source,
     MipFilter filter, ColorSpace color_space) -> ScratchImage;
 
   //! Generate a full mip chain for a 3D texture.
@@ -187,7 +185,7 @@ namespace image::mip {
     @param color_space Color space of the source image
     @return New ScratchImage with full mip chain
   */
-  [[nodiscard]] OXGN_CNTT_API auto GenerateChain3D(const ScratchImage& source,
+  OXGN_CNTT_NDAPI auto GenerateChain3D(const ScratchImage& source,
     MipFilter filter, ColorSpace color_space) -> ScratchImage;
 
 } // namespace image::mip
@@ -205,8 +203,8 @@ namespace image::content {
     @param rgba RGBA values with normal in RGB
     @return Renormalized RGBA values
   */
-  [[nodiscard]] OXGN_CNTT_API auto RenormalizeNormal(
-    std::array<float, 4> rgba) noexcept -> std::array<float, 4>;
+  OXGN_CNTT_NDAPI auto RenormalizeNormal(std::array<float, 4> rgba) noexcept
+    -> std::array<float, 4>;
 
   //! Generate mip chain for a normal map with optional renormalization.
   /*!
@@ -216,7 +214,7 @@ namespace image::content {
     @param renormalize Whether to renormalize after filtering
     @return New ScratchImage with full mip chain
   */
-  [[nodiscard]] OXGN_CNTT_API auto GenerateNormalMapMips(
+  OXGN_CNTT_NDAPI auto GenerateNormalMapMips(
     const ScratchImage& source, bool renormalize) -> ScratchImage;
 
   //! Flip the green channel of a normal map.

@@ -126,8 +126,7 @@ protected:
 class D3D12PackingPolicy final : public ITexturePackingPolicy {
 public:
   //! Returns the singleton instance.
-  [[nodiscard]] OXGN_CNTT_API static auto Instance() noexcept
-    -> const D3D12PackingPolicy&;
+  OXGN_CNTT_NDAPI static auto Instance() noexcept -> const D3D12PackingPolicy&;
 
   [[nodiscard]] auto Id() const noexcept -> std::string_view override
   {
@@ -165,8 +164,7 @@ public:
 class TightPackedPolicy final : public ITexturePackingPolicy {
 public:
   //! Returns the singleton instance.
-  [[nodiscard]] OXGN_CNTT_API static auto Instance() noexcept
-    -> const TightPackedPolicy&;
+  OXGN_CNTT_NDAPI static auto Instance() noexcept -> const TightPackedPolicy&;
 
   [[nodiscard]] auto Id() const noexcept -> std::string_view override
   {
@@ -197,16 +195,15 @@ public:
   @param format Pixel format
   @return Bytes per pixel/block, or 0 for unknown formats
 */
-[[nodiscard]] OXGN_CNTT_API auto ComputeBytesPerPixelOrBlock(
-  Format format) noexcept -> uint32_t;
+OXGN_CNTT_NDAPI auto ComputeBytesPerPixelOrBlock(Format format) noexcept
+  -> uint32_t;
 
 //! Compute the block dimension for a format.
 /*!
   @param format Pixel format
   @return Block dimension (1 for uncompressed, 4 for BC formats)
 */
-[[nodiscard]] OXGN_CNTT_API auto ComputeBlockDimension(Format format) noexcept
-  -> uint32_t;
+OXGN_CNTT_NDAPI auto ComputeBlockDimension(Format format) noexcept -> uint32_t;
 
 //! Compute the unaligned row bytes for a surface.
 /*!
@@ -216,8 +213,8 @@ public:
   @param format Pixel format
   @return Unaligned row size in bytes
 */
-[[nodiscard]] OXGN_CNTT_API auto ComputeRowBytes(
-  uint32_t width, Format format) noexcept -> uint32_t;
+OXGN_CNTT_NDAPI auto ComputeRowBytes(uint32_t width, Format format) noexcept
+  -> uint32_t;
 
 //! Compute the unaligned surface size in bytes.
 /*!
@@ -226,7 +223,7 @@ public:
   @param format Pixel format
   @return Unaligned surface size in bytes
 */
-[[nodiscard]] OXGN_CNTT_API auto ComputeSurfaceBytes(
+OXGN_CNTT_NDAPI auto ComputeSurfaceBytes(
   uint32_t width, uint32_t height, Format format) noexcept -> uint64_t;
 
 //===----------------------------------------------------------------------===//
@@ -257,16 +254,15 @@ public:
   @param policy Packing policy for alignment
   @return Vector of SubresourceLayout, one per subresource
 */
-[[nodiscard]] OXGN_CNTT_API auto ComputeSubresourceLayouts(
-  const ScratchImageMeta& meta, const ITexturePackingPolicy& policy)
-  -> std::vector<SubresourceLayout>;
+OXGN_CNTT_NDAPI auto ComputeSubresourceLayouts(const ScratchImageMeta& meta,
+  const ITexturePackingPolicy& policy) -> std::vector<SubresourceLayout>;
 
 //! Compute total payload size for a texture.
 /*!
   @param layouts Subresource layouts computed by ComputeSubresourceLayouts
   @return Total size in bytes for all subresources
 */
-[[nodiscard]] OXGN_CNTT_API auto ComputeTotalPayloadSize(
+OXGN_CNTT_NDAPI auto ComputeTotalPayloadSize(
   std::span<const SubresourceLayout> layouts) noexcept -> uint64_t;
 
 } // namespace oxygen::content::import

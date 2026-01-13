@@ -131,7 +131,7 @@ public:
 
   OXGN_RNDR_API auto Update(engine::sceneprep::GeometryHandle handle,
     const engine::sceneprep::GeometryRef& geometry) -> void;
-  [[nodiscard]] OXGN_RNDR_API auto IsHandleValid(
+  OXGN_RNDR_NDAPI auto IsHandleValid(
     engine::sceneprep::GeometryHandle handle) const -> bool;
 
   //! Ensures all geometry GPU resources are prepared for the current frame.
@@ -147,11 +147,11 @@ public:
 
   //! Returns the number of pending upload operations.
   //! Useful for debugging and monitoring upload queue health.
-  [[nodiscard]] OXGN_RNDR_API auto GetPendingUploadCount() const -> std::size_t;
+  OXGN_RNDR_NDAPI auto GetPendingUploadCount() const -> std::size_t;
 
   //! Returns span of pending upload tickets for synchronous waiting.
   //! Used by Renderer to wait for all uploads to complete this frame.
-  [[nodiscard]] OXGN_RNDR_API auto GetPendingUploadTickets() const
+  OXGN_RNDR_NDAPI auto GetPendingUploadTickets() const
     -> std::span<const engine::upload::UploadTicket>;
 
 private:

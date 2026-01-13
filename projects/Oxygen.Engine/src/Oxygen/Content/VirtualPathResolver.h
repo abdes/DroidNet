@@ -14,6 +14,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::content {
 
@@ -82,8 +83,8 @@ public:
    @return The resolved AssetKey, or `std::nullopt` if not found.
    @throw std::invalid_argument If `virtual_path` is not canonical.
   */
-  [[nodiscard]] OXGN_CNTT_API auto ResolveAssetKey(
-    std::string_view virtual_path) const -> std::optional<data::AssetKey>;
+  OXGN_CNTT_NDAPI auto ResolveAssetKey(std::string_view virtual_path) const
+    -> std::optional<data::AssetKey>;
 
 private:
   struct Impl;

@@ -45,18 +45,17 @@ struct Bc7EncoderParams {
   //=== Factory Methods ===---------------------------------------------------//
 
   //! Create parameters for fast encoding.
-  [[nodiscard]] OXGN_CNTT_API static auto Fast() noexcept -> Bc7EncoderParams;
+  OXGN_CNTT_NDAPI static auto Fast() noexcept -> Bc7EncoderParams;
 
   //! Create parameters for default (balanced) encoding.
-  [[nodiscard]] OXGN_CNTT_API static auto Default() noexcept
-    -> Bc7EncoderParams;
+  OXGN_CNTT_NDAPI static auto Default() noexcept -> Bc7EncoderParams;
 
   //! Create parameters for high quality encoding.
-  [[nodiscard]] OXGN_CNTT_API static auto High() noexcept -> Bc7EncoderParams;
+  OXGN_CNTT_NDAPI static auto High() noexcept -> Bc7EncoderParams;
 
   //! Create parameters from a Bc7Quality tier.
-  [[nodiscard]] OXGN_CNTT_API static auto FromQuality(
-    Bc7Quality quality) noexcept -> Bc7EncoderParams;
+  OXGN_CNTT_NDAPI static auto FromQuality(Bc7Quality quality) noexcept
+    -> Bc7EncoderParams;
 };
 
 //! Initialize the BC7 encoder.
@@ -89,7 +88,7 @@ OXGN_CNTT_API auto EncodeBlock(std::span<const std::byte, 64> pixels_rgba8,
   @param params  Encoding parameters
   @return BC7-compressed image, or invalid ScratchImage on error
 */
-[[nodiscard]] OXGN_CNTT_API auto EncodeSurface(
+OXGN_CNTT_NDAPI auto EncodeSurface(
   const ImageView& source, const Bc7EncoderParams& params) -> ScratchImage;
 
 //! Encode a full texture (all mip levels, all array layers) to BC7.
@@ -102,7 +101,7 @@ OXGN_CNTT_API auto EncodeBlock(std::span<const std::byte, 64> pixels_rgba8,
   @param params  Encoding parameters
   @return BC7-compressed texture, or invalid ScratchImage on error
 */
-[[nodiscard]] OXGN_CNTT_API auto EncodeTexture(
+OXGN_CNTT_NDAPI auto EncodeTexture(
   const ScratchImage& source, const Bc7EncoderParams& params) -> ScratchImage;
 
 //! Encode a full texture using a Bc7Quality preset.
@@ -113,7 +112,7 @@ OXGN_CNTT_API auto EncodeBlock(std::span<const std::byte, 64> pixels_rgba8,
   @param quality Quality tier
   @return BC7-compressed texture, or invalid ScratchImage on error
 */
-[[nodiscard]] OXGN_CNTT_API auto EncodeTexture(
+OXGN_CNTT_NDAPI auto EncodeTexture(
   const ScratchImage& source, Bc7Quality quality) -> ScratchImage;
 
 //! Compute the number of BC7 blocks in one dimension.
