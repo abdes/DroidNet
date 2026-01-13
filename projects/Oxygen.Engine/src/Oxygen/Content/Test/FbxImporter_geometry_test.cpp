@@ -585,7 +585,8 @@ NOLINT_TEST_F(
 
   EXPECT_EQ(table[0].width, 1u);
   EXPECT_EQ(table[0].height, 1u);
-  EXPECT_EQ(table[0].size_bytes, 256u);
+  // v4 payload includes header + layout table aligned before data
+  EXPECT_EQ(table[0].size_bytes, 768u);
 
   EXPECT_EQ(table[1].width, 2u);
   EXPECT_EQ(table[1].height, 2u);

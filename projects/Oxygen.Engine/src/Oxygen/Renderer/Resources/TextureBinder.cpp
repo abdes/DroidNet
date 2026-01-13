@@ -93,23 +93,24 @@ namespace {
 
   //! Build upload layout for 2D textures, 2D arrays, and cubemaps.
   /*!
-    CRITICAL: Subresource ordering MUST be MIP-MAJOR to match D3D12 conventions.
+    CRITICAL: Subresource ordering MUST be LAYER-MAJOR to match D3D12
+    subresource indexing.
 
     D3D12 subresource indexing formula:
       SubresourceIndex = MipSlice + (ArraySlice * MipLevels)
 
-    This means we iterate: for (mip) { for (layer) { ... } }
+    This means we iterate: for (layer) { for (mip) { ... } }
 
     Expected data layout from cooker:
-      Mip0/Layer0, Mip0/Layer1, ..., Mip0/LayerN,
-      Mip1/Layer0, Mip1/Layer1, ..., Mip1/LayerN,
+      Layer0/Mip0, Layer0/Mip1, ..., Layer0/MipN,
+      Layer1/Mip0, Layer1/Mip1, ..., Layer1/MipN,
       ...
 
     This ordering MUST match:
       - ComputeSubresourceLayouts() in TexturePackingPolicy.cpp
       - PackSubresources() in TextureCooker.cpp
 
-    If the cooker uses layer-major ordering, cubemap faces will be scrambled!
+    This ordering MUST match the cooker to avoid scrambled array layers.
   */
   [[nodiscard]] auto BuildTexture2DUploadLayout(
     const graphics::TextureDesc& desc,
@@ -131,54 +132,78 @@ namespace {
     std::size_t offset = 0U;
     const std::size_t total_data_size = data_bytes.size();
 
-    // IMPORTANT: MIP-MAJOR iteration (mip outer, layer inner)
-    for (std::uint32_t mip = 0; mip < mip_count; ++mip) {
-      const auto mip_w = (std::max)(desc.width >> mip, 1U);
-      const auto mip_h = (std::max)(desc.height >> mip, 1U);
-      const auto bytes_per_block = format_info.bytes_per_block;
-      if (bytes_per_block == 0U
-        || mip_w > (std::numeric_limits<std::size_t>::max)()
-            / static_cast<std::size_t>(bytes_per_block)) {
-        return UploadLayoutFailure {
-          .reason = UploadLayoutFailure::Reason::kArithmeticOverflow,
-          .mip = mip,
-          .layer = 0U,
-          .offset = offset,
-          .required_bytes = 0U,
-          .total_bytes = total_data_size,
-        };
-      }
+    // IMPORTANT: layer-major iteration (layer outer, mip inner)
+    for (std::uint32_t layer = 0; layer < array_layers; ++layer) {
+      for (std::uint32_t mip = 0; mip < mip_count; ++mip) {
+        const auto aligned_offset
+          = AlignUpSize(offset, mip_placement_alignment);
+        if (aligned_offset == (std::numeric_limits<std::size_t>::max)()) {
+          return UploadLayoutFailure {
+            .reason = UploadLayoutFailure::Reason::kArithmeticOverflow,
+            .mip = mip,
+            .layer = layer,
+            .offset = offset,
+            .required_bytes = 0U,
+            .total_bytes = total_data_size,
+          };
+        }
+        if (aligned_offset > total_data_size) {
+          return UploadLayoutFailure {
+            .reason = UploadLayoutFailure::Reason::kMipAlignmentOverflow,
+            .mip = mip,
+            .layer = layer,
+            .offset = offset,
+            .required_bytes = aligned_offset - offset,
+            .total_bytes = total_data_size,
+          };
+        }
+        offset = aligned_offset;
 
-      const auto bytes_per_row
-        = static_cast<std::size_t>(mip_w) * bytes_per_block;
-      const auto row_pitch = AlignUpSize(bytes_per_row, row_pitch_alignment);
-      if (row_pitch == (std::numeric_limits<std::size_t>::max)()) {
-        return UploadLayoutFailure {
-          .reason = UploadLayoutFailure::Reason::kArithmeticOverflow,
-          .mip = mip,
-          .layer = 0U,
-          .offset = offset,
-          .required_bytes = 0U,
-          .total_bytes = total_data_size,
-        };
-      }
+        const auto mip_w = (std::max)(desc.width >> mip, 1U);
+        const auto mip_h = (std::max)(desc.height >> mip, 1U);
+        const auto bytes_per_block = format_info.bytes_per_block;
+        if (bytes_per_block == 0U
+          || mip_w > (std::numeric_limits<std::size_t>::max)()
+              / static_cast<std::size_t>(bytes_per_block)) {
+          return UploadLayoutFailure {
+            .reason = UploadLayoutFailure::Reason::kArithmeticOverflow,
+            .mip = mip,
+            .layer = layer,
+            .offset = offset,
+            .required_bytes = 0U,
+            .total_bytes = total_data_size,
+          };
+        }
 
-      if (mip_h > 0U
-        && row_pitch > (std::numeric_limits<std::size_t>::max)()
-            / static_cast<std::size_t>(mip_h)) {
-        return UploadLayoutFailure {
-          .reason = UploadLayoutFailure::Reason::kArithmeticOverflow,
-          .mip = mip,
-          .layer = 0U,
-          .offset = offset,
-          .required_bytes = 0U,
-          .total_bytes = total_data_size,
-        };
-      }
+        const auto bytes_per_row
+          = static_cast<std::size_t>(mip_w) * bytes_per_block;
+        const auto row_pitch = AlignUpSize(bytes_per_row, row_pitch_alignment);
+        if (row_pitch == (std::numeric_limits<std::size_t>::max)()) {
+          return UploadLayoutFailure {
+            .reason = UploadLayoutFailure::Reason::kArithmeticOverflow,
+            .mip = mip,
+            .layer = layer,
+            .offset = offset,
+            .required_bytes = 0U,
+            .total_bytes = total_data_size,
+          };
+        }
 
-      const auto slice_pitch = row_pitch * static_cast<std::size_t>(mip_h);
+        if (mip_h > 0U
+          && row_pitch > (std::numeric_limits<std::size_t>::max)()
+              / static_cast<std::size_t>(mip_h)) {
+          return UploadLayoutFailure {
+            .reason = UploadLayoutFailure::Reason::kArithmeticOverflow,
+            .mip = mip,
+            .layer = layer,
+            .offset = offset,
+            .required_bytes = 0U,
+            .total_bytes = total_data_size,
+          };
+        }
 
-      for (std::uint32_t layer = 0; layer < array_layers; ++layer) {
+        const auto slice_pitch = row_pitch * static_cast<std::size_t>(mip_h);
+
         if (offset > total_data_size
           || slice_pitch > (total_data_size - offset)) {
           return UploadLayoutFailure {
@@ -210,32 +235,6 @@ namespace {
           });
 
         offset += slice_pitch;
-      }
-
-      if (mip + 1U < mip_count) {
-        const auto aligned_offset
-          = AlignUpSize(offset, mip_placement_alignment);
-        if (aligned_offset == (std::numeric_limits<std::size_t>::max)()) {
-          return UploadLayoutFailure {
-            .reason = UploadLayoutFailure::Reason::kArithmeticOverflow,
-            .mip = mip,
-            .layer = 0U,
-            .offset = offset,
-            .required_bytes = 0U,
-            .total_bytes = total_data_size,
-          };
-        }
-        if (aligned_offset > total_data_size) {
-          return UploadLayoutFailure {
-            .reason = UploadLayoutFailure::Reason::kMipAlignmentOverflow,
-            .mip = mip,
-            .layer = 0U,
-            .offset = offset,
-            .required_bytes = aligned_offset - offset,
-            .total_bytes = total_data_size,
-          };
-        }
-        offset = aligned_offset;
       }
     }
 

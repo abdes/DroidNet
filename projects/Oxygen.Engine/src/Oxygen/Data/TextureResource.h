@@ -92,7 +92,33 @@ public:
   ~TextureResource() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(TextureResource)
-  OXYGEN_DEFAULT_MOVABLE(TextureResource)
+
+  TextureResource(TextureResource&& other) noexcept
+    : Object(std::move(other))
+    , desc_(std::move(other.desc_))
+    , payload_header_(other.payload_header_)
+    , subresource_layouts_(std::move(other.subresource_layouts_))
+    , payload_(std::move(other.payload_))
+    , payload_data_offset_bytes_(other.payload_data_offset_bytes_)
+    , payload_data_size_bytes_(other.payload_data_size_bytes_)
+  {
+    other.ResetMovedFromState();
+  }
+
+  auto operator=(TextureResource&& other) noexcept -> TextureResource&
+  {
+    if (this != &other) {
+      Object::operator=(std::move(other));
+      desc_ = std::move(other.desc_);
+      payload_header_ = other.payload_header_;
+      subresource_layouts_ = std::move(other.subresource_layouts_);
+      payload_ = std::move(other.payload_);
+      payload_data_offset_bytes_ = other.payload_data_offset_bytes_;
+      payload_data_size_bytes_ = other.payload_data_size_bytes_;
+      other.ResetMovedFromState();
+    }
+    return *this;
+  }
 
   [[nodiscard]] auto GetDataOffset() const noexcept
   {
@@ -186,6 +212,16 @@ private:
   std::size_t payload_data_offset_bytes_ = 0;
   std::size_t payload_data_size_bytes_ = 0;
 
+  void ResetMovedFromState() noexcept
+  {
+    desc_ = {};
+    payload_header_ = {};
+    subresource_layouts_.clear();
+    payload_.clear();
+    payload_data_offset_bytes_ = 0;
+    payload_data_size_bytes_ = 0;
+  }
+
   //! Parses a v4 format payload (with TexturePayloadHeader).
   void ParseV4Payload()
   {
@@ -275,8 +311,10 @@ private:
 
   void Validate()
   {
-    if (desc_.alignment == 0) {
-      throw std::invalid_argument("TextureResource: alignment must be > 0");
+    constexpr uint16_t kExpectedTextureAlignmentBytes = 256;
+    if (desc_.alignment != kExpectedTextureAlignmentBytes) {
+      throw std::invalid_argument(
+        "TextureResource: alignment must be 256 bytes");
     }
 
     ParsePayload();

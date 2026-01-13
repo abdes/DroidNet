@@ -22,7 +22,8 @@ using oxygen::content::import::emit::CookedEmissionResult;
 using oxygen::content::import::emit::CookerConfig;
 using oxygen::content::import::emit::CookTextureForEmission;
 using oxygen::content::import::emit::CookTextureWithFallback;
-using oxygen::content::import::emit::CreatePlaceholderTexture;
+using oxygen::content::import::emit::CreateFallbackTexture;
+using oxygen::content::import::emit::CreatePlaceholderForMissingTexture;
 using oxygen::content::import::emit::GetPackingPolicy;
 using oxygen::content::import::emit::MakeImportDescFromConfig;
 
@@ -268,19 +269,19 @@ NOLINT_TEST_F(CookTextureWithFallbackTest, ValidInput_ReturnsCooked)
 }
 
 //===----------------------------------------------------------------------===//
-// CreatePlaceholderTexture Tests
+// CreatePlaceholderForMissingTexture Tests
 //===----------------------------------------------------------------------===//
 
-class CreatePlaceholderTextureTest : public ::testing::Test { };
+class CreatePlaceholderForMissingTextureTest : public ::testing::Test { };
 
 //! Verifies placeholder texture has correct dimensions.
-NOLINT_TEST_F(CreatePlaceholderTextureTest, HasCorrectDimensions)
+NOLINT_TEST_F(CreatePlaceholderForMissingTextureTest, HasCorrectDimensions)
 {
   // Arrange
   CookerConfig config { .enabled = true };
 
   // Act
-  auto result = CreatePlaceholderTexture("placeholder_test", config);
+  auto result = CreatePlaceholderForMissingTexture("placeholder_test", config);
 
   // Assert
   EXPECT_GT(result.desc.width, 0u);
@@ -289,15 +290,38 @@ NOLINT_TEST_F(CreatePlaceholderTextureTest, HasCorrectDimensions)
 }
 
 //! Verifies placeholder texture has non-empty payload.
-NOLINT_TEST_F(CreatePlaceholderTextureTest, HasNonEmptyPayload)
+NOLINT_TEST_F(CreatePlaceholderForMissingTextureTest, HasNonEmptyPayload)
 {
   // Arrange
   CookerConfig config { .enabled = true };
 
   // Act
-  auto result = CreatePlaceholderTexture("payload_test", config);
+  auto result = CreatePlaceholderForMissingTexture("payload_test", config);
 
   // Assert
+  EXPECT_FALSE(result.payload.empty());
+}
+
+//===----------------------------------------------------------------------===//
+// CreateFallbackTexture Tests
+//===----------------------------------------------------------------------===//
+
+class CreateFallbackTextureTest : public ::testing::Test { };
+
+//! Verifies fallback texture is a 1x1 placeholder with payload.
+NOLINT_TEST_F(CreateFallbackTextureTest, CreatesValidFallback)
+{
+  // Arrange
+  CookerConfig config { .enabled = true };
+
+  // Act
+  const auto result = CreateFallbackTexture(config);
+
+  // Assert
+  EXPECT_TRUE(result.is_placeholder);
+  EXPECT_EQ(result.desc.width, 1u);
+  EXPECT_EQ(result.desc.height, 1u);
+  EXPECT_EQ(result.desc.mip_levels, 1u);
   EXPECT_FALSE(result.payload.empty());
 }
 

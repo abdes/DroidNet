@@ -7,12 +7,10 @@
 #include <Oxygen/Content/Import/emit/TextureEmitter.h>
 
 #include <algorithm>
-#include <array>
 #include <cctype>
 #include <string>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
 #include <Oxygen/Content/Import/emit/TextureEmissionUtils.h>
 #include <Oxygen/Content/Import/util/Constants.h>
@@ -27,21 +25,6 @@ namespace {
   [[nodiscard]] auto ToStringView(const ufbx_string& s) -> std::string_view
   {
     return std::string_view(s.data, s.length);
-  }
-
-  [[nodiscard]] auto MakeDeterministicPixelRGBA8(std::string_view id)
-    -> std::array<std::byte, 4>
-  {
-    if (id.empty()) {
-      return { std::byte { 0x7F }, std::byte { 0x7F }, std::byte { 0x7F },
-        std::byte { 0xFF } };
-    }
-
-    const auto bytes
-      = std::as_bytes(std::span(id.data(), static_cast<size_t>(id.size())));
-    const auto digest = oxygen::base::ComputeSha256(bytes);
-    return { std::byte { digest[0] }, std::byte { digest[1] },
-      std::byte { digest[2] }, std::byte { 0xFF } };
   }
 
 } // namespace
@@ -169,15 +152,7 @@ auto EnsureFallbackTexture(TextureEmissionState& state) -> void
   // Index 0 is reserved: a 1x1 white RGBA8 placeholder texture.
   // Use the cooker to create it with proper packing.
   CookerConfig config {};
-  auto fallback = CreatePlaceholderTexture("_fallback_white_", config);
-
-  // Override the placeholder color to pure white
-  if (fallback.payload.size() >= 4) {
-    fallback.payload[0] = std::byte { 0xFF };
-    fallback.payload[1] = std::byte { 0xFF };
-    fallback.payload[2] = std::byte { 0xFF };
-    fallback.payload[3] = std::byte { 0xFF };
-  }
+  auto fallback = CreateFallbackTexture(config);
 
   const auto data_offset = AppendResource(state.appender,
     std::span<const std::byte>(
@@ -282,7 +257,7 @@ auto GetOrCreateTextureResourceIndexWithCooker(const ImportRequest& request,
 
     // Read file bytes for cooker
     if (!resolved.empty()) {
-      const auto opt_bytes = TryReadWholeFileBytes(resolved);
+      auto opt_bytes = TryReadWholeFileBytes(resolved);
       if (opt_bytes.has_value()) {
         file_bytes = std::move(opt_bytes.value());
         source_bytes

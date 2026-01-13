@@ -6,6 +6,7 @@
 
 // Standard library
 #include <cstdint>
+#include <cstring>
 #include <stdexcept>
 #include <vector>
 
@@ -19,6 +20,42 @@ using oxygen::data::TextureResource;
 
 namespace {
 
+[[nodiscard]] auto MakeValidPayload(uint16_t array_layers, uint16_t mip_levels,
+  uint32_t bytes_per_subresource, uint64_t content_hash) -> std::vector<uint8_t>
+{
+  using oxygen::data::pak::SubresourceLayout;
+  using oxygen::data::pak::TexturePayloadHeader;
+
+  const auto subresource_count = static_cast<uint16_t>(
+    static_cast<uint32_t>(array_layers) * static_cast<uint32_t>(mip_levels));
+
+  TexturePayloadHeader header {};
+  header.subresource_count = subresource_count;
+  header.layouts_offset_bytes = sizeof(TexturePayloadHeader);
+  header.data_offset_bytes = sizeof(TexturePayloadHeader)
+    + static_cast<uint32_t>(subresource_count) * sizeof(SubresourceLayout);
+  header.content_hash = content_hash;
+  header.total_payload_size
+    = header.data_offset_bytes + subresource_count * bytes_per_subresource;
+
+  std::vector<uint8_t> payload(header.total_payload_size, 0);
+  std::memcpy(payload.data(), &header, sizeof(header));
+
+  for (uint16_t i = 0; i < subresource_count; ++i) {
+    const SubresourceLayout layout {
+      .offset_bytes = static_cast<uint32_t>(i) * bytes_per_subresource,
+      .row_pitch_bytes = bytes_per_subresource,
+      .size_bytes = bytes_per_subresource,
+    };
+
+    const auto offset = static_cast<std::size_t>(header.layouts_offset_bytes)
+      + static_cast<std::size_t>(i) * sizeof(SubresourceLayout);
+    std::memcpy(payload.data() + offset, &layout, sizeof(layout));
+  }
+
+  return payload;
+}
+
 //! Basic test verifying TextureResource accessors return descriptor values (ID
 //! 35).
 NOLINT_TEST(TextureResourceBasicTest, AccessorsReturnDescriptorValues)
@@ -26,7 +63,7 @@ NOLINT_TEST(TextureResourceBasicTest, AccessorsReturnDescriptorValues)
   using oxygen::data::pak::TextureResourceDesc;
   TextureResourceDesc desc {
     .data_offset = 4096,
-    .size_bytes = 64,
+    .size_bytes = 0,
     .texture_type = static_cast<std::uint8_t>(oxygen::TextureType::kTexture2D),
     .compression_type = 0,
     .width = 128,
@@ -38,14 +75,19 @@ NOLINT_TEST(TextureResourceBasicTest, AccessorsReturnDescriptorValues)
     .alignment = 256,
     .reserved = {},
   };
-  std::vector<uint8_t> data(64, 0x7F);
+  auto payload = MakeValidPayload(desc.array_layers, desc.mip_levels,
+    /*bytes_per_subresource=*/4u, desc.content_hash);
+  desc.size_bytes = static_cast<uint32_t>(payload.size());
+
+  // Arrange
 
   // Act
-  TextureResource tex { desc, std::move(data) };
+  TextureResource tex { desc, std::move(payload) };
 
   // Assert
   EXPECT_EQ(tex.GetDataOffset(), 4096u);
-  EXPECT_EQ(tex.GetDataSize(), 64u);
+  EXPECT_EQ(tex.GetPayload().size(), desc.size_bytes);
+  EXPECT_EQ(tex.GetDataSize(), 20u);
   EXPECT_EQ(tex.GetWidth(), 128u);
   EXPECT_EQ(tex.GetHeight(), 64u);
   EXPECT_EQ(tex.GetDepth(), 1u);
@@ -65,7 +107,7 @@ NOLINT_TEST_F(TextureResourceValidationTest, MoveConstructor_TransfersOwnership)
   using oxygen::data::pak::TextureResourceDesc;
   TextureResourceDesc desc {
     .data_offset = 1024,
-    .size_bytes = 32,
+    .size_bytes = 0,
     .texture_type = static_cast<std::uint8_t>(oxygen::TextureType::kTexture2D),
     .compression_type = 0,
     .width = 32,
@@ -77,15 +119,20 @@ NOLINT_TEST_F(TextureResourceValidationTest, MoveConstructor_TransfersOwnership)
     .alignment = 256,
     .reserved = {},
   };
-  std::vector<uint8_t> bytes(32, 0xCD);
+  auto payload = MakeValidPayload(desc.array_layers, desc.mip_levels,
+    /*bytes_per_subresource=*/8u, desc.content_hash);
+  desc.size_bytes = static_cast<uint32_t>(payload.size());
+
+  // Arrange
 
   // Act
-  TextureResource original { desc, std::move(bytes) };
+  TextureResource original { desc, std::move(payload) };
   auto moved = std::move(original);
 
   // Assert
-  EXPECT_EQ(moved.GetDataSize(), 32u);
+  EXPECT_EQ(moved.GetDataSize(), 8u);
   EXPECT_EQ(original.GetDataSize(), 0u); // NOLINT(bugprone-use-after-move)
+  EXPECT_EQ(original.GetPayload().size(), 0u);
 }
 
 //! Invalid descriptor: zero width must throw.
@@ -94,7 +141,7 @@ NOLINT_TEST_F(TextureResourceValidationTest, InvalidDescriptor_ZeroWidth_Throws)
   using oxygen::data::pak::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
-    .size_bytes = 16,
+    .size_bytes = 0,
     .texture_type = static_cast<std::uint8_t>(oxygen::TextureType::kTexture2D),
     .compression_type = 0,
     .width = 0, // invalid
@@ -106,8 +153,15 @@ NOLINT_TEST_F(TextureResourceValidationTest, InvalidDescriptor_ZeroWidth_Throws)
     .alignment = 256,
     .reserved = {},
   };
-  NOLINT_EXPECT_THROW(TextureResource(bad, std::vector<uint8_t>(16, 0xAB)),
-    std::invalid_argument);
+  auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
+    /*bytes_per_subresource=*/4u, bad.content_hash);
+  bad.size_bytes = static_cast<uint32_t>(payload.size());
+
+  // Arrange
+
+  // Act / Assert
+  NOLINT_EXPECT_THROW(
+    TextureResource(bad, std::move(payload)), std::invalid_argument);
 }
 
 //! Invalid descriptor: zero height for 2D texture must throw.
@@ -117,7 +171,7 @@ NOLINT_TEST_F(
   using oxygen::data::pak::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
-    .size_bytes = 16,
+    .size_bytes = 0,
     .texture_type = static_cast<std::uint8_t>(oxygen::TextureType::kTexture2D),
     .compression_type = 0,
     .width = 16,
@@ -129,8 +183,16 @@ NOLINT_TEST_F(
     .alignment = 256,
     .reserved = {},
   };
-  NOLINT_EXPECT_THROW(TextureResource(bad, std::vector<uint8_t>(16, 0xAB)),
-    std::invalid_argument);
+
+  auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
+    /*bytes_per_subresource=*/4u, bad.content_hash);
+  bad.size_bytes = static_cast<uint32_t>(payload.size());
+
+  // Arrange
+
+  // Act / Assert
+  NOLINT_EXPECT_THROW(
+    TextureResource(bad, std::move(payload)), std::invalid_argument);
 }
 
 //! Invalid descriptor: zero depth for 3D texture must throw.
@@ -140,7 +202,7 @@ NOLINT_TEST_F(
   using oxygen::data::pak::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
-    .size_bytes = 32,
+    .size_bytes = 0,
     .texture_type = static_cast<std::uint8_t>(oxygen::TextureType::kTexture3D),
     .compression_type = 0,
     .width = 4,
@@ -152,8 +214,16 @@ NOLINT_TEST_F(
     .alignment = 256,
     .reserved = {},
   };
-  NOLINT_EXPECT_THROW(TextureResource(bad, std::vector<uint8_t>(32, 0x00)),
-    std::invalid_argument);
+
+  auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
+    /*bytes_per_subresource=*/4u, bad.content_hash);
+  bad.size_bytes = static_cast<uint32_t>(payload.size());
+
+  // Arrange
+
+  // Act / Assert
+  NOLINT_EXPECT_THROW(
+    TextureResource(bad, std::move(payload)), std::invalid_argument);
 }
 
 //! Invalid descriptor: zero mip levels must throw.
@@ -163,7 +233,7 @@ NOLINT_TEST_F(
   using oxygen::data::pak::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
-    .size_bytes = 16,
+    .size_bytes = 0,
     .texture_type = static_cast<std::uint8_t>(oxygen::TextureType::kTexture2D),
     .compression_type = 0,
     .width = 8,
@@ -175,8 +245,16 @@ NOLINT_TEST_F(
     .alignment = 256,
     .reserved = {},
   };
-  NOLINT_EXPECT_THROW(TextureResource(bad, std::vector<uint8_t>(16, 0xAB)),
-    std::invalid_argument);
+
+  auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
+    /*bytes_per_subresource=*/4u, bad.content_hash);
+  bad.size_bytes = static_cast<uint32_t>(payload.size());
+
+  // Arrange
+
+  // Act / Assert
+  NOLINT_EXPECT_THROW(
+    TextureResource(bad, std::move(payload)), std::invalid_argument);
 }
 
 //! Invalid descriptor: excessive mip levels (greater than log2(max) + 1) must
@@ -187,7 +265,7 @@ NOLINT_TEST_F(
   using oxygen::data::pak::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
-    .size_bytes = 16,
+    .size_bytes = 0,
     .texture_type = static_cast<std::uint8_t>(oxygen::TextureType::kTexture2D),
     .compression_type = 0,
     .width = 8,
@@ -200,8 +278,16 @@ NOLINT_TEST_F(
     .alignment = 256,
     .reserved = {},
   };
-  NOLINT_EXPECT_THROW(TextureResource(bad, std::vector<uint8_t>(16, 0xFF)),
-    std::invalid_argument);
+
+  auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
+    /*bytes_per_subresource=*/4u, bad.content_hash);
+  bad.size_bytes = static_cast<uint32_t>(payload.size());
+
+  // Arrange
+
+  // Act / Assert
+  NOLINT_EXPECT_THROW(
+    TextureResource(bad, std::move(payload)), std::invalid_argument);
 }
 
 //! Invalid descriptor: array layers must be >=1.
@@ -211,7 +297,7 @@ NOLINT_TEST_F(
   using oxygen::data::pak::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
-    .size_bytes = 16,
+    .size_bytes = 0,
     .texture_type
     = static_cast<std::uint8_t>(oxygen::TextureType::kTexture2DArray),
     .compression_type = 0,
@@ -224,8 +310,16 @@ NOLINT_TEST_F(
     .alignment = 256,
     .reserved = {},
   };
-  NOLINT_EXPECT_THROW(TextureResource(bad, std::vector<uint8_t>(16, 0xEF)),
-    std::invalid_argument);
+
+  auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
+    /*bytes_per_subresource=*/4u, bad.content_hash);
+  bad.size_bytes = static_cast<uint32_t>(payload.size());
+
+  // Arrange
+
+  // Act / Assert
+  NOLINT_EXPECT_THROW(
+    TextureResource(bad, std::move(payload)), std::invalid_argument);
 }
 
 //! Invalid descriptor: data size mismatch between descriptor and buffer size.
@@ -235,7 +329,7 @@ NOLINT_TEST_F(
   using oxygen::data::pak::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
-    .size_bytes = 32, // claims 32
+    .size_bytes = 0,
     .texture_type = static_cast<std::uint8_t>(oxygen::TextureType::kTexture2D),
     .compression_type = 0,
     .width = 4,
@@ -247,8 +341,16 @@ NOLINT_TEST_F(
     .alignment = 256,
     .reserved = {},
   };
-  NOLINT_EXPECT_THROW(TextureResource(bad, std::vector<uint8_t>(16, 0xAA)),
-    std::invalid_argument);
+
+  auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
+    /*bytes_per_subresource=*/4u, bad.content_hash);
+  bad.size_bytes = static_cast<uint32_t>(payload.size() + 1);
+
+  // Arrange
+
+  // Act / Assert
+  NOLINT_EXPECT_THROW(
+    TextureResource(bad, std::move(payload)), std::invalid_argument);
 }
 
 //! Invalid descriptor: alignment not 256 must throw (spec requires 256).
@@ -258,7 +360,7 @@ NOLINT_TEST_F(
   using oxygen::data::pak::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
-    .size_bytes = 16,
+    .size_bytes = 0,
     .texture_type = static_cast<std::uint8_t>(oxygen::TextureType::kTexture2D),
     .compression_type = 0,
     .width = 4,
@@ -270,8 +372,16 @@ NOLINT_TEST_F(
     .alignment = 128, // invalid per spec
     .reserved = {},
   };
-  NOLINT_EXPECT_THROW(TextureResource(bad, std::vector<uint8_t>(16, 0xAC)),
-    std::invalid_argument);
+
+  auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
+    /*bytes_per_subresource=*/4u, bad.content_hash);
+  bad.size_bytes = static_cast<uint32_t>(payload.size());
+
+  // Arrange
+
+  // Act / Assert
+  NOLINT_EXPECT_THROW(
+    TextureResource(bad, std::move(payload)), std::invalid_argument);
 }
 
 //! Resiliency: invalid enumerant values map to kUnknown but do not throw.
@@ -281,7 +391,7 @@ NOLINT_TEST_F(
   using oxygen::data::pak::TextureResourceDesc;
   TextureResourceDesc weird {
     .data_offset = 0,
-    .size_bytes = 8,
+    .size_bytes = 0,
     .texture_type = 99, // out of range
     .compression_type = 0,
     .width = 1,
@@ -293,7 +403,19 @@ NOLINT_TEST_F(
     .alignment = 256,
     .reserved = {},
   };
-  NOLINT_EXPECT_NO_THROW(TextureResource(weird, std::vector<uint8_t>(8, 0x01)));
+
+  auto payload = MakeValidPayload(weird.array_layers, weird.mip_levels,
+    /*bytes_per_subresource=*/1u, weird.content_hash);
+  weird.size_bytes = static_cast<uint32_t>(payload.size());
+
+  // Arrange
+
+  // Act
+  TextureResource tex { weird, std::move(payload) };
+
+  // Assert
+  EXPECT_EQ(tex.GetTextureType(), oxygen::TextureType::kUnknown);
+  EXPECT_EQ(tex.GetFormat(), oxygen::Format::kUnknown);
 }
 
 } // namespace

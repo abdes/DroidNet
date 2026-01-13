@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <string>
 
+#include <Oxygen/Renderer/RendererTag.h>
+
 #include <Oxygen/Renderer/Test/Resources/TextureBinderTest.h>
 #include <Oxygen/Renderer/Test/Resources/TextureBinderTestPayloads.h>
 
@@ -84,6 +86,9 @@ NOLINT_TEST_F(TextureBinderFailureTest, ErrorTexture_IsSharedAndObservable)
   const auto idx_a = TexBinder().GetOrAllocate(key_a);
   const auto idx_b = TexBinder().GetOrAllocate(key_b);
 
+  // Drain queued load failures.
+  TexBinder().OnFrameStart();
+
   // Assert
   EXPECT_NE(idx_a, idx_b);
   EXPECT_EQ(AllocatedSrvCount(), before + 2U);
@@ -116,6 +121,9 @@ NOLINT_TEST_F(TextureBinderFailureTest, LoadFailure_RepointsToError)
   const auto index_0 = TexBinder().GetOrAllocate(key);
   const auto index_1 = TexBinder().GetOrAllocate(key);
 
+  // Drain queued load failure.
+  TexBinder().OnFrameStart();
+
   // Assert
   EXPECT_EQ(index_0, index_1);
   EXPECT_EQ(AllocatedSrvCount(), before + 1U);
@@ -142,10 +150,17 @@ NOLINT_TEST_F(TextureBinderFailureTest, ForcedError_IsDeterministic)
   // Act
   const auto index_0 = TexBinder().GetOrAllocate(key);
   const auto u_index = index_0.get();
+
+  // Drain queued load failure and observe the stable error binding.
+  TexBinder().OnFrameStart();
+
   const auto creations_after_first
     = CountSrvViewCreationsForIndex(Gfx(), u_index);
 
   const auto index_1 = TexBinder().GetOrAllocate(key);
+
+  // No further updates expected.
+  TexBinder().OnFrameStart();
 
   // Assert
   EXPECT_EQ(index_0, index_1);
@@ -179,6 +194,9 @@ NOLINT_TEST_F(TextureBinderFailureTest, InvalidCookedLayout_Rejected)
   const auto index_0 = TexBinder().GetOrAllocate(key);
   const auto index_1 = TexBinder().GetOrAllocate(key);
 
+  // Process queued upload attempt and observe rejection.
+  TexBinder().OnFrameStart();
+
   // Assert
   EXPECT_EQ(index_0, index_1);
   EXPECT_EQ(AllocatedSrvCount(), before + 1U);
@@ -207,6 +225,9 @@ NOLINT_TEST_F(TextureBinderFailureTest, UnsupportedFormat_Rejected)
   const auto index_0 = TexBinder().GetOrAllocate(key);
   const auto index_1 = TexBinder().GetOrAllocate(key);
 
+  // Process queued upload attempt and observe rejection.
+  TexBinder().OnFrameStart();
+
   // Assert
   EXPECT_EQ(index_0, index_1);
   EXPECT_EQ(AllocatedSrvCount(), before + 1U);
@@ -231,11 +252,17 @@ NOLINT_TEST_F(
   const auto payload = MakeCookedTexture1x1Rgba8Payload();
   Loader().PreloadCookedTexture(key, std::span(payload.data(), payload.size()));
 
+  Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+
   Gfx().srv_view_log_.events.clear();
 
   // Act
   const auto index_0 = TexBinder().GetOrAllocate(key);
   const auto index_1 = TexBinder().GetOrAllocate(key);
+
+  // Process queued upload submission; staging map is configured to fail.
+  TexBinder().OnFrameStart();
 
   // Assert
   EXPECT_EQ(index_0, index_1);

@@ -623,24 +623,22 @@ namespace detail {
 
   //! Pack all subresources into a contiguous buffer with proper alignment.
   /*!
-    CRITICAL: Subresource ordering MUST be MIP-MAJOR to match D3D12 conventions.
+    CRITICAL: Subresource ordering MUST be LAYER-MAJOR to match D3D12
+    subresource indexing.
 
     D3D12 subresource indexing formula:
       SubresourceIndex = MipSlice + (ArraySlice * MipLevels)
 
-    This means we iterate: for (mip) { for (layer) { ... } }
+    This means we iterate: for (layer) { for (mip) { ... } }
 
     Data layout in output buffer:
-      Mip0/Layer0, Mip0/Layer1, ..., Mip0/LayerN,
-      Mip1/Layer0, Mip1/Layer1, ..., Mip1/LayerN,
+      Layer0/Mip0, Layer0/Mip1, ..., Layer0/MipN,
+      Layer1/Mip0, Layer1/Mip1, ..., Layer1/MipN,
       ...
 
     This ordering MUST match:
       - ComputeSubresourceLayouts() in TexturePackingPolicy.cpp
       - BuildTexture2DUploadLayout() in TextureBinder.cpp
-
-    Using layer-major ordering (layer outer, mip inner) will cause cubemap
-    faces to be scrambled on the GPU!
   */
   auto PackSubresources(const ScratchImage& image,
     const ITexturePackingPolicy& policy) -> std::vector<std::byte>
@@ -649,7 +647,7 @@ namespace detail {
       return {};
     }
 
-    // Compute layouts (uses MIP-MAJOR ordering)
+    // Compute layouts (uses layer-major ordering)
     auto layouts = ComputeSubresourceLayouts(image.Meta(), policy);
     const uint64_t total_size = ComputeTotalPayloadSize(layouts);
 
@@ -657,16 +655,13 @@ namespace detail {
     std::vector<std::byte> payload(total_size);
 
     // Copy each subresource with proper alignment.
-    // IMPORTANT: Must iterate MIP-MAJOR (mip outer, layer inner) to match
-    // the layout order from ComputeSubresourceLayouts and D3D12 expectations.
-    // D3D12 subresource indexing is MIP-MAJOR:
-    //   SubresourceIndex = MipSlice + ArraySlice * MipLevels
-    // So we iterate mip in outer loop, layer in inner loop.
+    // IMPORTANT: Must iterate layer-major (layer outer, mip inner) to match
+    // the layout order from ComputeSubresourceLayouts and D3D12 indexing.
     size_t layout_index = 0;
     const auto& meta = image.Meta();
 
-    for (uint16_t mip = 0; mip < meta.mip_levels; ++mip) {
-      for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
+    for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
+      for (uint16_t mip = 0; mip < meta.mip_levels; ++mip) {
         const auto& layout = layouts[layout_index++];
         const auto src_view = image.GetImage(layer, mip);
 

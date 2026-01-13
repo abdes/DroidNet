@@ -79,21 +79,20 @@ auto ComputeSurfaceBytes(const uint32_t width, const uint32_t height,
 
 //! Compute subresource layouts for texture packing.
 /*!
-  CRITICAL: Subresource ordering MUST be MIP-MAJOR to match D3D12 conventions.
+  CRITICAL: Subresource ordering MUST be LAYER-MAJOR to match D3D12
+  subresource indexing.
 
   D3D12 subresource indexing formula:
     SubresourceIndex = MipSlice + (ArraySlice * MipLevels)
 
-  This means data must be laid out as:
-    Mip0/Layer0, Mip0/Layer1, ..., Mip0/LayerN,
-    Mip1/Layer0, Mip1/Layer1, ..., Mip1/LayerN,
+  Subresources are indexed with mip varying fastest within each array slice.
+  Increasing subresource index order is:
+    Layer0/Mip0, Layer0/Mip1, ..., Layer0/MipN,
+    Layer1/Mip0, Layer1/Mip1, ..., Layer1/MipN,
     ...
 
-  NOT layer-major (Layer0/Mip0, Layer0/Mip1, ...) which would cause
-  the GPU to read the wrong face data for cubemaps and texture arrays.
-
-  The upload code in TextureBinder::BuildTexture2DUploadLayout also uses
-  MIP-MAJOR ordering, so these MUST match.
+  This ordering MUST match the cooker packing logic and the runtime upload
+  layout builder.
 */
 auto ComputeSubresourceLayouts(const ScratchImageMeta& meta,
   const ITexturePackingPolicy& policy) -> std::vector<SubresourceLayout>
@@ -105,11 +104,11 @@ auto ComputeSubresourceLayouts(const ScratchImageMeta& meta,
 
   uint64_t current_offset = 0;
 
-  // D3D12 subresource indexing is MIP-MAJOR:
+  // D3D12 subresource indexing is layer-major (array slice major):
   //   SubresourceIndex = MipSlice + ArraySlice * MipLevels
-  // So we iterate mip in outer loop, layer in inner loop.
-  for (uint16_t mip = 0; mip < meta.mip_levels; ++mip) {
-    for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
+  // So we iterate layer in outer loop, mip in inner loop.
+  for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
+    for (uint16_t mip = 0; mip < meta.mip_levels; ++mip) {
       SubresourceLayout layout;
 
       // Compute dimensions at this mip level
