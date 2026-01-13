@@ -96,6 +96,7 @@ set(
   "Internal/EnvironmentStaticDataManager.h"
   "Internal/IblManager.cpp"
   "Internal/IblManager.h"
+  "Internal/IBrdfLutProvider.h"
   "Internal/IIblProvider.h"
   "Internal/RenderScope.h"
   "Internal/SceneConstantsManager.cpp"

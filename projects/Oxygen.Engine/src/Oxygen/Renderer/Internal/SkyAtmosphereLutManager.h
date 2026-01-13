@@ -13,6 +13,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Renderer/Internal/ISkyAtmosphereLutProvider.h>
 #include <Oxygen/Renderer/Types/SunState.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -29,41 +30,6 @@ struct GpuSkyAtmosphereParams;
 } // namespace oxygen::engine
 
 namespace oxygen::engine::internal {
-
-//! Interface for sky atmosphere LUT providers.
-/*!
- Abstracts the LUT manager for dependency injection into
- EnvironmentStaticDataManager. Provides read-only access to LUT slots and
- dimensions.
-*/
-class ISkyAtmosphereLutProvider {
-public:
-  virtual ~ISkyAtmosphereLutProvider() = default;
-
-  //! Update cached parameters and set dirty flag if changed.
-  virtual auto UpdateParameters(const GpuSkyAtmosphereParams& params) -> void
-    = 0;
-
-  //! Returns shader-visible SRV index for the transmittance LUT.
-  [[nodiscard]] virtual auto GetTransmittanceLutSlot() const noexcept
-    -> ShaderVisibleIndex
-    = 0;
-
-  //! Returns shader-visible SRV index for the sky-view LUT.
-  [[nodiscard]] virtual auto GetSkyViewLutSlot() const noexcept
-    -> ShaderVisibleIndex
-    = 0;
-
-  //! Returns transmittance LUT dimensions.
-  [[nodiscard]] virtual auto GetTransmittanceLutSize() const noexcept
-    -> std::pair<uint32_t, uint32_t>
-    = 0;
-
-  //! Returns sky-view LUT dimensions.
-  [[nodiscard]] virtual auto GetSkyViewLutSize() const noexcept
-    -> std::pair<uint32_t, uint32_t>
-    = 0;
-};
 
 //! LUT dimensions for sky atmosphere precomputation.
 struct SkyAtmosphereLutConfig {
@@ -116,8 +82,33 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(SkyAtmosphereLutManager)
   OXYGEN_DEFAULT_MOVABLE(SkyAtmosphereLutManager)
 
-  //=== Parameter Tracking
-  //===-------------------------------------------------//
+  //=== Resource Access ===---------------------------------------------------//
+
+  //! Returns shader-visible SRV index for the transmittance LUT, or
+  //! `kInvalidShaderVisibleIndex` if resources are not yet created.
+  OXGN_RNDR_NDAPI auto GetTransmittanceLutSlot() const noexcept
+    -> ShaderVisibleIndex override;
+
+  //! Returns transmittance LUT dimensions.
+  [[nodiscard]] auto GetTransmittanceLutSize() const noexcept
+    -> Extent<uint32_t> override
+  {
+    return { config_.transmittance_width, config_.transmittance_height };
+  }
+
+  //! Returns shader-visible SRV index for the sky-view LUT, or
+  //! `kInvalidShaderVisibleIndex` if resources are not yet created.
+  OXGN_RNDR_NDAPI auto GetSkyViewLutSlot() const noexcept
+    -> ShaderVisibleIndex override;
+
+  //! Returns sky-view LUT dimensions.
+  [[nodiscard]] auto GetSkyViewLutSize() const noexcept
+    -> Extent<uint32_t> override
+  {
+    return { config_.sky_view_width, config_.sky_view_height };
+  }
+
+  //=== Parameter Tracking ===------------------------------------------------//
 
   //! Updates cached atmosphere parameters and sets dirty flag if changed.
   /*!
@@ -170,37 +161,6 @@ public:
    SRV state, ready for sampling in rendering passes.
   */
   OXGN_RNDR_API auto MarkGenerated() noexcept -> void;
-
-  //=== Resource Access
-  //===----------------------------------------------------//
-
-  //! Returns shader-visible SRV index for the transmittance LUT.
-  /*!
-   Returns `kInvalidShaderVisibleIndex` if resources are not yet created.
-  */
-  OXGN_RNDR_NDAPI auto GetTransmittanceLutSlot() const noexcept
-    -> ShaderVisibleIndex override;
-
-  //! Returns shader-visible SRV index for the sky-view LUT.
-  /*!
-   Returns `kInvalidShaderVisibleIndex` if resources are not yet created.
-  */
-  OXGN_RNDR_NDAPI auto GetSkyViewLutSlot() const noexcept
-    -> ShaderVisibleIndex override;
-
-  //! Returns transmittance LUT dimensions.
-  [[nodiscard]] auto GetTransmittanceLutSize() const noexcept
-    -> std::pair<uint32_t, uint32_t> override
-  {
-    return { config_.transmittance_width, config_.transmittance_height };
-  }
-
-  //! Returns sky-view LUT dimensions.
-  [[nodiscard]] auto GetSkyViewLutSize() const noexcept
-    -> std::pair<uint32_t, uint32_t> override
-  {
-    return { config_.sky_view_width, config_.sky_view_height };
-  }
 
   //! Returns the current planet radius in meters.
   /*!

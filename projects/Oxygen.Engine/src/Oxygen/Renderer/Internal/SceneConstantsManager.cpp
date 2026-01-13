@@ -37,7 +37,6 @@ SceneConstantsManager::~SceneConstantsManager()
 auto SceneConstantsManager::OnFrameStart(frame::Slot slot) -> void
 {
   current_slot_ = slot;
-  LOG_F(1, "SceneConstantsManager::OnFrameStart slot={}", slot);
 }
 
 auto SceneConstantsManager::GetOrCreateBuffer(ViewId view_id) -> BufferInfo
