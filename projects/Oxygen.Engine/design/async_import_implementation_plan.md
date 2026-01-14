@@ -202,35 +202,35 @@ basic threading.
 
 **File:** `src/Oxygen/Content/Import/Async/ImportEventLoop.h/.cpp`
 
-- [x] Create `ImportEventLoop` class wrapping ASIO io_context
-- [x] Implement `Run()`, `Stop()`, `Post()` methods
-- [x] Add work guard to prevent premature exit
-- [x] Unit test: event loop starts, posts callback, stops
+- [X] Create `ImportEventLoop` class wrapping ASIO io_context
+- [X] Implement `Run()`, `Stop()`, `Post()` methods
+- [X] Add work guard to prevent premature exit
+- [X] Unit test: event loop starts, posts callback, stops
 
 #### 1.2 EventLoopTraits Specialization
 
 **File:** `src/Oxygen/Content/Import/Async/ImportEventLoop.h`
 
-- [x] Specialize `co::EventLoopTraits<ImportEventLoop>`
-- [x] Implement `EventLoopId()`, `Run()`, `Stop()`, `IsRunning()`
-- [x] Unit test: traits work with `co::Run()`
+- [X] Specialize `co::EventLoopTraits<ImportEventLoop>`
+- [X] Implement `EventLoopId()`, `Run()`, `Stop()`, `IsRunning()`
+- [X] Unit test: traits work with `co::Run()`
 
 #### 1.3 ThreadNotification Specialization
 
 **File:** `src/Oxygen/Content/Import/Async/ImportEventLoop.h`
 
-- [x] Specialize `co::ThreadNotification<ImportEventLoop>`
-- [x] Implement using `asio::post()` or equivalent
-- [x] Unit test: notification posts from worker thread to event loop
+- [X] Specialize `co::ThreadNotification<ImportEventLoop>`
+- [X] Implement using `asio::post()` or equivalent
+- [X] Unit test: notification posts from worker thread to event loop
 
 #### 1.4 ThreadPool Integration
 
 **File:** Unit test only
 
-- [x] Construct `co::ThreadPool` with `ImportEventLoop`
-- [x] Verify `ThreadPool::Run()` works correctly
-- [x] Verify results return via ThreadNotification
-- [x] Unit test: CPU-bound work offloads and returns
+- [X] Construct `co::ThreadPool` with `ImportEventLoop`
+- [X] Verify `ThreadPool::Run()` works correctly
+- [X] Verify results return via ThreadNotification
+- [X] Unit test: CPU-bound work offloads and returns
 
 ### Deliverables
 
@@ -268,42 +268,42 @@ native implementation.
 
 **File:** `src/Oxygen/Content/Import/Async/FileError.h/.cpp`
 
-- [x] Define `FileError` enum
-- [x] Define `FileErrorInfo` struct with `ToString()`, `IsError()`
-- [x] Implement Windows error mapping via `MapSystemError()`
-- [x] Implement POSIX error mapping via `MapSystemError()`
-- [x] Unit test: error mapping coverage (21 tests)
+- [X] Define `FileError` enum
+- [X] Define `FileErrorInfo` struct with `ToString()`, `IsError()`
+- [X] Implement Windows error mapping via `MapSystemError()`
+- [X] Implement POSIX error mapping via `MapSystemError()`
+- [X] Unit test: error mapping coverage (21 tests)
 
 #### 2.2 IAsyncFileReader Interface
 
 **File:** `src/Oxygen/Content/Import/Async/IAsyncFileReader.h`
 
-- [x] Define `ReadOptions` struct (offset, max_bytes, size_hint, alignment)
-- [x] Define `FileInfo` struct (size, last_modified, is_directory, is_symlink)
-- [x] Define `IAsyncFileReader` interface with Co<Result<T>> returns
-- [x] Document thread safety and cancellation
+- [X] Define `ReadOptions` struct (offset, max_bytes, size_hint, alignment)
+- [X] Define `FileInfo` struct (size, last_modified, is_directory, is_symlink)
+- [X] Define `IAsyncFileReader` interface with Co<Result<T>> returns
+- [X] Document thread safety and cancellation
 
 #### 2.3 WindowsFileReader Implementation
 
 **File:** `src/Oxygen/Content/Import/Async/WindowsFileReader.h/.cpp`
 
-- [x] Implement `ReadFile()` using ASIO random_access_handle + IOCP
-- [x] Implement `GetFileInfo()` via std::filesystem
-- [x] Implement `Exists()` via std::filesystem
-- [x] Unit test: read existing file (small and large)
-- [x] Unit test: read non-existent file (error)
-- [x] Unit test: read with offset and max_bytes
-- [x] Unit test: GetFileInfo for file and directory
-- [x] Unit test: Exists for file, directory, and non-existent
-- [x] 14 WindowsFileReader tests passing
+- [X] Implement `ReadFile()` using ASIO random_access_handle + IOCP
+- [X] Implement `GetFileInfo()` via std::filesystem
+- [X] Implement `Exists()` via std::filesystem
+- [X] Unit test: read existing file (small and large)
+- [X] Unit test: read non-existent file (error)
+- [X] Unit test: read with offset and max_bytes
+- [X] Unit test: GetFileInfo for file and directory
+- [X] Unit test: Exists for file, directory, and non-existent
+- [X] 14 WindowsFileReader tests passing
 
 #### 2.4 Factory Function
 
 **File:** `src/Oxygen/Content/Import/Async/WindowsFileReader.h`
 
-- [x] Implement `CreateAsyncFileReader(ImportEventLoop&)`
-- [x] Currently returns WindowsFileReader on Windows
-- [x] Document future Linux (io_uring) implementation
+- [X] Implement `CreateAsyncFileReader(ImportEventLoop&)`
+- [X] Currently returns WindowsFileReader on Windows
+- [X] Document future Linux (io_uring) implementation
 
 ### Deliverables
 
@@ -339,12 +339,12 @@ Implement the public thread-safe API and import thread lifecycle.
 
 **File:** `src/Oxygen/Content/Import/Async/AsyncImportService.h`
 
-- [x] Define `ImportJobId` type (uint64_t)
-- [x] Define `ImportCompletionCallback` type (uses existing `ImportReport`)
-- [x] Define `ImportProgressCallback` type (uses existing `ImportDiagnostic`)
-- [x] Define `ImportCancellationCallback` type
-- [x] Define `ImportProgress` struct
-- [x] Define `Config` struct
+- [X] Define `ImportJobId` type (uint64_t)
+- [X] Define `ImportCompletionCallback` type (uses existing `ImportReport`)
+- [X] Define `ImportProgressCallback` type (uses existing `ImportDiagnostic`)
+- [X] Define `ImportCancellationCallback` type
+- [X] Define `ImportProgress` struct
+- [X] Define `Config` struct
 
 **CRITICAL:** Reuses existing types from `Import/` module:
 - `ImportRequest` from `<Oxygen/Content/Import/ImportRequest.h>`
@@ -355,51 +355,51 @@ Implement the public thread-safe API and import thread lifecycle.
 
 **File:** `src/Oxygen/Content/Import/Async/AsyncImportService.cpp`
 
-- [x] Spawn import thread in constructor
-- [x] Create ImportEventLoop on import thread
-- [x] Create IAsyncFileReader on import thread (via `CreateAsyncFileReader`)
-- [x] Implement graceful shutdown in destructor
-- [x] Use `std::latch` for startup synchronization
-- [x] Use separate `shutdown_complete_` flag for shutdown tracking
-- [x] Unit test: construct and destruct without crash (4 tests)
-- [x] Unit test: multiple construct/destruct cycles
+- [X] Spawn import thread in constructor
+- [X] Create ImportEventLoop on import thread
+- [X] Create IAsyncFileReader on import thread (via `CreateAsyncFileReader`)
+- [X] Implement graceful shutdown in destructor
+- [X] Use `std::latch` for startup synchronization
+- [X] Use separate `shutdown_complete_` flag for shutdown tracking
+- [X] Unit test: construct and destruct without crash (4 tests)
+- [X] Unit test: multiple construct/destruct cycles
 
 #### 3.3 Thread-Safe Job Submission
 
 **File:** `src/Oxygen/Content/Import/Async/AsyncImportService.cpp`
 
-- [x] Implement thread-safe request queue (mutex + `std::queue`)
-- [x] Implement atomic job ID generation
-- [x] Implement `SubmitImport()` posting to import thread via `event_loop_->Post()`
-- [x] Unit test: submit from main thread (5 tests)
-- [x] Unit test: submit from multiple threads concurrently (1 test)
+- [X] Implement thread-safe request queue (mutex + `std::queue`)
+- [X] Implement atomic job ID generation
+- [X] Implement `SubmitImport()` posting to import thread via `event_loop_->Post()`
+- [X] Unit test: submit from main thread (5 tests)
+- [X] Unit test: submit from multiple threads concurrently (1 test)
 
 #### 3.4 Result Callback Dispatch
 
 **File:** `src/Oxygen/Content/Import/Async/AsyncImportService.cpp`
 
-- [x] Callbacks invoked on import thread (simplified for shell)
-- [x] Unit test: callback invoked with correct job ID
+- [X] Callbacks invoked on import thread (simplified for shell)
+- [X] Unit test: callback invoked with correct job ID
 
 #### 3.5 Cancellation API
 
 **File:** `src/Oxygen/Content/Import/Async/AsyncImportService.cpp`
 
-- [x] Implement `CancelJob()` - returns false for invalid/completed jobs
-- [x] Implement `CancelAll()` - cancels pending and marks active for cancel
-- [x] Implement `RequestShutdown()` - non-blocking, sets flag
-- [x] Unit test: cancel pending job (3 tests)
-- [x] Unit test: shutdown tests (2 tests)
+- [X] Implement `CancelJob()` - returns false for invalid/completed jobs
+- [X] Implement `CancelAll()` - cancels pending and marks active for cancel
+- [X] Implement `RequestShutdown()` - non-blocking, sets flag
+- [X] Unit test: cancel pending job (3 tests)
+- [X] Unit test: shutdown tests (2 tests)
 
 #### 3.6 Query API
 
 **File:** `src/Oxygen/Content/Import/Async/AsyncImportService.cpp`
 
-- [x] Implement `IsAcceptingJobs()`
-- [x] Implement `IsJobActive()`
-- [x] Implement `PendingJobCount()`
-- [x] Implement `InFlightJobCount()`
-- [x] Unit tests (2 tests)
+- [X] Implement `IsAcceptingJobs()`
+- [X] Implement `IsJobActive()`
+- [X] Implement `PendingJobCount()`
+- [X] Implement `InFlightJobCount()`
+- [X] Unit tests (2 tests)
 
 ### Deliverables
 
@@ -446,74 +446,74 @@ The new design separates concerns:
 
 **File:** `src/Oxygen/Content/Import/Async/IAsyncFileWriter.h`
 
-- [x] Define `WriteOptions` struct (alignment, create_directories, overwrite, share_write)
-- [x] Define `WriteCompletionCallback` type
-- [x] Define `IAsyncFileWriter` interface
-- [x] `Write(path, data, options)` - coroutine returning bytes written
-- [x] `WriteAsync(path, data, options, callback)` - fire-and-forget with callback
-- [x] `WriteAt(path, offset, data, options)` - coroutine returning bytes written
-- [x] `WriteAtAsync(path, offset, data, options, callback)` - fire-and-forget with callback
-- [x] `Flush()` - wait for all pending operations
-- [x] `CancelAll()` - cancel pending operations
-- [x] `PendingCount()` - return number of pending operations
-- [x] Document thread safety
+- [X] Define `WriteOptions` struct (alignment, create_directories, overwrite, share_write)
+- [X] Define `WriteCompletionCallback` type
+- [X] Define `IAsyncFileWriter` interface
+- [X] `Write(path, data, options)` - coroutine returning bytes written
+- [X] `WriteAsync(path, data, options, callback)` - fire-and-forget with callback
+- [X] `WriteAt(path, offset, data, options)` - coroutine returning bytes written
+- [X] `WriteAtAsync(path, offset, data, options, callback)` - fire-and-forget with callback
+- [X] `Flush()` - wait for all pending operations
+- [X] `CancelAll()` - cancel pending operations
+- [X] `PendingCount()` - return number of pending operations
+- [X] Document thread safety
 
 #### 4.2 WindowsFileWriter Implementation
 
 **File:** `src/Oxygen/Content/Import/Async/WindowsFileWriter.h/.cpp`
 
-- [x] Implement using ASIO + IOCP for async writes
-- [x] Track pending write count via atomic
-- [x] Use `co::SleepFor` for yielding (consistent with OxCo patterns)
-- [x] Unit test: write small file (3 tests)
-- [x] Unit test: write large file (1 test)
-- [x] Unit test: explicit-offset write operations via `WriteAt*`
-- [x] Unit test: async `WriteAsync`/`WriteAtAsync` with callbacks
-- [x] Unit test: flush waits for pending (2 tests)
-- [x] Unit test: cancellation (2 tests)
-- [x] Unit test: error handling (4 tests)
-- [x] **20 unit tests**
+- [X] Implement using ASIO + IOCP for async writes
+- [X] Track pending write count via atomic
+- [X] Use `co::SleepFor` for yielding (consistent with OxCo patterns)
+- [X] Unit test: write small file (3 tests)
+- [X] Unit test: write large file (1 test)
+- [X] Unit test: explicit-offset write operations via `WriteAt*`
+- [X] Unit test: async `WriteAsync`/`WriteAtAsync` with callbacks
+- [X] Unit test: flush waits for pending (2 tests)
+- [X] Unit test: cancellation (2 tests)
+- [X] Unit test: error handling (4 tests)
+- [X] **20 unit tests**
 
 #### 4.3 ImportSession Class
 
 **File:** `src/Oxygen/Content/Import/Async/ImportSession.h/.cpp`
 
-- [x] Define `ImportSession` class
-- [x] Constructor takes `ImportRequest`, `IAsyncFileWriter&`
-- [x] Own `LooseCookedWriter` for index file
-- [x] Thread-safe diagnostics collection with `AddDiagnostic()`
-- [x] `HasErrors()` to check for error-level diagnostics
-- [x] `Finalize()` coroutine that waits for I/O and writes index
-- [x] Unit tests: 14 tests covering construction, diagnostics, finalization
+- [X] Define `ImportSession` class
+- [X] Constructor takes `ImportRequest`, `IAsyncFileWriter&`
+- [X] Own `LooseCookedWriter` for index file
+- [X] Thread-safe diagnostics collection with `AddDiagnostic()`
+- [X] `HasErrors()` to check for error-level diagnostics
+- [X] `Finalize()` coroutine that waits for I/O and writes index
+- [X] Unit tests: 14 tests covering construction, diagnostics, finalization
 
 #### 4.4 TextureEmitter ✅ COMPLETE
 
 **File:** `src/Oxygen/Content/Import/Async/Emitters/TextureEmitter.h/.cpp`
 
-- [x] Implement `Emit(CookedTexturePayload) -> uint32_t`
+- [X] Implement `Emit(CookedTexturePayload) -> uint32_t`
   - Assign stable index immediately (texture index 0 reserved for fallback)
   - Reserve a unique aligned range in `textures.data` (atomic CAS on size)
   - Write optional zero-padding and payload using `WriteAtAsync()`
     (requires `WriteOptions{.share_write=true}`)
   - Add `TextureResourceDesc` entry to in-memory table
-- [x] Implement `Count()`, `PendingCount()`, `ErrorCount()`, `DataFileSize()`
-- [x] Implement `Finalize() -> co::Co<bool>`
+- [X] Implement `Count()`, `PendingCount()`, `ErrorCount()`, `DataFileSize()`
+- [X] Implement `Finalize() -> co::Co<bool>`
   - Wait for pending writes via `Flush()`
   - Serialize table via `serio::Writer` with packed alignment
   - Write `textures.table` file
-- [x] Unit tests: 14 tests covering emission, alignment, finalization, content verification
+- [X] Unit tests: 14 tests covering emission, alignment, finalization, content verification
 
 #### 4.5 BufferEmitter ✅ COMPLETE
 
 **File:** `src/Oxygen/Content/Import/Async/Emitters/BufferEmitter.h/.cpp`
 
-- [x] Same pattern as TextureEmitter for geometry/animation buffers
+- [X] Same pattern as TextureEmitter for geometry/animation buffers
   - Per-buffer alignment (vertex=16, index=4, etc.)
   - CAS loop for atomic aligned offset reservation
   - Padding writes between buffers
-- [x] Emit returns stable index immediately
-- [x] Finalize waits for I/O and writes `buffers.table`
-- [x] Unit tests: 16 tests covering PAK format compliance
+- [X] Emit returns stable index immediately
+- [X] Finalize waits for I/O and writes `buffers.table`
+- [X] Unit tests: 16 tests covering PAK format compliance
   - Table file packed size verification (32 bytes per entry)
   - Aligned offset verification in table entries
   - Data file content verification with padding
@@ -523,20 +523,20 @@ The new design separates concerns:
 
 **File:** `src/Oxygen/Content/Import/Async/Emitters/AssetEmitter.h/.cpp`
 
-- [x] Implement `Emit(AssetKey, AssetType, virtual_path, descriptor_relpath, bytes)`
-- [x] Write `*.omat`, `*.ogeo`, `*.oscene` via async I/O (`WriteAsync`)
-- [x] Track pending writes and I/O errors
-- [x] Implement `Finalize() -> co::Co<bool>` (waits for pending I/O)
-- [x] Unit tests for path validation, emission, and finalization
+- [X] Implement `Emit(AssetKey, AssetType, virtual_path, descriptor_relpath, bytes)`
+- [X] Write `*.omat`, `*.ogeo`, `*.oscene` via async I/O (`WriteAsync`)
+- [X] Track pending writes and I/O errors
+- [X] Implement `Finalize() -> co::Co<bool>` (waits for pending I/O)
+- [X] Unit tests for path validation, emission, and finalization
 
 #### 4.7 ImportSession Lazy Emitters
 
 **File:** `src/Oxygen/Content/Import/Async/ImportSession.cpp`
 
-- [ ] Implement `TextureEmitter() -> TextureEmitter&` (lazy create)
-- [ ] Implement `BufferEmitter() -> BufferEmitter&` (lazy create)
-- [ ] Implement `AssetEmitter() -> AssetEmitter&` (lazy create)
-- [ ] Unit test: lazy creation on first access
+- [X] Implement `TextureEmitter() -> TextureEmitter&` (lazy create)
+- [X] Implement `BufferEmitter() -> BufferEmitter&` (lazy create)
+- [X] Implement `AssetEmitter() -> AssetEmitter&` (lazy create)
+- [X] Unit test: lazy creation on first access
 
 #### 4.8 ImportSession Finalization
 

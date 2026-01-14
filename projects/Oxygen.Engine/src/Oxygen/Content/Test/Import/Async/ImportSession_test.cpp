@@ -101,6 +101,29 @@ NOLINT_TEST_F(ImportSessionTest, CookedWriter_IsAccessible)
   (void)writer;
 }
 
+//=== Emitter Access Tests ===------------------------------------------------//
+
+//! Verify emitter accessors create lazily and return stable instances.
+NOLINT_TEST_F(ImportSessionTest, Emitters_LazyAccess_ReturnsStableInstances)
+{
+  // Arrange
+  auto request = MakeRequest();
+  ImportSession session(request, *writer_);
+
+  // Act
+  auto* tex_1 = &session.TextureEmitter();
+  auto* tex_2 = &session.TextureEmitter();
+  auto* buf_1 = &session.BufferEmitter();
+  auto* buf_2 = &session.BufferEmitter();
+  auto* asset_1 = &session.AssetEmitter();
+  auto* asset_2 = &session.AssetEmitter();
+
+  // Assert
+  EXPECT_EQ(tex_1, tex_2);
+  EXPECT_EQ(buf_1, buf_2);
+  EXPECT_EQ(asset_1, asset_2);
+}
+
 //=== Diagnostics Tests ===---------------------------------------------------//
 
 //! Verify adding a single diagnostic.

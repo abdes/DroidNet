@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -22,6 +23,9 @@
 namespace oxygen::content::import {
 
 class IAsyncFileWriter;
+class TextureEmitter;
+class BufferEmitter;
+class AssetEmitter;
 
 //! Per-import-job state including diagnostics and output tracking.
 /*!
@@ -40,6 +44,11 @@ class IAsyncFileWriter;
    the cooked root from the request.
  - **Async Finalization**: `Finalize()` is a coroutine that waits for pending
    I/O and writes the container index file.
+
+ ### Thread Safety
+
+ - Diagnostics collection is thread-safe.
+ - Emitter access and use is import-thread only.
 
  ### Usage Patterns
 
@@ -89,6 +98,20 @@ public:
 
   //! Get the loose cooked writer for this session.
   OXGN_CNTT_NDAPI auto CookedWriter() noexcept -> LooseCookedWriter&;
+
+  //=== Emitters
+  //===-----------------------------------------------------------//
+
+  //! Get the texture emitter (lazy, import-thread only).
+  OXGN_CNTT_NDAPI auto TextureEmitter()
+    -> oxygen::content::import::TextureEmitter&;
+
+  //! Get the buffer emitter (lazy, import-thread only).
+  OXGN_CNTT_NDAPI auto BufferEmitter()
+    -> oxygen::content::import::BufferEmitter&;
+
+  //! Get the asset emitter (lazy, import-thread only).
+  OXGN_CNTT_NDAPI auto AssetEmitter() -> oxygen::content::import::AssetEmitter&;
   //=== Diagnostics
   //===--------------------------------------------------------//
 
@@ -132,6 +155,13 @@ private:
   IAsyncFileWriter& file_writer_;
   std::filesystem::path cooked_root_;
   LooseCookedWriter cooked_writer_;
+
+  std::optional<std::unique_ptr<oxygen::content::import::TextureEmitter>>
+    texture_emitter_;
+  std::optional<std::unique_ptr<oxygen::content::import::BufferEmitter>>
+    buffer_emitter_;
+  std::optional<std::unique_ptr<oxygen::content::import::AssetEmitter>>
+    asset_emitter_;
 
   mutable std::mutex diagnostics_mutex_;
   std::vector<ImportDiagnostic> diagnostics_;

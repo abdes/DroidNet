@@ -5,6 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/Import/Async/Emitters/AssetEmitter.h>
+#include <Oxygen/Content/Import/Async/Emitters/BufferEmitter.h>
+#include <Oxygen/Content/Import/Async/Emitters/TextureEmitter.h>
 #include <Oxygen/Content/Import/Async/IAsyncFileWriter.h>
 #include <Oxygen/Content/Import/Async/ImportSession.h>
 
@@ -41,6 +44,54 @@ auto ImportSession::CookedRoot() const noexcept -> const std::filesystem::path&
 auto ImportSession::CookedWriter() noexcept -> LooseCookedWriter&
 {
   return cooked_writer_;
+}
+
+/*!
+ Get (and lazily create) the texture emitter for this session.
+
+ @warning This method is not thread-safe. It must be called from the importer
+  thread only.
+*/
+auto ImportSession::TextureEmitter() -> oxygen::content::import::TextureEmitter&
+{
+  if (!texture_emitter_.has_value()) {
+    texture_emitter_.emplace(
+      std::make_unique<oxygen::content::import::TextureEmitter>(
+        file_writer_, request_.loose_cooked_layout, cooked_root_));
+  }
+  return **texture_emitter_;
+}
+
+/*!
+ Get (and lazily create) the buffer emitter for this session.
+
+ @warning This method is not thread-safe. It must be called from the importer
+  thread only.
+*/
+auto ImportSession::BufferEmitter() -> oxygen::content::import::BufferEmitter&
+{
+  if (!buffer_emitter_.has_value()) {
+    buffer_emitter_.emplace(
+      std::make_unique<oxygen::content::import::BufferEmitter>(
+        file_writer_, request_.loose_cooked_layout, cooked_root_));
+  }
+  return **buffer_emitter_;
+}
+
+/*!
+ Get (and lazily create) the asset emitter for this session.
+
+ @warning This method is not thread-safe. It must be called from the importer
+  thread only.
+*/
+auto ImportSession::AssetEmitter() -> oxygen::content::import::AssetEmitter&
+{
+  if (!asset_emitter_.has_value()) {
+    asset_emitter_.emplace(
+      std::make_unique<oxygen::content::import::AssetEmitter>(
+        file_writer_, request_.loose_cooked_layout, cooked_root_));
+  }
+  return **asset_emitter_;
 }
 
 auto ImportSession::AddDiagnostic(ImportDiagnostic diagnostic) -> void
