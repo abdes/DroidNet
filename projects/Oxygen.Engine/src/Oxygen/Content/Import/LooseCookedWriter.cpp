@@ -25,7 +25,7 @@
 #include <Oxygen/Base/Endian.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Content/Internal/LooseCookedIndex.h>
+#include <Oxygen/Content/Detail/LooseCookedIndex.h>
 #include <Oxygen/Content/Internal/LooseCookedIndexLoad.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -333,6 +333,63 @@ struct LooseCookedWriter::Impl final {
     files_.insert_or_assign(kind, record);
   }
 
+  auto RegisterExternalAssetDescriptor(const data::AssetKey& key,
+    const data::AssetType asset_type, std::string_view virtual_path,
+    std::string_view descriptor_relpath, uint64_t descriptor_size,
+    std::optional<base::Sha256Digest> descriptor_sha256) -> void
+  {
+    ValidateVirtualPath(virtual_path);
+    ValidateRelativePath(descriptor_relpath);
+
+    if (const auto existing_it
+      = key_by_virtual_path_.find(std::string(virtual_path));
+      existing_it != key_by_virtual_path_.end() && existing_it->second != key) {
+      throw std::runtime_error(
+        "Conflicting virtual path mapping in loose cooked container");
+    }
+
+    const auto path_on_disk
+      = cooked_root_ / std::filesystem::path(descriptor_relpath);
+
+    std::error_code ec;
+    if (!std::filesystem::exists(path_on_disk, ec)) {
+      throw std::runtime_error("RegisterExternalAssetDescriptor: file does not "
+                               "exist: "
+        + path_on_disk.string());
+    }
+
+    const auto size_on_disk = std::filesystem::file_size(path_on_disk, ec);
+    if (ec) {
+      throw std::runtime_error(
+        "RegisterExternalAssetDescriptor: failed to get file size: "
+        + path_on_disk.string());
+    }
+
+    if (descriptor_size == 0) {
+      descriptor_size = size_on_disk;
+    } else if (descriptor_size != size_on_disk) {
+      throw std::runtime_error(
+        "RegisterExternalAssetDescriptor: size mismatch for: "
+        + path_on_disk.string());
+    }
+
+    if (!compute_sha256_) {
+      descriptor_sha256 = std::nullopt;
+    }
+
+    StoredAsset record {
+      .key = key,
+      .asset_type = asset_type,
+      .virtual_path = std::string(virtual_path),
+      .descriptor_relpath = std::string(descriptor_relpath),
+      .descriptor_size = descriptor_size,
+      .descriptor_sha256 = CopyDigestOrZero(descriptor_sha256),
+    };
+
+    assets_.insert_or_assign(key, record);
+    key_by_virtual_path_.insert_or_assign(std::string(virtual_path), key);
+  }
+
   [[nodiscard]] auto Finish() -> LooseCookedWriteResult
   {
     const auto cooked_root_str = cooked_root_.string();
@@ -404,7 +461,7 @@ private:
       existing_guid_ = data::SourceKey::FromBytes(header.guid);
       existing_content_version_ = header.content_version;
 
-      const auto index = internal::LooseCookedIndex::LoadFromFile(index_path);
+      const auto index = detail::LooseCookedIndex::LoadFromFile(index_path);
 
       for (const auto key : index.GetAllAssetKeys()) {
         const auto rel = index.FindDescriptorRelPath(key);
@@ -684,6 +741,16 @@ auto LooseCookedWriter::RegisterExternalFile(
   const FileKind kind, std::string_view relpath) -> void
 {
   impl_->RegisterExternalFile(kind, relpath);
+}
+
+auto LooseCookedWriter::RegisterExternalAssetDescriptor(
+  const data::AssetKey& key, const data::AssetType asset_type,
+  std::string_view virtual_path, std::string_view descriptor_relpath,
+  const uint64_t descriptor_size,
+  std::optional<base::Sha256Digest> descriptor_sha256) -> void
+{
+  impl_->RegisterExternalAssetDescriptor(key, asset_type, virtual_path,
+    descriptor_relpath, descriptor_size, std::move(descriptor_sha256));
 }
 
 auto LooseCookedWriter::Finish() -> LooseCookedWriteResult

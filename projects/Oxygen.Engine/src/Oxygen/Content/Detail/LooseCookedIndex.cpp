@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Internal/LooseCookedIndex.h>
-
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -17,12 +15,13 @@
 #include <string_view>
 #include <unordered_set>
 
+#include <Oxygen/Content/Detail/LooseCookedIndex.h>
 #include <Oxygen/Content/Internal/LooseCookedIndexLoad.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
 
-namespace oxygen::content::internal {
+namespace oxygen::content::detail {
 
 namespace {
 
@@ -599,4 +598,4 @@ auto LooseCookedIndex::FindFileSize(FileKind kind) const noexcept
   return it->second.size;
 }
 
-} // namespace oxygen::content::internal
+} // namespace oxygen::content::detail

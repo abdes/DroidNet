@@ -4,17 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Import/Async/ImportSession.h>
-
-#include <Oxygen/Content/Import/Async/ImportEventLoop.h>
-#include <Oxygen/Content/Import/Async/WindowsFileWriter.h>
-#include <Oxygen/OxCo/Run.h>
-#include <Oxygen/Testing/GTest.h>
-
 #include <filesystem>
 #include <fstream>
 #include <latch>
+#include <span>
+#include <string_view>
 #include <thread>
+
+#include <Oxygen/Content/Detail/LooseCookedIndex.h>
+#include <Oxygen/Content/Import/Async/Emitters/AssetEmitter.h>
+#include <Oxygen/Content/Import/Async/Emitters/BufferEmitter.h>
+#include <Oxygen/Content/Import/Async/Emitters/TextureEmitter.h>
+#include <Oxygen/Content/Import/Async/ImportEventLoop.h>
+#include <Oxygen/Content/Import/Async/ImportSession.h>
+#include <Oxygen/Content/Import/Async/WindowsFileWriter.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
@@ -55,6 +60,34 @@ protected:
   std::unique_ptr<WindowsFileWriter> writer_;
   std::filesystem::path test_dir_;
 };
+
+auto MakeTestTexturePayload() -> CookedTexturePayload
+{
+  CookedTexturePayload payload;
+  payload.desc.width = 8;
+  payload.desc.height = 8;
+  payload.desc.mip_levels = 1;
+  payload.desc.depth = 1;
+  payload.desc.array_layers = 1;
+  payload.desc.texture_type = oxygen::TextureType::kTexture2D;
+  payload.desc.format = oxygen::Format::kBC7UNorm;
+  payload.desc.content_hash = 0x12345678ABCDEF00ULL;
+
+  payload.payload.resize(512, std::byte { 0x5A });
+  return payload;
+}
+
+auto MakeTestBufferPayload() -> CookedBufferPayload
+{
+  CookedBufferPayload payload;
+  payload.alignment = 16;
+  payload.usage_flags = 0x01;
+  payload.element_stride = 16;
+  payload.element_format = 0;
+  payload.content_hash = 0xDEADBEEF;
+  payload.data.resize(256, std::byte { 0x3C });
+  return payload;
+}
 
 //=== Construction Tests ===--------------------------------------------------//
 
@@ -396,6 +429,72 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_WithDiagnostics_IncludesInReport)
   EXPECT_EQ(report.diagnostics.size(), 2);
   EXPECT_EQ(report.diagnostics[0].code, "test.info");
   EXPECT_EQ(report.diagnostics[1].code, "test.warning");
+}
+
+//! Verify Finalize orchestrates emitters and writes a valid index.
+NOLINT_TEST_F(ImportSessionTest, Finalize_WithEmitters_RegistersInIndex)
+{
+  using oxygen::data::AssetType;
+  using oxygen::data::loose_cooked::v1::FileKind;
+
+  // Arrange
+  auto request = MakeRequest();
+  std::filesystem::create_directories(request.cooked_root.value());
+  ImportSession session(request, *writer_);
+
+  const auto key = oxygen::data::AssetKey {
+    .guid = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 },
+  };
+  const auto descriptor_relpath
+    = request.loose_cooked_layout.MaterialDescriptorRelPath("Wood");
+  const auto virtual_path
+    = request.loose_cooked_layout.MaterialVirtualPath("Wood");
+  constexpr std::string_view kBytes = "abc";
+
+  // Act
+  co::Run(*loop_, [&]() -> Co<> {
+    const auto tex_idx
+      = session.TextureEmitter().Emit(MakeTestTexturePayload());
+    const auto buf_idx = session.BufferEmitter().Emit(MakeTestBufferPayload());
+    session.AssetEmitter().Emit(key, AssetType::kMaterial, virtual_path,
+      descriptor_relpath,
+      std::as_bytes(std::span(kBytes.data(), kBytes.size())));
+
+    auto report = co_await session.Finalize();
+    EXPECT_TRUE(report.success);
+
+    EXPECT_EQ(tex_idx, 1);
+    EXPECT_EQ(buf_idx, 0);
+  });
+
+  // Assert
+  const auto index_path = request.cooked_root.value() / "container.index.bin";
+  ASSERT_TRUE(std::filesystem::exists(index_path));
+
+  using oxygen::content::detail::LooseCookedIndex;
+  const auto index = LooseCookedIndex::LoadFromFile(index_path);
+
+  const auto textures_data = index.FindFileRelPath(FileKind::kTexturesData);
+  const auto textures_table = index.FindFileRelPath(FileKind::kTexturesTable);
+  ASSERT_TRUE(textures_data.has_value());
+  ASSERT_TRUE(textures_table.has_value());
+  EXPECT_EQ(*textures_data, request.loose_cooked_layout.TexturesDataRelPath());
+  EXPECT_EQ(
+    *textures_table, request.loose_cooked_layout.TexturesTableRelPath());
+
+  const auto buffers_data = index.FindFileRelPath(FileKind::kBuffersData);
+  const auto buffers_table = index.FindFileRelPath(FileKind::kBuffersTable);
+  ASSERT_TRUE(buffers_data.has_value());
+  ASSERT_TRUE(buffers_table.has_value());
+  EXPECT_EQ(*buffers_data, request.loose_cooked_layout.BuffersDataRelPath());
+  EXPECT_EQ(*buffers_table, request.loose_cooked_layout.BuffersTableRelPath());
+
+  const auto found_rel = index.FindDescriptorRelPath(key);
+  const auto found_vpath = index.FindVirtualPath(key);
+  ASSERT_TRUE(found_rel.has_value());
+  ASSERT_TRUE(found_vpath.has_value());
+  EXPECT_EQ(*found_rel, descriptor_relpath);
+  EXPECT_EQ(*found_vpath, virtual_path);
 }
 
 } // namespace

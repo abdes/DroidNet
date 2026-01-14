@@ -17,11 +17,12 @@
 #include <unordered_map>
 #include <vector>
 
+#include <Oxygen/Content/api_export.h> // For tests only
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
 
-namespace oxygen::content::internal {
+namespace oxygen::content::detail {
 
 //! Parsed representation of a loose cooked `container.index.bin`.
 class LooseCookedIndex final {
@@ -42,30 +43,30 @@ public:
 
    @throw std::runtime_error if the file cannot be read or fails validation.
   */
-  [[nodiscard]] static auto LoadFromFile(
+  OXGN_CNTT_NDAPI static auto LoadFromFile(
     const std::filesystem::path& index_path) -> LooseCookedIndex;
 
-  [[nodiscard]] auto Guid() const noexcept -> data::SourceKey;
+  OXGN_CNTT_NDAPI auto Guid() const noexcept -> data::SourceKey;
 
-  [[nodiscard]] auto FindDescriptorRelPath(
+  OXGN_CNTT_NDAPI auto FindDescriptorRelPath(
     const data::AssetKey& key) const noexcept
     -> std::optional<std::string_view>;
 
-  [[nodiscard]] auto FindDescriptorSize(
+  OXGN_CNTT_NDAPI auto FindDescriptorSize(
     const data::AssetKey& key) const noexcept -> std::optional<uint64_t>;
 
-  [[nodiscard]] auto FindDescriptorSha256(
+  OXGN_CNTT_NDAPI auto FindDescriptorSha256(
     const data::AssetKey& key) const noexcept
     -> std::optional<
       std::span<const uint8_t, data::loose_cooked::v1::kSha256Size>>;
 
-  [[nodiscard]] auto FindVirtualPath(const data::AssetKey& key) const noexcept
+  OXGN_CNTT_NDAPI auto FindVirtualPath(const data::AssetKey& key) const noexcept
     -> std::optional<std::string_view>;
 
-  [[nodiscard]] auto FindAssetType(const data::AssetKey& key) const noexcept
+  OXGN_CNTT_NDAPI auto FindAssetType(const data::AssetKey& key) const noexcept
     -> std::optional<uint8_t>;
 
-  [[nodiscard]] auto FindAssetKeyByVirtualPath(
+  OXGN_CNTT_NDAPI auto FindAssetKeyByVirtualPath(
     std::string_view virtual_path) const noexcept
     -> std::optional<data::AssetKey>;
 
@@ -75,14 +76,14 @@ public:
     return asset_keys_;
   }
 
-  [[nodiscard]] auto GetAllFileKinds() const noexcept
+  OXGN_CNTT_NDAPI auto GetAllFileKinds() const noexcept
     -> std::span<const data::loose_cooked::v1::FileKind>;
 
-  [[nodiscard]] auto FindFileRelPath(
+  OXGN_CNTT_NDAPI auto FindFileRelPath(
     data::loose_cooked::v1::FileKind kind) const noexcept
     -> std::optional<std::string_view>;
 
-  [[nodiscard]] auto FindFileSize(
+  OXGN_CNTT_NDAPI auto FindFileSize(
     data::loose_cooked::v1::FileKind kind) const noexcept
     -> std::optional<uint64_t>;
 
@@ -109,4 +110,4 @@ private:
   data::SourceKey guid_;
 };
 
-} // namespace oxygen::content::internal
+} // namespace oxygen::content::detail

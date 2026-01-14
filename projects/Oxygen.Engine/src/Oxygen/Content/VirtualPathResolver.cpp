@@ -4,18 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/VirtualPathResolver.h>
-
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <vector>
 #include <variant>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Content/Internal/LooseCookedIndex.h>
+#include <Oxygen/Content/Detail/LooseCookedIndex.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Data/AssetKey.h>
 
 namespace oxygen::content {
@@ -67,7 +66,7 @@ namespace {
 struct VirtualPathResolver::Impl final {
   struct LooseCookedMount {
     std::filesystem::path root;
-    internal::LooseCookedIndex index;
+    detail::LooseCookedIndex index;
   };
 
   struct PakMount {
@@ -92,9 +91,11 @@ auto VirtualPathResolver::AddLooseCookedRoot(
     = std::filesystem::weakly_canonical(cooked_root);
   const auto index_path = normalized / "container.index.bin";
 
-  DLOG_F(INFO, "VirtualPathResolver: loading index from {}", index_path.string());
-  auto index = internal::LooseCookedIndex::LoadFromFile(index_path);
-  DLOG_F(INFO, "VirtualPathResolver: loaded index with {} assets", index.GetAllAssetKeys().size());
+  DLOG_F(
+    INFO, "VirtualPathResolver: loading index from {}", index_path.string());
+  auto index = detail::LooseCookedIndex::LoadFromFile(index_path);
+  DLOG_F(INFO, "VirtualPathResolver: loaded index with {} assets",
+    index.GetAllAssetKeys().size());
 
   impl_->mounts.emplace_back(Impl::LooseCookedMount {
     .root = std::move(normalized),
@@ -116,10 +117,7 @@ auto VirtualPathResolver::AddPakFile(const std::filesystem::path& pak_path)
   });
 }
 
-auto VirtualPathResolver::ClearMounts() -> void
-{
-  impl_->mounts.clear();
-}
+auto VirtualPathResolver::ClearMounts() -> void { impl_->mounts.clear(); }
 
 auto VirtualPathResolver::ResolveAssetKey(
   const std::string_view virtual_path) const -> std::optional<data::AssetKey>

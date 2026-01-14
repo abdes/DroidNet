@@ -9,7 +9,7 @@
 #include <array>
 #include <utility>
 
-#include <Oxygen/Content/Internal/LooseCookedIndex.h>
+#include <Oxygen/Content/Detail/LooseCookedIndex.h>
 
 namespace oxygen::content {
 
@@ -35,8 +35,7 @@ auto LooseCookedInspection::LoadFromRoot(
 auto LooseCookedInspection::LoadFromFile(
   const std::filesystem::path& index_path) -> void
 {
-  const internal::LooseCookedIndex index
-    = internal::LooseCookedIndex::LoadFromFile(index_path);
+  const auto index = detail::LooseCookedIndex::LoadFromFile(index_path);
 
   impl_->assets.clear();
   impl_->files.clear();

@@ -142,9 +142,11 @@ public:
   //! Wait for all pending I/O and write the container index file.
   /*!
    This method:
-   1. Waits for any pending async writes to complete
-   2. Calls `LooseCookedWriter::Finish()` to write `container.index.bin`
-   3. Builds and returns an `ImportReport`
+    1. Finalizes any lazily-created emitters (if created)
+    2. Waits for any pending async writes to complete
+    3. Registers externally-written outputs with `LooseCookedWriter`
+    4. Calls `LooseCookedWriter::Finish()` to write `container.index.bin` (last)
+    5. Builds and returns an `ImportReport`
 
    @return Import report with success flag, diagnostics, and asset counts.
   */
