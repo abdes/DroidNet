@@ -10,6 +10,7 @@
 #include <Oxygen/Content/Import/Async/Emitters/TextureEmitter.h>
 #include <Oxygen/Content/Import/Async/IAsyncFileWriter.h>
 #include <Oxygen/Content/Import/Async/ImportSession.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 
 namespace oxygen::content::import {
 
@@ -137,6 +138,42 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
 {
   DLOG_F(INFO, "ImportSession::Finalize() starting");
 
+  if (texture_emitter_.has_value()) {
+    const auto ok = co_await (**texture_emitter_).Finalize();
+    if (!ok) {
+      AddDiagnostic({
+        .severity = ImportSeverity::kError,
+        .code = "import.texture_emitter_finalize_failed",
+        .message = "Texture emitter finalization failed",
+        .source_path = request_.source_path.string(),
+      });
+    }
+  }
+
+  if (buffer_emitter_.has_value()) {
+    const auto ok = co_await (**buffer_emitter_).Finalize();
+    if (!ok) {
+      AddDiagnostic({
+        .severity = ImportSeverity::kError,
+        .code = "import.buffer_emitter_finalize_failed",
+        .message = "Buffer emitter finalization failed",
+        .source_path = request_.source_path.string(),
+      });
+    }
+  }
+
+  if (asset_emitter_.has_value()) {
+    const auto ok = co_await (**asset_emitter_).Finalize();
+    if (!ok) {
+      AddDiagnostic({
+        .severity = ImportSeverity::kError,
+        .code = "import.asset_emitter_finalize_failed",
+        .message = "Asset emitter finalization failed",
+        .source_path = request_.source_path.string(),
+      });
+    }
+  }
+
   // Wait for any pending async writes
   auto flush_result = co_await file_writer_.Flush();
   if (!flush_result.has_value()) {
@@ -162,6 +199,31 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
   // Only write index if no errors occurred
   if (report.success) {
     try {
+      using oxygen::data::loose_cooked::v1::FileKind;
+
+      const auto& layout = request_.loose_cooked_layout;
+      if (texture_emitter_.has_value()) {
+        cooked_writer_.RegisterExternalFile(
+          FileKind::kTexturesData, layout.TexturesDataRelPath());
+        cooked_writer_.RegisterExternalFile(
+          FileKind::kTexturesTable, layout.TexturesTableRelPath());
+      }
+
+      if (buffer_emitter_.has_value() && (**buffer_emitter_).Count() > 0) {
+        cooked_writer_.RegisterExternalFile(
+          FileKind::kBuffersData, layout.BuffersDataRelPath());
+        cooked_writer_.RegisterExternalFile(
+          FileKind::kBuffersTable, layout.BuffersTableRelPath());
+      }
+
+      if (asset_emitter_.has_value()) {
+        for (const auto& rec : (**asset_emitter_).Records()) {
+          cooked_writer_.RegisterExternalAssetDescriptor(rec.key,
+            rec.asset_type, rec.virtual_path, rec.descriptor_relpath,
+            rec.descriptor_size, rec.descriptor_sha256);
+        }
+      }
+
       auto write_result = cooked_writer_.Finish();
       report.source_key = write_result.source_key;
 

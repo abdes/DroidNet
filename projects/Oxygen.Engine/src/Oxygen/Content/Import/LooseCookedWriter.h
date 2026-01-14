@@ -161,6 +161,31 @@ public:
   OXGN_CNTT_API auto RegisterExternalFile(
     data::loose_cooked::v1::FileKind kind, std::string_view relpath) -> void;
 
+  //! Register an externally-written asset descriptor.
+  /*!
+   This is used when an asset descriptor file was written by an external
+   component (for example, an async emitter) rather than through
+   WriteAssetDescriptor(). The file must already exist on disk at the given
+   relpath.
+
+   @param key Stable identity of the asset.
+   @param asset_type Loader dispatch type.
+   @param virtual_path Virtual path used by tooling/editors.
+   @param descriptor_relpath Container-relative path for the descriptor file.
+   @param descriptor_size Size of the descriptor bytes. If zero, the size will
+     be read from disk.
+   @param descriptor_sha256 Optional SHA-256 digest of the descriptor bytes.
+     When `SetComputeSha256(false)` was selected, the writer records an
+     all-zero hash.
+
+   @throw std::runtime_error if the file does not exist, paths are invalid, or
+     metadata is inconsistent.
+  */
+  OXGN_CNTT_API auto RegisterExternalAssetDescriptor(const data::AssetKey& key,
+    data::AssetType asset_type, std::string_view virtual_path,
+    std::string_view descriptor_relpath, uint64_t descriptor_size,
+    std::optional<base::Sha256Digest> descriptor_sha256 = std::nullopt) -> void;
+
   //! Finalize and write the loose cooked index.
   /*!
    @return Summary of written assets and file records.

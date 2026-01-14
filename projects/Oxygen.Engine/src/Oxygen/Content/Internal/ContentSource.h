@@ -15,7 +15,9 @@
 #include <variant>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Composition/TypedObject.h>
+#include <Oxygen/Content/Detail/LooseCookedIndex.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/ResourceTable.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -25,9 +27,6 @@
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
-
-#include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Content/Internal/LooseCookedIndex.h>
 
 namespace oxygen::content::internal {
 
@@ -310,8 +309,8 @@ public:
     const std::filesystem::path& cooked_root, const bool verify_content_hashes)
     : cooked_root_(cooked_root)
     , debug_name_(cooked_root_.string())
-    , index_(
-        LooseCookedIndex::LoadFromFile(cooked_root_ / "container.index.bin"))
+    , index_(detail::LooseCookedIndex::LoadFromFile(
+        cooked_root_ / "container.index.bin"))
     , verify_content_hashes_(verify_content_hashes)
   {
     using oxygen::data::loose_cooked::v1::FileKind;
@@ -700,7 +699,7 @@ private:
 
   std::filesystem::path cooked_root_;
   std::string debug_name_;
-  LooseCookedIndex index_;
+  detail::LooseCookedIndex index_;
 
   bool verify_content_hashes_ { false };
 

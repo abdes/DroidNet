@@ -12,7 +12,7 @@
 This plan implements the async import pipeline in 6 phases:
 
 | Phase | Name | Status | Key Deliverables |
-|-------|------|--------|------------------|
+| ----- | ---- | ------ | ---------------- |
 | 1 | Foundation | ✅ COMPLETE | EventLoop, ThreadPool, ThreadNotification |
 | 2 | Async File I/O | ✅ COMPLETE | IAsyncFileReader, WindowsFileReader |
 | 3 | AsyncImportService | ✅ COMPLETE | Thread-safe API, job lifecycle |
@@ -33,7 +33,7 @@ These lessons were learned through painful debugging. **DO NOT IGNORE.**
 The `oxygen::content::import` namespace ALREADY contains:
 
 | Type | Header | Key Members |
-|------|--------|-------------|
+| ---- | ------ | ----------- |
 | `ImportRequest` | `<Oxygen/Content/Import/ImportRequest.h>` | `std::filesystem::path source_path`, `LooseCookedLayout`, `ImportOptions` |
 | `ImportReport` | `<Oxygen/Content/Import/ImportReport.h>` | `std::filesystem::path cooked_root`, `bool success`, `std::vector<ImportDiagnostic>` |
 | `ImportDiagnostic` | `<Oxygen/Content/Import/ImportDiagnostics.h>` | `ImportSeverity severity`, `std::string code`, `std::string message` |
@@ -68,6 +68,7 @@ void ThreadMain() {
 ### 3. Shutdown Flag vs. Shutdown Complete Flag
 
 **Use TWO separate flags:**
+
 - `shutdown_requested_`: Set by `RequestShutdown()`, prevents new jobs
 - `shutdown_complete_`: Set by `Shutdown()`, prevents double-cleanup
 
@@ -166,7 +167,7 @@ const auto table = ParseTextureTable(ReadBinaryFile(table_path));
 EXPECT_EQ(table[1].data_offset, AlignUp(table[0].size_bytes, 256));
 ```
 
-4. **Alignment is critical for GPU uploads:**
+1. **Alignment is critical for GPU uploads:**
    - D3D12 requires `D3D12_TEXTURE_DATA_PITCH_ALIGNMENT` (256 bytes)
    - Each texture must start at an aligned offset
    - Padding bytes (zeros) must be written between textures
@@ -280,7 +281,7 @@ native implementation.
 
 - [X] Define `ReadOptions` struct (offset, max_bytes, size_hint, alignment)
 - [X] Define `FileInfo` struct (size, last_modified, is_directory, is_symlink)
-- [X] Define `IAsyncFileReader` interface with Co<Result<T>> returns
+- [X] Define `IAsyncFileReader` interface with `Co<Result<T>>` returns
 - [X] Document thread safety and cancellation
 
 #### 2.3 WindowsFileReader Implementation
@@ -347,6 +348,7 @@ Implement the public thread-safe API and import thread lifecycle.
 - [X] Define `Config` struct
 
 **CRITICAL:** Reuses existing types from `Import/` module:
+
 - `ImportRequest` from `<Oxygen/Content/Import/ImportRequest.h>`
 - `ImportReport` from `<Oxygen/Content/Import/ImportReport.h>`
 - `ImportDiagnostic` from `<Oxygen/Content/Import/ImportDiagnostics.h>`
@@ -436,6 +438,7 @@ Implement ImportSession with lazy emitters and async file write support.
 ### Background
 
 The new design separates concerns:
+
 - **AsyncImporter**: Shared compute infrastructure (pipelines, ThreadPool)
 - **ImportSession**: Per-job state (emitters, diagnostics, LooseCookedWriter)
 - **Emitters**: Async I/O writers returning stable indices immediately
@@ -542,10 +545,10 @@ The new design separates concerns:
 
 **File:** `src/Oxygen/Content/Import/Async/ImportSession.cpp`
 
-- [ ] Extend `Finalize()` to orchestrate emitters (if created)
+- [X] Extend `Finalize()` to orchestrate emitters (if created)
   - Await each emitter's `Finalize()`
   - Only then write `container.index.bin` (LAST)
-- [ ] Integration test: session + emitters finalize correctly
+- [X] Integration test: session + emitters finalize correctly
 
 #### 4.9 Wire ImportSession to AsyncImporter
 
@@ -830,7 +833,7 @@ authoritative count.
 
 ## Architecture Summary
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ AsyncImportService (thread-safe public API)                                 │
 │   SubmitImport() → ImportJobId                                              │

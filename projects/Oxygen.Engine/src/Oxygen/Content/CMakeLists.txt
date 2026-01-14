@@ -64,6 +64,7 @@ set(
   "ResourceTypeList.h"
   "SourceToken.h"
   "IAssetLoader.h"
+  "Detail/LooseCookedIndex.h"
   # Imporeters - External code
   "Import/AssetImporter.h"
   "Import/CookedContentWriter.h"
@@ -92,8 +93,6 @@ set(
   "ResourceKey.cpp"
   "VirtualPathResolver.cpp"
   "Internal/ContentSource.h"
-  "Internal/LooseCookedIndex.h"
-  "Internal/LooseCookedIndex.cpp"
   "Internal/InternalResourceKey.h"
   "Internal/LooseCookedIndexLoad.h"
   "Internal/DependencyCollector.h"
@@ -104,6 +103,7 @@ set(
   "Loaders/SceneLoader.h"
   "Loaders/TextureLoader.h"
   "Loaders/Helpers.h"
+  "Detail/LooseCookedIndex.cpp"
   # Imporeters - Internal code
   "Import/AssetImporter.cpp"
   "Import/FbxImporter.cpp"
