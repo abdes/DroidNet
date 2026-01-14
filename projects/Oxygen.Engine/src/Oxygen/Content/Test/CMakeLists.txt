@@ -94,3 +94,26 @@ target_compile_definitions(
   PRIVATE
     OXYGEN_ENGINE_TESTING
 )
+
+# -- Async Import Test Programs ------------------------------------------------
+
+m_gtest_program(
+  AsyncImport
+  SOURCES
+    "Import/Async/ImportEventLoop_test.cpp"
+    "Import/Async/FileError_test.cpp"
+    "Import/Async/ImportSession_test.cpp"
+    "Import/Async/AsyncImportService_test.cpp"
+    "Import/Async/AsyncImporter_test.cpp"
+    "Import/Async/BufferPipeline_test.cpp"
+    "Import/Async/TextureEmitter_test.cpp"
+    "Import/Async/BufferEmitter_test.cpp"
+    "Import/Async/AssetEmitter_test.cpp"
+    $<$<BOOL:${WIN32}>:Import/Async/WindowsFileReader_test.cpp>
+    $<$<BOOL:${WIN32}>:Import/Async/WindowsFileWriter_test.cpp>
+)
+target_compile_definitions(
+  Oxygen.Content.AsyncImport.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
+)

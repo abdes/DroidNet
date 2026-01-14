@@ -79,6 +79,7 @@ set(
   "Import/LooseCookedLayout.h"
   "Import/LooseCookedWriter.h"
   "Import/TextureImportTypes.h"
+  "Import/BufferImportTypes.h"
   "Import/TextureImportError.h"
   "Import/TextureImportDesc.h"
   "Import/ScratchImage.h"
@@ -155,6 +156,31 @@ set(
   "Import/emit/ResourceAppender.cpp"
   "Import/emit/TextureEmitter.h"
   "Import/emit/TextureEmitter.cpp"
+  # Async import
+  "Import/Async/ImportEventLoop.h"
+  "Import/Async/ImportEventLoop.cpp"
+  "Import/Async/FileError.h"
+  "Import/Async/FileError.cpp"
+  "Import/Async/IAsyncFileReader.h"
+  "Import/Async/IAsyncFileWriter.h"
+  "Import/Async/ImportSession.h"
+  "Import/Async/ImportSession.cpp"
+  "Import/Async/AsyncImportService.h"
+  "Import/Async/AsyncImportService.cpp"
+  "Import/Async/detail/AsyncImporter.h"
+  "Import/Async/detail/AsyncImporter.cpp"
+  "Import/Async/Emitters/TextureEmitter.h"
+  "Import/Async/Emitters/TextureEmitter.cpp"
+  "Import/Async/Emitters/BufferEmitter.h"
+  "Import/Async/Emitters/BufferEmitter.cpp"
+  "Import/Async/Emitters/AssetEmitter.h"
+  "Import/Async/Emitters/AssetEmitter.cpp"
+  "Import/Async/Pipelines/BufferPipeline.h"
+  "Import/Async/Pipelines/BufferPipeline.cpp"
+  $<$<BOOL:${WIN32}>:Import/Async/WindowsFileReader.h>
+  $<$<BOOL:${WIN32}>:Import/Async/WindowsFileReader.cpp>
+  $<$<BOOL:${WIN32}>:Import/Async/WindowsFileWriter.h>
+  $<$<BOOL:${WIN32}>:Import/Async/WindowsFileWriter.cpp>
 )
 
 target_sources(
