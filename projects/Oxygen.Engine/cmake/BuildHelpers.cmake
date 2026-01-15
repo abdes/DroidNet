@@ -214,11 +214,19 @@ endfunction()
 
 function(arrange_target_files_for_ide target)
   get_target_property(_all_sources ${target} SOURCES)
-  set(
-    _all_files
-    ${_all_sources}
-    ${_all_headers}
-  )
+
+  # Normalize generator expressions in target sources so that files guarded by
+  # platform conditions (e.g. $<$<BOOL:${WIN32}>:path/to/file.cpp>) are treated
+  # as part of the target when checking for "missing" files.
+  set(_all_files "")
+  foreach(file IN LISTS _all_sources)
+    list(APPEND _all_files "${file}")
+
+    # Extract the guarded file path from common genex forms.
+    if(file MATCHES "^\\$<.+:(.+)>$")
+      list(APPEND _all_files "${CMAKE_MATCH_1}")
+    endif()
+  endforeach()
 
   # Group files for IDE
   foreach(file IN LISTS _all_files)
