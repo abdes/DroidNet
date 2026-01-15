@@ -172,6 +172,7 @@ set(
   "Import/Async/Detail/JobEntry.h"
   "Import/Async/Detail/ImportJob.h"
   "Import/Async/Detail/ImportJob.cpp"
+  "Import/Async/ResourcePipeline.h"
   "Import/Async/Jobs/FbxImportJob.h"
   "Import/Async/Jobs/FbxImportJob.cpp"
   "Import/Async/Jobs/GlbImportJob.h"
@@ -188,6 +189,8 @@ set(
   "Import/Async/Emitters/AssetEmitter.cpp"
   "Import/Async/Pipelines/BufferPipeline.h"
   "Import/Async/Pipelines/BufferPipeline.cpp"
+  "Import/Async/Pipelines/TexturePipeline.h"
+  "Import/Async/Pipelines/TexturePipeline.cpp"
   $<$<BOOL:${WIN32}>:Import/Async/WindowsFileReader.h>
   $<$<BOOL:${WIN32}>:Import/Async/WindowsFileReader.cpp>
   $<$<BOOL:${WIN32}>:Import/Async/WindowsFileWriter.h>

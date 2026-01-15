@@ -7,10 +7,12 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Content/Import/ScratchImage.h>
 #include <Oxygen/Content/Import/TextureCooker.h>
 #include <Oxygen/Content/Import/TextureImportDesc.h>
 #include <Oxygen/Content/Import/TexturePackingPolicy.h>
@@ -27,11 +29,15 @@ using oxygen::content::import::Bc7Quality;
 using oxygen::content::import::CookedTexturePayload;
 using oxygen::content::import::CookTexture;
 using oxygen::content::import::D3D12PackingPolicy;
+using oxygen::content::import::HdrHandling;
 using oxygen::content::import::MipFilter;
 using oxygen::content::import::MipPolicy;
+using oxygen::content::import::ScratchImage;
+using oxygen::content::import::ScratchImageMeta;
 using oxygen::content::import::TextureImportDesc;
 using oxygen::content::import::TextureImportError;
 using oxygen::content::import::TextureIntent;
+using oxygen::content::import::TextureSourceSet;
 using oxygen::content::import::TightPackedPolicy;
 
 //===----------------------------------------------------------------------===//
@@ -114,11 +120,131 @@ using oxygen::content::import::TightPackedPolicy;
   return bytes;
 }
 
+//! Creates a minimal valid BMP image (1x1, 32-bit BGRA).
+/*!
+
+eturn A byte vector containing a valid BMP file with 1 colored pixel.
+*/
+[[nodiscard]] auto MakeBmp1x1() -> std::vector<std::byte>
+{
+  // BMP file header (14 bytes) + DIB header (40 bytes) + 1 pixel (4 bytes)
+  constexpr uint32_t kFileSize = 14u + 40u + 4u;
+  constexpr uint32_t kPixelOffset = 54u;
+  constexpr uint32_t kDibHeaderSize = 40u;
+  constexpr int32_t kWidth = 1;
+  constexpr int32_t kHeight = 1;
+  constexpr uint16_t kPlanes = 1u;
+  constexpr uint16_t kBitsPerPixel = 32u;
+
+  std::vector<std::byte> bytes;
+  bytes.reserve(kFileSize);
+
+  // Helper lambdas to append little-endian values
+  const auto push_u16 = [&bytes](uint16_t value) {
+    bytes.push_back(static_cast<std::byte>(value & 0xFFu));
+    bytes.push_back(static_cast<std::byte>((value >> 8u) & 0xFFu));
+  };
+  const auto push_u32 = [&bytes](uint32_t value) {
+    bytes.push_back(static_cast<std::byte>(value & 0xFFu));
+    bytes.push_back(static_cast<std::byte>((value >> 8u) & 0xFFu));
+    bytes.push_back(static_cast<std::byte>((value >> 16u) & 0xFFu));
+    bytes.push_back(static_cast<std::byte>((value >> 24u) & 0xFFu));
+  };
+  const auto push_i32 = [&bytes](int32_t value) {
+    const auto unsigned_val = static_cast<uint32_t>(value);
+    bytes.push_back(static_cast<std::byte>(unsigned_val & 0xFFu));
+    bytes.push_back(static_cast<std::byte>((unsigned_val >> 8u) & 0xFFu));
+    bytes.push_back(static_cast<std::byte>((unsigned_val >> 16u) & 0xFFu));
+    bytes.push_back(static_cast<std::byte>((unsigned_val >> 24u) & 0xFFu));
+  };
+  const auto push_bgra
+    = [&bytes](uint8_t blue, uint8_t green, uint8_t red, uint8_t alpha) {
+        bytes.push_back(static_cast<std::byte>(blue));
+        bytes.push_back(static_cast<std::byte>(green));
+        bytes.push_back(static_cast<std::byte>(red));
+        bytes.push_back(static_cast<std::byte>(alpha));
+      };
+
+  // BMP file header (14 bytes)
+  bytes.push_back(static_cast<std::byte>('B')); // Signature
+  bytes.push_back(static_cast<std::byte>('M'));
+  push_u32(kFileSize); // File size
+  push_u16(0u); // Reserved
+  push_u16(0u); // Reserved
+  push_u32(kPixelOffset); // Pixel data offset
+
+  // DIB header (BITMAPINFOHEADER, 40 bytes)
+  push_u32(kDibHeaderSize); // Header size
+  push_i32(kWidth); // Width
+  push_i32(kHeight); // Height (positive = bottom-up)
+  push_u16(kPlanes); // Color planes
+  push_u16(kBitsPerPixel); // Bits per pixel
+  push_u32(0u); // Compression (none)
+  push_u32(4u); // Image size (1 pixel * 4 bytes)
+  push_i32(2835); // Horizontal resolution (72 DPI)
+  push_i32(2835); // Vertical resolution (72 DPI)
+  push_u32(0u); // Colors in palette
+  push_u32(0u); // Important colors
+
+  // Pixel data (bottom-up, BGRA format)
+  push_bgra(10u, 20u, 30u, 255u); // Single pixel
+
+  return bytes;
+}
+
 //! Returns the test BMP image as a span of bytes.
 [[nodiscard]] auto GetTestImageBytes() -> std::span<const std::byte>
 {
   static const auto kTestBmp = MakeBmp2x2();
   return { kTestBmp.data(), kTestBmp.size() };
+}
+
+//! Returns the 1x1 BMP test image as a span of bytes.
+[[nodiscard]] auto GetTestImageBytes1x1() -> std::span<const std::byte>
+{
+  static const auto kTestBmp = MakeBmp1x1();
+  return { kTestBmp.data(), kTestBmp.size() };
+}
+
+//! Creates a minimal 2x2 RGBA32Float ScratchImage.
+/*!
+
+eturn A ScratchImage containing a 2x2 RGBA32Float image.
+*/
+[[nodiscard]] auto MakeFloatImage2x2() -> ScratchImage
+{
+  ScratchImageMeta meta {
+    .texture_type = TextureType::kTexture2D,
+    .width = 2,
+    .height = 2,
+    .depth = 1,
+    .array_layers = 1,
+    .mip_levels = 1,
+    .format = Format::kRGBA32Float,
+  };
+
+  ScratchImage image = ScratchImage::Create(meta);
+  auto pixels = image.GetMutablePixels(0, 0);
+  const std::array<float, 16> rgba = {
+    1.0f,
+    0.0f,
+    0.0f,
+    1.0f,
+    0.0f,
+    1.0f,
+    0.0f,
+    1.0f,
+    0.0f,
+    0.0f,
+    1.0f,
+    1.0f,
+    1.0f,
+    1.0f,
+    1.0f,
+    1.0f,
+  };
+  std::memcpy(pixels.data(), rgba.data(), sizeof(rgba));
+  return image;
 }
 
 //===----------------------------------------------------------------------===//
@@ -153,7 +279,7 @@ NOLINT_TEST_F(TextureCookerValidationTest, RejectsDepthFor2D)
   desc.width = 64;
   desc.height = 64;
   desc.depth = 4; // Invalid for 2D
-  desc.texture_type = TextureType::kTexture2D;
+  desc.texture_type = TextureType::kTexture2DArray;
   desc.output_format = Format::kRGBA8UNorm;
 
   // Act
@@ -204,7 +330,7 @@ NOLINT_TEST_F(TextureCookerBasicTest, CooksMinimalBmp)
   desc.source_id = "test.bmp";
   desc.width = 2;
   desc.height = 2;
-  desc.texture_type = TextureType::kTexture2D;
+  desc.texture_type = TextureType::kTexture2DArray;
   desc.output_format = Format::kRGBA8UNorm;
   desc.mip_policy = MipPolicy::kNone;
 
@@ -460,6 +586,116 @@ NOLINT_TEST_F(TextureCookerNormalMapTest, CooksNormalMap)
 
   EXPECT_EQ(result->desc.format, Format::kRGBA8UNorm);
   EXPECT_FALSE(result->payload.empty());
+}
+
+//===----------------------------------------------------------------------===//
+// Multi-Source Assembly Tests (6.3.9)
+//===----------------------------------------------------------------------===//
+
+class TextureCookerMultiSourceTest : public ::testing::Test { };
+
+//! Test: CookTexture assembles array layers and mips from sources.
+NOLINT_TEST_F(TextureCookerMultiSourceTest, AssemblesArrayLayersAndMips)
+{
+  // Arrange
+  TextureSourceSet sources;
+  sources.AddMipLevel(0, 0, MakeBmp2x2(), "layer0_mip0.bmp");
+  sources.AddMipLevel(0, 1, MakeBmp1x1(), "layer0_mip1.bmp");
+  sources.AddMipLevel(1, 0, MakeBmp2x2(), "layer1_mip0.bmp");
+  sources.AddMipLevel(1, 1, MakeBmp1x1(), "layer1_mip1.bmp");
+
+  TextureImportDesc desc;
+  desc.source_id = "array_layers";
+  desc.texture_type = TextureType::kTexture2DArray;
+  desc.output_format = Format::kRGBA8UNorm;
+  desc.mip_policy = MipPolicy::kNone;
+
+  // Act
+  auto result = CookTexture(sources, desc, TightPackedPolicy::Instance());
+
+  // Assert
+  ASSERT_TRUE(result.has_value())
+    << "Error: " << static_cast<int>(result.error());
+  EXPECT_EQ(result->desc.array_layers, 2u);
+  EXPECT_EQ(result->desc.mip_levels, 2u);
+  EXPECT_EQ(result->desc.format, Format::kRGBA8UNorm);
+}
+
+//! Test: CookTexture rejects mismatched dimensions across array layers.
+NOLINT_TEST_F(
+  TextureCookerMultiSourceTest, RejectsMismatchedDimensionsAcrossLayers)
+{
+  // Arrange
+  TextureSourceSet sources;
+  sources.AddMipLevel(0, 0, MakeBmp2x2(), "layer0_mip0.bmp");
+  sources.AddMipLevel(1, 0, MakeBmp1x1(), "layer1_mip0.bmp");
+
+  TextureImportDesc desc;
+  desc.source_id = "array_layers_mismatch";
+  desc.texture_type = TextureType::kTexture2D;
+  desc.output_format = Format::kRGBA8UNorm;
+  desc.mip_policy = MipPolicy::kNone;
+
+  // Act
+  auto result = CookTexture(sources, desc, TightPackedPolicy::Instance());
+
+  // Assert
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error(), TextureImportError::kDimensionMismatch);
+}
+
+//! Test: CookTexture rejects missing mip levels in multi-source input.
+NOLINT_TEST_F(TextureCookerMultiSourceTest, RejectsMissingMipLevel)
+{
+  // Arrange
+  TextureSourceSet sources;
+  sources.AddMipLevel(0, 0, MakeBmp2x2(), "layer0_mip0.bmp");
+  sources.AddMipLevel(0, 1, MakeBmp1x1(), "layer0_mip1.bmp");
+  sources.AddMipLevel(1, 0, MakeBmp2x2(), "layer1_mip0.bmp");
+
+  TextureImportDesc desc;
+  desc.source_id = "array_layers_missing_mip";
+  desc.texture_type = TextureType::kTexture2D;
+  desc.output_format = Format::kRGBA8UNorm;
+  desc.mip_policy = MipPolicy::kNone;
+
+  // Act
+  auto result = CookTexture(sources, desc, TightPackedPolicy::Instance());
+
+  // Assert
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error(), TextureImportError::kInvalidMipPolicy);
+}
+
+//===----------------------------------------------------------------------===//
+// HDR Handling Tests (6.3.12)
+//===----------------------------------------------------------------------===//
+
+class TextureCookerHdrTest : public ::testing::Test { };
+
+//! Test: CookTexture keeps float format when kKeepFloat is set.
+NOLINT_TEST_F(TextureCookerHdrTest, KeepFloatOverridesLdrOutputFormat)
+{
+  // Arrange
+  ScratchImage image = MakeFloatImage2x2();
+
+  TextureImportDesc desc;
+  desc.source_id = "hdr_float";
+  desc.intent = TextureIntent::kHdrEnvironment;
+  desc.hdr_handling = HdrHandling::kKeepFloat;
+  desc.output_format = Format::kRGBA8UNorm;
+  desc.bc7_quality = Bc7Quality::kNone;
+  desc.bake_hdr_to_ldr = false;
+  desc.mip_policy = MipPolicy::kNone;
+
+  // Act
+  auto result
+    = CookTexture(std::move(image), desc, TightPackedPolicy::Instance());
+
+  // Assert
+  ASSERT_TRUE(result.has_value())
+    << "Error: " << static_cast<int>(result.error());
+  EXPECT_EQ(result->desc.format, Format::kRGBA32Float);
 }
 
 //===----------------------------------------------------------------------===//

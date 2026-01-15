@@ -79,7 +79,8 @@ namespace {
     // HDR content vs output format. If the intent implies HDR and the user
     // did not request baking, the output must be float.
     if (IsHdrIntent(desc.intent) && !desc.bake_hdr_to_ldr
-      && !IsFloatFormat(desc.output_format)) {
+      && !IsFloatFormat(desc.output_format)
+      && desc.hdr_handling != HdrHandling::kKeepFloat) {
       LOG_F(WARNING,
         "TextureCooker: HDR intent {} requires float output format, "
         "but got {} (set bake_hdr_to_ldr=true or use float format) for '{}'",
@@ -174,6 +175,172 @@ namespace {
       return data::pak::TexturePackingPolicyId::kTightPacked;
     }
     return std::nullopt;
+  }
+
+  struct DecodedSource {
+    ScratchImage image;
+    SubresourceId subresource;
+    std::string source_id;
+  };
+
+  /*!
+   Assemble a non-cube array texture from pre-decoded subresources.
+
+  Each source must provide exactly one mip level (mip 0 in the decoded
+  ScratchImage). The target mip index is taken from subresource
+  metadata, and all mip levels for every array layer must be present.
+
+   @param sources Pre-decoded sources with subresource metadata.
+   @param type Target texture type (non-cube only).
+   @return A single ScratchImage containing all array layers and mips.
+
+  ### Performance Characteristics
+
+  - Time Complexity: $O(n + L \cdot M)$ for $n$ sources, $L$ layers,
+    $M$ mips.
+  - Memory: $O(L \cdot M)$ for presence tracking plus destination storage.
+  - Optimization: Single-pass validation and direct pixel copies.
+
+  ### Usage Examples
+
+   ```cpp
+   auto assembled = AssembleArrayTexture(
+     decoded_sources, desc.texture_type);
+   if (!assembled) {
+     return ::oxygen::Err(assembled.error());
+   }
+   ```
+
+   @note Cube maps are rejected and handled by the dedicated cube path.
+   @see CookTexture
+  */
+  [[nodiscard]] auto AssembleArrayTexture(
+    const std::span<const DecodedSource> sources, const TextureType type)
+    -> oxygen::Result<ScratchImage, TextureImportError>
+  {
+    if (sources.empty()) {
+      return ::oxygen::Err(TextureImportError::kFileNotFound);
+    }
+
+    if (type == TextureType::kTextureCube
+      || type == TextureType::kTextureCubeArray) {
+      return ::oxygen::Err(TextureImportError::kUnsupportedFormat);
+    }
+    if (type != TextureType::kTexture2D
+      && type != TextureType::kTexture2DArray) {
+      return ::oxygen::Err(TextureImportError::kUnsupportedFormat);
+    }
+
+    uint16_t max_layer = 0;
+    uint16_t max_mip = 0;
+    uint32_t base_width = 0;
+    uint32_t base_height = 0;
+    Format format = Format::kUnknown;
+
+    for (const auto& source : sources) {
+      if (!source.image.IsValid()) {
+        return ::oxygen::Err(TextureImportError::kInvalidDimensions);
+      }
+
+      const auto& meta = source.image.Meta();
+      if (meta.mip_levels != 1) {
+        return ::oxygen::Err(TextureImportError::kInvalidMipPolicy);
+      }
+
+      if (source.subresource.depth_slice != 0) {
+        return ::oxygen::Err(TextureImportError::kUnsupportedFormat);
+      }
+
+      max_layer = (std::max)(max_layer, source.subresource.array_layer);
+      max_mip = (std::max)(max_mip, source.subresource.mip_level);
+
+      if (format == Format::kUnknown) {
+        format = meta.format;
+      } else if (meta.format != format) {
+        return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+      }
+
+      if (source.subresource.mip_level == 0) {
+        if (base_width == 0 && base_height == 0) {
+          base_width = meta.width;
+          base_height = meta.height;
+        } else if (meta.width != base_width || meta.height != base_height) {
+          return ::oxygen::Err(TextureImportError::kDimensionMismatch);
+        }
+      }
+    }
+
+    if (base_width == 0 || base_height == 0) {
+      return ::oxygen::Err(TextureImportError::kInvalidMipPolicy);
+    }
+
+    const auto array_layers = static_cast<uint16_t>(max_layer + 1);
+    const auto mip_levels = static_cast<uint16_t>(max_mip + 1);
+
+    ScratchImageMeta meta {
+      .texture_type = type,
+      .width = base_width,
+      .height = base_height,
+      .depth = 1,
+      .array_layers = array_layers,
+      .mip_levels = mip_levels,
+      .format = format,
+    };
+
+    ScratchImage assembled = ScratchImage::Create(meta);
+    if (!assembled.IsValid()) {
+      return ::oxygen::Err(TextureImportError::kOutOfMemory);
+    }
+
+    std::vector<bool> present(
+      static_cast<size_t>(array_layers) * mip_levels, false);
+
+    for (const auto& source : sources) {
+      const auto layer = source.subresource.array_layer;
+      const auto mip = source.subresource.mip_level;
+      const auto index
+        = ScratchImage::ComputeSubresourceIndex(layer, mip, mip_levels);
+      if (index >= present.size() || present[index]) {
+        return ::oxygen::Err(TextureImportError::kInvalidMipPolicy);
+      }
+      present[index] = true;
+
+      const auto expected_width
+        = ScratchImage::ComputeMipDimension(base_width, mip);
+      const auto expected_height
+        = ScratchImage::ComputeMipDimension(base_height, mip);
+
+      const auto src_view = source.image.GetImage(0, 0);
+      if (src_view.width != expected_width
+        || src_view.height != expected_height) {
+        return ::oxygen::Err(TextureImportError::kDimensionMismatch);
+      }
+
+      const auto expected_row_bytes = ComputeRowBytes(expected_width, format);
+      if (src_view.row_pitch_bytes != expected_row_bytes) {
+        return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+      }
+
+      auto dst_pixels = assembled.GetMutablePixels(layer, mip);
+      if (dst_pixels.size() != src_view.pixels.size()) {
+        return ::oxygen::Err(TextureImportError::kDimensionMismatch);
+      }
+
+      std::copy(
+        src_view.pixels.begin(), src_view.pixels.end(), dst_pixels.data());
+    }
+
+    for (size_t layer = 0; layer < array_layers; ++layer) {
+      for (size_t mip = 0; mip < mip_levels; ++mip) {
+        const auto index = ScratchImage::ComputeSubresourceIndex(
+          static_cast<uint16_t>(layer), static_cast<uint16_t>(mip), mip_levels);
+        if (index >= present.size() || !present[index]) {
+          return ::oxygen::Err(TextureImportError::kInvalidMipPolicy);
+        }
+      }
+    }
+
+    return ::oxygen::Ok(std::move(assembled));
   }
 
   //=== Format Conversion Helpers
@@ -750,35 +917,57 @@ namespace {
     const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
     -> oxygen::Result<CookedTexturePayload, TextureImportError>
   {
+    auto resolved_desc = desc;
     DLOG_F(INFO, "CookFromScratchImage: {}x{} layers={} mips={} format={}",
       image.Meta().width, image.Meta().height, image.Meta().array_layers,
       image.Meta().mip_levels, static_cast<int>(image.Meta().format));
 
+    const bool is_hdr_input = image.Meta().format == Format::kRGBA32Float;
+    if (is_hdr_input && resolved_desc.hdr_handling == HdrHandling::kKeepFloat
+      && !IsFloatFormat(resolved_desc.output_format)) {
+      resolved_desc.output_format = Format::kRGBA32Float;
+      resolved_desc.bc7_quality = Bc7Quality::kNone;
+      resolved_desc.bake_hdr_to_ldr = false;
+    }
+
     // Post-decode validation (uses decoded/assembled image metadata).
-    if (auto error = ValidatePostDecode(desc, image.Meta())) {
+    if (auto error = ValidatePostDecode(resolved_desc, image.Meta())) {
       return ::oxygen::Err(*error);
     }
 
     // Stage 2: Convert to working format
-    auto working = detail::ConvertToWorkingFormat(std::move(image), desc);
+    auto working
+      = detail::ConvertToWorkingFormat(std::move(image), resolved_desc);
     if (!working) {
       return ::oxygen::Err(working.error());
     }
 
+    const bool is_working_hdr_input
+      = working->Meta().format == Format::kRGBA32Float;
+    if (is_working_hdr_input
+      && resolved_desc.hdr_handling == HdrHandling::kKeepFloat
+      && !IsFloatFormat(resolved_desc.output_format)) {
+      resolved_desc.output_format = Format::kRGBA32Float;
+      resolved_desc.bc7_quality = Bc7Quality::kNone;
+      resolved_desc.bake_hdr_to_ldr = false;
+    }
+
     // Stage 3: Apply content-specific processing
-    auto processed = detail::ApplyContentProcessing(std::move(*working), desc);
+    auto processed
+      = detail::ApplyContentProcessing(std::move(*working), resolved_desc);
     if (!processed) {
       return ::oxygen::Err(processed.error());
     }
 
     // Stage 4: Generate mips
-    auto with_mips = detail::GenerateMips(std::move(*processed), desc);
+    auto with_mips = detail::GenerateMips(std::move(*processed), resolved_desc);
     if (!with_mips) {
       return ::oxygen::Err(with_mips.error());
     }
 
     // Stage 5: Convert to output format
-    auto output = detail::ConvertToOutputFormat(std::move(*with_mips), desc);
+    auto output
+      = detail::ConvertToOutputFormat(std::move(*with_mips), resolved_desc);
     if (!output) {
       return ::oxygen::Err(output.error());
     }
@@ -799,7 +988,7 @@ namespace {
     // kRGBA8UNorm vs kRGBA8UNormSRGB). Use the requested output_format when
     // the storage is compatible.
     Format final_format = output->Meta().format;
-    const Format requested = desc.output_format;
+    const Format requested = resolved_desc.output_format;
 
     // Handle sRGB reinterpretation for RGBA8 formats
     if ((output->Meta().format == Format::kRGBA8UNorm
@@ -953,8 +1142,8 @@ auto CookTexture(const TextureSourceSet& sources, const TextureImportDesc& desc,
   }
 
   // Decode all sources first
-  std::vector<ScratchImage> decoded_images;
-  decoded_images.reserve(sources.Count());
+  std::vector<DecodedSource> decoded_sources;
+  decoded_sources.reserve(sources.Count());
 
   DecodeOptions decode_opts {
     .flip_y = desc.flip_y_on_decode,
@@ -973,19 +1162,12 @@ auto CookTexture(const TextureSourceSet& sources, const TextureImportDesc& desc,
     if (!decoded) {
       return ::oxygen::Err(decoded.error());
     }
-    decoded_images.push_back(std::move(*decoded));
-  }
 
-  // Verify all images have matching dimensions
-  const auto& first_meta = decoded_images[0].Meta();
-  for (size_t i = 1; i < decoded_images.size(); ++i) {
-    const auto& meta = decoded_images[i].Meta();
-    if (meta.width != first_meta.width || meta.height != first_meta.height) {
-      return ::oxygen::Err(TextureImportError::kDimensionMismatch);
-    }
-    if (meta.format != first_meta.format) {
-      return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
-    }
+    decoded_sources.push_back(DecodedSource {
+      .image = std::move(*decoded),
+      .subresource = source.subresource,
+      .source_id = source.source_id,
+    });
   }
 
   // For cube maps, use the assembly helper
@@ -1005,7 +1187,7 @@ auto CookTexture(const TextureSourceSet& sources, const TextureImportDesc& desc,
         }
         ++src_idx;
       }
-      faces[face_idx] = std::move(decoded_images[src_idx]);
+      faces[face_idx] = std::move(decoded_sources[src_idx].image);
     }
 
     auto cube = AssembleCubeFromFaces(
@@ -1018,9 +1200,11 @@ auto CookTexture(const TextureSourceSet& sources, const TextureImportDesc& desc,
   }
 
   // For array textures, assemble into a single ScratchImage
-  // TODO: Implement array texture assembly for non-cube arrays
-  // For now, only cube maps are supported via multi-source
-  return ::oxygen::Err(TextureImportError::kUnsupportedFormat);
+  auto assembled = AssembleArrayTexture(decoded_sources, desc.texture_type);
+  if (!assembled) {
+    return ::oxygen::Err(assembled.error());
+  }
+  return CookFromScratchImage(std::move(*assembled), desc, policy);
 }
 
 } // namespace oxygen::content::import
