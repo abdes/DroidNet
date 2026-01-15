@@ -16,6 +16,7 @@
 #include <unordered_map>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Import/Async/AsyncImportService.h>
 #include <Oxygen/Content/Import/Async/Detail/AsyncImporter.h>
 #include <Oxygen/Content/Import/Async/Detail/ImportJob.h>
@@ -63,22 +64,25 @@ namespace {
   [[nodiscard]] auto CreateJobForFormat(ImportFormat format, ImportJobId job_id,
     ImportRequest request, ImportCompletionCallback on_complete,
     ImportProgressCallback on_progress, std::shared_ptr<co::Event> cancel_event,
-    IAsyncFileWriter& file_writer) -> std::shared_ptr<detail::ImportJob>
+    oxygen::observer_ptr<IAsyncFileReader> file_reader,
+    oxygen::observer_ptr<IAsyncFileWriter> file_writer,
+    oxygen::observer_ptr<co::ThreadPool> thread_pool)
+    -> std::shared_ptr<detail::ImportJob>
   {
     switch (format) {
     case ImportFormat::kFbx:
       return std::make_shared<detail::FbxImportJob>(job_id, std::move(request),
         std::move(on_complete), std::move(on_progress), std::move(cancel_event),
-        file_writer);
+        file_reader, file_writer, thread_pool);
     case ImportFormat::kGltf:
       // TODO(Phase 5): Add dedicated GltfImportJob; use GLB job for now.
       return std::make_shared<detail::GlbImportJob>(job_id, std::move(request),
         std::move(on_complete), std::move(on_progress), std::move(cancel_event),
-        file_writer);
+        file_reader, file_writer, thread_pool);
     case ImportFormat::kGlb:
       return std::make_shared<detail::GlbImportJob>(job_id, std::move(request),
         std::move(on_complete), std::move(on_progress), std::move(cancel_event),
-        file_writer);
+        file_reader, file_writer, thread_pool);
     case ImportFormat::kUnknown:
       break;
     }
@@ -324,8 +328,18 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   const auto job_id
     = impl_->next_job_id_.fetch_add(1, std::memory_order_relaxed);
 
+  if (!impl_->file_reader_) {
+    DLOG_F(WARNING, "SubmitImport: async file reader not ready");
+    return kInvalidJobId;
+  }
+
   if (!impl_->file_writer_) {
     DLOG_F(WARNING, "SubmitImport: async file writer not ready");
+    return kInvalidJobId;
+  }
+
+  if (!impl_->thread_pool_) {
+    DLOG_F(WARNING, "SubmitImport: thread pool not ready");
     return kInvalidJobId;
   }
 
@@ -361,7 +375,9 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
 
   auto job = CreateJobForFormat(format, job_id, std::move(request),
     std::move(wrapped_complete), std::move(on_progress), cancel_event,
-    *impl_->file_writer_);
+    oxygen::observer_ptr<IAsyncFileReader>(impl_->file_reader_.get()),
+    oxygen::observer_ptr<IAsyncFileWriter>(impl_->file_writer_.get()),
+    oxygen::observer_ptr<co::ThreadPool>(impl_->thread_pool_.get()));
   if (!job) {
     DLOG_F(WARNING, "SubmitImport: failed to create job for '{}'",
       request.source_path.string());

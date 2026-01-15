@@ -463,8 +463,8 @@ Implement ImportSession with lazy emitters and async file write support.
 
 The new design separates concerns:
 
-- **AsyncImporter**: Shared compute infrastructure (pipelines, ThreadPool)
-- **ImportSession**: Per-job state (emitters, diagnostics, LooseCookedWriter)
+- **AsyncImporter**: Job scheduler (import-thread loop)
+- **ImportSession**: Per-job state + access to infra (async file reader/writer, ThreadPool)
 - **Emitters**: Async I/O writers returning stable indices immediately
 
 ### Tasks
@@ -750,56 +750,93 @@ on ThreadPool, returns cooked data to caller who emits via Emitter.
 
 ### Tasks
 
+#### 5.0 ImportSession Infrastructure Ownership Refactor
+
+**Files:**
+
+- `src/Oxygen/Content/Import/Async/ImportSession.h/.cpp`
+- `src/Oxygen/Content/Import/Async/AsyncImportService.h/.cpp`
+- `src/Oxygen/Content/Import/Async/Jobs/*.h/.cpp`
+
+Tasks:
+
+- [X] Update `ImportSession` constructor to take `observer_ptr` (or owning smart
+  pointers) for `IAsyncFileReader`, `IAsyncFileWriter`, and `co::ThreadPool`.
+- [X] Store infra handles as `oxygen::observer_ptr` (no reference members).
+- [X] Add accessors for `FileReader()`, `FileWriter()`, and `ThreadPool()`.
+- [X] Update job construction so the job (as ImportSession owner) provides
+  infra.
+- [X] Update tests to use the new constructor and accessors.
+
 #### 5.1 TexturePipeline Types
 
 **File:** `src/Oxygen/Content/Import/Async/TexturePipeline.h`
 
 - [ ] Define `TexturePipeline::WorkItem`
   - `source_id` (correlation key)
-  - `source` (file path OR embedded bytes)
+  - `bytes` (span of source bytes)
+  - `bytes_owner` (shared ownership for embedded/source buffers)
   - `desc` (TextureImportDesc)
+  - `stop_token` (cancellation)
 - [ ] Define `TexturePipeline::WorkResult`
   - `source_id` (echoed)
   - `cooked` (CookedTexture payload)
   - `diagnostics` (vector)
   - `success` (bool)
-- [ ] Define `PipelineProgress` struct
+- [ ] Add placeholder for pipeline progress (API defined in 5.2)
 
-#### 5.2 ResourcePipeline Concept
+#### 5.2 Pipeline Progress Reporting (Design Task)
+
+**Files:** (design + header updates)
+
+- `design/async_import_pipeline_v2.md`
+- `src/Oxygen/Content/Import/Async/ResourcePipeline.h`
+
+Tasks:
+
+- [ ] Define pipeline progress API shape (fields + update cadence).
+- [ ] Update `ResourcePipeline` concept to include the chosen `GetProgress()`.
+- [ ] Add initial design notes for progress aggregation across pipelines.
+
+#### 5.3 ResourcePipeline Concept
 
 **File:** `src/Oxygen/Content/Import/Async/ResourcePipeline.h`
 
 - [ ] Define `ResourcePipeline<T>` concept
   - `T::WorkItem`, `T::WorkResult`
-  - `Submit(WorkItem)`, `Collect() -> co::Co<WorkResult>`
+  - `Start(co::Nursery&)`
+  - `Submit(WorkItem)`, `TrySubmit(WorkItem)`
+  - `Collect() -> co::Co<WorkResult>`
   - `HasPending()`, `PendingCount()`
-  - `GetProgress()`, `CancelAll()`
+  - `Close()`
+  - `GetProgress()` (shape from 5.2)
 - [ ] `static_assert(ResourcePipeline<TexturePipeline>)`
 
-#### 5.3 TexturePipeline Implementation
+#### 5.4 TexturePipeline Implementation
 
 **File:** `src/Oxygen/Content/Import/Async/TexturePipeline.h/.cpp`
 
 - [ ] Bounded work queue (`co::Channel<WorkItem>`)
 - [ ] Result queue (`co::Channel<WorkResult>`)
-- [ ] Implement `Submit(WorkItem)` - non-blocking enqueue
-- [ ] Implement `Collect() -> co::Co<WorkResult>` - await result
+- [ ] Implement `Start(co::Nursery&)`
+- [ ] Implement `Submit(WorkItem)` + `TrySubmit(WorkItem)` with backpressure
+- [ ] Implement `Collect() -> co::Co<WorkResult>`
 - [ ] Implement `HasPending()`, `PendingCount()`
-- [ ] Implement `GetProgress()`, `CancelAll()`
+- [ ] Implement `Close()` and `GetProgress()` (per 5.2)
 - [ ] Unit test: submit and collect
 
-#### 5.4 TexturePipeline Worker Loop
+#### 5.5 TexturePipeline Worker Loop
 
 **File:** `src/Oxygen/Content/Import/Async/TexturePipeline.cpp`
 
 - [ ] Worker coroutine reads from work queue
-- [ ] Load texture (file via IAsyncFileReader, or embedded bytes)
+- [ ] Accept bytes from `WorkItem` (pipeline remains compute-only)
 - [ ] Decode image (ThreadPool CPU work)
 - [ ] Transcode (mips, BC7 on ThreadPool)
 - [ ] Push WorkResult to result queue
 - [ ] Unit test: texture cooks correctly
 
-#### 5.5 Reuse Existing Sync Cooking Logic
+#### 5.6 Reuse Existing Sync Cooking Logic
 
 **File:** `src/Oxygen/Content/Import/Async/TexturePipeline.cpp`
 
@@ -807,39 +844,27 @@ on ThreadPool, returns cooked data to caller who emits via Emitter.
 - [ ] Wrap sync helpers, don't rewrite
 - [ ] Unit test: output matches sync path
 
-#### 5.6 AsyncImporter Owns Pipeline
+#### 5.7 Job-Orchestrated Import Wiring
 
-**File:** `src/Oxygen/Content/Import/Async/detail/AsyncImporter.h/.cpp`
+**Files:**
 
-- [ ] Add `TexturePipeline texture_pipeline_` member
-- [ ] Expose via `Textures() -> TexturePipeline&`
-- [ ] Initialize in constructor with ThreadPool reference
-- [ ] Unit test: pipeline accessible
+- `src/Oxygen/Content/Import/Async/Jobs/FbxImportJob.h/.cpp`
+- `src/Oxygen/Content/Import/Async/Jobs/GlbImportJob.h/.cpp`
+- `src/Oxygen/Content/Import/Async/Jobs/TextureImportJob.h/.cpp`
 
-#### 5.7 Enhanced Importer Interface
+Tasks:
 
-**File:** `src/Oxygen/Content/Import/Importer.h`
+- [ ] FbxImportJob: parse FBX on `ThreadPool()`; read texture bytes via
+  `FileReader()`; submit to `TexturePipeline`; collect results and emit via
+  `session.TextureEmitter()` with streaming material emission.
+- [ ] FbxImportJob: submit mesh/animation work to `ThreadPool()` and emit via
+  `session.BufferEmitter()`.
+- [ ] GlbImportJob: mirror the FBX flow for glTF/GLB (subset acceptable).
+- [ ] TextureImportJob: read bytes via `FileReader()`, submit to pipeline,
+  emit via `TextureEmitter()`.
+- [ ] Integration tests for job wiring and cooked output.
 
-- [ ] Add `ImportAsync(request, session, importer) -> co::Co<void>`
-- [ ] Default: offload sync `Import()` to ThreadPool
-- [ ] Document override pattern
-
-#### 5.8 FbxImporter::ImportAsync
-
-**File:** `src/Oxygen/Content/Import/fbx/FbxImporter.cpp`
-
-- [ ] Override `ImportAsync()`
-- [ ] Phase 1: Parse FBX on ThreadPool
-- [ ] Phase 2: Submit all textures to pipeline
-- [ ] Phase 3: Concurrent streams with `co::Nursery`
-  - Stream A: Collect textures → emit → check material readiness
-  - Stream B: Process meshes on ThreadPool → emit
-  - Stream C: Bake animations on ThreadPool → emit
-- [ ] Phase 4: `nursery.Join()`
-- [ ] Phase 5: Emit scene descriptor
-- [ ] Integration test: FBX with textures, materials, meshes
-
-#### 5.9 MaterialReadinessTracker
+#### 5.8 MaterialReadinessTracker
 
 **File:** `src/Oxygen/Content/Import/Async/MaterialReadinessTracker.h/.cpp`
 
@@ -848,19 +873,35 @@ on ThreadPool, returns cooked data to caller who emits via Emitter.
 - [ ] Returns material indices that are now ready to emit
 - [ ] Unit test: dependency tracking
 
+#### 5.9 Configuration Flow (Need-to-Know)
+
+**Files:**
+
+- `src/Oxygen/Content/Import/Async/AsyncImportService.h/.cpp`
+- `src/Oxygen/Content/Import/Async/ImportSession.h/.cpp`
+- `src/Oxygen/Content/Import/Async/Pipelines/TexturePipeline.h/.cpp`
+
+Tasks:
+
+- [ ] Define how `AsyncImportService::Config` flows into jobs and pipelines.
+- [ ] Pass only the needed fields into constructors/PODs (avoid over-sharing).
+- [ ] Update unit tests to cover config injection.
+
 ### Deliverables
 
 - ✅ `TexturePipeline` as pure compute (concept-checked)
 - ✅ Submit/Collect pattern for parallel cooking
-- ✅ `FbxImporter::ImportAsync()` with streaming emission
+- ✅ Job-driven import wiring (FBX/GLB/Texture jobs)
 - ✅ `MaterialReadinessTracker` for dependency resolution
-- ✅ Full parallelism on 8+ core systems
+- ✅ Config flow defined and injected (need-to-know)
+- ✅ Progress reporting API defined
 
 ### Acceptance Criteria
 
 ```cpp
 // Pipeline cooks, emitter emits
-auto& tex_pipe = importer.Textures();
+auto& pool = *session.ThreadPool();
+TexturePipeline tex_pipe(pool, { /* config */ });
 auto& tex_emit = session.TextureEmitter();
 
 tex_pipe.Submit(work_item);
@@ -877,6 +918,15 @@ auto report = ImportSync(service, "test_assets/sponza.fbx");
 EXPECT_TRUE(report.success);
 EXPECT_GT(report.textures_written, 10);
 ```
+
+### Phase 5 Implementation Notes (Decisions + Open Items)
+
+- **Callback threading**: callbacks run on the import thread; callers marshal to UI.
+- **ImportSession owns infra access**: `IAsyncFileReader`, `IAsyncFileWriter`, and `co::ThreadPool` are injected into `ImportSession` via `observer_ptr` or owning smart pointers (no reference members).
+- **Infra lifetime**: `ImportSession` does not own global infra by default; it observes infra owned by `AsyncImportService` unless tests inject owned instances.
+- **Pipeline progress API**: define the `GetProgress()` shape and aggregation model before wiring progress in jobs.
+- **Config flow**: pass only needed config fields to jobs/pipelines; prefer constructor injection over global access.
+- **Tests**: update unit tests to use the new `ImportSession` constructor and validate config injection paths.
 
 ---
 

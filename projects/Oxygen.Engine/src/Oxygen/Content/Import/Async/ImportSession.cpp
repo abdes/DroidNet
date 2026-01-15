@@ -14,15 +14,22 @@
 
 namespace oxygen::content::import {
 
-ImportSession::ImportSession(
-  const ImportRequest& request, IAsyncFileWriter& file_writer)
+ImportSession::ImportSession(const ImportRequest& request,
+  oxygen::observer_ptr<IAsyncFileReader> file_reader,
+  oxygen::observer_ptr<IAsyncFileWriter> file_writer,
+  oxygen::observer_ptr<co::ThreadPool> thread_pool)
   : request_(request)
+  , file_reader_(file_reader)
   , file_writer_(file_writer)
+  , thread_pool_(thread_pool)
   , cooked_root_(
       request.cooked_root.value_or(request.source_path.parent_path()))
   , cooked_writer_(cooked_root_)
 {
   DLOG_F(INFO, "ImportSession created for: {}", request_.source_path.string());
+
+  DCHECK_F(file_writer_ != nullptr,
+    "ImportSession requires a valid async file writer");
 
   // Set source key if provided in request
   if (request_.source_key.has_value()) {
@@ -47,6 +54,24 @@ auto ImportSession::CookedWriter() noexcept -> LooseCookedWriter&
   return cooked_writer_;
 }
 
+auto ImportSession::FileReader() const noexcept
+  -> oxygen::observer_ptr<IAsyncFileReader>
+{
+  return file_reader_;
+}
+
+auto ImportSession::FileWriter() const noexcept
+  -> oxygen::observer_ptr<IAsyncFileWriter>
+{
+  return file_writer_;
+}
+
+auto ImportSession::ThreadPool() const noexcept
+  -> oxygen::observer_ptr<co::ThreadPool>
+{
+  return thread_pool_;
+}
+
 /*!
  Get (and lazily create) the texture emitter for this session.
 
@@ -58,7 +83,7 @@ auto ImportSession::TextureEmitter() -> oxygen::content::import::TextureEmitter&
   if (!texture_emitter_.has_value()) {
     texture_emitter_.emplace(
       std::make_unique<oxygen::content::import::TextureEmitter>(
-        file_writer_, request_.loose_cooked_layout, cooked_root_));
+        *file_writer_, request_.loose_cooked_layout, cooked_root_));
   }
   return **texture_emitter_;
 }
@@ -74,7 +99,7 @@ auto ImportSession::BufferEmitter() -> oxygen::content::import::BufferEmitter&
   if (!buffer_emitter_.has_value()) {
     buffer_emitter_.emplace(
       std::make_unique<oxygen::content::import::BufferEmitter>(
-        file_writer_, request_.loose_cooked_layout, cooked_root_));
+        *file_writer_, request_.loose_cooked_layout, cooked_root_));
   }
   return **buffer_emitter_;
 }
@@ -90,7 +115,7 @@ auto ImportSession::AssetEmitter() -> oxygen::content::import::AssetEmitter&
   if (!asset_emitter_.has_value()) {
     asset_emitter_.emplace(
       std::make_unique<oxygen::content::import::AssetEmitter>(
-        file_writer_, request_.loose_cooked_layout, cooked_root_));
+        *file_writer_, request_.loose_cooked_layout, cooked_root_));
   }
   return **asset_emitter_;
 }
@@ -175,7 +200,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
   }
 
   // Wait for any pending async writes
-  auto flush_result = co_await file_writer_.Flush();
+  auto flush_result = co_await file_writer_->Flush();
   if (!flush_result.has_value()) {
     AddDiagnostic({
       .severity = ImportSeverity::kError,

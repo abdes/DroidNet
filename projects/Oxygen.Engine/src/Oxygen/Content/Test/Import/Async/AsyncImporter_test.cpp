@@ -14,9 +14,11 @@
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Import/Async/Detail/AsyncImporter.h>
 #include <Oxygen/Content/Import/Async/Detail/ImportJob.h>
+#include <Oxygen/Content/Import/Async/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/Async/IAsyncFileWriter.h>
 #include <Oxygen/Content/Import/Async/ImportEventLoop.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>
 
 using namespace std::chrono_literals;
@@ -157,7 +159,9 @@ NOLINT_TEST_F(AsyncImporterLifecycleTest, Stop_ClosesJobChannel)
 class AsyncImporterJobTest : public ::testing::Test {
 protected:
   ImportEventLoop loop_;
+  std::unique_ptr<IAsyncFileReader> file_reader_;
   std::unique_ptr<IAsyncFileWriter> file_writer_;
+  std::unique_ptr<oxygen::co::ThreadPool> thread_pool_;
   AsyncImporter::Config config_ { .channel_capacity = 8 };
 
   [[nodiscard]] auto MakeTestCookedRoot() const -> std::filesystem::path
@@ -175,7 +179,9 @@ protected:
 
   void SetUp() override
   {
+    file_reader_ = CreateAsyncFileReader(loop_);
     file_writer_ = CreateAsyncFileWriter(loop_);
+    thread_pool_ = std::make_unique<oxygen::co::ThreadPool>(loop_, 1);
     config_.file_writer = file_writer_.get();
   }
 
@@ -185,7 +191,9 @@ protected:
   {
     return std::make_shared<TestImportJob>(job_id, std::move(request),
       std::move(on_complete), std::move(on_progress), std::move(cancel_event),
-      *file_writer_);
+      oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
+      oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
+      oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()));
   }
 
   void TearDown() override
@@ -371,11 +379,15 @@ class AsyncImporterCancellationTest : public ::testing::Test {
 protected:
   ImportEventLoop loop_;
   AsyncImporter::Config config_ { .channel_capacity = 8 };
+  std::unique_ptr<IAsyncFileReader> file_reader_;
   std::unique_ptr<IAsyncFileWriter> file_writer_;
+  std::unique_ptr<oxygen::co::ThreadPool> thread_pool_;
 
   void SetUp() override
   {
+    file_reader_ = CreateAsyncFileReader(loop_);
     file_writer_ = CreateAsyncFileWriter(loop_);
+    thread_pool_ = std::make_unique<oxygen::co::ThreadPool>(loop_, 1);
     config_.file_writer = file_writer_.get();
   }
 };
@@ -415,7 +427,10 @@ NOLINT_TEST_F(
       };
 
       auto job = std::make_shared<TestImportJob>(123, std::move(request),
-        std::move(on_complete), nullptr, cancel_event, *file_writer_);
+        std::move(on_complete), nullptr, cancel_event,
+        oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
+        oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
+        oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()));
 
       JobEntry entry;
       entry.job_id = 123;

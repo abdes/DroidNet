@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
 #include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
@@ -20,8 +21,13 @@
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 
+namespace oxygen::co {
+class ThreadPool;
+} // namespace oxygen::co
+
 namespace oxygen::content::import {
 
+class IAsyncFileReader;
 class IAsyncFileWriter;
 class TextureEmitter;
 class BufferEmitter;
@@ -53,7 +59,7 @@ class AssetEmitter;
  ### Usage Patterns
 
  ```cpp
- ImportSession session(request, file_writer);
+ ImportSession session(request, file_reader, file_writer, thread_pool);
 
  // During import (from ThreadPool workers):
  session.AddDiagnostic({
@@ -73,10 +79,14 @@ public:
   //! Create a session for the given import request.
   /*!
    @param request The import request with source path and layout.
+   @param file_reader Async file reader for input operations.
    @param file_writer Async file writer for output operations.
+   @param thread_pool Thread pool for CPU-bound work.
   */
-  OXGN_CNTT_API ImportSession(
-    const ImportRequest& request, IAsyncFileWriter& file_writer);
+  OXGN_CNTT_API ImportSession(const ImportRequest& request,
+    oxygen::observer_ptr<IAsyncFileReader> file_reader,
+    oxygen::observer_ptr<IAsyncFileWriter> file_writer,
+    oxygen::observer_ptr<co::ThreadPool> thread_pool);
 
   OXGN_CNTT_API ~ImportSession();
 
@@ -98,6 +108,18 @@ public:
 
   //! Get the loose cooked writer for this session.
   OXGN_CNTT_NDAPI auto CookedWriter() noexcept -> LooseCookedWriter&;
+
+  //! Get the async file reader (non-owning).
+  OXGN_CNTT_NDAPI auto FileReader() const noexcept
+    -> oxygen::observer_ptr<IAsyncFileReader>;
+
+  //! Get the async file writer (non-owning).
+  OXGN_CNTT_NDAPI auto FileWriter() const noexcept
+    -> oxygen::observer_ptr<IAsyncFileWriter>;
+
+  //! Get the thread pool for CPU-bound work (non-owning).
+  OXGN_CNTT_NDAPI auto ThreadPool() const noexcept
+    -> oxygen::observer_ptr<co::ThreadPool>;
 
   //=== Emitters
   //===-----------------------------------------------------------//
@@ -154,7 +176,9 @@ public:
 
 private:
   ImportRequest request_;
-  IAsyncFileWriter& file_writer_;
+  oxygen::observer_ptr<IAsyncFileReader> file_reader_ {};
+  oxygen::observer_ptr<IAsyncFileWriter> file_writer_ {};
+  oxygen::observer_ptr<co::ThreadPool> thread_pool_ {};
   std::filesystem::path cooked_root_;
   LooseCookedWriter cooked_writer_;
 

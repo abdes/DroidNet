@@ -23,8 +23,8 @@ the main application thread.
 2. **ThreadPool for CPU-Bound Work Only**: BC7 encoding, mip generation, and
    image processing offload to ThreadPool. File I/O uses an async abstraction.
 
-3. **Proper ThreadNotification**: Results flow back to the import event loop
-   via ThreadNotification, not custom push queues.
+3. **Callbacks on Import Thread**: Completion and progress callbacks run on the
+  import thread. Callers marshal to UI threads if needed.
 
 4. **Cooperative Cancellation**: Per-job and per-importer cancellation via
   explicit job cancellation signals and stop-token propagation to work items.
@@ -156,9 +156,9 @@ struct ImportReport {
 The async design **enhances** this architecture:
 
 - `Importer::Import()` remains the sync entry point
-- `Importer::ImportAsync()` is added as an optional override
-- `AsyncImporter` orchestrates jobs, calls backends
-- Resource pipelines are passed to backends that need parallel cooking
+- Async orchestration lives in job actors (`ImportJob::ExecuteAsync()`)
+- `AsyncImporter` schedules jobs on the import thread
+- Jobs may invoke existing backends and pipelines as needed for parallel cooking
 
 ---
 
@@ -195,9 +195,12 @@ graph TB
 
             JobPipelines -->|"runs pipelines"| ImportSession
             ImportSession -->|"collect results"| Emitters
+            ImportSession -.->|"uses"| AsyncFileReader
+            ImportSession -.->|"uses"| AsyncFileWriter
         end
 
         AsyncFileWriter["AsyncFileWriter - WriteAtAsync"]
+        AsyncFileReader["AsyncFileReader - ReadFile"]
 
         AsyncImporter -->|"creates & schedules"| JobScope
         Emitters -.->|"queues async writes"| AsyncFileWriter
@@ -206,7 +209,7 @@ graph TB
     ThreadPool["co::ThreadPool<br/><small>CPU-bound worker threads</small>"]
 
     AsyncService -->|"submits job"| AsyncImporter
-    ImportThread -.->|"ThreadNotification::Post"| AppCode
+    %% Callbacks are invoked on the import thread; UI marshalling is optional.
     JobPipelines -.->|"offloads CPU work"| ThreadPool
 
     style AppThread stroke:#666,stroke-width:4px
@@ -226,9 +229,9 @@ graph TB
 | Actor | Scope | Owns | Role |
 | ----- | ----- | ---- | ---- |
 | **AsyncImportService** | Singleton | Import thread, AsyncImporter | Thread-safe public API |
-| **AsyncImporter** | Shared | ThreadPool, AsyncFileWriter (WriteAt*) | Import-thread infrastructure + job runner |
+| **AsyncImporter** | Shared | Job channel + scheduler | Import-thread job runner |
 | **ImportJob** | Per-job | Child nursery, cancellation signal, ImportSession, pipelines | Single job actor: owns one job’s lifetime + resources |
-| **ImportSession** | Per-job | Emitters, LooseCookedWriter, Diagnostics | Per-import output state |
+| **ImportSession** | Per-job | Async I/O + ThreadPool access, Emitters, LooseCookedWriter, Diagnostics | Per-import output + infra access |
 | **TexturePipeline** | Per-job | Internal queues + worker tasks | Pure compute: decode/transcode → in-memory payload |
 | **TextureEmitter** | Per-job | `textures.data`, `textures.table` | Async I/O: Emit() → index + background write |
 | **BufferEmitter** | Per-job | `buffers.data`, `buffers.table` | Async I/O for geometry/animation buffers |
@@ -243,13 +246,13 @@ graph TB
 
 #### Purpose and Scope
 
-`AsyncImportService` is the application-facing façade for asynchronous content import. It provides a thread-safe API for submitting import jobs from any thread (e.g., main UI thread, game thread) and receiving completion notifications back on the caller's thread via `ThreadNotification`.
+`AsyncImportService` is the application-facing façade for asynchronous content import. It provides a thread-safe API for submitting import jobs from any thread (e.g., main UI thread, game thread) and receiving completion notifications on the import thread. Callers marshal to UI threads if needed.
 
 **Key responsibilities:**
 
 - Accept import requests from any thread
 - Manage the dedicated import thread lifecycle
-- Marshal completion callbacks back to application thread
+- Invoke completion callbacks on the import thread
 - Coordinate graceful shutdown and cancellation
 
 #### New Types
@@ -282,7 +285,7 @@ using ImportCompletionCallback = std::function<void(ImportJobId, const ImportRep
 using ImportProgressCallback = std::function<void(const ImportProgress&)>;
 ```
 
-**Design note:** `ImportReport` is passed by `const&` because it contains `std::filesystem::path` and other heavyweight members. Callbacks are invoked on the application thread via `ThreadNotification::Post()`.
+**Design note:** `ImportReport` is passed by `const&` because it contains `std::filesystem::path` and other heavyweight members. Callbacks are invoked on the import thread; UI marshalling is the caller’s responsibility.
 
 #### Configuration
 
@@ -313,7 +316,7 @@ auto SubmitImport(
 
 - Thread-safe; callable from any thread
 - Returns unique job ID immediately
-- Callbacks are marshaled back to calling thread
+- Callbacks are invoked on the import thread
 - Cancellation is reported via `on_complete` with `report.success=false` and diagnostic code `"import.cancelled"`
 
 **Cancellation:**
@@ -345,7 +348,6 @@ sequenceDiagram
     participant Channel as Thread-Safe Channel
     participant Importer as AsyncImporter<br/>(Import Thread)
     participant Job as ImportJob
-    participant TN as ThreadNotification
 
     App->>+Service: SubmitImport(request, callbacks)
     Service->>Service: Generate JobId
@@ -360,9 +362,8 @@ sequenceDiagram
     Job->>Job: session.Finalize()
     Job-->>-Importer: ImportReport
 
-    Importer->>TN: Post(on_complete, report)
-    Note over TN: Marshal callback to<br/>original calling thread
-    TN->>App: on_complete(job_id, report)
+    Importer->>App: on_complete(job_id, report)
+    Note over App: Caller may marshal to UI thread if desired
 
     deactivate Importer
 ```
@@ -370,7 +371,7 @@ sequenceDiagram
 **Key invariants:**
 
 - Service owns the import thread and blocks in destructor until thread exits
-- All callbacks are invoked on the thread that called `SubmitImport()`
+- All callbacks are invoked on the import thread
 - Internal synchronization uses lock-free channels; no application-visible locks
 
 #### Implementation Pattern
@@ -680,7 +681,7 @@ auto GetOrCreateTextureResourceIndexWithCooker(
 
 ```cpp
 // Async: Same extraction, different dispatch
-// Note: This is a helper; the actual Submit happens in ImportAsync()
+// Note: This is a helper; the actual Submit happens in the job
 
 TexturePipeline::WorkItem MakeTextureWorkItem(
   const ufbx_texture* texture,
@@ -703,7 +704,7 @@ TexturePipeline::WorkItem MakeTextureWorkItem(
   };
 }
 
-// Usage in ImportAsync():
+// Usage in ImportJob::ExecuteAsync():
 //   if (is_embedded) {
 //     auto bytes = std::span<const std::byte>(...);
 //     auto owner = scene_owner;  // keeps embedded bytes alive
@@ -723,7 +724,7 @@ TexturePipeline::WorkItem MakeTextureWorkItem(
 | Component | Responsibility |
 | --------- | -------------- |
 | Pipeline | Decode → Transcode → return `CookedTexturePayload` (in-memory) |
-| Importer | Receive result → call `session.TextureEmitter().Emit()` → track index |
+| Job | Receive result → call `session.TextureEmitter().Emit()` → track index |
 
 This separation:
 
@@ -732,10 +733,10 @@ This separation:
 - Mirrors sync architecture (cooker returns, emitter commits)
 
 ```cpp
-// In ImportAsync collection loop:
+// In job collection loop:
 auto result = co_await pipeline.Collect();
 if (result.success) {
-  // IMPORTER commits, not pipeline
+  // JOB commits, not pipeline
   auto table_idx = session.TextureEmitter().Emit(std::move(*result.cooked));
   texture_indices[result.source_id] = table_idx;
 }
@@ -758,10 +759,9 @@ Only the **dispatch** differs:
 
 Runs inside the import thread's nursery.
 
-**Implementation update (2026-01-15):** The current codebase wires
-`ImportSession` creation/finalization into `AsyncImporter` job execution. This
-required injecting an `IAsyncFileWriter` into the importer so sessions can
-flush/finish and write `container.index.bin`.
+**Implementation update (2026-01-15):** ImportSession creation is owned by the
+job. The session carries access to async I/O and the ThreadPool, so the importer
+itself no longer owns file-writer references.
 
 If a job request does not specify `ImportRequest.cooked_root`, the current
 implementation derives it from `ImportRequest.source_path` and
@@ -777,7 +777,6 @@ class AsyncImporter final : public co::LiveObject {
 public:
   struct Config {
     size_t channel_capacity = 64;
-    IAsyncFileWriter* file_writer = nullptr;
   };
 
   struct JobEntry {
@@ -800,7 +799,11 @@ progress state, and job metadata) lives inside `ImportJob`, not in the entry.
 
 ### 5. ImportSession (Per-Job State + Emitters)
 
-Each import job gets its own session. The session owns emitters and tracks I/O.
+Each import job gets its own session. The session owns emitters, tracks I/O,
+and provides the single access point for infrastructure services
+(async file reader/writer and ThreadPool). The session stores non-owning
+handles via `oxygen::observer_ptr` or owning smart pointers, but never raw
+reference members.
 
 ```cpp
 namespace oxygen::content::import {
@@ -816,7 +819,10 @@ namespace oxygen::content::import {
 */
 class ImportSession {
 public:
-  explicit ImportSession(const ImportRequest& request, IAsyncFileWriter& file_writer);
+  explicit ImportSession(const ImportRequest& request,
+    oxygen::observer_ptr<IAsyncFileReader> file_reader,
+    oxygen::observer_ptr<IAsyncFileWriter> file_writer,
+    oxygen::observer_ptr<co::ThreadPool> thread_pool);
 
   //=== Lazy Emitters ===//
 
@@ -844,7 +850,9 @@ public:
 
 private:
   ImportRequest request_;
-  IAsyncFileWriter& file_writer_;
+  oxygen::observer_ptr<IAsyncFileReader> file_reader_;
+  oxygen::observer_ptr<IAsyncFileWriter> file_writer_;
+  oxygen::observer_ptr<co::ThreadPool> thread_pool_;
   LooseCookedWriter cooked_writer_;
 
   // Lazy emitters (nullptr until first use)
@@ -1042,46 +1050,14 @@ TextureEmitter-specific rule:
 - **Index 0 reserved for fallback**: `EnsureFallbackTexture()` guarantees the
   fallback texture exists at index 0 before emitting user textures.
 
-### 6. Enhanced Importer Interface
+### 6. Job-Based Orchestration (ImportJob)
 
-The existing `Importer` interface is preserved. A new async variant is added.
+The sync `Importer` interface remains unchanged and continues to support the
+existing synchronous path. The async path is driven by job actors (e.g.
+`FbxImportJob`, `GlbImportJob`, `TextureImportJob`) which orchestrate pipelines
+and emitters on the import thread.
 
-```cpp
-// Importer.h - ENHANCED
-class Importer {
-public:
-  virtual ~Importer() = default;
-
-  [[nodiscard]] virtual auto Name() const noexcept -> std::string_view = 0;
-  [[nodiscard]] virtual auto Supports(ImportFormat format) const noexcept -> bool = 0;
-
-  //! Sync import (EXISTING - preserved unchanged)
-  virtual auto Import(const ImportRequest& request, CookedContentWriter& out) -> void = 0;
-
-  //! Async import with parallel resource cooking (NEW)
-  /*!
-   Default implementation offloads entire sync Import() to ThreadPool.
-   Backends override to use pipelines and emitters for true parallelism.
-
-   @param request  Import request
-   @param session  Per-job session with lazy emitters
-   @param importer AsyncImporter providing pipelines and infrastructure
-  */
-  virtual auto ImportAsync(const ImportRequest& request,
-                           ImportSession& session,
-                           detail::AsyncImporter& importer) -> co::Co<void>
-  {
-    // Default: offload sync version to thread pool (no parallelism)
-    // Creates a sync CookedContentWriter wrapper around session
-    co_await importer.ThreadPool().Run([&] {
-      SyncWriterAdapter out(session);
-      Import(request, out);
-    });
-  }
-};
-```
-
-### 6. FbxImporter Async Enhancement Example (Maximum Parallelism)
+### 6. FbxImportJob Async Orchestration Example (Maximum Parallelism)
 
 For a 32-core CPU, we want **all cores busy** and **streaming emission**.
 This example shows the optimal pattern for a complex FBX with 28 textures,
@@ -1148,12 +1124,12 @@ private:
 #### Optimal Concurrent Import (Using Session + Emitters)
 
 ```cpp
-auto FbxImporter::ImportAsync(const ImportRequest& request,
-                               ImportSession& session,
-                               detail::AsyncImporter& importer) -> co::Co<void>
+auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
 {
-  auto& pool = importer.ThreadPool();
-  auto& tex_pipe = importer.Textures();
+  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool());
+  auto& pool = *session.ThreadPool();
+  TexturePipeline tex_pipe(pool, {/* config */});
+  tex_pipe.Start(JobNursery());
 
   // Get emitters from session (lazy creation)
   auto& tex_emitter = session.TextureEmitter();
@@ -1257,7 +1233,7 @@ auto FbxImporter::ImportAsync(const ImportRequest& request,
   // session.Finalize() will wait for all I/O before writing index file.
 }
 
-// Called by AsyncImporter after ImportAsync returns:
+// Called by the job after compute completes:
 // co_await session.Finalize();  // Waits for I/O, flushes tables, writes index
 ```
 
@@ -1265,7 +1241,7 @@ auto FbxImporter::ImportAsync(const ImportRequest& request,
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
-│ FbxImporter::ImportAsync                                                   │
+│ FbxImportJob::ExecuteAsync                                                 │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ 1. Parse FBX → scene graph                                                 │
 │ 2. Submit all textures to TexturePipeline (28 jobs → ThreadPool)           │
@@ -1276,7 +1252,7 @@ auto FbxImporter::ImportAsync(const ImportRequest& request,
 │ 5. nursery.Join() → all compute done                                       │
 │ 6. Return (I/O may still be in flight!)                                    │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ AsyncImporter calls session.Finalize()                                     │
+│ ImportJob calls session.Finalize()                                         │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ 7. Wait for all pending I/O (tex_emitter, buf_emitter, asset_emitter)      │
 │ 8. Flush table files (single async write each)                             │
@@ -1500,14 +1476,14 @@ because:
 - Cooking remains the dominant cost
 - Explicit-offset writes avoid append interleaving
 
-#### Updated FbxImporter Flow
+#### Updated FbxImportJob Flow
 
 ```cpp
-auto FbxImporter::ImportAsync(const ImportRequest& request,
-                               ImportSession& session,
-                               detail::AsyncImporter& importer) -> co::Co<void> {
-  auto& pool = importer.ThreadPool();
-  auto& tex_pipe = importer.Textures();
+auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport> {
+  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool());
+  auto& pool = *session.ThreadPool();
+  TexturePipeline tex_pipe(pool, {/* config */});
+  tex_pipe.Start(JobNursery());
 
   // Emit via emitter (tables in memory, data via WriteAtAsync)
   auto& tex_emitter = session.TextureEmitter();
@@ -1841,7 +1817,7 @@ The existing `GetOrCreateTextureResourceIndexWithCooker()` in `TextureEmitter.cp
 calls `CookTextureWithFallback()` synchronously. For async:
 
 ```cpp
-// Async variant for FbxImporter::ImportAsync
+// Async variant for FbxImportJob
 auto GetOrCreateTextureResourceIndexAsync(
   TexturePipeline& pipeline,
   const ufbx_texture* texture,
@@ -1849,7 +1825,9 @@ auto GetOrCreateTextureResourceIndexAsync(
 {
   // Submit to pipeline
   pipeline.Submit(TexturePipeline::WorkItem{
-    .source = ExtractTextureSource(texture),
+    .source_id = TextureIdString(texture),
+    .bytes = ExtractTextureBytes(texture),
+    .bytes_owner = ExtractTextureOwner(texture),
     .desc = MakeDescFromConfig(config),
   });
 
@@ -2036,7 +2014,7 @@ Import Thread Event Loop (single thread):
 
 - All methods protected by `std::mutex`
 - Job submission via `std::atomic` ID generation + thread-safe queue
-- Results posted back via caller-provided dispatch mechanism
+- Results invoked on import thread; caller may marshal
 
 ### Internal (Import Thread)
 
@@ -2055,13 +2033,13 @@ Import Thread Event Loop (single thread):
      │                                │
      │                                │ Nursery spawns coroutines A, B, C
      │                                │ Each co_awaits ThreadPool
-     │                                │ ◀── results via ThreadNotification
+    │                                │ ◀── results resume on import thread
      │                                │
      │                                │ All commits on import thread
      │                                │ (interleaved, but single-threaded)
      │                                │
-     │ callback(result)               │
-     │ ◀──────────────────────────────│ (via caller's ThreadNotification)
+    │ callback(result)               │
+    │ ◀──────────────────────────────│ (import thread; caller may marshal)
      │                                │
 ```
 
@@ -2075,15 +2053,15 @@ These existing files are **preserved and wrapped**, not replaced:
 
 | File | Lines | Role in Async |
 | ---- | ----- | ------------- |
-| `Importer.h` | 55 | Base interface; gains `ImportAsync()` |
-| `AssetImporter.h/cpp` | 200 | Façade; gains `ImportToLooseCookedAsync()` |
+| `Importer.h` | 55 | Base interface; unchanged (sync path) |
+| `AssetImporter.h/cpp` | 200 | Façade; unchanged (sync path) |
 | `ImportRequest.h` | 55 | POD; unchanged |
 | `ImportReport.h` | 40 | POD; unchanged |
 | `CookedContentWriter.h` | 85 | Interface; unchanged |
 | `TextureImporter.h/cpp` | 2800 | Called by TexturePipeline |
 | `TextureCooker.h/cpp` | 1200 | Called by TexturePipeline |
 | `emit/TextureEmitter.h/cpp` | 450 | Sync path preserved |
-| `FbxImporter.cpp` | 800 | Gains `ImportAsync()` override |
+| `Async/Jobs/*.h/.cpp` | — | Job-based async orchestration |
 
 ### Preserved Sync Path
 
@@ -2111,27 +2089,21 @@ auto job_id = service.SubmitImport(request, on_complete);
 // Internally:
 //   1. Post to import thread
 //   2. DetectFormat() → ImportFormat::kFbx
-//   3. Find FbxImporter backend
-//   4. FbxImporter::ImportAsync(request, writer, async_importer)
-//      - ParseFbx() via ThreadPool
+//   3. Create FbxImportJob (or GlbImportJob/TextureImportJob)
+//   4. Job executes:
+//      - Parse via ThreadPool
 //      - For each texture: pipeline.Submit() [PARALLEL]
 //      - Collect textures, emit materials as ready
 //      - EmitGeometry(), EmitScene()
 ```
 
-### Backend Migration Path
+### Job Migration Path
 
-Backends migrate incrementally:
+Jobs migrate incrementally:
 
-1. **Phase 1**: Default `ImportAsync()` offloads `Import()` to ThreadPool
-   - No parallelism, but works immediately for all backends
-
-2. **Phase 2**: Override `ImportAsync()` in FbxImporter
-   - Use TexturePipeline for parallel texture cooking
-   - ~10x speedup for texture-heavy scenes
-
-3. **Phase 3**: Override in GltfImporter
-   - Same pattern as FbxImporter
+1. **Phase 1**: Basic job wiring + session finalization (no parallelism)
+2. **Phase 2**: FbxImportJob uses TexturePipeline for parallel cooking
+3. **Phase 3**: GlbImportJob adopts the same pipeline pattern
 
 ---
 
@@ -2409,7 +2381,7 @@ auto AggregateProgress(Ps&... pipelines) -> PipelineProgress {
 
 | Scenario | Pattern | Notes |
 | -------- | ------- | ----- |
-| Complex FBX/glTF (many textures) | Nursery + streaming emission | See FbxImporter example above |
+| Complex FBX/glTF (many textures) | Nursery + streaming emission | See FbxImportJob example above |
 | Simple asset (few textures) | Sequential collect is fine | Overhead of tracking not worth it |
 | Standalone texture import | Direct pipeline, no nursery | Single item, no dependencies |
 | Batch cooking (no UI) | Either works | Streaming for throughput, sequential for simplicity |
