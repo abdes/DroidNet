@@ -92,12 +92,34 @@ using ImportProgressCallback = std::function<void(const ImportProgress&)>;
  loop and ThreadPool. All public methods are thread-safe and can be called
  from any thread.
 
+ ### Architecture
+
+ Jobs are submitted via a thread-safe channel directly to AsyncImporter,
+ which processes them sequentially on the import thread. The service
+ tracks active jobs only for cancellation support.
+
  ### Lifecycle
 
  1. Construct the service (spawns import thread).
  2. Call `SubmitImport()` from any thread to queue jobs.
  3. Receive callbacks on your thread (via ThreadNotification if available).
  4. Destructor blocks until all work is complete.
+
+ ### Cancellation
+
+ Per-job cancellation is supported via `CancelJob(job_id)`, which triggers
+ an event observed by the job's nursery. Cancelled jobs complete with a
+ diagnostic code "import.cancelled".
+
+ ### Simplified Design (2026-01-15 Refactoring)
+
+ Previous implementation tracked jobs in multiple queues with manual
+ synchronization. This was redundant with co::Channel. Current design:
+
+ - Jobs submitted directly to AsyncImporter via channel
+ - No pending/active/completed tracking (channel handles state)
+ - Only cancel events tracked for cancellation support
+ - Nursery-based cancellation (no manual state machines)
 
  ### Thread Safety
 
@@ -212,10 +234,20 @@ public:
   //! Check if the service is still accepting new jobs. Thread-safe.
   OXGN_CNTT_NDAPI auto IsAcceptingJobs() const -> bool;
 
-  //! Get the number of pending jobs (waiting to start). Thread-safe.
+  //! Get the number of active jobs (pending or in-flight). Thread-safe.
+  /*!
+   Note: The current implementation cannot distinguish between pending
+   (queued) and in-flight (executing) jobs without exposing AsyncImporter
+   internals. Both methods return the total count of active jobs.
+
+   @return Number of jobs that have been submitted but not yet completed.
+  */
   OXGN_CNTT_NDAPI auto PendingJobCount() const -> size_t;
 
-  //! Get the number of in-flight jobs (currently processing). Thread-safe.
+  //! Get the number of active jobs (same as PendingJobCount). Thread-safe.
+  /*!
+   @return Number of jobs that have been submitted but not yet completed.
+  */
   OXGN_CNTT_NDAPI auto InFlightJobCount() const -> size_t;
 
 private:

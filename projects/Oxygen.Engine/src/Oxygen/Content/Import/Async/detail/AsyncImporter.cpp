@@ -9,6 +9,7 @@
 #include <Oxygen/Content/Import/Async/Detail/DefaultImportJob.h>
 #include <Oxygen/Content/Import/Async/Detail/ImportJob.h>
 #include <Oxygen/Content/Import/Async/IAsyncFileWriter.h>
+#include <Oxygen/OxCo/Algorithms.h>
 
 namespace oxygen::content::import::detail {
 
@@ -132,26 +133,27 @@ auto AsyncImporter::ProcessJobsLoop() -> co::Co<>
 */
 auto AsyncImporter::ProcessJob(JobEntry entry) -> co::Co<>
 {
-  if (config_.file_writer == nullptr) {
-    if (entry.cancel_event && entry.cancel_event->Triggered()) {
-      ImportReport report {
-        .cooked_root = entry.request.cooked_root.value_or(
-          entry.request.source_path.parent_path()),
-        .success = false,
-      };
-      report.diagnostics.push_back({
-        .severity = ImportSeverity::kInfo,
-        .code = "import.cancelled",
-        .message = "Import cancelled",
-        .source_path = entry.request.source_path.string(),
-      });
+  // Check for pre-cancellation (job cancelled before execution started)
+  if (entry.cancel_event && entry.cancel_event->Triggered()) {
+    ImportReport report {
+      .cooked_root = entry.request.cooked_root.value_or(
+        entry.request.source_path.parent_path()),
+      .success = false,
+    };
+    report.diagnostics.push_back({
+      .severity = ImportSeverity::kInfo,
+      .code = "import.cancelled",
+      .message = "Import cancelled before execution",
+      .source_path = entry.request.source_path.string(),
+    });
 
-      if (entry.on_complete) {
-        entry.on_complete(entry.job_id, report);
-      }
-      co_return;
+    if (entry.on_complete) {
+      entry.on_complete(entry.job_id, report);
     }
+    co_return;
+  }
 
+  if (config_.file_writer == nullptr) {
     ImportReport report {
       .cooked_root = entry.request.cooked_root.value_or(
         entry.request.source_path.parent_path()),
@@ -171,6 +173,7 @@ auto AsyncImporter::ProcessJob(JobEntry entry) -> co::Co<>
 
   OXCO_WITH_NURSERY(job_supervisor)
   {
+    // Create and start the job first
     auto job = std::make_shared<DefaultImportJob>(
       std::move(entry), *config_.file_writer);
     ImportJob* job_base = job.get();
@@ -183,10 +186,31 @@ auto AsyncImporter::ProcessJob(JobEntry entry) -> co::Co<>
       });
 
     job_base->Run();
-    co_await job_base->Wait();
 
+    // Race between cancellation and job completion
+    // Use AnyOf: if cancellation happens, cancel the nursery; otherwise wait
+    // for job
+    auto [cancelled, waited] = co_await co::AnyOf(
+      [cancel_event = entry.cancel_event, &job_supervisor]() -> co::Co<> {
+        if (cancel_event) {
+          co_await *cancel_event; // Wait for cancellation signal
+          DLOG_F(INFO, "Cancel event triggered, cancelling job nursery");
+          job_supervisor.Cancel(); // Cancel the nursery
+        }
+        co_return;
+      }(),
+      [job_base]() -> co::Co<> {
+        co_await job_base->Wait(); // Wait for job to complete
+        co_return;
+      }());
+
+    // Either the job completed or was cancelled
+    // The nursery will clean up appropriately
     co_return co::kJoin;
   };
+
+  // Note: If the nursery was cancelled, the job will complete with a
+  // cancelled diagnostic (handled by ImportJob implementation)
 }
 
 } // namespace oxygen::content::import::detail
