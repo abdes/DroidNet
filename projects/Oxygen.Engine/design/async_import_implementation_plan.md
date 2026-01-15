@@ -552,21 +552,29 @@ The new design separates concerns:
 
 #### 4.9 Wire ImportSession to AsyncImporter
 
-**File:** `src/Oxygen/Content/Import/Async/detail/AsyncImporter.cpp`
+**File:** `src/Oxygen/Content/Import/Async/Detail/AsyncImporter.cpp`
 
-- [ ] Create `ImportSession` per job
+- [X] Create `ImportSession` per job
 - [ ] Pass session to `Importer::ImportAsync()`
-- [ ] Call `session.Finalize()` after ImportAsync returns
-- [ ] Integration test: job creates session, finalizes
+- [X] Call `session.Finalize()` after ImportAsync returns
+- [X] Integration test: job creates session, finalizes
 
 ### Deliverables
 
 - ✅ `IAsyncFileWriter` abstraction with Windows implementation
 - ✅ `TextureEmitter`, `BufferEmitter`, `AssetEmitter`
 - ✅ Stable index assignment with async I/O (explicit-offset `WriteAt*`)
-- ⏳ `ImportSession` with lazy emitters (not implemented yet)
-- ⏳ Session finalization that awaits emitters then writes index last
-- ⏳ Wiring ImportSession into AsyncImporter job execution
+- ✅ `ImportSession` with lazy emitters
+- ✅ Session finalization that awaits emitters then writes index last
+- ✅ Wiring ImportSession into AsyncImporter job execution
+
+**Notes (implementation update):**
+
+- AsyncImporter now requires an `IAsyncFileWriter` to be configured (wired in
+  AsyncImportService on the import thread) so it can construct and finalize an
+  ImportSession.
+- A small integration test was added to ensure a submitted job produces a
+  `container.index.bin` at the job's cooked root.
 
 ### Acceptance Criteria
 

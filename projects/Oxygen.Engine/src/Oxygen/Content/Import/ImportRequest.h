@@ -9,10 +9,9 @@
 #include <filesystem>
 #include <optional>
 
-#include <Oxygen/Data/SourceKey.h>
-
 #include <Oxygen/Content/Import/ImportOptions.h>
 #include <Oxygen/Content/Import/LooseCookedLayout.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::import {
 
@@ -25,8 +24,9 @@ struct ImportRequest final {
   /*!
    If set, this path MUST be absolute.
 
-   If unset, the importer uses the source file's directory
-   (`source_path.parent_path()`) as the cooked root.
+    If unset, the importer derives the cooked root from `source_path` and
+    `loose_cooked_layout.virtual_mount_root`, ensuring the cooked root ends with
+    the virtual mount root leaf directory (by default: `.cooked`).
   */
   std::optional<std::filesystem::path> cooked_root;
 

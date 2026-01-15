@@ -97,6 +97,7 @@ set(
   "Internal/IblManager.h"
   "Internal/IBrdfLutProvider.h"
   "Internal/IIblProvider.h"
+  "Internal/ISkyAtmosphereLutProvider.h"
   "Internal/RenderScope.h"
   "Internal/SceneConstantsManager.cpp"
   "Internal/SceneConstantsManager.h"

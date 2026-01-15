@@ -17,6 +17,7 @@
 #include <Oxygen/Content/Import/Async/AsyncImportService.h>
 #include <Oxygen/Content/Import/Async/Detail/AsyncImporter.h>
 #include <Oxygen/Content/Import/Async/IAsyncFileReader.h>
+#include <Oxygen/Content/Import/Async/IAsyncFileWriter.h>
 #include <Oxygen/Content/Import/Async/ImportEventLoop.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -63,6 +64,9 @@ struct AsyncImportService::Impl {
 
   //! Async file reader (created on import thread).
   std::unique_ptr<IAsyncFileReader> file_reader_;
+
+  //! Async file writer (created on import thread).
+  std::unique_ptr<IAsyncFileWriter> file_writer_;
 
   //! Next job ID to assign.
   std::atomic<ImportJobId> next_job_id_ { 1 };
@@ -120,8 +124,15 @@ struct AsyncImportService::Impl {
     // Create platform-specific file reader via factory
     file_reader_ = CreateAsyncFileReader(*event_loop_);
 
+    // Create platform-specific file writer via factory
+    file_writer_ = CreateAsyncFileWriter(*event_loop_);
+
     // Create the async importer
-    async_importer_ = std::make_unique<detail::AsyncImporter>();
+    async_importer_
+      = std::make_unique<detail::AsyncImporter>(detail::AsyncImporter::Config {
+        .channel_capacity = 64,
+        .file_writer = file_writer_.get(),
+      });
 
     thread_running_.store(true, std::memory_order_release);
 
@@ -150,6 +161,9 @@ struct AsyncImportService::Impl {
     // Cleanup on import thread (in reverse order of creation)
     if (async_importer_) {
       async_importer_.reset();
+    }
+    if (file_writer_) {
+      file_writer_.reset();
     }
     if (file_reader_) {
       file_reader_.reset();

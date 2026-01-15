@@ -591,72 +591,44 @@ Only the **dispatch** differs:
 
 ### 4. AsyncImporter (Internal LiveObject)
 
-Runs inside the import thread's nursery. Owns resource pipelines by value.
-Uses concepts for compile-time safety, no runtime polymorphism.
+Runs inside the import thread's nursery.
+
+**Implementation update (2026-01-15):** The current codebase wires
+`ImportSession` creation/finalization into `AsyncImporter` job execution. This
+required injecting an `IAsyncFileWriter` into the importer so sessions can
+flush/finish and write `container.index.bin`.
+
+If a job request does not specify `ImportRequest.cooked_root`, the current
+implementation derives it from `ImportRequest.source_path` and
+`ImportRequest.loose_cooked_layout.virtual_mount_root`, ensuring the cooked
+root directory ends with the virtual mount root leaf directory (by default:
+`.cooked`). If the source path cannot be resolved (e.g., synthetic test paths),
+it falls back to the process temp directory and still appends `.cooked`.
 
 ```cpp
 namespace oxygen::content::import::detail {
 
-//! Internal importer running on the import thread.
-/*!
- AsyncImporter is like a GPU driver:
- - It doesn't know WHAT you're rendering (importing)
- - It provides infrastructure: pipelines, progress, cancellation
- - Backends (FbxImporter, GltfImporter) use the pipelines they need
-*/
-class AsyncImporter : public co::LiveObject {
+class AsyncImporter final : public co::LiveObject {
 public:
-  struct JobEntry {
-    ImportJobId id;
-    ImportRequest request;
-    co::Event cancel_event;  // Per-job cancellation
+  struct Config {
+    size_t channel_capacity = 64;
+    IAsyncFileWriter* file_writer = nullptr;
   };
 
-  explicit AsyncImporter(
-    std::shared_ptr<co::ThreadPool> thread_pool,
-    std::shared_ptr<IAsyncFileReader> file_reader);
+  struct JobEntry {
+    ImportJobId job_id;
+    ImportRequest request;
 
-  // LiveObject interface
-  [[nodiscard]] auto ActivateAsync(co::TaskStarted<> started = {}) -> co::Co<> override;
-  void Run() override;
-  void Stop() override;
-  [[nodiscard]] auto IsRunning() const -> bool override;
+    ImportCompletionCallback on_complete;
+    ImportProgressCallback on_progress;
+    ImportCancellationCallback on_cancel;
 
-  //! Submit a job (called from import event loop).
-  [[nodiscard]] auto SubmitJob(JobEntry job) -> co::Co<ImportReport>;
+    std::shared_ptr<co::Event> cancel_event;
+  };
 
-  //=== Pipeline Access (typed, concept-checked) ===//
-
-  //! Access texture pipeline for parallel texture cooking.
-  [[nodiscard]] auto Textures() -> TexturePipeline& { return texture_pipeline_; }
-
-  // Future: Audio(), Meshes(), etc.
-
-  //=== Aggregate Progress ===//
-
-  //! Get combined progress across all pipelines.
-  [[nodiscard]] auto GetAggregateProgress() const -> ImportProgress;
-
-  //=== Infrastructure ===//
-
-  [[nodiscard]] auto ThreadPool() -> co::ThreadPool& { return *thread_pool_; }
-  [[nodiscard]] auto FileReader() -> IAsyncFileReader& { return *file_reader_; }
-
-private:
-  auto ProcessJob(JobEntry& job) -> co::Co<ImportReport>;
-
-  std::shared_ptr<co::ThreadPool> thread_pool_;
-  std::shared_ptr<IAsyncFileReader> file_reader_;
-
-  // Pipelines owned by value (concept-checked, no polymorphism)
-  TexturePipeline texture_pipeline_;
-  // Future: AudioPipeline audio_pipeline_;
-
-  co::Nursery* nursery_ = nullptr;
+  explicit AsyncImporter(Config config = {});
+  [[nodiscard]] auto SubmitJob(JobEntry entry) -> co::Co<>;
 };
-
-// Verify pipeline contracts at compile time
-static_assert(ResourcePipeline<TexturePipeline>);
 
 } // namespace oxygen::content::import::detail
 ```
@@ -679,9 +651,7 @@ namespace oxygen::content::import {
 */
 class ImportSession {
 public:
-  explicit ImportSession(
-    const ImportRequest& request,
-    std::shared_ptr<IAsyncFileWriter> file_writer);
+  explicit ImportSession(const ImportRequest& request, IAsyncFileWriter& file_writer);
 
   //=== Lazy Emitters ===//
 
@@ -709,7 +679,7 @@ public:
 
 private:
   ImportRequest request_;
-  std::shared_ptr<IAsyncFileWriter> file_writer_;
+  IAsyncFileWriter& file_writer_;
   LooseCookedWriter cooked_writer_;
 
   // Lazy emitters (nullptr until first use)
