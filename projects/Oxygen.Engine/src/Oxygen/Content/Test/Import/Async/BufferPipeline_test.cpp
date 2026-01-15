@@ -219,6 +219,111 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_WhenCancelled_ReturnsFailedResult)
   EXPECT_EQ(result.source_id, "buffer0");
 }
 
+//! Verify cancellation after submission returns a failed result.
+NOLINT_TEST_F(BufferPipelineTest, Collect_WhenCancelledAfterSubmit_Fails)
+{
+  // Arrange
+  std::stop_source stop_source;
+
+  std::vector<std::byte> bytes(2 * 1024 * 1024, std::byte { 0x77 });
+  BufferPipeline::WorkResult result;
+  co::ThreadPool pool(loop_, 2);
+
+  // Act
+  co::Run(loop_, [&]() -> co::Co<> {
+    BufferPipeline pipeline(pool,
+      BufferPipeline::Config {
+        .queue_capacity = 4,
+        .worker_count = 1,
+        .with_content_hashing = true,
+      });
+
+    OXCO_WITH_NURSERY(n)
+    {
+      pipeline.Start(n);
+
+      co_await pipeline.Submit(MakeWorkItem("buffer0",
+        MakePayload(std::move(bytes), 0 /*content_hash*/),
+        stop_source.get_token()));
+
+      stop_source.request_stop();
+
+      result = co_await pipeline.Collect();
+      pipeline.Close();
+
+      co_return kJoin;
+    };
+  });
+
+  // Assert
+  EXPECT_FALSE(result.success);
+  EXPECT_TRUE(result.diagnostics.empty());
+  EXPECT_EQ(result.source_id, "buffer0");
+  EXPECT_EQ(result.cooked.content_hash, 0ULL);
+}
+
+//! Verify mixed cancellation yields mixed success states.
+NOLINT_TEST_F(BufferPipelineTest, Collect_MixedCancellation_ReturnsMixedResults)
+{
+  // Arrange
+  std::stop_source stop_source;
+  BufferPipeline::WorkResult cancelled_result;
+  BufferPipeline::WorkResult ok_result;
+  co::ThreadPool pool(loop_, 2);
+
+  // Act
+  co::Run(loop_, [&]() -> co::Co<> {
+    BufferPipeline pipeline(pool,
+      BufferPipeline::Config {
+        .queue_capacity = 4,
+        .worker_count = 1,
+        .with_content_hashing = true,
+      });
+
+    OXCO_WITH_NURSERY(n)
+    {
+      pipeline.Start(n);
+
+      co_await pipeline.Submit(MakeWorkItem("cancelled",
+        MakePayload(
+          std::vector<std::byte>(128, std::byte { 0x11 }), 0 /*content_hash*/),
+        stop_source.get_token()));
+
+      co_await pipeline.Submit(MakeWorkItem("ok",
+        MakePayload(std::vector<std::byte>(128, std::byte { 0x22 }),
+          0 /*content_hash*/)));
+
+      stop_source.request_stop();
+
+      auto first = co_await pipeline.Collect();
+      auto second = co_await pipeline.Collect();
+
+      if (first.source_id == "cancelled") {
+        cancelled_result = std::move(first);
+        ok_result = std::move(second);
+      } else {
+        ok_result = std::move(first);
+        cancelled_result = std::move(second);
+      }
+
+      pipeline.Close();
+
+      co_return kJoin;
+    };
+  });
+
+  // Assert
+  EXPECT_FALSE(cancelled_result.success);
+  EXPECT_TRUE(cancelled_result.diagnostics.empty());
+  EXPECT_EQ(cancelled_result.source_id, "cancelled");
+  EXPECT_EQ(cancelled_result.cooked.content_hash, 0ULL);
+
+  EXPECT_TRUE(ok_result.success);
+  EXPECT_TRUE(ok_result.diagnostics.empty());
+  EXPECT_EQ(ok_result.source_id, "ok");
+  EXPECT_NE(ok_result.cooked.content_hash, 0ULL);
+}
+
 //! Verify multiple submissions can be collected successfully.
 NOLINT_TEST_F(BufferPipelineTest, Collect_MultipleSubmissions_CollectsAll)
 {

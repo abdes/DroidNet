@@ -84,12 +84,6 @@ auto BufferPipeline::Collect() -> co::Co<WorkResult>
 
 auto BufferPipeline::Close() -> void { input_channel_.Close(); }
 
-auto BufferPipeline::CancelAll() -> void
-{
-  input_channel_.Close();
-  output_channel_.Close();
-}
-
 auto BufferPipeline::HasPending() const noexcept -> bool
 {
   return pending_.load(std::memory_order_acquire) > 0;
@@ -120,6 +114,11 @@ auto BufferPipeline::Worker() -> co::Co<>
     std::vector<ImportDiagnostic> diagnostics;
     if (auto diag = co_await ComputeContentHash(item); diag.has_value()) {
       diagnostics.push_back(std::move(*diag));
+    }
+
+    if (item.stop_token.stop_requested()) {
+      co_await ReportCancelled(std::move(item));
+      continue;
     }
 
     WorkResult result {
@@ -158,16 +157,28 @@ auto BufferPipeline::ComputeContentHash(WorkItem& item)
     co_return std::nullopt;
   }
 
+  if (item.stop_token.stop_requested()) {
+    co_return std::nullopt;
+  }
+
   std::span<const std::byte> bytes(
     item.cooked.data.data(), item.cooked.data.size());
 
-  const auto content_hash
-    = co_await thread_pool_.Run([bytes, &item]() noexcept {
-        const auto hash = util::ComputeContentHash(bytes);
-        DLOG_F(2, "hashed {} -> {:#x}", item.source_id, hash);
-        return hash;
-      });
-  item.cooked.content_hash = content_hash;
+  const auto content_hash = co_await thread_pool_.Run(
+    [bytes, stop_token = item.stop_token, &item](
+      co::ThreadPool::CancelToken cancelled) noexcept {
+      if (stop_token.stop_requested() || cancelled) {
+        return uint64_t { 0 };
+      }
+
+      const auto hash = util::ComputeContentHash(bytes);
+      DLOG_F(2, "hashed {} -> {:#x}", item.source_id, hash);
+      return hash;
+    });
+
+  if (!item.stop_token.stop_requested() && content_hash != 0) {
+    item.cooked.content_hash = content_hash;
+  }
   co_return std::nullopt;
 }
 

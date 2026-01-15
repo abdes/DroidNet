@@ -184,16 +184,33 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(AsyncImportService)
   OXYGEN_MAKE_NON_MOVABLE(AsyncImportService)
 
-  //! Submit an import job. Thread-safe.
+  //! Submit an import job for asynchronous processing.
   /*!
-   @param request     Import request (source path, options, etc.)
-   @param on_complete Callback invoked when import finishes.
-   @param on_progress Optional callback for progress updates.
-   @return Job ID for tracking/cancellation.
+   Detects the asset format from the file extension, creates the appropriate
+   job instance, and submits it to the import thread. Returns immediately
+   while the job executes asynchronously.
 
-   @note All callbacks are invoked on the thread that called SubmitImport,
-         provided that thread has an event loop with ThreadNotification.
-         For threads without an event loop, callbacks run on import thread.
+   @param request Import request specifying source path, optional cooked output
+          root, and optional job name. File extension determines the format
+          (`.fbx`, `.gltf`, `.glb`). If `cooked_root` is omitted, a default
+          location adjacent to the source file is used. The optional `job_name`
+          overrides the default naming (`format:id:filename`).
+   @param on_complete Completion callback invoked exactly once when the job
+          finishes (success, failure, or cancellation). Receives the job ID and
+          `ImportReport` with success status, diagnostics, and asset metadata.
+          Invoked on the calling thread if it has an event loop with
+          `ThreadNotification` support; otherwise on the import thread.
+          Cancelled jobs (via `CancelJob()` or `CancelAll()`) complete with
+          `report.success = false` and diagnostic code `"import.cancelled"`.
+   @param on_progress Optional progress callback invoked periodically to report
+          phase transitions and progress percentages. Invoked on the same thread
+          as `on_complete`. Can be `nullptr`.
+   @return Valid job ID (`> 0`) on success, or `kInvalidJobId` (`0`) if rejected
+           due to: shutdown, importer not ready, unknown file format, or
+           internal failure. When `kInvalidJobId` is returned, callbacks are
+           never invoked.
+
+   @see CancelJob, CancelAll, ImportRequest, ImportReport, ImportProgress
   */
   OXGN_CNTT_NDAPI auto SubmitImport(ImportRequest request,
     ImportCompletionCallback on_complete,

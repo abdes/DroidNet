@@ -95,7 +95,7 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_ReturnsValidJobId)
 
   // Act
   auto job_id
-    = service.SubmitImport(ImportRequest { .source_path = "test.txt" },
+    = service.SubmitImport(ImportRequest { .source_path = "test.fbx" },
       [&done](ImportJobId, ImportReport) { done.count_down(); });
 
   // Assert
@@ -117,12 +117,14 @@ NOLINT_TEST_F(
 
   // Act
   auto job_id
-    = service.SubmitImport(ImportRequest { .source_path = "test.txt" },
+    = service.SubmitImport(ImportRequest { .source_path = "test.fbx" },
       [&](ImportJobId id, ImportReport) {
         callback_invoked = true;
         received_id = id;
         done.count_down();
       });
+
+  EXPECT_NE(job_id, kInvalidJobId);
 
   done.wait();
 
@@ -152,7 +154,7 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_WritesIndexFile)
   // Act
   [[maybe_unused]] auto job_id = service.SubmitImport(
     ImportRequest {
-      .source_path = cooked_root_base / "dummy.txt",
+      .source_path = cooked_root_base / "dummy.fbx",
       .cooked_root = cooked_root_base,
     },
     [&](ImportJobId, ImportReport report) {
@@ -160,6 +162,8 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_WritesIndexFile)
       received_report = std::move(report);
       done.count_down();
     });
+
+  EXPECT_NE(job_id, kInvalidJobId);
 
   done.wait();
 
@@ -180,13 +184,15 @@ NOLINT_TEST_F(
 
   // Act
   [[maybe_unused]] auto job_id = service.SubmitImport(
-    ImportRequest { .source_path = "test.txt" },
+    ImportRequest { .source_path = "test.fbx" },
     [&done](ImportJobId, ImportReport) { done.count_down(); },
     [&progress_invoked](const ImportProgress& progress) {
       if (progress.phase == ImportPhase::kParsing) {
         progress_invoked = true;
       }
     });
+
+  EXPECT_NE(job_id, kInvalidJobId);
 
   done.wait();
 
@@ -202,14 +208,18 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_MultipleJobs_UniqueIds)
   std::latch done(3);
 
   // Act
-  auto id1 = service.SubmitImport(ImportRequest { .source_path = "file1.txt" },
+  auto id1 = service.SubmitImport(ImportRequest { .source_path = "file1.fbx" },
     [&done](ImportJobId, ImportReport) { done.count_down(); });
 
-  auto id2 = service.SubmitImport(ImportRequest { .source_path = "file2.txt" },
+  auto id2 = service.SubmitImport(ImportRequest { .source_path = "file2.fbx" },
     [&done](ImportJobId, ImportReport) { done.count_down(); });
 
-  auto id3 = service.SubmitImport(ImportRequest { .source_path = "file3.txt" },
+  auto id3 = service.SubmitImport(ImportRequest { .source_path = "file3.fbx" },
     [&done](ImportJobId, ImportReport) { done.count_down(); });
+
+  EXPECT_NE(id1, kInvalidJobId);
+  EXPECT_NE(id2, kInvalidJobId);
+  EXPECT_NE(id3, kInvalidJobId);
 
   done.wait();
 
@@ -229,7 +239,7 @@ NOLINT_TEST_F(
 
   // Act
   auto job_id
-    = service.SubmitImport(ImportRequest { .source_path = "test.txt" },
+    = service.SubmitImport(ImportRequest { .source_path = "test.fbx" },
       [](ImportJobId, ImportReport) { });
 
   // Assert
@@ -262,8 +272,10 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelJob_CompletedJob_ReturnsFalse)
   std::latch done(1);
 
   auto job_id
-    = service.SubmitImport(ImportRequest { .source_path = "test.txt" },
+    = service.SubmitImport(ImportRequest { .source_path = "test.fbx" },
       [&done](ImportJobId, ImportReport) { done.count_down(); });
+
+  EXPECT_NE(job_id, kInvalidJobId);
 
   done.wait();
 
@@ -294,13 +306,15 @@ NOLINT_TEST_F(
 
   // Submit a job that signals when it starts
   auto job_id = service.SubmitImport(
-    ImportRequest { .source_path = "slow_job.txt" },
+    ImportRequest { .source_path = "slow_job.fbx" },
     [&](ImportJobId, ImportReport) { job_completed = true; },
     [&](const ImportProgress& progress) {
       if (progress.phase == ImportPhase::kParsing) {
         job_started.count_down();
       }
     });
+
+  EXPECT_NE(job_id, kInvalidJobId);
 
   // Wait for job to start, then cancel it
   job_started.wait();
@@ -329,7 +343,7 @@ NOLINT_TEST_F(
 
   // Submit first job that blocks
   [[maybe_unused]] auto blocking_job = service.SubmitImport(
-    ImportRequest { .source_path = "blocker.txt" },
+    ImportRequest { .source_path = "blocker.fbx" },
     [](ImportJobId, ImportReport) {},
     [&](const ImportProgress& progress) {
       if (progress.phase == ImportPhase::kParsing) {
@@ -339,13 +353,17 @@ NOLINT_TEST_F(
       }
     });
 
+  EXPECT_NE(blocking_job, kInvalidJobId);
+
   // Wait for first job to start
   first_job_started.wait();
 
   // Submit second job - it should queue since worker is busy
   auto second_job
-    = service.SubmitImport(ImportRequest { .source_path = "queued.txt" },
+    = service.SubmitImport(ImportRequest { .source_path = "queued.fbx" },
       [&](ImportJobId, ImportReport) { second_job_executed = true; });
+
+  EXPECT_NE(second_job, kInvalidJobId);
 
   // Immediately cancel the second job before it executes
   bool cancel_result = service.CancelJob(second_job);
@@ -374,7 +392,7 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelAll_MultipleJobs_CancelsAll)
   std::vector<ImportJobId> job_ids;
   for (int i = 0; i < kJobCount; ++i) {
     auto job_id = service.SubmitImport(
-      ImportRequest { .source_path = "file" + std::to_string(i) + ".txt" },
+      ImportRequest { .source_path = "file" + std::to_string(i) + ".fbx" },
       [&](ImportJobId, ImportReport) {
         jobs_completed.fetch_add(1, std::memory_order_relaxed);
       },
@@ -386,6 +404,7 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelAll_MultipleJobs_CancelsAll)
           }
         }
       });
+    EXPECT_NE(job_id, kInvalidJobId);
     job_ids.push_back(job_id);
   }
 
@@ -443,8 +462,9 @@ NOLINT_TEST_F(
     // Submit several jobs
     for (int i = 0; i < 5; ++i) {
       [[maybe_unused]] auto job_id = service.SubmitImport(
-        ImportRequest { .source_path = "file" + std::to_string(i) + ".txt" },
+        ImportRequest { .source_path = "file" + std::to_string(i) + ".fbx" },
         [](ImportJobId, ImportReport) { });
+      EXPECT_NE(job_id, kInvalidJobId);
     }
     // Destructor will cancel and cleanup
   }
@@ -473,6 +493,7 @@ NOLINT_TEST_F(AsyncImportServiceConcurrencyTest,
   AsyncImportService service(config_);
   std::latch done(kTotalJobs);
   std::atomic<int> completed_count { 0 };
+  std::atomic<bool> all_valid { true };
 
   // Act - submit from multiple threads
   std::vector<std::thread> threads;
@@ -481,11 +502,14 @@ NOLINT_TEST_F(AsyncImportServiceConcurrencyTest,
       for (int i = 0; i < kJobsPerThread; ++i) {
         [[maybe_unused]] auto job_id = service.SubmitImport(
           ImportRequest { .source_path = "thread" + std::to_string(t) + "_file"
-              + std::to_string(i) + ".txt" },
+              + std::to_string(i) + ".fbx" },
           [&](ImportJobId, ImportReport) {
             completed_count.fetch_add(1, std::memory_order_relaxed);
             done.count_down();
           });
+        if (job_id == kInvalidJobId) {
+          all_valid.store(false, std::memory_order_relaxed);
+        }
       }
     });
   }
@@ -500,6 +524,7 @@ NOLINT_TEST_F(AsyncImportServiceConcurrencyTest,
 
   // Assert
   EXPECT_EQ(completed_count.load(), kTotalJobs);
+  EXPECT_TRUE(all_valid.load(std::memory_order_relaxed));
 }
 
 //! Verify rapid submit and cancel operations don't cause deadlocks.
@@ -514,10 +539,12 @@ NOLINT_TEST_F(
   // Act - rapidly submit and cancel jobs
   for (int i = 0; i < kIterations; ++i) {
     auto job_id = service.SubmitImport(
-      ImportRequest { .source_path = "rapid_" + std::to_string(i) + ".txt" },
+      ImportRequest { .source_path = "rapid_" + std::to_string(i) + ".fbx" },
       [&](ImportJobId, ImportReport) {
         completed_count.fetch_add(1, std::memory_order_relaxed);
       });
+
+    EXPECT_NE(job_id, kInvalidJobId);
 
     // Randomly cancel some jobs immediately
     if (i % 3 == 0) {
@@ -568,8 +595,10 @@ NOLINT_TEST_F(
   std::latch done(1);
 
   auto job_id
-    = service.SubmitImport(ImportRequest { .source_path = "test.txt" },
+    = service.SubmitImport(ImportRequest { .source_path = "test.fbx" },
       [&done](ImportJobId, ImportReport) { done.count_down(); });
+
+  EXPECT_NE(job_id, kInvalidJobId);
 
   done.wait();
 

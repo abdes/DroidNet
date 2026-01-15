@@ -6,13 +6,17 @@
 
 #pragma once
 
+#include <filesystem>
 #include <memory>
 #include <stop_token>
+#include <string>
+#include <string_view>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Composition/Named.h>
+#include <Oxygen/Composition/Object.h>
 #include <Oxygen/Content/Import/Async/AsyncImportService.h>
-#include <Oxygen/Content/Import/Async/Detail/JobEntry.h>
 #include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/api_export.h>
@@ -42,14 +46,22 @@ namespace oxygen::content::import::detail {
  `ActivateAsync()` and cancelled by `Stop()`. All job-scoped tasks (pipeline
  workers, collectors, and orchestration coroutines) must run in this nursery.
 */
-class ImportJob : public co::LiveObject {
+class ImportJob : public oxygen::Object,
+                  public oxygen::Named,
+                  public co::LiveObject {
 public:
   //! Construct a job.
   /*!
-   @param entry Job request and callbacks.
+   @param job_id Unique job identifier.
+   @param request Job request payload.
+   @param on_complete Completion callback.
+   @param on_progress Progress callback (optional).
+   @param cancel_event Cancellation event shared with the service.
    @param file_writer Async file writer used by ImportSession.
   */
-  OXGN_CNTT_API ImportJob(JobEntry entry, IAsyncFileWriter& file_writer);
+  OXGN_CNTT_API ImportJob(ImportJobId job_id, ImportRequest request,
+    ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
+    std::shared_ptr<co::Event> cancel_event, IAsyncFileWriter& file_writer);
 
   OXYGEN_MAKE_NON_COPYABLE(ImportJob)
   OXYGEN_MAKE_NON_MOVABLE(ImportJob)
@@ -70,6 +82,15 @@ public:
   //! Wait until the job reports completion.
   OXGN_CNTT_NDAPI auto Wait() -> co::Co<>;
 
+  //! Get the job identifier.
+  OXGN_CNTT_NDAPI auto GetJobId() const noexcept -> ImportJobId;
+
+  //! Get the job display name.
+  OXGN_CNTT_NDAPI auto GetName() const noexcept -> std::string_view override;
+
+  //! Set the job display name.
+  OXGN_CNTT_API void SetName(std::string_view name) noexcept override;
+
 protected:
   //! Execute the job-specific import work.
   /*!
@@ -81,14 +102,17 @@ protected:
   [[nodiscard]] virtual auto ExecuteAsync() -> co::Co<ImportReport> = 0;
 
   //! Access the job request.
-  [[nodiscard]] auto Request() -> ImportRequest&;
-  [[nodiscard]] auto Request() const -> const ImportRequest&;
+  OXGN_CNTT_NDAPI auto Request() -> ImportRequest&;
+  OXGN_CNTT_NDAPI auto Request() const -> const ImportRequest&;
+
+  //! Ensure the request has a concrete cooked root on disk.
+  OXGN_CNTT_API auto EnsureCookedRoot() -> void;
 
   //! Access the async file writer.
-  [[nodiscard]] auto FileWriter() -> IAsyncFileWriter&;
+  OXGN_CNTT_NDAPI auto FileWriter() -> IAsyncFileWriter&;
 
   //! Returns the job id.
-  [[nodiscard]] auto JobId() const -> ImportJobId;
+  OXGN_CNTT_NDAPI auto JobId() const -> ImportJobId;
 
   //! Job-scoped cancellation token for pipeline work.
   /*!
@@ -120,7 +144,7 @@ protected:
     pipeline.Start(*nursery_);
   }
 
-  auto ReportProgress(
+  OXGN_CNTT_API auto ReportProgress(
     ImportPhase phase, float overall_progress, std::string message) -> void;
 
 private:
@@ -132,8 +156,14 @@ private:
   [[nodiscard]] auto MakeNoFileWriterReport(const ImportRequest& request) const
     -> ImportReport;
 
-  JobEntry entry_;
+  ImportJobId job_id_ = kInvalidJobId;
+  ImportRequest request_;
+  ImportCompletionCallback on_complete_;
+  ImportProgressCallback on_progress_;
+  std::shared_ptr<co::Event> cancel_event_;
   IAsyncFileWriter& file_writer_;
+
+  std::string name_;
 
   std::stop_source stop_source_;
 

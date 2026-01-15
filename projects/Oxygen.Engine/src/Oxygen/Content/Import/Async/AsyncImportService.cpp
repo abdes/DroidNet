@@ -4,43 +4,85 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <atomic>
+#include <cctype>
+#include <filesystem>
 #include <latch>
 #include <mutex>
+#include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/Async/AsyncImportService.h>
 #include <Oxygen/Content/Import/Async/Detail/AsyncImporter.h>
+#include <Oxygen/Content/Import/Async/Detail/ImportJob.h>
 #include <Oxygen/Content/Import/Async/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/Async/IAsyncFileWriter.h>
 #include <Oxygen/Content/Import/Async/ImportEventLoop.h>
+#include <Oxygen/Content/Import/Async/Jobs/AudioImportJob.h>
+#include <Oxygen/Content/Import/Async/Jobs/FbxImportJob.h>
+#include <Oxygen/Content/Import/Async/Jobs/GlbImportJob.h>
+#include <Oxygen/Content/Import/Async/Jobs/TextureImportJob.h>
+#include <Oxygen/Content/Import/ImportFormat.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 
 namespace oxygen::content::import {
 
 namespace {
 
-  [[nodiscard]] auto MakeCancelledReport(const ImportRequest& request)
-    -> ImportReport
+  [[nodiscard]] auto FormatToString(ImportFormat format) -> std::string_view
   {
-    ImportReport report {
-      .cooked_root
-      = request.cooked_root.value_or(request.source_path.parent_path()),
-      .success = false,
-    };
+    switch (format) {
+    case ImportFormat::kFbx:
+      return "fbx";
+    case ImportFormat::kGltf:
+      return "gltf";
+    case ImportFormat::kGlb:
+      return "glb";
+    case ImportFormat::kUnknown:
+      return "unknown";
+    }
+    return "unknown";
+  }
 
-    report.diagnostics.push_back({
-      .severity = ImportSeverity::kInfo,
-      .code = "import.cancelled",
-      .message = "Import cancelled",
-      .source_path = request.source_path.string(),
-    });
+  [[nodiscard]] auto MakeJobName(ImportFormat format, ImportJobId job_id,
+    const std::filesystem::path& source_path) -> std::string
+  {
+    const auto file_name = source_path.filename().string();
+    const auto name_part = file_name.empty() ? "source" : file_name;
+    return std::string(FormatToString(format)) + ":" + std::to_string(job_id)
+      + ":" + name_part;
+  }
 
-    return report;
+  [[nodiscard]] auto CreateJobForFormat(ImportFormat format, ImportJobId job_id,
+    ImportRequest request, ImportCompletionCallback on_complete,
+    ImportProgressCallback on_progress, std::shared_ptr<co::Event> cancel_event,
+    IAsyncFileWriter& file_writer) -> std::shared_ptr<detail::ImportJob>
+  {
+    switch (format) {
+    case ImportFormat::kFbx:
+      return std::make_shared<detail::FbxImportJob>(job_id, std::move(request),
+        std::move(on_complete), std::move(on_progress), std::move(cancel_event),
+        file_writer);
+    case ImportFormat::kGltf:
+      // TODO(Phase 5): Add dedicated GltfImportJob; use GLB job for now.
+      return std::make_shared<detail::GlbImportJob>(job_id, std::move(request),
+        std::move(on_complete), std::move(on_progress), std::move(cancel_event),
+        file_writer);
+    case ImportFormat::kGlb:
+      return std::make_shared<detail::GlbImportJob>(job_id, std::move(request),
+        std::move(on_complete), std::move(on_progress), std::move(cancel_event),
+        file_writer);
+    case ImportFormat::kUnknown:
+      break;
+    }
+    return {};
   }
 
 } // namespace
@@ -73,6 +115,9 @@ struct AsyncImportService::Impl {
 
   //! Async file writer (created on import thread).
   std::unique_ptr<IAsyncFileWriter> file_writer_;
+
+  //! Thread pool for CPU-bound import work (created on import thread).
+  std::unique_ptr<co::ThreadPool> thread_pool_;
 
   //! Next job ID to assign.
   std::atomic<ImportJobId> next_job_id_ { 1 };
@@ -107,6 +152,33 @@ struct AsyncImportService::Impl {
     startup_latch_.wait();
   }
 
+  [[nodiscard]] static auto ToLowerAscii(std::string value) -> std::string
+  {
+    std::transform(
+      value.begin(), value.end(), value.begin(), [](const unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+      });
+    return value;
+  }
+
+  [[nodiscard]] static auto DetectFormatFromPath(
+    const std::filesystem::path& path) -> ImportFormat
+  {
+    const auto ext = ToLowerAscii(path.extension().string());
+
+    if (ext == ".gltf") {
+      return ImportFormat::kGltf;
+    }
+    if (ext == ".glb") {
+      return ImportFormat::kGlb;
+    }
+    if (ext == ".fbx") {
+      return ImportFormat::kFbx;
+    }
+
+    return ImportFormat::kUnknown;
+  }
+
   //! Main function running on the import thread.
   auto ThreadMain() -> void
   {
@@ -120,6 +192,10 @@ struct AsyncImportService::Impl {
 
     // Create platform-specific file writer via factory
     file_writer_ = CreateAsyncFileWriter(*event_loop_);
+
+    // Create thread pool for CPU-bound work (pipelines, mesh processing)
+    thread_pool_ = std::make_unique<co::ThreadPool>(
+      *event_loop_, config_.thread_pool_size);
 
     // Create the async importer
     async_importer_
@@ -153,6 +229,9 @@ struct AsyncImportService::Impl {
     });
 
     // Cleanup on import thread (in reverse order of creation)
+    if (thread_pool_) {
+      thread_pool_.reset();
+    }
     if (async_importer_) {
       async_importer_.reset();
     }
@@ -245,14 +324,19 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   const auto job_id
     = impl_->next_job_id_.fetch_add(1, std::memory_order_relaxed);
 
-  // Create cancel event for this job
-  auto cancel_event = std::make_shared<co::Event>();
-
-  // Store cancel event for CancelJob() support
-  {
-    std::lock_guard lock(impl_->cancel_events_mutex_);
-    impl_->cancel_events_[job_id] = cancel_event;
+  if (!impl_->file_writer_) {
+    DLOG_F(WARNING, "SubmitImport: async file writer not ready");
+    return kInvalidJobId;
   }
+
+  const auto format = Impl::DetectFormatFromPath(request.source_path);
+  if (format == ImportFormat::kUnknown) {
+    DLOG_F(WARNING, "SubmitImport: unknown format for '{}'",
+      request.source_path.string());
+    return kInvalidJobId;
+  }
+
+  std::shared_ptr<co::Event> cancel_event = std::make_shared<co::Event>();
 
   DLOG_F(
     INFO, "Submitting import job {}: {}", job_id, request.source_path.string());
@@ -272,12 +356,30 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
         }
       };
 
+  const auto job_name = request.job_name.value_or(
+    MakeJobName(format, job_id, request.source_path));
+
+  auto job = CreateJobForFormat(format, job_id, std::move(request),
+    std::move(wrapped_complete), std::move(on_progress), cancel_event,
+    *impl_->file_writer_);
+  if (!job) {
+    DLOG_F(WARNING, "SubmitImport: failed to create job for '{}'",
+      request.source_path.string());
+    return kInvalidJobId;
+  }
+
+  job->SetName(job_name);
+
+  // Store cancel event for CancelJob() support
+  {
+    std::lock_guard lock(impl_->cancel_events_mutex_);
+    impl_->cancel_events_[job_id] = cancel_event;
+  }
+
   // Create job entry
   detail::JobEntry entry {
     .job_id = job_id,
-    .request = std::move(request),
-    .on_complete = std::move(wrapped_complete),
-    .on_progress = std::move(on_progress),
+    .job = std::move(job),
     .cancel_event = cancel_event,
   };
 

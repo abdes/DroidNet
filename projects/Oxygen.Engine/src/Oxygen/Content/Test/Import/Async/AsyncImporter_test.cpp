@@ -11,7 +11,9 @@
 #include <system_error>
 #include <vector>
 
+#include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Import/Async/Detail/AsyncImporter.h>
+#include <Oxygen/Content/Import/Async/Detail/ImportJob.h>
 #include <Oxygen/Content/Import/Async/IAsyncFileWriter.h>
 #include <Oxygen/Content/Import/Async/ImportEventLoop.h>
 #include <Oxygen/OxCo/Run.h>
@@ -26,6 +28,31 @@ using oxygen::co::kJoin;
 using oxygen::co::kYield;
 
 namespace {
+
+[[nodiscard]] auto MakeSuccessReport(const ImportRequest& request)
+  -> ImportReport
+{
+  ImportReport report {
+    .cooked_root
+    = request.cooked_root.value_or(request.source_path.parent_path()),
+    .success = true,
+  };
+  return report;
+}
+
+class TestImportJob final : public ImportJob {
+public:
+  OXYGEN_TYPED(TestImportJob)
+
+  using ImportJob::ImportJob;
+
+private:
+  [[nodiscard]] auto ExecuteAsync() -> Co<ImportReport> override
+  {
+    ReportProgress(ImportPhase::kParsing, 0.1f, "Test job running");
+    co_return MakeSuccessReport(Request());
+  }
+};
 
 //=== Lifecycle Tests
 //===---------------------------------------------------------//
@@ -152,6 +179,15 @@ protected:
     config_.file_writer = file_writer_.get();
   }
 
+  [[nodiscard]] auto MakeJob(ImportJobId job_id, ImportRequest request,
+    ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
+    std::shared_ptr<Event> cancel_event) -> std::shared_ptr<TestImportJob>
+  {
+    return std::make_shared<TestImportJob>(job_id, std::move(request),
+      std::move(on_complete), std::move(on_progress), std::move(cancel_event),
+      *file_writer_);
+  }
+
   void TearDown() override
   {
     {
@@ -184,16 +220,25 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitJob_CallsCompletionCallback)
       co_await n.Start(&AsyncImporter::ActivateAsync, &importer);
       importer.Run();
 
-      JobEntry entry;
-      entry.job_id = 42;
-      entry.request.source_path = "test.txt";
-      entry.request.cooked_root = MakeTestCookedRoot();
-      entry.on_complete = [&](ImportJobId id, const ImportReport& report) {
+      ImportRequest request;
+      request.source_path = "test.txt";
+      request.cooked_root = MakeTestCookedRoot();
+
+      auto cancel_event = std::make_shared<Event>();
+      auto on_complete = [&](ImportJobId id, const ImportReport& report) {
         received_id = id;
         received_success = report.success;
         callback_called = true;
         completion_event.Trigger();
       };
+
+      auto job = MakeJob(
+        42, std::move(request), std::move(on_complete), nullptr, cancel_event);
+
+      JobEntry entry;
+      entry.job_id = 42;
+      entry.job = std::move(job);
+      entry.cancel_event = cancel_event;
 
       co_await importer.SubmitJob(std::move(entry));
 
@@ -229,11 +274,12 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitMultipleJobs_ProcessedInOrder)
       importer.Run();
 
       for (ImportJobId i = 1; i <= 3; ++i) {
-        JobEntry entry;
-        entry.job_id = i;
-        entry.request.source_path = "test" + std::to_string(i) + ".txt";
-        entry.request.cooked_root = MakeTestCookedRoot();
-        entry.on_complete = [&](ImportJobId id, const ImportReport&) {
+        ImportRequest request;
+        request.source_path = "test" + std::to_string(i) + ".txt";
+        request.cooked_root = MakeTestCookedRoot();
+
+        auto cancel_event = std::make_shared<Event>();
+        auto on_complete = [&](ImportJobId id, const ImportReport&) {
           {
             std::lock_guard lock(order_mutex);
             completion_order.push_back(id);
@@ -242,6 +288,14 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitMultipleJobs_ProcessedInOrder)
             all_done.Trigger();
           }
         };
+
+        auto job = MakeJob(
+          i, std::move(request), std::move(on_complete), nullptr, cancel_event);
+
+        JobEntry entry;
+        entry.job_id = i;
+        entry.job = std::move(job);
+        entry.cancel_event = cancel_event;
 
         co_await importer.SubmitJob(std::move(entry));
       }
@@ -275,16 +329,26 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitJob_CallsProgressCallback)
       co_await n.Start(&AsyncImporter::ActivateAsync, &importer);
       importer.Run();
 
-      JobEntry entry;
-      entry.job_id = 99;
-      entry.request.source_path = "test.txt";
-      entry.request.cooked_root = MakeTestCookedRoot();
-      entry.on_progress = [&](const ImportProgress& progress) {
+      ImportRequest request;
+      request.source_path = "test.txt";
+      request.cooked_root = MakeTestCookedRoot();
+
+      auto cancel_event = std::make_shared<Event>();
+      auto on_progress = [&](const ImportProgress& progress) {
         progress_job_id = progress.job_id;
         progress_called = true;
       };
-      entry.on_complete
+
+      auto on_complete
         = [&](ImportJobId, const ImportReport&) { completion_event.Trigger(); };
+
+      auto job = MakeJob(99, std::move(request), std::move(on_complete),
+        std::move(on_progress), cancel_event);
+
+      JobEntry entry;
+      entry.job_id = 99;
+      entry.job = std::move(job);
+      entry.cancel_event = cancel_event;
 
       co_await importer.SubmitJob(std::move(entry));
 
@@ -307,6 +371,13 @@ class AsyncImporterCancellationTest : public ::testing::Test {
 protected:
   ImportEventLoop loop_;
   AsyncImporter::Config config_ { .channel_capacity = 8 };
+  std::unique_ptr<IAsyncFileWriter> file_writer_;
+
+  void SetUp() override
+  {
+    file_writer_ = CreateAsyncFileWriter(loop_);
+    config_.file_writer = file_writer_.get();
+  }
 };
 
 //! Verify job with triggered cancel event calls cancellation callback.
@@ -330,11 +401,10 @@ NOLINT_TEST_F(
 
       auto cancel_event = std::make_shared<Event>();
 
-      JobEntry entry;
-      entry.job_id = 123;
-      entry.request.source_path = "test.txt";
-      entry.cancel_event = cancel_event;
-      entry.on_complete = [&](ImportJobId id, const ImportReport& report) {
+      ImportRequest request;
+      request.source_path = "test.txt";
+
+      auto on_complete = [&](ImportJobId id, const ImportReport& report) {
         completed_id = id;
         received_success = report.success;
         if (!report.diagnostics.empty()) {
@@ -343,6 +413,14 @@ NOLINT_TEST_F(
         complete_called = true;
         done_event.Trigger();
       };
+
+      auto job = std::make_shared<TestImportJob>(123, std::move(request),
+        std::move(on_complete), nullptr, cancel_event, *file_writer_);
+
+      JobEntry entry;
+      entry.job_id = 123;
+      entry.job = std::move(job);
+      entry.cancel_event = cancel_event;
 
       // Trigger cancellation before processing
       cancel_event->Trigger();
@@ -398,7 +476,6 @@ NOLINT_TEST_F(AsyncImporterTrySubmitTest, TrySubmitJob_WhenSpace_ReturnsTrue)
   // Act
   JobEntry entry;
   entry.job_id = 1;
-  entry.request.source_path = "test.txt";
   const bool result = importer.TrySubmitJob(std::move(entry));
 
   // Assert

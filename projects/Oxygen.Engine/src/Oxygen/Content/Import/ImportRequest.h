@@ -8,6 +8,7 @@
 
 #include <filesystem>
 #include <optional>
+#include <string>
 
 #include <Oxygen/Content/Import/ImportOptions.h>
 #include <Oxygen/Content/Import/LooseCookedLayout.h>
@@ -46,6 +47,9 @@ struct ImportRequest final {
 
   //! Optional explicit source GUID for the cooked container.
   std::optional<data::SourceKey> source_key;
+
+  //! Optional human-readable job name for logging and UI.
+  std::optional<std::string> job_name;
 
   //! Import options.
   ImportOptions options = {};

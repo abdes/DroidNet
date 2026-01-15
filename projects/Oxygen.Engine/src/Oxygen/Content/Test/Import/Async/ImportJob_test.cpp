@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 
+#include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Import/Async/Detail/ImportJob.h>
 #include <Oxygen/Content/Import/Async/IAsyncFileWriter.h>
 #include <Oxygen/Content/Import/Async/ImportEventLoop.h>
@@ -44,6 +45,9 @@ protected:
 
 class ImmediateSuccessJob final : public ImportJob {
 public:
+  OXYGEN_TYPED(ImmediateSuccessJob)
+
+public:
   using ImportJob::ImportJob;
 
   bool executed = false;
@@ -57,6 +61,9 @@ private:
 };
 
 class BlockingJob final : public ImportJob {
+public:
+  OXYGEN_TYPED(BlockingJob)
+
 public:
   using ImportJob::ImportJob;
 
@@ -90,6 +97,9 @@ private:
 
 class StartTaskJob final : public ImportJob {
 public:
+  OXYGEN_TYPED(StartTaskJob)
+
+public:
   using ImportJob::ImportJob;
 
   Event task_started;
@@ -118,6 +128,7 @@ struct FakePipeline {
 };
 
 class StartPipelineJob final : public ImportJob {
+  OXYGEN_TYPED(StartPipelineJob)
 public:
   using ImportJob::ImportJob;
 
@@ -140,16 +151,18 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_Run_CompletesAndCallsOnCompleteOnce)
   bool reported_success = false;
   Event done;
 
-  JobEntry entry;
-  entry.job_id = 1;
-  entry.request.source_path = "test.txt";
-  entry.on_complete = [&](ImportJobId, const ImportReport& report) {
+  ImportRequest request;
+  request.source_path = "test.txt";
+
+  auto cancel_event = std::make_shared<Event>();
+  auto on_complete = [&](ImportJobId, const ImportReport& report) {
     reported_success = report.success;
     ++complete_calls;
     done.Trigger();
   };
 
-  ImmediateSuccessJob job(std::move(entry), *file_writer_);
+  ImmediateSuccessJob job(1, std::move(request), std::move(on_complete),
+    nullptr, cancel_event, *file_writer_);
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -177,10 +190,11 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_Stop_CompletesWithCancelledDiagnostic)
   std::string cancelled_code;
   Event done;
 
-  JobEntry entry;
-  entry.job_id = 2;
-  entry.request.source_path = "test.txt";
-  entry.on_complete = [&](ImportJobId, const ImportReport& report) {
+  ImportRequest request;
+  request.source_path = "test.txt";
+
+  auto cancel_event = std::make_shared<Event>();
+  auto on_complete = [&](ImportJobId, const ImportReport& report) {
     reported_success = report.success;
     if (!report.diagnostics.empty()) {
       cancelled_code = report.diagnostics.front().code;
@@ -189,7 +203,8 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_Stop_CompletesWithCancelledDiagnostic)
     done.Trigger();
   };
 
-  BlockingJob job(std::move(entry), *file_writer_);
+  BlockingJob job(2, std::move(request), std::move(on_complete), nullptr,
+    cancel_event, *file_writer_);
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -222,14 +237,13 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_CancelEvent_PreTriggered_AvoidsExecution)
   std::string cancelled_code;
   Event done;
 
+  ImportRequest request;
+  request.source_path = "test.txt";
+
   auto cancel_event = std::make_shared<Event>();
   cancel_event->Trigger();
 
-  JobEntry entry;
-  entry.job_id = 3;
-  entry.request.source_path = "test.txt";
-  entry.cancel_event = cancel_event;
-  entry.on_complete = [&](ImportJobId, const ImportReport& report) {
+  auto on_complete = [&](ImportJobId, const ImportReport& report) {
     reported_success = report.success;
     if (!report.diagnostics.empty()) {
       cancelled_code = report.diagnostics.front().code;
@@ -238,7 +252,8 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_CancelEvent_PreTriggered_AvoidsExecution)
     done.Trigger();
   };
 
-  BlockingJob job(std::move(entry), *file_writer_);
+  BlockingJob job(3, std::move(request), std::move(on_complete), nullptr,
+    cancel_event, *file_writer_);
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -267,15 +282,17 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_StartTask_ExecutesTask)
   std::atomic<int> complete_calls { 0 };
   Event done;
 
-  JobEntry entry;
-  entry.job_id = 4;
-  entry.request.source_path = "test.txt";
-  entry.on_complete = [&](ImportJobId, const ImportReport&) {
+  ImportRequest request;
+  request.source_path = "test.txt";
+
+  auto cancel_event = std::make_shared<Event>();
+  auto on_complete = [&](ImportJobId, const ImportReport&) {
     ++complete_calls;
     done.Trigger();
   };
 
-  StartTaskJob job(std::move(entry), *file_writer_);
+  StartTaskJob job(4, std::move(request), std::move(on_complete), nullptr,
+    cancel_event, *file_writer_);
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -302,15 +319,17 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_StartPipeline_StartsWorkers)
 
   FakePipeline pipeline;
 
-  JobEntry entry;
-  entry.job_id = 5;
-  entry.request.source_path = "test.txt";
-  entry.on_complete = [&](ImportJobId, const ImportReport&) {
+  ImportRequest request;
+  request.source_path = "test.txt";
+
+  auto cancel_event = std::make_shared<Event>();
+  auto on_complete = [&](ImportJobId, const ImportReport&) {
     ++complete_calls;
     done.Trigger();
   };
 
-  StartPipelineJob job(std::move(entry), *file_writer_);
+  StartPipelineJob job(5, std::move(request), std::move(on_complete), nullptr,
+    cancel_event, *file_writer_);
   job.pipeline = &pipeline;
 
   // Act
