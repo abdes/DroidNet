@@ -8,8 +8,8 @@
 #include <mutex>
 #include <vector>
 
+#include <Oxygen/Content/Import/Async/Detail/AsyncImporter.h>
 #include <Oxygen/Content/Import/Async/ImportEventLoop.h>
-#include <Oxygen/Content/Import/Async/detail/AsyncImporter.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
 
