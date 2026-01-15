@@ -63,13 +63,18 @@ namespace {
 
 ImportJob::ImportJob(ImportJobId job_id, ImportRequest request,
   ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
-  std::shared_ptr<co::Event> cancel_event, IAsyncFileWriter& file_writer)
+  std::shared_ptr<co::Event> cancel_event,
+  oxygen::observer_ptr<IAsyncFileReader> file_reader,
+  oxygen::observer_ptr<IAsyncFileWriter> file_writer,
+  oxygen::observer_ptr<co::ThreadPool> thread_pool)
   : job_id_(job_id)
   , request_(std::move(request))
   , on_complete_(std::move(on_complete))
   , on_progress_(std::move(on_progress))
   , cancel_event_(std::move(cancel_event))
+  , file_reader_(file_reader)
   , file_writer_(file_writer)
+  , thread_pool_(thread_pool)
 {
 }
 
@@ -133,7 +138,23 @@ auto ImportJob::EnsureCookedRoot() -> void
   }
 }
 
-auto ImportJob::FileWriter() -> IAsyncFileWriter& { return file_writer_; }
+auto ImportJob::FileReader() const noexcept
+  -> oxygen::observer_ptr<IAsyncFileReader>
+{
+  return file_reader_;
+}
+
+auto ImportJob::FileWriter() const noexcept
+  -> oxygen::observer_ptr<IAsyncFileWriter>
+{
+  return file_writer_;
+}
+
+auto ImportJob::ThreadPool() const noexcept
+  -> oxygen::observer_ptr<co::ThreadPool>
+{
+  return thread_pool_;
+}
 
 auto ImportJob::JobId() const -> ImportJobId { return job_id_; }
 

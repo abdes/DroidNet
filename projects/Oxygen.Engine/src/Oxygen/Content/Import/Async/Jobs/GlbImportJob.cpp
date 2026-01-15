@@ -23,7 +23,7 @@ auto GlbImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   EnsureCookedRoot();
 
-  ImportSession session(Request(), FileWriter());
+  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool());
 
   ReportProgress(ImportPhase::kParsing, 0.0f, "Parsing GLB...");
   const auto asset = co_await ParseAsset(session);

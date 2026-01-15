@@ -12,11 +12,13 @@
 
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Import/Async/Detail/ImportJob.h>
+#include <Oxygen/Content/Import/Async/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/Async/IAsyncFileWriter.h>
 #include <Oxygen/Content/Import/Async/ImportEventLoop.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
@@ -38,9 +40,16 @@ namespace {
 class ImportJobTest : public ::testing::Test {
 protected:
   ImportEventLoop loop_;
+  std::unique_ptr<IAsyncFileReader> file_reader_;
   std::unique_ptr<IAsyncFileWriter> file_writer_;
+  std::unique_ptr<oxygen::co::ThreadPool> thread_pool_;
 
-  void SetUp() override { file_writer_ = CreateAsyncFileWriter(loop_); }
+  void SetUp() override
+  {
+    file_reader_ = CreateAsyncFileReader(loop_);
+    file_writer_ = CreateAsyncFileWriter(loop_);
+    thread_pool_ = std::make_unique<oxygen::co::ThreadPool>(loop_, 1);
+  }
 };
 
 class ImmediateSuccessJob final : public ImportJob {
@@ -162,7 +171,10 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_Run_CompletesAndCallsOnCompleteOnce)
   };
 
   ImmediateSuccessJob job(1, std::move(request), std::move(on_complete),
-    nullptr, cancel_event, *file_writer_);
+    nullptr, cancel_event,
+    oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
+    oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
+    oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()));
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -204,7 +216,9 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_Stop_CompletesWithCancelledDiagnostic)
   };
 
   BlockingJob job(2, std::move(request), std::move(on_complete), nullptr,
-    cancel_event, *file_writer_);
+    cancel_event, oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
+    oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
+    oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()));
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -253,7 +267,9 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_CancelEvent_PreTriggered_AvoidsExecution)
   };
 
   BlockingJob job(3, std::move(request), std::move(on_complete), nullptr,
-    cancel_event, *file_writer_);
+    cancel_event, oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
+    oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
+    oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()));
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -292,7 +308,9 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_StartTask_ExecutesTask)
   };
 
   StartTaskJob job(4, std::move(request), std::move(on_complete), nullptr,
-    cancel_event, *file_writer_);
+    cancel_event, oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
+    oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
+    oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()));
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -329,7 +347,9 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_StartPipeline_StartsWorkers)
   };
 
   StartPipelineJob job(5, std::move(request), std::move(on_complete), nullptr,
-    cancel_event, *file_writer_);
+    cancel_event, oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
+    oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
+    oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()));
   job.pipeline = &pipeline;
 
   // Act

@@ -14,6 +14,7 @@
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Content/Import/Async/AsyncImportService.h>
@@ -27,9 +28,11 @@
 
 namespace oxygen::co {
 class Event;
+class ThreadPool;
 } // namespace oxygen::co
 
 namespace oxygen::content::import {
+class IAsyncFileReader;
 class IAsyncFileWriter;
 } // namespace oxygen::content::import
 
@@ -57,11 +60,16 @@ public:
    @param on_complete Completion callback.
    @param on_progress Progress callback (optional).
    @param cancel_event Cancellation event shared with the service.
+   @param file_reader Async file reader used by ImportSession.
    @param file_writer Async file writer used by ImportSession.
+   @param thread_pool Thread pool used by ImportSession.
   */
   OXGN_CNTT_API ImportJob(ImportJobId job_id, ImportRequest request,
     ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
-    std::shared_ptr<co::Event> cancel_event, IAsyncFileWriter& file_writer);
+    std::shared_ptr<co::Event> cancel_event,
+    oxygen::observer_ptr<IAsyncFileReader> file_reader,
+    oxygen::observer_ptr<IAsyncFileWriter> file_writer,
+    oxygen::observer_ptr<co::ThreadPool> thread_pool);
 
   OXYGEN_MAKE_NON_COPYABLE(ImportJob)
   OXYGEN_MAKE_NON_MOVABLE(ImportJob)
@@ -109,7 +117,16 @@ protected:
   OXGN_CNTT_API auto EnsureCookedRoot() -> void;
 
   //! Access the async file writer.
-  OXGN_CNTT_NDAPI auto FileWriter() -> IAsyncFileWriter&;
+  OXGN_CNTT_NDAPI auto FileReader() const noexcept
+    -> oxygen::observer_ptr<IAsyncFileReader>;
+
+  //! Access the async file writer.
+  OXGN_CNTT_NDAPI auto FileWriter() const noexcept
+    -> oxygen::observer_ptr<IAsyncFileWriter>;
+
+  //! Access the shared thread pool.
+  OXGN_CNTT_NDAPI auto ThreadPool() const noexcept
+    -> oxygen::observer_ptr<co::ThreadPool>;
 
   //! Returns the job id.
   OXGN_CNTT_NDAPI auto JobId() const -> ImportJobId;
@@ -161,7 +178,9 @@ private:
   ImportCompletionCallback on_complete_;
   ImportProgressCallback on_progress_;
   std::shared_ptr<co::Event> cancel_event_;
-  IAsyncFileWriter& file_writer_;
+  oxygen::observer_ptr<IAsyncFileReader> file_reader_ {};
+  oxygen::observer_ptr<IAsyncFileWriter> file_writer_ {};
+  oxygen::observer_ptr<co::ThreadPool> thread_pool_ {};
 
   std::string name_;
 

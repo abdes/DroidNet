@@ -23,7 +23,7 @@ auto AudioImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   EnsureCookedRoot();
 
-  ImportSession session(Request(), FileWriter());
+  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool());
 
   ReportProgress(ImportPhase::kParsing, 0.0f, "Loading audio source...");
   const auto source = co_await LoadSource(session);
