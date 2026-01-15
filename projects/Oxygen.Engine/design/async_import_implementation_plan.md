@@ -772,18 +772,15 @@ Tasks:
 
 **File:** `src/Oxygen/Content/Import/Async/TexturePipeline.h`
 
-- [ ] Define `TexturePipeline::WorkItem`
-  - `source_id` (correlation key)
-  - `bytes` (span of source bytes)
-  - `bytes_owner` (shared ownership for embedded/source buffers)
-  - `desc` (TextureImportDesc)
-  - `stop_token` (cancellation)
-- [ ] Define `TexturePipeline::WorkResult`
-  - `source_id` (echoed)
-  - `cooked` (CookedTexture payload)
-  - `diagnostics` (vector)
-  - `success` (bool)
-- [ ] Add placeholder for pipeline progress (API defined in 5.2)
+- [X] Define `FailurePolicy` and `SourceContent` per
+      `design/texture_work_pipeline_v2.md` (`SourceBytes`, `TextureSourceSet`,
+      `ScratchImage`).
+- [X] Define `WorkItem` with fields: `source_id`, `texture_id`, `source_key`,
+      `desc`, `packing_policy_id`, `output_format_is_override`,
+      `failure_policy`, `source`, `stop_token`.
+- [X] Define `WorkResult` with fields: `source_id`, `texture_id`, `source_key`,
+      `cooked`, `used_placeholder`, `diagnostics`, `success`.
+- [X] Add `Config` struct (queue capacity, worker count) and store as member.
 
 #### 5.2 Pipeline Progress Reporting (Design Task)
 
@@ -794,55 +791,85 @@ Tasks:
 
 Tasks:
 
-- [ ] Define pipeline progress API shape (fields + update cadence).
-- [ ] Update `ResourcePipeline` concept to include the chosen `GetProgress()`.
-- [ ] Add initial design notes for progress aggregation across pipelines.
+- [X] Define `PipelineProgress` fields and invariants in the design doc.
+- [X] Add `GetProgress()` to `TexturePipeline` and update the
+  `ResourcePipeline` concept.
+- [X] Define update points: increment `submitted` on successful submit and
+  `completed/failed` on `Collect()`.
 
 #### 5.3 ResourcePipeline Concept
 
 **File:** `src/Oxygen/Content/Import/Async/ResourcePipeline.h`
 
-- [ ] Define `ResourcePipeline<T>` concept
-  - `T::WorkItem`, `T::WorkResult`
-  - `Start(co::Nursery&)`
-  - `Submit(WorkItem)`, `TrySubmit(WorkItem)`
-  - `Collect() -> co::Co<WorkResult>`
-  - `HasPending()`, `PendingCount()`
-  - `Close()`
-  - `GetProgress()` (shape from 5.2)
-- [ ] `static_assert(ResourcePipeline<TexturePipeline>)`
+- [X] Implement the concept to match BufferPipeline-style semantics.
+- [X] `static_assert(ResourcePipeline<TexturePipeline>)`.
 
 #### 5.4 TexturePipeline Implementation
 
 **File:** `src/Oxygen/Content/Import/Async/TexturePipeline.h/.cpp`
 
-- [ ] Bounded work queue (`co::Channel<WorkItem>`)
-- [ ] Result queue (`co::Channel<WorkResult>`)
-- [ ] Implement `Start(co::Nursery&)`
-- [ ] Implement `Submit(WorkItem)` + `TrySubmit(WorkItem)` with backpressure
-- [ ] Implement `Collect() -> co::Co<WorkResult>`
-- [ ] Implement `HasPending()`, `PendingCount()`
-- [ ] Implement `Close()` and `GetProgress()` (per 5.2)
-- [ ] Unit test: submit and collect
+- [X] Add `input_channel_` and `output_channel_` with bounded capacity.
+- [X] Track `pending_` and progress counters using the same rules as
+  BufferPipeline.
+- [X] Implement `Start()` to spawn `Config::worker_count` coroutines.
+- [X] Implement `Submit()`/`TrySubmit()` with backpressure and progress updates.
+- [X] Implement `Collect()` with sentinel result on closed output channel.
+- [X] Implement `HasPending()`, `PendingCount()`, `Close()`, `GetProgress()`.
 
 #### 5.5 TexturePipeline Worker Loop
 
 **File:** `src/Oxygen/Content/Import/Async/TexturePipeline.cpp`
 
-- [ ] Worker coroutine reads from work queue
-- [ ] Accept bytes from `WorkItem` (pipeline remains compute-only)
-- [ ] Decode image (ThreadPool CPU work)
-- [ ] Transcode (mips, BC7 on ThreadPool)
-- [ ] Push WorkResult to result queue
-- [ ] Unit test: texture cooks correctly
+- [X] Implement `Worker()` loop patterned after BufferPipeline.
+- [X] Early-cancel: if `stop_token` requested, emit `success=false` result.
+- [X] Resolve packing policy via `emit::GetPackingPolicy()`.
+- [X] Build local `TextureImportDesc` (set `source_id`, `stop_token`).
+- [X] Cook using the correct overload for `SourceContent`:
+  `SourceBytes`, `TextureSourceSet` (cube only), or `ScratchImage`.
+- [ ] Implement non-cube multi-source assembly for `TextureSourceSet`
+  (array layers), with validation of dimension/format parity.
+- [X] If `output_format_is_override == false`, preserve decoded format and
+  set `bc7_quality = kNone` to match sync path.
+- [X] On error: return placeholder when `failure_policy == kPlaceholder` and
+  not cancelled; otherwise emit diagnostics with `success=false`.
 
 #### 5.6 Reuse Existing Sync Cooking Logic
 
 **File:** `src/Oxygen/Content/Import/Async/TexturePipeline.cpp`
 
-- [ ] Call existing `CookTexture()` on ThreadPool
-- [ ] Wrap sync helpers, don't rewrite
-- [ ] Unit test: output matches sync path
+- [X] Call `emit::CookTextureForEmission(...)` / `CookTexture(...)` inside
+  `thread_pool_.Run(...)` (pipeline stays compute-only).
+- [X] Placeholder path uses
+  `emit::CreatePlaceholderForMissingTexture(...)` and returns a complete
+  `CookedTexturePayload`.
+- [X] Add byte-for-byte parity tests against sync cooker output.
+
+#### 5.6a Legacy Cooker Gap Fixes (Make New System Complete)
+
+**Files:**
+
+- `src/Oxygen/Content/Import/TextureCooker.*`
+- `src/Oxygen/Content/Import/TextureImportTypes.h`
+- `src/Oxygen/Content/Import/TextureSourceAssembly.*`
+- `design/texture_work_pipeline_v2.md`
+
+Tasks:
+
+- [X] Fix `HdrHandling::kKeepFloat` to **override** `output_format` to a float
+  format when HDR input is detected, instead of failing with
+  `kHdrRequiresFloatFormat`.
+- [X] Update validation logic so `kKeepFloat` no longer follows the `kError`
+  path when `bake_hdr_to_ldr == false`.
+- [X] Add regression tests for HDR inputs with `kKeepFloat` verifying the
+  float output format and successful cook.
+- [X] Implement non-cube multi-source assembly for `TextureSourceSet`
+  (2D array layers and pre-authored mips).
+- [X] Add validation tests for mismatched dimensions across layers and for
+  missing mip levels.
+- [X] Add unit tests for non-cube multi-source inputs (array layers),
+  including validation failures and successful cooking parity.
+- [X] Update the texture pipeline design doc to reflect the corrected HDR
+  policy and expanded multi-source support.
 
 #### 5.7 Job-Orchestrated Import Wiring
 
@@ -994,6 +1021,11 @@ End-to-end integration, example application, and documentation.
 - [ ] Final code review
 - [ ] ASAN/TSAN clean run
 - [ ] Update CHANGELOG
+
+#### 6.7 Legacy Cooker Gaps (Deferred from 5.6a)
+
+- [ ] Implement 3D depth-slice multi-source assembly for `TextureSourceSet`.
+- [ ] Add validation tests for subresource ordering (layer-major, mip-inner).
 
 ### Deliverables
 

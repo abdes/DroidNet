@@ -46,6 +46,7 @@ auto BufferPipeline::Start(co::Nursery& nursery) -> void
 auto BufferPipeline::Submit(WorkItem item) -> co::Co<>
 {
   ++pending_;
+  submitted_.fetch_add(1, std::memory_order_acq_rel);
   co_await input_channel_.Send(std::move(item));
 }
 
@@ -62,6 +63,7 @@ auto BufferPipeline::TrySubmit(WorkItem item) -> bool
   const auto ok = input_channel_.TrySend(std::move(item));
   if (ok) {
     ++pending_;
+    submitted_.fetch_add(1, std::memory_order_acq_rel);
   }
   return ok;
 }
@@ -79,6 +81,11 @@ auto BufferPipeline::Collect() -> co::Co<WorkResult>
   }
 
   pending_.fetch_sub(1, std::memory_order_acq_rel);
+  if (maybe_result->success) {
+    completed_.fetch_add(1, std::memory_order_acq_rel);
+  } else {
+    failed_.fetch_add(1, std::memory_order_acq_rel);
+  }
   co_return std::move(*maybe_result);
 }
 
@@ -92,6 +99,20 @@ auto BufferPipeline::HasPending() const noexcept -> bool
 auto BufferPipeline::PendingCount() const noexcept -> size_t
 {
   return pending_.load(std::memory_order_acquire);
+}
+
+auto BufferPipeline::GetProgress() const noexcept -> PipelineProgress
+{
+  const auto submitted = submitted_.load(std::memory_order_acquire);
+  const auto completed = completed_.load(std::memory_order_acquire);
+  const auto failed = failed_.load(std::memory_order_acquire);
+  return PipelineProgress {
+    .submitted = submitted,
+    .completed = completed,
+    .failed = failed,
+    .in_flight = submitted - completed - failed,
+    .throughput = 0.0F,
+  };
 }
 
 auto BufferPipeline::Worker() -> co::Co<>

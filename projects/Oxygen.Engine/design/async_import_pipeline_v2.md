@@ -590,6 +590,25 @@ Notes:
   within the job’s child nursery.
 - Importer/service shutdown is handled by cancelling the AsyncImporter nursery
   and/or cancelling all job nurseries (see Cancellation Design).
+
+##### Operational Semantics (Current Implementation Baseline)
+
+These behaviors reflect the established pattern in
+`src/Oxygen/Content/Import/Async/Pipelines/BufferPipeline.cpp` and are the
+baseline that new pipelines should follow unless explicitly documented
+otherwise:
+
+- `Start()` is called exactly once. Calling `Start()` more than once is invalid.
+- `Submit()` is intended to be used only before `Close()`; callers should
+  avoid submitting after closing the input channel.
+- `TrySubmit()` returns `false` when the input channel is closed or full.
+- `PendingCount()` tracks submitted work that has not yet been collected
+  (including cancelled items). `HasPending()` is derived from this counter.
+- `Collect()` suspends until a result is available. If the output channel is
+  closed, it returns a sentinel `WorkResult` with `success = false` and empty
+  fields. Callers should treat this as end-of-stream.
+- Cancellation is propagated via `WorkItem.stop_token`; cancelled work yields a
+  `WorkResult` with `success = false`.
 ```
 
 #### ResourcePipeline Concept
@@ -641,6 +660,23 @@ struct PipelineProgress {
   size_t in_flight = 0;     // Currently processing
   float throughput = 0.0f;  // Items per second (rolling average)
 };
+
+#### PipelineProgress Invariants (Required)
+
+- All counters (`submitted`, `completed`, `failed`, `in_flight`) are
+  non-negative and use `0` as a valid default state.
+- `submitted` is monotonically non-decreasing and increments only when a work
+  item is successfully accepted (i.e. `Submit()` or `TrySubmit()` succeeds).
+- `completed` is monotonically non-decreasing and increments when a collected
+  `WorkResult` has `success = true` (placeholders count as success).
+- `failed` is monotonically non-decreasing and increments when a collected
+  `WorkResult` has `success = false` (including cancellations).
+- `in_flight` is derived as:
+  `in_flight = submitted - completed - failed`.
+- `in_flight` must never be negative. When the pipeline is closed and fully
+  drained, `in_flight` must be `0` and `submitted = completed + failed`.
+- `throughput` is non-negative and may be `0.0f` when no samples are available
+  (e.g. `submitted == 0`).
 ```
 
 ### 3. Work Item Extraction Pattern

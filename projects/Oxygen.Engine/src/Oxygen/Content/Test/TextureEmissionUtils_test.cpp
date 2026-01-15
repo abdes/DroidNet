@@ -154,7 +154,7 @@ NOLINT_TEST_F(MakeImportDescFromConfigTest, SetsMipPolicy)
   // Arrange
   CookerConfig config {
     .enabled = true,
-    .generate_mips = true,
+    .mip_policy = oxygen::content::import::MipPolicy::kFullChain,
   };
 
   // Act
@@ -205,7 +205,7 @@ NOLINT_TEST_F(CookTextureForEmissionTest, WithMips_ProducesMultipleMips)
   // Arrange
   CookerConfig config {
     .enabled = true,
-    .generate_mips = true,
+    .mip_policy = oxygen::content::import::MipPolicy::kFullChain,
   };
 
   // Act

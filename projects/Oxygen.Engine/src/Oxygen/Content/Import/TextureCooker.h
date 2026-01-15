@@ -77,12 +77,12 @@ OXGN_CNTT_NDAPI auto CookTexture(ScratchImage&& image,
   const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
   -> oxygen::Result<CookedTexturePayload, TextureImportError>;
 
-//! Cook a multi-source texture (cube maps, arrays, 3D volumes).
+//! Cook a multi-source texture (cube maps and 2D arrays).
 /*!
   Assembles multiple source files into a single texture.
 
   Each source in the TextureSourceSet is decoded and placed into the
-  appropriate subresource position (array layer, mip level, depth slice).
+  appropriate subresource position (array layer, mip level).
 
   @param sources Set of source files mapped to subresources
   @param desc    Import descriptor specifying how to cook the texture
@@ -104,6 +104,7 @@ OXGN_CNTT_NDAPI auto CookTexture(ScratchImage&& image,
   auto result = CookTexture(sources, desc, D3D12PackingPolicy::Instance());
   ```
 
+  @note 3D depth-slice assembly is not supported yet.
   @see TextureSourceSet for source assembly helpers
   @see ApplyPreset for easy descriptor configuration
 */

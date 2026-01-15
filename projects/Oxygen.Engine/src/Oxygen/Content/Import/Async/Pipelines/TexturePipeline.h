@@ -9,17 +9,22 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <span>
 #include <stop_token>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/Import/Async/ResourcePipeline.h>
-#include <Oxygen/Content/Import/BufferImportTypes.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
+#include <Oxygen/Content/Import/ScratchImage.h>
+#include <Oxygen/Content/Import/TextureImportDesc.h>
+#include <Oxygen/Content/Import/TextureImportTypes.h>
+#include <Oxygen/Content/Import/TextureSourceAssembly.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/OxCo/Channel.h>
 #include <Oxygen/OxCo/Co.h>
@@ -28,21 +33,20 @@
 
 namespace oxygen::content::import {
 
-//! Pipeline for CPU-bound buffer post-processing.
+//! Pipeline for CPU-bound texture cooking.
 /*!
- BufferPipeline is a small compute-only helper intended for async imports.
- It offloads expensive CPU work (currently optional SHA-256 based content
- hashing) to a shared `co::ThreadPool`.
+ TexturePipeline is a compute-only pipeline used by async imports. It accepts
+ pre-acquired source bytes (or pre-decoded images), cooks them on a
+ `co::ThreadPool`, and returns `CookedTexturePayload` results.
 
- The pipeline does not perform any I/O and does not assign resource indices.
- Use `BufferEmitter` to perform deduplication and to write `buffers.data` and
- `buffers.table`.
+ The pipeline does not perform I/O and does not assign resource indices.
+ Use `TextureEmitter` to emit cooked payloads.
 
  ### Work Model
 
  - Producers submit `WorkItem` objects.
- - Worker coroutines receive work on the import thread, then offload CPU-bound
-   tasks to the ThreadPool.
+ - Worker coroutines run on the import thread and offload CPU work to the
+   ThreadPool.
  - Completed `WorkResult` objects are collected on the import thread.
 
  ### Cancellation Semantics
@@ -51,9 +55,9 @@ namespace oxygen::content::import {
  - Cancellation is expressed by cancelling the job nursery and by checking the
    `WorkItem` stop tokens during processing.
 
- @see CookedBufferPayload, BufferEmitter
+ @see CookedTexturePayload, TextureEmitter
 */
-class BufferPipeline final {
+class TexturePipeline final {
 public:
   //! Configuration for the pipeline.
   struct Config {
@@ -62,28 +66,49 @@ public:
 
     //! Number of worker coroutines to start.
     uint32_t worker_count = 2;
-
-    //! Whether to compute the SHA-256 based content hash.
-    /*!
-     When enabled, the pipeline computes the SHA-256 digest of the buffer bytes
-     and stores the first 8 bytes in `CookedBufferPayload::content_hash`.
-
-     When disabled, the pipeline does not touch `content_hash`.
-    */
-    bool with_content_hashing = true;
   };
+
+  //! Policy for handling failures while cooking.
+  enum class FailurePolicy : uint8_t {
+    kStrict,
+    kPlaceholder,
+  };
+
+  //! Source bytes for a single texture payload.
+  struct SourceBytes {
+    std::span<const std::byte> bytes;
+    std::shared_ptr<const void> owner;
+  };
+
+  //! Source content variants supported by the pipeline.
+  using SourceContent
+    = std::variant<SourceBytes, TextureSourceSet, ScratchImage>;
 
   //! Work submission item.
   struct WorkItem {
-    //! Correlation ID for diagnostics and lookup (e.g., mesh/buffer name).
+    //! Diagnostic ID and decode extension hint.
     std::string source_id;
 
-    //! Cooked buffer payload.
-    /*!
-     When `Config::with_content_hashing` is enabled and `content_hash` is zero,
-     the pipeline computes and populates it.
-    */
-    CookedBufferPayload cooked;
+    //! Canonical dedupe key (normalized path or embedded hash).
+    std::string texture_id;
+
+    //! Opaque correlation key (e.g., `ufbx_texture*`).
+    const void* source_key = nullptr;
+
+    //! Import descriptor to use for cooking.
+    TextureImportDesc desc;
+
+    //! Packing policy identifier (e.g., "d3d12", "tight").
+    std::string packing_policy_id;
+
+    //! True when output format is explicitly overridden.
+    bool output_format_is_override = false;
+
+    //! Failure policy for this work item.
+    FailurePolicy failure_policy = FailurePolicy::kPlaceholder;
+
+    //! Source content (bytes, multi-source set, or decoded image).
+    SourceContent source;
 
     //! Cancellation token.
     std::stop_token stop_token;
@@ -94,27 +119,33 @@ public:
     //! Echoed from WorkItem for correlation.
     std::string source_id;
 
-    //! Cooked payload.
-    /*!
-     If hashing is enabled, `content_hash` may be computed and filled.
-    */
-    CookedBufferPayload cooked;
+    //! Echoed from WorkItem for dedupe mapping.
+    std::string texture_id;
 
-    //! Any diagnostics produced during processing.
+    //! Echoed from WorkItem for correlation.
+    const void* source_key = nullptr;
+
+    //! Cooked payload, if successful.
+    std::optional<CookedTexturePayload> cooked;
+
+    //! True if a placeholder payload was used.
+    bool used_placeholder = false;
+
+    //! Diagnostics produced while cooking.
     std::vector<ImportDiagnostic> diagnostics;
 
     //! True if successful; false if cancelled or failed.
     bool success = false;
   };
 
-  //! Create a buffer pipeline using the given ThreadPool.
-  OXGN_CNTT_API explicit BufferPipeline(
+  //! Create a texture pipeline using the given ThreadPool.
+  OXGN_CNTT_API explicit TexturePipeline(
     co::ThreadPool& thread_pool, Config config = {});
 
-  OXGN_CNTT_API ~BufferPipeline();
+  OXGN_CNTT_API ~TexturePipeline();
 
-  OXYGEN_MAKE_NON_COPYABLE(BufferPipeline)
-  OXYGEN_MAKE_NON_MOVABLE(BufferPipeline)
+  OXYGEN_MAKE_NON_COPYABLE(TexturePipeline)
+  OXYGEN_MAKE_NON_MOVABLE(TexturePipeline)
 
   //! Start worker coroutines in the given nursery.
   /*!
@@ -152,8 +183,6 @@ public:
 
 private:
   [[nodiscard]] auto Worker() -> co::Co<>;
-  [[nodiscard]] auto ComputeContentHash(WorkItem& item)
-    -> co::Co<std::optional<ImportDiagnostic>>;
   auto ReportCancelled(WorkItem item) -> co::Co<>;
 
   co::ThreadPool& thread_pool_;
@@ -169,6 +198,6 @@ private:
   bool started_ = false;
 };
 
-static_assert(ResourcePipeline<BufferPipeline>);
+static_assert(ResourcePipeline<TexturePipeline>);
 
 } // namespace oxygen::content::import
