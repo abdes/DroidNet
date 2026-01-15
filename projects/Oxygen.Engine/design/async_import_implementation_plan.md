@@ -663,16 +663,16 @@ Tasks:
 
 Tasks:
 
-- [ ] Remove `Cancel`/`CancelAll` from pipeline public APIs.
-- [ ] Ensure pipelines support:
+- [X] Remove `Cancel`/`CancelAll` from pipeline public APIs.
+- [X] Ensure pipelines support:
   - `Start(co::Nursery&)`
   - bounded `Submit`/`TrySubmit`
   - `Collect()`
   - `Close()` (stop accepting new work and allow draining)
-- [ ] Ensure cancellation of in-flight work is done via:
+- [X] Ensure cancellation of in-flight work is done via:
   - job nursery cancellation, and
   - cooperative stop tokens checked by work items and ThreadPool tasks.
-- [ ] Update any pipeline concepts/specs in the codebase to remove
+- [X] Update any pipeline concepts/specs in the codebase to remove
   `CancelAll()` requirements.
 
 ##### 4.9.6 Tests (must cover the new execution model)
@@ -692,8 +692,6 @@ Tasks:
     `on_complete` with `import.cancelled`.
 - [X] Ensure job-based tests isolate output via `ImportRequest::cooked_root`
   and cleanup recursively in teardown.
-- [ ] No synchronous fallback: add a test guard that the async path does not
-  invoke sync importers.
 
 ### Deliverables
 

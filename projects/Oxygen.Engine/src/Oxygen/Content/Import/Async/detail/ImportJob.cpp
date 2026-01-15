@@ -4,14 +4,71 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <filesystem>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/Async/Detail/ImportJob.h>
 #include <Oxygen/OxCo/Algorithms.h>
 
 namespace oxygen::content::import::detail {
 
-ImportJob::ImportJob(JobEntry entry, IAsyncFileWriter& file_writer)
-  : entry_(std::move(entry))
+namespace {
+
+  [[nodiscard]] auto VirtualMountRootLeaf(const ImportRequest& request)
+    -> std::filesystem::path
+  {
+    auto mount_root
+      = std::filesystem::path(request.loose_cooked_layout.virtual_mount_root)
+          .lexically_normal();
+    auto leaf = mount_root.filename();
+    if (!leaf.empty()) {
+      return leaf;
+    }
+
+    // Defensive fallback: virtual mount roots are expected to end with a
+    // directory name (e.g. "/.cooked").
+    return std::filesystem::path(".cooked");
+  }
+
+  [[nodiscard]] auto ResolveCookedRootForRequest(const ImportRequest& request)
+    -> std::filesystem::path
+  {
+    const auto mount_leaf = VirtualMountRootLeaf(request);
+
+    std::filesystem::path base_root;
+    if (request.cooked_root.has_value()) {
+      base_root = *request.cooked_root;
+    } else if (!request.source_path.empty()) {
+      std::error_code ec;
+      auto absolute_source = std::filesystem::absolute(request.source_path, ec);
+      if (!ec) {
+        base_root = absolute_source.parent_path();
+      }
+    }
+
+    if (base_root.empty()) {
+      base_root = std::filesystem::temp_directory_path();
+    }
+
+    // Ensure the cooked root ends with the virtual mount root leaf directory
+    // (e.g. ".cooked"). This keeps incremental imports and updates stable.
+    if (base_root.filename() == mount_leaf) {
+      return base_root;
+    }
+
+    return base_root / mount_leaf;
+  }
+
+} // namespace
+
+ImportJob::ImportJob(ImportJobId job_id, ImportRequest request,
+  ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
+  std::shared_ptr<co::Event> cancel_event, IAsyncFileWriter& file_writer)
+  : job_id_(job_id)
+  , request_(std::move(request))
+  , on_complete_(std::move(on_complete))
+  , on_progress_(std::move(on_progress))
+  , cancel_event_(std::move(cancel_event))
   , file_writer_(file_writer)
 {
 }
@@ -43,16 +100,42 @@ auto ImportJob::IsRunning() const -> bool { return nursery_ != nullptr; }
 
 auto ImportJob::Wait() -> co::Co<> { co_await completed_; }
 
-auto ImportJob::Request() -> ImportRequest& { return entry_.request; }
+auto ImportJob::GetJobId() const noexcept -> ImportJobId { return job_id_; }
 
-auto ImportJob::Request() const -> const ImportRequest&
+auto ImportJob::GetName() const noexcept -> std::string_view { return name_; }
+
+void ImportJob::SetName(std::string_view name) noexcept
 {
-  return entry_.request;
+  name_.assign(name.begin(), name.end());
+}
+
+auto ImportJob::Request() -> ImportRequest& { return request_; }
+
+auto ImportJob::Request() const -> const ImportRequest& { return request_; }
+
+/*!
+ Ensure the request has a concrete cooked root and create it on disk.
+
+ Uses the request's explicit cooked root when provided. Otherwise, derives a
+ cooked root from the source path and loose cooked layout. If the source path
+ cannot be resolved, falls back to the process temp directory.
+*/
+auto ImportJob::EnsureCookedRoot() -> void
+{
+  auto cooked_root = ResolveCookedRootForRequest(request_);
+  request_.cooked_root = cooked_root;
+
+  std::error_code ec;
+  std::filesystem::create_directories(cooked_root, ec);
+  if (ec) {
+    DLOG_F(WARNING, "Failed to create cooked root '{}': {}",
+      cooked_root.string(), ec.message());
+  }
 }
 
 auto ImportJob::FileWriter() -> IAsyncFileWriter& { return file_writer_; }
 
-auto ImportJob::JobId() const -> ImportJobId { return entry_.job_id; }
+auto ImportJob::JobId() const -> ImportJobId { return job_id_; }
 
 auto ImportJob::StopToken() const noexcept -> std::stop_token
 {
@@ -69,11 +152,11 @@ auto ImportJob::MainAsync() -> co::Co<>
     }
     finalized = true;
 
-    DLOG_F(2, "ImportJob finalize: job_id={} success={}", entry_.job_id,
-      report.success);
+    DLOG_F(
+      2, "ImportJob finalize: job_id={} success={}", job_id_, report.success);
 
-    if (entry_.on_complete) {
-      entry_.on_complete(entry_.job_id, report);
+    if (on_complete_) {
+      on_complete_(job_id_, report);
     }
 
     completed_.Trigger();
@@ -90,17 +173,17 @@ auto ImportJob::MainAsync() -> co::Co<>
   co_await co::AnyOf(
     [&]() -> co::Co<> {
       auto run_work = [&]() -> co::Co<ImportReport> {
-        if (entry_.cancel_event && entry_.cancel_event->Triggered()) {
+        if (cancel_event_ && cancel_event_->Triggered()) {
           stop_source_.request_stop();
-          co_return MakeCancelledReport(entry_.request);
+          co_return MakeCancelledReport(request_);
         }
 
-        if (entry_.cancel_event) {
+        if (cancel_event_) {
           auto [cancelled, maybe_report]
-            = co_await co::AnyOf(*entry_.cancel_event, ExecuteAsync());
+            = co_await co::AnyOf(*cancel_event_, ExecuteAsync());
           if (cancelled.has_value()) {
             stop_source_.request_stop();
-            co_return MakeCancelledReport(entry_.request);
+            co_return MakeCancelledReport(request_);
           }
 
           DCHECK_F(maybe_report.has_value());
@@ -118,9 +201,9 @@ auto ImportJob::MainAsync() -> co::Co<>
         co_return;
       }
 
-      DLOG_F(2, "ImportJob main cancelled: job_id={}", entry_.job_id);
+      DLOG_F(2, "ImportJob main cancelled: job_id={}", job_id_);
       stop_source_.request_stop();
-      finalize(MakeCancelledReport(entry_.request));
+      finalize(MakeCancelledReport(request_));
       co_return;
     }));
 
@@ -168,16 +251,16 @@ auto ImportJob::MakeNoFileWriterReport(const ImportRequest& request) const
 auto ImportJob::ReportProgress(
   ImportPhase phase, float overall_progress, std::string message) -> void
 {
-  if (!entry_.on_progress) {
+  if (!on_progress_) {
     return;
   }
 
   ImportProgress progress;
-  progress.job_id = entry_.job_id;
+  progress.job_id = job_id_;
   progress.phase = phase;
   progress.overall_progress = overall_progress;
   progress.message = std::move(message);
-  entry_.on_progress(progress);
+  on_progress_(progress);
 }
 
 } // namespace oxygen::content::import::detail

@@ -782,11 +782,7 @@ public:
 
   struct JobEntry {
     ImportJobId job_id;
-    ImportRequest request;
-
-    ImportCompletionCallback on_complete;
-    ImportProgressCallback on_progress;
-
+    std::shared_ptr<ImportJob> job;
     std::shared_ptr<co::Event> cancel_event;
   };
 
@@ -796,6 +792,11 @@ public:
 
 } // namespace oxygen::content::import::detail
 ```
+
+**JobEntry ownership contract:** `JobEntry` is a thin envelope that transports
+the concrete `ImportJob` instance (constructed by `AsyncImportService`) plus a
+cancellation token/event. All job-specific data (request, callbacks, identity,
+progress state, and job metadata) lives inside `ImportJob`, not in the entry.
 
 ### 5. ImportSession (Per-Job State + Emitters)
 

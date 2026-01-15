@@ -44,6 +44,12 @@ namespace oxygen::content::import {
    tasks to the ThreadPool.
  - Completed `WorkResult` objects are collected on the import thread.
 
+ ### Cancellation Semantics
+
+ - Pipelines do not provide a direct cancel API.
+ - Cancellation is expressed by cancelling the job nursery and by checking the
+   `WorkItem` stop tokens during processing.
+
  @see CookedBufferPayload, BufferEmitter
 */
 class BufferPipeline final {
@@ -133,15 +139,6 @@ public:
    @note Does not cancel ThreadPool tasks already running.
   */
   OXGN_CNTT_API auto Close() -> void;
-
-  //! Cancel all queued work.
-  /*!
-   Clears the queues by closing the channels.
-
-   @note In-flight ThreadPool tasks are cooperatively cancellable only if
-         the submitted work checks the cancellation token.
-  */
-  OXGN_CNTT_API auto CancelAll() -> void;
 
   //! Whether any submitted work is still pending completion.
   OXGN_CNTT_NDAPI auto HasPending() const noexcept -> bool;
