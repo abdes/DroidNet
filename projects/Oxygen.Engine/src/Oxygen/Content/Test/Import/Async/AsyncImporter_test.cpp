@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <Oxygen/Content/Import/Async/Detail/AsyncImporter.h>
+#include <Oxygen/Content/Import/Async/IAsyncFileWriter.h>
 #include <Oxygen/Content/Import/Async/ImportEventLoop.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
@@ -126,7 +127,14 @@ NOLINT_TEST_F(AsyncImporterLifecycleTest, Stop_ClosesJobChannel)
 class AsyncImporterJobTest : public ::testing::Test {
 protected:
   ImportEventLoop loop_;
+  std::unique_ptr<IAsyncFileWriter> file_writer_;
   AsyncImporter::Config config_ { .channel_capacity = 8 };
+
+  void SetUp() override
+  {
+    file_writer_ = CreateAsyncFileWriter(loop_);
+    config_.file_writer = file_writer_.get();
+  }
 };
 
 //! Verify job submission and completion callback.

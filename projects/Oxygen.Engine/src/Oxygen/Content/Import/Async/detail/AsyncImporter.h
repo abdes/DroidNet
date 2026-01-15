@@ -19,6 +19,12 @@
 #include <Oxygen/OxCo/LiveObject.h>
 #include <Oxygen/OxCo/Nursery.h>
 
+namespace oxygen::content::import {
+
+class IAsyncFileWriter;
+
+} // namespace oxygen::content::import
+
 namespace oxygen::content::import::detail {
 
 //! Entry for a single import job in the job channel.
@@ -69,6 +75,9 @@ public:
   struct Config {
     //! Capacity of the job channel (backpressure control).
     size_t channel_capacity = 64;
+
+    //! Async file writer used by import sessions.
+    IAsyncFileWriter* file_writer = nullptr;
   };
 
   //! Construct an importer with the given configuration.

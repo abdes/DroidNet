@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <filesystem>
 #include <latch>
 #include <thread>
 #include <vector>
@@ -128,6 +129,44 @@ NOLINT_TEST_F(
   // Assert
   EXPECT_TRUE(callback_invoked);
   EXPECT_EQ(received_id, job_id);
+}
+
+//! Verify that an import job finalizes its session and writes an index file.
+NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_WritesIndexFile)
+{
+  // Arrange
+  AsyncImportService service(config_);
+
+  const auto unique_suffix = std::to_string(
+    std::chrono::steady_clock::now().time_since_epoch().count());
+  auto cooked_root_base = std::filesystem::temp_directory_path() / "Oxygen"
+    / "AsyncImportTests" / unique_suffix;
+  std::filesystem::create_directories(cooked_root_base);
+
+  const auto cooked_root = cooked_root_base / ".cooked";
+
+  std::latch done(1);
+  std::atomic<bool> callback_invoked { false };
+  ImportReport received_report;
+
+  // Act
+  [[maybe_unused]] auto job_id = service.SubmitImport(
+    ImportRequest {
+      .source_path = cooked_root_base / "dummy.txt",
+      .cooked_root = cooked_root_base,
+    },
+    [&](ImportJobId, ImportReport report) {
+      callback_invoked = true;
+      received_report = std::move(report);
+      done.count_down();
+    });
+
+  done.wait();
+
+  // Assert
+  EXPECT_TRUE(callback_invoked);
+  EXPECT_EQ(received_report.cooked_root, cooked_root);
+  EXPECT_TRUE(std::filesystem::exists(cooked_root / "container.index.bin"));
 }
 
 //! Verify progress callback is invoked if provided.
