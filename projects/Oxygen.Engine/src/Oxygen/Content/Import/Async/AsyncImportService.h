@@ -86,15 +86,6 @@ using ImportCompletionCallback
 */
 using ImportProgressCallback = std::function<void(const ImportProgress&)>;
 
-//! Cancellation callback invoked when a job is cancelled.
-/*!
- @param job_id The job that was cancelled.
-
- @note Invoked on the thread that called SubmitImport, if that thread
-       has an event loop. Otherwise, invoked on the import thread.
-*/
-using ImportCancellationCallback = std::function<void(ImportJobId)>;
-
 //! Thread-safe service for submitting async import jobs.
 /*!
  AsyncImportService manages a dedicated import thread with its own event
@@ -164,7 +155,7 @@ public:
   //! Shutdown and join the import thread.
   /*!
    Blocks until all pending work is cancelled and the import thread exits.
-   In-flight jobs will receive cancellation callbacks.
+    In-flight jobs will complete with a cancelled diagnostic.
   */
   OXGN_CNTT_API ~AsyncImportService();
 
@@ -176,7 +167,6 @@ public:
    @param request     Import request (source path, options, etc.)
    @param on_complete Callback invoked when import finishes.
    @param on_progress Optional callback for progress updates.
-   @param on_cancel   Optional callback if job is cancelled.
    @return Job ID for tracking/cancellation.
 
    @note All callbacks are invoked on the thread that called SubmitImport,
@@ -185,8 +175,7 @@ public:
   */
   OXGN_CNTT_NDAPI auto SubmitImport(ImportRequest request,
     ImportCompletionCallback on_complete,
-    ImportProgressCallback on_progress = nullptr,
-    ImportCancellationCallback on_cancel = nullptr) -> ImportJobId;
+    ImportProgressCallback on_progress = nullptr) -> ImportJobId;
 
   //! Cancel a specific import job. Thread-safe.
   /*!
@@ -200,7 +189,7 @@ public:
 
   //! Cancel all pending and in-flight imports. Thread-safe.
   /*!
-   All jobs will receive cancellation callbacks.
+    All jobs will complete with a cancelled diagnostic.
   */
   OXGN_CNTT_API auto CancelAll() -> void;
 

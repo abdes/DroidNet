@@ -25,6 +25,29 @@
 
 namespace oxygen::content::import {
 
+namespace {
+
+  [[nodiscard]] auto MakeCancelledReport(const ImportRequest& request)
+    -> ImportReport
+  {
+    ImportReport report {
+      .cooked_root
+      = request.cooked_root.value_or(request.source_path.parent_path()),
+      .success = false,
+    };
+
+    report.diagnostics.push_back({
+      .severity = ImportSeverity::kInfo,
+      .code = "import.cancelled",
+      .message = "Import cancelled",
+      .source_path = request.source_path.string(),
+    });
+
+    return report;
+  }
+
+} // namespace
+
 //=== Internal Job Tracking
 //===------------------------------------------------//
 
@@ -34,8 +57,6 @@ struct JobState {
   ImportRequest request;
   ImportCompletionCallback on_complete;
   ImportProgressCallback on_progress;
-  ImportCancellationCallback on_cancel;
-  bool cancel_requested = false;
   bool started = false;
 };
 
@@ -200,20 +221,6 @@ struct AsyncImportService::Impl {
           event->Trigger();
         }
       }
-
-      // Cancel pending jobs (legacy path)
-      while (!pending_jobs_.empty()) {
-        auto job = pending_jobs_.front();
-        pending_jobs_.pop();
-        if (job->on_cancel) {
-          job->on_cancel(job->id);
-        }
-      }
-
-      // Request cancellation of active jobs (legacy path)
-      for (auto& [id, job] : active_jobs_) {
-        job->cancel_requested = true;
-      }
     }
 
     // Post the stop request to the event loop to ensure it runs on the
@@ -248,8 +255,8 @@ AsyncImportService::AsyncImportService(Config config)
 AsyncImportService::~AsyncImportService() { impl_->Shutdown(); }
 
 auto AsyncImportService::SubmitImport(ImportRequest request,
-  ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
-  ImportCancellationCallback on_cancel) -> ImportJobId
+  ImportCompletionCallback on_complete, ImportProgressCallback on_progress)
+  -> ImportJobId
 {
   // Check if we're accepting jobs
   if (impl_->shutdown_requested_.load(std::memory_order_acquire)) {
@@ -274,9 +281,7 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   auto job = std::make_shared<JobState>();
   job->id = job_id;
   job->request = request; // Copy for legacy tracking
-  job->on_complete = on_complete;
   job->on_progress = on_progress;
-  job->on_cancel = on_cancel;
 
   DLOG_F(
     INFO, "Submitting import job {}: {}", job_id, request.source_path.string());
@@ -319,34 +324,10 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
         }
       },
     .on_progress = std::move(on_progress),
-    .on_cancel =
-      [this, job_id, on_cancel](ImportJobId id) {
-        // Update tracking state on cancellation
-        {
-          std::lock_guard lock(impl_->jobs_mutex_);
-          impl_->active_jobs_.erase(id);
-          impl_->completed_jobs_.insert(id);
-          impl_->cancel_events_.erase(id);
-
-          // Remove from pending queue if still there
-          std::queue<std::shared_ptr<JobState>> temp;
-          while (!impl_->pending_jobs_.empty()) {
-            auto j = impl_->pending_jobs_.front();
-            impl_->pending_jobs_.pop();
-            if (j->id != id) {
-              temp.push(j);
-            }
-          }
-          impl_->pending_jobs_ = std::move(temp);
-        }
-
-        // Invoke user callback
-        if (on_cancel) {
-          on_cancel(id);
-        }
-      },
     .cancel_event = cancel_event,
   };
+
+  job->on_complete = entry.on_complete;
 
   // Submit to AsyncImporter via event loop post
   impl_->event_loop_->Post([this, entry = std::move(entry)]() mutable {
@@ -379,85 +360,96 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
 
 auto AsyncImportService::CancelJob(ImportJobId job_id) -> bool
 {
-  std::lock_guard lock(impl_->jobs_mutex_);
-
-  // Check if job is already completed
-  if (impl_->completed_jobs_.contains(job_id)) {
+  if (job_id == kInvalidJobId) {
     return false;
   }
 
-  // Trigger cancel event if it exists
-  auto event_it = impl_->cancel_events_.find(job_id);
-  if (event_it != impl_->cancel_events_.end() && event_it->second) {
-    event_it->second->Trigger();
-  }
+  std::shared_ptr<JobState> pending_job;
 
-  // Check active jobs
-  auto active_it = impl_->active_jobs_.find(job_id);
-  if (active_it != impl_->active_jobs_.end()) {
-    active_it->second->cancel_requested = true;
-    DLOG_F(INFO, "Cancellation requested for active job {}", job_id);
-    return true;
-  }
+  // Check if job is already completed
+  {
+    std::lock_guard lock(impl_->jobs_mutex_);
+    if (impl_->completed_jobs_.contains(job_id)) {
+      return false;
+    }
 
-  // Check pending jobs - need to search the queue
-  std::queue<std::shared_ptr<JobState>> temp_queue;
-  bool found = false;
+    // Trigger cancel event if it exists (covers in-flight and also jobs that
+    // are already enqueued into AsyncImporter).
+    auto event_it = impl_->cancel_events_.find(job_id);
+    if (event_it != impl_->cancel_events_.end() && event_it->second) {
+      event_it->second->Trigger();
+    }
 
-  while (!impl_->pending_jobs_.empty()) {
-    auto job = impl_->pending_jobs_.front();
-    impl_->pending_jobs_.pop();
+    // Check active jobs
+    if (impl_->active_jobs_.contains(job_id)) {
+      DLOG_F(INFO, "Cancellation requested for active job {}", job_id);
+      return true;
+    }
 
-    if (job->id == job_id) {
-      found = true;
-      impl_->completed_jobs_.insert(job_id);
-      // Invoke cancellation callback outside the lock
-      if (job->on_cancel) {
-        // Post to avoid callback under lock
-        impl_->event_loop_->Post(
-          [callback = job->on_cancel, job_id]() { callback(job_id); });
+    // Check pending jobs - need to search the queue
+    std::queue<std::shared_ptr<JobState>> temp_queue;
+    bool found = false;
+
+    while (!impl_->pending_jobs_.empty()) {
+      auto job = impl_->pending_jobs_.front();
+      impl_->pending_jobs_.pop();
+
+      if (job->id == job_id) {
+        pending_job = job;
+        found = true;
+      } else {
+        temp_queue.push(job);
       }
-    } else {
-      temp_queue.push(job);
+    }
+
+    impl_->pending_jobs_ = std::move(temp_queue);
+
+    if (found) {
+      DLOG_F(INFO, "Cancelled pending job {}", job_id);
+    }
+
+    if (!found) {
+      return false;
     }
   }
 
-  impl_->pending_jobs_ = std::move(temp_queue);
-
-  if (found) {
-    DLOG_F(INFO, "Cancelled pending job {}", job_id);
+  // Pending job cancellation is reported via on_complete.
+  if (pending_job && pending_job->on_complete) {
+    pending_job->on_complete(
+      pending_job->id, MakeCancelledReport(pending_job->request));
   }
 
-  return found;
+  return true;
 }
 
 auto AsyncImportService::CancelAll() -> void
 {
   DLOG_F(INFO, "CancelAll requested");
 
-  std::lock_guard lock(impl_->jobs_mutex_);
+  std::vector<std::shared_ptr<JobState>> cancelled_pending;
 
-  // Trigger all cancel events
-  for (auto& [id, event] : impl_->cancel_events_) {
-    if (event) {
-      event->Trigger();
+  {
+    std::lock_guard lock(impl_->jobs_mutex_);
+
+    // Trigger all cancel events
+    for (auto& [id, event] : impl_->cancel_events_) {
+      if (event) {
+        event->Trigger();
+      }
+    }
+
+    // Cancel all pending jobs
+    while (!impl_->pending_jobs_.empty()) {
+      auto job = impl_->pending_jobs_.front();
+      impl_->pending_jobs_.pop();
+      cancelled_pending.push_back(std::move(job));
     }
   }
 
-  // Cancel all pending jobs
-  while (!impl_->pending_jobs_.empty()) {
-    auto job = impl_->pending_jobs_.front();
-    impl_->pending_jobs_.pop();
-    impl_->completed_jobs_.insert(job->id);
-    if (job->on_cancel) {
-      impl_->event_loop_->Post(
-        [callback = job->on_cancel, id = job->id]() { callback(id); });
+  for (const auto& job : cancelled_pending) {
+    if (job && job->on_complete) {
+      job->on_complete(job->id, MakeCancelledReport(job->request));
     }
-  }
-
-  // Request cancellation of all active jobs
-  for (auto& [id, job] : impl_->active_jobs_) {
-    job->cancel_requested = true;
   }
 }
 

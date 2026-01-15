@@ -4,78 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <filesystem>
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/Async/Detail/AsyncImporter.h>
+#include <Oxygen/Content/Import/Async/Detail/DefaultImportJob.h>
+#include <Oxygen/Content/Import/Async/Detail/ImportJob.h>
 #include <Oxygen/Content/Import/Async/IAsyncFileWriter.h>
-#include <Oxygen/Content/Import/Async/ImportSession.h>
-#include <Oxygen/Content/Import/Layout.h>
-#include <Oxygen/OxCo/Algorithms.h>
 
 namespace oxygen::content::import::detail {
-
-namespace {
-
-  [[nodiscard]] auto VirtualMountRootLeaf(const ImportRequest& request)
-    -> std::filesystem::path
-  {
-    auto mount_root
-      = std::filesystem::path(request.loose_cooked_layout.virtual_mount_root)
-          .lexically_normal();
-    auto leaf = mount_root.filename();
-    if (!leaf.empty()) {
-      return leaf;
-    }
-
-    // Defensive fallback: virtual mount roots are expected to end with a
-    // directory name (e.g. "/.cooked").
-    return std::filesystem::path(".cooked");
-  }
-
-  [[nodiscard]] auto ResolveCookedRootForRequest(const ImportRequest& request)
-    -> std::filesystem::path
-  {
-    const auto mount_leaf = VirtualMountRootLeaf(request);
-
-    std::filesystem::path base_root;
-    if (request.cooked_root.has_value()) {
-      base_root = *request.cooked_root;
-    } else if (!request.source_path.empty()) {
-      std::error_code ec;
-      auto absolute_source = std::filesystem::absolute(request.source_path, ec);
-      if (!ec) {
-        base_root = absolute_source.parent_path();
-      }
-    }
-
-    if (base_root.empty()) {
-      base_root = std::filesystem::temp_directory_path();
-    }
-
-    // Ensure the cooked root ends with the virtual mount root leaf directory
-    // (e.g. ".cooked"). This keeps incremental imports and updates stable.
-    if (base_root.filename() == mount_leaf) {
-      return base_root;
-    }
-
-    return base_root / mount_leaf;
-  }
-
-  auto EnsureCookedRoot(ImportRequest& request) -> void
-  {
-    auto cooked_root = ResolveCookedRootForRequest(request);
-    request.cooked_root = cooked_root;
-
-    std::error_code ec;
-    std::filesystem::create_directories(cooked_root, ec);
-    if (ec) {
-      DLOG_F(WARNING, "Failed to create cooked root '{}': {}",
-        cooked_root.string(), ec.message());
-    }
-  }
-
-} // namespace
 
 AsyncImporter::AsyncImporter(Config config)
   : job_channel_(config.channel_capacity)
@@ -197,34 +132,26 @@ auto AsyncImporter::ProcessJobsLoop() -> co::Co<>
 */
 auto AsyncImporter::ProcessJob(JobEntry entry) -> co::Co<>
 {
-  DLOG_F(INFO, "Processing job {}: {}", entry.job_id,
-    entry.request.source_path.string());
-
-  // Ensure the job has a usable cooked root. Tests and callers may submit
-  // requests without a cooked_root; the session needs a concrete directory
-  // to write the container index.
-  EnsureCookedRoot(entry.request);
-
-  // Check for early cancellation
-  if (entry.cancel_event && entry.cancel_event->Triggered()) {
-    DLOG_F(INFO, "Job {} cancelled before processing", entry.job_id);
-    if (entry.on_cancel) {
-      entry.on_cancel(entry.job_id);
-    }
-    co_return;
-  }
-
-  // Report starting progress
-  if (entry.on_progress) {
-    ImportProgress progress;
-    progress.job_id = entry.job_id;
-    progress.phase = ImportPhase::kParsing;
-    progress.overall_progress = 0.0f;
-    progress.message = "Starting import...";
-    entry.on_progress(progress);
-  }
-
   if (config_.file_writer == nullptr) {
+    if (entry.cancel_event && entry.cancel_event->Triggered()) {
+      ImportReport report {
+        .cooked_root = entry.request.cooked_root.value_or(
+          entry.request.source_path.parent_path()),
+        .success = false,
+      };
+      report.diagnostics.push_back({
+        .severity = ImportSeverity::kInfo,
+        .code = "import.cancelled",
+        .message = "Import cancelled",
+        .source_path = entry.request.source_path.string(),
+      });
+
+      if (entry.on_complete) {
+        entry.on_complete(entry.job_id, report);
+      }
+      co_return;
+    }
+
     ImportReport report {
       .cooked_root = entry.request.cooked_root.value_or(
         entry.request.source_path.parent_path()),
@@ -236,54 +163,30 @@ auto AsyncImporter::ProcessJob(JobEntry entry) -> co::Co<>
       .message = "AsyncImporter has no IAsyncFileWriter configured",
       .source_path = entry.request.source_path.string(),
     });
-
     if (entry.on_complete) {
       entry.on_complete(entry.job_id, report);
     }
     co_return;
   }
 
-  // Create per-job session.
-  ImportSession session(entry.request, *config_.file_writer);
+  OXCO_WITH_NURSERY(job_supervisor)
+  {
+    auto job = std::make_shared<DefaultImportJob>(
+      std::move(entry), *config_.file_writer);
+    ImportJob* job_base = job.get();
 
-  // TODO: Phase 4.4+ - Backend integration.
-  // For now, we only exercise session creation and finalization.
+    // Activate the job (opens its job nursery) and wait until activation
+    // completes so that Run() can safely start tasks in the job nursery.
+    co_await job_supervisor.Start(
+      [job_base, job](co::TaskStarted<> started) -> co::Co<> {
+        co_await job_base->ActivateAsync(std::move(started));
+      });
 
-  // Check for cancellation after "processing"
-  if (entry.cancel_event && entry.cancel_event->Triggered()) {
-    DLOG_F(INFO, "Job {} cancelled during processing", entry.job_id);
-    if (entry.on_cancel) {
-      entry.on_cancel(entry.job_id);
-    }
-    co_return;
-  }
+    job_base->Run();
+    co_await job_base->Wait();
 
-  if (entry.on_progress) {
-    ImportProgress progress;
-    progress.job_id = entry.job_id;
-    progress.phase = ImportPhase::kWriting;
-    progress.overall_progress = 0.9f;
-    progress.message = "Finalizing import...";
-    entry.on_progress(progress);
-  }
-
-  auto report = co_await session.Finalize();
-
-  if (entry.on_progress) {
-    ImportProgress progress;
-    progress.job_id = entry.job_id;
-    progress.phase
-      = report.success ? ImportPhase::kComplete : ImportPhase::kFailed;
-    progress.overall_progress = 1.0f;
-    progress.message = report.success ? "Import complete" : "Import failed";
-    entry.on_progress(progress);
-  }
-
-  DLOG_F(INFO, "Job {} completed (success={})", entry.job_id, report.success);
-
-  if (entry.on_complete) {
-    entry.on_complete(entry.job_id, report);
-  }
+    co_return co::kJoin;
+  };
 }
 
 } // namespace oxygen::content::import::detail

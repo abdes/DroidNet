@@ -1,9 +1,9 @@
 # Async Import Pipeline - Implementation Plan
 
 **Status:** In Progress
-**Date:** 2026-01-14
+**Date:** 2026-01-15
 **Estimate:** 6-8 weeks (one engineer)
-**Last Updated:** Phase 4 rewritten for ImportSession + Emitters
+**Last Updated:** Phase 4 updated for job actor + cancellation + test hygiene
 
 ---
 
@@ -16,11 +16,15 @@ This plan implements the async import pipeline in 6 phases:
 | 1 | Foundation | ✅ COMPLETE | EventLoop, ThreadPool, ThreadNotification |
 | 2 | Async File I/O | ✅ COMPLETE | IAsyncFileReader, WindowsFileReader |
 | 3 | AsyncImportService | ✅ COMPLETE | Thread-safe API, job lifecycle |
-| 4 | ImportSession + Emitters | ⏳ IN PROGRESS | Async writes, emitters, stable indices (lazy session-owned emitters pending) |
+| 4 | ImportSession + Emitters + Jobs | ⏳ IN PROGRESS | Async writes, emitters, stable indices, job actor + unified cancellation |
 | 5 | TexturePipeline | ❌ NOT STARTED | Pure compute pipeline, FbxImporter::ImportAsync |
 | 6 | Integration & Polish | ❌ NOT STARTED | End-to-end tests, example, docs |
 
-**Unit test coverage (high-level):** WindowsFileWriter, ImportSession, TextureEmitter, BufferEmitter, AssetEmitter. (Run `ctest` for current totals.)
+**Unit test coverage (high-level):** WindowsFileWriter, ImportSession, TextureEmitter, BufferEmitter, AssetEmitter, ImportJob, AsyncImporter.
+
+**How to run tests (canonical):** use the project runner:
+
+`oxyrun asyncimp -- --gtest_filter="*ImportJob*:*AsyncImporter*"`
 
 ---
 
@@ -186,6 +190,26 @@ if (!result.has_value()) {
   LOG_F(ERROR, "WriteBlob failed");
   co_return false;
 }
+
+### 9. Completion Must Be Cancellation-Safe
+
+If a coroutine is cancelled while suspended on a cancellable `co_await`, code
+after that await may never run. Any “must-run” cleanup and the **single
+completion notification** must be placed in cancellation-safe branches (e.g.
+guarded via `co::UntilCancelledAnd(...)` / mux patterns).
+
+This is especially important for the async import contract where cancellation
+must be reported through exactly one path (`on_complete(..., report)` with
+`success=false` + diagnostic code `import.cancelled`).
+
+### 10. Tests Must Not Pollute the Repo Root
+
+Async import jobs can write cooked output (`.cooked/...`) as part of session
+finalization. Tests must:
+
+- Set `ImportRequest::cooked_root` to a per-test temp directory.
+- Clean up that directory recursively in fixture teardown so cleanup runs on
+  both success and failure.
 ```
 
 ---
@@ -550,14 +574,126 @@ The new design separates concerns:
   - Only then write `container.index.bin` (LAST)
 - [X] Integration test: session + emitters finalize correctly
 
-#### 4.9 Wire ImportSession to AsyncImporter
+#### 4.9 Job-Based Execution Model (Required)
 
-**File:** `src/Oxygen/Content/Import/Async/Detail/AsyncImporter.cpp`
+This phase replaces the prior “AsyncImporter drives session + importer” model.
+There must be **no synchronous importer fallback**.
 
-- [X] Create `ImportSession` per job
-- [ ] Pass session to `Importer::ImportAsync()`
-- [X] Call `session.Finalize()` after ImportAsync returns
-- [X] Integration test: job creates session, finalizes
+**Ownership rules (must match design):**
+
+- **AsyncImportService** decides which concrete job to create.
+- **AsyncImporter** activates the job and runs it.
+- **ImportJob** is a `co::LiveObject` owning a **per-job child nursery**.
+- **ImportSession** is owned by the concrete job and is strictly per-job.
+- **Pipelines are job-scoped**. Cancellation is expressed by cancelling the
+  job nursery (pipelines must not expose Cancel/CancelAll as the primary
+  mechanism).
+
+##### 4.9.1 Make ImportJob a LiveObject (base class)
+
+**Files:**
+
+- `src/Oxygen/Content/Import/Async/Detail/ImportJob.h/.cpp`
+
+Tasks:
+
+- [X] Change `detail::ImportJob` to derive from `co::LiveObject`.
+- [X] Implement activation using `co::OpenNursery(...)` (job-scoped nursery).
+- [X] Implement a single override point for job work (e.g. `ExecuteAsync()`).
+- [X] Implement `Stop()` to request stop + cancel the job nursery.
+- [X] Guarantee exactly one completion notification (`on_complete`) even when
+  the job coroutine is cancelled during shutdown.
+
+##### 4.9.2 Define concrete jobs (orchestration lives in jobs)
+
+**Files (new):**
+
+- `src/Oxygen/Content/Import/Async/Jobs/FbxImportJob.h/.cpp`
+- `src/Oxygen/Content/Import/Async/Jobs/GlbImportJob.h/.cpp`
+- `src/Oxygen/Content/Import/Async/Jobs/TextureImportJob.h/.cpp`
+- `src/Oxygen/Content/Import/Async/Jobs/AudioImportJob.h/.cpp` (skeleton)
+
+Tasks:
+
+- [X] Introduce a concrete placeholder job (`DefaultImportJob`) that owns an
+  `ImportSession` and exercises session finalization.
+- [ ] Add format-specific jobs (FBX/GLB/etc.) and move orchestration there.
+- [ ] Ensure each concrete job decides which pipelines to start and how to wire
+  submit/collect/emit flows.
+- [X] Keep cancellation handling unified: cancelling the job nursery completes
+  via `on_complete(..., report)` with `success=false` and `import.cancelled`.
+
+@note At this phase, non-FBX jobs may remain skeletons, but the plumbing must
+      exist so the service can select them and the importer can activate/run
+      them.
+
+##### 4.9.3 AsyncImportService selects the concrete job
+
+**Files:**
+
+- `src/Oxygen/Content/Import/Async/AsyncImportService.h/.cpp`
+
+Tasks:
+
+- [X] Add initial job selection in `SubmitImport()` (current: placeholder job).
+- [ ] Extend selection to use format detection for real job types.
+- [X] Keep the public API stable: callers still submit `ImportRequest` and
+  receive `ImportReport` via `on_complete`.
+
+##### 4.9.4 AsyncImporter activates and runs the job
+
+**Files:**
+
+- `src/Oxygen/Content/Import/Async/Detail/AsyncImporter.h/.cpp`
+
+Tasks:
+
+- [X] Replace “single coroutine job execution” with “activate + run job
+  LiveObject”.
+- [X] Ensure all job work dispatching occurs on the AsyncImporter thread.
+- [X] Ensure cancellation requests from the service are forwarded to the
+  job’s `Stop()` and reported via `on_complete`.
+
+##### 4.9.5 Align pipeline cancellation semantics (walk the walk)
+
+**Files:**
+
+- `src/Oxygen/Content/Import/Async/Pipelines/BufferPipeline.h/.cpp`
+- (and any new pipeline interfaces introduced later)
+
+Tasks:
+
+- [ ] Remove `Cancel`/`CancelAll` from pipeline public APIs.
+- [ ] Ensure pipelines support:
+  - `Start(co::Nursery&)`
+  - bounded `Submit`/`TrySubmit`
+  - `Collect()`
+  - `Close()` (stop accepting new work and allow draining)
+- [ ] Ensure cancellation of in-flight work is done via:
+  - job nursery cancellation, and
+  - cooperative stop tokens checked by work items and ThreadPool tasks.
+- [ ] Update any pipeline concepts/specs in the codebase to remove
+  `CancelAll()` requirements.
+
+##### 4.9.6 Tests (must cover the new execution model)
+
+**Files:**
+
+- `src/Oxygen/Content/Test/Import/Async/AsyncImporter_test.cpp`
+- `src/Oxygen/Content/Test/Import/Async/AsyncImportService_test.cpp`
+
+Tasks:
+
+- [X] Job activation: service selects a job, importer activates and runs it.
+- [X] Cancellation:
+  - pending job cancellation completes via `on_complete` with
+    `import.cancelled`.
+  - in-flight job cancellation cancels the job nursery and completes via
+    `on_complete` with `import.cancelled`.
+- [X] Ensure job-based tests isolate output via `ImportRequest::cooked_root`
+  and cleanup recursively in teardown.
+- [ ] No synchronous fallback: add a test guard that the async path does not
+  invoke sync importers.
 
 ### Deliverables
 
@@ -566,7 +702,9 @@ The new design separates concerns:
 - ✅ Stable index assignment with async I/O (explicit-offset `WriteAt*`)
 - ✅ `ImportSession` with lazy emitters
 - ✅ Session finalization that awaits emitters then writes index last
-- ✅ Wiring ImportSession into AsyncImporter job execution
+- ✅ Job-based execution: ImportJob LiveObject + per-job nursery + job selection
+  plumbing + cancellation aligned to job nursery
+- ⏳ Remaining: format-specific jobs + pure compute TexturePipeline integration
 
 **Notes (implementation update):**
 
@@ -575,6 +713,11 @@ The new design separates concerns:
   ImportSession.
 - A small integration test was added to ensure a submitted job produces a
   `container.index.bin` at the job's cooked root.
+
+**Notes (design update - required):**
+
+- The async import system must not call synchronous importers as a fallback.
+  Format-specific logic will live in concrete jobs (e.g. `FbxImportJob`).
 
 ### Acceptance Criteria
 

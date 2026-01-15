@@ -5,7 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <atomic>
+#include <filesystem>
 #include <mutex>
+#include <string>
+#include <system_error>
 #include <vector>
 
 #include <Oxygen/Content/Import/Async/Detail/AsyncImporter.h>
@@ -130,10 +133,37 @@ protected:
   std::unique_ptr<IAsyncFileWriter> file_writer_;
   AsyncImporter::Config config_ { .channel_capacity = 8 };
 
+  [[nodiscard]] auto MakeTestCookedRoot() const -> std::filesystem::path
+  {
+    const auto* test_info
+      = ::testing::UnitTest::GetInstance()->current_test_info();
+    DCHECK_F(test_info != nullptr);
+
+    auto name = std::string(test_info->test_suite_name()) + "_"
+      + std::string(test_info->name());
+
+    return std::filesystem::temp_directory_path() / "oxygen_async_import_tests"
+      / std::move(name) / ".cooked";
+  }
+
   void SetUp() override
   {
     file_writer_ = CreateAsyncFileWriter(loop_);
     config_.file_writer = file_writer_.get();
+  }
+
+  void TearDown() override
+  {
+    {
+      std::error_code ec;
+      std::filesystem::remove_all(MakeTestCookedRoot(), ec);
+    }
+
+    {
+      std::error_code ec;
+      std::filesystem::remove_all(
+        std::filesystem::current_path() / ".cooked", ec);
+    }
   }
 };
 
@@ -157,6 +187,7 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitJob_CallsCompletionCallback)
       JobEntry entry;
       entry.job_id = 42;
       entry.request.source_path = "test.txt";
+      entry.request.cooked_root = MakeTestCookedRoot();
       entry.on_complete = [&](ImportJobId id, const ImportReport& report) {
         received_id = id;
         received_success = report.success;
@@ -201,6 +232,7 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitMultipleJobs_ProcessedInOrder)
         JobEntry entry;
         entry.job_id = i;
         entry.request.source_path = "test" + std::to_string(i) + ".txt";
+        entry.request.cooked_root = MakeTestCookedRoot();
         entry.on_complete = [&](ImportJobId id, const ImportReport&) {
           {
             std::lock_guard lock(order_mutex);
@@ -246,6 +278,7 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitJob_CallsProgressCallback)
       JobEntry entry;
       entry.job_id = 99;
       entry.request.source_path = "test.txt";
+      entry.request.cooked_root = MakeTestCookedRoot();
       entry.on_progress = [&](const ImportProgress& progress) {
         progress_job_id = progress.job_id;
         progress_called = true;
@@ -278,13 +311,14 @@ protected:
 
 //! Verify job with triggered cancel event calls cancellation callback.
 NOLINT_TEST_F(
-  AsyncImporterCancellationTest, CancelEvent_CallsCancellationCallback)
+  AsyncImporterCancellationTest, CancelEvent_CompletesWithCancelledDiagnostic)
 {
   // Arrange
   AsyncImporter importer(config_);
-  std::atomic<bool> cancel_called { false };
   std::atomic<bool> complete_called { false };
-  ImportJobId cancelled_id = kInvalidJobId;
+  ImportJobId completed_id = kInvalidJobId;
+  bool received_success = true;
+  std::string cancelled_code;
   Event done_event;
 
   // Act
@@ -300,12 +334,12 @@ NOLINT_TEST_F(
       entry.job_id = 123;
       entry.request.source_path = "test.txt";
       entry.cancel_event = cancel_event;
-      entry.on_cancel = [&](ImportJobId id) {
-        cancelled_id = id;
-        cancel_called = true;
-        done_event.Trigger();
-      };
-      entry.on_complete = [&](ImportJobId, const ImportReport&) {
+      entry.on_complete = [&](ImportJobId id, const ImportReport& report) {
+        completed_id = id;
+        received_success = report.success;
+        if (!report.diagnostics.empty()) {
+          cancelled_code = report.diagnostics.front().code;
+        }
         complete_called = true;
         done_event.Trigger();
       };
@@ -324,9 +358,10 @@ NOLINT_TEST_F(
   });
 
   // Assert
-  EXPECT_TRUE(cancel_called);
-  EXPECT_FALSE(complete_called);
-  EXPECT_EQ(cancelled_id, 123U);
+  EXPECT_TRUE(complete_called);
+  EXPECT_EQ(completed_id, 123U);
+  EXPECT_FALSE(received_success);
+  EXPECT_EQ(cancelled_code, "import.cancelled");
 }
 
 //! Verify CloseJobChannel prevents new submissions.

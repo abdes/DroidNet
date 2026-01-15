@@ -1,138 +1,179 @@
-# Texture Work Pipeline (v2)
+# Texture Pipeline (v2)
 
-**Status:** Approved Design
-**Date:** 2026-01-14
+**Status:** Updated Design (Phase 5)
+**Date:** 2026-01-15
 **Parent:** [async_import_pipeline_v2.md](async_import_pipeline_v2.md)
 
 ---
 
 ## Overview
 
-The Texture Work Pipeline parallelizes texture cooking within a single import
-job. It is owned by `AsyncImporter` and runs inside the import thread's event
-loop, using `co::ThreadPool` for CPU-bound work.
+This document specifies the **TexturePipeline** used by async imports to
+parallelize texture cooking within **a single import job**.
 
-This document focuses on the internal texture parallelization strategy,
-complementing the main async import architecture.
+The TexturePipeline is a **compute-only** component:
 
----
+- Performs **decode → content processing → mip generation → format conversion/compression → packing**.
+- Does **not** write cooked output files.
+- Does **not** assign resource indices.
+- Returns `CookedTexturePayload` to the caller, who commits via
+  `ImportSession::TextureEmitter()`.
 
-## Goals
+The concrete stage graph and the inputs/outputs of each stage are specified in
+the section **Pipeline Stages (Legacy Cooker Parity)**.
 
-1. **Parallel texture cooking**: Multiple textures cook concurrently within
-   one import job.
+The pipeline follows the established pipeline patterns already implemented in
+code (see `BufferPipeline`):
 
-2. **Block-level BC7 parallelism**: BC7 encoding uses ThreadPool for
-   fine-grained parallelism.
-
-3. **Backpressure**: Bounded work queue prevents memory exhaustion.
-
-4. **Single-writer commit**: Emission state is mutated only by collector
-   coroutine (no locks for dedup/write).
-
-5. **Cooperative cancellation**: Job cancellation propagates to texture tasks.
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         Import Job Coroutine                                │
-│                                                                             │
-│  ┌─────────────────┐                           ┌─────────────────────────┐ │
-│  │   Submitter     │                           │     Collector           │ │
-│  │   Coroutine     │                           │     Coroutine           │ │
-│  │                 │                           │                         │ │
-│  │  For each tex:  │    TextureWorkResult      │  Receive results        │ │
-│  │  Send request ──┼─────────────────────────▶ │  Commit to emission     │ │
-│  │  to work queue  │    via results_channel    │  state (single-writer)  │ │
-│  └────────┬────────┘                           └─────────────────────────┘ │
-│           │                                                                 │
-│           │ TextureWorkRequest                                              │
-│           ▼                                                                 │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │                    Bounded Work Queue                                 │  │
-│  │                    co::Channel<TextureWorkRequest>                    │  │
-│  └───────────────────────────────┬──────────────────────────────────────┘  │
-│                                  │                                          │
-│           ┌──────────────────────┼───────────────────────┐                  │
-│           │                      │                       │                  │
-│           ▼                      ▼                       ▼                  │
-│  ┌─────────────────┐   ┌─────────────────┐     ┌─────────────────┐         │
-│  │  Worker Task 0  │   │  Worker Task 1  │     │  Worker Task N  │         │
-│  │                 │   │                 │ ... │                 │         │
-│  │  Receive req    │   │  Receive req    │     │  Receive req    │         │
-│  │  Read file      │   │  Read file      │     │  Read file      │         │
-│  │  Cook texture   │   │  Cook texture   │     │  Cook texture   │         │
-│  │  Send result    │   │  Send result    │     │  Send result    │         │
-│  └────────┬────────┘   └────────┬────────┘     └────────┬────────┘         │
-│           │                      │                       │                  │
-│           │                      ▼                       │                  │
-│           │            ┌─────────────────┐               │                  │
-│           └───────────▶│   ThreadPool    │◀──────────────┘                  │
-│                        │   (BC7 encode)  │                                  │
-│                        └─────────────────┘                                  │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+- bounded input/output queues (`co::Channel`)
+- explicit `Start(nursery)` lifecycle
+- `Submit()` / `TrySubmit()` with backpressure
+- `Collect()` to retrieve results
+- cooperative cancellation via `std::stop_token`
+- explicit error reporting via `ImportDiagnostic` (no exceptions crossing async boundaries)
 
 ---
 
-## Data Types
+## Alignment With Current Architecture
 
-### TextureWorkRequest
+The pipeline-agnostic concurrency and lifetime model is defined in the parent
+document [design/async_import_pipeline_v2.md](design/async_import_pipeline_v2.md)
+under **Concurrency, Ownership, and Lifetime (Definitive)**.
+
+This texture design assumes and follows that model (pipelines are job-scoped,
+started in the job’s child nursery; job orchestration acquires sources, submits,
+collects, and commits via emitters).
+
+### Pipeline vs Emitter Responsibilities
+
+- **TexturePipeline**: produces `CookedTexturePayload` (compute-only).
+- **TextureEmitter**: assigns stable indices immediately and performs all async
+  I/O (`WriteAt*`) to `textures.data` and `textures.table`.
+- **ImportSession::Finalize()**: waits for emitter I/O, writes tables, then writes
+  `container.index.bin` **last**.
+
+---
+
+## Data Model
+
+### WorkItem
+
+The pipeline operates on source bytes already in memory.
+
+**Source acquisition is not the pipeline’s job**:
+
+- Embedded textures: the importer provides a `std::span<const std::byte>` plus an
+  owner to keep the memory alive.
+- File-backed textures: the importer reads bytes via `IAsyncFileReader` and then
+  submits the bytes to the pipeline.
+
+Rationale:
+
+- Keeps the pipeline compute-only.
+- Lets the bounded input channel provide backpressure without turning the
+  pipeline into an I/O dispatcher.
+
+A `WorkItem` must be able to represent everything the legacy synchronous
+`TextureImporter` + `CookTexture(...)` path can cook today.
+
+That includes:
+
+- single-source textures from one image file / embedded blob
+- multi-source cube maps (6 faces), where the bytes are already in memory
+
+A minimal `WorkItem` shape that preserves legacy feature parity:
 
 ```cpp
-struct TextureWorkRequest final {
-  //! Correlation IDs for result routing.
-  ImportJobId job_id = 0;
-  uint32_t request_id = 0;
+struct SingleSourceBytes {
+  std::span<const std::byte> bytes;
+  std::shared_ptr<const void> bytes_owner;
+};
 
-  //! Results channel writer (per-job, not global).
-  co::Channel<TextureWorkResult>::Writer* results_writer = nullptr;
+struct CubeSourceBytes {
+  // The cooker needs per-face source_id for extension hints and diagnostics.
+  // Face ordering uses the same convention as TextureSourceSet/CubeFace.
+  std::array<std::string, 6> face_source_ids;
+  std::array<std::span<const std::byte>, 6> face_bytes;
+  std::array<std::shared_ptr<const void>, 6> face_bytes_owner;
+};
 
-  //! Identity for deduplication (matches sync path).
-  std::string texture_id;
-  const void* source_key = nullptr;  // For index_by_file_texture lookup
+struct WorkItem {
+  // Correlation keys for the caller.
+  std::string source_id;      // e.g. "mat:Foo/baseColor"
+  std::string texture_id;     // normalized identifier (for dedup maps upstream)
+  const void* source_key{};   // optional opaque identity (e.g. ufbx_texture*)
 
-  //! Source specification.
-  std::filesystem::path source_file_path;  // File-backed texture
-  std::span<const std::byte> embedded_bytes;  // Embedded texture
-  std::shared_ptr<const void> embedded_owner;  // Keeps embedded data alive
+  // Cooking configuration.
+  TextureImportDesc desc;
+  std::string packing_policy_id; // e.g. "d3d12"; resolved by pipeline
 
-  //! Debug information.
-  std::string source_debug_id;
-  bool is_embedded = false;
+  // Source content (compute-only; bytes are already in memory).
+  std::variant<SingleSourceBytes, CubeSourceBytes, ScratchImage> source;
 
-  //! Cooking configuration.
-  emit::CookerConfig config{};
+  // Cooperative cancellation.
+  std::stop_token stop_token;
 };
 ```
 
-### TextureWorkResult
+Notes:
+
+- The pipeline MUST ensure cooperative cancellation reaches the cooker by
+  setting `desc.stop_token = stop_token` before calling `CookTexture(...)`.
+- For `SingleSourceBytes` and `CubeSourceBytes`, the owning handles are required
+  to keep the spans alive across coroutine suspension and ThreadPool execution.
+- **Invariant:** every `std::span<const std::byte>` in the work item must point
+  into memory whose lifetime is anchored by the corresponding `*_owner` for the
+  entire duration from `Submit()` until the worker has finished cooking
+  (including any `co_await` and ThreadPool execution). Owners may be empty only
+  when the referenced storage is independently guaranteed to outlive pipeline
+  processing (e.g., static read-only data).
+- `source_key` is carried through only to help the caller map results back to its
+  own data structures; the pipeline never interprets it.
+
+### WorkResult
 
 ```cpp
-enum class TextureWorkStatus : uint8_t {
-  kSuccess = 0,
-  kPlaceholder,  // Fallback texture used
-  kCancelled,
-  kFailed,
-};
-
-struct TextureWorkResult final {
-  ImportJobId job_id = 0;
-  uint32_t request_id = 0;
-
+struct WorkResult {
+  std::string source_id;
   std::string texture_id;
-  const void* source_key = nullptr;
+  const void* source_key{};
 
-  TextureWorkStatus status = TextureWorkStatus::kFailed;
+  std::optional<CookedTexturePayload> cooked;
+  std::vector<ImportDiagnostic> diagnostics;
+  bool success = false;
+};
+```
 
-  //! On success: cooked data ready for commit.
-  std::optional<emit::CookedEmissionResult> cooked;
+---
 
-  //! On failure: error description.
-  std::string error_message;
+## Public API (Pattern)
+
+The TexturePipeline API mirrors `BufferPipeline`.
+
+```cpp
+class TexturePipeline final {
+public:
+  struct Config {
+    size_t queue_capacity = 64;
+    uint32_t worker_count = 2;
+  };
+
+  explicit TexturePipeline(co::ThreadPool& thread_pool, Config cfg = {});
+
+  void Start(co::Nursery& nursery);
+
+  [[nodiscard]] auto Submit(WorkItem item) -> co::Co<>;
+  [[nodiscard]] auto TrySubmit(WorkItem item) -> bool;
+  [[nodiscard]] auto Collect() -> co::Co<WorkResult>;
+
+  void Close();
+  void Cancel();
+
+  [[nodiscard]] auto HasPending() const noexcept -> bool;
+  [[nodiscard]] auto PendingCount() const noexcept -> size_t;
+
+private:
+  [[nodiscard]] auto Worker() -> co::Co<>;
 };
 ```
 
@@ -140,458 +181,348 @@ struct TextureWorkResult final {
 
 ## Worker Behavior
 
-Each worker is a coroutine on the import event loop:
+Workers run as coroutines on the import thread, draining the bounded input queue.
+Each item is processed as:
+
+1) Check cancellation (`stop_token.stop_requested()`).
+2) Resolve packing policy (by ID).
+3) Offload expensive cooking to `co::ThreadPool`.
+4) Convert errors to `ImportDiagnostic`.
+5) Send `WorkResult` to the bounded output queue.
+
+The pipeline must reuse existing synchronous cooking logic:
+
+- `CookTexture(std::span<const std::byte>, const TextureImportDesc&, const ITexturePackingPolicy&)`
+- `CookTexture(ScratchImage&&, const TextureImportDesc&, const ITexturePackingPolicy&)`
+- `CookTexture(const TextureSourceSet&, const TextureImportDesc&, const ITexturePackingPolicy&)`
+
+The ThreadPool boundary should look like:
 
 ```cpp
-auto TexturePipeline::WorkerLoop(uint32_t worker_index) -> co::Co<> {
-  LOG_F(INFO, "Texture worker {} started", worker_index);
-
-  while (auto request = co_await work_queue_.Receive()) {
-    TextureWorkResult result{
-      .job_id = request->job_id,
-      .request_id = request->request_id,
-      .texture_id = request->texture_id,
-      .source_key = request->source_key,
-    };
-
-    try {
-      // Step 1: Get source bytes (async file read or embedded)
-      std::vector<std::byte> file_bytes;
-      std::span<const std::byte> source_bytes;
-
-      if (request->is_embedded) {
-        source_bytes = request->embedded_bytes;
-      } else {
-        // Async file read
-        auto read_result = co_await file_reader_->ReadFile(
-          request->source_file_path);
-        if (!read_result) {
-          result.status = TextureWorkStatus::kFailed;
-          result.error_message = read_result.error().message();
-          co_await request->results_writer->Send(std::move(result));
-          continue;
-        }
-        file_bytes = std::move(*read_result);
-        source_bytes = file_bytes;
-      }
-
-      // Step 2: Cook texture (uses ThreadPool internally)
-      auto desc = emit::MakeImportDescFromConfig(request->config);
-      auto& policy = emit::GetPackingPolicy(request->config);
-
-      auto cook_result = co_await CookTextureAsync(
-        source_bytes, desc, policy, thread_pool_);
-
-      if (!cook_result) {
-        result.status = TextureWorkStatus::kFailed;
-        result.error_message = to_string(cook_result.error());
-        co_await request->results_writer->Send(std::move(result));
-        continue;
-      }
-
-      // Step 3: Package for emission
-      result.status = TextureWorkStatus::kSuccess;
-      result.cooked = emit::ToCookedEmissionResult(
-        request->texture_id, *cook_result);
-
-    } catch (const std::exception& e) {
-      result.status = TextureWorkStatus::kFailed;
-      result.error_message = e.what();
-    }
-
-    co_await request->results_writer->Send(std::move(result));
-  }
-
-  LOG_F(INFO, "Texture worker {} exited", worker_index);
-  co_return;
-}
+auto cooked_or_error = co_await thread_pool_.Run([bytes, desc, &policy]() {
+  return CookTexture(bytes, desc, policy);
+});
 ```
+
+No exceptions should cross coroutine boundaries; failures must be reported as
+`ImportDiagnostic` + `success=false`.
 
 ---
 
-## Submitter + Collector Pattern
+## Per-Job Orchestration (No Hidden Entities)
 
-For each import job, two coroutines run in parallel:
+This section replaces the vague “submitter/collector” terminology with a
+concrete description of what runs where.
 
-### Submitter
+### What runs in the pipeline vs in the job
 
-Discovers textures and submits work requests:
+- **TexturePipeline workers**: job-scoped coroutines started in the job’s child
+  nursery. They drain the pipeline’s input channel and offload cooking to the
+  thread pool.
+- **Job orchestration**: the concrete job’s implementation (e.g.
+  `ImportJob::ExecuteAsync()` in a derived job), running on the import thread as
+  part of processing one job.
 
-```cpp
-auto SubmitTextureWork(
-  co::Nursery& nursery,
-  const std::vector<TextureRef>& textures,
-  TexturePipeline& pipeline,
-  co::Channel<TextureWorkResult>& results_channel,
-  ImportJobId job_id
-) -> co::Co<uint32_t> {
+### Minimal orchestration algorithm
 
-  uint32_t expected_count = 0;
-  auto& writer = results_channel.GetWriter();
+Within one job, the orchestrator does:
 
-  for (const auto& tex : textures) {
-    TextureWorkRequest request{
-      .job_id = job_id,
-      .request_id = expected_count,
-      .results_writer = &writer,
-      .texture_id = tex.id,
-      .source_key = tex.source_key,
-      .source_file_path = tex.path,
-      .is_embedded = tex.is_embedded,
-      .embedded_bytes = tex.embedded_bytes,
-      .embedded_owner = tex.embedded_owner,
-      .config = tex.config,
-    };
+1) Discover texture sources (embedded blobs and/or file paths).
+2) For each source:
+   - Acquire bytes (embedded: already in memory; file-backed: `co_await` reader).
+   - Build `WorkItem` (`desc` + `packing_policy_id` + bytes owners + cancellation).
+   - `co_await texture_pipeline.Submit(item)`.
+   - Increment `submitted_count`.
+3) After submission completes (or stops due to cancellation), collect exactly
+   `submitted_count` results:
+   - `auto r = co_await texture_pipeline.Collect()`.
+   - On success: commit via `session.TextureEmitter().Emit(...)`.
+   - On failure: record diagnostics.
 
-    // Send may suspend if queue is full (backpressure)
-    bool sent = co_await pipeline.Enqueue(std::move(request));
-    if (!sent) {
-      // Pipeline closed; abort submission
-      break;
-    }
-    ++expected_count;
-  }
+This achieves concurrency because cooking is parallelized by the pipeline
+workers and the thread pool; the job itself remains simple and deterministic.
 
-  co_return expected_count;
-}
-```
+### Cancellation semantics (job-safe)
 
-### Collector
+- Per-job cancellation is expressed by cancelling the job’s child nursery.
+- Work items still carry cancellation via `WorkItem.stop_token` so the cooker
+  observes cancellation via `TextureImportDesc::stop_token`.
+- `TexturePipeline::Cancel()` may be used for early-abort decisions inside the
+  job, but the normal cancellation mechanism is nursery cancellation.
 
-Receives results and commits to emission state:
+## Pipeline Stages (Legacy Cooker Parity)
 
-```cpp
-auto CollectTextureResults(
-  co::Channel<TextureWorkResult>& results_channel,
-  emit::TextureEmissionState& state,
-  uint32_t expected_count
-) -> co::Co<std::vector<TextureCommitResult>> {
+This section documents what “cooking” concretely means today, based on the
+current synchronous implementation in `CookTexture(...)`.
 
-  std::vector<TextureCommitResult> commits;
-  commits.reserve(expected_count);
-  uint32_t received = 0;
+Important scoping notes:
 
-  while (received < expected_count) {
-    auto result = co_await results_channel.Receive();
-    if (!result) break;  // Channel closed
+- The **pipeline** orchestrates these stages but remains compute-only.
+- The **ThreadPool boundary** is an implementation detail; conceptually, the
+  stages below happen in order. In practice, the pipeline may call one of the
+  `CookTexture(...)` overloads on the pool, which performs the full sequence.
 
-    TextureCommitResult commit{
-      .request_id = result->request_id,
-      .texture_id = result->texture_id,
-    };
+### Stage Summary
 
-    if (result->status == TextureWorkStatus::kSuccess && result->cooked) {
-      // Single-writer commit (no mutex needed)
-      commit.resource_index = emit::CommitTexture(state, *result->cooked);
-      commit.success = true;
-    } else {
-      commit.success = false;
-      commit.error = result->error_message;
-      // Use fallback texture
-      commit.resource_index = state.fallback_index;
-    }
+Each stage has explicit inputs/outputs; failures are returned as a
+`TextureImportError` which must be translated to `ImportDiagnostic`.
 
-    commits.push_back(commit);
-    ++received;
-  }
+1) **Resolve packing policy**
+   - Input: `WorkItem.packing_policy_id`
+   - Output: `const ITexturePackingPolicy&` (e.g. D3D12, TightPacked)
+   - Failure: unknown policy id
 
-  co_return commits;
-}
-```
+2) **Pre-decode validation**
+   - Input: `TextureImportDesc`
+   - Output: ok or `TextureImportError`
+   - Checks: dimension rules, depth/type rules, mip policy, HDR vs output format,
+     BC7 config consistency
 
-### Coordination
+3) **Decode** (single-source and multi-source)
+   - Input: image bytes + decode options
+   - Output: `ScratchImage` (working formats currently produced by decoder)
+   - Decode options:
+     - `flip_y_on_decode`
+     - `force_rgba_on_decode`
+     - `extension_hint` derived from `source_id` / face `source_id`
 
-```cpp
-auto ProcessTexturesAsync(
-  const std::vector<TextureRef>& textures,
-  TexturePipeline& pipeline,
-  emit::TextureEmissionState& state,
-  ImportJobId job_id
-) -> co::Co<std::vector<TextureCommitResult>> {
+4) **(Multi-source only) Assemble cube**
+   - Input: 6 decoded face `ScratchImage`s + face mapping
+   - Output: one `ScratchImage` representing a cubemap
+   - Current parity note: multi-source cooking currently supports **cubemaps
+     only**; non-cube arrays are not yet implemented.
 
-  // Create per-job results channel
-  co::Channel<TextureWorkResult> results_channel;
+5) **Post-decode validation**
+   - Input: `TextureImportDesc` + decoded/assembled `ScratchImageMeta`
+   - Output: ok or `TextureImportError`
+   - Checks: decoded dimensions non-zero, descriptor dimensions match if
+     explicitly provided, and `TextureImportDesc::Validate()` on resolved shape
 
-  uint32_t expected_count = 0;
-  std::vector<TextureCommitResult> commits;
+6) **Convert to working format**
+   - Input: `ScratchImage`
+   - Output: `ScratchImage` in a processing-friendly format
+   - Current implementation note: this is mostly a pass-through today because
+     decoding already yields RGBA8 or RGBA32Float.
 
-  OXCO_WITH_NURSERY(nursery) {
-    // Start submitter
-    nursery.Start([&]() -> co::Co<> {
-      expected_count = co_await SubmitTextureWork(
-        nursery, textures, pipeline, results_channel, job_id);
-      results_channel.Close();  // Signal collector we're done
-      co_return;
-    });
+7) **Apply content processing**
+   - Input: working `ScratchImage` + `TextureImportDesc`
+   - Output: processed `ScratchImage`
+   - HDR handling:
+     - if HDR input and LDR output: `hdr_handling` selects auto tonemap vs error
+       behavior; `exposure_ev` is applied when tonemapping
+     - `bake_hdr_to_ldr` is honored for explicit baking
+   - Normal maps:
+     - `intent == kNormalTS`: optional `flip_normal_green`
 
-    // Start collector
-    nursery.Start([&]() -> co::Co<> {
-      commits = co_await CollectTextureResults(
-        results_channel, state, expected_count);
-      co_return;
-    });
+8) **Generate mips**
+   - Input: processed `ScratchImage` + mip settings
+   - Output: `ScratchImage` with mip chain
+   - Behavior:
+     - `MipPolicy::kNone`: keep single mip
+     - `MipPolicy::kFullChain`: down to 1x1
+     - `MipPolicy::kMaxCount`: capped by `max_mip_levels`
+     - normal maps use a specialized mip generator and may renormalize per mip
+     - 3D textures use a 3D mip generator
+     - `mip_filter` + `mip_filter_space` control filtering
 
-    co_return co::kJoin;
-  };
+9) **Convert to output format / compress**
+   - Input: mipmapped `ScratchImage` + output settings
+   - Output: `ScratchImage` in the final stored format
+   - Supported output formats today:
+     - `Format::kRGBA8UNorm`, `Format::kRGBA8UNormSRGB`
+     - `Format::kRGBA16Float`, `Format::kRGBA32Float`
+     - `Format::kBC7UNorm`, `Format::kBC7UNormSRGB` (requires `bc7_quality != kNone`)
+   - HDR → LDR mismatch behavior:
+     - If HDR content remains and output is LDR, the cook fails with
+       `kHdrRequiresFloatFormat` unless HDR was baked earlier.
 
-  co_return commits;
-}
-```
+10) **Pack subresources**
+   - Input: output-format `ScratchImage` + packing policy
+   - Output:
+     - `payload_data` (`std::vector<std::byte>`) containing the packed data region
+     - `layouts` describing each subresource’s offset/row pitch/size
+   - Ordering requirement (parity-critical): layer-major ordering
+     (array layer outer, mip inner) to match D3D12 subresource indexing.
 
----
+11) **Build final payload**
+   - Input: layouts + packed data + packing policy id
+   - Output: `CookedTexturePayload.payload` containing:
+     - `TexturePayloadHeader`
+     - layouts table
+     - aligned data region
+   - `content_hash` is computed over the final payload bytes using the current
+     `detail::ComputeContentHash(...)` implementation.
 
-## Cancellation
+12) **Return cooked result**
+   - Output: `CookedTexturePayload`:
+     - `desc` (shape, mip count, final format, packing policy id, content hash)
+     - `payload` (complete cooked blob)
+     - `layouts` (subresource layouts for runtime)
 
-### Job Cancellation
+### Cancellation Observability
 
-When a job's cancel event triggers:
-
-1. The job's nursery is cancelled
-2. Submitter stops sending requests
-3. Results channel is closed
-4. Workers see closed channel, skip remaining work
-5. Any in-flight ThreadPool tasks check CancelToken
-
-### Pipeline Shutdown
-
-When AsyncImporter stops:
-
-1. Work queue is closed
-2. All workers exit their receive loop
-3. Worker tasks complete
-4. Pipeline nursery closes
-
----
-
-## Commit Behavior (Matching Sync Path)
-
-The collector performs the same commit logic as the sync path:
-
-```cpp
-auto CommitTexture(
-  emit::TextureEmissionState& state,
-  const emit::CookedEmissionResult& cooked
-) -> uint32_t {
-
-  // 1. Ensure fallback exists
-  emit::EnsureFallbackTexture(state);
-
-  // 2. Fast reuse: check by source key
-  if (auto* idx = state.index_by_file_texture.find(cooked.source_key)) {
-    return *idx;
-  }
-
-  // 3. Fast reuse: check by texture ID
-  if (auto* idx = state.index_by_texture_id.find(cooked.texture_id)) {
-    return *idx;
-  }
-
-  // 4. Compute signature for dedup
-  auto signature = util::MakeTextureSignatureFromStoredHash(cooked.desc);
-
-  // 5. Dedup by signature
-  if (auto* idx = state.index_by_signature.find(signature)) {
-    // Reuse existing, update indices
-    state.index_by_file_texture[cooked.source_key] = *idx;
-    state.index_by_texture_id[cooked.texture_id] = *idx;
-    return *idx;
-  }
-
-  // 6. New texture: append payload
-  uint32_t data_offset = emit::AppendResource(state.appender, cooked.payload);
-
-  // 7. Push descriptor to table
-  uint32_t table_index = state.table.size();
-  state.table.push_back(cooked.desc);
-  state.table.back().data_offset = data_offset;
-
-  // 8. Update all indices
-  state.index_by_file_texture[cooked.source_key] = table_index;
-  state.index_by_texture_id[cooked.texture_id] = table_index;
-  state.index_by_signature[signature] = table_index;
-
-  return table_index;
-}
-```
+The synchronous cooker checks `TextureImportDesc::stop_token` at multiple stages
+and the BC7 encoder honors it. The pipeline must wire cancellation through by
+copying the `WorkItem.stop_token` into the `TextureImportDesc` passed to the
+cooker.
 
 ---
 
-## Configuration
+## Feature Parity With Legacy Synchronous Import
 
-```cpp
-struct TexturePipeline::Config {
-  //! Number of worker coroutines draining the work queue.
-  uint32_t worker_count = 2;
+This pipeline design is feature-parity aligned with the existing synchronous
+import path, by splitting responsibilities the same way the code already does.
 
-  //! Bounded capacity for work queue (backpressure).
-  uint32_t work_queue_capacity = 64;
-};
-```
+### Parity Owned by the Pipeline (Cooker Parity)
 
-**Tuning Guidelines:**
+The following behaviors are implemented by `CookTexture(...)` and therefore must
+be preserved by the pipeline by calling the appropriate overload based on the
+work item:
 
-- `worker_count`: Match to ThreadPool size or slightly less. Each worker
-  can have one ThreadPool task in flight.
+- Decode options: `flip_y_on_decode`, `force_rgba_on_decode`, extension hint via `source_id`.
+- HDR handling: `hdr_handling`, `bake_hdr_to_ldr`, `exposure_ev`.
+- Normal map handling: green channel flip, normal-map mip generation.
+- Mip policy: none/full/max count + filter selection + filter color space.
+- Output formats: RGBA8 (linear/sRGB), RGBA16F, RGBA32F, BC7 (linear/sRGB) with quality tiers.
+- Packing: packing policy selection affects layout and alignment; payload header includes policy id.
+- Deterministic payload layout: layer-major ordering for subresources.
+- Content hashing: `content_hash` computed from final payload bytes.
+- Multi-source cooking: cubemap cooking from 6 faces is supported; non-cube arrays are currently unsupported (matching the legacy cooker’s current behavior).
 
-- `work_queue_capacity`: Higher = more requests buffered, more memory.
-  Lower = more backpressure, less memory. 64 is a reasonable default.
+### Parity Owned by the Importer/Orchestrator (Importer Parity)
+
+The following behaviors are part of the legacy synchronous `TextureImporter` and
+remain outside the pipeline (still required for end-to-end parity):
+
+- Preset auto-detection from filename (`DetectPresetFromFilename`).
+- File I/O: read bytes from disk.
+- Cubemap face discovery by naming convention (px/nx/..., posx/negx/..., right/left/...).
+  This is **texture-domain** logic (Skybox is not optional) and must be reusable
+  by standalone texture import as well as any scene importer (FBX/GLB/etc).
+  It stays out of the pipeline because it requires path/policy decisions and
+  existence checks.
+- Construction of the correct `TextureImportDesc` (including intent, color space, mip policy, output format).
+
+In the async design:
+
+- **Orchestrator (acquire + submit)** performs detection/discovery and acquires
+  bytes (reader or embedded), then submits work items to the pipeline.
+- **TexturePipeline** cooks (compute-only) and returns `CookedTexturePayload`.
+- **Commit path (collect + emit)** collects results and emits cooked textures via
+  the `TextureEmitter`.
+
+These are roles within the job’s orchestration code, not additional framework
+classes.
+
+Implementation strategy (no class explosion):
+
+- Keep cubemap face discovery as a small, reusable helper in the texture import
+  module (today it exists as an internal helper in the synchronous
+  `TextureImporter`; Phase 5 should make it shareable so both standalone texture
+  imports and scene importers can call the same logic).
+- The orchestrator uses that helper to resolve the 6 face sources, reads those
+  bytes via `IAsyncFileReader`, then submits a `CubeSourceBytes` work item.
+
+---
+
+## Separation of Concerns (AsyncImporter vs Pipeline vs Emitter vs Importers)
+
+This design keeps responsibilities aligned with existing code boundaries.
+
+- `detail::AsyncImporter` (LiveObject):
+  - owns the long-lived nursery on the import thread
+  - runs the job loop and creates a child nursery per job
+  - provides shared infrastructure (ThreadPool, async I/O drivers)
+  - calls into format importers
+- Format importer (FBX/GLB/etc):
+  - discovers textures and their semantics (intent/preset)
+  - resolves sources (embedded vs file-backed; cubemap face resolution)
+  - builds `TextureImportDesc` and `WorkItem`s
+  - maps results back to the scene/material graph
+- `TexturePipeline`:
+  - compute-only cook (calls `CookTexture(...)` on the thread pool)
+  - never performs file I/O
+  - never calls emitters
+- `TextureEmitter`:
+  - assigns stable indices
+  - performs all output writes (`textures.data`, `textures.table`)
+  - is mutated from the import thread only (single-writer rule)
+
+### Single-writer rule
+
+Only the job’s commit path mutates emission state:
+
+- `TextureEmitter` is mutated only by the commit path.
+- Any importer-side maps (dedup indices, material readiness, etc.) are mutated
+  only by the commit path.
+
+This mirrors the design goal: no locks needed for commit state.
+
+---
+
+## Cancellation Semantics
+
+Canonical cancellation behavior (job-safe pipeline usage, draining requirements,
+and shutdown semantics) is specified in the parent design
+[design/async_import_pipeline_v2.md](design/async_import_pipeline_v2.md) under
+**Cancellation Design**.
+
+Texture-specific requirement: the pipeline must wire `WorkItem.stop_token` into
+`TextureImportDesc::stop_token` so the synchronous cooker and BC7 encoder can
+observe cancellation.
+
+---
+
+## Backpressure and Memory Safety
+
+The bounded input queue is the primary backpressure mechanism.
+
+Correct usage pattern:
+
+- Read bytes for one texture.
+- Immediately `co_await pipeline.Submit(...)`.
+- Only then proceed to read the next texture.
+
+This prevents unbounded accumulation of large in-memory texture buffers.
 
 ---
 
 ## Progress Reporting
 
-The collector reports progress as textures complete:
+The pipeline remains UI-agnostic.
 
-```cpp
-auto CollectTextureResultsWithProgress(
-  co::Channel<TextureWorkResult>& results_channel,
-  emit::TextureEmissionState& state,
-  uint32_t expected_count,
-  ImportProgressCallback& progress_callback,
-  ImportJobId job_id
-) -> co::Co<std::vector<TextureCommitResult>> {
-
-  std::vector<TextureCommitResult> commits;
-  commits.reserve(expected_count);
-  uint32_t received = 0;
-  std::vector<ImportDiagnostic> pending_diagnostics;
-
-  while (received < expected_count) {
-    auto result = co_await results_channel.Receive();
-    if (!result) break;
-
-    TextureCommitResult commit = ProcessResult(*result, state);
-    commits.push_back(commit);
-    ++received;
-
-    // Collect diagnostics for failed textures
-    if (!commit.success) {
-      pending_diagnostics.push_back({
-        .severity = ImportSeverity::kWarning,
-        .message = fmt::format("Texture {} failed: {}",
-          result->texture_id, result->error_message),
-      });
-    }
-
-    // Report incremental progress
-    if (progress_callback) {
-      progress_callback(ImportProgress{
-        .job_id = job_id,
-        .phase = ImportProgress::Phase::kTextures,
-        .phase_progress = static_cast<float>(received) / expected_count,
-        .overall_progress = ComputeOverall(Phase::kTextures, received, expected_count),
-        .message = fmt::format("Processing texture {}/{}", received, expected_count),
-        .items_completed = received,
-        .items_total = expected_count,
-        .new_diagnostics = std::move(pending_diagnostics),
-      });
-      pending_diagnostics.clear();
-    }
-  }
-
-  co_return commits;
-}
-```
+- The pipeline tracks internal counts (submitted/completed/failed).
+- The job orchestrator converts that to `ImportProgress` and invokes the
+  `ImportProgressCallback`.
+- Diagnostics should be forwarded incrementally as results are collected.
 
 ---
 
-## Streaming Emission (Advanced)
+## Robustness Rules (Do Not Violate)
 
-For large scenes, materials can emit as soon as their textures are ready:
-
-### Dependency Graph
-
-```cpp
-struct TextureToMaterialDeps {
-  //! Maps texture index → materials waiting for it.
-  std::unordered_map<TextureIndex, std::vector<MaterialIndex>> waiters;
-
-  //! Maps material index → count of textures still pending.
-  std::unordered_map<MaterialIndex, uint32_t> pending_counts;
-};
-
-auto BuildDependencyGraph(const SceneData& scene) -> TextureToMaterialDeps {
-  TextureToMaterialDeps deps;
-
-  for (size_t mat_idx = 0; mat_idx < scene.materials.size(); ++mat_idx) {
-    const auto& mat = scene.materials[mat_idx];
-    uint32_t count = 0;
-
-    for (auto tex_idx : mat.texture_indices) {
-      deps.waiters[tex_idx].push_back(mat_idx);
-      ++count;
-    }
-
-    deps.pending_counts[mat_idx] = count;
-  }
-
-  return deps;
-}
-```
-
-### Streaming Collector
-
-```cpp
-auto CollectWithStreamingEmission(
-  co::Channel<TextureWorkResult>& results_channel,
-  emit::TextureEmissionState& tex_state,
-  emit::MaterialEmissionState& mat_state,
-  const SceneData& scene,
-  TextureToMaterialDeps& deps,
-  uint32_t expected_count
-) -> co::Co<void> {
-
-  uint32_t received = 0;
-
-  while (received < expected_count) {
-    auto result = co_await results_channel.Receive();
-    if (!result) break;
-
-    // Commit texture
-    uint32_t tex_table_idx = CommitTexture(tex_state, *result);
-    ++received;
-
-    // Update material dependencies
-    if (auto it = deps.waiters.find(result->texture_id);
-        it != deps.waiters.end()) {
-      for (auto mat_idx : it->second) {
-        auto& count = deps.pending_counts[mat_idx];
-        --count;
-
-        // If all textures ready, emit material now
-        if (count == 0) {
-          co_await EmitMaterial(scene.materials[mat_idx], mat_state);
-        }
-      }
-    }
-  }
-}
-```
-
-### When to Use
-
-| Scene Size | Strategy | Rationale |
-|------------|----------|-----------|
-| <20 textures | Barrier | Simpler, overhead negligible |
-| 20-100 textures | Optional | Measure real benefit |
-| >100 textures | Streaming | Clear throughput win |
-| Progressive preview | Streaming | Required for UX |
+1) Pipeline never writes output files.
+2) Pipeline never calls `TextureEmitter`.
+3) Only the job’s commit path mutates emission/dedup state.
+4) All heavyweight work runs on `co::ThreadPool`.
+5) Errors cross boundaries as data (`ImportDiagnostic`), not exceptions.
+6) Bounded channels are mandatory.
 
 ---
 
-## Integration Checklist
+## Integration Checklist (Phase 5)
 
-- [ ] TextureWorkRequest/Result types defined
-- [ ] TexturePipeline LiveObject implemented
-- [ ] Worker loop with async file read + CookTextureAsync
-- [ ] Submitter/Collector pattern in FBX async path
-- [ ] CommitTexture matching sync behavior
-- [ ] Cancellation propagation tested
-- [ ] Backpressure behavior tested
+- [ ] Implement `src/Oxygen/Content/Import/Async/Pipelines/TexturePipeline.h/.cpp`
+- [ ] Add unit tests: `Submit/Collect`, cancellation, and error reporting
+- [ ] Provide a packing-policy resolver by ID (e.g. `"d3d12"`)
+- [ ] Integrate into `FbxImporter::ImportAsync` with orchestrator + commit path
+- [ ] Keep `ImportSession::Finalize()` as the durability boundary
 
 ---
 
 ## See Also
 
-- [async_import_pipeline_v2.md](async_import_pipeline_v2.md) - Main architecture
-- [async_file_io.md](async_file_io.md) - File I/O abstraction
+- [async_import_pipeline_v2.md](async_import_pipeline_v2.md)
+- [async_import_implementation_plan.md](async_import_implementation_plan.md)
+- `src/Oxygen/Content/Import/Async/Pipelines/BufferPipeline.*` (pipeline pattern)
+- `src/Oxygen/Content/Import/Async/Emitters/TextureEmitter.*` (I/O + indices)
+- `src/Oxygen/Content/Import/TextureCooker.*` (sync cooking implementation)

@@ -105,6 +105,7 @@ m_gtest_program(
     "Import/Async/ImportSession_test.cpp"
     "Import/Async/AsyncImportService_test.cpp"
     "Import/Async/AsyncImporter_test.cpp"
+    "Import/Async/ImportJob_test.cpp"
     "Import/Async/BufferPipeline_test.cpp"
     "Import/Async/TextureEmitter_test.cpp"
     "Import/Async/BufferEmitter_test.cpp"
