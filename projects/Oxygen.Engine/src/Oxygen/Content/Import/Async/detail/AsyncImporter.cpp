@@ -4,9 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Import/Async/detail/AsyncImporter.h>
-
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/Import/Async/Detail/AsyncImporter.h>
 #include <Oxygen/OxCo/Algorithms.h>
 
 namespace oxygen::content::import::detail {

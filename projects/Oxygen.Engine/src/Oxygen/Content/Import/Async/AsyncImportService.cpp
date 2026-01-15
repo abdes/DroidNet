@@ -15,9 +15,9 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/Async/AsyncImportService.h>
+#include <Oxygen/Content/Import/Async/Detail/AsyncImporter.h>
 #include <Oxygen/Content/Import/Async/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/Async/ImportEventLoop.h>
-#include <Oxygen/Content/Import/Async/detail/AsyncImporter.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
