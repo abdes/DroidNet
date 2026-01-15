@@ -2,7 +2,7 @@
 
 **Status:** Approved Design
 **Author:** GitHub Copilot
-**Date:** 2026-01-14
+**Date:** 2026-01-15
 **Supersedes:** async_import_pipeline.md, texture_work_pipeline.md
 
 ---
@@ -27,7 +27,8 @@ the main application thread.
    via ThreadNotification, not custom push queues.
 
 4. **Cooperative Cancellation**: Per-job and per-importer cancellation via
-   OxCo's nursery cancellation propagation.
+  explicit job cancellation signals and stop-token propagation to work items.
+  Importer shutdown cancels the AsyncImporter LiveObject nursery.
 
 5. **Thread-Safe Public API**: All public methods are safe to call from any
    thread. Internal synchronization uses thread-safe channels.
@@ -69,7 +70,7 @@ the main application thread.
 These types ALREADY EXIST in `src/Oxygen/Content/Import/`. **DO NOT REDEFINE:**
 
 | Type | Header | Description |
-|------|--------|-------------|
+| ---- | ------ | ----------- |
 | `ImportRequest` | `ImportRequest.h` | Source path, cooked layout, options |
 | `ImportReport` | `ImportReport.h` | Result with success flag, diagnostics, counts |
 | `ImportDiagnostic` | `ImportDiagnostics.h` | Warning/error with severity, code, message |
@@ -78,6 +79,7 @@ These types ALREADY EXIST in `src/Oxygen/Content/Import/`. **DO NOT REDEFINE:**
 | `LooseCookedLayout` | `LooseCookedLayout.h` | Output directory layout |
 
 **Only define NEW types that don't exist:**
+
 - `ImportJobId` (uint64_t alias)
 - `ImportPhase` (enum for async progress tracking)
 - `ImportProgress` (struct for UI callbacks)
@@ -152,6 +154,7 @@ struct ImportReport {
 ### Why This Matters for Async
 
 The async design **enhances** this architecture:
+
 - `Importer::Import()` remains the sync entry point
 - `Importer::ImportAsync()` is added as an optional override
 - `AsyncImporter` orchestrates jobs, calls backends
@@ -161,63 +164,72 @@ The async design **enhances** this architecture:
 
 ## Architecture Overview
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           APPLICATION THREAD                                │
-│                                                                             │
-│  ┌─────────────┐    thread-safe     ┌─────────────────────────────────────┐│
-│  │ Application │ ───────────────────▶│  AsyncImportService                ││
-│  │   Code      │   SubmitImport()   │  (public thread-safe API)           ││
-│  └─────────────┘                    │                                     ││
-│        ▲                            │  - SubmitImport(request, callback)  ││
-│        │ callback invoked           │  - CancelJob(job_id)                ││
-│        │ on app thread              │  - CancelAll()                      ││
-│        │                            │  - Shutdown()                       ││
-│        │                            └─────────────────────────────────────┘│
-└────────┼────────────────────────────────────────────────────────────────────┘
-         │
-         │ ThreadNotification::Post()
-         │ (result callback marshaling)
-         │
-┌────────┴────────────────────────────────────────────────────────────────────┐
-│                           IMPORT THREAD                                     │
-│                                                                             │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │                      Import Event Loop (ASIO)                        │  │
-│  │                                                                      │  │
-│  │  ┌────────────────┐   ┌─────────────────┐   ┌──────────────────┐    │  │
-│  │  │ AsyncImporter  │   │ TexturePipeline │   │ AsyncFileWriter  │    │  │
-│  │  │ (LiveObject)   │   │ (pure compute)  │   │  (shared driver) │    │  │
-│  │  └────────────────┘   └─────────────────┘   └──────────────────┘    │  │
-│  │         │                     │                      ▲               │  │
-│  │         │                     │                      │               │  │
-│  │         ▼                     ▼                      │               │  │
-│  │  ┌────────────────────────────────────────────────────────────────┐ │  │
-│  │  │                    ImportSession                               │ │  │
-│  │  │  TextureEmitter ─────────────────────────────────────────────┘ │ │  │
-│  │  │  BufferEmitter   (lazy, one per resource type)                 │ │  │
-│  │  │  AssetEmitter    Emit() → index + queued async I/O             │ │  │
-│  │  └────────────────────────────────────────────────────────────────┘ │  │
-│  │         │                     │                      │               │  │
-│  │         │                     │                      │               │  │
-│  │         ▼                     ▼                      ▼               │  │
-│  │  ┌──────────────────────────────────────────────────────────────┐   │  │
-│  │  │                    co::ThreadPool                            │   │  │
-│  │  │  (CPU-bound: BC7 encode, mip gen, image decode)              │   │  │
-│  │  └──────────────────────────────────────────────────────────────┘   │  │
-│  └──────────────────────────────────────────────────────────────────────┘  │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+%%{init: {'flowchart': {'wrap': false, 'padding': 30}}}%%
+graph TB
+    subgraph AppThread["APPLICATION THREAD"]
+        direction TB
+        AppCode["Application Code"]
+
+        subgraph AsyncService["AsyncImportService (public thread-safe API)"]
+            direction TB
+            API["SubmitImport / CancelJob / CancelAll / Shutdown"]
+        end
+
+        AppCode -->|"thread-safe SubmitImport"| AsyncService
+    end
+
+    subgraph ImportThread["IMPORT THREAD<br/><small>Import Event Loop - ASIO</small>"]
+        direction TB
+
+        AsyncImporter["AsyncImporter (LiveObject) - manages job scheduling"]
+
+        subgraph JobScope["ImportJob (per-job, owns child nursery)"]
+            direction TB
+
+            ImportSession["ImportSession (created by ImportJob)"]
+
+            JobPipelines["Job Pipelines: TexturePipeline / AudioPipeline / MeshPipeline"]
+
+            Emitters["Emitters: TextureEmitter / BufferEmitter / AssetEmitter"]
+
+            JobPipelines -->|"runs pipelines"| ImportSession
+            ImportSession -->|"collect results"| Emitters
+        end
+
+        AsyncFileWriter["AsyncFileWriter - WriteAtAsync"]
+
+        AsyncImporter -->|"creates & schedules"| JobScope
+        Emitters -.->|"queues async writes"| AsyncFileWriter
+    end
+
+    ThreadPool["co::ThreadPool<br/><small>CPU-bound worker threads</small>"]
+
+    AsyncService -->|"submits job"| AsyncImporter
+    ImportThread -.->|"ThreadNotification::Post"| AppCode
+    JobPipelines -.->|"offloads CPU work"| ThreadPool
+
+    style AppThread stroke:#666,stroke-width:4px
+    style ImportThread stroke:#666,stroke-width:4px
+    style AsyncService stroke:#ff9800,stroke-width:3px
+    style AsyncImporter stroke:#9c27b0,stroke-width:3px
+    style JobScope stroke:#2196f3,stroke-width:3px
+    style ImportSession stroke:#4caf50,stroke-width:2px
+    style JobPipelines stroke:#00bcd4,stroke-width:2px
+    style Emitters stroke:#8bc34a,stroke-width:2px
+    style ThreadPool stroke:#607d8b,stroke-width:2px
+    style AsyncFileWriter stroke:#607d8b,stroke-width:2px
 ```
 
 ### Actor Summary
 
 | Actor | Scope | Owns | Role |
-|-------|-------|------|------|
+| ----- | ----- | ---- | ---- |
 | **AsyncImportService** | Singleton | Import thread, AsyncImporter | Thread-safe public API |
-| **AsyncImporter** | Shared | Pipelines, ThreadPool, AsyncFileWriter (WriteAt*) | Compute infrastructure (like GPU driver) |
+| **AsyncImporter** | Shared | ThreadPool, AsyncFileWriter (WriteAt*) | Import-thread infrastructure + job runner |
+| **ImportJob** | Per-job | Child nursery, cancellation signal, ImportSession, pipelines | Single job actor: owns one job’s lifetime + resources |
 | **ImportSession** | Per-job | Emitters, LooseCookedWriter, Diagnostics | Per-import output state |
-| **TexturePipeline** | Shared | Nothing (stateless) | Pure compute: Load → Decode → Transcode |
+| **TexturePipeline** | Per-job | Internal queues + worker tasks | Pure compute: decode/transcode → in-memory payload |
 | **TextureEmitter** | Per-job | `textures.data`, `textures.table` | Async I/O: Emit() → index + background write |
 | **BufferEmitter** | Per-job | `buffers.data`, `buffers.table` | Async I/O for geometry/animation buffers |
 | **AssetEmitter** | Per-job | `*.omat`, `*.ogeo`, `*.oscene` | Async I/O for asset descriptors |
@@ -229,124 +241,191 @@ The async design **enhances** this architecture:
 
 ### 1. AsyncImportService (Thread-Safe Public API)
 
-The public interface for submitting imports from any thread.
+#### Purpose and Scope
 
-**Headers Required:**
+`AsyncImportService` is the application-facing façade for asynchronous content import. It provides a thread-safe API for submitting import jobs from any thread (e.g., main UI thread, game thread) and receiving completion notifications back on the caller's thread via `ThreadNotification`.
+
+**Key responsibilities:**
+
+- Accept import requests from any thread
+- Manage the dedicated import thread lifecycle
+- Marshal completion callbacks back to application thread
+- Coordinate graceful shutdown and cancellation
+
+#### New Types
+
+The service introduces minimal new types, reusing existing `ImportRequest` and `ImportReport`:
+
 ```cpp
-#include <Oxygen/Content/Import/Async/AsyncImportService.h>
-// Which includes:
-//   <Oxygen/Content/Import/ImportRequest.h>   - EXISTING
-//   <Oxygen/Content/Import/ImportReport.h>    - EXISTING
-//   <Oxygen/Content/Import/ImportDiagnostics.h> - EXISTING
-```
-
-```cpp
-namespace oxygen::content::import {
-
-// ═══════════════════════════════════════════════════════════════════════════
-// NEW TYPES (only define what doesn't exist)
-// ═══════════════════════════════════════════════════════════════════════════
-
-//! Unique identifier for an import job.
+// Job identification
 using ImportJobId = uint64_t;
 inline constexpr ImportJobId kInvalidJobId = 0;
 
-//! Current phase of the import process (for progress reporting).
+// Progress tracking for UI
 enum class ImportPhase : uint8_t {
-  kPending,    //!< Job queued, not started.
-  kParsing,    //!< Reading/parsing source file.
-  kTextures,   //!< Cooking textures.
-  kMaterials,  //!< Processing materials.
-  kGeometry,   //!< Processing geometry.
-  kScene,      //!< Building scene graph.
-  kWriting,    //!< Writing cooked output.
-  kComplete,   //!< Finished.
-  kCancelled,  //!< Cancelled by user.
-  kFailed,     //!< Failed with error.
+  kPending, kParsing, kTextures, kMaterials,
+  kGeometry, kScene, kWriting, kComplete, kCancelled, kFailed
 };
 
-//! Progress update for UI integration.
 struct ImportProgress {
-  ImportJobId job_id = kInvalidJobId;
-  ImportPhase phase = ImportPhase::kPending;
-  float phase_progress = 0.0f;
-  float overall_progress = 0.0f;
+  ImportJobId job_id;
+  ImportPhase phase;
+  float phase_progress;
+  float overall_progress;
   std::string message;
-  uint32_t items_completed = 0;
-  uint32_t items_total = 0;
-  std::vector<ImportDiagnostic> new_diagnostics;  // REUSES existing type!
+  uint32_t items_completed, items_total;
+  std::vector<ImportDiagnostic> new_diagnostics;
 };
 
-// ═══════════════════════════════════════════════════════════════════════════
-// CALLBACK TYPES (use const& for ImportReport - it has filesystem::path!)
-// ═══════════════════════════════════════════════════════════════════════════
+// Callbacks
+using ImportCompletionCallback = std::function<void(ImportJobId, const ImportReport&)>;
+using ImportProgressCallback = std::function<void(const ImportProgress&)>;
+```
 
-//! Completion callback - receives EXISTING ImportReport by const ref.
-using ImportCompletionCallback =
-  std::function<void(ImportJobId, const ImportReport&)>;
+**Design note:** `ImportReport` is passed by `const&` because it contains `std::filesystem::path` and other heavyweight members. Callbacks are invoked on the application thread via `ThreadNotification::Post()`.
 
-//! Progress callback.
-using ImportProgressCallback =
-  std::function<void(const ImportProgress&)>;
+#### Configuration
 
-//! Cancellation callback.
-using ImportCancellationCallback =
-  std::function<void(ImportJobId)>;
+```cpp
+struct Config {
+  uint32_t thread_pool_size = std::thread::hardware_concurrency();
+  uint32_t texture_pipeline_workers = 2;
+  uint32_t texture_queue_capacity = 64;
+};
+```
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SERVICE CLASS
-// ═══════════════════════════════════════════════════════════════════════════
+The config specifies global resources shared across all import jobs:
 
+- **thread_pool_size**: Number of worker threads for CPU-bound cooking (BC7, mip gen, etc.)
+- **texture_pipeline_workers**: Concurrent texture processing tasks (per job)
+- **texture_queue_capacity**: Backpressure limit for texture submission
+
+#### Core API
+
+**Job submission:**
+
+```cpp
+auto SubmitImport(
+  ImportRequest request,
+  ImportCompletionCallback on_complete,
+  ImportProgressCallback on_progress = nullptr) -> ImportJobId;
+```
+
+- Thread-safe; callable from any thread
+- Returns unique job ID immediately
+- Callbacks are marshaled back to calling thread
+- Cancellation is reported via `on_complete` with `report.success=false` and diagnostic code `"import.cancelled"`
+
+**Cancellation:**
+
+```cpp
+auto CancelJob(ImportJobId job_id) -> bool;  // Cancel specific job
+auto CancelAll() -> void;                    // Cancel all jobs
+auto RequestShutdown() -> void;              // Begin graceful shutdown
+```
+
+- `CancelJob` returns `false` if job already completed
+- `CancelAll` cancels all pending and in-flight jobs
+- `RequestShutdown` signals the import thread to stop; destructor waits for completion
+
+**Status query:**
+
+```cpp
+auto IsJobActive(ImportJobId job_id) const -> bool;
+```
+
+Thread-safe check if job is still pending or executing.
+
+#### Threading Model
+
+```mermaid
+sequenceDiagram
+    participant App as Application Thread
+    participant Service as AsyncImportService
+    participant Channel as Thread-Safe Channel
+    participant Importer as AsyncImporter<br/>(Import Thread)
+    participant Job as ImportJob
+    participant TN as ThreadNotification
+
+    App->>+Service: SubmitImport(request, callbacks)
+    Service->>Service: Generate JobId
+    Service->>Channel: Push JobEntry
+    Service-->>-App: Return JobId (immediate)
+
+    Note over App: Non-blocking return<br/>Job queued for execution
+
+    Channel->>+Importer: Dequeue JobEntry
+    Importer->>+Job: Create & Execute
+    Note over Job: Parse, Cook, Emit<br/>(Parallel Pipelines)
+    Job->>Job: session.Finalize()
+    Job-->>-Importer: ImportReport
+
+    Importer->>TN: Post(on_complete, report)
+    Note over TN: Marshal callback to<br/>original calling thread
+    TN->>App: on_complete(job_id, report)
+
+    deactivate Importer
+```
+
+**Key invariants:**
+
+- Service owns the import thread and blocks in destructor until thread exits
+- All callbacks are invoked on the thread that called `SubmitImport()`
+- Internal synchronization uses lock-free channels; no application-visible locks
+
+#### Implementation Pattern
+
+The service uses the Pimpl idiom to hide implementation details:
+
+```cpp
 class AsyncImportService final {
 public:
-  struct Config {
-    uint32_t thread_pool_size = std::thread::hardware_concurrency();
-    uint32_t texture_pipeline_workers = 2;
-    uint32_t texture_queue_capacity = 64;
-  };
-
   explicit AsyncImportService(Config config = {});
   ~AsyncImportService();
 
-  OXYGEN_MAKE_NON_COPYABLE(AsyncImportService)
-  OXYGEN_MAKE_NON_MOVABLE(AsyncImportService)
-
-  //! Submit an import job. Thread-safe.
-  /*!
-   @param request     EXISTING ImportRequest (source_path is filesystem::path!)
-   @param on_complete Callback receives EXISTING ImportReport
-   @param on_progress Optional progress callback
-   @param on_cancel   Optional cancellation callback
-   @return Job ID
-  */
-  [[nodiscard]] auto SubmitImport(
-    ImportRequest request,  // EXISTING TYPE from ImportRequest.h
-    ImportCompletionCallback on_complete,
-    ImportProgressCallback on_progress = nullptr,
-    ImportCancellationCallback on_cancel = nullptr) -> ImportJobId;
-
-  auto CancelJob(ImportJobId job_id) -> bool;
-
-  //! Cancel all pending and in-flight imports. Thread-safe.
-  auto CancelAll() -> void;
-
-  //! Request graceful shutdown. Thread-safe.
-  /*!
-   Signals the import thread to stop accepting new jobs, cancel in-flight
-   work, and terminate. Does not block; destructor blocks for completion.
-  */
-  auto RequestShutdown() -> void;
-
-  //! Check if a job is still pending or in-flight. Thread-safe.
-  [[nodiscard]] auto IsJobActive(ImportJobId job_id) const -> bool;
+  // Public API methods...
 
 private:
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };
-
-} // namespace oxygen::content::import
 ```
+
+`Impl` contains:
+
+- `ImportEventLoop` running on dedicated thread
+- `detail::AsyncImporter` (LiveObject)
+- Thread-safe channel for job submission
+- Job ID generator and active job tracking
+
+#### Cancellation Semantics
+
+**Unified completion path:** Both successful completion and cancellation invoke the same `on_complete` callback. Cancellation is distinguished by:
+
+```cpp
+// Cancelled job produces this report:
+ImportReport report {
+  .success = false,
+  .diagnostics = {
+    ImportDiagnostic {
+      .severity = ImportSeverity::kError,
+      .code = "import.cancelled",
+      .message = "Import cancelled by user"
+    }
+  }
+};
+```
+
+This eliminates dual callback paths and simplifies application code.
+
+#### Shutdown Sequence
+
+1. `RequestShutdown()` signals import thread to stop accepting jobs
+2. Import thread cancels all in-flight jobs
+3. Destructor blocks until import thread exits
+4. All pending callbacks are flushed before destruction
+
+**Non-blocking shutdown initiation:** `RequestShutdown()` returns immediately; only destructor blocks.
 
 ### 2. Resource Pipeline Architecture
 
@@ -356,52 +435,106 @@ own strongly-typed API because inputs and outputs are fundamentally different.
 #### Why No Common Interface
 
 | Pipeline | Input | Processing | Output |
-|----------|-------|------------|--------|
-| Texture | bytes + TextureImportDesc | decode, mips, BC7 | table index + data offset |
-| Audio | bytes + AudioImportDesc | decode, resample, compress | table index + data offset |
-| Mesh | scene graph + options | optimize, pack | buffer indices |
+| -------- | ----- | ---------- | ------ |
+| Texture | bytes + TextureImportDesc | decode, mips, BC7 | CookedTexturePayload (in-memory) |
+| Audio | bytes + AudioImportDesc | decode, resample, compress | CookedAudioPayload (in-memory) |
+| Mesh | scene graph + options | optimize, pack | CookedMeshPayload / CookedBufferPayload (in-memory) |
 
 A polymorphic `IResourcePipeline<T>` adds complexity without value.
 
 #### Universal Pipeline Stages (Internal)
 
-All resource pipelines follow these internal stages:
+All resource pipelines follow these internal stages.
 
+Important: **acquiring bytes is not a pipeline responsibility**.
+Pipelines are compute-only and operate on bytes already in memory.
+
+```text
+┌──────────────────────┐     ┌─────────┐     ┌───────────┐
+│ Acquire source bytes │ ──▶ │ Decode  │ ──▶ │ Transcode │
+│ (Importer / caller)  │     └─────────┘     └───────────┘
+└──────────────────────┘          │                │
+                                  ▼                ▼
+                                CPU-bound        CPU-bound
+                                (ThreadPool)     (ThreadPool)
 ```
-┌─────────┐     ┌─────────┐     ┌───────────┐     ┌────────┐
-│  Load   │ ──▶ │ Decode  │ ──▶ │ Transcode │ ──▶ │ Commit │
-└─────────┘     └─────────┘     └───────────┘     └────────┘
-    │               │                │                │
-    │               │                │                │
-    ▼               ▼                ▼                ▼
- File I/O       CPU-bound        CPU-bound        File I/O
- or buffer      (ThreadPool)     (ThreadPool)     (WriteAt*)
-```
 
-1. **Load**: Acquire source bytes
-   - From file via `IAsyncFileReader`
-   - From embedded buffer (FBX/glTF embedded textures)
+1. **Acquire bytes** (outside pipeline)
 
-2. **Decode**: Parse format
+- From file via `IAsyncFileReader` (importer-owned I/O)
+- From embedded buffers (FBX/glTF embedded textures)
+
+1. **Decode**: Parse format
    - PNG/JPG/EXR → ScratchImage
    - WAV/FLAC → audio samples
    - (format-specific, CPU-bound)
 
-3. **Transcode**: Transform to runtime format
+2. **Transcode**: Transform to runtime format
    - Mip generation, BC7 compression
    - Audio resampling, codec encoding
    - (format-specific, CPU-bound, often parallelizable)
 
-4. ~~**Commit**: Write to cooked output~~ **NO! Pipelines don't commit!**
-   - Pipeline returns `CookedTexture` to caller
-   - Caller passes to Emitter for async I/O
-   - See **Principle 10**: Pipelines are pure compute
+3. ~~**Commit**: Write to cooked output~~ **NO! Pipelines don't commit!**
+
+- Pipeline returns an in-memory cooked payload (e.g., `CookedTexturePayload`)
+- Caller passes it to the appropriate emitter (e.g., `TextureEmitter`) for async I/O
+- See **Principle 10**: Pipelines are pure compute
 
 These stages are **internal**. The external API is simpler.
 
+#### Concurrency, Ownership, and Lifetime (Definitive)
+
+These rules apply to **all** resource pipelines (texture, audio, mesh, etc.).
+
+**Future-proof job model (required):** each import job runs inside a dedicated
+**child nursery** of `detail::AsyncImporter`.
+
+- The job’s child nursery is the job’s definitive lifetime boundary.
+- All job-scoped work (including pipeline workers) is started in that child
+  nursery so cancellation can be cascaded by cancelling the nursery.
+
+This model supports both current sequential processing and future concurrent
+job execution without changing pipeline APIs.
+
+**Nursery ownership (do not conflate lifetimes):** there are two distinct
+lifetimes.
+
+1) **Import-thread lifetime (long-lived)**
+   - Owner: `detail::AsyncImporter` (a `co::LiveObject`).
+   - Nursery: the nursery opened by `AsyncImporter::ActivateAsync()`.
+   - Purpose: owns long-lived background tasks for the import thread (e.g. job
+     loop, service shutdown coordination).
+
+2) **Single-job lifetime (short-lived, cancellable)**
+
+- Owner: `detail::ImportJob`.
+- Nursery: a child nursery created per job.
+- Purpose: owns job-scoped tasks, including:
+  - the importer’s job coroutine,
+  - any helper coroutines for acquisition/submission/collection,
+  - job-scoped pipeline instances and their worker coroutines.
+
+**Pipeline instancing:** pipeline instances are **job-scoped**.
+
+- Each job constructs its own pipeline instances (e.g. `TexturePipeline`) and
+  starts them in the job’s child nursery.
+- A pipeline instance therefore does not require job tagging or result routing.
+
+Why this matters:
+
+- Cancellation is unambiguous: cancelling the job’s nursery cancels everything
+  job-owned, including pipeline workers.
+- The design is future-proof for parallel jobs: jobs are isolated by nursery
+  boundaries and pipeline instances.
+
 #### Pipeline External API Pattern
 
-Each pipeline exposes the same conceptual API with type-specific signatures:
+Each pipeline exposes the same conceptual API with type-specific signatures.
+The API pattern matches the existing `BufferPipeline` implementation:
+
+- `Start(nursery)` spawns worker coroutines
+- bounded `Submit`/`TrySubmit` + `Collect`
+- results contain diagnostics and a `success` flag
 
 ```cpp
 // TexturePipeline - strongly typed, no polymorphism
@@ -410,20 +543,27 @@ public:
   // Work item and result types (pipeline-specific)
   struct WorkItem {
     std::string source_id;       // Correlation key (e.g., texture path or UUID)
-    SourceData source;           // File path OR embedded bytes
+    std::span<const std::byte> bytes;       // Source bytes (already acquired)
+    std::shared_ptr<const void> bytes_owner; // Keeps bytes alive
     TextureImportDesc desc;      // EXISTING type from TextureImportDesc.h
     std::stop_token stop_token;  // Cancellation
   };
 
   struct WorkResult {
     std::string source_id;       // Echoed from WorkItem for correlation
-    CookedTexture cooked_data;   // The processed texture (pipeline does NOT commit)
+    std::optional<CookedTexturePayload> cooked; // In-memory cooked payload
     std::vector<ImportDiagnostic> diagnostics;
     bool success;
   };
 
-  // Submit work (non-blocking, returns immediately)
-  auto Submit(WorkItem item) -> void;
+  // Start worker coroutines
+  auto Start(co::Nursery& nursery) -> void;
+
+  // Submit work (bounded; may suspend under backpressure)
+  auto Submit(WorkItem item) -> co::Co<>;
+
+  // Try to submit without blocking
+  auto TrySubmit(WorkItem item) -> bool;
 
   // Collect one completed result (blocks until ready)
   auto Collect() -> co::Co<WorkResult>;
@@ -435,9 +575,20 @@ public:
   // Progress for UI
   [[nodiscard]] auto GetProgress() const -> PipelineProgress;
 
-  // Cancellation
-  auto CancelAll() -> void;
+  // Close input (drain then exit)
+  auto Close() -> void;
+
+  // Cancel the pipeline (job-scoped). Intended for early-abort within the job.
+  // Job cancellation is normally expressed by cancelling the job nursery.
+  auto Cancel() -> void;
 };
+
+Notes:
+
+- Pipelines are job-scoped; they are created, started, drained, and destroyed
+  within the job’s child nursery.
+- Importer/service shutdown is handled by cancelling the AsyncImporter nursery
+  and/or cancelling all job nurseries (see Cancellation Design).
 ```
 
 #### ResourcePipeline Concept
@@ -452,13 +603,15 @@ at compile time:
  completely different WorkItem and WorkResult types.
 */
 template <typename T>
-concept ResourcePipeline = requires(T& pipeline, typename T::WorkItem item) {
+concept ResourcePipeline = requires(T& pipeline, typename T::WorkItem item,
+  co::Nursery& nursery) {
   // Must have nested types
   typename T::WorkItem;
   typename T::WorkResult;
 
-  // Submit/Collect pattern
-  { pipeline.Submit(std::move(item)) } -> std::same_as<void>;
+  // Start + Submit/Collect pattern
+  { pipeline.Start(nursery) } -> std::same_as<void>;
+  { pipeline.Submit(std::move(item)) } -> std::same_as<co::Co<>>;
   { pipeline.Collect() } -> std::same_as<co::Co<typename T::WorkResult>>;
 
   // Status queries
@@ -467,7 +620,7 @@ concept ResourcePipeline = requires(T& pipeline, typename T::WorkItem item) {
 
   // Progress and cancellation
   { pipeline.GetProgress() } -> std::same_as<PipelineProgress>;
-  { pipeline.CancelAll() } -> std::same_as<void>;
+  { pipeline.Cancel() } -> std::same_as<void>;
 };
 
 // Verify at compile time:
@@ -531,7 +684,9 @@ auto GetOrCreateTextureResourceIndexWithCooker(
 
 TexturePipeline::WorkItem MakeTextureWorkItem(
   const ufbx_texture* texture,
-  const CookerConfig& config)
+  const CookerConfig& config,
+  std::span<const std::byte> bytes,
+  std::shared_ptr<const void> bytes_owner)
 {
   // 1. Resolve source (same helper as sync)
   const auto* file_tex = ResolveFileTexture(texture);
@@ -542,16 +697,23 @@ TexturePipeline::WorkItem MakeTextureWorkItem(
   // 3. Build WorkItem using existing metadata types
   return TexturePipeline::WorkItem {
     .source_id = source_id,
-    .source = texture->content.data
-      ? SourceData::FromBuffer(texture->content)   // Embedded
-      : SourceData::FromFile(ResolveTexturePath(texture)),  // External
+    .bytes = bytes,
+    .bytes_owner = std::move(bytes_owner),
     .desc = MakeImportDescFromConfig(config, source_id),
   };
 }
 
 // Usage in ImportAsync():
-//   auto item = MakeTextureWorkItem(tex, config);
-//   pipeline.Submit(std::move(item));
+//   if (is_embedded) {
+//     auto bytes = std::span<const std::byte>(...);
+//     auto owner = scene_owner;  // keeps embedded bytes alive
+//     co_await pipeline.Submit(MakeTextureWorkItem(tex, config, bytes, owner));
+//   } else {
+//     auto file_bytes = co_await reader->ReadFile(path);
+//     auto owner = std::make_shared<std::vector<std::byte>>(std::move(*file_bytes));
+//     auto bytes = std::span<const std::byte>(owner->data(), owner->size());
+//     co_await pipeline.Submit(MakeTextureWorkItem(tex, config, bytes, owner));
+//   }
 ```
 
 #### Commit Responsibility
@@ -559,11 +721,12 @@ TexturePipeline::WorkItem MakeTextureWorkItem(
 **Pipelines do NOT commit to CookedContentWriter.** They return processed data.
 
 | Component | Responsibility |
-|-----------|----------------|
-| Pipeline | Load → Decode → Transcode → return `CookedTexture` |
-| Importer | Receive result → call `out.WriteTexture()` → track index |
+| --------- | -------------- |
+| Pipeline | Decode → Transcode → return `CookedTexturePayload` (in-memory) |
+| Importer | Receive result → call `session.TextureEmitter().Emit()` → track index |
 
 This separation:
+
 - Keeps pipelines stateless (no external references)
 - Serializes commits on the import thread (thread-safe)
 - Mirrors sync architecture (cooker returns, emitter commits)
@@ -573,7 +736,7 @@ This separation:
 auto result = co_await pipeline.Collect();
 if (result.success) {
   // IMPORTER commits, not pipeline
-  auto table_idx = out.WriteTexture(result.cooked_data);
+  auto table_idx = session.TextureEmitter().Emit(std::move(*result.cooked));
   texture_indices[result.source_id] = table_idx;
 }
 ```
@@ -581,11 +744,13 @@ if (result.success) {
 #### Key Insight
 
 The **metadata extraction** is identical between sync and async:
+
 - `ResolveFileTexture()` - same
 - `MakeImportDescFromConfig()` - same
 - `TextureIdString()` - same
 
 Only the **dispatch** differs:
+
 - Sync: `CookTextureWithFallback()` → blocks until done
 - Async: `pipeline.Submit()` → returns immediately, collect later
 
@@ -621,7 +786,6 @@ public:
 
     ImportCompletionCallback on_complete;
     ImportProgressCallback on_progress;
-    ImportCancellationCallback on_cancel;
 
     std::shared_ptr<co::Event> cancel_event;
   };
@@ -719,7 +883,7 @@ public:
    @param cooked The cooked texture payload.
    @return Table index (stable immediately, usable for material refs).
   */
-  [[nodiscard]] auto Emit(CookedTexture cooked) -> uint32_t {
+  [[nodiscard]] auto Emit(CookedTexturePayload cooked) -> uint32_t {
     // 1. Assign stable index NOW (before any I/O)
     auto idx = next_index_++;
 
@@ -873,6 +1037,7 @@ simple:
   same event loop to safely touch emitter state.
 
 TextureEmitter-specific rule:
+
 - **Index 0 reserved for fallback**: `EnsureFallbackTexture()` guarantees the
   fallback texture exists at index 0 before emitting user textures.
 
@@ -1145,7 +1310,7 @@ Scenes/
 **Sync Path (Existing - Unchanged):**
 
 | File | Cooked By | Emitted By | Method |
-|------|-----------|------------|--------|
+| ---- | --------- | ---------- | ------ |
 | `textures.data` | FbxImporter (inline) | FbxImporter | `AppendResource()` |
 | `textures.table` | — | FbxImporter | `out.WriteFile()` |
 | `buffers.data` | FbxImporter (inline) | FbxImporter | `AppendResource()` |
@@ -1158,7 +1323,7 @@ Scenes/
 **Async Path (New - Pipelines + Emitters):**
 
 | File | Cooked By | Emitted By | Method | When |
-|------|-----------|------------|--------|------|
+| ---- | --------- | ---------- | ------ | ---- |
 | `textures.data` | **TexturePipeline** | **TextureEmitter** | `Emit()` async I/O | Streaming |
 | `textures.table` | — | **TextureEmitter** | `Finalize()` | Session end |
 | `buffers.data` | **ThreadPool** | **BufferEmitter** | `Emit()` async I/O | Streaming |
@@ -1169,6 +1334,7 @@ Scenes/
 | `container.index.bin` | — | **ImportSession** | `Finalize()` → `Finish()` | **LAST** |
 
 **Key Differences:**
+
 - **Sync**: Importer cooks inline AND emits via blocking I/O
 - **Async**: Pipeline cooks → Emitter emits via async I/O → index returned immediately
 - **Sync**: Single thread, sequential
@@ -1177,7 +1343,7 @@ Scenes/
 #### Emitter Responsibilities
 
 | Emitter | Owns | `Emit()` Does | `Finalize()` Does |
-|---------|------|---------------|-------------------|
+| ------- | ---- | ------------- | ----------------- |
 | `TextureEmitter` | `textures.data`, `textures.table` | Assign index, queue async data write | Wait for I/O, flush table |
 | `BufferEmitter` | `buffers.data`, `buffers.table` | Assign index, queue async data write | Wait for I/O, flush table |
 | `AssetEmitter` | `*.omat`, `*.ogeo`, `*.oscene` | Queue async descriptor write | Wait for all writes |
@@ -1193,6 +1359,7 @@ PAK later:       Compact container, remap indices, trim stale data
 ```
 
 Counter-based index assignment is CORRECT because:
+
 - Each import session uses monotonic counter
 - Re-import appends new data with new indices
 - Index file is always written LAST with accurate mappings
@@ -1201,6 +1368,7 @@ Counter-based index assignment is CORRECT because:
 #### The Index File (`container.index.bin`)
 
 The index file is a **binary manifest** containing:
+
 1. **IndexHeader** (256 bytes) - magic, version, section offsets
 2. **String table** - all paths as null-terminated UTF-8
 3. **AssetEntry[]** - each asset with its key, descriptor path, virtual path
@@ -1245,6 +1413,7 @@ knowing the final size of each `.table` and `.data` file.
 
 **Offsets and table indices are stable at Emit() time.** Materials can
 reference `table_index` immediately because:
+
 - Index is assigned synchronously (counter increment)
 - Data write is queued as async I/O (non-blocking)
 - Table entry is added in memory (tiny: ~100 bytes)
@@ -1302,6 +1471,7 @@ A) **Single-threaded allocation, concurrent WriteAt** (current design):
   mutation, while file I/O completes concurrently via `WriteAtAsync()`.
 
 B) **Mutex-protected appends**:
+
    ```cpp
    auto Append(std::span<const std::byte> bytes) -> uint64_t {
      std::lock_guard lock(mutex_);
@@ -1313,6 +1483,7 @@ B) **Mutex-protected appends**:
    ```
 
 C) **Reserve offsets, parallel WriteAt** (same core idea as emitters):
+
    ```cpp
   // Phase 1: Reserve offset ranges (fast, serialized)
   const auto range = ReserveAlignedRange(size, alignment);
@@ -1323,6 +1494,7 @@ C) **Reserve offsets, parallel WriteAt** (same core idea as emitters):
 
 For most cases, **Option A** (single-threaded allocation on import thread) is sufficient
 because:
+
 - I/O is fast (~GB/s on NVMe)
 - Cooking remains the dominant cost
 - Explicit-offset writes avoid append interleaving
@@ -1387,7 +1559,7 @@ auto FbxImporter::ImportAsync(const ImportRequest& request,
 #### Memory Usage
 
 | Component | Size | Notes |
-|-----------|------|-------|
+| --------- | ---- | ----- |
 | Texture table (28 entries) | ~2.8 KB | In memory |
 | Buffer table (10 entries) | ~1 KB | In memory |
 | Material descriptors | ~5 KB | In memory |
@@ -1580,15 +1752,16 @@ auto TexturePipeline::ProcessItem(WorkItem& item) -> co::Co<WorkResult> {
   });
 
   if (!result) {
-    co_return WorkResult{ .success = false, .error = result.error() };
+    co_return WorkResult{
+      .success = false,
+      .diagnostics = { ConvertToDiagnostic(result.error()) },
+    };
   }
 
-  // Commit to data file (may need async file write)
-  auto offset = co_await CommitToDataFile(result->payload);
-
+  // Compute-only: return cooked payload in memory. The caller commits via an
+  // emitter (normal imports) or a writer (special standalone convenience APIs).
   co_return WorkResult{
-    .table_index = AppendToTable(result->desc),
-    .data_offset = offset,
+    .cooked = std::move(*result),
     .success = true,
   };
 }
@@ -1615,11 +1788,10 @@ auto TexturePipeline::ProcessItem(WorkItem& item) -> co::Co<WorkResult> {
   });
   if (item.stop_token.stop_requested()) co_return Cancelled();
 
-  // Stage 3: Pack and commit
+  // Stage 3: Pack into the final cooked payload (still compute-only)
   auto packed = detail::PackSubresources(*processed, GetPackingPolicy());
-  auto offset = co_await CommitToDataFile(packed);
-
-  co_return WorkResult{ .table_index = ..., .data_offset = offset, .success = true };
+  auto cooked = BuildCookedPayload(std::move(packed), item.desc, GetPackingPolicy());
+  co_return WorkResult{ .cooked = std::move(cooked), .success = true };
 }
 ```
 
@@ -1630,7 +1802,6 @@ class TexturePipeline {
 public:
   explicit TexturePipeline(
     std::shared_ptr<co::ThreadPool> pool,
-    std::shared_ptr<IAsyncFileReader> file_reader,
     const ITexturePackingPolicy& policy);
 
   auto Submit(WorkItem item) -> void {
@@ -1695,30 +1866,82 @@ auto GetOrCreateTextureResourceIndexAsync(
 1. **Per-Importer (Shutdown)**: Cancelling the AsyncImporter's nursery cancels
    all in-flight jobs. Used during service shutdown.
 
-2. **Per-Job**: Each job has a `co::Event cancel_event`. Triggering it causes
-   the job's coroutine to exit at the next cancellation point.
+2. **Per-Job**: Each job owns a cancellation signal and a job child nursery.
+  Cancelling the job cancels the job nursery, which cascades to all job-scoped
+  tasks including pipeline workers.
+
+### How to Cancel a Job
+
+`AsyncImportService::CancelJob(job_id)` performs a thread-safe request that is
+handled on the import thread:
+
+1) Look up the `ImportJob` state for `job_id`.
+2) Signal cancellation (e.g. trigger `cancel_event` and/or request-stop on a
+  stop source that feeds `WorkItem.stop_token`).
+3) Cancel the job child nursery.
+4) The job finishes and reports completion via `on_complete(job_id, report)`.
+  For cancellation, `report.success=false` and includes diagnostic code
+  `"import.cancelled"`.
+
+This is the definitive mechanism for per-job cancellation.
+
+### Pipeline Cancellation Semantics (Job-Scoped)
+
+Pipelines are **job-scoped** and run inside the job’s child nursery.
+
+- Cancelling the job’s nursery cancels pipeline worker coroutines.
+- Work items must still carry cancellation (`WorkItem.stop_token`) so the
+  synchronous cookers/transcoders can exit cooperatively while running on the
+  ThreadPool.
+- A pipeline may expose `Cancel()` for early-abort decisions inside the job, but
+  normal per-job cancellation is expressed by cancelling the job nursery.
 
 ### Cancellation Flow
 
 ```cpp
-// Per-job cancellation pattern
-auto AsyncImporter::ProcessJob(JobEntry& job) -> co::Co<ImportReport> {
-  // Wrap work in AnyOf with cancel event
-  auto [cancelled, result] = co_await co::AnyOf(
-    job.cancel_event.Wait(),
-    [&]() -> co::Co<ImportReport> {
-      // Actual import work here
-      co_return co_await DoImport(job.request);
-    }()
-  );
+// Per-job cancellation pattern (ImportJob is the single job actor)
+// NOTE: completion must be cancellation-safe; do not rely on code after a
+// cancellable co_await to run.
+auto ImportJob::MainAsync() -> co::Co<> {
+  bool report_ready = false;
+  ImportReport report;
 
-  if (cancelled) {
-    co_return ImportReport{ .success = false, .cancelled = true };
-  }
+  // Ensure on_complete is invoked once even if this coroutine is cancelled
+  // by importer shutdown.
+  co_await co::AnyOf(
+    [&]() -> co::Co<> {
+      auto run_job = [&]() -> co::Co<ImportReport> {
+        // Job-scoped pipelines/tasks are started via ImportJob's job-scoped
+        // APIs (nursery is intentionally not exposed).
+        // Actual work is implemented by the concrete job.
+        co_return co_await ExecuteAsync();
+      };
 
-  co_return *result;
+      // OxCo deterministically handles early cancellation: if the job coroutine
+      // hasn't been resumed yet, it is cancelled without running.
+      auto [cancelled, out] = co_await co::AnyOf(*cancel_event_, run_job());
+      report = cancelled.has_value() ? MakeCancelledReport() : std::move(*out);
+      report_ready = true;
+      co_return;
+    }(),
+    co::UntilCancelledAnd([&]() -> co::Co<> {
+      if (!report_ready) {
+        report = MakeCancelledReport();
+        report_ready = true;
+      }
+      co_return;
+    }));
+
+  on_complete_(job_id_, report);
 }
 ```
+
+### Encapsulation Rule (No Nursery Leakage)
+
+`ImportJob` owns the job nursery, but does **not** expose it. Concrete jobs use
+"cookie-cutter" job-scoped helpers provided by the base class (e.g.
+`StartTask(...)`, `StartPipeline(...)`, and a `StopToken()` accessor) so all
+jobs share consistent structured-concurrency and cancellation behavior.
 
 ### ThreadPool Cancellation
 
@@ -1781,8 +2004,10 @@ When a coroutine calls `co_await pool.Run(...)`, it:
 2. **Suspends** (import thread can run other coroutines)
 3. When ThreadPool completes, **resumes on import thread**
 
-This means `out.WriteTexture()`, `out.WriteMesh()`, etc. are always called
-from a single thread. **No locks needed for CookedContentWriter.**
+This means emission commits (e.g., `session.TextureEmitter().Emit(...)`,
+`session.BufferEmitter().Emit(...)`, `session.AssetEmitter().Emit(...)`) are
+always executed from a single thread. **No locks are needed for emitter state**
+(single-writer commit).
 
 ```
 Import Thread Event Loop (single thread):
@@ -1798,11 +2023,11 @@ Import Thread Event Loop (single thread):
 ├─────────────────────────────────────────────────────────────────────┤
 │ ... ThreadPool completes mesh 0 ...                                 │
 │ Coroutine B RESUMES on import thread:                               │
-│   out.WriteMesh(mesh)                   │ ← serialized!             │
+│   buf_emitter.Emit(mesh_buffers)         │ ← serialized!             │
 ├─────────────────────────────────────────────────────────────────────┤
 │ ... Pipeline has texture result ...                                 │
 │ Coroutine A RESUMES on import thread:                               │
-│   out.WriteTexture(result.cooked_data)  │ ← serialized!             │
+│   tex_emitter.Emit(*result.cooked)       │ ← serialized!             │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1814,8 +2039,8 @@ Import Thread Event Loop (single thread):
 
 ### Internal (Import Thread)
 
-- Single-threaded event loop: no locks needed between co_await points
-- All coroutines resume on import thread → CookedContentWriter access serialized
+- Single-threaded event loop: no locks needed between `co_await` points
+- All coroutines resume on import thread → emitter/session mutation serialized
 - Channel-based communication within the import thread
 - ThreadPool handles its own synchronization
 
@@ -1848,7 +2073,7 @@ Import Thread Event Loop (single thread):
 These existing files are **preserved and wrapped**, not replaced:
 
 | File | Lines | Role in Async |
-|------|-------|---------------|
+| ---- | ----- | ------------- |
 | `Importer.h` | 55 | Base interface; gains `ImportAsync()` |
 | `AssetImporter.h/cpp` | 200 | Façade; gains `ImportToLooseCookedAsync()` |
 | `ImportRequest.h` | 55 | POD; unchanged |
@@ -1922,8 +2147,12 @@ struct AsyncImportService::Config {
   //! Backpressure threshold for texture queue.
   uint32_t texture_queue_capacity = 64;
 
-  //! Maximum concurrent import jobs (0 = unlimited).
-  uint32_t max_concurrent_jobs = 4;
+  //! Maximum concurrent import jobs.
+  /*!
+   Current implementation processes jobs sequentially.
+   This knob is reserved for future multi-job concurrency.
+  */
+  uint32_t max_concurrent_jobs = 1;
 
   //! File read buffer size for async I/O.
   size_t file_read_buffer_size = 64 * 1024;
@@ -2028,8 +2257,7 @@ Not all imports involve scenes. The design supports importing individual assets:
 [[nodiscard]] auto SubmitTextureImport(
   TextureImportRequest request,
   ImportCompletionCallback on_complete,
-  ImportProgressCallback on_progress = nullptr,
-  ImportCancellationCallback on_cancel = nullptr) -> ImportJobId;
+  ImportProgressCallback on_progress = nullptr) -> ImportJobId;
 
 struct TextureImportRequest {
   std::filesystem::path source_path;   //!< Source texture file
@@ -2044,21 +2272,34 @@ struct TextureImportRequest {
 auto AsyncImporter::ProcessStandaloneTexture(TextureImportRequest& req)
   -> co::Co<ImportReport>
 {
-  // 1. Read file via IAsyncFileReader
-  auto bytes = co_await file_reader_->ReadFile(req.source_path);
-  if (!bytes) co_return ErrorReport(bytes.error());
+  // 1. Read file via IAsyncFileReader (I/O is importer-owned)
+  auto bytes_result = co_await file_reader_->ReadFile(req.source_path);
+  if (!bytes_result) {
+    co_return ErrorReport(bytes_result.error());
+  }
 
-  // 2. Cook via TexturePipeline (single item)
-  auto result = co_await texture_pipeline_->CookSingle(
-    TextureWorkRequest{
-      .source_data = std::move(*bytes),
-      .desc = req.options.ToDesc(),
-    });
+  // Keep bytes alive across suspension + ThreadPool work
+  auto bytes_owner
+    = std::make_shared<std::vector<std::byte>>(std::move(*bytes_result));
 
-  // 3. Write cooked output
-  auto write_result = co_await file_reader_->WriteFile(
-    req.output_path, result.cooked_data);
+  // 2. Cook via TexturePipeline (compute-only)
+  co_await texture_pipeline_.Submit(TexturePipeline::WorkItem{
+    .source_id = req.source_path.string(),
+    .bytes = std::span<const std::byte>(bytes_owner->data(), bytes_owner->size()),
+    .bytes_owner = bytes_owner,
+    .desc = req.options.ToDesc(),
+  });
+  // Note: do not Close() a shared pipeline per job.
 
+  auto cooked = co_await texture_pipeline_.Collect();
+  if (!cooked.success || !cooked.cooked.has_value()) {
+    co_return ImportReport{ .success = false, .diagnostics = std::move(cooked.diagnostics) };
+  }
+
+  // 3. Write cooked output via IAsyncFileWriter (NOT the reader)
+  // Note: standalone output is a convenience path; normal imports commit via emitters.
+  auto write_result
+    = co_await file_writer_->Write(req.output_path, cooked.cooked->payload);
   co_return ImportReport{ .success = write_result.has_value() };
 }
 ```
@@ -2078,24 +2319,28 @@ class AudioPipeline {
 public:
   struct WorkItem {
     std::string source_id;      // Correlation key (e.g., audio path)
-    SourceData source;
+    std::span<const std::byte> bytes;
+    std::shared_ptr<const void> bytes_owner;
     AudioImportDesc desc;       // sample rate, codec, channels, etc.
     std::stop_token stop_token;
   };
 
   struct WorkResult {
     std::string source_id;      // Echoed from WorkItem
-    CookedAudio cooked_data;    // Pipeline cooks, importer commits
+    std::optional<CookedAudioPayload> cooked;
     std::vector<ImportDiagnostic> diagnostics;
     bool success;
   };
 
-  auto Submit(WorkItem item) -> void;
+  auto Start(co::Nursery& nursery) -> void;
+  auto Submit(WorkItem item) -> co::Co<>;
+  auto TrySubmit(WorkItem item) -> bool;
   auto Collect() -> co::Co<WorkResult>;
   [[nodiscard]] auto HasPending() const -> bool;
   [[nodiscard]] auto PendingCount() const -> size_t;
   [[nodiscard]] auto GetProgress() const -> PipelineProgress;
-  auto CancelAll() -> void;
+  auto Close() -> void;
+  auto Cancel() -> void;
 };
 
 // Verified at compile time
@@ -2162,7 +2407,7 @@ auto AggregateProgress(Ps&... pipelines) -> PipelineProgress {
 ### When to Use Which Pattern
 
 | Scenario | Pattern | Notes |
-|----------|---------|-------|
+| -------- | ------- | ----- |
 | Complex FBX/glTF (many textures) | Nursery + streaming emission | See FbxImporter example above |
 | Simple asset (few textures) | Sequential collect is fine | Overhead of tracking not worth it |
 | Standalone texture import | Direct pipeline, no nursery | Single item, no dependencies |
@@ -2171,12 +2416,13 @@ auto AggregateProgress(Ps&... pipelines) -> PipelineProgress {
 ### Core Utilization
 
 | Item Count | Cores | Efficiency |
-|------------|-------|------------|
+| ---------- | ----- | ---------- |
 | 28 textures + 3 meshes + 4 animations | 32 | ~100% (work-stealing) |
 | 8 textures + 1 mesh | 32 | ~25% (not enough work) |
 | 100 textures | 32 | ~100% (pipeline keeps up) |
 
 For maximum throughput on high-core-count machines:
+
 1. Submit ALL work upfront (don't wait for dependencies)
 2. Use `co::Nursery` for concurrent collection streams
 3. Emit incrementally as dependencies resolve

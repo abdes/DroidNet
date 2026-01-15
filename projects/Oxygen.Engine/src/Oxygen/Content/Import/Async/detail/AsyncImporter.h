@@ -10,6 +10,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/Import/Async/AsyncImportService.h>
+#include <Oxygen/Content/Import/Async/Detail/JobEntry.h>
 #include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/api_export.h>
@@ -27,27 +28,6 @@ class IAsyncFileWriter;
 
 namespace oxygen::content::import::detail {
 
-//! Entry for a single import job in the job channel.
-struct JobEntry {
-  //! Unique job identifier.
-  ImportJobId job_id = kInvalidJobId;
-
-  //! Import request with source path and options.
-  ImportRequest request;
-
-  //! Callback for completion notification.
-  ImportCompletionCallback on_complete;
-
-  //! Optional callback for progress updates.
-  ImportProgressCallback on_progress;
-
-  //! Optional callback for cancellation notification.
-  ImportCancellationCallback on_cancel;
-
-  //! Event to signal cancellation request for this job.
-  std::shared_ptr<co::Event> cancel_event;
-};
-
 //! Internal LiveObject that processes import jobs on the import thread.
 /*!
  AsyncImporter runs as a LiveObject within the import thread's event loop.
@@ -64,8 +44,8 @@ struct JobEntry {
 
  ### Cancellation
 
- Each job has an associated `co::Event` for cancellation. The processing
- loop checks this event using `co::AnyOf()` to allow early exit.
+ Each job has an associated `co::Event` for cancellation. Cancellation is
+ always reported via `on_complete` with a cancelled diagnostic.
 
  @see AsyncImportService for the public thread-safe API.
 */
