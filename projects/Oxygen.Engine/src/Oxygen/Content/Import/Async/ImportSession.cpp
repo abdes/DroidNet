@@ -10,18 +10,32 @@
 #include <Oxygen/Content/Import/Async/Emitters/TextureEmitter.h>
 #include <Oxygen/Content/Import/Async/IAsyncFileWriter.h>
 #include <Oxygen/Content/Import/Async/ImportSession.h>
+#include <Oxygen/Content/Import/Async/ResourceTableRegistry.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/OxCo/Semaphore.h>
 
 namespace oxygen::content::import {
+
+namespace {
+
+  auto FinalizeGate() -> oxygen::co::Semaphore&
+  {
+    static oxygen::co::Semaphore gate(1);
+    return gate;
+  }
+
+} // namespace
 
 ImportSession::ImportSession(const ImportRequest& request,
   oxygen::observer_ptr<IAsyncFileReader> file_reader,
   oxygen::observer_ptr<IAsyncFileWriter> file_writer,
-  oxygen::observer_ptr<co::ThreadPool> thread_pool)
+  oxygen::observer_ptr<co::ThreadPool> thread_pool,
+  oxygen::observer_ptr<ResourceTableRegistry> table_registry)
   : request_(request)
   , file_reader_(file_reader)
   , file_writer_(file_writer)
   , thread_pool_(thread_pool)
+  , table_registry_(table_registry)
   , cooked_root_(
       request.cooked_root.value_or(request.source_path.parent_path()))
   , cooked_writer_(cooked_root_)
@@ -81,9 +95,13 @@ auto ImportSession::ThreadPool() const noexcept
 auto ImportSession::TextureEmitter() -> oxygen::content::import::TextureEmitter&
 {
   if (!texture_emitter_.has_value()) {
+    DCHECK_F(table_registry_ != nullptr,
+      "ImportSession requires a ResourceTableRegistry for texture emission");
+    auto& aggregator = table_registry_->TextureAggregator(
+      cooked_root_, request_.loose_cooked_layout);
     texture_emitter_.emplace(
       std::make_unique<oxygen::content::import::TextureEmitter>(
-        *file_writer_, request_.loose_cooked_layout, cooked_root_));
+        *file_writer_, aggregator, request_.loose_cooked_layout, cooked_root_));
   }
   return **texture_emitter_;
 }
@@ -97,9 +115,13 @@ auto ImportSession::TextureEmitter() -> oxygen::content::import::TextureEmitter&
 auto ImportSession::BufferEmitter() -> oxygen::content::import::BufferEmitter&
 {
   if (!buffer_emitter_.has_value()) {
+    DCHECK_F(table_registry_ != nullptr,
+      "ImportSession requires a ResourceTableRegistry for buffer emission");
+    auto& aggregator = table_registry_->BufferAggregator(
+      cooked_root_, request_.loose_cooked_layout);
     buffer_emitter_.emplace(
       std::make_unique<oxygen::content::import::BufferEmitter>(
-        *file_writer_, request_.loose_cooked_layout, cooked_root_));
+        *file_writer_, aggregator, request_.loose_cooked_layout, cooked_root_));
   }
   return **buffer_emitter_;
 }
@@ -162,6 +184,9 @@ auto ImportSession::HasErrors() const noexcept -> bool
 auto ImportSession::Finalize() -> co::Co<ImportReport>
 {
   DLOG_F(INFO, "ImportSession::Finalize() starting");
+
+  auto& gate = FinalizeGate();
+  auto guard = co_await gate.Lock();
 
   if (texture_emitter_.has_value()) {
     const auto ok = co_await (**texture_emitter_).Finalize();

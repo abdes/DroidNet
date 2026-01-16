@@ -27,6 +27,7 @@
 #include <Oxygen/Content/Import/Async/Jobs/FbxImportJob.h>
 #include <Oxygen/Content/Import/Async/Jobs/GlbImportJob.h>
 #include <Oxygen/Content/Import/Async/Jobs/TextureImportJob.h>
+#include <Oxygen/Content/Import/Async/ResourceTableRegistry.h>
 #include <Oxygen/Content/Import/ImportFormat.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -68,27 +69,29 @@ namespace {
     ImportProgressCallback on_progress, std::shared_ptr<co::Event> cancel_event,
     oxygen::observer_ptr<IAsyncFileReader> file_reader,
     oxygen::observer_ptr<IAsyncFileWriter> file_writer,
-    oxygen::observer_ptr<co::ThreadPool> thread_pool)
+    oxygen::observer_ptr<co::ThreadPool> thread_pool,
+    oxygen::observer_ptr<ResourceTableRegistry> table_registry)
     -> std::shared_ptr<detail::ImportJob>
   {
     switch (format) {
     case ImportFormat::kFbx:
       return std::make_shared<detail::FbxImportJob>(job_id, std::move(request),
         std::move(on_complete), std::move(on_progress), std::move(cancel_event),
-        file_reader, file_writer, thread_pool);
+        file_reader, file_writer, thread_pool, table_registry);
     case ImportFormat::kGltf:
       // TODO(Phase 5): Add dedicated GltfImportJob; use GLB job for now.
       return std::make_shared<detail::GlbImportJob>(job_id, std::move(request),
         std::move(on_complete), std::move(on_progress), std::move(cancel_event),
-        file_reader, file_writer, thread_pool);
+        file_reader, file_writer, thread_pool, table_registry);
     case ImportFormat::kGlb:
       return std::make_shared<detail::GlbImportJob>(job_id, std::move(request),
         std::move(on_complete), std::move(on_progress), std::move(cancel_event),
-        file_reader, file_writer, thread_pool);
+        file_reader, file_writer, thread_pool, table_registry);
     case ImportFormat::kTextureImage:
       return std::make_shared<detail::TextureImportJob>(job_id,
         std::move(request), std::move(on_complete), std::move(on_progress),
-        std::move(cancel_event), file_reader, file_writer, thread_pool);
+        std::move(cancel_event), file_reader, file_writer, thread_pool,
+        table_registry);
     case ImportFormat::kUnknown:
       break;
     }
@@ -125,6 +128,9 @@ struct AsyncImportService::Impl {
 
   //! Async file writer (created on import thread).
   std::unique_ptr<IAsyncFileWriter> file_writer_;
+
+  //! Resource table registry (created on import thread).
+  std::unique_ptr<ResourceTableRegistry> table_registry_;
 
   //! Thread pool for CPU-bound import work (created on import thread).
   std::unique_ptr<co::ThreadPool> thread_pool_;
@@ -209,6 +215,8 @@ struct AsyncImportService::Impl {
     // Create platform-specific file writer via factory
     file_writer_ = CreateAsyncFileWriter(*event_loop_);
 
+    table_registry_ = std::make_unique<ResourceTableRegistry>(*file_writer_);
+
     // Create thread pool for CPU-bound work (pipelines, mesh processing)
     thread_pool_ = std::make_unique<co::ThreadPool>(
       *event_loop_, config_.thread_pool_size);
@@ -217,7 +225,9 @@ struct AsyncImportService::Impl {
     async_importer_
       = std::make_unique<detail::AsyncImporter>(detail::AsyncImporter::Config {
         .channel_capacity = 64,
+        .max_in_flight_jobs = config_.max_in_flight_jobs,
         .file_writer = file_writer_.get(),
+        .table_registry = table_registry_.get(),
       });
 
     thread_running_.store(true, std::memory_order_release);
@@ -244,12 +254,26 @@ struct AsyncImportService::Impl {
       };
     });
 
+    if (table_registry_) {
+      oxygen::co::Run(*event_loop_, [this]() -> co::Co<> {
+        const auto ok = co_await table_registry_->FinalizeAll();
+        if (!ok) {
+          DLOG_F(
+            WARNING, "AsyncImportService: resource table finalization failed");
+        }
+        co_return;
+      });
+    }
+
     // Cleanup on import thread (in reverse order of creation)
     if (thread_pool_) {
       thread_pool_.reset();
     }
     if (async_importer_) {
       async_importer_.reset();
+    }
+    if (table_registry_) {
+      table_registry_.reset();
     }
     if (file_writer_) {
       file_writer_.reset();
@@ -389,7 +413,8 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     std::move(wrapped_complete), std::move(on_progress), cancel_event,
     oxygen::observer_ptr<IAsyncFileReader>(impl_->file_reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(impl_->file_writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(impl_->thread_pool_.get()));
+    oxygen::observer_ptr<co::ThreadPool>(impl_->thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(impl_->table_registry_.get()));
   if (!job) {
     DLOG_F(WARNING, "SubmitImport: failed to create job for '{}'",
       request.source_path.string());
@@ -411,19 +436,49 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     .cancel_event = cancel_event,
   };
 
+  if (!impl_->async_importer_->CanAcceptJob()) {
+    DLOG_F(
+      WARNING, "SubmitImport: AsyncImporter channel full for job {}", job_id);
+    {
+      std::lock_guard lock(impl_->cancel_events_mutex_);
+      impl_->cancel_events_.erase(job_id);
+    }
+    return kInvalidJobId;
+  }
+
+  const auto source_path = request.source_path.string();
+  auto on_submit_failed = wrapped_complete;
+
   // Submit directly to AsyncImporter via event loop post
   // The event loop ensures this runs on the import thread
-  impl_->event_loop_->Post([importer = impl_->async_importer_.get(),
-                             entry = std::move(entry)]() mutable {
-    // Now on import thread - submit to AsyncImporter
-    // Use TrySubmitJob since we're not in a coroutine context
-    if (!importer->TrySubmitJob(std::move(entry))) {
-      DLOG_F(WARNING,
-        "Failed to submit job to AsyncImporter (channel full or closed)");
-      // The job's on_complete will not be called in this case
-      // This is acceptable since the service is likely shutting down
-    }
-  });
+  impl_->event_loop_->Post(
+    [importer = impl_->async_importer_.get(), entry = std::move(entry),
+      on_submit_failed, source_path]() mutable {
+      // Now on import thread - submit to AsyncImporter
+      // Use TrySubmitJob since we're not in a coroutine context
+      if (!importer->TrySubmitJob(std::move(entry))) {
+        DLOG_F(WARNING,
+          "Failed to submit job to AsyncImporter (channel full or closed)");
+        ImportReport report {
+        .cooked_root = {},
+        .source_key = {},
+        .diagnostics = {
+          {
+            .severity = ImportSeverity::kError,
+            .code = "import.queue_full",
+            .message = "Import queue is full",
+            .source_path = source_path,
+            .object_path = {},
+          },
+        },
+        .materials_written = 0,
+        .geometry_written = 0,
+        .scenes_written = 0,
+        .success = false,
+      };
+        on_submit_failed(entry.job_id, report);
+      }
+    });
 
   return job_id;
 }

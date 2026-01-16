@@ -157,6 +157,7 @@ set(
   "Import/emit/ResourceAppender.cpp"
   "Import/emit/TextureEmitter.h"
   "Import/emit/TextureEmitter.cpp"
+  "Import/Internal/TextureSourceAssemblyInternal.h"
   # Async import
   "Import/Async/ImportEventLoop.h"
   "Import/Async/ImportEventLoop.cpp"
@@ -170,6 +171,9 @@ set(
   "Import/Async/ImportPlanner.cpp"
   "Import/Async/AsyncImportService.h"
   "Import/Async/AsyncImportService.cpp"
+  "Import/Async/ResourceTableAggregator.h"
+  "Import/Async/ResourceTableRegistry.h"
+  "Import/Async/ResourceTableRegistry.cpp"
   "Import/Async/Detail/AsyncImporter.h"
   "Import/Async/Detail/AsyncImporter.cpp"
   "Import/Async/Detail/JobEntry.h"

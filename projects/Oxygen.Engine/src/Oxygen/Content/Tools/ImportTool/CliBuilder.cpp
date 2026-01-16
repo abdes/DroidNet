@@ -4,12 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Tools/ImportTool/CliBuilder.h>
-
 #include <string>
 
 #include <Oxygen/Clap/Fluent/CliBuilder.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
+#include <Oxygen/Content/Tools/ImportTool/CliBuilder.h>
 #include <Oxygen/Content/Tools/ImportTool/ImportCommand.h>
 
 namespace oxygen::content::import::tool {

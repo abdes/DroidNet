@@ -12,7 +12,7 @@
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h>
-
+#include <Oxygen/Content/Tools/ImportTool/BatchCommand.h>
 #include <Oxygen/Content/Tools/ImportTool/CliBuilder.h>
 #include <Oxygen/Content/Tools/ImportTool/ImportCommand.h>
 #include <Oxygen/Content/Tools/ImportTool/TextureCommand.h>
@@ -22,7 +22,7 @@ auto main(int argc, char** argv) -> int
   loguru::g_preamble_date = false;
   loguru::g_preamble_file = true;
   loguru::g_preamble_verbose = false;
-  loguru::g_preamble_time = false;
+  loguru::g_preamble_time = true;
   loguru::g_preamble_uptime = false;
   loguru::g_preamble_thread = true;
   loguru::g_preamble_header = false;
@@ -34,12 +34,14 @@ auto main(int argc, char** argv) -> int
   int exit_code = 0;
   try {
     using oxygen::clap::Command;
+    using oxygen::content::import::tool::BatchCommand;
     using oxygen::content::import::tool::BuildCli;
     using oxygen::content::import::tool::ImportCommand;
     using oxygen::content::import::tool::TextureCommand;
 
+    BatchCommand batch_command;
     TextureCommand texture_command;
-    std::vector<ImportCommand*> commands { &texture_command };
+    std::vector<ImportCommand*> commands { &texture_command, &batch_command };
 
     const auto cli = BuildCli(commands);
     const auto context = cli->Parse(argc, const_cast<const char**>(argv));

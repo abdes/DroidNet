@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <filesystem>
-#include <fstream>
 #include <stdexcept>
 #include <string>
 
@@ -56,50 +55,8 @@ namespace {
     return signature;
   }
 
-  auto LoadExistingTable(const std::filesystem::path& table_path,
-    std::vector<oxygen::data::pak::BufferResourceDesc>& table) -> void
-  {
-    if (!std::filesystem::exists(table_path)) {
-      return;
-    }
-
-    std::ifstream in(table_path, std::ios::binary | std::ios::ate);
-    if (!in) {
-      LOG_F(WARNING, "BufferEmitter: failed to open existing table '{}'",
-        table_path.string());
-      return;
-    }
-
-    const auto size = in.tellg();
-    if (size <= 0) {
-      return;
-    }
-
-    const auto size_bytes = static_cast<size_t>(size);
-    if (size_bytes % sizeof(oxygen::data::pak::BufferResourceDesc) != 0) {
-      LOG_F(WARNING,
-        "BufferEmitter: invalid table size {} for '{}' (entry size {})",
-        size_bytes, table_path.string(),
-        sizeof(oxygen::data::pak::BufferResourceDesc));
-      return;
-    }
-
-    const auto count
-      = size_bytes / sizeof(oxygen::data::pak::BufferResourceDesc);
-    table.resize(count);
-    in.seekg(0, std::ios::beg);
-    in.read(reinterpret_cast<char*>(table.data()),
-      static_cast<std::streamsize>(size_bytes));
-    if (!in) {
-      LOG_F(WARNING, "BufferEmitter: failed to read existing table '{}'",
-        table_path.string());
-      table.clear();
-      return;
-    }
-  }
-
-  [[nodiscard]] auto GetExistingDataSize(const std::filesystem::path& data_path,
-    const std::vector<oxygen::data::pak::BufferResourceDesc>& table) -> uint64_t
+  [[nodiscard]] auto GetExistingDataSize(const std::filesystem::path& data_path)
+    -> uint64_t
   {
     std::error_code ec;
     const auto size = std::filesystem::file_size(data_path, ec);
@@ -107,41 +64,22 @@ namespace {
       return size;
     }
 
-    uint64_t max_end = 0;
-    for (const auto& entry : table) {
-      const auto end = entry.data_offset + entry.size_bytes;
-      if (end > max_end) {
-        max_end = end;
-      }
-    }
-
-    if (max_end > 0) {
-      LOG_F(WARNING,
-        "BufferEmitter: data file '{}' missing; using derived size {}",
-        data_path.string(), max_end);
-    }
-
-    return max_end;
+    return 0;
   }
 
 } // namespace
 
 BufferEmitter::BufferEmitter(IAsyncFileWriter& file_writer,
-  const LooseCookedLayout& layout, const std::filesystem::path& cooked_root)
+  BufferTableAggregator& table_aggregator, const LooseCookedLayout& layout,
+  const std::filesystem::path& cooked_root)
   : file_writer_(file_writer)
+  , table_aggregator_(table_aggregator)
   , data_path_(cooked_root / layout.BuffersDataRelPath())
-  , table_path_(cooked_root / layout.BuffersTableRelPath())
 {
-  LoadExistingTable(table_path_, table_);
-  if (!table_.empty()) {
-    next_index_.store(
-      static_cast<uint32_t>(table_.size()), std::memory_order_release);
-    data_file_size_.store(
-      GetExistingDataSize(data_path_, table_), std::memory_order_release);
-  }
+  data_file_size_.store(
+    GetExistingDataSize(data_path_), std::memory_order_release);
 
-  DLOG_F(INFO, "BufferEmitter created: data='{}' table='{}'",
-    data_path_.string(), table_path_.string());
+  DLOG_F(INFO, "BufferEmitter created: data='{}'", data_path_.string());
 }
 
 BufferEmitter::~BufferEmitter()
@@ -161,25 +99,29 @@ auto BufferEmitter::Emit(CookedBufferPayload cooked) -> uint32_t
   const auto signature = MakeBufferSignature(cooked);
   DCHECK_F(!signature.empty(), "buffer signature must not be empty");
 
-  if (const auto existing = FindExistingIndex(signature);
-    existing.has_value()) {
-    return existing.value();
-  }
-
-  // Assign index atomically (stable immediately)
-  const auto index = next_index_.fetch_add(1, std::memory_order_acq_rel);
-
   // Use buffer's specified alignment (defaults to 16)
   const auto buffer_alignment = cooked.alignment > 0 ? cooked.alignment : 16ULL;
 
-  const auto reserved = ReserveDataRange(buffer_alignment, cooked.data.size());
-  RecordNewBuffer(signature, index, cooked, reserved.aligned_offset);
+  const auto acquire = table_aggregator_.AcquireOrInsert(signature, [&]() {
+    const auto reserved
+      = ReserveDataRange(buffer_alignment, cooked.data.size());
+    auto desc = MakeTableEntry(cooked, reserved.aligned_offset);
+    return std::make_pair(desc, reserved);
+  });
+
+  if (!acquire.is_new) {
+    return acquire.index;
+  }
+
+  emitted_count_.fetch_add(1, std::memory_order_acq_rel);
+
+  const auto reserved = acquire.reservation;
 
   DLOG_F(INFO,
     "BufferEmitter::Emit: index={} offset={} size={} padding={} "
     "usage=0x{:x} stride={}",
-    index, reserved.aligned_offset, cooked.data.size(), reserved.padding_size,
-    cooked.usage_flags, cooked.element_stride);
+    acquire.index, reserved.aligned_offset, cooked.data.size(),
+    reserved.padding_size, cooked.usage_flags, cooked.element_stride);
 
   if (reserved.padding_size > 0) {
     auto padding_ptr = std::make_shared<std::vector<std::byte>>(
@@ -194,23 +136,13 @@ auto BufferEmitter::Emit(CookedBufferPayload cooked) -> uint32_t
 
   // Queue async write at explicit offset for buffer data
   QueueDataWrite(
-    WriteKind::kPayload, index, reserved.aligned_offset, payload_ptr);
+    WriteKind::kPayload, acquire.index, reserved.aligned_offset, payload_ptr);
 
-  return index;
-}
-
-auto BufferEmitter::FindExistingIndex(const std::string& signature) const
-  -> std::optional<uint32_t>
-{
-  const auto it = index_by_signature_.find(signature);
-  if (it == index_by_signature_.end()) {
-    return std::nullopt;
-  }
-  return it->second;
+  return acquire.index;
 }
 
 auto BufferEmitter::ReserveDataRange(
-  const uint64_t alignment, const uint64_t payload_size) -> ReservedWriteRange
+  const uint64_t alignment, const uint64_t payload_size) -> WriteReservation
 {
   uint64_t current_size = data_file_size_.load(std::memory_order_acquire);
   uint64_t aligned_offset = 0;
@@ -227,14 +159,6 @@ auto BufferEmitter::ReserveDataRange(
     .aligned_offset = aligned_offset,
     .padding_size = aligned_offset - current_size,
   };
-}
-
-auto BufferEmitter::RecordNewBuffer(const std::string& signature,
-  const uint32_t index, const CookedBufferPayload& cooked,
-  const uint64_t aligned_offset) -> void
-{
-  table_.push_back(MakeTableEntry(cooked, aligned_offset));
-  index_by_signature_.emplace(signature, index);
 }
 
 auto BufferEmitter::QueueDataWrite(const WriteKind kind,
@@ -274,7 +198,7 @@ auto BufferEmitter::OnWriteComplete(const WriteKind kind,
 
 auto BufferEmitter::Count() const noexcept -> uint32_t
 {
-  return next_index_.load(std::memory_order_acquire);
+  return emitted_count_.load(std::memory_order_acquire);
 }
 
 auto BufferEmitter::PendingCount() const noexcept -> size_t
@@ -315,16 +239,8 @@ auto BufferEmitter::Finalize() -> co::Co<bool>
     co_return false;
   }
 
-  // Write table file if we have any buffers
-  if (!table_.empty()) {
-    const auto table_ok = co_await WriteTableFile();
-    if (!table_ok) {
-      co_return false;
-    }
-  }
-
   DLOG_F(INFO, "BufferEmitter::Finalize: complete, {} buffers emitted",
-    table_.size());
+    emitted_count_.load(std::memory_order_acquire));
 
   co_return true;
 }
@@ -345,39 +261,6 @@ auto BufferEmitter::MakeTableEntry(
   // entry.reserved is zero-initialized by default
 
   return entry;
-}
-
-auto BufferEmitter::WriteTableFile() -> co::Co<bool>
-{
-  DLOG_F(INFO, "BufferEmitter::WriteTableFile: writing {} entries to '{}'",
-    table_.size(), table_path_.string());
-
-  // Serialize table entries to bytes
-  serio::MemoryStream stream;
-  serio::Writer<serio::MemoryStream> writer(stream);
-
-  // Use alignment of 1 for packed table (matches PAK format spec)
-  const auto pack = writer.ScopedAlignment(1);
-  auto write_result = writer.WriteBlob(std::as_bytes(std::span(table_)));
-  if (!write_result.has_value()) {
-    LOG_F(ERROR, "BufferEmitter::WriteTableFile: serialization failed");
-    co_return false;
-  }
-
-  // Write table file
-  auto result = co_await file_writer_.Write(table_path_,
-    std::span<const std::byte>(stream.Data()),
-    WriteOptions { .create_directories = true });
-
-  if (!result.has_value()) {
-    LOG_F(ERROR, "BufferEmitter::WriteTableFile: failed: {}",
-      result.error().ToString());
-    co_return false;
-  }
-
-  DLOG_F(INFO, "BufferEmitter::WriteTableFile: wrote {} bytes", result.value());
-
-  co_return true;
 }
 
 } // namespace oxygen::content::import

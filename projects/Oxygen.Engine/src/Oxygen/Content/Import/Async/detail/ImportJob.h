@@ -34,6 +34,7 @@ class ThreadPool;
 namespace oxygen::content::import {
 class IAsyncFileReader;
 class IAsyncFileWriter;
+class ResourceTableRegistry;
 } // namespace oxygen::content::import
 
 namespace oxygen::content::import::detail {
@@ -69,7 +70,8 @@ public:
     std::shared_ptr<co::Event> cancel_event,
     oxygen::observer_ptr<IAsyncFileReader> file_reader,
     oxygen::observer_ptr<IAsyncFileWriter> file_writer,
-    oxygen::observer_ptr<co::ThreadPool> thread_pool);
+    oxygen::observer_ptr<co::ThreadPool> thread_pool,
+    oxygen::observer_ptr<ResourceTableRegistry> table_registry);
 
   OXYGEN_MAKE_NON_COPYABLE(ImportJob)
   OXYGEN_MAKE_NON_MOVABLE(ImportJob)
@@ -128,6 +130,10 @@ protected:
   OXGN_CNTT_NDAPI auto ThreadPool() const noexcept
     -> oxygen::observer_ptr<co::ThreadPool>;
 
+  //! Access the resource table registry.
+  OXGN_CNTT_NDAPI auto TableRegistry() const noexcept
+    -> oxygen::observer_ptr<ResourceTableRegistry>;
+
   //! Returns the job id.
   OXGN_CNTT_NDAPI auto JobId() const -> ImportJobId;
 
@@ -181,6 +187,7 @@ private:
   oxygen::observer_ptr<IAsyncFileReader> file_reader_ {};
   oxygen::observer_ptr<IAsyncFileWriter> file_writer_ {};
   oxygen::observer_ptr<co::ThreadPool> thread_pool_ {};
+  oxygen::observer_ptr<ResourceTableRegistry> table_registry_ {};
 
   std::string name_;
 

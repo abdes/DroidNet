@@ -66,7 +66,8 @@ ImportJob::ImportJob(ImportJobId job_id, ImportRequest request,
   std::shared_ptr<co::Event> cancel_event,
   oxygen::observer_ptr<IAsyncFileReader> file_reader,
   oxygen::observer_ptr<IAsyncFileWriter> file_writer,
-  oxygen::observer_ptr<co::ThreadPool> thread_pool)
+  oxygen::observer_ptr<co::ThreadPool> thread_pool,
+  oxygen::observer_ptr<ResourceTableRegistry> table_registry)
   : job_id_(job_id)
   , request_(std::move(request))
   , on_complete_(std::move(on_complete))
@@ -75,6 +76,7 @@ ImportJob::ImportJob(ImportJobId job_id, ImportRequest request,
   , file_reader_(file_reader)
   , file_writer_(file_writer)
   , thread_pool_(thread_pool)
+  , table_registry_(table_registry)
 {
 }
 
@@ -154,6 +156,12 @@ auto ImportJob::ThreadPool() const noexcept
   -> oxygen::observer_ptr<co::ThreadPool>
 {
   return thread_pool_;
+}
+
+auto ImportJob::TableRegistry() const noexcept
+  -> oxygen::observer_ptr<ResourceTableRegistry>
+{
+  return table_registry_;
 }
 
 auto ImportJob::JobId() const -> ImportJobId { return job_id_; }

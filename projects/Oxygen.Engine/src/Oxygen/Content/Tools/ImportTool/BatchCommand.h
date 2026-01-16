@@ -7,20 +7,30 @@
 #pragma once
 
 #include <memory>
+#include <string>
 #include <string_view>
 
 #include <Oxygen/Content/Tools/ImportTool/ImportCommand.h>
-#include <Oxygen/Content/Tools/ImportTool/TextureImportSettings.h>
 
 namespace oxygen::content::import::tool {
 
-class TextureCommand final : public ImportCommand {
+class BatchCommand final : public ImportCommand {
 public:
   [[nodiscard]] auto Name() const -> std::string_view override;
   [[nodiscard]] auto BuildCommand() -> std::shared_ptr<clap::Command> override;
   [[nodiscard]] auto Run() -> int override;
 
-  TextureImportSettings options_ {};
+private:
+  struct Options {
+    std::string manifest_path;
+    std::string root_path;
+    std::string report_path;
+    bool dry_run = false;
+    bool fail_fast = false;
+    bool verbose = false;
+    bool no_tui = false;
+    uint32_t max_in_flight = 0;
+  } options_ {};
 };
 
 } // namespace oxygen::content::import::tool
