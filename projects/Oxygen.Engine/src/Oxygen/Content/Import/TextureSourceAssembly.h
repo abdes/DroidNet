@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <span>
 #include <string>
@@ -51,6 +52,18 @@ inline constexpr uint8_t kCubeFaceCount = 6;
 
 //! String representation of CubeFace enum values.
 OXGN_CNTT_NDAPI auto to_string(CubeFace face) -> const char*;
+
+//! Discover cube face file paths using common suffix conventions.
+/*!
+  Attempts to resolve the six cube face images by inspecting the filename
+  suffixes (e.g., _px/_nx, _posx/_negx, _right/_left). The returned array
+  is ordered in CubeFace order (+X, -X, +Y, -Y, +Z, -Z).
+
+  @param path Path to any of the face images (or the base name).
+  @return Array of face paths if all six faces are present; nullopt otherwise.
+*/
+OXGN_CNTT_NDAPI auto DiscoverCubeFacePaths(const std::filesystem::path& path)
+  -> std::optional<std::array<std::filesystem::path, kCubeFaceCount>>;
 
 //! Identifies a subresource within a multi-source texture.
 /*!
@@ -437,10 +450,11 @@ OXGN_CNTT_NDAPI auto ConvertEquirectangularToCube(
 enum class CubeMapImageLayout : uint8_t {
   // clang-format off
   kUnknown         = 0,  //!< Cannot detect or invalid layout
-  kHorizontalStrip = 1,  //!< 6:1 aspect, faces in a row
-  kVerticalStrip   = 2,  //!< 1:6 aspect, faces in a column
-  kHorizontalCross = 3,  //!< 4:3 aspect, cross arrangement
-  kVerticalCross   = 4,  //!< 3:4 aspect, vertical cross arrangement
+  kAuto            = 1,  //!< Auto-detect layout from image dimensions
+  kHorizontalStrip = 2,  //!< 6:1 aspect, faces in a row
+  kVerticalStrip   = 3,  //!< 1:6 aspect, faces in a column
+  kHorizontalCross = 4,  //!< 4:3 aspect, cross arrangement
+  kVerticalCross   = 5,  //!< 3:4 aspect, vertical cross arrangement
   // clang-format on
 };
 

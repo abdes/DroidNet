@@ -22,6 +22,10 @@ Core properties:
 - **ThreadPool offload**: heavy stages run on `co::ThreadPool`
 - **Reuse existing cookers**: `TextureCooker` and `TextureEmissionUtils` define
   the canonical behavior
+- **Planner‑gated**: the planner submits work only when dependencies are ready
+  (textures typically have no upstream dependencies)
+- **Configurable hashing**: payload `content_hash` is optional and is
+  configured via `ImportOptions`, cascading into the pipeline config.
 
 The concrete stage graph and data contracts are specified in
 **Pipeline Stages (Legacy Cooker Parity)** and **Cooked Output Contract**.
@@ -159,7 +163,6 @@ public:
   [[nodiscard]] auto Collect() -> co::Co<WorkResult>;
 
   void Close();
-  void Cancel();
 
   [[nodiscard]] auto HasPending() const noexcept -> bool;
   [[nodiscard]] auto PendingCount() const noexcept -> size_t;
@@ -303,8 +306,8 @@ These stages follow the current synchronous implementation in
 11) **Build final payload**
     - `TexturePayloadHeader` (28 bytes) + `SubresourceLayout[]` + aligned data
     - `data_offset_bytes = AlignSubresourceOffset(layouts_offset + layouts_bytes)`
-    - `content_hash = detail::ComputeContentHash(payload)` (current implementation
-      uses the first 8 bytes of SHA-256 over the full payload)
+    - `content_hash = detail::ComputeContentHash(payload)` computed on the
+      ThreadPool (first 8 bytes of SHA-256 over the full payload)
 
 12) **Return cooked result**
     - `CookedTexturePayload.desc` includes shape, mip count, final format,
@@ -344,7 +347,8 @@ Subresource data (layer-major order)
 - `compression_type = 7` for BC7, `0` otherwise
 - `alignment = policy.AlignRowPitchBytes(1)` (256 for D3D12, 1 for tight)
 - `size_bytes = payload.size()`
-- `content_hash` comes from the payload header
+- `content_hash` comes from the payload header and is computed on the
+  ThreadPool
 
 ### Data File Alignment
 
@@ -378,7 +382,8 @@ deduplication and diagnostics match the sync importer.
 - Output formats: RGBA8 (linear/sRGB), RGBA16F, RGBA32F, BC7 (linear/sRGB)
 - sRGB reinterpretation for RGBA8/BC7 when the storage is bit-identical
 - Packing policy alignment and layer-major subresource ordering
-- Payload header/layout format and `content_hash` calculation (SHA-256 first 8 bytes)
+- Payload header/layout format and `content_hash` calculation (SHA-256 first 8
+  bytes) are performed on the ThreadPool
 - Multi-source cooking: cubemaps and 2D arrays with pre-authored mips
 - Placeholder generation (when enabled) matches sync path exactly
 

@@ -20,10 +20,12 @@ Core properties:
 - **No I/O, no indices**: returns cooked payloads; the job commits via
   `BufferEmitter` and `AssetEmitter`.
 - **Job-scoped**: created per job and started in the job’s child nursery.
-- **ThreadPool offload**: tangent generation and buffer hashing run on
-  `co::ThreadPool`.
+- **ThreadPool offload**: tangent generation and any `content_hash`
+  computation run on `co::ThreadPool`.
 - **Strict failure policy**: geometry cooking never falls back to placeholders;
   failures surface as explicit diagnostics.
+- **Planner‑gated**: the planner submits work only when dependencies are ready
+  and the full descriptor can be finalized.
 
 ---
 
@@ -35,11 +37,13 @@ under **Concurrency, Ownership, and Lifetime (Definitive)**.
 
 ### Pipeline vs Emitter Responsibilities
 
-- **GeometryPipeline**: produces `CookedGeometryPayload` and
-  `CookedBufferPayload`s (compute-only).
+- **GeometryPipeline**: produces geometry descriptor bytes and buffer work
+  items (compute-only).
 - **BufferEmitter**: assigns stable buffer indices and writes `buffers.data` /
   `buffers.table`.
 - **AssetEmitter**: writes `.ogeo` geometry descriptor files.
+  `content_hash` must be computed on the ThreadPool after buffer indices are
+  assigned.
 
 ---
 
@@ -115,7 +119,8 @@ Notes:
 
 - `lods` must contain at least one LOD; `lods[0]` is the highest detail.
 - `UfbxMeshView` is allowed; it must contain the `ufbx_scene` and `ufbx_mesh`
-  pointers and an owner to keep them alive.
+  pointers and an owner to keep them alive. Importers should prefer
+  format-agnostic `TriangulatedMesh` where possible.
 - `TriangulatedMesh` is the format-agnostic path for glTF or pre-processed
   sources; it must already be triangle lists.
 - `storage_mesh_name` is used for virtual paths and descriptor relpaths.
@@ -165,6 +170,13 @@ struct WorkResult {
   bool success = false;
 };
 ```
+
+Notes:
+
+- The planner must ensure buffer indices are assigned before final descriptor
+  hashing. If buffer emission occurs first, the planner may schedule a
+  descriptor‑finalization step on the ThreadPool that fills indices and computes
+  `content_hash` over the complete bytes.
 
 ---
 
@@ -236,7 +248,8 @@ For each work item:
    - Index buffer: `uint32_t` array, usage flags = `IndexBuffer | Static`,
      format = `Format::kR32UInt`.
    - Skinned meshes emit additional joint index/weight buffers.
-   - Content hash must be computed (SHA-256 first 8 bytes).
+   - `content_hash` is **not** computed here. Hashing happens on the
+     ThreadPool in `BufferPipeline` once buffer dependencies are ready.
 10) Compute geometry identity:
     - `virtual_path = request.loose_cooked_layout.GeometryVirtualPath(
        storage_mesh_name)`
@@ -251,7 +264,9 @@ For each work item:
     - `header.variant_flags` uses **union-of-LOD attributes** (any attribute
       emitted by any LOD sets the bit). Missing attributes on a specific LOD
       must be defaulted by loaders.
-12) Compute `header.content_hash` over descriptor bytes.
+12) Defer `header.content_hash` until all dependency indices are known.
+  Hashing must run on the ThreadPool and must use the **complete**
+  descriptor bytes (no skip ranges).
 13) Return `CookedGeometryPayload` with metadata and buffer payloads.
 
 All errors must be converted to `ImportDiagnostic`; no exceptions cross async
@@ -318,7 +333,8 @@ Requirements:
 
 - `GeometryAssetDesc.header.asset_type = AssetType::kGeometry`
 - `GeometryAssetDesc.header.version = kGeometryAssetVersion`
-- `GeometryAssetDesc.header.content_hash` computed over the descriptor bytes
+- `GeometryAssetDesc.header.content_hash` computed on the ThreadPool after all
+  buffer indices are known, over the **complete** descriptor bytes
 - `lod_count = lods.size()`
 - `SubMeshDesc::material_asset_key` populated for each submesh
 
@@ -372,7 +388,8 @@ Buffers are emitted via `BufferEmitter` using `CookedBufferPayload`:
 - Vertex buffer alignment = `sizeof(Vertex)`
 - Index buffer alignment = `alignof(uint32_t)`
 - Skinned meshes emit joint index/weight buffers (alignment = 16 bytes)
-- `content_hash` must be populated for every buffer payload
+- `content_hash` must be populated for every buffer payload by
+  `BufferPipeline` on the ThreadPool
 
 ---
 
@@ -384,7 +401,8 @@ Buffers are emitted via `BufferEmitter` using `CookedBufferPayload`:
 - **Mesh types**: `kStandard`, `kSkinned`, and `kProcedural` are supported. Mesh
   types without a defined blob must emit a diagnostic and be skipped or coerced
   to `kStandard` per job policy.
-- **Header metadata**: `header.version` and `header.content_hash` are populated.
+- **Header metadata**: `header.version` and `header.content_hash` are
+  populated (hash computed on ThreadPool after dependencies resolve).
 - **Attribute mask**: missing attributes are reflected via
   `header.variant_flags` (union-of-LOD attributes).
 - **Failure policy**: no geometry fallback is allowed. Any failure produces

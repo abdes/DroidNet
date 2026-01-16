@@ -6,17 +6,16 @@
 
 #pragma once
 
-#include <cstdint>
+#include <memory>
+#include <span>
 
-namespace oxygen::content::import {
+#include <Oxygen/Clap/Cli.h>
 
-//! Supported authoring source formats.
-enum class ImportFormat : uint8_t {
-  kUnknown = 0,
-  kGltf,
-  kGlb,
-  kFbx,
-  kTextureImage,
-};
+namespace oxygen::content::import::tool {
 
-} // namespace oxygen::content::import
+class ImportCommand;
+
+[[nodiscard]] auto BuildCli(std::span<ImportCommand* const> commands)
+  -> std::unique_ptr<clap::Cli>;
+
+} // namespace oxygen::content::import::tool

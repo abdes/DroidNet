@@ -46,6 +46,8 @@ namespace {
       return "gltf";
     case ImportFormat::kGlb:
       return "glb";
+    case ImportFormat::kTextureImage:
+      return "texture";
     case ImportFormat::kUnknown:
       return "unknown";
     }
@@ -83,6 +85,10 @@ namespace {
       return std::make_shared<detail::GlbImportJob>(job_id, std::move(request),
         std::move(on_complete), std::move(on_progress), std::move(cancel_event),
         file_reader, file_writer, thread_pool);
+    case ImportFormat::kTextureImage:
+      return std::make_shared<detail::TextureImportJob>(job_id,
+        std::move(request), std::move(on_complete), std::move(on_progress),
+        std::move(cancel_event), file_reader, file_writer, thread_pool);
     case ImportFormat::kUnknown:
       break;
     }
@@ -170,6 +176,12 @@ struct AsyncImportService::Impl {
   {
     const auto ext = ToLowerAscii(path.extension().string());
 
+    if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga"
+      || ext == ".bmp" || ext == ".psd" || ext == ".gif" || ext == ".hdr"
+      || ext == ".pic" || ext == ".ppm" || ext == ".pgm" || ext == ".pnm"
+      || ext == ".exr") {
+      return ImportFormat::kTextureImage;
+    }
     if (ext == ".gltf") {
       return ImportFormat::kGltf;
     }

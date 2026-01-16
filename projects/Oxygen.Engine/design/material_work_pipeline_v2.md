@@ -19,6 +19,8 @@ Core properties:
 - **No I/O**: `AssetEmitter` writes `.omat` files.
 - **Job-scoped**: created per job and started in the job’s child nursery.
 - **ThreadPool-aware**: supports future heavy material graph processing.
+- **Planner‑gated**: the planner submits work only after texture indices and
+  other dependencies are ready.
 
 ---
 
@@ -128,6 +130,7 @@ Notes:
 - `storage_material_name` is used for virtual paths and descriptor relpaths.
 - `material_domain` uses `oxygen::data::MaterialDomain`.
 - `textures.*.index` must be final texture indices from `TextureEmitter`.
+  The planner must ensure these dependencies are ready before submission.
   For textures, index `0` refers to the fallback texture
   (`kFallbackResourceIndex`). Use `assigned=false` to indicate a truly missing
   texture slot; `assigned=true` means the slot should be sampled (including
@@ -250,10 +253,10 @@ For each work item:
    - `header.streaming_priority` from `ImportRequest` (0 if unspecified)
    - `header.variant_flags` from import configuration
    - Fill `material_domain`, `flags`, `shader_stages`, and all scalar fields
-10) Compute `header.content_hash` over the serialized bytes (descriptor +
-   shader refs) using `util::ComputeContentHash` (SHA-256, first 8 bytes).
-11) Serialize descriptor bytes with packed alignment = 1, followed by shader
-    references.
+10) Serialize descriptor bytes with packed alignment = 1, followed by shader
+  references.
+11) Compute `header.content_hash` on the ThreadPool after the full descriptor
+  bytes are known.
 12) Return `CookedMaterialPayload`.
 
 ---
@@ -276,7 +279,8 @@ The pipeline is defined as two stages with explicit parallelization boundaries:
 - Populate `MaterialAssetDesc` (all PBR fields)
 - Build `ShaderReferenceDesc` table and `shader_stages`
 - Serialize descriptor bytes + shader references
-- Compute `header.content_hash`
+- Compute `header.content_hash` on the ThreadPool after the full descriptor
+  bytes are finalized
 
 ---
 
@@ -304,7 +308,8 @@ Key requirements:
 - `shader_stages` matches the serialized shader refs (zero is invalid for
   successful materials and must emit a diagnostic)
 - `header.version = kMaterialAssetVersion`
-- `header.content_hash` is non-zero when payload bytes are non-empty
+- `header.content_hash` is computed on the ThreadPool after dependencies are
+  ready and is non-zero when payload bytes are non-empty
 
 ### UV Transform Extension (Reserved Bytes)
 
@@ -344,7 +349,8 @@ the PAK format:
 - Full PBR Tier 1/2 fields: emissive, specular, sheen, clearcoat, transmission,
   thickness, IOR, and attenuation.
 - Asset header metadata: `version`, `streaming_priority`, `content_hash`,
-  `variant_flags`.
+  `variant_flags` (`content_hash` computed on the ThreadPool after
+  dependencies are ready).
 - UV transform and UV set handling via the extension above or baking.
 
 ---

@@ -18,6 +18,8 @@
 
 #include <Oxygen/Content/Import/Naming.h>
 #include <Oxygen/Content/Import/TextureImportTypes.h>
+#include <Oxygen/Content/Import/TextureSourceAssembly.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
 
 namespace oxygen::content::import {
@@ -350,6 +352,18 @@ struct ImportOptions final {
     //! Enable texture cooking overrides.
     bool enabled = false;
 
+    //! Texture intent for standalone imports.
+    TextureIntent intent = TextureIntent::kAlbedo;
+
+    //! Source color space for decode and filtering.
+    ColorSpace source_color_space = ColorSpace::kSRGB;
+
+    //! Flip image vertically during decode.
+    bool flip_y_on_decode = false;
+
+    //! Force RGBA output during decode.
+    bool force_rgba_on_decode = true;
+
     //! Mip chain generation policy.
     MipPolicy mip_policy = MipPolicy::kNone;
 
@@ -370,6 +384,32 @@ struct ImportOptions final {
 
     //! Packing policy ID ("d3d12" or "tight").
     std::string packing_policy_id = "d3d12";
+
+    //! Import as a cubemap using cube-specific workflows.
+    /*!
+     When false, the import job treats the source as a standard 2D texture.
+    */
+    bool import_cubemap = false;
+
+    //! Convert an equirectangular panorama into a cubemap.
+    /*!
+     When false, no equirectangular conversion is attempted.
+    */
+    bool equirect_to_cubemap = false;
+
+    //! Cubemap face size in pixels for equirect conversion.
+    /*!
+      When set to 0, equirect conversion is invalid and must be provided by the
+      caller. The face size must be a multiple of 256.
+    */
+    uint32_t cubemap_face_size = 0;
+
+    //! Explicit cubemap layout for layout images.
+    /*!
+     When set to `kUnknown`, layout extraction is skipped.
+     When set to `kAuto`, the layout is detected from image dimensions.
+    */
+    CubeMapImageLayout cubemap_layout = CubeMapImageLayout::kUnknown;
   };
 
   TextureTuning texture_tuning = {};
