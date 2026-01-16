@@ -8,6 +8,7 @@
 #include <array>
 #include <cstring>
 #include <optional>
+#include <string_view>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/Async/Pipelines/TexturePipeline.h>
@@ -28,6 +29,27 @@ namespace {
       .code = "texture.cook_failed",
       .message = std::string("Texture cook failed: ") + to_string(error) + " ("
         + std::string(source_id) + ")",
+      .source_path = std::string(source_id),
+      .object_path = {},
+    };
+    return diag;
+  }
+
+  [[nodiscard]] auto IsKnownPackingPolicyId(std::string_view policy_id) -> bool
+  {
+    return policy_id == "d3d12" || policy_id == "tight";
+  }
+
+  [[nodiscard]] auto MakePackingPolicyDiagnostic(std::string_view policy_id,
+    std::string_view fallback_id, std::string_view source_id)
+    -> ImportDiagnostic
+  {
+    ImportDiagnostic diag {
+      .severity = ImportSeverity::kWarning,
+      .code = "texture.packing_policy_unknown",
+      .message = std::string("Unknown packing policy '")
+        + std::string(policy_id) + "'; using '" + std::string(fallback_id)
+        + "'.",
       .source_path = std::string(source_id),
       .object_path = {},
     };
@@ -322,6 +344,7 @@ auto TexturePipeline::Worker() -> co::Co<>
     }
 
     const auto& policy = emit::GetPackingPolicy(item.packing_policy_id);
+    const bool unknown_policy = !IsKnownPackingPolicyId(item.packing_policy_id);
     auto local_desc = item.desc;
     local_desc.source_id = item.source_id;
     local_desc.stop_token = item.stop_token;
@@ -348,6 +371,11 @@ auto TexturePipeline::Worker() -> co::Co<>
       .diagnostics = {},
       .success = false,
     };
+
+    if (unknown_policy) {
+      output.diagnostics.push_back(MakePackingPolicyDiagnostic(
+        item.packing_policy_id, policy.Id(), output.source_id));
+    }
 
     if (result.has_value()) {
       output.cooked = std::move(result.value());
