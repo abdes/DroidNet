@@ -70,6 +70,14 @@ auto IsColorIntent(const TextureIntent intent) -> bool
   return false;
 }
 
+[[nodiscard]] auto NormalizeTextureId(const std::filesystem::path& source_path)
+  -> std::string
+{
+  auto normalized = source_path.lexically_normal();
+  normalized.make_preferred();
+  return normalized.generic_string();
+}
+
 [[nodiscard]] auto ConvertToFloatImage(ScratchImage&& image)
   -> oxygen::Result<ScratchImage, TextureImportError>
 {
@@ -1042,9 +1050,11 @@ auto TextureImportJob::CookTexture(
     }
   }
 
+  const auto texture_id = NormalizeTextureId(Request().source_path);
+
   TexturePipeline::WorkItem item {};
   item.source_id = source.source_id;
-  item.texture_id = source.source_id;
+  item.texture_id = texture_id.empty() ? source.source_id : texture_id;
   item.desc = desc;
   item.packing_policy_id = tuning.enabled ? tuning.packing_policy_id : "d3d12";
   item.output_format_is_override = tuning.enabled;
