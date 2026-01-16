@@ -12,6 +12,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/api_export.h>
 
 namespace oxygen::content::import {
@@ -46,18 +47,18 @@ struct PipelineProgress {
  own `WorkItem` and `WorkResult` types.
 */
 template <typename T>
-concept ResourcePipeline
-  = requires(T& pipeline, typename T::WorkItem item, co::Nursery& nursery) {
-      typename T::WorkItem;
-      typename T::WorkResult;
+concept ImportPipeline = oxygen::IsTyped<T>
+  && requires(T& pipeline, typename T::WorkItem item, co::Nursery& nursery) {
+       typename T::WorkItem;
+       typename T::WorkResult;
 
-      { pipeline.Start(nursery) } -> std::same_as<void>;
-      { pipeline.Submit(std::move(item)) } -> std::same_as<co::Co<>>;
-      { pipeline.Collect() } -> std::same_as<co::Co<typename T::WorkResult>>;
+       { pipeline.Start(nursery) } -> std::same_as<void>;
+       { pipeline.Submit(std::move(item)) } -> std::same_as<co::Co<>>;
+       { pipeline.Collect() } -> std::same_as<co::Co<typename T::WorkResult>>;
 
-      { pipeline.HasPending() } -> std::convertible_to<bool>;
-      { pipeline.PendingCount() } -> std::convertible_to<size_t>;
-      { pipeline.GetProgress() } -> std::same_as<PipelineProgress>;
-    };
+       { pipeline.HasPending() } -> std::convertible_to<bool>;
+       { pipeline.PendingCount() } -> std::convertible_to<size_t>;
+       { pipeline.GetProgress() } -> std::same_as<PipelineProgress>;
+     };
 
 } // namespace oxygen::content::import
