@@ -19,7 +19,8 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Content/Import/Async/ResourcePipeline.h>
+#include <Oxygen/Composition/TypedObject.h>
+#include <Oxygen/Content/Import/Async/ImportPipeline.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
 #include <Oxygen/Content/Import/ScratchImage.h>
 #include <Oxygen/Content/Import/TextureImportDesc.h>
@@ -57,7 +58,8 @@ namespace oxygen::content::import {
 
  @see CookedTexturePayload, TextureEmitter
 */
-class TexturePipeline final {
+class TexturePipeline final : public Object {
+  OXYGEN_TYPED(TexturePipeline)
 public:
   //! Configuration for the pipeline.
   struct Config {
@@ -198,6 +200,6 @@ private:
   bool started_ = false;
 };
 
-static_assert(ResourcePipeline<TexturePipeline>);
+static_assert(ImportPipeline<TexturePipeline>);
 
 } // namespace oxygen::content::import

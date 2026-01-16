@@ -172,7 +172,7 @@ set(
   "Import/Async/Detail/JobEntry.h"
   "Import/Async/Detail/ImportJob.h"
   "Import/Async/Detail/ImportJob.cpp"
-  "Import/Async/ResourcePipeline.h"
+  "Import/Async/ImportPipeline.h"
   "Import/Async/Jobs/FbxImportJob.h"
   "Import/Async/Jobs/FbxImportJob.cpp"
   "Import/Async/Jobs/GlbImportJob.h"

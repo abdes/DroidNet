@@ -17,7 +17,8 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Content/Import/Async/ResourcePipeline.h>
+#include <Oxygen/Composition/TypedObject.h>
+#include <Oxygen/Content/Import/Async/ImportPipeline.h>
 #include <Oxygen/Content/Import/BufferImportTypes.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
 #include <Oxygen/Content/api_export.h>
@@ -53,7 +54,8 @@ namespace oxygen::content::import {
 
  @see CookedBufferPayload, BufferEmitter
 */
-class BufferPipeline final {
+class BufferPipeline final : public Object {
+  OXYGEN_TYPED(BufferPipeline)
 public:
   //! Configuration for the pipeline.
   struct Config {
@@ -169,6 +171,6 @@ private:
   bool started_ = false;
 };
 
-static_assert(ResourcePipeline<BufferPipeline>);
+static_assert(ImportPipeline<BufferPipeline>);
 
 } // namespace oxygen::content::import
