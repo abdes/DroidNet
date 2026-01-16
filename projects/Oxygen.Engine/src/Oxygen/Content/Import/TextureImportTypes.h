@@ -177,7 +177,7 @@ struct TextureResourceDesc {
   //! Packing policy identifier (e.g., "d3d12", "tight").
   std::string packing_policy_id;
 
-  //! Content hash for deduplication (XXH3).
+  //! Content hash for deduplication (first 8 bytes of SHA-256).
   uint64_t content_hash = 0;
 };
 

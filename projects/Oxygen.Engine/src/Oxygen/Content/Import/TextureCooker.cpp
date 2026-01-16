@@ -18,6 +18,7 @@
 #include <Oxygen/Content/Import/TextureSourceAssembly.h>
 #include <Oxygen/Content/Import/bc7/Bc7Encoder.h>
 #include <Oxygen/Content/Import/util/HalfFloatConvert.h>
+#include <Oxygen/Content/Import/util/Signature.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Data/PakFormat.h>
 
@@ -495,22 +496,6 @@ namespace {
     return result;
   }
 
-  //=== FNV-1a Hash ===-------------------------------------------------------//
-
-  [[nodiscard]] constexpr auto Fnv1a64(
-    const std::span<const std::byte> data) noexcept -> uint64_t
-  {
-    constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
-    constexpr uint64_t kFnvPrime = 1099511628211ULL;
-
-    uint64_t hash = kFnvOffsetBasis;
-    for (const auto byte : data) {
-      hash ^= static_cast<uint64_t>(byte);
-      hash *= kFnvPrime;
-    }
-    return hash;
-  }
-
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -898,7 +883,7 @@ namespace detail {
   auto ComputeContentHash(const std::span<const std::byte> payload) noexcept
     -> uint64_t
   {
-    return Fnv1a64(payload);
+    return util::ComputeContentHash(payload);
   }
 
 } // namespace detail

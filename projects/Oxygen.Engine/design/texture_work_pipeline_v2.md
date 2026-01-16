@@ -304,7 +304,7 @@ These stages follow the current synchronous implementation in
     - `TexturePayloadHeader` (28 bytes) + `SubresourceLayout[]` + aligned data
     - `data_offset_bytes = AlignSubresourceOffset(layouts_offset + layouts_bytes)`
     - `content_hash = detail::ComputeContentHash(payload)` (current implementation
-      uses 64-bit FNV-1a over the full payload)
+      uses the first 8 bytes of SHA-256 over the full payload)
 
 12) **Return cooked result**
     - `CookedTexturePayload.desc` includes shape, mip count, final format,
@@ -325,7 +325,7 @@ The pipeline must produce payload bytes identical to the sync cooker.
 
 ### `textures.data` Payload Layout
 
-```
+```text
 TexturePayloadHeader (28 bytes, magic "OTX1")
 SubresourceLayout[subresource_count] (12 bytes each)
 [padding to data_offset_bytes]
@@ -378,7 +378,7 @@ deduplication and diagnostics match the sync importer.
 - Output formats: RGBA8 (linear/sRGB), RGBA16F, RGBA32F, BC7 (linear/sRGB)
 - sRGB reinterpretation for RGBA8/BC7 when the storage is bit-identical
 - Packing policy alignment and layer-major subresource ordering
-- Payload header/layout format and `content_hash` calculation (FNV-1a 64-bit)
+- Payload header/layout format and `content_hash` calculation (SHA-256 first 8 bytes)
 - Multi-source cooking: cubemaps and 2D arrays with pre-authored mips
 - Placeholder generation (when enabled) matches sync path exactly
 
@@ -476,19 +476,6 @@ The pipeline is UI-agnostic.
 6) Bounded channels are mandatory.
 7) Placeholder payload bytes must match `emit::CreatePlaceholderForMissingTexture`.
 8) Payload headers/layouts must conform to PAK v4 (`TexturePayloadHeader`).
-
----
-
-## Integration Checklist (Phase 5)
-
-- [ ] Implement `Async/Pipelines/TexturePipeline.h/.cpp` with the `WorkItem`
-      contract, including `FailurePolicy` and `output_format_is_override`
-- [ ] Use `emit::GetPackingPolicy` and `TextureSourceSet` for cubemap inputs
-- [ ] Implement placeholder conversion path (CreatePlaceholder → Cooked payload)
-- [ ] Add unit tests for Submit/Collect, placeholder behavior, cancellation, and
-      payload header/layout correctness
-- [ ] Integrate into `FbxImportJob::ExecuteAsync` with proper diagnostics
-- [ ] Keep `ImportSession::Finalize()` as the durability boundary
 
 ---
 
