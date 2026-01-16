@@ -22,6 +22,8 @@ Core properties:
 - **Job-scoped**: created per job and started in the job’s child nursery.
 - **ThreadPool offload**: tangent generation and buffer hashing run on
   `co::ThreadPool`.
+- **Strict failure policy**: geometry cooking never falls back to placeholders;
+  failures surface as explicit diagnostics.
 
 ---
 
@@ -129,6 +131,12 @@ Notes:
   format-agnostic meshes; for FBX it can be derived from `ufbx_material`.
 - `request.options.normal_policy` and `request.options.tangent_policy` are fully
   honored.
+- **Naming is the importer’s responsibility.** Use
+  `util::BuildMeshName`, `util::DisambiguateMeshName`, and
+  `util::NamespaceImportedAssetName` (see
+  [src/Oxygen/Content/Import/util/ImportNaming.h](../src/Oxygen/Content/Import/util/ImportNaming.h))
+  before submitting the work item. The pipeline must treat names as resolved and
+  must not rename.
 
 ### WorkResult
 
@@ -180,7 +188,6 @@ public:
   [[nodiscard]] auto Collect() -> co::Co<WorkResult>;
 
   void Close();
-  void Cancel();
 
   [[nodiscard]] auto HasPending() const noexcept -> bool;
   [[nodiscard]] auto PendingCount() const noexcept -> size_t;
@@ -197,9 +204,7 @@ Workers run as coroutines on the import thread and drain the bounded input queue
 For each work item:
 
 1) Check cancellation; if cancelled, return `success=false`.
-2) Resolve mesh name and storage name using standard naming helpers
-   (`BuildMeshName`, `DisambiguateMeshName`, `NamespaceImportedAssetName`) if the
-   work item does not already carry resolved names.
+2) Assume names are already resolved by the importer; no renaming occurs here.
 3) Validate each LOD mesh:
    - If positions are missing → error `mesh.missing_positions`.
    - If faces/indices are empty → error `mesh.missing_buffers`.
@@ -243,6 +248,9 @@ For each work item:
     - `lod_count = lods.size()`
     - `mesh_type` per LOD (`kStandard`, `kSkinned`, or `kProcedural`)
     - `header.version = kGeometryAssetVersion`
+    - `header.variant_flags` uses **union-of-LOD attributes** (any attribute
+      emitted by any LOD sets the bit). Missing attributes on a specific LOD
+      must be defaulted by loaders.
 12) Compute `header.content_hash` over descriptor bytes.
 13) Return `CookedGeometryPayload` with metadata and buffer payloads.
 
@@ -287,18 +295,18 @@ boundaries.
 
 ---
 
-## Cooked Output Contract (PAK v2)
+## Cooked Output Contract (PAK vNext)
 
-This pipeline targets `oxygen::data::pak::v2`. Layout changes that cannot fit
-within existing structures (for example, new mesh-type blobs or descriptor
-fields) must introduce a new PAK namespace (v5) and a new geometry asset
-version.
+This pipeline targets a **new PAK namespace** with a new
+`kGeometryAssetVersion`. Backward compatibility is not required for geometry.
+The format **must** explicitly support a skinned-mesh blob and any additional
+geometry metadata needed by this pipeline.
 
 ### Geometry Descriptor (`.ogeo`)
 
 Packed binary blob:
 
-```
+```text
 GeometryAssetDesc (256 bytes)
 MeshDesc[ lod_count ]
   [optional mesh-type blob]
@@ -318,7 +326,7 @@ Requirements:
 
 `GeometryAssetDesc.header.variant_flags` encodes a per-geometry attribute mask:
 
-```
+```text
 bit 0: kGeomAttr_Normal
 bit 1: kGeomAttr_Tangent
 bit 2: kGeomAttr_Bitangent
@@ -332,7 +340,7 @@ The pipeline must clear bits when attributes are not emitted by policy. Loaders
 and runtime must treat missing attributes as defaults.
 
 @note The bit layout is a pipeline contract and must be mirrored by loaders and
-tools that interpret `variant_flags`.
+tools that interpret `variant_flags`. The mask is **union-of-LOD attributes**.
 
 ### Mesh-Type Blobs
 
@@ -341,9 +349,10 @@ If `mesh_type == MeshType::kStandard`, no blob is emitted.
 If `mesh_type == MeshType::kProcedural`, emit the procedural params blob
 immediately after `MeshDesc` (size = `MeshDesc.info.procedural.params_size`).
 
-If `mesh_type == MeshType::kSkinned`, emit:
+If `mesh_type == MeshType::kSkinned`, emit a skinned blob defined by the new
+format version (example structure below):
 
-```
+```text
 struct SkinnedMeshInfo {
   ResourceIndexT vertex_buffer;
   ResourceIndexT index_buffer;
@@ -377,7 +386,9 @@ Buffers are emitted via `BufferEmitter` using `CookedBufferPayload`:
   to `kStandard` per job policy.
 - **Header metadata**: `header.version` and `header.content_hash` are populated.
 - **Attribute mask**: missing attributes are reflected via
-  `header.variant_flags`.
+  `header.variant_flags` (union-of-LOD attributes).
+- **Failure policy**: no geometry fallback is allowed. Any failure produces
+  explicit diagnostics and `success=false`.
 
 ### Importer/Orchestrator Responsibilities
 
@@ -428,18 +439,53 @@ Pipeline tracks submitted/completed/failed counts and exposes
 3) Geometry descriptors must be packed with alignment = 1.
 4) Buffer content hashes must be computed for data integrity.
 5) All errors cross boundaries as `ImportDiagnostic`.
+6) Coordinate conversion is applied **once** and only if required by the
+  importer’s declared source space.
 
 ---
 
-## Integration Checklist (Phase 5)
+## Coordinate Conversion Policy (Definitive)
 
-- [ ] Implement `Async/Pipelines/GeometryPipeline.h/.cpp`
-- [ ] Compute buffer content hashes (SHA-256 first 8 bytes)
-- [ ] Emit attribute mask in `header.variant_flags`
-- [ ] Support LOD arrays and skinned mesh blobs
-- [ ] Integrate with `FbxImportJob::CookGeometry` and glTF import
-- [ ] Emit buffers via `BufferEmitter`, geometry via `AssetEmitter`
-- [ ] Add unit tests for attribute policies, LOD layout, and skinned blobs
+The engine space is **right-handed, Z-up, forward = -Y** as defined in
+[src/Oxygen/Core/Constants.h](../src/Oxygen/Core/Constants.h). Coordinate
+conversion must be **one-shot** and applied **only if** the importer declares
+that the source space differs from engine space.
+
+Rules:
+
+1) The importer must provide the **source space** metadata for each mesh.
+2) The pipeline applies at most one conversion, producing final engine space.
+3) No additional “unmapping” or multiple remappings are allowed.
+4) If the importer declares the source space already matches engine space,
+   conversion is a no-op.
+
+This conversion policy is **pluggable** by design. The pipeline exposes a
+`CoordinateConversionPolicy` interface (or equivalent) that the importer
+supplies per job. The policy must define deterministic transforms for
+positions, normals, tangents, and bitangents, and must re-normalize directions
+after conversion.
+
+Diagnostics:
+
+- If source-space metadata is missing or inconsistent, emit a **blocking error**
+  diagnostic and fail the work item.
+
+---
+
+## Limits and Validation (Industry-Style Defaults)
+
+The pipeline must validate inputs and emit diagnostics for out-of-range or
+invalid data. Use conservative defaults aligned with common engine practices:
+
+- `lod_count`: 1..8 (error if 0 or > 8).
+- Per-LOD `index_count`: must be > 0 and a multiple of 3.
+- Per-LOD `vertex_count` and `index_count`: must fit in `uint32_t`.
+- Per-LOD `submesh_count` and `mesh_view_count`: must fit in `uint32_t` and be
+  non-zero if indices are present.
+- Buffer payload sizes must be ≤ `kDataBlobMaxSize` and respect alignment
+  (`sizeof(Vertex)`, `alignof(uint32_t)`, and 16-byte alignment for skinning
+  buffers).
+- Names must fit `kMaxNameSize` (truncate with diagnostic if oversized).
 
 ---
 
