@@ -183,7 +183,8 @@ namespace detail {
 
   //! Compute content hash for deduplication.
   /*!
-    Uses XXH3 to hash the complete payload for content-based deduplication.
+    Uses the first 8 bytes of SHA-256 over the complete payload for
+    content-based deduplication.
 
     @param payload Payload bytes to hash
     @return 64-bit content hash
