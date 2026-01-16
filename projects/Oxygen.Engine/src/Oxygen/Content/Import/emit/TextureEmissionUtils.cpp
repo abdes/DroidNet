@@ -211,6 +211,11 @@ auto GetPackingPolicy(const std::string& policy_id)
   if (policy_id == "tight") {
     return kTightPolicy;
   }
+  if (policy_id != "d3d12") {
+    LOG_F(WARNING,
+      "TextureEmissionUtils: unknown packing policy '{}', using 'd3d12'",
+      policy_id);
+  }
   // Default to D3D12
   return kD3D12Policy;
 }
