@@ -162,7 +162,7 @@ public:
     uint32_t thread_pool_size = std::thread::hardware_concurrency();
 
     //! Number of parallel texture cooking tasks.
-    uint32_t texture_pipeline_workers = 2;
+    uint32_t texture_pipeline_workers = std::thread::hardware_concurrency() / 2;
 
     //! Bounded capacity for texture work queue (backpressure).
     uint32_t texture_queue_capacity = 64;

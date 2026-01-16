@@ -49,15 +49,25 @@ the main application thread.
    replacement.
 
 10. **Pipelines are Pure Compute**: Resource pipelines (TexturePipeline,
-    AudioPipeline, etc.) perform CPU-bound cooking only. They do NOT perform
-    I/O or commit results. Emitters handle all I/O.
+  AudioPipeline, etc.) perform CPU-bound cooking only. They do NOT perform
+  I/O or commit results. Emitters handle all I/O.
 
-11. **One Lazy Emitter Per Resource Type Per Session**: ImportSession owns
+11. **Planner-Driven Readiness**: A job-level planner owns the dependency
+  graph and per-asset readiness tracking. Pipelines only run once required
+  dependencies are ready per the planner’s schedule.
+
+12. **ThreadPool-Only content_hash**: `content_hash` is computed only on the
+  ThreadPool. The invariant is that all dependencies are ready and the full
+  descriptor payload is known before hashing. Buffer and texture hashing are
+  optional and are configured via `ImportOptions`, cascading into the
+  pipeline configs.
+
+13. **One Lazy Emitter Per Resource Type Per Session**: ImportSession owns
     emitters (TextureEmitter, BufferEmitter, AssetEmitter). Created lazily on
     first use. Emitter.Emit() returns a stable index immediately and queues
     async I/O in the background.
 
-12. **Log-Structured Allocation (Append Semantics)**: Re-importing an asset
+14. **Log-Structured Allocation (Append Semantics)**: Re-importing an asset
   allocates NEW space with a NEW index (append-like). Old data remains but is
   stale. Allocation is done by reserving explicit offsets and writing via
   `WriteAt*` to avoid interleaving. The index file is always accurate. PAK

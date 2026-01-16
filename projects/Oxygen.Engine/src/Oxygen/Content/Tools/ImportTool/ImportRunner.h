@@ -6,17 +6,11 @@
 
 #pragma once
 
-#include <cstdint>
+#include <Oxygen/Content/Import/ImportRequest.h>
 
-namespace oxygen::content::import {
+namespace oxygen::content::import::tool {
 
-//! Supported authoring source formats.
-enum class ImportFormat : uint8_t {
-  kUnknown = 0,
-  kGltf,
-  kGlb,
-  kFbx,
-  kTextureImage,
-};
+[[nodiscard]] auto RunImportJob(
+  const ImportRequest& request, bool verbose, bool print_telemetry) -> int;
 
-} // namespace oxygen::content::import
+} // namespace oxygen::content::import::tool

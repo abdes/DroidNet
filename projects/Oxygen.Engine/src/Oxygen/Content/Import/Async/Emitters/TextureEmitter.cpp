@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <filesystem>
+#include <fstream>
 #include <stdexcept>
 #include <string>
 
@@ -53,6 +55,84 @@ namespace {
     return signature;
   }
 
+  auto LoadExistingTable(const std::filesystem::path& table_path,
+    std::vector<oxygen::data::pak::TextureResourceDesc>& table,
+    std::unordered_map<std::string, uint32_t>& index_by_signature) -> void
+  {
+    if (!std::filesystem::exists(table_path)) {
+      return;
+    }
+
+    std::ifstream in(table_path, std::ios::binary | std::ios::ate);
+    if (!in) {
+      LOG_F(WARNING, "TextureEmitter: failed to open existing table '{}'",
+        table_path.string());
+      return;
+    }
+
+    const auto size = in.tellg();
+    if (size <= 0) {
+      return;
+    }
+
+    const auto size_bytes = static_cast<size_t>(size);
+    if (size_bytes % sizeof(oxygen::data::pak::TextureResourceDesc) != 0) {
+      LOG_F(WARNING,
+        "TextureEmitter: invalid table size {} for '{}' (entry size {})",
+        size_bytes, table_path.string(),
+        sizeof(oxygen::data::pak::TextureResourceDesc));
+      return;
+    }
+
+    const auto count
+      = size_bytes / sizeof(oxygen::data::pak::TextureResourceDesc);
+    table.resize(count);
+    in.seekg(0, std::ios::beg);
+    in.read(reinterpret_cast<char*>(table.data()),
+      static_cast<std::streamsize>(size_bytes));
+    if (!in) {
+      LOG_F(WARNING, "TextureEmitter: failed to read existing table '{}'",
+        table_path.string());
+      table.clear();
+      return;
+    }
+
+    index_by_signature.clear();
+    for (uint32_t i = 0; i < table.size(); ++i) {
+      const auto signature = MakeTextureSignature(table[i]);
+      if (!signature.empty()) {
+        index_by_signature.emplace(signature, i);
+      }
+    }
+  }
+
+  [[nodiscard]] auto GetExistingDataSize(const std::filesystem::path& data_path,
+    const std::vector<oxygen::data::pak::TextureResourceDesc>& table)
+    -> uint64_t
+  {
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(data_path, ec);
+    if (!ec) {
+      return size;
+    }
+
+    uint64_t max_end = 0;
+    for (const auto& entry : table) {
+      const auto end = entry.data_offset + entry.size_bytes;
+      if (end > max_end) {
+        max_end = end;
+      }
+    }
+
+    if (max_end > 0) {
+      LOG_F(WARNING,
+        "TextureEmitter: data file '{}' missing; using derived size {}",
+        data_path.string(), max_end);
+    }
+
+    return max_end;
+  }
+
 } // namespace
 
 TextureEmitter::TextureEmitter(IAsyncFileWriter& file_writer,
@@ -61,6 +141,14 @@ TextureEmitter::TextureEmitter(IAsyncFileWriter& file_writer,
   , data_path_(cooked_root / layout.TexturesDataRelPath())
   , table_path_(cooked_root / layout.TexturesTableRelPath())
 {
+  LoadExistingTable(table_path_, table_, index_by_signature_);
+  if (!table_.empty()) {
+    next_index_.store(
+      static_cast<uint32_t>(table_.size()), std::memory_order_release);
+    data_file_size_.store(
+      GetExistingDataSize(data_path_, table_), std::memory_order_release);
+  }
+
   DLOG_F(INFO, "TextureEmitter created: data='{}' table='{}'",
     data_path_.string(), table_path_.string());
 }

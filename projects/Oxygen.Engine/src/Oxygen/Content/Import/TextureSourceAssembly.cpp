@@ -6,15 +6,68 @@
 
 #include <Oxygen/Content/Import/TextureSourceAssembly.h>
 
+#include <Oxygen/Content/Import/Internal/TextureSourceAssemblyInternal.h>
+
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <cmath>
+#include <filesystem>
 #include <numbers>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 
 namespace oxygen::content::import {
+
+namespace {
+
+  struct CubeFaceSuffixSet {
+    std::array<std::string_view, kCubeFaceCount> suffixes;
+  };
+
+  // clang-format off
+  inline constexpr std::array<CubeFaceSuffixSet, 3> kCubeFaceSuffixSets = {{
+    {{ "_px", "_nx", "_py", "_ny", "_pz", "_nz" }},
+    {{ "_posx", "_negx", "_posy", "_negy", "_posz", "_negz" }},
+    {{ "_right", "_left", "_top", "_bottom", "_front", "_back" }},
+  }};
+  // clang-format on
+
+  [[nodiscard]] auto EndsWithI(
+    std::string_view str, std::string_view suffix) noexcept -> bool
+  {
+    if (suffix.size() > str.size()) {
+      return false;
+    }
+    const auto start = str.size() - suffix.size();
+    for (size_t i = 0; i < suffix.size(); ++i) {
+      const auto ch_str = static_cast<char>(
+        std::tolower(static_cast<unsigned char>(str[start + i])));
+      const auto ch_suf = static_cast<char>(
+        std::tolower(static_cast<unsigned char>(suffix[i])));
+      if (ch_str != ch_suf) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  [[nodiscard]] auto StripFaceSuffix(std::string_view stem,
+    const std::array<std::string_view, kCubeFaceCount>& suffixes) -> std::string
+  {
+    for (const auto suffix : suffixes) {
+      if (EndsWithI(stem, suffix)) {
+        return std::string(stem.substr(0, stem.size() - suffix.size()));
+      }
+    }
+    return std::string(stem);
+  }
+
+} // namespace
 
 //=== CubeFace to_string
 //===-------------------------------------------------===//
@@ -36,6 +89,37 @@ auto to_string(const CubeFace face) -> const char*
     return "NegativeZ";
   }
   return "Unknown";
+}
+
+auto DiscoverCubeFacePaths(const std::filesystem::path& path)
+  -> std::optional<std::array<std::filesystem::path, kCubeFaceCount>>
+{
+  const auto parent = path.parent_path();
+  const auto stem = path.stem().string();
+  const auto ext = path.extension().string();
+
+  for (const auto& suffix_set : kCubeFaceSuffixSets) {
+    const auto base = StripFaceSuffix(stem, suffix_set.suffixes);
+
+    std::array<std::filesystem::path, kCubeFaceCount> paths;
+    bool all_found = true;
+    for (size_t i = 0; i < kCubeFaceCount; ++i) {
+      const auto face_name = base + std::string(suffix_set.suffixes[i]) + ext;
+      const auto face_path = parent / face_name;
+      std::error_code ec;
+      if (!std::filesystem::exists(face_path, ec)) {
+        all_found = false;
+        break;
+      }
+      paths[i] = face_path;
+    }
+
+    if (all_found) {
+      return paths;
+    }
+  }
+
+  return std::nullopt;
 }
 
 //=== TextureSourceSet Implementation
@@ -406,7 +490,59 @@ namespace {
     return { u, v };
   }
 
+  auto ConvertEquirectangularFaceImpl(const ScratchImageMeta& src_meta,
+    std::span<const std::byte> src_pixels, const CubeFace face,
+    const uint32_t face_size, const bool use_bicubic, ScratchImage& cube)
+    -> void
+  {
+    auto dst_pixels = cube.GetMutablePixels(static_cast<uint16_t>(face), 0);
+    auto* dst_data = reinterpret_cast<float*>(dst_pixels.data());
+
+    for (uint32_t y = 0; y < face_size; ++y) {
+      for (uint32_t x = 0; x < face_size; ++x) {
+        const float u
+          = (static_cast<float>(x) + 0.5F) / static_cast<float>(face_size);
+        const float v
+          = (static_cast<float>(y) + 0.5F) / static_cast<float>(face_size);
+
+        const auto dir = ComputeCubeDirectionD3D(face, u, v);
+        const auto [eq_u, eq_v] = DirectionToEquirectUV(dir);
+
+        std::array<float, 4> color {};
+        if (use_bicubic) {
+          color = SampleBicubic(
+            src_pixels, src_meta.width, src_meta.height, eq_u, eq_v);
+        } else {
+          color = SampleBilinear(
+            src_pixels, src_meta.width, src_meta.height, eq_u, eq_v);
+        }
+
+        const size_t dst_idx
+          = (static_cast<size_t>(y) * face_size + static_cast<size_t>(x)) * 4;
+        dst_data[dst_idx + 0] = color[0];
+        dst_data[dst_idx + 1] = color[1];
+        dst_data[dst_idx + 2] = color[2];
+        dst_data[dst_idx + 3] = color[3];
+      }
+    }
+  }
+
 } // namespace
+
+namespace detail {
+
+  auto ConvertEquirectangularFace(const ScratchImage& equirect,
+    const ScratchImageMeta& src_meta,
+    const std::span<const std::byte> src_pixels, const CubeFace face,
+    const uint32_t face_size, const bool use_bicubic, ScratchImage& cube)
+    -> void
+  {
+    (void)equirect;
+    ConvertEquirectangularFaceImpl(
+      src_meta, src_pixels, face, face_size, use_bicubic, cube);
+  }
+
+} // namespace detail
 
 auto ConvertEquirectangularToCube(
   const ScratchImage& equirect, const EquirectToCubeOptions& options)
@@ -461,46 +597,11 @@ auto ConvertEquirectangularToCube(
   const bool use_bicubic = (options.sample_filter == MipFilter::kKaiser
     || options.sample_filter == MipFilter::kLanczos);
 
-  // Process each face
-  for (uint16_t face_idx = 0; face_idx < kCubeFaceCount; ++face_idx) {
+  const uint32_t face_size = options.face_size;
+  for (uint32_t face_idx = 0; face_idx < kCubeFaceCount; ++face_idx) {
     const auto face = static_cast<CubeFace>(face_idx);
-    auto dst_pixels = cube.GetMutablePixels(face_idx, 0);
-    auto* dst_data = reinterpret_cast<float*>(dst_pixels.data());
-
-    const auto face_size = options.face_size;
-    for (uint32_t y = 0; y < face_size; ++y) {
-      for (uint32_t x = 0; x < face_size; ++x) {
-        // Compute UV for this texel (center of texel)
-        const float u
-          = (static_cast<float>(x) + 0.5F) / static_cast<float>(face_size);
-        const float v
-          = (static_cast<float>(y) + 0.5F) / static_cast<float>(face_size);
-
-        // Compute direction in standard GPU cubemap convention.
-        const auto dir = ComputeCubeDirectionD3D(face, u, v);
-
-        // Convert to equirect UV
-        const auto [eq_u, eq_v] = DirectionToEquirectUV(dir);
-
-        // Sample equirectangular image
-        std::array<float, 4> color {};
-        if (use_bicubic) {
-          color = SampleBicubic(
-            src_pixels, src_meta.width, src_meta.height, eq_u, eq_v);
-        } else {
-          color = SampleBilinear(
-            src_pixels, src_meta.width, src_meta.height, eq_u, eq_v);
-        }
-
-        // Write to output
-        const size_t dst_idx
-          = (static_cast<size_t>(y) * face_size + static_cast<size_t>(x)) * 4;
-        dst_data[dst_idx + 0] = color[0];
-        dst_data[dst_idx + 1] = color[1];
-        dst_data[dst_idx + 2] = color[2];
-        dst_data[dst_idx + 3] = color[3];
-      }
-    }
+    detail::ConvertEquirectangularFace(
+      equirect, src_meta, src_pixels, face, face_size, use_bicubic, cube);
   }
 
   return ::oxygen::Ok(std::move(cube));
@@ -514,6 +615,8 @@ auto to_string(const CubeMapImageLayout layout) -> const char*
   switch (layout) {
   case CubeMapImageLayout::kUnknown:
     return "Unknown";
+  case CubeMapImageLayout::kAuto:
+    return "Auto";
   case CubeMapImageLayout::kHorizontalStrip:
     return "HorizontalStrip";
   case CubeMapImageLayout::kVerticalStrip:
@@ -682,6 +785,8 @@ namespace {
     -> FaceGridPos
   {
     switch (layout) {
+    case CubeMapImageLayout::kAuto:
+      break;
     case CubeMapImageLayout::kHorizontalStrip:
       return GetHorizontalStripFacePos(face);
     case CubeMapImageLayout::kVerticalStrip:
@@ -694,34 +799,6 @@ namespace {
       break;
     }
     return { .x = 0, .y = 0 };
-  }
-
-  //! Get bytes per pixel for a format.
-  auto GetBytesPerPixel(const Format format) -> std::size_t
-  {
-    switch (format) {
-    case Format::kRGBA8UNorm:
-    case Format::kRGBA8UNormSRGB:
-    case Format::kBGRA8UNorm:
-    case Format::kBGRA8UNormSRGB:
-      return 4;
-    case Format::kRGBA16Float:
-      return 8;
-    case Format::kRGBA32Float:
-      return 16;
-    case Format::kR8UNorm:
-      return 1;
-    case Format::kR16UNorm:
-    case Format::kR16Float:
-      return 2;
-    case Format::kR32Float:
-    case Format::kRG16Float:
-      return 4;
-    case Format::kRG32Float:
-      return 8;
-    default:
-      return 0;
-    }
   }
 
   //! Copy a face region from source to destination.
@@ -750,7 +827,61 @@ namespace {
     }
   }
 
+  auto ExtractCubeFaceFromLayoutImpl(const ImageView& src_view,
+    const CubeMapImageLayout layout, const uint32_t face_size,
+    const std::size_t bytes_per_pixel, const CubeFace face, ScratchImage& cube)
+    -> void
+  {
+    const auto grid_pos = GetFaceGridPos(layout, face);
+
+    auto dst_pixels = cube.GetMutablePixels(static_cast<uint16_t>(face), 0);
+    const auto dst_view = cube.GetImage(static_cast<uint16_t>(face), 0);
+
+    CopyFaceRegion(src_view.pixels, src_view.row_pitch_bytes, grid_pos,
+      face_size, bytes_per_pixel, dst_pixels, dst_view.row_pitch_bytes);
+  }
+
 } // namespace
+
+namespace detail {
+
+  auto GetBytesPerPixel(const Format format) -> std::size_t
+  {
+    switch (format) {
+    case Format::kRGBA8UNorm:
+    case Format::kRGBA8UNormSRGB:
+    case Format::kBGRA8UNorm:
+    case Format::kBGRA8UNormSRGB:
+      return 4;
+    case Format::kRGBA16Float:
+      return 8;
+    case Format::kRGBA32Float:
+      return 16;
+    case Format::kR8UNorm:
+      return 1;
+    case Format::kR16UNorm:
+    case Format::kR16Float:
+      return 2;
+    case Format::kR32Float:
+    case Format::kRG16Float:
+      return 4;
+    case Format::kRG32Float:
+      return 8;
+    default:
+      return 0;
+    }
+  }
+
+  auto ExtractCubeFaceFromLayout(const ImageView& src_view,
+    const CubeMapImageLayout layout, const uint32_t face_size,
+    const std::size_t bytes_per_pixel, const CubeFace face, ScratchImage& cube)
+    -> void
+  {
+    ExtractCubeFaceFromLayoutImpl(
+      src_view, layout, face_size, bytes_per_pixel, face, cube);
+  }
+
+} // namespace detail
 
 auto ExtractCubeFacesFromLayout(
   const ScratchImage& layout_image, const CubeMapImageLayout layout)
@@ -758,6 +889,10 @@ auto ExtractCubeFacesFromLayout(
 {
   if (!layout_image.IsValid()) {
     return ::oxygen::Err(TextureImportError::kDecodeFailed);
+  }
+
+  if (layout == CubeMapImageLayout::kAuto) {
+    return ExtractCubeFacesFromLayout(layout_image);
   }
 
   if (layout == CubeMapImageLayout::kUnknown) {
@@ -772,7 +907,7 @@ auto ExtractCubeFacesFromLayout(
   }
 
   const uint32_t face_size = detection->face_size;
-  const std::size_t bytes_per_pixel = GetBytesPerPixel(meta.format);
+  const std::size_t bytes_per_pixel = detail::GetBytesPerPixel(meta.format);
   if (bytes_per_pixel == 0) {
     return ::oxygen::Err(TextureImportError::kUnsupportedFormat);
   }
@@ -798,19 +933,11 @@ auto ExtractCubeFacesFromLayout(
 
   // Get source image data
   const auto src_view = layout_image.GetImage(0, 0);
-  const auto src_row_pitch = src_view.row_pitch_bytes;
 
-  // Extract each face
-  for (uint16_t face_idx = 0; face_idx < kCubeFaceCount; ++face_idx) {
+  for (uint32_t face_idx = 0; face_idx < kCubeFaceCount; ++face_idx) {
     const auto face = static_cast<CubeFace>(face_idx);
-    const auto grid_pos = GetFaceGridPos(layout, face);
-
-    auto dst_pixels = cube.GetMutablePixels(face_idx, 0);
-    const auto dst_view = cube.GetImage(face_idx, 0);
-    const auto dst_row_pitch = dst_view.row_pitch_bytes;
-
-    CopyFaceRegion(src_view.pixels, src_row_pitch, grid_pos, face_size,
-      bytes_per_pixel, dst_pixels, dst_row_pitch);
+    detail::ExtractCubeFaceFromLayout(
+      src_view, layout, face_size, bytes_per_pixel, face, cube);
   }
 
   return ::oxygen::Ok(std::move(cube));

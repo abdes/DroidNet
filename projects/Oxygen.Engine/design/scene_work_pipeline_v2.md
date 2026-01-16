@@ -21,6 +21,8 @@ Core properties:
 - **Geometry-aware**: links nodes to geometry assets via `ImportedGeometry`.
 - **PAK v4 container, v3 scene asset**: uses the v3 scene asset layout as
   defined in [src/Oxygen/Data/PakFormat.h](../src/Oxygen/Data/PakFormat.h).
+- **Planner‑gated**: the planner submits scene work only after referenced
+  geometry assets are ready.
 
 ---
 
@@ -69,6 +71,8 @@ Notes:
 - `request` provides naming strategy, asset key policy, and coordinate policy.
 - `environment_systems` encodes the trailing scene environment block (PAK v3).
   The pipeline validates record headers and computes the block size.
+- `geometry_map` must contain resolved geometry asset keys; the planner must
+  ensure geometry assets are ready before submission.
 
 ### WorkResult
 
@@ -158,7 +162,8 @@ For each work item:
 9) Append trailing SceneEnvironment block:
    - `SceneEnvironmentBlockHeader` + system records
    - `byte_size` covers header + records
-10) Compute `header.content_hash` over descriptor bytes + environment block.
+10) Compute `header.content_hash` on the ThreadPool after the full descriptor
+  bytes + environment block are finalized.
 11) Return `CookedScenePayload`.
 
 All errors must be converted to `ImportDiagnostic`; no exceptions cross async
@@ -246,7 +251,7 @@ Notes:
 - Component tables use `ComponentType` FourCC values (e.g., `kRenderable`).
 - `SceneAssetDesc.header.version = data::pak::v3::kSceneAssetVersion`.
 - `SceneAssetDesc.header.content_hash` must cover descriptor bytes + environment
-  block bytes.
+  block bytes and is computed on the ThreadPool after dependencies are ready.
 
 ### Scene Environment Block
 

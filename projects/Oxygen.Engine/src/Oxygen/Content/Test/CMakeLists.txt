@@ -120,3 +120,16 @@ target_compile_definitions(
   PRIVATE
     OXYGEN_ENGINE_TESTING
 )
+
+# -- Plan Test Programs -------------------------------------------------------
+
+m_gtest_program(
+  Plan
+  SOURCES
+    "Plan/ImportPlanner_test.cpp"
+)
+target_compile_definitions(
+  Oxygen.Content.Plan.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
+)

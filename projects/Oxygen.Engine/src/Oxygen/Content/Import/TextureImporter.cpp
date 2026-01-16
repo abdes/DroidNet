@@ -173,64 +173,6 @@ namespace {
     }
   }
 
-  //=== Cube Face Discovery ===-----------------------------------------------//
-
-  //! Face suffix patterns to try for cube map discovery.
-  struct CubeFaceSuffixSet {
-    std::array<std::string_view, kCubeFaceCount> suffixes;
-  };
-
-  // clang-format off
-  inline constexpr std::array<CubeFaceSuffixSet, 3> kCubeFaceSuffixSets = {{
-    // Short form: px, nx, py, ny, pz, nz
-    {{ "_px", "_nx", "_py", "_ny", "_pz", "_nz" }},
-    // Long form: posx, negx, etc.
-    {{ "_posx", "_negx", "_posy", "_negy", "_posz", "_negz" }},
-    // Descriptive: right, left, top, bottom, front, back
-    {{ "_right", "_left", "_top", "_bottom", "_front", "_back" }},
-  }};
-  // clang-format on
-
-  //! Try to discover cube face files from a base path.
-  /*!
-    Attempts to find 6 face files using common naming conventions.
-
-    @param base_path Base path without face suffix
-    @return Array of 6 paths if all faces found, or nullopt
-  */
-  [[nodiscard]] auto DiscoverCubeFacePaths(
-    const std::filesystem::path& base_path)
-    -> std::optional<std::array<std::filesystem::path, kCubeFaceCount>>
-  {
-    const auto parent = base_path.parent_path();
-    const auto stem = base_path.stem().string();
-    const auto ext = base_path.extension().string();
-
-    // Try each suffix set
-    for (const auto& suffix_set : kCubeFaceSuffixSets) {
-      std::array<std::filesystem::path, kCubeFaceCount> paths;
-      bool all_found = true;
-
-      for (size_t i = 0; i < kCubeFaceCount; ++i) {
-        auto face_name = stem + std::string(suffix_set.suffixes[i]) + ext;
-        auto face_path = parent / face_name;
-
-        std::error_code ec;
-        if (!std::filesystem::exists(face_path, ec)) {
-          all_found = false;
-          break;
-        }
-        paths[i] = std::move(face_path);
-      }
-
-      if (all_found) {
-        return paths;
-      }
-    }
-
-    return std::nullopt;
-  }
-
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -999,7 +941,7 @@ auto ImportCubeMapFromLayoutImage(const std::filesystem::path& path,
     return ::oxygen::Err(TextureImportError::kDimensionMismatch);
   }
 
-  if (detection->layout != layout) {
+  if (layout != CubeMapImageLayout::kAuto && detection->layout != layout) {
     LOG_F(WARNING,
       "TextureImporter: explicit layout {} doesn't match detected layout {} "
       "for image ({}x{}): {}",
@@ -1008,11 +950,13 @@ auto ImportCubeMapFromLayoutImage(const std::filesystem::path& path,
     return ::oxygen::Err(TextureImportError::kDimensionMismatch);
   }
 
+  const auto resolved_layout
+    = layout == CubeMapImageLayout::kAuto ? detection->layout : layout;
   LOG_F(INFO, "TextureImporter: using {} layout with {}px faces: {}",
-    to_string(layout), detection->face_size, path.string());
+    to_string(resolved_layout), detection->face_size, path.string());
 
   // Extract faces from layout
-  auto cube = ExtractCubeFacesFromLayout(*layout_image, layout);
+  auto cube = ExtractCubeFacesFromLayout(*layout_image, resolved_layout);
   if (!cube) {
     LOG_F(WARNING,
       "TextureImporter: failed to extract cube faces from layout: {}",
