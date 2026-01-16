@@ -871,6 +871,85 @@ Tasks:
 - [X] Update the texture pipeline design doc to reflect the corrected HDR
   policy and expanded multi-source support.
 
+#### 5.6b GeometryPipeline (Compute-Only) Implementation + Tests
+
+**Files:**
+
+- `src/Oxygen/Content/Import/Async/GeometryPipeline.h/.cpp`
+- `src/Oxygen/Content/Import/Async/ResourcePipeline.h`
+- `design/geometry_work_pipeline_v2.md`
+- `src/Oxygen/Content/Test/Import/Async/GeometryPipeline_test.cpp`
+
+Tasks:
+
+- [ ] Implement `GeometryPipeline` API (Submit/TrySubmit/Collect/Close) using
+  bounded channels and `PipelineProgress` tracking.
+- [ ] Implement worker loop with cancellation via `WorkItem.stop_token`.
+- [ ] Implement LOD validation, attribute policies, and diagnostics per
+  `design/geometry_work_pipeline_v2.md`.
+- [ ] Implement coordinate conversion policy plumbing (one-shot transform).
+- [ ] Build geometry descriptor bytes (packed, alignment = 1) and compute
+  `header.content_hash`.
+- [ ] Compute buffer payloads (vertex/index/aux) and content hashes; honor
+  alignment constraints for skinned buffers.
+- [ ] Unit tests: attribute policy coverage (normals/tangents), UV warnings,
+  bounds correctness, and deterministic naming rules.
+- [ ] Unit tests: skinned mesh payloads (joint buffers present + alignment).
+- [ ] Unit tests: descriptor serialization (layout, offsets, version, hash).
+
+#### 5.6c MaterialPipeline (Compute-Only) Implementation + Tests
+
+**Files:**
+
+- `src/Oxygen/Content/Import/Async/MaterialPipeline.h/.cpp`
+- `src/Oxygen/Content/Import/Async/ResourcePipeline.h`
+- `design/material_work_pipeline_v2.md`
+- `src/Oxygen/Content/Test/Import/Async/MaterialPipeline_test.cpp`
+
+Tasks:
+
+- [ ] Implement `MaterialPipeline` API with bounded channels and progress.
+- [ ] Implement worker logic for scalar normalization, domain/alpha mode
+  resolution, and ORM detection per design.
+- [ ] Implement UV transform extension emission and validation paths.
+- [ ] Serialize `MaterialAssetDesc` + shader refs (packed, alignment = 1).
+- [ ] Compute `header.content_hash` over descriptor bytes + shader refs.
+- [ ] Unit tests: ORM policy and texture binding flags, UV transform cases.
+- [ ] Unit tests: shader stage ordering, truncation warnings, and hash values.
+
+#### 5.6d ScenePipeline (Compute-Only) Implementation + Tests
+
+**Files:**
+
+- `src/Oxygen/Content/Import/Async/ScenePipeline.h/.cpp`
+- `src/Oxygen/Content/Import/Async/ResourcePipeline.h`
+- `design/scene_work_pipeline_v2.md`
+- `src/Oxygen/Content/Test/Import/Async/ScenePipeline_test.cpp`
+
+Tasks:
+
+- [ ] Implement `ScenePipeline` API with bounded channels and progress.
+- [ ] Implement node traversal, naming, and deterministic IDs.
+- [ ] Implement node pruning rules with transform preservation.
+- [ ] Implement component tables (renderables, cameras, lights) and sorting.
+- [ ] Append environment block (header + records) and validate sizes.
+- [ ] Compute `header.content_hash` over payload + environment block.
+- [ ] Unit tests: pruning policy correctness, component ordering, and hash.
+- [ ] Unit tests: environment system validation and error diagnostics.
+
+#### 5.6e Pipeline Conformance + Cancellation Tests
+
+**Files:**
+
+- `src/Oxygen/Content/Test/Import/Async/PipelineConformance_test.cpp`
+
+Tasks:
+
+- [ ] Verify all pipelines satisfy `ResourcePipeline` concept invariants.
+- [ ] Validate progress counters (`submitted`, `completed`, `failed`).
+- [ ] Cancellation tests: `stop_token` yields `success=false` and no outputs.
+- [ ] Backpressure tests: bounded queues block/deny submissions as expected.
+
 #### 5.7 Job-Orchestrated Import Wiring
 
 **Files:**
@@ -886,7 +965,15 @@ Tasks:
   `session.TextureEmitter()` with streaming material emission.
 - [ ] FbxImportJob: submit mesh/animation work to `ThreadPool()` and emit via
   `session.BufferEmitter()`.
+- [ ] FbxImportJob: submit geometry work to `GeometryPipeline`; emit buffers
+  via `BufferEmitter` and descriptors via `AssetEmitter`.
+- [ ] FbxImportJob: submit material work to `MaterialPipeline`; emit `.omat`
+  via `AssetEmitter` once `MaterialReadinessTracker` resolves texture indices.
+- [ ] FbxImportJob: submit scene work to `ScenePipeline`; emit `.oscene` via
+  `AssetEmitter` using `ImportedGeometry` mapping.
 - [ ] GlbImportJob: mirror the FBX flow for glTF/GLB (subset acceptable).
+- [ ] GlbImportJob: wire geometry, material, and scene pipelines with the
+  same emitter flow (subset acceptable).
 - [ ] TextureImportJob: read bytes via `FileReader()`, submit to pipeline,
   emit via `TextureEmitter()`.
 - [ ] Integration tests for job wiring and cooked output.
@@ -918,6 +1005,8 @@ Tasks:
 
 - ✅ `TexturePipeline` as pure compute (concept-checked)
 - ✅ Submit/Collect pattern for parallel cooking
+- ✅ GeometryPipeline, MaterialPipeline, ScenePipeline complete + tested
+- ✅ Pipeline conformance + cancellation test coverage
 - ✅ Job-driven import wiring (FBX/GLB/Texture jobs)
 - ✅ `MaterialReadinessTracker` for dependency resolution
 - ✅ Config flow defined and injected (need-to-know)
@@ -973,6 +1062,7 @@ End-to-end integration, example application, and documentation.
 - [ ] Test: Complex FBX (multiple meshes, materials, textures)
 - [ ] Test: FBX with embedded textures
 - [ ] Test: Standalone texture import (PNG, JPG, HDR)
+- [ ] Test: Geometry + material + scene outputs (`.ogeo`, `.omat`, `.oscene`)
 - [ ] Test: Re-import same asset (log-structured growth)
 - [ ] Test: Cancellation mid-import
 - [ ] Test: Multiple concurrent imports
@@ -1026,6 +1116,24 @@ End-to-end integration, example application, and documentation.
 
 - [ ] Implement 3D depth-slice multi-source assembly for `TextureSourceSet`.
 - [ ] Add validation tests for subresource ordering (layer-major, mip-inner).
+
+#### 6.8 PAK Format Propagation (Post-Pipeline Changes)
+
+**Files:**
+
+- `src/Oxygen/Data/PakFormat.h`
+- `tools/PakGen/`
+- `tools/PakDump/`
+- `tools/Inspector/`
+
+Tasks:
+
+- [ ] If PAK format or asset versions change (including a new v5), update
+  `PakFormat.h` and any serializers/deserializers.
+- [ ] Update PakGen to emit the new/changed descriptors and tables.
+- [ ] Update PakDump to parse and display new/changed PAK vNext data.
+- [ ] Update Inspector tooling to reflect new asset versions and fields.
+- [ ] Add golden-file regression tests for PakGen and PakDump with new format.
 
 ### Deliverables
 

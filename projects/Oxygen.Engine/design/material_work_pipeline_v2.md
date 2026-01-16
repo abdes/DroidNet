@@ -128,8 +128,10 @@ Notes:
 - `storage_material_name` is used for virtual paths and descriptor relpaths.
 - `material_domain` uses `oxygen::data::MaterialDomain`.
 - `textures.*.index` must be final texture indices from `TextureEmitter`.
-  Missing textures should be resolved to placeholders when `want_textures` is
-  true so `assigned` is still true.
+  For textures, index `0` refers to the fallback texture
+  (`kFallbackResourceIndex`). Use `assigned=false` to indicate a truly missing
+  texture slot; `assigned=true` means the slot should be sampled (including
+  placeholder or fallback).
 - `textures.*.uv_set` refers to the source UV set. If `uv_set != 0`, the
   orchestrator must remap geometry UVs to set 0 or bake textures accordingly.
 - `textures.*.uv_transform` comes from source material transforms (glTF or FBX).
@@ -181,7 +183,6 @@ public:
   [[nodiscard]] auto Collect() -> co::Co<WorkResult>;
 
   void Close();
-  void Cancel();
 
   [[nodiscard]] auto HasPending() const noexcept -> bool;
   [[nodiscard]] auto PendingCount() const noexcept -> size_t;
@@ -207,12 +208,12 @@ For each work item:
       storage_material_name)`
    - `material_key` from `AssetKeyPolicy`
 3) Normalize scalar inputs:
+   - Apply `roughness_as_glossiness` inversion first
    - Clamp base color and scalar factors to [0, 1]
    - Clamp `alpha_cutoff`, `specular_factor`, `clearcoat_factor`,
      `clearcoat_roughness`, `transmission_factor`, and `thickness_factor`
    - Clamp `ior` to `>= 1.0` and `attenuation_distance` to `>= 0`
    - Preserve emissive HDR (no clamp)
-   - Apply `roughness_as_glossiness` inversion when set
 4) Resolve domain + alpha:
    - Start with `material_domain` from the work item
    - If `alpha_mode == kMasked`, set `material_domain = kMasked` unless the
@@ -230,7 +231,9 @@ For each work item:
    - Apply `kMaterialFlag_DoubleSided`, `kMaterialFlag_Unlit`
    - Apply `kMaterialFlag_GltfOrmPacked` when
      `orm_policy == kForcePacked`, or
-     `orm_policy == kAuto` and metallic/roughness/AO share the same `source_id`
+     `orm_policy == kAuto` and **all three** metallic/roughness/AO slots are
+     `assigned=true` and share the same `source_id`, `uv_set`, and
+     `uv_transform`.
 7) Bind textures:
    - Copy texture indices into `MaterialAssetDesc` for all slots
    - If ORM packed, set metallic/roughness/AO indices to the packed texture
@@ -243,13 +246,12 @@ For each work item:
 9) Build `MaterialAssetDesc`:
    - `header.asset_type = AssetType::kMaterial`
    - `header.name = material_name`
-   - `header.version = 2` when UV transform extension is used, otherwise
-     `kMaterialAssetVersion`
+   - `header.version = kMaterialAssetVersion`
    - `header.streaming_priority` from `ImportRequest` (0 if unspecified)
    - `header.variant_flags` from import configuration
    - Fill `material_domain`, `flags`, `shader_stages`, and all scalar fields
-10) Compute `header.content_hash` over the descriptor bytes + shader refs using
-    `util::ComputeContentHash`.
+10) Compute `header.content_hash` over the serialized bytes (descriptor +
+   shader refs) using `util::ComputeContentHash` (SHA-256, first 8 bytes).
 11) Serialize descriptor bytes with packed alignment = 1, followed by shader
     references.
 12) Return `CookedMaterialPayload`.
@@ -280,16 +282,16 @@ The pipeline is defined as two stages with explicit parallelization boundaries:
 
 ## Cooked Output Contract (PAK v2)
 
-This pipeline targets `oxygen::data::pak::v2`. `MaterialAssetVersion = 2`
-extends the descriptor in-place without changing the container version. Any
+This pipeline targets `oxygen::data::pak::v2`. No new material asset versions
+are introduced; the existing `kMaterialAssetVersion` remains authoritative. Any
 future descriptor layout changes that exceed reserved bytes must introduce a new
-PAK namespace (v5) and a new material asset version.
+PAK namespace.
 
 ### Material Descriptor (`.omat`)
 
 Packed binary blob:
 
-```
+```text
 MaterialAssetDesc (256 bytes)
 ShaderReferenceDesc[ popcount(shader_stages) ]
 ```
@@ -299,19 +301,18 @@ Key requirements:
 - `material_domain` matches resolved domain (opaque, masked, blended, etc.)
 - `flags` includes `kMaterialFlag_NoTextureSampling` only when no textures are
   assigned across **all** slots
-- `shader_stages` matches the serialized shader refs (zero is valid but should
-  only occur for diagnostic-only materials)
-- `header.version = kMaterialAssetVersion` unless the UV transform extension is
-  used, in which case it must be `2`
+- `shader_stages` matches the serialized shader refs (zero is invalid for
+  successful materials and must emit a diagnostic)
+- `header.version = kMaterialAssetVersion`
 - `header.content_hash` is non-zero when payload bytes are non-empty
 
-### UV Transform Extension (MaterialAssetVersion 2)
+### UV Transform Extension (Reserved Bytes)
 
 The reserved bytes in `MaterialAssetDesc` are used to encode the default
-per-material UV transform (global, applied to all slots). The pipeline must set
-`header.version = 2` when emitting this extension.
+per-material UV transform (global, applied to all slots). The pipeline must
+**always** write this extension; identity means “no transform.”
 
-```
+```text
 struct MaterialUvTransformDesc {
   float uv_scale[2];
   float uv_offset[2];
@@ -328,8 +329,7 @@ Contract:
 - If transforms differ, textures must be baked to remove their transforms and
   this extension must be set to identity (scale 1, offset 0, rotation 0,
   uv_set 0).
-- Loaders must accept version 1 (implicit identity transform) and version 2
-  (explicit transform).
+- Loaders must read this extension unconditionally.
 
 ---
 
@@ -418,19 +418,27 @@ Pipeline tracks submitted/completed/failed counts and exposes
 1) Pipeline never writes output files.
 2) Descriptor serialization must be packed (alignment = 1).
 3) `kMaterialFlag_NoTextureSampling` must reflect `assigned` texture bindings.
-4) `header.version` must reflect UV transform extension usage.
+4) `header.version` must use `kMaterialAssetVersion`.
 5) `header.content_hash` must cover descriptor bytes + shader refs.
 6) No exceptions across async boundaries.
 
 ---
 
-## Integration Checklist (Phase 5)
+## Validation and Limits (Industry-Style Defaults)
 
-- [ ] Implement `Async/Pipelines/MaterialPipeline.h/.cpp`
-- [ ] Integrate with import jobs (`FbxImportJob::EmitMaterials`, glTF)
-- [ ] Emit `.omat` via `session.AssetEmitter().Emit(...)`
-- [ ] Extend loader/runtime to read UV transform extension (version 2)
-- [ ] Add unit tests for flags, ORM detection, shader refs, and UV transform
+The pipeline must validate inputs and emit diagnostics for out-of-range or
+invalid data. Conservative defaults aligned with common engine practice:
+
+- Shader stage count must be 1..32; all `shader_type` values must be unique.
+- `ShaderReferenceDesc` fields must be null-terminated and fit their fixed
+  sizes (`source_path` 120, `entry_point` 32, `defines` 256); if too long,
+  truncate and emit a warning diagnostic.
+- `MaterialTextureBinding.index` must fit `ResourceIndexT`; if out of range,
+  emit a blocking error.
+- `MaterialAlphaMode::kMasked` requires `alpha_cutoff` in [0,1]; clamp and
+  emit a warning when out of range.
+- `orm_policy == kForcePacked` requires all three ORM slots `assigned=true` and
+  identical source metadata; otherwise emit a blocking error.
 
 ---
 

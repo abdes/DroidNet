@@ -19,7 +19,8 @@ Core properties:
 - **No I/O**: `AssetEmitter` writes `.oscene` files.
 - **Job-scoped**: created per job and started in the job’s child nursery.
 - **Geometry-aware**: links nodes to geometry assets via `ImportedGeometry`.
-- **PAK v3**: emits the v3 scene format to support the environment block.
+- **PAK v4 container, v3 scene asset**: uses the v3 scene asset layout as
+  defined in [src/Oxygen/Data/PakFormat.h](../src/Oxygen/Data/PakFormat.h).
 
 ---
 
@@ -108,7 +109,6 @@ public:
   [[nodiscard]] auto Collect() -> co::Co<WorkResult>;
 
   void Close();
-  void Cancel();
 
   [[nodiscard]] auto HasPending() const noexcept -> bool;
   [[nodiscard]] auto PendingCount() const noexcept -> size_t;
@@ -133,7 +133,7 @@ For each work item:
    - `node_name = BuildSceneNodeName(authored_name, request, ordinal,
       parent_name)`
    - `NodeRecord` per node, parent indices, flags resolved
-   - Apply coordinate conversion via `coord::ApplySwapYZIfEnabled`
+  c- Apply **one-shot** coordinate conversion (see policy below)
    - `node_id = MakeDeterministicAssetKey(virtual_path + "/" + node_name)`
    - String table begins with `\0`, names appended as UTF-8
 4) Apply `NodePruningPolicy`:
@@ -214,23 +214,23 @@ boundaries.
    - All component tables are sorted by `node_index`.
 
 10) **Scene payload layout**
-   - `SceneAssetDesc.header.version = data::pak::v3::kSceneAssetVersion`
-   - Component directory offset is after all component tables.
-   - Append `SceneEnvironmentBlockHeader` and system records.
+    - `SceneAssetDesc.header.version = data::pak::v3::kSceneAssetVersion`
+    - Component directory offset is after all component tables.
+    - Append `SceneEnvironmentBlockHeader` and system records.
 
 ---
 
-## Cooked Output Contract (PAK v3)
+## Cooked Output Contract (PAK v4 Container, v3 Scene Asset)
 
-This pipeline targets `oxygen::data::pak::v3`. Layout changes that exceed
-the existing structures must introduce a new PAK namespace (v5) and a new
-scene asset version.
+This pipeline targets the latest PAK container while emitting the
+`data::pak::v3` scene asset layout. Layout changes that exceed the existing
+structures must introduce a new PAK namespace and a new scene asset version.
 
 ### Scene Descriptor (`.oscene`)
 
 Packed binary blob:
 
-```
+```text
 SceneAssetDesc (256 bytes)
 NodeRecord[ nodes.count ]
 Scene string table (NUL-terminated UTF-8, starts with '\0')
@@ -315,14 +315,72 @@ Pipeline tracks submitted/completed/failed counts and exposes
 
 ---
 
-## Integration Checklist (Phase 5)
+## Coordinate Conversion Policy (Definitive)
 
-- [ ] Implement `Async/Pipelines/ScenePipeline.h/.cpp`
-- [ ] Implement node pruning and flag mapping
-- [ ] Serialize v3 environment block records
-- [ ] Integrate with `FbxImportJob::EmitScene` and glTF import
-- [ ] Emit `.oscene` via `session.AssetEmitter().Emit(...)`
-- [ ] Add unit tests for pruning, flags, and environment block offsets
+The engine space is **right-handed, Z-up, forward = -Y** (see
+[src/Oxygen/Core/Constants.h](../src/Oxygen/Core/Constants.h)). Coordinate
+conversion is **one-shot** and must be applied only if the importer declares
+that the source space differs from engine space.
+
+Rules:
+
+1) The importer must supply source-space metadata per scene.
+2) The pipeline applies at most one conversion, producing final engine space.
+3) No additional “unmapping” or multiple remappings are allowed.
+4) If source space already matches engine space, conversion is a no-op.
+
+The conversion policy is pluggable (per job). It must define deterministic
+transforms for translations, rotations (quaternion), and scales, and must
+re-normalize quaternions after conversion.
+
+Missing or inconsistent source-space metadata is a **blocking error**.
+
+---
+
+## Deterministic Naming and Node IDs
+
+- `node_name` must be disambiguated after pruning using a stable strategy
+  (e.g., `BuildSceneNodeName` + ordinal in traversal order). If duplicates
+  remain, append `_N` suffixes in traversal order and emit a warning.
+- `node_id` uses the disambiguated name: `MakeDeterministicAssetKey(
+  virtual_path + "/" + node_name)`.
+
+---
+
+## Node Pruning (Deterministic Rules)
+
+When dropping a node, reparent its children to the nearest kept ancestor and
+recompute each child’s local transform as:
+
+$$
+T_{local}' = T_{parent}^{-1} \cdot T_{world}
+$$
+
+where $T_{world}$ is the original world transform and $T_{parent}$ is the new
+parent’s world transform. Use float32 math; if inversion fails (singular),
+emit a blocking diagnostic and keep the original parent.
+
+---
+
+## Environment Block Validation
+
+- Validate each `SceneEnvironmentSystemRecordHeader`:
+  - `record_size >= sizeof(SceneEnvironmentSystemRecordHeader)`.
+  - `record_size` does not exceed remaining bytes.
+- Unknown `system_type` values are preserved if `record_size` is valid.
+- If validation fails, emit a blocking diagnostic and fail the work item.
+
+---
+
+## Validation and Limits (Industry-Style Defaults)
+
+- Node count must be 1..1,000,000 (error if 0 or exceeds cap).
+- String table size must fit `StringTableSizeT` and be ≤ 64 MiB.
+- Component table counts must fit `uint32_t` and offsets must not overflow the
+  descriptor payload size.
+- Camera near/far: clamp `near > 0`, enforce `far > near`; if invalid, emit a
+  warning and clamp to `near = 0.1`, `far = 1000.0` (unless import overrides).
+- Light intensity, color, and cone angles must be finite; NaNs/Infs are errors.
 
 ---
 
