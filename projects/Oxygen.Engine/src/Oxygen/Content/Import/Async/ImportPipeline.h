@@ -48,6 +48,7 @@ struct PipelineProgress {
 */
 template <typename T>
 concept ImportPipeline = oxygen::IsTyped<T>
+  && std::movable<typename T::WorkItem> && std::movable<typename T::WorkResult>
   && requires(T& pipeline, typename T::WorkItem item, co::Nursery& nursery) {
        typename T::WorkItem;
        typename T::WorkResult;
