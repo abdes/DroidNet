@@ -11,10 +11,10 @@
 #include <filesystem>
 #include <optional>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Content/Import/Async/ResourceTableAggregator.h>
 #include <Oxygen/Content/Import/BufferImportTypes.h>
 #include <Oxygen/Content/Import/LooseCookedLayout.h>
 #include <Oxygen/Content/api_export.h>
@@ -28,9 +28,10 @@ struct FileErrorInfo;
 
 //! Emits cooked buffers with async I/O.
 /*!
- BufferEmitter owns the `buffers.data` and `buffers.table` files for
- a single import session. It provides immediate index assignment with
- background async I/O for maximum throughput.
+ BufferEmitter owns the `buffers.data` file for a single import session and
+ submits table entries to a shared `BufferTableAggregator`.
+ It provides immediate index assignment with background async I/O for
+ maximum throughput.
 
  ### Design Principles
 
@@ -40,9 +41,9 @@ struct FileErrorInfo;
  2. **Async I/O in Background**: Data is written via `IAsyncFileWriter`
     without blocking the import thread.
 
- 3. **In-Memory Table**: Table entries are accumulated in memory (~32 bytes
-    each per `BufferResourceDesc`). The table file is written once during
-    `Finalize()`.
+ 3. **Shared Table Aggregation**: Table entries are submitted to the
+   `BufferTableAggregator`. The table file is written once during service
+   shutdown.
 
  4. **Signature-Based Deduplication**: Buffers are deduplicated using a
    signature derived from the cooked payload metadata (usage/format/stride,
@@ -75,7 +76,7 @@ struct FileErrorInfo;
 
  // After all cooking completes
  co_await emitter.Finalize();
- // buffers.data and buffers.table are now on disk
+ // buffers.data is on disk; buffers.table is written at service shutdown
  ```
 
  ### Thread Safety
@@ -95,7 +96,8 @@ public:
    @param cooked_root Root directory for cooked output.
   */
   OXGN_CNTT_API BufferEmitter(IAsyncFileWriter& file_writer,
-    const LooseCookedLayout& layout, const std::filesystem::path& cooked_root);
+    BufferTableAggregator& table_aggregator, const LooseCookedLayout& layout,
+    const std::filesystem::path& cooked_root);
 
   OXGN_CNTT_API ~BufferEmitter();
 
@@ -149,11 +151,10 @@ public:
 
   //=== Finalization ===------------------------------------------------------//
 
-  //! Wait for all pending I/O and write the table file.
+  //! Wait for all pending I/O for this session.
   /*!
    This method:
    1. Waits for all pending async writes to complete.
-   2. Writes the in-memory table to `buffers.table`.
 
    @return True if all writes succeeded, false if any errors occurred.
 
@@ -169,12 +170,6 @@ public:
 private:
   using BufferResourceDesc = oxygen::data::pak::BufferResourceDesc;
 
-  struct ReservedWriteRange {
-    uint64_t reservation_start = 0;
-    uint64_t aligned_offset = 0;
-    uint64_t padding_size = 0;
-  };
-
   enum class WriteKind : uint8_t {
     kPadding,
     kPayload,
@@ -184,17 +179,9 @@ private:
   auto MakeTableEntry(const CookedBufferPayload& cooked, uint64_t data_offset)
     -> BufferResourceDesc;
 
-  //! Find an existing index for the signature, if present.
-  auto FindExistingIndex(const std::string& signature) const
-    -> std::optional<uint32_t>;
-
   //! Reserve an aligned range in the data file and return padding info.
   auto ReserveDataRange(uint64_t alignment, uint64_t payload_size)
-    -> ReservedWriteRange;
-
-  //! Record a newly emitted buffer in the table and dedupe map.
-  auto RecordNewBuffer(const std::string& signature, uint32_t index,
-    const CookedBufferPayload& cooked, uint64_t aligned_offset) -> void;
+    -> WriteReservation;
 
   //! Queue a write (padding or payload) to the data file.
   auto QueueDataWrite(WriteKind kind, std::optional<uint32_t> index,
@@ -204,17 +191,11 @@ private:
   auto OnWriteComplete(WriteKind kind, std::optional<uint32_t> index,
     const FileErrorInfo& error) -> void;
 
-  //! Write the table file to disk.
-  auto WriteTableFile() -> co::Co<bool>;
-
   IAsyncFileWriter& file_writer_;
+  BufferTableAggregator& table_aggregator_;
   std::filesystem::path data_path_;
-  std::filesystem::path table_path_;
-
-  std::vector<BufferResourceDesc> table_;
-  std::unordered_map<std::string, uint32_t> index_by_signature_;
   std::atomic<bool> finalize_started_ { false };
-  std::atomic<uint32_t> next_index_ { 0 };
+  std::atomic<uint32_t> emitted_count_ { 0 };
   std::atomic<uint64_t> data_file_size_ { 0 };
   std::atomic<size_t> pending_count_ { 0 };
   std::atomic<size_t> error_count_ { 0 };

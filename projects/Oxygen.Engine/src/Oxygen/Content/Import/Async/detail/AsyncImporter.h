@@ -23,6 +23,7 @@
 namespace oxygen::content::import {
 
 class IAsyncFileWriter;
+class ResourceTableRegistry;
 
 } // namespace oxygen::content::import
 
@@ -56,8 +57,14 @@ public:
     //! Capacity of the job channel (backpressure control).
     size_t channel_capacity = 64;
 
+    //! Maximum number of jobs processed concurrently.
+    size_t max_in_flight_jobs = 1;
+
     //! Async file writer used by import sessions.
     IAsyncFileWriter* file_writer = nullptr;
+
+    //! Resource table registry for global aggregation.
+    ResourceTableRegistry* table_registry = nullptr;
   };
 
   //! Construct an importer with the given configuration.
@@ -115,6 +122,9 @@ public:
   */
   OXGN_CNTT_NDAPI [[nodiscard]] auto TrySubmitJob(JobEntry entry) -> bool;
 
+  //! Check if the importer has capacity for another job.
+  OXGN_CNTT_NDAPI [[nodiscard]] auto CanAcceptJob() const noexcept -> bool;
+
   //! Close the job channel (no more jobs accepted).
   OXGN_CNTT_API void CloseJobChannel();
 
@@ -134,8 +144,20 @@ private:
   //! Channel for receiving job entries.
   co::Channel<JobEntry> job_channel_;
 
+  //! Channel for completed job notifications.
+  co::Channel<int> completion_channel_;
+
   //! Configuration.
   Config config_;
+
+  //! Channel capacity for backpressure checks.
+  size_t channel_capacity_ = 0;
+
+  //! Active job count (queued + in-flight).
+  std::atomic<size_t> active_jobs_ { 0 };
+
+  //! Current number of jobs in flight.
+  size_t in_flight_jobs_ = 0;
 };
 
 } // namespace oxygen::content::import::detail

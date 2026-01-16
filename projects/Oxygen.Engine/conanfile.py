@@ -99,6 +99,7 @@ class OxygenConan(ConanFile):
         self.requires("stduuid/1.2.3")
         self.requires("magic_enum/0.9.7")
         self.requires("tinyexr/1.0.12")
+        self.requires("pdcurses/3.9")
 
         # Record test-only dependencies so we can skip them during deploy.
         # The test_requires call accepts a reference like 'gtest/master'.
@@ -132,6 +133,13 @@ class OxygenConan(ConanFile):
             self.options["tinyexr"].with_openmp = True
         except Exception:
             # If tinyexr isn't present in this configuration, ignore silently
+            pass
+
+        # Enable wide-character support for pdcurses when available
+        try:
+            self.options["pdcurses"].enable_widec = True
+        except Exception:
+            # If pdcurses isn't present in this configuration, ignore silently
             pass
 
     def generate(self):

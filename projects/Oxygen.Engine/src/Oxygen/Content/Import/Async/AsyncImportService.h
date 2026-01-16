@@ -161,8 +161,8 @@ public:
     //! Number of worker threads in the import ThreadPool.
     uint32_t thread_pool_size = std::thread::hardware_concurrency();
 
-    //! Number of parallel texture cooking tasks.
-    uint32_t texture_pipeline_workers = std::thread::hardware_concurrency() / 2;
+    //! Maximum number of jobs processed concurrently.
+    uint32_t max_in_flight_jobs = std::thread::hardware_concurrency();
 
     //! Bounded capacity for texture work queue (backpressure).
     uint32_t texture_queue_capacity = 64;

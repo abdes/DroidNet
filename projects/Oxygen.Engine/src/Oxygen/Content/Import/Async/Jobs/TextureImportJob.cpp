@@ -413,7 +413,8 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   EnsureCookedRoot();
 
-  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool());
+  ImportSession session(
+    Request(), FileReader(), FileWriter(), ThreadPool(), TableRegistry());
 
   TexturePipeline pipeline(*ThreadPool());
   StartPipeline(pipeline);
@@ -571,9 +572,19 @@ auto TextureImportJob::LoadSource(ImportSession& session)
         co_return StampDurations(source);
       }
       source.prevalidated = true;
+      const auto source_id = Request().source_path.string();
       const auto decode_start = std::chrono::steady_clock::now();
-      auto decoded = DecodeToScratchImage(
-        std::span<const std::byte>(bytes.data(), bytes.size()), options);
+      auto decoded = co_await ThreadPool()->Run(
+        [data = bytes.data(), size = bytes.size(), options, source_id](
+          oxygen::co::ThreadPool::CancelToken cancelled)
+          -> oxygen::Result<ScratchImage, TextureImportError> {
+          if (cancelled) {
+            return ::oxygen::Err(TextureImportError::kCancelled);
+          }
+          auto result = DecodeToScratchImage(
+            std::span<const std::byte>(data, size), options);
+          return result;
+        });
       const auto decode_end = std::chrono::steady_clock::now();
       AddDuration(decode_duration, decode_start, decode_end);
       if (!decoded.has_value()) {
@@ -690,9 +701,19 @@ auto TextureImportJob::LoadSource(ImportSession& session)
         co_return StampDurations(source);
       }
       source.prevalidated = true;
+      const auto source_id = Request().source_path.string();
       const auto decode_start = std::chrono::steady_clock::now();
-      auto decoded = DecodeToScratchImage(
-        std::span<const std::byte>(bytes.data(), bytes.size()), options);
+      auto decoded = co_await ThreadPool()->Run(
+        [data = bytes.data(), size = bytes.size(), options, source_id](
+          oxygen::co::ThreadPool::CancelToken cancelled)
+          -> oxygen::Result<ScratchImage, TextureImportError> {
+          if (cancelled) {
+            return ::oxygen::Err(TextureImportError::kCancelled);
+          }
+          auto result = DecodeToScratchImage(
+            std::span<const std::byte>(data, size), options);
+          return result;
+        });
       const auto decode_end = std::chrono::steady_clock::now();
       AddDuration(decode_duration, decode_start, decode_end);
       if (!decoded.has_value()) {
@@ -803,9 +824,19 @@ auto TextureImportJob::LoadSource(ImportSession& session)
       if (!meta.has_value()) {
         DecodeOptions face_options = options;
         face_options.extension_hint = face_path.extension().string();
+        const auto source_id = face_path.string();
         const auto decode_start = std::chrono::steady_clock::now();
-        auto decoded = DecodeToScratchImage(
-          std::span<const std::byte>(bytes.data(), bytes.size()), face_options);
+        auto decoded = co_await ThreadPool()->Run(
+          [data = bytes.data(), size = bytes.size(), face_options, source_id](
+            oxygen::co::ThreadPool::CancelToken cancelled)
+            -> oxygen::Result<ScratchImage, TextureImportError> {
+            if (cancelled) {
+              return ::oxygen::Err(TextureImportError::kCancelled);
+            }
+            auto result = DecodeToScratchImage(
+              std::span<const std::byte>(data, size), face_options);
+            return result;
+          });
         const auto decode_end = std::chrono::steady_clock::now();
         AddDuration(decode_duration, decode_start, decode_end);
         if (!decoded.has_value()) {
@@ -874,9 +905,19 @@ auto TextureImportJob::LoadSource(ImportSession& session)
   }
   source.prevalidated = true;
 
+  const auto source_id = Request().source_path.string();
   const auto decode_start = std::chrono::steady_clock::now();
-  auto decoded = DecodeToScratchImage(
-    std::span<const std::byte>(bytes.data(), bytes.size()), options);
+  auto decoded = co_await ThreadPool()->Run(
+    [data = bytes.data(), size = bytes.size(), options, source_id](
+      oxygen::co::ThreadPool::CancelToken cancelled)
+      -> oxygen::Result<ScratchImage, TextureImportError> {
+      if (cancelled) {
+        return ::oxygen::Err(TextureImportError::kCancelled);
+      }
+      auto result
+        = DecodeToScratchImage(std::span<const std::byte>(data, size), options);
+      return result;
+    });
   const auto decode_end = std::chrono::steady_clock::now();
   AddDuration(decode_duration, decode_start, decode_end);
   if (!decoded.has_value()) {

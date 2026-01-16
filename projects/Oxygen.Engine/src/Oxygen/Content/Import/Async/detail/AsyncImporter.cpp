@@ -14,10 +14,16 @@ namespace oxygen::content::import::detail {
 
 AsyncImporter::AsyncImporter(Config config)
   : job_channel_(config.channel_capacity)
+  , completion_channel_(
+      config.max_in_flight_jobs == 0 ? 1 : config.max_in_flight_jobs)
   , config_(config)
+  , channel_capacity_(config.channel_capacity)
 {
   DLOG_F(INFO, "AsyncImporter created with channel capacity {}",
     config.channel_capacity);
+  if (config_.max_in_flight_jobs == 0) {
+    config_.max_in_flight_jobs = 1;
+  }
 }
 
 AsyncImporter::~AsyncImporter()
@@ -51,6 +57,7 @@ void AsyncImporter::Stop()
 
   // Close the channel to stop accepting new jobs and unblock receivers
   job_channel_.Close();
+  completion_channel_.Close();
 
   // Cancel the nursery to stop all background tasks
   if (nursery_ != nullptr) {
@@ -82,7 +89,21 @@ auto AsyncImporter::TrySubmitJob(JobEntry entry) -> bool
   }
 
   // Use TrySend for non-blocking submission
-  return job_channel_.TrySend(std::move(entry));
+  const auto ok = job_channel_.TrySend(std::move(entry));
+  if (ok) {
+    active_jobs_.fetch_add(1, std::memory_order_acq_rel);
+  }
+  return ok;
+}
+
+auto AsyncImporter::CanAcceptJob() const noexcept -> bool
+{
+  if (job_channel_.Closed()) {
+    return false;
+  }
+
+  const auto active = active_jobs_.load(std::memory_order_acquire);
+  return active < channel_capacity_;
 }
 
 void AsyncImporter::CloseJobChannel()
@@ -108,6 +129,18 @@ auto AsyncImporter::ProcessJobsLoop() -> co::Co<>
   DLOG_F(INFO, "ProcessJobsLoop started");
 
   while (true) {
+    while (in_flight_jobs_ >= config_.max_in_flight_jobs) {
+      auto completed = co_await completion_channel_.Receive();
+      if (!completed.has_value()) {
+        DLOG_F(INFO, "Completion channel closed, exiting processing loop");
+        co_return;
+      }
+      if (in_flight_jobs_ > 0) {
+        --in_flight_jobs_;
+      }
+      active_jobs_.fetch_sub(1, std::memory_order_acq_rel);
+    }
+
     // Receive next job (suspends until available or channel closed)
     auto maybe_entry = co_await job_channel_.Receive();
 
@@ -118,7 +151,21 @@ auto AsyncImporter::ProcessJobsLoop() -> co::Co<>
     }
 
     // Process the job
-    co_await ProcessJob(std::move(*maybe_entry));
+    ++in_flight_jobs_;
+    nursery_->Start(
+      [this, entry = std::move(*maybe_entry)]() mutable -> co::Co<> {
+        co_await ProcessJob(std::move(entry));
+        co_await completion_channel_.Send(1);
+      });
+  }
+
+  while (in_flight_jobs_ > 0) {
+    auto completed = co_await completion_channel_.Receive();
+    if (!completed.has_value()) {
+      break;
+    }
+    --in_flight_jobs_;
+    active_jobs_.fetch_sub(1, std::memory_order_acq_rel);
   }
 
   DLOG_F(INFO, "ProcessJobsLoop exited");

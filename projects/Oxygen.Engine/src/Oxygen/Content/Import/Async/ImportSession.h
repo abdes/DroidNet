@@ -29,6 +29,7 @@ namespace oxygen::content::import {
 
 class IAsyncFileReader;
 class IAsyncFileWriter;
+class ResourceTableRegistry;
 class TextureEmitter;
 class BufferEmitter;
 class AssetEmitter;
@@ -86,7 +87,8 @@ public:
   OXGN_CNTT_API ImportSession(const ImportRequest& request,
     oxygen::observer_ptr<IAsyncFileReader> file_reader,
     oxygen::observer_ptr<IAsyncFileWriter> file_writer,
-    oxygen::observer_ptr<co::ThreadPool> thread_pool);
+    oxygen::observer_ptr<co::ThreadPool> thread_pool,
+    oxygen::observer_ptr<ResourceTableRegistry> table_registry);
 
   OXGN_CNTT_API ~ImportSession();
 
@@ -179,6 +181,7 @@ private:
   oxygen::observer_ptr<IAsyncFileReader> file_reader_ {};
   oxygen::observer_ptr<IAsyncFileWriter> file_writer_ {};
   oxygen::observer_ptr<co::ThreadPool> thread_pool_ {};
+  oxygen::observer_ptr<ResourceTableRegistry> table_registry_ {};
   std::filesystem::path cooked_root_;
   LooseCookedWriter cooked_writer_;
 

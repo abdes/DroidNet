@@ -6,13 +6,15 @@
 
 #pragma once
 
-#include <string_view>
+#include <optional>
+#include <ostream>
 
 #include <Oxygen/Content/Import/ImportRequest.h>
+#include <Oxygen/Content/Tools/ImportTool/TextureImportSettings.h>
 
 namespace oxygen::content::import::tool {
 
-[[nodiscard]] auto RunImportJob(const ImportRequest& request, bool verbose,
-  std::string_view report_path) -> int;
+[[nodiscard]] auto BuildTextureRequest(const TextureImportSettings& settings,
+  std::ostream& error_stream) -> std::optional<ImportRequest>;
 
 } // namespace oxygen::content::import::tool

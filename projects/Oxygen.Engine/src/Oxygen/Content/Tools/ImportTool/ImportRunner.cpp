@@ -4,55 +4,97 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Tools/ImportTool/ImportRunner.h>
-
 #include <chrono>
 #include <condition_variable>
-#include <iomanip>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <optional>
+#include <string_view>
+
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Content/Import/Async/AsyncImportService.h>
 #include <Oxygen/Content/Import/ImportReport.h>
+#include <Oxygen/Content/Tools/ImportTool/ImportRunner.h>
 
 namespace oxygen::content::import::tool {
 
 namespace {
 
-  auto PrintTelemetry(const ImportReport& report) -> void
+  using nlohmann::ordered_json;
+
+  auto DurationToMillis(
+    const std::optional<std::chrono::microseconds>& duration) -> ordered_json
   {
-    const auto print_duration
-      = [](const char* label,
-          const std::optional<std::chrono::microseconds> duration) {
-          if (!duration.has_value()) {
-            return;
-          }
+    if (!duration.has_value()) {
+      return nullptr;
+    }
+    const auto ms = std::chrono::duration<double, std::milli>(*duration);
+    return ms.count();
+  }
 
-          const auto ms = std::chrono::duration<double, std::milli>(*duration);
-          const auto flags = std::cout.flags();
-          const auto precision = std::cout.precision();
-          std::cout << label << ": " << std::fixed << std::setprecision(3)
-                    << ms.count() << " ms\n";
-          std::cout.flags(flags);
-          std::cout.precision(precision);
-        };
+  auto BuildTelemetryJson(const ImportTelemetry& telemetry) -> ordered_json
+  {
+    return ordered_json {
+      { "io_ms", DurationToMillis(telemetry.io_duration) },
+      { "decode_ms", DurationToMillis(telemetry.decode_duration) },
+      { "load_ms", DurationToMillis(telemetry.load_duration) },
+      { "cook_ms", DurationToMillis(telemetry.cook_duration) },
+      { "emit_ms", DurationToMillis(telemetry.emit_duration) },
+      { "finalize_ms", DurationToMillis(telemetry.finalize_duration) },
+      { "total_ms", DurationToMillis(telemetry.total_duration) },
+    };
+  }
 
-    const auto& telemetry = report.telemetry;
-    print_duration("telemetry.io", telemetry.io_duration);
-    print_duration("telemetry.decode", telemetry.decode_duration);
-    print_duration("telemetry.load", telemetry.load_duration);
-    print_duration("telemetry.cook", telemetry.cook_duration);
-    print_duration("telemetry.emit", telemetry.emit_duration);
-    print_duration("telemetry.finalize", telemetry.finalize_duration);
-    print_duration("telemetry.total", telemetry.total_duration);
+  auto ResolveReportPath(std::string_view report_path,
+    const std::filesystem::path& cooked_root, std::ostream& error_stream)
+    -> std::optional<std::filesystem::path>
+  {
+    std::filesystem::path path(report_path);
+    if (path.is_absolute()) {
+      return path;
+    }
+    if (cooked_root.empty()) {
+      error_stream << "ERROR: --report requires a cooked root when using a "
+                      "relative path\n";
+      return std::nullopt;
+    }
+    return (cooked_root / path).lexically_normal();
+  }
+
+  auto WriteJsonReport(const ordered_json& payload,
+    const std::filesystem::path& report_path, std::ostream& error_stream)
+    -> bool
+  {
+    std::error_code ec;
+    const auto parent = report_path.parent_path();
+    if (!parent.empty()) {
+      std::filesystem::create_directories(parent, ec);
+      if (ec) {
+        error_stream << "ERROR: failed to create report directory: "
+                     << parent.string() << "\n";
+        return false;
+      }
+    }
+
+    std::ofstream output(report_path);
+    if (!output) {
+      error_stream << "ERROR: failed to open report file: "
+                   << report_path.string() << "\n";
+      return false;
+    }
+    output << payload.dump(2) << "\n";
+    return true;
   }
 
 } // namespace
 
 auto RunImportJob(const ImportRequest& request, const bool verbose,
-  const bool print_telemetry) -> int
+  const std::string_view report_path) -> int
 {
+  const auto start_time = std::chrono::steady_clock::now();
   std::mutex mutex;
   std::condition_variable cv;
   std::optional<ImportReport> report;
@@ -101,8 +143,37 @@ auto RunImportJob(const ImportRequest& request, const bool verbose,
     return 2;
   }
 
-  if (print_telemetry) {
-    PrintTelemetry(report_copy);
+  if (!report_path.empty()) {
+    const auto cooked_root = report_copy.cooked_root;
+    const auto resolved_path
+      = ResolveReportPath(report_path, cooked_root, std::cerr);
+    if (!resolved_path.has_value()) {
+      return 2;
+    }
+
+    const auto elapsed = std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now() - start_time)
+                           .count();
+    ordered_json payload = ordered_json::object();
+    payload["summary"] = {
+      { "jobs", 1 },
+      { "succeeded", report_copy.success ? 1 : 0 },
+      { "failed", report_copy.success ? 0 : 1 },
+      { "total_time_ms", elapsed },
+      { "cooked_root", cooked_root.string() },
+    };
+    payload["jobs"] = ordered_json::array({
+      {
+        { "index", 1 },
+        { "source", request.source_path.string() },
+        { "success", report_copy.success },
+        { "telemetry", BuildTelemetryJson(report_copy.telemetry) },
+      },
+    });
+
+    if (!WriteJsonReport(payload, *resolved_path, std::cerr)) {
+      return 2;
+    }
   }
 
   if (!report_copy.success) {

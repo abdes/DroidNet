@@ -4,324 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Tools/ImportTool/TextureCommand.h>
-
-#include <filesystem>
 #include <iostream>
-#include <optional>
-#include <string_view>
 
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
-#include <Oxygen/Content/Import/ImportOptions.h>
-#include <Oxygen/Content/Import/TextureImportTypes.h>
-#include <Oxygen/Content/Import/TextureSourceAssembly.h>
 #include <Oxygen/Content/Tools/ImportTool/ImportRunner.h>
-#include <Oxygen/Core/Types/ColorSpace.h>
-#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Content/Tools/ImportTool/TextureCommand.h>
+#include <Oxygen/Content/Tools/ImportTool/TextureImportRequestBuilder.h>
 
 namespace oxygen::content::import::tool {
 
 namespace {
 
-  using oxygen::ColorSpace;
-  using oxygen::Format;
   using oxygen::clap::CommandBuilder;
   using oxygen::clap::Option;
-  using oxygen::content::import::Bc7Quality;
-  using oxygen::content::import::CubeMapImageLayout;
-  using oxygen::content::import::ImportRequest;
-  using oxygen::content::import::MipFilter;
-  using oxygen::content::import::MipPolicy;
-  using oxygen::content::import::TextureIntent;
-
-  auto ParseIntent(std::string_view value) -> std::optional<TextureIntent>
-  {
-    if (value == "albedo") {
-      return TextureIntent::kAlbedo;
-    }
-    if (value == "normal") {
-      return TextureIntent::kNormalTS;
-    }
-    if (value == "roughness") {
-      return TextureIntent::kRoughness;
-    }
-    if (value == "metallic") {
-      return TextureIntent::kMetallic;
-    }
-    if (value == "ao") {
-      return TextureIntent::kAO;
-    }
-    if (value == "emissive") {
-      return TextureIntent::kEmissive;
-    }
-    if (value == "opacity") {
-      return TextureIntent::kOpacity;
-    }
-    if (value == "orm") {
-      return TextureIntent::kORMPacked;
-    }
-    if (value == "hdr_env") {
-      return TextureIntent::kHdrEnvironment;
-    }
-    if (value == "hdr_probe") {
-      return TextureIntent::kHdrLightProbe;
-    }
-    if (value == "data") {
-      return TextureIntent::kData;
-    }
-    if (value == "height") {
-      return TextureIntent::kHeightMap;
-    }
-    return std::nullopt;
-  }
-
-  auto ParseColorSpace(std::string_view value) -> std::optional<ColorSpace>
-  {
-    if (value == "srgb") {
-      return ColorSpace::kSRGB;
-    }
-    if (value == "linear") {
-      return ColorSpace::kLinear;
-    }
-    return std::nullopt;
-  }
-
-  auto ParseFormat(std::string_view value) -> std::optional<Format>
-  {
-    if (value == "rgba8") {
-      return Format::kRGBA8UNorm;
-    }
-    if (value == "rgba8_srgb") {
-      return Format::kRGBA8UNormSRGB;
-    }
-    if (value == "bc7") {
-      return Format::kBC7UNorm;
-    }
-    if (value == "bc7_srgb") {
-      return Format::kBC7UNormSRGB;
-    }
-    if (value == "rgba16f") {
-      return Format::kRGBA16Float;
-    }
-    if (value == "rgba32f") {
-      return Format::kRGBA32Float;
-    }
-    return std::nullopt;
-  }
-
-  auto ParseMipPolicy(std::string_view value) -> std::optional<MipPolicy>
-  {
-    if (value == "none") {
-      return MipPolicy::kNone;
-    }
-    if (value == "full") {
-      return MipPolicy::kFullChain;
-    }
-    if (value == "max") {
-      return MipPolicy::kMaxCount;
-    }
-    return std::nullopt;
-  }
-
-  auto ParseMipFilter(std::string_view value) -> std::optional<MipFilter>
-  {
-    if (value == "box") {
-      return MipFilter::kBox;
-    }
-    if (value == "kaiser") {
-      return MipFilter::kKaiser;
-    }
-    if (value == "lanczos") {
-      return MipFilter::kLanczos;
-    }
-    return std::nullopt;
-  }
-
-  auto ParseBc7Quality(std::string_view value) -> std::optional<Bc7Quality>
-  {
-    if (value == "none") {
-      return Bc7Quality::kNone;
-    }
-    if (value == "fast") {
-      return Bc7Quality::kFast;
-    }
-    if (value == "default") {
-      return Bc7Quality::kDefault;
-    }
-    if (value == "high") {
-      return Bc7Quality::kHigh;
-    }
-    return std::nullopt;
-  }
-
-  auto ParseCubeLayout(std::string_view value)
-    -> std::optional<CubeMapImageLayout>
-  {
-    if (value == "auto") {
-      return CubeMapImageLayout::kAuto;
-    }
-    if (value == "hstrip") {
-      return CubeMapImageLayout::kHorizontalStrip;
-    }
-    if (value == "vstrip") {
-      return CubeMapImageLayout::kVerticalStrip;
-    }
-    if (value == "hcross") {
-      return CubeMapImageLayout::kHorizontalCross;
-    }
-    if (value == "vcross") {
-      return CubeMapImageLayout::kVerticalCross;
-    }
-    return std::nullopt;
-  }
-
-  auto BuildTextureRequest(const TextureCommand::Options& opts)
-    -> std::optional<ImportRequest>
-  {
-    ImportRequest request {};
-    request.source_path = opts.source_path;
-
-    if (!opts.cooked_root.empty()) {
-      request.cooked_root = std::filesystem::path(opts.cooked_root);
-    }
-    if (!opts.job_name.empty()) {
-      request.job_name = opts.job_name;
-    }
-
-    auto& tuning = request.options.texture_tuning;
-
-    if (!opts.intent.empty()) {
-      auto parsed = ParseIntent(opts.intent);
-      if (!parsed.has_value()) {
-        std::cerr << "ERROR: invalid --intent value\n";
-        return std::nullopt;
-      }
-      tuning.intent = *parsed;
-    }
-
-    if (!opts.color_space.empty()) {
-      auto parsed = ParseColorSpace(opts.color_space);
-      if (!parsed.has_value()) {
-        std::cerr << "ERROR: invalid --color-space value\n";
-        return std::nullopt;
-      }
-      tuning.source_color_space = *parsed;
-    }
-
-    if (!opts.output_format.empty()) {
-      auto parsed = ParseFormat(opts.output_format);
-      if (!parsed.has_value()) {
-        std::cerr << "ERROR: invalid --output-format value\n";
-        return std::nullopt;
-      }
-      tuning.color_output_format = *parsed;
-      if (opts.data_format.empty()) {
-        tuning.data_output_format = *parsed;
-      }
-      tuning.enabled = true;
-    }
-
-    if (!opts.data_format.empty()) {
-      auto parsed = ParseFormat(opts.data_format);
-      if (!parsed.has_value()) {
-        std::cerr << "ERROR: invalid --data-format value\n";
-        return std::nullopt;
-      }
-      tuning.data_output_format = *parsed;
-      tuning.enabled = true;
-    }
-
-    if (!opts.mip_policy.empty()) {
-      auto parsed = ParseMipPolicy(opts.mip_policy);
-      if (!parsed.has_value()) {
-        std::cerr << "ERROR: invalid --mip-policy value\n";
-        return std::nullopt;
-      }
-      tuning.mip_policy = *parsed;
-      tuning.enabled = true;
-    }
-
-    if (!opts.mip_filter.empty()) {
-      auto parsed = ParseMipFilter(opts.mip_filter);
-      if (!parsed.has_value()) {
-        std::cerr << "ERROR: invalid --mip-filter value\n";
-        return std::nullopt;
-      }
-      tuning.mip_filter = *parsed;
-      tuning.enabled = true;
-    }
-
-    if (!opts.bc7_quality.empty()) {
-      auto parsed = ParseBc7Quality(opts.bc7_quality);
-      if (!parsed.has_value()) {
-        std::cerr << "ERROR: invalid --bc7-quality value\n";
-        return std::nullopt;
-      }
-      tuning.bc7_quality = *parsed;
-      tuning.enabled = true;
-    }
-
-    if (!opts.packing_policy.empty()) {
-      tuning.packing_policy_id = opts.packing_policy;
-      tuning.enabled = true;
-    }
-
-    if (opts.max_mip_levels > 0U) {
-      tuning.max_mip_levels = static_cast<uint8_t>(opts.max_mip_levels);
-    }
-
-    if (tuning.mip_policy == MipPolicy::kMaxCount
-      && tuning.max_mip_levels == 0U) {
-      std::cerr << "ERROR: --max-mips must be > 0 when mip-policy=max\n";
-      return std::nullopt;
-    }
-
-    if (opts.equirect_to_cube && !opts.cube_layout.empty()) {
-      std::cerr << "ERROR: --equirect-to-cube conflicts with --cube-layout\n";
-      return std::nullopt;
-    }
-
-    if (opts.cube_face_size > 0U && !opts.equirect_to_cube) {
-      std::cerr << "ERROR: --cube-face-size requires --equirect-to-cube\n";
-      return std::nullopt;
-    }
-
-    if (opts.equirect_to_cube && opts.cube_face_size == 0U) {
-      std::cerr
-        << "ERROR: --cube-face-size must be > 0 for equirect conversion\n";
-      return std::nullopt;
-    }
-
-    if (opts.cube_face_size > 0U && (opts.cube_face_size % 256U) != 0U) {
-      std::cerr << "ERROR: --cube-face-size must be a multiple of 256\n";
-      return std::nullopt;
-    }
-
-    if (opts.cubemap || opts.equirect_to_cube || !opts.cube_layout.empty()) {
-      tuning.import_cubemap = true;
-    }
-
-    if (opts.equirect_to_cube) {
-      tuning.equirect_to_cubemap = true;
-      tuning.cubemap_face_size = opts.cube_face_size;
-    }
-
-    if (!opts.cube_layout.empty()) {
-      auto parsed = ParseCubeLayout(opts.cube_layout);
-      if (!parsed.has_value()) {
-        std::cerr << "ERROR: invalid --cube-layout value\n";
-        return std::nullopt;
-      }
-      tuning.cubemap_layout = *parsed;
-    }
-
-    tuning.flip_y_on_decode = opts.flip_y;
-    tuning.force_rgba_on_decode = opts.force_rgba;
-
-    return request;
-  }
 
 } // namespace
 
@@ -469,12 +166,13 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                    .StoreTo(&options_.verbose)
                    .Build();
 
-  auto print_telemetry = Option::WithKey("print-telemetry")
-                           .About("Print telemetry timing after completion")
-                           .Long("print-telemetry")
-                           .WithValue<bool>()
-                           .StoreTo(&options_.print_telemetry)
-                           .Build();
+  auto report = Option::WithKey("report")
+                  .About("Write a JSON report (absolute or relative to cooked "
+                         "root)")
+                  .Long("report")
+                  .WithValue<std::string>()
+                  .StoreTo(&options_.report_path)
+                  .Build();
 
   return CommandBuilder("texture")
     .About("Import a standalone texture image")
@@ -497,17 +195,17 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(flip_y))
     .WithOption(std::move(force_rgba))
     .WithOption(std::move(verbose))
-    .WithOption(std::move(print_telemetry));
+    .WithOption(std::move(report));
 }
 
 auto TextureCommand::Run() -> int
 {
-  const auto request = BuildTextureRequest(options_);
+  const auto request = BuildTextureRequest(options_, std::cerr);
   if (!request.has_value()) {
     return 2;
   }
 
-  return RunImportJob(*request, options_.verbose, options_.print_telemetry);
+  return RunImportJob(*request, options_.verbose, options_.report_path);
 }
 
 } // namespace oxygen::content::import::tool

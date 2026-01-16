@@ -24,7 +24,8 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   EnsureCookedRoot();
 
-  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool());
+  ImportSession session(
+    Request(), FileReader(), FileWriter(), ThreadPool(), TableRegistry());
 
   ReportProgress(ImportPhase::kParsing, 0.0f, "Parsing FBX...");
   const auto scene = co_await ParseScene(session);
