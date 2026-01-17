@@ -25,6 +25,7 @@ from ..packing.constants import (
     MAX_LODS_PER_GEOMETRY,
     MAX_SUBMESHES_PER_LOD,
     MAX_MESH_VIEWS_PER_SUBMESH,
+    VALID_MESH_TYPES,
     YAML_SCHEMA_VERSION_CURRENT,
     YAML_SCHEMA_VERSION_MIN,
 )
@@ -449,6 +450,14 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
         for li, lod in enumerate(g.get("lods", []) or []):
             if not isinstance(lod, dict):
                 continue
+            mesh_type = lod.get("mesh_type", 0)
+            if mesh_type not in VALID_MESH_TYPES:
+                _err(
+                    errors,
+                    "E_RANGE",
+                    f"Invalid mesh_type '{mesh_type}'",
+                    f"geometries[{gi}].lods[{li}].mesh_type",
+                )
             vb = lod.get("vertex_buffer")
             ib = lod.get("index_buffer")
             if vb and vb not in buffer_names:
@@ -465,6 +474,67 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                     f"Unknown index_buffer '{ib}'",
                     f"geometries[{gi}].lods[{li}].index_buffer",
                 )
+            if mesh_type == 3:
+                jib = lod.get("joint_index_buffer")
+                jwb = lod.get("joint_weight_buffer")
+                ibb = lod.get("inverse_bind_buffer")
+                jrb = lod.get("joint_remap_buffer")
+                if not jib:
+                    _err(
+                        errors,
+                        "E_REQUIRED",
+                        "joint_index_buffer required for skinned mesh",
+                        f"geometries[{gi}].lods[{li}].joint_index_buffer",
+                    )
+                if not jwb:
+                    _err(
+                        errors,
+                        "E_REQUIRED",
+                        "joint_weight_buffer required for skinned mesh",
+                        f"geometries[{gi}].lods[{li}].joint_weight_buffer",
+                    )
+                if not ibb:
+                    _err(
+                        errors,
+                        "E_REQUIRED",
+                        "inverse_bind_buffer required for skinned mesh",
+                        f"geometries[{gi}].lods[{li}].inverse_bind_buffer",
+                    )
+                if not jrb:
+                    _err(
+                        errors,
+                        "E_REQUIRED",
+                        "joint_remap_buffer required for skinned mesh",
+                        f"geometries[{gi}].lods[{li}].joint_remap_buffer",
+                    )
+                if jib and jib not in buffer_names:
+                    _err(
+                        errors,
+                        "E_REF",
+                        f"Unknown joint_index_buffer '{jib}'",
+                        f"geometries[{gi}].lods[{li}].joint_index_buffer",
+                    )
+                if jwb and jwb not in buffer_names:
+                    _err(
+                        errors,
+                        "E_REF",
+                        f"Unknown joint_weight_buffer '{jwb}'",
+                        f"geometries[{gi}].lods[{li}].joint_weight_buffer",
+                    )
+                if ibb and ibb not in buffer_names:
+                    _err(
+                        errors,
+                        "E_REF",
+                        f"Unknown inverse_bind_buffer '{ibb}'",
+                        f"geometries[{gi}].lods[{li}].inverse_bind_buffer",
+                    )
+                if jrb and jrb not in buffer_names:
+                    _err(
+                        errors,
+                        "E_REF",
+                        f"Unknown joint_remap_buffer '{jrb}'",
+                        f"geometries[{gi}].lods[{li}].joint_remap_buffer",
+                    )
     # Mesh view index/vertex counts limits (if provided)
     for gi, g in enumerate(
         [

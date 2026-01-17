@@ -20,6 +20,7 @@
 #include <fmt/format.h>
 #include <glm/glm.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Data/Asset.h>
@@ -524,6 +525,80 @@ public:
     referenced->cached_index_type = detail::IndexType::kNone;
   }
 
+  //! Set runtime-only skinning buffer resources after async publish.
+  void SetSkiningBufferResources(
+    std::shared_ptr<BufferResource> joint_index_buffer,
+    std::shared_ptr<BufferResource> joint_weight_buffer,
+    std::shared_ptr<BufferResource> inverse_bind_buffer,
+    std::shared_ptr<BufferResource> joint_remap_buffer) noexcept
+  {
+    DCHECK_F(IsSkinned(), "Cannot set skinning buffers on non-skinned mesh");
+
+    if (joint_index_buffer) {
+      joint_index_buffer_ = std::move(joint_index_buffer);
+    }
+    if (joint_weight_buffer) {
+      joint_weight_buffer_ = std::move(joint_weight_buffer);
+    }
+    if (inverse_bind_buffer) {
+      inverse_bind_buffer_ = std::move(inverse_bind_buffer);
+    }
+    if (joint_remap_buffer) {
+      joint_remap_buffer_ = std::move(joint_remap_buffer);
+    }
+  }
+
+  //! Returns true if this mesh is skinned.
+  [[nodiscard]] auto IsSkinned() const noexcept -> bool
+  {
+    return desc_.has_value() && desc_.value().IsSkinned();
+  }
+
+  //! Returns the skinned mesh descriptor if available.
+  [[nodiscard]] auto SkinnedDescriptor() const noexcept
+    -> const pak::SkinnedMeshInfo*
+  {
+    if (!desc_.has_value() || !desc_.value().IsSkinned()) {
+      return nullptr;
+    }
+    return &desc_.value().info.skinned;
+  }
+
+  //! Returns true if any skinning buffer resource is set.
+  [[nodiscard]] auto HasSkinningBuffers() const noexcept -> bool
+  {
+    return joint_index_buffer_ || joint_weight_buffer_ || inverse_bind_buffer_
+      || joint_remap_buffer_;
+  }
+
+  //! Returns the joint index buffer resource, if any.
+  [[nodiscard]] auto JointIndexBuffer() const noexcept
+    -> const std::shared_ptr<BufferResource>&
+  {
+    return joint_index_buffer_;
+  }
+
+  //! Returns the joint weight buffer resource, if any.
+  [[nodiscard]] auto JointWeightBuffer() const noexcept
+    -> const std::shared_ptr<BufferResource>&
+  {
+    return joint_weight_buffer_;
+  }
+
+  //! Returns the inverse bind buffer resource, if any.
+  [[nodiscard]] auto InverseBindBuffer() const noexcept
+    -> const std::shared_ptr<BufferResource>&
+  {
+    return inverse_bind_buffer_;
+  }
+
+  //! Returns the joint remap buffer resource, if any.
+  [[nodiscard]] auto JointRemapBuffer() const noexcept
+    -> const std::shared_ptr<BufferResource>&
+  {
+    return joint_remap_buffer_;
+  }
+
   //! Set runtime-only submesh material after async publish.
   void SetSubMeshMaterial(
     size_t submesh_index, std::shared_ptr<const MaterialAsset> material)
@@ -614,6 +689,11 @@ private:
   std::vector<SubMesh> submeshes_;
 
   detail::BufferStorage buffer_storage_;
+
+  std::shared_ptr<BufferResource> joint_index_buffer_;
+  std::shared_ptr<BufferResource> joint_weight_buffer_;
+  std::shared_ptr<BufferResource> inverse_bind_buffer_;
+  std::shared_ptr<BufferResource> joint_remap_buffer_;
 
   std::optional<pak::MeshDesc> desc_ {};
 };
@@ -883,6 +963,38 @@ public:
     return *this;
   }
 
+  //! Sets the joint index buffer resource for skinned meshes.
+  auto WithJointIndexBuffer(std::shared_ptr<BufferResource> buffer)
+    -> MeshBuilder&
+  {
+    joint_index_buffer_resource_ = std::move(buffer);
+    return *this;
+  }
+
+  //! Sets the joint weight buffer resource for skinned meshes.
+  auto WithJointWeightBuffer(std::shared_ptr<BufferResource> buffer)
+    -> MeshBuilder&
+  {
+    joint_weight_buffer_resource_ = std::move(buffer);
+    return *this;
+  }
+
+  //! Sets the inverse bind buffer resource for skinned meshes.
+  auto WithInverseBindBuffer(std::shared_ptr<BufferResource> buffer)
+    -> MeshBuilder&
+  {
+    inverse_bind_buffer_resource_ = std::move(buffer);
+    return *this;
+  }
+
+  //! Sets the joint remap buffer resource for skinned meshes.
+  auto WithJointRemapBuffer(std::shared_ptr<BufferResource> buffer)
+    -> MeshBuilder&
+  {
+    joint_remap_buffer_resource_ = std::move(buffer);
+    return *this;
+  }
+
   auto WithDescriptor(pak::MeshDesc desc) -> MeshBuilder&
   {
     desc_ = std::move(desc);
@@ -997,6 +1109,12 @@ private:
   // For referenced storage (asset meshes)
   std::shared_ptr<BufferResource> vertex_buffer_resource_;
   std::shared_ptr<BufferResource> index_buffer_resource_;
+
+  // Optional skinning buffers (asset meshes)
+  std::shared_ptr<BufferResource> joint_index_buffer_resource_;
+  std::shared_ptr<BufferResource> joint_weight_buffer_resource_;
+  std::shared_ptr<BufferResource> inverse_bind_buffer_resource_;
+  std::shared_ptr<BufferResource> joint_remap_buffer_resource_;
 
   // Tracks which storage type to use
   bool using_owned_storage_ = true;

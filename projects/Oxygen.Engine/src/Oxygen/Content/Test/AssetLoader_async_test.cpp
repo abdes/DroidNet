@@ -4,9 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -15,7 +17,9 @@
 #include "./AssetLoader_test.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 
@@ -128,7 +132,8 @@ NOLINT_TEST_F(AssetLoaderAsyncTest, StartLoadAsset_Material_InvokesCallback)
       oxygen::content::internal::EngineTagFactory::Get(), config);
 
     std::shared_ptr<MaterialAsset> loaded_material;
-    bool callback_called = false;
+    auto callback_called = std::make_shared<std::atomic<bool>>(false);
+    auto completion_event = std::make_shared<oxygen::co::Event>();
 
     OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
     {
@@ -141,16 +146,32 @@ NOLINT_TEST_F(AssetLoaderAsyncTest, StartLoadAsset_Material_InvokesCallback)
       loader.StartLoadAsset<MaterialAsset>(
         material_key, [&](std::shared_ptr<MaterialAsset> asset) {
           loaded_material = std::move(asset);
-          callback_called = true;
+          const auto was_called = callback_called->exchange(true);
+          if (!was_called) {
+            completion_event->Trigger();
+          }
         });
 
-      // Wait (deterministically) for the callback to be invoked.
-      for (int i = 0; i < 200 && !callback_called; ++i) {
-        co_await el.Sleep(1ms);
-      }
+      auto timeout_task
+        = pool.Run([](oxygen::co::ThreadPool::CancelToken token) {
+            using namespace std::chrono_literals;
+            auto remaining = 1500ms;
+            while (!token.Peek() && remaining.count() > 0) {
+              std::this_thread::sleep_for(10ms);
+              remaining -= 10ms;
+            }
+            return !token.Peek();
+          });
+
+      auto [completed, timed_out] = co_await oxygen::co::AnyOf(
+        *completion_event, std::move(timeout_task));
+      const bool callback_completed = completed.has_value();
+      const bool timeout_hit = timed_out.has_value() && timed_out.value();
 
       // Assert
-      EXPECT_TRUE(callback_called);
+      EXPECT_TRUE(callback_completed);
+      EXPECT_FALSE(timeout_hit);
+      EXPECT_TRUE(callback_called->load());
       EXPECT_THAT(loaded_material, NotNull());
 
       loaded_material.reset();

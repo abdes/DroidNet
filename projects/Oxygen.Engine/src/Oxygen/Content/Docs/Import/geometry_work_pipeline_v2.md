@@ -72,29 +72,23 @@ struct TriangleRange {
   uint32_t index_count = 0;    // Multiple of 3
 };
 
+struct Bounds3 {
+  std::array<float, 3> min;
+  std::array<float, 3> max;
+};
+
 struct TriangulatedMesh {
   data::MeshType mesh_type = data::MeshType::kStandard;
   MeshStreamView streams;
   std::span<const uint32_t> indices;      // Triangle list (u32)
   std::span<const TriangleRange> ranges;  // Material ranges
+  std::optional<Bounds3> bounds;          // Precomputed bounds (optional)
 };
-
-struct UfbxMeshView {
-  const ufbx_scene* scene = nullptr;
-  const ufbx_mesh* mesh = nullptr;
-};
-
-using MeshSource = std::variant<TriangulatedMesh, UfbxMeshView>;
 
 struct MeshLod {
   std::string lod_name;
-  MeshSource source;
+  TriangulatedMesh source;
   std::shared_ptr<const void> source_owner; // Keeps mesh data alive
-};
-
-struct Bounds3 {
-  std::array<float, 3> min;
-  std::array<float, 3> max;
 };
 
 struct WorkItem {
@@ -118,18 +112,21 @@ struct WorkItem {
 Notes:
 
 - `lods` must contain at least one LOD; `lods[0]` is the highest detail.
-- `UfbxMeshView` is allowed; it must contain the `ufbx_scene` and `ufbx_mesh`
-  pointers and an owner to keep them alive. Importers should prefer
-  format-agnostic `TriangulatedMesh` where possible.
-- `TriangulatedMesh` is the format-agnostic path for glTF or pre-processed
-  sources; it must already be triangle lists.
+- `TriangulatedMesh` is the only accepted source type for the pipeline and
+  must already be triangle lists. Format adapters are responsible for
+  triangulation and normalization before submission.
 - `storage_mesh_name` is used for virtual paths and descriptor relpaths.
 - `TriangulatedMesh.mesh_type` selects `MeshType` and drives serialization
   (standard vs skinned).
+- Bounds are required in the PAK for geometry assets and meshes; all-zero
+  bounds are valid and must not be interpreted as "missing".
+- Adapters must populate `bounds` when the source provides precomputed bounds,
+  otherwise leave it unset so the pipeline computes bounds from vertices.
 - For skinned meshes, `joint_indices` and `joint_weights` must be present and
   aligned with `positions`.
-- The FBX path (`UfbxMeshView`) is supported for standard meshes only; skinned
-  FBX meshes must be converted to `TriangulatedMesh` with joint streams.
+- All FBX/glTF meshes must be converted to `TriangulatedMesh` with the
+  required streams before submission. The pipeline does not accept importer
+  native mesh views.
 - `material_keys` may be empty; the pipeline uses `default_material_key` when a
   material slot is missing.
 - `has_material_textures` should be precomputed by the importer for
@@ -223,6 +220,7 @@ For each work item:
 4) Build vertices, bounds, and attribute masks per LOD:
    - Expand to one vertex per index.
    - Apply coordinate conversion via `coord::ApplySwapYZ*`.
+   - If adapter bounds are missing, compute bounds from expanded vertices.
    - Apply `normal_policy`:
      - `kNone`: emit defaults and clear `kGeomAttr_Normal` in the attribute mask.
      - `kPreserveIfPresent`: preserve when present, otherwise defaults + clear.
@@ -235,7 +233,6 @@ For each work item:
 5) Warn on missing UVs when `want_textures == true` and
    `has_material_textures == true` (`mesh.missing_uvs` warning).
 6) Build submesh buckets by material slot:
-   - Triangulate faces (FBX uses `ufbx_triangulate_face`).
    - Sort buckets by `scene_material_index`.
 7) Fix invalid tangents/bitangents to ensure orthonormal basis when tangents are
    emitted.
@@ -264,6 +261,8 @@ For each work item:
     - `header.variant_flags` uses **union-of-LOD attributes** (any attribute
       emitted by any LOD sets the bit). Missing attributes on a specific LOD
       must be defaulted by loaders.
+    - `bounding_box_min` and `bounding_box_max` must be populated for both the
+      asset and each mesh. All-zero bounds are valid.
 12) Defer `header.content_hash` until all dependency indices are known.
   Hashing must run on the ThreadPool and must use the **complete**
   descriptor bytes (no skip ranges).
@@ -417,6 +416,225 @@ Buffers are emitted via `BufferEmitter` using `CookedBufferPayload`:
 - Import content flags (geometry/scene/materials).
 - LOD construction (ordering and naming), plus mesh-type selection.
 - Diagnostics enrichment and policy decisions (e.g., abort vs continue).
+
+---
+
+## Adapter Design (Format Bridges)
+
+GeometryPipeline stays format-agnostic. Importers must provide adapters that
+translate FBX (`ufbx`) and glTF/GLB (`cgltf`) into `WorkItem` payloads while
+preserving authored intent and attaching full diagnostics context.
+
+### Adapter Contract (Common)
+
+Adapters are responsible for **source acquisition**, **naming**, and
+**material/LOD mapping**. The output must be a fully-populated `WorkItem`:
+
+- **Identity**
+  - `source_id`: stable diagnostic ID (e.g., `scene_path::mesh_name` or
+    `scene_path::mesh_name::prim_2`).
+  - `source_key`: stable pointer or hash of the source mesh/primitive.
+- **Naming** (must be resolved before submission)
+  - `mesh_name`, `storage_mesh_name` computed via
+    `BuildMeshName` / `DisambiguateMeshName` /
+    `NamespaceImportedAssetName`.
+- **LOD Construction**
+  - LOD order is importer-defined; `lods[0]` is highest detail.
+  - `MeshLod::source_owner` must keep source data alive.
+- **Material Mapping**
+  - `material_keys` aligned with scene material array.
+  - `default_material_key` used when a slot is missing.
+  - `want_textures` and `has_material_textures` set from importer material
+    analysis to drive UV diagnostics.
+- **Coordinate Conversion**
+  - Adapter declares source space and sets `ImportRequest.options.coordinate`
+    to achieve the engine contract (right-handed, Z-up, forward = -Y).
+- **Diagnostics**
+  - Emit `ImportDiagnostic` for unsupported topology, missing attributes,
+    invalid indices, and any lossy conversions (e.g., joint trimming).
+
+### FBX Adapter (ufbx)
+
+**Goal:** Map `ufbx_scene` into `WorkItem` entries with full material and LOD
+coverage.
+
+- **Standard meshes**
+  - Preferred: emit `UfbxMeshView` (when supported) for zero-copy access.
+  - Fallback: build `TriangulatedMesh` by triangulating faces using
+    `ufbx_triangulate_face` and emitting explicit indices/ranges.
+- **Skinned meshes**
+  - Must emit `TriangulatedMesh` with `joint_indices`/`joint_weights`.
+  - If >4 influences, keep highest 4, renormalize, emit warning diagnostic.
+  - If joints/weights missing, emit `mesh.missing_skinning` and skip mesh.
+- **Material slots**
+  - Create one `TriangleRange` per material slot in the mesh (sorted).
+  - Map `ufbx_material` index to `material_keys`.
+- **LOD mapping**
+  - If the scene provides LOD groups, map each LOD entry to a `MeshLod`.
+  - Otherwise create a single `LOD0` entry.
+- **Tangents/bitangents**
+  - Use `ufbx` tangent layers when present; otherwise rely on pipeline
+    generation based on `tangent_policy`.
+
+### glTF/GLB Adapter (cgltf)
+
+**Goal:** Map `cgltf_data` meshes and primitives into `TriangulatedMesh`-based
+`WorkItem` entries.
+
+- **Primitive handling**
+  - Default: one `WorkItem` per primitive to avoid mismatched attribute sets.
+  - Optional: merge primitives only when attribute layouts are identical and
+    topology is triangle-list.
+- **Topology**
+  - Accept triangle-list primitives only; emit diagnostic for other modes.
+- **Indices**
+  - Convert index buffers to `uint32_t`; if missing, generate sequential
+    indices for triangle-list primitives and emit a warning diagnostic.
+- **Attributes**
+  - Required: `POSITION`.
+  - Optional: `NORMAL`, `TEXCOORD_0`, `COLOR_0`.
+  - `TANGENT` is `vec4`; compute bitangent as
+    `cross(normal, tangent.xyz) * tangent.w`.
+- **Skinning**
+  - Use `JOINTS_0`/`WEIGHTS_0` as `uvec4`/`vec4` (4 influences).
+  - If more than 4 influences exist, trim + renormalize and emit diagnostic.
+- **Materials**
+  - Map `cgltf_material` to `material_keys`; null material uses
+    `default_material_key`.
+  - Set `has_material_textures` when any bound texture exists
+    (base color, normal, metallic-roughness, occlusion, emissive).
+- **LODs**
+  - Map LODs explicitly when the importer provides authored LOD ordering.
+  - Otherwise emit a single `LOD0` per primitive.
+
+### Adapter Outputs and Post-Processing
+
+- Adapters must preserve `source_owner` lifetimes for all `MeshSource` data.
+- Any name truncation required for packed descriptors must emit diagnostics.
+- Adapters should attach `object_path` (scene node path) to diagnostics for
+  precise tooling feedback.
+
+---
+
+## Adapter API (Modern C++20)
+
+The adapter layer should be modeled as **value-type adapters** with a
+lightweight data contract and a concept-based interface. This keeps the job
+orchestrator free of virtual dispatch and allows format-specific logic to be
+compiled out when not used.
+
+### Data Contracts
+
+```cpp
+struct GeometryAdapterInput final {
+  std::string_view source_id_prefix;   // For stable diagnostic IDs
+  std::string_view object_path_prefix; // For object_path diagnostics
+
+  std::span<const data::AssetKey> material_keys;
+  data::AssetKey default_material_key;
+
+  ImportRequest request;               // Includes naming + coordinate policy
+  std::stop_token stop_token;
+};
+
+struct GeometryAdapterOutput final {
+  std::vector<GeometryPipeline::WorkItem> work_items;
+  std::vector<ImportDiagnostic> diagnostics;
+  bool success = true;
+};
+```
+
+### Concept-Based Adapter Interface
+
+```cpp
+template <typename T, typename SourceT>
+concept GeometryAdapter = requires(T adapter,
+  const SourceT& source,
+  const GeometryAdapterInput& input) {
+  { adapter.BuildWorkItems(source, input) }
+    -> std::same_as<GeometryAdapterOutput>;
+};
+```
+
+### Adapter Implementations (Value Types)
+
+```cpp
+struct FbxGeometryAdapter final {
+  GeometryAdapterOutput BuildWorkItems(
+    const UfbxSceneView& scene, const GeometryAdapterInput& input) const;
+};
+
+struct GltfGeometryAdapter final {
+  GeometryAdapterOutput BuildWorkItems(
+    const CgltfSceneView& scene, const GeometryAdapterInput& input) const;
+};
+```
+
+### Orchestrator Usage Pattern
+
+```cpp
+FbxGeometryAdapter adapter;
+GeometryAdapterInput input { /* filled from job state */ };
+auto output = adapter.BuildWorkItems(scene, input);
+if (!output.success) {
+  // diagnostics already populated
+}
+for (auto& item : output.work_items) {
+  co_await geometry_pipeline.Submit(std::move(item));
+}
+```
+
+### Design Notes
+
+- **No shared ownership required**: `MeshLod::source_owner` carries lifetime.
+- **No virtual dispatch**: concept + value type encourages inlining.
+- **Strict, explicit inputs**: adapters do not reach into job globals.
+- **Cancellation-aware**: adapters must check `input.stop_token` and return
+  `success=false` with a cancellation diagnostic when requested.
+
+---
+
+## Implementation Readiness Checklist
+
+The design is ready for implementation when the following are true:
+
+- `GeometryAdapterInput` / `GeometryAdapterOutput` are defined in a shared
+  header and used by both FBX and glTF adapters.
+- `GeometryAdapter` concept is used to enforce the `BuildWorkItems(...)`
+  signature at compile time.
+- Adapter output is **zero-copy** where possible (spans + `source_owner`).
+- Adapters emit diagnostics with `source_id` and `object_path` context.
+- Jobs submit `WorkItem`s only; pipelines never touch format APIs.
+
+---
+
+## Adapter API Summary (Final)
+
+```cpp
+// Shared contract
+struct GeometryAdapterInput final {
+  std::string_view source_id_prefix;
+  std::string_view object_path_prefix;
+  std::span<const data::AssetKey> material_keys;
+  data::AssetKey default_material_key;
+  ImportRequest request;
+  std::stop_token stop_token;
+};
+
+struct GeometryAdapterOutput final {
+  std::vector<GeometryPipeline::WorkItem> work_items;
+  std::vector<ImportDiagnostic> diagnostics;
+  bool success = true;
+};
+
+template <typename T, typename SourceT>
+concept GeometryAdapter = requires(T adapter,
+  const SourceT& source,
+  const GeometryAdapterInput& input) {
+  { adapter.BuildWorkItems(source, input) }
+    -> std::same_as<GeometryAdapterOutput>;
+};
+```
 
 ---
 

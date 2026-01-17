@@ -348,6 +348,14 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   ImportCompletionCallback on_complete, ImportProgressCallback on_progress)
   -> ImportJobId
 {
+  return SubmitImport(
+    std::move(request), std::move(on_complete), std::move(on_progress), {});
+}
+
+auto AsyncImportService::SubmitImport(ImportRequest request,
+  ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
+  ImportJobFactory job_factory) -> ImportJobId
+{
   // Check if we're accepting jobs
   if (impl_->shutdown_requested_.load(std::memory_order_acquire)) {
     DLOG_F(WARNING, "SubmitImport: service is shutting down");
@@ -379,11 +387,15 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     return kInvalidJobId;
   }
 
-  const auto format = Impl::DetectFormatFromPath(request.source_path);
-  if (format == ImportFormat::kUnknown) {
-    DLOG_F(WARNING, "SubmitImport: unknown format for '{}'",
-      request.source_path.string());
-    return kInvalidJobId;
+  const bool use_custom_factory = static_cast<bool>(job_factory);
+  auto format = ImportFormat::kUnknown;
+  if (!use_custom_factory) {
+    format = Impl::DetectFormatFromPath(request.source_path);
+    if (format == ImportFormat::kUnknown) {
+      DLOG_F(WARNING, "SubmitImport: unknown format for '{}'",
+        request.source_path.string());
+      return kInvalidJobId;
+    }
   }
 
   std::shared_ptr<co::Event> cancel_event = std::make_shared<co::Event>();
@@ -406,18 +418,34 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
         }
       };
 
-  const auto job_name = request.job_name.value_or(
-    MakeJobName(format, job_id, request.source_path));
+  const auto source_path_string = request.source_path.string();
 
-  auto job = CreateJobForFormat(format, job_id, std::move(request),
-    std::move(wrapped_complete), std::move(on_progress), cancel_event,
-    oxygen::observer_ptr<IAsyncFileReader>(impl_->file_reader_.get()),
-    oxygen::observer_ptr<IAsyncFileWriter>(impl_->file_writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(impl_->thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(impl_->table_registry_.get()));
+  const auto job_name = request.job_name.value_or(use_custom_factory
+      ? std::string("custom:") + std::to_string(job_id)
+      : MakeJobName(format, job_id, request.source_path));
+
+  const auto file_reader
+    = oxygen::observer_ptr<IAsyncFileReader>(impl_->file_reader_.get());
+  const auto file_writer
+    = oxygen::observer_ptr<IAsyncFileWriter>(impl_->file_writer_.get());
+  const auto thread_pool
+    = oxygen::observer_ptr<co::ThreadPool>(impl_->thread_pool_.get());
+  const auto table_registry
+    = oxygen::observer_ptr<ResourceTableRegistry>(impl_->table_registry_.get());
+
+  std::shared_ptr<detail::ImportJob> job;
+  if (use_custom_factory) {
+    job = job_factory(job_id, std::move(request), std::move(wrapped_complete),
+      std::move(on_progress), cancel_event, file_reader, file_writer,
+      thread_pool, table_registry);
+  } else {
+    job = CreateJobForFormat(format, job_id, std::move(request),
+      std::move(wrapped_complete), std::move(on_progress), cancel_event,
+      file_reader, file_writer, thread_pool, table_registry);
+  }
   if (!job) {
     DLOG_F(WARNING, "SubmitImport: failed to create job for '{}'",
-      request.source_path.string());
+      source_path_string);
     return kInvalidJobId;
   }
 
@@ -446,7 +474,7 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     return kInvalidJobId;
   }
 
-  const auto source_path = request.source_path.string();
+  const auto source_path = source_path_string;
   auto on_submit_failed = wrapped_complete;
 
   // Submit directly to AsyncImporter via event loop post
@@ -505,7 +533,11 @@ auto AsyncImportService::CancelJob(ImportJobId job_id) -> bool
   // Trigger cancellation
   // The job's nursery will observe this and cancel accordingly
   if (cancel_event) {
-    cancel_event->Trigger();
+    if (impl_->event_loop_) {
+      impl_->event_loop_->Post([event = cancel_event]() { event->Trigger(); });
+    } else {
+      cancel_event->Trigger();
+    }
     DLOG_F(INFO, "Triggered cancellation for job {}", job_id);
     return true;
   }
@@ -515,9 +547,8 @@ auto AsyncImportService::CancelJob(ImportJobId job_id) -> bool
 
 auto AsyncImportService::CancelAll() -> void
 {
-  DLOG_F(INFO, "CancelAll requested");
-
   std::vector<std::shared_ptr<co::Event>> events_to_trigger;
+  size_t cancel_count = 0;
 
   {
     std::lock_guard lock(impl_->cancel_events_mutex_);
@@ -528,14 +559,23 @@ auto AsyncImportService::CancelAll() -> void
         events_to_trigger.push_back(event);
       }
     }
+    cancel_count = events_to_trigger.size();
   }
 
   // Trigger all cancel events (outside the lock)
-  for (auto& event : events_to_trigger) {
-    event->Trigger();
+  if (impl_->event_loop_) {
+    impl_->event_loop_->Post([events = std::move(events_to_trigger)]() mutable {
+      for (auto& event : events) {
+        event->Trigger();
+      }
+    });
+  } else {
+    for (auto& event : events_to_trigger) {
+      event->Trigger();
+    }
   }
 
-  DLOG_F(INFO, "Triggered cancellation for {} jobs", events_to_trigger.size());
+  DLOG_F(INFO, "Triggered cancellation for {} jobs", cancel_count);
 }
 
 auto AsyncImportService::RequestShutdown() -> void

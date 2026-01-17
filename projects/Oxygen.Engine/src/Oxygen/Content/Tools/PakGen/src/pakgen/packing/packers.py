@@ -1301,6 +1301,43 @@ def pack_name_string(name: str, size: int) -> bytes:
     return raw + b"\x00" * (size - len(raw))
 
 
+def _coerce_vec3(value: Any, default: list[float]) -> list[float]:
+    if value is None:
+        return list(default)
+    if not isinstance(value, (list, tuple)) or len(value) != 3:
+        raise PakError("E_BOUNDS", f"Invalid vec3 bounds: {value}")
+    return [float(value[0]), float(value[1]), float(value[2])]
+
+
+def _merge_bounds(
+    bounds: list[tuple[list[float], list[float]]],
+) -> tuple[list[float], list[float]]:
+    if not bounds:
+        return [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
+    min_vals = [float("inf"), float("inf"), float("inf")]
+    max_vals = [float("-inf"), float("-inf"), float("-inf")]
+    for bb_min, bb_max in bounds:
+        for i in range(3):
+            min_vals[i] = min(min_vals[i], bb_min[i])
+            max_vals[i] = max(max_vals[i], bb_max[i])
+    return min_vals, max_vals
+
+
+def _collect_lod_bounds(lod: Dict[str, Any]) -> tuple[list[float], list[float]]:
+    if "bounding_box_min" in lod or "bounding_box_max" in lod:
+        lod_min = _coerce_vec3(lod.get("bounding_box_min"), [0.0, 0.0, 0.0])
+        lod_max = _coerce_vec3(lod.get("bounding_box_max"), [0.0, 0.0, 0.0])
+        return lod_min, lod_max
+
+    submeshes = lod.get("submeshes", []) or []
+    submesh_bounds: list[tuple[list[float], list[float]]] = []
+    for submesh in submeshes:
+        sm_min = _coerce_vec3(submesh.get("bounding_box_min"), [0.0, 0.0, 0.0])
+        sm_max = _coerce_vec3(submesh.get("bounding_box_max"), [0.0, 0.0, 0.0])
+        submesh_bounds.append((sm_min, sm_max))
+    return _merge_bounds(submesh_bounds)
+
+
 def pack_mesh_descriptor(
     lod: Dict[str, Any],
     resource_index_map: Dict[str, Dict[str, int]],
@@ -1318,12 +1355,59 @@ def pack_mesh_descriptor(
     index_buffer_idx = resource_index_map.get("buffer", {}).get(
         lod.get("index_buffer", ""), 0
     )
-    mesh_bb_min = lod.get("bounding_box_min", [0.0, 0.0, 0.0])
-    mesh_bb_max = lod.get("bounding_box_max", [0.0, 0.0, 0.0])
+    if "bounding_box_min" in lod or "bounding_box_max" in lod:
+        mesh_bb_min = _coerce_vec3(lod.get("bounding_box_min"), [0.0, 0.0, 0.0])
+        mesh_bb_max = _coerce_vec3(lod.get("bounding_box_max"), [0.0, 0.0, 0.0])
+    else:
+        submesh_bounds: list[tuple[list[float], list[float]]] = []
+        for submesh in submeshes:
+            sm_min = _coerce_vec3(
+                submesh.get("bounding_box_min"), [0.0, 0.0, 0.0]
+            )
+            sm_max = _coerce_vec3(
+                submesh.get("bounding_box_max"), [0.0, 0.0, 0.0]
+            )
+            submesh_bounds.append((sm_min, sm_max))
+        mesh_bb_min, mesh_bb_max = _merge_bounds(submesh_bounds)
     procedural_params_size = lod.get("procedural_params_size", 0)
-    # Mesh info block (32 bytes)
+    joint_index_buffer_idx = resource_index_map.get("buffer", {}).get(
+        lod.get("joint_index_buffer", ""), 0
+    )
+    joint_weight_buffer_idx = resource_index_map.get("buffer", {}).get(
+        lod.get("joint_weight_buffer", ""), 0
+    )
+    inverse_bind_buffer_idx = resource_index_map.get("buffer", {}).get(
+        lod.get("inverse_bind_buffer", ""), 0
+    )
+    joint_remap_buffer_idx = resource_index_map.get("buffer", {}).get(
+        lod.get("joint_remap_buffer", ""), 0
+    )
+    skeleton_asset_key = _asset_key_bytes(lod.get("skeleton_asset_key"))
+    joint_count = int(lod.get("joint_count", 0) or 0)
+    influences_per_vertex = int(lod.get("influences_per_vertex", 0) or 0)
+    skinned_flags = int(lod.get("skinned_flags", 0) or 0)
+    # Mesh info block (72 bytes)
     if mesh_type == 2:  # procedural
-        info = struct.pack("<I", procedural_params_size) + b"\x00" * (32 - 4)
+        info = struct.pack("<I", procedural_params_size)
+        info += b"\x00" * (72 - len(info))
+    elif mesh_type == 3:  # skinned
+        info = (
+            struct.pack(
+                "<IIIIII",
+                vertex_buffer_idx,
+                index_buffer_idx,
+                joint_index_buffer_idx,
+                joint_weight_buffer_idx,
+                inverse_bind_buffer_idx,
+                joint_remap_buffer_idx,
+            )
+            + skeleton_asset_key
+            + struct.pack(
+                "<HHI", joint_count, influences_per_vertex, skinned_flags
+            )
+            + struct.pack("<3f", *mesh_bb_min)
+            + struct.pack("<3f", *mesh_bb_max)
+        )
     else:  # standard
         info = (
             struct.pack("<I", vertex_buffer_idx)
@@ -1331,7 +1415,7 @@ def pack_mesh_descriptor(
             + struct.pack("<3f", *mesh_bb_min)
             + struct.pack("<3f", *mesh_bb_max)
         )
-        info += b"\x00" * (32 - len(info))
+        info += b"\x00" * (72 - len(info))
     desc = (
         mesh_name
         + struct.pack("<B", mesh_type)
@@ -1410,8 +1494,12 @@ def pack_geometry_asset_descriptor(
 ) -> bytes:
     # Match legacy geometry descriptor layout: header + lod_count + bb_min + bb_max + reserved
     lods = asset.get("lods", [])
-    bb_min = asset.get("bounding_box_min", [0.0, 0.0, 0.0])
-    bb_max = asset.get("bounding_box_max", [0.0, 0.0, 0.0])
+    if "bounding_box_min" in asset or "bounding_box_max" in asset:
+        bb_min = _coerce_vec3(asset.get("bounding_box_min"), [0.0, 0.0, 0.0])
+        bb_max = _coerce_vec3(asset.get("bounding_box_max"), [0.0, 0.0, 0.0])
+    else:
+        lod_bounds = [_collect_lod_bounds(lod) for lod in lods]
+        bb_min, bb_max = _merge_bounds(lod_bounds)
     header = header_builder(asset)
     # header (95) + lod_count(4) + bb_min(12) + bb_max(12) = 123, need 256 -> 133 bytes reserved
     reserved_len = GEOMETRY_DESC_SIZE - (len(header) + 4 + 12 + 12)
