@@ -101,6 +101,14 @@ protected:
     -> platform::window::Properties override;
 
 private:
+  struct TextureSlotSelection {
+    SceneSetup::TextureIndexMode mode {
+      SceneSetup::TextureIndexMode::kFallback
+    };
+    std::uint32_t resource_index { 0U };
+    oxygen::content::ResourceKey resource_key { 0U };
+  };
+
   std::shared_ptr<scene::Scene> scene_;
 
   // Component modules
@@ -111,11 +119,8 @@ private:
   std::unique_ptr<DebugUI> debug_ui_;
 
   // State
-  SceneSetup::TextureIndexMode texture_index_mode_ {
-    SceneSetup::TextureIndexMode::kFallback
-  };
-  std::uint32_t custom_texture_resource_index_ { 0U };
-  oxygen::content::ResourceKey custom_texture_key_ { 0U };
+  TextureSlotSelection sphere_texture_ {};
+  TextureSlotSelection cube_texture_ {};
   oxygen::content::ResourceKey forced_error_key_ { 0U };
   bool cube_needs_rebuild_ { true };
 };

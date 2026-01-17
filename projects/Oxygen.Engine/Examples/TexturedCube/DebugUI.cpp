@@ -98,7 +98,105 @@ auto TryBrowseForImageFile(std::string& out_utf8_path) -> bool
   return true;
 }
 
+auto TryBrowseForDirectory(std::string& out_utf8_path) -> bool
+{
+  out_utf8_path.clear();
+
+  const HRESULT init_hr = CoInitializeEx(
+    nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+  const bool co_initialized = SUCCEEDED(init_hr);
+
+  auto cleanup = [&]() noexcept {
+    if (co_initialized) {
+      CoUninitialize();
+    }
+  };
+
+  Microsoft::WRL::ComPtr<IFileOpenDialog> dlg;
+  const HRESULT create_hr = CoCreateInstance(
+    CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg));
+  if (FAILED(create_hr) || !dlg) {
+    cleanup();
+    return false;
+  }
+
+  DWORD flags = 0;
+  if (FAILED(dlg->GetOptions(&flags))) {
+    cleanup();
+    return false;
+  }
+  flags |= FOS_PICKFOLDERS;
+  (void)dlg->SetOptions(flags);
+
+  const HRESULT show_hr = dlg->Show(nullptr);
+  if (FAILED(show_hr)) {
+    cleanup();
+    return false;
+  }
+
+  Microsoft::WRL::ComPtr<IShellItem> item;
+  if (FAILED(dlg->GetResult(&item)) || !item) {
+    cleanup();
+    return false;
+  }
+
+  PWSTR wide_path = nullptr;
+  const HRESULT name_hr = item->GetDisplayName(SIGDN_FILESYSPATH, &wide_path);
+  if (FAILED(name_hr) || !wide_path) {
+    cleanup();
+    return false;
+  }
+
+  std::string utf8;
+  oxygen::string_utils::WideToUtf8(wide_path, utf8);
+  CoTaskMemFree(wide_path);
+
+  cleanup();
+
+  if (utf8.empty()) {
+    return false;
+  }
+
+  out_utf8_path = std::move(utf8);
+  return true;
+}
+
 #endif
+
+auto FormatLabel(const oxygen::Format format) -> const char*
+{
+  switch (format) {
+  case oxygen::Format::kRGBA8UNormSRGB:
+    return "RGBA8 sRGB";
+  case oxygen::Format::kBC7UNormSRGB:
+    return "BC7 sRGB";
+  case oxygen::Format::kRGBA16Float:
+    return "RGBA16F";
+  case oxygen::Format::kRGBA32Float:
+    return "RGBA32F";
+  default:
+    return "Unknown";
+  }
+}
+
+auto TextureTypeLabel(const oxygen::TextureType type) -> const char*
+{
+  switch (type) {
+  case oxygen::TextureType::kTexture2D:
+    return "2D";
+  case oxygen::TextureType::kTextureCube:
+    return "Cube";
+  case oxygen::TextureType::kTexture3D:
+    return "3D";
+  default:
+    return "Other";
+  }
+}
+
+auto IsCubemapType(const oxygen::TextureType type) -> bool
+{
+  return type == oxygen::TextureType::kTextureCube;
+}
 
 auto ApplyUvOriginFix(const glm::vec2 scale, const glm::vec2 offset,
   const bool flip_u, const bool flip_v) -> std::pair<glm::vec2, glm::vec2>
@@ -142,10 +240,10 @@ auto DebugUI::GetEffectiveUvTransform() const -> std::pair<glm::vec2, glm::vec2>
 }
 
 auto DebugUI::Draw(engine::FrameContext& context,
-  const CameraController& camera, SceneSetup::TextureIndexMode& texture_mode,
-  std::uint32_t& custom_texture_resource_index,
+  const CameraController& camera,
   oxygen::observer_ptr<oxygen::engine::Renderer> renderer,
   oxygen::engine::ShaderPassConfig* shader_pass_config,
+  const std::shared_ptr<const oxygen::data::MaterialAsset>& sphere_material,
   const std::shared_ptr<const oxygen::data::MaterialAsset>& cube_material,
   bool& cube_needs_rebuild) -> void
 {
@@ -164,8 +262,8 @@ auto DebugUI::Draw(engine::FrameContext& context,
 
   if (ImGui::BeginTabBar("DemoTabs")) {
     if (ImGui::BeginTabItem("Materials/UV")) {
-      DrawMaterialsTab(texture_mode, custom_texture_resource_index, renderer,
-        cube_material, cube_needs_rebuild);
+      DrawMaterialsTab(
+        renderer, sphere_material, cube_material, cube_needs_rebuild);
       ImGui::EndTabItem();
     }
 
@@ -183,23 +281,30 @@ auto DebugUI::Draw(engine::FrameContext& context,
   ImGui::Text("Distance:    %.3f", camera.GetDistance());
 
   ImGui::End();
+
+  DrawImportWindow();
+  DrawCookedBrowserWindow();
 }
 
-auto DebugUI::DrawMaterialsTab(SceneSetup::TextureIndexMode& texture_mode,
-  std::uint32_t& /*custom_texture_resource_index*/,
+auto DebugUI::DrawMaterialsTab(
   oxygen::observer_ptr<oxygen::engine::Renderer> renderer,
+  const std::shared_ptr<const oxygen::data::MaterialAsset>& sphere_material,
   const std::shared_ptr<const oxygen::data::MaterialAsset>& cube_material,
   bool& cube_needs_rebuild) -> void
 {
   ImGui::Separator();
-  ImGui::TextUnformatted("Texture:");
+  ImGui::TextUnformatted("Textures:");
 
   bool rebuild_requested = false;
   bool uv_transform_changed = false;
 
-  {
-    int mode = static_cast<int>(texture_mode);
-    const bool mode_changed = ImGui::RadioButton("Forced error", &mode,
+  auto DrawSlotControls = [&](const char* label, TextureSlotState& slot) {
+    ImGui::Separator();
+    ImGui::TextUnformatted(label);
+    ImGui::PushID(label);
+
+    int mode = static_cast<int>(slot.mode);
+    const bool mode_changed_1 = ImGui::RadioButton("Forced error", &mode,
       static_cast<int>(SceneSetup::TextureIndexMode::kForcedError));
     ImGui::SameLine();
     const bool mode_changed_2 = ImGui::RadioButton("Fallback (0)", &mode,
@@ -208,66 +313,20 @@ auto DebugUI::DrawMaterialsTab(SceneSetup::TextureIndexMode& texture_mode,
     const bool mode_changed_3 = ImGui::RadioButton(
       "Custom", &mode, static_cast<int>(SceneSetup::TextureIndexMode::kCustom));
 
-    rebuild_requested |= (mode_changed || mode_changed_2 || mode_changed_3);
-    texture_mode = static_cast<SceneSetup::TextureIndexMode>(mode);
-  }
-
-  if (texture_mode == SceneSetup::TextureIndexMode::kCustom) {
-    ImGui::InputText(
-      "Image path", texture_state_.path.data(), texture_state_.path.size());
-    if (ImGui::Button("Browse...")) {
-#if defined(OXYGEN_WINDOWS)
-      std::string chosen;
-      if (TryBrowseForImageFile(chosen)) {
-        std::snprintf(texture_state_.path.data(), texture_state_.path.size(),
-          "%s", chosen.c_str());
-      }
-#endif
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Load Image")) {
-      texture_state_.load_requested = true;
-      texture_state_.status_message.clear();
+    if (mode_changed_1 || mode_changed_2 || mode_changed_3) {
+      slot.mode = static_cast<SceneSetup::TextureIndexMode>(mode);
+      rebuild_requested = true;
     }
 
-    constexpr const char* kFormatNames[] = {
-      "RGBA8 sRGB",
-      "BC7 sRGB",
-      "RGBA16F",
-      "RGBA32F",
-    };
-    ImGui::SetNextItemWidth(180.0f);
-    ImGui::Combo("Output format", &texture_state_.output_format_idx,
-      kFormatNames, IM_ARRAYSIZE(kFormatNames));
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("RGBA8: Uncompressed LDR\n"
-                        "BC7: GPU-compressed LDR (recommended for shipping)\n"
-                        "RGBA16F/32F: HDR-friendly formats (larger VRAM)");
+    if (slot.mode == SceneSetup::TextureIndexMode::kCustom) {
+      ImGui::Text("Cooked texture index: %u", slot.resource_index);
     }
 
-    ImGui::Checkbox("Generate mips", &texture_state_.generate_mips);
+    ImGui::PopID();
+  };
 
-    ImGui::Checkbox("Tonemap HDR to LDR", &texture_state_.tonemap_hdr_to_ldr);
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Converts HDR (float) content to LDR (8-bit).\n"
-                        "Required when: HDR input + RGBA8/BC7 output.\n"
-                        "Disable for: HDR input + RGBA16F/32F output.");
-    }
-    if (texture_state_.tonemap_hdr_to_ldr) {
-      ImGui::SameLine();
-      ImGui::SetNextItemWidth(100.0f);
-      ImGui::DragFloat("Exposure (EV)", &texture_state_.hdr_exposure_ev, 0.1f,
-        -10.0f, 10.0f, "%.1f");
-    }
-
-    if (!texture_state_.status_message.empty()) {
-      ImGui::Text("Status: %s", texture_state_.status_message.c_str());
-    }
-    if (texture_state_.last_width > 0 && texture_state_.last_height > 0) {
-      ImGui::Text("Last image: %dx%d", texture_state_.last_width,
-        texture_state_.last_height);
-    }
-  }
+  DrawSlotControls("Sphere base color", sphere_texture_);
+  DrawSlotControls("Cube base color", cube_texture_);
 
   ImGui::Separator();
   ImGui::TextUnformatted("UV:");
@@ -445,11 +504,17 @@ auto DebugUI::DrawMaterialsTab(SceneSetup::TextureIndexMode& texture_mode,
     }
   }
 
-  if (uv_transform_changed && cube_material && renderer) {
+  if (uv_transform_changed && renderer) {
     const auto [effective_uv_scale, effective_uv_offset]
       = GetEffectiveUvTransform();
-    (void)renderer->OverrideMaterialUvTransform(
-      *cube_material, effective_uv_scale, effective_uv_offset);
+    if (sphere_material) {
+      (void)renderer->OverrideMaterialUvTransform(
+        *sphere_material, effective_uv_scale, effective_uv_offset);
+    }
+    if (cube_material) {
+      (void)renderer->OverrideMaterialUvTransform(
+        *cube_material, effective_uv_scale, effective_uv_offset);
+    }
   }
 
   if (rebuild_requested) {
@@ -457,121 +522,204 @@ auto DebugUI::DrawMaterialsTab(SceneSetup::TextureIndexMode& texture_mode,
   }
 }
 
+auto DebugUI::DrawImportWindow() -> void
+{
+  ImGui::SetNextWindowPos(ImVec2(460, 20), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(440, 260), ImGuiCond_FirstUseEver);
+
+  if (!ImGui::Begin(
+        "Cooked Texture Import", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::End();
+    return;
+  }
+
+  ImGui::InputText("Cooked root", import_state_.cooked_root.data(),
+    import_state_.cooked_root.size());
+  ImGui::SameLine();
+  if (ImGui::Button("Browse##CookedRoot")) {
+#if defined(OXYGEN_WINDOWS)
+    std::string chosen;
+    if (TryBrowseForDirectory(chosen)) {
+      std::snprintf(import_state_.cooked_root.data(),
+        import_state_.cooked_root.size(), "%s", chosen.c_str());
+    }
+#endif
+  }
+
+  ImGui::InputText("Source image", import_state_.source_path.data(),
+    import_state_.source_path.size());
+  ImGui::SameLine();
+  if (ImGui::Button("Browse##SourceImage")) {
+#if defined(OXYGEN_WINDOWS)
+    std::string chosen;
+    if (TryBrowseForImageFile(chosen)) {
+      std::snprintf(import_state_.source_path.data(),
+        import_state_.source_path.size(), "%s", chosen.c_str());
+    }
+#endif
+  }
+
+  constexpr const char* kImportKinds[] = {
+    "Texture (2D)",
+    "Skybox: HDR equirect",
+    "Skybox: layout image",
+  };
+  ImGui::SetNextItemWidth(220.0f);
+  ImGui::Combo("Import kind", &import_state_.import_kind, kImportKinds,
+    IM_ARRAYSIZE(kImportKinds));
+
+  constexpr const char* kFormats[] = {
+    "RGBA8 sRGB",
+    "BC7 sRGB",
+    "RGBA16F",
+    "RGBA32F",
+  };
+  ImGui::SetNextItemWidth(200.0f);
+  ImGui::Combo("Output format", &import_state_.output_format_idx, kFormats,
+    IM_ARRAYSIZE(kFormats));
+
+  ImGui::Checkbox("Generate mips", &import_state_.generate_mips);
+  ImGui::Checkbox("Flip Y on decode", &import_state_.flip_y);
+  ImGui::SameLine();
+  ImGui::Checkbox("Force RGBA", &import_state_.force_rgba);
+
+  if (import_state_.import_kind == 1) {
+    constexpr int kFaceSizes[] = { 128, 256, 512, 1024, 2048 };
+    constexpr const char* kFaceSizeNames[]
+      = { "128", "256", "512", "1024", "2048" };
+    int current_idx = 2;
+    for (int i = 0; i < IM_ARRAYSIZE(kFaceSizes); ++i) {
+      if (kFaceSizes[i] == import_state_.cube_face_size) {
+        current_idx = i;
+        break;
+      }
+    }
+    if (ImGui::Combo("Cube face size", &current_idx, kFaceSizeNames,
+          IM_ARRAYSIZE(kFaceSizeNames))) {
+      import_state_.cube_face_size = kFaceSizes[current_idx];
+    }
+  }
+
+  if (import_state_.import_kind == 2) {
+    constexpr const char* kLayoutNames[] = {
+      "Auto",
+      "Horizontal Cross",
+      "Vertical Cross",
+      "Horizontal Strip",
+      "Vertical Strip",
+    };
+    ImGui::Combo("Cube layout", &import_state_.layout_idx, kLayoutNames,
+      IM_ARRAYSIZE(kLayoutNames));
+  }
+
+  if (ImGui::Button("Submit Import")) {
+    import_state_.import_requested = true;
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Refresh Cooked Root")) {
+    import_state_.refresh_requested = true;
+  }
+
+  if (!import_state_.status_message.empty()) {
+    ImGui::Text("Status: %s", import_state_.status_message.c_str());
+  }
+  if (import_state_.import_in_flight) {
+    ImGui::ProgressBar(import_state_.import_progress, ImVec2(-1.0f, 0.0f));
+  }
+
+  ImGui::End();
+}
+
+auto DebugUI::DrawCookedBrowserWindow() -> void
+{
+  ImGui::SetNextWindowPos(ImVec2(460, 300), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(520, 420), ImGuiCond_FirstUseEver);
+
+  if (!ImGui::Begin(
+        "Cooked Texture Browser", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::End();
+    return;
+  }
+
+  ImGui::Text("Cooked entries: %zu", cooked_entries_.size());
+  ImGui::Text("Sphere texture index: %u", sphere_texture_.resource_index);
+  ImGui::Text("Cube texture index:   %u", cube_texture_.resource_index);
+  ImGui::Separator();
+
+  if (cooked_entries_.empty()) {
+    ImGui::TextDisabled("No cooked textures loaded.");
+    ImGui::End();
+    return;
+  }
+
+  if (ImGui::BeginTable("CookedTextures", 7,
+        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg
+          | ImGuiTableFlags_ScrollY,
+        ImVec2(0.0f, 320.0f))) {
+    ImGui::TableSetupColumn("Idx", ImGuiTableColumnFlags_WidthFixed, 40.0f);
+    ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+    ImGui::TableSetupColumn("Dims", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+    ImGui::TableSetupColumn("Mips", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+    ImGui::TableSetupColumn("Format", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+    ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+    ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableHeadersRow();
+
+    for (const auto& entry : cooked_entries_) {
+      ImGui::TableNextRow();
+
+      ImGui::TableSetColumnIndex(0);
+      ImGui::Text("%u", entry.index);
+
+      ImGui::TableSetColumnIndex(1);
+      ImGui::TextUnformatted(TextureTypeLabel(entry.texture_type));
+
+      ImGui::TableSetColumnIndex(2);
+      ImGui::Text("%ux%u", entry.width, entry.height);
+
+      ImGui::TableSetColumnIndex(3);
+      ImGui::Text("%u", entry.mip_levels);
+
+      ImGui::TableSetColumnIndex(4);
+      ImGui::TextUnformatted(FormatLabel(entry.format));
+
+      ImGui::TableSetColumnIndex(5);
+      ImGui::Text("%u", static_cast<unsigned int>(entry.size_bytes / 1024));
+
+      ImGui::TableSetColumnIndex(6);
+      ImGui::PushID(static_cast<int>(entry.index));
+      if (ImGui::Button("Sphere")) {
+        browser_action_.type = BrowserAction::Type::kSetSphere;
+        browser_action_.entry_index = entry.index;
+      }
+      ImGui::SameLine();
+      if (ImGui::Button("Cube")) {
+        browser_action_.type = BrowserAction::Type::kSetCube;
+        browser_action_.entry_index = entry.index;
+      }
+      ImGui::SameLine();
+      ImGui::BeginDisabled(!IsCubemapType(entry.texture_type));
+      if (ImGui::Button("Skybox")) {
+        browser_action_.type = BrowserAction::Type::kSetSkybox;
+        browser_action_.entry_index = entry.index;
+      }
+      ImGui::EndDisabled();
+      ImGui::PopID();
+    }
+
+    ImGui::EndTable();
+  }
+
+  ImGui::End();
+}
+
 auto DebugUI::DrawLightingTab(oxygen::observer_ptr<scene::Scene> scene,
   oxygen::observer_ptr<oxygen::engine::Renderer> renderer,
   oxygen::engine::ShaderPassConfig* shader_pass_config) -> void
 {
   ImGui::Separator();
-  ImGui::TextUnformatted("Skybox:");
-
-  ImGui::InputText(
-    "Skybox path", skybox_state_.path.data(), skybox_state_.path.size());
-  if (ImGui::Button("Browse skybox...")) {
-#if defined(OXYGEN_WINDOWS)
-    std::string chosen;
-    if (TryBrowseForImageFile(chosen)) {
-      std::snprintf(skybox_state_.path.data(), skybox_state_.path.size(), "%s",
-        chosen.c_str());
-    }
-#endif
-  }
-  ImGui::SameLine();
-  if (ImGui::Button("Load skybox")) {
-    skybox_state_.load_requested = true;
-    skybox_state_.status_message.clear();
-  }
-
-  // Layout selection
-  {
-    constexpr const char* kLayoutNames[] = { "Equirectangular (2:1)",
-      "Horizontal Cross (4x3)", "Vertical Cross (3x4)",
-      "Horizontal Strip (6x1)", "Vertical Strip (1x6)" };
-    ImGui::Combo("Layout", &skybox_state_.layout_idx, kLayoutNames,
-      IM_ARRAYSIZE(kLayoutNames));
-  }
-
-  // Output format selection
-  {
-    constexpr const char* kFormatNames[] = { "RGBA8 sRGB (LDR)",
-      "RGBA16F (HDR)", "RGBA32F (HDR)", "BC7 sRGB (LDR)" };
-    ImGui::Combo("Output format", &skybox_state_.output_format_idx,
-      kFormatNames, IM_ARRAYSIZE(kFormatNames));
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("RGBA8: Uncompressed LDR\n"
-                        "BC7: GPU-compressed LDR (useful after tonemapping)\n"
-                        "RGBA16F/32F: HDR-friendly formats (larger VRAM)");
-    }
-  }
-
-  const std::string sky_path { skybox_state_.path.data() };
-  std::filesystem::path sky_fs_path { sky_path };
-  std::string sky_ext = sky_fs_path.extension().string();
-  std::transform(sky_ext.begin(), sky_ext.end(), sky_ext.begin(),
-    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-  const bool is_hdr_source = (sky_ext == ".hdr") || (sky_ext == ".exr");
-  const bool is_ldr_output = (skybox_state_.output_format_idx == 0)
-    || (skybox_state_.output_format_idx == 3);
-
-  if (is_hdr_source && is_ldr_output) {
-    // HDR environments cannot be cooked to LDR formats without tonemapping.
-    // Force it on to avoid a confusing import-time error.
-    skybox_state_.tonemap_hdr_to_ldr = true;
-
-    ImGui::BeginDisabled(true);
-    ImGui::Checkbox("Tonemap HDR to LDR", &skybox_state_.tonemap_hdr_to_ldr);
-    ImGui::EndDisabled();
-
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(100.0f);
-    ImGui::DragFloat("Exposure (EV)", &skybox_state_.hdr_exposure_ev, 0.1f,
-      -10.0f, 10.0f, "%.1f");
-
-    ImGui::TextDisabled("HDR input + LDR output: tonemapping enabled");
-  } else {
-    skybox_state_.tonemap_hdr_to_ldr = false;
-  }
-
-  // Face size (for equirectangular conversion)
-  if (skybox_state_.layout_idx == 0) {
-    constexpr int kFaceSizes[] = { 128, 256, 512, 1024, 2048 };
-    constexpr const char* kFaceSizeNames[]
-      = { "128", "256", "512", "1024", "2048" };
-
-    int current_idx = 2;
-    for (int i = 0; i < IM_ARRAYSIZE(kFaceSizes); ++i) {
-      if (kFaceSizes[i] == skybox_state_.cube_face_size) {
-        current_idx = i;
-        break;
-      }
-    }
-
-    if (ImGui::Combo("Cube face size", &current_idx, kFaceSizeNames,
-          IM_ARRAYSIZE(kFaceSizeNames))) {
-      skybox_state_.cube_face_size = kFaceSizes[current_idx];
-      skybox_state_.load_requested = true;
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
-        "Resolution of each cube map face (must be power-of-two)");
-    }
-  }
-
-  if (ImGui::Checkbox("Flip Y", &skybox_state_.flip_y)) {
-    skybox_state_.load_requested = true;
-  }
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip(
-      "Flip image vertically during decode. Enable for standard "
-      "equirectangular HDRIs where Y=0 is at the top.");
-  }
-
-  if (!skybox_state_.status_message.empty()) {
-    ImGui::Text("Skybox: %s", skybox_state_.status_message.c_str());
-  }
-  if (skybox_state_.last_face_size > 0) {
-    ImGui::Text("Last skybox face: %dx%d", skybox_state_.last_face_size,
-      skybox_state_.last_face_size);
-  }
+  ImGui::TextUnformatted("Environment:");
+  ImGui::TextDisabled("Use the Cooked Texture Browser to set a skybox.");
 
   if (renderer) {
     if (const auto env_static = renderer->GetEnvironmentStaticDataManager();

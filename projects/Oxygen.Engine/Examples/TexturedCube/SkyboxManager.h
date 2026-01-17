@@ -110,6 +110,9 @@ public:
   auto LoadSkyboxAsync(const std::string& file_path, const LoadOptions& options)
     -> co::Co<LoadResult>;
 
+  //! Set the skybox resource key directly (e.g., from cooked content).
+  auto SetSkyboxResourceKey(oxygen::content::ResourceKey key) -> void;
+
   //! Apply loaded skybox to the scene environment.
   auto ApplyToScene(const SkyLightParams& params) -> void;
 
