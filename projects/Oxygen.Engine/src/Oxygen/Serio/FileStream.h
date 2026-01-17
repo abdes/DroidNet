@@ -155,8 +155,9 @@ static_assert(BackingStream<ByteFileStream>);
   The default BackingStream is ByteFileStream, which uses std::fstream with
   std::byte as the element type.
 
-  All operations are exception free, and the ones that may fail return a Result
-  type for error handling.
+  All operations are exception free and return a Result type for error
+  handling; the constructor may throw std::system_error if the stream cannot be
+  opened.
 
   This class is intentionally designed without any virtual methods or
   inheritance, and does not use runtime polymorphism. Instead, it is intended to

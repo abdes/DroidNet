@@ -265,6 +265,25 @@ NOLINT_TEST_F(MemoryStreamTest, ZeroSizeOperations_Succeed)
 }
 
 /*!
+ Verifies that a zero-size read at end succeeds and preserves position.
+*/
+NOLINT_TEST_F(MemoryStreamTest, ZeroSizeReadAtEnd_Succeeds)
+{
+  // Arrange
+  ASSERT_TRUE(sut_.Seek(buffer_.size()));
+  std::array<std::byte, 1> buffer {};
+
+  // Act
+  const auto read_result = sut_.Read(buffer.data(), 0);
+  const auto position_result = sut_.Position();
+
+  // Assert
+  EXPECT_TRUE(read_result);
+  EXPECT_TRUE(position_result);
+  EXPECT_EQ(position_result.value(), buffer_.size());
+}
+
+/*!
  Verifies that move construction transfers buffer state and size correctly.
 */
 NOLINT_TEST_F(MemoryStreamTest, MoveConstruction_MovesStateCorrectly)

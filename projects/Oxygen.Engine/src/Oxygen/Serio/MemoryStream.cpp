@@ -64,7 +64,11 @@ auto MemoryStream::Write(const std::byte* data, const size_t size) noexcept
 auto MemoryStream::Read(std::byte* data, const size_t size) noexcept
   -> Result<void>
 {
-  if (data == nullptr && size > 0) {
+  if (size == 0) {
+    return {};
+  }
+
+  if (data == nullptr) {
     return ::oxygen::Err(std::errc::invalid_argument);
   }
 
