@@ -59,6 +59,8 @@ def _spec_multi() -> dict:
                             {
                                 "name": "sm0",
                                 "material": "mat_a",
+                                "bounding_box_min": [0.0, 0.0, 0.0],
+                                "bounding_box_max": [1.0, 1.0, 1.0],
                                 "mesh_views": [
                                     {
                                         "first_index": 0,
@@ -72,7 +74,33 @@ def _spec_multi() -> dict:
                     }
                 ],
             },
-            {"type": "geometry", "name": "geo_b", "lods": []},
+            {
+                "type": "geometry",
+                "name": "geo_b",
+                "lods": [
+                    {
+                        "name": "lod0",
+                        "vertex_buffer": "buf_b",
+                        "index_buffer": None,
+                        "submeshes": [
+                            {
+                                "name": "sm0",
+                                "material": "mat_b",
+                                "bounding_box_min": [0.0, 0.0, 0.0],
+                                "bounding_box_max": [1.0, 1.0, 1.0],
+                                "mesh_views": [
+                                    {
+                                        "first_index": 0,
+                                        "index_count": 0,
+                                        "first_vertex": 0,
+                                        "vertex_count": 0,
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            },
         ],
     }
 

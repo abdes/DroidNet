@@ -50,6 +50,35 @@ def _err(
     errors.append(ValidationErrorRecord(code, message, path))
 
 
+def _has_bounds(obj: Any) -> bool:
+    return isinstance(obj, dict) and (
+        "bounding_box_min" in obj or "bounding_box_max" in obj
+    )
+
+
+def _validate_bounds_vec3(
+    errors: List[ValidationErrorRecord], obj: Any, path: str
+) -> None:
+    if not isinstance(obj, dict):
+        return
+    has_min = "bounding_box_min" in obj
+    has_max = "bounding_box_max" in obj
+    if has_min != has_max:
+        _err(
+            errors,
+            "E_BOUNDS",
+            "bounding_box_min and bounding_box_max must be provided together",
+            path,
+        )
+        return
+    if not has_min:
+        return
+    for key in ("bounding_box_min", "bounding_box_max"):
+        val = obj.get(key)
+        if not isinstance(val, (list, tuple)) or len(val) != 3:
+            _err(errors, "E_BOUNDS", "Invalid vec3 bounds", f"{path}.{key}")
+
+
 def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
     errors: List[ValidationErrorRecord] = []
 
@@ -447,9 +476,13 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
     ):
         if not isinstance(g, dict):
             continue
+        _validate_bounds_vec3(errors, g, f"geometries[{gi}]")
+        lods = g.get("lods", []) or []
+        lod_bounds_ok: List[bool] = []
         for li, lod in enumerate(g.get("lods", []) or []):
             if not isinstance(lod, dict):
                 continue
+            _validate_bounds_vec3(errors, lod, f"geometries[{gi}].lods[{li}]")
             mesh_type = lod.get("mesh_type", 0)
             if mesh_type not in VALID_MESH_TYPES:
                 _err(
@@ -535,6 +568,78 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                         f"Unknown joint_remap_buffer '{jrb}'",
                         f"geometries[{gi}].lods[{li}].joint_remap_buffer",
                     )
+            submeshes = lod.get("submeshes", []) or []
+            if not submeshes:
+                _err(
+                    errors,
+                    "E_REQUIRED",
+                    "Mesh must contain at least one submesh",
+                    f"geometries[{gi}].lods[{li}].submeshes",
+                )
+            submesh_bounds_ok: List[bool] = []
+            for si, sub in enumerate(submeshes):
+                if not isinstance(sub, dict):
+                    continue
+                sub_path = f"geometries[{gi}].lods[{li}].submeshes[{si}]"
+                _validate_bounds_vec3(errors, sub, sub_path)
+                material_ref = sub.get("material")
+                if not material_ref:
+                    _err(
+                        errors,
+                        "E_REQUIRED",
+                        "Submesh material is required",
+                        f"{sub_path}.material",
+                    )
+                elif not isinstance(material_ref, str):
+                    _err(
+                        errors,
+                        "E_TYPE",
+                        "Submesh material must be a string",
+                        f"{sub_path}.material",
+                    )
+                mesh_views = sub.get("mesh_views", []) or []
+                if not mesh_views:
+                    _err(
+                        errors,
+                        "E_REQUIRED",
+                        "Submesh must contain at least one mesh_view",
+                        f"{sub_path}.mesh_views",
+                    )
+                view_bounds_present = False
+                for vi, mv in enumerate(mesh_views):
+                    if not isinstance(mv, dict):
+                        continue
+                    if _has_bounds(mv):
+                        view_bounds_present = True
+                        _validate_bounds_vec3(
+                            errors,
+                            mv,
+                            f"{sub_path}.mesh_views[{vi}]",
+                        )
+                submesh_has_bounds = _has_bounds(sub)
+                if not submesh_has_bounds and not view_bounds_present:
+                    _err(
+                        errors,
+                        "E_REQUIRED",
+                        "Submesh bounds missing; provide submesh bounds or mesh_view bounds",
+                        sub_path,
+                    )
+                submesh_bounds_ok.append(
+                    submesh_has_bounds or view_bounds_present
+                )
+            lod_has_bounds = _has_bounds(lod)
+            lod_bounds_ok.append(
+                lod_has_bounds
+                or (len(submesh_bounds_ok) > 0 and all(submesh_bounds_ok))
+            )
+        geom_has_bounds = _has_bounds(g)
+        if not geom_has_bounds and not all(lod_bounds_ok):
+            _err(
+                errors,
+                "E_REQUIRED",
+                "Geometry bounds missing; provide geometry bounds or valid LOD bounds",
+                f"geometries[{gi}]",
+            )
     # Mesh view index/vertex counts limits (if provided)
     for gi, g in enumerate(
         [

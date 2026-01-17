@@ -31,6 +31,8 @@ def test_build_pak_with_scene_asset(tmp_path: Path):
                         "submeshes": [
                             {
                                 "material": "MatA",
+                                "bounding_box_min": [0.0, 0.0, 0.0],
+                                "bounding_box_max": [1.0, 1.0, 1.0],
                                 "mesh_views": [
                                     {
                                         "first_index": 0,

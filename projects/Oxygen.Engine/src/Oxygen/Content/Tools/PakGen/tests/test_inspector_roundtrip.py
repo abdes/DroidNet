@@ -68,6 +68,8 @@ SIMPLE_SPEC = {
                         {
                             "name": "SM_A",
                             "material": "matA",
+                            "bounding_box_min": [0.0, 0.0, 0.0],
+                            "bounding_box_max": [1.0, 1.0, 1.0],
                             "mesh_views": [
                                 {
                                     "first_index": 0,

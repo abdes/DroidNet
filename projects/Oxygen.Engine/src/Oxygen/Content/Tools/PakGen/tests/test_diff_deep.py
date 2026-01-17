@@ -67,6 +67,8 @@ def test_diff_geometry_removed_submesh(tmp_path: Path):
                         "submeshes": [
                             {
                                 "material": "MatA",
+                                "bounding_box_min": [0.0, 0.0, 0.0],
+                                "bounding_box_max": [1.0, 1.0, 1.0],
                                 "mesh_views": [
                                     {
                                         "first_index": 0,
@@ -78,6 +80,8 @@ def test_diff_geometry_removed_submesh(tmp_path: Path):
                             },
                             {
                                 "material": "MatB",
+                                "bounding_box_min": [0.0, 0.0, 0.0],
+                                "bounding_box_max": [1.0, 1.0, 1.0],
                                 "mesh_views": [
                                     {
                                         "first_index": 0,
@@ -112,6 +116,8 @@ def test_diff_geometry_removed_submesh(tmp_path: Path):
                     "submeshes": [
                         {
                             "material": "MatA",
+                            "bounding_box_min": [0.0, 0.0, 0.0],
+                            "bounding_box_max": [1.0, 1.0, 1.0],
                             "mesh_views": [
                                 {
                                     "first_index": 0,
@@ -150,6 +156,8 @@ def test_diff_geometry_lod_count(tmp_path: Path):
                         "submeshes": [
                             {
                                 "material": "MatA",
+                                "bounding_box_min": [0.0, 0.0, 0.0],
+                                "bounding_box_max": [1.0, 1.0, 1.0],
                                 "mesh_views": [
                                     {
                                         "first_index": 0,
