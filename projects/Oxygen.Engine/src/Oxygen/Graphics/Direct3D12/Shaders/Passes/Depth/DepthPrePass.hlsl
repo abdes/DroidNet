@@ -129,7 +129,7 @@ void PS(VS_OUTPUT_DEPTH input)
         (mat.flags & MATERIAL_FLAG_NO_TEXTURE_SAMPLING) != 0u;
 
     if (!no_texture_sampling && mat.opacity_texture_index != K_INVALID_BINDLESS_INDEX) {
-        const float2 uv = input.uv * mat.uv_scale + mat.uv_offset;
+        const float2 uv = ApplyMaterialUv(input.uv, mat);
         Texture2D<float4> opacity_tex = ResourceDescriptorHeap[mat.opacity_texture_index];
         SamplerState samp = SamplerDescriptorHeap[0];
         const float4 texel = opacity_tex.Sample(samp, uv);

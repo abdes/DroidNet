@@ -177,6 +177,44 @@ def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
             _err(errors, "E_FIELD", "Missing name", path)
         elif len(name.encode("utf-8")) > ASSET_NAME_MAX_LENGTH:
             _err(errors, "E_NAME_LEN", "Name too long", path + ".name")
+
+        uv_scale = m.get("uv_scale")
+        if uv_scale is not None:
+            if not isinstance(uv_scale, list) or len(uv_scale) != 2:
+                _err(
+                    errors,
+                    "E_TYPE",
+                    "uv_scale must be a list of 2 floats",
+                    path + ".uv_scale",
+                )
+        uv_offset = m.get("uv_offset")
+        if uv_offset is not None:
+            if not isinstance(uv_offset, list) or len(uv_offset) != 2:
+                _err(
+                    errors,
+                    "E_TYPE",
+                    "uv_offset must be a list of 2 floats",
+                    path + ".uv_offset",
+                )
+        uv_rotation = m.get("uv_rotation_radians")
+        if uv_rotation is not None and not isinstance(
+            uv_rotation, (int, float)
+        ):
+            _err(
+                errors,
+                "E_TYPE",
+                "uv_rotation_radians must be a number",
+                path + ".uv_rotation_radians",
+            )
+        uv_set = m.get("uv_set")
+        if uv_set is not None:
+            if not isinstance(uv_set, int) or uv_set < 0 or uv_set > 255:
+                _err(
+                    errors,
+                    "E_RANGE",
+                    "uv_set must be in [0, 255]",
+                    path + ".uv_set",
+                )
     for i, g in enumerate(geos):
         path = f"assets[{i}]"  # geometry
         if not isinstance(g, dict):

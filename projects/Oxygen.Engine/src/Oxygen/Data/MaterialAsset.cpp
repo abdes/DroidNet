@@ -125,6 +125,12 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
     desc.transmission_texture = pak::kFallbackResourceIndex;
     desc.thickness_texture = pak::kFallbackResourceIndex;
 
+    desc.uv_scale[0] = 1.0f;
+    desc.uv_scale[1] = 1.0f;
+    desc.uv_offset[0] = 0.0f;
+    desc.uv_offset[1] = 0.0f;
+    desc.uv_rotation_radians = 0.0f;
+    desc.uv_set = 0;
     std::fill(
       std::begin(desc.reserved), std::end(desc.reserved), uint8_t { 0 });
 

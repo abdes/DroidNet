@@ -311,14 +311,15 @@ Key requirements:
 - `header.content_hash` is computed on the ThreadPool after dependencies are
   ready and is non-zero when payload bytes are non-empty
 
-### UV Transform Extension (Reserved Bytes)
+### UV Transform Extension (v4 Fields)
 
-The reserved bytes in `MaterialAssetDesc` are used to encode the default
-per-material UV transform (global, applied to all slots). The pipeline must
-**always** write this extension; identity means “no transform.”
+The v4 `MaterialAssetDesc` stores the default per-material UV transform
+(global, applied to all slots) in explicit fields. The pipeline must
+**always** write these values; identity means “no transform.”
 
 ```text
-struct MaterialUvTransformDesc {
+struct MaterialAssetDesc {
+  // ...
   float uv_scale[2];
   float uv_offset[2];
   float uv_rotation_radians;
@@ -336,6 +337,14 @@ Contract:
   uv_set 0).
 - Loaders must read this extension unconditionally.
 
+Renderer convention:
+
+- `uv_rotation_radians` is counter-clockwise rotation in UV space.
+- Rotation is around the UV origin (0,0), not the center of the texture.
+- Transform order is: scale → rotation → offset.
+- `uv_set` selects the source UV set (0 = TEXCOORD0). Additional sets require
+  vertex payload support; the current renderer only provides uv0.
+
 ---
 
 ## Feature Completion Requirements
@@ -352,6 +361,13 @@ the PAK format:
   `variant_flags` (`content_hash` computed on the ThreadPool after
   dependencies are ready).
 - UV transform and UV set handling via the extension above or baking.
+
+---
+
+## TODO (Future Wiring)
+
+- TODO: Wire `header.streaming_priority` from import configuration.
+- TODO: Wire `header.variant_flags` from import configuration.
 
 ---
 

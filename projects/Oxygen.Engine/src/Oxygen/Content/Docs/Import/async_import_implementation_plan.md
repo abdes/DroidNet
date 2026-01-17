@@ -1007,14 +1007,20 @@ Tasks:
 
 Tasks:
 
-- [ ] Implement `MaterialPipeline` API with bounded channels and progress.
-- [ ] Implement worker logic for scalar normalization, domain/alpha mode
+- [X] Implement `MaterialPipeline` API with bounded channels and progress.
+- [X] Implement worker logic for scalar normalization, domain/alpha mode
   resolution, and ORM detection per design.
-- [ ] Implement UV transform extension emission and validation paths.
-- [ ] Serialize `MaterialAssetDesc` + shader refs (packed, alignment = 1).
-- [ ] Compute `header.content_hash` over descriptor bytes + shader refs.
-- [ ] Unit tests: ORM policy and texture binding flags, UV transform cases.
-- [ ] Unit tests: shader stage ordering, truncation warnings, and hash values.
+- [X] Implement UV transform extension emission and validation paths.
+- [X] Serialize `MaterialAssetDesc` + shader refs (packed, alignment = 1).
+- [X] Compute `header.content_hash` over descriptor bytes + shader refs.
+- [X] Unit tests: ORM policy and texture binding flags, UV transform cases.
+- [X] Unit tests: shader stage ordering, truncation warnings, and hash values.
+
+##### 6.6c TODO Follow-ups (v4 UV Transform + Tooling)
+
+- [X] Update `MaterialLoader` tests for v4 UV transform fields.
+- [X] Update PakGen tool and schema for v4 UV transform fields.
+- [X] Update PakDump tool for v4 UV transform fields.
 
 #### 6.6d ScenePipeline (Compute-Only) Implementation + Tests
 

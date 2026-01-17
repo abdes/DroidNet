@@ -95,6 +95,30 @@ public:
     return static_cast<MaterialDomain>(desc_.material_domain);
   }
 
+  //! Returns the global UV scale (tiling) for the material.
+  [[nodiscard]] auto GetUvScale() const noexcept -> std::array<float, 2>
+  {
+    return { desc_.uv_scale[0], desc_.uv_scale[1] };
+  }
+
+  //! Returns the global UV offset for the material.
+  [[nodiscard]] auto GetUvOffset() const noexcept -> std::array<float, 2>
+  {
+    return { desc_.uv_offset[0], desc_.uv_offset[1] };
+  }
+
+  //! Returns the global UV rotation in radians.
+  [[nodiscard]] auto GetUvRotationRadians() const noexcept -> float
+  {
+    return desc_.uv_rotation_radians;
+  }
+
+  //! Returns the UV set index used by the global transform.
+  [[nodiscard]] auto GetUvSet() const noexcept -> uint8_t
+  {
+    return desc_.uv_set;
+  }
+
   //! Returns the material flags bitfield.
   [[nodiscard]] auto GetFlags() const noexcept -> uint32_t
   {

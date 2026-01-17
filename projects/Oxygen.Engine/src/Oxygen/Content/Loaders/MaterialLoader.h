@@ -193,6 +193,22 @@ inline auto LoadMaterialAsset(LoaderContext context)
   check_result(
     attenuation_distance_result, "MaterialAssetDesc.attenuation_distance");
 
+  for (auto& i : desc.uv_scale) {
+    auto uv_scale_result = reader.ReadInto<float>(i);
+    check_result(uv_scale_result, "MaterialAssetDesc.uv_scale");
+  }
+
+  for (auto& i : desc.uv_offset) {
+    auto uv_offset_result = reader.ReadInto<float>(i);
+    check_result(uv_offset_result, "MaterialAssetDesc.uv_offset");
+  }
+
+  auto uv_rotation_result = reader.ReadInto<float>(desc.uv_rotation_radians);
+  check_result(uv_rotation_result, "MaterialAssetDesc.uv_rotation_radians");
+
+  auto uv_set_result = reader.ReadInto<uint8_t>(desc.uv_set);
+  check_result(uv_set_result, "MaterialAssetDesc.uv_set");
+
   for (auto& i : desc.reserved) {
     auto reserved_result = reader.ReadInto<uint8_t>(i);
     check_result(reserved_result, "MaterialAssetDesc.reserved");

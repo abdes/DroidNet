@@ -58,7 +58,9 @@ MaterialSurface EvaluateMaterialSurface(
         s.roughness = saturate(mat.roughness);
         s.ao        = saturate(mat.ambient_occlusion);
 
-        const float2 uv = uv0 * mat.uv_scale + mat.uv_offset;
+        // UV convention (see ApplyMaterialUv in Renderer/MaterialConstants.hlsli):
+        // scale -> rotation (radians, CCW around origin) -> offset.
+        const float2 uv = ApplyMaterialUv(uv0, mat);
 
         const bool no_texture_sampling =
             (mat.flags & MATERIAL_FLAG_NO_TEXTURE_SAMPLING) != 0u;

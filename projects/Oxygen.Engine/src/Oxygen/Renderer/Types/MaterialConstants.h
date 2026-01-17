@@ -34,6 +34,8 @@ Fields (match shader order):
   - alpha_cutoff (float)
   - uv_scale (float2)
   - uv_offset (float2)
+  - uv_rotation_radians (float)
+  - uv_set (uint)
 
 The final two floats pad to a 16-byte multiple so the struct size is root-CBV
 friendly. Provided as a whole-snapshot API similar to SceneConstants.
@@ -54,11 +56,14 @@ struct MaterialConstants {
   float alpha_cutoff { 0.5F };
   glm::vec2 uv_scale { 1.0F, 1.0F };
   glm::vec2 uv_offset { 0.0F, 0.0F };
+  float uv_rotation_radians { 0.0F };
+  uint32_t uv_set { 0U };
   glm::vec3 emissive_factor { 0.0F, 0.0F, 0.0F };
   uint32_t emissive_texture_index { 0xFFFFFFFFU };
+  glm::vec2 padding { 0.0F, 0.0F };
 };
-static_assert(sizeof(MaterialConstants) == 96,
-  "MaterialConstants size must be 96 bytes (6 x 16-byte rows)");
+static_assert(sizeof(MaterialConstants) == 112,
+  "MaterialConstants size must be 112 bytes (7 x 16-byte rows)");
 static_assert(sizeof(MaterialConstants) % 16 == 0,
   "MaterialConstants size must be 16-byte aligned");
 

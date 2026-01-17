@@ -1381,6 +1381,83 @@ constexpr uint8_t kSceneAssetVersion = v3::kSceneAssetVersion;
 //! Material asset descriptor version for PAK v4.
 constexpr uint8_t kMaterialAssetVersion = v3::kMaterialAssetVersion;
 
+//! Material asset descriptor (256 bytes) with explicit UV transform extension.
+/*!
+  v4 replaces the trailing reserved bytes with named UV transform fields.
+
+  @see v3::MaterialAssetDesc
+*/
+#pragma pack(push, 1)
+struct MaterialAssetDesc {
+  AssetHeader header;
+  uint8_t material_domain; // e.g. Opaque, AlphaBlended
+  uint32_t flags; // Bitfield for double-sided, alpha test, etc.
+  uint32_t shader_stages; // Bitfield for shaders used; entries that follow
+                          // are in ascending bit index order (LSB->MSB)
+
+  // --- Scalar factors (PBR) ---
+  float base_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f }; // RGBA fallback
+  float normal_scale = 1.0f;
+  Unorm16 metalness = Unorm16 { 0.0f };
+  Unorm16 roughness = Unorm16 { 1.0f };
+  Unorm16 ambient_occlusion = Unorm16 { 1.0f };
+
+  // --- Core texture references (Index into TextureResourceTable,
+  // kNoResourceIndex = invalid/none) ---
+  ResourceIndexT base_color_texture = kNoResourceIndex;
+  ResourceIndexT normal_texture = kNoResourceIndex;
+  ResourceIndexT metallic_texture = kNoResourceIndex;
+  ResourceIndexT roughness_texture = kNoResourceIndex;
+  ResourceIndexT ambient_occlusion_texture = kNoResourceIndex;
+
+  static_assert(kNoResourceIndex == 0);
+
+  // --- Additional texture references (optional, Tier 1/2) ---
+  ResourceIndexT emissive_texture = kNoResourceIndex;
+  ResourceIndexT specular_texture = kNoResourceIndex;
+  ResourceIndexT sheen_color_texture = kNoResourceIndex;
+  ResourceIndexT clearcoat_texture = kNoResourceIndex;
+  ResourceIndexT clearcoat_normal_texture = kNoResourceIndex;
+  ResourceIndexT transmission_texture = kNoResourceIndex;
+  ResourceIndexT thickness_texture = kNoResourceIndex;
+
+  // --- Additional scalar parameters (Tier 1/2) ---
+  // Emissive
+  HalfFloat emissive_factor[3]
+    = { HalfFloat { 0.0f }, HalfFloat { 0.0f }, HalfFloat { 0.0f } };
+  // Alpha
+  Unorm16 alpha_cutoff = Unorm16 { 0.5f };
+  // Dielectric response
+  float ior = 1.5f;
+  Unorm16 specular_factor = Unorm16 { 1.0f };
+  // Sheen (KHR_materials_sheen)
+  HalfFloat sheen_color_factor[3]
+    = { HalfFloat { 0.0f }, HalfFloat { 0.0f }, HalfFloat { 0.0f } };
+  // Clearcoat (KHR_materials_clearcoat)
+  Unorm16 clearcoat_factor = Unorm16 { 0.0f };
+  Unorm16 clearcoat_roughness = Unorm16 { 0.0f };
+  // Transmission / Volume (KHR_materials_transmission + KHR_materials_volume)
+  Unorm16 transmission_factor = Unorm16 { 0.0f };
+  Unorm16 thickness_factor = Unorm16 { 0.0f };
+  HalfFloat attenuation_color[3]
+    = { HalfFloat { 1.0f }, HalfFloat { 1.0f }, HalfFloat { 1.0f } };
+  float attenuation_distance = 0.0f;
+
+  // --- UV transform extension (v4) ---
+  float uv_scale[2] = { 1.0f, 1.0f };
+  float uv_offset[2] = { 0.0f, 0.0f };
+  float uv_rotation_radians = 0.0f;
+  uint8_t uv_set = 0;
+
+  uint8_t reserved[19] = {};
+};
+// Followed by:
+// - Array of ShaderReferenceDesc entries in ascending set-bit order of
+//   `shader_stages` (least-significant set bit first). Count is population
+//   count of `shader_stages`.
+#pragma pack(pop)
+static_assert(sizeof(MaterialAssetDesc) == 256);
+
 //! Geometry asset descriptor version for PAK v4.
 constexpr uint8_t kGeometryAssetVersion = v3::kGeometryAssetVersion;
 

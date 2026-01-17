@@ -113,6 +113,12 @@ public:
         mat.attenuation_color[2].ToFloat()),
       8);
     PrintUtils::Field("Attenuation Distance", mat.attenuation_distance, 8);
+    PrintUtils::Field("UV Scale",
+      fmt::format("[{:.3f}, {:.3f}]", mat.uv_scale[0], mat.uv_scale[1]), 8);
+    PrintUtils::Field("UV Offset",
+      fmt::format("[{:.3f}, {:.3f}]", mat.uv_offset[0], mat.uv_offset[1]), 8);
+    PrintUtils::Field("UV Rotation", mat.uv_rotation_radians, 8);
+    PrintUtils::Field("UV Set", static_cast<int>(mat.uv_set), 8);
     std::cout << "\n";
 
     const size_t num_refs = std::popcount(mat.shader_stages);

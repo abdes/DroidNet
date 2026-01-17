@@ -199,6 +199,8 @@ set(
   "Import/Async/Pipelines/BufferPipeline.cpp"
   "Import/Async/Pipelines/TexturePipeline.h"
   "Import/Async/Pipelines/TexturePipeline.cpp"
+  "Import/Async/Pipelines/MaterialPipeline.h"
+  "Import/Async/Pipelines/MaterialPipeline.cpp"
   $<$<BOOL:${WIN32}>:Import/Async/WindowsFileReader.h>
   $<$<BOOL:${WIN32}>:Import/Async/WindowsFileReader.cpp>
   $<$<BOOL:${WIN32}>:Import/Async/WindowsFileWriter.h>

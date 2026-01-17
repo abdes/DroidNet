@@ -65,6 +65,10 @@ class MaterialAsset:
     content_hash: int = 0
     variant_flags: int = 0
     alignment: int = 1
+    uv_scale: List[float] = field(default_factory=lambda: [1.0, 1.0])
+    uv_offset: List[float] = field(default_factory=lambda: [0.0, 0.0])
+    uv_rotation_radians: float = 0.0
+    uv_set: int = 0
 
 
 @dataclass(slots=True)

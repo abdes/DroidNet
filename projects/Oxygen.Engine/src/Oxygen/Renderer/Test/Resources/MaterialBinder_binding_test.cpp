@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cstdint>
 #include <memory>
 
@@ -39,6 +40,30 @@ using oxygen::renderer::testing::MaterialBinderTest;
   desc.base_color[1] = 0.5F;
   desc.base_color[2] = 0.25F;
   desc.base_color[3] = 1.0F;
+
+  return std::make_shared<oxygen::data::MaterialAsset>(
+    oxygen::data::AssetKey {}, desc,
+    std::vector<oxygen::data::ShaderReference> {},
+    std::vector { base_color_key, normal_key });
+}
+
+[[nodiscard]] auto MakeMaterialWithUv(ResourceKey base_color_key,
+  ResourceKey normal_key, uint32_t raw_base_color_index,
+  uint32_t raw_normal_index, std::array<float, 2> uv_scale,
+  std::array<float, 2> uv_offset, float uv_rotation_radians, uint8_t uv_set)
+  -> std::shared_ptr<const oxygen::data::MaterialAsset>
+{
+  using oxygen::data::pak::MaterialAssetDesc;
+
+  MaterialAssetDesc desc {};
+  desc.base_color_texture = raw_base_color_index;
+  desc.normal_texture = raw_normal_index;
+  desc.uv_scale[0] = uv_scale[0];
+  desc.uv_scale[1] = uv_scale[1];
+  desc.uv_offset[0] = uv_offset[0];
+  desc.uv_offset[1] = uv_offset[1];
+  desc.uv_rotation_radians = uv_rotation_radians;
+  desc.uv_set = uv_set;
 
   return std::make_shared<oxygen::data::MaterialAsset>(
     oxygen::data::AssetKey {}, desc,
@@ -90,6 +115,44 @@ NOLINT_TEST_F(MaterialBinderBindingTest,
 
   EXPECT_NE(constants.base_color_texture_index, kRawBaseColorIndex);
   EXPECT_NE(constants.normal_texture_index, kRawNormalIndex);
+}
+
+//! MaterialConstants must reflect the material UV transform fields.
+NOLINT_TEST_F(MaterialBinderBindingTest, SerializeMaterialConstantsCopiesUv)
+{
+  constexpr ResourceKey base_color_key { 22101U };
+  constexpr ResourceKey normal_key { 22102U };
+
+  // Arrange
+  Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+  MatBinder().OnFrameStart(
+    oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+
+  oxygen::engine::sceneprep::MaterialRef ref;
+  ref.resolved_asset = MakeMaterialWithUv(base_color_key, normal_key, 1U, 2U,
+    { 2.0F, 3.0F }, { 0.25F, -0.5F }, 0.75F, 2U);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
+
+  // Act
+  const auto handle = MatBinder().GetOrAllocate(ref);
+  ASSERT_TRUE(MatBinder().IsHandleValid(handle));
+
+  // Assert
+  const auto all_constants = MatBinder().GetMaterialConstants();
+  ASSERT_LT(static_cast<std::size_t>(handle.get()), all_constants.size());
+  const auto& constants
+    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+    = all_constants[static_cast<std::size_t>(handle.get())];
+
+  EXPECT_FLOAT_EQ(constants.uv_scale.x, 2.0F);
+  EXPECT_FLOAT_EQ(constants.uv_scale.y, 3.0F);
+  EXPECT_FLOAT_EQ(constants.uv_offset.x, 0.25F);
+  EXPECT_FLOAT_EQ(constants.uv_offset.y, -0.5F);
+  EXPECT_FLOAT_EQ(constants.uv_rotation_radians, 0.75F);
+  EXPECT_EQ(constants.uv_set, 2U);
 }
 
 //! When TextureBinder cannot provide a texture (error index), MaterialBinder

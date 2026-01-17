@@ -7,7 +7,7 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_MATERIALCONSTANTS_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_MATERIALCONSTANTS_HLSLI
 
-// ABI: must match sizeof(oxygen::engine::MaterialConstants) == 96
+// ABI: must match sizeof(oxygen::engine::MaterialConstants) == 112
 struct MaterialConstants
 {
     float4 base_color;
@@ -25,8 +25,34 @@ struct MaterialConstants
     float alpha_cutoff;
     float2 uv_scale;
     float2 uv_offset;
+    float uv_rotation_radians;
+    uint uv_set;
     float3 emissive_factor;
     uint emissive_texture_index;
+    float2 padding;
 };
+
+// UV convention:
+// - Rotation is in radians, counter-clockwise, around the UV origin (0,0).
+// - Transform order is: scale -> rotation -> offset.
+// - uv_set selects the source UV set (0 = TEXCOORD0). Other sets require
+//   vertex data support; currently only uv0 is available.
+float2 ApplyMaterialUv(float2 uv0, MaterialConstants mat)
+{
+    float2 uv = uv0;
+    // TODO: Support selecting alternate UV sets when available.
+    if (mat.uv_set != 0u) {
+        uv = uv0;
+    }
+
+    uv *= mat.uv_scale;
+    if (mat.uv_rotation_radians != 0.0f) {
+        const float c = cos(mat.uv_rotation_radians);
+        const float s = sin(mat.uv_rotation_radians);
+        uv = float2(uv.x * c - uv.y * s, uv.x * s + uv.y * c);
+    }
+    uv += mat.uv_offset;
+    return uv;
+}
 
 #endif  // OXYGEN_D3D12_SHADERS_RENDERER_MATERIALCONSTANTS_HLSLI

@@ -243,10 +243,15 @@ auto SerializeMaterialConstants(
     constants.opacity_texture_index = oxygen::kInvalidShaderVisibleIndex.get();
   }
 
-  // Default UV transform (identity). Runtime/editor can override via
-  // MaterialBinder::OverrideUvTransform.
-  constants.uv_scale = { 1.0F, 1.0F };
-  constants.uv_offset = { 0.0F, 0.0F };
+  const auto uv_scale = material.resolved_asset->GetUvScale();
+  constants.uv_scale = { uv_scale[0], uv_scale[1] };
+
+  const auto uv_offset = material.resolved_asset->GetUvOffset();
+  constants.uv_offset = { uv_offset[0], uv_offset[1] };
+
+  constants.uv_rotation_radians
+    = material.resolved_asset->GetUvRotationRadians();
+  constants.uv_set = material.resolved_asset->GetUvSet();
 
   // Emissive: factor and texture for self-illumination / glow.
   const auto emissive_factor = material.resolved_asset->GetEmissiveFactor();
