@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <fstream>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/Async/Emitters/AssetEmitter.h>
 #include <Oxygen/Content/Import/Async/Emitters/BufferEmitter.h>
@@ -22,6 +24,35 @@ namespace {
   {
     static oxygen::co::Semaphore gate(1);
     return gate;
+  }
+
+  auto EnsureExternalFileExists(const std::filesystem::path& path) -> void
+  {
+    std::error_code ec;
+    if (std::filesystem::exists(path, ec)) {
+      return;
+    }
+
+    std::filesystem::create_directories(path.parent_path(), ec);
+    if (ec) {
+      throw std::runtime_error(
+        "Failed to create directory for external file: " + path.string());
+    }
+
+    std::ofstream out(path, std::ios::binary | std::ios::app);
+    if (!out) {
+      throw std::runtime_error(
+        "Failed to create external file: " + path.string());
+    }
+  }
+
+  auto RegisterExternalTable(LooseCookedWriter& writer,
+    const data::loose_cooked::v1::FileKind kind,
+    const std::filesystem::path& cooked_root, std::string_view relpath) -> void
+  {
+    const auto path = cooked_root / std::filesystem::path(relpath);
+    EnsureExternalFileExists(path);
+    writer.RegisterExternalFile(kind, relpath);
   }
 
 } // namespace
@@ -252,18 +283,20 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       using oxygen::data::loose_cooked::v1::FileKind;
 
       const auto& layout = request_.loose_cooked_layout;
-      if (texture_emitter_.has_value()) {
+      if (texture_emitter_.has_value() && (**texture_emitter_).Count() > 0) {
         cooked_writer_.RegisterExternalFile(
           FileKind::kTexturesData, layout.TexturesDataRelPath());
-        cooked_writer_.RegisterExternalFile(
-          FileKind::kTexturesTable, layout.TexturesTableRelPath());
+
+        RegisterExternalTable(cooked_writer_, FileKind::kTexturesTable,
+          cooked_root_, layout.TexturesTableRelPath());
       }
 
       if (buffer_emitter_.has_value() && (**buffer_emitter_).Count() > 0) {
         cooked_writer_.RegisterExternalFile(
           FileKind::kBuffersData, layout.BuffersDataRelPath());
-        cooked_writer_.RegisterExternalFile(
-          FileKind::kBuffersTable, layout.BuffersTableRelPath());
+
+        RegisterExternalTable(cooked_writer_, FileKind::kBuffersTable,
+          cooked_root_, layout.BuffersTableRelPath());
       }
 
       if (asset_emitter_.has_value()) {

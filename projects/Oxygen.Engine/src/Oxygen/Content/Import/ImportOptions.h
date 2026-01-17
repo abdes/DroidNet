@@ -385,6 +385,9 @@ struct ImportOptions final {
     //! Packing policy ID ("d3d12" or "tight").
     std::string packing_policy_id = "d3d12";
 
+    //! Use placeholder payload when texture cooking fails.
+    bool placeholder_on_failure = false;
+
     //! Import as a cubemap using cube-specific workflows.
     /*!
      When false, the import job treats the source as a standard 2D texture.

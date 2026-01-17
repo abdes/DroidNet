@@ -15,6 +15,7 @@
 #include <Oxygen/Content/Import/Async/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/Async/IAsyncFileWriter.h>
 #include <Oxygen/Content/Import/Async/ImportEventLoop.h>
+#include <Oxygen/Content/Import/Async/ResourceTableRegistry.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Run.h>
@@ -43,11 +44,13 @@ protected:
   std::unique_ptr<IAsyncFileReader> file_reader_;
   std::unique_ptr<IAsyncFileWriter> file_writer_;
   std::unique_ptr<oxygen::co::ThreadPool> thread_pool_;
+  std::unique_ptr<ResourceTableRegistry> table_registry_;
 
   void SetUp() override
   {
     file_reader_ = CreateAsyncFileReader(loop_);
     file_writer_ = CreateAsyncFileWriter(loop_);
+    table_registry_ = std::make_unique<ResourceTableRegistry>(*file_writer_);
     thread_pool_ = std::make_unique<oxygen::co::ThreadPool>(loop_, 1);
   }
 };
@@ -174,7 +177,8 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_Run_CompletesAndCallsOnCompleteOnce)
     nullptr, cancel_event,
     oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
-    oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -218,7 +222,8 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_Stop_CompletesWithCancelledDiagnostic)
   BlockingJob job(2, std::move(request), std::move(on_complete), nullptr,
     cancel_event, oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
-    oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -269,7 +274,8 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_CancelEvent_PreTriggered_AvoidsExecution)
   BlockingJob job(3, std::move(request), std::move(on_complete), nullptr,
     cancel_event, oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
-    oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -310,7 +316,8 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_StartTask_ExecutesTask)
   StartTaskJob job(4, std::move(request), std::move(on_complete), nullptr,
     cancel_event, oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
-    oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -349,7 +356,8 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_StartPipeline_StartsWorkers)
   StartPipelineJob job(5, std::move(request), std::move(on_complete), nullptr,
     cancel_event, oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
-    oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
   job.pipeline = &pipeline;
 
   // Act

@@ -8,6 +8,7 @@
 
 #include <Oxygen/Content/Import/Async/IAsyncFileWriter.h>
 #include <Oxygen/Content/Import/Async/ImportEventLoop.h>
+#include <Oxygen/Content/Import/Async/ResourceTableRegistry.h>
 #include <Oxygen/Content/Import/Async/WindowsFileWriter.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
@@ -94,6 +95,7 @@ protected:
   {
     loop_ = std::make_unique<ImportEventLoop>();
     writer_ = std::make_unique<WindowsFileWriter>(*loop_);
+    table_registry_ = std::make_unique<ResourceTableRegistry>(*writer_);
     test_dir_
       = std::filesystem::temp_directory_path() / "oxygen_texture_emitter_test";
     std::filesystem::create_directories(test_dir_);
@@ -101,6 +103,7 @@ protected:
 
   auto TearDown() -> void override
   {
+    table_registry_.reset();
     writer_.reset();
     loop_.reset();
     std::error_code ec;
@@ -109,8 +112,24 @@ protected:
 
   auto Layout() const -> const LooseCookedLayout& { return layout_; }
 
+  auto TextureAggregator() -> TextureTableAggregator&
+  {
+    return table_registry_->TextureAggregator(test_dir_, layout_);
+  }
+
+  auto FinalizeTables() -> bool
+  {
+    bool ok = false;
+    co::Run(*loop_, [&]() -> Co<> {
+      ok = co_await table_registry_->FinalizeAll();
+      co_return;
+    });
+    return ok;
+  }
+
   std::unique_ptr<ImportEventLoop> loop_;
   std::unique_ptr<WindowsFileWriter> writer_;
+  std::unique_ptr<ResourceTableRegistry> table_registry_;
   std::filesystem::path test_dir_;
   LooseCookedLayout layout_ {}; // Uses default paths
 };
@@ -122,7 +141,7 @@ protected:
 NOLINT_TEST_F(TextureEmitterTest, Emit_SingleTexture_ReturnsIndexOne)
 {
   // Arrange
-  TextureEmitter emitter(*writer_, Layout(), test_dir_);
+  TextureEmitter emitter(*writer_, TextureAggregator(), Layout(), test_dir_);
   auto payload = MakeTestPayload(512, 512);
 
   // Act
@@ -145,7 +164,7 @@ NOLINT_TEST_F(
   TextureEmitterTest, Emit_MultipleTextures_ReturnsSequentialIndices)
 {
   // Arrange
-  TextureEmitter emitter(*writer_, Layout(), test_dir_);
+  TextureEmitter emitter(*writer_, TextureAggregator(), Layout(), test_dir_);
 
   // Act
   std::vector<uint32_t> indices;
@@ -172,7 +191,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(TextureEmitterTest, Emit_ReturnsImmediately_BeforeIOCompletes)
 {
   // Arrange
-  TextureEmitter emitter(*writer_, Layout(), test_dir_);
+  TextureEmitter emitter(*writer_, TextureAggregator(), Layout(), test_dir_);
   auto payload = MakeTestPayload(1024, 1024, 8, 4 * 1024); // 4KB
 
   // Act
@@ -196,7 +215,7 @@ NOLINT_TEST_F(TextureEmitterTest, Emit_ReturnsImmediately_BeforeIOCompletes)
 NOLINT_TEST_F(TextureEmitterTest, Emit_AfterFinalize_Throws)
 {
   // Arrange
-  TextureEmitter emitter(*writer_, Layout(), test_dir_);
+  TextureEmitter emitter(*writer_, TextureAggregator(), Layout(), test_dir_);
 
   // Act & Assert
   co::Run(*loop_, [&]() -> Co<> {
@@ -215,7 +234,7 @@ NOLINT_TEST_F(TextureEmitterTest, Emit_AfterFinalize_Throws)
 NOLINT_TEST_F(TextureEmitterTest, Finalize_WaitsForPendingIO)
 {
   // Arrange
-  TextureEmitter emitter(*writer_, Layout(), test_dir_);
+  TextureEmitter emitter(*writer_, TextureAggregator(), Layout(), test_dir_);
   auto idx0 = emitter.Emit(MakeTestPayload(512, 512, 4, 2048));
   auto idx1 = emitter.Emit(MakeTestPayload(256, 256, 2, 1024));
   EXPECT_EQ(idx0, 1);
@@ -235,14 +254,21 @@ NOLINT_TEST_F(TextureEmitterTest, Finalize_WaitsForPendingIO)
 NOLINT_TEST_F(TextureEmitterTest, Finalize_WritesTableFile)
 {
   // Arrange
-  TextureEmitter emitter(*writer_, Layout(), test_dir_);
+  TextureEmitter emitter(*writer_, TextureAggregator(), Layout(), test_dir_);
   auto idx0 = emitter.Emit(MakeTestPayload(512, 512, 4, 2048));
   auto idx1 = emitter.Emit(MakeTestPayload(256, 256, 2, 1024));
   EXPECT_EQ(idx0, 1);
   EXPECT_EQ(idx1, 2);
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> { co_await emitter.Finalize(); });
+  bool tables_ok = false;
+  co::Run(*loop_, [&]() -> Co<> {
+    co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
+  });
+
+  EXPECT_TRUE(tables_ok);
 
   // Assert
   const auto table_path = test_dir_ / Layout().TexturesTableRelPath();
@@ -257,7 +283,7 @@ NOLINT_TEST_F(TextureEmitterTest, Finalize_WritesTableFile)
 NOLINT_TEST_F(TextureEmitterTest, Finalize_WritesDataFile)
 {
   // Arrange
-  TextureEmitter emitter(*writer_, Layout(), test_dir_);
+  TextureEmitter emitter(*writer_, TextureAggregator(), Layout(), test_dir_);
   constexpr size_t kPayloadSize1 = 2048;
   constexpr size_t kPayloadSize2 = 1024;
   auto idx0 = emitter.Emit(MakeTestPayload(512, 512, 4, kPayloadSize1));
@@ -266,7 +292,14 @@ NOLINT_TEST_F(TextureEmitterTest, Finalize_WritesDataFile)
   EXPECT_EQ(idx1, 2);
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> { co_await emitter.Finalize(); });
+  bool tables_ok = false;
+  co::Run(*loop_, [&]() -> Co<> {
+    co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
+  });
+
+  EXPECT_TRUE(tables_ok);
 
   // Assert
   const auto data_path = test_dir_ / Layout().TexturesDataRelPath();
@@ -295,7 +328,7 @@ NOLINT_TEST_F(TextureEmitterTest, Finalize_WritesDataFile)
 NOLINT_TEST_F(TextureEmitterTest, Finalize_TableEntriesHaveCorrectOffsets)
 {
   // Arrange
-  TextureEmitter emitter(*writer_, Layout(), test_dir_);
+  TextureEmitter emitter(*writer_, TextureAggregator(), Layout(), test_dir_);
   constexpr size_t kPayloadSize1 = 2048;
   constexpr size_t kPayloadSize2 = 1024;
   auto idx0 = emitter.Emit(MakeTestPayload(512, 512, 4, kPayloadSize1));
@@ -304,7 +337,14 @@ NOLINT_TEST_F(TextureEmitterTest, Finalize_TableEntriesHaveCorrectOffsets)
   EXPECT_EQ(idx1, 2);
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> { co_await emitter.Finalize(); });
+  bool tables_ok = false;
+  co::Run(*loop_, [&]() -> Co<> {
+    co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
+  });
+
+  EXPECT_TRUE(tables_ok);
 
   // Assert
   const auto table_path = test_dir_ / Layout().TexturesTableRelPath();
@@ -327,7 +367,7 @@ NOLINT_TEST_F(TextureEmitterTest, Finalize_TableEntriesHaveCorrectOffsets)
 NOLINT_TEST_F(TextureEmitterTest, Finalize_TableEntriesPreserveMetadata)
 {
   // Arrange
-  TextureEmitter emitter(*writer_, Layout(), test_dir_);
+  TextureEmitter emitter(*writer_, TextureAggregator(), Layout(), test_dir_);
   auto payload = MakeTestPayload(512, 256, 4, 2048);
   payload.desc.array_layers = 6;
   payload.desc.depth = 1;
@@ -335,7 +375,14 @@ NOLINT_TEST_F(TextureEmitterTest, Finalize_TableEntriesPreserveMetadata)
   EXPECT_EQ(idx, 1);
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> { co_await emitter.Finalize(); });
+  bool tables_ok = false;
+  co::Run(*loop_, [&]() -> Co<> {
+    co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
+  });
+
+  EXPECT_TRUE(tables_ok);
 
   // Assert
   const auto table_path = test_dir_ / Layout().TexturesTableRelPath();
@@ -349,25 +396,31 @@ NOLINT_TEST_F(TextureEmitterTest, Finalize_TableEntriesPreserveMetadata)
   EXPECT_EQ(table[1].depth, 1);
 }
 
-//! Verify finalization with no textures still emits the fallback entry.
-NOLINT_TEST_F(TextureEmitterTest, Finalize_NoTextures_WritesFallback)
+//! Verify finalization with no textures skips table and fallback writes.
+NOLINT_TEST_F(TextureEmitterTest, Finalize_NoTextures_SkipsTableAndFallback)
 {
   // Arrange
-  TextureEmitter emitter(*writer_, Layout(), test_dir_);
+  TextureEmitter emitter(*writer_, TextureAggregator(), Layout(), test_dir_);
 
   // Act
   bool success = false;
-  co::Run(*loop_, [&]() -> Co<> { success = co_await emitter.Finalize(); });
+  bool tables_ok = false;
+  co::Run(*loop_, [&]() -> Co<> {
+    success = co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
+  });
+
+  EXPECT_TRUE(tables_ok);
 
   // Assert
   EXPECT_TRUE(success);
 
   const auto table_path = test_dir_ / Layout().TexturesTableRelPath();
-  EXPECT_TRUE(std::filesystem::exists(table_path));
+  EXPECT_FALSE(std::filesystem::exists(table_path));
 
-  const auto table = ParseTextureTable(ReadBinaryFile(table_path));
-  ASSERT_EQ(table.size(), 1);
-  EXPECT_EQ(table[0].data_offset, 0);
+  const auto data_path = test_dir_ / Layout().TexturesDataRelPath();
+  EXPECT_FALSE(std::filesystem::exists(data_path));
 }
 
 //=== State Query Tests
@@ -377,13 +430,14 @@ NOLINT_TEST_F(TextureEmitterTest, Finalize_NoTextures_WritesFallback)
 NOLINT_TEST_F(TextureEmitterTest, DataFileSize_TracksAccumulatedSize)
 {
   // Arrange
-  TextureEmitter emitter(*writer_, Layout(), test_dir_);
+  TextureEmitter emitter(*writer_, TextureAggregator(), Layout(), test_dir_);
   constexpr size_t kSize1 = 1000;
   constexpr size_t kSize2 = 500;
 
   uint64_t size_after_first = 0;
   uint64_t size_after_second = 0;
   bool finalized = false;
+  bool tables_ok = false;
 
   // Act & Assert
   EXPECT_EQ(emitter.DataFileSize(), 0);
@@ -400,9 +454,12 @@ NOLINT_TEST_F(TextureEmitterTest, DataFileSize_TracksAccumulatedSize)
     EXPECT_GT(size_after_second, size_after_first);
 
     finalized = co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
   });
 
   EXPECT_TRUE(finalized);
+  EXPECT_TRUE(tables_ok);
 
   const auto table_path = test_dir_ / Layout().TexturesTableRelPath();
   const auto data_path = test_dir_ / Layout().TexturesDataRelPath();
@@ -420,7 +477,7 @@ NOLINT_TEST_F(TextureEmitterTest, DataFileSize_TracksAccumulatedSize)
 NOLINT_TEST_F(TextureEmitterTest, Count_ReturnsNumberOfEmittedTextures)
 {
   // Arrange
-  TextureEmitter emitter(*writer_, Layout(), test_dir_);
+  TextureEmitter emitter(*writer_, TextureAggregator(), Layout(), test_dir_);
 
   // Act
   bool success = false;
@@ -450,7 +507,7 @@ NOLINT_TEST_F(TextureEmitterTest, Count_ReturnsNumberOfEmittedTextures)
 NOLINT_TEST_F(TextureEmitterTest, ErrorCount_InitiallyZero)
 {
   // Arrange
-  TextureEmitter emitter(*writer_, Layout(), test_dir_);
+  TextureEmitter emitter(*writer_, TextureAggregator(), Layout(), test_dir_);
 
   // Assert
   EXPECT_EQ(emitter.ErrorCount(), 0);
@@ -462,16 +519,21 @@ NOLINT_TEST_F(TextureEmitterTest, ErrorCount_InitiallyZero)
 NOLINT_TEST_F(TextureEmitterTest, DataFileContent_MatchesEmittedPayload)
 {
   // Arrange
-  TextureEmitter emitter(*writer_, Layout(), test_dir_);
+  TextureEmitter emitter(*writer_, TextureAggregator(), Layout(), test_dir_);
   auto payload = MakeTestPayload(256, 256, 1, 128);
   const auto expected_data = payload.payload; // Copy before move
 
   // Act
+  bool tables_ok = false;
   co::Run(*loop_, [&]() -> Co<> {
     auto idx = emitter.Emit(std::move(payload));
     EXPECT_EQ(idx, 1);
     co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
   });
+
+  EXPECT_TRUE(tables_ok);
 
   // Assert
   const auto table_path = test_dir_ / Layout().TexturesTableRelPath();
@@ -493,7 +555,7 @@ NOLINT_TEST_F(TextureEmitterTest, DataFileContent_MatchesEmittedPayload)
 NOLINT_TEST_F(TextureEmitterTest, MultiplePayloads_ConcatenatedInOrder)
 {
   // Arrange
-  TextureEmitter emitter(*writer_, Layout(), test_dir_);
+  TextureEmitter emitter(*writer_, TextureAggregator(), Layout(), test_dir_);
 
   // Build payloads with expected per-payload patterns.
   std::vector<CookedTexturePayload> payloads;
@@ -512,13 +574,18 @@ NOLINT_TEST_F(TextureEmitterTest, MultiplePayloads_ConcatenatedInOrder)
   }
 
   // Act - emit all and finalize in a single Run
+  bool tables_ok = false;
   co::Run(*loop_, [&]() -> Co<> {
     for (size_t i = 0; i < payloads.size(); ++i) {
       auto idx = emitter.Emit(std::move(payloads[i]));
       EXPECT_EQ(idx, static_cast<uint32_t>(i + 1));
     }
     co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
   });
+
+  EXPECT_TRUE(tables_ok);
 
   // Assert
   const auto table_path = test_dir_ / Layout().TexturesTableRelPath();
@@ -555,18 +622,23 @@ NOLINT_TEST_F(TextureEmitterTest, MultiplePayloads_ConcatenatedInOrder)
 NOLINT_TEST_F(TextureEmitterTest, Emit_IdenticalTextures_ReusesIndex)
 {
   // Arrange
-  TextureEmitter emitter(*writer_, Layout(), test_dir_);
+  TextureEmitter emitter(*writer_, TextureAggregator(), Layout(), test_dir_);
   auto payload1 = MakeTestPayload(256, 256, 1, 256);
   auto payload2 = MakeTestPayload(256, 256, 1, 256);
 
   // Act
   uint32_t idx1 = 0;
   uint32_t idx2 = 0;
+  bool tables_ok = false;
   co::Run(*loop_, [&]() -> Co<> {
     idx1 = emitter.Emit(std::move(payload1));
     idx2 = emitter.Emit(std::move(payload2));
     co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
   });
+
+  EXPECT_TRUE(tables_ok);
 
   // Assert
   EXPECT_EQ(idx1, 1);

@@ -15,6 +15,7 @@
 #include <Oxygen/Content/Import/Async/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/Async/ImportSession.h>
 #include <Oxygen/Content/Import/Async/Jobs/TextureImportJob.h>
+#include <Oxygen/Content/Import/Async/Jobs/TextureImportPolicy.h>
 #include <Oxygen/Content/Import/Async/Pipelines/TexturePipeline.h>
 #include <Oxygen/Content/Import/ImageDecode.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
@@ -1058,7 +1059,7 @@ auto TextureImportJob::CookTexture(
   item.desc = desc;
   item.packing_policy_id = tuning.enabled ? tuning.packing_policy_id : "d3d12";
   item.output_format_is_override = tuning.enabled;
-  item.failure_policy = TexturePipeline::FailurePolicy::kStrict;
+  item.failure_policy = FailurePolicyForTextureTuning(tuning);
   if (source.image.has_value()) {
     item.source = std::move(source.image.value());
   } else if (source.source_set.has_value()) {
@@ -1081,6 +1082,15 @@ auto TextureImportJob::CookTexture(
   auto result = co_await pipeline.Collect();
   for (const auto& diagnostic : result.diagnostics) {
     session.AddDiagnostic(diagnostic);
+  }
+  if (result.used_placeholder) {
+    session.AddDiagnostic({
+      .severity = ImportSeverity::kWarning,
+      .code = "texture.placeholder_used",
+      .message = "Texture cook failed; used placeholder payload",
+      .source_path = Request().source_path.string(),
+      .object_path = {},
+    });
   }
 
   if (!result.success || !result.cooked.has_value()) {
