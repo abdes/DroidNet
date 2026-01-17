@@ -56,6 +56,11 @@ applyTo: '**/*.cpp;**/*.h'
   - Cases where the underlying type is already sufficiently type-safe
   - Over-engineering simple numeric operations
 
+## Binary serialization / deserialization
+- Rule: For any binary serialization/deserialization in Oxygen, use oxygen::serio
+  (Reader/Writer/Stream/MemoryStream/FileStream and Store/Load ADL). Do NOT use raw memcpy, pointer arithmetic, or
+  manual byte packing unless explicitly requested for a proven hot path.
+
 ## CODE QUALITY RULES
 
 - Use `constexpr`, `noexcept`, and `auto` return types where appropriate.
