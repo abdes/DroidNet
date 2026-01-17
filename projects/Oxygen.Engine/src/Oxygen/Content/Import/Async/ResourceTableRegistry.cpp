@@ -84,6 +84,12 @@ auto ResourceTableRegistry::FinalizeAll() -> co::Co<bool>
     }
   }
 
+  {
+    std::lock_guard lock(mutex_);
+    texture_tables_.clear();
+    buffer_tables_.clear();
+  }
+
   co_return ok;
 }
 
