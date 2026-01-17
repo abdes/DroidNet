@@ -1156,10 +1156,8 @@ auto AssetLoader::BindGeometryRuntimePointers(data::GeometryAsset& asset,
         == static_cast<uint8_t>(MeshType::kStandard)) {
       const auto& info = mesh_desc_opt->info.standard;
 
-      const auto vb_it
-        = buffers_by_index.find(static_cast<uint32_t>(info.vertex_buffer));
-      const auto ib_it
-        = buffers_by_index.find(static_cast<uint32_t>(info.index_buffer));
+      const auto vb_it = buffers_by_index.find(info.vertex_buffer);
+      const auto ib_it = buffers_by_index.find(info.index_buffer);
 
       std::shared_ptr<BufferResource> vb;
       if (vb_it != buffers_by_index.end()) {
@@ -1172,6 +1170,56 @@ auto AssetLoader::BindGeometryRuntimePointers(data::GeometryAsset& asset,
       }
 
       mesh.SetBufferResources(std::move(vb), std::move(ib));
+    } else if (mesh_desc_opt && mesh_desc_opt->IsSkinned()) {
+      const auto& info = mesh_desc_opt->info.skinned;
+
+      const auto vb_it = buffers_by_index.find(info.vertex_buffer);
+      const auto ib_it = buffers_by_index.find(info.index_buffer);
+      const auto joint_index_it
+        = buffers_by_index.find(info.joint_index_buffer);
+      const auto joint_weight_it
+        = buffers_by_index.find(info.joint_weight_buffer);
+      const auto inverse_bind_it
+        = buffers_by_index.find(info.inverse_bind_buffer);
+      const auto joint_remap_it
+        = buffers_by_index.find(info.joint_remap_buffer);
+
+      std::shared_ptr<BufferResource> vb;
+      if (vb_it != buffers_by_index.end()) {
+        vb = vb_it->second.resource;
+      }
+
+      std::shared_ptr<BufferResource> ib;
+      if (ib_it != buffers_by_index.end()) {
+        ib = ib_it->second.resource;
+      }
+
+      std::shared_ptr<BufferResource> joint_index;
+      if (joint_index_it != buffers_by_index.end()) {
+        joint_index = joint_index_it->second.resource;
+      }
+
+      std::shared_ptr<BufferResource> joint_weight;
+      if (joint_weight_it != buffers_by_index.end()) {
+        joint_weight = joint_weight_it->second.resource;
+      }
+
+      std::shared_ptr<BufferResource> inverse_bind;
+      if (inverse_bind_it != buffers_by_index.end()) {
+        inverse_bind = inverse_bind_it->second.resource;
+      }
+
+      std::shared_ptr<BufferResource> joint_remap;
+      if (joint_remap_it != buffers_by_index.end()) {
+        joint_remap = joint_remap_it->second.resource;
+      }
+
+      mesh.SetBufferResources(std::move(vb), std::move(ib));
+      if (mesh.IsSkinned()) {
+        mesh.SetSkiningBufferResources(std::move(joint_index),
+          std::move(joint_weight), std::move(inverse_bind),
+          std::move(joint_remap));
+      }
     }
 
     const auto submeshes = mesh.SubMeshes();

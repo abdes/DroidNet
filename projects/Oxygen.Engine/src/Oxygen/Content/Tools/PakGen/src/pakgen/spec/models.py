@@ -98,6 +98,14 @@ class GeometryLod:
     mesh_type: int = 0
     vertex_buffer: Optional[str] = None
     index_buffer: Optional[str] = None
+    joint_index_buffer: Optional[str] = None
+    joint_weight_buffer: Optional[str] = None
+    inverse_bind_buffer: Optional[str] = None
+    joint_remap_buffer: Optional[str] = None
+    skeleton_asset_key: Optional[str] = None
+    joint_count: int = 0
+    influences_per_vertex: int = 0
+    skinned_flags: int = 0
     submeshes: List[Submesh] = field(default_factory=list)
     bounding_box_min: List[float] = field(
         default_factory=lambda: [0.0, 0.0, 0.0]

@@ -635,6 +635,8 @@ constexpr uint8_t kGeometryAssetVersion = 1;
     MeshDesc.
   - `bounding_box_min`, `bounding_box_max`: Axis-aligned bounding box (AABB) for
     the entire geometry, used for culling and spatial queries.
+  - Bounds are required and must be pre-computed by tooling. All-zero bounds are
+    valid and must not be interpreted as "missing".
 
   @see MeshDesc, SubMeshDesc, MeshViewDesc, AssetHeader
 */
@@ -653,6 +655,8 @@ struct GeometryAssetDesc {
 static_assert(sizeof(GeometryAssetDesc) == 256);
 
 //! Fields for a standard (static) mesh
+/*! Boundaries are required and must be pre-computed by tooling. All-zero
+  bounds are valid and must not be interpreted as "missing". */
 #pragma pack(push, 1)
 struct StandardMeshInfo {
   ResourceIndexT vertex_buffer = 0; //!< Reference to vertex buffer
@@ -662,6 +666,28 @@ struct StandardMeshInfo {
 };
 #pragma pack(pop)
 static_assert(sizeof(StandardMeshInfo) == 32);
+
+//! Fields for a skinned mesh
+/*! Stores references to the vertex and index buffers plus skinning buffers.
+  Bounds are required and must be pre-computed by tooling. All-zero bounds are
+  valid and must not be interpreted as "missing". */
+#pragma pack(push, 1)
+struct SkinnedMeshInfo {
+  ResourceIndexT vertex_buffer = 0; //!< Reference to vertex buffer
+  ResourceIndexT index_buffer = 0; //!< Reference to index buffer
+  ResourceIndexT joint_index_buffer = 0; //!< Joint indices buffer
+  ResourceIndexT joint_weight_buffer = 0; //!< Joint weights buffer
+  ResourceIndexT inverse_bind_buffer = 0; //!< Inverse bind matrices buffer
+  ResourceIndexT joint_remap_buffer = 0; //!< Mesh-to-skeleton remap buffer
+  AssetKey skeleton_asset_key = {}; //!< Skeleton asset reference - TODO: future
+  uint16_t joint_count = 0; //!< Number of joints referenced by this mesh
+  uint16_t influences_per_vertex = 0; //!< Influences per vertex (1..8)
+  uint32_t flags = 0; //!< Skinning flags (LBS/DQS, normalization)
+  float bounding_box_min[3] = {}; //!< AABB min coordinates
+  float bounding_box_max[3] = {}; //!< AABB max coordinates
+};
+#pragma pack(pop)
+static_assert(sizeof(SkinnedMeshInfo) == 72);
 
 //! Fields for a procedural mesh
 #pragma pack(push, 1)
@@ -687,7 +713,8 @@ static_assert(sizeof(ProceduralMeshInfo) == 4);
 
   - `submesh_count`: Number of SubMeshDesc structures following this mesh.
   - `mesh_view_count`: Total number of MeshViewDesc structures in all submeshes.
-  - `bounding_box_min`, `bounding_box_max`: AABB for the mesh.
+  - `bounding_box_min`, `bounding_box_max`: AABB for the mesh (required).
+  - All-zero bounds are valid and must not be interpreted as "missing".
 
   @see SubMeshDesc, MeshViewDesc, GeometryAssetDesc
 */
@@ -700,6 +727,8 @@ struct MeshDesc {
   union {
     //! Static Mesh. All info is self-contained in this structure.
     StandardMeshInfo standard;
+    //! Skinned Mesh. Contains skinning buffer references.
+    SkinnedMeshInfo skinned;
     //! Procedural Mesh. Parameters blob follow the MeshDesc immediately. Mesh
     //! name is used to identify the procedural mesh type, and should be in the
     //! format: `Generator/MeshName`, where `Generator` is a known procedural
@@ -732,7 +761,7 @@ struct MeshDesc {
 //   the MeshInfo structure.
 // - SubMeshDesc submeshes[submesh_count];
 #pragma pack(pop)
-static_assert(sizeof(MeshDesc) == 105);
+static_assert(sizeof(MeshDesc) == 145);
 
 //! Sub-mesh descriptor (108 bytes + MeshView table)
 /*!

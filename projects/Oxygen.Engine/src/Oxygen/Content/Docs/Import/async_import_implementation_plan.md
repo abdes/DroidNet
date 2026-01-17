@@ -618,11 +618,14 @@ Tasks:
 
 - [X] Introduce a concrete placeholder job (`DefaultImportJob`) that owns an
   `ImportSession` and exercises session finalization.
-- [ ] Add format-specific jobs (FBX/GLB/etc.) and move orchestration there.
+- [X] Add format-specific jobs (FBX/GLB/etc.) and move orchestration there.
 - [ ] Ensure each concrete job decides which pipelines to start and how to wire
   submit/collect/emit flows.
 - [X] Keep cancellation handling unified: cancelling the job nursery completes
   via `on_complete(..., report)` with `success=false` and `import.cancelled`.
+
+@note FBX/GLB jobs currently wire geometry only; texture/material/scene wiring
+      remains pending.
 
 @note At this phase, non-FBX jobs may remain skeletons, but the plumbing must
       exist so the service can select them and the importer can activate/run
@@ -981,20 +984,97 @@ Tasks:
 
 Tasks:
 
-- [ ] Implement `GeometryPipeline` API (Submit/TrySubmit/Collect/Close) using
-  bounded channels and `PipelineProgress` tracking.
-- [ ] Implement worker loop with cancellation via `WorkItem.stop_token`.
-- [ ] Implement LOD validation, attribute policies, and diagnostics per
-  `design/geometry_work_pipeline_v2.md`.
-- [ ] Implement coordinate conversion policy plumbing (one-shot transform).
-- [ ] Build geometry descriptor bytes (packed, alignment = 1) and compute
-  `header.content_hash`.
-- [ ] Compute buffer payloads (vertex/index/aux) and content hashes; honor
-  alignment constraints for skinned buffers.
-- [ ] Unit tests: attribute policy coverage (normals/tangents), UV warnings,
-  bounds correctness, and deterministic naming rules.
-- [ ] Unit tests: skinned mesh payloads (joint buffers present + alignment).
-- [ ] Unit tests: descriptor serialization (layout, offsets, version, hash).
+- [X] Implement `GeometryPipeline` API skeleton (channels, Start/Submit/
+  TrySubmit/Collect/Close) with `PipelineProgress` tracking.
+- [X] Define data model helpers for LOD validation, attribute masks, and
+  material bucketing (no I/O).
+- [X] Implement worker loop and cancellation via `WorkItem.stop_token`.
+- [X] Implement coordinate conversion policy plumbing (swap Y/Z policy).
+- [X] Implement LOD validation and diagnostics (missing positions/indices,
+  range validation).
+- [X] Implement vertex expansion, bounds computation, and attribute policy
+  application (normals/tangents with prerequisite diagnostics).
+- [X] Implement submesh bucketing and mesh view layout (sorted by material
+  slot, tight ranges).
+- [X] Build buffer payloads (vertex/index/aux) honoring alignment and skinned
+  mesh requirements; defer content hashing.
+- [X] Serialize geometry descriptor bytes (packed, alignment = 1), populate
+  headers/variant flags (with placeholder buffer indices).
+- [X] Unit tests: basic attribute policy coverage, UV warnings, and descriptor
+  header validation.
+
+##### 6.6b Gap Audit (Design Compliance)
+
+The implementation is functional but does not yet fully satisfy
+[geometry_work_pipeline_v2.md](geometry_work_pipeline_v2.md). The following
+gaps must be closed to declare the design fully implemented:
+
+- [X] **MeshSource policy**: pipeline accepts `TriangulatedMesh` only; all
+  importer-specific meshes must be normalized by adapters before submission.
+- [X] **LOD limits + validation**: enforce LOD count range (1..8), per-LOD
+  index_count > 0, vertex/index counts fit `uint32_t`, and submesh/view counts
+  are non-zero when indices exist. Emit diagnostics for limit violations.
+- [X] **Buffer size limits**: enforce `kDataBlobMaxSize` for vertex/index and
+  auxiliary buffers; emit diagnostics on overflow.
+- [X] **Mesh-type blob serialization**: emit skinned/procedural blobs
+  immediately after `MeshDesc` per PAK format; update descriptor layout tests.
+  (Current: no mesh-type blob emission in descriptor bytes.)
+- [X] **Procedural mesh policy**: support `MeshType::kProcedural` or reject
+  with explicit diagnostic per job policy.
+  (Current: non-standard/skinned are rejected.)
+- [X] **Descriptor finalization API**: expose a helper to patch buffer indices
+  into `MeshDesc` and compute `header.content_hash` once indices are known
+  (ThreadPool-backed). `Config::with_content_hashing` must be honored.
+  (Current: `header.content_hash` stays zero.)
+- [X] **Skinned auxiliary buffers**: add inverse bind and joint remap buffers
+  (or emit blocking diagnostics if unavailable) to match PAK requirements.
+  (Current: only joint indices/weights are emitted.)
+- [X] **Name truncation diagnostics**: emit warnings when mesh/LOD/submesh
+  names are truncated in packed descriptors.
+
+##### 6.6b Test Gaps
+
+- [X] Add tests for LOD limits and count validation (1..8), including failure
+  diagnostics.
+- [X] Add tests for buffer size limits (`kDataBlobMaxSize`).
+- [X] Add tests for skinned descriptor layout, including mesh-type blob size
+  and ordering, and joint buffer alignment.
+- [X] Add tests for `header.content_hash` deferral + patching.
+- [X] Add tests for name truncation diagnostics.
+- [X] Add tests to verify adapters always emit `TriangulatedMesh` work items.
+
+##### 6.6b.1 Geometry Adapters (Format Bridges)
+
+**Files (new/updated):**
+
+- `src/Oxygen/Content/Import/Async/Adapters/FbxGeometryAdapter.h/.cpp`
+- `src/Oxygen/Content/Import/Async/Adapters/GltfGeometryAdapter.h/.cpp`
+- `src/Oxygen/Content/Import/Async/Adapters/GeometryAdapterTypes.h`
+- `src/Oxygen/Content/Test/Import/Async/GeometryAdapter_*_test.cpp`
+
+Tasks:
+
+- [X] Define adapter data contracts (C++20 value-type adapters, explicit
+  `GeometryAdapterInput` / `GeometryAdapterOutput`).
+- [X] Define `GeometryAdapter` concept and `BuildWorkItems(...)` API shape.
+- [X] Implement FBX adapter using `ufbx`:
+  - [X] triangulate faces and build `TriangleRange` per material slot
+  - [X] emit `TriangulatedMesh` for all meshes, including skinned meshes with
+    joints/weights
+  - [X] handle >4 influences by trimming + renormalizing with diagnostics
+- [X] Implement glTF/GLB adapter using `cgltf`:
+  - [X] per-primitive `TriangulatedMesh` (merge only when layouts match)
+  - [X] convert indices to `uint32_t` and generate when missing
+  - [X] emit diagnostics when indices are missing
+  - [X] derive bitangent from tangent.w
+  - [X] map materials and detect texture usage for UV warnings
+- [X] Wire adapters into `FbxImportJob` / `GlbImportJob` (job submits
+  adapter output to `GeometryPipeline`).
+- [X] Adapter unit tests:
+  - [X] material slot mapping and range ordering
+  - [X] tangent/bitangent derivation for glTF
+  - [X] skinned mesh detection + joint buffer validation
+  - [X] LOD mapping
 
 #### 6.6c MaterialPipeline (Compute-Only) Implementation + Tests
 
@@ -1070,14 +1150,14 @@ Tasks:
   `session.TextureEmitter()` with streaming material emission.
 - [ ] FbxImportJob: submit mesh/animation work to `ThreadPool()` and emit via
   `session.BufferEmitter()`.
-- [ ] FbxImportJob: submit geometry work to `GeometryPipeline`; emit buffers
+- [X] FbxImportJob: submit geometry work to `GeometryPipeline`; emit buffers
   via `BufferEmitter` and descriptors via `AssetEmitter`.
 - [ ] FbxImportJob: submit material work to `MaterialPipeline`; emit `.omat`
   via `AssetEmitter` once `MaterialReadinessTracker` resolves texture indices.
 - [ ] FbxImportJob: submit scene work to `ScenePipeline`; emit `.oscene` via
   `AssetEmitter` using `ImportedGeometry` mapping.
 - [ ] GlbImportJob: mirror the FBX flow for glTF/GLB (subset acceptable).
-- [ ] GlbImportJob: wire geometry, material, and scene pipelines with the
+- [X] GlbImportJob: wire geometry, material, and scene pipelines with the
   same emitter flow (subset acceptable).
 - [ ] TextureImportJob: read bytes via `FileReader()`, submit to pipeline,
   emit via `TextureEmitter()`.

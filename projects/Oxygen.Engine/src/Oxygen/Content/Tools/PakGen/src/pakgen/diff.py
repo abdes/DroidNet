@@ -23,6 +23,12 @@ from pathlib import Path
 import struct
 import zlib
 
+from .packing.constants import (
+    MESH_DESC_SIZE,
+    SUBMESH_DESC_SIZE,
+    MESH_VIEW_DESC_SIZE,
+)
+
 try:
     from .spec.models import PakSpec
 except Exception:  # pragma: no cover
@@ -200,17 +206,17 @@ def _parse_geometry_descriptor(desc: bytes) -> Dict[str, Any]:
 def _parse_geometry_variable_blob(
     data: bytes, start: int, lod_count: int
 ) -> Dict[str, Any]:
-    # Sequentially parse LOD -> mesh desc (105) -> submesh descs (108 * count)
-    # -> mesh view descs (16 * count). We only need submesh counts and names.
+    # Sequentially parse LOD -> mesh desc -> submesh descs -> mesh view descs.
+    # We only need submesh counts and names.
     # Mesh descriptor layout bits required: after name(64)+type(1), submesh_count(u32), mesh_view_count(u32)
     offset = start
     lods: List[Dict[str, Any]] = []
     try:
         for _ in range(lod_count):
-            if offset + 105 > len(data):
+            if offset + MESH_DESC_SIZE > len(data):
                 break
-            mesh_desc = data[offset : offset + 105]
-            offset += 105
+            mesh_desc = data[offset : offset + MESH_DESC_SIZE]
+            offset += MESH_DESC_SIZE
             mesh_name = (
                 mesh_desc[:64].split(b"\x00", 1)[0].decode("utf-8", "ignore")
             )
@@ -219,16 +225,16 @@ def _parse_geometry_variable_blob(
             mesh_view_total = struct.unpack_from("<I", mesh_desc, 69)[0]
             submeshes: List[Dict[str, Any]] = []
             for _sm in range(submesh_count):
-                if offset + 108 > len(data):
+                if offset + SUBMESH_DESC_SIZE > len(data):
                     break
-                sm_desc = data[offset : offset + 108]
-                offset += 108
+                sm_desc = data[offset : offset + SUBMESH_DESC_SIZE]
+                offset += SUBMESH_DESC_SIZE
                 sm_name = (
                     sm_desc[:64].split(b"\x00", 1)[0].decode("utf-8", "ignore")
                 )
                 sm_mv_count = struct.unpack_from("<I", sm_desc, 80)[0]
                 # Skip mesh view descriptors
-                mv_size = 16 * sm_mv_count
+                mv_size = MESH_VIEW_DESC_SIZE * sm_mv_count
                 offset += mv_size
                 submeshes.append(
                     {"name": sm_name, "mesh_view_count": sm_mv_count}

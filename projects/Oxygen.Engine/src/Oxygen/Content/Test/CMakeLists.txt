@@ -98,30 +98,56 @@ target_compile_definitions(
 # -- Async Import Test Programs ------------------------------------------------
 
 m_gtest_program(
-  AsyncImport
+  AsyncImportCore
   SOURCES
-    "Import/Async/ImportEventLoop_test.cpp"
-    "Import/Async/FileError_test.cpp"
-    "Import/Async/ImportSession_test.cpp"
-    "Import/Async/AsyncImportService_test.cpp"
     "Import/Async/AsyncImporter_test.cpp"
+    "Import/Async/AsyncImportService_test.cpp"
+    "Import/Async/ImportEventLoop_test.cpp"
     "Import/Async/ImportJob_test.cpp"
+    "Import/Async/ImportSession_test.cpp"
+    "Mocks/TestImportJob.cpp"
+    "Mocks/TestImportJob.h"
+)
+
+m_gtest_program(
+  AsyncImportIO
+  SOURCES
+    "Import/Async/FileError_test.cpp"
+    $<$<BOOL:${WIN32}>:Import/Async/WindowsFileReader_test.cpp>
+    $<$<BOOL:${WIN32}>:Import/Async/WindowsFileWriter_test.cpp>
+)
+
+m_gtest_program(
+  AsyncImportBuffer
+  SOURCES
     "Import/Async/BufferPipeline_test.cpp"
+    "Import/Async/BufferEmitter_test.cpp"
+)
+
+m_gtest_program(
+  AsyncImportAssets
+  SOURCES
+    "Import/Async/AssetEmitter_test.cpp"
+    "Import/Async/GeometryPipeline_test.cpp"
     "Import/Async/MaterialPipeline_test.cpp"
+)
+
+m_gtest_program(
+  AsyncImportTexture
+  SOURCES
     "Import/Async/TexturePipeline_basic_test.cpp"
     "Import/Async/TexturePipeline_nonreg_test.cpp"
     "Import/Async/TexturePipeline_edge_test.cpp"
     "Import/Async/TextureImportJob_policy_test.cpp"
     "Import/Async/TextureEmitter_test.cpp"
-    "Import/Async/BufferEmitter_test.cpp"
-    "Import/Async/AssetEmitter_test.cpp"
-    $<$<BOOL:${WIN32}>:Import/Async/WindowsFileReader_test.cpp>
-    $<$<BOOL:${WIN32}>:Import/Async/WindowsFileWriter_test.cpp>
 )
-target_compile_definitions(
-  Oxygen.Content.AsyncImport.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
+
+m_gtest_program(
+  AsyncImportGeometry
+  SOURCES
+    "Import/Async/GeometryPipeline_test.cpp"
+    "Import/Async/GeometryAdapter_gltf_test.cpp"
+    "Import/Async/GeometryAdapter_fbx_test.cpp"
 )
 
 # -- Plan Test Programs -------------------------------------------------------
@@ -130,9 +156,4 @@ m_gtest_program(
   Plan
   SOURCES
     "Plan/ImportPlanner_test.cpp"
-)
-target_compile_definitions(
-  Oxygen.Content.Plan.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
 )

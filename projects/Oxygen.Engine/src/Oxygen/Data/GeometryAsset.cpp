@@ -160,35 +160,33 @@ Mesh::Mesh(uint32_t lod, std::shared_ptr<BufferResource> vertex_buffer,
 
 //! Computes bounding box and sphere - the single source of truth.
 /*!
-  Computes bounding data using the most appropriate method:
-  - If PAK descriptor exists: use pre-computed bounding box
-  - If no descriptor: compute bounding box from vertices
-  - Always compute bounding sphere from the resulting bounding box
+  Computes bounding data from the PAK descriptor when available.
+  If no descriptor is present, bounds remain zero-initialized.
 
   Data members (bbox_min_, bbox_max_, bounding_sphere_) are the source of truth.
 */
 auto Mesh::ComputeBounds() -> void
 {
   // Step 1: Compute or copy bounding box
-  if (desc_.has_value() && desc_.value().IsStandard()) {
-    // Use pre-computed bounds from PAK descriptor
-    const auto& desc = desc_.value().info.standard;
-    bbox_min_ = glm::vec3(desc.bounding_box_min[0], desc.bounding_box_min[1],
-      desc.bounding_box_min[2]);
-    bbox_max_ = glm::vec3(desc.bounding_box_max[0], desc.bounding_box_max[1],
-      desc.bounding_box_max[2]);
-  } else {
-    // Compute from vertices using the variant storage
-    auto vertices = Vertices(); // Get vertices through the variant interface
-    if (vertices.empty()) {
-      bbox_min_ = bbox_max_ = glm::vec3(0.0f);
+  if (desc_.has_value()) {
+    const auto& desc = desc_.value();
+    if (desc.IsStandard()) {
+      const auto& standard = desc.info.standard;
+      bbox_min_ = glm::vec3(standard.bounding_box_min[0],
+        standard.bounding_box_min[1], standard.bounding_box_min[2]);
+      bbox_max_ = glm::vec3(standard.bounding_box_max[0],
+        standard.bounding_box_max[1], standard.bounding_box_max[2]);
+    } else if (desc.IsSkinned()) {
+      const auto& skinned = desc.info.skinned;
+      bbox_min_ = glm::vec3(skinned.bounding_box_min[0],
+        skinned.bounding_box_min[1], skinned.bounding_box_min[2]);
+      bbox_max_ = glm::vec3(skinned.bounding_box_max[0],
+        skinned.bounding_box_max[1], skinned.bounding_box_max[2]);
     } else {
-      bbox_min_ = bbox_max_ = vertices.front().position;
-      for (const auto& v : vertices) {
-        bbox_min_ = glm::min(bbox_min_, v.position);
-        bbox_max_ = glm::max(bbox_max_, v.position);
-      }
+      bbox_min_ = bbox_max_ = glm::vec3(0.0f);
     }
+  } else {
+    bbox_min_ = bbox_max_ = glm::vec3(0.0f);
   }
 
   // Step 2: Always compute bounding sphere from bounding box
@@ -199,10 +197,8 @@ auto Mesh::ComputeBounds() -> void
 
 //! Computes bounding box and sphere for SubMesh - the single source of truth.
 /*!
-  Computes bounding data using the most appropriate method:
-  - If PAK descriptor exists: use pre-computed bounding box
-  - If no descriptor: compute bounding box from mesh view vertices
-  - Always compute bounding sphere from the resulting bounding box
+  Computes bounding data from the PAK descriptor when available.
+  If no descriptor is present, bounds remain zero-initialized.
 
   Data members (bbox_min_, bbox_max_, bounding_sphere_) are the source of truth.
 */
@@ -217,27 +213,7 @@ auto SubMesh::ComputeBounds() -> void
     bbox_max_ = glm::vec3(desc.bounding_box_max[0], desc.bounding_box_max[1],
       desc.bounding_box_max[2]);
   } else {
-    // Compute from mesh view vertices
-    if (mesh_views_.empty()) {
-      bbox_min_ = bbox_max_ = glm::vec3(0.0f);
-    } else {
-      bool first = true;
-      for (const auto& mesh_view : mesh_views_) {
-        for (const auto& vertex : mesh_view.Vertices()) {
-          if (first) {
-            bbox_min_ = bbox_max_ = vertex.position;
-            first = false;
-          } else {
-            bbox_min_ = glm::min(bbox_min_, vertex.position);
-            bbox_max_ = glm::max(bbox_max_, vertex.position);
-          }
-        }
-      }
-      if (first) {
-        // No vertices found
-        bbox_min_ = bbox_max_ = glm::vec3(0.0f);
-      }
-    }
+    bbox_min_ = bbox_max_ = glm::vec3(0.0f);
   }
 
   // Step 2: Always compute bounding sphere from bounding box
@@ -289,6 +265,13 @@ auto MeshBuilder::Build() -> std::unique_ptr<Mesh>
   // Set mesh descriptor if provided
   if (desc_.has_value()) {
     mesh->SetDescriptor(desc_.value());
+  }
+
+  if (mesh->IsSkinned()) {
+    mesh->SetSkiningBufferResources(std::move(joint_index_buffer_resource_),
+      std::move(joint_weight_buffer_resource_),
+      std::move(inverse_bind_buffer_resource_),
+      std::move(joint_remap_buffer_resource_));
   }
   // For each submesh spec, create MeshViews and SubMesh, then add to mesh
   for (const auto& spec : submeshes_) {

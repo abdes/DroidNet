@@ -14,12 +14,26 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
 #include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/api_export.h>
 
+namespace oxygen::co {
+class Event;
+class ThreadPool;
+} // namespace oxygen::co
+
 namespace oxygen::content::import {
+
+class IAsyncFileReader;
+class IAsyncFileWriter;
+class ResourceTableRegistry;
+
+namespace detail {
+  class ImportJob;
+} // namespace detail
 
 //! Unique identifier for an import job.
 using ImportJobId = uint64_t;
@@ -85,6 +99,13 @@ using ImportCompletionCallback
        has an event loop. Otherwise, invoked on the import thread.
 */
 using ImportProgressCallback = std::function<void(const ImportProgress&)>;
+
+//! Factory for creating custom import jobs.
+using ImportJobFactory = std::function<std::shared_ptr<detail::ImportJob>(
+  ImportJobId, ImportRequest, ImportCompletionCallback, ImportProgressCallback,
+  std::shared_ptr<co::Event>, oxygen::observer_ptr<IAsyncFileReader>,
+  oxygen::observer_ptr<IAsyncFileWriter>, oxygen::observer_ptr<co::ThreadPool>,
+  oxygen::observer_ptr<ResourceTableRegistry>)>;
 
 //! Thread-safe service for submitting async import jobs.
 /*!
@@ -215,6 +236,27 @@ public:
   OXGN_CNTT_NDAPI auto SubmitImport(ImportRequest request,
     ImportCompletionCallback on_complete,
     ImportProgressCallback on_progress = nullptr) -> ImportJobId;
+
+  //! Submit a custom import job for asynchronous processing.
+  /*!
+   Creates the job using the provided factory and submits it to the import
+   thread. This overload bypasses file-extension detection and allows custom
+   or test-specific jobs to run through the same cancellation and callback
+   pipeline.
+
+   @param request Import request used by the custom job.
+   @param on_complete Completion callback invoked exactly once when the job
+          finishes.
+   @param on_progress Optional progress callback invoked periodically.
+   @param job_factory Factory invoked to construct the job instance.
+   @return Valid job ID (`> 0`) on success, or `kInvalidJobId` (`0`) if
+           rejected due to shutdown, importer not ready, or factory failure.
+
+   @see CancelJob, CancelAll, ImportRequest, ImportReport, ImportProgress
+  */
+  OXGN_CNTT_NDAPI auto SubmitImport(ImportRequest request,
+    ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
+    ImportJobFactory job_factory) -> ImportJobId;
 
   //! Cancel a specific import job. Thread-safe.
   /*!

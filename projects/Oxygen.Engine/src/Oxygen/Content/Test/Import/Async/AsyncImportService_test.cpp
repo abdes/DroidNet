@@ -4,20 +4,62 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <filesystem>
+#include <condition_variable>
 #include <latch>
+#include <mutex>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/Async/AsyncImportService.h>
+#include <Oxygen/Content/Test/Mocks/TestImportJob.h>
 #include <Oxygen/Testing/GTest.h>
 
 using namespace std::chrono_literals;
 using namespace oxygen::content::import;
+namespace co = oxygen::co;
 
 namespace {
+
+[[nodiscard]] auto HasDiagnosticCode(
+  const std::vector<ImportDiagnostic>& diagnostics, std::string_view code)
+  -> bool
+{
+  return std::any_of(diagnostics.begin(), diagnostics.end(),
+    [code](
+      const ImportDiagnostic& diagnostic) { return diagnostic.code == code; });
+}
+
+[[nodiscard]] auto MakeTestJobFactory(test::TestImportJob::Config config)
+  -> ImportJobFactory
+{
+  return
+    [config](ImportJobId job_id, ImportRequest request,
+      ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
+      std::shared_ptr<co::Event> cancel_event,
+      oxygen::observer_ptr<IAsyncFileReader> file_reader,
+      oxygen::observer_ptr<IAsyncFileWriter> file_writer,
+      oxygen::observer_ptr<co::ThreadPool> thread_pool,
+      oxygen::observer_ptr<ResourceTableRegistry> table_registry)
+      -> std::shared_ptr<detail::ImportJob> {
+      return std::make_shared<test::TestImportJob>(job_id, std::move(request),
+        std::move(on_complete), std::move(on_progress), std::move(cancel_event),
+        file_reader, file_writer, thread_pool, table_registry, config);
+    };
+}
+
+[[nodiscard]] auto SubmitTestJob(AsyncImportService& service,
+  ImportRequest request, ImportCompletionCallback on_complete,
+  ImportProgressCallback on_progress = nullptr,
+  test::TestImportJob::Config config = {}) -> ImportJobId
+{
+  return service.SubmitImport(std::move(request), std::move(on_complete),
+    std::move(on_progress), MakeTestJobFactory(config));
+}
 
 //=== Construction and Destruction Tests
 //===-----------------------------------//
@@ -95,7 +137,7 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_ReturnsValidJobId)
 
   // Act
   auto job_id
-    = service.SubmitImport(ImportRequest { .source_path = "test.fbx" },
+    = SubmitTestJob(service, ImportRequest { .source_path = "custom.asset" },
       [&done](ImportJobId, ImportReport) { done.count_down(); });
 
   // Assert
@@ -117,7 +159,7 @@ NOLINT_TEST_F(
 
   // Act
   auto job_id
-    = service.SubmitImport(ImportRequest { .source_path = "test.fbx" },
+    = SubmitTestJob(service, ImportRequest { .source_path = "custom.asset" },
       [&](ImportJobId id, ImportReport) {
         callback_invoked = true;
         received_id = id;
@@ -133,35 +175,49 @@ NOLINT_TEST_F(
   EXPECT_EQ(received_id, job_id);
 }
 
-//! Verify that an import job finalizes its session and writes an index file.
-NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_WritesIndexFile)
+//! Verify custom job factory can run unknown formats.
+NOLINT_TEST_F(
+  AsyncImportServiceSubmitTest, SubmitImport_CustomJobFactory_AllowsUnknown)
 {
   // Arrange
   AsyncImportService service(config_);
+  std::latch done(1);
 
-  const auto unique_suffix = std::to_string(
-    std::chrono::steady_clock::now().time_since_epoch().count());
-  auto cooked_root_base = std::filesystem::temp_directory_path() / "Oxygen"
-    / "AsyncImportTests" / unique_suffix;
-  std::filesystem::create_directories(cooked_root_base);
+  const auto job_factory = MakeTestJobFactory({
+    .total_delay = 15ms,
+    .step_delay = 5ms,
+    .report_progress = false,
+  });
 
-  const auto cooked_root = cooked_root_base / ".cooked";
+  // Act
+  auto job_id = service.SubmitImport(
+    ImportRequest { .source_path = "custom.asset" },
+    [&done](ImportJobId, ImportReport) { done.count_down(); }, nullptr,
+    job_factory);
+
+  // Assert
+  EXPECT_NE(job_id, kInvalidJobId);
+  done.wait();
+}
+
+//! Verify custom job completes successfully.
+NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_CustomJob_Completes)
+{
+  // Arrange
+  AsyncImportService service(config_);
 
   std::latch done(1);
   std::atomic<bool> callback_invoked { false };
   ImportReport received_report;
 
   // Act
-  [[maybe_unused]] auto job_id = service.SubmitImport(
-    ImportRequest {
-      .source_path = cooked_root_base / "dummy.fbx",
-      .cooked_root = cooked_root_base,
-    },
-    [&](ImportJobId, ImportReport report) {
-      callback_invoked = true;
-      received_report = std::move(report);
-      done.count_down();
-    });
+  [[maybe_unused]] auto job_id
+    = SubmitTestJob(service, ImportRequest { .source_path = "custom.asset" },
+      [&](ImportJobId, ImportReport report) {
+        callback_invoked = true;
+        received_report = std::move(report);
+        done.count_down();
+      });
 
   EXPECT_NE(job_id, kInvalidJobId);
 
@@ -169,8 +225,7 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_WritesIndexFile)
 
   // Assert
   EXPECT_TRUE(callback_invoked);
-  EXPECT_EQ(received_report.cooked_root, cooked_root);
-  EXPECT_TRUE(std::filesystem::exists(cooked_root / "container.index.bin"));
+  EXPECT_TRUE(received_report.success);
 }
 
 //! Verify progress callback is invoked if provided.
@@ -183,13 +238,18 @@ NOLINT_TEST_F(
   std::atomic<bool> progress_invoked { false };
 
   // Act
-  [[maybe_unused]] auto job_id = service.SubmitImport(
-    ImportRequest { .source_path = "test.fbx" },
+  [[maybe_unused]] auto job_id = SubmitTestJob(
+    service, ImportRequest { .source_path = "custom.asset" },
     [&done](ImportJobId, ImportReport) { done.count_down(); },
     [&progress_invoked](const ImportProgress& progress) {
       if (progress.phase == ImportPhase::kParsing) {
         progress_invoked = true;
       }
+    },
+    test::TestImportJob::Config {
+      .total_delay = 15ms,
+      .step_delay = 5ms,
+      .report_progress = true,
     });
 
   EXPECT_NE(job_id, kInvalidJobId);
@@ -208,14 +268,17 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_MultipleJobs_UniqueIds)
   std::latch done(3);
 
   // Act
-  auto id1 = service.SubmitImport(ImportRequest { .source_path = "file1.fbx" },
-    [&done](ImportJobId, ImportReport) { done.count_down(); });
+  auto id1
+    = SubmitTestJob(service, ImportRequest { .source_path = "custom1.asset" },
+      [&done](ImportJobId, ImportReport) { done.count_down(); });
 
-  auto id2 = service.SubmitImport(ImportRequest { .source_path = "file2.fbx" },
-    [&done](ImportJobId, ImportReport) { done.count_down(); });
+  auto id2
+    = SubmitTestJob(service, ImportRequest { .source_path = "custom2.asset" },
+      [&done](ImportJobId, ImportReport) { done.count_down(); });
 
-  auto id3 = service.SubmitImport(ImportRequest { .source_path = "file3.fbx" },
-    [&done](ImportJobId, ImportReport) { done.count_down(); });
+  auto id3
+    = SubmitTestJob(service, ImportRequest { .source_path = "custom3.asset" },
+      [&done](ImportJobId, ImportReport) { done.count_down(); });
 
   EXPECT_NE(id1, kInvalidJobId);
   EXPECT_NE(id2, kInvalidJobId);
@@ -239,7 +302,7 @@ NOLINT_TEST_F(
 
   // Act
   auto job_id
-    = service.SubmitImport(ImportRequest { .source_path = "test.fbx" },
+    = SubmitTestJob(service, ImportRequest { .source_path = "custom.asset" },
       [](ImportJobId, ImportReport) { });
 
   // Assert
@@ -272,7 +335,7 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelJob_CompletedJob_ReturnsFalse)
   std::latch done(1);
 
   auto job_id
-    = service.SubmitImport(ImportRequest { .source_path = "test.fbx" },
+    = SubmitTestJob(service, ImportRequest { .source_path = "custom.asset" },
       [&done](ImportJobId, ImportReport) { done.count_down(); });
 
   EXPECT_NE(job_id, kInvalidJobId);
@@ -303,15 +366,24 @@ NOLINT_TEST_F(
   std::latch job_started(1);
   std::latch cancel_attempted(1);
   std::atomic<bool> job_completed { false };
+  std::atomic<bool> job_started_signaled { false };
 
   // Submit a job that signals when it starts
-  auto job_id = service.SubmitImport(
-    ImportRequest { .source_path = "slow_job.fbx" },
+  auto job_id = SubmitTestJob(
+    service, ImportRequest { .source_path = "custom.asset" },
     [&](ImportJobId, ImportReport) { job_completed = true; },
     [&](const ImportProgress& progress) {
       if (progress.phase == ImportPhase::kParsing) {
-        job_started.count_down();
+        bool expected = false;
+        if (job_started_signaled.compare_exchange_strong(expected, true)) {
+          job_started.count_down();
+        }
       }
+    },
+    test::TestImportJob::Config {
+      .total_delay = 50ms,
+      .step_delay = 5ms,
+      .report_progress = true,
     });
 
   EXPECT_NE(job_id, kInvalidJobId);
@@ -335,22 +407,34 @@ NOLINT_TEST_F(
   AsyncImportServiceCancelTest, CancelJob_BeforeExecution_PreventsStart)
 {
   // Arrange - configure with only 1 worker to ensure jobs queue up
-  AsyncImportService::Config blocking_config { .thread_pool_size = 1 };
+  AsyncImportService::Config blocking_config {
+    .thread_pool_size = 1,
+    .max_in_flight_jobs = 1,
+  };
   AsyncImportService service(blocking_config);
 
   std::latch first_job_started(1);
   std::atomic<bool> second_job_executed { false };
+  std::atomic<bool> first_job_signaled { false };
 
   // Submit first job that blocks
-  [[maybe_unused]] auto blocking_job = service.SubmitImport(
-    ImportRequest { .source_path = "blocker.fbx" },
+  [[maybe_unused]] auto blocking_job = SubmitTestJob(
+    service, ImportRequest { .source_path = "custom.asset" },
     [](ImportJobId, ImportReport) {},
     [&](const ImportProgress& progress) {
       if (progress.phase == ImportPhase::kParsing) {
-        first_job_started.count_down();
+        bool expected = false;
+        if (first_job_signaled.compare_exchange_strong(expected, true)) {
+          first_job_started.count_down();
+        }
         // Keep this job running for a bit
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
+    },
+    test::TestImportJob::Config {
+      .total_delay = 50ms,
+      .step_delay = 5ms,
+      .report_progress = true,
     });
 
   EXPECT_NE(blocking_job, kInvalidJobId);
@@ -360,7 +444,7 @@ NOLINT_TEST_F(
 
   // Submit second job - it should queue since worker is busy
   auto second_job
-    = service.SubmitImport(ImportRequest { .source_path = "queued.fbx" },
+    = SubmitTestJob(service, ImportRequest { .source_path = "custom.asset" },
       [&](ImportJobId, ImportReport) { second_job_executed = true; });
 
   EXPECT_NE(second_job, kInvalidJobId);
@@ -384,50 +468,90 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelAll_MultipleJobs_CancelsAll)
   // Arrange
   constexpr int kJobCount = 5;
   AsyncImportService service(config_);
-  std::atomic<int> jobs_started { 0 };
-  std::latch first_job_started(1);
-  std::atomic<int> jobs_completed { 0 };
+  struct SharedState {
+    std::atomic<int> jobs_completed { 0 };
+    std::atomic<int> cancelled_reports { 0 };
+    std::atomic<int> jobs_started { 0 };
+    std::unordered_set<ImportJobId> started_job_ids;
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::atomic<bool> active { true };
+  };
+
+  auto state = std::make_shared<SharedState>();
+
+  const auto job_factory = MakeTestJobFactory({
+    .total_delay = 30ms,
+    .step_delay = 5ms,
+    .report_progress = true,
+  });
 
   // Submit multiple jobs
-  std::vector<ImportJobId> job_ids;
   for (int i = 0; i < kJobCount; ++i) {
     auto job_id = service.SubmitImport(
-      ImportRequest { .source_path = "file" + std::to_string(i) + ".fbx" },
-      [&](ImportJobId, ImportReport) {
-        jobs_completed.fetch_add(1, std::memory_order_relaxed);
+      ImportRequest { .source_path = "custom.asset" },
+      [state](ImportJobId, ImportReport report) {
+        if (!state->active.load(std::memory_order_acquire)) {
+          return;
+        }
+        DLOG_F(INFO, "CancelAll completion: success={} diagnostics={}",
+          report.success, report.diagnostics.size());
+        state->jobs_completed.fetch_add(1, std::memory_order_relaxed);
+        const bool cancelled
+          = HasDiagnosticCode(report.diagnostics, "import.cancelled");
+        if (cancelled) {
+          state->cancelled_reports.fetch_add(1, std::memory_order_relaxed);
+        }
+        state->cv.notify_all();
       },
-      [&](const ImportProgress& progress) {
+      [state](const ImportProgress& progress) {
+        if (!state->active.load(std::memory_order_acquire)) {
+          return;
+        }
+        DLOG_F(INFO, "CancelAll progress: phase={} overall={:.2f} message='{}'",
+          static_cast<int>(progress.phase), progress.overall_progress,
+          progress.message);
         if (progress.phase == ImportPhase::kParsing) {
-          int started = jobs_started.fetch_add(1, std::memory_order_relaxed);
-          if (started == 0) {
-            first_job_started.count_down();
+          std::lock_guard lock(state->mutex);
+          if (state->started_job_ids.insert(progress.job_id).second) {
+            state->jobs_started.fetch_add(1, std::memory_order_relaxed);
+            state->cv.notify_all();
           }
         }
-      });
+      },
+      job_factory);
     EXPECT_NE(job_id, kInvalidJobId);
-    job_ids.push_back(job_id);
   }
 
-  // Wait for at least one job to start
-  first_job_started.wait();
-
-  // Act - cancel all jobs
+  // Act - wait for jobs to start, then cancel all.
+  {
+    std::unique_lock lock(state->mutex);
+    state->cv.wait_for(lock, 2s, [&]() {
+      return state->jobs_started.load(std::memory_order_relaxed) >= kJobCount;
+    });
+  }
   service.CancelAll();
 
-  // Wait a bit for cancellation to propagate
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  // Wait for all jobs to report completion, or timeout.
+  const auto deadline = std::chrono::steady_clock::now() + 2s;
+  {
+    std::unique_lock lock(state->mutex);
+    state->cv.wait_until(lock, deadline, [&]() {
+      return state->jobs_completed.load(std::memory_order_relaxed) >= kJobCount;
+    });
+  }
 
   // Assert - verify jobs were cancelled (completed count should be less than
   // total) Note: Some jobs might complete before cancellation takes effect, so
   // we can't assert exactly zero completions, but we can verify the system is
   // consistent
-  int final_completed = jobs_completed.load(std::memory_order_relaxed);
-  EXPECT_LE(final_completed, kJobCount);
+  state->active.store(false, std::memory_order_release);
 
-  // Verify none of the jobs are still active
-  for (auto job_id : job_ids) {
-    EXPECT_FALSE(service.IsJobActive(job_id));
-  }
+  const int final_completed
+    = state->jobs_completed.load(std::memory_order_relaxed);
+  EXPECT_EQ(final_completed, kJobCount);
+  EXPECT_EQ(
+    state->cancelled_reports.load(std::memory_order_relaxed), kJobCount);
 }
 
 //=== Shutdown Tests ===------------------------------------------------------//
@@ -447,6 +571,13 @@ NOLINT_TEST_F(
   // Act
   service.RequestShutdown();
 
+  // Allow shutdown to propagate.
+  const auto deadline = std::chrono::steady_clock::now() + 200ms;
+  while (
+    service.IsAcceptingJobs() && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(1ms);
+  }
+
   // Assert
   EXPECT_FALSE(service.IsAcceptingJobs());
 }
@@ -461,8 +592,8 @@ NOLINT_TEST_F(
 
     // Submit several jobs
     for (int i = 0; i < 5; ++i) {
-      [[maybe_unused]] auto job_id = service.SubmitImport(
-        ImportRequest { .source_path = "file" + std::to_string(i) + ".fbx" },
+      [[maybe_unused]] auto job_id = SubmitTestJob(service,
+        ImportRequest { .source_path = "custom.asset" },
         [](ImportJobId, ImportReport) { });
       EXPECT_NE(job_id, kInvalidJobId);
     }
@@ -500,9 +631,8 @@ NOLINT_TEST_F(AsyncImportServiceConcurrencyTest,
   for (int t = 0; t < kThreadCount; ++t) {
     threads.emplace_back([&, t]() {
       for (int i = 0; i < kJobsPerThread; ++i) {
-        [[maybe_unused]] auto job_id = service.SubmitImport(
-          ImportRequest { .source_path = "thread" + std::to_string(t) + "_file"
-              + std::to_string(i) + ".fbx" },
+        [[maybe_unused]] auto job_id = SubmitTestJob(service,
+          ImportRequest { .source_path = "custom.asset" },
           [&](ImportJobId, ImportReport) {
             completed_count.fetch_add(1, std::memory_order_relaxed);
             done.count_down();
@@ -538,11 +668,11 @@ NOLINT_TEST_F(
 
   // Act - rapidly submit and cancel jobs
   for (int i = 0; i < kIterations; ++i) {
-    auto job_id = service.SubmitImport(
-      ImportRequest { .source_path = "rapid_" + std::to_string(i) + ".fbx" },
-      [&](ImportJobId, ImportReport) {
-        completed_count.fetch_add(1, std::memory_order_relaxed);
-      });
+    auto job_id
+      = SubmitTestJob(service, ImportRequest { .source_path = "custom.asset" },
+        [&](ImportJobId, ImportReport) {
+          completed_count.fetch_add(1, std::memory_order_relaxed);
+        });
 
     EXPECT_NE(job_id, kInvalidJobId);
 
@@ -595,7 +725,7 @@ NOLINT_TEST_F(
   std::latch done(1);
 
   auto job_id
-    = service.SubmitImport(ImportRequest { .source_path = "test.fbx" },
+    = SubmitTestJob(service, ImportRequest { .source_path = "custom.asset" },
       [&done](ImportJobId, ImportReport) { done.count_down(); });
 
   EXPECT_NE(job_id, kInvalidJobId);

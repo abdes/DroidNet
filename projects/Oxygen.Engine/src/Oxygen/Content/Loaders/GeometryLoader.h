@@ -31,6 +31,8 @@ namespace oxygen::content::loaders {
 
 namespace detail {
 
+  constexpr size_t kMeshInfoSize = sizeof(oxygen::data::pak::SkinnedMeshInfo);
+
   // Accepts any Result<T> and checks for error, logs and throws if needed
   template <typename ResultT>
   auto CheckResult(const ResultT& result, const char* field_name) -> void
@@ -90,6 +92,12 @@ namespace detail {
       CheckResult(max_result, "m.bounding_box_max");
     }
 
+    constexpr size_t kStandardInfoSize = sizeof(data::pak::StandardMeshInfo);
+    constexpr size_t kStandardPadding = kMeshInfoSize - kStandardInfoSize;
+    auto skip_result
+      = reader.Forward(static_cast<std::streamoff>(kStandardPadding));
+    CheckResult(skip_result, "m.standard.padding");
+
     if (context.parse_only) {
       return { nullptr, nullptr };
     }
@@ -129,6 +137,13 @@ namespace detail {
     CheckResult(params_size_result, "m.param_blob_size");
     LOG_F(2, "param blob size : {}", info.params_size);
 
+    constexpr size_t kProceduralInfoSize
+      = sizeof(data::pak::ProceduralMeshInfo);
+    constexpr size_t kProceduralPadding = kMeshInfoSize - kProceduralInfoSize;
+    auto skip_result
+      = reader.Forward(static_cast<std::streamoff>(kProceduralPadding));
+    CheckResult(skip_result, "m.procedural.padding");
+
     std::vector<std::byte> param_blob;
     if (info.params_size > 0) {
       param_blob.resize(info.params_size);
@@ -144,6 +159,111 @@ namespace detail {
     } else {
       LOG_F(ERROR, "Failed to generate procedural mesh for {}", desc.name);
     }
+  }
+
+  inline auto LoadSkinnedMeshBuffers(
+    LoaderContext& context, data::pak::MeshDesc& desc)
+    -> std::pair<std::shared_ptr<data::BufferResource>,
+      std::shared_ptr<data::BufferResource>>
+  {
+    using namespace oxygen::data::pak;
+    using data::BufferResource;
+
+    DCHECK_NOTNULL_F(
+      context.desc_reader, "expecting desc_reader not to be null");
+    auto& reader = *context.desc_reader;
+
+    auto& info = desc.info.skinned;
+
+    auto vb_result = reader.ReadInto<ResourceIndexT>(info.vertex_buffer);
+    CheckResult(vb_result, "m.vertex_buffer");
+    LOG_F(2, "vertex buffer   : {}", info.vertex_buffer);
+
+    auto ib_result = reader.ReadInto<ResourceIndexT>(info.index_buffer);
+    CheckResult(ib_result, "m.index_buffer");
+    LOG_F(2, "index buffer    : {}", info.index_buffer);
+
+    auto joint_index_result
+      = reader.ReadInto<ResourceIndexT>(info.joint_index_buffer);
+    CheckResult(joint_index_result, "m.joint_index_buffer");
+    LOG_F(2, "joint index buf : {}", info.joint_index_buffer);
+
+    auto joint_weight_result
+      = reader.ReadInto<ResourceIndexT>(info.joint_weight_buffer);
+    CheckResult(joint_weight_result, "m.joint_weight_buffer");
+    LOG_F(2, "joint weight buf: {}", info.joint_weight_buffer);
+
+    auto inverse_bind_result
+      = reader.ReadInto<ResourceIndexT>(info.inverse_bind_buffer);
+    CheckResult(inverse_bind_result, "m.inverse_bind_buffer");
+    LOG_F(2, "inverse bind buf: {}", info.inverse_bind_buffer);
+
+    auto joint_remap_result
+      = reader.ReadInto<ResourceIndexT>(info.joint_remap_buffer);
+    CheckResult(joint_remap_result, "m.joint_remap_buffer");
+    LOG_F(2, "joint remap buf : {}", info.joint_remap_buffer);
+
+    auto skeleton_key_result
+      = reader.ReadInto<data::AssetKey>(info.skeleton_asset_key);
+    CheckResult(skeleton_key_result, "m.skeleton_asset_key");
+    LOG_F(2, "skeleton asset  : {}",
+      nostd::to_string(info.skeleton_asset_key).c_str());
+
+    auto joint_count_result = reader.ReadInto<uint16_t>(info.joint_count);
+    CheckResult(joint_count_result, "m.joint_count");
+    LOG_F(2, "joint count     : {}", info.joint_count);
+
+    auto influences_result
+      = reader.ReadInto<uint16_t>(info.influences_per_vertex);
+    CheckResult(influences_result, "m.influences_per_vertex");
+    LOG_F(2, "influences/vtx  : {}", info.influences_per_vertex);
+
+    auto flags_result = reader.ReadInto<uint32_t>(info.flags);
+    CheckResult(flags_result, "m.flags");
+    LOG_F(2, "skinning flags  : {}", info.flags);
+
+    for (float& i : info.bounding_box_min) {
+      auto min_result = reader.ReadInto<float>(i);
+      CheckResult(min_result, "m.bounding_box_min");
+    }
+    for (float& i : info.bounding_box_max) {
+      auto max_result = reader.ReadInto<float>(i);
+      CheckResult(max_result, "m.bounding_box_max");
+    }
+
+    if (context.parse_only) {
+      return { nullptr, nullptr };
+    }
+
+    if (!context.dependency_collector) {
+      LOG_F(ERROR,
+        "GeometryLoader requires a DependencyCollector for non-parse-only "
+        "loads (skinned mesh buffers)");
+      throw std::runtime_error(
+        "GeometryLoader requires a DependencyCollector for async decode");
+    }
+
+    auto collect_buffer_ref = [&](const ResourceIndexT resource_index) {
+      internal::ResourceRef ref {
+        .source = context.source_token,
+        .resource_type_id = BufferResource::ClassTypeId(),
+        .resource_index = resource_index,
+      };
+      context.dependency_collector->AddResourceDependency(ref);
+    };
+
+    collect_buffer_ref(info.vertex_buffer);
+    collect_buffer_ref(info.index_buffer);
+    collect_buffer_ref(info.joint_index_buffer);
+    collect_buffer_ref(info.joint_weight_buffer);
+    collect_buffer_ref(info.inverse_bind_buffer);
+    collect_buffer_ref(info.joint_remap_buffer);
+
+    if (info.skeleton_asset_key != data::AssetKey {}) {
+      context.dependency_collector->AddAssetDependency(info.skeleton_asset_key);
+    }
+
+    return { nullptr, nullptr };
   }
 
   inline auto LoadMeshViewDesc(serio::AnyReader& desc_reader)
@@ -270,11 +390,17 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
     // For standard meshes, load buffer resources (no data copying)
     std::tie(vertex_buffer_resource, index_buffer_resource)
       = detail::LoadStandardMeshBuffers(context, desc);
+  } else if (desc.IsSkinned()) {
+    std::tie(vertex_buffer_resource, index_buffer_resource)
+      = detail::LoadSkinnedMeshBuffers(context, desc);
   } else if (desc.IsProcedural()) {
     // For procedural meshes, generate vertex/index data (owned data)
     detail::LoadProceduralMeshBuffers(reader, desc, vertices, indices);
   } else {
     LOG_F(ERROR, "Unsupported mesh type: {}", static_cast<int>(desc.mesh_type));
+    auto skip_result
+      = reader.Forward(static_cast<std::streamoff>(detail::kMeshInfoSize));
+    detail::CheckResult(skip_result, "m.unknown_mesh_info");
     return nullptr;
   }
 
@@ -290,6 +416,11 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
   if (desc.IsStandard()) {
     if (should_build_mesh) {
       // Reference external buffer resources (zero-copy)
+      builder.WithBufferResources(
+        vertex_buffer_resource, index_buffer_resource);
+    }
+  } else if (desc.IsSkinned()) {
+    if (should_build_mesh) {
       builder.WithBufferResources(
         vertex_buffer_resource, index_buffer_resource);
     }

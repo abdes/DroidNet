@@ -116,6 +116,34 @@ public:
           asset_dump_helpers::FormatVec3(
             mesh_desc.info.standard.bounding_box_max),
           8);
+      } else if (mesh_type == MeshType::kSkinned || mesh_desc.IsSkinned()) {
+        PrintUtils::Field(
+          "Vertex Buffer", mesh_desc.info.skinned.vertex_buffer, 8);
+        PrintUtils::Field(
+          "Index Buffer", mesh_desc.info.skinned.index_buffer, 8);
+        PrintUtils::Field(
+          "Joint Index Buffer", mesh_desc.info.skinned.joint_index_buffer, 8);
+        PrintUtils::Field(
+          "Joint Weight Buffer", mesh_desc.info.skinned.joint_weight_buffer, 8);
+        PrintUtils::Field(
+          "Inverse Bind Buffer", mesh_desc.info.skinned.inverse_bind_buffer, 8);
+        PrintUtils::Field(
+          "Joint Remap Buffer", mesh_desc.info.skinned.joint_remap_buffer, 8);
+        PrintUtils::Field("Skeleton Asset",
+          oxygen::data::to_string(mesh_desc.info.skinned.skeleton_asset_key),
+          8);
+        PrintUtils::Field("Joint Count", mesh_desc.info.skinned.joint_count, 8);
+        PrintUtils::Field("Influences Per Vertex",
+          mesh_desc.info.skinned.influences_per_vertex, 8);
+        PrintUtils::Field("Skinned Flags", mesh_desc.info.skinned.flags, 8);
+        PrintUtils::Field("Mesh AABB Min",
+          asset_dump_helpers::FormatVec3(
+            mesh_desc.info.skinned.bounding_box_min),
+          8);
+        PrintUtils::Field("Mesh AABB Max",
+          asset_dump_helpers::FormatVec3(
+            mesh_desc.info.skinned.bounding_box_max),
+          8);
       } else if (mesh_type == MeshType::kProcedural
         || mesh_desc.IsProcedural()) {
         PrintUtils::Field(
