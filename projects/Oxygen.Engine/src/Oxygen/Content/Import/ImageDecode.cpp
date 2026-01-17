@@ -508,15 +508,31 @@ namespace {
       = static_cast<size_t>(width) * static_cast<size_t>(height);
     const auto byte_size = pixel_count * static_cast<size_t>(actual_channels);
 
-    std::vector<std::byte> pixel_data(byte_size);
-    std::memcpy(pixel_data.data(), decoded, byte_size);
+    std::vector<std::byte> pixel_data;
+    if (actual_channels == 3) {
+      const auto rgba_bytes = pixel_count * 4U;
+      pixel_data.resize(rgba_bytes);
+      const auto* src = decoded;
+      auto* dst = reinterpret_cast<uint8_t*>(pixel_data.data());
+      for (size_t i = 0; i < pixel_count; ++i) {
+        dst[i * 4 + 0] = src[i * 3 + 0];
+        dst[i * 4 + 1] = src[i * 3 + 1];
+        dst[i * 4 + 2] = src[i * 3 + 2];
+        dst[i * 4 + 3] = 255U;
+      }
+    } else {
+      pixel_data.resize(byte_size);
+      std::memcpy(pixel_data.data(), decoded, byte_size);
+    }
 
     stbi_image_free(decoded);
 
     // Apply Y-flip if requested
     if (options.flip_y) {
+      const uint32_t flip_channels
+        = (actual_channels == 3) ? 4U : static_cast<uint32_t>(actual_channels);
       FlipImageY(pixel_data, static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height), static_cast<uint32_t>(actual_channels));
+        static_cast<uint32_t>(height), flip_channels);
     }
 
     // Determine format based on channel count
@@ -532,14 +548,15 @@ namespace {
       format = Format::kRGBA8UNorm;
       break;
     default:
-      // 3-channel (RGB) - we should have forced RGBA
+      // 3-channel (RGB) - expand to RGBA8
       format = Format::kRGBA8UNorm;
       break;
     }
 
     return oxygen::Ok(ScratchImage::CreateFromData(static_cast<uint32_t>(width),
       static_cast<uint32_t>(height), format,
-      static_cast<uint32_t>(width) * static_cast<uint32_t>(actual_channels),
+      static_cast<uint32_t>(width)
+        * static_cast<uint32_t>((actual_channels == 3) ? 4 : actual_channels),
       std::move(pixel_data)));
   }
 
