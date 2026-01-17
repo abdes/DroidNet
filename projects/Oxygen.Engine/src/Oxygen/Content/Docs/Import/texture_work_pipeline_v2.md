@@ -87,6 +87,9 @@ struct WorkItem {
   bool output_format_is_override = false; // True when config explicitly set
                                          // output format
   FailurePolicy failure_policy = FailurePolicy::kPlaceholder;
+  bool equirect_to_cubemap = false;
+  uint32_t cubemap_face_size = 0; // Required when equirect_to_cubemap = true
+  CubeMapImageLayout cubemap_layout = CubeMapImageLayout::kUnknown;
   SourceContent source;
   std::stop_token stop_token;
 };
@@ -106,6 +109,13 @@ Notes:
 - `texture_id` canonicalization must match sync import:
   - file textures: `NormalizeTexturePathId(resolved_path)`
   - embedded textures: `"embedded:" + sha256(bytes)`
+- `output_format_is_override` should mirror
+- `equirect_to_cubemap` triggers HDR panorama → cubemap conversion (single
+  source only). Requires `cubemap_face_size > 0`; the conversion operates on
+  RGBA32F input and uses `desc.mip_filter` as the sampling filter.
+- `cubemap_layout` enables layout extraction from a single image (auto/strip/
+  cross). `kUnknown` disables layout extraction. If both equirect and layout
+  flags are set, equirect conversion takes precedence.
 - `output_format_is_override` should mirror
   `CookerConfig.output_format_override.has_value()`.
 - When `output_format_is_override == false`, the pipeline must preserve the
@@ -256,7 +266,15 @@ These stages follow the current synchronous implementation in
      - `extension_hint` from `source_id` or per-face `TextureSource.source_id`
    - Output: `ScratchImage` (RGBA8 or RGBA32Float)
 
-4) **(Multi-source only) Assemble subresources**
+4) **(Single-source only) Cubemap transforms**
+   - **Equirectangular → cube**: decode to RGBA32F, validate ~2:1 aspect,
+     convert to cubemap faces using `EquirectToCubeOptions` and
+     `desc.mip_filter` as the sampling filter.
+   - **Layout extraction**: when `cubemap_layout != kUnknown`, extract faces
+     from a single layout image (auto/strip/cross). Validation includes layout
+     detection and face size.
+
+5) **(Multi-source only) Assemble subresources**
    - Input: decoded sources mapped by `SubresourceId`
    - Output: assembled `ScratchImage`
    - Cube maps: 6 faces mapped by `CubeFace`.
@@ -266,15 +284,15 @@ These stages follow the current synchronous implementation in
      `kUnsupportedFormat` (unless the work item uses placeholder failure
      policy).
 
-5) **Post-decode validation**
+6) **Post-decode validation**
    - Input: `TextureImportDesc` + decoded meta
    - Checks: non-zero dimensions, explicit dimension match, and
      `TextureImportDesc::Validate()` on resolved shape
 
-6) **Convert to working format**
+7) **Convert to working format**
    - Currently pass-through (decoder outputs already in working formats)
 
-7) **Apply content processing**
+8) **Apply content processing**
    - HDR handling:
      - `kTonemapAuto`: auto bake HDR→LDR (uses `exposure_ev`)
      - `kError`: only bake if `bake_hdr_to_ldr` is true, otherwise error later
@@ -282,34 +300,34 @@ These stages follow the current synchronous implementation in
        disable BC7, and skip baking).
    - Normal maps: `intent == kNormalTS` → optional `flip_normal_green`
 
-8) **Generate mips**
+9) **Generate mips**
    - `MipPolicy::kNone`, `kFullChain`, or `kMaxCount`
    - Normal maps use specialized mips; 3D textures use 3D mip generator
    - `mip_filter` + `mip_filter_space` control filtering
 
-9) **Convert to output format / compress**
-   - Supported formats:
-     - `Format::kRGBA8UNorm`, `Format::kRGBA8UNormSRGB`
-     - `Format::kRGBA16Float`, `Format::kRGBA32Float`
-     - `Format::kBC7UNorm`, `Format::kBC7UNormSRGB`
-   - BC7 path converts float → RGBA8 first if needed
-   - HDR → LDR mismatch yields `kHdrRequiresFloatFormat` unless baked earlier
-     (except when `HdrHandling::kKeepFloat` overrides output to float)
-   - sRGB reinterpretation: if storage is RGBA8/BC7, requested sRGB variant is
-     preserved in the final descriptor
+10) **Convert to output format / compress**
+    - Supported formats:
+      - `Format::kRGBA8UNorm`, `Format::kRGBA8UNormSRGB`
+      - `Format::kRGBA16Float`, `Format::kRGBA32Float`
+      - `Format::kBC7UNorm`, `Format::kBC7UNormSRGB`
+    - BC7 path converts float → RGBA8 first if needed
+    - HDR → LDR mismatch yields `kHdrRequiresFloatFormat` unless baked earlier
+      (except when `HdrHandling::kKeepFloat` overrides output to float)
+    - sRGB reinterpretation: if storage is RGBA8/BC7, requested sRGB variant is
+      preserved in the final descriptor
 
-10) **Pack subresources**
+11) **Pack subresources**
     - Compute layouts via `ComputeSubresourceLayouts(meta, policy)`
     - **Ordering requirement**: layer-major (array layer outer, mip inner)
     - Use policy alignment for row pitch and subresource offsets
 
-11) **Build final payload**
+12) **Build final payload**
     - `TexturePayloadHeader` (28 bytes) + `SubresourceLayout[]` + aligned data
     - `data_offset_bytes = AlignSubresourceOffset(layouts_offset + layouts_bytes)`
     - `content_hash = detail::ComputeContentHash(payload)` computed on the
       ThreadPool (first 8 bytes of SHA-256 over the full payload)
 
-12) **Return cooked result**
+13) **Return cooked result**
     - `CookedTexturePayload.desc` includes shape, mip count, final format,
       `packing_policy_id`, and `content_hash`
     - `payload` contains the complete PAK v4 payload
@@ -385,6 +403,7 @@ deduplication and diagnostics match the sync importer.
 - Payload header/layout format and `content_hash` calculation (SHA-256 first 8
   bytes) are performed on the ThreadPool
 - Multi-source cooking: cubemaps and 2D arrays with pre-authored mips
+- Single-source cubemap transforms: equirect → cube and layout extraction
 - Placeholder generation (when enabled) matches sync path exactly
 
 ### Parity Owned by the Importer/Orchestrator (Importer Parity)
@@ -400,16 +419,12 @@ deduplication and diagnostics match the sync importer.
 - Dedup before submission via `texture_id`/`source_key` maps
   (job-scoped only; global dedupe is deferred to the packer)
 
-### Explicit Legacy Gap Contracts
+### Known Async Gaps (Must Be Closed for Parity)
 
-The following behaviors are **intentional parity** with the legacy synchronous
-importer and must be preserved until the sync path changes:
-
-- `HdrHandling::kKeepFloat` overrides the resolved output format to float for
-  HDR input, disables BC7, and skips baking.
-- Multi-source inputs support cubemaps and 2D arrays with pre-authored mips.
-  3D depth-slice assembly remains unsupported and returns
-  `TextureImportError::kUnsupportedFormat` (or a placeholder if requested).
+- **3D depth-slice assembly**: the sync importer supports volume textures via
+  `ImportTexture3D(...)`, but the async pipeline rejects non-zero
+  `SubresourceId::depth_slice`. This blocks volume textures in async imports
+  and should be implemented as a parity requirement.
 
 ---
 

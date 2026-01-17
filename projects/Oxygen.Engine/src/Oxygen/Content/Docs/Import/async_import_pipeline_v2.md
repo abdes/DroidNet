@@ -1285,7 +1285,7 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
 #### Flow Summary
 
-```
+```text
 ┌────────────────────────────────────────────────────────────────────────────┐
 │ FbxImportJob::ExecuteAsync                                                 │
 ├────────────────────────────────────────────────────────────────────────────┤
@@ -1313,7 +1313,7 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
 #### Loose Cooked Structure
 
-```
+```text
 container.index.bin     ← Written by: ImportSession::Finalize() → LooseCookedWriter::Finish()
 Resources/
   textures.table        ← Written by: TextureEmitter::Finalize()
@@ -1373,7 +1373,7 @@ Scenes/
 
 #### Log-Structured Allocation (Re-import Support)
 
-```
+```text
 Fresh import:    T1→0, T2→1, T3→2
 Re-import T2:    T2'→3 (NEW data appended, NEW index)
                  Old data at offset 1 is STALE (not referenced)
@@ -1412,7 +1412,7 @@ knowing the final size of each `.table` and `.data` file.
 
 #### The Data Flow
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ DURING IMPORT (streaming)                                               │
 ├─────────────────────────────────────────────────────────────────────────┤
@@ -1593,7 +1593,7 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport> {
 
 #### Timeline
 
-```
+```text
 TIME (ms) →    0    200   400   600   800   1000  1200  1400  1600  1800  2000
               ├─────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┤
 Parse FBX     ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
@@ -2034,7 +2034,7 @@ This means emission commits (e.g., `session.TextureEmitter().Emit(...)`,
 always executed from a single thread. **No locks are needed for emitter state**
 (single-writer commit).
 
-```
+```text
 Import Thread Event Loop (single thread):
 ┌─────────────────────────────────────────────────────────────────────┐
 │ Coroutine A (texture collection)     │ RUNNING                     │
@@ -2071,21 +2071,21 @@ Import Thread Event Loop (single thread):
 
 ### Cross-Thread Communication
 
-```
+```text
 [App Thread]                    [Import Thread]
      │                                │
      │ SubmitImport()                 │
-     │ ──────────────────────────────▶│ (via thread-safe queue + Post)
+     │ ─────────────────────────────▶ │ (via thread-safe queue + Post)
      │                                │
      │                                │ Nursery spawns coroutines A, B, C
      │                                │ Each co_awaits ThreadPool
-    │                                │ ◀── results resume on import thread
+     │                                │ ◀── results resume on import thread
      │                                │
      │                                │ All commits on import thread
      │                                │ (interleaved, but single-threaded)
      │                                │
-    │ callback(result)               │
-    │ ◀──────────────────────────────│ (import thread; caller may marshal)
+     │ callback(result)               │
+     │ ◀──────────────────────────────│ (import thread; caller may marshal)
      │                                │
 ```
 
@@ -2324,6 +2324,38 @@ auto AsyncImporter::ProcessStandaloneTexture(TextureImportRequest& req)
 ```
 
 ---
+
+## Manifest-Driven Imports (Built-In)
+
+Manifests are a first-class **importer feature** (not a tool-only concern) and
+represent a batch of import jobs with shared defaults and per-job overrides.
+They are designed to be consumed by both sync and async import paths and to
+expand into standard `ImportRequest` jobs with deterministic behavior.
+
+### Design Principles and Required Features
+
+- **Versioned schema with strict validation** and clear diagnostics (job index,
+  source path, and JSON pointer for invalid fields).
+- **Defaults + overrides model**: global defaults, per-job overrides, and
+  explicit `job_type` routing (texture, fbx, glb, etc.).
+- **Path resolution**: relative paths resolved against the manifest root or an
+  explicit override; paths normalized for stable `texture_id` generation.
+- **Deterministic expansion**: job order preserved; duplicate job definitions
+  produce deterministic dedupe keys and diagnostics.
+- **Texture settings parity**: intent, color space, output/data format, mip
+  policy/filter, BC7 quality, packing policy, cube layout/face size, flip Y,
+  force RGBA, cubemap, equirect-to-cube, HDR handling, exposure, normal map
+  flips/renorm, and mip filter space.
+- **Multi-source texture inputs**: explicit cube faces, 2D array layers,
+  3D depth slices, pre-authored mips, and single-image layout extraction.
+- **Async-compatibility**: manifest expansion yields `WorkItem`s and job
+  descriptors without performing I/O; pipelines and emitters remain unchanged.
+- **Dry-run + reporting hooks**: optional validation-only runs and JSON report
+  output consistent with per-job telemetry.
+- **Forward evolution**: additive fields permitted without breaking older
+  parsers; unknown fields must be rejected or ignored based on schema version.
+- **Uniform diagnostics**: error codes align with importer diagnostics (e.g.,
+  `import.manifest.invalid`, `texture.settings.invalid`, `import.cancelled`).
 
 ## Extensibility for New Asset Types
 

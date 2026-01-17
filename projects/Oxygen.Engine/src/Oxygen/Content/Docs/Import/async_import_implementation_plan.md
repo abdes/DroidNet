@@ -1,15 +1,15 @@
 # Async Import Pipeline - Implementation Plan
 
 **Status:** In Progress
-**Date:** 2026-01-15
-**Estimate:** 6-8 weeks (one engineer)
-**Last Updated:** Phase 4 updated for job actor + cancellation + test hygiene
+**Date:** 2026-01-17
+**Estimate:** 7-10 weeks (one engineer)
+**Last Updated:** Manifest phase added; TexturePipeline status refreshed
 
 ---
 
 ## Overview
 
-This plan implements the async import pipeline in 6 phases:
+This plan implements the async import pipeline in 7 phases:
 
 | Phase | Name | Status | Key Deliverables |
 | ----- | ---- | ------ | ---------------- |
@@ -17,8 +17,9 @@ This plan implements the async import pipeline in 6 phases:
 | 2 | Async File I/O | ✅ COMPLETE | IAsyncFileReader, WindowsFileReader |
 | 3 | AsyncImportService | ✅ COMPLETE | Thread-safe API, job lifecycle |
 | 4 | ImportSession + Emitters + Jobs | ⏳ IN PROGRESS | Async writes, emitters, stable indices, job actor + unified cancellation |
-| 5 | TexturePipeline | ❌ NOT STARTED | Pure compute pipeline, FbxImporter::ImportAsync |
-| 6 | Integration & Polish | ❌ NOT STARTED | End-to-end tests, example, docs |
+| 5 | Manifest Support (Importer-Level) | ❌ NOT STARTED | Manifest schema, parser, batch expansion |
+| 6 | TexturePipeline | ⏳ IN PROGRESS | Pure compute pipeline, async job wiring |
+| 7 | Integration & Polish | ❌ NOT STARTED | End-to-end tests, example, docs |
 
 **Unit test coverage (high-level):** WindowsFileWriter, ImportSession, TextureEmitter, BufferEmitter, AssetEmitter, ImportJob, AsyncImporter.
 
@@ -80,7 +81,7 @@ void ThreadMain() {
 // WRONG: Using same flag for both causes early return
 void RequestShutdown() { shutdown_.store(true); }
 void Shutdown() {
-  if (shutdown_.exchange(true)) return;  // BUG: Returns if RequestShutdown was called!
+  if (shutdown_.exchange(true)) return;  // bad: Returns if RequestShutdown was called!
   // ... cleanup never runs ...
 }
 
@@ -702,7 +703,7 @@ Tasks:
 - ✅ Session finalization that awaits emitters then writes index last
 - ✅ Job-based execution: ImportJob LiveObject + per-job nursery + job selection
   plumbing + cancellation aligned to job nursery
-- ⏳ Remaining: format-specific jobs + pure compute TexturePipeline integration
+- ⏳ Remaining: format-specific jobs + manifest-driven job wiring
 
 **Notes (implementation update):**
 
@@ -734,7 +735,103 @@ co_await emitter.Finalize();
 
 ---
 
-## Phase 5: TexturePipeline (Pure Compute) (Week 5-6)
+## Phase 5: Manifest Support (Importer-Level) (Week 5)
+
+### Objective
+
+Make import manifests a first-class importer feature (not tool-only) that
+expands into standard import jobs with deterministic behavior and diagnostics.
+
+### Tasks
+
+#### 5.1 Manifest Data Model + Schema
+
+**Files:**
+
+- `src/Oxygen/Content/Import/Manifest/ImportManifest.h/.cpp`
+- `src/Oxygen/Content/Import/Manifest/ImportManifest_schema.h`
+
+Tasks:
+
+- [ ] Define `ImportManifest`, `ImportManifestDefaults`, and job records.
+- [ ] Encode the full manifest schema (versioned, strict validation).
+- [ ] Include texture settings parity (intent, formats, mip policy/filter,
+  BC7 quality, packing policy, cube layout/face size, flips, HDR options,
+  normal-map options, mip filter space, and multi-source mappings).
+
+#### 5.2 Manifest Loader + Validation
+
+**Files:**
+
+- `src/Oxygen/Content/Import/Manifest/ImportManifestLoader.h/.cpp`
+
+Tasks:
+
+- [ ] Load/validate JSON (schema + semantic checks).
+- [ ] Resolve paths relative to manifest root or explicit override.
+- [ ] Normalize paths for deterministic IDs and diagnostics.
+- [ ] Emit diagnostics with job index + JSON pointer context.
+
+#### 5.3 Job Expansion + Routing
+
+**Files:**
+
+- `src/Oxygen/Content/Import/Async/AsyncImportService.h/.cpp`
+- `src/Oxygen/Content/Import/Async/Detail/AsyncImporter.h/.cpp`
+
+Tasks:
+
+- [ ] Add `SubmitManifest(...)` (or equivalent) API to submit a manifest.
+- [ ] Expand manifest jobs into `ImportRequest`/texture jobs with stable order.
+- [ ] Route `job_type` to concrete jobs (texture, fbx, glb, etc.).
+- [ ] Ensure manifests do not perform I/O during expansion.
+
+#### 5.4 Reporting + Dry-Run
+
+**Files:**
+
+- `src/Oxygen/Content/Import/Manifest/ImportManifestReport.h/.cpp`
+
+Tasks:
+
+- [ ] Support validation-only (dry-run) mode with no cooking.
+- [ ] Write JSON report with per-job status + telemetry (consistent with
+  existing ImportTool reports).
+
+#### 5.5 Tests
+
+**Files:**
+
+- `src/Oxygen/Content/Test/Import/Async/ImportManifest_test.cpp`
+- `src/Oxygen/Content/Test/Import/Async/ImportManifest_batch_test.cpp`
+
+Tasks:
+
+- [ ] Schema validation (valid/invalid, unknown fields, version mismatch).
+- [ ] Path resolution and normalization tests.
+- [ ] Job expansion order + deterministic IDs.
+- [ ] Dry-run behavior (no I/O, diagnostics only).
+
+#### 5.6 Tool Integration (Thin Wrapper)
+
+**Files:**
+
+- `src/Oxygen/Content/Tools/ImportTool/BatchCommand.cpp`
+
+Tasks:
+
+- [ ] Reuse importer manifest API instead of duplicating parsing logic.
+- [ ] Keep tool-specific UI/reporting as a thin layer.
+
+### Deliverables
+
+- Importer-owned manifest schema + loader
+- Manifest expansion into concrete jobs
+- Diagnostics and reporting parity with tool output
+
+---
+
+## Phase 6: TexturePipeline (Pure Compute) (Week 6-7)
 
 ### Objective
 
@@ -750,7 +847,7 @@ on ThreadPool, returns cooked data to caller who emits via Emitter.
 
 ### Tasks
 
-#### 5.0 ImportSession Infrastructure Ownership Refactor
+#### 6.0 ImportSession Infrastructure Ownership Refactor
 
 **Files:**
 
@@ -768,7 +865,7 @@ Tasks:
   infra.
 - [X] Update tests to use the new constructor and accessors.
 
-#### 5.1 TexturePipeline Types
+#### 6.1 TexturePipeline Types
 
 **File:** `src/Oxygen/Content/Import/Async/TexturePipeline.h`
 
@@ -782,7 +879,7 @@ Tasks:
       `cooked`, `used_placeholder`, `diagnostics`, `success`.
 - [X] Add `Config` struct (queue capacity, worker count) and store as member.
 
-#### 5.2 Pipeline Progress Reporting (Design Task)
+#### 6.2 Pipeline Progress Reporting (Design Task)
 
 **Files:** (design + header updates)
 
@@ -797,14 +894,14 @@ Tasks:
 - [X] Define update points: increment `submitted` on successful submit and
   `completed/failed` on `Collect()`.
 
-#### 5.3 ResourcePipeline Concept
+#### 6.3 ResourcePipeline Concept
 
 **File:** `src/Oxygen/Content/Import/Async/ResourcePipeline.h`
 
 - [X] Implement the concept to match BufferPipeline-style semantics.
 - [X] `static_assert(ResourcePipeline<TexturePipeline>)`.
 
-#### 5.4 TexturePipeline Implementation
+#### 6.4 TexturePipeline Implementation
 
 **File:** `src/Oxygen/Content/Import/Async/TexturePipeline.h/.cpp`
 
@@ -816,7 +913,7 @@ Tasks:
 - [X] Implement `Collect()` with sentinel result on closed output channel.
 - [X] Implement `HasPending()`, `PendingCount()`, `Close()`, `GetProgress()`.
 
-#### 5.5 TexturePipeline Worker Loop
+#### 6.5 TexturePipeline Worker Loop
 
 **File:** `src/Oxygen/Content/Import/Async/TexturePipeline.cpp`
 
@@ -825,15 +922,17 @@ Tasks:
 - [X] Resolve packing policy via `emit::GetPackingPolicy()`.
 - [X] Build local `TextureImportDesc` (set `source_id`, `stop_token`).
 - [X] Cook using the correct overload for `SourceContent`:
-  `SourceBytes`, `TextureSourceSet` (cube only), or `ScratchImage`.
-- [ ] Implement non-cube multi-source assembly for `TextureSourceSet`
+  `SourceBytes`, `TextureSourceSet` (cube + array), or `ScratchImage`.
+- [X] Implement non-cube multi-source assembly for `TextureSourceSet`
   (array layers), with validation of dimension/format parity.
+- [ ] Add 3D depth-slice assembly for `TextureSourceSet` in the async
+  pipeline (parity with `ImportTexture3D`).
 - [X] If `output_format_is_override == false`, preserve decoded format and
   set `bc7_quality = kNone` to match sync path.
 - [X] On error: return placeholder when `failure_policy == kPlaceholder` and
   not cancelled; otherwise emit diagnostics with `success=false`.
 
-#### 5.6 Reuse Existing Sync Cooking Logic
+#### 6.6 Reuse Existing Sync Cooking Logic
 
 **File:** `src/Oxygen/Content/Import/Async/TexturePipeline.cpp`
 
@@ -844,7 +943,7 @@ Tasks:
   `CookedTexturePayload`.
 - [X] Add byte-for-byte parity tests against sync cooker output.
 
-#### 5.6a Legacy Cooker Gap Fixes (Make New System Complete)
+#### 6.6a Legacy Cooker Gap Fixes (Make New System Complete)
 
 **Files:**
 
@@ -871,7 +970,7 @@ Tasks:
 - [X] Update the texture pipeline design doc to reflect the corrected HDR
   policy and expanded multi-source support.
 
-#### 5.6b GeometryPipeline (Compute-Only) Implementation + Tests
+#### 6.6b GeometryPipeline (Compute-Only) Implementation + Tests
 
 **Files:**
 
@@ -897,7 +996,7 @@ Tasks:
 - [ ] Unit tests: skinned mesh payloads (joint buffers present + alignment).
 - [ ] Unit tests: descriptor serialization (layout, offsets, version, hash).
 
-#### 5.6c MaterialPipeline (Compute-Only) Implementation + Tests
+#### 6.6c MaterialPipeline (Compute-Only) Implementation + Tests
 
 **Files:**
 
@@ -917,7 +1016,7 @@ Tasks:
 - [ ] Unit tests: ORM policy and texture binding flags, UV transform cases.
 - [ ] Unit tests: shader stage ordering, truncation warnings, and hash values.
 
-#### 5.6d ScenePipeline (Compute-Only) Implementation + Tests
+#### 6.6d ScenePipeline (Compute-Only) Implementation + Tests
 
 **Files:**
 
@@ -937,7 +1036,7 @@ Tasks:
 - [ ] Unit tests: pruning policy correctness, component ordering, and hash.
 - [ ] Unit tests: environment system validation and error diagnostics.
 
-#### 5.6e Pipeline Conformance + Cancellation Tests
+#### 6.6e Pipeline Conformance + Cancellation Tests
 
 **Files:**
 
@@ -950,7 +1049,7 @@ Tasks:
 - [ ] Cancellation tests: `stop_token` yields `success=false` and no outputs.
 - [ ] Backpressure tests: bounded queues block/deny submissions as expected.
 
-#### 5.7 Job-Orchestrated Import Wiring
+#### 6.7 Job-Orchestrated Import Wiring
 
 **Files:**
 
@@ -978,7 +1077,7 @@ Tasks:
   emit via `TextureEmitter()`.
 - [ ] Integration tests for job wiring and cooked output.
 
-#### 5.8 MaterialReadinessTracker
+#### 6.8 MaterialReadinessTracker
 
 **File:** `src/Oxygen/Content/Import/Async/MaterialReadinessTracker.h/.cpp`
 
@@ -987,7 +1086,7 @@ Tasks:
 - [ ] Returns material indices that are now ready to emit
 - [ ] Unit test: dependency tracking
 
-#### 5.9 Configuration Flow (Need-to-Know)
+#### 6.9 Configuration Flow (Need-to-Know)
 
 **Files:**
 
@@ -1035,7 +1134,7 @@ EXPECT_TRUE(report.success);
 EXPECT_GT(report.textures_written, 10);
 ```
 
-### Phase 5 Implementation Notes (Decisions + Open Items)
+### Phase 6 Implementation Notes (Decisions + Open Items)
 
 - **Callback threading**: callbacks run on the import thread; callers marshal to UI.
 - **ImportSession owns infra access**: `IAsyncFileReader`, `IAsyncFileWriter`, and `co::ThreadPool` are injected into `ImportSession` via `observer_ptr` or owning smart pointers (no reference members).
@@ -1046,7 +1145,7 @@ EXPECT_GT(report.textures_written, 10);
 
 ---
 
-## Phase 6: Integration, Example & Polish (Week 7-8)
+## Phase 7: Integration, Example & Polish (Week 8-9)
 
 ### Objective
 
@@ -1054,7 +1153,7 @@ End-to-end integration, example application, and documentation.
 
 ### Tasks
 
-#### 6.1 End-to-End Integration Tests
+#### 7.1 End-to-End Integration Tests
 
 **File:** `src/Oxygen/Content/Test/Import/Async/Integration/`
 
@@ -1067,7 +1166,7 @@ End-to-end integration, example application, and documentation.
 - [ ] Test: Cancellation mid-import
 - [ ] Test: Multiple concurrent imports
 
-#### 6.2 Verify Log-Structured Growth
+#### 7.2 Verify Log-Structured Growth
 
 **File:** Integration tests
 
@@ -1077,7 +1176,7 @@ End-to-end integration, example application, and documentation.
 - [ ] Verify index file points to new data
 - [ ] Verify old data is orphaned (not corrupted)
 
-#### 6.3 Performance Benchmarks
+#### 7.3 Performance Benchmarks
 
 **File:** `src/Oxygen/Content/Test/Import/Async/Benchmark/`
 
@@ -1085,7 +1184,7 @@ End-to-end integration, example application, and documentation.
 - [ ] Benchmark: Large FBX (28 textures, 5 meshes)
 - [ ] Record baseline and verify speedup
 
-#### 6.4 Example Application
+#### 7.4 Example Application
 
 **File:** `Examples/AsyncImport/`
 
@@ -1095,7 +1194,7 @@ End-to-end integration, example application, and documentation.
 - [ ] Handle Ctrl+C graceful shutdown
 - [ ] Add README.md
 
-#### 6.5 Documentation
+#### 7.5 Documentation
 
 **Files:** Various
 
@@ -1105,19 +1204,20 @@ End-to-end integration, example application, and documentation.
 - [ ] Document extending with new pipeline types
 - [ ] Add code examples to design doc
 
-#### 6.6 Cleanup
+#### 7.6 Cleanup
 
 - [ ] Remove obsolete code paths
 - [ ] Final code review
 - [ ] ASAN/TSAN clean run
 - [ ] Update CHANGELOG
 
-#### 6.7 Legacy Cooker Gaps (Deferred from 5.6a)
+#### 7.7 Legacy Cooker Gaps (Deferred from 6.6a)
 
-- [ ] Implement 3D depth-slice multi-source assembly for `TextureSourceSet`.
+- [ ] Implement 3D depth-slice assembly for `TextureSourceSet` in the async
+  pipeline (parity with `ImportTexture3D`).
 - [ ] Add validation tests for subresource ordering (layer-major, mip-inner).
 
-#### 6.8 PAK Format Propagation (Post-Pipeline Changes)
+#### 7.8 PAK Format Propagation (Post-Pipeline Changes)
 
 **Files:**
 
@@ -1137,11 +1237,11 @@ Tasks:
 
 ### Deliverables
 
-- ✅ Full integration test suite
-- ✅ Performance benchmarks with recorded baseline
-- ✅ Example application with progress UI
-- ✅ Complete documentation
-- ✅ Clean codebase
+- Full integration test suite
+- Performance benchmarks with recorded baseline
+- Example application with progress UI
+- Complete documentation
+- Clean codebase
 
 ### Acceptance Criteria
 
@@ -1155,45 +1255,6 @@ Tasks:
 
 # Ctrl+C causes graceful shutdown
 # Speedup: 3-5x on 8-core vs sequential
-```
-
----
-
-## Testing Summary by Phase
-
-Test totals fluctuate as work lands. Prefer using `ctest` (or CI) for the
-authoritative count.
-
-- Phase 1-3: Unit tests exist and are tracked as ✅ complete phases.
-- Phase 4: Unit tests exist for the writer + session + emitters; integration
-  tests for session+importer wiring are still pending.
-
----
-
-## Architecture Summary
-
-```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ AsyncImportService (thread-safe public API)                                 │
-│   SubmitImport() → ImportJobId                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Import Thread (ASIO event loop)                                             │
-│                                                                             │
-│  AsyncImporter (shared compute infrastructure)                              │
-│    ├── TexturePipeline (pure compute, Submit/Collect)                       │
-│    ├── ThreadPool (8+ workers)                                              │
-│    └── IAsyncFileIO (read + write)                                          │
-│                                                                             │
-│  ImportSession (per-job state)                                              │
-│    ├── TextureEmitter → textures.data, textures.table                       │
-│    ├── BufferEmitter  → buffers.data, buffers.table                         │
-│    ├── AssetEmitter   → *.omat, *.ogeo, *.oscene                            │
-│    ├── DiagnosticsBag                                                       │
-│    └── LooseCookedWriter → container.index.bin (LAST)                       │
-└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---

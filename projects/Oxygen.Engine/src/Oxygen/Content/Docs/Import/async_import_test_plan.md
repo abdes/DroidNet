@@ -15,7 +15,7 @@ requirements.
 
 ## Test File Naming Convention
 
-```
+```text
 {Component}_{TestType}_test.cpp
 
 Examples:
@@ -758,6 +758,28 @@ TEST(TextureCommitDedupTest, Commit_DifferentContent_CreatesNewEntry) {
 
 } // namespace
 ```
+
+### TexturePipeline_content_features_test.cpp
+
+Core coverage for HDR/cube/array/3D behavior in the async pipeline.
+
+- **HDR input: keep-float**
+  - HDR source with `HdrHandling::kKeepFloat` yields RGBA32F output and disables BC7.
+- **HDR input: bake-to-LDR**
+  - HDR source with `bake_hdr_to_ldr=true` produces RGBA8 output and passes validation.
+- **Equirectangular → cubemap**
+  - `WorkItem.equirect_to_cubemap=true` with valid `cubemap_face_size` produces a
+    6-face cubemap; invalid aspect ratio fails with `kInvalidDimensions`.
+- **Cubemap layout extraction**
+  - `WorkItem.cubemap_layout != kUnknown` extracts 6 faces from hstrip/vstrip/hcross/vcross;
+    invalid layouts fail with `kDimensionMismatch`.
+- **Multi-source cubemap assembly**
+  - 6 face images with `TextureType::kTextureCube` assemble and cook successfully.
+- **2D array assembly with pre-authored mips**
+  - Full layer × mip coverage assembles; missing subresource returns `kInvalidMipPolicy`.
+- **3D depth-slice assembly (parity gap)**
+  - When implemented, depth slices produce a `TextureType::kTexture3D` payload.
+  - Until implemented, verify `kUnsupportedFormat` is returned for non-zero depth slices.
 
 ---
 
