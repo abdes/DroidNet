@@ -93,6 +93,7 @@ NOLINT_TEST_F(PrintAndDebugTest, PrintHybridComponents)
 
 NOLINT_TEST_F(PrintAndDebugTest, LogComponents_OutputsToStdoutAndStderr)
 {
+  loguru::g_stderr_verbosity = loguru::Verbosity_INFO;
   // Arrange
   composition_.AddComponent<SimpleComponent1>();
   composition_.AddComponent<SimpleComponent2>();
