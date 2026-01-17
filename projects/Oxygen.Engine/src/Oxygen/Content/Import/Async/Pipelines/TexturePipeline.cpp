@@ -37,11 +37,6 @@ namespace {
     return diag;
   }
 
-  [[nodiscard]] auto IsKnownPackingPolicyId(std::string_view policy_id) -> bool
-  {
-    return policy_id == "d3d12" || policy_id == "tight";
-  }
-
   [[nodiscard]] auto MakePackingPolicyDiagnostic(std::string_view policy_id,
     std::string_view fallback_id, std::string_view source_id)
     -> ImportDiagnostic
@@ -71,7 +66,8 @@ namespace {
     const auto layouts_offset = header.layouts_offset_bytes;
     const auto layouts_size
       = static_cast<size_t>(count) * sizeof(data::pak::SubresourceLayout);
-    if (layouts_offset + layouts_size > payload.size()) {
+    if (layouts_offset > payload.size()
+      || layouts_size > payload.size() - layouts_offset) {
       return {};
     }
 
@@ -118,6 +114,10 @@ namespace {
 
     const size_t pixel_count
       = static_cast<size_t>(meta.width) * static_cast<size_t>(meta.height);
+    const size_t expected_bytes = pixel_count * 4U;
+    if (src_view.pixels.size() < expected_bytes) {
+      return ::oxygen::Err(TextureImportError::kInvalidDimensions);
+    }
     for (size_t i = 0; i < pixel_count; ++i) {
       for (size_t c = 0; c < 4; ++c) {
         const uint8_t byte_val = static_cast<uint8_t>(src_ptr[i * 4 + c]);
@@ -237,6 +237,123 @@ namespace {
     return ::oxygen::Ok(std::move(cube));
   }
 
+  //! Assemble a 3D volume texture from depth slices.
+  /*!
+   @param slices Decoded slice images.
+   @param subresources Subresource identifiers for the slices.
+   @return Assembled volume image or a texture import error.
+
+  ### Performance Characteristics
+
+  - Time Complexity: O(depth * width * height)
+  - Memory: O(depth * width * height)
+  - Optimization: Single contiguous copy per slice
+
+   @note All slices must be single-mip, array_layer 0, and contiguous depth.
+  */
+  [[nodiscard]] auto AssembleVolumeFromSlices(
+    std::span<ScratchImage> slices, std::span<const SubresourceId> subresources)
+    -> oxygen::Result<ScratchImage, TextureImportError>
+  {
+    if (slices.empty() || slices.size() != subresources.size()) {
+      return ::oxygen::Err(TextureImportError::kInvalidDimensions);
+    }
+
+    const auto& first_meta = slices.front().Meta();
+    const auto format = first_meta.format;
+
+    uint16_t max_depth = 0;
+    for (const auto& subresource : subresources) {
+      if (subresource.array_layer != 0) {
+        return ::oxygen::Err(TextureImportError::kArrayLayerCountInvalid);
+      }
+      if (subresource.mip_level != 0) {
+        return ::oxygen::Err(TextureImportError::kInvalidMipPolicy);
+      }
+      max_depth = (std::max)(max_depth, subresource.depth_slice);
+    }
+
+    const auto depth = static_cast<uint16_t>(max_depth + 1);
+    std::vector<size_t> source_by_depth(depth, slices.size());
+    std::vector<bool> present(depth, false);
+
+    for (size_t i = 0; i < slices.size(); ++i) {
+      const auto& meta = slices[i].Meta();
+      if (meta.width != first_meta.width || meta.height != first_meta.height) {
+        return ::oxygen::Err(TextureImportError::kDimensionMismatch);
+      }
+      if (meta.depth != 1 || meta.array_layers != 1 || meta.mip_levels != 1) {
+        return ::oxygen::Err(TextureImportError::kInvalidDimensions);
+      }
+      if (meta.format != format) {
+        return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+      }
+
+      const auto depth_index = subresources[i].depth_slice;
+      if (depth_index >= depth || present[depth_index]) {
+        return ::oxygen::Err(TextureImportError::kInvalidMipPolicy);
+      }
+      present[depth_index] = true;
+      source_by_depth[depth_index] = i;
+    }
+
+    for (const auto has_slice : present) {
+      if (!has_slice) {
+        return ::oxygen::Err(TextureImportError::kInvalidMipPolicy);
+      }
+    }
+
+    const auto bytes_per_pixel = detail::GetBytesPerPixel(format);
+    if (bytes_per_pixel == 0) {
+      return ::oxygen::Err(TextureImportError::kUnsupportedFormat);
+    }
+
+    ScratchImageMeta volume_meta {
+      .texture_type = TextureType::kTexture3D,
+      .width = first_meta.width,
+      .height = first_meta.height,
+      .depth = depth,
+      .array_layers = 1,
+      .mip_levels = 1,
+      .format = format,
+    };
+
+    ScratchImage volume = ScratchImage::Create(volume_meta);
+    if (!volume.IsValid()) {
+      return ::oxygen::Err(TextureImportError::kOutOfMemory);
+    }
+
+    auto dst_pixels = volume.GetMutablePixels(0, 0);
+    const auto slice_size = static_cast<size_t>(first_meta.width)
+      * static_cast<size_t>(first_meta.height) * bytes_per_pixel;
+
+    if (dst_pixels.size() < slice_size * depth) {
+      return ::oxygen::Err(TextureImportError::kOutOfMemory);
+    }
+
+    for (uint16_t slice = 0; slice < depth; ++slice) {
+      const auto source_index = source_by_depth[slice];
+      if (source_index >= slices.size()) {
+        return ::oxygen::Err(TextureImportError::kInvalidMipPolicy);
+      }
+
+      const auto src_view = slices[source_index].GetImage(0, 0);
+      const auto expected_row_bytes = ComputeRowBytes(src_view.width, format);
+      if (src_view.row_pitch_bytes != expected_row_bytes) {
+        return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+      }
+
+      if (src_view.pixels.size() != slice_size) {
+        return ::oxygen::Err(TextureImportError::kDimensionMismatch);
+      }
+
+      std::copy(src_view.pixels.begin(), src_view.pixels.end(),
+        dst_pixels.data() + slice_size * slice);
+    }
+
+    return ::oxygen::Ok(std::move(volume));
+  }
+
   [[nodiscard]] auto BuildPlaceholderPayload(std::string_view texture_id,
     std::string_view packing_policy_id) -> CookedTexturePayload
   {
@@ -272,6 +389,395 @@ namespace {
     std::optional<std::chrono::microseconds> decode_duration;
   };
 
+  //! Cook a decoded image with optional output format override.
+  [[nodiscard]] auto CookDecodedImage(ScratchImage&& image,
+    TextureImportDesc desc, const ITexturePackingPolicy& policy,
+    const bool output_format_is_override,
+    std::optional<std::chrono::microseconds> decode_duration) -> CookOutcome
+  {
+    if (!output_format_is_override) {
+      const auto& meta = image.Meta();
+      desc.output_format = meta.format;
+      desc.bc7_quality = Bc7Quality::kNone;
+    }
+
+    return { .cooked = CookTexture(std::move(image), desc, policy),
+      .decode_duration = decode_duration };
+  }
+
+  //! Decode and cook a single source payload.
+  /*!
+   Converts an encoded texture payload into a cooked texture. Supports
+   optional equirectangular-to-cubemap conversion and cubemap layout
+   extraction.
+
+   @param source Encoded payload bytes.
+   @param desc Import description for the texture.
+   @param policy Packing policy used by the cooker.
+   @param output_format_is_override Whether output format is forced.
+   @param equirect_to_cubemap Whether to convert from equirectangular.
+   @param cubemap_face_size Output face size for cubemap conversion.
+   @param cubemap_layout Layout for cubemap face extraction.
+   @return Cooked texture payload with decode duration if applicable.
+
+  ### Performance Characteristics
+
+  - Time Complexity: O(width * height) plus decode cost.
+  - Memory: O(width * height) for decoded images.
+  - Optimization: Decode and cook performed once per payload.
+
+   @note Decode cost depends on the input format and decoder.
+  */
+  [[nodiscard]] auto CookFromBytes(TexturePipeline::SourceBytes source,
+    TextureImportDesc desc, const ITexturePackingPolicy& policy,
+    const bool output_format_is_override, const bool equirect_to_cubemap,
+    const uint32_t cubemap_face_size, const CubeMapImageLayout cubemap_layout)
+    -> CookOutcome
+  {
+    if (source.bytes.empty()) {
+      return {
+        .cooked = ::oxygen::Err(TextureImportError::kFileNotFound),
+        .decode_duration = {},
+      };
+    }
+
+    if (equirect_to_cubemap) {
+      const auto decode_start = std::chrono::steady_clock::now();
+      auto decoded = detail::DecodeSource(source.bytes, desc);
+      const auto decode_end = std::chrono::steady_clock::now();
+      const auto decode_duration
+        = std::chrono::duration_cast<std::chrono::microseconds>(
+          decode_end - decode_start);
+      if (!decoded) {
+        return { .cooked = ::oxygen::Err(decoded.error()),
+          .decode_duration = decode_duration };
+      }
+
+      auto float_image = ConvertToFloatImage(std::move(*decoded));
+      if (!float_image) {
+        return { .cooked = ::oxygen::Err(float_image.error()),
+          .decode_duration = decode_duration };
+      }
+
+      EquirectToCubeOptions options {
+        .face_size = cubemap_face_size,
+        .sample_filter = desc.mip_filter,
+      };
+      auto cube
+        = ConvertEquirectangularToCube(std::move(float_image.value()), options);
+      if (!cube) {
+        return { .cooked = ::oxygen::Err(cube.error()),
+          .decode_duration = decode_duration };
+      }
+
+      return CookDecodedImage(std::move(*cube), desc, policy,
+        output_format_is_override, decode_duration);
+    }
+
+    if (cubemap_layout != CubeMapImageLayout::kUnknown) {
+      const auto decode_start = std::chrono::steady_clock::now();
+      auto decoded = detail::DecodeSource(source.bytes, desc);
+      const auto decode_end = std::chrono::steady_clock::now();
+      const auto decode_duration
+        = std::chrono::duration_cast<std::chrono::microseconds>(
+          decode_end - decode_start);
+      if (!decoded) {
+        return { .cooked = ::oxygen::Err(decoded.error()),
+          .decode_duration = decode_duration };
+      }
+
+      auto cube = ExtractCubeFacesFromLayoutImage(*decoded, cubemap_layout);
+      if (!cube) {
+        return { .cooked = ::oxygen::Err(cube.error()),
+          .decode_duration = decode_duration };
+      }
+
+      return CookDecodedImage(std::move(*cube), desc, policy,
+        output_format_is_override, decode_duration);
+    }
+
+    const auto decode_start = std::chrono::steady_clock::now();
+    auto decoded = detail::DecodeSource(source.bytes, desc);
+    const auto decode_end = std::chrono::steady_clock::now();
+    const auto decode_duration
+      = std::chrono::duration_cast<std::chrono::microseconds>(
+        decode_end - decode_start);
+    if (!decoded) {
+      return { .cooked = ::oxygen::Err(decoded.error()),
+        .decode_duration = decode_duration };
+    }
+
+    return CookDecodedImage(std::move(*decoded), desc, policy,
+      output_format_is_override, decode_duration);
+  }
+
+  //! Decode, validate, assemble, and cook a set of source slices.
+  /*!
+   Decodes a source set, validates subresource metadata, and assembles the
+   target texture (2D array, cube, or 3D volume) before cooking.
+
+   @param source_set Source set containing decoded subresources.
+   @param desc Import description for the texture.
+   @param policy Packing policy used by the cooker.
+   @param output_format_is_override Whether output format is forced.
+   @return Cooked texture payload with accumulated decode duration.
+
+  ### Performance Characteristics
+
+  - Time Complexity: O(n * width * height) plus decode cost.
+  - Memory: O(n * width * height) for decoded sources.
+  - Optimization: Validates and assembles in a single pass.
+
+   @note All sources must be single-mip and dimensionally consistent.
+  */
+  [[nodiscard]] auto CookFromSourceSet(TextureSourceSet source_set,
+    TextureImportDesc desc, const ITexturePackingPolicy& policy,
+    const bool output_format_is_override) -> CookOutcome
+  {
+    if (source_set.IsEmpty()) {
+      return {
+        .cooked = ::oxygen::Err(TextureImportError::kFileNotFound),
+        .decode_duration = {},
+      };
+    }
+
+    std::vector<ScratchImage> decoded_images;
+    decoded_images.reserve(source_set.Count());
+    std::vector<SubresourceId> subresources;
+    subresources.reserve(source_set.Count());
+
+    std::chrono::microseconds decode_accum { 0 };
+
+    for (const auto& source : source_set.Sources()) {
+      if (source.bytes.empty()) {
+        return {
+          .cooked = ::oxygen::Err(TextureImportError::kFileNotFound),
+          .decode_duration = {},
+        };
+      }
+
+      auto per_source_desc = desc;
+      per_source_desc.source_id = source.source_id;
+      const auto decode_start = std::chrono::steady_clock::now();
+      auto decoded = detail::DecodeSource(source.bytes, per_source_desc);
+      const auto decode_end = std::chrono::steady_clock::now();
+      decode_accum += std::chrono::duration_cast<std::chrono::microseconds>(
+        decode_end - decode_start);
+      if (!decoded) {
+        return { .cooked = ::oxygen::Err(decoded.error()),
+          .decode_duration = decode_accum };
+      }
+
+      const auto& meta = decoded->Meta();
+      if (meta.mip_levels != 1) {
+        return { .cooked = ::oxygen::Err(TextureImportError::kInvalidMipPolicy),
+          .decode_duration = decode_accum };
+      }
+
+      if (source.subresource.depth_slice != 0
+        && desc.texture_type != TextureType::kTexture3D) {
+        return { .cooked
+          = ::oxygen::Err(TextureImportError::kUnsupportedFormat),
+          .decode_duration = decode_accum };
+      }
+
+      decoded_images.push_back(std::move(*decoded));
+      subresources.push_back(source.subresource);
+    }
+
+    const auto& first_meta = decoded_images[0].Meta();
+    for (size_t i = 1; i < decoded_images.size(); ++i) {
+      const auto& meta = decoded_images[i].Meta();
+      if (meta.width != first_meta.width || meta.height != first_meta.height) {
+        return { .cooked
+          = ::oxygen::Err(TextureImportError::kDimensionMismatch),
+          .decode_duration = decode_accum };
+      }
+      if (meta.format != first_meta.format) {
+        return { .cooked
+          = ::oxygen::Err(TextureImportError::kOutputFormatInvalid),
+          .decode_duration = decode_accum };
+      }
+    }
+
+    if (desc.texture_type == TextureType::kTextureCube) {
+      std::array<ScratchImage, kCubeFaceCount> faces;
+      std::array<bool, kCubeFaceCount> filled {};
+      for (size_t i = 0; i < decoded_images.size(); ++i) {
+        const auto face_idx = subresources[i].array_layer;
+        if (face_idx >= kCubeFaceCount || filled[face_idx]) {
+          return { .cooked
+            = ::oxygen::Err(TextureImportError::kArrayLayerCountInvalid),
+            .decode_duration = decode_accum };
+        }
+        faces[face_idx] = std::move(decoded_images[i]);
+        filled[face_idx] = true;
+      }
+
+      for (const auto present : filled) {
+        if (!present) {
+          return { .cooked
+            = ::oxygen::Err(TextureImportError::kArrayLayerCountInvalid),
+            .decode_duration = decode_accum };
+        }
+      }
+
+      auto cube = AssembleCubeFromFaces(
+        std::span<const ScratchImage, kCubeFaceCount>(faces));
+      if (!cube) {
+        return { .cooked = ::oxygen::Err(cube.error()),
+          .decode_duration = decode_accum };
+      }
+
+      return CookDecodedImage(std::move(*cube), desc, policy,
+        output_format_is_override, decode_accum);
+    }
+
+    if (desc.texture_type == TextureType::kTextureCubeArray) {
+      return { .cooked = ::oxygen::Err(TextureImportError::kUnsupportedFormat),
+        .decode_duration = decode_accum };
+    }
+    if (desc.texture_type == TextureType::kTexture3D) {
+      auto volume = AssembleVolumeFromSlices(decoded_images, subresources);
+      if (!volume) {
+        return { .cooked = ::oxygen::Err(volume.error()),
+          .decode_duration = decode_accum };
+      }
+
+      return CookDecodedImage(std::move(*volume), desc, policy,
+        output_format_is_override, decode_accum);
+    }
+    if (desc.texture_type != TextureType::kTexture2D
+      && desc.texture_type != TextureType::kTexture2DArray) {
+      return { .cooked = ::oxygen::Err(TextureImportError::kUnsupportedFormat),
+        .decode_duration = decode_accum };
+    }
+
+    uint16_t max_layer = 0;
+    uint16_t max_mip = 0;
+    uint32_t base_width = 0;
+    uint32_t base_height = 0;
+    Format format = Format::kUnknown;
+
+    for (size_t i = 0; i < decoded_images.size(); ++i) {
+      const auto& meta = decoded_images[i].Meta();
+      const auto& subresource = subresources[i];
+
+      max_layer = (std::max)(max_layer, subresource.array_layer);
+      max_mip = (std::max)(max_mip, subresource.mip_level);
+
+      if (format == Format::kUnknown) {
+        format = meta.format;
+      } else if (meta.format != format) {
+        return { .cooked
+          = ::oxygen::Err(TextureImportError::kOutputFormatInvalid),
+          .decode_duration = decode_accum };
+      }
+
+      if (subresource.mip_level == 0) {
+        if (base_width == 0 && base_height == 0) {
+          base_width = meta.width;
+          base_height = meta.height;
+        } else if (meta.width != base_width || meta.height != base_height) {
+          return { .cooked
+            = ::oxygen::Err(TextureImportError::kDimensionMismatch),
+            .decode_duration = decode_accum };
+        }
+      }
+    }
+
+    if (base_width == 0 || base_height == 0) {
+      return { .cooked = ::oxygen::Err(TextureImportError::kInvalidMipPolicy),
+        .decode_duration = decode_accum };
+    }
+
+    const auto array_layer_count = static_cast<uint16_t>(max_layer + 1);
+    const auto mip_level_count = static_cast<uint16_t>(max_mip + 1);
+    auto array_type = desc.texture_type;
+    if (array_type == TextureType::kTexture2D && array_layer_count > 1) {
+      array_type = TextureType::kTexture2DArray;
+    }
+
+    ScratchImageMeta array_meta {
+      .texture_type = array_type,
+      .width = base_width,
+      .height = base_height,
+      .depth = 1,
+      .array_layers = array_layer_count,
+      .mip_levels = mip_level_count,
+      .format = format,
+    };
+
+    ScratchImage assembled = ScratchImage::Create(array_meta);
+    if (!assembled.IsValid()) {
+      return { .cooked = ::oxygen::Err(TextureImportError::kOutOfMemory),
+        .decode_duration = decode_accum };
+    }
+
+    std::vector<bool> present(
+      static_cast<size_t>(array_layer_count) * mip_level_count, false);
+
+    for (size_t i = 0; i < decoded_images.size(); ++i) {
+      const auto& subresource = subresources[i];
+      const auto layer = subresource.array_layer;
+      const auto mip = subresource.mip_level;
+      const auto index
+        = ScratchImage::ComputeSubresourceIndex(layer, mip, mip_level_count);
+      if (index >= present.size() || present[index]) {
+        return { .cooked = ::oxygen::Err(TextureImportError::kInvalidMipPolicy),
+          .decode_duration = decode_accum };
+      }
+      present[index] = true;
+
+      const auto expected_width
+        = ScratchImage::ComputeMipDimension(base_width, mip);
+      const auto expected_height
+        = ScratchImage::ComputeMipDimension(base_height, mip);
+
+      const auto src_view = decoded_images[i].GetImage(0, 0);
+      if (src_view.width != expected_width
+        || src_view.height != expected_height) {
+        return { .cooked
+          = ::oxygen::Err(TextureImportError::kDimensionMismatch),
+          .decode_duration = decode_accum };
+      }
+
+      const auto expected_row_bytes = ComputeRowBytes(expected_width, format);
+      if (src_view.row_pitch_bytes != expected_row_bytes) {
+        return { .cooked
+          = ::oxygen::Err(TextureImportError::kOutputFormatInvalid),
+          .decode_duration = decode_accum };
+      }
+
+      auto dst_pixels = assembled.GetMutablePixels(layer, mip);
+      if (dst_pixels.size() != src_view.pixels.size()) {
+        return { .cooked
+          = ::oxygen::Err(TextureImportError::kDimensionMismatch),
+          .decode_duration = decode_accum };
+      }
+
+      std::copy(
+        src_view.pixels.begin(), src_view.pixels.end(), dst_pixels.data());
+    }
+
+    for (size_t layer = 0; layer < array_layer_count; ++layer) {
+      for (size_t mip = 0; mip < mip_level_count; ++mip) {
+        const auto index
+          = ScratchImage::ComputeSubresourceIndex(static_cast<uint16_t>(layer),
+            static_cast<uint16_t>(mip), mip_level_count);
+        if (index >= present.size() || !present[index]) {
+          return { .cooked
+            = ::oxygen::Err(TextureImportError::kInvalidMipPolicy),
+            .decode_duration = decode_accum };
+        }
+      }
+    }
+
+    desc.texture_type = array_type;
+    return CookDecodedImage(std::move(assembled), desc, policy,
+      output_format_is_override, decode_accum);
+  }
+
   [[nodiscard]] auto CookFromSourceContent(
     TexturePipeline::SourceContent source, TextureImportDesc desc,
     const ITexturePackingPolicy& policy, const bool output_format_is_override,
@@ -281,361 +787,17 @@ namespace {
     return std::visit(
       [&](auto&& value) -> CookOutcome {
         using ValueT = std::decay_t<decltype(value)>;
-        std::optional<std::chrono::microseconds> decode_duration;
 
         if constexpr (std::is_same_v<ValueT, TexturePipeline::SourceBytes>) {
-          if (value.bytes.empty()) {
-            return {
-              .cooked = ::oxygen::Err(TextureImportError::kFileNotFound),
-              .decode_duration = {},
-            };
-          }
-
-          if (equirect_to_cubemap) {
-            const auto decode_start = std::chrono::steady_clock::now();
-            auto decoded = detail::DecodeSource(value.bytes, desc);
-            const auto decode_end = std::chrono::steady_clock::now();
-            decode_duration
-              = std::chrono::duration_cast<std::chrono::microseconds>(
-                decode_end - decode_start);
-            if (!decoded) {
-              return { .cooked = ::oxygen::Err(decoded.error()),
-                .decode_duration = decode_duration };
-            }
-
-            auto float_image = ConvertToFloatImage(std::move(*decoded));
-            if (!float_image) {
-              return { .cooked = ::oxygen::Err(float_image.error()),
-                .decode_duration = decode_duration };
-            }
-
-            EquirectToCubeOptions options {
-              .face_size = cubemap_face_size,
-              .sample_filter = desc.mip_filter,
-            };
-            auto cube = ConvertEquirectangularToCube(
-              std::move(float_image.value()), options);
-            if (!cube) {
-              return { .cooked = ::oxygen::Err(cube.error()),
-                .decode_duration = decode_duration };
-            }
-
-            if (!output_format_is_override) {
-              const auto& meta = cube->Meta();
-              desc.output_format = meta.format;
-              desc.bc7_quality = Bc7Quality::kNone;
-            }
-
-            return { .cooked = CookTexture(std::move(*cube), desc, policy),
-              .decode_duration = decode_duration };
-          }
-
-          if (cubemap_layout != CubeMapImageLayout::kUnknown) {
-            const auto decode_start = std::chrono::steady_clock::now();
-            auto decoded = detail::DecodeSource(value.bytes, desc);
-            const auto decode_end = std::chrono::steady_clock::now();
-            decode_duration
-              = std::chrono::duration_cast<std::chrono::microseconds>(
-                decode_end - decode_start);
-            if (!decoded) {
-              return { .cooked = ::oxygen::Err(decoded.error()),
-                .decode_duration = decode_duration };
-            }
-
-            auto cube
-              = ExtractCubeFacesFromLayoutImage(*decoded, cubemap_layout);
-            if (!cube) {
-              return { .cooked = ::oxygen::Err(cube.error()),
-                .decode_duration = decode_duration };
-            }
-
-            if (!output_format_is_override) {
-              const auto& meta = cube->Meta();
-              desc.output_format = meta.format;
-              desc.bc7_quality = Bc7Quality::kNone;
-            }
-
-            return { .cooked = CookTexture(std::move(*cube), desc, policy),
-              .decode_duration = decode_duration };
-          }
-
-          const auto decode_start = std::chrono::steady_clock::now();
-          auto decoded = detail::DecodeSource(value.bytes, desc);
-          const auto decode_end = std::chrono::steady_clock::now();
-          decode_duration
-            = std::chrono::duration_cast<std::chrono::microseconds>(
-              decode_end - decode_start);
-          if (!decoded) {
-            return { .cooked = ::oxygen::Err(decoded.error()),
-              .decode_duration = decode_duration };
-          }
-
-          if (!output_format_is_override) {
-            const auto& meta = decoded->Meta();
-            desc.output_format = meta.format;
-            desc.bc7_quality = Bc7Quality::kNone;
-          }
-
-          return { .cooked = CookTexture(std::move(*decoded), desc, policy),
-            .decode_duration = decode_duration };
+          return CookFromBytes(std::move(value), desc, policy,
+            output_format_is_override, equirect_to_cubemap, cubemap_face_size,
+            cubemap_layout);
         } else if constexpr (std::is_same_v<ValueT, TextureSourceSet>) {
-          if (value.IsEmpty()) {
-            return {
-              .cooked = ::oxygen::Err(TextureImportError::kFileNotFound),
-              .decode_duration = {},
-            };
-          }
-
-          std::vector<ScratchImage> decoded_images;
-          decoded_images.reserve(value.Count());
-          std::vector<uint16_t> array_layers;
-          array_layers.reserve(value.Count());
-          std::vector<SubresourceId> subresources;
-          subresources.reserve(value.Count());
-
-          std::chrono::microseconds decode_accum { 0 };
-
-          for (const auto& source : value.Sources()) {
-            if (source.bytes.empty()) {
-              return {
-                .cooked = ::oxygen::Err(TextureImportError::kFileNotFound),
-                .decode_duration = {},
-              };
-            }
-
-            auto per_source_desc = desc;
-            per_source_desc.source_id = source.source_id;
-            const auto decode_start = std::chrono::steady_clock::now();
-            auto decoded = detail::DecodeSource(source.bytes, per_source_desc);
-            const auto decode_end = std::chrono::steady_clock::now();
-            decode_accum
-              += std::chrono::duration_cast<std::chrono::microseconds>(
-                decode_end - decode_start);
-            if (!decoded) {
-              return { .cooked = ::oxygen::Err(decoded.error()),
-                .decode_duration = decode_accum };
-            }
-
-            const auto& meta = decoded->Meta();
-            if (meta.mip_levels != 1) {
-              return { .cooked
-                = ::oxygen::Err(TextureImportError::kInvalidMipPolicy),
-                .decode_duration = decode_accum };
-            }
-
-            if (source.subresource.depth_slice != 0) {
-              return { .cooked
-                = ::oxygen::Err(TextureImportError::kUnsupportedFormat),
-                .decode_duration = decode_accum };
-            }
-
-            decoded_images.push_back(std::move(*decoded));
-            array_layers.push_back(source.subresource.array_layer);
-            subresources.push_back(source.subresource);
-          }
-
-          const auto& first_meta = decoded_images[0].Meta();
-          for (size_t i = 1; i < decoded_images.size(); ++i) {
-            const auto& meta = decoded_images[i].Meta();
-            if (meta.width != first_meta.width
-              || meta.height != first_meta.height) {
-              return { .cooked
-                = ::oxygen::Err(TextureImportError::kDimensionMismatch),
-                .decode_duration = decode_accum };
-            }
-            if (meta.format != first_meta.format) {
-              return { .cooked
-                = ::oxygen::Err(TextureImportError::kOutputFormatInvalid),
-                .decode_duration = decode_accum };
-            }
-          }
-
-          if (!output_format_is_override) {
-            desc.output_format = first_meta.format;
-            desc.bc7_quality = Bc7Quality::kNone;
-          }
-
-          if (desc.texture_type == TextureType::kTextureCube) {
-            std::array<ScratchImage, kCubeFaceCount> faces;
-            std::array<bool, kCubeFaceCount> filled {};
-            for (size_t i = 0; i < decoded_images.size(); ++i) {
-              const auto face_idx = subresources[i].array_layer;
-              if (face_idx >= kCubeFaceCount || filled[face_idx]) {
-                return { .cooked
-                  = ::oxygen::Err(TextureImportError::kArrayLayerCountInvalid),
-                  .decode_duration = decode_accum };
-              }
-              faces[face_idx] = std::move(decoded_images[i]);
-              filled[face_idx] = true;
-            }
-
-            for (const auto present : filled) {
-              if (!present) {
-                return { .cooked
-                  = ::oxygen::Err(TextureImportError::kArrayLayerCountInvalid),
-                  .decode_duration = decode_accum };
-              }
-            }
-
-            auto cube = AssembleCubeFromFaces(
-              std::span<const ScratchImage, kCubeFaceCount>(faces));
-            if (!cube) {
-              return { .cooked = ::oxygen::Err(cube.error()),
-                .decode_duration = decode_accum };
-            }
-
-            return { .cooked = CookTexture(std::move(*cube), desc, policy),
-              .decode_duration = decode_accum };
-          }
-
-          if (desc.texture_type == TextureType::kTextureCubeArray) {
-            return { .cooked
-              = ::oxygen::Err(TextureImportError::kUnsupportedFormat),
-              .decode_duration = decode_accum };
-          }
-          if (desc.texture_type != TextureType::kTexture2D
-            && desc.texture_type != TextureType::kTexture2DArray) {
-            return { .cooked
-              = ::oxygen::Err(TextureImportError::kUnsupportedFormat),
-              .decode_duration = decode_accum };
-          }
-
-          uint16_t max_layer = 0;
-          uint16_t max_mip = 0;
-          uint32_t base_width = 0;
-          uint32_t base_height = 0;
-          Format format = Format::kUnknown;
-
-          for (size_t i = 0; i < decoded_images.size(); ++i) {
-            const auto& meta = decoded_images[i].Meta();
-            const auto& subresource = subresources[i];
-
-            max_layer = (std::max)(max_layer, subresource.array_layer);
-            max_mip = (std::max)(max_mip, subresource.mip_level);
-
-            if (format == Format::kUnknown) {
-              format = meta.format;
-            } else if (meta.format != format) {
-              return { .cooked
-                = ::oxygen::Err(TextureImportError::kOutputFormatInvalid),
-                .decode_duration = decode_accum };
-            }
-
-            if (subresource.mip_level == 0) {
-              if (base_width == 0 && base_height == 0) {
-                base_width = meta.width;
-                base_height = meta.height;
-              } else if (meta.width != base_width
-                || meta.height != base_height) {
-                return { .cooked
-                  = ::oxygen::Err(TextureImportError::kDimensionMismatch),
-                  .decode_duration = decode_accum };
-              }
-            }
-          }
-
-          if (base_width == 0 || base_height == 0) {
-            return { .cooked
-              = ::oxygen::Err(TextureImportError::kInvalidMipPolicy),
-              .decode_duration = decode_accum };
-          }
-
-          const auto array_layer_count = static_cast<uint16_t>(max_layer + 1);
-          const auto mip_level_count = static_cast<uint16_t>(max_mip + 1);
-          auto array_type = desc.texture_type;
-          if (array_type == TextureType::kTexture2D && array_layer_count > 1) {
-            array_type = TextureType::kTexture2DArray;
-          }
-
-          ScratchImageMeta array_meta {
-            .texture_type = array_type,
-            .width = base_width,
-            .height = base_height,
-            .depth = 1,
-            .array_layers = array_layer_count,
-            .mip_levels = mip_level_count,
-            .format = format,
-          };
-
-          ScratchImage assembled = ScratchImage::Create(array_meta);
-          if (!assembled.IsValid()) {
-            return { .cooked = ::oxygen::Err(TextureImportError::kOutOfMemory),
-              .decode_duration = decode_accum };
-          }
-
-          std::vector<bool> present(
-            static_cast<size_t>(array_layer_count) * mip_level_count, false);
-
-          for (size_t i = 0; i < decoded_images.size(); ++i) {
-            const auto& subresource = subresources[i];
-            const auto layer = subresource.array_layer;
-            const auto mip = subresource.mip_level;
-            const auto index = ScratchImage::ComputeSubresourceIndex(
-              layer, mip, mip_level_count);
-            if (index >= present.size() || present[index]) {
-              return { .cooked
-                = ::oxygen::Err(TextureImportError::kInvalidMipPolicy),
-                .decode_duration = decode_accum };
-            }
-            present[index] = true;
-
-            const auto expected_width
-              = ScratchImage::ComputeMipDimension(base_width, mip);
-            const auto expected_height
-              = ScratchImage::ComputeMipDimension(base_height, mip);
-
-            const auto src_view = decoded_images[i].GetImage(0, 0);
-            if (src_view.width != expected_width
-              || src_view.height != expected_height) {
-              return { .cooked
-                = ::oxygen::Err(TextureImportError::kDimensionMismatch),
-                .decode_duration = decode_accum };
-            }
-
-            const auto expected_row_bytes
-              = ComputeRowBytes(expected_width, format);
-            if (src_view.row_pitch_bytes != expected_row_bytes) {
-              return { .cooked
-                = ::oxygen::Err(TextureImportError::kOutputFormatInvalid),
-                .decode_duration = decode_accum };
-            }
-
-            auto dst_pixels = assembled.GetMutablePixels(layer, mip);
-            if (dst_pixels.size() != src_view.pixels.size()) {
-              return { .cooked
-                = ::oxygen::Err(TextureImportError::kDimensionMismatch),
-                .decode_duration = decode_accum };
-            }
-
-            std::copy(src_view.pixels.begin(), src_view.pixels.end(),
-              dst_pixels.data());
-          }
-
-          for (size_t layer = 0; layer < array_layer_count; ++layer) {
-            for (size_t mip = 0; mip < mip_level_count; ++mip) {
-              const auto index = ScratchImage::ComputeSubresourceIndex(
-                static_cast<uint16_t>(layer), static_cast<uint16_t>(mip),
-                mip_level_count);
-              if (index >= present.size() || !present[index]) {
-                return { .cooked
-                  = ::oxygen::Err(TextureImportError::kInvalidMipPolicy),
-                  .decode_duration = decode_accum };
-              }
-            }
-          }
-
-          desc.texture_type = array_type;
-          return { .cooked = CookTexture(std::move(assembled), desc, policy),
-            .decode_duration = decode_accum };
+          return CookFromSourceSet(
+            std::move(value), desc, policy, output_format_is_override);
         } else {
-          if (!output_format_is_override) {
-            const auto& meta = value.Meta();
-            desc.output_format = meta.format;
-            desc.bc7_quality = Bc7Quality::kNone;
-          }
-
-          return { .cooked = CookTexture(std::move(value), desc, policy),
-            .decode_duration = {} };
+          return CookDecodedImage(
+            std::move(value), desc, policy, output_format_is_override, {});
         }
       },
       std::move(source));
@@ -763,7 +925,7 @@ auto TexturePipeline::Worker() -> co::Co<>
     }
 
     const auto& policy = emit::GetPackingPolicy(item.packing_policy_id);
-    const bool unknown_policy = !IsKnownPackingPolicyId(item.packing_policy_id);
+    const bool unknown_policy = item.packing_policy_id != policy.Id();
     auto local_desc = item.desc;
     local_desc.source_id = item.source_id;
     local_desc.stop_token = item.stop_token;

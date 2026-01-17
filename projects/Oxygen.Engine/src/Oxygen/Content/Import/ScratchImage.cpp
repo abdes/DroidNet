@@ -204,16 +204,16 @@ namespace {
   }
 
   //! Compute slice pitch (total bytes for one 2D surface).
-  [[nodiscard]] auto ComputeSlicePitch(
-    uint32_t width, uint32_t height, Format format) noexcept -> uint32_t
+  [[nodiscard]] auto ComputeSlicePitch(uint32_t width, uint32_t height,
+    uint32_t depth, Format format) noexcept -> uint32_t
   {
     if (IsBlockCompressed(format)) {
       const auto blocks_x = (width + 3) / 4;
       const auto blocks_y = (height + 3) / 4;
-      return blocks_x * blocks_y * ComputeBytesPerBlock(format);
+      return blocks_x * blocks_y * ComputeBytesPerBlock(format) * depth;
     }
 
-    return ComputeRowPitch(width, format) * height;
+    return ComputeRowPitch(width, format) * height * depth;
   }
 
 } // namespace
@@ -255,9 +255,10 @@ auto ScratchImage::Create(const ScratchImageMeta& meta) -> ScratchImage
       const auto index = ComputeSubresourceIndex(layer, mip, meta.mip_levels);
       const auto mip_width = ComputeMipDimension(meta.width, mip);
       const auto mip_height = ComputeMipDimension(meta.height, mip);
+      const auto mip_depth = ComputeMipDimension(meta.depth, mip);
       const auto row_pitch = ComputeRowPitch(mip_width, meta.format);
       const auto slice_size
-        = ComputeSlicePitch(mip_width, mip_height, meta.format);
+        = ComputeSlicePitch(mip_width, mip_height, mip_depth, meta.format);
 
       image.subresources_[index] = SubresourceInfo {
         .offset = total_size,
@@ -317,8 +318,9 @@ auto ScratchImage::GetImage(uint16_t array_layer, uint16_t mip_level) const
   const auto& info = subresources_[index];
 
   // Compute slice size for span
+  const auto depth = ComputeMipDimension(meta_.depth, mip_level);
   const auto slice_size
-    = ComputeSlicePitch(info.width, info.height, meta_.format);
+    = ComputeSlicePitch(info.width, info.height, depth, meta_.format);
 
   return ImageView {
     .width = info.width,
@@ -340,8 +342,9 @@ auto ScratchImage::GetMutablePixels(uint16_t array_layer, uint16_t mip_level)
     = ComputeSubresourceIndex(array_layer, mip_level, meta_.mip_levels);
   const auto& info = subresources_[index];
 
+  const auto depth = ComputeMipDimension(meta_.depth, mip_level);
   const auto slice_size
-    = ComputeSlicePitch(info.width, info.height, meta_.format);
+    = ComputeSlicePitch(info.width, info.height, depth, meta_.format);
 
   return std::span<std::byte>(storage_.data() + info.offset, slice_size);
 }

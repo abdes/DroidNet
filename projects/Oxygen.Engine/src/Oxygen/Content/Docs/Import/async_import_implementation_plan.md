@@ -925,7 +925,7 @@ Tasks:
   `SourceBytes`, `TextureSourceSet` (cube + array), or `ScratchImage`.
 - [X] Implement non-cube multi-source assembly for `TextureSourceSet`
   (array layers), with validation of dimension/format parity.
-- [ ] Add 3D depth-slice assembly for `TextureSourceSet` in the async
+- [X] Add 3D depth-slice assembly for `TextureSourceSet` in the async
   pipeline (parity with `ImportTexture3D`).
 - [X] If `output_format_is_override == false`, preserve decoded format and
   set `bc7_quality = kNone` to match sync path.

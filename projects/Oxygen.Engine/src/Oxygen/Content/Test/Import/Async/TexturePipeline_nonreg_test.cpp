@@ -15,11 +15,15 @@
 
 #include <Oxygen/Content/Import/Async/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Async/Pipelines/TexturePipeline.h>
+#include <Oxygen/Content/Import/ImageDecode.h>
 #include <Oxygen/Content/Import/TextureCooker.h>
 #include <Oxygen/Content/Import/TextureImportDesc.h>
 #include <Oxygen/Content/Import/TextureImportTypes.h>
 #include <Oxygen/Content/Import/TexturePackingPolicy.h>
+#include <Oxygen/Content/Import/TextureSourceAssembly.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/asio.h>
@@ -29,6 +33,8 @@ using namespace oxygen::content::import;
 using namespace oxygen::co;
 namespace co = oxygen::co;
 using oxygen::Format;
+using oxygen::TextureType;
+namespace graphics_detail = oxygen::graphics::detail;
 
 namespace {
 
@@ -113,6 +119,67 @@ namespace {
 {
   static const auto kTestBmp = MakeBmp2x2();
   return { kTestBmp.data(), kTestBmp.size() };
+}
+
+//! Assemble a 3D volume from identical depth slices.
+[[nodiscard]] auto AssembleVolumeForTest(std::span<const std::byte> bytes,
+  uint16_t depth) -> oxygen::Result<ScratchImage, TextureImportError>
+{
+  if (depth == 0) {
+    return oxygen::Err(TextureImportError::kInvalidDimensions);
+  }
+
+  std::vector<ScratchImage> slices;
+  slices.reserve(depth);
+
+  for (uint16_t slice = 0; slice < depth; ++slice) {
+    auto decoded = DecodeToScratchImage(bytes);
+    if (!decoded) {
+      return oxygen::Err(decoded.error());
+    }
+    slices.push_back(std::move(*decoded));
+  }
+
+  const auto& meta = slices.front().Meta();
+  const auto format_info = graphics_detail::GetFormatInfo(meta.format);
+  if (format_info.block_size != 1) {
+    return oxygen::Err(TextureImportError::kUnsupportedFormat);
+  }
+  const auto bytes_per_pixel = format_info.bytes_per_block;
+  if (bytes_per_pixel == 0) {
+    return oxygen::Err(TextureImportError::kUnsupportedFormat);
+  }
+
+  ScratchImageMeta volume_meta {
+    .texture_type = TextureType::kTexture3D,
+    .width = meta.width,
+    .height = meta.height,
+    .depth = depth,
+    .array_layers = 1,
+    .mip_levels = 1,
+    .format = meta.format,
+  };
+
+  ScratchImage volume = ScratchImage::Create(volume_meta);
+  if (!volume.IsValid()) {
+    return oxygen::Err(TextureImportError::kOutOfMemory);
+  }
+
+  auto dst_pixels = volume.GetMutablePixels(0, 0);
+  const auto slice_size_bytes = static_cast<std::size_t>(meta.width)
+    * static_cast<std::size_t>(meta.height) * bytes_per_pixel;
+
+  if (dst_pixels.size() < slice_size_bytes * depth) {
+    return oxygen::Err(TextureImportError::kOutOfMemory);
+  }
+
+  for (uint16_t slice = 0; slice < depth; ++slice) {
+    const auto src_view = slices[slice].GetImage(0, 0);
+    std::copy(src_view.pixels.begin(), src_view.pixels.end(),
+      dst_pixels.data() + slice_size_bytes * slice);
+  }
+
+  return oxygen::Ok(std::move(volume));
 }
 
 auto MakeSourceBytes(std::vector<std::byte> bytes)
@@ -201,6 +268,117 @@ NOLINT_TEST_F(TexturePipelineNonRegTest, Collect_ParityWithSyncCooker_Matches)
   EXPECT_EQ(result.cooked->desc.format, sync->desc.format);
   EXPECT_EQ(result.cooked->desc.mip_levels, sync->desc.mip_levels);
   EXPECT_EQ(result.cooked->desc.content_hash, sync->desc.content_hash);
+}
+
+//! Verify 3D depth slices assemble into a volume with parity to sync cook.
+NOLINT_TEST_F(TexturePipelineNonRegTest, Collect_DepthSlices_ParityMatches)
+{
+  // Arrange
+  TextureImportDesc desc;
+  desc.source_id = "volume.bmp";
+  desc.texture_type = TextureType::kTexture3D;
+  desc.output_format = Format::kRGBA8UNorm;
+  desc.bc7_quality = Bc7Quality::kNone;
+  desc.mip_policy = MipPolicy::kNone;
+
+  constexpr uint16_t kDepth = 2;
+  const auto bytes = GetTestImageBytes();
+  auto assembled = AssembleVolumeForTest(bytes, kDepth);
+  ASSERT_TRUE(assembled.has_value());
+
+  auto expected
+    = CookTexture(std::move(*assembled), desc, TightPackedPolicy::Instance());
+  ASSERT_TRUE(expected.has_value());
+
+  TextureSourceSet sources;
+  for (uint16_t slice = 0; slice < kDepth; ++slice) {
+    sources.AddDepthSlice(
+      slice, std::vector<std::byte>(bytes.begin(), bytes.end()), "slice.bmp");
+  }
+
+  TexturePipeline::WorkResult result;
+  co::ThreadPool pool(loop_, 2);
+
+  // Act
+  co::Run(loop_, [&]() -> co::Co<> {
+    TexturePipeline pipeline(pool,
+      TexturePipeline::Config {
+        .queue_capacity = 4,
+        .worker_count = 1,
+      });
+
+    OXCO_WITH_NURSERY(n)
+    {
+      pipeline.Start(n);
+
+      co_await pipeline.Submit(
+        MakeWorkItem(desc, "volume.bmp", std::move(sources)));
+
+      result = co_await pipeline.Collect();
+      pipeline.Close();
+
+      co_return kJoin;
+    };
+  });
+
+  // Assert
+  EXPECT_TRUE(result.success);
+  ASSERT_TRUE(result.cooked.has_value());
+  EXPECT_TRUE(result.diagnostics.empty());
+  EXPECT_EQ(result.cooked->payload, expected->payload);
+  EXPECT_EQ(result.cooked->desc.depth, kDepth);
+  EXPECT_EQ(result.cooked->desc.texture_type, TextureType::kTexture3D);
+}
+
+//! Verify missing depth slices fail with a diagnostic.
+NOLINT_TEST_F(
+  TexturePipelineNonRegTest, Collect_DepthSlicesWithGap_EmitsDiagnostic)
+{
+  // Arrange
+  TextureImportDesc desc;
+  desc.source_id = "volume_gap.bmp";
+  desc.texture_type = TextureType::kTexture3D;
+  desc.output_format = Format::kRGBA8UNorm;
+  desc.bc7_quality = Bc7Quality::kNone;
+  desc.mip_policy = MipPolicy::kNone;
+
+  const auto bytes = GetTestImageBytes();
+  TextureSourceSet sources;
+  sources.AddDepthSlice(
+    0, std::vector<std::byte>(bytes.begin(), bytes.end()), "slice0.bmp");
+  sources.AddDepthSlice(
+    2, std::vector<std::byte>(bytes.begin(), bytes.end()), "slice2.bmp");
+
+  TexturePipeline::WorkResult result;
+  co::ThreadPool pool(loop_, 2);
+
+  // Act
+  co::Run(loop_, [&]() -> co::Co<> {
+    TexturePipeline pipeline(pool,
+      TexturePipeline::Config {
+        .queue_capacity = 4,
+        .worker_count = 1,
+      });
+
+    OXCO_WITH_NURSERY(n)
+    {
+      pipeline.Start(n);
+
+      co_await pipeline.Submit(
+        MakeWorkItem(desc, "volume_gap.bmp", std::move(sources)));
+
+      result = co_await pipeline.Collect();
+      pipeline.Close();
+
+      co_return kJoin;
+    };
+  });
+
+  // Assert
+  EXPECT_FALSE(result.success);
+  EXPECT_FALSE(result.cooked.has_value());
+  ASSERT_EQ(result.diagnostics.size(), 1U);
+  EXPECT_EQ(result.diagnostics[0].code, "texture.cook_failed");
 }
 
 } // namespace
