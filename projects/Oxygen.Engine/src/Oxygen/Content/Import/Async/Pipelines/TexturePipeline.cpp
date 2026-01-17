@@ -390,6 +390,8 @@ namespace {
           decoded_images.reserve(value.Count());
           std::vector<uint16_t> array_layers;
           array_layers.reserve(value.Count());
+          std::vector<SubresourceId> subresources;
+          subresources.reserve(value.Count());
 
           std::chrono::microseconds decode_accum { 0 };
 
@@ -414,8 +416,22 @@ namespace {
                 .decode_duration = decode_accum };
             }
 
+            const auto& meta = decoded->Meta();
+            if (meta.mip_levels != 1) {
+              return { .cooked
+                = ::oxygen::Err(TextureImportError::kInvalidMipPolicy),
+                .decode_duration = decode_accum };
+            }
+
+            if (source.subresource.depth_slice != 0) {
+              return { .cooked
+                = ::oxygen::Err(TextureImportError::kUnsupportedFormat),
+                .decode_duration = decode_accum };
+            }
+
             decoded_images.push_back(std::move(*decoded));
             array_layers.push_back(source.subresource.array_layer);
+            subresources.push_back(source.subresource);
           }
 
           const auto& first_meta = decoded_images[0].Meta();
@@ -443,7 +459,7 @@ namespace {
             std::array<ScratchImage, kCubeFaceCount> faces;
             std::array<bool, kCubeFaceCount> filled {};
             for (size_t i = 0; i < decoded_images.size(); ++i) {
-              const auto face_idx = array_layers[i];
+              const auto face_idx = subresources[i].array_layer;
               if (face_idx >= kCubeFaceCount || filled[face_idx]) {
                 return { .cooked
                   = ::oxygen::Err(TextureImportError::kArrayLayerCountInvalid),
@@ -472,8 +488,144 @@ namespace {
               .decode_duration = decode_accum };
           }
 
-          return { .cooked
-            = ::oxygen::Err(TextureImportError::kUnsupportedFormat),
+          if (desc.texture_type == TextureType::kTextureCubeArray) {
+            return { .cooked
+              = ::oxygen::Err(TextureImportError::kUnsupportedFormat),
+              .decode_duration = decode_accum };
+          }
+          if (desc.texture_type != TextureType::kTexture2D
+            && desc.texture_type != TextureType::kTexture2DArray) {
+            return { .cooked
+              = ::oxygen::Err(TextureImportError::kUnsupportedFormat),
+              .decode_duration = decode_accum };
+          }
+
+          uint16_t max_layer = 0;
+          uint16_t max_mip = 0;
+          uint32_t base_width = 0;
+          uint32_t base_height = 0;
+          Format format = Format::kUnknown;
+
+          for (size_t i = 0; i < decoded_images.size(); ++i) {
+            const auto& meta = decoded_images[i].Meta();
+            const auto& subresource = subresources[i];
+
+            max_layer = (std::max)(max_layer, subresource.array_layer);
+            max_mip = (std::max)(max_mip, subresource.mip_level);
+
+            if (format == Format::kUnknown) {
+              format = meta.format;
+            } else if (meta.format != format) {
+              return { .cooked
+                = ::oxygen::Err(TextureImportError::kOutputFormatInvalid),
+                .decode_duration = decode_accum };
+            }
+
+            if (subresource.mip_level == 0) {
+              if (base_width == 0 && base_height == 0) {
+                base_width = meta.width;
+                base_height = meta.height;
+              } else if (meta.width != base_width
+                || meta.height != base_height) {
+                return { .cooked
+                  = ::oxygen::Err(TextureImportError::kDimensionMismatch),
+                  .decode_duration = decode_accum };
+              }
+            }
+          }
+
+          if (base_width == 0 || base_height == 0) {
+            return { .cooked
+              = ::oxygen::Err(TextureImportError::kInvalidMipPolicy),
+              .decode_duration = decode_accum };
+          }
+
+          const auto array_layer_count = static_cast<uint16_t>(max_layer + 1);
+          const auto mip_level_count = static_cast<uint16_t>(max_mip + 1);
+          auto array_type = desc.texture_type;
+          if (array_type == TextureType::kTexture2D && array_layer_count > 1) {
+            array_type = TextureType::kTexture2DArray;
+          }
+
+          ScratchImageMeta array_meta {
+            .texture_type = array_type,
+            .width = base_width,
+            .height = base_height,
+            .depth = 1,
+            .array_layers = array_layer_count,
+            .mip_levels = mip_level_count,
+            .format = format,
+          };
+
+          ScratchImage assembled = ScratchImage::Create(array_meta);
+          if (!assembled.IsValid()) {
+            return { .cooked = ::oxygen::Err(TextureImportError::kOutOfMemory),
+              .decode_duration = decode_accum };
+          }
+
+          std::vector<bool> present(
+            static_cast<size_t>(array_layer_count) * mip_level_count, false);
+
+          for (size_t i = 0; i < decoded_images.size(); ++i) {
+            const auto& subresource = subresources[i];
+            const auto layer = subresource.array_layer;
+            const auto mip = subresource.mip_level;
+            const auto index = ScratchImage::ComputeSubresourceIndex(
+              layer, mip, mip_level_count);
+            if (index >= present.size() || present[index]) {
+              return { .cooked
+                = ::oxygen::Err(TextureImportError::kInvalidMipPolicy),
+                .decode_duration = decode_accum };
+            }
+            present[index] = true;
+
+            const auto expected_width
+              = ScratchImage::ComputeMipDimension(base_width, mip);
+            const auto expected_height
+              = ScratchImage::ComputeMipDimension(base_height, mip);
+
+            const auto src_view = decoded_images[i].GetImage(0, 0);
+            if (src_view.width != expected_width
+              || src_view.height != expected_height) {
+              return { .cooked
+                = ::oxygen::Err(TextureImportError::kDimensionMismatch),
+                .decode_duration = decode_accum };
+            }
+
+            const auto expected_row_bytes
+              = ComputeRowBytes(expected_width, format);
+            if (src_view.row_pitch_bytes != expected_row_bytes) {
+              return { .cooked
+                = ::oxygen::Err(TextureImportError::kOutputFormatInvalid),
+                .decode_duration = decode_accum };
+            }
+
+            auto dst_pixels = assembled.GetMutablePixels(layer, mip);
+            if (dst_pixels.size() != src_view.pixels.size()) {
+              return { .cooked
+                = ::oxygen::Err(TextureImportError::kDimensionMismatch),
+                .decode_duration = decode_accum };
+            }
+
+            std::copy(src_view.pixels.begin(), src_view.pixels.end(),
+              dst_pixels.data());
+          }
+
+          for (size_t layer = 0; layer < array_layer_count; ++layer) {
+            for (size_t mip = 0; mip < mip_level_count; ++mip) {
+              const auto index = ScratchImage::ComputeSubresourceIndex(
+                static_cast<uint16_t>(layer), static_cast<uint16_t>(mip),
+                mip_level_count);
+              if (index >= present.size() || !present[index]) {
+                return { .cooked
+                  = ::oxygen::Err(TextureImportError::kInvalidMipPolicy),
+                  .decode_duration = decode_accum };
+              }
+            }
+          }
+
+          desc.texture_type = array_type;
+          return { .cooked = CookTexture(std::move(assembled), desc, policy),
             .decode_duration = decode_accum };
         } else {
           if (!output_format_is_override) {
