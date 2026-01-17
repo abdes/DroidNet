@@ -561,7 +561,8 @@ namespace image::mip {
   } // namespace
 
   auto GenerateChain2D(const ScratchImage& source, const MipFilter filter,
-    const ColorSpace color_space) -> ScratchImage
+    const ColorSpace color_space, const uint32_t target_mip_levels)
+    -> ScratchImage
   {
     const auto& src_meta = source.Meta();
 
@@ -569,7 +570,11 @@ namespace image::mip {
       return {}; // Invalid input
     }
 
-    const uint32_t mip_count = ComputeMipCount(src_meta.width, src_meta.height);
+    const uint32_t full_mip_count
+      = ComputeMipCount(src_meta.width, src_meta.height);
+    const uint32_t mip_count = (target_mip_levels == 0)
+      ? full_mip_count
+      : (std::min)(target_mip_levels, full_mip_count);
 
     // Create output with full mip chain
     ScratchImageMeta dst_meta = src_meta;
@@ -629,7 +634,8 @@ namespace image::mip {
   }
 
   auto GenerateChain3D(const ScratchImage& source, const MipFilter /*filter*/,
-    const ColorSpace /*color_space*/) -> ScratchImage
+    const ColorSpace /*color_space*/, const uint32_t /*target_mip_levels*/)
+    -> ScratchImage
   {
     // 3D texture mip generation - simplified implementation
     // TODO: Implement proper 3D mip chain generation with depth downsampling
@@ -676,12 +682,12 @@ namespace image::content {
     };
   }
 
-  auto GenerateNormalMapMips(const ScratchImage& source, const bool renormalize)
-    -> ScratchImage
+  auto GenerateNormalMapMips(const ScratchImage& source, const bool renormalize,
+    const uint32_t target_mip_levels) -> ScratchImage
   {
     // Generate mips using box filter (averaging normals)
     auto result = image::mip::GenerateChain2D(
-      source, MipFilter::kBox, ColorSpace::kLinear);
+      source, MipFilter::kBox, ColorSpace::kLinear, target_mip_levels);
 
     if (!result.IsValid()) {
       return result;

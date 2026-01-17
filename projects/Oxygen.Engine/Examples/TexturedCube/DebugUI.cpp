@@ -585,6 +585,21 @@ auto DebugUI::DrawImportWindow() -> void
     IM_ARRAYSIZE(kFormats));
 
   ImGui::Checkbox("Generate mips", &import_state_.generate_mips);
+
+  ImGui::BeginDisabled(!import_state_.generate_mips);
+  ImGui::SetNextItemWidth(160.0f);
+  ImGui::SliderInt("Max mip levels", &import_state_.max_mip_levels, 0, 12,
+    import_state_.max_mip_levels == 0 ? "Full chain" : "%d");
+
+  constexpr const char* kMipFilters[] = {
+    "Box (fast)",
+    "Kaiser",
+    "Lanczos",
+  };
+  ImGui::SetNextItemWidth(160.0f);
+  ImGui::Combo("Mip filter", &import_state_.mip_filter_idx, kMipFilters,
+    IM_ARRAYSIZE(kMipFilters));
+  ImGui::EndDisabled();
   ImGui::Checkbox("Flip Y on decode", &import_state_.flip_y);
   ImGui::SameLine();
   ImGui::Checkbox("Force RGBA", &import_state_.force_rgba);

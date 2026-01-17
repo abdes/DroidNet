@@ -292,6 +292,8 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
         = static_cast<TextureLoadingService::ImportKind>(state.import_kind),
         .output_format_idx = state.output_format_idx,
         .generate_mips = state.generate_mips,
+        .max_mip_levels = state.max_mip_levels,
+        .mip_filter_idx = state.mip_filter_idx,
         .flip_y = state.flip_y,
         .force_rgba = state.force_rgba,
         .cube_face_size = state.cube_face_size,

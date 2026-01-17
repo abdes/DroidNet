@@ -162,7 +162,7 @@ namespace image::mip {
   OXGN_CNTT_NDAPI auto ComputeMipCount(uint32_t width, uint32_t height) noexcept
     -> uint32_t;
 
-  //! Generate a full mip chain for a 2D texture.
+  //! Generate a mip chain for a 2D texture.
   /*!
     Creates a new ScratchImage with all mip levels generated.
     Performs filtering in linear space when color_space is sRGB.
@@ -170,12 +170,14 @@ namespace image::mip {
     @param source      Source image (single mip)
     @param filter      Mip filter to use
     @param color_space Color space of the source image
-    @return New ScratchImage with full mip chain
+    @param target_mip_levels Number of mip levels to generate (0 for full chain)
+    @return New ScratchImage with mip chain
   */
   OXGN_CNTT_NDAPI auto GenerateChain2D(const ScratchImage& source,
-    MipFilter filter, ColorSpace color_space) -> ScratchImage;
+    MipFilter filter, ColorSpace color_space, uint32_t target_mip_levels = 0)
+    -> ScratchImage;
 
-  //! Generate a full mip chain for a 3D texture.
+  //! Generate a mip chain for a 3D texture.
   /*!
     Creates a new ScratchImage with all mip levels generated.
     Downsamples in all three dimensions.
@@ -183,10 +185,12 @@ namespace image::mip {
     @param source      Source image (single mip)
     @param filter      Mip filter to use
     @param color_space Color space of the source image
-    @return New ScratchImage with full mip chain
+    @param target_mip_levels Number of mip levels to generate (0 for full chain)
+    @return New ScratchImage with mip chain
   */
   OXGN_CNTT_NDAPI auto GenerateChain3D(const ScratchImage& source,
-    MipFilter filter, ColorSpace color_space) -> ScratchImage;
+    MipFilter filter, ColorSpace color_space, uint32_t target_mip_levels = 0)
+    -> ScratchImage;
 
 } // namespace image::mip
 
@@ -212,10 +216,11 @@ namespace image::content {
 
     @param source      Source normal map (single mip)
     @param renormalize Whether to renormalize after filtering
-    @return New ScratchImage with full mip chain
+    @param target_mip_levels Number of mip levels to generate (0 for full chain)
+    @return New ScratchImage with mip chain
   */
-  OXGN_CNTT_NDAPI auto GenerateNormalMapMips(
-    const ScratchImage& source, bool renormalize) -> ScratchImage;
+  OXGN_CNTT_NDAPI auto GenerateNormalMapMips(const ScratchImage& source,
+    bool renormalize, uint32_t target_mip_levels = 0) -> ScratchImage;
 
   //! Flip the green channel of a normal map.
   /*!

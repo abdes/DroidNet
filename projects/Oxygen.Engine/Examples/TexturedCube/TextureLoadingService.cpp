@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <optional>
@@ -92,6 +93,20 @@ auto CubeLayoutFromIndex(const int idx) -> CubeMapImageLayout
     return CubeMapImageLayout::kVerticalStrip;
   default:
     return CubeMapImageLayout::kAuto;
+  }
+}
+
+auto MipFilterFromIndex(const int idx) -> MipFilter
+{
+  switch (idx) {
+  case 0:
+    return MipFilter::kBox;
+  case 1:
+    return MipFilter::kKaiser;
+  case 2:
+    return MipFilter::kLanczos;
+  default:
+    return MipFilter::kKaiser;
   }
 }
 
@@ -187,9 +202,15 @@ auto TextureLoadingService::SubmitImport(const ImportSettings& settings) -> bool
 
   auto& tuning = options.texture_tuning;
   tuning.enabled = true;
-  tuning.mip_policy
-    = settings.generate_mips ? MipPolicy::kFullChain : MipPolicy::kNone;
-  tuning.mip_filter = MipFilter::kKaiser;
+  if (!settings.generate_mips) {
+    tuning.mip_policy = MipPolicy::kNone;
+  } else if (settings.max_mip_levels > 0) {
+    tuning.mip_policy = MipPolicy::kMaxCount;
+    tuning.max_mip_levels = static_cast<std::uint8_t>(settings.max_mip_levels);
+  } else {
+    tuning.mip_policy = MipPolicy::kFullChain;
+  }
+  tuning.mip_filter = MipFilterFromIndex(settings.mip_filter_idx);
   tuning.color_output_format = output_format;
   tuning.data_output_format = output_format;
   tuning.bc7_quality
