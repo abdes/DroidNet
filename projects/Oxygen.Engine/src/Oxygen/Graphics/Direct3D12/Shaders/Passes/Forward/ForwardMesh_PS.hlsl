@@ -165,7 +165,7 @@ float4 PS(VSOutput input) : SV_Target0 {
             const bool no_texture_sampling =
                 (mat.flags & MATERIAL_FLAG_NO_TEXTURE_SAMPLING) != 0u;
 
-            const float2 uv = input.uv * mat.uv_scale + mat.uv_offset;
+            const float2 uv = ApplyMaterialUv(input.uv, mat);
 
             float alpha = 1.0f;
             if (!no_texture_sampling

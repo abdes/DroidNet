@@ -508,10 +508,16 @@ auto DebugUI::DrawMaterialsTab(
     const auto [effective_uv_scale, effective_uv_offset]
       = GetEffectiveUvTransform();
     if (sphere_material) {
+      // TODO: Apply baseline UV transform from MaterialAsset defaults and
+      // move this override to per-instance material overrides when the
+      // MaterialInstance system is available.
       (void)renderer->OverrideMaterialUvTransform(
         *sphere_material, effective_uv_scale, effective_uv_offset);
     }
     if (cube_material) {
+      // TODO: Apply baseline UV transform from MaterialAsset defaults and
+      // move this override to per-instance material overrides when the
+      // MaterialInstance system is available.
       (void)renderer->OverrideMaterialUvTransform(
         *cube_material, effective_uv_scale, effective_uv_offset);
     }

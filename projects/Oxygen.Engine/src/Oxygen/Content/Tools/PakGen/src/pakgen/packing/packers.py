@@ -1066,6 +1066,10 @@ def pack_material_asset_descriptor(
     thickness_factor = float(asset.get("thickness_factor", 0.0))
     attenuation_color = asset.get("attenuation_color", [1.0, 1.0, 1.0])
     attenuation_distance = float(asset.get("attenuation_distance", 0.0))
+    uv_scale = asset.get("uv_scale", [1.0, 1.0])
+    uv_offset = asset.get("uv_offset", [0.0, 0.0])
+    uv_rotation_radians = float(asset.get("uv_rotation_radians", 0.0))
+    uv_set = int(asset.get("uv_set", 0))
     header = header_builder(asset)
     if len(header) != ASSET_HEADER_SIZE:
         raise PakError(
@@ -1074,7 +1078,7 @@ def pack_material_asset_descriptor(
         )
 
     # Match oxygen::data::pak::MaterialAssetDesc exactly (see PakFormat.h).
-    reserved = b"\x00" * 40
+    reserved = b"\x00" * 19
     desc = (
         header
         + struct.pack("<B", material_domain)
@@ -1126,6 +1130,17 @@ def pack_material_asset_descriptor(
         + pack_f16x3(attenuation_color)
         + struct.pack("<f", attenuation_distance)
     )
+    if not isinstance(uv_scale, list) or len(uv_scale) != 2:
+        raise PakError("E_SPEC", "uv_scale must be a list of 2 floats")
+    if not isinstance(uv_offset, list) or len(uv_offset) != 2:
+        raise PakError("E_SPEC", "uv_offset must be a list of 2 floats")
+    if uv_set < 0 or uv_set > 255:
+        raise PakError("E_RANGE", "uv_set must be in [0, 255]")
+
+    desc += struct.pack("<2f", float(uv_scale[0]), float(uv_scale[1]))
+    desc += struct.pack("<2f", float(uv_offset[0]), float(uv_offset[1]))
+    desc += struct.pack("<f", uv_rotation_radians)
+    desc += struct.pack("<B", uv_set)
     desc += reserved
     if len(desc) != MATERIAL_DESC_SIZE:
         raise PakError(

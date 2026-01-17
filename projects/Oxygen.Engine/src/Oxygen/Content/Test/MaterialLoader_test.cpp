@@ -231,6 +231,12 @@ NOLINT_TEST_F(
   desc.metallic_texture = 44u;
   desc.roughness_texture = 45u;
   desc.ambient_occlusion_texture = 46u;
+  desc.uv_scale[0] = 2.0f;
+  desc.uv_scale[1] = 3.0f;
+  desc.uv_offset[0] = 0.25f;
+  desc.uv_offset[1] = 0.75f;
+  desc.uv_rotation_radians = 0.5f;
+  desc.uv_set = 1u;
 
   const std::array<ShaderReferenceDesc, 2> shader_descs {
     MakeShaderReferenceDesc(
@@ -255,6 +261,11 @@ NOLINT_TEST_F(
   EXPECT_NEAR(asset->GetMetalness(), 0.7f, 1.0f / 65535.0f);
   EXPECT_NEAR(asset->GetRoughness(), 0.2f, 1.0f / 65535.0f);
   EXPECT_NEAR(asset->GetAmbientOcclusion(), 0.9f, 1.0f / 65535.0f);
+  EXPECT_THAT(asset->GetUvScale(), ::testing::ElementsAre(Eq(2.0f), Eq(3.0f)));
+  EXPECT_THAT(
+    asset->GetUvOffset(), ::testing::ElementsAre(Eq(0.25f), Eq(0.75f)));
+  EXPECT_FLOAT_EQ(asset->GetUvRotationRadians(), 0.5f);
+  EXPECT_EQ(asset->GetUvSet(), 1u);
 
   EXPECT_THAT(asset->GetBaseColor(),
     ::testing::Pointwise(

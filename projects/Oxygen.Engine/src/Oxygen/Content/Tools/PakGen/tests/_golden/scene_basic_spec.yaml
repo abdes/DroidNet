@@ -13,6 +13,10 @@ assets:
     name: MatA
     asset_key: "11111111111111111111111111111111"
     alignment: 1
+    uv_scale: [2.0, 2.0]
+    uv_offset: [0.25, 0.5]
+    uv_rotation_radians: 0.1
+    uv_set: 1
 
   - type: geometry
     name: GeoPlayer
@@ -26,9 +30,9 @@ assets:
             material: MatA
             mesh_views:
               - first_index: 0
-                index_count: 0
+                index_count: 1
                 first_vertex: 0
-                vertex_count: 0
+                vertex_count: 1
 
   - type: geometry
     name: GeoWeapon
@@ -42,9 +46,9 @@ assets:
             material: MatA
             mesh_views:
               - first_index: 0
-                index_count: 0
+                index_count: 1
                 first_vertex: 0
-                vertex_count: 0
+                vertex_count: 1
 
   - type: geometry
     name: GeoTree
@@ -58,9 +62,9 @@ assets:
             material: MatA
             mesh_views:
               - first_index: 0
-                index_count: 0
+                index_count: 1
                 first_vertex: 0
-                vertex_count: 0
+                vertex_count: 1
 
   - type: scene
     name: SceneA

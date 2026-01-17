@@ -83,6 +83,11 @@ public:
   auto EnsureCubeNode() -> scene::SceneNode;
 
   //! Rebuild the cube and sphere geometry with new material/UV settings.
+  /*!
+   @note TODO: When MaterialAsset baseline UV transforms are fully wired into
+         rendering, use those defaults here and move runtime edits to
+         per-instance overrides (MaterialInstance).
+  */
   auto RebuildCube(TextureIndexMode sphere_texture_mode,
     std::uint32_t sphere_resource_index,
     oxygen::content::ResourceKey sphere_texture_key,

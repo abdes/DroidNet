@@ -179,11 +179,17 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
       if (auto* renderer = ResolveRenderer(); renderer) {
         if (auto sphere_material = scene_setup_->GetSphereMaterial();
           sphere_material) {
+          // TODO: Apply baseline UV transform from MaterialAsset defaults and
+          // move this override to per-instance material overrides when the
+          // MaterialInstance system is available.
           (void)renderer->OverrideMaterialUvTransform(
             *sphere_material, uv_scale, uv_offset);
         }
         if (auto cube_material = scene_setup_->GetCubeMaterial();
           cube_material) {
+          // TODO: Apply baseline UV transform from MaterialAsset defaults and
+          // move this override to per-instance material overrides when the
+          // MaterialInstance system is available.
           (void)renderer->OverrideMaterialUvTransform(
             *cube_material, uv_scale, uv_offset);
         }
@@ -197,10 +203,16 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
       const auto [uv_scale, uv_offset] = debug_ui_->GetEffectiveUvTransform();
       if (auto sphere_material = scene_setup_->GetSphereMaterial();
         sphere_material) {
+        // TODO: Apply baseline UV transform from MaterialAsset defaults and
+        // move this override to per-instance material overrides when the
+        // MaterialInstance system is available.
         (void)renderer->OverrideMaterialUvTransform(
           *sphere_material, uv_scale, uv_offset);
       }
       if (auto cube_material = scene_setup_->GetCubeMaterial(); cube_material) {
+        // TODO: Apply baseline UV transform from MaterialAsset defaults and
+        // move this override to per-instance material overrides when the
+        // MaterialInstance system is available.
         (void)renderer->OverrideMaterialUvTransform(
           *cube_material, uv_scale, uv_offset);
       }

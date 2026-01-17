@@ -142,6 +142,8 @@ auto BuildCubeGeometry(
     return nullptr;
   }
 
+  // TODO: When per-instance material overrides exist, keep geometry UVs
+  // authored and apply baseline UV transforms via MaterialAsset defaults.
   std::vector<Vertex> vertices = sphere_data->first;
 
   auto mesh
