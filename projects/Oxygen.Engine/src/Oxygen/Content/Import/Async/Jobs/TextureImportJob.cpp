@@ -24,7 +24,6 @@
 #include <Oxygen/Content/Import/TextureImportError.h>
 #include <Oxygen/Content/Import/TextureSourceAssembly.h>
 #include <Oxygen/OxCo/Algorithms.h>
-#include <glm/gtc/packing.hpp>
 
 namespace {
 
@@ -45,9 +44,6 @@ using oxygen::content::import::ScratchImageMeta;
 using oxygen::content::import::TextureImportDesc;
 using oxygen::content::import::TextureImportError;
 using oxygen::content::import::TextureIntent;
-using oxygen::content::import::detail::ConvertEquirectangularFace;
-using oxygen::content::import::detail::ExtractCubeFaceFromLayout;
-using oxygen::content::import::detail::GetBytesPerPixel;
 
 auto IsColorIntent(const TextureIntent intent) -> bool
 {
@@ -77,242 +73,6 @@ auto IsColorIntent(const TextureIntent intent) -> bool
   auto normalized = source_path.lexically_normal();
   normalized.make_preferred();
   return normalized.generic_string();
-}
-
-[[nodiscard]] auto ConvertToFloatImage(ScratchImage&& image)
-  -> oxygen::Result<ScratchImage, TextureImportError>
-{
-  if (!image.IsValid()) {
-    return ::oxygen::Err(TextureImportError::kInvalidDimensions);
-  }
-
-  const auto& meta = image.Meta();
-  if (meta.format == Format::kRGBA32Float) {
-    return ::oxygen::Ok(std::move(image));
-  }
-
-  if (meta.format != Format::kRGBA8UNorm
-    && meta.format != Format::kRGBA8UNormSRGB) {
-    return ::oxygen::Err(TextureImportError::kInvalidOutputFormat);
-  }
-
-  ScratchImage float_image = ScratchImage::Create(ScratchImageMeta {
-    .texture_type = TextureType::kTexture2D,
-    .width = meta.width,
-    .height = meta.height,
-    .depth = 1,
-    .array_layers = 1,
-    .mip_levels = 1,
-    .format = Format::kRGBA32Float,
-  });
-
-  if (!float_image.IsValid()) {
-    return ::oxygen::Err(TextureImportError::kOutOfMemory);
-  }
-
-  const auto src_view = image.GetImage(0, 0);
-  auto dst_pixels = float_image.GetMutablePixels(0, 0);
-  const auto* src_ptr = src_view.pixels.data();
-  auto* dst_ptr = reinterpret_cast<float*>(dst_pixels.data());
-
-  const size_t pixel_count
-    = static_cast<size_t>(meta.width) * static_cast<size_t>(meta.height);
-  for (size_t i = 0; i < pixel_count; ++i) {
-    for (size_t c = 0; c < 4; ++c) {
-      const uint8_t byte_val = static_cast<uint8_t>(src_ptr[i * 4 + c]);
-      dst_ptr[i * 4 + c] = static_cast<float>(byte_val) / 255.0F;
-    }
-  }
-
-  return ::oxygen::Ok(std::move(float_image));
-}
-
-[[nodiscard]] auto ConvertFloat32ToFloat16Image(const ScratchImage& source)
-  -> oxygen::Result<ScratchImage, TextureImportError>
-{
-  if (!source.IsValid()) {
-    return ::oxygen::Err(TextureImportError::kInvalidDimensions);
-  }
-
-  const auto& meta = source.Meta();
-  if (meta.format != Format::kRGBA32Float) {
-    return ::oxygen::Err(TextureImportError::kInvalidOutputFormat);
-  }
-
-  ScratchImage result = ScratchImage::Create(ScratchImageMeta {
-    .texture_type = meta.texture_type,
-    .width = meta.width,
-    .height = meta.height,
-    .depth = meta.depth,
-    .array_layers = meta.array_layers,
-    .mip_levels = meta.mip_levels,
-    .format = Format::kRGBA16Float,
-  });
-
-  if (!result.IsValid()) {
-    return ::oxygen::Err(TextureImportError::kOutOfMemory);
-  }
-
-  for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
-    for (uint16_t mip = 0; mip < meta.mip_levels; ++mip) {
-      const auto src_view = source.GetImage(layer, mip);
-      auto dst_pixels = result.GetMutablePixels(layer, mip);
-
-      const auto* src_ptr
-        = reinterpret_cast<const float*>(src_view.pixels.data());
-      auto* dst_ptr = reinterpret_cast<uint16_t*>(dst_pixels.data());
-
-      const size_t pixel_count
-        = static_cast<size_t>(src_view.width) * src_view.height;
-      for (size_t i = 0; i < pixel_count * 4; ++i) {
-        dst_ptr[i] = glm::packHalf1x16(src_ptr[i]);
-      }
-    }
-  }
-
-  return ::oxygen::Ok(std::move(result));
-}
-
-[[nodiscard]] auto WantsHalfFloatOutput(
-  const ImportOptions::TextureTuning& tuning) -> bool
-{
-  if (!tuning.enabled) {
-    return false;
-  }
-
-  const auto output_format = IsColorIntent(tuning.intent)
-    ? tuning.color_output_format
-    : tuning.data_output_format;
-
-  return output_format == Format::kRGBA16Float;
-}
-
-[[nodiscard]] auto ConvertEquirectangularToCubeOnThreadPool(
-  oxygen::co::ThreadPool& thread_pool, const ScratchImage& equirect,
-  const oxygen::content::import::EquirectToCubeOptions& options)
-  -> oxygen::co::Co<oxygen::Result<ScratchImage, TextureImportError>>
-{
-  if (!equirect.IsValid()) {
-    co_return ::oxygen::Err(TextureImportError::kDecodeFailed);
-  }
-
-  const auto& src_meta = equirect.Meta();
-  const float aspect
-    = static_cast<float>(src_meta.width) / static_cast<float>(src_meta.height);
-  if (aspect < 1.5F || aspect > 2.5F) {
-    co_return ::oxygen::Err(TextureImportError::kInvalidDimensions);
-  }
-
-  if (src_meta.format != Format::kRGBA32Float) {
-    co_return ::oxygen::Err(TextureImportError::kInvalidOutputFormat);
-  }
-
-  if (options.face_size == 0) {
-    co_return ::oxygen::Err(TextureImportError::kInvalidDimensions);
-  }
-
-  ScratchImageMeta cube_meta {
-    .texture_type = TextureType::kTextureCube,
-    .width = options.face_size,
-    .height = options.face_size,
-    .depth = 1,
-    .array_layers = kCubeFaceCount,
-    .mip_levels = 1,
-    .format = Format::kRGBA32Float,
-  };
-
-  ScratchImage cube = ScratchImage::Create(cube_meta);
-  if (!cube.IsValid()) {
-    co_return ::oxygen::Err(TextureImportError::kOutOfMemory);
-  }
-
-  const auto src_view = equirect.GetImage(0, 0);
-  const bool use_bicubic = (options.sample_filter == MipFilter::kKaiser
-    || options.sample_filter == MipFilter::kLanczos);
-  const uint32_t face_size = options.face_size;
-
-  std::vector<oxygen::co::Co<>> jobs;
-  jobs.reserve(kCubeFaceCount);
-
-  for (uint32_t face_idx = 0; face_idx < kCubeFaceCount; ++face_idx) {
-    const auto face = static_cast<CubeFace>(face_idx);
-    jobs.push_back([&](const CubeFace face_value) -> oxygen::co::Co<> {
-      co_await thread_pool.Run([&]() {
-        ConvertEquirectangularFace(equirect, src_meta, src_view.pixels,
-          face_value, face_size, use_bicubic, cube);
-      });
-    }(face));
-  }
-
-  co_await AllOf(std::move(jobs));
-  co_return ::oxygen::Ok(std::move(cube));
-}
-
-[[nodiscard]] auto ExtractCubeFacesFromLayoutOnThreadPool(
-  oxygen::co::ThreadPool& thread_pool, const ScratchImage& layout_image,
-  const CubeMapImageLayout layout)
-  -> oxygen::co::Co<oxygen::Result<ScratchImage, TextureImportError>>
-{
-  if (!layout_image.IsValid()) {
-    co_return ::oxygen::Err(TextureImportError::kDecodeFailed);
-  }
-
-  if (layout == CubeMapImageLayout::kAuto) {
-    const auto detection = DetectCubeMapLayout(layout_image);
-    if (!detection.has_value()) {
-      co_return ::oxygen::Err(TextureImportError::kDimensionMismatch);
-    }
-    co_return co_await ExtractCubeFacesFromLayoutOnThreadPool(
-      thread_pool, layout_image, detection->layout);
-  }
-
-  if (layout == CubeMapImageLayout::kUnknown) {
-    co_return ::oxygen::Err(TextureImportError::kInvalidDimensions);
-  }
-
-  const auto& meta = layout_image.Meta();
-  const auto detection = DetectCubeMapLayout(meta.width, meta.height);
-  if (!detection.has_value() || detection->layout != layout) {
-    co_return ::oxygen::Err(TextureImportError::kDimensionMismatch);
-  }
-
-  const uint32_t face_size = detection->face_size;
-  const std::size_t bytes_per_pixel = GetBytesPerPixel(meta.format);
-  if (bytes_per_pixel == 0) {
-    co_return ::oxygen::Err(TextureImportError::kUnsupportedFormat);
-  }
-
-  ScratchImageMeta cube_meta {
-    .texture_type = TextureType::kTextureCube,
-    .width = face_size,
-    .height = face_size,
-    .depth = 1,
-    .array_layers = kCubeFaceCount,
-    .mip_levels = 1,
-    .format = meta.format,
-  };
-
-  ScratchImage cube = ScratchImage::Create(cube_meta);
-  if (!cube.IsValid()) {
-    co_return ::oxygen::Err(TextureImportError::kOutOfMemory);
-  }
-
-  const auto src_view = layout_image.GetImage(0, 0);
-  std::vector<oxygen::co::Co<>> jobs;
-  jobs.reserve(kCubeFaceCount);
-
-  for (uint32_t face_idx = 0; face_idx < kCubeFaceCount; ++face_idx) {
-    const auto face = static_cast<CubeFace>(face_idx);
-    jobs.push_back([&](const CubeFace face_value) -> oxygen::co::Co<> {
-      co_await thread_pool.Run([&]() {
-        ExtractCubeFaceFromLayout(
-          src_view, layout, face_size, bytes_per_pixel, face_value, cube);
-      });
-    }(face));
-  }
-
-  co_await AllOf(std::move(jobs));
-  co_return ::oxygen::Ok(std::move(cube));
 }
 
 [[nodiscard]] auto BuildPreflightDesc(
@@ -459,14 +219,17 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto cooked = co_await CookTexture(source, session, pipeline);
   const auto cook_end = std::chrono::steady_clock::now();
   telemetry.cook_duration = MakeDuration(cook_start, cook_end);
-  if (!cooked.has_value()) {
+  if (cooked.decode_duration.has_value()) {
+    telemetry.decode_duration = cooked.decode_duration;
+  }
+  if (!cooked.payload.has_value()) {
     ReportProgress(ImportPhase::kFailed, 1.0f, "Texture cook failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
   ReportProgress(ImportPhase::kWriting, 0.7f, "Emitting texture...");
   const auto emit_start = std::chrono::steady_clock::now();
-  if (!co_await EmitTexture(std::move(*cooked), session)) {
+  if (!co_await EmitTexture(std::move(*cooked.payload), session)) {
     ReportProgress(ImportPhase::kFailed, 1.0f, "Texture emit failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
@@ -581,96 +344,8 @@ auto TextureImportJob::LoadSource(ImportSession& session)
         co_return StampDurations(source);
       }
       source.prevalidated = true;
-      const auto source_id = Request().source_path.string();
-      const auto decode_start = std::chrono::steady_clock::now();
-      auto decoded = co_await ThreadPool()->Run(
-        [data = bytes.data(), size = bytes.size(), options, source_id](
-          oxygen::co::ThreadPool::CancelToken cancelled)
-          -> oxygen::Result<ScratchImage, TextureImportError> {
-          if (cancelled) {
-            return ::oxygen::Err(TextureImportError::kCancelled);
-          }
-          auto result = DecodeToScratchImage(
-            std::span<const std::byte>(data, size), options);
-          return result;
-        });
-      const auto decode_end = std::chrono::steady_clock::now();
-      AddDuration(decode_duration, decode_start, decode_end);
-      if (!decoded.has_value()) {
-        const auto error = decoded.error();
-        session.AddDiagnostic({
-          .severity = ImportSeverity::kError,
-          .code = "texture.decode_failed",
-          .message = std::string("Decode failed: ") + to_string(error),
-          .source_path = Request().source_path.string(),
-          .object_path = {},
-        });
-        co_return StampDurations(source);
-      }
-
-      const auto float_start = std::chrono::steady_clock::now();
-      auto float_image = ConvertToFloatImage(std::move(decoded.value()));
-      const auto float_end = std::chrono::steady_clock::now();
-      AddDuration(decode_duration, float_start, float_end);
-      if (!float_image.has_value()) {
-        const auto error = float_image.error();
-        session.AddDiagnostic({
-          .severity = ImportSeverity::kError,
-          .code = "texture.equirect_float_failed",
-          .message
-          = std::string("Equirect to float failed: ") + to_string(error),
-          .source_path = Request().source_path.string(),
-          .object_path = {},
-        });
-        co_return StampDurations(source);
-      }
-
-      EquirectToCubeOptions cube_options {
-        .face_size = tuning.cubemap_face_size,
-        .sample_filter = tuning.mip_filter,
-      };
-
-      const auto cube_start = std::chrono::steady_clock::now();
-      auto cube = co_await ConvertEquirectangularToCubeOnThreadPool(
-        *ThreadPool(), float_image.value(), cube_options);
-      const auto cube_end = std::chrono::steady_clock::now();
-      AddDuration(decode_duration, cube_start, cube_end);
-      if (!cube.has_value()) {
-        const auto error = cube.error();
-        session.AddDiagnostic({
-          .severity = ImportSeverity::kError,
-          .code = "texture.equirect_convert_failed",
-          .message
-          = std::string("Equirect conversion failed: ") + to_string(error),
-          .source_path = Request().source_path.string(),
-          .object_path = {},
-        });
-        co_return StampDurations(source);
-      }
-
-      if (WantsHalfFloatOutput(tuning)
-        && cube->Meta().format == Format::kRGBA32Float) {
-        const auto half_start = std::chrono::steady_clock::now();
-        auto half_image = ConvertFloat32ToFloat16Image(cube.value());
-        const auto half_end = std::chrono::steady_clock::now();
-        AddDuration(decode_duration, half_start, half_end);
-        if (!half_image.has_value()) {
-          const auto error = half_image.error();
-          session.AddDiagnostic({
-            .severity = ImportSeverity::kError,
-            .code = "texture.half_float_failed",
-            .message
-            = std::string("Half-float conversion failed: ") + to_string(error),
-            .source_path = Request().source_path.string(),
-            .object_path = {},
-          });
-          co_return StampDurations(source);
-        }
-        source.image = std::move(half_image.value());
-      } else {
-        source.image = std::move(cube.value());
-      }
-      source.meta = source.image->Meta();
+      source.is_hdr_input = IsHdrFormat(bytes, options.extension_hint);
+      source.bytes = std::make_shared<std::vector<std::byte>>(std::move(bytes));
       source.success = true;
       co_return StampDurations(source);
     }
@@ -710,75 +385,8 @@ auto TextureImportJob::LoadSource(ImportSession& session)
         co_return StampDurations(source);
       }
       source.prevalidated = true;
-      const auto source_id = Request().source_path.string();
-      const auto decode_start = std::chrono::steady_clock::now();
-      auto decoded = co_await ThreadPool()->Run(
-        [data = bytes.data(), size = bytes.size(), options, source_id](
-          oxygen::co::ThreadPool::CancelToken cancelled)
-          -> oxygen::Result<ScratchImage, TextureImportError> {
-          if (cancelled) {
-            return ::oxygen::Err(TextureImportError::kCancelled);
-          }
-          auto result = DecodeToScratchImage(
-            std::span<const std::byte>(data, size), options);
-          return result;
-        });
-      const auto decode_end = std::chrono::steady_clock::now();
-      AddDuration(decode_duration, decode_start, decode_end);
-      if (!decoded.has_value()) {
-        const auto error = decoded.error();
-        session.AddDiagnostic({
-          .severity = ImportSeverity::kError,
-          .code = "texture.decode_failed",
-          .message = std::string("Decode failed: ") + to_string(error),
-          .source_path = Request().source_path.string(),
-          .object_path = {},
-        });
-        co_return StampDurations(source);
-      }
-
-      const auto extract_start = std::chrono::steady_clock::now();
-      oxygen::Result<ScratchImage, TextureImportError> cube
-        = co_await ExtractCubeFacesFromLayoutOnThreadPool(
-          *ThreadPool(), decoded.value(), tuning.cubemap_layout);
-      const auto extract_end = std::chrono::steady_clock::now();
-      AddDuration(decode_duration, extract_start, extract_end);
-
-      if (!cube.has_value()) {
-        const auto error = cube.error();
-        session.AddDiagnostic({
-          .severity = ImportSeverity::kError,
-          .code = "texture.cubemap_layout_failed",
-          .message = std::string("Cubemap layout failed: ") + to_string(error),
-          .source_path = Request().source_path.string(),
-          .object_path = {},
-        });
-        co_return StampDurations(source);
-      }
-
-      if (WantsHalfFloatOutput(tuning)
-        && cube->Meta().format == Format::kRGBA32Float) {
-        const auto half_start = std::chrono::steady_clock::now();
-        auto half_image = ConvertFloat32ToFloat16Image(cube.value());
-        const auto half_end = std::chrono::steady_clock::now();
-        AddDuration(decode_duration, half_start, half_end);
-        if (!half_image.has_value()) {
-          const auto error = half_image.error();
-          session.AddDiagnostic({
-            .severity = ImportSeverity::kError,
-            .code = "texture.half_float_failed",
-            .message
-            = std::string("Half-float conversion failed: ") + to_string(error),
-            .source_path = Request().source_path.string(),
-            .object_path = {},
-          });
-          co_return StampDurations(source);
-        }
-        source.image = std::move(half_image.value());
-      } else {
-        source.image = std::move(cube.value());
-      }
-      source.meta = source.image->Meta();
+      source.is_hdr_input = IsHdrFormat(bytes, options.extension_hint);
+      source.bytes = std::make_shared<std::vector<std::byte>>(std::move(bytes));
       source.success = true;
       co_return StampDurations(source);
     }
@@ -796,7 +404,6 @@ auto TextureImportJob::LoadSource(ImportSession& session)
     }
 
     TextureSourceSet sources;
-    std::optional<ScratchImageMeta> meta;
 
     for (size_t i = 0; i < kCubeFaceCount; ++i) {
       const auto& face_path = (*discovered)[i];
@@ -830,46 +437,9 @@ auto TextureImportJob::LoadSource(ImportSession& session)
         co_return StampDurations(source);
       }
       source.prevalidated = true;
-      if (!meta.has_value()) {
-        DecodeOptions face_options = options;
-        face_options.extension_hint = face_path.extension().string();
-        const auto source_id = face_path.string();
-        const auto decode_start = std::chrono::steady_clock::now();
-        auto decoded = co_await ThreadPool()->Run(
-          [data = bytes.data(), size = bytes.size(), face_options, source_id](
-            oxygen::co::ThreadPool::CancelToken cancelled)
-            -> oxygen::Result<ScratchImage, TextureImportError> {
-            if (cancelled) {
-              return ::oxygen::Err(TextureImportError::kCancelled);
-            }
-            auto result = DecodeToScratchImage(
-              std::span<const std::byte>(data, size), face_options);
-            return result;
-          });
-        const auto decode_end = std::chrono::steady_clock::now();
-        AddDuration(decode_duration, decode_start, decode_end);
-        if (!decoded.has_value()) {
-          const auto error = decoded.error();
-          session.AddDiagnostic({
-            .severity = ImportSeverity::kError,
-            .code = "texture.decode_failed",
-            .message = std::string("Decode failed: ") + to_string(error),
-            .source_path = face_path.string(),
-            .object_path = {},
-          });
-          co_return StampDurations(source);
-        }
-
-        const auto& face_meta = decoded->Meta();
-        meta = ScratchImageMeta {
-          .texture_type = TextureType::kTextureCube,
-          .width = face_meta.width,
-          .height = face_meta.height,
-          .depth = 1,
-          .array_layers = kCubeFaceCount,
-          .mip_levels = 1,
-          .format = face_meta.format,
-        };
+      if (!source.is_hdr_input.has_value()) {
+        source.is_hdr_input
+          = IsHdrFormat(bytes, face_path.extension().string());
       }
 
       sources.AddCubeFace(
@@ -877,7 +447,6 @@ auto TextureImportJob::LoadSource(ImportSession& session)
     }
 
     source.source_set = std::move(sources);
-    source.meta = std::move(meta);
     source.success = true;
     co_return StampDurations(source);
   }
@@ -913,57 +482,8 @@ auto TextureImportJob::LoadSource(ImportSession& session)
     co_return StampDurations(source);
   }
   source.prevalidated = true;
-
-  const auto source_id = Request().source_path.string();
-  const auto decode_start = std::chrono::steady_clock::now();
-  auto decoded = co_await ThreadPool()->Run(
-    [data = bytes.data(), size = bytes.size(), options, source_id](
-      oxygen::co::ThreadPool::CancelToken cancelled)
-      -> oxygen::Result<ScratchImage, TextureImportError> {
-      if (cancelled) {
-        return ::oxygen::Err(TextureImportError::kCancelled);
-      }
-      auto result
-        = DecodeToScratchImage(std::span<const std::byte>(data, size), options);
-      return result;
-    });
-  const auto decode_end = std::chrono::steady_clock::now();
-  AddDuration(decode_duration, decode_start, decode_end);
-  if (!decoded.has_value()) {
-    const auto error = decoded.error();
-    session.AddDiagnostic({
-      .severity = ImportSeverity::kError,
-      .code = "texture.decode_failed",
-      .message = std::string("Decode failed: ") + to_string(error),
-      .source_path = Request().source_path.string(),
-      .object_path = {},
-    });
-    co_return StampDurations(source);
-  }
-
-  if (WantsHalfFloatOutput(tuning)
-    && decoded->Meta().format == Format::kRGBA32Float) {
-    const auto half_start = std::chrono::steady_clock::now();
-    auto half_image = ConvertFloat32ToFloat16Image(decoded.value());
-    const auto half_end = std::chrono::steady_clock::now();
-    AddDuration(decode_duration, half_start, half_end);
-    if (!half_image.has_value()) {
-      const auto error = half_image.error();
-      session.AddDiagnostic({
-        .severity = ImportSeverity::kError,
-        .code = "texture.half_float_failed",
-        .message
-        = std::string("Half-float conversion failed: ") + to_string(error),
-        .source_path = Request().source_path.string(),
-        .object_path = {},
-      });
-      co_return StampDurations(source);
-    }
-    source.image = std::move(half_image.value());
-  } else {
-    source.image = std::move(decoded.value());
-  }
-  source.meta = source.image->Meta();
+  source.is_hdr_input = IsHdrFormat(bytes, options.extension_hint);
+  source.bytes = std::make_shared<std::vector<std::byte>>(std::move(bytes));
   source.success = true;
   co_return StampDurations(source);
 }
@@ -971,53 +491,58 @@ auto TextureImportJob::LoadSource(ImportSession& session)
 //! Cook the texture via the async TexturePipeline.
 auto TextureImportJob::CookTexture(
   TextureSource& source, ImportSession& session, TexturePipeline& pipeline)
-  -> co::Co<std::optional<CookedTexturePayload>>
+  -> co::Co<CookedTextureResult>
 {
-  if (!source.meta.has_value()) {
-    session.AddDiagnostic({
-      .severity = ImportSeverity::kError,
-      .code = "texture.meta_missing",
-      .message = "Texture source metadata is missing",
-      .source_path = Request().source_path.string(),
-      .object_path = {},
-    });
-    co_return std::nullopt;
-  }
-
-  const auto& meta = source.meta.value();
   const auto& tuning = Request().options.texture_tuning;
+  const bool has_meta = source.meta.has_value();
+  const bool is_cubemap = source.source_set.has_value()
+    || (has_meta && source.meta->texture_type == TextureType::kTextureCube)
+    || tuning.import_cubemap || tuning.equirect_to_cubemap
+    || tuning.cubemap_layout != CubeMapImageLayout::kUnknown;
 
   TextureImportDesc desc {};
-  desc.source_id = source.source_id;
-  desc.texture_type = meta.texture_type;
-  desc.width = meta.width;
-  desc.height = meta.height;
-  desc.depth = meta.depth;
-  desc.array_layers = meta.array_layers;
-  desc.intent = tuning.intent;
-  desc.source_color_space = tuning.source_color_space;
-  desc.flip_y_on_decode = tuning.flip_y_on_decode;
-  desc.force_rgba_on_decode = tuning.force_rgba_on_decode;
-  if (tuning.enabled) {
-    desc.mip_policy = tuning.mip_policy;
-    desc.max_mip_levels = tuning.max_mip_levels;
-    desc.mip_filter = tuning.mip_filter;
-    desc.output_format = IsColorIntent(desc.intent) ? tuning.color_output_format
-                                                    : tuning.data_output_format;
-    desc.bc7_quality = tuning.bc7_quality;
-  } else {
-    desc.output_format = meta.format;
-    desc.bc7_quality = Bc7Quality::kNone;
-  }
-
-  if (desc.intent == TextureIntent::kHdrEnvironment
-    || desc.intent == TextureIntent::kHdrLightProbe) {
-    const bool is_float_output = desc.output_format == Format::kRGBA16Float
-      || desc.output_format == Format::kRGBA32Float
-      || desc.output_format == Format::kR11G11B10Float;
-    if (!is_float_output && meta.format != Format::kRGBA32Float) {
-      desc.bake_hdr_to_ldr = true;
+  if (has_meta) {
+    const auto& meta = source.meta.value();
+    desc.source_id = source.source_id;
+    desc.texture_type = meta.texture_type;
+    desc.width = meta.width;
+    desc.height = meta.height;
+    desc.depth = meta.depth;
+    desc.array_layers = meta.array_layers;
+    desc.intent = tuning.intent;
+    desc.source_color_space = tuning.source_color_space;
+    desc.flip_y_on_decode = tuning.flip_y_on_decode;
+    desc.force_rgba_on_decode = tuning.force_rgba_on_decode;
+    if (tuning.enabled) {
+      desc.mip_policy = tuning.mip_policy;
+      desc.max_mip_levels = tuning.max_mip_levels;
+      desc.mip_filter = tuning.mip_filter;
+      desc.output_format = IsColorIntent(desc.intent)
+        ? tuning.color_output_format
+        : tuning.data_output_format;
+      desc.bc7_quality = tuning.bc7_quality;
+    } else {
+      desc.output_format = meta.format;
+      desc.bc7_quality = Bc7Quality::kNone;
     }
+
+    if (desc.intent == TextureIntent::kHdrEnvironment
+      || desc.intent == TextureIntent::kHdrLightProbe) {
+      const bool is_float_output = desc.output_format == Format::kRGBA16Float
+        || desc.output_format == Format::kRGBA32Float
+        || desc.output_format == Format::kR11G11B10Float;
+      if (!is_float_output && meta.format != Format::kRGBA32Float) {
+        desc.bake_hdr_to_ldr = true;
+      }
+    }
+  } else {
+    desc = BuildPreflightDesc(
+      tuning, source.is_hdr_input.value_or(false), is_cubemap);
+    desc.source_id = source.source_id;
+    desc.width = 0;
+    desc.height = 0;
+    desc.depth = 1;
+    desc.array_layers = is_cubemap ? kCubeFaceCount : 1;
   }
 
   {
@@ -1047,7 +572,7 @@ auto TextureImportJob::CookTexture(
         .object_path = {},
       });
       DLOG_F(ERROR, "Texture descriptor validation failed: {}", *error);
-      co_return std::nullopt;
+      co_return CookedTextureResult {};
     }
   }
 
@@ -1060,10 +585,19 @@ auto TextureImportJob::CookTexture(
   item.packing_policy_id = tuning.enabled ? tuning.packing_policy_id : "d3d12";
   item.output_format_is_override = tuning.enabled;
   item.failure_policy = FailurePolicyForTextureTuning(tuning);
-  if (source.image.has_value()) {
-    item.source = std::move(source.image.value());
-  } else if (source.source_set.has_value()) {
+  item.equirect_to_cubemap = tuning.equirect_to_cubemap;
+  item.cubemap_face_size = tuning.cubemap_face_size;
+  item.cubemap_layout = tuning.cubemap_layout;
+  if (source.source_set.has_value()) {
     item.source = std::move(source.source_set.value());
+  } else if (source.bytes != nullptr) {
+    TexturePipeline::SourceBytes raw_source {
+      .bytes = std::span<const std::byte>(*source.bytes),
+      .owner = std::static_pointer_cast<const void>(source.bytes),
+    };
+    item.source = std::move(raw_source);
+  } else if (source.image.has_value()) {
+    item.source = std::move(source.image.value());
   } else {
     session.AddDiagnostic({
       .severity = ImportSeverity::kError,
@@ -1072,7 +606,7 @@ auto TextureImportJob::CookTexture(
       .source_path = Request().source_path.string(),
       .object_path = {},
     });
-    co_return std::nullopt;
+    co_return CookedTextureResult {};
   }
   item.stop_token = StopToken();
 
@@ -1101,10 +635,12 @@ auto TextureImportJob::CookTexture(
       .source_path = Request().source_path.string(),
       .object_path = {},
     });
-    co_return std::nullopt;
+    co_return { .payload = std::nullopt,
+      .decode_duration = result.decode_duration };
   }
 
-  co_return std::move(result.cooked.value());
+  co_return { .payload = std::move(result.cooked.value()),
+    .decode_duration = result.decode_duration };
 }
 
 //! Emit the cooked texture via TextureEmitter.

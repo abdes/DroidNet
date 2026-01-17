@@ -7,6 +7,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -109,6 +110,15 @@ public:
     //! Failure policy for this work item.
     FailurePolicy failure_policy = FailurePolicy::kPlaceholder;
 
+    //! Convert equirectangular input to cubemap inside the pipeline.
+    bool equirect_to_cubemap = false;
+
+    //! Cubemap face size for equirect conversion (required when enabled).
+    uint32_t cubemap_face_size = 0;
+
+    //! Cubemap layout hint for layout extraction (kUnknown disables).
+    CubeMapImageLayout cubemap_layout = CubeMapImageLayout::kUnknown;
+
     //! Source content (bytes, multi-source set, or decoded image).
     SourceContent source;
 
@@ -135,6 +145,9 @@ public:
 
     //! Diagnostics produced while cooking.
     std::vector<ImportDiagnostic> diagnostics;
+
+    //! Time spent decoding source bytes, if applicable.
+    std::optional<std::chrono::microseconds> decode_duration;
 
     //! True if successful; false if cancelled or failed.
     bool success = false;

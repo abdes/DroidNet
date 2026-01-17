@@ -7,8 +7,10 @@
 #pragma once
 
 #include <chrono>
+#include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Import/Async/Detail/ImportJob.h>
@@ -39,11 +41,18 @@ private:
   struct TextureSource {
     bool success = false;
     std::string source_id;
+    std::shared_ptr<std::vector<std::byte>> bytes;
     std::optional<ScratchImage> image;
     std::optional<TextureSourceSet> source_set;
     std::optional<ScratchImageMeta> meta;
+    std::optional<bool> is_hdr_input;
     bool prevalidated = false;
     std::optional<std::chrono::microseconds> io_duration;
+    std::optional<std::chrono::microseconds> decode_duration;
+  };
+
+  struct CookedTextureResult {
+    std::optional<CookedTexturePayload> payload;
     std::optional<std::chrono::microseconds> decode_duration;
   };
 
@@ -53,7 +62,7 @@ private:
     -> co::Co<TextureSource>;
 
   [[nodiscard]] auto CookTexture(TextureSource& source, ImportSession& session,
-    TexturePipeline& pipeline) -> co::Co<std::optional<CookedTexturePayload>>;
+    TexturePipeline& pipeline) -> co::Co<CookedTextureResult>;
 
   [[nodiscard]] auto EmitTexture(
     CookedTexturePayload cooked, ImportSession& session) -> co::Co<bool>;
