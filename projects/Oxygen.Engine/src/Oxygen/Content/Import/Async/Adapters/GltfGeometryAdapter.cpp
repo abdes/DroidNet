@@ -495,6 +495,19 @@ namespace {
         auto joint_indices_vec = ReadUVec4(joints);
         auto joint_weights_vec = ReadVec4(weights);
 
+        if (positions_vec.empty()) {
+          DLOG_F(WARNING,
+            "glTF primitive contains no vertex positions: source_id='{}' "
+            "mesh='{}'",
+            input.source_id_prefix, mesh_name);
+          output.diagnostics.push_back(
+            MakeErrorDiagnostic("mesh.missing_positions",
+              "glTF primitive contains no vertex positions",
+              input.source_id_prefix, mesh_name));
+          output.success = false;
+          continue;
+        }
+
         auto indices_vec = ReadIndices(prim.indices);
         if (indices_vec.empty()) {
           output.diagnostics.push_back(
@@ -507,6 +520,30 @@ namespace {
           }
         }
 
+        if (indices_vec.empty()) {
+          DLOG_F(WARNING,
+            "glTF primitive contains no indices: source_id='{}' mesh='{}'",
+            input.source_id_prefix, mesh_name);
+          output.diagnostics.push_back(MakeErrorDiagnostic(
+            "mesh.missing_indices", "glTF primitive contains no indices",
+            input.source_id_prefix, mesh_name));
+          output.success = false;
+          continue;
+        }
+
+        if ((indices_vec.size() % 3U) != 0U) {
+          DLOG_F(WARNING,
+            "glTF primitive index count not multiple of 3: source_id='{}' "
+            "mesh='{}' index_count={}",
+            input.source_id_prefix, mesh_name, indices_vec.size());
+          output.diagnostics.push_back(
+            MakeWarningDiagnostic("mesh.invalid_range",
+              "glTF primitive index count must be a multiple of 3",
+              input.source_id_prefix, mesh_name));
+          output.success = false;
+          continue;
+        }
+
         const auto material_slot = [&]() -> uint32_t {
           if (prim.material == nullptr) {
             return 0;
@@ -517,6 +554,14 @@ namespace {
           }
           return 0;
         }();
+
+        if (!input.material_keys.empty()
+          && material_slot >= input.material_keys.size()) {
+          output.diagnostics.push_back(
+            MakeWarningDiagnostic("mesh.material_slot_oob",
+              "glTF material slot exceeds imported material key count",
+              input.source_id_prefix, mesh_name));
+        }
 
         TriangleRange range {
           .material_slot = material_slot,
