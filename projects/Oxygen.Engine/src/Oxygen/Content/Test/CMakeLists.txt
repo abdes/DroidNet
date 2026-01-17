@@ -109,6 +109,7 @@ m_gtest_program(
     "Import/Async/BufferPipeline_test.cpp"
     "Import/Async/TexturePipeline_basic_test.cpp"
     "Import/Async/TexturePipeline_nonreg_test.cpp"
+    "Import/Async/TexturePipeline_edge_test.cpp"
     "Import/Async/TextureImportJob_policy_test.cpp"
     "Import/Async/TextureEmitter_test.cpp"
     "Import/Async/BufferEmitter_test.cpp"
