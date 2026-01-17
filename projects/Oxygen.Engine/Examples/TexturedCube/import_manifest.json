@@ -26,17 +26,6 @@
       }
     },
     {
-      "source": "hay_bales_4k_skybox.exr",
-      "texture": {
-        "intent": "hdr_env",
-        "color_space": "linear",
-        "output_format": "rgba32f",
-        "cubemap": true,
-        "equirect_to_cube": true,
-        "cube_face_size": 512
-      }
-    },
-    {
       "source": "4x3_skybox.png",
       "texture": {
         "cubemap": true,

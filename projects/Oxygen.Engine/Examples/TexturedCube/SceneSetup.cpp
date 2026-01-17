@@ -257,9 +257,11 @@ auto SceneSetup::EnsureCubeNode() -> scene::SceneNode
   return cube_node_;
 }
 
-auto SceneSetup::RebuildCube(TextureIndexMode texture_mode,
-  std::uint32_t custom_resource_index,
-  oxygen::content::ResourceKey custom_texture_key,
+auto SceneSetup::RebuildCube(TextureIndexMode sphere_texture_mode,
+  std::uint32_t sphere_resource_index,
+  oxygen::content::ResourceKey sphere_texture_key,
+  TextureIndexMode cube_texture_mode, std::uint32_t cube_resource_index,
+  oxygen::content::ResourceKey cube_texture_key,
   oxygen::content::ResourceKey forced_error_key, glm::vec2 uv_scale,
   glm::vec2 uv_offset, float metalness, float roughness,
   glm::vec4 base_color_rgba, bool disable_texture_sampling)
@@ -267,26 +269,35 @@ auto SceneSetup::RebuildCube(TextureIndexMode texture_mode,
 {
   EnsureCubeNode();
 
-  const auto res_index
-    = ResolveBaseColorTextureResourceIndex(texture_mode, custom_resource_index);
+  const auto sphere_res_index = ResolveBaseColorTextureResourceIndex(
+    sphere_texture_mode, sphere_resource_index);
+  const auto cube_res_index = ResolveBaseColorTextureResourceIndex(
+    cube_texture_mode, cube_resource_index);
 
-  const auto base_color_key = [&]() -> oxygen::content::ResourceKey {
+  const auto ResolveKey =
+    [&](TextureIndexMode mode,
+      const oxygen::content::ResourceKey key) -> oxygen::content::ResourceKey {
     using enum TextureIndexMode;
-    switch (texture_mode) {
+    switch (mode) {
     case kCustom:
-      return custom_texture_key;
+      return key;
     case kForcedError:
       return forced_error_key;
     case kFallback:
     default:
       return static_cast<oxygen::content::ResourceKey>(0);
     }
-  }();
+  };
 
-  cube_material_ = MakeCubeMaterial("CubeMat", base_color_rgba, res_index,
-    base_color_key, metalness, roughness, disable_texture_sampling);
+  sphere_material_ = MakeCubeMaterial("SphereMat", base_color_rgba,
+    sphere_res_index, ResolveKey(sphere_texture_mode, sphere_texture_key),
+    metalness, roughness, disable_texture_sampling);
 
-  auto cube_geo = BuildCubeGeometry(cube_material_, uv_scale, uv_offset);
+  cube_material_ = MakeCubeMaterial("CubeMat", base_color_rgba, cube_res_index,
+    ResolveKey(cube_texture_mode, cube_texture_key), metalness, roughness,
+    disable_texture_sampling);
+
+  auto cube_geo = BuildCubeGeometry(sphere_material_, uv_scale, uv_offset);
   auto comparison_geo = BuildComparisonCubeGeometry(cube_material_);
 
   if (cube_geo || comparison_geo) {
@@ -306,7 +317,7 @@ auto SceneSetup::RebuildCube(TextureIndexMode texture_mode,
     CleanupRetiredGeometries();
   }
 
-  return cube_material_;
+  return sphere_material_;
 }
 
 auto SceneSetup::EnsureLighting(

@@ -6,15 +6,138 @@
 
 #include "TextureLoadingService.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstring>
-#include <filesystem>
+#include <fstream>
+#include <optional>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Content/Import/TextureImportPresets.h>
-#include <Oxygen/Content/Import/TextureImporter.h>
-#include <Oxygen/Content/Import/TexturePackingPolicy.h>
+#include <Oxygen/Content/Import/ImportOptions.h>
+#include <Oxygen/Content/Import/ImportRequest.h>
+#include <Oxygen/Content/Import/TextureImportTypes.h>
+#include <Oxygen/Content/LooseCookedInspection.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
+
+namespace {
+
+using oxygen::ColorSpace;
+using oxygen::Format;
+using oxygen::TextureType;
+using oxygen::content::LooseCookedInspection;
+using oxygen::content::import::Bc7Quality;
+using oxygen::content::import::CubeMapImageLayout;
+using oxygen::content::import::ImportContentFlags;
+using oxygen::content::import::ImportOptions;
+using oxygen::content::import::ImportProgress;
+using oxygen::content::import::ImportReport;
+using oxygen::content::import::MipFilter;
+using oxygen::content::import::MipPolicy;
+using oxygen::content::import::TextureIntent;
+using oxygen::data::loose_cooked::v1::FileKind;
+using oxygen::data::pak::TextureResourceDesc;
+
+auto IsHdrPath(const std::filesystem::path& path) -> bool
+{
+  std::string ext = path.extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(),
+    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return (ext == ".hdr") || (ext == ".exr");
+}
+
+auto FormatFromIndex(const int idx) -> Format
+{
+  switch (idx) {
+  case 0:
+    return Format::kRGBA8UNormSRGB;
+  case 1:
+    return Format::kBC7UNormSRGB;
+  case 2:
+    return Format::kRGBA16Float;
+  case 3:
+    return Format::kRGBA32Float;
+  default:
+    return Format::kRGBA8UNormSRGB;
+  }
+}
+
+auto IsSrgbFormat(const Format format) -> bool
+{
+  return format == Format::kRGBA8UNormSRGB || format == Format::kBC7UNormSRGB
+    || format == Format::kBGRA8UNormSRGB || format == Format::kBC1UNormSRGB
+    || format == Format::kBC2UNormSRGB || format == Format::kBC3UNormSRGB;
+}
+
+auto IsBc7Format(const Format format) -> bool
+{
+  return format == Format::kBC7UNorm || format == Format::kBC7UNormSRGB;
+}
+
+auto CubeLayoutFromIndex(const int idx) -> CubeMapImageLayout
+{
+  switch (idx) {
+  case 0:
+    return CubeMapImageLayout::kAuto;
+  case 1:
+    return CubeMapImageLayout::kHorizontalCross;
+  case 2:
+    return CubeMapImageLayout::kVerticalCross;
+  case 3:
+    return CubeMapImageLayout::kHorizontalStrip;
+  case 4:
+    return CubeMapImageLayout::kVerticalStrip;
+  default:
+    return CubeMapImageLayout::kAuto;
+  }
+}
+
+auto FindFileRelPath(const LooseCookedInspection& inspection,
+  const FileKind kind) -> std::optional<std::string>
+{
+  for (const auto& entry : inspection.Files()) {
+    if (entry.kind == kind) {
+      return entry.relpath;
+    }
+  }
+  return std::nullopt;
+}
+
+template <typename T>
+auto LoadPackedTable(const std::filesystem::path& table_path) -> std::vector<T>
+{
+  std::ifstream stream(table_path, std::ios::binary);
+  if (!stream) {
+    throw std::runtime_error("failed to open table file");
+  }
+
+  stream.seekg(0, std::ios::end);
+  const auto size_bytes = static_cast<std::size_t>(stream.tellg());
+  stream.seekg(0, std::ios::beg);
+
+  if (size_bytes == 0) {
+    return {};
+  }
+
+  if (size_bytes % sizeof(T) != 0) {
+    throw std::runtime_error("table size is not a multiple of entry size");
+  }
+
+  const auto count = size_bytes / sizeof(T);
+  std::vector<T> entries(count);
+  stream.read(reinterpret_cast<char*>(entries.data()),
+    static_cast<std::streamsize>(size_bytes));
+  if (!stream) {
+    throw std::runtime_error("failed to read table file");
+  }
+
+  return entries;
+}
+
+} // namespace
 
 namespace oxygen::examples::textured_cube {
 
@@ -24,106 +147,257 @@ TextureLoadingService::TextureLoadingService(
 {
 }
 
-auto TextureLoadingService::LoadTextureAsync(const std::string& file_path,
-  const LoadOptions& options) -> co::Co<LoadResult>
+auto TextureLoadingService::SubmitImport(const ImportSettings& settings) -> bool
+{
+  std::lock_guard lock(import_mutex_);
+
+  import_status_ = {};
+  import_status_.message = "Preparing import...";
+  import_status_.in_flight = false;
+  import_status_.overall_progress = 0.0f;
+  import_completed_ = false;
+  import_report_ = {};
+
+  if (!asset_loader_) {
+    import_status_.message = "AssetLoader unavailable";
+    return false;
+  }
+
+  if (settings.source_path.empty()) {
+    import_status_.message = "No source path provided";
+    return false;
+  }
+
+  if (settings.cooked_root.empty()) {
+    import_status_.message = "No cooked root provided";
+    return false;
+  }
+
+  if (settings.kind == ImportKind::kSkyboxEquirect
+    && (settings.cube_face_size % 256) != 0) {
+    import_status_.message = "Cube face size must be a multiple of 256";
+    return false;
+  }
+
+  const auto output_format = FormatFromIndex(settings.output_format_idx);
+  const bool is_hdr_source = IsHdrPath(settings.source_path);
+
+  ImportOptions options {};
+  options.import_content = ImportContentFlags::kTextures;
+
+  auto& tuning = options.texture_tuning;
+  tuning.enabled = true;
+  tuning.mip_policy
+    = settings.generate_mips ? MipPolicy::kFullChain : MipPolicy::kNone;
+  tuning.mip_filter = MipFilter::kKaiser;
+  tuning.color_output_format = output_format;
+  tuning.data_output_format = output_format;
+  tuning.bc7_quality
+    = IsBc7Format(output_format) ? Bc7Quality::kDefault : Bc7Quality::kNone;
+  tuning.flip_y_on_decode = settings.flip_y;
+  tuning.force_rgba_on_decode = settings.force_rgba;
+
+  if (settings.kind == ImportKind::kTexture2D) {
+    tuning.intent = TextureIntent::kAlbedo;
+    tuning.source_color_space
+      = IsSrgbFormat(output_format) ? ColorSpace::kSRGB : ColorSpace::kLinear;
+  } else {
+    tuning.intent
+      = is_hdr_source ? TextureIntent::kHdrEnvironment : TextureIntent::kData;
+    tuning.source_color_space
+      = is_hdr_source ? ColorSpace::kLinear : ColorSpace::kSRGB;
+    tuning.import_cubemap = true;
+    if (settings.kind == ImportKind::kSkyboxEquirect) {
+      tuning.equirect_to_cubemap = true;
+      tuning.cubemap_face_size = static_cast<uint32_t>(settings.cube_face_size);
+    }
+    if (settings.kind == ImportKind::kSkyboxLayout) {
+      tuning.cubemap_layout = CubeLayoutFromIndex(settings.layout_idx);
+    }
+  }
+
+  oxygen::content::import::ImportRequest request {};
+  request.source_path = settings.source_path;
+  request.cooked_root = std::filesystem::absolute(settings.cooked_root);
+  request.options = std::move(options);
+
+  import_status_.message = "Submitting import...";
+
+  const auto on_complete
+    = [this](oxygen::content::import::ImportJobId /*job_id*/,
+        const ImportReport& report) {
+        std::lock_guard lock(import_mutex_);
+        import_report_ = report;
+        import_completed_ = true;
+        import_status_.in_flight = false;
+        import_status_.overall_progress = 1.0f;
+        import_status_.message
+          = report.success ? "Import complete" : "Import failed";
+      };
+
+  const auto on_progress = [this](const ImportProgress& progress) {
+    std::lock_guard lock(import_mutex_);
+    import_status_.in_flight = true;
+    import_status_.overall_progress = progress.overall_progress;
+    if (!progress.message.empty()) {
+      import_status_.message = progress.message;
+    }
+  };
+
+  import_status_.in_flight = true;
+  const auto job_id = import_service_.SubmitImport(
+    std::move(request), on_complete, on_progress);
+  if (job_id == oxygen::content::import::kInvalidJobId) {
+    import_status_.in_flight = false;
+    import_status_.message = "Import rejected (service unavailable)";
+    return false;
+  }
+
+  return true;
+}
+
+auto TextureLoadingService::ConsumeImportReport(ImportReport& report) -> bool
+{
+  std::lock_guard lock(import_mutex_);
+  if (!import_completed_) {
+    return false;
+  }
+
+  report = import_report_;
+  import_completed_ = false;
+  return true;
+}
+
+auto TextureLoadingService::GetImportStatus() const -> ImportStatus
+{
+  std::lock_guard lock(import_mutex_);
+  return import_status_;
+}
+
+auto TextureLoadingService::RefreshCookedTextureEntries(
+  const std::filesystem::path& cooked_root, std::string* error_message) -> bool
+{
+  try {
+    LOG_F(
+      INFO, "TextureLoadingService: refresh root='{}'", cooked_root.string());
+    if (cooked_root.empty()) {
+      throw std::runtime_error("Cooked root is empty");
+    }
+
+    std::error_code ec;
+    auto normalized_root = std::filesystem::absolute(cooked_root, ec);
+    if (ec) {
+      throw std::runtime_error("Failed to resolve cooked root path");
+    }
+    normalized_root = normalized_root.lexically_normal();
+
+    LooseCookedInspection inspection;
+    inspection.LoadFromRoot(normalized_root);
+
+    const auto table_rel
+      = FindFileRelPath(inspection, FileKind::kTexturesTable);
+    const auto data_rel = FindFileRelPath(inspection, FileKind::kTexturesData);
+    if (!table_rel.has_value() || !data_rel.has_value()) {
+      throw std::runtime_error("textures.table or textures.data missing");
+    }
+
+    textures_table_path_ = normalized_root / *table_rel;
+    textures_data_path_ = normalized_root / *data_rel;
+    cooked_root_ = normalized_root;
+
+    texture_table_ = LoadPackedTable<TextureResourceDesc>(textures_table_path_);
+    cooked_entries_.clear();
+    cooked_entries_.reserve(texture_table_.size());
+
+    for (std::uint32_t i = 0; i < texture_table_.size(); ++i) {
+      const auto& desc = texture_table_[i];
+      cooked_entries_.push_back(CookedTextureEntry {
+        .index = i,
+        .width = desc.width,
+        .height = desc.height,
+        .mip_levels = desc.mip_levels,
+        .array_layers = desc.array_layers,
+        .size_bytes = desc.size_bytes,
+        .content_hash = desc.content_hash,
+        .format = static_cast<Format>(desc.format),
+        .texture_type = static_cast<TextureType>(desc.texture_type),
+      });
+    }
+    LOG_F(INFO, "TextureLoadingService: refresh complete entries={} table='{}'",
+      cooked_entries_.size(), textures_table_path_.string());
+  } catch (const std::exception& e) {
+    if (error_message != nullptr) {
+      *error_message = e.what();
+    }
+    LOG_F(ERROR, "TextureLoadingService: refresh failed root='{}' error='{}'",
+      cooked_root.string(), e.what());
+    return false;
+  }
+
+  if (error_message != nullptr) {
+    error_message->clear();
+  }
+  return true;
+}
+
+auto TextureLoadingService::GetCookedTextureEntries() const
+  -> std::span<const CookedTextureEntry>
+{
+  return cooked_entries_;
+}
+
+auto TextureLoadingService::LoadCookedTextureAsync(
+  const std::uint32_t entry_index) -> co::Co<LoadResult>
 {
   LoadResult result;
-
-  const std::filesystem::path img_path { file_path };
-  if (img_path.empty()) {
-    result.status_message = "No image path provided";
-    co_return result;
-  }
 
   if (!asset_loader_) {
     result.status_message = "AssetLoader unavailable";
     co_return result;
   }
 
-  using namespace oxygen::content::import;
-
-  // Start with kAlbedo preset (sRGB, Kaiser mips, sensible defaults)
-  auto desc = MakeDescFromPreset(TexturePreset::kAlbedo);
-  desc.source_id = img_path.string();
-
-  // Override output format based on user selection
-  const char* format_name = "RGBA8";
-  switch (options.output_format_idx) {
-  case 0: // RGBA8 (uncompressed for fast iteration)
-    desc.output_format = oxygen::Format::kRGBA8UNormSRGB;
-    desc.bc7_quality = Bc7Quality::kNone;
-    format_name = "RGBA8";
-    break;
-  case 1: // BC7 (production quality)
-    desc.output_format = oxygen::Format::kBC7UNormSRGB;
-    desc.bc7_quality = Bc7Quality::kDefault;
-    format_name = "BC7";
-    break;
-  case 2: // RGBA16F (HDR)
-    desc.output_format = oxygen::Format::kRGBA16Float;
-    desc.bc7_quality = Bc7Quality::kNone;
-    format_name = "RGBA16F";
-    break;
-  case 3: // RGBA32F (full HDR precision)
-    desc.output_format = oxygen::Format::kRGBA32Float;
-    desc.bc7_quality = Bc7Quality::kNone;
-    format_name = "RGBA32F";
-    break;
-  default:
-    break;
-  }
-
-  // Override mip policy based on user selection
-  desc.mip_policy
-    = options.generate_mips ? MipPolicy::kFullChain : MipPolicy::kNone;
-
-  // Configure HDR handling
-  desc.hdr_handling = options.tonemap_hdr_to_ldr ? HdrHandling::kTonemapAuto
-                                                 : HdrHandling::kError;
-  desc.bake_hdr_to_ldr = options.tonemap_hdr_to_ldr;
-  desc.exposure_ev = options.hdr_exposure_ev;
-
-  auto cooked = ImportTexture(img_path, desc, D3D12PackingPolicy::Instance());
-
-  if (!cooked.has_value()) {
-    if (cooked.error() == TextureImportError::kHdrRequiresFloatFormat
-      && !options.tonemap_hdr_to_ldr) {
-      result.status_message
-        = "HDR image requires 'Tonemap HDR to LDR' enabled for RGBA8 output";
-    } else {
-      result.status_message = to_string(cooked.error());
-    }
+  if (entry_index >= texture_table_.size()) {
+    result.status_message = "Texture index out of range";
     co_return result;
   }
 
-  // Mint a fresh key for this texture
-  result.resource_key = asset_loader_->MintSyntheticTextureKey();
+  if (textures_data_path_.empty()) {
+    result.status_message = "textures.data is not available";
+    co_return result;
+  }
 
-  // Access the cooked payload from the import result
-  const auto& payload = cooked->payload;
+  auto desc = texture_table_[entry_index];
+  std::ifstream data_stream(textures_data_path_, std::ios::binary);
+  if (!data_stream) {
+    result.status_message = "Failed to open textures.data";
+    co_return result;
+  }
 
-  // Build the packed buffer with descriptor + payload
-  using oxygen::data::pak::TextureResourceDesc;
-  TextureResourceDesc pak_desc {};
-  pak_desc.data_offset
+  data_stream.seekg(
+    static_cast<std::streamoff>(desc.data_offset), std::ios::beg);
+  if (!data_stream) {
+    result.status_message = "Failed to seek textures.data";
+    co_return result;
+  }
+
+  std::vector<std::uint8_t> payload(desc.size_bytes);
+  data_stream.read(reinterpret_cast<char*>(payload.data()),
+    static_cast<std::streamsize>(payload.size()));
+  if (!data_stream) {
+    result.status_message = "Failed to read texture payload";
+    co_return result;
+  }
+
+  desc.data_offset
     = static_cast<oxygen::data::pak::OffsetT>(sizeof(TextureResourceDesc));
-  pak_desc.size_bytes
-    = static_cast<oxygen::data::pak::DataBlobSizeT>(payload.payload.size());
-  pak_desc.texture_type = static_cast<std::uint8_t>(payload.desc.texture_type);
-  pak_desc.compression_type = 0;
-  pak_desc.width = payload.desc.width;
-  pak_desc.height = payload.desc.height;
-  pak_desc.depth = payload.desc.depth;
-  pak_desc.array_layers = payload.desc.array_layers;
-  pak_desc.mip_levels = payload.desc.mip_levels;
-  pak_desc.format = static_cast<std::uint8_t>(payload.desc.format);
-  pak_desc.alignment = 256U;
 
   std::vector<std::uint8_t> packed;
-  packed.resize(sizeof(TextureResourceDesc) + payload.payload.size());
-  std::memcpy(packed.data(), &pak_desc, sizeof(TextureResourceDesc));
-  std::memcpy(packed.data() + sizeof(TextureResourceDesc),
-    payload.payload.data(), payload.payload.size());
+  packed.resize(sizeof(TextureResourceDesc) + payload.size());
+  std::memcpy(packed.data(), &desc, sizeof(TextureResourceDesc));
+  std::memcpy(packed.data() + sizeof(TextureResourceDesc), payload.data(),
+    payload.size());
+
+  result.resource_key = asset_loader_->MintSyntheticTextureKey();
 
   auto tex
     = co_await asset_loader_->LoadResourceAsync<oxygen::data::TextureResource>(
@@ -133,39 +407,17 @@ auto TextureLoadingService::LoadTextureAsync(const std::string& file_path,
       });
 
   if (!tex) {
-    result.status_message = "Upload failed";
+    result.status_message = "Texture upload failed";
     co_return result;
   }
 
   result.success = true;
-  result.width = static_cast<int>(tex->GetWidth());
-  result.height = static_cast<int>(tex->GetHeight());
-
-  // Build informative status message
-  std::string status = "Loaded";
-  // Check if HDR processing was applied
-  const bool is_hdr_output = (desc.output_format == oxygen::Format::kRGBA16Float
-    || desc.output_format == oxygen::Format::kRGBA32Float);
-  if (options.tonemap_hdr_to_ldr) {
-    status += " (HDR→LDR)";
-  } else if (is_hdr_output) {
-    status += " (HDR)";
-  }
-  status += " [";
-  status += format_name;
-  status += "]";
-  result.status_message = status;
+  result.width = static_cast<int>(desc.width);
+  result.height = static_cast<int>(desc.height);
+  result.texture_type = static_cast<TextureType>(desc.texture_type);
+  result.status_message = "Loaded cooked texture";
 
   co_return result;
-}
-
-auto TextureLoadingService::MintTextureKey() const
-  -> oxygen::content::ResourceKey
-{
-  if (!asset_loader_) {
-    return oxygen::content::ResourceKey { 0U };
-  }
-  return asset_loader_->MintSyntheticTextureKey();
 }
 
 } // namespace oxygen::examples::textured_cube

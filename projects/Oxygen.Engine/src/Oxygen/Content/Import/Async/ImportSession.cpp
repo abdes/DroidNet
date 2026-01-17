@@ -255,6 +255,18 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     }
   }
 
+  if (table_registry_) {
+    const auto ok = co_await table_registry_->FinalizeAll();
+    if (!ok) {
+      AddDiagnostic({
+        .severity = ImportSeverity::kError,
+        .code = "import.resource_table_finalize_failed",
+        .message = "Resource table finalization failed",
+        .source_path = request_.source_path.string(),
+      });
+    }
+  }
+
   // Wait for any pending async writes
   auto flush_result = co_await file_writer_->Flush();
   if (!flush_result.has_value()) {

@@ -211,6 +211,12 @@ auto SkyboxManager::LoadSkyboxAsync(const std::string& file_path,
   co_return result;
 }
 
+auto SkyboxManager::SetSkyboxResourceKey(oxygen::content::ResourceKey key)
+  -> void
+{
+  current_resource_key_ = key;
+}
+
 auto SkyboxManager::ApplyToScene(const SkyLightParams& params) -> void
 {
   if (!scene_ || current_resource_key_ == oxygen::content::ResourceKey { 0U }) {

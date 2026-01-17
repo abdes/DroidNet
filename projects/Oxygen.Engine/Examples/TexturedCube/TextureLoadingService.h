@@ -7,15 +7,21 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
+#include <mutex>
 #include <span>
 #include <string>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/Import/Async/AsyncImportService.h>
+#include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::data {
@@ -24,52 +30,76 @@ class TextureResource;
 
 namespace oxygen::examples::textured_cube {
 
-//! Service for loading and managing runtime textures.
+//! Service for importing and browsing cooked textures.
 /*!
- This class handles texture loading from disk, cooking through the import
- pipeline, and uploading to the GPU via the AssetLoader.
+ This class submits async import jobs that write to a loose cooked root,
+ refreshes the textures table, and uploads cooked textures on demand.
 
  ### Features
 
- - Loads images from common formats (PNG, JPEG, HDR, EXR)
- - Configurable output format (RGBA8, BC7, RGBA16F, RGBA32F)
- - Optional mipmap generation
- - HDR to LDR tone mapping support
+ - Submits async import jobs via AsyncImportService
+ - Refreshes cooked texture tables from a loose cooked root
+ - Loads cooked textures by table index
 
  ### Usage
 
  ```cpp
  TextureLoadingService loader(asset_loader);
- auto result = co_await loader.LoadTextureAsync(path, options);
- if (result.success) {
-   // Use result.resource_key
- }
+ loader.SubmitImport(settings);
+ loader.RefreshCookedTextureEntries(cooked_root, nullptr);
+ auto result = co_await loader.LoadCookedTextureAsync(entry_index);
  ```
 */
 class TextureLoadingService final {
 public:
-  //! Options for texture loading.
-  struct LoadOptions {
-    //! Output format index: 0=RGBA8, 1=BC7, 2=RGBA16F, 3=RGBA32F.
-    int output_format_idx { 0 };
-
-    //! Generate mipmaps.
-    bool generate_mips { true };
-
-    //! Tonemap HDR content to LDR.
-    bool tonemap_hdr_to_ldr { false };
-
-    //! Exposure adjustment for HDR (in EV).
-    float hdr_exposure_ev { 0.0f };
+  //! Import type for the async texture job.
+  enum class ImportKind : std::uint8_t {
+    kTexture2D = 0,
+    kSkyboxEquirect = 1,
+    kSkyboxLayout = 2,
   };
 
-  //! Result of a texture load operation.
+  //! Options for submitting an async texture import job.
+  struct ImportSettings {
+    std::filesystem::path source_path {};
+    std::filesystem::path cooked_root {};
+    ImportKind kind { ImportKind::kTexture2D };
+    int output_format_idx { 0 };
+    bool generate_mips { true };
+    bool flip_y { false };
+    bool force_rgba { true };
+    int cube_face_size { 512 };
+    int layout_idx { 0 };
+  };
+
+  //! Status snapshot for an in-flight import.
+  struct ImportStatus {
+    bool in_flight { false };
+    float overall_progress { 0.0f };
+    std::string message {};
+  };
+
+  //! One entry from textures.table for display and selection.
+  struct CookedTextureEntry {
+    std::uint32_t index { 0U };
+    std::uint32_t width { 0U };
+    std::uint32_t height { 0U };
+    std::uint32_t mip_levels { 0U };
+    std::uint32_t array_layers { 0U };
+    std::uint64_t size_bytes { 0U };
+    std::uint64_t content_hash { 0U };
+    oxygen::Format format { oxygen::Format::kUnknown };
+    oxygen::TextureType texture_type { oxygen::TextureType::kTexture2D };
+  };
+
+  //! Result of loading a cooked texture.
   struct LoadResult {
     bool success { false };
     oxygen::content::ResourceKey resource_key { 0U };
     std::string status_message {};
     int width { 0 };
     int height { 0 };
+    oxygen::TextureType texture_type { oxygen::TextureType::kTexture2D };
   };
 
   explicit TextureLoadingService(
@@ -83,15 +113,41 @@ public:
   TextureLoadingService(TextureLoadingService&&) = delete;
   auto operator=(TextureLoadingService&&) -> TextureLoadingService& = delete;
 
-  //! Load a texture from file asynchronously.
-  auto LoadTextureAsync(const std::string& file_path,
-    const LoadOptions& options) -> co::Co<LoadResult>;
+  //! Submit a texture import job that writes to a cooked root.
+  auto SubmitImport(const ImportSettings& settings) -> bool;
 
-  //! Get a fresh synthetic texture key.
-  [[nodiscard]] auto MintTextureKey() const -> oxygen::content::ResourceKey;
+  //! Consume a completed import report (if available).
+  auto ConsumeImportReport(oxygen::content::import::ImportReport& report)
+    -> bool;
+
+  //! Get the current import status snapshot.
+  [[nodiscard]] auto GetImportStatus() const -> ImportStatus;
+
+  //! Refresh the cooked texture table from a cooked root.
+  auto RefreshCookedTextureEntries(const std::filesystem::path& cooked_root,
+    std::string* error_message) -> bool;
+
+  //! Get the current cooked texture entries.
+  [[nodiscard]] auto GetCookedTextureEntries() const
+    -> std::span<const CookedTextureEntry>;
+
+  //! Load a cooked texture by table index asynchronously.
+  auto LoadCookedTextureAsync(std::uint32_t entry_index) -> co::Co<LoadResult>;
 
 private:
   oxygen::observer_ptr<oxygen::content::AssetLoader> asset_loader_;
+  oxygen::content::import::AsyncImportService import_service_ {};
+
+  mutable std::mutex import_mutex_ {};
+  ImportStatus import_status_ {};
+  bool import_completed_ { false };
+  oxygen::content::import::ImportReport import_report_ {};
+
+  std::filesystem::path cooked_root_ {};
+  std::filesystem::path textures_table_path_ {};
+  std::filesystem::path textures_data_path_ {};
+  std::vector<oxygen::data::pak::TextureResourceDesc> texture_table_ {};
+  std::vector<CookedTextureEntry> cooked_entries_ {};
 };
 
 } // namespace oxygen::examples::textured_cube

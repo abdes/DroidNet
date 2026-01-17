@@ -82,10 +82,12 @@ public:
   //! Ensure the cube node exists in the scene.
   auto EnsureCubeNode() -> scene::SceneNode;
 
-  //! Rebuild the cube geometry with new material/UV settings.
-  auto RebuildCube(TextureIndexMode texture_mode,
-    std::uint32_t custom_resource_index,
-    oxygen::content::ResourceKey custom_texture_key,
+  //! Rebuild the cube and sphere geometry with new material/UV settings.
+  auto RebuildCube(TextureIndexMode sphere_texture_mode,
+    std::uint32_t sphere_resource_index,
+    oxygen::content::ResourceKey sphere_texture_key,
+    TextureIndexMode cube_texture_mode, std::uint32_t cube_resource_index,
+    oxygen::content::ResourceKey cube_texture_key,
     oxygen::content::ResourceKey forced_error_key, glm::vec2 uv_scale,
     glm::vec2 uv_offset, float metalness, float roughness,
     glm::vec4 base_color_rgba, bool disable_texture_sampling)
@@ -106,6 +108,13 @@ public:
     -> std::shared_ptr<const oxygen::data::MaterialAsset>
   {
     return cube_material_;
+  }
+
+  //! Get the current sphere material.
+  [[nodiscard]] auto GetSphereMaterial() const
+    -> std::shared_ptr<const oxygen::data::MaterialAsset>
+  {
+    return sphere_material_;
   }
 
   //! Get the cube node.
@@ -134,6 +143,7 @@ private:
   scene::SceneNode sun_node_;
   scene::SceneNode fill_light_node_;
 
+  std::shared_ptr<const oxygen::data::MaterialAsset> sphere_material_;
   std::shared_ptr<const oxygen::data::MaterialAsset> cube_material_;
   std::shared_ptr<oxygen::data::GeometryAsset> cube_geometry_;
   std::shared_ptr<oxygen::data::GeometryAsset> comparison_cube_geometry_;

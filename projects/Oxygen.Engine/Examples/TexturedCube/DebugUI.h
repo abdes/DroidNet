@@ -9,15 +9,17 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include <glm/glm.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 
 #include "CameraController.h"
 #include "SceneSetup.h"
-#include "SkyboxManager.h"
 
 // Forward declarations
 struct ImGuiContext;
@@ -69,17 +71,56 @@ public:
     kTopLeft = 1,
   };
 
-  //! State for texture loading UI.
-  struct TextureState {
-    std::array<char, 512> path {};
-    bool load_requested { false };
-    std::string status_message {};
-    int last_width { 0 };
-    int last_height { 0 };
+  //! State for the cooked texture import UI.
+  struct ImportState {
+    std::array<char, 512> cooked_root {};
+    std::array<char, 512> source_path {};
+    int import_kind { 0 };
     int output_format_idx { 0 };
     bool generate_mips { true };
-    bool tonemap_hdr_to_ldr { false };
-    float hdr_exposure_ev { 0.0f };
+    bool flip_y { false };
+    bool force_rgba { true };
+    int cube_face_size { 512 };
+    int layout_idx { 0 };
+    bool import_requested { false };
+    bool refresh_requested { false };
+    bool import_in_flight { false };
+    float import_progress { 0.0f };
+    std::string status_message {};
+  };
+
+  //! State for per-object texture selection.
+  struct TextureSlotState {
+    SceneSetup::TextureIndexMode mode {
+      SceneSetup::TextureIndexMode::kFallback
+    };
+    std::uint32_t resource_index { 0U };
+  };
+
+  //! One cooked texture entry for the browser list.
+  struct CookedTextureEntry {
+    std::uint32_t index { 0U };
+    std::uint32_t width { 0U };
+    std::uint32_t height { 0U };
+    std::uint32_t mip_levels { 0U };
+    std::uint32_t array_layers { 0U };
+    std::uint64_t size_bytes { 0U };
+    std::uint64_t content_hash { 0U };
+    oxygen::Format format { oxygen::Format::kUnknown };
+    oxygen::TextureType texture_type { oxygen::TextureType::kTexture2D };
+  };
+
+  //! Action emitted by the cooked texture browser.
+  struct BrowserAction {
+    enum class Type : std::uint8_t {
+      kNone = 0,
+      kSetSphere = 1,
+      kSetCube = 2,
+      kSetSkybox = 3,
+    };
+
+    Type type { Type::kNone };
+    std::uint32_t entry_index { 0U };
   };
 
   //! State for the demo surface material.
@@ -92,22 +133,6 @@ public:
     // base color. This is useful to isolate PBR+IBL behavior.
     bool use_constant_base_color { false };
     glm::vec3 constant_base_color_rgb { 0.82f, 0.82f, 0.82f };
-  };
-
-  //! State for skybox UI.
-  struct SkyboxState {
-    std::array<char, 512> path {};
-    bool load_requested { false };
-    std::string status_message {};
-    int last_face_size { 0 };
-    int layout_idx { 0 };
-    int output_format_idx { 0 };
-    int cube_face_size { 512 };
-    bool flip_y { false };
-
-    // HDR handling: only applies to HDR sources (.hdr/.exr).
-    bool tonemap_hdr_to_ldr { false };
-    float hdr_exposure_ev { 0.0f };
   };
 
   //! State for UV transformation UI.
@@ -142,42 +167,68 @@ public:
 
   //! Draw the debug overlay.
   auto Draw(engine::FrameContext& context, const CameraController& camera,
-    SceneSetup::TextureIndexMode& texture_mode,
-    std::uint32_t& custom_texture_resource_index,
     oxygen::observer_ptr<oxygen::engine::Renderer> renderer,
     oxygen::engine::ShaderPassConfig* shader_pass_config,
+    const std::shared_ptr<const oxygen::data::MaterialAsset>& sphere_material,
     const std::shared_ptr<const oxygen::data::MaterialAsset>& cube_material,
     bool& cube_needs_rebuild) -> void;
 
-  //! Check if texture load was requested.
-  [[nodiscard]] auto IsTextureLoadRequested() const -> bool
+  //! Check if an import was requested.
+  [[nodiscard]] auto IsImportRequested() const -> bool
   {
-    return texture_state_.load_requested;
+    return import_state_.import_requested;
   }
 
-  //! Clear texture load request flag.
-  auto ClearTextureLoadRequest() -> void
+  //! Clear import request flag.
+  auto ClearImportRequest() -> void { import_state_.import_requested = false; }
+
+  //! Check if a cooked-root refresh was requested.
+  [[nodiscard]] auto IsRefreshRequested() const -> bool
   {
-    texture_state_.load_requested = false;
+    return import_state_.refresh_requested;
   }
 
-  //! Check if skybox load was requested.
-  [[nodiscard]] auto IsSkyboxLoadRequested() const -> bool
+  //! Clear refresh request flag.
+  auto ClearRefreshRequest() -> void
   {
-    return skybox_state_.load_requested;
+    import_state_.refresh_requested = false;
   }
 
-  //! Clear skybox load request flag.
-  auto ClearSkyboxLoadRequest() -> void
+  //! Get import UI state.
+  auto GetImportState() -> ImportState& { return import_state_; }
+
+  //! Set import status message and progress.
+  auto SetImportStatus(const std::string& message, const bool in_flight,
+    const float progress) -> void
   {
-    skybox_state_.load_requested = false;
+    import_state_.status_message = message;
+    import_state_.import_in_flight = in_flight;
+    import_state_.import_progress = progress;
   }
 
-  //! Get texture state for reading/writing.
-  auto GetTextureState() -> TextureState& { return texture_state_; }
+  //! Set the cooked texture entries for browsing.
+  auto SetCookedTextureEntries(std::vector<CookedTextureEntry> entries) -> void
+  {
+    cooked_entries_ = std::move(entries);
+  }
 
-  //! Get skybox state for reading/writing.
-  auto GetSkyboxState() -> SkyboxState& { return skybox_state_; }
+  //! Consume the next browser action, if any.
+  auto ConsumeBrowserAction(BrowserAction& action) -> bool
+  {
+    if (browser_action_.type == BrowserAction::Type::kNone) {
+      return false;
+    }
+    action = browser_action_;
+    browser_action_.type = BrowserAction::Type::kNone;
+    browser_action_.entry_index = 0U;
+    return true;
+  }
+
+  //! Get the sphere texture state.
+  auto GetSphereTextureState() -> TextureSlotState& { return sphere_texture_; }
+
+  //! Get the cube texture state.
+  auto GetCubeTextureState() -> TextureSlotState& { return cube_texture_; }
 
   //! Get UV state for reading/writing.
   auto GetUvState() -> UvState& { return uv_state_; }
@@ -193,19 +244,25 @@ public:
     -> std::pair<glm::vec2, glm::vec2>;
 
 private:
-  auto DrawMaterialsTab(SceneSetup::TextureIndexMode& texture_mode,
-    std::uint32_t& custom_texture_resource_index,
-    oxygen::observer_ptr<oxygen::engine::Renderer> renderer,
+  auto DrawMaterialsTab(oxygen::observer_ptr<oxygen::engine::Renderer> renderer,
+    const std::shared_ptr<const oxygen::data::MaterialAsset>& sphere_material,
     const std::shared_ptr<const oxygen::data::MaterialAsset>& cube_material,
     bool& cube_needs_rebuild) -> void;
+
+  auto DrawImportWindow() -> void;
+
+  auto DrawCookedBrowserWindow() -> void;
 
   auto DrawLightingTab(oxygen::observer_ptr<scene::Scene> scene,
     oxygen::observer_ptr<oxygen::engine::Renderer> renderer,
     oxygen::engine::ShaderPassConfig* shader_pass_config) -> void;
 
-  TextureState texture_state_;
+  ImportState import_state_;
+  TextureSlotState sphere_texture_ {};
+  TextureSlotState cube_texture_ {};
+  std::vector<CookedTextureEntry> cooked_entries_ {};
+  BrowserAction browser_action_ {};
   SurfaceState surface_state_;
-  SkyboxState skybox_state_;
   UvState uv_state_;
   LightingState lighting_state_;
 };
