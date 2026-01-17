@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -16,6 +17,36 @@
 #include <Oxygen/Data/MaterialAsset.h>
 
 namespace oxygen::engine::sceneprep::testing {
+
+[[nodiscard]] inline auto MakeStandardMeshDesc(const glm::vec3 bounds_min,
+  const glm::vec3 bounds_max) -> oxygen::data::pak::MeshDesc
+{
+  using oxygen::data::MeshType;
+  oxygen::data::pak::MeshDesc desc {};
+  desc.mesh_type
+    = static_cast<std::underlying_type_t<MeshType>>(MeshType::kStandard);
+  desc.info.standard.bounding_box_min[0] = bounds_min.x;
+  desc.info.standard.bounding_box_min[1] = bounds_min.y;
+  desc.info.standard.bounding_box_min[2] = bounds_min.z;
+  desc.info.standard.bounding_box_max[0] = bounds_max.x;
+  desc.info.standard.bounding_box_max[1] = bounds_max.y;
+  desc.info.standard.bounding_box_max[2] = bounds_max.z;
+  return desc;
+}
+
+[[nodiscard]] inline auto MakeSubMeshDesc(const glm::vec3 bounds_min,
+  const glm::vec3 bounds_max,
+  const uint32_t mesh_view_count = 1U) -> oxygen::data::pak::SubMeshDesc
+{
+  oxygen::data::pak::SubMeshDesc desc {
+    .name = {},
+    .material_asset_key = {},
+    .mesh_view_count = mesh_view_count,
+    .bounding_box_min = { bounds_min.x, bounds_min.y, bounds_min.z },
+    .bounding_box_max = { bounds_max.x, bounds_max.y, bounds_max.z },
+  };
+  return desc;
+}
 
 //! Create a simple triangle mesh for tests.
 inline auto MakeSimpleMesh(const uint32_t lod, const std::string_view name = {})
@@ -29,8 +60,15 @@ inline auto MakeSimpleMesh(const uint32_t lod, const std::string_view name = {})
   std::vector<uint32_t> idx = { 0, 1, 2 };
   const auto mat = MaterialAsset::CreateDefault();
   auto builder = MeshBuilder(lod, name);
-  builder.WithVertices(vertices).WithIndices(idx);
+  const auto mesh_desc
+    = MakeStandardMeshDesc(glm::vec3(-1.0f, 0.0f, 0.0f),
+      glm::vec3(1.0f, 1.0f, 0.0f));
+  const auto submesh_desc
+    = MakeSubMeshDesc(glm::vec3(-1.0f, 0.0f, 0.0f),
+      glm::vec3(1.0f, 1.0f, 0.0f));
+  builder.WithVertices(vertices).WithIndices(idx).WithDescriptor(mesh_desc);
   builder.BeginSubMesh("S0", mat)
+    .WithDescriptor(submesh_desc)
     .WithMeshView({ .first_index = 0u,
       .index_count = static_cast<pak::MeshViewDesc::BufferIndexT>(idx.size()),
       .first_vertex = 0u,
@@ -53,9 +91,16 @@ inline auto MakeMeshWithSubmeshes(const uint32_t lod,
   std::vector<uint32_t> idx = { 0, 1, 2, 2, 3, 0 };
   const auto mat = MaterialAsset::CreateDefault();
   MeshBuilder b(lod);
-  b.WithVertices(vertices).WithIndices(idx);
+  const auto mesh_desc
+    = MakeStandardMeshDesc(glm::vec3(-1.0f, -1.0f, 0.0f),
+      glm::vec3(1.0f, 1.0f, 0.0f));
+  const auto submesh_desc
+    = MakeSubMeshDesc(glm::vec3(-1.0f, -1.0f, 0.0f),
+      glm::vec3(1.0f, 1.0f, 0.0f));
+  b.WithVertices(vertices).WithIndices(idx).WithDescriptor(mesh_desc);
   for (std::size_t s = 0; s < submesh_count; ++s) {
     b.BeginSubMesh("SM", mat)
+      .WithDescriptor(submesh_desc)
       .WithMeshView({ .first_index = 0u,
         .index_count = static_cast<pak::MeshViewDesc::BufferIndexT>(idx.size()),
         .first_vertex = 0u,
@@ -67,7 +112,9 @@ inline auto MakeMeshWithSubmeshes(const uint32_t lod,
 }
 
 //! Create a mesh with submeshes placed at provided centers (spread test mesh).
-inline auto MakeSpreadMesh(uint32_t lod, const std::vector<glm::vec3>& centers)
+inline auto MakeSpreadMesh(uint32_t lod, const std::vector<glm::vec3>& centers,
+  const glm::vec3 mesh_bounds_min, const glm::vec3 mesh_bounds_max,
+  const std::vector<std::pair<glm::vec3, glm::vec3>>& submesh_bounds)
   -> std::shared_ptr<oxygen::data::Mesh>
 {
   using namespace oxygen::data;
@@ -77,6 +124,10 @@ inline auto MakeSpreadMesh(uint32_t lod, const std::vector<glm::vec3>& centers)
   idx.reserve(centers.size() * 6);
   auto mat = MaterialAsset::CreateDefault();
   MeshBuilder b(lod);
+  b.WithDescriptor(MakeStandardMeshDesc(mesh_bounds_min, mesh_bounds_max));
+
+  CHECK_F(submesh_bounds.size() == centers.size(),
+    "Submesh bounds count must match centers count");
 
   for (size_t s = 0; s < centers.size(); ++s) {
     const auto base_v = static_cast<uint32_t>(vertices.size());
@@ -100,6 +151,8 @@ inline auto MakeSpreadMesh(uint32_t lod, const std::vector<glm::vec3>& centers)
 
     b.WithVertices(vertices).WithIndices(idx);
     b.BeginSubMesh("SMs", mat)
+      .WithDescriptor(
+        MakeSubMeshDesc(submesh_bounds[s].first, submesh_bounds[s].second))
       .WithMeshView({ .first_index = base_i,
         .index_count = static_cast<pak::MeshViewDesc::BufferIndexT>(6),
         .first_vertex = base_v,

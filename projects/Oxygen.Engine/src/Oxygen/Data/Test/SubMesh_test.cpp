@@ -245,8 +245,8 @@ NOLINT_TEST_F(SubMeshBuilderFixture, DescriptorBoundsUsed)
   EXPECT_EQ(sm.BoundingBoxMax(), glm::vec3(1.0f, 2.0f, 3.0f));
 }
 
-//! (9) Computed bounds path: bounds enclose all vertices (no descriptor).
-NOLINT_TEST_F(SubMeshBuilderFixture, ComputedBoundsMatchVertices)
+//! (9) Submesh bounds come from descriptor (precomputed).
+NOLINT_TEST_F(SubMeshBuilderFixture, DescriptorBoundsMatchExpected)
 {
   // Arrange
   std::vector<Vertex> vertices = {
@@ -277,12 +277,20 @@ NOLINT_TEST_F(SubMeshBuilderFixture, ComputedBoundsMatchVertices)
   };
   std::vector<std::uint32_t> indices { 0, 1, 2 };
   auto material = MakeMaterial();
+  oxygen::data::pak::SubMeshDesc desc {
+    .name = {},
+    .material_asset_key = {},
+    .mesh_view_count = 1,
+    .bounding_box_min = { -1.0f, -4.0f, -2.0f },
+    .bounding_box_max = { 3.0f, 2.0f, 5.0f },
+  };
 
   // Act
   auto mesh = MeshBuilder(0, "comp_bounds")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("sm", material)
+                .WithDescriptor(desc)
                 .WithMeshView({ .first_index = 0,
                   .index_count = 3,
                   .first_vertex = 0,
@@ -292,16 +300,8 @@ NOLINT_TEST_F(SubMeshBuilderFixture, ComputedBoundsMatchVertices)
 
   // Assert
   const auto& sm = mesh->SubMeshes()[0];
-  const auto min = sm.BoundingBoxMin();
-  const auto max = sm.BoundingBoxMax();
-  for (const auto& v : vertices) {
-    EXPECT_LE(v.position.x, max.x);
-    EXPECT_GE(v.position.x, min.x);
-    EXPECT_LE(v.position.y, max.y);
-    EXPECT_GE(v.position.y, min.y);
-    EXPECT_LE(v.position.z, max.z);
-    EXPECT_GE(v.position.z, min.z);
-  }
+  EXPECT_EQ(sm.BoundingBoxMin(), glm::vec3(-1.0f, -4.0f, -2.0f));
+  EXPECT_EQ(sm.BoundingBoxMax(), glm::vec3(3.0f, 2.0f, 5.0f));
 }
 
 //! Tests EndSubMesh throws when no mesh views were added (1:N constraint).

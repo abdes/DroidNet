@@ -31,6 +31,24 @@ using oxygen::data::MeshBuilder;
 using oxygen::data::Vertex;
 
 namespace {
+[[nodiscard]] auto MakeStandardMeshDesc(const glm::vec3& bounds_min,
+  const glm::vec3& bounds_max) -> oxygen::data::pak::MeshDesc
+{
+  using oxygen::data::MeshType;
+  using oxygen::data::pak::MeshDesc;
+
+  MeshDesc desc {};
+  desc.mesh_type
+    = static_cast<std::underlying_type_t<MeshType>>(MeshType::kStandard);
+  desc.info.standard.bounding_box_min[0] = bounds_min.x;
+  desc.info.standard.bounding_box_min[1] = bounds_min.y;
+  desc.info.standard.bounding_box_min[2] = bounds_min.z;
+  desc.info.standard.bounding_box_max[0] = bounds_max.x;
+  desc.info.standard.bounding_box_max[1] = bounds_max.y;
+  desc.info.standard.bounding_box_max[2] = bounds_max.z;
+  return desc;
+}
+
 //! Verifies that Mesh::BoundingSphere encloses all vertices (owned storage).
 class MeshBoundingSphereOwnedTest : public testing::Test { };
 
@@ -64,11 +82,15 @@ NOLINT_TEST_F(MeshBoundingSphereOwnedTest, ComputedSphereContainsAllVertices)
       .color = {} },
   };
   std::vector<std::uint32_t> indices { 0, 1, 2, 2, 3, 0 };
+  const glm::vec3 bounds_min { -2.0f, -2.0f, -3.0f };
+  const glm::vec3 bounds_max { 3.0f, 4.0f, 2.0f };
+  const auto desc = MakeStandardMeshDesc(bounds_min, bounds_max);
 
   auto material = MaterialAsset::CreateDefault();
   MeshBuilder builder;
   builder.WithVertices(vertices)
     .WithIndices(indices)
+    .WithDescriptor(desc)
     .BeginSubMesh("owned", material)
     .WithMeshView({ .first_index = 0,
       .index_count = static_cast<uint32_t>(indices.size()),
@@ -125,6 +147,9 @@ NOLINT_TEST_F(
       .color = {} },
   };
   std::vector<std::uint32_t> indices { 0, 1, 2, 2, 3, 0 };
+  const glm::vec3 bounds_min { -2.0f, -2.0f, -3.0f };
+  const glm::vec3 bounds_max { 3.0f, 4.0f, 2.0f };
+  const auto desc = MakeStandardMeshDesc(bounds_min, bounds_max);
 
   // Build temporary owned mesh to obtain a vertex/index buffer snapshot
   MeshBuilder temp_builder;
@@ -172,6 +197,7 @@ NOLINT_TEST_F(
   auto material = MaterialAsset::CreateDefault();
   MeshBuilder builder;
   builder.WithBufferResources(vertex_buffer, index_buffer)
+    .WithDescriptor(desc)
     .BeginSubMesh("ref", material)
     .WithMeshView({ .first_index = 0,
       .index_count = static_cast<uint32_t>(indices.size()),

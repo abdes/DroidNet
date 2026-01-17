@@ -67,10 +67,25 @@ protected:
     const std::vector<std::uint32_t>& indices)
     -> std::shared_ptr<oxygen::data::Mesh>
   {
+    using oxygen::data::MeshType;
+
     auto material = MaterialAsset::CreateDefault();
+    const glm::vec3 bounds_min { 0.0f, 0.0f, 0.0f };
+    const glm::vec3 bounds_max { 1.0f, 1.0f, 0.0f };
+    oxygen::data::pak::MeshDesc desc {};
+    desc.mesh_type
+      = static_cast<std::underlying_type_t<MeshType>>(MeshType::kStandard);
+    desc.info.standard.bounding_box_min[0] = bounds_min.x;
+    desc.info.standard.bounding_box_min[1] = bounds_min.y;
+    desc.info.standard.bounding_box_min[2] = bounds_min.z;
+    desc.info.standard.bounding_box_max[0] = bounds_max.x;
+    desc.info.standard.bounding_box_max[1] = bounds_max.y;
+    desc.info.standard.bounding_box_max[2] = bounds_max.z;
+
     return oxygen::data::MeshBuilder(0, "triangle")
       .WithVertices(vertices)
       .WithIndices(indices)
+      .WithDescriptor(desc)
       .BeginSubMesh("main", material)
       .WithMeshView({
         .first_index = 0,
