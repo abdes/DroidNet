@@ -193,12 +193,10 @@ public:
         PrintUtils::Field("Material Key",
           oxygen::data::to_string(submesh_desc.material_asset_key), 12);
         PrintUtils::Field("MeshView Count", submesh_desc.mesh_view_count, 12);
-        if (ctx.verbose) {
-          PrintUtils::Field("AABB Min",
-            asset_dump_helpers::FormatVec3(submesh_desc.bounding_box_min), 12);
-          PrintUtils::Field("AABB Max",
-            asset_dump_helpers::FormatVec3(submesh_desc.bounding_box_max), 12);
-        }
+        PrintUtils::Field("AABB Min",
+          asset_dump_helpers::FormatVec3(submesh_desc.bounding_box_min), 12);
+        PrintUtils::Field("AABB Max",
+          asset_dump_helpers::FormatVec3(submesh_desc.bounding_box_max), 12);
 
         offset += sizeof(SubMeshDesc);
 
