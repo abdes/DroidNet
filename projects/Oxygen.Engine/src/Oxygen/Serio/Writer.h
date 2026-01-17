@@ -138,17 +138,23 @@ public:
    padding (0x0) bytes if necessary. If a scoped alignment is active, it
    overrides the requested alignment. No action is taken if already aligned.
 
-   @param alignment The alignment boundary in bytes (must be a power of two).
-   @return Result of the alignment operation; error if the stream cannot be
-           advanced or the position cannot be determined.
+   @param alignment The alignment boundary in bytes (power of two, 1 to 256).
+   @return Result of the alignment operation; error if the alignment is invalid
+           or the stream cannot be advanced or the position cannot be
+           determined.
 
    @see ScopedAlignment, Reader
   */
   [[nodiscard]] auto AlignTo(size_t alignment) noexcept -> Result<void> override
   {
+    size_t effective_alignment = alignment;
     if (const auto current = CurrentAlignment(); current != 0) {
       // override alignment with the top of the stack
-      alignment = current;
+      effective_alignment = current;
+    }
+    if (effective_alignment == 0 || !std::has_single_bit(effective_alignment)
+      || effective_alignment > kMaxAlignment) {
+      return ::oxygen::Err(std::errc::invalid_argument);
     }
 
     const auto current_pos = stream_.get().Position();
@@ -157,7 +163,8 @@ public:
     }
 
     const size_t padding
-      = (alignment - (current_pos.value() % alignment)) % alignment;
+      = (effective_alignment - (current_pos.value() % effective_alignment))
+      % effective_alignment;
     if (padding > 0) {
       std::array<std::byte, kMaxAlignment> zeros { std::byte { 0 } };
       return stream_.get().Write(zeros.data(), padding);

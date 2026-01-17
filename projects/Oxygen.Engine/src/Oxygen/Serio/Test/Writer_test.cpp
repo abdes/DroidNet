@@ -278,6 +278,30 @@ NOLINT_TEST_F(WriterErrorTest, WriteArray_Fails_OnStreamError)
   EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
 }
 
+
+//! AlignTo fails when using invalid alignment values.
+NOLINT_TEST_F(WriterErrorTest, AlignTo_Fails_OnInvalidAlignment)
+{
+  // Arrange
+  // (No setup needed)
+
+  // Act
+  const auto zero_result = GetWriter().AlignTo(0);
+  const auto non_power_result = GetWriter().AlignTo(3);
+  const auto too_large_result = GetWriter().AlignTo(512);
+
+  // Assert
+  EXPECT_FALSE(zero_result);
+  EXPECT_EQ(zero_result.error(),
+    std::make_error_code(std::errc::invalid_argument));
+  EXPECT_FALSE(non_power_result);
+  EXPECT_EQ(non_power_result.error(),
+    std::make_error_code(std::errc::invalid_argument));
+  EXPECT_FALSE(too_large_result);
+  EXPECT_EQ(too_large_result.error(),
+    std::make_error_code(std::errc::invalid_argument));
+}
+
 //=== AnyWriter API Tests ===-------------------------------------------------//
 
 template <typename T> class WriterIntegralTest : public WriterBasicTest { };
@@ -401,8 +425,9 @@ NOLINT_TEST_F(WriterAlignmentGuardTest, ScopedAlignment_InvalidAlignment_Throws)
   // Act & Assert
   EXPECT_THROW((void)GetWriter().ScopedAlignment(3), std::invalid_argument);
   EXPECT_NO_THROW((void)GetWriter().ScopedAlignment(0));
-  EXPECT_NO_THROW((void)GetWriter().ScopedAlignment(static_cast<uint8_t>(256)));
-  EXPECT_NO_THROW((void)GetWriter().ScopedAlignment(static_cast<uint8_t>(257)));
+  EXPECT_NO_THROW((void)GetWriter().ScopedAlignment(static_cast<uint16_t>(256)));
+  EXPECT_THROW((void)GetWriter().ScopedAlignment(static_cast<uint16_t>(257)),
+    std::invalid_argument);
 }
 
 //! Writes a value with auto type alignment (alignof(T)) and verifies correct

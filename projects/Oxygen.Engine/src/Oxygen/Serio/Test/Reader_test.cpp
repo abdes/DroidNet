@@ -386,6 +386,30 @@ NOLINT_TEST_F(ReaderErrorTest, ReadBlobTo_Fails_OnStreamError)
   EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
 }
 
+
+//! AlignTo fails when using invalid alignment values.
+NOLINT_TEST_F(ReaderErrorTest, AlignTo_Fails_OnInvalidAlignment)
+{
+  // Arrange
+  // (No setup needed)
+
+  // Act
+  const auto zero_result = GetReader().AlignTo(0);
+  const auto non_power_result = GetReader().AlignTo(3);
+  const auto too_large_result = GetReader().AlignTo(512);
+
+  // Assert
+  EXPECT_FALSE(zero_result);
+  EXPECT_EQ(zero_result.error(),
+    std::make_error_code(std::errc::invalid_argument));
+  EXPECT_FALSE(non_power_result);
+  EXPECT_EQ(non_power_result.error(),
+    std::make_error_code(std::errc::invalid_argument));
+  EXPECT_FALSE(too_large_result);
+  EXPECT_EQ(too_large_result.error(),
+    std::make_error_code(std::errc::invalid_argument));
+}
+
 //=== Scoped Alignment Guard Integration Tests ===----------------------------//
 
 //! Tests that Reader reads values correctly with explicit scoped alignment
@@ -541,9 +565,10 @@ NOLINT_TEST_F(ReaderAlignmentGuardTest, ScopedAlignment_InvalidAlignment_Throws)
   // Assert: 0 is valid (auto-alignment)
   EXPECT_NO_THROW((void)GetReader().ScopedAlignment(0));
   // Assert: 256 is valid (max alignment)
-  EXPECT_NO_THROW((void)GetReader().ScopedAlignment(static_cast<uint8_t>(256)));
-  // Assert: 257 as uint8_t wraps to 1, which is valid
-  EXPECT_NO_THROW((void)GetReader().ScopedAlignment(static_cast<uint8_t>(257)));
+  EXPECT_NO_THROW((void)GetReader().ScopedAlignment(static_cast<uint16_t>(256)));
+  // Assert: 257 is invalid (exceeds max)
+  EXPECT_THROW((void)GetReader().ScopedAlignment(static_cast<uint16_t>(257)),
+    std::invalid_argument);
 }
 
 //! Reads a value with auto type alignment (alignof(T)) and verifies correct
