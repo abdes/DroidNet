@@ -284,7 +284,16 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, Frustum_PartialVisible_SelectsSubset)
   using oxygen::data::Mesh;
   const std::vector<glm::vec3> centers
     = { { -100.f, 0.f, 0.f }, { 0.f, 0.f, 0.f }, { 100.f, 0.f, 0.f } };
-  const auto mesh = MakeSpreadMesh(0, centers);
+  const glm::vec3 mesh_bounds_min { -101.f, -1.f, 0.f };
+  const glm::vec3 mesh_bounds_max { 101.f, 1.f, 0.f };
+  const std::vector<std::pair<glm::vec3, glm::vec3>> submesh_bounds = {
+    { { -101.f, -1.f, 0.f }, { -99.f, 1.f, 0.f } },
+    { { -1.f, -1.f, 0.f }, { 1.f, 1.f, 0.f } },
+    { { 99.f, -1.f, 0.f }, { 101.f, 1.f, 0.f } },
+  };
+  const auto mesh
+    = MakeSpreadMesh(0, centers, mesh_bounds_min, mesh_bounds_max,
+      submesh_bounds);
   oxygen::data::pak::GeometryAssetDesc desc {};
   desc.lod_count = 1;
   const auto geom = std::make_shared<GeometryAsset>(
