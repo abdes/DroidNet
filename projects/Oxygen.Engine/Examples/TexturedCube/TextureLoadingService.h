@@ -66,6 +66,8 @@ public:
     ImportKind kind { ImportKind::kTexture2D };
     int output_format_idx { 0 };
     bool generate_mips { true };
+    int max_mip_levels { 0 };
+    int mip_filter_idx { 1 };
     bool flip_y { false };
     bool force_rgba { true };
     int cube_face_size { 512 };

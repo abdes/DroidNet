@@ -678,13 +678,13 @@ namespace detail {
     ScratchImage result;
     if (desc.intent == TextureIntent::kNormalTS) {
       result = image::content::GenerateNormalMapMips(
-        image, desc.renormalize_normals_in_mips);
+        image, desc.renormalize_normals_in_mips, target_mip_count);
     } else if (desc.texture_type == TextureType::kTexture3D) {
       result = image::mip::GenerateChain3D(
-        image, desc.mip_filter, desc.mip_filter_space);
+        image, desc.mip_filter, desc.mip_filter_space, target_mip_count);
     } else {
       result = image::mip::GenerateChain2D(
-        image, desc.mip_filter, desc.mip_filter_space);
+        image, desc.mip_filter, desc.mip_filter_space, target_mip_count);
     }
 
     if (!result.IsValid()) {
