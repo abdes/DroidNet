@@ -18,6 +18,7 @@
 #include <Oxygen/Content/Import/Async/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/Async/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Async/ImportSession.h>
+#include <Oxygen/Content/Import/Async/ResourceTableRegistry.h>
 #include <Oxygen/Content/Import/Async/WindowsFileWriter.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
@@ -37,6 +38,7 @@ protected:
     loop_ = std::make_unique<ImportEventLoop>();
     reader_ = CreateAsyncFileReader(*loop_);
     writer_ = std::make_unique<WindowsFileWriter>(*loop_);
+    table_registry_ = std::make_unique<ResourceTableRegistry>(*writer_);
     thread_pool_ = std::make_unique<co::ThreadPool>(*loop_, 1);
     test_dir_
       = std::filesystem::temp_directory_path() / "oxygen_import_session_test";
@@ -46,6 +48,7 @@ protected:
   auto TearDown() -> void override
   {
     thread_pool_.reset();
+    table_registry_.reset();
     writer_.reset();
     reader_.reset();
     loop_.reset();
@@ -65,6 +68,7 @@ protected:
   std::unique_ptr<ImportEventLoop> loop_;
   std::unique_ptr<IAsyncFileReader> reader_;
   std::unique_ptr<WindowsFileWriter> writer_;
+  std::unique_ptr<ResourceTableRegistry> table_registry_;
   std::unique_ptr<co::ThreadPool> thread_pool_;
   std::filesystem::path test_dir_;
 };
@@ -109,7 +113,8 @@ NOLINT_TEST_F(ImportSessionTest, Constructor_ValidRequest_Succeeds)
   ImportSession session(request,
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   // Assert
   EXPECT_EQ(session.Request().source_path, request.source_path);
@@ -128,7 +133,8 @@ NOLINT_TEST_F(ImportSessionTest, Constructor_NoExplicitCookedRoot_UsesSourceDir)
   ImportSession session(request,
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   // Assert
   EXPECT_EQ(session.CookedRoot(), test_dir_ / "models");
@@ -144,7 +150,8 @@ NOLINT_TEST_F(ImportSessionTest, CookedWriter_IsAccessible)
   ImportSession session(request,
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   // Assert - just verify we can access it without crash
   auto& writer = session.CookedWriter();
@@ -161,7 +168,8 @@ NOLINT_TEST_F(ImportSessionTest, Emitters_LazyAccess_ReturnsStableInstances)
   ImportSession session(request,
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   // Act
   auto* tex_1 = &session.TextureEmitter();
@@ -187,7 +195,8 @@ NOLINT_TEST_F(ImportSessionTest, AddDiagnostic_Single_AddsToList)
   ImportSession session(request,
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   // Act
   session.AddDiagnostic({
@@ -212,7 +221,8 @@ NOLINT_TEST_F(ImportSessionTest, AddDiagnostic_Multiple_AllAdded)
   ImportSession session(request,
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   // Act
   session.AddDiagnostic({
@@ -244,7 +254,8 @@ NOLINT_TEST_F(ImportSessionTest, HasErrors_NoErrors_ReturnsFalse)
   ImportSession session(request,
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
   session.AddDiagnostic({
     .severity = ImportSeverity::kWarning,
     .code = "test.warning",
@@ -263,7 +274,8 @@ NOLINT_TEST_F(ImportSessionTest, HasErrors_ErrorAdded_ReturnsTrue)
   ImportSession session(request,
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   // Act
   session.AddDiagnostic({
@@ -284,7 +296,8 @@ NOLINT_TEST_F(ImportSessionTest, AddDiagnostic_MultipleThreads_ThreadSafe)
   ImportSession session(request,
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
   constexpr int kThreadCount = 4;
   constexpr int kDiagnosticsPerThread = 100;
   std::latch start_latch(kThreadCount);
@@ -326,7 +339,8 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_NoErrors_ReturnsSuccess)
   ImportSession session(request,
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   // Add a warning (not an error)
   session.AddDiagnostic({
@@ -354,7 +368,8 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_HasErrors_ReturnsFailure)
   ImportSession session(request,
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   session.AddDiagnostic({
     .severity = ImportSeverity::kError,
@@ -380,7 +395,8 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_Success_WritesIndex)
   ImportSession session(request,
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   // Act
   co::Run(*loop_, [&]() -> Co<> {
@@ -402,7 +418,8 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_HasErrors_SkipsIndexWrite)
   ImportSession session(request,
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   session.AddDiagnostic({
     .severity = ImportSeverity::kError,
@@ -430,7 +447,8 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_PendingWrites_WaitsForCompletion)
   ImportSession session(request,
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   // Queue some async writes
   const std::string content = "test content";
@@ -461,7 +479,8 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_WithDiagnostics_IncludesInReport)
   ImportSession session(request,
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   session.AddDiagnostic({
     .severity = ImportSeverity::kInfo,
@@ -496,7 +515,8 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_WithEmitters_RegistersInIndex)
   ImportSession session(request,
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
-    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()));
+    oxygen::observer_ptr<co::ThreadPool>(thread_pool_.get()),
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
   const auto key = oxygen::data::AssetKey {
     .guid = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 },

@@ -119,7 +119,6 @@ public:
     : file_writer_(file_writer)
     , table_path_(cooked_root / Traits::TablePath(layout))
   {
-    EnsureTableFileExists();
     LoadExistingTable();
   }
 
@@ -143,6 +142,7 @@ public:
     }
 
     const uint32_t index = next_index_++;
+    EnsureTableFileExists();
     auto [descriptor, reservation] = builder();
     table_.push_back(descriptor);
     index_by_signature_.emplace(signature, index);

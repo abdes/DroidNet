@@ -17,6 +17,7 @@
 #include <Oxygen/Content/Import/Async/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/Async/IAsyncFileWriter.h>
 #include <Oxygen/Content/Import/Async/ImportEventLoop.h>
+#include <Oxygen/Content/Import/Async/ResourceTableRegistry.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>
@@ -162,6 +163,7 @@ protected:
   std::unique_ptr<IAsyncFileReader> file_reader_;
   std::unique_ptr<IAsyncFileWriter> file_writer_;
   std::unique_ptr<oxygen::co::ThreadPool> thread_pool_;
+  std::unique_ptr<ResourceTableRegistry> table_registry_;
   AsyncImporter::Config config_ { .channel_capacity = 8 };
 
   [[nodiscard]] auto MakeTestCookedRoot() const -> std::filesystem::path
@@ -181,8 +183,10 @@ protected:
   {
     file_reader_ = CreateAsyncFileReader(loop_);
     file_writer_ = CreateAsyncFileWriter(loop_);
+    table_registry_ = std::make_unique<ResourceTableRegistry>(*file_writer_);
     thread_pool_ = std::make_unique<oxygen::co::ThreadPool>(loop_, 1);
     config_.file_writer = file_writer_.get();
+    config_.table_registry = table_registry_.get();
   }
 
   [[nodiscard]] auto MakeJob(ImportJobId job_id, ImportRequest request,
@@ -193,7 +197,8 @@ protected:
       std::move(on_complete), std::move(on_progress), std::move(cancel_event),
       oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
       oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
-      oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()));
+      oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
+      oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
   }
 
   void TearDown() override
@@ -382,13 +387,16 @@ protected:
   std::unique_ptr<IAsyncFileReader> file_reader_;
   std::unique_ptr<IAsyncFileWriter> file_writer_;
   std::unique_ptr<oxygen::co::ThreadPool> thread_pool_;
+  std::unique_ptr<ResourceTableRegistry> table_registry_;
 
   void SetUp() override
   {
     file_reader_ = CreateAsyncFileReader(loop_);
     file_writer_ = CreateAsyncFileWriter(loop_);
+    table_registry_ = std::make_unique<ResourceTableRegistry>(*file_writer_);
     thread_pool_ = std::make_unique<oxygen::co::ThreadPool>(loop_, 1);
     config_.file_writer = file_writer_.get();
+    config_.table_registry = table_registry_.get();
   }
 };
 
@@ -430,7 +438,8 @@ NOLINT_TEST_F(
         std::move(on_complete), nullptr, cancel_event,
         oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
         oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
-        oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()));
+        oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
+        oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
 
       JobEntry entry;
       entry.job_id = 123;

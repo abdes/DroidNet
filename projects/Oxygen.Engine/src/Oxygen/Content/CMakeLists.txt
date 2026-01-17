@@ -184,6 +184,7 @@ set(
   "Import/Async/Jobs/FbxImportJob.cpp"
   "Import/Async/Jobs/GlbImportJob.h"
   "Import/Async/Jobs/GlbImportJob.cpp"
+  "Import/Async/Jobs/TextureImportPolicy.h"
   "Import/Async/Jobs/TextureImportJob.h"
   "Import/Async/Jobs/TextureImportJob.cpp"
   "Import/Async/Jobs/AudioImportJob.h"

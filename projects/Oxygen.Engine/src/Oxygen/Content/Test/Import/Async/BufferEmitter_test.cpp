@@ -8,6 +8,7 @@
 
 #include <Oxygen/Content/Import/Async/IAsyncFileWriter.h>
 #include <Oxygen/Content/Import/Async/ImportEventLoop.h>
+#include <Oxygen/Content/Import/Async/ResourceTableRegistry.h>
 #include <Oxygen/Content/Import/Async/WindowsFileWriter.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
@@ -139,6 +140,7 @@ protected:
   {
     loop_ = std::make_unique<ImportEventLoop>();
     writer_ = std::make_unique<WindowsFileWriter>(*loop_);
+    table_registry_ = std::make_unique<ResourceTableRegistry>(*writer_);
     test_dir_
       = std::filesystem::temp_directory_path() / "oxygen_buffer_emitter_test";
     std::filesystem::create_directories(test_dir_);
@@ -146,6 +148,7 @@ protected:
 
   auto TearDown() -> void override
   {
+    table_registry_.reset();
     writer_.reset();
     loop_.reset();
     std::error_code ec;
@@ -154,8 +157,24 @@ protected:
 
   auto Layout() const -> const LooseCookedLayout& { return layout_; }
 
+  auto BufferAggregator() -> BufferTableAggregator&
+  {
+    return table_registry_->BufferAggregator(test_dir_, layout_);
+  }
+
+  auto FinalizeTables() -> bool
+  {
+    bool ok = false;
+    co::Run(*loop_, [&]() -> Co<> {
+      ok = co_await table_registry_->FinalizeAll();
+      co_return;
+    });
+    return ok;
+  }
+
   std::unique_ptr<ImportEventLoop> loop_;
   std::unique_ptr<WindowsFileWriter> writer_;
+  std::unique_ptr<ResourceTableRegistry> table_registry_;
   std::filesystem::path test_dir_;
   LooseCookedLayout layout_ {}; // Uses default paths
 };
@@ -167,7 +186,7 @@ protected:
 NOLINT_TEST_F(BufferEmitterTest, Emit_SingleBuffer_ReturnsIndexZero)
 {
   // Arrange
-  BufferEmitter emitter(*writer_, Layout(), test_dir_);
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
   auto payload = MakeTestBuffer(1024, 0x01, 16, 32);
 
   // Act
@@ -189,7 +208,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_SingleBuffer_ReturnsIndexZero)
 NOLINT_TEST_F(BufferEmitterTest, Emit_MultipleBuffers_ReturnsSequentialIndices)
 {
   // Arrange
-  BufferEmitter emitter(*writer_, Layout(), test_dir_);
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
 
   // Act
   std::vector<uint32_t> indices;
@@ -216,11 +235,12 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_MultipleBuffers_ReturnsSequentialIndices)
 NOLINT_TEST_F(BufferEmitterTest, Emit_DuplicateBuffer_ReturnsSameIndex)
 {
   // Arrange
-  BufferEmitter emitter(*writer_, Layout(), test_dir_);
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
 
   // Act
   uint32_t idx0 = 0;
   uint32_t idx1 = 0;
+  bool tables_ok = false;
   co::Run(*loop_, [&]() -> Co<> {
     auto buf0 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0xAB });
     auto buf1 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0xAB });
@@ -232,7 +252,11 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_DuplicateBuffer_ReturnsSameIndex)
     idx0 = emitter.Emit(std::move(buf0));
     idx1 = emitter.Emit(std::move(buf1));
     co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
   });
+
+  EXPECT_TRUE(tables_ok);
 
   // Assert
   EXPECT_EQ(idx0, 0);
@@ -248,7 +272,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_DuplicateBuffer_ReturnsSameIndex)
 NOLINT_TEST_F(BufferEmitterTest, Emit_ReturnsImmediately_BeforeIOCompletes)
 {
   // Arrange
-  BufferEmitter emitter(*writer_, Layout(), test_dir_);
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
   auto payload = MakeTestBuffer(4 * 1024, 0x01, 16, 32);
 
   // Act
@@ -272,7 +296,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_ReturnsImmediately_BeforeIOCompletes)
 NOLINT_TEST_F(BufferEmitterTest, Emit_AfterFinalize_Throws)
 {
   // Arrange
-  BufferEmitter emitter(*writer_, Layout(), test_dir_);
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
 
   // Act & Assert
   co::Run(*loop_, [&]() -> Co<> {
@@ -291,9 +315,10 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_AfterFinalize_Throws)
 NOLINT_TEST_F(BufferEmitterTest, Finalize_TableFileHasCorrectPackedSize)
 {
   // Arrange
-  BufferEmitter emitter(*writer_, Layout(), test_dir_);
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
   constexpr int kBufferCount = 3;
 
+  bool tables_ok = false;
   co::Run(*loop_, [&]() -> Co<> {
     for (int i = 0; i < kBufferCount; ++i) {
       auto idx = emitter.Emit(
@@ -301,7 +326,11 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableFileHasCorrectPackedSize)
       EXPECT_EQ(idx, static_cast<uint32_t>(i));
     }
     co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
   });
+
+  EXPECT_TRUE(tables_ok);
 
   // Assert: Table file size = count * sizeof(BufferResourceDesc)
   const auto table_path = test_dir_ / Layout().BuffersTableRelPath();
@@ -317,7 +346,7 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableFileHasCorrectPackedSize)
 NOLINT_TEST_F(BufferEmitterTest, Finalize_TableEntriesHaveCorrectAlignedOffsets)
 {
   // Arrange: Create buffers with different alignments
-  BufferEmitter emitter(*writer_, Layout(), test_dir_);
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
 
   // Buffer 0: 100 bytes with 16-byte alignment -> offset 0
   // Buffer 1: 200 bytes with 16-byte alignment -> offset = AlignUp(100, 16) =
@@ -330,6 +359,7 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableEntriesHaveCorrectAlignedOffsets)
   constexpr uint64_t kAlign1 = 16;
   constexpr uint64_t kAlign2 = 4;
 
+  bool tables_ok = false;
   co::Run(*loop_, [&]() -> Co<> {
     auto idx0 = emitter.Emit(MakeTestBuffer(kSize0, 0x01, kAlign0, 32));
     auto idx1 = emitter.Emit(MakeTestBuffer(kSize1, 0x01, kAlign1, 32));
@@ -338,7 +368,11 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableEntriesHaveCorrectAlignedOffsets)
     EXPECT_EQ(idx1, 1);
     EXPECT_EQ(idx2, 2);
     co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
   });
+
+  EXPECT_TRUE(tables_ok);
 
   // Assert: Parse table and verify offsets
   const auto table_path = test_dir_ / Layout().BuffersTableRelPath();
@@ -370,7 +404,7 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableEntriesHaveCorrectAlignedOffsets)
 NOLINT_TEST_F(BufferEmitterTest, Finalize_TableEntriesPreserveMetadata)
 {
   // Arrange
-  BufferEmitter emitter(*writer_, Layout(), test_dir_);
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
 
   CookedBufferPayload vertex_payload;
   vertex_payload.data.resize(512);
@@ -388,13 +422,18 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableEntriesPreserveMetadata)
   index_payload.element_format = 0;
   index_payload.content_hash = 0x1234567890ABCDEF;
 
+  bool tables_ok = false;
   co::Run(*loop_, [&]() -> Co<> {
     auto idx0 = emitter.Emit(std::move(vertex_payload));
     auto idx1 = emitter.Emit(std::move(index_payload));
     EXPECT_EQ(idx0, 0);
     EXPECT_EQ(idx1, 1);
     co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
   });
+
+  EXPECT_TRUE(tables_ok);
 
   // Assert: Parse table and verify metadata
   const auto table_path = test_dir_ / Layout().BuffersTableRelPath();
@@ -421,7 +460,7 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableEntriesPreserveMetadata)
 NOLINT_TEST_F(BufferEmitterTest, Finalize_DataFileContainsCorrectContent)
 {
   // Arrange
-  BufferEmitter emitter(*writer_, Layout(), test_dir_);
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
 
   // Create two buffers with distinct content
   CookedBufferPayload buf0;
@@ -474,7 +513,7 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_DataFileContainsCorrectContent)
 NOLINT_TEST_F(BufferEmitterTest, Finalize_DataFileSizeIncludesPadding)
 {
   // Arrange
-  BufferEmitter emitter(*writer_, Layout(), test_dir_);
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
 
   constexpr size_t kSize0 = 100;
   constexpr size_t kSize1 = 200;
@@ -505,7 +544,7 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_DataFileSizeIncludesPadding)
 NOLINT_TEST_F(BufferEmitterTest, Finalize_WaitsForPendingIO)
 {
   // Arrange
-  BufferEmitter emitter(*writer_, Layout(), test_dir_);
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
   auto idx0 = emitter.Emit(MakeTestBuffer(2048, 0x01, 16, 32));
   auto idx1 = emitter.Emit(MakeTestBuffer(1024, 0x02, 4, 0));
   EXPECT_EQ(idx0, 0);
@@ -525,7 +564,7 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_WaitsForPendingIO)
 NOLINT_TEST_F(BufferEmitterTest, Finalize_NoBuffers_SucceedsWithoutWritingFiles)
 {
   // Arrange
-  BufferEmitter emitter(*writer_, Layout(), test_dir_);
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
 
   // Act
   bool success = false;
@@ -545,7 +584,7 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_NoBuffers_SucceedsWithoutWritingFiles)
 NOLINT_TEST_F(BufferEmitterTest, DataFileSize_TracksAccumulatedSize)
 {
   // Arrange
-  BufferEmitter emitter(*writer_, Layout(), test_dir_);
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
   constexpr size_t kSize0 = 100;
   constexpr size_t kSize1 = 200;
   constexpr uint64_t kAlign = 16;
@@ -577,7 +616,7 @@ NOLINT_TEST_F(BufferEmitterTest, DataFileSize_TracksAccumulatedSize)
 NOLINT_TEST_F(BufferEmitterTest, Count_TracksEmittedBuffers)
 {
   // Arrange
-  BufferEmitter emitter(*writer_, Layout(), test_dir_);
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
 
   // Assert initial state
   EXPECT_EQ(emitter.Count(), 0);
@@ -605,16 +644,21 @@ NOLINT_TEST_F(BufferEmitterTest, Count_TracksEmittedBuffers)
 NOLINT_TEST_F(BufferEmitterTest, Emit_ZeroAlignment_UsesDefaultAlignment)
 {
   // Arrange
-  BufferEmitter emitter(*writer_, Layout(), test_dir_);
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
 
   // Buffer with zero alignment should use default (16)
   auto payload = MakeTestBuffer(100, 0x01, 0, 32);
 
+  bool tables_ok = false;
   co::Run(*loop_, [&]() -> Co<> {
     auto idx = emitter.Emit(std::move(payload));
     EXPECT_EQ(idx, 0);
     co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
   });
+
+  EXPECT_TRUE(tables_ok);
 
   // Assert: Table entry exists
   const auto table_path = test_dir_ / Layout().BuffersTableRelPath();
@@ -628,17 +672,22 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_ZeroAlignment_UsesDefaultAlignment)
 NOLINT_TEST_F(BufferEmitterTest, Emit_LargeBuffer_SucceedsWithCorrectSize)
 {
   // Arrange
-  BufferEmitter emitter(*writer_, Layout(), test_dir_);
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
 
   // 1MB buffer
   constexpr size_t kLargeSize = 1024 * 1024;
   auto payload = MakeTestBuffer(kLargeSize, 0x01, 16, 32);
 
+  bool tables_ok = false;
   co::Run(*loop_, [&]() -> Co<> {
     auto idx = emitter.Emit(std::move(payload));
     EXPECT_EQ(idx, 0);
     co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
   });
+
+  EXPECT_TRUE(tables_ok);
 
   // Assert: Data file has correct size
   const auto data_path = test_dir_ / Layout().BuffersDataRelPath();
@@ -656,12 +705,13 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_LargeBuffer_SucceedsWithCorrectSize)
 NOLINT_TEST_F(BufferEmitterTest, Emit_ManySmallBuffers_AllAlignedCorrectly)
 {
   // Arrange
-  BufferEmitter emitter(*writer_, Layout(), test_dir_);
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
 
   constexpr int kBufferCount = 50;
   constexpr size_t kBufferSize = 17; // Intentionally not aligned
   constexpr uint64_t kAlignment = 16;
 
+  bool tables_ok = false;
   co::Run(*loop_, [&]() -> Co<> {
     for (int i = 0; i < kBufferCount; ++i) {
       auto idx = emitter.Emit(MakeTestBuffer(kBufferSize, 0x01, kAlignment, 32,
@@ -669,7 +719,11 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_ManySmallBuffers_AllAlignedCorrectly)
       EXPECT_EQ(idx, static_cast<uint32_t>(i));
     }
     co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
   });
+
+  EXPECT_TRUE(tables_ok);
 
   // Assert: All table entries have aligned offsets
   const auto table_path = test_dir_ / Layout().BuffersTableRelPath();
