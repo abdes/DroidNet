@@ -60,6 +60,8 @@ def test_buffer_indices_preserved_for_geometry(tmp_path: Path):
                             {
                                 "name": "s0",
                                 "material": "mat",
+                                "bounding_box_min": [0.0, 0.0, 0.0],
+                                "bounding_box_max": [1.0, 1.0, 1.0],
                                 "mesh_views": [
                                     {
                                         "first_index": 0,

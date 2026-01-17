@@ -66,6 +66,8 @@ def _spec_with_padding() -> dict:
                             {
                                 "name": "s0",
                                 "material": "mat_z",
+                                "bounding_box_min": [0.0, 0.0, 0.0],
+                                "bounding_box_max": [1.0, 1.0, 1.0],
                                 "mesh_views": [
                                     {
                                         "first_index": 0,

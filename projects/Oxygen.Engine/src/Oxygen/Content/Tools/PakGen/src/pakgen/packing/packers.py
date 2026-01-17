@@ -1323,6 +1323,26 @@ def _merge_bounds(
     return min_vals, max_vals
 
 
+def _collect_submesh_bounds(
+    submesh: Dict[str, Any],
+) -> tuple[list[float], list[float]]:
+    if "bounding_box_min" in submesh or "bounding_box_max" in submesh:
+        sm_min = _coerce_vec3(submesh.get("bounding_box_min"), [0.0, 0.0, 0.0])
+        sm_max = _coerce_vec3(submesh.get("bounding_box_max"), [0.0, 0.0, 0.0])
+        return sm_min, sm_max
+
+    mesh_views = submesh.get("mesh_views", []) or []
+    view_bounds: list[tuple[list[float], list[float]]] = []
+    for mv in mesh_views:
+        if not isinstance(mv, dict):
+            continue
+        if "bounding_box_min" in mv or "bounding_box_max" in mv:
+            mv_min = _coerce_vec3(mv.get("bounding_box_min"), [0.0, 0.0, 0.0])
+            mv_max = _coerce_vec3(mv.get("bounding_box_max"), [0.0, 0.0, 0.0])
+            view_bounds.append((mv_min, mv_max))
+    return _merge_bounds(view_bounds)
+
+
 def _collect_lod_bounds(lod: Dict[str, Any]) -> tuple[list[float], list[float]]:
     if "bounding_box_min" in lod or "bounding_box_max" in lod:
         lod_min = _coerce_vec3(lod.get("bounding_box_min"), [0.0, 0.0, 0.0])
@@ -1332,9 +1352,7 @@ def _collect_lod_bounds(lod: Dict[str, Any]) -> tuple[list[float], list[float]]:
     submeshes = lod.get("submeshes", []) or []
     submesh_bounds: list[tuple[list[float], list[float]]] = []
     for submesh in submeshes:
-        sm_min = _coerce_vec3(submesh.get("bounding_box_min"), [0.0, 0.0, 0.0])
-        sm_max = _coerce_vec3(submesh.get("bounding_box_max"), [0.0, 0.0, 0.0])
-        submesh_bounds.append((sm_min, sm_max))
+        submesh_bounds.append(_collect_submesh_bounds(submesh))
     return _merge_bounds(submesh_bounds)
 
 
@@ -1361,13 +1379,7 @@ def pack_mesh_descriptor(
     else:
         submesh_bounds: list[tuple[list[float], list[float]]] = []
         for submesh in submeshes:
-            sm_min = _coerce_vec3(
-                submesh.get("bounding_box_min"), [0.0, 0.0, 0.0]
-            )
-            sm_max = _coerce_vec3(
-                submesh.get("bounding_box_max"), [0.0, 0.0, 0.0]
-            )
-            submesh_bounds.append((sm_min, sm_max))
+            submesh_bounds.append(_collect_submesh_bounds(submesh))
         mesh_bb_min, mesh_bb_max = _merge_bounds(submesh_bounds)
     procedural_params_size = lod.get("procedural_params_size", 0)
     joint_index_buffer_idx = resource_index_map.get("buffer", {}).get(
@@ -1456,8 +1468,7 @@ def pack_submesh_descriptor(
             f"Material asset key must be {ASSET_KEY_SIZE} bytes (got {len(mat_key)})",
         )
     mesh_views = submesh.get("mesh_views", []) or []
-    sm_bb_min = submesh.get("bounding_box_min", [0.0, 0.0, 0.0])
-    sm_bb_max = submesh.get("bounding_box_max", [0.0, 0.0, 0.0])
+    sm_bb_min, sm_bb_max = _collect_submesh_bounds(submesh)
     desc = (
         sm_name
         + mat_key  # type: ignore[operator]

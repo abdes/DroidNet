@@ -37,13 +37,13 @@
       "key": "00000000000000000000000000000000",
       "name": "geo_b",
       "type": "geometry",
-      "variable_extra_size": 0,
+      "variable_extra_size": 269,
       "warnings": []
     }
   ],
   "browse_index": {
     "entry_count": 4,
-    "offset": 7184,
+    "offset": 7456,
     "padding_before": 0,
     "size": 144,
     "string_table_size": 24
@@ -52,22 +52,22 @@
   "deterministic": true,
   "directory": {
     "asset_count": 4,
-    "offset": 6928,
-    "padding_before": 3,
+    "offset": 7200,
+    "padding_before": 6,
     "size": 256
   },
-  "file_size": 7584,
+  "file_size": 7856,
   "footer": {
-    "offset": 7328,
+    "offset": 7600,
     "size": 256
   },
   "padding": {
     "by_section": {
       "assets_region": 48,
-      "directory": 3,
+      "directory": 6,
       "table_buffer": 8
     },
-    "total": 59
+    "total": 62
   },
   "regions": [
     {
@@ -101,7 +101,7 @@
       "materials": 2,
       "total": 4
     },
-    "variable_extra_total": 269
+    "variable_extra_total": 538
   },
   "tables": [
     {

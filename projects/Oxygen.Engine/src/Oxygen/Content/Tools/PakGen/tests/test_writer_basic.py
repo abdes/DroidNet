@@ -28,6 +28,8 @@ def test_build_minimal_pak(tmp_path: Path):
                         "submeshes": [
                             {
                                 "material": "MatA",
+                                "bounding_box_min": [0.0, 0.0, 0.0],
+                                "bounding_box_max": [1.0, 1.0, 1.0],
                                 "mesh_views": [
                                     {
                                         "first_index": 0,
