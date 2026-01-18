@@ -62,8 +62,8 @@ struct Bounds3 {
   std::array<float, 3> max {};
 };
 
-//! Triangulated mesh view.
-struct TriangulatedMesh {
+//! Triangle mesh view.
+struct TriangleMesh {
   data::MeshType mesh_type = data::MeshType::kStandard;
   MeshStreamView streams;
   std::span<const glm::mat4> inverse_bind_matrices;
@@ -76,7 +76,7 @@ struct TriangulatedMesh {
 //! LOD entry for a mesh source.
 struct MeshLod {
   std::string lod_name;
-  TriangulatedMesh source;
+  TriangleMesh source;
   std::shared_ptr<const void> source_owner;
 };
 

@@ -279,6 +279,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
   }
 
   // Build the report
+  const bool had_errors = HasErrors();
   ImportReport report {
     .cooked_root = cooked_root_,
     .source_key = {},
@@ -286,77 +287,84 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     .materials_written = 0,
     .geometry_written = 0,
     .scenes_written = 0,
-    .success = !HasErrors(),
+    .success = false,
   };
 
-  // Only write index if no errors occurred
-  if (report.success) {
-    try {
-      using oxygen::data::loose_cooked::v1::FileKind;
+  // Always attempt to write the index to keep file sizes in sync, even if
+  // diagnostics reported errors. This prevents stale index metadata from
+  // invalidating previously cooked content.
+  try {
+    using oxygen::data::loose_cooked::v1::FileKind;
 
-      const auto& layout = request_.loose_cooked_layout;
-      if (texture_emitter_.has_value() && (**texture_emitter_).Count() > 0) {
-        cooked_writer_.RegisterExternalFile(
-          FileKind::kTexturesData, layout.TexturesDataRelPath());
+    const auto& layout = request_.loose_cooked_layout;
+    if (texture_emitter_.has_value() && (**texture_emitter_).Count() > 0) {
+      cooked_writer_.RegisterExternalFile(
+        FileKind::kTexturesData, layout.TexturesDataRelPath());
 
-        RegisterExternalTable(cooked_writer_, FileKind::kTexturesTable,
-          cooked_root_, layout.TexturesTableRelPath());
+      RegisterExternalTable(cooked_writer_, FileKind::kTexturesTable,
+        cooked_root_, layout.TexturesTableRelPath());
+    }
+
+    if (buffer_emitter_.has_value() && (**buffer_emitter_).Count() > 0) {
+      cooked_writer_.RegisterExternalFile(
+        FileKind::kBuffersData, layout.BuffersDataRelPath());
+
+      RegisterExternalTable(cooked_writer_, FileKind::kBuffersTable,
+        cooked_root_, layout.BuffersTableRelPath());
+    }
+
+    if (asset_emitter_.has_value()) {
+      for (const auto& rec : (**asset_emitter_).Records()) {
+        cooked_writer_.RegisterExternalAssetDescriptor(rec.key, rec.asset_type,
+          rec.virtual_path, rec.descriptor_relpath, rec.descriptor_size,
+          rec.descriptor_sha256);
       }
+    }
 
-      if (buffer_emitter_.has_value() && (**buffer_emitter_).Count() > 0) {
-        cooked_writer_.RegisterExternalFile(
-          FileKind::kBuffersData, layout.BuffersDataRelPath());
+    auto write_result = cooked_writer_.Finish();
+    report.source_key = write_result.source_key;
 
-        RegisterExternalTable(cooked_writer_, FileKind::kBuffersTable,
-          cooked_root_, layout.BuffersTableRelPath());
+    // Count assets by type
+    for (const auto& asset : write_result.assets) {
+      switch (asset.asset_type) {
+      case data::AssetType::kMaterial:
+        ++report.materials_written;
+        break;
+      case data::AssetType::kGeometry:
+        ++report.geometry_written;
+        break;
+      case data::AssetType::kScene:
+        ++report.scenes_written;
+        break;
+      default:
+        break;
       }
+    }
 
-      if (asset_emitter_.has_value()) {
-        for (const auto& rec : (**asset_emitter_).Records()) {
-          cooked_writer_.RegisterExternalAssetDescriptor(rec.key,
-            rec.asset_type, rec.virtual_path, rec.descriptor_relpath,
-            rec.descriptor_size, rec.descriptor_sha256);
-        }
-      }
-
-      auto write_result = cooked_writer_.Finish();
-      report.source_key = write_result.source_key;
-
-      // Count assets by type
-      for (const auto& asset : write_result.assets) {
-        switch (asset.asset_type) {
-        case data::AssetType::kMaterial:
-          ++report.materials_written;
-          break;
-        case data::AssetType::kGeometry:
-          ++report.geometry_written;
-          break;
-        case data::AssetType::kScene:
-          ++report.scenes_written;
-          break;
-        default:
-          break;
-        }
-      }
-
-      DLOG_F(INFO,
-        "ImportSession::Finalize() complete: {} materials, {} "
-        "geometry, {} scenes",
-        report.materials_written, report.geometry_written,
-        report.scenes_written);
-    } catch (const std::exception& ex) {
-      report.success = false;
+    if (had_errors) {
       report.diagnostics.push_back({
-        .severity = ImportSeverity::kError,
-        .code = "import.index_write_failed",
-        .message = ex.what(),
+        .severity = ImportSeverity::kWarning,
+        .code = "import.index_written_with_errors",
+        .message = "Index written despite import errors",
         .source_path = request_.source_path.string(),
       });
-      LOG_F(ERROR, "Failed to write index: {}", ex.what());
     }
-  } else {
-    DLOG_F(
-      WARNING, "ImportSession::Finalize() skipping index write due to errors");
+
+    report.success = !had_errors;
+
+    DLOG_F(INFO,
+      "ImportSession::Finalize() complete: {} materials, {} "
+      "geometry, {} scenes",
+      report.materials_written, report.geometry_written, report.scenes_written);
+  } catch (const std::exception& ex) {
+    report.success = false;
+    report.diagnostics.push_back({
+      .severity = ImportSeverity::kError,
+      .code = "import.index_write_failed",
+      .message = ex.what(),
+      .source_path = request_.source_path.string(),
+    });
+    LOG_F(ERROR, "Failed to write index: {}", ex.what());
   }
 
   co_return report;

@@ -466,6 +466,12 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
       return "DEBUG_IBL_RAW_SKY";
     case ShaderDebugMode::kIblRawSkyViewDir:
       return "DEBUG_IBL_RAW_SKY_VIEWDIR";
+    case ShaderDebugMode::kBaseColor:
+      return "DEBUG_BASE_COLOR";
+    case ShaderDebugMode::kUv0:
+      return "DEBUG_UV0";
+    case ShaderDebugMode::kOpacity:
+      return "DEBUG_OPACITY";
     default:
       return nullptr;
     }

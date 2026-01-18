@@ -134,7 +134,7 @@ auto ExpectedShaderStages(const std::vector<ShaderRequest>& requests)
 {
   uint32_t stages = 0;
   for (const auto& request : requests) {
-    const uint32_t bit = 1u << (request.shader_type - 1u);
+    const uint32_t bit = 1u << request.shader_type;
     stages |= bit;
   }
   return stages;

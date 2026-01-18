@@ -18,6 +18,9 @@
 //!   DEBUG_IBL_SPECULAR: Visualize IBL specular sampling (prefilter map)
 //!   DEBUG_IBL_RAW_SKY: Visualize raw sky cubemap sampling (no prefilter)
 //!   DEBUG_IBL_RAW_SKY_VIEWDIR: Visualize raw sky cubemap (view direction)
+//!   DEBUG_BASE_COLOR: Visualize base color texture (albedo)
+//!   DEBUG_UV0: Visualize UV0 coordinates
+//!   DEBUG_OPACITY: Visualize base alpha/opacity
 
 #include "Renderer/SceneConstants.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
@@ -78,7 +81,7 @@ struct VSOutput {
 //=== Debug Visualization Helpers ===----------------------------------------//
 
 // Check if any debug mode is active
-#if defined(DEBUG_LIGHT_HEATMAP) || defined(DEBUG_DEPTH_SLICE) || defined(DEBUG_CLUSTER_INDEX) || defined(DEBUG_IBL_SPECULAR) || defined(DEBUG_IBL_RAW_SKY) || defined(DEBUG_IBL_RAW_SKY_VIEWDIR)
+#if defined(DEBUG_LIGHT_HEATMAP) || defined(DEBUG_DEPTH_SLICE) || defined(DEBUG_CLUSTER_INDEX) || defined(DEBUG_IBL_SPECULAR) || defined(DEBUG_IBL_RAW_SKY) || defined(DEBUG_IBL_RAW_SKY_VIEWDIR) || defined(DEBUG_BASE_COLOR) || defined(DEBUG_UV0) || defined(DEBUG_OPACITY)
 #define DEBUG_MODE_ACTIVE 1
 #endif
 
@@ -188,8 +191,20 @@ float4 PS(VSOutput input) : SV_Target0 {
     //=== Debug Visualization Modes ===---------------------------------------//
 
 #ifdef DEBUG_MODE_ACTIVE
-
-#if defined(DEBUG_IBL_SPECULAR)
+#if defined(DEBUG_UV0)
+    const float2 uv = frac(input.uv);
+    return float4(uv, 0.0f, 1.0f);
+#elif defined(DEBUG_BASE_COLOR)
+    const MaterialSurface s = EvaluateMaterialSurface(input.world_pos,
+        input.world_normal, input.world_tangent, input.world_bitangent,
+        input.uv, g_DrawIndex);
+    return float4(s.base_rgb, 1.0f);
+#elif defined(DEBUG_OPACITY)
+    const MaterialSurface s = EvaluateMaterialSurface(input.world_pos,
+        input.world_normal, input.world_tangent, input.world_bitangent,
+        input.uv, g_DrawIndex);
+    return float4(s.base_a.xxx, 1.0f);
+#elif defined(DEBUG_IBL_SPECULAR)
     // IBL specular visualization: sample the prefilter map (if available) and
     // show it directly.
     // Important: keep this mode purely geometric to avoid normal-map / TBN

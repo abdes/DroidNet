@@ -40,6 +40,9 @@ using enum ShaderType;
 //   DEBUG_LIGHT_HEATMAP: Light count heat map
 //   DEBUG_DEPTH_SLICE: Depth slice visualization
 //   DEBUG_CLUSTER_INDEX: Cluster index checkerboard
+//   DEBUG_BASE_COLOR: Base color/albedo visualization
+//   DEBUG_UV0: UV0 visualization
+//   DEBUG_OPACITY: Opacity visualization
 
 // clang-format off
 inline constexpr auto kEngineShaders = GenerateCatalog(
@@ -89,6 +92,24 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     "Passes/Forward/ForwardMesh_PS.hlsl",
     std::array { EntryPoint { kPixel, "PS" } },
     std::array<std::string_view, 2> { "DEBUG_IBL_RAW_SKY_VIEWDIR", "ALPHA_TEST" }
+  },
+  // Forward pass pixel shader: DEBUG_BASE_COLOR with ALPHA_TEST permutation
+  ShaderFileSpec {
+    "Passes/Forward/ForwardMesh_PS.hlsl",
+    std::array { EntryPoint { kPixel, "PS" } },
+    std::array<std::string_view, 2> { "DEBUG_BASE_COLOR", "ALPHA_TEST" }
+  },
+  // Forward pass pixel shader: DEBUG_UV0 with ALPHA_TEST permutation
+  ShaderFileSpec {
+    "Passes/Forward/ForwardMesh_PS.hlsl",
+    std::array { EntryPoint { kPixel, "PS" } },
+    std::array<std::string_view, 2> { "DEBUG_UV0", "ALPHA_TEST" }
+  },
+  // Forward pass pixel shader: DEBUG_OPACITY with ALPHA_TEST permutation
+  ShaderFileSpec {
+    "Passes/Forward/ForwardMesh_PS.hlsl",
+    std::array { EntryPoint { kPixel, "PS" } },
+    std::array<std::string_view, 2> { "DEBUG_OPACITY", "ALPHA_TEST" }
   },
   // Depth pre-pass: VS and PS with ALPHA_TEST permutation
   ShaderFileSpec {
@@ -156,7 +177,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - SkyCapture_VS/PS: 2 entries
 // - IblFiltering: 2 entries
 // - ImGui: 2 entries
-// Total: 43
-static_assert(kEngineShaders.size() == 43, "Expected 43 shader entries");
+// Total: 55
+static_assert(kEngineShaders.size() == 55, "Expected 55 shader entries");
 
 } // namespace oxygen::graphics::d3d12

@@ -18,7 +18,7 @@ Core properties:
 - **Compute-only**: builds the complete scene descriptor payload in memory.
 - **No I/O**: `AssetEmitter` writes `.oscene` files.
 - **Job-scoped**: created per job and started in the job’s child nursery.
-- **Geometry-aware**: links nodes to geometry assets via `ImportedGeometry`.
+- **Geometry-aware**: links nodes to geometry assets via `geometry_keys`.
 - **PAK v4 container, v3 scene asset**: uses the v3 scene asset layout as
   defined in [src/Oxygen/Data/PakFormat.h](../src/Oxygen/Data/PakFormat.h).
 - **Planner‑gated**: the planner submits scene work only after referenced
@@ -45,7 +45,7 @@ under **Concurrency, Ownership, and Lifetime (Definitive)**.
 
 ```cpp
 struct SceneSource {
-  const ufbx_scene* scene = nullptr;
+  const void* scene = nullptr;
   std::shared_ptr<const void> scene_owner; // Keeps scene alive
 };
 
@@ -57,7 +57,7 @@ struct SceneEnvironmentSystem {
 struct WorkItem {
   std::string source_id;
   SceneSource source;
-  std::vector<ImportedGeometry> geometry_map; // mesh* -> AssetKey
+  std::vector<data::AssetKey> geometry_keys; // adapter-ordered asset keys
   std::vector<SceneEnvironmentSystem> environment_systems;
   ImportRequest request;
   std::stop_token stop_token;
@@ -66,13 +66,38 @@ struct WorkItem {
 
 Notes:
 
-- `SceneSource` is FBX-specific today. Other importers must provide an
-  equivalent scene view with the same semantics.
+- `SceneSource` is importer-specific; `scene` is opaque and must be paired
+  with `scene_owner` to keep the parsed scene alive.
 - `request` provides naming strategy, asset key policy, and coordinate policy.
 - `environment_systems` encodes the trailing scene environment block (PAK v3).
   The pipeline validates record headers and computes the block size.
-- `geometry_map` must contain resolved geometry asset keys; the planner must
-  ensure geometry assets are ready before submission.
+- `geometry_keys` must contain resolved geometry asset keys; the planner must
+  ensure geometry assets are ready before submission. The adapter’s mesh
+  traversal order defines the index mapping used by renderable records.
+
+---
+
+## Adapter + Planner Integration (Definitive)
+
+ScenePipeline work items are produced **directly from the native importer
+scene** (ufbx/cgltf) with **no intermediate scene graph**. The format adapter
+walks the native node hierarchy, computes naming/keys, and emits a single
+ScenePipeline `WorkItem` that holds a pointer to the native scene plus a
+shared owner for lifetime. The adapter must not re-pack or clone node data.
+
+Planner integration rules:
+
+- The adapter registers a **scene plan item** and stores a
+  `WorkPayloadHandle` that points to the ScenePipeline `WorkItem` storage
+  owned by the job.
+- The planner **gates** scene submission on geometry readiness using
+  dependencies declared for each `RenderableRecord::geometry_key`.
+- The job executes the plan steps; for the scene step it waits on
+  `PlanStep.prerequisites`, then submits the stored `WorkItem` to the
+  ScenePipeline.
+
+This keeps the pipeline compute-only while ensuring the planner enforces
+geometry prerequisites without introducing new scene representations.
 
 ### WorkResult
 
@@ -146,7 +171,7 @@ For each work item:
    - When dropping a node, reparent its children to the nearest kept ancestor and
      recompute local transforms to preserve world-space transforms.
 5) Attach components:
-   - Renderables for nodes whose mesh exists in `geometry_map`
+   - Renderables for nodes whose mesh resolves into `geometry_keys`
    - Perspective/orthographic cameras based on `ufbx_camera`
    - Lights based on `ufbx_light` (directional, point, spot)
 6) Light fallback:
@@ -198,7 +223,7 @@ boundaries.
    - Apply `NodePruningPolicy` with transform preservation and reparenting.
 
 6) **Renderables**
-   - Emit `RenderableRecord` when mesh is found in `geometry_map`.
+   - Emit `RenderableRecord` when mesh resolves into `geometry_keys`.
 
 7) **Cameras**
    - Perspective: `fov_y` from `field_of_view_deg.y` (degrees → radians),
@@ -275,7 +300,7 @@ Notes:
 
 ### Importer/Orchestrator Responsibilities
 
-- Geometry emission and `ImportedGeometry` mapping.
+- Geometry emission and `geometry_keys` population.
 - Import content flags and naming strategy setup.
 - Asset key policy (deterministic vs random).
 - Environment system extraction (SkyAtmosphere, Fog, PostProcess, etc.).
@@ -286,7 +311,8 @@ Notes:
 
 - **ScenePipeline**: compute-only descriptor assembly.
 - **AssetEmitter**: `.oscene` output and records.
-- **GeometryPipeline**: produces `ImportedGeometry` mapping.
+- **GeometryPipeline**: produces geometry asset keys; the job assembles
+  `geometry_keys` for the scene work item.
 
 ---
 

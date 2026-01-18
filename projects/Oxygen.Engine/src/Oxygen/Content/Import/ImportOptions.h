@@ -245,23 +245,7 @@ struct CoordinateConversionPolicy final {
   */
   float custom_unit_scale = 1.0f;
 
-  //! Swap Y/Z axes during conversion.
-  /*!
-   Default behavior (swap_yz_axes == false): do not perform an explicit Y/Z
-   swap beyond whatever basis conversion the importer applies to meet Oxygen's
-   fixed conventions.
-
-   @note This option affects only *spatial* coordinate conversion (node
-    transforms, geometry positions, animation tracks). It MUST NOT modify
-    texture coordinates (UVs).
-
-   @note UV orientation issues are typically caused by image origin conventions
-    (top-left vs. bottom-left) in the texture decode/upload pipeline, not by
-    3D axis conventions. If a flip is required, prefer handling it when
-    decoding/uploading texture pixels (or via a material/shader convention)
-    rather than rewriting mesh UV data.
-  */
-  bool swap_yz_axes = false;
+  //! Importers must always output Oxygen world coordinates.
 };
 
 //! Import tuning options.
@@ -324,14 +308,14 @@ struct ImportOptions final {
   /*!
    Oxygen Mesh assets are triangle-list based.
 
-   Importers MUST always normalize mesh topology into explicit triangle lists:
-   - FBX polygons (n-gons) are triangulated.
-   - glTF triangle strips and triangle fans are expanded into triangle lists.
+  Importers MUST only accept explicit triangle lists:
+  - FBX polygons (n-gons) are rejected.
+  - glTF triangle strips and triangle fans are rejected.
 
    Separately, source formats may contain primitives that are not mesh geometry
-   in Oxygen today (points, lines, line strips, etc.). These primitives MUST
-   NOT be triangulated, MUST NOT be converted into Mesh geometry, and MUST NOT
-   be merged with triangle meshes.
+  in Oxygen today (points, lines, line strips, etc.). These primitives MUST
+  NOT be converted into Mesh geometry, and MUST NOT be merged with triangle
+  meshes.
 
    When this option is true (default), the importer skips such primitives.
    When false, the importer MUST fail with a diagnostic if any are encountered.

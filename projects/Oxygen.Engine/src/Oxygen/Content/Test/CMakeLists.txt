@@ -80,6 +80,7 @@ m_gtest_program(
     "FbxImporter_geometry_test.cpp"
     "FbxImporter_scene_test.cpp"
     "FbxImporter_units_axes_test.cpp"
+    "FbxImporter_test.cpp"
     "FbxImporterTest.h"
     "LooseCookedWriter_test.cpp"
     "ScratchImage_test.cpp"
@@ -130,6 +131,8 @@ m_gtest_program(
     "Import/Async/AssetEmitter_test.cpp"
     "Import/Async/GeometryPipeline_test.cpp"
     "Import/Async/MaterialPipeline_test.cpp"
+    "Import/Async/PipelineConformance_test.cpp"
+    "Import/Async/ScenePipeline_test.cpp"
 )
 
 m_gtest_program(
@@ -143,11 +146,15 @@ m_gtest_program(
 )
 
 m_gtest_program(
-  AsyncImportGeometry
+  FbxImport
   SOURCES
-    "Import/Async/GeometryPipeline_test.cpp"
-    "Import/Async/GeometryAdapter_gltf_test.cpp"
-    "Import/Async/GeometryAdapter_fbx_test.cpp"
+    "Import/Async/AsyncFbxImporter_test.cpp"
+)
+
+m_gtest_program(
+  GltfImport
+  SOURCES
+    "Import/Async/AsyncGltfImporter_test.cpp"
 )
 
 # -- Plan Test Programs -------------------------------------------------------

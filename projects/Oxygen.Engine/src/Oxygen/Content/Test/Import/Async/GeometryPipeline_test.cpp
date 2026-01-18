@@ -134,10 +134,9 @@ struct MeshBuffers {
   return buffers;
 }
 
-[[nodiscard]] auto MakeTriangulatedMesh(const MeshBuffers& buffers)
-  -> TriangulatedMesh
+[[nodiscard]] auto MakeTriangleMesh(const MeshBuffers& buffers) -> TriangleMesh
 {
-  return TriangulatedMesh {
+  return TriangleMesh {
     .mesh_type = data::MeshType::kStandard,
     .streams = MeshStreamView {
       .positions = std::span<const glm::vec3>(
@@ -170,18 +169,18 @@ struct MeshBuffers {
   };
 }
 
-[[nodiscard]] auto MakeSkinnedTriangulatedMesh(const MeshBuffers& buffers)
-  -> TriangulatedMesh
+[[nodiscard]] auto MakeSkinnedTriangleMesh(const MeshBuffers& buffers)
+  -> TriangleMesh
 {
-  auto mesh = MakeTriangulatedMesh(buffers);
+  auto mesh = MakeTriangleMesh(buffers);
   mesh.mesh_type = data::MeshType::kSkinned;
   return mesh;
 }
 
-[[nodiscard]] auto MakeProceduralTriangulatedMesh(const MeshBuffers& buffers)
-  -> TriangulatedMesh
+[[nodiscard]] auto MakeProceduralTriangleMesh(const MeshBuffers& buffers)
+  -> TriangleMesh
 {
-  auto mesh = MakeTriangulatedMesh(buffers);
+  auto mesh = MakeTriangleMesh(buffers);
   mesh.mesh_type = data::MeshType::kProcedural;
   return mesh;
 }
@@ -206,7 +205,7 @@ struct MeshBuffers {
   item.has_material_textures = true;
   item.request = MakeRequest();
 
-  TriangulatedMesh mesh = MakeTriangulatedMesh(*buffers);
+  TriangleMesh mesh = MakeTriangleMesh(*buffers);
   item.lods = {
     MeshLod {
       .lod_name = "LOD0",
@@ -230,7 +229,7 @@ struct MeshBuffers {
   item.has_material_textures = true;
   item.request = MakeRequest();
 
-  TriangulatedMesh mesh = MakeSkinnedTriangulatedMesh(*buffers);
+  TriangleMesh mesh = MakeSkinnedTriangleMesh(*buffers);
   item.lods = {
     MeshLod {
       .lod_name = "LOD0",
@@ -254,7 +253,7 @@ struct MeshBuffers {
   item.has_material_textures = false;
   item.request = MakeRequest();
 
-  TriangulatedMesh mesh = MakeProceduralTriangulatedMesh(*buffers);
+  TriangleMesh mesh = MakeProceduralTriangleMesh(*buffers);
   item.lods = {
     MeshLod {
       .lod_name = "LOD0",
@@ -273,7 +272,7 @@ struct MeshBuffers {
   item.lods.reserve(lod_count);
 
   for (uint32_t lod_i = 0; lod_i < lod_count; ++lod_i) {
-    TriangulatedMesh mesh = MakeTriangulatedMesh(*buffers);
+    TriangleMesh mesh = MakeTriangleMesh(*buffers);
     item.lods.push_back(MeshLod {
       .lod_name = "LOD" + std::to_string(lod_i),
       .source = mesh,

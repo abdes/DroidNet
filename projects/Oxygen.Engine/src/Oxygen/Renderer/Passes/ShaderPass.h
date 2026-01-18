@@ -44,6 +44,11 @@ enum class ShaderDebugMode : int {
   kIblSpecular = 4, //!< Visualize IBL specular (prefilter map sampling)
   kIblRawSky = 5, //!< Visualize raw sky cubemap sampling (no prefilter)
   kIblRawSkyViewDir = 6, //!< Visualize raw sky cubemap (view direction)
+
+  // Material/UV debug modes
+  kBaseColor = 7, //!< Visualize base color texture (albedo)
+  kUv0 = 8, //!< Visualize UV0 coordinates
+  kOpacity = 9, //!< Visualize base alpha/opacity
 };
 
 //! Configuration for a shading pass (main geometry + lighting).

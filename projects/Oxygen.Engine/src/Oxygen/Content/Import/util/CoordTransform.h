@@ -13,24 +13,6 @@
 
 namespace oxygen::content::import::coord {
 
-//! Returns the permutation matrix that swaps Y/Z components.
-/*!
- The matrix is column-major as expected by ufbx_matrix.
-
- @return A 4x3 affine matrix representing Y/Z swap.
-*/
-[[nodiscard]] inline auto SwapYZMatrix() noexcept -> ufbx_matrix
-{
-  return ufbx_matrix {
-    .cols = {
-      { 1.0, 0.0, 0.0 },
-      { 0.0, 0.0, 1.0 },
-      { 0.0, 1.0, 0.0 },
-      { 0.0, 0.0, 0.0 },
-    },
-  };
-}
-
 //! Returns ufbx coordinate axes matching Oxygen engine world space.
 /*!
  Oxygen engine world conventions (Oxygen/Core/Constants.h):
@@ -67,85 +49,6 @@ namespace oxygen::content::import::coord {
     .up = UFBX_COORDINATE_AXIS_POSITIVE_Y,
     .front = UFBX_COORDINATE_AXIS_POSITIVE_Z,
   };
-}
-
-//! Applies Y/Z swap to a transform if enabled in policy.
-/*!
- @param policy The coordinate conversion policy.
- @param t The ufbx transform to potentially swap.
- @return The possibly-swapped transform.
-*/
-[[nodiscard]] inline auto ApplySwapYZIfEnabled(
-  const CoordinateConversionPolicy& policy, const ufbx_transform& t)
-  -> ufbx_transform
-{
-  if (!policy.swap_yz_axes) {
-    return t;
-  }
-
-  // Apply a similarity transform: M' = P * M * P^{-1}.
-  // For a pure axis permutation, P^{-1} == P.
-  const auto p = SwapYZMatrix();
-  const auto m = ufbx_transform_to_matrix(&t);
-  const auto pm = ufbx_matrix_mul(&p, &m);
-  const auto pmp = ufbx_matrix_mul(&pm, &p);
-  return ufbx_matrix_to_transform(&pmp);
-}
-
-//! Applies Y/Z swap to a position vector if enabled in policy.
-/*!
- @param policy The coordinate conversion policy.
- @param v The position vector.
- @return The possibly-swapped vector.
-*/
-[[nodiscard]] inline auto ApplySwapYZIfEnabled(
-  const CoordinateConversionPolicy& policy, const ufbx_vec3 v) -> ufbx_vec3
-{
-  if (!policy.swap_yz_axes) {
-    return v;
-  }
-
-  const auto p = SwapYZMatrix();
-  return ufbx_transform_position(&p, v);
-}
-
-//! Applies Y/Z swap to a direction vector if enabled in policy.
-/*!
- Direction vectors (normals, tangents) use direction transformation
- which excludes translation.
-
- @param policy The coordinate conversion policy.
- @param v The direction vector.
- @return The possibly-swapped vector.
-*/
-[[nodiscard]] inline auto ApplySwapYZDirIfEnabled(
-  const CoordinateConversionPolicy& policy, const ufbx_vec3 v) -> ufbx_vec3
-{
-  if (!policy.swap_yz_axes) {
-    return v;
-  }
-
-  const auto p = SwapYZMatrix();
-  return ufbx_transform_direction(&p, v);
-}
-
-//! Applies Y/Z swap to a matrix if enabled in policy.
-/*!
- @param policy The coordinate conversion policy.
- @param m The matrix.
- @return The possibly-swapped matrix.
-*/
-[[nodiscard]] inline auto ApplySwapYZIfEnabled(
-  const CoordinateConversionPolicy& policy, const ufbx_matrix& m) -> ufbx_matrix
-{
-  if (!policy.swap_yz_axes) {
-    return m;
-  }
-
-  const auto p = SwapYZMatrix();
-  const auto pm = ufbx_matrix_mul(&p, &m);
-  const auto pmp = ufbx_matrix_mul(&pm, &p);
-  return pmp;
 }
 
 //! Converts ufbx matrix to glm::mat4.

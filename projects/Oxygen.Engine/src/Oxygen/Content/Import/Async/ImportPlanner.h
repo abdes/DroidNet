@@ -72,7 +72,7 @@ struct ReadinessEvent {
 //! Tracks readiness for a consumer item.
 struct ReadinessTracker {
   std::span<const PlanItemId> required;
-  std::span<uint8_t> satisfied;
+  std::span<uint8_t> satisfied; // Interpreted as boolean flags (0/1).
   ReadinessEvent* ready_event = nullptr;
 
   //! Check whether all dependencies are satisfied.
@@ -93,7 +93,7 @@ struct PlanItem {
 //! Execution step derived from a plan item.
 struct PlanStep {
   PlanItemId item_id {};
-  std::span<const ReadinessEvent* const> prerequisites;
+  std::vector<PlanItemId> prerequisites;
 };
 
 //! Planner that owns the dependency graph and readiness tracking.
@@ -189,7 +189,7 @@ private:
   std::vector<ReadinessTracker> trackers_;
   std::vector<PlanItemId> required_storage_;
   std::vector<uint8_t> satisfied_storage_;
-  std::vector<const ReadinessEvent*> prerequisites_storage_;
+  std::vector<PlanItemId> prerequisites_storage_;
   std::array<std::optional<oxygen::TypeId>, kPlanKindCount>
     pipeline_registry_ {};
 };

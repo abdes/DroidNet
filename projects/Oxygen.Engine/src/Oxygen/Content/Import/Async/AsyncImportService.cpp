@@ -70,28 +70,28 @@ namespace {
     oxygen::observer_ptr<IAsyncFileReader> file_reader,
     oxygen::observer_ptr<IAsyncFileWriter> file_writer,
     oxygen::observer_ptr<co::ThreadPool> thread_pool,
-    oxygen::observer_ptr<ResourceTableRegistry> table_registry)
-    -> std::shared_ptr<detail::ImportJob>
+    oxygen::observer_ptr<ResourceTableRegistry> table_registry,
+    const ImportConcurrency& concurrency) -> std::shared_ptr<detail::ImportJob>
   {
     switch (format) {
     case ImportFormat::kFbx:
       return std::make_shared<detail::FbxImportJob>(job_id, std::move(request),
         std::move(on_complete), std::move(on_progress), std::move(cancel_event),
-        file_reader, file_writer, thread_pool, table_registry);
+        file_reader, file_writer, thread_pool, table_registry, concurrency);
     case ImportFormat::kGltf:
       // TODO(Phase 5): Add dedicated GltfImportJob; use GLB job for now.
       return std::make_shared<detail::GlbImportJob>(job_id, std::move(request),
         std::move(on_complete), std::move(on_progress), std::move(cancel_event),
-        file_reader, file_writer, thread_pool, table_registry);
+        file_reader, file_writer, thread_pool, table_registry, concurrency);
     case ImportFormat::kGlb:
       return std::make_shared<detail::GlbImportJob>(job_id, std::move(request),
         std::move(on_complete), std::move(on_progress), std::move(cancel_event),
-        file_reader, file_writer, thread_pool, table_registry);
+        file_reader, file_writer, thread_pool, table_registry, concurrency);
     case ImportFormat::kTextureImage:
       return std::make_shared<detail::TextureImportJob>(job_id,
         std::move(request), std::move(on_complete), std::move(on_progress),
         std::move(cancel_event), file_reader, file_writer, thread_pool,
-        table_registry);
+        table_registry, concurrency);
     case ImportFormat::kUnknown:
       break;
     }
@@ -437,11 +437,12 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   if (use_custom_factory) {
     job = job_factory(job_id, std::move(request), std::move(wrapped_complete),
       std::move(on_progress), cancel_event, file_reader, file_writer,
-      thread_pool, table_registry);
+      thread_pool, table_registry, impl_->config_.concurrency);
   } else {
     job = CreateJobForFormat(format, job_id, std::move(request),
       std::move(wrapped_complete), std::move(on_progress), cancel_event,
-      file_reader, file_writer, thread_pool, table_registry);
+      file_reader, file_writer, thread_pool, table_registry,
+      impl_->config_.concurrency);
   }
   if (!job) {
     DLOG_F(WARNING, "SubmitImport: failed to create job for '{}'",

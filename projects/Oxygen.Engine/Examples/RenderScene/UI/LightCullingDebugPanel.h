@@ -49,6 +49,9 @@ struct LightCullingDebugConfig {
    - Discrete Colors: Distinct colors for light count ranges
    - Depth Slice: Visualize depth slices (clustered mode)
    - Cluster Index: Checkerboard pattern showing cluster boundaries
+   - Base Color: Visualize base color/albedo texture
+   - UV0: Visualize UV0 coordinates as color
+   - Opacity: Visualize base alpha/opacity
 
  ### Usage Example
 

@@ -56,18 +56,23 @@ the main application thread.
   graph and per-asset readiness tracking. Pipelines only run once required
   dependencies are ready per the planner’s schedule.
 
-12. **ThreadPool-Only content_hash**: `content_hash` is computed only on the
+12. **Direct Adapter Translation**: Format adapters (FBX/glTF) translate
+  native parser structures (ufbx/cgltf) directly into pipeline `WorkItem`
+  storage with no intermediate scene graph. The job owns the storage and
+  passes `WorkPayloadHandle` references to the planner.
+
+13. **ThreadPool-Only content_hash**: `content_hash` is computed only on the
   ThreadPool. The invariant is that all dependencies are ready and the full
   descriptor payload is known before hashing. Buffer and texture hashing are
   optional and are configured via `ImportOptions`, cascading into the
   pipeline configs.
 
-13. **One Lazy Emitter Per Resource Type Per Session**: ImportSession owns
+14. **One Lazy Emitter Per Resource Type Per Session**: ImportSession owns
     emitters (TextureEmitter, BufferEmitter, AssetEmitter). Created lazily on
     first use. Emitter.Emit() returns a stable index immediately and queues
     async I/O in the background.
 
-14. **Log-Structured Allocation (Append Semantics)**: Re-importing an asset
+15. **Log-Structured Allocation (Append Semantics)**: Re-importing an asset
   allocates NEW space with a NEW index (append-like). Old data remains but is
   stale. Allocation is done by reserving explicit offsets and writing via
   `WriteAt*` to avoid interleaving. The index file is always accurate. PAK
@@ -251,6 +256,25 @@ graph TB
 ---
 
 ## Component Design
+
+### 0. Format Adapters + Planner Integration
+
+Format adapters (FBX, glTF) parse the source once and translate the native
+parser structures (ufbx/cgltf) directly into pipeline `WorkItem` storage
+owned by the job. Adapters do **not** construct a secondary scene graph.
+
+Planner integration is explicit:
+
+- The adapter registers plan items and stores `WorkPayloadHandle` values that
+  point to the job-owned `WorkItem` storage.
+- The job executes `PlanStep`s from `ImportPlanner::MakePlan()` and awaits
+  each step’s `prerequisites` before submitting the corresponding work item
+  to the pipeline.
+- Readiness is marked by emitters (or job code) using the planner’s
+  `ReadinessTracker`, allowing dependent steps (e.g., scene) to proceed.
+
+This keeps pipelines compute-only and preserves deterministic dependency
+gating without additional abstraction layers.
 
 ### 1. AsyncImportService (Thread-Safe Public API)
 

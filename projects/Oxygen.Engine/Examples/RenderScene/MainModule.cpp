@@ -15,6 +15,7 @@
 #include <functional>
 #include <numbers>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -793,6 +794,8 @@ private:
 
     // Dump the runtime scene hierarchy (once per load).
     LOG_F(INFO, "SceneLoader: Runtime scene hierarchy:");
+    std::unordered_set<scene::NodeHandle> visited_nodes;
+    visited_nodes.reserve(runtime_nodes_.size());
     const auto PrintNodeLine = [](scene::SceneNode& node, const int depth) {
       const std::string indent(static_cast<size_t>(depth * 2), ' ');
       const bool has_renderable = node.GetRenderable().HasGeometry();
@@ -809,6 +812,7 @@ private:
         return;
       }
 
+      visited_nodes.insert(node.GetHandle());
       PrintNodeLine(node, depth);
 
       auto child = node.GetFirstChild();
@@ -820,6 +824,26 @@ private:
 
     for (auto& root : swap_.scene->GetRootNodes()) {
       PrintSubtree(PrintSubtree, root, 0);
+    }
+
+    if (visited_nodes.size() != runtime_nodes_.size()) {
+      LOG_F(WARNING, "SceneLoader: Hierarchy traversal visited {} of {} nodes.",
+        visited_nodes.size(), runtime_nodes_.size());
+      for (auto& node : runtime_nodes_) {
+        if (!node.IsAlive() || visited_nodes.contains(node.GetHandle())) {
+          continue;
+        }
+
+        const bool has_renderable = node.GetRenderable().HasGeometry();
+        const bool has_camera = node.HasCamera();
+        const bool has_light = node.HasLight();
+        LOG_F(WARNING, "SceneLoader: Unvisited node: {}{}{}{}",
+          node.GetName().c_str(), has_renderable ? " [R]" : "",
+          has_camera ? " [C]" : "", has_light ? " [L]" : "");
+      }
+    } else {
+      LOG_F(INFO, "SceneLoader: Hierarchy traversal covered all {} nodes.",
+        runtime_nodes_.size());
     }
 
     ready_ = true;
@@ -880,7 +904,7 @@ auto MainModule::OnAttached(
 
 void MainModule::OnShutdown() noexcept
 {
-  content_loader_panel_.GetFbxPanel().CancelImport();
+  content_loader_panel_.GetImportPanel().CancelImport();
   scene_.reset();
   scene_loader_.reset();
   active_camera_ = {};
@@ -1634,6 +1658,35 @@ auto MainModule::DrawUI() -> void
   camera_control_panel_.Draw();
   light_culling_debug_panel_.Draw();
   environment_debug_panel_.Draw();
+
+  if (auto render_graph = GetRenderGraph()) {
+    auto shader_pass_config = render_graph->GetShaderPassConfig();
+    auto transparent_pass_config = render_graph->GetTransparentPassConfig();
+    if (shader_pass_config && transparent_pass_config) {
+      using graphics::FillMode;
+      const bool is_wireframe
+        = shader_pass_config->fill_mode == FillMode::kWireFrame;
+      bool use_wireframe = is_wireframe;
+
+      if (ImGui::Begin("Render Mode")) {
+        ImGui::TextUnformatted("Rasterization");
+        if (ImGui::RadioButton("Solid", !use_wireframe)) {
+          use_wireframe = false;
+        }
+        if (ImGui::RadioButton("Wireframe", use_wireframe)) {
+          use_wireframe = true;
+        }
+      }
+      ImGui::End();
+
+      if (use_wireframe != is_wireframe) {
+        const auto mode
+          = use_wireframe ? FillMode::kWireFrame : FillMode::kSolid;
+        shader_pass_config->fill_mode = mode;
+        transparent_pass_config->fill_mode = mode;
+      }
+    }
+  }
 
   // Draw axes widget with current camera view matrix
   if (active_camera_.IsAlive()) {

@@ -77,7 +77,7 @@ struct Bounds3 {
   std::array<float, 3> max;
 };
 
-struct TriangulatedMesh {
+struct TriangleMesh {
   data::MeshType mesh_type = data::MeshType::kStandard;
   MeshStreamView streams;
   std::span<const uint32_t> indices;      // Triangle list (u32)
@@ -87,7 +87,7 @@ struct TriangulatedMesh {
 
 struct MeshLod {
   std::string lod_name;
-  TriangulatedMesh source;
+  TriangleMesh source;
   std::shared_ptr<const void> source_owner; // Keeps mesh data alive
 };
 
@@ -112,11 +112,11 @@ struct WorkItem {
 Notes:
 
 - `lods` must contain at least one LOD; `lods[0]` is the highest detail.
-- `TriangulatedMesh` is the only accepted source type for the pipeline and
-  must already be triangle lists. Format adapters are responsible for
-  triangulation and normalization before submission.
+- `TriangleMesh` is the only accepted source type for the pipeline and
+  must already be triangle lists. Format adapters must reject non-triangle
+  topology before submission.
 - `storage_mesh_name` is used for virtual paths and descriptor relpaths.
-- `TriangulatedMesh.mesh_type` selects `MeshType` and drives serialization
+- `TriangleMesh.mesh_type` selects `MeshType` and drives serialization
   (standard vs skinned).
 - Bounds are required in the PAK for geometry assets and meshes; all-zero
   bounds are valid and must not be interpreted as "missing".
@@ -124,7 +124,7 @@ Notes:
   otherwise leave it unset so the pipeline computes bounds from vertices.
 - For skinned meshes, `joint_indices` and `joint_weights` must be present and
   aligned with `positions`.
-- All FBX/glTF meshes must be converted to `TriangulatedMesh` with the
+- All FBX/glTF meshes must be converted to `TriangleMesh` with the
   required streams before submission. The pipeline does not accept importer
   native mesh views.
 - `material_keys` may be empty; the pipeline uses `default_material_key` when a
@@ -219,7 +219,7 @@ For each work item:
    - If faces/indices are empty → error `mesh.missing_buffers`.
 4) Build vertices, bounds, and attribute masks per LOD:
    - Expand to one vertex per index.
-   - Apply coordinate conversion via `coord::ApplySwapYZ*`.
+   - Apply coordinate conversion to Oxygen world space.
    - If adapter bounds are missing, compute bounds from expanded vertices.
    - Apply `normal_policy`:
      - `kNone`: emit defaults and clear `kGeomAttr_Normal` in the attribute mask.
@@ -290,7 +290,7 @@ boundaries.
 
 4) **Material bucketing**
    - Face material slots map to `material_keys` (or default).
-   - Triangulate faces, group by material, sort by slot index.
+   - Group triangle ranges by material and sort by slot index.
 
 5) **Submesh + view layout**
    - `SubMeshDesc` per material bucket; `MeshViewDesc` per submesh.
@@ -460,10 +460,9 @@ coverage.
 
 - **Standard meshes**
   - Preferred: emit `UfbxMeshView` (when supported) for zero-copy access.
-  - Fallback: build `TriangulatedMesh` by triangulating faces using
-    `ufbx_triangulate_face` and emitting explicit indices/ranges.
+  - Otherwise require triangle faces and emit explicit indices/ranges.
 - **Skinned meshes**
-  - Must emit `TriangulatedMesh` with `joint_indices`/`joint_weights`.
+  - Must emit `TriangleMesh` with `joint_indices`/`joint_weights`.
   - If >4 influences, keep highest 4, renormalize, emit warning diagnostic.
   - If joints/weights missing, emit `mesh.missing_skinning` and skip mesh.
 - **Material slots**
@@ -478,7 +477,7 @@ coverage.
 
 ### glTF/GLB Adapter (cgltf)
 
-**Goal:** Map `cgltf_data` meshes and primitives into `TriangulatedMesh`-based
+**Goal:** Map `cgltf_data` meshes and primitives into `TriangleMesh`-based
 `WorkItem` entries.
 
 - **Primitive handling**
@@ -643,7 +642,7 @@ concept GeometryAdapter = requires(T adapter,
 - **GeometryPipeline**: compute-only; no I/O.
 - **BufferEmitter**: dedupe + async data writes.
 - **AssetEmitter**: `.ogeo` write.
-- **ScenePipeline**: consumes `ImportedGeometry` mapping to build `.oscene`.
+- **ScenePipeline**: consumes `geometry_keys` to build `.oscene`.
 
 ---
 

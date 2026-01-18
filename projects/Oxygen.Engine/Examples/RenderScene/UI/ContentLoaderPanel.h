@@ -12,7 +12,7 @@
 #include <memory>
 
 #include "CameraControlPanel.h"
-#include "FbxLoaderPanel.h"
+#include "ImportPanel.h"
 #include "LooseCookedLoaderPanel.h"
 #include "PakLoaderPanel.h"
 
@@ -20,7 +20,7 @@ namespace oxygen::examples::render_scene::ui {
 
 //! Unified content loader panel combining all loading options
 /*!
- Provides a single ImGui window with tabs for FBX, PAK, and Loose Cooked
+ Provides a single ImGui window with tabs for Import, PAK, and Loose Cooked
  content loading. Manages all loader panels internally and provides a clean
  interface for scene loading operations.
 
@@ -62,7 +62,7 @@ namespace oxygen::examples::render_scene::ui {
  loader_panel.Draw();
  ```
 
- @see FbxLoaderPanel, PakLoaderPanel, LooseCookedLoaderPanel
+ @see ImportPanel, PakLoaderPanel, LooseCookedLoaderPanel
  */
 class ContentLoaderPanel {
 public:
@@ -88,8 +88,8 @@ public:
   //! Draw the ImGui panel content
   void Draw();
 
-  //! Get FBX loader panel
-  [[nodiscard]] auto GetFbxPanel() -> FbxLoaderPanel& { return fbx_panel_; }
+  //! Get unified import panel
+  [[nodiscard]] auto GetImportPanel() -> ImportPanel& { return import_panel_; }
 
   //! Get PAK loader panel
   [[nodiscard]] auto GetPakPanel() -> PakLoaderPanel& { return pak_panel_; }
@@ -101,7 +101,7 @@ public:
   }
 
 private:
-  FbxLoaderPanel fbx_panel_;
+  ImportPanel import_panel_;
   PakLoaderPanel pak_panel_;
   LooseCookedLoaderPanel loose_cooked_panel_;
 };

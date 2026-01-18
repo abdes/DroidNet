@@ -71,7 +71,8 @@ public:
     oxygen::observer_ptr<IAsyncFileReader> file_reader,
     oxygen::observer_ptr<IAsyncFileWriter> file_writer,
     oxygen::observer_ptr<co::ThreadPool> thread_pool,
-    oxygen::observer_ptr<ResourceTableRegistry> table_registry);
+    oxygen::observer_ptr<ResourceTableRegistry> table_registry,
+    ImportConcurrency concurrency);
 
   OXYGEN_MAKE_NON_COPYABLE(ImportJob)
   OXYGEN_MAKE_NON_MOVABLE(ImportJob)
@@ -129,6 +130,9 @@ protected:
   //! Access the shared thread pool.
   OXGN_CNTT_NDAPI auto ThreadPool() const noexcept
     -> oxygen::observer_ptr<co::ThreadPool>;
+
+  //! Access pipeline concurrency settings.
+  OXGN_CNTT_NDAPI auto Concurrency() const noexcept -> const ImportConcurrency&;
 
   //! Access the resource table registry.
   OXGN_CNTT_NDAPI auto TableRegistry() const noexcept
@@ -188,6 +192,7 @@ private:
   oxygen::observer_ptr<IAsyncFileWriter> file_writer_ {};
   oxygen::observer_ptr<co::ThreadPool> thread_pool_ {};
   oxygen::observer_ptr<ResourceTableRegistry> table_registry_ {};
+  ImportConcurrency concurrency_ {};
 
   std::string name_;
 

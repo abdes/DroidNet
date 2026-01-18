@@ -161,6 +161,21 @@ auto MakeFbxFilePickerConfig() -> FilePickerConfig
   return config;
 }
 
+auto MakeModelFilePickerConfig() -> FilePickerConfig
+{
+  FilePickerConfig config;
+  config.filters = {
+    { L"FBX/GLTF/GLB files (*.fbx;*.gltf;*.glb)", L"*.fbx;*.gltf;*.glb" },
+    { L"FBX files (*.fbx)", L"*.fbx" },
+    { L"glTF files (*.gltf)", L"*.gltf" },
+    { L"GLB files (*.glb)", L"*.glb" },
+    { L"All files (*.*)", L"*.*" },
+  };
+  config.default_extension = L"gltf";
+  config.title = L"Select 3D Model File";
+  return config;
+}
+
 auto MakeLooseCookedIndexPickerConfig() -> FilePickerConfig
 {
   FilePickerConfig config;

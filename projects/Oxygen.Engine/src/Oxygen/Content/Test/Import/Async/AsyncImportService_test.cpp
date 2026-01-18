@@ -44,11 +44,13 @@ namespace {
       oxygen::observer_ptr<IAsyncFileReader> file_reader,
       oxygen::observer_ptr<IAsyncFileWriter> file_writer,
       oxygen::observer_ptr<co::ThreadPool> thread_pool,
-      oxygen::observer_ptr<ResourceTableRegistry> table_registry)
+      oxygen::observer_ptr<ResourceTableRegistry> table_registry,
+      const ImportConcurrency& concurrency)
       -> std::shared_ptr<detail::ImportJob> {
       return std::make_shared<test::TestImportJob>(job_id, std::move(request),
         std::move(on_complete), std::move(on_progress), std::move(cancel_event),
-        file_reader, file_writer, thread_pool, table_registry, config);
+        file_reader, file_writer, thread_pool, table_registry, concurrency,
+        config);
     };
 }
 

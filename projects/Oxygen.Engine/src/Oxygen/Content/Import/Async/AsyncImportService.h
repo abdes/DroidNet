@@ -101,11 +101,30 @@ using ImportCompletionCallback
 using ImportProgressCallback = std::function<void(const ImportProgress&)>;
 
 //! Factory for creating custom import jobs.
+//! Per-pipeline concurrency settings.
+struct ImportPipelineConcurrency {
+  //! Number of worker coroutines to start for the pipeline.
+  uint32_t workers = 2;
+
+  //! Bounded capacity of the pipeline work queues.
+  uint32_t queue_capacity = 64;
+};
+
+//! Concurrency tuning for async import pipelines.
+struct ImportConcurrency {
+  ImportPipelineConcurrency texture { .workers = 2, .queue_capacity = 64 };
+  ImportPipelineConcurrency buffer { .workers = 2, .queue_capacity = 64 };
+  ImportPipelineConcurrency material { .workers = 2, .queue_capacity = 64 };
+  ImportPipelineConcurrency geometry { .workers = 2, .queue_capacity = 32 };
+  ImportPipelineConcurrency scene { .workers = 1, .queue_capacity = 8 };
+};
+
+//! Factory for creating custom import jobs.
 using ImportJobFactory = std::function<std::shared_ptr<detail::ImportJob>(
   ImportJobId, ImportRequest, ImportCompletionCallback, ImportProgressCallback,
   std::shared_ptr<co::Event>, oxygen::observer_ptr<IAsyncFileReader>,
   oxygen::observer_ptr<IAsyncFileWriter>, oxygen::observer_ptr<co::ThreadPool>,
-  oxygen::observer_ptr<ResourceTableRegistry>)>;
+  oxygen::observer_ptr<ResourceTableRegistry>, const ImportConcurrency&)>;
 
 //! Thread-safe service for submitting async import jobs.
 /*!
@@ -185,8 +204,8 @@ public:
     //! Maximum number of jobs processed concurrently.
     uint32_t max_in_flight_jobs = std::thread::hardware_concurrency();
 
-    //! Bounded capacity for texture work queue (backpressure).
-    uint32_t texture_queue_capacity = 64;
+    //! Per-pipeline concurrency settings (workers and queue capacity).
+    ImportConcurrency concurrency {};
   };
 
   //! Construct and start the import thread.

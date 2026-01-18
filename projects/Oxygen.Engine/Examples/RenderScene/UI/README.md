@@ -10,7 +10,7 @@ The RenderScene demo UI has been restructured into a modular, maintainable archi
 Examples/RenderScene/
 ├── UI/
 │   ├── FilePicker.h/cpp              # Reusable file picker dialog
-│   ├── FbxLoaderPanel.h/cpp          # FBX file loading & import
+│   ├── ImportPanel.h/cpp             # Unified FBX + GLB/GLTF importer
 │   ├── PakLoaderPanel.h/cpp          # PAK file loading & scene browser
 │   ├── LooseCookedLoaderPanel.h/cpp  # Loose cooked index loader
 │   ├── CameraControlPanel.h/cpp      # Camera mode & debug controls
@@ -29,7 +29,7 @@ Examples/RenderScene/
 **Features:**
 
 - Cross-platform abstraction (Windows COM implementation, extensible for other platforms)
-- Pre-configured factory functions for common file types (PAK, FBX, Index)
+- Pre-configured factory functions for common file types (PAK, Model, Index)
 - Clean API with `FilePickerConfig` struct
 
 **Usage:**
@@ -43,29 +43,30 @@ if (const auto selected_path = ui::ShowFilePicker(picker_config)) {
 }
 ```
 
-### 2. FbxLoaderPanel (`UI/FbxLoaderPanel.h/cpp`)
+### 2. ImportPanel (`UI/ImportPanel.h/cpp`)
 
-**Purpose:** Loads and imports FBX files into the cooked asset format.
+**Purpose:** Loads and imports FBX + GLB/GLTF files into the cooked asset format.
 
 **Features:**
 
-- Auto-scans FBX directory for available files
-- Manual file selection via file picker
-- Asynchronous import with progress indicator
-- Automatic scene extraction and loading after import
-- Refresh button to rescan directory
+- Auto-scans FBX and GLB/GLTF directories
+- Single file picker for all supported formats
+- Async import with progress feedback and diagnostics
+- Full import options and service configuration
+- Automatic scene extraction and optional auto-load
 
 **Configuration:**
 
 ```cpp
-ui::FbxLoaderConfig config;
+ui::ImportPanelConfig config;
 config.fbx_directory = content_root / "fbx";
+config.gltf_directory = content_root / "glb";
 config.cooked_output_directory = content_root / ".cooked";
 config.on_scene_ready = [](const data::AssetKey& key) {
     // Load the imported scene
 };
 
-fbx_panel.Initialize(config);
+import_panel.Initialize(config);
 ```
 
 ### 3. PakLoaderPanel (`UI/PakLoaderPanel.h/cpp`)
@@ -219,7 +220,7 @@ InitializeUIPanels();  // Configure all panels with callbacks
 **Update Loop** (in `OnSceneMutation`):
 
 ```cpp
-UpdateUIPanels();  // Update async operations (e.g., FBX import)
+UpdateUIPanels();  // Update async operations (e.g., model import)
 ```
 
 **Rendering** (in `OnGuiUpdate`):
@@ -249,7 +250,7 @@ DrawUI();  // Draw all panels
 
 Potential improvements to the UI system:
 
-1. **GLB/GLTF Loader Panel:** Similar to FBX loader
+1. **Asset Browser Panel:** Browse assets across mounted sources
 2. **Asset Browser Panel:** Browse all assets in mounted sources
 3. **Scene Hierarchy Panel:** Tree view of loaded scene
 4. **Material Editor Panel:** Edit material properties

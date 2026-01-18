@@ -68,7 +68,7 @@ public:
     size_t queue_capacity = 64;
 
     //! Number of worker coroutines to start.
-    uint32_t worker_count = 2;
+    uint32_t worker_count = 4;
   };
 
   //! Policy for handling failures while cooking.
