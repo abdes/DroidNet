@@ -93,6 +93,21 @@ auto MakePakFilePickerConfig() -> FilePickerConfig;
 auto MakeFbxFilePickerConfig() -> FilePickerConfig;
 
 /*!
+ Creates a file picker configuration for FBX/GLTF/GLB files.
+
+ @return Pre-configured FilePickerConfig for selecting FBX/GLTF/GLB files
+
+ ### Usage Examples
+
+ ```cpp
+ if (const auto path = ShowFilePicker(MakeModelFilePickerConfig())) {
+   ImportModel(*path);
+ }
+ ```
+*/
+auto MakeModelFilePickerConfig() -> FilePickerConfig;
+
+/*!
  Creates a file picker configuration for loose cooked index files.
 
  @return Pre-configured FilePickerConfig for selecting container.index.bin files

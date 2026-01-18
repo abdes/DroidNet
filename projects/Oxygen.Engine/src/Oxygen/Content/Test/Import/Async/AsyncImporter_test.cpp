@@ -198,7 +198,8 @@ protected:
       oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
       oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
       oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
-      oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+      oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+      ImportConcurrency {});
   }
 
   void TearDown() override
@@ -439,7 +440,8 @@ NOLINT_TEST_F(
         oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
         oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
         oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
-        oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+        oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+        ImportConcurrency {});
 
       JobEntry entry;
       entry.job_id = 123;

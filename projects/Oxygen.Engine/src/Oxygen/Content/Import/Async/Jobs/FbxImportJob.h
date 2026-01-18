@@ -6,12 +6,19 @@
 
 #pragma once
 
+#include <memory>
+
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Import/Async/Detail/ImportJob.h>
+#include <Oxygen/Content/Import/ImportDiagnostics.h>
 
 namespace oxygen::content::import {
 class ImportSession;
 } // namespace oxygen::content::import
+
+namespace oxygen::content::import::adapters {
+class FbxAdapter;
+} // namespace oxygen::content::import::adapters
 
 namespace oxygen::content::import::detail {
 
@@ -35,7 +42,18 @@ public:
 private:
   //! Placeholder for parsed FBX scene state.
   struct ParsedFbxScene {
+    std::shared_ptr<adapters::FbxAdapter> adapter;
+    std::vector<ImportDiagnostic> diagnostics;
     bool success = true;
+    bool cancelled = false;
+  };
+
+  struct PlannedFbxImport;
+
+  struct PlanBuildOutcome {
+    std::unique_ptr<PlannedFbxImport> plan;
+    std::vector<ImportDiagnostic> diagnostics;
+    bool cancelled = false;
   };
 
   [[nodiscard]] auto ExecuteAsync() -> co::Co<ImportReport> override;
@@ -43,17 +61,12 @@ private:
   [[nodiscard]] auto ParseScene(ImportSession& session)
     -> co::Co<ParsedFbxScene>;
 
-  [[nodiscard]] auto CookTextures(
-    const ParsedFbxScene& scene, ImportSession& session) -> co::Co<bool>;
+  [[nodiscard]] auto BuildPlan(ParsedFbxScene& scene,
+    const ImportRequest& request, std::stop_token stop_token)
+    -> PlanBuildOutcome;
 
-  [[nodiscard]] auto CookGeometry(
-    const ParsedFbxScene& scene, ImportSession& session) -> co::Co<bool>;
-
-  [[nodiscard]] auto EmitMaterials(
-    const ParsedFbxScene& scene, ImportSession& session) -> co::Co<bool>;
-
-  [[nodiscard]] auto EmitScene(
-    const ParsedFbxScene& scene, ImportSession& session) -> co::Co<bool>;
+  [[nodiscard]] auto ExecutePlan(PlannedFbxImport& plan, ImportSession& session)
+    -> co::Co<bool>;
 
   [[nodiscard]] auto FinalizeSession(ImportSession& session)
     -> co::Co<ImportReport>;

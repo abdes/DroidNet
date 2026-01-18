@@ -24,10 +24,11 @@ TestImportJob::TestImportJob(ImportJobId job_id, ImportRequest request,
   oxygen::observer_ptr<IAsyncFileReader> file_reader,
   oxygen::observer_ptr<IAsyncFileWriter> file_writer,
   oxygen::observer_ptr<co::ThreadPool> thread_pool,
-  oxygen::observer_ptr<ResourceTableRegistry> table_registry, Config config)
+  oxygen::observer_ptr<ResourceTableRegistry> table_registry,
+  ImportConcurrency concurrency, Config config)
   : detail::ImportJob(job_id, std::move(request), std::move(on_complete),
       std::move(on_progress), std::move(cancel_event), file_reader, file_writer,
-      thread_pool, table_registry)
+      thread_pool, table_registry, concurrency)
   , config_(config)
 {
 }

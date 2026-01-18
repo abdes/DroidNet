@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -19,8 +20,8 @@
 #include <Oxygen/Data/AssetKey.h>
 
 // Only available to tests
-#include <Oxygen/Content/Import/Async/Adapters/GeometryAdapterTypes.h>
-#include <Oxygen/Content/Import/Async/Adapters/GltfGeometryAdapter.h>
+#include <Oxygen/Content/Import/Async/Adapters/AdapterTypes.h>
+#include <Oxygen/Content/Import/Async/Adapters/GltfAdapter.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen::content::import::adapters;
@@ -35,6 +36,17 @@ struct GltfBuffers {
   std::vector<float> positions;
   std::vector<float> normals;
   std::vector<float> tangents;
+};
+
+class GeometryWorkItemCollector final : public GeometryWorkItemSink {
+public:
+  auto Consume(GeometryPipeline::WorkItem item) -> bool override
+  {
+    work_items.push_back(std::move(item));
+    return true;
+  }
+
+  std::vector<GeometryPipeline::WorkItem> work_items;
 };
 
 [[nodiscard]] auto MakeDefaultMaterialKey() -> data::AssetKey
@@ -109,8 +121,8 @@ protected:
   };
 };
 
-//! Verify glTF adapter emits TriangulatedMesh work items with bitangents.
-NOLINT_TEST_F(GltfGeometryAdapterTest, BuildWorkItems_EmitsTriangulatedMesh)
+//! Verify glTF adapter emits TriangleMesh work items with bitangents.
+NOLINT_TEST_F(GltfGeometryAdapterTest, BuildWorkItems_EmitsTriangleMesh)
 {
   // Arrange
   const auto temp_dir = std::filesystem::temp_directory_path()
@@ -173,41 +185,47 @@ NOLINT_TEST_F(GltfGeometryAdapterTest, BuildWorkItems_EmitsTriangulatedMesh)
     file.write(json.data(), static_cast<std::streamsize>(json.size()));
   }
 
-  GeometryAdapterInput input {
+  std::vector<data::AssetKey> material_keys;
+  AdapterInput input {
     .source_id_prefix = "glb",
     .object_path_prefix = "",
-    .material_keys = {},
+    .material_keys = std::span<const data::AssetKey>(material_keys),
     .default_material_key = MakeDefaultMaterialKey(),
     .request = MakeRequest(source_path),
     .stop_token = {},
   };
 
-  GltfGeometryAdapter adapter;
+  GltfAdapter adapter;
+  GeometryWorkItemCollector collector;
 
   // Act
-  const auto output = adapter.BuildWorkItems(source_path, input);
+  const auto parse_result = adapter.Parse(source_path, input);
+  ASSERT_TRUE(parse_result.success);
+  const auto output
+    = adapter.BuildWorkItems(GeometryWorkTag {}, collector, input);
 
   // Assert
   ASSERT_TRUE(output.success);
   ASSERT_EQ(output.diagnostics.size(), 1u);
   EXPECT_EQ(output.diagnostics[0].severity, ImportSeverity::kWarning);
   EXPECT_EQ(output.diagnostics[0].code, "gltf.missing_indices");
-  ASSERT_EQ(output.work_items.size(), 1u);
+  ASSERT_EQ(output.emitted, 1u);
+  ASSERT_EQ(collector.work_items.size(), 1u);
 
-  const auto& item = output.work_items.front();
+  const auto& item = collector.work_items.front();
   ASSERT_EQ(item.lods.size(), 1u);
   EXPECT_EQ(item.lods.front().lod_name, "LOD0");
 
-  const auto& tri_mesh = item.lods.front().source;
-  EXPECT_EQ(tri_mesh.streams.positions.size(), 3u);
-  EXPECT_EQ(tri_mesh.streams.normals.size(), 3u);
-  EXPECT_EQ(tri_mesh.streams.tangents.size(), 3u);
-  EXPECT_EQ(tri_mesh.streams.bitangents.size(), 3u);
+  const auto& triangle_mesh = item.lods.front().source;
+  EXPECT_EQ(triangle_mesh.streams.positions.size(), 3u);
+  EXPECT_EQ(triangle_mesh.streams.normals.size(), 3u);
+  EXPECT_EQ(triangle_mesh.streams.tangents.size(), 3u);
+  EXPECT_EQ(triangle_mesh.streams.bitangents.size(), 3u);
 
   const glm::vec3 expected_bitangent { 0.0F, 1.0F, 0.0F };
-  EXPECT_FLOAT_EQ(tri_mesh.streams.bitangents[0].x, expected_bitangent.x);
-  EXPECT_FLOAT_EQ(tri_mesh.streams.bitangents[0].y, expected_bitangent.y);
-  EXPECT_FLOAT_EQ(tri_mesh.streams.bitangents[0].z, expected_bitangent.z);
+  EXPECT_FLOAT_EQ(triangle_mesh.streams.bitangents[0].x, expected_bitangent.x);
+  EXPECT_FLOAT_EQ(triangle_mesh.streams.bitangents[0].y, expected_bitangent.y);
+  EXPECT_FLOAT_EQ(triangle_mesh.streams.bitangents[0].z, expected_bitangent.z);
 }
 
 //! Verify glTF adapter maps material slots by material index.
@@ -278,31 +296,37 @@ NOLINT_TEST_F(GltfGeometryAdapterTest, BuildWorkItems_MapsMaterialSlot)
     file.write(json.data(), static_cast<std::streamsize>(json.size()));
   }
 
-  GeometryAdapterInput input {
+  std::vector<data::AssetKey> material_keys;
+  AdapterInput input {
     .source_id_prefix = "glb",
     .object_path_prefix = "",
-    .material_keys = {},
+    .material_keys = std::span<const data::AssetKey>(material_keys),
     .default_material_key = MakeDefaultMaterialKey(),
     .request = MakeRequest(source_path),
     .stop_token = {},
   };
 
-  GltfGeometryAdapter adapter;
+  GltfAdapter adapter;
+  GeometryWorkItemCollector collector;
 
   // Act
-  const auto output = adapter.BuildWorkItems(source_path, input);
+  const auto parse_result = adapter.Parse(source_path, input);
+  ASSERT_TRUE(parse_result.success);
+  const auto output
+    = adapter.BuildWorkItems(GeometryWorkTag {}, collector, input);
 
   // Assert
   ASSERT_TRUE(output.success);
   ASSERT_TRUE(output.diagnostics.empty());
-  ASSERT_EQ(output.work_items.size(), 1u);
+  ASSERT_EQ(output.emitted, 1u);
+  ASSERT_EQ(collector.work_items.size(), 1u);
 
-  const auto& item = output.work_items.front();
+  const auto& item = collector.work_items.front();
   ASSERT_EQ(item.lods.size(), 1u);
 
-  const auto& tri_mesh = item.lods.front().source;
-  ASSERT_EQ(tri_mesh.ranges.size(), 1u);
-  EXPECT_EQ(tri_mesh.ranges[0].material_slot, 1u);
+  const auto& triangle_mesh = item.lods.front().source;
+  ASSERT_EQ(triangle_mesh.ranges.size(), 1u);
+  EXPECT_EQ(triangle_mesh.ranges[0].material_slot, 1u);
 }
 
 } // namespace

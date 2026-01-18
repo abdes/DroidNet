@@ -298,7 +298,7 @@ struct LoadedBuffers final {
 
 //! Test: Real FBX backend emits a GeometryAsset with valid mesh structure.
 /*!\
- Scenario: Writes a minimal ASCII FBX containing a single triangulated mesh.
+ Scenario: Writes a minimal ASCII FBX containing a single triangle mesh.
  Runs the default AssetImporter() (real FbxImporter backend), requesting
  geometry-only output.
 

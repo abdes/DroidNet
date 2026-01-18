@@ -6,12 +6,19 @@
 
 #pragma once
 
+#include <memory>
+
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Import/Async/Detail/ImportJob.h>
+#include <Oxygen/Content/Import/ImportDiagnostics.h>
 
 namespace oxygen::content::import {
 class ImportSession;
 } // namespace oxygen::content::import
+
+namespace oxygen::content::import::adapters {
+class GltfAdapter;
+} // namespace oxygen::content::import::adapters
 
 namespace oxygen::content::import::detail {
 
@@ -34,7 +41,18 @@ public:
 private:
   //! Placeholder for parsed GLB asset state.
   struct ParsedGlbAsset {
+    std::shared_ptr<adapters::GltfAdapter> adapter;
+    std::vector<ImportDiagnostic> diagnostics;
     bool success = true;
+    bool cancelled = false;
+  };
+
+  struct PlannedGlbImport;
+
+  struct PlanBuildOutcome {
+    std::unique_ptr<PlannedGlbImport> plan;
+    std::vector<ImportDiagnostic> diagnostics;
+    bool cancelled = false;
   };
 
   [[nodiscard]] auto ExecuteAsync() -> co::Co<ImportReport> override;
@@ -42,17 +60,12 @@ private:
   [[nodiscard]] auto ParseAsset(ImportSession& session)
     -> co::Co<ParsedGlbAsset>;
 
-  [[nodiscard]] auto CookTextures(
-    const ParsedGlbAsset& asset, ImportSession& session) -> co::Co<bool>;
+  [[nodiscard]] auto BuildPlan(ParsedGlbAsset& asset,
+    const ImportRequest& request, std::stop_token stop_token)
+    -> PlanBuildOutcome;
 
-  [[nodiscard]] auto CookBuffers(
-    const ParsedGlbAsset& asset, ImportSession& session) -> co::Co<bool>;
-
-  [[nodiscard]] auto EmitMaterials(
-    const ParsedGlbAsset& asset, ImportSession& session) -> co::Co<bool>;
-
-  [[nodiscard]] auto EmitScene(
-    const ParsedGlbAsset& asset, ImportSession& session) -> co::Co<bool>;
+  [[nodiscard]] auto ExecutePlan(PlannedGlbImport& plan, ImportSession& session)
+    -> co::Co<bool>;
 
   [[nodiscard]] auto FinalizeSession(ImportSession& session)
     -> co::Co<ImportReport>;

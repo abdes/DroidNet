@@ -784,6 +784,7 @@ namespace {
     const bool equirect_to_cubemap, const uint32_t cubemap_face_size,
     const CubeMapImageLayout cubemap_layout) -> CookOutcome
   {
+    DLOG_F(1, "TexturePipeline: Cook source content");
     return std::visit(
       [&](auto&& value) -> CookOutcome {
         using ValueT = std::decay_t<decltype(value)>;
@@ -938,6 +939,7 @@ auto TexturePipeline::Worker() -> co::Co<>
         cubemap_face_size = item.cubemap_face_size,
         cubemap_layout = item.cubemap_layout, stop_token = item.stop_token](
         co::ThreadPool::CancelToken cancelled) -> CookOutcome {
+        DLOG_F(1, "TexturePipeline: Cook task begin");
         if (stop_token.stop_requested() || cancelled) {
           return { .cooked = ::oxygen::Err(TextureImportError::kCancelled),
             .decode_duration = {} };

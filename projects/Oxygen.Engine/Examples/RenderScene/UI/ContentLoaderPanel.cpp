@@ -12,14 +12,15 @@ namespace oxygen::examples::render_scene::ui {
 
 void ContentLoaderPanel::Initialize(const Config& config)
 {
-  // Configure FBX loader panel
-  FbxLoaderConfig fbx_config;
-  fbx_config.fbx_directory = config.content_root / "fbx";
-  fbx_config.cooked_output_directory = config.content_root / ".cooked";
-  fbx_config.on_scene_ready = config.on_scene_load_requested;
-  fbx_config.on_index_loaded = config.on_loose_index_loaded;
-  fbx_config.on_dump_texture_memory = config.on_dump_texture_memory;
-  fbx_panel_.Initialize(fbx_config);
+  // Configure unified import panel
+  ImportPanelConfig import_config;
+  import_config.fbx_directory = config.content_root / "fbx";
+  import_config.gltf_directory = config.content_root / "glb";
+  import_config.cooked_output_directory = config.content_root / ".cooked";
+  import_config.on_scene_ready = config.on_scene_load_requested;
+  import_config.on_index_loaded = config.on_loose_index_loaded;
+  import_config.on_dump_texture_memory = config.on_dump_texture_memory;
+  import_panel_.Initialize(import_config);
 
   // Configure PAK loader panel
   PakLoaderConfig pak_config;
@@ -38,8 +39,8 @@ void ContentLoaderPanel::Initialize(const Config& config)
 
 void ContentLoaderPanel::Update()
 {
-  // FBX panel needs update for async import status
-  fbx_panel_.Update();
+  // Import panel needs update for async import status
+  import_panel_.Update();
 }
 
 void ContentLoaderPanel::Draw()
@@ -53,8 +54,8 @@ void ContentLoaderPanel::Draw()
   }
 
   if (ImGui::BeginTabBar("ContentSourceTabs")) {
-    if (ImGui::BeginTabItem("FBX")) {
-      fbx_panel_.Draw();
+    if (ImGui::BeginTabItem("Import")) {
+      import_panel_.Draw();
       ImGui::EndTabItem();
     }
 

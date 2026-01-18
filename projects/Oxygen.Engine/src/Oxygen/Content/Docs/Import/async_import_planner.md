@@ -33,6 +33,11 @@ emitters perform all I/O. The planner does not parse importer formats and does
 not own any cooked output; the job stores pipeline results in a job‑level cache
 after emission.
 
+Format adapters create job-owned `WorkItem` storage directly from ufbx/cgltf
+structures and register plan items with `WorkPayloadHandle` values pointing to
+that storage. The planner uses these handles as opaque references only; it
+never inspects or copies the payloads.
+
 ### Non‑Goals
 
 - Introducing new asset/resource types beyond those defined in
@@ -122,8 +127,11 @@ struct ReadinessEvent {
 struct ReadinessTracker {
   // One entry per producer dependency (deduplicated by producer step).
   std::span<const PlanItemId> required;
-  std::span<bool> satisfied;              // same size as required
-  ReadinessEvent ready_event;
+  std::span<uint8_t> satisfied;           // same size as required;
+                                          // uint8_t avoids std::vector<bool>
+                                          // proxy storage so spans can point
+                                          // to contiguous backing memory.
+  ReadinessEvent* ready_event = nullptr;
 
   auto IsReady() const noexcept -> bool;
   auto MarkReady(const DependencyToken& token) -> bool; // true on transition
@@ -138,7 +146,7 @@ struct PlanItem {
 
 struct PlanStep {
   PlanItemId item_id = 0;
-  std::span<const ReadinessEvent* const> prerequisites;
+  std::span<ReadinessEvent* const> prerequisites;
 };
 
 // Planner owns the backing storage for prerequisites. Each PlanStep references
@@ -175,7 +183,7 @@ contiguous table to enable stable iteration and deterministic ordering.
 std::vector<PlanItem> items_;          // indexed by PlanItemId
 std::vector<ReadinessEvent> events_;   // indexed by PlanItemId
 std::vector<ReadinessTracker> trackers_; // indexed by PlanItemId
-std::vector<const ReadinessEvent*> prerequisites_storage_;
+std::vector<ReadinessEvent*> prerequisites_storage_;
 
 std::array<std::optional<oxygen::TypeId>, kPlanKindCount> pipeline_registry_;
 
@@ -360,7 +368,7 @@ for (const auto& step : plan) {
   for (auto* ev : step.prerequisites) {
     waits.push_back([ev]() -> co::Co<> {
       if (!ev->ready) {
-        co_await ev->event.Wait();
+        co_await ev->event;
       }
     }());
   }
@@ -463,86 +471,6 @@ planner.Tracker(geometry_item)
 - [ ] Cancellation‑safe readiness awaits
 - [ ] Cycle detection and diagnostics
 - [ ] No references to non‑PakFormat asset types (animation/morph)
-
----
-
-## 14. TODOs (Implementation + Tests)
-
-### 14.1 Implementation TODOs
-
-- [x] Create ImportPlanner public header and source files:
-  - [x] src/Oxygen/Content/Import/Async/ImportPlanner.h
-  - [x] src/Oxygen/Content/Import/Async/ImportPlanner.cpp
-- [x] Define core types per Section 4.1:
-  - [x] PlanItemKind enum and kPlanKindCount
-  - [x] PlanItemId strong type
-  - [x] WorkPayloadHandle strong type
-  - [x] DependencyToken, ReadinessEvent, ReadinessTracker, PlanItem, PlanStep
-- [x] Implement ReadinessTracker logic:
-  - [x] IsReady() and MarkReady() per Section 7.2
-  - [x] Deduplicate producers in required list
-- [x] Implement ImportPlanner storage layout per Section 4.3:
-  - [x] items_ table (PlanItem)
-  - [x] events_ table (ReadinessEvent)
-  - [x] trackers_ table (ReadinessTracker)
-  - [x] prerequisites_storage_ (ReadinessEvent* slices)
-  - [x] pipeline_registry_ (TypeId per PlanItemKind)
-- [x] Implement Add* methods for each PlanItemKind:
-  - [x] Enforce kind correctness; store debug name + work handle
-  - [x] Allocate PlanItemId in registration order
-- [x] Implement AddDependency(consumer, producer):
-  - [x] Validate sealed_ == false
-  - [x] Record dependency edge (consumer -> producer)
-  - [x] Deduplicate by producer per consumer
-- [x] Implement RegisterPipeline<Pipeline>(kind) registration
-- [x] Implement PipelineTypeFor(item) resolver
-- [x] Implement Item(PlanItemId), Tracker(PlanItemId), ReadyEvent(PlanItemId)
-- [x] Implement MakePlan():
-  - [x] Validate all used kinds are registered
-  - [x] Build in‑degree by item from dependency edges
-  - [x] Stable topological ordering by registration order
-  - [x] Detect and report cycles (blocking diagnostic)
-  - [x] Build PlanStep list with prerequisite spans
-  - [x] Initialize readiness trackers and events
-  - [x] Set sealed_ flag and prevent further mutation
-- [x] Wire in diagnostics types and error handling conventions
-- [x] Add minimal logging/trace hooks (if required by import subsystem)
-
-### 14.2 Test TODOs (Fake/Mock Pipelines)
-
-- [x] Create test file(s) under appropriate test target (e.g.
-  src/Oxygen/Content/Import/Async/ImportPlanner_basic_test.cpp or equivalent)
-- [x] Define fake pipeline types satisfying ImportPipeline:
-  - [x] Minimal mock pipeline classes with static ClassTypeId()
-  - [x] No dependency on real pipeline implementations
-  - [x] Register via RegisterPipeline<MockPipeline>()
-- [x] Add test fixtures following unit test rules (AAA, doc comments, NOLINT_*):
-  - [x] Basic planner fixture
-  - [x] Error/cycle fixture
-  - [x] Edge‑case fixture (empty plan, single item)
-- [x] Plan construction tests:
-  - [x] Stable topological order with mixed kinds
-  - [x] Tie‑breaker uses registration order
-  - [x] Deduplication of producer dependencies per consumer
-  - [x] Missing pipeline registration is blocking error
-  - [x] Add* and AddDependency reject after sealed
-  - [x] Cycle detection produces blocking diagnostic
-- [x] Readiness tracker tests:
-  - [x] MarkReady transitions to ready when all producers satisfied
-  - [x] Duplicate MarkReady does not re‑signal
-  - [x] Empty required list is ready
-  - [x] ReadyEvent is signaled exactly once
-- [x] PlanStep prerequisites tests:
-  - [x] Prerequisite list references producer ReadyEvent instances
-  - [x] Prerequisites span uses planner‑owned storage (stable slices)
-  - [x] Steps with no prerequisites have empty spans
-- [x] Pipeline resolution tests:
-  - [x] PipelineTypeFor returns registered type for each kind
-  - [x] Unregistered kind returns empty optional
-- [x] Diagnostics tests:
-  - [x] Invalid dependency (if validated) reports proper diagnostic
-  - [x] Cycle diagnostics identify involved items (if supported)
-
 
 ---
 

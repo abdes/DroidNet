@@ -8,6 +8,7 @@
 #include <chrono>
 #include <filesystem>
 #include <memory>
+#include <stop_token>
 #include <string>
 
 #include <Oxygen/Composition/TypedObject.h>
@@ -178,7 +179,8 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_Run_CompletesAndCallsOnCompleteOnce)
     oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
     oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    ImportConcurrency {});
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -223,7 +225,8 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_Stop_CompletesWithCancelledDiagnostic)
     cancel_event, oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
     oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    ImportConcurrency {});
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -275,7 +278,8 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_CancelEvent_PreTriggered_AvoidsExecution)
     cancel_event, oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
     oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    ImportConcurrency {});
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -317,7 +321,8 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_StartTask_ExecutesTask)
     cancel_event, oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
     oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    ImportConcurrency {});
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -357,7 +362,8 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_StartPipeline_StartsWorkers)
     cancel_event, oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
     oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    ImportConcurrency {});
   job.pipeline = &pipeline;
 
   // Act

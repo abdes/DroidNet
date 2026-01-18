@@ -78,11 +78,62 @@ namespace {
   using util::ToFloat;
   using util::TruncateAndNullTerminate;
 
-  using coord::ApplySwapYZDirIfEnabled;
-  using coord::ApplySwapYZIfEnabled;
   using coord::EngineCameraTargetAxes;
   using coord::EngineWorldTargetAxes;
   using coord::ToGlmMat4;
+
+  struct AxisVec final {
+    int x = 0;
+    int y = 0;
+    int z = 0;
+  };
+
+  [[nodiscard]] auto AxisToVec(const ufbx_coordinate_axis axis) -> AxisVec
+  {
+    switch (axis) {
+    case UFBX_COORDINATE_AXIS_POSITIVE_X:
+      return AxisVec { .x = 1, .y = 0, .z = 0 };
+    case UFBX_COORDINATE_AXIS_NEGATIVE_X:
+      return AxisVec { .x = -1, .y = 0, .z = 0 };
+    case UFBX_COORDINATE_AXIS_POSITIVE_Y:
+      return AxisVec { .x = 0, .y = 1, .z = 0 };
+    case UFBX_COORDINATE_AXIS_NEGATIVE_Y:
+      return AxisVec { .x = 0, .y = -1, .z = 0 };
+    case UFBX_COORDINATE_AXIS_POSITIVE_Z:
+      return AxisVec { .x = 0, .y = 0, .z = 1 };
+    case UFBX_COORDINATE_AXIS_NEGATIVE_Z:
+      return AxisVec { .x = 0, .y = 0, .z = -1 };
+    case UFBX_COORDINATE_AXIS_UNKNOWN:
+      break;
+    }
+
+    return AxisVec {};
+  }
+
+  [[nodiscard]] auto IsLeftHandedAxes(const ufbx_coordinate_axes& axes)
+    -> std::optional<bool>
+  {
+    if (axes.right == UFBX_COORDINATE_AXIS_UNKNOWN
+      || axes.up == UFBX_COORDINATE_AXIS_UNKNOWN
+      || axes.front == UFBX_COORDINATE_AXIS_UNKNOWN) {
+      return std::nullopt;
+    }
+
+    const auto right = AxisToVec(axes.right);
+    const auto up = AxisToVec(axes.up);
+    const auto back = AxisToVec(axes.front);
+    const AxisVec forward { .x = -back.x, .y = -back.y, .z = -back.z };
+
+    const AxisVec cross_ru {
+      .x = right.y * up.z - right.z * up.y,
+      .y = right.z * up.x - right.x * up.z,
+      .z = right.x * up.y - right.y * up.x,
+    };
+
+    const int det = cross_ru.x * forward.x + cross_ru.y * forward.y
+      + cross_ru.z * forward.z;
+    return det < 0;
+  }
 
   [[nodiscard]] constexpr auto LightTypeName(
     const ufbx_light_type type) noexcept -> const char*
@@ -245,7 +296,7 @@ namespace {
   // - EngineCameraTargetAxes
   // - ComputeTargetUnitMeters
   // - SwapYZMatrix
-  // - ApplySwapYZIfEnabled (all overloads)
+  // - Coordinate conversion helpers
   // - ToGlmMat4
 
   class FbxImporter final : public Importer {
@@ -296,14 +347,50 @@ namespace {
       // linear terms) are scaled/rotated as required by import policy.
       opts.space_conversion = UFBX_SPACE_CONVERSION_MODIFY_GEOMETRY;
 
-      // When converting between left-handed and right-handed conventions ufbx
-      // mirrors the scene along a chosen axis.
-      //
-      // Oxygen world is Z-up (Oxygen/Core/Constants.h). Mirroring along Z is
-      // therefore the most destructive choice as it flips "up" and can make
-      // imported scenes appear upside-down. Prefer mirroring along the world
-      // forward/back axis instead.
+      // Default to mirroring along engine forward/back, then refine using
+      // FBX axis metadata if available.
       opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Y;
+
+      // Determine whether the source scene is left-handed using FBX axis
+      // metadata, then choose a mirror axis only if a handedness conversion
+      // is required.
+      {
+        ufbx_load_opts probe_opts = opts;
+        probe_opts.target_axes = ufbx_coordinate_axes {
+          .right = UFBX_COORDINATE_AXIS_UNKNOWN,
+          .up = UFBX_COORDINATE_AXIS_UNKNOWN,
+          .front = UFBX_COORDINATE_AXIS_UNKNOWN,
+        };
+        probe_opts.target_camera_axes = probe_opts.target_axes;
+        probe_opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_NONE;
+        probe_opts.handedness_conversion_retain_winding = false;
+        probe_opts.reverse_winding = false;
+
+        ufbx_error probe_error {};
+        if (ufbx_scene* probe_scene
+          = ufbx_load_file(source_path_str.c_str(), &probe_opts, &probe_error);
+          probe_scene != nullptr) {
+          const auto handedness = IsLeftHandedAxes(probe_scene->settings.axes);
+          ufbx_free_scene(probe_scene);
+
+          if (!handedness.has_value()) {
+            ImportDiagnostic diag {
+              .severity = ImportSeverity::kWarning,
+              .code = "fbx.axis_unknown",
+              .message = "FBX axis metadata is incomplete; using default "
+                         "handedness conversion",
+              .source_path = source_path_str,
+              .object_path = {},
+            };
+            out.AddDiagnostic(std::move(diag));
+            opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Y;
+          } else if (*handedness) {
+            opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Y;
+          } else {
+            opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_NONE;
+          }
+        }
+      }
 
       const auto& coordinate_policy = request.options.coordinate;
       if (coordinate_policy.unit_normalization
@@ -359,9 +446,8 @@ namespace {
       const auto light_count = static_cast<uint32_t>(scene->lights.count);
       LOG_F(INFO,
         "FBX scene loaded: {} materials, {} meshes, {} nodes, {} cameras, "
-        "{} lights. SwapYZ={}",
-        material_count, mesh_count, node_count, camera_count, light_count,
-        request.options.coordinate.swap_yz_axes);
+        "{} lights.",
+        material_count, mesh_count, node_count, camera_count, light_count);
 
       LogUfbxLights(*scene);
 

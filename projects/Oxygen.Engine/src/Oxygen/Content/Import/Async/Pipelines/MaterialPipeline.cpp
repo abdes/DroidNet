@@ -65,7 +65,7 @@ namespace {
 
   [[nodiscard]] auto ShaderStageBit(const uint8_t shader_type) -> uint32_t
   {
-    return 1u << (static_cast<uint32_t>(shader_type) - 1u);
+    return 1u << static_cast<uint32_t>(shader_type);
   }
 
   [[nodiscard]] auto HasErrorDiagnostic(
@@ -435,7 +435,16 @@ namespace {
     if (orm_packed) {
       desc.metallic_texture = orm_index;
       desc.roughness_texture = orm_index;
-      desc.ambient_occlusion_texture = orm_index;
+      // If ORM is packed (flag set), the shader defaults to reading AO from the
+      // Red channel of the ORM texture. We only override this if the material
+      // explicitly assigns a different texture for AO.
+      if (textures.ambient_occlusion.assigned
+        && textures.ambient_occlusion.source_id
+          != textures.metallic.source_id) {
+        desc.ambient_occlusion_texture = ao_index;
+      } else {
+        desc.ambient_occlusion_texture = orm_index;
+      }
     } else {
       desc.metallic_texture = metallic_index;
       desc.roughness_texture = roughness_index;
@@ -472,21 +481,23 @@ namespace {
   {
     const auto& metallic = textures.metallic;
     const auto& roughness = textures.roughness;
-    const auto& ao = textures.ambient_occlusion;
 
-    const bool all_assigned
-      = metallic.assigned && roughness.assigned && ao.assigned;
-    const bool same_source = metallic.source_id == roughness.source_id
-      && metallic.source_id == ao.source_id && !metallic.source_id.empty();
-    const bool same_uv = !NeedsUvTransformBake(metallic, roughness)
-      && !NeedsUvTransformBake(metallic, ao);
+    // We primarily check if Metallic and Roughness are compatible for packing,
+    // as they are the core of the glTF PBR model (shared texture, usually).
+    // The shader flag kMaterialFlag_GltfOrmPacked implies M is in Blue and R
+    // is in Green. Even if AO is separate or missing, we must enable this flag
+    // to read M/R from the correct channels.
+    const bool mr_assigned = metallic.assigned && roughness.assigned;
+    const bool mr_same_source = metallic.source_id == roughness.source_id
+      && !metallic.source_id.empty();
+    const bool mr_same_uv = !NeedsUvTransformBake(metallic, roughness);
 
-    const bool can_pack = all_assigned && same_source && same_uv;
+    const bool can_pack = mr_assigned && mr_same_source && mr_same_uv;
 
     if (policy == OrmPolicy::kForcePacked) {
       if (!can_pack) {
         diagnostics.push_back(MakeErrorDiagnostic("material.orm_policy",
-          "ForcePacked requires metallic/roughness/ao to share source and UV",
+          "ForcePacked requires metallic/roughness to share source and UV",
           source_id, object_path));
         return std::nullopt;
       }
@@ -537,6 +548,7 @@ namespace {
   {
     const auto hash = co_await thread_pool.Run(
       [bytes, stop_token](co::ThreadPool::CancelToken cancelled) noexcept {
+        DLOG_F(1, "MaterialPipeline: Compute content hash");
         if (stop_token.stop_requested() || cancelled) {
           return uint64_t { 0 };
         }
@@ -554,6 +566,7 @@ namespace {
     const MaterialPipeline::WorkItem& item,
     std::vector<ImportDiagnostic> diagnostics) -> BuildOutcome
   {
+    DLOG_F(1, "Building material payload: {}", item.material_name);
     BuildOutcome outcome {
       .diagnostics = std::move(diagnostics),
     };
@@ -782,12 +795,16 @@ auto MaterialPipeline::Worker() -> co::Co<>
       build_outcome = co_await thread_pool_.Run(
         [item = std::move(item_copy)](
           co::ThreadPool::CancelToken cancelled) noexcept {
+          DLOG_F(1, "MaterialPipeline: Build material task begin");
           if (item.stop_token.stop_requested() || cancelled) {
             return BuildOutcome { .cancelled = true };
           }
           return BuildMaterialPayload(item, {});
         });
     } else {
+      DLOG_F(2,
+        "MaterialPipeline: BuildMaterialPayload on import thread material={}",
+        item.material_name);
       build_outcome = BuildMaterialPayload(item, {});
     }
     if (build_outcome.cancelled) {

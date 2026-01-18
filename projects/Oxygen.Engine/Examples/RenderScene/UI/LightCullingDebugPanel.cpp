@@ -137,6 +137,40 @@ void LightCullingDebugPanel::DrawModeControls()
                       "Useful for verifying tile/cluster alignment.");
   }
 
+  ImGui::Spacing();
+  ImGui::SeparatorText("Material / UV Debug");
+
+  if (ImGui::RadioButton(
+        "Base Color", current_mode_ == ShaderDebugMode::kBaseColor)) {
+    current_mode_ = ShaderDebugMode::kBaseColor;
+    mode_changed = true;
+  }
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip(
+      "Visualize base color/albedo texture after UV transform.\n"
+      "If this looks wrong, UVs or texture binding are wrong.");
+  }
+
+  if (ImGui::RadioButton("UV0", current_mode_ == ShaderDebugMode::kUv0)) {
+    current_mode_ = ShaderDebugMode::kUv0;
+    mode_changed = true;
+  }
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip(
+      "Visualize UV0 as color (R=U, G=V).\n"
+      "Solid gradients are correct; noisy patches imply bad UVs.");
+  }
+
+  if (ImGui::RadioButton(
+        "Opacity", current_mode_ == ShaderDebugMode::kOpacity)) {
+    current_mode_ = ShaderDebugMode::kOpacity;
+    mode_changed = true;
+  }
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Visualize base alpha/opacity.\n"
+                      "White = fully opaque, black = transparent.");
+  }
+
   if (!enabled) {
     ImGui::EndDisabled();
   }

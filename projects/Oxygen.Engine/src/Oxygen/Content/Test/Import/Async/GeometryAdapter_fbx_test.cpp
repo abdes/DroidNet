@@ -8,10 +8,12 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <span>
 #include <string>
+#include <vector>
 
-#include <Oxygen/Content/Import/Async/Adapters/FbxGeometryAdapter.h>
-#include <Oxygen/Content/Import/Async/Adapters/GeometryAdapterTypes.h>
+#include <Oxygen/Content/Import/Async/Adapters/AdapterTypes.h>
+#include <Oxygen/Content/Import/Async/Adapters/FbxAdapter.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Testing/GTest.h>
@@ -64,8 +66,19 @@ namespace {
   return path;
 }
 
-//! Verify FBX adapter emits TriangulatedMesh work items.
-NOLINT_TEST(FbxGeometryAdapterTest, BuildWorkItems_EmitsTriangulatedMesh)
+class GeometryWorkItemCollector final : public GeometryWorkItemSink {
+public:
+  auto Consume(GeometryPipeline::WorkItem item) -> bool override
+  {
+    work_items.push_back(std::move(item));
+    return true;
+  }
+
+  std::vector<GeometryPipeline::WorkItem> work_items;
+};
+
+//! Verify FBX adapter emits TriangleMesh work items.
+NOLINT_TEST(FbxGeometryAdapterTest, BuildWorkItems_EmitsTriangleMesh)
 {
   // Arrange
   const auto temp_dir = std::filesystem::temp_directory_path()
@@ -110,31 +123,36 @@ NOLINT_TEST(FbxGeometryAdapterTest, BuildWorkItems_EmitsTriangulatedMesh)
     file.write(kFbxAscii, static_cast<std::streamsize>(std::strlen(kFbxAscii)));
   }
 
-  GeometryAdapterInput input {
+  std::vector<data::AssetKey> material_keys;
+  AdapterInput input {
     .source_id_prefix = "fbx",
     .object_path_prefix = "",
-    .material_keys = {},
+    .material_keys = std::span<const data::AssetKey>(material_keys),
     .default_material_key = MakeDefaultMaterialKey(),
     .request = MakeRequest(source_path),
     .stop_token = {},
   };
 
-  FbxGeometryAdapter adapter;
+  FbxAdapter adapter;
+  GeometryWorkItemCollector collector;
 
   // Act
-  const auto output = adapter.BuildWorkItems(source_path, input);
+  const auto parse_result = adapter.Parse(source_path, input);
+  ASSERT_TRUE(parse_result.success);
+  const auto output
+    = adapter.BuildWorkItems(GeometryWorkTag {}, collector, input);
 
   // Assert
   ASSERT_TRUE(output.success);
   ASSERT_TRUE(output.diagnostics.empty());
-  ASSERT_FALSE(output.work_items.empty());
+  ASSERT_FALSE(collector.work_items.empty());
 
-  const auto& item = output.work_items.front();
+  const auto& item = collector.work_items.front();
   ASSERT_EQ(item.lods.size(), 1u);
-  const auto& tri_mesh = item.lods.front().source;
-  EXPECT_FALSE(tri_mesh.streams.positions.empty());
-  EXPECT_FALSE(tri_mesh.indices.empty());
-  EXPECT_FALSE(tri_mesh.ranges.empty());
+  const auto& triangle_mesh = item.lods.front().source;
+  EXPECT_FALSE(triangle_mesh.streams.positions.empty());
+  EXPECT_FALSE(triangle_mesh.indices.empty());
+  EXPECT_FALSE(triangle_mesh.ranges.empty());
 }
 
 //! Verify FBX adapter orders triangle ranges by material slot.
@@ -206,31 +224,37 @@ NOLINT_TEST(FbxGeometryAdapterTest, BuildWorkItems_OrdersRangesByMaterialSlot)
     file.write(kFbxAscii, static_cast<std::streamsize>(std::strlen(kFbxAscii)));
   }
 
-  GeometryAdapterInput input {
+  std::vector<data::AssetKey> material_keys;
+  AdapterInput input {
     .source_id_prefix = "fbx",
     .object_path_prefix = "",
-    .material_keys = {},
+    .material_keys = std::span<const data::AssetKey>(material_keys),
     .default_material_key = MakeDefaultMaterialKey(),
     .request = MakeRequest(source_path),
     .stop_token = {},
   };
 
-  FbxGeometryAdapter adapter;
+  FbxAdapter adapter;
+  GeometryWorkItemCollector collector;
 
   // Act
-  const auto output = adapter.BuildWorkItems(source_path, input);
+  const auto parse_result = adapter.Parse(source_path, input);
+  ASSERT_TRUE(parse_result.success);
+  const auto output
+    = adapter.BuildWorkItems(GeometryWorkTag {}, collector, input);
 
   // Assert
   ASSERT_TRUE(output.success);
   ASSERT_TRUE(output.diagnostics.empty());
-  ASSERT_EQ(output.work_items.size(), 1u);
+  ASSERT_EQ(output.emitted, 1u);
+  ASSERT_EQ(collector.work_items.size(), 1u);
 
-  const auto& item = output.work_items.front();
+  const auto& item = collector.work_items.front();
   ASSERT_EQ(item.lods.size(), 1u);
-  const auto& tri_mesh = item.lods.front().source;
-  ASSERT_EQ(tri_mesh.ranges.size(), 2u);
-  EXPECT_EQ(tri_mesh.ranges[0].material_slot, 0u);
-  EXPECT_EQ(tri_mesh.ranges[1].material_slot, 1u);
+  const auto& triangle_mesh = item.lods.front().source;
+  ASSERT_EQ(triangle_mesh.ranges.size(), 2u);
+  EXPECT_EQ(triangle_mesh.ranges[0].material_slot, 0u);
+  EXPECT_EQ(triangle_mesh.ranges[1].material_slot, 1u);
 }
 
 //! Verify FBX adapter detects skinned meshes and builds joint buffers.
@@ -243,25 +267,30 @@ NOLINT_TEST(FbxGeometryAdapterTest, BuildWorkItems_SkinnedMeshDetected)
     GTEST_SKIP() << "Missing test asset: " << source_path.string();
   }
 
-  GeometryAdapterInput input {
+  std::vector<data::AssetKey> material_keys;
+  AdapterInput input {
     .source_id_prefix = "fbx",
     .object_path_prefix = "",
-    .material_keys = {},
+    .material_keys = std::span<const data::AssetKey>(material_keys),
     .default_material_key = MakeDefaultMaterialKey(),
     .request = MakeRequest(source_path),
     .stop_token = {},
   };
 
-  FbxGeometryAdapter adapter;
+  FbxAdapter adapter;
+  GeometryWorkItemCollector collector;
 
   // Act
-  const auto output = adapter.BuildWorkItems(source_path, input);
+  const auto parse_result = adapter.Parse(source_path, input);
+  ASSERT_TRUE(parse_result.success);
+  const auto output
+    = adapter.BuildWorkItems(GeometryWorkTag {}, collector, input);
 
   // Assert
   ASSERT_TRUE(output.success);
 
   const MeshLod* skinned_lod = nullptr;
-  for (const auto& item : output.work_items) {
+  for (const auto& item : collector.work_items) {
     if (item.lods.empty()) {
       continue;
     }

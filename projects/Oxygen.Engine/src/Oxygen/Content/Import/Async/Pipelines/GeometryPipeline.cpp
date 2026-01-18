@@ -25,6 +25,7 @@
 #include <Oxygen/Content/Import/util/StringUtils.h>
 #include <Oxygen/Content/Import/util/TangentGen.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -119,38 +120,6 @@ namespace {
         (std::numeric_limits<float>::lowest)(),
         (std::numeric_limits<float>::lowest)(), },
     };
-  }
-
-  [[nodiscard]] auto ApplySwapYZIfEnabled(
-    const CoordinateConversionPolicy& policy, glm::vec3 v) -> glm::vec3
-  {
-    if (!policy.swap_yz_axes) {
-      return v;
-    }
-    std::swap(v.y, v.z);
-    return v;
-  }
-
-  [[nodiscard]] auto ApplySwapYZDirIfEnabled(
-    const CoordinateConversionPolicy& policy, glm::vec3 v) -> glm::vec3
-  {
-    if (!policy.swap_yz_axes) {
-      return v;
-    }
-    std::swap(v.y, v.z);
-    return v;
-  }
-
-  [[nodiscard]] auto ApplySwapYZBoundsIfEnabled(
-    const CoordinateConversionPolicy& policy, Bounds3 bounds) -> Bounds3
-  {
-    if (!policy.swap_yz_axes) {
-      return bounds;
-    }
-
-    std::swap(bounds.min[1], bounds.min[2]);
-    std::swap(bounds.max[1], bounds.max[2]);
-    return bounds;
   }
 
   [[nodiscard]] auto HasAnyError(
@@ -430,7 +399,7 @@ namespace {
     vertex.color = glm::vec4(1.0F, 1.0F, 1.0F, 1.0F);
   }
 
-  auto BuildVerticesFromRanges(const TriangulatedMesh& mesh,
+  auto BuildVerticesFromRanges(const TriangleMesh& mesh,
     const ImportRequest& request, const GeometryAttributePolicy normal_policy,
     const std::span<const TriangleRange> ranges,
     std::vector<SubmeshBucket>& buckets, std::vector<data::Vertex>& vertices,
@@ -477,7 +446,16 @@ namespace {
 
     uint32_t next_index = 0;
     for (const auto& range : ranges) {
-      if (range.index_count == 0 || (range.index_count % 3) != 0) {
+      uint32_t range_count = range.index_count;
+      if (range_count == 0) {
+        diagnostics.push_back(MakeWarningDiagnostic("mesh.invalid_range",
+          "Triangle range index_count is zero; skipping range", source_id,
+          object_path));
+        continue;
+      }
+
+      const auto remainder = range_count % 3;
+      if (remainder != 0) {
         diagnostics.push_back(MakeErrorDiagnostic("mesh.invalid_range",
           "Triangle range index_count must be a multiple of 3", source_id,
           object_path));
@@ -486,64 +464,59 @@ namespace {
 
       auto* bucket = find_bucket(range.material_slot);
       if (bucket == nullptr) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.invalid_range",
-          "Triangle range references unknown material slot", source_id,
-          object_path));
-        return;
+        diagnostics.push_back(MakeWarningDiagnostic("mesh.invalid_range",
+          "Triangle range references unknown material slot; skipping range",
+          source_id, object_path));
+        continue;
       }
 
-      const auto range_end = range.first_index + range.index_count;
+      const auto range_end = range.first_index + range_count;
       if (range_end > mesh.indices.size()) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.invalid_range",
-          "Triangle range exceeds index buffer bounds", source_id,
+        diagnostics.push_back(MakeWarningDiagnostic("mesh.invalid_range",
+          "Triangle range exceeds index buffer bounds; truncating", source_id,
           object_path));
-        return;
+        if (range.first_index >= mesh.indices.size()) {
+          continue;
+        }
+        range_count
+          = static_cast<uint32_t>(mesh.indices.size() - range.first_index);
+        const auto rem = range_count % 3U;
+        if (rem != 0U) {
+          range_count -= rem;
+        }
+        if (range_count == 0) {
+          continue;
+        }
       }
 
-      for (uint32_t i = 0; i < range.index_count; ++i) {
-        const auto source_index = mesh.indices[range.first_index + i];
-        if (source_index >= positions.size()) {
-          diagnostics.push_back(MakeErrorDiagnostic("mesh.invalid_index",
-            "Index buffer references out-of-range vertex", source_id,
-            object_path));
-          return;
-        }
+      const bool preserve_authored_normals
+        = normal_policy == GeometryAttributePolicy::kPreserveIfPresent
+        || normal_policy == GeometryAttributePolicy::kGenerateMissing;
+      const auto tangent_policy = request.options.tangent_policy;
+      const bool preserve_authored_tangents
+        = tangent_policy == GeometryAttributePolicy::kPreserveIfPresent
+        || tangent_policy == GeometryAttributePolicy::kGenerateMissing;
 
+      auto emit_vertex = [&](const uint32_t source_index) {
         data::Vertex vertex {};
         PopulateVertexDefaults(vertex);
 
-        const auto position = ApplySwapYZIfEnabled(
-          request.options.coordinate, positions[source_index]);
-        vertex.position = position;
+        vertex.position = positions[source_index];
 
-        const bool preserve_authored_normals
-          = normal_policy == GeometryAttributePolicy::kPreserveIfPresent
-          || normal_policy == GeometryAttributePolicy::kGenerateMissing;
         if (preserve_authored_normals && has_normals) {
-          const auto n = ApplySwapYZDirIfEnabled(
-            request.options.coordinate, normals[source_index]);
-          vertex.normal = glm::normalize(n);
+          vertex.normal = glm::normalize(normals[source_index]);
         }
 
         if (has_uvs) {
           vertex.texcoord = texcoords[source_index];
         }
 
-        const auto tangent_policy = request.options.tangent_policy;
-        const bool preserve_authored_tangents
-          = tangent_policy == GeometryAttributePolicy::kPreserveIfPresent
-          || tangent_policy == GeometryAttributePolicy::kGenerateMissing;
-
         if (preserve_authored_tangents && has_tangents) {
-          const auto t = ApplySwapYZDirIfEnabled(
-            request.options.coordinate, tangents[source_index]);
-          vertex.tangent = t;
+          vertex.tangent = tangents[source_index];
         }
 
         if (preserve_authored_tangents && has_bitangents) {
-          const auto b = ApplySwapYZDirIfEnabled(
-            request.options.coordinate, bitangents[source_index]);
-          vertex.bitangent = b;
+          vertex.bitangent = bitangents[source_index];
         }
 
         if (has_colors) {
@@ -561,6 +534,28 @@ namespace {
             joint_weights.push_back(joint_wts[source_index]);
           }
         }
+      };
+
+      size_t skipped_triangles = 0;
+      for (uint32_t i = 0; i < range_count; i += 3) {
+        const auto idx0 = mesh.indices[range.first_index + i + 0];
+        const auto idx1 = mesh.indices[range.first_index + i + 1];
+        const auto idx2 = mesh.indices[range.first_index + i + 2];
+        if (idx0 >= positions.size() || idx1 >= positions.size()
+          || idx2 >= positions.size()) {
+          ++skipped_triangles;
+          continue;
+        }
+
+        emit_vertex(idx0);
+        emit_vertex(idx1);
+        emit_vertex(idx2);
+      }
+
+      if (skipped_triangles > 0) {
+        diagnostics.push_back(MakeWarningDiagnostic("mesh.invalid_index",
+          "Skipped triangles with out-of-range indices", source_id,
+          object_path));
       }
     }
 
@@ -649,12 +644,13 @@ namespace {
     return mesh_bounds;
   }
 
-  auto BuildLodData(const TriangulatedMesh& mesh, const MeshLod& lod_source,
-    const WorkItem& item, oxygen::co::ThreadPool& thread_pool,
+  [[nodiscard]] auto BuildLodData(const TriangleMesh& mesh,
+    const MeshLod& lod_source, const WorkItem& item,
     const uint64_t max_data_blob_bytes,
     std::vector<ImportDiagnostic>& diagnostics, uint32_t& attr_mask)
-    -> co::Co<std::optional<LodBuildData>>
+    -> std::optional<LodBuildData>
   {
+    DLOG_F(1, "GeometryPipeline: Build LOD data");
     LodBuildData lod;
     lod.lod_name = lod_source.lod_name;
     lod.mesh_type = mesh.mesh_type;
@@ -663,7 +659,7 @@ namespace {
       diagnostics.push_back(MakeErrorDiagnostic("mesh.procedural_unsupported",
         "Procedural meshes are not supported by GeometryPipeline",
         item.source_id, item.mesh_name));
-      co_return std::nullopt;
+      return std::nullopt;
     }
 
     if (lod.mesh_type != data::MeshType::kStandard
@@ -671,14 +667,14 @@ namespace {
       diagnostics.push_back(MakeErrorDiagnostic("mesh.unsupported_type",
         "Mesh type is unsupported in GeometryPipeline", item.source_id,
         item.mesh_name));
-      co_return std::nullopt;
+      return std::nullopt;
     }
 
     if (mesh.indices.empty() || mesh.ranges.empty()) {
       diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_buffers",
         "Mesh is missing triangle indices or ranges", item.source_id,
         item.mesh_name));
-      co_return std::nullopt;
+      return std::nullopt;
     }
 
     lod.vertices.reserve(mesh.indices.size());
@@ -693,7 +689,7 @@ namespace {
       item.source_id, item.mesh_name);
 
     if (HasAnyError(diagnostics)) {
-      co_return std::nullopt;
+      return std::nullopt;
     }
 
     if (lod.mesh_type == data::MeshType::kSkinned) {
@@ -701,13 +697,13 @@ namespace {
         diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_inverse_bind",
           "Skinned mesh missing inverse bind matrices", item.source_id,
           item.mesh_name));
-        co_return std::nullopt;
+        return std::nullopt;
       }
       if (mesh.joint_remap.empty()) {
         diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_joint_remap",
           "Skinned mesh missing joint remap data", item.source_id,
           item.mesh_name));
-        co_return std::nullopt;
+        return std::nullopt;
       }
       lod.inverse_bind_matrices.assign(
         mesh.inverse_bind_matrices.begin(), mesh.inverse_bind_matrices.end());
@@ -763,17 +759,12 @@ namespace {
       if (tangent_policy == GeometryAttributePolicy::kAlwaysRecalculate
         || (tangent_policy == GeometryAttributePolicy::kGenerateMissing
           && !has_tangents)) {
-        const auto generated = co_await thread_pool.Run(
-          [&lod, &buckets, stop_token = item.stop_token](
-            oxygen::co::ThreadPool::CancelToken cancelled) noexcept {
-            if (stop_token.stop_requested() || cancelled) {
-              return false;
-            }
-            util::GenerateTangents(lod.vertices,
-              std::span<const SubmeshBucket>(buckets.data(), buckets.size()));
-            return true;
-          });
-        tangents_emitted = generated;
+        if (item.stop_token.stop_requested()) {
+          return std::nullopt;
+        }
+        util::GenerateTangents(lod.vertices,
+          std::span<const SubmeshBucket>(buckets.data(), buckets.size()));
+        tangents_emitted = true;
       } else if (has_tangents) {
         tangents_emitted = true;
       }
@@ -785,9 +776,25 @@ namespace {
 
     const auto computed_bounds = BuildSubmeshDescriptors(
       lod.vertices, buckets, lod.submeshes, lod.views, lod.indices);
+    LOG_F(INFO, "Mesh '{}' LOD '{}' submesh_count={} view_count={}",
+      item.mesh_name, lod.lod_name, lod.submeshes.size(), lod.views.size());
+    for (size_t i = 0; i < lod.submeshes.size() && i < lod.views.size(); ++i) {
+      const auto& submesh = lod.submeshes[i];
+      const auto& view = lod.views[i];
+      LOG_F(INFO,
+        "Mesh '{}' LOD '{}' submesh[{}]='{}' material_key={} view="
+        "{{ first_index={}, index_count={}, first_vertex={}, vertex_count={} "
+        "}}",
+        item.mesh_name, lod.lod_name, i, submesh.name,
+        data::to_string(submesh.material_asset_key), view.first_index,
+        view.index_count, view.first_vertex, view.vertex_count);
+    }
+    for (const auto& bucket : buckets) {
+      DLOG_F(1, "Mesh '{}' material_slot={} -> key={}", item.mesh_name,
+        bucket.scene_material_index, data::to_string(bucket.material_key));
+    }
     if (mesh.bounds.has_value()) {
-      lod.bounds = ApplySwapYZBoundsIfEnabled(
-        item.request.options.coordinate, *mesh.bounds);
+      lod.bounds = *mesh.bounds;
     } else {
       lod.bounds = computed_bounds;
     }
@@ -796,14 +803,14 @@ namespace {
       diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_buffers",
         "Mesh does not produce valid vertex/index buffers", item.source_id,
         item.mesh_name));
-      co_return std::nullopt;
+      return std::nullopt;
     }
 
     if (lod.views.empty()) {
       diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_buffers",
         "Mesh does not produce valid mesh views", item.source_id,
         item.mesh_name));
-      co_return std::nullopt;
+      return std::nullopt;
     }
 
     const auto max_u32 = (std::numeric_limits<uint32_t>::max)();
@@ -812,7 +819,7 @@ namespace {
       diagnostics.push_back(MakeErrorDiagnostic("mesh.count_overflow",
         "Mesh vertex/index/submesh counts exceed uint32 limits", item.source_id,
         item.mesh_name));
-      co_return std::nullopt;
+      return std::nullopt;
     }
 
     const auto vb_bytes
@@ -823,7 +830,7 @@ namespace {
       diagnostics.push_back(MakeErrorDiagnostic("mesh.buffer_too_large",
         "Mesh buffer exceeds maximum data blob size", item.source_id,
         item.mesh_name));
-      co_return std::nullopt;
+      return std::nullopt;
     }
 
     if (final_has_normals) {
@@ -857,7 +864,7 @@ namespace {
         diagnostics.push_back(MakeErrorDiagnostic("mesh.buffer_too_large",
           "Skinned mesh buffer exceeds maximum data blob size", item.source_id,
           item.mesh_name));
-        co_return std::nullopt;
+        return std::nullopt;
       }
 
       uint32_t max_joint = 0;
@@ -878,7 +885,7 @@ namespace {
             MakeErrorDiagnostic("mesh.skinning_buffers_mismatch",
               "Skinned mesh joint data exceeds inverse bind/remap counts",
               item.source_id, item.mesh_name));
-          co_return std::nullopt;
+          return std::nullopt;
         }
 
         const auto max_u16
@@ -892,8 +899,17 @@ namespace {
       attr_mask |= kGeomAttr_JointWeights;
     }
 
-    co_return lod;
+    return lod;
   }
+
+  struct GeometryBuildOutcome {
+    std::string source_id;
+    const void* source_key = nullptr;
+    std::optional<GeometryPipeline::CookedGeometryPayload> cooked;
+    std::vector<ImportDiagnostic> diagnostics;
+    bool cancelled = false;
+    bool success = false;
+  };
 
   template <typename T>
   [[nodiscard]] auto ToByteVector(const std::span<const T> data)
@@ -1164,6 +1180,7 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
     const auto hash = co_await thread_pool_.Run(
       [bytes = std::span<const std::byte>(output_bytes.data(),
          output_bytes.size())](co::ThreadPool::CancelToken cancelled) noexcept {
+        DLOG_F(1, "GeometryPipeline: Compute content hash");
         if (cancelled) {
           return uint64_t { 0 };
         }
@@ -1228,193 +1245,228 @@ auto GeometryPipeline::Worker() -> co::Co<>
       co_await ReportCancelled(std::move(item));
       continue;
     }
+    auto build_outcome = co_await thread_pool_.Run(
+      [item = std::move(item), max_bytes = config_.max_data_blob_bytes,
+        with_content_hashing = config_.with_content_hashing](
+        co::ThreadPool::CancelToken cancelled) mutable -> GeometryBuildOutcome {
+        DLOG_F(1, "GeometryPipeline: Build geometry payload");
+        GeometryBuildOutcome out;
+        out.source_id = item.source_id;
+        out.source_key = item.source_key;
 
-    if (item.lods.empty()) {
-      WorkResult result {
-        .source_id = std::move(item.source_id),
-        .source_key = item.source_key,
+        if (cancelled || item.stop_token.stop_requested()) {
+          out.cancelled = true;
+          return out;
+        }
+
+        if (item.lods.empty()) {
+          out.diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_lods",
+            "Mesh LOD list is empty", item.source_id, item.mesh_name));
+          return out;
+        }
+
+        if (item.lods.size() > 8) {
+          out.diagnostics.push_back(MakeErrorDiagnostic(
+            "mesh.invalid_lod_count", "Mesh LOD count exceeds maximum of 8",
+            item.source_id, item.mesh_name));
+          return out;
+        }
+
+        std::vector<LodBuildData> lods;
+        lods.reserve(item.lods.size());
+
+        uint32_t attr_mask = 0;
+        for (const auto& lod : item.lods) {
+          if (item.stop_token.stop_requested()) {
+            out.cancelled = true;
+            return out;
+          }
+
+          const auto& triangle_mesh = lod.source;
+          auto lod_data = BuildLodData(
+            triangle_mesh, lod, item, max_bytes, out.diagnostics, attr_mask);
+          if (!lod_data.has_value()) {
+            return out;
+          }
+          lods.push_back(std::move(*lod_data));
+        }
+
+        if (item.stop_token.stop_requested()) {
+          out.cancelled = true;
+          return out;
+        }
+
+        if (HasAnyError(out.diagnostics)) {
+          return out;
+        }
+
+        Bounds3 geom_bounds = MakeEmptyBounds();
+        for (const auto& lod : lods) {
+          ExpandBounds(geom_bounds,
+            glm::vec3(lod.bounds.min[0], lod.bounds.min[1], lod.bounds.min[2]));
+          ExpandBounds(geom_bounds,
+            glm::vec3(lod.bounds.max[0], lod.bounds.max[1], lod.bounds.max[2]));
+        }
+
+        auto descriptor_bytes = BuildDescriptorBytes(item.mesh_name, lods,
+          geom_bounds, attr_mask, out.diagnostics, item.source_id);
+
+        if (HasAnyError(out.diagnostics)) {
+          return out;
+        }
+
+        GeometryPipeline::CookedGeometryPayload cooked_payload;
+        cooked_payload.virtual_path
+          = item.request.loose_cooked_layout.GeometryVirtualPath(
+            item.storage_mesh_name);
+        cooked_payload.descriptor_relpath
+          = item.request.loose_cooked_layout.GeometryDescriptorRelPath(
+            item.storage_mesh_name);
+        cooked_payload.geometry_key
+          = ResolveGeometryKey(item.request, cooked_payload.virtual_path);
+        cooked_payload.descriptor_bytes = std::move(descriptor_bytes);
+
+        for (const auto& lod : lods) {
+          CookedMeshPayload cooked_mesh;
+
+          const auto vb_usage_flags
+            = static_cast<uint32_t>(
+                data::BufferResource::UsageFlags::kVertexBuffer)
+            | kDefaultStaticUsageFlags;
+          const auto ib_usage_flags
+            = static_cast<uint32_t>(
+                data::BufferResource::UsageFlags::kIndexBuffer)
+            | kDefaultStaticUsageFlags;
+
+          cooked_mesh.vertex_buffer.data
+            = ToByteVector(std::span<const data::Vertex>(
+              lod.vertices.data(), lod.vertices.size()));
+          cooked_mesh.vertex_buffer.alignment = sizeof(data::Vertex);
+          cooked_mesh.vertex_buffer.usage_flags = vb_usage_flags;
+          cooked_mesh.vertex_buffer.element_stride = sizeof(data::Vertex);
+          cooked_mesh.vertex_buffer.element_format
+            = static_cast<uint8_t>(oxygen::Format::kUnknown);
+          if (with_content_hashing && !item.stop_token.stop_requested()) {
+            cooked_mesh.vertex_buffer.content_hash = util::ComputeContentHash(
+              std::span<const std::byte>(cooked_mesh.vertex_buffer.data.data(),
+                cooked_mesh.vertex_buffer.data.size()));
+          }
+
+          cooked_mesh.index_buffer.data = ToByteVector(
+            std::span<const uint32_t>(lod.indices.data(), lod.indices.size()));
+          cooked_mesh.index_buffer.alignment = alignof(uint32_t);
+          cooked_mesh.index_buffer.usage_flags = ib_usage_flags;
+          cooked_mesh.index_buffer.element_stride = 0;
+          cooked_mesh.index_buffer.element_format
+            = static_cast<uint8_t>(oxygen::Format::kR32UInt);
+          if (with_content_hashing && !item.stop_token.stop_requested()) {
+            cooked_mesh.index_buffer.content_hash = util::ComputeContentHash(
+              std::span<const std::byte>(cooked_mesh.index_buffer.data.data(),
+                cooked_mesh.index_buffer.data.size()));
+          }
+
+          if (lod.mesh_type == data::MeshType::kSkinned) {
+            const auto joint_usage_flags
+              = static_cast<uint32_t>(
+                  data::BufferResource::UsageFlags::kStorageBuffer)
+              | kDefaultStaticUsageFlags;
+
+            CookedBufferPayload joint_indices_payload;
+            joint_indices_payload.data
+              = ToByteVector(std::span<const glm::uvec4>(
+                lod.joint_indices.data(), lod.joint_indices.size()));
+            joint_indices_payload.alignment = 16;
+            joint_indices_payload.usage_flags = joint_usage_flags;
+            joint_indices_payload.element_stride = 0;
+            joint_indices_payload.element_format
+              = static_cast<uint8_t>(oxygen::Format::kRGBA32UInt);
+            if (with_content_hashing && !item.stop_token.stop_requested()) {
+              joint_indices_payload.content_hash = util::ComputeContentHash(
+                std::span<const std::byte>(joint_indices_payload.data.data(),
+                  joint_indices_payload.data.size()));
+            }
+
+            CookedBufferPayload joint_weights_payload;
+            joint_weights_payload.data
+              = ToByteVector(std::span<const glm::vec4>(
+                lod.joint_weights.data(), lod.joint_weights.size()));
+            joint_weights_payload.alignment = 16;
+            joint_weights_payload.usage_flags = joint_usage_flags;
+            joint_weights_payload.element_stride = 0;
+            joint_weights_payload.element_format
+              = static_cast<uint8_t>(oxygen::Format::kRGBA32Float);
+            if (with_content_hashing && !item.stop_token.stop_requested()) {
+              joint_weights_payload.content_hash = util::ComputeContentHash(
+                std::span<const std::byte>(joint_weights_payload.data.data(),
+                  joint_weights_payload.data.size()));
+            }
+
+            CookedBufferPayload inverse_bind_payload;
+            inverse_bind_payload.data = ToByteVector(
+              std::span<const glm::mat4>(lod.inverse_bind_matrices.data(),
+                lod.inverse_bind_matrices.size()));
+            inverse_bind_payload.alignment = 16;
+            inverse_bind_payload.usage_flags = joint_usage_flags;
+            inverse_bind_payload.element_stride = sizeof(glm::mat4);
+            inverse_bind_payload.element_format
+              = static_cast<uint8_t>(oxygen::Format::kUnknown);
+            if (with_content_hashing && !item.stop_token.stop_requested()) {
+              inverse_bind_payload.content_hash = util::ComputeContentHash(
+                std::span<const std::byte>(inverse_bind_payload.data.data(),
+                  inverse_bind_payload.data.size()));
+            }
+
+            CookedBufferPayload joint_remap_payload;
+            joint_remap_payload.data = ToByteVector(std::span<const uint32_t>(
+              lod.joint_remap.data(), lod.joint_remap.size()));
+            joint_remap_payload.alignment = alignof(uint32_t);
+            joint_remap_payload.usage_flags = joint_usage_flags;
+            joint_remap_payload.element_stride = 0;
+            joint_remap_payload.element_format
+              = static_cast<uint8_t>(oxygen::Format::kR32UInt);
+            if (with_content_hashing && !item.stop_token.stop_requested()) {
+              joint_remap_payload.content_hash = util::ComputeContentHash(
+                std::span<const std::byte>(joint_remap_payload.data.data(),
+                  joint_remap_payload.data.size()));
+            }
+
+            cooked_mesh.auxiliary_buffers.push_back(
+              std::move(joint_indices_payload));
+            cooked_mesh.auxiliary_buffers.push_back(
+              std::move(joint_weights_payload));
+            cooked_mesh.auxiliary_buffers.push_back(
+              std::move(inverse_bind_payload));
+            cooked_mesh.auxiliary_buffers.push_back(
+              std::move(joint_remap_payload));
+          }
+
+          cooked_mesh.bounds = lod.bounds;
+          cooked_payload.lods.push_back(std::move(cooked_mesh));
+        }
+
+        out.cooked = std::move(cooked_payload);
+        out.success = true;
+        return out;
+      });
+
+    if (build_outcome.cancelled) {
+      WorkResult cancelled {
+        .source_id = std::move(build_outcome.source_id),
+        .source_key = build_outcome.source_key,
         .cooked = std::nullopt,
-        .diagnostics = { MakeErrorDiagnostic("mesh.missing_lods",
-          "Mesh LOD list is empty", item.source_id, item.mesh_name) },
+        .diagnostics = {},
         .success = false,
       };
-      co_await output_channel_.Send(std::move(result));
+      co_await output_channel_.Send(std::move(cancelled));
       continue;
-    }
-
-    if (item.lods.size() > 8) {
-      WorkResult result {
-        .source_id = std::move(item.source_id),
-        .source_key = item.source_key,
-        .cooked = std::nullopt,
-        .diagnostics = { MakeErrorDiagnostic("mesh.invalid_lod_count",
-          "Mesh LOD count exceeds maximum of 8", item.source_id,
-          item.mesh_name) },
-        .success = false,
-      };
-      co_await output_channel_.Send(std::move(result));
-      continue;
-    }
-
-    std::vector<ImportDiagnostic> diagnostics;
-    std::vector<LodBuildData> lods;
-    lods.reserve(item.lods.size());
-
-    uint32_t attr_mask = 0;
-
-    for (const auto& lod : item.lods) {
-      if (item.stop_token.stop_requested()) {
-        break;
-      }
-
-      const auto& tri_mesh = lod.source;
-      auto lod_data = co_await BuildLodData(tri_mesh, lod, item, thread_pool_,
-        config_.max_data_blob_bytes, diagnostics, attr_mask);
-      if (!lod_data.has_value()) {
-        break;
-      }
-      lods.push_back(std::move(*lod_data));
-    }
-
-    if (item.stop_token.stop_requested()) {
-      co_await ReportCancelled(std::move(item));
-      continue;
-    }
-
-    if (HasAnyError(diagnostics)) {
-      WorkResult result {
-        .source_id = std::move(item.source_id),
-        .source_key = item.source_key,
-        .cooked = std::nullopt,
-        .diagnostics = std::move(diagnostics),
-        .success = false,
-      };
-      co_await output_channel_.Send(std::move(result));
-      continue;
-    }
-
-    Bounds3 geom_bounds = MakeEmptyBounds();
-    for (const auto& lod : lods) {
-      ExpandBounds(geom_bounds,
-        glm::vec3(lod.bounds.min[0], lod.bounds.min[1], lod.bounds.min[2]));
-      ExpandBounds(geom_bounds,
-        glm::vec3(lod.bounds.max[0], lod.bounds.max[1], lod.bounds.max[2]));
-    }
-
-    auto descriptor_bytes = BuildDescriptorBytes(item.mesh_name, lods,
-      geom_bounds, attr_mask, diagnostics, item.source_id);
-
-    if (HasAnyError(diagnostics)) {
-      WorkResult result {
-        .source_id = std::move(item.source_id),
-        .source_key = item.source_key,
-        .cooked = std::nullopt,
-        .diagnostics = std::move(diagnostics),
-        .success = false,
-      };
-      co_await output_channel_.Send(std::move(result));
-      continue;
-    }
-
-    CookedGeometryPayload cooked_payload;
-    cooked_payload.virtual_path
-      = item.request.loose_cooked_layout.GeometryVirtualPath(
-        item.storage_mesh_name);
-    cooked_payload.descriptor_relpath
-      = item.request.loose_cooked_layout.GeometryDescriptorRelPath(
-        item.storage_mesh_name);
-    cooked_payload.geometry_key
-      = ResolveGeometryKey(item.request, cooked_payload.virtual_path);
-    cooked_payload.descriptor_bytes = std::move(descriptor_bytes);
-
-    for (const auto& lod : lods) {
-      CookedMeshPayload cooked_mesh;
-
-      const auto vb_usage_flags
-        = static_cast<uint32_t>(data::BufferResource::UsageFlags::kVertexBuffer)
-        | kDefaultStaticUsageFlags;
-      const auto ib_usage_flags
-        = static_cast<uint32_t>(data::BufferResource::UsageFlags::kIndexBuffer)
-        | kDefaultStaticUsageFlags;
-
-      cooked_mesh.vertex_buffer.data
-        = ToByteVector(std::span<const data::Vertex>(
-          lod.vertices.data(), lod.vertices.size()));
-      cooked_mesh.vertex_buffer.alignment = sizeof(data::Vertex);
-      cooked_mesh.vertex_buffer.usage_flags = vb_usage_flags;
-      cooked_mesh.vertex_buffer.element_stride = sizeof(data::Vertex);
-      cooked_mesh.vertex_buffer.element_format
-        = static_cast<uint8_t>(oxygen::Format::kUnknown);
-
-      cooked_mesh.index_buffer.data = ToByteVector(
-        std::span<const uint32_t>(lod.indices.data(), lod.indices.size()));
-      cooked_mesh.index_buffer.alignment = alignof(uint32_t);
-      cooked_mesh.index_buffer.usage_flags = ib_usage_flags;
-      cooked_mesh.index_buffer.element_stride = 0;
-      cooked_mesh.index_buffer.element_format
-        = static_cast<uint8_t>(oxygen::Format::kR32UInt);
-
-      if (lod.mesh_type == data::MeshType::kSkinned) {
-        const auto joint_usage_flags
-          = static_cast<uint32_t>(
-              data::BufferResource::UsageFlags::kStorageBuffer)
-          | kDefaultStaticUsageFlags;
-
-        CookedBufferPayload joint_indices_payload;
-        joint_indices_payload.data = ToByteVector(std::span<const glm::uvec4>(
-          lod.joint_indices.data(), lod.joint_indices.size()));
-        joint_indices_payload.alignment = 16;
-        joint_indices_payload.usage_flags = joint_usage_flags;
-        joint_indices_payload.element_stride = 0;
-        joint_indices_payload.element_format
-          = static_cast<uint8_t>(oxygen::Format::kRGBA32UInt);
-
-        CookedBufferPayload joint_weights_payload;
-        joint_weights_payload.data = ToByteVector(std::span<const glm::vec4>(
-          lod.joint_weights.data(), lod.joint_weights.size()));
-        joint_weights_payload.alignment = 16;
-        joint_weights_payload.usage_flags = joint_usage_flags;
-        joint_weights_payload.element_stride = 0;
-        joint_weights_payload.element_format
-          = static_cast<uint8_t>(oxygen::Format::kRGBA32Float);
-
-        CookedBufferPayload inverse_bind_payload;
-        inverse_bind_payload.data = ToByteVector(std::span<const glm::mat4>(
-          lod.inverse_bind_matrices.data(), lod.inverse_bind_matrices.size()));
-        inverse_bind_payload.alignment = 16;
-        inverse_bind_payload.usage_flags = joint_usage_flags;
-        inverse_bind_payload.element_stride = sizeof(glm::mat4);
-        inverse_bind_payload.element_format
-          = static_cast<uint8_t>(oxygen::Format::kUnknown);
-
-        CookedBufferPayload joint_remap_payload;
-        joint_remap_payload.data = ToByteVector(std::span<const uint32_t>(
-          lod.joint_remap.data(), lod.joint_remap.size()));
-        joint_remap_payload.alignment = alignof(uint32_t);
-        joint_remap_payload.usage_flags = joint_usage_flags;
-        joint_remap_payload.element_stride = 0;
-        joint_remap_payload.element_format
-          = static_cast<uint8_t>(oxygen::Format::kR32UInt);
-
-        cooked_mesh.auxiliary_buffers.push_back(
-          std::move(joint_indices_payload));
-        cooked_mesh.auxiliary_buffers.push_back(
-          std::move(joint_weights_payload));
-        cooked_mesh.auxiliary_buffers.push_back(
-          std::move(inverse_bind_payload));
-        cooked_mesh.auxiliary_buffers.push_back(std::move(joint_remap_payload));
-      }
-
-      cooked_mesh.bounds = lod.bounds;
-      cooked_payload.lods.push_back(std::move(cooked_mesh));
     }
 
     WorkResult result {
-      .source_id = std::move(item.source_id),
-      .source_key = item.source_key,
-      .cooked = std::move(cooked_payload),
-      .diagnostics = std::move(diagnostics),
-      .success = true,
+      .source_id = std::move(build_outcome.source_id),
+      .source_key = build_outcome.source_key,
+      .cooked = std::move(build_outcome.cooked),
+      .diagnostics = std::move(build_outcome.diagnostics),
+      .success = build_outcome.success,
     };
     co_await output_channel_.Send(std::move(result));
   }

@@ -273,8 +273,7 @@ namespace {
     const bool has_uv = HasUvs(mesh);
 
     for (size_t idx = 0; idx < mesh.num_indices; ++idx) {
-      auto p = mesh.vertex_position[idx];
-      p = coord::ApplySwapYZIfEnabled(request.options.coordinate, p);
+      const auto p = mesh.vertex_position[idx];
 
       Vertex v {
         .position = { static_cast<float>(p.x), static_cast<float>(p.y),
@@ -288,8 +287,7 @@ namespace {
 
       if (mesh.vertex_normal.exists && mesh.vertex_normal.values.data != nullptr
         && mesh.vertex_normal.indices.data != nullptr) {
-        auto n = mesh.vertex_normal[idx];
-        n = coord::ApplySwapYZDirIfEnabled(request.options.coordinate, n);
+        const auto n = mesh.vertex_normal[idx];
         v.normal = { static_cast<float>(n.x), static_cast<float>(n.y),
           static_cast<float>(n.z) };
       }
@@ -307,8 +305,7 @@ namespace {
       if (preserve_authored_tangents && mesh.vertex_tangent.exists
         && mesh.vertex_tangent.values.data != nullptr
         && mesh.vertex_tangent.indices.data != nullptr) {
-        auto t = mesh.vertex_tangent[idx];
-        t = coord::ApplySwapYZDirIfEnabled(request.options.coordinate, t);
+        const auto t = mesh.vertex_tangent[idx];
         const auto tx = static_cast<float>(t.x);
         const auto ty = static_cast<float>(t.y);
         const auto tz = static_cast<float>(t.z);
@@ -320,8 +317,7 @@ namespace {
       if (preserve_authored_tangents && mesh.vertex_bitangent.exists
         && mesh.vertex_bitangent.values.data != nullptr
         && mesh.vertex_bitangent.indices.data != nullptr) {
-        auto b = mesh.vertex_bitangent[idx];
-        b = coord::ApplySwapYZDirIfEnabled(request.options.coordinate, b);
+        const auto b = mesh.vertex_bitangent[idx];
         const auto bx = static_cast<float>(b.x);
         const auto by = static_cast<float>(b.y);
         const auto bz = static_cast<float>(b.z);

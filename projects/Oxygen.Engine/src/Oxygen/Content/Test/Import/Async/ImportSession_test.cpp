@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <latch>
@@ -409,8 +410,8 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_Success_WritesIndex)
   EXPECT_TRUE(std::filesystem::exists(index_path));
 }
 
-//! Verify Finalize skips index write when errors exist.
-NOLINT_TEST_F(ImportSessionTest, Finalize_HasErrors_SkipsIndexWrite)
+//! Verify Finalize writes index and reports warning when errors exist.
+NOLINT_TEST_F(ImportSessionTest, Finalize_HasErrors_WritesIndexWithWarning)
 {
   // Arrange
   auto request = MakeRequest();
@@ -428,14 +429,18 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_HasErrors_SkipsIndexWrite)
   });
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
-    auto report = co_await session.Finalize();
-    EXPECT_FALSE(report.success);
-  });
+  ImportReport report;
+  co::Run(*loop_, [&]() -> Co<> { report = co_await session.Finalize(); });
 
-  // Assert - index should not be written
+  // Assert - index should be written and warning added
+  EXPECT_FALSE(report.success);
+  const auto has_index_warning = std::any_of(report.diagnostics.begin(),
+    report.diagnostics.end(), [](const ImportDiagnostic& diagnostic) {
+      return diagnostic.code == "import.index_written_with_errors";
+    });
+  EXPECT_TRUE(has_index_warning);
   auto index_path = request.cooked_root.value() / "container.index.bin";
-  EXPECT_FALSE(std::filesystem::exists(index_path));
+  EXPECT_TRUE(std::filesystem::exists(index_path));
 }
 
 //! Verify Finalize waits for pending writes.

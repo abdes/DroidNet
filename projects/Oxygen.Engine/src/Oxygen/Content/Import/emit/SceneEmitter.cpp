@@ -501,8 +501,7 @@ namespace {
     rec.parent_index = parent_index;
     rec.node_flags = oxygen::data::pak::kSceneNodeFlag_Visible;
 
-    const ufbx_transform local_trs = coord::ApplySwapYZIfEnabled(
-      request.options.coordinate, node->local_transform);
+    const auto local_trs = node->local_transform;
 
     rec.translation[0] = util::ToFloat(local_trs.translation.x);
     rec.translation[1] = util::ToFloat(local_trs.translation.y);

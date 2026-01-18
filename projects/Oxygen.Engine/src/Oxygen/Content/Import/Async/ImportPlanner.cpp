@@ -223,7 +223,8 @@ auto ImportPlanner::MakePlan() -> std::vector<PlanStep>
   trackers_.resize(item_count);
   required_storage_.clear();
   satisfied_storage_.clear();
-  prerequisites_storage_.clear();
+  required_storage_.reserve(dependency_count);
+  satisfied_storage_.reserve(dependency_count);
 
   for (size_t index = 0; index < item_count; ++index) {
     const auto& deps = dependencies_[index];
@@ -250,17 +251,9 @@ auto ImportPlanner::MakePlan() -> std::vector<PlanStep>
   for (const auto item_id : order) {
     const auto u_item = ItemIndex(item_id);
     const auto& deps = dependencies_[u_item];
-    const auto prereq_offset = prerequisites_storage_.size();
-
-    for (const auto producer : deps) {
-      const auto u_producer = ItemIndex(producer);
-      prerequisites_storage_.push_back(&events_.at(u_producer));
-    }
-
     plan.push_back(PlanStep {
       .item_id = item_id,
-      .prerequisites = std::span<const ReadinessEvent* const>(
-        prerequisites_storage_.data() + prereq_offset, deps.size()),
+      .prerequisites = std::vector<PlanItemId>(deps.begin(), deps.end()),
     });
   }
 

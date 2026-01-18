@@ -1009,7 +1009,7 @@ The implementation is functional but does not yet fully satisfy
 [geometry_work_pipeline_v2.md](geometry_work_pipeline_v2.md). The following
 gaps must be closed to declare the design fully implemented:
 
-- [X] **MeshSource policy**: pipeline accepts `TriangulatedMesh` only; all
+- [X] **MeshSource policy**: pipeline accepts `TriangleMesh` only; all
   importer-specific meshes must be normalized by adapters before submission.
 - [X] **LOD limits + validation**: enforce LOD count range (1..8), per-LOD
   index_count > 0, vertex/index counts fit `uint32_t`, and submesh/view counts
@@ -1041,7 +1041,7 @@ gaps must be closed to declare the design fully implemented:
   and ordering, and joint buffer alignment.
 - [X] Add tests for `header.content_hash` deferral + patching.
 - [X] Add tests for name truncation diagnostics.
-- [X] Add tests to verify adapters always emit `TriangulatedMesh` work items.
+- [X] Add tests to verify adapters always emit `TriangleMesh` work items.
 
 ##### 6.6b.1 Geometry Adapters (Format Bridges)
 
@@ -1058,12 +1058,12 @@ Tasks:
   `GeometryAdapterInput` / `GeometryAdapterOutput`).
 - [X] Define `GeometryAdapter` concept and `BuildWorkItems(...)` API shape.
 - [X] Implement FBX adapter using `ufbx`:
-  - [X] triangulate faces and build `TriangleRange` per material slot
-  - [X] emit `TriangulatedMesh` for all meshes, including skinned meshes with
+  - [X] require triangle faces and build `TriangleRange` per material slot
+  - [X] emit `TriangleMesh` for all meshes, including skinned meshes with
     joints/weights
   - [X] handle >4 influences by trimming + renormalizing with diagnostics
 - [X] Implement glTF/GLB adapter using `cgltf`:
-  - [X] per-primitive `TriangulatedMesh` (merge only when layouts match)
+  - [X] per-primitive `TriangleMesh` (merge only when layouts match)
   - [X] convert indices to `uint32_t` and generate when missing
   - [X] emit diagnostics when indices are missing
   - [X] derive bitangent from tangent.w
@@ -1075,6 +1075,26 @@ Tasks:
   - [X] tangent/bitangent derivation for glTF
   - [X] skinned mesh detection + joint buffer validation
   - [X] LOD mapping
+
+##### 6.6b.2 Format Adapters (Direct WorkItem Translation)
+
+Goal: evolve FBX/glTF adapters into **format adapters** that parse once and
+emit `WorkItem` storage for all pipelines without introducing a new scene
+graph or duplicated data model.
+
+Tasks:
+
+- [ ] Refactor `FbxGeometryAdapter` / `GltfGeometryAdapter` into
+  `FbxAdapter` / `GltfAdapter` that own parse state and emit work items for
+  geometry, material, scene, and texture pipelines.
+- [ ] Ensure `WorkItem` storage is job-owned and referenced via
+  `WorkPayloadHandle` in the planner (no payload copying).
+- [ ] Add adapter output that includes plan item registration and dependency
+  edges (e.g., scene depends on geometry items).
+- [ ] Enforce one-shot coordinate conversion metadata validation at adapter
+  boundary (missing source-space metadata is a blocking error).
+- [ ] Unit tests: adapter emits stable names/keys across geometry + scene
+  outputs from the same parse.
 
 #### 6.6c MaterialPipeline (Compute-Only) Implementation + Tests
 
@@ -1155,13 +1175,27 @@ Tasks:
 - [ ] FbxImportJob: submit material work to `MaterialPipeline`; emit `.omat`
   via `AssetEmitter` once `MaterialReadinessTracker` resolves texture indices.
 - [ ] FbxImportJob: submit scene work to `ScenePipeline`; emit `.oscene` via
-  `AssetEmitter` using `ImportedGeometry` mapping.
-- [ ] GlbImportJob: mirror the FBX flow for glTF/GLB (subset acceptable).
+  `AssetEmitter` using `geometry_keys`.
+- [ ] FbxImportJob: build import plan via `ImportPlanner`, await
+  `PlanStep.prerequisites`, and submit pipeline work from
+  `WorkPayloadHandle` storage.
+- [X] GlbImportJob: mirror the FBX flow for glTF/GLB (subset acceptable).
 - [X] GlbImportJob: wire geometry, material, and scene pipelines with the
   same emitter flow (subset acceptable).
 - [ ] TextureImportJob: read bytes via `FileReader()`, submit to pipeline,
   emit via `TextureEmitter()`.
 - [ ] Integration tests for job wiring and cooked output.
+
+Additional gaps to close:
+
+- [ ] ScenePipeline: implement scene cooking in
+  `src/Oxygen/Content/Import/Async/Pipelines/ScenePipeline.cpp` (remove the
+  `scene.pipeline.not_implemented` diagnostic, build full descriptor bytes,
+  compute content hash on ThreadPool).
+- [ ] FbxImportJob: migrate to planner-driven flow (BuildPlan + ExecutePlan),
+  wire textures/materials/scene streaming via planner sinks, and remove the
+  legacy collection flow in
+  `src/Oxygen/Content/Import/Async/Jobs/FbxImportJob.cpp`.
 
 #### 6.8 MaterialReadinessTracker
 
@@ -1170,6 +1204,8 @@ Tasks:
 - [ ] Build dependency graph: material → required texture source_ids
 - [ ] Implement `MarkTextureReady(source_id) -> vector<size_t>`
 - [ ] Returns material indices that are now ready to emit
+- [ ] Integrate `MaterialReadinessTracker` into job plan execution to emit
+  materials as texture dependencies resolve.
 - [ ] Unit test: dependency tracking
 
 #### 6.9 Configuration Flow (Need-to-Know)

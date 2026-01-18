@@ -42,7 +42,7 @@ public:
     oxygen::observer_ptr<IAsyncFileWriter> file_writer,
     oxygen::observer_ptr<co::ThreadPool> thread_pool,
     oxygen::observer_ptr<ResourceTableRegistry> table_registry,
-    Config config = {});
+    ImportConcurrency concurrency, Config config = {});
 
 protected:
   [[nodiscard]] auto ExecuteAsync() -> co::Co<ImportReport> override;
