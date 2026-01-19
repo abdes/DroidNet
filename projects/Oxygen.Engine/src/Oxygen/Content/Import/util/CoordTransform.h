@@ -20,7 +20,7 @@ namespace oxygen::content::import::coord {
  - Z-up
  - Forward = -Y
 
- ufbx `front` axis is the "Back" direction (opposite of Forward).
+ ufbx `front` axis is the forward direction.
 
  @return Coordinate axes for ufbx_load_opts::target_axes.
 */
@@ -30,7 +30,7 @@ namespace oxygen::content::import::coord {
   return ufbx_coordinate_axes {
     .right = UFBX_COORDINATE_AXIS_POSITIVE_X,
     .up = UFBX_COORDINATE_AXIS_POSITIVE_Z,
-    .front = UFBX_COORDINATE_AXIS_POSITIVE_Y,
+    .front = UFBX_COORDINATE_AXIS_NEGATIVE_Y,
   };
 }
 

@@ -121,8 +121,7 @@ namespace {
 
     const auto right = AxisToVec(axes.right);
     const auto up = AxisToVec(axes.up);
-    const auto back = AxisToVec(axes.front);
-    const AxisVec forward { .x = -back.x, .y = -back.y, .z = -back.z };
+    const auto forward = AxisToVec(axes.front);
 
     const AxisVec cross_ru {
       .x = right.y * up.z - right.z * up.y,

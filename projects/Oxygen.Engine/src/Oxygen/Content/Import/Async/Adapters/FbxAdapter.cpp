@@ -250,8 +250,7 @@ namespace {
 
     const auto right = AxisToVec(axes.right);
     const auto up = AxisToVec(axes.up);
-    const auto back = AxisToVec(axes.front);
-    const AxisVec forward { .x = -back.x, .y = -back.y, .z = -back.z };
+    const auto forward = AxisToVec(axes.front);
 
     const AxisVec cross_ru {
       .x = right.y * up.z - right.z * up.y,
@@ -468,7 +467,9 @@ namespace {
     out.tangents.reserve(mesh.num_indices);
     out.bitangents.reserve(mesh.num_indices);
     out.colors.reserve(mesh.num_indices);
-    out.indices.reserve(mesh.num_indices * 3u);
+    const auto estimated_tris
+      = mesh.num_triangles > 0 ? mesh.num_triangles : mesh.num_indices;
+    out.indices.reserve(estimated_tris * 3u);
 
     struct MaterialRange {
       TriangleRange range {};
@@ -476,6 +477,9 @@ namespace {
     };
 
     std::unordered_map<uint32_t, MaterialRange> range_map;
+    std::vector<uint32_t> tri_indices;
+    tri_indices.resize(static_cast<size_t>(mesh.max_face_triangles) * 3u);
+    size_t triangulated_faces = 0;
 
     for (size_t idx = 0; idx < mesh.num_indices; ++idx) {
       out.positions.push_back(
@@ -538,11 +542,11 @@ namespace {
 
     for (size_t face_i = 0; face_i < mesh.num_faces; ++face_i) {
       const auto face = mesh.faces[face_i];
-      if (face.num_indices != 3) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.non_triangle_face",
-          "FBX mesh contains non-triangle faces; only triangles are supported",
+      if (face.num_indices < 3) {
+        diagnostics.push_back(MakeWarningDiagnostic("mesh.invalid_face",
+          "FBX mesh contains face with fewer than 3 indices; skipping",
           source_id, object_path));
-        return std::nullopt;
+        continue;
       }
 
       uint32_t material_slot = material_key_count;
@@ -576,13 +580,18 @@ namespace {
                .first;
       }
 
-      const auto base = static_cast<size_t>(face.index_begin);
-      std::array<uint32_t, 3> face_indices = {
-        static_cast<uint32_t>(base + 0u),
-        static_cast<uint32_t>(base + 1u),
-        static_cast<uint32_t>(base + 2u),
-      };
-      for (const auto idx : face_indices) {
+      const auto tri_count = ufbx_triangulate_face(
+        tri_indices.data(), tri_indices.size(), &mesh, face);
+      if (tri_count == 0) {
+        diagnostics.push_back(MakeWarningDiagnostic("mesh.triangulate_failed",
+          "FBX face triangulation produced no triangles; skipping face",
+          source_id, object_path));
+        continue;
+      }
+
+      const auto tri_index_count = static_cast<size_t>(tri_count) * 3u;
+      for (size_t i = 0; i < tri_index_count; ++i) {
+        const auto idx = tri_indices[i];
         if (idx >= mesh.num_indices) {
           diagnostics.push_back(MakeErrorDiagnostic("mesh.index_oob",
             "FBX mesh contains out-of-range indices", source_id, object_path));
@@ -590,9 +599,17 @@ namespace {
         }
       }
 
-      it->second.indices.insert(
-        it->second.indices.end(), face_indices.begin(), face_indices.end());
-      it->second.range.index_count += 3u;
+      it->second.indices.insert(it->second.indices.end(), tri_indices.begin(),
+        tri_indices.begin() + tri_index_count);
+      it->second.range.index_count += static_cast<uint32_t>(tri_index_count);
+      if (face.num_indices != 3) {
+        ++triangulated_faces;
+      }
+    }
+
+    if (triangulated_faces > 0) {
+      LOG_F(INFO, "FBX mesh '{}' triangulated {} faces", object_path,
+        triangulated_faces);
     }
 
     if (const auto* skin_deformer = FindSkinDeformer(mesh);
