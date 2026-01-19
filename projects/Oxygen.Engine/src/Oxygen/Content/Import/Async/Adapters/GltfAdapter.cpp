@@ -832,7 +832,9 @@ namespace {
     auto converted = c * m * glm::transpose(c);
     const auto scale = ComputeUnitScale(policy);
     if (scale != 1.0F) {
-      converted[3] *= scale;
+      converted[3].x *= scale;
+      converted[3].y *= scale;
+      converted[3].z *= scale;
     }
     return converted;
   }
@@ -2104,6 +2106,16 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     if (!DecomposeTransform(node.local_matrix, translation, rotation, scale)) {
       diagnostics.push_back(MakeErrorDiagnostic("scene.transform_invalid",
         "Failed to decompose node transform", input.source_id, name));
+    }
+    const auto matrix_translation = glm::vec3(node.local_matrix[3]);
+    const auto translation_delta
+      = glm::length(translation - matrix_translation);
+    if (translation_delta > 1e-3F) {
+      LOG_F(WARNING,
+        "SceneImport: node '{}' translation mismatch (decompose vs matrix) "
+        "decomposed=({:.6f},{:.6f},{:.6f}) matrix=({:.6f},{:.6f},{:.6f})",
+        name, translation.x, translation.y, translation.z, matrix_translation.x,
+        matrix_translation.y, matrix_translation.z);
     }
 
     NodeRecord rec {};

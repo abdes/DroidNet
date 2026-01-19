@@ -244,6 +244,11 @@ set_source_files_properties(
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
+target_compile_options(
+  ${META_MODULE_TARGET}
+  PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/bigobj>
+)
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE

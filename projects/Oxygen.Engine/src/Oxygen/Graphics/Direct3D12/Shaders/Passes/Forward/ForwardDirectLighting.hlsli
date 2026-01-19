@@ -31,6 +31,9 @@ float3 AccumulateDirectionalLights(
     const bool use_sun_override = IsOverrideSunEnabled();
     const float3 override_sun_dir = GetOverrideSunDirectionWS();
     const float  override_sun_illum = GetOverrideSunIlluminance();
+    const float3 override_sun_color = GetSunColorRGB();
+    const float  override_sun_intensity = GetSunIntensity();
+    bool found_sun = false;
 
     if (bindless_directional_lights_slot != K_INVALID_BINDLESS_INDEX
         && BX_IN_GLOBAL_SRV(bindless_directional_lights_slot)) {
@@ -50,6 +53,9 @@ float3 AccumulateDirectionalLights(
 
             // Check if this is the sun light and we have an override
             const bool is_sun = (dl.flags & DIRECTIONAL_LIGHT_FLAG_SUN_LIGHT) != 0u;
+            if (is_sun) {
+                found_sun = true;
+            }
 
             float3 light_dir_ws;
             float  light_intensity;
@@ -92,6 +98,31 @@ float3 AccumulateDirectionalLights(
             const float3 diffuse = kD * base_rgb / kPi;
 
             direct += (diffuse + specular) * light_color * light_intensity * NdotL;
+        }
+
+        if (use_sun_override && !found_sun) {
+            const float3 L = SafeNormalize(override_sun_dir);
+            const float  NdotL = saturate(dot(N, L));
+            if (NdotL > 0.0) {
+                const float3 H = SafeNormalize(V + L);
+                const float  NdotH = saturate(dot(N, H));
+                const float  VdotH = saturate(dot(V, H));
+
+                const float3 F = FresnelSchlick(VdotH, F0);
+                const float  D = DistributionGGX(NdotH, roughness);
+                const float  G = GeometrySmith(NdotV, NdotL, roughness);
+
+                const float3 numerator = D * G * F;
+                const float  denom = max(4.0 * NdotV * NdotL, 1e-6);
+                const float3 specular = numerator / denom;
+
+                const float3 kS = F;
+                const float3 kD = (1.0 - kS) * (1.0 - metalness);
+                const float3 diffuse = kD * base_rgb / kPi;
+
+                direct += (diffuse + specular) * override_sun_color
+                          * override_sun_intensity * NdotL;
+            }
         }
     }
 

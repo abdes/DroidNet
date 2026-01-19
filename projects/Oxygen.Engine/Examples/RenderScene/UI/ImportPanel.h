@@ -143,6 +143,7 @@ private:
   std::vector<SourceEntry> cached_files_ {};
   bool files_cached_ = false;
 
+  std::string model_directory_text_;
   std::string fbx_directory_text_;
   std::string gltf_directory_text_;
   std::string cooked_output_text_;

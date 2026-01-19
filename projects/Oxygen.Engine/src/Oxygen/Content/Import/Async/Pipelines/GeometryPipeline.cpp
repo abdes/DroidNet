@@ -297,13 +297,20 @@ namespace {
 
     for (const auto& lod : lods) {
       MeshDesc mesh_desc {};
-      if (lod.lod_name.size() >= std::size(mesh_desc.name)) {
-        const std::string path = std::string(mesh_name) + "/" + lod.lod_name;
+      const std::string_view name_view = [&]() -> std::string_view {
+        if (lods.size() <= 1U) {
+          return mesh_name;
+        }
+        return lod.lod_name;
+      }();
+      if (name_view.size() >= std::size(mesh_desc.name)) {
+        const std::string path
+          = std::string(mesh_name) + "/" + std::string(name_view);
         diagnostics.push_back(MakeWarningDiagnostic("mesh.lod_name_truncated",
           "LOD name truncated to fit descriptor limit", source_id, path));
       }
       util::TruncateAndNullTerminate(
-        mesh_desc.name, std::size(mesh_desc.name), lod.lod_name);
+        mesh_desc.name, std::size(mesh_desc.name), name_view);
       mesh_desc.mesh_type = static_cast<uint8_t>(lod.mesh_type);
       mesh_desc.submesh_count = static_cast<uint32_t>(lod.submeshes.size());
       mesh_desc.mesh_view_count = static_cast<uint32_t>(lod.views.size());
@@ -637,8 +644,10 @@ namespace {
         .vertex_count = static_cast<MeshViewDesc::BufferIndexT>(vertex_count),
       });
 
-      merged_indices.insert(
-        merged_indices.end(), bucket.indices.begin(), bucket.indices.end());
+      for (const auto vi : bucket.indices) {
+        const auto adjusted = (min_vertex > 0) ? (vi - min_vertex) : vi;
+        merged_indices.push_back(adjusted);
+      }
     }
 
     return mesh_bounds;
@@ -778,20 +787,15 @@ namespace {
       lod.vertices, buckets, lod.submeshes, lod.views, lod.indices);
     LOG_F(INFO, "Mesh '{}' LOD '{}' submesh_count={} view_count={}",
       item.mesh_name, lod.lod_name, lod.submeshes.size(), lod.views.size());
-    for (size_t i = 0; i < lod.submeshes.size() && i < lod.views.size(); ++i) {
-      const auto& submesh = lod.submeshes[i];
-      const auto& view = lod.views[i];
-      LOG_F(INFO,
-        "Mesh '{}' LOD '{}' submesh[{}]='{}' material_key={} view="
-        "{{ first_index={}, index_count={}, first_vertex={}, vertex_count={} "
-        "}}",
-        item.mesh_name, lod.lod_name, i, submesh.name,
-        data::to_string(submesh.material_asset_key), view.first_index,
-        view.index_count, view.first_vertex, view.vertex_count);
+    std::size_t views_with_base_vertex = 0;
+    for (const auto& view : lod.views) {
+      if (view.first_vertex != 0) {
+        ++views_with_base_vertex;
+      }
     }
-    for (const auto& bucket : buckets) {
-      DLOG_F(1, "Mesh '{}' material_slot={} -> key={}", item.mesh_name,
-        bucket.scene_material_index, data::to_string(bucket.material_key));
+    if (views_with_base_vertex > 0) {
+      LOG_F(INFO, "Mesh '{}' LOD '{}' views_with_base_vertex={}",
+        item.mesh_name, lod.lod_name, views_with_base_vertex);
     }
     if (mesh.bounds.has_value()) {
       lod.bounds = *mesh.bounds;

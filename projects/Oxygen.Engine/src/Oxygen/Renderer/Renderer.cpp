@@ -98,8 +98,8 @@ struct SunLightSelection {
 auto SelectSunLight(std::span<const oxygen::engine::DirectionalLightBasic> dir)
   -> SunLightSelection
 {
-  SunLightSelection best_flagged;
-  SunLightSelection best_any;
+  SunLightSelection first_flagged;
+  SunLightSelection first_any;
 
   for (const auto& light : dir) {
     const bool is_sun = (light.flags
@@ -120,16 +120,18 @@ auto SelectSunLight(std::span<const oxygen::engine::DirectionalLightBasic> dir)
       .valid = true,
     };
 
-    auto& bucket = is_sun ? best_flagged : best_any;
-    if (!bucket.valid || candidate.illuminance > bucket.illuminance) {
-      bucket = candidate;
+    if (is_sun && !first_flagged.valid) {
+      first_flagged = candidate;
+    }
+    if (!first_any.valid) {
+      first_any = candidate;
     }
   }
 
-  if (best_flagged.valid) {
-    return best_flagged;
+  if (first_flagged.valid) {
+    return first_flagged;
   }
-  return best_any;
+  return first_any;
 }
 
 } // namespace
