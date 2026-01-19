@@ -16,6 +16,7 @@
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Platforms.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
 #include <Oxygen/Content/Import/Naming.h>
 #include <Oxygen/Content/LooseCookedInspection.h>
@@ -245,8 +246,11 @@ void ImportPanel::Initialize(const ImportPanelConfig& config)
 {
   config_ = config;
 
-  fbx_directory_text_ = config_.fbx_directory.string();
-  gltf_directory_text_ = config_.gltf_directory.string();
+  model_directory_text_ = !config_.gltf_directory.empty()
+    ? config_.gltf_directory.string()
+    : config_.fbx_directory.string();
+  fbx_directory_text_ = model_directory_text_;
+  gltf_directory_text_ = model_directory_text_;
   cooked_output_text_ = config_.cooked_output_directory.string();
 
   layout_ = {};
@@ -280,6 +284,11 @@ void ImportPanel::Initialize(const ImportPanelConfig& config)
   };
 
   service_config_ = {};
+  service_config_.concurrency.texture.workers = 8;
+  service_config_.concurrency.material.workers = 4;
+  service_config_.concurrency.geometry.workers = 6;
+  service_config_.concurrency.buffer.workers = 6;
+  service_config_.concurrency.scene.workers = 1;
   import_service_
     = std::make_unique<content::import::AsyncImportService>(service_config_);
 
@@ -568,43 +577,43 @@ auto ImportPanel::EnumerateSourceFiles() const -> std::vector<SourceEntry>
 {
   std::vector<SourceEntry> files;
 
-  const auto add_entries = [&files](const std::filesystem::path& root,
-                             content::import::ImportFormat format,
-                             std::string_view extension) {
-    std::error_code ec;
-    if (root.empty() || !std::filesystem::exists(root, ec)
-      || !std::filesystem::is_directory(root, ec)) {
-      return;
-    }
+  const auto add_entries
+    = [&files](const std::filesystem::path& root,
+        content::import::ImportFormat format, std::string_view extension) {
+        std::error_code ec;
+        if (root.empty() || !std::filesystem::exists(root, ec)
+          || !std::filesystem::is_directory(root, ec)) {
+          return;
+        }
 
-    for (const auto& entry : std::filesystem::directory_iterator(root, ec)) {
-      if (ec) {
-        break;
-      }
-      if (!entry.is_regular_file(ec)) {
-        continue;
-      }
+        for (const auto& entry :
+          std::filesystem::recursive_directory_iterator(root, ec)) {
+          if (ec) {
+            break;
+          }
+          if (!entry.is_regular_file(ec)) {
+            continue;
+          }
 
-      const auto path = entry.path();
-      if (path.extension() == extension) {
-        files.push_back({ path, format });
-      }
-    }
-  };
+          const auto path = entry.path();
+          if (path.extension() == extension) {
+            files.push_back({ path, format });
+          }
+        }
+      };
+
+  const auto model_root = std::filesystem::path(model_directory_text_);
 
   if (include_fbx_) {
-    add_entries(std::filesystem::path(fbx_directory_text_),
-      content::import::ImportFormat::kFbx, ".fbx");
+    add_entries(model_root, content::import::ImportFormat::kFbx, ".fbx");
   }
 
   if (include_gltf_) {
-    add_entries(std::filesystem::path(gltf_directory_text_),
-      content::import::ImportFormat::kGltf, ".gltf");
+    add_entries(model_root, content::import::ImportFormat::kGltf, ".gltf");
   }
 
   if (include_glb_) {
-    add_entries(std::filesystem::path(gltf_directory_text_),
-      content::import::ImportFormat::kGlb, ".glb");
+    add_entries(model_root, content::import::ImportFormat::kGlb, ".glb");
   }
 
   std::sort(
@@ -633,15 +642,53 @@ auto ImportPanel::DrawSourceSelectionUi() -> void
     return;
   }
 
-  ImGui::Text("Source directories");
-  if (InputTextString("FBX directory", fbx_directory_text_)) {
-    config_.fbx_directory = std::filesystem::path(fbx_directory_text_);
+  ImGui::Text("Source directory");
+  if (InputTextString("Model directory", model_directory_text_)) {
+    fbx_directory_text_ = model_directory_text_;
+    gltf_directory_text_ = model_directory_text_;
+    config_.fbx_directory = std::filesystem::path(model_directory_text_);
+    config_.gltf_directory = std::filesystem::path(model_directory_text_);
     files_cached_ = false;
   }
-  if (InputTextString("GLTF/GLB directory", gltf_directory_text_)) {
-    config_.gltf_directory = std::filesystem::path(gltf_directory_text_);
-    files_cached_ = false;
+
+#if defined(OXYGEN_WINDOWS)
+  if (ImGui::Button("Browse...")) {
+    ImGui::OpenPopup("ImportBrowsePopup");
   }
+  if (ImGui::BeginPopup("ImportBrowsePopup")) {
+    if (ImGui::MenuItem("Pick file...")) {
+      auto picker_config = MakeModelFilePickerConfig();
+      if (!model_directory_text_.empty()) {
+        picker_config.initial_directory
+          = std::filesystem::path(model_directory_text_);
+      }
+
+      if (const auto selected_path = ShowFilePicker(picker_config)) {
+        StartImport(*selected_path);
+        ImGui::EndPopup();
+        return;
+      }
+    }
+
+    if (ImGui::MenuItem("Pick directory...")) {
+      auto picker_config = MakeModelDirectoryPickerConfig();
+      if (!model_directory_text_.empty()) {
+        picker_config.initial_directory
+          = std::filesystem::path(model_directory_text_);
+      }
+
+      if (const auto selected_path = ShowDirectoryPicker(picker_config)) {
+        model_directory_text_ = selected_path->string();
+        fbx_directory_text_ = model_directory_text_;
+        gltf_directory_text_ = model_directory_text_;
+        config_.fbx_directory = *selected_path;
+        config_.gltf_directory = *selected_path;
+        files_cached_ = false;
+      }
+    }
+    ImGui::EndPopup();
+  }
+#endif
 
   ImGui::Separator();
   ImGui::Text("Format filters");
@@ -656,22 +703,6 @@ auto ImportPanel::DrawSourceSelectionUi() -> void
   }
 
   ImGui::Separator();
-#if defined(OXYGEN_WINDOWS)
-  if (ImGui::Button("Browse for FBX/GLTF/GLB...")) {
-    auto picker_config = MakeModelFilePickerConfig();
-    if (!config_.fbx_directory.empty()) {
-      picker_config.initial_directory = config_.fbx_directory;
-    } else if (!config_.gltf_directory.empty()) {
-      picker_config.initial_directory = config_.gltf_directory;
-    }
-
-    if (const auto selected_path = ShowFilePicker(picker_config)) {
-      StartImport(*selected_path);
-      return;
-    }
-  }
-  ImGui::SameLine();
-#endif
   if (ImGui::Button("Refresh List")) {
     files_cached_ = false;
   }

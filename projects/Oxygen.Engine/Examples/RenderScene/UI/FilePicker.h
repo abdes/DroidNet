@@ -28,6 +28,12 @@ struct FilePickerConfig {
   std::filesystem::path initial_directory;
 };
 
+//! Configuration for directory picker dialog
+struct DirectoryPickerConfig {
+  std::wstring title;
+  std::filesystem::path initial_directory;
+};
+
 /*!
  Displays a platform-native file picker dialog.
 
@@ -60,6 +66,10 @@ struct FilePickerConfig {
  @see FilePickerConfig, FileFilter
  */
 auto ShowFilePicker(const FilePickerConfig& config)
+  -> std::optional<std::filesystem::path>;
+
+//! Displays a platform-native directory picker dialog.
+auto ShowDirectoryPicker(const DirectoryPickerConfig& config)
   -> std::optional<std::filesystem::path>;
 
 /*!
@@ -106,6 +116,9 @@ auto MakeFbxFilePickerConfig() -> FilePickerConfig;
  ```
 */
 auto MakeModelFilePickerConfig() -> FilePickerConfig;
+
+//! Creates a directory picker configuration for model source folders.
+auto MakeModelDirectoryPickerConfig() -> DirectoryPickerConfig;
 
 /*!
  Creates a file picker configuration for loose cooked index files.

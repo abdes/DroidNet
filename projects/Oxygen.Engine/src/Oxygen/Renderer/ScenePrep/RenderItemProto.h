@@ -201,6 +201,26 @@ public:
     return transform_facade_;
   }
 
+  //! Returns the owning node name for diagnostics.
+  /*!
+   Provides access to the underlying SceneNodeImpl name for logging and
+   debugging during ScenePrep collection.
+
+   @return The node name as a string view.
+
+  ### Performance Characteristics
+
+  - Time Complexity: O(1)
+  - Memory: O(1)
+  - Optimization: None
+
+   @note The returned view remains valid while the node exists.
+  */
+  [[nodiscard]] auto GetNodeName() const noexcept -> std::string_view
+  {
+    return node_->GetName();
+  }
+
   auto& Flags() const noexcept { return node_->GetFlags(); }
 
   void SetVisibleSubmeshes(std::vector<uint32_t> indices) noexcept

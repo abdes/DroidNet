@@ -6,6 +6,7 @@
 
 #include "FilePicker.h"
 
+#include <Oxygen/Base/Platforms.h>
 #include <Oxygen/Base/StringUtils.h>
 
 #if defined(OXYGEN_WINDOWS)
@@ -137,6 +138,98 @@ auto ShowFilePicker(const FilePickerConfig& config)
 #endif
 }
 
+/*!
+ Displays a platform-native directory picker dialog.
+
+ @param config Dialog configuration including title and initial folder
+ @return Selected directory path, or std::nullopt if canceled
+
+ ### Platform Support
+
+ - **Windows:** Uses IFileOpenDialog with folder selection
+ - **macOS/Linux:** Currently not implemented (returns std::nullopt)
+
+ ### Usage Examples
+
+ ```cpp
+ DirectoryPickerConfig config;
+ config.title = L"Select Model Folder";
+
+ if (const auto path = ShowDirectoryPicker(config)) {
+   // User selected a directory
+   ScanAssets(*path);
+ }
+ ```
+
+ @warning This function initializes COM and may affect application state
+ @see DirectoryPickerConfig
+ */
+auto ShowDirectoryPicker(const DirectoryPickerConfig& config)
+  -> std::optional<std::filesystem::path>
+{
+#if defined(OXYGEN_WINDOWS)
+  ScopedCoInitialize com;
+
+  Microsoft::WRL::ComPtr<IFileOpenDialog> dialog;
+  const HRESULT hr = CoCreateInstance(
+    CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog));
+
+  if (FAILED(hr) || !dialog) {
+    return std::nullopt;
+  }
+
+  DWORD options = 0;
+  if (SUCCEEDED(dialog->GetOptions(&options))) {
+    options |= FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST;
+    (void)dialog->SetOptions(options);
+  }
+
+  if (!config.title.empty()) {
+    (void)dialog->SetTitle(config.title.c_str());
+  }
+
+  if (!config.initial_directory.empty()) {
+    Microsoft::WRL::ComPtr<IShellItem> folder_item;
+    const HRESULT folder_hr = SHCreateItemFromParsingName(
+      config.initial_directory.c_str(), nullptr, IID_PPV_ARGS(&folder_item));
+
+    if (SUCCEEDED(folder_hr) && folder_item) {
+      (void)dialog->SetFolder(folder_item.Get());
+    }
+  }
+
+  const HRESULT show_hr = dialog->Show(nullptr);
+  if (FAILED(show_hr)) {
+    return std::nullopt;
+  }
+
+  Microsoft::WRL::ComPtr<IShellItem> result_item;
+  if (FAILED(dialog->GetResult(&result_item)) || !result_item) {
+    return std::nullopt;
+  }
+
+  PWSTR wide_path = nullptr;
+  const HRESULT name_hr
+    = result_item->GetDisplayName(SIGDN_FILESYSPATH, &wide_path);
+
+  if (FAILED(name_hr) || !wide_path) {
+    return std::nullopt;
+  }
+
+  std::string utf8_path;
+  oxygen::string_utils::WideToUtf8(wide_path, utf8_path);
+  CoTaskMemFree(wide_path);
+
+  if (utf8_path.empty()) {
+    return std::nullopt;
+  }
+
+  return std::filesystem::path(utf8_path);
+#else
+  return std::nullopt;
+#endif
+}
+
 auto MakePakFilePickerConfig() -> FilePickerConfig
 {
   FilePickerConfig config;
@@ -173,6 +266,26 @@ auto MakeModelFilePickerConfig() -> FilePickerConfig
   };
   config.default_extension = L"gltf";
   config.title = L"Select 3D Model File";
+  return config;
+}
+
+/*!
+ Creates a directory picker configuration for model source folders.
+
+ @return Pre-configured DirectoryPickerConfig for selecting model directories
+
+ ### Usage Examples
+
+ ```cpp
+ if (const auto path = ShowDirectoryPicker(MakeModelDirectoryPickerConfig())) {
+   ScanModelDirectory(*path);
+ }
+ ```
+ */
+auto MakeModelDirectoryPickerConfig() -> DirectoryPickerConfig
+{
+  DirectoryPickerConfig config;
+  config.title = L"Select Model Directory";
   return config;
 }
 
