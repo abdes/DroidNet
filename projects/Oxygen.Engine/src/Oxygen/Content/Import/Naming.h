@@ -7,7 +7,6 @@
 #pragma once
 
 #include <array>
-#include <cctype>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -16,6 +15,9 @@
 #include <string_view>
 #include <unordered_map>
 #include <utility>
+
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Content/api_export.h>
 
 namespace oxygen::content::import {
 
@@ -132,28 +134,8 @@ public:
   {
   }
 
-  [[nodiscard]] auto Rename(std::string_view authored_name,
-    const NamingContext& context) const -> std::optional<std::string> override
-  {
-    auto normalized = Normalize(authored_name);
-
-    if (normalized.empty()) {
-      normalized = DefaultBaseName(context);
-    }
-
-    if (options_.apply_prefixes) {
-      const auto prefix = PrefixFor(context.kind);
-      if (!prefix.empty() && !normalized.starts_with(prefix)) {
-        normalized = std::string(prefix) + normalized;
-      }
-    }
-
-    if (normalized == authored_name) {
-      return std::nullopt;
-    }
-
-    return normalized;
-  }
+  OXGN_CNTT_NDAPI auto Rename(std::string_view authored_name,
+    const NamingContext& context) const -> std::optional<std::string> override;
 
   //! Generate a default base name for the given context.
   [[nodiscard]] static auto DefaultBaseName(const NamingContext& context)
@@ -173,93 +155,8 @@ public:
   }
 
 private:
-  [[nodiscard]] auto Normalize(std::string_view input) const -> std::string
-  {
-    auto s = std::string(input);
-
-    if (options_.trim_whitespace) {
-      const auto is_space
-        = [](unsigned char ch) { return std::isspace(ch) != 0; };
-      while (!s.empty() && is_space(static_cast<unsigned char>(s.front()))) {
-        s.erase(s.begin());
-      }
-      while (!s.empty() && is_space(static_cast<unsigned char>(s.back()))) {
-        s.pop_back();
-      }
-    }
-
-    if (s.empty()) {
-      return s;
-    }
-
-    std::string out;
-    out.reserve(s.size());
-
-    bool last_was_underscore = false;
-    bool in_whitespace = false;
-
-    for (const auto ch : s) {
-      const auto uch = static_cast<unsigned char>(ch);
-      const auto is_space = (std::isspace(uch) != 0);
-
-      if (is_space) {
-        if (options_.collapse_whitespace) {
-          in_whitespace = true;
-          continue;
-        }
-        out.push_back('_');
-        last_was_underscore = true;
-        continue;
-      }
-
-      if (in_whitespace) {
-        out.push_back('_');
-        last_was_underscore = true;
-        in_whitespace = false;
-      }
-
-      const auto is_valid = (std::isalnum(uch) != 0) || (ch == '_');
-      if (!is_valid && options_.replace_invalid_chars) {
-        if (!last_was_underscore || !options_.collapse_underscores) {
-          out.push_back('_');
-          last_was_underscore = true;
-        }
-        continue;
-      }
-
-      if (ch == '_' && options_.collapse_underscores && last_was_underscore) {
-        continue;
-      }
-
-      out.push_back(ch);
-      last_was_underscore = (ch == '_');
-    }
-
-    if (options_.collapse_underscores) {
-      while (!out.empty() && out.front() == '_') {
-        out.erase(out.begin());
-      }
-      while (!out.empty() && out.back() == '_') {
-        out.pop_back();
-      }
-    }
-
-    return out;
-  }
-
-  [[nodiscard]] auto PrefixFor(ImportNameKind kind) const -> std::string_view
-  {
-    switch (kind) {
-    case ImportNameKind::kMesh:
-      return options_.mesh_prefix;
-    case ImportNameKind::kMaterial:
-      return options_.material_prefix;
-    case ImportNameKind::kScene:
-    case ImportNameKind::kSceneNode:
-      return {};
-    }
-    return {};
-  }
+  [[nodiscard]] auto Normalize(std::string_view input) const -> std::string;
+  [[nodiscard]] auto PrefixFor(ImportNameKind kind) const -> std::string_view;
 
   Options options_ = {};
 };
@@ -301,15 +198,12 @@ public:
 
    @pre config.strategy must not be null.
   */
-  explicit NamingService(Config config);
+  OXGN_CNTT_API explicit NamingService(Config config);
 
   ~NamingService() = default;
 
-  // Non-copyable, movable
-  NamingService(const NamingService&) = delete;
-  auto operator=(const NamingService&) -> NamingService& = delete;
-  NamingService(NamingService&&) noexcept = default;
-  auto operator=(NamingService&&) noexcept -> NamingService& = default;
+  OXYGEN_MAKE_NON_COPYABLE(NamingService)
+  OXYGEN_DEFAULT_MOVABLE(NamingService)
 
   //! Generate a unique name for an imported object.
   /*!
@@ -322,22 +216,21 @@ public:
    ### Thread Safety
    This method is thread-safe and may be called concurrently.
   */
-  [[nodiscard]] auto MakeUniqueName(std::string_view authored_name,
+  OXGN_CNTT_NDAPI auto MakeUniqueName(std::string_view authored_name,
     const NamingContext& context) -> std::string;
 
   //! Check if a name has been registered for a specific kind.
-  [[nodiscard]] auto HasName(ImportNameKind kind, std::string_view name) const
+  OXGN_CNTT_NDAPI auto HasName(ImportNameKind kind, std::string_view name) const
     -> bool;
 
   //! Get the count of registered names for a specific kind.
-  [[nodiscard]] auto GetNameCount(ImportNameKind kind) const -> size_t;
-
+  OXGN_CNTT_NDAPI auto GetNameCount(ImportNameKind kind) const -> size_t;
   //! Reset all registries for a new import session.
   /*!
    @warning Not thread-safe with respect to MakeUniqueName().
    Call this only when no naming operations are in progress.
   */
-  auto Reset() -> void;
+  OXGN_CNTT_API auto Reset() -> void;
 
 private:
   struct NameRegistry {

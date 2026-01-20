@@ -162,6 +162,14 @@ TextureLoadingService::TextureLoadingService(
 {
 }
 
+/*!
+ Ensure the import service is stopped before destruction.
+
+ @note If the service is still running, it is stopped here to satisfy the
+       AsyncImportService contract.
+*/
+TextureLoadingService::~TextureLoadingService() { import_service_.Stop(); }
+
 auto TextureLoadingService::SubmitImport(const ImportSettings& settings) -> bool
 {
   std::lock_guard lock(import_mutex_);

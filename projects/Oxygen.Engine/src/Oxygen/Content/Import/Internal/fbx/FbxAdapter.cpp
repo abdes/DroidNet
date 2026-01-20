@@ -2435,7 +2435,7 @@ auto FbxAdapter::BuildWorkItems(SceneWorkTag, SceneWorkItemSink& sink,
 
   auto item = ScenePipeline::WorkItem::MakeWorkItem(shared_from_this(),
     BuildSceneSourceId(input.source_id_prefix, input.request), {}, {},
-    input.request, input.stop_token);
+    input.request, input.naming_service, input.stop_token);
 
   if (!sink.Consume(std::move(item))) {
     return result;

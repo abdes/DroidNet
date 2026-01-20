@@ -53,7 +53,6 @@ struct TextureTableTraits {
     signature.reserve(96);
 
     signature.append("tex:");
-    signature.append(std::to_string(desc.content_hash));
     signature.append(";w=");
     signature.append(std::to_string(desc.width));
     signature.append("x");
@@ -66,6 +65,10 @@ struct TextureTableTraits {
     signature.append(std::to_string(desc.alignment));
     signature.append(";n=");
     signature.append(std::to_string(desc.size_bytes));
+    if (desc.content_hash != 0U) {
+      signature.append(";h=");
+      signature.append(std::to_string(desc.content_hash));
+    }
     return signature;
   }
 };

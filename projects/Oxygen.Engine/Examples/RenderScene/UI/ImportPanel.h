@@ -74,7 +74,8 @@ struct ImportPanelConfig {
 class ImportPanel {
 public:
   ImportPanel() = default;
-  ~ImportPanel() = default;
+  //! Ensure the import service is stopped before destruction.
+  ~ImportPanel();
 
   //! Initialize panel with configuration.
   void Initialize(const ImportPanelConfig& config);

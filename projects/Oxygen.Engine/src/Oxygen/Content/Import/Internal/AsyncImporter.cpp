@@ -57,9 +57,8 @@ void AsyncImporter::Stop()
 
   // Close the channel to stop accepting new jobs and unblock receivers
   job_channel_.Close();
-  completion_channel_.Close();
 
-  // Cancel the nursery to stop all background tasks
+  // Cancel the live-object nursery to let OpenNursery complete.
   if (nursery_ != nullptr) {
     nursery_->Cancel();
   }
@@ -154,7 +153,13 @@ auto AsyncImporter::ProcessJobsLoop() -> co::Co<>
     ++in_flight_jobs_;
     nursery_->Start(
       [this, entry = std::move(*maybe_entry)]() mutable -> co::Co<> {
-        co_await ProcessJob(std::move(entry));
+        try {
+          co_await ProcessJob(std::move(entry));
+        } catch (const std::exception& ex) {
+          LOG_F(ERROR, "AsyncImporter job failed: {}", ex.what());
+        } catch (...) {
+          LOG_F(ERROR, "AsyncImporter job failed: unknown exception");
+        }
         co_await completion_channel_.Send(1);
       });
   }

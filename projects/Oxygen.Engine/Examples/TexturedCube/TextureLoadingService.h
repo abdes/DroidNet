@@ -107,7 +107,8 @@ public:
   explicit TextureLoadingService(
     oxygen::observer_ptr<oxygen::content::AssetLoader> asset_loader);
 
-  ~TextureLoadingService() = default;
+  //! Ensure the import service is stopped before destruction.
+  ~TextureLoadingService();
 
   TextureLoadingService(const TextureLoadingService&) = delete;
   auto operator=(const TextureLoadingService&)

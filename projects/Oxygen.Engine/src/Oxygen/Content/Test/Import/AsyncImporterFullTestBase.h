@@ -147,6 +147,8 @@ protected:
       = duration_cast<milliseconds>(import_end - import_start).count();
     GTEST_LOG_(INFO) << "Async import duration: " << import_ms << " ms";
 
+    service.Stop();
+
     return result;
   }
 

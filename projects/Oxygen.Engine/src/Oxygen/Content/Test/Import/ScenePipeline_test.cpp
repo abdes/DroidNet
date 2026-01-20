@@ -14,8 +14,10 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Internal/Pipelines/ScenePipeline.h>
+#include <Oxygen/Content/Import/Naming.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Run.h>
@@ -167,12 +169,18 @@ NOLINT_TEST_F(ScenePipelineTest, Collect_MinimalScene_BuildsDescriptor)
   co::Run(loop_, [&]() -> co::Co<> {
     ScenePipeline pipeline(pool);
 
+    NamingService naming_service(NamingService::Config {
+      .strategy = std::make_shared<NoOpNamingStrategy>(),
+      .enable_namespacing = false,
+      .enforce_uniqueness = false,
+    });
+
     auto item = ScenePipeline::WorkItem::MakeWorkItem(std::move(adapter),
       "Scene", {}, {},
       ImportRequest {
         .source_path = "TestScene.scene",
       },
-      {});
+      oxygen::observer_ptr { &naming_service }, {});
 
     OXCO_WITH_NURSERY(n)
     {
@@ -255,12 +263,18 @@ NOLINT_TEST_F(ScenePipelineTest, Collect_SortsRenderables_ByNodeIndex)
   co::Run(loop_, [&]() -> co::Co<> {
     ScenePipeline pipeline(pool);
 
+    NamingService naming_service(NamingService::Config {
+      .strategy = std::make_shared<NoOpNamingStrategy>(),
+      .enable_namespacing = false,
+      .enforce_uniqueness = false,
+    });
+
     auto item = ScenePipeline::WorkItem::MakeWorkItem(std::move(adapter),
       "Scene", {}, {},
       ImportRequest {
         .source_path = "TestScene.scene",
       },
-      {});
+      oxygen::observer_ptr { &naming_service }, {});
 
     OXCO_WITH_NURSERY(n)
     {
@@ -312,6 +326,12 @@ NOLINT_TEST_F(ScenePipelineTest, Collect_WithEnvironmentBlock_AppendsBlock)
   co::Run(loop_, [&]() -> co::Co<> {
     ScenePipeline pipeline(pool);
 
+    NamingService naming_service(NamingService::Config {
+      .strategy = std::make_shared<NoOpNamingStrategy>(),
+      .enable_namespacing = false,
+      .enforce_uniqueness = false,
+    });
+
     auto item
       = ScenePipeline::WorkItem::MakeWorkItem(std::move(adapter), "Scene", {},
         {
@@ -325,7 +345,7 @@ NOLINT_TEST_F(ScenePipelineTest, Collect_WithEnvironmentBlock_AppendsBlock)
         ImportRequest {
           .source_path = "TestScene.scene",
         },
-        {});
+        oxygen::observer_ptr { &naming_service }, {});
 
     OXCO_WITH_NURSERY(n)
     {

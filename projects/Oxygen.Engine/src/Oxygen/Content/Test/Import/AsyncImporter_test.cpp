@@ -52,7 +52,8 @@ public:
 private:
   [[nodiscard]] auto ExecuteAsync() -> Co<ImportReport> override
   {
-    ReportProgress(ImportPhase::kParsing, 0.1f, "Test job running");
+    ReportProgress(
+      ImportPhase::kParsing, 0.1f, 0.1f, 1U, 1U, "Test job running");
     co_return MakeSuccessReport(Request());
   }
 };

@@ -26,30 +26,37 @@ auto AudioImportJob::ExecuteAsync() -> co::Co<ImportReport>
   ImportSession session(
     Request(), FileReader(), FileWriter(), ThreadPool(), TableRegistry());
 
-  ReportProgress(ImportPhase::kParsing, 0.0f, "Loading audio source...");
+  ReportProgress(
+    ImportPhase::kParsing, 0.0f, 0.0f, 0U, 0U, "Loading audio source...");
   const auto source = co_await LoadSource(session);
   if (!source.success) {
-    ReportProgress(ImportPhase::kFailed, 1.0f, "Audio load failed");
+    ReportProgress(
+      ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "Audio load failed");
     co_return co_await FinalizeSession(session);
   }
 
-  ReportProgress(ImportPhase::kGeometry, 0.4f, "Cooking audio...");
+  ReportProgress(
+    ImportPhase::kGeometry, 0.4f, 0.0f, 0U, 0U, "Cooking audio...");
   if (!co_await CookAudio(source, session)) {
-    ReportProgress(ImportPhase::kFailed, 1.0f, "Audio cook failed");
+    ReportProgress(
+      ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "Audio cook failed");
     co_return co_await FinalizeSession(session);
   }
 
-  ReportProgress(ImportPhase::kWriting, 0.7f, "Emitting audio...");
+  ReportProgress(
+    ImportPhase::kWriting, 0.7f, 0.0f, 0U, 0U, "Emitting audio...");
   if (!co_await EmitAudio(source, session)) {
-    ReportProgress(ImportPhase::kFailed, 1.0f, "Audio emit failed");
+    ReportProgress(
+      ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "Audio emit failed");
     co_return co_await FinalizeSession(session);
   }
 
-  ReportProgress(ImportPhase::kWriting, 0.9f, "Finalizing import...");
+  ReportProgress(
+    ImportPhase::kWriting, 0.9f, 0.0f, 0U, 0U, "Finalizing import...");
   auto report = co_await FinalizeSession(session);
 
   ReportProgress(report.success ? ImportPhase::kComplete : ImportPhase::kFailed,
-    1.0f, report.success ? "Import complete" : "Import failed");
+    1.0f, 1.0f, 0U, 0U, report.success ? "Import complete" : "Import failed");
 
   co_return report;
 }

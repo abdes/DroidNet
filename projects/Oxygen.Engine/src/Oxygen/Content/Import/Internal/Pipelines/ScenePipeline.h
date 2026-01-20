@@ -118,7 +118,8 @@ public:
     [[nodiscard]] static auto MakeWorkItem(std::shared_ptr<Adapter> adapter,
       std::string source_id, std::vector<data::AssetKey> geometry_keys,
       std::vector<SceneEnvironmentSystem> environment_systems,
-      ImportRequest request, std::stop_token stop_token) -> WorkItem
+      ImportRequest request, observer_ptr<NamingService> naming_service,
+      std::stop_token stop_token) -> WorkItem
     {
       WorkItem item;
       item.source_id = std::move(source_id);
@@ -135,6 +136,7 @@ public:
       item.geometry_keys = std::move(geometry_keys);
       item.environment_systems = std::move(environment_systems);
       item.request = std::move(request);
+      item.naming_service = naming_service;
       item.stop_token = stop_token;
       return item;
     }

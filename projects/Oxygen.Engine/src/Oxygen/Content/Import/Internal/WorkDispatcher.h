@@ -45,6 +45,18 @@ namespace oxygen::content::import::detail {
 */
 class WorkDispatcher final {
 public:
+  //! Progress reporter used to emit granular updates.
+  struct ProgressReporter final {
+    ImportJobId job_id = kInvalidJobId;
+    ImportProgressCallback on_progress;
+    float overall_start = 0.0f;
+    float overall_end = 1.0f;
+
+    auto Report(ImportPhase phase, float phase_progress,
+      uint32_t items_completed, uint32_t items_total, float overall_progress,
+      std::string message) const -> void;
+  };
+
   //! Context required to execute a plan.
   struct PlanContext final {
     ImportPlanner& planner;
@@ -57,7 +69,8 @@ public:
   //! Create a dispatcher bound to a single import session.
   WorkDispatcher(ImportSession& session,
     oxygen::observer_ptr<co::ThreadPool> thread_pool,
-    const ImportConcurrency& concurrency, std::stop_token stop_token);
+    const ImportConcurrency& concurrency, std::stop_token stop_token,
+    std::optional<ProgressReporter> progress = std::nullopt);
 
   OXYGEN_MAKE_NON_COPYABLE(WorkDispatcher)
   OXYGEN_MAKE_NON_MOVABLE(WorkDispatcher)
@@ -111,6 +124,7 @@ private:
   oxygen::observer_ptr<co::ThreadPool> thread_pool_ {};
   const ImportConcurrency& concurrency_;
   std::stop_token stop_token_;
+  std::optional<ProgressReporter> progress_ {};
 
   std::unique_ptr<TexturePipeline> texture_pipeline_;
   std::unique_ptr<BufferPipeline> buffer_pipeline_;
