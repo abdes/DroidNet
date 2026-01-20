@@ -178,9 +178,46 @@ auto ImportJob::StopToken() const noexcept -> std::stop_token
   return stop_source_.get_token();
 }
 
+auto ImportJob::GetNamingService() -> NamingService&
+{
+  if (!naming_service_) {
+    NamingService::Config config;
+    if (request_.options.naming_strategy) {
+      config.strategy = request_.options.naming_strategy;
+    } else {
+      config.strategy = std::make_shared<NoOpNamingStrategy>();
+    }
+    naming_service_ = std::make_unique<NamingService>(std::move(config));
+  }
+  return *naming_service_;
+}
+
+auto ImportJob::ProgressCallback() const noexcept
+  -> const ImportProgressCallback&
+{
+  return on_progress_;
+}
+
 auto ImportJob::MainAsync() -> co::Co<>
 {
   bool finalized = false;
+
+  auto make_exception_report = [&](std::string_view message) -> ImportReport {
+    ImportReport report {
+      .cooked_root
+      = request_.cooked_root.value_or(request_.source_path.parent_path()),
+      .success = false,
+    };
+
+    report.diagnostics.push_back({
+      .severity = ImportSeverity::kError,
+      .code = "import.exception",
+      .message = std::string(message),
+      .source_path = request_.source_path.string(),
+    });
+
+    return report;
+  };
 
   auto finalize = [&](ImportReport report) {
     if (finalized) {
@@ -229,7 +266,27 @@ auto ImportJob::MainAsync() -> co::Co<>
         co_return co_await ExecuteAsync();
       };
 
-      finalize(co_await run_work());
+      try {
+        finalize(co_await run_work());
+      } catch (const std::exception& ex) {
+        const bool cancelled = stop_source_.stop_requested()
+          || (cancel_event_ && cancel_event_->Triggered());
+        if (cancelled) {
+          finalize(MakeCancelledReport(request_));
+        } else {
+          LOG_F(ERROR, "ImportJob failed: {}", ex.what());
+          finalize(make_exception_report(ex.what()));
+        }
+      } catch (...) {
+        const bool cancelled = stop_source_.stop_requested()
+          || (cancel_event_ && cancel_event_->Triggered());
+        if (cancelled) {
+          finalize(MakeCancelledReport(request_));
+        } else {
+          LOG_F(ERROR, "ImportJob failed: unknown exception");
+          finalize(make_exception_report("unknown exception"));
+        }
+      }
       co_return;
     }(),
     co::UntilCancelledAnd([&]() -> co::Co<> {
@@ -284,8 +341,9 @@ auto ImportJob::MakeNoFileWriterReport(const ImportRequest& request) const
   return report;
 }
 
-auto ImportJob::ReportProgress(
-  ImportPhase phase, float overall_progress, std::string message) -> void
+auto ImportJob::ReportProgress(ImportPhase phase, float overall_progress,
+  float phase_progress, uint32_t items_completed, uint32_t items_total,
+  std::string message) -> void
 {
   if (!on_progress_) {
     return;
@@ -295,6 +353,9 @@ auto ImportJob::ReportProgress(
   progress.job_id = job_id_;
   progress.phase = phase;
   progress.overall_progress = overall_progress;
+  progress.phase_progress = phase_progress;
+  progress.items_completed = items_completed;
+  progress.items_total = items_total;
   progress.message = std::move(message);
   on_progress_(progress);
 }

@@ -63,6 +63,8 @@ namespace {
     std::move(on_progress), MakeTestJobFactory(config));
 }
 
+auto StopService(AsyncImportService& service) -> void { service.Stop(); }
+
 //=== Construction and Destruction Tests
 //===-----------------------------------//
 
@@ -80,6 +82,7 @@ NOLINT_TEST_F(
     AsyncImportService service(config_);
     // Allow thread to start
     std::this_thread::sleep_for(50ms);
+    StopService(service);
   }
 
   // Assert - no crash, no hang
@@ -94,6 +97,7 @@ NOLINT_TEST_F(
   for (int i = 0; i < 3; ++i) {
     AsyncImportService service(config_);
     std::this_thread::sleep_for(20ms);
+    StopService(service);
   }
 
   // Assert - no crash, no hang
@@ -109,6 +113,8 @@ NOLINT_TEST_F(AsyncImportServiceLifecycleTest,
 
   // Act & Assert
   EXPECT_TRUE(service.IsAcceptingJobs());
+
+  StopService(service);
 }
 
 //! Verify counts are zero after construction.
@@ -121,6 +127,8 @@ NOLINT_TEST_F(
   // Act & Assert
   EXPECT_EQ(service.PendingJobCount(), 0U);
   EXPECT_EQ(service.InFlightJobCount(), 0U);
+
+  StopService(service);
 }
 
 //=== Job Submission Tests ===------------------------------------------------//
@@ -147,6 +155,8 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_ReturnsValidJobId)
 
   // Cleanup - wait for job to complete
   done.wait();
+
+  StopService(service);
 }
 
 //! Verify completion callback is invoked.
@@ -175,6 +185,8 @@ NOLINT_TEST_F(
   // Assert
   EXPECT_TRUE(callback_invoked);
   EXPECT_EQ(received_id, job_id);
+
+  StopService(service);
 }
 
 //! Verify custom job factory can run unknown formats.
@@ -200,6 +212,8 @@ NOLINT_TEST_F(
   // Assert
   EXPECT_NE(job_id, kInvalidJobId);
   done.wait();
+
+  StopService(service);
 }
 
 //! Verify custom job completes successfully.
@@ -228,6 +242,8 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_CustomJob_Completes)
   // Assert
   EXPECT_TRUE(callback_invoked);
   EXPECT_TRUE(received_report.success);
+
+  StopService(service);
 }
 
 //! Verify progress callback is invoked if provided.
@@ -260,6 +276,8 @@ NOLINT_TEST_F(
 
   // Assert
   EXPECT_TRUE(progress_invoked);
+
+  StopService(service);
 }
 
 //! Verify multiple jobs get unique IDs.
@@ -292,6 +310,8 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_MultipleJobs_UniqueIds)
   EXPECT_NE(id1, id2);
   EXPECT_NE(id2, id3);
   EXPECT_NE(id1, id3);
+
+  StopService(service);
 }
 
 //! Verify SubmitImport returns kInvalidJobId after shutdown.
@@ -309,6 +329,8 @@ NOLINT_TEST_F(
 
   // Assert
   EXPECT_EQ(job_id, kInvalidJobId);
+
+  StopService(service);
 }
 
 //=== Cancellation Tests ===--------------------------------------------------//
@@ -327,6 +349,8 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelJob_InvalidId_ReturnsFalse)
   // Act & Assert
   EXPECT_FALSE(service.CancelJob(kInvalidJobId));
   EXPECT_FALSE(service.CancelJob(999));
+
+  StopService(service);
 }
 
 //! Verify CancelJob returns false for completed job.
@@ -346,6 +370,8 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelJob_CompletedJob_ReturnsFalse)
 
   // Act & Assert
   EXPECT_FALSE(service.CancelJob(job_id));
+
+  StopService(service);
 }
 
 //! Verify CancelAll does not crash with no jobs.
@@ -357,6 +383,8 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelAll_NoJobs_Succeeds)
   // Act & Assert - should not crash
   service.CancelAll();
   SUCCEED();
+
+  StopService(service);
 }
 
 //! Verify CancelJob can cancel a job during execution.
@@ -402,6 +430,8 @@ NOLINT_TEST_F(
   // Note: The cancel may succeed or fail depending on timing, but we shouldn't
   // crash The important thing is that the system remains in a consistent state
   EXPECT_TRUE(cancel_result || job_completed);
+
+  StopService(service);
 }
 
 //! Verify CancelJob before execution prevents job from starting.
@@ -462,6 +492,8 @@ NOLINT_TEST_F(
   // Note: Due to timing, second_job_executed might still be true if cancel was
   // too late The important verification is that cancel_result correctly
   // reflects the outcome
+
+  StopService(service);
 }
 
 //! Verify CancelAll cancels all active jobs.
@@ -554,6 +586,8 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelAll_MultipleJobs_CancelsAll)
   EXPECT_EQ(final_completed, kJobCount);
   EXPECT_EQ(
     state->cancelled_reports.load(std::memory_order_relaxed), kJobCount);
+
+  StopService(service);
 }
 
 //=== Shutdown Tests ===------------------------------------------------------//
@@ -582,14 +616,21 @@ NOLINT_TEST_F(
 
   // Assert
   EXPECT_FALSE(service.IsAcceptingJobs());
+
+  StopService(service);
 }
 
-//! Verify destructor completes even with pending jobs.
+class AsyncImportServiceShutdownDeathTest : public ::testing::Test {
+protected:
+  AsyncImportService::Config config_ { .thread_pool_size = 2 };
+};
+
+//! Verify destruction without Stop aborts the process.
 NOLINT_TEST_F(
-  AsyncImportServiceShutdownTest, Destructor_WithPendingJobs_Completes)
+  AsyncImportServiceShutdownDeathTest, Destructor_WithoutStop_Aborts)
 {
-  // Arrange & Act
-  {
+  // Arrange
+  const auto exercise = [this]() {
     AsyncImportService service(config_);
 
     // Submit several jobs
@@ -597,17 +638,35 @@ NOLINT_TEST_F(
       [[maybe_unused]] auto job_id = SubmitTestJob(service,
         ImportRequest { .source_path = "custom.asset" },
         [](ImportJobId, ImportReport) { });
-      EXPECT_NE(job_id, kInvalidJobId);
     }
-    // Destructor will cancel and cleanup
-  }
+  };
 
-  // Assert - no hang, no crash
-  SUCCEED();
+  // Act & Assert
+  EXPECT_DEATH(
+    exercise(), ".*AsyncImportService destroyed without Stop\\(\\).*");
 }
 
-//=== Concurrent Submission Tests
-//===------------------------------------------//
+//! Verify Stop completes with pending jobs before destruction.
+NOLINT_TEST_F(AsyncImportServiceShutdownTest, Stop_WithPendingJobs_Completes)
+{
+  // Arrange
+  AsyncImportService service(config_);
+
+  // Act
+  for (int i = 0; i < 5; ++i) {
+    [[maybe_unused]] auto job_id
+      = SubmitTestJob(service, ImportRequest { .source_path = "custom.asset" },
+        [](ImportJobId, ImportReport) { });
+    EXPECT_NE(job_id, kInvalidJobId);
+  }
+
+  service.Stop();
+
+  // Assert
+  EXPECT_TRUE(service.IsStopped());
+}
+
+//=== Concurrent Submission Tests ===-----------------------------------------//
 
 class AsyncImportServiceConcurrencyTest : public ::testing::Test {
 protected:
@@ -657,6 +716,8 @@ NOLINT_TEST_F(AsyncImportServiceConcurrencyTest,
   // Assert
   EXPECT_EQ(completed_count.load(), kTotalJobs);
   EXPECT_TRUE(all_valid.load(std::memory_order_relaxed));
+
+  StopService(service);
 }
 
 //! Verify rapid submit and cancel operations don't cause deadlocks.
@@ -696,6 +757,8 @@ NOLINT_TEST_F(
   SUCCEED();
   // Note: We don't assert exact completion count because cancellations are
   // timing-dependent
+
+  StopService(service);
 }
 
 //=== IsJobActive Tests
@@ -716,6 +779,8 @@ NOLINT_TEST_F(
   // Act & Assert
   EXPECT_FALSE(service.IsJobActive(kInvalidJobId));
   EXPECT_FALSE(service.IsJobActive(999));
+
+  StopService(service);
 }
 
 //! Verify IsJobActive returns false after job completes.
@@ -736,6 +801,8 @@ NOLINT_TEST_F(
 
   // Act & Assert
   EXPECT_FALSE(service.IsJobActive(job_id));
+
+  StopService(service);
 }
 
 } // namespace

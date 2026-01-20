@@ -17,6 +17,9 @@
 
 #include <glm/glm.hpp>
 
+#include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Internal/Pipelines/BufferPipeline.h>
@@ -24,13 +27,13 @@
 #include <Oxygen/Content/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Content/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Content/Import/Internal/Pipelines/TexturePipeline.h>
+#include <Oxygen/Content/Import/Naming.h>
 #include <Oxygen/Content/Import/ScratchImage.h>
 #include <Oxygen/Content/Import/TextureImportDesc.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/asio.h>
-#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
@@ -221,8 +224,13 @@ auto MakeSceneWorkItem(std::shared_ptr<FakeSceneAdapter> adapter)
 {
   ImportRequest request;
   request.source_path = "Scene.scene";
-  return ScenePipeline::WorkItem::MakeWorkItem(
-    std::move(adapter), "Scene", {}, {}, std::move(request), {});
+  static NamingService naming_service(NamingService::Config {
+    .strategy = std::make_shared<NoOpNamingStrategy>(),
+    .enable_namespacing = false,
+    .enforce_uniqueness = false,
+  });
+  return ScenePipeline::WorkItem::MakeWorkItem(std::move(adapter), "Scene", {},
+    {}, std::move(request), oxygen::observer_ptr { &naming_service }, {});
 }
 
 auto MakeMinimalSceneBuild(std::string_view name) -> SceneBuild

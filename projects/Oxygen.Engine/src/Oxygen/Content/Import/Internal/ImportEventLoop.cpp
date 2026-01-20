@@ -63,7 +63,7 @@ auto ImportEventLoop::Stop() -> void
   // Release the work guard to allow run() to exit
   work_guard_.reset();
 
-  // Stop the io_context
+  // Stop the io_context immediately
   io_context_.stop();
 }
 

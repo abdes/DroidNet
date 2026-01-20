@@ -132,6 +132,9 @@ struct AsyncImportService::Impl {
   //! Flag indicating full shutdown has completed.
   std::atomic<bool> shutdown_complete_ { false };
 
+  //! Serialize shutdown operations.
+  std::mutex shutdown_mutex_;
+
   //! Flag indicating the import thread is running and ready.
   std::atomic<bool> thread_running_ { false };
 
@@ -236,24 +239,40 @@ struct AsyncImportService::Impl {
     DLOG_F(INFO, "Import thread exited");
   }
 
-  //! Shutdown the import thread.
-  auto Shutdown() -> void
+  //! Initiate shutdown without blocking.
+  auto RequestShutdown() -> void
   {
-    // Check if we've already completed shutdown
-    if (shutdown_complete_.exchange(true, std::memory_order_acq_rel)) {
-      return; // Already shut down
+    const bool was_requested
+      = shutdown_requested_.exchange(true, std::memory_order_acq_rel);
+    if (was_requested) {
+      return;
     }
 
-    // Mark shutdown requested (in case it wasn't already)
-    shutdown_requested_.store(true, std::memory_order_release);
+    DLOG_F(INFO, "AsyncImportService shutdown requested");
 
-    DLOG_F(INFO, "AsyncImportService shutting down");
-
-    // Trigger all cancel events
+    // Trigger all cancel events to cancel pending jobs on the import thread.
+    std::vector<std::shared_ptr<co::Event>> events_to_trigger;
     {
       std::lock_guard lock(cancel_events_mutex_);
+      events_to_trigger.reserve(cancel_events_.size());
       for (auto& [id, event] : cancel_events_) {
         if (event) {
+          events_to_trigger.push_back(event);
+        }
+      }
+    }
+
+    if (!events_to_trigger.empty()) {
+      if (event_loop_) {
+        // IMPORTANT: Trigger cancellations on the import thread to keep
+        // coroutine resumption on the correct executor.
+        event_loop_->Post([events = std::move(events_to_trigger)]() mutable {
+          for (auto& event : events) {
+            event->Trigger();
+          }
+        });
+      } else {
+        for (auto& event : events_to_trigger) {
           event->Trigger();
         }
       }
@@ -265,12 +284,25 @@ struct AsyncImportService::Impl {
     if (event_loop_ && async_importer_) {
       event_loop_->Post([this]() { async_importer_->Stop(); });
     }
+  }
+
+  //! Shutdown the import thread and wait for completion.
+  auto Shutdown() -> void
+  {
+    std::lock_guard lock(shutdown_mutex_);
+    if (shutdown_complete_.load(std::memory_order_acquire)) {
+      return;
+    }
+
+    RequestShutdown();
 
     // Wait for import thread to exit (co::Run() will complete after nursery
     // drains)
     if (import_thread_.joinable()) {
       import_thread_.join();
     }
+
+    shutdown_complete_.store(true, std::memory_order_release);
 
     DLOG_F(INFO, "AsyncImportService shutdown complete");
   }
@@ -288,7 +320,12 @@ AsyncImportService::AsyncImportService(Config config)
   impl_->StartThread();
 }
 
-AsyncImportService::~AsyncImportService() { impl_->Shutdown(); }
+AsyncImportService::~AsyncImportService()
+{
+  CHECK_F(IsStopped(),
+    "AsyncImportService destroyed without Stop(). "
+    "Call Stop() and wait for IsStopped() before destruction.");
+}
 
 auto AsyncImportService::SubmitImport(ImportRequest request,
   ImportCompletionCallback on_complete, ImportProgressCallback on_progress)
@@ -305,6 +342,11 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   // Check if we're accepting jobs
   if (impl_->shutdown_requested_.load(std::memory_order_acquire)) {
     DLOG_F(WARNING, "SubmitImport: service is shutting down");
+    return kInvalidJobId;
+  }
+
+  if (!impl_->thread_running_.load(std::memory_order_acquire)) {
+    DLOG_F(WARNING, "SubmitImport: import thread not running");
     return kInvalidJobId;
   }
 
@@ -525,11 +567,24 @@ auto AsyncImportService::CancelAll() -> void
   DLOG_F(INFO, "Triggered cancellation for {} jobs", cancel_count);
 }
 
-auto AsyncImportService::RequestShutdown() -> void
-{
-  impl_->shutdown_requested_.store(true, std::memory_order_release);
+auto AsyncImportService::RequestShutdown() -> void { impl_->RequestShutdown(); }
 
-  DLOG_F(INFO, "Shutdown requested (non-blocking)");
+auto AsyncImportService::Stop() -> void
+{
+  try {
+    impl_->Shutdown();
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "AsyncImportService Stop failed: {}", ex.what());
+    impl_->shutdown_complete_.store(true, std::memory_order_release);
+  } catch (...) {
+    LOG_F(ERROR, "AsyncImportService Stop failed: unknown exception");
+    impl_->shutdown_complete_.store(true, std::memory_order_release);
+  }
+}
+
+auto AsyncImportService::IsStopped() const -> bool
+{
+  return impl_->shutdown_complete_.load(std::memory_order_acquire);
 }
 
 auto AsyncImportService::IsJobActive(ImportJobId job_id) const -> bool

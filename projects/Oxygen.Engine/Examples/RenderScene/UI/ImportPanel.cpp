@@ -28,6 +28,19 @@
 
 namespace oxygen::examples::render_scene::ui {
 
+/*!
+ Ensure the import service is stopped before panel destruction.
+
+ @note If the service is still running, it is stopped here to satisfy the
+       AsyncImportService contract.
+*/
+ImportPanel::~ImportPanel()
+{
+  if (import_service_) {
+    import_service_->Stop();
+  }
+}
+
 namespace {
 
   [[nodiscard]] auto BeginEnumCombo(const char* label, const char* preview)
@@ -272,6 +285,9 @@ void ImportPanel::Initialize(const ImportPanelConfig& config)
   service_config_.concurrency.geometry.workers = 6;
   service_config_.concurrency.buffer.workers = 6;
   service_config_.concurrency.scene.workers = 1;
+  if (import_service_) {
+    import_service_->Stop();
+  }
   import_service_
     = std::make_unique<content::import::AsyncImportService>(service_config_);
 
@@ -291,6 +307,9 @@ void ImportPanel::Initialize(const ImportPanelConfig& config)
 void ImportPanel::Update()
 {
   if (pending_service_restart_ && !IsImporting()) {
+    if (import_service_) {
+      import_service_->Stop();
+    }
     import_service_.reset();
     import_service_
       = std::make_unique<content::import::AsyncImportService>(service_config_);
@@ -850,6 +869,10 @@ auto ImportPanel::DrawImportOptionsUi() -> void
 
   ImGui::Checkbox(
     "Ignore non-mesh primitives", &import_options_.ignore_non_mesh_primitives);
+
+  ImGui::Separator();
+  ImGui::Checkbox(
+    "Enable content hashing", &import_options_.with_content_hashing);
 }
 
 auto ImportPanel::DrawTextureTuningUi() -> void

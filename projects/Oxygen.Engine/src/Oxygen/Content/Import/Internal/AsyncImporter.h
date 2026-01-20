@@ -48,6 +48,10 @@ namespace oxygen::content::import::detail {
  Each job has an associated `co::Event` for cancellation. Cancellation is
  always reported via `on_complete` with a cancelled diagnostic.
 
+ @warning Cancellation must be triggered on the import thread's event loop.
+          Triggering cancellation from another thread can resume coroutines on
+          the wrong executor and lead to hard aborts.
+
  @see AsyncImportService for the public thread-safe API.
 */
 class AsyncImporter final : public co::LiveObject {
@@ -95,8 +99,12 @@ public:
 
   //! Request cancellation and close the job channel.
   /*!
-   Triggers cancellation of the nursery and closes the channel,
-   causing the processing loop to exit after draining.
+     Triggers cancellation of the nursery and closes the job channel. The
+     processing loop exits after draining and all in-flight jobs report
+     completion.
+
+     @note Call `Stop()` on the import thread (via the event loop) to keep
+       coroutine resumption on the correct executor.
   */
   OXGN_CNTT_API void Stop() override;
 

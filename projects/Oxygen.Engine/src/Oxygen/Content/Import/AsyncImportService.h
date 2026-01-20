@@ -143,7 +143,17 @@ using ImportJobFactory = std::function<std::shared_ptr<detail::ImportJob>(
  1. Construct the service (spawns import thread).
  2. Call `SubmitImport()` from any thread to queue jobs.
  3. Receive callbacks on your thread (via ThreadNotification if available).
- 4. Destructor blocks until all work is complete.
+ 4. Call `Stop()` and wait for `IsStopped()` before destruction.
+
+ ### Shutdown Contract
+
+ - Call `RequestShutdown()` to stop accepting new jobs.
+ - Call `Stop()` to cancel in-flight work and wait for shutdown to finish.
+ - Destroy the service only after `IsStopped()` returns true.
+
+ @warning Cancellation must be triggered on the import thread's event loop.
+          Triggering cancellation from another thread can resume coroutines on
+          the wrong executor and lead to hard aborts.
 
  ### Cancellation
 
@@ -214,10 +224,11 @@ public:
   */
   OXGN_CNTT_API explicit AsyncImportService(Config config = {});
 
-  //! Shutdown and join the import thread.
+  //! Verify the service was stopped before destruction.
   /*!
-   Blocks until all pending work is cancelled and the import thread exits.
-    In-flight jobs will complete with a cancelled diagnostic.
+   The service must be stopped explicitly by calling `Stop()` and waiting
+   for `IsStopped()` before destruction. Destruction without a prior stop
+   will abort the program.
   */
   OXGN_CNTT_API ~AsyncImportService();
 
@@ -295,12 +306,32 @@ public:
 
   //! Request graceful shutdown. Thread-safe.
   /*!
-   Signals the import thread to stop accepting new jobs, cancel in-flight
-   work, and terminate. Does not block; destructor blocks for completion.
+  Signals the import thread to stop accepting new jobs, cancel in-flight
+  work, and terminate. Does not block; call `Stop()` to wait.
+
+     @note Cancellation is posted to the import thread to keep coroutine
+       resumption on the correct executor.
 
    After calling this, `SubmitImport` will return `kInvalidJobId`.
   */
   OXGN_CNTT_API auto RequestShutdown() -> void;
+
+  //! Stop the service and wait for shutdown completion. Thread-safe.
+  /*!
+   Cancels all pending and in-flight jobs, stops the import thread, and
+   blocks until shutdown completes. After this returns, `IsStopped()` is
+   guaranteed to be true.
+
+    @note Safe to call multiple times.
+  */
+  OXGN_CNTT_API auto Stop() -> void;
+
+  //! Check whether the service has fully stopped. Thread-safe.
+  /*!
+   Returns true only after `Stop()` has completed (or shutdown has finished
+   during teardown).
+  */
+  OXGN_CNTT_NDAPI auto IsStopped() const -> bool;
 
   //! Check if a job is still pending or in-flight. Thread-safe.
   /*!

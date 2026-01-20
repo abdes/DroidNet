@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -90,15 +91,17 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
   ImportSession session(
     Request(), FileReader(), FileWriter(), ThreadPool(), TableRegistry());
 
-  ReportProgress(ImportPhase::kParsing, 0.0f, "Parsing FBX...");
+  ReportProgress(ImportPhase::kParsing, 0.0f, 0.0f, 0U, 0U, "Parsing FBX...");
   auto scene = co_await ParseScene(session);
   AddDiagnostics(session, std::move(scene.diagnostics));
   if (scene.cancelled || !scene.success) {
-    ReportProgress(ImportPhase::kFailed, 1.0f, "FBX parse failed");
+    ReportProgress(
+      ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "FBX parse failed");
     co_return co_await FinalizeSession(session);
   }
 
-  ReportProgress(ImportPhase::kParsing, 0.1f, "Building import plan...");
+  ReportProgress(
+    ImportPhase::kParsing, 0.1f, 0.0f, 0U, 0U, "Building import plan...");
   const auto request_copy = Request();
   const auto stop_token = StopToken();
   auto plan_outcome = co_await ThreadPool()->Run(
@@ -115,21 +118,25 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
     });
   AddDiagnostics(session, std::move(plan_outcome.diagnostics));
   if (plan_outcome.cancelled || !plan_outcome.plan) {
-    ReportProgress(ImportPhase::kFailed, 1.0f, "Plan build failed");
+    ReportProgress(
+      ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "Plan build failed");
     co_return co_await FinalizeSession(session);
   }
 
-  ReportProgress(ImportPhase::kTextures, 0.2f, "Executing plan...");
+  ReportProgress(
+    ImportPhase::kTextures, 0.2f, 0.0f, 0U, 0U, "Executing plan...");
   if (!co_await ExecutePlan(*plan_outcome.plan, session)) {
-    ReportProgress(ImportPhase::kFailed, 1.0f, "Plan execution failed");
+    ReportProgress(
+      ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "Plan execution failed");
     co_return co_await FinalizeSession(session);
   }
 
-  ReportProgress(ImportPhase::kWriting, 0.9f, "Finalizing import...");
+  ReportProgress(
+    ImportPhase::kWriting, 0.9f, 0.0f, 0U, 0U, "Finalizing import...");
   auto report = co_await FinalizeSession(session);
 
   ReportProgress(report.success ? ImportPhase::kComplete : ImportPhase::kFailed,
-    1.0f, report.success ? "Import complete" : "Import failed");
+    1.0f, 1.0f, 0U, 0U, report.success ? "Import complete" : "Import failed");
 
   co_return report;
 }
@@ -139,6 +146,7 @@ auto FbxImportJob::ParseScene(ImportSession& session) -> co::Co<ParsedFbxScene>
 {
   const auto request_copy = Request();
   const auto stop_token = StopToken();
+  const auto naming_service = observer_ptr { &GetNamingService() };
 
   if (ThreadPool() == nullptr) {
     ParsedFbxScene parsed;
@@ -149,6 +157,7 @@ auto FbxImportJob::ParseScene(ImportSession& session) -> co::Co<ParsedFbxScene>
       .material_keys = {},
       .default_material_key = DefaultMaterialKey(),
       .request = request_copy,
+      .naming_service = naming_service,
       .stop_token = stop_token,
     };
 
@@ -161,7 +170,8 @@ auto FbxImportJob::ParseScene(ImportSession& session) -> co::Co<ParsedFbxScene>
   }
 
   auto parsed = co_await ThreadPool()->Run(
-    [request_copy, stop_token](co::ThreadPool::CancelToken cancelled) {
+    [request_copy, stop_token, naming_service](
+      co::ThreadPool::CancelToken cancelled) {
       DLOG_F(1, "FbxImportJob: ParseScene task begin");
       ParsedFbxScene out;
       if (cancelled || stop_token.stop_requested()) {
@@ -176,6 +186,7 @@ auto FbxImportJob::ParseScene(ImportSession& session) -> co::Co<ParsedFbxScene>
         .material_keys = {},
         .default_material_key = DefaultMaterialKey(),
         .request = request_copy,
+        .naming_service = naming_service,
         .stop_token = stop_token,
       };
 
@@ -218,6 +229,7 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
     .material_keys = {},
     .default_material_key = DefaultMaterialKey(),
     .request = request,
+    .naming_service = observer_ptr { &GetNamingService() },
     .stop_token = stop_token,
   };
 
@@ -397,8 +409,17 @@ auto FbxImportJob::ExecutePlan(PlannedFbxImport& plan, ImportSession& session)
 
   OXCO_WITH_NURSERY(n)
   {
+    std::optional<WorkDispatcher::ProgressReporter> progress;
+    if (ProgressCallback()) {
+      progress = WorkDispatcher::ProgressReporter {
+        .job_id = JobId(),
+        .on_progress = ProgressCallback(),
+        .overall_start = 0.2f,
+        .overall_end = 0.9f,
+      };
+    }
     WorkDispatcher dispatcher(
-      session, ThreadPool(), Concurrency(), StopToken());
+      session, ThreadPool(), Concurrency(), StopToken(), std::move(progress));
     WorkDispatcher::PlanContext context {
       .planner = plan.planner,
       .payloads = plan.payloads,

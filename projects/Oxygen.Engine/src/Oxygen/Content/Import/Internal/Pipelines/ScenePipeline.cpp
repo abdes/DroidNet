@@ -489,6 +489,7 @@ auto ScenePipeline::Worker() -> co::Co<>
         .source_id = item.source_id,
         .geometry_keys = std::span<const data::AssetKey>(item.geometry_keys),
         .request = &item.request,
+        .naming_service = item.naming_service,
         .stop_token = item.stop_token,
       };
 

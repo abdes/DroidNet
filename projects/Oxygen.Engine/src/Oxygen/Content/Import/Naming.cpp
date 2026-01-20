@@ -4,9 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Naming.h"
-
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/Import/Naming.h>
 
 namespace oxygen::content::import {
 
@@ -128,6 +127,119 @@ auto NamingService::ApplyNamespacing(
 
   // Apply namespace: "SceneName/AssetName"
   return std::string(context.scene_namespace) + "/" + name;
+}
+
+auto NormalizeNamingStrategy::Rename(std::string_view authored_name,
+  const NamingContext& context) const -> std::optional<std::string>
+{
+  auto normalized = Normalize(authored_name);
+
+  if (normalized.empty()) {
+    normalized = DefaultBaseName(context);
+  }
+
+  if (options_.apply_prefixes) {
+    const auto prefix = PrefixFor(context.kind);
+    if (!prefix.empty() && !normalized.starts_with(prefix)) {
+      normalized = std::string(prefix) + normalized;
+    }
+  }
+
+  if (normalized == authored_name) {
+    return std::nullopt;
+  }
+
+  return normalized;
+}
+
+auto NormalizeNamingStrategy::Normalize(std::string_view input) const
+  -> std::string
+{
+  auto s = std::string(input);
+
+  if (options_.trim_whitespace) {
+    const auto is_space
+      = [](unsigned char ch) { return std::isspace(ch) != 0; };
+    while (!s.empty() && is_space(static_cast<unsigned char>(s.front()))) {
+      s.erase(s.begin());
+    }
+    while (!s.empty() && is_space(static_cast<unsigned char>(s.back()))) {
+      s.pop_back();
+    }
+  }
+
+  if (s.empty()) {
+    return s;
+  }
+
+  std::string out;
+  out.reserve(s.size());
+
+  bool last_was_underscore = false;
+  bool in_whitespace = false;
+
+  for (const auto ch : s) {
+    const auto uch = static_cast<unsigned char>(ch);
+    const auto is_space = (std::isspace(uch) != 0);
+
+    if (is_space) {
+      if (options_.collapse_whitespace) {
+        in_whitespace = true;
+        continue;
+      }
+      out.push_back('_');
+      last_was_underscore = true;
+      continue;
+    }
+
+    if (in_whitespace) {
+      out.push_back('_');
+      last_was_underscore = true;
+      in_whitespace = false;
+    }
+
+    const auto is_valid = (std::isalnum(uch) != 0) || (ch == '_');
+    if (!is_valid && options_.replace_invalid_chars) {
+      if (!last_was_underscore || !options_.collapse_underscores) {
+        out.push_back('_');
+        last_was_underscore = true;
+      }
+      continue;
+    }
+
+    if (ch == '_' && options_.collapse_underscores && last_was_underscore) {
+      continue;
+    }
+
+    out.push_back(ch);
+    last_was_underscore = (ch == '_');
+  }
+
+  if (options_.collapse_underscores) {
+    while (!out.empty() && out.front() == '_') {
+      out.erase(out.begin());
+    }
+    while (!out.empty() && out.back() == '_') {
+      out.pop_back();
+    }
+  }
+
+  return out;
+}
+
+auto NormalizeNamingStrategy::PrefixFor(ImportNameKind kind) const
+  -> std::string_view
+{
+  switch (kind) {
+  case ImportNameKind::kMesh:
+    return options_.mesh_prefix;
+  case ImportNameKind::kMaterial:
+    return options_.material_prefix;
+  case ImportNameKind::kScene:
+  case ImportNameKind::kSceneNode:
+    return {};
+  }
+  return {};
 }
 
 } // namespace oxygen::content::import

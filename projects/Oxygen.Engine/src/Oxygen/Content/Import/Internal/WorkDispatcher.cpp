@@ -6,6 +6,7 @@
 
 #include <Oxygen/Content/Import/Internal/WorkDispatcher.h>
 
+#include <array>
 #include <limits>
 #include <utility>
 
@@ -22,12 +23,33 @@ namespace oxygen::content::import::detail {
 
 WorkDispatcher::WorkDispatcher(ImportSession& session,
   oxygen::observer_ptr<co::ThreadPool> thread_pool,
-  const ImportConcurrency& concurrency, std::stop_token stop_token)
+  const ImportConcurrency& concurrency, std::stop_token stop_token,
+  std::optional<ProgressReporter> progress)
   : session_(session)
   , thread_pool_(thread_pool)
   , concurrency_(concurrency)
   , stop_token_(std::move(stop_token))
+  , progress_(std::move(progress))
 {
+}
+
+auto WorkDispatcher::ProgressReporter::Report(ImportPhase phase,
+  float phase_progress, uint32_t items_completed, uint32_t items_total,
+  float overall_progress, std::string message) const -> void
+{
+  if (!on_progress) {
+    return;
+  }
+
+  ImportProgress progress;
+  progress.job_id = job_id;
+  progress.phase = phase;
+  progress.phase_progress = phase_progress;
+  progress.overall_progress = overall_progress;
+  progress.items_completed = items_completed;
+  progress.items_total = items_total;
+  progress.message = std::move(message);
+  on_progress(progress);
 }
 
 auto WorkDispatcher::DefaultMaterialKey() -> data::AssetKey
@@ -368,6 +390,28 @@ auto WorkDispatcher::ClosePipelines() noexcept -> void
 auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
   -> co::Co<bool>
 {
+  auto phase_for_kind = [](const PlanItemKind kind) -> ImportPhase {
+    switch (kind) {
+    case PlanItemKind::kTextureResource:
+      return ImportPhase::kTextures;
+    case PlanItemKind::kBufferResource:
+      return ImportPhase::kGeometry;
+    case PlanItemKind::kAudioResource:
+      return ImportPhase::kGeometry;
+    case PlanItemKind::kMaterialAsset:
+      return ImportPhase::kMaterials;
+    case PlanItemKind::kGeometryAsset:
+      return ImportPhase::kGeometry;
+    case PlanItemKind::kSceneAsset:
+      return ImportPhase::kScene;
+    }
+    return ImportPhase::kPending;
+  };
+
+  auto kind_label = [](const PlanItemKind kind) -> std::string {
+    return std::string(to_string(kind));
+  };
+
   std::unordered_map<std::string, uint32_t> texture_indices;
   std::unordered_map<PlanItemId, data::AssetKey> material_keys;
   std::unordered_map<PlanItemId, data::AssetKey> geometry_keys;
@@ -421,6 +465,16 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
   };
 
   const auto item_count = context.steps.size();
+  std::array<uint32_t, kPlanKindCount> total_by_kind {};
+  std::array<uint32_t, kPlanKindCount> completed_by_kind {};
+  std::array<uint8_t, kPlanKindCount> pipeline_reported {};
+  for (const auto& step : context.steps) {
+    const auto kind = context.planner.Item(step.item_id).kind;
+    const auto index = static_cast<size_t>(kind);
+    if (index < total_by_kind.size()) {
+      ++total_by_kind[index];
+    }
+  }
   std::vector<uint8_t> submitted(item_count, 0U);
   std::vector<uint8_t> completed(item_count, 0U);
   size_t completed_count = 0U;
@@ -456,6 +510,40 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
     completed[u_item] = 1U;
     ++completed_count;
+    const auto kind = context.planner.Item(item_id).kind;
+    const auto kind_index = static_cast<size_t>(kind);
+    if (kind_index < completed_by_kind.size()) {
+      ++completed_by_kind[kind_index];
+    }
+    if (progress_.has_value() && progress_->on_progress) {
+      const auto total
+        = kind_index < total_by_kind.size() ? total_by_kind[kind_index] : 0U;
+      const auto done = kind_index < completed_by_kind.size()
+        ? completed_by_kind[kind_index]
+        : 0U;
+      const float phase_progress = (total > 0U)
+        ? static_cast<float>(done) / static_cast<float>(total)
+        : 1.0f;
+      const float overall_progress = (item_count > 0U)
+        ? progress_->overall_start
+          + (progress_->overall_end - progress_->overall_start)
+            * (static_cast<float>(completed_count)
+              / static_cast<float>(item_count))
+        : progress_->overall_end;
+      const auto label = kind_label(kind);
+      const auto emitted_message = label + " emitted (" + std::to_string(done)
+        + "/" + std::to_string(total) + ")";
+      progress_->Report(phase_for_kind(kind), phase_progress, done, total,
+        overall_progress, emitted_message);
+
+      if (total > 0U && done == total && kind_index < pipeline_reported.size()
+        && pipeline_reported[kind_index] == 0U) {
+        pipeline_reported[kind_index] = 1U;
+        const auto complete_message = label + " pipeline complete";
+        progress_->Report(phase_for_kind(kind), 1.0f, done, total,
+          overall_progress, complete_message);
+      }
+    }
     for (const auto dependent : dependents[u_item]) {
       auto& tracker = context.planner.Tracker(dependent);
       if (tracker.MarkReady({ item_id })) {

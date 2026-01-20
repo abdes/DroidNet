@@ -20,6 +20,7 @@
 #include <Oxygen/Content/Import/AsyncImportService.h>
 #include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
+#include <Oxygen/Content/Import/Naming.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
@@ -148,6 +149,9 @@ protected:
   */
   OXGN_CNTT_NDAPI auto StopToken() const noexcept -> std::stop_token;
 
+  //! Get the naming service for this import job.
+  OXGN_CNTT_API auto GetNamingService() -> NamingService&;
+
   //! Start a job-scoped task in the job nursery.
   /*!
    @tparam TaskFactory Callable returning `co::Co<>`.
@@ -171,8 +175,13 @@ protected:
     pipeline.Start(*nursery_);
   }
 
-  OXGN_CNTT_API auto ReportProgress(
-    ImportPhase phase, float overall_progress, std::string message) -> void;
+  //! Access the progress callback (may be empty).
+  OXGN_CNTT_NDAPI auto ProgressCallback() const noexcept
+    -> const ImportProgressCallback&;
+
+  OXGN_CNTT_API auto ReportProgress(ImportPhase phase, float overall_progress,
+    float phase_progress, uint32_t items_completed, uint32_t items_total,
+    std::string message) -> void;
 
 private:
   [[nodiscard]] auto MainAsync() -> co::Co<>;
@@ -197,6 +206,8 @@ private:
   std::string name_;
 
   std::stop_source stop_source_;
+
+  std::unique_ptr<NamingService> naming_service_;
 
   co::Nursery* nursery_ = nullptr;
   co::Event completed_;
