@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -18,14 +19,35 @@
 #include <Oxygen/Content/Import/TextureImportError.h>
 #include <Oxygen/Core/Types/Format.h>
 
-#include "FbxImporterTest.h"
-
 namespace {
 
 using oxygen::content::import::DecodeImageRgba8FromFile;
 using oxygen::content::import::DecodeImageRgba8FromMemory;
 
-class ImageDecodeTest : public oxygen::content::test::FbxImporterTest { };
+class ImageDecodeTest : public ::testing::Test {
+protected:
+  [[nodiscard]] static auto MakeTempDir(std::string_view suffix)
+    -> std::filesystem::path
+  {
+    const auto root
+      = std::filesystem::temp_directory_path() / "oxgn-cntt-tests";
+    const auto out_dir = root / std::filesystem::path(std::string(suffix));
+
+    std::error_code ec;
+    std::filesystem::remove_all(out_dir, ec);
+    std::filesystem::create_directories(out_dir);
+
+    return out_dir;
+  }
+
+  static auto WriteBinaryFile(const std::filesystem::path& path,
+    const std::span<const std::byte> bytes) -> void
+  {
+    std::ofstream file(path.string(), std::ios::binary);
+    file.write(reinterpret_cast<const char*>(bytes.data()),
+      static_cast<std::streamsize>(bytes.size()));
+  }
+};
 
 [[nodiscard]] auto MakeBmp2x2() -> std::vector<std::byte>
 {

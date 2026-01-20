@@ -26,6 +26,12 @@ LooseCookedInspection::LooseCookedInspection()
 
 LooseCookedInspection::~LooseCookedInspection() = default;
 
+LooseCookedInspection::LooseCookedInspection(LooseCookedInspection&&) noexcept
+  = default;
+
+auto LooseCookedInspection::operator=(LooseCookedInspection&&) noexcept
+  -> LooseCookedInspection& = default;
+
 auto LooseCookedInspection::LoadFromRoot(
   const std::filesystem::path& cooked_root) -> void
 {

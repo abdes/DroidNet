@@ -922,7 +922,7 @@ Tasks:
 
 - [X] Implement `Worker()` loop patterned after BufferPipeline.
 - [X] Early-cancel: if `stop_token` requested, emit `success=false` result.
-- [X] Resolve packing policy via `emit::GetPackingPolicy()`.
+- [X] Resolve packing policy via `TexturePackingPolicy` helpers (no legacy).
 - [X] Build local `TextureImportDesc` (set `source_id`, `stop_token`).
 - [X] Cook using the correct overload for `SourceContent`:
   `SourceBytes`, `TextureSourceSet` (cube + array), or `ScratchImage`.
@@ -939,11 +939,10 @@ Tasks:
 
 **File:** `src/Oxygen/Content/Import/Async/TexturePipeline.cpp`
 
-- [X] Call `emit::CookTextureForEmission(...)` / `CookTexture(...)` inside
-  `thread_pool_.Run(...)` (pipeline stays compute-only).
-- [X] Placeholder path uses
-  `emit::CreatePlaceholderForMissingTexture(...)` and returns a complete
-  `CookedTexturePayload`.
+- [X] Call `CookTexture(...)` inside `thread_pool_.Run(...)` (pipeline stays
+  compute-only).
+- [X] Placeholder path maps to fallback texture index `0` and returns
+  `used_placeholder = true` (no payload emission, no legacy helpers).
 - [X] Add byte-for-byte parity tests against sync cooker output.
 
 #### 6.6a Legacy Cooker Gap Fixes (Make New System Complete)

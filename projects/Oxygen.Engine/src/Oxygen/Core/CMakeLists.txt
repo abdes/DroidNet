@@ -101,6 +101,9 @@ set(
   "Time/PresentationClock.h"
   "Time/SimulationClock.h"
   "Time/Types.h"
+  # Transforms manipulation
+  "Transforms/Decompose.h"
+  "Transforms/IsFinite.h"
 )
 # Remove any headers that do not exist so we only add existing files to the
 # target. We modify OXYGEN_CORE_HEADERS in-place rather than creating a new
@@ -125,6 +128,7 @@ set(
   "Time/PhysicalClock.cpp"
   "Time/PresentationClock.cpp"
   "Time/SimulationClock.cpp"
+  "Transforms/Decompose.cpp"
   "Types/Frustum.cpp"
   "Types/ResolvedView.cpp"
   "Version.cpp"

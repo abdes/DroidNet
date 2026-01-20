@@ -25,7 +25,8 @@ Core properties:
 - **Planner‑gated**: the planner submits work only when dependencies are ready
   (textures typically have no upstream dependencies)
 - **Configurable hashing**: payload `content_hash` is optional and is
-  configured via `ImportOptions`, cascading into the pipeline config.
+  controlled by `ImportOptions::with_content_hashing`, cascading into the
+  pipeline config. When disabled, the pipeline MUST NOT compute hashes.
 
 The concrete stage graph and data contracts are specified in
 **Pipeline Stages (Legacy Cooker Parity)** and **Cooked Output Contract**.
@@ -103,9 +104,9 @@ Notes:
   be empty only when storage has a guaranteed static lifetime.
 - `TextureSourceSet` owns its bytes; each `TextureSource.source_id` is used for
   extension hints and diagnostics. Cubemap faces use `CubeFace` ordering.
-- `packing_policy_id` is resolved via `emit::GetPackingPolicy()`. Unknown IDs
-  fall back to the default policy (D3D12 on Windows) and should emit a warning
-  diagnostic.
+- `packing_policy_id` is resolved via `TexturePackingPolicy` helpers. Unknown
+  IDs fall back to the default policy (D3D12 on Windows) and should emit a
+  warning diagnostic.
 - `texture_id` canonicalization must match sync import:
   - file textures: `NormalizeTexturePathId(resolved_path)`
   - embedded textures: `"embedded:" + sha256(bytes)`
@@ -116,11 +117,11 @@ Notes:
 - `cubemap_layout` enables layout extraction from a single image (auto/strip/
   cross). `kUnknown` disables layout extraction. If both equirect and layout
   flags are set, equirect conversion takes precedence.
-- `output_format_is_override` should mirror
-  `CookerConfig.output_format_override.has_value()`.
+- `output_format_is_override` should mirror whether the job explicitly
+  overrides the output format.
 - When `output_format_is_override == false`, the pipeline must preserve the
   decoded format (set `desc.output_format` to the decoded format and set
-  `desc.bc7_quality = kNone`) to match `emit::CookTextureForEmission`.
+  `desc.bc7_quality = kNone`).
 
 ### WorkResult
 
@@ -162,6 +163,7 @@ public:
   struct Config {
     size_t queue_capacity = 64;
     uint32_t worker_count = 2;
+    bool with_content_hashing = true;
   };
 
   explicit TexturePipeline(co::ThreadPool& thread_pool, Config cfg = {});
@@ -190,7 +192,7 @@ For each work item:
 
 1) Check cancellation (`stop_token.stop_requested()`); if cancelled, return
    `success=false` with no cooked payload.
-2) Resolve packing policy via `emit::GetPackingPolicy(packing_policy_id)`.
+2) Resolve packing policy via `TexturePackingPolicy` helpers.
 3) Build a local `TextureImportDesc`:
    - copy from `WorkItem.desc`
    - set `source_id` and `stop_token`
@@ -200,15 +202,12 @@ For each work item:
      calling `CookTexture(ScratchImage&&, ...)`.
    - `TextureSourceSet`: decode all sources, verify matching dimensions/format,
      preserve the decoded format when `output_format_is_override == false`,
-     assemble cubemaps or 2D arrays with pre-authored mips (depth slices are
-     unsupported).
+     assemble cubemaps, 2D arrays with pre-authored mips, or 3D depth slices.
    - `ScratchImage`: skip decode and cook directly.
 5) On error:
    - If `failure_policy == kPlaceholder` and the error is **not** cancellation,
-     return a placeholder payload identical to
-     `emit::CreatePlaceholderForMissingTexture(...)` when called with the work
-     item’s packing policy id, set `used_placeholder = true`, and
-     `success = true`.
+     return `success = false` with `used_placeholder = true`. The job/orchestrator
+     maps this to fallback texture index `0`.
    - Otherwise, translate `TextureImportError` into `ImportDiagnostic` and
      return `success=false`.
 6) Send `WorkResult` to the output queue.
@@ -222,16 +221,16 @@ No exceptions cross coroutine boundaries; all failures are reported as data.
 Within a job:
 
 1) Discover texture sources (embedded blobs and/or file paths).
-2) Build `CookerConfig` via presets (`DetectPresetFromFilename`,
-   `TextureImportPresets`) and translate it with `emit::MakeImportDescFromConfig`.
+2) Build `TextureImportDesc` via presets (`DetectPresetFromFilename`,
+   `TextureImportPresets`) and job-level tuning.
 3) Resolve `texture_id` and deduplicate **before** submission (use
    `source_key` and `texture_id` maps for embedded/file textures).
 4) Acquire bytes (`IAsyncFileReader` or embedded), build `WorkItem`, and
    `co_await texture_pipeline.Submit(item)` (bounded backpressure).
 5) Collect results (`Collect()` or `HasPending()` loop):
    - On success: emit via `session.TextureEmitter().Emit(...)` (index is stable).
-   - On `used_placeholder`: emit payload **and** add importer-specific warning
-     diagnostics (matching sync codes).
+   - On `used_placeholder`: add warning diagnostics and map to the fallback
+     texture index `0` (no payload emission).
    - On failure: add diagnostics and map to the error texture index
      (`std::numeric_limits<ResourceIndexT>::max()`).
 
@@ -280,9 +279,8 @@ These stages follow the current synchronous implementation in
    - Cube maps: 6 faces mapped by `CubeFace`.
    - 2D arrays: assemble array layers and pre-authored mips (depth slice must
      be 0). All layers and mip levels must be present.
-   - Note: 3D depth-slice assembly remains unsupported and must fail with
-     `kUnsupportedFormat` (unless the work item uses placeholder failure
-     policy).
+  - 3D textures: assemble depth slices (array_layer = 0, mip_level = 0) into
+    a single 3D `ScratchImage` with contiguous depth slices.
 
 6) **Post-decode validation**
    - Input: `TextureImportDesc` + decoded meta
@@ -325,7 +323,8 @@ These stages follow the current synchronous implementation in
     - `TexturePayloadHeader` (28 bytes) + `SubresourceLayout[]` + aligned data
     - `data_offset_bytes = AlignSubresourceOffset(layouts_offset + layouts_bytes)`
     - `content_hash = detail::ComputeContentHash(payload)` computed on the
-      ThreadPool (first 8 bytes of SHA-256 over the full payload)
+      ThreadPool **only when hashing is enabled** (first 8 bytes of SHA-256
+      over the full payload)
 
 13) **Return cooked result**
     - `CookedTexturePayload.desc` includes shape, mip count, final format,
@@ -360,13 +359,13 @@ Subresource data (layer-major order)
 ### `textures.table` Entry (Emitter Conversion)
 
 `TextureEmitter::Emit()` converts `CookedTexturePayload` into
-`data::pak::TextureResourceDesc` using `emit::ToPakDescriptor(...)`:
+`data::pak::TextureResourceDesc` using its internal descriptor conversion:
 
 - `compression_type = 7` for BC7, `0` otherwise
 - `alignment = policy.AlignRowPitchBytes(1)` (256 for D3D12, 1 for tight)
 - `size_bytes = payload.size()`
 - `content_hash` comes from the payload header and is computed on the
-  ThreadPool
+  ThreadPool only when hashing is enabled
 
 ### Data File Alignment
 
@@ -381,10 +380,8 @@ Emitter offsets in `textures.data` are reserved with
 
 ### Placeholder Contract
 
-Placeholders must be **byte-identical** to
-`emit::CreatePlaceholderForMissingTexture(...)` when called with the work item’s
-packing policy id (1x1 RGBA8, deterministic color derived from `texture_id`) so
-deduplication and diagnostics match the sync importer.
+Placeholder policy maps to the fallback texture index `0`. The fallback
+payload is created by `TextureEmitter` and reused across all failures.
 
 ---
 
@@ -401,7 +398,7 @@ deduplication and diagnostics match the sync importer.
 - sRGB reinterpretation for RGBA8/BC7 when the storage is bit-identical
 - Packing policy alignment and layer-major subresource ordering
 - Payload header/layout format and `content_hash` calculation (SHA-256 first 8
-  bytes) are performed on the ThreadPool
+  bytes) are performed on the ThreadPool **only when hashing is enabled**
 - Multi-source cooking: cubemaps and 2D arrays with pre-authored mips
 - Single-source cubemap transforms: equirect → cube and layout extraction
 - Placeholder generation (when enabled) matches sync path exactly
@@ -409,7 +406,7 @@ deduplication and diagnostics match the sync importer.
 ### Parity Owned by the Importer/Orchestrator (Importer Parity)
 
 - Preset auto-detection (`DetectPresetFromFilename`) and `TextureImportPresets`
-- `emit::MakeImportDescFromConfig` for descriptor construction
+- `TextureImportDesc` construction from presets and tuning
 - File and embedded texture resolution:
   - `ResolveFileTexture`, `TextureIdString`, `NormalizeTexturePathId`
   - embedded `texture_id = "embedded:" + sha256(bytes)`
@@ -421,10 +418,7 @@ deduplication and diagnostics match the sync importer.
 
 ### Known Async Gaps (Must Be Closed for Parity)
 
-- **3D depth-slice assembly**: the sync importer supports volume textures via
-  `ImportTexture3D(...)`, but the async pipeline rejects non-zero
-  `SubresourceId::depth_slice`. This blocks volume textures in async imports
-  and should be implemented as a parity requirement.
+- (none for texture assembly; volume depth-slice assembly is supported).
 
 ---
 
@@ -494,7 +488,7 @@ The pipeline is UI-agnostic.
 4) All heavyweight work runs on `co::ThreadPool`.
 5) Errors cross boundaries as data (`ImportDiagnostic`), not exceptions.
 6) Bounded channels are mandatory.
-7) Placeholder payload bytes must match `emit::CreatePlaceholderForMissingTexture`.
+7) Placeholder policy maps to fallback texture index `0` (no payload emitted).
 8) Payload headers/layouts must conform to PAK v4 (`TexturePayloadHeader`).
 
 ---

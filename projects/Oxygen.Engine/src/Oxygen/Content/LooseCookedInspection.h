@@ -52,7 +52,9 @@ public:
   OXGN_CNTT_API ~LooseCookedInspection();
 
   OXYGEN_MAKE_NON_COPYABLE(LooseCookedInspection)
-  OXYGEN_DEFAULT_MOVABLE(LooseCookedInspection)
+  OXGN_CNTT_API LooseCookedInspection(LooseCookedInspection&&) noexcept;
+  OXGN_CNTT_API auto operator=(LooseCookedInspection&&) noexcept
+    -> LooseCookedInspection&;
 
   //! Load and validate `container.index.bin` from a cooked root.
   /*!

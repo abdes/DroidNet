@@ -16,7 +16,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
-#include <Oxygen/Content/Import/Async/AsyncImportService.h>
+#include <Oxygen/Content/Import/AsyncImportService.h>
 #include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/Format.h>

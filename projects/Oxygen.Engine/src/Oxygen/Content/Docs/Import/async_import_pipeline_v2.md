@@ -62,10 +62,10 @@ the main application thread.
   passes `WorkPayloadHandle` references to the planner.
 
 13. **ThreadPool-Only content_hash**: `content_hash` is computed only on the
-  ThreadPool. The invariant is that all dependencies are ready and the full
-  descriptor payload is known before hashing. Buffer and texture hashing are
-  optional and are configured via `ImportOptions`, cascading into the
-  pipeline configs.
+  ThreadPool **when enabled**. The invariant is that all dependencies are
+  ready and the full descriptor payload is known before hashing. Hashing is
+  controlled by `ImportOptions::with_content_hashing` and cascades into all
+  pipeline configs. When disabled, pipelines MUST NOT compute any hashes.
 
 14. **One Lazy Emitter Per Resource Type Per Session**: ImportSession owns
     emitters (TextureEmitter, BufferEmitter, AssetEmitter). Created lazily on
@@ -702,7 +702,7 @@ struct PipelineProgress {
 - `submitted` is monotonically non-decreasing and increments only when a work
   item is successfully accepted (i.e. `Submit()` or `TrySubmit()` succeeds).
 - `completed` is monotonically non-decreasing and increments when a collected
-  `WorkResult` has `success = true` (placeholders count as success).
+  `WorkResult` has `success = true`.
 - `failed` is monotonically non-decreasing and increments when a collected
   `WorkResult` has `success = false` (including cancellations).
 - `in_flight` is derived as:
@@ -1794,8 +1794,10 @@ Wrap the entire sync `CookTexture()` in a ThreadPool task:
 // TexturePipeline internal implementation
 auto TexturePipeline::ProcessItem(WorkItem& item) -> co::Co<WorkResult> {
   // Single ThreadPool task for entire cooking
+  const auto& policy = ResolvePackingPolicy(item.packing_policy_id);
   auto result = co_await thread_pool_->Run([&] {
-    return CookTexture(item.source.bytes, item.desc, GetPackingPolicy());
+    return CookTexture(item.source.bytes, item.desc, policy,
+      /*with_content_hashing=*/true);
   });
 
   if (!result) {
@@ -1836,8 +1838,9 @@ auto TexturePipeline::ProcessItem(WorkItem& item) -> co::Co<WorkResult> {
   if (item.stop_token.stop_requested()) co_return Cancelled();
 
   // Stage 3: Pack into the final cooked payload (still compute-only)
-  auto packed = detail::PackSubresources(*processed, GetPackingPolicy());
-  auto cooked = BuildCookedPayload(std::move(packed), item.desc, GetPackingPolicy());
+  const auto& policy = ResolvePackingPolicy(item.packing_policy_id);
+  auto packed = detail::PackSubresources(*processed, policy);
+  auto cooked = BuildCookedPayload(std::move(packed), item.desc, policy);
   co_return WorkResult{ .cooked = std::move(cooked), .success = true };
 }
 ```
@@ -1847,9 +1850,7 @@ auto TexturePipeline::ProcessItem(WorkItem& item) -> co::Co<WorkResult> {
 ```cpp
 class TexturePipeline {
 public:
-  explicit TexturePipeline(
-    std::shared_ptr<co::ThreadPool> pool,
-    const ITexturePackingPolicy& policy);
+  explicit TexturePipeline(co::ThreadPool& pool, Config cfg = {});
 
   auto Submit(WorkItem item) -> void {
     input_channel_.TrySend(std::move(item));

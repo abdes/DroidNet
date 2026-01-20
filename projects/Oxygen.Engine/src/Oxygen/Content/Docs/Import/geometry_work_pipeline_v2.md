@@ -21,7 +21,7 @@ Core properties:
   `BufferEmitter` and `AssetEmitter`.
 - **Job-scoped**: created per job and started in the job’s child nursery.
 - **ThreadPool offload**: tangent generation and any `content_hash`
-  computation run on `co::ThreadPool`.
+  computation run on `co::ThreadPool` **when hashing is enabled**.
 - **Strict failure policy**: geometry cooking never falls back to placeholders;
   failures surface as explicit diagnostics.
 - **Planner‑gated**: the planner submits work only when dependencies are ready
@@ -185,7 +185,7 @@ public:
   struct Config {
     size_t queue_capacity = 32;
     uint32_t worker_count = 2;
-    bool with_content_hashing = true; // Enabled for integrity + dedupe
+    bool with_content_hashing = true; // Controlled by ImportOptions
   };
 
   explicit GeometryPipeline(co::ThreadPool& thread_pool, Config cfg = {});

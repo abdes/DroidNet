@@ -12,12 +12,13 @@
 #include <limits>
 #include <optional>
 
+#include <glm/gtc/packing.hpp>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/ImageDecode.h>
 #include <Oxygen/Content/Import/ImageProcessing.h>
 #include <Oxygen/Content/Import/TextureSourceAssembly.h>
 #include <Oxygen/Content/Import/bc7/Bc7Encoder.h>
-#include <Oxygen/Content/Import/util/HalfFloatConvert.h>
 #include <Oxygen/Content/Import/util/Signature.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -25,6 +26,15 @@
 namespace oxygen::content::import {
 
 namespace {
+
+  //! Convert RGBA32Float pixels to RGBA16Float in-place.
+  inline void ConvertRgba32FloatToRgba16Float(
+    std::span<const float> src, std::span<uint16_t> dst, size_t pixel_count)
+  {
+    for (size_t i = 0; i < pixel_count * 4; ++i) {
+      dst[i] = glm::packHalf1x16(src[i]);
+    }
+  }
 
   //=== Pre-Decode Validation ===---------------------------------------------//
 
@@ -487,8 +497,7 @@ namespace {
         auto* dst_ptr = reinterpret_cast<uint16_t*>(dst_pixels.data());
 
         const size_t pixel_count = src_view.width * src_view.height;
-        util::ConvertRgba32FloatToRgba16Float(
-          std::span { src_ptr, pixel_count * 4 },
+        ConvertRgba32FloatToRgba16Float(std::span { src_ptr, pixel_count * 4 },
           std::span { dst_ptr, pixel_count * 4 }, pixel_count);
       }
     }
@@ -899,7 +908,8 @@ namespace {
    This handles stages 2-6 of the pipeline and builds the final payload.
   */
   [[nodiscard]] auto CookFromScratchImage(ScratchImage&& image,
-    const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
+    const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
+    const bool with_content_hashing)
     -> oxygen::Result<CookedTexturePayload, TextureImportError>
   {
     auto resolved_desc = desc;
@@ -1051,8 +1061,10 @@ namespace {
     std::memcpy(final_payload.data() + data_offset_bytes, payload_data.data(),
       payload_data.size());
 
-    header.content_hash = detail::ComputeContentHash(final_payload);
-    std::memcpy(final_payload.data(), &header, sizeof(header));
+    if (with_content_hashing) {
+      header.content_hash = detail::ComputeContentHash(final_payload);
+      std::memcpy(final_payload.data(), &header, sizeof(header));
+    }
 
     // Build result
     CookedTexturePayload result;
@@ -1074,7 +1086,8 @@ namespace {
 } // namespace
 
 auto CookTexture(const std::span<const std::byte> source_bytes,
-  const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
+  const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
+  const bool with_content_hashing)
   -> oxygen::Result<CookedTexturePayload, TextureImportError>
 {
   // Pre-decode validation - dimensions come from the decoded image
@@ -1088,11 +1101,12 @@ auto CookTexture(const std::span<const std::byte> source_bytes,
     return ::oxygen::Err(decoded.error());
   }
 
-  return CookFromScratchImage(std::move(*decoded), desc, policy);
+  return CookFromScratchImage(
+    std::move(*decoded), desc, policy, with_content_hashing);
 }
 
 auto CookTexture(ScratchImage&& image, const TextureImportDesc& desc,
-  const ITexturePackingPolicy& policy)
+  const ITexturePackingPolicy& policy, const bool with_content_hashing)
   -> oxygen::Result<CookedTexturePayload, TextureImportError>
 {
   // Pre-decode validation - dimensions come from the ScratchImage
@@ -1104,11 +1118,12 @@ auto CookTexture(ScratchImage&& image, const TextureImportDesc& desc,
     return ::oxygen::Err(TextureImportError::kDecodeFailed);
   }
 
-  return CookFromScratchImage(std::move(image), desc, policy);
+  return CookFromScratchImage(
+    std::move(image), desc, policy, with_content_hashing);
 }
 
 auto CookTexture(const TextureSourceSet& sources, const TextureImportDesc& desc,
-  const ITexturePackingPolicy& policy)
+  const ITexturePackingPolicy& policy, const bool with_content_hashing)
   -> oxygen::Result<CookedTexturePayload, TextureImportError>
 {
   // Pre-decode validation - dimensions come from decoded images
@@ -1181,7 +1196,8 @@ auto CookTexture(const TextureSourceSet& sources, const TextureImportDesc& desc,
       return ::oxygen::Err(cube.error());
     }
 
-    return CookFromScratchImage(std::move(*cube), desc, policy);
+    return CookFromScratchImage(
+      std::move(*cube), desc, policy, with_content_hashing);
   }
 
   // For array textures, assemble into a single ScratchImage
@@ -1189,7 +1205,8 @@ auto CookTexture(const TextureSourceSet& sources, const TextureImportDesc& desc,
   if (!assembled) {
     return ::oxygen::Err(assembled.error());
   }
-  return CookFromScratchImage(std::move(*assembled), desc, policy);
+  return CookFromScratchImage(
+    std::move(*assembled), desc, policy, with_content_hashing);
 }
 
 } // namespace oxygen::content::import

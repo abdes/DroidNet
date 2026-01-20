@@ -127,6 +127,7 @@ public:
   struct Config {
     size_t queue_capacity = 8;
     uint32_t worker_count = 1;
+    bool with_content_hashing = true;
   };
 
   explicit ScenePipeline(co::ThreadPool& thread_pool, Config cfg = {});
@@ -188,7 +189,7 @@ For each work item:
    - `SceneEnvironmentBlockHeader` + system records
    - `byte_size` covers header + records
 10) Compute `header.content_hash` on the ThreadPool after the full descriptor
-  bytes + environment block are finalized.
+  bytes + environment block are finalized **only when hashing is enabled**.
 11) Return `CookedScenePayload`.
 
 All errors must be converted to `ImportDiagnostic`; no exceptions cross async
@@ -276,7 +277,8 @@ Notes:
 - Component tables use `ComponentType` FourCC values (e.g., `kRenderable`).
 - `SceneAssetDesc.header.version = data::pak::v3::kSceneAssetVersion`.
 - `SceneAssetDesc.header.content_hash` must cover descriptor bytes + environment
-  block bytes and is computed on the ThreadPool after dependencies are ready.
+  block bytes and is computed on the ThreadPool after dependencies are ready
+  **when hashing is enabled**.
 
 ### Scene Environment Block
 
@@ -296,7 +298,8 @@ Notes:
   overrides.
 - **Environment block**: v3 environment systems are serialized with valid
   headers and sizes.
-- **Header metadata**: `header.version` and `header.content_hash` are populated.
+- **Header metadata**: `header.version` and `header.content_hash` are populated
+  when hashing is enabled.
 
 ### Importer/Orchestrator Responsibilities
 
@@ -342,7 +345,8 @@ Pipeline tracks submitted/completed/failed counts and exposes
 2) Scene payload must be packed with alignment = 1.
 3) String table must start with `\0` so offset `0` maps to empty string.
 4) Environment block header is always appended (even empty).
-5) `header.content_hash` must cover payload + environment block.
+5) `header.content_hash` must cover payload + environment block when hashing
+  is enabled.
 
 ---
 
