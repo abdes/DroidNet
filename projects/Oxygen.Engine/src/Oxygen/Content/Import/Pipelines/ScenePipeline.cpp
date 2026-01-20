@@ -24,7 +24,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
-#include <Oxygen/Content/Import/util/ImportNaming.h>
 #include <Oxygen/Content/Import/util/Signature.h>
 #include <Oxygen/Content/Import/util/StringUtils.h>
 #include <Oxygen/Data/AssetType.h>
@@ -518,7 +517,7 @@ auto ScenePipeline::Worker() -> co::Co<>
           item.source_id);
         SortSceneComponents(stage_outcome.result.build);
 
-        const auto scene_name = util::BuildSceneName(item.request);
+        const auto scene_name = item.request.GetSceneName();
         const auto virtual_path
           = item.request.loose_cooked_layout.SceneVirtualPath(scene_name);
         const auto scene_key = BuildSceneAssetKey(
@@ -563,7 +562,7 @@ auto ScenePipeline::Worker() -> co::Co<>
     };
 
     if (outcome.success) {
-      const auto scene_name = util::BuildSceneName(item.request);
+      const auto scene_name = item.request.GetSceneName();
       const auto virtual_path
         = item.request.loose_cooked_layout.SceneVirtualPath(scene_name);
       const auto relpath

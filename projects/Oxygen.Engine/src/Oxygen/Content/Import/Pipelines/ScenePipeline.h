@@ -18,10 +18,12 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
 #include <Oxygen/Content/Import/ImportPipeline.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
+#include <Oxygen/Content/Import/Naming.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -56,6 +58,7 @@ struct SceneStageInput final {
   std::string_view source_id;
   std::span<const data::AssetKey> geometry_keys;
   const ImportRequest* request = nullptr;
+  observer_ptr<NamingService> naming_service;
   std::stop_token stop_token;
 };
 
@@ -108,6 +111,7 @@ public:
     std::vector<data::AssetKey> geometry_keys;
     std::vector<SceneEnvironmentSystem> environment_systems;
     ImportRequest request;
+    observer_ptr<NamingService> naming_service;
     std::stop_token stop_token;
 
     template <SceneStageAdapter Adapter>

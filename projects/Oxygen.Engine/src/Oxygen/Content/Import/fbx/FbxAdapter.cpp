@@ -28,7 +28,6 @@
 #include <Oxygen/Content/Import/fbx/UfbxUtils.h>
 #include <Oxygen/Content/Import/fbx/ufbx.h>
 #include <Oxygen/Content/Import/util/CoordTransform.h>
-#include <Oxygen/Content/Import/util/ImportNaming.h>
 #include <Oxygen/Content/Import/util/StringUtils.h>
 #include <Oxygen/Core/Transforms/Decompose.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -275,44 +274,6 @@ namespace {
       }
     }
     return nodes;
-  }
-
-  [[nodiscard]] auto DisambiguateMeshName(const ufbx_scene& scene,
-    const ImportRequest& request, const ufbx_mesh& mesh, uint32_t ordinal,
-    std::unordered_map<std::string, uint32_t>& name_usage) -> std::string
-  {
-    const auto authored_name = fbx::ToStringView(mesh.name);
-    auto mesh_name = util::BuildMeshName(authored_name, request, ordinal);
-    const auto original_mesh_name = mesh_name;
-
-    if (const auto it = name_usage.find(mesh_name); it != name_usage.end()) {
-      const auto collision_ordinal = it->second;
-      std::string new_name;
-
-      const auto nodes = FindNodesForMesh(scene, &mesh);
-      if (!nodes.empty()) {
-        const auto* node = nodes.front();
-        const auto node_name = fbx::ToStringView(node->name);
-        if (!node_name.empty()) {
-          const std::string prefix = mesh_name.starts_with("G_") ? "" : "G_";
-          new_name = prefix + std::string(node_name) + "_"
-            + std::string(authored_name.empty()
-                ? ("Mesh_" + std::to_string(ordinal))
-                : std::string(authored_name));
-        }
-      }
-
-      if (new_name.empty()) {
-        new_name = mesh_name + "_" + std::to_string(collision_ordinal);
-      }
-
-      LOG_F(INFO, "Geometry name collision detected for '{}', renamed to '{}'",
-        original_mesh_name.c_str(), new_name.c_str());
-      mesh_name = std::move(new_name);
-    }
-
-    name_usage[original_mesh_name]++;
-    return mesh_name;
   }
 
   [[nodiscard]] auto ToVec2(const ufbx_vec2 v) -> glm::vec2
@@ -1134,7 +1095,7 @@ namespace {
     if (!prefix.empty()) {
       return std::string(prefix);
     }
-    return util::BuildSceneName(request);
+    return request.GetSceneName();
   }
 
   struct NodeInput final {
@@ -1401,7 +1362,8 @@ namespace {
       return result;
     }
 
-    std::unordered_map<std::string, uint32_t> name_usage;
+    CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
+
     std::unordered_map<const ufbx_material*, uint32_t>
       scene_material_index_by_ptr;
     scene_material_index_by_ptr.reserve(scene.materials.count);
@@ -1415,6 +1377,8 @@ namespace {
     const auto mesh_count = static_cast<uint32_t>(scene.meshes.count);
     DLOG_F(2, "FBX scene meshes={} skin_deformers={}", mesh_count,
       scene.skin_deformers.count);
+
+    const auto scene_name = input.request.GetSceneName();
 
     for (uint32_t mesh_i = 0; mesh_i < mesh_count; ++mesh_i) {
       if (input.stop_token.stop_requested()) {
@@ -1437,16 +1401,21 @@ namespace {
         mesh->skin_deformers.count, mesh->all_deformers.count,
         mesh->instances.count, mesh->element.connections_src.count,
         mesh->element.connections_dst.count);
-      auto mesh_name
-        = DisambiguateMeshName(scene, input.request, *mesh, mesh_i, name_usage);
 
-      const auto storage_mesh_name
-        = util::NamespaceImportedAssetName(input.request, mesh_name);
+      const NamingContext mesh_context {
+        .kind = ImportNameKind::kMesh,
+        .ordinal = mesh_i,
+        .parent_name = {},
+        .source_id = input.request.source_path.string(),
+        .scene_namespace = scene_name,
+      };
+      const auto mesh_name
+        = input.naming_service->MakeUniqueName(authored_name, mesh_context);
 
       GeometryPipeline::WorkItem item;
       item.source_id = BuildSourceId(input.source_id_prefix, mesh_name, mesh_i);
       item.mesh_name = mesh_name;
-      item.storage_mesh_name = storage_mesh_name;
+      item.storage_mesh_name = mesh_name;
       item.source_key = mesh;
       item.material_keys.assign(
         input.material_keys.begin(), input.material_keys.end());
@@ -1468,6 +1437,7 @@ namespace {
       }
       item.has_material_textures = has_material_textures;
       item.request = input.request;
+      item.naming_service = input.naming_service;
       item.stop_token = input.stop_token;
 
       std::vector<ImportDiagnostic> diagnostics;
@@ -1661,15 +1631,27 @@ auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
 
   const auto material_count = static_cast<uint32_t>(scene.materials.count);
   if (material_count == 0) {
+    CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
+    const auto scene_name = input.request.GetSceneName();
+    const NamingContext material_context {
+      .kind = ImportNameKind::kMaterial,
+      .ordinal = 0,
+      .parent_name = {},
+      .source_id = input.request.source_path.string(),
+      .scene_namespace = scene_name,
+    };
+    const auto material_name
+      = input.naming_service->MakeUniqueName("M_Default", material_context);
+
     MaterialPipeline::WorkItem item;
-    item.material_name = util::BuildMaterialName("M_Default", input.request, 0);
+    item.material_name = material_name;
     item.source_id
       = BuildSourceId(input.source_id_prefix, item.material_name, 0);
-    item.storage_material_name
-      = util::NamespaceImportedAssetName(input.request, item.material_name);
+    item.storage_material_name = material_name;
     item.material_domain = data::MaterialDomain::kOpaque;
     item.alpha_mode = MaterialAlphaMode::kOpaque;
     item.request = input.request;
+    item.naming_service = input.naming_service;
     item.stop_token = input.stop_token;
 
     if (!sink.Consume(std::move(item))) {
@@ -1687,18 +1669,27 @@ auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
       return result;
     }
 
+    CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
+    const auto scene_name = input.request.GetSceneName();
+
     const auto* material = scene.materials.data[i];
     const auto authored_name = material != nullptr
       ? fbx::ToStringView(material->name)
       : std::string_view {};
+    const NamingContext material_context {
+      .kind = ImportNameKind::kMaterial,
+      .ordinal = i,
+      .parent_name = {},
+      .source_id = input.request.source_path.string(),
+      .scene_namespace = scene_name,
+    };
     const auto material_name
-      = util::BuildMaterialName(authored_name, input.request, i);
+      = input.naming_service->MakeUniqueName(authored_name, material_context);
 
     MaterialPipeline::WorkItem item;
     item.source_id = BuildSourceId(input.source_id_prefix, material_name, i);
     item.material_name = material_name;
-    item.storage_material_name
-      = util::NamespaceImportedAssetName(input.request, material_name);
+    item.storage_material_name = material_name;
     item.source_key = material;
     item.material_domain = data::MaterialDomain::kOpaque;
     item.alpha_mode = MaterialAlphaMode::kOpaque;
@@ -1874,6 +1865,7 @@ auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
     }
 
     item.request = input.request;
+    item.naming_service = input.naming_service;
     item.stop_token = input.stop_token;
 
     if (!sink.Consume(std::move(item))) {
@@ -1989,8 +1981,10 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
       continue;
     }
 
-    const auto material_name = util::BuildMaterialName(
-      fbx::ToStringView(material->name), input.request, i);
+    const auto authored_name = fbx::ToStringView(material->name);
+    const std::string material_name = !authored_name.empty()
+      ? std::string(authored_name)
+      : ("Material_" + std::to_string(i));
     const auto material_source_id
       = BuildSourceId(input.source_id_prefix, material_name, i);
 
@@ -2091,9 +2085,19 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
       return;
     }
 
+    CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
+    const auto scene_name = request.GetSceneName();
+
     const auto authored = fbx::ToStringView(node->name);
+    const NamingContext node_context {
+      .kind = ImportNameKind::kSceneNode,
+      .ordinal = ordinal,
+      .parent_name = parent_name,
+      .source_id = request.source_path.string(),
+      .scene_namespace = scene_name,
+    };
     const auto base_name
-      = util::BuildSceneNodeName(authored, request, ordinal, parent_name);
+      = input.naming_service->MakeUniqueName(authored, node_context);
 
     const auto local_matrix = MakeLocalTransformMatrix(node->local_transform);
     const auto world_matrix = parent_world * local_matrix;
@@ -2245,25 +2249,13 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
   build.nodes.reserve(pruned_nodes.size());
   build.strings.push_back(std::byte { 0 });
 
-  std::unordered_map<std::string, uint32_t> name_usage;
-  name_usage.reserve(pruned_nodes.size());
-
-  const auto scene_name = util::BuildSceneName(request);
+  const auto scene_name = request.GetSceneName();
   const auto virtual_path
     = request.loose_cooked_layout.SceneVirtualPath(scene_name);
 
   for (uint32_t i = 0; i < pruned_nodes.size(); ++i) {
     auto& node = pruned_nodes[i];
-    auto name = node.base_name;
-    auto& count = name_usage[name];
-    if (count > 0) {
-      const auto suffix = "_" + std::to_string(count);
-      name += suffix;
-      diagnostics.push_back(MakeWarningDiagnostic("scene.node_name_renamed",
-        "Duplicate node name renamed with suffix", input.source_id,
-        node.base_name));
-    }
-    ++count;
+    const auto& name = node.base_name;
 
     glm::vec3 translation {};
     glm::vec3 scale { 1.0F, 1.0F, 1.0F };

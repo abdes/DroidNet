@@ -12,8 +12,10 @@
 #include <string_view>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
+#include <Oxygen/Content/Import/Naming.h>
 #include <Oxygen/Content/Import/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Content/Import/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Content/Import/Pipelines/ScenePipeline.h>
@@ -31,6 +33,7 @@ struct AdapterInput final {
   data::AssetKey default_material_key;
 
   ImportRequest request;
+  observer_ptr<NamingService> naming_service;
   std::stop_token stop_token;
 };
 
