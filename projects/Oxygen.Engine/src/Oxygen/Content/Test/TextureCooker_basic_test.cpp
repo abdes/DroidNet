@@ -12,8 +12,8 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Content/Import/Internal/TextureCooker.h>
 #include <Oxygen/Content/Import/ScratchImage.h>
-#include <Oxygen/Content/Import/TextureCooker.h>
 #include <Oxygen/Content/Import/TextureImportDesc.h>
 #include <Oxygen/Content/Import/TexturePackingPolicy.h>
 #include <Oxygen/Core/Types/ColorSpace.h>

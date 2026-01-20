@@ -15,7 +15,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Content/Import/ImageDecode.h>
+#include <Oxygen/Content/Import/Internal/ImageDecode.h>
 #include <Oxygen/Content/Import/TextureImportError.h>
 #include <Oxygen/Core/Types/Format.h>
 

@@ -13,14 +13,14 @@
 #include <thread>
 
 #include <Oxygen/Content/Detail/LooseCookedIndex.h>
-#include <Oxygen/Content/Import/Emitters/AssetEmitter.h>
-#include <Oxygen/Content/Import/Emitters/BufferEmitter.h>
-#include <Oxygen/Content/Import/Emitters/TextureEmitter.h>
 #include <Oxygen/Content/Import/IAsyncFileReader.h>
-#include <Oxygen/Content/Import/ImportEventLoop.h>
-#include <Oxygen/Content/Import/ImportSession.h>
-#include <Oxygen/Content/Import/ResourceTableRegistry.h>
-#include <Oxygen/Content/Import/WindowsFileWriter.h>
+#include <Oxygen/Content/Import/Internal/Emitters/AssetEmitter.h>
+#include <Oxygen/Content/Import/Internal/Emitters/BufferEmitter.h>
+#include <Oxygen/Content/Import/Internal/Emitters/TextureEmitter.h>
+#include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Content/Import/Internal/ImportSession.h>
+#include <Oxygen/Content/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Content/Import/Internal/WindowsFileWriter.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>

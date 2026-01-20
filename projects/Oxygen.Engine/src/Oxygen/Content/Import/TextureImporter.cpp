@@ -16,8 +16,8 @@
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Content/Import/ImageDecode.h>
-#include <Oxygen/Content/Import/TextureCooker.h>
+#include <Oxygen/Content/Import/Internal/ImageDecode.h>
+#include <Oxygen/Content/Import/Internal/TextureCooker.h>
 #include <Oxygen/Content/Import/TextureSourceAssembly.h>
 
 namespace oxygen::content::import {

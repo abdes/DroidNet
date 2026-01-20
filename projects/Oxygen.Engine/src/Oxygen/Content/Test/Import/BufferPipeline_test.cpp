@@ -11,9 +11,9 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Content/Import/ImportEventLoop.h>
-#include <Oxygen/Content/Import/Pipelines/BufferPipeline.h>
-#include <Oxygen/Content/Import/util/Signature.h>
+#include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Content/Import/Internal/Pipelines/BufferPipeline.h>
+#include <Oxygen/Content/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/asio.h>

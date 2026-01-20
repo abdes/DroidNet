@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "ImportPanel.h"
-
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -16,14 +14,17 @@
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Platforms.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
+#include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/Import/Naming.h>
 #include <Oxygen/Content/LooseCookedInspection.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Data/AssetType.h>
 
 #include "FilePicker.h"
+#include "ImportPanel.h"
 
 namespace oxygen::examples::render_scene::ui {
 
@@ -61,24 +62,6 @@ namespace {
       return true;
     }
     return false;
-  }
-
-  [[nodiscard]] auto FormatLabel(content::import::ImportFormat format)
-    -> std::string_view
-  {
-    switch (format) {
-    case content::import::ImportFormat::kFbx:
-      return "FBX";
-    case content::import::ImportFormat::kGltf:
-      return "GLTF";
-    case content::import::ImportFormat::kGlb:
-      return "GLB";
-    case content::import::ImportFormat::kTextureImage:
-      return "Texture";
-    case content::import::ImportFormat::kUnknown:
-      return "Unknown";
-    }
-    return "Unknown";
   }
 
   template <typename EnumT, std::size_t N>
@@ -613,7 +596,7 @@ auto ImportPanel::EnumerateSourceFiles() const -> std::vector<SourceEntry>
   }
 
   if (include_glb_) {
-    add_entries(model_root, content::import::ImportFormat::kGlb, ".glb");
+    add_entries(model_root, content::import::ImportFormat::kGltf, ".glb");
   }
 
   std::sort(
@@ -717,7 +700,7 @@ auto ImportPanel::DrawSourceSelectionUi() -> void
     for (const auto& entry : cached_files_) {
       const auto filename = entry.path.filename().string();
       std::string label = std::string("[")
-        + std::string(FormatLabel(entry.format)) + "] " + filename;
+        + std::string(nostd::to_string(entry.format)) + "] " + filename;
 
       if (ImGui::Selectable(label.c_str(), false)) {
         StartImport(entry.path);

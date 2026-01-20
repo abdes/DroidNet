@@ -6,7 +6,7 @@
 
 #include <Oxygen/Content/Import/TextureSourceAssembly.h>
 
-#include <Oxygen/Content/Import/Internal/TextureSourceAssemblyInternal.h>
+#include <Oxygen/Content/Import/Internal/TextureSourceAssembly_internal.h>
 
 #include <algorithm>
 #include <array>

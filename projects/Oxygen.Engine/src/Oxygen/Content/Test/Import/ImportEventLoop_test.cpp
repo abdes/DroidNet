@@ -9,7 +9,7 @@
 #include <thread>
 #include <vector>
 
-#include <Oxygen/Content/Import/ImportEventLoop.h>
+#include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>

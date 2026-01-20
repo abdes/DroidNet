@@ -16,19 +16,20 @@
 #include <unordered_map>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Import/AsyncImportService.h>
-#include <Oxygen/Content/Import/Detail/AsyncImporter.h>
-#include <Oxygen/Content/Import/Detail/ImportJob.h>
 #include <Oxygen/Content/Import/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/IAsyncFileWriter.h>
-#include <Oxygen/Content/Import/ImportEventLoop.h>
-#include <Oxygen/Content/Import/ImportFormat.h>
-#include <Oxygen/Content/Import/Jobs/AudioImportJob.h>
-#include <Oxygen/Content/Import/Jobs/FbxImportJob.h>
-#include <Oxygen/Content/Import/Jobs/GlbImportJob.h>
-#include <Oxygen/Content/Import/Jobs/TextureImportJob.h>
-#include <Oxygen/Content/Import/ResourceTableRegistry.h>
+#include <Oxygen/Content/Import/ImportRequest.h>
+#include <Oxygen/Content/Import/Internal/AsyncImporter.h>
+#include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Content/Import/Internal/ImportJob.h>
+#include <Oxygen/Content/Import/Internal/Jobs/AudioImportJob.h>
+#include <Oxygen/Content/Import/Internal/Jobs/FbxImportJob.h>
+#include <Oxygen/Content/Import/Internal/Jobs/GlbImportJob.h>
+#include <Oxygen/Content/Import/Internal/Jobs/TextureImportJob.h>
+#include <Oxygen/Content/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
@@ -38,29 +39,12 @@ namespace oxygen::content::import {
 
 namespace {
 
-  [[nodiscard]] auto FormatToString(ImportFormat format) -> std::string_view
-  {
-    switch (format) {
-    case ImportFormat::kFbx:
-      return "fbx";
-    case ImportFormat::kGltf:
-      return "gltf";
-    case ImportFormat::kGlb:
-      return "glb";
-    case ImportFormat::kTextureImage:
-      return "texture";
-    case ImportFormat::kUnknown:
-      return "unknown";
-    }
-    return "unknown";
-  }
-
   [[nodiscard]] auto MakeJobName(ImportFormat format, ImportJobId job_id,
     const std::filesystem::path& source_path) -> std::string
   {
     const auto file_name = source_path.filename().string();
     const auto name_part = file_name.empty() ? "source" : file_name;
-    return std::string(FormatToString(format)) + ":" + std::to_string(job_id)
+    return std::string(nostd::to_string(format)) + ":" + std::to_string(job_id)
       + ":" + name_part;
   }
 
@@ -79,11 +63,6 @@ namespace {
         std::move(on_complete), std::move(on_progress), std::move(cancel_event),
         file_reader, file_writer, thread_pool, table_registry, concurrency);
     case ImportFormat::kGltf:
-      // TODO(Phase 5): Add dedicated GltfImportJob; use GLB job for now.
-      return std::make_shared<detail::GlbImportJob>(job_id, std::move(request),
-        std::move(on_complete), std::move(on_progress), std::move(cancel_event),
-        file_reader, file_writer, thread_pool, table_registry, concurrency);
-    case ImportFormat::kGlb:
       return std::make_shared<detail::GlbImportJob>(job_id, std::move(request),
         std::move(on_complete), std::move(on_progress), std::move(cancel_event),
         file_reader, file_writer, thread_pool, table_registry, concurrency);
@@ -166,39 +145,6 @@ struct AsyncImportService::Impl {
 
     // Wait for the import thread to finish initialization
     startup_latch_.wait();
-  }
-
-  [[nodiscard]] static auto ToLowerAscii(std::string value) -> std::string
-  {
-    std::transform(
-      value.begin(), value.end(), value.begin(), [](const unsigned char ch) {
-        return static_cast<char>(std::tolower(ch));
-      });
-    return value;
-  }
-
-  [[nodiscard]] static auto DetectFormatFromPath(
-    const std::filesystem::path& path) -> ImportFormat
-  {
-    const auto ext = ToLowerAscii(path.extension().string());
-
-    if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga"
-      || ext == ".bmp" || ext == ".psd" || ext == ".gif" || ext == ".hdr"
-      || ext == ".pic" || ext == ".ppm" || ext == ".pgm" || ext == ".pnm"
-      || ext == ".exr") {
-      return ImportFormat::kTextureImage;
-    }
-    if (ext == ".gltf") {
-      return ImportFormat::kGltf;
-    }
-    if (ext == ".glb") {
-      return ImportFormat::kGlb;
-    }
-    if (ext == ".fbx") {
-      return ImportFormat::kFbx;
-    }
-
-    return ImportFormat::kUnknown;
   }
 
   //! Main function running on the import thread.
@@ -390,7 +336,7 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   const bool use_custom_factory = static_cast<bool>(job_factory);
   auto format = ImportFormat::kUnknown;
   if (!use_custom_factory) {
-    format = Impl::DetectFormatFromPath(request.source_path);
+    format = request.GetFormat();
     if (format == ImportFormat::kUnknown) {
       DLOG_F(WARNING, "SubmitImport: unknown format for '{}'",
         request.source_path.string());

@@ -11,7 +11,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Content/Import/ImageProcessing.h>
+#include <Oxygen/Content/Import/Internal/ImageProcessing.h>
 #include <Oxygen/Content/Import/ScratchImage.h>
 
 namespace {

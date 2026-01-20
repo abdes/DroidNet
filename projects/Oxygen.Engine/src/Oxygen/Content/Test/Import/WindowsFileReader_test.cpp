@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Import/WindowsFileReader.h>
+#include <Oxygen/Content/Import/Internal/WindowsFileReader.h>
 
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
