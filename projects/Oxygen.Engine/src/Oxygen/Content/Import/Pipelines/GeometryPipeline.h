@@ -21,11 +21,13 @@
 #include <glm/glm.hpp>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Import/BufferImportTypes.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
 #include <Oxygen/Content/Import/ImportPipeline.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
+#include <Oxygen/Content/Import/Naming.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/MeshType.h>
@@ -144,6 +146,7 @@ public:
     bool has_material_textures = false;
 
     ImportRequest request;
+    observer_ptr<NamingService> naming_service;
     std::stop_token stop_token;
   };
 

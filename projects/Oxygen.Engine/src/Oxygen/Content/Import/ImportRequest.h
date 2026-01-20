@@ -53,6 +53,17 @@ struct ImportRequest final {
 
   //! Import options.
   ImportOptions options = {};
+
+  //! Derives a stable scene name from the source file stem.
+  /*!
+   Used as the default namespace for imported assets and for scene virtual path
+   generation. Returns "Scene" if the source path has no stem.
+  */
+  [[nodiscard]] auto GetSceneName() const -> std::string
+  {
+    const auto stem = source_path.stem().string();
+    return stem.empty() ? "Scene" : stem;
+  }
 };
 
 } // namespace oxygen::content::import

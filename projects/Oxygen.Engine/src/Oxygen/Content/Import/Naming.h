@@ -6,11 +6,15 @@
 
 #pragma once
 
+#include <array>
 #include <cctype>
 #include <cstdint>
+#include <memory>
 #include <optional>
+#include <shared_mutex>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 
 namespace oxygen::content::import {
@@ -20,15 +24,18 @@ enum class ImportNameKind : uint8_t {
   //! A node in an imported scene graph.
   kSceneNode = 0,
 
+  //! A scene asset.
+  kScene,
+
   //! A geometry asset representing mesh data.
   kMesh,
 
   //! A material asset.
   kMaterial,
-
-  //! A texture asset.
-  kTexture,
 };
+
+//! Number of distinct ImportNameKind values.
+inline constexpr size_t kImportNameKindCount = 4;
 
 //! Context passed to node/asset naming strategies.
 /*!
@@ -54,6 +61,9 @@ struct NamingContext final {
 
   //! Optional source identifier for diagnostics (path, URI, or format id).
   std::string_view source_id = {};
+
+  //! Optional scene namespace for asset namespacing.
+  std::string_view scene_namespace = {};
 };
 
 //! Strategy for naming imported nodes and assets.
@@ -114,7 +124,6 @@ public:
 
     std::string mesh_prefix = "G_";
     std::string material_prefix = "M_";
-    std::string texture_prefix = "T_";
   };
 
   NormalizeNamingStrategy() = default;
@@ -144,6 +153,23 @@ public:
     }
 
     return normalized;
+  }
+
+  //! Generate a default base name for the given context.
+  [[nodiscard]] static auto DefaultBaseName(const NamingContext& context)
+    -> std::string
+  {
+    switch (context.kind) {
+    case ImportNameKind::kSceneNode:
+      return "Node";
+    case ImportNameKind::kScene:
+      return "Scene";
+    case ImportNameKind::kMesh:
+      return "Mesh";
+    case ImportNameKind::kMaterial:
+      return "Material";
+    }
+    return "Unnamed";
   }
 
 private:
@@ -228,31 +254,102 @@ private:
       return options_.mesh_prefix;
     case ImportNameKind::kMaterial:
       return options_.material_prefix;
-    case ImportNameKind::kTexture:
-      return options_.texture_prefix;
+    case ImportNameKind::kScene:
     case ImportNameKind::kSceneNode:
       return {};
     }
     return {};
   }
 
-  [[nodiscard]] static auto DefaultBaseName(const NamingContext& context)
-    -> std::string
-  {
-    switch (context.kind) {
-    case ImportNameKind::kSceneNode:
-      return "Node";
-    case ImportNameKind::kMesh:
-      return "Mesh";
-    case ImportNameKind::kMaterial:
-      return "Material";
-    case ImportNameKind::kTexture:
-      return "Texture";
-    }
-    return "Unnamed";
-  }
-
   Options options_ = {};
+};
+
+//! Thread-safe naming service with uniqueness tracking.
+/*!
+ NamingService wraps a stateless NamingStrategy and adds session-scoped
+ uniqueness tracking and optional scene namespacing.
+
+ ### Design Principles
+
+ 1. **Stateless Strategy**: Delegates convention logic to pluggable strategy
+ 2. **Stateful Uniqueness**: Tracks used names per kind, assigns collision
+    suffixes
+ 3. **Thread-Safe**: Uses per-kind registries with shared_mutex for concurrent
+    access
+ 4. **Session-Scoped**: Intended for one import session; call Reset() between
+    sessions
+
+ @see NamingStrategy, NamingContext
+*/
+class NamingService final {
+public:
+  //! Configuration for the naming service.
+  struct Config final {
+    //! Strategy for applying naming conventions.
+    std::shared_ptr<const NamingStrategy> strategy;
+
+    //! Enable scene namespace prefixing for assets.
+    bool enable_namespacing = true;
+
+    //! Enforce uniqueness by appending collision suffixes.
+    bool enforce_uniqueness = true;
+  };
+
+  //! Construct a naming service with the given configuration.
+  /*!
+   @param config Configuration specifying strategy and behavior.
+
+   @pre config.strategy must not be null.
+  */
+  explicit NamingService(Config config);
+
+  ~NamingService() = default;
+
+  // Non-copyable, movable
+  NamingService(const NamingService&) = delete;
+  auto operator=(const NamingService&) -> NamingService& = delete;
+  NamingService(NamingService&&) noexcept = default;
+  auto operator=(NamingService&&) noexcept -> NamingService& = default;
+
+  //! Generate a unique name for an imported object.
+  /*!
+   Applies the naming strategy, then enforces uniqueness if enabled.
+
+   @param authored_name Original name from source file (may be empty).
+   @param context Contextual information for naming conventions.
+   @return Unique name ready for use in the import session.
+
+   ### Thread Safety
+   This method is thread-safe and may be called concurrently.
+  */
+  [[nodiscard]] auto MakeUniqueName(std::string_view authored_name,
+    const NamingContext& context) -> std::string;
+
+  //! Check if a name has been registered for a specific kind.
+  [[nodiscard]] auto HasName(ImportNameKind kind, std::string_view name) const
+    -> bool;
+
+  //! Get the count of registered names for a specific kind.
+  [[nodiscard]] auto GetNameCount(ImportNameKind kind) const -> size_t;
+
+  //! Reset all registries for a new import session.
+  /*!
+   @warning Not thread-safe with respect to MakeUniqueName().
+   Call this only when no naming operations are in progress.
+  */
+  auto Reset() -> void;
+
+private:
+  struct NameRegistry {
+    std::unordered_map<std::string, uint32_t> usage_counts;
+    mutable std::shared_mutex mutex;
+  };
+
+  [[nodiscard]] auto ApplyNamespacing(
+    std::string name, const NamingContext& context) const -> std::string;
+
+  Config config_;
+  std::array<NameRegistry, kImportNameKindCount> registries_;
 };
 
 } // namespace oxygen::content::import

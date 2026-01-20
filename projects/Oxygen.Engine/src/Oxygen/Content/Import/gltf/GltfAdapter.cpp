@@ -28,7 +28,6 @@
 #include <Oxygen/Content/Import/TextureImportPresets.h>
 #include <Oxygen/Content/Import/gltf/GltfAdapter.h>
 #include <Oxygen/Content/Import/gltf/cgltf.h>
-#include <Oxygen/Content/Import/util/ImportNaming.h>
 #include <Oxygen/Content/Import/util/StringUtils.h>
 #include <Oxygen/Core/Transforms/Decompose.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -751,7 +750,7 @@ namespace {
     if (!prefix.empty()) {
       return std::string(prefix);
     }
-    return util::BuildSceneName(request);
+    return request.GetSceneName();
   }
 
   struct NodeInput final {
@@ -861,7 +860,9 @@ namespace {
       }
     }
 
-    std::unordered_map<std::string, uint32_t> name_usage;
+    CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
+
+    const auto scene_name = input.request.GetSceneName();
     uint32_t mesh_ordinal = 0;
 
     struct PrimitiveInfo {
@@ -889,17 +890,18 @@ namespace {
         continue;
       }
 
-      const std::string mesh_name = util::BuildMeshName(mesh->name != nullptr
-          ? std::string_view(mesh->name)
-          : std::string_view {},
-        input.request, static_cast<uint32_t>(mesh_i));
-
-      auto storage_name = mesh_name;
-      auto& storage_name_count = name_usage[storage_name];
-      if (storage_name_count > 0) {
-        storage_name += "_" + std::to_string(storage_name_count);
-      }
-      ++storage_name_count;
+      const std::string_view authored_name = mesh->name != nullptr
+        ? std::string_view(mesh->name)
+        : std::string_view {};
+      const NamingContext mesh_context {
+        .kind = ImportNameKind::kMesh,
+        .ordinal = static_cast<uint32_t>(mesh_i),
+        .parent_name = {},
+        .source_id = input.request.source_path.string(),
+        .scene_namespace = scene_name,
+      };
+      const std::string mesh_name
+        = input.naming_service->MakeUniqueName(authored_name, mesh_context);
 
       std::vector<PrimitiveInfo> primitives;
       primitives.reserve(mesh->primitives_count);
@@ -1206,10 +1208,9 @@ namespace {
 
       GeometryPipeline::WorkItem item;
       item.source_id
-        = BuildSourceId(input.source_id_prefix, storage_name, mesh_ordinal++);
-      item.mesh_name = storage_name;
-      item.storage_mesh_name
-        = util::NamespaceImportedAssetName(input.request, storage_name);
+        = BuildSourceId(input.source_id_prefix, mesh_name, mesh_ordinal++);
+      item.mesh_name = mesh_name;
+      item.storage_mesh_name = mesh_name;
       item.source_key = mesh;
       item.material_keys.assign(
         input.material_keys.begin(), input.material_keys.end());
@@ -1217,6 +1218,7 @@ namespace {
       item.want_textures = true;
       item.has_material_textures = has_material_textures;
       item.request = input.request;
+      item.naming_service = input.naming_service;
       if (!all_normals
         && item.request.options.normal_policy
           == GeometryAttributePolicy::kPreserveIfPresent) {
@@ -1640,6 +1642,8 @@ auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
     return result;
   }
 
+  CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
+
   WorkItemStreamResult result;
   if (input.stop_token.stop_requested()) {
     result.success = false;
@@ -1647,19 +1651,26 @@ auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
     return result;
   }
 
+  const auto scene_name = input.request.GetSceneName();
   const auto& data = *impl_->data_owner;
   const uint32_t material_count = static_cast<uint32_t>(data.materials_count);
   for (uint32_t i = 0; i < material_count; ++i) {
     const auto& material = data.materials[i];
-    const std::string authored = material.name ? material.name : "";
+    const std::string_view authored = material.name ? material.name : "";
+    const NamingContext material_context {
+      .kind = ImportNameKind::kMaterial,
+      .ordinal = i,
+      .parent_name = {},
+      .source_id = input.request.source_path.string(),
+      .scene_namespace = scene_name,
+    };
     const auto material_name
-      = util::BuildMaterialName(authored, input.request, i);
+      = input.naming_service->MakeUniqueName(authored, material_context);
 
     MaterialPipeline::WorkItem item;
     item.source_id = BuildSourceId(input.source_id_prefix, material_name, i);
     item.material_name = material_name;
-    item.storage_material_name
-      = util::NamespaceImportedAssetName(input.request, material_name);
+    item.storage_material_name = material_name;
     item.source_key = &material;
     item.material_domain = data::MaterialDomain::kOpaque;
     item.alpha_mode = MaterialAlphaMode::kOpaque;
@@ -1737,6 +1748,7 @@ auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
     }
 
     item.request = input.request;
+    item.naming_service = input.naming_service;
     item.stop_token = input.stop_token;
 
     if (!sink.Consume(std::move(item))) {
@@ -1915,6 +1927,9 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       "Geometry key count does not match mesh count", input.source_id, {}));
   }
 
+  CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
+  const auto scene_name = request.GetSceneName();
+
   std::vector<NodeInput> nodes;
   nodes.reserve(data.nodes_count > 0 ? data.nodes_count : 1u);
 
@@ -1929,8 +1944,15 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
 
     const auto authored = node->name != nullptr ? std::string_view(node->name)
                                                 : std::string_view {};
+    const NamingContext node_context {
+      .kind = ImportNameKind::kSceneNode,
+      .ordinal = ordinal,
+      .parent_name = parent_name,
+      .source_id = request.source_path.string(),
+      .scene_namespace = scene_name,
+    };
     const auto base_name
-      = util::BuildSceneNodeName(authored, request, ordinal, parent_name);
+      = input.naming_service->MakeUniqueName(authored, node_context);
 
     cgltf_float local_matrix_data[16] = {};
     cgltf_node_transform_local(node, local_matrix_data);
@@ -2091,25 +2113,12 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   build.nodes.reserve(pruned_nodes.size());
   build.strings.push_back(std::byte { 0 });
 
-  std::unordered_map<std::string, uint32_t> name_usage;
-  name_usage.reserve(pruned_nodes.size());
-
-  const auto scene_name = util::BuildSceneName(request);
   const auto virtual_path
     = request.loose_cooked_layout.SceneVirtualPath(scene_name);
 
   for (uint32_t i = 0; i < pruned_nodes.size(); ++i) {
     auto& node = pruned_nodes[i];
-    auto name = node.base_name;
-    auto& count = name_usage[name];
-    if (count > 0) {
-      const auto suffix = "_" + std::to_string(count);
-      name += suffix;
-      diagnostics.push_back(MakeWarningDiagnostic("scene.node_name_renamed",
-        "Duplicate node name renamed with suffix", input.source_id,
-        node.base_name));
-    }
-    ++count;
+    const auto& name = node.base_name;
 
     glm::vec3 translation {};
     glm::vec3 scale { 1.0F, 1.0F, 1.0F };

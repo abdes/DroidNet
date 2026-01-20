@@ -200,6 +200,7 @@ set(
   "Import/Pipelines/ScenePipeline.cpp"
   "Import/Pipelines/MaterialPipeline.h"
   "Import/Pipelines/MaterialPipeline.cpp"
+  "Import/Naming.cpp"
   $<$<BOOL:${WIN32}>:Import/WindowsFileReader.h>
   $<$<BOOL:${WIN32}>:Import/WindowsFileReader.cpp>
   $<$<BOOL:${WIN32}>:Import/WindowsFileWriter.h>
