@@ -10,11 +10,11 @@
 #include <span>
 
 #include <fmt/format.h>
-#include <glm/mat4x4.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Transforms/IsFinite.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/RendererTag.h>
@@ -22,23 +22,6 @@
 #include <Oxygen/Renderer/ScenePrep/Handles.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
-
-namespace {
-
-[[nodiscard]] auto IsFinite(const glm::mat4& m) noexcept -> bool
-{
-  for (int c = 0; c < 4; ++c) {
-    for (int r = 0; r < 4; ++r) {
-      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-      if (!std::isfinite(m[c][r])) {
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-} // namespace
 
 namespace oxygen::renderer::resources {
 
@@ -93,7 +76,8 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
 {
   ++total_calls_;
 
-  DCHECK_F(IsFinite(transform), "GetOrAllocate received non-finite matrix");
+  DCHECK_F(transforms::IsFinite(transform),
+    "GetOrAllocate received non-finite matrix");
 
   // Reuse slots by frame order to maintain stable indices across frames
   const bool is_new_logical = frame_write_count_ >= transforms_.size();

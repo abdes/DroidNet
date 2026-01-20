@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-#include <Oxygen/Content/Import/Async/AsyncImportService.h>
+#include <Oxygen/Content/Import/AsyncImportService.h>
 #include <Oxygen/Content/Import/ImportFormat.h>
 #include <Oxygen/Content/Import/ImportOptions.h>
 #include <Oxygen/Content/Import/ImportReport.h>

@@ -15,7 +15,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include <Oxygen/Content/Import/Async/AsyncImportService.h>
+#include <Oxygen/Content/Import/AsyncImportService.h>
 #include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Tools/ImportTool/ImportRunner.h>
 

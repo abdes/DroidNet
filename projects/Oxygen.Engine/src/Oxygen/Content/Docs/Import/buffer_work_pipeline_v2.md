@@ -17,8 +17,9 @@ Core properties:
 - **Compute‑only**: no I/O, no resource index assignment.
 - **Job‑scoped**: created per job and started in the job’s child nursery.
 - **ThreadPool offload**: `content_hash` is computed on `co::ThreadPool` only.
-- **Configurable hashing**: hashing is optional and is configured via
-  `ImportOptions`, cascading into the pipeline config.
+- **Configurable hashing**: hashing is optional and is controlled by
+  `ImportOptions::with_content_hashing`, cascading into the pipeline config.
+  When disabled, the pipeline MUST NOT compute hashes.
 - **Planner‑gated**: work is submitted only after dependencies are ready and the
   full buffer payload is known.
 

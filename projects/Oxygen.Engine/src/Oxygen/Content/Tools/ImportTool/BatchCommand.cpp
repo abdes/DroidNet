@@ -29,7 +29,7 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
-#include <Oxygen/Content/Import/Async/AsyncImportService.h>
+#include <Oxygen/Content/Import/AsyncImportService.h>
 #include <Oxygen/Content/Tools/ImportTool/BatchCommand.h>
 #include <Oxygen/Content/Tools/ImportTool/ImportManifest.h>
 #include <Oxygen/Content/Tools/ImportTool/TextureImportRequestBuilder.h>

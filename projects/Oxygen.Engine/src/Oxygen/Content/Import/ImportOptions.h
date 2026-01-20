@@ -294,6 +294,13 @@ struct ImportOptions final {
   //! Select which cooked content should be emitted.
   ImportContentFlags import_content = ImportContentFlags::kAll;
 
+  //! Enable or disable content hashing across import pipelines.
+  /*!
+   When false, pipelines MUST NOT compute any `content_hash` values.
+   This applies to textures, buffers, geometry, materials, and scenes.
+  */
+  bool with_content_hashing = true;
+
   //! How to handle vertex normals.
   /*! Default is `kGenerateMissing`. */
   GeometryAttributePolicy normal_policy

@@ -39,7 +39,6 @@ m_gtest_program(
     "AssetLoader_async_test.cpp"
     "AssetLoader_basic_test.cpp"
     "AssetLoader_buffer_test.cpp"
-    "FbxImporter_units_axes_test.cpp"
     "AssetLoader_cancellation_test.cpp"
     "AssetLoader_deps_test.cpp"
     "AssetLoader_geometry_test.cpp"
@@ -75,20 +74,12 @@ m_gtest_program(
     "Bc7Encoder_test.cpp"
     "ImageDecode_test.cpp"
     "ImageProcessing_test.cpp"
-    "FbxImporter_fake_test.cpp"
-    "FbxImporter_materials_test.cpp"
-    "FbxImporter_geometry_test.cpp"
-    "FbxImporter_scene_test.cpp"
-    "FbxImporter_units_axes_test.cpp"
-    "FbxImporter_test.cpp"
-    "FbxImporterTest.h"
     "LooseCookedWriter_test.cpp"
     "ScratchImage_test.cpp"
     "TextureCooker_basic_test.cpp"
     "TextureImportPresets_test.cpp"
     "TexturePackingPolicy_test.cpp"
     "TextureSourceAssembly_test.cpp"
-    "TextureEmissionUtils_test.cpp"
 )
 target_compile_definitions(
   Oxygen.Content.Importers.Tests
@@ -101,11 +92,11 @@ target_compile_definitions(
 m_gtest_program(
   AsyncImportCore
   SOURCES
-    "Import/Async/AsyncImporter_test.cpp"
-    "Import/Async/AsyncImportService_test.cpp"
-    "Import/Async/ImportEventLoop_test.cpp"
-    "Import/Async/ImportJob_test.cpp"
-    "Import/Async/ImportSession_test.cpp"
+    "Import/AsyncImporter_test.cpp"
+    "Import/AsyncImportService_test.cpp"
+    "Import/ImportEventLoop_test.cpp"
+    "Import/ImportJob_test.cpp"
+    "Import/ImportSession_test.cpp"
     "Mocks/TestImportJob.cpp"
     "Mocks/TestImportJob.h"
 )
@@ -113,54 +104,54 @@ m_gtest_program(
 m_gtest_program(
   AsyncImportIO
   SOURCES
-    "Import/Async/FileError_test.cpp"
-    $<$<BOOL:${WIN32}>:Import/Async/WindowsFileReader_test.cpp>
-    $<$<BOOL:${WIN32}>:Import/Async/WindowsFileWriter_test.cpp>
+    "Import/FileError_test.cpp"
+    $<$<BOOL:${WIN32}>:Import/WindowsFileReader_test.cpp>
+    $<$<BOOL:${WIN32}>:Import/WindowsFileWriter_test.cpp>
 )
 
 m_gtest_program(
   AsyncImportBuffer
   SOURCES
-    "Import/Async/BufferPipeline_test.cpp"
-    "Import/Async/BufferEmitter_test.cpp"
+    "Import/BufferPipeline_test.cpp"
+    "Import/BufferEmitter_test.cpp"
 )
 
 m_gtest_program(
   AsyncImportAssets
   SOURCES
-    "Import/Async/AssetEmitter_test.cpp"
-    "Import/Async/GeometryPipeline_test.cpp"
-    "Import/Async/MaterialPipeline_test.cpp"
-    "Import/Async/PipelineConformance_test.cpp"
-    "Import/Async/ScenePipeline_test.cpp"
+    "Import/AssetEmitter_test.cpp"
+    "Import/GeometryPipeline_test.cpp"
+    "Import/MaterialPipeline_test.cpp"
+    "Import/PipelineConformance_test.cpp"
+    "Import/ScenePipeline_test.cpp"
 )
 
 m_gtest_program(
   AsyncImportTexture
   SOURCES
-    "Import/Async/TexturePipeline_basic_test.cpp"
-    "Import/Async/TexturePipeline_nonreg_test.cpp"
-    "Import/Async/TexturePipeline_edge_test.cpp"
-    "Import/Async/TextureImportJob_policy_test.cpp"
-    "Import/Async/TextureEmitter_test.cpp"
+    "Import/TexturePipeline_basic_test.cpp"
+    "Import/TexturePipeline_nonreg_test.cpp"
+    "Import/TexturePipeline_edge_test.cpp"
+    "Import/TextureImportJob_policy_test.cpp"
+    "Import/TextureEmitter_test.cpp"
 )
 
 m_gtest_program(
   FbxImport
   SOURCES
-    "Import/Async/AsyncFbxImporter_test.cpp"
+    "Import/AsyncImporterFullTestBase.cpp"
+    "Import/AsyncImporterFullTestBase.h"
+    "Import/AsyncFbxImporter_test.cpp"
 )
 
 m_gtest_program(
   GltfImport
   SOURCES
-    "Import/Async/AsyncGltfImporter_test.cpp"
+    "Import/AsyncImporterFullTestBase.cpp"
+    "Import/AsyncImporterFullTestBase.h"
+    "Import/AsyncGltfImporter_test.cpp"
 )
 
 # -- Plan Test Programs -------------------------------------------------------
 
-m_gtest_program(
-  Plan
-  SOURCES
-    "Plan/ImportPlanner_test.cpp"
-)
+m_gtest_program(Plan SOURCES "Plan/ImportPlanner_test.cpp")

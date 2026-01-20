@@ -646,42 +646,39 @@ class TexturePipelineWorkerTest : public AsyncTestFixture {
 protected:
   void SetUp() override {
     AsyncTestFixture::SetUp();
-    file_reader_ = io::CreateAsyncFileReader({.thread_pool = thread_pool_});
     pipeline_ = std::make_unique<TexturePipeline>(
-      thread_pool_, file_reader_,
-      TexturePipeline::Config{.worker_count = 2});
+      thread_pool_, TexturePipeline::Config{.worker_count = 2});
   }
 
-  std::shared_ptr<io::IAsyncFileReader> file_reader_;
   std::unique_ptr<TexturePipeline> pipeline_;
 };
 
 //! Single texture request produces result.
 TEST_F(TexturePipelineWorkerTest, Enqueue_SingleTexture_ProducesResult) {
   // Arrange
-  co::Channel<TextureWorkResult> results;
+  co::Channel<TexturePipeline::WorkResult> results;
 
   // Act
   RunAsync([&]() -> co::Co<> {
     OXCO_WITH_NURSERY(nursery) {
-      pipeline_->Activate(&nursery);
-      pipeline_->Run();
+      pipeline_->Start(nursery);
 
-      TextureWorkRequest request{
-        .job_id = 1,
-        .request_id = 0,
-        .results_writer = &results.GetWriter(),
-        .source_file_path = GetTestAssetPath("texture.png"),
-        .config = emit::CookerConfig{},
+      auto bytes = LoadTestBytes("texture.png");
+      TexturePipeline::WorkItem item {};
+      item.source_id = "texture.png";
+      item.texture_id = "texture.png";
+      item.desc = MakeTestDesc();
+      item.packing_policy_id = "d3d12";
+      item.source = TexturePipeline::SourceBytes {
+        .bytes = std::span<const std::byte>(bytes.data(), bytes.size()),
+        .owner = std::static_pointer_cast<const void>(bytes),
       };
 
-      co_await pipeline_->Enqueue(std::move(request));
+      co_await pipeline_->Submit(std::move(item));
 
-      auto result = co_await results.Receive();
-      EXPECT_TRUE(result.has_value());
-      EXPECT_EQ(result->status, TextureWorkStatus::kSuccess);
+      auto result = co_await pipeline_->Collect();
+      EXPECT_TRUE(result.success);
 
-      pipeline_->Stop();
       co_return co::kJoin;
     };
     co_return;
@@ -706,10 +703,9 @@ namespace {
 TEST_F(TexturePipelineWorkerTest, Enqueue_QueueFull_SendSuspends) {
   // Configure with small queue
   pipeline_ = std::make_unique<TexturePipeline>(
-    thread_pool_, file_reader_,
-    TexturePipeline::Config{
+    thread_pool_, TexturePipeline::Config{
       .worker_count = 1,
-      .work_queue_capacity = 2,
+      .queue_capacity = 2,
     });
 
   // Submit more than capacity
@@ -727,33 +723,31 @@ namespace {
 //! Duplicate textures reuse existing index.
 TEST(TextureCommitDedupTest, Commit_DuplicateSignature_ReusesIndex) {
   // Arrange
-  emit::TextureEmissionState state;
+  TextureEmitter emitter = MakeTestEmitter();
   auto cooked1 = MakeTestCookedTexture("tex1", kTestPayload);
   auto cooked2 = MakeTestCookedTexture("tex2", kTestPayload);  // Same content
 
   // Act
-  uint32_t idx1 = emit::CommitTexture(state, cooked1);
-  uint32_t idx2 = emit::CommitTexture(state, cooked2);
+  uint32_t idx1 = emitter.Emit(cooked1);
+  uint32_t idx2 = emitter.Emit(cooked2);
 
   // Assert
   EXPECT_EQ(idx1, idx2);
-  EXPECT_EQ(state.table.size(), 1);  // Only one entry
 }
 
 //! Different content creates new entry.
 TEST(TextureCommitDedupTest, Commit_DifferentContent_CreatesNewEntry) {
   // Arrange
-  emit::TextureEmissionState state;
+  TextureEmitter emitter = MakeTestEmitter();
   auto cooked1 = MakeTestCookedTexture("tex1", kPayload1);
   auto cooked2 = MakeTestCookedTexture("tex2", kPayload2);
 
   // Act
-  uint32_t idx1 = emit::CommitTexture(state, cooked1);
-  uint32_t idx2 = emit::CommitTexture(state, cooked2);
+  uint32_t idx1 = emitter.Emit(cooked1);
+  uint32_t idx2 = emitter.Emit(cooked2);
 
   // Assert
   EXPECT_NE(idx1, idx2);
-  EXPECT_EQ(state.table.size(), 2);
 }
 
 } // namespace
@@ -777,7 +771,7 @@ Core coverage for HDR/cube/array/3D behavior in the async pipeline.
   - 6 face images with `TextureType::kTextureCube` assemble and cook successfully.
 - **2D array assembly with pre-authored mips**
   - Full layer × mip coverage assembles; missing subresource returns `kInvalidMipPolicy`.
-- **3D depth-slice assembly (parity gap)**
+- **3D depth-slice assembly**
   - When implemented, depth slices produce a `TextureType::kTexture3D` payload.
   - Until implemented, verify `kUnsupportedFormat` is returned for non-zero depth slices.
 

@@ -14,7 +14,7 @@
 #include <mutex>
 #include <numeric>
 
-#include <Oxygen/Content/Import/bc7enc/bc7enc.h>
+#include <Oxygen/Content/Import/bc7/bc7enc.h>
 
 namespace oxygen::content::import::bc7 {
 

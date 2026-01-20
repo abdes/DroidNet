@@ -51,7 +51,8 @@ namespace oxygen::content::import {
   @see TextureSourceSet for multi-source textures (cubemaps, arrays)
 */
 OXGN_CNTT_NDAPI auto CookTexture(std::span<const std::byte> source_bytes,
-  const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
+  const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
+  bool with_content_hashing = true)
   -> oxygen::Result<CookedTexturePayload, TextureImportError>;
 
 //! Cook a texture from an already-decoded ScratchImage.
@@ -74,7 +75,8 @@ OXGN_CNTT_NDAPI auto CookTexture(std::span<const std::byte> source_bytes,
   @see ConvertEquirectangularToCube for HDR panorama → cubemap workflow
 */
 OXGN_CNTT_NDAPI auto CookTexture(ScratchImage&& image,
-  const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
+  const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
+  bool with_content_hashing = true)
   -> oxygen::Result<CookedTexturePayload, TextureImportError>;
 
 //! Cook a multi-source texture (cube maps and 2D arrays).
@@ -109,7 +111,8 @@ OXGN_CNTT_NDAPI auto CookTexture(ScratchImage&& image,
   @see ApplyPreset for easy descriptor configuration
 */
 OXGN_CNTT_NDAPI auto CookTexture(const TextureSourceSet& sources,
-  const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
+  const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
+  bool with_content_hashing = true)
   -> oxygen::Result<CookedTexturePayload, TextureImportError>;
 
 //===----------------------------------------------------------------------===//

@@ -11,17 +11,14 @@
 #include <functional>
 #include <mutex>
 #include <optional>
-#include <stop_token>
 #include <string>
-#include <thread>
 #include <vector>
 
+#include <Oxygen/Content/Import/Async/AsyncImportService.h>
 #include <Oxygen/Content/Import/ImportOptions.h>
+#include <Oxygen/Content/Import/ImportReport.h>
+#include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Data/AssetKey.h>
-
-namespace oxygen::content::import {
-class AssetImporter;
-} // namespace oxygen::content::import
 
 namespace oxygen::examples::render_scene::ui {
 
@@ -37,18 +34,15 @@ struct FbxImportState {
   std::atomic_bool cancel_requested { false };
   std::atomic_bool completion_ready { false };
   std::string importing_path;
+  content::import::ImportJobId job_id = content::import::kInvalidJobId;
 
-  std::jthread import_thread;
-
-  struct Completion {
-    bool cancelled { false };
-    std::optional<data::AssetKey> scene_key;
-    std::filesystem::path index_path;
-    std::string error;
-  };
+  std::mutex progress_mutex;
+  content::import::ImportProgress progress {};
+  std::vector<content::import::ImportDiagnostic> diagnostics;
 
   std::mutex completion_mutex;
-  Completion completion;
+  std::optional<content::import::ImportReport> completion_report;
+  std::string completion_error;
 };
 
 //! Configuration for FBX loader panel
@@ -141,6 +135,10 @@ private:
   auto DrawTextureTuningUi() -> void;
 
   FbxLoaderConfig config_;
+  std::unique_ptr<content::import::AsyncImportService> import_service_;
+  content::import::AsyncImportService::Config service_config_ {};
+  content::import::LooseCookedLayout layout_ {};
+  std::string last_import_source_;
   FbxImportState import_state_;
   std::vector<std::filesystem::path> cached_fbx_files_;
   bool files_cached_ { false };
