@@ -10,9 +10,9 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Content/Import/Internal/bc7/Bc7Encoder.h>
 #include <Oxygen/Content/Import/ScratchImage.h>
 #include <Oxygen/Content/Import/TextureImportTypes.h>
-#include <Oxygen/Content/Import/bc7/Bc7Encoder.h>
 
 namespace {
 

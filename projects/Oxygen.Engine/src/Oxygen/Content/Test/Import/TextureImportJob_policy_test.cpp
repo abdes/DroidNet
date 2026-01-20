@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Import/Jobs/TextureImportPolicy.h>
 #include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Content/Import/Internal/Jobs/TextureImportPolicy.h>
 
 using oxygen::content::import::ImportOptions;
 using oxygen::content::import::TexturePipeline;

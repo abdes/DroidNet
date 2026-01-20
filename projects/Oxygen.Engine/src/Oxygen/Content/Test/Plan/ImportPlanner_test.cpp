@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include <Oxygen/Content/Import/ImportPlanner.h>
+#include <Oxygen/Content/Import/Internal/ImportPlanner.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Testing/GTest.h>

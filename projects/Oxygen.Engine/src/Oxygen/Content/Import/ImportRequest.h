@@ -16,6 +16,16 @@
 
 namespace oxygen::content::import {
 
+//! Supported authoring source formats.
+enum class ImportFormat : uint8_t {
+  kUnknown = 0,
+  kGltf,
+  kFbx,
+  kTextureImage,
+};
+
+OXGN_CNTT_NDAPI auto to_string(ImportFormat format) -> std::string_view;
+
 //! Request for importing a source file into a loose cooked container.
 struct ImportRequest final {
   //! Source file (FBX, glTF, or GLB).
@@ -59,11 +69,10 @@ struct ImportRequest final {
    Used as the default namespace for imported assets and for scene virtual path
    generation. Returns "Scene" if the source path has no stem.
   */
-  [[nodiscard]] auto GetSceneName() const -> std::string
-  {
-    const auto stem = source_path.stem().string();
-    return stem.empty() ? "Scene" : stem;
-  }
+  OXGN_CNTT_NDAPI auto GetSceneName() const -> std::string;
+
+  //! Auto-detects the import format from the source path extension.
+  OXGN_CNTT_NDAPI auto GetFormat() const -> ImportFormat;
 };
 
 } // namespace oxygen::content::import

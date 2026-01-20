@@ -17,13 +17,13 @@
 
 #include <glm/glm.hpp>
 
-#include <Oxygen/Content/Import/ImportEventLoop.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
-#include <Oxygen/Content/Import/Pipelines/BufferPipeline.h>
-#include <Oxygen/Content/Import/Pipelines/GeometryPipeline.h>
-#include <Oxygen/Content/Import/Pipelines/MaterialPipeline.h>
-#include <Oxygen/Content/Import/Pipelines/ScenePipeline.h>
-#include <Oxygen/Content/Import/Pipelines/TexturePipeline.h>
+#include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Content/Import/Internal/Pipelines/BufferPipeline.h>
+#include <Oxygen/Content/Import/Internal/Pipelines/GeometryPipeline.h>
+#include <Oxygen/Content/Import/Internal/Pipelines/MaterialPipeline.h>
+#include <Oxygen/Content/Import/Internal/Pipelines/ScenePipeline.h>
+#include <Oxygen/Content/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Content/Import/ScratchImage.h>
 #include <Oxygen/Content/Import/TextureImportDesc.h>
 #include <Oxygen/Data/MaterialAsset.h>

@@ -10,7 +10,7 @@
 #include <memory>
 
 #include <Oxygen/Composition/TypedObject.h>
-#include <Oxygen/Content/Import/Detail/ImportJob.h>
+#include <Oxygen/Content/Import/Internal/ImportJob.h>
 
 namespace oxygen::content::import::test {
 

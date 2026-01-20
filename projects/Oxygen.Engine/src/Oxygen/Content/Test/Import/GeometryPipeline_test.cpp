@@ -17,8 +17,8 @@
 
 #include <glm/glm.hpp>
 
-#include <Oxygen/Content/Import/ImportEventLoop.h>
-#include <Oxygen/Content/Import/Pipelines/GeometryPipeline.h>
+#include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Content/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/Vertex.h>

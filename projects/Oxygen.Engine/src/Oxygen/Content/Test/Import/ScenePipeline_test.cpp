@@ -14,8 +14,8 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Content/Import/ImportEventLoop.h>
-#include <Oxygen/Content/Import/Pipelines/ScenePipeline.h>
+#include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Content/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Run.h>

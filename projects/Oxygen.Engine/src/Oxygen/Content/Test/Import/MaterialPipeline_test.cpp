@@ -14,9 +14,9 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Content/Import/ImportEventLoop.h>
-#include <Oxygen/Content/Import/Pipelines/MaterialPipeline.h>
-#include <Oxygen/Content/Import/util/Signature.h>
+#include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Content/Import/Internal/Pipelines/MaterialPipeline.h>
+#include <Oxygen/Content/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Run.h>

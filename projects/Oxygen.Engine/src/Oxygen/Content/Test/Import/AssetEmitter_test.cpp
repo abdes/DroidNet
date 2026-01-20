@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Import/Emitters/AssetEmitter.h>
+#include <Oxygen/Content/Import/Internal/Emitters/AssetEmitter.h>
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/Import/IAsyncFileWriter.h>
-#include <Oxygen/Content/Import/ImportEventLoop.h>
-#include <Oxygen/Content/Import/WindowsFileWriter.h>
+#include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Content/Import/Internal/WindowsFileWriter.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
 

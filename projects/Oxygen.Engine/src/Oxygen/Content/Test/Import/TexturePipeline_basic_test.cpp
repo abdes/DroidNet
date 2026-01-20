@@ -11,12 +11,13 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Content/Import/ImportEventLoop.h>
-#include <Oxygen/Content/Import/Pipelines/TexturePipeline.h>
+#include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Content/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/asio.h>
-#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
