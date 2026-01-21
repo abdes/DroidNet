@@ -55,7 +55,8 @@ public:
   ~UploadCoordinator() = default;
 
   OXGN_RNDR_API auto CreateRingBufferStaging(frame::SlotCount partitions,
-    std::uint32_t alignment, float slack = kDefaultRingBufferStagingSlack)
+    std::uint32_t alignment, float slack = kDefaultRingBufferStagingSlack,
+    std::string_view debug_name = "UploadCoordinator.RingBufferStaging")
     -> std::shared_ptr<StagingProvider>;
 
   // Provider-aware submissions

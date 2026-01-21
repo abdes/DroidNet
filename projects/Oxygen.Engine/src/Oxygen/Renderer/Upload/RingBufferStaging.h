@@ -51,6 +51,24 @@ public:
     , alignment_(alignment)
     , slack_(slack)
   {
+    debug_name_ = "RingBufferStaging";
+    DCHECK_F(alignment_ > 0, "RingBufferStaging requires non-zero alignment");
+    DCHECK_F((alignment_ & (alignment_ - 1)) == 0,
+      "RingBufferStaging alignment must be power-of-two, got %u", alignment_);
+    heads_.assign(partitions_count_.get(), 0ULL);
+  }
+
+  explicit RingBufferStaging(UploaderTag tag, observer_ptr<Graphics> gfx,
+    frame::SlotCount partitions, std::uint32_t alignment, float slack,
+    std::string_view debug_name)
+    : StagingProvider(tag)
+    , gfx_(gfx)
+    , partitions_count_(partitions)
+    , alignment_(alignment)
+    , slack_(slack)
+    , debug_name_(
+        debug_name.empty() ? "RingBufferStaging" : std::string(debug_name))
+  {
     DCHECK_F(alignment_ > 0, "RingBufferStaging requires non-zero alignment");
     DCHECK_F((alignment_ & (alignment_ - 1)) == 0,
       "RingBufferStaging alignment must be power-of-two, got %u", alignment_);
@@ -139,6 +157,11 @@ private:
   // Idle trimming: if no allocations happen for a while, shrink back toward the
   // initial size to reclaim CPU-visible upload memory after large bursts.
   std::uint32_t consecutive_idle_frames_ { 0U };
+
+  // Stable scenario-based name used for the underlying upload buffer resource
+  // (e.g. for PIX). Per-allocation debug labels are still accepted by
+  // Allocate() for logging and telemetry.
+  std::string debug_name_ {};
 };
 
 } // namespace oxygen::engine::upload
