@@ -7,6 +7,7 @@
 #include <array>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <fmt/format.h>
 
@@ -461,6 +462,62 @@ namespace {
 
     // Assert
     EXPECT_EQ(output.find("\x1b["), std::string::npos);
+  }
+
+  //! Scenario: Per-value notifier is called for each parsed value.
+  NOLINT_TEST(Callbacks, PerValueNotifier_FiresForEachOccurrence)
+  {
+    // Arrange
+    std::vector<int> values;
+    const Command::Ptr command
+      = CommandBuilder(Command::DEFAULT)
+          .WithOption(Option::WithKey("tag")
+              .Long("tag")
+              .WithValue<int>()
+              .Repeatable()
+              .CallOnEachValue([&values](const int& v) { values.push_back(v); })
+              .Build())
+          .Build();
+    const auto cli
+      = CliBuilder().ProgramName("tool").WithCommand(command).Build();
+
+    constexpr int argc = 5;
+    const char* argv[argc] = { "tool", "--tag", "1", "--tag", "2" };
+
+    // Act
+    (void)cli->Parse(argc, argv);
+
+    // Assert
+    ASSERT_EQ(values.size(), 2U);
+    EXPECT_EQ(values[0], 1);
+    EXPECT_EQ(values[1], 2);
+  }
+
+  //! Scenario: Per-value notifier is not called for defaulted values.
+  NOLINT_TEST(Callbacks, PerValueNotifier_SkipsDefaults)
+  {
+    // Arrange
+    std::vector<int> values;
+    const Command::Ptr command
+      = CommandBuilder(Command::DEFAULT)
+          .WithOption(Option::WithKey("count")
+              .Long("count")
+              .WithValue<int>()
+              .DefaultValue(42)
+              .CallOnEachValue([&values](const int& v) { values.push_back(v); })
+              .Build())
+          .Build();
+    const auto cli
+      = CliBuilder().ProgramName("tool").WithCommand(command).Build();
+
+    constexpr int argc = 1;
+    const char* argv[argc] = { "tool" };
+
+    // Act
+    (void)cli->Parse(argc, argv);
+
+    // Assert
+    EXPECT_TRUE(values.empty());
   }
 
 } // namespace
