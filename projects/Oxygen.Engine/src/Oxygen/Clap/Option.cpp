@@ -9,9 +9,9 @@
 #include <Oxygen/Clap/CliTheme.h>
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
+#include <Oxygen/Clap/Internal/StyledWrap.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Clap/OptionValuesMap.h>
-#include <Oxygen/TextWrap/TextWrap.h>
 
 namespace oxygen::clap {
 
@@ -65,14 +65,7 @@ auto Option::Print(
     }
   }
 
-  const wrap::TextWrapper wrap = wrap::MakeWrapper()
-                                   .Width(width)
-                                   .IgnoreAnsiEscapeCodes()
-                                   .CollapseWhiteSpace()
-                                   .TrimLines()
-                                   .IndentWith()
-                                   .Initially("   ")
-                                   .Then("   ");
+  const wrap::TextWrapper wrap = detail::MakeStyledWrapper(width, "   ", "   ");
   context.out << wrap.Fill(About()).value_or("__wrapping_error__");
 }
 

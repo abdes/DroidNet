@@ -186,28 +186,30 @@ public:
 
   [[nodiscard]] auto ExpectedTypeName() const -> std::string override
   {
+    std::string name;
     if constexpr (std::is_enum_v<T>) {
-      return std::string(magic_enum::enum_type_name<T>());
+      name = std::string(magic_enum::enum_type_name<T>());
     } else if constexpr (std::is_same_v<T, std::string>
       || std::is_same_v<T, std::string_view>) {
-      return "string";
+      name = "string";
     } else if constexpr (std::is_same_v<T, bool>) {
-      return "bool";
+      name = "bool";
     } else if constexpr (std::is_same_v<T, char>) {
-      return "char";
+      name = "char";
     } else if constexpr (std::is_same_v<T, float>) {
-      return "float";
+      name = "float";
     } else if constexpr (std::is_same_v<T, double>) {
-      return "double";
+      name = "double";
     } else if constexpr (std::is_same_v<T, long double>) {
-      return "long double";
+      name = "long double";
     } else if constexpr (std::is_integral_v<T> && std::is_signed_v<T>) {
-      return "integer";
+      name = "integer";
     } else if constexpr (std::is_integral_v<T>) {
-      return "unsigned integer";
+      name = "unsigned integer";
     } else {
-      return typeid(T).name();
+      name = typeid(T).name();
     }
+    return name;
   }
 
   /**

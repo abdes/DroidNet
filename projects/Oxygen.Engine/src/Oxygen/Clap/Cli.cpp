@@ -27,9 +27,9 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/PositionalOptionBuilder.h>
 #include <Oxygen/Clap/Internal/Args.h>
+#include <Oxygen/Clap/Internal/StyledWrap.h>
 #include <Oxygen/Clap/Parser/Parser.h>
 #include <Oxygen/Clap/Parser/Tokenizer.h>
-#include <Oxygen/TextWrap/TextWrap.h>
 
 using oxygen::clap::detail::Arguments;
 
@@ -207,13 +207,8 @@ auto Cli::PrintCommands(
                   << fmt::format(
                        theme.command_name, "{}", command->PathAsString())
                   << "\n";
-      wrap::TextWrapper wrap = wrap::MakeWrapper()
-                                 .Width(width)
-                                 .IgnoreAnsiEscapeCodes()
-                                 .TrimLines()
-                                 .IndentWith()
-                                 .Initially("     ")
-                                 .Then("     ");
+      wrap::TextWrapper wrap
+        = detail::MakeStyledWrapper(width, "     ", "     ");
       context.out << wrap.Fill(command->About()).value_or("__wrapping_error__");
       context.out << "\n\n";
     }

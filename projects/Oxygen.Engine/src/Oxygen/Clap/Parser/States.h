@@ -612,7 +612,7 @@ struct ParseShortOptionState
       value_ = "_implicit_";
       return TransitionTo<ParseOptionsState> {};
     }
-    return ReportError(MissingValueForOption(context_));
+    return ReportError(InvalidValueForOption(context_, event.token));
   }
 
 private:
@@ -760,7 +760,7 @@ struct ParseLongOptionState : Will<ByDefault<TransitionTo<ParseOptionsState>>> {
         return TransitionTo<ParseOptionsState> {};
       }
     }
-    return ReportError(MissingValueForOption(context));
+    return ReportError(InvalidValueForOption(context, event.token));
   }
 
 private:
