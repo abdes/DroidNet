@@ -9,7 +9,6 @@
 #include <memory>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Content/Import/AsyncImportService.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/Import/Internal/JobEntry.h>
 #include <Oxygen/Content/api_export.h>

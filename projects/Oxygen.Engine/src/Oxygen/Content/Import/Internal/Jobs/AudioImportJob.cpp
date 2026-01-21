@@ -26,8 +26,10 @@ auto AudioImportJob::ExecuteAsync() -> co::Co<ImportReport>
   ImportSession session(
     Request(), FileReader(), FileWriter(), ThreadPool(), TableRegistry());
 
+  ReportProgress(ImportProgressEvent::kPhaseStarted, ImportPhase::kLoading,
+    0.0f, 0.0f, 0U, 0U, "Loading started");
   ReportProgress(
-    ImportPhase::kParsing, 0.0f, 0.0f, 0U, 0U, "Loading audio source...");
+    ImportPhase::kLoading, 0.0f, 0.0f, 0U, 0U, "Loading audio source...");
   const auto source = co_await LoadSource(session);
   if (!source.success) {
     ReportProgress(
@@ -35,16 +37,22 @@ auto AudioImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeSession(session);
   }
 
-  ReportProgress(
-    ImportPhase::kGeometry, 0.4f, 0.0f, 0U, 0U, "Cooking audio...");
+  ReportProgress(ImportProgressEvent::kPhaseFinished, ImportPhase::kLoading,
+    1.0f, 1.0f, 0U, 0U, "Loading finished");
+
+  ReportProgress(ImportProgressEvent::kPhaseStarted, ImportPhase::kWorking,
+    0.4f, 0.0f, 0U, 0U, "Working started");
+  ReportProgress(ImportPhase::kWorking, 0.4f, 0.0f, 0U, 0U, "Cooking audio...");
   if (!co_await CookAudio(source, session)) {
     ReportProgress(
       ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "Audio cook failed");
     co_return co_await FinalizeSession(session);
   }
 
+  ReportProgress(ImportProgressEvent::kPhaseStarted, ImportPhase::kFinalizing,
+    0.7f, 0.0f, 0U, 0U, "Finalizing started");
   ReportProgress(
-    ImportPhase::kWriting, 0.7f, 0.0f, 0U, 0U, "Emitting audio...");
+    ImportPhase::kFinalizing, 0.7f, 0.0f, 0U, 0U, "Emitting audio...");
   if (!co_await EmitAudio(source, session)) {
     ReportProgress(
       ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "Audio emit failed");
@@ -52,8 +60,13 @@ auto AudioImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   ReportProgress(
-    ImportPhase::kWriting, 0.9f, 0.0f, 0U, 0U, "Finalizing import...");
+    ImportPhase::kFinalizing, 0.9f, 0.0f, 0U, 0U, "Finalizing import...");
   auto report = co_await FinalizeSession(session);
+
+  ReportProgress(ImportProgressEvent::kPhaseFinished, ImportPhase::kWorking,
+    1.0f, 1.0f, 0U, 0U, "Working finished");
+  ReportProgress(ImportProgressEvent::kPhaseFinished, ImportPhase::kFinalizing,
+    1.0f, 1.0f, 0U, 0U, "Finalizing finished");
 
   ReportProgress(report.success ? ImportPhase::kComplete : ImportPhase::kFailed,
     1.0f, 1.0f, 0U, 0U, report.success ? "Import complete" : "Import failed");

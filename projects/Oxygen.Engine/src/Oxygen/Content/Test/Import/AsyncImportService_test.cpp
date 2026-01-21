@@ -260,7 +260,7 @@ NOLINT_TEST_F(
     service, ImportRequest { .source_path = "custom.asset" },
     [&done](ImportJobId, ImportReport) { done.count_down(); },
     [&progress_invoked](const ImportProgress& progress) {
-      if (progress.phase == ImportPhase::kParsing) {
+      if (progress.phase == ImportPhase::kWorking) {
         progress_invoked = true;
       }
     },
@@ -348,7 +348,7 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelJob_InvalidId_ReturnsFalse)
 
   // Act & Assert
   EXPECT_FALSE(service.CancelJob(kInvalidJobId));
-  EXPECT_FALSE(service.CancelJob(999));
+  EXPECT_FALSE(service.CancelJob(ImportJobId { 999U }));
 
   StopService(service);
 }
@@ -403,7 +403,7 @@ NOLINT_TEST_F(
     service, ImportRequest { .source_path = "custom.asset" },
     [&](ImportJobId, ImportReport) { job_completed = true; },
     [&](const ImportProgress& progress) {
-      if (progress.phase == ImportPhase::kParsing) {
+      if (progress.phase == ImportPhase::kWorking) {
         bool expected = false;
         if (job_started_signaled.compare_exchange_strong(expected, true)) {
           job_started.count_down();
@@ -454,7 +454,7 @@ NOLINT_TEST_F(
     service, ImportRequest { .source_path = "custom.asset" },
     [](ImportJobId, ImportReport) {},
     [&](const ImportProgress& progress) {
-      if (progress.phase == ImportPhase::kParsing) {
+      if (progress.phase == ImportPhase::kWorking) {
         bool expected = false;
         if (first_job_signaled.compare_exchange_strong(expected, true)) {
           first_job_started.count_down();
@@ -545,7 +545,7 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelAll_MultipleJobs_CancelsAll)
         DLOG_F(INFO, "CancelAll progress: phase={} overall={:.2f} message='{}'",
           static_cast<int>(progress.phase), progress.overall_progress,
           progress.message);
-        if (progress.phase == ImportPhase::kParsing) {
+        if (progress.phase == ImportPhase::kWorking) {
           std::lock_guard lock(state->mutex);
           if (state->started_job_ids.insert(progress.job_id).second) {
             state->jobs_started.fetch_add(1, std::memory_order_relaxed);
@@ -777,7 +777,7 @@ NOLINT_TEST_F(
 
   // Act & Assert
   EXPECT_FALSE(service.IsJobActive(kInvalidJobId));
-  EXPECT_FALSE(service.IsJobActive(999));
+  EXPECT_FALSE(service.IsJobActive(ImportJobId { 999U }));
 
   StopService(service);
 }

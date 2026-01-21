@@ -6,16 +6,13 @@
 
 #pragma once
 
-#include <cstdint>
-#include <functional>
 #include <memory>
-#include <string>
 #include <thread>
-#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/Import/ImportDiagnostics.h>
+#include <Oxygen/Content/Import/ImportConcurrency.h>
+#include <Oxygen/Content/Import/ImportProgress.h>
 #include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/api_export.h>
@@ -34,90 +31,6 @@ class ResourceTableRegistry;
 namespace detail {
   class ImportJob;
 } // namespace detail
-
-//! Unique identifier for an import job.
-using ImportJobId = uint64_t;
-
-//! Invalid job ID constant.
-inline constexpr ImportJobId kInvalidJobId = 0;
-
-//! Current phase of the import process.
-enum class ImportPhase : uint8_t {
-  kPending, //!< Job queued, not started.
-  kParsing, //!< Reading/parsing source file.
-  kTextures, //!< Cooking textures.
-  kMaterials, //!< Processing materials.
-  kGeometry, //!< Processing geometry.
-  kScene, //!< Building scene graph.
-  kWriting, //!< Writing cooked output.
-  kComplete, //!< Finished.
-  kCancelled, //!< Cancelled by user.
-  kFailed, //!< Failed with error.
-};
-
-//! Progress update for UI integration.
-struct ImportProgress {
-  //! Job this progress applies to.
-  ImportJobId job_id = kInvalidJobId;
-
-  //! Current phase of import.
-  ImportPhase phase = ImportPhase::kPending;
-
-  //! Progress within current phase (0.0 - 1.0).
-  float phase_progress = 0.0f;
-
-  //! Overall progress (0.0 - 1.0).
-  float overall_progress = 0.0f;
-
-  //! Human-readable status message.
-  std::string message;
-
-  //! Items processed in current phase.
-  uint32_t items_completed = 0;
-  uint32_t items_total = 0;
-
-  //! Incremental diagnostics (warnings/errors as they occur).
-  std::vector<ImportDiagnostic> new_diagnostics;
-};
-
-//! Completion callback invoked when import finishes.
-/*!
- @param job_id The job that completed.
- @param report The import result.
-
- @note Invoked on the thread that called SubmitImport, if that thread
-       has an event loop. Otherwise, invoked on the import thread.
-*/
-using ImportCompletionCallback
-  = std::function<void(ImportJobId, const ImportReport&)>;
-
-//! Progress callback for UI updates.
-/*!
- @param progress Current progress information.
-
- @note Invoked on the thread that called SubmitImport, if that thread
-       has an event loop. Otherwise, invoked on the import thread.
-*/
-using ImportProgressCallback = std::function<void(const ImportProgress&)>;
-
-//! Factory for creating custom import jobs.
-//! Per-pipeline concurrency settings.
-struct ImportPipelineConcurrency {
-  //! Number of worker coroutines to start for the pipeline.
-  uint32_t workers = 2;
-
-  //! Bounded capacity of the pipeline work queues.
-  uint32_t queue_capacity = 64;
-};
-
-//! Concurrency tuning for async import pipelines.
-struct ImportConcurrency {
-  ImportPipelineConcurrency texture { .workers = 2, .queue_capacity = 64 };
-  ImportPipelineConcurrency buffer { .workers = 2, .queue_capacity = 64 };
-  ImportPipelineConcurrency material { .workers = 2, .queue_capacity = 64 };
-  ImportPipelineConcurrency geometry { .workers = 2, .queue_capacity = 32 };
-  ImportPipelineConcurrency scene { .workers = 1, .queue_capacity = 8 };
-};
 
 //! Factory for creating custom import jobs.
 using ImportJobFactory = std::function<std::shared_ptr<detail::ImportJob>(

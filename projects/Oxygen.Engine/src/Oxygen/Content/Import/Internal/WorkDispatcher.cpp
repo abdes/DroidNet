@@ -33,9 +33,10 @@ WorkDispatcher::WorkDispatcher(ImportSession& session,
 {
 }
 
-auto WorkDispatcher::ProgressReporter::Report(ImportPhase phase,
-  float phase_progress, uint32_t items_completed, uint32_t items_total,
-  float overall_progress, std::string message) const -> void
+auto WorkDispatcher::ProgressReporter::Report(ImportProgressEvent event,
+  ImportPhase phase, float phase_progress, uint32_t items_completed,
+  uint32_t items_total, float overall_progress, std::string message,
+  std::string item_kind, std::string item_name) const -> void
 {
   if (!on_progress) {
     return;
@@ -43,12 +44,15 @@ auto WorkDispatcher::ProgressReporter::Report(ImportPhase phase,
 
   ImportProgress progress;
   progress.job_id = job_id;
+  progress.event = event;
   progress.phase = phase;
   progress.phase_progress = phase_progress;
   progress.overall_progress = overall_progress;
   progress.items_completed = items_completed;
   progress.items_total = items_total;
   progress.message = std::move(message);
+  progress.item_kind = std::move(item_kind);
+  progress.item_name = std::move(item_name);
   on_progress(progress);
 }
 
@@ -390,23 +394,8 @@ auto WorkDispatcher::ClosePipelines() noexcept -> void
 auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
   -> co::Co<bool>
 {
-  auto phase_for_kind = [](const PlanItemKind kind) -> ImportPhase {
-    switch (kind) {
-    case PlanItemKind::kTextureResource:
-      return ImportPhase::kTextures;
-    case PlanItemKind::kBufferResource:
-      return ImportPhase::kGeometry;
-    case PlanItemKind::kAudioResource:
-      return ImportPhase::kGeometry;
-    case PlanItemKind::kMaterialAsset:
-      return ImportPhase::kMaterials;
-    case PlanItemKind::kGeometryAsset:
-      return ImportPhase::kGeometry;
-    case PlanItemKind::kSceneAsset:
-      return ImportPhase::kScene;
-    }
-    return ImportPhase::kPending;
-  };
+  auto phase_for_kind
+    = [](const PlanItemKind) -> ImportPhase { return ImportPhase::kWorking; };
 
   auto kind_label = [](const PlanItemKind kind) -> std::string {
     return std::string(to_string(kind));
@@ -468,6 +457,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
   std::array<uint32_t, kPlanKindCount> total_by_kind {};
   std::array<uint32_t, kPlanKindCount> completed_by_kind {};
   std::array<uint8_t, kPlanKindCount> pipeline_reported {};
+  std::array<uint8_t, kPlanKindCount> phase_started {};
   for (const auto& step : context.steps) {
     const auto kind = context.planner.Item(step.item_id).kind;
     const auto index = static_cast<size_t>(kind);
@@ -503,14 +493,14 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     ready_queue.push_back(item_id);
   };
 
-  auto mark_complete = [&](const PlanItemId item_id) {
+  auto mark_complete = [&](const PlanItemId item_id, const PlanItemKind kind,
+                         std::string_view item_name) {
     const auto u_item = item_id.get();
     if (completed[u_item] != 0U) {
       return;
     }
     completed[u_item] = 1U;
     ++completed_count;
-    const auto kind = context.planner.Item(item_id).kind;
     const auto kind_index = static_cast<size_t>(kind);
     if (kind_index < completed_by_kind.size()) {
       ++completed_by_kind[kind_index];
@@ -533,15 +523,21 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       const auto label = kind_label(kind);
       const auto emitted_message = label + " emitted (" + std::to_string(done)
         + "/" + std::to_string(total) + ")";
-      progress_->Report(phase_for_kind(kind), phase_progress, done, total,
-        overall_progress, emitted_message);
+      progress_->Report(ImportProgressEvent::kItemFinished,
+        phase_for_kind(kind), phase_progress, done, total, overall_progress,
+        std::string(item_name) + " finished", label, std::string(item_name));
+
+      progress_->Report(ImportProgressEvent::kPhaseProgress,
+        phase_for_kind(kind), phase_progress, done, total, overall_progress,
+        emitted_message);
 
       if (total > 0U && done == total && kind_index < pipeline_reported.size()
         && pipeline_reported[kind_index] == 0U) {
         pipeline_reported[kind_index] = 1U;
         const auto complete_message = label + " pipeline complete";
-        progress_->Report(phase_for_kind(kind), 1.0f, done, total,
-          overall_progress, complete_message);
+        progress_->Report(ImportProgressEvent::kPhaseFinished,
+          phase_for_kind(kind), 1.0f, done, total, overall_progress,
+          complete_message, label);
       }
     }
     for (const auto dependent : dependents[u_item]) {
@@ -628,7 +624,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
 
     if (const auto item_id = resolve_texture_item(result)) {
-      mark_complete(*item_id);
+      const auto& item = context.planner.Item(*item_id);
+      mark_complete(*item_id, item.kind, item.debug_name);
       co_return true;
     }
 
@@ -645,7 +642,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
 
     if (const auto item_id = resolve_buffer_item(result)) {
-      mark_complete(*item_id);
+      const auto& item = context.planner.Item(*item_id);
+      mark_complete(*item_id, item.kind, item.debug_name);
       co_return true;
     }
 
@@ -664,7 +662,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       if (result.cooked.has_value()) {
         material_keys.emplace(*item_id, result.cooked->material_key);
       }
-      mark_complete(*item_id);
+      const auto& item = context.planner.Item(*item_id);
+      mark_complete(*item_id, item.kind, item.debug_name);
       co_return true;
     }
 
@@ -694,7 +693,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       if (geometry_key.has_value()) {
         geometry_keys.emplace(*item_id, *geometry_key);
       }
-      mark_complete(*item_id);
+      const auto& item = context.planner.Item(*item_id);
+      mark_complete(*item_id, item.kind, item.debug_name);
       co_return true;
     }
 
@@ -711,7 +711,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
 
     if (item_id.has_value()) {
-      mark_complete(*item_id);
+      const auto& item = context.planner.Item(*item_id);
+      mark_complete(*item_id, item.kind, item.debug_name);
       co_return true;
     }
 
@@ -895,6 +896,35 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     submitted[u_item] = 1U;
 
     const auto& item = context.planner.Item(item_id);
+    const auto kind_index = static_cast<size_t>(item.kind);
+    if (progress_.has_value() && progress_->on_progress
+      && kind_index < total_by_kind.size()) {
+      const auto total = total_by_kind[kind_index];
+      const auto done = kind_index < completed_by_kind.size()
+        ? completed_by_kind[kind_index]
+        : 0U;
+      const float phase_progress = (total > 0U)
+        ? static_cast<float>(done) / static_cast<float>(total)
+        : 0.0f;
+      const float overall_progress = (item_count > 0U)
+        ? progress_->overall_start
+          + (progress_->overall_end - progress_->overall_start)
+            * (static_cast<float>(completed_count)
+              / static_cast<float>(item_count))
+        : progress_->overall_start;
+      const auto label = kind_label(item.kind);
+      if (phase_started[kind_index] == 0U && total > 0U) {
+        phase_started[kind_index] = 1U;
+        progress_->Report(ImportProgressEvent::kPhaseStarted,
+          phase_for_kind(item.kind), phase_progress, done, total,
+          overall_progress, label + " phase started", label);
+      }
+
+      progress_->Report(ImportProgressEvent::kItemStarted,
+        phase_for_kind(item.kind), phase_progress, done, total,
+        overall_progress, std::string(item.debug_name) + " started", label,
+        std::string(item.debug_name));
+    }
     switch (item.kind) {
     case PlanItemKind::kTextureResource:
       co_return co_await submit_texture(item_id);
