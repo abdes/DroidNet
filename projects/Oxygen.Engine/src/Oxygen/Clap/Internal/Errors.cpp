@@ -152,6 +152,17 @@ auto OptionSuggestions(
       add_option(option);
     }
   }
+  if (context->active_command
+    && context->active_command->PathAsString() == "help") {
+    for (const auto& command : context->commands) {
+      if (!command || command->PathAsString() == "help") {
+        continue;
+      }
+      for (const auto& option : command->CommandOptions()) {
+        add_option(option);
+      }
+    }
+  }
   for (const auto& option : context->global_options) {
     add_option(option);
   }

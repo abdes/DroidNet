@@ -60,26 +60,6 @@ auto oxygen::clap::Command::PrintSynopsis(
 auto oxygen::clap::Command::PrintOptions(
   const CommandLineContext& context, unsigned int width) const -> void
 {
-  const CliTheme& theme = context.theme ? *context.theme : CliTheme::Plain();
-  if (context.global_option_groups && !context.global_option_groups->empty()) {
-    bool has_visible_globals = false;
-    for (const auto& [group, hidden] : *context.global_option_groups) {
-      if (!hidden && group) {
-        has_visible_globals = true;
-        break;
-      }
-    }
-    if (has_visible_globals) {
-      context.out << fmt::format(theme.section_header, "GLOBAL OPTIONS\n");
-      for (const auto& [group, hidden] : *context.global_option_groups) {
-        if (!hidden && group) {
-          group->Print(context, width);
-          context.out << "\n\n";
-        }
-      }
-    }
-  }
-
   for (unsigned option_index = 0; option_index < options_.size();
     ++option_index) {
     if (options_in_groups_[option_index]) {
@@ -147,8 +127,51 @@ auto oxygen::clap::Command::Print(
   }
   context.out << "\n\n";
 
-  context.out << fmt::format(theme.section_header, "OPTIONS\n");
-  PrintOptions(context, width);
+  bool has_visible_globals = false;
+  if (context.global_option_groups && !context.global_option_groups->empty()) {
+    for (const auto& [group, hidden] : *context.global_option_groups) {
+      if (!hidden && group) {
+        has_visible_globals = true;
+        break;
+      }
+    }
+  }
+
+  if (has_visible_globals) {
+    context.out << fmt::format(theme.section_header, "GLOBAL OPTIONS\n")
+                << "\n";
+    for (const auto& [group, hidden] : *context.global_option_groups) {
+      if (!hidden && group) {
+        group->Print(context, width);
+        context.out << "\n\n";
+      }
+    }
+  }
+
+  bool has_visible_command_options = false;
+  for (unsigned option_index = 0; option_index < options_.size();
+    ++option_index) {
+    if (!options_in_groups_[option_index]) {
+      has_visible_command_options = true;
+      break;
+    }
+  }
+  if (!has_visible_command_options) {
+    for (const auto& [group, hidden] : groups_) {
+      if (!hidden && group) {
+        has_visible_command_options = true;
+        break;
+      }
+    }
+  }
+  if (!has_visible_command_options) {
+    has_visible_command_options = !positional_args_.empty();
+  }
+
+  if (has_visible_command_options) {
+    context.out << fmt::format(theme.section_header, "OPTIONS\n") << "\n";
+    PrintOptions(context, width);
+  }
 }
 
 auto oxygen::clap::Command::PathAsString() const -> std::string
