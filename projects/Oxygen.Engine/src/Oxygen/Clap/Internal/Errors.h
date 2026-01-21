@@ -17,6 +17,10 @@ OXGN_CLP_API auto UnrecognizedCommand(
   const std::vector<std::string>& path_segments, const char* message = nullptr)
   -> std::string;
 
+OXGN_CLP_API auto UnrecognizedCommand(const ParserContextPtr& context,
+  const std::vector<std::string>& path_segments, const char* message = nullptr)
+  -> std::string;
+
 OXGN_CLP_API auto MissingCommand(const ParserContextPtr& context,
   const char* message = nullptr) -> std::string;
 

@@ -316,9 +316,8 @@ required by the project.
 | 4 | High | Rich error reporting & suggestions | Implement typo correction and suggestions for mistyped commands/options. Provide contextual error messages with actionable hints. |
 | 5 | Medium | Advanced validation and constraints | Allow declarative constraints (e.g., mutually exclusive options, required groups, value ranges) with clear error reporting. |
 | 6 | Medium | Interactive mode | Optionally prompt for missing required arguments interactively if not provided on the command line. |
-| 7 | Low | CLI output theming | **Implemented:** Colorized and themed output for help, errors, and usage, with user-configurable styles. |
-| 8 | Low | Command/option deprecation | Mark commands or options as deprecated, with warnings and migration hints. |
-| 9 | High | Dynamic option/command registration | Support registering commands and options at runtime (e.g., for plugin systems or extensible tools). |
+| 7 | Low | Command/option deprecation | Mark commands or options as deprecated, with warnings and migration hints. |
+| 8 | High | Dynamic option/command registration | Support registering commands and options at runtime (e.g., for plugin systems or extensible tools). |
 
 ---
 

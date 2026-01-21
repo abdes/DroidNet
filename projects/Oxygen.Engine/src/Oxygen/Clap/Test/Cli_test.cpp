@@ -569,6 +569,75 @@ namespace {
     EXPECT_NE(err.find("expected type 'integer'"), std::string::npos);
   }
 
+  //! Scenario: Unrecognized command suggests closest match.
+  NOLINT_TEST(ErrorReporting, UnrecognizedCommand_SuggestsClosestMatch)
+  {
+    // Arrange
+    const Command::Ptr run_command = CommandBuilder("run");
+    const auto cli
+      = CliBuilder().ProgramName("tool").WithCommand(run_command).Build();
+
+    constexpr int argc = 2;
+    const char* argv[argc] = { "tool", "rnu" };
+    testing::internal::CaptureStderr();
+
+    // Act
+    NOLINT_EXPECT_THROW(cli->Parse(argc, argv), CmdLineArgumentsError);
+    const auto err = testing::internal::GetCapturedStderr();
+
+    // Assert
+    EXPECT_NE(err.find("Did you mean 'run'"), std::string::npos);
+  }
+
+  //! Scenario: Unrecognized option suggests closest match.
+  NOLINT_TEST(ErrorReporting, UnrecognizedOption_SuggestsClosestMatch)
+  {
+    // Arrange
+    const Command::Ptr command = CommandBuilder(Command::DEFAULT)
+                                   .WithOption(Option::WithKey("verbose")
+                                       .Short("v")
+                                       .Long("verbose")
+                                       .WithValue<bool>()
+                                       .Build())
+                                   .Build();
+    const auto cli
+      = CliBuilder().ProgramName("tool").WithCommand(command).Build();
+
+    constexpr int argc = 2;
+    const char* argv[argc] = { "tool", "--verobse" };
+    testing::internal::CaptureStderr();
+
+    // Act
+    NOLINT_EXPECT_THROW(cli->Parse(argc, argv), CmdLineArgumentsError);
+    const auto err = testing::internal::GetCapturedStderr();
+
+    // Assert
+    EXPECT_NE(err.find("Did you mean '--verbose'"), std::string::npos);
+  }
+
+  //! Scenario: Unexpected positional suggests a command match.
+  NOLINT_TEST(ErrorReporting, UnexpectedPositional_SuggestsCommand)
+  {
+    // Arrange
+    const Command::Ptr default_command = CommandBuilder(Command::DEFAULT);
+    const auto cli = CliBuilder()
+                       .ProgramName("tool")
+                       .WithCommand(default_command)
+                       .WithVersionCommand()
+                       .Build();
+
+    constexpr int argc = 2;
+    const char* argv[argc] = { "tool", "vex" };
+    testing::internal::CaptureStderr();
+
+    // Act
+    NOLINT_EXPECT_THROW(cli->Parse(argc, argv), CmdLineArgumentsError);
+    const auto err = testing::internal::GetCapturedStderr();
+
+    // Assert
+    EXPECT_NE(err.find("Did you mean 'version'"), std::string::npos);
+  }
+
 } // namespace
 
 } // namespace oxygen::clap

@@ -110,7 +110,7 @@ struct InitialState {
     if (context->active_command) {
       return TransitionTo<ParseOptionsState>(context);
     }
-    return ReportError(UnrecognizedCommand({ event.token }));
+    return ReportError(UnrecognizedCommand(context, { event.token }));
   }
 
   auto Handle(const TokenEvent<TokenType::kEndOfInput>& /*event*/)
@@ -282,7 +282,7 @@ struct IdentifyCommandState {
         path_segments_, std::back_inserter(context_->positional_tokens));
       return TransitionTo<ParseOptionsState>(context_);
     }
-    return ReportError(UnrecognizedCommand(path_segments_));
+    return ReportError(UnrecognizedCommand(context_, path_segments_));
   }
 
   auto Handle(const TokenEvent<TokenType::kValue>& event)
@@ -308,7 +308,7 @@ struct IdentifyCommandState {
     if (filtered_commands_.empty()) {
       if (!last_matched_command_) {
         if (!default_command_) {
-          return ReportError(UnrecognizedCommand(path_segments_));
+          return ReportError(UnrecognizedCommand(context_, path_segments_));
         }
         context_->active_command = default_command_;
         context_->allow_global_options = false;
@@ -411,7 +411,7 @@ struct ParseOptionsState {
       return TransitionTo<IdentifyCommandState>(context);
     }
     if (!context->active_command) {
-      return ReportError(UnrecognizedCommand({ event.token }));
+      return ReportError(UnrecognizedCommand(context, { event.token }));
     }
     // This may be a positional argument. Store it for later processing with the
     // rest of positional arguments.
