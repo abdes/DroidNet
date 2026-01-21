@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <cstdint>
+#include <optional>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Bindless/Types.h>
@@ -95,6 +98,21 @@ public:
     const content::ResourceKey& key) const noexcept -> bool
   {
     return !key.IsPlaceholder();
+  }
+
+  //! Optionally returns the number of mip levels for a resolved resource.
+  /*!
+   Implementations may return std::nullopt if the information is unavailable.
+
+   @param key Opaque resource identifier.
+   @return Number of mip levels for the resource, or std::nullopt if unknown.
+  */
+  [[nodiscard]] virtual auto TryGetMipLevels(
+    const content::ResourceKey& key) const noexcept
+    -> std::optional<std::uint32_t>
+  {
+    (void)key;
+    return std::nullopt;
   }
 };
 

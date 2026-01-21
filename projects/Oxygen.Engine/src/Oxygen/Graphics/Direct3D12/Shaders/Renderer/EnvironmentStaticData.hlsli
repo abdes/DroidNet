@@ -76,7 +76,7 @@ struct GpuSkyAtmosphereParams
     float _reserved7;
 };
 
-// Mirrors oxygen::engine::GpuSkyLightParams (sizeof = 48)
+// Mirrors oxygen::engine::GpuSkyLightParams (sizeof = 64)
 struct GpuSkyLightParams
 {
     float3 tint_rgb;
@@ -91,6 +91,11 @@ struct GpuSkyLightParams
     uint brdf_lut_slot;
     uint irradiance_map_slot;
     uint prefilter_map_slot;
+
+    uint cubemap_max_mip;
+    uint prefilter_max_mip;
+    uint _pad0;
+    uint _pad1;
 };
 
 // Mirrors oxygen::engine::GpuSkySphereParams (sizeof = 48)
@@ -105,7 +110,7 @@ struct GpuSkySphereParams
     uint source;
     uint enabled;
     uint cubemap_slot;
-    uint _pad0;
+    uint cubemap_max_mip;
 };
 
 // Mirrors oxygen::engine::GpuVolumetricCloudParams (sizeof = 64)
@@ -152,7 +157,7 @@ struct GpuPostProcessParams
     uint _pad2;
 };
 
-// Mirrors oxygen::engine::EnvironmentStaticData (sizeof = 400)
+// Mirrors oxygen::engine::EnvironmentStaticData (sizeof = 416)
 struct EnvironmentStaticData
 {
     GpuFogParams fog;

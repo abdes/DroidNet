@@ -314,6 +314,9 @@ auto EnvironmentStaticDataManager::PopulateSkyLight(
     next.sky_light.specular_intensity = sky_light->GetSpecularIntensity();
     next.sky_light.brdf_lut_slot = BrdfLutSlot { brdf_lut_slot_ };
 
+    next.sky_light.cubemap_max_mip = 0U;
+    next.sky_light.prefilter_max_mip = 0U;
+
     if (texture_binder_
       && sky_light->GetSource()
         == scene::environment::SkyLightSource::kSpecifiedCubemap
@@ -323,6 +326,12 @@ auto EnvironmentStaticDataManager::PopulateSkyLight(
       const bool cubemap_ready = texture_binder_->IsResourceReady(key);
       next.sky_light.cubemap_slot
         = CubeMapSlot { cubemap_ready ? slot : kInvalidShaderVisibleIndex };
+      if (cubemap_ready) {
+        if (const auto mips = texture_binder_->TryGetMipLevels(key);
+          mips.has_value() && *mips > 0U) {
+          next.sky_light.cubemap_max_mip = *mips - 1U;
+        }
+      }
     } else {
       next.sky_light.cubemap_slot = CubeMapSlot { kInvalidShaderVisibleIndex };
     }
@@ -349,6 +358,8 @@ auto EnvironmentStaticDataManager::PopulateSkySphere(
     next.sky_sphere.rotation_radians = sky_sphere->GetRotationRadians();
     next.sky_sphere.tint_rgb = sky_sphere->GetTintRgb();
 
+    next.sky_sphere.cubemap_max_mip = 0U;
+
     if (texture_binder_
       && sky_sphere->GetSource()
         == scene::environment::SkySphereSource::kCubemap
@@ -358,6 +369,12 @@ auto EnvironmentStaticDataManager::PopulateSkySphere(
       const bool cubemap_ready = texture_binder_->IsResourceReady(key);
       next.sky_sphere.cubemap_slot
         = CubeMapSlot { cubemap_ready ? slot : kInvalidShaderVisibleIndex };
+      if (cubemap_ready) {
+        if (const auto mips = texture_binder_->TryGetMipLevels(key);
+          mips.has_value() && *mips > 0U) {
+          next.sky_sphere.cubemap_max_mip = *mips - 1U;
+        }
+      }
     } else {
       next.sky_sphere.cubemap_slot = CubeMapSlot { kInvalidShaderVisibleIndex };
     }
@@ -378,6 +395,7 @@ auto EnvironmentStaticDataManager::PopulateIbl(EnvironmentStaticData& next)
   if (!has_source) {
     next.sky_light.irradiance_map_slot = IrradianceMapSlot {};
     next.sky_light.prefilter_map_slot = PrefilterMapSlot {};
+    next.sky_light.prefilter_max_mip = 0U;
     return;
   }
 
@@ -390,6 +408,12 @@ auto EnvironmentStaticDataManager::PopulateIbl(EnvironmentStaticData& next)
 
   next.sky_light.irradiance_map_slot = IrradianceMapSlot { outputs.irradiance };
   next.sky_light.prefilter_map_slot = PrefilterMapSlot { outputs.prefilter };
+
+  if (outputs.prefilter_mip_levels > 0U) {
+    next.sky_light.prefilter_max_mip = outputs.prefilter_mip_levels - 1U;
+  } else {
+    next.sky_light.prefilter_max_mip = 0U;
+  }
 }
 
 auto EnvironmentStaticDataManager::PopulateClouds(

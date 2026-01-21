@@ -6,7 +6,9 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 
 #if defined(OXYGEN_ENGINE_TESTING)
 #  include <optional>
@@ -126,6 +128,10 @@ public:
 
   OXGN_RNDR_NDAPI auto GetOrAllocate(const content::ResourceKey& resource_key)
     -> ShaderVisibleIndex override;
+
+  [[nodiscard]] auto TryGetMipLevels(
+    const content::ResourceKey& key) const noexcept
+    -> std::optional<std::uint32_t> override;
 
   OXGN_RNDR_NDAPI auto IsResourceReady(
     const content::ResourceKey& key) const noexcept -> bool override;
