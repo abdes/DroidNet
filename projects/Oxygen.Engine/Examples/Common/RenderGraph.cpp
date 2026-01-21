@@ -243,6 +243,12 @@ auto RenderGraph::RunPasses(const oxygen::engine::RenderContext& ctx,
     ctx.RegisterPass<engine::LightCullingPass>(light_culling_pass_.get());
   }
 
+  // Register SkyPass early so ShaderPass can query it to decide whether to
+  // skip an otherwise full color clear.
+  if (sky_pass_) {
+    ctx.RegisterPass<engine::SkyPass>(sky_pass_.get());
+  }
+
   // Shader Pass execution
   if (shader_pass_) {
     co_await shader_pass_->PrepareResources(ctx, recorder);

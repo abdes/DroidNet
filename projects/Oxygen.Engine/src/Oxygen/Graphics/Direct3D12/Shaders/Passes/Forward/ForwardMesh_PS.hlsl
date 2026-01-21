@@ -397,24 +397,6 @@ float4 PS(VSOutput input) : SV_Target0 {
 #else
     //=== Normal PBR Rendering Path ===---------------------------------------//
 
-    float3 N = SafeNormalize(input.world_normal);
-    float3 T = input.world_tangent;
-    float3 B = input.world_bitangent;
-
-    // Fix degenerate tangents at runtime
-    if (dot(T, T) < 1e-6) {
-        float3 axis = (abs(N.z) < 0.9) ? float3(0, 0, 1) : float3(1, 0, 0);
-        T = normalize(cross(N, axis));
-        B = normalize(cross(N, T));
-    }
-    T = SafeNormalize(T);
-    if (dot(B, B) < 1e-6) {
-        B = normalize(cross(N, T));
-    }
-    B = SafeNormalize(B);
-
-    float3 V = SafeNormalize(camera_position - input.world_pos);
-
     MaterialSurface surf = EvaluateMaterialSurface(
         input.world_pos,
         input.world_normal,
@@ -426,8 +408,8 @@ float4 PS(VSOutput input) : SV_Target0 {
     const float3 base_rgb = surf.base_rgb;
     const float  metalness = surf.metalness;
     const float  roughness = surf.roughness;
-    N = surf.N;
-    V = surf.V;
+    const float3 N = surf.N;
+    const float3 V = surf.V;
     const float NdotV = saturate(dot(N, V));
 
     // Direct lighting (GGX specular + Lambert diffuse)
