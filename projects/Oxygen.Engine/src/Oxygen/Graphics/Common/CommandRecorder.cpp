@@ -99,6 +99,33 @@ void CommandRecorder::RecordQueueWait(uint64_t value)
   }
 }
 
+/*!
+ Begins a GPU debug event scope.
+
+ The common implementation is a no-op so that backends which do not support
+ GPU debug markers (or builds that do not enable them) can safely ignore these
+ calls.
+
+ @param name The event name to display in GPU debuggers.
+*/
+auto CommandRecorder::BeginEvent(std::string_view /*name*/) -> void { }
+
+/*!
+ Ends the most recently begun GPU debug event scope.
+
+ The common implementation is a no-op.
+*/
+auto CommandRecorder::EndEvent() -> void { }
+
+/*!
+ Emits an instantaneous GPU debug marker.
+
+ The common implementation is a no-op.
+
+ @param name The marker name to display in GPU debuggers.
+*/
+auto CommandRecorder::SetMarker(std::string_view /*name*/) -> void { }
+
 // -- Private non-template dispatch method implementations for Buffer
 
 // ReSharper disable once CppMemberFunctionMayBeConst

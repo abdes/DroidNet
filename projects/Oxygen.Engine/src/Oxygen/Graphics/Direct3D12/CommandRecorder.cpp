@@ -8,6 +8,7 @@
 
 #include <wrl/client.h> // For Microsoft::WRL::ComPtr
 
+#include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Base/VariantHelpers.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.h>
 #include <Oxygen/Core/Types/Scissors.h>
@@ -24,6 +25,10 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/common/Framebuffer.h>
+
+#if __has_include(<pix3.h>)
+#  include <pix3.h>
+#endif
 
 using oxygen::Overloads;
 using oxygen::graphics::d3d12::CommandRecorder;
@@ -969,4 +974,56 @@ auto CommandRecorder::GetD3D12CommandList() const -> ID3D12GraphicsCommandList*
 {
   const auto& command_list_impl = GetConcreteCommandList();
   return command_list_impl.GetCommandList();
+}
+
+auto CommandRecorder::BeginEvent(const std::string_view name) -> void
+{
+  auto* command_list = GetD3D12CommandList();
+  if (command_list == nullptr) {
+    return;
+  }
+
+  std::wstring name_w;
+  oxygen::string_utils::Utf8ToWide(name, name_w);
+
+#if __has_include(<pix3.h>)
+  PIXBeginEvent(command_list, 0, L"%s", name_w.c_str());
+#else
+  const auto size_bytes
+    = static_cast<UINT>((name_w.size() + 1) * sizeof(wchar_t));
+  command_list->BeginEvent(0, name_w.c_str(), size_bytes);
+#endif
+}
+
+auto CommandRecorder::EndEvent() -> void
+{
+  auto* command_list = GetD3D12CommandList();
+  if (command_list == nullptr) {
+    return;
+  }
+
+#if __has_include(<pix3.h>)
+  PIXEndEvent(command_list);
+#else
+  command_list->EndEvent();
+#endif
+}
+
+auto CommandRecorder::SetMarker(const std::string_view name) -> void
+{
+  auto* command_list = GetD3D12CommandList();
+  if (command_list == nullptr) {
+    return;
+  }
+
+  std::wstring name_w;
+  oxygen::string_utils::Utf8ToWide(name, name_w);
+
+#if __has_include(<pix3.h>)
+  PIXSetMarker(command_list, 0, L"%s", name_w.c_str());
+#else
+  const auto size_bytes
+    = static_cast<UINT>((name_w.size() + 1) * sizeof(wchar_t));
+  command_list->SetMarker(0, name_w.c_str(), size_bytes);
+#endif
 }

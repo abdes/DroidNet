@@ -8,6 +8,7 @@
 #include <limits>
 
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/GpuEventScope.h>
 #include <Oxygen/Renderer/Internal/RenderScope.h>
 #include <Oxygen/Renderer/Passes/RenderPass.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
@@ -102,6 +103,9 @@ auto RenderPass::PrepareResources(
 {
   detail::RenderScope ctx_scope(context_, context);
 
+  graphics::GpuEventScope phase_scope(recorder, "PrepareResources");
+  graphics::GpuEventScope pass_scope(recorder, GetName());
+
   DLOG_SCOPE_F(2, "RenderPass PrepareResources");
   DLOG_F(2, "pass: {}", GetName());
 
@@ -119,6 +123,9 @@ auto RenderPass::Execute(
   const RenderContext& context, CommandRecorder& recorder) -> co::Co<>
 {
   detail::RenderScope ctx_scope(context_, context);
+
+  graphics::GpuEventScope phase_scope(recorder, "Execute");
+  graphics::GpuEventScope pass_scope(recorder, GetName());
 
   DLOG_SCOPE_F(2, "RenderPass Execute");
   DLOG_F(2, "pass: {}", GetName());

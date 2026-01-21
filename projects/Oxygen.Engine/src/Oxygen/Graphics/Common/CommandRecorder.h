@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/AlwaysFalse.h>
@@ -73,6 +74,17 @@ public:
    must give away ownership of the command list.
   */
   OXGN_GFX_API virtual auto End() noexcept -> std::shared_ptr<CommandList>;
+
+  //=== GPU Debug Markers ===---------------------------------------------//
+
+  //! Begins a GPU debug event scope on the underlying command stream.
+  OXGN_GFX_API virtual auto BeginEvent(std::string_view name) -> void;
+
+  //! Ends the most recently begun GPU debug event scope.
+  OXGN_GFX_API virtual auto EndEvent() -> void;
+
+  //! Emits an instantaneous GPU debug marker into the command stream.
+  OXGN_GFX_API virtual auto SetMarker(std::string_view name) -> void;
 
   //=== Pipeline State and Bindless Setup ===-------------------------------//
 

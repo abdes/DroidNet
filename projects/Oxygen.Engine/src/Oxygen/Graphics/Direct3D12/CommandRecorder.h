@@ -53,6 +53,10 @@ public:
   //! Use sparingly; prefer the CommandRecorder abstraction where possible.
   auto GetD3D12CommandList() const -> ID3D12GraphicsCommandList*;
 
+  auto BeginEvent(std::string_view name) -> void override;
+  auto EndEvent() -> void override;
+  auto SetMarker(std::string_view name) -> void override;
+
   auto SetPipelineState(GraphicsPipelineDesc desc) -> void override;
   auto SetPipelineState(ComputePipelineDesc desc) -> void override;
   auto SetGraphicsRootConstantBufferView(uint32_t root_parameter_index,
