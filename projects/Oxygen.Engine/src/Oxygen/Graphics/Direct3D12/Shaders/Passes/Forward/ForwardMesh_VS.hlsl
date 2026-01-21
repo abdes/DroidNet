@@ -118,18 +118,46 @@ VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
     }
     const float3x3 world_3x3 = (float3x3)world_matrix;
     float3 n_ws = SafeNormalize(mul(normal_mat, vertex.normal));
-    // Tangent and bitangent are direction vectors; transform with the world
-    // matrix (then orthonormalize in PS) instead of the normal matrix.
-    float3 t_ws = SafeNormalize(mul(world_3x3, vertex.tangent));
-    float3 b_ws = SafeNormalize(mul(world_3x3, vertex.bitangent));
+    // Tangent-space basis (TBN): transform tangent/bitangent as direction
+    // vectors with the world matrix, then orthonormalize here so the pixel
+    // shader can stay on a cheap normalize-only path.
+    float3 t_ws_in = mul(world_3x3, vertex.tangent);
+    float3 b_ws_in = mul(world_3x3, vertex.bitangent);
+
+    // Ensure a valid geometric normal.
+    float3 NN = n_ws;
+    if (dot(NN, NN) < 0.5) {
+        NN = float3(0.0, 1.0, 0.0);
+    }
+
+    // Gram-Schmidt orthonormalization for tangent.
+    float3 T = t_ws_in - NN * dot(NN, t_ws_in);
+    if (dot(T, T) <= 1e-6) {
+        const float3 axis = (abs(NN.y) > 0.9) ? float3(1.0, 0.0, 0.0)
+                                              : float3(0.0, 1.0, 0.0);
+        T = cross(NN, axis);
+    }
+    T = SafeNormalize(T);
+    if (dot(T, T) < 0.5) {
+        T = float3(1.0, 0.0, 0.0);
+    }
+
+    // Derive bitangent from cross to keep orthogonality and preserve handedness
+    // using the incoming bitangent when available.
+    const float3 B_from_cross = cross(NN, T);
+    const float handedness = (dot(B_from_cross, b_ws_in) < 0.0) ? -1.0 : 1.0;
+    float3 B = SafeNormalize(B_from_cross * handedness);
+    if (dot(B, B) < 0.5) {
+        B = cross(NN, T);
+    }
     float4 view_pos = mul(view_matrix, world_pos);
     float4 proj_pos = mul(projection_matrix, view_pos);
     output.position = proj_pos;
     output.color = vertex.color.rgb;
     output.uv = vertex.texcoord;
     output.world_pos = world_pos.xyz;
-    output.world_normal = n_ws;
-    output.world_tangent = t_ws;
-    output.world_bitangent = b_ws;
+    output.world_normal = NN;
+    output.world_tangent = T;
+    output.world_bitangent = B;
     return output;
 }
