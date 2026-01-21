@@ -13,6 +13,16 @@
 
 namespace oxygen::content::import {
 
+namespace {
+
+  [[nodiscard]] auto IsStopRequested(const std::stop_token& token) noexcept
+    -> bool
+  {
+    return token.stop_possible() && token.stop_requested();
+  }
+
+} // namespace
+
 BufferPipeline::BufferPipeline(co::ThreadPool& thread_pool, Config config)
   : thread_pool_(thread_pool)
   , config_(config)
@@ -125,7 +135,7 @@ auto BufferPipeline::Worker() -> co::Co<>
 
     auto item = std::move(*maybe_item);
 
-    if (item.stop_token.stop_requested()) {
+    if (IsStopRequested(item.stop_token)) {
       co_await ReportCancelled(std::move(item));
       continue;
     }
@@ -141,7 +151,7 @@ auto BufferPipeline::Worker() -> co::Co<>
       diagnostics.push_back(std::move(*diag));
     }
 
-    if (item.stop_token.stop_requested()) {
+    if (IsStopRequested(item.stop_token)) {
       co_await ReportCancelled(std::move(item));
       continue;
     }
@@ -182,26 +192,27 @@ auto BufferPipeline::ComputeContentHash(WorkItem& item)
     co_return std::nullopt;
   }
 
-  if (item.stop_token.stop_requested()) {
+  if (IsStopRequested(item.stop_token)) {
     co_return std::nullopt;
   }
 
   std::span<const std::byte> bytes(
     item.cooked.data.data(), item.cooked.data.size());
 
+  const std::string source_id = item.source_id;
   const auto content_hash = co_await thread_pool_.Run(
-    [bytes, stop_token = item.stop_token, &item](
+    [bytes, stop_token = item.stop_token, source_id](
       co::ThreadPool::CancelToken canceled) noexcept {
-      if (stop_token.stop_requested() || canceled) {
+      if (IsStopRequested(stop_token) || canceled) {
         return uint64_t { 0 };
       }
 
       const auto hash = util::ComputeContentHash(bytes);
-      DLOG_F(2, "hashed {} -> {:#x}", item.source_id, hash);
+      DLOG_F(2, "hashed {} -> {:#x}", source_id, hash);
       return hash;
     });
 
-  if (!item.stop_token.stop_requested() && content_hash != 0) {
+  if (!IsStopRequested(item.stop_token) && content_hash != 0) {
     item.cooked.content_hash = content_hash;
   }
   co_return std::nullopt;

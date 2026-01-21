@@ -81,19 +81,26 @@ struct MeshLod {
   std::shared_ptr<const void> source_owner;
 };
 
-//! Pipeline for CPU-bound geometry cooking.
-/*!
- GeometryPipeline is a compute-only pipeline used by async imports. It
- assembles geometry descriptor bytes and buffer payloads on the import thread
- while offloading heavy compute to the provided `co::ThreadPool`.
+//! Buffer bindings used to finalize geometry descriptors.
+struct MeshBufferBindings {
+  data::pak::ResourceIndexT vertex_buffer = 0;
+  data::pak::ResourceIndexT index_buffer = 0;
+  data::pak::ResourceIndexT joint_index_buffer = 0;
+  data::pak::ResourceIndexT joint_weight_buffer = 0;
+  data::pak::ResourceIndexT inverse_bind_buffer = 0;
+  data::pak::ResourceIndexT joint_remap_buffer = 0;
+};
 
- The pipeline does not perform I/O and does not assign resource indices.
- Use `BufferEmitter` and `AssetEmitter` to commit the results.
+//! Pipeline for CPU-bound mesh build (VB/IB + auxiliary buffers).
+/*!
+ MeshBuildPipeline performs heavy mesh processing and produces cooked buffer
+ payloads plus descriptor bytes. Buffer emission and descriptor finalization
+ happen outside the pipeline.
 
  @see CookedBufferPayload
 */
-class GeometryPipeline final : public Object {
-  OXYGEN_TYPED(GeometryPipeline)
+class MeshBuildPipeline final : public Object {
+  OXYGEN_TYPED(MeshBuildPipeline)
 public:
   //! Configuration for the pipeline.
   struct Config {
@@ -118,16 +125,6 @@ public:
     std::string descriptor_relpath;
     std::vector<std::byte> descriptor_bytes;
     std::vector<CookedMeshPayload> lods;
-  };
-
-  //! Buffer bindings used to finalize geometry descriptors.
-  struct MeshBufferBindings {
-    data::pak::ResourceIndexT vertex_buffer = 0;
-    data::pak::ResourceIndexT index_buffer = 0;
-    data::pak::ResourceIndexT joint_index_buffer = 0;
-    data::pak::ResourceIndexT joint_weight_buffer = 0;
-    data::pak::ResourceIndexT inverse_bind_buffer = 0;
-    data::pak::ResourceIndexT joint_remap_buffer = 0;
   };
 
   //! Work submission item.
@@ -162,13 +159,13 @@ public:
   };
 
   //! Create a geometry pipeline using the given ThreadPool.
-  OXGN_CNTT_API explicit GeometryPipeline(
+  OXGN_CNTT_API explicit MeshBuildPipeline(
     co::ThreadPool& thread_pool, Config config = {});
 
-  OXGN_CNTT_API ~GeometryPipeline();
+  OXGN_CNTT_API ~MeshBuildPipeline();
 
-  OXYGEN_MAKE_NON_COPYABLE(GeometryPipeline)
-  OXYGEN_MAKE_NON_MOVABLE(GeometryPipeline)
+  OXYGEN_MAKE_NON_COPYABLE(MeshBuildPipeline)
+  OXYGEN_MAKE_NON_MOVABLE(MeshBuildPipeline)
 
   //! Start worker coroutines in the given nursery.
   OXGN_CNTT_API auto Start(co::Nursery& nursery) -> void;
@@ -181,13 +178,6 @@ public:
 
   //! Collect one completed result (suspends until ready or closed).
   OXGN_CNTT_NDAPI [[nodiscard]] auto Collect() -> co::Co<WorkResult>;
-
-  //! Patch buffer indices and compute descriptor content hash.
-  OXGN_CNTT_NDAPI [[nodiscard]] auto FinalizeDescriptorBytes(
-    std::span<const MeshBufferBindings> bindings,
-    std::span<const std::byte> descriptor_bytes,
-    std::vector<ImportDiagnostic>& diagnostics)
-    -> co::Co<std::optional<std::vector<std::byte>>>;
 
   //! Close the input queue.
   OXGN_CNTT_API auto Close() -> void;
@@ -218,6 +208,29 @@ private:
   bool started_ = false;
 };
 
-static_assert(ImportPipeline<GeometryPipeline>);
+static_assert(ImportPipeline<MeshBuildPipeline>);
+
+//! Geometry descriptor finalization helper.
+class GeometryPipeline final {
+public:
+  //! Configuration for descriptor finalization.
+  struct Config {
+    bool with_content_hashing = true;
+  };
+
+  OXGN_CNTT_API explicit GeometryPipeline(
+    co::ThreadPool& thread_pool, Config config = {});
+
+  //! Patch buffer indices and compute descriptor content hash.
+  OXGN_CNTT_NDAPI [[nodiscard]] auto FinalizeDescriptorBytes(
+    std::span<const MeshBufferBindings> bindings,
+    std::span<const std::byte> descriptor_bytes,
+    std::vector<ImportDiagnostic>& diagnostics)
+    -> co::Co<std::optional<std::vector<std::byte>>>;
+
+private:
+  co::ThreadPool& thread_pool_;
+  Config config_;
+};
 
 } // namespace oxygen::content::import

@@ -44,7 +44,7 @@ struct MaterialWorkPayload final {
 //! Stored payload for geometry pipeline work.
 struct GeometryWorkPayload final {
   WorkPayloadHeader header { PlanItemKind::kGeometryAsset };
-  GeometryPipeline::WorkItem item;
+  MeshBuildPipeline::WorkItem item;
 };
 
 //! Stored payload for scene pipeline work.
@@ -67,7 +67,7 @@ public:
     -> WorkPayloadHandle;
 
   //! Store a geometry work item and return a handle.
-  [[nodiscard]] auto Store(GeometryPipeline::WorkItem item)
+  [[nodiscard]] auto Store(MeshBuildPipeline::WorkItem item)
     -> WorkPayloadHandle;
 
   //! Store a scene work item and return a handle.

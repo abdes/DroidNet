@@ -38,7 +38,7 @@ namespace oxygen::content::import {
 
 namespace {
 
-  using WorkItem = GeometryPipeline::WorkItem;
+  using WorkItem = MeshBuildPipeline::WorkItem;
 
   constexpr uint32_t kGeomAttr_Normal = 1u << 0u;
   constexpr uint32_t kGeomAttr_Tangent = 1u << 1u;
@@ -659,14 +659,14 @@ namespace {
     std::vector<ImportDiagnostic>& diagnostics, uint32_t& attr_mask)
     -> std::optional<LodBuildData>
   {
-    DLOG_F(1, "GeometryPipeline: Build LOD data");
+    DLOG_F(1, "MeshBuildPipeline: Build LOD data");
     LodBuildData lod;
     lod.lod_name = lod_source.lod_name;
     lod.mesh_type = mesh.mesh_type;
 
     if (lod.mesh_type == data::MeshType::kProcedural) {
       diagnostics.push_back(MakeErrorDiagnostic("mesh.procedural_unsupported",
-        "Procedural meshes are not supported by GeometryPipeline",
+        "Procedural meshes are not supported by MeshBuildPipeline",
         item.source_id, item.mesh_name));
       return std::nullopt;
     }
@@ -674,7 +674,7 @@ namespace {
     if (lod.mesh_type != data::MeshType::kStandard
       && lod.mesh_type != data::MeshType::kSkinned) {
       diagnostics.push_back(MakeErrorDiagnostic("mesh.unsupported_type",
-        "Mesh type is unsupported in GeometryPipeline", item.source_id,
+        "Mesh type is unsupported in MeshBuildPipeline", item.source_id,
         item.mesh_name));
       return std::nullopt;
     }
@@ -909,7 +909,7 @@ namespace {
   struct GeometryBuildOutcome {
     std::string source_id;
     const void* source_key = nullptr;
-    std::optional<GeometryPipeline::CookedGeometryPayload> cooked;
+    std::optional<MeshBuildPipeline::CookedGeometryPayload> cooked;
     std::vector<ImportDiagnostic> diagnostics;
     bool canceled = false;
     bool success = false;
@@ -925,7 +925,7 @@ namespace {
 
 } // namespace
 
-GeometryPipeline::GeometryPipeline(co::ThreadPool& thread_pool, Config config)
+MeshBuildPipeline::MeshBuildPipeline(co::ThreadPool& thread_pool, Config config)
   : thread_pool_(thread_pool)
   , config_(config)
   , input_channel_(config.queue_capacity)
@@ -933,20 +933,20 @@ GeometryPipeline::GeometryPipeline(co::ThreadPool& thread_pool, Config config)
 {
 }
 
-GeometryPipeline::~GeometryPipeline()
+MeshBuildPipeline::~MeshBuildPipeline()
 {
   if (started_) {
     DLOG_IF_F(WARNING, HasPending(),
-      "GeometryPipeline destroyed with {} pending items", PendingCount());
+      "MeshBuildPipeline destroyed with {} pending items", PendingCount());
   }
 
   input_channel_.Close();
   output_channel_.Close();
 }
 
-auto GeometryPipeline::Start(co::Nursery& nursery) -> void
+auto MeshBuildPipeline::Start(co::Nursery& nursery) -> void
 {
-  DCHECK_F(!started_, "GeometryPipeline::Start() called more than once");
+  DCHECK_F(!started_, "MeshBuildPipeline::Start() called more than once");
   started_ = true;
 
   const auto worker_count = std::max(1U, config_.worker_count);
@@ -955,14 +955,14 @@ auto GeometryPipeline::Start(co::Nursery& nursery) -> void
   }
 }
 
-auto GeometryPipeline::Submit(WorkItem item) -> co::Co<>
+auto MeshBuildPipeline::Submit(WorkItem item) -> co::Co<>
 {
   ++pending_;
   submitted_.fetch_add(1, std::memory_order_acq_rel);
   co_await input_channel_.Send(std::move(item));
 }
 
-auto GeometryPipeline::TrySubmit(WorkItem item) -> bool
+auto MeshBuildPipeline::TrySubmit(WorkItem item) -> bool
 {
   if (input_channel_.Closed() || input_channel_.Full()) {
     return false;
@@ -976,7 +976,7 @@ auto GeometryPipeline::TrySubmit(WorkItem item) -> bool
   return ok;
 }
 
-auto GeometryPipeline::Collect() -> co::Co<WorkResult>
+auto MeshBuildPipeline::Collect() -> co::Co<WorkResult>
 {
   auto maybe_result = co_await output_channel_.Receive();
   if (!maybe_result.has_value()) {
@@ -997,6 +997,12 @@ auto GeometryPipeline::Collect() -> co::Co<WorkResult>
   }
 
   co_return std::move(*maybe_result);
+}
+
+GeometryPipeline::GeometryPipeline(co::ThreadPool& thread_pool, Config config)
+  : thread_pool_(thread_pool)
+  , config_(config)
+{
 }
 
 auto GeometryPipeline::FinalizeDescriptorBytes(
@@ -1209,19 +1215,19 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
   co_return output_bytes;
 }
 
-auto GeometryPipeline::Close() -> void { input_channel_.Close(); }
+auto MeshBuildPipeline::Close() -> void { input_channel_.Close(); }
 
-auto GeometryPipeline::HasPending() const noexcept -> bool
+auto MeshBuildPipeline::HasPending() const noexcept -> bool
 {
   return pending_.load(std::memory_order_acquire) > 0;
 }
 
-auto GeometryPipeline::PendingCount() const noexcept -> size_t
+auto MeshBuildPipeline::PendingCount() const noexcept -> size_t
 {
   return pending_.load(std::memory_order_acquire);
 }
 
-auto GeometryPipeline::GetProgress() const noexcept -> PipelineProgress
+auto MeshBuildPipeline::GetProgress() const noexcept -> PipelineProgress
 {
   const auto submitted = submitted_.load(std::memory_order_acquire);
   const auto completed = completed_.load(std::memory_order_acquire);
@@ -1235,7 +1241,7 @@ auto GeometryPipeline::GetProgress() const noexcept -> PipelineProgress
   };
 }
 
-auto GeometryPipeline::Worker() -> co::Co<>
+auto MeshBuildPipeline::Worker() -> co::Co<>
 {
   while (true) {
     auto maybe_item = co_await input_channel_.Receive();
@@ -1253,10 +1259,9 @@ auto GeometryPipeline::Worker() -> co::Co<>
       item.on_started();
     }
     auto build_outcome = co_await thread_pool_.Run(
-      [item = std::move(item), max_bytes = config_.max_data_blob_bytes,
-        with_content_hashing = config_.with_content_hashing](
+      [item = std::move(item), max_bytes = config_.max_data_blob_bytes](
         co::ThreadPool::CancelToken canceled) mutable -> GeometryBuildOutcome {
-        DLOG_F(1, "GeometryPipeline: Build geometry payload");
+        DLOG_F(1, "MeshBuildPipeline: Build geometry payload");
         GeometryBuildOutcome out;
         out.source_id = item.source_id;
         out.source_key = item.source_key;
@@ -1352,11 +1357,6 @@ auto GeometryPipeline::Worker() -> co::Co<>
           cooked_mesh.vertex_buffer.element_stride = sizeof(data::Vertex);
           cooked_mesh.vertex_buffer.element_format
             = static_cast<uint8_t>(Format::kUnknown);
-          if (with_content_hashing && !item.stop_token.stop_requested()) {
-            cooked_mesh.vertex_buffer.content_hash = util::ComputeContentHash(
-              std::span<const std::byte>(cooked_mesh.vertex_buffer.data.data(),
-                cooked_mesh.vertex_buffer.data.size()));
-          }
 
           cooked_mesh.index_buffer.data
             = ToByteVector(std::span(lod.indices.data(), lod.indices.size()));
@@ -1365,11 +1365,6 @@ auto GeometryPipeline::Worker() -> co::Co<>
           cooked_mesh.index_buffer.element_stride = 0;
           cooked_mesh.index_buffer.element_format
             = static_cast<uint8_t>(Format::kR32UInt);
-          if (with_content_hashing && !item.stop_token.stop_requested()) {
-            cooked_mesh.index_buffer.content_hash = util::ComputeContentHash(
-              std::span<const std::byte>(cooked_mesh.index_buffer.data.data(),
-                cooked_mesh.index_buffer.data.size()));
-          }
 
           if (lod.mesh_type == data::MeshType::kSkinned) {
             const auto joint_usage_flags
@@ -1385,11 +1380,6 @@ auto GeometryPipeline::Worker() -> co::Co<>
             joint_indices_payload.element_stride = 0;
             joint_indices_payload.element_format
               = static_cast<uint8_t>(Format::kRGBA32UInt);
-            if (with_content_hashing && !item.stop_token.stop_requested()) {
-              joint_indices_payload.content_hash = util::ComputeContentHash(
-                std::span<const std::byte>(joint_indices_payload.data.data(),
-                  joint_indices_payload.data.size()));
-            }
 
             CookedBufferPayload joint_weights_payload;
             joint_weights_payload.data = ToByteVector(
@@ -1399,11 +1389,6 @@ auto GeometryPipeline::Worker() -> co::Co<>
             joint_weights_payload.element_stride = 0;
             joint_weights_payload.element_format
               = static_cast<uint8_t>(Format::kRGBA32Float);
-            if (with_content_hashing && !item.stop_token.stop_requested()) {
-              joint_weights_payload.content_hash = util::ComputeContentHash(
-                std::span<const std::byte>(joint_weights_payload.data.data(),
-                  joint_weights_payload.data.size()));
-            }
 
             CookedBufferPayload inverse_bind_payload;
             inverse_bind_payload.data
@@ -1414,11 +1399,6 @@ auto GeometryPipeline::Worker() -> co::Co<>
             inverse_bind_payload.element_stride = sizeof(glm::mat4);
             inverse_bind_payload.element_format
               = static_cast<uint8_t>(Format::kUnknown);
-            if (with_content_hashing && !item.stop_token.stop_requested()) {
-              inverse_bind_payload.content_hash = util::ComputeContentHash(
-                std::span<const std::byte>(inverse_bind_payload.data.data(),
-                  inverse_bind_payload.data.size()));
-            }
 
             CookedBufferPayload joint_remap_payload;
             joint_remap_payload.data = ToByteVector(
@@ -1428,11 +1408,6 @@ auto GeometryPipeline::Worker() -> co::Co<>
             joint_remap_payload.element_stride = 0;
             joint_remap_payload.element_format
               = static_cast<uint8_t>(Format::kR32UInt);
-            if (with_content_hashing && !item.stop_token.stop_requested()) {
-              joint_remap_payload.content_hash = util::ComputeContentHash(
-                std::span<const std::byte>(joint_remap_payload.data.data(),
-                  joint_remap_payload.data.size()));
-            }
 
             cooked_mesh.auxiliary_buffers.push_back(
               std::move(joint_indices_payload));
@@ -1478,7 +1453,7 @@ auto GeometryPipeline::Worker() -> co::Co<>
   co_return;
 }
 
-auto GeometryPipeline::ReportCancelled(WorkItem item) -> co::Co<>
+auto MeshBuildPipeline::ReportCancelled(WorkItem item) -> co::Co<>
 {
   WorkResult canceled {
     .source_id = std::move(item.source_id),

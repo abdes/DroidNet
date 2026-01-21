@@ -8,7 +8,7 @@
       "type": "cppvsdbg",
       "request": "launch",
       "program": "${workspaceFolder}/out/build/bin/Debug/Oxygen.Content.ImportTool.exe",
-      "args": ["batch", "--manifest", "Examples/TexturedCube/import_manifest.json"],
+      "args": ["batch", "--manifest", "src/Oxygen/Content/Tools/ImportTool/Testing/manifest-mixed.json"],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
       "environment": [],

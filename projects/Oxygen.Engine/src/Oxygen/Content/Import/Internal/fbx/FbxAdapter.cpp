@@ -1465,7 +1465,7 @@ namespace {
       const auto mesh_name
         = input.naming_service->MakeUniqueName(authored_name, mesh_context);
 
-      GeometryPipeline::WorkItem item;
+      MeshBuildPipeline::WorkItem item;
       item.source_id = BuildSourceId(input.source_id_prefix, mesh_name, mesh_i);
       item.mesh_name = mesh_name;
       item.storage_mesh_name = mesh_name;

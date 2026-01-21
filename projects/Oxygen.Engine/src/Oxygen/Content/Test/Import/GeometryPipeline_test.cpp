@@ -192,9 +192,9 @@ struct MeshBuffers {
 }
 
 [[nodiscard]] auto MakeWorkItem(std::shared_ptr<MeshBuffers> buffers)
-  -> GeometryPipeline::WorkItem
+  -> MeshBuildPipeline::WorkItem
 {
-  GeometryPipeline::WorkItem item;
+  MeshBuildPipeline::WorkItem item;
   item.source_id = "mesh0";
   item.mesh_name = "Mesh_0";
   item.storage_mesh_name = "Mesh_0";
@@ -216,9 +216,9 @@ struct MeshBuffers {
 }
 
 [[nodiscard]] auto MakeSkinnedWorkItem(std::shared_ptr<MeshBuffers> buffers)
-  -> GeometryPipeline::WorkItem
+  -> MeshBuildPipeline::WorkItem
 {
-  GeometryPipeline::WorkItem item;
+  MeshBuildPipeline::WorkItem item;
   item.source_id = "mesh0";
   item.mesh_name = "Mesh_0";
   item.storage_mesh_name = "Mesh_0";
@@ -240,9 +240,9 @@ struct MeshBuffers {
 }
 
 [[nodiscard]] auto MakeProceduralWorkItem(std::shared_ptr<MeshBuffers> buffers)
-  -> GeometryPipeline::WorkItem
+  -> MeshBuildPipeline::WorkItem
 {
-  GeometryPipeline::WorkItem item;
+  MeshBuildPipeline::WorkItem item;
   item.source_id = "mesh0";
   item.mesh_name = "Mesh_0";
   item.storage_mesh_name = "Mesh_0";
@@ -264,7 +264,7 @@ struct MeshBuffers {
 }
 
 [[nodiscard]] auto MakeWorkItemWithLods(std::shared_ptr<MeshBuffers> buffers,
-  const uint32_t lod_count) -> GeometryPipeline::WorkItem
+  const uint32_t lod_count) -> MeshBuildPipeline::WorkItem
 {
   auto item = MakeWorkItem(buffers);
   item.lods.clear();
@@ -317,13 +317,13 @@ NOLINT_TEST_F(
 {
   // Arrange
   const auto buffers = MakeTriangleMeshBuffers();
-  GeometryPipeline::WorkResult result;
+  MeshBuildPipeline::WorkResult result;
   co::ThreadPool pool(loop_, 2);
 
   // Act
   co::Run(loop_, [&]() -> co::Co<> {
-    GeometryPipeline pipeline(pool,
-      GeometryPipeline::Config {
+    MeshBuildPipeline pipeline(pool,
+      MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
         .with_content_hashing = true,
@@ -393,7 +393,7 @@ NOLINT_TEST_F(
 {
   // Arrange
   const auto buffers = MakeTriangleMeshBuffers();
-  GeometryPipeline::WorkResult result;
+  MeshBuildPipeline::WorkResult result;
   co::ThreadPool pool(loop_, 2);
 
   auto item = MakeWorkItem(buffers);
@@ -403,8 +403,8 @@ NOLINT_TEST_F(
 
   // Act
   co::Run(loop_, [&]() -> co::Co<> {
-    GeometryPipeline pipeline(pool,
-      GeometryPipeline::Config {
+    MeshBuildPipeline pipeline(pool,
+      MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
         .with_content_hashing = true,
@@ -433,13 +433,13 @@ NOLINT_TEST_F(
 {
   // Arrange
   const auto buffers = MakeSkinnedTriangleMeshBuffers();
-  GeometryPipeline::WorkResult result;
+  MeshBuildPipeline::WorkResult result;
   co::ThreadPool pool(loop_, 2);
 
   // Act
   co::Run(loop_, [&]() -> co::Co<> {
-    GeometryPipeline pipeline(pool,
-      GeometryPipeline::Config {
+    MeshBuildPipeline pipeline(pool,
+      MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
         .with_content_hashing = true,
@@ -499,13 +499,13 @@ NOLINT_TEST_F(
   auto buffers = MakeSkinnedTriangleMeshBuffers();
   buffers->inverse_bind_matrices.clear();
 
-  GeometryPipeline::WorkResult result;
+  MeshBuildPipeline::WorkResult result;
   co::ThreadPool pool(loop_, 2);
 
   // Act
   co::Run(loop_, [&]() -> co::Co<> {
-    GeometryPipeline pipeline(pool,
-      GeometryPipeline::Config {
+    MeshBuildPipeline pipeline(pool,
+      MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
         .with_content_hashing = true,
@@ -534,13 +534,13 @@ NOLINT_TEST_F(
 {
   // Arrange
   const auto buffers = MakeTriangleMeshBuffers();
-  GeometryPipeline::WorkResult result;
+  MeshBuildPipeline::WorkResult result;
   co::ThreadPool pool(loop_, 2);
 
   // Act
   co::Run(loop_, [&]() -> co::Co<> {
-    GeometryPipeline pipeline(pool,
-      GeometryPipeline::Config {
+    MeshBuildPipeline pipeline(pool,
+      MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
         .with_content_hashing = true,
@@ -569,19 +569,21 @@ NOLINT_TEST_F(
 {
   // Arrange
   const auto buffers = MakeTriangleMeshBuffers();
-  GeometryPipeline::WorkResult result;
+  MeshBuildPipeline::WorkResult result;
   std::vector<ImportDiagnostic> diagnostics;
   std::optional<std::vector<std::byte>> finalized;
   co::ThreadPool pool(loop_, 2);
 
   // Act
   co::Run(loop_, [&]() -> co::Co<> {
-    GeometryPipeline pipeline(pool,
-      GeometryPipeline::Config {
+    MeshBuildPipeline pipeline(pool,
+      MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
         .with_content_hashing = true,
       });
+    GeometryPipeline finalizer(
+      pool, GeometryPipeline::Config { .with_content_hashing = true });
 
     OXCO_WITH_NURSERY(n)
     {
@@ -594,13 +596,13 @@ NOLINT_TEST_F(
         co_return kJoin;
       }
 
-      const GeometryPipeline::MeshBufferBindings bindings {
+      const MeshBufferBindings bindings {
         .vertex_buffer = 11,
         .index_buffer = 22,
       };
 
-      finalized = co_await pipeline.FinalizeDescriptorBytes(
-        std::span<const GeometryPipeline::MeshBufferBindings>(&bindings, 1),
+      finalized = co_await finalizer.FinalizeDescriptorBytes(
+        std::span<const MeshBufferBindings>(&bindings, 1),
         result.cooked->descriptor_bytes, diagnostics);
       co_return kJoin;
     };
@@ -635,13 +637,13 @@ NOLINT_TEST_F(
     },
   };
 
-  GeometryPipeline::WorkResult result;
+  MeshBuildPipeline::WorkResult result;
   co::ThreadPool pool(loop_, 2);
 
   // Act
   co::Run(loop_, [&]() -> co::Co<> {
-    GeometryPipeline pipeline(pool,
-      GeometryPipeline::Config {
+    MeshBuildPipeline pipeline(pool,
+      MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
         .with_content_hashing = true,
@@ -669,13 +671,13 @@ NOLINT_TEST_F(
 {
   // Arrange
   const auto buffers = MakeTriangleMeshBuffers();
-  GeometryPipeline::WorkResult result;
+  MeshBuildPipeline::WorkResult result;
   co::ThreadPool pool(loop_, 2);
 
   // Act
   co::Run(loop_, [&]() -> co::Co<> {
-    GeometryPipeline pipeline(pool,
-      GeometryPipeline::Config {
+    MeshBuildPipeline pipeline(pool,
+      MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
         .with_content_hashing = true,
@@ -704,13 +706,13 @@ NOLINT_TEST_F(
 {
   // Arrange
   const auto buffers = MakeSkinnedTriangleMeshBuffers();
-  GeometryPipeline::WorkResult result;
+  MeshBuildPipeline::WorkResult result;
   co::ThreadPool pool(loop_, 2);
 
   // Act
   co::Run(loop_, [&]() -> co::Co<> {
-    GeometryPipeline pipeline(pool,
-      GeometryPipeline::Config {
+    MeshBuildPipeline pipeline(pool,
+      MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
         .with_content_hashing = true,
@@ -738,13 +740,13 @@ NOLINT_TEST_F(GeometryPipelineBasicTest, Collect_WithTooManyLods_ReturnsFailure)
 {
   // Arrange
   const auto buffers = MakeTriangleMeshBuffers();
-  GeometryPipeline::WorkResult result;
+  MeshBuildPipeline::WorkResult result;
   co::ThreadPool pool(loop_, 2);
 
   // Act
   co::Run(loop_, [&]() -> co::Co<> {
-    GeometryPipeline pipeline(pool,
-      GeometryPipeline::Config {
+    MeshBuildPipeline pipeline(pool,
+      MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
         .with_content_hashing = true,

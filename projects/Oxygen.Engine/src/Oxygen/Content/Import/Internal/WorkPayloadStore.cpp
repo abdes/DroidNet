@@ -54,7 +54,7 @@ auto WorkPayloadStore::Store(MaterialPipeline::WorkItem item)
     materials_, MaterialWorkPayload { .item = std::move(item) });
 }
 
-auto WorkPayloadStore::Store(GeometryPipeline::WorkItem item)
+auto WorkPayloadStore::Store(MeshBuildPipeline::WorkItem item)
   -> WorkPayloadHandle
 {
   return StorePayload(

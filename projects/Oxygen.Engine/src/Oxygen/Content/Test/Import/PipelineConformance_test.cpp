@@ -150,7 +150,7 @@ auto MakeMaterialWorkItem() -> MaterialPipeline::WorkItem
   return item;
 }
 
-auto MakeGeometryWorkItem() -> GeometryPipeline::WorkItem
+auto MakeGeometryWorkItem() -> MeshBuildPipeline::WorkItem
 {
   const auto default_material = data::MaterialAsset::CreateDefault();
   const auto default_key = default_material->GetAssetKey();
@@ -199,7 +199,7 @@ auto MakeGeometryWorkItem() -> GeometryPipeline::WorkItem
     .bounds = std::nullopt,
   };
 
-  GeometryPipeline::WorkItem item;
+  MeshBuildPipeline::WorkItem item;
   item.source_id = "mesh0";
   item.mesh_name = "Mesh_0";
   item.storage_mesh_name = "Mesh_0";
@@ -344,12 +344,12 @@ NOLINT_TEST_F(PipelineConformanceTest, MaterialPipeline_ProgressCounters_Update)
 NOLINT_TEST_F(PipelineConformanceTest, GeometryPipeline_ProgressCounters_Update)
 {
   // Arrange
-  GeometryPipeline::WorkResult result;
+  MeshBuildPipeline::WorkResult result;
   ThreadPool pool(loop_, 1);
 
   // Act
   co::Run(loop_, [&]() -> Co<> {
-    GeometryPipeline pipeline(pool);
+    MeshBuildPipeline pipeline(pool);
 
     OXCO_WITH_NURSERY(n)
     {

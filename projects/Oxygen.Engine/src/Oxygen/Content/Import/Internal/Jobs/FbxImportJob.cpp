@@ -341,7 +341,7 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
   plan->planner.RegisterPipeline<BufferPipeline>(PlanItemKind::kBufferResource);
   plan->planner.RegisterPipeline<MaterialPipeline>(
     PlanItemKind::kMaterialAsset);
-  plan->planner.RegisterPipeline<GeometryPipeline>(
+  plan->planner.RegisterPipeline<MeshBuildPipeline>(
     PlanItemKind::kGeometryAsset);
   plan->planner.RegisterPipeline<ScenePipeline>(PlanItemKind::kSceneAsset);
 
@@ -436,7 +436,7 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
     {
     }
 
-    auto Consume(GeometryPipeline::WorkItem item) -> bool override
+    auto Consume(MeshBuildPipeline::WorkItem item) -> bool override
     {
       const auto handle = plan_.payloads.Store(std::move(item));
       auto& payload = plan_.payloads.Geometry(handle);
