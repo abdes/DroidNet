@@ -114,18 +114,32 @@ auto oxygen::clap::parser::detail::InvalidValueForOption(
   const ParserContextPtr& context, const std::string& token,
   const char* message) -> std::string
 {
+  return InvalidValueForOption(context, context->active_option, token, message);
+}
+
+auto oxygen::clap::parser::detail::InvalidValueForOption(
+  const ParserContextPtr& context, const OptionPtr& option,
+  const std::string& token, const char* message) -> std::string
+{
   std::string option_name = "<positional>";
   std::string option_flag = "<positional>";
-  if (context->active_option) {
-    option_name = context->active_option->Key();
+  std::string expected_type;
+  if (option) {
+    option_name = option->Key();
     option_flag = context->active_option_flag;
+    if (const auto semantics = option->value_semantic()) {
+      expected_type = semantics->ExpectedTypeName();
+    }
   }
-  auto description = fmt::format(
-    "{} option '{}' seen as '{}',"
-    " got value token '{}' which failed to parse to the expected type,"
-    " and the option has no implicit value",
-    CommandDiagnostic(context->active_command), option_name, option_flag,
-    token);
+  const auto type_clause = expected_type.empty()
+    ? "the expected type"
+    : fmt::format("expected type '{}'", expected_type);
+  auto description
+    = fmt::format("{} option '{}' seen as '{}',"
+                  " got value token '{}' which failed to parse to {},"
+                  " and the option has no implicit value",
+      CommandDiagnostic(context->active_command), option_name, option_flag,
+      token, type_clause);
   AppendOptionalMessage(description, message);
   return description;
 }

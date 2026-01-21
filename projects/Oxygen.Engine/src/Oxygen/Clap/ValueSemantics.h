@@ -131,6 +131,9 @@ public:
     -> bool
     = 0;
 
+  //! Returns a human-readable expected type name for diagnostics.
+  [[nodiscard]] virtual auto ExpectedTypeName() const -> std::string = 0;
+
   //! Notify listeners for each parsed value.
   /*! Called immediately after a value is parsed and stored. Defaults to a
       no-op. */

@@ -926,7 +926,8 @@ private:
       context->ovm.StoreValue(option->Key(), { value, std::move(token), true });
       semantics->NotifyParsed(value);
     } else {
-      throw std::runtime_error(InvalidValueForOption(context, token, ""));
+      throw std::runtime_error(
+        InvalidValueForOption(context, option, token, ""));
     }
   }
 

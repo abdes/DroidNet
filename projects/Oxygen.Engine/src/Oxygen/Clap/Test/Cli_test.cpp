@@ -520,6 +520,30 @@ namespace {
     EXPECT_TRUE(values.empty());
   }
 
+  //! Scenario: Invalid values report expected type names.
+  NOLINT_TEST(ErrorReporting, InvalidValue_ReportsExpectedType)
+  {
+    // Arrange
+    const Command::Ptr command
+      = CommandBuilder(Command::DEFAULT)
+          .WithOption(
+            Option::WithKey("count").Long("count").WithValue<int>().Build())
+          .Build();
+    const auto cli
+      = CliBuilder().ProgramName("tool").WithCommand(command).Build();
+
+    constexpr int argc = 3;
+    const char* argv[argc] = { "tool", "--count", "nope" };
+    testing::internal::CaptureStderr();
+
+    // Act
+    NOLINT_EXPECT_THROW(cli->Parse(argc, argv), CmdLineArgumentsError);
+    const auto err = testing::internal::GetCapturedStderr();
+
+    // Assert
+    EXPECT_NE(err.find("expected type 'integer'"), std::string::npos);
+  }
+
 } // namespace
 
 } // namespace oxygen::clap
