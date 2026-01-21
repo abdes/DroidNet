@@ -632,7 +632,9 @@ NOLINT_TEST_F(Sha256FileTest, NonExistentFileThrows)
   const auto non_existent = temp_file_.parent_path() / "non_existent_file.xyz";
 
   // Act & Assert
-  EXPECT_THROW(oxygen::base::ComputeFileSha256(non_existent), std::exception);
+  EXPECT_THROW(
+    [[maybe_unused]] auto _ = oxygen::base::ComputeFileSha256(non_existent),
+    std::exception);
 }
 
 // ---------------------------------------------------------------------------
