@@ -33,6 +33,7 @@
 #include <Oxygen/Content/Tools/ImportTool/BatchCommand.h>
 #include <Oxygen/Content/Tools/ImportTool/ImportManifest.h>
 #include <Oxygen/Content/Tools/ImportTool/TextureImportRequestBuilder.h>
+#include <Oxygen/OxCo/Detail/ScopeGuard.h>
 
 namespace oxygen::content::import::tool {
 
@@ -41,6 +42,7 @@ namespace {
   using nlohmann::ordered_json;
   using oxygen::clap::CommandBuilder;
   using oxygen::clap::Option;
+  using oxygen::co::detail::ScopeGuard;
 
   auto ShouldOverride(const bool override_value, const bool current_value)
     -> bool
@@ -581,6 +583,7 @@ auto BatchCommand::Run() -> int
   std::vector<std::optional<std::chrono::steady_clock::time_point>>
     submit_times(jobs.size());
   AsyncImportService service;
+  ScopeGuard stop_guard([&]() noexcept { service.Stop(); });
 
   bool tui_enabled = !options_.no_tui;
   if (tui_enabled) {

@@ -4,6 +4,17 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "(ImportTool) Launch",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/out/build/bin/Debug/Oxygen.Content.ImportTool.exe",
+      "args": ["batch", "--manifest", "Examples/TexturedCube/import_manifest.json"],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "console": "externalTerminal"
+    },
+    {
       "name": "Debug: Oxygen.Examples.Async (MSVC)",
       "type": "cppvsdbg",
       "request": "launch",
