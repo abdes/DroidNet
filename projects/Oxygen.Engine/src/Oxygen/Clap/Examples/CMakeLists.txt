@@ -49,5 +49,6 @@ macro(add_example EXAMPLE_NAME SOURCE_FILE)
 endmacro()
 
 add_subdirectory("Simple")
+add_subdirectory("Busybox")
 
 add_custom_target(Oxygen.Clap.Examples ALL DEPENDS ${EXAMPLES_TARGETS})
