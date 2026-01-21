@@ -69,6 +69,7 @@ set(
   "Errors.h"
   "Forward.h"
   "Framebuffer.h"
+  "GpuEventScope.h"
   "Graphics.h"
   "MemoryBlock.h"
   "NativeObject.h"

@@ -29,6 +29,7 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/GpuEventScope.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
@@ -654,6 +655,9 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
       }
       auto recorder = recorder_ptr.get();
 
+      graphics::GpuEventScope view_scope(
+        *recorder, fmt::format("View {}", view_id.get()));
+
       if (!SetupFramebufferForView(
             context, view_id, *recorder, *render_context_)) {
         LOG_F(ERROR, "Failed to setup framebuffer for view {}; skipping",
@@ -679,6 +683,7 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
 
       if (!ran_ibl_compute_this_frame && ibl_compute_pass_) {
         try {
+          graphics::GpuEventScope ibl_scope(*recorder, "IBL Compute");
           co_await ibl_compute_pass_->PrepareResources(
             *render_context_, *recorder);
           co_await ibl_compute_pass_->Execute(*render_context_, *recorder);
@@ -689,6 +694,7 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
       }
 
       // Execute the registered render graph for this view
+      graphics::GpuEventScope graph_scope(*recorder, "RenderGraph");
       const bool rv = co_await ExecuteRenderGraphForView(
         view_id, factory, *render_context_, *recorder);
 

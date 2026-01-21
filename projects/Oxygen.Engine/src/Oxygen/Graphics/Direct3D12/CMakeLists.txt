@@ -22,6 +22,13 @@ asap_push_module("${META_MODULE_NAME}")
 find_package(glm CONFIG REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
+set(
+  OXYGEN_WINPIXEVENTRUNTIME_DIR
+  ""
+  CACHE PATH
+  "Optional root directory containing WinPixEventRuntime (Include/Lib)."
+)
+
 # ==============================================================================
 # Build instructions
 # ==============================================================================
@@ -133,6 +140,7 @@ target_compile_definitions(
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
     $<$<PLATFORM_ID:Windows>:NOMINMAX>
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_D3D12_STATIC>
+    $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${USE_PIX}>>:USE_PIX>
 )
 
 target_link_libraries(
@@ -150,6 +158,102 @@ target_link_libraries(
     dxgi
     dxguid
 )
+
+if(WIN32 AND USE_PIX)
+  # WinPixEventRuntime discovery is intentionally restricted to project-local
+  # packages (downloaded by GetWinPixEvent.ps1), optionally overridden by an
+  # explicit path.
+  set(_oxygen_winpixeventruntime_hint_paths)
+
+  if(OXYGEN_WINPIXEVENTRUNTIME_DIR)
+    list(APPEND _oxygen_winpixeventruntime_hint_paths
+      "${OXYGEN_WINPIXEVENTRUNTIME_DIR}"
+    )
+  endif()
+
+  # Repo-local package layout (downloaded by GetWinPixEvent.ps1).
+  if(DEFINED OXYGEN_SOURCE_DIR)
+    list(APPEND _oxygen_winpixeventruntime_hint_paths
+      "${OXYGEN_SOURCE_DIR}/packages/WinPixEventRuntime"
+    )
+  endif()
+  list(APPEND _oxygen_winpixeventruntime_hint_paths
+    "${CMAKE_CURRENT_LIST_DIR}/../../../../packages/WinPixEventRuntime"
+  )
+
+  find_path(
+    OXYGEN_WINPIXEVENTRUNTIME_INCLUDE_DIR
+    NAMES pix3.h
+    PATHS ${_oxygen_winpixeventruntime_hint_paths}
+    PATH_SUFFIXES Include include
+  )
+
+  find_library(
+    OXYGEN_WINPIXEVENTRUNTIME_LIBRARY
+    NAMES WinPixEventRuntime
+    PATHS ${_oxygen_winpixeventruntime_hint_paths}
+    PATH_SUFFIXES Lib/x64 lib/x64 Lib lib
+  )
+
+  find_file(
+    OXYGEN_WINPIXEVENTRUNTIME_DLL
+    NAMES WinPixEventRuntime.dll
+    PATHS ${_oxygen_winpixeventruntime_hint_paths}
+    PATH_SUFFIXES Bin/x64 bin/x64 Bin bin
+  )
+
+  if(
+    OXYGEN_WINPIXEVENTRUNTIME_INCLUDE_DIR
+    AND OXYGEN_WINPIXEVENTRUNTIME_LIBRARY
+    AND OXYGEN_WINPIXEVENTRUNTIME_DLL
+  )
+    target_include_directories(
+      ${META_MODULE_TARGET}
+      PRIVATE
+        "${OXYGEN_WINPIXEVENTRUNTIME_INCLUDE_DIR}"
+    )
+
+    target_link_libraries(
+      ${META_MODULE_TARGET}
+      PRIVATE
+        "${OXYGEN_WINPIXEVENTRUNTIME_LIBRARY}"
+    )
+
+    # Ensure the runtime DLL is available next to built binaries.
+    add_custom_command(
+      TARGET ${META_MODULE_TARGET}
+      POST_BUILD
+      COMMAND
+        ${CMAKE_COMMAND} -E copy_if_different
+          "${OXYGEN_WINPIXEVENTRUNTIME_DLL}"
+          "$<TARGET_FILE_DIR:${META_MODULE_TARGET}>"
+      VERBATIM
+    )
+
+    # Install the runtime DLL alongside executables.
+    if(DEFINED OXYGEN_INSTALL_BIN)
+      install(
+        FILES "${OXYGEN_WINPIXEVENTRUNTIME_DLL}"
+        DESTINATION ${OXYGEN_INSTALL_BIN}
+        COMPONENT "${META_MODULE_NAME}_runtime"
+      )
+    endif()
+
+    message(STATUS
+      "WinPixEventRuntime enabled for ${META_MODULE_NAME}: "
+      "${OXYGEN_WINPIXEVENTRUNTIME_INCLUDE_DIR}"
+    )
+  else()
+    message(WARNING
+      "USE_PIX is ON but WinPixEventRuntime was not found. "
+      "\n  - Recommended: run GetWinPixEvent.bat from the repo root "
+      "(it installs to packages/WinPixEventRuntime by default)."
+      "\n  - Alternative: set OXYGEN_WINPIXEVENTRUNTIME_DIR to a folder "
+      "containing Include/pix3.h, Lib/x64/WinPixEventRuntime.lib, and "
+      "Bin/x64/WinPixEventRuntime.dll."
+    )
+  endif()
+endif()
 
 # ------------------------------------------------------------------------------
 # Shader compilation

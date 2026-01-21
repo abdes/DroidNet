@@ -8,6 +8,9 @@
       "name": "windows",
       "inherits": "base",
       "installDir": "${sourceDir}/out/install",
+      "cacheVariables": {
+        "USE_PIX": "ON"
+      },
       "vendor": {
         "microsoft.com/VisualStudioSettings/CMake/1.0": {
           "hostOS": [
