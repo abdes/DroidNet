@@ -257,9 +257,9 @@ void CS(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint
     GroupMemoryBarrierWithGroupSync(); // Sync after init
 
     // Sample depth buffer to determine tile depth bounds
+    Texture2D<float> depth_tex = ResourceDescriptorHeap[depth_texture_index];
     float depth = 1.0f;
     if (all(pixelCoord < uint2(screen_dimensions))) { // Boundary check
-        Texture2D<float> depth_tex = ResourceDescriptorHeap[depth_texture_index];
         depth = depth_tex.Load(int3(pixelCoord, 0)).r;
     }
     s_DepthTileMin[groupIndex] = depth;
@@ -325,8 +325,8 @@ void CS(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint
     uint endLightIndex = min(startLightIndex + lightsPerThread, num_lights);
 
     // Test lights against cluster frustum
+    StructuredBuffer<PositionalLightData> lights = ResourceDescriptorHeap[light_buffer_index];
     for (uint lightIndex = startLightIndex; lightIndex < endLightIndex; lightIndex++) {
-        StructuredBuffer<PositionalLightData> lights = ResourceDescriptorHeap[light_buffer_index];
         PositionalLightData light = lights[lightIndex];
 
         if (TestLightInFrustum(light, frustumPlanes)) {
@@ -344,6 +344,9 @@ void CS(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint
 
     // Write results to output buffers (first thread in group)
     if (groupIndex == 0) {
+        RWStructuredBuffer<uint2> cluster_grid = ResourceDescriptorHeap[light_count_uav_index];
+        RWStructuredBuffer<uint> light_list = ResourceDescriptorHeap[light_list_uav_index];
+
         // Compute linear cluster index
         // For tile-based: clusterIndex = y * tiles_x + x
         // For clustered: clusterIndex = z * (tiles_x * tiles_y) + y * tiles_x + x
@@ -356,13 +359,11 @@ void CS(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint
 
         // Write cluster info (offset, count) as uint2
         // The offset is: clusterIndex * MAX_LIGHTS_PER_CLUSTER
-        RWStructuredBuffer<uint2> cluster_grid = ResourceDescriptorHeap[light_count_uav_index];
         uint lightListOffset = clusterIndex * MAX_LIGHTS_PER_CLUSTER;
         cluster_grid[clusterIndex] = uint2(lightListOffset, finalLightCount);
 
         // Write light indices for this cluster
         for (uint i = 0; i < finalLightCount; i++) {
-            RWStructuredBuffer<uint> light_list = ResourceDescriptorHeap[light_list_uav_index];
             light_list[lightListOffset + i] = s_ClusterLightIndices[i];
         }
     }

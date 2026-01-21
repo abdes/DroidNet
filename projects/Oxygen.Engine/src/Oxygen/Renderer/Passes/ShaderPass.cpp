@@ -24,6 +24,7 @@
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
+#include <Oxygen/Renderer/Passes/SkyPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/MaterialPermutations.h>
@@ -211,10 +212,17 @@ auto ShaderPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
                    : nullptr,
     GetClearColor().r, GetClearColor().g, GetClearColor().b, GetClearColor().a);
 
-  if (const auto* fb_to_clear = GetFramebuffer()) {
-    recorder.ClearFramebuffer(*fb_to_clear,
-      std::vector<std::optional<graphics::Color>> { GetClearColor() },
-      std::nullopt, std::nullopt);
+  const bool clear_enabled = (!config_) || config_->clear_color_target;
+  const bool sky_registered = Context().GetPass<engine::SkyPass>() != nullptr;
+  const bool should_auto_skip = config_
+    && config_->auto_skip_clear_when_sky_pass_present && sky_registered;
+  const bool should_clear = clear_enabled && !should_auto_skip;
+  if (should_clear) {
+    if (const auto* fb_to_clear = GetFramebuffer()) {
+      recorder.ClearFramebuffer(*fb_to_clear,
+        std::vector<std::optional<graphics::Color>> { GetClearColor() },
+        std::nullopt, std::nullopt);
+    }
   }
 }
 

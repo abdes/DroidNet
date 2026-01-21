@@ -57,6 +57,20 @@ struct ShaderPassConfig {
   //! set).
   std::shared_ptr<const graphics::Texture> color_texture = nullptr;
 
+  //! Whether to clear the color attachment at the start of this pass.
+  //!
+  //! This can be disabled when a later pass (e.g. SkyPass) guarantees full
+  //! background coverage for pixels not written by opaque geometry.
+  bool clear_color_target = true;
+
+  //! When enabled, ShaderPass will automatically skip the clear if a SkyPass
+  //! is registered in the current RenderContext.
+  //!
+  //! This is a performance optimization to avoid an otherwise full render
+  //! target clear when the sky will fill background pixels (typically where
+  //! depth remains at the clear value).
+  bool auto_skip_clear_when_sky_pass_present = true;
+
   //! Optional clear color for the color attachment. If present, will override
   //! the default clear value in the texture's descriptor.
   std::optional<graphics::Color> clear_color {};
