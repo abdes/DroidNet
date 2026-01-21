@@ -10,24 +10,32 @@
 #include <string>
 #include <string_view>
 
+#include <Oxygen/Content/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Content/Tools/ImportTool/ImportCommand.h>
 
 namespace oxygen::content::import::tool {
 
 class BatchCommand final : public ImportCommand {
 public:
+  explicit BatchCommand(const GlobalOptions* global_options)
+    : global_options_ { global_options }
+  {
+  }
+
   [[nodiscard]] auto Name() const -> std::string_view override;
   [[nodiscard]] auto BuildCommand() -> std::shared_ptr<clap::Command> override;
   [[nodiscard]] auto Run() -> int override;
 
 private:
+  const GlobalOptions* global_options_ = nullptr;
+
   struct Options {
     std::string manifest_path;
     std::string root_path;
     std::string report_path;
     bool dry_run = false;
     bool fail_fast = false;
-    bool verbose = false;
+    bool quiet = false;
     bool no_tui = false;
     uint32_t max_in_flight = 0;
   } options_ {};

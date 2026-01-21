@@ -12,7 +12,7 @@
 
 namespace oxygen::content::import::tool {
 
-[[nodiscard]] auto RunImportJob(const ImportRequest& request, bool verbose,
+[[nodiscard]] auto RunImportJob(const ImportRequest& request, bool quiet,
   std::string_view report_path) -> int;
 
 } // namespace oxygen::content::import::tool

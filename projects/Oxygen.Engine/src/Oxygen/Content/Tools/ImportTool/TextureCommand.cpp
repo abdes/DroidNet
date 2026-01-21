@@ -80,6 +80,13 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                        .StoreTo(&options_.data_format)
                        .Build();
 
+  auto preset = Option::WithKey("preset")
+                  .About("Apply a named texture preset")
+                  .Long("preset")
+                  .WithValue<std::string>()
+                  .StoreTo(&options_.preset)
+                  .Build();
+
   auto mip_policy = Option::WithKey("mip-policy")
                       .About("Mip policy (none, full, max)")
                       .Long("mip-policy")
@@ -158,14 +165,6 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                       .StoreTo(&options_.force_rgba)
                       .Build();
 
-  auto verbose = Option::WithKey("verbose")
-                   .About("Print progress updates")
-                   .Short("v")
-                   .Long("verbose")
-                   .WithValue<bool>()
-                   .StoreTo(&options_.verbose)
-                   .Build();
-
   auto report = Option::WithKey("report")
                   .About("Write a JSON report (absolute or relative to cooked "
                          "root)")
@@ -183,6 +182,7 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(color_space))
     .WithOption(std::move(output_format))
     .WithOption(std::move(data_format))
+    .WithOption(std::move(preset))
     .WithOption(std::move(mip_policy))
     .WithOption(std::move(max_mips))
     .WithOption(std::move(mip_filter))
@@ -194,18 +194,26 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(cube_layout))
     .WithOption(std::move(flip_y))
     .WithOption(std::move(force_rgba))
-    .WithOption(std::move(verbose))
     .WithOption(std::move(report));
 }
 
 auto TextureCommand::Run() -> int
 {
-  const auto request = BuildTextureRequest(options_, std::cerr);
+  auto settings = options_;
+  bool quiet = false;
+  if (global_options_ != nullptr) {
+    if (settings.cooked_root.empty()) {
+      settings.cooked_root = global_options_->cooked_root;
+    }
+    quiet = global_options_->quiet;
+  }
+
+  const auto request = BuildTextureRequest(settings, std::cerr);
   if (!request.has_value()) {
     return 2;
   }
 
-  return RunImportJob(*request, options_.verbose, options_.report_path);
+  return RunImportJob(*request, quiet, settings.report_path);
 }
 
 } // namespace oxygen::content::import::tool

@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "defaults": {
+    "job_type": "texture",
+    "cooked_root": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Cooked"
+  },
+  "jobs": [
+    {
+      "source": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Models/Wood.png",
+      "job_name": "wood-albedo",
+      "texture": {
+        "preset": "albedo-srgb"
+      }
+    },
+    {
+      "job_type": "fbx",
+      "source": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Models/dino-a.fbx",
+      "job_name": "dino-scene",
+      "fbx": {
+        "content_flags": {
+          "textures": false,
+          "materials": true,
+          "geometry": true,
+          "scene": true
+        },
+        "unit_normalization_policy": "normalize",
+        "normals_policy": "generate",
+        "tangents_policy": "generate",
+        "node_pruning_policy": "drop-empty"
+      }
+    },
+    {
+      "job_type": "gltf",
+      "source": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Models/Tabuleiro.glb",
+      "job_name": "tabuleiro-scene",
+      "gltf": {
+        "unit_normalization_policy": "normalize",
+        "normals_policy": "generate",
+        "tangents_policy": "recalculate",
+        "node_pruning_policy": "keep"
+      }
+    }
+  ]
+}
