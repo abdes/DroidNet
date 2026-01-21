@@ -1,0 +1,6 @@
+.cooked
+Testing/**
+!Testing/
+!Testing/Models/
+!Testing/Models/**
+!Testing/manifest-*

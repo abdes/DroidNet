@@ -14,6 +14,9 @@
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Content/Tools/ImportTool/BatchCommand.h>
 #include <Oxygen/Content/Tools/ImportTool/CliBuilder.h>
+#include <Oxygen/Content/Tools/ImportTool/FbxCommand.h>
+#include <Oxygen/Content/Tools/ImportTool/GlobalOptions.h>
+#include <Oxygen/Content/Tools/ImportTool/GltfCommand.h>
 #include <Oxygen/Content/Tools/ImportTool/ImportCommand.h>
 #include <Oxygen/Content/Tools/ImportTool/TextureCommand.h>
 
@@ -36,15 +39,37 @@ auto main(int argc, char** argv) -> int
     using oxygen::clap::Command;
     using oxygen::content::import::tool::BatchCommand;
     using oxygen::content::import::tool::BuildCli;
+    using oxygen::content::import::tool::FbxCommand;
+    using oxygen::content::import::tool::GltfCommand;
     using oxygen::content::import::tool::ImportCommand;
     using oxygen::content::import::tool::TextureCommand;
 
-    BatchCommand batch_command;
-    TextureCommand texture_command;
-    std::vector<ImportCommand*> commands { &texture_command, &batch_command };
+    using oxygen::content::import::tool::GlobalOptions;
 
-    const auto cli = BuildCli(commands);
+    GlobalOptions global_options;
+    BatchCommand batch_command(&global_options);
+    FbxCommand fbx_command(&global_options);
+    GltfCommand gltf_command(&global_options);
+    TextureCommand texture_command(&global_options);
+    std::vector<ImportCommand*> commands {
+      &texture_command,
+      &fbx_command,
+      &gltf_command,
+      &batch_command,
+    };
+
+    const auto cli = BuildCli(commands, global_options);
     const auto context = cli->Parse(argc, const_cast<const char**>(argv));
+
+    if (context.global_option_groups != nullptr) {
+      for (const auto& group : *context.global_option_groups) {
+        for (const auto& option : *group.first) {
+          option->FinalizeValue(context.ovm);
+        }
+      }
+    }
+
+    ApplyLoggingOptions(global_options);
 
     const auto command_path = context.active_command->PathAsString();
     const auto& ovm = context.ovm;

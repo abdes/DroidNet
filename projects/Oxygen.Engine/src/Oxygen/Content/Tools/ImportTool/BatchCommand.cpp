@@ -20,18 +20,23 @@
 #include <optional>
 #include <sstream>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include <curses.h>
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Content/Import/AsyncImportService.h>
+#include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/Tools/ImportTool/BatchCommand.h>
 #include <Oxygen/Content/Tools/ImportTool/ImportManifest.h>
+#include <Oxygen/Content/Tools/ImportTool/SceneImportRequestBuilder.h>
+#include <Oxygen/Content/Tools/ImportTool/SceneImportSettings.h>
 #include <Oxygen/Content/Tools/ImportTool/TextureImportRequestBuilder.h>
 #include <Oxygen/OxCo/Detail/ScopeGuard.h>
 
@@ -44,11 +49,37 @@ namespace {
   using oxygen::clap::Option;
   using oxygen::co::detail::ScopeGuard;
 
-  auto ShouldOverride(const bool override_value, const bool current_value)
-    -> bool
+  constexpr auto PhaseCount() -> size_t
   {
-    return override_value && !current_value;
+    return static_cast<size_t>(ImportPhase::kFailed) + 1U;
   }
+
+  auto PhaseIndex(const ImportPhase phase) -> size_t
+  {
+    return static_cast<size_t>(phase);
+  }
+
+  struct PhaseTiming {
+    std::optional<std::chrono::steady_clock::time_point> started;
+    std::optional<std::chrono::steady_clock::time_point> finished;
+    uint32_t items_completed = 0U;
+    uint32_t items_total = 0U;
+  };
+
+  struct ItemTiming {
+    std::string phase;
+    std::string kind;
+    std::string name;
+    std::optional<std::chrono::steady_clock::time_point> started;
+    std::optional<std::chrono::steady_clock::time_point> finished;
+  };
+
+  struct JobProgressTrace {
+    std::optional<std::chrono::steady_clock::time_point> started;
+    std::optional<std::chrono::steady_clock::time_point> finished;
+    std::vector<PhaseTiming> phases = std::vector<PhaseTiming>(PhaseCount());
+    std::unordered_map<std::string, ItemTiming> items;
+  };
 
   auto DisplayJobNumber(const size_t job_index) -> size_t
   {
@@ -184,11 +215,16 @@ namespace {
   }
 
   auto EmitEvent(std::mutex& output_mutex, std::deque<UiEvent>& events,
-    UiEvent event, const size_t max_events, const bool tui_enabled) -> void
+    UiEvent event, const size_t max_events, const bool tui_enabled,
+    const bool quiet) -> void
   {
     if (tui_enabled) {
       std::lock_guard lock(output_mutex);
       AddEvent(events, std::move(event), max_events);
+      return;
+    }
+
+    if (quiet && !event.is_error) {
       return;
     }
 
@@ -218,6 +254,85 @@ namespace {
       { "finalize_ms", DurationToMillis(telemetry.finalize_duration) },
       { "total_ms", DurationToMillis(telemetry.total_duration) },
     };
+  }
+
+  auto ToRelativeMillis(const std::chrono::steady_clock::time_point base,
+    const std::optional<std::chrono::steady_clock::time_point>& value)
+    -> ordered_json
+  {
+    if (!value.has_value()) {
+      return nullptr;
+    }
+    const auto ms
+      = std::chrono::duration<double, std::milli>(*value - base).count();
+    return ms;
+  }
+
+  auto BuildProgressJson(const JobProgressTrace& trace,
+    const std::chrono::steady_clock::time_point fallback_start) -> ordered_json
+  {
+    const auto base = trace.started.value_or(fallback_start);
+    ordered_json phases = ordered_json::array();
+    for (size_t index = 0; index < trace.phases.size(); ++index) {
+      const auto& timing = trace.phases[index];
+      if (!timing.started.has_value() && !timing.finished.has_value()) {
+        continue;
+      }
+
+      const auto started_ms = ToRelativeMillis(base, timing.started);
+      const auto finished_ms = ToRelativeMillis(base, timing.finished);
+      ordered_json duration_ms = nullptr;
+      if (timing.started.has_value() && timing.finished.has_value()) {
+        duration_ms = std::chrono::duration<double, std::milli>(
+          *timing.finished - *timing.started)
+                        .count();
+      }
+      phases.push_back({
+        { "phase", nostd::to_string(static_cast<ImportPhase>(index)) },
+        { "started_ms", started_ms },
+        { "finished_ms", finished_ms },
+        { "duration_ms", duration_ms },
+        { "items_completed", timing.items_completed },
+        { "items_total", timing.items_total },
+      });
+    }
+
+    ordered_json items = ordered_json::array();
+    for (const auto& [key, item] : trace.items) {
+      const auto started_ms = ToRelativeMillis(base, item.started);
+      const auto finished_ms = ToRelativeMillis(base, item.finished);
+      ordered_json duration_ms = nullptr;
+      if (item.started.has_value() && item.finished.has_value()) {
+        duration_ms = std::chrono::duration<double, std::milli>(
+          *item.finished - *item.started)
+                        .count();
+      }
+      items.push_back({
+        { "phase", item.phase },
+        { "kind", item.kind },
+        { "name", item.name },
+        { "started_ms", started_ms },
+        { "finished_ms", finished_ms },
+        { "duration_ms", duration_ms },
+      });
+    }
+
+    ordered_json job = ordered_json::object();
+    job["started_ms"] = ToRelativeMillis(base, trace.started);
+    job["finished_ms"] = ToRelativeMillis(base, trace.finished);
+    ordered_json job_duration = nullptr;
+    if (trace.started.has_value() && trace.finished.has_value()) {
+      job_duration = std::chrono::duration<double, std::milli>(
+        *trace.finished - *trace.started)
+                       .count();
+    }
+    job["duration_ms"] = job_duration;
+
+    ordered_json progress = ordered_json::object();
+    progress["job"] = std::move(job);
+    progress["phases"] = std::move(phases);
+    progress["items"] = std::move(items);
+    return progress;
   }
 
   auto ResolveCookedRootForReport(const std::vector<PreparedJob>& jobs,
@@ -368,12 +483,18 @@ namespace {
         }
         std::ostringstream line;
         line << "job=" << pending.index << " id="
-             << (pending.job_id.has_value() ? std::to_string(*pending.job_id)
+             << (pending.job_id.has_value() ? nostd::to_string(*pending.job_id)
                                             : std::string("n/a"))
              << " source=" << pending.source_path;
         if (pending.progress.has_value()) {
-          const auto phase = static_cast<uint32_t>(pending.progress->phase);
-          line << " phase=" << phase;
+          line << " phase=" << nostd::to_string(pending.progress->phase);
+          if (pending.progress->items_total > 0U) {
+            line << " items=" << pending.progress->items_completed << "/"
+                 << pending.progress->items_total;
+          }
+          if (!pending.progress->item_name.empty()) {
+            line << " item=" << pending.progress->item_name;
+          }
         }
         if (pending.progress_time.has_value()) {
           const auto age = std::chrono::duration_cast<std::chrono::seconds>(
@@ -449,13 +570,13 @@ auto BatchCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                      .StoreTo(&options_.fail_fast)
                      .Build();
 
-  auto verbose = Option::WithKey("verbose")
-                   .About("Print progress updates")
-                   .Short("v")
-                   .Long("verbose")
-                   .WithValue<bool>()
-                   .StoreTo(&options_.verbose)
-                   .Build();
+  auto quiet = Option::WithKey("quiet")
+                 .About("Suppress non-error output")
+                 .Short("q")
+                 .Long("quiet")
+                 .WithValue<bool>()
+                 .StoreTo(&options_.quiet)
+                 .Build();
 
   auto report = Option::WithKey("report")
                   .About("Write a JSON report (absolute or relative to cooked "
@@ -485,7 +606,7 @@ auto BatchCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(root))
     .WithOption(std::move(dry_run))
     .WithOption(std::move(fail_fast))
-    .WithOption(std::move(verbose))
+    .WithOption(std::move(quiet))
     .WithOption(std::move(report))
     .WithOption(std::move(max_in_flight))
     .WithOption(std::move(no_tui));
@@ -493,6 +614,21 @@ auto BatchCommand::BuildCommand() -> std::shared_ptr<clap::Command>
 
 auto BatchCommand::Run() -> int
 {
+  if (global_options_ != nullptr) {
+    if (!options_.fail_fast && global_options_->fail_fast) {
+      options_.fail_fast = true;
+    }
+    if (!options_.quiet && global_options_->quiet) {
+      options_.quiet = true;
+    }
+    if (!options_.no_tui && global_options_->no_tui) {
+      options_.no_tui = true;
+    }
+    if (options_.max_in_flight == 0U && global_options_->max_in_flight > 0U) {
+      options_.max_in_flight = global_options_->max_in_flight;
+    }
+  }
+
   if (options_.manifest_path.empty()) {
     std::cerr << "ERROR: --manifest is required\n";
     return 2;
@@ -514,7 +650,8 @@ auto BatchCommand::Run() -> int
   jobs.reserve(manifest->jobs.size());
 
   for (const auto& job : manifest->jobs) {
-    if (job.job_type != "texture") {
+    if (job.job_type != "texture" && job.job_type != "fbx"
+      && job.job_type != "gltf") {
       std::cerr << "ERROR: unsupported job type: " << job.job_type << "\n";
       ++failures;
       if (options_.fail_fast) {
@@ -523,12 +660,31 @@ auto BatchCommand::Run() -> int
       continue;
     }
 
-    auto settings = job.texture;
-    if (ShouldOverride(options_.verbose, settings.verbose)) {
-      settings.verbose = true;
-    }
+    if (job.job_type == "texture") {
+      auto settings = job.texture;
+      if (global_options_ != nullptr && settings.cooked_root.empty()) {
+        settings.cooked_root = global_options_->cooked_root;
+      }
+      if (options_.quiet) {
+        settings.verbose = false;
+      }
 
-    if (options_.dry_run) {
+      if (options_.dry_run) {
+        const auto request = BuildTextureRequest(settings, std::cerr);
+        if (!request.has_value()) {
+          ++failures;
+          if (options_.fail_fast) {
+            break;
+          }
+          continue;
+        }
+        if (!options_.quiet) {
+          std::cout << "DRY-RUN: texture source=" << settings.source_path
+                    << "\n";
+        }
+        continue;
+      }
+
       const auto request = BuildTextureRequest(settings, std::cerr);
       if (!request.has_value()) {
         ++failures;
@@ -537,11 +693,45 @@ auto BatchCommand::Run() -> int
         }
         continue;
       }
-      std::cout << "DRY-RUN: texture source=" << settings.source_path << "\n";
+
+      jobs.push_back({
+        .request = *request,
+        .verbose = settings.verbose,
+        .source_path = settings.source_path,
+      });
       continue;
     }
 
-    const auto request = BuildTextureRequest(settings, std::cerr);
+    SceneImportSettings settings = job.job_type == "fbx" ? job.fbx : job.gltf;
+    if (global_options_ != nullptr && settings.cooked_root.empty()) {
+      settings.cooked_root = global_options_->cooked_root;
+    }
+    if (options_.quiet) {
+      settings.verbose = false;
+    }
+
+    const auto expected_format
+      = job.job_type == "fbx" ? ImportFormat::kFbx : ImportFormat::kGltf;
+
+    if (options_.dry_run) {
+      const auto request
+        = BuildSceneRequest(settings, expected_format, std::cerr);
+      if (!request.has_value()) {
+        ++failures;
+        if (options_.fail_fast) {
+          break;
+        }
+        continue;
+      }
+      if (!options_.quiet) {
+        std::cout << "DRY-RUN: " << job.job_type
+                  << " source=" << settings.source_path << "\n";
+      }
+      continue;
+    }
+
+    const auto request
+      = BuildSceneRequest(settings, expected_format, std::cerr);
     if (!request.has_value()) {
       ++failures;
       if (options_.fail_fast) {
@@ -578,6 +768,7 @@ auto BatchCommand::Run() -> int
   std::vector<std::optional<ImportReport>> reports(jobs.size());
   std::vector<std::optional<ImportJobId>> job_ids(jobs.size());
   std::vector<std::optional<ImportProgress>> progress_states(jobs.size());
+  std::vector<JobProgressTrace> progress_traces(jobs.size());
   std::vector<std::optional<std::chrono::steady_clock::time_point>>
     progress_times(jobs.size());
   std::vector<std::optional<std::chrono::steady_clock::time_point>>
@@ -585,7 +776,7 @@ auto BatchCommand::Run() -> int
   AsyncImportService service;
   ScopeGuard stop_guard([&]() noexcept { service.Stop(); });
 
-  bool tui_enabled = !options_.no_tui;
+  bool tui_enabled = !options_.no_tui && !options_.quiet;
   if (tui_enabled) {
     std::setlocale(LC_ALL, "");
     if (initscr() == nullptr) {
@@ -658,14 +849,14 @@ auto BatchCommand::Run() -> int
           std::ostringstream line;
           line << "completed job=" << DisplayJobNumber(job_index) << " id="
                << (job_id_snapshot.has_value()
-                      ? std::to_string(*job_id_snapshot)
+                      ? nostd::to_string(*job_id_snapshot)
                       : std::string("n/a"))
                << " (" << completed_snapshot << "/" << total << ")"
                << " source=" << jobs[job_index].source_path
                << " success=" << (report.success ? "true" : "false");
           EmitEvent(output_mutex, recent_events,
             { .text = line.str(), .is_error = !report.success }, kMaxEvents,
-            tui_enabled);
+            tui_enabled, options_.quiet);
         }
         ui_dirty.store(true, std::memory_order_release);
 
@@ -677,7 +868,7 @@ auto BatchCommand::Run() -> int
                    << ": " << diag.message;
               EmitEvent(output_mutex, recent_events,
                 { .text = line.str(), .is_error = true }, kMaxEvents,
-                tui_enabled);
+                tui_enabled, options_.quiet);
             }
           } else {
             PrintDiagnostics(report, job_index, jobs[job_index].source_path);
@@ -691,22 +882,72 @@ auto BatchCommand::Run() -> int
       return [&, job_index](const ImportProgress& progress) {
         {
           std::lock_guard lock(mutex);
+          const auto now = std::chrono::steady_clock::now();
           progress_states[job_index] = progress;
-          progress_times[job_index] = std::chrono::steady_clock::now();
+          progress_times[job_index] = now;
+
+          auto& trace = progress_traces[job_index];
+          if (!trace.started.has_value()) {
+            trace.started = now;
+          }
+          if (progress.event == ImportProgressEvent::kJobStarted) {
+            trace.started = now;
+          } else if (progress.event == ImportProgressEvent::kJobFinished) {
+            trace.finished = now;
+          }
+
+          const auto phase_index = PhaseIndex(progress.phase);
+          if (phase_index < trace.phases.size()) {
+            auto& timing = trace.phases[phase_index];
+            timing.items_completed = progress.items_completed;
+            timing.items_total = progress.items_total;
+            if (progress.event == ImportProgressEvent::kPhaseStarted) {
+              timing.started = now;
+            } else if (progress.event == ImportProgressEvent::kPhaseFinished) {
+              timing.finished = now;
+            }
+          }
+
+          if (progress.event == ImportProgressEvent::kItemStarted
+            || progress.event == ImportProgressEvent::kItemFinished) {
+            if (!progress.item_name.empty()) {
+              std::string key = progress.item_kind;
+              if (!key.empty()) {
+                key.append(":");
+              }
+              key.append(progress.item_name);
+              auto& item = trace.items[key];
+              item.phase = nostd::to_string(progress.phase);
+              item.kind = progress.item_kind;
+              item.name = progress.item_name;
+              if (progress.event == ImportProgressEvent::kItemStarted) {
+                item.started = now;
+              } else {
+                item.finished = now;
+              }
+            }
+          }
         }
         ui_dirty.store(true, std::memory_order_release);
         cv.notify_one();
         if (!jobs[job_index].verbose) {
           return;
         }
-        if (!tui_enabled) {
-          std::ostringstream line;
-          line << "job=" << DisplayJobNumber(job_index)
-               << " phase=" << static_cast<uint32_t>(progress.phase)
-               << " overall=" << progress.overall_progress;
-          EmitEvent(output_mutex, recent_events,
-            { .text = line.str(), .is_error = false }, kMaxEvents, tui_enabled);
+        std::ostringstream line;
+        line << "job=" << DisplayJobNumber(job_index)
+             << " event=" << nostd::to_string(progress.event)
+             << " phase=" << nostd::to_string(progress.phase)
+             << " overall=" << progress.overall_progress;
+        if (progress.items_total > 0U) {
+          line << " items=" << progress.items_completed << "/"
+               << progress.items_total;
         }
+        if (!progress.item_name.empty()) {
+          line << " item=" << progress.item_name;
+        }
+        EmitEvent(output_mutex, recent_events,
+          { .text = line.str(), .is_error = false }, kMaxEvents, tui_enabled,
+          options_.quiet);
       };
     }(index);
 
@@ -733,7 +974,8 @@ auto BatchCommand::Run() -> int
         std::ostringstream line;
         line << "ERROR: failed to submit import job: " << job.source_path;
         EmitEvent(output_mutex, recent_events,
-          { .text = line.str(), .is_error = true }, kMaxEvents, tui_enabled);
+          { .text = line.str(), .is_error = true }, kMaxEvents, tui_enabled,
+          options_.quiet);
       }
       ui_dirty.store(true, std::memory_order_release);
       ++failures;
@@ -763,7 +1005,8 @@ auto BatchCommand::Run() -> int
              << " (" << completed_snapshot << "/" << total << ")"
              << " source=" << job.source_path << " success=false";
         EmitEvent(output_mutex, recent_events,
-          { .text = line.str(), .is_error = true }, kMaxEvents, tui_enabled);
+          { .text = line.str(), .is_error = true }, kMaxEvents, tui_enabled,
+          options_.quiet);
       }
       if (options_.fail_fast) {
         cv.notify_one();
@@ -778,10 +1021,12 @@ auto BatchCommand::Run() -> int
       }
       {
         std::ostringstream line;
-        line << "submitted job=" << DisplayJobNumber(index) << " id=" << job_id
+        line << "submitted job=" << DisplayJobNumber(index)
+             << " id=" << nostd::to_string(job_id)
              << " source=" << job.source_path;
         EmitEvent(output_mutex, recent_events,
-          { .text = line.str(), .is_error = false }, kMaxEvents, tui_enabled);
+          { .text = line.str(), .is_error = false }, kMaxEvents, tui_enabled,
+          options_.quiet);
       }
       ui_dirty.store(true, std::memory_order_release);
       cv.notify_one();
@@ -847,7 +1092,8 @@ auto BatchCommand::Run() -> int
             << " pending=" << snapshot.remaining
             << " elapsed=" << snapshot.elapsed.count() << "s\n";
       EmitEvent(output_mutex, recent_events,
-        { .text = block.str(), .is_error = false }, kMaxEvents, tui_enabled);
+        { .text = block.str(), .is_error = false }, kMaxEvents, tui_enabled,
+        options_.quiet);
     }
   }
 
@@ -886,11 +1132,15 @@ auto BatchCommand::Run() -> int
       if (report.has_value()) {
         telemetry = BuildTelemetryJson(report->telemetry);
       }
+      const auto fallback_start = submit_times[index].value_or(wait_start);
+      const auto progress_json
+        = BuildProgressJson(progress_traces[index], fallback_start);
       jobs_json.push_back({
         { "index", DisplayJobNumber(index) },
         { "source", job.source_path },
         { "success", success },
         { "telemetry", telemetry },
+        { "progress", progress_json },
       });
     }
 

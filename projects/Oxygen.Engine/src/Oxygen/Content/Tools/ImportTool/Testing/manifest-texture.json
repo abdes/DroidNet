@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "defaults": {
+    "job_type": "texture",
+    "cooked_root": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Cooked"
+  },
+  "jobs": [
+    {
+      "source": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Models/Wood.png",
+      "texture": {
+        "preset": "albedo-srgb",
+        "bc7_quality": "high"
+      }
+    },
+    {
+      "source": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Models/hdr_skybox_f32.hdr",
+      "texture": {
+        "preset": "hdr-env-16f",
+        "cubemap": true,
+        "equirect_to_cube": true,
+        "cube_face_size": 512
+      }
+    }
+  ]
+}

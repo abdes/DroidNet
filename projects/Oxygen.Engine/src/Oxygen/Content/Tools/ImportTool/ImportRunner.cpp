@@ -12,9 +12,11 @@
 #include <mutex>
 #include <optional>
 #include <string_view>
+#include <unordered_map>
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/Import/AsyncImportService.h>
 #include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Tools/ImportTool/ImportRunner.h>
@@ -24,6 +26,38 @@ namespace oxygen::content::import::tool {
 namespace {
 
   using nlohmann::ordered_json;
+
+  constexpr auto PhaseCount() -> size_t
+  {
+    return static_cast<size_t>(ImportPhase::kFailed) + 1U;
+  }
+
+  auto PhaseIndex(const ImportPhase phase) -> size_t
+  {
+    return static_cast<size_t>(phase);
+  }
+
+  struct PhaseTiming {
+    std::optional<std::chrono::steady_clock::time_point> started;
+    std::optional<std::chrono::steady_clock::time_point> finished;
+    uint32_t items_completed = 0U;
+    uint32_t items_total = 0U;
+  };
+
+  struct ItemTiming {
+    std::string phase;
+    std::string kind;
+    std::string name;
+    std::optional<std::chrono::steady_clock::time_point> started;
+    std::optional<std::chrono::steady_clock::time_point> finished;
+  };
+
+  struct JobProgressTrace {
+    std::optional<std::chrono::steady_clock::time_point> started;
+    std::optional<std::chrono::steady_clock::time_point> finished;
+    std::vector<PhaseTiming> phases = std::vector<PhaseTiming>(PhaseCount());
+    std::unordered_map<std::string, ItemTiming> items;
+  };
 
   auto DurationToMillis(
     const std::optional<std::chrono::microseconds>& duration) -> ordered_json
@@ -46,6 +80,85 @@ namespace {
       { "finalize_ms", DurationToMillis(telemetry.finalize_duration) },
       { "total_ms", DurationToMillis(telemetry.total_duration) },
     };
+  }
+
+  auto ToRelativeMillis(const std::chrono::steady_clock::time_point base,
+    const std::optional<std::chrono::steady_clock::time_point>& value)
+    -> ordered_json
+  {
+    if (!value.has_value()) {
+      return nullptr;
+    }
+    const auto ms
+      = std::chrono::duration<double, std::milli>(*value - base).count();
+    return ms;
+  }
+
+  auto BuildProgressJson(const JobProgressTrace& trace,
+    const std::chrono::steady_clock::time_point fallback_start) -> ordered_json
+  {
+    const auto base = trace.started.value_or(fallback_start);
+    ordered_json phases = ordered_json::array();
+    for (size_t index = 0; index < trace.phases.size(); ++index) {
+      const auto& timing = trace.phases[index];
+      if (!timing.started.has_value() && !timing.finished.has_value()) {
+        continue;
+      }
+
+      const auto started_ms = ToRelativeMillis(base, timing.started);
+      const auto finished_ms = ToRelativeMillis(base, timing.finished);
+      ordered_json duration_ms = nullptr;
+      if (timing.started.has_value() && timing.finished.has_value()) {
+        duration_ms = std::chrono::duration<double, std::milli>(
+          *timing.finished - *timing.started)
+                        .count();
+      }
+      phases.push_back({
+        { "phase", nostd::to_string(static_cast<ImportPhase>(index)) },
+        { "started_ms", started_ms },
+        { "finished_ms", finished_ms },
+        { "duration_ms", duration_ms },
+        { "items_completed", timing.items_completed },
+        { "items_total", timing.items_total },
+      });
+    }
+
+    ordered_json items = ordered_json::array();
+    for (const auto& [key, item] : trace.items) {
+      const auto started_ms = ToRelativeMillis(base, item.started);
+      const auto finished_ms = ToRelativeMillis(base, item.finished);
+      ordered_json duration_ms = nullptr;
+      if (item.started.has_value() && item.finished.has_value()) {
+        duration_ms = std::chrono::duration<double, std::milli>(
+          *item.finished - *item.started)
+                        .count();
+      }
+      items.push_back({
+        { "phase", item.phase },
+        { "kind", item.kind },
+        { "name", item.name },
+        { "started_ms", started_ms },
+        { "finished_ms", finished_ms },
+        { "duration_ms", duration_ms },
+      });
+    }
+
+    ordered_json job = ordered_json::object();
+    job["started_ms"] = ToRelativeMillis(base, trace.started);
+    job["finished_ms"] = ToRelativeMillis(base, trace.finished);
+    ordered_json job_duration = nullptr;
+    if (trace.started.has_value() && trace.finished.has_value()) {
+      job_duration = std::chrono::duration<double, std::milli>(
+        *trace.finished - *trace.started)
+                       .count();
+    }
+    job["duration_ms"] = job_duration;
+
+    ordered_json progress = ordered_json::object();
+    progress["job"] = std::move(job);
+    progress["phases"] = std::move(phases);
+    progress["items"] = std::move(items);
+    return progress;
   }
 
   auto ResolveReportPath(std::string_view report_path,
@@ -91,13 +204,14 @@ namespace {
 
 } // namespace
 
-auto RunImportJob(const ImportRequest& request, const bool verbose,
+auto RunImportJob(const ImportRequest& request, const bool quiet,
   const std::string_view report_path) -> int
 {
   const auto start_time = std::chrono::steady_clock::now();
   std::mutex mutex;
   std::condition_variable cv;
   std::optional<ImportReport> report;
+  JobProgressTrace progress_trace {};
 
   ImportReport report_copy {};
   std::optional<std::string> submit_error;
@@ -114,11 +228,61 @@ auto RunImportJob(const ImportRequest& request, const bool verbose,
     };
 
     const auto on_progress = [&](const ImportProgress& progress) {
-      if (!verbose) {
-        return;
+      const auto now = std::chrono::steady_clock::now();
+      {
+        std::lock_guard lock(mutex);
+        if (!progress_trace.started.has_value()) {
+          progress_trace.started = now;
+        }
+
+        if (progress.event == ImportProgressEvent::kJobStarted) {
+          progress_trace.started = now;
+        } else if (progress.event == ImportProgressEvent::kJobFinished) {
+          progress_trace.finished = now;
+        }
+
+        const auto phase_index = PhaseIndex(progress.phase);
+        if (phase_index < progress_trace.phases.size()) {
+          auto& timing = progress_trace.phases[phase_index];
+          timing.items_completed = progress.items_completed;
+          timing.items_total = progress.items_total;
+          if (progress.event == ImportProgressEvent::kPhaseStarted) {
+            timing.started = now;
+          } else if (progress.event == ImportProgressEvent::kPhaseFinished) {
+            timing.finished = now;
+          }
+        }
+
+        if (progress.event == ImportProgressEvent::kItemStarted
+          || progress.event == ImportProgressEvent::kItemFinished) {
+          if (!progress.item_name.empty()) {
+            std::string key = progress.item_kind;
+            if (!key.empty()) {
+              key.append(":");
+            }
+            key.append(progress.item_name);
+            auto& item = progress_trace.items[key];
+            item.phase = nostd::to_string(progress.phase);
+            item.kind = progress.item_kind;
+            item.name = progress.item_name;
+            if (progress.event == ImportProgressEvent::kItemStarted) {
+              item.started = now;
+            } else {
+              item.finished = now;
+            }
+          }
+        }
       }
-      std::cout << "phase=" << static_cast<uint32_t>(progress.phase)
-                << " overall=" << progress.overall_progress << "\n";
+
+      if (!quiet) {
+        std::cout << "event=" << nostd::to_string(progress.event)
+                  << " phase=" << nostd::to_string(progress.phase)
+                  << " overall=" << progress.overall_progress;
+        if (!progress.item_name.empty()) {
+          std::cout << " item=" << progress.item_name;
+        }
+        std::cout << "\n";
+      }
     };
 
     const auto job_id = service.SubmitImport(request, on_complete, on_progress);
@@ -170,6 +334,7 @@ auto RunImportJob(const ImportRequest& request, const bool verbose,
         { "source", request.source_path.string() },
         { "success", report_copy.success },
         { "telemetry", BuildTelemetryJson(report_copy.telemetry) },
+        { "progress", BuildProgressJson(progress_trace, start_time) },
       },
     });
 
@@ -186,7 +351,9 @@ auto RunImportJob(const ImportRequest& request, const bool verbose,
     return 2;
   }
 
-  std::cout << "OK: import complete\n";
+  if (!quiet) {
+    std::cout << "OK: import complete\n";
+  }
   return 0;
 }
 

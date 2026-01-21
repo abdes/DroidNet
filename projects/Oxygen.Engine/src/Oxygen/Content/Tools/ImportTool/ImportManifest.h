@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include <Oxygen/Content/Tools/ImportTool/SceneImportSettings.h>
 #include <Oxygen/Content/Tools/ImportTool/TextureImportSettings.h>
 
 namespace oxygen::content::import::tool {
@@ -19,11 +20,15 @@ namespace oxygen::content::import::tool {
 struct ImportManifestJob {
   std::string job_type;
   TextureImportSettings texture;
+  SceneImportSettings fbx;
+  SceneImportSettings gltf;
 };
 
 struct ImportManifestDefaults {
   std::string job_type;
   TextureImportSettings texture;
+  SceneImportSettings fbx;
+  SceneImportSettings gltf;
 };
 
 struct ImportManifest {

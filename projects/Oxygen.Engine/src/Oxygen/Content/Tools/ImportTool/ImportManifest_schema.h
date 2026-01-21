@@ -38,7 +38,10 @@ constexpr const char* kImportManifestSchema = R"schema(
         "cooked_root": { "type": "string" },
         "job_name": { "type": "string" },
         "verbose": { "type": "boolean" },
-        "texture": { "$ref": "#/definitions/TextureSettings" }
+        "import_options": { "$ref": "#/definitions/ImportOptions" },
+        "texture": { "$ref": "#/definitions/TextureSettings" },
+        "fbx": { "$ref": "#/definitions/SceneSettings" },
+        "gltf": { "$ref": "#/definitions/SceneSettings" }
       }
     },
     "Job": {
@@ -51,13 +54,53 @@ constexpr const char* kImportManifestSchema = R"schema(
         "cooked_root": { "type": "string" },
         "job_name": { "type": "string" },
         "verbose": { "type": "boolean" },
-        "texture": { "$ref": "#/definitions/TextureSettings" }
+        "import_options": { "$ref": "#/definitions/ImportOptions" },
+        "texture": { "$ref": "#/definitions/TextureSettings" },
+        "fbx": { "$ref": "#/definitions/SceneSettings" },
+        "gltf": { "$ref": "#/definitions/SceneSettings" }
+      }
+    },
+    "ImportOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "content_flags": { "$ref": "#/definitions/ContentFlags" },
+        "unit_normalization_policy": { "type": "string" },
+        "custom_unit_scale": { "type": "number" },
+        "bake_transforms": { "type": "boolean" },
+        "normals_policy": { "type": "string" },
+        "tangents_policy": { "type": "string" },
+        "node_pruning_policy": { "type": "string" }
+      }
+    },
+    "ContentFlags": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "textures": { "type": "boolean" },
+        "materials": { "type": "boolean" },
+        "geometry": { "type": "boolean" },
+        "scene": { "type": "boolean" }
+      }
+    },
+    "SceneSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "content_flags": { "$ref": "#/definitions/ContentFlags" },
+        "unit_normalization_policy": { "type": "string" },
+        "custom_unit_scale": { "type": "number" },
+        "bake_transforms": { "type": "boolean" },
+        "normals_policy": { "type": "string" },
+        "tangents_policy": { "type": "string" },
+        "node_pruning_policy": { "type": "string" }
       }
     },
     "TextureSettings": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "preset": { "type": "string" },
         "intent": { "type": "string" },
         "color_space": { "type": "string" },
         "output_format": { "type": "string" },

@@ -9,6 +9,7 @@
 #include <memory>
 #include <string_view>
 
+#include <Oxygen/Content/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Content/Tools/ImportTool/ImportCommand.h>
 #include <Oxygen/Content/Tools/ImportTool/TextureImportSettings.h>
 
@@ -16,10 +17,19 @@ namespace oxygen::content::import::tool {
 
 class TextureCommand final : public ImportCommand {
 public:
+  explicit TextureCommand(const GlobalOptions* global_options)
+    : global_options_ { global_options }
+  {
+  }
+
   [[nodiscard]] auto Name() const -> std::string_view override;
   [[nodiscard]] auto BuildCommand() -> std::shared_ptr<clap::Command> override;
   [[nodiscard]] auto Run() -> int override;
 
+private:
+  const GlobalOptions* global_options_ = nullptr;
+
+public:
   TextureImportSettings options_ {};
 };
 
