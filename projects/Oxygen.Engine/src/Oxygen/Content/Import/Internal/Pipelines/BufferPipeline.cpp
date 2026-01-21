@@ -130,6 +130,10 @@ auto BufferPipeline::Worker() -> co::Co<>
       continue;
     }
 
+    if (item.on_started) {
+      item.on_started();
+    }
+
     DLOG_F(1, "processing {}", item.source_id);
 
     std::vector<ImportDiagnostic> diagnostics;

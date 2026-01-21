@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <stop_token>
 #include <string>
@@ -83,6 +84,9 @@ public:
      the pipeline computes and populates it.
     */
     CookedBufferPayload cooked;
+
+    //! Callback fired when a worker starts processing this item.
+    std::function<void()> on_started;
 
     //! Cancellation token.
     std::stop_token stop_token;

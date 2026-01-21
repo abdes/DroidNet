@@ -777,6 +777,10 @@ auto MaterialPipeline::Worker() -> co::Co<>
       continue;
     }
 
+    if (item.on_started) {
+      item.on_started();
+    }
+
     const auto virtual_path
       = item.request.loose_cooked_layout.MaterialVirtualPath(
         item.storage_material_name);

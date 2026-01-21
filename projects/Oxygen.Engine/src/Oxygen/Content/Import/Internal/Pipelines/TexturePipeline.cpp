@@ -871,6 +871,10 @@ auto TexturePipeline::Worker() -> co::Co<>
       continue;
     }
 
+    if (item.on_started) {
+      item.on_started();
+    }
+
     const auto& policy = ResolvePackingPolicy(item.packing_policy_id);
     const bool unknown_policy = item.packing_policy_id != policy.Id();
     auto local_desc = item.desc;
