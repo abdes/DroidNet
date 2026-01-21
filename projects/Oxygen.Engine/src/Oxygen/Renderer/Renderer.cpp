@@ -166,12 +166,14 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
   uploader_ = std::make_unique<upload::UploadCoordinator>(
     observer_ptr { gfx.get() }, policy);
   upload_staging_provider_
-    = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16);
+    = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16,
+      upload::kDefaultRingBufferStagingSlack, "Renderer.UploadStaging");
 
   inline_transfers_ = std::make_unique<upload::InlineTransfersCoordinator>(
     observer_ptr { gfx.get() });
   inline_staging_provider_
-    = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16);
+    = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16,
+      upload::kDefaultRingBufferStagingSlack, "Renderer.InlineStaging");
   inline_transfers_->RegisterProvider(inline_staging_provider_);
 
   // Initialize the render-context pool helper used to claim per-frame

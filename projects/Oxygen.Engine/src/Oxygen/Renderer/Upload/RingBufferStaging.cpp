@@ -166,7 +166,7 @@ auto RingBufferStaging::RecreateBuffer(
   desc.size_bytes = total_capacity;
   desc.usage = BufferUsage::kNone;
   desc.memory = BufferMemory::kUpload;
-  desc.debug_name = std::string(debug_name);
+  desc.debug_name = debug_name_;
 
   UnMap();
   graphics::DeferredObjectRelease(buffer_, gfx_->GetDeferredReclaimer());
@@ -186,12 +186,19 @@ auto RingBufferStaging::RecreateBuffer(
       // Reset partition bookkeeping on buffer recreation.
       std::ranges::fill(heads_, 0ULL);
       partition_last_seen_retire_count_.assign(heads_.size(), retire_count_);
+      LOG_F(INFO,
+        "RingBufferStaging: recreated staging buffer '{}' (trigger='{}') "
+        "total={} per_partition={} partitions={}",
+        debug_name_, debug_name, capacity_, capacity_per_partition_,
+        partitions_count_.get());
       return {};
     }
     error_code = map_result.error();
   } catch (const std::exception& ex) {
-    LOG_F(ERROR, "RingBufferStaging buffer recreate failed ({}): {}",
-      total_capacity, ex.what());
+    LOG_F(ERROR,
+      "RingBufferStaging buffer recreate failed '{}' (trigger='{}' total={}): "
+      "{}",
+      debug_name_, debug_name, total_capacity, ex.what());
     error_code = UploadError::kStagingAllocFailed;
   }
 
@@ -230,7 +237,7 @@ auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
   desc.size_bytes = total_capacity;
   desc.usage = BufferUsage::kNone;
   desc.memory = BufferMemory::kUpload;
-  desc.debug_name = std::string(debug_name);
+  desc.debug_name = debug_name_;
 
   // We can UnMap the buffer immediately, but it cannot be released now.
   // Release must be deferred until frames are no longer using it.
@@ -251,12 +258,19 @@ auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
       Stats().current_buffer_size = buffer_->GetSize();
       Stats().max_buffer_size
         = (std::max)(Stats().max_buffer_size, Stats().current_buffer_size);
+
+      LOG_F(INFO,
+        "RingBufferStaging: grew staging buffer '{}' (trigger='{}') "
+        "total={} per_partition={} partitions={} head={} required={}",
+        debug_name_, debug_name, capacity_, capacity_per_partition_,
+        partitions_count_.get(), head, required);
       return {};
     }
     error_code = map_result.error();
   } catch (const std::exception& ex) {
-    LOG_F(ERROR, "RingBufferStaging allocation failed ({}): {}", total_capacity,
-      ex.what());
+    LOG_F(ERROR,
+      "RingBufferStaging allocation failed '{}' (trigger='{}' total={}): {}",
+      debug_name_, debug_name, total_capacity, ex.what());
     error_code = UploadError::kStagingAllocFailed;
     // fall through to the cleanup code below
   }

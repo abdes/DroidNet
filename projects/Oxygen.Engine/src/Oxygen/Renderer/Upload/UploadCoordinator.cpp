@@ -103,13 +103,14 @@ inline auto RowCopyBytes(const oxygen::graphics::detail::FormatInfo& info,
 }
 
 auto PackTexture2DToStaging(const UploadPolicy& policy,
-  const oxygen::graphics::detail::FormatInfo& info, const TextureUploadPlan& plan,
-  const UploadTextureSourceView& src, std::byte* dst_staging) -> bool
+  const oxygen::graphics::detail::FormatInfo& info,
+  const TextureUploadPlan& plan, const UploadTextureSourceView& src,
+  std::byte* dst_staging) -> bool
 {
   const auto& fp = policy.filler;
   if (fp.enable_default_fill) {
-    std::memset(dst_staging, static_cast<int>(fp.filler_value),
-      plan.total_bytes);
+    std::memset(
+      dst_staging, static_cast<int>(fp.filler_value), plan.total_bytes);
   }
 
   if (plan.regions.size() != plan.source_indices.size()) {
@@ -132,10 +133,9 @@ auto PackTexture2DToStaging(const UploadPolicy& policy,
     const auto copy_bytes_per_row = RowCopyBytes(info, width);
     const auto rows = BlocksY(info, height);
 
-    const uint64_t required_src_bytes =
-      (rows == 0U) ? 0ULL
-                  : (static_cast<uint64_t>(rows - 1U)
-                      * static_cast<uint64_t>(s.row_pitch))
+    const uint64_t required_src_bytes = (rows == 0U)
+      ? 0ULL
+      : (static_cast<uint64_t>(rows - 1U) * static_cast<uint64_t>(s.row_pitch))
         + copy_bytes_per_row;
     if (s.bytes.size() < required_src_bytes) {
       return false;
@@ -144,18 +144,18 @@ auto PackTexture2DToStaging(const UploadPolicy& policy,
       return false;
     }
 
-    const uint64_t required_dst_bytes =
-      (rows == 0U) ? 0ULL
-                  : (static_cast<uint64_t>(rows - 1U)
-                      * static_cast<uint64_t>(region.buffer_row_pitch))
+    const uint64_t required_dst_bytes = (rows == 0U)
+      ? 0ULL
+      : (static_cast<uint64_t>(rows - 1U)
+          * static_cast<uint64_t>(region.buffer_row_pitch))
         + copy_bytes_per_row;
     if (region.buffer_offset + required_dst_bytes > plan.total_bytes) {
       return false;
     }
 
     for (uint32_t row = 0; row < rows; ++row) {
-      const auto src_off = static_cast<uint64_t>(row)
-        * static_cast<uint64_t>(s.row_pitch);
+      const auto src_off
+        = static_cast<uint64_t>(row) * static_cast<uint64_t>(s.row_pitch);
       const auto dst_off = region.buffer_offset
         + static_cast<uint64_t>(row)
           * static_cast<uint64_t>(region.buffer_row_pitch);
@@ -169,13 +169,14 @@ auto PackTexture2DToStaging(const UploadPolicy& policy,
 }
 
 auto PackTexture3DToStaging(const UploadPolicy& policy,
-  const oxygen::graphics::detail::FormatInfo& info, const TextureUploadPlan& plan,
-  const UploadTextureSourceView& src, std::byte* dst_staging) -> bool
+  const oxygen::graphics::detail::FormatInfo& info,
+  const TextureUploadPlan& plan, const UploadTextureSourceView& src,
+  std::byte* dst_staging) -> bool
 {
   const auto& fp = policy.filler;
   if (fp.enable_default_fill) {
-    std::memset(dst_staging, static_cast<int>(fp.filler_value),
-      plan.total_bytes);
+    std::memset(
+      dst_staging, static_cast<int>(fp.filler_value), plan.total_bytes);
   }
 
   if (plan.regions.size() != plan.source_indices.size()) {
@@ -203,41 +204,40 @@ auto PackTexture3DToStaging(const UploadPolicy& policy,
       return false;
     }
 
-    const uint64_t required_src_bytes =
-      (depth == 0U || rows == 0U)
-        ? 0ULL
-        : (static_cast<uint64_t>(depth - 1U)
-            * static_cast<uint64_t>(s.slice_pitch))
-          + (static_cast<uint64_t>(rows - 1U)
-              * static_cast<uint64_t>(s.row_pitch))
-          + copy_bytes_per_row;
+    const uint64_t required_src_bytes = (depth == 0U || rows == 0U)
+      ? 0ULL
+      : (static_cast<uint64_t>(depth - 1U)
+          * static_cast<uint64_t>(s.slice_pitch))
+        + (static_cast<uint64_t>(rows - 1U)
+          * static_cast<uint64_t>(s.row_pitch))
+        + copy_bytes_per_row;
     if (s.bytes.size() < required_src_bytes) {
       return false;
     }
 
-    const uint64_t required_dst_bytes =
-      (depth == 0U || rows == 0U)
-        ? 0ULL
-        : (static_cast<uint64_t>(depth - 1U)
-            * static_cast<uint64_t>(region.buffer_slice_pitch))
-          + (static_cast<uint64_t>(rows - 1U)
-              * static_cast<uint64_t>(region.buffer_row_pitch))
-          + copy_bytes_per_row;
+    const uint64_t required_dst_bytes = (depth == 0U || rows == 0U)
+      ? 0ULL
+      : (static_cast<uint64_t>(depth - 1U)
+          * static_cast<uint64_t>(region.buffer_slice_pitch))
+        + (static_cast<uint64_t>(rows - 1U)
+          * static_cast<uint64_t>(region.buffer_row_pitch))
+        + copy_bytes_per_row;
     if (region.buffer_offset + required_dst_bytes > plan.total_bytes) {
       return false;
     }
 
     for (uint32_t z = 0; z < depth; ++z) {
-      const auto src_slice_off =
-        static_cast<uint64_t>(z) * static_cast<uint64_t>(s.slice_pitch);
+      const auto src_slice_off
+        = static_cast<uint64_t>(z) * static_cast<uint64_t>(s.slice_pitch);
       const auto dst_slice_off = region.buffer_offset
         + static_cast<uint64_t>(z)
           * static_cast<uint64_t>(region.buffer_slice_pitch);
       for (uint32_t row = 0; row < rows; ++row) {
-        const auto src_off = src_slice_off + static_cast<uint64_t>(row)
-          * static_cast<uint64_t>(s.row_pitch);
-        const auto dst_off = dst_slice_off + static_cast<uint64_t>(row)
-          * static_cast<uint64_t>(region.buffer_row_pitch);
+        const auto src_off = src_slice_off
+          + static_cast<uint64_t>(row) * static_cast<uint64_t>(s.row_pitch);
+        const auto dst_off = dst_slice_off
+          + static_cast<uint64_t>(row)
+            * static_cast<uint64_t>(region.buffer_row_pitch);
         std::memcpy(dst_staging + dst_off,
           s.bytes.data() + static_cast<std::size_t>(src_off),
           static_cast<std::size_t>(copy_bytes_per_row));
@@ -252,8 +252,7 @@ auto PackTexture3DToStaging(const UploadPolicy& policy,
 // Follows Renderer.cpp pattern and uses SingleQueueStrategy for now.
 auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
   const UploadPolicy& policy, UploadTracker& tracker, StagingProvider& provider,
-  const QueueKey& queue_key)
-  -> std::expected<UploadTicket, UploadError>
+  const QueueKey& queue_key) -> std::expected<UploadTicket, UploadError>
 {
   const auto& desc = std::get<UploadBufferDesc>(req.desc);
   const auto size = desc.size_bytes;
@@ -271,15 +270,16 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
   // Fill staging from the provided data view or producer.
   const auto& fp = policy.filler;
   if (fp.enable_default_fill) {
-    std::memset(
-      staging.Ptr(), static_cast<int>(fp.filler_value), static_cast<size_t>(size));
+    std::memset(staging.Ptr(), static_cast<int>(fp.filler_value),
+      static_cast<size_t>(size));
   }
 
   if (std::holds_alternative<UploadDataView>(req.data)) {
     auto view = std::get<UploadDataView>(req.data);
     const auto to_copy = std::min<uint64_t>(size, view.bytes.size());
     if (to_copy > 0) {
-      std::memcpy(staging.Ptr(), view.bytes.data(), static_cast<size_t>(to_copy));
+      std::memcpy(
+        staging.Ptr(), view.bytes.data(), static_cast<size_t>(to_copy));
     }
   } else if (std::holds_alternative<UploadProducer>(req.data)) {
     auto& producer
@@ -548,10 +548,12 @@ UploadCoordinator::UploadCoordinator(
 }
 
 auto UploadCoordinator::CreateRingBufferStaging(frame::SlotCount partitions,
-  std::uint32_t alignment, float slack) -> std::shared_ptr<StagingProvider>
+  const std::uint32_t alignment, const float slack,
+  const std::string_view debug_name) -> std::shared_ptr<StagingProvider>
 {
-  auto provider = std::make_shared<RingBufferStaging>(
-    internal::UploaderTagFactory::Get(), gfx_, partitions, alignment, slack);
+  auto provider
+    = std::make_shared<RingBufferStaging>(internal::UploaderTagFactory::Get(),
+      gfx_, partitions, alignment, slack, debug_name);
   providers_.push_back(provider);
   return provider;
 }
