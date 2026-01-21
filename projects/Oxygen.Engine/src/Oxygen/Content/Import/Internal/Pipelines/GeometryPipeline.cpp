@@ -1248,6 +1248,10 @@ auto GeometryPipeline::Worker() -> co::Co<>
       co_await ReportCancelled(std::move(item));
       continue;
     }
+
+    if (item.on_started) {
+      item.on_started();
+    }
     auto build_outcome = co_await thread_pool_.Run(
       [item = std::move(item), max_bytes = config_.max_data_blob_bytes,
         with_content_hashing = config_.with_content_hashing](

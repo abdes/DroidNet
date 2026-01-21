@@ -10,6 +10,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -109,6 +110,10 @@ public:
     BuildStageFn build_stage = nullptr;
     std::vector<data::AssetKey> geometry_keys;
     std::vector<SceneEnvironmentSystem> environment_systems;
+
+    //! Callback fired when a worker starts processing this item.
+    std::function<void()> on_started;
+
     ImportRequest request;
     observer_ptr<NamingService> naming_service;
     std::stop_token stop_token;

@@ -9,6 +9,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <stop_token>
 #include <string>
@@ -177,6 +178,9 @@ public:
     MaterialTextureBindings textures;
     OrmPolicy orm_policy = OrmPolicy::kAuto;
     std::vector<ShaderRequest> shader_requests;
+
+    //! Callback fired when a worker starts processing this item.
+    std::function<void()> on_started;
 
     ImportRequest request;
     observer_ptr<NamingService> naming_service;

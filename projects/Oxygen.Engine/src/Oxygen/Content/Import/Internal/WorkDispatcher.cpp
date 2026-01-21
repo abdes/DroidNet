@@ -7,6 +7,7 @@
 #include <Oxygen/Content/Import/Internal/WorkDispatcher.h>
 
 #include <array>
+#include <functional>
 #include <limits>
 #include <utility>
 
@@ -548,6 +549,43 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
   };
 
+  auto MakeItemStartedCallback
+    = [&](const PlanItemKind kind,
+        std::string_view item_name) -> std::function<void()> {
+    if (!progress_.has_value() || !progress_->on_progress) {
+      return {};
+    }
+    const std::string name(item_name);
+    return [&, kind, name]() {
+      const auto kind_index = static_cast<size_t>(kind);
+      const auto total
+        = kind_index < total_by_kind.size() ? total_by_kind[kind_index] : 0U;
+      const auto done = kind_index < completed_by_kind.size()
+        ? completed_by_kind[kind_index]
+        : 0U;
+      const float phase_progress = (total > 0U)
+        ? static_cast<float>(done) / static_cast<float>(total)
+        : 0.0f;
+      const float overall_progress = (item_count > 0U)
+        ? progress_->overall_start
+          + (progress_->overall_end - progress_->overall_start)
+            * (static_cast<float>(completed_count)
+              / static_cast<float>(item_count))
+        : progress_->overall_start;
+      const auto label = kind_label(kind);
+      if (kind_index < phase_started.size() && total > 0U
+        && phase_started[kind_index] == 0U) {
+        phase_started[kind_index] = 1U;
+        progress_->Report(ImportProgressEvent::kPhaseStarted,
+          phase_for_kind(kind), phase_progress, done, total, overall_progress,
+          label + " phase started", label);
+      }
+      progress_->Report(ImportProgressEvent::kItemStarted, phase_for_kind(kind),
+        phase_progress, done, total, overall_progress, name + " started", label,
+        name);
+    };
+  };
+
   auto resolve_buffer_item =
     [&](const BufferPipeline::WorkResult& result) -> std::optional<PlanItemId> {
     if (!result.source_id.empty()) {
@@ -755,7 +793,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     co_return false;
   };
 
-  auto submit_texture = [&](const PlanItemId item_id) -> co::Co<bool> {
+  auto submit_texture = [&](const PlanItemId item_id,
+                          std::function<void()> on_started) -> co::Co<bool> {
     auto& item = context.planner.Item(item_id);
     auto& payload = context.payloads.Texture(item.work_handle);
     if (!payload.item.texture_id.empty()) {
@@ -777,11 +816,13 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       }
     }
     ++pending_textures;
+    payload.item.on_started = std::move(on_started);
     co_await pipeline.Submit(std::move(payload.item));
     co_return true;
   };
 
-  auto submit_buffer = [&](const PlanItemId item_id) -> co::Co<bool> {
+  auto submit_buffer = [&](const PlanItemId item_id,
+                         std::function<void()> on_started) -> co::Co<bool> {
     auto& item = context.planner.Item(item_id);
     auto& payload = context.payloads.Buffer(item.work_handle);
     if (!payload.item.source_id.empty()) {
@@ -796,11 +837,13 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       }
     }
     ++pending_buffers;
+    payload.item.on_started = std::move(on_started);
     co_await pipeline.Submit(std::move(payload.item));
     co_return true;
   };
 
-  auto submit_material = [&](const PlanItemId item_id) -> co::Co<bool> {
+  auto submit_material = [&](const PlanItemId item_id,
+                           std::function<void()> on_started) -> co::Co<bool> {
     auto& item = context.planner.Item(item_id);
     auto& payload = context.payloads.Material(item.work_handle);
     std::vector<ImportDiagnostic> resolve_diags;
@@ -819,11 +862,13 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       }
     }
     ++pending_materials;
+    payload.item.on_started = std::move(on_started);
     co_await pipeline.Submit(std::move(payload.item));
     co_return true;
   };
 
-  auto submit_geometry = [&](const PlanItemId item_id) -> co::Co<bool> {
+  auto submit_geometry = [&](const PlanItemId item_id,
+                           std::function<void()> on_started) -> co::Co<bool> {
     auto& item = context.planner.Item(item_id);
     auto& payload = context.payloads.Geometry(item.work_handle);
     payload.item.material_keys.clear();
@@ -853,11 +898,13 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       }
     }
     ++pending_geometries;
+    payload.item.on_started = std::move(on_started);
     co_await pipeline.Submit(std::move(payload.item));
     co_return true;
   };
 
-  auto submit_scene = [&](const PlanItemId item_id) -> co::Co<bool> {
+  auto submit_scene = [&](const PlanItemId item_id,
+                        std::function<void()> on_started) -> co::Co<bool> {
     auto& item = context.planner.Item(item_id);
     auto& payload = context.payloads.Scene(item.work_handle);
     payload.item.geometry_keys.clear();
@@ -884,6 +931,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       }
     }
     ++pending_scenes;
+    payload.item.on_started = std::move(on_started);
     co_await pipeline.Submit(std::move(payload.item));
     co_return true;
   };
@@ -896,46 +944,18 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     submitted[u_item] = 1U;
 
     const auto& item = context.planner.Item(item_id);
-    const auto kind_index = static_cast<size_t>(item.kind);
-    if (progress_.has_value() && progress_->on_progress
-      && kind_index < total_by_kind.size()) {
-      const auto total = total_by_kind[kind_index];
-      const auto done = kind_index < completed_by_kind.size()
-        ? completed_by_kind[kind_index]
-        : 0U;
-      const float phase_progress = (total > 0U)
-        ? static_cast<float>(done) / static_cast<float>(total)
-        : 0.0f;
-      const float overall_progress = (item_count > 0U)
-        ? progress_->overall_start
-          + (progress_->overall_end - progress_->overall_start)
-            * (static_cast<float>(completed_count)
-              / static_cast<float>(item_count))
-        : progress_->overall_start;
-      const auto label = kind_label(item.kind);
-      if (phase_started[kind_index] == 0U && total > 0U) {
-        phase_started[kind_index] = 1U;
-        progress_->Report(ImportProgressEvent::kPhaseStarted,
-          phase_for_kind(item.kind), phase_progress, done, total,
-          overall_progress, label + " phase started", label);
-      }
-
-      progress_->Report(ImportProgressEvent::kItemStarted,
-        phase_for_kind(item.kind), phase_progress, done, total,
-        overall_progress, std::string(item.debug_name) + " started", label,
-        std::string(item.debug_name));
-    }
+    auto on_started = MakeItemStartedCallback(item.kind, item.debug_name);
     switch (item.kind) {
     case PlanItemKind::kTextureResource:
-      co_return co_await submit_texture(item_id);
+      co_return co_await submit_texture(item_id, std::move(on_started));
     case PlanItemKind::kBufferResource:
-      co_return co_await submit_buffer(item_id);
+      co_return co_await submit_buffer(item_id, std::move(on_started));
     case PlanItemKind::kMaterialAsset:
-      co_return co_await submit_material(item_id);
+      co_return co_await submit_material(item_id, std::move(on_started));
     case PlanItemKind::kGeometryAsset:
-      co_return co_await submit_geometry(item_id);
+      co_return co_await submit_geometry(item_id, std::move(on_started));
     case PlanItemKind::kSceneAsset:
-      co_return co_await submit_scene(item_id);
+      co_return co_await submit_scene(item_id, std::move(on_started));
     case PlanItemKind::kAudioResource:
       session_.AddDiagnostic(MakeErrorDiagnostic("import.plan.unhandled_kind",
         "Unhandled plan item kind in import", item.debug_name, ""));

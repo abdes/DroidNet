@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -142,6 +143,9 @@ public:
     data::AssetKey default_material_key;
     bool want_textures = false;
     bool has_material_textures = false;
+
+    //! Callback fired when a worker starts processing this item.
+    std::function<void()> on_started;
 
     ImportRequest request;
     observer_ptr<NamingService> naming_service;

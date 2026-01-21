@@ -466,6 +466,10 @@ auto ScenePipeline::Worker() -> co::Co<>
       continue;
     }
 
+    if (item.on_started) {
+      item.on_started();
+    }
+
     std::vector<ImportDiagnostic> diagnostics;
     BuildOutcome outcome;
 

@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -125,6 +126,9 @@ public:
 
     //! Source content (bytes, multi-source set, or decoded image).
     SourceContent source;
+
+    //! Callback fired when a worker starts processing this item.
+    std::function<void()> on_started;
 
     //! Cancellation token.
     std::stop_token stop_token;
