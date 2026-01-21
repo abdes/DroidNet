@@ -4,16 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Import/Internal/bc7/Bc7Encoder.h>
-
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <cstring>
 #include <execution>
 #include <mutex>
 #include <numeric>
 
+#include <Oxygen/Content/Import/Internal/bc7/Bc7Encoder.h>
 #include <Oxygen/Content/Import/Internal/bc7/bc7enc.h>
 
 namespace oxygen::content::import::bc7 {
@@ -23,7 +21,7 @@ namespace {
   //=== Thread-Safe Initialization ===----------------------------------------//
 
   std::once_flag g_encoder_init_flag;
-  std::atomic<bool> g_encoder_initialized { false };
+  std::atomic g_encoder_initialized { false };
 
   void DoInitialize()
   {

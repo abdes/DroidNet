@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <atomic>
-#include <cctype>
 #include <filesystem>
 #include <latch>
 #include <mutex>
@@ -25,7 +24,6 @@
 #include <Oxygen/Content/Import/Internal/AsyncImporter.h>
 #include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Internal/ImportJob.h>
-#include <Oxygen/Content/Import/Internal/Jobs/AudioImportJob.h>
 #include <Oxygen/Content/Import/Internal/Jobs/FbxImportJob.h>
 #include <Oxygen/Content/Import/Internal/Jobs/GlbImportJob.h>
 #include <Oxygen/Content/Import/Internal/Jobs/TextureImportJob.h>
@@ -51,10 +49,10 @@ namespace {
   [[nodiscard]] auto CreateJobForFormat(ImportFormat format, ImportJobId job_id,
     ImportRequest request, ImportCompletionCallback on_complete,
     ImportProgressCallback on_progress, std::shared_ptr<co::Event> cancel_event,
-    oxygen::observer_ptr<IAsyncFileReader> file_reader,
-    oxygen::observer_ptr<IAsyncFileWriter> file_writer,
-    oxygen::observer_ptr<co::ThreadPool> thread_pool,
-    oxygen::observer_ptr<ResourceTableRegistry> table_registry,
+    observer_ptr<IAsyncFileReader> file_reader,
+    observer_ptr<IAsyncFileWriter> file_writer,
+    observer_ptr<co::ThreadPool> thread_pool,
+    observer_ptr<ResourceTableRegistry> table_registry,
     const ImportConcurrency& concurrency) -> std::shared_ptr<detail::ImportJob>
   {
     switch (format) {
@@ -185,7 +183,7 @@ struct AsyncImportService::Impl {
     startup_latch_.count_down();
 
     // Run the coroutine runtime with the AsyncImporter
-    oxygen::co::Run(*event_loop_, [this]() -> co::Co<> {
+    co::Run(*event_loop_, [this]() -> co::Co<> {
       // Use OXCO_WITH_NURSERY to properly activate the LiveObject
       OXCO_WITH_NURSERY(n)
       {
@@ -204,7 +202,7 @@ struct AsyncImportService::Impl {
     });
 
     if (table_registry_) {
-      oxygen::co::Run(*event_loop_, [this]() -> co::Co<> {
+      co::Run(*event_loop_, [this]() -> co::Co<> {
         const auto ok = co_await table_registry_->FinalizeAll();
         if (!ok) {
           DLOG_F(
@@ -279,7 +277,7 @@ struct AsyncImportService::Impl {
     }
 
     // Post the stop request to the event loop to ensure it runs on the
-    // correct thread. The nursery will be cancelled and co::Run() will
+    // correct thread. The nursery will be canceled and co::Run() will
     // exit naturally, causing the event loop to stop.
     if (event_loop_ && async_importer_) {
       event_loop_->Post([this]() { async_importer_->Stop(); });
@@ -412,14 +410,10 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
       ? std::string("custom:") + std::to_string(job_id)
       : MakeJobName(format, job_id, request.source_path));
 
-  const auto file_reader
-    = oxygen::observer_ptr<IAsyncFileReader>(impl_->file_reader_.get());
-  const auto file_writer
-    = oxygen::observer_ptr<IAsyncFileWriter>(impl_->file_writer_.get());
-  const auto thread_pool
-    = oxygen::observer_ptr<co::ThreadPool>(impl_->thread_pool_.get());
-  const auto table_registry
-    = oxygen::observer_ptr<ResourceTableRegistry>(impl_->table_registry_.get());
+  const auto file_reader = observer_ptr(impl_->file_reader_.get());
+  const auto file_writer = observer_ptr(impl_->file_writer_.get());
+  const auto thread_pool = observer_ptr(impl_->thread_pool_.get());
+  const auto table_registry = observer_ptr(impl_->table_registry_.get());
 
   std::shared_ptr<detail::ImportJob> job;
   if (use_custom_factory) {

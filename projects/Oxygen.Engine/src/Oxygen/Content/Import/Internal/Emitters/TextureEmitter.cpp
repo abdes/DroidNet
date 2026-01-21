@@ -138,11 +138,11 @@ namespace {
       .size_bytes = aligned_pitch,
     };
 
-    const std::array<std::byte, 4> white_pixel { std::byte { 0xFF },
-      std::byte { 0xFF }, std::byte { 0xFF }, std::byte { 0xFF } };
+    const std::array white_pixel { std::byte { 0xFF }, std::byte { 0xFF },
+      std::byte { 0xFF }, std::byte { 0xFF } };
 
-    oxygen::serio::MemoryStream stream;
-    oxygen::serio::Writer<oxygen::serio::MemoryStream> writer(stream);
+    serio::MemoryStream stream;
+    serio::Writer writer(stream);
 
     CheckResult(writer.Write(header), "payload_header");
     CheckResult(writer.Write(layout), "subresource_layout");
@@ -156,7 +156,7 @@ namespace {
     const size_t padding_size
       = data_offset_bytes - static_cast<uint32_t>(position.value());
     if (padding_size > 0) {
-      std::vector<std::byte> padding(padding_size, std::byte { 0 });
+      std::vector padding(padding_size, std::byte { 0 });
       CheckResult(writer.WriteBlob(
                     std::span<const std::byte>(padding.data(), padding.size())),
         "payload_padding");
@@ -173,7 +173,7 @@ namespace {
       CheckResult(writer.Write(header), "payload_header_hash");
     }
 
-    return std::vector<std::byte>(payload_bytes.begin(), payload_bytes.end());
+    return std::vector(payload_bytes.begin(), payload_bytes.end());
   }
 
 } // namespace

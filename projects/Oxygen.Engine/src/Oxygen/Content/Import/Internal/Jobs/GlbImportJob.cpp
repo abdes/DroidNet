@@ -25,9 +25,7 @@
 #include <Oxygen/Content/Import/Internal/WorkDispatcher.h>
 #include <Oxygen/Content/Import/Internal/WorkPayloadStore.h>
 #include <Oxygen/Content/Import/Internal/gltf/GltfAdapter.h>
-#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/OxCo/Detail/ScopeGuard.h>
 #include <Oxygen/OxCo/Nursery.h>
 
 namespace oxygen::content::import::detail {
@@ -107,7 +105,7 @@ auto GlbImportJob::ExecuteAsync() -> co::Co<ImportReport>
   ReportProgress(ImportPhase::kParsing, 0.0f, 0.0f, 0U, 0U, "Parsing GLB...");
   auto asset = co_await ParseAsset(session);
   AddDiagnostics(session, std::move(asset.diagnostics));
-  if (asset.cancelled || !asset.success) {
+  if (asset.canceled || !asset.success) {
     ReportProgress(
       ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "GLB parse failed");
     co_return co_await FinalizeSession(session);
@@ -117,9 +115,9 @@ auto GlbImportJob::ExecuteAsync() -> co::Co<ImportReport>
     ImportPhase::kParsing, 0.05f, 0.0f, 0U, 0U, "Loading texture sources...");
   auto external_textures = co_await LoadExternalTextureBytes(asset, session);
   AddDiagnostics(session, std::move(external_textures.diagnostics));
-  if (external_textures.cancelled) {
+  if (external_textures.canceled) {
     ReportProgress(
-      ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "GLB load cancelled");
+      ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "GLB load canceled");
     co_return co_await FinalizeSession(session);
   }
 
@@ -129,18 +127,18 @@ auto GlbImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto stop_token = StopToken();
   auto plan_outcome = co_await ThreadPool()->Run(
     [this, &asset, request_copy, stop_token, &external_textures](
-      co::ThreadPool::CancelToken cancelled) -> PlanBuildOutcome {
+      co::ThreadPool::CancelToken canceled) -> PlanBuildOutcome {
       DLOG_F(1, "GlbImportJob: BuildPlan task begin");
-      if (cancelled || stop_token.stop_requested()) {
-        PlanBuildOutcome cancelled_outcome;
-        cancelled_outcome.cancelled = true;
-        return cancelled_outcome;
+      if (canceled || stop_token.stop_requested()) {
+        PlanBuildOutcome canceled_outcome;
+        canceled_outcome.canceled = true;
+        return canceled_outcome;
       }
       return BuildPlan(
         asset, request_copy, stop_token, external_textures.bytes);
     });
   AddDiagnostics(session, std::move(plan_outcome.diagnostics));
-  if (plan_outcome.cancelled || !plan_outcome.plan) {
+  if (plan_outcome.canceled || !plan_outcome.plan) {
     ReportProgress(
       ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "Plan build failed");
     co_return co_await FinalizeSession(session);
@@ -195,11 +193,11 @@ auto GlbImportJob::ParseAsset(ImportSession& session) -> co::Co<ParsedGlbAsset>
 
   auto parsed = co_await ThreadPool()->Run(
     [request_copy, stop_token, naming_service](
-      co::ThreadPool::CancelToken cancelled) {
+      co::ThreadPool::CancelToken canceled) {
       DLOG_F(1, "GlbImportJob: ParseAsset task begin");
       ParsedGlbAsset out;
-      if (cancelled || stop_token.stop_requested()) {
-        out.cancelled = true;
+      if (canceled || stop_token.stop_requested()) {
+        out.canceled = true;
         return out;
       }
 
@@ -237,7 +235,7 @@ auto GlbImportJob::LoadExternalTextureBytes(ParsedGlbAsset& asset,
   }
 
   if (StopToken().stop_requested()) {
-    outcome.cancelled = true;
+    outcome.canceled = true;
     co_return outcome;
   }
 
@@ -271,7 +269,7 @@ auto GlbImportJob::LoadExternalTextureBytes(ParsedGlbAsset& asset,
 
   for (const auto& source : sources) {
     if (StopToken().stop_requested()) {
-      outcome.cancelled = true;
+      outcome.canceled = true;
       co_return outcome;
     }
 

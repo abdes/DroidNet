@@ -19,7 +19,6 @@
 
 #include <Oxygen/Content/Import/AsyncImportService.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
-#include <Oxygen/Content/Import/LooseCookedLayout.h>
 #include <Oxygen/Content/LooseCookedInspection.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
@@ -30,25 +29,25 @@
 
 namespace oxygen::content::import::test {
 
-using oxygen::content::LooseCookedInspection;
-using oxygen::content::import::AsyncImportService;
-using oxygen::content::import::ImportJobId;
-using oxygen::content::import::ImportReport;
-using oxygen::content::import::ImportRequest;
-using oxygen::data::AssetType;
-using oxygen::data::ComponentType;
-using oxygen::data::loose_cooked::v1::FileKind;
-using oxygen::data::pak::RenderableRecord;
-using oxygen::data::pak::SceneAssetDesc;
-using oxygen::data::pak::SceneComponentTableDesc;
-using oxygen::data::pak::TextureResourceDesc;
-using oxygen::serio::FileStream;
-using oxygen::serio::Reader;
+using content::LooseCookedInspection;
+using data::AssetType;
+using data::ComponentType;
+using data::loose_cooked::v1::FileKind;
+using data::pak::RenderableRecord;
+using data::pak::SceneAssetDesc;
+using data::pak::SceneComponentTableDesc;
+using data::pak::TextureResourceDesc;
+using import::AsyncImportService;
+using import::ImportJobId;
+using import::ImportReport;
+using import::ImportRequest;
+using serio::FileStream;
+using serio::Reader;
 using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 
-class AsyncImporterFullTestBase : public ::testing::Test {
+class AsyncImporterFullTestBase : public testing::Test {
 protected:
   struct ImportRunResult {
     ImportReport report;

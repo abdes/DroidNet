@@ -7,7 +7,6 @@
 #pragma once
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -39,22 +38,22 @@ OXGN_CNTT_NDAPI auto to_string(PlanItemKind kind) noexcept -> std::string_view;
 inline constexpr size_t kPlanKindCount = 6;
 
 //! Strongly typed identifier for a plan item.
-using PlanItemId = oxygen::NamedType<uint32_t, struct PlanItemIdTag,
+using PlanItemId = NamedType<uint32_t, struct PlanItemIdTag,
   // clang-format off
-  oxygen::DefaultInitialized,
-  oxygen::Hashable,
-  oxygen::Comparable,
-  oxygen::Printable
+  DefaultInitialized,
+  Hashable,
+  Comparable,
+  Printable
   // clang-format on
   >;
 
 //! Strongly typed handle for importer-owned payload references.
-using WorkPayloadHandle = oxygen::NamedType<void*, struct WorkPayloadHandleTag,
+using WorkPayloadHandle = NamedType<void*, struct WorkPayloadHandleTag,
   // clang-format off
-  oxygen::DefaultInitialized,
-  oxygen::Hashable,
-  oxygen::Comparable,
-  oxygen::Printable
+  DefaultInitialized,
+  Hashable,
+  Comparable,
+  Printable
   // clang-format on
   >;
 
@@ -166,7 +165,7 @@ public:
 
   //! Resolve the pipeline type ID for a plan item.
   OXGN_CNTT_NDAPI auto PipelineTypeFor(PlanItemId item) const noexcept
-    -> std::optional<oxygen::TypeId>;
+    -> std::optional<TypeId>;
 
   //! Access the readiness tracker for a plan item.
   OXGN_CNTT_API auto Tracker(PlanItemId item) -> ReadinessTracker&;
@@ -190,8 +189,7 @@ private:
   std::vector<PlanItemId> required_storage_;
   std::vector<uint8_t> satisfied_storage_;
   std::vector<PlanItemId> prerequisites_storage_;
-  std::array<std::optional<oxygen::TypeId>, kPlanKindCount>
-    pipeline_registry_ {};
+  std::array<std::optional<TypeId>, kPlanKindCount> pipeline_registry_ {};
 };
 
 } // namespace oxygen::content::import

@@ -11,6 +11,8 @@
 #include <stop_token>
 #include <string>
 
+#include <Oxygen/Testing/GTest.h>
+
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Import/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/IAsyncFileWriter.h>
@@ -21,7 +23,6 @@
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
-#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen::content::import::detail;
@@ -39,7 +40,7 @@ namespace {
   };
 }
 
-class ImportJobTest : public ::testing::Test {
+class ImportJobTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
   std::unique_ptr<IAsyncFileReader> file_reader_;
@@ -87,7 +88,7 @@ public:
 
   Event started;
   Event waiting;
-  bool cancelled_cleanup_ran = false;
+  bool canceled_cleanup_ran = false;
   bool executed = false;
 
 private:
@@ -100,7 +101,7 @@ private:
 
     co_await oxygen::co::AnyOf(oxygen::co::kSuspendForever,
       oxygen::co::UntilCancelledAnd([this]() -> Co<> {
-        cancelled_cleanup_ran = true;
+        canceled_cleanup_ran = true;
         co_return;
       }));
 
@@ -205,7 +206,7 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_Stop_CompletesWithCancelledDiagnostic)
   // Arrange
   std::atomic<int> complete_calls { 0 };
   bool reported_success = true;
-  std::string cancelled_code;
+  std::string canceled_code;
   Event done;
 
   ImportRequest request;
@@ -215,7 +216,7 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_Stop_CompletesWithCancelledDiagnostic)
   auto on_complete = [&](ImportJobId, const ImportReport& report) {
     reported_success = report.success;
     if (!report.diagnostics.empty()) {
-      cancelled_code = report.diagnostics.front().code;
+      canceled_code = report.diagnostics.front().code;
     }
     ++complete_calls;
     done.Trigger();
@@ -246,17 +247,17 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_Stop_CompletesWithCancelledDiagnostic)
   // Assert
   EXPECT_EQ(complete_calls.load(), 1);
   EXPECT_FALSE(reported_success);
-  EXPECT_EQ(cancelled_code, "import.cancelled");
+  EXPECT_EQ(canceled_code, "import.canceled");
   EXPECT_TRUE(job.StopTokenForTest().stop_requested());
 }
 
-//! Verify pre-triggered cancel_event completes as cancelled and avoids work.
+//! Verify pre-triggered cancel_event completes as canceled and avoids work.
 NOLINT_TEST_F(ImportJobTest, ImportJob_CancelEvent_PreTriggered_AvoidsExecution)
 {
   // Arrange
   std::atomic<int> complete_calls { 0 };
   bool reported_success = true;
-  std::string cancelled_code;
+  std::string canceled_code;
   Event done;
 
   ImportRequest request;
@@ -268,7 +269,7 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_CancelEvent_PreTriggered_AvoidsExecution)
   auto on_complete = [&](ImportJobId, const ImportReport& report) {
     reported_success = report.success;
     if (!report.diagnostics.empty()) {
-      cancelled_code = report.diagnostics.front().code;
+      canceled_code = report.diagnostics.front().code;
     }
     ++complete_calls;
     done.Trigger();
@@ -296,7 +297,7 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_CancelEvent_PreTriggered_AvoidsExecution)
   // Assert
   EXPECT_EQ(complete_calls.load(), 1);
   EXPECT_FALSE(reported_success);
-  EXPECT_EQ(cancelled_code, "import.cancelled");
+  EXPECT_EQ(canceled_code, "import.canceled");
   EXPECT_FALSE(job.executed);
   EXPECT_TRUE(job.StopTokenForTest().stop_requested());
 }

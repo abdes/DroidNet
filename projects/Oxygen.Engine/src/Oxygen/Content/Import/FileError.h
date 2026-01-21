@@ -6,12 +6,12 @@
 
 #pragma once
 
-#include <Oxygen/Content/api_export.h>
-
 #include <cstdint>
 #include <filesystem>
 #include <string>
 #include <system_error>
+
+#include <Oxygen/Content/api_export.h>
 
 namespace oxygen::content::import {
 
@@ -75,7 +75,7 @@ enum class FileError : uint32_t {
   //! General I/O error during read/write.
   kIOError,
 
-  //! Operation was cancelled.
+  //! Operation was canceled.
   kCancelled,
 
   //! Unknown or unmapped error.

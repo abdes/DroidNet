@@ -67,14 +67,13 @@ auto IsColorIntent(const TextureIntent intent) -> bool
   return false;
 }
 
-[[nodiscard]] auto IsBc7Format(const oxygen::Format format) noexcept -> bool
+[[nodiscard]] auto IsBc7Format(const Format format) noexcept -> bool
 {
-  return format == oxygen::Format::kBC7UNorm
-    || format == oxygen::Format::kBC7UNormSRGB;
+  return format == Format::kBC7UNorm || format == Format::kBC7UNormSRGB;
 }
 
 [[nodiscard]] auto NormalizeBc7Quality(
-  const oxygen::Format format, const Bc7Quality quality) noexcept -> Bc7Quality
+  const Format format, const Bc7Quality quality) noexcept -> Bc7Quality
 {
   return IsBc7Format(format) ? quality : Bc7Quality::kNone;
 }

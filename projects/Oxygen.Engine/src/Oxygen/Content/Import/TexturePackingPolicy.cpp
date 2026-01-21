@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Content/Import/TexturePackingPolicy.h>
-
 #include <Oxygen/Core/Detail/FormatUtils.h>
 
 namespace oxygen::content::import {

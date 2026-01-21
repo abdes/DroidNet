@@ -366,7 +366,7 @@ OXGN_CNTT_NDAPI auto ComputeCubeDirection(
 */
 OXGN_CNTT_NDAPI auto AssembleCubeFromFaces(
   std::span<const ScratchImage, kCubeFaceCount> faces)
-  -> oxygen::Result<ScratchImage, TextureImportError>;
+  -> Result<ScratchImage, TextureImportError>;
 
 //! Options for equirectangular to cube map conversion.
 /*!
@@ -409,7 +409,7 @@ struct EquirectToCubeOptions {
 */
 OXGN_CNTT_NDAPI auto ConvertEquirectangularToCube(
   const ScratchImage& equirect, const EquirectToCubeOptions& options)
-  -> oxygen::Result<ScratchImage, TextureImportError>;
+  -> Result<ScratchImage, TextureImportError>;
 
 //===----------------------------------------------------------------------===//
 // Cube Map Layout Detection and Extraction
@@ -537,7 +537,7 @@ OXGN_CNTT_NDAPI auto DetectCubeMapLayout(const ScratchImage& image) noexcept
 */
 OXGN_CNTT_NDAPI auto ExtractCubeFacesFromLayout(
   const ScratchImage& layout_image, CubeMapImageLayout layout)
-  -> oxygen::Result<ScratchImage, TextureImportError>;
+  -> Result<ScratchImage, TextureImportError>;
 
 //! Extract cube faces with automatic layout detection.
 /*!
@@ -550,7 +550,6 @@ OXGN_CNTT_NDAPI auto ExtractCubeFacesFromLayout(
   @see DetectCubeMapLayout, ExtractCubeFacesFromLayout
 */
 OXGN_CNTT_NDAPI auto ExtractCubeFacesFromLayout(
-  const ScratchImage& layout_image)
-  -> oxygen::Result<ScratchImage, TextureImportError>;
+  const ScratchImage& layout_image) -> Result<ScratchImage, TextureImportError>;
 
 } // namespace oxygen::content::import

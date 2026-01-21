@@ -4,14 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Import/Internal/WindowsFileWriter.h>
-
-#include <Oxygen/OxCo/Run.h>
-#include <Oxygen/Testing/GTest.h>
-
 #include <filesystem>
 #include <fstream>
 #include <latch>
+
+#include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Content/Import/Internal/WindowsFileWriter.h>
+#include <Oxygen/OxCo/Run.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
@@ -20,7 +21,7 @@ namespace co = oxygen::co;
 namespace {
 
 //! Test fixture with temporary directory management.
-class WindowsFileWriterTest : public ::testing::Test {
+class WindowsFileWriterTest : public testing::Test {
 protected:
   auto SetUp() -> void override
   {
@@ -485,7 +486,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, Flush_ReturnsFirstError)
 NOLINT_TEST_F(WindowsFileWriterTest, CancelAll_PreventsNewOperations)
 {
   // Arrange
-  auto path = test_dir_ / "cancelled.txt";
+  auto path = test_dir_ / "canceled.txt";
 
   // Act
   writer_->CancelAll();
@@ -501,7 +502,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, CancelAll_PreventsNewOperations)
   EXPECT_EQ(error, FileError::kCancelled);
 }
 
-//! Verify CancelAll invokes callbacks with cancelled error.
+//! Verify CancelAll invokes callbacks with canceled error.
 NOLINT_TEST_F(WindowsFileWriterTest, CancelAll_InvokesCallbacksWithCancelled)
 {
   // Arrange
@@ -519,7 +520,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, CancelAll_InvokesCallbacksWithCancelled)
       callback_error = err.code;
     });
 
-  // Assert - callback should be invoked immediately with cancelled
+  // Assert - callback should be invoked immediately with canceled
   EXPECT_TRUE(callback_invoked);
   EXPECT_EQ(callback_error, FileError::kCancelled);
 }

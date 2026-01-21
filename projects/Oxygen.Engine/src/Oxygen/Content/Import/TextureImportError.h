@@ -58,7 +58,7 @@ enum class TextureImportError : uint8_t {
   kWriteFailed   = 62,  //!< Failed to write output data
 
   //=== Cancellation (80-89) ===---------------------------------------------//
-  kCancelled     = 80,  //!< Operation was cancelled by the caller
+  kCancelled     = 80,  //!< Operation was canceled by the caller
 
   // clang-format on
 };

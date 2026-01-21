@@ -8,17 +8,15 @@
 
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <stop_token>
 #include <string>
 #include <type_traits>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Content/api_export.h>
-
 #include <Oxygen/Content/Import/Naming.h>
 #include <Oxygen/Content/Import/TextureImportTypes.h>
 #include <Oxygen/Content/Import/TextureSourceAssembly.h>
+#include <Oxygen/Content/api_export.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
 

@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <filesystem>
 #include <memory>
 #include <stop_token>
 #include <string>
@@ -45,15 +44,13 @@ namespace oxygen::content::import::detail {
  Owns job-scoped state and defines the job lifetime boundary.
 
  The job is cancellable. Cancellation is reported via the completion callback
- only: `ImportReport.success=false` with a cancelled diagnostic.
+ only: `ImportReport.success=false` with a canceled diagnostic.
 
  The job is a `co::LiveObject`. It owns a per-job nursery which is opened by
- `ActivateAsync()` and cancelled by `Stop()`. All job-scoped tasks (pipeline
+ `ActivateAsync()` and canceled by `Stop()`. All job-scoped tasks (pipeline
  workers, collectors, and orchestration coroutines) must run in this nursery.
 */
-class ImportJob : public oxygen::Object,
-                  public oxygen::Named,
-                  public co::LiveObject {
+class ImportJob : public Object, public Named, public co::LiveObject {
 public:
   //! Construct a job.
   /*!
@@ -69,10 +66,10 @@ public:
   OXGN_CNTT_API ImportJob(ImportJobId job_id, ImportRequest request,
     ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
     std::shared_ptr<co::Event> cancel_event,
-    oxygen::observer_ptr<IAsyncFileReader> file_reader,
-    oxygen::observer_ptr<IAsyncFileWriter> file_writer,
-    oxygen::observer_ptr<co::ThreadPool> thread_pool,
-    oxygen::observer_ptr<ResourceTableRegistry> table_registry,
+    observer_ptr<IAsyncFileReader> file_reader,
+    observer_ptr<IAsyncFileWriter> file_writer,
+    observer_ptr<co::ThreadPool> thread_pool,
+    observer_ptr<ResourceTableRegistry> table_registry,
     ImportConcurrency concurrency);
 
   OXYGEN_MAKE_NON_COPYABLE(ImportJob)
@@ -122,22 +119,22 @@ protected:
 
   //! Access the async file writer.
   OXGN_CNTT_NDAPI auto FileReader() const noexcept
-    -> oxygen::observer_ptr<IAsyncFileReader>;
+    -> observer_ptr<IAsyncFileReader>;
 
   //! Access the async file writer.
   OXGN_CNTT_NDAPI auto FileWriter() const noexcept
-    -> oxygen::observer_ptr<IAsyncFileWriter>;
+    -> observer_ptr<IAsyncFileWriter>;
 
   //! Access the shared thread pool.
   OXGN_CNTT_NDAPI auto ThreadPool() const noexcept
-    -> oxygen::observer_ptr<co::ThreadPool>;
+    -> observer_ptr<co::ThreadPool>;
 
   //! Access pipeline concurrency settings.
   OXGN_CNTT_NDAPI auto Concurrency() const noexcept -> const ImportConcurrency&;
 
   //! Access the resource table registry.
   OXGN_CNTT_NDAPI auto TableRegistry() const noexcept
-    -> oxygen::observer_ptr<ResourceTableRegistry>;
+    -> observer_ptr<ResourceTableRegistry>;
 
   //! Returns the job id.
   OXGN_CNTT_NDAPI auto JobId() const -> ImportJobId;
@@ -197,10 +194,10 @@ private:
   ImportCompletionCallback on_complete_;
   ImportProgressCallback on_progress_;
   std::shared_ptr<co::Event> cancel_event_;
-  oxygen::observer_ptr<IAsyncFileReader> file_reader_ {};
-  oxygen::observer_ptr<IAsyncFileWriter> file_writer_ {};
-  oxygen::observer_ptr<co::ThreadPool> thread_pool_ {};
-  oxygen::observer_ptr<ResourceTableRegistry> table_registry_ {};
+  observer_ptr<IAsyncFileReader> file_reader_ {};
+  observer_ptr<IAsyncFileWriter> file_writer_ {};
+  observer_ptr<co::ThreadPool> thread_pool_ {};
+  observer_ptr<ResourceTableRegistry> table_registry_ {};
   ImportConcurrency concurrency_ {};
 
   std::string name_;

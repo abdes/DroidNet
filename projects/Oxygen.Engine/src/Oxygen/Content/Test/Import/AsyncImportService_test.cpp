@@ -68,7 +68,7 @@ auto StopService(AsyncImportService& service) -> void { service.Stop(); }
 //=== Construction and Destruction Tests
 //===-----------------------------------//
 
-class AsyncImportServiceLifecycleTest : public ::testing::Test {
+class AsyncImportServiceLifecycleTest : public testing::Test {
 protected:
   AsyncImportService::Config config_ { .thread_pool_size = 2 };
 };
@@ -133,7 +133,7 @@ NOLINT_TEST_F(
 
 //=== Job Submission Tests ===------------------------------------------------//
 
-class AsyncImportServiceSubmitTest : public ::testing::Test {
+class AsyncImportServiceSubmitTest : public testing::Test {
 protected:
   AsyncImportService::Config config_ { .thread_pool_size = 2 };
 };
@@ -335,7 +335,7 @@ NOLINT_TEST_F(
 
 //=== Cancellation Tests ===--------------------------------------------------//
 
-class AsyncImportServiceCancelTest : public ::testing::Test {
+class AsyncImportServiceCancelTest : public testing::Test {
 protected:
   AsyncImportService::Config config_ { .thread_pool_size = 2 };
 };
@@ -423,7 +423,7 @@ NOLINT_TEST_F(
   bool cancel_result = service.CancelJob(job_id);
   cancel_attempted.count_down();
 
-  // Wait a bit to see if job completes (it shouldn't if cancelled properly)
+  // Wait a bit to see if job completes (it shouldn't if canceled properly)
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
   // Assert
@@ -487,7 +487,7 @@ NOLINT_TEST_F(
   // Wait for first job to finish
   std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-  // Assert - the second job should have been cancelled before execution
+  // Assert - the second job should have been canceled before execution
   EXPECT_TRUE(cancel_result);
   // Note: Due to timing, second_job_executed might still be true if cancel was
   // too late The important verification is that cancel_result correctly
@@ -504,7 +504,7 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelAll_MultipleJobs_CancelsAll)
   AsyncImportService service(config_);
   struct SharedState {
     std::atomic<int> jobs_completed { 0 };
-    std::atomic<int> cancelled_reports { 0 };
+    std::atomic<int> canceled_reports { 0 };
     std::atomic<int> jobs_started { 0 };
     std::unordered_set<ImportJobId> started_job_ids;
     std::mutex mutex;
@@ -531,10 +531,10 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelAll_MultipleJobs_CancelsAll)
         DLOG_F(INFO, "CancelAll completion: success={} diagnostics={}",
           report.success, report.diagnostics.size());
         state->jobs_completed.fetch_add(1, std::memory_order_relaxed);
-        const bool cancelled
-          = HasDiagnosticCode(report.diagnostics, "import.cancelled");
-        if (cancelled) {
-          state->cancelled_reports.fetch_add(1, std::memory_order_relaxed);
+        const bool canceled
+          = HasDiagnosticCode(report.diagnostics, "import.canceled");
+        if (canceled) {
+          state->canceled_reports.fetch_add(1, std::memory_order_relaxed);
         }
         state->cv.notify_all();
       },
@@ -575,7 +575,7 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelAll_MultipleJobs_CancelsAll)
     });
   }
 
-  // Assert - verify jobs were cancelled (completed count should be less than
+  // Assert - verify jobs were canceled (completed count should be less than
   // total) Note: Some jobs might complete before cancellation takes effect, so
   // we can't assert exactly zero completions, but we can verify the system is
   // consistent
@@ -584,15 +584,14 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelAll_MultipleJobs_CancelsAll)
   const int final_completed
     = state->jobs_completed.load(std::memory_order_relaxed);
   EXPECT_EQ(final_completed, kJobCount);
-  EXPECT_EQ(
-    state->cancelled_reports.load(std::memory_order_relaxed), kJobCount);
+  EXPECT_EQ(state->canceled_reports.load(std::memory_order_relaxed), kJobCount);
 
   StopService(service);
 }
 
 //=== Shutdown Tests ===------------------------------------------------------//
 
-class AsyncImportServiceShutdownTest : public ::testing::Test {
+class AsyncImportServiceShutdownTest : public testing::Test {
 protected:
   AsyncImportService::Config config_ { .thread_pool_size = 2 };
 };
@@ -620,7 +619,7 @@ NOLINT_TEST_F(
   StopService(service);
 }
 
-class AsyncImportServiceShutdownDeathTest : public ::testing::Test {
+class AsyncImportServiceShutdownDeathTest : public testing::Test {
 protected:
   AsyncImportService::Config config_ { .thread_pool_size = 2 };
 };
@@ -668,7 +667,7 @@ NOLINT_TEST_F(AsyncImportServiceShutdownTest, Stop_WithPendingJobs_Completes)
 
 //=== Concurrent Submission Tests ===-----------------------------------------//
 
-class AsyncImportServiceConcurrencyTest : public ::testing::Test {
+class AsyncImportServiceConcurrencyTest : public testing::Test {
 protected:
   AsyncImportService::Config config_ { .thread_pool_size = 4 };
 };
@@ -764,7 +763,7 @@ NOLINT_TEST_F(
 //=== IsJobActive Tests
 //===----------------------------------------------------//
 
-class AsyncImportServiceJobActiveTest : public ::testing::Test {
+class AsyncImportServiceJobActiveTest : public testing::Test {
 protected:
   AsyncImportService::Config config_ { .thread_pool_size = 2 };
 };

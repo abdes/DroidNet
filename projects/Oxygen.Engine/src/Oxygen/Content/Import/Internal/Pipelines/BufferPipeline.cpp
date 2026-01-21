@@ -157,13 +157,13 @@ auto BufferPipeline::Worker() -> co::Co<>
 
 auto BufferPipeline::ReportCancelled(WorkItem item) -> co::Co<>
 {
-  WorkResult cancelled {
+  WorkResult canceled {
     .source_id = std::move(item.source_id),
     .cooked = std::move(item.cooked),
     .diagnostics = {},
     .success = false,
   };
-  co_await output_channel_.Send(std::move(cancelled));
+  co_await output_channel_.Send(std::move(canceled));
 }
 
 auto BufferPipeline::ComputeContentHash(WorkItem& item)
@@ -187,8 +187,8 @@ auto BufferPipeline::ComputeContentHash(WorkItem& item)
 
   const auto content_hash = co_await thread_pool_.Run(
     [bytes, stop_token = item.stop_token, &item](
-      co::ThreadPool::CancelToken cancelled) noexcept {
-      if (stop_token.stop_requested() || cancelled) {
+      co::ThreadPool::CancelToken canceled) noexcept {
+      if (stop_token.stop_requested() || canceled) {
         return uint64_t { 0 };
       }
 

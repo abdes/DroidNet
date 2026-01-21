@@ -10,6 +10,7 @@
 #include <Windows.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Internal/WindowsFileWriter.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/asio.h>
@@ -191,7 +192,7 @@ auto WindowsFileWriter::Write(const std::filesystem::path& path,
     co_return Err(FileErrorInfo {
       .code = FileError::kCancelled,
       .path = path,
-      .message = "Write cancelled",
+      .message = "Write canceled",
     });
   }
 
@@ -240,7 +241,7 @@ void WindowsFileWriter::WriteAsync(const std::filesystem::path& path,
         FileErrorInfo {
           .code = FileError::kCancelled,
           .path = path,
-          .message = "Write cancelled",
+          .message = "Write canceled",
         },
         0);
     }
@@ -338,7 +339,7 @@ auto WindowsFileWriter::WriteAt(const std::filesystem::path& path,
     co_return Err(FileErrorInfo {
       .code = FileError::kCancelled,
       .path = path,
-      .message = "Write cancelled",
+      .message = "Write canceled",
     });
   }
 
@@ -387,7 +388,7 @@ void WindowsFileWriter::WriteAtAsync(const std::filesystem::path& path,
         FileErrorInfo {
           .code = FileError::kCancelled,
           .path = path,
-          .message = "Write cancelled",
+          .message = "Write canceled",
         },
         0);
     }

@@ -4605,7 +4605,7 @@ typedef enum ufbx_error_type UFBX_ENUM_REPR {
   // condition.
   UFBX_ERROR_IO,
 
-  // User cancelled the loading via `ufbx_load_opts.progress_cb` returning
+  // User canceled the loading via `ufbx_load_opts.progress_cb` returning
   // `UFBX_PROGRESS_CANCEL`.
   UFBX_ERROR_CANCELLED,
 

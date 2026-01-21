@@ -8,7 +8,6 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -49,13 +48,13 @@ GltfAdapter::~GltfAdapter() = default;
 
 namespace {
 
-  using oxygen::data::pak::DirectionalLightRecord;
-  using oxygen::data::pak::NodeRecord;
-  using oxygen::data::pak::OrthographicCameraRecord;
-  using oxygen::data::pak::PerspectiveCameraRecord;
-  using oxygen::data::pak::PointLightRecord;
-  using oxygen::data::pak::RenderableRecord;
-  using oxygen::data::pak::SpotLightRecord;
+  using data::pak::DirectionalLightRecord;
+  using data::pak::NodeRecord;
+  using data::pak::OrthographicCameraRecord;
+  using data::pak::PerspectiveCameraRecord;
+  using data::pak::PointLightRecord;
+  using data::pak::RenderableRecord;
+  using data::pak::SpotLightRecord;
 
   [[nodiscard]] auto MakeErrorDiagnostic(std::string code, std::string message,
     std::string_view source_id, std::string_view object_path)
@@ -88,8 +87,8 @@ namespace {
   {
     return ImportDiagnostic {
       .severity = ImportSeverity::kError,
-      .code = "import.cancelled",
-      .message = "Import cancelled",
+      .code = "import.canceled",
+      .message = "Import canceled",
       .source_path = std::string(source_id),
       .object_path = {},
     };
@@ -139,7 +138,7 @@ namespace {
   {
     if (input.stop_token.stop_requested()) {
       DLOG_F(
-        WARNING, "glTF load cancelled: source_id='{}'", input.source_id_prefix);
+        WARNING, "glTF load canceled: source_id='{}'", input.source_id_prefix);
       diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
       return { nullptr, &cgltf_free };
     }
@@ -175,7 +174,7 @@ namespace {
     -> CgltfDataPtr
   {
     if (input.stop_token.stop_requested()) {
-      DLOG_F(WARNING, "glTF load cancelled (memory): source_id='{}'",
+      DLOG_F(WARNING, "glTF load canceled (memory): source_id='{}'",
         input.source_id_prefix);
       diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
       return { nullptr, &cgltf_free };
@@ -343,12 +342,12 @@ namespace {
   [[nodiscard]] auto ToBounds3(const AccessorBounds& bounds) -> Bounds3
   {
     Bounds3 out;
-    out.min = std::array<float, 3> {
+    out.min = std::array {
       bounds.min.x,
       bounds.min.y,
       bounds.min.z,
     };
-    out.max = std::array<float, 3> {
+    out.max = std::array {
       bounds.max.x,
       bounds.max.y,
       bounds.max.z,
@@ -554,11 +553,9 @@ namespace {
     return id;
   }
 
-  [[nodiscard]] constexpr auto IsBc7Format(const oxygen::Format format) noexcept
-    -> bool
+  [[nodiscard]] constexpr auto IsBc7Format(const Format format) noexcept -> bool
   {
-    return format == oxygen::Format::kBC7UNorm
-      || format == oxygen::Format::kBC7UNormSRGB;
+    return format == Format::kBC7UNorm || format == Format::kBC7UNormSRGB;
   }
 
   [[nodiscard]] auto ResolveUvSet(const cgltf_texture_view& view) -> uint8_t
@@ -735,7 +732,7 @@ namespace {
         + image.buffer_view->offset;
       const auto size = static_cast<size_t>(image.buffer_view->size);
       return TexturePipeline::SourceBytes {
-        .bytes = std::span<const std::byte>(raw, size),
+        .bytes = std::span(raw, size),
         .owner = std::static_pointer_cast<const void>(owner),
       };
     }
@@ -803,12 +800,11 @@ namespace {
   };
 
   [[nodiscard]] auto AppendString(std::vector<std::byte>& strings,
-    const std::string_view value) -> oxygen::data::pak::StringTableOffsetT
+    const std::string_view value) -> data::pak::StringTableOffsetT
   {
     const auto offset
-      = static_cast<oxygen::data::pak::StringTableOffsetT>(strings.size());
-    const auto bytes
-      = std::as_bytes(std::span<const char>(value.data(), value.size()));
+      = static_cast<data::pak::StringTableOffsetT>(strings.size());
+    const auto bytes = std::as_bytes(std::span(value.data(), value.size()));
     strings.insert(strings.end(), bytes.begin(), bytes.end());
     strings.push_back(std::byte { 0 });
     return offset;
@@ -2187,7 +2183,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     kept_indices.push_back(0);
   }
 
-  std::vector<int32_t> old_to_new(nodes.size(), -1);
+  std::vector old_to_new(nodes.size(), -1);
   for (uint32_t new_index = 0; new_index < kept_indices.size(); ++new_index) {
     old_to_new[kept_indices[new_index]] = static_cast<int32_t>(new_index);
   }

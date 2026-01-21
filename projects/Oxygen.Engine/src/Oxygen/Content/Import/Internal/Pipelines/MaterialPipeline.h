@@ -12,7 +12,6 @@
 #include <optional>
 #include <stop_token>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -25,10 +24,8 @@
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/MaterialDomain.h>
-#include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Channel.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 
 namespace oxygen::content::import {

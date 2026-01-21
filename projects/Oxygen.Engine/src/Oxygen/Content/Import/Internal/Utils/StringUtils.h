@@ -7,13 +7,8 @@
 #pragma once
 
 #include <algorithm>
-#include <cctype>
-#include <cstddef>
 #include <string>
 #include <string_view>
-
-#include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Data/AssetKey.h>
 
 namespace oxygen::content::import::util {
 

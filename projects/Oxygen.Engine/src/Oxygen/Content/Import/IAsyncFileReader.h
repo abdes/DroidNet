@@ -6,16 +6,16 @@
 
 #pragma once
 
-#include <Oxygen/Base/Result.h>
-#include <Oxygen/Content/Import/FileError.h>
-#include <Oxygen/Content/api_export.h>
-#include <Oxygen/OxCo/Co.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <vector>
+
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Content/Import/FileError.h>
+#include <Oxygen/Content/api_export.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import {
 
@@ -74,7 +74,7 @@ struct FileInfo {
  ### Cancellation
 
  All operations respect coroutine cancellation. When a coroutine is
- cancelled, pending operations return `FileError::kCancelled`.
+ canceled, pending operations return `FileError::kCancelled`.
 
  ### Error Handling
 
@@ -112,7 +112,7 @@ public:
    - `kNotFound` if file does not exist.
    - `kAccessDenied` if read permission is denied.
    - `kIsDirectory` if path points to a directory.
-   - `kCancelled` if operation was cancelled.
+   - `kCancelled` if operation was canceled.
    - `kIOError` for other I/O failures.
   */
   [[nodiscard]] virtual auto ReadFile(

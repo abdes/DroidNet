@@ -10,7 +10,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
-#include <string>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -168,7 +167,7 @@ public:
   OXGN_CNTT_NDAPI auto Finalize() -> co::Co<bool>;
 
 private:
-  using BufferResourceDesc = oxygen::data::pak::BufferResourceDesc;
+  using BufferResourceDesc = data::pak::BufferResourceDesc;
 
   enum class WriteKind : uint8_t {
     kPadding,

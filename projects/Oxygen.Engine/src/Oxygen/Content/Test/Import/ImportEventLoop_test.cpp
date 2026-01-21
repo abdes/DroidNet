@@ -9,11 +9,12 @@
 #include <thread>
 #include <vector>
 
+#include <Oxygen/Testing/GTest.h>
+
 #include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
-#include <Oxygen/Testing/GTest.h>
 
 using namespace std::chrono_literals;
 using namespace oxygen::content::import;
@@ -25,7 +26,7 @@ namespace {
 //=== Basic Functionality Tests
 //===--------------------------------------------//
 
-class ImportEventLoopBasicTest : public ::testing::Test {
+class ImportEventLoopBasicTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
 };
@@ -63,7 +64,7 @@ NOLINT_TEST_F(ImportEventLoopBasicTest, Post_MultipleCallbacks_ExecuteInOrder)
   loop_.Run();
 
   // Assert
-  using ::testing::ElementsAre;
+  using testing::ElementsAre;
   EXPECT_THAT(order, ElementsAre(1, 2, 3));
 }
 
@@ -104,7 +105,7 @@ NOLINT_TEST_F(ImportEventLoopBasicTest, IsRunning_ReturnsCorrectState)
 //=== EventLoopTraits Tests
 //===------------------------------------------------//
 
-class ImportEventLoopTraitsTest : public ::testing::Test {
+class ImportEventLoopTraitsTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
 };
@@ -138,7 +139,7 @@ NOLINT_TEST_F(ImportEventLoopTraitsTest, Run_WithCoRun_Works)
 //=== ThreadNotification Tests
 //===---------------------------------------------//
 
-class ImportEventLoopThreadNotificationTest : public ::testing::Test {
+class ImportEventLoopThreadNotificationTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
 };
@@ -189,7 +190,7 @@ NOLINT_TEST_F(ImportEventLoopThreadNotificationTest,
 //=== ThreadPool Integration Tests
 //===-----------------------------------------//
 
-class ImportEventLoopThreadPoolTest : public ::testing::Test {
+class ImportEventLoopThreadPoolTest : public testing::Test {
 protected:
   auto SetUp() -> void override
   {
@@ -270,10 +271,10 @@ NOLINT_TEST_F(ImportEventLoopThreadPoolTest, Run_WithCancelToken_Completes)
   // Act
   int result = 0;
   co::Run(*loop_, [&]() -> Co<> {
-    result = co_await pool_->Run([&](ThreadPool::CancelToken cancelled) {
+    result = co_await pool_->Run([&](ThreadPool::CancelToken canceled) {
       task_started = true;
-      // Short task that doesn't actually get cancelled
-      if (cancelled) {
+      // Short task that doesn't actually get canceled
+      if (canceled) {
         return -1;
       }
       return 42;

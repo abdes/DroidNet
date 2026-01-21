@@ -9,7 +9,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
-#include <string>
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -24,7 +23,7 @@ namespace oxygen::content::import::util {
 [[nodiscard]] inline auto ComputeContentHash(
   const std::span<const std::byte> bytes) -> uint64_t
 {
-  const auto digest = oxygen::base::ComputeSha256(bytes);
+  const auto digest = base::ComputeSha256(bytes);
   uint64_t hash = 0;
   for (size_t i = 0; i < 8; ++i) {
     hash |= static_cast<uint64_t>(digest[i]) << (i * 8);

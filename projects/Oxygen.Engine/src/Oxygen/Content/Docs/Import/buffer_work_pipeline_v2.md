@@ -111,7 +111,7 @@ public:
 Workers run as coroutines on the import thread and drain the bounded input
 queue. For each work item:
 
-1) Check cancellation; if cancelled, return `success=false`.
+1) Check cancellation; if canceled, return `success=false`.
 2) If hashing is disabled, forward the payload unchanged.
 3) If `content_hash` is already non‑zero, do not recompute.
 4) Otherwise, compute `content_hash` on the ThreadPool using SHA‑256 and store
@@ -145,7 +145,7 @@ boundaries.
 ## Cancellation Semantics
 
 - Cancellation is expressed via the job nursery and `stop_token`.
-- A cancelled work item returns `success=false` with no additional side effects.
+- A canceled work item returns `success=false` with no additional side effects.
 
 ---
 

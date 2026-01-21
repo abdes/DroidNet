@@ -351,7 +351,7 @@ auto SubmitImport(
 - Thread-safe; callable from any thread
 - Returns unique job ID immediately
 - Callbacks are invoked on the import thread
-- Cancellation is reported via `on_complete` with `report.success=false` and diagnostic code `"import.cancelled"`
+- Cancellation is reported via `on_complete` with `report.success=false` and diagnostic code `"import.canceled"`
 
 **Cancellation:**
 
@@ -444,8 +444,8 @@ ImportReport report {
   .diagnostics = {
     ImportDiagnostic {
       .severity = ImportSeverity::kError,
-      .code = "import.cancelled",
-      .message = "Import cancelled by user"
+      .code = "import.canceled",
+      .message = "Import canceled by user"
     }
   }
 };
@@ -637,11 +637,11 @@ otherwise:
   avoid submitting after closing the input channel.
 - `TrySubmit()` returns `false` when the input channel is closed or full.
 - `PendingCount()` tracks submitted work that has not yet been collected
-  (including cancelled items). `HasPending()` is derived from this counter.
+  (including canceled items). `HasPending()` is derived from this counter.
 - `Collect()` suspends until a result is available. If the output channel is
   closed, it returns a sentinel `WorkResult` with `success = false` and empty
   fields. Callers should treat this as end-of-stream.
-- Cancellation is propagated via `WorkItem.stop_token`; cancelled work yields a
+- Cancellation is propagated via `WorkItem.stop_token`; canceled work yields a
   `WorkResult` with `success = false`.
 ```
 
@@ -1931,7 +1931,7 @@ handled on the import thread:
 3) Cancel the job child nursery.
 4) The job finishes and reports completion via `on_complete(job_id, report)`.
   For cancellation, `report.success=false` and includes diagnostic code
-  `"import.cancelled"`.
+  `"import.canceled"`.
 
 This is the definitive mechanism for per-job cancellation.
 
@@ -1956,7 +1956,7 @@ auto ImportJob::MainAsync() -> co::Co<> {
   bool report_ready = false;
   ImportReport report;
 
-  // Ensure on_complete is invoked once even if this coroutine is cancelled
+  // Ensure on_complete is invoked once even if this coroutine is canceled
   // by importer shutdown.
   co_await co::AnyOf(
     [&]() -> co::Co<> {
@@ -1968,9 +1968,9 @@ auto ImportJob::MainAsync() -> co::Co<> {
       };
 
       // OxCo deterministically handles early cancellation: if the job coroutine
-      // hasn't been resumed yet, it is cancelled without running.
-      auto [cancelled, out] = co_await co::AnyOf(*cancel_event_, run_job());
-      report = cancelled.has_value() ? MakeCancelledReport() : std::move(*out);
+      // hasn't been resumed yet, it is canceled without running.
+      auto [canceled, out] = co_await co::AnyOf(*cancel_event_, run_job());
+      report = canceled.has_value() ? MakeCancelledReport() : std::move(*out);
       report_ready = true;
       co_return;
     }(),
@@ -1999,9 +1999,9 @@ For long-running ThreadPool tasks (e.g., BC7 encoding), use `CancelToken`:
 
 ```cpp
 auto result = co_await thread_pool_->Run(
-  [&](co::ThreadPool::CancelToken cancelled) {
+  [&](co::ThreadPool::CancelToken canceled) {
     for (auto& block : blocks) {
-      if (cancelled) return PartialResult{};
+      if (canceled) return PartialResult{};
       EncodeBlock(block);
     }
     return FullResult{};
@@ -2380,7 +2380,7 @@ expand into standard `ImportRequest` jobs with deterministic behavior.
 - **Forward evolution**: additive fields permitted without breaking older
   parsers; unknown fields must be rejected or ignored based on schema version.
 - **Uniform diagnostics**: error codes align with importer diagnostics (e.g.,
-  `import.manifest.invalid`, `texture.settings.invalid`, `import.cancelled`).
+  `import.manifest.invalid`, `texture.settings.invalid`, `import.canceled`).
 
 ## Extensibility for New Asset Types
 

@@ -6,13 +6,14 @@
 
 #include <array>
 #include <cstddef>
-#include <cstring>
 #include <memory>
 #include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
@@ -22,8 +23,6 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
-#include <Oxygen/OxCo/asio.h>
-#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
@@ -150,7 +149,7 @@ auto ReadRenderableRecord(const std::vector<std::byte>& bytes,
   return record;
 }
 
-class ScenePipelineTest : public ::testing::Test {
+class ScenePipelineTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
 };
@@ -163,10 +162,10 @@ NOLINT_TEST_F(ScenePipelineTest, Collect_MinimalScene_BuildsDescriptor)
   adapter->build = MakeMinimalSceneBuild("Root");
 
   ScenePipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 1);
+  ThreadPool pool(loop_, 1);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     ScenePipeline pipeline(pool);
 
     NamingService naming_service(NamingService::Config {
@@ -257,10 +256,10 @@ NOLINT_TEST_F(ScenePipelineTest, Collect_SortsRenderables_ByNodeIndex)
   adapter->build = std::move(build);
 
   ScenePipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 1);
+  ThreadPool pool(loop_, 1);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     ScenePipeline pipeline(pool);
 
     NamingService naming_service(NamingService::Config {
@@ -320,10 +319,10 @@ NOLINT_TEST_F(ScenePipelineTest, Collect_WithEnvironmentBlock_AppendsBlock)
   adapter->build = MakeMinimalSceneBuild("Root");
 
   ScenePipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 1);
+  ThreadPool pool(loop_, 1);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     ScenePipeline pipeline(pool);
 
     NamingService naming_service(NamingService::Config {

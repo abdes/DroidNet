@@ -10,6 +10,7 @@
 #include <Windows.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Internal/WindowsFileReader.h>
 #include <Oxygen/OxCo/asio.h>
 

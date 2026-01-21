@@ -201,7 +201,7 @@ namespace image::hdr {
           const size_t dst_offset = i * 4;
 
           // Read HDR pixel
-          std::array<float, 4> hdr_pixel = {
+          std::array hdr_pixel = {
             src_data[src_offset + 0],
             src_data[src_offset + 1],
             src_data[src_offset + 2],
@@ -457,7 +457,7 @@ namespace image::mip {
           const int start = static_cast<int>(std::floor(center - radius));
           const int end = static_cast<int>(std::ceil(center + radius));
 
-          std::array<float, 4> val = { 0.0F, 0.0F, 0.0F, 0.0F };
+          std::array val = { 0.0F, 0.0F, 0.0F, 0.0F };
           float weight_sum = 0.0F;
 
           for (int j = start; j < end; ++j) {
@@ -686,7 +686,7 @@ namespace image::content {
     const uint32_t target_mip_levels) -> ScratchImage
   {
     // Generate mips using box filter (averaging normals)
-    auto result = image::mip::GenerateChain2D(
+    auto result = mip::GenerateChain2D(
       source, MipFilter::kBox, ColorSpace::kLinear, target_mip_levels);
 
     if (!result.IsValid()) {
@@ -711,7 +711,7 @@ namespace image::content {
           auto* float_data = reinterpret_cast<float*>(pixels.data());
           for (size_t i = 0; i < pixel_count; ++i) {
             const size_t offset = i * 4;
-            std::array<float, 4> pixel = {
+            std::array pixel = {
               float_data[offset + 0],
               float_data[offset + 1],
               float_data[offset + 2],
@@ -729,7 +729,7 @@ namespace image::content {
           auto* byte_data = reinterpret_cast<uint8_t*>(pixels.data());
           for (size_t i = 0; i < pixel_count; ++i) {
             const size_t offset = i * 4;
-            std::array<float, 4> pixel = {
+            std::array pixel = {
               static_cast<float>(byte_data[offset + 0]) / 255.0F,
               static_cast<float>(byte_data[offset + 1]) / 255.0F,
               static_cast<float>(byte_data[offset + 2]) / 255.0F,

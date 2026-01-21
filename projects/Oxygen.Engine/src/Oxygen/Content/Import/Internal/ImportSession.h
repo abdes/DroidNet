@@ -85,10 +85,10 @@ public:
    @param thread_pool Thread pool for CPU-bound work.
   */
   OXGN_CNTT_API ImportSession(const ImportRequest& request,
-    oxygen::observer_ptr<IAsyncFileReader> file_reader,
-    oxygen::observer_ptr<IAsyncFileWriter> file_writer,
-    oxygen::observer_ptr<co::ThreadPool> thread_pool,
-    oxygen::observer_ptr<ResourceTableRegistry> table_registry);
+    observer_ptr<IAsyncFileReader> file_reader,
+    observer_ptr<IAsyncFileWriter> file_writer,
+    observer_ptr<co::ThreadPool> thread_pool,
+    observer_ptr<ResourceTableRegistry> table_registry);
 
   OXGN_CNTT_API ~ImportSession();
 
@@ -113,29 +113,27 @@ public:
 
   //! Get the async file reader (non-owning).
   OXGN_CNTT_NDAPI auto FileReader() const noexcept
-    -> oxygen::observer_ptr<IAsyncFileReader>;
+    -> observer_ptr<IAsyncFileReader>;
 
   //! Get the async file writer (non-owning).
   OXGN_CNTT_NDAPI auto FileWriter() const noexcept
-    -> oxygen::observer_ptr<IAsyncFileWriter>;
+    -> observer_ptr<IAsyncFileWriter>;
 
   //! Get the thread pool for CPU-bound work (non-owning).
   OXGN_CNTT_NDAPI auto ThreadPool() const noexcept
-    -> oxygen::observer_ptr<co::ThreadPool>;
+    -> observer_ptr<co::ThreadPool>;
 
   //=== Emitters
   //===-----------------------------------------------------------//
 
   //! Get the texture emitter (lazy, import-thread only).
-  OXGN_CNTT_NDAPI auto TextureEmitter()
-    -> oxygen::content::import::TextureEmitter&;
+  OXGN_CNTT_NDAPI auto TextureEmitter() -> TextureEmitter&;
 
   //! Get the buffer emitter (lazy, import-thread only).
-  OXGN_CNTT_NDAPI auto BufferEmitter()
-    -> oxygen::content::import::BufferEmitter&;
+  OXGN_CNTT_NDAPI auto BufferEmitter() -> BufferEmitter&;
 
   //! Get the asset emitter (lazy, import-thread only).
-  OXGN_CNTT_NDAPI auto AssetEmitter() -> oxygen::content::import::AssetEmitter&;
+  OXGN_CNTT_NDAPI auto AssetEmitter() -> AssetEmitter&;
   //=== Diagnostics
   //===--------------------------------------------------------//
 
@@ -178,19 +176,16 @@ public:
 
 private:
   ImportRequest request_;
-  oxygen::observer_ptr<IAsyncFileReader> file_reader_ {};
-  oxygen::observer_ptr<IAsyncFileWriter> file_writer_ {};
-  oxygen::observer_ptr<co::ThreadPool> thread_pool_ {};
-  oxygen::observer_ptr<ResourceTableRegistry> table_registry_ {};
+  observer_ptr<IAsyncFileReader> file_reader_ {};
+  observer_ptr<IAsyncFileWriter> file_writer_ {};
+  observer_ptr<co::ThreadPool> thread_pool_ {};
+  observer_ptr<ResourceTableRegistry> table_registry_ {};
   std::filesystem::path cooked_root_;
   LooseCookedWriter cooked_writer_;
 
-  std::optional<std::unique_ptr<oxygen::content::import::TextureEmitter>>
-    texture_emitter_;
-  std::optional<std::unique_ptr<oxygen::content::import::BufferEmitter>>
-    buffer_emitter_;
-  std::optional<std::unique_ptr<oxygen::content::import::AssetEmitter>>
-    asset_emitter_;
+  std::optional<std::unique_ptr<import::TextureEmitter>> texture_emitter_;
+  std::optional<std::unique_ptr<import::BufferEmitter>> buffer_emitter_;
+  std::optional<std::unique_ptr<import::AssetEmitter>> asset_emitter_;
 
   mutable std::mutex diagnostics_mutex_;
   std::vector<ImportDiagnostic> diagnostics_;

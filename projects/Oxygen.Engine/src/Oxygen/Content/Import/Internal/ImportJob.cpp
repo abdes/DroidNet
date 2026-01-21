@@ -64,10 +64,10 @@ namespace {
 ImportJob::ImportJob(ImportJobId job_id, ImportRequest request,
   ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
   std::shared_ptr<co::Event> cancel_event,
-  oxygen::observer_ptr<IAsyncFileReader> file_reader,
-  oxygen::observer_ptr<IAsyncFileWriter> file_writer,
-  oxygen::observer_ptr<co::ThreadPool> thread_pool,
-  oxygen::observer_ptr<ResourceTableRegistry> table_registry,
+  observer_ptr<IAsyncFileReader> file_reader,
+  observer_ptr<IAsyncFileWriter> file_writer,
+  observer_ptr<co::ThreadPool> thread_pool,
+  observer_ptr<ResourceTableRegistry> table_registry,
   ImportConcurrency concurrency)
   : job_id_(job_id)
   , request_(std::move(request))
@@ -142,20 +142,17 @@ auto ImportJob::EnsureCookedRoot() -> void
   }
 }
 
-auto ImportJob::FileReader() const noexcept
-  -> oxygen::observer_ptr<IAsyncFileReader>
+auto ImportJob::FileReader() const noexcept -> observer_ptr<IAsyncFileReader>
 {
   return file_reader_;
 }
 
-auto ImportJob::FileWriter() const noexcept
-  -> oxygen::observer_ptr<IAsyncFileWriter>
+auto ImportJob::FileWriter() const noexcept -> observer_ptr<IAsyncFileWriter>
 {
   return file_writer_;
 }
 
-auto ImportJob::ThreadPool() const noexcept
-  -> oxygen::observer_ptr<co::ThreadPool>
+auto ImportJob::ThreadPool() const noexcept -> observer_ptr<co::ThreadPool>
 {
   return thread_pool_;
 }
@@ -166,7 +163,7 @@ auto ImportJob::Concurrency() const noexcept -> const ImportConcurrency&
 }
 
 auto ImportJob::TableRegistry() const noexcept
-  -> oxygen::observer_ptr<ResourceTableRegistry>
+  -> observer_ptr<ResourceTableRegistry>
 {
   return table_registry_;
 }
@@ -240,7 +237,7 @@ auto ImportJob::MainAsync() -> co::Co<>
   };
 
   // Guarantee: call on_complete exactly once, even if this coroutine is
-  // cancelled by importer shutdown. Note that code after a cancellable
+  // canceled by importer shutdown. Note that code after a cancellable
   // await is not guaranteed to run, so finalization must be done inside the
   // branches.
   co_await co::AnyOf(
@@ -252,9 +249,9 @@ auto ImportJob::MainAsync() -> co::Co<>
         }
 
         if (cancel_event_) {
-          auto [cancelled, maybe_report]
+          auto [canceled, maybe_report]
             = co_await co::AnyOf(*cancel_event_, ExecuteAsync());
-          if (cancelled.has_value()) {
+          if (canceled.has_value()) {
             stop_source_.request_stop();
             co_return MakeCancelledReport(request_);
           }
@@ -269,18 +266,18 @@ auto ImportJob::MainAsync() -> co::Co<>
       try {
         finalize(co_await run_work());
       } catch (const std::exception& ex) {
-        const bool cancelled = stop_source_.stop_requested()
+        const bool canceled = stop_source_.stop_requested()
           || (cancel_event_ && cancel_event_->Triggered());
-        if (cancelled) {
+        if (canceled) {
           finalize(MakeCancelledReport(request_));
         } else {
           LOG_F(ERROR, "ImportJob failed: {}", ex.what());
           finalize(make_exception_report(ex.what()));
         }
       } catch (...) {
-        const bool cancelled = stop_source_.stop_requested()
+        const bool canceled = stop_source_.stop_requested()
           || (cancel_event_ && cancel_event_->Triggered());
-        if (cancelled) {
+        if (canceled) {
           finalize(MakeCancelledReport(request_));
         } else {
           LOG_F(ERROR, "ImportJob failed: unknown exception");
@@ -294,7 +291,7 @@ auto ImportJob::MainAsync() -> co::Co<>
         co_return;
       }
 
-      DLOG_F(2, "ImportJob main cancelled: job_id={}", job_id_);
+      DLOG_F(2, "ImportJob main canceled: job_id={}", job_id_);
       stop_source_.request_stop();
       finalize(MakeCancelledReport(request_));
       co_return;
@@ -314,8 +311,8 @@ auto ImportJob::MakeCancelledReport(const ImportRequest& request) const
 
   report.diagnostics.push_back({
     .severity = ImportSeverity::kInfo,
-    .code = "import.cancelled",
-    .message = "Import cancelled",
+    .code = "import.canceled",
+    .message = "Import canceled",
     .source_path = request.source_path.string(),
   });
 

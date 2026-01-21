@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cstring>
 #include <limits>
 #include <span>
 #include <string_view>
@@ -51,7 +50,7 @@ namespace {
   struct BuildOutcome {
     std::vector<std::byte> bytes;
     std::vector<ImportDiagnostic> diagnostics;
-    bool cancelled = false;
+    bool canceled = false;
     bool has_error = false;
   };
 
@@ -510,19 +509,18 @@ namespace {
     const std::vector<data::pak::ShaderReferenceDesc>& shader_refs)
     -> std::vector<std::byte>
   {
-    oxygen::serio::MemoryStream stream;
-    oxygen::serio::Writer<oxygen::serio::MemoryStream> writer(stream);
+    serio::MemoryStream stream;
+    serio::Writer writer(stream);
     const auto pack = writer.ScopedAlignment(1);
 
     (void)writer.WriteBlob(std::as_bytes(
       std::span<const data::pak::MaterialAssetDesc, 1>(&desc, 1)));
     if (!shader_refs.empty()) {
-      (void)writer.WriteBlob(std::as_bytes(
-        std::span<const data::pak::ShaderReferenceDesc>(shader_refs)));
+      (void)writer.WriteBlob(std::as_bytes(std::span(shader_refs)));
     }
 
     const auto data = stream.Data();
-    return std::vector<std::byte>(data.begin(), data.end());
+    return std::vector(data.begin(), data.end());
   }
 
   auto PatchContentHash(
@@ -541,9 +539,9 @@ namespace {
     -> co::Co<std::optional<uint64_t>>
   {
     const auto hash = co_await thread_pool.Run(
-      [bytes, stop_token](co::ThreadPool::CancelToken cancelled) noexcept {
+      [bytes, stop_token](co::ThreadPool::CancelToken canceled) noexcept {
         DLOG_F(1, "MaterialPipeline: Compute content hash");
-        if (stop_token.stop_requested() || cancelled) {
+        if (stop_token.stop_requested() || canceled) {
           return uint64_t { 0 };
         }
         return util::ComputeContentHash(bytes);
@@ -566,7 +564,7 @@ namespace {
     };
 
     if (item.stop_token.stop_requested()) {
-      outcome.cancelled = true;
+      outcome.canceled = true;
       return outcome;
     }
 
@@ -618,7 +616,7 @@ namespace {
     AssignTextureIndices(
       item.textures, orm_packed, orm_packed ? *orm_index : 0, desc);
 
-    const std::vector<const MaterialTextureBinding*> bindings {
+    const std::vector bindings {
       &item.textures.base_color,
       &item.textures.normal,
       &item.textures.metallic,
@@ -792,10 +790,10 @@ auto MaterialPipeline::Worker() -> co::Co<>
       auto item_copy = item;
       build_outcome = co_await thread_pool_.Run(
         [item = std::move(item_copy)](
-          co::ThreadPool::CancelToken cancelled) noexcept {
+          co::ThreadPool::CancelToken canceled) noexcept {
           DLOG_F(1, "MaterialPipeline: Build material task begin");
-          if (item.stop_token.stop_requested() || cancelled) {
-            return BuildOutcome { .cancelled = true };
+          if (item.stop_token.stop_requested() || canceled) {
+            return BuildOutcome { .canceled = true };
           }
           return BuildMaterialPayload(item, {});
         });
@@ -805,7 +803,7 @@ auto MaterialPipeline::Worker() -> co::Co<>
         item.material_name);
       build_outcome = BuildMaterialPayload(item, {});
     }
-    if (build_outcome.cancelled) {
+    if (build_outcome.canceled) {
       co_await ReportCancelled(std::move(item));
       continue;
     }
@@ -860,13 +858,13 @@ auto MaterialPipeline::Worker() -> co::Co<>
 
 auto MaterialPipeline::ReportCancelled(WorkItem item) -> co::Co<>
 {
-  WorkResult cancelled {
+  WorkResult canceled {
     .source_id = std::move(item.source_id),
     .cooked = std::nullopt,
     .diagnostics = {},
     .success = false,
   };
-  co_await output_channel_.Send(std::move(cancelled));
+  co_await output_channel_.Send(std::move(canceled));
 }
 
 } // namespace oxygen::content::import

@@ -6,7 +6,6 @@
 #include <assert.h>
 #include <limits.h>
 #include <math.h>
-#include <memory.h>
 
 // Helpers
 static inline int32_t clampi(int32_t value, int32_t low, int32_t high)

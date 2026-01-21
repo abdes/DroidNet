@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstring>
 #include <fstream>
 #include <limits>
 
@@ -163,9 +162,8 @@ namespace {
    For multipart EXR files, we load the first part that contains image data.
    This handles files where the simple LoadEXRFromMemory API fails.
   */
-  [[nodiscard]] auto DecodeExrMultipart(
-    std::span<const std::byte> bytes, const DecodeOptions& options)
-    -> oxygen::Result<ScratchImage, TextureImportError>
+  [[nodiscard]] auto DecodeExrMultipart(std::span<const std::byte> bytes,
+    const DecodeOptions& options) -> Result<ScratchImage, TextureImportError>
   {
     const auto* data = reinterpret_cast<const unsigned char*>(bytes.data());
     const auto size = bytes.size();
@@ -175,7 +173,7 @@ namespace {
     EXRVersion version {};
     int ret = ParseEXRVersionFromMemory(&version, data, size);
     if (ret != TINYEXR_SUCCESS) {
-      return oxygen::Err(TextureImportError::kCorruptedData);
+      return Err(TextureImportError::kCorruptedData);
     }
 
     // For multipart files, we need to use the multipart API
@@ -190,7 +188,7 @@ namespace {
         if (err != nullptr) {
           FreeEXRErrorMessage(err);
         }
-        return oxygen::Err(TextureImportError::kCorruptedData);
+        return Err(TextureImportError::kCorruptedData);
       }
 
       // Find first valid image part (skip deep/tiled for now)
@@ -209,7 +207,7 @@ namespace {
           free(headers[i]);
         }
         free(headers);
-        return oxygen::Err(TextureImportError::kUnsupportedFormat);
+        return Err(TextureImportError::kUnsupportedFormat);
       }
 
       // Request float output for all channels in all headers
@@ -239,7 +237,7 @@ namespace {
           free(headers[i]);
         }
         free(headers);
-        return oxygen::Err(TextureImportError::kDecodeFailed);
+        return Err(TextureImportError::kDecodeFailed);
       }
 
       // Get the selected part
@@ -271,7 +269,7 @@ namespace {
           free(headers[i]);
         }
         free(headers);
-        return oxygen::Err(TextureImportError::kUnsupportedFormat);
+        return Err(TextureImportError::kUnsupportedFormat);
       }
 
       // Assemble RGBA float data
@@ -312,10 +310,9 @@ namespace {
           static_cast<uint32_t>(height), 16);
       }
 
-      return oxygen::Ok(
-        ScratchImage::CreateFromData(static_cast<uint32_t>(width),
-          static_cast<uint32_t>(height), Format::kRGBA32Float,
-          static_cast<uint32_t>(width) * 16, std::move(pixel_data)));
+      return Ok(ScratchImage::CreateFromData(static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height), Format::kRGBA32Float,
+        static_cast<uint32_t>(width) * 16, std::move(pixel_data)));
     }
 
     // Single-part: use simpler header/image loading
@@ -326,7 +323,7 @@ namespace {
       if (err != nullptr) {
         FreeEXRErrorMessage(err);
       }
-      return oxygen::Err(TextureImportError::kCorruptedData);
+      return Err(TextureImportError::kCorruptedData);
     }
     hdr_guard.initialized = true;
 
@@ -342,7 +339,7 @@ namespace {
       if (err != nullptr) {
         FreeEXRErrorMessage(err);
       }
-      return oxygen::Err(TextureImportError::kDecodeFailed);
+      return Err(TextureImportError::kDecodeFailed);
     }
     img_guard.initialized = true;
 
@@ -365,7 +362,7 @@ namespace {
     }
 
     if (idx_r < 0 || idx_g < 0 || idx_b < 0) {
-      return oxygen::Err(TextureImportError::kUnsupportedFormat);
+      return Err(TextureImportError::kUnsupportedFormat);
     }
 
     // Assemble RGBA float data
@@ -399,14 +396,13 @@ namespace {
         static_cast<uint32_t>(height), 16);
     }
 
-    return oxygen::Ok(ScratchImage::CreateFromData(static_cast<uint32_t>(width),
+    return Ok(ScratchImage::CreateFromData(static_cast<uint32_t>(width),
       static_cast<uint32_t>(height), Format::kRGBA32Float,
       static_cast<uint32_t>(width) * 16, std::move(pixel_data)));
   }
 
-  [[nodiscard]] auto DecodeExrToScratchImage(
-    std::span<const std::byte> bytes, const DecodeOptions& options)
-    -> oxygen::Result<ScratchImage, TextureImportError>
+  [[nodiscard]] auto DecodeExrToScratchImage(std::span<const std::byte> bytes,
+    const DecodeOptions& options) -> Result<ScratchImage, TextureImportError>
   {
     // Try simple API first (faster for single-part files)
     float* out_rgba = nullptr;
@@ -431,10 +427,9 @@ namespace {
           static_cast<uint32_t>(height), 16);
       }
 
-      return oxygen::Ok(
-        ScratchImage::CreateFromData(static_cast<uint32_t>(width),
-          static_cast<uint32_t>(height), Format::kRGBA32Float,
-          static_cast<uint32_t>(width) * 16, std::move(pixel_data)));
+      return Ok(ScratchImage::CreateFromData(static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height), Format::kRGBA32Float,
+        static_cast<uint32_t>(width) * 16, std::move(pixel_data)));
     }
 
     // Simple API failed - try multipart/low-level API
@@ -443,9 +438,8 @@ namespace {
 
   //=== HDR (Radiance) Decoder ===--------------------------------------------//
 
-  [[nodiscard]] auto DecodeHdrToScratchImage(
-    std::span<const std::byte> bytes, const DecodeOptions& options)
-    -> oxygen::Result<ScratchImage, TextureImportError>
+  [[nodiscard]] auto DecodeHdrToScratchImage(std::span<const std::byte> bytes,
+    const DecodeOptions& options) -> Result<ScratchImage, TextureImportError>
   {
     int width = 0;
     int height = 0;
@@ -458,7 +452,7 @@ namespace {
       STBI_rgb_alpha); // Force RGBA
 
     if (decoded == nullptr) {
-      return oxygen::Err(TextureImportError::kDecodeFailed);
+      return Err(TextureImportError::kDecodeFailed);
     }
 
     const auto pixel_count
@@ -476,16 +470,15 @@ namespace {
         static_cast<uint32_t>(height), 16);
     }
 
-    return oxygen::Ok(ScratchImage::CreateFromData(static_cast<uint32_t>(width),
+    return Ok(ScratchImage::CreateFromData(static_cast<uint32_t>(width),
       static_cast<uint32_t>(height), Format::kRGBA32Float,
       static_cast<uint32_t>(width) * 16, std::move(pixel_data)));
   }
 
   //=== LDR Decoder (stb_image RGBA8) ===-------------------------------------//
 
-  [[nodiscard]] auto DecodeLdrToScratchImage(
-    std::span<const std::byte> bytes, const DecodeOptions& options)
-    -> oxygen::Result<ScratchImage, TextureImportError>
+  [[nodiscard]] auto DecodeLdrToScratchImage(std::span<const std::byte> bytes,
+    const DecodeOptions& options) -> Result<ScratchImage, TextureImportError>
   {
     int width = 0;
     int height = 0;
@@ -499,7 +492,7 @@ namespace {
       desired_channels);
 
     if (decoded == nullptr) {
-      return oxygen::Err(TextureImportError::kDecodeFailed);
+      return Err(TextureImportError::kDecodeFailed);
     }
 
     const int actual_channels
@@ -553,7 +546,7 @@ namespace {
       break;
     }
 
-    return oxygen::Ok(ScratchImage::CreateFromData(static_cast<uint32_t>(width),
+    return Ok(ScratchImage::CreateFromData(static_cast<uint32_t>(width),
       static_cast<uint32_t>(height), format,
       static_cast<uint32_t>(width)
         * static_cast<uint32_t>((actual_channels == 3) ? 4 : actual_channels),
@@ -563,17 +556,17 @@ namespace {
   //=== File Reading Utility ===----------------------------------------------//
 
   [[nodiscard]] auto ReadFileBytes(const std::filesystem::path& path)
-    -> oxygen::Result<std::vector<std::byte>, TextureImportError>
+    -> Result<std::vector<std::byte>, TextureImportError>
   {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
-      return oxygen::Err(TextureImportError::kFileNotFound);
+      return Err(TextureImportError::kFileNotFound);
     }
 
     file.seekg(0, std::ios::end);
     const auto size = file.tellg();
     if (size <= 0) {
-      return oxygen::Err(TextureImportError::kFileReadFailed);
+      return Err(TextureImportError::kFileReadFailed);
     }
 
     std::vector<std::byte> bytes;
@@ -584,10 +577,10 @@ namespace {
       static_cast<std::streamsize>(bytes.size()));
 
     if (!file) {
-      return oxygen::Err(TextureImportError::kFileReadFailed);
+      return Err(TextureImportError::kFileReadFailed);
     }
 
-    return oxygen::Ok(std::move(bytes));
+    return Ok(std::move(bytes));
   }
 
 } // namespace
@@ -734,16 +727,15 @@ auto IsHdrFormat(
 
 //=== Unified Decode API ===--------------------------------------------------//
 
-auto DecodeToScratchImage(
-  std::span<const std::byte> bytes, const DecodeOptions& options)
-  -> oxygen::Result<ScratchImage, TextureImportError>
+auto DecodeToScratchImage(std::span<const std::byte> bytes,
+  const DecodeOptions& options) -> Result<ScratchImage, TextureImportError>
 {
   if (bytes.empty()) {
-    return oxygen::Err(TextureImportError::kCorruptedData);
+    return Err(TextureImportError::kCorruptedData);
   }
 
   if (bytes.size() > static_cast<size_t>((std::numeric_limits<int>::max)())) {
-    return oxygen::Err(TextureImportError::kOutOfMemory);
+    return Err(TextureImportError::kOutOfMemory);
   }
 
   // Format detection priority:
@@ -767,14 +759,13 @@ auto DecodeToScratchImage(
   return DecodeLdrToScratchImage(bytes, options);
 }
 
-auto DecodeToScratchImage(
-  const std::filesystem::path& path, const DecodeOptions& options)
-  -> oxygen::Result<ScratchImage, TextureImportError>
+auto DecodeToScratchImage(const std::filesystem::path& path,
+  const DecodeOptions& options) -> Result<ScratchImage, TextureImportError>
 {
   // Read file
   auto bytes_result = ReadFileBytes(path);
   if (!bytes_result) {
-    return oxygen::Err(bytes_result.error());
+    return Err(bytes_result.error());
   }
 
   // Create options with extension hint

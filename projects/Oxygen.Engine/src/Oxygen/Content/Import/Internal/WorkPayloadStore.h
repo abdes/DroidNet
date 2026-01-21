@@ -7,7 +7,6 @@
 #pragma once
 
 #include <memory>
-#include <utility>
 #include <vector>
 
 #include <Oxygen/Content/Import/Internal/ImportPlanner.h>

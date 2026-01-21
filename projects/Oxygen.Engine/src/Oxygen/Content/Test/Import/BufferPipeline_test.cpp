@@ -11,13 +11,14 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Testing/GTest.h>
+
 #include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Internal/Pipelines/BufferPipeline.h>
 #include <Oxygen/Content/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/asio.h>
-#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
@@ -54,7 +55,7 @@ auto MakeWorkItem(std::string source_id, CookedBufferPayload cooked,
 //=== Basic Behavior Tests
 //===-----------------------------------------------------//
 
-class BufferPipelineTest : public ::testing::Test {
+class BufferPipelineTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
 };
@@ -69,10 +70,10 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_WithHashingEnabled_ComputesHash)
   const auto expected_hash = util::ComputeContentHash(span);
 
   BufferPipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 2);
+  ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     BufferPipeline pipeline(pool,
       BufferPipeline::Config {
         .queue_capacity = 4,
@@ -107,10 +108,10 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_WithHashingDisabled_LeavesHashZero)
   // Arrange
   std::vector<std::byte> bytes(64, std::byte { 0xAB });
   BufferPipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 2);
+  ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     BufferPipeline pipeline(pool,
       BufferPipeline::Config {
         .queue_capacity = 4,
@@ -146,10 +147,10 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_WithExistingHash_DoesNotOverwrite)
   constexpr uint64_t kExistingHash = 0x12345678ABCDEF00ULL;
   std::vector<std::byte> bytes(8, std::byte { 0x01 });
   BufferPipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 2);
+  ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     BufferPipeline pipeline(pool,
       BufferPipeline::Config {
         .queue_capacity = 4,
@@ -178,7 +179,7 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_WithExistingHash_DoesNotOverwrite)
   EXPECT_EQ(result.cooked.content_hash, kExistingHash);
 }
 
-//! Verify cancelled work returns a failed result.
+//! Verify canceled work returns a failed result.
 NOLINT_TEST_F(BufferPipelineTest, Collect_WhenCancelled_ReturnsFailedResult)
 {
   // Arrange
@@ -187,10 +188,10 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_WhenCancelled_ReturnsFailedResult)
 
   std::vector<std::byte> bytes(16, std::byte { 0x42 });
   BufferPipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 2);
+  ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     BufferPipeline pipeline(pool,
       BufferPipeline::Config {
         .queue_capacity = 4,
@@ -227,10 +228,10 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_WhenCancelledAfterSubmit_Fails)
 
   std::vector<std::byte> bytes(2 * 1024 * 1024, std::byte { 0x77 });
   BufferPipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 2);
+  ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     BufferPipeline pipeline(pool,
       BufferPipeline::Config {
         .queue_capacity = 4,
@@ -267,12 +268,12 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_MixedCancellation_ReturnsMixedResults)
 {
   // Arrange
   std::stop_source stop_source;
-  BufferPipeline::WorkResult cancelled_result;
+  BufferPipeline::WorkResult canceled_result;
   BufferPipeline::WorkResult ok_result;
-  co::ThreadPool pool(loop_, 2);
+  ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     BufferPipeline pipeline(pool,
       BufferPipeline::Config {
         .queue_capacity = 4,
@@ -284,7 +285,7 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_MixedCancellation_ReturnsMixedResults)
     {
       pipeline.Start(n);
 
-      co_await pipeline.Submit(MakeWorkItem("cancelled",
+      co_await pipeline.Submit(MakeWorkItem("canceled",
         MakePayload(
           std::vector<std::byte>(128, std::byte { 0x11 }), 0 /*content_hash*/),
         stop_source.get_token()));
@@ -298,12 +299,12 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_MixedCancellation_ReturnsMixedResults)
       auto first = co_await pipeline.Collect();
       auto second = co_await pipeline.Collect();
 
-      if (first.source_id == "cancelled") {
-        cancelled_result = std::move(first);
+      if (first.source_id == "canceled") {
+        canceled_result = std::move(first);
         ok_result = std::move(second);
       } else {
         ok_result = std::move(first);
-        cancelled_result = std::move(second);
+        canceled_result = std::move(second);
       }
 
       pipeline.Close();
@@ -313,10 +314,10 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_MixedCancellation_ReturnsMixedResults)
   });
 
   // Assert
-  EXPECT_FALSE(cancelled_result.success);
-  EXPECT_TRUE(cancelled_result.diagnostics.empty());
-  EXPECT_EQ(cancelled_result.source_id, "cancelled");
-  EXPECT_EQ(cancelled_result.cooked.content_hash, 0ULL);
+  EXPECT_FALSE(canceled_result.success);
+  EXPECT_TRUE(canceled_result.diagnostics.empty());
+  EXPECT_EQ(canceled_result.source_id, "canceled");
+  EXPECT_EQ(canceled_result.cooked.content_hash, 0ULL);
 
   EXPECT_TRUE(ok_result.success);
   EXPECT_TRUE(ok_result.diagnostics.empty());
@@ -341,10 +342,10 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_MultipleSubmissions_CollectsAll)
 
   std::vector<BufferPipeline::WorkResult> results;
   results.reserve(kCount);
-  co::ThreadPool pool(loop_, 2);
+  ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     BufferPipeline pipeline(pool,
       BufferPipeline::Config {
         .queue_capacity = 16,
@@ -391,10 +392,10 @@ NOLINT_TEST_F(
   // Arrange
   std::atomic<bool> posted_ran { false };
   BufferPipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 2);
+  ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     BufferPipeline pipeline(pool,
       BufferPipeline::Config {
         .queue_capacity = 4,
@@ -413,7 +414,7 @@ NOLINT_TEST_F(
       loop_.Post([&posted_ran]() { posted_ran.store(true); });
 
       EXPECT_TRUE(pipeline.HasPending());
-      co_await co::SleepFor(loop_.IoContext(), std::chrono::milliseconds(1));
+      co_await SleepFor(loop_.IoContext(), std::chrono::milliseconds(1));
 
       result = co_await pipeline.Collect();
       pipeline.Close();

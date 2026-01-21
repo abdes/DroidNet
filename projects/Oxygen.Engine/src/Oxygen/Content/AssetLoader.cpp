@@ -247,7 +247,7 @@ void AssetLoader::Stop()
     nursery_->Cancel();
   }
 
-  // Prevent new joiners from attaching to cancelled shared operations.
+  // Prevent new joiners from attaching to canceled shared operations.
   // The per-operation erase guards tolerate the entry already being absent.
   in_flight_material_assets_.clear();
   in_flight_geometry_assets_.clear();

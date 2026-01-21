@@ -205,9 +205,9 @@ auto AsyncImporter::ProcessJob(JobEntry entry) -> co::Co<>
     job_base->Run();
 
     if (entry.cancel_event) {
-      auto [cancelled, waited]
+      auto [canceled, waited]
         = co_await co::AnyOf(*entry.cancel_event, job_base->Wait());
-      if (cancelled.has_value()) {
+      if (canceled.has_value()) {
         DLOG_F(INFO, "Cancel event triggered, stopping job");
         job_base->Stop();
         co_await job_base->Wait();
@@ -216,7 +216,7 @@ auto AsyncImporter::ProcessJob(JobEntry entry) -> co::Co<>
       co_await job_base->Wait();
     }
 
-    // Either the job completed or was cancelled
+    // Either the job completed or was canceled
     // The nursery will clean up appropriately
     co_return co::kJoin;
   };

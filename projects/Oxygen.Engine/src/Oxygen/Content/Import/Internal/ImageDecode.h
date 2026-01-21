@@ -122,7 +122,7 @@ OXGN_CNTT_NDAPI auto IsHdrFormat(std::span<const std::byte> bytes,
 */
 OXGN_CNTT_NDAPI auto DecodeToScratchImage(
   std::span<const std::byte> bytes, const DecodeOptions& options = {})
-  -> oxygen::Result<ScratchImage, TextureImportError>;
+  -> Result<ScratchImage, TextureImportError>;
 
 //! Decode an image file into a ScratchImage.
 /*!
@@ -135,6 +135,6 @@ OXGN_CNTT_NDAPI auto DecodeToScratchImage(
 */
 OXGN_CNTT_NDAPI auto DecodeToScratchImage(
   const std::filesystem::path& path, const DecodeOptions& options = {})
-  -> oxygen::Result<ScratchImage, TextureImportError>;
+  -> Result<ScratchImage, TextureImportError>;
 
 } // namespace oxygen::content::import

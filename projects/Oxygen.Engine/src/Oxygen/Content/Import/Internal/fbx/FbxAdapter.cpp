@@ -9,12 +9,10 @@
 #include <cctype>
 #include <cmath>
 #include <cstddef>
-#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <memory>
 #include <numbers>
-#include <numeric>
 #include <optional>
 #include <span>
 #include <string>
@@ -25,7 +23,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/Internal/Utils/AssetKeyUtils.h>
-#include <Oxygen/Content/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Content/Import/Internal/fbx/CoordTransform.h>
 #include <Oxygen/Content/Import/Internal/fbx/FbxAdapter.h>
 #include <Oxygen/Content/Import/Internal/fbx/ufbx.h>
@@ -215,13 +212,13 @@ namespace {
     return bytes;
   }
 
-  using oxygen::data::pak::DirectionalLightRecord;
-  using oxygen::data::pak::NodeRecord;
-  using oxygen::data::pak::OrthographicCameraRecord;
-  using oxygen::data::pak::PerspectiveCameraRecord;
-  using oxygen::data::pak::PointLightRecord;
-  using oxygen::data::pak::RenderableRecord;
-  using oxygen::data::pak::SpotLightRecord;
+  using data::pak::DirectionalLightRecord;
+  using data::pak::NodeRecord;
+  using data::pak::OrthographicCameraRecord;
+  using data::pak::PerspectiveCameraRecord;
+  using data::pak::PointLightRecord;
+  using data::pak::RenderableRecord;
+  using data::pak::SpotLightRecord;
 
   struct UfbxCancelContext final {
     std::stop_token stop_token;
@@ -255,8 +252,8 @@ namespace {
   {
     return ImportDiagnostic {
       .severity = ImportSeverity::kError,
-      .code = "import.cancelled",
-      .message = "Import cancelled",
+      .code = "import.canceled",
+      .message = "Import canceled",
       .source_path = std::string(source_id),
       .object_path = {},
     };
@@ -528,7 +525,7 @@ namespace {
       auto w = weights[i];
       auto j = joints[i];
 
-      std::array<std::pair<float, uint32_t>, 4> influences = {
+      std::array influences = {
         std::make_pair(w.x, j.x),
         std::make_pair(w.y, j.y),
         std::make_pair(w.z, j.z),
@@ -635,8 +632,7 @@ namespace {
       material_list = &material_node->materials;
     }
 
-    std::vector<uint32_t> face_material_slots(
-      mesh.num_faces, material_key_count);
+    std::vector face_material_slots(mesh.num_faces, material_key_count);
     if (mesh.material_parts.data != nullptr && mesh.material_parts.count > 0) {
       for (size_t part_i = 0; part_i < mesh.material_parts.count; ++part_i) {
         const auto& part = mesh.material_parts.data[part_i];
@@ -921,11 +917,9 @@ namespace {
     return TexturePreset::kData;
   }
 
-  [[nodiscard]] constexpr auto IsBc7Format(const oxygen::Format format) noexcept
-    -> bool
+  [[nodiscard]] constexpr auto IsBc7Format(const Format format) noexcept -> bool
   {
-    return format == oxygen::Format::kBC7UNorm
-      || format == oxygen::Format::kBC7UNormSRGB;
+    return format == Format::kBC7UNorm || format == Format::kBC7UNormSRGB;
   }
 
   [[nodiscard]] auto BuildTextureSourceId(std::string_view prefix,
@@ -1057,7 +1051,7 @@ namespace {
     };
 
     if (identity.embedded) {
-      const auto bytes = std::span<const std::byte>(
+      const auto bytes = std::span(
         reinterpret_cast<const std::byte*>(identity.file_texture->content.data),
         identity.file_texture->content.size);
       if (bytes.empty()) {
@@ -1172,12 +1166,11 @@ namespace {
   };
 
   [[nodiscard]] auto AppendString(std::vector<std::byte>& strings,
-    const std::string_view value) -> oxygen::data::pak::StringTableOffsetT
+    const std::string_view value) -> data::pak::StringTableOffsetT
   {
     const auto offset
-      = static_cast<oxygen::data::pak::StringTableOffsetT>(strings.size());
-    const auto bytes
-      = std::as_bytes(std::span<const char>(value.data(), value.size()));
+      = static_cast<data::pak::StringTableOffsetT>(strings.size());
+    const auto bytes = std::as_bytes(std::span(value.data(), value.size()));
     strings.insert(strings.end(), bytes.begin(), bytes.end());
     strings.push_back(std::byte { 0 });
     return offset;
@@ -1214,7 +1207,7 @@ namespace {
   {
     if (input.stop_token.stop_requested()) {
       DLOG_F(
-        WARNING, "FBX load cancelled: source_id='{}'", input.source_id_prefix);
+        WARNING, "FBX load canceled: source_id='{}'", input.source_id_prefix);
       diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
       return {};
     }
@@ -1291,7 +1284,7 @@ namespace {
     if (scene == nullptr) {
       if (error.type == UFBX_ERROR_CANCELLED
         || input.stop_token.stop_requested()) {
-        DLOG_F(WARNING, "FBX load cancelled: path='{}'", path.string());
+        DLOG_F(WARNING, "FBX load canceled: path='{}'", path.string());
         diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
         return {};
       }
@@ -1313,7 +1306,7 @@ namespace {
     -> std::shared_ptr<const ufbx_scene>
   {
     if (input.stop_token.stop_requested()) {
-      DLOG_F(WARNING, "FBX load cancelled (memory): source_id='{}'",
+      DLOG_F(WARNING, "FBX load canceled (memory): source_id='{}'",
         input.source_id_prefix);
       diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
       return {};
@@ -1393,7 +1386,7 @@ namespace {
     if (scene == nullptr) {
       if (error.type == UFBX_ERROR_CANCELLED
         || input.stop_token.stop_requested()) {
-        DLOG_F(WARNING, "FBX load cancelled (memory): source_id='{}'",
+        DLOG_F(WARNING, "FBX load canceled (memory): source_id='{}'",
           input.source_id_prefix);
         diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
         return {};
@@ -2359,7 +2352,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     kept_indices.push_back(0);
   }
 
-  std::vector<int32_t> old_to_new(nodes.size(), -1);
+  std::vector old_to_new(nodes.size(), -1);
   for (uint32_t new_index = 0; new_index < kept_indices.size(); ++new_index) {
     old_to_new[kept_indices[new_index]] = static_cast<int32_t>(new_index);
   }

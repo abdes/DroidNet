@@ -149,9 +149,9 @@ auto RunPipelineOnce(ImportEventLoop& loop, TexturePipeline::WorkItem item)
   -> TexturePipeline::WorkResult
 {
   TexturePipeline::WorkResult result;
-  co::ThreadPool pool(loop, 2);
+  ThreadPool pool(loop, 2);
 
-  co::Run(loop, [&]() -> co::Co<> {
+  Run(loop, [&]() -> Co<> {
     TexturePipeline pipeline(pool,
       TexturePipeline::Config {
         .queue_capacity = 4,
@@ -175,7 +175,7 @@ auto RunPipelineOnce(ImportEventLoop& loop, TexturePipeline::WorkItem item)
 //=== Edge Case Tests
 //===-----------------------------------------------------//
 
-class TexturePipelineEdgeTest : public ::testing::Test {
+class TexturePipelineEdgeTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
 };

@@ -7,15 +7,15 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <span>
-#include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include <glm/glm.hpp>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Internal/Pipelines/GeometryPipeline.h>
@@ -25,12 +25,11 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/asio.h>
-#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen;
 using namespace oxygen::co;
-namespace co = oxygen::co;
+namespace co = co;
 
 namespace {
 
@@ -307,7 +306,7 @@ template <typename T>
 //=== Basic Behavior Tests
 //===-----------------------------------------------------//
 
-class GeometryPipelineBasicTest : public ::testing::Test {
+class GeometryPipelineBasicTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
 };

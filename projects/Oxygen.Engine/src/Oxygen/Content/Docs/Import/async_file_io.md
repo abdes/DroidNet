@@ -115,7 +115,7 @@ struct FileInfo {
 
  ### Cancellation
 
- All operations respect coroutine cancellation. When cancelled, operations
+ All operations respect coroutine cancellation. When canceled, operations
  return `FileError::kCancelled`.
 
  ### Error Handling
@@ -253,11 +253,11 @@ auto ThreadPoolFileReader::ReadFile(
 ) -> co::Co<Result<std::vector<std::byte>, FileErrorInfo>> {
 
   auto result = co_await thread_pool_->Run(
-    [path, options](co::ThreadPool::CancelToken cancelled)
+    [path, options](co::ThreadPool::CancelToken canceled)
       -> Result<std::vector<std::byte>, FileErrorInfo> {
 
       // Check cancellation before I/O
-      if (cancelled) {
+      if (canceled) {
         return Err(FileErrorInfo{
           .code = FileError::kCancelled,
           .path = path,

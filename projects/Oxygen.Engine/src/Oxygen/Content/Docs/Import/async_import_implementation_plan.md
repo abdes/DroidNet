@@ -194,14 +194,14 @@ if (!result.has_value()) {
 
 ### 9. Completion Must Be Cancellation-Safe
 
-If a coroutine is cancelled while suspended on a cancellable `co_await`, code
+If a coroutine is canceled while suspended on a cancellable `co_await`, code
 after that await may never run. Any “must-run” cleanup and the **single
 completion notification** must be placed in cancellation-safe branches (e.g.
 guarded via `co::UntilCancelledAnd(...)` / mux patterns).
 
 This is especially important for the async import contract where cancellation
 must be reported through exactly one path (`on_complete(..., report)` with
-`success=false` + diagnostic code `import.cancelled`).
+`success=false` + diagnostic code `import.canceled`).
 
 ### 10. Tests Must Not Pollute the Repo Root
 
@@ -603,7 +603,7 @@ Tasks:
 - [X] Implement a single override point for job work (e.g. `ExecuteAsync()`).
 - [X] Implement `Stop()` to request stop + cancel the job nursery.
 - [X] Guarantee exactly one completion notification (`on_complete`) even when
-  the job coroutine is cancelled during shutdown.
+  the job coroutine is canceled during shutdown.
 
 ##### 4.9.2 Define concrete jobs (orchestration lives in jobs)
 
@@ -620,7 +620,7 @@ Tasks:
   `ImportSession` and exercises session finalization.
 - [X] Add format-specific jobs (FBX/GLB/etc.) and move orchestration there.
 - [X] Keep cancellation handling unified: cancelling the job nursery completes
-  via `on_complete(..., report)` with `success=false` and `import.cancelled`.
+  via `on_complete(..., report)` with `success=false` and `import.canceled`.
 
 @note FBX/GLB jobs currently wire geometry only; texture/material/scene wiring
       remains pending.
@@ -688,9 +688,9 @@ Tasks:
 - [X] Job activation: service selects a job, importer activates and runs it.
 - [X] Cancellation:
   - pending job cancellation completes via `on_complete` with
-    `import.cancelled`.
+    `import.canceled`.
   - in-flight job cancellation cancels the job nursery and completes via
-    `on_complete` with `import.cancelled`.
+    `on_complete` with `import.canceled`.
 - [X] Ensure job-based tests isolate output via `ImportRequest::cooked_root`
   and cleanup recursively in teardown.
 
@@ -930,7 +930,7 @@ Tasks:
 - [X] If `output_format_is_override == false`, preserve decoded format and
   set `bc7_quality = kNone` to match sync path.
 - [X] On error: return placeholder when `failure_policy == kPlaceholder` and
-  not cancelled; otherwise emit diagnostics with `success=false`.
+  not canceled; otherwise emit diagnostics with `success=false`.
 
 #### 6.6 Reuse Existing Sync Cooking Logic
 
