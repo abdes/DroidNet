@@ -215,11 +215,25 @@ auto Cli::PrintCommands(
   }
 }
 
+auto Cli::PrintFooter(
+  const CommandLineContext& context, const unsigned int width) const -> void
+{
+  if (footer_.empty()) {
+    return;
+  }
+  const CliTheme& theme = context.theme ? *context.theme : CliTheme::Plain();
+  context.out << fmt::format(theme.section_header, "FOOTER\n");
+  const wrap::TextWrapper wrap = detail::MakeStyledWrapper(width, "   ", "   ");
+  context.out << wrap.Fill(footer_).value_or("__wrapping_error__");
+  context.out << "\n\n";
+}
+
 auto Cli::Print(
   const CommandLineContext& context, const unsigned int width) const -> void
 {
   PrintDefaultCommand(context, width);
   PrintCommands(context, width);
+  PrintFooter(context, width);
 }
 
 auto Cli::EnableVersionCommand() -> void
@@ -260,6 +274,7 @@ auto Cli::HandleHelpCommand(const CommandLineContext& context) const -> void
 {
   if (context.ovm.HasOption("help")) {
     context.active_command->Print(context, context.output_width);
+    PrintFooter(context, context.output_width);
   } else if (context.active_command->PathAsString() == "help") {
     if (context.ovm.HasOption(Option::key_rest_)) {
       const auto& values = context.ovm.ValuesOf(Option::key_rest_);
@@ -276,6 +291,7 @@ auto Cli::HandleHelpCommand(const CommandLineContext& context) const -> void
         });
       if (command != commands_.end()) {
         (*command)->Print(context, context.output_width);
+        PrintFooter(context, context.output_width);
       } else {
         context.err << fmt::format(
           "The path `{}` does not correspond to a known command.\n",
@@ -287,6 +303,7 @@ auto Cli::HandleHelpCommand(const CommandLineContext& context) const -> void
     } else {
       PrintDefaultCommand(context, context.output_width);
       PrintCommands(context, context.output_width);
+      PrintFooter(context, context.output_width);
     }
   }
 }

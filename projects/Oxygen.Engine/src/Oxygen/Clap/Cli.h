@@ -118,6 +118,8 @@ private:
 
   auto About(std::string about) -> void { about_ = std::move(about); }
 
+  auto Footer(std::string footer) -> void { footer_ = std::move(footer); }
+
   auto ProgramName(std::string name) -> void
   {
     program_name_ = std::move(name);
@@ -196,9 +198,12 @@ private:
     const CommandLineContext& context, unsigned int width) const -> void;
   OXGN_CLP_API auto PrintCommands(
     const CommandLineContext& context, unsigned int width) const -> void;
+  OXGN_CLP_API auto PrintFooter(
+    const CommandLineContext& context, unsigned int width) const -> void;
 
   std::string version_;
   std::string about_;
+  std::string footer_;
   std::optional<std::string> program_name_ {};
   std::vector<std::shared_ptr<Command>> commands_;
   Command::Ptr active_command_;

@@ -520,6 +520,31 @@ namespace {
     EXPECT_TRUE(values.empty());
   }
 
+  //! Scenario: Usage footer is printed in help output.
+  NOLINT_TEST(HelpOutput, Footer_IsPrinted)
+  {
+    // Arrange
+    const auto cli = CliBuilder()
+                       .ProgramName("tool")
+                       .WithTheme(CliTheme::Plain())
+                       .Footer("Footer text goes here.")
+                       .WithHelpCommand()
+                       .WithCommand(CommandBuilder(Command::DEFAULT))
+                       .Build();
+
+    constexpr int argc = 2;
+    const char* argv[argc] = { "tool", "--help" };
+    testing::internal::CaptureStdout();
+
+    // Act
+    (void)cli->Parse(argc, argv);
+    const auto output = testing::internal::GetCapturedStdout();
+
+    // Assert
+    EXPECT_NE(output.find("FOOTER"), std::string::npos);
+    EXPECT_NE(output.find("Footer text goes here."), std::string::npos);
+  }
+
   //! Scenario: Invalid values report expected type names.
   NOLINT_TEST(ErrorReporting, InvalidValue_ReportsExpectedType)
   {

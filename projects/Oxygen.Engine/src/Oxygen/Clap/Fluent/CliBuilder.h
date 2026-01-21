@@ -47,6 +47,9 @@ public:
   /// Set the descriptive message about this command line program.
   OXGN_CLP_API auto About(std::string about) -> Self&;
 
+  /// Set the usage footer text displayed in help output.
+  OXGN_CLP_API auto Footer(std::string footer) -> Self&;
+
   /// Set the output width for help/usage formatting.
   OXGN_CLP_API auto OutputWidth(unsigned int width) -> Self&;
 
