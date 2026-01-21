@@ -147,7 +147,8 @@ public:
   template <typename> friend class OptionValueBuilder;
 
   //! Finalize and propagate parsed (or default) value to user storage.
-  auto FinalizeValue(const class OptionValuesMap& ovm) const -> void;
+  OXGN_CLP_API auto FinalizeValue(const class OptionValuesMap& ovm) const
+    -> void;
 
 private:
   std::string key_;
