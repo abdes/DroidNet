@@ -29,7 +29,7 @@ namespace {
       const auto commands = BuildCommands(command_paths);
       OptionValuesMap ovm;
       Command::Ptr command;
-      const CommandLineContext base_context("test", command, ovm);
+      const CommandLineContext base_context("test", command, ovm, 80U);
       auto context = ParserContext::New(base_context, commands);
       SetupInitialState(context);
       std::get<InitialStateTestData>(state_check).Check(state());

@@ -42,6 +42,28 @@ auto oxygen::clap::CliBuilder::About(std::string about) -> CliBuilder&
   return *this;
 }
 
+auto oxygen::clap::CliBuilder::OutputWidth(const unsigned int width)
+  -> CliBuilder&
+{
+  if (!cli_) {
+    throw std::logic_error("OptionValueBuilder: method called after Build()");
+  }
+  if (width < 1) {
+    throw std::invalid_argument("OutputWidth must be >= 1");
+  }
+  cli_->OutputWidth(width);
+  return *this;
+}
+
+auto oxygen::clap::CliBuilder::WithAutoOutputWidth() -> CliBuilder&
+{
+  if (!cli_) {
+    throw std::logic_error("OptionValueBuilder: method called after Build()");
+  }
+  cli_->EnableAutoOutputWidth();
+  return *this;
+}
+
 auto oxygen::clap::CliBuilder::WithCommand(std::shared_ptr<Command> command)
   -> CliBuilder&
 {

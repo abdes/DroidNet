@@ -18,8 +18,10 @@ struct CliTheme;
 
 struct CommandLineContext {
   explicit CommandLineContext(std::string _program_name,
-    Command::Ptr& active_command_ref, OptionValuesMap& ovm_ref)
-    : program_name { std::move(_program_name) }
+    Command::Ptr& active_command_ref, OptionValuesMap& ovm_ref,
+    unsigned int output_width_value)
+    : output_width { output_width_value }
+    , program_name { std::move(_program_name) }
     , active_command { active_command_ref }
     , ovm { ovm_ref }
   {
@@ -28,6 +30,8 @@ struct CommandLineContext {
   const CliTheme* theme = nullptr;
 
   bool allow_long_option_value_with_no_equal { true };
+
+  unsigned int output_width;
 
   std::istream& in { std::cin };
   std::ostream& out { std::cout };

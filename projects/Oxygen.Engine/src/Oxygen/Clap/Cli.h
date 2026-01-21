@@ -82,6 +82,12 @@ public:
     return has_help_command_;
   }
 
+  /// The output width used for help and usage formatting.
+  [[nodiscard]] auto OutputWidth() const -> unsigned int
+  {
+    return output_width_.value_or(0U);
+  }
+
   OXGN_CLP_API auto Parse(int argc, const char** argv) -> CommandLineContext;
 
   /** Produces a human-readable  output of 'desc', listing options,
@@ -94,7 +100,6 @@ public:
       option_description element. */
   OXGN_CLP_API auto Print(
     const CommandLineContext& context, unsigned width = 80) const -> void;
-  // TODO(abdes): make the width a config parameter of the CLI
 
   // Cli instances are created and configured only via the associated
   // CliBuilder.
@@ -110,6 +115,18 @@ private:
   auto ProgramName(std::string name) -> void
   {
     program_name_ = std::move(name);
+  }
+
+  auto OutputWidth(const unsigned int width) -> void
+  {
+    output_width_ = width;
+    auto_output_width_ = false;
+  }
+
+  auto EnableAutoOutputWidth() -> void
+  {
+    output_width_.reset();
+    auto_output_width_ = true;
   }
 
   auto WithCommand(std::shared_ptr<Command> command) -> void
@@ -156,6 +173,8 @@ private:
 
   bool has_version_command_ = false;
   bool has_help_command_ = false;
+  std::optional<unsigned int> output_width_;
+  bool auto_output_width_ = true;
 };
 
 } // namespace oxygen::clap
