@@ -599,7 +599,7 @@ public:
   auto GetProfiler() const noexcept { return engine_state_.profiler; }
 
   // Scene pointer (engine-managed). Provided for modules like TransformsModule
-  // and ScenePrep. Lifetime managed externally; FrameContext only observes.
+  // and ScenePrep. Lifetime is owned by the engine; FrameContext observes it.
   // Scene is module-managed (not EngineState); no EngineTag required.
   OXGN_CORE_API auto SetScene(observer_ptr<scene::Scene> s) noexcept -> void;
 
@@ -982,7 +982,7 @@ private:
   // own optimized component storage, and is too different from what will be
   // snapshot and finally passed for rendering. Can be mutated until
   // PhaseId::KSceneMutation (not included).
-  observer_ptr<scene::Scene> scene_ { nullptr }; // active scene (non-owning)
+  observer_ptr<scene::Scene> scene_ {}; // active scene (observed)
 
   // protects staged_module_data_
   mutable std::shared_mutex staged_module_mutex_;

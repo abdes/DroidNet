@@ -332,9 +332,9 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
             .texture_type = entry.texture_type,
           });
         }
-        debug_ui_->SetCookedTextureEntries(std::move(entries));
         LOG_F(INFO, "TexturedCube: refresh completed entries={} root='{}'",
           entries.size(), root_path.string());
+        debug_ui_->SetCookedTextureEntries(std::move(entries));
         debug_ui_->SetImportStatus("Cooked root refreshed", false, 0.0f);
       } else {
         LOG_F(ERROR, "TexturedCube: refresh failed root='{}' error='{}'",

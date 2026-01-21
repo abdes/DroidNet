@@ -213,15 +213,16 @@ public:
 private:
   void OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset)
   {
-    if (!asset) {
-      LOG_F(ERROR, "SceneLoader: Failed to load scene asset");
-      failed_ = true;
-      return;
-    }
+    try {
+      if (!asset) {
+        LOG_F(ERROR, "SceneLoader: Failed to load scene asset");
+        failed_ = true;
+        return;
+      }
 
-    LOG_F(INFO, "SceneLoader: Scene asset loaded. Instantiating nodes...");
+      LOG_F(INFO, "SceneLoader: Scene asset loaded. Instantiating nodes...");
 
-    swap_.scene = std::make_shared<scene::Scene>("RenderScene");
+      swap_.scene = std::make_shared<scene::Scene>("RenderScene");
 
     // Check for mutually exclusive sky systems
     const auto sky_atmo_record = asset->TryGetSkyAtmosphereEnvironment();
@@ -843,9 +844,22 @@ private:
         runtime_nodes_.size());
     }
 
-    ready_ = true;
-    LOG_F(INFO,
-      "SceneLoader: Scene loading and instantiation complete. Ready for swap.");
+      ready_ = true;
+      LOG_F(INFO,
+        "SceneLoader: Scene loading and instantiation complete. Ready for swap.");
+    } catch (const std::exception& ex) {
+      LOG_F(ERROR, "SceneLoader: Exception while building scene: {}", ex.what());
+      swap_ = {};
+      runtime_nodes_.clear();
+      ready_ = false;
+      failed_ = true;
+    } catch (...) {
+      LOG_F(ERROR, "SceneLoader: Unknown exception while building scene");
+      swap_ = {};
+      runtime_nodes_.clear();
+      ready_ = false;
+      failed_ = true;
+    }
   }
 
   oxygen::content::AssetLoader& loader_;

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/Import/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
 #include <Oxygen/Content/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Content/Import/Internal/ImportPlanner.h>
@@ -72,6 +73,19 @@ namespace {
     };
   }
 
+  [[nodiscard]] auto MakeWarningDiagnostic(std::string code,
+    std::string message, std::string_view source_id,
+    std::string_view object_path) -> ImportDiagnostic
+  {
+    return ImportDiagnostic {
+      .severity = ImportSeverity::kWarning,
+      .code = std::move(code),
+      .message = std::move(message),
+      .source_path = std::string(source_id),
+      .object_path = std::string(object_path),
+    };
+  }
+
 } // namespace
 
 /*!
@@ -100,11 +114,21 @@ auto GlbImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   ReportProgress(
+    ImportPhase::kParsing, 0.05f, 0.0f, 0U, 0U, "Loading texture sources...");
+  auto external_textures = co_await LoadExternalTextureBytes(asset, session);
+  AddDiagnostics(session, std::move(external_textures.diagnostics));
+  if (external_textures.cancelled) {
+    ReportProgress(
+      ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "GLB load cancelled");
+    co_return co_await FinalizeSession(session);
+  }
+
+  ReportProgress(
     ImportPhase::kParsing, 0.1f, 0.0f, 0U, 0U, "Building import plan...");
   const auto request_copy = Request();
   const auto stop_token = StopToken();
   auto plan_outcome = co_await ThreadPool()->Run(
-    [this, &asset, request_copy, stop_token](
+    [this, &asset, request_copy, stop_token, &external_textures](
       co::ThreadPool::CancelToken cancelled) -> PlanBuildOutcome {
       DLOG_F(1, "GlbImportJob: BuildPlan task begin");
       if (cancelled || stop_token.stop_requested()) {
@@ -112,7 +136,8 @@ auto GlbImportJob::ExecuteAsync() -> co::Co<ImportReport>
         cancelled_outcome.cancelled = true;
         return cancelled_outcome;
       }
-      return BuildPlan(asset, request_copy, stop_token);
+      return BuildPlan(
+        asset, request_copy, stop_token, external_textures.bytes);
     });
   AddDiagnostics(session, std::move(plan_outcome.diagnostics));
   if (plan_outcome.cancelled || !plan_outcome.plan) {
@@ -157,6 +182,7 @@ auto GlbImportJob::ParseAsset(ImportSession& session) -> co::Co<ParsedGlbAsset>
       .request = request_copy,
       .naming_service = naming_service,
       .stop_token = stop_token,
+      .external_texture_bytes = {},
     };
 
     auto adapter = std::make_shared<adapters::GltfAdapter>();
@@ -186,6 +212,7 @@ auto GlbImportJob::ParseAsset(ImportSession& session) -> co::Co<ParsedGlbAsset>
         .request = request_copy,
         .naming_service = naming_service,
         .stop_token = stop_token,
+        .external_texture_bytes = {},
       };
 
       auto adapter = std::make_shared<adapters::GltfAdapter>();
@@ -200,9 +227,89 @@ auto GlbImportJob::ParseAsset(ImportSession& session) -> co::Co<ParsedGlbAsset>
   co_return parsed;
 }
 
+//! Load external glTF texture bytes via the async file reader.
+auto GlbImportJob::LoadExternalTextureBytes(ParsedGlbAsset& asset,
+  ImportSession& session) -> co::Co<ExternalTextureLoadOutcome>
+{
+  ExternalTextureLoadOutcome outcome;
+  if (!asset.success || asset.adapter == nullptr) {
+    co_return outcome;
+  }
+
+  if (StopToken().stop_requested()) {
+    outcome.cancelled = true;
+    co_return outcome;
+  }
+
+  auto reader = session.FileReader();
+  if (reader == nullptr) {
+    outcome.diagnostics.push_back(MakeErrorDiagnostic("import.file_reader",
+      "Import session has no async file reader", Request().source_path.string(),
+      ""));
+    co_return outcome;
+  }
+
+  const auto request_copy = Request();
+  const std::string source_id_prefix = request_copy.source_path.string();
+  adapters::AdapterInput input {
+    .source_id_prefix = source_id_prefix,
+    .object_path_prefix = {},
+    .material_keys = {},
+    .default_material_key = DefaultMaterialKey(),
+    .request = request_copy,
+    .naming_service = observer_ptr { &GetNamingService() },
+    .stop_token = StopToken(),
+    .external_texture_bytes = {},
+  };
+
+  std::vector<ImportDiagnostic> source_diagnostics;
+  const auto sources
+    = asset.adapter->CollectExternalTextureSources(input, source_diagnostics);
+  for (auto& diagnostic : source_diagnostics) {
+    outcome.diagnostics.push_back(std::move(diagnostic));
+  }
+
+  for (const auto& source : sources) {
+    if (StopToken().stop_requested()) {
+      outcome.cancelled = true;
+      co_return outcome;
+    }
+
+    auto read_result = co_await reader.get()->ReadFile(source.resolved_path);
+    if (!read_result.has_value()) {
+      const auto message
+        = "Failed to read glTF image file: " + read_result.error().ToString();
+      outcome.diagnostics.push_back(
+        MakeWarningDiagnostic("gltf.image.load_failed", message,
+          source.texture_id, source.resolved_path.string()));
+      outcome.bytes.push_back(adapters::AdapterInput::ExternalTextureBytes {
+        .texture_id = source.texture_id,
+        .bytes = std::make_shared<std::vector<std::byte>>(),
+      });
+      continue;
+    }
+
+    auto bytes = std::make_shared<std::vector<std::byte>>(
+      std::move(read_result.value()));
+    if (bytes->empty()) {
+      outcome.diagnostics.push_back(
+        MakeWarningDiagnostic("gltf.image.empty", "glTF image file is empty",
+          source.texture_id, source.resolved_path.string()));
+    }
+    outcome.bytes.push_back(adapters::AdapterInput::ExternalTextureBytes {
+      .texture_id = source.texture_id,
+      .bytes = std::move(bytes),
+    });
+  }
+
+  co_return outcome;
+}
+
 //! Build the planner-driven execution plan for this import.
 auto GlbImportJob::BuildPlan(ParsedGlbAsset& asset,
-  const ImportRequest& request, std::stop_token stop_token) -> PlanBuildOutcome
+  const ImportRequest& request, std::stop_token stop_token,
+  std::span<const adapters::AdapterInput::ExternalTextureBytes>
+    external_texture_bytes) -> PlanBuildOutcome
 {
   PlanBuildOutcome outcome;
   if (!asset.success || asset.adapter == nullptr) {
@@ -230,6 +337,7 @@ auto GlbImportJob::BuildPlan(ParsedGlbAsset& asset,
     .request = request,
     .naming_service = observer_ptr { &GetNamingService() },
     .stop_token = stop_token,
+    .external_texture_bytes = external_texture_bytes,
   };
 
   struct PlannerTextureSink final : adapters::TextureWorkItemSink {

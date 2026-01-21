@@ -20,6 +20,7 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -553,6 +554,13 @@ namespace {
     return id;
   }
 
+  [[nodiscard]] constexpr auto IsBc7Format(const oxygen::Format format) noexcept
+    -> bool
+  {
+    return format == oxygen::Format::kBC7UNorm
+      || format == oxygen::Format::kBC7UNormSRGB;
+  }
+
   [[nodiscard]] auto ResolveUvSet(const cgltf_texture_view& view) -> uint8_t
   {
     if (view.has_transform && view.transform.has_texcoord) {
@@ -699,7 +707,8 @@ namespace {
   [[nodiscard]] auto ResolveImageBytes(const cgltf_image& image,
     const std::filesystem::path& base_dir,
     const std::shared_ptr<const cgltf_data>& owner,
-    std::vector<ImportDiagnostic>& diagnostics, std::string_view source_id)
+    std::vector<ImportDiagnostic>& diagnostics, std::string_view source_id,
+    std::span<const AdapterInput::ExternalTextureBytes> external_texture_bytes)
     -> std::optional<TexturePipeline::SourceBytes>
   {
     const auto make_placeholder = []() -> TexturePipeline::SourceBytes {
@@ -708,6 +717,16 @@ namespace {
         .bytes = std::span<const std::byte>(bytes->data(), bytes->size()),
         .owner = std::static_pointer_cast<const void>(bytes),
       };
+    };
+
+    auto find_external_bytes = [&](std::string_view texture_id)
+      -> std::shared_ptr<std::vector<std::byte>> {
+      for (const auto& entry : external_texture_bytes) {
+        if (entry.texture_id == texture_id) {
+          return entry.bytes;
+        }
+      }
+      return {};
     };
     if (image.buffer_view != nullptr && image.buffer_view->buffer != nullptr
       && image.buffer_view->buffer->data != nullptr) {
@@ -737,6 +756,22 @@ namespace {
     }
 
     const auto path = base_dir / std::filesystem::path(std::string(uri));
+    if (!external_texture_bytes.empty()) {
+      const auto external_bytes = find_external_bytes(source_id);
+      if (external_bytes) {
+        return TexturePipeline::SourceBytes {
+          .bytes = std::span<const std::byte>(
+            external_bytes->data(), external_bytes->size()),
+          .owner = std::static_pointer_cast<const void>(external_bytes),
+        };
+      }
+
+      diagnostics.push_back(MakeWarningDiagnostic("gltf.image.async_missing",
+        "glTF image bytes were not loaded via async reader", source_id,
+        path.string()));
+      return make_placeholder();
+    }
+
     auto bytes = LoadExternalBytes(path, diagnostics, source_id);
 
     return TexturePipeline::SourceBytes {
@@ -1819,14 +1854,17 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
         item.desc.mip_policy = tuning.mip_policy;
         item.desc.max_mip_levels = tuning.max_mip_levels;
         item.desc.mip_filter = tuning.mip_filter;
-        item.desc.output_format
-          = (usage == TextureUsage::kBaseColor || usage == TextureUsage::kEmissive)
+        item.desc.output_format = (usage == TextureUsage::kBaseColor
+                                    || usage == TextureUsage::kEmissive)
           ? tuning.color_output_format
           : tuning.data_output_format;
-        item.desc.bc7_quality = tuning.bc7_quality;
+        item.desc.bc7_quality = IsBc7Format(item.desc.output_format)
+          ? tuning.bc7_quality
+          : Bc7Quality::kNone;
       }
 
-      item.packing_policy_id = tuning.enabled ? tuning.packing_policy_id : "d3d12";
+      item.packing_policy_id
+        = tuning.enabled ? tuning.packing_policy_id : "d3d12";
       item.output_format_is_override = tuning.enabled;
       item.failure_policy
         = input.request.options.texture_tuning.placeholder_on_failure
@@ -1841,8 +1879,8 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
       return;
     }
 
-    auto source_bytes = ResolveImageBytes(
-      *image, base_dir, impl_->data_owner, result.diagnostics, source_id);
+    auto source_bytes = ResolveImageBytes(*image, base_dir, impl_->data_owner,
+      result.diagnostics, source_id, input.external_texture_bytes);
     if (!source_bytes.has_value()) {
       DLOG_F(INFO, "glTF texture register: source_id='{}' no bytes", source_id);
       return;
@@ -1861,11 +1899,12 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
       desc.mip_policy = tuning.mip_policy;
       desc.max_mip_levels = tuning.max_mip_levels;
       desc.mip_filter = tuning.mip_filter;
-      desc.output_format
-        = (usage == TextureUsage::kBaseColor || usage == TextureUsage::kEmissive)
+      desc.output_format = (usage == TextureUsage::kBaseColor
+                             || usage == TextureUsage::kEmissive)
         ? tuning.color_output_format
         : tuning.data_output_format;
-      desc.bc7_quality = tuning.bc7_quality;
+      desc.bc7_quality = IsBc7Format(desc.output_format) ? tuning.bc7_quality
+                                                         : Bc7Quality::kNone;
     }
 
     TexturePipeline::WorkItem item {};
@@ -1873,7 +1912,8 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
     item.texture_id = source_id;
     item.source_key = view.texture;
     item.desc = std::move(desc);
-    item.packing_policy_id = tuning.enabled ? tuning.packing_policy_id : "d3d12";
+    item.packing_policy_id
+      = tuning.enabled ? tuning.packing_policy_id : "d3d12";
     item.output_format_is_override = tuning.enabled;
     item.failure_policy
       = input.request.options.texture_tuning.placeholder_on_failure
@@ -1906,6 +1946,79 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
   }
 
   return result;
+}
+
+auto GltfAdapter::CollectExternalTextureSources(
+  const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics) const
+  -> std::vector<ExternalTextureSource>
+{
+  std::vector<ExternalTextureSource> sources;
+  if (!impl_->data_owner) {
+    diagnostics.push_back(MakeErrorDiagnostic("gltf.scene.not_parsed",
+      "glTF adapter has no parsed scene", input.source_id_prefix,
+      input.object_path_prefix));
+    return sources;
+  }
+
+  if (input.stop_token.stop_requested()) {
+    diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
+    return sources;
+  }
+
+  const auto& data = *impl_->data_owner;
+  const auto base_dir = input.request.source_path.parent_path();
+  std::unordered_set<std::string> seen_ids;
+
+  auto register_texture
+    = [&](const cgltf_texture_view& view, const TextureUsage usage) {
+        if (view.texture == nullptr || view.texture->image == nullptr) {
+          return;
+        }
+
+        const auto source_id = BuildTextureSourceId(
+          input.source_id_prefix, data, *view.texture, usage);
+        if (!seen_ids.insert(source_id).second) {
+          return;
+        }
+
+        const auto& image = *view.texture->image;
+        if (image.buffer_view != nullptr) {
+          return;
+        }
+        if (image.uri == nullptr || *image.uri == '\0') {
+          return;
+        }
+
+        std::string_view uri(image.uri);
+        if (uri.rfind("data:", 0) == 0) {
+          return;
+        }
+
+        sources.push_back(ExternalTextureSource {
+          .texture_id = source_id,
+          .resolved_path = base_dir / std::filesystem::path(std::string(uri)),
+        });
+      };
+
+  for (cgltf_size i = 0; i < data.materials_count; ++i) {
+    if (input.stop_token.stop_requested()) {
+      diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
+      return sources;
+    }
+
+    const auto& material = data.materials[i];
+    if (material.has_pbr_metallic_roughness) {
+      const auto& pbr = material.pbr_metallic_roughness;
+      register_texture(pbr.base_color_texture, TextureUsage::kBaseColor);
+      register_texture(
+        pbr.metallic_roughness_texture, TextureUsage::kMetallicRoughness);
+    }
+    register_texture(material.normal_texture, TextureUsage::kNormal);
+    register_texture(material.occlusion_texture, TextureUsage::kOcclusion);
+    register_texture(material.emissive_texture, TextureUsage::kEmissive);
+  }
+
+  return sources;
 }
 
 auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,

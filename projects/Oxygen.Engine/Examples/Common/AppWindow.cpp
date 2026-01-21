@@ -127,56 +127,88 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
     return false;
   }
 
+  const auto weak_self = weak_from_this();
+
   // Close-request handler
-  platform_->Async().Nursery().Start([this]() -> co::Co<> {
-    while (!window_.expired()) {
-      const auto w = window_.lock();
-      if (!w)
-        break;
+  platform_->Async().Nursery().Start([weak_self]() -> co::Co<> {
+    while (true) {
+      auto self = weak_self.lock();
+      if (!self) {
+        co_return;
+      }
+      const auto w = self->window_.lock();
+      if (!w) {
+        co_return;
+      }
       co_await w->CloseRequested();
-      if (auto sw = window_.lock())
+      self = weak_self.lock();
+      if (!self) {
+        co_return;
+      }
+      if (auto sw = self->window_.lock()) {
         sw->VoteToClose();
+      }
     }
-    co_return;
   });
 
   // Resize/expose handler
-  platform_->Async().Nursery().Start([this]() -> co::Co<> {
+  platform_->Async().Nursery().Start([weak_self]() -> co::Co<> {
     using WindowEvent = platform::window::Event;
-    while (!window_.expired()) {
-      const auto w = window_.lock();
-      if (!w)
-        break;
+    while (true) {
+      auto self = weak_self.lock();
+      if (!self) {
+        co_return;
+      }
+      const auto w = self->window_.lock();
+      if (!w) {
+        co_return;
+      }
       const auto [from, to] = co_await w->Events().UntilChanged();
+      self = weak_self.lock();
+      if (!self) {
+        co_return;
+      }
       if (to == WindowEvent::kResized) {
         LOG_F(1, "Window resized -> marking surface for resize");
-        surface_->ShouldResize(true);
+        if (self->surface_) {
+          self->surface_->ShouldResize(true);
+        }
       }
     }
-    co_return;
   });
 
   // Platform termination -> request close
-  platform_->Async().Nursery().Start([this]() -> co::Co<> {
-    co_await platform_->Async().OnTerminate();
+  auto platform = platform_;
+  platform_->Async().Nursery().Start([weak_self, platform]() -> co::Co<> {
+    co_await platform->Async().OnTerminate();
     LOG_F(INFO, "platform OnTerminate -> requesting window close");
-    if (auto w = window_.lock())
-      w->RequestClose();
-    co_return;
+    if (auto self = weak_self.lock()) {
+      if (auto w = self->window_.lock()) {
+        w->RequestClose();
+      }
+    }
   });
 
   // Register pre-destroy handler
-  const auto win_id = window_.lock()->Id();
+  const auto win_ref = window_.lock();
+  if (!win_ref) {
+    LOG_F(ERROR, "Failed to lock platform window handle");
+    return false;
+  }
+  const auto win_id = win_ref->Id();
   window_lifecycle_token_ = platform_->RegisterWindowAboutToBeDestroyedHandler(
-    [this, win_id](platform::WindowIdType closing_window_id) {
-      if (closing_window_id == win_id) {
+    [weak_self, win_id](platform::WindowIdType closing_window_id) {
+      if (closing_window_id != win_id) {
+        return;
+      }
+      if (auto self = weak_self.lock()) {
         LOG_F(INFO, "Platform about to destroy window {} -> detaching state",
           win_id);
         // Release resources and clear the state
-        MaybeUnhookImgui(engine_);
-        ClearFramebuffers();
-        surface_.reset();
-        window_.reset();
+        MaybeUnhookImgui(self->engine_);
+        self->ClearFramebuffers();
+        self->surface_.reset();
+        self->window_.reset();
       }
     });
 

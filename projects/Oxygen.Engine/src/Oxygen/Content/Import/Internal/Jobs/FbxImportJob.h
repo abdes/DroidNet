@@ -7,9 +7,11 @@
 #pragma once
 
 #include <memory>
+#include <span>
 
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
+#include <Oxygen/Content/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Content/Import/Internal/ImportJob.h>
 
 namespace oxygen::content::import {
@@ -56,14 +58,24 @@ private:
     bool cancelled = false;
   };
 
+  struct ExternalTextureLoadOutcome {
+    std::vector<adapters::AdapterInput::ExternalTextureBytes> bytes;
+    std::vector<ImportDiagnostic> diagnostics;
+    bool cancelled = false;
+  };
+
   [[nodiscard]] auto ExecuteAsync() -> co::Co<ImportReport> override;
 
   [[nodiscard]] auto ParseScene(ImportSession& session)
     -> co::Co<ParsedFbxScene>;
 
   [[nodiscard]] auto BuildPlan(ParsedFbxScene& scene,
-    const ImportRequest& request, std::stop_token stop_token)
-    -> PlanBuildOutcome;
+    const ImportRequest& request, std::stop_token stop_token,
+    std::span<const adapters::AdapterInput::ExternalTextureBytes>
+      external_texture_bytes) -> PlanBuildOutcome;
+
+  [[nodiscard]] auto LoadExternalTextureBytes(ParsedFbxScene& scene,
+    ImportSession& session) -> co::Co<ExternalTextureLoadOutcome>;
 
   [[nodiscard]] auto ExecutePlan(PlannedFbxImport& plan, ImportSession& session)
     -> co::Co<bool>;

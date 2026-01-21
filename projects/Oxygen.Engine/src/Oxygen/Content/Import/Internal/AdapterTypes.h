@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <memory>
 #include <span>
 #include <stop_token>
 #include <string>
@@ -32,9 +33,15 @@ struct AdapterInput final {
   std::span<const data::AssetKey> material_keys;
   data::AssetKey default_material_key;
 
+  struct ExternalTextureBytes final {
+    std::string texture_id;
+    std::shared_ptr<std::vector<std::byte>> bytes;
+  };
+
   ImportRequest request;
   observer_ptr<NamingService> naming_service;
   std::stop_token stop_token;
+  std::span<const ExternalTextureBytes> external_texture_bytes {};
 };
 
 //! Tag selecting geometry work item production.

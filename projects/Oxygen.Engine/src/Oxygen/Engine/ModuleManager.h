@@ -117,6 +117,7 @@ public:
     friend class ModuleManager;
     uint64_t id_ { 0 };
     observer_ptr<ModuleManager> owner_ { nullptr };
+    std::weak_ptr<int> alive_token_ {};
   };
 
   // Subscribe to module attach events. Default replay_existing=false.
@@ -150,6 +151,7 @@ private:
   std::mutex subscribers_mutex_;
   std::unordered_map<uint64_t, ModuleAttachedCallback> attached_subscribers_ {};
   uint64_t next_subscriber_id_ { 1 };
+  std::shared_ptr<int> alive_token_ {};
 };
 
 } // namespace oxygen::engine
