@@ -92,31 +92,28 @@ MaterialSurface EvaluateMaterialSurface(
                 NN = float3(0.0, 1.0, 0.0);
             }
 
+            // The VS provides an orthonormal TBN basis. In the PS we only do a
+            // minimal, correctness-preserving renormalization and handedness
+            // check to account for interpolation.
             float3 T = SafeNormalize(world_tangent);
-            float3 B_in = world_bitangent;
+            float3 B_in = SafeNormalize(world_bitangent);
 
-            // Orthonormalize TBN to reduce artifacts.
+            // Re-orthogonalize T against N (cheap) to avoid accumulating error
+            // across interpolation.
             T = T - NN * dot(NN, T);
             if (dot(T, T) <= 1e-6) {
-                // Degenerate tangent (e.g., tangent parallel to normal). Choose a
-                // stable orthogonal axis so we don't introduce NaNs.
                 const float3 axis = (abs(NN.y) > 0.9) ? float3(1.0, 0.0, 0.0)
                                                       : float3(0.0, 1.0, 0.0);
                 T = cross(NN, axis);
             }
             T = SafeNormalize(T);
-            // Double-check T is valid
-            if (dot(T, T) < 0.5) {
-                T = float3(1.0, 0.0, 0.0);
-            }
 
-            // Preserve TBN handedness (mirrored UVs) when possible.
-            const float3 B_from_cross = cross(NN, T);
-            const float handedness = (dot(B_from_cross, B_in) < 0.0) ? -1.0 : 1.0;
-            float3 B = SafeNormalize(B_from_cross * handedness);
-            if (dot(B, B) < 0.5) {
-                B = cross(NN, T);
+            float3 B = cross(NN, T);
+            if (dot(B, B) <= 1e-6) {
+                B = B_in;
             }
+            const float handedness = (dot(B, B_in) < 0.0) ? -1.0 : 1.0;
+            B = SafeNormalize(B * handedness);
 
             // Transform tangent-space normal to world space.
             // TBN basis vectors (T, B, NN) are columns of the transform matrix.
