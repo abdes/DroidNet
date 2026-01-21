@@ -93,13 +93,15 @@ private:
     ImportSession& session, std::vector<ImportDiagnostic> diagnostics) -> void;
 
   [[nodiscard]] auto EmitGeometryPayload(GeometryPipeline& pipeline,
-    GeometryPipeline::WorkResult result) -> co::Co<bool>;
+    const MeshBuildPipeline::CookedGeometryPayload& cooked,
+    const std::vector<MeshBufferBindings>& bindings, std::string_view source_id)
+    -> co::Co<bool>;
 
   [[nodiscard]] auto EmitTexturePayload(TexturePipeline::WorkResult& result)
     -> std::optional<uint32_t>;
 
   [[nodiscard]] auto EmitBufferPayload(BufferPipeline::WorkResult result)
-    -> bool;
+    -> std::optional<uint32_t>;
 
   [[nodiscard]] auto EmitMaterialPayload(MaterialPipeline::WorkResult result)
     -> bool;
@@ -114,7 +116,8 @@ private:
   auto EnsureTexturePipeline(co::Nursery& nursery) -> TexturePipeline&;
   auto EnsureBufferPipeline(co::Nursery& nursery) -> BufferPipeline&;
   auto EnsureMaterialPipeline(co::Nursery& nursery) -> MaterialPipeline&;
-  auto EnsureGeometryPipeline(co::Nursery& nursery) -> GeometryPipeline&;
+  auto EnsureMeshBuildPipeline(co::Nursery& nursery) -> MeshBuildPipeline&;
+  auto EnsureGeometryPipeline() -> GeometryPipeline&;
   auto EnsureScenePipeline(co::Nursery& nursery) -> ScenePipeline&;
 
   auto ClosePipelines() noexcept -> void;
@@ -128,6 +131,7 @@ private:
   std::unique_ptr<TexturePipeline> texture_pipeline_;
   std::unique_ptr<BufferPipeline> buffer_pipeline_;
   std::unique_ptr<MaterialPipeline> material_pipeline_;
+  std::unique_ptr<MeshBuildPipeline> mesh_build_pipeline_;
   std::unique_ptr<GeometryPipeline> geometry_pipeline_;
   std::unique_ptr<ScenePipeline> scene_pipeline_;
 };

@@ -1238,7 +1238,7 @@ namespace {
           input.source_id_prefix, mesh_name));
       }
 
-      GeometryPipeline::WorkItem item;
+      MeshBuildPipeline::WorkItem item;
       item.source_id
         = BuildSourceId(input.source_id_prefix, mesh_name, mesh_ordinal++);
       item.mesh_name = mesh_name;

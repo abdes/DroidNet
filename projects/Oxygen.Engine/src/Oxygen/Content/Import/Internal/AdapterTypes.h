@@ -70,7 +70,7 @@ public:
   virtual ~GeometryWorkItemSink() = default;
 
   //! Consume one geometry work item. Return false to stop streaming.
-  virtual auto Consume(GeometryPipeline::WorkItem item) -> bool = 0;
+  virtual auto Consume(MeshBuildPipeline::WorkItem item) -> bool = 0;
 };
 
 //! Streaming sink for scene work items.
