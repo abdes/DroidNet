@@ -479,6 +479,7 @@ inline auto TryImplicitValue(const ParserContextPtr& context) -> bool
   if (semantics->ApplyImplicit(value, value_as_text)) {
     context->ovm.StoreValue(
       context->active_option->Key(), { value, value_as_text, false });
+    semantics->NotifyParsed(value);
     return true;
   }
   return false;
@@ -603,6 +604,7 @@ struct ParseShortOptionState
     if (semantics->Parse(value, event.token)) {
       context_->ovm.StoreValue(
         context_->active_option->Key(), { value, event.token, false });
+      semantics->NotifyParsed(value);
       value_ = event.token;
       return DoNothing {};
     }
@@ -748,6 +750,7 @@ struct ParseLongOptionState : Will<ByDefault<TransitionTo<ParseOptionsState>>> {
     if (semantics->Parse(any_value, event.token)) {
       context->ovm.StoreValue(
         context->active_option->Key(), { any_value, event.token, false });
+      semantics->NotifyParsed(any_value);
       value = event.token;
       return DoNothing {};
     }
@@ -908,7 +911,7 @@ private:
           }
         } else {
           context->ovm.StoreValue(
-            option->Key(), { value, value_as_text, false });
+            option->Key(), { value, value_as_text, true });
         }
       }
     }
@@ -921,6 +924,7 @@ private:
     std::any value;
     if (semantics->Parse(value, token)) {
       context->ovm.StoreValue(option->Key(), { value, std::move(token), true });
+      semantics->NotifyParsed(value);
     } else {
       throw std::runtime_error(InvalidValueForOption(context, token, ""));
     }

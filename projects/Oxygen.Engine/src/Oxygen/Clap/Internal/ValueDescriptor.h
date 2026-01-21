@@ -228,6 +228,16 @@ public:
   // TODO: deicide if and how we can get notified not just for the final value,
   // but for other values as well
 
+  //! Specifies a 'Callable' (function, lambda, method, etc.) to be invoked
+  //! with a const reference to the value, on each parsed occurrence.
+  template <typename Callable>
+    requires std::invocable<Callable, const T&>
+  auto CallOnEachValue(Callable&& callback) -> void
+  {
+    each_value_notifier_
+      = std::function<void(const T&)>(std::forward<Callable>(callback));
+  }
+
   //! Specifies a 'Callable' (function, lambda, method, etc.) to be invoked with
   //! a const reference to the value, when the final value is determined.
   template <typename Callable>
@@ -267,6 +277,17 @@ public:
     }
   }
 
+  auto NotifyParsed(const std::any& value_store) const -> void override
+  {
+    if (!each_value_notifier_) {
+      return;
+    }
+    const T* value = std::any_cast<T>(&value_store);
+    if (value) {
+      each_value_notifier_(*value);
+    }
+  }
+
   template <typename> friend class OptionValueBuilder;
 
 private:
@@ -282,6 +303,7 @@ private:
   std::string implicit_value_as_text_;
   bool repeatable_ { false };
   std::function<void(const T&)> notifier_;
+  std::function<void(const T&)> each_value_notifier_;
 };
 
 } // namespace oxygen::clap

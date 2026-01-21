@@ -207,7 +207,10 @@ determined by the type of token encountered. The main states are:
   options in a separate section before command options.
 - **Theme Selection**: Set a predictable output style via
   `CliBuilder::WithTheme(CliTheme::Plain())` (or `Dark()`/`Light()`) for help and
-  usage formatting.
+  usage formatting. To allow users to select a theme at runtime, enable the
+  pre-configured global option with `CliBuilder::WithThemeSelectionOption()`.
+- **Notifiers**: Register callbacks for option values using
+  `CallOnEachValue` (per occurrence) and `CallOnFinalValue` (after parsing).
 - **Custom Value Semantics**: Extend `ValueSemantics` to support custom
   parsing/validation logic.
 - **Extensible Builders**: Builders are facets-compatible and can be extended
@@ -291,7 +294,7 @@ required by the project.
 | Value type parsers coverage | ✅ | Core numeric, bool, char, string-like, enums, and chrono durations are supported. |
 | Repeatable value parsing tests | ⏳ | Add tests for multiple occurrences and illegal repeats. |
 | Required value parsing tests | ⏳ | Add tests for missing required options/positionals without defaults. |
-| Callback interface refactor | ⏳ | Clarify notifier APIs (final vs per-value) and add per-value notifications. |
+| Callback interface refactor | ✅ | Per-value notifier (`CallOnEachValue`) and final notifier (`CallOnFinalValue`) are supported; per-value fires on each parsed occurrence, final fires after parsing/defaults. |
 | Multi-token value support | ⏳ | Support values that span multiple tokens (e.g., `--opt a b`). |
 | Notifiers/store-to finalization | ✅ | Final values are propagated after parsing via `Option::FinalizeValue`. |
 | Error type name reporting | ⏳ | Include expected type names in invalid value errors. |

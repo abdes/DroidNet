@@ -131,6 +131,11 @@ public:
     -> bool
     = 0;
 
+  //! Notify listeners for each parsed value.
+  /*! Called immediately after a value is parsed and stored. Defaults to a
+      no-op. */
+  virtual auto NotifyParsed(const std::any& /*value_store*/) const -> void { }
+
   //! Finalize the value by applying storage / notification side-effects.
   /*! Called after the full command line has been parsed so that concrete
       implementations can propagate the final (possibly default or implicit)

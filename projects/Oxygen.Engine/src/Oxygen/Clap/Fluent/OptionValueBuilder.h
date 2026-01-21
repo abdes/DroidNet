@@ -70,6 +70,22 @@ public:
     return *this;
   }
 
+  template <typename Callable>
+    requires std::invocable<Callable, const T&>
+  auto CallOnEachValue(Callable&& callback) -> Self&
+  {
+    TypedValueDesc()->CallOnEachValue(std::forward<Callable>(callback));
+    return *this;
+  }
+
+  template <typename Callable>
+    requires std::invocable<Callable, const T&>
+  auto CallOnFinalValue(Callable&& callback) -> Self&
+  {
+    TypedValueDesc()->CallOnFinalValue(std::forward<Callable>(callback));
+    return *this;
+  }
+
 private:
   auto TypedValueDesc() const -> std::shared_ptr<ValueDescriptor<T>>
   {
