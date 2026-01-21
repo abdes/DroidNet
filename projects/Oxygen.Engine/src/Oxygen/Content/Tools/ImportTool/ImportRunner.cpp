@@ -131,6 +131,8 @@ auto RunImportJob(const ImportRequest& request, const bool verbose,
       report_copy = *report;
       have_report = true;
     }
+
+    service.Stop();
   }
 
   if (submit_error.has_value()) {
