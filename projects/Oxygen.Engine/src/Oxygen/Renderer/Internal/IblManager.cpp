@@ -260,6 +260,10 @@ auto IblManager::QueryOutputsFor(ShaderVisibleIndex source_slot) const noexcept
 
   out.irradiance = irradiance_map_.srv_index;
   out.prefilter = prefilter_map_.srv_index;
+  if (prefilter_map_.texture) {
+    out.prefilter_mip_levels
+      = prefilter_map_.texture->GetDescriptor().mip_levels;
+  }
   return out;
 }
 

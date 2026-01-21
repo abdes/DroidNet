@@ -460,9 +460,9 @@ float4 PS(VSOutput input) : SV_Target0 {
             brdf_lut = ResourceDescriptorHeap[env_data.sky_light.brdf_lut_slot];
         }
 
-        uint cube_width, cube_height, cube_levels;
-        sky_cube.GetDimensions(0, cube_width, cube_height, cube_levels);
-        const float max_mip = max(0.0f, (float)cube_levels - 1.0f);
+        const float max_mip = (ibl_cubemap_slot == env_data.sky_sphere.cubemap_slot)
+            ? (float)env_data.sky_sphere.cubemap_max_mip
+            : (float)env_data.sky_light.cubemap_max_mip;
 
         const float3 R = reflect(-V, N);
 
@@ -480,11 +480,8 @@ float4 PS(VSOutput input) : SV_Target0 {
              ibl_diffuse = irr_map.SampleLevel(linear_sampler, cube_N, 0).rgb;
 
              // Specular from Prefilter Map
-             uint pf_w, pf_h, pf_levels;
-             pref_map.GetDimensions(0, pf_w, pf_h, pf_levels);
-             float pf_max_mip = max(0.0f, (float)pf_levels - 1.0f);
-
-             ibl_specular = pref_map.SampleLevel(linear_sampler, cube_R, pf_max_mip * roughness).rgb;
+               const float pf_max_mip = (float)env_data.sky_light.prefilter_max_mip;
+               ibl_specular = pref_map.SampleLevel(linear_sampler, cube_R, pf_max_mip * roughness).rgb;
         }
         else
         {

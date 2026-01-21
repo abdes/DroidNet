@@ -535,6 +535,9 @@ public:
   auto OnFrameEnd() -> void;
   auto GetOrAllocate(const content::ResourceKey& resource_key)
     -> ShaderVisibleIndex;
+  [[nodiscard]] auto TryGetMipLevels(
+    const content::ResourceKey& resource_key) const noexcept
+    -> std::optional<std::uint32_t>;
   [[nodiscard]] auto IsResourceReady(
     const content::ResourceKey& resource_key) const noexcept -> bool;
   [[nodiscard]] auto GetErrorTextureIndex() const -> ShaderVisibleIndex;
@@ -645,6 +648,13 @@ auto TextureBinder::IsResourceReady(
   return impl_->IsResourceReady(key);
 }
 
+auto TextureBinder::TryGetMipLevels(
+  const content::ResourceKey& key) const noexcept
+  -> std::optional<std::uint32_t>
+{
+  return impl_->TryGetMipLevels(key);
+}
+
 /*!
  TextureBinder frame-end hook.
 
@@ -692,6 +702,31 @@ auto TextureBinder::Impl::IsResourceReady(
     return false;
   }
   return !entry.is_placeholder;
+}
+
+auto TextureBinder::Impl::TryGetMipLevels(
+  const content::ResourceKey& resource_key) const noexcept
+  -> std::optional<std::uint32_t>
+{
+  if (resource_key.IsFallback()) {
+    if (placeholder_texture_) {
+      return placeholder_texture_->GetDescriptor().mip_levels;
+    }
+    return std::nullopt;
+  }
+
+  const auto it = texture_map_.find(resource_key);
+  if (it == texture_map_.end()) {
+    // The fast-path placeholder binding does not create entries.
+    return std::nullopt;
+  }
+
+  const auto& entry = it->second;
+  if (!entry.texture) {
+    return std::nullopt;
+  }
+
+  return entry.texture->GetDescriptor().mip_levels;
 }
 
 auto TextureBinder::Impl::GetOrAllocate(

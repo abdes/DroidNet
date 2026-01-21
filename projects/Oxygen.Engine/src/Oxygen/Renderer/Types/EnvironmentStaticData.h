@@ -241,10 +241,19 @@ struct alignas(16) GpuSkyLightParams {
   // Added slots for IBL maps
   IrradianceMapSlot irradiance_map_slot {};
   PrefilterMapSlot prefilter_map_slot {};
+
+  //! Maximum mip index for the sky cubemap slot (0 when unknown).
+  std::uint32_t cubemap_max_mip { 0U };
+
+  //! Maximum mip index for the prefilter cubemap slot (0 when unknown).
+  std::uint32_t prefilter_max_mip { 0U };
+
+  std::uint32_t _pad0 { 0U };
+  std::uint32_t _pad1 { 0U };
 };
 static_assert(sizeof(GpuSkyLightParams) % 16 == 0,
   "GpuSkyLightParams size must be 16-byte aligned");
-static_assert(sizeof(GpuSkyLightParams) == 48,
+static_assert(sizeof(GpuSkyLightParams) == 64,
   "GpuSkyLightParams size must match HLSL packing");
 
 //! GPU-facing sky sphere background parameters.
@@ -264,7 +273,7 @@ struct alignas(16) GpuSkySphereParams {
   SkySphereSource source { SkySphereSource::kCubemap };
   uint32_t enabled { 0u };
   CubeMapSlot cubemap_slot {};
-  uint32_t _pad0 { 0u };
+  std::uint32_t cubemap_max_mip { 0U };
 };
 static_assert(sizeof(GpuSkySphereParams) % 16 == 0,
   "GpuSkySphereParams size must be 16-byte aligned");
@@ -348,7 +357,7 @@ struct alignas(16) EnvironmentStaticData {
 };
 static_assert(sizeof(EnvironmentStaticData) % 16 == 0,
   "EnvironmentStaticData size must be 16-byte aligned");
-static_assert(sizeof(EnvironmentStaticData) == 400,
+static_assert(sizeof(EnvironmentStaticData) == 416,
   "EnvironmentStaticData size must match HLSL packing");
 
 } // namespace oxygen::engine

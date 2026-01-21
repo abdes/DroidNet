@@ -27,6 +27,7 @@ public:
   struct OutputMaps {
     ShaderVisibleIndex irradiance { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex prefilter { kInvalidShaderVisibleIndex };
+    std::uint32_t prefilter_mip_levels { 0U };
     std::uint64_t generation { 0ULL };
   };
 
