@@ -26,6 +26,12 @@ public:
     bool success = true;
   };
 
+  //! Descriptor for an external texture source discovered in a glTF.
+  struct ExternalTextureSource final {
+    std::string texture_id;
+    std::filesystem::path resolved_path;
+  };
+
   GltfAdapter();
   ~GltfAdapter();
 
@@ -51,6 +57,11 @@ public:
   OXGN_CNTT_NDAPI auto BuildWorkItems(
     TextureWorkTag tag, TextureWorkItemSink& sink, const AdapterInput& input)
     -> WorkItemStreamResult;
+
+  //! Collect external texture sources referenced by the parsed document.
+  OXGN_CNTT_NDAPI auto CollectExternalTextureSources(
+    const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics) const
+    -> std::vector<ExternalTextureSource>;
 
   //! Stream scene work items.
   OXGN_CNTT_NDAPI auto BuildWorkItems(SceneWorkTag tag, SceneWorkItemSink& sink,

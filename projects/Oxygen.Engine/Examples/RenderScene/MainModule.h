@@ -142,7 +142,7 @@ private:
   std::shared_ptr<oxygen::input::InputMappingContext> fly_controls_ctx_;
 
   enum class CameraMode { kOrbit, kFly };
-  CameraMode camera_mode_ { CameraMode::kOrbit };
+  CameraMode camera_mode_ { CameraMode::kFly };
   std::unique_ptr<OrbitCameraController> orbit_controller_;
   std::unique_ptr<FlyCameraController> fly_controller_;
 

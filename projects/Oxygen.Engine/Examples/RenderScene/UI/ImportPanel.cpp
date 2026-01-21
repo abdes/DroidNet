@@ -154,6 +154,87 @@ namespace {
     return "Unknown";
   }
 
+  enum class TexturePreset {
+    kBalanced,
+    kSaveGpuMemory,
+    kMaxImportSpeed,
+    kBestQuality,
+  };
+
+  [[nodiscard]] auto ToString(TexturePreset value) -> const char*
+  {
+    switch (value) {
+    case TexturePreset::kBalanced:
+      return "Balanced";
+    case TexturePreset::kSaveGpuMemory:
+      return "Save GPU memory";
+    case TexturePreset::kMaxImportSpeed:
+      return "Maximize import speed";
+    case TexturePreset::kBestQuality:
+      return "Best quality (no compression)";
+    }
+    return "Unknown";
+  }
+
+  auto ApplyTexturePreset(content::import::ImportOptions::TextureTuning& tuning,
+    TexturePreset preset) -> void
+  {
+    switch (preset) {
+    case TexturePreset::kBalanced:
+      tuning.enabled = true;
+      tuning.intent = content::import::TextureIntent::kAlbedo;
+      tuning.source_color_space = ColorSpace::kSRGB;
+      tuning.flip_y_on_decode = false;
+      tuning.force_rgba_on_decode = true;
+      tuning.mip_policy = content::import::MipPolicy::kFullChain;
+      tuning.max_mip_levels = 10;
+      tuning.mip_filter = content::import::MipFilter::kKaiser;
+      tuning.color_output_format = Format::kBC7UNormSRGB;
+      tuning.data_output_format = Format::kBC7UNorm;
+      tuning.bc7_quality = content::import::Bc7Quality::kDefault;
+      break;
+    case TexturePreset::kSaveGpuMemory:
+      tuning.enabled = true;
+      tuning.intent = content::import::TextureIntent::kAlbedo;
+      tuning.source_color_space = ColorSpace::kSRGB;
+      tuning.flip_y_on_decode = false;
+      tuning.force_rgba_on_decode = true;
+      tuning.mip_policy = content::import::MipPolicy::kFullChain;
+      tuning.max_mip_levels = 10;
+      tuning.mip_filter = content::import::MipFilter::kBox;
+      tuning.color_output_format = Format::kBC7UNormSRGB;
+      tuning.data_output_format = Format::kBC7UNorm;
+      tuning.bc7_quality = content::import::Bc7Quality::kFast;
+      break;
+    case TexturePreset::kMaxImportSpeed:
+      tuning.enabled = false;
+      tuning.intent = content::import::TextureIntent::kAlbedo;
+      tuning.source_color_space = ColorSpace::kSRGB;
+      tuning.flip_y_on_decode = false;
+      tuning.force_rgba_on_decode = false;
+      tuning.mip_policy = content::import::MipPolicy::kNone;
+      tuning.max_mip_levels = 1;
+      tuning.mip_filter = content::import::MipFilter::kBox;
+      tuning.color_output_format = Format::kRGBA8UNormSRGB;
+      tuning.data_output_format = Format::kRGBA8UNorm;
+      tuning.bc7_quality = content::import::Bc7Quality::kNone;
+      break;
+    case TexturePreset::kBestQuality:
+      tuning.enabled = true;
+      tuning.intent = content::import::TextureIntent::kAlbedo;
+      tuning.source_color_space = ColorSpace::kSRGB;
+      tuning.flip_y_on_decode = false;
+      tuning.force_rgba_on_decode = true;
+      tuning.mip_policy = content::import::MipPolicy::kFullChain;
+      tuning.max_mip_levels = 12;
+      tuning.mip_filter = content::import::MipFilter::kLanczos;
+      tuning.color_output_format = Format::kRGBA8UNormSRGB;
+      tuning.data_output_format = Format::kRGBA8UNorm;
+      tuning.bc7_quality = content::import::Bc7Quality::kNone;
+      break;
+    }
+  }
+
   template <typename EnumT, std::size_t N>
   auto DrawEnumCombo(const char* label, EnumT& value,
     const std::array<EnumT, N>& items, const char* (*to_string_fn)(EnumT),
@@ -798,81 +879,83 @@ auto ImportPanel::DrawImportOptionsUi() -> void
       content::import::GeometryAttributePolicy::kAlwaysRecalculate,
     };
 
-  (void)DrawEnumCombo("Asset key policy", import_options_.asset_key_policy,
-    kAssetKeyPolicies, ToString);
+  if (ImGui::TreeNodeEx("Essentials", ImGuiTreeNodeFlags_DefaultOpen)) {
+    bool emit_textures = (import_options_.import_content
+                           & content::import::ImportContentFlags::kTextures)
+      != content::import::ImportContentFlags::kNone;
+    bool emit_materials = (import_options_.import_content
+                            & content::import::ImportContentFlags::kMaterials)
+      != content::import::ImportContentFlags::kNone;
+    bool emit_geometry = (import_options_.import_content
+                           & content::import::ImportContentFlags::kGeometry)
+      != content::import::ImportContentFlags::kNone;
+    bool emit_scene = (import_options_.import_content
+                        & content::import::ImportContentFlags::kScene)
+      != content::import::ImportContentFlags::kNone;
 
-  ImGui::Separator();
-  ImGui::Checkbox("Bake transforms into meshes",
-    &import_options_.coordinate.bake_transforms_into_meshes);
+    ImGui::Text("Emit cooked content");
+    ImGui::Checkbox("Textures", &emit_textures);
+    ImGui::SameLine();
+    ImGui::Checkbox("Materials", &emit_materials);
+    ImGui::SameLine();
+    ImGui::Checkbox("Geometry", &emit_geometry);
+    ImGui::SameLine();
+    ImGui::Checkbox("Scene", &emit_scene);
 
-  (void)DrawEnumCombo("Unit normalization",
-    import_options_.coordinate.unit_normalization, kUnitPolicies, ToString);
+    import_options_.import_content = content::import::ImportContentFlags::kNone;
+    if (emit_textures) {
+      import_options_.import_content = import_options_.import_content
+        | content::import::ImportContentFlags::kTextures;
+    }
+    if (emit_materials) {
+      import_options_.import_content = import_options_.import_content
+        | content::import::ImportContentFlags::kMaterials;
+    }
+    if (emit_geometry) {
+      import_options_.import_content = import_options_.import_content
+        | content::import::ImportContentFlags::kGeometry;
+    }
+    if (emit_scene) {
+      import_options_.import_content = import_options_.import_content
+        | content::import::ImportContentFlags::kScene;
+    }
 
-  if (import_options_.coordinate.unit_normalization
-    == content::import::UnitNormalizationPolicy::kApplyCustomFactor) {
-    ImGui::SliderFloat("Custom unit scale",
-      &import_options_.coordinate.custom_unit_scale, 0.01F, 10.0F);
+    ImGui::Separator();
+    ImGui::Checkbox("Bake transforms into meshes",
+      &import_options_.coordinate.bake_transforms_into_meshes);
+    (void)DrawEnumCombo("Unit normalization",
+      import_options_.coordinate.unit_normalization, kUnitPolicies, ToString);
+    if (import_options_.coordinate.unit_normalization
+      == content::import::UnitNormalizationPolicy::kApplyCustomFactor) {
+      ImGui::SliderFloat("Custom unit scale",
+        &import_options_.coordinate.custom_unit_scale, 0.01F, 10.0F);
+    }
+
+    ImGui::Separator();
+    ImGui::Checkbox("Normalize names", &use_normalize_naming_);
+
+    ImGui::TreePop();
   }
 
-  ImGui::Separator();
-  ImGui::Checkbox("Normalize names", &use_normalize_naming_);
-
-  (void)DrawEnumCombo(
-    "Node pruning", import_options_.node_pruning, kNodePolicies, ToString);
-
-  ImGui::Separator();
-  bool emit_textures = (import_options_.import_content
-                         & content::import::ImportContentFlags::kTextures)
-    != content::import::ImportContentFlags::kNone;
-  bool emit_materials = (import_options_.import_content
-                          & content::import::ImportContentFlags::kMaterials)
-    != content::import::ImportContentFlags::kNone;
-  bool emit_geometry = (import_options_.import_content
-                         & content::import::ImportContentFlags::kGeometry)
-    != content::import::ImportContentFlags::kNone;
-  bool emit_scene = (import_options_.import_content
-                      & content::import::ImportContentFlags::kScene)
-    != content::import::ImportContentFlags::kNone;
-
-  ImGui::Text("Emit cooked content");
-  ImGui::Checkbox("Textures", &emit_textures);
-  ImGui::SameLine();
-  ImGui::Checkbox("Materials", &emit_materials);
-  ImGui::SameLine();
-  ImGui::Checkbox("Geometry", &emit_geometry);
-  ImGui::SameLine();
-  ImGui::Checkbox("Scene", &emit_scene);
-
-  import_options_.import_content = content::import::ImportContentFlags::kNone;
-  if (emit_textures) {
-    import_options_.import_content = import_options_.import_content
-      | content::import::ImportContentFlags::kTextures;
-  }
-  if (emit_materials) {
-    import_options_.import_content = import_options_.import_content
-      | content::import::ImportContentFlags::kMaterials;
-  }
-  if (emit_geometry) {
-    import_options_.import_content = import_options_.import_content
-      | content::import::ImportContentFlags::kGeometry;
-  }
-  if (emit_scene) {
-    import_options_.import_content = import_options_.import_content
-      | content::import::ImportContentFlags::kScene;
+  if (ImGui::TreeNodeEx("Geometry", ImGuiTreeNodeFlags_DefaultOpen)) {
+    (void)DrawEnumCombo("Normal policy", import_options_.normal_policy,
+      kAttributePolicies, ToString);
+    (void)DrawEnumCombo("Tangent policy", import_options_.tangent_policy,
+      kAttributePolicies, ToString);
+    ImGui::Checkbox("Ignore non-mesh primitives",
+      &import_options_.ignore_non_mesh_primitives);
+    ImGui::TreePop();
   }
 
-  ImGui::Separator();
-  (void)DrawEnumCombo("Normal policy", import_options_.normal_policy,
-    kAttributePolicies, ToString);
-  (void)DrawEnumCombo("Tangent policy", import_options_.tangent_policy,
-    kAttributePolicies, ToString);
-
-  ImGui::Checkbox(
-    "Ignore non-mesh primitives", &import_options_.ignore_non_mesh_primitives);
-
-  ImGui::Separator();
-  ImGui::Checkbox(
-    "Enable content hashing", &import_options_.with_content_hashing);
+  if (ImGui::TreeNode("Advanced")) {
+    (void)DrawEnumCombo(
+      "Node pruning", import_options_.node_pruning, kNodePolicies, ToString);
+    (void)DrawEnumCombo("Asset key policy", import_options_.asset_key_policy,
+      kAssetKeyPolicies, ToString);
+    ImGui::Checkbox(
+      "Enable content hashing", &import_options_.with_content_hashing);
+    ImGui::TreePop();
+  }
 }
 
 auto ImportPanel::DrawTextureTuningUi() -> void
@@ -882,6 +965,23 @@ auto ImportPanel::DrawTextureTuningUi() -> void
     return;
   }
 
+  static constexpr std::array<TexturePreset, 4> kPresets = {
+    TexturePreset::kBalanced,
+    TexturePreset::kSaveGpuMemory,
+    TexturePreset::kMaxImportSpeed,
+    TexturePreset::kBestQuality,
+  };
+
+  ImGui::Text("Quick presets");
+  static TexturePreset selected_preset = TexturePreset::kBalanced;
+  (void)DrawEnumCombo("Preset", selected_preset, kPresets, ToString,
+    "Apply a preset to reset texture tuning.");
+  ImGui::SameLine();
+  if (ImGui::Button("Apply")) {
+    ApplyTexturePreset(texture_tuning_, selected_preset);
+  }
+
+  ImGui::Separator();
   ImGui::Checkbox("Enable texture cooking overrides", &texture_tuning_.enabled);
 
   if (!texture_tuning_.enabled) {
@@ -923,7 +1023,8 @@ auto ImportPanel::DrawTextureTuningUi() -> void
     content::import::MipFilter::kLanczos,
   };
 
-  static constexpr std::array<content::import::Bc7Quality, 3> kBc7Qualities = {
+  static constexpr std::array<content::import::Bc7Quality, 4> kBc7Qualities = {
+    content::import::Bc7Quality::kNone,
     content::import::Bc7Quality::kFast,
     content::import::Bc7Quality::kDefault,
     content::import::Bc7Quality::kHigh,
@@ -939,50 +1040,70 @@ auto ImportPanel::DrawTextureTuningUi() -> void
       content::import::CubeMapImageLayout::kVerticalCross,
     };
 
-  (void)DrawEnumCombo("Texture intent", texture_tuning_.intent, kIntents,
-    content::import::to_string);
-  (void)DrawEnumCombo("Source color space", texture_tuning_.source_color_space,
-    kColorSpaces, oxygen::to_string);
+  if (ImGui::TreeNodeEx("Basic", ImGuiTreeNodeFlags_DefaultOpen)) {
+    (void)DrawFormatCombo(
+      "Color output format", texture_tuning_.color_output_format);
+    (void)DrawFormatCombo(
+      "Data output format", texture_tuning_.data_output_format);
 
-  ImGui::Checkbox("Flip Y on decode", &texture_tuning_.flip_y_on_decode);
-  ImGui::Checkbox(
-    "Force RGBA on decode", &texture_tuning_.force_rgba_on_decode);
-
-  (void)DrawEnumCombo("Mip policy", texture_tuning_.mip_policy, kMipPolicies,
-    content::import::to_string);
-  if (texture_tuning_.mip_policy == content::import::MipPolicy::kMaxCount) {
-    int max_mips = static_cast<int>(texture_tuning_.max_mip_levels);
-    max_mips = ClampInt(max_mips, 1, 16);
-    if (ImGui::SliderInt("Max mip levels", &max_mips, 1, 16)) {
-      texture_tuning_.max_mip_levels = static_cast<uint8_t>(max_mips);
+    const auto is_bc7 = [](const Format format) {
+      return format == Format::kBC7UNormSRGB || format == Format::kBC7UNorm;
+    };
+    const bool any_bc7 = is_bc7(texture_tuning_.color_output_format)
+      || is_bc7(texture_tuning_.data_output_format);
+    if (!any_bc7) {
+      texture_tuning_.bc7_quality = content::import::Bc7Quality::kNone;
+      ImGui::TextDisabled("BC7 quality: None (BC7 disabled)");
+    } else {
+      if (texture_tuning_.bc7_quality == content::import::Bc7Quality::kNone) {
+        texture_tuning_.bc7_quality = content::import::Bc7Quality::kDefault;
+      }
+      (void)DrawEnumCombo("BC7 quality", texture_tuning_.bc7_quality,
+        kBc7Qualities, content::import::to_string);
     }
+
+    ImGui::Separator();
+    (void)DrawEnumCombo("Mip policy", texture_tuning_.mip_policy, kMipPolicies,
+      content::import::to_string);
+    if (texture_tuning_.mip_policy == content::import::MipPolicy::kMaxCount) {
+      int max_mips = static_cast<int>(texture_tuning_.max_mip_levels);
+      max_mips = ClampInt(max_mips, 1, 16);
+      if (ImGui::SliderInt("Max mip levels", &max_mips, 1, 16)) {
+        texture_tuning_.max_mip_levels = static_cast<uint8_t>(max_mips);
+      }
+    }
+    (void)DrawEnumCombo("Mip filter", texture_tuning_.mip_filter, kMipFilters,
+      content::import::to_string);
+    ImGui::TreePop();
   }
 
-  (void)DrawEnumCombo("Mip filter", texture_tuning_.mip_filter, kMipFilters,
-    content::import::to_string);
+  if (ImGui::TreeNode("Advanced")) {
+    (void)DrawEnumCombo("Texture intent", texture_tuning_.intent, kIntents,
+      content::import::to_string);
+    (void)DrawEnumCombo("Source color space",
+      texture_tuning_.source_color_space, kColorSpaces, oxygen::to_string);
 
-  ImGui::Separator();
-  (void)DrawFormatCombo(
-    "Color output format", texture_tuning_.color_output_format);
-  (void)DrawFormatCombo(
-    "Data output format", texture_tuning_.data_output_format);
+    ImGui::Checkbox("Flip Y on decode", &texture_tuning_.flip_y_on_decode);
+    ImGui::Checkbox(
+      "Force RGBA on decode", &texture_tuning_.force_rgba_on_decode);
 
-  (void)DrawEnumCombo("BC7 quality", texture_tuning_.bc7_quality, kBc7Qualities,
-    content::import::to_string);
-  (void)DrawPackingPolicyCombo(texture_tuning_.packing_policy_id);
+    (void)DrawPackingPolicyCombo(texture_tuning_.packing_policy_id);
+    ImGui::Checkbox(
+      "Use placeholder on failure", &texture_tuning_.placeholder_on_failure);
 
-  ImGui::Separator();
-  ImGui::Checkbox(
-    "Use placeholder on failure", &texture_tuning_.placeholder_on_failure);
-  ImGui::Checkbox("Import cubemap", &texture_tuning_.import_cubemap);
-  ImGui::Checkbox("Equirect to cubemap", &texture_tuning_.equirect_to_cubemap);
-  if (texture_tuning_.import_cubemap || texture_tuning_.equirect_to_cubemap) {
-    int face_size = static_cast<int>(texture_tuning_.cubemap_face_size);
-    if (ImGui::SliderInt("Cubemap face size", &face_size, 0, 4096)) {
-      texture_tuning_.cubemap_face_size = static_cast<uint32_t>(face_size);
+    ImGui::Separator();
+    ImGui::Checkbox("Import cubemap", &texture_tuning_.import_cubemap);
+    ImGui::Checkbox(
+      "Equirect to cubemap", &texture_tuning_.equirect_to_cubemap);
+    if (texture_tuning_.import_cubemap || texture_tuning_.equirect_to_cubemap) {
+      int face_size = static_cast<int>(texture_tuning_.cubemap_face_size);
+      if (ImGui::SliderInt("Cubemap face size", &face_size, 0, 4096)) {
+        texture_tuning_.cubemap_face_size = static_cast<uint32_t>(face_size);
+      }
+      (void)DrawEnumCombo("Cubemap layout", texture_tuning_.cubemap_layout,
+        kCubeLayouts, content::import::to_string);
     }
-    (void)DrawEnumCombo("Cubemap layout", texture_tuning_.cubemap_layout,
-      kCubeLayouts, content::import::to_string);
+    ImGui::TreePop();
   }
 }
 

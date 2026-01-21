@@ -19,6 +19,7 @@
 #include <span>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -920,6 +921,13 @@ namespace {
     return TexturePreset::kData;
   }
 
+  [[nodiscard]] constexpr auto IsBc7Format(const oxygen::Format format) noexcept
+    -> bool
+  {
+    return format == oxygen::Format::kBC7UNorm
+      || format == oxygen::Format::kBC7UNormSRGB;
+  }
+
   [[nodiscard]] auto BuildTextureSourceId(std::string_view prefix,
     std::string_view texture_id, const TextureUsage usage) -> std::string
   {
@@ -1022,7 +1030,8 @@ namespace {
 
   [[nodiscard]] auto ResolveTextureSourceBytes(const TextureIdentity& identity,
     std::string_view source_id, const std::shared_ptr<const ufbx_scene>& owner,
-    std::vector<ImportDiagnostic>& diagnostics)
+    std::vector<ImportDiagnostic>& diagnostics,
+    std::span<const AdapterInput::ExternalTextureBytes> external_texture_bytes)
     -> std::optional<TexturePipeline::SourceBytes>
   {
     if (identity.file_texture == nullptr) {
@@ -1035,6 +1044,16 @@ namespace {
         .bytes = std::span<const std::byte>(bytes->data(), bytes->size()),
         .owner = std::static_pointer_cast<const void>(bytes),
       };
+    };
+
+    auto find_external_bytes = [&](std::string_view texture_id)
+      -> std::shared_ptr<std::vector<std::byte>> {
+      for (const auto& entry : external_texture_bytes) {
+        if (entry.texture_id == texture_id) {
+          return entry.bytes;
+        }
+      }
+      return {};
     };
 
     if (identity.embedded) {
@@ -1050,6 +1069,27 @@ namespace {
         .bytes = bytes,
         .owner = std::static_pointer_cast<const void>(owner),
       };
+    }
+
+    if (!external_texture_bytes.empty()) {
+      const auto external_bytes = find_external_bytes(identity.texture_id);
+      if (external_bytes) {
+        return TexturePipeline::SourceBytes {
+          .bytes = std::span<const std::byte>(
+            external_bytes->data(), external_bytes->size()),
+          .owner = std::static_pointer_cast<const void>(external_bytes),
+        };
+      }
+
+      if (identity.resolved_path.empty()) {
+        diagnostics.push_back(MakeWarningDiagnostic("fbx.texture.path_missing",
+          "FBX texture has no resolved file path", source_id, ""));
+      } else {
+        diagnostics.push_back(MakeWarningDiagnostic("fbx.texture.async_missing",
+          "FBX texture bytes were not loaded via async reader", source_id,
+          identity.resolved_path.string()));
+      }
+      return make_placeholder();
     }
 
     if (identity.resolved_path.empty()) {
@@ -1925,64 +1965,65 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
     return identity;
   };
 
-  auto register_texture
-    = [&](const ufbx_texture* texture, const TextureUsage usage,
-        std::string_view source_id) {
-        if (texture == nullptr) {
-          return;
-        }
+  auto register_texture = [&](const ufbx_texture* texture,
+                            const TextureUsage usage,
+                            std::string_view source_id) {
+    if (texture == nullptr) {
+      return;
+    }
 
-        auto identity = get_identity(texture, source_id);
-        if (!identity.has_value()) {
-          return;
-        }
+    auto identity = get_identity(texture, source_id);
+    if (!identity.has_value()) {
+      return;
+    }
 
-        const auto tex_source_id = BuildTextureSourceId(
-          input.source_id_prefix, identity->texture_id, usage);
-        if (work_items.find(tex_source_id) != work_items.end()) {
-          return;
-        }
+    const auto tex_source_id = BuildTextureSourceId(
+      input.source_id_prefix, identity->texture_id, usage);
+    if (work_items.find(tex_source_id) != work_items.end()) {
+      return;
+    }
 
-        auto bytes = ResolveTextureSourceBytes(
-          *identity, tex_source_id, impl_->scene_owner, result.diagnostics);
-        if (!bytes.has_value()) {
-          return;
-        }
+    auto bytes = ResolveTextureSourceBytes(*identity, tex_source_id,
+      impl_->scene_owner, result.diagnostics, input.external_texture_bytes);
+    if (!bytes.has_value()) {
+      return;
+    }
 
-        auto desc = MakeDescFromPreset(PresetForUsage(usage));
-        desc.source_id = tex_source_id;
-        desc.stop_token = input.stop_token;
-        const auto& tuning = input.request.options.texture_tuning;
-        if (tuning.enabled) {
-          desc.flip_y_on_decode = tuning.flip_y_on_decode;
-          desc.force_rgba_on_decode = tuning.force_rgba_on_decode;
-          desc.mip_policy = tuning.mip_policy;
-          desc.max_mip_levels = tuning.max_mip_levels;
-          desc.mip_filter = tuning.mip_filter;
-          desc.output_format
-            = (usage == TextureUsage::kBaseColor || usage == TextureUsage::kEmissive)
-            ? tuning.color_output_format
-            : tuning.data_output_format;
-          desc.bc7_quality = tuning.bc7_quality;
-        }
+    auto desc = MakeDescFromPreset(PresetForUsage(usage));
+    desc.source_id = tex_source_id;
+    desc.stop_token = input.stop_token;
+    const auto& tuning = input.request.options.texture_tuning;
+    if (tuning.enabled) {
+      desc.flip_y_on_decode = tuning.flip_y_on_decode;
+      desc.force_rgba_on_decode = tuning.force_rgba_on_decode;
+      desc.mip_policy = tuning.mip_policy;
+      desc.max_mip_levels = tuning.max_mip_levels;
+      desc.mip_filter = tuning.mip_filter;
+      desc.output_format = (usage == TextureUsage::kBaseColor
+                             || usage == TextureUsage::kEmissive)
+        ? tuning.color_output_format
+        : tuning.data_output_format;
+      desc.bc7_quality = IsBc7Format(desc.output_format) ? tuning.bc7_quality
+                                                         : Bc7Quality::kNone;
+    }
 
-        TexturePipeline::WorkItem item {};
-        item.source_id = tex_source_id;
-        item.texture_id = tex_source_id;
-        item.source_key = identity->file_texture;
-        item.desc = std::move(desc);
-        item.packing_policy_id
-          = tuning.enabled ? tuning.packing_policy_id : "d3d12";
-        item.output_format_is_override = tuning.enabled;
-        item.failure_policy
-          = input.request.options.texture_tuning.placeholder_on_failure
-          ? TexturePipeline::FailurePolicy::kPlaceholder
-          : TexturePipeline::FailurePolicy::kStrict;
-        item.source = *bytes;
-        item.stop_token = input.stop_token;
+    TexturePipeline::WorkItem item {};
+    item.source_id = tex_source_id;
+    item.texture_id = tex_source_id;
+    item.source_key = identity->file_texture;
+    item.desc = std::move(desc);
+    item.packing_policy_id
+      = tuning.enabled ? tuning.packing_policy_id : "d3d12";
+    item.output_format_is_override = tuning.enabled;
+    item.failure_policy
+      = input.request.options.texture_tuning.placeholder_on_failure
+      ? TexturePipeline::FailurePolicy::kPlaceholder
+      : TexturePipeline::FailurePolicy::kStrict;
+    item.source = *bytes;
+    item.stop_token = input.stop_token;
 
-        work_items.emplace(tex_source_id, std::move(item));
-      };
+    work_items.emplace(tex_source_id, std::move(item));
+  };
 
   const auto material_count = static_cast<uint32_t>(scene.materials.count);
   for (uint32_t i = 0; i < material_count; ++i) {
@@ -2046,6 +2087,125 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
   }
 
   return result;
+}
+
+auto FbxAdapter::CollectExternalTextureSources(
+  const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics) const
+  -> std::vector<ExternalTextureSource>
+{
+  std::vector<ExternalTextureSource> sources;
+  if (!impl_->scene_owner) {
+    diagnostics.push_back(MakeErrorDiagnostic("fbx.scene.not_parsed",
+      "FBX adapter has no parsed scene", input.source_id_prefix,
+      input.object_path_prefix));
+    return sources;
+  }
+
+  if (input.stop_token.stop_requested()) {
+    diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
+    return sources;
+  }
+
+  const auto& scene = *impl_->scene_owner;
+  std::unordered_map<const ufbx_texture*, TextureIdentity> identities;
+  std::unordered_set<std::string> seen_ids;
+
+  auto get_identity
+    = [&](const ufbx_texture* texture,
+        std::string_view source_id) -> std::optional<TextureIdentity> {
+    const auto* file_tex = ResolveFileTexture(texture);
+    if (file_tex == nullptr) {
+      return std::nullopt;
+    }
+
+    if (const auto it = identities.find(file_tex); it != identities.end()) {
+      return it->second;
+    }
+
+    auto identity
+      = ResolveTextureIdentity(texture, input.request, source_id, diagnostics);
+    if (!identity.has_value()) {
+      return std::nullopt;
+    }
+
+    identities.emplace(file_tex, *identity);
+    return identity;
+  };
+
+  auto register_texture
+    = [&](const ufbx_texture* texture, std::string_view source_id) {
+        if (texture == nullptr) {
+          return;
+        }
+
+        auto identity = get_identity(texture, source_id);
+        if (!identity.has_value()) {
+          return;
+        }
+
+        if (identity->embedded || identity->resolved_path.empty()) {
+          return;
+        }
+
+        if (!seen_ids.insert(identity->texture_id).second) {
+          return;
+        }
+
+        sources.push_back(ExternalTextureSource {
+          .texture_id = identity->texture_id,
+          .resolved_path = identity->resolved_path,
+        });
+      };
+
+  const auto material_count = static_cast<uint32_t>(scene.materials.count);
+  for (uint32_t i = 0; i < material_count; ++i) {
+    if (input.stop_token.stop_requested()) {
+      diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
+      return sources;
+    }
+
+    const auto* material = scene.materials.data[i];
+    if (material == nullptr) {
+      continue;
+    }
+
+    const auto authored_name = ToStringView(material->name);
+    const std::string material_name = !authored_name.empty()
+      ? std::string(authored_name)
+      : ("Material_" + std::to_string(i));
+    const auto material_source_id
+      = BuildSourceId(input.source_id_prefix, material_name, i);
+
+    const auto* base_color_tex = SelectBaseColorTexture(*material);
+    const auto* normal_tex = SelectNormalTexture(*material);
+    const auto* metallic_tex = SelectMetallicTexture(*material);
+    const auto* roughness_tex = SelectRoughnessTexture(*material);
+    const auto* ao_tex = SelectAmbientOcclusionTexture(*material);
+    const auto* emissive_tex = SelectEmissiveTexture(*material);
+
+    const auto* metallic_file = ResolveFileTexture(metallic_tex);
+    const auto* roughness_file = ResolveFileTexture(roughness_tex);
+    const bool orm_packed
+      = metallic_file != nullptr && metallic_file == roughness_file;
+
+    register_texture(base_color_tex, material_source_id);
+    register_texture(normal_tex, material_source_id);
+    register_texture(emissive_tex, material_source_id);
+
+    if (orm_packed) {
+      register_texture(metallic_tex, material_source_id);
+      const auto* ao_file = ResolveFileTexture(ao_tex);
+      if (ao_file == nullptr || ao_file != metallic_file) {
+        register_texture(ao_tex, material_source_id);
+      }
+    } else {
+      register_texture(metallic_tex, material_source_id);
+      register_texture(roughness_tex, material_source_id);
+      register_texture(ao_tex, material_source_id);
+    }
+  }
+
+  return sources;
 }
 
 auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,

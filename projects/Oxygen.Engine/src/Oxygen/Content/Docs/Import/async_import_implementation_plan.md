@@ -619,8 +619,6 @@ Tasks:
 - [X] Introduce a concrete placeholder job (`DefaultImportJob`) that owns an
   `ImportSession` and exercises session finalization.
 - [X] Add format-specific jobs (FBX/GLB/etc.) and move orchestration there.
-- [ ] Ensure each concrete job decides which pipelines to start and how to wire
-  submit/collect/emit flows.
 - [X] Keep cancellation handling unified: cancelling the job nursery completes
   via `on_complete(..., report)` with `success=false` and `import.cancelled`.
 
@@ -640,7 +638,6 @@ Tasks:
 Tasks:
 
 - [X] Add initial job selection in `SubmitImport()` (current: placeholder job).
-- [ ] Extend selection to use format detection for real job types.
 - [X] Keep the public API stable: callers still submit `ImportRequest` and
   receive `ImportReport` via `on_complete`.
 
@@ -1083,17 +1080,11 @@ graph or duplicated data model.
 
 Tasks:
 
-- [ ] Refactor `FbxGeometryAdapter` / `GltfGeometryAdapter` into
+- [X] Refactor `FbxGeometryAdapter` / `GltfGeometryAdapter` into
   `FbxAdapter` / `GltfAdapter` that own parse state and emit work items for
   geometry, material, scene, and texture pipelines.
-- [ ] Ensure `WorkItem` storage is job-owned and referenced via
+- [X] Ensure `WorkItem` storage is job-owned and referenced via
   `WorkPayloadHandle` in the planner (no payload copying).
-- [ ] Add adapter output that includes plan item registration and dependency
-  edges (e.g., scene depends on geometry items).
-- [ ] Enforce one-shot coordinate conversion metadata validation at adapter
-  boundary (missing source-space metadata is a blocking error).
-- [ ] Unit tests: adapter emits stable names/keys across geometry + scene
-  outputs from the same parse.
 
 #### 6.6c MaterialPipeline (Compute-Only) Implementation + Tests
 
@@ -1132,12 +1123,12 @@ Tasks:
 
 Tasks:
 
-- [ ] Implement `ScenePipeline` API with bounded channels and progress.
-- [ ] Implement node traversal, naming, and deterministic IDs.
-- [ ] Implement node pruning rules with transform preservation.
-- [ ] Implement component tables (renderables, cameras, lights) and sorting.
-- [ ] Append environment block (header + records) and validate sizes.
-- [ ] Compute `header.content_hash` over payload + environment block.
+- [X] Implement `ScenePipeline` API with bounded channels and progress.
+- [X] Implement node traversal, naming, and deterministic IDs.
+- [X] Implement node pruning rules with transform preservation.
+- [X] Implement component tables (renderables, cameras, lights) and sorting.
+- [X] Append environment block (header + records) and validate sizes.
+- [X] Compute `header.content_hash` over payload + environment block.
 - [ ] Unit tests: pruning policy correctness, component ordering, and hash.
 - [ ] Unit tests: environment system validation and error diagnostics.
 
@@ -1149,9 +1140,9 @@ Tasks:
 
 Tasks:
 
-- [ ] Verify all pipelines satisfy `ResourcePipeline` concept invariants.
-- [ ] Validate progress counters (`submitted`, `completed`, `failed`).
-- [ ] Cancellation tests: `stop_token` yields `success=false` and no outputs.
+- [X] Verify all pipelines satisfy `ResourcePipeline` concept invariants.
+- [X] Validate progress counters (`submitted`, `completed`, `failed`).
+- [X] Cancellation tests: `stop_token` yields `success=false` and no outputs.
 - [ ] Backpressure tests: bounded queues block/deny submissions as expected.
 
 #### 6.7 Job-Orchestrated Import Wiring
@@ -1164,48 +1155,43 @@ Tasks:
 
 Tasks:
 
-- [ ] FbxImportJob: parse FBX on `ThreadPool()`; read texture bytes via
-  `FileReader()`; submit to `TexturePipeline`; collect results and emit via
-  `session.TextureEmitter()` with streaming material emission.
-- [ ] FbxImportJob: submit mesh/animation work to `ThreadPool()` and emit via
-  `session.BufferEmitter()`.
+- [X] FbxImportJob: parse FBX on `ThreadPool()`; use adapter-emitted work
+  items; register plan items/dependencies in `ImportPlanner`; submit to
+  `TexturePipeline`; collect results and emit via `session.TextureEmitter()`
+  with streaming material emission.
+- [ ] FbxImportJob: load external texture bytes via `IAsyncFileReader`
+  (adapter still performs synchronous file reads for file-backed textures).
 - [X] FbxImportJob: submit geometry work to `GeometryPipeline`; emit buffers
   via `BufferEmitter` and descriptors via `AssetEmitter`.
-- [ ] FbxImportJob: submit material work to `MaterialPipeline`; emit `.omat`
-  via `AssetEmitter` once `MaterialReadinessTracker` resolves texture indices.
-- [ ] FbxImportJob: submit scene work to `ScenePipeline`; emit `.oscene` via
+- [X] FbxImportJob: submit material work to `MaterialPipeline`; emit `.omat`
+  via `AssetEmitter` once planner dependencies resolve texture indices.
+- [X] FbxImportJob: submit scene work to `ScenePipeline`; emit `.oscene` via
   `AssetEmitter` using `geometry_keys`.
-- [ ] FbxImportJob: build import plan via `ImportPlanner`, await
+- [X] FbxImportJob: build import plan via `ImportPlanner`, await
   `PlanStep.prerequisites`, and submit pipeline work from
   `WorkPayloadHandle` storage.
 - [X] GlbImportJob: mirror the FBX flow for glTF/GLB (subset acceptable).
 - [X] GlbImportJob: wire geometry, material, and scene pipelines with the
   same emitter flow (subset acceptable).
-- [ ] TextureImportJob: read bytes via `FileReader()`, submit to pipeline,
+- [X] TextureImportJob: read bytes via `FileReader()`, submit to pipeline,
   emit via `TextureEmitter()`.
-- [ ] Integration tests for job wiring and cooked output.
+- [X] Integration tests for job wiring and cooked output.
 
 Additional gaps to close:
 
-- [ ] ScenePipeline: implement scene cooking in
+- [X] ScenePipeline: implement scene cooking in
   `src/Oxygen/Content/Import/Async/Pipelines/ScenePipeline.cpp` (remove the
   `scene.pipeline.not_implemented` diagnostic, build full descriptor bytes,
   compute content hash on ThreadPool).
-- [ ] FbxImportJob: migrate to planner-driven flow (BuildPlan + ExecutePlan),
+- [X] FbxImportJob: migrate to planner-driven flow (BuildPlan + ExecutePlan),
   wire textures/materials/scene streaming via planner sinks, and remove the
   legacy collection flow in
   `src/Oxygen/Content/Import/Async/Jobs/FbxImportJob.cpp`.
 
-#### 6.8 MaterialReadinessTracker
+#### 6.8 MaterialReadinessTracker (Obsolete)
 
-**File:** `src/Oxygen/Content/Import/Async/MaterialReadinessTracker.h/.cpp`
-
-- [ ] Build dependency graph: material → required texture source_ids
-- [ ] Implement `MarkTextureReady(source_id) -> vector<size_t>`
-- [ ] Returns material indices that are now ready to emit
-- [ ] Integrate `MaterialReadinessTracker` into job plan execution to emit
-  materials as texture dependencies resolve.
-- [ ] Unit test: dependency tracking
+Planner dependency management supersedes `MaterialReadinessTracker`.
+This section remains for historical context only.
 
 #### 6.9 Configuration Flow (Need-to-Know)
 
@@ -1217,19 +1203,18 @@ Additional gaps to close:
 
 Tasks:
 
-- [ ] Define how `AsyncImportService::Config` flows into jobs and pipelines.
-- [ ] Pass only the needed fields into constructors/PODs (avoid over-sharing).
+- [X] Define how `AsyncImportService::Config` flows into jobs and pipelines.
+- [X] Pass only the needed fields into constructors/PODs (avoid over-sharing).
 - [ ] Update unit tests to cover config injection.
 
 ### Deliverables
 
 - ✅ `TexturePipeline` as pure compute (concept-checked)
 - ✅ Submit/Collect pattern for parallel cooking
-- ✅ GeometryPipeline, MaterialPipeline, ScenePipeline complete + tested
-- ✅ Pipeline conformance + cancellation test coverage
-- ✅ Job-driven import wiring (FBX/GLB/Texture jobs)
-- ✅ `MaterialReadinessTracker` for dependency resolution
-- ✅ Config flow defined and injected (need-to-know)
+- ⏳ GeometryPipeline, MaterialPipeline, ScenePipeline complete + tested
+- ⏳ Pipeline conformance + cancellation test coverage
+- ⏳ Job-driven import wiring (FBX/GLB/Texture jobs)
+- ⏳ Config flow defined and injected (need-to-know)
 - ✅ Progress reporting API defined
 
 ### Acceptance Criteria

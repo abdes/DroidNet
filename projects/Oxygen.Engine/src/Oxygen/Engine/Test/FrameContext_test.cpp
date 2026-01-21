@@ -411,6 +411,9 @@ NOLINT_TEST(FrameContext_basic_test, PresentableFlagsPhaseMatrix)
 
 NOLINT_TEST(FrameContext_basic_test, SetScenePhaseMatrix)
 {
+  using oxygen::observer_ptr;
+  using oxygen::scene::Scene;
+
   auto tag = EngineTagFactory::Get();
 
   for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
@@ -420,9 +423,9 @@ NOLINT_TEST(FrameContext_basic_test, SetScenePhaseMatrix)
 
     if (ui < static_cast<uint32_t>(PhaseId::kSceneMutation)) {
       // Allowed before SceneMutation
-      ctx.SetScene(nullptr);
+      ctx.SetScene(observer_ptr<Scene> {});
     } else {
-      NOLINT_ASSERT_DEATH(ctx.SetScene(nullptr), ".*");
+      NOLINT_ASSERT_DEATH(ctx.SetScene(observer_ptr<Scene> {}), ".*");
     }
   }
 }

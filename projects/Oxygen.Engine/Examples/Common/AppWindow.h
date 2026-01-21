@@ -45,7 +45,8 @@ struct AsyncEngineApp;
  other example components so example modules can AddComponent<AppWindow>(app)
  and treat this as the single window / render lifecycle owner.
 */
-class AppWindow final : public oxygen::Component {
+class AppWindow final : public oxygen::Component,
+                        public std::enable_shared_from_this<AppWindow> {
   OXYGEN_COMPONENT(AppWindow)
 
 public:

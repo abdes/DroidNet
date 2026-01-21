@@ -59,7 +59,7 @@ the main application thread.
 12. **Direct Adapter Translation**: Format adapters (FBX/glTF) translate
   native parser structures (ufbx/cgltf) directly into pipeline `WorkItem`
   storage with no intermediate scene graph. The job owns the storage and
-  passes `WorkPayloadHandle` references to the planner.
+  registers plan items and dependencies via `ImportPlanner`.
 
 13. **ThreadPool-Only content_hash**: `content_hash` is computed only on the
   ThreadPool **when enabled**. The invariant is that all dependencies are
@@ -263,10 +263,10 @@ Format adapters (FBX, glTF) parse the source once and translate the native
 parser structures (ufbx/cgltf) directly into pipeline `WorkItem` storage
 owned by the job. Adapters do **not** construct a secondary scene graph.
 
-Planner integration is explicit:
+Planner integration is explicit and job-driven:
 
-- The adapter registers plan items and stores `WorkPayloadHandle` values that
-  point to the job-owned `WorkItem` storage.
+- The job registers plan items, dependencies, and `WorkPayloadHandle` values
+  that point to job-owned `WorkItem` storage.
 - The job executes `PlanStep`s from `ImportPlanner::MakePlan()` and awaits
   each step’s `prerequisites` before submitting the corresponding work item
   to the pipeline.

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <fstream>
+#include <optional>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/IAsyncFileWriter.h>
@@ -14,17 +15,9 @@
 #include <Oxygen/Content/Import/Internal/ImportSession.h>
 #include <Oxygen/Content/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
-#include <Oxygen/OxCo/Semaphore.h>
-
 namespace oxygen::content::import {
 
 namespace {
-
-  auto FinalizeGate() -> oxygen::co::Semaphore&
-  {
-    static oxygen::co::Semaphore gate(1);
-    return gate;
-  }
 
   auto EnsureExternalFileExists(const std::filesystem::path& path) -> void
   {
@@ -220,8 +213,11 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
 {
   DLOG_F(INFO, "ImportSession::Finalize() starting");
 
-  auto& gate = FinalizeGate();
-  auto guard = co_await gate.Lock();
+  std::optional<co::Semaphore::LockGuard> finalize_guard;
+  if (table_registry_ != nullptr) {
+    auto& gate = table_registry_->FinalizeGateForRoot(cooked_root_);
+    finalize_guard.emplace(co_await gate.Lock());
+  }
 
   if (texture_emitter_.has_value()) {
     const auto ok = co_await (**texture_emitter_).Finalize();
@@ -260,7 +256,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
   }
 
   if (table_registry_) {
-    const auto ok = co_await table_registry_->FinalizeAll();
+    const auto ok = co_await table_registry_->FinalizeForRoot(cooked_root_);
     if (!ok) {
       AddDiagnostic({
         .severity = ImportSeverity::kError,

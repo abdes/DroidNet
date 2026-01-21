@@ -67,7 +67,6 @@ protected:
   [[nodiscard]] auto TestModelsDirFromFile() -> std::filesystem::path
   {
     auto path = std::filesystem::path(__FILE__).parent_path();
-    path /= "..";
     path /= "Models";
     return path.lexically_normal();
   }

@@ -55,6 +55,7 @@ using oxygen::engine::UnifiedSnapshot;
 
 ModuleManager::ModuleManager(const observer_ptr<AsyncEngine> engine)
   : engine_(engine)
+  , alive_token_(std::make_shared<int>(0))
 {
 }
 
@@ -62,9 +63,11 @@ ModuleManager::ModuleManager(const observer_ptr<AsyncEngine> engine)
 ModuleManager::Subscription::Subscription(Subscription&& other) noexcept
   : id_(other.id_)
   , owner_(other.owner_)
+  , alive_token_(std::move(other.alive_token_))
 {
   other.id_ = 0;
   other.owner_ = nullptr;
+  other.alive_token_.reset();
 }
 
 ModuleManager::Subscription& ModuleManager::Subscription::operator=(
@@ -74,8 +77,10 @@ ModuleManager::Subscription& ModuleManager::Subscription::operator=(
     Cancel();
     id_ = other.id_;
     owner_ = other.owner_;
+    alive_token_ = std::move(other.alive_token_);
     other.id_ = 0;
     other.owner_ = nullptr;
+    other.alive_token_.reset();
   }
   return *this;
 }
@@ -85,6 +90,11 @@ ModuleManager::Subscription::~Subscription() noexcept { Cancel(); }
 void ModuleManager::Subscription::Cancel() noexcept
 {
   if (id_ == 0 || !owner_) {
+    return;
+  }
+  if (alive_token_.expired()) {
+    id_ = 0;
+    owner_ = nullptr;
     return;
   }
   // owner_->UnsubscribeSubscription is private; Subscription is a friend.
@@ -108,6 +118,7 @@ auto ModuleManager::SubscribeModuleAttached(
   Subscription s;
   s.id_ = id;
   s.owner_ = observer_ptr<ModuleManager> { this };
+  s.alive_token_ = alive_token_;
 
   if (replay_existing) {
     // Capture a snapshot of existing modules in attach order and invoke the
@@ -156,6 +167,12 @@ void ModuleManager::UnsubscribeSubscription(uint64_t id) noexcept
 ModuleManager::~ModuleManager()
 {
   LOG_SCOPE_FUNCTION(INFO);
+
+  {
+    std::scoped_lock lock(subscribers_mutex_);
+    attached_subscribers_.clear();
+  }
+  alive_token_.reset();
 
   // Reverse-order shutdown with immediate destruction: remove each module
   // from the container before shutting it down, so resources are released

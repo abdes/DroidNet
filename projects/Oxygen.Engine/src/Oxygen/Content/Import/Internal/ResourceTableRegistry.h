@@ -17,6 +17,7 @@
 #include <Oxygen/Content/Import/LooseCookedLayout.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Semaphore.h>
 
 namespace oxygen::content::import {
 
@@ -37,6 +38,12 @@ public:
     const std::filesystem::path& cooked_root, const LooseCookedLayout& layout)
     -> BufferTableAggregator&;
 
+  OXGN_CNTT_NDAPI auto FinalizeGateForRoot(
+    const std::filesystem::path& cooked_root) -> co::Semaphore&;
+
+  OXGN_CNTT_NDAPI auto FinalizeForRoot(const std::filesystem::path& cooked_root)
+    -> co::Co<bool>;
+
   OXGN_CNTT_NDAPI auto FinalizeAll() -> co::Co<bool>;
 
 private:
@@ -49,6 +56,8 @@ private:
     texture_tables_;
   std::unordered_map<std::string, std::unique_ptr<BufferTableAggregator>>
     buffer_tables_;
+  std::unordered_map<std::string, std::unique_ptr<co::Semaphore>>
+    finalize_gates_;
 };
 
 } // namespace oxygen::content::import
