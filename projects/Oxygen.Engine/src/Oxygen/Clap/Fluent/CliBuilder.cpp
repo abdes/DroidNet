@@ -42,6 +42,15 @@ auto oxygen::clap::CliBuilder::About(std::string about) -> CliBuilder&
   return *this;
 }
 
+auto oxygen::clap::CliBuilder::Footer(std::string footer) -> CliBuilder&
+{
+  if (!cli_) {
+    throw std::logic_error("OptionValueBuilder: method called after Build()");
+  }
+  cli_->Footer(std::move(footer));
+  return *this;
+}
+
 auto oxygen::clap::CliBuilder::OutputWidth(const unsigned int width)
   -> CliBuilder&
 {

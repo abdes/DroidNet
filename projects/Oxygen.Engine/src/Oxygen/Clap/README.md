@@ -211,6 +211,7 @@ determined by the type of token encountered. The main states are:
   pre-configured global option with `CliBuilder::WithThemeSelectionOption()`.
 - **Notifiers**: Register callbacks for option values using
   `CallOnEachValue` (per occurrence) and `CallOnFinalValue` (after parsing).
+- **Usage Footer**: Add a help footer with `CliBuilder::Footer("...")`.
 - **Custom Value Semantics**: Extend `ValueSemantics` to support custom
   parsing/validation logic.
 - **Extensible Builders**: Builders are facets-compatible and can be extended
@@ -299,7 +300,7 @@ required by the project.
 | Notifiers/store-to finalization | ✅ | Final values are propagated after parsing via `Option::FinalizeValue`. |
 | Error type name reporting | ✅ | Invalid value errors include the expected type name. |
 | OptionValuesMap tests | ✅ | Comprehensive unit tests are present. |
-| Usage footer support | ⏳ | Add CLI usage footer output and tests. |
+| Usage footer support | ✅ | CLI usage footer output and tests are implemented. |
 | Multiple command names | ⏳ | Add support and tests for commands with multiple names/aliases. |
 | Consolidate styled wrapping | ✅ | Unified styled text wrapping across CLI, command, and option printers. |
 
