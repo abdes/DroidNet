@@ -7,6 +7,7 @@
 #include <iostream>
 #include <string>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
@@ -17,9 +18,27 @@ using oxygen::clap::Command;
 using oxygen::clap::CommandBuilder;
 using oxygen::clap::Option;
 
-auto main(const int argc, char** argv) -> int
+auto main(int argc, char** argv) -> int
 {
+  bool loguru_initialized = false;
   try {
+    loguru::g_preamble_date = false;
+    loguru::g_preamble_file = true;
+    loguru::g_preamble_verbose = false;
+    loguru::g_preamble_time = false;
+    loguru::g_preamble_uptime = false;
+    loguru::g_preamble_thread = true;
+    loguru::g_preamble_header = false;
+#if !defined(NDEBUG)
+    loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+#else
+    loguru::g_stderr_verbosity = loguru::Verbosity_0;
+#endif // !NDEBUG
+
+    loguru::init(argc, const_cast<const char**>(argv));
+    loguru::set_thread_name("main");
+    loguru_initialized = true;
+
     bool quiet { false };
 
     // Describe the `default` command for this program.
@@ -86,8 +105,16 @@ auto main(const int argc, char** argv) -> int
       std::cout << "-- Simple command line invoked, value of `lines` is: "
                 << ovm.ValuesOf("lines").at(0).GetAs<int>() << std::endl;
     }
+    loguru::flush();
+    loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+    loguru::shutdown();
     return EXIT_SUCCESS;
   } catch (...) {
+    if (loguru_initialized) {
+      loguru::flush();
+      loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+      loguru::shutdown();
+    }
     return EXIT_FAILURE;
   }
 }

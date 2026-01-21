@@ -29,6 +29,10 @@ OXGN_CLP_API auto MissingValueForOption(const ParserContextPtr& context,
 OXGN_CLP_API auto InvalidValueForOption(const ParserContextPtr& context,
   const std::string& token, const char* message = nullptr) -> std::string;
 
+OXGN_CLP_API auto InvalidValueForOption(const ParserContextPtr& context,
+  const OptionPtr& option, const std::string& token,
+  const char* message = nullptr) -> std::string;
+
 OXGN_CLP_API auto IllegalMultipleOccurrence(const ParserContextPtr& context,
   const char* message = nullptr) -> std::string;
 

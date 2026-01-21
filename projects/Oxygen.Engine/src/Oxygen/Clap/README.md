@@ -297,7 +297,7 @@ required by the project.
 | Callback interface refactor | ✅ | Per-value notifier (`CallOnEachValue`) and final notifier (`CallOnFinalValue`) are supported; per-value fires on each parsed occurrence, final fires after parsing/defaults. |
 | Multi-token value support | ⏳ | Support values that span multiple tokens (e.g., `--opt a b`). |
 | Notifiers/store-to finalization | ✅ | Final values are propagated after parsing via `Option::FinalizeValue`. |
-| Error type name reporting | ⏳ | Include expected type names in invalid value errors. |
+| Error type name reporting | ✅ | Invalid value errors include the expected type name. |
 | OptionValuesMap tests | ✅ | Comprehensive unit tests are present. |
 | Usage footer support | ⏳ | Add CLI usage footer output and tests. |
 | Multiple command names | ⏳ | Add support and tests for commands with multiple names/aliases. |

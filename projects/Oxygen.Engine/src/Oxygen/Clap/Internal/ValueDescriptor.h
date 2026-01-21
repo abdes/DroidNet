@@ -10,9 +10,14 @@
 #include <functional>
 #include <sstream>
 #include <string>
+#include <string_view>
+#include <type_traits>
+#include <typeinfo>
 
 #include <Oxygen/Clap/Detail/ParseValue.h>
+
 #include <Oxygen/Clap/ValueSemantics.h>
+#include <magic_enum/magic_enum.hpp>
 
 namespace oxygen::clap {
 
@@ -177,6 +182,32 @@ public:
       return true;
     }
     return false;
+  }
+
+  [[nodiscard]] auto ExpectedTypeName() const -> std::string override
+  {
+    if constexpr (std::is_enum_v<T>) {
+      return std::string(magic_enum::enum_type_name<T>());
+    } else if constexpr (std::is_same_v<T, std::string>
+      || std::is_same_v<T, std::string_view>) {
+      return "string";
+    } else if constexpr (std::is_same_v<T, bool>) {
+      return "bool";
+    } else if constexpr (std::is_same_v<T, char>) {
+      return "char";
+    } else if constexpr (std::is_same_v<T, float>) {
+      return "float";
+    } else if constexpr (std::is_same_v<T, double>) {
+      return "double";
+    } else if constexpr (std::is_same_v<T, long double>) {
+      return "long double";
+    } else if constexpr (std::is_integral_v<T> && std::is_signed_v<T>) {
+      return "integer";
+    } else if constexpr (std::is_integral_v<T>) {
+      return "unsigned integer";
+    } else {
+      return typeid(T).name();
+    }
   }
 
   /**
