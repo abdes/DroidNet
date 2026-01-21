@@ -17,9 +17,12 @@ class CmdLineParser {
 public:
   using CommandsList = const std::vector<Command::Ptr>;
   explicit CmdLineParser(const CommandLineContext& context,
-    const Tokenizer& _tokenizer, CommandsList& commands)
+    const Tokenizer& _tokenizer, CommandsList& commands,
+    const std::vector<Option::Ptr>& global_options,
+    const std::vector<std::pair<Options::Ptr, bool>>& global_option_groups)
     : tokenizer_(_tokenizer)
-    , context_ { detail::ParserContext::New(context, commands) }
+    , context_ { detail::ParserContext::New(
+        context, commands, global_options, global_option_groups) }
   {
   }
 

@@ -8,6 +8,7 @@
 
 #include <map>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -59,6 +60,26 @@ using TestValueType = std::tuple<
 
 class StateTest : public testing::Test {
 public:
+  static auto EmptyGlobalOptions() -> const std::vector<OptionPtr>&
+  {
+    static const std::vector<OptionPtr> empty;
+    return empty;
+  }
+
+  static auto EmptyGlobalOptionGroups()
+    -> const std::vector<std::pair<Options::Ptr, bool>>&
+  {
+    static const std::vector<std::pair<Options::Ptr, bool>> empty;
+    return empty;
+  }
+
+  static auto MakeParserContext(const CommandLineContext& base,
+    const CommandsList& commands) -> ParserContextPtr
+  {
+    return ParserContext::New(
+      base, commands, EmptyGlobalOptions(), EmptyGlobalOptionGroups());
+  }
+
   static auto predefined_commands() -> std::map<std::string, CommandPtr>&
   {
     OXYGEN_DIAGNOSTIC_PUSH

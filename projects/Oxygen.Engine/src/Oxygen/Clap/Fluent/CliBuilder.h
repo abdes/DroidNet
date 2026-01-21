@@ -53,8 +53,21 @@ public:
   /// Use the current terminal width for help/usage formatting.
   OXGN_CLP_API auto WithAutoOutputWidth() -> Self&;
 
+  /// Set the output theme for help/usage formatting.
+  OXGN_CLP_API auto WithTheme(const CliTheme& theme) -> Self&;
+
   /// Add the given command to the `Cli`.
   OXGN_CLP_API auto WithCommand(std::shared_ptr<Command> command) -> Self&;
+
+  /// Add a global options group that applies to all commands.
+  OXGN_CLP_API auto WithGlobalOptions(
+    std::shared_ptr<Options> options, bool hidden = false) -> Self&;
+
+  /// Add a single global option that applies to all commands.
+  OXGN_CLP_API auto WithGlobalOption(std::shared_ptr<Option> option) -> Self&;
+
+  /// Add a pre-configured global option for selecting the output theme.
+  OXGN_CLP_API auto WithThemeSelectionOption() -> Self&;
 
   /**
    * \brief Enable the default handling for the version option/command.

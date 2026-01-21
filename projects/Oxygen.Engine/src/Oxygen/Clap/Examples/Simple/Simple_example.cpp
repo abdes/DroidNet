@@ -67,6 +67,7 @@ auto main(const int argc, char** argv) -> int
                  "standard `version` and `help` commands and only "
                  "implements a default command with several options.")
           .WithAutoOutputWidth()
+          .WithThemeSelectionOption()
           .WithVersionCommand()
           .WithHelpCommand()
           .WithCommand(command_builder);

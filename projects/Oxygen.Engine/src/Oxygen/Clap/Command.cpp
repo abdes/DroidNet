@@ -60,6 +60,26 @@ auto oxygen::clap::Command::PrintSynopsis(
 auto oxygen::clap::Command::PrintOptions(
   const CommandLineContext& context, unsigned int width) const -> void
 {
+  const CliTheme& theme = context.theme ? *context.theme : CliTheme::Plain();
+  if (context.global_option_groups && !context.global_option_groups->empty()) {
+    bool has_visible_globals = false;
+    for (const auto& [group, hidden] : *context.global_option_groups) {
+      if (!hidden && group) {
+        has_visible_globals = true;
+        break;
+      }
+    }
+    if (has_visible_globals) {
+      context.out << fmt::format(theme.section_header, "GLOBAL OPTIONS\n");
+      for (const auto& [group, hidden] : *context.global_option_groups) {
+        if (!hidden && group) {
+          group->Print(context, width);
+          context.out << "\n\n";
+        }
+      }
+    }
+  }
+
   for (unsigned option_index = 0; option_index < options_.size();
     ++option_index) {
     if (options_in_groups_[option_index]) {

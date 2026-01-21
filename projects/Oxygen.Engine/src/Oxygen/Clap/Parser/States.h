@@ -128,16 +128,22 @@ struct InitialState {
       TransitionTo<DashDashState>, ReportError>
   {
     static_assert(TokenT != TokenType::kValue);
-    // For any token type other than TokenType::Value, we require a default
-    // command to be present.
-    if (context->active_command) {
-      if constexpr (TokenT == TokenType::kDashDash) {
+    if constexpr (TokenT == TokenType::kDashDash) {
+      if (context->active_command) {
         return TransitionTo<DashDashState>(context);
-      } else {
+      }
+      return ReportError(MissingCommand(context));
+    } else {
+      // For any token type other than TokenType::Value, we require a default
+      // command to be present.
+      if (context->active_command) {
         return TransitionTo<ParseOptionsState>(context);
       }
+      if (context->allow_global_options && !context->global_options.empty()) {
+        return TransitionTo<ParseOptionsState>(context);
+      }
+      return ReportError(MissingCommand(context));
     }
-    return ReportError(MissingCommand(context));
   }
 
   [[nodiscard]] auto GetContext() const -> const ParserContextPtr&
@@ -254,6 +260,7 @@ struct IdentifyCommandState {
 
     if (last_matched_command_) {
       context_->active_command = last_matched_command_;
+      context_->allow_global_options = false;
       switch (token_type) {
       case TokenType::kDashDash:
         return TransitionTo<DashDashState>(context_);
@@ -269,6 +276,7 @@ struct IdentifyCommandState {
     }
     if (default_command_) {
       context_->active_command = default_command_;
+      context_->allow_global_options = false;
       DCHECK_F(context_->positional_tokens.empty());
       std::ranges::copy(
         path_segments_, std::back_inserter(context_->positional_tokens));
@@ -303,6 +311,7 @@ struct IdentifyCommandState {
           return ReportError(UnrecognizedCommand(path_segments_));
         }
         context_->active_command = default_command_;
+        context_->allow_global_options = false;
         DCHECK_F(context_->positional_tokens.empty());
         // Remove the last pushed token in the path segments as it will be
         // transmitted to the ParseOptionsState as the next event.
@@ -312,6 +321,7 @@ struct IdentifyCommandState {
         return TransitionTo<ParseOptionsState>(context_);
       }
       context_->active_command = last_matched_command_;
+      context_->allow_global_options = false;
       return TransitionTo<ParseOptionsState>(context_);
     }
     return DoNothing {};
@@ -376,7 +386,7 @@ struct ParseOptionsState {
   {
     DCHECK_F(data.has_value());
     context = std::any_cast<ParserContextPtr>(data);
-    DCHECK_NOTNULL_F(context->active_command);
+    DCHECK_F(context->active_command || context->allow_global_options);
     // recycle the event that transitioned us here so that we dispatch it
     // properly to the next state.
     return ReissueEvent {};
@@ -394,17 +404,28 @@ struct ParseOptionsState {
   }
 
   // ReSharper disable once CppMemberFunctionMayBeConst
-  auto Handle(const TokenEvent<TokenType::kValue>& event) -> DoNothing
+  auto Handle(const TokenEvent<TokenType::kValue>& event)
+    -> OneOf<DoNothing, TransitionTo<IdentifyCommandState>, ReportError>
   {
+    if (context->allow_global_options && MaybeCommand(event.token)) {
+      return TransitionTo<IdentifyCommandState>(context);
+    }
+    if (!context->active_command) {
+      return ReportError(UnrecognizedCommand({ event.token }));
+    }
     // This may be a positional argument. Store it for later processing with the
     // rest of positional arguments.
+    context->allow_global_options = false;
     context->positional_tokens.push_back(event.token);
     return DoNothing {};
   }
 
   auto Handle(const TokenEvent<TokenType::kEndOfInput>& /*event*/)
-    -> TransitionTo<FinalState>
+    -> OneOf<TransitionTo<FinalState>, ReportError>
   {
+    if (!context->active_command) {
+      return ReportError(MissingCommand(context));
+    }
     return TransitionTo<FinalState> { context };
   }
 
@@ -436,6 +457,15 @@ struct ParseOptionsState {
   }
 
 private:
+  [[nodiscard]] auto MaybeCommand(const std::string& token) const -> bool
+  {
+    return std::ranges::any_of(
+      context->commands, [&token](const auto& command) {
+        return (!command->IsDefault() && !command->Path().empty()
+          && command->Path()[0] == token);
+      });
+  }
+
   ParserContextPtr context;
 
   friend struct ParseOptionsStateTestData;
@@ -507,7 +537,7 @@ struct ParseShortOptionState
       || token_type == TokenType::kLoneDash);
     DCHECK_F(data.has_value());
     context_ = std::any_cast<ParserContextPtr>(data);
-    DCHECK_NOTNULL_F(context_->active_command);
+    DCHECK_F(context_->active_command || context_->allow_global_options);
 
     std::optional<OptionPtr> option;
     switch (token_type) {
@@ -515,7 +545,7 @@ struct ParseShortOptionState
       [[fallthrough]];
     case TokenType::kLoneDash:
       context_->active_option_flag = "-" + event.token;
-      option = context_->active_command->FindShortOption(event.token);
+      option = context_->ResolveShortOption(event.token);
       break;
     case TokenType::kLongOption:
     case TokenType::kDashDash:
@@ -529,6 +559,9 @@ struct ParseShortOptionState
       return TerminateWithError { UnrecognizedOption(context_, event.token) };
     }
     context_->active_option.swap(option.value());
+    if (!context_->active_option_is_global) {
+      context_->allow_global_options = false;
+    }
     if (!CheckMultipleOccurrence(context_)) {
       return TerminateWithError { IllegalMultipleOccurrence(context_) };
     }
@@ -634,13 +667,13 @@ struct ParseLongOptionState : Will<ByDefault<TransitionTo<ParseOptionsState>>> {
     static_assert(token_type == TokenType::kLongOption);
     DCHECK_F(data.has_value());
     context = std::any_cast<ParserContextPtr>(data);
-    DCHECK_NOTNULL_F(context->active_command);
+    DCHECK_F(context->active_command || context->allow_global_options);
 
     std::optional<OptionPtr> option;
     switch (token_type) {
     case TokenType::kLongOption:
       context->active_option_flag = "--" + event.token;
-      option = context->active_command->FindLongOption(event.token);
+      option = context->ResolveLongOption(event.token);
       break;
     case TokenType::kShortOption:
     case TokenType::kLoneDash:
@@ -655,6 +688,9 @@ struct ParseLongOptionState : Will<ByDefault<TransitionTo<ParseOptionsState>>> {
       return TerminateWithError { UnrecognizedOption(context, event.token) };
     }
     context->active_option.swap(option.value());
+    if (!context->active_option_is_global) {
+      context->allow_global_options = false;
+    }
     if (!CheckMultipleOccurrence(context)) {
       return TerminateWithError { IllegalMultipleOccurrence(context) };
     }
