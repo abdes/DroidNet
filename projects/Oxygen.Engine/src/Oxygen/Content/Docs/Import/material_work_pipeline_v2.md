@@ -204,7 +204,7 @@ offloaded to the ThreadPool when `use_thread_pool = true`.
 
 For each work item:
 
-1) Check cancellation; if cancelled, return `success=false`.
+1) Check cancellation; if canceled, return `success=false`.
 2) Compute material identity:
    - `virtual_path = request.loose_cooked_layout.MaterialVirtualPath(
       storage_material_name)`

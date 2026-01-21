@@ -190,7 +190,7 @@ Workers run as coroutines on the import thread and drain the bounded input queue
 
 For each work item:
 
-1) Check cancellation (`stop_token.stop_requested()`); if cancelled, return
+1) Check cancellation (`stop_token.stop_requested()`); if canceled, return
    `success=false` with no cooked payload.
 2) Resolve packing policy via `TexturePackingPolicy` helpers.
 3) Build a local `TextureImportDesc`:
@@ -279,8 +279,8 @@ These stages follow the current synchronous implementation in
    - Cube maps: 6 faces mapped by `CubeFace`.
    - 2D arrays: assemble array layers and pre-authored mips (depth slice must
      be 0). All layers and mip levels must be present.
-  - 3D textures: assemble depth slices (array_layer = 0, mip_level = 0) into
-    a single 3D `ScratchImage` with contiguous depth slices.
+   - 3D textures: assemble depth slices (array_layer = 0, mip_level = 0) into
+     a single 3D `ScratchImage` with contiguous depth slices.
 
 6) **Post-decode validation**
    - Input: `TextureImportDesc` + decoded meta

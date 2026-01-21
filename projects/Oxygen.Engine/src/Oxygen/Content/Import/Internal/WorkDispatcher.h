@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <deque>
 #include <memory>
 #include <optional>
 #include <span>
@@ -19,7 +18,6 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Import/AsyncImportService.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
-#include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Import/Internal/ImportPlanner.h>
 #include <Oxygen/Content/Import/Internal/ImportSession.h>
 #include <Oxygen/Content/Import/Internal/Pipelines/BufferPipeline.h>
@@ -29,7 +27,6 @@
 #include <Oxygen/Content/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Content/Import/Internal/WorkPayloadStore.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Nursery.h>
 
 namespace oxygen::co {
 class ThreadPool;
@@ -68,7 +65,7 @@ public:
 
   //! Create a dispatcher bound to a single import session.
   WorkDispatcher(ImportSession& session,
-    oxygen::observer_ptr<co::ThreadPool> thread_pool,
+    observer_ptr<co::ThreadPool> thread_pool,
     const ImportConcurrency& concurrency, std::stop_token stop_token,
     std::optional<ProgressReporter> progress = std::nullopt);
 
@@ -121,7 +118,7 @@ private:
   auto ClosePipelines() noexcept -> void;
 
   ImportSession& session_;
-  oxygen::observer_ptr<co::ThreadPool> thread_pool_ {};
+  observer_ptr<co::ThreadPool> thread_pool_ {};
   const ImportConcurrency& concurrency_;
   std::stop_token stop_token_;
   std::optional<ProgressReporter> progress_ {};

@@ -213,7 +213,7 @@ auto MakeWorkItem(TextureImportDesc desc, std::string texture_id,
 //=== Basic Parity Tests
 //===-----------------------------------------------------//
 
-class TexturePipelineNonRegTest : public ::testing::Test {
+class TexturePipelineNonRegTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
 };
@@ -233,10 +233,10 @@ NOLINT_TEST_F(TexturePipelineNonRegTest, Collect_ParityWithSyncCooker_Matches)
   ASSERT_TRUE(sync.has_value());
 
   TexturePipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 2);
+  ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     TexturePipeline pipeline(pool,
       TexturePipeline::Config {
         .queue_capacity = 4,
@@ -298,10 +298,10 @@ NOLINT_TEST_F(TexturePipelineNonRegTest, Collect_DepthSlices_ParityMatches)
   }
 
   TexturePipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 2);
+  ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     TexturePipeline pipeline(pool,
       TexturePipeline::Config {
         .queue_capacity = 4,
@@ -351,10 +351,10 @@ NOLINT_TEST_F(
     2, std::vector<std::byte>(bytes.begin(), bytes.end()), "slice2.bmp");
 
   TexturePipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 2);
+  ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     TexturePipeline pipeline(pool,
       TexturePipeline::Config {
         .queue_capacity = 4,

@@ -212,7 +212,7 @@ Workers run as coroutines on the import thread and drain the bounded input queue
 
 For each work item:
 
-1) Check cancellation; if cancelled, return `success=false`.
+1) Check cancellation; if canceled, return `success=false`.
 2) Assume names are already resolved by the importer; no renaming occurs here.
 3) Validate each LOD mesh:
    - If positions are missing → error `mesh.missing_positions`.

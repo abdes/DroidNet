@@ -327,8 +327,7 @@ auto ScratchImage::GetImage(uint16_t array_layer, uint16_t mip_level) const
     .height = info.height,
     .format = meta_.format,
     .row_pitch_bytes = info.row_pitch,
-    .pixels
-    = std::span<const std::byte>(storage_.data() + info.offset, slice_size),
+    .pixels = std::span(storage_.data() + info.offset, slice_size),
   };
 }
 
@@ -346,7 +345,7 @@ auto ScratchImage::GetMutablePixels(uint16_t array_layer, uint16_t mip_level)
   const auto slice_size
     = ComputeSlicePitch(info.width, info.height, depth, meta_.format);
 
-  return std::span<std::byte>(storage_.data() + info.offset, slice_size);
+  return std::span(storage_.data() + info.offset, slice_size);
 }
 
 } // namespace oxygen::content::import

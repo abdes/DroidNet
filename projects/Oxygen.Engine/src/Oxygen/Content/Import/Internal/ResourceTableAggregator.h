@@ -7,12 +7,10 @@
 #pragma once
 
 #include <atomic>
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
-#include <optional>
 #include <span>
 #include <string>
 #include <system_error>
@@ -37,7 +35,7 @@ struct WriteReservation {
 };
 
 struct TextureTableTraits {
-  using Descriptor = oxygen::data::pak::TextureResourceDesc;
+  using Descriptor = data::pak::TextureResourceDesc;
   using Reservation = WriteReservation;
 
   [[nodiscard]] static auto TablePath(const LooseCookedLayout& layout)
@@ -74,7 +72,7 @@ struct TextureTableTraits {
 };
 
 struct BufferTableTraits {
-  using Descriptor = oxygen::data::pak::BufferResourceDesc;
+  using Descriptor = data::pak::BufferResourceDesc;
   using Reservation = WriteReservation;
 
   [[nodiscard]] static auto TablePath(const LooseCookedLayout& layout)
@@ -188,7 +186,7 @@ public:
       snapshot.size(), table_path_.string());
 
     serio::MemoryStream stream;
-    serio::Writer<serio::MemoryStream> writer(stream);
+    serio::Writer writer(stream);
     const auto pack = writer.ScopedAlignment(1);
     auto write_result = writer.WriteBlob(std::as_bytes(std::span(snapshot)));
     if (!write_result.has_value()) {
@@ -196,9 +194,9 @@ public:
       co_return false;
     }
 
-    auto result = co_await file_writer_.Write(table_path_,
-      std::span<const std::byte>(stream.Data()),
-      WriteOptions { .create_directories = true, .overwrite = true });
+    auto result
+      = co_await file_writer_.Write(table_path_, std::span(stream.Data()),
+        WriteOptions { .create_directories = true, .overwrite = true });
 
     if (!result.has_value()) {
       LOG_F(ERROR, "ResourceTableAggregator: write failed: {}",

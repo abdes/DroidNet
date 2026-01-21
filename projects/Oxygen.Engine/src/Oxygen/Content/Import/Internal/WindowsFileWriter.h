@@ -9,10 +9,8 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
-#include <vector>
 
 #include <Oxygen/Content/Import/IAsyncFileWriter.h>
-#include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/api_export.h>
 
 namespace oxygen::content::import {

@@ -9,7 +9,6 @@
 #include <atomic>
 #include <thread>
 
-#include <asio/dispatch.hpp>
 #include <asio/io_context.hpp>
 #include <asio/post.hpp>
 

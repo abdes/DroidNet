@@ -47,7 +47,7 @@ private:
     std::shared_ptr<adapters::FbxAdapter> adapter;
     std::vector<ImportDiagnostic> diagnostics;
     bool success = true;
-    bool cancelled = false;
+    bool canceled = false;
   };
 
   struct PlannedFbxImport;
@@ -55,13 +55,13 @@ private:
   struct PlanBuildOutcome {
     std::unique_ptr<PlannedFbxImport> plan;
     std::vector<ImportDiagnostic> diagnostics;
-    bool cancelled = false;
+    bool canceled = false;
   };
 
   struct ExternalTextureLoadOutcome {
     std::vector<adapters::AdapterInput::ExternalTextureBytes> bytes;
     std::vector<ImportDiagnostic> diagnostics;
-    bool cancelled = false;
+    bool canceled = false;
   };
 
   [[nodiscard]] auto ExecuteAsync() -> co::Co<ImportReport> override;

@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include <cmath>
-#include <cstddef>
 #include <span>
 #include <vector>
 
@@ -27,15 +25,15 @@ namespace oxygen::content::import::util {
         triangle indices for a submesh.
 */
 template <typename BucketT>
-auto GenerateTangents(std::vector<oxygen::data::Vertex>& vertices,
+auto GenerateTangents(std::vector<data::Vertex>& vertices,
   const std::span<const BucketT> buckets) -> void
 {
   if (vertices.empty()) {
     return;
   }
 
-  std::vector<glm::vec3> tan1(vertices.size(), glm::vec3(0.0F));
-  std::vector<glm::vec3> tan2(vertices.size(), glm::vec3(0.0F));
+  std::vector tan1(vertices.size(), glm::vec3(0.0F));
+  std::vector tan2(vertices.size(), glm::vec3(0.0F));
 
   for (const auto& bucket : buckets) {
     const auto tri_count = bucket.indices.size() / 3;

@@ -35,7 +35,7 @@ TestImportJob::TestImportJob(ImportJobId job_id, ImportRequest request,
 
 auto TestImportJob::ExecuteAsync() -> co::Co<ImportReport>
 {
-  auto make_cancelled_report = [&]() -> ImportReport {
+  auto make_canceled_report = [&]() -> ImportReport {
     ImportReport report {
       .cooked_root
       = Request().cooked_root.value_or(Request().source_path.parent_path()),
@@ -44,8 +44,8 @@ auto TestImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
     report.diagnostics.push_back({
       .severity = ImportSeverity::kInfo,
-      .code = "import.cancelled",
-      .message = "Import cancelled",
+      .code = "import.canceled",
+      .message = "Import canceled",
       .source_path = Request().source_path.string(),
       .object_path = {},
     });
@@ -55,7 +55,7 @@ auto TestImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   const auto stop_token = StopToken();
   if (stop_token.stop_requested()) {
-    co_return make_cancelled_report();
+    co_return make_canceled_report();
   }
 
   auto step_delay = config_.step_delay;
@@ -69,32 +69,32 @@ auto TestImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   auto thread_pool = ThreadPool();
   if (thread_pool == nullptr) {
-    co_return make_cancelled_report();
+    co_return make_canceled_report();
   }
 
   for (int step = 0; step < step_count; ++step) {
     if (stop_token.stop_requested()) {
-      co_return make_cancelled_report();
+      co_return make_canceled_report();
     }
 
     try {
       co_await thread_pool->Run(
-        [step_delay](co::ThreadPool::CancelToken cancelled) {
-          if (cancelled) {
+        [step_delay](co::ThreadPool::CancelToken canceled) {
+          if (canceled) {
             return;
           }
           std::this_thread::sleep_for(step_delay);
         });
     } catch (const std::exception& ex) {
       DLOG_F(WARNING, "TestImportJob caught exception: {}", ex.what());
-      co_return make_cancelled_report();
+      co_return make_canceled_report();
     } catch (...) {
       DLOG_F(WARNING, "TestImportJob caught unknown exception");
-      co_return make_cancelled_report();
+      co_return make_canceled_report();
     }
 
     if (stop_token.stop_requested()) {
-      co_return make_cancelled_report();
+      co_return make_canceled_report();
     }
 
     if (config_.report_progress) {

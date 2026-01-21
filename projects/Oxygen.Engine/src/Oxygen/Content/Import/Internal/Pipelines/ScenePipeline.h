@@ -29,7 +29,6 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Channel.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 
 namespace oxygen::content::import {

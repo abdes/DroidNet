@@ -63,7 +63,7 @@ auto MakeWorkItem(std::string source_id, std::string texture_id,
 //=== Basic Behavior Tests
 //===-----------------------------------------------------//
 
-class TexturePipelineTest : public ::testing::Test {
+class TexturePipelineTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
 };
@@ -73,10 +73,10 @@ NOLINT_TEST_F(TexturePipelineTest, Collect_WithPlaceholderPolicy_ReportsFailure)
 {
   // Arrange
   TexturePipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 2);
+  ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     TexturePipeline pipeline(pool,
       TexturePipeline::Config {
         .queue_capacity = 4,
@@ -110,10 +110,10 @@ NOLINT_TEST_F(TexturePipelineTest, Collect_WithStrictPolicy_EmitsDiagnostic)
 {
   // Arrange
   TexturePipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 2);
+  ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     TexturePipeline pipeline(pool,
       TexturePipeline::Config {
         .queue_capacity = 4,
@@ -142,7 +142,7 @@ NOLINT_TEST_F(TexturePipelineTest, Collect_WithStrictPolicy_EmitsDiagnostic)
   EXPECT_EQ(result.diagnostics[0].code, "texture.cook_failed");
 }
 
-//! Verify cancelled work returns a failed result without diagnostics.
+//! Verify canceled work returns a failed result without diagnostics.
 NOLINT_TEST_F(TexturePipelineTest, Collect_WhenCancelled_ReturnsFailedResult)
 {
   // Arrange
@@ -150,10 +150,10 @@ NOLINT_TEST_F(TexturePipelineTest, Collect_WhenCancelled_ReturnsFailedResult)
   stop_source.request_stop();
 
   TexturePipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 2);
+  ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     TexturePipeline pipeline(pool,
       TexturePipeline::Config {
         .queue_capacity = 4,

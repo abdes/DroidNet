@@ -236,7 +236,7 @@ auto ImportPlanner::MakePlan() -> std::vector<PlanStep>
     tracker.required = std::span<const PlanItemId>(
       required_storage_.data() + offset, deps.size());
     tracker.satisfied
-      = std::span<uint8_t>(satisfied_storage_.data() + offset, deps.size());
+      = std::span(satisfied_storage_.data() + offset, deps.size());
     tracker.ready_event = &events_[index];
 
     if (deps.empty()) {
@@ -253,7 +253,7 @@ auto ImportPlanner::MakePlan() -> std::vector<PlanStep>
     const auto& deps = dependencies_[u_item];
     plan.push_back(PlanStep {
       .item_id = item_id,
-      .prerequisites = std::vector<PlanItemId>(deps.begin(), deps.end()),
+      .prerequisites = std::vector(deps.begin(), deps.end()),
     });
   }
 
@@ -267,7 +267,7 @@ auto ImportPlanner::Item(PlanItemId item) -> PlanItem&
 }
 
 auto ImportPlanner::PipelineTypeFor(PlanItemId item) const noexcept
-  -> std::optional<oxygen::TypeId>
+  -> std::optional<TypeId>
 {
   const auto u_item = ItemIndex(item);
   const auto index = static_cast<size_t>(items_.at(u_item).kind);

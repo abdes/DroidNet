@@ -11,6 +11,8 @@
 #include <system_error>
 #include <vector>
 
+#include <Oxygen/Testing/GTest.h>
+
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Import/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/IAsyncFileWriter.h>
@@ -20,7 +22,6 @@
 #include <Oxygen/Content/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
-#include <Oxygen/Testing/GTest.h>
 
 using namespace std::chrono_literals;
 using namespace oxygen::content::import;
@@ -411,7 +412,7 @@ NOLINT_TEST_F(
   std::atomic<bool> complete_called { false };
   ImportJobId completed_id = kInvalidJobId;
   bool received_success = true;
-  std::string cancelled_code;
+  std::string canceled_code;
   Event done_event;
 
   // Act
@@ -430,7 +431,7 @@ NOLINT_TEST_F(
         completed_id = id;
         received_success = report.success;
         if (!report.diagnostics.empty()) {
-          cancelled_code = report.diagnostics.front().code;
+          canceled_code = report.diagnostics.front().code;
         }
         complete_called = true;
         done_event.Trigger();
@@ -466,7 +467,7 @@ NOLINT_TEST_F(
   EXPECT_TRUE(complete_called);
   EXPECT_EQ(completed_id, 123U);
   EXPECT_FALSE(received_success);
-  EXPECT_EQ(cancelled_code, "import.cancelled");
+  EXPECT_EQ(canceled_code, "import.canceled");
 }
 
 //! Verify CloseJobChannel prevents new submissions.

@@ -375,7 +375,7 @@ TEST_F(ThreadPoolFileReaderCancellationTest, ReadFile_Cancelled_ReturnsKCancelle
     co_return;
   }());
 
-  // Assert - either completed or cancelled
+  // Assert - either completed or canceled
   if (!read_result.has_value()) {
     EXPECT_EQ(read_result.error().code, io::FileError::kCancelled);
   }
@@ -420,7 +420,7 @@ TEST(AsyncImportServiceLifecycleTest, Shutdown_WithPendingJobs_Completes) {
   service.RequestShutdown();
   // Destructor blocks
 
-  // Assert - either completed or cancelled, but all callbacks fired
+  // Assert - either completed or canceled, but all callbacks fired
   EXPECT_EQ(callbacks, 10);
 }
 
@@ -497,12 +497,12 @@ namespace {
 TEST(AsyncImportServiceCancellationTest, CancelJob_PendingJob_ReturnsTrue) {
   // Arrange
   AsyncImportService service;
-  std::atomic<bool> cancelled{false};
+  std::atomic<bool> canceled{false};
 
   auto id = service.SubmitImport(
     ImportRequest{.source_path = "large_model.fbx"},  // Would take time
-    [&](auto, auto report) { cancelled = report.cancelled; },
-    [&](auto) { cancelled = true; }  // Cancel callback
+    [&](auto, auto report) { canceled = report.canceled; },
+    [&](auto) { canceled = true; }  // Cancel callback
   );
 
   // Act
@@ -512,19 +512,19 @@ TEST(AsyncImportServiceCancellationTest, CancelJob_PendingJob_ReturnsTrue) {
   EXPECT_TRUE(result);
   // Wait for cancel callback
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  EXPECT_TRUE(cancelled);
+  EXPECT_TRUE(canceled);
 }
 
 //! CancelAll cancels all pending jobs.
 TEST(AsyncImportServiceCancellationTest, CancelAll_MultiplePending_AllCancelled) {
   // Arrange
   AsyncImportService service;
-  std::atomic<int> cancelled_count{0};
+  std::atomic<int> canceled_count{0};
 
   for (int i = 0; i < 10; ++i) {
     service.SubmitImport(
       ImportRequest{.source_path = "model.fbx"},
-      [&](auto, auto report) { if (report.cancelled) ++cancelled_count; }
+      [&](auto, auto report) { if (report.canceled) ++canceled_count; }
     );
   }
 
@@ -533,7 +533,7 @@ TEST(AsyncImportServiceCancellationTest, CancelAll_MultiplePending_AllCancelled)
   std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
   // Assert
-  EXPECT_EQ(cancelled_count, 10);
+  EXPECT_EQ(canceled_count, 10);
 }
 
 } // namespace
@@ -1005,7 +1005,7 @@ TEST(AsyncImportProgressTest, ProgressCallback_IncludesDiagnostics) {
 ```cpp
 namespace {
 
-//! Cancel job during texture phase, callback receives cancelled report.
+//! Cancel job during texture phase, callback receives canceled report.
 TEST(AsyncImportCancellationTest, CancelJob_DuringTextures_ReportsCancelled) {
   // Arrange
   AsyncImportService service;
@@ -1031,14 +1031,14 @@ TEST(AsyncImportCancellationTest, CancelJob_DuringTextures_ReportsCancelled) {
 
   // Wait for textures to start, then cancel
   texture_started.get_future().wait();
-  bool cancelled = service.CancelJob(job_id);
+  bool canceled = service.CancelJob(job_id);
 
   auto report = completion.get_future().get();
 
   // Assert
-  EXPECT_TRUE(cancelled);
+  EXPECT_TRUE(canceled);
   EXPECT_FALSE(report.success);
-  EXPECT_TRUE(report.cancelled);
+  EXPECT_TRUE(report.canceled);
 }
 
 //! Cancel all jobs during multi-job import.
@@ -1046,7 +1046,7 @@ TEST(AsyncImportCancellationTest, CancelAll_MultipleJobs_AllReportCancelled) {
   // Arrange
   AsyncImportService service;
   std::atomic<int> completed_count{0};
-  std::atomic<int> cancelled_count{0};
+  std::atomic<int> canceled_count{0};
 
   // Submit multiple jobs
   for (int i = 0; i < 5; ++i) {
@@ -1056,7 +1056,7 @@ TEST(AsyncImportCancellationTest, CancelAll_MultipleJobs_AllReportCancelled) {
       },
       [&](auto, auto report) {
         ++completed_count;
-        if (report.cancelled) ++cancelled_count;
+        if (report.canceled) ++canceled_count;
       }
     );
   }
@@ -1070,8 +1070,8 @@ TEST(AsyncImportCancellationTest, CancelAll_MultipleJobs_AllReportCancelled) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 
-  // Assert - some jobs were cancelled
-  EXPECT_GT(cancelled_count, 0);
+  // Assert - some jobs were canceled
+  EXPECT_GT(canceled_count, 0);
 }
 
 } // namespace

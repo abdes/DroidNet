@@ -13,9 +13,8 @@
 #include <optional>
 #include <vector>
 
-#include <Oxygen/Data/SourceKey.h>
-
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::import {
 

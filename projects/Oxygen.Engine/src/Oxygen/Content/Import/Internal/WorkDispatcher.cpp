@@ -22,7 +22,7 @@
 namespace oxygen::content::import::detail {
 
 WorkDispatcher::WorkDispatcher(ImportSession& session,
-  oxygen::observer_ptr<co::ThreadPool> thread_pool,
+  observer_ptr<co::ThreadPool> thread_pool,
   const ImportConcurrency& concurrency, std::stop_token stop_token,
   std::optional<ProgressReporter> progress)
   : session_(session)

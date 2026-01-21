@@ -122,9 +122,9 @@ struct ImportConcurrency {
 //! Factory for creating custom import jobs.
 using ImportJobFactory = std::function<std::shared_ptr<detail::ImportJob>(
   ImportJobId, ImportRequest, ImportCompletionCallback, ImportProgressCallback,
-  std::shared_ptr<co::Event>, oxygen::observer_ptr<IAsyncFileReader>,
-  oxygen::observer_ptr<IAsyncFileWriter>, oxygen::observer_ptr<co::ThreadPool>,
-  oxygen::observer_ptr<ResourceTableRegistry>, const ImportConcurrency&)>;
+  std::shared_ptr<co::Event>, observer_ptr<IAsyncFileReader>,
+  observer_ptr<IAsyncFileWriter>, observer_ptr<co::ThreadPool>,
+  observer_ptr<ResourceTableRegistry>, const ImportConcurrency&)>;
 
 //! Thread-safe service for submitting async import jobs.
 /*!
@@ -159,7 +159,7 @@ using ImportJobFactory = std::function<std::shared_ptr<detail::ImportJob>(
 
  Per-job cancellation is supported via `CancelJob(job_id)`, which triggers
  an event observed by the job's nursery. Cancelled jobs complete with a
- diagnostic code "import.cancelled".
+ diagnostic code "import.canceled".
 
  ### Simplified Design (2026-01-15 Refactoring)
 
@@ -252,7 +252,7 @@ public:
           Invoked on the calling thread if it has an event loop with
           `ThreadNotification` support; otherwise on the import thread.
           Cancelled jobs (via `CancelJob()` or `CancelAll()`) complete with
-          `report.success = false` and diagnostic code `"import.cancelled"`.
+          `report.success = false` and diagnostic code `"import.canceled"`.
    @param on_progress Optional progress callback invoked periodically to report
           phase transitions and progress percentages. Invoked on the same thread
           as `on_complete`. Can be `nullptr`.
@@ -300,7 +300,7 @@ public:
 
   //! Cancel all pending and in-flight imports. Thread-safe.
   /*!
-    All jobs will complete with a cancelled diagnostic.
+    All jobs will complete with a canceled diagnostic.
   */
   OXGN_CNTT_API auto CancelAll() -> void;
 
@@ -336,7 +336,7 @@ public:
   //! Check if a job is still pending or in-flight. Thread-safe.
   /*!
    @param job_id The job to check.
-   @return True if the job is active, false if completed/cancelled/invalid.
+   @return True if the job is active, false if completed/canceled/invalid.
   */
   OXGN_CNTT_NDAPI auto IsJobActive(ImportJobId job_id) const -> bool;
 

@@ -95,9 +95,9 @@ using WriteCompletionCallback
 
  ### Cancellation
 
- Coroutine-based operations respect coroutine cancellation. When cancelled,
+ Coroutine-based operations respect coroutine cancellation. When canceled,
  pending operations return `FileError::kCancelled`. Callback-based
- operations cannot be individually cancelled, but `CancelAll()` will
+ operations cannot be individually canceled, but `CancelAll()` will
  cancel pending operations.
 
  ### Error Handling
@@ -148,7 +148,7 @@ public:
    - `kAccessDenied` if write permission is denied.
    - `kNoSpace` or `kDiskFull` if insufficient disk space.
    - `kReadOnly` if filesystem is read-only.
-   - `kCancelled` if operation was cancelled.
+   - `kCancelled` if operation was canceled.
    - `kIOError` for other I/O failures.
   */
   [[nodiscard]] virtual auto Write(const std::filesystem::path& path,
@@ -245,7 +245,7 @@ public:
   //! Cancel all pending async operations.
   /*!
    Cancels pending operations. Already-started I/O may complete normally
-   or be aborted. Callbacks for cancelled operations will be invoked
+   or be aborted. Callbacks for canceled operations will be invoked
    with `FileError::kCancelled`.
   */
   virtual void CancelAll() = 0;

@@ -128,7 +128,7 @@ OXGN_CNTT_NDAPI auto DetectPresetFromFilename(
   @see CookImportedTexture for cooking a loaded ScratchImage
 */
 OXGN_CNTT_NDAPI auto LoadTexture(const std::filesystem::path& path)
-  -> oxygen::Result<ScratchImage, TextureImportError>;
+  -> Result<ScratchImage, TextureImportError>;
 
 //! Load an image file into a ScratchImage with custom options.
 /*!
@@ -136,9 +136,8 @@ OXGN_CNTT_NDAPI auto LoadTexture(const std::filesystem::path& path)
   @param desc Import descriptor (uses flip_y_on_decode)
   @return Decoded ScratchImage on success, or error
 */
-OXGN_CNTT_NDAPI auto LoadTexture(
-  const std::filesystem::path& path, const TextureImportDesc& desc)
-  -> oxygen::Result<ScratchImage, TextureImportError>;
+OXGN_CNTT_NDAPI auto LoadTexture(const std::filesystem::path& path,
+  const TextureImportDesc& desc) -> Result<ScratchImage, TextureImportError>;
 
 //! Load an image from memory into a ScratchImage without cooking.
 /*!
@@ -146,9 +145,8 @@ OXGN_CNTT_NDAPI auto LoadTexture(
   @param source_id Identifier for diagnostics and error messages
   @return Decoded ScratchImage on success, or error
 */
-OXGN_CNTT_NDAPI auto LoadTexture(
-  std::span<const std::byte> data, std::string_view source_id)
-  -> oxygen::Result<ScratchImage, TextureImportError>;
+OXGN_CNTT_NDAPI auto LoadTexture(std::span<const std::byte> data,
+  std::string_view source_id) -> Result<ScratchImage, TextureImportError>;
 
 //! Load an image from memory with custom options.
 /*!
@@ -156,9 +154,8 @@ OXGN_CNTT_NDAPI auto LoadTexture(
   @param desc      Import descriptor (uses flip_y_on_decode)
   @return Decoded ScratchImage on success, or error
 */
-OXGN_CNTT_NDAPI auto LoadTexture(
-  std::span<const std::byte> data, const TextureImportDesc& desc)
-  -> oxygen::Result<ScratchImage, TextureImportError>;
+OXGN_CNTT_NDAPI auto LoadTexture(std::span<const std::byte> data,
+  const TextureImportDesc& desc) -> Result<ScratchImage, TextureImportError>;
 
 //! Load multiple image files into separate ScratchImages.
 /*!
@@ -184,18 +181,18 @@ OXGN_CNTT_NDAPI auto LoadTexture(
   ```
 */
 OXGN_CNTT_NDAPI auto LoadTextures(std::span<const std::filesystem::path> paths)
-  -> oxygen::Result<std::vector<ScratchImage>, TextureImportError>;
+  -> Result<std::vector<ScratchImage>, TextureImportError>;
 
 //===----------------------------------------------------------------------===//
 // ScratchImage Cooking API
 //===----------------------------------------------------------------------===//
 
-//! Cook a pre-loaded ScratchImage with a preset.
+//! Cook a preloaded ScratchImage with a preset.
 /*!
   Use this when you have already loaded or composed a ScratchImage and
   want to apply a preset and cook it.
 
-  @param image  Pre-loaded ScratchImage (takes ownership via move)
+  @param image  Preloaded ScratchImage (takes ownership via move)
   @param preset Texture preset to apply
   @param policy Packing policy for the target backend
   @return Import result on success, or error
@@ -218,21 +215,21 @@ OXGN_CNTT_NDAPI auto LoadTextures(std::span<const std::filesystem::path> paths)
 */
 OXGN_CNTT_NDAPI auto CookScratchImage(ScratchImage&& image,
   TexturePreset preset, const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
-//! Cook a pre-loaded ScratchImage with a custom descriptor.
+//! Cook a preloaded ScratchImage with a custom descriptor.
 /*!
   Use this when you need full control over the import descriptor
   beyond what presets offer.
 
-  @param image  Pre-loaded ScratchImage (takes ownership via move)
+  @param image  Preloaded ScratchImage (takes ownership via move)
   @param desc   Custom import descriptor
   @param policy Packing policy for the target backend
   @return Import result on success, or error
 */
 OXGN_CNTT_NDAPI auto CookScratchImage(ScratchImage&& image,
   const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //===----------------------------------------------------------------------===//
 // Single-File Import API
@@ -265,7 +262,7 @@ OXGN_CNTT_NDAPI auto CookScratchImage(ScratchImage&& image,
 */
 OXGN_CNTT_NDAPI auto ImportTexture(
   const std::filesystem::path& path, const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //! Import a single texture file with explicit preset.
 /*!
@@ -287,7 +284,7 @@ OXGN_CNTT_NDAPI auto ImportTexture(
 */
 OXGN_CNTT_NDAPI auto ImportTexture(const std::filesystem::path& path,
   TexturePreset preset, const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //! Import a single texture file with a custom descriptor.
 /*!
@@ -319,7 +316,7 @@ OXGN_CNTT_NDAPI auto ImportTexture(const std::filesystem::path& path,
 */
 OXGN_CNTT_NDAPI auto ImportTexture(const std::filesystem::path& path,
   const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //! Import a single texture from memory with explicit preset.
 /*!
@@ -334,7 +331,7 @@ OXGN_CNTT_NDAPI auto ImportTexture(const std::filesystem::path& path,
 OXGN_CNTT_NDAPI auto ImportTexture(std::span<const std::byte> data,
   std::string_view source_id, TexturePreset preset,
   const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //! Import a single texture from memory with a custom descriptor.
 /*!
@@ -348,7 +345,7 @@ OXGN_CNTT_NDAPI auto ImportTexture(std::span<const std::byte> data,
 */
 OXGN_CNTT_NDAPI auto ImportTexture(std::span<const std::byte> data,
   const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //===----------------------------------------------------------------------===//
 // Cube Map Import API
@@ -382,7 +379,7 @@ OXGN_CNTT_NDAPI auto ImportTexture(std::span<const std::byte> data,
 OXGN_CNTT_NDAPI auto ImportCubeMap(
   std::span<const std::filesystem::path, kCubeFaceCount> face_paths,
   TexturePreset preset, const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //! Import a cube map from 6 individual face files with a custom descriptor.
 /*!
@@ -398,7 +395,7 @@ OXGN_CNTT_NDAPI auto ImportCubeMap(
 OXGN_CNTT_NDAPI auto ImportCubeMap(
   std::span<const std::filesystem::path, kCubeFaceCount> face_paths,
   const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //! Import a cube map from a base path with auto-discovered faces.
 /*!
@@ -423,7 +420,7 @@ OXGN_CNTT_NDAPI auto ImportCubeMap(
 */
 OXGN_CNTT_NDAPI auto ImportCubeMap(const std::filesystem::path& base_path,
   TexturePreset preset, const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //! Import a cube map from an equirectangular panorama.
 /*!
@@ -450,7 +447,7 @@ OXGN_CNTT_NDAPI auto ImportCubeMap(const std::filesystem::path& base_path,
 OXGN_CNTT_NDAPI auto ImportCubeMapFromEquirect(
   const std::filesystem::path& equirect_path, uint32_t face_size,
   TexturePreset preset, const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //! Import a cube map from an equirectangular panorama with a custom descriptor.
 /*!
@@ -469,7 +466,7 @@ OXGN_CNTT_NDAPI auto ImportCubeMapFromEquirect(
 OXGN_CNTT_NDAPI auto ImportCubeMapFromEquirect(
   const std::filesystem::path& equirect_path, uint32_t face_size,
   const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //! Import a cube map from a single image containing all faces in a layout.
 /*!
@@ -506,7 +503,7 @@ OXGN_CNTT_NDAPI auto ImportCubeMapFromEquirect(
 OXGN_CNTT_NDAPI auto ImportCubeMapFromLayoutImage(
   const std::filesystem::path& path, TexturePreset preset,
   const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //! Import a cube map from a layout image with explicit layout override.
 /*!
@@ -532,7 +529,7 @@ OXGN_CNTT_NDAPI auto ImportCubeMapFromLayoutImage(
 OXGN_CNTT_NDAPI auto ImportCubeMapFromLayoutImage(
   const std::filesystem::path& path, CubeMapImageLayout layout,
   TexturePreset preset, const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //! Import a cube map from a layout image with custom descriptor.
 /*!
@@ -547,7 +544,7 @@ OXGN_CNTT_NDAPI auto ImportCubeMapFromLayoutImage(
 OXGN_CNTT_NDAPI auto ImportCubeMapFromLayoutImage(
   const std::filesystem::path& path, const TextureImportDesc& desc,
   const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //===----------------------------------------------------------------------===//
 // Texture Array Import API
@@ -579,7 +576,7 @@ OXGN_CNTT_NDAPI auto ImportCubeMapFromLayoutImage(
 OXGN_CNTT_NDAPI auto ImportTextureArray(
   std::span<const std::filesystem::path> layer_paths, TexturePreset preset,
   const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //! Import a texture array from multiple files with a custom descriptor.
 /*!
@@ -594,7 +591,7 @@ OXGN_CNTT_NDAPI auto ImportTextureArray(
 OXGN_CNTT_NDAPI auto ImportTextureArray(
   std::span<const std::filesystem::path> layer_paths,
   const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //===----------------------------------------------------------------------===//
 // 3D Texture Import API
@@ -627,7 +624,7 @@ OXGN_CNTT_NDAPI auto ImportTextureArray(
 OXGN_CNTT_NDAPI auto ImportTexture3D(
   std::span<const std::filesystem::path> slice_paths, TexturePreset preset,
   const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //! Import a 3D texture from depth slice files with a custom descriptor.
 /*!
@@ -642,7 +639,7 @@ OXGN_CNTT_NDAPI auto ImportTexture3D(
 OXGN_CNTT_NDAPI auto ImportTexture3D(
   std::span<const std::filesystem::path> slice_paths,
   const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
-  -> oxygen::Result<TextureImportResult, TextureImportError>;
+  -> Result<TextureImportResult, TextureImportError>;
 
 //===----------------------------------------------------------------------===//
 // Builder Pattern for Advanced Control
@@ -909,7 +906,7 @@ public:
     @return Import result on success, or error
   */
   OXGN_CNTT_NDAPI auto Build(const ITexturePackingPolicy& policy)
-    -> oxygen::Result<TextureImportResult, TextureImportError>;
+    -> Result<TextureImportResult, TextureImportError>;
 
 private:
   struct Impl;

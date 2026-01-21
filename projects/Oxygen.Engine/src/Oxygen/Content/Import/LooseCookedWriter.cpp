@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Import/LooseCookedWriter.h>
-
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -13,6 +11,7 @@
 #include <filesystem>
 #include <limits>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -26,6 +25,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/Detail/LooseCookedIndex.h>
+#include <Oxygen/Content/Import/LooseCookedWriter.h>
 #include <Oxygen/Content/Internal/LooseCookedIndexLoad.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -37,15 +37,14 @@ namespace oxygen::content::import {
 
 namespace {
 
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileKind;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using data::loose_cooked::v1::AssetEntry;
+  using data::loose_cooked::v1::FileKind;
+  using data::loose_cooked::v1::FileRecord;
+  using data::loose_cooked::v1::IndexHeader;
 
   constexpr std::string_view kIndexFileName = "container.index.bin";
 
-  auto ThrowOnError(const oxygen::Result<void>& result, std::string_view what)
-    -> void
+  auto ThrowOnError(const Result<void>& result, std::string_view what) -> void
   {
     if (!result) {
       throw std::runtime_error(
@@ -55,8 +54,7 @@ namespace {
 
   auto IsAllZeros(std::span<const uint8_t> bytes) noexcept -> bool
   {
-    return std::all_of(
-      bytes.begin(), bytes.end(), [](const auto b) { return b == 0; });
+    return std::ranges::all_of(bytes, [](const auto b) { return b == 0; });
   }
 
   auto ValidateNoDotSegments(
@@ -199,7 +197,7 @@ namespace {
   {
     std::filesystem::create_directories(path.parent_path());
 
-    serio::FileStream<> stream(path, std::ios::out | std::ios::trunc);
+    serio::FileStream stream(path, std::ios::out | std::ios::trunc);
     ThrowOnError(stream.Write(bytes), "Failed to write cooked file");
     ThrowOnError(stream.Flush(), "Failed to flush cooked file");
   }
@@ -207,8 +205,8 @@ namespace {
   auto ReadIndexHeaderOrThrow(const std::filesystem::path& index_path)
     -> IndexHeader
   {
-    serio::FileStream<> stream(index_path, std::ios::in);
-    serio::Reader<serio::FileStream<>> reader(stream);
+    serio::FileStream stream(index_path, std::ios::in);
+    serio::Reader reader(stream);
 
     auto header_result = reader.Read<IndexHeader>();
     if (!header_result) {
@@ -393,7 +391,8 @@ struct LooseCookedWriter::Impl final {
   [[nodiscard]] auto Finish() -> LooseCookedWriteResult
   {
     const auto cooked_root_str = cooked_root_.string();
-    LOG_SCOPE_F(INFO, "LooseCookedWriter::Finish {}", cooked_root_str.c_str());
+    LOG_SCOPE_F(INFO,
+      fmt::format("LooseCookedWriter::Finish {}", cooked_root_str).c_str());
 
     ValidateRequiredFilePairs_();
 
@@ -589,7 +588,7 @@ private:
       (void)asset;
       keys.push_back(key);
     }
-    std::sort(keys.begin(), keys.end());
+    std::ranges::sort(keys);
 
     for (const auto& key : keys) {
       const auto& a = assets_.at(key);
@@ -618,10 +617,9 @@ private:
       (void)file;
       kinds.push_back(kind);
     }
-    std::sort(
-      kinds.begin(), kinds.end(), [](const FileKind a, const FileKind b) {
-        return static_cast<uint16_t>(a) < static_cast<uint16_t>(b);
-      });
+    std::ranges::sort(kinds, [](const FileKind a, const FileKind b) {
+      return static_cast<uint16_t>(a) < static_cast<uint16_t>(b);
+    });
 
     for (const auto kind : kinds) {
       const auto& f = files_.at(kind);
@@ -657,10 +655,10 @@ private:
     header.file_record_size = sizeof(FileRecord);
 
     const auto& guid_bytes = source_key.get();
-    std::copy(guid_bytes.begin(), guid_bytes.end(), std::begin(header.guid));
+    std::ranges::copy(guid_bytes, std::begin(header.guid));
 
-    serio::FileStream<> stream(index_path, std::ios::out | std::ios::trunc);
-    serio::Writer<serio::FileStream<>> writer(stream);
+    serio::FileStream stream(index_path, std::ios::out | std::ios::trunc);
+    serio::Writer writer(stream);
 
     ThrowOnError(writer.WriteBlob(std::as_bytes(std::span(&header, 1))),
       "Failed to write index header");

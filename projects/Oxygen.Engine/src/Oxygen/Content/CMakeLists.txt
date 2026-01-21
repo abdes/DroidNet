@@ -72,7 +72,6 @@ set(
   "Import/IAsyncFileReader.h"
   "Import/IAsyncFileWriter.h"
   "Import/ImportDiagnostics.h"
-  "Import/ImportFormat.h"
   "Import/ImportOptions.h"
   "Import/ImportReport.h"
   "Import/ImportRequest.h"

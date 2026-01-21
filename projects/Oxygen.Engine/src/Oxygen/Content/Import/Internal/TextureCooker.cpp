@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cstring>
 #include <limits>
 #include <optional>
 
@@ -227,19 +226,19 @@ namespace {
   */
   [[nodiscard]] auto AssembleArrayTexture(
     const std::span<const DecodedSource> sources, const TextureType type)
-    -> oxygen::Result<ScratchImage, TextureImportError>
+    -> Result<ScratchImage, TextureImportError>
   {
     if (sources.empty()) {
-      return ::oxygen::Err(TextureImportError::kFileNotFound);
+      return Err(TextureImportError::kFileNotFound);
     }
 
     if (type == TextureType::kTextureCube
       || type == TextureType::kTextureCubeArray) {
-      return ::oxygen::Err(TextureImportError::kUnsupportedFormat);
+      return Err(TextureImportError::kUnsupportedFormat);
     }
     if (type != TextureType::kTexture2D
       && type != TextureType::kTexture2DArray) {
-      return ::oxygen::Err(TextureImportError::kUnsupportedFormat);
+      return Err(TextureImportError::kUnsupportedFormat);
     }
 
     uint16_t max_layer = 0;
@@ -250,16 +249,16 @@ namespace {
 
     for (const auto& source : sources) {
       if (!source.image.IsValid()) {
-        return ::oxygen::Err(TextureImportError::kInvalidDimensions);
+        return Err(TextureImportError::kInvalidDimensions);
       }
 
       const auto& meta = source.image.Meta();
       if (meta.mip_levels != 1) {
-        return ::oxygen::Err(TextureImportError::kInvalidMipPolicy);
+        return Err(TextureImportError::kInvalidMipPolicy);
       }
 
       if (source.subresource.depth_slice != 0) {
-        return ::oxygen::Err(TextureImportError::kUnsupportedFormat);
+        return Err(TextureImportError::kUnsupportedFormat);
       }
 
       max_layer = (std::max)(max_layer, source.subresource.array_layer);
@@ -268,7 +267,7 @@ namespace {
       if (format == Format::kUnknown) {
         format = meta.format;
       } else if (meta.format != format) {
-        return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+        return Err(TextureImportError::kOutputFormatInvalid);
       }
 
       if (source.subresource.mip_level == 0) {
@@ -276,13 +275,13 @@ namespace {
           base_width = meta.width;
           base_height = meta.height;
         } else if (meta.width != base_width || meta.height != base_height) {
-          return ::oxygen::Err(TextureImportError::kDimensionMismatch);
+          return Err(TextureImportError::kDimensionMismatch);
         }
       }
     }
 
     if (base_width == 0 || base_height == 0) {
-      return ::oxygen::Err(TextureImportError::kInvalidMipPolicy);
+      return Err(TextureImportError::kInvalidMipPolicy);
     }
 
     const auto array_layers = static_cast<uint16_t>(max_layer + 1);
@@ -300,11 +299,10 @@ namespace {
 
     ScratchImage assembled = ScratchImage::Create(meta);
     if (!assembled.IsValid()) {
-      return ::oxygen::Err(TextureImportError::kOutOfMemory);
+      return Err(TextureImportError::kOutOfMemory);
     }
 
-    std::vector<bool> present(
-      static_cast<size_t>(array_layers) * mip_levels, false);
+    std::vector present(static_cast<size_t>(array_layers) * mip_levels, false);
 
     for (const auto& source : sources) {
       const auto layer = source.subresource.array_layer;
@@ -312,7 +310,7 @@ namespace {
       const auto index
         = ScratchImage::ComputeSubresourceIndex(layer, mip, mip_levels);
       if (index >= present.size() || present[index]) {
-        return ::oxygen::Err(TextureImportError::kInvalidMipPolicy);
+        return Err(TextureImportError::kInvalidMipPolicy);
       }
       present[index] = true;
 
@@ -324,17 +322,17 @@ namespace {
       const auto src_view = source.image.GetImage(0, 0);
       if (src_view.width != expected_width
         || src_view.height != expected_height) {
-        return ::oxygen::Err(TextureImportError::kDimensionMismatch);
+        return Err(TextureImportError::kDimensionMismatch);
       }
 
       const auto expected_row_bytes = ComputeRowBytes(expected_width, format);
       if (src_view.row_pitch_bytes != expected_row_bytes) {
-        return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+        return Err(TextureImportError::kOutputFormatInvalid);
       }
 
       auto dst_pixels = assembled.GetMutablePixels(layer, mip);
       if (dst_pixels.size() != src_view.pixels.size()) {
-        return ::oxygen::Err(TextureImportError::kDimensionMismatch);
+        return Err(TextureImportError::kDimensionMismatch);
       }
 
       std::copy(
@@ -346,12 +344,12 @@ namespace {
         const auto index = ScratchImage::ComputeSubresourceIndex(
           static_cast<uint16_t>(layer), static_cast<uint16_t>(mip), mip_levels);
         if (index >= present.size() || !present[index]) {
-          return ::oxygen::Err(TextureImportError::kInvalidMipPolicy);
+          return Err(TextureImportError::kInvalidMipPolicy);
         }
       }
     }
 
-    return ::oxygen::Ok(std::move(assembled));
+    return Ok(std::move(assembled));
   }
 
   //=== Format Conversion Helpers
@@ -523,11 +521,10 @@ namespace detail {
   }
 
   auto DecodeSource(const std::span<const std::byte> source_bytes,
-    const TextureImportDesc& desc)
-    -> oxygen::Result<ScratchImage, TextureImportError>
+    const TextureImportDesc& desc) -> Result<ScratchImage, TextureImportError>
   {
-    if (auto cancelled = CheckCancelled(desc)) {
-      return ::oxygen::Err(*cancelled);
+    if (auto canceled = CheckCancelled(desc)) {
+      return Err(*canceled);
     }
 
     DCHECK_F(
@@ -557,12 +554,11 @@ namespace detail {
     return result;
   }
 
-  auto ConvertToWorkingFormat(
-    ScratchImage&& image, const TextureImportDesc& desc)
-    -> oxygen::Result<ScratchImage, TextureImportError>
+  auto ConvertToWorkingFormat(ScratchImage&& image,
+    const TextureImportDesc& desc) -> Result<ScratchImage, TextureImportError>
   {
-    if (auto cancelled = CheckCancelled(desc)) {
-      return ::oxygen::Err(*cancelled);
+    if (auto canceled = CheckCancelled(desc)) {
+      return Err(*canceled);
     }
 
     // For now, the decoder already produces RGBA8 or RGBA32Float
@@ -575,25 +571,24 @@ namespace detail {
       LOG_F(WARNING,
         "TextureCooker: ConvertToWorkingFormat received invalid image for '{}'",
         desc.source_id);
-      return ::oxygen::Err(TextureImportError::kDecodeFailed);
+      return Err(TextureImportError::kDecodeFailed);
     }
 
-    return ::oxygen::Ok(std::move(image));
+    return Ok(std::move(image));
   }
 
-  auto ApplyContentProcessing(
-    ScratchImage&& image, const TextureImportDesc& desc)
-    -> oxygen::Result<ScratchImage, TextureImportError>
+  auto ApplyContentProcessing(ScratchImage&& image,
+    const TextureImportDesc& desc) -> Result<ScratchImage, TextureImportError>
   {
-    if (auto cancelled = CheckCancelled(desc)) {
-      return ::oxygen::Err(*cancelled);
+    if (auto canceled = CheckCancelled(desc)) {
+      return Err(*canceled);
     }
 
     if (!image.IsValid()) {
       LOG_F(WARNING,
         "TextureCooker: ApplyContentProcessing received invalid image for '{}'",
         desc.source_id);
-      return ::oxygen::Err(TextureImportError::kDecodeFailed);
+      return Err(TextureImportError::kDecodeFailed);
     }
 
     ScratchImage result = std::move(image);
@@ -608,7 +603,7 @@ namespace detail {
         // Auto-tonemap: always bake HDR to LDR for LDR output
         result = image::hdr::BakeToLdr(result, desc.exposure_ev);
         if (!result.IsValid()) {
-          return ::oxygen::Err(TextureImportError::kMipGenerationFailed);
+          return Err(TextureImportError::kMipGenerationFailed);
         }
         break;
 
@@ -617,7 +612,7 @@ namespace detail {
         if (desc.bake_hdr_to_ldr) {
           result = image::hdr::BakeToLdr(result, desc.exposure_ev);
           if (!result.IsValid()) {
-            return ::oxygen::Err(TextureImportError::kMipGenerationFailed);
+            return Err(TextureImportError::kMipGenerationFailed);
           }
         }
         // If bake_hdr_to_ldr is false, let ConvertToOutputFormat handle error
@@ -632,7 +627,7 @@ namespace detail {
       // User explicitly requested baking even for float output
       result = image::hdr::BakeToLdr(result, desc.exposure_ev);
       if (!result.IsValid()) {
-        return ::oxygen::Err(TextureImportError::kMipGenerationFailed);
+        return Err(TextureImportError::kMipGenerationFailed);
       }
     }
 
@@ -650,22 +645,22 @@ namespace detail {
       // Note: Mip generation will handle color space internally
     }
 
-    return ::oxygen::Ok(std::move(result));
+    return Ok(std::move(result));
   }
 
   auto GenerateMips(ScratchImage&& image, const TextureImportDesc& desc)
-    -> oxygen::Result<ScratchImage, TextureImportError>
+    -> Result<ScratchImage, TextureImportError>
   {
-    if (auto cancelled = CheckCancelled(desc)) {
-      return ::oxygen::Err(*cancelled);
+    if (auto canceled = CheckCancelled(desc)) {
+      return Err(*canceled);
     }
 
     if (!image.IsValid()) {
-      return ::oxygen::Err(TextureImportError::kDecodeFailed);
+      return Err(TextureImportError::kDecodeFailed);
     }
 
     if (desc.mip_policy == MipPolicy::kNone) {
-      return ::oxygen::Ok(std::move(image));
+      return Ok(std::move(image));
     }
 
     // Compute target mip count
@@ -680,7 +675,7 @@ namespace detail {
 
     // Skip if already has enough mips or only need 1
     if (target_mip_count <= 1 || image.Meta().mip_levels >= target_mip_count) {
-      return ::oxygen::Ok(std::move(image));
+      return Ok(std::move(image));
     }
 
     // Generate mip chain based on content intent
@@ -697,22 +692,21 @@ namespace detail {
     }
 
     if (!result.IsValid()) {
-      return ::oxygen::Err(TextureImportError::kMipGenerationFailed);
+      return Err(TextureImportError::kMipGenerationFailed);
     }
 
-    return ::oxygen::Ok(std::move(result));
+    return Ok(std::move(result));
   }
 
-  auto ConvertToOutputFormat(
-    ScratchImage&& image, const TextureImportDesc& desc)
-    -> oxygen::Result<ScratchImage, TextureImportError>
+  auto ConvertToOutputFormat(ScratchImage&& image,
+    const TextureImportDesc& desc) -> Result<ScratchImage, TextureImportError>
   {
-    if (auto cancelled = CheckCancelled(desc)) {
-      return ::oxygen::Err(*cancelled);
+    if (auto canceled = CheckCancelled(desc)) {
+      return Err(*canceled);
     }
 
     if (!image.IsValid()) {
-      return ::oxygen::Err(TextureImportError::kDecodeFailed);
+      return Err(TextureImportError::kDecodeFailed);
     }
 
     const Format output_format = desc.output_format;
@@ -722,7 +716,7 @@ namespace detail {
     if (output_format == Format::kBC7UNorm
       || output_format == Format::kBC7UNormSRGB) {
       if (desc.bc7_quality == Bc7Quality::kNone) {
-        return ::oxygen::Err(TextureImportError::kCompressionFailed);
+        return Err(TextureImportError::kCompressionFailed);
       }
 
       // Convert float to RGBA8 first if needed
@@ -730,13 +724,13 @@ namespace detail {
       if (current_format == Format::kRGBA32Float) {
         input_image = ConvertFloat32ToRgba8(image);
         if (!input_image.IsValid()) {
-          return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+          return Err(TextureImportError::kOutputFormatInvalid);
         }
       } else if (current_format == Format::kRGBA8UNorm
         || current_format == Format::kRGBA8UNormSRGB) {
         input_image = std::move(image);
       } else {
-        return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+        return Err(TextureImportError::kOutputFormatInvalid);
       }
 
       bc7::InitializeEncoder();
@@ -744,11 +738,11 @@ namespace detail {
         = bc7::EncodeTexture(input_image, desc.bc7_quality, desc.stop_token);
       if (!compressed.IsValid()) {
         if (desc.stop_token.stop_requested()) {
-          return ::oxygen::Err(TextureImportError::kCancelled);
+          return Err(TextureImportError::kCancelled);
         }
-        return ::oxygen::Err(TextureImportError::kCompressionFailed);
+        return Err(TextureImportError::kCompressionFailed);
       }
-      return ::oxygen::Ok(std::move(compressed));
+      return Ok(std::move(compressed));
     }
 
     // Float format output - handle RGBA16Float and RGBA32Float separately
@@ -757,41 +751,41 @@ namespace detail {
       if (current_format == Format::kRGBA32Float) {
         auto half_image = ConvertFloat32ToFloat16(image);
         if (!half_image.IsValid()) {
-          return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+          return Err(TextureImportError::kOutputFormatInvalid);
         }
-        return ::oxygen::Ok(std::move(half_image));
+        return Ok(std::move(half_image));
       }
       // Convert RGBA8 to float32 first, then to float16
       if (current_format == Format::kRGBA8UNorm
         || current_format == Format::kRGBA8UNormSRGB) {
         auto float32_image = ConvertRgba8ToFloat32(image);
         if (!float32_image.IsValid()) {
-          return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+          return Err(TextureImportError::kOutputFormatInvalid);
         }
         auto half_image = ConvertFloat32ToFloat16(float32_image);
         if (!half_image.IsValid()) {
-          return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+          return Err(TextureImportError::kOutputFormatInvalid);
         }
-        return ::oxygen::Ok(std::move(half_image));
+        return Ok(std::move(half_image));
       }
-      return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+      return Err(TextureImportError::kOutputFormatInvalid);
     }
 
     if (output_format == Format::kRGBA32Float) {
       if (current_format == Format::kRGBA32Float) {
         // Already in float32 format
-        return ::oxygen::Ok(std::move(image));
+        return Ok(std::move(image));
       }
       // Convert RGBA8 to float32
       if (current_format == Format::kRGBA8UNorm
         || current_format == Format::kRGBA8UNormSRGB) {
         auto float_image = ConvertRgba8ToFloat32(image);
         if (!float_image.IsValid()) {
-          return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+          return Err(TextureImportError::kOutputFormatInvalid);
         }
-        return ::oxygen::Ok(std::move(float_image));
+        return Ok(std::move(float_image));
       }
-      return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+      return Err(TextureImportError::kOutputFormatInvalid);
     }
 
     // LDR format - ensure we have RGBA8
@@ -799,20 +793,20 @@ namespace detail {
       || output_format == Format::kRGBA8UNormSRGB) {
       if (current_format == Format::kRGBA8UNorm
         || current_format == Format::kRGBA8UNormSRGB) {
-        return ::oxygen::Ok(std::move(image));
+        return Ok(std::move(image));
       }
       // HDR input without bake_hdr_to_ldr - error
       if (current_format == Format::kRGBA32Float) {
-        return ::oxygen::Err(TextureImportError::kHdrRequiresFloatFormat);
+        return Err(TextureImportError::kHdrRequiresFloatFormat);
       }
     }
 
     // Pass through for matching formats
     if (current_format == output_format) {
-      return ::oxygen::Ok(std::move(image));
+      return Ok(std::move(image));
     }
 
-    return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+    return Err(TextureImportError::kOutputFormatInvalid);
   }
 
   //! Pack all subresources into a contiguous buffer with proper alignment.
@@ -910,7 +904,7 @@ namespace {
   [[nodiscard]] auto CookFromScratchImage(ScratchImage&& image,
     const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
     const bool with_content_hashing)
-    -> oxygen::Result<CookedTexturePayload, TextureImportError>
+    -> Result<CookedTexturePayload, TextureImportError>
   {
     auto resolved_desc = desc;
     DLOG_F(INFO, "CookFromScratchImage: {}x{} layers={} mips={} format={}",
@@ -927,14 +921,14 @@ namespace {
 
     // Post-decode validation (uses decoded/assembled image metadata).
     if (auto error = ValidatePostDecode(resolved_desc, image.Meta())) {
-      return ::oxygen::Err(*error);
+      return Err(*error);
     }
 
     // Stage 2: Convert to working format
     auto working
       = detail::ConvertToWorkingFormat(std::move(image), resolved_desc);
     if (!working) {
-      return ::oxygen::Err(working.error());
+      return Err(working.error());
     }
 
     const bool is_working_hdr_input
@@ -951,20 +945,20 @@ namespace {
     auto processed
       = detail::ApplyContentProcessing(std::move(*working), resolved_desc);
     if (!processed) {
-      return ::oxygen::Err(processed.error());
+      return Err(processed.error());
     }
 
     // Stage 4: Generate mips
     auto with_mips = detail::GenerateMips(std::move(*processed), resolved_desc);
     if (!with_mips) {
-      return ::oxygen::Err(with_mips.error());
+      return Err(with_mips.error());
     }
 
     // Stage 5: Convert to output format
     auto output
       = detail::ConvertToOutputFormat(std::move(*with_mips), resolved_desc);
     if (!output) {
-      return ::oxygen::Err(output.error());
+      return Err(output.error());
     }
 
     DLOG_F(INFO, "CookFromScratchImage: output {}x{} layers={} mips={} fmt={}",
@@ -1007,7 +1001,7 @@ namespace {
       if (layout.offset > std::numeric_limits<uint32_t>::max()
         || layout.row_pitch > std::numeric_limits<uint32_t>::max()
         || layout.size_bytes > std::numeric_limits<uint32_t>::max()) {
-        return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+        return Err(TextureImportError::kOutputFormatInvalid);
       }
 
       layouts.push_back(data::pak::SubresourceLayout {
@@ -1019,7 +1013,7 @@ namespace {
 
     const auto policy_id_opt = ToPackingPolicyId(policy.Id());
     if (!policy_id_opt.has_value()) {
-      return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+      return Err(TextureImportError::kOutputFormatInvalid);
     }
 
     const uint32_t layouts_offset
@@ -1027,21 +1021,21 @@ namespace {
     const uint64_t layouts_bytes64 = static_cast<uint64_t>(layouts.size())
       * sizeof(data::pak::SubresourceLayout);
     if (layouts_bytes64 > std::numeric_limits<uint32_t>::max()) {
-      return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+      return Err(TextureImportError::kOutputFormatInvalid);
     }
     const auto layouts_bytes = static_cast<uint32_t>(layouts_bytes64);
 
     const auto data_offset64
       = policy.AlignSubresourceOffset(layouts_offset + layouts_bytes);
     if (data_offset64 > std::numeric_limits<uint32_t>::max()) {
-      return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+      return Err(TextureImportError::kOutputFormatInvalid);
     }
     const auto data_offset_bytes = static_cast<uint32_t>(data_offset64);
 
     const auto total_payload64
       = data_offset64 + static_cast<uint64_t>(payload_data.size());
     if (total_payload64 > std::numeric_limits<uint32_t>::max()) {
-      return ::oxygen::Err(TextureImportError::kOutputFormatInvalid);
+      return Err(TextureImportError::kOutputFormatInvalid);
     }
     const auto total_payload_size = static_cast<uint32_t>(total_payload64);
 
@@ -1054,7 +1048,7 @@ namespace {
     header.layouts_offset_bytes = layouts_offset;
     header.data_offset_bytes = data_offset_bytes;
 
-    std::vector<std::byte> final_payload(total_payload_size, std::byte { 0 });
+    std::vector final_payload(total_payload_size, std::byte { 0 });
     std::memcpy(final_payload.data(), &header, sizeof(header));
     std::memcpy(
       final_payload.data() + layouts_offset, layouts.data(), layouts_bytes);
@@ -1080,7 +1074,7 @@ namespace {
     result.payload = std::move(final_payload);
     result.layouts = std::move(layouts);
 
-    return ::oxygen::Ok(std::move(result));
+    return Ok(std::move(result));
   }
 
 } // namespace
@@ -1088,17 +1082,17 @@ namespace {
 auto CookTexture(const std::span<const std::byte> source_bytes,
   const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
   const bool with_content_hashing)
-  -> oxygen::Result<CookedTexturePayload, TextureImportError>
+  -> Result<CookedTexturePayload, TextureImportError>
 {
   // Pre-decode validation - dimensions come from the decoded image
   if (auto error = ValidatePreDecode(desc)) {
-    return ::oxygen::Err(*error);
+    return Err(*error);
   }
 
   // Stage 1: Decode
   auto decoded = detail::DecodeSource(source_bytes, desc);
   if (!decoded) {
-    return ::oxygen::Err(decoded.error());
+    return Err(decoded.error());
   }
 
   return CookFromScratchImage(
@@ -1107,15 +1101,15 @@ auto CookTexture(const std::span<const std::byte> source_bytes,
 
 auto CookTexture(ScratchImage&& image, const TextureImportDesc& desc,
   const ITexturePackingPolicy& policy, const bool with_content_hashing)
-  -> oxygen::Result<CookedTexturePayload, TextureImportError>
+  -> Result<CookedTexturePayload, TextureImportError>
 {
   // Pre-decode validation - dimensions come from the ScratchImage
   if (auto error = ValidatePreDecode(desc)) {
-    return ::oxygen::Err(*error);
+    return Err(*error);
   }
 
   if (!image.IsValid()) {
-    return ::oxygen::Err(TextureImportError::kDecodeFailed);
+    return Err(TextureImportError::kDecodeFailed);
   }
 
   return CookFromScratchImage(
@@ -1124,21 +1118,21 @@ auto CookTexture(ScratchImage&& image, const TextureImportDesc& desc,
 
 auto CookTexture(const TextureSourceSet& sources, const TextureImportDesc& desc,
   const ITexturePackingPolicy& policy, const bool with_content_hashing)
-  -> oxygen::Result<CookedTexturePayload, TextureImportError>
+  -> Result<CookedTexturePayload, TextureImportError>
 {
   // Pre-decode validation - dimensions come from decoded images
   if (auto error = ValidatePreDecode(desc)) {
-    return ::oxygen::Err(*error);
+    return Err(*error);
   }
 
   if (sources.IsEmpty()) {
-    return ::oxygen::Err(TextureImportError::kFileNotFound);
+    return Err(TextureImportError::kFileNotFound);
   }
 
   // For cube maps, we need exactly 6 sources
   if (desc.texture_type == TextureType::kTextureCube
     && sources.Count() != kCubeFaceCount) {
-    return ::oxygen::Err(TextureImportError::kArrayLayerCountInvalid);
+    return Err(TextureImportError::kArrayLayerCountInvalid);
   }
 
   // Decode all sources first
@@ -1160,7 +1154,7 @@ auto CookTexture(const TextureSourceSet& sources, const TextureImportDesc& desc,
 
     auto decoded = DecodeToScratchImage(source.bytes, decode_opts);
     if (!decoded) {
-      return ::oxygen::Err(decoded.error());
+      return Err(decoded.error());
     }
 
     decoded_sources.push_back(DecodedSource {
@@ -1177,7 +1171,7 @@ auto CookTexture(const TextureSourceSet& sources, const TextureImportDesc& desc,
     for (const auto& source : sources.Sources()) {
       const auto face_idx = source.subresource.array_layer;
       if (face_idx >= kCubeFaceCount) {
-        return ::oxygen::Err(TextureImportError::kArrayLayerCountInvalid);
+        return Err(TextureImportError::kArrayLayerCountInvalid);
       }
       // Find the corresponding decoded image
       size_t src_idx = 0;
@@ -1193,7 +1187,7 @@ auto CookTexture(const TextureSourceSet& sources, const TextureImportDesc& desc,
     auto cube = AssembleCubeFromFaces(
       std::span<const ScratchImage, kCubeFaceCount>(faces));
     if (!cube) {
-      return ::oxygen::Err(cube.error());
+      return Err(cube.error());
     }
 
     return CookFromScratchImage(
@@ -1203,7 +1197,7 @@ auto CookTexture(const TextureSourceSet& sources, const TextureImportDesc& desc,
   // For array textures, assemble into a single ScratchImage
   auto assembled = AssembleArrayTexture(decoded_sources, desc.texture_type);
   if (!assembled) {
-    return ::oxygen::Err(assembled.error());
+    return Err(assembled.error());
   }
   return CookFromScratchImage(
     std::move(*assembled), desc, policy, with_content_hashing);

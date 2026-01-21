@@ -6,10 +6,10 @@
 
 #pragma once
 
+#include <glm/glm.hpp>
+
 #include <Oxygen/Content/Import/ImportOptions.h>
 #include <Oxygen/Content/Import/Internal/fbx/ufbx.h>
-
-#include <glm/glm.hpp>
 
 namespace oxygen::content::import::coord {
 

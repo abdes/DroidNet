@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <ranges>
 #include <string>
 #include <string_view>
 
@@ -42,10 +43,9 @@ namespace {
   //! Lower-case an ASCII string in-place and return it.
   auto ToLowerAscii(std::string value) -> std::string
   {
-    std::transform(
-      value.begin(), value.end(), value.begin(), [](const unsigned char ch) {
-        return static_cast<char>(std::tolower(ch));
-      });
+    std::ranges::transform(value, value.begin(), [](const unsigned char ch) {
+      return static_cast<char>(std::tolower(ch));
+    });
     return value;
   }
 } // namespace

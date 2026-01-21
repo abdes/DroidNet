@@ -7,18 +7,12 @@
 #include <Oxygen/Content/Import/Internal/Pipelines/ScenePipeline.h>
 
 #include <algorithm>
-#include <array>
-#include <cctype>
-#include <cmath>
 #include <cstddef>
-#include <cstring>
 #include <filesystem>
-#include <limits>
 #include <numbers>
 #include <span>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -36,32 +30,32 @@ namespace oxygen::content::import {
 
 namespace {
 
-  using oxygen::data::AssetKey;
-  using oxygen::data::AssetType;
-  using oxygen::data::ComponentType;
-  using oxygen::data::pak::DirectionalLightRecord;
-  using oxygen::data::pak::NodeRecord;
-  using oxygen::data::pak::OrthographicCameraRecord;
-  using oxygen::data::pak::PerspectiveCameraRecord;
-  using oxygen::data::pak::PointLightRecord;
-  using oxygen::data::pak::RenderableRecord;
-  using oxygen::data::pak::SceneAssetDesc;
-  using oxygen::data::pak::SceneComponentTableDesc;
-  using oxygen::data::pak::SceneEnvironmentBlockHeader;
-  using oxygen::data::pak::SceneEnvironmentSystemRecordHeader;
-  using oxygen::data::pak::SpotLightRecord;
+  using data::AssetKey;
+  using data::AssetType;
+  using data::ComponentType;
+  using data::pak::DirectionalLightRecord;
+  using data::pak::NodeRecord;
+  using data::pak::OrthographicCameraRecord;
+  using data::pak::PerspectiveCameraRecord;
+  using data::pak::PointLightRecord;
+  using data::pak::RenderableRecord;
+  using data::pak::SceneAssetDesc;
+  using data::pak::SceneComponentTableDesc;
+  using data::pak::SceneEnvironmentBlockHeader;
+  using data::pak::SceneEnvironmentSystemRecordHeader;
+  using data::pak::SpotLightRecord;
 
   struct BuildOutcome {
     std::vector<std::byte> bytes;
     std::vector<ImportDiagnostic> diagnostics;
-    bool cancelled = false;
+    bool canceled = false;
     bool success = false;
   };
 
   struct StageRunOutcome {
     SceneStageResult result;
     std::vector<ImportDiagnostic> diagnostics;
-    bool cancelled = false;
+    bool canceled = false;
   };
 
   [[nodiscard]] auto MakeCancelDiagnostic(std::string_view source_id)
@@ -69,8 +63,8 @@ namespace {
   {
     return ImportDiagnostic {
       .severity = ImportSeverity::kError,
-      .code = "import.cancelled",
-      .message = "Import cancelled",
+      .code = "import.canceled",
+      .message = "Import canceled",
       .source_path = std::string(source_id),
       .object_path = {},
     };
@@ -157,8 +151,8 @@ namespace {
   {
     BuildOutcome outcome;
 
-    oxygen::serio::MemoryStream stream;
-    oxygen::serio::Writer<oxygen::serio::MemoryStream> writer(stream);
+    serio::MemoryStream stream;
+    serio::Writer writer(stream);
     const auto packed = writer.ScopedAlignment(1);
 
     SceneAssetDesc desc {};
@@ -171,14 +165,12 @@ namespace {
     desc.nodes.count = static_cast<uint32_t>(build.nodes.size());
     desc.nodes.entry_size = sizeof(NodeRecord);
 
-    const auto nodes_bytes
-      = std::as_bytes(std::span<const NodeRecord>(build.nodes));
+    const auto nodes_bytes = std::as_bytes(std::span(build.nodes));
 
-    desc.scene_strings.offset
-      = static_cast<oxygen::data::pak::StringTableOffsetT>(
-        sizeof(SceneAssetDesc) + nodes_bytes.size());
+    desc.scene_strings.offset = static_cast<data::pak::StringTableOffsetT>(
+      sizeof(SceneAssetDesc) + nodes_bytes.size());
     desc.scene_strings.size
-      = static_cast<oxygen::data::pak::StringTableSizeT>(build.strings.size());
+      = static_cast<data::pak::StringTableSizeT>(build.strings.size());
 
     struct ComponentTablePayload {
       SceneComponentTableDesc desc {};
@@ -204,23 +196,20 @@ namespace {
     };
 
     add_component_table(ComponentType::kRenderable, sizeof(RenderableRecord),
-      std::as_bytes(std::span<const RenderableRecord>(build.renderables)));
+      std::as_bytes(std::span(build.renderables)));
     add_component_table(ComponentType::kPerspectiveCamera,
       sizeof(PerspectiveCameraRecord),
-      std::as_bytes(
-        std::span<const PerspectiveCameraRecord>(build.perspective_cameras)));
+      std::as_bytes(std::span(build.perspective_cameras)));
     add_component_table(ComponentType::kOrthographicCamera,
       sizeof(OrthographicCameraRecord),
-      std::as_bytes(
-        std::span<const OrthographicCameraRecord>(build.orthographic_cameras)));
+      std::as_bytes(std::span(build.orthographic_cameras)));
     add_component_table(ComponentType::kDirectionalLight,
       sizeof(DirectionalLightRecord),
-      std::as_bytes(
-        std::span<const DirectionalLightRecord>(build.directional_lights)));
+      std::as_bytes(std::span(build.directional_lights)));
     add_component_table(ComponentType::kPointLight, sizeof(PointLightRecord),
-      std::as_bytes(std::span<const PointLightRecord>(build.point_lights)));
+      std::as_bytes(std::span(build.point_lights)));
     add_component_table(ComponentType::kSpotLight, sizeof(SpotLightRecord),
-      std::as_bytes(std::span<const SpotLightRecord>(build.spot_lights)));
+      std::as_bytes(std::span(build.spot_lights)));
 
     std::vector<SceneComponentTableDesc> component_directory;
 
@@ -228,7 +217,7 @@ namespace {
       size_t payload_cursor = static_cast<size_t>(desc.scene_strings.offset)
         + desc.scene_strings.size;
       desc.component_table_directory_offset
-        = static_cast<oxygen::data::pak::OffsetT>(payload_cursor);
+        = static_cast<data::pak::OffsetT>(payload_cursor);
       desc.component_table_count
         = static_cast<uint32_t>(component_tables.size());
 
@@ -238,7 +227,7 @@ namespace {
       component_directory.reserve(component_tables.size());
       for (auto& table : component_tables) {
         table.desc.table.offset
-          = static_cast<oxygen::data::pak::OffsetT>(payload_cursor);
+          = static_cast<data::pak::OffsetT>(payload_cursor);
         payload_cursor += table.bytes.size();
         component_directory.push_back(table.desc);
       }
@@ -263,8 +252,7 @@ namespace {
       return outcome;
     }
 
-    if (auto result
-      = writer.WriteBlob(std::span<const std::byte>(build.strings));
+    if (auto result = writer.WriteBlob(std::span(build.strings));
       !result.has_value()) {
       diagnostics.push_back(MakeErrorDiagnostic("scene.serialize_failed",
         "Failed to write string table", source_id, {}));
@@ -337,8 +325,8 @@ namespace {
       SceneEnvironmentSystemRecordHeader header {};
       std::memcpy(&header, system.record_bytes.data(), sizeof(header));
       const auto record_size = static_cast<size_t>(header.record_size);
-      if (auto result = writer.WriteBlob(std::span<const std::byte>(
-            system.record_bytes.data(), record_size));
+      if (auto result
+        = writer.WriteBlob(std::span(system.record_bytes.data(), record_size));
         !result.has_value()) {
         diagnostics.push_back(MakeErrorDiagnostic("scene.serialize_failed",
           "Failed to write environment record", source_id, {}));
@@ -487,7 +475,7 @@ auto ScenePipeline::Worker() -> co::Co<>
     } else {
       const SceneStageInput stage_input {
         .source_id = item.source_id,
-        .geometry_keys = std::span<const data::AssetKey>(item.geometry_keys),
+        .geometry_keys = std::span<const AssetKey>(item.geometry_keys),
         .request = &item.request,
         .naming_service = item.naming_service,
         .stop_token = item.stop_token,
@@ -495,11 +483,11 @@ auto ScenePipeline::Worker() -> co::Co<>
 
       auto stage_outcome = co_await thread_pool_.Run(
         [adapter = item.adapter_owner, build_stage = item.build_stage,
-          stage_input](co::ThreadPool::CancelToken cancelled) {
+          stage_input](co::ThreadPool::CancelToken canceled) {
           DLOG_F(1, "ScenePipeline: Build scene stage");
           StageRunOutcome out;
-          if (cancelled || stage_input.stop_token.stop_requested()) {
-            out.cancelled = true;
+          if (canceled || stage_input.stop_token.stop_requested()) {
+            out.canceled = true;
             return out;
           }
           out.result = build_stage(adapter.get(), stage_input, out.diagnostics);
@@ -509,7 +497,7 @@ auto ScenePipeline::Worker() -> co::Co<>
       diagnostics.insert(diagnostics.end(), stage_outcome.diagnostics.begin(),
         stage_outcome.diagnostics.end());
 
-      if (stage_outcome.cancelled) {
+      if (stage_outcome.canceled) {
         co_await ReportCancelled(std::move(item));
         continue;
       }
@@ -543,9 +531,9 @@ auto ScenePipeline::Worker() -> co::Co<>
     if (outcome.success && config_.with_content_hashing) {
       auto hash = co_await thread_pool_.Run(
         [bytes = std::span<const std::byte>(outcome.bytes),
-          stop_token = item.stop_token](co::ThreadPool::CancelToken cancelled) {
+          stop_token = item.stop_token](co::ThreadPool::CancelToken canceled) {
           DLOG_F(1, "ScenePipeline: Compute content hash");
-          if (stop_token.stop_requested() || cancelled) {
+          if (stop_token.stop_requested() || canceled) {
             return uint64_t { 0 };
           }
           return util::ComputeContentHash(bytes);
@@ -570,7 +558,7 @@ auto ScenePipeline::Worker() -> co::Co<>
       const auto relpath
         = item.request.loose_cooked_layout.SceneDescriptorRelPath(scene_name);
 
-      result.cooked = ScenePipeline::CookedScenePayload {
+      result.cooked = CookedScenePayload {
         .scene_key = BuildSceneAssetKey(
           virtual_path, item.request.options.asset_key_policy),
         .virtual_path = virtual_path,
@@ -585,13 +573,13 @@ auto ScenePipeline::Worker() -> co::Co<>
 
 auto ScenePipeline::ReportCancelled(WorkItem item) -> co::Co<>
 {
-  WorkResult cancelled {
+  WorkResult canceled {
     .source_id = std::move(item.source_id),
     .cooked = std::nullopt,
     .diagnostics = { MakeCancelDiagnostic(item.source_id) },
     .success = false,
   };
-  co_await output_channel_.Send(std::move(cancelled));
+  co_await output_channel_.Send(std::move(canceled));
 }
 
 } // namespace oxygen::content::import

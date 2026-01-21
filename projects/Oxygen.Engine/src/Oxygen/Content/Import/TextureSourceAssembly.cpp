@@ -4,10 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Import/TextureSourceAssembly.h>
-
-#include <Oxygen/Content/Import/Internal/TextureSourceAssembly_internal.h>
-
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -20,6 +16,8 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/Import/Internal/TextureSourceAssembly_internal.h>
+#include <Oxygen/Content/Import/TextureSourceAssembly.h>
 
 namespace oxygen::content::import {
 
@@ -243,12 +241,12 @@ auto ComputeCubeDirectionD3D(const CubeFace face, const float u,
 }
 
 auto AssembleCubeFromFaces(std::span<const ScratchImage, kCubeFaceCount> faces)
-  -> oxygen::Result<ScratchImage, TextureImportError>
+  -> Result<ScratchImage, TextureImportError>
 {
   // Validate all faces are valid
   for (size_t i = 0; i < kCubeFaceCount; ++i) {
     if (!faces[i].IsValid()) {
-      return oxygen::Err(TextureImportError::kInvalidDimensions);
+      return Err(TextureImportError::kInvalidDimensions);
     }
   }
 
@@ -261,21 +259,21 @@ auto AssembleCubeFromFaces(std::span<const ScratchImage, kCubeFaceCount> faces)
 
   // Cube faces must be square
   if (face_width != face_height) {
-    return oxygen::Err(TextureImportError::kInvalidDimensions);
+    return Err(TextureImportError::kInvalidDimensions);
   }
 
   // Validate all faces have matching dimensions and format
   for (size_t i = 1; i < kCubeFaceCount; ++i) {
     const auto& face_meta = faces[i].Meta();
     if (face_meta.width != face_width || face_meta.height != face_height) {
-      return oxygen::Err(TextureImportError::kDimensionMismatch);
+      return Err(TextureImportError::kDimensionMismatch);
     }
     if (face_meta.format != format) {
-      return oxygen::Err(TextureImportError::kDimensionMismatch);
+      return Err(TextureImportError::kDimensionMismatch);
     }
     // Each face must have only 1 mip level (mips generated later)
     if (face_meta.mip_levels != 1) {
-      return oxygen::Err(TextureImportError::kInvalidMipPolicy);
+      return Err(TextureImportError::kInvalidMipPolicy);
     }
   }
 
@@ -292,7 +290,7 @@ auto AssembleCubeFromFaces(std::span<const ScratchImage, kCubeFaceCount> faces)
 
   ScratchImage cube = ScratchImage::Create(meta);
   if (!cube.IsValid()) {
-    return oxygen::Err(TextureImportError::kOutOfMemory);
+    return Err(TextureImportError::kOutOfMemory);
   }
 
   // Copy each face into the cube map
@@ -301,14 +299,14 @@ auto AssembleCubeFromFaces(std::span<const ScratchImage, kCubeFaceCount> faces)
     const auto dst_pixels = cube.GetMutablePixels(static_cast<uint16_t>(i), 0);
 
     if (src_image.pixels.size() != dst_pixels.size()) {
-      return oxygen::Err(TextureImportError::kDimensionMismatch);
+      return Err(TextureImportError::kDimensionMismatch);
     }
 
     std::copy(
       src_image.pixels.begin(), src_image.pixels.end(), dst_pixels.data());
   }
 
-  return oxygen::Ok(std::move(cube));
+  return Ok(std::move(cube));
 }
 
 //=== Equirectangular to Cube Conversion
@@ -434,7 +432,7 @@ namespace {
     };
 
     // Sample 4x4 grid
-    std::array<float, 4> result { 0.0F, 0.0F, 0.0F, 0.0F };
+    std::array result { 0.0F, 0.0F, 0.0F, 0.0F };
     float weight_sum = 0.0F;
 
     for (int32_t j = -1; j <= 2; ++j) {
@@ -546,11 +544,11 @@ namespace detail {
 
 auto ConvertEquirectangularToCube(
   const ScratchImage& equirect, const EquirectToCubeOptions& options)
-  -> oxygen::Result<ScratchImage, TextureImportError>
+  -> Result<ScratchImage, TextureImportError>
 {
   // Validate input
   if (!equirect.IsValid()) {
-    return ::oxygen::Err(TextureImportError::kDecodeFailed);
+    return Err(TextureImportError::kDecodeFailed);
   }
 
   const auto& src_meta = equirect.Meta();
@@ -560,17 +558,17 @@ auto ConvertEquirectangularToCube(
   const float aspect
     = static_cast<float>(src_meta.width) / static_cast<float>(src_meta.height);
   if (aspect < 1.5F || aspect > 2.5F) {
-    return ::oxygen::Err(TextureImportError::kInvalidDimensions);
+    return Err(TextureImportError::kInvalidDimensions);
   }
 
   // Only support float formats for HDR sampling
   // For LDR input, caller should convert to float first
   if (src_meta.format != Format::kRGBA32Float) {
-    return ::oxygen::Err(TextureImportError::kInvalidOutputFormat);
+    return Err(TextureImportError::kInvalidOutputFormat);
   }
 
   if (options.face_size == 0) {
-    return ::oxygen::Err(TextureImportError::kInvalidDimensions);
+    return Err(TextureImportError::kInvalidDimensions);
   }
 
   // Create output cube map
@@ -586,7 +584,7 @@ auto ConvertEquirectangularToCube(
 
   ScratchImage cube = ScratchImage::Create(cube_meta);
   if (!cube.IsValid()) {
-    return ::oxygen::Err(TextureImportError::kOutOfMemory);
+    return Err(TextureImportError::kOutOfMemory);
   }
 
   // Get source pixels
@@ -604,7 +602,7 @@ auto ConvertEquirectangularToCube(
       equirect, src_meta, src_pixels, face, face_size, use_bicubic, cube);
   }
 
-  return ::oxygen::Ok(std::move(cube));
+  return Ok(std::move(cube));
 }
 
 //=== CubeMapImageLayout to_string
@@ -883,12 +881,11 @@ namespace detail {
 
 } // namespace detail
 
-auto ExtractCubeFacesFromLayout(
-  const ScratchImage& layout_image, const CubeMapImageLayout layout)
-  -> oxygen::Result<ScratchImage, TextureImportError>
+auto ExtractCubeFacesFromLayout(const ScratchImage& layout_image,
+  const CubeMapImageLayout layout) -> Result<ScratchImage, TextureImportError>
 {
   if (!layout_image.IsValid()) {
-    return ::oxygen::Err(TextureImportError::kDecodeFailed);
+    return Err(TextureImportError::kDecodeFailed);
   }
 
   if (layout == CubeMapImageLayout::kAuto) {
@@ -896,20 +893,20 @@ auto ExtractCubeFacesFromLayout(
   }
 
   if (layout == CubeMapImageLayout::kUnknown) {
-    return ::oxygen::Err(TextureImportError::kInvalidDimensions);
+    return Err(TextureImportError::kInvalidDimensions);
   }
 
   // Detect face size from layout
   const auto& meta = layout_image.Meta();
   const auto detection = DetectCubeMapLayout(meta.width, meta.height);
   if (!detection.has_value() || detection->layout != layout) {
-    return ::oxygen::Err(TextureImportError::kDimensionMismatch);
+    return Err(TextureImportError::kDimensionMismatch);
   }
 
   const uint32_t face_size = detection->face_size;
   const std::size_t bytes_per_pixel = detail::GetBytesPerPixel(meta.format);
   if (bytes_per_pixel == 0) {
-    return ::oxygen::Err(TextureImportError::kUnsupportedFormat);
+    return Err(TextureImportError::kUnsupportedFormat);
   }
 
   DLOG_F(INFO, "ExtractCubeFacesFromLayout: {}x{} {} -> {}px faces", meta.width,
@@ -928,7 +925,7 @@ auto ExtractCubeFacesFromLayout(
 
   ScratchImage cube = ScratchImage::Create(cube_meta);
   if (!cube.IsValid()) {
-    return ::oxygen::Err(TextureImportError::kOutOfMemory);
+    return Err(TextureImportError::kOutOfMemory);
   }
 
   // Get source image data
@@ -940,19 +937,19 @@ auto ExtractCubeFacesFromLayout(
       src_view, layout, face_size, bytes_per_pixel, face, cube);
   }
 
-  return ::oxygen::Ok(std::move(cube));
+  return Ok(std::move(cube));
 }
 
 auto ExtractCubeFacesFromLayout(const ScratchImage& layout_image)
-  -> oxygen::Result<ScratchImage, TextureImportError>
+  -> Result<ScratchImage, TextureImportError>
 {
   if (!layout_image.IsValid()) {
-    return ::oxygen::Err(TextureImportError::kDecodeFailed);
+    return Err(TextureImportError::kDecodeFailed);
   }
 
   const auto detection = DetectCubeMapLayout(layout_image);
   if (!detection.has_value()) {
-    return ::oxygen::Err(TextureImportError::kDimensionMismatch);
+    return Err(TextureImportError::kDimensionMismatch);
   }
 
   return ExtractCubeFacesFromLayout(layout_image, detection->layout);

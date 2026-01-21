@@ -8,7 +8,6 @@
 
 #include <array>
 #include <cstdint>
-#include <span>
 
 #include <Oxygen/Content/Import/ScratchImage.h>
 #include <Oxygen/Content/Import/TextureImportTypes.h>

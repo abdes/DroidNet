@@ -10,13 +10,11 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/Import/AsyncImportService.h>
-#include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/Import/Internal/JobEntry.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/OxCo/Channel.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/LiveObject.h>
 #include <Oxygen/OxCo/Nursery.h>
 
@@ -46,7 +44,7 @@ namespace oxygen::content::import::detail {
  ### Cancellation
 
  Each job has an associated `co::Event` for cancellation. Cancellation is
- always reported via `on_complete` with a cancelled diagnostic.
+ always reported via `on_complete` with a canceled diagnostic.
 
  @warning Cancellation must be triggered on the import thread's event loop.
           Triggering cancellation from another thread can resume coroutines on

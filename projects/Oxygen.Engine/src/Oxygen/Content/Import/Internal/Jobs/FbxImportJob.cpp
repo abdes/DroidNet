@@ -26,9 +26,7 @@
 #include <Oxygen/Content/Import/Internal/WorkDispatcher.h>
 #include <Oxygen/Content/Import/Internal/WorkPayloadStore.h>
 #include <Oxygen/Content/Import/Internal/fbx/FbxAdapter.h>
-#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/OxCo/Detail/ScopeGuard.h>
 #include <Oxygen/OxCo/Nursery.h>
 
 namespace oxygen::content::import::detail {
@@ -108,7 +106,7 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
   ReportProgress(ImportPhase::kParsing, 0.0f, 0.0f, 0U, 0U, "Parsing FBX...");
   auto scene = co_await ParseScene(session);
   AddDiagnostics(session, std::move(scene.diagnostics));
-  if (scene.cancelled || !scene.success) {
+  if (scene.canceled || !scene.success) {
     ReportProgress(
       ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "FBX parse failed");
     co_return co_await FinalizeSession(session);
@@ -118,9 +116,9 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
     ImportPhase::kParsing, 0.05f, 0.0f, 0U, 0U, "Loading texture sources...");
   auto external_textures = co_await LoadExternalTextureBytes(scene, session);
   AddDiagnostics(session, std::move(external_textures.diagnostics));
-  if (external_textures.cancelled) {
+  if (external_textures.canceled) {
     ReportProgress(
-      ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "FBX load cancelled");
+      ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "FBX load canceled");
     co_return co_await FinalizeSession(session);
   }
 
@@ -130,18 +128,18 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto stop_token = StopToken();
   auto plan_outcome = co_await ThreadPool()->Run(
     [this, &scene, request_copy, stop_token, &external_textures](
-      co::ThreadPool::CancelToken cancelled) -> PlanBuildOutcome {
+      co::ThreadPool::CancelToken canceled) -> PlanBuildOutcome {
       DLOG_F(1, "FbxImportJob: BuildPlan task begin");
-      if (cancelled || stop_token.stop_requested()) {
-        PlanBuildOutcome cancelled_outcome;
-        cancelled_outcome.cancelled = true;
-        return cancelled_outcome;
+      if (canceled || stop_token.stop_requested()) {
+        PlanBuildOutcome canceled_outcome;
+        canceled_outcome.canceled = true;
+        return canceled_outcome;
       }
       return BuildPlan(const_cast<ParsedFbxScene&>(scene), request_copy,
         stop_token, external_textures.bytes);
     });
   AddDiagnostics(session, std::move(plan_outcome.diagnostics));
-  if (plan_outcome.cancelled || !plan_outcome.plan) {
+  if (plan_outcome.canceled || !plan_outcome.plan) {
     ReportProgress(
       ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "Plan build failed");
     co_return co_await FinalizeSession(session);
@@ -196,11 +194,11 @@ auto FbxImportJob::ParseScene(ImportSession& session) -> co::Co<ParsedFbxScene>
 
   auto parsed = co_await ThreadPool()->Run(
     [request_copy, stop_token, naming_service](
-      co::ThreadPool::CancelToken cancelled) {
+      co::ThreadPool::CancelToken canceled) {
       DLOG_F(1, "FbxImportJob: ParseScene task begin");
       ParsedFbxScene out;
-      if (cancelled || stop_token.stop_requested()) {
-        out.cancelled = true;
+      if (canceled || stop_token.stop_requested()) {
+        out.canceled = true;
         return out;
       }
 
@@ -238,7 +236,7 @@ auto FbxImportJob::LoadExternalTextureBytes(ParsedFbxScene& scene,
   }
 
   if (StopToken().stop_requested()) {
-    outcome.cancelled = true;
+    outcome.canceled = true;
     co_return outcome;
   }
 
@@ -272,7 +270,7 @@ auto FbxImportJob::LoadExternalTextureBytes(ParsedFbxScene& scene,
 
   for (const auto& source : sources) {
     if (StopToken().stop_requested()) {
-      outcome.cancelled = true;
+      outcome.canceled = true;
       co_return outcome;
     }
 

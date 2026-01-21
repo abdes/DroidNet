@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -147,7 +146,7 @@ struct LooseCookedLayout final : Layout {
   /*!
    If empty, resource files are written directly under the cooked root.
   */
-  std::string resources_dir = std::string(Layout::kResourcesDirName);
+  std::string resources_dir = std::string(kResourcesDirName);
 
   //! File name for the buffers table.
   std::string buffers_table_file_name = "buffers.table";
@@ -169,15 +168,15 @@ struct LooseCookedLayout final : Layout {
 
   //! Subfolder for scene descriptors.
   /*! Set to empty to place scenes directly under `descriptors_dir`. */
-  std::string scenes_subdir = std::string(Layout::kScenesDirName);
+  std::string scenes_subdir = std::string(kScenesDirName);
 
   //! Subfolder for geometry descriptors.
   /*! Set to empty to place geometry directly under `descriptors_dir`. */
-  std::string geometry_subdir = std::string(Layout::kGeometryDirName);
+  std::string geometry_subdir = std::string(kGeometryDirName);
 
   //! Subfolder for material descriptors.
   /*! Set to empty to place materials directly under `descriptors_dir`. */
-  std::string materials_subdir = std::string(Layout::kMaterialsDirName);
+  std::string materials_subdir = std::string(kMaterialsDirName);
 
   //! Subfolder for texture descriptors.
   /*!

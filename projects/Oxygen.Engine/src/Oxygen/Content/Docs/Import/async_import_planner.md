@@ -447,7 +447,7 @@ planner.Tracker(geometry_item)
 - Job nursery cancellation stops all pipeline workers.
 - Awaiting readiness events must be cancellation‑safe.
 - On cancellation, the importer aborts traversal and finalizes the session
-  with `success=false` and diagnostic code `import.cancelled`.
+  with `success=false` and diagnostic code `import.canceled`.
 
 ---
 

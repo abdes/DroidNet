@@ -152,7 +152,7 @@ public:
 
 For each work item:
 
-1) Check cancellation; if cancelled, return `success=false`.
+1) Check cancellation; if canceled, return `success=false`.
 2) Compute scene naming:
    - `scene_name = BuildSceneName(request)`
    - `virtual_path = request.loose_cooked_layout.SceneVirtualPath(scene_name)`

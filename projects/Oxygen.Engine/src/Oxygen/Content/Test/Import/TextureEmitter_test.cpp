@@ -4,9 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstring>
 #include <filesystem>
 #include <fstream>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Content/Import/IAsyncFileWriter.h>
 #include <Oxygen/Content/Import/Internal/Emitters/TextureEmitter.h>
@@ -14,7 +15,6 @@
 #include <Oxygen/Content/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Content/Import/Internal/WindowsFileWriter.h>
 #include <Oxygen/OxCo/Run.h>
-#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
@@ -88,7 +88,7 @@ auto ParseTextureTable(const std::vector<std::byte>& data)
 //=== Test Fixture ===--------------------------------------------------------//
 
 //! Test fixture for TextureEmitter tests.
-class TextureEmitterTest : public ::testing::Test {
+class TextureEmitterTest : public testing::Test {
 protected:
   auto SetUp() -> void override
   {

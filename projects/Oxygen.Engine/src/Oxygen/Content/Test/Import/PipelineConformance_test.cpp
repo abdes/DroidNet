@@ -6,7 +6,6 @@
 
 #include <array>
 #include <cstddef>
-#include <cstring>
 #include <memory>
 #include <span>
 #include <stop_token>
@@ -252,7 +251,7 @@ auto MakeMinimalSceneBuild(std::string_view name) -> SceneBuild
   return build;
 }
 
-class PipelineConformanceTest : public ::testing::Test {
+class PipelineConformanceTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
 };
@@ -263,10 +262,10 @@ NOLINT_TEST_F(PipelineConformanceTest, BufferPipeline_ProgressCounters_Update)
   // Arrange
   BufferPipeline::WorkResult result;
   PipelineProgress progress;
-  co::ThreadPool pool(loop_, 1);
+  ThreadPool pool(loop_, 1);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     BufferPipeline pipeline(pool);
 
     OXCO_WITH_NURSERY(n)
@@ -296,10 +295,10 @@ NOLINT_TEST_F(PipelineConformanceTest, TexturePipeline_ProgressCounters_Update)
 {
   // Arrange
   TexturePipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 1);
+  ThreadPool pool(loop_, 1);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     TexturePipeline pipeline(pool);
 
     OXCO_WITH_NURSERY(n)
@@ -321,10 +320,10 @@ NOLINT_TEST_F(PipelineConformanceTest, MaterialPipeline_ProgressCounters_Update)
 {
   // Arrange
   MaterialPipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 1);
+  ThreadPool pool(loop_, 1);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     MaterialPipeline pipeline(pool);
 
     OXCO_WITH_NURSERY(n)
@@ -346,10 +345,10 @@ NOLINT_TEST_F(PipelineConformanceTest, GeometryPipeline_ProgressCounters_Update)
 {
   // Arrange
   GeometryPipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 1);
+  ThreadPool pool(loop_, 1);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     GeometryPipeline pipeline(pool);
 
     OXCO_WITH_NURSERY(n)
@@ -374,10 +373,10 @@ NOLINT_TEST_F(PipelineConformanceTest, ScenePipeline_ProgressCounters_Update)
   adapter->build = MakeMinimalSceneBuild("Root");
 
   ScenePipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 1);
+  ThreadPool pool(loop_, 1);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     ScenePipeline pipeline(pool);
 
     OXCO_WITH_NURSERY(n)
@@ -399,12 +398,12 @@ NOLINT_TEST_F(PipelineConformanceTest, BufferPipeline_StopToken_Cancels)
 {
   // Arrange
   BufferPipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 1);
+  ThreadPool pool(loop_, 1);
   std::stop_source source;
   source.request_stop();
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     BufferPipeline pipeline(pool);
 
     OXCO_WITH_NURSERY(n)
@@ -430,12 +429,12 @@ NOLINT_TEST_F(PipelineConformanceTest, TexturePipeline_StopToken_Cancels)
 {
   // Arrange
   TexturePipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 1);
+  ThreadPool pool(loop_, 1);
   std::stop_source source;
   source.request_stop();
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     TexturePipeline pipeline(pool);
 
     OXCO_WITH_NURSERY(n)
@@ -462,12 +461,12 @@ NOLINT_TEST_F(PipelineConformanceTest, ScenePipeline_StopToken_Cancels)
   adapter->build = MakeMinimalSceneBuild("Root");
 
   ScenePipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 1);
+  ThreadPool pool(loop_, 1);
   std::stop_source source;
   source.request_stop();
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&]() -> Co<> {
     ScenePipeline pipeline(pool);
 
     OXCO_WITH_NURSERY(n)

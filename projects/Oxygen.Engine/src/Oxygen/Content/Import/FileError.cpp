@@ -4,13 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Import/FileError.h>
-
 #include <format>
 
 #ifdef _WIN32
 #  include <Windows.h>
 #endif
+
+#include <Oxygen/Content/Import/FileError.h>
 
 namespace oxygen::content::import {
 

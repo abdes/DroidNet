@@ -10,7 +10,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <numeric>
 #include <optional>
 #include <span>
 #include <string>
@@ -174,7 +173,7 @@ namespace {
       return;
     }
 
-    std::vector<glm::vec3> normals(vertices.size(), glm::vec3(0.0F));
+    std::vector normals(vertices.size(), glm::vec3(0.0F));
 
     for (const auto& bucket : buckets) {
       const auto tri_count = bucket.indices.size() / 3;
@@ -284,8 +283,8 @@ namespace {
     std::copy_n(bounds.min.data(), 3, asset_desc.bounding_box_min);
     std::copy_n(bounds.max.data(), 3, asset_desc.bounding_box_max);
 
-    oxygen::serio::MemoryStream stream;
-    oxygen::serio::Writer<oxygen::serio::MemoryStream> writer(stream);
+    serio::MemoryStream stream;
+    serio::Writer writer(stream);
     const auto pack = writer.ScopedAlignment(1);
 
     const auto asset_result = writer.WriteBlob(
@@ -382,7 +381,7 @@ namespace {
     }
 
     const auto data = stream.Data();
-    return std::vector<std::byte>(data.begin(), data.end());
+    return std::vector(data.begin(), data.end());
   }
 
   [[nodiscard]] auto ResolveGeometryKey(const ImportRequest& request,
@@ -912,7 +911,7 @@ namespace {
     const void* source_key = nullptr;
     std::optional<GeometryPipeline::CookedGeometryPayload> cooked;
     std::vector<ImportDiagnostic> diagnostics;
-    bool cancelled = false;
+    bool canceled = false;
     bool success = false;
   };
 
@@ -1012,11 +1011,10 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
     co_return std::nullopt;
   }
 
-  std::vector<std::byte> input_copy(
-    descriptor_bytes.begin(), descriptor_bytes.end());
+  std::vector input_copy(descriptor_bytes.begin(), descriptor_bytes.end());
   serio::MemoryStream input_stream(
-    std::span<std::byte>(input_copy.data(), input_copy.size()));
-  serio::Reader<serio::MemoryStream> reader(input_stream);
+    std::span(input_copy.data(), input_copy.size()));
+  serio::Reader reader(input_stream);
   const auto pack_reader = reader.ScopedAlignment(1);
 
   auto read_pod = [&reader](auto& value) -> bool {
@@ -1038,7 +1036,7 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
   }
 
   serio::MemoryStream output_stream;
-  serio::Writer<serio::MemoryStream> writer(output_stream);
+  serio::Writer writer(output_stream);
   const auto pack_writer = writer.ScopedAlignment(1);
 
   asset_desc.header.content_hash = 0;
@@ -1179,14 +1177,14 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
   }
 
   const auto output_span = output_stream.Data();
-  std::vector<std::byte> output_bytes(output_span.begin(), output_span.end());
+  std::vector output_bytes(output_span.begin(), output_span.end());
 
   if (config_.with_content_hashing) {
     const auto hash = co_await thread_pool_.Run(
       [bytes = std::span<const std::byte>(output_bytes.data(),
-         output_bytes.size())](co::ThreadPool::CancelToken cancelled) noexcept {
+         output_bytes.size())](co::ThreadPool::CancelToken canceled) noexcept {
         DLOG_F(1, "GeometryPipeline: Compute content hash");
-        if (cancelled) {
+        if (canceled) {
           return uint64_t { 0 };
         }
         return util::ComputeContentHash(bytes);
@@ -1195,8 +1193,8 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
     if (hash != 0) {
       asset_desc.header.content_hash = hash;
       serio::MemoryStream patch_stream(
-        std::span<std::byte>(output_bytes.data(), output_bytes.size()));
-      serio::Writer<serio::MemoryStream> patch_writer(patch_stream);
+        std::span(output_bytes.data(), output_bytes.size()));
+      serio::Writer patch_writer(patch_stream);
       const auto patch_pack = patch_writer.ScopedAlignment(1);
       if (!patch_writer.WriteBlob(
             std::as_bytes(std::span<const data::pak::GeometryAssetDesc, 1>(
@@ -1253,14 +1251,14 @@ auto GeometryPipeline::Worker() -> co::Co<>
     auto build_outcome = co_await thread_pool_.Run(
       [item = std::move(item), max_bytes = config_.max_data_blob_bytes,
         with_content_hashing = config_.with_content_hashing](
-        co::ThreadPool::CancelToken cancelled) mutable -> GeometryBuildOutcome {
+        co::ThreadPool::CancelToken canceled) mutable -> GeometryBuildOutcome {
         DLOG_F(1, "GeometryPipeline: Build geometry payload");
         GeometryBuildOutcome out;
         out.source_id = item.source_id;
         out.source_key = item.source_key;
 
-        if (cancelled || item.stop_token.stop_requested()) {
-          out.cancelled = true;
+        if (canceled || item.stop_token.stop_requested()) {
+          out.canceled = true;
           return out;
         }
 
@@ -1283,7 +1281,7 @@ auto GeometryPipeline::Worker() -> co::Co<>
         uint32_t attr_mask = 0;
         for (const auto& lod : item.lods) {
           if (item.stop_token.stop_requested()) {
-            out.cancelled = true;
+            out.canceled = true;
             return out;
           }
 
@@ -1297,7 +1295,7 @@ auto GeometryPipeline::Worker() -> co::Co<>
         }
 
         if (item.stop_token.stop_requested()) {
-          out.cancelled = true;
+          out.canceled = true;
           return out;
         }
 
@@ -1320,7 +1318,7 @@ auto GeometryPipeline::Worker() -> co::Co<>
           return out;
         }
 
-        GeometryPipeline::CookedGeometryPayload cooked_payload;
+        CookedGeometryPayload cooked_payload;
         cooked_payload.virtual_path
           = item.request.loose_cooked_layout.GeometryVirtualPath(
             item.storage_mesh_name);
@@ -1344,26 +1342,25 @@ auto GeometryPipeline::Worker() -> co::Co<>
             | kDefaultStaticUsageFlags;
 
           cooked_mesh.vertex_buffer.data
-            = ToByteVector(std::span<const data::Vertex>(
-              lod.vertices.data(), lod.vertices.size()));
+            = ToByteVector(std::span(lod.vertices.data(), lod.vertices.size()));
           cooked_mesh.vertex_buffer.alignment = sizeof(data::Vertex);
           cooked_mesh.vertex_buffer.usage_flags = vb_usage_flags;
           cooked_mesh.vertex_buffer.element_stride = sizeof(data::Vertex);
           cooked_mesh.vertex_buffer.element_format
-            = static_cast<uint8_t>(oxygen::Format::kUnknown);
+            = static_cast<uint8_t>(Format::kUnknown);
           if (with_content_hashing && !item.stop_token.stop_requested()) {
             cooked_mesh.vertex_buffer.content_hash = util::ComputeContentHash(
               std::span<const std::byte>(cooked_mesh.vertex_buffer.data.data(),
                 cooked_mesh.vertex_buffer.data.size()));
           }
 
-          cooked_mesh.index_buffer.data = ToByteVector(
-            std::span<const uint32_t>(lod.indices.data(), lod.indices.size()));
+          cooked_mesh.index_buffer.data
+            = ToByteVector(std::span(lod.indices.data(), lod.indices.size()));
           cooked_mesh.index_buffer.alignment = alignof(uint32_t);
           cooked_mesh.index_buffer.usage_flags = ib_usage_flags;
           cooked_mesh.index_buffer.element_stride = 0;
           cooked_mesh.index_buffer.element_format
-            = static_cast<uint8_t>(oxygen::Format::kR32UInt);
+            = static_cast<uint8_t>(Format::kR32UInt);
           if (with_content_hashing && !item.stop_token.stop_requested()) {
             cooked_mesh.index_buffer.content_hash = util::ComputeContentHash(
               std::span<const std::byte>(cooked_mesh.index_buffer.data.data(),
@@ -1377,14 +1374,13 @@ auto GeometryPipeline::Worker() -> co::Co<>
               | kDefaultStaticUsageFlags;
 
             CookedBufferPayload joint_indices_payload;
-            joint_indices_payload.data
-              = ToByteVector(std::span<const glm::uvec4>(
-                lod.joint_indices.data(), lod.joint_indices.size()));
+            joint_indices_payload.data = ToByteVector(
+              std::span(lod.joint_indices.data(), lod.joint_indices.size()));
             joint_indices_payload.alignment = 16;
             joint_indices_payload.usage_flags = joint_usage_flags;
             joint_indices_payload.element_stride = 0;
             joint_indices_payload.element_format
-              = static_cast<uint8_t>(oxygen::Format::kRGBA32UInt);
+              = static_cast<uint8_t>(Format::kRGBA32UInt);
             if (with_content_hashing && !item.stop_token.stop_requested()) {
               joint_indices_payload.content_hash = util::ComputeContentHash(
                 std::span<const std::byte>(joint_indices_payload.data.data(),
@@ -1392,14 +1388,13 @@ auto GeometryPipeline::Worker() -> co::Co<>
             }
 
             CookedBufferPayload joint_weights_payload;
-            joint_weights_payload.data
-              = ToByteVector(std::span<const glm::vec4>(
-                lod.joint_weights.data(), lod.joint_weights.size()));
+            joint_weights_payload.data = ToByteVector(
+              std::span(lod.joint_weights.data(), lod.joint_weights.size()));
             joint_weights_payload.alignment = 16;
             joint_weights_payload.usage_flags = joint_usage_flags;
             joint_weights_payload.element_stride = 0;
             joint_weights_payload.element_format
-              = static_cast<uint8_t>(oxygen::Format::kRGBA32Float);
+              = static_cast<uint8_t>(Format::kRGBA32Float);
             if (with_content_hashing && !item.stop_token.stop_requested()) {
               joint_weights_payload.content_hash = util::ComputeContentHash(
                 std::span<const std::byte>(joint_weights_payload.data.data(),
@@ -1407,14 +1402,14 @@ auto GeometryPipeline::Worker() -> co::Co<>
             }
 
             CookedBufferPayload inverse_bind_payload;
-            inverse_bind_payload.data = ToByteVector(
-              std::span<const glm::mat4>(lod.inverse_bind_matrices.data(),
+            inverse_bind_payload.data
+              = ToByteVector(std::span(lod.inverse_bind_matrices.data(),
                 lod.inverse_bind_matrices.size()));
             inverse_bind_payload.alignment = 16;
             inverse_bind_payload.usage_flags = joint_usage_flags;
             inverse_bind_payload.element_stride = sizeof(glm::mat4);
             inverse_bind_payload.element_format
-              = static_cast<uint8_t>(oxygen::Format::kUnknown);
+              = static_cast<uint8_t>(Format::kUnknown);
             if (with_content_hashing && !item.stop_token.stop_requested()) {
               inverse_bind_payload.content_hash = util::ComputeContentHash(
                 std::span<const std::byte>(inverse_bind_payload.data.data(),
@@ -1422,13 +1417,13 @@ auto GeometryPipeline::Worker() -> co::Co<>
             }
 
             CookedBufferPayload joint_remap_payload;
-            joint_remap_payload.data = ToByteVector(std::span<const uint32_t>(
-              lod.joint_remap.data(), lod.joint_remap.size()));
+            joint_remap_payload.data = ToByteVector(
+              std::span(lod.joint_remap.data(), lod.joint_remap.size()));
             joint_remap_payload.alignment = alignof(uint32_t);
             joint_remap_payload.usage_flags = joint_usage_flags;
             joint_remap_payload.element_stride = 0;
             joint_remap_payload.element_format
-              = static_cast<uint8_t>(oxygen::Format::kR32UInt);
+              = static_cast<uint8_t>(Format::kR32UInt);
             if (with_content_hashing && !item.stop_token.stop_requested()) {
               joint_remap_payload.content_hash = util::ComputeContentHash(
                 std::span<const std::byte>(joint_remap_payload.data.data(),
@@ -1454,15 +1449,15 @@ auto GeometryPipeline::Worker() -> co::Co<>
         return out;
       });
 
-    if (build_outcome.cancelled) {
-      WorkResult cancelled {
+    if (build_outcome.canceled) {
+      WorkResult canceled {
         .source_id = std::move(build_outcome.source_id),
         .source_key = build_outcome.source_key,
         .cooked = std::nullopt,
         .diagnostics = {},
         .success = false,
       };
-      co_await output_channel_.Send(std::move(cancelled));
+      co_await output_channel_.Send(std::move(canceled));
       continue;
     }
 
@@ -1481,14 +1476,14 @@ auto GeometryPipeline::Worker() -> co::Co<>
 
 auto GeometryPipeline::ReportCancelled(WorkItem item) -> co::Co<>
 {
-  WorkResult cancelled {
+  WorkResult canceled {
     .source_id = std::move(item.source_id),
     .source_key = item.source_key,
     .cooked = std::nullopt,
     .diagnostics = {},
     .success = false,
   };
-  co_await output_channel_.Send(std::move(cancelled));
+  co_await output_channel_.Send(std::move(canceled));
 }
 
 } // namespace oxygen::content::import

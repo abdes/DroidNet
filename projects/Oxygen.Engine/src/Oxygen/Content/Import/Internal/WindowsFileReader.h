@@ -7,7 +7,6 @@
 #pragma once
 
 #include <Oxygen/Content/Import/IAsyncFileReader.h>
-#include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/api_export.h>
 
 namespace oxygen::content::import {

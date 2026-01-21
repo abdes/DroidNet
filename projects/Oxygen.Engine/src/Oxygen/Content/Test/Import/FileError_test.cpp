@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Import/FileError.h>
-
 #include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Content/Import/FileError.h>
 
 using namespace oxygen::content::import;
 
@@ -54,7 +54,7 @@ NOLINT_TEST_F(FileErrorTest, AllCodes_AreDistinct)
 //=== FileErrorInfo Tests
 //===---------------------------------------------//
 
-class FileErrorInfoTest : public ::testing::Test { };
+class FileErrorInfoTest : public testing::Test { };
 
 //! Verify IsError returns false for kOk.
 NOLINT_TEST_F(FileErrorInfoTest, IsError_WithOk_ReturnsFalse)
@@ -121,7 +121,7 @@ NOLINT_TEST_F(FileErrorInfoTest, ToString_WithSystemError_IncludesSystemError)
 //=== MapSystemError Tests
 //===--------------------------------------------//
 
-class MapSystemErrorTest : public ::testing::Test { };
+class MapSystemErrorTest : public testing::Test { };
 
 //! Verify no error maps to kOk.
 NOLINT_TEST_F(MapSystemErrorTest, NoError_MapsToOk)
@@ -197,7 +197,7 @@ NOLINT_TEST_F(MapSystemErrorTest, UnknownError_MapsToUnknown)
 //=== MakeFileError Tests
 //===--------------------------------------------//
 
-class MakeFileErrorTest : public ::testing::Test { };
+class MakeFileErrorTest : public testing::Test { };
 
 //! Verify MakeFileError from system error creates correct info.
 NOLINT_TEST_F(MakeFileErrorTest, FromSystemError_CreatesCorrectInfo)

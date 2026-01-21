@@ -51,10 +51,10 @@ namespace {
 } // namespace
 
 ImportSession::ImportSession(const ImportRequest& request,
-  oxygen::observer_ptr<IAsyncFileReader> file_reader,
-  oxygen::observer_ptr<IAsyncFileWriter> file_writer,
-  oxygen::observer_ptr<co::ThreadPool> thread_pool,
-  oxygen::observer_ptr<ResourceTableRegistry> table_registry)
+  observer_ptr<IAsyncFileReader> file_reader,
+  observer_ptr<IAsyncFileWriter> file_writer,
+  observer_ptr<co::ThreadPool> thread_pool,
+  observer_ptr<ResourceTableRegistry> table_registry)
   : request_(request)
   , file_reader_(file_reader)
   , file_writer_(file_writer)
@@ -93,19 +93,18 @@ auto ImportSession::CookedWriter() noexcept -> LooseCookedWriter&
 }
 
 auto ImportSession::FileReader() const noexcept
-  -> oxygen::observer_ptr<IAsyncFileReader>
+  -> observer_ptr<IAsyncFileReader>
 {
   return file_reader_;
 }
 
 auto ImportSession::FileWriter() const noexcept
-  -> oxygen::observer_ptr<IAsyncFileWriter>
+  -> observer_ptr<IAsyncFileWriter>
 {
   return file_writer_;
 }
 
-auto ImportSession::ThreadPool() const noexcept
-  -> oxygen::observer_ptr<co::ThreadPool>
+auto ImportSession::ThreadPool() const noexcept -> observer_ptr<co::ThreadPool>
 {
   return thread_pool_;
 }
@@ -116,7 +115,7 @@ auto ImportSession::ThreadPool() const noexcept
  @warning This method is not thread-safe. It must be called from the importer
   thread only.
 */
-auto ImportSession::TextureEmitter() -> oxygen::content::import::TextureEmitter&
+auto ImportSession::TextureEmitter() -> import::TextureEmitter&
 {
   if (!texture_emitter_.has_value()) {
     DCHECK_F(table_registry_ != nullptr,
@@ -127,9 +126,8 @@ auto ImportSession::TextureEmitter() -> oxygen::content::import::TextureEmitter&
     config.cooked_root = cooked_root_;
     config.layout = request_.loose_cooked_layout;
     config.with_content_hashing = request_.options.with_content_hashing;
-    texture_emitter_.emplace(
-      std::make_unique<oxygen::content::import::TextureEmitter>(
-        *file_writer_, aggregator, std::move(config)));
+    texture_emitter_.emplace(std::make_unique<import::TextureEmitter>(
+      *file_writer_, aggregator, std::move(config)));
   }
   return **texture_emitter_;
 }
@@ -140,16 +138,15 @@ auto ImportSession::TextureEmitter() -> oxygen::content::import::TextureEmitter&
  @warning This method is not thread-safe. It must be called from the importer
   thread only.
 */
-auto ImportSession::BufferEmitter() -> oxygen::content::import::BufferEmitter&
+auto ImportSession::BufferEmitter() -> import::BufferEmitter&
 {
   if (!buffer_emitter_.has_value()) {
     DCHECK_F(table_registry_ != nullptr,
       "ImportSession requires a ResourceTableRegistry for buffer emission");
     auto& aggregator = table_registry_->BufferAggregator(
       cooked_root_, request_.loose_cooked_layout);
-    buffer_emitter_.emplace(
-      std::make_unique<oxygen::content::import::BufferEmitter>(
-        *file_writer_, aggregator, request_.loose_cooked_layout, cooked_root_));
+    buffer_emitter_.emplace(std::make_unique<import::BufferEmitter>(
+      *file_writer_, aggregator, request_.loose_cooked_layout, cooked_root_));
   }
   return **buffer_emitter_;
 }
@@ -160,12 +157,11 @@ auto ImportSession::BufferEmitter() -> oxygen::content::import::BufferEmitter&
  @warning This method is not thread-safe. It must be called from the importer
   thread only.
 */
-auto ImportSession::AssetEmitter() -> oxygen::content::import::AssetEmitter&
+auto ImportSession::AssetEmitter() -> import::AssetEmitter&
 {
   if (!asset_emitter_.has_value()) {
-    asset_emitter_.emplace(
-      std::make_unique<oxygen::content::import::AssetEmitter>(
-        *file_writer_, request_.loose_cooked_layout, cooked_root_));
+    asset_emitter_.emplace(std::make_unique<import::AssetEmitter>(
+      *file_writer_, request_.loose_cooked_layout, cooked_root_));
   }
   return **asset_emitter_;
 }
@@ -294,7 +290,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
   // diagnostics reported errors. This prevents stale index metadata from
   // invalidating previously cooked content.
   try {
-    using oxygen::data::loose_cooked::v1::FileKind;
+    using data::loose_cooked::v1::FileKind;
 
     const auto& layout = request_.loose_cooked_layout;
     if (texture_emitter_.has_value()

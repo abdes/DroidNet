@@ -15,7 +15,6 @@
 #include <span>
 #include <stop_token>
 #include <string>
-#include <utility>
 #include <variant>
 #include <vector>
 
@@ -30,7 +29,6 @@
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/OxCo/Channel.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 
 namespace oxygen::content::import {
@@ -155,7 +153,7 @@ public:
     //! Time spent decoding source bytes, if applicable.
     std::optional<std::chrono::microseconds> decode_duration;
 
-    //! True if successful; false if cancelled or failed.
+    //! True if successful; false if canceled or failed.
     bool success = false;
   };
 

@@ -7,12 +7,13 @@
 #include <algorithm>
 #include <bit>
 #include <cstddef>
-#include <cstring>
 #include <span>
 #include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Internal/Pipelines/MaterialPipeline.h>
@@ -22,11 +23,10 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/asio.h>
-#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen;
-namespace co = oxygen::co;
+namespace co = co;
 
 namespace {
 
@@ -154,22 +154,22 @@ auto ZeroContentHash(std::vector<std::byte> bytes) -> std::vector<std::byte>
 //=== Fixtures
 //===--------------------------------------------------------------//
 
-class MaterialPipelineBasicTest : public ::testing::Test {
+class MaterialPipelineBasicTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
 };
 
-class MaterialPipelineOrmTest : public ::testing::Test {
+class MaterialPipelineOrmTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
 };
 
-class MaterialPipelineUvTest : public ::testing::Test {
+class MaterialPipelineUvTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
 };
 
-class MaterialPipelineShaderTest : public ::testing::Test {
+class MaterialPipelineShaderTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
 };

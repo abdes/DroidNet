@@ -1921,10 +1921,10 @@ typedef struct {
 	// Progress tracking, maybe `NULL` it not requested
 	ufbx_progress_cb progress_cb;
 
-	// When `progress_cb.fn()` returns `false` set the `cancelled` flag and
+	// When `progress_cb.fn()` returns `false` set the `canceled` flag and
 	// set the buffered bits to `cancel_bits`.
 	uint64_t cancel_bits;
-	bool cancelled;
+	bool canceled;
 
 	char local_buffer[256];
 } ufbxi_bit_stream;
@@ -2060,7 +2060,7 @@ ufbxi_bit_chunk_refill(ufbxi_bit_stream *s, const char *ptr)
 
 	// Read more user data if the user supplied a `read_fn()`, otherwise
 	// we assume the initial data chunk is the whole input buffer.
-	if (s->read_fn && !s->cancelled) {
+	if (s->read_fn && !s->canceled) {
 		size_t to_read = ufbxi_min_sz(s->input_left, s->buffer_size - left);
 		if (to_read > 0) {
 			size_t num_read = s->read_fn(s->read_user, s->buffer + left, to_read);
@@ -2119,7 +2119,7 @@ static ufbxi_noinline void ufbxi_bit_stream_init(ufbxi_bit_stream *s, const ufbx
 	} else {
 		s->progress_interval = 0x4000;
 	}
-	s->cancelled = false;
+	s->canceled = false;
 
 	// Clear the initial bit buffer
 	s->bits = 0;
@@ -2152,7 +2152,7 @@ ufbxi_bit_yield(ufbxi_bit_stream *s, const char *ptr)
 		uint32_t result = (uint32_t)s->progress_cb.fn(s->progress_cb.user, &progress);
 		ufbx_assert(result == UFBX_PROGRESS_CONTINUE || result == UFBX_PROGRESS_CANCEL);
 		if (result == UFBX_PROGRESS_CANCEL) {
-			s->cancelled = true;
+			s->canceled = true;
 			ptr = s->local_buffer;
 			s->buffer = s->local_buffer;
 			s->buffer_size = sizeof(s->local_buffer);
@@ -2178,8 +2178,8 @@ ufbxi_bit_refill(uint64_t *p_bits, size_t *p_left, const char **p_data, ufbxi_bi
 {
 	if (*p_data > s->chunk_yield) {
 		*p_data = ufbxi_bit_yield(s, *p_data);
-		if (s->cancelled) {
-			// Force an end-of-block symbol when cancelled so we don't need an
+		if (s->canceled) {
+			// Force an end-of-block symbol when canceled so we don't need an
 			// extra branch in the chunk decoding loop.
 			*p_bits = s->cancel_bits;
 		}
@@ -2547,7 +2547,7 @@ static ufbxi_noinline ptrdiff_t ufbxi_decode_dynamic_huff_bits(ufbxi_deflate_con
 	uint8_t prev = 0;
 	while (symbol_index < num_symbols) {
 		ufbxi_bit_refill(&bits, &left, &data, &dc->stream);
-		if (dc->stream.cancelled) return -28;
+		if (dc->stream.canceled) return -28;
 
 		ufbxi_huff_sym sym = ufbxi_huff_decode_bits(huff_code_length, bits, UFBXI_HUFF_CODELEN_FAST_BITS, UFBXI_HUFF_CODELEN_FAST_MASK);
 		ufbxi_regression_assert(sym != UFBXI_HUFF_UNINITIALIZED_SYM);
@@ -2608,7 +2608,7 @@ ufbxi_init_dynamic_huff(ufbxi_deflate_context *dc, ufbxi_trees *trees)
 	size_t left = dc->stream.left;
 	const char *data = dc->stream.chunk_ptr;
 	ufbxi_bit_refill(&bits, &left, &data, &dc->stream);
-	if (dc->stream.cancelled) return -28;
+	if (dc->stream.canceled) return -28;
 
 	trees->fast_bits = dc->fast_bits;
 
@@ -2629,7 +2629,7 @@ ufbxi_init_dynamic_huff(ufbxi_deflate_context *dc, ufbxi_trees *trees)
 	for (size_t len_i = 0; len_i < num_code_lengths; len_i++) {
 		if (len_i == 14) {
 			ufbxi_bit_refill(&bits, &left, &data, &dc->stream);
-			if (dc->stream.cancelled) return -28;
+			if (dc->stream.canceled) return -28;
 		}
 		code_lengths[ufbxi_deflate_code_length_permutation[len_i]] = (uint32_t)bits & 0x7;
 		bits >>= 3;
@@ -2911,7 +2911,7 @@ ufbx_static_assert(inflate_huff_long_bits, UFBXI_HUFF_FAST_BITS + UFBXI_HUFF_MAX
 static ufbxi_noinline int
 ufbxi_inflate_block_fast(ufbxi_deflate_context *dc, ufbxi_trees *trees)
 {
-	ufbxi_dev_assert(!dc->stream.cancelled);
+	ufbxi_dev_assert(!dc->stream.canceled);
 	ufbxi_dev_assert(trees->fast_bits == UFBXI_HUFF_FAST_BITS);
 	ufbxi_dev_assert(dc->stream.chunk_yield - dc->stream.chunk_ptr >= UFBXI_INFLATE_FAST_MIN_IN);
 	ufbxi_dev_assert(dc->out_end - dc->out_ptr >= UFBXI_INFLATE_FAST_MIN_OUT);
@@ -3151,7 +3151,7 @@ ufbxi_extern_c ptrdiff_t ufbx_inflate(void *dst, size_t dst_size, const ufbx_inf
 	const char *data = dc.stream.chunk_ptr;
 
 	ufbxi_bit_refill(&bits, &left, &data, &dc.stream);
-	if (dc.stream.cancelled) return -28;
+	if (dc.stream.canceled) return -28;
 
 	// Zlib header
 	if (!input->no_header) {
@@ -3168,7 +3168,7 @@ ufbxi_extern_c ptrdiff_t ufbx_inflate(void *dst, size_t dst_size, const ufbx_inf
 
 	for (;;) {
 		ufbxi_bit_refill(&bits, &left, &data, &dc.stream);
-		if (dc.stream.cancelled) return -28;
+		if (dc.stream.canceled) return -28;
 
 		// Block header: [0:1] BFINAL [1:3] BTYPE
 		size_t header = (size_t)bits & 0x7;
@@ -3234,7 +3234,7 @@ ufbxi_extern_c ptrdiff_t ufbx_inflate(void *dst, size_t dst_size, const ufbx_inf
 				if (err < 0) return err;
 
 				// `ufbxi_inflate_block()` returns normally on cancel so check it here
-				if (dc.stream.cancelled) return -28;
+				if (dc.stream.canceled) return -28;
 
 				if (err == 0) break;
 			}
@@ -3259,7 +3259,7 @@ ufbxi_extern_c ptrdiff_t ufbx_inflate(void *dst, size_t dst_size, const ufbx_inf
 		bits >>= align_bits;
 		left -= align_bits;
 		ufbxi_bit_refill(&bits, &left, &data, &dc.stream);
-		if (dc.stream.cancelled) return -28;
+		if (dc.stream.canceled) return -28;
 
 		if (!input->no_checksum) {
 			uint32_t ref = (uint32_t)bits;

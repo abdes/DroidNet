@@ -7,13 +7,10 @@
 #pragma once
 
 #include <atomic>
-#include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <span>
 #include <stop_token>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -105,7 +102,7 @@ public:
     //! Any diagnostics produced during processing.
     std::vector<ImportDiagnostic> diagnostics;
 
-    //! True if successful; false if cancelled or failed.
+    //! True if successful; false if canceled or failed.
     bool success = false;
   };
 

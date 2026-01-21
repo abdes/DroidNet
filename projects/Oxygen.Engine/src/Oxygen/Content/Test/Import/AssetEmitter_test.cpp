@@ -4,18 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Import/Internal/Emitters/AssetEmitter.h>
+#include <filesystem>
+#include <fstream>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/Import/IAsyncFileWriter.h>
+#include <Oxygen/Content/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Internal/WindowsFileWriter.h>
 #include <Oxygen/OxCo/Run.h>
-#include <Oxygen/Testing/GTest.h>
-
-#include <cstring>
-#include <filesystem>
-#include <fstream>
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
@@ -72,7 +71,7 @@ auto ReadFileAsString(const std::filesystem::path& path) -> std::string
 //=== Test Fixture ===--------------------------------------------------------//
 
 //! Test fixture for AssetEmitter tests.
-class AssetEmitterTest : public ::testing::Test {
+class AssetEmitterTest : public testing::Test {
 protected:
   auto SetUp() -> void override
   {

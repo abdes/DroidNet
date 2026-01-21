@@ -4,18 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Import/Internal/Emitters/BufferEmitter.h>
+#include <filesystem>
+#include <fstream>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Content/Import/IAsyncFileWriter.h>
+#include <Oxygen/Content/Import/Internal/Emitters/BufferEmitter.h>
 #include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Content/Import/Internal/WindowsFileWriter.h>
 #include <Oxygen/OxCo/Run.h>
-#include <Oxygen/Testing/GTest.h>
-
-#include <cstring>
-#include <filesystem>
-#include <fstream>
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
@@ -134,7 +133,7 @@ auto VerifyBufferContent(const std::vector<std::byte>& data_file,
 //=== Test Fixture ===--------------------------------------------------------//
 
 //! Test fixture for BufferEmitter tests.
-class BufferEmitterTest : public ::testing::Test {
+class BufferEmitterTest : public testing::Test {
 protected:
   auto SetUp() -> void override
   {

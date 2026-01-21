@@ -11,7 +11,6 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
-#include <span>
 #include <string>
 #include <vector>
 
@@ -188,7 +187,7 @@ public:
   OXGN_CNTT_NDAPI auto Finalize() -> co::Co<bool>;
 
 private:
-  using TextureResourceDesc = oxygen::data::pak::TextureResourceDesc;
+  using TextureResourceDesc = data::pak::TextureResourceDesc;
 
   enum class WriteKind : uint8_t {
     kPadding,

@@ -614,8 +614,6 @@ STBIDEF int stbi_zlib_decode_noheader_buffer(
 
 #  include <limits.h>
 #  include <stdarg.h>
-#  include <stddef.h> // ptrdiff_t on osx
-#  include <stdlib.h>
 #  include <string.h>
 
 #  if !defined(STBI_NO_LINEAR) || !defined(STBI_NO_HDR)
@@ -623,7 +621,6 @@ STBIDEF int stbi_zlib_decode_noheader_buffer(
 #  endif
 
 #  ifndef STBI_NO_STDIO
-#    include <stdio.h>
 #  endif
 
 #  ifndef STBI_ASSERT

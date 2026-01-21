@@ -9,7 +9,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
-#include <string>
 #include <vector>
 
 #include <Oxygen/Base/Result.h>
@@ -20,9 +19,6 @@
 #include <Oxygen/Content/Import/TexturePackingPolicy.h>
 #include <Oxygen/Content/Import/TextureSourceAssembly.h>
 #include <Oxygen/Content/api_export.h>
-#include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Core/Types/TextureType.h>
-#include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content::import {
 
@@ -53,7 +49,7 @@ namespace oxygen::content::import {
 OXGN_CNTT_NDAPI auto CookTexture(std::span<const std::byte> source_bytes,
   const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
   bool with_content_hashing = true)
-  -> oxygen::Result<CookedTexturePayload, TextureImportError>;
+  -> Result<CookedTexturePayload, TextureImportError>;
 
 //! Cook a texture from an already-decoded ScratchImage.
 /*!
@@ -77,7 +73,7 @@ OXGN_CNTT_NDAPI auto CookTexture(std::span<const std::byte> source_bytes,
 OXGN_CNTT_NDAPI auto CookTexture(ScratchImage&& image,
   const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
   bool with_content_hashing = true)
-  -> oxygen::Result<CookedTexturePayload, TextureImportError>;
+  -> Result<CookedTexturePayload, TextureImportError>;
 
 //! Cook a multi-source texture (cube maps and 2D arrays).
 /*!
@@ -113,7 +109,7 @@ OXGN_CNTT_NDAPI auto CookTexture(ScratchImage&& image,
 OXGN_CNTT_NDAPI auto CookTexture(const TextureSourceSet& sources,
   const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
   bool with_content_hashing = true)
-  -> oxygen::Result<CookedTexturePayload, TextureImportError>;
+  -> Result<CookedTexturePayload, TextureImportError>;
 
 //===----------------------------------------------------------------------===//
 // Internal Pipeline Stages (Exposed for Testing)
@@ -127,9 +123,8 @@ namespace detail {
     @param desc         Import descriptor with decode options
     @return Decoded ScratchImage or error
   */
-  OXGN_CNTT_NDAPI auto DecodeSource(
-    std::span<const std::byte> source_bytes, const TextureImportDesc& desc)
-    -> oxygen::Result<ScratchImage, TextureImportError>;
+  OXGN_CNTT_NDAPI auto DecodeSource(std::span<const std::byte> source_bytes,
+    const TextureImportDesc& desc) -> Result<ScratchImage, TextureImportError>;
 
   //! Convert image to the working format for processing.
   /*!
@@ -141,9 +136,8 @@ namespace detail {
     @param desc  Import descriptor
     @return Converted image or error
   */
-  OXGN_CNTT_NDAPI auto ConvertToWorkingFormat(
-    ScratchImage&& image, const TextureImportDesc& desc)
-    -> oxygen::Result<ScratchImage, TextureImportError>;
+  OXGN_CNTT_NDAPI auto ConvertToWorkingFormat(ScratchImage&& image,
+    const TextureImportDesc& desc) -> Result<ScratchImage, TextureImportError>;
 
   //! Apply content-specific processing (normal maps, HDR, etc.).
   /*!
@@ -151,9 +145,8 @@ namespace detail {
     @param desc  Import descriptor
     @return Processed image or error
   */
-  OXGN_CNTT_NDAPI auto ApplyContentProcessing(
-    ScratchImage&& image, const TextureImportDesc& desc)
-    -> oxygen::Result<ScratchImage, TextureImportError>;
+  OXGN_CNTT_NDAPI auto ApplyContentProcessing(ScratchImage&& image,
+    const TextureImportDesc& desc) -> Result<ScratchImage, TextureImportError>;
 
   //! Generate mip chain according to mip policy.
   /*!
@@ -161,9 +154,8 @@ namespace detail {
     @param desc  Import descriptor with mip settings
     @return Image with mip chain or error
   */
-  OXGN_CNTT_NDAPI auto GenerateMips(
-    ScratchImage&& image, const TextureImportDesc& desc)
-    -> oxygen::Result<ScratchImage, TextureImportError>;
+  OXGN_CNTT_NDAPI auto GenerateMips(ScratchImage&& image,
+    const TextureImportDesc& desc) -> Result<ScratchImage, TextureImportError>;
 
   //! Convert to output format (including BC7 compression).
   /*!
@@ -171,9 +163,8 @@ namespace detail {
     @param desc  Import descriptor with output format settings
     @return Output format image or error
   */
-  OXGN_CNTT_NDAPI auto ConvertToOutputFormat(
-    ScratchImage&& image, const TextureImportDesc& desc)
-    -> oxygen::Result<ScratchImage, TextureImportError>;
+  OXGN_CNTT_NDAPI auto ConvertToOutputFormat(ScratchImage&& image,
+    const TextureImportDesc& desc) -> Result<ScratchImage, TextureImportError>;
 
   //! Pack subresource data according to policy.
   /*!
