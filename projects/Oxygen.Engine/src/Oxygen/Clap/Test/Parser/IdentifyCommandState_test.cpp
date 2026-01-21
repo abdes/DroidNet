@@ -50,7 +50,7 @@ namespace {
       OptionValuesMap ovm;
       Command::Ptr command;
       const CommandLineContext base_context("test", command, ovm, 80U);
-      const auto context = ParserContext::New(base_context, commands);
+      const auto context = StateTest::MakeParserContext(base_context, commands);
       EnterState(tokenizer.NextToken(), context);
       while (true) {
         auto token = tokenizer.NextToken();

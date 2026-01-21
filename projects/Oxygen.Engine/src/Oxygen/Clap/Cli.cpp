@@ -143,9 +143,17 @@ auto Cli::Parse(const int argc, const char** argv) -> CommandLineContext
     = ResolveOutputWidth(output_width_, auto_output_width_);
   CommandLineContext context(
     ProgramName(), active_command_, ovm_, resolved_width);
-  context.theme = &CliTheme::Dark(); // Set a default theme
-  parser::CmdLineParser parser(context, tokenizer, commands_);
+  context.theme = theme_ ? theme_ : &CliTheme::Dark();
+  context.global_option_groups = &global_option_groups_;
+  parser::CmdLineParser parser(
+    context, tokenizer, commands_, global_options_, global_option_groups_);
   if (parser.Parse()) {
+    if (context.ovm.HasOption("theme")) {
+      const auto& values = context.ovm.ValuesOf("theme");
+      if (!values.empty()) {
+        context.theme = &ResolveTheme(values.back().GetAs<CliThemeKind>());
+      }
+    }
     // Check if we need to handle a `version` or `help` command
     if (context.active_command->PathAsString() == "help"
       || context.ovm.HasOption("help")) {
@@ -286,5 +294,18 @@ auto Cli::HandleHelpCommand(const CommandLineContext& context) const -> void
       PrintCommands(context, context.output_width);
     }
   }
+}
+
+auto Cli::EnableThemeSelectionOption() -> void
+{
+  if (has_theme_selection_option_) {
+    return;
+  }
+  has_theme_selection_option_ = true;
+  WithGlobalOption(Option::WithKey("theme")
+      .Long("theme")
+      .About("Select output theme: dark, light, plain.")
+      .WithValue<CliThemeKind>()
+      .Build());
 }
 } // namespace oxygen::clap

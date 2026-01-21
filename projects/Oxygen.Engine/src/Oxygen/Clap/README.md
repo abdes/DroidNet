@@ -80,7 +80,7 @@ int main(int argc, char** argv) {
 Clap uses a fluent builder pattern for all major components:
 
 - **CliBuilder**: Configures the overall CLI (program name, version, about,
-  commands, help/version commands).
+  commands, help/version commands, output width with auto detection).
 - **CommandBuilder**: Defines commands and subcommands, their descriptions, and
   options.
 - **OptionBuilder**: Defines options (short/long/positional), their value types,
@@ -200,6 +200,14 @@ determined by the type of token encountered. The main states are:
   paths.
 - **Automatic Help/Version**: Built-in support for `--help`, `-h`, `help`,
   `--version`, `-v`, and `version` commands/options.
+- **Global Options**: Declare options that apply to all commands using
+  `WithGlobalOptions` or `WithGlobalOption`. Global options must appear before
+  any command (default or named). If a global option name conflicts with a
+  command option, the command option takes precedence. Help output lists global
+  options in a separate section before command options.
+- **Theme Selection**: Set a predictable output style via
+  `CliBuilder::WithTheme(CliTheme::Plain())` (or `Dark()`/`Light()`) for help and
+  usage formatting.
 - **Custom Value Semantics**: Extend `ValueSemantics` to support custom
   parsing/validation logic.
 - **Extensible Builders**: Builders are facets-compatible and can be extended
@@ -274,8 +282,8 @@ required by the project.
 
 | Area/Feature | Status | Description |
 | --- | --- | --- |
-| CLI output width config | ✅ | Configurable via `CliBuilder::OutputWidth()` and stored in `CommandLineContext`. |
-| Global CLI options | ⏳ | Implement support for options that apply to all commands. |
+| CLI output width config | ✅ | Auto by default via `WithAutoOutputWidth()`, with `OutputWidth()` taking precedence. |
+| Global CLI options | ✅ | Configurable via `WithGlobalOptions`/`WithGlobalOption`, apply before any command (default or named), listed separately before command options; command options take precedence on conflicts. |
 | Help command (built-in) | ✅ | Built-in `help` command plus `-h/--help` option routing to the active command. |
 | Version command (built-in) | ✅ | Built-in `version` command plus `-v/--version` option on the default command. |
 | StoreTo/Finalize integration tests | ⏳ | Add end-to-end tests that verify `StoreTo`/`CallOnFinalValue` behavior during parsing. |

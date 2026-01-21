@@ -64,6 +64,15 @@ auto oxygen::clap::CliBuilder::WithAutoOutputWidth() -> CliBuilder&
   return *this;
 }
 
+auto oxygen::clap::CliBuilder::WithTheme(const CliTheme& theme) -> CliBuilder&
+{
+  if (!cli_) {
+    throw std::logic_error("OptionValueBuilder: method called after Build()");
+  }
+  cli_->Theme(theme);
+  return *this;
+}
+
 auto oxygen::clap::CliBuilder::WithCommand(std::shared_ptr<Command> command)
   -> CliBuilder&
 {
@@ -74,6 +83,41 @@ auto oxygen::clap::CliBuilder::WithCommand(std::shared_ptr<Command> command)
     throw std::invalid_argument("Command cannot be null");
   }
   cli_->WithCommand(std::move(command));
+  return *this;
+}
+
+auto oxygen::clap::CliBuilder::WithGlobalOptions(
+  std::shared_ptr<Options> options, const bool hidden) -> CliBuilder&
+{
+  if (!cli_) {
+    throw std::logic_error("OptionValueBuilder: method called after Build()");
+  }
+  if (!options) {
+    throw std::invalid_argument("Options cannot be null");
+  }
+  cli_->WithGlobalOptions(std::move(options), hidden);
+  return *this;
+}
+
+auto oxygen::clap::CliBuilder::WithGlobalOption(std::shared_ptr<Option> option)
+  -> CliBuilder&
+{
+  if (!cli_) {
+    throw std::logic_error("OptionValueBuilder: method called after Build()");
+  }
+  if (!option) {
+    throw std::invalid_argument("Option cannot be null");
+  }
+  cli_->WithGlobalOption(std::move(option));
+  return *this;
+}
+
+auto oxygen::clap::CliBuilder::WithThemeSelectionOption() -> Self&
+{
+  if (!cli_) {
+    throw std::logic_error("OptionValueBuilder: method called after Build()");
+  }
+  cli_->EnableThemeSelectionOption();
   return *this;
 }
 

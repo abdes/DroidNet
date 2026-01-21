@@ -7,6 +7,8 @@
 #pragma once
 
 #include <iostream>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/OptionValuesMap.h>
@@ -32,6 +34,9 @@ struct CommandLineContext {
   bool allow_long_option_value_with_no_equal { true };
 
   unsigned int output_width;
+
+  const std::vector<std::pair<Options::Ptr, bool>>* global_option_groups
+    = nullptr;
 
   std::istream& in { std::cin };
   std::ostream& out { std::cout };

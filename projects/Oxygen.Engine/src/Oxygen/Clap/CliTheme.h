@@ -10,6 +10,8 @@
 
 namespace oxygen::clap {
 
+enum class CliThemeKind { kDark, kLight, kPlain };
+
 struct CliTheme {
   fmt::text_style section_header;
   fmt::text_style command_name;
@@ -65,5 +67,18 @@ struct CliTheme {
     return theme;
   }
 };
+
+inline auto ResolveTheme(const CliThemeKind kind) -> const CliTheme&
+{
+  switch (kind) {
+  case CliThemeKind::kDark:
+    return CliTheme::Dark();
+  case CliThemeKind::kLight:
+    return CliTheme::Light();
+  case CliThemeKind::kPlain:
+    return CliTheme::Plain();
+  }
+  return CliTheme::Dark();
+}
 
 } // namespace oxygen::clap

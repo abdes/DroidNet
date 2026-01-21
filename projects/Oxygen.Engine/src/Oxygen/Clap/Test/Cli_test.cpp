@@ -6,12 +6,14 @@
 
 #include <array>
 #include <memory>
+#include <string>
 
 #include <fmt/format.h>
 
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Clap/Cli.h>
+#include <Oxygen/Clap/CliTheme.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
@@ -97,6 +99,7 @@ namespace {
                  .ProgramName(ProgramName())
                  .Version("1.1.0")
                  .About(about_head)
+                 .WithTheme(CliTheme::Plain())
                  // TODO(Abdessattar) support usage footer
                  //.Footer(usage_footer)
                  .WithCommand(command);
@@ -184,6 +187,7 @@ namespace {
                  .ProgramName(ProgramName())
                  .Version("1.0.0")
                  .About("Paint something using a color")
+                 .WithTheme(CliTheme::Plain())
                  // TODO(Abdessattar) support usage footer
                  //.Footer(usage_footer)
                  .WithCommand(command);
@@ -237,6 +241,7 @@ namespace {
                  .Version("1.1.0")
                  .About("GNU Core Utils - the basic file, shell and text "
                         "manipulation utilities of the GNU operating system.")
+                 .WithTheme(CliTheme::Plain())
                  // TODO(Abdessattar) support usage footer
                  //.Footer(usage_footer)
                  .WithCommand(default_command)
@@ -255,6 +260,208 @@ namespace {
   private:
     std::unique_ptr<Cli> cli_;
   };
+
+  //! Scenario: Global options are parsed before the command.
+  NOLINT_TEST(GlobalOptions, BeforeCommand_IsParsed)
+  {
+    // Arrange
+    const auto global_verbose
+      = Option::WithKey("verbose").Long("verbose").WithValue<bool>().Build();
+    const Command::Ptr run_command = CommandBuilder("run").WithOption(
+      Option::WithKey("count").Long("count").WithValue<int>().Build());
+    const auto cli = CliBuilder()
+                       .ProgramName("tool")
+                       .WithTheme(CliTheme::Plain())
+                       .WithGlobalOption(global_verbose)
+                       .WithCommand(run_command)
+                       .Build();
+
+    constexpr int argc = 5;
+    const char* argv[argc] = { "tool", "--verbose", "run", "--count", "3" };
+
+    // Act
+    const auto context = cli->Parse(argc, argv);
+
+    // Assert
+    const auto& ovm = context.ovm;
+    EXPECT_TRUE(ovm.HasOption("verbose"));
+    EXPECT_TRUE(ovm.HasOption("count"));
+    EXPECT_THAT(ovm.ValuesOf("count").at(0).GetAs<int>(), Eq(3));
+    EXPECT_THAT(ovm.ValuesOf("verbose").at(0).GetAs<bool>(), IsTrue());
+  }
+
+  //! Scenario: Global options after the command are rejected.
+  NOLINT_TEST(GlobalOptions, AfterCommand_IsRejected)
+  {
+    // Arrange
+    const auto global_verbose
+      = Option::WithKey("verbose").Long("verbose").WithValue<bool>().Build();
+    const Command::Ptr run_command = CommandBuilder("run");
+    const auto cli = CliBuilder()
+                       .ProgramName("tool")
+                       .WithTheme(CliTheme::Plain())
+                       .WithGlobalOption(global_verbose)
+                       .WithCommand(run_command)
+                       .Build();
+
+    constexpr int argc = 3;
+    const char* argv[argc] = { "tool", "run", "--verbose" };
+
+    // Act & Assert
+    NOLINT_EXPECT_THROW(cli->Parse(argc, argv), CmdLineArgumentsError);
+  }
+
+  //! Scenario: Command options take precedence over global options.
+  NOLINT_TEST(GlobalOptions, CommandOptions_TakePrecedence)
+  {
+    // Arrange
+    const auto global_mode
+      = Option::WithKey("global_mode").Long("mode").WithValue<bool>().Build();
+    const Command::Ptr run_command = CommandBuilder("run").WithOption(
+      Option::WithKey("mode").Long("mode").WithValue<int>().Build());
+    const auto cli = CliBuilder()
+                       .ProgramName("tool")
+                       .WithTheme(CliTheme::Plain())
+                       .WithGlobalOption(global_mode)
+                       .WithCommand(run_command)
+                       .Build();
+
+    constexpr int argc = 4;
+    const char* argv[argc] = { "tool", "run", "--mode", "7" };
+
+    // Act
+    const auto context = cli->Parse(argc, argv);
+
+    // Assert
+    const auto& ovm = context.ovm;
+    EXPECT_TRUE(ovm.HasOption("mode"));
+    EXPECT_FALSE(ovm.HasOption("global_mode"));
+    EXPECT_THAT(ovm.ValuesOf("mode").at(0).GetAs<int>(), Eq(7));
+  }
+
+  //! Scenario: Help output lists global options before command options.
+  NOLINT_TEST(GlobalOptions, HelpOutput_ListsGlobalBeforeCommandOptions)
+  {
+    // Arrange
+    const auto global_verbose
+      = Option::WithKey("verbose").Long("verbose").WithValue<bool>().Build();
+    const Command::Ptr run_command = CommandBuilder("run").WithOption(
+      Option::WithKey("count").Long("count").WithValue<int>().Build());
+    const auto cli = CliBuilder()
+                       .ProgramName("tool")
+                       .WithTheme(CliTheme::Plain())
+                       .WithGlobalOption(global_verbose)
+                       .WithCommand(run_command)
+                       .WithHelpCommand()
+                       .Build();
+
+    constexpr int argc = 3;
+    const char* argv[argc] = { "tool", "run", "--help" };
+    testing::internal::CaptureStdout();
+
+    // Act
+    (void)cli->Parse(argc, argv);
+    const auto output = testing::internal::GetCapturedStdout();
+
+    // Assert
+    const auto global_header_pos = output.find("GLOBAL OPTIONS");
+    const auto command_option_pos = output.find("--count", global_header_pos);
+    EXPECT_NE(global_header_pos, std::string::npos);
+    EXPECT_NE(command_option_pos, std::string::npos);
+    EXPECT_LT(global_header_pos, command_option_pos);
+  }
+
+  //! Scenario: Global options without a command are rejected.
+  NOLINT_TEST(GlobalOptions, GlobalsOnly_NoCommand_IsRejected)
+  {
+    // Arrange
+    const auto global_verbose
+      = Option::WithKey("verbose").Long("verbose").WithValue<bool>().Build();
+    const auto cli = CliBuilder()
+                       .ProgramName("tool")
+                       .WithTheme(CliTheme::Plain())
+                       .WithGlobalOption(global_verbose)
+                       .Build();
+
+    constexpr int argc = 2;
+    const char* argv[argc] = { "tool", "--verbose" };
+
+    // Act & Assert
+    NOLINT_EXPECT_THROW(cli->Parse(argc, argv), CmdLineArgumentsError);
+  }
+
+  //! Scenario: Dash-dash before any command is rejected.
+  NOLINT_TEST(GlobalOptions, DashDashBeforeCommand_IsRejected)
+  {
+    // Arrange
+    const auto global_verbose
+      = Option::WithKey("verbose").Long("verbose").WithValue<bool>().Build();
+    const Command::Ptr run_command = CommandBuilder("run");
+    const auto cli = CliBuilder()
+                       .ProgramName("tool")
+                       .WithTheme(CliTheme::Plain())
+                       .WithGlobalOption(global_verbose)
+                       .WithCommand(run_command)
+                       .Build();
+
+    constexpr int argc = 2;
+    const char* argv[argc] = { "tool", "--" };
+
+    // Act & Assert
+    NOLINT_EXPECT_THROW(cli->Parse(argc, argv), CmdLineArgumentsError);
+  }
+
+  //! Scenario: Hidden global options are not listed in help output.
+  NOLINT_TEST(GlobalOptions, HiddenGlobals_AreNotListedInHelp)
+  {
+    // Arrange
+    const auto hidden_group = std::make_shared<Options>("Hidden globals");
+    hidden_group->Add(
+      Option::WithKey("hidden").Long("hidden").WithValue<bool>().Build());
+    const Command::Ptr run_command = CommandBuilder("run");
+    const auto cli = CliBuilder()
+                       .ProgramName("tool")
+                       .WithTheme(CliTheme::Plain())
+                       .WithGlobalOptions(hidden_group, true)
+                       .WithCommand(run_command)
+                       .WithHelpCommand()
+                       .Build();
+
+    constexpr int argc = 3;
+    const char* argv[argc] = { "tool", "run", "--help" };
+    testing::internal::CaptureStdout();
+
+    // Act
+    (void)cli->Parse(argc, argv);
+    const auto output = testing::internal::GetCapturedStdout();
+
+    // Assert
+    EXPECT_EQ(output.find("GLOBAL OPTIONS"), std::string::npos);
+  }
+
+  //! Scenario: Theme global option selects the output theme.
+  NOLINT_TEST(GlobalOptions, ThemeSelection_UsesRequestedTheme)
+  {
+    // Arrange
+    const Command::Ptr run_command = CommandBuilder("run");
+    const auto cli = CliBuilder()
+                       .ProgramName("tool")
+                       .WithThemeSelectionOption()
+                       .WithCommand(run_command)
+                       .WithHelpCommand()
+                       .Build();
+
+    constexpr int argc = 5;
+    const char* argv[argc] = { "tool", "--theme", "plain", "run", "--help" };
+    testing::internal::CaptureStdout();
+
+    // Act
+    (void)cli->Parse(argc, argv);
+    const auto output = testing::internal::GetCapturedStdout();
+
+    // Assert
+    EXPECT_EQ(output.find("\x1b["), std::string::npos);
+  }
 
   // TODO: Make better test cases for the command line parser
 #if 0

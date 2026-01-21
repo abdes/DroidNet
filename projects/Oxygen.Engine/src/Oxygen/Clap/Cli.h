@@ -22,6 +22,7 @@
 namespace oxygen::clap {
 
 struct CommandLineContext;
+struct CliTheme;
 
 /*!
  * \brief An exception thrown when a command line arguments parsing error
@@ -88,6 +89,11 @@ public:
     return output_width_.value_or(0U);
   }
 
+  [[nodiscard]] auto HasGlobalOptions() const -> bool
+  {
+    return !global_options_.empty();
+  }
+
   OXGN_CLP_API auto Parse(int argc, const char** argv) -> CommandLineContext;
 
   /** Produces a human-readable  output of 'desc', listing options,
@@ -123,10 +129,37 @@ private:
     auto_output_width_ = false;
   }
 
+  auto Theme(const CliTheme& theme) -> void { theme_ = &theme; }
+
+  auto EnableThemeSelectionOption() -> void;
+
   auto EnableAutoOutputWidth() -> void
   {
     output_width_.reset();
     auto_output_width_ = true;
+  }
+
+  auto WithGlobalOptions(std::shared_ptr<Options> options, bool hidden) -> void
+  {
+    if (options) {
+      for (const auto& option : *options) {
+        global_options_.push_back(option);
+      }
+      global_option_groups_.emplace_back(std::move(options), hidden);
+    }
+  }
+
+  auto WithGlobalOption(std::shared_ptr<Option> option) -> void
+  {
+    if (!option) {
+      return;
+    }
+    if (!ungrouped_global_options_) {
+      ungrouped_global_options_ = std::make_shared<Options>("");
+      global_option_groups_.emplace_back(ungrouped_global_options_, false);
+    }
+    ungrouped_global_options_->Add(option);
+    global_options_.push_back(std::move(option));
   }
 
   auto WithCommand(std::shared_ptr<Command> command) -> void
@@ -175,6 +208,11 @@ private:
   bool has_help_command_ = false;
   std::optional<unsigned int> output_width_;
   bool auto_output_width_ = true;
+  const CliTheme* theme_ = nullptr;
+  bool has_theme_selection_option_ = false;
+  std::vector<Option::Ptr> global_options_;
+  std::vector<std::pair<Options::Ptr, bool>> global_option_groups_;
+  Options::Ptr ungrouped_global_options_;
 };
 
 } // namespace oxygen::clap

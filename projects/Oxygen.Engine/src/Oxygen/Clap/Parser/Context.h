@@ -7,6 +7,8 @@
 #pragma once
 
 #include <memory>
+#include <optional>
+#include <ranges>
 
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h>
@@ -56,11 +58,14 @@ struct ParserContext : CommandLineContext {
    * supported by the CLI. \return a shared smart pointer to a new instance of
    * `ParserContext`.
    */
-  static auto New(
-    const CommandLineContext& base, const CommandsList& cli_commands) -> Ptr
+  static auto New(const CommandLineContext& base,
+    const CommandsList& cli_commands,
+    const std::vector<OptionPtr>& global_options,
+    const std::vector<std::pair<Options::Ptr, bool>>& global_option_groups)
+    -> Ptr
   {
-    return std::shared_ptr<ParserContext>(
-      new ParserContext(base, cli_commands));
+    return std::shared_ptr<ParserContext>(new ParserContext(
+      base, cli_commands, global_options, global_option_groups));
   }
 
   /*!
@@ -71,6 +76,8 @@ struct ParserContext : CommandLineContext {
    * remains valid for its lifetime.
    */
   const CommandsList& commands;
+  const std::vector<OptionPtr>& global_options;
+  const std::vector<std::pair<Options::Ptr, bool>>& global_option_groups;
   /*!
    * \brief Tracks the `oxygen::clap::Option` object for the command line option
    * currently being parsed.
@@ -87,6 +94,8 @@ struct ParserContext : CommandLineContext {
    * being parsed, refer to the `active_option` field.
    */
   std::string active_option_flag;
+  bool active_option_is_global = false;
+  bool allow_global_options = true;
 
   /*! \brief Value tokens collected while the parser is matching commands and
    * options which do not correspond to a command path segment or an option
@@ -99,12 +108,55 @@ struct ParserContext : CommandLineContext {
    */
   std::vector<std::string> positional_tokens;
 
+  auto ResolveShortOption(const std::string& name) -> std::optional<OptionPtr>
+  {
+    active_option_is_global = false;
+    if (active_command) {
+      if (const auto command_option = active_command->FindShortOption(name)) {
+        return command_option;
+      }
+    }
+    if (!allow_global_options) {
+      return std::nullopt;
+    }
+    const auto global_option = std::ranges::find_if(global_options,
+      [&name](const OptionPtr& option) { return option->Short() == name; });
+    if (global_option == global_options.cend()) {
+      return std::nullopt;
+    }
+    active_option_is_global = true;
+    return *global_option;
+  }
+
+  auto ResolveLongOption(const std::string& name) -> std::optional<OptionPtr>
+  {
+    active_option_is_global = false;
+    if (active_command) {
+      if (const auto command_option = active_command->FindLongOption(name)) {
+        return command_option;
+      }
+    }
+    if (!allow_global_options) {
+      return std::nullopt;
+    }
+    const auto global_option = std::ranges::find_if(global_options,
+      [&name](const OptionPtr& option) { return option->Long() == name; });
+    if (global_option == global_options.cend()) {
+      return std::nullopt;
+    }
+    active_option_is_global = true;
+    return *global_option;
+  }
+
 private:
   // Constructor is private. Use `New()` to create an instance of this class.
-  explicit ParserContext(
-    const CommandLineContext& base, const CommandsList& cli_commands)
+  explicit ParserContext(const CommandLineContext& base,
+    const CommandsList& cli_commands, const std::vector<OptionPtr>& globals,
+    const std::vector<std::pair<Options::Ptr, bool>>& global_groups)
     : CommandLineContext(base)
     , commands { cli_commands }
+    , global_options { globals }
+    , global_option_groups { global_groups }
   {
   }
 };

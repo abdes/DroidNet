@@ -30,7 +30,7 @@ namespace {
       OptionValuesMap ovm;
       Command::Ptr command;
       const CommandLineContext base_context("test", command, ovm, 80U);
-      auto context = ParserContext::New(base_context, commands);
+      auto context = StateTest::MakeParserContext(base_context, commands);
       SetupInitialState(context);
       std::get<InitialStateTestData>(state_check).Check(state());
       while (true) {

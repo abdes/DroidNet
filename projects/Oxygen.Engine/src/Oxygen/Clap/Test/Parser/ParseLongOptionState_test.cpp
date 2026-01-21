@@ -83,7 +83,7 @@ namespace {
       const auto commands = BuildCommands(command_paths);
       Command::Ptr command;
       const CommandLineContext base_context("test", command, ovm_, 80U);
-      const auto context = ParserContext::New(base_context, commands);
+      const auto context = StateTest::MakeParserContext(base_context, commands);
       context->active_command = predefined_commands().at("with-options");
       auto token = tokenizer.NextToken();
       // NOLINTNEXTLINE(hicpp-avoid-goto, cppcoreguidelines-avoid-goto)
@@ -184,7 +184,7 @@ namespace {
     OptionValuesMap ovm;
     Command::Ptr command;
     const CommandLineContext base_context("test", command, ovm, 80U);
-    auto context = ParserContext::New(base_context, commands);
+    auto context = StateTest::MakeParserContext(base_context, commands);
     context->active_command = predefined_commands().at("with-options");
     auto token = tokenizer.NextToken();
     auto status = EnterState(token, context);
