@@ -10,10 +10,12 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <vector>
 
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
+#include <Oxygen/Content/Import/ImportProgress.h>
 #include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::import {
@@ -61,5 +63,9 @@ struct ImportReport final {
   //! True if the cook completed and emitted an index.
   bool success = false;
 };
+
+//! Completion callback invoked when import finishes.
+using ImportCompletionCallback
+  = std::function<void(ImportJobId, const ImportReport&)>;
 
 } // namespace oxygen::content::import

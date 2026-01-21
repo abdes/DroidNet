@@ -16,7 +16,8 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/Object.h>
-#include <Oxygen/Content/Import/AsyncImportService.h>
+#include <Oxygen/Content/Import/ImportConcurrency.h>
+#include <Oxygen/Content/Import/ImportProgress.h>
 #include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/Import/Naming.h>
@@ -179,6 +180,11 @@ protected:
   OXGN_CNTT_API auto ReportProgress(ImportPhase phase, float overall_progress,
     float phase_progress, uint32_t items_completed, uint32_t items_total,
     std::string message) -> void;
+
+  OXGN_CNTT_API auto ReportProgress(ImportProgressEvent event,
+    ImportPhase phase, float overall_progress, float phase_progress,
+    uint32_t items_completed, uint32_t items_total, std::string message,
+    std::string item_kind = {}, std::string item_name = {}) -> void;
 
 private:
   [[nodiscard]] auto MainAsync() -> co::Co<>;

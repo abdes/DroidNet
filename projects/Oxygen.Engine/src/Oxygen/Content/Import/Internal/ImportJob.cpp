@@ -199,6 +199,9 @@ auto ImportJob::MainAsync() -> co::Co<>
 {
   bool finalized = false;
 
+  ReportProgress(ImportProgressEvent::kJobStarted, ImportPhase::kPending, 0.0f,
+    0.0f, 0U, 0U, "Job started");
+
   auto make_exception_report = [&](std::string_view message) -> ImportReport {
     ImportReport report {
       .cooked_root
@@ -221,6 +224,11 @@ auto ImportJob::MainAsync() -> co::Co<>
       return;
     }
     finalized = true;
+
+    const auto phase
+      = report.success ? ImportPhase::kComplete : ImportPhase::kFailed;
+    ReportProgress(ImportProgressEvent::kJobFinished, phase, 1.0f, 1.0f, 0U, 0U,
+      report.success ? "Job finished" : "Job failed");
 
     DLOG_F(
       2, "ImportJob finalize: job_id={} success={}", job_id_, report.success);
@@ -342,18 +350,30 @@ auto ImportJob::ReportProgress(ImportPhase phase, float overall_progress,
   float phase_progress, uint32_t items_completed, uint32_t items_total,
   std::string message) -> void
 {
+  ReportProgress(ImportProgressEvent::kPhaseProgress, phase, overall_progress,
+    phase_progress, items_completed, items_total, std::move(message));
+}
+
+auto ImportJob::ReportProgress(ImportProgressEvent event, ImportPhase phase,
+  float overall_progress, float phase_progress, uint32_t items_completed,
+  uint32_t items_total, std::string message, std::string item_kind,
+  std::string item_name) -> void
+{
   if (!on_progress_) {
     return;
   }
 
   ImportProgress progress;
   progress.job_id = job_id_;
+  progress.event = event;
   progress.phase = phase;
   progress.overall_progress = overall_progress;
   progress.phase_progress = phase_progress;
   progress.items_completed = items_completed;
   progress.items_total = items_total;
   progress.message = std::move(message);
+  progress.item_kind = std::move(item_kind);
+  progress.item_name = std::move(item_name);
   on_progress_(progress);
 }
 

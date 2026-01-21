@@ -100,7 +100,7 @@ auto TestImportJob::ExecuteAsync() -> co::Co<ImportReport>
     if (config_.report_progress) {
       const auto progress
         = static_cast<float>(step + 1) / static_cast<float>(step_count);
-      ReportProgress(ImportPhase::kParsing, progress, progress,
+      ReportProgress(ImportPhase::kWorking, progress, progress,
         static_cast<uint32_t>(step + 1), static_cast<uint32_t>(step_count),
         "Test job running");
     }

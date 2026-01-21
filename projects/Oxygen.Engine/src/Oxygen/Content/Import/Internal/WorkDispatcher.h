@@ -16,8 +16,9 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/Import/AsyncImportService.h>
+#include <Oxygen/Content/Import/ImportConcurrency.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
+#include <Oxygen/Content/Import/ImportProgress.h>
 #include <Oxygen/Content/Import/Internal/ImportPlanner.h>
 #include <Oxygen/Content/Import/Internal/ImportSession.h>
 #include <Oxygen/Content/Import/Internal/Pipelines/BufferPipeline.h>
@@ -49,9 +50,10 @@ public:
     float overall_start = 0.0f;
     float overall_end = 1.0f;
 
-    auto Report(ImportPhase phase, float phase_progress,
-      uint32_t items_completed, uint32_t items_total, float overall_progress,
-      std::string message) const -> void;
+    auto Report(ImportProgressEvent event, ImportPhase phase,
+      float phase_progress, uint32_t items_completed, uint32_t items_total,
+      float overall_progress, std::string message, std::string item_kind = {},
+      std::string item_name = {}) const -> void;
   };
 
   //! Context required to execute a plan.

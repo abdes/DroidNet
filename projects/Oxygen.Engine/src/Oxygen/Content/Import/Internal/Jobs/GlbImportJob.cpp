@@ -102,7 +102,9 @@ auto GlbImportJob::ExecuteAsync() -> co::Co<ImportReport>
   ImportSession session(
     Request(), FileReader(), FileWriter(), ThreadPool(), TableRegistry());
 
-  ReportProgress(ImportPhase::kParsing, 0.0f, 0.0f, 0U, 0U, "Parsing GLB...");
+  ReportProgress(ImportProgressEvent::kPhaseStarted, ImportPhase::kLoading,
+    0.0f, 0.0f, 0U, 0U, "Loading started");
+  ReportProgress(ImportPhase::kLoading, 0.0f, 0.0f, 0U, 0U, "Parsing GLB...");
   auto asset = co_await ParseAsset(session);
   AddDiagnostics(session, std::move(asset.diagnostics));
   if (asset.canceled || !asset.success) {
@@ -112,7 +114,7 @@ auto GlbImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   ReportProgress(
-    ImportPhase::kParsing, 0.05f, 0.0f, 0U, 0U, "Loading texture sources...");
+    ImportPhase::kLoading, 0.05f, 0.0f, 0U, 0U, "Loading texture sources...");
   auto external_textures = co_await LoadExternalTextureBytes(asset, session);
   AddDiagnostics(session, std::move(external_textures.diagnostics));
   if (external_textures.canceled) {
@@ -121,8 +123,10 @@ auto GlbImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeSession(session);
   }
 
+  ReportProgress(ImportProgressEvent::kPhaseStarted, ImportPhase::kPlanning,
+    0.1f, 0.0f, 0U, 0U, "Planning started");
   ReportProgress(
-    ImportPhase::kParsing, 0.1f, 0.0f, 0U, 0U, "Building import plan...");
+    ImportPhase::kPlanning, 0.1f, 0.0f, 0U, 0U, "Building import plan...");
   const auto request_copy = Request();
   const auto stop_token = StopToken();
   auto plan_outcome = co_await ThreadPool()->Run(
@@ -144,17 +148,32 @@ auto GlbImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeSession(session);
   }
 
+  ReportProgress(ImportProgressEvent::kPhaseFinished, ImportPhase::kLoading,
+    1.0f, 1.0f, 0U, 0U, "Loading finished");
+  ReportProgress(ImportProgressEvent::kPhaseFinished, ImportPhase::kPlanning,
+    1.0f, 1.0f, 0U, 0U, "Planning finished");
+
+  ReportProgress(ImportProgressEvent::kPhaseStarted, ImportPhase::kWorking,
+    0.2f, 0.0f, 0U, 0U, "Working started");
   ReportProgress(
-    ImportPhase::kTextures, 0.2f, 0.0f, 0U, 0U, "Executing plan...");
+    ImportPhase::kWorking, 0.2f, 0.0f, 0U, 0U, "Executing plan...");
   if (!co_await ExecutePlan(*plan_outcome.plan, session)) {
     ReportProgress(
       ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "Plan execution failed");
     co_return co_await FinalizeSession(session);
   }
 
+  ReportProgress(ImportProgressEvent::kPhaseFinished, ImportPhase::kWorking,
+    1.0f, 1.0f, 0U, 0U, "Working finished");
+
+  ReportProgress(ImportProgressEvent::kPhaseStarted, ImportPhase::kFinalizing,
+    0.9f, 0.0f, 0U, 0U, "Finalizing started");
   ReportProgress(
-    ImportPhase::kWriting, 0.9f, 0.0f, 0U, 0U, "Finalizing import...");
+    ImportPhase::kFinalizing, 0.9f, 0.0f, 0U, 0U, "Finalizing import...");
   auto report = co_await FinalizeSession(session);
+
+  ReportProgress(ImportProgressEvent::kPhaseFinished, ImportPhase::kFinalizing,
+    1.0f, 1.0f, 0U, 0U, "Finalizing finished");
 
   ReportProgress(report.success ? ImportPhase::kComplete : ImportPhase::kFailed,
     1.0f, 1.0f, 0U, 0U, report.success ? "Import complete" : "Import failed");

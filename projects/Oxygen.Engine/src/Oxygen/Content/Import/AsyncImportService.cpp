@@ -42,8 +42,8 @@ namespace {
   {
     const auto file_name = source_path.filename().string();
     const auto name_part = file_name.empty() ? "source" : file_name;
-    return std::string(nostd::to_string(format)) + ":" + std::to_string(job_id)
-      + ":" + name_part;
+    return std::string(nostd::to_string(format)) + ":"
+      + nostd::to_string(job_id) + ":" + name_part;
   }
 
   [[nodiscard]] auto CreateJobForFormat(ImportFormat format, ImportJobId job_id,
@@ -113,7 +113,7 @@ struct AsyncImportService::Impl {
   std::unique_ptr<co::ThreadPool> thread_pool_;
 
   //! Next job ID to assign.
-  std::atomic<ImportJobId> next_job_id_ { 1 };
+  std::atomic<uint64_t> next_job_id_ { 1 };
 
   //! Lightweight cancellation tracking only.
   mutable std::mutex cancel_events_mutex_;
@@ -355,8 +355,8 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   }
 
   // Generate job ID
-  const auto job_id
-    = impl_->next_job_id_.fetch_add(1, std::memory_order_relaxed);
+  const ImportJobId job_id { impl_->next_job_id_.fetch_add(
+    1, std::memory_order_relaxed) };
 
   if (!impl_->file_reader_) {
     DLOG_F(WARNING, "SubmitImport: async file reader not ready");
@@ -407,7 +407,7 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   const auto source_path_string = request.source_path.string();
 
   const auto job_name = request.job_name.value_or(use_custom_factory
-      ? std::string("custom:") + std::to_string(job_id)
+      ? std::string("custom:") + nostd::to_string(job_id)
       : MakeJobName(format, job_id, request.source_path));
 
   const auto file_reader = observer_ptr(impl_->file_reader_.get());

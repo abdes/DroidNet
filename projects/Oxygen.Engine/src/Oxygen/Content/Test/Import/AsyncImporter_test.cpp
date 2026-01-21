@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <atomic>
+#include <cstdint>
 #include <filesystem>
 #include <mutex>
 #include <string>
@@ -54,7 +55,7 @@ private:
   [[nodiscard]] auto ExecuteAsync() -> Co<ImportReport> override
   {
     ReportProgress(
-      ImportPhase::kParsing, 0.1f, 0.1f, 1U, 1U, "Test job running");
+      ImportPhase::kWorking, 0.1f, 0.1f, 1U, 1U, "Test job running");
     co_return MakeSuccessReport(Request());
   }
 };
@@ -248,11 +249,11 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitJob_CallsCompletionCallback)
         completion_event.Trigger();
       };
 
-      auto job = MakeJob(
-        42, std::move(request), std::move(on_complete), nullptr, cancel_event);
+      auto job = MakeJob(ImportJobId { 42U }, std::move(request),
+        std::move(on_complete), nullptr, cancel_event);
 
       JobEntry entry;
-      entry.job_id = 42;
+      entry.job_id = ImportJobId { 42U };
       entry.job = std::move(job);
       entry.cancel_event = cancel_event;
 
@@ -268,7 +269,7 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitJob_CallsCompletionCallback)
 
   // Assert
   EXPECT_TRUE(callback_called);
-  EXPECT_EQ(received_id, 42U);
+  EXPECT_EQ(received_id, ImportJobId { 42U });
   EXPECT_TRUE(received_success);
 }
 
@@ -289,7 +290,8 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitMultipleJobs_ProcessedInOrder)
       co_await n.Start(&AsyncImporter::ActivateAsync, &importer);
       importer.Run();
 
-      for (ImportJobId i = 1; i <= 3; ++i) {
+      for (uint64_t i = 1; i <= 3; ++i) {
+        const ImportJobId job_id { i };
         ImportRequest request;
         request.source_path = "test" + std::to_string(i) + ".txt";
         request.cooked_root = MakeTestCookedRoot();
@@ -305,11 +307,11 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitMultipleJobs_ProcessedInOrder)
           }
         };
 
-        auto job = MakeJob(
-          i, std::move(request), std::move(on_complete), nullptr, cancel_event);
+        auto job = MakeJob(job_id, std::move(request), std::move(on_complete),
+          nullptr, cancel_event);
 
         JobEntry entry;
-        entry.job_id = i;
+        entry.job_id = job_id;
         entry.job = std::move(job);
         entry.cancel_event = cancel_event;
 
@@ -326,7 +328,8 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitMultipleJobs_ProcessedInOrder)
 
   // Assert
   using ::testing::ElementsAre;
-  EXPECT_THAT(completion_order, ElementsAre(1, 2, 3));
+  EXPECT_THAT(completion_order,
+    ElementsAre(ImportJobId { 1U }, ImportJobId { 2U }, ImportJobId { 3U }));
 }
 
 //! Verify progress callback is invoked.
@@ -358,11 +361,11 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitJob_CallsProgressCallback)
       auto on_complete
         = [&](ImportJobId, const ImportReport&) { completion_event.Trigger(); };
 
-      auto job = MakeJob(99, std::move(request), std::move(on_complete),
-        std::move(on_progress), cancel_event);
+      auto job = MakeJob(ImportJobId { 99U }, std::move(request),
+        std::move(on_complete), std::move(on_progress), cancel_event);
 
       JobEntry entry;
-      entry.job_id = 99;
+      entry.job_id = ImportJobId { 99U };
       entry.job = std::move(job);
       entry.cancel_event = cancel_event;
 
@@ -378,7 +381,7 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitJob_CallsProgressCallback)
 
   // Assert
   EXPECT_TRUE(progress_called);
-  EXPECT_EQ(progress_job_id, 99U);
+  EXPECT_EQ(progress_job_id, ImportJobId { 99U });
 }
 
 //=== Cancellation Tests ===-------------------------------------------------//
@@ -437,8 +440,8 @@ NOLINT_TEST_F(
         done_event.Trigger();
       };
 
-      auto job = std::make_shared<TestImportJob>(123, std::move(request),
-        std::move(on_complete), nullptr, cancel_event,
+      auto job = std::make_shared<TestImportJob>(ImportJobId { 123U },
+        std::move(request), std::move(on_complete), nullptr, cancel_event,
         oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
         oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
         oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
@@ -446,7 +449,7 @@ NOLINT_TEST_F(
         ImportConcurrency {});
 
       JobEntry entry;
-      entry.job_id = 123;
+      entry.job_id = ImportJobId { 123U };
       entry.job = std::move(job);
       entry.cancel_event = cancel_event;
 
@@ -465,7 +468,7 @@ NOLINT_TEST_F(
 
   // Assert
   EXPECT_TRUE(complete_called);
-  EXPECT_EQ(completed_id, 123U);
+  EXPECT_EQ(completed_id, ImportJobId { 123U });
   EXPECT_FALSE(received_success);
   EXPECT_EQ(canceled_code, "import.canceled");
 }
@@ -484,7 +487,7 @@ NOLINT_TEST_F(
   EXPECT_FALSE(importer.IsAcceptingJobs());
 
   JobEntry entry;
-  entry.job_id = 1;
+  entry.job_id = ImportJobId { 1U };
   EXPECT_FALSE(importer.TrySubmitJob(std::move(entry)));
 }
 
@@ -503,7 +506,7 @@ NOLINT_TEST_F(AsyncImporterTrySubmitTest, TrySubmitJob_WhenSpace_ReturnsTrue)
 
   // Act
   JobEntry entry;
-  entry.job_id = 1;
+  entry.job_id = ImportJobId { 1U };
   const bool result = importer.TrySubmitJob(std::move(entry));
 
   // Assert
@@ -517,15 +520,15 @@ NOLINT_TEST_F(AsyncImporterTrySubmitTest, TrySubmitJob_WhenFull_ReturnsFalse)
   AsyncImporter importer({ .channel_capacity = 2 });
 
   // Fill the channel
-  for (int i = 0; i < 2; ++i) {
+  for (uint64_t i = 0; i < 2; ++i) {
     JobEntry entry;
-    entry.job_id = static_cast<ImportJobId>(i);
+    entry.job_id = ImportJobId { i };
     EXPECT_TRUE(importer.TrySubmitJob(std::move(entry)));
   }
 
   // Act
   JobEntry extra_entry;
-  extra_entry.job_id = 99;
+  extra_entry.job_id = ImportJobId { 99U };
   const bool result = importer.TrySubmitJob(std::move(extra_entry));
 
   // Assert
@@ -541,7 +544,7 @@ NOLINT_TEST_F(AsyncImporterTrySubmitTest, TrySubmitJob_WhenClosed_ReturnsFalse)
 
   // Act
   JobEntry entry;
-  entry.job_id = 1;
+  entry.job_id = ImportJobId { 1U };
   const bool result = importer.TrySubmitJob(std::move(entry));
 
   // Assert

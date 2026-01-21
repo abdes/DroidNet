@@ -8,7 +8,7 @@
 
 #include <memory>
 
-#include <Oxygen/Content/Import/AsyncImportService.h>
+#include <Oxygen/Content/Import/ImportProgress.h>
 #include <Oxygen/OxCo/Event.h>
 
 namespace oxygen::content::import::detail {
