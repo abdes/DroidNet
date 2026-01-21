@@ -1952,14 +1952,28 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
         auto desc = MakeDescFromPreset(PresetForUsage(usage));
         desc.source_id = tex_source_id;
         desc.stop_token = input.stop_token;
+        const auto& tuning = input.request.options.texture_tuning;
+        if (tuning.enabled) {
+          desc.flip_y_on_decode = tuning.flip_y_on_decode;
+          desc.force_rgba_on_decode = tuning.force_rgba_on_decode;
+          desc.mip_policy = tuning.mip_policy;
+          desc.max_mip_levels = tuning.max_mip_levels;
+          desc.mip_filter = tuning.mip_filter;
+          desc.output_format
+            = (usage == TextureUsage::kBaseColor || usage == TextureUsage::kEmissive)
+            ? tuning.color_output_format
+            : tuning.data_output_format;
+          desc.bc7_quality = tuning.bc7_quality;
+        }
 
         TexturePipeline::WorkItem item {};
         item.source_id = tex_source_id;
         item.texture_id = tex_source_id;
         item.source_key = identity->file_texture;
         item.desc = std::move(desc);
-        item.packing_policy_id = "d3d12";
-        item.output_format_is_override = false;
+        item.packing_policy_id
+          = tuning.enabled ? tuning.packing_policy_id : "d3d12";
+        item.output_format_is_override = tuning.enabled;
         item.failure_policy
           = input.request.options.texture_tuning.placeholder_on_failure
           ? TexturePipeline::FailurePolicy::kPlaceholder
