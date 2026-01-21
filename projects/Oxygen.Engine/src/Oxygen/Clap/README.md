@@ -301,7 +301,7 @@ required by the project.
 | OptionValuesMap tests | ✅ | Comprehensive unit tests are present. |
 | Usage footer support | ⏳ | Add CLI usage footer output and tests. |
 | Multiple command names | ⏳ | Add support and tests for commands with multiple names/aliases. |
-| Consolidate styled wrapping | ⏳ | Unify text wrapping and styled output across printers. |
+| Consolidate styled wrapping | ✅ | Unified styled text wrapping across CLI, command, and option printers. |
 
 ---
 

@@ -15,7 +15,7 @@
 #include <Oxygen/Clap/CliTheme.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h>
-#include <Oxygen/TextWrap/TextWrap.h>
+#include <Oxygen/Clap/Internal/StyledWrap.h>
 
 auto oxygen::clap::Command::ProgramName() const -> std::string
 {
@@ -128,14 +128,7 @@ auto oxygen::clap::Command::WithOption(std::shared_ptr<Option>&& option) -> void
 auto oxygen::clap::Command::Print(
   const CommandLineContext& context, unsigned int width) const -> void
 {
-  wrap::TextWrapper wrap = wrap::MakeWrapper()
-                             .Width(width)
-                             .IgnoreAnsiEscapeCodes()
-                             .CollapseWhiteSpace()
-                             .TrimLines()
-                             .IndentWith()
-                             .Initially("   ")
-                             .Then("   ");
+  wrap::TextWrapper wrap = detail::MakeStyledWrapper(width, "   ", "   ");
   std::ostringstream ostr;
 
   const CliTheme& theme = context.theme ? *context.theme : CliTheme::Plain();

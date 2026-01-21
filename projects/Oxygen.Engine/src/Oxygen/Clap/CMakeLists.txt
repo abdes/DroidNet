@@ -84,6 +84,7 @@ set(
   "Internal/Args.h"
   "Internal/Errors.cpp"
   "Internal/Errors.h"
+  "Internal/StyledWrap.h"
   "Internal/ValueDescriptor.h"
 )
 
