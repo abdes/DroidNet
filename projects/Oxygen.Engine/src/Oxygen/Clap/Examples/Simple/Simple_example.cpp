@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <iostream>
+#include <string>
 
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/CommandLineContext.h>
@@ -65,6 +66,7 @@ auto main(const int argc, char** argv) -> int
                  "commonly used features of `asap-clap`. It uses the "
                  "standard `version` and `help` commands and only "
                  "implements a default command with several options.")
+          .WithAutoOutputWidth()
           .WithVersionCommand()
           .WithHelpCommand()
           .WithCommand(command_builder);

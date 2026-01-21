@@ -49,7 +49,7 @@ namespace {
       const auto commands = BuildCommands(command_paths);
       OptionValuesMap ovm;
       Command::Ptr command;
-      const CommandLineContext base_context("test", command, ovm);
+      const CommandLineContext base_context("test", command, ovm, 80U);
       const auto context = ParserContext::New(base_context, commands);
       EnterState(tokenizer.NextToken(), context);
       while (true) {

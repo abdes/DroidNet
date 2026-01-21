@@ -5,10 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <exception>
+#include <string>
+#include <vector>
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
+#include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Fluent/CliBuilder.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 
@@ -17,6 +21,39 @@ using oxygen::clap::Command;
 using oxygen::clap::CommandBuilder;
 
 namespace {
+
+auto StripAnsiEscapeCodes(const std::string& input) -> std::string
+{
+  std::string output;
+  output.reserve(input.size());
+  for (std::size_t i = 0; i < input.size(); ++i) {
+    if (input[i] == '\x1b' && i + 1 < input.size() && input[i + 1] == '[') {
+      i += 2;
+      while (i < input.size() && input[i] != 'm') {
+        ++i;
+      }
+      continue;
+    }
+    output.push_back(input[i]);
+  }
+  return output;
+}
+
+auto SplitLines(const std::string& input) -> std::vector<std::string>
+{
+  std::vector<std::string> lines;
+  std::size_t start = 0;
+  while (start <= input.size()) {
+    const auto end = input.find('\n', start);
+    if (end == std::string::npos) {
+      lines.emplace_back(input.substr(start));
+      break;
+    }
+    lines.emplace_back(input.substr(start, end - start));
+    start = end + 1;
+  }
+  return lines;
+}
 
 //! Scenario: Constructing a default CliBuilder
 NOLINT_TEST(CliBuilder, DefaultConstruct)
@@ -34,9 +71,9 @@ NOLINT_TEST(CliBuilder, SetVersionProgramNameAbout)
 {
   // Arrange
   CliBuilder builder;
-  const std::string version = "1.2.3";
-  const std::string prog = "my_prog";
-  const std::string about = "Test CLI";
+  const auto version = std::string("1.2.3");
+  const auto prog = std::string("my_prog");
+  const auto about = std::string("Test CLI");
 
   // Act
   const auto cli
@@ -52,7 +89,8 @@ NOLINT_TEST(CliBuilder, WithCommandAddsCommand)
 {
   // Arrange
   CliBuilder builder;
-  const std::shared_ptr cmd { CommandBuilder("foo").About("desc").Build() };
+  const auto cmd
+    = std::shared_ptr { CommandBuilder("foo").About("desc").Build() };
 
   // Act
   const auto cli = builder.WithCommand(cmd).Build();
@@ -83,7 +121,7 @@ NOLINT_TEST(CliBuilder, BuilderMethodAfterBuildThrows)
 
   // Act & Assert
   NOLINT_EXPECT_THROW(builder.Version("fail"), std::logic_error);
-  std::shared_ptr cmd { CommandBuilder("fail").Build() };
+  auto cmd = std::shared_ptr { CommandBuilder("fail").Build() };
   NOLINT_EXPECT_THROW(builder.WithCommand(cmd), std::logic_error);
 }
 
@@ -91,7 +129,7 @@ NOLINT_TEST(CliBuilder, BuilderMethodAfterBuildThrows)
 NOLINT_TEST(CliBuilder, ImplicitConversionToUniquePtr)
 {
   // Arrange & Act
-  const std::shared_ptr<Command> cmd { CommandBuilder("bar") };
+  const auto cmd = std::shared_ptr<Command> { CommandBuilder("bar") };
   CliBuilder builder;
   const std::unique_ptr<oxygen::clap::Cli> cli = builder.WithCommand(cmd);
 
@@ -128,7 +166,7 @@ NOLINT_TEST(CliBuilder, ChainingAllMutators)
 {
   // Arrange
   CliBuilder builder;
-  const std::shared_ptr<Command> cmd {
+  const auto cmd = std::shared_ptr<Command> {
     CommandBuilder("chain").About("desc").Build()
   };
 
@@ -192,6 +230,55 @@ NOLINT_TEST(CliBuilder, HelpAndVersionCommandPresence)
   // Assert (public API only)
   EXPECT_TRUE(cli->HasHelpCommand());
   EXPECT_TRUE(cli->HasVersionCommand());
+}
+
+//! Scenario: OutputWidth rejects values less than 1
+NOLINT_TEST(CliBuilder, OutputWidthRejectsInvalidValues)
+{
+  // Arrange
+  CliBuilder builder;
+
+  // Act & Assert
+  NOLINT_EXPECT_THROW(builder.OutputWidth(0), std::invalid_argument);
+}
+
+//! Scenario: Configured output width is used for help formatting
+NOLINT_TEST(CliBuilder, OutputWidthIsUsedForHelpFormatting)
+{
+  // Arrange
+  constexpr unsigned int width = 20;
+  const auto about = std::string(
+    "This description is long enough to wrap across multiple lines.");
+  const auto command
+    = std::shared_ptr<Command> { CommandBuilder(Command::DEFAULT) };
+  const auto cli = CliBuilder()
+                     .ProgramName("clap-test")
+                     .About(about)
+                     .WithCommand(command)
+                     .WithHelpCommand()
+                     .OutputWidth(width)
+                     .Build();
+
+  constexpr int argc = 2;
+  const char* argv[argc] = { "clap-test", "--help" };
+  testing::internal::CaptureStdout();
+
+  // Act
+  (void)cli->Parse(argc, argv);
+  const auto output = testing::internal::GetCapturedStdout();
+
+  // Assert
+  const auto lines = SplitLines(output);
+  for (const auto& raw_line : lines) {
+    const auto line = StripAnsiEscapeCodes(raw_line);
+    const auto first_non_space = line.find_first_not_of(' ');
+    if (first_non_space == std::string::npos) {
+      continue;
+    }
+    if (line.starts_with("   ")) {
+      EXPECT_LE(line.size(), width);
+    }
+  }
 }
 
 } // namespace

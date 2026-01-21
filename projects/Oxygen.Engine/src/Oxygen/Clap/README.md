@@ -274,7 +274,7 @@ required by the project.
 
 | Area/Feature | Status | Description |
 | --- | --- | --- |
-| CLI output width config | ⏳ | Make output width configurable (currently hardcoded to 80). |
+| CLI output width config | ✅ | Configurable via `CliBuilder::OutputWidth()` and stored in `CommandLineContext`. |
 | Global CLI options | ⏳ | Implement support for options that apply to all commands. |
 | Help command (built-in) | ✅ | Built-in `help` command plus `-h/--help` option routing to the active command. |
 | Version command (built-in) | ✅ | Built-in `version` command plus `-v/--version` option on the default command. |

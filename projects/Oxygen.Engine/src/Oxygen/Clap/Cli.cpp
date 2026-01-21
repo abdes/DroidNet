@@ -5,7 +5,17 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdlib>
+#include <memory>
+#include <optional>
 #include <vector>
+
+#if defined(_WIN32)
+#  include <windows.h>
+#else
+#  include <sys/ioctl.h>
+#  include <unistd.h>
+#endif
 
 #include <fmt/format.h>
 #include <fmt/printf.h>
@@ -24,6 +34,83 @@
 using oxygen::clap::detail::Arguments;
 
 namespace oxygen::clap {
+
+namespace {
+
+  constexpr unsigned int kFallbackOutputWidth = 80;
+
+  auto TryParseColumnsEnv() -> std::optional<unsigned int>
+  {
+#if defined(_WIN32)
+    char* columns = nullptr;
+    size_t length = 0;
+    if (_dupenv_s(&columns, &length, "COLUMNS") != 0 || columns == nullptr) {
+      return std::nullopt;
+    }
+    const auto cleanup
+      = std::unique_ptr<char, decltype(&std::free)>(columns, &std::free);
+    if (*columns == '\0') {
+      return std::nullopt;
+    }
+    char* end = nullptr;
+    const auto value = std::strtoul(columns, &end, 10);
+    if (end == columns || *end != '\0' || value < 1U) {
+      return std::nullopt;
+    }
+    return static_cast<unsigned int>(value);
+#else
+    const char* columns = std::getenv("COLUMNS");
+    if (columns == nullptr || *columns == '\0') {
+      return std::nullopt;
+    }
+    char* end = nullptr;
+    const auto value = std::strtoul(columns, &end, 10);
+    if (end == columns || *end != '\0' || value < 1U) {
+      return std::nullopt;
+    }
+    return static_cast<unsigned int>(value);
+#endif
+  }
+
+  auto GetTerminalWidth() -> std::optional<unsigned int>
+  {
+#if defined(_WIN32)
+    const HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (handle == INVALID_HANDLE_VALUE || handle == nullptr) {
+      return TryParseColumnsEnv();
+    }
+    CONSOLE_SCREEN_BUFFER_INFO info;
+    if (!GetConsoleScreenBufferInfo(handle, &info)) {
+      return TryParseColumnsEnv();
+    }
+    const auto width
+      = static_cast<int>(info.srWindow.Right - info.srWindow.Left + 1);
+    if (width < 1) {
+      return TryParseColumnsEnv();
+    }
+    return static_cast<unsigned int>(width);
+#else
+    winsize size {};
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) == 0 && size.ws_col > 0) {
+      return static_cast<unsigned int>(size.ws_col);
+    }
+    return TryParseColumnsEnv();
+#endif
+  }
+
+  auto ResolveOutputWidth(const std::optional<unsigned int>& configured,
+    const bool auto_enabled) -> unsigned int
+  {
+    if (configured.has_value()) {
+      return configured.value();
+    }
+    if (auto_enabled) {
+      return GetTerminalWidth().value_or(kFallbackOutputWidth);
+    }
+    return kFallbackOutputWidth;
+  }
+
+} // namespace
 
 CmdLineArgumentsError::~CmdLineArgumentsError() = default;
 
@@ -52,7 +139,10 @@ auto Cli::Parse(const int argc, const char** argv) -> CommandLineContext
   }
 
   const parser::Tokenizer tokenizer { args };
-  CommandLineContext context(ProgramName(), active_command_, ovm_);
+  const auto resolved_width
+    = ResolveOutputWidth(output_width_, auto_output_width_);
+  CommandLineContext context(
+    ProgramName(), active_command_, ovm_, resolved_width);
   context.theme = &CliTheme::Dark(); // Set a default theme
   parser::CmdLineParser parser(context, tokenizer, commands_);
   if (parser.Parse()) {
@@ -166,7 +256,7 @@ auto Cli::EnableHelpCommand() -> void
 auto Cli::HandleHelpCommand(const CommandLineContext& context) const -> void
 {
   if (context.ovm.HasOption("help")) {
-    context.active_command->Print(context, 80);
+    context.active_command->Print(context, context.output_width);
   } else if (context.active_command->PathAsString() == "help") {
     if (context.ovm.HasOption(Option::key_rest_)) {
       const auto& values = context.ovm.ValuesOf(Option::key_rest_);
@@ -182,7 +272,7 @@ auto Cli::HandleHelpCommand(const CommandLineContext& context) const -> void
           return cmd->Path() == command_path;
         });
       if (command != commands_.end()) {
-        (*command)->Print(context, 80);
+        (*command)->Print(context, context.output_width);
       } else {
         context.err << fmt::format(
           "The path `{}` does not correspond to a known command.\n",
@@ -192,8 +282,8 @@ auto Cli::HandleHelpCommand(const CommandLineContext& context) const -> void
                     << '\n';
       }
     } else {
-      PrintDefaultCommand(context, 80);
-      PrintCommands(context, 80);
+      PrintDefaultCommand(context, context.output_width);
+      PrintCommands(context, context.output_width);
     }
   }
 }

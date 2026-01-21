@@ -47,6 +47,12 @@ public:
   /// Set the descriptive message about this command line program.
   OXGN_CLP_API auto About(std::string about) -> Self&;
 
+  /// Set the output width for help/usage formatting.
+  OXGN_CLP_API auto OutputWidth(unsigned int width) -> Self&;
+
+  /// Use the current terminal width for help/usage formatting.
+  OXGN_CLP_API auto WithAutoOutputWidth() -> Self&;
+
   /// Add the given command to the `Cli`.
   OXGN_CLP_API auto WithCommand(std::shared_ptr<Command> command) -> Self&;
 

@@ -148,7 +148,7 @@ namespace {
     const auto commands = BuildCommands(command_paths);
     OptionValuesMap ovm;
     Command::Ptr command;
-    const CommandLineContext base_context("test", command, ovm);
+    const CommandLineContext base_context("test", command, ovm, 80U);
     auto context = ParserContext::New(base_context, commands);
     context->active_command = predefined_commands().at("with-options");
     auto token = tokenizer.NextToken();
@@ -176,7 +176,7 @@ namespace {
     const auto event = TokenEvent<TokenType::EndOfInput>("");
     OptionValuesMap ovm;
     Command::Ptr command;
-    const CommandLineContext base_context("test", command, ovm);
+    const CommandLineContext base_context("test", command, ovm, 80U);
     auto context = ParserContext::New(
       base_context, { StateTest::predefined_commands().at("default") });
     CHECK_VIOLATES_CONTRACT(state->OnEnter(event, context));
@@ -198,7 +198,7 @@ namespace {
     const auto event = TokenEvent<TokenType::Value>("xxx");
     OptionValuesMap ovm;
     Command::Ptr command;
-    const CommandLineContext base_context("test", command, ovm);
+    const CommandLineContext base_context("test", command, ovm, 80U);
     auto context = ParserContext::New(
       base_context, { StateTest::predefined_commands().at("default") });
     CHECK_VIOLATES_CONTRACT(state->OnEnter(event, {}));
