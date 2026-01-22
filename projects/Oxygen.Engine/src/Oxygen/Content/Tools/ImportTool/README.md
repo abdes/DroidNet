@@ -111,7 +111,6 @@ This specification is grounded in the following modules and headers from `Oxygen
 | `--log-format` | enum | `text` | Log output format: `text`, `json` | Logger formatter |
 | `--diagnostics-file` | path | none | Write structured diagnostics to file | Diagnostics output |
 | `--cooked-root` | path | none | Default output directory for all jobs | `ImportRequest::output_root` |
-| `--max-in-flight` | uint | `std::thread::hardware_concurrency()` | Maximum concurrent jobs | `AsyncImportService` throttling |
 | `--fail-fast` | flag | false | Stop on first job failure | Batch execution policy |
 | `--no-color` | flag | false | Disable ANSI color codes | Terminal output formatting |
 | `--theme` | enum | `dark` | Color theme: `plain`, `dark`, `light` | Help/usage theme selection |
@@ -298,7 +297,6 @@ Oxygen.Content.ImportTool texture albedo.png -o ./Cooked \
 | `--root` | path | no | manifest directory | Base path for relative source paths |
 | `--dry-run` | flag | no | false | Validation‑only mode |
 | `--fail-fast` | flag | no | false | Stop on first job failure |
-| `--max-in-flight` | uint | no | global default | Concurrent job limit |
 
 **REQ‑BATCH‑003**: `--dry-run` SHALL validate manifest, resolve paths, and print job summary without executing imports.
 
@@ -708,11 +706,9 @@ Oxygen.Content.ImportTool gltf model.glb -o ./Cooked \
 
 **REQ‑EXE‑001**: Job execution SHALL use `AsyncImportService` from `Oxygen::Content` for concurrent execution.
 
-**REQ‑EXE‑002**: The maximum number of concurrent jobs (in‑flight limit) SHALL be controlled by:
-
-1. Command‑line `--max-in-flight` option (if specified)
-2. Global `--max-in-flight` default (if specified)
-3. `std::thread::hardware_concurrency()` (system CPU count)
+**REQ‑EXE‑002**: The maximum number of concurrent jobs (in‑flight limit) SHALL
+be controlled by the manifest `max_in_flight_jobs` field when provided, and
+otherwise default to `std::thread::hardware_concurrency()`.
 
 **REQ‑EXE‑003**: In batch mode, jobs with unsatisfied dependencies SHALL not be submitted to `AsyncImportService` until all dependencies complete successfully.
 
@@ -767,7 +763,8 @@ Oxygen.Content.ImportTool gltf model.glb -o ./Cooked \
 
 **Acceptance Criteria:**
 
-- AC‑EXE‑001: Batch with 100 jobs respects `--max-in-flight` limit throughout execution.
+- AC‑EXE‑001: Batch with 100 jobs respects the configured in‑flight limit
+  throughout execution.
 - AC‑EXE‑002: TUI updates at least once per second for active jobs.
 - AC‑EXE‑003: Text mode output is machine‑parseable with grep/regex.
 - AC‑EXE‑004: Dependency graph with 10+ jobs respects ordering constraints.

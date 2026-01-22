@@ -22,6 +22,15 @@ constexpr const char* kImportManifestSchema = R"schema(
       "type": "integer",
       "minimum": 1
     },
+    "thread_pool_size": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "max_in_flight_jobs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "concurrency": { "$ref": "#/definitions/Concurrency" },
     "defaults": { "$ref": "#/definitions/Defaults" },
     "jobs": {
       "type": "array",
@@ -64,6 +73,7 @@ constexpr const char* kImportManifestSchema = R"schema(
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "with_content_hashing": { "type": "boolean" },
         "content_flags": { "$ref": "#/definitions/ContentFlags" },
         "unit_normalization_policy": { "type": "string" },
         "custom_unit_scale": { "type": "number" },
@@ -87,6 +97,7 @@ constexpr const char* kImportManifestSchema = R"schema(
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "with_content_hashing": { "type": "boolean" },
         "content_flags": { "$ref": "#/definitions/ContentFlags" },
         "unit_normalization_policy": { "type": "string" },
         "custom_unit_scale": { "type": "number" },
@@ -116,6 +127,26 @@ constexpr const char* kImportManifestSchema = R"schema(
         "force_rgba": { "type": "boolean" },
         "cubemap": { "type": "boolean" },
         "equirect_to_cube": { "type": "boolean" }
+      }
+    },
+    "PipelineConcurrency": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workers": { "type": "integer", "minimum": 0 },
+        "queue_capacity": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "Concurrency": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "texture": { "$ref": "#/definitions/PipelineConcurrency" },
+        "buffer": { "$ref": "#/definitions/PipelineConcurrency" },
+        "material": { "$ref": "#/definitions/PipelineConcurrency" },
+        "mesh": { "$ref": "#/definitions/PipelineConcurrency" },
+        "geometry": { "$ref": "#/definitions/PipelineConcurrency" },
+        "scene": { "$ref": "#/definitions/PipelineConcurrency" }
       }
     }
   }

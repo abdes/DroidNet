@@ -1,5 +1,14 @@
 {
   "version": 1,
+  "thread_pool_size": 30,
+  "concurrency": {
+    "texture": { "workers": 12, "queue_capacity": 64 },
+    "buffer": { "workers": 2, "queue_capacity": 64 },
+    "material": { "workers": 4, "queue_capacity": 64 },
+    "mesh": { "workers": 10, "queue_capacity": 64 },
+    "geometry": { "workers": 3, "queue_capacity": 32 },
+    "scene": { "workers": 1, "queue_capacity": 8 }
+  },
   "defaults": {
     "job_type": "gltf",
     "cooked_root": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Cooked",
