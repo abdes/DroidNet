@@ -54,8 +54,7 @@ public:
 private:
   [[nodiscard]] auto ExecuteAsync() -> Co<ImportReport> override
   {
-    ReportProgress(
-      ImportPhase::kWorking, 0.1f, 0.1f, 1U, 1U, "Test job running");
+    ReportPhaseProgress(ImportPhase::kWorking, 0.1f, "Test job running");
     co_return MakeSuccessReport(Request());
   }
 };
@@ -193,7 +192,7 @@ protected:
   }
 
   [[nodiscard]] auto MakeJob(ImportJobId job_id, ImportRequest request,
-    ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
+    ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
     std::shared_ptr<Event> cancel_event) -> std::shared_ptr<TestImportJob>
   {
     return std::make_shared<TestImportJob>(job_id, std::move(request),
@@ -353,8 +352,8 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitJob_CallsProgressCallback)
       request.cooked_root = MakeTestCookedRoot();
 
       auto cancel_event = std::make_shared<Event>();
-      auto on_progress = [&](const ImportProgress& progress) {
-        progress_job_id = progress.job_id;
+      auto on_progress = [&](const ProgressEvent& progress) {
+        progress_job_id = progress.header.job_id;
         progress_called = true;
       };
 

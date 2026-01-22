@@ -171,6 +171,8 @@ set(
   # Import - Internal pipelines
   "Import/Internal/Pipelines/BufferPipeline.h"
   "Import/Internal/Pipelines/BufferPipeline.cpp"
+  "Import/Internal/Pipelines/MeshBuildPipeline.h"
+  "Import/Internal/Pipelines/MeshBuildPipeline.cpp"
   "Import/Internal/Pipelines/GeometryPipeline.h"
   "Import/Internal/Pipelines/GeometryPipeline_tangents.h"
   "Import/Internal/Pipelines/GeometryPipeline.cpp"

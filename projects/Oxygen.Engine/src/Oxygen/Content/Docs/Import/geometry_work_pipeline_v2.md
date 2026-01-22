@@ -101,6 +101,7 @@ struct WorkItem {
 
   std::vector<data::AssetKey> material_keys; // Aligned with scene materials
   data::AssetKey default_material_key;
+  std::vector<uint32_t> material_slots_used; // Unique slots used by ranges
   bool want_textures = false;  // Used for UV diagnostics
   bool has_material_textures = false; // Used for UV diagnostics
 
@@ -129,6 +130,9 @@ Notes:
   native mesh views.
 - `material_keys` may be empty; the pipeline uses `default_material_key` when a
   material slot is missing.
+- `material_slots_used` must be derived from triangle ranges (not from
+  `material_keys` size). This list is used by the planner to pass only the
+  resolved material keys needed for the mesh.
 - `has_material_textures` should be precomputed by the importer for
   format-agnostic meshes; for FBX it can be derived from `ufbx_material`.
 - `request.options.normal_policy` and `request.options.tangent_policy` are fully
@@ -155,6 +159,7 @@ struct CookedGeometryPayload {
   std::string virtual_path;
   std::string descriptor_relpath;
   std::vector<std::byte> descriptor_bytes;  // .ogeo payload
+  std::vector<MaterialSlotPatchOffset> material_patch_offsets;
 
   std::vector<CookedMeshPayload> lods; // LOD0..LOD(n-1)
 };
@@ -174,6 +179,8 @@ Notes:
   hashing. If buffer emission occurs first, the planner may schedule a
   descriptor‑finalization step on the ThreadPool that fills indices and computes
   `content_hash` over the complete bytes.
+- Mesh build must capture per-submesh material patch offsets while serializing
+  the descriptor so geometry finalization can patch keys directly by offset.
 
 ---
 
@@ -237,36 +244,47 @@ For each work item:
 7) Fix invalid tangents/bitangents to ensure orthonormal basis when tangents are
    emitted.
 8) Build `SubMeshDesc` and `MeshViewDesc` per LOD:
-   - Submesh name: `"mat_<scene_material_index>"`.
+   - Submesh name remains for debugging only.
    - MeshView covers the submesh’s index and vertex ranges (tight bounds).
-9) Create buffer payloads per LOD:
-   - Vertex buffer: `data::Vertex` array, stride `sizeof(Vertex)`,
-     usage flags = `VertexBuffer | Static`, format = `Format::kUnknown`.
-   - Index buffer: `uint32_t` array, usage flags = `IndexBuffer | Static`,
-     format = `Format::kR32UInt`.
-   - Skinned meshes emit additional joint index/weight buffers.
-   - `content_hash` is **not** computed here. Hashing happens on the
-     ThreadPool in `BufferPipeline` once buffer dependencies are ready.
-10) Compute geometry identity:
-    - `virtual_path = request.loose_cooked_layout.GeometryVirtualPath(
-       storage_mesh_name)`
-    - `descriptor_relpath = request.loose_cooked_layout.GeometryDescriptorRelPath(
-       storage_mesh_name)`
-    - `geometry_key` based on `AssetKeyPolicy`
-11) Build geometry descriptor bytes:
-    - `GeometryAssetDesc` + `MeshDesc[ lod_count ]` + submeshes + views
-    - `lod_count = lods.size()`
-    - `mesh_type` per LOD (`kStandard`, `kSkinned`, or `kProcedural`)
-    - `header.version = kGeometryAssetVersion`
-    - `header.variant_flags` uses **union-of-LOD attributes** (any attribute
-      emitted by any LOD sets the bit). Missing attributes on a specific LOD
-      must be defaulted by loaders.
-    - `bounding_box_min` and `bounding_box_max` must be populated for both the
-      asset and each mesh. All-zero bounds are valid.
-12) Defer `header.content_hash` until all dependency indices are known.
-  Hashing must run on the ThreadPool and must use the **complete**
-  descriptor bytes (no skip ranges).
-13) Return `CookedGeometryPayload` with metadata and buffer payloads.
+9) Record patch offsets during descriptor serialization:
+   - Capture the absolute byte offset of each `SubMeshDesc::material_asset_key`
+     within the descriptor payload.
+   - Store a compact table of `{slot, material_key_offset}` in
+     `CookedGeometryPayload`.
+10) Patch material keys during descriptor finalization:
+    - Geometry finalization receives only the resolved keys for
+      `material_slots_used`.
+    - For each patch entry, seek to `material_key_offset` and overwrite the
+      `material_asset_key` directly.
+    - If a required slot is missing, emit a blocking diagnostic and fail.
+11) Create buffer payloads per LOD:
+    - Vertex buffer: `data::Vertex` array, stride `sizeof(Vertex)`,
+      usage flags = `VertexBuffer | Static`, format = `Format::kUnknown`.
+    - Index buffer: `uint32_t` array, usage flags = `IndexBuffer | Static`,
+      format = `Format::kR32UInt`.
+    - Skinned meshes emit additional joint index/weight buffers.
+    - `content_hash` is **not** computed here. Hashing happens on the
+      ThreadPool in `BufferPipeline` once buffer dependencies are ready.
+12) Compute geometry identity:
+     - `virtual_path = request.loose_cooked_layout.GeometryVirtualPath(
+        storage_mesh_name)`
+     - `descriptor_relpath = request.loose_cooked_layout.GeometryDescriptorRelPath(
+        storage_mesh_name)`
+     - `geometry_key` based on `AssetKeyPolicy`
+13) Build geometry descriptor bytes:
+     - `GeometryAssetDesc` + `MeshDesc[ lod_count ]` + submeshes + views
+     - `lod_count = lods.size()`
+     - `mesh_type` per LOD (`kStandard`, `kSkinned`, or `kProcedural`)
+     - `header.version = kGeometryAssetVersion`
+     - `header.variant_flags` uses **union-of-LOD attributes** (any attribute
+       emitted by any LOD sets the bit). Missing attributes on a specific LOD
+       must be defaulted by loaders.
+     - `bounding_box_min` and `bounding_box_max` must be populated for both the
+       asset and each mesh. All-zero bounds are valid.
+14) Defer `header.content_hash` until all dependency indices are known.
+    Hashing must run on the ThreadPool and must use the **complete**
+    descriptor bytes (no skip ranges).
+15) Return `CookedGeometryPayload` with metadata and buffer payloads.
 
 All errors must be converted to `ImportDiagnostic`; no exceptions cross async
 boundaries.
@@ -303,9 +321,12 @@ boundaries.
    - Content hashes computed for all buffers.
 
 7) **Geometry descriptor serialization**
+
    - Packed alignment = 1 (no padding).
    - `GeometryAssetDesc` + `MeshDesc[ lod_count ]` + submesh/view tables.
    - Optional mesh-type blob follows each `MeshDesc` as required.
+   - Capture per-submesh `material_key_offset` values as the descriptor is
+     serialized.
 
 ---
 
@@ -336,6 +357,8 @@ Requirements:
   buffer indices are known, over the **complete** descriptor bytes
 - `lod_count = lods.size()`
 - `SubMeshDesc::material_asset_key` populated for each submesh
+- `material_patch_offsets` provides absolute offsets (from payload start) for
+  each submesh material key
 
 ### Geometry Attribute Mask
 

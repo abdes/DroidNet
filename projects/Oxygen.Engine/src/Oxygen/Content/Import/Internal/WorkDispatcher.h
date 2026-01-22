@@ -46,14 +46,17 @@ public:
   //! Progress reporter used to emit granular updates.
   struct ProgressReporter final {
     ImportJobId job_id = kInvalidJobId;
-    ImportProgressCallback on_progress;
+    ProgressEventCallback on_progress;
     float overall_start = 0.0f;
     float overall_end = 1.0f;
 
-    auto Report(ImportProgressEvent event, ImportPhase phase,
-      float phase_progress, uint32_t items_completed, uint32_t items_total,
-      float overall_progress, std::string message, std::string item_kind = {},
-      std::string item_name = {}) const -> void;
+    auto ReportItemProgress(ProgressEventKind kind, ImportPhase phase,
+      float overall_progress, std::string message, std::string item_kind,
+      std::string item_name) const -> void;
+
+    auto ReportItemCollected(ImportPhase phase, float overall_progress,
+      std::string message, std::string item_kind, float queue_load) const
+      -> void;
   };
 
   //! Context required to execute a plan.
@@ -92,10 +95,9 @@ private:
   static auto AddDiagnostics(
     ImportSession& session, std::vector<ImportDiagnostic> diagnostics) -> void;
 
-  [[nodiscard]] auto EmitGeometryPayload(GeometryPipeline& pipeline,
+  [[nodiscard]] auto EmitGeometryPayload(
     const MeshBuildPipeline::CookedGeometryPayload& cooked,
-    const std::vector<MeshBufferBindings>& bindings, std::string_view source_id)
-    -> co::Co<bool>;
+    std::span<const std::byte> finalized_descriptor_bytes) -> bool;
 
   [[nodiscard]] auto EmitTexturePayload(TexturePipeline::WorkResult& result)
     -> std::optional<uint32_t>;
@@ -117,7 +119,7 @@ private:
   auto EnsureBufferPipeline(co::Nursery& nursery) -> BufferPipeline&;
   auto EnsureMaterialPipeline(co::Nursery& nursery) -> MaterialPipeline&;
   auto EnsureMeshBuildPipeline(co::Nursery& nursery) -> MeshBuildPipeline&;
-  auto EnsureGeometryPipeline() -> GeometryPipeline&;
+  auto EnsureGeometryPipeline(co::Nursery& nursery) -> GeometryPipeline&;
   auto EnsureScenePipeline(co::Nursery& nursery) -> ScenePipeline&;
 
   auto ClosePipelines() noexcept -> void;

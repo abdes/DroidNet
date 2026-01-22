@@ -701,18 +701,25 @@ namespace {
     return bytes;
   }
 
+  struct ResolvedTextureSource final {
+    TexturePipeline::SourceBytes bytes;
+    std::filesystem::path source_path;
+  };
+
   [[nodiscard]] auto ResolveImageBytes(const cgltf_image& image,
     const std::filesystem::path& base_dir,
     const std::shared_ptr<const cgltf_data>& owner,
     std::vector<ImportDiagnostic>& diagnostics, std::string_view source_id,
     std::span<const AdapterInput::ExternalTextureBytes> external_texture_bytes)
-    -> std::optional<TexturePipeline::SourceBytes>
+    -> std::optional<ResolvedTextureSource>
   {
-    const auto make_placeholder = []() -> TexturePipeline::SourceBytes {
+    const auto make_placeholder = []() -> ResolvedTextureSource {
       auto bytes = std::make_shared<std::vector<std::byte>>();
-      return TexturePipeline::SourceBytes {
-        .bytes = std::span<const std::byte>(bytes->data(), bytes->size()),
-        .owner = std::static_pointer_cast<const void>(bytes),
+      return ResolvedTextureSource {
+        .bytes = TexturePipeline::SourceBytes {
+          .bytes = std::span<const std::byte>(bytes->data(), bytes->size()),
+          .owner = std::static_pointer_cast<const void>(bytes),
+        },
       };
     };
 
@@ -731,9 +738,11 @@ namespace {
       const auto* raw = static_cast<const std::byte*>(buffer->data)
         + image.buffer_view->offset;
       const auto size = static_cast<size_t>(image.buffer_view->size);
-      return TexturePipeline::SourceBytes {
-        .bytes = std::span(raw, size),
-        .owner = std::static_pointer_cast<const void>(owner),
+      return ResolvedTextureSource {
+        .bytes = TexturePipeline::SourceBytes {
+          .bytes = std::span(raw, size),
+          .owner = std::static_pointer_cast<const void>(owner),
+        },
       };
     }
 
@@ -746,9 +755,11 @@ namespace {
     std::string_view uri(image.uri);
     if (uri.rfind("data:", 0) == 0) {
       auto bytes = DecodeDataUri(uri, diagnostics, source_id);
-      return TexturePipeline::SourceBytes {
-        .bytes = std::span<const std::byte>(bytes->data(), bytes->size()),
-        .owner = std::static_pointer_cast<const void>(bytes),
+      return ResolvedTextureSource {
+        .bytes = TexturePipeline::SourceBytes {
+          .bytes = std::span<const std::byte>(bytes->data(), bytes->size()),
+          .owner = std::static_pointer_cast<const void>(bytes),
+        },
       };
     }
 
@@ -756,25 +767,19 @@ namespace {
     if (!external_texture_bytes.empty()) {
       const auto external_bytes = find_external_bytes(source_id);
       if (external_bytes) {
-        return TexturePipeline::SourceBytes {
-          .bytes = std::span<const std::byte>(
-            external_bytes->data(), external_bytes->size()),
-          .owner = std::static_pointer_cast<const void>(external_bytes),
+        return ResolvedTextureSource {
+          .bytes = TexturePipeline::SourceBytes {
+            .bytes = std::span<const std::byte>(
+              external_bytes->data(), external_bytes->size()),
+            .owner = std::static_pointer_cast<const void>(external_bytes),
+          },
         };
       }
-
-      diagnostics.push_back(MakeWarningDiagnostic("gltf.image.async_missing",
-        "glTF image bytes were not loaded via async reader", source_id,
-        path.string()));
-      return make_placeholder();
     }
 
-    auto bytes = LoadExternalBytes(path, diagnostics, source_id);
-
-    return TexturePipeline::SourceBytes {
-      .bytes = std::span<const std::byte>(bytes->data(), bytes->size()),
-      .owner = std::static_pointer_cast<const void>(bytes),
-    };
+    auto placeholder = make_placeholder();
+    placeholder.source_path = path;
+    return placeholder;
   }
 
   [[nodiscard]] auto BuildSceneSourceId(
@@ -1578,6 +1583,25 @@ namespace {
         .bounds = bounds3,
       };
 
+      if (!owner->ranges.empty()) {
+        uint32_t max_slot = 0;
+        for (const auto& range : owner->ranges) {
+          max_slot = (std::max)(max_slot, range.material_slot);
+        }
+
+        std::vector<uint8_t> used(max_slot + 1, static_cast<uint8_t>(0));
+        for (const auto& range : owner->ranges) {
+          used[range.material_slot] = static_cast<uint8_t>(1);
+        }
+
+        item.material_slots_used.clear();
+        for (uint32_t i = 0; i < used.size(); ++i) {
+          if (used[i] != 0U) {
+            item.material_slots_used.push_back(i);
+          }
+        }
+      }
+
       item.lods = {
         MeshLod {
           .lod_name = "LOD0",
@@ -1875,15 +1899,15 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
       return;
     }
 
-    auto source_bytes = ResolveImageBytes(*image, base_dir, impl_->data_owner,
+    auto resolved_bytes = ResolveImageBytes(*image, base_dir, impl_->data_owner,
       result.diagnostics, source_id, input.external_texture_bytes);
-    if (!source_bytes.has_value()) {
+    if (!resolved_bytes.has_value()) {
       DLOG_F(INFO, "glTF texture register: source_id='{}' no bytes", source_id);
       return;
     }
 
     DLOG_F(INFO, "glTF texture register: source_id='{}' bytes={} usage={}",
-      source_id, source_bytes->bytes.size(), UsageLabel(usage));
+      source_id, resolved_bytes->bytes.bytes.size(), UsageLabel(usage));
 
     auto desc = MakeDescFromPreset(PresetForUsage(usage));
     desc.source_id = source_id;
@@ -1915,7 +1939,8 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
       = input.request.options.texture_tuning.placeholder_on_failure
       ? TexturePipeline::FailurePolicy::kPlaceholder
       : TexturePipeline::FailurePolicy::kStrict;
-    item.source = *source_bytes;
+    item.source = resolved_bytes->bytes;
+    item.source_path = resolved_bytes->source_path;
     item.stop_token = input.stop_token;
 
     work_items.emplace(source_id, std::move(item));

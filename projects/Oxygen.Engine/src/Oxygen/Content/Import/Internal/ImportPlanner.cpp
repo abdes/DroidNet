@@ -13,26 +13,6 @@
 
 namespace oxygen::content::import {
 
-auto to_string(PlanItemKind kind) noexcept -> std::string_view
-{
-  switch (kind) {
-  case PlanItemKind::kTextureResource:
-    return "Texture";
-  case PlanItemKind::kBufferResource:
-    return "Buffer";
-  case PlanItemKind::kAudioResource:
-    return "Audio";
-  case PlanItemKind::kMaterialAsset:
-    return "Material";
-  case PlanItemKind::kGeometryAsset:
-    return "Geometry";
-  case PlanItemKind::kSceneAsset:
-    return "Scene";
-  }
-
-  return "Unknown";
-}
-
 [[nodiscard]] auto ReadinessTracker::IsReady() const noexcept -> bool
 {
   if (ready_event == nullptr) {
@@ -112,6 +92,12 @@ auto ImportPlanner::AddGeometryAsset(
 {
   return AddItem(
     PlanItemKind::kGeometryAsset, std::move(debug_name), work_handle);
+}
+
+auto ImportPlanner::AddMeshBuild(
+  std::string debug_name, WorkPayloadHandle work_handle) -> PlanItemId
+{
+  return AddItem(PlanItemKind::kMeshBuild, std::move(debug_name), work_handle);
 }
 
 auto ImportPlanner::AddSceneAsset(

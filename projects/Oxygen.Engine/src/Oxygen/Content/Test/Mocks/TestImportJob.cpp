@@ -19,7 +19,7 @@ namespace co = oxygen::co;
 namespace oxygen::content::import::test {
 
 TestImportJob::TestImportJob(ImportJobId job_id, ImportRequest request,
-  ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
+  ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
   std::shared_ptr<co::Event> cancel_event,
   oxygen::observer_ptr<IAsyncFileReader> file_reader,
   oxygen::observer_ptr<IAsyncFileWriter> file_writer,
@@ -100,9 +100,7 @@ auto TestImportJob::ExecuteAsync() -> co::Co<ImportReport>
     if (config_.report_progress) {
       const auto progress
         = static_cast<float>(step + 1) / static_cast<float>(step_count);
-      ReportProgress(ImportPhase::kWorking, progress, progress,
-        static_cast<uint32_t>(step + 1), static_cast<uint32_t>(step_count),
-        "Test job running");
+      ReportPhaseProgress(ImportPhase::kWorking, progress, "Test job running");
     }
   }
 

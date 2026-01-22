@@ -107,7 +107,7 @@ private:
     content::import::ImportJobId job_id = content::import::kInvalidJobId;
 
     std::mutex progress_mutex;
-    content::import::ImportProgress progress {};
+    content::import::ProgressEvent progress {};
     std::vector<content::import::ImportDiagnostic> diagnostics;
 
     std::mutex completion_mutex;

@@ -65,7 +65,7 @@ public:
    @param thread_pool Thread pool used by ImportSession.
   */
   OXGN_CNTT_API ImportJob(ImportJobId job_id, ImportRequest request,
-    ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
+    ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
     std::shared_ptr<co::Event> cancel_event,
     observer_ptr<IAsyncFileReader> file_reader,
     observer_ptr<IAsyncFileWriter> file_writer,
@@ -175,16 +175,17 @@ protected:
 
   //! Access the progress callback (may be empty).
   OXGN_CNTT_NDAPI auto ProgressCallback() const noexcept
-    -> const ImportProgressCallback&;
+    -> const ProgressEventCallback&;
 
-  OXGN_CNTT_API auto ReportProgress(ImportPhase phase, float overall_progress,
-    float phase_progress, uint32_t items_completed, uint32_t items_total,
-    std::string message) -> void;
+  OXGN_CNTT_API auto ReportJobEvent(ProgressEventKind kind, ImportPhase phase,
+    float overall_progress, std::string message) -> void;
 
-  OXGN_CNTT_API auto ReportProgress(ImportProgressEvent event,
-    ImportPhase phase, float overall_progress, float phase_progress,
-    uint32_t items_completed, uint32_t items_total, std::string message,
-    std::string item_kind = {}, std::string item_name = {}) -> void;
+  OXGN_CNTT_API auto ReportPhaseProgress(
+    ImportPhase phase, float overall_progress, std::string message) -> void;
+
+  OXGN_CNTT_API auto ReportItemProgress(ProgressEventKind kind,
+    ImportPhase phase, float overall_progress, std::string message,
+    std::string item_kind, std::string item_name) -> void;
 
 private:
   [[nodiscard]] auto MainAsync() -> co::Co<>;
@@ -198,7 +199,7 @@ private:
   ImportJobId job_id_ = kInvalidJobId;
   ImportRequest request_;
   ImportCompletionCallback on_complete_;
-  ImportProgressCallback on_progress_;
+  ProgressEventCallback on_progress_;
   std::shared_ptr<co::Event> cancel_event_;
   observer_ptr<IAsyncFileReader> file_reader_ {};
   observer_ptr<IAsyncFileWriter> file_writer_ {};

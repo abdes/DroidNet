@@ -56,23 +56,30 @@ the main application thread.
   graph and per-asset readiness tracking. Pipelines only run once required
   dependencies are ready per the planner’s schedule.
 
-12. **Direct Adapter Translation**: Format adapters (FBX/glTF) translate
+12. **Geometry Material Patching**: Mesh build captures a table of
+  `{slot, material_key_offset}` for each submesh while serializing the
+  descriptor. Geometry finalization receives only the resolved material keys
+  for the mesh’s `material_slots_used` and patches
+  `SubMeshDesc::material_asset_key` directly by offset. The planner guarantees
+  these materials are ready before geometry finalization runs.
+
+13. **Direct Adapter Translation**: Format adapters (FBX/glTF) translate
   native parser structures (ufbx/cgltf) directly into pipeline `WorkItem`
   storage with no intermediate scene graph. The job owns the storage and
   registers plan items and dependencies via `ImportPlanner`.
 
-13. **ThreadPool-Only content_hash**: `content_hash` is computed only on the
+14. **ThreadPool-Only content_hash**: `content_hash` is computed only on the
   ThreadPool **when enabled**. The invariant is that all dependencies are
   ready and the full descriptor payload is known before hashing. Hashing is
   controlled by `ImportOptions::with_content_hashing` and cascades into all
   pipeline configs. When disabled, pipelines MUST NOT compute any hashes.
 
-14. **One Lazy Emitter Per Resource Type Per Session**: ImportSession owns
+15. **One Lazy Emitter Per Resource Type Per Session**: ImportSession owns
     emitters (TextureEmitter, BufferEmitter, AssetEmitter). Created lazily on
     first use. Emitter.Emit() returns a stable index immediately and queues
     async I/O in the background.
 
-15. **Log-Structured Allocation (Append Semantics)**: Re-importing an asset
+16. **Log-Structured Allocation (Append Semantics)**: Re-importing an asset
   allocates NEW space with a NEW index (append-like). Old data remains but is
   stale. Allocation is done by reserving explicit offsets and writing via
   `WriteAt*` to avoid interleaving. The index file is always accurate. PAK

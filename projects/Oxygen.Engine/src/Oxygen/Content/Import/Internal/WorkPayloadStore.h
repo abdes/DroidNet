@@ -42,9 +42,20 @@ struct MaterialWorkPayload final {
 };
 
 //! Stored payload for geometry pipeline work.
+struct GeometryFinalizeWorkItem final {
+  PlanItemId mesh_build_item {};
+};
+
+//! Stored payload for mesh build pipeline work.
+struct MeshBuildWorkPayload final {
+  WorkPayloadHeader header { PlanItemKind::kMeshBuild };
+  MeshBuildPipeline::WorkItem item;
+};
+
+//! Stored payload for geometry pipeline work.
 struct GeometryWorkPayload final {
   WorkPayloadHeader header { PlanItemKind::kGeometryAsset };
-  MeshBuildPipeline::WorkItem item;
+  GeometryFinalizeWorkItem item;
 };
 
 //! Stored payload for scene pipeline work.
@@ -70,6 +81,9 @@ public:
   [[nodiscard]] auto Store(MeshBuildPipeline::WorkItem item)
     -> WorkPayloadHandle;
 
+  //! Store a geometry finalize work item and return a handle.
+  [[nodiscard]] auto Store(GeometryFinalizeWorkItem item) -> WorkPayloadHandle;
+
   //! Store a scene work item and return a handle.
   [[nodiscard]] auto Store(ScenePipeline::WorkItem item) -> WorkPayloadHandle;
 
@@ -85,6 +99,10 @@ public:
   //! Get a stored geometry payload.
   [[nodiscard]] auto Geometry(WorkPayloadHandle handle) -> GeometryWorkPayload&;
 
+  //! Get a stored mesh build payload.
+  [[nodiscard]] auto MeshBuild(WorkPayloadHandle handle)
+    -> MeshBuildWorkPayload&;
+
   //! Get a stored scene payload.
   [[nodiscard]] auto Scene(WorkPayloadHandle handle) -> SceneWorkPayload&;
 
@@ -92,6 +110,7 @@ private:
   std::vector<std::unique_ptr<TextureWorkPayload>> textures_;
   std::vector<std::unique_ptr<BufferWorkPayload>> buffers_;
   std::vector<std::unique_ptr<MaterialWorkPayload>> materials_;
+  std::vector<std::unique_ptr<MeshBuildWorkPayload>> mesh_builds_;
   std::vector<std::unique_ptr<GeometryWorkPayload>> geometries_;
   std::vector<std::unique_ptr<SceneWorkPayload>> scenes_;
 };

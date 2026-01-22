@@ -7,6 +7,8 @@
 #pragma once
 
 #include <concepts>
+#include <cstddef>
+#include <string_view>
 
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -14,6 +16,43 @@
 #include <Oxygen/Composition/Typed.h>
 
 namespace oxygen::content::import {
+
+//! Kinds of import plan items.
+enum class PlanItemKind : uint8_t {
+  kTextureResource,
+  kBufferResource,
+  kAudioResource,
+  kMaterialAsset,
+  kMeshBuild,
+  kGeometryAsset,
+  kSceneAsset,
+};
+
+//! Convert a plan item kind to a string view.
+[[nodiscard]] inline auto to_string(PlanItemKind kind) noexcept
+  -> std::string_view
+{
+  switch (kind) {
+  case PlanItemKind::kTextureResource:
+    return "Texture";
+  case PlanItemKind::kBufferResource:
+    return "Buffer";
+  case PlanItemKind::kAudioResource:
+    return "Audio";
+  case PlanItemKind::kMaterialAsset:
+    return "Material";
+  case PlanItemKind::kMeshBuild:
+    return "MeshBuild";
+  case PlanItemKind::kGeometryAsset:
+    return "Geometry";
+  case PlanItemKind::kSceneAsset:
+    return "Scene";
+  }
+
+  return "Unknown";
+}
+
+inline constexpr size_t kPlanKindCount = 7;
 
 //! Progress counters for a resource pipeline.
 /*!
@@ -50,6 +89,7 @@ concept ImportPipeline = oxygen::IsTyped<T>
   && requires(T& pipeline, typename T::WorkItem item, co::Nursery& nursery) {
        typename T::WorkItem;
        typename T::WorkResult;
+       { T::kItemKind } -> std::convertible_to<PlanItemKind>;
 
        { pipeline.Start(nursery) } -> std::same_as<void>;
        { pipeline.Submit(std::move(item)) } -> std::same_as<co::Co<>>;
@@ -58,6 +98,8 @@ concept ImportPipeline = oxygen::IsTyped<T>
        { pipeline.HasPending() } -> std::convertible_to<bool>;
        { pipeline.PendingCount() } -> std::convertible_to<size_t>;
        { pipeline.GetProgress() } -> std::same_as<PipelineProgress>;
+       { pipeline.OutputQueueSize() } -> std::convertible_to<size_t>;
+       { pipeline.OutputQueueCapacity() } -> std::convertible_to<size_t>;
      };
 
 } // namespace oxygen::content::import

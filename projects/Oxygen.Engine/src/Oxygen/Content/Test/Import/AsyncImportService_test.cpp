@@ -39,7 +39,7 @@ namespace {
 {
   return
     [config](ImportJobId job_id, ImportRequest request,
-      ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
+      ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
       std::shared_ptr<co::Event> cancel_event,
       oxygen::observer_ptr<IAsyncFileReader> file_reader,
       oxygen::observer_ptr<IAsyncFileWriter> file_writer,
@@ -56,7 +56,7 @@ namespace {
 
 [[nodiscard]] auto SubmitTestJob(AsyncImportService& service,
   ImportRequest request, ImportCompletionCallback on_complete,
-  ImportProgressCallback on_progress = nullptr,
+  ProgressEventCallback on_progress = nullptr,
   test::TestImportJob::Config config = {}) -> ImportJobId
 {
   return service.SubmitImport(std::move(request), std::move(on_complete),
@@ -259,8 +259,8 @@ NOLINT_TEST_F(
   [[maybe_unused]] auto job_id = SubmitTestJob(
     service, ImportRequest { .source_path = "custom.asset" },
     [&done](ImportJobId, ImportReport) { done.count_down(); },
-    [&progress_invoked](const ImportProgress& progress) {
-      if (progress.phase == ImportPhase::kWorking) {
+    [&progress_invoked](const ProgressEvent& progress) {
+      if (progress.header.phase == ImportPhase::kWorking) {
         progress_invoked = true;
       }
     },
@@ -402,8 +402,8 @@ NOLINT_TEST_F(
   auto job_id = SubmitTestJob(
     service, ImportRequest { .source_path = "custom.asset" },
     [&](ImportJobId, ImportReport) { job_completed = true; },
-    [&](const ImportProgress& progress) {
-      if (progress.phase == ImportPhase::kWorking) {
+    [&](const ProgressEvent& progress) {
+      if (progress.header.phase == ImportPhase::kWorking) {
         bool expected = false;
         if (job_started_signaled.compare_exchange_strong(expected, true)) {
           job_started.count_down();
@@ -453,8 +453,8 @@ NOLINT_TEST_F(
   [[maybe_unused]] auto blocking_job = SubmitTestJob(
     service, ImportRequest { .source_path = "custom.asset" },
     [](ImportJobId, ImportReport) {},
-    [&](const ImportProgress& progress) {
-      if (progress.phase == ImportPhase::kWorking) {
+    [&](const ProgressEvent& progress) {
+      if (progress.header.phase == ImportPhase::kWorking) {
         bool expected = false;
         if (first_job_signaled.compare_exchange_strong(expected, true)) {
           first_job_started.count_down();
@@ -538,16 +538,16 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelAll_MultipleJobs_CancelsAll)
         }
         state->cv.notify_all();
       },
-      [state](const ImportProgress& progress) {
+      [state](const ProgressEvent& progress) {
         if (!state->active.load(std::memory_order_acquire)) {
           return;
         }
         DLOG_F(INFO, "CancelAll progress: phase={} overall={:.2f} message='{}'",
-          static_cast<int>(progress.phase), progress.overall_progress,
-          progress.message);
-        if (progress.phase == ImportPhase::kWorking) {
+          static_cast<int>(progress.header.phase),
+          progress.header.overall_progress, progress.header.message);
+        if (progress.header.phase == ImportPhase::kWorking) {
           std::lock_guard lock(state->mutex);
-          if (state->started_job_ids.insert(progress.job_id).second) {
+          if (state->started_job_ids.insert(progress.header.job_id).second) {
             state->jobs_started.fetch_add(1, std::memory_order_relaxed);
             state->cv.notify_all();
           }

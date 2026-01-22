@@ -34,10 +34,10 @@ using oxygen::content::import::Bc7Quality;
 using oxygen::content::import::CubeMapImageLayout;
 using oxygen::content::import::ImportContentFlags;
 using oxygen::content::import::ImportOptions;
-using oxygen::content::import::ImportProgress;
 using oxygen::content::import::ImportReport;
 using oxygen::content::import::MipFilter;
 using oxygen::content::import::MipPolicy;
+using oxygen::content::import::ProgressEvent;
 using oxygen::content::import::TextureIntent;
 using oxygen::data::loose_cooked::v1::FileKind;
 using oxygen::data::pak::TextureResourceDesc;
@@ -264,12 +264,12 @@ auto TextureLoadingService::SubmitImport(const ImportSettings& settings) -> bool
           = report.success ? "Import complete" : "Import failed";
       };
 
-  const auto on_progress = [this](const ImportProgress& progress) {
+  const auto on_progress = [this](const ProgressEvent& progress) {
     std::lock_guard lock(import_mutex_);
     import_status_.in_flight = true;
-    import_status_.overall_progress = progress.overall_progress;
-    if (!progress.message.empty()) {
-      import_status_.message = progress.message;
+    import_status_.overall_progress = progress.header.overall_progress;
+    if (!progress.header.message.empty()) {
+      import_status_.message = progress.header.message;
     }
   };
 

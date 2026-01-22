@@ -603,7 +603,8 @@ NOLINT_TEST_F(
 
       finalized = co_await finalizer.FinalizeDescriptorBytes(
         std::span<const MeshBufferBindings>(&bindings, 1),
-        result.cooked->descriptor_bytes, diagnostics);
+        result.cooked->descriptor_bytes,
+        std::span<const GeometryPipeline::MaterialKeyPatch> {}, diagnostics);
       co_return kJoin;
     };
   });
