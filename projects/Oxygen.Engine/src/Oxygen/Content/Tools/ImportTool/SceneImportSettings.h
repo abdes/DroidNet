@@ -22,6 +22,8 @@ struct SceneImportSettings {
   bool import_geometry = true;
   bool import_scene = true;
 
+  bool with_content_hashing = true;
+
   std::string unit_policy;
   float unit_scale = 1.0F;
   bool unit_scale_set = false;

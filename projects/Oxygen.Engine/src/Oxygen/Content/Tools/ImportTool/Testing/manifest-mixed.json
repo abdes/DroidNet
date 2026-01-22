@@ -1,8 +1,45 @@
 {
   "version": 1,
+  "thread_pool_size": 35,
+  "concurrency": {
+    "texture": {
+      "workers": 12,
+      "queue_capacity": 64
+    },
+    "buffer": {
+      "workers": 2,
+      "queue_capacity": 64
+    },
+    "material": {
+      "workers": 4,
+      "queue_capacity": 64
+    },
+    "mesh": {
+      "workers": 12,
+      "queue_capacity": 128
+    },
+    "geometry": {
+      "workers": 8,
+      "queue_capacity": 64
+    },
+    "scene": {
+      "workers": 1,
+      "queue_capacity": 8
+    }
+  },
   "defaults": {
     "job_type": "texture",
-    "cooked_root": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Cooked"
+    "cooked_root": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Cooked",
+    "import_options": {
+      "with_content_hashing": true
+    },
+    "texture": {
+      "output_format": "bc7-srgb",
+      "data_format": "bc7",
+      "mip_policy": "full",
+      "mip_filter": "lanczos",
+      "bc7_quality": "default"
+    }
   },
   "jobs": [
     {
@@ -10,6 +47,17 @@
       "job_name": "wood-albedo",
       "texture": {
         "preset": "albedo-srgb"
+      }
+    },
+    {
+      "job_type": "gltf",
+      "source": "F:/projects/main_sponza/NewSponza_Main_glTF_003.gltf",
+      "job_name": "sponza-scene",
+      "gltf": {
+        "unit_normalization_policy": "normalize",
+        "normals_policy": "generate",
+        "tangents_policy": "recalculate",
+        "node_pruning_policy": "keep"
       }
     },
     {
@@ -33,6 +81,17 @@
       "job_type": "gltf",
       "source": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Models/Tabuleiro.glb",
       "job_name": "tabuleiro-scene",
+      "gltf": {
+        "unit_normalization_policy": "normalize",
+        "normals_policy": "generate",
+        "tangents_policy": "recalculate",
+        "node_pruning_policy": "keep"
+      }
+    },
+    {
+      "job_type": "fbx",
+      "source": "F:/projects/main_sponza/NewSponza_Main_Zup_003.fbx",
+      "job_name": "sponza-scene-fbx",
       "gltf": {
         "unit_normalization_policy": "normalize",
         "normals_policy": "generate",

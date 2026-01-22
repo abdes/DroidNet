@@ -142,6 +142,7 @@ auto BuildSceneRequest(const SceneImportSettings& settings,
   auto options = request.options;
   options.import_content = BuildContentFlags(settings);
   options.coordinate.bake_transforms_into_meshes = settings.bake_transforms;
+  options.with_content_hashing = settings.with_content_hashing;
 
   if (!settings.unit_policy.empty()) {
     const auto parsed = ParseUnitPolicy(settings.unit_policy);

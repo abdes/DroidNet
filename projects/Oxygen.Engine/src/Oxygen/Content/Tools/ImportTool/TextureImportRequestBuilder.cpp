@@ -334,6 +334,8 @@ auto BuildTextureRequest(const TextureImportSettings& settings,
     }
   }
 
+  request.options.with_content_hashing = settings.with_content_hashing;
+
   auto& tuning = request.options.texture_tuning;
 
   bool preset_applied = false;

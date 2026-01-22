@@ -14,7 +14,7 @@
     "cooked_root": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Cooked",
     "import_options": {
       "content_flags": {
-        "textures": true,
+        "textures": false,
         "materials": true,
         "geometry": true,
         "scene": true
@@ -27,8 +27,18 @@
   },
   "jobs": [
     {
-      "source": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Models/dino-a.fbx",
-      "job_name": "dino-a"
+      "source": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Models/Rigged_Humanoid_a.fbx",
+      "job_name": "rigged-humanoid",
+      "fbx": {
+        "content_flags": {
+          "textures": true,
+          "materials": true,
+          "geometry": true,
+          "scene": true
+        },
+        "unit_normalization_policy": "custom",
+        "custom_unit_scale": 0.01
+      }
     }
   ]
 }

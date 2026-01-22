@@ -16,6 +16,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/Import/AsyncImportService.h>
 #include <Oxygen/Content/Import/ImportReport.h>
@@ -227,7 +228,7 @@ auto RunImportJob(const ImportRequest& request, const bool quiet,
       cv.notify_one();
     };
 
-    const auto on_progress = [&](const ImportProgress& progress) {
+    const auto on_progress = [&](const ProgressEvent& progress) {
       const auto now = std::chrono::steady_clock::now();
       {
         std::lock_guard lock(mutex);
@@ -235,56 +236,72 @@ auto RunImportJob(const ImportRequest& request, const bool quiet,
           progress_trace.started = now;
         }
 
-        if (progress.event == ImportProgressEvent::kJobStarted) {
+        if (progress.header.kind == ProgressEventKind::kJobStarted) {
           progress_trace.started = now;
-        } else if (progress.event == ImportProgressEvent::kJobFinished) {
+        } else if (progress.header.kind == ProgressEventKind::kJobFinished) {
           progress_trace.finished = now;
         }
 
-        const auto phase_index = PhaseIndex(progress.phase);
-        if (phase_index < progress_trace.phases.size()) {
+        const auto phase_index = PhaseIndex(progress.header.phase);
+        if (progress.header.kind == ProgressEventKind::kPhaseUpdate
+          && phase_index < progress_trace.phases.size()) {
           auto& timing = progress_trace.phases[phase_index];
-          timing.items_completed = progress.items_completed;
-          timing.items_total = progress.items_total;
-          if (progress.event == ImportProgressEvent::kPhaseStarted) {
+          if (!timing.started.has_value()) {
             timing.started = now;
-          } else if (progress.event == ImportProgressEvent::kPhaseFinished) {
-            timing.finished = now;
+          }
+          if (phase_index > 0U) {
+            auto& previous = progress_trace.phases[phase_index - 1U];
+            if (!previous.finished.has_value()) {
+              previous.finished = now;
+            }
+          }
+          if (progress.header.phase == ImportPhase::kComplete
+            || progress.header.phase == ImportPhase::kFailed
+            || progress.header.phase == ImportPhase::kCancelled) {
+            for (auto& entry : progress_trace.phases) {
+              if (!entry.finished.has_value() && entry.started.has_value()) {
+                entry.finished = now;
+              }
+            }
           }
         }
 
-        if (progress.event == ImportProgressEvent::kItemStarted
-          || progress.event == ImportProgressEvent::kItemFinished) {
-          if (!progress.item_name.empty()) {
-            std::string key = progress.item_kind;
+        if (const auto* item = GetItemProgress(progress)) {
+          if (!item->item_name.empty()) {
+            std::string key = item->item_kind;
             if (!key.empty()) {
               key.append(":");
             }
-            key.append(progress.item_name);
-            auto& item = progress_trace.items[key];
-            item.phase = nostd::to_string(progress.phase);
-            item.kind = progress.item_kind;
-            item.name = progress.item_name;
-            if (progress.event == ImportProgressEvent::kItemStarted) {
-              item.started = now;
-            } else {
-              item.finished = now;
+            key.append(item->item_name);
+            auto& trace_item = progress_trace.items[key];
+            trace_item.phase = nostd::to_string(progress.header.phase);
+            trace_item.kind = item->item_kind;
+            trace_item.name = item->item_name;
+            if (progress.header.kind == ProgressEventKind::kItemStarted) {
+              trace_item.started = now;
+            } else if (progress.header.kind
+              == ProgressEventKind::kItemFinished) {
+              trace_item.finished = now;
             }
           }
         }
       }
 
       if (!quiet) {
-        std::cout << "event=" << nostd::to_string(progress.event)
-                  << " phase=" << nostd::to_string(progress.phase)
-                  << " overall=" << progress.overall_progress;
-        if (!progress.item_name.empty()) {
-          std::cout << " item=" << progress.item_name;
+        std::cout << "event=" << to_string(progress.header.kind)
+                  << " phase=" << nostd::to_string(progress.header.phase)
+                  << " overall=" << progress.header.overall_progress;
+        if (const auto* item = GetItemProgress(progress)) {
+          if (!item->item_name.empty()) {
+            std::cout << " item=" << item->item_name;
+          }
         }
         std::cout << "\n";
       }
     };
 
+    LOG_F(INFO, "ImportTool submit job: source='{}' with_content_hashing={}",
+      request.source_path.string(), request.options.with_content_hashing);
     const auto job_id = service.SubmitImport(request, on_complete, on_progress);
     if (job_id == kInvalidJobId) {
       submit_error = "ERROR: failed to submit import job";

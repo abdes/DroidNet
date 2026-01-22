@@ -17,7 +17,6 @@ struct GlobalOptions {
   bool quiet = false;
   std::string diagnostics_file;
   std::string cooked_root;
-  uint32_t max_in_flight = 0;
   bool fail_fast = false;
   bool no_color = false;
   bool no_tui = false;

@@ -25,7 +25,7 @@ asap_push_module("${META_MODULE_NAME}")
 
 find_package(nlohmann_json REQUIRED)
 find_package(nlohmann_json_schema_validator REQUIRED)
-find_package(pdcurses REQUIRED)
+find_package(ftxui REQUIRED)
 
 # ------------------------------------------------------------------------------
 # Build instructions
@@ -58,6 +58,9 @@ add_executable(
   "TextureImportRequestBuilder.h"
   "TextureImportSettings.h"
   "main.cpp"
+  "UI/BatchViewModel.h"
+  "UI/Screens/BatchImportScreen.h"
+  "UI/Screens/BatchImportScreen.cpp"
 )
 
 add_custom_target(
@@ -75,7 +78,6 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
-target_compile_definitions(${META_MODULE_TARGET} PRIVATE PDC_WIDE)
 target_include_directories(
   ${META_MODULE_TARGET}
   PRIVATE
@@ -88,9 +90,11 @@ target_link_libraries(
     oxygen::core
     oxygen::content
     oxygen::clap
+    ftxui::screen
+    ftxui::dom
+    ftxui::component
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
-    pdcurses::pdcurses
 )
 
 # ------------------------------------------------------------------------------

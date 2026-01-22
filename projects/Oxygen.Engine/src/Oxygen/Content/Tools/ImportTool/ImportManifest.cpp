@@ -123,6 +123,20 @@ namespace {
     return true;
   }
 
+  auto ReadOptionalUIntField(const json& obj, const char* name,
+    std::optional<uint32_t>& target, std::ostream& errors) -> bool
+  {
+    if (!obj.contains(name)) {
+      return true;
+    }
+    uint32_t value = 0U;
+    if (!ReadUIntField(obj, name, value, errors)) {
+      return false;
+    }
+    target = value;
+    return true;
+  }
+
   auto ReadFloatField(const json& obj, const char* name, float& target,
     bool& was_set, std::ostream& errors) -> bool
   {
@@ -200,6 +214,8 @@ namespace {
   auto ApplySceneOverrides(const json& obj, SceneImportSettings& settings,
     std::ostream& errors) -> bool
   {
+    ReadBoolField(
+      obj, "with_content_hashing", settings.with_content_hashing, errors);
     if (obj.contains("content_flags")) {
       const auto& flags = obj["content_flags"];
       if (!flags.is_object()) {
@@ -241,6 +257,13 @@ namespace {
     return true;
   }
 
+  auto ApplyImportOptions(
+    const json& obj, bool& with_content_hashing, std::ostream& errors) -> bool
+  {
+    return ReadBoolField(
+      obj, "with_content_hashing", with_content_hashing, errors);
+  }
+
   auto ApplyCommonOverrides(const json& obj, TextureImportSettings& settings,
     std::ostream& errors) -> bool
   {
@@ -252,6 +275,95 @@ namespace {
     }
     if (!ReadBoolField(obj, "verbose", settings.verbose, errors)) {
       return false;
+    }
+    return true;
+  }
+
+  auto ApplyPipelineConcurrency(const json& obj,
+    ImportPipelineConcurrency& target, std::ostream& errors) -> bool
+  {
+    if (!ReadUIntField(obj, "workers", target.workers, errors)) {
+      return false;
+    }
+    if (!ReadUIntField(obj, "queue_capacity", target.queue_capacity, errors)) {
+      return false;
+    }
+    return true;
+  }
+
+  auto ApplyConcurrencyOverrides(
+    const json& obj, ImportConcurrency& target, std::ostream& errors) -> bool
+  {
+    if (obj.contains("texture")) {
+      if (!obj["texture"].is_object()) {
+        errors << "ERROR: concurrency.texture must be an object\n";
+        return false;
+      }
+      if (!ApplyPipelineConcurrency(obj["texture"], target.texture, errors)) {
+        return false;
+      }
+    }
+    if (obj.contains("buffer")) {
+      if (!obj["buffer"].is_object()) {
+        errors << "ERROR: concurrency.buffer must be an object\n";
+        return false;
+      }
+      if (!ApplyPipelineConcurrency(obj["buffer"], target.buffer, errors)) {
+        return false;
+      }
+    }
+    if (obj.contains("material")) {
+      if (!obj["material"].is_object()) {
+        errors << "ERROR: concurrency.material must be an object\n";
+        return false;
+      }
+      if (!ApplyPipelineConcurrency(obj["material"], target.material, errors)) {
+        return false;
+      }
+    }
+    const bool has_mesh = obj.contains("mesh");
+    const bool has_mesh_build = obj.contains("mesh_build");
+    if (has_mesh && has_mesh_build) {
+      errors << "ERROR: use only one of concurrency.mesh or "
+                "concurrency.mesh_build\n";
+      return false;
+    }
+    if (has_mesh) {
+      if (!obj["mesh"].is_object()) {
+        errors << "ERROR: concurrency.mesh must be an object\n";
+        return false;
+      }
+      if (!ApplyPipelineConcurrency(obj["mesh"], target.mesh_build, errors)) {
+        return false;
+      }
+    }
+    if (has_mesh_build) {
+      if (!obj["mesh_build"].is_object()) {
+        errors << "ERROR: concurrency.mesh_build must be an object\n";
+        return false;
+      }
+      if (!ApplyPipelineConcurrency(
+            obj["mesh_build"], target.mesh_build, errors)) {
+        return false;
+      }
+    }
+    if (obj.contains("geometry")) {
+      if (!obj["geometry"].is_object()) {
+        errors << "ERROR: concurrency.geometry must be an object\n";
+        return false;
+      }
+      if (!ApplyPipelineConcurrency(obj["geometry"], target.geometry, errors)) {
+        return false;
+      }
+    }
+    if (obj.contains("scene")) {
+      if (!obj["scene"].is_object()) {
+        errors << "ERROR: concurrency.scene must be an object\n";
+        return false;
+      }
+      if (!ApplyPipelineConcurrency(obj["scene"], target.scene, errors)) {
+        return false;
+      }
     }
     return true;
   }
@@ -293,6 +405,27 @@ auto ImportManifestLoader::Load(const std::filesystem::path& manifest_path,
   manifest.version = json_data->value("version", 1U);
   manifest.defaults.job_type = "texture";
 
+  if (!ReadOptionalUIntField(*json_data, "thread_pool_size",
+        manifest.thread_pool_size, error_stream)) {
+    return std::nullopt;
+  }
+  if (!ReadOptionalUIntField(*json_data, "max_in_flight_jobs",
+        manifest.max_in_flight_jobs, error_stream)) {
+    return std::nullopt;
+  }
+  if (json_data->contains("concurrency")) {
+    if (!(*json_data)["concurrency"].is_object()) {
+      error_stream << "ERROR: concurrency must be an object\n";
+      return std::nullopt;
+    }
+    ImportConcurrency concurrency {};
+    if (!ApplyConcurrencyOverrides(
+          (*json_data)["concurrency"], concurrency, error_stream)) {
+      return std::nullopt;
+    }
+    manifest.concurrency = concurrency;
+  }
+
   if (manifest.version != 1U) {
     error_stream << "ERROR: unsupported manifest version: " << manifest.version
                  << "\n";
@@ -312,6 +445,10 @@ auto ImportManifestLoader::Load(const std::filesystem::path& manifest_path,
     if (defaults.contains("import_options")) {
       if (!defaults["import_options"].is_object()) {
         error_stream << "ERROR: defaults.import_options must be an object\n";
+        return std::nullopt;
+      }
+      if (!ApplyImportOptions(defaults["import_options"],
+            manifest.defaults.texture.with_content_hashing, error_stream)) {
         return std::nullopt;
       }
       if (!ApplySceneOverrides(
@@ -407,6 +544,10 @@ auto ImportManifestLoader::Load(const std::filesystem::path& manifest_path,
     if (job.contains("import_options")) {
       if (!job["import_options"].is_object()) {
         error_stream << "ERROR: job.import_options must be an object\n";
+        return std::nullopt;
+      }
+      if (!ApplyImportOptions(job["import_options"],
+            manifest_job.texture.with_content_hashing, error_stream)) {
         return std::nullopt;
       }
       if (!ApplySceneOverrides(

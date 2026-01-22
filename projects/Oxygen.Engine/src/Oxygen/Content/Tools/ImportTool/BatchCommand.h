@@ -37,7 +37,6 @@ private:
     bool fail_fast = false;
     bool quiet = false;
     bool no_tui = false;
-    uint32_t max_in_flight = 0;
   } options_ {};
 };
 

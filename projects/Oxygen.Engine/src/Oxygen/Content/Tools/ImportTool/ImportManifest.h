@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include <Oxygen/Content/Import/ImportConcurrency.h>
 #include <Oxygen/Content/Tools/ImportTool/SceneImportSettings.h>
 #include <Oxygen/Content/Tools/ImportTool/TextureImportSettings.h>
 
@@ -33,6 +34,9 @@ struct ImportManifestDefaults {
 
 struct ImportManifest {
   uint32_t version = 1;
+  std::optional<uint32_t> thread_pool_size;
+  std::optional<uint32_t> max_in_flight_jobs;
+  std::optional<ImportConcurrency> concurrency;
   ImportManifestDefaults defaults;
   std::vector<ImportManifestJob> jobs;
 };

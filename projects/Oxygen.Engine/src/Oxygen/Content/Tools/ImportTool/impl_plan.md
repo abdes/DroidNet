@@ -139,7 +139,8 @@ This plan translates the ImportTool README requirements into executable phases. 
 
 **Goal:** Align runtime execution with concurrency, fail‑fast, and dependency scheduling requirements.
 
-1. Confirm `AsyncImportService` concurrency control is wired to `--max-in-flight`.
+1. Confirm `AsyncImportService` concurrency control is wired to
+   `max_in_flight_jobs` from the manifest.
 2. Implement dependency‑aware scheduling in batch mode.
 3. Implement fail‑fast cancellation within 100ms.
 4. Implement dry‑run mode for batch validation only.

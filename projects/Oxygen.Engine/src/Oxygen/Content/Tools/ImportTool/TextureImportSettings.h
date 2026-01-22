@@ -32,6 +32,7 @@ struct TextureImportSettings {
   bool force_rgba = false;
   bool cubemap = false;
   bool equirect_to_cube = false;
+  bool with_content_hashing = true;
   bool verbose = false;
 };
 
