@@ -34,7 +34,7 @@ namespace detail {
 
 //! Factory for creating custom import jobs.
 using ImportJobFactory = std::function<std::shared_ptr<detail::ImportJob>(
-  ImportJobId, ImportRequest, ImportCompletionCallback, ImportProgressCallback,
+  ImportJobId, ImportRequest, ImportCompletionCallback, ProgressEventCallback,
   std::shared_ptr<co::Event>, observer_ptr<IAsyncFileReader>,
   observer_ptr<IAsyncFileWriter>, observer_ptr<co::ThreadPool>,
   observer_ptr<ResourceTableRegistry>, const ImportConcurrency&)>;
@@ -107,15 +107,15 @@ using ImportJobFactory = std::function<std::shared_ptr<detail::ImportJob>(
        LOG_F(INFO, "Import {} succeeded", id);
      }
    },
-   [](const ImportProgress& progress) {
-     UpdateProgressBar(progress.overall_progress);
+   [](const ProgressEvent& progress) {
+     UpdateProgressBar(progress.header.overall_progress);
    });
 
  // Later, if needed:
  service.CancelJob(job_id);
  ```
 
- @see ImportRequest, ImportReport, ImportProgress
+ @see ImportRequest, ImportReport, ProgressEvent
 */
 class AsyncImportService final {
 public:
@@ -166,19 +166,19 @@ public:
           `ThreadNotification` support; otherwise on the import thread.
           Cancelled jobs (via `CancelJob()` or `CancelAll()`) complete with
           `report.success = false` and diagnostic code `"import.canceled"`.
-   @param on_progress Optional progress callback invoked periodically to report
-          phase transitions and progress percentages. Invoked on the same thread
-          as `on_complete`. Can be `nullptr`.
+     @param on_progress Optional progress callback invoked periodically to
+  report phase and item updates. Invoked on the same thread as `on_complete`.
+       Can be `nullptr`.
    @return Valid job ID (`> 0`) on success, or `kInvalidJobId` (`0`) if rejected
            due to: shutdown, importer not ready, unknown file format, or
            internal failure. When `kInvalidJobId` is returned, callbacks are
            never invoked.
 
-   @see CancelJob, CancelAll, ImportRequest, ImportReport, ImportProgress
+  @see CancelJob, CancelAll, ImportRequest, ImportReport, ProgressEvent
   */
   OXGN_CNTT_NDAPI auto SubmitImport(ImportRequest request,
     ImportCompletionCallback on_complete,
-    ImportProgressCallback on_progress = nullptr) -> ImportJobId;
+    ProgressEventCallback on_progress = nullptr) -> ImportJobId;
 
   //! Submit a custom import job for asynchronous processing.
   /*!
@@ -190,15 +190,15 @@ public:
    @param request Import request used by the custom job.
    @param on_complete Completion callback invoked exactly once when the job
           finishes.
-   @param on_progress Optional progress callback invoked periodically.
+  @param on_progress Optional progress callback invoked periodically.
    @param job_factory Factory invoked to construct the job instance.
    @return Valid job ID (`> 0`) on success, or `kInvalidJobId` (`0`) if
            rejected due to shutdown, importer not ready, or factory failure.
 
-   @see CancelJob, CancelAll, ImportRequest, ImportReport, ImportProgress
+  @see CancelJob, CancelAll, ImportRequest, ImportReport, ProgressEvent
   */
   OXGN_CNTT_NDAPI auto SubmitImport(ImportRequest request,
-    ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
+    ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
     ImportJobFactory job_factory) -> ImportJobId;
 
   //! Cancel a specific import job. Thread-safe.

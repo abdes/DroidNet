@@ -348,7 +348,7 @@ void ImportPanel::Initialize(const ImportPanelConfig& config)
     .force_rgba_on_decode = true,
     .mip_policy = content::import::MipPolicy::kFullChain,
     .max_mip_levels = 10,
-    .mip_filter = content::import::MipFilter::kKaiser,
+    .mip_filter = content::import::MipFilter::kLanczos,
     .color_output_format = Format::kBC7UNormSRGB,
     .data_output_format = Format::kBC7UNorm,
     .bc7_quality = content::import::Bc7Quality::kDefault,
@@ -361,11 +361,20 @@ void ImportPanel::Initialize(const ImportPanelConfig& config)
   };
 
   service_config_ = {};
-  service_config_.concurrency.texture.workers = 8;
+  service_config_.thread_pool_size = 35;
+  service_config_.max_in_flight_jobs = 35;
+  service_config_.concurrency.texture.workers = 12;
+  service_config_.concurrency.texture.queue_capacity = 64;
+  service_config_.concurrency.buffer.workers = 2;
+  service_config_.concurrency.buffer.queue_capacity = 64;
   service_config_.concurrency.material.workers = 4;
-  service_config_.concurrency.geometry.workers = 6;
-  service_config_.concurrency.buffer.workers = 6;
+  service_config_.concurrency.material.queue_capacity = 64;
+  service_config_.concurrency.mesh_build.workers = 12;
+  service_config_.concurrency.mesh_build.queue_capacity = 128;
+  service_config_.concurrency.geometry.workers = 8;
+  service_config_.concurrency.geometry.queue_capacity = 64;
   service_config_.concurrency.scene.workers = 1;
+  service_config_.concurrency.scene.queue_capacity = 8;
   if (import_service_) {
     import_service_->Stop();
   }
@@ -517,18 +526,19 @@ void ImportPanel::Draw()
       CancelImport();
     }
 
-    content::import::ImportProgress progress;
+    content::import::ProgressEvent progress;
     {
       std::lock_guard<std::mutex> lock(import_state_.progress_mutex);
       progress = import_state_.progress;
     }
 
-    const float progress_value = (progress.overall_progress > 0.0F)
-      ? progress.overall_progress
+    const float progress_value = (progress.header.overall_progress > 0.0F)
+      ? progress.header.overall_progress
       : -1.0F * static_cast<float>(ImGui::GetTime()) * 0.2F;
 
     ImGui::ProgressBar(progress_value, ImVec2(-1.0F, 0.0F),
-      progress.message.empty() ? "Importing..." : progress.message.c_str());
+      progress.header.message.empty() ? "Importing..."
+                                      : progress.header.message.c_str());
   }
 
   const bool disable_inputs = IsImporting();
@@ -633,12 +643,13 @@ void ImportPanel::StartImport(const std::filesystem::path& source_path)
   };
 
   const auto on_progress
-    = [this](const content::import::ImportProgress& progress) {
+    = [this](const content::import::ProgressEvent& progress) {
         std::lock_guard<std::mutex> lock(import_state_.progress_mutex);
         import_state_.progress = progress;
-        if (!progress.new_diagnostics.empty()) {
+        if (!progress.header.new_diagnostics.empty()) {
           import_state_.diagnostics.insert(import_state_.diagnostics.end(),
-            progress.new_diagnostics.begin(), progress.new_diagnostics.end());
+            progress.header.new_diagnostics.begin(),
+            progress.header.new_diagnostics.end());
         }
       };
 
@@ -1165,6 +1176,7 @@ auto ImportPanel::DrawServiceConfigUi() -> void
   draw_pipeline("Texture", service_config_.concurrency.texture);
   draw_pipeline("Buffer", service_config_.concurrency.buffer);
   draw_pipeline("Material", service_config_.concurrency.material);
+  draw_pipeline("Mesh", service_config_.concurrency.mesh_build);
   draw_pipeline("Geometry", service_config_.concurrency.geometry);
   draw_pipeline("Scene", service_config_.concurrency.scene);
 

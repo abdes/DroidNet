@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -61,6 +62,7 @@ namespace oxygen::content::import {
 class TexturePipeline final : public Object {
   OXYGEN_TYPED(TexturePipeline)
 public:
+  static constexpr PlanItemKind kItemKind = PlanItemKind::kTextureResource;
   //! Configuration for the pipeline.
   struct Config {
     //! Bounded capacity of the input and output queues.
@@ -96,6 +98,10 @@ public:
   struct WorkItem {
     //! Diagnostic ID and decode extension hint.
     std::string source_id;
+
+    //! External source path used to load bytes on the import thread.
+    //! Leave empty when `source` already contains content.
+    std::filesystem::path source_path;
 
     //! Canonical dedupe key (normalized path or embedded hash).
     std::string texture_id;
@@ -203,6 +209,18 @@ public:
 
   //! Get pipeline progress counters.
   OXGN_CNTT_NDAPI auto GetProgress() const noexcept -> PipelineProgress;
+
+  //! Number of completed results waiting in the output queue.
+  OXGN_CNTT_NDAPI auto OutputQueueSize() const noexcept -> size_t
+  {
+    return output_channel_.Size();
+  }
+
+  //! Capacity of the output queue.
+  OXGN_CNTT_NDAPI auto OutputQueueCapacity() const noexcept -> size_t
+  {
+    return config_.queue_capacity;
+  }
 
 private:
   [[nodiscard]] auto Worker() -> co::Co<>;

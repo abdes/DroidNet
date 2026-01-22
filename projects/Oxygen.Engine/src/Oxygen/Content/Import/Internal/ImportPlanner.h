@@ -22,21 +22,6 @@
 
 namespace oxygen::content::import {
 
-//! Kinds of import plan items.
-enum class PlanItemKind : uint8_t {
-  kTextureResource,
-  kBufferResource,
-  kAudioResource,
-  kMaterialAsset,
-  kGeometryAsset,
-  kSceneAsset,
-};
-
-//! Convert a plan item kind to a string view.
-OXGN_CNTT_NDAPI auto to_string(PlanItemKind kind) noexcept -> std::string_view;
-
-inline constexpr size_t kPlanKindCount = 6;
-
 //! Strongly typed identifier for a plan item.
 using PlanItemId = NamedType<uint32_t, struct PlanItemIdTag,
   // clang-format off
@@ -137,6 +122,10 @@ public:
 
   //! Register a geometry asset plan item.
   OXGN_CNTT_API auto AddGeometryAsset(
+    std::string debug_name, WorkPayloadHandle work_handle) -> PlanItemId;
+
+  //! Register a mesh build plan item.
+  OXGN_CNTT_API auto AddMeshBuild(
     std::string debug_name, WorkPayloadHandle work_handle) -> PlanItemId;
 
   //! Register a scene asset plan item.

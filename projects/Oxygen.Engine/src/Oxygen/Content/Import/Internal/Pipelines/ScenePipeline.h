@@ -81,6 +81,7 @@ concept SceneStageAdapter = requires(const Adapter& adapter,
 class ScenePipeline final : public Object {
   OXYGEN_TYPED(ScenePipeline)
 public:
+  static constexpr PlanItemKind kItemKind = PlanItemKind::kSceneAsset;
   //! Configuration for the pipeline.
   struct Config {
     size_t queue_capacity = 8;
@@ -186,6 +187,18 @@ public:
 
   //! Get pipeline progress counters.
   OXGN_CNTT_NDAPI auto GetProgress() const noexcept -> PipelineProgress;
+
+  //! Number of completed results waiting in the output queue.
+  OXGN_CNTT_NDAPI auto OutputQueueSize() const noexcept -> size_t
+  {
+    return output_channel_.Size();
+  }
+
+  //! Capacity of the output queue.
+  OXGN_CNTT_NDAPI auto OutputQueueCapacity() const noexcept -> size_t
+  {
+    return config_.queue_capacity;
+  }
 
 private:
   [[nodiscard]] auto Worker() -> co::Co<>;

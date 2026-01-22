@@ -12,7 +12,6 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Content/Import/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
 #include <Oxygen/Content/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Content/Import/Internal/ImportPlanner.h>
@@ -103,35 +102,19 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
   ImportSession session(
     Request(), FileReader(), FileWriter(), ThreadPool(), TableRegistry());
 
-  ReportProgress(ImportProgressEvent::kPhaseStarted, ImportPhase::kLoading,
-    0.0f, 0.0f, 0U, 0U, "Loading started");
-  ReportProgress(ImportPhase::kLoading, 0.0f, 0.0f, 0U, 0U, "Parsing FBX...");
+  ReportPhaseProgress(ImportPhase::kLoading, 0.0f, "Parsing FBX...");
   auto scene = co_await ParseScene(session);
   AddDiagnostics(session, std::move(scene.diagnostics));
   if (scene.canceled || !scene.success) {
-    ReportProgress(
-      ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "FBX parse failed");
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "FBX parse failed");
     co_return co_await FinalizeSession(session);
   }
 
-  ReportProgress(
-    ImportPhase::kLoading, 0.05f, 0.0f, 0U, 0U, "Loading texture sources...");
-  auto external_textures = co_await LoadExternalTextureBytes(scene, session);
-  AddDiagnostics(session, std::move(external_textures.diagnostics));
-  if (external_textures.canceled) {
-    ReportProgress(
-      ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "FBX load canceled");
-    co_return co_await FinalizeSession(session);
-  }
-
-  ReportProgress(ImportProgressEvent::kPhaseStarted, ImportPhase::kPlanning,
-    0.1f, 0.0f, 0U, 0U, "Planning started");
-  ReportProgress(
-    ImportPhase::kPlanning, 0.1f, 0.0f, 0U, 0U, "Building import plan...");
+  ReportPhaseProgress(ImportPhase::kPlanning, 0.1f, "Building import plan...");
   const auto request_copy = Request();
   const auto stop_token = StopToken();
   auto plan_outcome = co_await ThreadPool()->Run(
-    [this, &scene, request_copy, stop_token, &external_textures](
+    [this, &scene, request_copy, stop_token](
       co::ThreadPool::CancelToken canceled) -> PlanBuildOutcome {
       DLOG_F(1, "FbxImportJob: BuildPlan task begin");
       if (canceled || stop_token.stop_requested()) {
@@ -139,45 +122,27 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
         canceled_outcome.canceled = true;
         return canceled_outcome;
       }
-      return BuildPlan(const_cast<ParsedFbxScene&>(scene), request_copy,
-        stop_token, external_textures.bytes);
+      return BuildPlan(
+        const_cast<ParsedFbxScene&>(scene), request_copy, stop_token);
     });
   AddDiagnostics(session, std::move(plan_outcome.diagnostics));
   if (plan_outcome.canceled || !plan_outcome.plan) {
-    ReportProgress(
-      ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "Plan build failed");
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Plan build failed");
     co_return co_await FinalizeSession(session);
   }
 
-  ReportProgress(ImportProgressEvent::kPhaseFinished, ImportPhase::kLoading,
-    1.0f, 1.0f, 0U, 0U, "Loading finished");
-  ReportProgress(ImportProgressEvent::kPhaseFinished, ImportPhase::kPlanning,
-    1.0f, 1.0f, 0U, 0U, "Planning finished");
-
-  ReportProgress(ImportProgressEvent::kPhaseStarted, ImportPhase::kWorking,
-    0.2f, 0.0f, 0U, 0U, "Working started");
-  ReportProgress(
-    ImportPhase::kWorking, 0.2f, 0.0f, 0U, 0U, "Executing plan...");
+  ReportPhaseProgress(ImportPhase::kWorking, 0.2f, "Executing plan...");
   if (!co_await ExecutePlan(*plan_outcome.plan, session)) {
-    ReportProgress(
-      ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "Plan execution failed");
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Plan execution failed");
     co_return co_await FinalizeSession(session);
   }
 
-  ReportProgress(ImportProgressEvent::kPhaseFinished, ImportPhase::kWorking,
-    1.0f, 1.0f, 0U, 0U, "Working finished");
-
-  ReportProgress(ImportProgressEvent::kPhaseStarted, ImportPhase::kFinalizing,
-    0.9f, 0.0f, 0U, 0U, "Finalizing started");
-  ReportProgress(
-    ImportPhase::kFinalizing, 0.9f, 0.0f, 0U, 0U, "Finalizing import...");
+  ReportPhaseProgress(ImportPhase::kFinalizing, 0.9f, "Finalizing import...");
   auto report = co_await FinalizeSession(session);
 
-  ReportProgress(ImportProgressEvent::kPhaseFinished, ImportPhase::kFinalizing,
-    1.0f, 1.0f, 0U, 0U, "Finalizing finished");
-
-  ReportProgress(report.success ? ImportPhase::kComplete : ImportPhase::kFailed,
-    1.0f, 1.0f, 0U, 0U, report.success ? "Import complete" : "Import failed");
+  ReportPhaseProgress(
+    report.success ? ImportPhase::kComplete : ImportPhase::kFailed, 1.0f,
+    report.success ? "Import complete" : "Import failed");
 
   co_return report;
 }
@@ -245,89 +210,9 @@ auto FbxImportJob::ParseScene(ImportSession& session) -> co::Co<ParsedFbxScene>
   co_return parsed;
 }
 
-//! Load external FBX texture bytes via the async file reader.
-auto FbxImportJob::LoadExternalTextureBytes(ParsedFbxScene& scene,
-  ImportSession& session) -> co::Co<ExternalTextureLoadOutcome>
-{
-  ExternalTextureLoadOutcome outcome;
-  if (!scene.success || scene.adapter == nullptr) {
-    co_return outcome;
-  }
-
-  if (StopToken().stop_requested()) {
-    outcome.canceled = true;
-    co_return outcome;
-  }
-
-  auto reader = session.FileReader();
-  if (reader == nullptr) {
-    outcome.diagnostics.push_back(MakeErrorDiagnostic("import.file_reader",
-      "Import session has no async file reader", Request().source_path.string(),
-      ""));
-    co_return outcome;
-  }
-
-  const auto request_copy = Request();
-  const std::string source_id_prefix = request_copy.source_path.string();
-  adapters::AdapterInput input {
-    .source_id_prefix = source_id_prefix,
-    .object_path_prefix = {},
-    .material_keys = {},
-    .default_material_key = DefaultMaterialKey(),
-    .request = request_copy,
-    .naming_service = observer_ptr { &GetNamingService() },
-    .stop_token = StopToken(),
-    .external_texture_bytes = {},
-  };
-
-  std::vector<ImportDiagnostic> source_diagnostics;
-  const auto sources
-    = scene.adapter->CollectExternalTextureSources(input, source_diagnostics);
-  for (auto& diagnostic : source_diagnostics) {
-    outcome.diagnostics.push_back(std::move(diagnostic));
-  }
-
-  for (const auto& source : sources) {
-    if (StopToken().stop_requested()) {
-      outcome.canceled = true;
-      co_return outcome;
-    }
-
-    auto read_result = co_await reader.get()->ReadFile(source.resolved_path);
-    if (!read_result.has_value()) {
-      const auto message
-        = "Failed to read FBX texture file: " + read_result.error().ToString();
-      outcome.diagnostics.push_back(
-        MakeWarningDiagnostic("fbx.texture.load_failed", message,
-          source.texture_id, source.resolved_path.string()));
-      outcome.bytes.push_back(adapters::AdapterInput::ExternalTextureBytes {
-        .texture_id = source.texture_id,
-        .bytes = std::make_shared<std::vector<std::byte>>(),
-      });
-      continue;
-    }
-
-    auto bytes = std::make_shared<std::vector<std::byte>>(
-      std::move(read_result.value()));
-    if (bytes->empty()) {
-      outcome.diagnostics.push_back(
-        MakeWarningDiagnostic("fbx.texture.empty", "FBX texture file is empty",
-          source.texture_id, source.resolved_path.string()));
-    }
-    outcome.bytes.push_back(adapters::AdapterInput::ExternalTextureBytes {
-      .texture_id = source.texture_id,
-      .bytes = std::move(bytes),
-    });
-  }
-
-  co_return outcome;
-}
-
 //! Build the planner-driven execution plan for this import.
 auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
-  const ImportRequest& request, std::stop_token stop_token,
-  std::span<const adapters::AdapterInput::ExternalTextureBytes>
-    external_texture_bytes) -> PlanBuildOutcome
+  const ImportRequest& request, std::stop_token stop_token) -> PlanBuildOutcome
 {
   DLOG_F(1, "FbxImportJob: BuildPlan begin");
   PlanBuildOutcome outcome;
@@ -341,7 +226,8 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
   plan->planner.RegisterPipeline<BufferPipeline>(PlanItemKind::kBufferResource);
   plan->planner.RegisterPipeline<MaterialPipeline>(
     PlanItemKind::kMaterialAsset);
-  plan->planner.RegisterPipeline<MeshBuildPipeline>(
+  plan->planner.RegisterPipeline<MeshBuildPipeline>(PlanItemKind::kMeshBuild);
+  plan->planner.RegisterPipeline<GeometryPipeline>(
     PlanItemKind::kGeometryAsset);
   plan->planner.RegisterPipeline<ScenePipeline>(PlanItemKind::kSceneAsset);
 
@@ -354,7 +240,7 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
     .request = request,
     .naming_service = observer_ptr { &GetNamingService() },
     .stop_token = stop_token,
-    .external_texture_bytes = external_texture_bytes,
+    .external_texture_bytes = {},
   };
 
   struct PlannerTextureSink final : adapters::TextureWorkItemSink {
@@ -439,10 +325,23 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
     auto Consume(MeshBuildPipeline::WorkItem item) -> bool override
     {
       const auto handle = plan_.payloads.Store(std::move(item));
-      auto& payload = plan_.payloads.Geometry(handle);
-      const auto id
-        = plan_.planner.AddGeometryAsset(payload.item.mesh_name, handle);
-      plan_.geometry_items.push_back(id);
+      auto& payload = plan_.payloads.MeshBuild(handle);
+      const auto mesh_build_id
+        = plan_.planner.AddMeshBuild(payload.item.mesh_name, handle);
+
+      for (const auto slot : payload.item.material_slots_used) {
+        if (slot < plan_.material_slots.size()) {
+          plan_.planner.AddDependency(
+            mesh_build_id, plan_.material_slots[slot]);
+        }
+      }
+
+      const auto geometry_handle = plan_.payloads.Store(
+        GeometryFinalizeWorkItem { .mesh_build_item = mesh_build_id });
+      const auto geometry_id = plan_.planner.AddGeometryAsset(
+        payload.item.mesh_name, geometry_handle);
+      plan_.planner.AddDependency(geometry_id, mesh_build_id);
+      plan_.geometry_items.push_back(geometry_id);
       return true;
     }
 
@@ -506,12 +405,6 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
   }
   if (!scene_result.success) {
     return outcome;
-  }
-
-  for (const auto geometry_item : plan->geometry_items) {
-    for (const auto material_item : plan->material_items) {
-      plan->planner.AddDependency(geometry_item, material_item);
-    }
   }
 
   for (const auto scene_item : plan->scene_items) {

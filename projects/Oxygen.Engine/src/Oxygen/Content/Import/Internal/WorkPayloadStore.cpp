@@ -58,6 +58,12 @@ auto WorkPayloadStore::Store(MeshBuildPipeline::WorkItem item)
   -> WorkPayloadHandle
 {
   return StorePayload(
+    mesh_builds_, MeshBuildWorkPayload { .item = std::move(item) });
+}
+
+auto WorkPayloadStore::Store(GeometryFinalizeWorkItem item) -> WorkPayloadHandle
+{
+  return StorePayload(
     geometries_, GeometryWorkPayload { .item = std::move(item) });
 }
 
@@ -90,6 +96,12 @@ auto WorkPayloadStore::Geometry(WorkPayloadHandle handle)
 {
   return RequirePayload<GeometryWorkPayload>(
     handle, PlanItemKind::kGeometryAsset);
+}
+
+auto WorkPayloadStore::MeshBuild(WorkPayloadHandle handle)
+  -> MeshBuildWorkPayload&
+{
+  return RequirePayload<MeshBuildWorkPayload>(handle, PlanItemKind::kMeshBuild);
 }
 
 auto WorkPayloadStore::Scene(WorkPayloadHandle handle) -> SceneWorkPayload&

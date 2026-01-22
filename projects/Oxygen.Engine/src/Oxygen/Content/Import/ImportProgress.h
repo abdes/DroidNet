@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
@@ -28,16 +29,35 @@ enum class ImportPhase : uint8_t {
   kFailed, //!< Failed with error.
 };
 
-//! Kind of progress event emitted by an import job.
-enum class ImportProgressEvent : uint8_t {
-  kJobStarted, //!< Job execution started.
-  kJobFinished, //!< Job execution finished.
-  kPhaseStarted, //!< Phase started.
-  kPhaseProgress, //!< Phase progress update.
-  kPhaseFinished, //!< Phase finished.
-  kItemStarted, //!< Work item started.
-  kItemFinished, //!< Work item finished.
+//! Kind of progress event payload.
+enum class ProgressEventKind : uint8_t {
+  kJobStarted,
+  kJobFinished,
+  kPhaseUpdate,
+  kItemStarted,
+  kItemFinished,
+  kItemCollected,
 };
+
+//! Convert a progress event kind to a string label.
+inline auto to_string(ProgressEventKind kind) -> std::string
+{
+  switch (kind) {
+  case ProgressEventKind::kJobStarted:
+    return "job_started";
+  case ProgressEventKind::kJobFinished:
+    return "job_finished";
+  case ProgressEventKind::kPhaseUpdate:
+    return "phase_update";
+  case ProgressEventKind::kItemStarted:
+    return "item_started";
+  case ProgressEventKind::kItemFinished:
+    return "item_finished";
+  case ProgressEventKind::kItemCollected:
+    return "item_collected";
+  }
+  return "unknown";
+}
 
 //! Convert an import phase to a string label.
 inline auto to_string(ImportPhase phase) -> std::string
@@ -63,63 +83,157 @@ inline auto to_string(ImportPhase phase) -> std::string
   return "Unknown";
 }
 
-//! Convert a progress event to a string label.
-inline auto to_string(ImportProgressEvent event) -> std::string
-{
-  switch (event) {
-  case ImportProgressEvent::kJobStarted:
-    return "job_started";
-  case ImportProgressEvent::kJobFinished:
-    return "job_finished";
-  case ImportProgressEvent::kPhaseStarted:
-    return "phase_started";
-  case ImportProgressEvent::kPhaseProgress:
-    return "phase_progress";
-  case ImportProgressEvent::kPhaseFinished:
-    return "phase_finished";
-  case ImportProgressEvent::kItemStarted:
-    return "item_started";
-  case ImportProgressEvent::kItemFinished:
-    return "item_finished";
-  }
-  return "unknown";
-}
-
-//! Progress update for UI integration.
-struct ImportProgress {
-  //! Job this progress applies to.
+//! Shared header for all progress events.
+struct ProgressHeader {
   ImportJobId job_id = kInvalidJobId;
-
-  //! Type of progress event.
-  ImportProgressEvent event = ImportProgressEvent::kPhaseProgress;
-
-  //! Current phase of import.
   ImportPhase phase = ImportPhase::kPending;
-
-  //! Progress within current phase (0.0 - 1.0).
-  float phase_progress = 0.0f;
-
-  //! Overall progress (0.0 - 1.0).
+  ProgressEventKind kind = ProgressEventKind::kPhaseUpdate;
   float overall_progress = 0.0f;
-
-  //! Human-readable status message.
   std::string message;
-
-  //! Optional work item kind label (e.g., "TextureResource").
-  std::string item_kind;
-
-  //! Optional work item name or identifier.
-  std::string item_name;
-
-  //! Items processed in current phase.
-  uint32_t items_completed = 0;
-  uint32_t items_total = 0;
-
-  //! Incremental diagnostics (warnings/errors as they occur).
   std::vector<ImportDiagnostic> new_diagnostics;
 };
 
+//! Payload for item progress updates.
+struct ItemProgress {
+  std::string item_kind;
+  std::string item_name;
+  float queue_load = -1.0f;
+};
+
+//! Variant payload for progress events.
+using ProgressPayload = std::variant<std::monostate, ItemProgress>;
+
+//! Full progress event with header and payload.
+struct ProgressEvent {
+  ProgressHeader header;
+  ProgressPayload payload;
+};
+
+//! Create a phase progress event.
+[[nodiscard]] inline auto MakePhaseProgress(ImportJobId job_id,
+  ImportPhase phase, float overall_progress, std::string message = {})
+  -> ProgressEvent
+{
+  ProgressEvent event {};
+  event.header = ProgressHeader {
+    .job_id = job_id,
+    .phase = phase,
+    .kind = ProgressEventKind::kPhaseUpdate,
+    .overall_progress = overall_progress,
+    .message = std::move(message),
+  };
+  event.payload = std::monostate {};
+  return event;
+}
+
+//! Create an item started event.
+[[nodiscard]] inline auto MakeItemStarted(ImportJobId job_id, ImportPhase phase,
+  float overall_progress, std::string item_kind, std::string item_name,
+  std::string message = {}) -> ProgressEvent
+{
+  ProgressEvent event {};
+  event.header = ProgressHeader {
+    .job_id = job_id,
+    .phase = phase,
+    .kind = ProgressEventKind::kItemStarted,
+    .overall_progress = overall_progress,
+    .message = std::move(message),
+  };
+  event.payload = ItemProgress {
+    .item_kind = std::move(item_kind),
+    .item_name = std::move(item_name),
+  };
+  return event;
+}
+
+//! Create an item finished event.
+[[nodiscard]] inline auto MakeItemFinished(ImportJobId job_id,
+  ImportPhase phase, float overall_progress, std::string item_kind,
+  std::string item_name, std::string message = {}) -> ProgressEvent
+{
+  ProgressEvent event {};
+  event.header = ProgressHeader {
+    .job_id = job_id,
+    .phase = phase,
+    .kind = ProgressEventKind::kItemFinished,
+    .overall_progress = overall_progress,
+    .message = std::move(message),
+  };
+  event.payload = ItemProgress {
+    .item_kind = std::move(item_kind),
+    .item_name = std::move(item_name),
+    .queue_load = -1.0f,
+  };
+  return event;
+}
+
+//! Create an item collected event.
+[[nodiscard]] inline auto MakeItemCollected(ImportJobId job_id,
+  ImportPhase phase, float overall_progress, std::string item_kind,
+  float queue_load, std::string message = {}) -> ProgressEvent
+{
+  ProgressEvent event {};
+  event.header = ProgressHeader {
+    .job_id = job_id,
+    .phase = phase,
+    .kind = ProgressEventKind::kItemCollected,
+    .overall_progress = overall_progress,
+    .message = std::move(message),
+  };
+  event.payload = ItemProgress {
+    .item_kind = std::move(item_kind),
+    .item_name = {},
+    .queue_load = queue_load,
+  };
+  return event;
+}
+
+//! Create a job started event.
+[[nodiscard]] inline auto MakeJobStarted(ImportJobId job_id, ImportPhase phase,
+  float overall_progress, std::string message = {}) -> ProgressEvent
+{
+  ProgressEvent event {};
+  event.header = ProgressHeader {
+    .job_id = job_id,
+    .phase = phase,
+    .kind = ProgressEventKind::kJobStarted,
+    .overall_progress = overall_progress,
+    .message = std::move(message),
+  };
+  event.payload = std::monostate {};
+  return event;
+}
+
+//! Create a job finished event.
+[[nodiscard]] inline auto MakeJobFinished(ImportJobId job_id, ImportPhase phase,
+  float overall_progress, std::string message = {}) -> ProgressEvent
+{
+  ProgressEvent event {};
+  event.header = ProgressHeader {
+    .job_id = job_id,
+    .phase = phase,
+    .kind = ProgressEventKind::kJobFinished,
+    .overall_progress = overall_progress,
+    .message = std::move(message),
+  };
+  event.payload = std::monostate {};
+  return event;
+}
+
+//! Check whether the event is an item update.
+[[nodiscard]] inline auto IsItemProgress(const ProgressEvent& event) -> bool
+{
+  return std::holds_alternative<ItemProgress>(event.payload);
+}
+
+//! Get the item payload if available.
+[[nodiscard]] inline auto GetItemProgress(const ProgressEvent& event)
+  -> const ItemProgress*
+{
+  return std::get_if<ItemProgress>(&event.payload);
+}
+
 //! Progress callback for UI updates.
-using ImportProgressCallback = std::function<void(const ImportProgress&)>;
+using ProgressEventCallback = std::function<void(const ProgressEvent&)>;
 
 } // namespace oxygen::content::import

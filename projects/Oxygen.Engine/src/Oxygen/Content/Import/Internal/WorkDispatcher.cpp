@@ -6,22 +6,99 @@
 
 #include <Oxygen/Content/Import/Internal/WorkDispatcher.h>
 
+#include <algorithm>
 #include <array>
+#include <atomic>
+#include <deque>
+#include <filesystem>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <sstream>
 #include <utility>
+#include <variant>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/Import/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Content/Import/Internal/Emitters/BufferEmitter.h>
 #include <Oxygen/Content/Import/Internal/Emitters/TextureEmitter.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/OxCo/Channel.h>
 #include <Oxygen/OxCo/Detail/ScopeGuard.h>
+#include <Oxygen/OxCo/Event.h>
 
 namespace oxygen::content::import::detail {
+
+namespace {
+
+  using KindAvailability = std::array<bool, kPlanKindCount>;
+
+  //! Strategy interface for selecting the next ready item to submit.
+  class SubmissionStrategy {
+  public:
+    virtual ~SubmissionStrategy() = default;
+
+    virtual auto AddReady(PlanItemId item_id, PlanItemKind kind) -> void = 0;
+
+    [[nodiscard]] virtual auto HasReady() const -> bool = 0;
+
+    [[nodiscard]] virtual auto NextReady(const KindAvailability& availability)
+      -> std::optional<PlanItemId>
+      = 0;
+  };
+
+  //! Round-robin submission strategy that skips full kinds.
+  class RoundRobinSubmissionStrategy final : public SubmissionStrategy {
+  public:
+    auto AddReady(PlanItemId item_id, PlanItemKind kind) -> void override
+    {
+      buckets_[static_cast<size_t>(kind)].push_back(item_id);
+    }
+
+    [[nodiscard]] auto HasReady() const -> bool override
+    {
+      for (const auto& bucket : buckets_) {
+        if (!bucket.empty()) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    [[nodiscard]] auto NextReady(const KindAvailability& availability)
+      -> std::optional<PlanItemId> override
+    {
+      if (!HasReady()) {
+        return std::nullopt;
+      }
+
+      for (size_t attempt = 0U; attempt < buckets_.size(); ++attempt) {
+        const auto kind_index = (cursor_ + attempt) % buckets_.size();
+        if (buckets_[kind_index].empty()) {
+          continue;
+        }
+        if (!availability[kind_index]) {
+          continue;
+        }
+
+        auto item_id = buckets_[kind_index].front();
+        buckets_[kind_index].pop_front();
+        cursor_ = (kind_index + 1U) % buckets_.size();
+        return item_id;
+      }
+
+      return std::nullopt;
+    }
+
+  private:
+    std::array<std::deque<PlanItemId>, kPlanKindCount> buckets_ {};
+    size_t cursor_ = 0U;
+  };
+
+} // namespace
 
 WorkDispatcher::WorkDispatcher(ImportSession& session,
   observer_ptr<co::ThreadPool> thread_pool,
@@ -35,26 +112,36 @@ WorkDispatcher::WorkDispatcher(ImportSession& session,
 {
 }
 
-auto WorkDispatcher::ProgressReporter::Report(ImportProgressEvent event,
-  ImportPhase phase, float phase_progress, uint32_t items_completed,
-  uint32_t items_total, float overall_progress, std::string message,
-  std::string item_kind, std::string item_name) const -> void
+auto WorkDispatcher::ProgressReporter::ReportItemProgress(
+  ProgressEventKind kind, ImportPhase phase, float overall_progress,
+  std::string message, std::string item_kind, std::string item_name) const
+  -> void
 {
   if (!on_progress) {
     return;
   }
 
-  ImportProgress progress;
-  progress.job_id = job_id;
-  progress.event = event;
-  progress.phase = phase;
-  progress.phase_progress = phase_progress;
-  progress.overall_progress = overall_progress;
-  progress.items_completed = items_completed;
-  progress.items_total = items_total;
-  progress.message = std::move(message);
-  progress.item_kind = std::move(item_kind);
-  progress.item_name = std::move(item_name);
+  DCHECK_F(kind == ProgressEventKind::kItemStarted
+      || kind == ProgressEventKind::kItemFinished,
+    "ReportItemProgress expects item start or finish kind");
+  auto progress = kind == ProgressEventKind::kItemStarted
+    ? MakeItemStarted(job_id, phase, overall_progress, std::move(item_kind),
+        std::move(item_name), std::move(message))
+    : MakeItemFinished(job_id, phase, overall_progress, std::move(item_kind),
+        std::move(item_name), std::move(message));
+  on_progress(progress);
+}
+
+auto WorkDispatcher::ProgressReporter::ReportItemCollected(ImportPhase phase,
+  float overall_progress, std::string message, std::string item_kind,
+  float queue_load) const -> void
+{
+  if (!on_progress) {
+    return;
+  }
+
+  auto progress = MakeItemCollected(job_id, phase, overall_progress,
+    std::move(item_kind), queue_load, std::move(message));
   on_progress(progress);
 }
 
@@ -96,26 +183,17 @@ auto WorkDispatcher::AddDiagnostics(
   }
 }
 
-auto WorkDispatcher::EmitGeometryPayload(GeometryPipeline& pipeline,
+auto WorkDispatcher::EmitGeometryPayload(
   const MeshBuildPipeline::CookedGeometryPayload& cooked,
-  const std::vector<MeshBufferBindings>& bindings, std::string_view source_id)
-  -> co::Co<bool>
+  const std::span<const std::byte> finalized_descriptor_bytes) -> bool
 {
   auto& asset_emitter = session_.AssetEmitter();
 
-  std::vector<ImportDiagnostic> finalize_diagnostics;
-  const auto finalized = co_await pipeline.FinalizeDescriptorBytes(
-    bindings, cooked.descriptor_bytes, finalize_diagnostics);
-  AddDiagnostics(session_, std::move(finalize_diagnostics));
-
-  if (!finalized.has_value()) {
-    co_return false;
-  }
-
   asset_emitter.Emit(cooked.geometry_key, data::AssetType::kGeometry,
-    cooked.virtual_path, cooked.descriptor_relpath, *finalized);
-  (void)source_id;
-  co_return true;
+    cooked.virtual_path, cooked.descriptor_relpath,
+    std::vector<std::byte>(
+      finalized_descriptor_bytes.begin(), finalized_descriptor_bytes.end()));
+  return true;
 }
 
 auto WorkDispatcher::EmitTexturePayload(TexturePipeline::WorkResult& result)
@@ -314,8 +392,8 @@ auto WorkDispatcher::EnsureMeshBuildPipeline(co::Nursery& nursery)
       = session_.Request().options.with_content_hashing;
     mesh_build_pipeline_ = std::make_unique<MeshBuildPipeline>(*thread_pool_,
       MeshBuildPipeline::Config {
-        .queue_capacity = concurrency_.geometry.queue_capacity,
-        .worker_count = concurrency_.geometry.workers,
+        .queue_capacity = concurrency_.mesh_build.queue_capacity,
+        .worker_count = concurrency_.mesh_build.workers,
         .with_content_hashing = with_content_hashing,
       });
     mesh_build_pipeline_->Start(nursery);
@@ -323,14 +401,19 @@ auto WorkDispatcher::EnsureMeshBuildPipeline(co::Nursery& nursery)
   return *mesh_build_pipeline_;
 }
 
-auto WorkDispatcher::EnsureGeometryPipeline() -> GeometryPipeline&
+auto WorkDispatcher::EnsureGeometryPipeline(co::Nursery& nursery)
+  -> GeometryPipeline&
 {
   if (!geometry_pipeline_) {
     const bool with_content_hashing
       = session_.Request().options.with_content_hashing;
     geometry_pipeline_ = std::make_unique<GeometryPipeline>(*thread_pool_,
       GeometryPipeline::Config {
-        .with_content_hashing = with_content_hashing });
+        .queue_capacity = concurrency_.geometry.queue_capacity,
+        .worker_count = concurrency_.geometry.workers,
+        .with_content_hashing = with_content_hashing,
+      });
+    geometry_pipeline_->Start(nursery);
   }
   return *geometry_pipeline_;
 }
@@ -365,6 +448,9 @@ auto WorkDispatcher::ClosePipelines() noexcept -> void
   if (mesh_build_pipeline_) {
     mesh_build_pipeline_->Close();
   }
+  if (geometry_pipeline_) {
+    geometry_pipeline_->Close();
+  }
   if (scene_pipeline_) {
     scene_pipeline_->Close();
   }
@@ -388,40 +474,61 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
   std::unordered_map<const void*, PlanItemId> texture_item_ids_by_key;
   std::unordered_map<std::string, PlanItemId> buffer_item_ids_by_source;
   std::unordered_map<std::string, PlanItemId> material_item_ids_by_source;
-  std::unordered_map<std::string, PlanItemId> geometry_item_ids_by_source;
-  std::unordered_map<const void*, PlanItemId> geometry_item_ids_by_key;
-  std::unordered_map<std::string, PlanItemId> scene_item_ids_by_source;
-  size_t pending_textures = 0;
-  size_t pending_buffers = 0;
-  size_t pending_materials = 0;
-  size_t pending_geometries = 0;
-  size_t pending_scenes = 0;
-
-  enum class GeometryBufferKind : uint8_t {
-    kVertex,
-    kIndex,
-    kJointIndex,
-    kJointWeight,
-    kInverseBind,
-    kJointRemap,
-  };
-
-  struct GeometryBufferBinding final {
-    size_t geometry_index = 0;
-    size_t lod_index = 0;
-    GeometryBufferKind kind = GeometryBufferKind::kVertex;
-  };
-
-  struct PendingGeometry final {
+  std::unordered_map<std::string, PlanItemId> mesh_build_item_ids_by_source;
+  std::unordered_map<const void*, PlanItemId> mesh_build_item_ids_by_key;
+  struct MeshBuildReady final {
     MeshBuildPipeline::WorkResult result;
     std::vector<MeshBufferBindings> bindings;
-    std::optional<PlanItemId> item_id;
-    size_t buffers_pending = 0;
   };
 
-  std::vector<PendingGeometry> pending_geometry_items;
-  std::unordered_map<std::string, GeometryBufferBinding>
-    geometry_buffer_bindings;
+  std::unordered_map<PlanItemId, MeshBuildReady> mesh_build_results;
+  std::unordered_map<std::string, PlanItemId> geometry_item_ids_by_source;
+  std::unordered_map<std::string, PlanItemId> scene_item_ids_by_source;
+  std::atomic<size_t> pending_textures { 0U };
+  std::atomic<size_t> pending_buffers { 0U };
+  std::atomic<size_t> pending_materials { 0U };
+  std::atomic<size_t> pending_mesh_builds { 0U };
+  std::atomic<size_t> pending_geometries { 0U };
+  std::atomic<size_t> pending_scenes { 0U };
+  std::atomic<size_t> pending_envelopes { 0U };
+
+  auto scheduler = std::make_unique<RoundRobinSubmissionStrategy>();
+
+  enum class ResultKind : uint8_t {
+    kTexture,
+    kBuffer,
+    kMaterial,
+    kMeshBuild,
+    kGeometry,
+    kScene,
+  };
+
+  using ResultPayload
+    = std::variant<TexturePipeline::WorkResult, BufferPipeline::WorkResult,
+      MaterialPipeline::WorkResult, MeshBuildPipeline::WorkResult,
+      GeometryPipeline::WorkResult, ScenePipeline::WorkResult>;
+
+  struct ResultEnvelope {
+    ResultKind kind;
+    ResultPayload payload;
+  };
+
+  const auto item_count = context.steps.size();
+  const auto result_capacity = (std::max)(size_t { 1 }, item_count);
+  co::Channel<ResultEnvelope> result_channel(result_capacity);
+  co::Channel<uint8_t> collector_kick(1U);
+
+  auto PendingTotal = [&]() -> size_t {
+    return pending_textures.load(std::memory_order_acquire)
+      + pending_buffers.load(std::memory_order_acquire)
+      + pending_materials.load(std::memory_order_acquire)
+      + pending_mesh_builds.load(std::memory_order_acquire)
+      + pending_geometries.load(std::memory_order_acquire)
+      + pending_scenes.load(std::memory_order_acquire);
+  };
+
+  auto NotifyCollector
+    = [&]() -> void { (void)collector_kick.TrySend(uint8_t { 1 }); };
 
   co::detail::ScopeGuard close_guard([&]() noexcept { ClosePipelines(); });
 
@@ -433,6 +540,12 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       if (it != texture_item_ids.end()) {
         const auto item_id = it->second;
         texture_item_ids.erase(it);
+        if (result.source_key != nullptr) {
+          texture_item_ids_by_key.erase(result.source_key);
+        }
+        if (!result.source_id.empty()) {
+          texture_item_ids_by_source.erase(result.source_id);
+        }
         return item_id;
       }
     }
@@ -442,6 +555,12 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       if (it != texture_item_ids_by_key.end()) {
         const auto item_id = it->second;
         texture_item_ids_by_key.erase(it);
+        if (!result.texture_id.empty()) {
+          texture_item_ids.erase(result.texture_id);
+        }
+        if (!result.source_id.empty()) {
+          texture_item_ids_by_source.erase(result.source_id);
+        }
         return item_id;
       }
     }
@@ -451,6 +570,12 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       if (it != texture_item_ids_by_source.end()) {
         const auto item_id = it->second;
         texture_item_ids_by_source.erase(it);
+        if (!result.texture_id.empty()) {
+          texture_item_ids.erase(result.texture_id);
+        }
+        if (result.source_key != nullptr) {
+          texture_item_ids_by_key.erase(result.source_key);
+        }
         return item_id;
       }
     }
@@ -458,18 +583,6 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     return std::nullopt;
   };
 
-  const auto item_count = context.steps.size();
-  std::array<uint32_t, kPlanKindCount> total_by_kind {};
-  std::array<uint32_t, kPlanKindCount> completed_by_kind {};
-  std::array<uint8_t, kPlanKindCount> pipeline_reported {};
-  std::array<uint8_t, kPlanKindCount> phase_started {};
-  for (const auto& step : context.steps) {
-    const auto kind = context.planner.Item(step.item_id).kind;
-    const auto index = static_cast<size_t>(kind);
-    if (index < total_by_kind.size()) {
-      ++total_by_kind[index];
-    }
-  }
   std::vector<uint8_t> submitted(item_count, 0U);
   std::vector<uint8_t> completed(item_count, 0U);
   size_t completed_count = 0U;
@@ -482,11 +595,11 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
   }
 
-  std::deque<PlanItemId> ready_queue;
   for (const auto& step : context.steps) {
     auto& tracker = context.planner.Tracker(step.item_id);
     if (tracker.IsReady()) {
-      ready_queue.push_back(step.item_id);
+      const auto& item = context.planner.Item(step.item_id);
+      scheduler->AddReady(step.item_id, item.kind);
     }
   }
 
@@ -495,7 +608,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     if (submitted[u_item] != 0U) {
       return;
     }
-    ready_queue.push_back(item_id);
+    const auto& item = context.planner.Item(item_id);
+    scheduler->AddReady(item_id, item.kind);
   };
 
   auto mark_complete = [&](const PlanItemId item_id, const PlanItemKind kind,
@@ -506,19 +620,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
     completed[u_item] = 1U;
     ++completed_count;
-    const auto kind_index = static_cast<size_t>(kind);
-    if (kind_index < completed_by_kind.size()) {
-      ++completed_by_kind[kind_index];
-    }
     if (progress_.has_value() && progress_->on_progress) {
-      const auto total
-        = kind_index < total_by_kind.size() ? total_by_kind[kind_index] : 0U;
-      const auto done = kind_index < completed_by_kind.size()
-        ? completed_by_kind[kind_index]
-        : 0U;
-      const float phase_progress = (total > 0U)
-        ? static_cast<float>(done) / static_cast<float>(total)
-        : 1.0f;
       const float overall_progress = (item_count > 0U)
         ? progress_->overall_start
           + (progress_->overall_end - progress_->overall_start)
@@ -526,24 +628,9 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
               / static_cast<float>(item_count))
         : progress_->overall_end;
       const auto label = kind_label(kind);
-      const auto emitted_message = label + " emitted (" + std::to_string(done)
-        + "/" + std::to_string(total) + ")";
-      progress_->Report(ImportProgressEvent::kItemFinished,
-        phase_for_kind(kind), phase_progress, done, total, overall_progress,
+      progress_->ReportItemProgress(ProgressEventKind::kItemFinished,
+        phase_for_kind(kind), overall_progress,
         std::string(item_name) + " finished", label, std::string(item_name));
-
-      progress_->Report(ImportProgressEvent::kPhaseProgress,
-        phase_for_kind(kind), phase_progress, done, total, overall_progress,
-        emitted_message);
-
-      if (total > 0U && done == total && kind_index < pipeline_reported.size()
-        && pipeline_reported[kind_index] == 0U) {
-        pipeline_reported[kind_index] = 1U;
-        const auto complete_message = label + " pipeline complete";
-        progress_->Report(ImportProgressEvent::kPhaseFinished,
-          phase_for_kind(kind), 1.0f, done, total, overall_progress,
-          complete_message, label);
-      }
     }
     for (const auto dependent : dependents[u_item]) {
       auto& tracker = context.planner.Tracker(dependent);
@@ -561,15 +648,6 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
     const std::string name(item_name);
     return [&, kind, name]() {
-      const auto kind_index = static_cast<size_t>(kind);
-      const auto total
-        = kind_index < total_by_kind.size() ? total_by_kind[kind_index] : 0U;
-      const auto done = kind_index < completed_by_kind.size()
-        ? completed_by_kind[kind_index]
-        : 0U;
-      const float phase_progress = (total > 0U)
-        ? static_cast<float>(done) / static_cast<float>(total)
-        : 0.0f;
       const float overall_progress = (item_count > 0U)
         ? progress_->overall_start
           + (progress_->overall_end - progress_->overall_start)
@@ -577,16 +655,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
               / static_cast<float>(item_count))
         : progress_->overall_start;
       const auto label = kind_label(kind);
-      if (kind_index < phase_started.size() && total > 0U
-        && phase_started[kind_index] == 0U) {
-        phase_started[kind_index] = 1U;
-        progress_->Report(ImportProgressEvent::kPhaseStarted,
-          phase_for_kind(kind), phase_progress, done, total, overall_progress,
-          label + " phase started", label);
-      }
-      progress_->Report(ImportProgressEvent::kItemStarted, phase_for_kind(kind),
-        phase_progress, done, total, overall_progress, name + " started", label,
-        name);
+      progress_->ReportItemProgress(ProgressEventKind::kItemStarted,
+        phase_for_kind(kind), overall_progress, name + " started", label, name);
     };
   };
 
@@ -595,24 +665,44 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     if (!progress_.has_value() || !progress_->on_progress) {
       return;
     }
-    const auto kind_index = static_cast<size_t>(kind);
-    const auto total
-      = kind_index < total_by_kind.size() ? total_by_kind[kind_index] : 0U;
-    const auto done = kind_index < completed_by_kind.size()
-      ? completed_by_kind[kind_index]
-      : 0U;
-    const float phase_progress = (total > 0U)
-      ? static_cast<float>(done) / static_cast<float>(total)
-      : 0.0f;
     const float overall_progress = (item_count > 0U) ? progress_->overall_start
         + (progress_->overall_end - progress_->overall_start)
           * (static_cast<float>(completed_count)
             / static_cast<float>(item_count))
                                                      : progress_->overall_start;
     const auto label = kind_label(kind);
-    progress_->Report(ImportProgressEvent::kItemFinished, phase_for_kind(kind),
-      phase_progress, done, total, overall_progress,
+    progress_->ReportItemProgress(ProgressEventKind::kItemFinished,
+      phase_for_kind(kind), overall_progress,
       std::string(item_name) + " finished", label, std::string(item_name));
+  };
+
+  auto ReportItemCollected
+    = [&](const PlanItemKind kind, const size_t queue_size,
+        const size_t queue_capacity) -> void {
+    if (!progress_.has_value() || !progress_->on_progress) {
+      return;
+    }
+
+    const float overall_progress = (item_count > 0U) ? progress_->overall_start
+        + (progress_->overall_end - progress_->overall_start)
+          * (static_cast<float>(completed_count)
+            / static_cast<float>(item_count))
+                                                     : progress_->overall_start;
+    const auto label = kind_label(kind);
+    const float queue_load = (queue_capacity > 0U)
+      ? static_cast<float>(queue_size) / static_cast<float>(queue_capacity)
+      : 1.0f;
+    progress_->ReportItemCollected(
+      phase_for_kind(kind), overall_progress, {}, label, queue_load);
+  };
+
+  enum class GeometryBufferKind : uint8_t {
+    kVertex,
+    kIndex,
+    kJointIndex,
+    kJointWeight,
+    kInverseBind,
+    kJointRemap,
   };
 
   const auto MakeGeometryBufferId
@@ -651,17 +741,39 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     return std::nullopt;
   };
 
-  auto resolve_geometry_item = [&](const MeshBuildPipeline::WorkResult& result)
+  auto resolve_mesh_build_item
+    = [&](const MeshBuildPipeline::WorkResult& result)
     -> std::optional<PlanItemId> {
     if (result.source_key != nullptr) {
-      const auto it = geometry_item_ids_by_key.find(result.source_key);
-      if (it != geometry_item_ids_by_key.end()) {
+      const auto it = mesh_build_item_ids_by_key.find(result.source_key);
+      if (it != mesh_build_item_ids_by_key.end()) {
         const auto item_id = it->second;
-        geometry_item_ids_by_key.erase(it);
+        mesh_build_item_ids_by_key.erase(it);
+        if (!result.source_id.empty()) {
+          mesh_build_item_ids_by_source.erase(result.source_id);
+        }
         return item_id;
       }
     }
 
+    if (!result.source_id.empty()) {
+      const auto it = mesh_build_item_ids_by_source.find(result.source_id);
+      if (it != mesh_build_item_ids_by_source.end()) {
+        const auto item_id = it->second;
+        mesh_build_item_ids_by_source.erase(it);
+        if (result.source_key != nullptr) {
+          mesh_build_item_ids_by_key.erase(result.source_key);
+        }
+        return item_id;
+      }
+    }
+
+    return std::nullopt;
+  };
+
+  auto resolve_geometry_item =
+    [&](
+      const GeometryPipeline::WorkResult& result) -> std::optional<PlanItemId> {
     if (!result.source_id.empty()) {
       const auto it = geometry_item_ids_by_source.find(result.source_id);
       if (it != geometry_item_ids_by_source.end()) {
@@ -687,12 +799,16 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     return std::nullopt;
   };
 
-  std::function<co::Co<bool>()> collect_one_result;
-
   auto process_texture_result
     = [&](TexturePipeline::WorkResult result) -> co::Co<bool> {
     auto index = EmitTexturePayload(result);
     if (!index.has_value()) {
+      if (const auto item_id = resolve_texture_item(result)) {
+        const auto& item = context.planner.Item(*item_id);
+        ReportItemFinished(item.kind, item.debug_name);
+      } else if (!result.source_id.empty()) {
+        ReportItemFinished(PlanItemKind::kTextureResource, result.source_id);
+      }
       co_return false;
     }
 
@@ -709,90 +825,26 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     session_.AddDiagnostic(MakeErrorDiagnostic("import.plan.texture_unmapped",
       "Texture result could not be mapped to a plan item", result.source_id,
       ""));
+    if (!result.source_id.empty()) {
+      ReportItemFinished(PlanItemKind::kTextureResource, result.source_id);
+    }
     co_return false;
   };
 
-  auto FinalizePendingGeometry = [&](PendingGeometry& pending) -> co::Co<bool> {
-    if (!pending.result.cooked.has_value()) {
-      co_return false;
-    }
-    auto& geometry_pipeline = EnsureGeometryPipeline();
-
-    if (!co_await EmitGeometryPayload(geometry_pipeline, *pending.result.cooked,
-          pending.bindings, pending.result.source_id)) {
-      co_return false;
-    }
-
-    if (pending.item_id.has_value()) {
-      geometry_keys.emplace(
-        *pending.item_id, pending.result.cooked->geometry_key);
-      const auto& item = context.planner.Item(*pending.item_id);
-      mark_complete(*pending.item_id, item.kind, item.debug_name);
-    }
-
-    co_return true;
+  struct PendingGeometry final {
+    MeshBuildPipeline::WorkResult result;
+    std::vector<MeshBufferBindings> bindings;
+    std::optional<PlanItemId> item_id;
   };
 
   auto process_buffer_result
     = [&](BufferPipeline::WorkResult result) -> co::Co<bool> {
     const auto emitted = EmitBufferPayload(result);
     if (!emitted.has_value()) {
+      if (!result.source_id.empty()) {
+        ReportItemFinished(PlanItemKind::kBufferResource, result.source_id);
+      }
       co_return false;
-    }
-
-    const auto binding_it = geometry_buffer_bindings.find(result.source_id);
-    if (binding_it != geometry_buffer_bindings.end()) {
-      const auto binding = binding_it->second;
-      geometry_buffer_bindings.erase(binding_it);
-
-      if (binding.geometry_index >= pending_geometry_items.size()) {
-        session_.AddDiagnostic(
-          MakeErrorDiagnostic("import.plan.buffer_unmapped",
-            "Buffer result could not be mapped to geometry", result.source_id,
-            ""));
-        co_return false;
-      }
-
-      auto& pending = pending_geometry_items[binding.geometry_index];
-      if (binding.lod_index >= pending.bindings.size()) {
-        session_.AddDiagnostic(
-          MakeErrorDiagnostic("import.plan.buffer_unmapped",
-            "Buffer result could not be mapped to geometry LOD",
-            result.source_id, ""));
-        co_return false;
-      }
-
-      auto& lod_binding = pending.bindings[binding.lod_index];
-      switch (binding.kind) {
-      case GeometryBufferKind::kVertex:
-        lod_binding.vertex_buffer = *emitted;
-        break;
-      case GeometryBufferKind::kIndex:
-        lod_binding.index_buffer = *emitted;
-        break;
-      case GeometryBufferKind::kJointIndex:
-        lod_binding.joint_index_buffer = *emitted;
-        break;
-      case GeometryBufferKind::kJointWeight:
-        lod_binding.joint_weight_buffer = *emitted;
-        break;
-      case GeometryBufferKind::kInverseBind:
-        lod_binding.inverse_bind_buffer = *emitted;
-        break;
-      case GeometryBufferKind::kJointRemap:
-        lod_binding.joint_remap_buffer = *emitted;
-        break;
-      }
-
-      ReportItemFinished(PlanItemKind::kBufferResource, result.source_id);
-
-      if (pending.buffers_pending > 0) {
-        --pending.buffers_pending;
-      }
-      if (pending.buffers_pending == 0) {
-        co_return co_await FinalizePendingGeometry(pending);
-      }
-      co_return true;
     }
 
     if (const auto item_id = resolve_buffer_item(result)) {
@@ -804,12 +856,21 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     session_.AddDiagnostic(MakeErrorDiagnostic("import.plan.buffer_unmapped",
       "Buffer result could not be mapped to a plan item", result.source_id,
       ""));
+    if (!result.source_id.empty()) {
+      ReportItemFinished(PlanItemKind::kBufferResource, result.source_id);
+    }
     co_return false;
   };
 
   auto process_material_result
     = [&](MaterialPipeline::WorkResult result) -> co::Co<bool> {
     if (!EmitMaterialPayload(result)) {
+      if (const auto item_id = resolve_material_item(result)) {
+        const auto& item = context.planner.Item(*item_id);
+        ReportItemFinished(item.kind, item.debug_name);
+      } else if (!result.source_id.empty()) {
+        ReportItemFinished(PlanItemKind::kMaterialAsset, result.source_id);
+      }
       co_return false;
     }
 
@@ -825,109 +886,167 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     session_.AddDiagnostic(MakeErrorDiagnostic("import.plan.material_unmapped",
       "Material result could not be mapped to a plan item", result.source_id,
       ""));
+    if (!result.source_id.empty()) {
+      ReportItemFinished(PlanItemKind::kMaterialAsset, result.source_id);
+    }
     co_return false;
   };
 
-  auto process_geometry_result
+  auto process_mesh_build_result
     = [&](MeshBuildPipeline::WorkResult result) -> co::Co<bool> {
+    const auto item_id = resolve_mesh_build_item(result);
+    if (!item_id.has_value()) {
+      session_.AddDiagnostic(
+        MakeErrorDiagnostic("import.plan.mesh_build_unmapped",
+          "Mesh build result could not be mapped to a plan item",
+          result.source_id, ""));
+      if (!result.source_id.empty()) {
+        ReportItemFinished(PlanItemKind::kMeshBuild, result.source_id);
+      }
+      co_return false;
+    }
+    if (!result.success || !result.cooked.has_value()) {
+      AddDiagnostics(session_, std::move(result.diagnostics));
+      const auto& item = context.planner.Item(*item_id);
+      ReportItemFinished(item.kind, item.debug_name);
+      co_return false;
+    }
+
+    AddDiagnostics(session_, std::move(result.diagnostics));
+
+    auto& buffer_emitter = session_.BufferEmitter();
+    const auto EmitGeometryBuffer
+      = [&](CookedBufferPayload payload, const GeometryBufferKind kind,
+          const size_t lod_index, std::string_view suffix,
+          std::vector<MeshBufferBindings>& bindings) -> bool {
+      const auto buffer_id
+        = MakeGeometryBufferId(result.source_id, suffix, lod_index);
+      if (const auto started
+        = MakeItemStartedCallback(PlanItemKind::kMeshBuild, buffer_id);
+        started) {
+        started();
+      }
+
+      const auto emitted = buffer_emitter.Emit(std::move(payload));
+      auto& lod_binding = bindings[lod_index];
+      switch (kind) {
+      case GeometryBufferKind::kVertex:
+        lod_binding.vertex_buffer = emitted;
+        break;
+      case GeometryBufferKind::kIndex:
+        lod_binding.index_buffer = emitted;
+        break;
+      case GeometryBufferKind::kJointIndex:
+        lod_binding.joint_index_buffer = emitted;
+        break;
+      case GeometryBufferKind::kJointWeight:
+        lod_binding.joint_weight_buffer = emitted;
+        break;
+      case GeometryBufferKind::kInverseBind:
+        lod_binding.inverse_bind_buffer = emitted;
+        break;
+      case GeometryBufferKind::kJointRemap:
+        lod_binding.joint_remap_buffer = emitted;
+        break;
+      }
+
+      ReportItemFinished(PlanItemKind::kMeshBuild, buffer_id);
+      return true;
+    };
+
+    if (!result.cooked.has_value()) {
+      const auto& item = context.planner.Item(*item_id);
+      ReportItemFinished(item.kind, item.debug_name);
+      co_return false;
+    }
+
+    auto& cooked = *result.cooked;
+    std::vector<MeshBufferBindings> bindings;
+    bindings.resize(cooked.lods.size());
+
+    for (size_t lod_index = 0; lod_index < cooked.lods.size(); ++lod_index) {
+      auto& lod = cooked.lods[lod_index];
+      if (!lod.auxiliary_buffers.empty()
+        && lod.auxiliary_buffers.size() != 4u) {
+        session_.AddDiagnostic(MakeErrorDiagnostic("mesh.aux_buffer_count",
+          "Unexpected auxiliary buffer count for mesh LOD", result.source_id,
+          ""));
+        co_return false;
+      }
+      if (!EmitGeometryBuffer(std::move(lod.vertex_buffer),
+            GeometryBufferKind::kVertex, lod_index, "vb", bindings)) {
+        co_return false;
+      }
+      if (!EmitGeometryBuffer(std::move(lod.index_buffer),
+            GeometryBufferKind::kIndex, lod_index, "ib", bindings)) {
+        co_return false;
+      }
+      if (lod.auxiliary_buffers.size() == 4u) {
+        if (!EmitGeometryBuffer(std::move(lod.auxiliary_buffers[0]),
+              GeometryBufferKind::kJointIndex, lod_index, "joint_indices",
+              bindings)) {
+          co_return false;
+        }
+        if (!EmitGeometryBuffer(std::move(lod.auxiliary_buffers[1]),
+              GeometryBufferKind::kJointWeight, lod_index, "joint_weights",
+              bindings)) {
+          co_return false;
+        }
+        if (!EmitGeometryBuffer(std::move(lod.auxiliary_buffers[2]),
+              GeometryBufferKind::kInverseBind, lod_index, "inverse_bind",
+              bindings)) {
+          co_return false;
+        }
+        if (!EmitGeometryBuffer(std::move(lod.auxiliary_buffers[3]),
+              GeometryBufferKind::kJointRemap, lod_index, "joint_remap",
+              bindings)) {
+          co_return false;
+        }
+      }
+    }
+
+    mesh_build_results.emplace(*item_id,
+      MeshBuildReady {
+        .result = std::move(result), .bindings = std::move(bindings) });
+
+    const auto& item = context.planner.Item(*item_id);
+    mark_complete(*item_id, item.kind, item.debug_name);
+    co_return true;
+  };
+
+  auto process_geometry_result
+    = [&](GeometryPipeline::WorkResult result) -> co::Co<bool> {
     const auto item_id = resolve_geometry_item(result);
     if (!item_id.has_value()) {
       session_.AddDiagnostic(
         MakeErrorDiagnostic("import.plan.geometry_unmapped",
           "Geometry result could not be mapped to a plan item",
           result.source_id, ""));
+      if (!result.source_id.empty()) {
+        ReportItemFinished(PlanItemKind::kGeometryAsset, result.source_id);
+      }
       co_return false;
     }
-    if (!result.success || !result.cooked.has_value()) {
+
+    if (!result.success || !result.cooked.has_value()
+      || result.finalized_descriptor_bytes.empty()) {
       AddDiagnostics(session_, std::move(result.diagnostics));
+      const auto& item = context.planner.Item(*item_id);
+      ReportItemFinished(item.kind, item.debug_name);
       co_return false;
     }
 
     AddDiagnostics(session_, std::move(result.diagnostics));
-
-    const auto geometry_index = pending_geometry_items.size();
-    pending_geometry_items.push_back(PendingGeometry {});
-    auto& pending = pending_geometry_items.back();
-    pending.result = std::move(result);
-    pending.item_id = item_id;
-
-    auto& cooked = *pending.result.cooked;
-    pending.bindings.resize(cooked.lods.size());
-
-    for (size_t lod_index = 0; lod_index < cooked.lods.size(); ++lod_index) {
-      const auto& lod = cooked.lods[lod_index];
-      if (!lod.auxiliary_buffers.empty()
-        && lod.auxiliary_buffers.size() != 4u) {
-        session_.AddDiagnostic(MakeErrorDiagnostic("mesh.aux_buffer_count",
-          "Unexpected auxiliary buffer count for mesh LOD",
-          pending.result.source_id, ""));
-        co_return false;
-      }
+    if (!EmitGeometryPayload(
+          *result.cooked, result.finalized_descriptor_bytes)) {
+      const auto& item = context.planner.Item(*item_id);
+      ReportItemFinished(item.kind, item.debug_name);
+      co_return false;
     }
 
-    auto& buffer_pipeline = EnsureBufferPipeline(nursery);
-    const auto SubmitGeometryBuffer
-      = [&](CookedBufferPayload payload, const GeometryBufferKind kind,
-          const size_t lod_index, std::string_view suffix) -> co::Co<bool> {
-      const auto buffer_id
-        = MakeGeometryBufferId(pending.result.source_id, suffix, lod_index);
-      geometry_buffer_bindings.emplace(buffer_id,
-        GeometryBufferBinding { .geometry_index = geometry_index,
-          .lod_index = lod_index,
-          .kind = kind });
-
-      BufferPipeline::WorkItem item;
-      item.source_id = buffer_id;
-      item.cooked = std::move(payload);
-      item.on_started
-        = MakeItemStartedCallback(PlanItemKind::kBufferResource, buffer_id);
-      item.stop_token = stop_token_;
-
-      while (pending_buffers >= concurrency_.buffer.queue_capacity) {
-        if (!co_await collect_one_result()) {
-          co_return false;
-        }
-      }
-      ++pending_buffers;
-      ++pending.buffers_pending;
-      co_await buffer_pipeline.Submit(std::move(item));
-      co_return true;
-    };
-
-    for (size_t lod_index = 0; lod_index < cooked.lods.size(); ++lod_index) {
-      auto& lod = cooked.lods[lod_index];
-      if (!co_await SubmitGeometryBuffer(std::move(lod.vertex_buffer),
-            GeometryBufferKind::kVertex, lod_index, "vb")) {
-        co_return false;
-      }
-      if (!co_await SubmitGeometryBuffer(std::move(lod.index_buffer),
-            GeometryBufferKind::kIndex, lod_index, "ib")) {
-        co_return false;
-      }
-      if (lod.auxiliary_buffers.size() == 4u) {
-        if (!co_await SubmitGeometryBuffer(std::move(lod.auxiliary_buffers[0]),
-              GeometryBufferKind::kJointIndex, lod_index, "joint_indices")) {
-          co_return false;
-        }
-        if (!co_await SubmitGeometryBuffer(std::move(lod.auxiliary_buffers[1]),
-              GeometryBufferKind::kJointWeight, lod_index, "joint_weights")) {
-          co_return false;
-        }
-        if (!co_await SubmitGeometryBuffer(std::move(lod.auxiliary_buffers[2]),
-              GeometryBufferKind::kInverseBind, lod_index, "inverse_bind")) {
-          co_return false;
-        }
-        if (!co_await SubmitGeometryBuffer(std::move(lod.auxiliary_buffers[3]),
-              GeometryBufferKind::kJointRemap, lod_index, "joint_remap")) {
-          co_return false;
-        }
-      }
-    }
-
-    if (pending.buffers_pending == 0) {
-      co_return co_await FinalizePendingGeometry(pending);
-    }
-
+    geometry_keys.emplace(*item_id, result.cooked->geometry_key);
+    const auto& item = context.planner.Item(*item_id);
+    mark_complete(*item_id, item.kind, item.debug_name);
     co_return true;
   };
 
@@ -949,38 +1068,188 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     co_return false;
   };
 
-  collect_one_result = [&]() -> co::Co<bool> {
-    if (pending_textures > 0 && texture_pipeline_) {
-      auto result = co_await texture_pipeline_->Collect();
-      --pending_textures;
-      co_return co_await process_texture_result(std::move(result));
-    }
-
-    if (pending_buffers > 0 && buffer_pipeline_) {
-      auto result = co_await buffer_pipeline_->Collect();
-      --pending_buffers;
-      co_return co_await process_buffer_result(std::move(result));
-    }
-
-    if (pending_materials > 0 && material_pipeline_) {
-      auto result = co_await material_pipeline_->Collect();
-      --pending_materials;
-      co_return co_await process_material_result(std::move(result));
-    }
-
-    if (pending_geometries > 0 && mesh_build_pipeline_) {
-      auto result = co_await mesh_build_pipeline_->Collect();
-      --pending_geometries;
-      co_return co_await process_geometry_result(std::move(result));
-    }
-
-    if (pending_scenes > 0 && scene_pipeline_) {
-      auto result = co_await scene_pipeline_->Collect();
-      --pending_scenes;
-      co_return co_await process_scene_result(std::move(result));
+  auto ProcessEnvelope = [&](ResultEnvelope envelope) -> co::Co<bool> {
+    pending_envelopes.fetch_sub(1, std::memory_order_acq_rel);
+    switch (envelope.kind) {
+    case ResultKind::kTexture:
+      co_return co_await process_texture_result(
+        std::get<TexturePipeline::WorkResult>(std::move(envelope.payload)));
+    case ResultKind::kBuffer:
+      co_return co_await process_buffer_result(
+        std::get<BufferPipeline::WorkResult>(std::move(envelope.payload)));
+    case ResultKind::kMaterial:
+      co_return co_await process_material_result(
+        std::get<MaterialPipeline::WorkResult>(std::move(envelope.payload)));
+    case ResultKind::kMeshBuild:
+      co_return co_await process_mesh_build_result(
+        std::get<MeshBuildPipeline::WorkResult>(std::move(envelope.payload)));
+    case ResultKind::kGeometry:
+      co_return co_await process_geometry_result(
+        std::get<GeometryPipeline::WorkResult>(std::move(envelope.payload)));
+    case ResultKind::kScene:
+      co_return co_await process_scene_result(
+        std::get<ScenePipeline::WorkResult>(std::move(envelope.payload)));
     }
 
     co_return false;
+  };
+
+  std::atomic<bool> collector_done { false };
+  co::Event collector_finished;
+  nursery.Start([&]() -> co::Co<> {
+    size_t collect_cursor = 0U;
+    while (true) {
+      if (collector_done.load(std::memory_order_acquire)
+        && PendingTotal() == 0U) {
+        break;
+      }
+
+      if (PendingTotal() == 0U) {
+        auto kick = co_await collector_kick.Receive();
+        if (!kick.has_value()) {
+          break;
+        }
+        continue;
+      }
+
+      std::optional<ResultEnvelope> envelope;
+      for (size_t attempt = 0U; attempt < kPlanKindCount; ++attempt) {
+        const auto index = (collect_cursor + attempt) % kPlanKindCount;
+        const auto kind = static_cast<PlanItemKind>(index);
+        switch (kind) {
+        case PlanItemKind::kTextureResource:
+          if (pending_textures.load(std::memory_order_acquire) == 0U
+            || !texture_pipeline_) {
+            continue;
+          }
+          {
+            auto result = co_await texture_pipeline_->Collect();
+            pending_textures.fetch_sub(1, std::memory_order_acq_rel);
+            ReportItemCollected(PlanItemKind::kTextureResource,
+              texture_pipeline_->OutputQueueSize(),
+              texture_pipeline_->OutputQueueCapacity());
+            envelope = ResultEnvelope {
+              .kind = ResultKind::kTexture,
+              .payload = std::move(result),
+            };
+          }
+          break;
+        case PlanItemKind::kBufferResource:
+          if (pending_buffers.load(std::memory_order_acquire) == 0U
+            || !buffer_pipeline_) {
+            continue;
+          }
+          {
+            auto result = co_await buffer_pipeline_->Collect();
+            pending_buffers.fetch_sub(1, std::memory_order_acq_rel);
+            ReportItemCollected(PlanItemKind::kBufferResource,
+              buffer_pipeline_->OutputQueueSize(),
+              buffer_pipeline_->OutputQueueCapacity());
+            envelope = ResultEnvelope {
+              .kind = ResultKind::kBuffer,
+              .payload = std::move(result),
+            };
+          }
+          break;
+        case PlanItemKind::kMaterialAsset:
+          if (pending_materials.load(std::memory_order_acquire) == 0U
+            || !material_pipeline_) {
+            continue;
+          }
+          {
+            auto result = co_await material_pipeline_->Collect();
+            pending_materials.fetch_sub(1, std::memory_order_acq_rel);
+            ReportItemCollected(PlanItemKind::kMaterialAsset,
+              material_pipeline_->OutputQueueSize(),
+              material_pipeline_->OutputQueueCapacity());
+            envelope = ResultEnvelope {
+              .kind = ResultKind::kMaterial,
+              .payload = std::move(result),
+            };
+          }
+          break;
+        case PlanItemKind::kMeshBuild:
+          if (pending_mesh_builds.load(std::memory_order_acquire) == 0U
+            || !mesh_build_pipeline_) {
+            continue;
+          }
+          {
+            auto result = co_await mesh_build_pipeline_->Collect();
+            pending_mesh_builds.fetch_sub(1, std::memory_order_acq_rel);
+            ReportItemCollected(PlanItemKind::kMeshBuild,
+              mesh_build_pipeline_->OutputQueueSize(),
+              mesh_build_pipeline_->OutputQueueCapacity());
+            envelope = ResultEnvelope {
+              .kind = ResultKind::kMeshBuild,
+              .payload = std::move(result),
+            };
+          }
+          break;
+        case PlanItemKind::kGeometryAsset:
+          if (pending_geometries.load(std::memory_order_acquire) == 0U
+            || !geometry_pipeline_) {
+            continue;
+          }
+          {
+            auto result = co_await geometry_pipeline_->Collect();
+            pending_geometries.fetch_sub(1, std::memory_order_acq_rel);
+            ReportItemCollected(PlanItemKind::kGeometryAsset,
+              geometry_pipeline_->OutputQueueSize(),
+              geometry_pipeline_->OutputQueueCapacity());
+            envelope = ResultEnvelope {
+              .kind = ResultKind::kGeometry,
+              .payload = std::move(result),
+            };
+          }
+          break;
+        case PlanItemKind::kSceneAsset:
+          if (pending_scenes.load(std::memory_order_acquire) == 0U
+            || !scene_pipeline_) {
+            continue;
+          }
+          {
+            auto result = co_await scene_pipeline_->Collect();
+            pending_scenes.fetch_sub(1, std::memory_order_acq_rel);
+            ReportItemCollected(PlanItemKind::kSceneAsset,
+              scene_pipeline_->OutputQueueSize(),
+              scene_pipeline_->OutputQueueCapacity());
+            envelope = ResultEnvelope {
+              .kind = ResultKind::kScene,
+              .payload = std::move(result),
+            };
+          }
+          break;
+        case PlanItemKind::kAudioResource:
+          continue;
+        }
+
+        if (envelope.has_value()) {
+          collect_cursor = (index + 1U) % kPlanKindCount;
+          break;
+        }
+      }
+
+      if (!envelope.has_value()) {
+        continue;
+      }
+
+      pending_envelopes.fetch_add(1, std::memory_order_acq_rel);
+      if (!co_await result_channel.Send(std::move(*envelope))) {
+        pending_envelopes.fetch_sub(1, std::memory_order_acq_rel);
+        break;
+      }
+    }
+
+    result_channel.Close();
+    collector_finished.Trigger();
+    co_return;
+  });
+
+  auto Finish = [&](const bool ok) -> co::Co<bool> {
+    collector_done.store(true, std::memory_order_release);
+    collector_kick.Close();
+    co_await collector_finished;
+    co_return ok;
   };
 
   auto submit_texture = [&](const PlanItemId item_id,
@@ -1000,14 +1269,43 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
 
     auto& pipeline = EnsureTexturePipeline(nursery);
-    while (pending_textures >= concurrency_.texture.queue_capacity) {
-      if (!co_await collect_one_result()) {
-        co_return false;
+
+    if (auto* source_bytes
+      = std::get_if<TexturePipeline::SourceBytes>(&payload.item.source)) {
+      if (!payload.item.source_path.empty()) {
+        auto reader = session_.FileReader();
+        const auto source_path_string = payload.item.source_path.string();
+        if (reader == nullptr) {
+          session_.AddDiagnostic(MakeErrorDiagnostic("import.file_reader",
+            "Import session has no async file reader", payload.item.source_id,
+            source_path_string));
+        } else {
+          auto read_result
+            = co_await reader.get()->ReadFile(payload.item.source_path);
+          if (!read_result.has_value()) {
+            const auto message = "Failed to read texture file: "
+              + read_result.error().ToString();
+            session_.AddDiagnostic(
+              MakeWarningDiagnostic("import.texture.load_failed", message,
+                payload.item.source_id, source_path_string));
+          } else {
+            auto bytes = std::make_shared<std::vector<std::byte>>(
+              std::move(read_result.value()));
+            payload.item.source = TexturePipeline::SourceBytes {
+              .bytes = std::span<const std::byte>(bytes->data(), bytes->size()),
+              .owner = std::static_pointer_cast<const void>(bytes),
+            };
+          }
+        }
       }
     }
-    ++pending_textures;
+    const auto total_before = PendingTotal();
+    pending_textures.fetch_add(1, std::memory_order_acq_rel);
     payload.item.on_started = std::move(on_started);
     co_await pipeline.Submit(std::move(payload.item));
+    if (total_before == 0U) {
+      NotifyCollector();
+    }
     co_return true;
   };
 
@@ -1021,14 +1319,13 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
 
     auto& pipeline = EnsureBufferPipeline(nursery);
-    while (pending_buffers >= concurrency_.buffer.queue_capacity) {
-      if (!co_await collect_one_result()) {
-        co_return false;
-      }
-    }
-    ++pending_buffers;
+    const auto total_before = PendingTotal();
+    pending_buffers.fetch_add(1, std::memory_order_acq_rel);
     payload.item.on_started = std::move(on_started);
     co_await pipeline.Submit(std::move(payload.item));
+    if (total_before == 0U) {
+      NotifyCollector();
+    }
     co_return true;
   };
 
@@ -1046,21 +1343,20 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
 
     auto& pipeline = EnsureMaterialPipeline(nursery);
-    while (pending_materials >= concurrency_.material.queue_capacity) {
-      if (!co_await collect_one_result()) {
-        co_return false;
-      }
-    }
-    ++pending_materials;
+    const auto total_before = PendingTotal();
+    pending_materials.fetch_add(1, std::memory_order_acq_rel);
     payload.item.on_started = std::move(on_started);
     co_await pipeline.Submit(std::move(payload.item));
+    if (total_before == 0U) {
+      NotifyCollector();
+    }
     co_return true;
   };
 
-  auto submit_geometry = [&](const PlanItemId item_id,
-                           std::function<void()> on_started) -> co::Co<bool> {
+  auto submit_mesh_build = [&](const PlanItemId item_id,
+                             std::function<void()> on_started) -> co::Co<bool> {
     auto& item = context.planner.Item(item_id);
-    auto& payload = context.payloads.Geometry(item.work_handle);
+    auto& payload = context.payloads.MeshBuild(item.work_handle);
     payload.item.material_keys.clear();
     payload.item.material_keys.reserve(context.material_slots.size());
     for (const auto material_item : context.material_slots) {
@@ -1073,23 +1369,110 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
 
     if (!payload.item.source_id.empty()) {
-      geometry_item_ids_by_source.insert_or_assign(
+      mesh_build_item_ids_by_source.insert_or_assign(
         payload.item.source_id, item_id);
     }
     if (payload.item.source_key != nullptr) {
-      geometry_item_ids_by_key.insert_or_assign(
+      mesh_build_item_ids_by_key.insert_or_assign(
         payload.item.source_key, item_id);
     }
 
     auto& pipeline = EnsureMeshBuildPipeline(nursery);
-    while (pending_geometries >= concurrency_.geometry.queue_capacity) {
-      if (!co_await collect_one_result()) {
-        co_return false;
-      }
-    }
-    ++pending_geometries;
+    const auto total_before = PendingTotal();
+    pending_mesh_builds.fetch_add(1, std::memory_order_acq_rel);
     payload.item.on_started = std::move(on_started);
     co_await pipeline.Submit(std::move(payload.item));
+    if (total_before == 0U) {
+      NotifyCollector();
+    }
+    co_return true;
+  };
+
+  auto submit_geometry_asset
+    = [&](const PlanItemId item_id,
+        std::function<void()> on_started) -> co::Co<bool> {
+    auto& item = context.planner.Item(item_id);
+    auto& payload = context.payloads.Geometry(item.work_handle);
+
+    const auto result_it
+      = mesh_build_results.find(payload.item.mesh_build_item);
+    if (result_it == mesh_build_results.end()) {
+      session_.AddDiagnostic(MakeErrorDiagnostic("import.plan.mesh_missing",
+        "Missing mesh build result for geometry finalize", item.debug_name,
+        ""));
+      ReportItemFinished(item.kind, item.debug_name);
+      co_return false;
+    }
+
+    PendingGeometry pending;
+    pending.result = std::move(result_it->second.result);
+    pending.bindings = std::move(result_it->second.bindings);
+    pending.item_id = item_id;
+    mesh_build_results.erase(result_it);
+
+    if (!pending.result.success || !pending.result.cooked.has_value()) {
+      AddDiagnostics(session_, std::move(pending.result.diagnostics));
+      ReportItemFinished(item.kind, item.debug_name);
+      co_return false;
+    }
+
+    AddDiagnostics(session_, std::move(pending.result.diagnostics));
+
+    GeometryPipeline::WorkItem geometry_item;
+    geometry_item.source_id = pending.result.source_id;
+    geometry_item.bindings = std::move(pending.bindings);
+    bool missing_material = false;
+    auto& cooked_payload = *pending.result.cooked;
+    geometry_item.material_patches.reserve(
+      cooked_payload.material_patch_offsets.size());
+    for (const auto& patch_offset : cooked_payload.material_patch_offsets) {
+      const auto slot = patch_offset.slot;
+      if (slot >= context.material_slots.size()) {
+        session_.AddDiagnostic(
+          MakeErrorDiagnostic("import.plan.material_slot_invalid",
+            "Material slot is outside the plan material list", item.debug_name,
+            std::to_string(slot)));
+        missing_material = true;
+        continue;
+      }
+
+      const auto material_item = context.material_slots[slot];
+      const auto it = material_keys.find(material_item);
+      if (it == material_keys.end()) {
+        session_.AddDiagnostic(
+          MakeErrorDiagnostic("import.plan.material_key_missing",
+            "Missing material key for geometry patch", item.debug_name,
+            std::to_string(slot)));
+        missing_material = true;
+        continue;
+      }
+
+      geometry_item.material_patches.push_back(
+        GeometryPipeline::MaterialKeyPatch {
+          .material_key_offset = patch_offset.material_key_offset,
+          .key = it->second,
+        });
+    }
+    if (missing_material) {
+      ReportItemFinished(item.kind, item.debug_name);
+      co_return false;
+    }
+    geometry_item.cooked = std::move(cooked_payload);
+    geometry_item.on_started = std::move(on_started);
+    geometry_item.stop_token = stop_token_;
+
+    if (!geometry_item.source_id.empty()) {
+      geometry_item_ids_by_source.insert_or_assign(
+        geometry_item.source_id, item_id);
+    }
+
+    auto& pipeline = EnsureGeometryPipeline(nursery);
+    const auto total_before = PendingTotal();
+    pending_geometries.fetch_add(1, std::memory_order_acq_rel);
+    co_await pipeline.Submit(std::move(geometry_item));
+    if (total_before == 0U) {
+      NotifyCollector();
+    }
     co_return true;
   };
 
@@ -1115,14 +1498,13 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
 
     auto& pipeline = EnsureScenePipeline(nursery);
-    while (pending_scenes >= concurrency_.scene.queue_capacity) {
-      if (!co_await collect_one_result()) {
-        co_return false;
-      }
-    }
-    ++pending_scenes;
+    const auto total_before = PendingTotal();
+    pending_scenes.fetch_add(1, std::memory_order_acq_rel);
     payload.item.on_started = std::move(on_started);
     co_await pipeline.Submit(std::move(payload.item));
+    if (total_before == 0U) {
+      NotifyCollector();
+    }
     co_return true;
   };
 
@@ -1142,8 +1524,10 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       co_return co_await submit_buffer(item_id, std::move(on_started));
     case PlanItemKind::kMaterialAsset:
       co_return co_await submit_material(item_id, std::move(on_started));
+    case PlanItemKind::kMeshBuild:
+      co_return co_await submit_mesh_build(item_id, std::move(on_started));
     case PlanItemKind::kGeometryAsset:
-      co_return co_await submit_geometry(item_id, std::move(on_started));
+      co_return co_await submit_geometry_asset(item_id, std::move(on_started));
     case PlanItemKind::kSceneAsset:
       co_return co_await submit_scene(item_id, std::move(on_started));
     case PlanItemKind::kAudioResource:
@@ -1155,33 +1539,144 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     co_return false;
   };
 
+  auto KindHasCapacity = [&](const PlanItemKind kind) -> bool {
+    switch (kind) {
+    case PlanItemKind::kTextureResource:
+      return pending_textures.load(std::memory_order_acquire)
+        < concurrency_.texture.queue_capacity;
+    case PlanItemKind::kBufferResource:
+      return pending_buffers.load(std::memory_order_acquire)
+        < concurrency_.buffer.queue_capacity;
+    case PlanItemKind::kMaterialAsset:
+      return pending_materials.load(std::memory_order_acquire)
+        < concurrency_.material.queue_capacity;
+    case PlanItemKind::kMeshBuild:
+      return pending_mesh_builds.load(std::memory_order_acquire)
+        < concurrency_.mesh_build.queue_capacity;
+    case PlanItemKind::kGeometryAsset:
+      return pending_geometries.load(std::memory_order_acquire)
+        < concurrency_.geometry.queue_capacity;
+    case PlanItemKind::kSceneAsset:
+      return pending_scenes.load(std::memory_order_acquire)
+        < concurrency_.scene.queue_capacity;
+    case PlanItemKind::kAudioResource:
+      return false;
+    }
+    return false;
+  };
+
+  auto BuildAvailability = [&]() -> KindAvailability {
+    KindAvailability availability {};
+    for (size_t index = 0U; index < availability.size(); ++index) {
+      const auto kind = static_cast<PlanItemKind>(index);
+      availability[index] = KindHasCapacity(kind);
+    }
+    return availability;
+  };
+
   while (completed_count < item_count) {
-    while (!ready_queue.empty()) {
-      const auto item_id = ready_queue.front();
-      ready_queue.pop_front();
-      if (!co_await submit_item(item_id)) {
-        co_return false;
+    bool submitted_any = false;
+    auto availability = BuildAvailability();
+    auto next_item = scheduler->NextReady(availability);
+    while (next_item.has_value()) {
+      submitted_any = true;
+      if (!co_await submit_item(*next_item)) {
+        co_return co_await Finish(false);
       }
+      availability = BuildAvailability();
+      next_item = scheduler->NextReady(availability);
     }
 
     if (stop_token_.stop_requested()) {
-      co_return false;
+      co_return co_await Finish(false);
     }
 
-    const auto pending_total = pending_textures + pending_buffers
-      + pending_materials + pending_geometries + pending_scenes;
-    if (pending_total == 0U) {
+    while (auto envelope = result_channel.TryReceive()) {
+      if (!co_await ProcessEnvelope(std::move(*envelope))) {
+        co_return co_await Finish(false);
+      }
+    }
+
+    if (completed_count >= item_count) {
+      co_return co_await Finish(true);
+    }
+
+    const auto pending_total = PendingTotal();
+    const auto pending_envelopes_count
+      = pending_envelopes.load(std::memory_order_acquire);
+    if (pending_total == 0U && pending_envelopes_count == 0U) {
+      if (scheduler->HasReady()) {
+        const auto any_capacity = [&]() -> bool {
+          for (size_t index = 0U; index < kPlanKindCount; ++index) {
+            if (KindHasCapacity(static_cast<PlanItemKind>(index))) {
+              return true;
+            }
+          }
+          return false;
+        }();
+
+        if (!any_capacity) {
+          LOG_F(INFO,
+            "plan capacity blocked: ready={} completed={}/{} submitted={} "
+            "pending={{tex={}, buf={}, mat={}, mesh={}, geo={}, scene={}, "
+            "env={}}}",
+            scheduler->HasReady(), completed_count, item_count,
+            std::accumulate(submitted.begin(), submitted.end(), 0U),
+            pending_textures.load(std::memory_order_acquire),
+            pending_buffers.load(std::memory_order_acquire),
+            pending_materials.load(std::memory_order_acquire),
+            pending_mesh_builds.load(std::memory_order_acquire),
+            pending_geometries.load(std::memory_order_acquire),
+            pending_scenes.load(std::memory_order_acquire),
+            pending_envelopes_count);
+          session_.AddDiagnostic(
+            MakeErrorDiagnostic("import.plan.capacity_blocked",
+              "Import plan has ready work but no pipeline capacity available",
+              "", ""));
+          co_return co_await Finish(false);
+        }
+
+        continue;
+      }
+
+      LOG_F(INFO,
+        "plan deadlock: completed={}/{} submitted={} ready={} "
+        "pending={{tex={}, buf={}, mat={}, mesh={}, geo={}, scene={}, "
+        "env={}}}",
+        completed_count, item_count,
+        std::accumulate(submitted.begin(), submitted.end(), 0U),
+        scheduler->HasReady(), pending_textures.load(std::memory_order_acquire),
+        pending_buffers.load(std::memory_order_acquire),
+        pending_materials.load(std::memory_order_acquire),
+        pending_mesh_builds.load(std::memory_order_acquire),
+        pending_geometries.load(std::memory_order_acquire),
+        pending_scenes.load(std::memory_order_acquire),
+        pending_envelopes_count);
+      LOG_F(INFO,
+        "plan deadlock maps: textures={{id={}, key={}, source={}}} "
+        "materials={{source={}}} mesh_build={{source={}, key={}}} "
+        "geometry={{source={}}} scene={{source={}}}",
+        texture_item_ids.size(), texture_item_ids_by_key.size(),
+        texture_item_ids_by_source.size(), material_item_ids_by_source.size(),
+        mesh_build_item_ids_by_source.size(), mesh_build_item_ids_by_key.size(),
+        geometry_item_ids_by_source.size(), scene_item_ids_by_source.size());
       session_.AddDiagnostic(MakeErrorDiagnostic("import.plan.deadlock",
         "Import plan has no pending work but is not complete", "", ""));
-      co_return false;
+      co_return co_await Finish(false);
     }
 
-    if (!co_await collect_one_result()) {
-      co_return false;
+    if (!submitted_any) {
+      auto envelope = co_await result_channel.Receive();
+      if (!envelope.has_value()) {
+        co_return co_await Finish(false);
+      }
+      if (!co_await ProcessEnvelope(std::move(*envelope))) {
+        co_return co_await Finish(false);
+      }
     }
   }
 
-  co_return true;
+  co_return co_await Finish(true);
 }
 
 } // namespace oxygen::content::import::detail

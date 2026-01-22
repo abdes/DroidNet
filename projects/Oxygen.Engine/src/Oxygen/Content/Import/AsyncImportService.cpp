@@ -48,7 +48,7 @@ namespace {
 
   [[nodiscard]] auto CreateJobForFormat(ImportFormat format, ImportJobId job_id,
     ImportRequest request, ImportCompletionCallback on_complete,
-    ImportProgressCallback on_progress, std::shared_ptr<co::Event> cancel_event,
+    ProgressEventCallback on_progress, std::shared_ptr<co::Event> cancel_event,
     observer_ptr<IAsyncFileReader> file_reader,
     observer_ptr<IAsyncFileWriter> file_writer,
     observer_ptr<co::ThreadPool> thread_pool,
@@ -326,7 +326,7 @@ AsyncImportService::~AsyncImportService()
 }
 
 auto AsyncImportService::SubmitImport(ImportRequest request,
-  ImportCompletionCallback on_complete, ImportProgressCallback on_progress)
+  ImportCompletionCallback on_complete, ProgressEventCallback on_progress)
   -> ImportJobId
 {
   return SubmitImport(
@@ -334,7 +334,7 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
 }
 
 auto AsyncImportService::SubmitImport(ImportRequest request,
-  ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
+  ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
   ImportJobFactory job_factory) -> ImportJobId
 {
   // Check if we're accepting jobs

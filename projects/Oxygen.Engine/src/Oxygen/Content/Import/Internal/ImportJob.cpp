@@ -62,7 +62,7 @@ namespace {
 } // namespace
 
 ImportJob::ImportJob(ImportJobId job_id, ImportRequest request,
-  ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
+  ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
   std::shared_ptr<co::Event> cancel_event,
   observer_ptr<IAsyncFileReader> file_reader,
   observer_ptr<IAsyncFileWriter> file_writer,
@@ -190,7 +190,7 @@ auto ImportJob::GetNamingService() -> NamingService&
 }
 
 auto ImportJob::ProgressCallback() const noexcept
-  -> const ImportProgressCallback&
+  -> const ProgressEventCallback&
 {
   return on_progress_;
 }
@@ -199,8 +199,8 @@ auto ImportJob::MainAsync() -> co::Co<>
 {
   bool finalized = false;
 
-  ReportProgress(ImportProgressEvent::kJobStarted, ImportPhase::kPending, 0.0f,
-    0.0f, 0U, 0U, "Job started");
+  ReportJobEvent(
+    ProgressEventKind::kJobStarted, ImportPhase::kPending, 0.0f, "Job started");
 
   auto make_exception_report = [&](std::string_view message) -> ImportReport {
     ImportReport report {
@@ -227,7 +227,7 @@ auto ImportJob::MainAsync() -> co::Co<>
 
     const auto phase
       = report.success ? ImportPhase::kComplete : ImportPhase::kFailed;
-    ReportProgress(ImportProgressEvent::kJobFinished, phase, 1.0f, 1.0f, 0U, 0U,
+    ReportJobEvent(ProgressEventKind::kJobFinished, phase, 1.0f,
       report.success ? "Job finished" : "Job failed");
 
     DLOG_F(
@@ -346,34 +346,50 @@ auto ImportJob::MakeNoFileWriterReport(const ImportRequest& request) const
   return report;
 }
 
-auto ImportJob::ReportProgress(ImportPhase phase, float overall_progress,
-  float phase_progress, uint32_t items_completed, uint32_t items_total,
-  std::string message) -> void
+auto ImportJob::ReportJobEvent(ProgressEventKind kind, ImportPhase phase,
+  float overall_progress, std::string message) -> void
 {
-  ReportProgress(ImportProgressEvent::kPhaseProgress, phase, overall_progress,
-    phase_progress, items_completed, items_total, std::move(message));
+  if (!on_progress_) {
+    return;
+  }
+
+  DCHECK_F(kind == ProgressEventKind::kJobStarted
+      || kind == ProgressEventKind::kJobFinished,
+    "ReportJobEvent expects job start or finish kind");
+  ProgressEvent progress = kind == ProgressEventKind::kJobStarted
+    ? MakeJobStarted(job_id_, phase, overall_progress, std::move(message))
+    : MakeJobFinished(job_id_, phase, overall_progress, std::move(message));
+  on_progress_(progress);
 }
 
-auto ImportJob::ReportProgress(ImportProgressEvent event, ImportPhase phase,
-  float overall_progress, float phase_progress, uint32_t items_completed,
-  uint32_t items_total, std::string message, std::string item_kind,
+auto ImportJob::ReportPhaseProgress(
+  ImportPhase phase, float overall_progress, std::string message) -> void
+{
+  if (!on_progress_) {
+    return;
+  }
+
+  auto progress
+    = MakePhaseProgress(job_id_, phase, overall_progress, std::move(message));
+  on_progress_(progress);
+}
+
+auto ImportJob::ReportItemProgress(ProgressEventKind kind, ImportPhase phase,
+  float overall_progress, std::string message, std::string item_kind,
   std::string item_name) -> void
 {
   if (!on_progress_) {
     return;
   }
 
-  ImportProgress progress;
-  progress.job_id = job_id_;
-  progress.event = event;
-  progress.phase = phase;
-  progress.overall_progress = overall_progress;
-  progress.phase_progress = phase_progress;
-  progress.items_completed = items_completed;
-  progress.items_total = items_total;
-  progress.message = std::move(message);
-  progress.item_kind = std::move(item_kind);
-  progress.item_name = std::move(item_name);
+  DCHECK_F(kind == ProgressEventKind::kItemStarted
+      || kind == ProgressEventKind::kItemFinished,
+    "ReportItemProgress expects item start or finish kind");
+  auto progress = kind == ProgressEventKind::kItemStarted
+    ? MakeItemStarted(job_id_, phase, overall_progress, std::move(item_kind),
+        std::move(item_name), std::move(message))
+    : MakeItemFinished(job_id_, phase, overall_progress, std::move(item_kind),
+        std::move(item_name), std::move(message));
   on_progress_(progress);
 }
 

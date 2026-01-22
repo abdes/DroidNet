@@ -24,7 +24,8 @@ struct ImportConcurrency {
   ImportPipelineConcurrency texture { .workers = 2, .queue_capacity = 64 };
   ImportPipelineConcurrency buffer { .workers = 2, .queue_capacity = 64 };
   ImportPipelineConcurrency material { .workers = 2, .queue_capacity = 64 };
-  ImportPipelineConcurrency geometry { .workers = 2, .queue_capacity = 32 };
+  ImportPipelineConcurrency mesh_build { .workers = 2, .queue_capacity = 32 };
+  ImportPipelineConcurrency geometry { .workers = 1, .queue_capacity = 16 };
   ImportPipelineConcurrency scene { .workers = 1, .queue_capacity = 8 };
 };
 

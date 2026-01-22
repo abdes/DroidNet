@@ -24,6 +24,8 @@ template <oxygen::TypeId kTypeId> struct MockPipeline {
   using WorkItem = int;
   using WorkResult = int;
 
+  static constexpr PlanItemKind kItemKind = PlanItemKind::kTextureResource;
+
   static auto ClassTypeId() noexcept -> oxygen::TypeId { return kTypeId; }
 
   auto Start(oxygen::co::Nursery&) -> void { }
@@ -37,6 +39,10 @@ template <oxygen::TypeId kTypeId> struct MockPipeline {
   [[nodiscard]] auto PendingCount() const -> size_t { return 0U; }
 
   [[nodiscard]] auto GetProgress() const -> PipelineProgress { return {}; }
+
+  [[nodiscard]] auto OutputQueueSize() const -> size_t { return 0U; }
+
+  [[nodiscard]] auto OutputQueueCapacity() const -> size_t { return 0U; }
 };
 
 using MockTexturePipeline = MockPipeline<0x1101>;

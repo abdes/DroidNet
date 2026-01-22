@@ -65,6 +65,8 @@ ImportSession::ImportSession(const ImportRequest& request,
   , cooked_writer_(cooked_root_)
 {
   DLOG_F(INFO, "ImportSession created for: {}", request_.source_path.string());
+  LOG_F(INFO, "ImportSession options: with_content_hashing={}",
+    request_.options.with_content_hashing);
 
   DCHECK_F(file_writer_ != nullptr,
     "ImportSession requires a valid async file writer");

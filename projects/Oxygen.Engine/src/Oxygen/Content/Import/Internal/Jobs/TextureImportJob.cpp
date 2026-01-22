@@ -203,10 +203,7 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
     });
   StartPipeline(pipeline);
 
-  ReportProgress(ImportProgressEvent::kPhaseStarted, ImportPhase::kLoading,
-    0.0f, 0.0f, 0U, 0U, "Loading started");
-  ReportProgress(
-    ImportPhase::kLoading, 0.0f, 0.0f, 0U, 0U, "Loading texture source...");
+  ReportPhaseProgress(ImportPhase::kLoading, 0.0f, "Loading texture source...");
   const auto load_start = std::chrono::steady_clock::now();
   auto source = co_await LoadSource(session);
   const auto load_end = std::chrono::steady_clock::now();
@@ -214,13 +211,9 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
   telemetry.io_duration = source.io_duration;
   telemetry.decode_duration = source.decode_duration;
   if (!source.success) {
-    ReportProgress(
-      ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "Texture load failed");
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Texture load failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
-
-  ReportProgress(ImportProgressEvent::kPhaseFinished, ImportPhase::kLoading,
-    1.0f, 1.0f, 0U, 0U, "Loading finished");
 
   if (source.meta.has_value()) {
     const auto& meta = source.meta.value();
@@ -237,12 +230,9 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   const auto item_name = Request().source_path.filename().string();
-  ReportProgress(ImportProgressEvent::kPhaseStarted, ImportPhase::kWorking,
-    0.0f, 0.0f, 0U, 1U, "Working started");
-  ReportProgress(ImportProgressEvent::kItemStarted, ImportPhase::kWorking, 0.4f,
-    0.0f, 0U, 1U, "Texture item started", "Texture", item_name);
-  ReportProgress(
-    ImportPhase::kWorking, 0.4f, 0.0f, 0U, 1U, "Cooking texture...");
+  ReportPhaseProgress(ImportPhase::kWorking, 0.0f, "Cooking texture...");
+  ReportItemProgress(ProgressEventKind::kItemStarted, ImportPhase::kWorking,
+    0.4f, "Texture item started", "Texture", item_name);
   const auto cook_start = std::chrono::steady_clock::now();
   auto cooked = co_await CookTexture(source, session, pipeline);
   const auto cook_end = std::chrono::steady_clock::now();
@@ -251,40 +241,29 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
     telemetry.decode_duration = cooked.decode_duration;
   }
   if (!cooked.payload.has_value() && !cooked.used_fallback) {
-    ReportProgress(
-      ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "Texture cook failed");
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Texture cook failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
   if (cooked.payload.has_value()) {
-    ReportProgress(ImportProgressEvent::kPhaseStarted, ImportPhase::kFinalizing,
-      0.7f, 0.0f, 0U, 1U, "Finalizing started");
-    ReportProgress(
-      ImportPhase::kFinalizing, 0.7f, 0.0f, 0U, 0U, "Emitting texture...");
+    ReportPhaseProgress(ImportPhase::kFinalizing, 0.7f, "Emitting texture...");
     const auto emit_start = std::chrono::steady_clock::now();
     if (!co_await EmitTexture(std::move(*cooked.payload), session)) {
-      ReportProgress(
-        ImportPhase::kFailed, 1.0f, 1.0f, 0U, 0U, "Texture emit failed");
+      ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Texture emit failed");
       co_return co_await FinalizeWithTelemetry(session);
     }
     const auto emit_end = std::chrono::steady_clock::now();
     telemetry.emit_duration = MakeDuration(emit_start, emit_end);
   }
 
-  ReportProgress(ImportProgressEvent::kItemFinished, ImportPhase::kWorking,
-    1.0f, 1.0f, 1U, 1U, "Texture item finished", "Texture", item_name);
-  ReportProgress(ImportProgressEvent::kPhaseFinished, ImportPhase::kWorking,
-    1.0f, 1.0f, 1U, 1U, "Working finished", "Texture");
-
-  ReportProgress(
-    ImportPhase::kFinalizing, 0.9f, 0.0f, 0U, 0U, "Finalizing import...");
+  ReportItemProgress(ProgressEventKind::kItemFinished, ImportPhase::kWorking,
+    1.0f, "Texture item finished", "Texture", item_name);
+  ReportPhaseProgress(ImportPhase::kFinalizing, 0.9f, "Finalizing import...");
   auto report = co_await FinalizeWithTelemetry(session);
 
-  ReportProgress(ImportProgressEvent::kPhaseFinished, ImportPhase::kFinalizing,
-    1.0f, 1.0f, 1U, 1U, "Finalizing finished");
-
-  ReportProgress(report.success ? ImportPhase::kComplete : ImportPhase::kFailed,
-    1.0f, 1.0f, 0U, 0U, report.success ? "Import complete" : "Import failed");
+  ReportPhaseProgress(
+    report.success ? ImportPhase::kComplete : ImportPhase::kFailed, 1.0f,
+    report.success ? "Import complete" : "Import failed");
 
   co_return report;
 }

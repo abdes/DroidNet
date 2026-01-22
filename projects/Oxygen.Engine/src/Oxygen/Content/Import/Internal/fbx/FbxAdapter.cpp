@@ -1022,21 +1022,28 @@ namespace {
     return identity;
   }
 
+  struct ResolvedTextureSource final {
+    TexturePipeline::SourceBytes bytes;
+    std::filesystem::path source_path;
+  };
+
   [[nodiscard]] auto ResolveTextureSourceBytes(const TextureIdentity& identity,
     std::string_view source_id, const std::shared_ptr<const ufbx_scene>& owner,
     std::vector<ImportDiagnostic>& diagnostics,
     std::span<const AdapterInput::ExternalTextureBytes> external_texture_bytes)
-    -> std::optional<TexturePipeline::SourceBytes>
+    -> std::optional<ResolvedTextureSource>
   {
     if (identity.file_texture == nullptr) {
       return std::nullopt;
     }
 
-    const auto make_placeholder = []() -> TexturePipeline::SourceBytes {
+    const auto make_placeholder = []() -> ResolvedTextureSource {
       auto bytes = std::make_shared<std::vector<std::byte>>();
-      return TexturePipeline::SourceBytes {
-        .bytes = std::span<const std::byte>(bytes->data(), bytes->size()),
-        .owner = std::static_pointer_cast<const void>(bytes),
+      return ResolvedTextureSource {
+        .bytes = TexturePipeline::SourceBytes {
+          .bytes = std::span<const std::byte>(bytes->data(), bytes->size()),
+          .owner = std::static_pointer_cast<const void>(bytes),
+        },
       };
     };
 
@@ -1059,31 +1066,25 @@ namespace {
           "FBX embedded texture payload is empty", source_id, ""));
         return make_placeholder();
       }
-      return TexturePipeline::SourceBytes {
-        .bytes = bytes,
-        .owner = std::static_pointer_cast<const void>(owner),
+      return ResolvedTextureSource {
+        .bytes = TexturePipeline::SourceBytes {
+          .bytes = bytes,
+          .owner = std::static_pointer_cast<const void>(owner),
+        },
       };
     }
 
     if (!external_texture_bytes.empty()) {
       const auto external_bytes = find_external_bytes(identity.texture_id);
       if (external_bytes) {
-        return TexturePipeline::SourceBytes {
-          .bytes = std::span<const std::byte>(
-            external_bytes->data(), external_bytes->size()),
-          .owner = std::static_pointer_cast<const void>(external_bytes),
+        return ResolvedTextureSource {
+          .bytes = TexturePipeline::SourceBytes {
+            .bytes = std::span<const std::byte>(
+              external_bytes->data(), external_bytes->size()),
+            .owner = std::static_pointer_cast<const void>(external_bytes),
+          },
         };
       }
-
-      if (identity.resolved_path.empty()) {
-        diagnostics.push_back(MakeWarningDiagnostic("fbx.texture.path_missing",
-          "FBX texture has no resolved file path", source_id, ""));
-      } else {
-        diagnostics.push_back(MakeWarningDiagnostic("fbx.texture.async_missing",
-          "FBX texture bytes were not loaded via async reader", source_id,
-          identity.resolved_path.string()));
-      }
-      return make_placeholder();
     }
 
     if (identity.resolved_path.empty()) {
@@ -1092,22 +1093,9 @@ namespace {
       return make_placeholder();
     }
 
-    auto bytes = TryReadWholeFileBytes(identity.resolved_path);
-    if (!bytes.has_value() || bytes->empty()) {
-      diagnostics.push_back(MakeWarningDiagnostic("fbx.texture.load_failed",
-        "Failed to read FBX texture file", source_id,
-        identity.resolved_path.string()));
-      return make_placeholder();
-    }
-
-    auto shared_bytes
-      = std::make_shared<std::vector<std::byte>>(std::move(*bytes));
-
-    return TexturePipeline::SourceBytes {
-      .bytes
-      = std::span<const std::byte>(shared_bytes->data(), shared_bytes->size()),
-      .owner = std::static_pointer_cast<const void>(shared_bytes),
-    };
+    auto placeholder = make_placeholder();
+    placeholder.source_path = identity.resolved_path;
+    return placeholder;
   }
 
   [[nodiscard]] auto IsLambertMaterial(const ufbx_material& material) -> bool
@@ -1503,6 +1491,25 @@ namespace {
           result.diagnostics.end(), diagnostics.begin(), diagnostics.end());
         result.success = false;
         continue;
+      }
+
+      if (!buffers->ranges.empty()) {
+        uint32_t max_slot = 0;
+        for (const auto& range : buffers->ranges) {
+          max_slot = (std::max)(max_slot, range.material_slot);
+        }
+
+        std::vector<uint8_t> used(max_slot + 1, static_cast<uint8_t>(0));
+        for (const auto& range : buffers->ranges) {
+          used[range.material_slot] = static_cast<uint8_t>(1);
+        }
+
+        item.material_slots_used.clear();
+        for (uint32_t i = 0; i < used.size(); ++i) {
+          if (used[i] != 0U) {
+            item.material_slots_used.push_back(i);
+          }
+        }
       }
 
       const auto* skin_deformer = FindSkinDeformer(*mesh);
@@ -1976,9 +1983,9 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
       return;
     }
 
-    auto bytes = ResolveTextureSourceBytes(*identity, tex_source_id,
+    auto resolved = ResolveTextureSourceBytes(*identity, tex_source_id,
       impl_->scene_owner, result.diagnostics, input.external_texture_bytes);
-    if (!bytes.has_value()) {
+    if (!resolved.has_value()) {
       return;
     }
 
@@ -2012,7 +2019,8 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
       = input.request.options.texture_tuning.placeholder_on_failure
       ? TexturePipeline::FailurePolicy::kPlaceholder
       : TexturePipeline::FailurePolicy::kStrict;
-    item.source = *bytes;
+    item.source = resolved->bytes;
+    item.source_path = resolved->source_path;
     item.stop_token = input.stop_token;
 
     work_items.emplace(tex_source_id, std::move(item));

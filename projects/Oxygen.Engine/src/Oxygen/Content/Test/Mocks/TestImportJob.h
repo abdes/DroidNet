@@ -36,7 +36,7 @@ public:
 
   //! Construct a test job.
   TestImportJob(ImportJobId job_id, ImportRequest request,
-    ImportCompletionCallback on_complete, ImportProgressCallback on_progress,
+    ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
     std::shared_ptr<co::Event> cancel_event,
     oxygen::observer_ptr<IAsyncFileReader> file_reader,
     oxygen::observer_ptr<IAsyncFileWriter> file_writer,

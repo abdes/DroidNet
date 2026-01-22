@@ -7,7 +7,6 @@
 #pragma once
 
 #include <memory>
-#include <span>
 
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
@@ -57,24 +56,14 @@ private:
     bool canceled = false;
   };
 
-  struct ExternalTextureLoadOutcome {
-    std::vector<adapters::AdapterInput::ExternalTextureBytes> bytes;
-    std::vector<ImportDiagnostic> diagnostics;
-    bool canceled = false;
-  };
-
   [[nodiscard]] auto ExecuteAsync() -> co::Co<ImportReport> override;
 
   [[nodiscard]] auto ParseAsset(ImportSession& session)
     -> co::Co<ParsedGlbAsset>;
 
   [[nodiscard]] auto BuildPlan(ParsedGlbAsset& asset,
-    const ImportRequest& request, std::stop_token stop_token,
-    std::span<const adapters::AdapterInput::ExternalTextureBytes>
-      external_texture_bytes) -> PlanBuildOutcome;
-
-  [[nodiscard]] auto LoadExternalTextureBytes(ParsedGlbAsset& asset,
-    ImportSession& session) -> co::Co<ExternalTextureLoadOutcome>;
+    const ImportRequest& request, std::stop_token stop_token)
+    -> PlanBuildOutcome;
 
   [[nodiscard]] auto ExecutePlan(PlannedGlbImport& plan, ImportSession& session)
     -> co::Co<bool>;
