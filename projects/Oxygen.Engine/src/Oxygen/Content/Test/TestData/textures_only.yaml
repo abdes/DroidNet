@@ -17,7 +17,7 @@ textures:
     format: 30  # kRGBA8UNorm
     texture_type: 3  # kTexture2D
     compression_type: 0
-    data_hex: "ffffffff"  # Single white pixel as default
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
 
   - name: "texture_2d"
     width: 256
@@ -25,7 +25,7 @@ textures:
     format: 30  # kRGBA8UNorm
     texture_type: 3  # kTexture2D
     compression_type: 0
-    data_hex: "deadbeef"
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
 
   - name: "texture_cube"
     width: 128
@@ -34,7 +34,7 @@ textures:
     texture_type: 5  # kTextureCube
     compression_type: 0
     array_layers: 6
-    data_hex: "cafebabe"
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
 
   - name: "texture_array"
     width: 64
@@ -43,6 +43,6 @@ textures:
     texture_type: 4  # kTexture2DArray
     compression_type: 0
     array_layers: 4
-    data_hex: "feedface"
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
 
 # No assets, just resources for resource loading tests

@@ -24,11 +24,11 @@ textures:
     texture_type: 3     # kTexture2D
     compression_type: 0
     mip_levels: 1
-    data_hex: "ffffffff"  # 1x1 white pixel
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
 
   # Hull Material Textures
   - name: "SpaceshipHull_Diffuse"
-    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478daed93310e82301445bf7244141141c1b040b040b040b0"
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
     width: 64
     height: 64
     format: 30  # Format::kRGBA8UNorm (was incorrectly using kRGBA8UInt)
@@ -37,7 +37,7 @@ textures:
     texture_type: 3  # kTexture2D
 
   - name: "SpaceshipHull_Normal"
-    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478da8080808080808080808080808080808080808080"
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
     width: 64
     height: 64
     format: 30  # Format::kRGBA8UNorm
@@ -46,7 +46,7 @@ textures:
     texture_type: 3  # kTexture2D
 
   - name: "SpaceshipHull_Metallic"
-    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478daffffffffffffffffffffffffffffffffffff"
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
     width: 64
     height: 64
     format: 30  # Format::kRGBA8UNorm
@@ -55,7 +55,7 @@ textures:
     texture_type: 3  # kTexture2D
 
   - name: "SpaceshipHull_Roughness"
-    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478da404040404040404040404040404040404040"
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
     width: 64
     height: 64
     format: 30  # Format::kRGBA8UNorm
@@ -64,7 +64,7 @@ textures:
     texture_type: 3  # kTexture2D
 
   - name: "SpaceshipHull_AO"
-    data_hex: "89504e470d0a1a0a0000000d49484452000000400000004008060000008a71c4d0000001004944415478da202020202020202020202020202020202020"
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
     width: 64
     height: 64
     format: 30  # Format::kRGBA8UNorm
@@ -74,7 +74,7 @@ textures:
 
   # Cockpit Glass Material Textures
   - name: "CockpitGlass_Diffuse"
-    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478da1010101010101010101010101010101010"
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
     width: 32
     height: 32
     format: 30  # Format::kRGBA8UNorm
@@ -83,7 +83,7 @@ textures:
     texture_type: 3  # kTexture2D
 
   - name: "CockpitGlass_Normal"
-    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478da8080ff8080ff8080ff8080ff8080ff8080"
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
     width: 32
     height: 32
     format: 30  # Format::kRGBA8UNorm
@@ -93,7 +93,7 @@ textures:
 
   # Engine Material Textures
   - name: "EngineGlow_Diffuse"
-    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478daff4000ff4000ff4000ff4000ff4000ff40"
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
     width: 32
     height: 32
     format: 30  # Format::kRGBA8UNorm
@@ -102,7 +102,7 @@ textures:
     texture_type: 3  # kTexture2D
 
   - name: "EngineGlow_Emissive"
-    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478daff8000ff8000ff8000ff8000ff8000ff80"
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
     width: 32
     height: 32
     format: 30  # Format::kRGBA8UNorm
@@ -112,7 +112,7 @@ textures:
 
   # Weapon Material Textures
   - name: "Weapon_Diffuse"
-    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478da606060606060606060606060606060"
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
     width: 32
     height: 32
     format: 30  # Format::kRGBA8UNorm
@@ -121,7 +121,7 @@ textures:
     texture_type: 3  # kTexture2D
 
   - name: "Weapon_Normal"
-    data_hex: "89504e470d0a1a0a0000000d49484452000000200000002008060000009b8ac4d0000000804944415478da8080ff8080ff8080ff8080ff8080ff80"
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
     width: 32
     height: 32
     format: 30  # Format::kRGBA8UNorm

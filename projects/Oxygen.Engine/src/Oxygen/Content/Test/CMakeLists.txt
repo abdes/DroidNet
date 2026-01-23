@@ -33,28 +33,39 @@ add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 include(GTestHelpers)
 
 m_gtest_program(
-  Loaders
+  AssetLoader
   SOURCES
-    "AssetHeaderLoader_test.cpp"
     "AssetLoader_async_test.cpp"
     "AssetLoader_basic_test.cpp"
     "AssetLoader_buffer_test.cpp"
     "AssetLoader_cancellation_test.cpp"
     "AssetLoader_deps_test.cpp"
-    "AssetLoader_geometry_test.cpp"
+    "AssetLoader_eviction_test.cpp"
+    "AssetLoader_lifetime_test.cpp"
     "AssetLoader_loading_test.cpp"
     "AssetLoader_scene_test.cpp"
     "AssetLoader_test_helpers.cpp"
-    "AssetLoader_test.h"
-    "BufferLoader_test.cpp"
     "EngineTagFactory_test_impl.cpp"
     "LooseCookedIndex_test.cpp"
+    "AssetLoader_test.h"
+    "Utils/PakUtils.h"
+    "VirtualPathResolver_test.cpp"
+)
+target_compile_definitions(
+  Oxygen.Content.AssetLoader.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
+)
+
+m_gtest_program(
+  Loaders
+  SOURCES
+    "AssetHeaderLoader_test.cpp"
+    "BufferLoader_test.cpp"
     "MaterialLoader_test.cpp"
     "Mocks/MockStream.h"
     "SceneLoader_test.cpp"
     "TextureLoader_test.cpp"
-    "Utils/PakUtils.h"
-    "VirtualPathResolver_test.cpp"
 )
 target_compile_definitions(
   Oxygen.Content.Loaders.Tests

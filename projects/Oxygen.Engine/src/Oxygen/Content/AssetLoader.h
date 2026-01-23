@@ -91,6 +91,8 @@ struct AssetLoaderConfig final {
 class AssetLoader : public oxygen::co::LiveObject, public IAssetLoader {
 public:
   using IAssetLoader::BufferCallback;
+  using IAssetLoader::EvictionHandler;
+  using IAssetLoader::EvictionSubscription;
   using IAssetLoader::GeometryCallback;
   using IAssetLoader::MaterialCallback;
   using IAssetLoader::TextureCallback;
@@ -246,7 +248,7 @@ public:
   template <IsTyped T>
   auto GetAsset(const data::AssetKey& key) const -> std::shared_ptr<T>
   {
-    return content_cache_.CheckOut<T>(HashAssetKey(key));
+    return content_cache_.Peek<T>(HashAssetKey(key));
   }
 
   //! Check if asset is loaded in cache
@@ -291,6 +293,10 @@ public:
    @see LoadAsset, HasAsset, ReleaseResource
   */
   OXGN_CNTT_API auto ReleaseAsset(const data::AssetKey& key) -> bool override;
+
+  //! Subscribe to resource eviction notifications for a resource type.
+  OXGN_CNTT_API auto SubscribeResourceEvictions(TypeId resource_type,
+    EvictionHandler handler) -> EvictionSubscription override;
 
   //=== Resource Loading =====================================================//
 
@@ -551,6 +557,24 @@ public:
   template <PakResource T>
   auto GetResource(ResourceKey key) const noexcept -> std::shared_ptr<T>
   {
+    return content_cache_.Peek<T>(HashResourceKey(key));
+  }
+
+  //! Check out a resource, incrementing its usage count.
+  /*!
+   Use this when you need to hold a resource beyond a transient query. Each
+   checkout must be paired with a matching ReleaseResource call.
+
+   @tparam T The resource type (must satisfy PakResource concept)
+   @param key The resource key identifying the resource
+   @return Shared pointer to cached resource, or nullptr if not cached
+
+   @note This method increments the cache refcount.
+   @see GetResource, ReleaseResource
+  */
+  template <PakResource T>
+  auto CheckOutResource(ResourceKey key) const noexcept -> std::shared_ptr<T>
+  {
     return content_cache_.CheckOut<T>(HashResourceKey(key));
   }
 
@@ -743,7 +767,8 @@ private:
   std::unordered_map<TypeId, LoadFnErased> asset_loaders_;
   std::unordered_map<TypeId, LoadFnErased> resource_loaders_;
 
-  void UnloadObject(uint64_t cache_key, const oxygen::TypeId& type_id);
+  void UnloadObject(
+    uint64_t cache_key, const oxygen::TypeId& type_id, EvictionReason reason);
 
   OXGN_CNTT_API auto AddTypeErasedAssetLoader(
     TypeId type_id, std::string_view type_name, LoadFnErased&& loader) -> void;
@@ -818,6 +843,19 @@ private:
 
   bool verify_content_hashes_ { false };
 
+  //=== Eviction Notifications ===-----------------------------------------//
+
+  struct EvictionSubscriber final {
+    uint64_t id { 0 };
+    EvictionHandler handler {};
+  };
+
+  std::unordered_map<TypeId, std::vector<EvictionSubscriber>>
+    eviction_subscribers_;
+  std::unordered_map<uint64_t, ResourceKey> resource_key_by_hash_;
+  uint64_t next_eviction_subscriber_id_ { 1 };
+  std::shared_ptr<int> eviction_alive_token_ {};
+
   //=== In-flight Deduplication (Phase 2) ===--------------------------------//
 
   // Maps are owning-thread only.
@@ -862,6 +900,8 @@ public:
 #endif
 
 private:
+  void UnsubscribeResourceEvictions(
+    TypeId resource_type, uint64_t id) noexcept override;
 };
 
 //=== Explicit Template Declarations for DLL Export ==========================//

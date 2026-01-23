@@ -48,7 +48,7 @@ textures:
     texture_type: 3     # kTexture2D
     compression_type: 0
     mip_levels: 1
-    data_hex: "ffffffff"  # 1x1 white pixel
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
 
 # Assets - unified structure
 assets:

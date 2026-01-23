@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <limits>
@@ -133,6 +134,17 @@ inline auto GetResourceTypeIndexByTypeId(const oxygen::TypeId type_id)
   }
   throw std::runtime_error("Unknown resource type id for ResourceRef binding");
 }
+
+inline auto IsResourceTypeId(const oxygen::TypeId type_id) -> bool
+{
+  static const auto ids = MakeTypeIdArray(oxygen::content::ResourceTypeList {});
+  for (const auto id : ids) {
+    if (id == type_id) {
+      return true;
+    }
+  }
+  return false;
+}
 } // namespace
 
 //=== Sanity Checking Helper =================================================//
@@ -193,6 +205,7 @@ AssetLoader::AssetLoader(
   thread_pool_ = config.thread_pool;
   work_offline_ = config.work_offline;
   verify_content_hashes_ = config.verify_content_hashes;
+  eviction_alive_token_ = std::make_shared<int>(0);
 
   // Register asset loaders
   RegisterLoader(loaders::LoadGeometryAsset);
@@ -254,6 +267,20 @@ void AssetLoader::Stop()
   in_flight_scene_assets_.clear();
   in_flight_textures_.clear();
   in_flight_buffers_.clear();
+
+  {
+    auto eviction_guard = content_cache_.OnEviction(
+      [&](const uint64_t cache_key, std::shared_ptr<void> value,
+        const TypeId type_id) {
+        static_cast<void>(value);
+        UnloadObject(cache_key, type_id, EvictionReason::kShutdown);
+      });
+    content_cache_.Clear();
+  }
+
+  resource_key_by_hash_.clear();
+  eviction_subscribers_.clear();
+  eviction_alive_token_.reset();
 }
 
 auto AssetLoader::IsRunning() const -> bool { return nursery_ != nullptr; }
@@ -355,7 +382,7 @@ auto AssetLoader::ClearMounts() -> void
   LOG_F(INFO, "AssetLoader::ClearMounts thread={} owner={}",
     std::hash<std::thread::id> {}(std::this_thread::get_id()),
     std::hash<std::thread::id> {}(owning_thread_id_));
-  AssertOwningThread();
+  AssertOwningThread(); // Ensure this method is called on the owning thread
   impl_->sources.clear();
   impl_->source_ids.clear();
   impl_->source_id_to_index.clear();
@@ -367,7 +394,17 @@ auto AssetLoader::ClearMounts() -> void
 
   // Clear the content cache to prevent stale assets from being returned
   // when switching content sources (e.g. scene swap).
-  // content_cache_.Clear();
+  {
+    auto eviction_guard = content_cache_.OnEviction(
+      [&](const uint64_t cache_key, std::shared_ptr<void> value,
+        const TypeId type_id) {
+        static_cast<void>(value);
+        UnloadObject(cache_key, type_id, EvictionReason::kClear);
+      });
+    content_cache_.Clear();
+  }
+
+  resource_key_by_hash_.clear();
 }
 
 auto AssetLoader::BindResourceRefToKey(const internal::ResourceRef& ref)
@@ -506,10 +543,12 @@ auto AssetLoader::LoadResourceAsyncFromCookedErased(
   if (type_id == data::TextureResource::ClassTypeId()) {
     if (auto cached
       = content_cache_.CheckOut<data::TextureResource>(key_hash)) {
+      resource_key_by_hash_.try_emplace(key_hash, key);
       co_return cached;
     }
   } else if (type_id == data::BufferResource::ClassTypeId()) {
     if (auto cached = content_cache_.CheckOut<data::BufferResource>(key_hash)) {
+      resource_key_by_hash_.try_emplace(key_hash, key);
       co_return cached;
     }
   } else {
@@ -556,6 +595,7 @@ auto AssetLoader::LoadResourceAsyncFromCookedErased(
     if (type_id == data::TextureResource::ClassTypeId()) {
       if (auto cached
         = content_cache_.CheckOut<data::TextureResource>(key_hash)) {
+        resource_key_by_hash_.try_emplace(key_hash, key);
         co_return cached;
       }
       auto typed = std::static_pointer_cast<data::TextureResource>(decoded);
@@ -565,10 +605,13 @@ auto AssetLoader::LoadResourceAsyncFromCookedErased(
           data::TextureResource::ClassTypeNamePretty());
         co_return nullptr;
       }
-      content_cache_.Store(key_hash, typed);
+      if (content_cache_.Store(key_hash, typed)) {
+        resource_key_by_hash_.insert_or_assign(key_hash, key);
+      }
     } else if (type_id == data::BufferResource::ClassTypeId()) {
       if (auto cached
         = content_cache_.CheckOut<data::BufferResource>(key_hash)) {
+        resource_key_by_hash_.try_emplace(key_hash, key);
         co_return cached;
       }
       auto typed = std::static_pointer_cast<data::BufferResource>(decoded);
@@ -577,7 +620,9 @@ auto AssetLoader::LoadResourceAsyncFromCookedErased(
           data::BufferResource::ClassTypeNamePretty());
         co_return nullptr;
       }
-      content_cache_.Store(key_hash, typed);
+      if (content_cache_.Store(key_hash, typed)) {
+        resource_key_by_hash_.insert_or_assign(key_hash, key);
+      }
     }
 
     co_return decoded;
@@ -738,12 +783,46 @@ auto AssetLoader::ReleaseAsset(const data::AssetKey& key) -> bool
       [[maybe_unused]] std::shared_ptr<void> value, TypeId type_id) {
       static_cast<void>(value);
       LOG_F(2, "Evict entry: key_hash={} type_id={}", cache_key, type_id);
+      UnloadObject(cache_key, type_id, EvictionReason::kRefCountZero);
     });
 
   // Recursively release (check in) the asset and all its dependencies.
   ReleaseAssetTree(key);
   // Return true if the asset is no longer present in the cache
   return !content_cache_.Contains(HashAssetKey(key));
+}
+
+auto AssetLoader::SubscribeResourceEvictions(
+  const TypeId resource_type, EvictionHandler handler) -> EvictionSubscription
+{
+  AssertOwningThread();
+  const auto id = next_eviction_subscriber_id_++;
+  auto& subscribers = eviction_subscribers_[resource_type];
+  subscribers.push_back(EvictionSubscriber {
+    .id = id,
+    .handler = std::move(handler),
+  });
+
+  return MakeEvictionSubscription(resource_type, id,
+    observer_ptr<IAssetLoader> { this }, eviction_alive_token_);
+}
+
+void AssetLoader::UnsubscribeResourceEvictions(
+  const TypeId resource_type, const uint64_t id) noexcept
+{
+  auto it = eviction_subscribers_.find(resource_type);
+  if (it == eviction_subscribers_.end()) {
+    return;
+  }
+
+  auto& subscribers = it->second;
+  const auto erase_from = std::remove_if(subscribers.begin(), subscribers.end(),
+    [id](const EvictionSubscriber& subscriber) { return subscriber.id == id; });
+  subscribers.erase(erase_from, subscribers.end());
+
+  if (subscribers.empty()) {
+    eviction_subscribers_.erase(it);
+  }
 }
 
 auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key) -> void
@@ -1477,6 +1556,7 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
 
   const auto key_hash = HashResourceKey(key);
   if (auto cached = content_cache_.CheckOut<T>(key_hash)) {
+    resource_key_by_hash_.try_emplace(key_hash, key);
     co_return cached;
   }
 
@@ -1589,7 +1669,9 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
           co_return nullptr;
         }
 
-        content_cache_.Store(key_hash, decoded);
+        if (content_cache_.Store(key_hash, decoded)) {
+          resource_key_by_hash_.insert_or_assign(key_hash, key);
+        }
 
         LOG_F(INFO,
           "AssetLoader: Decoded TextureResource {} ({}x{}, format={}, "
@@ -1710,7 +1792,9 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
           co_return nullptr;
         }
 
-        content_cache_.Store(key_hash, decoded);
+        if (content_cache_.Store(key_hash, decoded)) {
+          resource_key_by_hash_.insert_or_assign(key_hash, key);
+        }
         co_return decoded;
       } catch (const co::TaskCancelledException& e) {
         throw OperationCancelledException(e.what());
@@ -1728,18 +1812,49 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
   }
 }
 
-void oxygen::content::AssetLoader::UnloadObject(
-  [[maybe_unused]] uint64_t cache_key, const oxygen::TypeId& type_id)
+void oxygen::content::AssetLoader::UnloadObject(const uint64_t cache_key,
+  const oxygen::TypeId& type_id, const EvictionReason reason)
 {
-  static_cast<void>(cache_key);
-  if (work_offline_) {
-    LOG_F(2, "Skipping unload of type {} due to offline mode", type_id);
+  if (!IsResourceTypeId(type_id)) {
     return;
   }
 
-  // TODO: invoke registered eviction handlers for the resource type
-  // Find the eviction handler by type_id (map)
-  // Find the ResourceKey from the cache_key (map)
+  const auto it = resource_key_by_hash_.find(cache_key);
+  if (it == resource_key_by_hash_.end()) {
+    LOG_F(WARNING,
+      "Eviction without ResourceKey mapping: key_hash={} type_id={}", cache_key,
+      type_id);
+    return;
+  }
+
+  EvictionEvent event {
+    .key = it->second,
+    .type_id = type_id,
+    .reason = reason,
+#if !defined(NDEBUG)
+    .cache_key_hash = cache_key,
+#endif
+  };
+
+  resource_key_by_hash_.erase(it);
+
+  const auto sub_it = eviction_subscribers_.find(type_id);
+  if (sub_it == eviction_subscribers_.end()) {
+    return;
+  }
+
+  for (const auto& subscriber : sub_it->second) {
+    if (!subscriber.handler) {
+      continue;
+    }
+    try {
+      subscriber.handler(event);
+    } catch (const std::exception& e) {
+      LOG_F(ERROR, "Eviction handler threw: {}", e.what());
+    } catch (...) {
+      LOG_F(ERROR, "Eviction handler threw unknown exception");
+    }
+  }
 }
 
 auto AssetLoader::ReleaseResource(const ResourceKey key) -> bool
@@ -1760,8 +1875,7 @@ auto AssetLoader::ReleaseResource(const ResourceKey key) -> bool
         key_hash, cache_key, expected_type_id, type_id));
       LOG_F(2, "Evict resource: key_hash={} type_id={}", cache_key, type_id);
 
-      // TODO: find the
-      UnloadObject(cache_key, type_id);
+      UnloadObject(cache_key, type_id, EvictionReason::kRefCountZero);
     });
   content_cache_.CheckIn(key_hash);
   return !content_cache_.Contains(key_hash);
