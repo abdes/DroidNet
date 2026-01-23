@@ -33,9 +33,9 @@ auto main(int argc, char** argv) -> int
     loguru::g_preamble_thread = true;
     loguru::g_preamble_header = false;
 #if !defined(NDEBUG)
-    loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
+    loguru::g_global_verbosity = loguru::Verbosity_WARNING;
 #else
-    loguru::g_stderr_verbosity = loguru::Verbosity_0;
+    loguru::g_global_verbosity = loguru::Verbosity_0;
 #endif // !NDEBUG
   }
 
@@ -51,7 +51,7 @@ auto main(int argc, char** argv) -> int
 
   if (!list_tests) {
     loguru::flush();
-    loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+    loguru::g_global_verbosity = loguru::Verbosity_OFF;
     loguru::shutdown();
   }
 

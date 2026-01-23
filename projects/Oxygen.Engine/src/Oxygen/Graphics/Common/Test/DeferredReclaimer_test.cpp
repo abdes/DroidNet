@@ -61,7 +61,7 @@ protected:
   // Called once before any test in this fixture runs
   static auto SetUpTestSuite() -> void
   {
-    loguru::g_stderr_verbosity = loguru::Verbosity_2;
+    loguru::g_global_verbosity = loguru::Verbosity_2;
   }
 
   auto SetUp() -> void override

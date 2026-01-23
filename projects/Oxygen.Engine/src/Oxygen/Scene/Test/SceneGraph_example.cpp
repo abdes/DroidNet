@@ -611,7 +611,7 @@ auto main() -> int
   loguru::g_preamble_uptime = false;
   loguru::g_preamble_thread = true;
   loguru::g_preamble_header = false;
-  loguru::g_stderr_verbosity = loguru::Verbosity_2;
+  loguru::g_global_verbosity = loguru::Verbosity_2;
   loguru::g_colorlogtostderr = true;
 
   std::cout << "=== Oxygen Engine Scene Graph Transform Demo ===\n";

@@ -127,7 +127,7 @@ void DoSetup(const benchmark::State& /*state*/)
   loguru::g_preamble_uptime = false;
   loguru::g_preamble_thread = false;
   loguru::g_preamble_header = false;
-  loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
+  loguru::g_global_verbosity = loguru::Verbosity_WARNING;
 }
 
 void BM_SharedEventSource(benchmark::State& state)

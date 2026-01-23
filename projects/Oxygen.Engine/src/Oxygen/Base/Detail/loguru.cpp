@@ -177,7 +177,8 @@ using StringPairList = std::vector<StringPair>;
 
 const auto s_start_time = steady_clock::now();
 
-Verbosity g_stderr_verbosity = Verbosity_0;
+Verbosity g_global_verbosity = Verbosity_0;
+bool g_log_to_stderr = true;
 bool g_colorlogtostderr = true;
 unsigned g_flush_interval_ms = 0;
 bool g_preamble_header = true;
@@ -669,53 +670,11 @@ void parse_args(int& argc, const char** argv, const char* verbosity_flag)
   fprintf(stderr, "parse_args called with argc=%d\n", argc);
   int arg_dest = 1;
   int out_argc = argc;
-  bool disable_console_logging = false;
 
   for (int arg_it = 1; arg_it < argc; ++arg_it) {
     const char* cmd = argv[arg_it];
     const auto arg_len = std::strlen(verbosity_flag);
     const auto cmd_len = std::strlen(cmd);
-
-    // Handle logfile flag (--logfile PATH, --logfile=PATH, -L PATH, -L=PATH)
-    if (std::strncmp(cmd, "--logfile", 9) == 0
-      || std::strncmp(cmd, "-L", 2) == 0) {
-      out_argc -= 1;
-      const char* value_str = nullptr;
-      if (std::strncmp(cmd, "--logfile", 9) == 0) {
-        value_str = cmd + 9;
-        if (value_str[0] == '\0') {
-          arg_it += 1;
-          CHECK_LT_F(arg_it, argc, "Missing value after --logfile");
-          value_str = argv[arg_it];
-          out_argc -= 1;
-        } else if (value_str[0] == '=') {
-          value_str += 1;
-        }
-      } else {
-        value_str = cmd + 2;
-        if (value_str[0] == '\0') {
-          arg_it += 1;
-          CHECK_LT_F(arg_it, argc, "Missing value after -L");
-          value_str = argv[arg_it];
-          out_argc -= 1;
-        } else if (value_str[0] == '=') {
-          value_str += 1;
-        }
-      }
-
-      CHECK_F(value_str && value_str[0] != '\0', "Invalid logfile path");
-      FileMode file_mode = Truncate;
-      if (value_str[0] == '+') {
-        file_mode = Append;
-        value_str += 1;
-        CHECK_F(value_str[0] != '\0', "Invalid logfile path");
-      }
-      if (!add_file(value_str, file_mode, Verbosity_MAX)) {
-        LOG_F(ERROR, "Failed to add logfile '%s'", value_str);
-      }
-      disable_console_logging = true;
-      continue;
-    }
 
     // Check for verbosity flag (e.g., -v)
     bool last_is_alpha = false;
@@ -757,18 +716,54 @@ void parse_args(int& argc, const char** argv, const char* verbosity_flag)
         value_str += 1;
       }
 
-      // Parse verbosity name or integer and apply to stderr verbosity
+      // Parse verbosity name or integer and apply to global cutoff
       auto req_verbosity_local = get_verbosity_from_name(value_str);
       if (req_verbosity_local != Verbosity_INVALID) {
-        g_stderr_verbosity = req_verbosity_local;
+        g_global_verbosity = req_verbosity_local;
       } else {
         char* end = nullptr;
-        g_stderr_verbosity = static_cast<int>(std::strtol(value_str, &end, 10));
+        g_global_verbosity = static_cast<int>(std::strtol(value_str, &end, 10));
         CHECK_F(end && *end == '\0',
           "Invalid verbosity. Expected integer, INFO, WARNING, ERROR or "
           "OFF, got '" LOGURU_FMT(s) "'",
           value_str);
       }
+    } else if (std::strncmp(cmd, "-L", 2) == 0
+      || std::strncmp(cmd, "--logfile", 9) == 0) {
+      const bool is_short = std::strncmp(cmd, "-L", 2) == 0;
+      const size_t flag_len = is_short ? 2u : 9u;
+      const char next = (flag_len < cmd_len) ? cmd[flag_len] : '\0';
+      const bool logfile_match = is_short || next == '\0' || next == '=';
+      if (!logfile_match) {
+        argv[arg_dest++] = argv[arg_it];
+        continue;
+      }
+
+      out_argc -= 1;
+      const char* value_str = cmd + flag_len;
+
+      if (value_str[0] == '\0') {
+        arg_it += 1;
+        CHECK_LT_F(arg_it, argc, "Missing logfile path after " LOGURU_FMT(s) "",
+          is_short ? "-L" : "--logfile");
+        value_str = argv[arg_it];
+        out_argc -= 1;
+      } else if (value_str[0] == '=') {
+        value_str += 1;
+      }
+
+      CHECK_F(value_str[0] != '\0', "Empty logfile path");
+
+      FileMode mode = Truncate;
+      const char* path = value_str;
+      if (value_str[0] == '+') {
+        CHECK_F(value_str[1] != '\0', "Empty logfile path after '+'");
+        mode = Append;
+        path = value_str + 1;
+      }
+
+      add_file(path, mode, Verbosity_MAX);
+      g_log_to_stderr = false;
     } else if (std::strncmp(cmd, "--vmodule", 9) == 0) {
       // Handle --vmodule flag (only long form supported)
       out_argc -= 1;
@@ -833,10 +828,6 @@ void parse_args(int& argc, const char** argv, const char* verbosity_flag)
 
   argc = out_argc;
   argv[argc] = nullptr;
-
-  if (disable_console_logging) {
-    g_stderr_verbosity = Verbosity_OFF;
-  }
 }
 
 // ------------------------------------------------------------------------
@@ -1068,14 +1059,17 @@ LOGURU_EXPORT void clear_vmodule_overrides()
 
 LOGURU_EXPORT bool is_enabled_for(Verbosity verbosity, const char* file_path)
 {
-  // Evaluate vmodule overrides first so module-specific rules take
-  // precedence over the global stderr cutoff. This matches intended
-  // semantics where modules can enable or suppress logs independent of
+  if (verbosity > g_global_verbosity) {
+    return false;
+  }
+
+  // Evaluate vmodule overrides after applying the global cutoff so
+  // module-specific rules can further suppress logs without bypassing
   // the global verbosity.
   {
     std::scoped_lock l(s_module_mutex);
     if (s_module_list.empty()) {
-      return verbosity <= current_verbosity_cutoff();
+      return true;
     }
   }
 
@@ -1083,7 +1077,7 @@ LOGURU_EXPORT bool is_enabled_for(Verbosity verbosity, const char* file_path)
   const int level = compute_module_verbosity_for_paths(
     cached_paths->base_name, cached_paths->full_path);
   if (level == Verbosity_UNSPECIFIED) {
-    return verbosity <= current_verbosity_cutoff();
+    return true;
   }
   return verbosity <= level;
 }
@@ -1220,6 +1214,9 @@ LOGURU_EXPORT void ensure_module_site_registered(
 LOGURU_EXPORT bool check_module_fast(
   std::atomic<int>* site_cache, Verbosity verbosity, const char* file_path)
 {
+  if (verbosity > g_global_verbosity) {
+    return false;
+  }
   if (!site_cache) {
     return is_enabled_for(verbosity, file_path);
   }
@@ -1231,10 +1228,10 @@ LOGURU_EXPORT bool check_module_fast(
     const bool result = verbosity <= cached;
     return result;
   }
-  // No cached override: fall back to global verbosity only. Overrides are
-  // applied via update_all_module_sites(), so this remains correct and avoids
-  // per-call matching on the hot path.
-  return verbosity <= current_verbosity_cutoff();
+  // No cached override: global cutoff already applied. Overrides are applied
+  // via update_all_module_sites(), so this remains correct and avoids per-call
+  // matching on the hot path.
+  return true;
 }
 
 static auto now_ns() -> long long
@@ -1385,7 +1382,7 @@ void init(int& argc, const char** argv, const Options& options)
 #  endif // LOGURU_PTHREADS
   }
 
-  if (g_stderr_verbosity >= Verbosity_INFO) {
+  if (g_log_to_stderr && g_global_verbosity >= Verbosity_INFO) {
     if (g_preamble_header) {
       char preamble_explain[LOGURU_PREAMBLE_WIDTH];
       print_preamble_header(preamble_explain, sizeof(preamble_explain));
@@ -1404,8 +1401,8 @@ void init(int& argc, const char** argv, const Options& options)
     VLOG_F(
       g_internal_verbosity, "Current dir: " LOGURU_FMT(s) "", s_current_dir);
   }
-  VLOG_F(g_internal_verbosity, "stderr verbosity: " LOGURU_FMT(d) "",
-    g_stderr_verbosity);
+  VLOG_F(g_internal_verbosity, "global verbosity: " LOGURU_FMT(d) "",
+    g_global_verbosity);
   VLOG_F(g_internal_verbosity, "-----------------------------------");
 
   atexit(on_atexit);
@@ -1710,12 +1707,8 @@ void remove_all_callbacks()
   on_callback_change();
 }
 
-// Returns the maximum of g_stderr_verbosity and all file/custom outputs.
-auto current_verbosity_cutoff() -> Verbosity
-{
-  return g_stderr_verbosity > s_max_out_verbosity ? g_stderr_verbosity
-                                                  : s_max_out_verbosity;
-}
+// Returns the global cutoff verbosity.
+auto current_verbosity_cutoff() -> Verbosity { return g_global_verbosity; }
 
 // ------------------------------------------------------------------------
 // Threads names
@@ -2165,8 +2158,7 @@ static void log_message(int stack_trace_skip, Message& message,
     message.indentation = indentation(s_stderr_indentation);
   }
 
-  const bool write_to_stderr = verbosity <= g_stderr_verbosity;
-  if (write_to_stderr) {
+  if (g_log_to_stderr) {
     if (g_colorlogtostderr && s_terminal_has_color) {
       if (verbosity > Verbosity_WARNING) {
         fprintf(stderr, "%s%s%s%s%s%s%s%s\n", terminal_reset(), terminal_dim(),
@@ -2312,7 +2304,9 @@ void raw_log(
 void flush()
 {
   std::scoped_lock lock(s_mutex);
-  fflush(stderr);
+  if (g_log_to_stderr) {
+    fflush(stderr);
+  }
   for (const auto& callback : s_callbacks) {
     if (callback.flush) {
       callback.flush(callback.user_data);
@@ -2378,9 +2372,8 @@ void LogScopeRAII::Init(const char* format, va_list vlist)
 {
   std::scoped_lock lock(s_mutex);
   // Use full enable check (including per-module vmodule override) rather than
-  // only comparing against the global stderr verbosity. This ensures scope
-  // indentation is applied when a module-specific override raises verbosity
-  // above a globally lowered/off setting.
+  // only comparing against the global cutoff. This ensures scope indentation
+  // is applied when a module-specific override suppresses a log site.
   _indent_stderr = is_enabled_for(_verbosity, _file);
   _start_time_ns = now_ns();
   vsnprintf(_name, sizeof(_name), format, vlist);

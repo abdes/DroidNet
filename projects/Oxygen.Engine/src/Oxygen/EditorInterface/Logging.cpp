@@ -28,7 +28,7 @@ auto SetupLogging(const char* program_name,
   loguru::g_preamble_uptime = false;
   loguru::g_preamble_thread = true;
   loguru::g_preamble_header = false;
-  loguru::g_stderr_verbosity = config.verbosity;
+  loguru::g_global_verbosity = config.verbosity;
   loguru::g_colorlogtostderr = config.is_colored;
   loguru::set_thread_name("engine-main");
 

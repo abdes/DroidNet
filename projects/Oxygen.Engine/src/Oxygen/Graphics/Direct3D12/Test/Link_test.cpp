@@ -22,9 +22,9 @@ void SetupLoguru(int& argc, const char** argv)
   loguru::g_preamble_uptime = false;
   loguru::g_preamble_thread = false;
   loguru::g_preamble_header = false;
-  loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+  loguru::g_global_verbosity = loguru::Verbosity_OFF;
   loguru::init(argc, argv);
-  loguru::g_stderr_verbosity = loguru::Verbosity_1;
+  loguru::g_global_verbosity = loguru::Verbosity_1;
 }
 
 int main(int argc, char** argv)
