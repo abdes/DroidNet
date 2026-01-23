@@ -76,7 +76,7 @@ auto TestImportJob::ExecuteAsync() -> co::Co<ImportReport>
           }
           std::this_thread::sleep_for(step_delay);
         });
-    } catch (const std::exception& ex) {
+    } catch ([[maybe_unused]] const std::exception& ex) {
       DLOG_F(WARNING, "TestImportJob caught exception: {}", ex.what());
       co_return make_canceled_report();
     } catch (...) {

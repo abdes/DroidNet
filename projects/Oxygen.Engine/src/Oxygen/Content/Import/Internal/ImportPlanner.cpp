@@ -113,9 +113,9 @@ auto ImportPlanner::AddDependency(PlanItemId consumer, PlanItemId producer)
   EnsureMutable();
 
   const auto u_consumer = ItemIndex(consumer);
-  const auto u_producer = ItemIndex(producer);
 
-  DLOG_F(INFO, "AddDependency consumer={} producer={}", u_consumer, u_producer);
+  DLOG_F(INFO, "AddDependency consumer={} producer={}", u_consumer,
+    ItemIndex(producer));
 
   auto& consumer_deps = dependencies_.at(u_consumer);
   if (std::ranges::find(consumer_deps, producer) != consumer_deps.end()) {
@@ -178,10 +178,11 @@ auto ImportPlanner::MakePlan() -> std::vector<PlanStep>
   while (!ready_current.empty()) {
     for (const auto current_index : ready_current) {
       order.emplace_back(static_cast<uint32_t>(current_index));
+#ifndef NDEBUG
       const auto& item = items_.at(current_index);
       DLOG_F(INFO, "{:>3}: id={:<3} {}/{}", order.size() - 1U, current_index,
         item.kind, item.debug_name);
-
+#endif // NDEBUG
       for (const auto dependent : dependents[current_index]) {
         const auto u_dependent = ItemIndex(dependent);
         DCHECK_F(in_degree[u_dependent] > 0U, "Invalid in-degree underflow");
@@ -278,8 +279,7 @@ auto ImportPlanner::AddItem(PlanItemKind kind, std::string debug_name,
   EnsureMutable();
 
   const auto id = PlanItemId { static_cast<uint32_t>(items_.size()) };
-  const auto u_id = id.get();
-  DLOG_F(INFO, "AddItem id={} kind={} name={}", u_id, kind, debug_name);
+  DLOG_F(INFO, "AddItem id={} kind={} name={}", id.get(), kind, debug_name);
   items_.push_back(PlanItem {
     .id = id,
     .kind = kind,
