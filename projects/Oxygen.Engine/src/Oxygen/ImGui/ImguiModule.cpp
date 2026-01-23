@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <imgui.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Platform/ImGui/ImGuiSdl3Backend.h>
 #include <Oxygen/Platform/Platform.h>
+#include <imgui.h>
 
 namespace oxygen::imgui {
 

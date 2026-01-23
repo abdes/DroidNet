@@ -16,19 +16,19 @@ namespace oxygen::graphics {
 //! ABI compatibility.
 class IShaderByteCode {
 public:
-    IShaderByteCode() noexcept = default;
-    virtual ~IShaderByteCode() noexcept = default;
+  IShaderByteCode() noexcept = default;
+  virtual ~IShaderByteCode() noexcept = default;
 
-    // Default copy constructor and copy assignment operator
-    IShaderByteCode(const IShaderByteCode&) = default;
-    auto operator=(const IShaderByteCode&) -> IShaderByteCode& = default;
+  // Default copy constructor and copy assignment operator
+  IShaderByteCode(const IShaderByteCode&) = default;
+  auto operator=(const IShaderByteCode&) -> IShaderByteCode& = default;
 
-    // Default move constructor and move assignment operator
-    IShaderByteCode(IShaderByteCode&&) noexcept = default;
-    auto operator=(IShaderByteCode&&) noexcept -> IShaderByteCode& = default;
+  // Default move constructor and move assignment operator
+  IShaderByteCode(IShaderByteCode&&) noexcept = default;
+  auto operator=(IShaderByteCode&&) noexcept -> IShaderByteCode& = default;
 
-    [[nodiscard]] virtual auto Size() const noexcept -> size_t = 0;
-    [[nodiscard]] virtual auto Data() const noexcept -> const uint32_t* = 0;
+  [[nodiscard]] virtual auto Size() const noexcept -> size_t = 0;
+  [[nodiscard]] virtual auto Data() const noexcept -> const uint32_t* = 0;
 };
 
 //! Concept to check if T has GetBufferPointer(), GetBufferSize(), and
@@ -39,9 +39,9 @@ public:
 */
 template <typename T>
 concept ManagedBuffer = std::movable<T> && requires(T t) {
-    { t->GetBufferPointer() } -> std::convertible_to<void*>;
-    { t->GetBufferSize() } -> std::convertible_to<size_t>;
-    { static_cast<bool>(t) } -> std::convertible_to<bool>;
+  { t->GetBufferPointer() } -> std::convertible_to<void*>;
+  { t->GetBufferSize() } -> std::convertible_to<size_t>;
+  { static_cast<bool>(t) } -> std::convertible_to<bool>;
 };
 
 //! Concept to specify a basic buffer with `size` and `data` members. The
@@ -52,8 +52,8 @@ concept ManagedBuffer = std::movable<T> && requires(T t) {
 */
 template <typename T>
 concept BasicBufferWithOwnershipTransfer = std::movable<T> && requires(T t) {
-    { t.size } noexcept -> std::convertible_to<size_t>;
-    { t.data } noexcept -> std::convertible_to<const uint32_t*>;
+  { t.size } noexcept -> std::convertible_to<size_t>;
+  { t.data } noexcept -> std::convertible_to<const uint32_t*>;
 };
 
 //! Concept to specify a buffer implemented with a contiguous container,
@@ -63,12 +63,13 @@ concept BasicBufferWithOwnershipTransfer = std::movable<T> && requires(T t) {
 */
 template <typename T>
 concept IsContiguousContainer = std::movable<T> && requires(T t) {
-    typename T::value_type; // Require that T has a value_type
-    { t.data() } noexcept -> std::convertible_to<const uint32_t*>;
-    { t.size() } noexcept -> std::convertible_to<size_t>;
+  typename T::value_type; // Require that T has a value_type
+  { t.data() } noexcept -> std::convertible_to<const uint32_t*>;
+  { t.size() } noexcept -> std::convertible_to<size_t>;
 } && std::contiguous_iterator<decltype(std::declval<T>().data())>;
 
-//! A class to hold shader byte code. It is a wrapper around a buffer of type `T`.
+//! A class to hold shader byte code. It is a wrapper around a buffer of type
+//! `T`.
 /*!
   \tparam T The type of the buffer to hold the shader byte code.
 
@@ -84,8 +85,7 @@ concept IsContiguousContainer = std::movable<T> && requires(T t) {
     and optional data memory management with a custom deleter. Ownership of
     the data is transferred when such buffer is wrapped.
 */
-template <typename T>
-class ShaderByteCode;
+template <typename T> class ShaderByteCode;
 
 //! Specialization for `ManagedBuffer` types.
 /*!
@@ -95,46 +95,45 @@ class ShaderByteCode;
   buffer data memory management. The original buffer is __moved__ into the
   ShaderByteCode wrapper.
 */
-template <ManagedBuffer T>
-class ShaderByteCode<T> : public IShaderByteCode {
+template <ManagedBuffer T> class ShaderByteCode<T> : public IShaderByteCode {
 public:
-    explicit ShaderByteCode(T&& buffer) noexcept
-        : buffer_(std::move(buffer))
-    {
-    }
+  explicit ShaderByteCode(T&& buffer) noexcept
+    : buffer_(std::move(buffer))
+  {
+  }
 
-    [[nodiscard]] auto Size() const noexcept -> size_t override
-    {
-        return buffer_->GetBufferSize();
-    }
+  [[nodiscard]] auto Size() const noexcept -> size_t override
+  {
+    return buffer_->GetBufferSize();
+  }
 
-    [[nodiscard]] auto Data() const noexcept -> const uint32_t* override
-    {
-        return static_cast<uint32_t*>(buffer_->GetBufferPointer());
-    }
+  [[nodiscard]] auto Data() const noexcept -> const uint32_t* override
+  {
+    return static_cast<uint32_t*>(buffer_->GetBufferPointer());
+  }
 
-    // Disable copy constructor and copy assignment operator
-    ShaderByteCode(const ShaderByteCode&) = delete;
-    auto operator=(const ShaderByteCode&) -> ShaderByteCode& = delete;
+  // Disable copy constructor and copy assignment operator
+  ShaderByteCode(const ShaderByteCode&) = delete;
+  auto operator=(const ShaderByteCode&) -> ShaderByteCode& = delete;
 
-    // Enable move constructor and move assignment operator
-    ShaderByteCode(ShaderByteCode&& other) noexcept
-        : buffer_(std::move(other.buffer_))
-    {
+  // Enable move constructor and move assignment operator
+  ShaderByteCode(ShaderByteCode&& other) noexcept
+    : buffer_(std::move(other.buffer_))
+  {
+  }
+  auto operator=(ShaderByteCode&& other) noexcept -> ShaderByteCode&
+  {
+    if (this != &other) {
+      buffer_ = std::move(other.buffer_);
     }
-    auto operator=(ShaderByteCode&& other) noexcept -> ShaderByteCode&
-    {
-        if (this != &other) {
-            buffer_ = std::move(other.buffer_);
-        }
-        return *this;
-    }
+    return *this;
+  }
 
-    //! Destructor, releases the buffer data.
-    ~ShaderByteCode() noexcept override = default;
+  //! Destructor, releases the buffer data.
+  ~ShaderByteCode() noexcept override = default;
 
 private:
-    T buffer_;
+  T buffer_;
 };
 
 //! Specialization for contiguous containers
@@ -152,38 +151,39 @@ private:
 template <IsContiguousContainer T>
 class ShaderByteCode<T> : public IShaderByteCode {
 public:
-    // Constructor that takes ownership of the buffer
-    explicit ShaderByteCode(T&& buffer) noexcept
-        : buffer_(std::move(buffer))
-    {
-    }
+  // Constructor that takes ownership of the buffer
+  explicit ShaderByteCode(T&& buffer) noexcept
+    : buffer_(std::move(buffer))
+  {
+  }
 
-    ~ShaderByteCode() noexcept override = default;
+  ~ShaderByteCode() noexcept override = default;
 
-    [[nodiscard]] auto Size() const noexcept -> size_t override
-    {
-        return buffer_.size() * sizeof(typename T::value_type);
-    }
+  [[nodiscard]] auto Size() const noexcept -> size_t override
+  {
+    return buffer_.size() * sizeof(typename T::value_type);
+  }
 
-    [[nodiscard]] auto Data() const noexcept -> const uint32_t* override
-    {
-        return buffer_.data();
-    }
+  [[nodiscard]] auto Data() const noexcept -> const uint32_t* override
+  {
+    return buffer_.data();
+  }
 
-    // Copy constructor
-    ShaderByteCode(const ShaderByteCode& other) noexcept = default;
+  // Copy constructor
+  ShaderByteCode(const ShaderByteCode& other) noexcept = default;
 
-    // Copy assignment operator
-    auto operator=(const ShaderByteCode& other) noexcept -> ShaderByteCode& = default;
+  // Copy assignment operator
+  auto operator=(const ShaderByteCode& other) noexcept
+    -> ShaderByteCode& = default;
 
-    // Move constructor
-    ShaderByteCode(ShaderByteCode&& other) noexcept = default;
+  // Move constructor
+  ShaderByteCode(ShaderByteCode&& other) noexcept = default;
 
-    // Move assignment operator
-    auto operator=(ShaderByteCode&& other) noexcept -> ShaderByteCode& = default;
+  // Move assignment operator
+  auto operator=(ShaderByteCode&& other) noexcept -> ShaderByteCode& = default;
 
 private:
-    T buffer_;
+  T buffer_;
 };
 
 //! Specialization for a basic buffer with `size` and `data` members. Usually
@@ -208,59 +208,60 @@ private:
 template <BasicBufferWithOwnershipTransfer T>
 class ShaderByteCode<T> : public IShaderByteCode {
 public:
-    using Deleter = std::function<void(const uint32_t*)>;
+  using Deleter = std::function<void(const uint32_t*)>;
 
-    explicit ShaderByteCode(T&& buffer, Deleter deleter = nullptr) noexcept
-        : buffer_(std::move(buffer))
-        , deleter_(std::move(deleter))
-    {
+  explicit ShaderByteCode(T&& buffer, Deleter deleter = nullptr) noexcept
+    : buffer_(std::move(buffer))
+    , deleter_(std::move(deleter))
+  {
+  }
+
+  ~ShaderByteCode() noexcept override
+  {
+    if (deleter_) {
+      deleter_(buffer_.data);
     }
+    buffer_.data = nullptr;
+    buffer_.size = 0;
+  }
 
-    ~ShaderByteCode() noexcept override
-    {
-        if (deleter_) {
-            deleter_(buffer_.data);
-        }
-        buffer_.data = nullptr;
-        buffer_.size = 0;
+  // Disable copy constructor and copy assignment operator
+  ShaderByteCode(const ShaderByteCode& other) noexcept = delete;
+  auto operator=(const ShaderByteCode& other) noexcept
+    -> ShaderByteCode& = delete;
+
+  // Move constructor
+  ShaderByteCode(ShaderByteCode&& other) noexcept
+    : buffer_(std::move(other.buffer_))
+    , deleter_(std::move(other.deleter_))
+  {
+    other.deleter_ = nullptr;
+  }
+
+  // Move assignment operator
+  auto operator=(ShaderByteCode&& other) noexcept -> ShaderByteCode&
+  {
+    if (this != &other) {
+      buffer_ = std::move(other.buffer_);
+      deleter_ = std::move(other.deleter_);
+      other.deleter_ = nullptr;
     }
+    return *this;
+  }
 
-    // Disable copy constructor and copy assignment operator
-    ShaderByteCode(const ShaderByteCode& other) noexcept = delete;
-    auto operator=(const ShaderByteCode& other) noexcept -> ShaderByteCode& = delete;
+  [[nodiscard]] auto Size() const noexcept -> size_t override
+  {
+    return buffer_.size;
+  }
 
-    // Move constructor
-    ShaderByteCode(ShaderByteCode&& other) noexcept
-        : buffer_(std::move(other.buffer_))
-        , deleter_(std::move(other.deleter_))
-    {
-        other.deleter_ = nullptr;
-    }
-
-    // Move assignment operator
-    auto operator=(ShaderByteCode&& other) noexcept -> ShaderByteCode&
-    {
-        if (this != &other) {
-            buffer_ = std::move(other.buffer_);
-            deleter_ = std::move(other.deleter_);
-            other.deleter_ = nullptr;
-        }
-        return *this;
-    }
-
-    [[nodiscard]] auto Size() const noexcept -> size_t override
-    {
-        return buffer_.size;
-    }
-
-    [[nodiscard]] auto Data() const noexcept -> const uint32_t* override
-    {
-        return buffer_.data;
-    }
+  [[nodiscard]] auto Data() const noexcept -> const uint32_t* override
+  {
+    return buffer_.data;
+  }
 
 private:
-    T buffer_;
-    Deleter deleter_;
+  T buffer_;
+  Deleter deleter_;
 };
 
 } // namespace oxygen::graphics

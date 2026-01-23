@@ -25,8 +25,11 @@ auto ConvertColorWriteMask(ColorWriteMask flags) -> UINT8;
 auto ConvertPrimitiveType(PrimitiveType value) -> D3D12_PRIMITIVE_TOPOLOGY_TYPE;
 auto ConvertClearFlags(ClearFlags flags) -> D3D12_CLEAR_FLAGS;
 
-void TranslateRasterizerState(const RasterizerStateDesc& desc, D3D12_RASTERIZER_DESC& d3d_desc);
-void TranslateDepthStencilState(const DepthStencilStateDesc& desc, D3D12_DEPTH_STENCIL_DESC& d3d_desc);
-void TranslateBlendState(const std::vector<BlendTargetDesc>& blend_targets, D3D12_BLEND_DESC& d3d_desc);
+void TranslateRasterizerState(
+  const RasterizerStateDesc& desc, D3D12_RASTERIZER_DESC& d3d_desc);
+void TranslateDepthStencilState(
+  const DepthStencilStateDesc& desc, D3D12_DEPTH_STENCIL_DESC& d3d_desc);
+void TranslateBlendState(const std::vector<BlendTargetDesc>& blend_targets,
+  D3D12_BLEND_DESC& d3d_desc);
 
 } // namespace oxygen::graphics::d3d12::detail

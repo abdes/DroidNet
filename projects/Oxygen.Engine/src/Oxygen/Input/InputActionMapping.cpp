@@ -75,7 +75,7 @@ void InputActionMapping::NotifyActionCanceled()
       .canceled = true,
     },
     zero_value);
-    evaluation_ongoing_ = false;
+  evaluation_ongoing_ = false;
 }
 
 void InputActionMapping::AddTrigger(std::shared_ptr<ActionTrigger> trigger)

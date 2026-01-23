@@ -50,10 +50,12 @@ auto CreateCompositionSurface(std::shared_ptr<EngineContext> ctx,
 
   auto surface = gfx->CreateSurfaceFromNative(nullptr, queue);
   if (surface && swap_chain_out) {
-    // We know it's a CompositionSurface because we called CreateSurfaceFromNative
-    // (which maps to that in D3D12 backend for now, or we assume D3D12 backend)
-    // Ideally we should check the type, but for now we static_cast as we know the backend.
-    auto composition_surface = std::static_pointer_cast<oxygen::graphics::d3d12::detail::CompositionSurface>(surface);
+    // We know it's a CompositionSurface because we called
+    // CreateSurfaceFromNative (which maps to that in D3D12 backend for now, or
+    // we assume D3D12 backend) Ideally we should check the type, but for now we
+    // static_cast as we know the backend.
+    auto composition_surface = std::static_pointer_cast<
+      oxygen::graphics::d3d12::detail::CompositionSurface>(surface);
     *swap_chain_out = composition_surface->GetSwapChain();
   }
   return surface;

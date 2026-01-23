@@ -19,13 +19,13 @@ namespace oxygen::graphics::d3d12::testing {
 // ReSharper disable once CppClassCanBeFinal - Mock class should not be final
 class MockRootSignature : public dx::IRootSignature {
 public:
-    MockRootSignature() = default;
-    virtual ~MockRootSignature() = default;
+  MockRootSignature() = default;
+  virtual ~MockRootSignature() = default;
 
-    OXYGEN_DEFAULT_COPYABLE(MockRootSignature)
-    OXYGEN_DEFAULT_MOVABLE(MockRootSignature)
+  OXYGEN_DEFAULT_COPYABLE(MockRootSignature)
+  OXYGEN_DEFAULT_MOVABLE(MockRootSignature)
 
-    // clang-format off
+  // clang-format off
     // IUnknown (stubbed)
     ULONG STDMETHODCALLTYPE AddRef() override { return 1; }
     ULONG STDMETHODCALLTYPE Release() override { return 1; }
@@ -41,7 +41,7 @@ public:
     HRESULT STDMETHODCALLTYPE GetDevice(REFIID, void**) override { return E_NOTIMPL; }
 
     // ID3D12RootSignature has no additional methods beyond ID3D12DeviceChild
-    // clang-format on
+  // clang-format on
 };
 
 } // namespace oxygen::graphics::d3d12::testing

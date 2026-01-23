@@ -52,9 +52,8 @@ NOLINT_TEST(Frustum_BasicTest, ExtractPlanes_And_IntersectAabb)
 NOLINT_TEST(Frustum_BasicTest, IntersectSphere_And_ReverseZ)
 {
   // Arrange: view = translate back to z=+5 looking at origin
-  const ::oxygen::Mat4 view
-    = glm::lookAtRH(::oxygen::Vec3(0, 0, 5), ::oxygen::Vec3(0, 0, 0),
-      ::oxygen::space::look::Up);
+  const ::oxygen::Mat4 view = glm::lookAtRH(::oxygen::Vec3(0, 0, 5),
+    ::oxygen::Vec3(0, 0, 0), ::oxygen::space::look::Up);
 
   // Normal Z (near<far)
   const ::oxygen::Mat4 proj = MakePerspective(70.0F, 16.0F / 9.0F, 0.1F, 50.0F);
@@ -66,7 +65,8 @@ NOLINT_TEST(Frustum_BasicTest, IntersectSphere_And_ReverseZ)
   EXPECT_FALSE(fr_n.IntersectsSphere(::oxygen::Vec3(0, 0, -60), 1.0F));
 
   // Reverse-Z: swap near/far plane meaning; choose large far and near ~1e-2
-  const ::oxygen::Mat4 proj_r = MakePerspective(70.0F, 16.0F / 9.0F, 0.01F, 1000.0F);
+  const ::oxygen::Mat4 proj_r
+    = MakePerspective(70.0F, 16.0F / 9.0F, 0.01F, 1000.0F);
   const auto fr_r = Frustum::FromViewProj(proj_r * view, /*reverse_z*/ true);
 
   // Same origin sphere remains visible; a sphere extremely far in front of the

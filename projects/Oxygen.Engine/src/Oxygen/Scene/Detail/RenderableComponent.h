@@ -140,8 +140,7 @@ private:
     Vec3 mesh_bbox_min { 0.0F, 0.0F, 0.0F };
     Vec3 mesh_bbox_max { 0.0F, 0.0F, 0.0F };
     Vec4 mesh_sphere { 0.0F, 0.0F, 0.0F, 0.0F };
-    std::vector<std::pair<Vec3, Vec3>>
-      submesh_aabbs; // local
+    std::vector<std::pair<Vec3, Vec3>> submesh_aabbs; // local
   };
 
   void RebuildLocalBoundsCache() noexcept;

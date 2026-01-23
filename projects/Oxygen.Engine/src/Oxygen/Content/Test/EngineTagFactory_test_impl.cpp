@@ -10,11 +10,8 @@
 
 namespace oxygen::content::internal {
 
-auto EngineTagFactory::Get() noexcept -> EngineTag
-{
-  return EngineTag {};
-}
+auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
 
 } // namespace oxygen::content::internal
 
-#endif  // OXYGEN_ENGINE_TESTING
+#endif // OXYGEN_ENGINE_TESTING

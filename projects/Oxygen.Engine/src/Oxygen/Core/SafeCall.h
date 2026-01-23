@@ -18,7 +18,7 @@ namespace oxygen {
 //! Concept to detect if a type has a LogSafeCallError method for error logging.
 template <typename T>
 concept HasLogSafeCallError = requires(T t, const char* msg) {
-    { t.LogSafeCallError(msg) } -> std::same_as<void>;
+  { t.LogSafeCallError(msg) } -> std::same_as<void>;
 };
 
 //! Core SafeCall function template for validated operation execution.
@@ -166,51 +166,50 @@ concept HasLogSafeCallError = requires(T t, const char* msg) {
          if validation fails or an exception occurs.
 */
 template <typename TargetRef, typename Validator, typename Func>
-    requires std::invocable<Func, TargetRef>
-    && std::is_nothrow_invocable_v<Func, TargetRef>
-    && std::invocable<Validator, TargetRef>
+  requires std::invocable<Func, TargetRef>
+  && std::is_nothrow_invocable_v<Func, TargetRef>
+  && std::invocable<Validator, TargetRef>
 auto SafeCall(TargetRef&& target, Validator&& validate, Func&& func) noexcept
 {
-    using ReturnType = std::invoke_result_t<Func, TargetRef>;
-    using OptionalReturn = std::conditional_t<
-        std::is_void_v<ReturnType>,
-        std::optional<std::monostate>,
-        std::optional<ReturnType>>;
+  using ReturnType = std::invoke_result_t<Func, TargetRef>;
+  using OptionalReturn = std::conditional_t<std::is_void_v<ReturnType>,
+    std::optional<std::monostate>, std::optional<ReturnType>>;
 
-    // Capture target by reference to call its member function
-    auto fail = [&](const char* reason = nullptr) -> OptionalReturn {
-        if constexpr (HasLogSafeCallError<std::remove_reference_t<TargetRef>>) {
-            if (reason != nullptr) {
-                target.LogSafeCallError(reason);
-            }
-        } else {
-            (void)reason; // Avoid unused variable warning if no logging function exists
-        }
-        return std::nullopt;
-    };
-
-    // Support both member function pointers and lambdas
-    std::optional<std::string> error;
-    if constexpr (std::is_member_function_pointer_v<std::decay_t<Validator>>) {
-        error = std::invoke(validate, target);
+  // Capture target by reference to call its member function
+  auto fail = [&](const char* reason = nullptr) -> OptionalReturn {
+    if constexpr (HasLogSafeCallError<std::remove_reference_t<TargetRef>>) {
+      if (reason != nullptr) {
+        target.LogSafeCallError(reason);
+      }
     } else {
-        error = std::invoke(std::forward<Validator>(validate), target);
+      (void)
+        reason; // Avoid unused variable warning if no logging function exists
     }
-    if (error.has_value()) {
-        return fail(error->c_str());
-    }
+    return std::nullopt;
+  };
 
-    try {
-        if constexpr (std::is_void_v<ReturnType>) {
-            std::invoke(std::forward<Func>(func), std::forward<TargetRef>(target));
-            return std::make_optional(std::monostate {});
-        } else {
-            return std::make_optional(std::invoke(std::forward<Func>(func),
-                std::forward<TargetRef>(target)));
-        }
-    } catch (const std::exception& ex) {
-        return fail(ex.what());
+  // Support both member function pointers and lambdas
+  std::optional<std::string> error;
+  if constexpr (std::is_member_function_pointer_v<std::decay_t<Validator>>) {
+    error = std::invoke(validate, target);
+  } else {
+    error = std::invoke(std::forward<Validator>(validate), target);
+  }
+  if (error.has_value()) {
+    return fail(error->c_str());
+  }
+
+  try {
+    if constexpr (std::is_void_v<ReturnType>) {
+      std::invoke(std::forward<Func>(func), std::forward<TargetRef>(target));
+      return std::make_optional(std::monostate {});
+    } else {
+      return std::make_optional(
+        std::invoke(std::forward<Func>(func), std::forward<TargetRef>(target)));
     }
+  } catch (const std::exception& ex) {
+    return fail(ex.what());
+  }
 }
 
 } // namespace oxygen

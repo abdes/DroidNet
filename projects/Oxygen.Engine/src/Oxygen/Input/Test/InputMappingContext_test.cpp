@@ -190,14 +190,13 @@ NOLINT_TEST_F(InputMappingContextTest, Update_ConsumptionCancelsLaterMappings)
 
 //! When a later mapping consumes input, earlier mappings must be canceled too
 NOLINT_TEST_F(
-  InputMappingContextTest,
-  Update_ConsumerCancelsOnlyLaterMappings_NotEarlier)
+  InputMappingContextTest, Update_ConsumerCancelsOnlyLaterMappings_NotEarlier)
 {
   // Arrange: earlier mapping does not consume, later mapping does
   InputMappingContext ctx("ctx5");
 
-  auto early = std::make_shared<Action>(
-    "Early", oxygen::input::ActionValueType::kBool);
+  auto early
+    = std::make_shared<Action>("Early", oxygen::input::ActionValueType::kBool);
   auto m_early = std::make_shared<InputActionMapping>(early, InputSlots::Space);
   auto t_early = std::make_shared<ActionTriggerTap>();
   t_early->SetTapTimeThreshold(0.25F);
@@ -205,8 +204,8 @@ NOLINT_TEST_F(
   m_early->AddTrigger(t_early);
   ctx.AddMapping(m_early);
 
-  auto later = std::make_shared<Action>(
-    "Later", oxygen::input::ActionValueType::kBool);
+  auto later
+    = std::make_shared<Action>("Later", oxygen::input::ActionValueType::kBool);
   later->SetConsumesInput(true);
   auto m_later = std::make_shared<InputActionMapping>(later, InputSlots::Space);
   auto t_later = std::make_shared<ActionTriggerTap>();
@@ -245,15 +244,14 @@ NOLINT_TEST_F(
 //! After a consuming mapping fires and cancels earlier mappings, subsequent
 //! tap gestures should work immediately — a fresh press/release should trigger
 //! the early mapping without needing an extra 'reset' press.
-NOLINT_TEST_F(
-  InputMappingContextTest,
+NOLINT_TEST_F(InputMappingContextTest,
   Update_ConsumerCancelsLater_NotEarlier_SubsequentTapConsumedAgain)
 {
   // Arrange
   InputMappingContext ctx("ctx6");
 
-  auto early = std::make_shared<Action>(
-    "Early", oxygen::input::ActionValueType::kBool);
+  auto early
+    = std::make_shared<Action>("Early", oxygen::input::ActionValueType::kBool);
   auto m_early = std::make_shared<InputActionMapping>(early, InputSlots::Space);
   auto t_early = std::make_shared<ActionTriggerTap>();
   t_early->SetTapTimeThreshold(0.25F);
@@ -261,8 +259,8 @@ NOLINT_TEST_F(
   m_early->AddTrigger(t_early);
   ctx.AddMapping(m_early);
 
-  auto later = std::make_shared<Action>(
-    "Later", oxygen::input::ActionValueType::kBool);
+  auto later
+    = std::make_shared<Action>("Later", oxygen::input::ActionValueType::kBool);
   later->SetConsumesInput(true);
   auto m_later = std::make_shared<InputActionMapping>(later, InputSlots::Space);
   auto t_later = std::make_shared<ActionTriggerTap>();
@@ -312,15 +310,13 @@ NOLINT_TEST_F(
 // TDD: perfect behavior spec — if mapping context and triggers work correctly
 // then a consumer should cancel earlier mappings and a subsequent fresh tap
 // should allow the earlier mapping to trigger immediately.
-NOLINT_TEST_F(
-  InputMappingContextTest,
+NOLINT_TEST_F(InputMappingContextTest,
   TDD_ConsumerCancelsLater_NotEarlier_SubsequentTapConsumedAgain)
 {
   // Arrange: earlier mapping (A) and later consuming mapping (B)
   InputMappingContext ctx("tdd_ctx");
 
-  auto a = std::make_shared<Action>(
-    "A", oxygen::input::ActionValueType::kBool);
+  auto a = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
   auto map_a = std::make_shared<InputActionMapping>(a, InputSlots::Space);
   auto tap_a = std::make_shared<ActionTriggerTap>();
   tap_a->SetTapTimeThreshold(0.25F);
@@ -328,8 +324,7 @@ NOLINT_TEST_F(
   map_a->AddTrigger(tap_a);
   ctx.AddMapping(map_a);
 
-  auto b = std::make_shared<Action>(
-    "B", oxygen::input::ActionValueType::kBool);
+  auto b = std::make_shared<Action>("B", oxygen::input::ActionValueType::kBool);
   b->SetConsumesInput(true);
   auto map_b = std::make_shared<InputActionMapping>(b, InputSlots::Space);
   auto tap_b = std::make_shared<ActionTriggerTap>();
@@ -340,12 +335,14 @@ NOLINT_TEST_F(
 
   // Act: press+release -> consumer B must trigger and cancel A
   const KeyEvent down1(Now(), kInvalidWindowId,
-    oxygen::platform::input::KeyInfo(Key::kSpace, false), ButtonState::kPressed);
+    oxygen::platform::input::KeyInfo(Key::kSpace, false),
+    ButtonState::kPressed);
   ctx.HandleInput(InputSlots::Space, down1);
   ctx.Update(CanonicalDuration {});
 
   const KeyEvent up1(Now(), kInvalidWindowId,
-    oxygen::platform::input::KeyInfo(Key::kSpace, false), ButtonState::kReleased);
+    oxygen::platform::input::KeyInfo(Key::kSpace, false),
+    ButtonState::kReleased);
   ctx.HandleInput(InputSlots::Space, up1);
   const bool consumed = ctx.Update(CanonicalDuration {});
 
@@ -358,12 +355,14 @@ NOLINT_TEST_F(
   // Now a fresh press+release should allow A to trigger (no need for extra
   // resetting press)
   const KeyEvent down2(Now(), kInvalidWindowId,
-    oxygen::platform::input::KeyInfo(Key::kSpace, false), ButtonState::kPressed);
+    oxygen::platform::input::KeyInfo(Key::kSpace, false),
+    ButtonState::kPressed);
   ctx.HandleInput(InputSlots::Space, down2);
   ctx.Update(CanonicalDuration {});
 
   const KeyEvent up2(Now(), kInvalidWindowId,
-    oxygen::platform::input::KeyInfo(Key::kSpace, false), ButtonState::kReleased);
+    oxygen::platform::input::KeyInfo(Key::kSpace, false),
+    ButtonState::kReleased);
   ctx.HandleInput(InputSlots::Space, up2);
   const bool consumed2 = ctx.Update(CanonicalDuration {});
 

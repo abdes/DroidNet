@@ -164,10 +164,7 @@ public:
   }
 
   //! Gets contrast.
-  [[nodiscard]] auto GetContrast() const noexcept -> float
-  {
-    return contrast_;
-  }
+  [[nodiscard]] auto GetContrast() const noexcept -> float { return contrast_; }
 
   //! Sets vignette intensity in [0, 1].
   auto SetVignetteIntensity(const float intensity) noexcept -> void

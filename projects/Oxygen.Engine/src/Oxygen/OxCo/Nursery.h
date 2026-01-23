@@ -138,8 +138,8 @@ public:
 // NOLINTBEGIN(bugprone-macro-parentheses)
 #define OXCO_WITH_NURSERY(arg_name)                                            \
   co_yield ::oxygen::co::Nursery::Factory {}                                   \
-    % [&](::oxygen::co::Nursery                                                \
-      & arg_name) -> ::oxygen::co::Co<::oxygen::co::detail::NurseryBodyRetVal>
+    % [&](::oxygen::co::Nursery & arg_name)                                    \
+        ->::oxygen::co::Co<::oxygen::co::detail::NurseryBodyRetVal>
   // NOLINTEND(bugprone-macro-parentheses)
 
   virtual ~Nursery() { DCHECK_F(tasks_.Empty()); }

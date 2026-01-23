@@ -14,14 +14,14 @@ namespace oxygen {
 
 class Named {
 public:
-    Named() = default;
-    virtual ~Named() = default;
+  Named() = default;
+  virtual ~Named() = default;
 
-    OXYGEN_MAKE_NON_COPYABLE(Named)
-    OXYGEN_DEFAULT_MOVABLE(Named)
+  OXYGEN_MAKE_NON_COPYABLE(Named)
+  OXYGEN_DEFAULT_MOVABLE(Named)
 
-    [[nodiscard]] virtual auto GetName() const noexcept -> std::string_view = 0;
-    virtual void SetName(std::string_view name) noexcept = 0;
+  [[nodiscard]] virtual auto GetName() const noexcept -> std::string_view = 0;
+  virtual void SetName(std::string_view name) noexcept = 0;
 };
 
 } // namespace oxygen

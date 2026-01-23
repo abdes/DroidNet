@@ -48,9 +48,15 @@ public:
   {
     return frame_seq_number;
   }
-  [[nodiscard]] auto HasView() const noexcept { return static_cast<bool>(view_); }
+  [[nodiscard]] auto HasView() const noexcept
+  {
+    return static_cast<bool>(view_);
+  }
 
-  [[nodiscard]] auto GetView() const noexcept -> const ResolvedView& { return *view_; }
+  [[nodiscard]] auto GetView() const noexcept -> const ResolvedView&
+  {
+    return *view_;
+  }
   [[nodiscard]] auto& GetScene() const noexcept { return scene_.get(); }
   // NOTE: RenderContext removed; reintroduce if extractors require GPU ops.
 

@@ -13,24 +13,24 @@
 namespace oxygen::graphics {
 //! Description of a GPU memory block.
 struct MemoryBlockDesc {
-    uint64_t size;
-    uint32_t alignment;
+  uint64_t size;
+  uint32_t alignment;
 
-    explicit MemoryBlockDesc(const uint64_t size = 0u)
-        : size(size)
-        , alignment(0u)
-    {
-    }
+  explicit MemoryBlockDesc(const uint64_t size = 0u)
+    : size(size)
+    , alignment(0u)
+  {
+  }
 };
 
 //! GPU memory block.
 class IMemoryBlock {
 public:
-    IMemoryBlock() = default;
-    virtual ~IMemoryBlock() = default;
+  IMemoryBlock() = default;
+  virtual ~IMemoryBlock() = default;
 
-    OXYGEN_MAKE_NON_COPYABLE(IMemoryBlock);
-    OXYGEN_MAKE_NON_MOVABLE(IMemoryBlock);
+  OXYGEN_MAKE_NON_COPYABLE(IMemoryBlock);
+  OXYGEN_MAKE_NON_MOVABLE(IMemoryBlock);
 };
 
 } // namespace oxygen::graphics

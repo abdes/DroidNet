@@ -84,6 +84,9 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(MainModule);
   OXYGEN_MAKE_NON_MOVABLE(MainModule);
 
+  auto BuildDefaultWindowProperties() const
+    -> platform::window::Properties override;
+
   struct PendingSceneSwap {
     std::shared_ptr<scene::Scene> scene;
     scene::SceneNode active_camera;

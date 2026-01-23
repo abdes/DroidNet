@@ -8,8 +8,8 @@
 #include <thread>
 #include <vector>
 
-#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::graphics::detail;
@@ -114,14 +114,17 @@ NOLINT_TEST_F(DeferredReclaimerTest,
     ObservedResource(std::atomic<bool>* flag)
       : TestResource("observed")
       , ext_flag(flag)
-    {}
-
-    auto Release() -> void {
-      TestResource::Release();
-      if (ext_flag) ext_flag->store(true);
+    {
     }
 
-    std::atomic<bool>* ext_flag{nullptr};
+    auto Release() -> void
+    {
+      TestResource::Release();
+      if (ext_flag)
+        ext_flag->store(true);
+    }
+
+    std::atomic<bool>* ext_flag { nullptr };
   };
 
   auto res = std::make_shared<ObservedResource>(&released_flag);
@@ -146,9 +149,16 @@ NOLINT_TEST_F(DeferredReclaimerTest,
   std::atomic<bool> released_flag { false };
 
   struct ObservedRaw {
-    ObservedRaw(std::atomic<bool>* f) : flag(f) {}
-    auto Release() -> void { if (flag) flag->store(true); }
-    std::atomic<bool>* flag{nullptr};
+    ObservedRaw(std::atomic<bool>* f)
+      : flag(f)
+    {
+    }
+    auto Release() -> void
+    {
+      if (flag)
+        flag->store(true);
+    }
+    std::atomic<bool>* flag { nullptr };
   };
 
   auto* raw = new ObservedRaw(&released_flag);
@@ -165,7 +175,8 @@ NOLINT_TEST_F(DeferredReclaimerTest,
   // cleanup - release should have been invoked by reclaimer; raw may have been
   // deleted already depending on implementation, but ProcessAllDeferredReleases
   // will be invoked in teardown anyway. If not destroyed, attempt to delete.
-  if (raw != nullptr) delete raw;
+  if (raw != nullptr)
+    delete raw;
 }
 
 //! Tests that shared_ptr resources without Release() method have destructor

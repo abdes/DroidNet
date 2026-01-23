@@ -15,9 +15,8 @@
 namespace oxygen::data {
 
 //! Raw IEEE-754 binary16 bit pattern.
-struct HalfFloat final
-  : oxygen::NamedType<uint16_t, struct HalfFloatTag,
-      // clang-format off
+struct HalfFloat final : oxygen::NamedType<uint16_t, struct HalfFloatTag,
+                           // clang-format off
       oxygen::Comparable,
       oxygen::Printable,
       oxygen::Hashable,
@@ -54,8 +53,7 @@ private:
 static_assert(sizeof(HalfFloat) == sizeof(uint16_t));
 static_assert(std::is_trivially_copyable_v<HalfFloat>);
 
-[[nodiscard]] constexpr auto HalfFloat::Encode(float value) noexcept
-  -> uint16_t
+[[nodiscard]] constexpr auto HalfFloat::Encode(float value) noexcept -> uint16_t
 {
   const uint32_t bits = std::bit_cast<uint32_t>(value);
   const uint32_t sign = (bits >> 31) & 0x1u;
@@ -123,8 +121,7 @@ static_assert(std::is_trivially_copyable_v<HalfFloat>);
 
   // Round to nearest-even.
   const uint32_t remainder = mantissa & 0x1FFFu;
-  if (remainder > 0x1000u
-    || (remainder == 0x1000u && ((mant_out & 1u) != 0))) {
+  if (remainder > 0x1000u || (remainder == 0x1000u && ((mant_out & 1u) != 0))) {
     mant_out += 1u;
     if (mant_out == 0x400u) {
       // Mantissa overflow; increment exponent.
@@ -137,12 +134,11 @@ static_assert(std::is_trivially_copyable_v<HalfFloat>);
     }
   }
 
-  return static_cast<uint16_t>(sign_out
-    | (static_cast<uint32_t>(exp_half) << 10) | (mant_out & 0x3FFu));
+  return static_cast<uint16_t>(
+    sign_out | (static_cast<uint32_t>(exp_half) << 10) | (mant_out & 0x3FFu));
 }
 
-[[nodiscard]] constexpr auto HalfFloat::Decode(uint16_t bits) noexcept
-  -> float
+[[nodiscard]] constexpr auto HalfFloat::Decode(uint16_t bits) noexcept -> float
 {
   const uint32_t sign = (static_cast<uint32_t>(bits) >> 15) & 0x1u;
   const uint32_t exp = (static_cast<uint32_t>(bits) >> 10) & 0x1Fu;
