@@ -209,6 +209,8 @@ static std::atomic<unsigned> s_stderr_indentation { 0 };
 struct ModuleSiteEntry {
   std::atomic<int>* cache;
   std::string file_path;
+  std::string base_name;
+  std::string full_path;
 };
 static std::mutex s_module_registry_mutex;
 static std::vector<ModuleSiteEntry> s_module_registry;
@@ -489,6 +491,9 @@ static auto indentation(unsigned depth) -> const char*
 struct ModuleInfo {
   std::string pattern;
   int verbosity;
+  bool use_full_path;
+  bool has_wildcards;
+  bool has_double_star;
 };
 
 static std::mutex s_module_mutex;
@@ -498,6 +503,16 @@ static std::vector<ModuleInfo> s_module_list;
 static void normalize_module_path(std::string& s)
 {
   std::replace(s.begin(), s.end(), '\\', '/');
+}
+
+static auto has_wildcards(std::string_view pattern) -> bool
+{
+  return pattern.find_first_of("*?") != std::string_view::npos;
+}
+
+static auto has_double_star(std::string_view pattern) -> bool
+{
+  return pattern.find("**") != std::string_view::npos;
 }
 
 //! Parse a single vmodule override in the form "pattern=verbosity"
@@ -579,8 +594,17 @@ static bool parse_vmodule_override(std::string_view override_str)
   {
     std::string stored_pattern(pattern_view);
     normalize_module_path(stored_pattern);
+    const bool use_full_path = stored_pattern.find('/') != std::string::npos;
+    const bool has_wildcards_flag = has_wildcards(stored_pattern);
+    const bool has_double_star_flag = has_double_star(stored_pattern);
     std::lock_guard<std::mutex> l(s_module_mutex);
-    s_module_list.push_back(ModuleInfo { std::move(stored_pattern), level });
+    s_module_list.push_back(ModuleInfo {
+      .pattern = std::move(stored_pattern),
+      .verbosity = level,
+      .use_full_path = use_full_path,
+      .has_wildcards = has_wildcards_flag,
+      .has_double_star = has_double_star_flag,
+    });
   }
 
   return true;
@@ -765,7 +789,7 @@ static std::string fullpath_for_matching(const char* file_path)
 //  Matching is against already normalized (forward slash) strings with
 //  extensions and '-inl' removed as appropriate by callers.
 // Match a single path segment (no '/') with '*' and '?' wildcards.
-static bool match_segment(const std::string& patt, const std::string& seg)
+static bool match_segment(std::string_view patt, std::string_view seg)
 {
   size_t pi = 0, si = 0;
   size_t star = std::string::npos, retry = 0;
@@ -792,6 +816,31 @@ static bool match_segment(const std::string& patt, const std::string& seg)
     ++pi;
   }
   return pi == patt.size();
+}
+
+// Segment-aware glob matching with '*' and '?' only (no '**').
+static bool module_glob_match_no_double_star(
+  std::string_view pattern, std::string_view path)
+{
+  size_t p_start = 0;
+  size_t s_start = 0;
+  while (true) {
+    const size_t p_end = pattern.find('/', p_start);
+    const size_t s_end = path.find('/', s_start);
+    if (p_end == std::string_view::npos || s_end == std::string_view::npos) {
+      if (p_end != s_end) {
+        return false;
+      }
+      return match_segment(pattern.substr(p_start), path.substr(s_start));
+    }
+
+    if (!match_segment(pattern.substr(p_start, p_end - p_start),
+          path.substr(s_start, s_end - s_start))) {
+      return false;
+    }
+    p_start = p_end + 1;
+    s_start = s_end + 1;
+  }
 }
 
 // Fully specified module glob matching with segment semantics and '**'.
@@ -928,18 +977,30 @@ LOGURU_EXPORT bool is_enabled_for(Verbosity verbosity, const char* file_path)
     const std::string base = basename_for_matching(file_path);
     // Iterate forward so earlier entries take precedence (first-match-wins).
     for (const auto& info : s_module_list) {
-      bool use_full = info.pattern.find('/') != std::string::npos
-        || info.pattern.find('\\') != std::string::npos;
-      if (use_full) {
+      if (info.use_full_path) {
         // Full path matching with glob semantics.
         std::string full_norm = fullpath_for_matching(file_path);
-        std::string patt_norm = info.pattern;
-        normalize_module_path(patt_norm);
-        if (module_glob_match(patt_norm, full_norm)) {
+        if (!info.has_wildcards) {
+          if (info.pattern == full_norm) {
+            return verbosity <= info.verbosity;
+          }
+        } else if (!info.has_double_star) {
+          if (module_glob_match_no_double_star(info.pattern, full_norm)) {
+            return verbosity <= info.verbosity;
+          }
+        } else if (module_glob_match(info.pattern, full_norm)) {
           return verbosity <= info.verbosity;
         }
       } else {
-        if (module_glob_match(info.pattern, base)) {
+        if (!info.has_wildcards) {
+          if (info.pattern == base) {
+            return verbosity <= info.verbosity;
+          }
+        } else if (!info.has_double_star) {
+          if (match_segment(info.pattern, base)) {
+            return verbosity <= info.verbosity;
+          }
+        } else if (module_glob_match(info.pattern, base)) {
           return verbosity <= info.verbosity;
         }
       }
@@ -953,35 +1014,53 @@ LOGURU_EXPORT bool is_enabled_for(Verbosity verbosity, const char* file_path)
 // Compute the effective vmodule level for a file path. Returns
 // Verbosity_UNSPECIFIED to indicate "no specific override" so callers can fall
 // back to global.
-LOGURU_EXPORT int compute_module_verbosity_for(const char* file_path)
+static int compute_module_verbosity_for_paths(
+  const std::string& base_name, const std::string& full_path)
 {
   std::lock_guard<std::mutex> l(s_module_mutex);
   if (s_module_list.empty()) {
     return Verbosity_UNSPECIFIED;
   }
-  const std::string base = basename_for_matching(file_path);
 
   // Iterate forward so earlier inserted entries take precedence (first-match)
   // aligning with is_enabled_for(). This guarantees consistent behavior for
   // cached module sites and direct runtime checks after
   // update_all_module_sites.
   for (const auto& info : s_module_list) {
-    bool use_full = info.pattern.find('/') != std::string::npos
-      || info.pattern.find('\\') != std::string::npos;
-    if (use_full) {
-      std::string full_norm = fullpath_for_matching(file_path);
-      std::string patt_norm = info.pattern;
-      normalize_module_path(patt_norm);
-      if (module_glob_match(patt_norm, full_norm)) {
+    if (info.use_full_path) {
+      if (!info.has_wildcards) {
+        if (info.pattern == full_path) {
+          return info.verbosity;
+        }
+      } else if (!info.has_double_star) {
+        if (module_glob_match_no_double_star(info.pattern, full_path)) {
+          return info.verbosity;
+        }
+      } else if (module_glob_match(info.pattern, full_path)) {
         return info.verbosity;
       }
     } else {
-      if (module_glob_match(info.pattern, base)) {
+      if (!info.has_wildcards) {
+        if (info.pattern == base_name) {
+          return info.verbosity;
+        }
+      } else if (!info.has_double_star) {
+        if (match_segment(info.pattern, base_name)) {
+          return info.verbosity;
+        }
+      } else if (module_glob_match(info.pattern, base_name)) {
         return info.verbosity;
       }
     }
   }
   return Verbosity_UNSPECIFIED;
+}
+
+LOGURU_EXPORT int compute_module_verbosity_for(const char* file_path)
+{
+  const std::string base = basename_for_matching(file_path);
+  const std::string full_norm = fullpath_for_matching(file_path);
+  return compute_module_verbosity_for_paths(base, full_norm);
 }
 
 //! Recompute and cache vmodule verbosity for all registered call sites.
@@ -1011,7 +1090,8 @@ LOGURU_EXPORT void update_all_module_sites()
     copied = s_module_registry;
   }
   for (auto& e : copied) {
-    const int level = compute_module_verbosity_for(e.file_path.c_str());
+    const int level
+      = compute_module_verbosity_for_paths(e.base_name, e.full_path);
     e.cache->store(level, std::memory_order_release);
   }
 }
@@ -1026,6 +1106,8 @@ LOGURU_EXPORT void ensure_module_site_registered(
     return; // Already initialized.
   }
   bool already_registered = false;
+  const std::string base_name = basename_for_matching(file_path);
+  const std::string full_path = fullpath_for_matching(file_path);
   {
     std::lock_guard<std::mutex> reg(s_module_registry_mutex);
     for (const auto& e : s_module_registry) {
@@ -1035,11 +1117,16 @@ LOGURU_EXPORT void ensure_module_site_registered(
       }
     }
     if (!already_registered) {
-      s_module_registry.push_back(ModuleSiteEntry { site_cache, file_path });
+      s_module_registry.push_back(ModuleSiteEntry {
+        site_cache,
+        file_path,
+        base_name,
+        full_path,
+      });
     }
   }
   if (!already_registered) {
-    const int level = compute_module_verbosity_for(file_path);
+    const int level = compute_module_verbosity_for_paths(base_name, full_path);
     site_cache->store(
       level == Verbosity_UNSPECIFIED ? Verbosity_UNSPECIFIED : level,
       std::memory_order_relaxed);
@@ -1060,18 +1147,10 @@ LOGURU_EXPORT bool check_module_fast(
     const bool result = verbosity <= cached;
     return result;
   }
-  // No cached override -> fallback to full check.
-  const bool result = is_enabled_for(verbosity, file_path);
-  // If fallback succeeded (an override allowed it) capture and cache the
-  // module-specific level so subsequent calls are fast and can raise above
-  // a global OFF.
-  if (result) {
-    const int level = compute_module_verbosity_for(file_path);
-    if (level != Verbosity_UNSPECIFIED) {
-      site_cache->store(level, std::memory_order_relaxed);
-    }
-  }
-  return result;
+  // No cached override: fall back to global verbosity only. Overrides are
+  // applied via update_all_module_sites(), so this remains correct and avoids
+  // per-call matching on the hot path.
+  return verbosity <= g_stderr_verbosity;
 }
 
 static auto now_ns() -> long long
