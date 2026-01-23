@@ -7,32 +7,20 @@
 #include <Oxygen/Core/Version.h>
 #include <Oxygen/Core/version-info.h>
 
-auto oxygen::version::Major() -> std::uint8_t
-{
-    return info::cVersionMajor;
-}
+auto oxygen::version::Major() -> std::uint8_t { return info::cVersionMajor; }
 
-auto oxygen::version::Minor() -> std::uint8_t
-{
-    return info::cVersionMinor;
-}
+auto oxygen::version::Minor() -> std::uint8_t { return info::cVersionMinor; }
 
-auto oxygen::version::Patch() -> std::uint8_t
-{
-    return info::cVersionMajor;
-}
+auto oxygen::version::Patch() -> std::uint8_t { return info::cVersionMajor; }
 
-auto oxygen::version::Version() -> std::string
-{
-    return info::cVersion;
-}
+auto oxygen::version::Version() -> std::string { return info::cVersion; }
 
 auto oxygen::version::VersionFull() -> std::string
 {
-    return std::string(info::cVersion) + " (" + info::cVersionRevision + ")";
+  return std::string(info::cVersion) + " (" + info::cVersionRevision + ")";
 }
 
 auto oxygen::version::NameVersion() -> std::string
 {
-    return info::cNameVersion;
+  return info::cNameVersion;
 }

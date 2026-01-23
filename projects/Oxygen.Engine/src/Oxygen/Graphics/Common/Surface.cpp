@@ -15,43 +15,40 @@ using oxygen::graphics::detail::WindowComponent;
 using oxygen::graphics::detail::WindowSurface;
 using oxygen::graphics::resources::kSurface;
 
-Surface::~Surface()
-{
-    DLOG_F(INFO, "Surface `{}` destroyed", GetName());
-}
+Surface::~Surface() { DLOG_F(INFO, "Surface `{}` destroyed", GetName()); }
 
 auto WindowComponent::Width() const -> uint32_t
 {
-    if (const auto window = window_.lock()) {
-        return window->FrameBufferSize().width;
-    }
-    throw std::runtime_error("Window is no longer valid");
+  if (const auto window = window_.lock()) {
+    return window->FrameBufferSize().width;
+  }
+  throw std::runtime_error("Window is no longer valid");
 }
 
 auto WindowComponent::Height() const -> uint32_t
 {
-    if (const auto window = window_.lock()) {
-        return window->FrameBufferSize().height;
-    }
-    throw std::runtime_error("Window is no longer valid");
+  if (const auto window = window_.lock()) {
+    return window->FrameBufferSize().height;
+  }
+  throw std::runtime_error("Window is no longer valid");
 }
 
 auto WindowComponent::FrameBufferSize() const -> platform::window::ExtentT
 {
-    if (const auto window = window_.lock()) {
-        return window_.lock()->FrameBufferSize();
-    }
-    throw std::runtime_error("Window is no longer valid");
+  if (const auto window = window_.lock()) {
+    return window_.lock()->FrameBufferSize();
+  }
+  throw std::runtime_error("Window is no longer valid");
 }
 
 auto WindowComponent::Native() const -> platform::window::NativeHandles
 {
-    if (const auto window = window_.lock()) {
-        return window->Native();
-    }
-    throw std::runtime_error("Window is no longer valid");
+  if (const auto window = window_.lock()) {
+    return window->Native();
+  }
+  throw std::runtime_error("Window is no longer valid");
 }
 auto WindowComponent::GetWindowTitle() const -> std::string
 {
-    return window_.expired() ? "" : window_.lock()->Title();
+  return window_.expired() ? "" : window_.lock()->Title();
 }

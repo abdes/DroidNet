@@ -305,14 +305,15 @@ NOLINT_TEST_F(
   });
 }
 
-NOLINT_TEST_F(InputSystemIntegrationTest, CrossContext_ConsumerCancelsEarlierContext)
+NOLINT_TEST_F(
+  InputSystemIntegrationTest, CrossContext_ConsumerCancelsEarlierContext)
 {
   oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
     // Arrange
     auto shift = std::make_shared<Action>("Shift", ActionValueType::kBool);
     auto jump = std::make_shared<Action>("Jump", ActionValueType::kBool);
-    auto jump_higher = std::make_shared<Action>(
-      "JumpHigher", ActionValueType::kBool);
+    auto jump_higher
+      = std::make_shared<Action>("JumpHigher", ActionValueType::kBool);
 
     // JumpHigher consumes input
     jump_higher->SetConsumesInput(true);
@@ -324,8 +325,8 @@ NOLINT_TEST_F(InputSystemIntegrationTest, CrossContext_ConsumerCancelsEarlierCon
     // High-priority modifier context (Shift)
     auto mod_ctx = std::make_shared<InputMappingContext>("mods");
     {
-      auto map_shift = std::make_shared<InputActionMapping>(
-        shift, InputSlots::LeftShift);
+      auto map_shift
+        = std::make_shared<InputActionMapping>(shift, InputSlots::LeftShift);
       auto t = std::make_shared<ActionTriggerDown>();
       t->MakeExplicit();
       map_shift->AddTrigger(t);
@@ -338,8 +339,8 @@ NOLINT_TEST_F(InputSystemIntegrationTest, CrossContext_ConsumerCancelsEarlierCon
     auto ground_ctx = std::make_shared<InputMappingContext>("ground");
     {
       // JumpHigher (Tap + chain to Shift)
-      auto m_higher = std::make_shared<InputActionMapping>(
-        jump_higher, InputSlots::Space);
+      auto m_higher
+        = std::make_shared<InputActionMapping>(jump_higher, InputSlots::Space);
       auto tap = std::make_shared<ActionTriggerTap>();
       tap->SetTapTimeThreshold(0.25F);
       tap->MakeExplicit();
@@ -351,8 +352,8 @@ NOLINT_TEST_F(InputSystemIntegrationTest, CrossContext_ConsumerCancelsEarlierCon
       ground_ctx->AddMapping(m_higher);
 
       // Jump (Tap)
-      auto m_jump = std::make_shared<InputActionMapping>(
-        jump, InputSlots::Space);
+      auto m_jump
+        = std::make_shared<InputActionMapping>(jump, InputSlots::Space);
       auto t_jump = std::make_shared<ActionTriggerTap>();
       t_jump->SetTapTimeThreshold(0.25F);
       t_jump->MakeExplicit();
@@ -383,191 +384,200 @@ NOLINT_TEST_F(InputSystemIntegrationTest, CrossContext_ConsumerCancelsEarlierCon
   });
 }
 
-  NOLINT_TEST_F(InputSystemIntegrationTest, MappingOrderAcrossContexts)
-  {
-    oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
-      // Arrange: High-priority context with 'High' mapping; low-priority context
-      // with two mappings whose order relative to a consumer will be validated.
-      auto high = std::make_shared<Action>("High", ActionValueType::kBool);
-      auto lowA = std::make_shared<Action>("LowA", ActionValueType::kBool);
-      auto lowB = std::make_shared<Action>("LowB", ActionValueType::kBool);
+NOLINT_TEST_F(InputSystemIntegrationTest, MappingOrderAcrossContexts)
+{
+  oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
+    // Arrange: High-priority context with 'High' mapping; low-priority context
+    // with two mappings whose order relative to a consumer will be validated.
+    auto high = std::make_shared<Action>("High", ActionValueType::kBool);
+    auto lowA = std::make_shared<Action>("LowA", ActionValueType::kBool);
+    auto lowB = std::make_shared<Action>("LowB", ActionValueType::kBool);
 
-      // B will be the consumer in our scenarios
-      lowB->SetConsumesInput(true);
+    // B will be the consumer in our scenarios
+    lowB->SetConsumesInput(true);
 
-      input_system_->AddAction(high);
-      input_system_->AddAction(lowA);
-      input_system_->AddAction(lowB);
+    input_system_->AddAction(high);
+    input_system_->AddAction(lowA);
+    input_system_->AddAction(lowB);
 
-      // High context (priority 100)
-      auto ctx_high = std::make_shared<InputMappingContext>("high_ctx");
-      {
-        auto m = std::make_shared<InputActionMapping>(high, InputSlots::Space);
-        auto t = std::make_shared<ActionTriggerPressed>();
-        t->MakeExplicit();
-        m->AddTrigger(t);
-        ctx_high->AddMapping(m);
-      }
+    // High context (priority 100)
+    auto ctx_high = std::make_shared<InputMappingContext>("high_ctx");
+    {
+      auto m = std::make_shared<InputActionMapping>(high, InputSlots::Space);
+      auto t = std::make_shared<ActionTriggerPressed>();
+      t->MakeExplicit();
+      m->AddTrigger(t);
+      ctx_high->AddMapping(m);
+    }
 
-      // Case 1: Low context with non-consuming A then consuming B (B after A)
-      auto ctx_low1 = std::make_shared<InputMappingContext>("low_ctx1");
-      {
-        auto mA = std::make_shared<InputActionMapping>(lowA, InputSlots::Space);
-        auto ta = std::make_shared<ActionTriggerTap>();
-        ta->SetTapTimeThreshold(0.25F);
-        ta->MakeExplicit();
-        mA->AddTrigger(ta);
-        ctx_low1->AddMapping(mA);
+    // Case 1: Low context with non-consuming A then consuming B (B after A)
+    auto ctx_low1 = std::make_shared<InputMappingContext>("low_ctx1");
+    {
+      auto mA = std::make_shared<InputActionMapping>(lowA, InputSlots::Space);
+      auto ta = std::make_shared<ActionTriggerTap>();
+      ta->SetTapTimeThreshold(0.25F);
+      ta->MakeExplicit();
+      mA->AddTrigger(ta);
+      ctx_low1->AddMapping(mA);
 
-        auto mB = std::make_shared<InputActionMapping>(lowB, InputSlots::Space);
-        auto tb = std::make_shared<ActionTriggerTap>();
-        tb->SetTapTimeThreshold(0.25F);
-        tb->MakeExplicit();
-        mB->AddTrigger(tb);
-        ctx_low1->AddMapping(mB);
-      }
+      auto mB = std::make_shared<InputActionMapping>(lowB, InputSlots::Space);
+      auto tb = std::make_shared<ActionTriggerTap>();
+      tb->SetTapTimeThreshold(0.25F);
+      tb->MakeExplicit();
+      mB->AddTrigger(tb);
+      ctx_low1->AddMapping(mB);
+    }
 
-      input_system_->AddMappingContext(ctx_low1, 0);
-      input_system_->AddMappingContext(ctx_high, 100);
-      input_system_->ActivateMappingContext(ctx_low1);
-      input_system_->ActivateMappingContext(ctx_high);
+    input_system_->AddMappingContext(ctx_low1, 0);
+    input_system_->AddMappingContext(ctx_high, 100);
+    input_system_->ActivateMappingContext(ctx_low1);
+    input_system_->ActivateMappingContext(ctx_high);
 
-      // Press: high-priority Pressed mapping should trigger on the press frame
-      SendKeyEvent(Key::kSpace, ButtonState::kPressed);
-      input_system_->OnFrameStart(*frame_context_);
-      co_await input_system_->OnInput(*frame_context_);
+    // Press: high-priority Pressed mapping should trigger on the press frame
+    SendKeyEvent(Key::kSpace, ButtonState::kPressed);
+    input_system_->OnFrameStart(*frame_context_);
+    co_await input_system_->OnInput(*frame_context_);
 
-      EXPECT_TRUE(high->WasTriggeredThisFrame());
-      EXPECT_FALSE(lowA->WasTriggeredThisFrame());
-      EXPECT_FALSE(lowB->WasTriggeredThisFrame());
+    EXPECT_TRUE(high->WasTriggeredThisFrame());
+    EXPECT_FALSE(lowA->WasTriggeredThisFrame());
+    EXPECT_FALSE(lowB->WasTriggeredThisFrame());
 
-      // Release: tap mappings in the low context should trigger on release
-      SendKeyEvent(Key::kSpace, ButtonState::kReleased);
-      input_system_->OnFrameStart(*frame_context_);
-      co_await input_system_->OnInput(*frame_context_);
+    // Release: tap mappings in the low context should trigger on release
+    SendKeyEvent(Key::kSpace, ButtonState::kReleased);
+    input_system_->OnFrameStart(*frame_context_);
+    co_await input_system_->OnInput(*frame_context_);
 
-      EXPECT_FALSE(high->WasTriggeredThisFrame());
-      EXPECT_TRUE(lowA->WasTriggeredThisFrame());
-      EXPECT_TRUE(lowB->WasTriggeredThisFrame());
+    EXPECT_FALSE(high->WasTriggeredThisFrame());
+    EXPECT_TRUE(lowA->WasTriggeredThisFrame());
+    EXPECT_TRUE(lowB->WasTriggeredThisFrame());
 
-      // Case 2: Low context with consuming B first, then non-consuming A
-      auto ctx_low2 = std::make_shared<InputMappingContext>("low_ctx2");
-      {
-        auto mB_first = std::make_shared<InputActionMapping>(lowB, InputSlots::Space);
-        auto tb1 = std::make_shared<ActionTriggerTap>();
-        tb1->SetTapTimeThreshold(0.25F);
-        tb1->MakeExplicit();
-        mB_first->AddTrigger(tb1);
-        ctx_low2->AddMapping(mB_first);
+    // Case 2: Low context with consuming B first, then non-consuming A
+    auto ctx_low2 = std::make_shared<InputMappingContext>("low_ctx2");
+    {
+      auto mB_first
+        = std::make_shared<InputActionMapping>(lowB, InputSlots::Space);
+      auto tb1 = std::make_shared<ActionTriggerTap>();
+      tb1->SetTapTimeThreshold(0.25F);
+      tb1->MakeExplicit();
+      mB_first->AddTrigger(tb1);
+      ctx_low2->AddMapping(mB_first);
 
-        auto mA_late = std::make_shared<InputActionMapping>(lowA, InputSlots::Space);
-        auto ta2 = std::make_shared<ActionTriggerTap>();
-        ta2->SetTapTimeThreshold(0.25F);
-        ta2->MakeExplicit();
-        mA_late->AddTrigger(ta2);
-        ctx_low2->AddMapping(mA_late);
-      }
+      auto mA_late
+        = std::make_shared<InputActionMapping>(lowA, InputSlots::Space);
+      auto ta2 = std::make_shared<ActionTriggerTap>();
+      ta2->SetTapTimeThreshold(0.25F);
+      ta2->MakeExplicit();
+      mA_late->AddTrigger(ta2);
+      ctx_low2->AddMapping(mA_late);
+    }
 
-      // Replace the lower-priority context with this new ordering
-      input_system_->DeactivateMappingContext(ctx_low1);
-      input_system_->AddMappingContext(ctx_low2, 0);
-      input_system_->ActivateMappingContext(ctx_low2);
+    // Replace the lower-priority context with this new ordering
+    input_system_->DeactivateMappingContext(ctx_low1);
+    input_system_->AddMappingContext(ctx_low2, 0);
+    input_system_->ActivateMappingContext(ctx_low2);
 
-      // Press: high triggers on press frame
-      SendKeyEvent(Key::kSpace, ButtonState::kPressed);
-      input_system_->OnFrameStart(*frame_context_);
-      co_await input_system_->OnInput(*frame_context_);
+    // Press: high triggers on press frame
+    SendKeyEvent(Key::kSpace, ButtonState::kPressed);
+    input_system_->OnFrameStart(*frame_context_);
+    co_await input_system_->OnInput(*frame_context_);
 
-      EXPECT_TRUE(high->WasTriggeredThisFrame());
+    EXPECT_TRUE(high->WasTriggeredThisFrame());
 
-      // Release: consumer lowB should trigger and cancel the later lowA mapping
-      SendKeyEvent(Key::kSpace, ButtonState::kReleased);
-      input_system_->OnFrameStart(*frame_context_);
-      co_await input_system_->OnInput(*frame_context_);
+    // Release: consumer lowB should trigger and cancel the later lowA mapping
+    SendKeyEvent(Key::kSpace, ButtonState::kReleased);
+    input_system_->OnFrameStart(*frame_context_);
+    co_await input_system_->OnInput(*frame_context_);
 
-      EXPECT_FALSE(high->WasTriggeredThisFrame());
-      EXPECT_TRUE(lowB->WasTriggeredThisFrame());
-      EXPECT_TRUE(lowA->WasCanceledThisFrame());
+    EXPECT_FALSE(high->WasTriggeredThisFrame());
+    EXPECT_TRUE(lowB->WasTriggeredThisFrame());
+    EXPECT_TRUE(lowA->WasCanceledThisFrame());
 
-      co_return;
-    });
-  }
+    co_return;
+  });
+}
 
-  // TDD integration spec: after a consuming mapping fires (JumpHigher) and
-  // cancels earlier mappings (Jump), a subsequent single tap of the same slot
-  // should allow Jump to trigger immediately (no extra press needed).
-  NOLINT_TEST_F(InputSystemIntegrationTest, TDD_JumpHigherCancelsThenJumpTriggersOnNextTap)
-  {
-    oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
-      // Arrange (same wiring as CrossContext_ConsumerCancelsEarlierContext)
-      auto shift = std::make_shared<Action>("Shift", ActionValueType::kBool);
-      auto jump = std::make_shared<Action>("Jump", ActionValueType::kBool);
-      auto jump_higher = std::make_shared<Action>(
-        "JumpHigher", ActionValueType::kBool);
-      jump_higher->SetConsumesInput(true);
+// TDD integration spec: after a consuming mapping fires (JumpHigher) and
+// cancels earlier mappings (Jump), a subsequent single tap of the same slot
+// should allow Jump to trigger immediately (no extra press needed).
+NOLINT_TEST_F(
+  InputSystemIntegrationTest, TDD_JumpHigherCancelsThenJumpTriggersOnNextTap)
+{
+  oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
+    // Arrange (same wiring as CrossContext_ConsumerCancelsEarlierContext)
+    auto shift = std::make_shared<Action>("Shift", ActionValueType::kBool);
+    auto jump = std::make_shared<Action>("Jump", ActionValueType::kBool);
+    auto jump_higher
+      = std::make_shared<Action>("JumpHigher", ActionValueType::kBool);
+    jump_higher->SetConsumesInput(true);
 
-      input_system_->AddAction(shift);
-      input_system_->AddAction(jump);
-      input_system_->AddAction(jump_higher);
+    input_system_->AddAction(shift);
+    input_system_->AddAction(jump);
+    input_system_->AddAction(jump_higher);
 
-      auto mod_ctx = std::make_shared<InputMappingContext>("mods");
-      {
-        auto map_shift = std::make_shared<InputActionMapping>(
-          shift, InputSlots::LeftShift);
-        auto t = std::make_shared<ActionTriggerDown>(); t->MakeExplicit();
-        map_shift->AddTrigger(t);
-        mod_ctx->AddMapping(map_shift);
-      }
-      input_system_->AddMappingContext(mod_ctx, 1000);
-      input_system_->ActivateMappingContext(mod_ctx);
+    auto mod_ctx = std::make_shared<InputMappingContext>("mods");
+    {
+      auto map_shift
+        = std::make_shared<InputActionMapping>(shift, InputSlots::LeftShift);
+      auto t = std::make_shared<ActionTriggerDown>();
+      t->MakeExplicit();
+      map_shift->AddTrigger(t);
+      mod_ctx->AddMapping(map_shift);
+    }
+    input_system_->AddMappingContext(mod_ctx, 1000);
+    input_system_->ActivateMappingContext(mod_ctx);
 
-      auto ground_ctx = std::make_shared<InputMappingContext>("ground");
-      {
-        auto m_higher = std::make_shared<InputActionMapping>(
-          jump_higher, InputSlots::Space);
-        auto tap = std::make_shared<ActionTriggerTap>(); tap->MakeExplicit();
-        m_higher->AddTrigger(tap);
-        auto chain = std::make_shared<ActionTriggerChain>();
-        chain->SetLinkedAction(shift); chain->MakeImplicit(); m_higher->AddTrigger(chain);
-        ground_ctx->AddMapping(m_higher);
+    auto ground_ctx = std::make_shared<InputMappingContext>("ground");
+    {
+      auto m_higher
+        = std::make_shared<InputActionMapping>(jump_higher, InputSlots::Space);
+      auto tap = std::make_shared<ActionTriggerTap>();
+      tap->MakeExplicit();
+      m_higher->AddTrigger(tap);
+      auto chain = std::make_shared<ActionTriggerChain>();
+      chain->SetLinkedAction(shift);
+      chain->MakeImplicit();
+      m_higher->AddTrigger(chain);
+      ground_ctx->AddMapping(m_higher);
 
-        auto m_jump = std::make_shared<InputActionMapping>(jump, InputSlots::Space);
-        auto t_jump = std::make_shared<ActionTriggerTap>(); t_jump->MakeExplicit();
-        m_jump->AddTrigger(t_jump);
-        ground_ctx->AddMapping(m_jump);
-      }
-      input_system_->AddMappingContext(ground_ctx, 0);
-      input_system_->ActivateMappingContext(ground_ctx);
+      auto m_jump
+        = std::make_shared<InputActionMapping>(jump, InputSlots::Space);
+      auto t_jump = std::make_shared<ActionTriggerTap>();
+      t_jump->MakeExplicit();
+      m_jump->AddTrigger(t_jump);
+      ground_ctx->AddMapping(m_jump);
+    }
+    input_system_->AddMappingContext(ground_ctx, 0);
+    input_system_->ActivateMappingContext(ground_ctx);
 
-      // Press Shift
-      SendKeyEvent(Key::kLeftShift, ButtonState::kPressed);
-      input_system_->OnFrameStart(*frame_context_);
-      co_await input_system_->OnInput(*frame_context_);
+    // Press Shift
+    SendKeyEvent(Key::kLeftShift, ButtonState::kPressed);
+    input_system_->OnFrameStart(*frame_context_);
+    co_await input_system_->OnInput(*frame_context_);
 
-      // Press+release Space -> JumpHigher should trigger and Jump canceled
-      SendKeyEvent(Key::kSpace, ButtonState::kPressed);
-      SendKeyEvent(Key::kSpace, ButtonState::kReleased);
-      input_system_->OnFrameStart(*frame_context_);
-      co_await input_system_->OnInput(*frame_context_);
+    // Press+release Space -> JumpHigher should trigger and Jump canceled
+    SendKeyEvent(Key::kSpace, ButtonState::kPressed);
+    SendKeyEvent(Key::kSpace, ButtonState::kReleased);
+    input_system_->OnFrameStart(*frame_context_);
+    co_await input_system_->OnInput(*frame_context_);
 
-      EXPECT_TRUE(jump_higher->WasTriggeredThisFrame());
-      EXPECT_TRUE(jump->WasCanceledThisFrame());
+    EXPECT_TRUE(jump_higher->WasTriggeredThisFrame());
+    EXPECT_TRUE(jump->WasCanceledThisFrame());
 
-      // Release Shift so the chain is no longer armed, then single tap Space
-      // should allow Jump to trigger on its own.
-      SendKeyEvent(Key::kLeftShift, ButtonState::kReleased);
-      input_system_->OnFrameStart(*frame_context_);
-      co_await input_system_->OnInput(*frame_context_);
+    // Release Shift so the chain is no longer armed, then single tap Space
+    // should allow Jump to trigger on its own.
+    SendKeyEvent(Key::kLeftShift, ButtonState::kReleased);
+    input_system_->OnFrameStart(*frame_context_);
+    co_await input_system_->OnInput(*frame_context_);
 
-      SendKeyEvent(Key::kSpace, ButtonState::kPressed);
-      SendKeyEvent(Key::kSpace, ButtonState::kReleased);
-      input_system_->OnFrameStart(*frame_context_);
-      co_await input_system_->OnInput(*frame_context_);
+    SendKeyEvent(Key::kSpace, ButtonState::kPressed);
+    SendKeyEvent(Key::kSpace, ButtonState::kReleased);
+    input_system_->OnFrameStart(*frame_context_);
+    co_await input_system_->OnInput(*frame_context_);
 
-      EXPECT_TRUE(jump->WasTriggeredThisFrame());
+    EXPECT_TRUE(jump->WasTriggeredThisFrame());
 
-      co_return;
-    });
-  }
+    co_return;
+  });
+}
 
 } // namespace

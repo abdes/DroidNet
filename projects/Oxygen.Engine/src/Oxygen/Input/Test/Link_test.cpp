@@ -10,5 +10,6 @@ using oxygen::input::Action;
 
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
-    const auto action = std::make_shared<Action>("a", oxygen::input::ActionValueType::kBool);
+  const auto action
+    = std::make_shared<Action>("a", oxygen::input::ActionValueType::kBool);
 }

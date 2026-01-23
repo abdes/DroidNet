@@ -19,11 +19,11 @@ namespace oxygen::graphics::d3d12::testing {
 // ReSharper disable once CppClassCanBeFinal - Mock class should not be final
 class MockPipelineState : public dx::IPipelineState {
 public:
-    MockPipelineState() = default;
-    virtual ~MockPipelineState() = default;
+  MockPipelineState() = default;
+  virtual ~MockPipelineState() = default;
 
-    OXYGEN_DEFAULT_COPYABLE(MockPipelineState)
-    OXYGEN_DEFAULT_MOVABLE(MockPipelineState) // clang-format off
+  OXYGEN_DEFAULT_COPYABLE(MockPipelineState)
+  OXYGEN_DEFAULT_MOVABLE(MockPipelineState) // clang-format off
     // ID3D12PipelineState (stubbed)
     HRESULT STDMETHODCALLTYPE GetCachedBlob(ID3DBlob** ppBlob) override {
         if (ppBlob) {
@@ -45,7 +45,7 @@ public:
 
     // ID3D12DeviceChild (stubbed)
     HRESULT STDMETHODCALLTYPE GetDevice(REFIID, void**) override { return E_NOTIMPL; }
-    // clang-format on
+  // clang-format on
 };
 
 } // namespace oxygen::graphics::d3d12::testing

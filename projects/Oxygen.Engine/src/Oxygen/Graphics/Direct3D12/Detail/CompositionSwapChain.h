@@ -31,8 +31,8 @@ namespace detail {
   class CompositionSwapChain : public Component {
     OXYGEN_COMPONENT(CompositionSwapChain)
   public:
-    CompositionSwapChain(dx::ICommandQueue* command_queue, const DXGI_FORMAT format,
-      Graphics* graphics);
+    CompositionSwapChain(dx::ICommandQueue* command_queue,
+      const DXGI_FORMAT format, Graphics* graphics);
 
     ~CompositionSwapChain() noexcept override;
 

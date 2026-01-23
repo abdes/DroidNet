@@ -5,9 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
-#include <limits>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <limits>
 
 using oxygen::graphics::CommandQueue;
 
@@ -30,7 +30,8 @@ void CommandQueue::Flush() const
   // In that case, bail out gracefully instead of wrapping to 0 and throwing.
   if (completed == (std::numeric_limits<uint64_t>::max)()) {
     DLOG_F(WARNING,
-      "CommandQueue[{}] flush skipped: completed value is UINT64_MAX (device removed)",
+      "CommandQueue[{}] flush skipped: completed value is UINT64_MAX (device "
+      "removed)",
       GetName());
     return;
   }

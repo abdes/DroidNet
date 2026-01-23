@@ -220,7 +220,8 @@ NOLINT_TEST_F(ProceduralMeshTest, BoundingBox)
 }
 
 //! Boundary tests for minimum valid sphere segment counts.
-//! Verifies documentated lower limits: latitude_segments >=3, longitude_segments
+//! Verifies documentated lower limits: latitude_segments >=3,
+//! longitude_segments
 //! >=3.
 NOLINT_TEST_F(ProceduralMeshTest, SphereMinimumValidSegments)
 {

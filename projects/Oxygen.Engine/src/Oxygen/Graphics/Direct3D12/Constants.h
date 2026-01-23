@@ -10,6 +10,8 @@
 
 namespace oxygen::graphics::d3d12 {
 
-constexpr static DXGI_FORMAT kDefaultBackBufferFormat { DXGI_FORMAT_R8G8B8A8_UNORM };
+constexpr static DXGI_FORMAT kDefaultBackBufferFormat {
+  DXGI_FORMAT_R8G8B8A8_UNORM
+};
 
 } // namespace oxygen::graphics::d3d12

@@ -10,11 +10,11 @@
 
 class MyInputHandler final : public oxygen::engine::InputHandler {
 public:
-    void ProcessInput(const oxygen::platform::InputEvent& /*event*/) override { }
+  void ProcessInput(const oxygen::platform::InputEvent& /*event*/) override { }
 };
 
 NOLINT_TEST(InputHandlerInterfaceTest, CompilesAndLinks)
 {
-    const MyInputHandler handler {};
-    (void)handler;
+  const MyInputHandler handler {};
+  (void)handler;
 }

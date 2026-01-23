@@ -191,8 +191,7 @@ public:
       // override alignment with the top of the stack
       effective_alignment = current;
     }
-    if (effective_alignment == 0
-      || !std::has_single_bit(effective_alignment)
+    if (effective_alignment == 0 || !std::has_single_bit(effective_alignment)
       || effective_alignment > kMaxAlignment) {
       return ::oxygen::Err(std::errc::invalid_argument);
     }
@@ -203,8 +202,7 @@ public:
     }
 
     const size_t padding
-      = (effective_alignment
-          - (current_pos.value() % effective_alignment))
+      = (effective_alignment - (current_pos.value() % effective_alignment))
       % effective_alignment;
     if (padding > 0) {
       return stream_.get().Forward(padding);

@@ -18,9 +18,9 @@ namespace oxygen::graphics::d3d12::testing {
 // ReSharper disable once CppClassCanBeFinal - Mock class should not be final
 class MockDevice : public dx::IDevice {
 public:
-    virtual ~MockDevice() = default;
+  virtual ~MockDevice() = default;
 
-    // clang-format off
+  // clang-format off
     // Mocked methods
     MOCK_METHOD(HRESULT, CreateDescriptorHeap, (const D3D12_DESCRIPTOR_HEAP_DESC*, REFIID, void**), (override));
     MOCK_METHOD(UINT, GetDescriptorHandleIncrementSize, (D3D12_DESCRIPTOR_HEAP_TYPE), (override));
@@ -111,7 +111,7 @@ public:
     HRESULT STDMETHODCALLTYPE CreateShaderCacheSession(const D3D12_SHADER_CACHE_SESSION_DESC*, REFIID, void**) override { return E_NOTIMPL; }
     HRESULT STDMETHODCALLTYPE ShaderCacheControl(D3D12_SHADER_CACHE_KIND_FLAGS, D3D12_SHADER_CACHE_CONTROL_FLAGS) override { return E_NOTIMPL; }
     HRESULT STDMETHODCALLTYPE CreateCommandQueue1(const D3D12_COMMAND_QUEUE_DESC*, REFIID, REFIID, void**) override { return E_NOTIMPL; }
-    // clang-format on
+  // clang-format on
 };
 
 } // namespace oxygen::graphics::d3d12::testing

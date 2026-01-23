@@ -87,7 +87,6 @@ namespace physics {
   inline constexpr Vec3 Gravity { 0.0F, 0.0F, -GravityMagnitude };
 } // namespace physics
 
-
 //! Mathematical constants and utilities.
 namespace math {
   inline constexpr float Pi = glm::pi<float>();

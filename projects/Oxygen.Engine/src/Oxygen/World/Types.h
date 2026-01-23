@@ -8,13 +8,13 @@
 
 #include <Oxygen/Base/ResourceHandle.h>
 
-#define DECLARE_RESOURCE(scope, Name)           \
-    using Name##Id = ResourceHandle;            \
-    namespace scope {                           \
-    struct Descriptor;                          \
-    }                                           \
-    using Name##Descriptor = scope::Descriptor; \
-    class Name##;
+#define DECLARE_RESOURCE(scope, Name)                                          \
+  using Name##Id = ResourceHandle;                                             \
+  namespace scope {                                                            \
+  struct Descriptor;                                                           \
+  }                                                                            \
+  using Name##Descriptor = scope::Descriptor;                                  \
+  class Name##;
 
 namespace oxygen::world {
 
@@ -28,21 +28,21 @@ namespace oxygen::world {
 // ---------------------------------------------------------------------------
 
 namespace resources {
-    // Reserved resource types for engine internal objects with IDs
-    constexpr ResourceHandle::ResourceTypeT kReserved1 = 1; // Window
-    constexpr ResourceHandle::ResourceTypeT kReserved2 = 2; // Surface
-    constexpr ResourceHandle::ResourceTypeT kReserved3 = 3;
-    constexpr ResourceHandle::ResourceTypeT kReserved4 = 4;
-    constexpr ResourceHandle::ResourceTypeT kReserved5 = 5;
-    constexpr ResourceHandle::ResourceTypeT kReserved6 = 6;
-    constexpr ResourceHandle::ResourceTypeT kReserved7 = 7;
-    constexpr ResourceHandle::ResourceTypeT kReserved8 = 8;
-    constexpr ResourceHandle::ResourceTypeT kReserved9 = 9;
-    constexpr ResourceHandle::ResourceTypeT kReserved10 = 10;
+  // Reserved resource types for engine internal objects with IDs
+  constexpr ResourceHandle::ResourceTypeT kReserved1 = 1; // Window
+  constexpr ResourceHandle::ResourceTypeT kReserved2 = 2; // Surface
+  constexpr ResourceHandle::ResourceTypeT kReserved3 = 3;
+  constexpr ResourceHandle::ResourceTypeT kReserved4 = 4;
+  constexpr ResourceHandle::ResourceTypeT kReserved5 = 5;
+  constexpr ResourceHandle::ResourceTypeT kReserved6 = 6;
+  constexpr ResourceHandle::ResourceTypeT kReserved7 = 7;
+  constexpr ResourceHandle::ResourceTypeT kReserved8 = 8;
+  constexpr ResourceHandle::ResourceTypeT kReserved9 = 9;
+  constexpr ResourceHandle::ResourceTypeT kReserved10 = 10;
 
-    // World resources
-    constexpr ResourceHandle::ResourceTypeT kSceneNode = 11;
-    constexpr ResourceHandle::ResourceTypeT kTransform = 12;
+  // World resources
+  constexpr ResourceHandle::ResourceTypeT kSceneNode = 11;
+  constexpr ResourceHandle::ResourceTypeT kTransform = 12;
 } // namespace resources
 
 DECLARE_RESOURCE(entity, SceneNode)

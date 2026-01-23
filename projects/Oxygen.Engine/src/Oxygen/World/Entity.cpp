@@ -17,8 +17,8 @@ using oxygen::ResourceTable;
 using oxygen::world::SceneNode;
 using oxygen::world::Transform;
 
-#define MAKE_RESOURCE_TABLE(name, type, itemType) \
-    ResourceTable<type> name(oxygen::world::resources::k##itemType, 256)
+#define MAKE_RESOURCE_TABLE(name, type, itemType)                              \
+  ResourceTable<type> name(oxygen::world::resources::k##itemType, 256)
 
 // TODO: table size needs to be moved to a constant
 
@@ -46,23 +46,22 @@ std::shared_mutex entity_mutex;
  * created.
  * @return The created Transform object.
  */
-auto SceneNode::CreateTransform(
-    const TransformDescriptor& transform_desc,
-    const SceneNodeId& entity_id) -> Transform
+auto SceneNode::CreateTransform(const TransformDescriptor& transform_desc,
+  const SceneNodeId& entity_id) -> Transform
 {
-    const auto transform_id = transforms.Insert({});
-    DCHECK_EQ_F(transform_id.Index(), entity_id.Index());
+  const auto transform_id = transforms.Insert({});
+  DCHECK_EQ_F(transform_id.Index(), entity_id.Index());
 
-    const auto position_id = positions.Insert(transform_desc.position);
-    DCHECK_EQ_F(position_id.Index(), entity_id.Index());
+  const auto position_id = positions.Insert(transform_desc.position);
+  DCHECK_EQ_F(position_id.Index(), entity_id.Index());
 
-    const auto rotation_id = rotations.Insert(transform_desc.rotation);
-    DCHECK_EQ_F(rotation_id.Index(), entity_id.Index());
+  const auto rotation_id = rotations.Insert(transform_desc.rotation);
+  DCHECK_EQ_F(rotation_id.Index(), entity_id.Index());
 
-    const auto scale_id = scales.Insert(transform_desc.scale);
-    DCHECK_EQ_F(scale_id.Index(), entity_id.Index());
+  const auto scale_id = scales.Insert(transform_desc.scale);
+  DCHECK_EQ_F(scale_id.Index(), entity_id.Index());
 
-    return Transform(transform_id);
+  return Transform(transform_id);
 }
 
 /**
@@ -77,114 +76,117 @@ auto SceneNode::CreateTransform(
  */
 auto SceneNode::RemoveTransform(Transform& transform) -> size_t
 {
-    if (!transform.IsValid()) {
-        return 0;
-    }
+  if (!transform.IsValid()) {
+    return 0;
+  }
 
-    auto removed = transforms.Erase(transform.GetId());
-    CHECK_EQ_F(1, removed, "transform not in the resource table");
-    removed = positions.Erase(transform.GetId());
-    CHECK_EQ_F(1, removed, "transform-position not in the resource table");
-    removed = rotations.Erase(transform.GetId());
-    CHECK_EQ_F(1, removed, "transform-rotation not in the resource table");
-    removed = scales.Erase(transform.GetId());
-    CHECK_EQ_F(1, removed, "transform-scale not in the resource table");
+  auto removed = transforms.Erase(transform.GetId());
+  CHECK_EQ_F(1, removed, "transform not in the resource table");
+  removed = positions.Erase(transform.GetId());
+  CHECK_EQ_F(1, removed, "transform-position not in the resource table");
+  removed = rotations.Erase(transform.GetId());
+  CHECK_EQ_F(1, removed, "transform-rotation not in the resource table");
+  removed = scales.Erase(transform.GetId());
+  CHECK_EQ_F(1, removed, "transform-scale not in the resource table");
 
-    transform.Invalidate();
-    return removed;
+  transform.Invalidate();
+  return removed;
 }
 
 auto Transform::GetPosition() const noexcept -> glm::vec3
 {
-    CHECK_F(IsValid());
-    std::unique_lock lock(entity_mutex);
-    return positions.ItemAt(GetId());
+  CHECK_F(IsValid());
+  std::unique_lock lock(entity_mutex);
+  return positions.ItemAt(GetId());
 }
 
 auto Transform::GetRotation() const noexcept -> glm::quat
 {
-    CHECK_F(IsValid());
-    std::unique_lock lock(entity_mutex);
-    return rotations.ItemAt(GetId());
+  CHECK_F(IsValid());
+  std::unique_lock lock(entity_mutex);
+  return rotations.ItemAt(GetId());
 }
 
 auto Transform::GetScale() const noexcept -> glm::vec3
 {
-    CHECK_F(IsValid());
-    std::unique_lock lock(entity_mutex);
-    return scales.ItemAt(GetId());
+  CHECK_F(IsValid());
+  std::unique_lock lock(entity_mutex);
+  return scales.ItemAt(GetId());
 }
 void Transform::SetPosition(const glm::vec3 position) const noexcept
 {
-    CHECK_F(IsValid());
-    std::unique_lock lock(entity_mutex);
-    positions.ItemAt(GetId()) = position;
+  CHECK_F(IsValid());
+  std::unique_lock lock(entity_mutex);
+  positions.ItemAt(GetId()) = position;
 }
 void Transform::SetRotation(const glm::quat rotation) const noexcept
 {
-    CHECK_F(IsValid());
-    std::unique_lock lock(entity_mutex);
-    rotations.ItemAt(GetId()) = rotation;
+  CHECK_F(IsValid());
+  std::unique_lock lock(entity_mutex);
+  rotations.ItemAt(GetId()) = rotation;
 }
 void Transform::SetScale(const glm::vec3 scale) const noexcept
 {
-    CHECK_F(IsValid());
-    std::unique_lock lock(entity_mutex);
-    scales.ItemAt(GetId()) = scale;
+  CHECK_F(IsValid());
+  std::unique_lock lock(entity_mutex);
+  scales.ItemAt(GetId()) = scale;
 }
 
-auto oxygen::world::entity::CreateSceneNode(const SceneNodeDescriptor& entity_desc) -> SceneNode
+auto oxygen::world::entity::CreateSceneNode(
+  const SceneNodeDescriptor& entity_desc) -> SceneNode
 {
-    // All game entities must have a transform component.
-    CHECK_NOTNULL_F(entity_desc.transform, "all game entities must have a transform component!");
+  // All game entities must have a transform component.
+  CHECK_NOTNULL_F(entity_desc.transform,
+    "all game entities must have a transform component!");
 
-    std::unique_lock lock(entity_mutex);
+  std::unique_lock lock(entity_mutex);
 
-    const auto entity_id = entities.Insert({});
-    if (!entity_id.IsValid()) {
-        return {};
-    }
+  const auto entity_id = entities.Insert({});
+  if (!entity_id.IsValid()) {
+    return {};
+  }
 
-    // ReSharper disable once CppTooWideScopeInitStatement (we use it for DCHECK)
-    const auto transform = SceneNode::CreateTransform(*entity_desc.transform, entity_id);
-    if (!transform.IsValid()) {
-        entities.Erase(entity_id);
-        return {};
-    }
-    DCHECK_EQ_F(transform.GetId().Index(), entity_id.Index());
-    DCHECK_EQ_F(transform.GetId().Generation(), entity_id.Generation());
+  // ReSharper disable once CppTooWideScopeInitStatement (we use it for DCHECK)
+  const auto transform
+    = SceneNode::CreateTransform(*entity_desc.transform, entity_id);
+  if (!transform.IsValid()) {
+    entities.Erase(entity_id);
+    return {};
+  }
+  DCHECK_EQ_F(transform.GetId().Index(), entity_id.Index());
+  DCHECK_EQ_F(transform.GetId().Generation(), entity_id.Generation());
 
-    LOG_F(INFO, "Game entity created: {}", entity_id.ToString());
-    return SceneNode(entity_id);
+  LOG_F(INFO, "Game entity created: {}", entity_id.ToString());
+  return SceneNode(entity_id);
 }
 
 auto oxygen::world::entity::RemoveSceneNode(SceneNode& entity) -> size_t
 {
-    if (!entity.IsValid()) {
-        return 0;
-    }
+  if (!entity.IsValid()) {
+    return 0;
+  }
 
-    std::unique_lock lock(entity_mutex);
+  std::unique_lock lock(entity_mutex);
 
-    const auto entity_id = entity.GetId().ToString(); // keep for logging later
-    const auto entity_removed = entities.Erase(entity.GetId());
-    if (entity_removed != 0) {
-        auto transform = entity.GetTransform();
-        CHECK_EQ_F(1, SceneNode::RemoveTransform(transform));
-        entity.Invalidate();
+  const auto entity_id = entity.GetId().ToString(); // keep for logging later
+  const auto entity_removed = entities.Erase(entity.GetId());
+  if (entity_removed != 0) {
+    auto transform = entity.GetTransform();
+    CHECK_EQ_F(1, SceneNode::RemoveTransform(transform));
+    entity.Invalidate();
 
-        LOG_F(INFO, "Game entity removed: {}", entity_id);
-    }
-    return entity_removed;
+    LOG_F(INFO, "Game entity removed: {}", entity_id);
+  }
+  return entity_removed;
 }
 
 auto SceneNode::GetTransform() const noexcept -> Transform
 {
-    if (!IsValid()) {
-        return {};
-    }
+  if (!IsValid()) {
+    return {};
+  }
 
-    auto transform = Transform(GetTransformId());
-    CHECK_F(transform.IsValid());
-    return transform;
+  auto transform = Transform(GetTransformId());
+  CHECK_F(transform.IsValid());
+  return transform;
 }

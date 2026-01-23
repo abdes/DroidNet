@@ -52,9 +52,9 @@ struct ImGui_ImplDX12_InitInfo {
     D3D12_GPU_DESCRIPTOR_HANDLE gpu_desc_handle);
 #  ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
   D3D12_CPU_DESCRIPTOR_HANDLE
-    LegacySingleSrvCpuDescriptor; // To facilitate transition from single
-                                  // descriptor to allocator callback, you may
-                                  // use those.
+  LegacySingleSrvCpuDescriptor; // To facilitate transition from single
+                                // descriptor to allocator callback, you may
+                                // use those.
   D3D12_GPU_DESCRIPTOR_HANDLE LegacySingleSrvGpuDescriptor;
 #  endif
 

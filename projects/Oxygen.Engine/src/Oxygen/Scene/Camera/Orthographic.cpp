@@ -27,8 +27,7 @@ auto OrthographicCamera::ProjectionMatrix() const -> Mat4
 {
   // Engine canonical orthographic projection: right-handed, z in [0,1], no
   // Y-flip.
-  Mat4 proj
-    = glm::orthoRH_ZO(left_, right_, bottom_, top_, near_, far_);
+  Mat4 proj = glm::orthoRH_ZO(left_, right_, bottom_, top_, near_, far_);
   return proj;
 }
 
@@ -49,8 +48,8 @@ void OrthographicCamera::UpdateDependencies(
  @return World-space position at the near plane.
  @see WorldToScreen
 */
-auto OrthographicCamera::ScreenToWorld(const Vec2& p,
-  const Vec4& viewport) const -> Vec2
+auto OrthographicCamera::ScreenToWorld(
+  const Vec2& p, const Vec4& viewport) const -> Vec2
 {
   DCHECK_NOTNULL_F(transform_);
   const float x = (2.0F * (p.x - viewport.x) / viewport.z) - 1.0F;
@@ -72,8 +71,8 @@ auto OrthographicCamera::ScreenToWorld(const Vec2& p,
  @return Screen-space point (pixels).
  @see ScreenToWorld
 */
-auto OrthographicCamera::WorldToScreen(const Vec2& p,
-  const Vec4& viewport) const -> Vec2
+auto OrthographicCamera::WorldToScreen(
+  const Vec2& p, const Vec4& viewport) const -> Vec2
 {
   DCHECK_NOTNULL_F(transform_);
   const glm::vec4 world(p.x, p.y, 0.0F, 1.0F);

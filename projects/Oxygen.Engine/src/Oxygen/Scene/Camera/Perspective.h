@@ -179,12 +179,12 @@ public:
 
   //! Maps a screen-space point (in pixels) to a world-space position at the
   //! near plane.
-  OXGN_SCN_NDAPI auto ScreenToWorld(const Vec2& p,
-    const Vec4& viewport) const -> Vec2;
+  OXGN_SCN_NDAPI auto ScreenToWorld(const Vec2& p, const Vec4& viewport) const
+    -> Vec2;
 
   //! Projects a world-space position to screen-space (pixels).
-  OXGN_SCN_NDAPI auto WorldToScreen(const Vec2& p,
-    const Vec4& viewport) const -> Vec2;
+  OXGN_SCN_NDAPI auto WorldToScreen(const Vec2& p, const Vec4& viewport) const
+    -> Vec2;
 
   //! Returns the set viewport, or a default rectangle if unset.
   OXGN_SCN_NDAPI auto ActiveViewport() const -> ViewPort;

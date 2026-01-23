@@ -50,9 +50,9 @@ protected:
 
   // Helper: Create a game object with specific transform and flags
   [[nodiscard]] auto CreateGameObject(const std::string& name,
-    const ::oxygen::Vec3& position = ::oxygen::Vec3{ 0.0f, 0.0f, 0.0f },
-    const ::oxygen::Vec3& scale = ::oxygen::Vec3{ 1.0f, 1.0f, 1.0f }, const bool visible = true,
-    const bool static_obj = false) const -> SceneNode
+    const ::oxygen::Vec3& position = ::oxygen::Vec3 { 0.0f, 0.0f, 0.0f },
+    const ::oxygen::Vec3& scale = ::oxygen::Vec3 { 1.0f, 1.0f, 1.0f },
+    const bool visible = true, const bool static_obj = false) const -> SceneNode
   {
     const auto flags = SceneNode::Flags {}
                          .SetFlag(SceneNodeFlags::kVisible,
@@ -95,7 +95,8 @@ protected:
 
   // Helper: Verify node has expected transform values
   static auto ExpectTransformValues(const SceneNode& node,
-    const ::oxygen::Vec3& expected_pos, const ::oxygen::Vec3& expected_scale) -> void
+    const ::oxygen::Vec3& expected_pos, const ::oxygen::Vec3& expected_scale)
+    -> void
   {
     const auto transform = node.GetTransform();
     const auto pos = transform.GetLocalPosition();
@@ -176,13 +177,14 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, NodeLifecycle_CreateModifyDestroy)
   EXPECT_EQ(scene_->GetNodeCount(), 0);
 
   // Act: Create a game object
-  auto player
-    = CreateGameObject("Player", ::oxygen::Vec3{ 10.0f, 5.0f, 0.0f }, ::oxygen::Vec3{ 1.5f, 1.5f, 1.5f });
+  auto player = CreateGameObject("Player", ::oxygen::Vec3 { 10.0f, 5.0f, 0.0f },
+    ::oxygen::Vec3 { 1.5f, 1.5f, 1.5f });
 
   // Assert: Node should be created correctly
   EXPECT_TRUE(player.IsValid());
   EXPECT_EQ(scene_->GetNodeCount(), 1);
-  ExpectTransformValues(player, ::oxygen::Vec3{ 10.0f, 5.0f, 0.0f }, ::oxygen::Vec3{ 1.5f, 1.5f, 1.5f });
+  ExpectTransformValues(player, ::oxygen::Vec3 { 10.0f, 5.0f, 0.0f },
+    ::oxygen::Vec3 { 1.5f, 1.5f, 1.5f });
 
   // Act: Modify the game object
   const auto impl_opt = player.GetImpl();
@@ -191,11 +193,12 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, NodeLifecycle_CreateModifyDestroy)
   impl.SetName("MainPlayer");
 
   auto transform = player.GetTransform();
-  transform.SetLocalPosition(::oxygen::Vec3{ 20.0f, 10.0f, 5.0f });
+  transform.SetLocalPosition(::oxygen::Vec3 { 20.0f, 10.0f, 5.0f });
 
   // Assert: Modifications should be preserved
   EXPECT_EQ(impl.GetName(), "MainPlayer");
-  ExpectTransformValues(player, ::oxygen::Vec3{ 20.0f, 10.0f, 5.0f }, ::oxygen::Vec3{ 1.5f, 1.5f, 1.5f });
+  ExpectTransformValues(player, ::oxygen::Vec3 { 20.0f, 10.0f, 5.0f },
+    ::oxygen::Vec3 { 1.5f, 1.5f, 1.5f });
 
   // Act: Destroy the node
   scene_->DestroyNode(player);
@@ -268,7 +271,7 @@ NOLINT_TEST_F(
 
   // Act: Move vehicle and verify all parts move with it (conceptually)
   auto vehicle_transform = vehicle.GetTransform();
-  vehicle_transform.SetLocalPosition(::oxygen::Vec3{ 100.0f, 0.0f, 50.0f });
+  vehicle_transform.SetLocalPosition(::oxygen::Vec3 { 100.0f, 0.0f, 50.0f });
 
   // Assert: Verify scene integrity after modification
   VerifySceneIntegrity();
@@ -488,8 +491,8 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, TransformHierarchy_WorldSpaceTransforms)
   auto child = child_opt.value();
 
   auto child_transform = child.GetTransform();
-  child_transform.SetLocalPosition(::oxygen::Vec3{ 5.0f, 10.0f, 15.0f });
-  child_transform.SetLocalScale(::oxygen::Vec3{ 0.5f, 0.5f, 0.5f });
+  child_transform.SetLocalPosition(::oxygen::Vec3 { 5.0f, 10.0f, 15.0f });
+  child_transform.SetLocalScale(::oxygen::Vec3 { 0.5f, 0.5f, 0.5f });
 
   // Act: Update transforms to compute world space values
   const auto parent_impl_opt = parent.GetImpl();
@@ -531,7 +534,7 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, TransformOperations_LocalAndWorldSpace)
   auto transform = object.GetTransform();
 
   // Act: Perform various transform operations
-  transform.SetLocalPosition(::oxygen::Vec3{ 10.0f, 0.0f, 0.0f });
+  transform.SetLocalPosition(::oxygen::Vec3 { 10.0f, 0.0f, 0.0f });
 
   // Apply local translation (should be in object's local space)
   const auto impl_opt = object.GetImpl();
@@ -766,7 +769,8 @@ NOLINT_TEST_F(
 
     // Act: Modify object to test functionality
     auto transform = object.GetTransform();
-    transform.SetLocalPosition(::oxygen::Vec3{ static_cast<float>(i), 0.0f, 0.0f });
+    transform.SetLocalPosition(
+      ::oxygen::Vec3 { static_cast<float>(i), 0.0f, 0.0f });
 
     // Act: Verify modification worked
     auto position = transform.GetLocalPosition();

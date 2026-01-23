@@ -35,8 +35,8 @@ namespace oxygen::engine::sceneprep::testing {
 }
 
 [[nodiscard]] inline auto MakeSubMeshDesc(const glm::vec3 bounds_min,
-  const glm::vec3 bounds_max,
-  const uint32_t mesh_view_count = 1U) -> oxygen::data::pak::SubMeshDesc
+  const glm::vec3 bounds_max, const uint32_t mesh_view_count = 1U)
+  -> oxygen::data::pak::SubMeshDesc
 {
   oxygen::data::pak::SubMeshDesc desc {
     .name = {},
@@ -60,12 +60,10 @@ inline auto MakeSimpleMesh(const uint32_t lod, const std::string_view name = {})
   std::vector<uint32_t> idx = { 0, 1, 2 };
   const auto mat = MaterialAsset::CreateDefault();
   auto builder = MeshBuilder(lod, name);
-  const auto mesh_desc
-    = MakeStandardMeshDesc(glm::vec3(-1.0f, 0.0f, 0.0f),
-      glm::vec3(1.0f, 1.0f, 0.0f));
-  const auto submesh_desc
-    = MakeSubMeshDesc(glm::vec3(-1.0f, 0.0f, 0.0f),
-      glm::vec3(1.0f, 1.0f, 0.0f));
+  const auto mesh_desc = MakeStandardMeshDesc(
+    glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 0.0f));
+  const auto submesh_desc = MakeSubMeshDesc(
+    glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 0.0f));
   builder.WithVertices(vertices).WithIndices(idx).WithDescriptor(mesh_desc);
   builder.BeginSubMesh("S0", mat)
     .WithDescriptor(submesh_desc)
@@ -91,12 +89,10 @@ inline auto MakeMeshWithSubmeshes(const uint32_t lod,
   std::vector<uint32_t> idx = { 0, 1, 2, 2, 3, 0 };
   const auto mat = MaterialAsset::CreateDefault();
   MeshBuilder b(lod);
-  const auto mesh_desc
-    = MakeStandardMeshDesc(glm::vec3(-1.0f, -1.0f, 0.0f),
-      glm::vec3(1.0f, 1.0f, 0.0f));
-  const auto submesh_desc
-    = MakeSubMeshDesc(glm::vec3(-1.0f, -1.0f, 0.0f),
-      glm::vec3(1.0f, 1.0f, 0.0f));
+  const auto mesh_desc = MakeStandardMeshDesc(
+    glm::vec3(-1.0f, -1.0f, 0.0f), glm::vec3(1.0f, 1.0f, 0.0f));
+  const auto submesh_desc = MakeSubMeshDesc(
+    glm::vec3(-1.0f, -1.0f, 0.0f), glm::vec3(1.0f, 1.0f, 0.0f));
   b.WithVertices(vertices).WithIndices(idx).WithDescriptor(mesh_desc);
   for (std::size_t s = 0; s < submesh_count; ++s) {
     b.BeginSubMesh("SM", mat)

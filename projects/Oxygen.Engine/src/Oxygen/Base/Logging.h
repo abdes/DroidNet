@@ -472,13 +472,11 @@ LOGURU_EXPORT bool add_file(
   const char* path, FileMode mode, Verbosity verbosity);
 
 LOGURU_EXPORT // Send logs to syslog with LOG_USER facility (see next call)
-  bool
-  add_syslog(const char* app_name, Verbosity verbosity);
+  bool add_syslog(const char* app_name, Verbosity verbosity);
 LOGURU_EXPORT // Send logs to syslog with your own choice of facility (LOG_USER,
               // LOG_AUTH,
   // ...) see loguru.cpp: syslog_log() for more details.
-  bool
-  add_syslog(const char* app_name, Verbosity verbosity, int facility);
+  bool add_syslog(const char* app_name, Verbosity verbosity, int facility);
 
 /*  Will be called right before abort().
         You can for instance use this to print custom error messages, or throw

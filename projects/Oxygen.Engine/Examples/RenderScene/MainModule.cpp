@@ -224,265 +224,275 @@ private:
 
       swap_.scene = std::make_shared<scene::Scene>("RenderScene");
 
-    // Check for mutually exclusive sky systems
-    const auto sky_atmo_record = asset->TryGetSkyAtmosphereEnvironment();
-    const auto sky_sphere_record = asset->TryGetSkySphereEnvironment();
+      // Check for mutually exclusive sky systems
+      const auto sky_atmo_record = asset->TryGetSkyAtmosphereEnvironment();
+      const auto sky_sphere_record = asset->TryGetSkySphereEnvironment();
 
-    const bool sky_atmo_enabled
-      = sky_atmo_record && sky_atmo_record->enabled != 0U;
-    const bool sky_sphere_enabled
-      = sky_sphere_record && sky_sphere_record->enabled != 0U;
+      const bool sky_atmo_enabled
+        = sky_atmo_record && sky_atmo_record->enabled != 0U;
+      const bool sky_sphere_enabled
+        = sky_sphere_record && sky_sphere_record->enabled != 0U;
 
-    if (sky_atmo_enabled && sky_sphere_enabled) {
-      LOG_F(WARNING,
-        "SceneLoader: Both SkyAtmosphere and SkySphere are enabled in the "
-        "scene. They are mutually exclusive; SkyAtmosphere will be used.");
-    }
-
-    auto environment = std::make_unique<scene::SceneEnvironment>();
-
-    // SkyAtmosphere takes priority over SkySphere
-    if (sky_atmo_enabled) {
-      auto& atmo = environment->AddSystem<scene::environment::SkyAtmosphere>();
-      atmo.SetPlanetRadiusMeters(sky_atmo_record->planet_radius_m);
-      atmo.SetAtmosphereHeightMeters(sky_atmo_record->atmosphere_height_m);
-      atmo.SetGroundAlbedoRgb(
-        oxygen::Vec3 { sky_atmo_record->ground_albedo_rgb[0],
-          sky_atmo_record->ground_albedo_rgb[1],
-          sky_atmo_record->ground_albedo_rgb[2] });
-      atmo.SetRayleighScatteringRgb(
-        oxygen::Vec3 { sky_atmo_record->rayleigh_scattering_rgb[0],
-          sky_atmo_record->rayleigh_scattering_rgb[1],
-          sky_atmo_record->rayleigh_scattering_rgb[2] });
-      atmo.SetRayleighScaleHeightMeters(
-        sky_atmo_record->rayleigh_scale_height_m);
-      atmo.SetMieScatteringRgb(
-        oxygen::Vec3 { sky_atmo_record->mie_scattering_rgb[0],
-          sky_atmo_record->mie_scattering_rgb[1],
-          sky_atmo_record->mie_scattering_rgb[2] });
-      atmo.SetMieScaleHeightMeters(sky_atmo_record->mie_scale_height_m);
-      atmo.SetMieAnisotropy(sky_atmo_record->mie_g);
-      atmo.SetAbsorptionRgb(oxygen::Vec3 { sky_atmo_record->absorption_rgb[0],
-        sky_atmo_record->absorption_rgb[1],
-        sky_atmo_record->absorption_rgb[2] });
-      atmo.SetAbsorptionScaleHeightMeters(
-        sky_atmo_record->absorption_scale_height_m);
-      atmo.SetMultiScatteringFactor(sky_atmo_record->multi_scattering_factor);
-      atmo.SetSunDiskEnabled(sky_atmo_record->sun_disk_enabled != 0U);
-      atmo.SetSunDiskAngularRadiusRadians(
-        sky_atmo_record->sun_disk_angular_radius_radians);
-      atmo.SetAerialPerspectiveDistanceScale(
-        sky_atmo_record->aerial_perspective_distance_scale);
-      LOG_F(INFO, "SceneLoader: Applied SkyAtmosphere environment");
-    } else if (sky_sphere_enabled) {
-      auto& sky_sphere
-        = environment->AddSystem<scene::environment::SkySphere>();
-
-      if (sky_sphere_record->source
-        == static_cast<std::uint32_t>(
-          scene::environment::SkySphereSource::kSolidColor)) {
-        sky_sphere.SetSource(scene::environment::SkySphereSource::kSolidColor);
-      } else {
+      if (sky_atmo_enabled && sky_sphere_enabled) {
         LOG_F(WARNING,
-          "SceneLoader: SkySphere cubemap source requested, but scene-authored "
-          "cubemap AssetKey resolution is not implemented in this example. "
-          "Keeping solid color; use the Environment panel Skybox Loader to "
-          "bind a cubemap at runtime.");
-        sky_sphere.SetSource(scene::environment::SkySphereSource::kSolidColor);
+          "SceneLoader: Both SkyAtmosphere and SkySphere are enabled in the "
+          "scene. They are mutually exclusive; SkyAtmosphere will be used.");
       }
 
-      sky_sphere.SetSolidColorRgb(
-        oxygen::Vec3 { sky_sphere_record->solid_color_rgb[0],
-          sky_sphere_record->solid_color_rgb[1],
-          sky_sphere_record->solid_color_rgb[2] });
-      sky_sphere.SetIntensity(sky_sphere_record->intensity);
-      sky_sphere.SetRotationRadians(sky_sphere_record->rotation_radians);
-      sky_sphere.SetTintRgb(oxygen::Vec3 { sky_sphere_record->tint_rgb[0],
-        sky_sphere_record->tint_rgb[1], sky_sphere_record->tint_rgb[2] });
-      LOG_F(INFO,
-        "SceneLoader: Applied SkySphere environment (solid color source)");
-    }
+      auto environment = std::make_unique<scene::SceneEnvironment>();
 
-    // Load Fog environment
-    if (const auto fog_record = asset->TryGetFogEnvironment();
-      fog_record && fog_record->enabled != 0U) {
-      auto& fog = environment->AddSystem<scene::environment::Fog>();
-      fog.SetModel(
-        static_cast<scene::environment::FogModel>(fog_record->model));
-      fog.SetDensity(fog_record->density);
-      fog.SetHeightFalloff(fog_record->height_falloff);
-      fog.SetHeightOffsetMeters(fog_record->height_offset_m);
-      fog.SetStartDistanceMeters(fog_record->start_distance_m);
-      fog.SetMaxOpacity(fog_record->max_opacity);
-      fog.SetAlbedoRgb(oxygen::Vec3 { fog_record->albedo_rgb[0],
-        fog_record->albedo_rgb[1], fog_record->albedo_rgb[2] });
-      fog.SetAnisotropy(fog_record->anisotropy_g);
-      fog.SetScatteringIntensity(fog_record->scattering_intensity);
-      LOG_F(INFO, "SceneLoader: Applied Fog environment");
-    }
+      // SkyAtmosphere takes priority over SkySphere
+      if (sky_atmo_enabled) {
+        auto& atmo
+          = environment->AddSystem<scene::environment::SkyAtmosphere>();
+        atmo.SetPlanetRadiusMeters(sky_atmo_record->planet_radius_m);
+        atmo.SetAtmosphereHeightMeters(sky_atmo_record->atmosphere_height_m);
+        atmo.SetGroundAlbedoRgb(
+          oxygen::Vec3 { sky_atmo_record->ground_albedo_rgb[0],
+            sky_atmo_record->ground_albedo_rgb[1],
+            sky_atmo_record->ground_albedo_rgb[2] });
+        atmo.SetRayleighScatteringRgb(
+          oxygen::Vec3 { sky_atmo_record->rayleigh_scattering_rgb[0],
+            sky_atmo_record->rayleigh_scattering_rgb[1],
+            sky_atmo_record->rayleigh_scattering_rgb[2] });
+        atmo.SetRayleighScaleHeightMeters(
+          sky_atmo_record->rayleigh_scale_height_m);
+        atmo.SetMieScatteringRgb(
+          oxygen::Vec3 { sky_atmo_record->mie_scattering_rgb[0],
+            sky_atmo_record->mie_scattering_rgb[1],
+            sky_atmo_record->mie_scattering_rgb[2] });
+        atmo.SetMieScaleHeightMeters(sky_atmo_record->mie_scale_height_m);
+        atmo.SetMieAnisotropy(sky_atmo_record->mie_g);
+        atmo.SetAbsorptionRgb(oxygen::Vec3 { sky_atmo_record->absorption_rgb[0],
+          sky_atmo_record->absorption_rgb[1],
+          sky_atmo_record->absorption_rgb[2] });
+        atmo.SetAbsorptionScaleHeightMeters(
+          sky_atmo_record->absorption_scale_height_m);
+        atmo.SetMultiScatteringFactor(sky_atmo_record->multi_scattering_factor);
+        atmo.SetSunDiskEnabled(sky_atmo_record->sun_disk_enabled != 0U);
+        atmo.SetSunDiskAngularRadiusRadians(
+          sky_atmo_record->sun_disk_angular_radius_radians);
+        atmo.SetAerialPerspectiveDistanceScale(
+          sky_atmo_record->aerial_perspective_distance_scale);
+        LOG_F(INFO, "SceneLoader: Applied SkyAtmosphere environment");
+      } else if (sky_sphere_enabled) {
+        auto& sky_sphere
+          = environment->AddSystem<scene::environment::SkySphere>();
 
-    // Load SkyLight environment
-    if (const auto sky_light_record = asset->TryGetSkyLightEnvironment();
-      sky_light_record && sky_light_record->enabled != 0U) {
-      auto& sky_light = environment->AddSystem<scene::environment::SkyLight>();
-      sky_light.SetSource(static_cast<scene::environment::SkyLightSource>(
-        sky_light_record->source));
-      if (sky_light.GetSource()
-        == scene::environment::SkyLightSource::kSpecifiedCubemap) {
+        if (sky_sphere_record->source
+          == static_cast<std::uint32_t>(
+            scene::environment::SkySphereSource::kSolidColor)) {
+          sky_sphere.SetSource(
+            scene::environment::SkySphereSource::kSolidColor);
+        } else {
+          LOG_F(WARNING,
+            "SceneLoader: SkySphere cubemap source requested, but "
+            "scene-authored "
+            "cubemap AssetKey resolution is not implemented in this example. "
+            "Keeping solid color; use the Environment panel Skybox Loader to "
+            "bind a cubemap at runtime.");
+          sky_sphere.SetSource(
+            scene::environment::SkySphereSource::kSolidColor);
+        }
+
+        sky_sphere.SetSolidColorRgb(
+          oxygen::Vec3 { sky_sphere_record->solid_color_rgb[0],
+            sky_sphere_record->solid_color_rgb[1],
+            sky_sphere_record->solid_color_rgb[2] });
+        sky_sphere.SetIntensity(sky_sphere_record->intensity);
+        sky_sphere.SetRotationRadians(sky_sphere_record->rotation_radians);
+        sky_sphere.SetTintRgb(oxygen::Vec3 { sky_sphere_record->tint_rgb[0],
+          sky_sphere_record->tint_rgb[1], sky_sphere_record->tint_rgb[2] });
         LOG_F(INFO,
-          "SceneLoader: SkyLight specifies a cubemap AssetKey, but this "
-          "example "
-          "does not yet resolve it to a ResourceKey. Use the Environment panel "
-          "Skybox Loader to bind a cubemap at runtime.");
-      }
-      sky_light.SetIntensity(sky_light_record->intensity);
-      sky_light.SetTintRgb(oxygen::Vec3 { sky_light_record->tint_rgb[0],
-        sky_light_record->tint_rgb[1], sky_light_record->tint_rgb[2] });
-      sky_light.SetDiffuseIntensity(sky_light_record->diffuse_intensity);
-      sky_light.SetSpecularIntensity(sky_light_record->specular_intensity);
-      LOG_F(INFO, "SceneLoader: Applied SkyLight environment");
-    }
-
-    // Load VolumetricClouds environment
-    if (const auto clouds_record = asset->TryGetVolumetricCloudsEnvironment();
-      clouds_record && clouds_record->enabled != 0U) {
-      auto& clouds
-        = environment->AddSystem<scene::environment::VolumetricClouds>();
-      clouds.SetBaseAltitudeMeters(clouds_record->base_altitude_m);
-      clouds.SetLayerThicknessMeters(clouds_record->layer_thickness_m);
-      clouds.SetCoverage(clouds_record->coverage);
-      clouds.SetDensity(clouds_record->density);
-      clouds.SetAlbedoRgb(oxygen::Vec3 { clouds_record->albedo_rgb[0],
-        clouds_record->albedo_rgb[1], clouds_record->albedo_rgb[2] });
-      clouds.SetExtinctionScale(clouds_record->extinction_scale);
-      clouds.SetPhaseAnisotropy(clouds_record->phase_g);
-      clouds.SetWindDirectionWs(oxygen::Vec3 { clouds_record->wind_dir_ws[0],
-        clouds_record->wind_dir_ws[1], clouds_record->wind_dir_ws[2] });
-      clouds.SetWindSpeedMps(clouds_record->wind_speed_mps);
-      clouds.SetShadowStrength(clouds_record->shadow_strength);
-      LOG_F(INFO, "SceneLoader: Applied VolumetricClouds environment");
-    }
-
-    // Load PostProcessVolume environment
-    if (const auto pp_record = asset->TryGetPostProcessVolumeEnvironment();
-      pp_record && pp_record->enabled != 0U) {
-      auto& pp
-        = environment->AddSystem<scene::environment::PostProcessVolume>();
-      pp.SetToneMapper(
-        static_cast<scene::environment::ToneMapper>(pp_record->tone_mapper));
-      pp.SetExposureMode(static_cast<scene::environment::ExposureMode>(
-        pp_record->exposure_mode));
-      pp.SetExposureCompensationEv(pp_record->exposure_compensation_ev);
-      pp.SetAutoExposureRangeEv(
-        pp_record->auto_exposure_min_ev, pp_record->auto_exposure_max_ev);
-      pp.SetAutoExposureAdaptationSpeeds(
-        pp_record->auto_exposure_speed_up, pp_record->auto_exposure_speed_down);
-      pp.SetBloomIntensity(pp_record->bloom_intensity);
-      pp.SetBloomThreshold(pp_record->bloom_threshold);
-      pp.SetSaturation(pp_record->saturation);
-      pp.SetContrast(pp_record->contrast);
-      pp.SetVignetteIntensity(pp_record->vignette_intensity);
-      LOG_F(INFO, "SceneLoader: Applied PostProcessVolume environment");
-    }
-
-    swap_.scene->SetEnvironment(std::move(environment));
-
-    // Instantiate nodes (synchronous part)
-    using oxygen::data::pak::DirectionalLightRecord;
-    using oxygen::data::pak::NodeRecord;
-    using oxygen::data::pak::OrthographicCameraRecord;
-    using oxygen::data::pak::PerspectiveCameraRecord;
-    using oxygen::data::pak::PointLightRecord;
-    using oxygen::data::pak::RenderableRecord;
-    using oxygen::data::pak::SpotLightRecord;
-
-    const auto nodes = asset->GetNodes();
-    runtime_nodes_.reserve(nodes.size());
-
-    LOG_F(INFO,
-      "SceneLoader: Scene summary: nodes={} renderables={} "
-      "perspective_cameras={} orthographic_cameras={} "
-      "directional_lights={} point_lights={} spot_lights={}",
-      nodes.size(), asset->GetComponents<RenderableRecord>().size(),
-      asset->GetComponents<PerspectiveCameraRecord>().size(),
-      asset->GetComponents<OrthographicCameraRecord>().size(),
-      asset->GetComponents<DirectionalLightRecord>().size(),
-      asset->GetComponents<PointLightRecord>().size(),
-      asset->GetComponents<SpotLightRecord>().size());
-
-    for (size_t i = 0; i < nodes.size(); ++i) {
-      const NodeRecord& node = nodes[i];
-
-      std::string_view name_view = asset->GetNodeName(node);
-      std::string name;
-      if (name_view.empty()) {
-        name = "Node" + std::to_string(i);
-      } else {
-        name.assign(name_view.begin(), name_view.end());
+          "SceneLoader: Applied SkySphere environment (solid color source)");
       }
 
-      auto n = swap_.scene->CreateNode(name);
-      auto tf = n.GetTransform();
-      tf.SetLocalPosition(glm::vec3(
-        node.translation[0], node.translation[1], node.translation[2]));
-      tf.SetLocalRotation(glm::quat(node.rotation[3], node.rotation[0],
-        node.rotation[1], node.rotation[2]));
-      tf.SetLocalScale(glm::vec3(node.scale[0], node.scale[1], node.scale[2]));
-
-      runtime_nodes_.push_back(std::move(n));
-    }
-
-    // Apply hierarchy using parent indices.
-    for (size_t i = 0; i < nodes.size(); ++i) {
-      const auto parent_index = static_cast<size_t>(nodes[i].parent_index);
-      if (parent_index == i) {
-        continue;
-      }
-      if (parent_index >= runtime_nodes_.size()) {
-        LOG_F(WARNING, "Invalid parent_index {} for node {}", parent_index, i);
-        continue;
+      // Load Fog environment
+      if (const auto fog_record = asset->TryGetFogEnvironment();
+        fog_record && fog_record->enabled != 0U) {
+        auto& fog = environment->AddSystem<scene::environment::Fog>();
+        fog.SetModel(
+          static_cast<scene::environment::FogModel>(fog_record->model));
+        fog.SetDensity(fog_record->density);
+        fog.SetHeightFalloff(fog_record->height_falloff);
+        fog.SetHeightOffsetMeters(fog_record->height_offset_m);
+        fog.SetStartDistanceMeters(fog_record->start_distance_m);
+        fog.SetMaxOpacity(fog_record->max_opacity);
+        fog.SetAlbedoRgb(oxygen::Vec3 { fog_record->albedo_rgb[0],
+          fog_record->albedo_rgb[1], fog_record->albedo_rgb[2] });
+        fog.SetAnisotropy(fog_record->anisotropy_g);
+        fog.SetScatteringIntensity(fog_record->scattering_intensity);
+        LOG_F(INFO, "SceneLoader: Applied Fog environment");
       }
 
-      const bool ok = swap_.scene->ReparentNode(runtime_nodes_[i],
-        runtime_nodes_[parent_index], /*preserve_world_transform=*/false);
-      if (!ok) {
-        LOG_F(WARNING, "Failed to reparent node {} under {}", i, parent_index);
+      // Load SkyLight environment
+      if (const auto sky_light_record = asset->TryGetSkyLightEnvironment();
+        sky_light_record && sky_light_record->enabled != 0U) {
+        auto& sky_light
+          = environment->AddSystem<scene::environment::SkyLight>();
+        sky_light.SetSource(static_cast<scene::environment::SkyLightSource>(
+          sky_light_record->source));
+        if (sky_light.GetSource()
+          == scene::environment::SkyLightSource::kSpecifiedCubemap) {
+          LOG_F(INFO,
+            "SceneLoader: SkyLight specifies a cubemap AssetKey, but this "
+            "example "
+            "does not yet resolve it to a ResourceKey. Use the Environment "
+            "panel "
+            "Skybox Loader to bind a cubemap at runtime.");
+        }
+        sky_light.SetIntensity(sky_light_record->intensity);
+        sky_light.SetTintRgb(oxygen::Vec3 { sky_light_record->tint_rgb[0],
+          sky_light_record->tint_rgb[1], sky_light_record->tint_rgb[2] });
+        sky_light.SetDiffuseIntensity(sky_light_record->diffuse_intensity);
+        sky_light.SetSpecularIntensity(sky_light_record->specular_intensity);
+        LOG_F(INFO, "SceneLoader: Applied SkyLight environment");
       }
-    }
 
-    // Identify renderables and assign geometries (synchronous)
-    const auto renderables = asset->GetComponents<RenderableRecord>();
-    int valid_renderables = 0;
-    for (const RenderableRecord& r : renderables) {
-      if (r.visible == 0) {
-        continue;
+      // Load VolumetricClouds environment
+      if (const auto clouds_record = asset->TryGetVolumetricCloudsEnvironment();
+        clouds_record && clouds_record->enabled != 0U) {
+        auto& clouds
+          = environment->AddSystem<scene::environment::VolumetricClouds>();
+        clouds.SetBaseAltitudeMeters(clouds_record->base_altitude_m);
+        clouds.SetLayerThicknessMeters(clouds_record->layer_thickness_m);
+        clouds.SetCoverage(clouds_record->coverage);
+        clouds.SetDensity(clouds_record->density);
+        clouds.SetAlbedoRgb(oxygen::Vec3 { clouds_record->albedo_rgb[0],
+          clouds_record->albedo_rgb[1], clouds_record->albedo_rgb[2] });
+        clouds.SetExtinctionScale(clouds_record->extinction_scale);
+        clouds.SetPhaseAnisotropy(clouds_record->phase_g);
+        clouds.SetWindDirectionWs(oxygen::Vec3 { clouds_record->wind_dir_ws[0],
+          clouds_record->wind_dir_ws[1], clouds_record->wind_dir_ws[2] });
+        clouds.SetWindSpeedMps(clouds_record->wind_speed_mps);
+        clouds.SetShadowStrength(clouds_record->shadow_strength);
+        LOG_F(INFO, "SceneLoader: Applied VolumetricClouds environment");
       }
-      const auto node_index = static_cast<size_t>(r.node_index);
-      if (node_index >= runtime_nodes_.size()) {
-        continue;
+
+      // Load PostProcessVolume environment
+      if (const auto pp_record = asset->TryGetPostProcessVolumeEnvironment();
+        pp_record && pp_record->enabled != 0U) {
+        auto& pp
+          = environment->AddSystem<scene::environment::PostProcessVolume>();
+        pp.SetToneMapper(
+          static_cast<scene::environment::ToneMapper>(pp_record->tone_mapper));
+        pp.SetExposureMode(static_cast<scene::environment::ExposureMode>(
+          pp_record->exposure_mode));
+        pp.SetExposureCompensationEv(pp_record->exposure_compensation_ev);
+        pp.SetAutoExposureRangeEv(
+          pp_record->auto_exposure_min_ev, pp_record->auto_exposure_max_ev);
+        pp.SetAutoExposureAdaptationSpeeds(pp_record->auto_exposure_speed_up,
+          pp_record->auto_exposure_speed_down);
+        pp.SetBloomIntensity(pp_record->bloom_intensity);
+        pp.SetBloomThreshold(pp_record->bloom_threshold);
+        pp.SetSaturation(pp_record->saturation);
+        pp.SetContrast(pp_record->contrast);
+        pp.SetVignetteIntensity(pp_record->vignette_intensity);
+        LOG_F(INFO, "SceneLoader: Applied PostProcessVolume environment");
       }
 
-      // AssetLoader guarantees dependencies are loaded (or placeholders are
-      // ready). We retrieve the asset directly to support placeholders and
-      // avoid redundant async waits.
-      auto geo = loader_.GetGeometryAsset(r.geometry_key);
-      if (geo) {
-        runtime_nodes_[node_index].GetRenderable().SetGeometry(std::move(geo));
-        valid_renderables++;
-      } else {
-        LOG_F(WARNING, "SceneLoader: Missing geometry dependency for node {}",
-          node_index);
+      swap_.scene->SetEnvironment(std::move(environment));
+
+      // Instantiate nodes (synchronous part)
+      using oxygen::data::pak::DirectionalLightRecord;
+      using oxygen::data::pak::NodeRecord;
+      using oxygen::data::pak::OrthographicCameraRecord;
+      using oxygen::data::pak::PerspectiveCameraRecord;
+      using oxygen::data::pak::PointLightRecord;
+      using oxygen::data::pak::RenderableRecord;
+      using oxygen::data::pak::SpotLightRecord;
+
+      const auto nodes = asset->GetNodes();
+      runtime_nodes_.reserve(nodes.size());
+
+      LOG_F(INFO,
+        "SceneLoader: Scene summary: nodes={} renderables={} "
+        "perspective_cameras={} orthographic_cameras={} "
+        "directional_lights={} point_lights={} spot_lights={}",
+        nodes.size(), asset->GetComponents<RenderableRecord>().size(),
+        asset->GetComponents<PerspectiveCameraRecord>().size(),
+        asset->GetComponents<OrthographicCameraRecord>().size(),
+        asset->GetComponents<DirectionalLightRecord>().size(),
+        asset->GetComponents<PointLightRecord>().size(),
+        asset->GetComponents<SpotLightRecord>().size());
+
+      for (size_t i = 0; i < nodes.size(); ++i) {
+        const NodeRecord& node = nodes[i];
+
+        std::string_view name_view = asset->GetNodeName(node);
+        std::string name;
+        if (name_view.empty()) {
+          name = "Node" + std::to_string(i);
+        } else {
+          name.assign(name_view.begin(), name_view.end());
+        }
+
+        auto n = swap_.scene->CreateNode(name);
+        auto tf = n.GetTransform();
+        tf.SetLocalPosition(glm::vec3(
+          node.translation[0], node.translation[1], node.translation[2]));
+        tf.SetLocalRotation(glm::quat(node.rotation[3], node.rotation[0],
+          node.rotation[1], node.rotation[2]));
+        tf.SetLocalScale(
+          glm::vec3(node.scale[0], node.scale[1], node.scale[2]));
+
+        runtime_nodes_.push_back(std::move(n));
       }
-    }
 
-    if (valid_renderables > 0) {
-      LOG_F(INFO, "SceneLoader: Assigned {} geometries from cache.",
-        valid_renderables);
-    }
+      // Apply hierarchy using parent indices.
+      for (size_t i = 0; i < nodes.size(); ++i) {
+        const auto parent_index = static_cast<size_t>(nodes[i].parent_index);
+        if (parent_index == i) {
+          continue;
+        }
+        if (parent_index >= runtime_nodes_.size()) {
+          LOG_F(
+            WARNING, "Invalid parent_index {} for node {}", parent_index, i);
+          continue;
+        }
 
-    // Instantiate light components (synchronous).
-    const auto ApplyCommonLight
-      = [](scene::CommonLightProperties& dst,
+        const bool ok = swap_.scene->ReparentNode(runtime_nodes_[i],
+          runtime_nodes_[parent_index], /*preserve_world_transform=*/false);
+        if (!ok) {
+          LOG_F(
+            WARNING, "Failed to reparent node {} under {}", i, parent_index);
+        }
+      }
+
+      // Identify renderables and assign geometries (synchronous)
+      const auto renderables = asset->GetComponents<RenderableRecord>();
+      int valid_renderables = 0;
+      for (const RenderableRecord& r : renderables) {
+        if (r.visible == 0) {
+          continue;
+        }
+        const auto node_index = static_cast<size_t>(r.node_index);
+        if (node_index >= runtime_nodes_.size()) {
+          continue;
+        }
+
+        // AssetLoader guarantees dependencies are loaded (or placeholders are
+        // ready). We retrieve the asset directly to support placeholders and
+        // avoid redundant async waits.
+        auto geo = loader_.GetGeometryAsset(r.geometry_key);
+        if (geo) {
+          runtime_nodes_[node_index].GetRenderable().SetGeometry(
+            std::move(geo));
+          valid_renderables++;
+        } else {
+          LOG_F(WARNING, "SceneLoader: Missing geometry dependency for node {}",
+            node_index);
+        }
+      }
+
+      if (valid_renderables > 0) {
+        LOG_F(INFO, "SceneLoader: Assigned {} geometries from cache.",
+          valid_renderables);
+      }
+
+      // Instantiate light components (synchronous).
+      const auto ApplyCommonLight =
+        [](scene::CommonLightProperties& dst,
           const oxygen::data::pak::LightCommonRecord& src) {
           dst.affects_world = (src.affects_world != 0U);
           dst.color_rgb
@@ -498,357 +508,365 @@ private:
           dst.exposure_compensation_ev = src.exposure_compensation_ev;
         };
 
-    int attached_directional = 0;
-    for (const DirectionalLightRecord& rec :
-      asset->GetComponents<DirectionalLightRecord>()) {
-      const auto node_index = static_cast<size_t>(rec.node_index);
-      if (node_index >= runtime_nodes_.size()) {
-        continue;
-      }
+      int attached_directional = 0;
+      for (const DirectionalLightRecord& rec :
+        asset->GetComponents<DirectionalLightRecord>()) {
+        const auto node_index = static_cast<size_t>(rec.node_index);
+        if (node_index >= runtime_nodes_.size()) {
+          continue;
+        }
 
-      auto light = std::make_unique<scene::DirectionalLight>();
-      ApplyCommonLight(light->Common(), rec.common);
-      light->SetAngularSizeRadians(rec.angular_size_radians);
-      light->SetEnvironmentContribution(rec.environment_contribution != 0U);
-      light->SetIsSunLight(rec.is_sun_light != 0U);
+        auto light = std::make_unique<scene::DirectionalLight>();
+        ApplyCommonLight(light->Common(), rec.common);
+        light->SetAngularSizeRadians(rec.angular_size_radians);
+        light->SetEnvironmentContribution(rec.environment_contribution != 0U);
+        light->SetIsSunLight(rec.is_sun_light != 0U);
 
-      auto& csm = light->CascadedShadows();
-      csm.cascade_count = std::clamp<std::uint32_t>(
-        rec.cascade_count, 1U, scene::kMaxShadowCascades);
-      for (std::uint32_t i = 0U; i < scene::kMaxShadowCascades; ++i) {
-        // NOLINTNEXTLINE(*-pro-bounds-constant-array-index)
-        csm.cascade_distances[i] = rec.cascade_distances[i];
-      }
-      csm.distribution_exponent = rec.distribution_exponent;
+        auto& csm = light->CascadedShadows();
+        csm.cascade_count = std::clamp<std::uint32_t>(
+          rec.cascade_count, 1U, scene::kMaxShadowCascades);
+        for (std::uint32_t i = 0U; i < scene::kMaxShadowCascades; ++i) {
+          // NOLINTNEXTLINE(*-pro-bounds-constant-array-index)
+          csm.cascade_distances[i] = rec.cascade_distances[i];
+        }
+        csm.distribution_exponent = rec.distribution_exponent;
 
-      const bool attached
-        = runtime_nodes_[node_index].ReplaceLight(std::move(light));
-      if (attached) {
-        attached_directional++;
-      } else {
-        LOG_F(WARNING,
-          "SceneLoader: Failed to attach DirectionalLight to node_index={}",
-          node_index);
-      }
-    }
-
-    // Ensure a sunlight exists even when the scene asset provides no valid
-    // directional light component. Avoid LookAt() here because world transforms
-    // are not guaranteed to be available during the load/instantiation phase.
-    if (attached_directional == 0) {
-      auto sun_node = swap_.scene->CreateNode("Sun");
-      auto sun_tf = sun_node.GetTransform();
-      sun_tf.SetLocalPosition(glm::vec3(0.0F, 0.0F, 0.0F));
-
-      // Set a natural sun direction (angled, not straight down).
-      // Convention: engine forward is -Y and Z-up.
-      // We compute a rotation that maps local Forward (-Y) to the desired
-      // world-space ray direction (from light toward the scene).
-      const glm::vec3 from_dir(0.0F, -1.0F, 0.0F);
-      const glm::vec3 to_dir = glm::normalize(glm::vec3(-1.0F, -0.6F, -1.4F));
-
-      const float cos_theta
-        = std::clamp(glm::dot(from_dir, to_dir), -1.0F, 1.0F);
-      glm::quat sun_rot(1.0F, 0.0F, 0.0F, 0.0F);
-      if (cos_theta < 0.9999F) {
-        if (cos_theta > -0.9999F) {
-          const glm::vec3 axis = glm::normalize(glm::cross(from_dir, to_dir));
-          const float angle = std::acos(cos_theta);
-          sun_rot = glm::angleAxis(angle, axis);
+        const bool attached
+          = runtime_nodes_[node_index].ReplaceLight(std::move(light));
+        if (attached) {
+          attached_directional++;
         } else {
-          // Opposite vectors: pick a stable orthogonal axis.
-          const glm::vec3 axis = glm::vec3(0.0F, 0.0F, 1.0F);
-          sun_rot = glm::angleAxis(glm::pi<float>(), axis);
+          LOG_F(WARNING,
+            "SceneLoader: Failed to attach DirectionalLight to node_index={}",
+            node_index);
         }
       }
 
-      sun_tf.SetLocalRotation(sun_rot);
+      // Ensure a sunlight exists even when the scene asset provides no valid
+      // directional light component. Avoid LookAt() here because world
+      // transforms are not guaranteed to be available during the
+      // load/instantiation phase.
+      if (attached_directional == 0) {
+        auto sun_node = swap_.scene->CreateNode("Sun");
+        auto sun_tf = sun_node.GetTransform();
+        sun_tf.SetLocalPosition(glm::vec3(0.0F, 0.0F, 0.0F));
 
-      auto sun_light = std::make_unique<scene::DirectionalLight>();
-      sun_light->SetIsSunLight(true);
-      sun_light->SetEnvironmentContribution(true);
-      sun_light->Common().affects_world = true;
-      sun_light->Common().color_rgb = { 1.0F, 0.98F, 0.92F };
-      sun_light->Common().intensity = 2.0F;
-      sun_light->Common().mobility = scene::LightMobility::kRealtime;
-      sun_light->Common().casts_shadows = true;
-      sun_light->SetAngularSizeRadians(0.01F);
-      sun_light->SetEnvironmentContribution(true);
+        // Set a natural sun direction (angled, not straight down).
+        // Convention: engine forward is -Y and Z-up.
+        // We compute a rotation that maps local Forward (-Y) to the desired
+        // world-space ray direction (from light toward the scene).
+        const glm::vec3 from_dir(0.0F, -1.0F, 0.0F);
+        const glm::vec3 to_dir = glm::normalize(glm::vec3(-1.0F, -0.6F, -1.4F));
 
-      const bool attached = sun_node.ReplaceLight(std::move(sun_light));
-      if (!attached) {
-        LOG_F(WARNING, "SceneLoader: Failed to attach fallback Sun light");
-      } else {
-        attached_directional++;
-      }
-    }
+        const float cos_theta
+          = std::clamp(glm::dot(from_dir, to_dir), -1.0F, 1.0F);
+        glm::quat sun_rot(1.0F, 0.0F, 0.0F, 0.0F);
+        if (cos_theta < 0.9999F) {
+          if (cos_theta > -0.9999F) {
+            const glm::vec3 axis = glm::normalize(glm::cross(from_dir, to_dir));
+            const float angle = std::acos(cos_theta);
+            sun_rot = glm::angleAxis(angle, axis);
+          } else {
+            // Opposite vectors: pick a stable orthogonal axis.
+            const glm::vec3 axis = glm::vec3(0.0F, 0.0F, 1.0F);
+            sun_rot = glm::angleAxis(glm::pi<float>(), axis);
+          }
+        }
 
-    int attached_point = 0;
-    for (const PointLightRecord& rec :
-      asset->GetComponents<PointLightRecord>()) {
-      const auto node_index = static_cast<size_t>(rec.node_index);
-      if (node_index >= runtime_nodes_.size()) {
-        continue;
-      }
+        sun_tf.SetLocalRotation(sun_rot);
 
-      auto light = std::make_unique<scene::PointLight>();
-      ApplyCommonLight(light->Common(), rec.common);
-      light->SetRange(std::abs(rec.range));
-      light->SetAttenuationModel(
-        static_cast<scene::AttenuationModel>(rec.attenuation_model));
-      light->SetDecayExponent(rec.decay_exponent);
-      light->SetSourceRadius(std::abs(rec.source_radius));
+        auto sun_light = std::make_unique<scene::DirectionalLight>();
+        sun_light->SetIsSunLight(true);
+        sun_light->SetEnvironmentContribution(true);
+        sun_light->Common().affects_world = true;
+        sun_light->Common().color_rgb = { 1.0F, 0.98F, 0.92F };
+        sun_light->Common().intensity = 2.0F;
+        sun_light->Common().mobility = scene::LightMobility::kRealtime;
+        sun_light->Common().casts_shadows = true;
+        sun_light->SetAngularSizeRadians(0.01F);
+        sun_light->SetEnvironmentContribution(true);
 
-      const bool attached
-        = runtime_nodes_[node_index].ReplaceLight(std::move(light));
-      if (attached) {
-        attached_point++;
-      } else {
-        LOG_F(WARNING,
-          "SceneLoader: Failed to attach PointLight to node_index={}",
-          node_index);
-      }
-    }
-
-    int attached_spot = 0;
-    for (const SpotLightRecord& rec : asset->GetComponents<SpotLightRecord>()) {
-      const auto node_index = static_cast<size_t>(rec.node_index);
-      if (node_index >= runtime_nodes_.size()) {
-        continue;
+        const bool attached = sun_node.ReplaceLight(std::move(sun_light));
+        if (!attached) {
+          LOG_F(WARNING, "SceneLoader: Failed to attach fallback Sun light");
+        } else {
+          attached_directional++;
+        }
       }
 
-      auto light = std::make_unique<scene::SpotLight>();
-      ApplyCommonLight(light->Common(), rec.common);
-      light->SetRange(std::abs(rec.range));
-      light->SetAttenuationModel(
-        static_cast<scene::AttenuationModel>(rec.attenuation_model));
-      light->SetDecayExponent(rec.decay_exponent);
-      light->SetConeAnglesRadians(
-        rec.inner_cone_angle_radians, rec.outer_cone_angle_radians);
-      light->SetSourceRadius(std::abs(rec.source_radius));
+      int attached_point = 0;
+      for (const PointLightRecord& rec :
+        asset->GetComponents<PointLightRecord>()) {
+        const auto node_index = static_cast<size_t>(rec.node_index);
+        if (node_index >= runtime_nodes_.size()) {
+          continue;
+        }
 
-      const bool attached
-        = runtime_nodes_[node_index].ReplaceLight(std::move(light));
-      if (attached) {
-        attached_spot++;
-      } else {
-        LOG_F(WARNING,
-          "SceneLoader: Failed to attach SpotLight to node_index={}",
-          node_index);
+        auto light = std::make_unique<scene::PointLight>();
+        ApplyCommonLight(light->Common(), rec.common);
+        light->SetRange(std::abs(rec.range));
+        light->SetAttenuationModel(
+          static_cast<scene::AttenuationModel>(rec.attenuation_model));
+        light->SetDecayExponent(rec.decay_exponent);
+        light->SetSourceRadius(std::abs(rec.source_radius));
+
+        const bool attached
+          = runtime_nodes_[node_index].ReplaceLight(std::move(light));
+        if (attached) {
+          attached_point++;
+        } else {
+          LOG_F(WARNING,
+            "SceneLoader: Failed to attach PointLight to node_index={}",
+            node_index);
+        }
       }
-    }
 
-    if (attached_directional + attached_point + attached_spot > 0) {
-      LOG_F(INFO,
-        "SceneLoader: Attached lights: directional={} point={} spot={} "
-        "(total={})",
-        attached_directional, attached_point, attached_spot,
-        attached_directional + attached_point + attached_spot);
-    }
+      int attached_spot = 0;
+      for (const SpotLightRecord& rec :
+        asset->GetComponents<SpotLightRecord>()) {
+        const auto node_index = static_cast<size_t>(rec.node_index);
+        if (node_index >= runtime_nodes_.size()) {
+          continue;
+        }
 
-    // Pick or create an active camera.
-    const auto perspective_cams
-      = asset->GetComponents<PerspectiveCameraRecord>();
-    if (!perspective_cams.empty()) {
-      LOG_F(INFO, "SceneLoader: Found {} perspective camera(s)",
-        perspective_cams.size());
-      const auto& rec = perspective_cams.front();
-      const auto node_index = static_cast<size_t>(rec.node_index);
-      if (node_index < runtime_nodes_.size()) {
-        swap_.active_camera = runtime_nodes_[node_index];
+        auto light = std::make_unique<scene::SpotLight>();
+        ApplyCommonLight(light->Common(), rec.common);
+        light->SetRange(std::abs(rec.range));
+        light->SetAttenuationModel(
+          static_cast<scene::AttenuationModel>(rec.attenuation_model));
+        light->SetDecayExponent(rec.decay_exponent);
+        light->SetConeAnglesRadians(
+          rec.inner_cone_angle_radians, rec.outer_cone_angle_radians);
+        light->SetSourceRadius(std::abs(rec.source_radius));
+
+        const bool attached
+          = runtime_nodes_[node_index].ReplaceLight(std::move(light));
+        if (attached) {
+          attached_spot++;
+        } else {
+          LOG_F(WARNING,
+            "SceneLoader: Failed to attach SpotLight to node_index={}",
+            node_index);
+        }
+      }
+
+      if (attached_directional + attached_point + attached_spot > 0) {
         LOG_F(INFO,
-          "SceneLoader: Using perspective camera node_index={} name='{}'",
-          rec.node_index, swap_.active_camera.GetName().c_str());
-        if (!swap_.active_camera.HasCamera()) {
-          auto cam = std::make_unique<scene::PerspectiveCamera>();
-          const bool attached
-            = swap_.active_camera.AttachCamera(std::move(cam));
-          CHECK_F(attached,
-            "Failed to attach PerspectiveCamera to scene camera node");
-        }
-        if (auto cam_ref
-          = swap_.active_camera.GetCameraAs<scene::PerspectiveCamera>();
-          cam_ref) {
-          auto& cam = cam_ref->get();
-          float near_plane = std::abs(rec.near_plane);
-          float far_plane = std::abs(rec.far_plane);
-          if (far_plane < near_plane) {
-            std::swap(far_plane, near_plane);
-          }
-          cam.SetFieldOfView(rec.fov_y);
-
-          cam.SetNearPlane(near_plane);
-          cam.SetFarPlane(far_plane);
-
-          const float fov_y_deg
-            = rec.fov_y * (180.0F / std::numbers::pi_v<float>);
-          LOG_F(INFO,
-            "SceneLoader: Applied perspective camera params fov_y_deg={} "
-            "near={} far={} aspect_hint={}",
-            fov_y_deg, near_plane, far_plane, rec.aspect_ratio);
-
-          auto tf = swap_.active_camera.GetTransform();
-          glm::vec3 cam_pos { 0.0F, 0.0F, 0.0F };
-          glm::quat cam_rot { 1.0F, 0.0F, 0.0F, 0.0F };
-          if (auto lp = tf.GetLocalPosition()) {
-            cam_pos = *lp;
-          }
-          if (auto lr = tf.GetLocalRotation()) {
-            cam_rot = *lr;
-          }
-          const glm::vec3 forward = cam_rot * glm::vec3(0.0F, 0.0F, -1.0F);
-          const glm::vec3 up = cam_rot * glm::vec3(0.0F, 1.0F, 0.0F);
-          LOG_F(INFO,
-            "SceneLoader: Camera local pose pos=({:.3f}, {:.3f}, {:.3f}) "
-            "forward=({:.3f}, {:.3f}, {:.3f}) up=({:.3f}, {:.3f}, {:.3f})",
-            cam_pos.x, cam_pos.y, cam_pos.z, forward.x, forward.y, forward.z,
-            up.x, up.y, up.z);
-        }
+          "SceneLoader: Attached lights: directional={} point={} spot={} "
+          "(total={})",
+          attached_directional, attached_point, attached_spot,
+          attached_directional + attached_point + attached_spot);
       }
-    }
 
-    // If no perspective, try ortho
-    if (!swap_.active_camera.IsAlive()) {
-      const auto ortho_cams = asset->GetComponents<OrthographicCameraRecord>();
-      if (!ortho_cams.empty()) {
-        LOG_F(INFO, "SceneLoader: Found {} orthographic camera(s)",
-          ortho_cams.size());
-        const auto& rec = ortho_cams.front();
+      // Pick or create an active camera.
+      const auto perspective_cams
+        = asset->GetComponents<PerspectiveCameraRecord>();
+      if (!perspective_cams.empty()) {
+        LOG_F(INFO, "SceneLoader: Found {} perspective camera(s)",
+          perspective_cams.size());
+        const auto& rec = perspective_cams.front();
         const auto node_index = static_cast<size_t>(rec.node_index);
         if (node_index < runtime_nodes_.size()) {
           swap_.active_camera = runtime_nodes_[node_index];
           LOG_F(INFO,
-            "SceneLoader: Using orthographic camera node_index={} name='{}'",
+            "SceneLoader: Using perspective camera node_index={} name='{}'",
             rec.node_index, swap_.active_camera.GetName().c_str());
           if (!swap_.active_camera.HasCamera()) {
-            auto cam = std::make_unique<scene::OrthographicCamera>();
+            auto cam = std::make_unique<scene::PerspectiveCamera>();
             const bool attached
               = swap_.active_camera.AttachCamera(std::move(cam));
             CHECK_F(attached,
-              "Failed to attach OrthographicCamera to scene camera node");
+              "Failed to attach PerspectiveCamera to scene camera node");
           }
           if (auto cam_ref
-            = swap_.active_camera.GetCameraAs<scene::OrthographicCamera>();
+            = swap_.active_camera.GetCameraAs<scene::PerspectiveCamera>();
             cam_ref) {
+            auto& cam = cam_ref->get();
             float near_plane = std::abs(rec.near_plane);
             float far_plane = std::abs(rec.far_plane);
             if (far_plane < near_plane) {
               std::swap(far_plane, near_plane);
             }
-            cam_ref->get().SetExtents(
-              rec.left, rec.right, rec.bottom, rec.top, near_plane, far_plane);
+            cam.SetFieldOfView(rec.fov_y);
+
+            cam.SetNearPlane(near_plane);
+            cam.SetFarPlane(far_plane);
+
+            const float fov_y_deg
+              = rec.fov_y * (180.0F / std::numbers::pi_v<float>);
             LOG_F(INFO,
-              "SceneLoader: Applied orthographic camera extents l={} r={} b={} "
-              "t={} near={} far={}",
-              rec.left, rec.right, rec.bottom, rec.top, near_plane, far_plane);
+              "SceneLoader: Applied perspective camera params fov_y_deg={} "
+              "near={} far={} aspect_hint={}",
+              fov_y_deg, near_plane, far_plane, rec.aspect_ratio);
+
+            auto tf = swap_.active_camera.GetTransform();
+            glm::vec3 cam_pos { 0.0F, 0.0F, 0.0F };
+            glm::quat cam_rot { 1.0F, 0.0F, 0.0F, 0.0F };
+            if (auto lp = tf.GetLocalPosition()) {
+              cam_pos = *lp;
+            }
+            if (auto lr = tf.GetLocalRotation()) {
+              cam_rot = *lr;
+            }
+            const glm::vec3 forward = cam_rot * glm::vec3(0.0F, 0.0F, -1.0F);
+            const glm::vec3 up = cam_rot * glm::vec3(0.0F, 1.0F, 0.0F);
+            LOG_F(INFO,
+              "SceneLoader: Camera local pose pos=({:.3f}, {:.3f}, {:.3f}) "
+              "forward=({:.3f}, {:.3f}, {:.3f}) up=({:.3f}, {:.3f}, {:.3f})",
+              cam_pos.x, cam_pos.y, cam_pos.z, forward.x, forward.y, forward.z,
+              up.x, up.y, up.z);
           }
         }
       }
-    }
 
-    // Finalize setup
-    const float aspect = height_ > 0
-      ? (static_cast<float>(width_) / static_cast<float>(height_))
-      : 1.0F;
-
-    const ViewPort viewport { .top_left_x = 0.0F,
-      .top_left_y = 0.0F,
-      .width = static_cast<float>(width_),
-      .height = static_cast<float>(height_),
-      .min_depth = 0.0F,
-      .max_depth = 1.0F };
-
-    // Ensure we have a camera if none was found in the scene
-    if (!swap_.active_camera.IsAlive()) {
-      swap_.active_camera = swap_.scene->CreateNode("MainCamera");
-      // Stable, elevated pose: look at origin with Z-up.
-      const glm::vec3 cam_pos(10.0F, 10.0F, 10.0F);
-      const glm::vec3 cam_target(0.0F, 0.0F, 0.0F);
-      auto tf = swap_.active_camera.GetTransform();
-      tf.SetLocalPosition(cam_pos);
-      tf.SetLocalRotation(MakeLookRotationFromPosition(cam_pos, cam_target));
-      LOG_F(INFO,
-        "SceneLoader: No camera in scene; created fallback camera '{}'",
-        swap_.active_camera.GetName().c_str());
-    }
-
-    if (!swap_.active_camera.HasCamera()) {
-      auto camera = std::make_unique<scene::PerspectiveCamera>();
-      swap_.active_camera.AttachCamera(std::move(camera));
-    }
-
-    // Apply viewport to the active camera
-    if (auto cam_ref
-      = swap_.active_camera.GetCameraAs<scene::PerspectiveCamera>();
-      cam_ref) {
-      auto& cam = cam_ref->get();
-      cam.SetAspectRatio(aspect);
-      cam.SetViewport(viewport);
-    } else if (auto ortho_ref
-      = swap_.active_camera.GetCameraAs<scene::OrthographicCamera>();
-      ortho_ref) {
-      ortho_ref->get().SetViewport(viewport);
-    }
-
-    // Dump the runtime scene hierarchy (once per load).
-    LOG_F(INFO, "SceneLoader: Runtime scene hierarchy:");
-    std::unordered_set<scene::NodeHandle> visited_nodes;
-    visited_nodes.reserve(runtime_nodes_.size());
-    const auto PrintNodeLine = [](scene::SceneNode& node, const int depth) {
-      const std::string indent(static_cast<size_t>(depth * 2), ' ');
-      const bool has_renderable = node.GetRenderable().HasGeometry();
-      const bool has_camera = node.HasCamera();
-      const bool has_light = node.HasLight();
-      LOG_F(INFO, "{}- {}{}{}{}", indent, node.GetName().c_str(),
-        has_renderable ? " [R]" : "", has_camera ? " [C]" : "",
-        has_light ? " [L]" : "");
-    };
-
-    const auto PrintSubtree
-      = [&](const auto& self, scene::SceneNode node, const int depth) -> void {
-      if (!node.IsAlive()) {
-        return;
-      }
-
-      visited_nodes.insert(node.GetHandle());
-      PrintNodeLine(node, depth);
-
-      auto child = node.GetFirstChild();
-      while (child) {
-        self(self, *child, depth + 1);
-        child = child->GetNextSibling();
-      }
-    };
-
-    for (auto& root : swap_.scene->GetRootNodes()) {
-      PrintSubtree(PrintSubtree, root, 0);
-    }
-
-    if (visited_nodes.size() != runtime_nodes_.size()) {
-      LOG_F(WARNING, "SceneLoader: Hierarchy traversal visited {} of {} nodes.",
-        visited_nodes.size(), runtime_nodes_.size());
-      for (auto& node : runtime_nodes_) {
-        if (!node.IsAlive() || visited_nodes.contains(node.GetHandle())) {
-          continue;
+      // If no perspective, try ortho
+      if (!swap_.active_camera.IsAlive()) {
+        const auto ortho_cams
+          = asset->GetComponents<OrthographicCameraRecord>();
+        if (!ortho_cams.empty()) {
+          LOG_F(INFO, "SceneLoader: Found {} orthographic camera(s)",
+            ortho_cams.size());
+          const auto& rec = ortho_cams.front();
+          const auto node_index = static_cast<size_t>(rec.node_index);
+          if (node_index < runtime_nodes_.size()) {
+            swap_.active_camera = runtime_nodes_[node_index];
+            LOG_F(INFO,
+              "SceneLoader: Using orthographic camera node_index={} name='{}'",
+              rec.node_index, swap_.active_camera.GetName().c_str());
+            if (!swap_.active_camera.HasCamera()) {
+              auto cam = std::make_unique<scene::OrthographicCamera>();
+              const bool attached
+                = swap_.active_camera.AttachCamera(std::move(cam));
+              CHECK_F(attached,
+                "Failed to attach OrthographicCamera to scene camera node");
+            }
+            if (auto cam_ref
+              = swap_.active_camera.GetCameraAs<scene::OrthographicCamera>();
+              cam_ref) {
+              float near_plane = std::abs(rec.near_plane);
+              float far_plane = std::abs(rec.far_plane);
+              if (far_plane < near_plane) {
+                std::swap(far_plane, near_plane);
+              }
+              cam_ref->get().SetExtents(rec.left, rec.right, rec.bottom,
+                rec.top, near_plane, far_plane);
+              LOG_F(INFO,
+                "SceneLoader: Applied orthographic camera extents l={} r={} "
+                "b={} "
+                "t={} near={} far={}",
+                rec.left, rec.right, rec.bottom, rec.top, near_plane,
+                far_plane);
+            }
+          }
         }
+      }
 
+      // Finalize setup
+      const float aspect = height_ > 0
+        ? (static_cast<float>(width_) / static_cast<float>(height_))
+        : 1.0F;
+
+      const ViewPort viewport { .top_left_x = 0.0F,
+        .top_left_y = 0.0F,
+        .width = static_cast<float>(width_),
+        .height = static_cast<float>(height_),
+        .min_depth = 0.0F,
+        .max_depth = 1.0F };
+
+      // Ensure we have a camera if none was found in the scene
+      if (!swap_.active_camera.IsAlive()) {
+        swap_.active_camera = swap_.scene->CreateNode("MainCamera");
+        // Stable, elevated pose: look at origin with Z-up.
+        const glm::vec3 cam_pos(10.0F, 10.0F, 10.0F);
+        const glm::vec3 cam_target(0.0F, 0.0F, 0.0F);
+        auto tf = swap_.active_camera.GetTransform();
+        tf.SetLocalPosition(cam_pos);
+        tf.SetLocalRotation(MakeLookRotationFromPosition(cam_pos, cam_target));
+        LOG_F(INFO,
+          "SceneLoader: No camera in scene; created fallback camera '{}'",
+          swap_.active_camera.GetName().c_str());
+      }
+
+      if (!swap_.active_camera.HasCamera()) {
+        auto camera = std::make_unique<scene::PerspectiveCamera>();
+        swap_.active_camera.AttachCamera(std::move(camera));
+      }
+
+      // Apply viewport to the active camera
+      if (auto cam_ref
+        = swap_.active_camera.GetCameraAs<scene::PerspectiveCamera>();
+        cam_ref) {
+        auto& cam = cam_ref->get();
+        cam.SetAspectRatio(aspect);
+        cam.SetViewport(viewport);
+      } else if (auto ortho_ref
+        = swap_.active_camera.GetCameraAs<scene::OrthographicCamera>();
+        ortho_ref) {
+        ortho_ref->get().SetViewport(viewport);
+      }
+
+      // Dump the runtime scene hierarchy (once per load).
+      LOG_F(INFO, "SceneLoader: Runtime scene hierarchy:");
+      std::unordered_set<scene::NodeHandle> visited_nodes;
+      visited_nodes.reserve(runtime_nodes_.size());
+      const auto PrintNodeLine = [](scene::SceneNode& node, const int depth) {
+        const std::string indent(static_cast<size_t>(depth * 2), ' ');
         const bool has_renderable = node.GetRenderable().HasGeometry();
         const bool has_camera = node.HasCamera();
         const bool has_light = node.HasLight();
-        LOG_F(WARNING, "SceneLoader: Unvisited node: {}{}{}{}",
-          node.GetName().c_str(), has_renderable ? " [R]" : "",
-          has_camera ? " [C]" : "", has_light ? " [L]" : "");
+        LOG_F(INFO, "{}- {}{}{}{}", indent, node.GetName().c_str(),
+          has_renderable ? " [R]" : "", has_camera ? " [C]" : "",
+          has_light ? " [L]" : "");
+      };
+
+      const auto PrintSubtree = [&](const auto& self, scene::SceneNode node,
+                                  const int depth) -> void {
+        if (!node.IsAlive()) {
+          return;
+        }
+
+        visited_nodes.insert(node.GetHandle());
+        PrintNodeLine(node, depth);
+
+        auto child = node.GetFirstChild();
+        while (child) {
+          self(self, *child, depth + 1);
+          child = child->GetNextSibling();
+        }
+      };
+
+      for (auto& root : swap_.scene->GetRootNodes()) {
+        PrintSubtree(PrintSubtree, root, 0);
       }
-    } else {
-      LOG_F(INFO, "SceneLoader: Hierarchy traversal covered all {} nodes.",
-        runtime_nodes_.size());
-    }
+
+      if (visited_nodes.size() != runtime_nodes_.size()) {
+        LOG_F(WARNING,
+          "SceneLoader: Hierarchy traversal visited {} of {} nodes.",
+          visited_nodes.size(), runtime_nodes_.size());
+        for (auto& node : runtime_nodes_) {
+          if (!node.IsAlive() || visited_nodes.contains(node.GetHandle())) {
+            continue;
+          }
+
+          const bool has_renderable = node.GetRenderable().HasGeometry();
+          const bool has_camera = node.HasCamera();
+          const bool has_light = node.HasLight();
+          LOG_F(WARNING, "SceneLoader: Unvisited node: {}{}{}{}",
+            node.GetName().c_str(), has_renderable ? " [R]" : "",
+            has_camera ? " [C]" : "", has_light ? " [L]" : "");
+        }
+      } else {
+        LOG_F(INFO, "SceneLoader: Hierarchy traversal covered all {} nodes.",
+          runtime_nodes_.size());
+      }
 
       ready_ = true;
       LOG_F(INFO,
-        "SceneLoader: Scene loading and instantiation complete. Ready for swap.");
+        "SceneLoader: Scene loading and instantiation complete. Ready for "
+        "swap.");
     } catch (const std::exception& ex) {
-      LOG_F(ERROR, "SceneLoader: Exception while building scene: {}", ex.what());
+      LOG_F(
+        ERROR, "SceneLoader: Exception while building scene: {}", ex.what());
       swap_ = {};
       runtime_nodes_.clear();
       ready_ = false;
@@ -880,6 +898,21 @@ MainModule::MainModule(const oxygen::examples::common::AsyncEngineApp& app)
 }
 
 MainModule::~MainModule() = default;
+
+auto MainModule::BuildDefaultWindowProperties() const
+  -> platform::window::Properties
+{
+  platform::window::Properties p("Oxygen Example");
+  p.extent = { .width = 2560U, .height = 1400 };
+  p.flags = { .hidden = false,
+    .always_on_top = false,
+    .full_screen = app_.fullscreen,
+    .maximized = false,
+    .minimized = false,
+    .resizable = true,
+    .borderless = false };
+  return p;
+}
 
 auto MainModule::OnAttached(
   oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept -> bool

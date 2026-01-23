@@ -10,9 +10,9 @@
 
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
-    std::cout << "Oxygen v" << static_cast<int>(oxygen::version::Major())
-              << "." << static_cast<int>(oxygen::version::Minor())
-              << "." << static_cast<int>(oxygen::version::Patch()) << '\n';
+  std::cout << "Oxygen v" << static_cast<int>(oxygen::version::Major()) << "."
+            << static_cast<int>(oxygen::version::Minor()) << "."
+            << static_cast<int>(oxygen::version::Patch()) << '\n';
 
-    return 0;
+  return 0;
 }

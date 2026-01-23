@@ -17,13 +17,13 @@ namespace oxygen::graphics::d3d12::testing {
 // ReSharper disable once CppClassCanBeFinal - Mock class should not be final
 class MockDescriptorHeap : public dx::IDescriptorHeap {
 public:
-    MockDescriptorHeap() = default;
-    virtual ~MockDescriptorHeap() = default;
+  MockDescriptorHeap() = default;
+  virtual ~MockDescriptorHeap() = default;
 
-    OXYGEN_DEFAULT_COPYABLE(MockDescriptorHeap)
-    OXYGEN_DEFAULT_MOVABLE(MockDescriptorHeap)
+  OXYGEN_DEFAULT_COPYABLE(MockDescriptorHeap)
+  OXYGEN_DEFAULT_MOVABLE(MockDescriptorHeap)
 
-    // clang-format off
+  // clang-format off
     // Mocked methods
     MOCK_METHOD(D3D12_CPU_DESCRIPTOR_HANDLE, GetCPUDescriptorHandleForHeapStart, (), (override));
     MOCK_METHOD(D3D12_GPU_DESCRIPTOR_HANDLE, GetGPUDescriptorHandleForHeapStart, (), (override));
@@ -42,7 +42,7 @@ public:
 
     // ID3D12DescriptorHeap (stubbed)
     HRESULT STDMETHODCALLTYPE GetDevice(REFIID, void**) override { return E_NOTIMPL; }
-    // clang-format on
+  // clang-format on
 };
 
 } // namespace oxygen::graphics::d3d12::testing

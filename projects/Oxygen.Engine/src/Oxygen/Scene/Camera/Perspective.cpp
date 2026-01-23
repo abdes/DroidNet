@@ -54,8 +54,8 @@ inline auto PerspectiveCamera::UpdateDependencies(
 
  @see WorldToScreen
 */
-auto PerspectiveCamera::ScreenToWorld(const Vec2& p,
-  const Vec4& viewport) const -> Vec2
+auto PerspectiveCamera::ScreenToWorld(const Vec2& p, const Vec4& viewport) const
+  -> Vec2
 {
   DCHECK_NOTNULL_F(transform_);
   // Convert screen coordinates to normalized device coordinates (NDC)
@@ -83,8 +83,8 @@ auto PerspectiveCamera::ScreenToWorld(const Vec2& p,
 
  @see ScreenToWorld
 */
-auto PerspectiveCamera::WorldToScreen(const Vec2& p,
-  const Vec4& viewport) const -> Vec2
+auto PerspectiveCamera::WorldToScreen(const Vec2& p, const Vec4& viewport) const
+  -> Vec2
 {
   DCHECK_NOTNULL_F(transform_);
   const glm::vec4 world(p.x, p.y, 0.0F, 1.0F);

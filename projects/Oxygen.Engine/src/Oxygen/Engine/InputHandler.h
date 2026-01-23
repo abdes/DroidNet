@@ -13,15 +13,15 @@ namespace oxygen::engine {
 
 class InputHandler {
 public:
-    InputHandler() = default;
-    virtual ~InputHandler() = default;
+  InputHandler() = default;
+  virtual ~InputHandler() = default;
 
-    OXYGEN_DEFAULT_COPYABLE(InputHandler);
-    OXYGEN_DEFAULT_MOVABLE(InputHandler);
+  OXYGEN_DEFAULT_COPYABLE(InputHandler);
+  OXYGEN_DEFAULT_MOVABLE(InputHandler);
 
-    // Called by the core, every frame, to give a chance to the system to
-    // update its state.
-    virtual void ProcessInput(const platform::InputEvent& event) = 0;
+  // Called by the core, every frame, to give a chance to the system to
+  // update its state.
+  virtual void ProcessInput(const platform::InputEvent& event) = 0;
 };
 
 } // namespace oxygen::engine

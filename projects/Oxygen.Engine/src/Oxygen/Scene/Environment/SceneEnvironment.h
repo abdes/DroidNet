@@ -127,8 +127,7 @@ public:
    @warning Entries contain non-owning pointers; they are only valid while the
             corresponding systems remain present in this environment.
   */
-  [[nodiscard]] auto GetSystems() const noexcept
-    -> std::span<const SystemEntry>
+  [[nodiscard]] auto GetSystems() const noexcept -> std::span<const SystemEntry>
   {
     return systems_;
   }

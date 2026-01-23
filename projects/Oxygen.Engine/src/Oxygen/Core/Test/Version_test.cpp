@@ -11,38 +11,38 @@
 
 NOLINT_TEST(VersionTests, Major)
 {
-    EXPECT_EQ(oxygen::version::Major(), oxygen::info::cVersionMajor);
+  EXPECT_EQ(oxygen::version::Major(), oxygen::info::cVersionMajor);
 }
 
 NOLINT_TEST(VersionTests, Minor)
 {
-    EXPECT_EQ(oxygen::version::Minor(), oxygen::info::cVersionMinor);
+  EXPECT_EQ(oxygen::version::Minor(), oxygen::info::cVersionMinor);
 }
 
 NOLINT_TEST(VersionTests, Patch)
 {
-    EXPECT_EQ(oxygen::version::Patch(), oxygen::info::cVersionPatch);
+  EXPECT_EQ(oxygen::version::Patch(), oxygen::info::cVersionPatch);
 }
 
 NOLINT_TEST(VersionTests, Version)
 {
-    const std::string expectedVersion = std::to_string(oxygen::version::Major())
-        + "." + std::to_string(oxygen::version::Minor()) + "."
-        + std::to_string(oxygen::version::Patch());
-    EXPECT_EQ(oxygen::version::Version(), expectedVersion);
+  const std::string expectedVersion = std::to_string(oxygen::version::Major())
+    + "." + std::to_string(oxygen::version::Minor()) + "."
+    + std::to_string(oxygen::version::Patch());
+  EXPECT_EQ(oxygen::version::Version(), expectedVersion);
 }
 
 NOLINT_TEST(VersionTests, VersionFull)
 {
-    const std::string version = oxygen::version::Version();
-    const std::string versionFull = oxygen::version::VersionFull();
-    EXPECT_TRUE(versionFull.find(version) != std::string::npos);
+  const std::string version = oxygen::version::Version();
+  const std::string versionFull = oxygen::version::VersionFull();
+  EXPECT_TRUE(versionFull.find(version) != std::string::npos);
 }
 
 NOLINT_TEST(VersionTests, NameVersion)
 {
-    const std::string version = oxygen::version::Version();
-    const std::string nameVersion = oxygen::version::NameVersion();
-    EXPECT_TRUE(nameVersion.find("Oxygen") != std::string::npos);
-    EXPECT_TRUE(nameVersion.find(version) != std::string::npos);
+  const std::string version = oxygen::version::Version();
+  const std::string nameVersion = oxygen::version::NameVersion();
+  EXPECT_TRUE(nameVersion.find("Oxygen") != std::string::npos);
+  EXPECT_TRUE(nameVersion.find(version) != std::string::npos);
 }

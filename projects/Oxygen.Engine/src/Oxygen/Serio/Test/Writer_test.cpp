@@ -278,7 +278,6 @@ NOLINT_TEST_F(WriterErrorTest, WriteArray_Fails_OnStreamError)
   EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
 }
 
-
 //! AlignTo fails when using invalid alignment values.
 NOLINT_TEST_F(WriterErrorTest, AlignTo_Fails_OnInvalidAlignment)
 {
@@ -292,8 +291,8 @@ NOLINT_TEST_F(WriterErrorTest, AlignTo_Fails_OnInvalidAlignment)
 
   // Assert
   EXPECT_FALSE(zero_result);
-  EXPECT_EQ(zero_result.error(),
-    std::make_error_code(std::errc::invalid_argument));
+  EXPECT_EQ(
+    zero_result.error(), std::make_error_code(std::errc::invalid_argument));
   EXPECT_FALSE(non_power_result);
   EXPECT_EQ(non_power_result.error(),
     std::make_error_code(std::errc::invalid_argument));
@@ -425,7 +424,8 @@ NOLINT_TEST_F(WriterAlignmentGuardTest, ScopedAlignment_InvalidAlignment_Throws)
   // Act & Assert
   EXPECT_THROW((void)GetWriter().ScopedAlignment(3), std::invalid_argument);
   EXPECT_NO_THROW((void)GetWriter().ScopedAlignment(0));
-  EXPECT_NO_THROW((void)GetWriter().ScopedAlignment(static_cast<uint16_t>(256)));
+  EXPECT_NO_THROW(
+    (void)GetWriter().ScopedAlignment(static_cast<uint16_t>(256)));
   EXPECT_THROW((void)GetWriter().ScopedAlignment(static_cast<uint16_t>(257)),
     std::invalid_argument);
 }
