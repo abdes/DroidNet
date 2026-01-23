@@ -570,7 +570,7 @@ namespace {
     }
 
     std::vector<std::byte> bytes;
-    bytes.resize(static_cast<size_t>(size));
+    bytes.resize(size);
 
     file.seekg(0, std::ios::beg);
     file.read(reinterpret_cast<char*>(bytes.data()),
@@ -636,7 +636,7 @@ auto DecodeImageRgba8FromFile(const std::filesystem::path& path)
   }
 
   std::vector<std::byte> bytes;
-  bytes.resize(static_cast<size_t>(size));
+  bytes.resize(size);
 
   file.seekg(0, std::ios::beg);
   file.read(reinterpret_cast<char*>(bytes.data()),

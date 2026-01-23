@@ -21,6 +21,8 @@ asap_push_module("${META_MODULE_NAME}")
 
 find_package(glm CONFIG REQUIRED)
 find_package(tinyexr CONFIG REQUIRED)
+find_package(nlohmann_json REQUIRED)
+find_package(nlohmann_json_schema_validator REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -74,13 +76,15 @@ set(
   "Import/ImportDiagnostics.h"
   "Import/ImportConcurrency.h"
   "Import/ImportJobId.h"
+  "Import/ImportManifest.h"
   "Import/ImportOptions.h"
   "Import/ImportProgress.h"
   "Import/ImportReport.h"
   "Import/ImportRequest.h"
+  "Import/SceneImportSettings.h"
+  "Import/TextureImportSettings.h"
   "Import/Layout.h"
   "Import/LooseCookedLayout.h"
-  "Import/LooseCookedWriter.h"
   "Import/Naming.h"
   "Import/ScratchImage.h"
   "Import/TextureImportDesc.h"
@@ -113,8 +117,13 @@ set(
   # Import - implementation
   "Import/AsyncImportService.cpp"
   "Import/FileError.cpp"
+  "Import/ImportManifest.cpp"
   "Import/ImportRequest.cpp"
-  "Import/LooseCookedWriter.cpp"
+  "Import/Internal/ImportManifest_schema.h"
+  "Import/Internal/SceneImportRequestBuilder.h"
+  "Import/Internal/SceneImportRequestBuilder.cpp"
+  "Import/Internal/TextureImportRequestBuilder.h"
+  "Import/Internal/TextureImportRequestBuilder.cpp"
   "Import/Naming.cpp"
   "Import/ScratchImage.cpp"
   "Import/TextureImportDesc.cpp"
@@ -124,6 +133,10 @@ set(
   "Import/TexturePackingPolicy.cpp"
   "Import/TextureSourceAssembly.cpp"
   # Import - Internal stuff
+  "Import/Internal/LooseCookedWriter.cpp"
+  "Import/Internal/LooseCookedWriter.h"
+  "Import/Internal/LooseCookedIndexRegistry.cpp"
+  "Import/Internal/LooseCookedIndexRegistry.h"
   "Import/Internal/AdapterTypes.h"
   "Import/Internal/AsyncImporter.cpp"
   "Import/Internal/AsyncImporter.h"
@@ -135,6 +148,7 @@ set(
   "Import/Internal/ImportEventLoop.h"
   "Import/Internal/ImportJob.cpp"
   "Import/Internal/ImportJob.h"
+  "Import/Internal/ImportJobParams.h"
   "Import/Internal/ImportPipeline.h"
   "Import/Internal/ImportPlanner.cpp"
   "Import/Internal/ImportPlanner.h"
@@ -186,6 +200,8 @@ set(
   "Import/Internal/Utils/ContentHashUtils.h"
   "Import/Internal/Utils/StringUtils.h"
   "Import/Internal/Utils/AssetKeyUtils.h"
+  "Import/Internal/Utils/ImportSettingsUtils.h"
+  "Import/Internal/Utils/ImportSettingsUtils.cpp"
   # Import - Platform-specific implementations
   $<$<BOOL:${WIN32}>:Import/Internal/WindowsFileReader.h>
   $<$<BOOL:${WIN32}>:Import/Internal/WindowsFileReader.cpp>
@@ -251,6 +267,8 @@ target_link_libraries(
   PRIVATE
     glm::glm
     tinyexr::tinyexr
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
 )
 
 # ------------------------------------------------------------------------------

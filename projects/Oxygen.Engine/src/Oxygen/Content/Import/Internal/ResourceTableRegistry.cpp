@@ -4,12 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Import/Internal/ResourceTableRegistry.h>
-
-#include <vector>
+#include <ranges>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/IAsyncFileWriter.h>
+#include <Oxygen/Content/Import/Internal/ResourceTableRegistry.h>
 
 namespace oxygen::content::import {
 
@@ -29,13 +28,13 @@ auto ResourceTableRegistry::TextureAggregator(
   -> TextureTableAggregator&
 {
   const auto key = NormalizeKey(cooked_root);
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   auto it = texture_tables_.find(key);
   if (it == texture_tables_.end()) {
     auto created = std::make_unique<TextureTableAggregator>(
       file_writer_, layout, cooked_root);
     it = texture_tables_.emplace(key, std::move(created)).first;
-    DLOG_F(INFO, "ResourceTableRegistry: created texture table for '{}'", key);
+    DLOG_F(INFO, "Created texture table for '{}'", key);
   }
   return *it->second;
 }
@@ -45,46 +44,65 @@ auto ResourceTableRegistry::BufferAggregator(
   -> BufferTableAggregator&
 {
   const auto key = NormalizeKey(cooked_root);
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   auto it = buffer_tables_.find(key);
   if (it == buffer_tables_.end()) {
     auto created = std::make_unique<BufferTableAggregator>(
       file_writer_, layout, cooked_root);
     it = buffer_tables_.emplace(key, std::move(created)).first;
-    DLOG_F(INFO, "ResourceTableRegistry: created buffer table for '{}'", key);
+    DLOG_F(INFO, "Created buffer table for '{}'", key);
   }
   return *it->second;
 }
 
-auto ResourceTableRegistry::FinalizeGateForRoot(
-  const std::filesystem::path& cooked_root) -> co::Semaphore&
+auto ResourceTableRegistry::BeginSession(
+  const std::filesystem::path& cooked_root) -> void
 {
   const auto key = NormalizeKey(cooked_root);
-  std::lock_guard lock(mutex_);
-  auto it = finalize_gates_.find(key);
-  if (it == finalize_gates_.end()) {
-    auto created = std::make_unique<co::Semaphore>(1);
-    it = finalize_gates_.emplace(key, std::move(created)).first;
-    DLOG_F(INFO, "ResourceTableRegistry: created finalize gate for '{}'", key);
-  }
-  return *it->second;
+  std::scoped_lock lock(mutex_);
+  auto& count = active_sessions_[key];
+  ++count;
+  DLOG_F(INFO, "Session started for '{}' (count={})", key, count);
 }
 
-auto ResourceTableRegistry::FinalizeForRoot(
-  const std::filesystem::path& cooked_root) -> co::Co<bool>
+auto ResourceTableRegistry::EndSession(const std::filesystem::path& cooked_root)
+  -> co::Co<bool>
 {
   const auto key = NormalizeKey(cooked_root);
-  TextureTableAggregator* textures = nullptr;
-  BufferTableAggregator* buffers = nullptr;
+  std::unique_ptr<TextureTableAggregator> textures;
+  std::unique_ptr<BufferTableAggregator> buffers;
+  uint32_t remaining = 0;
   {
-    std::lock_guard lock(mutex_);
-    if (const auto it = texture_tables_.find(key);
-      it != texture_tables_.end()) {
-      textures = it->second.get();
+    std::scoped_lock lock(mutex_);
+    const auto it = active_sessions_.find(key);
+    if (it == active_sessions_.end()) {
+      LOG_F(WARNING, "End session without start for '{}'", key);
+    } else if (it->second == 0) {
+      LOG_F(WARNING, "Session count underflow for '{}'", key);
+    } else {
+      --it->second;
+      remaining = it->second;
+      if (remaining == 0) {
+        active_sessions_.erase(it);
+      }
     }
-    if (const auto it = buffer_tables_.find(key); it != buffer_tables_.end()) {
-      buffers = it->second.get();
+
+    if (remaining == 0) {
+      if (const auto table_it = texture_tables_.find(key);
+        table_it != texture_tables_.end()) {
+        textures = std::move(table_it->second);
+        texture_tables_.erase(table_it);
+      }
+      if (const auto table_it = buffer_tables_.find(key);
+        table_it != buffer_tables_.end()) {
+        buffers = std::move(table_it->second);
+        buffer_tables_.erase(table_it);
+      }
     }
+  }
+
+  if (remaining != 0) {
+    co_return true;
   }
 
   bool ok = true;
@@ -99,33 +117,39 @@ auto ResourceTableRegistry::FinalizeForRoot(
     }
   }
 
-  {
-    std::lock_guard lock(mutex_);
-    texture_tables_.erase(key);
-    buffer_tables_.erase(key);
-  }
-
   co_return ok;
 }
 
 auto ResourceTableRegistry::FinalizeAll() -> co::Co<bool>
 {
-  std::vector<std::string> keys;
+  std::unordered_map<std::string, std::unique_ptr<TextureTableAggregator>>
+    textures;
+  std::unordered_map<std::string, std::unique_ptr<BufferTableAggregator>>
+    buffers;
   {
-    std::lock_guard lock(mutex_);
-    keys.reserve(texture_tables_.size() + buffer_tables_.size());
-    for (const auto& [key, table] : texture_tables_) {
-      keys.push_back(key);
+    std::scoped_lock lock(mutex_);
+    if (!active_sessions_.empty()) {
+      LOG_F(
+        WARNING, "Finalizing with {} active sessions", active_sessions_.size());
     }
-    for (const auto& [key, table] : buffer_tables_) {
-      keys.push_back(key);
-    }
+    textures = std::move(texture_tables_);
+    buffers = std::move(buffer_tables_);
+    active_sessions_.clear();
   }
 
   bool ok = true;
-  for (const auto& key : keys) {
-    if (!co_await FinalizeForRoot(std::filesystem::path(key))) {
-      ok = false;
+  for (auto& table : textures | std::views::values) {
+    if (table != nullptr) {
+      if (!co_await table->Finalize()) {
+        ok = false;
+      }
+    }
+  }
+  for (auto& table : buffers | std::views::values) {
+    if (table != nullptr) {
+      if (!co_await table->Finalize()) {
+        ok = false;
+      }
     }
   }
 

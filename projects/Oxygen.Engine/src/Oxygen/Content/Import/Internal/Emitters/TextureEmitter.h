@@ -199,10 +199,6 @@ private:
     kUser,
   };
 
-  //! Reserve an aligned range in the data file and return padding info.
-  auto ReserveDataRange(uint64_t alignment, uint64_t payload_size)
-    -> WriteReservation;
-
   //! Queue a write (padding or payload) to the data file.
   auto QueueDataWrite(WriteKind kind, TextureKind texture_kind,
     std::optional<uint32_t> index, uint64_t offset,
@@ -224,7 +220,6 @@ private:
   std::atomic<bool> finalize_started_ { false };
   std::atomic<bool> fallback_emitted_ { false };
   std::atomic<uint32_t> emitted_count_ { 0 };
-  std::atomic<uint64_t> data_file_size_ { 0 };
   std::atomic<size_t> pending_count_ { 0 };
   std::atomic<size_t> error_count_ { 0 };
 };

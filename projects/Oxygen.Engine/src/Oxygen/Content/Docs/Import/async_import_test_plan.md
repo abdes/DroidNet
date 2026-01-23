@@ -939,7 +939,7 @@ TEST(AsyncImportProgressTest, ProgressCallback_FiresDuringTextures) {
     },
     [&](auto, auto report) { completion.set_value(report); },
     [&](const ImportProgress& p) {
-      std::lock_guard lock(progress_mutex);
+      std::scoped_lock lock(progress_mutex);
       progress_updates.push_back(p);
     }
   );

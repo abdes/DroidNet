@@ -20,12 +20,12 @@
 #include <Oxygen/Content/Import/ImportProgress.h>
 #include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
+#include <Oxygen/Content/Import/Internal/ImportJobParams.h>
 #include <Oxygen/Content/Import/Naming.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/LiveObject.h>
-#include <Oxygen/OxCo/Nursery.h>
 
 namespace oxygen::co {
 class Event;
@@ -36,6 +36,7 @@ namespace oxygen::content::import {
 class IAsyncFileReader;
 class IAsyncFileWriter;
 class ResourceTableRegistry;
+class LooseCookedIndexRegistry;
 } // namespace oxygen::content::import
 
 namespace oxygen::content::import::detail {
@@ -55,23 +56,9 @@ class ImportJob : public Object, public Named, public co::LiveObject {
 public:
   //! Construct a job.
   /*!
-   @param job_id Unique job identifier.
-   @param request Job request payload.
-   @param on_complete Completion callback.
-   @param on_progress Progress callback (optional).
-   @param cancel_event Cancellation event shared with the service.
-   @param file_reader Async file reader used by ImportSession.
-   @param file_writer Async file writer used by ImportSession.
-   @param thread_pool Thread pool used by ImportSession.
+   @param params Parameters for creating the job.
   */
-  OXGN_CNTT_API ImportJob(ImportJobId job_id, ImportRequest request,
-    ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
-    std::shared_ptr<co::Event> cancel_event,
-    observer_ptr<IAsyncFileReader> file_reader,
-    observer_ptr<IAsyncFileWriter> file_writer,
-    observer_ptr<co::ThreadPool> thread_pool,
-    observer_ptr<ResourceTableRegistry> table_registry,
-    ImportConcurrency concurrency);
+  OXGN_CNTT_API explicit ImportJob(ImportJobParams params);
 
   OXYGEN_MAKE_NON_COPYABLE(ImportJob)
   OXYGEN_MAKE_NON_MOVABLE(ImportJob)
@@ -137,6 +124,10 @@ protected:
   OXGN_CNTT_NDAPI auto TableRegistry() const noexcept
     -> observer_ptr<ResourceTableRegistry>;
 
+  //! Access the loose cooked index registry.
+  OXGN_CNTT_NDAPI auto IndexRegistry() const noexcept
+    -> observer_ptr<LooseCookedIndexRegistry>;
+
   //! Returns the job id.
   OXGN_CNTT_NDAPI auto JobId() const -> ImportJobId;
 
@@ -146,6 +137,9 @@ protected:
    compute-only pipelines can cooperatively stop expensive work.
   */
   OXGN_CNTT_NDAPI auto StopToken() const noexcept -> std::stop_token;
+
+  //! Check if the job has been requested to stop (internally or via token).
+  OXGN_CNTT_NDAPI auto IsStopped() const noexcept -> bool;
 
   //! Get the naming service for this import job.
   OXGN_CNTT_API auto GetNamingService() -> NamingService&;
@@ -205,7 +199,9 @@ private:
   observer_ptr<IAsyncFileWriter> file_writer_ {};
   observer_ptr<co::ThreadPool> thread_pool_ {};
   observer_ptr<ResourceTableRegistry> table_registry_ {};
+  observer_ptr<LooseCookedIndexRegistry> index_registry_ {};
   ImportConcurrency concurrency_ {};
+  std::stop_token stop_token_;
 
   std::string name_;
 

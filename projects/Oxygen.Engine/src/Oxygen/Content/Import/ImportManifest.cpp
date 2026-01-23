@@ -7,16 +7,53 @@
 #include <fstream>
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
+#include <sstream>
+#include <vector>
 
-#include <Oxygen/Content/Tools/ImportTool/ImportManifest.h>
-#include <Oxygen/Content/Tools/ImportTool/ImportManifest_schema.h>
+#include <Oxygen/Content/Import/ImportManifest.h>
+#include <Oxygen/Content/Import/Internal/ImportManifest_schema.h>
+#include <Oxygen/Content/Import/Internal/SceneImportRequestBuilder.h>
+#include <Oxygen/Content/Import/Internal/TextureImportRequestBuilder.h>
 
-namespace oxygen::content::import::tool {
+namespace oxygen::content::import {
 
 namespace {
 
   using nlohmann::json;
+  using nlohmann::json_schema::error_handler;
   using nlohmann::json_schema::json_validator;
+
+  class CollectingErrorHandler final : public error_handler {
+  public:
+    void error(const json::json_pointer& ptr, const json& instance,
+      const std::string& message) override
+    {
+      std::ostringstream out;
+      const auto path = ptr.to_string();
+      out << (path.empty() ? "<root>" : path) << ": " << message;
+      if (!instance.is_discarded()) {
+        out << " (value=" << instance.dump() << ")";
+      }
+      errors_.push_back(out.str());
+    }
+
+    [[nodiscard]] auto HasErrors() const noexcept -> bool
+    {
+      return !errors_.empty();
+    }
+
+    [[nodiscard]] auto ToString() const -> std::string
+    {
+      std::ostringstream out;
+      for (const auto& error : errors_) {
+        out << "- " << error << "\n";
+      }
+      return out.str();
+    }
+
+  private:
+    std::vector<std::string> errors_;
+  };
 
   class SchemaValidator {
   public:
@@ -29,7 +66,11 @@ namespace {
     auto Validate(const json& instance) const -> std::optional<std::string>
     {
       try {
-        [[maybe_unused]] auto _ = validator_.validate(instance);
+        CollectingErrorHandler handler;
+        [[maybe_unused]] auto _ = validator_.validate(instance, handler);
+        if (handler.HasErrors()) {
+          return handler.ToString();
+        }
         return std::nullopt;
       } catch (const std::exception& e) {
         return std::string(e.what());
@@ -123,6 +164,20 @@ namespace {
     return true;
   }
 
+  auto ReadUInt16Field(const json& obj, const char* name, uint16_t& target,
+    std::ostream& errors) -> bool
+  {
+    if (!obj.contains(name)) {
+      return true;
+    }
+    uint32_t value = 0U;
+    if (!ReadUIntField(obj, name, value, errors)) {
+      return false;
+    }
+    target = static_cast<uint16_t>(value);
+    return true;
+  }
+
   auto ReadOptionalUIntField(const json& obj, const char* name,
     std::optional<uint32_t>& target, std::ostream& errors) -> bool
   {
@@ -155,6 +210,22 @@ namespace {
   auto ApplyTextureOverrides(const json& obj, TextureImportSettings& settings,
     std::ostream& errors) -> bool
   {
+    if (obj.contains("sources")) {
+      if (!obj["sources"].is_array()) {
+        errors << "ERROR: 'sources' must be an array\n";
+        return false;
+      }
+      for (const auto& mapping_json : obj["sources"]) {
+        TextureSourceMapping mapping;
+        if (!ReadStringField(mapping_json, "file", mapping.file, errors)) {
+          return false;
+        }
+        ReadUInt16Field(mapping_json, "layer", mapping.layer, errors);
+        ReadUInt16Field(mapping_json, "mip", mapping.mip, errors);
+        ReadUInt16Field(mapping_json, "slice", mapping.slice, errors);
+        settings.sources.push_back(std::move(mapping));
+      }
+    }
     if (!ReadStringField(obj, "preset", settings.preset, errors)) {
       return false;
     }
@@ -177,6 +248,10 @@ namespace {
     if (!ReadStringField(obj, "mip_filter", settings.mip_filter, errors)) {
       return false;
     }
+    if (!ReadStringField(
+          obj, "mip_filter_space", settings.mip_filter_space, errors)) {
+      return false;
+    }
     if (!ReadStringField(obj, "bc7_quality", settings.bc7_quality, errors)) {
       return false;
     }
@@ -187,8 +262,15 @@ namespace {
     if (!ReadStringField(obj, "cube_layout", settings.cube_layout, errors)) {
       return false;
     }
-    if (!ReadUIntField(
-          obj, "max_mip_levels", settings.max_mip_levels, errors)) {
+    if (!ReadStringField(obj, "hdr_handling", settings.hdr_handling, errors)) {
+      return false;
+    }
+    bool dummy = false;
+    if (!ReadFloatField(
+          obj, "exposure_ev", settings.exposure_ev, dummy, errors)) {
+      return false;
+    }
+    if (!ReadUIntField(obj, "max_mips", settings.max_mip_levels, errors)) {
       return false;
     }
     if (!ReadUIntField(
@@ -199,6 +281,17 @@ namespace {
       return false;
     }
     if (!ReadBoolField(obj, "force_rgba", settings.force_rgba, errors)) {
+      return false;
+    }
+    if (!ReadBoolField(
+          obj, "flip_normal_green", settings.flip_normal_green, errors)) {
+      return false;
+    }
+    if (!ReadBoolField(
+          obj, "renormalize", settings.renormalize_normals, errors)) {
+      return false;
+    }
+    if (!ReadBoolField(obj, "bake_hdr", settings.bake_hdr_to_ldr, errors)) {
       return false;
     }
     if (!ReadBoolField(obj, "cubemap", settings.cubemap, errors)) {
@@ -215,7 +308,7 @@ namespace {
     std::ostream& errors) -> bool
   {
     ReadBoolField(
-      obj, "with_content_hashing", settings.with_content_hashing, errors);
+      obj, "content_hashing", settings.with_content_hashing, errors);
     if (obj.contains("content_flags")) {
       const auto& flags = obj["content_flags"];
       if (!flags.is_object()) {
@@ -228,11 +321,10 @@ namespace {
       ReadBoolField(flags, "scene", settings.import_scene, errors);
     }
 
-    if (!ReadStringField(
-          obj, "unit_normalization_policy", settings.unit_policy, errors)) {
+    if (!ReadStringField(obj, "unit_policy", settings.unit_policy, errors)) {
       return false;
     }
-    if (!ReadFloatField(obj, "custom_unit_scale", settings.unit_scale,
+    if (!ReadFloatField(obj, "unit_scale", settings.unit_scale,
           settings.unit_scale_set, errors)) {
       return false;
     }
@@ -250,27 +342,47 @@ namespace {
           obj, "tangents_policy", settings.tangents_policy, errors)) {
       return false;
     }
-    if (!ReadStringField(
-          obj, "node_pruning_policy", settings.node_pruning, errors)) {
+    if (!ReadStringField(obj, "node_pruning", settings.node_pruning, errors)) {
       return false;
     }
+
+    // Apply texture overrides from the same object (flat structure)
+    if (!ApplyTextureOverrides(obj, settings.texture_defaults, errors)) {
+      return false;
+    }
+
+    if (obj.contains("texture_overrides")) {
+      const auto& overrides = obj["texture_overrides"];
+      if (!overrides.is_object()) {
+        errors << "ERROR: 'texture_overrides' must be an object\n";
+        return false;
+      }
+      for (auto it = overrides.begin(); it != overrides.end(); ++it) {
+        // Start with the defaults for this job
+        TextureImportSettings tex_settings = settings.texture_defaults;
+        if (!ApplyTextureOverrides(it.value(), tex_settings, errors)) {
+          return false;
+        }
+        settings.texture_overrides[it.key()] = std::move(tex_settings);
+      }
+    }
+
     return true;
   }
 
   auto ApplyImportOptions(
     const json& obj, bool& with_content_hashing, std::ostream& errors) -> bool
   {
-    return ReadBoolField(
-      obj, "with_content_hashing", with_content_hashing, errors);
+    return ReadBoolField(obj, "content_hashing", with_content_hashing, errors);
   }
 
   auto ApplyCommonOverrides(const json& obj, TextureImportSettings& settings,
     std::ostream& errors) -> bool
   {
-    if (!ReadStringField(obj, "cooked_root", settings.cooked_root, errors)) {
+    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
       return false;
     }
-    if (!ReadStringField(obj, "job_name", settings.job_name, errors)) {
+    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
       return false;
     }
     if (!ReadBoolField(obj, "verbose", settings.verbose, errors)) {
@@ -321,22 +433,7 @@ namespace {
         return false;
       }
     }
-    const bool has_mesh = obj.contains("mesh");
     const bool has_mesh_build = obj.contains("mesh_build");
-    if (has_mesh && has_mesh_build) {
-      errors << "ERROR: use only one of concurrency.mesh or "
-                "concurrency.mesh_build\n";
-      return false;
-    }
-    if (has_mesh) {
-      if (!obj["mesh"].is_object()) {
-        errors << "ERROR: concurrency.mesh must be an object\n";
-        return false;
-      }
-      if (!ApplyPipelineConcurrency(obj["mesh"], target.mesh_build, errors)) {
-        return false;
-      }
-    }
     if (has_mesh_build) {
       if (!obj["mesh_build"].is_object()) {
         errors << "ERROR: concurrency.mesh_build must be an object\n";
@@ -371,10 +468,10 @@ namespace {
   auto ApplyCommonSceneOverrides(const json& obj, SceneImportSettings& settings,
     std::ostream& errors) -> bool
   {
-    if (!ReadStringField(obj, "cooked_root", settings.cooked_root, errors)) {
+    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
       return false;
     }
-    if (!ReadStringField(obj, "job_name", settings.job_name, errors)) {
+    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
       return false;
     }
     if (!ReadBoolField(obj, "verbose", settings.verbose, errors)) {
@@ -385,7 +482,7 @@ namespace {
 
 } // namespace
 
-auto ImportManifestLoader::Load(const std::filesystem::path& manifest_path,
+auto ImportManifest::Load(const std::filesystem::path& manifest_path,
   const std::optional<std::filesystem::path>& root_override,
   std::ostream& error_stream) -> std::optional<ImportManifest>
 {
@@ -396,14 +493,15 @@ auto ImportManifestLoader::Load(const std::filesystem::path& manifest_path,
 
   if (const auto error = SchemaValidator::Instance().Validate(*json_data);
     error.has_value()) {
-    error_stream << "ERROR: manifest schema validation failed: " << *error
-                 << "\n";
+    error_stream << "ERROR: manifest schema validation failed:\n" << *error;
+    if (!error->empty() && error->back() != '\n') {
+      error_stream << "\n";
+    }
     return std::nullopt;
   }
 
   ImportManifest manifest {};
   manifest.version = json_data->value("version", 1U);
-  manifest.defaults.job_type = "texture";
 
   if (!ReadOptionalUIntField(*json_data, "thread_pool_size",
         manifest.thread_pool_size, error_stream)) {
@@ -437,58 +535,37 @@ auto ImportManifestLoader::Load(const std::filesystem::path& manifest_path,
 
   if (json_data->contains("defaults")) {
     const auto& defaults = (*json_data)["defaults"];
-    ReadStringField(
-      defaults, "job_type", manifest.defaults.job_type, error_stream);
-    ApplyCommonOverrides(defaults, manifest.defaults.texture, error_stream);
-    ApplyCommonSceneOverrides(defaults, manifest.defaults.fbx, error_stream);
-    ApplyCommonSceneOverrides(defaults, manifest.defaults.gltf, error_stream);
-    if (defaults.contains("import_options")) {
-      if (!defaults["import_options"].is_object()) {
-        error_stream << "ERROR: defaults.import_options must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyImportOptions(defaults["import_options"],
-            manifest.defaults.texture.with_content_hashing, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplySceneOverrides(
-            defaults["import_options"], manifest.defaults.fbx, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplySceneOverrides(
-            defaults["import_options"], manifest.defaults.gltf, error_stream)) {
-        return std::nullopt;
-      }
+    if (!defaults.is_object()) {
+      error_stream << "ERROR: defaults must be an object\n";
+      return std::nullopt;
     }
+
     if (defaults.contains("texture")) {
-      if (!defaults["texture"].is_object()) {
+      const auto& texture_defaults = defaults["texture"];
+      if (!texture_defaults.is_object()) {
         error_stream << "ERROR: defaults.texture must be an object\n";
         return std::nullopt;
       }
-      if (!ApplyTextureOverrides(
-            defaults["texture"], manifest.defaults.texture, error_stream)) {
-        return std::nullopt;
-      }
+      ApplyCommonOverrides(
+        texture_defaults, manifest.defaults.texture, error_stream);
+      ApplyImportOptions(texture_defaults,
+        manifest.defaults.texture.with_content_hashing, error_stream);
+      ApplyTextureOverrides(
+        texture_defaults, manifest.defaults.texture, error_stream);
     }
-    if (defaults.contains("fbx")) {
-      if (!defaults["fbx"].is_object()) {
-        error_stream << "ERROR: defaults.fbx must be an object\n";
+
+    if (defaults.contains("scene")) {
+      const auto& scene_defaults = defaults["scene"];
+      if (!scene_defaults.is_object()) {
+        error_stream << "ERROR: defaults.scene must be an object\n";
         return std::nullopt;
       }
-      if (!ApplySceneOverrides(
-            defaults["fbx"], manifest.defaults.fbx, error_stream)) {
-        return std::nullopt;
-      }
-    }
-    if (defaults.contains("gltf")) {
-      if (!defaults["gltf"].is_object()) {
-        error_stream << "ERROR: defaults.gltf must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplySceneOverrides(
-            defaults["gltf"], manifest.defaults.gltf, error_stream)) {
-        return std::nullopt;
-      }
+      ApplyCommonSceneOverrides(
+        scene_defaults, manifest.defaults.fbx, error_stream);
+      ApplyCommonSceneOverrides(
+        scene_defaults, manifest.defaults.gltf, error_stream);
+      ApplySceneOverrides(scene_defaults, manifest.defaults.fbx, error_stream);
+      ApplySceneOverrides(scene_defaults, manifest.defaults.gltf, error_stream);
     }
   }
 
@@ -504,18 +581,17 @@ auto ImportManifestLoader::Load(const std::filesystem::path& manifest_path,
     }
 
     ImportManifestJob manifest_job {};
-    manifest_job.job_type = manifest.defaults.job_type;
     manifest_job.texture = manifest.defaults.texture;
     manifest_job.fbx = manifest.defaults.fbx;
     manifest_job.gltf = manifest.defaults.gltf;
 
-    if (!ReadStringField(
-          job, "job_type", manifest_job.job_type, error_stream)) {
+    if (!job.contains("type") || !job["type"].is_string()) {
+      error_stream << "ERROR: job.type is required and must be a string\n";
       return std::nullopt;
     }
-
+    manifest_job.job_type = job["type"].get<std::string>();
     if (manifest_job.job_type.empty()) {
-      error_stream << "ERROR: job_type must not be empty\n";
+      error_stream << "ERROR: job.type must not be empty\n";
       return std::nullopt;
     }
 
@@ -541,54 +617,18 @@ auto ImportManifestLoader::Load(const std::filesystem::path& manifest_path,
       return std::nullopt;
     }
 
-    if (job.contains("import_options")) {
-      if (!job["import_options"].is_object()) {
-        error_stream << "ERROR: job.import_options must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyImportOptions(job["import_options"],
-            manifest_job.texture.with_content_hashing, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplySceneOverrides(
-            job["import_options"], manifest_job.fbx, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplySceneOverrides(
-            job["import_options"], manifest_job.gltf, error_stream)) {
-        return std::nullopt;
-      }
+    if (!ApplyImportOptions(
+          job, manifest_job.texture.with_content_hashing, error_stream)) {
+      return std::nullopt;
     }
-
-    if (job.contains("texture")) {
-      if (!job["texture"].is_object()) {
-        error_stream << "ERROR: job.texture must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyTextureOverrides(
-            job["texture"], manifest_job.texture, error_stream)) {
-        return std::nullopt;
-      }
+    if (!ApplySceneOverrides(job, manifest_job.fbx, error_stream)) {
+      return std::nullopt;
     }
-
-    if (job.contains("fbx")) {
-      if (!job["fbx"].is_object()) {
-        error_stream << "ERROR: job.fbx must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplySceneOverrides(job["fbx"], manifest_job.fbx, error_stream)) {
-        return std::nullopt;
-      }
+    if (!ApplySceneOverrides(job, manifest_job.gltf, error_stream)) {
+      return std::nullopt;
     }
-
-    if (job.contains("gltf")) {
-      if (!job["gltf"].is_object()) {
-        error_stream << "ERROR: job.gltf must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplySceneOverrides(job["gltf"], manifest_job.gltf, error_stream)) {
-        return std::nullopt;
-      }
+    if (!ApplyTextureOverrides(job, manifest_job.texture, error_stream)) {
+      return std::nullopt;
     }
 
     manifest.jobs.push_back(std::move(manifest_job));
@@ -597,4 +637,33 @@ auto ImportManifestLoader::Load(const std::filesystem::path& manifest_path,
   return manifest;
 }
 
-} // namespace oxygen::content::import::tool
+auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
+  -> std::optional<ImportRequest>
+{
+  if (job_type == "texture") {
+    return internal::BuildTextureRequest(texture, error_stream);
+  }
+  if (job_type == "fbx") {
+    return internal::BuildSceneRequest(fbx, ImportFormat::kFbx, error_stream);
+  }
+  if (job_type == "gltf") {
+    return internal::BuildSceneRequest(gltf, ImportFormat::kGltf, error_stream);
+  }
+  error_stream << "ERROR: unknown job_type: " << job_type << "\n";
+  return std::nullopt;
+}
+
+auto ImportManifest::BuildRequests(std::ostream& error_stream) const
+  -> std::vector<ImportRequest>
+{
+  std::vector<ImportRequest> requests;
+  requests.reserve(jobs.size());
+  for (const auto& job : jobs) {
+    if (auto request = job.BuildRequest(error_stream)) {
+      requests.push_back(std::move(*request));
+    }
+  }
+  return requests;
+}
+
+} // namespace oxygen::content::import

@@ -5,39 +5,48 @@
     "texture": { "workers": 12, "queue_capacity": 64 },
     "buffer": { "workers": 2, "queue_capacity": 64 },
     "material": { "workers": 4, "queue_capacity": 64 },
-    "mesh": { "workers": 10, "queue_capacity": 64 },
+    "mesh_build": { "workers": 10, "queue_capacity": 64 },
     "geometry": { "workers": 3, "queue_capacity": 32 },
     "scene": { "workers": 1, "queue_capacity": 8 }
   },
   "defaults": {
-    "job_type": "fbx",
-    "cooked_root": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Cooked",
-    "import_options": {
+    "scene": {
+      "output": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Cooked",
       "content_flags": {
         "textures": false,
         "materials": true,
         "geometry": true,
         "scene": true
       },
-      "unit_normalization_policy": "normalize",
-      "normals_policy": "generate",
+      "unit_policy": "normalize",
+      "normals_policy": "recalculate",
       "tangents_policy": "recalculate",
-      "node_pruning_policy": "drop-empty"
+      "node_pruning": "drop-empty"
     }
   },
   "jobs": [
     {
+      "type": "fbx",
       "source": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Models/Rigged_Humanoid_a.fbx",
-      "job_name": "rigged-humanoid",
-      "fbx": {
-        "content_flags": {
-          "textures": true,
-          "materials": true,
-          "geometry": true,
-          "scene": true
+      "name": "rigged-humanoid",
+      "content_flags": {
+        "textures": true,
+        "materials": true,
+        "geometry": true,
+        "scene": true
+      },
+      "unit_policy": "custom",
+      "unit_scale": 0.01,
+      "texture_overrides": {
+        "Body_Albedo.png": {
+          "preset": "albedo-srgb",
+          "bc7_quality": "high"
         },
-        "unit_normalization_policy": "custom",
-        "custom_unit_scale": 0.01
+        "Body_Normal.png": {
+          "intent": "normal",
+          "preset": "normal-bc7",
+          "flip_normal_green": true
+        }
       }
     }
   ]

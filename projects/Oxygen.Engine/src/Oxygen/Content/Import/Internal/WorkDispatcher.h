@@ -47,8 +47,8 @@ public:
   struct ProgressReporter final {
     ImportJobId job_id = kInvalidJobId;
     ProgressEventCallback on_progress;
-    float overall_start = 0.0f;
-    float overall_end = 1.0f;
+    float overall_start = 0.0F;
+    float overall_end = 1.0F;
 
     auto ReportItemProgress(ProgressEventKind kind, ImportPhase phase,
       float overall_progress, std::string message, std::string item_kind,
@@ -125,10 +125,10 @@ private:
   auto ClosePipelines() noexcept -> void;
 
   ImportSession& session_;
-  observer_ptr<co::ThreadPool> thread_pool_ {};
+  observer_ptr<co::ThreadPool> thread_pool_;
   const ImportConcurrency& concurrency_;
   std::stop_token stop_token_;
-  std::optional<ProgressReporter> progress_ {};
+  std::optional<ProgressReporter> progress_;
 
   std::unique_ptr<TexturePipeline> texture_pipeline_;
   std::unique_ptr<BufferPipeline> buffer_pipeline_;

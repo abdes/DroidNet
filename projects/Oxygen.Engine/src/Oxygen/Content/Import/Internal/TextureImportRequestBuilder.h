@@ -7,15 +7,15 @@
 #pragma once
 
 #include <optional>
-#include <ostream>
 
 #include <Oxygen/Content/Import/ImportRequest.h>
-#include <Oxygen/Content/Tools/ImportTool/SceneImportSettings.h>
+#include <Oxygen/Content/Import/TextureImportSettings.h>
+#include <Oxygen/Content/api_export.h>
 
-namespace oxygen::content::import::tool {
+namespace oxygen::content::import::internal {
 
-[[nodiscard]] auto BuildSceneRequest(const SceneImportSettings& settings,
-  ImportFormat expected_format, std::ostream& error_stream)
+[[nodiscard]] OXGN_CNTT_API auto BuildTextureRequest(
+  const TextureImportSettings& settings, std::ostream& error_stream)
   -> std::optional<ImportRequest>;
 
-} // namespace oxygen::content::import::tool
+} // namespace oxygen::content::import::internal

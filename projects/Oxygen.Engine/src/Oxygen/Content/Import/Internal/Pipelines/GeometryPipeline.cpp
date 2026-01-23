@@ -49,8 +49,8 @@ GeometryPipeline::GeometryPipeline(co::ThreadPool& thread_pool, Config config)
 GeometryPipeline::~GeometryPipeline()
 {
   if (started_) {
-    DLOG_IF_F(WARNING, HasPending(),
-      "GeometryPipeline destroyed with {} pending items", PendingCount());
+    DLOG_IF_F(
+      WARNING, HasPending(), "Destroyed with {} pending items", PendingCount());
   }
 
   input_channel_.Close();
@@ -352,7 +352,7 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
     const auto hash = co_await thread_pool_.Run(
       [bytes = std::span<const std::byte>(output_bytes.data(),
          output_bytes.size())](co::ThreadPool::CancelToken canceled) noexcept {
-        DLOG_F(1, "GeometryPipeline: Compute content hash");
+        DLOG_F(1, "Compute content hash");
         if (canceled) {
           return uint64_t { 0 };
         }

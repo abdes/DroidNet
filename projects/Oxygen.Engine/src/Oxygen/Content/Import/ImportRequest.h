@@ -9,9 +9,11 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <Oxygen/Content/Import/ImportOptions.h>
 #include <Oxygen/Content/Import/LooseCookedLayout.h>
+#include <Oxygen/Content/Import/TextureSourceAssembly.h>
 #include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::import {
@@ -26,10 +28,19 @@ enum class ImportFormat : uint8_t {
 
 OXGN_CNTT_NDAPI auto to_string(ImportFormat format) -> std::string_view;
 
+//! A single source mapping for multi-source imports.
+struct ImportSource final {
+  std::filesystem::path path;
+  SubresourceId subresource;
+};
+
 //! Request for importing a source file into a loose cooked container.
 struct ImportRequest final {
-  //! Source file (FBX, glTF, or GLB).
+  //! Source file (FBX, glTF, GLB, or primary texture).
   std::filesystem::path source_path;
+
+  //! Optional additional source files for multi-source imports.
+  std::vector<ImportSource> additional_sources;
 
   //! Optional destination directory (the loose cooked root).
   /*!

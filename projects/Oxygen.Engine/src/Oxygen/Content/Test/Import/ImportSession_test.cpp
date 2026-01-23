@@ -20,6 +20,7 @@
 #include <Oxygen/Content/Import/Internal/Emitters/TextureEmitter.h>
 #include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Internal/ImportSession.h>
+#include <Oxygen/Content/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Content/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Content/Import/Internal/WindowsFileWriter.h>
 #include <Oxygen/OxCo/Run.h>
@@ -40,6 +41,7 @@ protected:
     reader_ = CreateAsyncFileReader(*loop_);
     writer_ = std::make_unique<WindowsFileWriter>(*loop_);
     table_registry_ = std::make_unique<ResourceTableRegistry>(*writer_);
+    index_registry_ = std::make_unique<LooseCookedIndexRegistry>();
     thread_pool_ = std::make_unique<ThreadPool>(*loop_, 1);
     test_dir_
       = std::filesystem::temp_directory_path() / "oxygen_import_session_test";
@@ -50,6 +52,7 @@ protected:
   {
     thread_pool_.reset();
     table_registry_.reset();
+    index_registry_.reset();
     writer_.reset();
     reader_.reset();
     loop_.reset();
@@ -70,6 +73,7 @@ protected:
   std::unique_ptr<IAsyncFileReader> reader_;
   std::unique_ptr<WindowsFileWriter> writer_;
   std::unique_ptr<ResourceTableRegistry> table_registry_;
+  std::unique_ptr<LooseCookedIndexRegistry> index_registry_;
   std::unique_ptr<ThreadPool> thread_pool_;
   std::filesystem::path test_dir_;
 };
@@ -115,7 +119,8 @@ NOLINT_TEST_F(ImportSessionTest, Constructor_ValidRequest_Succeeds)
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
     oxygen::observer_ptr<ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    oxygen::observer_ptr<LooseCookedIndexRegistry>(index_registry_.get()));
 
   // Assert
   EXPECT_EQ(session.Request().source_path, request.source_path);
@@ -135,7 +140,8 @@ NOLINT_TEST_F(ImportSessionTest, Constructor_NoExplicitCookedRoot_UsesSourceDir)
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
     oxygen::observer_ptr<ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    oxygen::observer_ptr<LooseCookedIndexRegistry>(index_registry_.get()));
 
   // Assert
   EXPECT_EQ(session.CookedRoot(), test_dir_ / "models");
@@ -152,7 +158,8 @@ NOLINT_TEST_F(ImportSessionTest, CookedWriter_IsAccessible)
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
     oxygen::observer_ptr<ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    oxygen::observer_ptr<LooseCookedIndexRegistry>(index_registry_.get()));
 
   // Assert - just verify we can access it without crash
   auto& writer = session.CookedWriter();
@@ -170,7 +177,8 @@ NOLINT_TEST_F(ImportSessionTest, Emitters_LazyAccess_ReturnsStableInstances)
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
     oxygen::observer_ptr<ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    oxygen::observer_ptr<LooseCookedIndexRegistry>(index_registry_.get()));
 
   // Act
   auto* tex_1 = &session.TextureEmitter();
@@ -197,7 +205,8 @@ NOLINT_TEST_F(ImportSessionTest, AddDiagnostic_Single_AddsToList)
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
     oxygen::observer_ptr<ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    oxygen::observer_ptr<LooseCookedIndexRegistry>(index_registry_.get()));
 
   // Act
   session.AddDiagnostic({
@@ -223,7 +232,8 @@ NOLINT_TEST_F(ImportSessionTest, AddDiagnostic_Multiple_AllAdded)
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
     oxygen::observer_ptr<ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    oxygen::observer_ptr<LooseCookedIndexRegistry>(index_registry_.get()));
 
   // Act
   session.AddDiagnostic({
@@ -256,7 +266,8 @@ NOLINT_TEST_F(ImportSessionTest, HasErrors_NoErrors_ReturnsFalse)
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
     oxygen::observer_ptr<ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    oxygen::observer_ptr<LooseCookedIndexRegistry>(index_registry_.get()));
   session.AddDiagnostic({
     .severity = ImportSeverity::kWarning,
     .code = "test.warning",
@@ -276,7 +287,8 @@ NOLINT_TEST_F(ImportSessionTest, HasErrors_ErrorAdded_ReturnsTrue)
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
     oxygen::observer_ptr<ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    oxygen::observer_ptr<LooseCookedIndexRegistry>(index_registry_.get()));
 
   // Act
   session.AddDiagnostic({
@@ -298,7 +310,8 @@ NOLINT_TEST_F(ImportSessionTest, AddDiagnostic_MultipleThreads_ThreadSafe)
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
     oxygen::observer_ptr<ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    oxygen::observer_ptr<LooseCookedIndexRegistry>(index_registry_.get()));
   constexpr int kThreadCount = 4;
   constexpr int kDiagnosticsPerThread = 100;
   std::latch start_latch(kThreadCount);
@@ -341,7 +354,8 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_NoErrors_ReturnsSuccess)
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
     oxygen::observer_ptr<ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    oxygen::observer_ptr<LooseCookedIndexRegistry>(index_registry_.get()));
 
   // Add a warning (not an error)
   session.AddDiagnostic({
@@ -370,7 +384,8 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_HasErrors_ReturnsFailure)
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
     oxygen::observer_ptr<ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    oxygen::observer_ptr<LooseCookedIndexRegistry>(index_registry_.get()));
 
   session.AddDiagnostic({
     .severity = ImportSeverity::kError,
@@ -397,7 +412,8 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_Success_WritesIndex)
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
     oxygen::observer_ptr<ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    oxygen::observer_ptr<LooseCookedIndexRegistry>(index_registry_.get()));
 
   // Act
   co::Run(*loop_, [&]() -> Co<> {
@@ -420,7 +436,8 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_HasErrors_WritesIndexWithWarning)
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
     oxygen::observer_ptr<ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    oxygen::observer_ptr<LooseCookedIndexRegistry>(index_registry_.get()));
 
   session.AddDiagnostic({
     .severity = ImportSeverity::kError,
@@ -453,7 +470,8 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_PendingWrites_WaitsForCompletion)
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
     oxygen::observer_ptr<ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    oxygen::observer_ptr<LooseCookedIndexRegistry>(index_registry_.get()));
 
   // Queue some async writes
   const std::string content = "test content";
@@ -485,7 +503,8 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_WithDiagnostics_IncludesInReport)
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
     oxygen::observer_ptr<ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    oxygen::observer_ptr<LooseCookedIndexRegistry>(index_registry_.get()));
 
   session.AddDiagnostic({
     .severity = ImportSeverity::kInfo,
@@ -521,7 +540,8 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_WithEmitters_RegistersInIndex)
     oxygen::observer_ptr<IAsyncFileReader>(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
     oxygen::observer_ptr<ThreadPool>(thread_pool_.get()),
-    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()));
+    oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+    oxygen::observer_ptr<LooseCookedIndexRegistry>(index_registry_.get()));
 
   const auto key = oxygen::data::AssetKey {
     .guid = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 },

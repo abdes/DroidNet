@@ -15,11 +15,11 @@ namespace oxygen::content::import {
 
 //! Unique identifier for an import job.
 // clang-format off
-using ImportJobId = oxygen::NamedType<uint64_t,
+using ImportJobId = NamedType<uint64_t,
   struct ImportJobIdTag,
-  oxygen::Comparable,
-  oxygen::Hashable,
-  oxygen::Printable>;
+  Comparable,
+  Hashable,
+  Printable>;
 // clang-format on
 
 //! Invalid job ID constant.

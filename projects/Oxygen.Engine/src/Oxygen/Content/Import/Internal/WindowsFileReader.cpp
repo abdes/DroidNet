@@ -82,7 +82,7 @@ namespace oxygen::content::import {
 WindowsFileReader::WindowsFileReader(ImportEventLoop& loop)
   : loop_(loop)
 {
-  DLOG_F(INFO, "WindowsFileReader created");
+  DLOG_F(INFO, "Created");
 }
 
 WindowsFileReader::~WindowsFileReader()
@@ -145,7 +145,7 @@ auto WindowsFileReader::ReadFile(const std::filesystem::path& path,
   // Allocate buffer
   std::vector<std::byte> buffer;
   try {
-    buffer.resize(static_cast<size_t>(bytes_to_read));
+    buffer.resize(bytes_to_read);
   } catch (const std::bad_alloc&) {
     co_return Err(FileErrorInfo {
       .code = FileError::kUnknown,

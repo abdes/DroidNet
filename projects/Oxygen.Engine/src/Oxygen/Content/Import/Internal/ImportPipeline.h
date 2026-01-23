@@ -7,7 +7,6 @@
 #pragma once
 
 #include <concepts>
-#include <cstddef>
 #include <string_view>
 
 #include <Oxygen/OxCo/Co.h>

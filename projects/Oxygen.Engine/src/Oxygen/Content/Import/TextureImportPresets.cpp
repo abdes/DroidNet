@@ -164,6 +164,7 @@ void ApplyPreset(TextureImportDesc& desc, const TexturePreset preset) noexcept
   desc.mip_filter_space = ColorSpace::kLinear;
   desc.output_format = Format::kRGBA8UNorm;
   desc.bc7_quality = Bc7Quality::kNone;
+  desc.hdr_handling = HdrHandling::kTonemapAuto;
   desc.bake_hdr_to_ldr = false;
   desc.exposure_ev = 0.0F;
 
@@ -235,6 +236,7 @@ void ApplyPreset(TextureImportDesc& desc, const TexturePreset preset) noexcept
     desc.source_color_space = ColorSpace::kLinear;
     desc.output_format = Format::kRGBA16Float;
     desc.bc7_quality = Bc7Quality::kNone;
+    desc.hdr_handling = HdrHandling::kKeepFloat;
     break;
 
   case TexturePreset::kHdrLightProbe:
@@ -242,6 +244,7 @@ void ApplyPreset(TextureImportDesc& desc, const TexturePreset preset) noexcept
     desc.source_color_space = ColorSpace::kLinear;
     desc.output_format = Format::kRGBA16Float;
     desc.bc7_quality = Bc7Quality::kNone;
+    desc.hdr_handling = HdrHandling::kKeepFloat;
     break;
 
   case TexturePreset::kData:

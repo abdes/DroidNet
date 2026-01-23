@@ -43,7 +43,7 @@ struct MaterialWorkPayload final {
 
 //! Stored payload for geometry pipeline work.
 struct GeometryFinalizeWorkItem final {
-  PlanItemId mesh_build_item {};
+  PlanItemId mesh_build_item;
 };
 
 //! Stored payload for mesh build pipeline work.

@@ -106,7 +106,7 @@ AssetEmitter::AssetEmitter(IAsyncFileWriter& file_writer,
 {
   // layout is available for future use if needed
   (void)layout;
-  DLOG_F(INFO, "AssetEmitter created: cooked_root='{}' sha256={}",
+  DLOG_F(INFO, "Created asset emitter: cooked_root='{}' sha256={}",
     cooked_root_.string(), compute_sha256_);
 }
 
@@ -114,7 +114,7 @@ AssetEmitter::~AssetEmitter()
 {
   const auto pending = pending_count_.load(std::memory_order_acquire);
   if (pending > 0) {
-    LOG_F(WARNING, "AssetEmitter destroyed with {} pending writes", pending);
+    LOG_F(WARNING, "Destroyed with {} pending writes", pending);
   }
 }
 
@@ -144,12 +144,12 @@ auto AssetEmitter::Emit(const data::AssetKey& key, data::AssetType asset_type,
   // Build full path for the descriptor file
   const auto descriptor_path = cooked_root_ / descriptor_relpath;
 
-  DLOG_F(INFO, "AssetEmitter::Emit: type={} vpath='{}' relpath='{}' size={}",
+  DLOG_F(INFO, "Emit: type={} vpath='{}' relpath='{}' size={}",
     static_cast<int>(asset_type), virtual_path, descriptor_relpath,
     bytes.size());
 
-  RecordAsset(key, asset_type, virtual_path, descriptor_relpath,
-    static_cast<uint64_t>(bytes.size()), sha256);
+  RecordAsset(
+    key, asset_type, virtual_path, descriptor_relpath, bytes.size(), sha256);
   QueueDescriptorWrite(descriptor_path, descriptor_relpath, bytes);
 }
 
@@ -274,35 +274,33 @@ auto AssetEmitter::OnWriteComplete(
   }
 
   error_count_.fetch_add(1, std::memory_order_acq_rel);
-  LOG_F(ERROR, "AssetEmitter: failed to write '{}': {}", descriptor_relpath,
-    error.ToString());
+  LOG_F(
+    ERROR, "Failed to write '{}': {}", descriptor_relpath, error.ToString());
 }
 
 auto AssetEmitter::Finalize() -> co::Co<bool>
 {
   finalize_started_.store(true, std::memory_order_release);
 
-  DLOG_F(INFO, "AssetEmitter::Finalize: waiting for {} pending writes",
+  DLOG_F(INFO, "Finalize: waiting for {} pending writes",
     pending_count_.load(std::memory_order_acquire));
 
   // Wait for all pending writes via flush
   auto flush_result = co_await file_writer_.Flush();
 
   if (!flush_result.has_value()) {
-    LOG_F(ERROR, "AssetEmitter::Finalize: flush failed: {}",
-      flush_result.error().ToString());
+    LOG_F(ERROR, "Finalize: flush failed: {}", flush_result.error().ToString());
     co_return false;
   }
 
   // Check for accumulated errors
   const auto errors = error_count_.load(std::memory_order_acquire);
   if (errors > 0) {
-    LOG_F(ERROR, "AssetEmitter::Finalize: {} I/O errors occurred", errors);
+    LOG_F(ERROR, "Finalize: {} I/O errors occurred", errors);
     co_return false;
   }
 
-  DLOG_F(INFO, "AssetEmitter::Finalize: complete, {} assets emitted",
-    records_.size());
+  DLOG_F(INFO, "Finalize: complete, {} assets emitted", records_.size());
 
   co_return true;
 }

@@ -11,7 +11,6 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -44,7 +43,7 @@ using WorkPayloadHandle = NamedType<void*, struct WorkPayloadHandleTag,
 
 //! Token used to mark a dependency as satisfied.
 struct DependencyToken {
-  PlanItemId producer {};
+  PlanItemId producer;
 };
 
 //! Readiness event for a plan item.
@@ -68,15 +67,15 @@ struct ReadinessTracker {
 
 //! Declared item in the import plan.
 struct PlanItem {
-  PlanItemId id {};
+  PlanItemId id;
   PlanItemKind kind = PlanItemKind::kTextureResource;
   std::string debug_name;
-  WorkPayloadHandle work_handle {};
+  WorkPayloadHandle work_handle;
 };
 
 //! Execution step derived from a plan item.
 struct PlanStep {
-  PlanItemId item_id {};
+  PlanItemId item_id;
   std::vector<PlanItemId> prerequisites;
 };
 
@@ -166,7 +165,7 @@ private:
   auto AddItem(PlanItemKind kind, std::string debug_name,
     WorkPayloadHandle work_handle) -> PlanItemId;
 
-  auto ItemIndex(PlanItemId item) const -> size_t;
+  [[nodiscard]] auto ItemIndex(PlanItemId item) const -> size_t;
 
   auto EnsureMutable() const -> void;
 

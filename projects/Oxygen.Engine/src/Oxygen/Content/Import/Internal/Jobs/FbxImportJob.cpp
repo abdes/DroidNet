@@ -94,13 +94,13 @@ namespace {
 */
 auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
 {
-  DLOG_F(INFO, "FbxImportJob starting: job_id={} path={}", JobId(),
+  DLOG_F(INFO, "Starting job: job_id={} path={}", JobId(),
     Request().source_path.string());
 
   EnsureCookedRoot();
 
-  ImportSession session(
-    Request(), FileReader(), FileWriter(), ThreadPool(), TableRegistry());
+  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool(),
+    TableRegistry(), IndexRegistry());
 
   ReportPhaseProgress(ImportPhase::kLoading, 0.0f, "Parsing FBX...");
   auto scene = co_await ParseScene(session);
@@ -116,14 +116,13 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto plan_outcome = co_await ThreadPool()->Run(
     [this, &scene, request_copy, stop_token](
       co::ThreadPool::CancelToken canceled) -> PlanBuildOutcome {
-      DLOG_F(1, "FbxImportJob: BuildPlan task begin");
+      DLOG_F(1, "Build plan task begin");
       if (canceled || stop_token.stop_requested()) {
         PlanBuildOutcome canceled_outcome;
         canceled_outcome.canceled = true;
         return canceled_outcome;
       }
-      return BuildPlan(
-        const_cast<ParsedFbxScene&>(scene), request_copy, stop_token);
+      return BuildPlan(scene, request_copy, stop_token);
     });
   AddDiagnostics(session, std::move(plan_outcome.diagnostics));
   if (plan_outcome.canceled || !plan_outcome.plan) {
@@ -179,7 +178,7 @@ auto FbxImportJob::ParseScene(ImportSession& session) -> co::Co<ParsedFbxScene>
   auto parsed = co_await ThreadPool()->Run(
     [request_copy, stop_token, naming_service](
       co::ThreadPool::CancelToken canceled) {
-      DLOG_F(1, "FbxImportJob: ParseScene task begin");
+      DLOG_F(1, "Parse scene task begin");
       ParsedFbxScene out;
       if (canceled || stop_token.stop_requested()) {
         out.canceled = true;
@@ -214,7 +213,7 @@ auto FbxImportJob::ParseScene(ImportSession& session) -> co::Co<ParsedFbxScene>
 auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
   const ImportRequest& request, std::stop_token stop_token) -> PlanBuildOutcome
 {
-  DLOG_F(1, "FbxImportJob: BuildPlan begin");
+  DLOG_F(1, "Build plan begin");
   PlanBuildOutcome outcome;
   if (!scene.success || scene.adapter == nullptr) {
     return outcome;

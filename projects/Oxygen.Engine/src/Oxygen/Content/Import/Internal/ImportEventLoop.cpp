@@ -11,10 +11,9 @@
 namespace oxygen::content::import {
 
 ImportEventLoop::ImportEventLoop()
-  : io_context_()
-  , work_guard_(asio::make_work_guard(io_context_))
+  : work_guard_(asio::make_work_guard(io_context_))
 {
-  DLOG_F(INFO, "ImportEventLoop created");
+  DLOG_F(INFO, "Created");
 }
 
 ImportEventLoop::~ImportEventLoop()
@@ -22,7 +21,7 @@ ImportEventLoop::~ImportEventLoop()
   if (running_.load(std::memory_order_acquire)) {
     Stop();
   }
-  DLOG_F(INFO, "ImportEventLoop destroyed");
+  DLOG_F(INFO, "Destroyed");
 }
 
 auto ImportEventLoop::IoContext() noexcept -> asio::io_context&
@@ -43,7 +42,7 @@ auto ImportEventLoop::Run() -> void
   running_.store(true, std::memory_order_release);
   running_thread_id_ = std::this_thread::get_id();
 
-  DLOG_F(INFO, "ImportEventLoop::Run() starting");
+  DLOG_F(INFO, "Run starting");
 
   // Run until Stop() is called
   io_context_.run();
@@ -53,12 +52,12 @@ auto ImportEventLoop::Run() -> void
   running_.store(false, std::memory_order_release);
   running_thread_id_ = std::thread::id {};
 
-  DLOG_F(INFO, "ImportEventLoop::Run() exited");
+  DLOG_F(INFO, "Run exited");
 }
 
 auto ImportEventLoop::Stop() -> void
 {
-  DLOG_F(INFO, "ImportEventLoop::Stop() called");
+  DLOG_F(INFO, "Stop called");
 
   // Release the work guard to allow run() to exit
   work_guard_.reset();

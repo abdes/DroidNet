@@ -159,7 +159,7 @@ public:
   OXGN_CNTT_API explicit ScenePipeline(
     co::ThreadPool& thread_pool, Config config = {});
 
-  OXGN_CNTT_API ~ScenePipeline();
+  OXGN_CNTT_API ~ScenePipeline() override;
 
   OXYGEN_MAKE_NON_COPYABLE(ScenePipeline)
   OXYGEN_MAKE_NON_MOVABLE(ScenePipeline)
@@ -168,13 +168,13 @@ public:
   OXGN_CNTT_API auto Start(co::Nursery& nursery) -> void;
 
   //! Submit work (may suspend if the queue is full).
-  OXGN_CNTT_NDAPI [[nodiscard]] auto Submit(WorkItem item) -> co::Co<>;
+  OXGN_CNTT_NDAPI auto Submit(WorkItem item) -> co::Co<>;
 
   //! Try to submit work without blocking.
   OXGN_CNTT_NDAPI auto TrySubmit(WorkItem item) -> bool;
 
   //! Collect one completed result (suspends until ready or closed).
-  OXGN_CNTT_NDAPI [[nodiscard]] auto Collect() -> co::Co<WorkResult>;
+  OXGN_CNTT_NDAPI auto Collect() -> co::Co<WorkResult>;
 
   //! Close the input queue.
   OXGN_CNTT_API auto Close() -> void;

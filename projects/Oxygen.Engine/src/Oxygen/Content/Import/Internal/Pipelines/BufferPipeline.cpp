@@ -34,8 +34,8 @@ BufferPipeline::BufferPipeline(co::ThreadPool& thread_pool, Config config)
 BufferPipeline::~BufferPipeline()
 {
   if (started_) {
-    DLOG_IF_F(WARNING, HasPending(),
-      "BufferPipeline destroyed with {} pending items", PendingCount());
+    DLOG_IF_F(
+      WARNING, HasPending(), "Destroyed with {} pending items", PendingCount());
   }
 
   input_channel_.Close();

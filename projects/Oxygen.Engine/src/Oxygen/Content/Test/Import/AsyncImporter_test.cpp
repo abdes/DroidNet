@@ -20,6 +20,7 @@
 #include <Oxygen/Content/Import/Internal/AsyncImporter.h>
 #include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Internal/ImportJob.h>
+#include <Oxygen/Content/Import/Internal/ImportJobParams.h>
 #include <Oxygen/Content/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
@@ -195,13 +196,21 @@ protected:
     ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
     std::shared_ptr<Event> cancel_event) -> std::shared_ptr<TestImportJob>
   {
-    return std::make_shared<TestImportJob>(job_id, std::move(request),
-      std::move(on_complete), std::move(on_progress), std::move(cancel_event),
-      oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
-      oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
-      oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
-      oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
-      ImportConcurrency {});
+    return std::make_shared<TestImportJob>(ImportJobParams {
+      .id = job_id,
+      .request = std::move(request),
+      .on_complete = std::move(on_complete),
+      .on_progress = std::move(on_progress),
+      .cancel_event = std::move(cancel_event),
+      .reader = oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
+      .writer = oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
+      .thread_pool
+      = oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
+      .registry
+      = oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+      .concurrency = ImportConcurrency {},
+      .stop_token = {},
+    });
   }
 
   void TearDown() override
@@ -298,7 +307,7 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitMultipleJobs_ProcessedInOrder)
         auto cancel_event = std::make_shared<Event>();
         auto on_complete = [&](ImportJobId id, const ImportReport&) {
           {
-            std::lock_guard lock(order_mutex);
+            std::scoped_lock lock(order_mutex);
             completion_order.push_back(id);
           }
           if (++completed_count == 3) {
@@ -439,13 +448,21 @@ NOLINT_TEST_F(
         done_event.Trigger();
       };
 
-      auto job = std::make_shared<TestImportJob>(ImportJobId { 123U },
-        std::move(request), std::move(on_complete), nullptr, cancel_event,
-        oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
-        oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
-        oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
-        oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
-        ImportConcurrency {});
+      auto job = std::make_shared<TestImportJob>(ImportJobParams {
+        .id = ImportJobId { 123U },
+        .request = std::move(request),
+        .on_complete = std::move(on_complete),
+        .on_progress = nullptr,
+        .cancel_event = cancel_event,
+        .reader = oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
+        .writer = oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
+        .thread_pool
+        = oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
+        .registry
+        = oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+        .concurrency = ImportConcurrency {},
+        .stop_token = {},
+      });
 
       JobEntry entry;
       entry.job_id = ImportJobId { 123U };

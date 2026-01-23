@@ -9,9 +9,9 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Content/Import/Internal/TextureImportRequestBuilder.h>
 #include <Oxygen/Content/Tools/ImportTool/ImportRunner.h>
 #include <Oxygen/Content/Tools/ImportTool/TextureCommand.h>
-#include <Oxygen/Content/Tools/ImportTool/TextureImportRequestBuilder.h>
 
 namespace oxygen::content::import::tool {
 
@@ -19,6 +19,42 @@ namespace {
 
   using oxygen::clap::CommandBuilder;
   using oxygen::clap::Option;
+
+  auto ParseSourceMapping(const std::string& input)
+    -> std::optional<TextureSourceMapping>
+  {
+    // Format: file[:layer[:mip[:slice]]]
+    TextureSourceMapping mapping;
+    auto parts = std::vector<std::string>();
+    size_t start = 0;
+    size_t end = input.find(':');
+    while (end != std::string::npos) {
+      parts.push_back(input.substr(start, end - start));
+      start = end + 1;
+      end = input.find(':', start);
+    }
+    parts.push_back(input.substr(start));
+
+    if (parts.empty() || parts[0].empty()) {
+      return std::nullopt;
+    }
+
+    mapping.file = parts[0];
+    try {
+      if (parts.size() > 1) {
+        mapping.layer = static_cast<uint16_t>(std::stoul(parts[1]));
+      }
+      if (parts.size() > 2) {
+        mapping.mip = static_cast<uint16_t>(std::stoul(parts[2]));
+      }
+      if (parts.size() > 3) {
+        mapping.slice = static_cast<uint16_t>(std::stoul(parts[3]));
+      }
+    } catch (...) {
+      return std::nullopt;
+    }
+    return mapping;
+  }
 
 } // namespace
 
@@ -108,6 +144,14 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                       .StoreTo(&options_.mip_filter)
                       .Build();
 
+  auto mip_filter_space
+    = Option::WithKey("mip-filter-space")
+        .About("Color space for mip filtering (srgb, linear)")
+        .Long("mip-filter-space")
+        .WithValue<std::string>()
+        .StoreTo(&options_.mip_filter_space)
+        .Build();
+
   auto bc7_quality = Option::WithKey("bc7-quality")
                        .About("BC7 quality (none, fast, default, high)")
                        .Long("bc7-quality")
@@ -121,6 +165,20 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                           .WithValue<std::string>()
                           .StoreTo(&options_.packing_policy)
                           .Build();
+
+  auto hdr_handling = Option::WithKey("hdr-handling")
+                        .About("HDR handling: error, tonemap, keep")
+                        .Long("hdr-handling")
+                        .WithValue<std::string>()
+                        .StoreTo(&options_.hdr_handling)
+                        .Build();
+
+  auto exposure_ev = Option::WithKey("exposure-ev")
+                       .About("Exposure adjustment in EV")
+                       .Long("exposure-ev")
+                       .WithValue<float>()
+                       .StoreTo(&options_.exposure_ev)
+                       .Build();
 
   auto cubemap = Option::WithKey("cubemap")
                    .About("Import as a cubemap")
@@ -165,6 +223,39 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                       .StoreTo(&options_.force_rgba)
                       .Build();
 
+  auto flip_normal_green = Option::WithKey("flip-normal-green")
+                             .About("Flip the green channel for normal maps")
+                             .Long("flip-normal-green")
+                             .WithValue<bool>()
+                             .StoreTo(&options_.flip_normal_green)
+                             .Build();
+
+  auto renormalize_normals = Option::WithKey("renormalize-normals")
+                               .About("Renormalize normals in mip levels")
+                               .Long("renormalize-normals")
+                               .WithValue<bool>()
+                               .StoreTo(&options_.renormalize_normals)
+                               .Build();
+
+  auto bake_hdr_to_ldr = Option::WithKey("bake-hdr-to-ldr")
+                           .About("Bake HDR content to LDR via tonemap")
+                           .Long("bake-hdr-to-ldr")
+                           .WithValue<bool>()
+                           .StoreTo(&options_.bake_hdr_to_ldr)
+                           .Build();
+
+  auto sources = Option::WithKey("source")
+                   .About("Additional source mapping (file:layer:mip:slice)")
+                   .Long("source")
+                   .WithValue<std::string>()
+                   .Repeatable()
+                   .CallOnEachValue([this](const std::string& val) {
+                     if (auto mapping = ParseSourceMapping(val)) {
+                       options_.sources.push_back(std::move(*mapping));
+                     }
+                   })
+                   .Build();
+
   auto report = Option::WithKey("report")
                   .About("Write a JSON report (absolute or relative to cooked "
                          "root)")
@@ -186,14 +277,21 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(mip_policy))
     .WithOption(std::move(max_mips))
     .WithOption(std::move(mip_filter))
+    .WithOption(std::move(mip_filter_space))
     .WithOption(std::move(bc7_quality))
     .WithOption(std::move(packing_policy))
+    .WithOption(std::move(hdr_handling))
+    .WithOption(std::move(exposure_ev))
     .WithOption(std::move(cubemap))
     .WithOption(std::move(equirect_to_cube))
     .WithOption(std::move(cube_face_size))
     .WithOption(std::move(cube_layout))
     .WithOption(std::move(flip_y))
     .WithOption(std::move(force_rgba))
+    .WithOption(std::move(flip_normal_green))
+    .WithOption(std::move(renormalize_normals))
+    .WithOption(std::move(bake_hdr_to_ldr))
+    .WithOption(std::move(sources))
     .WithOption(std::move(report));
 }
 
@@ -208,7 +306,7 @@ auto TextureCommand::Run() -> int
     quiet = global_options_->quiet;
   }
 
-  const auto request = BuildTextureRequest(settings, std::cerr);
+  const auto request = internal::BuildTextureRequest(settings, std::cerr);
   if (!request.has_value()) {
     return 2;
   }

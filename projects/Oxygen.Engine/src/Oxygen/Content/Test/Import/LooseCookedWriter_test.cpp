@@ -12,8 +12,8 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Content/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Content/Import/LooseCookedLayout.h>
-#include <Oxygen/Content/Import/LooseCookedWriter.h>
 #include <Oxygen/Content/LooseCookedInspection.h>
 #include <Oxygen/Data/AssetType.h>
 

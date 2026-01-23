@@ -42,7 +42,7 @@ This specification is grounded in the following modules and headers from `Oxygen
 
 - **`ImportManifest.h`**: Manifest data structure supporting versioned schema, job arrays, defaults, and per‑job overrides.
 - **`ImportManifest_schema.h`**: JSON Schema (Draft‑7) definition and validator integration.
-- **`ImportManifestLoader.h`**: Manifest deserialization with schema validation and error reporting.
+- **`ImportManifest.h`**: Manifest deserialization with schema validation and error reporting via `ImportManifest::Load()`.
 - **`ImportDiagnostics.h`**: Canonical diagnostics structure for validation and import failures.
 
 ### 2.4 Reporting and Asset Metadata (Oxygen::Content and Oxygen::Data)
@@ -381,7 +381,7 @@ Oxygen.Content.ImportTool batch import-manifest.json \
 | Option | Type | Required | Default | Maps To |
 | --- | --- | --- | --- | --- |
 | `--unit-policy` | enum | no | `normalize` | `ImportOptions::coordinate.unit_normalization` |
-| `--unit-scale` | float | no | 1.0 | `ImportOptions::coordinate.custom_unit_scale` |
+| `--unit-scale` | float | no | 1.0 | `ImportOptions::coordinate.unit_scale` |
 | `--no-bake-transforms` | flag | no | false | `ImportOptions::coordinate.bake_transforms_into_meshes` (disable) |
 
 **REQ‑FBX‑004**: Valid `--unit-policy` values: `normalize`, `preserve`, `custom`
@@ -541,11 +541,11 @@ Oxygen.Content.ImportTool gltf model.glb -o ./Cooked \
 
 ## 5. Manifest Format Specification
 
-**REQ‑MF‑000**: `ImportManifest_schema.h` is the authoritative schema definition. All manifest validation behavior SHALL be consistent with its Draft‑7 rules and error messages provided by `ImportManifestLoader.h`.
+**REQ‑MF‑000**: `ImportManifest_schema.h` is the authoritative schema definition. All manifest validation behavior SHALL be consistent with its Draft‑7 rules and error messages provided by `ImportManifest::Load()`.
 
 ### 5.1 JSON Schema Structure
 
-**REQ‑MF‑001**: The manifest format SHALL use JSON with Draft‑7 schema validation via `ImportManifestLoader`.
+**REQ‑MF‑001**: The manifest format SHALL use JSON with Draft‑7 schema validation via `ImportManifest`.
 
 **REQ‑MF‑002**: The manifest top‑level structure SHALL include:
 
@@ -570,12 +570,12 @@ Oxygen.Content.ImportTool gltf model.glb -o ./Cooked \
 **REQ‑MF‑011**: `import_options` in defaults SHALL support:
 
 - `content_flags`: Bitmask (textures, materials, geometry, scene)
-- `unit_normalization_policy`: `normalize`, `preserve`, `custom`
-- `custom_unit_scale`: floating‑point scale factor
+- `unit_policy`: `normalize`, `preserve`, `custom`
+- `unit_scale`: floating‑point scale factor
 - `bake_transforms`: boolean
 - `normals_policy`: `none`, `preserve`, `generate`, `recalculate`
 - `tangents_policy`: `none`, `preserve`, `generate`, `recalculate`
-- `node_pruning_policy`: `keep`, `drop-empty`
+- `node_pruning`: `keep`, `drop-empty`
 
 ### 5.3 Job Specification
 
@@ -633,12 +633,12 @@ Oxygen.Content.ImportTool gltf model.glb -o ./Cooked \
 | Field | Type | Maps To |
 | --- | --- | --- |
 | `content_flags` | object | `ImportOptions::import_content` |
-| `unit_normalization_policy` | string | `ImportOptions::coordinate.unit_normalization` |
-| `custom_unit_scale` | number | `ImportOptions::coordinate.custom_unit_scale` |
+| `unit_policy` | string | `ImportOptions::coordinate.unit_normalization` |
+| `unit_scale` | number | `ImportOptions::coordinate.unit_scale` |
 | `bake_transforms` | boolean | `ImportOptions::coordinate.bake_transforms_into_meshes` |
 | `normals_policy` | string | `ImportOptions::normal_policy` |
 | `tangents_policy` | string | `ImportOptions::tangent_policy` |
-| `node_pruning_policy` | string | `ImportOptions::node_pruning` |
+| `node_pruning` | string | `ImportOptions::node_pruning` |
 
 **REQ‑MF‑041**: The `content_flags` object SHALL have boolean fields: `textures`, `materials`, `geometry`, `scene`.
 
@@ -679,7 +679,7 @@ Oxygen.Content.ImportTool gltf model.glb -o ./Cooked \
       "job_type": "fbx",
       "source": "assets/character.fbx",
       "fbx": {
-        "unit_normalization_policy": "normalize",
+        "unit_policy": "normalize",
         "normals_policy": "generate",
         "tangents_policy": "recalculate"
       }

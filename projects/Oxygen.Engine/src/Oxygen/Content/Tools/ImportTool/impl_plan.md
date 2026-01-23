@@ -120,7 +120,7 @@ This plan translates the ImportTool README requirements into executable phases. 
    - `version`, `defaults`, `jobs`, `job_type`.
    - per‑job overrides and dependencies.
 2. Update schema definition in `ImportManifest_schema.h` to match README.
-3. Ensure `ImportManifestLoader.h` enforces schema version and provides errors.
+3. Ensure `ImportManifest::Load()` enforces schema version and provides errors.
 4. Add dependency validation for circular references and missing job IDs.
 5. Confirm default resolution order matches CLI precedence rules.
 

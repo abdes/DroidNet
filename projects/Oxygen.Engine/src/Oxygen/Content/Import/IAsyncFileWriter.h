@@ -152,7 +152,7 @@ public:
    - `kIOError` for other I/O failures.
   */
   [[nodiscard]] virtual auto Write(const std::filesystem::path& path,
-    std::span<const std::byte> data, WriteOptions options = {})
+    std::span<const std::byte> data, WriteOptions options)
     -> co::Co<Result<uint64_t, FileErrorInfo>>
     = 0;
 
@@ -209,7 +209,7 @@ public:
    @return Number of bytes written on success, or error information.
   */
   [[nodiscard]] virtual auto WriteAt(const std::filesystem::path& path,
-    uint64_t offset, std::span<const std::byte> data, WriteOptions options = {})
+    uint64_t offset, std::span<const std::byte> data, WriteOptions options)
     -> co::Co<Result<uint64_t, FileErrorInfo>>
     = 0;
 

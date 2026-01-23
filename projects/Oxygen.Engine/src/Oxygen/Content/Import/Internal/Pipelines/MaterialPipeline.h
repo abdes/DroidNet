@@ -33,9 +33,9 @@ namespace oxygen::content::import {
 
 //! UV transform for a material texture slot.
 struct MaterialUvTransform {
-  float scale[2] = { 1.0f, 1.0f };
-  float offset[2] = { 0.0f, 0.0f };
-  float rotation_radians = 0.0f;
+  float scale[2] = { 1.0F, 1.0F };
+  float offset[2] = { 0.0F, 0.0F };
+  float rotation_radians = 0.0F;
 };
 
 //! Material alpha mode from authoring.
@@ -214,13 +214,13 @@ public:
   OXGN_CNTT_API auto Start(co::Nursery& nursery) -> void;
 
   //! Submit work (may suspend if the queue is full).
-  OXGN_CNTT_NDAPI [[nodiscard]] auto Submit(WorkItem item) -> co::Co<>;
+  OXGN_CNTT_NDAPI auto Submit(WorkItem item) -> co::Co<>;
 
   //! Try to submit work without blocking.
   OXGN_CNTT_NDAPI auto TrySubmit(WorkItem item) -> bool;
 
   //! Collect one completed result (suspends until ready or closed).
-  OXGN_CNTT_NDAPI [[nodiscard]] auto Collect() -> co::Co<WorkResult>;
+  OXGN_CNTT_NDAPI auto Collect() -> co::Co<WorkResult>;
 
   //! Close the input queue.
   /*!

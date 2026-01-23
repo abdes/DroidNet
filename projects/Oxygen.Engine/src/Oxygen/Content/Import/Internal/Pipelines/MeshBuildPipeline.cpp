@@ -126,10 +126,9 @@ namespace {
   [[nodiscard]] auto HasAnyError(
     const std::vector<ImportDiagnostic>& diagnostics) -> bool
   {
-    return std::any_of(
-      diagnostics.begin(), diagnostics.end(), [](const ImportDiagnostic& diag) {
-        return diag.severity == ImportSeverity::kError;
-      });
+    return std::ranges::any_of(diagnostics, [](const ImportDiagnostic& diag) {
+      return diag.severity == ImportSeverity::kError;
+    });
   }
 
   auto BuildBucketsForRanges(const std::span<const TriangleRange> ranges,
@@ -140,10 +139,10 @@ namespace {
     buckets.reserve(ranges.size());
 
     for (const auto& range : ranges) {
-      const auto existing = std::find_if(
-        buckets.begin(), buckets.end(), [&](const SubmeshBucket& bucket) {
-          return bucket.scene_material_index == range.material_slot;
-        });
+      const auto existing
+        = std::ranges::find_if(buckets, [&](const SubmeshBucket& bucket) {
+            return bucket.scene_material_index == range.material_slot;
+          });
       if (existing != buckets.end()) {
         continue;
       }
@@ -159,8 +158,8 @@ namespace {
       });
     }
 
-    std::sort(buckets.begin(), buckets.end(),
-      [](const SubmeshBucket& a, const SubmeshBucket& b) {
+    std::ranges::sort(
+      buckets, [](const SubmeshBucket& a, const SubmeshBucket& b) {
         return a.scene_material_index < b.scene_material_index;
       });
 
@@ -481,10 +480,10 @@ namespace {
     const bool has_weights = joint_wts.size() == positions.size();
 
     auto find_bucket = [&](const uint32_t material_slot) -> SubmeshBucket* {
-      const auto it = std::find_if(
-        buckets.begin(), buckets.end(), [&](const SubmeshBucket& bucket) {
-          return bucket.scene_material_index == material_slot;
-        });
+      const auto it
+        = std::ranges::find_if(buckets, [&](const SubmeshBucket& bucket) {
+            return bucket.scene_material_index == material_slot;
+          });
       if (it == buckets.end()) {
         return nullptr;
       }
@@ -684,7 +683,7 @@ namespace {
       views.push_back(MeshViewDesc {
         .first_index = first_index,
         .index_count = index_count,
-        .first_vertex = static_cast<MeshViewDesc::BufferIndexT>(min_vertex),
+        .first_vertex = (min_vertex),
         .vertex_count = static_cast<MeshViewDesc::BufferIndexT>(vertex_count),
       });
 
@@ -703,7 +702,7 @@ namespace {
     std::vector<ImportDiagnostic>& diagnostics, uint32_t& attr_mask)
     -> std::optional<LodBuildData>
   {
-    DLOG_F(1, "MeshBuildPipeline: Build LOD data");
+    DLOG_F(1, "Build LOD data");
     LodBuildData lod;
     lod.lod_name = lod_source.lod_name;
     lod.mesh_type = mesh.mesh_type;
@@ -829,7 +828,7 @@ namespace {
 
     const auto computed_bounds = BuildSubmeshDescriptors(lod.vertices, buckets,
       lod.submeshes, lod.submesh_slots, lod.views, lod.indices);
-    LOG_F(INFO, "Mesh '{}' LOD '{}' submesh_count={} view_count={}",
+    DLOG_F(INFO, "Mesh '{}' LOD '{}' submesh_count={} view_count={}",
       item.mesh_name, lod.lod_name, lod.submeshes.size(), lod.views.size());
     std::size_t views_with_base_vertex = 0;
     for (const auto& view : lod.views) {
@@ -838,7 +837,7 @@ namespace {
       }
     }
     if (views_with_base_vertex > 0) {
-      LOG_F(INFO, "Mesh '{}' LOD '{}' views_with_base_vertex={}",
+      DLOG_F(INFO, "Mesh '{}' LOD '{}' views_with_base_vertex={}",
         item.mesh_name, lod.lod_name, views_with_base_vertex);
     }
     if (mesh.bounds.has_value()) {
@@ -870,10 +869,8 @@ namespace {
       return std::nullopt;
     }
 
-    const auto vb_bytes
-      = static_cast<uint64_t>(lod.vertices.size()) * sizeof(data::Vertex);
-    const auto ib_bytes
-      = static_cast<uint64_t>(lod.indices.size()) * sizeof(uint32_t);
+    const auto vb_bytes = lod.vertices.size() * sizeof(data::Vertex);
+    const auto ib_bytes = lod.indices.size() * sizeof(uint32_t);
     if (vb_bytes > max_data_blob_bytes || ib_bytes > max_data_blob_bytes) {
       diagnostics.push_back(MakeErrorDiagnostic("mesh.buffer_too_large",
         "Mesh buffer exceeds maximum data blob size", item.source_id,
@@ -896,15 +893,11 @@ namespace {
     }
 
     if (mesh.mesh_type == data::MeshType::kSkinned) {
-      const auto joint_bytes
-        = static_cast<uint64_t>(lod.joint_indices.size()) * sizeof(glm::uvec4);
-      const auto weight_bytes
-        = static_cast<uint64_t>(lod.joint_weights.size()) * sizeof(glm::vec4);
+      const auto joint_bytes = lod.joint_indices.size() * sizeof(glm::uvec4);
+      const auto weight_bytes = lod.joint_weights.size() * sizeof(glm::vec4);
       const auto inverse_bind_bytes
-        = static_cast<uint64_t>(lod.inverse_bind_matrices.size())
-        * sizeof(glm::mat4);
-      const auto remap_bytes
-        = static_cast<uint64_t>(lod.joint_remap.size()) * sizeof(uint32_t);
+        = lod.inverse_bind_matrices.size() * sizeof(glm::mat4);
+      const auto remap_bytes = lod.joint_remap.size() * sizeof(uint32_t);
       if (joint_bytes > max_data_blob_bytes
         || weight_bytes > max_data_blob_bytes
         || inverse_bind_bytes > max_data_blob_bytes
@@ -980,8 +973,8 @@ MeshBuildPipeline::MeshBuildPipeline(co::ThreadPool& thread_pool, Config config)
 MeshBuildPipeline::~MeshBuildPipeline()
 {
   if (started_) {
-    DLOG_IF_F(WARNING, HasPending(),
-      "MeshBuildPipeline destroyed with {} pending items", PendingCount());
+    DLOG_IF_F(
+      WARNING, HasPending(), "Destroyed with {} pending items", PendingCount());
   }
 
   input_channel_.Close();
@@ -1090,7 +1083,7 @@ auto MeshBuildPipeline::Worker() -> co::Co<>
       [item = std::move(item), max_bytes = config_.max_data_blob_bytes,
         with_content_hashing = config_.with_content_hashing](
         co::ThreadPool::CancelToken canceled) mutable -> GeometryBuildOutcome {
-        DLOG_F(1, "MeshBuildPipeline: Build geometry payload");
+        DLOG_F(1, "Build geometry payload");
         GeometryBuildOutcome out;
         out.source_id = item.source_id;
         out.source_key = item.source_key;
@@ -1149,8 +1142,7 @@ auto MeshBuildPipeline::Worker() -> co::Co<>
             glm::vec3(lod.bounds.max[0], lod.bounds.max[1], lod.bounds.max[2]));
         }
 
-        std::vector<MeshBuildPipeline::MaterialSlotPatchOffset>
-          material_patch_offsets;
+        std::vector<MaterialSlotPatchOffset> material_patch_offsets;
         auto descriptor_bytes
           = BuildDescriptorBytes(item.mesh_name, lods, geom_bounds, attr_mask,
             material_patch_offsets, out.diagnostics, item.source_id);

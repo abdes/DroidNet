@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <ranges>
 
 #include <Oxygen/Content/Import/Internal/ImageProcessing.h>
 
@@ -442,7 +443,7 @@ namespace image::mip {
       // approx 3.0 pixels.
       // - Kaiser: kWidth = 3.0 (hardcoded)
       // - Lanczos: a = 3 (from wrapper)
-      const float kernel_width = 3.0F;
+      constexpr float kernel_width = 3.0F;
 
       // Helper for 1D resampling
       auto resample_1d = [&](uint32_t src_size, uint32_t dst_size,
@@ -589,8 +590,7 @@ namespace image::mip {
     for (uint16_t layer = 0; layer < src_meta.array_layers; ++layer) {
       const auto src_view = source.GetImage(layer, 0);
       auto dst_pixels = result.GetMutablePixels(layer, 0);
-      std::copy(
-        src_view.pixels.begin(), src_view.pixels.end(), dst_pixels.begin());
+      std::ranges::copy(src_view.pixels, dst_pixels.begin());
     }
 
     // Convert to linear if sRGB

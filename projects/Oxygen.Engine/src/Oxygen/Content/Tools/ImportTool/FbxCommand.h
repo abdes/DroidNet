@@ -9,9 +9,9 @@
 #include <memory>
 #include <string_view>
 
+#include <Oxygen/Content/Import/SceneImportSettings.h>
 #include <Oxygen/Content/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Content/Tools/ImportTool/ImportCommand.h>
-#include <Oxygen/Content/Tools/ImportTool/SceneImportSettings.h>
 
 namespace oxygen::content::import::tool {
 

@@ -10,6 +10,7 @@
 #include <cassert>
 #include <limits>
 #include <optional>
+#include <ranges>
 
 #include <glm/gtc/packing.hpp>
 
@@ -63,25 +64,22 @@ namespace {
     // provides one dimension, they must provide both.
     if ((desc.width == 0) != (desc.height == 0)) {
       LOG_F(WARNING,
-        "TextureCooker: invalid dimensions - width and height must both be "
-        "specified or both be zero (got {}x{}) for '{}'",
+        "Invalid dimensions - width and height must both be specified or both "
+        "be zero (got {}x{}) for '{}'",
         desc.width, desc.height, desc.source_id);
       return TextureImportError::kInvalidDimensions;
     }
 
     // Depth is only meaningful for 3D textures.
     if (desc.texture_type != TextureType::kTexture3D && desc.depth != 1) {
-      LOG_F(WARNING,
-        "TextureCooker: depth {} specified for non-3D texture type for '{}'",
+      LOG_F(WARNING, "Depth {} specified for non-3D texture type for '{}'",
         desc.depth, desc.source_id);
       return TextureImportError::kDepthInvalidFor2D;
     }
 
     // Mip policy configuration.
     if (desc.mip_policy == MipPolicy::kMaxCount && desc.max_mip_levels == 0) {
-      LOG_F(WARNING,
-        "TextureCooker: mip_policy is kMaxCount but max_mip_levels is 0 for "
-        "'{}'",
+      LOG_F(WARNING, "mip_policy is kMaxCount but max_mip_levels is 0 for '{}'",
         desc.source_id);
       return TextureImportError::kInvalidMipPolicy;
     }
@@ -92,8 +90,8 @@ namespace {
       && !IsFloatFormat(desc.output_format)
       && desc.hdr_handling != HdrHandling::kKeepFloat) {
       LOG_F(WARNING,
-        "TextureCooker: HDR intent {} requires float output format, "
-        "but got {} (set bake_hdr_to_ldr=true or use float format) for '{}'",
+        "HDR intent {} requires float output format, but got {} (set "
+        "bake_hdr_to_ldr=true or use float format) for '{}'",
         to_string(desc.intent), to_string(desc.output_format), desc.source_id);
       return TextureImportError::kHdrRequiresFloatFormat;
     }
@@ -102,8 +100,7 @@ namespace {
     if (desc.bc7_quality != Bc7Quality::kNone
       && !IsBc7Format(desc.output_format)) {
       LOG_F(WARNING,
-        "TextureCooker: bc7_quality is {} but output_format is {} "
-        "(not BC7) for '{}'",
+        "bc7_quality is {} but output_format is {} (not BC7) for '{}'",
         to_string(desc.bc7_quality), to_string(desc.output_format),
         desc.source_id);
       return TextureImportError::kIntentFormatMismatch;
@@ -111,8 +108,8 @@ namespace {
     if (IsBc7Format(desc.output_format)
       && desc.bc7_quality == Bc7Quality::kNone) {
       LOG_F(WARNING,
-        "TextureCooker: output_format is {} but bc7_quality is kNone "
-        "(BC7 format requires compression quality) for '{}'",
+        "output_format is {} but bc7_quality is kNone (BC7 format requires "
+        "compression quality) for '{}'",
         to_string(desc.output_format), desc.source_id);
       return TextureImportError::kIntentFormatMismatch;
     }
@@ -126,8 +123,7 @@ namespace {
     -> std::optional<TextureImportError>
   {
     if (decoded_meta.width == 0 || decoded_meta.height == 0) {
-      LOG_F(WARNING,
-        "TextureCooker: decoded image has zero dimensions ({}x{}) for '{}'",
+      LOG_F(WARNING, "Decoded image has zero dimensions ({}x{}) for '{}'",
         decoded_meta.width, decoded_meta.height, desc.source_id);
       return TextureImportError::kInvalidDimensions;
     }
@@ -137,8 +133,8 @@ namespace {
       if (decoded_meta.width != desc.width
         || decoded_meta.height != desc.height) {
         LOG_F(WARNING,
-          "TextureCooker: dimension mismatch - descriptor specifies {}x{} "
-          "but decoded image is {}x{} for '{}'",
+          "Dimension mismatch - descriptor specifies {}x{} but decoded image "
+          "is {}x{} for '{}'",
           desc.width, desc.height, decoded_meta.width, decoded_meta.height,
           desc.source_id);
         return TextureImportError::kDimensionMismatch;
@@ -157,22 +153,10 @@ namespace {
 
   //=== Format Helpers ===----------------------------------------------------//
 
-  [[nodiscard]] auto IsCompressedFormat(const Format format) noexcept -> bool
-  {
-    const auto& info = graphics::detail::GetFormatInfo(format);
-    return info.block_size > 1;
-  }
-
   [[nodiscard]] auto IsFloatFormat(const Format format) noexcept -> bool
   {
     const auto& info = graphics::detail::GetFormatInfo(format);
     return info.kind == graphics::detail::FormatKind::kFloat;
-  }
-
-  [[nodiscard]] auto IsSrgbFormat(const Format format) noexcept -> bool
-  {
-    const auto& info = graphics::detail::GetFormatInfo(format);
-    return info.is_srgb;
   }
 
   [[nodiscard]] auto ToPackingPolicyId(const std::string_view id)
@@ -190,7 +174,6 @@ namespace {
   struct DecodedSource {
     ScratchImage image;
     SubresourceId subresource;
-    std::string source_id;
   };
 
   /*!
@@ -335,8 +318,7 @@ namespace {
         return Err(TextureImportError::kDimensionMismatch);
       }
 
-      std::copy(
-        src_view.pixels.begin(), src_view.pixels.end(), dst_pixels.data());
+      std::ranges::copy(src_view.pixels, dst_pixels.data());
     }
 
     for (size_t layer = 0; layer < array_layers; ++layer) {
@@ -544,10 +526,10 @@ namespace detail {
 
     auto result = DecodeToScratchImage(source_bytes, options);
     if (!result) {
-      LOG_F(WARNING, "TextureCooker: failed to decode source '{}' (error: {})",
-        desc.source_id, to_string(result.error()));
+      LOG_F(WARNING, "Failed to decode source '{}' (error: {})", desc.source_id,
+        to_string(result.error()));
     } else {
-      DLOG_F(INFO, "TextureCooker: decoded '{}' as {}x{} {}", desc.source_id,
+      DLOG_F(INFO, "Decoded '{}' as {}x{} {}", desc.source_id,
         result->Meta().width, result->Meta().height,
         to_string(result->Meta().format));
     }
@@ -568,8 +550,7 @@ namespace detail {
     (void)desc; // Currently unused but may be needed for future conversions
 
     if (!image.IsValid()) {
-      LOG_F(WARNING,
-        "TextureCooker: ConvertToWorkingFormat received invalid image for '{}'",
+      LOG_F(WARNING, "ConvertToWorkingFormat received invalid image for '{}'",
         desc.source_id);
       return Err(TextureImportError::kDecodeFailed);
     }
@@ -585,8 +566,7 @@ namespace detail {
     }
 
     if (!image.IsValid()) {
-      LOG_F(WARNING,
-        "TextureCooker: ApplyContentProcessing received invalid image for '{}'",
+      LOG_F(WARNING, "ApplyContentProcessing received invalid image for '{}'",
         desc.source_id);
       return Err(TextureImportError::kDecodeFailed);
     }
@@ -1016,10 +996,9 @@ namespace {
       return Err(TextureImportError::kOutputFormatInvalid);
     }
 
-    const uint32_t layouts_offset
-      = static_cast<uint32_t>(sizeof(data::pak::TexturePayloadHeader));
-    const uint64_t layouts_bytes64 = static_cast<uint64_t>(layouts.size())
-      * sizeof(data::pak::SubresourceLayout);
+    constexpr uint32_t layouts_offset = sizeof(data::pak::TexturePayloadHeader);
+    const uint64_t layouts_bytes64
+      = layouts.size() * sizeof(data::pak::SubresourceLayout);
     if (layouts_bytes64 > std::numeric_limits<uint32_t>::max()) {
       return Err(TextureImportError::kOutputFormatInvalid);
     }
@@ -1032,8 +1011,7 @@ namespace {
     }
     const auto data_offset_bytes = static_cast<uint32_t>(data_offset64);
 
-    const auto total_payload64
-      = data_offset64 + static_cast<uint64_t>(payload_data.size());
+    const auto total_payload64 = data_offset64 + payload_data.size();
     if (total_payload64 > std::numeric_limits<uint32_t>::max()) {
       return Err(TextureImportError::kOutputFormatInvalid);
     }
@@ -1160,7 +1138,6 @@ auto CookTexture(const TextureSourceSet& sources, const TextureImportDesc& desc,
     decoded_sources.push_back(DecodedSource {
       .image = std::move(*decoded),
       .subresource = source.subresource,
-      .source_id = source.source_id,
     });
   }
 
