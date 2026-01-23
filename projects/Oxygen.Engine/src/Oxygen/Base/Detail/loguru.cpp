@@ -41,12 +41,14 @@
 #  include <cstdlib>
 #  include <cstring>
 #  include <functional>
+#  include <memory>
 #  include <mutex>
 #  include <span>
 #  include <stdexcept>
 #  include <string>
 #  include <string_view>
 #  include <thread>
+#  include <unordered_map>
 #  include <vector>
 
 #  ifdef _WIN32
@@ -212,12 +214,64 @@ struct ModuleSiteEntry {
   std::string base_name;
   std::string full_path;
 };
+
+struct CachedPathEntry {
+  std::string base_name;
+  std::string full_path;
+};
 static std::mutex s_module_registry_mutex;
 static std::vector<ModuleSiteEntry> s_module_registry;
+static std::unordered_map<const char*, std::shared_ptr<CachedPathEntry>>
+  s_cached_paths;
 
 // For periodic flushing:
-static std::thread* s_flush_thread = nullptr;
-static bool s_needs_flushing = false;
+static std::unique_ptr<std::jthread> s_flush_thread;
+static std::atomic<bool> s_needs_flushing { false };
+
+static std::string basename_for_matching(const char* file_path);
+static std::string fullpath_for_matching(const char* file_path);
+static int compute_module_verbosity_for_paths(
+  const std::string& base_name, const std::string& full_path);
+
+static auto get_cached_paths(const char* file_path)
+  -> std::shared_ptr<CachedPathEntry>
+{
+  std::scoped_lock reg(s_module_registry_mutex);
+  auto it = s_cached_paths.find(file_path);
+  if (it != s_cached_paths.end()) {
+    return it->second;
+  }
+  auto entry = std::make_shared<CachedPathEntry>(CachedPathEntry {
+    .base_name = basename_for_matching(file_path),
+    .full_path = fullpath_for_matching(file_path),
+  });
+  s_cached_paths.emplace(file_path, entry);
+  return entry;
+}
+
+static void ensure_flush_thread_started()
+{
+  if (g_flush_interval_ms == 0 || s_flush_thread) {
+    return;
+  }
+  s_flush_thread = std::make_unique<std::jthread>([](std::stop_token stop) {
+    while (!stop.stop_requested()) {
+      if (s_needs_flushing.exchange(false, std::memory_order_acq_rel)) {
+        flush();
+      }
+      std::this_thread::sleep_for(milliseconds(g_flush_interval_ms));
+    }
+  });
+}
+
+static void stop_flush_thread()
+{
+  if (!s_flush_thread) {
+    return;
+  }
+  s_flush_thread->request_stop();
+  s_flush_thread.reset();
+}
 
 static const bool s_terminal_has_color = []() {
 #  ifdef _WIN32
@@ -597,7 +651,7 @@ static bool parse_vmodule_override(std::string_view override_str)
     const bool use_full_path = stored_pattern.find('/') != std::string::npos;
     const bool has_wildcards_flag = has_wildcards(stored_pattern);
     const bool has_double_star_flag = has_double_star(stored_pattern);
-    std::lock_guard<std::mutex> l(s_module_mutex);
+    std::scoped_lock l(s_module_mutex);
     s_module_list.push_back(ModuleInfo {
       .pattern = std::move(stored_pattern),
       .verbosity = level,
@@ -960,7 +1014,7 @@ LOGURU_EXPORT void clear_vmodule_overrides()
 {
   // Clear under lock.
   {
-    std::lock_guard<std::mutex> l(s_module_mutex);
+    std::scoped_lock l(s_module_mutex);
     s_module_list.clear();
   }
   update_all_module_sites();
@@ -972,43 +1026,20 @@ LOGURU_EXPORT bool is_enabled_for(Verbosity verbosity, const char* file_path)
   // precedence over the global stderr cutoff. This matches intended
   // semantics where modules can enable or suppress logs independent of
   // the global verbosity.
-  std::lock_guard<std::mutex> l(s_module_mutex);
-  if (!s_module_list.empty()) {
-    const std::string base = basename_for_matching(file_path);
-    // Iterate forward so earlier entries take precedence (first-match-wins).
-    for (const auto& info : s_module_list) {
-      if (info.use_full_path) {
-        // Full path matching with glob semantics.
-        std::string full_norm = fullpath_for_matching(file_path);
-        if (!info.has_wildcards) {
-          if (info.pattern == full_norm) {
-            return verbosity <= info.verbosity;
-          }
-        } else if (!info.has_double_star) {
-          if (module_glob_match_no_double_star(info.pattern, full_norm)) {
-            return verbosity <= info.verbosity;
-          }
-        } else if (module_glob_match(info.pattern, full_norm)) {
-          return verbosity <= info.verbosity;
-        }
-      } else {
-        if (!info.has_wildcards) {
-          if (info.pattern == base) {
-            return verbosity <= info.verbosity;
-          }
-        } else if (!info.has_double_star) {
-          if (match_segment(info.pattern, base)) {
-            return verbosity <= info.verbosity;
-          }
-        } else if (module_glob_match(info.pattern, base)) {
-          return verbosity <= info.verbosity;
-        }
-      }
+  {
+    std::scoped_lock l(s_module_mutex);
+    if (s_module_list.empty()) {
+      return verbosity <= g_stderr_verbosity;
     }
   }
 
-  // Fall back to the global stderr cutoff.
-  return verbosity <= g_stderr_verbosity;
+  const auto cached_paths = get_cached_paths(file_path);
+  const int level = compute_module_verbosity_for_paths(
+    cached_paths->base_name, cached_paths->full_path);
+  if (level == Verbosity_UNSPECIFIED) {
+    return verbosity <= g_stderr_verbosity;
+  }
+  return verbosity <= level;
 }
 
 // Compute the effective vmodule level for a file path. Returns
@@ -1017,7 +1048,7 @@ LOGURU_EXPORT bool is_enabled_for(Verbosity verbosity, const char* file_path)
 static int compute_module_verbosity_for_paths(
   const std::string& base_name, const std::string& full_path)
 {
-  std::lock_guard<std::mutex> l(s_module_mutex);
+  std::scoped_lock l(s_module_mutex);
   if (s_module_list.empty()) {
     return Verbosity_UNSPECIFIED;
   }
@@ -1086,7 +1117,7 @@ LOGURU_EXPORT void update_all_module_sites()
 {
   std::vector<ModuleSiteEntry> copied;
   {
-    std::lock_guard<std::mutex> reg(s_module_registry_mutex);
+    std::scoped_lock reg(s_module_registry_mutex);
     copied = s_module_registry;
   }
   for (auto& e : copied) {
@@ -1109,7 +1140,7 @@ LOGURU_EXPORT void ensure_module_site_registered(
   const std::string base_name = basename_for_matching(file_path);
   const std::string full_path = fullpath_for_matching(file_path);
   {
-    std::lock_guard<std::mutex> reg(s_module_registry_mutex);
+    std::scoped_lock reg(s_module_registry_mutex);
     for (const auto& e : s_module_registry) {
       if (e.cache == site_cache) {
         already_registered = true;
@@ -1123,6 +1154,13 @@ LOGURU_EXPORT void ensure_module_site_registered(
         base_name,
         full_path,
       });
+    }
+    if (s_cached_paths.find(file_path) == s_cached_paths.end()) {
+      s_cached_paths.emplace(file_path,
+        std::make_shared<CachedPathEntry>(CachedPathEntry {
+          .base_name = base_name,
+          .full_path = full_path,
+        }));
     }
   }
   if (!already_registered) {
@@ -1176,6 +1214,7 @@ auto filename(const char* path) -> const char*
 static void on_atexit()
 {
   VLOG_F(g_internal_verbosity, "atexit");
+  stop_flush_thread();
   flush();
 }
 
@@ -1329,6 +1368,7 @@ void init(int& argc, const char** argv, const Options& options)
 void shutdown()
 {
   VLOG_F(g_internal_verbosity, "loguru::shutdown()");
+  stop_flush_thread();
   remove_all_callbacks();
   set_fatal_handler(nullptr);
   set_verbosity_to_name_callback(nullptr);
@@ -1538,7 +1578,7 @@ static void on_callback_change()
 void add_callback(const char* id, log_handler_t callback, void* user_data,
   Verbosity verbosity, close_handler_t on_close, flush_handler_t on_flush)
 {
-  std::lock_guard lock(s_mutex);
+  std::scoped_lock lock(s_mutex);
   s_callbacks.push_back(
     Callback { id, callback, user_data, verbosity, on_close, on_flush, 0 });
   on_callback_change();
@@ -1596,7 +1636,7 @@ auto get_verbosity_from_name(const char* name) -> Verbosity
 
 auto remove_callback(const char* id) -> bool
 {
-  std::lock_guard lock(s_mutex);
+  std::scoped_lock lock(s_mutex);
   auto it = std::find_if(begin(s_callbacks), end(s_callbacks),
     [&](const Callback& c) { return c.id == id; });
   if (it != s_callbacks.end()) {
@@ -1614,7 +1654,7 @@ auto remove_callback(const char* id) -> bool
 
 void remove_all_callbacks()
 {
-  std::lock_guard lock(s_mutex);
+  std::scoped_lock lock(s_mutex);
   for (auto& callback : s_callbacks) {
     if (callback.close) {
       callback.close(callback.user_data);
@@ -1633,6 +1673,8 @@ auto current_verbosity_cutoff() -> Verbosity
 
 // ------------------------------------------------------------------------
 // Threads names
+
+static std::atomic<uint64_t> s_thread_name_epoch { 1 };
 
 #  if LOGURU_PTLS_NAMES
 static pthread_once_t s_pthread_key_once = PTHREAD_ONCE_INIT;
@@ -1677,6 +1719,8 @@ void set_thread_name(const char* name)
   // in a generic thread-local storage.
   (void)name;
 #  endif // LOGURU_PTHREADS
+
+  s_thread_name_epoch.fetch_add(1, std::memory_order_relaxed);
 }
 
 void get_thread_name(
@@ -1685,27 +1729,64 @@ void get_thread_name(
   CHECK_NE_F(length, 0u, "Zero length buffer in get_thread_name");
   CHECK_NOTNULL_F(buffer, "nullptr in get_thread_name");
 
+  struct ThreadNameCache {
+    uint64_t epoch;
+    bool has_name;
+    char name[LOGURU_THREADNAME_WIDTH + 1];
+    char id_right[LOGURU_THREADNAME_WIDTH + 1];
+    char id_left[LOGURU_THREADNAME_WIDTH + 1];
+  };
+
+  const uint64_t epoch = s_thread_name_epoch.load(std::memory_order_relaxed);
+  thread_local ThreadNameCache cache { 0, false, { 0 }, { 0 }, { 0 } };
+  if (cache.epoch != epoch) {
+    cache.epoch = epoch;
+    cache.has_name = false;
+    cache.name[0] = 0;
+    cache.id_right[0] = 0;
+    cache.id_left[0] = 0;
+  }
+
+  if (cache.has_name) {
+    snprintf(buffer, static_cast<size_t>(length), "%s", cache.name);
+    return;
+  }
+  if (cache.id_right[0] != 0) {
+    snprintf(buffer, static_cast<size_t>(length), "%s",
+      right_align_hex_id ? cache.id_right : cache.id_left);
+    return;
+  }
+
+  char local_name[LOGURU_THREADNAME_WIDTH + 1] = { 0 };
+
 #  if LOGURU_PTLS_NAMES
   (void)pthread_once(&s_pthread_key_once, make_pthread_key_name);
   if (const char* name
     = static_cast<const char*>(pthread_getspecific(s_pthread_key_name))) {
-    snprintf(buffer, static_cast<size_t>(length), "%s", name);
+    snprintf(local_name, sizeof(local_name), "%s", name);
   } else {
-    buffer[0] = 0;
+    local_name[0] = 0;
   }
 #  elif LOGURU_PTHREADS
   // Ask the OS about the thread name.
   // This is what we *want* to do on all platforms, but
   // only some platforms support it (currently).
-  pthread_getname_np(pthread_self(), buffer, length);
+  pthread_getname_np(pthread_self(), local_name, sizeof(local_name));
 #  elif LOGURU_WINTHREADS
-  snprintf(buffer, static_cast<size_t>(length), "%s", thread_name_buffer());
+  snprintf(local_name, sizeof(local_name), "%s", thread_name_buffer());
 #  else
   // Thread names unsupported
-  buffer[0] = 0;
+  local_name[0] = 0;
 #  endif
 
-  if (buffer[0] == 0) {
+  if (local_name[0] != 0) {
+    snprintf(cache.name, sizeof(cache.name), "%s", local_name);
+    cache.has_name = true;
+    snprintf(buffer, static_cast<size_t>(length), "%s", cache.name);
+    return;
+  }
+
+  if (local_name[0] == 0) {
     // We failed to get a readable thread name.
     // Write a HEX thread ID instead.
     // We try to get an ID that is the same as the ID you could
@@ -1726,13 +1807,13 @@ void get_thread_name(
       = std::hash<std::thread::id> {}(std::this_thread::get_id());
 #  endif
 
-    if (right_align_hex_id) {
-      snprintf(buffer, static_cast<size_t>(length), "%*X",
-        static_cast<int>(length - 1), static_cast<unsigned>(thread_id));
-    } else {
-      snprintf(buffer, static_cast<size_t>(length), "%X",
-        static_cast<unsigned>(thread_id));
-    }
+    snprintf(cache.id_right, sizeof(cache.id_right), "%*X",
+      static_cast<int>(sizeof(cache.id_right) - 1),
+      static_cast<unsigned>(thread_id));
+    snprintf(cache.id_left, sizeof(cache.id_left), "%X",
+      static_cast<unsigned>(thread_id));
+    snprintf(buffer, static_cast<size_t>(length), "%s",
+      right_align_hex_id ? cache.id_right : cache.id_left);
   }
 }
 
@@ -2020,7 +2101,7 @@ static void log_message(int stack_trace_skip, Message& message,
   bool with_indentation, bool abort_if_fatal)
 {
   const auto verbosity = message.verbosity;
-  std::lock_guard lock(s_mutex);
+  std::scoped_lock lock(s_mutex);
 
   if (message.verbosity == Verbosity_FATAL) {
     auto st = stacktrace(stack_trace_skip + 2);
@@ -2058,7 +2139,7 @@ static void log_message(int stack_trace_skip, Message& message,
   if (g_flush_interval_ms == 0) {
     fflush(stderr);
   } else {
-    s_needs_flushing = true;
+    s_needs_flushing.store(true, std::memory_order_relaxed);
   }
 
   for (auto& p : s_callbacks) {
@@ -2072,21 +2153,12 @@ static void log_message(int stack_trace_skip, Message& message,
           p.flush(p.user_data);
         }
       } else {
-        s_needs_flushing = true;
+        s_needs_flushing.store(true, std::memory_order_relaxed);
       }
     }
   }
 
-  if (g_flush_interval_ms > 0 && !s_flush_thread) {
-    s_flush_thread = new std::thread([]() {
-      for (;;) {
-        if (s_needs_flushing) {
-          flush();
-        }
-        std::this_thread::sleep_for(milliseconds(g_flush_interval_ms));
-      }
-    });
-  }
+  ensure_flush_thread_started();
 
   if (message.verbosity == Verbosity_FATAL) {
     flush();
@@ -2112,6 +2184,15 @@ static void log_message(int stack_trace_skip, Message& message,
 void log_to_everywhere(int stack_trace_skip, Verbosity verbosity,
   const char* file, unsigned line, const char* prefix, const char* buff)
 {
+  bool has_vmodule = false;
+  {
+    std::scoped_lock l(s_module_mutex);
+    has_vmodule = !s_module_list.empty();
+  }
+  if (!has_vmodule && verbosity > current_verbosity_cutoff()) {
+    return;
+  }
+
   // If this log site is not enabled for the given verbosity
   // (considering per-module overrides), skip formatting and return early.
   if (!is_enabled_for(verbosity, file)) {
@@ -2180,14 +2261,14 @@ void raw_log(
 
 void flush()
 {
-  std::lock_guard lock(s_mutex);
+  std::scoped_lock lock(s_mutex);
   fflush(stderr);
   for (const auto& callback : s_callbacks) {
     if (callback.flush) {
       callback.flush(callback.user_data);
     }
   }
-  s_needs_flushing = false;
+  s_needs_flushing.store(false, std::memory_order_relaxed);
 }
 
 LogScopeRAII::LogScopeRAII(Verbosity verbosity, const char* file, unsigned line,
@@ -2214,7 +2295,7 @@ LogScopeRAII::LogScopeRAII(
 LogScopeRAII::~LogScopeRAII()
 {
   if (_file) {
-    std::lock_guard lock(s_mutex);
+    std::scoped_lock lock(s_mutex);
     if (_indent_stderr && s_stderr_indentation > 0) {
       --s_stderr_indentation;
     }
@@ -2245,7 +2326,7 @@ LogScopeRAII::~LogScopeRAII()
 
 void LogScopeRAII::Init(const char* format, va_list vlist)
 {
-  std::lock_guard lock(s_mutex);
+  std::scoped_lock lock(s_mutex);
   // Use full enable check (including per-module vmodule override) rather than
   // only comparing against the global stderr verbosity. This ensures scope
   // indentation is applied when a module-specific override raises verbosity
