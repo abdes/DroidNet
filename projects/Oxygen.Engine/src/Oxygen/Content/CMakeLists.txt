@@ -56,6 +56,7 @@ set(
   "AssetLoader.h"
   "Constants.h"
   "EngineTag.h"
+  "EvictionEvents.h"
   "VirtualPathResolver.h"
   "LooseCookedInspection.h"
   "LoaderContext.h"

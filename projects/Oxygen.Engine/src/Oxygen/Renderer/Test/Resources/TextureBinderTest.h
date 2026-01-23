@@ -149,6 +149,12 @@ public:
     return false;
   }
 
+  auto SubscribeResourceEvictions(TypeId /*resource_type*/,
+    EvictionHandler /*handler*/) -> EvictionSubscription override
+  {
+    return {};
+  }
+
   [[nodiscard]] auto MintSyntheticTextureKey() -> content::ResourceKey override
   {
     return content::ResourceKey { next_key_++ };
@@ -189,6 +195,11 @@ public:
   }
 
 private:
+  void UnsubscribeResourceEvictions(
+    TypeId /*resource_type*/, uint64_t /*id*/) noexcept override
+  {
+  }
+
   std::unordered_map<content::ResourceKey,
     std::shared_ptr<data::TextureResource>>
     textures_;

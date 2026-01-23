@@ -10,6 +10,8 @@
 #include <memory>
 #include <span>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/ResourceTypeList.h>
 #include <Oxygen/Content/api_export.h>
@@ -60,6 +62,67 @@ public:
     = std::function<void(std::shared_ptr<data::MaterialAsset>)>;
   using GeometryCallback
     = std::function<void(std::shared_ptr<data::GeometryAsset>)>;
+  using EvictionHandler = std::function<void(const EvictionEvent&)>;
+
+  //! RAII handle for resource eviction subscriptions.
+  class EvictionSubscription {
+  public:
+    EvictionSubscription() noexcept = default;
+    EvictionSubscription(EvictionSubscription&& other) noexcept
+      : id_(other.id_)
+      , resource_type_(other.resource_type_)
+      , owner_(other.owner_)
+      , alive_token_(std::move(other.alive_token_))
+    {
+      other.id_ = 0;
+      other.resource_type_ = kInvalidTypeId;
+      other.owner_ = nullptr;
+      other.alive_token_.reset();
+    }
+
+    EvictionSubscription& operator=(EvictionSubscription&& other) noexcept
+    {
+      if (this != &other) {
+        Cancel();
+        id_ = other.id_;
+        resource_type_ = other.resource_type_;
+        owner_ = other.owner_;
+        alive_token_ = std::move(other.alive_token_);
+        other.id_ = 0;
+        other.resource_type_ = kInvalidTypeId;
+        other.owner_ = nullptr;
+        other.alive_token_.reset();
+      }
+      return *this;
+    }
+
+    ~EvictionSubscription() noexcept { Cancel(); }
+
+    //! Cancel this subscription early.
+    void Cancel() noexcept
+    {
+      if (id_ == 0 || !owner_) {
+        return;
+      }
+      if (alive_token_.expired()) {
+        id_ = 0;
+        resource_type_ = kInvalidTypeId;
+        owner_ = nullptr;
+        return;
+      }
+      owner_->UnsubscribeResourceEvictions(resource_type_, id_);
+      id_ = 0;
+      resource_type_ = kInvalidTypeId;
+      owner_ = nullptr;
+    }
+
+  private:
+    friend class IAssetLoader;
+    uint64_t id_ { 0 };
+    TypeId resource_type_ { kInvalidTypeId };
+    observer_ptr<IAssetLoader> owner_ { nullptr };
+    std::weak_ptr<int> alive_token_ {};
+  };
 
   //! Begin loading a texture resource and invoke `on_complete` on completion.
   virtual void StartLoadTexture(ResourceKey key, TextureCallback on_complete)
@@ -135,11 +198,33 @@ public:
   //! Release (check in) an asset usage.
   virtual auto ReleaseAsset(const data::AssetKey& key) -> bool = 0;
 
+  //! Subscribe to resource eviction notifications for a resource type.
+  virtual auto SubscribeResourceEvictions(
+    TypeId resource_type, EvictionHandler handler) -> EvictionSubscription
+    = 0;
+
   //! Mint a synthetic texture key suitable for buffer-driven workflows.
   [[nodiscard]] virtual auto MintSyntheticTextureKey() -> ResourceKey = 0;
 
   //! Mint a synthetic buffer key suitable for buffer-driven workflows.
   [[nodiscard]] virtual auto MintSyntheticBufferKey() -> ResourceKey = 0;
+
+protected:
+  virtual void UnsubscribeResourceEvictions(
+    TypeId resource_type, uint64_t id) noexcept
+    = 0;
+
+  [[nodiscard]] auto MakeEvictionSubscription(TypeId resource_type, uint64_t id,
+    observer_ptr<IAssetLoader> owner, std::shared_ptr<int> alive_token)
+    -> EvictionSubscription
+  {
+    EvictionSubscription subscription;
+    subscription.id_ = id;
+    subscription.resource_type_ = resource_type;
+    subscription.owner_ = owner;
+    subscription.alive_token_ = std::move(alive_token);
+    return subscription;
+  }
 };
 
 } // namespace oxygen::content

@@ -29,7 +29,7 @@ textures:
     format: 30  # kRGBA8UNorm
     texture_type: 3  # kTexture2D
     compression_type: 0
-    data_hex: "ffffffff"  # Single white pixel as default
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
 
 # Define material for the geometry
 assets:

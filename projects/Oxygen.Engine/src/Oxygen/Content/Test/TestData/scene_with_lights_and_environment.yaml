@@ -15,7 +15,7 @@ textures:
     format: 30
     texture_type: 3
     compression_type: 0
-    data_hex: "ffffffff"
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
 
 audios: []
 
