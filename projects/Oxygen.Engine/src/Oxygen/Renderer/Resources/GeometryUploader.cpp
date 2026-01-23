@@ -374,7 +374,7 @@ auto GeometryUploader::Impl::GetOrAllocate(
   const engine::sceneprep::GeometryRef& geometry, const bool is_critical)
   -> engine::sceneprep::GeometryHandle
 {
-  LOG_SCOPE_FUNCTION(2);
+  LOG_SCOPE_FUNCTION(3);
 
   if (!geometry.IsValid()) {
     LOG_F(ERROR,
@@ -388,7 +388,7 @@ auto GeometryUploader::Impl::GetOrAllocate(
     .asset_key = geometry.asset_key,
     .lod_index = geometry.lod_index,
   };
-  DLOG_F(2, "lod index    = {}", key.lod_index);
+  DLOG_F(3, "lod index    = {}", key.lod_index);
   if (const auto it = mesh_identity_to_handle_.find(key);
     it != mesh_identity_to_handle_.end()) {
     const auto h = it->second;
@@ -420,9 +420,9 @@ auto GeometryUploader::Impl::GetOrAllocate(
     if (entry.mesh != geometry.mesh) {
       // Validate only when we see a new mesh instance. This avoids repeated
       // O(N) scans on cache hits.
-      DLOG_F(2, "mesh name     = {}", mesh.GetName());
-      DLOG_F(2, "mesh vertices = {}", mesh.Vertices().size());
-      DLOG_F(2, "mesh indices  = {}", mesh.IndexBuffer().Count());
+      DLOG_F(3, "mesh name     = {}", mesh.GetName());
+      DLOG_F(3, "mesh vertices = {}", mesh.Vertices().size());
+      DLOG_F(3, "mesh indices  = {}", mesh.IndexBuffer().Count());
 
       std::string error_msg;
       if (!ValidateMesh(mesh, error_msg)) {
@@ -454,9 +454,9 @@ auto GeometryUploader::Impl::GetOrAllocate(
   }
 
   // New identity: validate once before allocating resources.
-  DLOG_F(2, "mesh name     = {}", mesh.GetName());
-  DLOG_F(2, "mesh vertices = {}", mesh.Vertices().size());
-  DLOG_F(2, "mesh indices  = {}", mesh.IndexBuffer().Count());
+  DLOG_F(3, "mesh name     = {}", mesh.GetName());
+  DLOG_F(3, "mesh vertices = {}", mesh.Vertices().size());
+  DLOG_F(3, "mesh indices  = {}", mesh.IndexBuffer().Count());
 
   std::string error_msg;
   if (!ValidateMesh(mesh, error_msg)) {
@@ -467,12 +467,12 @@ auto GeometryUploader::Impl::GetOrAllocate(
 
   // Not found or collision mismatch: allocate new handle
   const auto handle = next_handle_;
-  DLOG_F(2, "new handle : {}", handle);
+  DLOG_F(3, "new handle : {}", handle);
   const auto u_handle = handle.get();
 
   // Resize geometry_entries_ and GPU arrays if needed
   if (geometry_entries_.size() <= u_handle) {
-    DLOG_F(2, "resize internal storage to : {}", u_handle + 1U);
+    DLOG_F(3, "resize internal storage to : {}", u_handle + 1U);
     geometry_entries_.resize(u_handle + 1U);
   }
 
@@ -487,10 +487,10 @@ auto GeometryUploader::Impl::GetOrAllocate(
   // referenced; uploads are scheduled only when content/residency requires it.
   entry.last_touched_epoch = current_epoch_;
 
-  DLOG_F(2, "asset key   : {}", oxygen::data::to_string(entry.asset_key));
-  DLOG_F(2, "epoch       : {}", current_epoch_);
-  DLOG_F(2, "is dirty    : {}", entry.is_dirty);
-  DLOG_F(2, "is critical : {}", is_critical);
+  DLOG_F(3, "asset key   : {}", oxygen::data::to_string(entry.asset_key));
+  DLOG_F(3, "epoch       : {}", current_epoch_);
+  DLOG_F(3, "is dirty    : {}", entry.is_dirty);
+  DLOG_F(3, "is critical : {}", is_critical);
 
   mesh_identity_to_handle_[key] = handle;
   ++next_handle_;
@@ -722,7 +722,7 @@ auto GeometryUploader::Impl::UploadBuffers() -> void
 {
   DCHECK_NOTNULL_F(uploader_);
 
-  DLOG_SCOPE_FUNCTION(2);
+  DLOG_SCOPE_FUNCTION(3);
 
   for (auto& entry : geometry_entries_) {
     if (!entry.is_dirty) {
@@ -735,9 +735,9 @@ auto GeometryUploader::Impl::UploadBuffers() -> void
       continue;
     }
 
-    DLOG_F(2, "mesh : {}", entry.mesh->GetName());
+    DLOG_F(3, "mesh : {}", entry.mesh->GetName());
     const auto scope_name = fmt::format("Mesh '{}'", entry.mesh->GetName());
-    DLOG_SCOPE_F(2, scope_name.c_str());
+    DLOG_SCOPE_F(3, scope_name.c_str());
 
     // Vertex upload ------------------------------------------------------
     if (entry.vertex_srv_index == kInvalidShaderVisibleIndex
