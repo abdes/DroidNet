@@ -7,6 +7,7 @@
     {
       "name": "windows",
       "inherits": "base",
+      "hidden": true,
       "installDir": "${sourceDir}/out/install",
       "cacheVariables": {
         "USE_PIX": "ON"
@@ -20,23 +21,49 @@
           "enableClangTidyCodeAnalysis": true
         }
       }
+    },
+    {
+      "name": "windows-debug",
+      "inherits": "windows",
+      "cacheVariables": {
+        "OXYGEN_WITH_ASAN": "OFF"
+      }
+    },
+    {
+      "name": "windows-release",
+      "inherits": "windows",
+      "cacheVariables": {
+        "OXYGEN_WITH_ASAN": "OFF"
+      }
+    },
+    {
+      "name": "windows-asan",
+      "inherits": "windows-debug",
+      "cacheVariables": {
+        "OXYGEN_WITH_ASAN": "ON"
+      }
     }
   ],
   "buildPresets": [
     {
       "name": "windows-debug",
       "inherits": "base-debug",
-      "configurePreset": "windows"
+      "configurePreset": "windows-debug"
     },
     {
       "name": "windows-release",
       "inherits": "base-release",
-      "configurePreset": "windows"
+      "configurePreset": "windows-release"
     },
     {
       "name": "windows-relwithdebinfo",
       "inherits": "base-relwithdebinfo",
       "configurePreset": "windows"
+    },
+    {
+      "name": "windows-asan",
+      "inherits": "windows-debug",
+      "configurePreset": "windows-asan"
     }
   ],
   "testPresets": [

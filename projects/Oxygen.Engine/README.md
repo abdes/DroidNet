@@ -68,24 +68,77 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\
 
 ## Conan
 
-cd dev/projects
-
-pip install conan
-git clone <https://github.com/abdes/conan-center-index.git>
+### Install prerequisites
 
 ```shell
-$ conan remote remove conancenter
+cd dev/projects
+pip install conan
+git clone https://github.com/abdes/conan-center-index.git
+```
 
-# Add the mycenter remote pointing to the local folder
-$ conan remote add mycenter ./conan-center-index
+### Sanitizer-aware package IDs (Conan 2)
 
-$ cd DroidNet/projects/Oxygen.Engine
+Goal: avoid mixing ASan and non-ASan binaries in the Conan cache by making the
+sanitizer a first-class setting that participates in package IDs.
 
-# $ conan install . --profile:host=profiles/windows-msvc-asan.ini --profile:build=profiles/windows-msvc-asan.ini --build=missing -s build_type=Debug --deployer-folder=out/install --deployer-package=Oxygen/0.1.0
+#### 1) Project-owned user settings file
 
-# $ conan install . --profile:host=profiles/windows-msvc.ini --profile:build=profiles/windows-msvc.ini --build=all -s build_type=Debug --deployer-folder=out/install --deployer-package=Oxygen/0.1.0 -c tools.microsoft.msbuild:vs_version=18
+We keep a repo-local Conan user settings file at:
 
-$ conan install . --profile:host=profiles/windows-msvc.ini --profile:build=profiles/windows-msvc.ini --build=all -s build_type=Debug --deployer-folder=out/install --deployer-package=Oxygen/0.1.0
+- [conan-settings_user.yml](conan-settings_user.yml)
+
+It contains:
+
+```text
+sanitizer: [None, asan]
+```
+
+#### 2) Install the user settings into Conan home
+
+Use Conan to install the user settings file into Conan home (this is the
+recommended flow in the Conan docs):
+
+PowerShell (one line):
+
+```powershell
+$tmp=Join-Path $env:TEMP "settings_user.yml"; Copy-Item -Path "conan-settings_user.yml" -Destination $tmp -Force; conan config install $tmp
+```
+
+Conan only reads settings_user.yml from Conan home and merges it with the
+built-in settings at runtime.
+
+When switching between ASan and non-ASan, regenerate the Conan toolchain and
+reconfigure CMake in a clean build folder (CMake caches OXYGEN_WITH_ASAN).
+
+#### 3) Add sanitizer to profiles
+
+- In [profiles/windows-msvc-asan.ini](profiles/windows-msvc-asan.ini)
+  - [settings] → sanitizer=asan
+- In [profiles/windows-msvc.ini](profiles/windows-msvc.ini)
+  - [settings] → sanitizer=None
+
+#### 4) Wire the setting in the recipe
+
+Update [conanfile.py](conanfile.py) to use the setting inside `generate()`:
+
+- If sanitizer is asan, set `OXYGEN_WITH_ASAN=ON` and add -fsanitize=address
+
+This makes the sanitizer a package ID dimension across all dependencies,
+without requiring per-dependency options.
+
+### Example install commands
+
+```shell
+conan remote remove conancenter
+conan remote add mycenter ./conan-center-index
+
+cd DroidNet/projects/Oxygen.Engine
+
+# ASan
+conan install . --profile:host=profiles/windows-msvc-asan.ini --profile:build=profiles/windows-msvc-asan.ini --build=missing -s build_type=Debug --deployer-folder=out/install --deployer-package=Oxygen/0.1.0
+
+# Non-ASan
+conan install . --profile:host=profiles/windows-msvc.ini --profile:build=profiles/windows-msvc.ini --build=all -s build_type=Debug --deployer-folder=out/install --deployer-package=Oxygen/0.1.0
 ```
 
 ## Useful commands
