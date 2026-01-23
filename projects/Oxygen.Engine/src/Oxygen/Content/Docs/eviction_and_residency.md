@@ -325,29 +325,139 @@ contract gaps are closed.
    - Subscriptions are removed automatically when `EvictionSubscription` is
      destroyed or when `AssetLoader::Stop()` clears subscribers.
 
-3. **TextureBinder integration.**
-   - Subscribe to texture evictions.
-   - On eviction, schedule render-thread teardown and repoint/invalidate SRV
-     per chosen policy.
+3. **Renderer-side GPU residency integration (TextureBinder + GeometryUploader).**
+   - Subscribe to texture and buffer evictions.
+   - On eviction, schedule render-thread teardown and repoint/invalidate
+     handles per chosen policy.
    - Drop or ignore upload completions if the entry is no longer resident.
 
-4. **GeometryUploader integration.**
-   - Subscribe to buffer evictions (or a buffer residency owner if distinct).
-   - Release GPU buffers and descriptor views via deferred reclaimer.
-   - Guard against late upload completions for evicted handles.
+   **LLD (step 3)**
 
-5. **Targeted tests.**
+   **Scope**
+   - Texture GPU residency managed by `TextureBinder`.
+   - Buffer GPU residency managed by `GeometryUploader` (or the owning buffer
+     residency system if different).
+   - Focus on eviction reaction, in-flight suppression, and stable handle
+     policy. No new renderer architecture required.
+
+   **Data model (TextureBinder)**
+   - Keep the existing bindless index / handle stable across the entry
+     lifetime.
+   - Extend `TextureBinder::Entry` (or equivalent internal record) with:
+     - `ResourceKey key` (already present in most cases).
+     - `bool evicted` (default false).
+     - `uint64_t generation` (monotonic, per key) to suppress late uploads.
+     - `UploadToken` or `UploadTicket` (optional handle to in-flight upload).
+   - Maintain an `unordered_map<ResourceKey, Entry>` (or reuse existing map).
+
+   **Data model (GeometryUploader)**
+   - Extend buffer residency record with:
+     - `ResourceKey key`.
+     - `bool evicted`.
+     - `uint64_t generation` (per key).
+     - Any in-flight token/handle.
+   - Maintain a map from `ResourceKey` to buffer residency entry.
+
+   **Stable handle policy**
+   - **TextureBinder**: **Repoint** to a placeholder/error texture on eviction.
+     - Handle stays stable.
+     - Descriptor updated to point to fallback SRV.
+   - **GeometryUploader**: **Invalidate** handles on eviction unless an
+     established placeholder buffer exists.
+   - Document these policies in the respective subsystem headers.
+
+   **Subscription wiring**
+   - At subsystem initialization, subscribe to eviction events:
+     - `TextureBinder` subscribes to `data::TextureResource::ClassTypeId()`.
+     - `GeometryUploader` subscribes to `data::BufferResource::ClassTypeId()`.
+   - Store `EvictionSubscription` members in the subsystem to preserve RAII
+     ownership for the engine lifetime.
+
+   **Event handling (threading)**
+   - Eviction events originate on Content thread; GPU teardown must run on the
+     render/graphics thread.
+   - Handler MUST enqueue a small command that is executed on the render
+     thread (e.g., render-thread task queue or end-of-frame deferred list).
+   - No GPU objects are destroyed directly on the Content thread.
+
+   **Texture eviction flow**
+   1. Eviction handler runs on Content thread; it looks up `Entry` by key.
+   2. If not found, return (already evicted or never resident).
+   3. Mark entry as `evicted = true`, bump `generation`.
+   4. Enqueue render-thread teardown:
+      - Release GPU texture object.
+      - Release per-entry descriptor allocations (SRV/UAV if any).
+      - Repoint handle to fallback texture (stable handle policy).
+      - Clear in-flight token if present.
+   5. Log debug-level eviction + scheduled teardown.
+
+   **Buffer eviction flow**
+   1. Eviction handler runs on Content thread; locate buffer entry.
+   2. Mark `evicted = true`, bump `generation`.
+   3. Enqueue render-thread teardown:
+      - Release GPU buffer resource.
+      - Release views (SRV/UAV/IB/VB if tracked).
+      - Invalidate handle or repoint to placeholder buffer.
+      - Clear in-flight token.
+   4. Log debug-level eviction + scheduled teardown.
+
+   **In-flight completion suppression**
+   - Upload completion callbacks MUST verify that the entry is still resident
+     and the `generation` matches the upload ticket generation.
+   - If `evicted == true` or generation mismatch:
+     - Discard completion result.
+     - Do NOT reinsert/repoint descriptor to the completed resource.
+     - Log debug-level "discarded completion due to eviction".
+
+   **Resurrection prevention**
+   - Any code path that installs GPU objects for a key MUST check
+     `!entry.evicted` and matching generation before committing.
+   - If a new CPU load happens after eviction, it creates a new generation and
+     a new upload ticket. Old completions are ignored.
+
+   **Failure/edge cases**
+   - Duplicate eviction events: handle idempotently (no double-free). This is
+     guaranteed by Content, but renderer code must be robust.
+   - Missing entry: ignore silently or debug-log once per key.
+   - Offline mode: renderer may ignore eviction events if no GPU residency is
+     created in the first place. Do not crash or create GPU work.
+
+   **Observability**
+   - Debug logs when:
+     - Eviction enqueued (`ResourceKey`, type, generation).
+     - Teardown executed.
+     - Upload completion discarded due to eviction/generation mismatch.
+   - Keep logging gated in non-release builds.
+
+   **Testing (unit-level, minimal)**
+   - TextureBinder:
+     - Eviction repoints SRV to fallback and releases descriptors.
+     - In-flight completion after eviction is ignored.
+   - GeometryUploader:
+     - Eviction releases buffer resources and invalidates handle.
+     - In-flight completion after eviction is ignored.
+   - These tests should mock upload completion callbacks to control timing and
+     validate generation checks.
+
+   **Open doors for frame-budgeted trim (future)**
+   - Keep teardown scheduling via queue so that later we can
+     - cap the number of evictions processed per frame, or
+     - defer work to a budgeted phase (e.g., end-of-frame "reclaimer"), or
+     - batch descriptor releases for amortized cost.
+   - The generation check remains valid even when teardown is delayed.
+
+4. **Targeted tests.**
    - Verify eviction triggers teardown and no descriptor leaks.
    - Verify in-flight upload completion does not resurrect.
    - Verify budget trim only evicts non-checked-out entries.
 
-6. **Budgeting + LRU trim (new).**
+5. **Budgeting + LRU trim (new).**
 
    NOTE/TODO: Think about fitting cache trimming to an engine dictated frame
    time budget. Only a certain number of evictions can happen per frame, while
    respecting dependencies and not leaving orphaned resource.
 
-   **LLD (step 6)**
+   **LLD (step 5)**
 
    **Design goal**
    - Keep memory bounded while preserving the refcount ownership model.

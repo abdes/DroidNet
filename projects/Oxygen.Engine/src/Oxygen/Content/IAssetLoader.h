@@ -198,7 +198,7 @@ public:
   //! Release (check in) an asset usage.
   virtual auto ReleaseAsset(const data::AssetKey& key) -> bool = 0;
 
-  //! Subscribe to resource eviction notifications for a resource type.
+  //! Subscribe to eviction notifications for a resource or asset type.
   virtual auto SubscribeResourceEvictions(
     TypeId resource_type, EvictionHandler handler) -> EvictionSubscription
     = 0;

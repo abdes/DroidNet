@@ -160,10 +160,14 @@ NOLINT_TEST(GeometryUploaderFailuresStandaloneTest,
   auto staging = std::make_shared<AlwaysFailStagingProvider>(
     oxygen::engine::upload::internal::UploaderTagFactory::Get());
 
+  auto asset_loader
+    = std::make_unique<oxygen::renderer::testing::FakeAssetLoader>();
+
   auto geo_uploader
     = std::make_unique<GeometryUploader>(oxygen::observer_ptr { gfx.get() },
       oxygen::observer_ptr { upload_coordinator.get() },
-      oxygen::observer_ptr { staging.get() });
+      oxygen::observer_ptr { staging.get() },
+      oxygen::observer_ptr { asset_loader.get() });
 
   upload_coordinator->OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
   geo_uploader->OnFrameStart(RendererTagFactory::Get(), Slot { 0 });

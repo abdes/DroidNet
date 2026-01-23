@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 
 #include "CameraControlPanel.h"
 #include "ImportPanel.h"
@@ -77,6 +78,10 @@ public:
     IndexLoadCallback on_loose_index_loaded;
     //! Optional callback to dump runtime texture memory telemetry.
     std::function<void(std::size_t)> on_dump_texture_memory;
+    //! Optional callback to get the last released scene key.
+    std::function<std::optional<data::AssetKey>()> get_last_released_scene_key;
+    //! Optional callback to force trim content caches.
+    std::function<void()> on_force_trim;
   };
 
   //! Initialize panel with configuration
@@ -104,6 +109,8 @@ private:
   ImportPanel import_panel_;
   PakLoaderPanel pak_panel_;
   LooseCookedLoaderPanel loose_cooked_panel_;
+  std::function<std::optional<data::AssetKey>()> get_last_released_scene_key_;
+  std::function<void()> on_force_trim_;
 };
 
 } // namespace oxygen::examples::render_scene::ui

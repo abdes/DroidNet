@@ -949,11 +949,8 @@ auto MainModule::OnAttached(
 void MainModule::OnShutdown() noexcept
 {
   content_loader_panel_.GetImportPanel().CancelImport();
-  scene_.reset();
-  scene_loader_.reset();
-  active_camera_ = {};
-  registered_view_camera_ = scene::NodeHandle();
-  UnregisterViewForRendering("module shutdown");
+  ReleaseCurrentSceneAsset("module shutdown");
+  ClearSceneRuntime("module shutdown");
   Base::OnShutdown();
 }
 
@@ -966,13 +963,16 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
 {
   if (scene_loader_) {
     if (scene_loader_->IsReady()) {
+      auto loader = scene_loader_;
       auto swap = scene_loader_->GetResult();
       LOG_F(WARNING, "RenderScene: Applying staged scene swap (scene_key={})",
         oxygen::data::to_string(swap.scene_key));
-      UnregisterViewForRendering("scene swap");
+      ReleaseCurrentSceneAsset("scene swap");
+      ClearSceneRuntime("scene swap");
 
       scene_ = std::move(swap.scene);
       active_camera_ = std::move(swap.active_camera);
+      current_scene_key_ = swap.scene_key;
       if (active_camera_.IsAlive()) {
         // Store initial camera pose for reset functionality
         auto tf = active_camera_.GetTransform();
@@ -991,7 +991,10 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
         UpdateCameraControlPanelConfig();
       }
       registered_view_camera_ = scene::NodeHandle();
-      scene_loader_->MarkConsumed();
+      scene_loader_ = std::move(loader);
+      if (scene_loader_) {
+        scene_loader_->MarkConsumed();
+      }
     } else if (scene_loader_->IsFailed()) {
       LOG_F(ERROR, "RenderScene: Scene loading failed");
       scene_loader_.reset();
@@ -1085,6 +1088,8 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     pending_load_scene_ = false;
 
     if (pending_scene_key_) {
+      ReleaseCurrentSceneAsset("scene load request");
+      ClearSceneRuntime("scene load request");
       auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
       if (asset_loader) {
         scene_loader_ = std::make_shared<SceneLoader>(
@@ -1099,6 +1104,42 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   }
 
   co_return;
+}
+
+auto MainModule::ReleaseCurrentSceneAsset(const char* reason) -> void
+{
+  if (!current_scene_key_.has_value()) {
+    return;
+  }
+
+  auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+  if (!asset_loader) {
+    last_released_scene_key_ = current_scene_key_;
+    current_scene_key_.reset();
+    return;
+  }
+
+  LOG_F(INFO, "RenderScene: Releasing scene asset (reason={} key={})", reason,
+    oxygen::data::to_string(*current_scene_key_));
+  last_released_scene_key_ = current_scene_key_;
+  (void)asset_loader->ReleaseAsset(*current_scene_key_);
+  current_scene_key_.reset();
+}
+
+auto MainModule::ClearSceneRuntime(const char* reason) -> void
+{
+  UnregisterViewForRendering(reason);
+  scene_.reset();
+  scene_loader_.reset();
+  active_camera_ = {};
+  registered_view_camera_ = scene::NodeHandle();
+  orbit_controller_.reset();
+  fly_controller_.reset();
+  skybox_manager_.reset();
+  skybox_manager_scene_ = nullptr;
+  pending_sync_active_camera_ = false;
+  pending_reset_camera_ = false;
+  UpdateCameraControlPanelConfig();
 }
 
 auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
@@ -1559,9 +1600,17 @@ auto MainModule::InitializeUIPanels() -> void
       renderer->DumpEstimatedTextureMemory(top_n);
     }
   };
+  loader_config.get_last_released_scene_key
+    = [this]() { return last_released_scene_key_; };
+  loader_config.on_force_trim = [this]() {
+    ReleaseCurrentSceneAsset("force trim");
+    ClearSceneRuntime("force trim");
+  };
   loader_config.on_pak_mounted = [this](const std::filesystem::path& path) {
     auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
     if (asset_loader) {
+      ReleaseCurrentSceneAsset("pak mounted");
+      ClearSceneRuntime("pak mounted");
       asset_loader->ClearMounts();
       asset_loader->AddPakFile(path);
     }
@@ -1570,6 +1619,8 @@ auto MainModule::InitializeUIPanels() -> void
                                           const std::filesystem::path& path) {
     auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
     if (asset_loader) {
+      ReleaseCurrentSceneAsset("loose cooked root");
+      ClearSceneRuntime("loose cooked root");
       asset_loader->ClearMounts();
       asset_loader->AddLooseCookedRoot(path.parent_path());
     }

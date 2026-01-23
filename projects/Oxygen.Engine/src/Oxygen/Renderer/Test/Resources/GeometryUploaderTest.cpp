@@ -49,9 +49,12 @@ auto GeometryUploaderTest::SetUp() -> void
 
   default_material_ = DefaultMaterial();
 
+  asset_loader_ = std::make_unique<FakeAssetLoader>();
+
   geo_uploader_ = std::make_unique<resources::GeometryUploader>(
     observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
-    observer_ptr { staging_provider_.get() });
+    observer_ptr { staging_provider_.get() },
+    observer_ptr { asset_loader_.get() });
 }
 
 auto GeometryUploaderTest::GfxPtr() const -> observer_ptr<Graphics>
@@ -73,6 +76,11 @@ auto GeometryUploaderTest::Staging() const -> engine::upload::StagingProvider&
 auto GeometryUploaderTest::GeoUploader() const -> resources::GeometryUploader&
 {
   return *geo_uploader_;
+}
+
+auto GeometryUploaderTest::Loader() const -> FakeAssetLoader&
+{
+  return *asset_loader_;
 }
 
 auto GeometryUploaderTest::BeginFrame(frame::Slot slot) -> void

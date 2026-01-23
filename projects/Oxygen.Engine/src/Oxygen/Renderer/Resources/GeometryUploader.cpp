@@ -6,9 +6,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <expected>
 #include <fmt/format.h>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <string>
@@ -21,6 +23,7 @@
 #include <Oxygen/Core/Types/Epoch.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/Resources/GeometryUploader.h>
@@ -131,7 +134,8 @@ class GeometryUploader::Impl {
 public:
   Impl(observer_ptr<Graphics> gfx,
     observer_ptr<engine::upload::UploadCoordinator> uploader,
-    observer_ptr<engine::upload::StagingProvider> provider);
+    observer_ptr<engine::upload::StagingProvider> provider,
+    observer_ptr<content::IAssetLoader> asset_loader);
 
   ~Impl();
 
@@ -159,6 +163,16 @@ public:
     -> std::span<const engine::upload::UploadTicket>;
 
 private:
+  struct CallbackGate {
+    std::mutex mutex;
+    bool alive { true };
+  };
+
+  struct PendingAssetEviction {
+    data::AssetKey asset_key {};
+    content::EvictionReason reason { content::EvictionReason::kRefCountZero };
+  };
+
   struct GeometryIdentityKey {
     data::AssetKey asset_key {};
     std::uint32_t lod_index { 0U };
@@ -187,6 +201,8 @@ private:
 
     bool is_dirty { true };
     bool is_critical { false };
+    bool evicted { false };
+    std::uint64_t generation { 0U };
 
     Epoch last_touched_epoch { epoch::kNever };
 
@@ -201,6 +217,8 @@ private:
 
     std::optional<engine::upload::UploadTicket> pending_vertex_ticket;
     std::optional<engine::upload::UploadTicket> pending_index_ticket;
+    std::uint64_t pending_vertex_generation { 0U };
+    std::uint64_t pending_index_generation { 0U };
 
     // When source indices are 16-bit, we widen to 32-bit for GPU consumption
     // and keep this staging buffer alive until the upload ticket retires.
@@ -213,10 +231,18 @@ private:
   auto UploadIndexBuffer(GeometryEntry& dirty_entry)
     -> std::expected<engine::upload::UploadRequest, bool>;
   auto RetireCompletedUploads() -> void;
+  auto ProcessEvictions() -> void;
+  auto ReleaseEntryBuffers(GeometryEntry& entry) -> void;
 
   observer_ptr<Graphics> gfx_;
   observer_ptr<engine::upload::UploadCoordinator> uploader_;
   observer_ptr<engine::upload::StagingProvider> staging_provider_;
+  observer_ptr<content::IAssetLoader> asset_loader_;
+
+  std::shared_ptr<CallbackGate> callback_gate_;
+  std::mutex eviction_mutex_;
+  std::deque<PendingAssetEviction> pending_evictions_;
+  content::IAssetLoader::EvictionSubscription eviction_subscription_ {};
 
   engine::sceneprep::GeometryHandle next_handle_ { 0U };
   // Start at 1 so a brand-new uploader can safely answer queries (e.g. for
@@ -233,8 +259,9 @@ private:
 
 GeometryUploader::GeometryUploader(observer_ptr<Graphics> gfx,
   const observer_ptr<engine::upload::UploadCoordinator> uploader,
-  observer_ptr<engine::upload::StagingProvider> provider)
-  : impl_(std::make_unique<Impl>(gfx, uploader, provider))
+  observer_ptr<engine::upload::StagingProvider> provider,
+  observer_ptr<content::IAssetLoader> asset_loader)
+  : impl_(std::make_unique<Impl>(gfx, uploader, provider, asset_loader))
 {
 }
 
@@ -242,18 +269,58 @@ GeometryUploader::~GeometryUploader() = default;
 
 GeometryUploader::Impl::Impl(observer_ptr<Graphics> gfx,
   const observer_ptr<engine::upload::UploadCoordinator> uploader,
-  observer_ptr<engine::upload::StagingProvider> provider)
+  observer_ptr<engine::upload::StagingProvider> provider,
+  observer_ptr<content::IAssetLoader> asset_loader)
   : gfx_(gfx)
   , uploader_(uploader)
   , staging_provider_(provider)
+  , asset_loader_(asset_loader)
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DCHECK_NOTNULL_F(uploader_, "UploadCoordinator cannot be null");
   DCHECK_NOTNULL_F(staging_provider_, "StagingProvider cannot be null");
+
+  CHECK_NOTNULL_F(asset_loader_, "IAssetLoader cannot be null");
+
+  callback_gate_ = std::make_shared<CallbackGate>();
+  CHECK_NOTNULL_F(callback_gate_, "Failed to create callback gate");
+
+  eviction_subscription_ = asset_loader_->SubscribeResourceEvictions(
+    data::GeometryAsset::ClassTypeId(),
+    [gate = callback_gate_, this](const content::EvictionEvent& event) -> void {
+      if (!gate) {
+        return;
+      }
+
+      std::scoped_lock lock(gate->mutex);
+      if (!gate->alive) {
+        return;
+      }
+
+      if (!event.asset_key.has_value()) {
+        return;
+      }
+
+      LOG_F(2,
+        "GeometryUploader: eviction notification for asset {} "
+        "(reason={})",
+        data::to_string(*event.asset_key), event.reason);
+
+      std::scoped_lock eviction_lock(eviction_mutex_);
+      pending_evictions_.push_back(PendingAssetEviction {
+        .asset_key = *event.asset_key,
+        .reason = event.reason,
+      });
+    });
 }
 
 GeometryUploader::Impl::~Impl()
 {
+  if (callback_gate_) {
+    std::scoped_lock lock(callback_gate_->mutex);
+    callback_gate_->alive = false;
+  }
+
   // GPU-safety: wait for in-flight work to complete before unregistering
   // descriptor views and buffers.
   if (gfx_ != nullptr) {
@@ -331,6 +398,22 @@ auto GeometryUploader::Impl::GetOrAllocate(
     // Found identity - update criticality only if stronger than before.
     entry.is_critical |= is_critical;
     entry.last_touched_epoch = current_epoch_;
+
+    if (entry.evicted) {
+      entry.evicted = false;
+      entry.is_dirty = true;
+      entry.vertex_srv_index = kInvalidShaderVisibleIndex;
+      entry.index_srv_index = kInvalidShaderVisibleIndex;
+      entry.pending_vertex_srv_index = kInvalidShaderVisibleIndex;
+      entry.pending_index_srv_index = kInvalidShaderVisibleIndex;
+      entry.pending_vertex_ticket.reset();
+      entry.pending_index_ticket.reset();
+      entry.pending_vertex_generation = 0U;
+      entry.pending_index_generation = 0U;
+      entry.pending_widened_indices.reset();
+      entry.vertex_buffer.reset();
+      entry.index_buffer.reset();
+    }
 
     // If the mesh instance changed for the same stable identity (hot-reload),
     // update and mark dirty to ensure data is reuploaded.
@@ -448,6 +531,10 @@ auto GeometryUploader::Impl::Update(engine::sceneprep::GeometryHandle handle,
 
   auto& entry = geometry_entries_[idx];
 
+  if (entry.evicted) {
+    entry.evicted = false;
+  }
+
   if (entry.mesh != nullptr) {
     const bool same_identity = entry.asset_key == geometry.asset_key
       && entry.lod_index == geometry.lod_index;
@@ -510,6 +597,7 @@ auto GeometryUploader::Impl::OnFrameStart(frame::Slot /*slot*/) -> void
   frame_resources_ensured_ = false;
 
   // Clean up completed upload tickets
+  ProcessEvictions();
   RetireCompletedUploads();
 }
 
@@ -525,7 +613,8 @@ auto GeometryUploader::Impl::IsHandleValid(
   const auto u_handle = handle.get();
   const auto idx = static_cast<std::size_t>(u_handle);
   return idx < geometry_entries_.size()
-    && geometry_entries_[idx].mesh != nullptr;
+    && geometry_entries_[idx].mesh != nullptr
+    && !geometry_entries_[idx].evicted;
 }
 
 auto GeometryUploader::EnsureFrameResources() -> void
@@ -550,6 +639,85 @@ auto GeometryUploader::Impl::EnsureFrameResources() -> void
   frame_resources_ensured_ = true;
 }
 
+//=== Eviction handling =====================================================//
+
+/*!
+ Drain pending geometry asset evictions and invalidate all GPU residency for
+ matching entries.
+
+ This runs on the render thread during OnFrameStart(). Handles become invalid
+ until the asset is reloaded and GetOrAllocate() repopulates the entry.
+*/
+auto GeometryUploader::Impl::ProcessEvictions() -> void
+{
+  std::deque<PendingAssetEviction> evictions;
+  {
+    std::scoped_lock lock(eviction_mutex_);
+    if (pending_evictions_.empty()) {
+      return;
+    }
+    evictions.swap(pending_evictions_);
+  }
+
+  DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
+
+  for (const auto& eviction : evictions) {
+    for (auto& entry : geometry_entries_) {
+      if (entry.asset_key != eviction.asset_key) {
+        continue;
+      }
+
+      if (entry.evicted) {
+        continue;
+      }
+
+      entry.evicted = true;
+      ++entry.generation;
+
+      entry.pending_vertex_ticket.reset();
+      entry.pending_index_ticket.reset();
+      entry.pending_vertex_generation = 0U;
+      entry.pending_index_generation = 0U;
+      entry.pending_widened_indices.reset();
+
+      entry.vertex_srv_index = kInvalidShaderVisibleIndex;
+      entry.index_srv_index = kInvalidShaderVisibleIndex;
+      entry.pending_vertex_srv_index = kInvalidShaderVisibleIndex;
+      entry.pending_index_srv_index = kInvalidShaderVisibleIndex;
+
+      ReleaseEntryBuffers(entry);
+      entry.mesh.reset();
+      entry.is_dirty = false;
+
+      LOG_F(2,
+        "GeometryUploader: eviction processed for asset {} "
+        "(reason={})",
+        data::to_string(eviction.asset_key), eviction.reason);
+    }
+  }
+}
+
+//! Release GPU buffers for an entry and unregister them from the registry.
+auto GeometryUploader::Impl::ReleaseEntryBuffers(GeometryEntry& entry) -> void
+{
+  if (!gfx_) {
+    return;
+  }
+
+  auto& registry = gfx_->GetResourceRegistry();
+  auto& reclaimer = gfx_->GetDeferredReclaimer();
+
+  if (entry.vertex_buffer) {
+    registry.UnRegisterResource<graphics::Buffer>(*entry.vertex_buffer);
+    reclaimer.RegisterDeferredRelease(std::move(entry.vertex_buffer));
+  }
+
+  if (entry.index_buffer) {
+    registry.UnRegisterResource<graphics::Buffer>(*entry.index_buffer);
+    reclaimer.RegisterDeferredRelease(std::move(entry.index_buffer));
+  }
+}
+
 auto GeometryUploader::Impl::UploadBuffers() -> void
 {
   DCHECK_NOTNULL_F(uploader_);
@@ -561,6 +729,9 @@ auto GeometryUploader::Impl::UploadBuffers() -> void
       continue;
     }
     if (entry.mesh == nullptr) {
+      continue;
+    }
+    if (entry.evicted) {
       continue;
     }
 
@@ -575,6 +746,7 @@ auto GeometryUploader::Impl::UploadBuffers() -> void
         auto ticket_exp = uploader_->Submit(req.value(), *staging_provider_);
         if (ticket_exp.has_value()) {
           entry.pending_vertex_ticket = ticket_exp.value();
+          entry.pending_vertex_generation = entry.generation;
         } else {
           const std::error_code ec = ticket_exp.error();
           LOG_F(ERROR,
@@ -594,6 +766,7 @@ auto GeometryUploader::Impl::UploadBuffers() -> void
         auto ticket_exp = uploader_->Submit(req.value(), *staging_provider_);
         if (ticket_exp.has_value()) {
           entry.pending_index_ticket = ticket_exp.value();
+          entry.pending_index_generation = entry.generation;
         } else {
           const std::error_code ec = ticket_exp.error();
           LOG_F(ERROR,
@@ -750,7 +923,7 @@ auto GeometryUploader::Impl::GetShaderVisibleIndices(
     return {};
   }
   const auto& entry = geometry_entries_[idx];
-  if (entry.mesh == nullptr) {
+  if (entry.mesh == nullptr || entry.evicted) {
     return {};
   }
   return {
@@ -771,8 +944,16 @@ auto GeometryUploader::Impl::RetireCompletedUploads() -> void
   auto retire_one = [&](auto& entry,
                       std::optional<engine::upload::UploadTicket>& ticket_opt,
                       ShaderVisibleIndex& published,
-                      ShaderVisibleIndex& pending) {
+                      ShaderVisibleIndex& pending,
+                      std::uint64_t& pending_generation) {
     if (!ticket_opt.has_value()) {
+      return;
+    }
+
+    if (entry.evicted || pending_generation != entry.generation) {
+      ticket_opt.reset();
+      pending = kInvalidShaderVisibleIndex;
+      pending_generation = 0U;
       return;
     }
 
@@ -821,22 +1002,25 @@ auto GeometryUploader::Impl::RetireCompletedUploads() -> void
     }
 
     ticket_opt.reset();
+    pending_generation = 0U;
   };
 
   for (auto& entry : geometry_entries_) {
     if (entry.mesh == nullptr) {
       entry.pending_vertex_ticket.reset();
       entry.pending_index_ticket.reset();
+      entry.pending_vertex_generation = 0U;
+      entry.pending_index_generation = 0U;
       entry.pending_widened_indices.reset();
       continue;
     }
 
     retire_one(entry, entry.pending_vertex_ticket, entry.vertex_srv_index,
-      entry.pending_vertex_srv_index);
+      entry.pending_vertex_srv_index, entry.pending_vertex_generation);
 
     const bool had_index_ticket = entry.pending_index_ticket.has_value();
     retire_one(entry, entry.pending_index_ticket, entry.index_srv_index,
-      entry.pending_index_srv_index);
+      entry.pending_index_srv_index, entry.pending_index_generation);
     if (had_index_ticket && !entry.pending_index_ticket.has_value()) {
       entry.pending_widened_indices.reset();
     }

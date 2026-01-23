@@ -137,6 +137,7 @@ m_gtest_program(
     "Resources/TextureBinderTest.h"
     "Resources/TextureBinder_basic_test.cpp"
     "Resources/TextureBinder_upload_test.cpp"
+    "Resources/TextureBinder_eviction_test.cpp"
     "Resources/TextureBinder_failures_test.cpp"
 )
 target_compile_definitions(
@@ -204,6 +205,7 @@ m_gtest_program(
     "Resources/GeometryUploader_upload_test.cpp"
     "Resources/GeometryUploader_retire_test.cpp"
     "Resources/GeometryUploader_update_test.cpp"
+    "Resources/GeometryUploader_eviction_test.cpp"
     "Resources/GeometryUploader_failures_test.cpp"
     "Resources/GeometryUploader_edge_test.cpp"
 )

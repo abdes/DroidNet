@@ -58,7 +58,7 @@ inline auto LoadMaterialAsset(LoaderContext context)
   MaterialAssetDesc desc;
 
   {
-    LOG_SCOPE_F(INFO, "Header");
+    LOG_SCOPE_F(1, "Header");
     LoadAssetHeader(reader, desc.header);
   }
 
@@ -214,36 +214,36 @@ inline auto LoadMaterialAsset(LoaderContext context)
     check_result(reserved_result, "MaterialAssetDesc.reserved");
   }
 
-  LOG_F(INFO, "material domain   : {}", desc.material_domain);
-  LOG_F(INFO, "flags             : 0x{:08X}", desc.flags);
-  LOG_F(INFO, "shader stages     : 0x{:08X}", desc.shader_stages);
-  LOG_F(INFO, "base color        : [{:.2f}, {:.2f}, {:.2f}, {:.2f}]",
+  LOG_F(2, "material domain   : {}", desc.material_domain);
+  LOG_F(2, "flags             : 0x{:08X}", desc.flags);
+  LOG_F(2, "shader stages     : 0x{:08X}", desc.shader_stages);
+  LOG_F(2, "base color        : [{:.2f}, {:.2f}, {:.2f}, {:.2f}]",
     desc.base_color[0], desc.base_color[1], desc.base_color[2],
     desc.base_color[3]);
-  LOG_F(INFO, "normal scale      : {:.2f}", desc.normal_scale);
-  LOG_F(INFO, "metalness         : {:.2f}", desc.metalness.ToFloat());
-  LOG_F(INFO, "roughness         : {:.2f}", desc.roughness.ToFloat());
-  LOG_F(INFO, "ambient occlusion : {:.2f}", desc.ambient_occlusion.ToFloat());
-  LOG_F(INFO, "base color tex    : {}", desc.base_color_texture);
-  LOG_F(INFO, "normal tex        : {}", desc.normal_texture);
-  LOG_F(INFO, "metallic tex      : {}", desc.metallic_texture);
-  LOG_F(INFO, "roughness tex     : {}", desc.roughness_texture);
-  LOG_F(INFO, "ambient occ. tex  : {}", desc.ambient_occlusion_texture);
-  LOG_F(INFO, "emissive tex     : {}", desc.emissive_texture);
-  LOG_F(INFO, "specular tex     : {}", desc.specular_texture);
-  LOG_F(INFO, "sheen color tex  : {}", desc.sheen_color_texture);
-  LOG_F(INFO, "clearcoat tex    : {}", desc.clearcoat_texture);
-  LOG_F(INFO, "clearcoat N tex  : {}", desc.clearcoat_normal_texture);
-  LOG_F(INFO, "transmission tex : {}", desc.transmission_texture);
-  LOG_F(INFO, "thickness tex    : {}", desc.thickness_texture);
-  LOG_F(INFO, "alpha cutoff     : {:.3f}", desc.alpha_cutoff.ToFloat());
-  LOG_F(INFO, "ior              : {:.3f}", desc.ior);
-  LOG_F(INFO, "specular factor  : {:.3f}", desc.specular_factor.ToFloat());
-  LOG_F(INFO, "clearcoat        : {:.3f}", desc.clearcoat_factor.ToFloat());
-  LOG_F(INFO, "clearcoat rough. : {:.3f}", desc.clearcoat_roughness.ToFloat());
-  LOG_F(INFO, "transmission     : {:.3f}", desc.transmission_factor.ToFloat());
-  LOG_F(INFO, "thickness        : {:.3f}", desc.thickness_factor.ToFloat());
-  LOG_F(INFO, "attenuation dist : {:.3f}", desc.attenuation_distance);
+  LOG_F(2, "normal scale      : {:.2f}", desc.normal_scale);
+  LOG_F(2, "metalness         : {:.2f}", desc.metalness.ToFloat());
+  LOG_F(2, "roughness         : {:.2f}", desc.roughness.ToFloat());
+  LOG_F(2, "ambient occlusion : {:.2f}", desc.ambient_occlusion.ToFloat());
+  LOG_F(2, "base color tex    : {}", desc.base_color_texture);
+  LOG_F(2, "normal tex        : {}", desc.normal_texture);
+  LOG_F(2, "metallic tex      : {}", desc.metallic_texture);
+  LOG_F(2, "roughness tex     : {}", desc.roughness_texture);
+  LOG_F(2, "ambient occ. tex  : {}", desc.ambient_occlusion_texture);
+  LOG_F(2, "emissive tex     : {}", desc.emissive_texture);
+  LOG_F(2, "specular tex     : {}", desc.specular_texture);
+  LOG_F(2, "sheen color tex  : {}", desc.sheen_color_texture);
+  LOG_F(2, "clearcoat tex    : {}", desc.clearcoat_texture);
+  LOG_F(2, "clearcoat N tex  : {}", desc.clearcoat_normal_texture);
+  LOG_F(2, "transmission tex : {}", desc.transmission_texture);
+  LOG_F(2, "thickness tex    : {}", desc.thickness_texture);
+  LOG_F(2, "alpha cutoff     : {:.3f}", desc.alpha_cutoff.ToFloat());
+  LOG_F(2, "ior              : {:.3f}", desc.ior);
+  LOG_F(2, "specular factor  : {:.3f}", desc.specular_factor.ToFloat());
+  LOG_F(2, "clearcoat        : {:.3f}", desc.clearcoat_factor.ToFloat());
+  LOG_F(2, "clearcoat rough. : {:.3f}", desc.clearcoat_roughness.ToFloat());
+  LOG_F(2, "transmission     : {:.3f}", desc.transmission_factor.ToFloat());
+  LOG_F(2, "thickness        : {:.3f}", desc.thickness_factor.ToFloat());
+  LOG_F(2, "attenuation dist : {:.3f}", desc.attenuation_distance);
 
   // TODO: Implement shader refs as resources
   // Currently shader references are embedded data without asset keys

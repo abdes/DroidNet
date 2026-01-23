@@ -12,6 +12,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Renderer/RendererTag.h>
@@ -65,6 +66,12 @@ namespace oxygen::renderer::resources {
  - **Upload coordination**: asynchronous uploads are scheduled through
    `engine::upload::UploadCoordinator`.
 
+ ### Eviction Policy
+
+ - **Asset-level eviction**: when a `GeometryAsset` is evicted, all GPU
+   buffers for its meshes (VB/IB and related SRVs) are released and the
+   associated handles become invalid until the asset is reloaded.
+
  ### Usage Pattern
 
  ```cpp
@@ -88,6 +95,9 @@ namespace oxygen::renderer::resources {
    `GetPendingUploadTickets()` or continue rendering while assets become
    resident.
  @warning Do not issue draws that reference invalid SRV indices.
+ @note Eviction is asset-level: when a GeometryAsset is evicted, all GPU
+   buffers for its meshes are released and handles become invalid until the
+   asset is reloaded.
  @see MaterialBinder for a reference PIMPL binder design
  @see engine::upload::UploadCoordinator
 */
@@ -107,7 +117,8 @@ public:
   */
   OXGN_RNDR_API GeometryUploader(observer_ptr<Graphics> gfx,
     observer_ptr<engine::upload::UploadCoordinator> uploader,
-    observer_ptr<engine::upload::StagingProvider> provider);
+    observer_ptr<engine::upload::StagingProvider> provider,
+    observer_ptr<content::IAssetLoader> asset_loader);
 
   OXYGEN_MAKE_NON_COPYABLE(GeometryUploader)
   OXYGEN_MAKE_NON_MOVABLE(GeometryUploader)
