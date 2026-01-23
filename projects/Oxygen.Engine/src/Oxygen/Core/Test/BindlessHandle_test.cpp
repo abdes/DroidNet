@@ -648,14 +648,14 @@ class LoggingTests : public testing::Test {
 protected:
   auto SetUp() -> void override
   {
-    saved_verbosity_ = loguru::g_stderr_verbosity;
+    saved_verbosity_ = loguru::g_global_verbosity;
     // Set to INFO level so LOG_F calls produce output
-    loguru::g_stderr_verbosity = loguru::Verbosity_INFO;
+    loguru::g_global_verbosity = loguru::Verbosity_INFO;
   }
 
   auto TearDown() -> void override
   {
-    loguru::g_stderr_verbosity = saved_verbosity_;
+    loguru::g_global_verbosity = saved_verbosity_;
   }
 
   // Helper to capture stderr while running a callable and return the output.

@@ -107,14 +107,20 @@ class BasicLoggingFixture : public testing::Test {
 protected:
   void SetUp() override
   {
-    saved_verbosity_ = loguru::g_stderr_verbosity;
+    saved_verbosity_ = loguru::g_global_verbosity;
+    saved_log_to_stderr_ = loguru::g_log_to_stderr;
     // Default tests to INFO so individual tests don't need to set verbosity.
-    loguru::g_stderr_verbosity = loguru::Verbosity_INFO;
+    loguru::g_global_verbosity = loguru::Verbosity_INFO;
+    loguru::g_log_to_stderr = true;
   }
 
-  void TearDown() override { loguru::g_stderr_verbosity = saved_verbosity_; }
+  void TearDown() override
+  {
+    loguru::g_global_verbosity = saved_verbosity_;
+    loguru::g_log_to_stderr = saved_log_to_stderr_;
+  }
 
-  void SetVerbosity(loguru::Verbosity v) { loguru::g_stderr_verbosity = v; }
+  void SetVerbosity(loguru::Verbosity v) { loguru::g_global_verbosity = v; }
 
   // Helper to capture stderr while running a callable and return the output.
   template <typename F> std::string CaptureStderr(F&& f)
@@ -126,6 +132,7 @@ protected:
 
 private:
   loguru::Verbosity saved_verbosity_ { loguru::Verbosity_OFF };
+  bool saved_log_to_stderr_ { true };
 };
 
 //=== Basic Logging Functionality Tests ===-----------------------------------//

@@ -71,7 +71,7 @@ constexpr size_t kIterations { 1'000'000 };
 
 TEST_CASE("Event Stream - Synchronized Shared Benchmark")
 {
-  loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
+  loguru::g_global_verbosity = loguru::Verbosity_WARNING;
 
   TestEventLoop el;
 
@@ -217,7 +217,7 @@ TEST_CASE("Event Stream - Synchronized Shared Benchmark")
 
 TEST_CASE("Event Stream - Multi Channel benchmark")
 {
-  loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
+  loguru::g_global_verbosity = loguru::Verbosity_WARNING;
 
   TestEventLoop el;
 
@@ -317,7 +317,7 @@ TEST_CASE("Event Stream - Multi Channel benchmark")
 
 TEST_CASE("Event Stream - BroadcastChannel benchmark")
 {
-  loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
+  loguru::g_global_verbosity = loguru::Verbosity_WARNING;
 
   TestEventLoop el;
 

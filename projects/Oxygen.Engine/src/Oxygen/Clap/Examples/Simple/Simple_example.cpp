@@ -30,9 +30,9 @@ auto main(int argc, char** argv) -> int
     loguru::g_preamble_thread = true;
     loguru::g_preamble_header = false;
 #if !defined(NDEBUG)
-    loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+    loguru::g_global_verbosity = loguru::Verbosity_OFF;
 #else
-    loguru::g_stderr_verbosity = loguru::Verbosity_0;
+    loguru::g_global_verbosity = loguru::Verbosity_0;
 #endif // !NDEBUG
 
     loguru::init(argc, const_cast<const char**>(argv));
@@ -106,13 +106,13 @@ auto main(int argc, char** argv) -> int
                 << ovm.ValuesOf("lines").at(0).GetAs<int>() << std::endl;
     }
     loguru::flush();
-    loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+    loguru::g_global_verbosity = loguru::Verbosity_OFF;
     loguru::shutdown();
     return EXIT_SUCCESS;
   } catch (...) {
     if (loguru_initialized) {
       loguru::flush();
-      loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+      loguru::g_global_verbosity = loguru::Verbosity_OFF;
       loguru::shutdown();
     }
     return EXIT_FAILURE;

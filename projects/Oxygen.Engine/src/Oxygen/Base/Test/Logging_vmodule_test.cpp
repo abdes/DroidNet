@@ -69,14 +69,14 @@ protected:
   {
     loguru::clear_vmodule_overrides();
     ResetSiteCaches();
-    saved_verbosity_ = loguru::g_stderr_verbosity;
-    loguru::g_stderr_verbosity = loguru::Verbosity_INFO; // Suppress by default
+    saved_verbosity_ = loguru::g_global_verbosity;
+    loguru::g_global_verbosity = loguru::Verbosity_MAX;
   }
 
   void TearDown() override
   {
     loguru::clear_vmodule_overrides();
-    loguru::g_stderr_verbosity = saved_verbosity_;
+    loguru::g_global_verbosity = saved_verbosity_;
   }
 
   //! Helper to simulate command line parsing
@@ -160,23 +160,23 @@ NOLINT_TEST_F(CommandLineParsingTest, ParsesVerbosityFlags)
 {
   // Test -v with number
   ParseArgs({ "program", "-v", "3", "other_arg" });
-  EXPECT_EQ(loguru::g_stderr_verbosity, 3);
+  EXPECT_EQ(loguru::g_global_verbosity, 3);
   EXPECT_EQ(GetRemainingArgCount(), 2); // program + other_arg
 
   // Reset verbosity
-  loguru::g_stderr_verbosity = loguru::Verbosity_INFO;
+  loguru::g_global_verbosity = loguru::Verbosity_INFO;
 
   // Test -v=2
   ParseArgs({ "program", "-v=2", "other_arg" });
-  EXPECT_EQ(loguru::g_stderr_verbosity, 2);
+  EXPECT_EQ(loguru::g_global_verbosity, 2);
   EXPECT_EQ(GetRemainingArgCount(), 2);
 
   // Reset verbosity
-  loguru::g_stderr_verbosity = loguru::Verbosity_INFO;
+  loguru::g_global_verbosity = loguru::Verbosity_INFO;
 
   // Test with named verbosity
   ParseArgs({ "program", "-v", "WARNING", "other_arg" });
-  EXPECT_EQ(loguru::g_stderr_verbosity, loguru::Verbosity_WARNING);
+  EXPECT_EQ(loguru::g_global_verbosity, loguru::Verbosity_WARNING);
 }
 
 //! Command line should throw on invalid single override (enforced format)
@@ -201,7 +201,7 @@ NOLINT_TEST_F(CommandLineParsingTest, HandlesCustomVerbosityFlags)
 {
   // Test with custom verbosity flag name
   ParseArgs({ "program", "--debug", "2", "other" }, "--debug");
-  EXPECT_EQ(loguru::g_stderr_verbosity, 2);
+  EXPECT_EQ(loguru::g_global_verbosity, 2);
   EXPECT_EQ(GetRemainingArgCount(), 2); // program + other
 }
 
@@ -231,14 +231,14 @@ protected:
   void SetUp() override
   {
     loguru::clear_vmodule_overrides();
-    saved_verbosity_ = loguru::g_stderr_verbosity;
-    loguru::g_stderr_verbosity = loguru::Verbosity_INFO;
+    saved_verbosity_ = loguru::g_global_verbosity;
+    loguru::g_global_verbosity = loguru::Verbosity_MAX;
   }
 
   void TearDown() override
   {
     loguru::clear_vmodule_overrides();
-    loguru::g_stderr_verbosity = saved_verbosity_;
+    loguru::g_global_verbosity = saved_verbosity_;
   }
 
 private:
@@ -318,14 +318,14 @@ protected:
   void SetUp() override
   {
     loguru::clear_vmodule_overrides();
-    saved_verbosity_ = loguru::g_stderr_verbosity;
-    loguru::g_stderr_verbosity = loguru::Verbosity_INFO;
+    saved_verbosity_ = loguru::g_global_verbosity;
+    loguru::g_global_verbosity = loguru::Verbosity_MAX;
   }
 
   void TearDown() override
   {
     loguru::clear_vmodule_overrides();
-    loguru::g_stderr_verbosity = saved_verbosity_;
+    loguru::g_global_verbosity = saved_verbosity_;
   }
 
 private:
@@ -347,7 +347,7 @@ NOLINT_TEST_F(RuntimeConfigurationTest, MultipleModulesConfiguration)
 {
   ScopedLogCapture capture("test_multiple", loguru::Verbosity_9);
 
-  loguru::configure_vmodules({ "mod1=1", "mod2=2", "mod3=3" });
+  loguru::configure_vmodules({ "mod1=1", "mod2=2", "mod3=3", "*=OFF" });
 
   EXPECT_TRUE(Enabled("mod1.cpp", loguru::Verbosity_1));
   EXPECT_TRUE(Enabled("mod2.cpp", loguru::Verbosity_2));
@@ -383,6 +383,7 @@ NOLINT_TEST_F(RuntimeConfigurationTest, ClearingOverrides)
   loguru::clear_vmodule_overrides();
 
   {
+    loguru::g_global_verbosity = loguru::Verbosity_INFO;
     ScopedLogCapture capture("after_clear", loguru::Verbosity_9);
     EXPECT_FALSE(Enabled("testmod.cpp", loguru::Verbosity_5));
   }
@@ -400,14 +401,14 @@ protected:
   void SetUp() override
   {
     loguru::clear_vmodule_overrides();
-    saved_verbosity_ = loguru::g_stderr_verbosity;
-    loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+    saved_verbosity_ = loguru::g_global_verbosity;
+    loguru::g_global_verbosity = loguru::Verbosity_MAX;
   }
 
   void TearDown() override
   {
     loguru::clear_vmodule_overrides();
-    loguru::g_stderr_verbosity = saved_verbosity_;
+    loguru::g_global_verbosity = saved_verbosity_;
   }
 
 private:
@@ -417,7 +418,7 @@ private:
 //! Patterns without path separators should match basename only
 NOLINT_TEST_F(PatternMatchingTest, BasenameMatching)
 {
-  loguru::configure_vmodule("parser=2");
+  loguru::configure_vmodules({ "parser=2", "*=OFF" });
   EXPECT_TRUE(Enabled("parser.cpp", loguru::Verbosity_2));
   EXPECT_TRUE(Enabled("src/parser.cpp", loguru::Verbosity_2));
   EXPECT_TRUE(Enabled("deep/path/parser.h", loguru::Verbosity_2));
@@ -427,7 +428,7 @@ NOLINT_TEST_F(PatternMatchingTest, BasenameMatching)
 //! Patterns with path separators should match full paths
 NOLINT_TEST_F(PatternMatchingTest, FullPathMatching)
 {
-  loguru::configure_vmodule("src/network*=2");
+  loguru::configure_vmodules({ "src/network*=2", "*=OFF" });
   EXPECT_TRUE(Enabled("src/network.cpp", loguru::Verbosity_2));
   EXPECT_TRUE(Enabled("src/network_manager.cpp", loguru::Verbosity_2));
   EXPECT_FALSE(Enabled("other/network.cpp", loguru::Verbosity_2));
@@ -440,7 +441,7 @@ NOLINT_TEST_F(PatternMatchingTest, WildcardStar)
   // Updated to use tree-glob semantics: '*' does not cross '/', matches within
   // a segment. We want to match top-level foo/ with files whose basename starts
   // with 'net'.
-  loguru::configure_vmodule("foo/net*=2");
+  loguru::configure_vmodules({ "foo/net*=2", "*=OFF" });
   EXPECT_TRUE(Enabled("foo/net.cpp", loguru::Verbosity_2));
   EXPECT_TRUE(Enabled("foo/network.cpp", loguru::Verbosity_2));
   EXPECT_TRUE(Enabled("foo/networking.cpp", loguru::Verbosity_2));
@@ -453,7 +454,7 @@ NOLINT_TEST_F(PatternMatchingTest, WildcardStar)
 //! Recursive ** pattern should match across directory boundaries
 NOLINT_TEST_F(PatternMatchingTest, RecursiveGlobDoubleStar)
 {
-  loguru::configure_vmodule("src/**/net*=3");
+  loguru::configure_vmodules({ "src/**/net*=3", "*=OFF" });
   EXPECT_TRUE(Enabled("src/net.cpp", loguru::Verbosity_3));
   EXPECT_TRUE(Enabled("src/core/net_utils.cpp", loguru::Verbosity_3));
   EXPECT_TRUE(Enabled("src/core/sub/netProfiler.cpp", loguru::Verbosity_3));
@@ -463,7 +464,7 @@ NOLINT_TEST_F(PatternMatchingTest, RecursiveGlobDoubleStar)
 //! Leading **/ should match zero or more directories (including current)
 NOLINT_TEST_F(PatternMatchingTest, RecursiveLeadingDoubleStar)
 {
-  loguru::configure_vmodule("**/foo/net*=2");
+  loguru::configure_vmodules({ "**/foo/net*=2", "*=OFF" });
   // zero directories before foo
   EXPECT_TRUE(Enabled("foo/net.cpp", loguru::Verbosity_2));
   EXPECT_TRUE(Enabled("foo/network.cpp", loguru::Verbosity_2));
@@ -482,7 +483,7 @@ NOLINT_TEST_F(PatternMatchingTest, WildcardQuestion)
 {
   ScopedLogCapture capture("test_wildcard_question", loguru::Verbosity_9);
 
-  loguru::configure_vmodule("mod?le=2");
+  loguru::configure_vmodules({ "mod?le=2", "*=OFF" });
   EXPECT_TRUE(Enabled("module.cpp", loguru::Verbosity_2));
   EXPECT_TRUE(Enabled("modale.cpp", loguru::Verbosity_2));
   EXPECT_FALSE(Enabled("modle.cpp", loguru::Verbosity_2));
@@ -521,13 +522,13 @@ protected:
   void SetUp() override
   {
     loguru::clear_vmodule_overrides();
-    saved_verbosity_ = loguru::g_stderr_verbosity;
-    loguru::g_stderr_verbosity = loguru::Verbosity_INFO;
+    saved_verbosity_ = loguru::g_global_verbosity;
+    loguru::g_global_verbosity = loguru::Verbosity_MAX;
   }
   void TearDown() override
   {
     loguru::clear_vmodule_overrides();
-    loguru::g_stderr_verbosity = saved_verbosity_;
+    loguru::g_global_verbosity = saved_verbosity_;
   }
 
 private:
@@ -563,13 +564,13 @@ protected:
   void SetUp() override
   {
     loguru::clear_vmodule_overrides();
-    saved_verbosity_ = loguru::g_stderr_verbosity;
-    loguru::g_stderr_verbosity = loguru::Verbosity_INFO;
+    saved_verbosity_ = loguru::g_global_verbosity;
+    loguru::g_global_verbosity = loguru::Verbosity_MAX;
   }
   void TearDown() override
   {
     loguru::clear_vmodule_overrides();
-    loguru::g_stderr_verbosity = saved_verbosity_;
+    loguru::g_global_verbosity = saved_verbosity_;
   }
   loguru::Verbosity saved_verbosity_ {};
 };
@@ -615,8 +616,8 @@ NOLINT_TEST_F(CachedVerbosityTest, BasenameVsFullPathIsolation)
   loguru::configure_vmodule("other/alpha=4");
   const bool enabled_fullpath_mismatch
     = loguru::check_module_fast(&tu_cache, loguru::Verbosity_4, file_path);
-  // Should fall back to global (INFO) which is lower than 4, so disabled.
-  EXPECT_FALSE(enabled_fullpath_mismatch);
+  // No matching override -> global cutoff (MAX) allows the log.
+  EXPECT_TRUE(enabled_fullpath_mismatch);
   // Cached verbosity should now reflect UNSPECIFIED after recompute.
   EXPECT_EQ(
     tu_cache.load(std::memory_order_relaxed), loguru::Verbosity_UNSPECIFIED);
@@ -643,18 +644,19 @@ NOLINT_TEST_F(CachedVerbosityTest, CacheUpdatesOnOverrideChange)
 }
 
 //! Module override should allow verbosity higher than global cutoff
-NOLINT_TEST_F(CachedVerbosityTest, OverrideRaisesAboveGlobal)
+NOLINT_TEST_F(CachedVerbosityTest, OverrideCannotExceedGlobalCutoff)
 {
-  loguru::g_stderr_verbosity = loguru::Verbosity_INFO; // global low
+  loguru::g_global_verbosity = loguru::Verbosity_INFO; // global low
   static std::atomic<int> cache { loguru::Verbosity_UNSPECIFIED };
   const char* file_path = "graphics/Renderer.cpp";
-  // Configure override before first use; first check will register & compute.
+  // Configure override before first use; register with a low verbosity first.
   loguru::configure_vmodule("graphics/Renderer=4");
   EXPECT_TRUE(
-    loguru::check_module_fast(&cache, loguru::Verbosity_4, file_path));
+    loguru::check_module_fast(&cache, loguru::Verbosity_INFO, file_path));
   EXPECT_EQ(cache.load(std::memory_order_relaxed), 4);
+  // Global cutoff blocks higher verbosity regardless of override.
   EXPECT_FALSE(
-    loguru::check_module_fast(&cache, loguru::Verbosity_5, file_path));
+    loguru::check_module_fast(&cache, loguru::Verbosity_4, file_path));
 }
 
 //! Adding an override after site registration should update cache

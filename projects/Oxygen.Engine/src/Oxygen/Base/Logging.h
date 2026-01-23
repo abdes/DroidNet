@@ -287,7 +287,8 @@ enum NamedVerbosity : Verbosity {
   // Used to mark an invalid verbosity. Do not log to this level.
   Verbosity_INVALID = -10, // Never do LOG_F(INVALID)
 
-  // You may use Verbosity_OFF on g_stderr_verbosity, but for nothing else!
+  // You may use Verbosity_OFF on g_global_verbosity (global cutoff),
+  // but for nothing else!
   Verbosity_OFF = -9, // Never do LOG_F(OFF)
 
   // Prefer to use ABORT_F or ABORT_S over LOG_F(FATAL) or LOG_S(FATAL).
@@ -301,8 +302,8 @@ enum NamedVerbosity : Verbosity {
   // Same as Verbosity_INFO in every way.
   Verbosity_0 = 0,
 
-  // Verbosity levels 1-9 are generally not written to stderr, but are written
-  // to file.
+  // Verbosity levels 1-9 are intended for verbose output and are only emitted
+  // when the global cutoff is set high enough.
   Verbosity_1 = +1,
   Verbosity_2 = +2,
   Verbosity_3 = +3,
@@ -330,12 +331,14 @@ struct Message {
   const char* message; // User message goes here.
 };
 
-/* Everything with a verbosity equal or greater than g_stderr_verbosity will be
-written to stderr. You can set this in code or via the -v argument.
-Set to loguru::Verbosity_OFF to write nothing to stderr.
-Default is 0, i.e. only log ERROR, WARNING and INFO are written to stderr.
+/* Everything with a verbosity less than or equal to g_global_verbosity passes
+the global cutoff. You can set this in code or via the -v argument.
+Set to loguru::Verbosity_OFF to disable all logging.
+Default is 0, i.e. only ERROR, WARNING and INFO are emitted.
 */
-LOGURU_EXPORT extern Verbosity g_stderr_verbosity;
+LOGURU_EXPORT extern Verbosity g_global_verbosity;
+// Controls whether loguru writes to stderr at all (true by default).
+LOGURU_EXPORT extern bool g_log_to_stderr;
 LOGURU_EXPORT extern bool g_colorlogtostderr; // True by default.
 LOGURU_EXPORT extern unsigned g_flush_interval_ms; // 0 (unbuffered) by default.
 LOGURU_EXPORT extern bool
@@ -401,17 +404,22 @@ struct Options {
 
         loguru::init() will look for arguments meant for loguru and remove them.
         Arguments meant for loguru are:
-                -v n   Set loguru::g_stderr_verbosity level. Examples:
+          -v n   Set the global cutoff (g_global_verbosity). Examples:
                         -v 3        Show verbosity level 3 and lower.
                         -v 0        Only show INFO, WARNING, ERROR, FATAL
    (default). -v INFO     Only show INFO, WARNING, ERROR, FATAL (default). -v
    WARNING  Only show WARNING, ERROR, FATAL. -v ERROR    Only show ERROR, FATAL.
                         -v FATAL    Only show FATAL.
-                        -v OFF      Turn off logging to stderr.
+                        -v OFF      Turn off logging.
 
-        Tip: You can set g_stderr_verbosity before calling loguru::init.
-        That way you can set the default but have the user override it with the
-   -v flag. Note that -v does not affect file logging (see loguru::add_file).
+          -L, --logfile <path>
+            Log to a file. Prefix the path with '+' to append,
+            otherwise the file is truncated. When a logfile is
+            specified, stderr logging is disabled.
+
+           Tip: You can set g_global_verbosity before calling loguru::init.
+           That way you can set the default but have the user override it with
+   the -v flag. The global cutoff applies to all outputs.
 
         You can you something other than the -v flag by setting the
    verbosity_flag option.
@@ -521,16 +529,29 @@ LOGURU_EXPORT bool remove_callback(const char* id);
 // Shut down all file logging and any other callback hooks installed.
 LOGURU_EXPORT void remove_all_callbacks();
 
-// Returns the maximum of g_stderr_verbosity and all file/custom outputs.
+// Returns the global cutoff verbosity.
 LOGURU_EXPORT Verbosity current_verbosity_cutoff();
 
 // Per-module verbosity overrides similar to glog's --vmodule.
+//
+// Usage rules:
+// - The global cutoff (set by -v) is always applied first.
+// - Vmodule rules can only further suppress logging; they do not override
+//   the global cutoff.
+// - First match wins. Put more specific patterns before general ones.
+//
 // Pattern syntax: '*' matches any sequence, '?' matches any single char.
 // If a pattern contains a path separator ('/' or '\\'), it is matched
 // against the full file path; otherwise matching is done against the
 // filename base (basename without extension, and with "-inl" trimmed).
+// This means patterns like "MainModule" or "**/MainModule" match both
+// MainModule.cpp and MainModule-inl.h; patterns with extensions are not
+// matched by default.
+//
 // Multiple entries can be supplied either as a single comma-separated
 // string or via multiple occurrences of the flag when parsing args.
+// Example:
+//   --vmodule="**/AssetLoader=2,*=OFF" -v=2
 
 // Configure a single vmodule override. Throws std::invalid_argument
 // if input contains comma or has invalid format.

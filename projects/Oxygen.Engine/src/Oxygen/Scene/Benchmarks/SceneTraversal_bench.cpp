@@ -23,7 +23,7 @@ public:
     loguru::g_preamble_uptime = false;
     loguru::g_preamble_thread = true;
     loguru::g_preamble_header = false;
-    loguru::g_stderr_verbosity = loguru::Verbosity_ERROR;
+    loguru::g_global_verbosity = loguru::Verbosity_ERROR;
     loguru::g_colorlogtostderr = true;
 
     // Create test scene with different hierarchies based on benchmark

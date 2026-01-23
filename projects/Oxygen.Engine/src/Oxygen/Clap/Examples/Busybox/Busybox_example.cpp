@@ -148,9 +148,9 @@ auto main(int argc, char** argv) -> int
     loguru::g_preamble_thread = true;
     loguru::g_preamble_header = false;
 #if !defined(NDEBUG)
-    loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
+    loguru::g_global_verbosity = loguru::Verbosity_WARNING;
 #else
-    loguru::g_stderr_verbosity = loguru::Verbosity_0;
+    loguru::g_global_verbosity = loguru::Verbosity_0;
 #endif // !NDEBUG
 
     loguru::init(argc, const_cast<const char**>(argv));
@@ -604,7 +604,7 @@ auto main(int argc, char** argv) -> int
       const auto full = ovm.HasOption("list_full");
       PrintAppletList(applets, full);
       loguru::flush();
-      loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+      loguru::g_global_verbosity = loguru::Verbosity_OFF;
       loguru::shutdown();
       return 0;
     }
@@ -617,7 +617,7 @@ auto main(int argc, char** argv) -> int
                   << (use_symlinks ? "symlinks" : "hardlinks") << ".\n";
       }
       loguru::flush();
-      loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+      loguru::g_global_verbosity = loguru::Verbosity_OFF;
       loguru::shutdown();
       return 0;
     }
@@ -625,7 +625,7 @@ auto main(int argc, char** argv) -> int
     if (command_path == Command::VERSION || command_path == Command::HELP
       || ovm.HasOption(Command::HELP)) {
       loguru::flush();
-      loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+      loguru::g_global_verbosity = loguru::Verbosity_OFF;
       loguru::shutdown();
       return 0;
     }
@@ -633,7 +633,7 @@ auto main(int argc, char** argv) -> int
     if (context.active_command->IsDefault()) {
       PrintAppletList(applets, false);
       loguru::flush();
-      loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+      loguru::g_global_verbosity = loguru::Verbosity_OFF;
       loguru::shutdown();
       return 0;
     }
@@ -679,13 +679,13 @@ auto main(int argc, char** argv) -> int
     }
 
     loguru::flush();
-    loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+    loguru::g_global_verbosity = loguru::Verbosity_OFF;
     loguru::shutdown();
     return 0;
   } catch (...) {
     if (loguru_initialized) {
       loguru::flush();
-      loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+      loguru::g_global_verbosity = loguru::Verbosity_OFF;
       loguru::shutdown();
     }
     return 1;

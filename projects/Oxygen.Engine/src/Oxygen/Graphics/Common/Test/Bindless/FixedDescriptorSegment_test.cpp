@@ -122,8 +122,8 @@ NOLINT_TEST(FixedDescriptorSegmentTest, ConstructionWithInvalidTypeOrVisibility)
 NOLINT_TEST(FixedDescriptorSegmentTest, DestructionWhenNotEmpty)
 {
   // Setup log capture for destruction warnings.
-  const auto old_verbosity = loguru::g_stderr_verbosity;
-  loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
+  const auto old_verbosity = loguru::g_global_verbosity;
+  loguru::g_global_verbosity = loguru::Verbosity_WARNING;
   const bool old_color = loguru::g_colorlogtostderr;
   loguru::g_colorlogtostderr = false;
   testing::internal::CaptureStderr();
@@ -140,7 +140,7 @@ NOLINT_TEST(FixedDescriptorSegmentTest, DestructionWhenNotEmpty)
   }
 
   std::string output = testing::internal::GetCapturedStderr();
-  loguru::g_stderr_verbosity = old_verbosity;
+  loguru::g_global_verbosity = old_verbosity;
   loguru::g_colorlogtostderr = old_color;
   // Check that the warning message appears in the output.
   EXPECT_NE(output.find("descriptors still allocated"), std::string::npos);
