@@ -629,6 +629,29 @@ auto MaterialBinder::Impl::GetOrAllocate(
     materials_[idx] = material.resolved_asset;
     material_ptr_to_index_[material.resolved_asset.get()] = idx;
 
+    const auto& cached_asset = *material.resolved_asset;
+    const bool no_texture_sampling
+      = (cached_asset.GetFlags()
+          & oxygen::data::pak::kMaterialFlag_NoTextureSampling)
+      != 0U;
+    if (!no_texture_sampling) {
+      const auto needs_refresh
+        = [this](const content::ResourceKey key) -> bool {
+        return key.get() != 0U && !texture_binder_->IsResourceReady(key);
+      };
+
+      if (needs_refresh(cached_asset.GetBaseColorTextureKey())
+        || needs_refresh(cached_asset.GetNormalTextureKey())
+        || needs_refresh(cached_asset.GetMetallicTextureKey())
+        || needs_refresh(cached_asset.GetRoughnessTextureKey())
+        || needs_refresh(cached_asset.GetAmbientOcclusionTextureKey())
+        || needs_refresh(cached_asset.GetEmissiveTextureKey())) {
+        material_constants_[idx]
+          = SerializeMaterialConstants(material, *texture_binder_);
+        MarkDirty(idx);
+      }
+    }
+
     return it->second.handle;
   }
 

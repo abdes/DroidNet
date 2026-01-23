@@ -84,6 +84,13 @@ namespace oxygen::renderer::resources {
  binding the shared error texture immediately or keeping the per-entry
  placeholder bound when upload submission failed.
 
+ ### Eviction policy
+
+ On Content eviction, TextureBinder keeps the stable SRV index but repoints the
+ descriptor to the global placeholder texture. Evicted entries are marked and
+ will reload on the next `GetOrAllocate()` call. Late upload completions are
+ discarded when the entry generation no longer matches.
+
  ### Lifecycle (concise)
 
  1. `OnFrameStart()` — begin frame; drain upload completions.

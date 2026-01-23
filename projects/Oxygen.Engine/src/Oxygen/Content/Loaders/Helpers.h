@@ -280,7 +280,7 @@ inline auto LoadAssetHeader(
   using data::AssetType;
   using data::pak::AssetHeader;
 
-  LOG_SCOPE_F(INFO, "Header");
+  LOG_SCOPE_F(1, "Header");
 
   auto result = reader.ReadInto<AssetHeader>(header);
   if (!result) {
@@ -293,11 +293,11 @@ inline auto LoadAssetHeader(
   // Check validity of the header
   auto asset_type = header.asset_type;
   if (asset_type > static_cast<uint8_t>(AssetType::kMaxAssetType)) {
-    LOG_F(INFO, "-failed- on invalid asset type {}", asset_type);
+    LOG_F(ERROR, "-failed- on invalid asset type {}", asset_type);
     throw std::runtime_error(
       fmt::format("invalid asset type in header: {}", asset_type));
   }
-  LOG_F(INFO, "asset type         : {}",
+  LOG_F(1, "asset type         : {}",
     nostd::to_string(static_cast<AssetType>(asset_type)));
 
   // Check that name contains a null terminator
@@ -308,12 +308,12 @@ inline auto LoadAssetHeader(
     LOG_F(WARNING, "-fishy- on name not null-terminated");
   }
   std::string_view name_view(name, data::pak::kMaxNameSize);
-  LOG_F(INFO, "asset name         : {}", name_view);
+  LOG_F(1, "asset name         : {}", name_view);
 
-  LOG_F(INFO, "format version     : {}", header.version);
-  LOG_F(INFO, "variant flags      : 0x{:08X}", header.variant_flags);
-  LOG_F(INFO, "streaming priority : {}", header.streaming_priority);
-  LOG_F(INFO, "content hash       : 0x{:016X}", header.content_hash);
+  LOG_F(1, "format version     : {}", header.version);
+  LOG_F(1, "variant flags      : 0x{:08X}", header.variant_flags);
+  LOG_F(1, "streaming priority : {}", header.streaming_priority);
+  LOG_F(1, "content hash       : 0x{:016X}", header.content_hash);
 }
 
 //! Helper RAII class for automatic resource cleanup when an error occurs during

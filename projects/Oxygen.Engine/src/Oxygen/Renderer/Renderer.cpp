@@ -215,7 +215,8 @@ auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
     auto geom_uploader
       = std::make_unique<renderer::resources::GeometryUploader>(
         observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
-        observer_ptr { upload_staging_provider_.get() });
+        observer_ptr { upload_staging_provider_.get() },
+        observer_ptr { asset_loader_.get() });
     auto xform_uploader
       = std::make_unique<renderer::resources::TransformUploader>(
         observer_ptr { gfx.get() },

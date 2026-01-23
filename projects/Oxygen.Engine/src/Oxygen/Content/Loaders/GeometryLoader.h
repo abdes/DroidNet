@@ -269,7 +269,7 @@ namespace detail {
   inline auto LoadMeshViewDesc(serio::AnyReader& desc_reader)
     -> data::pak::MeshViewDesc
   {
-    LOG_SCOPE_F(INFO, "Mesh View");
+    LOG_SCOPE_F(1, "Mesh View");
 
     using namespace oxygen::data;
     using namespace oxygen::data::pak;
@@ -279,10 +279,10 @@ namespace detail {
     auto mesh_view_result = desc_reader.Read<MeshViewDesc>();
     CheckResult(mesh_view_result, "m.desc");
     mesh_view_desc = *mesh_view_result;
-    LOG_F(INFO, "firs vertex   : {}", mesh_view_desc.first_vertex);
-    LOG_F(INFO, "vertex count  : {}", mesh_view_desc.vertex_count);
-    LOG_F(INFO, "first index   : {}", mesh_view_desc.first_index);
-    LOG_F(INFO, "index count   : {}", mesh_view_desc.index_count);
+    LOG_F(2, "first vertex  : {}", mesh_view_desc.first_vertex);
+    LOG_F(2, "vertex count  : {}", mesh_view_desc.vertex_count);
+    LOG_F(2, "first index   : {}", mesh_view_desc.first_index);
+    LOG_F(2, "index count   : {}", mesh_view_desc.index_count);
 
     return mesh_view_desc;
   }
@@ -290,7 +290,7 @@ namespace detail {
   inline auto LoadSubMeshDesc(serio::AnyReader& desc_reader)
     -> data::pak::SubMeshDesc
   {
-    LOG_SCOPE_F(INFO, "Sub-Mesh");
+    LOG_SCOPE_F(1, "Sub-Mesh");
 
     using namespace oxygen::data;
     using namespace oxygen::data::pak;
@@ -349,7 +349,7 @@ namespace detail {
 
 inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
 {
-  LOG_SCOPE_F(INFO, "Mesh");
+  LOG_SCOPE_F(1, "Mesh");
   LOG_F(2, "offline mode    : {}", context.work_offline ? "yes" : "no");
 
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
@@ -496,7 +496,7 @@ inline auto LoadGeometryAsset(LoaderContext context)
   using namespace oxygen::data;
   using namespace oxygen::data::pak;
 
-  LOG_SCOPE_F(INFO, "Geometry");
+  LOG_SCOPE_F(1, "Geometry");
 
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;

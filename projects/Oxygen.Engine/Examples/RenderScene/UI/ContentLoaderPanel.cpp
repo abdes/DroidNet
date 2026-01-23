@@ -35,6 +35,9 @@ void ContentLoaderPanel::Initialize(const Config& config)
   loose_config.on_scene_selected = config.on_scene_load_requested;
   loose_config.on_index_loaded = config.on_loose_index_loaded;
   loose_cooked_panel_.Initialize(loose_config);
+
+  get_last_released_scene_key_ = config.get_last_released_scene_key;
+  on_force_trim_ = config.on_force_trim;
 }
 
 void ContentLoaderPanel::Update()
@@ -51,6 +54,26 @@ void ContentLoaderPanel::Draw()
   if (!ImGui::Begin("Content Loader", nullptr, ImGuiWindowFlags_None)) {
     ImGui::End();
     return;
+  }
+
+  if (get_last_released_scene_key_) {
+    const auto last_key = get_last_released_scene_key_();
+    if (last_key.has_value()) {
+      ImGui::Text(
+        "Last released scene: %s", oxygen::data::to_string(*last_key).c_str());
+    } else {
+      ImGui::TextDisabled("Last released scene: <none>");
+    }
+  }
+
+  if (on_force_trim_) {
+    if (ImGui::Button("Force Trim")) {
+      on_force_trim_();
+    }
+  }
+
+  if (get_last_released_scene_key_ || on_force_trim_) {
+    ImGui::Separator();
   }
 
   if (ImGui::BeginTabBar("ContentSourceTabs")) {

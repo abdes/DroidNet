@@ -853,6 +853,7 @@ private:
   std::unordered_map<TypeId, std::vector<EvictionSubscriber>>
     eviction_subscribers_;
   std::unordered_map<uint64_t, ResourceKey> resource_key_by_hash_;
+  std::unordered_map<uint64_t, data::AssetKey> asset_key_by_hash_;
   uint64_t next_eviction_subscriber_id_ { 1 };
   std::shared_ptr<int> eviction_alive_token_ {};
 

@@ -114,9 +114,11 @@ private:
   auto EnsureActiveCameraViewport(const int width, const int height) -> void;
   auto ApplyOrbitAndZoom(time::CanonicalDuration delta_time) -> void;
   auto EnsureViewCameraRegistered() -> void;
+  auto ReleaseCurrentSceneAsset(const char* reason) -> void;
 
   auto UpdateUIPanels() -> void;
   auto DrawUI() -> void;
+  auto ClearSceneRuntime(const char* reason) -> void;
 
   // Scene and rendering.
   std::shared_ptr<scene::Scene> scene_;
@@ -163,6 +165,8 @@ private:
   std::filesystem::path content_root_;
   bool pending_load_scene_ { false };
   std::optional<data::AssetKey> pending_scene_key_;
+  std::optional<data::AssetKey> current_scene_key_;
+  std::optional<data::AssetKey> last_released_scene_key_;
   glm::vec3 initial_camera_position_ { 0.0F, -15.0F, 0.0F };
   glm::vec3 initial_camera_target_ { 0.0F, 0.0F, 0.0F };
   glm::quat initial_camera_rotation_ { 1.0F, 0.0F, 0.0F, 0.0F };

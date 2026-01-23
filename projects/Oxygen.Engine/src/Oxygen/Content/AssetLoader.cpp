@@ -279,6 +279,7 @@ void AssetLoader::Stop()
   }
 
   resource_key_by_hash_.clear();
+  asset_key_by_hash_.clear();
   eviction_subscribers_.clear();
   eviction_alive_token_.reset();
 }
@@ -405,6 +406,7 @@ auto AssetLoader::ClearMounts() -> void
   }
 
   resource_key_by_hash_.clear();
+  asset_key_by_hash_.clear();
 }
 
 auto AssetLoader::BindResourceRefToKey(const internal::ResourceRef& ref)
@@ -789,7 +791,10 @@ auto AssetLoader::ReleaseAsset(const data::AssetKey& key) -> bool
   // Recursively release (check in) the asset and all its dependencies.
   ReleaseAssetTree(key);
   // Return true if the asset is no longer present in the cache
-  return !content_cache_.Contains(HashAssetKey(key));
+  const bool still_present = content_cache_.Contains(HashAssetKey(key));
+  LOG_F(2, "AssetLoader: ReleaseAsset key={} evicted={}", data::to_string(key),
+    still_present ? "false" : "true");
+  return !still_present;
 }
 
 auto AssetLoader::SubscribeResourceEvictions(
@@ -1109,6 +1114,7 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key)
       }
 
       content_cache_.Store(hash_key, decoded);
+      asset_key_by_hash_.insert_or_assign(hash_key, key);
 
       co_await PublishResourceDependenciesAsync<data::TextureResource>(
         key, *decoded_result.dependency_collector);
@@ -1422,6 +1428,7 @@ auto AssetLoader::LoadGeometryAssetAsyncImpl(const data::AssetKey& key)
 
       // Store the fully published asset.
       content_cache_.Store(hash_key, decoded);
+      asset_key_by_hash_.insert_or_assign(hash_key, key);
 
       PublishGeometryDependencyEdgesAndRelease(
         key, loaded_buffers_by_index, loaded_materials);
@@ -1490,6 +1497,7 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key)
       // Publish: store the scene asset, then load asset dependencies and
       // register dependency edges.
       content_cache_.Store(hash_key, decoded);
+      asset_key_by_hash_.insert_or_assign(hash_key, key);
 
       // Publish only what needs async residency management:
       // geometry assets referenced by renderable components.
@@ -1815,20 +1823,8 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
 void oxygen::content::AssetLoader::UnloadObject(const uint64_t cache_key,
   const oxygen::TypeId& type_id, const EvictionReason reason)
 {
-  if (!IsResourceTypeId(type_id)) {
-    return;
-  }
-
-  const auto it = resource_key_by_hash_.find(cache_key);
-  if (it == resource_key_by_hash_.end()) {
-    LOG_F(WARNING,
-      "Eviction without ResourceKey mapping: key_hash={} type_id={}", cache_key,
-      type_id);
-    return;
-  }
-
   EvictionEvent event {
-    .key = it->second,
+    .key = ResourceKey {},
     .type_id = type_id,
     .reason = reason,
 #if !defined(NDEBUG)
@@ -1836,7 +1832,33 @@ void oxygen::content::AssetLoader::UnloadObject(const uint64_t cache_key,
 #endif
   };
 
-  resource_key_by_hash_.erase(it);
+  if (IsResourceTypeId(type_id)) {
+    const auto it = resource_key_by_hash_.find(cache_key);
+    if (it == resource_key_by_hash_.end()) {
+      LOG_F(WARNING,
+        "Eviction without ResourceKey mapping: key_hash={} type_id={}",
+        cache_key, type_id);
+      return;
+    }
+
+    event.key = it->second;
+    resource_key_by_hash_.erase(it);
+    LOG_F(2, "AssetLoader: Evicted resource {} type_id={} reason={}",
+      to_string(event.key), type_id, reason);
+  } else {
+    const auto it = asset_key_by_hash_.find(cache_key);
+    if (it == asset_key_by_hash_.end()) {
+      LOG_F(WARNING,
+        "Eviction without AssetKey mapping: key_hash={} type_id={}", cache_key,
+        type_id);
+      return;
+    }
+
+    event.asset_key = it->second;
+    asset_key_by_hash_.erase(it);
+    LOG_F(2, "AssetLoader: Evicted asset {} type_id={} reason={}",
+      data::to_string(*event.asset_key), type_id, reason);
+  }
 
   const auto sub_it = eviction_subscribers_.find(type_id);
   if (sub_it == eviction_subscribers_.end()) {
@@ -1878,7 +1900,10 @@ auto AssetLoader::ReleaseResource(const ResourceKey key) -> bool
       UnloadObject(cache_key, type_id, EvictionReason::kRefCountZero);
     });
   content_cache_.CheckIn(key_hash);
-  return !content_cache_.Contains(key_hash);
+  const bool still_present = content_cache_.Contains(key_hash);
+  LOG_F(2, "AssetLoader: ReleaseResource key={} evicted={}", to_string(key),
+    still_present ? "false" : "true");
+  return !still_present;
 }
 
 auto AssetLoader::GetPakIndex(const PakFile& pak) const -> uint16_t

@@ -15,6 +15,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -149,10 +150,19 @@ public:
     return false;
   }
 
-  auto SubscribeResourceEvictions(TypeId /*resource_type*/,
-    EvictionHandler /*handler*/) -> EvictionSubscription override
+  auto SubscribeResourceEvictions(TypeId resource_type, EvictionHandler handler)
+    -> EvictionSubscription override
   {
-    return {};
+    const auto id = next_subscription_id_++;
+    eviction_handlers_[resource_type].insert_or_assign(id, std::move(handler));
+    return MakeEvictionSubscription(resource_type, id,
+      observer_ptr<IAssetLoader> { this }, eviction_alive_token_);
+  }
+
+  auto EmitTextureEviction(
+    content::ResourceKey key, content::EvictionReason reason) -> void
+  {
+    EmitEviction(key, data::TextureResource::ClassTypeId(), reason);
   }
 
   [[nodiscard]] auto MintSyntheticTextureKey() -> content::ResourceKey override
@@ -196,13 +206,43 @@ public:
 
 private:
   void UnsubscribeResourceEvictions(
-    TypeId /*resource_type*/, uint64_t /*id*/) noexcept override
+    TypeId resource_type, uint64_t id) noexcept override
   {
+    const auto it = eviction_handlers_.find(resource_type);
+    if (it == eviction_handlers_.end()) {
+      return;
+    }
+    it->second.erase(id);
+  }
+
+  auto EmitEviction(content::ResourceKey key, TypeId type_id,
+    content::EvictionReason reason) -> void
+  {
+    const auto it = eviction_handlers_.find(type_id);
+    if (it == eviction_handlers_.end()) {
+      return;
+    }
+
+    content::EvictionEvent event {
+      .key = key,
+      .type_id = type_id,
+      .reason = reason,
+    };
+
+    for (const auto& [id, handler] : it->second) {
+      (void)id;
+      handler(event);
+    }
   }
 
   std::unordered_map<content::ResourceKey,
     std::shared_ptr<data::TextureResource>>
     textures_;
+
+  std::unordered_map<TypeId, std::unordered_map<std::uint64_t, EvictionHandler>>
+    eviction_handlers_;
+  std::uint64_t next_subscription_id_ { 1U };
+  std::shared_ptr<int> eviction_alive_token_ { std::make_shared<int>(0) };
 
   std::uint64_t next_key_ { 1U };
 };

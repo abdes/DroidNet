@@ -7,9 +7,12 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
+#include <string_view>
 
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Data/AssetKey.h>
 
 namespace oxygen::content {
 
@@ -20,8 +23,23 @@ enum class EvictionReason : uint8_t {
   kShutdown,
 };
 
-//! Payload emitted when a cached resource is evicted.
+//! Convert eviction reason to a stable string.
+[[nodiscard]] inline auto to_string(EvictionReason reason) -> std::string_view
+{
+  switch (reason) {
+  case EvictionReason::kRefCountZero:
+    return "RefCountZero";
+  case EvictionReason::kClear:
+    return "Clear";
+  case EvictionReason::kShutdown:
+    return "Shutdown";
+  }
+  return "Unknown";
+}
+
+//! Payload emitted when a cached resource or asset is evicted.
 struct EvictionEvent final {
+  std::optional<data::AssetKey> asset_key {};
   ResourceKey key {};
   TypeId type_id { kInvalidTypeId };
   EvictionReason reason { EvictionReason::kRefCountZero };
