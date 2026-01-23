@@ -131,7 +131,7 @@ auto ConvertResourceStates(oxygen::graphics::ResourceStates common_states)
 // Static helper functions to process specific barrier types
 auto ProcessBarrierDesc(const BufferBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
 {
-  DLOG_F(4, ". buffer barrier: {} {} -> {}",
+  DLOG_F(4, "buffer barrier: {} {} -> {}",
     nostd::to_string(desc.resource).c_str(),
     nostd::to_string(desc.before).c_str(),
     nostd::to_string(desc.after).c_str());
@@ -155,7 +155,7 @@ auto ProcessBarrierDesc(const BufferBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
 auto ProcessBarrierDesc(const TextureBarrierDesc& desc)
   -> D3D12_RESOURCE_BARRIER
 {
-  DLOG_F(4, ". texture barrier: {} {} -> {}",
+  DLOG_F(4, "texture barrier: {} {} -> {}",
     nostd::to_string(desc.resource).c_str(),
     nostd::to_string(desc.before).c_str(),
     nostd::to_string(desc.after).c_str());
@@ -178,8 +178,7 @@ auto ProcessBarrierDesc(const TextureBarrierDesc& desc)
 
 auto ProcessBarrierDesc(const MemoryBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
 {
-  DLOG_F(
-    4, ". memory barrier: 0x{:X}", nostd::to_string(desc.resource).c_str());
+  DLOG_F(4, "memory barrier: {}", desc.resource);
 
   const D3D12_RESOURCE_BARRIER d3d12_barrier
     = { .Type = D3D12_RESOURCE_BARRIER_TYPE_UAV,
@@ -516,7 +515,6 @@ auto CommandRecorder::GetConcreteCommandList() const -> CommandList&
   return static_cast<CommandList&>(GetCommandList());
 }
 
-// TODO: legacy - should be replaced once render passes are implemented
 auto CommandRecorder::BindFrameBuffer(const Framebuffer& framebuffer) -> void
 {
   // NOLINTNEXTLINE(*-pro-type-static-cast_down_cast)
