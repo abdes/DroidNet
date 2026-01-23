@@ -669,11 +669,53 @@ void parse_args(int& argc, const char** argv, const char* verbosity_flag)
   fprintf(stderr, "parse_args called with argc=%d\n", argc);
   int arg_dest = 1;
   int out_argc = argc;
+  bool disable_console_logging = false;
 
   for (int arg_it = 1; arg_it < argc; ++arg_it) {
     const char* cmd = argv[arg_it];
     const auto arg_len = std::strlen(verbosity_flag);
     const auto cmd_len = std::strlen(cmd);
+
+    // Handle logfile flag (--logfile PATH, --logfile=PATH, -L PATH, -L=PATH)
+    if (std::strncmp(cmd, "--logfile", 9) == 0
+      || std::strncmp(cmd, "-L", 2) == 0) {
+      out_argc -= 1;
+      const char* value_str = nullptr;
+      if (std::strncmp(cmd, "--logfile", 9) == 0) {
+        value_str = cmd + 9;
+        if (value_str[0] == '\0') {
+          arg_it += 1;
+          CHECK_LT_F(arg_it, argc, "Missing value after --logfile");
+          value_str = argv[arg_it];
+          out_argc -= 1;
+        } else if (value_str[0] == '=') {
+          value_str += 1;
+        }
+      } else {
+        value_str = cmd + 2;
+        if (value_str[0] == '\0') {
+          arg_it += 1;
+          CHECK_LT_F(arg_it, argc, "Missing value after -L");
+          value_str = argv[arg_it];
+          out_argc -= 1;
+        } else if (value_str[0] == '=') {
+          value_str += 1;
+        }
+      }
+
+      CHECK_F(value_str && value_str[0] != '\0', "Invalid logfile path");
+      FileMode file_mode = Truncate;
+      if (value_str[0] == '+') {
+        file_mode = Append;
+        value_str += 1;
+        CHECK_F(value_str[0] != '\0', "Invalid logfile path");
+      }
+      if (!add_file(value_str, file_mode, Verbosity_MAX)) {
+        LOG_F(ERROR, "Failed to add logfile '%s'", value_str);
+      }
+      disable_console_logging = true;
+      continue;
+    }
 
     // Check for verbosity flag (e.g., -v)
     bool last_is_alpha = false;
@@ -791,6 +833,10 @@ void parse_args(int& argc, const char** argv, const char* verbosity_flag)
 
   argc = out_argc;
   argv[argc] = nullptr;
+
+  if (disable_console_logging) {
+    g_stderr_verbosity = Verbosity_OFF;
+  }
 }
 
 // ------------------------------------------------------------------------
@@ -1029,7 +1075,7 @@ LOGURU_EXPORT bool is_enabled_for(Verbosity verbosity, const char* file_path)
   {
     std::scoped_lock l(s_module_mutex);
     if (s_module_list.empty()) {
-      return verbosity <= g_stderr_verbosity;
+      return verbosity <= current_verbosity_cutoff();
     }
   }
 
@@ -1037,7 +1083,7 @@ LOGURU_EXPORT bool is_enabled_for(Verbosity verbosity, const char* file_path)
   const int level = compute_module_verbosity_for_paths(
     cached_paths->base_name, cached_paths->full_path);
   if (level == Verbosity_UNSPECIFIED) {
-    return verbosity <= g_stderr_verbosity;
+    return verbosity <= current_verbosity_cutoff();
   }
   return verbosity <= level;
 }
@@ -1188,7 +1234,7 @@ LOGURU_EXPORT bool check_module_fast(
   // No cached override: fall back to global verbosity only. Overrides are
   // applied via update_all_module_sites(), so this remains correct and avoids
   // per-call matching on the hot path.
-  return verbosity <= g_stderr_verbosity;
+  return verbosity <= current_verbosity_cutoff();
 }
 
 static auto now_ns() -> long long
@@ -2119,27 +2165,31 @@ static void log_message(int stack_trace_skip, Message& message,
     message.indentation = indentation(s_stderr_indentation);
   }
 
-  if (g_colorlogtostderr && s_terminal_has_color) {
-    if (verbosity > Verbosity_WARNING) {
-      fprintf(stderr, "%s%s%s%s%s%s%s%s\n", terminal_reset(), terminal_dim(),
-        message.preamble, message.indentation,
-        verbosity == Verbosity_INFO ? terminal_reset() : "", // un-dim for info
-        message.prefix, message.message, terminal_reset());
+  const bool write_to_stderr = verbosity <= g_stderr_verbosity;
+  if (write_to_stderr) {
+    if (g_colorlogtostderr && s_terminal_has_color) {
+      if (verbosity > Verbosity_WARNING) {
+        fprintf(stderr, "%s%s%s%s%s%s%s%s\n", terminal_reset(), terminal_dim(),
+          message.preamble, message.indentation,
+          verbosity == Verbosity_INFO ? terminal_reset()
+                                      : "", // un-dim for info
+          message.prefix, message.message, terminal_reset());
+      } else {
+        fprintf(stderr, "%s%s%s%s%s%s%s\n", terminal_reset(),
+          verbosity == Verbosity_WARNING ? terminal_yellow() : terminal_red(),
+          message.preamble, message.indentation, message.prefix,
+          message.message, terminal_reset());
+      }
     } else {
-      fprintf(stderr, "%s%s%s%s%s%s%s\n", terminal_reset(),
-        verbosity == Verbosity_WARNING ? terminal_yellow() : terminal_red(),
-        message.preamble, message.indentation, message.prefix, message.message,
-        terminal_reset());
+      fprintf(stderr, "%s%s%s%s\n", message.preamble, message.indentation,
+        message.prefix, message.message);
     }
-  } else {
-    fprintf(stderr, "%s%s%s%s\n", message.preamble, message.indentation,
-      message.prefix, message.message);
-  }
 
-  if (g_flush_interval_ms == 0) {
-    fflush(stderr);
-  } else {
-    s_needs_flushing.store(true, std::memory_order_relaxed);
+    if (g_flush_interval_ms == 0) {
+      fflush(stderr);
+    } else {
+      s_needs_flushing.store(true, std::memory_order_relaxed);
+    }
   }
 
   for (auto& p : s_callbacks) {
