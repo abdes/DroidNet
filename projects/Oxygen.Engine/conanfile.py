@@ -114,6 +114,10 @@ class OxygenConan(ConanFile):
         self._test_deps.add(ref.split("/")[0])
 
     def configure(self):
+        sanitizer = self.settings.get_safe("sanitizer")
+        if sanitizer == "asan":
+            self.options.with_asan = True
+
         if self.options.shared:
             self.options.rm_safe("fPIC")
             # When building shared libs, and compiler is MSVC, we need to set
@@ -158,8 +162,8 @@ class OxygenConan(ConanFile):
                 not is_msvc_static_runtime(self)
             )
 
-        if self.options.with_asan:
-            tc.cache_variables["OXYGEN_WITH_ASAN"] = "ON"
+        sanitizer = self.settings.get_safe("sanitizer")
+        enable_asan = sanitizer == "asan" or bool(self.options.with_asan)
 
         # Check if we need to enable COVERAGE
         if self.options.with_coverage:
