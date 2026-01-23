@@ -73,29 +73,6 @@ namespace {
     return data::pak::TexturePackingPolicyId::kD3D12;
   }
 
-  //! Aligns a value up to the specified alignment.
-  [[nodiscard]] constexpr auto AlignUp(
-    const uint64_t value, const uint64_t alignment) noexcept -> uint64_t
-  {
-    if (alignment <= 1) {
-      return value;
-    }
-    const auto remainder = value % alignment;
-    return (remainder == 0) ? value : (value + (alignment - remainder));
-  }
-
-  [[nodiscard]] auto GetExistingDataSize(const std::filesystem::path& data_path)
-    -> uint64_t
-  {
-    std::error_code ec;
-    const auto size = std::filesystem::file_size(data_path, ec);
-    if (!ec) {
-      return size;
-    }
-
-    return 0;
-  }
-
   [[nodiscard]] auto BuildFallbackPayloadBytes(
     const ITexturePackingPolicy& policy,
     const data::pak::TexturePackingPolicyId policy_id,
@@ -105,10 +82,8 @@ namespace {
     constexpr uint32_t kUnalignedPitch = 4;
     const uint32_t aligned_pitch = policy.AlignRowPitchBytes(kUnalignedPitch);
 
-    const uint32_t layouts_offset
-      = static_cast<uint32_t>(sizeof(data::pak::TexturePayloadHeader));
-    const uint32_t layouts_bytes
-      = static_cast<uint32_t>(sizeof(data::pak::SubresourceLayout));
+    const uint32_t layouts_offset = sizeof(data::pak::TexturePayloadHeader);
+    const uint32_t layouts_bytes = sizeof(data::pak::SubresourceLayout);
 
     const uint64_t data_offset64
       = policy.AlignSubresourceOffset(layouts_offset + layouts_bytes);
@@ -188,18 +163,14 @@ TextureEmitter::TextureEmitter(IAsyncFileWriter& file_writer,
   if (config_.packing_policy_id.empty()) {
     config_.packing_policy_id = DefaultPackingPolicyId();
   }
-
-  data_file_size_.store(
-    GetExistingDataSize(data_path_), std::memory_order_release);
-
-  DLOG_F(INFO, "created data='{}'", data_path_.string());
+  DLOG_F(INFO, "Created texture emitter: data='{}'", data_path_.string());
 }
 
 TextureEmitter::~TextureEmitter()
 {
   const auto pending = pending_count_.load(std::memory_order_acquire);
   if (pending > 0) {
-    LOG_F(WARNING, "destroyed with {} pending writes", pending);
+    LOG_F(WARNING, "Destroyed with {} pending writes", pending);
   }
 }
 
@@ -215,8 +186,8 @@ auto TextureEmitter::Emit(CookedTexturePayload cooked) -> uint32_t
   const auto signature = TextureTableTraits::SignatureForDescriptor(tmp_desc);
   DCHECK_F(!signature.empty(), "texture signature must not be empty");
   const auto acquire = table_aggregator_.AcquireOrInsert(signature, [&]() {
-    const auto reserved
-      = ReserveDataRange(config_.data_alignment, cooked.payload.size());
+    const auto reserved = table_aggregator_.ReserveDataRange(
+      config_.data_alignment, cooked.payload.size());
     auto desc = ToPakDescriptor(cooked, reserved.aligned_offset);
     return std::make_pair(desc, reserved);
   });
@@ -228,7 +199,7 @@ auto TextureEmitter::Emit(CookedTexturePayload cooked) -> uint32_t
   emitted_count_.fetch_add(1, std::memory_order_acq_rel);
 
   const auto reserved = acquire.reservation;
-  DLOG_SCOPE_F(INFO, "Emit index={} offset={} size={} padding={} format={}",
+  DLOG_F(INFO, "Emit index={} offset={} size={} padding={} format={}",
     acquire.index, reserved.aligned_offset, cooked.payload.size(),
     reserved.padding_size, static_cast<int>(cooked.desc.format));
 
@@ -249,26 +220,6 @@ auto TextureEmitter::Emit(CookedTexturePayload cooked) -> uint32_t
     reserved.aligned_offset, payload_ptr);
 
   return acquire.index;
-}
-
-auto TextureEmitter::ReserveDataRange(
-  const uint64_t alignment, const uint64_t payload_size) -> WriteReservation
-{
-  uint64_t current_size = data_file_size_.load(std::memory_order_acquire);
-  uint64_t aligned_offset = 0;
-  uint64_t new_size = 0;
-
-  do {
-    aligned_offset = AlignUp(current_size, alignment);
-    new_size = aligned_offset + payload_size;
-  } while (!data_file_size_.compare_exchange_weak(
-    current_size, new_size, std::memory_order_acq_rel));
-
-  return {
-    .reservation_start = current_size,
-    .aligned_offset = aligned_offset,
-    .padding_size = aligned_offset - current_size,
-  };
 }
 
 auto TextureEmitter::QueueDataWrite(const WriteKind kind,
@@ -321,7 +272,7 @@ auto TextureEmitter::GetStats() const noexcept -> Stats
 {
   return {
     .emitted_textures = emitted_count_.load(std::memory_order_acquire),
-    .data_file_size = data_file_size_.load(std::memory_order_acquire),
+    .data_file_size = table_aggregator_.DataFileSize(),
     .pending_writes = pending_count_.load(std::memory_order_acquire),
     .error_count = error_count_.load(std::memory_order_acquire),
   };
@@ -331,7 +282,7 @@ auto TextureEmitter::Finalize() -> co::Co<bool>
 {
   finalize_started_.store(true, std::memory_order_release);
   EnsureFallbackTexture();
-  DLOG_SCOPE_F(INFO, "Finalize pending={}",
+  DLOG_F(INFO, "Finalize pending={}",
     pending_count_.load(std::memory_order_acquire));
 
   // Wait for all pending writes via flush
@@ -361,7 +312,7 @@ auto TextureEmitter::CreateFallbackPayload() const -> CookedTexturePayload
     policy, policy_id, config_.with_content_hashing);
   if (payload_bytes.empty()) {
     LOG_F(ERROR, "failed to build fallback payload");
-    throw std::runtime_error("TextureEmitter: fallback payload build failed");
+    throw std::runtime_error("fallback payload build failed");
   }
   const auto content_hash = config_.with_content_hashing
     ? util::ComputeContentHash(payload_bytes)
@@ -430,8 +381,8 @@ auto TextureEmitter::EnsureFallbackTexture() -> void
   DCHECK_F(!signature.empty(), "fallback texture signature must not be empty");
 
   const auto acquire = table_aggregator_.AcquireOrInsert(signature, [&]() {
-    const auto reserved
-      = ReserveDataRange(config_.data_alignment, fallback.payload.size());
+    const auto reserved = table_aggregator_.ReserveDataRange(
+      config_.data_alignment, fallback.payload.size());
     auto desc = ToPakDescriptor(fallback, reserved.aligned_offset);
     return std::make_pair(desc, reserved);
   });

@@ -98,7 +98,7 @@ struct FileErrorInfo {
   std::error_code system_error {};
 
   //! Human-readable error message.
-  std::string message {};
+  std::string message;
 
   //! Format error as a human-readable string.
   /*!

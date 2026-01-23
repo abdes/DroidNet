@@ -18,13 +18,13 @@ namespace oxygen::content::import::detail {
 */
 auto AudioImportJob::ExecuteAsync() -> co::Co<ImportReport>
 {
-  DLOG_F(INFO, "AudioImportJob starting: job_id={} path={}", JobId(),
+  DLOG_F(INFO, "Starting job: job_id={} path={}", JobId(),
     Request().source_path.string());
 
   EnsureCookedRoot();
 
-  ImportSession session(
-    Request(), FileReader(), FileWriter(), ThreadPool(), TableRegistry());
+  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool(),
+    TableRegistry(), IndexRegistry());
 
   ReportPhaseProgress(ImportPhase::kLoading, 0.0f, "Loading audio source...");
   const auto source = co_await LoadSource(session);

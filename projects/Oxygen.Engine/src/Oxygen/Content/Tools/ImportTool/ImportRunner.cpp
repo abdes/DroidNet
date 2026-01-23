@@ -222,7 +222,7 @@ auto RunImportJob(const ImportRequest& request, const bool quiet,
 
     const auto on_complete = [&](ImportJobId, const ImportReport& result) {
       {
-        std::lock_guard lock(mutex);
+        std::scoped_lock lock(mutex);
         report = result;
       }
       cv.notify_one();
@@ -231,7 +231,7 @@ auto RunImportJob(const ImportRequest& request, const bool quiet,
     const auto on_progress = [&](const ProgressEvent& progress) {
       const auto now = std::chrono::steady_clock::now();
       {
-        std::lock_guard lock(mutex);
+        std::scoped_lock lock(mutex);
         if (!progress_trace.started.has_value()) {
           progress_trace.started = now;
         }
@@ -303,7 +303,7 @@ auto RunImportJob(const ImportRequest& request, const bool quiet,
     LOG_F(INFO, "ImportTool submit job: source='{}' with_content_hashing={}",
       request.source_path.string(), request.options.with_content_hashing);
     const auto job_id = service.SubmitImport(request, on_complete, on_progress);
-    if (job_id == kInvalidJobId) {
+    if (!job_id) {
       submit_error = "ERROR: failed to submit import job";
     } else {
       std::unique_lock lock(mutex);

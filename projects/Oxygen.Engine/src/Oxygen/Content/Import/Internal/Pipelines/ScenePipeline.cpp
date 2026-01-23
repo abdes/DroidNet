@@ -110,34 +110,32 @@ namespace {
 
   auto SortSceneComponents(SceneBuild& build) -> void
   {
-    std::sort(build.renderables.begin(), build.renderables.end(),
+    std::ranges::sort(build.renderables,
       [](const RenderableRecord& a, const RenderableRecord& b) {
         return a.node_index < b.node_index;
       });
 
-    std::sort(build.perspective_cameras.begin(),
-      build.perspective_cameras.end(),
+    std::ranges::sort(build.perspective_cameras,
       [](const PerspectiveCameraRecord& a, const PerspectiveCameraRecord& b) {
         return a.node_index < b.node_index;
       });
 
-    std::sort(build.orthographic_cameras.begin(),
-      build.orthographic_cameras.end(),
+    std::ranges::sort(build.orthographic_cameras,
       [](const OrthographicCameraRecord& a, const OrthographicCameraRecord& b) {
         return a.node_index < b.node_index;
       });
 
-    std::sort(build.directional_lights.begin(), build.directional_lights.end(),
+    std::ranges::sort(build.directional_lights,
       [](const DirectionalLightRecord& a, const DirectionalLightRecord& b) {
         return a.node_index < b.node_index;
       });
 
-    std::sort(build.point_lights.begin(), build.point_lights.end(),
+    std::ranges::sort(build.point_lights,
       [](const PointLightRecord& a, const PointLightRecord& b) {
         return a.node_index < b.node_index;
       });
 
-    std::sort(build.spot_lights.begin(), build.spot_lights.end(),
+    std::ranges::sort(build.spot_lights,
       [](const SpotLightRecord& a, const SpotLightRecord& b) {
         return a.node_index < b.node_index;
       });
@@ -216,8 +214,7 @@ namespace {
     if (!component_tables.empty()) {
       size_t payload_cursor = static_cast<size_t>(desc.scene_strings.offset)
         + desc.scene_strings.size;
-      desc.component_table_directory_offset
-        = static_cast<data::pak::OffsetT>(payload_cursor);
+      desc.component_table_directory_offset = payload_cursor;
       desc.component_table_count
         = static_cast<uint32_t>(component_tables.size());
 
@@ -226,8 +223,7 @@ namespace {
 
       component_directory.reserve(component_tables.size());
       for (auto& table : component_tables) {
-        table.desc.table.offset
-          = static_cast<data::pak::OffsetT>(payload_cursor);
+        table.desc.table.offset = payload_cursor;
         payload_cursor += table.bytes.size();
         component_directory.push_back(table.desc);
       }
@@ -363,8 +359,8 @@ ScenePipeline::ScenePipeline(co::ThreadPool& thread_pool, Config config)
 ScenePipeline::~ScenePipeline()
 {
   if (started_) {
-    DLOG_IF_F(WARNING, HasPending(),
-      "ScenePipeline destroyed with {} pending items", PendingCount());
+    DLOG_IF_F(
+      WARNING, HasPending(), "Destroyed with {} pending items", PendingCount());
   }
 
   input_channel_.Close();
@@ -487,8 +483,9 @@ auto ScenePipeline::Worker() -> co::Co<>
 
       auto stage_outcome = co_await thread_pool_.Run(
         [adapter = item.adapter_owner, build_stage = item.build_stage,
-          stage_input](co::ThreadPool::CancelToken canceled) {
-          DLOG_F(1, "ScenePipeline: Build scene stage");
+          stage_input](
+          co::ThreadPool::CancelToken canceled) -> StageRunOutcome {
+          DLOG_F(1, "Build scene stage");
           StageRunOutcome out;
           if (canceled || stage_input.stop_token.stop_requested()) {
             out.canceled = true;
@@ -507,8 +504,7 @@ auto ScenePipeline::Worker() -> co::Co<>
       }
 
       if (stage_outcome.result.success) {
-        DLOG_F(2, "ScenePipeline: SerializeScene on import thread source={}",
-          item.source_id);
+        DLOG_F(2, "Serialize scene on import thread source={}", item.source_id);
         SortSceneComponents(stage_outcome.result.build);
 
         const auto scene_name = item.request.GetSceneName();
@@ -535,8 +531,9 @@ auto ScenePipeline::Worker() -> co::Co<>
     if (outcome.success && config_.with_content_hashing) {
       auto hash = co_await thread_pool_.Run(
         [bytes = std::span<const std::byte>(outcome.bytes),
-          stop_token = item.stop_token](co::ThreadPool::CancelToken canceled) {
-          DLOG_F(1, "ScenePipeline: Compute content hash");
+          stop_token = item.stop_token](
+          co::ThreadPool::CancelToken canceled) -> uint64_t {
+          DLOG_F(1, "Compute content hash");
           if (stop_token.stop_requested() || canceled) {
             return uint64_t { 0 };
           }

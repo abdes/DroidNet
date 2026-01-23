@@ -59,22 +59,21 @@ namespace {
     if (shader_type == 0) {
       return false;
     }
-    const auto max_type = static_cast<uint32_t>(ShaderType::kMaxShaderType);
+    constexpr auto max_type = static_cast<uint32_t>(ShaderType::kMaxShaderType);
     return static_cast<uint32_t>(shader_type) <= max_type;
   }
 
   [[nodiscard]] auto ShaderStageBit(const uint8_t shader_type) -> uint32_t
   {
-    return 1u << static_cast<uint32_t>(shader_type);
+    return 1U << static_cast<uint32_t>(shader_type);
   }
 
   [[nodiscard]] auto HasErrorDiagnostic(
     const std::vector<ImportDiagnostic>& diagnostics) -> bool
   {
-    return std::any_of(
-      diagnostics.begin(), diagnostics.end(), [](const ImportDiagnostic& diag) {
-        return diag.severity == ImportSeverity::kError;
-      });
+    return std::ranges::any_of(diagnostics, [](const ImportDiagnostic& diag) {
+      return diag.severity == ImportSeverity::kError;
+    });
   }
 
   [[nodiscard]] auto MakeWarningDiagnostic(std::string code,
@@ -222,8 +221,8 @@ namespace {
       return result;
     }
 
-    std::sort(shader_requests.begin(), shader_requests.end(),
-      [](const ShaderRequest& lhs, const ShaderRequest& rhs) {
+    std::ranges::sort(shader_requests,
+      [](const ShaderRequest& lhs, const ShaderRequest& rhs) -> bool {
         return lhs.shader_type < rhs.shader_type;
       });
 
@@ -268,8 +267,7 @@ namespace {
     // TODO: Update this when multiple UV sets/transforms are supported in
     // material descriptors.
     DLOG_F(INFO,
-      "MaterialPipeline: using single UV transform from '{}'; "
-      "multiple UV sets not yet supported",
+      "Using single UV transform from '{}'; multiple UV sets not yet supported",
       reference->source_id);
 
     desc.uv_scale[0] = reference->uv_transform.scale[0];
@@ -494,11 +492,11 @@ namespace {
           source_id, object_path));
         return std::nullopt;
       }
-      return static_cast<data::pak::ResourceIndexT>(metallic.index);
+      return metallic.index;
     }
 
     if (policy == OrmPolicy::kAuto && can_pack) {
-      return static_cast<data::pak::ResourceIndexT>(metallic.index);
+      return metallic.index;
     }
 
     return std::nullopt;
@@ -540,7 +538,7 @@ namespace {
   {
     const auto hash = co_await thread_pool.Run(
       [bytes, stop_token](co::ThreadPool::CancelToken canceled) noexcept {
-        DLOG_F(1, "MaterialPipeline: Compute content hash");
+        DLOG_F(1, "Compute content hash");
         if (stop_token.stop_requested() || canceled) {
           return uint64_t { 0 };
         }
@@ -604,8 +602,8 @@ namespace {
       desc.flags |= data::pak::kMaterialFlag_GltfOrmPacked;
     }
 
-    const auto any_textures = HasAnyAssignedTextures(item.textures);
-    if (any_textures) {
+    if ([[maybe_unused]] const auto any_textures
+      = HasAnyAssignedTextures(item.textures)) {
       desc.flags &= ~data::pak::kMaterialFlag_NoTextureSampling;
     } else {
       DLOG_F(INFO,
@@ -672,8 +670,8 @@ MaterialPipeline::MaterialPipeline(co::ThreadPool& thread_pool, Config config)
 MaterialPipeline::~MaterialPipeline()
 {
   if (started_) {
-    DLOG_IF_F(WARNING, HasPending(),
-      "MaterialPipeline destroyed with {} pending items", PendingCount());
+    DLOG_IF_F(
+      WARNING, HasPending(), "Destroyed with {} pending items", PendingCount());
   }
 
   input_channel_.Close();
@@ -795,15 +793,14 @@ auto MaterialPipeline::Worker() -> co::Co<>
       build_outcome = co_await thread_pool_.Run(
         [item = std::move(item_copy)](
           co::ThreadPool::CancelToken canceled) noexcept {
-          DLOG_F(1, "MaterialPipeline: Build material task begin");
+          DLOG_F(1, "Build material task begin");
           if (item.stop_token.stop_requested() || canceled) {
             return BuildOutcome { .canceled = true };
           }
           return BuildMaterialPayload(item, {});
         });
     } else {
-      DLOG_F(2,
-        "MaterialPipeline: BuildMaterialPayload on import thread material={}",
+      DLOG_F(2, "Build material payload on import thread material={}",
         item.material_name);
       build_outcome = BuildMaterialPayload(item, {});
     }

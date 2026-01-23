@@ -17,7 +17,7 @@
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
 #include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
-#include <Oxygen/Content/Import/LooseCookedWriter.h>
+#include <Oxygen/Content/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -33,6 +33,7 @@ class ResourceTableRegistry;
 class TextureEmitter;
 class BufferEmitter;
 class AssetEmitter;
+class LooseCookedIndexRegistry;
 
 //! Per-import-job state including diagnostics and output tracking.
 /*!
@@ -78,17 +79,12 @@ class AssetEmitter;
 class ImportSession final {
 public:
   //! Create a session for the given import request.
-  /*!
-   @param request The import request with source path and layout.
-   @param file_reader Async file reader for input operations.
-   @param file_writer Async file writer for output operations.
-   @param thread_pool Thread pool for CPU-bound work.
-  */
   OXGN_CNTT_API ImportSession(const ImportRequest& request,
     observer_ptr<IAsyncFileReader> file_reader,
     observer_ptr<IAsyncFileWriter> file_writer,
     observer_ptr<co::ThreadPool> thread_pool,
-    observer_ptr<ResourceTableRegistry> table_registry);
+    observer_ptr<ResourceTableRegistry> table_registry,
+    observer_ptr<LooseCookedIndexRegistry> index_registry);
 
   OXGN_CNTT_API ~ImportSession();
 
@@ -176,10 +172,11 @@ public:
 
 private:
   ImportRequest request_;
-  observer_ptr<IAsyncFileReader> file_reader_ {};
-  observer_ptr<IAsyncFileWriter> file_writer_ {};
-  observer_ptr<co::ThreadPool> thread_pool_ {};
-  observer_ptr<ResourceTableRegistry> table_registry_ {};
+  observer_ptr<IAsyncFileReader> file_reader_;
+  observer_ptr<IAsyncFileWriter> file_writer_;
+  observer_ptr<co::ThreadPool> thread_pool_;
+  observer_ptr<ResourceTableRegistry> table_registry_;
+  observer_ptr<LooseCookedIndexRegistry> index_registry_;
   std::filesystem::path cooked_root_;
   LooseCookedWriter cooked_writer_;
 

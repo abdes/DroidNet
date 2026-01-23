@@ -66,32 +66,15 @@ target_compile_definitions(
 # pakgen CLI is available for any dynamic pack builds performed by tests.
 add_dependencies("${META_MODULE_NAME}.Loaders.Tests" pakgen_editable_install)
 
-# -- Importers Test Programs ---------------------------------------------------
-
-m_gtest_program(
-  Importers
-  SOURCES
-    "Bc7Encoder_test.cpp"
-    "ImageDecode_test.cpp"
-    "ImageProcessing_test.cpp"
-    "LooseCookedWriter_test.cpp"
-    "ScratchImage_test.cpp"
-    "TextureCooker_basic_test.cpp"
-    "TextureImportPresets_test.cpp"
-    "TexturePackingPolicy_test.cpp"
-    "TextureSourceAssembly_test.cpp"
-)
-target_compile_definitions(
-  Oxygen.Content.Importers.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
-)
-
 # -- Async Import Test Programs ------------------------------------------------
 
 m_gtest_program(
   AsyncImportCore
   SOURCES
+    "Import/ImageDecode_test.cpp"
+    "Import/Bc7Encoder_test.cpp"
+    "Import/ImageProcessing_test.cpp"
+    "Import/LooseCookedWriter_test.cpp"
     "Import/AsyncImporter_test.cpp"
     "Import/AsyncImportService_test.cpp"
     "Import/ImportEventLoop_test.cpp"
@@ -129,6 +112,11 @@ m_gtest_program(
 m_gtest_program(
   AsyncImportTexture
   SOURCES
+    "Import/ScratchImage_test.cpp"
+    "Import/TextureCooker_basic_test.cpp"
+    "Import/TextureImportPresets_test.cpp"
+    "Import/TexturePackingPolicy_test.cpp"
+    "Import/TextureSourceAssembly_test.cpp"
     "Import/TexturePipeline_basic_test.cpp"
     "Import/TexturePipeline_nonreg_test.cpp"
     "Import/TexturePipeline_edge_test.cpp"
@@ -137,7 +125,7 @@ m_gtest_program(
 )
 
 m_gtest_program(
-  FbxImport
+  AsyncImportFbx
   SOURCES
     "Import/AsyncImporterFullTestBase.cpp"
     "Import/AsyncImporterFullTestBase.h"
@@ -145,7 +133,7 @@ m_gtest_program(
 )
 
 m_gtest_program(
-  GltfImport
+  AsyncImportGltf
   SOURCES
     "Import/AsyncImporterFullTestBase.cpp"
     "Import/AsyncImporterFullTestBase.h"
@@ -154,4 +142,4 @@ m_gtest_program(
 
 # -- Plan Test Programs -------------------------------------------------------
 
-m_gtest_program(Plan SOURCES "Plan/ImportPlanner_test.cpp")
+m_gtest_program(AsyncImportPlan SOURCES "Plan/ImportPlanner_test.cpp")

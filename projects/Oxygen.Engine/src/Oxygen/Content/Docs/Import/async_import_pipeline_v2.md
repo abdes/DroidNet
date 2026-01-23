@@ -1528,7 +1528,7 @@ B) **Mutex-protected appends**:
 
    ```cpp
    auto Append(std::span<const std::byte> bytes) -> uint64_t {
-     std::lock_guard lock(mutex_);
+     std::scoped_lock lock(mutex_);
      auto offset = current_offset_;
      stream_.write(...);
      current_offset_ += bytes.size();

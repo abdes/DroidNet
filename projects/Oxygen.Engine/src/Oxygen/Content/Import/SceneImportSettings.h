@@ -6,9 +6,12 @@
 
 #pragma once
 
+#include <map>
 #include <string>
 
-namespace oxygen::content::import::tool {
+#include <Oxygen/Content/Import/TextureImportSettings.h>
+
+namespace oxygen::content::import {
 
 struct SceneImportSettings {
   std::string source_path;
@@ -32,6 +35,13 @@ struct SceneImportSettings {
   std::string normals_policy;
   std::string tangents_policy;
   std::string node_pruning;
+
+  //! Default tuning for all textures in the scene.
+  TextureImportSettings texture_defaults;
+
+  //! Overrides for specific textures found in the scene file.
+  //! The key is the original filename or path as authored in the scene.
+  std::map<std::string, TextureImportSettings> texture_overrides;
 };
 
-} // namespace oxygen::content::import::tool
+} // namespace oxygen::content::import

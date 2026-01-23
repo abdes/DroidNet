@@ -26,4 +26,4 @@
 #  define OXGN_CNTT_API
 #endif
 
-#define OXGN_CNTT_NDAPI [[nodiscard]] OXGN_CNTT_API
+#define OXGN_CNTT_NDAPI OXGN_CNTT_API

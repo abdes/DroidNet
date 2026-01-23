@@ -5,30 +5,36 @@
     "texture": { "workers": 12, "queue_capacity": 64 },
     "buffer": { "workers": 2, "queue_capacity": 64 },
     "material": { "workers": 4, "queue_capacity": 64 },
-    "mesh": { "workers": 10, "queue_capacity": 64 },
+    "mesh_build": { "workers": 10, "queue_capacity": 64 },
     "geometry": { "workers": 3, "queue_capacity": 32 },
     "scene": { "workers": 1, "queue_capacity": 8 }
   },
   "defaults": {
-    "job_type": "gltf",
-    "cooked_root": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Cooked",
-    "import_options": {
+    "scene": {
+      "output": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Cooked",
       "content_flags": {
         "textures": true,
         "materials": true,
         "geometry": true,
         "scene": true
       },
-      "unit_normalization_policy": "normalize",
-      "normals_policy": "generate",
+      "unit_policy": "normalize",
+      "normals_policy": "recalculate",
       "tangents_policy": "recalculate",
-      "node_pruning_policy": "keep"
+      "node_pruning": "keep"
     }
   },
   "jobs": [
     {
+      "type": "gltf",
       "source": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Models/Tabuleiro.glb",
-      "job_name": "tabuleiro"
+      "name": "tabuleiro",
+      "texture_overrides": {
+        "Wood_Albedo.png": {
+          "preset": "albedo-srgb",
+          "bc7_quality": "high"
+        }
+      }
     }
   ]
 }

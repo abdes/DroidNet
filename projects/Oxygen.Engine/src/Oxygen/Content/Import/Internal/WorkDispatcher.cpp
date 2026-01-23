@@ -295,6 +295,7 @@ auto WorkDispatcher::UpdateMaterialBindings(
 {
   auto resolve_binding = [&](MaterialTextureBinding& binding,
                            std::string_view label) {
+    (void)label;
     if (!binding.assigned || binding.source_id.empty()) {
       return;
     }
@@ -1616,8 +1617,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
         }();
 
         if (!any_capacity) {
-          LOG_F(INFO,
-            "plan capacity blocked: ready={} completed={}/{} submitted={} "
+          LOG_F(WARNING,
+            "Plan capacity blocked: ready={} completed={}/{} submitted={} "
             "pending={{tex={}, buf={}, mat={}, mesh={}, geo={}, scene={}, "
             "env={}}}",
             scheduler->HasReady(), completed_count, item_count,
@@ -1639,8 +1640,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
         continue;
       }
 
-      LOG_F(INFO,
-        "plan deadlock: completed={}/{} submitted={} ready={} "
+      LOG_F(WARNING,
+        "Plan deadlock: completed={}/{} submitted={} ready={} "
         "pending={{tex={}, buf={}, mat={}, mesh={}, geo={}, scene={}, "
         "env={}}}",
         completed_count, item_count,
@@ -1652,8 +1653,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
         pending_geometries.load(std::memory_order_acquire),
         pending_scenes.load(std::memory_order_acquire),
         pending_envelopes_count);
-      LOG_F(INFO,
-        "plan deadlock maps: textures={{id={}, key={}, source={}}} "
+      DLOG_F(INFO,
+        "Plan deadlock maps: textures={{id={}, key={}, source={}}} "
         "materials={{source={}}} mesh_build={{source={}, key={}}} "
         "geometry={{source={}}} scene={{source={}}}",
         texture_item_ids.size(), texture_item_ids_by_key.size(),

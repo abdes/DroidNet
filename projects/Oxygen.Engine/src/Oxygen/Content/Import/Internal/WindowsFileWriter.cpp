@@ -97,15 +97,15 @@ namespace oxygen::content::import {
 WindowsFileWriter::WindowsFileWriter(ImportEventLoop& loop)
   : loop_(loop)
 {
-  DLOG_F(INFO, "WindowsFileWriter created");
+  DLOG_F(INFO, "Created");
 }
 
 WindowsFileWriter::~WindowsFileWriter()
 {
   // Cancel any pending operations
   if (pending_count_.load() > 0) {
-    DLOG_F(WARNING, "WindowsFileWriter destroyed with {} pending operations",
-      pending_count_.load());
+    DLOG_F(
+      WARNING, "Destroyed with {} pending operations", pending_count_.load());
     CancelAll();
   }
 }
@@ -203,7 +203,7 @@ auto WindowsFileWriter::Write(const std::filesystem::path& path,
     co_return Err(open_result.error());
   }
 
-  HandleGuard guard { static_cast<HANDLE>(open_result.value()) };
+  HandleGuard guard { (open_result.value()) };
 
   // Handle empty data
   if (data.empty()) {
@@ -259,7 +259,7 @@ void WindowsFileWriter::WriteAsync(const std::filesystem::path& path,
     }
     // Record first error for Flush
     {
-      std::lock_guard lock(first_error_mutex_);
+      std::scoped_lock lock(first_error_mutex_);
       if (!first_error_.has_value()) {
         first_error_ = open_result.error();
       }
@@ -270,7 +270,7 @@ void WindowsFileWriter::WriteAsync(const std::filesystem::path& path,
 
   // Handle empty data
   if (data.empty()) {
-    CloseHandle(static_cast<HANDLE>(open_result.value()));
+    CloseHandle(open_result.value());
     if (callback) {
       callback(FileErrorInfo { .code = FileError::kOk }, 0);
     }
@@ -311,7 +311,7 @@ void WindowsFileWriter::WriteAsync(const std::filesystem::path& path,
           };
           // Record first error for Flush
           {
-            std::lock_guard lock(state->writer->first_error_mutex_);
+            std::scoped_lock lock(state->writer->first_error_mutex_);
             if (!state->writer->first_error_.has_value()) {
               state->writer->first_error_ = error;
             }
@@ -350,7 +350,7 @@ auto WindowsFileWriter::WriteAt(const std::filesystem::path& path,
     co_return Err(open_result.error());
   }
 
-  HandleGuard guard { static_cast<HANDLE>(open_result.value()) };
+  HandleGuard guard { (open_result.value()) };
 
   // Handle empty data
   if (data.empty()) {
@@ -406,7 +406,7 @@ void WindowsFileWriter::WriteAtAsync(const std::filesystem::path& path,
     }
     // Record first error for Flush
     {
-      std::lock_guard lock(first_error_mutex_);
+      std::scoped_lock lock(first_error_mutex_);
       if (!first_error_.has_value()) {
         first_error_ = open_result.error();
       }
@@ -417,7 +417,7 @@ void WindowsFileWriter::WriteAtAsync(const std::filesystem::path& path,
 
   // Handle empty data
   if (data.empty()) {
-    CloseHandle(static_cast<HANDLE>(open_result.value()));
+    CloseHandle(open_result.value());
     if (callback) {
       callback(FileErrorInfo { .code = FileError::kOk }, 0);
     }
@@ -457,7 +457,7 @@ void WindowsFileWriter::WriteAtAsync(const std::filesystem::path& path,
             .message = ec.message(),
           };
           {
-            std::lock_guard lock(state->writer->first_error_mutex_);
+            std::scoped_lock lock(state->writer->first_error_mutex_);
             if (!state->writer->first_error_.has_value()) {
               state->writer->first_error_ = error;
             }
@@ -487,7 +487,7 @@ auto WindowsFileWriter::Flush() -> co::Co<Result<void, FileErrorInfo>>
 
   // Check if any errors occurred during async operations
   {
-    std::lock_guard lock(first_error_mutex_);
+    std::scoped_lock lock(first_error_mutex_);
     if (first_error_.has_value()) {
       auto error = std::move(first_error_.value());
       first_error_.reset();
@@ -507,8 +507,7 @@ void WindowsFileWriter::CancelAll()
   // and let in-flight operations complete. The cancel flag will cause
   // Write/WriteAt to return kCancelled if checked before starting I/O.
 
-  DLOG_F(INFO, "WindowsFileWriter::CancelAll() called, {} pending ops",
-    pending_count_.load());
+  DLOG_F(INFO, "CancelAll called, {} pending ops", pending_count_.load());
 }
 
 auto WindowsFileWriter::PendingCount() const -> size_t

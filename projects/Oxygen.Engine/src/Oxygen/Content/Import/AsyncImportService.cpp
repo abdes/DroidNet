@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <latch>
 #include <mutex>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -20,13 +21,16 @@
 #include <Oxygen/Content/Import/AsyncImportService.h>
 #include <Oxygen/Content/Import/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/IAsyncFileWriter.h>
+#include <Oxygen/Content/Import/ImportManifest.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/Import/Internal/AsyncImporter.h>
 #include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Internal/ImportJob.h>
+#include <Oxygen/Content/Import/Internal/ImportJobParams.h>
 #include <Oxygen/Content/Import/Internal/Jobs/FbxImportJob.h>
 #include <Oxygen/Content/Import/Internal/Jobs/GlbImportJob.h>
 #include <Oxygen/Content/Import/Internal/Jobs/TextureImportJob.h>
+#include <Oxygen/Content/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Content/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -46,29 +50,16 @@ namespace {
       + nostd::to_string(job_id) + ":" + name_part;
   }
 
-  [[nodiscard]] auto CreateJobForFormat(ImportFormat format, ImportJobId job_id,
-    ImportRequest request, ImportCompletionCallback on_complete,
-    ProgressEventCallback on_progress, std::shared_ptr<co::Event> cancel_event,
-    observer_ptr<IAsyncFileReader> file_reader,
-    observer_ptr<IAsyncFileWriter> file_writer,
-    observer_ptr<co::ThreadPool> thread_pool,
-    observer_ptr<ResourceTableRegistry> table_registry,
-    const ImportConcurrency& concurrency) -> std::shared_ptr<detail::ImportJob>
+  [[nodiscard]] auto CreateJobForFormat(ImportFormat format,
+    detail::ImportJobParams params) -> std::shared_ptr<detail::ImportJob>
   {
     switch (format) {
     case ImportFormat::kFbx:
-      return std::make_shared<detail::FbxImportJob>(job_id, std::move(request),
-        std::move(on_complete), std::move(on_progress), std::move(cancel_event),
-        file_reader, file_writer, thread_pool, table_registry, concurrency);
+      return std::make_shared<detail::FbxImportJob>(std::move(params));
     case ImportFormat::kGltf:
-      return std::make_shared<detail::GlbImportJob>(job_id, std::move(request),
-        std::move(on_complete), std::move(on_progress), std::move(cancel_event),
-        file_reader, file_writer, thread_pool, table_registry, concurrency);
+      return std::make_shared<detail::GlbImportJob>(std::move(params));
     case ImportFormat::kTextureImage:
-      return std::make_shared<detail::TextureImportJob>(job_id,
-        std::move(request), std::move(on_complete), std::move(on_progress),
-        std::move(cancel_event), file_reader, file_writer, thread_pool,
-        table_registry, concurrency);
+      return std::make_shared<detail::TextureImportJob>(std::move(params));
     case ImportFormat::kUnknown:
       break;
     }
@@ -109,6 +100,9 @@ struct AsyncImportService::Impl {
   //! Resource table registry (created on import thread).
   std::unique_ptr<ResourceTableRegistry> table_registry_;
 
+  //! Loose cooked index registry (created on import thread).
+  std::unique_ptr<LooseCookedIndexRegistry> index_registry_;
+
   //! Thread pool for CPU-bound import work (created on import thread).
   std::unique_ptr<co::ThreadPool> thread_pool_;
 
@@ -129,6 +123,9 @@ struct AsyncImportService::Impl {
 
   //! Flag indicating full shutdown has completed.
   std::atomic<bool> shutdown_complete_ { false };
+
+  //! Primary stop source for all jobs.
+  std::stop_source stop_source_;
 
   //! Serialize shutdown operations.
   std::mutex shutdown_mutex_;
@@ -163,6 +160,7 @@ struct AsyncImportService::Impl {
     file_writer_ = CreateAsyncFileWriter(*event_loop_);
 
     table_registry_ = std::make_unique<ResourceTableRegistry>(*file_writer_);
+    index_registry_ = std::make_unique<LooseCookedIndexRegistry>();
 
     // Create thread pool for CPU-bound work (pipelines, mesh processing)
     thread_pool_ = std::make_unique<co::ThreadPool>(
@@ -205,8 +203,7 @@ struct AsyncImportService::Impl {
       co::Run(*event_loop_, [this]() -> co::Co<> {
         const auto ok = co_await table_registry_->FinalizeAll();
         if (!ok) {
-          DLOG_F(
-            WARNING, "AsyncImportService: resource table finalization failed");
+          LOG_F(WARNING, "Resource table finalization failed");
         }
         co_return;
       });
@@ -221,6 +218,9 @@ struct AsyncImportService::Impl {
     }
     if (table_registry_) {
       table_registry_.reset();
+    }
+    if (index_registry_) {
+      index_registry_.reset();
     }
     if (file_writer_) {
       file_writer_.reset();
@@ -246,12 +246,13 @@ struct AsyncImportService::Impl {
       return;
     }
 
-    DLOG_F(INFO, "AsyncImportService shutdown requested");
+    stop_source_.request_stop();
+    DLOG_F(INFO, "Shutdown requested");
 
     // Trigger all cancel events to cancel pending jobs on the import thread.
     std::vector<std::shared_ptr<co::Event>> events_to_trigger;
     {
-      std::lock_guard lock(cancel_events_mutex_);
+      std::scoped_lock lock(cancel_events_mutex_);
       events_to_trigger.reserve(cancel_events_.size());
       for (auto& [id, event] : cancel_events_) {
         if (event) {
@@ -287,7 +288,7 @@ struct AsyncImportService::Impl {
   //! Shutdown the import thread and wait for completion.
   auto Shutdown() -> void
   {
-    std::lock_guard lock(shutdown_mutex_);
+    std::scoped_lock lock(shutdown_mutex_);
     if (shutdown_complete_.load(std::memory_order_acquire)) {
       return;
     }
@@ -302,7 +303,7 @@ struct AsyncImportService::Impl {
 
     shutdown_complete_.store(true, std::memory_order_release);
 
-    DLOG_F(INFO, "AsyncImportService shutdown complete");
+    DLOG_F(INFO, "Shutdown complete");
   }
 };
 
@@ -312,8 +313,7 @@ struct AsyncImportService::Impl {
 AsyncImportService::AsyncImportService(Config config)
   : impl_(std::make_unique<Impl>(config))
 {
-  DLOG_F(INFO, "AsyncImportService created with {} thread pool workers",
-    config.thread_pool_size);
+  DLOG_F(INFO, "Created with {} thread pool workers", config.thread_pool_size);
 
   impl_->StartThread();
 }
@@ -321,37 +321,40 @@ AsyncImportService::AsyncImportService(Config config)
 AsyncImportService::~AsyncImportService()
 {
   CHECK_F(IsStopped(),
-    "AsyncImportService destroyed without Stop(). "
+    "Destroyed without Stop(). "
     "Call Stop() and wait for IsStopped() before destruction.");
 }
 
 auto AsyncImportService::SubmitImport(ImportRequest request,
-  ImportCompletionCallback on_complete, ProgressEventCallback on_progress)
-  -> ImportJobId
+  ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
+  std::optional<ImportConcurrency> concurrency_override)
+  -> std::optional<ImportJobId>
 {
-  return SubmitImport(
-    std::move(request), std::move(on_complete), std::move(on_progress), {});
+  return SubmitImport(std::move(request), std::move(on_complete),
+    std::move(on_progress), nullptr, std::move(concurrency_override));
 }
 
 auto AsyncImportService::SubmitImport(ImportRequest request,
   ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
-  ImportJobFactory job_factory) -> ImportJobId
+  ImportJobFactory job_factory,
+  std::optional<ImportConcurrency> concurrency_override)
+  -> std::optional<ImportJobId>
 {
   // Check if we're accepting jobs
   if (impl_->shutdown_requested_.load(std::memory_order_acquire)) {
-    DLOG_F(WARNING, "SubmitImport: service is shutting down");
-    return kInvalidJobId;
+    LOG_F(WARNING, "Submit rejected: service is shutting down");
+    return std::nullopt;
   }
 
   if (!impl_->thread_running_.load(std::memory_order_acquire)) {
-    DLOG_F(WARNING, "SubmitImport: import thread not running");
-    return kInvalidJobId;
+    LOG_F(WARNING, "Submit rejected: import thread not running");
+    return std::nullopt;
   }
 
   // Check if the async importer is ready
   if (!impl_->async_importer_ || !impl_->async_importer_->IsAcceptingJobs()) {
-    DLOG_F(WARNING, "SubmitImport: async importer not ready");
-    return kInvalidJobId;
+    LOG_F(WARNING, "Submit rejected: async importer not ready");
+    return std::nullopt;
   }
 
   // Generate job ID
@@ -359,18 +362,18 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     1, std::memory_order_relaxed) };
 
   if (!impl_->file_reader_) {
-    DLOG_F(WARNING, "SubmitImport: async file reader not ready");
-    return kInvalidJobId;
+    LOG_F(WARNING, "Submit rejected: async file reader not ready");
+    return std::nullopt;
   }
 
   if (!impl_->file_writer_) {
-    DLOG_F(WARNING, "SubmitImport: async file writer not ready");
-    return kInvalidJobId;
+    LOG_F(WARNING, "Submit rejected: async file writer not ready");
+    return std::nullopt;
   }
 
   if (!impl_->thread_pool_) {
-    DLOG_F(WARNING, "SubmitImport: thread pool not ready");
-    return kInvalidJobId;
+    LOG_F(WARNING, "Submit rejected: thread pool not ready");
+    return std::nullopt;
   }
 
   const bool use_custom_factory = static_cast<bool>(job_factory);
@@ -378,9 +381,9 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   if (!use_custom_factory) {
     format = request.GetFormat();
     if (format == ImportFormat::kUnknown) {
-      DLOG_F(WARNING, "SubmitImport: unknown format for '{}'",
+      LOG_F(WARNING, "Submit rejected: unknown format for '{}'",
         request.source_path.string());
-      return kInvalidJobId;
+      return std::nullopt;
     }
   }
 
@@ -394,7 +397,7 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     = [this, job_id, on_complete](ImportJobId id, const ImportReport& report) {
         // Clean up cancel event
         {
-          std::lock_guard lock(impl_->cancel_events_mutex_);
+          std::scoped_lock lock(impl_->cancel_events_mutex_);
           impl_->cancel_events_.erase(job_id);
         }
 
@@ -414,29 +417,44 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   const auto file_writer = observer_ptr(impl_->file_writer_.get());
   const auto thread_pool = observer_ptr(impl_->thread_pool_.get());
   const auto table_registry = observer_ptr(impl_->table_registry_.get());
+  const auto index_registry = observer_ptr(impl_->index_registry_.get());
+
+  const auto& concurrency = concurrency_override.has_value()
+    ? *concurrency_override
+    : impl_->config_.concurrency;
+
+  detail::ImportJobParams params {
+    .id = job_id,
+    .request = std::move(request),
+    .on_complete = std::move(wrapped_complete),
+    .on_progress = std::move(on_progress),
+    .cancel_event = cancel_event,
+    .reader = file_reader,
+    .writer = file_writer,
+    .thread_pool = thread_pool,
+    .registry = table_registry,
+    .index_registry = index_registry,
+    .concurrency = concurrency,
+    .stop_token = impl_->stop_source_.get_token(),
+  };
 
   std::shared_ptr<detail::ImportJob> job;
   if (use_custom_factory) {
-    job = job_factory(job_id, std::move(request), std::move(wrapped_complete),
-      std::move(on_progress), cancel_event, file_reader, file_writer,
-      thread_pool, table_registry, impl_->config_.concurrency);
+    job = job_factory(std::move(params));
   } else {
-    job = CreateJobForFormat(format, job_id, std::move(request),
-      std::move(wrapped_complete), std::move(on_progress), cancel_event,
-      file_reader, file_writer, thread_pool, table_registry,
-      impl_->config_.concurrency);
+    job = CreateJobForFormat(format, std::move(params));
   }
   if (!job) {
-    DLOG_F(WARNING, "SubmitImport: failed to create job for '{}'",
+    LOG_F(WARNING, "Submit rejected: failed to create job for '{}'",
       source_path_string);
-    return kInvalidJobId;
+    return std::nullopt;
   }
 
   job->SetName(job_name);
 
   // Store cancel event for CancelJob() support
   {
-    std::lock_guard lock(impl_->cancel_events_mutex_);
+    std::scoped_lock lock(impl_->cancel_events_mutex_);
     impl_->cancel_events_[job_id] = cancel_event;
   }
 
@@ -448,13 +466,12 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   };
 
   if (!impl_->async_importer_->CanAcceptJob()) {
-    DLOG_F(
-      WARNING, "SubmitImport: AsyncImporter channel full for job {}", job_id);
+    LOG_F(WARNING, "Submit rejected: channel full for job {}", job_id);
     {
-      std::lock_guard lock(impl_->cancel_events_mutex_);
+      std::scoped_lock lock(impl_->cancel_events_mutex_);
       impl_->cancel_events_.erase(job_id);
     }
-    return kInvalidJobId;
+    return std::nullopt;
   }
 
   const auto source_path = source_path_string;
@@ -468,8 +485,7 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
       // Now on import thread - submit to AsyncImporter
       // Use TrySubmitJob since we're not in a coroutine context
       if (!importer->TrySubmitJob(std::move(entry))) {
-        DLOG_F(WARNING,
-          "Failed to submit job to AsyncImporter (channel full or closed)");
+        LOG_F(WARNING, "Failed to submit job (channel full or closed)");
         ImportReport report {
         .cooked_root = {},
         .source_key = {},
@@ -494,17 +510,31 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   return job_id;
 }
 
-auto AsyncImportService::CancelJob(ImportJobId job_id) -> bool
+auto AsyncImportService::SubmitManifest(const ImportManifest& manifest,
+  ImportCompletionCallback on_item_complete, ProgressEventCallback on_progress)
+  -> std::vector<ImportJobId>
 {
-  if (job_id == kInvalidJobId) {
-    return false;
+  std::vector<ImportJobId> job_ids;
+  auto requests = manifest.BuildRequests(std::cerr);
+  job_ids.reserve(requests.size());
+
+  for (auto& request : requests) {
+    if (auto job_id = SubmitImport(std::move(request), on_item_complete,
+          on_progress, {}, manifest.concurrency)) {
+      job_ids.push_back(*job_id);
+    }
   }
 
+  return job_ids;
+}
+
+auto AsyncImportService::CancelJob(const ImportJobId job_id) -> bool
+{
   std::shared_ptr<co::Event> cancel_event;
 
   // Look up cancel event
   {
-    std::lock_guard lock(impl_->cancel_events_mutex_);
+    std::scoped_lock lock(impl_->cancel_events_mutex_);
     auto it = impl_->cancel_events_.find(job_id);
     if (it == impl_->cancel_events_.end()) {
       // Job not found (already completed or invalid)
@@ -534,7 +564,7 @@ auto AsyncImportService::CancelAll() -> void
   size_t cancel_count = 0;
 
   {
-    std::lock_guard lock(impl_->cancel_events_mutex_);
+    std::scoped_lock lock(impl_->cancel_events_mutex_);
     events_to_trigger.reserve(impl_->cancel_events_.size());
 
     for (auto& [id, event] : impl_->cancel_events_) {
@@ -568,10 +598,10 @@ auto AsyncImportService::Stop() -> void
   try {
     impl_->Shutdown();
   } catch (const std::exception& ex) {
-    LOG_F(ERROR, "AsyncImportService Stop failed: {}", ex.what());
+    LOG_F(ERROR, "Stop failed: {}", ex.what());
     impl_->shutdown_complete_.store(true, std::memory_order_release);
   } catch (...) {
-    LOG_F(ERROR, "AsyncImportService Stop failed: unknown exception");
+    LOG_F(ERROR, "Stop failed: unknown exception");
     impl_->shutdown_complete_.store(true, std::memory_order_release);
   }
 }
@@ -581,13 +611,9 @@ auto AsyncImportService::IsStopped() const -> bool
   return impl_->shutdown_complete_.load(std::memory_order_acquire);
 }
 
-auto AsyncImportService::IsJobActive(ImportJobId job_id) const -> bool
+auto AsyncImportService::IsJobActive(const ImportJobId job_id) const -> bool
 {
-  if (job_id == kInvalidJobId) {
-    return false;
-  }
-
-  std::lock_guard lock(impl_->cancel_events_mutex_);
+  std::scoped_lock lock(impl_->cancel_events_mutex_);
   return impl_->cancel_events_.contains(job_id);
 }
 
@@ -596,19 +622,28 @@ auto AsyncImportService::IsAcceptingJobs() const -> bool
   return !impl_->shutdown_requested_.load(std::memory_order_acquire);
 }
 
-auto AsyncImportService::PendingJobCount() const -> size_t
+auto AsyncImportService::ActiveJobCount() const -> size_t
 {
-  // Note: We can't distinguish between pending vs in-flight without
-  // inspecting AsyncImporter's channel state. Return total active count.
-  std::lock_guard lock(impl_->cancel_events_mutex_);
-  return impl_->cancel_events_.size();
+  if (impl_->async_importer_) {
+    return impl_->async_importer_->ActiveJobCount();
+  }
+  return 0;
 }
 
-auto AsyncImportService::InFlightJobCount() const -> size_t
+auto AsyncImportService::RunningJobCount() const -> size_t
 {
-  // Return total active job count (pending + in-flight)
-  std::lock_guard lock(impl_->cancel_events_mutex_);
-  return impl_->cancel_events_.size();
+  if (impl_->async_importer_) {
+    return impl_->async_importer_->RunningJobCount();
+  }
+  return 0;
+}
+
+auto AsyncImportService::PendingJobCount() const -> size_t
+{
+  if (impl_->async_importer_) {
+    return impl_->async_importer_->PendingJobCount();
+  }
+  return 0;
 }
 
 } // namespace oxygen::content::import

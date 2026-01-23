@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <functional>
 #include <queue>
+#include <ranges>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/Internal/ImportPlanner.h>
@@ -48,8 +49,8 @@ auto ReadinessTracker::MarkReady(const DependencyToken& token) -> bool
     return false;
   }
 
-  for (size_t index = 0; index < satisfied.size(); ++index) {
-    if (satisfied[index] == 0U) {
+  for (unsigned char index : satisfied) {
+    if (index == 0U) {
       return false;
     }
   }
@@ -117,8 +118,7 @@ auto ImportPlanner::AddDependency(PlanItemId consumer, PlanItemId producer)
   DLOG_F(INFO, "AddDependency consumer={} producer={}", u_consumer, u_producer);
 
   auto& consumer_deps = dependencies_.at(u_consumer);
-  if (std::find(consumer_deps.begin(), consumer_deps.end(), producer)
-    != consumer_deps.end()) {
+  if (std::ranges::find(consumer_deps, producer) != consumer_deps.end()) {
     return;
   }
 
@@ -155,8 +155,8 @@ auto ImportPlanner::MakePlan() -> std::vector<PlanStep>
 
     for (const auto producer : deps) {
       const auto u_producer = ItemIndex(producer);
-      dependents[u_producer].push_back(
-        PlanItemId { static_cast<uint32_t>(consumer_index) });
+      dependents[u_producer].emplace_back(
+        static_cast<uint32_t>(consumer_index));
     }
   }
 
@@ -173,11 +173,11 @@ auto ImportPlanner::MakePlan() -> std::vector<PlanStep>
   std::vector<PlanItemId> order;
   order.reserve(item_count);
 
-  std::sort(ready_current.begin(), ready_current.end());
+  std::ranges::sort(ready_current);
 
   while (!ready_current.empty()) {
     for (const auto current_index : ready_current) {
-      order.push_back(PlanItemId { static_cast<uint32_t>(current_index) });
+      order.emplace_back(static_cast<uint32_t>(current_index));
       const auto& item = items_.at(current_index);
       DLOG_F(INFO, "{:>3}: id={:<3} {}/{}", order.size() - 1U, current_index,
         item.kind, item.debug_name);
@@ -194,7 +194,7 @@ auto ImportPlanner::MakePlan() -> std::vector<PlanStep>
 
     ready_current.clear();
     if (!ready_next.empty()) {
-      std::sort(ready_next.begin(), ready_next.end());
+      std::ranges::sort(ready_next);
       ready_current.swap(ready_next);
       ready_next.clear();
     }
@@ -294,7 +294,7 @@ auto ImportPlanner::ItemIndex(PlanItemId item) const -> size_t
 {
   const auto u_item = item.get();
   CHECK_F(u_item < items_.size(), "PlanItemId out of range: {}", u_item);
-  return static_cast<size_t>(u_item);
+  return u_item;
 }
 
 auto ImportPlanner::EnsureMutable() const -> void

@@ -331,8 +331,8 @@ namespace {
         return Err(TextureImportError::kDimensionMismatch);
       }
 
-      std::copy(src_view.pixels.begin(), src_view.pixels.end(),
-        dst_pixels.data() + slice_size * slice);
+      std::ranges::copy(
+        src_view.pixels, dst_pixels.data() + slice_size * slice);
     }
 
     return Ok(std::move(volume));
@@ -702,8 +702,7 @@ namespace {
           .decode_duration = decode_accum };
       }
 
-      std::copy(
-        src_view.pixels.begin(), src_view.pixels.end(), dst_pixels.data());
+      std::ranges::copy(src_view.pixels, dst_pixels.data());
     }
 
     for (size_t layer = 0; layer < array_layer_count; ++layer) {
@@ -730,7 +729,7 @@ namespace {
     const CubeMapImageLayout cubemap_layout, const bool with_content_hashing)
     -> CookOutcome
   {
-    DLOG_F(1, "TexturePipeline: Cook source content");
+    DLOG_F(1, "Cook source content");
     return std::visit(
       [&](auto&& value) -> CookOutcome {
         using ValueT = std::decay_t<decltype(value)>;
@@ -763,8 +762,8 @@ TexturePipeline::TexturePipeline(co::ThreadPool& thread_pool, Config config)
 TexturePipeline::~TexturePipeline()
 {
   if (started_) {
-    DLOG_IF_F(WARNING, HasPending(),
-      "TexturePipeline destroyed with {} pending items", PendingCount());
+    DLOG_IF_F(
+      WARNING, HasPending(), "Destroyed with {} pending items", PendingCount());
   }
 
   input_channel_.Close();
@@ -891,7 +890,7 @@ auto TexturePipeline::Worker() -> co::Co<>
         with_content_hashing = config_.with_content_hashing,
         stop_token = item.stop_token](
         co::ThreadPool::CancelToken canceled) -> CookOutcome {
-        DLOG_F(1, "TexturePipeline: Cook task begin");
+        DLOG_F(1, "Cook task begin");
         if (stop_token.stop_requested() || canceled) {
           return { .cooked = Err(TextureImportError::kCancelled),
             .decode_duration = {} };

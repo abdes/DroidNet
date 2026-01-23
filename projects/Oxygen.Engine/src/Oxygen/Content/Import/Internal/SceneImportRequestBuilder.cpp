@@ -9,17 +9,18 @@
 #include <string>
 
 #include <Oxygen/Content/Import/ImportOptions.h>
-#include <Oxygen/Content/Tools/ImportTool/SceneImportRequestBuilder.h>
+#include <Oxygen/Content/Import/Internal/SceneImportRequestBuilder.h>
+#include <Oxygen/Content/Import/Internal/Utils/ImportSettingsUtils.h>
 
-namespace oxygen::content::import::tool {
+namespace oxygen::content::import::internal {
 
 namespace {
 
-  using oxygen::content::import::GeometryAttributePolicy;
-  using oxygen::content::import::ImportContentFlags;
-  using oxygen::content::import::ImportFormat;
-  using oxygen::content::import::NodePruningPolicy;
-  using oxygen::content::import::UnitNormalizationPolicy;
+  using import::GeometryAttributePolicy;
+  using import::ImportContentFlags;
+  using import::ImportFormat;
+  using import::NodePruningPolicy;
+  using import::UnitNormalizationPolicy;
 
   auto ParseUnitPolicy(std::string_view value)
     -> std::optional<UnitNormalizationPolicy>
@@ -159,7 +160,7 @@ auto BuildSceneRequest(const SceneImportSettings& settings,
       error_stream << "ERROR: --unit-scale requires --unit-policy=custom\n";
       return std::nullopt;
     }
-    options.coordinate.custom_unit_scale = settings.unit_scale;
+    options.coordinate.unit_scale = settings.unit_scale;
   }
 
   if (!settings.normals_policy.empty()) {
@@ -189,8 +190,22 @@ auto BuildSceneRequest(const SceneImportSettings& settings,
     options.node_pruning = *parsed;
   }
 
+  // Handle texture tuning overrides for the scene
+  if (!MapSettingsToTuning(
+        settings.texture_defaults, options.texture_tuning, error_stream)) {
+    return std::nullopt;
+  }
+
+  for (const auto& [name, tex_settings] : settings.texture_overrides) {
+    ImportOptions::TextureTuning tuning = options.texture_tuning;
+    if (!MapSettingsToTuning(tex_settings, tuning, error_stream)) {
+      return std::nullopt;
+    }
+    options.texture_overrides[name] = std::move(tuning);
+  }
+
   request.options = std::move(options);
   return request;
 }
 
-} // namespace oxygen::content::import::tool
+} // namespace oxygen::content::import::internal

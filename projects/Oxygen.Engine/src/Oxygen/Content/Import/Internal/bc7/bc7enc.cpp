@@ -1426,7 +1426,7 @@ void bc7enc_compress_block_init()
   for (int c = 0; c < 256; c++) {
     for (uint32_t lp = 0; lp < 2; lp++) {
       endpoint_err best;
-      best.m_error = (uint16_t)UINT16_MAX;
+      best.m_error = UINT16_MAX;
       for (uint32_t l = 0; l < 64; l++) {
         uint32_t low = ((l << 1) | lp) << 1;
         low |= (low >> 7);
@@ -1454,7 +1454,7 @@ void bc7enc_compress_block_init()
     for (uint32_t hp = 0; hp < 2; hp++) {
       for (uint32_t lp = 0; lp < 2; lp++) {
         endpoint_err best;
-        best.m_error = (uint16_t)UINT16_MAX;
+        best.m_error = UINT16_MAX;
         best.m_lo = 0;
         best.m_hi = 0;
 
@@ -1537,14 +1537,14 @@ static void compute_least_squares_endpoints_rgba(uint32_t N,
   iz10 = -z10 * det;
   iz11 = z00 * det;
 
-  pXl->m_c[0] = (float)(iz00 * q00_r + iz01 * q10_r);
-  pXh->m_c[0] = (float)(iz10 * q00_r + iz11 * q10_r);
-  pXl->m_c[1] = (float)(iz00 * q00_g + iz01 * q10_g);
-  pXh->m_c[1] = (float)(iz10 * q00_g + iz11 * q10_g);
-  pXl->m_c[2] = (float)(iz00 * q00_b + iz01 * q10_b);
-  pXh->m_c[2] = (float)(iz10 * q00_b + iz11 * q10_b);
-  pXl->m_c[3] = (float)(iz00 * q00_a + iz01 * q10_a);
-  pXh->m_c[3] = (float)(iz10 * q00_a + iz11 * q10_a);
+  pXl->m_c[0] = iz00 * q00_r + iz01 * q10_r;
+  pXh->m_c[0] = iz10 * q00_r + iz11 * q10_r;
+  pXl->m_c[1] = iz00 * q00_g + iz01 * q10_g;
+  pXh->m_c[1] = iz10 * q00_g + iz11 * q10_g;
+  pXl->m_c[2] = iz00 * q00_b + iz01 * q10_b;
+  pXh->m_c[2] = iz10 * q00_b + iz11 * q10_b;
+  pXl->m_c[3] = iz00 * q00_a + iz01 * q10_a;
+  pXh->m_c[3] = iz10 * q00_a + iz11 * q10_a;
 
   for (uint32_t c = 0; c < 4; c++) {
     if ((pXl->m_c[c] < 0.0f) || (pXh->m_c[c] > 255.0f)) {
@@ -1600,12 +1600,12 @@ static void compute_least_squares_endpoints_rgb(uint32_t N,
   iz10 = -z10 * det;
   iz11 = z00 * det;
 
-  pXl->m_c[0] = (float)(iz00 * q00_r + iz01 * q10_r);
-  pXh->m_c[0] = (float)(iz10 * q00_r + iz11 * q10_r);
-  pXl->m_c[1] = (float)(iz00 * q00_g + iz01 * q10_g);
-  pXh->m_c[1] = (float)(iz10 * q00_g + iz11 * q10_g);
-  pXl->m_c[2] = (float)(iz00 * q00_b + iz01 * q10_b);
-  pXh->m_c[2] = (float)(iz10 * q00_b + iz11 * q10_b);
+  pXl->m_c[0] = iz00 * q00_r + iz01 * q10_r;
+  pXh->m_c[0] = iz10 * q00_r + iz11 * q10_r;
+  pXl->m_c[1] = iz00 * q00_g + iz01 * q10_g;
+  pXh->m_c[1] = iz10 * q00_g + iz11 * q10_g;
+  pXl->m_c[2] = iz00 * q00_b + iz01 * q10_b;
+  pXh->m_c[2] = iz10 * q00_b + iz11 * q10_b;
   pXl->m_c[3] = 255.0f;
   pXh->m_c[3] = 255.0f;
 
@@ -1662,8 +1662,8 @@ static void compute_least_squares_endpoints_a(uint32_t N,
   iz10 = -z10 * det;
   iz11 = z00 * det;
 
-  *pXl = (float)(iz00 * q00_a + iz01 * q10_a);
-  *pXh = (float)(iz10 * q00_a + iz11 * q10_a);
+  *pXl = iz00 * q00_a + iz01 * q10_a;
+  *pXh = iz10 * q00_a + iz11 * q10_a;
 
   if ((*pXl < 0.0f) || (*pXh > 255.0f)) {
     uint32_t lo_v = UINT32_MAX, hi_v = 0;
@@ -1966,8 +1966,7 @@ static uint64_t evaluate_solution(const color_rgba* pLow,
       const int da = actualMaxColor.m_c[3] - la;
 
       const float f = N
-        / (float)(squarei(dr) + squarei(dg) + squarei(db) + squarei(da)
-          + .00000125f);
+        / (squarei(dr) + squarei(dg) + squarei(db) + squarei(da) + .00000125f);
 
       for (uint32_t i = 0; i < pParams->m_num_pixels; i++) {
         const color_rgba* pC = &pParams->m_pPixels[i];
@@ -1997,7 +1996,7 @@ static uint64_t evaluate_solution(const color_rgba* pLow,
       }
     } else {
       const float f
-        = N / (float)(squarei(dr) + squarei(dg) + squarei(db) + .00000125f);
+        = N / (squarei(dr) + squarei(dg) + squarei(db) + .00000125f);
 
       for (uint32_t i = 0; i < pParams->m_num_pixels; i++) {
         const color_rgba* pC = &pParams->m_pPixels[i];
@@ -2401,8 +2400,7 @@ static uint64_t color_cell_compression(uint32_t mode,
   vec4F meanColorScaled
     = vec4F_mul(&meanColor, 1.0f / (float)(pParams->m_num_pixels));
 
-  meanColor
-    = vec4F_mul(&meanColor, 1.0f / (float)(pParams->m_num_pixels * 255.0f));
+  meanColor = vec4F_mul(&meanColor, 1.0f / (pParams->m_num_pixels * 255.0f));
   vec4F_saturate_in_place(&meanColor);
 
   if (pParams->m_has_alpha) {

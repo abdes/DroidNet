@@ -69,7 +69,7 @@ public:
   };
 
   //! Construct an importer with the given configuration.
-  OXGN_CNTT_API explicit AsyncImporter(Config config = {});
+  OXGN_CNTT_API explicit AsyncImporter(Config config);
 
   OXGN_CNTT_API ~AsyncImporter() override;
 
@@ -84,8 +84,8 @@ public:
    @param started Task started notification for synchronization.
    @return Coroutine that runs until the nursery is closed.
   */
-  OXGN_CNTT_NDAPI [[nodiscard]] auto ActivateAsync(
-    co::TaskStarted<> started = {}) -> co::Co<> override;
+  OXGN_CNTT_NDAPI auto ActivateAsync(co::TaskStarted<> started)
+    -> co::Co<> override;
 
   //! Start the job processing loop.
   /*!
@@ -106,7 +106,7 @@ public:
   OXGN_CNTT_API void Stop() override;
 
   //! Check if the importer is running (nursery is open).
-  OXGN_CNTT_NDAPI [[nodiscard]] auto IsRunning() const -> bool override;
+  OXGN_CNTT_NDAPI auto IsRunning() const -> bool override;
 
   //=== Job Submission
   //===---------------------------------------------------------//
@@ -118,23 +118,32 @@ public:
 
    @note This is an async operation that may suspend if the channel is full.
   */
-  OXGN_CNTT_NDAPI [[nodiscard]] auto SubmitJob(JobEntry entry) -> co::Co<>;
+  OXGN_CNTT_NDAPI auto SubmitJob(JobEntry entry) -> co::Co<>;
 
   //! Try to submit a job without blocking.
   /*!
    @param entry The job entry containing request and callbacks.
    @return True if the job was queued, false if the channel was full or closed.
   */
-  OXGN_CNTT_NDAPI [[nodiscard]] auto TrySubmitJob(JobEntry entry) -> bool;
+  OXGN_CNTT_NDAPI auto TrySubmitJob(JobEntry entry) -> bool;
 
   //! Check if the importer has capacity for another job.
-  OXGN_CNTT_NDAPI [[nodiscard]] auto CanAcceptJob() const noexcept -> bool;
+  OXGN_CNTT_NDAPI auto CanAcceptJob() const noexcept -> bool;
 
   //! Close the job channel (no more jobs accepted).
   OXGN_CNTT_API void CloseJobChannel();
 
   //! Check if the job channel is accepting jobs.
-  OXGN_CNTT_NDAPI [[nodiscard]] auto IsAcceptingJobs() const -> bool;
+  OXGN_CNTT_NDAPI auto IsAcceptingJobs() const -> bool;
+
+  //! Get the number of active jobs (queued + running).
+  OXGN_CNTT_NDAPI auto ActiveJobCount() const noexcept -> size_t;
+
+  //! Get the number of jobs currently running.
+  OXGN_CNTT_NDAPI auto RunningJobCount() const noexcept -> size_t;
+
+  //! Get the number of jobs queued but not yet running.
+  OXGN_CNTT_NDAPI auto PendingJobCount() const noexcept -> size_t;
 
 private:
   //! The job processing loop coroutine.
@@ -158,11 +167,11 @@ private:
   //! Channel capacity for backpressure checks.
   size_t channel_capacity_ = 0;
 
-  //! Active job count (queued + in-flight).
+  //! Active job count (queued + running).
   std::atomic<size_t> active_jobs_ { 0 };
 
-  //! Current number of jobs in flight.
-  size_t in_flight_jobs_ = 0;
+  //! Current number of jobs in flight (running).
+  std::atomic<size_t> running_jobs_ { 0 };
 };
 
 } // namespace oxygen::content::import::detail

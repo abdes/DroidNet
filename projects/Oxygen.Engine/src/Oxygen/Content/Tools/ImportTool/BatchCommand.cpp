@@ -36,12 +36,13 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Content/Import/AsyncImportService.h>
+#include <Oxygen/Content/Import/ImportManifest.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
+#include <Oxygen/Content/Import/Internal/SceneImportRequestBuilder.h>
+#include <Oxygen/Content/Import/Internal/TextureImportRequestBuilder.h>
+#include <Oxygen/Content/Import/SceneImportSettings.h>
+#include <Oxygen/Content/Import/TextureImportSettings.h>
 #include <Oxygen/Content/Tools/ImportTool/BatchCommand.h>
-#include <Oxygen/Content/Tools/ImportTool/ImportManifest.h>
-#include <Oxygen/Content/Tools/ImportTool/SceneImportRequestBuilder.h>
-#include <Oxygen/Content/Tools/ImportTool/SceneImportSettings.h>
-#include <Oxygen/Content/Tools/ImportTool/TextureImportRequestBuilder.h>
 #include <Oxygen/Content/Tools/ImportTool/UI/BatchViewModel.h>
 #include <Oxygen/Content/Tools/ImportTool/UI/Screens/BatchImportScreen.h>
 #include <Oxygen/OxCo/Detail/ScopeGuard.h>
@@ -445,7 +446,7 @@ auto BatchCommand::Run() -> int
     root_override = std::filesystem::path(options_.root_path);
   }
 
-  const auto manifest = ImportManifestLoader::Load(
+  const auto manifest = ImportManifest::Load(
     std::filesystem::path(options_.manifest_path), root_override, std::cerr);
   if (!manifest.has_value()) {
     return 2;
@@ -485,7 +486,7 @@ auto BatchCommand::Run() -> int
       if (options_.quiet)
         settings.verbose = false;
 
-      auto request = BuildTextureRequest(settings, std::cerr);
+      auto request = internal::BuildTextureRequest(settings, std::cerr);
       if (!request) {
         ++validation_failures;
         if (options_.fail_fast)
@@ -515,7 +516,8 @@ auto BatchCommand::Run() -> int
 
     const auto expected_format
       = job.job_type == "fbx" ? ImportFormat::kFbx : ImportFormat::kGltf;
-    auto request = BuildSceneRequest(settings, expected_format, std::cerr);
+    auto request
+      = internal::BuildSceneRequest(settings, expected_format, std::cerr);
 
     if (!request) {
       ++validation_failures;
@@ -644,11 +646,16 @@ auto BatchCommand::Run() -> int
       }
 
       while (submitted < jobs.size()) {
+        if (st.stop_requested()
+          || (g_stop_requested && g_stop_requested->load())) {
+          service.RequestShutdown();
+          break;
+        }
         auto& job = jobs[submitted];
 
         auto on_complete = [&, submitted](
                              ImportJobId id, const ImportReport& report) {
-          std::lock_guard lock(common_context->mutex);
+          std::scoped_lock lock(common_context->mutex);
 
           if (job_ids[submitted].has_value() && id != *job_ids[submitted]) {
             const auto u_expected = job_ids[submitted]->get();
@@ -721,7 +728,7 @@ auto BatchCommand::Run() -> int
         };
 
         auto on_progress = [&, submitted](const ProgressEvent& progress) {
-          std::lock_guard lock(common_context->mutex);
+          std::scoped_lock lock(common_context->mutex);
           if (progress.header.kind == ProgressEventKind::kPhaseUpdate) {
             return;
           }
@@ -875,10 +882,9 @@ auto BatchCommand::Run() -> int
           UpdateWorkerUtilization();
         };
 
-        const auto id
-          = service.SubmitImport(job.request, on_complete, on_progress);
-        if (id != kInvalidJobId) {
-          job_ids[submitted] = id;
+        if (auto id
+          = service.SubmitImport(job.request, on_complete, on_progress)) {
+          job_ids[submitted] = *id;
           job_views[submitted].id = std::to_string(DisplayJobNumber(submitted));
           job_views[submitted].source = job.source_path;
           job_views[submitted].status = "Queued";
@@ -889,7 +895,7 @@ auto BatchCommand::Run() -> int
           submitted++;
           in_flight++;
         } else {
-          std::lock_guard lock(common_context->mutex);
+          std::scoped_lock lock(common_context->mutex);
           common_context->state.recent_logs.push_back(
             std::format("Backpressure: delaying submission of job {}",
               DisplayJobNumber(submitted)));
@@ -897,7 +903,7 @@ auto BatchCommand::Run() -> int
         }
 
         {
-          std::lock_guard lock(common_context->mutex);
+          std::scoped_lock lock(common_context->mutex);
           common_context->state.in_flight = in_flight;
           common_context->state.remaining
             = PendingCount(jobs.size(), completed, in_flight);
@@ -910,7 +916,7 @@ auto BatchCommand::Run() -> int
 
       auto now = std::chrono::steady_clock::now();
       {
-        std::lock_guard lock(common_context->mutex);
+        std::scoped_lock lock(common_context->mutex);
         common_context->state.elapsed
           = std::chrono::duration_cast<std::chrono::seconds>(now - start_time);
       }
@@ -919,7 +925,7 @@ auto BatchCommand::Run() -> int
     service.Stop();
 
     {
-      std::lock_guard lock(common_context->mutex);
+      std::scoped_lock lock(common_context->mutex);
       common_context->completed = true;
       common_context->state.remaining = 0;
       common_context->state.in_flight = 0;
@@ -934,14 +940,26 @@ auto BatchCommand::Run() -> int
   if (!options_.no_tui) {
     BatchImportScreen screen;
     screen.SetDataProvider([common_context]() {
-      std::lock_guard lock(common_context->mutex);
+      std::scoped_lock lock(common_context->mutex);
       return common_context->state;
     });
     screen.Run();
   } else {
+    bool stop_notified = false;
     while (!common_context->completed) {
+      if (g_stop_requested && g_stop_requested->load()) {
+        if (!stop_notified) {
+          stop_notified = true;
+          worker_thread.request_stop();
+          std::cout << "Stopping..." << "\n";
+        }
+      }
+
       std::this_thread::sleep_for(std::chrono::seconds(1));
-      std::lock_guard lock(common_context->mutex);
+      if (stop_notified) {
+        continue;
+      }
+      std::scoped_lock lock(common_context->mutex);
       std::cout << "Progress: " << common_context->state.completed << "/"
                 << common_context->state.total << "\n";
     }

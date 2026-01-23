@@ -19,8 +19,7 @@ AsyncImporter::AsyncImporter(Config config)
   , config_(config)
   , channel_capacity_(config.channel_capacity)
 {
-  DLOG_F(INFO, "AsyncImporter created with channel capacity {}",
-    config.channel_capacity);
+  DLOG_F(INFO, "Created with channel capacity {}", config.channel_capacity);
   if (config_.max_in_flight_jobs == 0) {
     config_.max_in_flight_jobs = 1;
   }
@@ -29,7 +28,7 @@ AsyncImporter::AsyncImporter(Config config)
 AsyncImporter::~AsyncImporter()
 {
   DLOG_IF_F(WARNING, (nursery_ != nullptr),
-    "AsyncImporter destroyed while nursery is still open. "
+    "Destroyed while nursery is still open. "
     "Did you forget to call Stop()?");
 }
 
@@ -48,12 +47,12 @@ void AsyncImporter::Run()
   // Start the job processing loop as a background task
   nursery_->Start([this]() -> co::Co<> { co_await ProcessJobsLoop(); });
 
-  DLOG_F(INFO, "AsyncImporter job processing loop started");
+  DLOG_F(INFO, "Job processing loop started");
 }
 
 void AsyncImporter::Stop()
 {
-  DLOG_F(INFO, "AsyncImporter::Stop() called");
+  DLOG_F(INFO, "Stop called");
 
   // Close the channel to stop accepting new jobs and unblock receivers
   job_channel_.Close();
@@ -78,12 +77,12 @@ auto AsyncImporter::SubmitJob(JobEntry entry) -> co::Co<>
 auto AsyncImporter::TrySubmitJob(JobEntry entry) -> bool
 {
   if (job_channel_.Closed()) {
-    DLOG_F(WARNING, "TrySubmitJob: channel is closed");
+    LOG_F(WARNING, "Job channel is closed");
     return false;
   }
 
   if (job_channel_.Full()) {
-    DLOG_F(WARNING, "TrySubmitJob: channel is full");
+    LOG_F(WARNING, "Job channel is full");
     return false;
   }
 
@@ -116,6 +115,23 @@ auto AsyncImporter::IsAcceptingJobs() const -> bool
   return !job_channel_.Closed();
 }
 
+auto AsyncImporter::ActiveJobCount() const noexcept -> size_t
+{
+  return active_jobs_.load(std::memory_order_acquire);
+}
+
+auto AsyncImporter::RunningJobCount() const noexcept -> size_t
+{
+  return running_jobs_.load(std::memory_order_acquire);
+}
+
+auto AsyncImporter::PendingJobCount() const noexcept -> size_t
+{
+  const auto active = ActiveJobCount();
+  const auto running = RunningJobCount();
+  return (active > running) ? (active - running) : 0;
+}
+
 //=== Private Implementation
 //===-------------------------------------------------//
 
@@ -128,15 +144,14 @@ auto AsyncImporter::ProcessJobsLoop() -> co::Co<>
   DLOG_F(INFO, "ProcessJobsLoop started");
 
   while (true) {
-    while (in_flight_jobs_ >= config_.max_in_flight_jobs) {
+    while (running_jobs_.load(std::memory_order_acquire)
+      >= config_.max_in_flight_jobs) {
       auto completed = co_await completion_channel_.Receive();
       if (!completed.has_value()) {
         DLOG_F(INFO, "Completion channel closed, exiting processing loop");
         co_return;
       }
-      if (in_flight_jobs_ > 0) {
-        --in_flight_jobs_;
-      }
+      running_jobs_.fetch_sub(1, std::memory_order_acq_rel);
       active_jobs_.fetch_sub(1, std::memory_order_acq_rel);
     }
 
@@ -150,26 +165,26 @@ auto AsyncImporter::ProcessJobsLoop() -> co::Co<>
     }
 
     // Process the job
-    ++in_flight_jobs_;
+    running_jobs_.fetch_add(1, std::memory_order_acq_rel);
     nursery_->Start(
       [this, entry = std::move(*maybe_entry)]() mutable -> co::Co<> {
         try {
           co_await ProcessJob(std::move(entry));
         } catch (const std::exception& ex) {
-          LOG_F(ERROR, "AsyncImporter job failed: {}", ex.what());
+          LOG_F(ERROR, "Job failed: {}", ex.what());
         } catch (...) {
-          LOG_F(ERROR, "AsyncImporter job failed: unknown exception");
+          LOG_F(ERROR, "Job failed: unknown exception");
         }
         co_await completion_channel_.Send(1);
       });
   }
 
-  while (in_flight_jobs_ > 0) {
+  while (running_jobs_.load(std::memory_order_acquire) > 0) {
     auto completed = co_await completion_channel_.Receive();
     if (!completed.has_value()) {
       break;
     }
-    --in_flight_jobs_;
+    running_jobs_.fetch_sub(1, std::memory_order_acq_rel);
     active_jobs_.fetch_sub(1, std::memory_order_acq_rel);
   }
 

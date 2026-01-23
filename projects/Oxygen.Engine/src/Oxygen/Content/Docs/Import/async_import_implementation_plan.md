@@ -17,7 +17,7 @@ This plan implements the async import pipeline in 7 phases:
 | 2 | Async File I/O | ✅ COMPLETE | IAsyncFileReader, WindowsFileReader |
 | 3 | AsyncImportService | ✅ COMPLETE | Thread-safe API, job lifecycle |
 | 4 | ImportSession + Emitters + Jobs | ⏳ IN PROGRESS | Async writes, emitters, stable indices, job actor + unified cancellation |
-| 5 | Manifest Support (Importer-Level) | ❌ NOT STARTED | Manifest schema, parser, batch expansion |
+| 5 | Manifest Support (Importer-Level) | ⏳ IN PROGRESS | Manifest schema, parser, batch expansion |
 | 6 | TexturePipeline | ⏳ IN PROGRESS | Pure compute pipeline, async job wiring |
 | 7 | Integration & Polish | ❌ NOT STARTED | End-to-end tests, example, docs |
 
@@ -735,68 +735,67 @@ co_await emitter.Finalize();
 
 ---
 
-## Phase 5: Manifest Support (Importer-Level) (Week 5)
+## Phase 5: Manifest Support (Library-Integrated) (Week 5)
 
 ### Objective
 
-Make import manifests a first-class importer feature (not tool-only) that
-expands into standard import jobs with deterministic behavior and diagnostics.
+Make import manifests a first-class engine feature that expands into standard
+import jobs with deterministic behavior and diagnostics.
 
 ### Tasks
 
 #### 5.1 Manifest Data Model + Schema
 
-**Files:**
+**Files (Integrated):**
 
-- `src/Oxygen/Content/Import/Manifest/ImportManifest.h/.cpp`
-- `src/Oxygen/Content/Import/Manifest/ImportManifest_schema.h`
+- `src/Oxygen/Content/Import/ImportManifest.h/.cpp`
+- `src/Oxygen/Content/Import/Internal/ImportManifest_schema.h`
 
 Tasks:
 
-- [ ] Define `ImportManifest`, `ImportManifestDefaults`, and job records.
-- [ ] Encode the full manifest schema (versioned, strict validation).
-- [ ] Include texture settings parity (intent, formats, mip policy/filter,
-  BC7 quality, packing policy, cube layout/face size, flips, HDR options,
-  normal-map options, mip filter space, and multi-source mappings).
+- [X] Define `ImportManifest`, `ImportManifestDefaults`, and job records.
+- [X] Encode the full manifest schema (versioned, strict validation).
+- [X] Include texture settings parity (multi-source mappings, mip filter space, more normal-map options).
 
 #### 5.2 Manifest Loader + Validation
 
-**Files:**
+**Files (Integrated):**
 
-- `src/Oxygen/Content/Import/Manifest/ImportManifestLoader.h/.cpp`
+- `src/Oxygen/Content/Import/ImportManifest.h/.cpp`
 
 Tasks:
 
-- [ ] Load/validate JSON (schema + semantic checks).
-- [ ] Resolve paths relative to manifest root or explicit override.
-- [ ] Normalize paths for deterministic IDs and diagnostics.
-- [ ] Emit diagnostics with job index + JSON pointer context.
+- [X] Load/validate JSON (schema + semantic checks).
+- [X] Resolve paths relative to manifest root or explicit override.
+- [X] Normalize paths for deterministic IDs and diagnostics.
+- [X] Emit diagnostics with job index + JSON pointer context.
 
 #### 5.3 Job Expansion + Routing
 
-**Files:**
+**Files (Integrated):**
 
-- `src/Oxygen/Content/Import/Async/AsyncImportService.h/.cpp`
-- `src/Oxygen/Content/Import/Async/Detail/AsyncImporter.h/.cpp`
+- `src/Oxygen/Content/Import/AsyncImportService.h/.cpp`
+- `src/Oxygen/Content/Import/ImportManifest.h/.cpp`
 
 Tasks:
 
-- [ ] Add `SubmitManifest(...)` (or equivalent) API to submit a manifest.
-- [ ] Expand manifest jobs into `ImportRequest`/texture jobs with stable order.
-- [ ] Route `job_type` to concrete jobs (texture, fbx, glb, etc.).
-- [ ] Ensure manifests do not perform I/O during expansion.
+- [X] Add `SubmitManifest(...)` API to `AsyncImportService`.
+- [X] Move `SubmitManifest` logic from tool to library core.
+- [X] Expand manifest jobs into `ImportRequest`/texture jobs with stable order.
+- [X] Route `job_type` to concrete jobs (texture, fbx, glb, etc.).
+- [X] Ensure manifests do not perform I/O during expansion.
 
 #### 5.4 Reporting + Dry-Run
 
 **Files:**
 
-- `src/Oxygen/Content/Import/Manifest/ImportManifestReport.h/.cpp`
+- `src/Oxygen/Content/Tools/ImportTool/BatchCommand.cpp`
 
 Tasks:
 
-- [ ] Support validation-only (dry-run) mode with no cooking.
-- [ ] Write JSON report with per-job status + telemetry (consistent with
-  existing ImportTool reports).
+- [X] Support validation-only (dry-run) mode with no cooking (tool layer).
+- [X] Write JSON report with per-job status + telemetry (tool layer).
+- [X] Support per-job progress tracking and logging.
 
 #### 5.5 Tests
 

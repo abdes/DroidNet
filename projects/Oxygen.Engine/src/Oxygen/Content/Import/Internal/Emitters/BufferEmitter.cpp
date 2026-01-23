@@ -18,17 +18,6 @@ namespace oxygen::content::import {
 
 namespace {
 
-  //! Aligns a value up to the specified alignment.
-  [[nodiscard]] constexpr auto AlignUp(
-    const uint64_t value, const uint64_t alignment) noexcept -> uint64_t
-  {
-    if (alignment <= 1) {
-      return value;
-    }
-    const auto remainder = value % alignment;
-    return (remainder == 0) ? value : (value + (alignment - remainder));
-  }
-
   [[nodiscard]] auto MakeBufferSignature(const CookedBufferPayload& cooked)
     -> std::string
   {
@@ -55,18 +44,6 @@ namespace {
     return signature;
   }
 
-  [[nodiscard]] auto GetExistingDataSize(const std::filesystem::path& data_path)
-    -> uint64_t
-  {
-    std::error_code ec;
-    const auto size = std::filesystem::file_size(data_path, ec);
-    if (!ec) {
-      return size;
-    }
-
-    return 0;
-  }
-
 } // namespace
 
 BufferEmitter::BufferEmitter(IAsyncFileWriter& file_writer,
@@ -76,17 +53,14 @@ BufferEmitter::BufferEmitter(IAsyncFileWriter& file_writer,
   , table_aggregator_(table_aggregator)
   , data_path_(cooked_root / layout.BuffersDataRelPath())
 {
-  data_file_size_.store(
-    GetExistingDataSize(data_path_), std::memory_order_release);
-
-  DLOG_F(INFO, "BufferEmitter created: data='{}'", data_path_.string());
+  DLOG_F(INFO, "Created buffer emitter: data='{}'", data_path_.string());
 }
 
 BufferEmitter::~BufferEmitter()
 {
   const auto pending = pending_count_.load(std::memory_order_acquire);
   if (pending > 0) {
-    LOG_F(WARNING, "BufferEmitter destroyed with {} pending writes", pending);
+    LOG_F(WARNING, "Destroyed with {} pending writes", pending);
   }
 }
 
@@ -103,8 +77,8 @@ auto BufferEmitter::Emit(CookedBufferPayload cooked) -> uint32_t
   const auto buffer_alignment = cooked.alignment > 0 ? cooked.alignment : 16ULL;
 
   const auto acquire = table_aggregator_.AcquireOrInsert(signature, [&]() {
-    const auto reserved
-      = ReserveDataRange(buffer_alignment, cooked.data.size());
+    const auto reserved = table_aggregator_.ReserveDataRange(
+      buffer_alignment, cooked.data.size());
     auto desc = MakeTableEntry(cooked, reserved.aligned_offset);
     return std::make_pair(desc, reserved);
   });
@@ -118,8 +92,7 @@ auto BufferEmitter::Emit(CookedBufferPayload cooked) -> uint32_t
   const auto reserved = acquire.reservation;
 
   DLOG_F(INFO,
-    "BufferEmitter::Emit: index={} offset={} size={} padding={} "
-    "usage=0x{:x} stride={}",
+    "Emit: index={} offset={} size={} padding={} usage=0x{:x} stride={}",
     acquire.index, reserved.aligned_offset, cooked.data.size(),
     reserved.padding_size, cooked.usage_flags, cooked.element_stride);
 
@@ -139,26 +112,6 @@ auto BufferEmitter::Emit(CookedBufferPayload cooked) -> uint32_t
     WriteKind::kPayload, acquire.index, reserved.aligned_offset, payload_ptr);
 
   return acquire.index;
-}
-
-auto BufferEmitter::ReserveDataRange(
-  const uint64_t alignment, const uint64_t payload_size) -> WriteReservation
-{
-  uint64_t current_size = data_file_size_.load(std::memory_order_acquire);
-  uint64_t aligned_offset = 0;
-  uint64_t new_size = 0;
-
-  do {
-    aligned_offset = AlignUp(current_size, alignment);
-    new_size = aligned_offset + payload_size;
-  } while (!data_file_size_.compare_exchange_weak(
-    current_size, new_size, std::memory_order_acq_rel));
-
-  return {
-    .reservation_start = current_size,
-    .aligned_offset = aligned_offset,
-    .padding_size = aligned_offset - current_size,
-  };
 }
 
 auto BufferEmitter::QueueDataWrite(const WriteKind kind,
@@ -187,13 +140,12 @@ auto BufferEmitter::OnWriteComplete(const WriteKind kind,
 
   error_count_.fetch_add(1, std::memory_order_acq_rel);
   if (kind == WriteKind::kPadding) {
-    LOG_F(
-      ERROR, "BufferEmitter: failed to write padding: {}", error.ToString());
+    LOG_F(ERROR, "Failed to write padding: {}", error.ToString());
     return;
   }
 
-  LOG_F(ERROR, "BufferEmitter: failed to write buffer {}: {}",
-    index.value_or(0), error.ToString());
+  LOG_F(ERROR, "Failed to write buffer {}: {}", index.value_or(0),
+    error.ToString());
 }
 
 auto BufferEmitter::Count() const noexcept -> uint32_t
@@ -213,33 +165,32 @@ auto BufferEmitter::ErrorCount() const noexcept -> size_t
 
 auto BufferEmitter::DataFileSize() const noexcept -> uint64_t
 {
-  return data_file_size_.load(std::memory_order_acquire);
+  return table_aggregator_.DataFileSize();
 }
 
 auto BufferEmitter::Finalize() -> co::Co<bool>
 {
   finalize_started_.store(true, std::memory_order_release);
 
-  DLOG_F(INFO, "BufferEmitter::Finalize: waiting for {} pending writes",
+  DLOG_F(INFO, "Finalize: waiting for {} pending writes",
     pending_count_.load(std::memory_order_acquire));
 
   // Wait for all pending writes via flush
   auto flush_result = co_await file_writer_.Flush();
 
   if (!flush_result.has_value()) {
-    LOG_F(ERROR, "BufferEmitter::Finalize: flush failed: {}",
-      flush_result.error().ToString());
+    LOG_F(ERROR, "Finalize: flush failed: {}", flush_result.error().ToString());
     co_return false;
   }
 
   // Check for accumulated errors
   const auto errors = error_count_.load(std::memory_order_acquire);
   if (errors > 0) {
-    LOG_F(ERROR, "BufferEmitter::Finalize: {} I/O errors occurred", errors);
+    LOG_F(ERROR, "Finalize: {} I/O errors occurred", errors);
     co_return false;
   }
 
-  DLOG_F(INFO, "BufferEmitter::Finalize: complete, {} buffers emitted",
+  DLOG_F(INFO, "Finalize: complete, {} buffers emitted",
     emitted_count_.load(std::memory_order_acquire));
 
   co_return true;
@@ -252,7 +203,7 @@ auto BufferEmitter::MakeTableEntry(
   using data::pak::OffsetT;
 
   BufferResourceDesc entry {};
-  entry.data_offset = static_cast<OffsetT>(data_offset);
+  entry.data_offset = data_offset;
   entry.size_bytes = static_cast<DataBlobSizeT>(cooked.data.size());
   entry.usage_flags = cooked.usage_flags;
   entry.element_stride = cooked.element_stride;

@@ -10,9 +10,9 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
+#include <Oxygen/Content/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Content/Tools/ImportTool/GltfCommand.h>
 #include <Oxygen/Content/Tools/ImportTool/ImportRunner.h>
-#include <Oxygen/Content/Tools/ImportTool/SceneImportRequestBuilder.h>
 
 namespace oxygen::content::import::tool {
 
@@ -167,7 +167,7 @@ auto GltfCommand::Run() -> int
   settings.bake_transforms = !no_bake_transforms_;
 
   const auto request
-    = BuildSceneRequest(settings, ImportFormat::kGltf, std::cerr);
+    = internal::BuildSceneRequest(settings, ImportFormat::kGltf, std::cerr);
   if (!request.has_value()) {
     return 2;
   }

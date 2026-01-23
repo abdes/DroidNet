@@ -443,13 +443,13 @@ void BatchImportScreen::SetOnCompleted(CompletionCallback callback)
 
 auto BatchImportScreen::GetStateSnapshot() const -> BatchViewModel
 {
-  std::lock_guard lock(state_mutex_);
+  std::scoped_lock lock(state_mutex_);
   return state_;
 }
 
 void BatchImportScreen::UpdateState(BatchViewModel state)
 {
-  std::lock_guard lock(state_mutex_);
+  std::scoped_lock lock(state_mutex_);
   state_ = std::move(state);
   if (state_.completed_run) {
     completed_.store(true);

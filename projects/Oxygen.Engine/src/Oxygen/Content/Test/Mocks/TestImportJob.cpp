@@ -18,17 +18,8 @@ namespace co = oxygen::co;
 
 namespace oxygen::content::import::test {
 
-TestImportJob::TestImportJob(ImportJobId job_id, ImportRequest request,
-  ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
-  std::shared_ptr<co::Event> cancel_event,
-  oxygen::observer_ptr<IAsyncFileReader> file_reader,
-  oxygen::observer_ptr<IAsyncFileWriter> file_writer,
-  oxygen::observer_ptr<co::ThreadPool> thread_pool,
-  oxygen::observer_ptr<ResourceTableRegistry> table_registry,
-  ImportConcurrency concurrency, Config config)
-  : detail::ImportJob(job_id, std::move(request), std::move(on_complete),
-      std::move(on_progress), std::move(cancel_event), file_reader, file_writer,
-      thread_pool, table_registry, concurrency)
+TestImportJob::TestImportJob(detail::ImportJobParams params, Config config)
+  : detail::ImportJob(std::move(params))
   , config_(config)
 {
 }

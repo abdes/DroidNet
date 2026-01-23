@@ -61,24 +61,19 @@ namespace {
 
 } // namespace
 
-ImportJob::ImportJob(ImportJobId job_id, ImportRequest request,
-  ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
-  std::shared_ptr<co::Event> cancel_event,
-  observer_ptr<IAsyncFileReader> file_reader,
-  observer_ptr<IAsyncFileWriter> file_writer,
-  observer_ptr<co::ThreadPool> thread_pool,
-  observer_ptr<ResourceTableRegistry> table_registry,
-  ImportConcurrency concurrency)
-  : job_id_(job_id)
-  , request_(std::move(request))
-  , on_complete_(std::move(on_complete))
-  , on_progress_(std::move(on_progress))
-  , cancel_event_(std::move(cancel_event))
-  , file_reader_(file_reader)
-  , file_writer_(file_writer)
-  , thread_pool_(thread_pool)
-  , table_registry_(table_registry)
-  , concurrency_(concurrency)
+ImportJob::ImportJob(ImportJobParams params)
+  : job_id_(params.id)
+  , request_(std::move(params.request))
+  , on_complete_(std::move(params.on_complete))
+  , on_progress_(std::move(params.on_progress))
+  , cancel_event_(std::move(params.cancel_event))
+  , file_reader_(params.reader)
+  , file_writer_(params.writer)
+  , thread_pool_(params.thread_pool)
+  , table_registry_(params.registry)
+  , index_registry_(params.index_registry)
+  , concurrency_(params.concurrency)
+  , stop_token_(std::move(params.stop_token))
 {
 }
 
@@ -137,7 +132,7 @@ auto ImportJob::EnsureCookedRoot() -> void
   std::error_code ec;
   std::filesystem::create_directories(cooked_root, ec);
   if (ec) {
-    DLOG_F(WARNING, "Failed to create cooked root '{}': {}",
+    LOG_F(WARNING, "Failed to create cooked root '{}': {}",
       cooked_root.string(), ec.message());
   }
 }
@@ -168,11 +163,22 @@ auto ImportJob::TableRegistry() const noexcept
   return table_registry_;
 }
 
+auto ImportJob::IndexRegistry() const noexcept
+  -> observer_ptr<LooseCookedIndexRegistry>
+{
+  return index_registry_;
+}
+
 auto ImportJob::JobId() const -> ImportJobId { return job_id_; }
 
 auto ImportJob::StopToken() const noexcept -> std::stop_token
 {
   return stop_source_.get_token();
+}
+
+auto ImportJob::IsStopped() const noexcept -> bool
+{
+  return stop_source_.stop_requested() || stop_token_.stop_requested();
 }
 
 auto ImportJob::GetNamingService() -> NamingService&
@@ -230,8 +236,7 @@ auto ImportJob::MainAsync() -> co::Co<>
     ReportJobEvent(ProgressEventKind::kJobFinished, phase, 1.0f,
       report.success ? "Job finished" : "Job failed");
 
-    DLOG_F(
-      2, "ImportJob finalize: job_id={} success={}", job_id_, report.success);
+    DLOG_F(2, "Finalize: job_id={} success={}", job_id_, report.success);
 
     if (on_complete_) {
       on_complete_(job_id_, report);
@@ -279,7 +284,7 @@ auto ImportJob::MainAsync() -> co::Co<>
         if (canceled) {
           finalize(MakeCancelledReport(request_));
         } else {
-          LOG_F(ERROR, "ImportJob failed: {}", ex.what());
+          LOG_F(ERROR, "Job failed: {}", ex.what());
           finalize(make_exception_report(ex.what()));
         }
       } catch (...) {
@@ -288,7 +293,7 @@ auto ImportJob::MainAsync() -> co::Co<>
         if (canceled) {
           finalize(MakeCancelledReport(request_));
         } else {
-          LOG_F(ERROR, "ImportJob failed: unknown exception");
+          LOG_F(ERROR, "Job failed: unknown exception");
           finalize(make_exception_report("unknown exception"));
         }
       }
@@ -299,7 +304,7 @@ auto ImportJob::MainAsync() -> co::Co<>
         co_return;
       }
 
-      DLOG_F(2, "ImportJob main canceled: job_id={}", job_id_);
+      DLOG_F(2, "Job main canceled: job_id={}", job_id_);
       stop_source_.request_stop();
       finalize(MakeCancelledReport(request_));
       co_return;

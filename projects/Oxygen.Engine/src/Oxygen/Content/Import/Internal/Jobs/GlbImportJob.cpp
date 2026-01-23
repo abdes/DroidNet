@@ -94,13 +94,13 @@ namespace {
 */
 auto GlbImportJob::ExecuteAsync() -> co::Co<ImportReport>
 {
-  DLOG_F(INFO, "GlbImportJob starting: job_id={} path={}", JobId(),
+  DLOG_F(INFO, "Starting job: job_id={} path={}", JobId(),
     Request().source_path.string());
 
   EnsureCookedRoot();
 
-  ImportSession session(
-    Request(), FileReader(), FileWriter(), ThreadPool(), TableRegistry());
+  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool(),
+    TableRegistry(), IndexRegistry());
 
   ReportPhaseProgress(ImportPhase::kLoading, 0.0f, "Parsing glTF...");
   auto asset = co_await ParseAsset(session);
@@ -116,7 +116,7 @@ auto GlbImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto plan_outcome = co_await ThreadPool()->Run(
     [this, &asset, request_copy, stop_token](
       co::ThreadPool::CancelToken canceled) -> PlanBuildOutcome {
-      DLOG_F(1, "GlbImportJob: BuildPlan task begin");
+      DLOG_F(1, "Build plan task begin");
       if (canceled || stop_token.stop_requested()) {
         PlanBuildOutcome canceled_outcome;
         canceled_outcome.canceled = true;
@@ -178,7 +178,7 @@ auto GlbImportJob::ParseAsset(ImportSession& session) -> co::Co<ParsedGlbAsset>
   auto parsed = co_await ThreadPool()->Run(
     [request_copy, stop_token, naming_service](
       co::ThreadPool::CancelToken canceled) {
-      DLOG_F(1, "GlbImportJob: ParseAsset task begin");
+      DLOG_F(1, "Parse asset task begin");
       ParsedGlbAsset out;
       if (canceled || stop_token.stop_requested()) {
         out.canceled = true;
@@ -218,7 +218,7 @@ auto GlbImportJob::BuildPlan(ParsedGlbAsset& asset,
     return outcome;
   }
 
-  DLOG_F(1, "GlbImportJob: BuildPlan begin");
+  DLOG_F(1, "Build plan begin");
 
   auto plan = std::make_unique<PlannedGlbImport>();
   plan->planner.RegisterPipeline<TexturePipeline>(

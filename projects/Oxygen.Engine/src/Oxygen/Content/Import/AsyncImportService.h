@@ -10,8 +10,8 @@
 #include <thread>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Import/ImportConcurrency.h>
+#include <Oxygen/Content/Import/ImportManifest.h>
 #include <Oxygen/Content/Import/ImportProgress.h>
 #include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
@@ -30,14 +30,12 @@ class ResourceTableRegistry;
 
 namespace detail {
   class ImportJob;
+  struct ImportJobParams;
 } // namespace detail
 
 //! Factory for creating custom import jobs.
 using ImportJobFactory = std::function<std::shared_ptr<detail::ImportJob>(
-  ImportJobId, ImportRequest, ImportCompletionCallback, ProgressEventCallback,
-  std::shared_ptr<co::Event>, observer_ptr<IAsyncFileReader>,
-  observer_ptr<IAsyncFileWriter>, observer_ptr<co::ThreadPool>,
-  observer_ptr<ResourceTableRegistry>, const ImportConcurrency&)>;
+  detail::ImportJobParams params)>;
 
 //! Thread-safe service for submitting async import jobs.
 /*!
@@ -162,23 +160,29 @@ public:
    @param on_complete Completion callback invoked exactly once when the job
           finishes (success, failure, or cancellation). Receives the job ID and
           `ImportReport` with success status, diagnostics, and asset metadata.
-          Invoked on the calling thread if it has an event loop with
-          `ThreadNotification` support; otherwise on the import thread.
           Cancelled jobs (via `CancelJob()` or `CancelAll()`) complete with
           `report.success = false` and diagnostic code `"import.canceled"`.
-     @param on_progress Optional progress callback invoked periodically to
-  report phase and item updates. Invoked on the same thread as `on_complete`.
-       Can be `nullptr`.
-   @return Valid job ID (`> 0`) on success, or `kInvalidJobId` (`0`) if rejected
+
+          @note Callbacks are invoked on the import thread. If the calling
+                thread is monitoring for results and progress, it should
+                handle synchronization appropriately.
+
+   @param on_progress Optional progress callback invoked periodically to
+          report phase and item updates. Invoked on the same thread as
+          `on_complete`. Can be `nullptr`.
+   @param concurrency_override Optional overrides for per-pipeline concurrency.
+   @return Valid job ID on success, or `std::nullopt` if rejected
            due to: shutdown, importer not ready, unknown file format, or
-           internal failure. When `kInvalidJobId` is returned, callbacks are
+           internal failure. When `std::nullopt` is returned, callbacks are
            never invoked.
 
   @see CancelJob, CancelAll, ImportRequest, ImportReport, ProgressEvent
   */
   OXGN_CNTT_NDAPI auto SubmitImport(ImportRequest request,
     ImportCompletionCallback on_complete,
-    ProgressEventCallback on_progress = nullptr) -> ImportJobId;
+    ProgressEventCallback on_progress = nullptr,
+    std::optional<ImportConcurrency> concurrency_override = std::nullopt)
+    -> std::optional<ImportJobId>;
 
   //! Submit a custom import job for asynchronous processing.
   /*!
@@ -190,16 +194,34 @@ public:
    @param request Import request used by the custom job.
    @param on_complete Completion callback invoked exactly once when the job
           finishes.
-  @param on_progress Optional progress callback invoked periodically.
+   @param on_progress Optional progress callback invoked periodically.
    @param job_factory Factory invoked to construct the job instance.
-   @return Valid job ID (`> 0`) on success, or `kInvalidJobId` (`0`) if
+   @param concurrency_override Optional overrides for per-pipeline concurrency.
+   @return Valid job ID on success, or `std::nullopt` if
            rejected due to shutdown, importer not ready, or factory failure.
 
   @see CancelJob, CancelAll, ImportRequest, ImportReport, ProgressEvent
   */
   OXGN_CNTT_NDAPI auto SubmitImport(ImportRequest request,
     ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
-    ImportJobFactory job_factory) -> ImportJobId;
+    ImportJobFactory job_factory,
+    std::optional<ImportConcurrency> concurrency_override = std::nullopt)
+    -> std::optional<ImportJobId>;
+
+  //! Submit a batch of import jobs defined in an ImportManifest object.
+  /*!
+   Submits each item in the manifest as an individual import job.
+
+   @param manifest The manifest object containing jobs.
+   @param on_item_complete Optional callback invoked when each item in the batch
+          finishes.
+   @param on_progress Optional callback for item-level progress updates.
+   @return A list of Job IDs for the items in the manifest. If submission fails
+           for all items or the manifest is empty, returns an empty vector.
+  */
+  OXGN_CNTT_NDAPI auto SubmitManifest(const ImportManifest& manifest,
+    ImportCompletionCallback on_item_complete = nullptr,
+    ProgressEventCallback on_progress = nullptr) -> std::vector<ImportJobId>;
 
   //! Cancel a specific import job. Thread-safe.
   /*!
@@ -256,21 +278,14 @@ public:
   //! Check if the service is still accepting new jobs. Thread-safe.
   OXGN_CNTT_NDAPI auto IsAcceptingJobs() const -> bool;
 
-  //! Get the number of active jobs (pending or in-flight). Thread-safe.
-  /*!
-   Note: The current implementation cannot distinguish between pending
-   (queued) and in-flight (executing) jobs without exposing AsyncImporter
-   internals. Both methods return the total count of active jobs.
+  //! Get the total number of active jobs (pending + running).
+  OXGN_CNTT_NDAPI auto ActiveJobCount() const -> size_t;
 
-   @return Number of jobs that have been submitted but not yet completed.
-  */
+  //! Get the number of jobs currently running.
+  OXGN_CNTT_NDAPI auto RunningJobCount() const -> size_t;
+
+  //! Get the number of jobs queued but not yet running.
   OXGN_CNTT_NDAPI auto PendingJobCount() const -> size_t;
-
-  //! Get the number of active jobs (same as PendingJobCount). Thread-safe.
-  /*!
-   @return Number of jobs that have been submitted but not yet completed.
-  */
-  OXGN_CNTT_NDAPI auto InFlightJobCount() const -> size_t;
 
 private:
   struct Impl;

@@ -2,102 +2,67 @@
   "version": 1,
   "thread_pool_size": 35,
   "concurrency": {
-    "texture": {
-      "workers": 12,
-      "queue_capacity": 64
-    },
-    "buffer": {
-      "workers": 2,
-      "queue_capacity": 64
-    },
-    "material": {
-      "workers": 4,
-      "queue_capacity": 64
-    },
-    "mesh": {
-      "workers": 12,
-      "queue_capacity": 128
-    },
-    "geometry": {
-      "workers": 8,
-      "queue_capacity": 64
-    },
-    "scene": {
-      "workers": 1,
-      "queue_capacity": 8
-    }
+    "texture": { "workers": 12, "queue_capacity": 64 },
+    "buffer": { "workers": 2, "queue_capacity": 64 },
+    "material": { "workers": 4, "queue_capacity": 64 },
+    "mesh_build": { "workers": 12, "queue_capacity": 128 },
+    "geometry": { "workers": 8, "queue_capacity": 64 },
+    "scene": { "workers": 1, "queue_capacity": 8 }
   },
   "defaults": {
-    "job_type": "texture",
-    "cooked_root": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Cooked",
-    "import_options": {
-      "with_content_hashing": true
-    },
     "texture": {
-      "output_format": "bc7-srgb",
-      "data_format": "bc7",
+      "output": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Cooked",
+      "content_hashing": true,
       "mip_policy": "full",
-      "mip_filter": "lanczos",
-      "bc7_quality": "default"
+      "mip_filter": "lanczos"
+    },
+    "scene": {
+      "output": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Cooked",
+      "content_hashing": true
     }
   },
   "jobs": [
     {
+      "type": "texture",
       "source": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Models/Wood.png",
-      "job_name": "wood-albedo",
-      "texture": {
-        "preset": "albedo-srgb"
-      }
+      "name": "wood-albedo",
+      "preset": "albedo-srgb"
     },
     {
-      "job_type": "gltf",
+      "type": "gltf",
       "source": "F:/projects/main_sponza/NewSponza_Main_glTF_003.gltf",
-      "job_name": "sponza-scene",
-      "gltf": {
-        "unit_normalization_policy": "normalize",
-        "normals_policy": "generate",
-        "tangents_policy": "recalculate",
-        "node_pruning_policy": "keep"
-      }
+      "name": "sponza-scene",
+      "unit_policy": "normalize",
+      "normals_policy": "recalculate",
+      "tangents_policy": "recalculate",
+      "node_pruning": "keep"
     },
     {
-      "job_type": "fbx",
+      "type": "fbx",
       "source": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Models/dino-a.fbx",
-      "job_name": "dino-scene",
-      "fbx": {
-        "content_flags": {
-          "textures": false,
-          "materials": true,
-          "geometry": true,
-          "scene": true
-        },
-        "unit_normalization_policy": "normalize",
-        "normals_policy": "generate",
-        "tangents_policy": "generate",
-        "node_pruning_policy": "drop-empty"
-      }
+      "name": "dino-scene",
+      "unit_policy": "normalize",
+      "normals_policy": "recalculate",
+      "tangents_policy": "recalculate",
+      "node_pruning": "drop-empty"
     },
     {
-      "job_type": "gltf",
+      "type": "gltf",
       "source": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Models/Tabuleiro.glb",
-      "job_name": "tabuleiro-scene",
-      "gltf": {
-        "unit_normalization_policy": "normalize",
-        "normals_policy": "generate",
-        "tangents_policy": "recalculate",
-        "node_pruning_policy": "keep"
-      }
+      "name": "tabuleiro-scene",
+      "unit_policy": "normalize",
+      "normals_policy": "recalculate",
+      "tangents_policy": "recalculate",
+      "node_pruning": "keep"
     },
     {
-      "job_type": "fbx",
+      "type": "fbx",
       "source": "F:/projects/main_sponza/NewSponza_Main_Zup_003.fbx",
-      "job_name": "sponza-scene-fbx",
-      "gltf": {
-        "unit_normalization_policy": "normalize",
-        "normals_policy": "generate",
-        "tangents_policy": "recalculate",
-        "node_pruning_policy": "keep"
-      }
+      "name": "sponza-scene-fbx",
+      "unit_policy": "normalize",
+      "normals_policy": "recalculate",
+      "tangents_policy": "recalculate",
+      "node_pruning": "keep"
     }
   ]
 }

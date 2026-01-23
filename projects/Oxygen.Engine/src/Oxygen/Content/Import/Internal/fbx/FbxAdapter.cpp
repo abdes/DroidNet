@@ -203,7 +203,7 @@ namespace {
       return std::nullopt;
     }
 
-    auto bytes = std::vector<std::byte>(static_cast<size_t>(size));
+    auto bytes = std::vector<std::byte>(size);
     file.seekg(0, std::ios::beg);
     if (!file.read(reinterpret_cast<char*>(bytes.data()), size)) {
       return std::nullopt;
@@ -727,7 +727,7 @@ namespace {
     }
 
     if (triangulated_faces > 0) {
-      LOG_F(INFO, "FBX mesh '{}' triangulated {} faces", object_path,
+      DLOG_F(INFO, "FBX mesh '{}' triangulated {} faces", object_path,
         triangulated_faces);
     }
 
@@ -1203,11 +1203,11 @@ namespace {
     const auto& coordinate_policy = input.request.options.coordinate;
     if (coordinate_policy.unit_normalization
         == UnitNormalizationPolicy::kApplyCustomFactor
-      && !(coordinate_policy.custom_unit_scale > 0.0F)) {
+      && !(coordinate_policy.unit_scale > 0.0F)) {
       DLOG_F(ERROR, "FBX invalid custom unit scale: source_id='{}' scale={} ",
-        input.source_id_prefix, coordinate_policy.custom_unit_scale);
+        input.source_id_prefix, coordinate_policy.unit_scale);
       diagnostics.push_back(MakeErrorDiagnostic("fbx.invalid_custom_unit_scale",
-        "custom_unit_scale must be > 0 when using custom unit normalization",
+        "unit_scale must be > 0 when using custom unit normalization",
         input.source_id_prefix, input.object_path_prefix));
       return {};
     }
@@ -1303,11 +1303,11 @@ namespace {
     const auto& coordinate_policy = input.request.options.coordinate;
     if (coordinate_policy.unit_normalization
         == UnitNormalizationPolicy::kApplyCustomFactor
-      && !(coordinate_policy.custom_unit_scale > 0.0F)) {
+      && !(coordinate_policy.unit_scale > 0.0F)) {
       DLOG_F(ERROR, "FBX invalid custom unit scale: source_id='{}' scale={} ",
-        input.source_id_prefix, coordinate_policy.custom_unit_scale);
+        input.source_id_prefix, coordinate_policy.unit_scale);
       diagnostics.push_back(MakeErrorDiagnostic("fbx.invalid_custom_unit_scale",
-        "custom_unit_scale must be > 0 when using custom unit normalization",
+        "unit_scale must be > 0 when using custom unit normalization",
         input.source_id_prefix, input.object_path_prefix));
       return {};
     }
@@ -1369,7 +1369,7 @@ namespace {
     }
 
     const void* data = bytes.data();
-    const auto size = static_cast<size_t>(bytes.size());
+    const auto size = bytes.size();
     ufbx_scene* scene = ufbx_load_memory(data, size, &opts, &error);
     if (scene == nullptr) {
       if (error.type == UFBX_ERROR_CANCELLED
@@ -1499,7 +1499,7 @@ namespace {
           max_slot = (std::max)(max_slot, range.material_slot);
         }
 
-        std::vector<uint8_t> used(max_slot + 1, static_cast<uint8_t>(0));
+        std::vector<uint8_t> used(max_slot + 1, 0);
         for (const auto& range : buffers->ranges) {
           used[range.material_slot] = static_cast<uint8_t>(1);
         }
@@ -1512,10 +1512,9 @@ namespace {
         }
       }
 
-      const auto* skin_deformer = FindSkinDeformer(*mesh);
       DLOG_F(2, "FBX mesh[{}] skin_deformer_found={} joints={} weights={}",
-        mesh_i, skin_deformer != nullptr, buffers->joint_indices.size(),
-        buffers->joint_weights.size());
+        mesh_i, FindSkinDeformer(*mesh) != nullptr,
+        buffers->joint_indices.size(), buffers->joint_weights.size());
 
       const bool is_skinned = !buffers->joint_indices.empty()
         && buffers->joint_weights.size() == buffers->joint_indices.size();

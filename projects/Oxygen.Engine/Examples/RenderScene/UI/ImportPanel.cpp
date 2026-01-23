@@ -656,7 +656,7 @@ void ImportPanel::StartImport(const std::filesystem::path& source_path)
   const auto job_id
     = import_service_->SubmitImport(request, on_complete, on_progress);
 
-  if (job_id == content::import::kInvalidJobId) {
+  if (!job_id) {
     import_state_.is_importing.store(false, std::memory_order_relaxed);
     import_state_.completion_ready.store(true, std::memory_order_relaxed);
     std::lock_guard<std::mutex> lock(import_state_.completion_mutex);
@@ -664,7 +664,7 @@ void ImportPanel::StartImport(const std::filesystem::path& source_path)
     return;
   }
 
-  import_state_.job_id = job_id;
+  import_state_.job_id = *job_id;
 }
 
 auto ImportPanel::EnumerateSourceFiles() const -> std::vector<SourceEntry>
@@ -939,7 +939,7 @@ auto ImportPanel::DrawImportOptionsUi() -> void
     if (import_options_.coordinate.unit_normalization
       == content::import::UnitNormalizationPolicy::kApplyCustomFactor) {
       ImGui::SliderFloat("Custom unit scale",
-        &import_options_.coordinate.custom_unit_scale, 0.01F, 10.0F);
+        &import_options_.coordinate.unit_scale, 0.01F, 10.0F);
     }
 
     ImGui::Separator();

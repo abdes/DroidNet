@@ -44,6 +44,12 @@ struct TextureTableTraits {
     return layout.TexturesTableRelPath();
   }
 
+  [[nodiscard]] static auto DataPath(const LooseCookedLayout& layout)
+    -> std::filesystem::path
+  {
+    return layout.TexturesDataRelPath();
+  }
+
   [[nodiscard]] static auto SignatureForDescriptor(const Descriptor& desc)
     -> std::string
   {
@@ -81,6 +87,12 @@ struct BufferTableTraits {
     return layout.BuffersTableRelPath();
   }
 
+  [[nodiscard]] static auto DataPath(const LooseCookedLayout& layout)
+    -> std::filesystem::path
+  {
+    return layout.BuffersDataRelPath();
+  }
+
   [[nodiscard]] static auto SignatureForDescriptor(const Descriptor& desc)
     -> std::string
   {
@@ -104,8 +116,8 @@ struct BufferTableTraits {
 
 template <typename Traits> class ResourceTableAggregator final {
 public:
-  using Descriptor = typename Traits::Descriptor;
-  using Reservation = typename Traits::Reservation;
+  using Descriptor = Traits::Descriptor;
+  using Reservation = Traits::Reservation;
 
   struct AcquireResult {
     uint32_t index = 0;
@@ -117,7 +129,10 @@ public:
     const LooseCookedLayout& layout, const std::filesystem::path& cooked_root)
     : file_writer_(file_writer)
     , table_path_(cooked_root / Traits::TablePath(layout))
+    , data_path_(cooked_root / Traits::DataPath(layout))
   {
+    data_file_size_.store(
+      GetExistingDataSize(data_path_), std::memory_order_release);
     LoadExistingTable();
   }
 
@@ -128,7 +143,7 @@ public:
   auto AcquireOrInsert(const std::string& signature, Builder&& builder)
     -> AcquireResult
   {
-    std::lock_guard lock(mutex_);
+    std::scoped_lock lock(mutex_);
     if (finalize_started_.load(std::memory_order_acquire)) {
       LOG_F(ERROR, "ResourceTableAggregator: AcquireOrInsert after finalize");
     }
@@ -161,7 +176,7 @@ public:
 
     std::vector<Descriptor> snapshot;
     {
-      std::lock_guard lock(mutex_);
+      std::scoped_lock lock(mutex_);
       snapshot = table_;
     }
 
@@ -172,10 +187,10 @@ public:
     const auto requests = requests_.load(std::memory_order_acquire);
     const auto new_entries_this_run
       = new_entries_this_run_.load(std::memory_order_acquire);
-    const auto deduped_total = (requests >= new_entries_this_run)
-      ? (requests - new_entries_this_run)
-      : 0;
-    const auto unique_entries = snapshot.size();
+    [[maybe_unused]] const auto deduped_total
+      = (requests >= new_entries_this_run) ? (requests - new_entries_this_run)
+                                           : 0;
+    [[maybe_unused]] const auto unique_entries = snapshot.size();
 
     DLOG_F(INFO,
       "ResourceTableAggregator: finalize stats requests={} new={} deduped={} "
@@ -214,6 +229,31 @@ public:
   }
 
   auto TablePath() const -> const std::filesystem::path& { return table_path_; }
+
+  auto ReserveDataRange(const uint64_t alignment, const uint64_t payload_size)
+    -> WriteReservation
+  {
+    uint64_t current_size = data_file_size_.load(std::memory_order_acquire);
+    uint64_t aligned_offset = 0;
+    uint64_t new_size = 0;
+
+    do {
+      aligned_offset = AlignUp(current_size, alignment);
+      new_size = aligned_offset + payload_size;
+    } while (!data_file_size_.compare_exchange_weak(
+      current_size, new_size, std::memory_order_acq_rel));
+
+    return {
+      .reservation_start = current_size,
+      .aligned_offset = aligned_offset,
+      .padding_size = aligned_offset - current_size,
+    };
+  }
+
+  auto DataFileSize() const noexcept -> uint64_t
+  {
+    return data_file_size_.load(std::memory_order_acquire);
+  }
 
 private:
   auto EnsureTableFileExists() -> void
@@ -278,7 +318,7 @@ private:
       return;
     }
 
-    std::lock_guard lock(mutex_);
+    std::scoped_lock lock(mutex_);
     table_ = std::move(loaded);
     index_by_signature_.clear();
     index_by_signature_.reserve(table_.size());
@@ -295,13 +335,37 @@ private:
 
   IAsyncFileWriter& file_writer_;
   std::filesystem::path table_path_;
+  std::filesystem::path data_path_;
   mutable std::mutex mutex_;
   std::vector<Descriptor> table_;
   std::unordered_map<std::string, uint32_t> index_by_signature_;
   std::atomic<uint32_t> next_index_ { 0 };
+  std::atomic<uint64_t> data_file_size_ { 0 };
   std::atomic<uint64_t> requests_ { 0 };
   std::atomic<uint64_t> new_entries_this_run_ { 0 };
   std::atomic<bool> finalize_started_ { false };
+
+  [[nodiscard]] static constexpr auto AlignUp(
+    const uint64_t value, const uint64_t alignment) noexcept -> uint64_t
+  {
+    if (alignment <= 1) {
+      return value;
+    }
+    const auto remainder = value % alignment;
+    return (remainder == 0) ? value : (value + (alignment - remainder));
+  }
+
+  [[nodiscard]] static auto GetExistingDataSize(
+    const std::filesystem::path& data_path) -> uint64_t
+  {
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(data_path, ec);
+    if (!ec) {
+      return size;
+    }
+
+    return 0;
+  }
 };
 
 using TextureTableAggregator = ResourceTableAggregator<TextureTableTraits>;

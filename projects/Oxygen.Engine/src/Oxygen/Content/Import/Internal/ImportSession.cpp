@@ -13,6 +13,7 @@
 #include <Oxygen/Content/Import/Internal/Emitters/BufferEmitter.h>
 #include <Oxygen/Content/Import/Internal/Emitters/TextureEmitter.h>
 #include <Oxygen/Content/Import/Internal/ImportSession.h>
+#include <Oxygen/Content/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Content/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 namespace oxygen::content::import {
@@ -39,13 +40,13 @@ namespace {
     }
   }
 
-  auto RegisterExternalTable(LooseCookedWriter& writer,
+  auto RegisterExternalTable(LooseCookedIndexRegistry& registry,
     const data::loose_cooked::v1::FileKind kind,
     const std::filesystem::path& cooked_root, std::string_view relpath) -> void
   {
     const auto path = cooked_root / std::filesystem::path(relpath);
     EnsureExternalFileExists(path);
-    writer.RegisterExternalFile(kind, relpath);
+    registry.RegisterExternalFile(cooked_root, kind, relpath);
   }
 
 } // namespace
@@ -54,30 +55,39 @@ ImportSession::ImportSession(const ImportRequest& request,
   observer_ptr<IAsyncFileReader> file_reader,
   observer_ptr<IAsyncFileWriter> file_writer,
   observer_ptr<co::ThreadPool> thread_pool,
-  observer_ptr<ResourceTableRegistry> table_registry)
+  observer_ptr<ResourceTableRegistry> table_registry,
+  observer_ptr<LooseCookedIndexRegistry> index_registry)
   : request_(request)
   , file_reader_(file_reader)
   , file_writer_(file_writer)
   , thread_pool_(thread_pool)
   , table_registry_(table_registry)
+  , index_registry_(index_registry)
   , cooked_root_(
       request.cooked_root.value_or(request.source_path.parent_path()))
   , cooked_writer_(cooked_root_)
 {
-  DLOG_F(INFO, "ImportSession created for: {}", request_.source_path.string());
-  LOG_F(INFO, "ImportSession options: with_content_hashing={}",
+  DLOG_F(INFO, "Session created for: {}", request_.source_path.string());
+  DLOG_F(INFO, "Session options: with_content_hashing={}",
     request_.options.with_content_hashing);
 
   DCHECK_F(file_writer_ != nullptr,
     "ImportSession requires a valid async file writer");
+  DCHECK_F(index_registry_ != nullptr,
+    "ImportSession requires a LooseCookedIndexRegistry");
+  DCHECK_F(table_registry_ != nullptr,
+    "ImportSession requires a ResourceTableRegistry");
 
   // Set source key if provided in request
   if (request_.source_key.has_value()) {
     cooked_writer_.SetSourceKey(request_.source_key);
   }
+
+  table_registry_->BeginSession(cooked_root_);
+  index_registry_->BeginSession(cooked_root_, request_.source_key);
 }
 
-ImportSession::~ImportSession() { DLOG_F(INFO, "ImportSession destroyed"); }
+ImportSession::~ImportSession() { DLOG_F(INFO, "Session destroyed"); }
 
 auto ImportSession::Request() const noexcept -> const ImportRequest&
 {
@@ -173,7 +183,7 @@ auto ImportSession::AddDiagnostic(ImportDiagnostic diagnostic) -> void
   const bool is_error = (diagnostic.severity == ImportSeverity::kError);
 
   {
-    std::lock_guard lock(diagnostics_mutex_);
+    std::scoped_lock lock(diagnostics_mutex_);
     diagnostics_.push_back(std::move(diagnostic));
     if (is_error) {
       has_errors_ = true;
@@ -197,28 +207,22 @@ auto ImportSession::AddDiagnostic(ImportDiagnostic diagnostic) -> void
 
 auto ImportSession::Diagnostics() const -> std::vector<ImportDiagnostic>
 {
-  std::lock_guard lock(diagnostics_mutex_);
+  std::scoped_lock lock(diagnostics_mutex_);
   return diagnostics_;
 }
 
 auto ImportSession::HasErrors() const noexcept -> bool
 {
-  std::lock_guard lock(diagnostics_mutex_);
+  std::scoped_lock lock(diagnostics_mutex_);
   return has_errors_;
 }
 
 auto ImportSession::Finalize() -> co::Co<ImportReport>
 {
-  DLOG_F(INFO, "ImportSession::Finalize() starting");
-
-  std::optional<co::Semaphore::LockGuard> finalize_guard;
-  if (table_registry_ != nullptr) {
-    auto& gate = table_registry_->FinalizeGateForRoot(cooked_root_);
-    finalize_guard.emplace(co_await gate.Lock());
-  }
+  DLOG_F(INFO, "Finalize starting");
 
   if (texture_emitter_.has_value()) {
-    const auto ok = co_await (**texture_emitter_).Finalize();
+    const auto ok = co_await (*texture_emitter_)->Finalize();
     if (!ok) {
       AddDiagnostic({
         .severity = ImportSeverity::kError,
@@ -230,7 +234,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
   }
 
   if (buffer_emitter_.has_value()) {
-    const auto ok = co_await (**buffer_emitter_).Finalize();
+    const auto ok = co_await (*buffer_emitter_)->Finalize();
     if (!ok) {
       AddDiagnostic({
         .severity = ImportSeverity::kError,
@@ -242,7 +246,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
   }
 
   if (asset_emitter_.has_value()) {
-    const auto ok = co_await (**asset_emitter_).Finalize();
+    const auto ok = co_await (*asset_emitter_)->Finalize();
     if (!ok) {
       AddDiagnostic({
         .severity = ImportSeverity::kError,
@@ -253,16 +257,25 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     }
   }
 
-  if (table_registry_) {
-    const auto ok = co_await table_registry_->FinalizeForRoot(cooked_root_);
-    if (!ok) {
-      AddDiagnostic({
-        .severity = ImportSeverity::kError,
-        .code = "import.resource_table_finalize_failed",
-        .message = "Resource table finalization failed",
-        .source_path = request_.source_path.string(),
-      });
-    }
+  const auto texture_count = texture_emitter_.has_value()
+    ? (*texture_emitter_)->GetStats().emitted_textures
+    : 0U;
+  const auto buffer_count
+    = buffer_emitter_.has_value() ? (*buffer_emitter_)->Count() : 0U;
+
+#ifndef NDEBUG
+  const auto asset_count
+    = asset_emitter_.has_value() ? (*asset_emitter_)->Records().size() : 0U;
+#endif // NDEBUG
+
+  const auto ok = co_await table_registry_->EndSession(cooked_root_);
+  if (!ok) {
+    AddDiagnostic({
+      .severity = ImportSeverity::kError,
+      .code = "import.resource_table_finalize_failed",
+      .message = "Resource table finalization failed",
+      .source_path = request_.source_path.string(),
+    });
   }
 
   // Wait for any pending async writes
@@ -295,48 +308,63 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     using data::loose_cooked::v1::FileKind;
 
     const auto& layout = request_.loose_cooked_layout;
-    if (texture_emitter_.has_value()
-      && (**texture_emitter_).GetStats().emitted_textures > 0) {
-      cooked_writer_.RegisterExternalFile(
-        FileKind::kTexturesData, layout.TexturesDataRelPath());
 
-      RegisterExternalTable(cooked_writer_, FileKind::kTexturesTable,
+    DLOG_F(INFO,
+      "Registering index entries: textures={} buffers={} assets={} "
+      "cooked_root='{}'",
+      texture_count, buffer_count, asset_count, cooked_root_.string());
+
+    if (texture_count > 0) {
+      index_registry_->RegisterExternalFile(
+        cooked_root_, FileKind::kTexturesData, layout.TexturesDataRelPath());
+
+      RegisterExternalTable(*index_registry_, FileKind::kTexturesTable,
         cooked_root_, layout.TexturesTableRelPath());
     }
 
-    if (buffer_emitter_.has_value() && (**buffer_emitter_).Count() > 0) {
-      cooked_writer_.RegisterExternalFile(
-        FileKind::kBuffersData, layout.BuffersDataRelPath());
+    if (buffer_count > 0) {
+      index_registry_->RegisterExternalFile(
+        cooked_root_, FileKind::kBuffersData, layout.BuffersDataRelPath());
 
-      RegisterExternalTable(cooked_writer_, FileKind::kBuffersTable,
+      RegisterExternalTable(*index_registry_, FileKind::kBuffersTable,
         cooked_root_, layout.BuffersTableRelPath());
     }
 
     if (asset_emitter_.has_value()) {
-      for (const auto& rec : (**asset_emitter_).Records()) {
-        cooked_writer_.RegisterExternalAssetDescriptor(rec.key, rec.asset_type,
-          rec.virtual_path, rec.descriptor_relpath, rec.descriptor_size,
-          rec.descriptor_sha256);
+      for (const auto& rec : (*asset_emitter_)->Records()) {
+        index_registry_->RegisterExternalAssetDescriptor(cooked_root_, rec.key,
+          rec.asset_type, rec.virtual_path, rec.descriptor_relpath,
+          rec.descriptor_size, rec.descriptor_sha256);
       }
     }
 
-    auto write_result = cooked_writer_.Finish();
-    report.source_key = write_result.source_key;
+    const auto write_result = index_registry_->EndSession(cooked_root_);
+    if (write_result.has_value()) {
+      LOG_F(INFO, "Index write completed: assets={} files={} cooked_root='{}'",
+        write_result->assets.size(), write_result->files.size(),
+        cooked_root_.string());
+      report.source_key = write_result->source_key;
+    } else {
+      DLOG_F(INFO,
+        "Index write deferred (other sessions active) for cooked_root='{}'",
+        cooked_root_.string());
+    }
 
-    // Count assets by type
-    for (const auto& asset : write_result.assets) {
-      switch (asset.asset_type) {
-      case data::AssetType::kMaterial:
-        ++report.materials_written;
-        break;
-      case data::AssetType::kGeometry:
-        ++report.geometry_written;
-        break;
-      case data::AssetType::kScene:
-        ++report.scenes_written;
-        break;
-      default:
-        break;
+    if (asset_emitter_.has_value()) {
+      for (const auto& rec : (*asset_emitter_)->Records()) {
+        switch (rec.asset_type) {
+        case data::AssetType::kMaterial:
+          ++report.materials_written;
+          break;
+        case data::AssetType::kGeometry:
+          ++report.geometry_written;
+          break;
+        case data::AssetType::kScene:
+          ++report.scenes_written;
+          break;
+        default:
+          break;
+        }
       }
     }
 
@@ -351,9 +379,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
 
     report.success = !had_errors;
 
-    DLOG_F(INFO,
-      "ImportSession::Finalize() complete: {} materials, {} "
-      "geometry, {} scenes",
+    DLOG_F(INFO, "Finalize complete: {} materials, {} geometry, {} scenes",
       report.materials_written, report.geometry_written, report.scenes_written);
   } catch (const std::exception& ex) {
     report.success = false;

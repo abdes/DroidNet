@@ -148,7 +148,7 @@ namespace {
     const auto parse_result
       = cgltf_parse_file(&options, path.string().c_str(), &data);
     if (parse_result != cgltf_result_success) {
-      DLOG_F(ERROR, "glTF parse failed: path='{}' result='{}'", path.string(),
+      LOG_F(ERROR, "glTF parse failed: path='{}' result='{}'", path.string(),
         ResultToMessage(parse_result));
       diagnostics.push_back(
         MakeParseDiagnostic(input.source_id_prefix, parse_result));
@@ -158,7 +158,7 @@ namespace {
     const auto load_result
       = cgltf_load_buffers(&options, data, path.string().c_str());
     if (load_result != cgltf_result_success) {
-      DLOG_F(ERROR, "glTF buffer load failed: path='{}' result='{}'",
+      LOG_F(ERROR, "glTF buffer load failed: path='{}' result='{}'",
         path.string(), ResultToMessage(load_result));
       diagnostics.push_back(
         MakeParseDiagnostic(input.source_id_prefix, load_result));
@@ -182,10 +182,10 @@ namespace {
 
     cgltf_options options {};
     cgltf_data* data = nullptr;
-    const auto parse_result = cgltf_parse(
-      &options, bytes.data(), static_cast<cgltf_size>(bytes.size()), &data);
+    const auto parse_result
+      = cgltf_parse(&options, bytes.data(), bytes.size(), &data);
     if (parse_result != cgltf_result_success) {
-      DLOG_F(ERROR, "glTF parse failed (memory): result='{}'",
+      LOG_F(ERROR, "glTF parse failed (memory): result='{}'",
         ResultToMessage(parse_result));
       diagnostics.push_back(
         MakeParseDiagnostic(input.source_id_prefix, parse_result));
@@ -194,7 +194,7 @@ namespace {
 
     const auto load_result = cgltf_load_buffers(&options, data, "");
     if (load_result != cgltf_result_success) {
-      DLOG_F(ERROR, "glTF buffer load failed (memory): result='{}'",
+      LOG_F(ERROR, "glTF buffer load failed (memory): result='{}'",
         ResultToMessage(load_result));
       diagnostics.push_back(
         MakeParseDiagnostic(input.source_id_prefix, load_result));
@@ -217,8 +217,8 @@ namespace {
       cgltf_float v[4] = {};
       cgltf_accessor_read_float(accessor, i, v, 4);
       out[i] = glm::vec2 {
-        static_cast<float>(v[0]),
-        static_cast<float>(v[1]),
+        (v[0]),
+        (v[1]),
       };
     }
     return out;
@@ -236,9 +236,9 @@ namespace {
       cgltf_float v[4] = {};
       cgltf_accessor_read_float(accessor, i, v, 4);
       out[i] = glm::vec3 {
-        static_cast<float>(v[0]),
-        static_cast<float>(v[1]),
-        static_cast<float>(v[2]),
+        (v[0]),
+        (v[1]),
+        (v[2]),
       };
     }
     return out;
@@ -256,10 +256,10 @@ namespace {
       cgltf_float v[4] = {};
       cgltf_accessor_read_float(accessor, i, v, 4);
       out[i] = glm::vec4 {
-        static_cast<float>(v[0]),
-        static_cast<float>(v[1]),
-        static_cast<float>(v[2]),
-        static_cast<float>(v[3]),
+        (v[0]),
+        (v[1]),
+        (v[2]),
+        (v[3]),
       };
     }
     return out;
@@ -330,12 +330,8 @@ namespace {
     }
 
     return AccessorBounds {
-      .min = glm::vec3(static_cast<float>(accessor->min[0]),
-        static_cast<float>(accessor->min[1]),
-        static_cast<float>(accessor->min[2])),
-      .max = glm::vec3(static_cast<float>(accessor->max[0]),
-        static_cast<float>(accessor->max[1]),
-        static_cast<float>(accessor->max[2])),
+      .min = glm::vec3(accessor->min[0], accessor->min[1], accessor->min[2]),
+      .max = glm::vec3(accessor->max[0], accessor->max[1], accessor->max[2]),
     };
   }
 
@@ -398,7 +394,7 @@ namespace {
     glm::mat4 result(1.0F);
     for (int c = 0; c < 4; ++c) {
       for (int r = 0; r < 4; ++r) {
-        result[c][r] = static_cast<float>(world_matrix[c * 4 + r]);
+        result[c][r] = world_matrix[c * 4 + r];
       }
     }
     return result;
@@ -737,7 +733,7 @@ namespace {
       const auto* buffer = image.buffer_view->buffer;
       const auto* raw = static_cast<const std::byte*>(buffer->data)
         + image.buffer_view->offset;
-      const auto size = static_cast<size_t>(image.buffer_view->size);
+      const auto size = image.buffer_view->size;
       return ResolvedTextureSource {
         .bytes = TexturePipeline::SourceBytes {
           .bytes = std::span(raw, size),
@@ -842,7 +838,7 @@ namespace {
     case UnitNormalizationPolicy::kNormalizeToMeters:
       return 1.0F;
     case UnitNormalizationPolicy::kApplyCustomFactor:
-      return policy.custom_unit_scale;
+      return policy.unit_scale;
     }
     return 1.0F;
   }
@@ -1589,7 +1585,7 @@ namespace {
           max_slot = (std::max)(max_slot, range.material_slot);
         }
 
-        std::vector<uint8_t> used(max_slot + 1, static_cast<uint8_t>(0));
+        std::vector<uint8_t> used(max_slot + 1, 0);
         for (const auto& range : owner->ranges) {
           used[range.material_slot] = static_cast<uint8_t>(1);
         }
@@ -2121,7 +2117,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     glm::mat4 local_matrix(1.0F);
     for (int c = 0; c < 4; ++c) {
       for (int r = 0; r < 4; ++r) {
-        local_matrix[c][r] = static_cast<float>(local_matrix_data[c * 4 + r]);
+        local_matrix[c][r] = local_matrix_data[c * 4 + r];
       }
     }
 
@@ -2343,11 +2339,11 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       const auto& cam = *gltf_node->camera;
       if (cam.type == cgltf_camera_type_perspective) {
         const auto& perspective = cam.data.perspective;
-        const float fov_y = static_cast<float>(perspective.yfov);
+        const float fov_y = perspective.yfov;
         const float aspect_ratio = perspective.has_aspect_ratio
           ? static_cast<float>(perspective.aspect_ratio)
           : 1.0F;
-        const float near_plane = static_cast<float>(perspective.znear);
+        const float near_plane = perspective.znear;
         const float far_plane = perspective.has_zfar
           ? static_cast<float>(perspective.zfar)
           : near_plane + 1000.0F;
@@ -2364,8 +2360,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         const auto& ortho = cam.data.orthographic;
         const float half_w = static_cast<float>(ortho.xmag) * 0.5F;
         const float half_h = static_cast<float>(ortho.ymag) * 0.5F;
-        const float near_plane = static_cast<float>(ortho.znear);
-        const float far_plane = static_cast<float>(ortho.zfar);
+        const float near_plane = ortho.znear;
+        const float far_plane = ortho.zfar;
 
         build.orthographic_cameras.push_back(OrthographicCameraRecord {
           .node_index = i,

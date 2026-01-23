@@ -11,6 +11,7 @@
 #include <stop_token>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/Import/Naming.h>
@@ -241,7 +242,7 @@ struct CoordinateConversionPolicy final {
    @note This factor is applied to linear distances only (see
     `UnitNormalizationPolicy` for the exact requirements).
   */
-  float custom_unit_scale = 1.0f;
+  float unit_scale = 1.0f;
 
   //! Importers must always output Oxygen world coordinates.
 };
@@ -362,6 +363,9 @@ struct ImportOptions final {
     //! Mip filter kernel used when generating mips.
     MipFilter mip_filter = MipFilter::kKaiser;
 
+    //! Color space for mip filtering.
+    ColorSpace mip_filter_space = ColorSpace::kLinear;
+
     //! Output format for color textures (e.g., base color, emissive).
     Format color_output_format = Format::kBC7UNormSRGB;
 
@@ -376,6 +380,21 @@ struct ImportOptions final {
 
     //! Use placeholder payload when texture cooking fails.
     bool placeholder_on_failure = false;
+
+    //! HDR content handling policy.
+    HdrHandling hdr_handling = HdrHandling::kTonemapAuto;
+
+    //! Exposure adjustment in EV (applied before tonemapping).
+    float exposure_ev = 0.0f;
+
+    //! Bake HDR content to LDR via tonemap + exposure.
+    bool bake_hdr_to_ldr = false;
+
+    //! Flip the green (Y) channel for normal maps.
+    bool flip_normal_green = false;
+
+    //! Renormalize normals in each mip level after downsampling.
+    bool renormalize_normals_in_mips = true;
 
     //! Import as a cubemap using cube-specific workflows.
     /*!
@@ -405,6 +424,9 @@ struct ImportOptions final {
   };
 
   TextureTuning texture_tuning = {};
+
+  //! Optional overrides for specific textures by name.
+  std::unordered_map<std::string, TextureTuning> texture_overrides;
 };
 
 } // namespace oxygen::content::import

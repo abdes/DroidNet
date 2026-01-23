@@ -9,8 +9,11 @@
 #include <chrono>
 #include <memory>
 
+#include <Oxygen/Composition/Object.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Import/Internal/ImportJob.h>
+#include <Oxygen/Content/Import/Internal/ImportJobParams.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import::test {
 
@@ -35,14 +38,7 @@ public:
   };
 
   //! Construct a test job.
-  TestImportJob(ImportJobId job_id, ImportRequest request,
-    ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
-    std::shared_ptr<co::Event> cancel_event,
-    oxygen::observer_ptr<IAsyncFileReader> file_reader,
-    oxygen::observer_ptr<IAsyncFileWriter> file_writer,
-    oxygen::observer_ptr<co::ThreadPool> thread_pool,
-    oxygen::observer_ptr<ResourceTableRegistry> table_registry,
-    ImportConcurrency concurrency, Config config = {});
+  TestImportJob(detail::ImportJobParams params, Config config = {});
 
 protected:
   [[nodiscard]] auto ExecuteAsync() -> co::Co<ImportReport> override;

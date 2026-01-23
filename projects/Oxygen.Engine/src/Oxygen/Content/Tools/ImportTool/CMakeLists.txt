@@ -8,10 +8,7 @@
 # Meta information about the this module
 # ------------------------------------------------------------------------------
 
-set(
-  description
-  "A CLI tool for invoking async import jobs."
-)
+set(description "A CLI tool for invoking async import jobs.")
 asap_module_declare(
   MODULE_NAME "Oxygen.Content.ImportTool"
   DESCRIPTION description
@@ -26,6 +23,7 @@ asap_push_module("${META_MODULE_NAME}")
 find_package(nlohmann_json REQUIRED)
 find_package(nlohmann_json_schema_validator REQUIRED)
 find_package(ftxui REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
 # ------------------------------------------------------------------------------
 # Build instructions
@@ -44,30 +42,17 @@ add_executable(
   "GltfCommand.cpp"
   "GltfCommand.h"
   "ImportCommand.h"
-  "ImportManifest.cpp"
-  "ImportManifest.h"
-  "ImportManifest_schema.h"
   "ImportRunner.cpp"
   "ImportRunner.h"
-  "SceneImportRequestBuilder.cpp"
-  "SceneImportRequestBuilder.h"
-  "SceneImportSettings.h"
   "TextureCommand.cpp"
   "TextureCommand.h"
-  "TextureImportRequestBuilder.cpp"
-  "TextureImportRequestBuilder.h"
-  "TextureImportSettings.h"
   "main.cpp"
   "UI/BatchViewModel.h"
   "UI/Screens/BatchImportScreen.h"
   "UI/Screens/BatchImportScreen.cpp"
 )
 
-add_custom_target(
-  ${META_MODULE_NAME}
-  DEPENDS
-    ${META_MODULE_TARGET}
-)
+add_custom_target(${META_MODULE_NAME} DEPENDS ${META_MODULE_TARGET})
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 set_target_properties(
   ${META_MODULE_TARGET}
@@ -94,7 +79,6 @@ target_link_libraries(
     ftxui::dom
     ftxui::component
     nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
 )
 
 # ------------------------------------------------------------------------------

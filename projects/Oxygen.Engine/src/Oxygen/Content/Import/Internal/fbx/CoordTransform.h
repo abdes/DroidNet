@@ -62,14 +62,10 @@ namespace oxygen::content::import::coord {
 [[nodiscard]] inline auto ToGlmMat4(const ufbx_matrix& m) noexcept -> glm::mat4
 {
   glm::mat4 out(1.0F);
-  out[0] = glm::vec4(static_cast<float>(m.cols[0].x),
-    static_cast<float>(m.cols[0].y), static_cast<float>(m.cols[0].z), 0.0F);
-  out[1] = glm::vec4(static_cast<float>(m.cols[1].x),
-    static_cast<float>(m.cols[1].y), static_cast<float>(m.cols[1].z), 0.0F);
-  out[2] = glm::vec4(static_cast<float>(m.cols[2].x),
-    static_cast<float>(m.cols[2].y), static_cast<float>(m.cols[2].z), 0.0F);
-  out[3] = glm::vec4(static_cast<float>(m.cols[3].x),
-    static_cast<float>(m.cols[3].y), static_cast<float>(m.cols[3].z), 1.0F);
+  out[0] = glm::vec4(m.cols[0].x, m.cols[0].y, m.cols[0].z, 0.0F);
+  out[1] = glm::vec4(m.cols[1].x, m.cols[1].y, m.cols[1].z, 0.0F);
+  out[2] = glm::vec4(m.cols[2].x, m.cols[2].y, m.cols[2].z, 0.0F);
+  out[3] = glm::vec4(m.cols[3].x, m.cols[3].y, m.cols[3].z, 1.0F);
   return out;
 }
 
@@ -87,10 +83,10 @@ namespace oxygen::content::import::coord {
   case UnitNormalizationPolicy::kPreserveSource:
     return std::nullopt;
   case UnitNormalizationPolicy::kApplyCustomFactor: {
-    if (!(policy.custom_unit_scale > 0.0F)) {
+    if (!(policy.unit_scale > 0.0F)) {
       return std::nullopt;
     }
-    return static_cast<ufbx_real>(1.0F / policy.custom_unit_scale);
+    return 1.0F / policy.unit_scale;
   }
   }
 

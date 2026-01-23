@@ -72,20 +72,19 @@ namespace {
   {
     std::error_code ec;
     if (!std::filesystem::exists(path, ec)) {
-      LOG_F(WARNING, "TextureImporter: file not found: {}", path.string());
+      LOG_F(WARNING, "File not found: {}", path.string());
       return Err(TextureImportError::kFileNotFound);
     }
 
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
-      LOG_F(WARNING, "TextureImporter: failed to open file: {}", path.string());
+      LOG_F(WARNING, "Failed to open file: {}", path.string());
       return Err(TextureImportError::kFileReadFailed);
     }
 
     const auto size = file.tellg();
     if (size <= 0) {
-      LOG_F(WARNING, "TextureImporter: file is empty or unreadable: {}",
-        path.string());
+      LOG_F(WARNING, "File is empty or unreadable: {}", path.string());
       return Err(TextureImportError::kFileReadFailed);
     }
 
@@ -94,8 +93,7 @@ namespace {
     std::vector<std::byte> buffer(static_cast<size_t>(size));
     if (!file.read(reinterpret_cast<char*>(buffer.data()),
           static_cast<std::streamsize>(size))) {
-      LOG_F(WARNING, "TextureImporter: failed to read file contents: {}",
-        path.string());
+      LOG_F(WARNING, "Failed to read file contents: {}", path.string());
       return Err(TextureImportError::kFileReadFailed);
     }
 
@@ -109,21 +107,19 @@ namespace {
     std::string_view source_id) noexcept -> bool
   {
     if (data.empty()) {
-      LOG_F(WARNING, "TextureImporter: empty input data for source: {}",
-        std::string(source_id));
+      LOG_F(WARNING, "Empty input data for source: {}", std::string(source_id));
       return false;
     }
     return true;
   }
 
   //! Log a warning when preset was detected vs explicitly provided.
-  void LogPresetSelection(const std::filesystem::path& path,
+  void LogPresetSelection([[maybe_unused]] const std::filesystem::path& path,
     TexturePreset detected, TexturePreset applied)
   {
     if (detected != applied) {
       DLOG_F(INFO,
-        "TextureImporter: using explicit preset {} for '{}' "
-        "(auto-detected would be {})",
+        "Using explicit preset {} for '{}' (auto-detected would be {})",
         to_string(applied), path.filename().string(), to_string(detected));
     }
   }
@@ -136,16 +132,16 @@ namespace {
       && desc.output_format != Format::kBC7UNorm
       && desc.output_format != Format::kBC7UNormSRGB) {
       LOG_F(WARNING,
-        "TextureImporter: bc7_quality is set to {} but output_format is not "
-        "BC7 for source '{}'. BC7 compression will not be applied.",
+        "bc7_quality is set to {} but output_format is not BC7 for source "
+        "'{}'. BC7 compression will not be applied.",
         to_string(desc.bc7_quality), desc.source_id);
     }
 
     // Warn if flip_normal_green is set but intent is not normal map
     if (desc.flip_normal_green && desc.intent != TextureIntent::kNormalTS) {
       LOG_F(WARNING,
-        "TextureImporter: flip_normal_green is true but intent is {} "
-        "(not kNormalTS) for source '{}'. Setting will be ignored.",
+        "flip_normal_green is true but intent is {} (not kNormalTS) for "
+        "source '{}'. Setting will be ignored.",
         to_string(desc.intent), desc.source_id);
     }
 
@@ -153,8 +149,8 @@ namespace {
     if (desc.renormalize_normals_in_mips
       && desc.intent != TextureIntent::kNormalTS) {
       DLOG_F(INFO,
-        "TextureImporter: renormalize_normals_in_mips is true but intent is {} "
-        "for source '{}'. Setting may not have effect.",
+        "renormalize_normals_in_mips is true but intent is {} for source "
+        "'{}'. Setting may not have effect.",
         to_string(desc.intent), desc.source_id);
     }
 
@@ -166,8 +162,8 @@ namespace {
         || desc.output_format == Format::kR32Float);
       if (!is_float_output) {
         DLOG_F(INFO,
-          "TextureImporter: hdr_handling is kKeepFloat but output_format is {} "
-          "for source '{}'. Output format may be overridden.",
+          "hdr_handling is kKeepFloat but output_format is {} for source "
+          "'{}'. Output format may be overridden.",
           to_string(desc.output_format), desc.source_id);
       }
     }
@@ -255,8 +251,7 @@ namespace {
     }
 
     if (bytes->empty()) {
-      LOG_F(
-        WARNING, "TextureImporter: file contains no data: {}", path.string());
+      LOG_F(WARNING, "File contains no data: {}", path.string());
       return Err(TextureImportError::kCorruptedData);
     }
 
@@ -268,8 +263,8 @@ namespace {
 
     auto result = DecodeToScratchImage(*bytes, options);
     if (!result) {
-      LOG_F(WARNING, "TextureImporter: failed to decode image: {} (error: {})",
-        path.string(), to_string(result.error()));
+      LOG_F(WARNING, "Failed to decode image: {} (error: {})", path.string(),
+        to_string(result.error()));
     }
     return result;
   }
@@ -309,8 +304,7 @@ auto LoadTexture(std::span<const std::byte> data, std::string_view source_id)
 
   auto result = DecodeToScratchImage(data, options);
   if (!result) {
-    LOG_F(WARNING,
-      "TextureImporter: failed to decode image from memory: {} (error: {})",
+    LOG_F(WARNING, "Failed to decode image from memory: {} (error: {})",
       std::string(source_id), to_string(result.error()));
   }
   return result;
@@ -337,8 +331,7 @@ auto LoadTexture(std::span<const std::byte> data, const TextureImportDesc& desc)
 
   auto result = DecodeToScratchImage(data, options);
   if (!result) {
-    LOG_F(WARNING,
-      "TextureImporter: failed to decode image from memory: {} (error: {})",
+    LOG_F(WARNING, "Failed to decode image from memory: {} (error: {})",
       desc.source_id, to_string(result.error()));
   }
   return result;
@@ -348,7 +341,7 @@ auto LoadTextures(std::span<const std::filesystem::path> paths)
   -> Result<std::vector<ScratchImage>, TextureImportError>
 {
   if (paths.empty()) {
-    LOG_F(WARNING, "TextureImporter: LoadTextures called with empty paths");
+    LOG_F(WARNING, "LoadTextures called with empty paths");
     return Err(TextureImportError::kFileNotFound);
   }
 
@@ -359,8 +352,8 @@ auto LoadTextures(std::span<const std::filesystem::path> paths)
     const auto& path = paths[i];
     auto result = LoadTexture(path);
     if (!result) {
-      LOG_F(WARNING, "TextureImporter: failed to load image {} of {}: {}",
-        i + 1, paths.size(), path.string());
+      LOG_F(WARNING, "Failed to load image {} of {}: {}", i + 1, paths.size(),
+        path.string());
       return Err(result.error());
     }
     images.push_back(std::move(*result));
@@ -379,8 +372,7 @@ auto CookScratchImage(ScratchImage&& image, TexturePreset preset,
 {
   // Validate input image
   if (!image.IsValid()) {
-    LOG_F(
-      WARNING, "TextureImporter: CookScratchImage called with invalid image");
+    LOG_F(WARNING, "CookScratchImage called with invalid image");
     return Err(TextureImportError::kDecodeFailed);
   }
 
@@ -399,7 +391,7 @@ auto CookScratchImage(ScratchImage&& image, TexturePreset preset,
   // Cook the texture
   auto cooked = CookTexture(std::move(image), desc, policy);
   if (!cooked) {
-    LOG_F(WARNING, "TextureImporter: cooking failed for preset {} (error: {})",
+    LOG_F(WARNING, "Cooking failed for preset {} (error: {})",
       to_string(preset), to_string(cooked.error()));
     return Err(cooked.error());
   }
@@ -419,8 +411,7 @@ auto CookScratchImage(ScratchImage&& image, const TextureImportDesc& desc,
 {
   // Validate input image
   if (!image.IsValid()) {
-    LOG_F(WARNING,
-      "TextureImporter: CookScratchImage called with invalid image for '{}'",
+    LOG_F(WARNING, "CookScratchImage called with invalid image for '{}'",
       desc.source_id);
     return Err(TextureImportError::kDecodeFailed);
   }
@@ -445,16 +436,16 @@ auto CookScratchImage(ScratchImage&& image, const TextureImportDesc& desc,
 
   // Validate the resolved descriptor
   if (auto error = resolved_desc.Validate()) {
-    LOG_F(WARNING, "TextureImporter: descriptor validation failed for '{}': {}",
-      desc.source_id, to_string(*error));
+    LOG_F(WARNING, "Descriptor validation failed for '{}': {}", desc.source_id,
+      to_string(*error));
     return Err(*error);
   }
 
   // Cook the texture
   auto cooked = CookTexture(std::move(image), resolved_desc, policy);
   if (!cooked) {
-    LOG_F(WARNING, "TextureImporter: cooking failed for '{}' (error: {})",
-      desc.source_id, to_string(cooked.error()));
+    LOG_F(WARNING, "Cooking failed for '{}' (error: {})", desc.source_id,
+      to_string(cooked.error()));
     return Err(cooked.error());
   }
 
@@ -479,8 +470,8 @@ auto ImportTexture(
 
   // Auto-detect preset from filename
   const TexturePreset preset = DetectPresetFromFilename(path);
-  DLOG_F(INFO, "TextureImporter: auto-detected preset {} for '{}'",
-    to_string(preset), path.filename().string());
+  DLOG_F(INFO, "Auto-detected preset {} for '{}'", to_string(preset),
+    path.filename().string());
   return ImportTexture(path, preset, policy);
 }
 
@@ -507,8 +498,8 @@ auto ImportTexture(const std::filesystem::path& path, TexturePreset preset,
   // Cook the texture
   auto cooked = CookTexture(*bytes, desc, policy);
   if (!cooked) {
-    LOG_F(WARNING, "TextureImporter: import failed for '{}' (error: {})",
-      path.string(), to_string(cooked.error()));
+    LOG_F(WARNING, "Import failed for '{}' (error: {})", path.string(),
+      to_string(cooked.error()));
     return Err(cooked.error());
   }
 
@@ -545,8 +536,8 @@ auto ImportTexture(const std::filesystem::path& path,
   // Cook the texture
   auto cooked = CookTexture(*bytes, resolved_desc, policy);
   if (!cooked) {
-    LOG_F(WARNING, "TextureImporter: import failed for '{}' (error: {})",
-      path.string(), to_string(cooked.error()));
+    LOG_F(WARNING, "Import failed for '{}' (error: {})", path.string(),
+      to_string(cooked.error()));
     return Err(cooked.error());
   }
 
@@ -574,8 +565,8 @@ auto ImportTexture(std::span<const std::byte> data, std::string_view source_id,
   // Cook the texture
   auto cooked = CookTexture(data, desc, policy);
   if (!cooked) {
-    LOG_F(WARNING, "TextureImporter: import failed for '{}' (error: {})",
-      std::string(source_id), to_string(cooked.error()));
+    LOG_F(WARNING, "Import failed for '{}' (error: {})", std::string(source_id),
+      to_string(cooked.error()));
     return Err(cooked.error());
   }
 
@@ -602,8 +593,8 @@ auto ImportTexture(std::span<const std::byte> data,
   // Cook the texture
   auto cooked = CookTexture(data, desc, policy);
   if (!cooked) {
-    LOG_F(WARNING, "TextureImporter: import failed for '{}' (error: {})",
-      desc.source_id, to_string(cooked.error()));
+    LOG_F(WARNING, "Import failed for '{}' (error: {})", desc.source_id,
+      to_string(cooked.error()));
     return Err(cooked.error());
   }
 
@@ -636,14 +627,14 @@ namespace {
       const auto& meta = faces[i].Meta();
       if (meta.width != first_meta.width || meta.height != first_meta.height) {
         LOG_F(WARNING,
-          "TextureImporter: cube face {} has different dimensions "
+          "Cube face {} has different dimensions "
           "({}x{}) vs face 0 ({}x{})",
           i, meta.width, meta.height, first_meta.width, first_meta.height);
         return Err(TextureImportError::kDimensionMismatch);
       }
       if (meta.format != first_meta.format) {
         LOG_F(WARNING,
-          "TextureImporter: cube face {} has different format ({}) vs face 0 "
+          "Cube face {} has different format ({}) vs face 0 "
           "({})",
           i, to_string(meta.format), to_string(first_meta.format));
         return Err(TextureImportError::kDimensionMismatch);
@@ -654,7 +645,7 @@ namespace {
     auto cube = AssembleCubeFromFaces(
       std::span<const ScratchImage, kCubeFaceCount>(faces));
     if (!cube) {
-      LOG_F(WARNING, "TextureImporter: failed to assemble cube map");
+      LOG_F(WARNING, "Failed to assemble cube map");
       return Err(cube.error());
     }
 
@@ -674,7 +665,7 @@ namespace {
     // Cook the texture
     auto cooked = CookTexture(std::move(*cube), desc, policy);
     if (!cooked) {
-      LOG_F(WARNING, "TextureImporter: cube map cooking failed (error: {})",
+      LOG_F(WARNING, "Cube map cooking failed (error: {})",
         to_string(cooked.error()));
       return Err(cooked.error());
     }
@@ -700,8 +691,8 @@ auto ImportCubeMap(
   for (size_t i = 0; i < kCubeFaceCount; ++i) {
     auto result = LoadTexture(face_paths[i]);
     if (!result) {
-      LOG_F(WARNING, "TextureImporter: failed to load cube face {}: {}", i,
-        face_paths[i].string());
+      LOG_F(
+        WARNING, "Failed to load cube face {}: {}", i, face_paths[i].string());
       return Err(result.error());
     }
     faces[i] = std::move(*result);
@@ -728,8 +719,8 @@ auto ImportCubeMap(
   for (size_t i = 0; i < kCubeFaceCount; ++i) {
     auto result = LoadTexture(face_paths[i]);
     if (!result) {
-      LOG_F(WARNING, "TextureImporter: failed to load cube face {}: {}", i,
-        face_paths[i].string());
+      LOG_F(
+        WARNING, "Failed to load cube face {}: {}", i, face_paths[i].string());
       return Err(result.error());
     }
     faces[i] = std::move(*result);
@@ -748,8 +739,7 @@ auto ImportCubeMap(const std::filesystem::path& base_path, TexturePreset preset,
   // Discover face paths
   auto discovered = DiscoverCubeFacePaths(base_path);
   if (!discovered) {
-    LOG_F(WARNING,
-      "TextureImporter: could not discover cube face files for base path: {}",
+    LOG_F(WARNING, "Could not discover cube face files for base path: {}",
       base_path.string());
     return Err(TextureImportError::kFileNotFound);
   }
@@ -857,8 +847,7 @@ auto ImportCubeMapFromLayoutImage(const std::filesystem::path& path,
   // Load the layout image using descriptor (respects flip_y_on_decode)
   auto layout_image = LoadTexture(path, desc);
   if (!layout_image) {
-    LOG_F(WARNING, "TextureImporter: failed to load layout image: {}",
-      path.string());
+    LOG_F(WARNING, "Failed to load layout image: {}", path.string());
     return Err(layout_image.error());
   }
 
@@ -866,21 +855,20 @@ auto ImportCubeMapFromLayoutImage(const std::filesystem::path& path,
   const auto detection = DetectCubeMapLayout(*layout_image);
   if (!detection.has_value()) {
     LOG_F(WARNING,
-      "TextureImporter: cannot detect cube map layout from image dimensions "
+      "Cannot detect cube map layout from image dimensions "
       "({}x{}): {}",
       layout_image->Meta().width, layout_image->Meta().height, path.string());
     return Err(TextureImportError::kDimensionMismatch);
   }
 
-  LOG_F(INFO, "TextureImporter: detected {} layout with {}px faces: {}",
+  DLOG_F(INFO, "Detected {} layout with {}px faces: {}",
     to_string(detection->layout), detection->face_size, path.string());
 
   // Extract faces from layout
   auto cube = ExtractCubeFacesFromLayout(*layout_image, detection->layout);
   if (!cube) {
-    LOG_F(WARNING,
-      "TextureImporter: failed to extract cube faces from layout: {}",
-      path.string());
+    LOG_F(
+      WARNING, "Failed to extract cube faces from layout: {}", path.string());
     return Err(cube.error());
   }
 
@@ -897,7 +885,7 @@ auto ImportCubeMapFromLayoutImage(const std::filesystem::path& path,
   // Cook the texture
   auto cooked = CookTexture(std::move(*cube), resolved_desc, policy);
   if (!cooked) {
-    LOG_F(WARNING, "TextureImporter: cube map cooking failed (error: {}): {}",
+    LOG_F(WARNING, "Cube map cooking failed (error: {}): {}",
       to_string(cooked.error()), path.string());
     return Err(cooked.error());
   }
@@ -917,16 +905,14 @@ auto ImportCubeMapFromLayoutImage(const std::filesystem::path& path,
   -> Result<TextureImportResult, TextureImportError>
 {
   if (layout == CubeMapImageLayout::kUnknown) {
-    LOG_F(WARNING, "TextureImporter: explicit layout cannot be kUnknown: {}",
-      path.string());
+    LOG_F(WARNING, "Explicit layout cannot be kUnknown: {}", path.string());
     return Err(TextureImportError::kInvalidDimensions);
   }
 
   // Load the layout image
   auto layout_image = LoadTexture(path);
   if (!layout_image) {
-    LOG_F(WARNING, "TextureImporter: failed to load layout image: {}",
-      path.string());
+    LOG_F(WARNING, "Failed to load layout image: {}", path.string());
     return Err(layout_image.error());
   }
 
@@ -934,7 +920,7 @@ auto ImportCubeMapFromLayoutImage(const std::filesystem::path& path,
   const auto detection = DetectCubeMapLayout(*layout_image);
   if (!detection.has_value()) {
     LOG_F(WARNING,
-      "TextureImporter: image dimensions ({}x{}) don't match any cube map "
+      "Image dimensions ({}x{}) don't match any cube map "
       "layout: {}",
       layout_image->Meta().width, layout_image->Meta().height, path.string());
     return Err(TextureImportError::kDimensionMismatch);
@@ -942,7 +928,7 @@ auto ImportCubeMapFromLayoutImage(const std::filesystem::path& path,
 
   if (layout != CubeMapImageLayout::kAuto && detection->layout != layout) {
     LOG_F(WARNING,
-      "TextureImporter: explicit layout {} doesn't match detected layout {} "
+      "Explicit layout {} doesn't match detected layout {} "
       "for image ({}x{}): {}",
       to_string(layout), to_string(detection->layout),
       layout_image->Meta().width, layout_image->Meta().height, path.string());
@@ -951,15 +937,14 @@ auto ImportCubeMapFromLayoutImage(const std::filesystem::path& path,
 
   const auto resolved_layout
     = layout == CubeMapImageLayout::kAuto ? detection->layout : layout;
-  LOG_F(INFO, "TextureImporter: using {} layout with {}px faces: {}",
+  DLOG_F(INFO, "Using {} layout with {}px faces: {}",
     to_string(resolved_layout), detection->face_size, path.string());
 
   // Extract faces from layout
   auto cube = ExtractCubeFacesFromLayout(*layout_image, resolved_layout);
   if (!cube) {
-    LOG_F(WARNING,
-      "TextureImporter: failed to extract cube faces from layout: {}",
-      path.string());
+    LOG_F(
+      WARNING, "Failed to extract cube faces from layout: {}", path.string());
     return Err(cube.error());
   }
 
@@ -974,7 +959,7 @@ auto ImportCubeMapFromLayoutImage(const std::filesystem::path& path,
   // Cook the texture
   auto cooked = CookTexture(std::move(*cube), desc, policy);
   if (!cooked) {
-    LOG_F(WARNING, "TextureImporter: cube map cooking failed (error: {}): {}",
+    LOG_F(WARNING, "Cube map cooking failed (error: {}): {}",
       to_string(cooked.error()), path.string());
     return Err(cooked.error());
   }
@@ -995,8 +980,7 @@ auto ImportCubeMapFromLayoutImage(const std::filesystem::path& path,
   // Load the layout image
   auto layout_image = LoadTexture(path);
   if (!layout_image) {
-    LOG_F(WARNING, "TextureImporter: failed to load layout image: {}",
-      path.string());
+    LOG_F(WARNING, "Failed to load layout image: {}", path.string());
     return Err(layout_image.error());
   }
 
@@ -1004,21 +988,20 @@ auto ImportCubeMapFromLayoutImage(const std::filesystem::path& path,
   const auto detection = DetectCubeMapLayout(*layout_image);
   if (!detection.has_value()) {
     LOG_F(WARNING,
-      "TextureImporter: cannot detect cube map layout from image dimensions "
+      "Cannot detect cube map layout from image dimensions "
       "({}x{}): {}",
       layout_image->Meta().width, layout_image->Meta().height, path.string());
     return Err(TextureImportError::kDimensionMismatch);
   }
 
-  LOG_F(INFO, "TextureImporter: detected {} layout with {}px faces: {}",
+  DLOG_F(INFO, "Detected {} layout with {}px faces: {}",
     to_string(detection->layout), detection->face_size, path.string());
 
   // Extract faces from layout
   auto cube = ExtractCubeFacesFromLayout(*layout_image, detection->layout);
   if (!cube) {
-    LOG_F(WARNING,
-      "TextureImporter: failed to extract cube faces from layout: {}",
-      path.string());
+    LOG_F(
+      WARNING, "Failed to extract cube faces from layout: {}", path.string());
     return Err(cube.error());
   }
 
@@ -1033,7 +1016,7 @@ auto ImportCubeMapFromLayoutImage(const std::filesystem::path& path,
   // Cook the texture
   auto cooked = CookTexture(std::move(*cube), desc, policy);
   if (!cooked) {
-    LOG_F(WARNING, "TextureImporter: cube map cooking failed (error: {}): {}",
+    LOG_F(WARNING, "Cube map cooking failed (error: {}): {}",
       to_string(cooked.error()), path.string());
     return Err(cooked.error());
   }
@@ -1069,14 +1052,14 @@ namespace {
       const auto& meta = layers[i].Meta();
       if (meta.width != first_meta.width || meta.height != first_meta.height) {
         LOG_F(WARNING,
-          "TextureImporter: array layer {} has different dimensions "
+          "Array layer {} has different dimensions "
           "({}x{}) vs layer 0 ({}x{})",
           i, meta.width, meta.height, first_meta.width, first_meta.height);
         return Err(TextureImportError::kDimensionMismatch);
       }
       if (meta.format != first_meta.format) {
         LOG_F(WARNING,
-          "TextureImporter: array layer {} has different format ({}) vs layer "
+          "Array layer {} has different format ({}) vs layer "
           "0 ({})",
           i, to_string(meta.format), to_string(first_meta.format));
         return Err(TextureImportError::kDimensionMismatch);
@@ -1097,7 +1080,7 @@ namespace {
 
     auto array_image = ScratchImage::Create(array_meta);
     if (!array_image.IsValid()) {
-      LOG_F(WARNING, "TextureImporter: failed to allocate array texture");
+      LOG_F(WARNING, "Failed to allocate array texture");
       return Err(TextureImportError::kOutOfMemory);
     }
 
@@ -1108,8 +1091,7 @@ namespace {
         = array_image.GetMutablePixels(static_cast<uint16_t>(i), 0);
 
       if (src_view.pixels.size() != dst_pixels.size()) {
-        LOG_F(WARNING,
-          "TextureImporter: pixel size mismatch for array layer {}", i);
+        LOG_F(WARNING, "Pixel size mismatch for array layer {}", i);
         return Err(TextureImportError::kDimensionMismatch);
       }
 
@@ -1132,8 +1114,7 @@ namespace {
     // Cook the texture
     auto cooked = CookTexture(std::move(array_image), desc, policy);
     if (!cooked) {
-      LOG_F(WARNING,
-        "TextureImporter: texture array cooking failed (error: {})",
+      LOG_F(WARNING, "Texture array cooking failed (error: {})",
         to_string(cooked.error()));
       return Err(cooked.error());
     }
@@ -1154,8 +1135,7 @@ auto ImportTextureArray(std::span<const std::filesystem::path> layer_paths,
   -> Result<TextureImportResult, TextureImportError>
 {
   if (layer_paths.empty()) {
-    LOG_F(
-      WARNING, "TextureImporter: ImportTextureArray called with empty paths");
+    LOG_F(WARNING, "ImportTextureArray called with empty paths");
     return Err(TextureImportError::kArrayLayerCountInvalid);
   }
 
@@ -1166,7 +1146,7 @@ auto ImportTextureArray(std::span<const std::filesystem::path> layer_paths,
   for (size_t i = 0; i < layer_paths.size(); ++i) {
     auto result = LoadTexture(layer_paths[i]);
     if (!result) {
-      LOG_F(WARNING, "TextureImporter: failed to load array layer {}: {}", i,
+      LOG_F(WARNING, "Failed to load array layer {}: {}", i,
         layer_paths[i].string());
       return Err(result.error());
     }
@@ -1189,8 +1169,7 @@ auto ImportTextureArray(std::span<const std::filesystem::path> layer_paths,
   -> Result<TextureImportResult, TextureImportError>
 {
   if (layer_paths.empty()) {
-    LOG_F(
-      WARNING, "TextureImporter: ImportTextureArray called with empty paths");
+    LOG_F(WARNING, "ImportTextureArray called with empty paths");
     return Err(TextureImportError::kArrayLayerCountInvalid);
   }
 
@@ -1201,7 +1180,7 @@ auto ImportTextureArray(std::span<const std::filesystem::path> layer_paths,
   for (size_t i = 0; i < layer_paths.size(); ++i) {
     auto result = LoadTexture(layer_paths[i]);
     if (!result) {
-      LOG_F(WARNING, "TextureImporter: failed to load array layer {}: {}", i,
+      LOG_F(WARNING, "Failed to load array layer {}: {}", i,
         layer_paths[i].string());
       return Err(result.error());
     }
@@ -1233,14 +1212,14 @@ namespace {
       const auto& meta = slices[i].Meta();
       if (meta.width != first_meta.width || meta.height != first_meta.height) {
         LOG_F(WARNING,
-          "TextureImporter: 3D slice {} has different dimensions "
+          "3D slice {} has different dimensions "
           "({}x{}) vs slice 0 ({}x{})",
           i, meta.width, meta.height, first_meta.width, first_meta.height);
         return Err(TextureImportError::kDimensionMismatch);
       }
       if (meta.format != first_meta.format) {
         LOG_F(WARNING,
-          "TextureImporter: 3D slice {} has different format ({}) vs slice 0 "
+          "3D slice {} has different format ({}) vs slice 0 "
           "({})",
           i, to_string(meta.format), to_string(first_meta.format));
         return Err(TextureImportError::kDimensionMismatch);
@@ -1261,7 +1240,7 @@ namespace {
 
     auto volume_image = ScratchImage::Create(volume_meta);
     if (!volume_image.IsValid()) {
-      LOG_F(WARNING, "TextureImporter: failed to allocate 3D texture");
+      LOG_F(WARNING, "Failed to allocate 3D texture");
       return Err(TextureImportError::kOutOfMemory);
     }
 
@@ -1274,8 +1253,7 @@ namespace {
     for (size_t i = 0; i < slices.size(); ++i) {
       const auto src_view = slices[i].GetImage(0, 0);
       if (src_view.pixels.size() != slice_size) {
-        LOG_F(
-          WARNING, "TextureImporter: pixel size mismatch for 3D slice {}", i);
+        LOG_F(WARNING, "Pixel size mismatch for 3D slice {}", i);
         return Err(TextureImportError::kDimensionMismatch);
       }
 
@@ -1298,7 +1276,7 @@ namespace {
     // Cook the texture
     auto cooked = CookTexture(std::move(volume_image), desc, policy);
     if (!cooked) {
-      LOG_F(WARNING, "TextureImporter: 3D texture cooking failed (error: {})",
+      LOG_F(WARNING, "3D texture cooking failed (error: {})",
         to_string(cooked.error()));
       return Err(cooked.error());
     }
@@ -1319,7 +1297,7 @@ auto ImportTexture3D(std::span<const std::filesystem::path> slice_paths,
   -> Result<TextureImportResult, TextureImportError>
 {
   if (slice_paths.empty()) {
-    LOG_F(WARNING, "TextureImporter: ImportTexture3D called with empty paths");
+    LOG_F(WARNING, "ImportTexture3D called with empty paths");
     return Err(TextureImportError::kInvalidDimensions);
   }
 
@@ -1330,8 +1308,8 @@ auto ImportTexture3D(std::span<const std::filesystem::path> slice_paths,
   for (size_t i = 0; i < slice_paths.size(); ++i) {
     auto result = LoadTexture(slice_paths[i]);
     if (!result) {
-      LOG_F(WARNING, "TextureImporter: failed to load 3D slice {}: {}", i,
-        slice_paths[i].string());
+      LOG_F(
+        WARNING, "Failed to load 3D slice {}: {}", i, slice_paths[i].string());
       return Err(result.error());
     }
     slices.push_back(std::move(*result));
@@ -1353,7 +1331,7 @@ auto ImportTexture3D(std::span<const std::filesystem::path> slice_paths,
   -> Result<TextureImportResult, TextureImportError>
 {
   if (slice_paths.empty()) {
-    LOG_F(WARNING, "TextureImporter: ImportTexture3D called with empty paths");
+    LOG_F(WARNING, "ImportTexture3D called with empty paths");
     return Err(TextureImportError::kInvalidDimensions);
   }
 
@@ -1364,8 +1342,8 @@ auto ImportTexture3D(std::span<const std::filesystem::path> slice_paths,
   for (size_t i = 0; i < slice_paths.size(); ++i) {
     auto result = LoadTexture(slice_paths[i]);
     if (!result) {
-      LOG_F(WARNING, "TextureImporter: failed to load 3D slice {}: {}", i,
-        slice_paths[i].string());
+      LOG_F(
+        WARNING, "Failed to load 3D slice {}: {}", i, slice_paths[i].string());
       return Err(result.error());
     }
     slices.push_back(std::move(*result));
@@ -1701,16 +1679,14 @@ auto TextureImportBuilder::Build(const ITexturePackingPolicy& policy)
   TextureImportDesc desc;
   if (impl_->custom_desc) {
     desc = *impl_->custom_desc;
-    DLOG_F(INFO, "TextureImportBuilder: using custom descriptor");
+    DLOG_F(INFO, "Using custom descriptor");
   } else if (impl_->preset) {
     desc = MakeDescFromPreset(*impl_->preset);
-    DLOG_F(
-      INFO, "TextureImportBuilder: using preset {}", to_string(*impl_->preset));
+    DLOG_F(INFO, "Using preset {}", to_string(*impl_->preset));
   } else {
     // Default to kData preset
     desc = MakeDescFromPreset(TexturePreset::kData);
-    DLOG_F(INFO,
-      "TextureImportBuilder: no preset or descriptor specified, using kData");
+    DLOG_F(INFO, "No preset or descriptor specified; using kData");
   }
 
   // Apply overrides
@@ -1734,9 +1710,8 @@ auto TextureImportBuilder::Build(const ITexturePackingPolicy& policy)
     }
 
     if (!all_faces_present) {
-      LOG_F(WARNING,
-        "TextureImportBuilder: cube map missing face {} (expected 6 faces)",
-        missing_face);
+      LOG_F(
+        WARNING, "Cube map missing face {} (expected 6 faces)", missing_face);
       return Err(TextureImportError::kArrayLayerCountInvalid);
     }
 
@@ -1745,8 +1720,8 @@ auto TextureImportBuilder::Build(const ITexturePackingPolicy& policy)
     for (size_t i = 0; i < kCubeFaceCount; ++i) {
       auto result = LoadTexture(*impl_->cube_faces[i]);
       if (!result) {
-        LOG_F(WARNING, "TextureImportBuilder: failed to load cube face {}: {}",
-          i, impl_->cube_faces[i]->string());
+        LOG_F(WARNING, "Failed to load cube face {}: {}", i,
+          impl_->cube_faces[i]->string());
         return Err(result.error());
       }
       faces[i] = std::move(*result);
@@ -1756,7 +1731,7 @@ auto TextureImportBuilder::Build(const ITexturePackingPolicy& policy)
     auto cube = AssembleCubeFromFaces(
       std::span<const ScratchImage, kCubeFaceCount>(faces));
     if (!cube) {
-      LOG_F(WARNING, "TextureImportBuilder: failed to assemble cube map");
+      LOG_F(WARNING, "Failed to assemble cube map");
       return Err(cube.error());
     }
 
@@ -1767,8 +1742,7 @@ auto TextureImportBuilder::Build(const ITexturePackingPolicy& policy)
 
     auto cooked = CookTexture(std::move(*cube), desc, policy);
     if (!cooked) {
-      LOG_F(WARNING, "TextureImportBuilder: cube map cooking failed: {}",
-        to_string(cooked.error()));
+      LOG_F(WARNING, "Cube map cooking failed: {}", to_string(cooked.error()));
       return Err(cooked.error());
     }
 
@@ -1788,10 +1762,8 @@ auto TextureImportBuilder::Build(const ITexturePackingPolicy& policy)
     // Check for gaps in layer indices
     for (size_t i = 0; i < impl_->array_layers.size(); ++i) {
       if (impl_->array_layers[i].first != static_cast<uint16_t>(i)) {
-        LOG_F(WARNING,
-          "TextureImportBuilder: array layer indices have gaps "
-          "(expected {}, got {})",
-          i, impl_->array_layers[i].first);
+        LOG_F(WARNING, "Array layer indices have gaps (expected {}, got {})", i,
+          impl_->array_layers[i].first);
       }
     }
 
@@ -1818,10 +1790,8 @@ auto TextureImportBuilder::Build(const ITexturePackingPolicy& policy)
     // Check for gaps in slice indices
     for (size_t i = 0; i < impl_->depth_slices.size(); ++i) {
       if (impl_->depth_slices[i].first != static_cast<uint16_t>(i)) {
-        LOG_F(WARNING,
-          "TextureImportBuilder: depth slice indices have gaps "
-          "(expected {}, got {})",
-          i, impl_->depth_slices[i].first);
+        LOG_F(WARNING, "Depth slice indices have gaps (expected {}, got {})", i,
+          impl_->depth_slices[i].first);
       }
     }
 
@@ -1850,7 +1820,7 @@ auto TextureImportBuilder::Build(const ITexturePackingPolicy& policy)
 
     auto cooked = CookTexture(*bytes, desc, policy);
     if (!cooked) {
-      LOG_F(WARNING, "TextureImportBuilder: cooking failed for '{}': {}",
+      LOG_F(WARNING, "Cooking failed for '{}': {}",
         impl_->source_path->string(), to_string(cooked.error()));
       return Err(cooked.error());
     }
@@ -1871,8 +1841,8 @@ auto TextureImportBuilder::Build(const ITexturePackingPolicy& policy)
 
     auto cooked = CookTexture(impl_->source_memory->first, desc, policy);
     if (!cooked) {
-      LOG_F(WARNING, "TextureImportBuilder: cooking failed for '{}': {}",
-        desc.source_id, to_string(cooked.error()));
+      LOG_F(WARNING, "Cooking failed for '{}': {}", desc.source_id,
+        to_string(cooked.error()));
       return Err(cooked.error());
     }
 
@@ -1884,7 +1854,7 @@ auto TextureImportBuilder::Build(const ITexturePackingPolicy& policy)
   }
 
   // No source provided
-  LOG_F(WARNING, "TextureImportBuilder: no source provided");
+  LOG_F(WARNING, "No source provided");
   return Err(TextureImportError::kFileNotFound);
 }
 

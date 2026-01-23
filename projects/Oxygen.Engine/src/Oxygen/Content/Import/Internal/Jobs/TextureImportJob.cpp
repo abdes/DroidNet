@@ -101,11 +101,17 @@ auto IsColorIntent(const TextureIntent intent) -> bool
   desc.source_color_space = tuning.source_color_space;
   desc.flip_y_on_decode = tuning.flip_y_on_decode;
   desc.force_rgba_on_decode = tuning.force_rgba_on_decode;
+  desc.flip_normal_green = tuning.flip_normal_green;
+  desc.renormalize_normals_in_mips = tuning.renormalize_normals_in_mips;
+  desc.exposure_ev = tuning.exposure_ev;
+  desc.hdr_handling = tuning.hdr_handling;
+  desc.bake_hdr_to_ldr = tuning.bake_hdr_to_ldr;
 
   if (tuning.enabled) {
     desc.mip_policy = tuning.mip_policy;
     desc.max_mip_levels = tuning.max_mip_levels;
     desc.mip_filter = tuning.mip_filter;
+    desc.mip_filter_space = tuning.mip_filter_space;
     desc.output_format = IsColorIntent(desc.intent) ? tuning.color_output_format
                                                     : tuning.data_output_format;
     desc.bc7_quality
@@ -149,7 +155,7 @@ namespace oxygen::content::import::detail {
 */
 auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
 {
-  DLOG_F(INFO, "TextureImportJob starting: job_id={} path={}", JobId(),
+  DLOG_F(INFO, "Starting job: job_id={} path={}", JobId(),
     Request().source_path.string());
 
   const auto job_start = std::chrono::steady_clock::now();
@@ -172,8 +178,8 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
   };
 
   {
-    const auto& tuning = Request().options.texture_tuning;
-    DLOG_SCOPE_F(INFO, "TextureImportJob tuning");
+    [[maybe_unused]] const auto& tuning = Request().options.texture_tuning;
+    DLOG_SCOPE_F(INFO, "Texture tuning");
     DLOG_F(INFO, "  enabled: {}", tuning.enabled);
     DLOG_F(INFO, "  intent: {}", tuning.intent);
     DLOG_F(INFO, "  color_space: {}", tuning.source_color_space);
@@ -181,6 +187,7 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
     DLOG_F(INFO, "  data_format: {}", tuning.data_output_format);
     DLOG_F(INFO, "  mip_policy: {}", tuning.mip_policy);
     DLOG_F(INFO, "  mip_filter: {}", tuning.mip_filter);
+    DLOG_F(INFO, "  mip_filter_space: {}", tuning.mip_filter_space);
     DLOG_F(INFO, "  bc7_quality: {}", tuning.bc7_quality);
     DLOG_F(INFO, "  max_mips: {}", tuning.max_mip_levels);
     DLOG_F(INFO, "  packing_policy: {}", tuning.packing_policy_id);
@@ -189,13 +196,17 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
     DLOG_F(INFO, "  cube_face_size: {}", tuning.cubemap_face_size);
     DLOG_F(INFO, "  cube_layout: {}", tuning.cubemap_layout);
     DLOG_F(INFO, "  flip_y: {}", tuning.flip_y_on_decode);
+    DLOG_F(INFO, "  flip_normal_green: {}", tuning.flip_normal_green);
+    DLOG_F(INFO, "  renormalize: {}", tuning.renormalize_normals_in_mips);
+    DLOG_F(INFO, "  hdr_handling: {}", tuning.hdr_handling);
+    DLOG_F(INFO, "  exposure: {} EV", tuning.exposure_ev);
     DLOG_F(INFO, "  force_rgba: {}", tuning.force_rgba_on_decode);
   }
 
   EnsureCookedRoot();
 
-  ImportSession session(
-    Request(), FileReader(), FileWriter(), ThreadPool(), TableRegistry());
+  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool(),
+    TableRegistry(), IndexRegistry());
 
   TexturePipeline pipeline(*ThreadPool(),
     TexturePipeline::Config {
@@ -216,7 +227,7 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   if (source.meta.has_value()) {
-    const auto& meta = source.meta.value();
+    [[maybe_unused]] const auto& meta = source.meta.value();
     DLOG_SCOPE_F(INFO, "Texture source prepared");
     DLOG_F(INFO, "  type: {}", meta.texture_type);
     DLOG_F(INFO, "  format: {}", meta.format);
@@ -305,6 +316,42 @@ auto TextureImportJob::LoadSource(ImportSession& session)
   }
 
   const auto& tuning = Request().options.texture_tuning;
+
+  // Handle explicit multi-source mappings
+  if (!Request().additional_sources.empty()) {
+    TextureSourceSet sources;
+    for (const auto& mapping : Request().additional_sources) {
+      const auto read_start = std::chrono::steady_clock::now();
+      auto read_result = co_await reader.get()->ReadFile(mapping.path);
+      const auto read_end = std::chrono::steady_clock::now();
+      AddDuration(io_duration, read_start, read_end);
+
+      if (!read_result.has_value()) {
+        const auto& error = read_result.error();
+        session.AddDiagnostic({
+          .severity = ImportSeverity::kError,
+          .code = "texture.read_failed",
+          .message = error.ToString(),
+          .source_path = mapping.path.string(),
+          .object_path = {},
+        });
+        co_return StampDurations(source);
+      }
+
+      auto bytes = std::move(read_result.value());
+      if (!source.is_hdr_input.has_value()) {
+        source.is_hdr_input
+          = IsHdrFormat(bytes, mapping.path.extension().string());
+      }
+      sources.Add({ .bytes = std::move(bytes),
+        .subresource = mapping.subresource,
+        .source_id = mapping.path.string() });
+    }
+    source.source_set = std::move(sources);
+    source.success = true;
+    co_return StampDurations(source);
+  }
+
   DecodeOptions options {};
   options.flip_y = tuning.flip_y_on_decode;
   options.force_rgba = tuning.force_rgba_on_decode;
@@ -536,10 +583,17 @@ auto TextureImportJob::CookTexture(
     desc.source_color_space = tuning.source_color_space;
     desc.flip_y_on_decode = tuning.flip_y_on_decode;
     desc.force_rgba_on_decode = tuning.force_rgba_on_decode;
+    desc.flip_normal_green = tuning.flip_normal_green;
+    desc.renormalize_normals_in_mips = tuning.renormalize_normals_in_mips;
+    desc.exposure_ev = tuning.exposure_ev;
+    desc.hdr_handling = tuning.hdr_handling;
+    desc.bake_hdr_to_ldr = tuning.bake_hdr_to_ldr;
+
     if (tuning.enabled) {
       desc.mip_policy = tuning.mip_policy;
       desc.max_mip_levels = tuning.max_mip_levels;
       desc.mip_filter = tuning.mip_filter;
+      desc.mip_filter_space = tuning.mip_filter_space;
       desc.output_format = IsColorIntent(desc.intent)
         ? tuning.color_output_format
         : tuning.data_output_format;
@@ -689,7 +743,7 @@ auto TextureImportJob::EmitTexture(
 {
   try {
     auto& emitter = session.TextureEmitter();
-    const auto index = emitter.Emit(std::move(cooked));
+    [[maybe_unused]] const auto index = emitter.Emit(std::move(cooked));
     DLOG_F(INFO, "Texture emitted at index={}", index);
     co_return true;
   } catch (const std::exception& ex) {

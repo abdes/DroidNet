@@ -17,7 +17,6 @@
 #include <Oxygen/Content/Import/LooseCookedLayout.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Semaphore.h>
 
 namespace oxygen::content::import {
 
@@ -38,17 +37,19 @@ public:
     const std::filesystem::path& cooked_root, const LooseCookedLayout& layout)
     -> BufferTableAggregator&;
 
-  OXGN_CNTT_NDAPI auto FinalizeGateForRoot(
-    const std::filesystem::path& cooked_root) -> co::Semaphore&;
+  //! Register an active import session for a cooked root.
+  OXGN_CNTT_API auto BeginSession(const std::filesystem::path& cooked_root)
+    -> void;
 
-  OXGN_CNTT_NDAPI auto FinalizeForRoot(const std::filesystem::path& cooked_root)
+  //! Complete a session and finalize tables if it was the last one.
+  OXGN_CNTT_API auto EndSession(const std::filesystem::path& cooked_root)
     -> co::Co<bool>;
 
   OXGN_CNTT_NDAPI auto FinalizeAll() -> co::Co<bool>;
 
 private:
-  auto NormalizeKey(const std::filesystem::path& cooked_root) const
-    -> std::string;
+  [[nodiscard]] auto NormalizeKey(
+    const std::filesystem::path& cooked_root) const -> std::string;
 
   IAsyncFileWriter& file_writer_;
   std::mutex mutex_;
@@ -56,8 +57,7 @@ private:
     texture_tables_;
   std::unordered_map<std::string, std::unique_ptr<BufferTableAggregator>>
     buffer_tables_;
-  std::unordered_map<std::string, std::unique_ptr<co::Semaphore>>
-    finalize_gates_;
+  std::unordered_map<std::string, uint32_t> active_sessions_;
 };
 
 } // namespace oxygen::content::import

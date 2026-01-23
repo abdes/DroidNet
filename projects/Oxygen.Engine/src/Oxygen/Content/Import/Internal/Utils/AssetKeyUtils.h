@@ -19,8 +19,8 @@ namespace oxygen::content::import::util {
 [[nodiscard]] inline auto MakeDeterministicAssetKey(
   std::string_view virtual_path) -> data::AssetKey
 {
-  const auto bytes = std::as_bytes(
-    std::span(virtual_path.data(), static_cast<size_t>(virtual_path.size())));
+  const auto bytes
+    = std::as_bytes(std::span(virtual_path.data(), virtual_path.size()));
   const auto digest = base::ComputeSha256(bytes);
 
   data::AssetKey key {};

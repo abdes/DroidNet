@@ -131,13 +131,15 @@ protected:
     ImportRunResult result {};
 
     const auto import_start = steady_clock::now();
-    result.job_id = service.SubmitImport(
+    auto job_id_opt = service.SubmitImport(
       std::move(request), [&](ImportJobId id, const ImportReport& completed) {
         result.finished_id = id;
         result.report = completed;
         done.count_down();
       });
 
+    EXPECT_TRUE(job_id_opt.has_value());
+    result.job_id = *job_id_opt;
     EXPECT_NE(result.job_id, kInvalidJobId);
     done.wait();
     const auto import_end = steady_clock::now();

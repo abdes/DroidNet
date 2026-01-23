@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <limits>
+#include <mutex>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -25,7 +26,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/Detail/LooseCookedIndex.h>
-#include <Oxygen/Content/Import/LooseCookedWriter.h>
+#include <Oxygen/Content/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Content/Internal/LooseCookedIndexLoad.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -86,10 +87,10 @@ namespace {
       throw std::runtime_error("Index path must not be empty");
     }
 
-    if (relpath.find('\\') != std::string_view::npos) {
+    if (relpath.contains('\\')) {
       throw std::runtime_error("Index path must use '/' as the separator");
     }
-    if (relpath.find(':') != std::string_view::npos) {
+    if (relpath.contains(':')) {
       throw std::runtime_error("Index path must not contain ':'");
     }
     if (relpath.front() == '/') {
@@ -98,7 +99,7 @@ namespace {
     if (relpath.back() == '/') {
       throw std::runtime_error("Index path must not end with '/'");
     }
-    if (relpath.find("//") != std::string_view::npos) {
+    if (relpath.contains("//")) {
       throw std::runtime_error("Index path must not contain '//'");
     }
 
@@ -121,7 +122,7 @@ namespace {
     if (virtual_path.empty()) {
       throw std::runtime_error("Virtual path must not be empty");
     }
-    if (virtual_path.find('\\') != std::string_view::npos) {
+    if (virtual_path.contains('\\')) {
       throw std::runtime_error("Virtual path must use '/' as the separator");
     }
     if (virtual_path.front() != '/') {
@@ -131,7 +132,7 @@ namespace {
       throw std::runtime_error(
         "Virtual path must not end with '/' (except the root)");
     }
-    if (virtual_path.find("//") != std::string_view::npos) {
+    if (virtual_path.contains("//")) {
       throw std::runtime_error("Virtual path must not contain '//'");
     }
 
@@ -168,7 +169,7 @@ namespace {
 
     [[nodiscard]] auto SizeBytes() const noexcept -> uint64_t
     {
-      return static_cast<uint64_t>(table_.size());
+      return table_.size();
     }
 
   private:
@@ -228,6 +229,23 @@ namespace {
     return out;
   }
 
+  auto GetCookedRootLock(const std::filesystem::path& cooked_root)
+    -> std::shared_ptr<std::mutex>
+  {
+    static std::mutex map_mutex;
+    static std::unordered_map<std::string, std::shared_ptr<std::mutex>> locks;
+
+    const auto key = cooked_root.lexically_normal().string();
+    std::scoped_lock lock(map_mutex);
+    auto it = locks.find(key);
+    if (it != locks.end()) {
+      return it->second;
+    }
+    auto created = std::make_shared<std::mutex>();
+    locks.emplace(key, created);
+    return created;
+  }
+
 } // namespace
 
 struct LooseCookedWriter::Impl final {
@@ -278,7 +296,7 @@ struct LooseCookedWriter::Impl final {
       .asset_type = asset_type,
       .virtual_path = std::string(virtual_path),
       .descriptor_relpath = std::string(descriptor_relpath),
-      .descriptor_size = static_cast<uint64_t>(bytes.size()),
+      .descriptor_size = (bytes.size()),
       .descriptor_sha256 = CopyDigestOrZero(digest),
     };
 
@@ -297,7 +315,7 @@ struct LooseCookedWriter::Impl final {
     StoredFile record {
       .kind = kind,
       .relpath = std::string(relpath),
-      .size = static_cast<uint64_t>(bytes.size()),
+      .size = (bytes.size()),
     };
 
     files_.insert_or_assign(kind, record);
@@ -390,9 +408,36 @@ struct LooseCookedWriter::Impl final {
 
   [[nodiscard]] auto Finish() -> LooseCookedWriteResult
   {
+    auto cooked_root_lock = GetCookedRootLock(cooked_root_);
+    std::scoped_lock lock(*cooked_root_lock);
+
+    auto current_assets = assets_;
+    auto current_files = files_;
+
+    assets_.clear();
+    files_.clear();
+    key_by_virtual_path_.clear();
+
+    LoadExistingIndexIfPresent_();
+
+    for (const auto& [key, asset] : current_assets) {
+      if (const auto existing_it
+        = key_by_virtual_path_.find(asset.virtual_path);
+        existing_it != key_by_virtual_path_.end()
+        && existing_it->second != key) {
+        throw std::runtime_error(
+          "Conflicting virtual path mapping in loose cooked container");
+      }
+      assets_.insert_or_assign(key, asset);
+      key_by_virtual_path_.insert_or_assign(asset.virtual_path, key);
+    }
+
+    for (const auto& [kind, file] : current_files) {
+      files_.insert_or_assign(kind, file);
+    }
+
     const auto cooked_root_str = cooked_root_.string();
-    LOG_SCOPE_F(INFO,
-      fmt::format("LooseCookedWriter::Finish {}", cooked_root_str).c_str());
+    LOG_SCOPE_F(INFO, fmt::format("Finish {}", cooked_root_str).c_str());
 
     ValidateRequiredFilePairs_();
 
@@ -506,7 +551,7 @@ private:
         files_.insert_or_assign(kind, record);
       }
 
-      LOG_F(INFO, "Loaded existing loose cooked index: assets={}, files={}",
+      DLOG_F(INFO, "Loaded existing loose cooked index: assets={}, files={}",
         assets_.size(), files_.size());
     } catch (const std::exception& ex) {
       throw std::runtime_error(
@@ -545,7 +590,7 @@ private:
     if (IsAllZeros(bytes)) {
       bytes[0] = 1;
     }
-    return data::SourceKey(bytes);
+    return data::SourceKey { bytes };
   }
 
   [[nodiscard]] auto ResolveContentVersion_() const -> uint16_t
@@ -650,7 +695,7 @@ private:
     header.asset_entry_size = sizeof(AssetEntry);
 
     header.file_records_offset = header.asset_entries_offset
-      + (static_cast<uint64_t>(asset_entries.size()) * sizeof(AssetEntry));
+      + (asset_entries.size() * sizeof(AssetEntry));
     header.file_record_count = static_cast<uint32_t>(file_records.size());
     header.file_record_size = sizeof(FileRecord);
 
@@ -707,7 +752,7 @@ LooseCookedWriter::~LooseCookedWriter() = default;
 
 auto LooseCookedWriter::SetSourceKey(std::optional<data::SourceKey> key) -> void
 {
-  impl_->SetSourceKey(std::move(key));
+  impl_->SetSourceKey(key);
 }
 
 auto LooseCookedWriter::SetContentVersion(const uint16_t version) -> void
@@ -748,7 +793,7 @@ auto LooseCookedWriter::RegisterExternalAssetDescriptor(
   std::optional<base::Sha256Digest> descriptor_sha256) -> void
 {
   impl_->RegisterExternalAssetDescriptor(key, asset_type, virtual_path,
-    descriptor_relpath, descriptor_size, std::move(descriptor_sha256));
+    descriptor_relpath, descriptor_size, descriptor_sha256);
 }
 
 auto LooseCookedWriter::Finish() -> LooseCookedWriteResult
