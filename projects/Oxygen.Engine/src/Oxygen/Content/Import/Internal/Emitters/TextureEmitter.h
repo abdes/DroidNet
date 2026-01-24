@@ -12,6 +12,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -208,6 +209,9 @@ private:
   auto OnWriteComplete(WriteKind kind, TextureKind texture_kind,
     std::optional<uint32_t> index, const FileErrorInfo& error) -> void;
 
+  auto UpdateDataFileSize(uint64_t new_size) -> void;
+  auto RecordEmissionSignature(const std::string& signature) -> void;
+
   auto EnsureFallbackTexture() -> void;
   auto CreateFallbackPayload() const -> CookedTexturePayload;
   auto ToPakDescriptor(const CookedTexturePayload& cooked,
@@ -220,6 +224,8 @@ private:
   std::atomic<bool> finalize_started_ { false };
   std::atomic<bool> fallback_emitted_ { false };
   std::atomic<uint32_t> emitted_count_ { 0 };
+  std::unordered_set<std::string> emitted_signatures_;
+  std::atomic<uint64_t> data_file_size_ { 0 };
   std::atomic<size_t> pending_count_ { 0 };
   std::atomic<size_t> error_count_ { 0 };
 };

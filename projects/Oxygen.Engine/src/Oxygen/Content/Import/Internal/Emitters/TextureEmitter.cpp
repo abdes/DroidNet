@@ -192,11 +192,14 @@ auto TextureEmitter::Emit(CookedTexturePayload cooked) -> uint32_t
     return std::make_pair(desc, reserved);
   });
 
+  RecordEmissionSignature(signature);
+
   if (!acquire.is_new) {
     return acquire.index;
   }
 
-  emitted_count_.fetch_add(1, std::memory_order_acq_rel);
+  UpdateDataFileSize(
+    acquire.reservation.aligned_offset + cooked.payload.size());
 
   const auto reserved = acquire.reservation;
   DLOG_F(INFO, "Emit index={} offset={} size={} padding={} format={}",
@@ -272,10 +275,31 @@ auto TextureEmitter::GetStats() const noexcept -> Stats
 {
   return {
     .emitted_textures = emitted_count_.load(std::memory_order_acquire),
-    .data_file_size = table_aggregator_.DataFileSize(),
+    .data_file_size = data_file_size_.load(std::memory_order_acquire),
     .pending_writes = pending_count_.load(std::memory_order_acquire),
     .error_count = error_count_.load(std::memory_order_acquire),
   };
+}
+
+auto TextureEmitter::UpdateDataFileSize(const uint64_t new_size) -> void
+{
+  auto current = data_file_size_.load(std::memory_order_acquire);
+  while (current < new_size
+    && !data_file_size_.compare_exchange_weak(
+      current, new_size, std::memory_order_acq_rel)) {
+  }
+}
+
+auto TextureEmitter::RecordEmissionSignature(const std::string& signature)
+  -> void
+{
+  if (signature.empty()) {
+    return;
+  }
+
+  if (emitted_signatures_.insert(signature).second) {
+    emitted_count_.fetch_add(1, std::memory_order_acq_rel);
+  }
 }
 
 auto TextureEmitter::Finalize() -> co::Co<bool>
@@ -387,12 +411,15 @@ auto TextureEmitter::EnsureFallbackTexture() -> void
     return std::make_pair(desc, reserved);
   });
 
+  RecordEmissionSignature(signature);
+
   if (!acquire.is_new) {
     fallback_emitted_.store(true, std::memory_order_release);
     return;
   }
 
-  emitted_count_.fetch_add(1, std::memory_order_acq_rel);
+  UpdateDataFileSize(
+    acquire.reservation.aligned_offset + fallback.payload.size());
 
   const auto reserved = acquire.reservation;
   if (reserved.padding_size > 0) {
