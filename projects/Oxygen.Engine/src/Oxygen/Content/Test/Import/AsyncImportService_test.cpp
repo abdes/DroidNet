@@ -635,7 +635,7 @@ NOLINT_TEST_F(
 
   // Act & Assert
   EXPECT_DEATH(
-    exercise(), ".*AsyncImportService destroyed without Stop\\(\\).*");
+    exercise(), ".*Destroyed without Stop\\(\\).*");
 }
 
 //! Verify Stop completes with pending jobs before destruction.
