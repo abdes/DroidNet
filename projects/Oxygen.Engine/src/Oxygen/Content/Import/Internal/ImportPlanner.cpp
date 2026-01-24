@@ -112,10 +112,12 @@ auto ImportPlanner::AddDependency(PlanItemId consumer, PlanItemId producer)
 {
   EnsureMutable();
 
+  // These two statements are important as they validate the IDs.
   const auto u_consumer = ItemIndex(consumer);
+  [[maybe_unused]] const auto u_producer = ItemIndex(producer);
 
   DLOG_F(INFO, "AddDependency consumer={} producer={}", u_consumer,
-    ItemIndex(producer));
+    u_producer);
 
   auto& consumer_deps = dependencies_.at(u_consumer);
   if (std::ranges::find(consumer_deps, producer) != consumer_deps.end()) {
