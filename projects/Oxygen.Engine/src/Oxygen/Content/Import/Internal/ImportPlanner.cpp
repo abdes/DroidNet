@@ -116,8 +116,7 @@ auto ImportPlanner::AddDependency(PlanItemId consumer, PlanItemId producer)
   const auto u_consumer = ItemIndex(consumer);
   [[maybe_unused]] const auto u_producer = ItemIndex(producer);
 
-  DLOG_F(INFO, "AddDependency consumer={} producer={}", u_consumer,
-    u_producer);
+  DLOG_F(INFO, "AddDependency consumer={} producer={}", u_consumer, u_producer);
 
   auto& consumer_deps = dependencies_.at(u_consumer);
   if (std::ranges::find(consumer_deps, producer) != consumer_deps.end()) {
