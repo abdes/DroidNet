@@ -116,9 +116,8 @@ struct ParserContext : CommandLineContext {
         return command_option;
       }
     }
-    if (!allow_global_options) {
-      return std::nullopt;
-    }
+    // Always consider global options regardless of allow_global_options so that
+    // global flags may be specified before or after the subcommand.
     const auto global_option = std::ranges::find_if(global_options,
       [&name](const OptionPtr& option) { return option->Short() == name; });
     if (global_option == global_options.cend()) {
@@ -136,9 +135,8 @@ struct ParserContext : CommandLineContext {
         return command_option;
       }
     }
-    if (!allow_global_options) {
-      return std::nullopt;
-    }
+    // Always consider global options regardless of allow_global_options so that
+    // global flags may be specified before or after the subcommand.
     const auto global_option = std::ranges::find_if(global_options,
       [&name](const OptionPtr& option) { return option->Long() == name; });
     if (global_option == global_options.cend()) {
