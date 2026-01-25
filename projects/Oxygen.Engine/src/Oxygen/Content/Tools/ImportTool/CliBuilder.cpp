@@ -47,6 +47,7 @@ namespace {
 
     group->Add(Option::WithKey("cooked-root")
         .About("Default output directory for all jobs")
+        .Short("o")
         .Long("cooked-root")
         .WithValue<std::string>()
         .StoreTo(&options.cooked_root)
@@ -87,6 +88,25 @@ namespace {
     return group;
   }
 
+  auto BuildServiceOptions() -> std::shared_ptr<Options>
+  {
+    auto group = std::make_shared<Options>("Service Options");
+
+    group->Add(Option::WithKey("thread-pool-size")
+        .About("Override import ThreadPool worker count")
+        .Long("thread-pool-size")
+        .WithValue<uint32_t>()
+        .Build());
+
+    group->Add(Option::WithKey("concurrency")
+        .About("Override pipeline concurrency (t,b,m,h,g,s as workers/queue)")
+        .Long("concurrency")
+        .WithValue<std::string>()
+        .Build());
+
+    return group;
+  }
+
 } // namespace
 
 auto BuildCli(std::span<ImportCommand* const> commands,
@@ -100,6 +120,7 @@ auto BuildCli(std::span<ImportCommand* const> commands,
     .WithVersionCommand();
 
   builder.WithGlobalOptions(BuildGlobalOptions(global_options));
+  builder.WithGlobalOptions(BuildServiceOptions());
 
   for (auto* command : commands) {
     builder.WithCommand(command->BuildCommand());

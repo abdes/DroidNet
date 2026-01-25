@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <span>
+#include <string>
 
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Content/Tools/ImportTool/GlobalOptions.h>

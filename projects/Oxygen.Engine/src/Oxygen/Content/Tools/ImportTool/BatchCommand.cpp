@@ -6,16 +6,14 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <cctype>
 #include <chrono>
 #include <clocale>
 #include <condition_variable>
-#include <csignal>
 #include <cstdlib>
 #include <deque>
+#include <expected>
 #include <filesystem>
-#include <format>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -23,15 +21,19 @@
 #include <optional>
 #include <sstream>
 #include <string_view>
+#include <system_error>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include <fmt/format.h>
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
@@ -43,6 +45,8 @@
 #include <Oxygen/Content/Import/SceneImportSettings.h>
 #include <Oxygen/Content/Import/TextureImportSettings.h>
 #include <Oxygen/Content/Tools/ImportTool/BatchCommand.h>
+#include <Oxygen/Content/Tools/ImportTool/MessageWriter.h>
+#include <Oxygen/Content/Tools/ImportTool/ReportJson.h>
 #include <Oxygen/Content/Tools/ImportTool/UI/BatchViewModel.h>
 #include <Oxygen/Content/Tools/ImportTool/UI/Screens/BatchImportScreen.h>
 #include <Oxygen/OxCo/Detail/ScopeGuard.h>
@@ -50,15 +54,6 @@
 namespace oxygen::content::import::tool {
 
 namespace {
-
-  std::atomic<bool>* g_stop_requested = nullptr;
-
-  auto HandleStopSignal(const int) -> void
-  {
-    if (g_stop_requested != nullptr) {
-      g_stop_requested->store(true, std::memory_order_relaxed);
-    }
-  }
 
   using nlohmann::ordered_json;
   using oxygen::clap::CommandBuilder;
@@ -78,16 +73,17 @@ namespace {
   }
 
   auto PrintDiagnostics(const ImportReport& report, const size_t job_index,
-    std::string_view source_path) -> void
+    std::string_view source_path,
+    const oxygen::observer_ptr<IMessageWriter>& writer) -> void
   {
     if (report.success) {
       return;
     }
 
-    std::cerr << "ERROR: import failed (job=" << DisplayJobNumber(job_index)
-              << ", source=" << source_path << ")\n";
+    writer->Error(fmt::format("ERROR: import failed (job={}, source={})",
+      DisplayJobNumber(job_index), source_path));
     for (const auto& diag : report.diagnostics) {
-      std::cerr << "- " << diag.code << ": " << diag.message << "\n";
+      writer->Error(fmt::format("- {}: {}", diag.code, diag.message));
     }
   }
 
@@ -166,130 +162,6 @@ namespace {
     return std::nullopt;
   }
 
-  struct PhaseTiming {
-    std::optional<std::chrono::steady_clock::time_point> started;
-    std::optional<std::chrono::steady_clock::time_point> finished;
-    uint32_t items_completed = 0U;
-    uint32_t items_total = 0U;
-  };
-
-  struct ItemTiming {
-    std::string phase;
-    std::string kind;
-    std::string name;
-    std::optional<std::chrono::steady_clock::time_point> started;
-    std::optional<std::chrono::steady_clock::time_point> finished;
-  };
-
-  struct JobProgressTrace {
-    std::optional<std::chrono::steady_clock::time_point> started;
-    std::optional<std::chrono::steady_clock::time_point> finished;
-    std::vector<PhaseTiming> phases = std::vector<PhaseTiming>(PhaseCount());
-    std::unordered_map<std::string, ItemTiming> items;
-  };
-
-  auto DurationToMillis(
-    const std::optional<std::chrono::microseconds>& duration) -> ordered_json
-  {
-    if (!duration.has_value()) {
-      return nullptr;
-    }
-    const auto ms = std::chrono::duration<double, std::milli>(*duration);
-    return ms.count();
-  }
-
-  auto BuildTelemetryJson(const ImportTelemetry& telemetry) -> ordered_json
-  {
-    return ordered_json {
-      { "io_ms", DurationToMillis(telemetry.io_duration) },
-      { "decode_ms", DurationToMillis(telemetry.decode_duration) },
-      { "load_ms", DurationToMillis(telemetry.load_duration) },
-      { "cook_ms", DurationToMillis(telemetry.cook_duration) },
-      { "emit_ms", DurationToMillis(telemetry.emit_duration) },
-      { "finalize_ms", DurationToMillis(telemetry.finalize_duration) },
-      { "total_ms", DurationToMillis(telemetry.total_duration) },
-    };
-  }
-
-  auto ToRelativeMillis(const std::chrono::steady_clock::time_point base,
-    const std::optional<std::chrono::steady_clock::time_point>& value)
-    -> ordered_json
-  {
-    if (!value.has_value()) {
-      return nullptr;
-    }
-    const auto ms
-      = std::chrono::duration<double, std::milli>(*value - base).count();
-    return ms;
-  }
-
-  auto BuildProgressJson(const JobProgressTrace& trace,
-    const std::chrono::steady_clock::time_point fallback_start) -> ordered_json
-  {
-    const auto base = trace.started.value_or(fallback_start);
-    ordered_json phases = ordered_json::array();
-    for (size_t index = 0; index < trace.phases.size(); ++index) {
-      const auto& timing = trace.phases[index];
-      if (!timing.started.has_value() && !timing.finished.has_value()) {
-        continue;
-      }
-
-      const auto started_ms = ToRelativeMillis(base, timing.started);
-      const auto finished_ms = ToRelativeMillis(base, timing.finished);
-      ordered_json duration_ms = nullptr;
-      if (timing.started.has_value() && timing.finished.has_value()) {
-        duration_ms = std::chrono::duration<double, std::milli>(
-          *timing.finished - *timing.started)
-                        .count();
-      }
-      phases.push_back({
-        { "phase", nostd::to_string(static_cast<ImportPhase>(index)) },
-        { "started_ms", started_ms },
-        { "finished_ms", finished_ms },
-        { "duration_ms", duration_ms },
-        { "items_completed", timing.items_completed },
-        { "items_total", timing.items_total },
-      });
-    }
-
-    ordered_json items = ordered_json::array();
-    for (const auto& [key, item] : trace.items) {
-      const auto started_ms = ToRelativeMillis(base, item.started);
-      const auto finished_ms = ToRelativeMillis(base, item.finished);
-      ordered_json duration_ms = nullptr;
-      if (item.started.has_value() && item.finished.has_value()) {
-        duration_ms = std::chrono::duration<double, std::milli>(
-          *item.finished - *item.started)
-                        .count();
-      }
-      items.push_back({
-        { "phase", item.phase },
-        { "kind", item.kind },
-        { "name", item.name },
-        { "started_ms", started_ms },
-        { "finished_ms", finished_ms },
-        { "duration_ms", duration_ms },
-      });
-    }
-
-    ordered_json job = ordered_json::object();
-    job["started_ms"] = ToRelativeMillis(base, trace.started);
-    job["finished_ms"] = ToRelativeMillis(base, trace.finished);
-    ordered_json job_duration = nullptr;
-    if (trace.started.has_value() && trace.finished.has_value()) {
-      job_duration = std::chrono::duration<double, std::milli>(
-        *trace.finished - *trace.started)
-                       .count();
-    }
-    job["duration_ms"] = job_duration;
-
-    ordered_json progress = ordered_json::object();
-    progress["job"] = std::move(job);
-    progress["phases"] = std::move(phases);
-    progress["items"] = std::move(items);
-    return progress;
-  }
-
   auto ResolveCookedRootForReport(const std::vector<PreparedJob>& jobs,
     const std::vector<std::optional<ImportReport>>& reports)
     -> std::optional<std::filesystem::path>
@@ -351,6 +223,60 @@ namespace {
     return true;
   }
 
+  auto IsCanceledReport(const ImportReport& report) -> bool
+  {
+    for (const auto& diag : report.diagnostics) {
+      if (diag.code == "import.canceled") {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  auto JobStatusFromReport(const std::optional<ImportReport>& report)
+    -> std::string_view
+  {
+    if (!report.has_value()) {
+      return "Not Started";
+    }
+    if (report->success) {
+      return "Success";
+    }
+    if (IsCanceledReport(*report)) {
+      return "Canceled";
+    }
+    return "Failed";
+  }
+
+  struct BatchSummaryCounts {
+    size_t succeeded = 0;
+    size_t failed = 0;
+    size_t canceled = 0;
+    size_t not_started = 0;
+  };
+
+  auto BuildBatchSummary(
+    const std::vector<std::optional<ImportReport>>& reports,
+    const size_t total_jobs) -> BatchSummaryCounts
+  {
+    BatchSummaryCounts counts {};
+    for (const auto& report : reports) {
+      const auto status = JobStatusFromReport(report);
+      if (status == "Success") {
+        ++counts.succeeded;
+      } else if (status == "Canceled") {
+        ++counts.canceled;
+      } else if (status == "Not Started") {
+        ++counts.not_started;
+      }
+    }
+    if (counts.succeeded + counts.canceled + counts.not_started <= total_jobs) {
+      counts.failed
+        = total_jobs - counts.succeeded - counts.canceled - counts.not_started;
+    }
+    return counts;
+  }
+
 } // namespace
 
 auto BatchCommand::Name() const -> std::string_view { return "batch"; }
@@ -402,12 +328,15 @@ auto BatchCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                   .StoreTo(&options_.report_path)
                   .Build();
 
-  auto no_tui = Option::WithKey("no-tui")
-                  .About("Disable TUI")
-                  .Long("no-tui")
-                  .WithValue<bool>()
-                  .StoreTo(&options_.no_tui)
-                  .Build();
+  auto max_in_flight = Option::WithKey("max-in-flight-jobs")
+                         .About("Maximum number of in-flight jobs")
+                         .Long("max-in-flight-jobs")
+                         .WithValue<uint32_t>()
+                         .StoreTo(&options_.max_in_flight_jobs)
+                         .CallOnFinalValue([this](const uint32_t&) {
+                           options_.max_in_flight_jobs_set = true;
+                         })
+                         .Build();
 
   return CommandBuilder("batch")
     .About("Run a batch import manifest")
@@ -417,10 +346,63 @@ auto BatchCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(fail_fast))
     .WithOption(std::move(quiet))
     .WithOption(std::move(report))
-    .WithOption(std::move(no_tui));
+    .WithOption(std::move(max_in_flight));
 }
 
-auto BatchCommand::Run() -> int
+auto BatchCommand::PrepareImportServiceConfig()
+  -> std::expected<AsyncImportService::Config, std::error_code>
+{
+  DCHECK_F(global_options_ != nullptr && global_options_->writer,
+    "Global message writer must be set by main");
+  auto writer = global_options_->writer;
+  DCHECK_NOTNULL_F(
+    global_options_->import_service, "Import service must be set by main");
+  auto import_service = global_options_->import_service;
+
+  if (options_.manifest_path.empty()) {
+    writer->Error("ERROR: --manifest is required");
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+  }
+
+  std::optional<std::filesystem::path> root_override;
+  if (!options_.root_path.empty()) {
+    root_override = std::filesystem::path(options_.root_path);
+  }
+
+  std::optional<ImportManifest> manifest;
+  {
+    std::ostringstream err;
+    manifest = ImportManifest::Load(
+      std::filesystem::path(options_.manifest_path), root_override, err);
+    if (!manifest.has_value()) {
+      const auto msg = err.str();
+      if (!msg.empty()) {
+        writer->Error(msg);
+      }
+      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
+  }
+
+  prepared_manifest_ = manifest;
+
+  AsyncImportService::Config service_config {};
+  if (manifest->thread_pool_size.has_value()) {
+    service_config.thread_pool_size = *manifest->thread_pool_size;
+  }
+  if (manifest->max_in_flight_jobs.has_value()) {
+    service_config.max_in_flight_jobs = *manifest->max_in_flight_jobs;
+  }
+  if (options_.max_in_flight_jobs_set) {
+    service_config.max_in_flight_jobs = options_.max_in_flight_jobs;
+  }
+  if (manifest->concurrency.has_value()) {
+    service_config.concurrency = *manifest->concurrency;
+  }
+
+  return service_config;
+}
+
+auto BatchCommand::Run() -> std::expected<void, std::error_code>
 {
   // 1. Process Options
   if (global_options_ != nullptr) {
@@ -430,51 +412,65 @@ auto BatchCommand::Run() -> int
     if (!options_.quiet && global_options_->quiet) {
       options_.quiet = true;
     }
-    if (!options_.no_tui && global_options_->no_tui) {
-      options_.no_tui = true;
-    }
+    // TUI control is global-only; respect the global --no-tui setting
   }
 
+  // Prepare a MessageWriter for console output. The global writer MUST be
+  // provided by main; never create a local writer.
+  DCHECK_F(global_options_ != nullptr && global_options_->writer,
+    "Global message writer must be set by main");
+  auto writer = global_options_->writer;
+  DCHECK_NOTNULL_F(
+    global_options_->import_service, "Import service must be set by main");
+  auto import_service = global_options_->import_service;
+
   if (options_.manifest_path.empty()) {
-    std::cerr << "ERROR: --manifest is required\n";
-    return 2;
+    writer->Error("ERROR: --manifest is required");
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
 
   // 2. Load Manifest
-  std::optional<std::filesystem::path> root_override;
-  if (!options_.root_path.empty()) {
-    root_override = std::filesystem::path(options_.root_path);
-  }
+  std::optional<ImportManifest> manifest;
+  if (prepared_manifest_.has_value()) {
+    manifest = std::move(prepared_manifest_);
+  } else {
+    std::optional<std::filesystem::path> root_override;
+    if (!options_.root_path.empty()) {
+      root_override = std::filesystem::path(options_.root_path);
+    }
 
-  const auto manifest = ImportManifest::Load(
-    std::filesystem::path(options_.manifest_path), root_override, std::cerr);
-  if (!manifest.has_value()) {
-    return 2;
+    std::ostringstream err;
+    manifest = ImportManifest::Load(
+      std::filesystem::path(options_.manifest_path), root_override, err);
+    if (!manifest.has_value()) {
+      const auto msg = err.str();
+      if (!msg.empty()) {
+        writer->Error(msg);
+      }
+      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
   }
 
   // 3. Prepare Jobs
+  if (service_config_override_ != nullptr && concurrency_override_set_) {
+    manifest->concurrency = service_config_override_->concurrency;
+  }
   const auto worker_totals = BuildWorkerTotals(*manifest);
-  AsyncImportService::Config service_config {};
-  if (manifest->thread_pool_size.has_value()) {
-    service_config.thread_pool_size = *manifest->thread_pool_size;
-  }
-  if (manifest->max_in_flight_jobs.has_value()) {
-    service_config.max_in_flight_jobs = *manifest->max_in_flight_jobs;
-  }
-  if (manifest->concurrency.has_value()) {
-    service_config.concurrency = *manifest->concurrency;
-  }
   int validation_failures = 0;
+  bool unsupported_seen = false;
   std::vector<PreparedJob> jobs;
   jobs.reserve(manifest->jobs.size());
 
   for (const auto& job : manifest->jobs) {
     if (job.job_type != "texture" && job.job_type != "fbx"
       && job.job_type != "gltf") {
-      std::cerr << "ERROR: unsupported job type: " << job.job_type << "\n";
+      writer->Error(
+        fmt::format("ERROR: unsupported job type: {}", job.job_type));
+      unsupported_seen = true;
       ++validation_failures;
-      if (options_.fail_fast)
-        break;
+      if (options_.fail_fast) {
+        return std::unexpected(std::make_error_code(std::errc::not_supported));
+      }
       continue;
     }
 
@@ -483,20 +479,29 @@ auto BatchCommand::Run() -> int
       if (global_options_ != nullptr && settings.cooked_root.empty()) {
         settings.cooked_root = global_options_->cooked_root;
       }
-      if (options_.quiet)
+      if (options_.quiet) {
         settings.verbose = false;
+      }
 
-      auto request = internal::BuildTextureRequest(settings, std::cerr);
-      if (!request) {
-        ++validation_failures;
-        if (options_.fail_fast)
-          break;
-        continue;
+      std::optional<ImportRequest> request;
+      {
+        std::ostringstream err;
+        request = internal::BuildTextureRequest(settings, err);
+        if (!request) {
+          const auto msg = err.str();
+          if (!msg.empty()) {
+            writer->Error(msg);
+          }
+          ++validation_failures;
+          if (options_.fail_fast) {
+            break;
+          }
+          continue;
+        }
       }
 
       if (options_.dry_run) {
-        if (!options_.quiet)
-          std::cout << "DRY-RUN: texture " << settings.source_path << "\n";
+        writer->Info(fmt::format("DRY-RUN: texture {}", settings.source_path));
         continue;
       }
 
@@ -511,26 +516,32 @@ auto BatchCommand::Run() -> int
     if (global_options_ != nullptr && settings.cooked_root.empty()) {
       settings.cooked_root = global_options_->cooked_root;
     }
-    if (options_.quiet)
+    if (options_.quiet) {
       settings.verbose = false;
+    }
 
     const auto expected_format
       = job.job_type == "fbx" ? ImportFormat::kFbx : ImportFormat::kGltf;
-    auto request
-      = internal::BuildSceneRequest(settings, expected_format, std::cerr);
-
-    if (!request) {
-      ++validation_failures;
-      if (options_.fail_fast)
-        break;
-      continue;
+    std::optional<ImportRequest> request;
+    {
+      std::ostringstream err;
+      request = internal::BuildSceneRequest(settings, expected_format, err);
+      if (!request) {
+        const auto msg = err.str();
+        if (!msg.empty()) {
+          writer->Error(msg);
+        }
+        ++validation_failures;
+        if (options_.fail_fast) {
+          break;
+        }
+        continue;
+      }
     }
 
     if (options_.dry_run) {
-      if (!options_.quiet) {
-        std::cout << "DRY-RUN: " << job.job_type << " " << settings.source_path
-                  << "\n";
-      }
+      writer->Info(
+        fmt::format("DRY-RUN: {} {}", job.job_type, settings.source_path));
       continue;
     }
 
@@ -540,16 +551,26 @@ auto BatchCommand::Run() -> int
   }
 
   if (options_.dry_run || jobs.empty()) {
-    return validation_failures == 0 ? 0 : 2;
+    if (validation_failures == 0) {
+      return {};
+    }
+    if (unsupported_seen) {
+      return std::unexpected(std::make_error_code(std::errc::not_supported));
+    }
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
 
   if (validation_failures > 0 && options_.fail_fast) {
-    return 2;
+    if (unsupported_seen) {
+      return std::unexpected(std::make_error_code(std::errc::not_supported));
+    }
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
 
   // 4. Execution Logic (Worker)
   struct SharedContext {
     std::mutex mutex;
+    std::condition_variable completed_cv;
     BatchViewModel state;
     bool completed = false;
     int exit_code = 0;
@@ -566,24 +587,15 @@ auto BatchCommand::Run() -> int
     = BuildWorkerUtilizationViews(worker_totals);
   common_context->reports.resize(jobs.size());
 
-  // Signal Handling
-  std::atomic<bool> stop_requested { false };
-  auto* previous_stop = g_stop_requested;
-  g_stop_requested = &stop_requested;
-  const ScopeGuard stop_guard(
-    [&]() noexcept { g_stop_requested = previous_stop; });
-  std::signal(SIGINT, HandleStopSignal);
-  std::signal(SIGTERM, HandleStopSignal);
-
   std::vector<JobProgressTrace> progress_traces(jobs.size());
   std::vector<std::optional<std::chrono::steady_clock::time_point>>
     submit_times(jobs.size());
 
-  auto worker_thread = std::jthread([this, &jobs, common_context,
-                                      &progress_traces, &submit_times,
-                                      worker_totals,
-                                      service_config](std::stop_token st) {
-    AsyncImportService service(service_config);
+  auto worker_thread = std::jthread([this, &jobs, common_context, writer,
+                                      import_service, &progress_traces,
+                                      &submit_times,
+                                      worker_totals](std::stop_token st) {
+    DCHECK_NOTNULL_F(import_service, "Import service must be set by main");
 
     size_t submitted = 0;
     size_t completed = 0;
@@ -639,16 +651,28 @@ auto BatchCommand::Run() -> int
       }
     };
 
+    bool shutdown_requested = false;
+    auto RequestShutdown = [&]() {
+      if (shutdown_requested) {
+        return;
+      }
+      shutdown_requested = true;
+      import_service->CancelAll();
+      import_service->RequestShutdown();
+    };
+
     while (!st.stop_requested() && (submitted < jobs.size() || in_flight > 0)) {
-      if (g_stop_requested && g_stop_requested->load()) {
-        service.RequestShutdown();
+      if (!import_service->IsAcceptingJobs()) {
+        RequestShutdown();
+      }
+
+      if (shutdown_requested) {
         break;
       }
 
-      while (submitted < jobs.size()) {
-        if (st.stop_requested()
-          || (g_stop_requested && g_stop_requested->load())) {
-          service.RequestShutdown();
+      while (!shutdown_requested && submitted < jobs.size()) {
+        if (st.stop_requested()) {
+          RequestShutdown();
           break;
         }
         auto& job = jobs[submitted];
@@ -661,7 +685,7 @@ auto BatchCommand::Run() -> int
             const auto u_expected = job_ids[submitted]->get();
             const auto u_actual = id.get();
             common_context->state.recent_logs.push_back(
-              std::format("Job {} id mismatch (expected {}, got {})",
+              fmt::format("Job {} id mismatch (expected {}, got {})",
                 DisplayJobNumber(submitted), u_expected, u_actual));
           }
 
@@ -695,12 +719,14 @@ auto BatchCommand::Run() -> int
 
             for (const auto& diag : report.diagnostics) {
               common_context->state.recent_logs.push_back(
-                std::format("✖ Job {} Failed: {}: {}",
+                fmt::format("✖ Job {} Failed: {}: {}",
                   DisplayJobNumber(submitted), diag.code, diag.message));
             }
           } else {
             common_context->state.recent_logs.push_back(
-              std::format("✔ Job {} Completed", DisplayJobNumber(submitted)));
+              fmt::format("✔ Job {} Completed", DisplayJobNumber(submitted)));
+            writer->Report(
+              fmt::format("Job {} Completed", DisplayJobNumber(submitted)));
           }
 
           // Cap logs
@@ -730,6 +756,9 @@ auto BatchCommand::Run() -> int
         auto on_progress = [&, submitted](const ProgressEvent& progress) {
           std::scoped_lock lock(common_context->mutex);
           if (progress.header.kind == ProgressEventKind::kPhaseUpdate) {
+            return;
+          }
+          if (progress.header.kind == ProgressEventKind::kJobFinished) {
             return;
           }
           {
@@ -774,12 +803,12 @@ auto BatchCommand::Run() -> int
             std::string event_label = EventLabel(progress.header.kind);
             if (const auto* item = GetItemProgress(progress)) {
               if (!item->item_kind.empty()) {
-                event_label = std::format(
+                event_label = fmt::format(
                   "{} {}", item->item_kind, EventLabel(progress.header.kind));
               }
             }
             std::string line
-              = std::format("Job {}-{} {}", DisplayJobNumber(submitted),
+              = fmt::format("Job {}-{} {}", DisplayJobNumber(submitted),
                 PhaseCode(progress.header.phase), event_label);
             if (const auto* item = GetItemProgress(progress)) {
               if (!item->item_name.empty()) {
@@ -787,9 +816,10 @@ auto BatchCommand::Run() -> int
                 line.append(item->item_name);
               }
               if (progress.header.kind == ProgressEventKind::kItemCollected) {
-                line.append(std::format(" load={:.2f}", item->queue_load));
+                line.append(fmt::format(" load={:.2f}", item->queue_load));
               }
             }
+            writer->Progress(line);
             common_context->state.recent_logs.push_back(std::move(line));
             if (common_context->state.recent_logs.size() > 50) {
               common_context->state.recent_logs.erase(
@@ -882,8 +912,8 @@ auto BatchCommand::Run() -> int
           UpdateWorkerUtilization();
         };
 
-        if (auto id
-          = service.SubmitImport(job.request, on_complete, on_progress)) {
+        if (auto id = import_service->SubmitImport(
+              job.request, on_complete, on_progress)) {
           job_ids[submitted] = *id;
           job_views[submitted].id = std::to_string(DisplayJobNumber(submitted));
           job_views[submitted].source = job.source_path;
@@ -897,7 +927,7 @@ auto BatchCommand::Run() -> int
         } else {
           std::scoped_lock lock(common_context->mutex);
           common_context->state.recent_logs.push_back(
-            std::format("Backpressure: delaying submission of job {}",
+            fmt::format("Backpressure: delaying submission of job {}",
               DisplayJobNumber(submitted)));
           break;
         }
@@ -922,7 +952,7 @@ auto BatchCommand::Run() -> int
       }
     }
 
-    service.Stop();
+    import_service->Stop();
 
     {
       std::scoped_lock lock(common_context->mutex);
@@ -934,10 +964,12 @@ auto BatchCommand::Run() -> int
       common_context->state.completed_run = true;
       common_context->state.worker_utilization.clear();
     }
+    common_context->completed_cv.notify_all();
   });
 
   // 5. Run TUI or Headless
-  if (!options_.no_tui) {
+  if (!(global_options_ != nullptr && global_options_->no_tui)) {
+    // TUI mode: the writer is muted by main to avoid console output.
     BatchImportScreen screen;
     screen.SetDataProvider([common_context]() {
       std::scoped_lock lock(common_context->mutex);
@@ -945,27 +977,16 @@ auto BatchCommand::Run() -> int
     });
     screen.Run();
   } else {
-    bool stop_notified = false;
-    while (!common_context->completed) {
-      if (g_stop_requested && g_stop_requested->load()) {
-        if (!stop_notified) {
-          stop_notified = true;
-          worker_thread.request_stop();
-          std::cout << "Stopping..." << "\n";
-        }
-      }
-
-      std::this_thread::sleep_for(std::chrono::seconds(1));
-      if (stop_notified) {
-        continue;
-      }
-      std::scoped_lock lock(common_context->mutex);
-      std::cout << "Progress: " << common_context->state.completed << "/"
-                << common_context->state.total << "\n";
-    }
+    std::unique_lock lock(common_context->mutex);
+    common_context->completed_cv.wait(
+      lock, [&]() { return common_context->completed; });
   }
 
+  std::optional<std::error_code> deferred_error;
+
   // 6. Report Generation
+  std::optional<std::filesystem::path> final_report_path;
+  const auto counts = BuildBatchSummary(common_context->reports, jobs.size());
   if (!options_.report_path.empty()) {
     const auto cooked_root
       = ResolveCookedRootForReport(jobs, common_context->reports);
@@ -982,6 +1003,7 @@ auto BatchCommand::Run() -> int
         const auto& job = jobs[index];
         const auto& report = common_context->reports[index];
         const bool success = report.has_value() && report->success;
+        const auto status = JobStatusFromReport(report);
         ordered_json telemetry = nullptr;
         if (report.has_value()) {
           telemetry = BuildTelemetryJson(report->telemetry);
@@ -995,6 +1017,7 @@ auto BatchCommand::Run() -> int
           { "index", DisplayJobNumber(index) },
           { "source", job.source_path },
           { "success", success },
+          { "status", status },
           { "telemetry", telemetry },
           { "progress", progress_json },
         });
@@ -1003,8 +1026,10 @@ auto BatchCommand::Run() -> int
       ordered_json payload = ordered_json::object();
       payload["summary"] = {
         { "jobs", jobs.size() },
-        { "succeeded", jobs.size() - common_context->state.failures },
-        { "failed", common_context->state.failures },
+        { "succeeded", counts.succeeded },
+        { "failed", counts.failed },
+        { "canceled", counts.canceled },
+        { "not_started", counts.not_started },
         { "total_time_ms", elapsed_ms },
         { "cooked_root",
           cooked_root.has_value() ? cooked_root->string() : std::string() },
@@ -1012,11 +1037,61 @@ auto BatchCommand::Run() -> int
       payload["jobs"] = std::move(jobs_json);
 
       if (!WriteJsonReport(payload, *resolved_path, std::cerr)) {
-        return 2;
+        deferred_error = std::make_error_code(std::errc::io_error);
+      }
+      final_report_path = *resolved_path;
+    }
+  }
+
+  if (options_.quiet) {
+    for (size_t index = 0; index < jobs.size(); ++index) {
+      const auto& report = common_context->reports[index];
+      const bool success = report.has_value() && report->success;
+      if (!success) {
+        if (report.has_value()) {
+          for (const auto& diag : report->diagnostics) {
+            writer->Error(fmt::format("{}: {}", diag.code, diag.message));
+          }
+        } else {
+          writer->Warning("No report available");
+        }
+      }
+    }
+  } else {
+    const auto elapsed_ms
+      = std::chrono::duration<double, std::milli>(common_context->state.elapsed)
+          .count();
+    writer->Info(
+      fmt::format("Summary: jobs={} succeeded={} failed={} canceled={} "
+                  "not_started={} total_time_ms={}",
+        jobs.size(), counts.succeeded, counts.failed, counts.canceled,
+        counts.not_started, elapsed_ms));
+
+    for (size_t index = 0; index < jobs.size(); ++index) {
+      const auto& report = common_context->reports[index];
+      const auto status = JobStatusFromReport(report);
+      writer->Info(fmt::format("Job {}: {}", DisplayJobNumber(index), status));
+      if (report.has_value() && !report->success) {
+        for (const auto& diag : report->diagnostics) {
+          writer->Error(fmt::format("{}: {}", diag.code, diag.message));
+        }
       }
     }
   }
 
-  return common_context->exit_code;
+  if (final_report_path.has_value()) {
+    writer->Info(
+      fmt::format("Report written: {}", final_report_path->string()));
+  }
+
+  if (deferred_error.has_value()) {
+    return std::unexpected(*deferred_error);
+  }
+
+  if (common_context->exit_code != 0) {
+    return std::unexpected(
+      std::make_error_code(std::errc::state_not_recoverable));
+  }
+  return {};
 }
 } // namespace oxygen::content::import::tool

@@ -20,10 +20,10 @@ asap_push_module("${META_MODULE_NAME}")
 # Dependencies
 # ------------------------------------------------------------------------------
 
+find_package(fmt CONFIG REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(nlohmann_json_schema_validator REQUIRED)
 find_package(ftxui REQUIRED)
-find_package(nlohmann_json REQUIRED)
 
 # ------------------------------------------------------------------------------
 # Build instructions
@@ -37,19 +37,24 @@ add_executable(
   "CliBuilder.h"
   "FbxCommand.cpp"
   "FbxCommand.h"
-  "GlobalOptions.cpp"
   "GlobalOptions.h"
   "GltfCommand.cpp"
   "GltfCommand.h"
   "ImportCommand.h"
   "ImportRunner.cpp"
   "ImportRunner.h"
+  "MessageWriter.h"
+  "ReportJson.cpp"
+  "ReportJson.h"
   "TextureCommand.cpp"
   "TextureCommand.h"
   "main.cpp"
   "UI/BatchViewModel.h"
+  "UI/JobViewModel.h"
   "UI/Screens/BatchImportScreen.h"
   "UI/Screens/BatchImportScreen.cpp"
+  "UI/Screens/ImportScreen.h"
+  "UI/Screens/ImportScreen.cpp"
 )
 
 add_custom_target(${META_MODULE_NAME} DEPENDS ${META_MODULE_TARGET})
@@ -75,6 +80,7 @@ target_link_libraries(
     oxygen::core
     oxygen::content
     oxygen::clap
+    fmt::fmt-header-only
     ftxui::screen
     ftxui::dom
     ftxui::component

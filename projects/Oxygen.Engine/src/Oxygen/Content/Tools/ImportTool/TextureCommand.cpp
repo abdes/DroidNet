@@ -5,12 +5,16 @@
 //===----------------------------------------------------------------------===//
 
 #include <iostream>
+#include <sstream>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Content/Import/Internal/TextureImportRequestBuilder.h>
 #include <Oxygen/Content/Tools/ImportTool/ImportRunner.h>
+#include <Oxygen/Content/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Content/Tools/ImportTool/TextureCommand.h>
 
 namespace oxygen::content::import::tool {
@@ -76,6 +80,23 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                        .WithValue<std::string>()
                        .StoreTo(&options_.cooked_root)
                        .Build();
+
+  // Alias to match global option name; accepts --cooked-root after the
+  // subcommand
+  auto cooked_root_alias = Option::WithKey("cooked-root")
+                             .About("Destination cooked root directory")
+                             .Long("cooked-root")
+                             .WithValue<std::string>()
+                             .StoreTo(&options_.cooked_root)
+                             .Build();
+
+  auto with_content_hashing
+    = Option::WithKey("content-hashing")
+        .About("Enable or disable content hashing for outputs")
+        .Long("content-hashing")
+        .WithValue<bool>()
+        .StoreTo(&options_.with_content_hashing)
+        .Build();
 
   auto job_name = Option::WithKey("name")
                     .About("Optional job name")
@@ -292,26 +313,35 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(renormalize_normals))
     .WithOption(std::move(bake_hdr_to_ldr))
     .WithOption(std::move(sources))
-    .WithOption(std::move(report));
+    .WithOption(std::move(report))
+    .WithOption(std::move(cooked_root_alias))
+    .WithOption(std::move(with_content_hashing));
 }
 
-auto TextureCommand::Run() -> int
+auto TextureCommand::Run() -> std::expected<void, std::error_code>
 {
   auto settings = options_;
-  bool quiet = false;
-  if (global_options_ != nullptr) {
-    if (settings.cooked_root.empty()) {
-      settings.cooked_root = global_options_->cooked_root;
-    }
-    quiet = global_options_->quiet;
+
+  if (global_options_ != nullptr && settings.cooked_root.empty()) {
+    settings.cooked_root = global_options_->cooked_root;
   }
 
-  const auto request = internal::BuildTextureRequest(settings, std::cerr);
+  DCHECK_F(global_options_ != nullptr && global_options_->writer,
+    "Global message writer must be set by main");
+  auto writer = global_options_->writer;
+
+  std::ostringstream err;
+  const auto request = internal::BuildTextureRequest(settings, err);
   if (!request.has_value()) {
-    return 2;
+    const auto msg = err.str();
+    if (!msg.empty()) {
+      writer->Error(msg);
+    }
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
 
-  return RunImportJob(*request, quiet, settings.report_path);
+  return RunImportJob(*request, writer, settings.report_path,
+    !global_options_->no_tui, global_options_->import_service);
 }
 
 } // namespace oxygen::content::import::tool

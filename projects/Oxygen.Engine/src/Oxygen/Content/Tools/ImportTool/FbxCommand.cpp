@@ -5,7 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <iostream>
+#include <sstream>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
@@ -13,6 +16,7 @@
 #include <Oxygen/Content/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Content/Tools/ImportTool/FbxCommand.h>
 #include <Oxygen/Content/Tools/ImportTool/ImportRunner.h>
+#include <Oxygen/Content/Tools/ImportTool/MessageWriter.h>
 
 namespace oxygen::content::import::tool {
 
@@ -42,6 +46,23 @@ auto FbxCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                        .WithValue<std::string>()
                        .StoreTo(&options_.cooked_root)
                        .Build();
+
+  // Alias to match global option name; accepts --cooked-root after the
+  // subcommand
+  auto cooked_root_alias = Option::WithKey("cooked-root")
+                             .About("Destination cooked root directory")
+                             .Long("cooked-root")
+                             .WithValue<std::string>()
+                             .StoreTo(&options_.cooked_root)
+                             .Build();
+
+  auto with_content_hashing
+    = Option::WithKey("content-hashing")
+        .About("Enable or disable content hashing for outputs")
+        .Long("content-hashing")
+        .WithValue<bool>()
+        .StoreTo(&options_.with_content_hashing)
+        .Build();
 
   auto job_name = Option::WithKey("name")
                     .About("Optional job name")
@@ -148,17 +169,17 @@ auto FbxCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(no_bake_transforms))
     .WithOption(std::move(normals))
     .WithOption(std::move(tangents))
-    .WithOption(std::move(prune_nodes));
+    .WithOption(std::move(prune_nodes))
+    .WithOption(std::move(cooked_root_alias))
+    .WithOption(std::move(with_content_hashing));
 }
 
-auto FbxCommand::Run() -> int
+auto FbxCommand::Run() -> std::expected<void, std::error_code>
 {
   auto settings = options_;
-  if (global_options_ != nullptr) {
-    if (settings.cooked_root.empty()) {
-      settings.cooked_root = global_options_->cooked_root;
-    }
-  }
+  DCHECK_F(global_options_ != nullptr && global_options_->writer,
+    "Global message writer must be set by main");
+  auto writer = global_options_->writer;
 
   settings.import_textures = !no_import_textures_;
   settings.import_materials = !no_import_materials_;
@@ -166,14 +187,21 @@ auto FbxCommand::Run() -> int
   settings.import_scene = !no_import_scene_;
   settings.bake_transforms = !no_bake_transforms_;
 
-  const auto request
-    = internal::BuildSceneRequest(settings, ImportFormat::kFbx, std::cerr);
-  if (!request.has_value()) {
-    return 2;
+  std::optional<ImportRequest> request;
+  {
+    std::ostringstream err;
+    request = internal::BuildSceneRequest(settings, ImportFormat::kFbx, err);
+    if (!request.has_value()) {
+      const auto msg = err.str();
+      if (!msg.empty()) {
+        writer->Error(msg);
+      }
+      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
   }
 
-  return RunImportJob(*request,
-    global_options_ != nullptr && global_options_->quiet, settings.report_path);
+  return RunImportJob(*request, writer, settings.report_path,
+    !global_options_->no_tui, global_options_->import_service);
 }
 
 } // namespace oxygen::content::import::tool
