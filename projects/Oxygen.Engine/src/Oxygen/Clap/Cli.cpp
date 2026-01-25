@@ -125,7 +125,7 @@ auto Cli::Parse(const int argc, const char** argv) -> CommandLineContext
   const auto args_span = cla.Args();
   std::vector<std::string> args(args_span.begin(), args_span.end());
 
-  // Simplify processing by transforming the shor or long option forms of
+  // Simplify processing by transforming the short or long option forms of
   // `version` and `help` into the corresponding unified command name.
   if (!args.empty()) {
     const std::string_view first = args[0];
@@ -135,6 +135,25 @@ auto Cli::Parse(const int argc, const char** argv) -> CommandLineContext
     } else if (has_help_command_
       && (first == Command::HELP_SHORT || first == Command::HELP_LONG)) {
       args[0].assign(Command::HELP);
+    }
+
+    // Support the common usage: `tool subcommand --help` -> `tool help
+    // subcommand`. If a help token is present anywhere after the first token,
+    // rewrite the arguments so that we run the help command for the target
+    // command path.
+    if (has_help_command_) {
+      for (size_t i = 1; i < args.size(); ++i) {
+        if (args[i] == Command::HELP_LONG || args[i] == Command::HELP_SHORT) {
+          std::vector<std::string> rewritten;
+          rewritten.reserve(i + 1);
+          rewritten.emplace_back(Command::HELP);
+          for (size_t j = 0; j < i; ++j) {
+            rewritten.emplace_back(std::move(args[j]));
+          }
+          args = std::move(rewritten);
+          break;
+        }
+      }
     }
   }
 
