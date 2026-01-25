@@ -667,7 +667,6 @@ static bool parse_vmodule_override(std::string_view override_str)
 
 void parse_args(int& argc, const char** argv, const char* verbosity_flag)
 {
-  fprintf(stderr, "parse_args called with argc=%d\n", argc);
   int arg_dest = 1;
   int out_argc = argc;
 
