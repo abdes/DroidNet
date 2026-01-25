@@ -4,14 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Content/Tools/ImportTool/GlobalOptions.h>
+#pragma once
+
+#include <chrono>
+#include <string>
+#include <vector>
 
 namespace oxygen::content::import::tool {
 
-auto ApplyLoggingOptions(const GlobalOptions& options) -> void
-{
-  loguru::g_colorlogtostderr = !options.no_color;
-}
+struct JobViewModel {
+  std::string status;
+  std::string phase;
+  std::string item_kind;
+  std::string item_name;
+  float progress = 0.0f;
+  std::vector<std::string> recent_logs;
+  std::chrono::seconds elapsed { 0 };
+  bool completed = false;
+  bool success = false;
+};
 
 } // namespace oxygen::content::import::tool

@@ -24,7 +24,7 @@ public:
 
   [[nodiscard]] auto Name() const -> std::string_view override;
   [[nodiscard]] auto BuildCommand() -> std::shared_ptr<clap::Command> override;
-  [[nodiscard]] auto Run() -> int override;
+  [[nodiscard]] auto Run() -> std::expected<void, std::error_code> override;
 
 private:
   const GlobalOptions* global_options_ = nullptr;
