@@ -4,8 +4,44 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cctype>
+#include <cstdint>
+#include <mutex>
+#include <optional>
+#include <shared_mutex>
+#include <string>
+#include <string_view>
+#include <utility>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/Naming.h>
+
+namespace import = oxygen::content::import;
+
+namespace {
+
+auto ApplyNamespacing(std::string name, const import::NamingContext& context)
+  -> std::string
+{
+  if (context.kind == import::ImportNameKind::kSceneNode) {
+    return name;
+  }
+
+  // Check if we have a scene namespace to apply
+  if (context.scene_namespace.empty()) {
+    return name;
+  }
+
+  // Already namespaced? (contains '/')
+  if (name.contains('/')) {
+    return name;
+  }
+
+  // Apply namespace: "SceneName/AssetName"
+  return std::string(context.scene_namespace) + "/" + name;
+}
+
+} // namespace
 
 namespace oxygen::content::import {
 
@@ -51,15 +87,15 @@ auto NamingService::MakeUniqueName(const std::string_view authored_name,
   }
 
   const auto kind_index = static_cast<size_t>(context.kind);
-  auto& registry = registries_[kind_index];
+  auto& [usage_counts, mutex] = registries_.at(kind_index);
 
-  std::unique_lock lock(registry.mutex);
+  std::unique_lock lock(mutex);
 
   // Check for collision
-  auto it = registry.usage_counts.find(base_name);
-  if (it == registry.usage_counts.end()) {
+  const auto it = usage_counts.find(base_name);
+  if (it == usage_counts.end()) {
     // First use of this name
-    registry.usage_counts[base_name] = 1;
+    usage_counts[base_name] = 1;
     return base_name;
   }
 
@@ -71,11 +107,11 @@ auto NamingService::MakeUniqueName(const std::string_view authored_name,
   do {
     unique_name = original_name + "_" + std::to_string(collision_ordinal);
     ++collision_ordinal;
-  } while (registry.usage_counts.contains(unique_name));
+  } while (usage_counts.contains(unique_name));
 
   // Register both the original (incremented) and the new unique name
   it->second = collision_ordinal;
-  registry.usage_counts[unique_name] = 1;
+  usage_counts[unique_name] = 1;
 
   return unique_name;
 }
@@ -84,49 +120,27 @@ auto NamingService::HasName(
   const ImportNameKind kind, const std::string_view name) const -> bool
 {
   const auto kind_index = static_cast<size_t>(kind);
-  const auto& registry = registries_[kind_index];
+  const auto& [usage_counts, mutex] = registries_.at(kind_index);
 
-  std::shared_lock lock(registry.mutex);
-  return registry.usage_counts.contains(std::string(name));
+  std::shared_lock lock(mutex);
+  return usage_counts.contains(std::string(name));
 }
 
 auto NamingService::GetNameCount(const ImportNameKind kind) const -> size_t
 {
   const auto kind_index = static_cast<size_t>(kind);
-  const auto& registry = registries_[kind_index];
+  const auto& [usage_counts, mutex] = registries_.at(kind_index);
 
-  std::shared_lock lock(registry.mutex);
-  return registry.usage_counts.size();
+  std::shared_lock lock(mutex);
+  return usage_counts.size();
 }
 
 auto NamingService::Reset() -> void
 {
-  for (auto& registry : registries_) {
-    std::unique_lock lock(registry.mutex);
-    registry.usage_counts.clear();
+  for (auto& [usage_counts, mutex] : registries_) {
+    std::unique_lock lock(mutex);
+    usage_counts.clear();
   }
-}
-
-auto NamingService::ApplyNamespacing(
-  std::string name, const NamingContext& context) const -> std::string
-{
-  // Only namespace assets, not scene nodes
-  if (context.kind == ImportNameKind::kSceneNode) {
-    return name;
-  }
-
-  // Check if we have a scene namespace to apply
-  if (context.scene_namespace.empty()) {
-    return name;
-  }
-
-  // Already namespaced? (contains '/')
-  if (name.find('/') != std::string::npos) {
-    return name;
-  }
-
-  // Apply namespace: "SceneName/AssetName"
-  return std::string(context.scene_namespace) + "/" + name;
 }
 
 auto NormalizeNamingStrategy::Rename(std::string_view authored_name,
@@ -159,7 +173,7 @@ auto NormalizeNamingStrategy::Normalize(std::string_view input) const
 
   if (options_.trim_whitespace) {
     const auto is_space
-      = [](unsigned char ch) { return std::isspace(ch) != 0; };
+      = [](const unsigned char ch) -> bool { return std::isspace(ch) != 0; };
     while (!s.empty() && is_space(static_cast<unsigned char>(s.front()))) {
       s.erase(s.begin());
     }
