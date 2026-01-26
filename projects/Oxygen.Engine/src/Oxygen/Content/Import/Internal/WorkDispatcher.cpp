@@ -641,9 +641,21 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     return std::nullopt;
   };
 
+  struct ProgressState final {
+    std::shared_ptr<ProgressReporter> reporter;
+    std::atomic<size_t> completed_count { 0U };
+    size_t item_count = 0U;
+    std::atomic<bool> active { true };
+  };
+
+  auto progress_state = std::make_shared<ProgressState>();
+  progress_state->item_count = item_count;
+  if (progress_.has_value()) {
+    progress_state->reporter = std::make_shared<ProgressReporter>(*progress_);
+  }
+
   std::vector<uint8_t> submitted(item_count, 0U);
   std::vector<uint8_t> completed(item_count, 0U);
-  size_t completed_count = 0U;
 
   std::vector<std::vector<PlanItemId>> dependents(item_count);
   for (const auto& step : context.steps) {
@@ -679,7 +691,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       return;
     }
     completed[u_item] = 1U;
-    ++completed_count;
+    progress_state->completed_count.fetch_add(1U, std::memory_order_relaxed);
     for (const auto dependent : dependents[u_item]) {
       auto& tracker = context.planner.Tracker(dependent);
       if (tracker.MarkReady({ item_id })) {
@@ -691,19 +703,25 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
   auto MakeItemStartedCallback
     = [&](const PlanItemKind kind,
         std::string_view item_name) -> std::function<void()> {
-    if (!progress_.has_value() || !progress_->on_progress) {
+    if (!progress_state->reporter || !progress_state->reporter->on_progress) {
       return {};
     }
     const std::string name(item_name);
-    return [&, kind, name]() {
-      const float overall_progress = (item_count > 0U)
-        ? progress_->overall_start
-          + (progress_->overall_end - progress_->overall_start)
+    return [state = progress_state, kind, name, kind_label, phase_for_kind]() {
+      if (!state->active.load(std::memory_order_acquire) || !state->reporter
+        || !state->reporter->on_progress) {
+        return;
+      }
+      const auto completed_count
+        = state->completed_count.load(std::memory_order_relaxed);
+      const float overall_progress = (state->item_count > 0U)
+        ? state->reporter->overall_start
+          + (state->reporter->overall_end - state->reporter->overall_start)
             * (static_cast<float>(completed_count)
-              / static_cast<float>(item_count))
-        : progress_->overall_start;
+              / static_cast<float>(state->item_count))
+        : state->reporter->overall_start;
       const auto label = kind_label(kind);
-      progress_->ReportItemProgress(ProgressEventKind::kItemStarted,
+      state->reporter->ReportItemProgress(ProgressEventKind::kItemStarted,
         phase_for_kind(kind), overall_progress, name + " started", label, name);
     };
   };
@@ -711,19 +729,25 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
   auto MakeItemFinishedCallback
     = [&](const PlanItemKind kind,
         std::string_view item_name) -> std::function<void()> {
-    if (!progress_.has_value() || !progress_->on_progress) {
+    if (!progress_state->reporter || !progress_state->reporter->on_progress) {
       return {};
     }
     const std::string name(item_name);
-    return [&, kind, name]() {
-      const float overall_progress = (item_count > 0U)
-        ? progress_->overall_start
-          + (progress_->overall_end - progress_->overall_start)
+    return [state = progress_state, kind, name, kind_label, phase_for_kind]() {
+      if (!state->active.load(std::memory_order_acquire) || !state->reporter
+        || !state->reporter->on_progress) {
+        return;
+      }
+      const auto completed_count
+        = state->completed_count.load(std::memory_order_relaxed);
+      const float overall_progress = (state->item_count > 0U)
+        ? state->reporter->overall_start
+          + (state->reporter->overall_end - state->reporter->overall_start)
             * (static_cast<float>(completed_count)
-              / static_cast<float>(item_count))
-        : progress_->overall_start;
+              / static_cast<float>(state->item_count))
+        : state->reporter->overall_start;
       const auto label = kind_label(kind);
-      progress_->ReportItemProgress(ProgressEventKind::kItemFinished,
+      state->reporter->ReportItemProgress(ProgressEventKind::kItemFinished,
         phase_for_kind(kind), overall_progress, name + " finished", label,
         name);
     };
@@ -731,35 +755,46 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
 
   auto ReportItemFinished
     = [&](const PlanItemKind kind, std::string_view item_name) -> void {
-    if (!progress_.has_value() || !progress_->on_progress) {
+    if (!progress_state->reporter || !progress_state->reporter->on_progress
+      || !progress_state->active.load(std::memory_order_acquire)) {
       return;
     }
-    const float overall_progress = (item_count > 0U) ? progress_->overall_start
-        + (progress_->overall_end - progress_->overall_start)
+    const auto completed_count
+      = progress_state->completed_count.load(std::memory_order_relaxed);
+    const float overall_progress = (progress_state->item_count > 0U)
+      ? progress_state->reporter->overall_start
+        + (progress_state->reporter->overall_end
+            - progress_state->reporter->overall_start)
           * (static_cast<float>(completed_count)
-            / static_cast<float>(item_count))
-                                                     : progress_->overall_start;
+            / static_cast<float>(progress_state->item_count))
+      : progress_state->reporter->overall_start;
     const auto label = kind_label(kind);
-    progress_->ReportItemProgress(ProgressEventKind::kItemFinished,
-      phase_for_kind(kind), overall_progress,
+    progress_state->reporter->ReportItemProgress(
+      ProgressEventKind::kItemFinished, phase_for_kind(kind), overall_progress,
       std::string(item_name) + " finished", label, std::string(item_name));
   };
 
   auto ReportItemCollected
     = [&](const PlanItemKind kind, std::string_view item_name,
         const float input_queue_load, const float output_queue_load) -> void {
-    if (!progress_.has_value() || !progress_->on_progress) {
+    if (!progress_state->reporter || !progress_state->reporter->on_progress
+      || !progress_state->active.load(std::memory_order_acquire)) {
       return;
     }
 
-    const float overall_progress = (item_count > 0U) ? progress_->overall_start
-        + (progress_->overall_end - progress_->overall_start)
+    const auto completed_count
+      = progress_state->completed_count.load(std::memory_order_relaxed);
+    const float overall_progress = (progress_state->item_count > 0U)
+      ? progress_state->reporter->overall_start
+        + (progress_state->reporter->overall_end
+            - progress_state->reporter->overall_start)
           * (static_cast<float>(completed_count)
-            / static_cast<float>(item_count))
-                                                     : progress_->overall_start;
+            / static_cast<float>(progress_state->item_count))
+      : progress_state->reporter->overall_start;
     const auto label = kind_label(kind);
-    progress_->ReportItemCollected(phase_for_kind(kind), overall_progress, {},
-      label, std::string(item_name), input_queue_load, output_queue_load);
+    progress_state->reporter->ReportItemCollected(phase_for_kind(kind),
+      overall_progress, {}, label, std::string(item_name), input_queue_load,
+      output_queue_load);
   };
 
   auto ComputeQueueLoad
@@ -1375,6 +1410,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
   });
 
   auto Finish = [&](const bool ok) -> co::Co<bool> {
+    progress_state->active.store(false, std::memory_order_release);
     collector_done.store(true, std::memory_order_release);
     collector_kick.Close();
     co_await collector_finished;
@@ -1682,7 +1718,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     return availability;
   };
 
-  while (completed_count < item_count) {
+  while (progress_state->completed_count.load(std::memory_order_acquire)
+    < item_count) {
     bool submitted_any = false;
     auto availability = BuildAvailability();
     auto next_item = scheduler->NextReady(availability);
@@ -1705,7 +1742,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       }
     }
 
-    if (completed_count >= item_count) {
+    if (progress_state->completed_count.load(std::memory_order_acquire)
+      >= item_count) {
       co_return co_await Finish(true);
     }
 
