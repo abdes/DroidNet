@@ -21,7 +21,7 @@ This document captures the *why* and the *how* of the current implementation, in
 
 ### Out of scope (owned elsewhere)
 
-- Asset caching, streaming policies, LRU/eviction, and deduplication of identical content.
+- Global asset streaming policy and cache budget decisions.
 - Choosing placeholder meshes when assets are missing.
 - Instancing/batching policy (built on top of stable handles and SRV indices).
 
@@ -58,7 +58,7 @@ flowchart LR
 
 - `engine::sceneprep::GeometryHandle` is a stable index into `GeometryUploader`’s internal entry table.
 - Handles are stable for the renderer lifetime.
-- Handle recycling is reserved for a future explicit asset-eviction notification hook.
+- Handle recycling is reserved for a future explicit policy decision.
 - Invalid handle sentinel: `engine::sceneprep::kInvalidGeometryHandle`.
 
 ### 3) Bindless Index Meaning and Invalid Sentinel
@@ -80,7 +80,7 @@ The caller is responsible for ensuring that the updated mesh still corresponds t
 
 ## Runtime Behavior Policy (User-Visible Semantics)
 
-When geometry is invalid, not yet resident, or upload fails:
+When geometry is invalid, not yet resident, evicted, or upload fails:
 
 - Render nothing for that item (skip the draw or emit a zero-count draw).
 - Do not fail the frame.
@@ -96,6 +96,7 @@ The public API is intentionally narrow (PIMPL-based) and frame-aware.
 - `OnFrameStart(tag, slot)`
   - Advances the internal epoch and resets per-frame “ensure” state.
   - Retires completed uploads and refreshes internal pending-ticket lists.
+  - Processes pending content eviction events and invalidates affected entries.
 - `GetOrAllocate(geometry_ref)` / `GetOrAllocate(geometry_ref, is_critical)`
   - Interns the stable identity to a stable handle.
   - May mark an existing entry as critical (criticality is sticky and only upgrades).
@@ -125,6 +126,8 @@ Each entry conceptually contains:
 - Mesh reference: shared ownership of the mesh instance used for upload and subsequent queries
 - Dirtiness/residency tracking:
   - `is_dirty` (content/residency needs work)
+  - `evicted` (content cache eviction observed for identity)
+  - `generation` (monotonic per-entry generation; guards stale uploads)
   - `last_touched_epoch` (debug/diagnostics and future eviction policies)
 - GPU resources:
   - Vertex buffer and optional index buffer
@@ -132,6 +135,7 @@ Each entry conceptually contains:
   - Pending SRV indices (allocated/kept for the next publish)
 - Upload tickets:
   - Optional pending ticket per buffer (VB/IB)
+  - Pending generation per ticket to reject late completions
 
 ### “Touched” vs “Dirty”
 
@@ -179,7 +183,10 @@ sequenceDiagram
 Bindless indices are only *published* (i.e., returned as valid) after upload completion is confirmed successful.
 
 - On update/hot-reload, previously published indices are invalidated for safety.
-- The uploader keeps “pending” indices/tickets so it can replace data and publish atomically from the renderer’s perspective.
+- The uploader keeps pending indices and tickets so it can replace data and
+  publish atomically from the renderer’s perspective.
+- Publication is skipped if the pending ticket’s generation no longer matches
+  the entry (eviction or replacement).
 
 ### Entry State Machine
 
@@ -195,6 +202,7 @@ stateDiagram-v2
   Uploading --> Dirty: Completion failure (log + retry)
 
   Resident --> Dirty: Update() or identity's mesh instance changes
+  Resident --> Dirty: Content eviction event
   Resident --> Resident: Referenced again (no reupload)
 
   Dirty --> Resident: Already resident (no work)
@@ -256,10 +264,13 @@ Meshes are validated at the API boundary (`GetOrAllocate` and `Update`). Validat
 
 On destruction:
 
-- The graphics backend is flushed to ensure in-flight GPU work completes.
-- GPU buffers are unregistered from the resource registry as best-effort cleanup.
+- The uploader stops accepting work and releases resources via the graphics
+  backend's deferred reclamation path where applicable.
+- GPU buffers and views are unregistered from the resource registry as a
+  best-effort cleanup.
 
-This prevents descriptor registry leaks and reduces risk of freeing resources still in use by the GPU.
+This prevents descriptor registry leaks and reduces risk of freeing resources
+still in use by the GPU.
 
 ## Typical Usage Models
 

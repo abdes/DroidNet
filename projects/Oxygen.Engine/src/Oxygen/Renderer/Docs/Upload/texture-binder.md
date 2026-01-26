@@ -16,11 +16,14 @@ heap indices, allowing materials to reference textures that can be sampled in sh
   `TextureBinder` using `ResourceKey` values emitted at scene-prep time.
 - Implemented: `TextureBinder` constructor requires `AssetLoader` injection; placeholder and error textures are created
   during initialization.
-- Implemented: Async loading and upload pipeline using OxCo coroutines. `AssetLoader::StartLoadTexture` starts loader
-  coroutines, `TextureBinder::InitiateAsyncLoad` requests CPU-side payload, creates GPU texture on completion, submits
-  full mip-chain via `UploadCoordinator`, and `OnFrameStart()` drains upload completions and repoints descriptors.
+- Implemented: Async loading and upload pipeline using OxCo coroutines. CPU payload is loaded via AssetLoader, GPU
+  textures are created on completion, full mip chains are submitted via UploadCoordinator, and `OnFrameStart()` drains
+  upload completions and repoints descriptors.
 - Implemented: buffer-provided textures flow through the same pipeline via `AssetLoader::LoadTextureFromBufferAsync`,
   which expects a cooked/pak-style payload (`TextureResourceDesc` followed by the mip/data blob).
+- Implemented: content eviction repoints per-entry descriptors to the global placeholder while preserving stable SRV
+  indices; evicted entries reload on the next `GetOrAllocate()` call.
+- Implemented: per-frame upload bytes are capped to prevent staging explosion.
 
 ## Responsibilities
 
@@ -194,10 +197,22 @@ stateDiagram-v2
 - `OnFrameStart()` is the work pump:
   - drains upload completion tickets,
   - repoints descriptors after successful completion,
+  - applies eviction-driven repoints to placeholders,
   - performs deterministic failure handling.
 - `OnFrameEnd()` is intentionally a no-op.
 - GPU-safe destruction is handled by the graphics backend's deferred reclaim
   processing when the frame slot cycles.
+
+### Content cache eviction integration
+
+- TextureBinder subscribes to content eviction events and marks affected
+  entries as evicted.
+- Evicted entries keep their stable SRV indices but repoint to the global
+  placeholder texture so shaders remain safe.
+- Late upload completions are ignored if the entry generation changed after
+  eviction or replacement.
+- A subsequent `GetOrAllocate()` call for the same ResourceKey restarts the
+  load/ upload pipeline.
 
 ## 2. Error-Indicator Texture
 
@@ -252,9 +267,9 @@ any dependency on content sources, file IO, or the asset pipeline.
 
 - Row pitch: 256-byte aligned
 - Mip placement: 512-byte aligned (alignment padding occurs between mips)
-- Formats: RGBA8_UNORM, RGBA8_UNORM_SRGB
-- Compression: NONE
-- Type: 2D textures
+- Formats: uncompressed formats and BC7 (engine rejects unsupported formats)
+- Type: 2D textures, arrays, and cubemaps; 3D textures are supported when
+  the payload provides valid subresource layouts
 
 If these guarantees are violated at runtime, `TextureBinder` treats the texture
 as invalid and binds the error-indicator texture for that identity.
