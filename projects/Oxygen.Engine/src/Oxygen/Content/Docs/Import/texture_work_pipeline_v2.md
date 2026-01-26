@@ -17,9 +17,11 @@ format.
 Core properties:
 
 - **Decode → process → mips → format conversion/compression → packing**
-- **No I/O, no indices**: returns `CookedTexturePayload` for the job to emit
+- **No indices**: returns `CookedTexturePayload` for the job to emit
 - **Job-scoped**: created per job and started in the job’s child nursery
 - **ThreadPool offload**: heavy stages run on `co::ThreadPool`
+- **Optional async file reads**: when configured with an `IAsyncFileReader`, the
+  pipeline may resolve `WorkItem::source_path` into bytes (read-only).
 - **Reuse existing cookers**: `TextureCooker` and `TextureEmissionUtils` define
   the canonical behavior
 - **Planner‑gated**: the planner submits work only when dependencies are ready
@@ -43,8 +45,9 @@ job orchestration acquires sources, submits, collects, and commits via emitters)
 
 ### Pipeline vs Emitter Responsibilities
 
-- **TexturePipeline**: produces `CookedTexturePayload` (compute-only), including
-  deterministic placeholders when requested.
+- **TexturePipeline**: produces `CookedTexturePayload` (compute-only, with the
+  exception of loading external texture sources), including deterministic
+  placeholders when requested.
 - **TextureEmitter**: ensures fallback index `0`, deduplicates by signature,
   assigns stable indices immediately, and performs all async I/O to
   `textures.data` and `textures.table`.
@@ -80,6 +83,12 @@ using SourceContent = std::variant<SourceBytes, TextureSourceSet, ScratchImage>;
 
 struct WorkItem {
   std::string source_id;     // Diagnostic id + decode extension hint
+
+  // Optional file path used to resolve bytes via `IAsyncFileReader`. When the
+  // `source` field already contains bytes or a decoded `ScratchImage`, leave
+  // this empty. The pipeline will use the configured file reader when present.
+  std::filesystem::path source_path;
+
   std::string texture_id;    // Canonical dedupe key (NormalizeTexturePathId /
                              // embedded:sha256)
   const void* source_key{};  // Opaque correlation (e.g. ufbx_texture*)
@@ -92,6 +101,12 @@ struct WorkItem {
   uint32_t cubemap_face_size = 0; // Required when equirect_to_cubemap = true
   CubeMapImageLayout cubemap_layout = CubeMapImageLayout::kUnknown;
   SourceContent source;
+
+  // Optional callbacks invoked on the import thread when a worker begins and
+  // ends processing this item. Useful for telemetry and tests.
+  std::function<void()> on_started;
+  std::function<void()> on_finished;
+
   std::stop_token stop_token;
 };
 ```
@@ -110,7 +125,6 @@ Notes:
 - `texture_id` canonicalization must match sync import:
   - file textures: `NormalizeTexturePathId(resolved_path)`
   - embedded textures: `"embedded:" + sha256(bytes)`
-- `output_format_is_override` should mirror
 - `equirect_to_cubemap` triggers HDR panorama → cubemap conversion (single
   source only). Requires `cubemap_face_size > 0`; the conversion operates on
   RGBA32F input and uses `desc.mip_filter` as the sampling filter.
@@ -132,8 +146,12 @@ struct WorkResult {
   const void* source_key{};
 
   std::optional<CookedTexturePayload> cooked;
-  bool used_placeholder = false;
+  bool used_placeholder = false; // True -> caller should map to fallback texture index 0
   std::vector<ImportDiagnostic> diagnostics;
+
+  // Per-item telemetry captured during pipeline execution (timings, IO).
+  ImportWorkItemTelemetry telemetry;
+
   bool success = false;
 };
 ```
@@ -149,6 +167,8 @@ Notes:
   by the job/orchestrator, not the pipeline.
 - Job-level failure handling maps a failed texture to the error texture index
   (`std::numeric_limits<ResourceIndexT>::max()`) and continues the job.
+- `ImportWorkItemTelemetry` captures per-item timings (including any observed
+  IO durations) and is populated into `WorkResult.telemetry`.
 
 ---
 
@@ -162,13 +182,23 @@ class TexturePipeline final {
 public:
   struct Config {
     size_t queue_capacity = 64;
-    uint32_t worker_count = 2;
+    uint32_t worker_count = 4;
     bool with_content_hashing = true;
+
+    // Optional async file reader for resolving WorkItem::source_path when
+    // the submitted WorkItem does not already contain source bytes.
+    observer_ptr<IAsyncFileReader> file_reader = {};
+
+    // Optional callback to observe async I/O durations (microseconds).
+    std::function<void(std::chrono::microseconds)> on_io_duration;
   };
 
   explicit TexturePipeline(co::ThreadPool& thread_pool, Config cfg = {});
 
   void Start(co::Nursery& nursery);
+
+  // Note: `Start` must be called on the import thread; the nursery will own
+  // the worker coroutines.
 
   [[nodiscard]] auto Submit(WorkItem item) -> co::Co<>;
   [[nodiscard]] auto TrySubmit(WorkItem item) -> bool;
@@ -179,6 +209,12 @@ public:
   [[nodiscard]] auto HasPending() const noexcept -> bool;
   [[nodiscard]] auto PendingCount() const noexcept -> size_t;
   [[nodiscard]] auto GetProgress() const noexcept -> PipelineProgress;
+
+  // Queue introspection helpers (available on the import-thread):
+  [[nodiscard]] auto InputQueueSize() const noexcept -> size_t;
+  [[nodiscard]] auto InputQueueCapacity() const noexcept -> size_t;
+  [[nodiscard]] auto OutputQueueSize() const noexcept -> size_t;
+  [[nodiscard]] auto OutputQueueCapacity() const noexcept -> size_t;
 };
 ```
 
@@ -186,17 +222,17 @@ public:
 
 ## Worker Behavior
 
-Workers run as coroutines on the import thread and drain the bounded input queue.
+Workers run as coroutines on the import thread and drain the bounded input queue. The number of worker coroutines is controlled by `Config::worker_count` (default 4). CPU-heavy work is offloaded to the configured `co::ThreadPool`.
 
 For each work item:
 
-1) Check cancellation (`stop_token.stop_requested()`); if canceled, return
-   `success=false` with no cooked payload.
+1) Invoke `WorkItem.on_started()` (if provided) on the import thread and check cancellation (`stop_token.stop_requested()`); if canceled, return `success=false` with no cooked payload.
 2) Resolve packing policy via `TexturePackingPolicy` helpers.
-3) Build a local `TextureImportDesc`:
+3) If `WorkItem::source` does not contain bytes and `WorkItem::source_path` is set, attempt to resolve bytes using the configured `IAsyncFileReader` and report I/O latency via `Config::on_io_duration` when present.
+4) Build a local `TextureImportDesc`:
    - copy from `WorkItem.desc`
    - set `source_id` and `stop_token`
-4) Cook using the appropriate `CookTexture(...)` overload:
+5) Cook using the appropriate `CookTexture(...)` overload:
    - `SourceBytes`: decode with extension hints and, if
      `output_format_is_override == false`, preserve the decoded format before
      calling `CookTexture(ScratchImage&&, ...)`.
@@ -204,13 +240,13 @@ For each work item:
      preserve the decoded format when `output_format_is_override == false`,
      assemble cubemaps, 2D arrays with pre-authored mips, or 3D depth slices.
    - `ScratchImage`: skip decode and cook directly.
-5) On error:
+6) On error:
    - If `failure_policy == kPlaceholder` and the error is **not** cancellation,
      return `success = false` with `used_placeholder = true`. The job/orchestrator
      maps this to fallback texture index `0`.
    - Otherwise, translate `TextureImportError` into `ImportDiagnostic` and
      return `success=false`.
-6) Send `WorkResult` to the output queue.
+7) Invoke `WorkItem.on_finished()` (if provided) on the import thread and send `WorkResult` to the output queue.
 
 No exceptions cross coroutine boundaries; all failures are reported as data.
 
@@ -225,8 +261,7 @@ Within a job:
    `TextureImportPresets`) and job-level tuning.
 3) Resolve `texture_id` and deduplicate **before** submission (use
    `source_key` and `texture_id` maps for embedded/file textures).
-4) Acquire bytes (`IAsyncFileReader` or embedded), build `WorkItem`, and
-   `co_await texture_pipeline.Submit(item)` (bounded backpressure).
+4) Acquire bytes (the importer may either acquire bytes itself and populate `WorkItem::source`, or pass a `source_path` and let the pipeline resolve bytes via the configured `IAsyncFileReader`), build `WorkItem`, and `co_await texture_pipeline.Submit(item)` (bounded backpressure).
 5) Collect results (`Collect()` or `HasPending()` loop):
    - On success: emit via `session.TextureEmitter().Emit(...)` (index is stable).
    - On `used_placeholder`: add warning diagnostics and map to the fallback
@@ -257,7 +292,15 @@ These stages follow the current synchronous implementation in
      - HDR intent vs output format
      - BC7 quality vs output format
 
-3) **Decode**
+3) **Resolve source bytes (optional)**
+   - Input: `WorkItem.source_path` + configured `IAsyncFileReader`
+   - Behavior: when the submitted `WorkItem.source` does not already contain
+     bytes or decoded images, the pipeline will attempt to read the file at
+     `source_path` using the configured file reader. IO latency may be reported
+     via `Config::on_io_duration`. This step is a read-only convenience for
+     imports that submit file paths instead of pre-acquired bytes.
+
+4) **Decode**
    - Input: bytes + `DecodeOptions`
    - Options:
      - `flip_y_on_decode`
@@ -265,7 +308,7 @@ These stages follow the current synchronous implementation in
      - `extension_hint` from `source_id` or per-face `TextureSource.source_id`
    - Output: `ScratchImage` (RGBA8 or RGBA32Float)
 
-4) **(Single-source only) Cubemap transforms**
+5) **(Single-source only) Cubemap transforms**
    - **Equirectangular → cube**: decode to RGBA32F, validate ~2:1 aspect,
      convert to cubemap faces using `EquirectToCubeOptions` and
      `desc.mip_filter` as the sampling filter.
@@ -273,7 +316,7 @@ These stages follow the current synchronous implementation in
      from a single layout image (auto/strip/cross). Validation includes layout
      detection and face size.
 
-5) **(Multi-source only) Assemble subresources**
+6) **(Multi-source only) Assemble subresources**
    - Input: decoded sources mapped by `SubresourceId`
    - Output: assembled `ScratchImage`
    - Cube maps: 6 faces mapped by `CubeFace`.
@@ -282,15 +325,15 @@ These stages follow the current synchronous implementation in
    - 3D textures: assemble depth slices (array_layer = 0, mip_level = 0) into
      a single 3D `ScratchImage` with contiguous depth slices.
 
-6) **Post-decode validation**
+7) **Post-decode validation**
    - Input: `TextureImportDesc` + decoded meta
    - Checks: non-zero dimensions, explicit dimension match, and
      `TextureImportDesc::Validate()` on resolved shape
 
-7) **Convert to working format**
+8) **Convert to working format**
    - Currently pass-through (decoder outputs already in working formats)
 
-8) **Apply content processing**
+9) **Apply content processing**
    - HDR handling:
      - `kTonemapAuto`: auto bake HDR→LDR (uses `exposure_ev`)
      - `kError`: only bake if `bake_hdr_to_ldr` is true, otherwise error later
@@ -298,12 +341,12 @@ These stages follow the current synchronous implementation in
        disable BC7, and skip baking).
    - Normal maps: `intent == kNormalTS` → optional `flip_normal_green`
 
-9) **Generate mips**
-   - `MipPolicy::kNone`, `kFullChain`, or `kMaxCount`
-   - Normal maps use specialized mips; 3D textures use 3D mip generator
-   - `mip_filter` + `mip_filter_space` control filtering
+10) **Generate mips**
+    - `MipPolicy::kNone`, `kFullChain`, or `kMaxCount`
+    - Normal maps use specialized mips; 3D textures use 3D mip generator
+    - `mip_filter` + `mip_filter_space` control filtering
 
-10) **Convert to output format / compress**
+11) **Convert to output format / compress**
     - Supported formats:
       - `Format::kRGBA8UNorm`, `Format::kRGBA8UNormSRGB`
       - `Format::kRGBA16Float`, `Format::kRGBA32Float`
@@ -314,19 +357,19 @@ These stages follow the current synchronous implementation in
     - sRGB reinterpretation: if storage is RGBA8/BC7, requested sRGB variant is
       preserved in the final descriptor
 
-11) **Pack subresources**
+12) **Pack subresources**
     - Compute layouts via `ComputeSubresourceLayouts(meta, policy)`
     - **Ordering requirement**: layer-major (array layer outer, mip inner)
     - Use policy alignment for row pitch and subresource offsets
 
-12) **Build final payload**
+13) **Build final payload**
     - `TexturePayloadHeader` (28 bytes) + `SubresourceLayout[]` + aligned data
     - `data_offset_bytes = AlignSubresourceOffset(layouts_offset + layouts_bytes)`
     - `content_hash = detail::ComputeContentHash(payload)` computed on the
       ThreadPool **only when hashing is enabled** (first 8 bytes of SHA-256
       over the full payload)
 
-13) **Return cooked result**
+14) **Return cooked result**
     - `CookedTexturePayload.desc` includes shape, mip count, final format,
       `packing_policy_id`, and `content_hash`
     - `payload` contains the complete PAK v4 payload
@@ -433,8 +476,8 @@ payload is created by `TextureEmitter` and reused across all failures.
   - maps results back to materials and emits diagnostics
 - `TexturePipeline`:
   - compute-only cook (`CookTexture(...)` overloads)
-  - never performs file I/O
-  - never calls emitters
+  - may perform async reads of `WorkItem::source_path` when configured with an `IAsyncFileReader` (reads only)
+  - never writes output files and never calls emitters
 - `TextureEmitter`:
   - ensures fallback index `0`
   - deduplicates by signature
@@ -455,6 +498,8 @@ Only the job’s commit path mutates emission state:
 Cancellation semantics are defined in the parent design under **Cancellation
 Design**. Texture-specific requirements:
 
+- Pipelines do not provide a direct cancel API; cancellation is expressed by
+  cancelling the job nursery and by checking per-item `stop_token` values.
 - Wire `WorkItem.stop_token` into `TextureImportDesc::stop_token`.
 - Cancellation returns `success=false` and **does not** emit placeholders.
 
@@ -475,6 +520,7 @@ The bounded input queue is the primary backpressure mechanism:
 The pipeline is UI-agnostic.
 
 - `GetProgress()` returns `PipelineProgress` (submitted/completed/failed/in_flight).
+- Queue introspection helpers (`InputQueueSize`, `InputQueueCapacity`, `OutputQueueSize`, `OutputQueueCapacity`) are available on the import thread for realtime UI feedback.
 - The job orchestrator converts pipeline progress into `ImportProgress`.
 - Diagnostics are forwarded incrementally as results are collected.
 
@@ -488,8 +534,9 @@ The pipeline is UI-agnostic.
 4) All heavyweight work runs on `co::ThreadPool`.
 5) Errors cross boundaries as data (`ImportDiagnostic`), not exceptions.
 6) Bounded channels are mandatory.
-7) Placeholder policy maps to fallback texture index `0` (no payload emitted).
-8) Payload headers/layouts must conform to PAK v4 (`TexturePayloadHeader`).
+7) The pipeline may perform file reads only when configured with an `IAsyncFileReader`; such IO must be read-only and limited to resolving `WorkItem::source_path`.
+8) Placeholder policy maps to fallback texture index `0` (no payload emitted).
+9) Payload headers/layouts must conform to PAK v4 (`TexturePayloadHeader`).
 
 ---
 
