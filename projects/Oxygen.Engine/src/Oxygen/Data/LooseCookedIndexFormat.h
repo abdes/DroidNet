@@ -150,3 +150,8 @@ struct FileRecord {
 static_assert(sizeof(FileRecord) == 64);
 
 } // namespace oxygen::data::loose_cooked::v1
+
+namespace oxygen::data::loose_cooked {
+//! Default namespace alias for latest version of the PAK format
+using namespace v1;
+} // namespace oxygen::data::pak
