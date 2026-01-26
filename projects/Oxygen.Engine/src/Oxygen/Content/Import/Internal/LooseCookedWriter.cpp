@@ -38,10 +38,10 @@ namespace oxygen::content::import {
 
 namespace {
 
-  using data::loose_cooked::v1::AssetEntry;
-  using data::loose_cooked::v1::FileKind;
-  using data::loose_cooked::v1::FileRecord;
-  using data::loose_cooked::v1::IndexHeader;
+  using data::loose_cooked::AssetEntry;
+  using data::loose_cooked::FileKind;
+  using data::loose_cooked::FileRecord;
+  using data::loose_cooked::IndexHeader;
 
   constexpr std::string_view kIndexFileName = "container.index.bin";
 
@@ -183,8 +183,7 @@ namespace {
     std::string virtual_path;
     std::string descriptor_relpath;
     uint64_t descriptor_size = 0;
-    std::array<uint8_t, data::loose_cooked::v1::kSha256Size> descriptor_sha256
-      = {};
+    std::array<uint8_t, data::loose_cooked::kSha256Size> descriptor_sha256 = {};
   };
 
   struct StoredFile final {
@@ -219,9 +218,9 @@ namespace {
   }
 
   auto CopyDigestOrZero(const std::optional<base::Sha256Digest>& digest)
-    -> std::array<uint8_t, data::loose_cooked::v1::kSha256Size>
+    -> std::array<uint8_t, data::loose_cooked::kSha256Size>
   {
-    std::array<uint8_t, data::loose_cooked::v1::kSha256Size> out = {};
+    std::array<uint8_t, data::loose_cooked::kSha256Size> out = {};
     if (!digest.has_value()) {
       return out;
     }
@@ -681,9 +680,9 @@ private:
     header.version = 1;
     header.content_version = content_version;
 
-    header.flags = data::loose_cooked::v1::kHasVirtualPaths;
+    header.flags = data::loose_cooked::kHasVirtualPaths;
     if (!file_records.empty()) {
-      header.flags |= data::loose_cooked::v1::kHasFileRecords;
+      header.flags |= data::loose_cooked::kHasFileRecords;
     }
 
     header.string_table_offset = sizeof(IndexHeader);

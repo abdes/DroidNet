@@ -49,7 +49,7 @@ using oxygen::data::SceneAsset;
 
 namespace {
 
-auto FillTestGuid(oxygen::data::loose_cooked::v1::IndexHeader& header) -> void
+auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
 {
   for (uint8_t i = 0; i < 16; ++i) {
     header.guid[i] = static_cast<uint8_t>(i + 1);
@@ -61,8 +61,8 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   const oxygen::data::AssetKey& scene_key) -> void
 {
   using oxygen::data::AssetType;
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::IndexHeader;
   using oxygen::data::pak::NodeRecord;
   using oxygen::data::pak::SceneAssetDesc;
   using oxygen::data::pak::SceneEnvironmentBlockHeader;
@@ -129,7 +129,7 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset
@@ -139,7 +139,7 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   header.file_records_offset
     = header.asset_entries_offset + sizeof(AssetEntry) * header.asset_count;
   header.file_record_count = 0;
-  header.file_record_size = sizeof(oxygen::data::loose_cooked::v1::FileRecord);
+  header.file_record_size = sizeof(oxygen::data::loose_cooked::FileRecord);
 
   AssetEntry asset_entry {};
   asset_entry.asset_key = scene_key;

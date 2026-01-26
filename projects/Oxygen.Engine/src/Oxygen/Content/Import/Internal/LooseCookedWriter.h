@@ -40,8 +40,7 @@ struct LooseCookedAssetRecord final {
 
 //! Summary of one cooked file record written to disk.
 struct LooseCookedFileRecord final {
-  data::loose_cooked::v1::FileKind kind
-    = data::loose_cooked::v1::FileKind::kUnknown;
+  data::loose_cooked::FileKind kind = data::loose_cooked::FileKind::kUnknown;
   std::string relpath;
 
   uint64_t size = 0;
@@ -68,7 +67,7 @@ struct LooseCookedWriteResult final {
  It is designed to be used by importers (FBX/glTF) and other cook pipelines.
 
  @note The on-disk schema is fixed by
-   oxygen::data::loose_cooked::v1::IndexHeader and related structs.
+   oxygen::data::loose_cooked::IndexHeader and related structs.
 */
 class LooseCookedWriter final {
 public:
@@ -145,7 +144,7 @@ public:
 
    @throw std::runtime_error on IO errors or invalid paths.
   */
-  OXGN_CNTT_API auto WriteFile(data::loose_cooked::v1::FileKind kind,
+  OXGN_CNTT_API auto WriteFile(data::loose_cooked::FileKind kind,
     std::string_view relpath, std::span<const std::byte> bytes) -> void;
 
   //! Register an externally-written file.
@@ -159,7 +158,7 @@ public:
    @throw std::runtime_error if the file does not exist.
   */
   OXGN_CNTT_API auto RegisterExternalFile(
-    data::loose_cooked::v1::FileKind kind, std::string_view relpath) -> void;
+    data::loose_cooked::FileKind kind, std::string_view relpath) -> void;
 
   //! Register an externally-written asset descriptor.
   /*!

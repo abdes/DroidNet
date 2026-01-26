@@ -32,7 +32,7 @@ namespace oxygen::content::import::test {
 using content::LooseCookedInspection;
 using data::AssetType;
 using data::ComponentType;
-using data::loose_cooked::v1::FileKind;
+using data::loose_cooked::FileKind;
 using data::pak::RenderableRecord;
 using data::pak::SceneAssetDesc;
 using data::pak::SceneComponentTableDesc;

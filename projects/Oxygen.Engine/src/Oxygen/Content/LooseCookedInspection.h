@@ -42,8 +42,7 @@ public:
   };
 
   struct FileEntry {
-    data::loose_cooked::v1::FileKind kind
-      = data::loose_cooked::v1::FileKind::kUnknown;
+    data::loose_cooked::FileKind kind = data::loose_cooked::FileKind::kUnknown;
     std::string relpath;
     uint64_t size = 0;
   };

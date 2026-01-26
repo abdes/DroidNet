@@ -51,7 +51,7 @@ namespace {
 
 using oxygen::content::import::LooseCookedLayout;
 
-auto FillTestGuid(oxygen::data::loose_cooked::v1::IndexHeader& header) -> void
+auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
 {
   for (uint8_t i = 0; i < 16; ++i) {
     header.guid[i] = static_cast<uint8_t>(i + 1);
@@ -61,7 +61,7 @@ auto FillTestGuid(oxygen::data::loose_cooked::v1::IndexHeader& header) -> void
 auto WriteMinimalLooseCookedIndex(const std::filesystem::path& cooked_root)
   -> void
 {
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   std::filesystem::create_directories(cooked_root);
 
@@ -69,17 +69,17 @@ auto WriteMinimalLooseCookedIndex(const std::filesystem::path& cooked_root)
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = 1; // "\0"
   header.asset_entries_offset
     = header.string_table_offset + header.string_table_size;
   header.asset_count = 0;
-  header.asset_entry_size = sizeof(oxygen::data::loose_cooked::v1::AssetEntry);
+  header.asset_entry_size = sizeof(oxygen::data::loose_cooked::AssetEntry);
   header.file_records_offset = header.asset_entries_offset;
   header.file_record_count = 0;
-  header.file_record_size = sizeof(oxygen::data::loose_cooked::v1::FileRecord);
+  header.file_record_size = sizeof(oxygen::data::loose_cooked::FileRecord);
 
   const auto index_path = cooked_root / "container.index.bin";
   std::ofstream out(index_path, std::ios::binary);
@@ -93,10 +93,10 @@ auto WriteLooseCookedMaterialWithTexture(
   const oxygen::data::AssetKey& asset_key) -> void
 {
   using oxygen::data::AssetType;
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileKind;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileKind;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
   using oxygen::data::pak::MaterialAssetDesc;
   using oxygen::data::pak::TextureResourceDesc;
 
@@ -200,8 +200,8 @@ auto WriteLooseCookedMaterialWithTexture(
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset
@@ -246,9 +246,9 @@ auto WriteLooseCookedMaterialWithTexture(
 auto WriteLooseCookedIndexWithInvalidTexturesTable(
   const std::filesystem::path& cooked_root) -> void
 {
-  using oxygen::data::loose_cooked::v1::FileKind;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::FileKind;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   const LooseCookedLayout layout {};
 
@@ -280,14 +280,14 @@ auto WriteLooseCookedIndexWithInvalidTexturesTable(
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset
     = header.string_table_offset + header.string_table_size;
   header.asset_count = 0;
-  header.asset_entry_size = sizeof(oxygen::data::loose_cooked::v1::AssetEntry);
+  header.asset_entry_size = sizeof(oxygen::data::loose_cooked::AssetEntry);
   header.file_records_offset = header.asset_entries_offset;
   header.file_record_count = 2;
   header.file_record_size = sizeof(FileRecord);

@@ -55,7 +55,7 @@ using oxygen::clap::CommandBuilder;
 using oxygen::clap::Option;
 
 using oxygen::data::AssetKey;
-using oxygen::data::loose_cooked::v1::FileKind;
+using oxygen::data::loose_cooked::FileKind;
 
 constexpr std::string_view kProgramName = "Oxygen.Content.Inspector";
 constexpr std::string_view kVersion = "0.1";
@@ -106,8 +106,8 @@ auto FileKindToString(const FileKind kind) -> std::string_view
 }
 
 auto IsAllZero(
-  const std::array<uint8_t, oxygen::data::loose_cooked::v1::kSha256Size>&
-    digest) -> bool
+  const std::array<uint8_t, oxygen::data::loose_cooked::kSha256Size>& digest)
+  -> bool
 {
   for (const auto b : digest) {
     if (b != 0) {
@@ -118,7 +118,7 @@ auto IsAllZero(
 }
 
 auto DumpHexSha256(std::ostream& os,
-  const std::span<const uint8_t, oxygen::data::loose_cooked::v1::kSha256Size>&
+  const std::span<const uint8_t, oxygen::data::loose_cooked::kSha256Size>&
     digest) -> void
 {
   static constexpr char kHex[] = "0123456789abcdef";
@@ -230,7 +230,7 @@ auto DumpAssets(
       if (e.descriptor_sha256) {
         os << " desc_sha256=";
         DumpHexSha256(os,
-          std::span<const uint8_t, oxygen::data::loose_cooked::v1::kSha256Size>(
+          std::span<const uint8_t, oxygen::data::loose_cooked::kSha256Size>(
             e.descriptor_sha256->data(), e.descriptor_sha256->size()));
       }
     }

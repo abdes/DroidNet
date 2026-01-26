@@ -42,8 +42,8 @@ public:
 
   //! Register a file record in the shared index writer.
   OXGN_CNTT_API auto RegisterExternalFile(
-    const std::filesystem::path& cooked_root,
-    data::loose_cooked::v1::FileKind kind, std::string_view relpath) -> void;
+    const std::filesystem::path& cooked_root, data::loose_cooked::FileKind kind,
+    std::string_view relpath) -> void;
 
   //! Register an asset record in the shared index writer.
   OXGN_CNTT_API auto RegisterExternalAssetDescriptor(

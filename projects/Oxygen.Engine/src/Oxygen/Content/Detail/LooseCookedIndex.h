@@ -32,8 +32,7 @@ public:
     uint32_t virtual_path_offset = 0;
     uint64_t descriptor_size = 0;
     uint8_t asset_type = 0;
-    std::array<uint8_t, data::loose_cooked::v1::kSha256Size> descriptor_sha256
-      = {};
+    std::array<uint8_t, data::loose_cooked::kSha256Size> descriptor_sha256 = {};
   };
 
   //! Load and validate an index file.
@@ -57,8 +56,7 @@ public:
 
   OXGN_CNTT_NDAPI auto FindDescriptorSha256(
     const data::AssetKey& key) const noexcept
-    -> std::optional<
-      std::span<const uint8_t, data::loose_cooked::v1::kSha256Size>>;
+    -> std::optional<std::span<const uint8_t, data::loose_cooked::kSha256Size>>;
 
   OXGN_CNTT_NDAPI auto FindVirtualPath(const data::AssetKey& key) const noexcept
     -> std::optional<std::string_view>;
@@ -77,14 +75,14 @@ public:
   }
 
   OXGN_CNTT_NDAPI auto GetAllFileKinds() const noexcept
-    -> std::span<const data::loose_cooked::v1::FileKind>;
+    -> std::span<const data::loose_cooked::FileKind>;
 
   OXGN_CNTT_NDAPI auto FindFileRelPath(
-    data::loose_cooked::v1::FileKind kind) const noexcept
+    data::loose_cooked::FileKind kind) const noexcept
     -> std::optional<std::string_view>;
 
   OXGN_CNTT_NDAPI auto FindFileSize(
-    data::loose_cooked::v1::FileKind kind) const noexcept
+    data::loose_cooked::FileKind kind) const noexcept
     -> std::optional<uint64_t>;
 
 private:
@@ -94,7 +92,7 @@ private:
   };
 
   struct FileKindHash {
-    auto operator()(data::loose_cooked::v1::FileKind k) const noexcept -> size_t
+    auto operator()(data::loose_cooked::FileKind k) const noexcept -> size_t
     {
       return static_cast<size_t>(k);
     }
@@ -104,8 +102,8 @@ private:
   std::vector<data::AssetKey> asset_keys_;
   std::unordered_map<data::AssetKey, AssetInfo> key_to_asset_info_;
   std::unordered_map<uint32_t, data::AssetKey> virtual_path_offset_to_key_;
-  std::vector<data::loose_cooked::v1::FileKind> file_kinds_;
-  std::unordered_map<data::loose_cooked::v1::FileKind, FileInfo, FileKindHash>
+  std::vector<data::loose_cooked::FileKind> file_kinds_;
+  std::unordered_map<data::loose_cooked::FileKind, FileInfo, FileKindHash>
     kind_to_file_;
   data::SourceKey guid_;
 };

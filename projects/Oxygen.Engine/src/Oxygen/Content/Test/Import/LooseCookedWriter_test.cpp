@@ -27,7 +27,7 @@ namespace {
   using oxygen::data::AssetKey;
   using oxygen::data::AssetType;
   using oxygen::data::SourceKey;
-  using oxygen::data::loose_cooked::v1::FileKind;
+  using oxygen::data::loose_cooked::FileKind;
 
   //=== Test Helpers
   //===--------------------------------------------------------//

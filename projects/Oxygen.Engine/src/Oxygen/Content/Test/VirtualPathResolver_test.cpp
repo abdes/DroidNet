@@ -26,9 +26,9 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   const oxygen::data::AssetKey& key, const std::string_view descriptor_relpath,
   const std::string_view virtual_path) -> void
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   std::filesystem::create_directories(cooked_root);
 
@@ -44,8 +44,8 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   IndexHeader header {};
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
 
   // The runtime loader rejects indexes with an all-zero GUID.
   // For these tests we only need a valid (non-zero) value.

@@ -28,7 +28,7 @@ protected:
   }
 };
 
-auto FillTestGuid(oxygen::data::loose_cooked::v1::IndexHeader& header) -> void
+auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
 {
   for (uint8_t i = 0; i < 16; ++i) {
     header.guid[i] = static_cast<uint8_t>(i + 1);
@@ -43,9 +43,9 @@ auto FillTestGuid(oxygen::data::loose_cooked::v1::IndexHeader& header) -> void
 NOLINT_TEST_F(
   LooseCookedIndexTest, AddLooseCookedRoot_DescriptorShaMatches_Abc_Succeeds)
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -70,8 +70,8 @@ NOLINT_TEST_F(
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset
@@ -147,9 +147,9 @@ NOLINT_TEST_F(
 */
 NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_MinimalIndex_Succeeds)
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -160,8 +160,8 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_MinimalIndex_Succeeds)
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = 1; // "\0"
   header.asset_entries_offset
@@ -191,9 +191,9 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_MinimalIndex_Succeeds)
 NOLINT_TEST_F(
   LooseCookedIndexTest, AddLooseCookedRoot_UnsupportedVersion_Throws)
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -204,8 +204,8 @@ NOLINT_TEST_F(
   FillTestGuid(header);
   header.version = 999;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = 1;
   header.asset_entries_offset
@@ -236,9 +236,9 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   LooseCookedIndexTest, AddLooseCookedRoot_StringTableBeforeHeader_Throws)
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -249,8 +249,8 @@ NOLINT_TEST_F(
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = 0; // Invalid: overlaps header
   header.string_table_size = 1; // "\0"
   header.asset_entries_offset = sizeof(IndexHeader);
@@ -280,9 +280,9 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(LooseCookedIndexTest,
   AddLooseCookedRoot_AssetEntriesOverlapStringTable_Throws)
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -298,8 +298,8 @@ NOLINT_TEST_F(LooseCookedIndexTest,
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset = header.string_table_offset; // Invalid overlap
@@ -328,9 +328,9 @@ NOLINT_TEST_F(LooseCookedIndexTest,
 NOLINT_TEST_F(LooseCookedIndexTest,
   AddLooseCookedRoot_VirtualPathMissingLeadingSlash_Throws)
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -350,8 +350,8 @@ NOLINT_TEST_F(LooseCookedIndexTest,
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset
@@ -391,9 +391,9 @@ NOLINT_TEST_F(LooseCookedIndexTest,
 NOLINT_TEST_F(
   LooseCookedIndexTest, AddLooseCookedRoot_VirtualPathContainsDotDot_Throws)
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -413,8 +413,8 @@ NOLINT_TEST_F(
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset
@@ -454,9 +454,9 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   LooseCookedIndexTest, AddLooseCookedRoot_RelPathContainsBackslash_Throws)
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -476,8 +476,8 @@ NOLINT_TEST_F(
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset
@@ -516,10 +516,10 @@ NOLINT_TEST_F(
 */
 NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_UnknownFileKind_Throws)
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileKind;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileKind;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -536,8 +536,8 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_UnknownFileKind_Throws)
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset
@@ -572,10 +572,10 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_UnknownFileKind_Throws)
 */
 NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DuplicateFileKind_Throws)
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileKind;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileKind;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -592,8 +592,8 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DuplicateFileKind_Throws)
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset
@@ -634,9 +634,9 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DuplicateFileKind_Throws)
 */
 NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DuplicateAssetKey_Throws)
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -662,8 +662,8 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DuplicateAssetKey_Throws)
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset
@@ -712,9 +712,9 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DuplicateAssetKey_Throws)
 NOLINT_TEST_F(
   LooseCookedIndexTest, AddLooseCookedRoot_DuplicateVirtualPathString_Throws)
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -741,8 +741,8 @@ NOLINT_TEST_F(
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset
@@ -794,10 +794,10 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_TableWithoutData_Throws)
 {
   using oxygen::data::AssetType;
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileKind;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileKind;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
   using oxygen::data::pak::MaterialAssetDesc;
 
   const LooseCookedLayout layout {};
@@ -853,8 +853,8 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_TableWithoutData_Throws)
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset
@@ -900,10 +900,10 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_TableWithoutData_Throws)
 */
 NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DataWithoutTable_Throws)
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileKind;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileKind;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -920,8 +920,8 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DataWithoutTable_Throws)
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset
@@ -964,10 +964,10 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DataWithoutTable_Throws)
 NOLINT_TEST_F(
   LooseCookedIndexTest, AddLooseCookedRoot_FileRecordLegacyShaBytes_Ignored)
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileKind;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileKind;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
   using oxygen::data::pak::TextureResourceDesc;
 
   const LooseCookedLayout layout {};
@@ -1008,8 +1008,8 @@ NOLINT_TEST_F(
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset
@@ -1053,9 +1053,9 @@ NOLINT_TEST_F(
   LooseCookedIndexTest, AddLooseCookedRoot_DescriptorShaMismatch_Throws)
 {
   using oxygen::data::AssetType;
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
   using oxygen::data::pak::MaterialAssetDesc;
 
   const LooseCookedLayout layout {};
@@ -1091,8 +1091,8 @@ NOLINT_TEST_F(
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
-    | oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset
@@ -1132,9 +1132,9 @@ NOLINT_TEST_F(
 */
 NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_UnknownFlags_Throws)
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -1176,9 +1176,9 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_UnknownFlags_Throws)
 NOLINT_TEST_F(
   LooseCookedIndexTest, AddLooseCookedRoot_FlagsMissingVirtualPaths_Throws)
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -1189,7 +1189,7 @@ NOLINT_TEST_F(
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasFileRecords;
+  header.flags = oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = 1;
   header.asset_entries_offset
@@ -1220,10 +1220,10 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   LooseCookedIndexTest, AddLooseCookedRoot_FileRecordsWithoutFlag_Throws)
 {
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileKind;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileKind;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -1240,7 +1240,7 @@ NOLINT_TEST_F(
   FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset
@@ -1271,8 +1271,8 @@ NOLINT_TEST_F(
 //! Test: Verify that an index without a GUID (all zeros) is rejected.
 NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_NoGuid_Throws)
 {
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
 
   const auto cooked_root = temp_dir_ / "loose_cooked_no_guid";
   std::filesystem::create_directories(cooked_root);
