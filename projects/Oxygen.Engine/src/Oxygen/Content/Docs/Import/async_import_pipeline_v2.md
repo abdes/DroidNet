@@ -287,7 +287,10 @@ gating without additional abstraction layers.
 
 #### Purpose and Scope
 
-`AsyncImportService` is the application-facing façade for asynchronous content import. It provides a thread-safe API for submitting import jobs from any thread (e.g., main UI thread, game thread) and receiving completion notifications on the import thread. Callers marshal to UI threads if needed.
+`AsyncImportService` is the application-facing façade for asynchronous content
+import. It provides a thread-safe API for submitting import jobs from any thread
+(e.g., main UI thread, game thread) and receiving completion notifications on
+the import thread. Callers marshal to UI threads if needed.
 
 **Key responsibilities:**
 
@@ -298,51 +301,44 @@ gating without additional abstraction layers.
 
 #### New Types
 
-The service introduces minimal new types, reusing existing `ImportRequest` and `ImportReport`:
+The service reuses existing progress/event types declared in `ImportProgress.h`
+and introduces only minimal identifiers:
 
 ```cpp
 // Job identification
 using ImportJobId = uint64_t;
 inline constexpr ImportJobId kInvalidJobId = 0;
 
-// Progress tracking for UI
-enum class ImportPhase : uint8_t {
-  kPending, kParsing, kTextures, kMaterials,
-  kGeometry, kScene, kWriting, kComplete, kCancelled, kFailed
-};
+// Import phases (current implementation)
+// See `ImportProgress.h` for the canonical enum and helpers.
+// enum class ImportPhase : uint8_t { kPending, kLoading, kPlanning, kWorking, kFinalizing, kComplete, kCancelled, kFailed };
 
-struct ImportProgress {
-  ImportJobId job_id;
-  ImportPhase phase;
-  float phase_progress;
-  float overall_progress;
-  std::string message;
-  uint32_t items_completed, items_total;
-  std::vector<ImportDiagnostic> new_diagnostics;
-};
+// Progress events
+// Progress updates are communicated via `ProgressEvent` (header + payload).
+// See `MakePhaseProgress`, `MakeItemStarted`, `MakeItemCollected` helpers in `ImportProgress.h`.
 
-// Callbacks
-using ImportCompletionCallback = std::function<void(ImportJobId, const ImportReport&)>;
-using ImportProgressCallback = std::function<void(const ImportProgress&)>;
+// Callback types
+using ImportCompletionCallback = std::function<void(ImportJobId, const ImportReport&)>; // invoked once per job
+using ProgressEventCallback = std::function<void(const ProgressEvent&)>; // invoked for phase/item updates
 ```
 
-**Design note:** `ImportReport` is passed by `const&` because it contains `std::filesystem::path` and other heavyweight members. Callbacks are invoked on the import thread; UI marshalling is the caller’s responsibility.
+**Design note:** `ImportReport` is passed by `const&` because it contains `std::filesystem::path` and other heavyweight members. Callbacks are delivered on the caller's thread when that thread supports `ThreadNotification` (the service will marshal results back when possible); otherwise callbacks are invoked on the import thread. Callers should still marshal to their UI thread if required by their application model.
 
 #### Configuration
 
 ```cpp
 struct Config {
   uint32_t thread_pool_size = std::thread::hardware_concurrency();
-  uint32_t texture_pipeline_workers = 2;
-  uint32_t texture_queue_capacity = 64;
+  uint32_t max_in_flight_jobs = std::thread::hardware_concurrency();
+  ImportConcurrency concurrency{}; // per-pipeline workers & queue capacities
 };
 ```
 
 The config specifies global resources shared across all import jobs:
 
 - **thread_pool_size**: Number of worker threads for CPU-bound cooking (BC7, mip gen, etc.)
-- **texture_pipeline_workers**: Concurrent texture processing tasks (per job)
-- **texture_queue_capacity**: Backpressure limit for texture submission
+- **max_in_flight_jobs**: Maximum number of jobs processed concurrently by the importer (default is hardware_concurrency; defaults to 1 in some deployments)
+- **concurrency**: Per-pipeline concurrency knobs (`ImportConcurrency`) that control worker counts and queue capacities for texture/buffer/material/mesh/scene pipelines.
 
 #### Core API
 
@@ -352,13 +348,15 @@ The config specifies global resources shared across all import jobs:
 auto SubmitImport(
   ImportRequest request,
   ImportCompletionCallback on_complete,
-  ImportProgressCallback on_progress = nullptr) -> ImportJobId;
+  ProgressEventCallback on_progress = nullptr,
+  const std::optional<ImportConcurrency>& concurrency_override = std::nullopt
+) -> std::optional<ImportJobId>;
 ```
 
 - Thread-safe; callable from any thread
-- Returns unique job ID immediately
-- Callbacks are invoked on the import thread
-- Cancellation is reported via `on_complete` with `report.success=false` and diagnostic code `"import.canceled"`
+- Returns a valid `ImportJobId` on success, or `std::nullopt` if the request is rejected (shutdown, unknown format, importer not ready, or queue full)
+- Callbacks are delivered on the caller's thread when possible via `ThreadNotification`; otherwise they are invoked on the import thread
+- Cancellation is reported via `on_complete` with `report.success = false` and diagnostic code `"import.canceled"`
 
 **Cancellation:**
 
@@ -571,66 +569,41 @@ Why this matters:
 
 #### Pipeline External API Pattern
 
-Each pipeline exposes the same conceptual API with type-specific signatures.
-The API pattern matches the existing `BufferPipeline` implementation:
+Pipelines follow the `ImportPipeline` pattern used throughout the
+implementation. Each pipeline is concrete (no runtime polymorphism) and is
+started inside a job's child nursery.
 
 - `Start(nursery)` spawns worker coroutines
-- bounded `Submit`/`TrySubmit` + `Collect`
-- results contain diagnostics and a `success` flag
+- bounded `Submit` + `Collect`
+- results contain diagnostics, telemetry, and a `success` flag
 
-```cpp
-// TexturePipeline - strongly typed, no polymorphism
-class TexturePipeline {
-public:
-  // Work item and result types (pipeline-specific)
-  struct WorkItem {
-    std::string source_id;       // Correlation key (e.g., texture path or UUID)
-    std::span<const std::byte> bytes;       // Source bytes (already acquired)
-    std::shared_ptr<const void> bytes_owner; // Keeps bytes alive
-    TextureImportDesc desc;      // EXISTING type from TextureImportDesc.h
-    std::stop_token stop_token;  // Cancellation
-  };
+Key points:
 
-  struct WorkResult {
-    std::string source_id;       // Echoed from WorkItem for correlation
-    std::optional<CookedTexturePayload> cooked; // In-memory cooked payload
-    std::vector<ImportDiagnostic> diagnostics;
-    bool success;
-  };
-
-  // Start worker coroutines
-  auto Start(co::Nursery& nursery) -> void;
-
-  // Submit work (bounded; may suspend under backpressure)
-  auto Submit(WorkItem item) -> co::Co<>;
-
-  // Try to submit without blocking
-  auto TrySubmit(WorkItem item) -> bool;
-
-  // Collect one completed result (blocks until ready)
-  auto Collect() -> co::Co<WorkResult>;
-
-  // Status queries
-  [[nodiscard]] auto PendingCount() const -> size_t;
-  [[nodiscard]] auto HasPending() const -> bool;
-
-  // Progress for UI
-  [[nodiscard]] auto GetProgress() const -> PipelineProgress;
-
-  // Close input (drain then exit)
-  auto Close() -> void;
-
-  // Cancel the pipeline (job-scoped). Intended for early-abort within the job.
-  // Job cancellation is normally expressed by cancelling the job nursery.
-  auto Cancel() -> void;
-};
-
-Notes:
-
-- Pipelines are job-scoped; they are created, started, drained, and destroyed
+- Pipelines do **not** provide a direct `Cancel()` API; cancellation is
+  expressed by cancelling the job nursery and by checking per-item stop tokens
+  (`WorkItem::stop_token`).
+- Pipelines are job-scoped: they are created, started, drained, and destroyed
   within the job’s child nursery.
-- Importer/service shutdown is handled by cancelling the AsyncImporter nursery
-  and/or cancelling all job nurseries (see Cancellation Design).
+- The implemented concept (`ImportPipeline`) requires a static `kItemKind` and
+  the methods below; see `Internal/ImportPipeline.h` for the authoritative
+  definition.
+
+Minimal required API (conceptual):
+
+- `static constexpr PlanItemKind kItemKind`
+- `Start(co::Nursery& nursery) -> void`
+- `Submit(WorkItem) -> co::Co<>`
+- `Collect() -> co::Co<WorkResult>`
+- `HasPending() -> bool`, `PendingCount() -> size_t`
+- `GetProgress() -> PipelineProgress`
+- `OutputQueueSize()/OutputQueueCapacity()` (optional helpers for load reporting)
+
+Operational semantics (implemented baseline):
+
+- `Start()` must be called exactly once on import thread.
+- `Submit()` should not be called after `Close()`.
+- `Collect()` suspends until a result is ready; a closed output yields a sentinel result.
+- Cancellation is propagated by `WorkItem.stop_token` and by cancelling the job nursery.
 
 ##### Operational Semantics (Current Implementation Baseline)
 
@@ -650,46 +623,16 @@ otherwise:
   fields. Callers should treat this as end-of-stream.
 - Cancellation is propagated via `WorkItem.stop_token`; canceled work yields a
   `WorkResult` with `success = false`.
-```
 
-#### ResourcePipeline Concept
+#### ImportPipeline Concept
 
-Instead of polymorphism, use a C++20 concept to enforce the API contract
-at compile time:
+The implementation uses a compile-time concept (`ImportPipeline`) to verify pipeline APIs. It enforces the `Start/Submit/Collect` pattern and progress/query helpers without requiring runtime polymorphism. See `src/Oxygen/Content/Import/Internal/ImportPipeline.h` for the canonical definition. Example responsibilities include:
 
-```cpp
-//! Concept defining what a resource pipeline must provide.
-/*!
- All pipelines (texture, audio, mesh) satisfy this concept but have
- completely different WorkItem and WorkResult types.
-*/
-template <typename T>
-concept ResourcePipeline = requires(T& pipeline, typename T::WorkItem item,
-  co::Nursery& nursery) {
-  // Must have nested types
-  typename T::WorkItem;
-  typename T::WorkResult;
+- `T::kItemKind` (PlanItemKind)
+- `Start(co::Nursery&)`, `Submit(WorkItem)`, `Collect()`
+- `HasPending()`, `PendingCount()`, `GetProgress()`
 
-  // Start + Submit/Collect pattern
-  { pipeline.Start(nursery) } -> std::same_as<void>;
-  { pipeline.Submit(std::move(item)) } -> std::same_as<co::Co<>>;
-  { pipeline.Collect() } -> std::same_as<co::Co<typename T::WorkResult>>;
-
-  // Status queries
-  { pipeline.HasPending() } -> std::convertible_to<bool>;
-  { pipeline.PendingCount() } -> std::convertible_to<size_t>;
-
-  // Progress and cancellation
-  { pipeline.GetProgress() } -> std::same_as<PipelineProgress>;
-  { pipeline.Cancel() } -> std::same_as<void>;
-};
-
-// Verify at compile time:
-static_assert(ResourcePipeline<TexturePipeline>);
-static_assert(ResourcePipeline<AudioPipeline>);
-```
-
-This gives compile-time safety without runtime polymorphism overhead.
+This yields compile-time safety while keeping pipelines concrete and efficient.
 
 #### Progress Abstraction
 
@@ -1950,8 +1893,9 @@ Pipelines are **job-scoped** and run inside the job’s child nursery.
 - Work items must still carry cancellation (`WorkItem.stop_token`) so the
   synchronous cookers/transcoders can exit cooperatively while running on the
   ThreadPool.
-- A pipeline may expose `Cancel()` for early-abort decisions inside the job, but
-  normal per-job cancellation is expressed by cancelling the job nursery.
+- Pipelines do not provide a direct `Cancel()` API; normal per-job cancellation
+  is expressed by cancelling the job nursery and by honoring
+  `WorkItem::stop_token` in pipeline workers.
 
 ### Cancellation Flow
 
@@ -2510,6 +2454,45 @@ For maximum throughput on high-core-count machines:
 2. Use `co::Nursery` for concurrent collection streams
 3. Emit incrementally as dependencies resolve
 4. Scene graph emits last (needs all indices)
+
+---
+
+## Implementation status & Remaining TODOs
+
+The implementation covers the core async import pipeline (import thread/event
+loop, `AsyncImporter`, `ImportSession`, `TexturePipeline`, `TextureEmitter`,
+`ThreadPool` integration, Windows file reader/writer, and job orchestration).
+The following concise set of items remain to complete or extend the architecture
+(kept as tracked TODOs):
+
+- **High priority**
+  - Implement `AudioPipeline` and `AudioEmitter` and wire `AudioImportJob`
+    (Phase 6 TODOs in `Internal/Jobs/AudioImportJob.cpp`).
+  - Add pipeline-level tests (Texture/Buffer/Material) for correctness under
+    cancellation, error propagation, and `Finalize()` semantics.
+  - Complete manifest validation and tooling: strict schema evolution, dry-run
+    reporting output, and improved path resolution.
+
+- **Medium priority**
+  - Add a shader/compile pipeline (shader asset cooking) and test harness.
+  - Address `MaterialPipeline` TODOs (e.g., `header.streaming_priority`,
+    `header.variant_flags`, and multi-UV support).
+  - Harden multi-job concurrency behavior and expose tuning/observability for
+    `max_in_flight_jobs` and per-pipeline concurrency knobs.
+
+- **Low priority / Future**
+  - Enhance per-item telemetry and progress reporting (input/output queue
+    samples, rolling throughput) surfaced via `ProgressEvent`.
+  - Add content-hash coverage across pipelines (configurable and testable) and
+    ensure correct behavior when hashing is disabled.
+  - Expand packing policies and presets across platforms and add more
+    performance benchmarks and regressions tests.
+
+> Note: These TODOs are intentionally high-level. When work begins, create
+> focused issues referencing the relevant files (examples:
+> `Internal/Jobs/AudioImportJob.cpp`, `Internal/Pipelines/MaterialPipeline.h`,
+> `ImportManifest.{h,cpp}`) and include unit/integration tests that assert
+> correctness and robustness.
 
 ---
 

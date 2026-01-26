@@ -8,24 +8,29 @@
 
 ## Overview
 
-This document specifies the **GeometryPipeline** used by async imports to cook
-mesh geometry within **a single import job**. The pipeline is compute-only and
-must produce **feature-complete** geometry assets that fix legacy omissions
-while staying compatible with the PAK format and async architecture.
+This document specifies the **GeometryPipeline** used by async imports to
+finalize geometry *descriptors* produced by the mesh build stage. The heavy
+mesh cooking (vertex/index expansion, attribute policy application, tangent
+and normal generation, and creation of buffer payloads and raw descriptor
+bytes) is performed by the **MeshBuildPipeline**. The `GeometryPipeline` is a
+descriptor-finalization stage that patches buffer indices, applies resolved
+material keys, and computes the geometry descriptor `content_hash` once all
+buffer indices are known.
 
 Core properties:
 
-- **Compute-only**: builds vertex/index buffers, submesh tables, and geometry
-  descriptor bytes.
-- **No I/O, no indices**: returns cooked payloads; the job commits via
-  `BufferEmitter` and `AssetEmitter`.
+- **Descriptor finalizer**: patches buffer indices into serialized
+  `GeometryAssetDesc`/`MeshDesc` blobs, applies material key patches, and
+  writes the finalized descriptor bytes.
+- **No I/O**: does not write files or emit buffers – it produces finalized
+  descriptor bytes; `BufferEmitter` / `AssetEmitter` still perform writes.
 - **Job-scoped**: created per job and started in the job’s child nursery.
-- **ThreadPool offload**: tangent generation and any `content_hash`
-  computation run on `co::ThreadPool` **when hashing is enabled**.
-- **Strict failure policy**: geometry cooking never falls back to placeholders;
-  failures surface as explicit diagnostics.
-- **Planner‑gated**: the planner submits work only when dependencies are ready
-  and the full descriptor can be finalized.
+- **ThreadPool offload**: descriptor `content_hash` computation runs on
+  `co::ThreadPool` when hashing is enabled.
+- **Strict failure policy**: finalization failures surface as explicit
+  diagnostics; no silent fallbacks are performed.
+- **Planner‑gated**: the planner submits finalization work only after buffer
+  indices (bindings) and resolved material keys are available.
 
 ---
 
@@ -37,296 +42,194 @@ under **Concurrency, Ownership, and Lifetime (Definitive)**.
 
 ### Pipeline vs Emitter Responsibilities
 
-- **GeometryPipeline**: produces geometry descriptor bytes and buffer work
-  items (compute-only).
-- **BufferEmitter**: assigns stable buffer indices and writes `buffers.data` /
-  `buffers.table`.
-- **AssetEmitter**: writes `.ogeo` geometry descriptor files.
-  `content_hash` must be computed on the ThreadPool after buffer indices are
-  assigned.
+- **MeshBuildPipeline**: performs CPU-bound mesh cooking. It produces cooked
+  buffer payloads and the *initial* geometry descriptor bytes (with
+  placeholder indices) plus a table of per-submesh material patch offsets.
+- **GeometryPipeline**: finalizes the geometry descriptor by patching buffer
+  bindings (indices), applying resolved material keys at the recorded byte
+  offsets, and computing the descriptor-level `content_hash` (on the
+  ThreadPool) if enabled.
+- **BufferEmitter**: assigns stable buffer indices, writes `buffers.data` and
+  `buffers.table`, and makes the binding indices available for finalization.
+- **AssetEmitter**: writes `.ogeo` geometry descriptor files using the
+  finalized descriptor bytes produced by `GeometryPipeline`.
 
 ---
 
 ## Data Model
 
-### WorkItem
+### WorkItem (GeometryPipeline)
 
-Geometry cooking operates on mesh data already in memory. Source acquisition is
-outside the pipeline.
+GeometryPipeline receives *finalization* work items produced by the planner
+once the mesh has been cooked by `MeshBuildPipeline` and buffer indices have
+been assigned. A GeometryPipeline work item contains the following logical
+fields:
 
-```cpp
-struct MeshStreamView {
-  std::span<const glm::vec3> positions;
-  std::span<const glm::vec3> normals;     // optional
-  std::span<const glm::vec2> texcoords;   // optional
-  std::span<const glm::vec3> tangents;    // optional
-  std::span<const glm::vec3> bitangents;  // optional
-  std::span<const glm::vec4> colors;      // optional
-  std::span<const glm::uvec4> joint_indices; // optional (skinned)
-  std::span<const glm::vec4> joint_weights;  // optional (skinned)
-};
-
-struct TriangleRange {
-  uint32_t material_slot = 0;  // Scene material index for this range
-  uint32_t first_index = 0;    // Offset into indices
-  uint32_t index_count = 0;    // Multiple of 3
-};
-
-struct Bounds3 {
-  std::array<float, 3> min;
-  std::array<float, 3> max;
-};
-
-struct TriangleMesh {
-  data::MeshType mesh_type = data::MeshType::kStandard;
-  MeshStreamView streams;
-  std::span<const uint32_t> indices;      // Triangle list (u32)
-  std::span<const TriangleRange> ranges;  // Material ranges
-  std::optional<Bounds3> bounds;          // Precomputed bounds (optional)
-};
-
-struct MeshLod {
-  std::string lod_name;
-  TriangleMesh source;
-  std::shared_ptr<const void> source_owner; // Keeps mesh data alive
-};
-
-struct WorkItem {
-  std::string source_id;        // Diagnostic id
-  std::string mesh_name;        // Authored or synthesized name
-  std::string storage_mesh_name; // Namespaced name (scene/mesh)
-  const void* source_key{};     // Opaque mesh identity (e.g., ufbx_mesh*)
-
-  std::vector<MeshLod> lods;    // Must contain at least one LOD
-
-  std::vector<data::AssetKey> material_keys; // Aligned with scene materials
-  data::AssetKey default_material_key;
-  std::vector<uint32_t> material_slots_used; // Unique slots used by ranges
-  bool want_textures = false;  // Used for UV diagnostics
-  bool has_material_textures = false; // Used for UV diagnostics
-
-  ImportRequest request;       // Options, naming, asset key policy
-  std::stop_token stop_token;
-};
-```
+- `source_id`: a correlation string (used for diagnostics and lookup).
+- `cooked`: the `CookedGeometryPayload` produced by `MeshBuildPipeline`. This
+  includes the raw descriptor bytes (`descriptor_bytes`) with recorded
+  per-submesh material patch offsets and the cooked buffer payloads for each
+  LOD.
+- `bindings`: a vector of buffer bindings (one binding per LOD) that supplies
+  the concrete resource indices to patch into the serialized `MeshDesc`
+  blobs (vertex/index/joint buffers).
+- `material_patches`: a compact list of `{material_key_offset, key}` entries
+  indicating absolute byte offsets (from payload start) where `data::AssetKey`
+  values must be overwritten with the resolved keys.
+- `on_started` / `on_finished`: optional callbacks invoked when a worker
+  begins/finishes processing the item.
+- `stop_token`: cancellation token scanned by the pipeline; cancellation must
+  produce a non-successful `WorkResult` with no partial outputs.
 
 Notes:
 
-- `lods` must contain at least one LOD; `lods[0]` is the highest detail.
-- `TriangleMesh` is the only accepted source type for the pipeline and
-  must already be triangle lists. Format adapters must reject non-triangle
-  topology before submission.
-- `storage_mesh_name` is used for virtual paths and descriptor relpaths.
-- `TriangleMesh.mesh_type` selects `MeshType` and drives serialization
-  (standard vs skinned).
-- Bounds are required in the PAK for geometry assets and meshes; all-zero
-  bounds are valid and must not be interpreted as "missing".
-- Adapters must populate `bounds` when the source provides precomputed bounds,
-  otherwise leave it unset so the pipeline computes bounds from vertices.
-- For skinned meshes, `joint_indices` and `joint_weights` must be present and
-  aligned with `positions`.
-- All FBX/glTF meshes must be converted to `TriangleMesh` with the
-  required streams before submission. The pipeline does not accept importer
-  native mesh views.
-- `material_keys` may be empty; the pipeline uses `default_material_key` when a
-  material slot is missing.
-- `material_slots_used` must be derived from triangle ranges (not from
-  `material_keys` size). This list is used by the planner to pass only the
-  resolved material keys needed for the mesh.
-- `has_material_textures` should be precomputed by the importer for
-  format-agnostic meshes; for FBX it can be derived from `ufbx_material`.
-- `request.options.normal_policy` and `request.options.tangent_policy` are fully
-  honored.
-- **Naming is the importer’s responsibility.** Use
-  `util::BuildMeshName`, `util::DisambiguateMeshName`, and
-  `util::NamespaceImportedAssetName` (see
-  [src/Oxygen/Content/Import/util/ImportNaming.h](../src/Oxygen/Content/Import/util/ImportNaming.h))
-  before submitting the work item. The pipeline must treat names as resolved and
-  must not rename.
+- Mesh construction (vertex expansion, attribute application, tangent
+  generation, auxiliary buffer creation) is the responsibility of
+  `MeshBuildPipeline`. GeometryPipeline expects the descriptor bytes and
+  material patch offsets to be produced by that earlier stage.
+- Material patch offsets are absolute byte offsets into the descriptor payload
+  and must be valid for the descriptor produced by `MeshBuildPipeline`. Any
+  offset outside the descriptor bounds is treated as a finalization error.
 
 ### WorkResult
 
-```cpp
-struct CookedMeshPayload {
-  CookedBufferPayload vertex_buffer;
-  CookedBufferPayload index_buffer;
-  std::vector<CookedBufferPayload> auxiliary_buffers; // skinning, morph, etc.
-  Bounds3 bounds;
-};
+A completed GeometryPipeline work item produces a `WorkResult` that contains:
 
-struct CookedGeometryPayload {
-  data::AssetKey geometry_key;
-  std::string virtual_path;
-  std::string descriptor_relpath;
-  std::vector<std::byte> descriptor_bytes;  // .ogeo payload
-  std::vector<MaterialSlotPatchOffset> material_patch_offsets;
-
-  std::vector<CookedMeshPayload> lods; // LOD0..LOD(n-1)
-};
-
-struct WorkResult {
-  std::string source_id;
-  const void* source_key{};
-  std::optional<CookedGeometryPayload> cooked;
-  std::vector<ImportDiagnostic> diagnostics;
-  bool success = false;
-};
-```
+- `source_id`: echoed from the WorkItem for correlation.
+- `cooked` (optional): the `CookedGeometryPayload` when finalization succeeded
+  (otherwise `std::nullopt`).
+- `finalized_descriptor_bytes`: the finalized `.ogeo` payload (buffer indices
+  and material keys patched, and `header.content_hash` written if hashing
+  succeeded and was enabled).
+- `diagnostics`: any `ImportDiagnostic` entries produced during finalization.
+- `telemetry`: per-item timing/telemetry (e.g., `cook_duration`).
+- `success`: true on success; false if canceled or any errors occurred.
 
 Notes:
 
-- The planner must ensure buffer indices are assigned before final descriptor
-  hashing. If buffer emission occurs first, the planner may schedule a
-  descriptor‑finalization step on the ThreadPool that fills indices and computes
-  `content_hash` over the complete bytes.
-- Mesh build must capture per-submesh material patch offsets while serializing
-  the descriptor so geometry finalization can patch keys directly by offset.
+- The planner must ensure that buffer indices are available (via `bindings`)
+  and that material keys to write at the recorded offsets are provided.
+- `MeshBuildPipeline` is responsible for recording the per-submesh material
+  patch offsets while serializing the initial descriptor; `GeometryPipeline`
+  uses those offsets to write `data::AssetKey` values directly into the
+  finalized payload.
 
 ---
 
 ## Public API (Pattern)
 
-```cpp
-class GeometryPipeline final {
-public:
-  struct Config {
-    size_t queue_capacity = 32;
-    uint32_t worker_count = 2;
-    bool with_content_hashing = true; // Controlled by ImportOptions
-  };
+The implemented `GeometryPipeline` exposes the usual pipeline control
+functions and a public helper for descriptor finalization:
 
-  explicit GeometryPipeline(co::ThreadPool& thread_pool, Config cfg = {});
-
-  void Start(co::Nursery& nursery);
-
-  [[nodiscard]] auto Submit(WorkItem item) -> co::Co<>;
-  [[nodiscard]] auto TrySubmit(WorkItem item) -> bool;
-  [[nodiscard]] auto Collect() -> co::Co<WorkResult>;
-
-  void Close();
-
-  [[nodiscard]] auto HasPending() const noexcept -> bool;
-  [[nodiscard]] auto PendingCount() const noexcept -> size_t;
-  [[nodiscard]] auto GetProgress() const noexcept -> PipelineProgress;
-};
-```
+- `Config` — configuration with `queue_capacity` (default 32),
+  `worker_count` (default 1 in the implementation), and
+  `with_content_hashing` (default true).
+- `GeometryPipeline(co::ThreadPool&, Config)` — create the pipeline.
+- `Start(co::Nursery&)` — starts worker coroutines.
+- `Submit(WorkItem)` / `TrySubmit(WorkItem)` — submit work (blocking / non-
+  blocking variants).
+- `Collect()` — receive one completed `WorkResult` (suspends until ready or
+  closed).
+- `Close()` — close the input queue.
+- `HasPending()` / `PendingCount()` / `GetProgress()` — progress and counters.
+- `InputQueueSize()` / `OutputQueueSize()` — inspect channel sizes.
+- `FinalizeDescriptorBytes(bindings, descriptor_bytes, material_patches, diagnostics)`
+  — public coroutine that patches buffer bindings/materials into the supplied
+  `descriptor_bytes`, computes `header.content_hash` on the ThreadPool when
+  `with_content_hashing` is enabled, and returns the finalized byte vector or
+  `std::nullopt` on failure. Diagnostics are appended to the provided
+  diagnostics vector.
 
 ---
 
 ## Worker Behavior
 
-Workers run as coroutines on the import thread and drain the bounded input queue.
+Workers run as coroutines and process descriptor-finalization work items from
+the bounded input queue. GeometryPipeline workers are lightweight: they call
+`FinalizeDescriptorBytes()` to patch bindings/materials and optionally compute
+`header.content_hash`.
 
-For each work item:
+For each work item the worker performs:
 
-1) Check cancellation; if canceled, return `success=false`.
-2) Assume names are already resolved by the importer; no renaming occurs here.
-3) Validate each LOD mesh:
-   - If positions are missing → error `mesh.missing_positions`.
-   - If faces/indices are empty → error `mesh.missing_buffers`.
-4) Build vertices, bounds, and attribute masks per LOD:
-   - Expand to one vertex per index.
-   - Apply coordinate conversion to Oxygen world space.
-   - If adapter bounds are missing, compute bounds from expanded vertices.
-   - Apply `normal_policy`:
-     - `kNone`: emit defaults and clear `kGeomAttr_Normal` in the attribute mask.
-     - `kPreserveIfPresent`: preserve when present, otherwise defaults + clear.
-     - `kGenerateMissing`: generate when missing, otherwise preserve.
-     - `kAlwaysRecalculate`: always recompute from positions/indices.
-   - Apply `tangent_policy`:
-     - If prerequisites (positions, UVs, normals) are missing, emit
-       `mesh.missing_tangent_prereq` and clear `kGeomAttr_TangentBitangent`.
-     - Otherwise preserve, generate, or recompute per policy.
-5) Warn on missing UVs when `want_textures == true` and
-   `has_material_textures == true` (`mesh.missing_uvs` warning).
-6) Build submesh buckets by material slot:
-   - Sort buckets by `scene_material_index`.
-7) Fix invalid tangents/bitangents to ensure orthonormal basis when tangents are
-   emitted.
-8) Build `SubMeshDesc` and `MeshViewDesc` per LOD:
-   - Submesh name remains for debugging only.
-   - MeshView covers the submesh’s index and vertex ranges (tight bounds).
-9) Record patch offsets during descriptor serialization:
-   - Capture the absolute byte offset of each `SubMeshDesc::material_asset_key`
-     within the descriptor payload.
-   - Store a compact table of `{slot, material_key_offset}` in
-     `CookedGeometryPayload`.
-10) Patch material keys during descriptor finalization:
-    - Geometry finalization receives only the resolved keys for
-      `material_slots_used`.
-    - For each patch entry, seek to `material_key_offset` and overwrite the
-      `material_asset_key` directly.
-    - If a required slot is missing, emit a blocking diagnostic and fail.
-11) Create buffer payloads per LOD:
-    - Vertex buffer: `data::Vertex` array, stride `sizeof(Vertex)`,
-      usage flags = `VertexBuffer | Static`, format = `Format::kUnknown`.
-    - Index buffer: `uint32_t` array, usage flags = `IndexBuffer | Static`,
-      format = `Format::kR32UInt`.
-    - Skinned meshes emit additional joint index/weight buffers.
-    - `content_hash` is **not** computed here. Hashing happens on the
-      ThreadPool in `BufferPipeline` once buffer dependencies are ready.
-12) Compute geometry identity:
-     - `virtual_path = request.loose_cooked_layout.GeometryVirtualPath(
-        storage_mesh_name)`
-     - `descriptor_relpath = request.loose_cooked_layout.GeometryDescriptorRelPath(
-        storage_mesh_name)`
-     - `geometry_key` based on `AssetKeyPolicy`
-13) Build geometry descriptor bytes:
-     - `GeometryAssetDesc` + `MeshDesc[ lod_count ]` + submeshes + views
-     - `lod_count = lods.size()`
-     - `mesh_type` per LOD (`kStandard`, `kSkinned`, or `kProcedural`)
-     - `header.version = kGeometryAssetVersion`
-     - `header.variant_flags` uses **union-of-LOD attributes** (any attribute
-       emitted by any LOD sets the bit). Missing attributes on a specific LOD
-       must be defaulted by loaders.
-     - `bounding_box_min` and `bounding_box_max` must be populated for both the
-       asset and each mesh. All-zero bounds are valid.
-14) Defer `header.content_hash` until all dependency indices are known.
-    Hashing must run on the ThreadPool and must use the **complete**
-    descriptor bytes (no skip ranges).
-15) Return `CookedGeometryPayload` with metadata and buffer payloads.
+1) Check cancellation; if canceled, report a cancelled `WorkResult` and
+   continue.
+2) Invoke `on_started()` (if provided).
+3) Call `FinalizeDescriptorBytes(bindings, cooked.descriptor_bytes,
+   material_patches, diagnostics)` which:
+   - Validates the supplied descriptor bytes and reads the header (`GeometryAssetDesc`).
+   - Verifies `lod_count` matches `bindings.size()`.
+   - Iterates each `MeshDesc` and, depending on `mesh_type`, patches the
+     mesh blob with the concrete resource indices supplied in the matching
+     `bindings` entry (standard/procedural/skinned support). Skinned blobs
+     are patched with vertex/index/joint buffer indices and any auxiliary
+     indices (e.g., `inverse_bind_buffer`, `joint_remap_buffer`) when present.
+   - Writes submesh descriptors and mesh views verbatim.
+   - Applies all material key patches by seeking to each recorded absolute
+     offset and writing the `data::AssetKey` value. Offsets outside the
+     descriptor bounds are treated as errors.
+   - If `with_content_hashing` is enabled, schedules `util::ComputeContentHash`
+     on the `co::ThreadPool` and, on success, writes `header.content_hash` into
+     the descriptor bytes.
+   - Returns the finalized bytes or `std::nullopt` on any failure, accumulating
+     diagnostics.
+4) If cancellation is requested after finalization started, report cancelled.
+5) Determine `success = finalized.has_value() && diagnostics.empty()`.
+6) Assemble and send a `WorkResult` containing the `source_id`, optional
+   `cooked` payload (present on success), `finalized_descriptor_bytes`, any
+   diagnostics, `telemetry` (e.g., `cook_duration`) and the `success` flag.
+7) Invoke `on_finished()` if provided.
 
-All errors must be converted to `ImportDiagnostic`; no exceptions cross async
-boundaries.
+All errors are reported as `ImportDiagnostic` entries; no exceptions cross
+async boundaries.
 
 ---
 
 ## Pipeline Stages (Complete)
 
+### Mesh build (performed by `MeshBuildPipeline`)
+
 1) **LOD validation**
-   - Validate each LOD for positions/indices.
-   - Record diagnostics for missing streams.
+   - Validate each LOD for positions/indices and other stream prerequisites.
+   - Record diagnostics for missing or invalid streams.
 
 2) **Vertex expansion + coordinate conversion**
-   - Build one vertex per index (no vertex dedupe).
-   - Apply `CoordinateConversionPolicy` swap-YZ to positions, normals, tangents.
+   - Build one vertex per index (no vertex dedupe) and apply the required
+     coordinate conversion to engine space.
 
 3) **Attribute policy application**
-   - Enforce `normal_policy` and `tangent_policy`.
-   - Generate normals/tangents as required, or clear attribute bits when absent.
-   - Emit diagnostics when tangent prerequisites are missing.
+   - Enforce `normal_policy` and `tangent_policy` and generate attributes as
+     required. Emit diagnostics for missing prerequisites.
 
 4) **Material bucketing**
-   - Face material slots map to `material_keys` (or default).
-   - Group triangle ranges by material and sort by slot index.
+   - Group triangle ranges by material slot and sort buckets by slot index.
 
 5) **Submesh + view layout**
-   - `SubMeshDesc` per material bucket; `MeshViewDesc` per submesh.
-   - `MeshViewDesc` ranges are tight to the submesh.
+   - Construct `SubMeshDesc` and `MeshViewDesc` entries (tight ranges).
 
 6) **Buffer payloads**
-   - Vertex buffer uses `data::Vertex` layout.
-   - Index buffer uses `uint32_t`.
-   - Skinned meshes emit joint index/weight buffers.
-   - Content hashes computed for all buffers.
+   - Build `CookedBufferPayload`s for vertex/index buffers and optional
+     auxiliary buffers (skinning, morph targets, etc.).
+   - Compute buffer-level content hashes as part of buffer emission processes
+     (outside MeshBuildPipeline when buffers are written).
 
 7) **Geometry descriptor serialization**
+   - Emit `GeometryAssetDesc` + `MeshDesc[ lod_count ]` + submesh/view tables
+     into `descriptor_bytes` (packed alignment = 1).
+   - Record absolute byte offsets for each `SubMeshDesc::material_asset_key` so
+     that material keys can be patched later.
 
-   - Packed alignment = 1 (no padding).
-   - `GeometryAssetDesc` + `MeshDesc[ lod_count ]` + submesh/view tables.
-   - Optional mesh-type blob follows each `MeshDesc` as required.
-   - Capture per-submesh `material_key_offset` values as the descriptor is
-     serialized.
+### Descriptor finalization (performed by `GeometryPipeline`)
+
+1) Validate the supplied `descriptor_bytes` and read `GeometryAssetDesc`.
+2) Verify that the number of `bindings` matches `lod_count`.
+3) For each LOD, read `MeshDesc` and any mesh-type blob; patch the mesh info
+   with resource indices from the corresponding `bindings` entry.
+4) Emit submesh descriptors and mesh views verbatim.
+5) Apply all `material_patches` by writing `data::AssetKey` values at their
+   recorded absolute offsets. Offsets outside the descriptor range are errors.
+6) Compute `header.content_hash` on `co::ThreadPool` (if enabled) over the
+   complete finalized bytes and write it into the header.
+7) Return the finalized descriptor bytes or an error diagnostic.
 
 ---
 
@@ -387,21 +290,17 @@ If `mesh_type == MeshType::kStandard`, no blob is emitted.
 If `mesh_type == MeshType::kProcedural`, emit the procedural params blob
 immediately after `MeshDesc` (size = `MeshDesc.info.procedural.params_size`).
 
-If `mesh_type == MeshType::kSkinned`, emit a skinned blob defined by the new
-format version (example structure below):
+If `mesh_type == MeshType::kSkinned`, emit a skinned blob that carries the
+resource indices for the mesh buffers as well as any auxiliary skinning tables
+required by runtime. In practice the skinned blob contains at least:
 
-```text
-struct SkinnedMeshInfo {
-  ResourceIndexT vertex_buffer;
-  ResourceIndexT index_buffer;
-  ResourceIndexT joint_index_buffer;
-  ResourceIndexT joint_weight_buffer;
-  float bounding_box_min[3];
-  float bounding_box_max[3];
-};
-```
+- `vertex_buffer`, `index_buffer`, `joint_index_buffer`, `joint_weight_buffer`;
+- optional auxiliary indices such as `inverse_bind_buffer` and `joint_remap_buffer`;
+- per-mesh bounding box values (min/max).
 
-The pipeline must set `mesh_view_count`, `submesh_count`, and bounds as usual.
+The finalizer patches these resource indices from the supplied `bindings` and
+the pipeline must still set `mesh_view_count`, `submesh_count`, and bounds as
+usual.
 
 ### Buffers (`buffers.data` / `buffers.table`)
 
@@ -424,7 +323,9 @@ Buffers are emitted via `BufferEmitter` using `CookedBufferPayload`:
   types without a defined blob must emit a diagnostic and be skipped or coerced
   to `kStandard` per job policy.
 - **Header metadata**: `header.version` and `header.content_hash` are
-  populated (hash computed on ThreadPool after dependencies resolve).
+  populated; `GeometryPipeline` computes `header.content_hash` on the
+  `co::ThreadPool` after buffer indices are patched (when
+  `with_content_hashing` is enabled).
 - **Attribute mask**: missing attributes are reflected via
   `header.variant_flags` (union-of-LOD attributes).
 - **Failure policy**: no geometry fallback is allowed. Any failure produces
@@ -444,9 +345,11 @@ Buffers are emitted via `BufferEmitter` using `CookedBufferPayload`:
 
 ## Adapter Design (Format Bridges)
 
-GeometryPipeline stays format-agnostic. Importers must provide adapters that
-translate FBX (`ufbx`) and glTF/GLB (`cgltf`) into `WorkItem` payloads while
-preserving authored intent and attaching full diagnostics context.
+The import adapter layer is format-agnostic. Importers must provide adapters
+that translate FBX (`ufbx`) and glTF/GLB (`cgltf`) into `WorkItem` payloads for
+`MeshBuildPipeline` (cooking) while preserving authored intent and attaching
+full diagnostics context. `GeometryPipeline` consumes the cooked payloads and
+finalizes descriptors.
 
 ### Adapter Contract (Common)
 

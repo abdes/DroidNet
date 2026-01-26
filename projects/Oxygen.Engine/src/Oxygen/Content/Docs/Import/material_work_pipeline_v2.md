@@ -118,7 +118,12 @@ struct WorkItem {
   OrmPolicy orm_policy = OrmPolicy::kAuto;
   std::vector<ShaderRequest> shader_requests;
 
+  // Optional lifecycle callbacks invoked by the worker.
+  std::function<void()> on_started;
+  std::function<void()> on_finished;
+
   ImportRequest request;
+  observer_ptr<NamingService> naming_service;
   std::stop_token stop_token;
 };
 ```
@@ -138,8 +143,12 @@ Notes:
 - `textures.*.uv_set` refers to the source UV set. If `uv_set != 0`, the
   orchestrator must remap geometry UVs to set 0 or bake textures accordingly.
 - `textures.*.uv_transform` comes from source material transforms (glTF or FBX).
-  When transforms differ between slots, they must be baked into the affected
-  textures so the material can use a single global UV transform.
+  When assigned textures have differing transforms the pipeline currently
+  selects the *first assigned* texture's transform and writes it into the
+  descriptor (it logs an informational message when multiple transforms are
+  present). Support for per-slot baking or multi-UV-set descriptors is a
+  future enhancement (the orchestrator may still choose to bake textures to
+  achieve a single transform if desired).
 - `shader_requests` is optional; when empty, the pipeline synthesizes default
   stage bindings for the requested `material_domain` and flags.
 - `orm_policy` controls `kMaterialFlag_GltfOrmPacked`.
@@ -160,6 +169,7 @@ struct WorkResult {
   std::string source_id;
   std::optional<CookedMaterialPayload> cooked;
   std::vector<ImportDiagnostic> diagnostics;
+  ImportWorkItemTelemetry telemetry;
   bool success = false;
 };
 ```
@@ -191,6 +201,12 @@ public:
   [[nodiscard]] auto HasPending() const noexcept -> bool;
   [[nodiscard]] auto PendingCount() const noexcept -> size_t;
   [[nodiscard]] auto GetProgress() const noexcept -> PipelineProgress;
+
+  // Queue inspection helpers exposed by the implementation.
+  [[nodiscard]] auto InputQueueSize() const noexcept -> size_t;
+  [[nodiscard]] auto InputQueueCapacity() const noexcept -> size_t;
+  [[nodiscard]] auto OutputQueueSize() const noexcept -> size_t;
+  [[nodiscard]] auto OutputQueueCapacity() const noexcept -> size_t;
 };
 ```
 
@@ -227,17 +243,25 @@ For each work item:
      the domain is `kDecal`, `kUserInterface`, or `kPostProcess`
 5) Resolve UV transforms:
    - If all assigned textures share the same `uv_set` and `uv_transform`, store
-     the transform in the descriptor extension (see "UV Transform Extension")
-   - Otherwise, require texture baking for non-identity transforms (owned by the
-     orchestrator) and use identity transform in the descriptor
+     that transform in the descriptor extension (see "UV Transform Extension").
+   - If assigned textures have differing transforms the pipeline currently
+     selects the *first assigned* texture's transform (logged at INFO). This
+     behavior avoids failing imports; future work may add explicit baking or
+     per-slot transform support.
 6) Resolve flags:
-   - Start with `kMaterialFlag_NoTextureSampling`
-   - Apply `kMaterialFlag_DoubleSided`, `kMaterialFlag_Unlit`
-   - Apply `kMaterialFlag_GltfOrmPacked` when
-     `orm_policy == kForcePacked`, or
-     `orm_policy == kAuto` and **all three** metallic/roughness/AO slots are
-     `assigned=true` and share the same `source_id`, `uv_set`, and
-     `uv_transform`.
+   - Start with `kMaterialFlag_NoTextureSampling`.
+   - Apply `kMaterialFlag_DoubleSided`, `kMaterialFlag_Unlit`.
+   - Resolve ORM packing using metallic+roughness compatibility:
+     - `OrmPolicy::kForcePacked` requires *metallic* and *roughness* to be
+       `assigned=true` and to share the same `source_id` and exact `uv_set` +
+       `uv_transform`; otherwise the pipeline emits a blocking diagnostic
+       (`material.orm_policy`) and the item fails.
+     - `OrmPolicy::kAuto` enables packing when metallic and roughness are both
+       assigned and share the same `source_id` and UV transform; ambient
+       occlusion is not required to enable packing (if AO is present but has a
+       different source it remains a separate texture). If packing succeeds,
+       `kMaterialFlag_GltfOrmPacked` is set and metallic/roughness indices are
+       set to the packed index.
 7) Bind textures:
    - Copy texture indices into `MaterialAssetDesc` for all slots
    - If ORM packed, set metallic/roughness/AO indices to the packed texture
@@ -334,10 +358,34 @@ Contract:
 
 - If all assigned textures share identical `uv_set` and `uv_transform`, store
   that transform here.
-- If transforms differ, textures must be baked to remove their transforms and
-  this extension must be set to identity (scale 1, offset 0, rotation 0,
-  uv_set 0).
-- Loaders must read this extension unconditionally.
+- If assigned textures have differing transforms the pipeline currently stores
+  the *first assigned* texture's transform in the extension (it logs an info
+  message when multiple transforms were present). Loaders must read this
+  extension unconditionally.
+
+### Future: Multi-UV Support (Design Notes)
+
+The current single-UV selection behavior is a temporary compatibility measure.
+Planned evolution to full multi-UV support includes the following options and
+considerations:
+
+- Descriptor changes: add per-slot `uv_set` and `uv_transform` fields (or an
+  extension), so materials can express different transforms and UV sets
+  without remapping geometry.
+- Shader/Loader changes: ensure shaders can sample with an arbitrary UV set
+  index, and loaders can supply additional vertex attribute bindings when
+  a `uv_set != 0` is used by the material descriptor.
+- Orchestrator migration: provide an option to either bake transforms into
+  textures (existing compatibility path) or emit descriptors with per-slot
+  transforms when the pipeline and runtime support them.
+- Backwards compatibility: any descriptor format changes must ensure existing
+  content loads with the current runtime; new fields or extensions should be
+  optional and ignored by older runtimes.
+
+These items should be specified and prioritized when multi-UV content
+requirements arise (e.g., authoring tools or glTF models that reference
+`TEXCOORD1+`). Future work should also include tests that validate
+per-slot transform serialization, loader consumption, and rendering parity.
 
 Renderer convention:
 
@@ -370,6 +418,12 @@ the PAK format:
 
 - TODO: Wire `header.streaming_priority` from import configuration.
 - TODO: Wire `header.variant_flags` from import configuration.
+- TODO: Evolve UV handling to support multi-UV sets and per-slot transforms:
+  - Define descriptor layout changes or an extension that encodes per-slot
+    `uv_set` and `uv_transform` when required.
+  - Update import orchestration to prefer descriptor-resident transforms over
+    baking when supported, and provide clear migration guidance for existing
+    content.
 
 ---
 
@@ -461,8 +515,12 @@ invalid data. Conservative defaults aligned with common engine practice:
   emit a blocking error.
 - `MaterialAlphaMode::kMasked` requires `alpha_cutoff` in [0,1]; clamp and
   emit a warning when out of range.
-- `orm_policy == kForcePacked` requires all three ORM slots `assigned=true` and
-  identical source metadata; otherwise emit a blocking error.
+- `OrmPolicy::kForcePacked` requires `metallic` and `roughness` to be
+  `assigned=true` and to share identical `source_id`, `uv_set`, and
+  `uv_transform`; otherwise emit a blocking error (diagnostic code
+  `material.orm_policy`). `OrmPolicy::kAuto` will enable packing when metallic
+  and roughness are assigned and compatible; ambient occlusion may be packed
+  when compatible but is not required.
 
 ---
 

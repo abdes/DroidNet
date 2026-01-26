@@ -18,10 +18,10 @@ readiness tracking, grounded in the PAK format definitions. It covers:
 It **does not** redefine pipeline architecture or I/O responsibilities; those
 live in [design/async_import_pipeline_v2.md](async_import_pipeline_v2.md).
 
-### File Layout (Planned)
+### File Layout (Actual)
 
-- [src/Oxygen/Content/Import/Async/ImportPlanner.h](src/Oxygen/Content/Import/Async/ImportPlanner.h)
-- [src/Oxygen/Content/Import/Async/ImportPlanner.cpp](src/Oxygen/Content/Import/Async/ImportPlanner.cpp)
+- [src/Oxygen/Content/Import/Internal/ImportPlanner.h](src/Oxygen/Content/Import/Internal/ImportPlanner.h)
+- [src/Oxygen/Content/Import/Internal/ImportPlanner.cpp](src/Oxygen/Content/Import/Internal/ImportPlanner.cpp)
 
 ### Relationship to the Async Import Architecture
 
@@ -92,10 +92,11 @@ enum class PlanItemKind : uint8_t {
   kBufferResource,
   kAudioResource,
   kMaterialAsset,
+  kMeshBuild,
   kGeometryAsset,
   kSceneAsset,
 };
-inline constexpr size_t kPlanKindCount = 6;
+inline constexpr size_t kPlanKindCount = 7;
 using PlanItemId = oxygen::NamedType<uint32_t, struct PlanItemIdTag,
   // clang-format off
   oxygen::DefaultInitialized,
@@ -146,11 +147,11 @@ struct PlanItem {
 
 struct PlanStep {
   PlanItemId item_id = 0;
-  std::span<ReadinessEvent* const> prerequisites;
+  std::vector<PlanItemId> prerequisites; // per-step producer IDs (copied from dependencies_)
 };
 
-// Planner owns the backing storage for prerequisites. Each PlanStep references
-// a slice of a planner-owned vector of ReadinessEvent*.
+// Dependencies are stored in planner-owned `dependencies_` (consumer -> producers).
+// Each `PlanStep.prerequisites` is a copied vector of producer `PlanItemId`s.
 
 // Readiness trackers are stored separately (e.g., in planner-owned arrays
 // keyed by PlanItemId) to keep PlanItem minimal.
@@ -168,6 +169,10 @@ Current design is **1:1** (each item produces one step). The item/step
 distinction is kept to allow future coalescing or batching without changing the
 input model.
 
+The set of plan item kinds includes `kMeshBuild`, which represents mesh-building
+/ cooking work performed by a `MeshBuildPipeline` and may be consumed by the
+`GeometryPipeline` when present (see `geometry_work_pipeline_v2.md`).
+
 Pipeline selection is an internal detail of the planner. Callers ask the
 planner for a pipeline type given a `PlanItemId`, and the planner resolves it
 based on the item's kind.
@@ -180,10 +185,12 @@ contiguous table to enable stable iteration and deterministic ordering.
 
 ```cpp
 // Sketch of planner-owned storage (implementation detail)
-std::vector<PlanItem> items_;          // indexed by PlanItemId
-std::vector<ReadinessEvent> events_;   // indexed by PlanItemId
-std::vector<ReadinessTracker> trackers_; // indexed by PlanItemId
-std::vector<ReadinessEvent*> prerequisites_storage_;
+std::vector<PlanItem> items_;                     // indexed by PlanItemId
+std::vector<std::vector<PlanItemId>> dependencies_; // consumer -> producers
+std::vector<ReadinessEvent> events_;              // indexed by PlanItemId
+std::vector<ReadinessTracker> trackers_;          // indexed by PlanItemId
+std::vector<PlanItemId> required_storage_;
+std::vector<uint8_t> satisfied_storage_;
 
 std::array<std::optional<oxygen::TypeId>, kPlanKindCount> pipeline_registry_;
 
@@ -239,6 +246,8 @@ public:
     WorkPayloadHandle work_handle) -> PlanItemId;
   auto AddGeometryAsset(std::string debug_name,
     WorkPayloadHandle work_handle) -> PlanItemId;
+  auto AddMeshBuild(std::string debug_name,
+    WorkPayloadHandle work_handle) -> PlanItemId;
   auto AddSceneAsset(std::string debug_name,
     WorkPayloadHandle work_handle) -> PlanItemId;
   auto AddDependency(PlanItemId consumer, PlanItemId producer) -> void;
@@ -289,7 +298,7 @@ auto ImportPlanner::PipelineTypeFor(PlanItemId item) const noexcept
 - Each `PlanItemKind` used in a plan must have a registered pipeline type.
 - `RegisterPipeline<Pipeline>()` requires `Pipeline` to satisfy
   `ImportPipeline` (see
-  [src/Oxygen/Content/Import/Async/ImportPipeline.h](src/Oxygen/Content/Import/Async/ImportPipeline.h)).
+  [src/Oxygen/Content/Import/Internal/ImportPipeline.h](src/Oxygen/Content/Import/Internal/ImportPipeline.h)).
 - `AddDependency(consumer, producer)` must represent a valid PakFormat
   dependency (see Section 3).
 - Dependencies are deduplicated **by producer step** per consumer.
@@ -301,8 +310,7 @@ auto ImportPlanner::PipelineTypeFor(PlanItemId item) const noexcept
 `MakePlan()` performs:
 
 1) Build in‑degree for each **item** from dependency edges.
-2) Insert all zero‑in‑degree items into a stable priority queue
-  (registration order from `Add*` calls is the tie‑breaker).
+2) Insert all zero‑in‑degree items into a ready set and process them in deterministic order; `MakePlan()` collects ready items in batches and sorts indices to preserve registration order as the tie‑breaker.
 3) Pop items to build the **step sequence**.
 4) Decrement in‑degree of dependents; when 0, enqueue.
 5) If items remain, report a **cycle** (blocking diagnostic).
@@ -317,8 +325,7 @@ using events.
   (debug assertion + error return).
 - `MakePlan()` validates that all item kinds in the plan have registered
   pipeline types; missing registrations are blocking diagnostics.
-- `MakePlan()` builds `PlanStep.prerequisites` as spans into
-  `prerequisites_storage_`.
+- `MakePlan()` copies each consumer's dependency list into `PlanStep.prerequisites` (a `std::vector<PlanItemId>`) and initializes per‑item readiness trackers and events.
 - The plan is immutable after construction. Only readiness state mutates.
 
 ---
@@ -334,10 +341,11 @@ completion of those producer steps.
 Dependencies are strictly between plan steps. They do not depend on whether a
 step represents a resource or asset pipeline; only completion matters.
 
-`PlanStep.prerequisites` is built by converting each producer dependency into
-its corresponding `ReadinessEvent*` from the planner. Each dependency points
-to `planner.ReadyEvent(producer_item_id)`, so awaiting prerequisites is just
-waiting on those events to become ready.
+`PlanStep.prerequisites` is a per-step copy of the producer `PlanItemId`s
+(from the planner's `dependencies_` table). The importer loop must resolve
+each prerequisite `PlanItemId` to a `ReadinessEvent&` by calling
+`planner.ReadyEvent(producer_item_id)` and await that event (checking
+`ready` first to avoid waiting when already satisfied).
 
 ### 7.2 MarkReady Contract
 
@@ -365,10 +373,11 @@ collects a pipeline result and emits it.
 for (const auto& step : plan) {
   std::vector<co::Co<>> waits;
   waits.reserve(step.prerequisites.size());
-  for (auto* ev : step.prerequisites) {
-    waits.push_back([ev]() -> co::Co<> {
-      if (!ev->ready) {
-        co_await ev->event;
+  for (const auto producer : step.prerequisites) {
+    waits.push_back([&planner, producer]() -> co::Co<> {
+      auto& ev = planner.ReadyEvent(producer);
+      if (!ev.ready) {
+        co_await ev.event;
       }
     }());
   }
@@ -457,20 +466,6 @@ planner.Tracker(geometry_item)
 - Missing pipeline registrations for used kinds are **blocking** errors.
 - Readiness events never fire on invalid plans.
 - All pipeline failures propagate as `ImportDiagnostic` records.
-
----
-
-## 13. LLD Checklist (PakFormat‑Aligned)
-
-- [ ] Deterministic, stable topological order
-- [ ] Per‑step readiness tracker with awaitable event
-- [ ] Produced results stored in a job-level cache (keyed by PlanItemId)
-- [ ] Pipeline registry enables planner-only tests (no real pipelines)
-- [ ] Emission updates readiness tokens (per dependency map)
-- [ ] ThreadPool‑only hashing after readiness
-- [ ] Cancellation‑safe readiness awaits
-- [ ] Cycle detection and diagnostics
-- [ ] No references to non‑PakFormat asset types (animation/morph)
 
 ---
 
