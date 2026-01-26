@@ -238,9 +238,6 @@ private:
     mutable std::shared_mutex mutex;
   };
 
-  [[nodiscard]] auto ApplyNamespacing(
-    std::string name, const NamingContext& context) const -> std::string;
-
   Config config_;
   std::array<NameRegistry, kImportNameKindCount> registries_;
 };
