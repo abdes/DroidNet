@@ -179,10 +179,10 @@ public:
   @see CancelJob, CancelAll, ImportRequest, ImportReport, ProgressEvent
   */
   OXGN_CNTT_NDAPI auto SubmitImport(ImportRequest request,
-    ImportCompletionCallback on_complete,
-    ProgressEventCallback on_progress = nullptr,
-    std::optional<ImportConcurrency> concurrency_override = std::nullopt)
-    -> std::optional<ImportJobId>;
+    const ImportCompletionCallback& on_complete,
+    const ProgressEventCallback& on_progress = nullptr,
+    const std::optional<ImportConcurrency>& concurrency_override
+    = std::nullopt) const -> std::optional<ImportJobId>;
 
   //! Submit a custom import job for asynchronous processing.
   /*!
@@ -203,10 +203,11 @@ public:
   @see CancelJob, CancelAll, ImportRequest, ImportReport, ProgressEvent
   */
   OXGN_CNTT_NDAPI auto SubmitImport(ImportRequest request,
-    ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
-    ImportJobFactory job_factory,
-    std::optional<ImportConcurrency> concurrency_override = std::nullopt)
-    -> std::optional<ImportJobId>;
+    const ImportCompletionCallback& on_complete,
+    const ProgressEventCallback& on_progress,
+    const ImportJobFactory& job_factory,
+    const std::optional<ImportConcurrency>& concurrency_override
+    = std::nullopt) const -> std::optional<ImportJobId>;
 
   //! Submit a batch of import jobs defined in an ImportManifest object.
   /*!
@@ -220,8 +221,9 @@ public:
            for all items or the manifest is empty, returns an empty vector.
   */
   OXGN_CNTT_NDAPI auto SubmitManifest(const ImportManifest& manifest,
-    ImportCompletionCallback on_item_complete = nullptr,
-    ProgressEventCallback on_progress = nullptr) -> std::vector<ImportJobId>;
+    const ImportCompletionCallback& on_item_complete = nullptr,
+    const ProgressEventCallback& on_progress = nullptr) const
+    -> std::vector<ImportJobId>;
 
   //! Cancel a specific import job. Thread-safe.
   /*!
@@ -231,13 +233,13 @@ public:
    @param job_id The job to cancel.
    @return True if the job was found, false if already completed or invalid.
   */
-  OXGN_CNTT_API auto CancelJob(ImportJobId job_id) -> bool;
+  OXGN_CNTT_API auto CancelJob(ImportJobId job_id) const -> bool;
 
   //! Cancel all pending and in-flight imports. Thread-safe.
   /*!
     All jobs will complete with a canceled diagnostic.
   */
-  OXGN_CNTT_API auto CancelAll() -> void;
+  OXGN_CNTT_API auto CancelAll() const -> void;
 
   //! Request graceful shutdown. Thread-safe.
   /*!
@@ -249,7 +251,7 @@ public:
 
    After calling this, `SubmitImport` will return `kInvalidJobId`.
   */
-  OXGN_CNTT_API auto RequestShutdown() -> void;
+  OXGN_CNTT_API auto RequestShutdown() const -> void;
 
   //! Stop the service and wait for shutdown completion. Thread-safe.
   /*!
@@ -259,7 +261,7 @@ public:
 
     @note Safe to call multiple times.
   */
-  OXGN_CNTT_API auto Stop() -> void;
+  OXGN_CNTT_API auto Stop() const -> void;
 
   //! Check whether the service has fully stopped. Thread-safe.
   /*!

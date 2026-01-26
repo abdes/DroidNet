@@ -4,35 +4,50 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <atomic>
+#include <cstdint>
+#include <exception>
 #include <filesystem>
+#include <iostream>
 #include <latch>
+#include <memory>
 #include <mutex>
+#include <optional>
+#include <ranges>
 #include <stop_token>
 #include <string>
-#include <string_view>
 #include <thread>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Import/AsyncImportService.h>
+
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/Import/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/IAsyncFileWriter.h>
+#include <Oxygen/Content/Import/ImportConcurrency.h>
+#include <Oxygen/Content/Import/ImportDiagnostics.h>
+#include <Oxygen/Content/Import/ImportJobId.h>
 #include <Oxygen/Content/Import/ImportManifest.h>
+#include <Oxygen/Content/Import/ImportProgress.h>
+#include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/Import/Internal/AsyncImporter.h>
 #include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Internal/ImportJob.h>
 #include <Oxygen/Content/Import/Internal/ImportJobParams.h>
+#include <Oxygen/Content/Import/Internal/JobEntry.h>
 #include <Oxygen/Content/Import/Internal/Jobs/FbxImportJob.h>
 #include <Oxygen/Content/Import/Internal/Jobs/GlbImportJob.h>
 #include <Oxygen/Content/Import/Internal/Jobs/TextureImportJob.h>
 #include <Oxygen/Content/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Content/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
@@ -72,7 +87,8 @@ namespace {
 //===-------------------------------------------------------//
 
 struct AsyncImportService::Impl {
-  explicit Impl(Config config)
+  static constexpr size_t kImportChannelCapacity = 64;
+  explicit Impl(const Config& config)
     : config_(config)
   {
   }
@@ -139,7 +155,7 @@ struct AsyncImportService::Impl {
   //! Start the import thread and wait for it to be ready.
   auto StartThread() -> void
   {
-    import_thread_ = std::thread([this]() { ThreadMain(); });
+    import_thread_ = std::thread([this]() -> void { ThreadMain(); });
 
     // Wait for the import thread to finish initialization
     startup_latch_.wait();
@@ -169,7 +185,7 @@ struct AsyncImportService::Impl {
     // Create the async importer
     async_importer_
       = std::make_unique<detail::AsyncImporter>(detail::AsyncImporter::Config {
-        .channel_capacity = 64,
+        .channel_capacity = kImportChannelCapacity,
         .max_in_flight_jobs = config_.max_in_flight_jobs,
         .file_writer = file_writer_.get(),
         .table_registry = table_registry_.get(),
@@ -181,6 +197,7 @@ struct AsyncImportService::Impl {
     startup_latch_.count_down();
 
     // Run the coroutine runtime with the AsyncImporter
+    // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) - blocking call
     co::Run(*event_loop_, [this]() -> co::Co<> {
       // Use OXCO_WITH_NURSERY to properly activate the LiveObject
       OXCO_WITH_NURSERY(n)
@@ -199,15 +216,17 @@ struct AsyncImportService::Impl {
       };
     });
 
-    if (table_registry_) {
-      co::Run(*event_loop_, [this]() -> co::Co<> {
-        const auto ok = co_await table_registry_->FinalizeAll();
-        if (!ok) {
-          LOG_F(WARNING, "Resource table finalization failed");
-        }
-        co_return;
-      });
-    }
+    // We run coroutines again, after the main nursery is closed, to finalize
+    // all resource tables. This guarantees that all import jobs have completed
+    // and no further writes will be made to the tables.
+    // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) - blocking call
+    co::Run(*event_loop_, [this]() -> co::Co<> {
+      const auto ok = co_await table_registry_->FinalizeAll();
+      if (!ok) {
+        LOG_F(WARNING, "Resource table finalization failed");
+      }
+      co_return;
+    });
 
     // Cleanup on import thread (in reverse order of creation)
     if (thread_pool_) {
@@ -254,7 +273,7 @@ struct AsyncImportService::Impl {
     {
       std::scoped_lock lock(cancel_events_mutex_);
       events_to_trigger.reserve(cancel_events_.size());
-      for (auto& [id, event] : cancel_events_) {
+      for (auto& event : cancel_events_ | std::views::values) {
         if (event) {
           events_to_trigger.push_back(event);
         }
@@ -265,11 +284,12 @@ struct AsyncImportService::Impl {
       if (event_loop_) {
         // IMPORTANT: Trigger cancellations on the import thread to keep
         // coroutine resumption on the correct executor.
-        event_loop_->Post([events = std::move(events_to_trigger)]() mutable {
-          for (auto& event : events) {
-            event->Trigger();
-          }
-        });
+        event_loop_->Post(
+          [events = std::move(events_to_trigger)]() mutable -> void {
+            for (auto& event : events) {
+              event->Trigger();
+            }
+          });
       } else {
         for (auto& event : events_to_trigger) {
           event->Trigger();
@@ -281,7 +301,7 @@ struct AsyncImportService::Impl {
     // correct thread. The nursery will be canceled and co::Run() will
     // exit naturally, causing the event loop to stop.
     if (event_loop_ && async_importer_) {
-      event_loop_->Post([this]() { async_importer_->Stop(); });
+      event_loop_->Post([this]() -> void { async_importer_->Stop(); });
     }
   }
 
@@ -326,18 +346,19 @@ AsyncImportService::~AsyncImportService()
 }
 
 auto AsyncImportService::SubmitImport(ImportRequest request,
-  ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
-  std::optional<ImportConcurrency> concurrency_override)
+  const ImportCompletionCallback& on_complete,
+  const ProgressEventCallback& on_progress,
+  const std::optional<ImportConcurrency>& concurrency_override) const
   -> std::optional<ImportJobId>
 {
-  return SubmitImport(std::move(request), std::move(on_complete),
-    std::move(on_progress), nullptr, std::move(concurrency_override));
+  return SubmitImport(std::move(request), on_complete, on_progress, nullptr,
+    concurrency_override);
 }
 
 auto AsyncImportService::SubmitImport(ImportRequest request,
-  ImportCompletionCallback on_complete, ProgressEventCallback on_progress,
-  ImportJobFactory job_factory,
-  std::optional<ImportConcurrency> concurrency_override)
+  const ImportCompletionCallback& on_complete,
+  const ProgressEventCallback& on_progress, const ImportJobFactory& job_factory,
+  const std::optional<ImportConcurrency>& concurrency_override) const
   -> std::optional<ImportJobId>
 {
   // Check if we're accepting jobs
@@ -387,25 +408,25 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     }
   }
 
-  std::shared_ptr<co::Event> cancel_event = std::make_shared<co::Event>();
+  auto cancel_event = std::make_shared<co::Event>();
 
   DLOG_F(
     INFO, "Submitting import job {}: {}", job_id, request.source_path.string());
 
   // Wrap completion callback to clean up cancel event
-  auto wrapped_complete
-    = [this, job_id, on_complete](ImportJobId id, const ImportReport& report) {
-        // Clean up cancel event
-        {
-          std::scoped_lock lock(impl_->cancel_events_mutex_);
-          impl_->cancel_events_.erase(job_id);
-        }
+  auto wrapped_complete = [this, job_id, on_complete](const ImportJobId id,
+                            const ImportReport& report) -> void {
+    // Clean up cancel event
+    {
+      std::scoped_lock lock(impl_->cancel_events_mutex_);
+      impl_->cancel_events_.erase(job_id);
+    }
 
-        // Invoke user callback
-        if (on_complete) {
-          on_complete(id, report);
-        }
-      };
+    // Invoke user callback
+    if (on_complete) {
+      on_complete(id, report);
+    }
+  };
 
   const auto source_path_string = request.source_path.string();
 
@@ -426,8 +447,8 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   detail::ImportJobParams params {
     .id = job_id,
     .request = std::move(request),
-    .on_complete = std::move(wrapped_complete),
-    .on_progress = std::move(on_progress),
+    .on_complete = wrapped_complete,
+    .on_progress = on_progress,
     .cancel_event = cancel_event,
     .reader = file_reader,
     .writer = file_writer,
@@ -474,14 +495,11 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     return std::nullopt;
   }
 
-  const auto source_path = source_path_string;
-  auto on_submit_failed = wrapped_complete;
-
   // Submit directly to AsyncImporter via event loop post
   // The event loop ensures this runs on the import thread
   impl_->event_loop_->Post(
     [importer = impl_->async_importer_.get(), entry = std::move(entry),
-      on_submit_failed, source_path]() mutable {
+      wrapped_complete, source_path = source_path_string]() mutable -> void {
       // Now on import thread - submit to AsyncImporter
       // Use TrySubmitJob since we're not in a coroutine context
       if (!importer->TrySubmitJob(std::move(entry))) {
@@ -503,7 +521,7 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
         .scenes_written = 0,
         .success = false,
       };
-        on_submit_failed(entry.job_id, report);
+        wrapped_complete(entry.job_id, report);
       }
     });
 
@@ -511,8 +529,8 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
 }
 
 auto AsyncImportService::SubmitManifest(const ImportManifest& manifest,
-  ImportCompletionCallback on_item_complete, ProgressEventCallback on_progress)
-  -> std::vector<ImportJobId>
+  const ImportCompletionCallback& on_item_complete,
+  const ProgressEventCallback& on_progress) const -> std::vector<ImportJobId>
 {
   std::vector<ImportJobId> job_ids;
   auto requests = manifest.BuildRequests(std::cerr);
@@ -528,7 +546,7 @@ auto AsyncImportService::SubmitManifest(const ImportManifest& manifest,
   return job_ids;
 }
 
-auto AsyncImportService::CancelJob(const ImportJobId job_id) -> bool
+auto AsyncImportService::CancelJob(const ImportJobId job_id) const -> bool
 {
   std::shared_ptr<co::Event> cancel_event;
 
@@ -547,7 +565,8 @@ auto AsyncImportService::CancelJob(const ImportJobId job_id) -> bool
   // The job's nursery will observe this and cancel accordingly
   if (cancel_event) {
     if (impl_->event_loop_) {
-      impl_->event_loop_->Post([event = cancel_event]() { event->Trigger(); });
+      impl_->event_loop_->Post(
+        [event = cancel_event]() -> void { event->Trigger(); });
     } else {
       cancel_event->Trigger();
     }
@@ -558,7 +577,7 @@ auto AsyncImportService::CancelJob(const ImportJobId job_id) -> bool
   return false;
 }
 
-auto AsyncImportService::CancelAll() -> void
+auto AsyncImportService::CancelAll() const -> void
 {
   std::vector<std::shared_ptr<co::Event>> events_to_trigger;
   size_t cancel_count = 0;
@@ -567,7 +586,7 @@ auto AsyncImportService::CancelAll() -> void
     std::scoped_lock lock(impl_->cancel_events_mutex_);
     events_to_trigger.reserve(impl_->cancel_events_.size());
 
-    for (auto& [id, event] : impl_->cancel_events_) {
+    for (auto& event : impl_->cancel_events_ | std::views::values) {
       if (event) {
         events_to_trigger.push_back(event);
       }
@@ -577,11 +596,12 @@ auto AsyncImportService::CancelAll() -> void
 
   // Trigger all cancel events (outside the lock)
   if (impl_->event_loop_) {
-    impl_->event_loop_->Post([events = std::move(events_to_trigger)]() mutable {
-      for (auto& event : events) {
-        event->Trigger();
-      }
-    });
+    impl_->event_loop_->Post(
+      [events = std::move(events_to_trigger)]() mutable -> void {
+        for (auto& event : events) {
+          event->Trigger();
+        }
+      });
   } else {
     for (auto& event : events_to_trigger) {
       event->Trigger();
@@ -591,9 +611,12 @@ auto AsyncImportService::CancelAll() -> void
   DLOG_F(INFO, "Triggered cancellation for {} jobs", cancel_count);
 }
 
-auto AsyncImportService::RequestShutdown() -> void { impl_->RequestShutdown(); }
+auto AsyncImportService::RequestShutdown() const -> void
+{
+  impl_->RequestShutdown();
+}
 
-auto AsyncImportService::Stop() -> void
+auto AsyncImportService::Stop() const -> void
 {
   try {
     impl_->Shutdown();
