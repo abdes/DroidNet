@@ -15,7 +15,7 @@
 namespace oxygen::serio {
 
 //! Load specialization for IndexHeader.
-inline auto Load(AnyReader& reader, data::loose_cooked::v1::IndexHeader& header)
+inline auto Load(AnyReader& reader, data::loose_cooked::IndexHeader& header)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -46,7 +46,7 @@ inline auto Load(AnyReader& reader, data::loose_cooked::v1::IndexHeader& header)
 }
 
 //! Load specialization for AssetEntry.
-inline auto Load(AnyReader& reader, data::loose_cooked::v1::AssetEntry& entry)
+inline auto Load(AnyReader& reader, data::loose_cooked::AssetEntry& entry)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -65,13 +65,13 @@ inline auto Load(AnyReader& reader, data::loose_cooked::v1::AssetEntry& entry)
 }
 
 //! Load specialization for FileRecord.
-inline auto Load(AnyReader& reader, data::loose_cooked::v1::FileRecord& record)
+inline auto Load(AnyReader& reader, data::loose_cooked::FileRecord& record)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   uint16_t kind_u = 0;
   CHECK_RESULT(reader.ReadInto(kind_u));
-  using data::loose_cooked::v1::FileKind;
+  using data::loose_cooked::FileKind;
   switch (static_cast<FileKind>(kind_u)) {
   case FileKind::kUnknown:
   case FileKind::kBuffersTable:

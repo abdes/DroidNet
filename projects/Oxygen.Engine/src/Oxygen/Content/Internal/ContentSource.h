@@ -313,7 +313,7 @@ public:
         cooked_root_ / "container.index.bin"))
     , verify_content_hashes_(verify_content_hashes)
   {
-    using oxygen::data::loose_cooked::v1::FileKind;
+    using oxygen::data::loose_cooked::FileKind;
 
     ValidateDescriptorFilesExistAndMatchIndex();
 
@@ -451,7 +451,7 @@ private:
   }
 
   auto ValidateFileRecordExistsAndMatchesSize(
-    oxygen::data::loose_cooked::v1::FileKind kind,
+    oxygen::data::loose_cooked::FileKind kind,
     const std::filesystem::path& absolute_path) const -> void
   {
     const auto t0 = std::chrono::steady_clock::now();

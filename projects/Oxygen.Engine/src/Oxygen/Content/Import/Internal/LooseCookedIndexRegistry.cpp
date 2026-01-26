@@ -48,7 +48,7 @@ auto LooseCookedIndexRegistry::BeginSession(
 
 auto LooseCookedIndexRegistry::RegisterExternalFile(
   const std::filesystem::path& cooked_root,
-  const data::loose_cooked::v1::FileKind kind, std::string_view relpath) -> void
+  const data::loose_cooked::FileKind kind, std::string_view relpath) -> void
 {
   const auto key = NormalizeKey(cooked_root);
   std::scoped_lock lock(mutex_);

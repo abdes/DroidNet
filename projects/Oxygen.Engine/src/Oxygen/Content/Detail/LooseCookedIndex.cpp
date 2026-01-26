@@ -25,13 +25,13 @@ namespace oxygen::content::detail {
 
 namespace {
 
-  using oxygen::data::loose_cooked::v1::AssetEntry;
-  using oxygen::data::loose_cooked::v1::FileKind;
-  using oxygen::data::loose_cooked::v1::FileRecord;
-  using oxygen::data::loose_cooked::v1::IndexHeader;
-  using oxygen::data::loose_cooked::v1::kHasFileRecords;
-  using oxygen::data::loose_cooked::v1::kHasVirtualPaths;
-  using oxygen::data::loose_cooked::v1::kKnownIndexFlags;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileKind;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
+  using oxygen::data::loose_cooked::kHasFileRecords;
+  using oxygen::data::loose_cooked::kHasVirtualPaths;
+  using oxygen::data::loose_cooked::kKnownIndexFlags;
 
   constexpr auto ToSizeT(const uint64_t value) -> size_t
   {
@@ -49,7 +49,7 @@ namespace {
 
   auto ValidateMagic(const IndexHeader& header) -> void
   {
-    const auto expected = oxygen::data::loose_cooked::v1::kHeaderMagic;
+    const auto expected = oxygen::data::loose_cooked::kHeaderMagic;
     const auto actual = std::string_view(header.magic, sizeof(header.magic));
     const auto expected_sv = std::string_view(expected.data(), expected.size());
     if (actual != expected_sv) {
@@ -508,14 +508,14 @@ auto LooseCookedIndex::FindDescriptorSize(
 auto LooseCookedIndex::FindDescriptorSha256(
   const data::AssetKey& key) const noexcept
   -> std::optional<
-    std::span<const uint8_t, oxygen::data::loose_cooked::v1::kSha256Size>>
+    std::span<const uint8_t, oxygen::data::loose_cooked::kSha256Size>>
 {
   const auto it = key_to_asset_info_.find(key);
   if (it == key_to_asset_info_.end()) {
     return std::nullopt;
   }
 
-  return std::span<const uint8_t, oxygen::data::loose_cooked::v1::kSha256Size>(
+  return std::span<const uint8_t, oxygen::data::loose_cooked::kSha256Size>(
     it->second.descriptor_sha256);
 }
 
@@ -547,7 +547,7 @@ auto LooseCookedIndex::FindAssetType(const data::AssetKey& key) const noexcept
 }
 
 auto LooseCookedIndex::GetAllFileKinds() const noexcept
-  -> std::span<const data::loose_cooked::v1::FileKind>
+  -> std::span<const data::loose_cooked::FileKind>
 {
   return file_kinds_;
 }

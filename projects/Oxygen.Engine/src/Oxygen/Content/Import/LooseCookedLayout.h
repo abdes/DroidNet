@@ -39,8 +39,8 @@ namespace oxygen::content::import {
  @warning The runtime mount path is rooted at `container.index.bin`.
   Today, mounting assumes this filename at the container root.
 
- @see oxygen::data::loose_cooked::v1::IndexHeader
- @see oxygen::data::loose_cooked::v1::FileRecord
+ @see oxygen::data::loose_cooked::IndexHeader
+ @see oxygen::data::loose_cooked::FileRecord
 */
 //! Layout description for loose cooked output.
 struct LooseCookedLayout final : Layout {

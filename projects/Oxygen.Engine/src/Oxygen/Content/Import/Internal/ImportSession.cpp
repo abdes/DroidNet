@@ -42,7 +42,7 @@ namespace {
   }
 
   auto RegisterExternalTable(LooseCookedIndexRegistry& registry,
-    const data::loose_cooked::v1::FileKind kind,
+    const data::loose_cooked::FileKind kind,
     const std::filesystem::path& cooked_root, std::string_view relpath) -> void
   {
     const auto path = cooked_root / std::filesystem::path(relpath);
@@ -398,7 +398,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
   // diagnostics reported errors. This prevents stale index metadata from
   // invalidating previously cooked content.
   try {
-    using data::loose_cooked::v1::FileKind;
+    using data::loose_cooked::FileKind;
     constexpr std::string_view kIndexFileName = "container.index.bin";
 
     const auto& layout = request_.loose_cooked_layout;
