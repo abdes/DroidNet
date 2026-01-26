@@ -8,269 +8,288 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
+#include <iterator>
+#include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_set>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Content/Detail/LooseCookedIndex.h>
-#include <Oxygen/Content/Internal/LooseCookedIndexLoad.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
 
-namespace oxygen::content::detail {
+using oxygen::data::loose_cooked::AssetEntry;
+using oxygen::data::loose_cooked::FileKind;
+using oxygen::data::loose_cooked::FileRecord;
+using oxygen::data::loose_cooked::IndexHeader;
+using oxygen::data::loose_cooked::kHasFileRecords;
+using oxygen::data::loose_cooked::kHasVirtualPaths;
+using oxygen::data::loose_cooked::kHeaderMagic;
+using oxygen::data::loose_cooked::kKnownIndexFlags;
 
+namespace oxygen::serio {
+
+//! Deserializes an IndexHeader from the stream.
+inline static auto Load(AnyReader& reader,
+  oxygen::data::loose_cooked::IndexHeader& value) -> Result<void>
+{
+  CHECK_RESULT(reader.AlignTo(1));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span(&value, 1))));
+  return {};
+}
+
+//! Deserializes an AssetEntry from the stream.
+inline static auto Load(AnyReader& reader,
+  oxygen::data::loose_cooked::AssetEntry& value) -> Result<void>
+{
+  CHECK_RESULT(reader.AlignTo(1));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span(&value, 1))));
+  return {};
+}
+
+//! Deserializes a FileRecord from the stream.
+inline static auto Load(AnyReader& reader,
+  oxygen::data::loose_cooked::FileRecord& value) -> Result<void>
+{
+  CHECK_RESULT(reader.AlignTo(1));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span(&value, 1))));
+  return {};
+}
+
+} // namespace oxygen::serio
 namespace {
 
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileKind;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-  using oxygen::data::loose_cooked::kHasFileRecords;
-  using oxygen::data::loose_cooked::kHasVirtualPaths;
-  using oxygen::data::loose_cooked::kKnownIndexFlags;
+auto ValidateMagic(const IndexHeader& header) -> void
+{
+  const auto actual = std::span<const char>(header.magic);
+  if (!std::ranges::equal(actual, std::span<const char>(kHeaderMagic))) {
+    throw std::runtime_error("Invalid loose cooked index magic");
+  }
+}
 
-  constexpr auto ToSizeT(const uint64_t value) -> size_t
-  {
-    return static_cast<size_t>(value);
+auto ValidateSectionRange(const size_t file_size, const uint64_t offset,
+  const uint64_t size, const std::string_view what) -> void
+{
+  if (offset > file_size) {
+    throw std::runtime_error(std::string(what) + " offset out of range");
+  }
+  if (size > file_size) {
+    throw std::runtime_error(std::string(what) + " size out of range");
+  }
+  if (offset + size > file_size) {
+    throw std::runtime_error(std::string(what) + " range out of bounds");
+  }
+}
+
+auto ValidateSectionLayout(const IndexHeader& header) -> void
+{
+  if (header.string_table_size == 0) {
+    throw std::runtime_error("String table must not be empty");
   }
 
-  auto ReadOrThrow(
-    const oxygen::Result<void>& result, const std::string_view message) -> void
-  {
-    if (!result) {
-      throw std::runtime_error(
-        std::string(message) + ": " + result.error().message());
-    }
+  if (header.string_table_offset < sizeof(IndexHeader)) {
+    throw std::runtime_error("String table must start after index header");
   }
 
-  auto ValidateMagic(const IndexHeader& header) -> void
-  {
-    const auto expected = oxygen::data::loose_cooked::kHeaderMagic;
-    const auto actual = std::string_view(header.magic, sizeof(header.magic));
-    const auto expected_sv = std::string_view(expected.data(), expected.size());
-    if (actual != expected_sv) {
-      throw std::runtime_error("Invalid loose cooked index magic");
-    }
+  const auto expected_asset_entries_min
+    = header.string_table_offset + header.string_table_size;
+  if (header.asset_entries_offset < expected_asset_entries_min) {
+    throw std::runtime_error(
+      "Asset entries must start after the end of the string table");
   }
 
-  auto ValidateSectionRange(const size_t file_size, const uint64_t offset,
-    const uint64_t size, const std::string_view what) -> void
-  {
-    if (offset > file_size) {
-      throw std::runtime_error(std::string(what) + " offset out of range");
-    }
-    if (size > file_size) {
-      throw std::runtime_error(std::string(what) + " size out of range");
-    }
-    if (offset + size > file_size) {
-      throw std::runtime_error(std::string(what) + " range out of bounds");
-    }
+  const auto expected_file_records_min = header.asset_entries_offset
+    + (static_cast<uint64_t>(header.asset_count) * sizeof(AssetEntry));
+  if (header.file_records_offset < expected_file_records_min) {
+    throw std::runtime_error(
+      "File records must start after the end of the asset entries");
+  }
+}
+
+auto ValidateStringOffset(const IndexHeader& header, const uint32_t offset)
+  -> void
+{
+  const auto str_size = header.string_table_size;
+  if (static_cast<uint64_t>(offset) >= str_size) {
+    throw std::runtime_error("String table offset out of range");
+  }
+}
+
+auto ExtractNullTerminatedString(std::string_view table, const uint32_t offset)
+  -> std::string_view
+{
+  if (offset >= table.size()) {
+    throw std::runtime_error("String table offset out of range");
   }
 
-  auto ValidateSectionLayout(const IndexHeader& header, const size_t file_size)
-    -> void
-  {
-    (void)file_size;
-
-    if (header.string_table_size == 0) {
-      throw std::runtime_error("String table must not be empty");
-    }
-
-    if (header.string_table_offset < sizeof(IndexHeader)) {
-      throw std::runtime_error("String table must start after index header");
-    }
-
-    const auto expected_asset_entries_min
-      = header.string_table_offset + header.string_table_size;
-    if (header.asset_entries_offset < expected_asset_entries_min) {
-      throw std::runtime_error(
-        "Asset entries must start after the end of the string table");
-    }
-
-    const auto expected_file_records_min = header.asset_entries_offset
-      + (static_cast<uint64_t>(header.asset_count) * sizeof(AssetEntry));
-    if (header.file_records_offset < expected_file_records_min) {
-      throw std::runtime_error(
-        "File records must start after the end of the asset entries");
-    }
+  const auto chars = std::span<const char>(table.data(), table.size());
+  const auto tail = chars.subspan(offset);
+  const auto end = std::ranges::find(tail, '\0');
+  if (end == tail.end()) {
+    throw std::runtime_error("Unterminated string in string table");
   }
 
-  auto ValidateStringOffset(const IndexHeader& header, const uint32_t offset)
-    -> void
-  {
-    const auto str_size = header.string_table_size;
-    if (static_cast<uint64_t>(offset) >= str_size) {
-      throw std::runtime_error("String table offset out of range");
-    }
-  }
+  const auto len = static_cast<size_t>(std::distance(tail.begin(), end));
+  return { tail.data(), len };
+}
 
-  auto ExtractNullTerminatedString(
-    std::string_view table, const uint32_t offset) -> std::string_view
-  {
-    if (offset >= table.size()) {
-      throw std::runtime_error("String table offset out of range");
+auto ValidateNoDotSegments(
+  const std::string_view path, const std::string_view what) -> void
+{
+  size_t pos = 0;
+  while (pos <= path.size()) {
+    const auto next = path.find('/', pos);
+    const auto len
+      = (next == std::string_view::npos) ? (path.size() - pos) : (next - pos);
+    const auto segment = path.substr(pos, len);
+    if (segment == ".") {
+      throw std::runtime_error(std::string(what) + " must not contain '.'");
     }
-
-    const auto* begin = table.data() + offset;
-    const auto remaining = table.size() - offset;
-    const auto* end = static_cast<const char*>(memchr(begin, '\0', remaining));
-    if (end == nullptr) {
-      throw std::runtime_error("Unterminated string in string table");
+    if (segment == "..") {
+      throw std::runtime_error(std::string(what) + " must not contain '..'");
     }
 
-    return std::string_view(begin, static_cast<size_t>(end - begin));
-  }
-
-  auto ValidateNoDotSegments(
-    const std::string_view path, const std::string_view what) -> void
-  {
-    size_t pos = 0;
-    while (pos <= path.size()) {
-      const auto next = path.find('/', pos);
-      const auto len
-        = (next == std::string_view::npos) ? (path.size() - pos) : (next - pos);
-      const auto segment = path.substr(pos, len);
-      if (segment == ".") {
-        throw std::runtime_error(std::string(what) + " must not contain '.'");
-      }
-      if (segment == "..") {
-        throw std::runtime_error(std::string(what) + " must not contain '..'");
-      }
-
-      if (next == std::string_view::npos) {
-        break;
-      }
-      pos = next + 1;
-    }
-  }
-
-  auto ValidateRelativePath(const std::string_view relpath) -> void
-  {
-    if (relpath.empty()) {
-      throw std::runtime_error("Index path must not be empty");
-    }
-
-    if (relpath.find('\\') != std::string_view::npos) {
-      throw std::runtime_error("Index path must use '/' as the separator");
-    }
-    if (relpath.find(':') != std::string_view::npos) {
-      throw std::runtime_error("Index path must not contain ':'");
-    }
-    if (relpath.front() == '/') {
-      throw std::runtime_error("Index path must be container-relative");
-    }
-    if (relpath.back() == '/') {
-      throw std::runtime_error("Index path must not end with '/'");
-    }
-    if (relpath.find("//") != std::string_view::npos) {
-      throw std::runtime_error("Index path must not contain '//'");
-    }
-
-    ValidateNoDotSegments(relpath, "Index path");
-
-    std::filesystem::path p(relpath);
-    if (p.is_absolute() || p.has_root_path() || p.has_root_name()) {
-      throw std::runtime_error("Index path must be container-relative");
-    }
-
-    for (const auto& part : p) {
-      if (part == "..") {
-        throw std::runtime_error("Index path must not contain '..'");
-      }
-    }
-  }
-
-  auto ValidateVirtualPath(const std::string_view virtual_path) -> void
-  {
-    if (virtual_path.empty()) {
-      throw std::runtime_error("Virtual path must not be empty");
-    }
-    if (virtual_path.find('\\') != std::string_view::npos) {
-      throw std::runtime_error("Virtual path must use '/' as the separator");
-    }
-    if (virtual_path.front() != '/') {
-      throw std::runtime_error("Virtual path must start with '/'");
-    }
-    if (virtual_path.size() > 1 && virtual_path.back() == '/') {
-      throw std::runtime_error(
-        "Virtual path must not end with '/' (except the root)");
-    }
-    if (virtual_path.find("//") != std::string_view::npos) {
-      throw std::runtime_error("Virtual path must not contain '//'");
-    }
-
-    ValidateNoDotSegments(virtual_path, "Virtual path");
-  }
-
-  auto ValidateFileKind(const FileKind kind) -> void
-  {
-    switch (kind) {
-    case FileKind::kBuffersTable:
-    case FileKind::kBuffersData:
-    case FileKind::kTexturesTable:
-    case FileKind::kTexturesData:
-      return;
-    case FileKind::kUnknown:
-    default:
+    if (next == std::string_view::npos) {
       break;
     }
+    pos = next + 1;
+  }
+}
 
-    throw std::runtime_error("Unsupported FileKind in loose cooked index");
+auto ValidateRelativePath(const std::string_view relpath) -> void
+{
+  if (relpath.empty()) {
+    throw std::runtime_error("Index path must not be empty");
   }
 
-  auto ValidateHeaderFlags(const IndexHeader& header) -> void
-  {
-    const auto flags = header.flags;
-
-    if ((flags & ~kKnownIndexFlags) != 0u) {
-      throw std::runtime_error(
-        "Unsupported IndexHeader flags in loose cooked index");
-    }
-
-    // Backward compatibility: flags==0 is a legacy value.
-    if (flags == 0u) {
-      return;
-    }
-
-    // For v1 indexes, asset virtual paths are part of the contract.
-    if ((flags & static_cast<uint32_t>(kHasVirtualPaths)) == 0u) {
-      throw std::runtime_error(
-        "Loose cooked index flags must declare virtual-path support");
-    }
-
-    const auto declares_file_records
-      = (flags & static_cast<uint32_t>(kHasFileRecords)) != 0u;
-
-    if (!declares_file_records && header.file_record_count != 0u) {
-      throw std::runtime_error("Loose cooked index flags disallow file "
-                               "records, but file_record_count is non-zero");
-    }
-
-    if (declares_file_records
-      && header.file_record_size != sizeof(FileRecord)) {
-      throw std::runtime_error("Unexpected FileRecord size in index header");
-    }
+  if (relpath.contains('\\')) {
+    throw std::runtime_error("Index path must use '/' as the separator");
+  }
+  if (relpath.contains(':')) {
+    throw std::runtime_error("Index path must not contain ':'");
+  }
+  if (relpath.front() == '/') {
+    throw std::runtime_error("Index path must be container-relative");
+  }
+  if (relpath.back() == '/') {
+    throw std::runtime_error("Index path must not end with '/'");
+  }
+  if (relpath.contains("//")) {
+    throw std::runtime_error("Index path must not contain '//'");
   }
 
-  auto ValidateGuid(const IndexHeader& header) -> void
-  {
-    bool all_zeros = true;
-    for (const auto b : header.guid) {
-      if (b != 0) {
-        all_zeros = false;
-        break;
-      }
-    }
-    if (all_zeros) {
-      throw std::runtime_error("Loose cooked index must have a non-zero GUID");
+  ValidateNoDotSegments(relpath, "Index path");
+
+  std::filesystem::path p(relpath);
+  if (p.is_absolute() || p.has_root_path() || p.has_root_name()) {
+    throw std::runtime_error("Index path must be container-relative");
+  }
+
+  for (const auto& part : p) {
+    if (part == "..") {
+      throw std::runtime_error("Index path must not contain '..'");
     }
   }
+}
+
+auto ValidateVirtualPath(const std::string_view virtual_path) -> void
+{
+  if (virtual_path.empty()) {
+    throw std::runtime_error("Virtual path must not be empty");
+  }
+  if (virtual_path.contains('\\')) {
+    throw std::runtime_error("Virtual path must use '/' as the separator");
+  }
+  if (virtual_path.front() != '/') {
+    throw std::runtime_error("Virtual path must start with '/'");
+  }
+  if (virtual_path.size() > 1 && virtual_path.back() == '/') {
+    throw std::runtime_error(
+      "Virtual path must not end with '/' (except the root)");
+  }
+  if (virtual_path.contains("//")) {
+    throw std::runtime_error("Virtual path must not contain '//'");
+  }
+
+  ValidateNoDotSegments(virtual_path, "Virtual path");
+}
+
+auto ValidateFileKind(const FileKind kind) -> void
+{
+  switch (kind) {
+  case FileKind::kBuffersTable:
+  case FileKind::kBuffersData:
+  case FileKind::kTexturesTable:
+  case FileKind::kTexturesData:
+    return;
+  case FileKind::kUnknown:
+  default:
+    break;
+  }
+
+  throw std::runtime_error("Unsupported FileKind in loose cooked index");
+}
+
+auto ValidateHeaderFlags(const IndexHeader& header) -> void
+{
+  const auto flags = header.flags;
+
+  if ((flags & ~kKnownIndexFlags) != 0U) {
+    throw std::runtime_error(
+      "Unsupported IndexHeader flags in loose cooked index");
+  }
+
+  // Backward compatibility: flags==0 is a legacy value.
+  if (flags == 0U) {
+    return;
+  }
+
+  // For v1 indexes, asset virtual paths are part of the contract.
+  if ((flags & static_cast<uint32_t>(kHasVirtualPaths)) == 0U) {
+    throw std::runtime_error(
+      "Loose cooked index flags must declare virtual-path support");
+  }
+
+  const auto declares_file_records
+    = (flags & static_cast<uint32_t>(kHasFileRecords)) != 0U;
+
+  if (!declares_file_records && header.file_record_count != 0U) {
+    throw std::runtime_error("Loose cooked index flags disallow file "
+                             "records, but file_record_count is non-zero");
+  }
+
+  if (declares_file_records && header.file_record_size != sizeof(FileRecord)) {
+    throw std::runtime_error("Unexpected FileRecord size in index header");
+  }
+}
+
+auto ValidateGuid(const IndexHeader& header) -> void
+{
+  bool all_zeros = true;
+  for (const auto b : header.guid) {
+    if (b != 0) {
+      all_zeros = false;
+      break;
+    }
+  }
+  if (all_zeros) {
+    throw std::runtime_error("Loose cooked index must have a non-zero GUID");
+  }
+}
 
 } // namespace
+
+namespace oxygen::content::detail {
 
 auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
   -> LooseCookedIndex
@@ -294,11 +313,11 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
 
   serio::Reader<serio::FileStream<>> reader(stream);
   auto header_result = reader.Read<IndexHeader>();
-  if (!header_result) {
+  if (!header_result.has_value()) {
     throw std::runtime_error(
       "Failed to read index header: " + header_result.error().message());
   }
-  const auto header = header_result.value();
+  const IndexHeader header = header_result.value();
 
   ValidateMagic(header);
 
@@ -322,7 +341,7 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
     throw std::runtime_error("Unexpected FileRecord size in index header");
   }
 
-  ValidateSectionLayout(header, file_size);
+  ValidateSectionLayout(header);
 
   ValidateSectionRange(file_size, header.string_table_offset,
     header.string_table_size, "string table");
@@ -331,8 +350,8 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
     static_cast<uint64_t>(header.asset_count) * sizeof(AssetEntry),
     "asset entries");
 
-  const auto declares_file_records = header.flags != 0u
-    && (header.flags & static_cast<uint32_t>(kHasFileRecords)) != 0u;
+  const auto declares_file_records = header.flags != 0U
+    && (header.flags & static_cast<uint32_t>(kHasFileRecords)) != 0U;
 
   if (declares_file_records || header.file_record_count > 0) {
     ValidateSectionRange(file_size, header.file_records_offset,
@@ -342,16 +361,19 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
 
   LooseCookedIndex out;
   out.guid_ = data::SourceKey::FromBytes(header.guid);
-  out.string_storage_.resize(ToSizeT(header.string_table_size));
-  if (auto res = reader.Seek(ToSizeT(header.string_table_offset)); !res) {
+  out.string_storage_.resize(header.string_table_size);
+  if (auto res = reader.Seek(header.string_table_offset); !res) {
     throw std::runtime_error(
       "Failed to seek to string table: " + res.error().message());
   }
-  ReadOrThrow(reader.ReadBlobInto(std::span(
-                // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-                reinterpret_cast<std::byte*>(out.string_storage_.data()),
-                out.string_storage_.size())),
-    "Failed to read string table");
+  const auto result = reader.ReadBlobInto(std::span(
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+    reinterpret_cast<std::byte*>(out.string_storage_.data()),
+    out.string_storage_.size()));
+  if (!result) {
+    throw std::runtime_error(
+      std::string("Failed to read string table: " + result.error().message()));
+  }
 
   if (out.string_storage_.empty() || out.string_storage_.front() != '\0') {
     throw std::runtime_error("String table must start with a NUL byte");
@@ -359,7 +381,7 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
   const auto stored_table
     = std::string_view(out.string_storage_.data(), out.string_storage_.size());
 
-  if (auto res = reader.Seek(ToSizeT(header.asset_entries_offset)); !res) {
+  if (auto res = reader.Seek(header.asset_entries_offset); !res) {
     throw std::runtime_error(
       "Failed to seek to asset entries: " + res.error().message());
   }
@@ -398,7 +420,7 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
         "Duplicate virtual path string in loose cooked index");
     }
 
-    LooseCookedIndex::AssetInfo info {
+    AssetInfo info {
       .descriptor_relpath_offset = entry.descriptor_relpath_offset,
       .virtual_path_offset = entry.virtual_path_offset,
       .descriptor_size = entry.descriptor_size,
@@ -416,7 +438,7 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
   }
 
   if (header.file_record_count > 0) {
-    if (auto res = reader.Seek(ToSizeT(header.file_records_offset)); !res) {
+    if (auto res = reader.Seek(header.file_records_offset); !res) {
       throw std::runtime_error(
         "Failed to seek to file records: " + res.error().message());
     }
@@ -441,7 +463,7 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
           "Duplicate FileKind record in loose cooked index");
       }
 
-      LooseCookedIndex::FileInfo info {
+      FileInfo info {
         .relpath_offset = record.relpath_offset,
         .size = record.size,
       };
@@ -507,15 +529,14 @@ auto LooseCookedIndex::FindDescriptorSize(
 
 auto LooseCookedIndex::FindDescriptorSha256(
   const data::AssetKey& key) const noexcept
-  -> std::optional<
-    std::span<const uint8_t, oxygen::data::loose_cooked::kSha256Size>>
+  -> std::optional<std::span<const uint8_t, data::loose_cooked::kSha256Size>>
 {
   const auto it = key_to_asset_info_.find(key);
   if (it == key_to_asset_info_.end()) {
     return std::nullopt;
   }
 
-  return std::span<const uint8_t, oxygen::data::loose_cooked::kSha256Size>(
+  return std::span<const uint8_t, data::loose_cooked::kSha256Size>(
     it->second.descriptor_sha256);
 }
 
@@ -547,7 +568,7 @@ auto LooseCookedIndex::FindAssetType(const data::AssetKey& key) const noexcept
 }
 
 auto LooseCookedIndex::GetAllFileKinds() const noexcept
-  -> std::span<const data::loose_cooked::FileKind>
+  -> std::span<const FileKind>
 {
   return file_kinds_;
 }
