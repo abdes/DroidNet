@@ -1,11 +1,13 @@
 # ScenePrep Pipeline
 
-This document describes the **fully implemented** ScenePrep system (as of December 2025). Both the Collection and Finalization phases are complete and actively used by the Renderer.
+This document describes the ScenePrep system as currently implemented. Both
+the Collection and Finalization phases are active and used by the Renderer.
 
 ## Current Status
 
 - ✅ **Collection Phase**: Scene graph traversal, LOD selection, visibility filtering, and item emission fully operational
-- ✅ **Finalization Phase**: GPU uploads, draw metadata assembly, sorting, and partitioning complete
+- ✅ **Finalization Phase**: GPU uploads, draw metadata assembly, sorting, and
+  partitioning complete
 - ✅ **Renderer Integration**: Renderer directly uses ScenePrepPipeline with both phases
 - ✅ **Legacy Removal**: Former Extraction module fully removed; no SoA→AoS bridge
 - ✅ **Helper Implementation**: TransformUploader, MaterialBinder, GeometryUploader, and DrawMetadataEmitter all implemented
@@ -23,14 +25,14 @@ For implementation details, see the respective header files in `src/Oxygen/Rende
 | ✅ | 3 | Collection Extractors | `ExtractionPreFilter`, `TransformResolveStage`, `MeshResolver`, `SubMeshVisibilityFilter`, `EmitPerVisibleSubmesh` fully operational. |
 | ✅ | 4 | Collection Config | `CollectionConfig` template with optional stage detection (`CreateBasicCollectionConfig`). |
 | ✅ | 5 | Pipeline Orchestration | `ScenePrepPipeline` base + `ScenePrepPipelineImpl` template. Full Collection + Finalization orchestration complete. |
-| ✅ | 6 | Helper State (Transforms) | `TransformUploader` fully implemented with per-frame deduplication and GPU upload. |
+| ✅ | 6 | Helper State (Transforms) | `TransformUploader` fully implemented with per-frame slot reuse and GPU upload. |
 | ✅ | 7 | Helper State (Materials) | `MaterialBinder` fully implemented with deduplication, persistent caching, and bindless access. |
 | ✅ | 8 | Helper State (Geometry) | `GeometryUploader` implemented with residency tracking and handle management. |
 | ✅ | 9 | Unified GPU Buffer Manager | `TransientStructuredBuffer` and coordinate via `UploadCoordinator`. |
-| ✅ | 10 | Finalization Config & Roles | `FinalizationConfig` fully templated with 6 finalization stages (emit, sort, geometry, transform, material, upload). |
+| ✅ | 10 | Finalization Config & Roles | `FinalizationConfig` fully templated with 6 finalization stages (geometry, transform, material, emit, sort, upload). |
 | ✅ | 11 | Draw Metadata System | `DrawMetadataEmitter` handles MeshView expansion + per-item `DrawMetadata` emission. |
 | ✅ | 12 | Sorting & Partitioning | `DrawMetadataEmitter::SortAndPartition()` implemented for stable ordering. |
-| ✅ | 13 | Performance Optimizations | Deduplication (transform/material/geometry), frame-aware slot reuse, batched uploads via `UploadCoordinator`. |
+| ✅ | 13 | Performance Optimizations | Deduplication (material/geometry), frame-aware slot reuse, batched uploads via `UploadCoordinator`. |
 | ✅ | 14 | Expanded Test Coverage | Unit tests cover collection (`Frustum_test`, `Link_test`, `MaterialBinder_test`). Additional integration tests in place. |
 | ✅ | 15 | Renderer Integration | `Renderer::BuildFrame()` uses `ScenePrepPipeline::Collect()` and `Finalize()` directly. |
 | ✅ | 16 | Legacy Removal | Former Extraction module fully removed from build. |
@@ -56,7 +58,8 @@ Legend: ✅ complete, 🔄 in progress, ⏳ pending.
 
 ## Overview
 
-ScenePrep is architected as a two-phase system with **both phases now fully implemented**:
+ScenePrep is architected as a two-phase system with both phases implemented
+and active in the renderer:
 
 ### Implemented: Collection Phase
 
@@ -72,14 +75,15 @@ ScenePrep is architected as a two-phase system with **both phases now fully impl
 - Draw metadata expansion (per MeshView) via `DrawMetadataEmitFinalizer`
 - Sorting & partitioning via `DrawMetadataSortAndPartitionFinalizer`
 - Direct GPU upload of draw metadata via `DrawMetadataUploadFinalizer`
-- SoA publication directly to passes (bridge removed - legacy AoS conversion eliminated)
+- SoA publication directly to passes (bridge removed; no AoS conversion)
 
 ---
 
 ## Implemented Collection Extractors
 
 - **ExtractionPreFilter**: Seeds visibility/shadow flags, geometry, and transform handle; drops invisible nodes via effective visibility check.
-- **TransformResolveStage**: Allocates stable transform handles via `TransformUploader::GetOrAllocate()` for deduplication.
+- **TransformResolveStage**: Allocates deterministic transform handles via
+  `TransformUploader::GetOrAllocate()`.
 - **MeshResolver**: Selects active LOD (distance/SSE policies) and resolves the mesh. View-dependent; skips in frame-phase.
 - **SubMeshVisibilityFilter**: Computes visible submesh indices using node visibility masks and per-submesh frustum culling (AABB preferred, world-sphere fallback).
 - **EmitPerVisibleSubmesh**: Emits one `RenderItemData` per visible submesh, resolving material per submesh (override → mesh submesh → default).
@@ -339,11 +343,11 @@ concept DrawMetadataEmitter = requires(
 
 ### Finalization Stages (in order)
 
-1. **DrawMetadataEmit**: Per-item metadata emission
-2. **DrawMetadataSort**: Sort and partition metadata
-3. **GeometryUpload**: Ensure geometry residency
-4. **TransformUpload**: Upload transform matrices
-5. **MaterialUpload**: Upload material constants
+1. **GeometryUpload**: Ensure geometry residency
+2. **TransformUpload**: Upload transform matrices
+3. **MaterialUpload**: Upload material constants
+4. **DrawMetadataEmit**: Per-item metadata emission
+5. **DrawMetadataSort**: Sort and partition metadata
 6. **DrawMetadataUpload**: Upload metadata to GPU
 
 Each stage is optional (use `void` in config to skip).
@@ -398,20 +402,24 @@ All helper classes are **fully implemented and integrated**. They are owned by `
 
 ### Transform Management
 
-- **TransformUploader** (persistent, owned by ScenePrepState): Manages stable transform handles with per-frame GPU upload.
-  - `GetOrAllocate(const glm::mat4&)` → `TransformHandle`: Deduplicates matrices by content.
-  - `EnsureFrameResources()`: Uploads deduplicated transforms to GPU (worlds + normals).
+- **TransformUploader** (persistent, owned by ScenePrepState): Manages stable
+  transform handles with per-frame GPU upload.
+  - `GetOrAllocate(const glm::mat4&)` → `TransformHandle`: assigns indices in
+    call order and reuses slots per frame for deterministic handles.
+  - `EnsureFrameResources()`: uploads world and normal matrices to GPU via
+    transient buffers.
   - Normal matrices (inverse-transpose) computed automatically.
   - Accessed via `ScenePrepState::GetTransformUploader()`.
   - Located in `src/Oxygen/Renderer/Resources/TransformUploader.h/cpp`.
 
 ### Material Management
 
-- **MaterialBinder** (persistent, owned by ScenePrepState): Manages material constants with deduplication and atlas allocation.
-  - `GetOrAllocate(const MaterialAsset&)` → `MaterialHandle`: Registers unique materials with content-based hashing.
-  - `EnsureFrameResources()`: Uploads material constants and ensures texture residency.
-  - Pre-registers default and debug materials during construction.
-  - Frame-aware slot reuse prevents unbounded growth.
+- **MaterialBinder** (persistent, owned by ScenePrepState): Manages material
+  constants with deduplication and atlas allocation.
+  - `GetOrAllocate(...)` → `MaterialHandle`: registers unique materials with
+    content-based hashing.
+  - `EnsureFrameResources()`: uploads material constants and resolves texture
+    residency via TextureBinder.
   - Integrates with `UploadCoordinator` for efficient batch uploads.
   - Accessed via `ScenePrepState::GetMaterialBinder()`.
   - Located in `src/Oxygen/Renderer/Resources/MaterialBinder.h/cpp`.
@@ -461,13 +469,13 @@ Each helper implements frame management:
    - Allocates transient GPU buffers for this frame's data.
    - Preps cached data for new frame.
 
-2. **Collection Phase**: Extractors invoke helpers to allocate/deduplicate handles.
+2. **Collection Phase**: Extractors invoke helpers to allocate handles.
    - `TransformResolveStage` calls `TransformUploader::GetOrAllocate()`.
    - `EmitPerVisibleSubmesh` resolves materials and geometry.
    - Handles are stored in `RenderItemData` for later use.
 
 3. **Finalization Phase**: Finalizers invoke `EnsureFrameResources()` to upload accumulated data.
-   - `TransformUploadFinalizer` → uploads deduped transforms.
+   - `TransformUploadFinalizer` → uploads per-frame transforms.
    - `MaterialUploadFinalizer` → uploads constants and ensures residency.
    - `GeometryUploadFinalizer` → ensures VB/IB residency.
    - `DrawMetadataEmitFinalizer` → emits metadata per item.
@@ -642,7 +650,7 @@ struct BadTransformCache {
 - [ ] Process items by index to maintain input data cache locality
 - [ ] Batch GPU uploads to reduce API overhead
 - [ ] Use stable sorting to maintain deterministic output
-- [ ] Deduplicate transforms, materials, and geometry handles
+- [ ] Reuse transform slots deterministically; deduplicate materials and geometry handles
 - [ ] Profile with representative scene data (1K, 10K, 100K items)
 
 ---
