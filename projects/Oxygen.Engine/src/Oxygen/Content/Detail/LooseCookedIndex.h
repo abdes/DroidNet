@@ -85,6 +85,8 @@ public:
     -> std::optional<uint64_t>;
 
 private:
+  struct IndexLoadContext;
+
   struct FileInfo {
     uint32_t relpath_offset = 0;
     uint64_t size = 0;
@@ -105,6 +107,12 @@ private:
   std::unordered_map<data::loose_cooked::FileKind, FileInfo, FileKindHash>
     kind_to_file_;
   data::SourceKey guid_;
+
+  static auto LoadAndValidateHeader(IndexLoadContext& context) -> void;
+  static auto ReadStringTable(IndexLoadContext& context) -> void;
+  static auto ReadAssetEntries(IndexLoadContext& context) -> void;
+  static auto ReadFileRecords(IndexLoadContext& context) -> void;
+  static auto ValidateFilePairs(const LooseCookedIndex& index) -> void;
 };
 
 } // namespace oxygen::content::detail

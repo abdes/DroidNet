@@ -17,6 +17,7 @@
 #include <string_view>
 #include <unordered_set>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Content/Detail/LooseCookedIndex.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -34,11 +35,14 @@ using oxygen::data::loose_cooked::kHasVirtualPaths;
 using oxygen::data::loose_cooked::kHeaderMagic;
 using oxygen::data::loose_cooked::kKnownIndexFlags;
 
+namespace serio = oxygen::serio;
+namespace data = oxygen::data;
+namespace content = oxygen::content;
+
 namespace oxygen::serio {
 
 //! Deserializes an IndexHeader from the stream.
-inline static auto Load(AnyReader& reader,
-  oxygen::data::loose_cooked::IndexHeader& value) -> Result<void>
+static auto Load(AnyReader& reader, IndexHeader& value) -> Result<void>
 {
   CHECK_RESULT(reader.AlignTo(1));
   CHECK_RESULT(
@@ -47,8 +51,7 @@ inline static auto Load(AnyReader& reader,
 }
 
 //! Deserializes an AssetEntry from the stream.
-inline static auto Load(AnyReader& reader,
-  oxygen::data::loose_cooked::AssetEntry& value) -> Result<void>
+static auto Load(AnyReader& reader, AssetEntry& value) -> Result<void>
 {
   CHECK_RESULT(reader.AlignTo(1));
   CHECK_RESULT(
@@ -57,8 +60,7 @@ inline static auto Load(AnyReader& reader,
 }
 
 //! Deserializes a FileRecord from the stream.
-inline static auto Load(AnyReader& reader,
-  oxygen::data::loose_cooked::FileRecord& value) -> Result<void>
+static auto Load(AnyReader& reader, FileRecord& value) -> Result<void>
 {
   CHECK_RESULT(reader.AlignTo(1));
   CHECK_RESULT(
@@ -67,6 +69,7 @@ inline static auto Load(AnyReader& reader,
 }
 
 } // namespace oxygen::serio
+
 namespace {
 
 auto ValidateMagic(const IndexHeader& header) -> void
@@ -291,6 +294,15 @@ auto ValidateGuid(const IndexHeader& header) -> void
 
 namespace oxygen::content::detail {
 
+struct LooseCookedIndex::IndexLoadContext {
+  oxygen::observer_ptr<serio::Reader<serio::FileStream<>>> reader;
+  uint64_t file_size;
+  IndexHeader header;
+  oxygen::observer_ptr<LooseCookedIndex> index;
+  std::string_view stored_table;
+  std::unordered_set<std::string_view> unique_virtual_paths;
+};
+
 auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
   -> LooseCookedIndex
 {
@@ -312,7 +324,26 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
   }
 
   serio::Reader<serio::FileStream<>> reader(stream);
-  auto header_result = reader.Read<IndexHeader>();
+  LooseCookedIndex out;
+  IndexLoadContext context {
+    .reader = oxygen::make_observer(&reader),
+    .file_size = file_size,
+    .header = {},
+    .index = oxygen::make_observer(&out),
+  };
+
+  LoadAndValidateHeader(context);
+  ReadStringTable(context);
+  ReadAssetEntries(context);
+  ReadFileRecords(context);
+  ValidateFilePairs(out);
+
+  return out;
+}
+
+auto LooseCookedIndex::LoadAndValidateHeader(IndexLoadContext& context) -> void
+{
+  auto header_result = context.reader->Read<IndexHeader>();
   if (!header_result.has_value()) {
     throw std::runtime_error(
       "Failed to read index header: " + header_result.error().message());
@@ -343,10 +374,10 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
 
   ValidateSectionLayout(header);
 
-  ValidateSectionRange(file_size, header.string_table_offset,
+  ValidateSectionRange(context.file_size, header.string_table_offset,
     header.string_table_size, "string table");
 
-  ValidateSectionRange(file_size, header.asset_entries_offset,
+  ValidateSectionRange(context.file_size, header.asset_entries_offset,
     static_cast<uint64_t>(header.asset_count) * sizeof(AssetEntry),
     "asset entries");
 
@@ -354,68 +385,77 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
     && (header.flags & static_cast<uint32_t>(kHasFileRecords)) != 0U;
 
   if (declares_file_records || header.file_record_count > 0) {
-    ValidateSectionRange(file_size, header.file_records_offset,
+    ValidateSectionRange(context.file_size, header.file_records_offset,
       static_cast<uint64_t>(header.file_record_count) * sizeof(FileRecord),
       "file records");
   }
 
-  LooseCookedIndex out;
-  out.guid_ = data::SourceKey::FromBytes(header.guid);
-  out.string_storage_.resize(header.string_table_size);
-  if (auto res = reader.Seek(header.string_table_offset); !res) {
+  context.header = header;
+}
+
+auto LooseCookedIndex::ReadStringTable(IndexLoadContext& context) -> void
+{
+  context.index->guid_ = data::SourceKey::FromBytes(context.header.guid);
+  context.index->string_storage_.resize(context.header.string_table_size);
+  if (auto res = context.reader->Seek(context.header.string_table_offset);
+    !res) {
     throw std::runtime_error(
       "Failed to seek to string table: " + res.error().message());
   }
-  const auto result = reader.ReadBlobInto(std::span(
+  const auto result = context.reader->ReadBlobInto(std::span(
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-    reinterpret_cast<std::byte*>(out.string_storage_.data()),
-    out.string_storage_.size()));
+    reinterpret_cast<std::byte*>(context.index->string_storage_.data()),
+    context.index->string_storage_.size()));
   if (!result) {
     throw std::runtime_error(
       std::string("Failed to read string table: " + result.error().message()));
   }
 
-  if (out.string_storage_.empty() || out.string_storage_.front() != '\0') {
+  if (context.index->string_storage_.empty()
+    || context.index->string_storage_.front() != '\0') {
     throw std::runtime_error("String table must start with a NUL byte");
   }
-  const auto stored_table
-    = std::string_view(out.string_storage_.data(), out.string_storage_.size());
+  context.stored_table = std::string_view(context.index->string_storage_.data(),
+    context.index->string_storage_.size());
+}
 
-  if (auto res = reader.Seek(header.asset_entries_offset); !res) {
+auto LooseCookedIndex::ReadAssetEntries(IndexLoadContext& context) -> void
+{
+  if (auto res = context.reader->Seek(context.header.asset_entries_offset);
+    !res) {
     throw std::runtime_error(
       "Failed to seek to asset entries: " + res.error().message());
   }
 
-  std::unordered_set<std::string_view> unique_virtual_paths;
-
-  for (uint32_t i = 0; i < header.asset_count; ++i) {
-    auto entry_result = reader.Read<AssetEntry>();
+  for (uint32_t i = 0; i < context.header.asset_count; ++i) {
+    auto entry_result = context.reader->Read<AssetEntry>();
     if (!entry_result) {
       throw std::runtime_error(
         "Failed to read asset entry: " + entry_result.error().message());
     }
     const auto& entry = entry_result.value();
 
-    ValidateStringOffset(header, entry.descriptor_relpath_offset);
-    ValidateStringOffset(header, entry.virtual_path_offset);
+    ValidateStringOffset(context.header, entry.descriptor_relpath_offset);
+    ValidateStringOffset(context.header, entry.virtual_path_offset);
 
     const auto descriptor_rel = ExtractNullTerminatedString(
-      stored_table, entry.descriptor_relpath_offset);
-    const auto virtual_path
-      = ExtractNullTerminatedString(stored_table, entry.virtual_path_offset);
+      context.stored_table, entry.descriptor_relpath_offset);
+    const auto virtual_path = ExtractNullTerminatedString(
+      context.stored_table, entry.virtual_path_offset);
 
     ValidateRelativePath(descriptor_rel);
     ValidateVirtualPath(virtual_path);
 
-    if (out.key_to_asset_info_.contains(entry.asset_key)) {
+    if (context.index->key_to_asset_info_.contains(entry.asset_key)) {
       throw std::runtime_error("Duplicate AssetKey in loose cooked index");
     }
-    if (out.virtual_path_offset_to_key_.contains(entry.virtual_path_offset)) {
+    if (context.index->virtual_path_offset_to_key_.contains(
+          entry.virtual_path_offset)) {
       throw std::runtime_error(
         "Duplicate virtual path offset in loose cooked index");
     }
 
-    if (!unique_virtual_paths.insert(virtual_path).second) {
+    if (!context.unique_virtual_paths.insert(virtual_path).second) {
       throw std::runtime_error(
         "Duplicate virtual path string in loose cooked index");
     }
@@ -431,67 +471,74 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
     std::copy_n(std::begin(entry.descriptor_sha256),
       info.descriptor_sha256.size(), info.descriptor_sha256.begin());
 
-    out.asset_keys_.push_back(entry.asset_key);
-    out.key_to_asset_info_.insert_or_assign(entry.asset_key, info);
-    out.virtual_path_offset_to_key_.insert_or_assign(
+    context.index->asset_keys_.push_back(entry.asset_key);
+    context.index->key_to_asset_info_.insert_or_assign(entry.asset_key, info);
+    context.index->virtual_path_offset_to_key_.insert_or_assign(
       entry.virtual_path_offset, entry.asset_key);
   }
+}
 
-  if (header.file_record_count > 0) {
-    if (auto res = reader.Seek(header.file_records_offset); !res) {
-      throw std::runtime_error(
-        "Failed to seek to file records: " + res.error().message());
-    }
-
-    for (uint32_t i = 0; i < header.file_record_count; ++i) {
-      auto record_result = reader.Read<FileRecord>();
-      if (!record_result) {
-        throw std::runtime_error(
-          "Failed to read file record: " + record_result.error().message());
-      }
-      const auto& record = record_result.value();
-
-      ValidateFileKind(record.kind);
-
-      ValidateStringOffset(header, record.relpath_offset);
-      const auto rel
-        = ExtractNullTerminatedString(stored_table, record.relpath_offset);
-      ValidateRelativePath(rel);
-
-      if (out.kind_to_file_.contains(record.kind)) {
-        throw std::runtime_error(
-          "Duplicate FileKind record in loose cooked index");
-      }
-
-      FileInfo info {
-        .relpath_offset = record.relpath_offset,
-        .size = record.size,
-      };
-
-      out.kind_to_file_.insert_or_assign(record.kind, info);
-      out.file_kinds_.push_back(record.kind);
-    }
+auto LooseCookedIndex::ReadFileRecords(IndexLoadContext& context) -> void
+{
+  if (context.header.file_record_count == 0) {
+    return;
   }
 
+  if (auto res = context.reader->Seek(context.header.file_records_offset);
+    !res) {
+    throw std::runtime_error(
+      "Failed to seek to file records: " + res.error().message());
+  }
+
+  for (uint32_t i = 0; i < context.header.file_record_count; ++i) {
+    auto record_result = context.reader->Read<FileRecord>();
+    if (!record_result) {
+      throw std::runtime_error(
+        "Failed to read file record: " + record_result.error().message());
+    }
+    const auto& record = record_result.value();
+
+    ValidateFileKind(record.kind);
+
+    ValidateStringOffset(context.header, record.relpath_offset);
+    const auto rel = ExtractNullTerminatedString(
+      context.stored_table, record.relpath_offset);
+    ValidateRelativePath(rel);
+
+    if (context.index->kind_to_file_.contains(record.kind)) {
+      throw std::runtime_error(
+        "Duplicate FileKind record in loose cooked index");
+    }
+
+    FileInfo info {
+      .relpath_offset = record.relpath_offset,
+      .size = record.size,
+    };
+
+    context.index->kind_to_file_.insert_or_assign(record.kind, info);
+    context.index->file_kinds_.push_back(record.kind);
+  }
+}
+
+auto LooseCookedIndex::ValidateFilePairs(const LooseCookedIndex& index) -> void
+{
   const auto has_buffers_table
-    = out.kind_to_file_.contains(FileKind::kBuffersTable);
+    = index.kind_to_file_.contains(FileKind::kBuffersTable);
   const auto has_buffers_data
-    = out.kind_to_file_.contains(FileKind::kBuffersData);
+    = index.kind_to_file_.contains(FileKind::kBuffersData);
   if (has_buffers_table != has_buffers_data) {
     throw std::runtime_error(
       "Loose cooked index must provide both buffers.table and buffers.data");
   }
 
   const auto has_textures_table
-    = out.kind_to_file_.contains(FileKind::kTexturesTable);
+    = index.kind_to_file_.contains(FileKind::kTexturesTable);
   const auto has_textures_data
-    = out.kind_to_file_.contains(FileKind::kTexturesData);
+    = index.kind_to_file_.contains(FileKind::kTexturesData);
   if (has_textures_table != has_textures_data) {
     throw std::runtime_error(
       "Loose cooked index must provide both textures.table and textures.data");
   }
-
-  return out;
 }
 
 auto LooseCookedIndex::Guid() const noexcept -> data::SourceKey
