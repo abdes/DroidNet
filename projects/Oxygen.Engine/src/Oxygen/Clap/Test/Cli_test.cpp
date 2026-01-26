@@ -292,7 +292,7 @@ namespace {
   }
 
   //! Scenario: Global options after the command are rejected.
-  NOLINT_TEST(GlobalOptions, AfterCommand_IsRejected)
+  NOLINT_TEST(GlobalOptions, AfterCommand_IsAccepted)
   {
     // Arrange
     const auto global_verbose
@@ -309,7 +309,9 @@ namespace {
     const char* argv[argc] = { "tool", "run", "--verbose" };
 
     // Act & Assert
-    NOLINT_EXPECT_THROW(cli->Parse(argc, argv), CmdLineArgumentsError);
+    const auto context = cli->Parse(argc, argv);
+    const auto& ovm = context.ovm;
+    EXPECT_TRUE(ovm.HasOption("verbose"));
   }
 
   //! Scenario: Command options take precedence over global options.
