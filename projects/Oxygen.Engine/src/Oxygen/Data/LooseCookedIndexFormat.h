@@ -69,9 +69,8 @@ static constexpr uint32_t kKnownIndexFlags
 
 //=== Index File Format Structures ===---------------------------------------//
 
-#pragma pack(push, 1)
-
 //! Fixed-size header at the start of the loose cooked index (256 bytes).
+#pragma pack(push, 1)
 struct IndexHeader {
   char magic[8] = { 'O', 'X', 'L', 'C', 'I', 'D', 'X', 0 };
   uint16_t version = 1; // Schema version
@@ -154,4 +153,4 @@ static_assert(sizeof(FileRecord) == 64);
 namespace oxygen::data::loose_cooked {
 //! Default namespace alias for latest version of the PAK format
 using namespace v1;
-} // namespace oxygen::data::pak
+} // namespace oxygen::data::loose_cooked
