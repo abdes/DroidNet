@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -132,7 +133,8 @@ public:
 
    @note The returned index is stable even if the I/O fails later.
   */
-  OXGN_CNTT_NDAPI auto Emit(CookedBufferPayload cooked) -> uint32_t;
+  OXGN_CNTT_NDAPI auto Emit(
+    CookedBufferPayload cooked, std::string_view signature_salt) -> uint32_t;
 
   //=== State Query ===-------------------------------------------------------//
 

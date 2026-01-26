@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <chrono>
 #include <filesystem>
 
 #include <Oxygen/Base/Logging.h>
@@ -13,6 +14,20 @@
 namespace oxygen::content::import::detail {
 
 namespace {
+
+  [[nodiscard]] auto MakeZeroTelemetry() -> ImportTelemetry
+  {
+    return ImportTelemetry {
+      .io_duration = std::chrono::microseconds { 0 },
+      .source_load_duration = std::chrono::microseconds { 0 },
+      .decode_duration = std::chrono::microseconds { 0 },
+      .load_duration = std::chrono::microseconds { 0 },
+      .cook_duration = std::chrono::microseconds { 0 },
+      .emit_duration = std::chrono::microseconds { 0 },
+      .finalize_duration = std::chrono::microseconds { 0 },
+      .total_duration = std::chrono::microseconds { 0 },
+    };
+  }
 
   [[nodiscard]] auto VirtualMountRootLeaf(const ImportRequest& request)
     -> std::filesystem::path
@@ -75,6 +90,7 @@ ImportJob::ImportJob(ImportJobParams params)
   , concurrency_(params.concurrency)
   , stop_token_(std::move(params.stop_token))
 {
+  CHECK_NOTNULL_F(thread_pool_, "ImportJob requires a non-null thread pool");
 }
 
 auto ImportJob::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
@@ -322,6 +338,8 @@ auto ImportJob::MakeCancelledReport(const ImportRequest& request) const
     .success = false,
   };
 
+  report.telemetry = MakeZeroTelemetry();
+
   report.diagnostics.push_back({
     .severity = ImportSeverity::kInfo,
     .code = "import.canceled",
@@ -340,6 +358,8 @@ auto ImportJob::MakeNoFileWriterReport(const ImportRequest& request) const
     = request.cooked_root.value_or(request.source_path.parent_path()),
     .success = false,
   };
+
+  report.telemetry = MakeZeroTelemetry();
 
   report.diagnostics.push_back({
     .severity = ImportSeverity::kError,

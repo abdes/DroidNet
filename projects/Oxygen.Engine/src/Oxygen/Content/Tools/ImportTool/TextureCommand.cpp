@@ -341,7 +341,8 @@ auto TextureCommand::Run() -> std::expected<void, std::error_code>
   }
 
   return RunImportJob(*request, writer, settings.report_path,
-    !global_options_->no_tui, global_options_->import_service);
+    global_options_->command_line, !global_options_->no_tui,
+    global_options_->import_service);
 }
 
 } // namespace oxygen::content::import::tool

@@ -170,8 +170,8 @@ namespace {
   }
 
   [[nodiscard]] auto LoadDataFromMemory(const std::span<const std::byte> bytes,
-    const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics)
-    -> CgltfDataPtr
+    const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics,
+    const std::filesystem::path& source_path) -> CgltfDataPtr
   {
     if (input.stop_token.stop_requested()) {
       DLOG_F(WARNING, "glTF load canceled (memory): source_id='{}'",
@@ -192,7 +192,8 @@ namespace {
       return { nullptr, &cgltf_free };
     }
 
-    const auto load_result = cgltf_load_buffers(&options, data, "");
+    const auto load_result
+      = cgltf_load_buffers(&options, data, source_path.string().c_str());
     if (load_result != cgltf_result_success) {
       LOG_F(ERROR, "glTF buffer load failed (memory): result='{}'",
         ResultToMessage(load_result));
@@ -1649,7 +1650,8 @@ auto GltfAdapter::Parse(const std::span<const std::byte> source_bytes,
   const AdapterInput& input) -> ParseResult
 {
   ParseResult result;
-  auto data = LoadDataFromMemory(source_bytes, input, result.diagnostics);
+  auto data = LoadDataFromMemory(
+    source_bytes, input, result.diagnostics, input.request.source_path);
   if (data == nullptr) {
     DLOG_F(ERROR, "glTF parse failed (memory): diagnostics={}",
       result.diagnostics.size());

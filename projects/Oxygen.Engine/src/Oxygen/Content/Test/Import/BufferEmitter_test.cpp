@@ -192,7 +192,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_SingleBuffer_ReturnsIndexZero)
   uint32_t index = 0;
   bool success = false;
   co::Run(*loop_, [&]() -> Co<> {
-    index = emitter.Emit(std::move(payload));
+    index = emitter.Emit(std::move(payload), "buf0");
 
     success = co_await emitter.Finalize();
   });
@@ -215,7 +215,8 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_MultipleBuffers_ReturnsSequentialIndices)
   co::Run(*loop_, [&]() -> Co<> {
     for (int i = 0; i < 5; ++i) {
       auto payload = MakeTestBuffer(512 + i * 100, 0x01, 16, 32);
-      indices.push_back(emitter.Emit(std::move(payload)));
+      indices.push_back(
+        emitter.Emit(std::move(payload), "buf" + std::to_string(i)));
     }
 
     success = co_await emitter.Finalize();
@@ -248,8 +249,8 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_DuplicateBuffer_ReturnsSameIndex)
     buf0.content_hash = 0x1111222233334444ULL;
     buf1.content_hash = 0x1111222233334444ULL;
 
-    idx0 = emitter.Emit(std::move(buf0));
-    idx1 = emitter.Emit(std::move(buf1));
+    idx0 = emitter.Emit(std::move(buf0), "dupe");
+    idx1 = emitter.Emit(std::move(buf1), "dupe");
     co_await emitter.Finalize();
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
@@ -279,7 +280,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_ReturnsImmediately_BeforeIOCompletes)
   bool had_pending = false;
   bool success = false;
   co::Run(*loop_, [&]() -> Co<> {
-    index = emitter.Emit(std::move(payload));
+    index = emitter.Emit(std::move(payload), "buf0");
     had_pending = emitter.PendingCount() > 0;
 
     success = co_await emitter.Finalize();
@@ -302,7 +303,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_AfterFinalize_Throws)
     const auto success = co_await emitter.Finalize();
     EXPECT_TRUE(success);
 
-    EXPECT_THROW((void)emitter.Emit(MakeTestBuffer(256, 0x01, 16, 32)),
+    EXPECT_THROW((void)emitter.Emit(MakeTestBuffer(256, 0x01, 16, 32), "buf0"),
       std::runtime_error);
   });
 }
@@ -321,7 +322,8 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableFileHasCorrectPackedSize)
   co::Run(*loop_, [&]() -> Co<> {
     for (int i = 0; i < kBufferCount; ++i) {
       auto idx = emitter.Emit(
-        MakeTestBuffer(256, 0x01, 16, 32, static_cast<std::byte>(0xA0 + i)));
+        MakeTestBuffer(256, 0x01, 16, 32, static_cast<std::byte>(0xA0 + i)),
+        "buf" + std::to_string(i));
       EXPECT_EQ(idx, static_cast<uint32_t>(i));
     }
     co_await emitter.Finalize();
@@ -360,9 +362,9 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableEntriesHaveCorrectAlignedOffsets)
 
   bool tables_ok = false;
   co::Run(*loop_, [&]() -> Co<> {
-    auto idx0 = emitter.Emit(MakeTestBuffer(kSize0, 0x01, kAlign0, 32));
-    auto idx1 = emitter.Emit(MakeTestBuffer(kSize1, 0x01, kAlign1, 32));
-    auto idx2 = emitter.Emit(MakeTestBuffer(kSize2, 0x02, kAlign2, 0));
+    auto idx0 = emitter.Emit(MakeTestBuffer(kSize0, 0x01, kAlign0, 32), "buf0");
+    auto idx1 = emitter.Emit(MakeTestBuffer(kSize1, 0x01, kAlign1, 32), "buf1");
+    auto idx2 = emitter.Emit(MakeTestBuffer(kSize2, 0x02, kAlign2, 0), "buf2");
     EXPECT_EQ(idx0, 0);
     EXPECT_EQ(idx1, 1);
     EXPECT_EQ(idx2, 2);
@@ -423,8 +425,8 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableEntriesPreserveMetadata)
 
   bool tables_ok = false;
   co::Run(*loop_, [&]() -> Co<> {
-    auto idx0 = emitter.Emit(std::move(vertex_payload));
-    auto idx1 = emitter.Emit(std::move(index_payload));
+    auto idx0 = emitter.Emit(std::move(vertex_payload), "vb");
+    auto idx1 = emitter.Emit(std::move(index_payload), "ib");
     EXPECT_EQ(idx0, 0);
     EXPECT_EQ(idx1, 1);
     co_await emitter.Finalize();
@@ -475,8 +477,8 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_DataFileContainsCorrectContent)
   buf1.usage_flags = 0x01;
 
   co::Run(*loop_, [&]() -> Co<> {
-    auto idx0 = emitter.Emit(std::move(buf0));
-    auto idx1 = emitter.Emit(std::move(buf1));
+    auto idx0 = emitter.Emit(std::move(buf0), "buf0");
+    auto idx1 = emitter.Emit(std::move(buf1), "buf1");
     EXPECT_EQ(idx0, 0);
     EXPECT_EQ(idx1, 1);
     co_await emitter.Finalize();
@@ -519,8 +521,8 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_DataFileSizeIncludesPadding)
   constexpr uint64_t kAlign = 16;
 
   co::Run(*loop_, [&]() -> Co<> {
-    auto idx0 = emitter.Emit(MakeTestBuffer(kSize0, 0x01, kAlign, 32));
-    auto idx1 = emitter.Emit(MakeTestBuffer(kSize1, 0x01, kAlign, 32));
+    auto idx0 = emitter.Emit(MakeTestBuffer(kSize0, 0x01, kAlign, 32), "buf0");
+    auto idx1 = emitter.Emit(MakeTestBuffer(kSize1, 0x01, kAlign, 32), "buf1");
     EXPECT_EQ(idx0, 0);
     EXPECT_EQ(idx1, 1);
     co_await emitter.Finalize();
@@ -544,8 +546,8 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_WaitsForPendingIO)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
-  auto idx0 = emitter.Emit(MakeTestBuffer(2048, 0x01, 16, 32));
-  auto idx1 = emitter.Emit(MakeTestBuffer(1024, 0x02, 4, 0));
+  auto idx0 = emitter.Emit(MakeTestBuffer(2048, 0x01, 16, 32), "buf0");
+  auto idx1 = emitter.Emit(MakeTestBuffer(1024, 0x02, 4, 0), "buf1");
   EXPECT_EQ(idx0, 0);
   EXPECT_EQ(idx1, 1);
 
@@ -594,12 +596,12 @@ NOLINT_TEST_F(BufferEmitterTest, DataFileSize_TracksAccumulatedSize)
     // Assert initial state
     EXPECT_EQ(emitter.DataFileSize(), 0);
 
-    auto idx0 = emitter.Emit(MakeTestBuffer(kSize0, 0x01, kAlign, 32));
+    auto idx0 = emitter.Emit(MakeTestBuffer(kSize0, 0x01, kAlign, 32), "buf0");
     EXPECT_EQ(idx0, 0);
     // First buffer: offset 0, size 100 -> file size 100
     EXPECT_EQ(emitter.DataFileSize(), kSize0);
 
-    auto idx1 = emitter.Emit(MakeTestBuffer(kSize1, 0x01, kAlign, 32));
+    auto idx1 = emitter.Emit(MakeTestBuffer(kSize1, 0x01, kAlign, 32), "buf1");
     EXPECT_EQ(idx1, 1);
     // Second buffer: offset = AlignUp(100, 16) = 112, size 200 -> file size 312
     EXPECT_EQ(emitter.DataFileSize(), AlignUp(kSize0, kAlign) + kSize1);
@@ -625,7 +627,8 @@ NOLINT_TEST_F(BufferEmitterTest, Count_TracksEmittedBuffers)
   co::Run(*loop_, [&]() -> Co<> {
     for (uint32_t i = 0; i < 10; ++i) {
       auto idx = emitter.Emit(
-        MakeTestBuffer(64, 0x01, 16, 32, static_cast<std::byte>(0xC0 + i)));
+        MakeTestBuffer(64, 0x01, 16, 32, static_cast<std::byte>(0xC0 + i)),
+        "buf" + std::to_string(i));
       EXPECT_EQ(idx, i);
       EXPECT_EQ(emitter.Count(), i + 1);
     }
@@ -650,7 +653,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_ZeroAlignment_UsesDefaultAlignment)
 
   bool tables_ok = false;
   co::Run(*loop_, [&]() -> Co<> {
-    auto idx = emitter.Emit(std::move(payload));
+    auto idx = emitter.Emit(std::move(payload), "buf0");
     EXPECT_EQ(idx, 0);
     co_await emitter.Finalize();
     tables_ok = co_await table_registry_->FinalizeAll();
@@ -679,7 +682,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_LargeBuffer_SucceedsWithCorrectSize)
 
   bool tables_ok = false;
   co::Run(*loop_, [&]() -> Co<> {
-    auto idx = emitter.Emit(std::move(payload));
+    auto idx = emitter.Emit(std::move(payload), "buf0");
     EXPECT_EQ(idx, 0);
     co_await emitter.Finalize();
     tables_ok = co_await table_registry_->FinalizeAll();
@@ -714,7 +717,8 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_ManySmallBuffers_AllAlignedCorrectly)
   co::Run(*loop_, [&]() -> Co<> {
     for (int i = 0; i < kBufferCount; ++i) {
       auto idx = emitter.Emit(MakeTestBuffer(kBufferSize, 0x01, kAlignment, 32,
-        static_cast<std::byte>(0x10 + (i & 0x7F))));
+                                static_cast<std::byte>(0x10 + (i & 0x7F))),
+        "buf" + std::to_string(i));
       EXPECT_EQ(idx, static_cast<uint32_t>(i));
     }
     co_await emitter.Finalize();

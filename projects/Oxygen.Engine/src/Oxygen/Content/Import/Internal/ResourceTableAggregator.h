@@ -108,8 +108,10 @@ struct BufferTableTraits {
     signature.append(std::to_string(desc.element_format));
     signature.append(";n=");
     signature.append(std::to_string(desc.size_bytes));
-    signature.append(";h=");
-    signature.append(std::to_string(desc.content_hash));
+    if (desc.content_hash != 0U) {
+      signature.append(";h=");
+      signature.append(std::to_string(desc.content_hash));
+    }
     return signature;
   }
 };

@@ -4,7 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <chrono>
+#include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -97,22 +100,61 @@ auto GlbImportJob::ExecuteAsync() -> co::Co<ImportReport>
   DLOG_F(INFO, "Starting job: job_id={} path={}", JobId(),
     Request().source_path.string());
 
+  const auto job_start = std::chrono::steady_clock::now();
+  ImportTelemetry telemetry {
+    .io_duration = std::chrono::microseconds { 0 },
+    .source_load_duration = std::chrono::microseconds { 0 },
+    .decode_duration = std::chrono::microseconds { 0 },
+    .load_duration = std::chrono::microseconds { 0 },
+    .cook_duration = std::chrono::microseconds { 0 },
+    .emit_duration = std::chrono::microseconds { 0 },
+    .finalize_duration = std::chrono::microseconds { 0 },
+    .total_duration = std::chrono::microseconds { 0 },
+  };
+  const auto MakeDuration
+    = [](const std::chrono::steady_clock::time_point start,
+        const std::chrono::steady_clock::time_point end)
+    -> std::chrono::microseconds {
+    return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+  };
+  const auto FinalizeWithTelemetry
+    = [&](ImportSession& session) -> co::Co<ImportReport> {
+    const auto finalize_start = std::chrono::steady_clock::now();
+    auto report = co_await FinalizeSession(session);
+    const auto finalize_end = std::chrono::steady_clock::now();
+    telemetry.finalize_duration = MakeDuration(finalize_start, finalize_end);
+    telemetry.total_duration = MakeDuration(job_start, finalize_end);
+    telemetry.io_duration = session.IoDuration();
+    telemetry.source_load_duration = session.SourceLoadDuration();
+    telemetry.decode_duration = session.DecodeDuration();
+    telemetry.load_duration
+      = session.SourceLoadDuration() + session.LoadDuration();
+    telemetry.cook_duration = session.CookDuration();
+    telemetry.emit_duration = session.EmitDuration();
+    report.telemetry = telemetry;
+    co_return report;
+  };
+
   EnsureCookedRoot();
 
   ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool(),
     TableRegistry(), IndexRegistry());
 
   ReportPhaseProgress(ImportPhase::kLoading, 0.0f, "Parsing glTF...");
+  const auto load_start = std::chrono::steady_clock::now();
   auto asset = co_await ParseAsset(session);
+  const auto load_end = std::chrono::steady_clock::now();
+  session.AddSourceLoadDuration(MakeDuration(load_start, load_end));
   AddDiagnostics(session, std::move(asset.diagnostics));
   if (asset.canceled || !asset.success) {
     ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "glTF parse failed");
-    co_return co_await FinalizeSession(session);
+    co_return co_await FinalizeWithTelemetry(session);
   }
 
   ReportPhaseProgress(ImportPhase::kPlanning, 0.1f, "Building import plan...");
   const auto request_copy = Request();
   const auto stop_token = StopToken();
+  const auto plan_start = std::chrono::steady_clock::now();
   auto plan_outcome = co_await ThreadPool()->Run(
     [this, &asset, request_copy, stop_token](
       co::ThreadPool::CancelToken canceled) -> PlanBuildOutcome {
@@ -127,17 +169,18 @@ auto GlbImportJob::ExecuteAsync() -> co::Co<ImportReport>
   AddDiagnostics(session, std::move(plan_outcome.diagnostics));
   if (plan_outcome.canceled || !plan_outcome.plan) {
     ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Plan build failed");
-    co_return co_await FinalizeSession(session);
+    co_return co_await FinalizeWithTelemetry(session);
   }
 
   ReportPhaseProgress(ImportPhase::kWorking, 0.2f, "Executing plan...");
-  if (!co_await ExecutePlan(*plan_outcome.plan, session)) {
+  const bool executed = co_await ExecutePlan(*plan_outcome.plan, session);
+  if (!executed) {
     ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Plan execution failed");
-    co_return co_await FinalizeSession(session);
+    co_return co_await FinalizeWithTelemetry(session);
   }
 
   ReportPhaseProgress(ImportPhase::kFinalizing, 0.9f, "Finalizing import...");
-  auto report = co_await FinalizeSession(session);
+  auto report = co_await FinalizeWithTelemetry(session);
 
   ReportPhaseProgress(
     report.success ? ImportPhase::kComplete : ImportPhase::kFailed, 1.0f,
@@ -152,31 +195,33 @@ auto GlbImportJob::ParseAsset(ImportSession& session) -> co::Co<ParsedGlbAsset>
   const auto request_copy = Request();
   const auto stop_token = StopToken();
   const auto naming_service = observer_ptr { &GetNamingService() };
+  const auto MakeDuration
+    = [](const std::chrono::steady_clock::time_point start,
+        const std::chrono::steady_clock::time_point end)
+    -> std::chrono::microseconds {
+    return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+  };
+  auto reader = FileReader();
+  std::shared_ptr<std::vector<std::byte>> source_bytes;
 
-  if (ThreadPool() == nullptr) {
-    ParsedGlbAsset parsed;
-    const auto source_id_prefix = request_copy.source_path.string();
-    adapters::AdapterInput input {
-      .source_id_prefix = source_id_prefix,
-      .object_path_prefix = {},
-      .material_keys = {},
-      .default_material_key = DefaultMaterialKey(),
-      .request = request_copy,
-      .naming_service = naming_service,
-      .stop_token = stop_token,
-      .external_texture_bytes = {},
-    };
-
-    auto adapter = std::make_shared<adapters::GltfAdapter>();
-    const auto parse_result = adapter->Parse(request_copy.source_path, input);
-    parsed.adapter = std::move(adapter);
-    parsed.diagnostics = parse_result.diagnostics;
-    parsed.success = parse_result.success;
-    co_return parsed;
+  if (reader != nullptr) {
+    const auto read_start = std::chrono::steady_clock::now();
+    auto read_result
+      = co_await reader.get()->ReadFile(request_copy.source_path);
+    const auto read_end = std::chrono::steady_clock::now();
+    session.AddIoDuration(MakeDuration(read_start, read_end));
+    if (read_result.has_value()) {
+      source_bytes = std::make_shared<std::vector<std::byte>>(
+        std::move(read_result.value()));
+    } else {
+      session.AddDiagnostic(MakeErrorDiagnostic("gltf.read_failed",
+        "Failed to read glTF source bytes", request_copy.source_path.string(),
+        ""));
+    }
   }
 
   auto parsed = co_await ThreadPool()->Run(
-    [request_copy, stop_token, naming_service](
+    [request_copy, stop_token, naming_service, source_bytes](
       co::ThreadPool::CancelToken canceled) {
       DLOG_F(1, "Parse asset task begin");
       ParsedGlbAsset out;
@@ -198,14 +243,18 @@ auto GlbImportJob::ParseAsset(ImportSession& session) -> co::Co<ParsedGlbAsset>
       };
 
       auto adapter = std::make_shared<adapters::GltfAdapter>();
-      const auto parse_result = adapter->Parse(request_copy.source_path, input);
+      const auto parse_result = source_bytes
+        ? adapter->Parse(std::span<const std::byte>(
+                           source_bytes->data(), source_bytes->size()),
+            input)
+        : adapter->Parse(request_copy.source_path, input);
       out.adapter = std::move(adapter);
+      out.source_bytes = source_bytes;
       out.diagnostics = parse_result.diagnostics;
       out.success = parse_result.success;
       return out;
     });
 
-  (void)session;
   co_return parsed;
 }
 
@@ -329,18 +378,16 @@ auto GlbImportJob::BuildPlan(ParsedGlbAsset& asset,
       const auto mesh_build_id
         = plan_.planner.AddMeshBuild(payload.item.mesh_name, handle);
 
-      for (const auto slot : payload.item.material_slots_used) {
-        if (slot < plan_.material_slots.size()) {
-          plan_.planner.AddDependency(
-            mesh_build_id, plan_.material_slots[slot]);
-        }
-      }
-
       const auto geometry_handle = plan_.payloads.Store(
         GeometryFinalizeWorkItem { .mesh_build_item = mesh_build_id });
       const auto geometry_id = plan_.planner.AddGeometryAsset(
         payload.item.mesh_name, geometry_handle);
       plan_.planner.AddDependency(geometry_id, mesh_build_id);
+      for (const auto slot : payload.item.material_slots_used) {
+        if (slot < plan_.material_slots.size()) {
+          plan_.planner.AddDependency(geometry_id, plan_.material_slots[slot]);
+        }
+      }
       plan_.geometry_items.push_back(geometry_id);
       return true;
     }

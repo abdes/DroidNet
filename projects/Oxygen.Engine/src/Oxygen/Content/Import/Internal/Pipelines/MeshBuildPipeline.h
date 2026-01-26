@@ -8,6 +8,7 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -25,6 +26,7 @@
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Import/BufferImportTypes.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
+#include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Content/Import/Naming.h>
@@ -153,6 +155,9 @@ public:
     //! Callback fired when a worker starts processing this item.
     std::function<void()> on_started;
 
+    //! Callback fired when a worker finishes processing this item.
+    std::function<void()> on_finished;
+
     ImportRequest request;
     observer_ptr<NamingService> naming_service;
     std::stop_token stop_token;
@@ -164,6 +169,7 @@ public:
     const void* source_key = nullptr;
     std::optional<CookedGeometryPayload> cooked;
     std::vector<ImportDiagnostic> diagnostics;
+    ImportWorkItemTelemetry telemetry;
     bool success = false;
   };
 
@@ -199,6 +205,18 @@ public:
 
   //! Get pipeline progress counters.
   OXGN_CNTT_NDAPI auto GetProgress() const noexcept -> PipelineProgress;
+
+  //! Number of queued items waiting in the input queue.
+  OXGN_CNTT_NDAPI auto InputQueueSize() const noexcept -> size_t
+  {
+    return input_channel_.Size();
+  }
+
+  //! Capacity of the input queue.
+  OXGN_CNTT_NDAPI auto InputQueueCapacity() const noexcept -> size_t
+  {
+    return config_.queue_capacity;
+  }
 
   //! Number of completed results waiting in the output queue.
   OXGN_CNTT_NDAPI auto OutputQueueSize() const noexcept -> size_t

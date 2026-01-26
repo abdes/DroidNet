@@ -20,10 +20,9 @@ namespace oxygen::content::import::detail {
 [[nodiscard]] auto GetBytesPerPixel(Format format) -> std::size_t;
 
 //! Convert a single cube face from an equirectangular source.
-auto ConvertEquirectangularFace(const ScratchImage& equirect,
-  const ScratchImageMeta& src_meta, std::span<const std::byte> src_pixels,
-  CubeFace face, uint32_t face_size, bool use_bicubic, ScratchImage& cube)
-  -> void;
+auto ConvertEquirectangularFace(const ScratchImageMeta& src_meta,
+  std::span<const std::byte> src_pixels, CubeFace face, uint32_t face_size,
+  bool use_bicubic, ScratchImage& cube) -> void;
 
 //! Extract a single cube face from a layout image.
 auto ExtractCubeFaceFromLayout(const ImageView& src_view,

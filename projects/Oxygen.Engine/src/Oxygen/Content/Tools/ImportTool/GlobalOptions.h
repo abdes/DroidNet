@@ -31,6 +31,7 @@ struct GlobalOptions {
   bool quiet = false;
   std::string diagnostics_file;
   std::string cooked_root;
+  std::string command_line;
   bool fail_fast = false;
   bool no_color = false;
   bool no_tui = false;

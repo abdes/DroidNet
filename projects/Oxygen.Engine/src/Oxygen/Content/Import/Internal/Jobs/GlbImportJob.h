@@ -6,7 +6,9 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
+#include <vector>
 
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
@@ -43,6 +45,7 @@ private:
   //! Placeholder for parsed GLB asset state.
   struct ParsedGlbAsset {
     std::shared_ptr<adapters::GltfAdapter> adapter;
+    std::shared_ptr<std::vector<std::byte>> source_bytes;
     std::vector<ImportDiagnostic> diagnostics;
     bool success = true;
     bool canceled = false;

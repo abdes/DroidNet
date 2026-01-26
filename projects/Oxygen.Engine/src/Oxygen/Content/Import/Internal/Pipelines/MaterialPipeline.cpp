@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <limits>
 #include <span>
 #include <string_view>
@@ -511,10 +512,15 @@ namespace {
     serio::Writer writer(stream);
     const auto pack = writer.ScopedAlignment(1);
 
-    (void)writer.WriteBlob(std::as_bytes(
+    [[maybe_unused]] const auto desc_write = writer.WriteBlob(std::as_bytes(
       std::span<const data::pak::MaterialAssetDesc, 1>(&desc, 1)));
+    DCHECK_F(!desc_write.has_error(),
+      "Material descriptor write Result<void> must not have an error");
     if (!shader_refs.empty()) {
-      (void)writer.WriteBlob(std::as_bytes(std::span(shader_refs)));
+      [[maybe_unused]] const auto shaders_write
+        = writer.WriteBlob(std::as_bytes(std::span(shader_refs)));
+      DCHECK_F(!shaders_write.has_error(),
+        "Material shader refs write Result<void> must not have an error");
     }
 
     const auto data = stream.Data();
@@ -763,6 +769,13 @@ auto MaterialPipeline::GetProgress() const noexcept -> PipelineProgress
 
 auto MaterialPipeline::Worker() -> co::Co<>
 {
+  const auto MakeDuration
+    = [](const std::chrono::steady_clock::time_point start,
+        const std::chrono::steady_clock::time_point end)
+    -> std::chrono::microseconds {
+    return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+  };
+
   while (true) {
     auto maybe_item = co_await input_channel_.Receive();
     if (!maybe_item.has_value()) {
@@ -778,7 +791,13 @@ auto MaterialPipeline::Worker() -> co::Co<>
     if (item.on_started) {
       item.on_started();
     }
+    auto NotifyFinished = [&item]() {
+      if (item.on_finished) {
+        item.on_finished();
+      }
+    };
 
+    const auto cook_start = std::chrono::steady_clock::now();
     const auto virtual_path
       = item.request.loose_cooked_layout.MaterialVirtualPath(
         item.storage_material_name);
@@ -813,10 +832,14 @@ auto MaterialPipeline::Worker() -> co::Co<>
       .source_id = item.source_id,
       .cooked = std::nullopt,
       .diagnostics = std::move(build_outcome.diagnostics),
+      .telemetry = {},
       .success = false,
     };
 
     if (build_outcome.has_error) {
+      output.telemetry.cook_duration
+        = MakeDuration(cook_start, std::chrono::steady_clock::now());
+      NotifyFinished();
       co_await output_channel_.Send(std::move(output));
       continue;
     }
@@ -825,6 +848,9 @@ auto MaterialPipeline::Worker() -> co::Co<>
       output.diagnostics.push_back(MakeErrorDiagnostic(
         "material.serialize_failed", "Material descriptor serialization failed",
         item.source_id, item.material_name));
+      output.telemetry.cook_duration
+        = MakeDuration(cook_start, std::chrono::steady_clock::now());
+      NotifyFinished();
       co_await output_channel_.Send(std::move(output));
       continue;
     }
@@ -850,7 +876,9 @@ auto MaterialPipeline::Worker() -> co::Co<>
       .descriptor_bytes = std::move(bytes),
     };
     output.success = true;
-
+    output.telemetry.cook_duration
+      = MakeDuration(cook_start, std::chrono::steady_clock::now());
+    NotifyFinished();
     co_await output_channel_.Send(std::move(output));
   }
 
@@ -865,6 +893,9 @@ auto MaterialPipeline::ReportCancelled(WorkItem item) -> co::Co<>
     .diagnostics = {},
     .success = false,
   };
+  if (item.on_finished) {
+    item.on_finished();
+  }
   co_await output_channel_.Send(std::move(canceled));
 }
 

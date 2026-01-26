@@ -9,6 +9,7 @@
 # ------------------------------------------------------------------------------
 
 set(description "A CLI tool for invoking async import jobs.")
+set(import_tool_version "0.1")
 asap_module_declare(
   MODULE_NAME "Oxygen.Content.ImportTool"
   DESCRIPTION description
@@ -85,6 +86,12 @@ target_link_libraries(
     ftxui::dom
     ftxui::component
     nlohmann_json::nlohmann_json
+)
+
+target_compile_definitions(
+  ${META_MODULE_TARGET}
+  PRIVATE
+    OXYGEN_IMPORT_TOOL_VERSION="${import_tool_version}"
 )
 
 # ------------------------------------------------------------------------------

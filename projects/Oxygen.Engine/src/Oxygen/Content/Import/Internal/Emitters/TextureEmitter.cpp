@@ -73,6 +73,18 @@ namespace {
     return data::pak::TexturePackingPolicyId::kD3D12;
   }
 
+  [[nodiscard]] auto MakeTextureSignature(
+    const data::pak::TextureResourceDesc& desc,
+    const std::string_view signature_salt) -> std::string
+  {
+    auto signature = TextureTableTraits::SignatureForDescriptor(desc);
+    if (desc.content_hash == 0U) {
+      signature.append(";id=");
+      signature.append(signature_salt);
+    }
+    return signature;
+  }
+
   [[nodiscard]] auto BuildFallbackPayloadBytes(
     const ITexturePackingPolicy& policy,
     const data::pak::TexturePackingPolicyId policy_id,
@@ -174,7 +186,8 @@ TextureEmitter::~TextureEmitter()
   }
 }
 
-auto TextureEmitter::Emit(CookedTexturePayload cooked) -> uint32_t
+auto TextureEmitter::Emit(CookedTexturePayload cooked,
+  const std::string_view signature_salt) -> uint32_t
 {
   if (finalize_started_.load(std::memory_order_acquire)) {
     throw std::runtime_error("TextureEmitter is finalized");
@@ -183,7 +196,7 @@ auto TextureEmitter::Emit(CookedTexturePayload cooked) -> uint32_t
   EnsureFallbackTexture();
 
   const auto tmp_desc = ToPakDescriptor(cooked, 0);
-  const auto signature = TextureTableTraits::SignatureForDescriptor(tmp_desc);
+  const auto signature = MakeTextureSignature(tmp_desc, signature_salt);
   DCHECK_F(!signature.empty(), "texture signature must not be empty");
   const auto acquire = table_aggregator_.AcquireOrInsert(signature, [&]() {
     const auto reserved = table_aggregator_.ReserveDataRange(
@@ -286,8 +299,7 @@ auto TextureEmitter::UpdateDataFileSize(const uint64_t new_size) -> void
   auto current = data_file_size_.load(std::memory_order_acquire);
   while (current < new_size
     && !data_file_size_.compare_exchange_weak(
-      current, new_size, std::memory_order_acq_rel)) {
-  }
+      current, new_size, std::memory_order_acq_rel)) { }
 }
 
 auto TextureEmitter::RecordEmissionSignature(const std::string& signature)
@@ -401,7 +413,7 @@ auto TextureEmitter::EnsureFallbackTexture() -> void
 
   CookedTexturePayload fallback = CreateFallbackPayload();
   const auto tmp_desc = ToPakDescriptor(fallback, 0);
-  const auto signature = TextureTableTraits::SignatureForDescriptor(tmp_desc);
+  const auto signature = MakeTextureSignature(tmp_desc, "fallback");
   DCHECK_F(!signature.empty(), "fallback texture signature must not be empty");
 
   const auto acquire = table_aggregator_.AcquireOrInsert(signature, [&]() {

@@ -30,7 +30,8 @@ struct WorkerUtilizationView {
   uint32_t completed = 0U;
   uint32_t total = 0U;
   uint32_t active = 0U;
-  float queue_load = 0.0f;
+  float input_queue_load = 0.0f;
+  float output_queue_load = 0.0f;
 };
 
 struct BatchViewModel {

@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -380,6 +381,13 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
 
 auto GeometryPipeline::Worker() -> co::Co<>
 {
+  const auto MakeDuration
+    = [](const std::chrono::steady_clock::time_point start,
+        const std::chrono::steady_clock::time_point end)
+    -> std::chrono::microseconds {
+    return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+  };
+
   while (true) {
     auto maybe_item = co_await input_channel_.Receive();
     if (!maybe_item.has_value()) {
@@ -396,6 +404,7 @@ auto GeometryPipeline::Worker() -> co::Co<>
       item.on_started();
     }
 
+    const auto cook_start = std::chrono::steady_clock::now();
     std::vector<ImportDiagnostic> diagnostics;
     auto finalized = co_await FinalizeDescriptorBytes(item.bindings,
       item.cooked.descriptor_bytes, item.material_patches, diagnostics);
@@ -416,9 +425,15 @@ auto GeometryPipeline::Worker() -> co::Co<>
         ? std::move(*finalized)
         : std::vector<std::byte> {},
       .diagnostics = std::move(diagnostics),
+      .telemetry = ImportWorkItemTelemetry {
+        .cook_duration = MakeDuration(
+          cook_start, std::chrono::steady_clock::now()),
+      },
       .success = success,
     };
-
+    if (item.on_finished) {
+      item.on_finished();
+    }
     co_await output_channel_.Send(std::move(result));
   }
 
@@ -434,6 +449,9 @@ auto GeometryPipeline::ReportCancelled(WorkItem item) -> co::Co<>
     .diagnostics = {},
     .success = false,
   };
+  if (item.on_finished) {
+    item.on_finished();
+  }
   co_await output_channel_.Send(std::move(canceled));
 }
 

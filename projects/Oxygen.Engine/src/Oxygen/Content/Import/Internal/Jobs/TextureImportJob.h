@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <Oxygen/Composition/TypedObject.h>
+#include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Import/Internal/ImportJob.h>
 #include <Oxygen/Content/Import/ScratchImage.h>
 #include <Oxygen/Content/Import/TextureImportTypes.h>
@@ -53,7 +54,7 @@ private:
 
   struct CookedTextureResult {
     std::optional<CookedTexturePayload> payload;
-    std::optional<std::chrono::microseconds> decode_duration;
+    ImportWorkItemTelemetry telemetry;
     bool used_fallback = false;
   };
 

@@ -7,6 +7,7 @@
 #include <Oxygen/Content/Import/Internal/ImageDecode.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <fstream>
 #include <limits>
@@ -15,6 +16,7 @@
 #define STBI_NO_THREAD_LOCALS
 #include <Oxygen/Content/Import/Internal/stb/stb_image.h>
 
+#include <spng.h>
 #include <tinyexr.h>
 
 namespace oxygen::content::import {
@@ -32,6 +34,26 @@ namespace {
         static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
     }
     return result;
+  }
+
+  [[nodiscard]] auto IsPngSignature(std::span<const std::byte> bytes) noexcept
+    -> bool
+  {
+    constexpr std::array<std::byte, 8> kPngSignature {
+      std::byte { 0x89 },
+      std::byte { 0x50 },
+      std::byte { 0x4E },
+      std::byte { 0x47 },
+      std::byte { 0x0D },
+      std::byte { 0x0A },
+      std::byte { 0x1A },
+      std::byte { 0x0A },
+    };
+    if (bytes.size() < kPngSignature.size()) {
+      return false;
+    }
+    return std::equal(
+      kPngSignature.begin(), kPngSignature.end(), bytes.begin());
   }
 
   //=== Legacy stb_image RGBA8 Decoder ===------------------------------------//
@@ -475,11 +497,105 @@ namespace {
       static_cast<uint32_t>(width) * 16, std::move(pixel_data)));
   }
 
+  //=== PNG Decoder (libspng) ===-------------------------------------------//
+
+  [[nodiscard]] auto DecodePngToScratchImage(std::span<const std::byte> bytes,
+    const DecodeOptions& options) -> Result<ScratchImage, TextureImportError>
+  {
+    spng_ctx* ctx = spng_ctx_new(0);
+    if (ctx == nullptr) {
+      return Err(TextureImportError::kOutOfMemory);
+    }
+
+    const auto Cleanup = [ctx]() { spng_ctx_free(ctx); };
+
+    if (spng_set_png_buffer(ctx, bytes.data(), bytes.size()) != 0) {
+      Cleanup();
+      return Err(TextureImportError::kDecodeFailed);
+    }
+
+    spng_ihdr ihdr {};
+    if (spng_get_ihdr(ctx, &ihdr) != 0) {
+      Cleanup();
+      return Err(TextureImportError::kDecodeFailed);
+    }
+
+    int spng_format = SPNG_FMT_RGBA8;
+    Format output_format = Format::kRGBA8UNorm;
+    uint32_t bytes_per_pixel = 4U;
+
+    if (!options.force_rgba) {
+      switch (ihdr.color_type) {
+      case SPNG_COLOR_TYPE_GRAYSCALE:
+        spng_format = SPNG_FMT_G8;
+        output_format = Format::kR8UNorm;
+        bytes_per_pixel = 1U;
+        break;
+      case SPNG_COLOR_TYPE_GRAYSCALE_ALPHA:
+        spng_format = SPNG_FMT_GA8;
+        output_format = Format::kRG8UNorm;
+        bytes_per_pixel = 2U;
+        break;
+      case SPNG_COLOR_TYPE_TRUECOLOR:
+        spng_format = SPNG_FMT_RGBA8;
+        output_format = Format::kRGBA8UNorm;
+        bytes_per_pixel = 4U;
+        break;
+      case SPNG_COLOR_TYPE_TRUECOLOR_ALPHA:
+        spng_format = SPNG_FMT_RGBA8;
+        output_format = Format::kRGBA8UNorm;
+        bytes_per_pixel = 4U;
+        break;
+      case SPNG_COLOR_TYPE_INDEXED:
+        spng_format = SPNG_FMT_RGBA8;
+        output_format = Format::kRGBA8UNorm;
+        bytes_per_pixel = 4U;
+        break;
+      default:
+        spng_format = SPNG_FMT_RGBA8;
+        output_format = Format::kRGBA8UNorm;
+        bytes_per_pixel = 4U;
+        break;
+      }
+    }
+
+    size_t decoded_size = 0;
+    if (spng_decoded_image_size(ctx, spng_format, &decoded_size) != 0
+      || decoded_size == 0) {
+      Cleanup();
+      return Err(TextureImportError::kDecodeFailed);
+    }
+
+    std::vector<std::byte> pixel_data(decoded_size);
+    if (spng_decode_image(ctx, pixel_data.data(), decoded_size, spng_format, 0)
+      != 0) {
+      Cleanup();
+      return Err(TextureImportError::kDecodeFailed);
+    }
+
+    Cleanup();
+
+    if (options.flip_y) {
+      FlipImageY(pixel_data, ihdr.width, ihdr.height, bytes_per_pixel);
+    }
+
+    return Ok(ScratchImage::CreateFromData(ihdr.width, ihdr.height,
+      output_format, ihdr.width * bytes_per_pixel, std::move(pixel_data)));
+  }
+
   //=== LDR Decoder (stb_image RGBA8) ===-------------------------------------//
 
   [[nodiscard]] auto DecodeLdrToScratchImage(std::span<const std::byte> bytes,
     const DecodeOptions& options) -> Result<ScratchImage, TextureImportError>
   {
+    const auto ext_lower = ToLower(options.extension_hint);
+    if (IsPngSignature(bytes) || ext_lower == ".png") {
+      auto png = DecodePngToScratchImage(bytes, options);
+      if (png) {
+        return png;
+      }
+    }
+
     int width = 0;
     int height = 0;
     int channels_in_file = 0;

@@ -292,6 +292,13 @@ inline constexpr std::string_view kImportManifestSchema = R"({
                     "drop-empty"
                 ]
             },
+            "naming_policy": {
+                "enum": [
+                    "normalize",
+                    "none",
+                    "preserve"
+                ]
+            },
             "texture_overrides": {
                 "type": "object",
                 "additionalProperties": {
@@ -475,6 +482,13 @@ inline constexpr std::string_view kImportManifestSchema = R"({
                     "drop-empty"
                 ]
             },
+            "naming_policy": {
+                "enum": [
+                    "normalize",
+                    "none",
+                    "preserve"
+                ]
+            },
             "texture_overrides": {
                 "type": "object",
                 "additionalProperties": {
@@ -513,9 +527,13 @@ inline constexpr std::string_view kImportManifestSchema = R"({
             "rgba8",
             "rgba8_srgb",
             "rgba8-srgb",
+            "rgba8_unorm",
+            "rgba8_unorm_srgb",
             "bc7",
             "bc7_srgb",
             "bc7-srgb",
+            "bc7_unorm",
+            "bc7_unorm_srgb",
             "rgba16f",
             "rgba32f"
         ]

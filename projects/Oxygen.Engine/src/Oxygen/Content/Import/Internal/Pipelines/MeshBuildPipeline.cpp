@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -1064,6 +1065,13 @@ auto MeshBuildPipeline::GetProgress() const noexcept -> PipelineProgress
 
 auto MeshBuildPipeline::Worker() -> co::Co<>
 {
+  const auto MakeDuration
+    = [](const std::chrono::steady_clock::time_point start,
+        const std::chrono::steady_clock::time_point end)
+    -> std::chrono::microseconds {
+    return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+  };
+
   while (true) {
     auto maybe_item = co_await input_channel_.Receive();
     if (!maybe_item.has_value()) {
@@ -1079,6 +1087,8 @@ auto MeshBuildPipeline::Worker() -> co::Co<>
     if (item.on_started) {
       item.on_started();
     }
+    auto on_finished = std::move(item.on_finished);
+    const auto cook_start = std::chrono::steady_clock::now();
     auto build_outcome = co_await thread_pool_.Run(
       [item = std::move(item), max_bytes = config_.max_data_blob_bytes,
         with_content_hashing = config_.with_content_hashing](
@@ -1288,6 +1298,9 @@ auto MeshBuildPipeline::Worker() -> co::Co<>
         .diagnostics = {},
         .success = false,
       };
+      if (on_finished) {
+        on_finished();
+      }
       co_await output_channel_.Send(std::move(canceled));
       continue;
     }
@@ -1297,8 +1310,15 @@ auto MeshBuildPipeline::Worker() -> co::Co<>
       .source_key = build_outcome.source_key,
       .cooked = std::move(build_outcome.cooked),
       .diagnostics = std::move(build_outcome.diagnostics),
+      .telemetry = ImportWorkItemTelemetry {
+        .cook_duration = MakeDuration(
+          cook_start, std::chrono::steady_clock::now()),
+      },
       .success = build_outcome.success,
     };
+    if (on_finished) {
+      on_finished();
+    }
     co_await output_channel_.Send(std::move(result));
   }
 
@@ -1314,6 +1334,9 @@ auto MeshBuildPipeline::ReportCancelled(WorkItem item) -> co::Co<>
     .diagnostics = {},
     .success = false,
   };
+  if (item.on_finished) {
+    item.on_finished();
+  }
   co_await output_channel_.Send(std::move(canceled));
 }
 

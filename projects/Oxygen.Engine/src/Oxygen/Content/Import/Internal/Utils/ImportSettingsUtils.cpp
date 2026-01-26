@@ -82,6 +82,11 @@ namespace {
     return std::nullopt;
   }
 
+  [[nodiscard]] constexpr auto IsBc7Format(const Format format) noexcept -> bool
+  {
+    return format == Format::kBC7UNorm || format == Format::kBC7UNormSRGB;
+  }
+
 } // namespace
 
 auto ParseIntent(std::string_view value) -> std::optional<TextureIntent>
@@ -413,7 +418,8 @@ auto MapSettingsToTuning(const TextureImportSettings& settings,
     tuning.mip_filter_space = *parsed;
   }
 
-  if (!settings.bc7_quality.empty()) {
+  const bool bc7_quality_set = !settings.bc7_quality.empty();
+  if (bc7_quality_set) {
     auto parsed = ParseBc7Quality(settings.bc7_quality);
     if (!parsed.has_value()) {
       error_stream << "ERROR: invalid bc7_quality: " << settings.bc7_quality
@@ -421,6 +427,19 @@ auto MapSettingsToTuning(const TextureImportSettings& settings,
       return false;
     }
     tuning.bc7_quality = *parsed;
+  }
+
+  if (!bc7_quality_set && !IsBc7Format(tuning.color_output_format)
+    && !IsBc7Format(tuning.data_output_format)) {
+    tuning.bc7_quality = Bc7Quality::kNone;
+  }
+
+  if (bc7_quality_set && tuning.bc7_quality != Bc7Quality::kNone
+    && !IsBc7Format(tuning.color_output_format)
+    && !IsBc7Format(tuning.data_output_format)) {
+    error_stream << "ERROR: bc7_quality requires BC7 output_format or "
+                    "data_format\n";
+    return false;
   }
 
   if (!settings.packing_policy.empty()) {

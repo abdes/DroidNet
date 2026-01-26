@@ -944,6 +944,8 @@ auto ImportPanel::DrawImportOptionsUi() -> void
 
     ImGui::Separator();
     ImGui::Checkbox("Normalize names", &use_normalize_naming_);
+    ImGui::Checkbox(
+      "Enable content hashing", &import_options_.with_content_hashing);
 
     ImGui::TreePop();
   }
@@ -963,8 +965,6 @@ auto ImportPanel::DrawImportOptionsUi() -> void
       "Node pruning", import_options_.node_pruning, kNodePolicies, ToString);
     (void)DrawEnumCombo("Asset key policy", import_options_.asset_key_policy,
       kAssetKeyPolicies, ToString);
-    ImGui::Checkbox(
-      "Enable content hashing", &import_options_.with_content_hashing);
     ImGui::TreePop();
   }
 }

@@ -18,8 +18,8 @@ namespace oxygen::content::import {
 
 namespace {
 
-  [[nodiscard]] auto MakeBufferSignature(const CookedBufferPayload& cooked)
-    -> std::string
+  [[nodiscard]] auto MakeBufferSignature(const CookedBufferPayload& cooked,
+    std::string_view signature_salt) -> std::string
   {
     std::string signature;
     signature.reserve(96);
@@ -40,6 +40,9 @@ namespace {
     if (cooked.content_hash != 0) {
       signature.append(";h=");
       signature.append(std::to_string(cooked.content_hash));
+    } else if (!signature_salt.empty()) {
+      signature.append(";id=");
+      signature.append(signature_salt.begin(), signature_salt.end());
     }
     return signature;
   }
@@ -64,13 +67,14 @@ BufferEmitter::~BufferEmitter()
   }
 }
 
-auto BufferEmitter::Emit(CookedBufferPayload cooked) -> uint32_t
+auto BufferEmitter::Emit(
+  CookedBufferPayload cooked, std::string_view signature_salt) -> uint32_t
 {
   if (finalize_started_.load(std::memory_order_acquire)) {
     throw std::runtime_error("BufferEmitter is finalized");
   }
 
-  const auto signature = MakeBufferSignature(cooked);
+  const auto signature = MakeBufferSignature(cooked, signature_salt);
   DCHECK_F(!signature.empty(), "buffer signature must not be empty");
 
   // Use buffer's specified alignment (defaults to 16)

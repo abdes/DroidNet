@@ -101,6 +101,7 @@ class OxygenConan(ConanFile):
         self.requires("tinyexr/1.0.12")
         self.requires("pdcurses/3.9")
         self.requires("ftxui/6.1.9")
+        self.requires("libspng/0.7.4")
 
         # Record test-only dependencies so we can skip them during deploy.
         # The test_requires call accepts a reference like 'gtest/master'.

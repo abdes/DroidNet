@@ -31,16 +31,15 @@
 #include <Oxygen/Content/Tools/ImportTool/UI/JobViewModel.h>
 #include <Oxygen/Content/Tools/ImportTool/UI/Screens/ImportScreen.h>
 
+#ifndef OXYGEN_IMPORT_TOOL_VERSION
+#  error OXYGEN_IMPORT_TOOL_VERSION must be defined for ImportTool reports.
+#endif
+
 namespace oxygen::content::import::tool {
 
 namespace {
 
   using nlohmann::ordered_json;
-
-  auto PhaseIndex(const ImportPhase phase) -> size_t
-  {
-    return static_cast<size_t>(phase);
-  }
 
   auto ResolveReportPath(std::string_view report_path,
     const std::filesystem::path& cooked_root,
@@ -94,13 +93,15 @@ namespace {
 
 auto RunImportJob(const ImportRequest& request,
   oxygen::observer_ptr<IMessageWriter> writer,
-  const std::string_view report_path, const bool enable_tui,
-  oxygen::observer_ptr<AsyncImportService> service)
+  const std::string_view report_path, const std::string_view command_line,
+  const bool enable_tui, oxygen::observer_ptr<AsyncImportService> service)
   -> std::expected<void, std::error_code>
 {
   const auto start_time = std::chrono::steady_clock::now();
+  const auto session_started = std::chrono::system_clock::now();
   DCHECK_NOTNULL_F(writer, "Message writer must be provided by main");
   DCHECK_NOTNULL_F(service, "Import service must be provided by main");
+  CHECK_F(!command_line.empty(), "Command line is required for report output");
 
   std::mutex mutex;
   std::condition_variable cv;
@@ -129,67 +130,28 @@ auto RunImportJob(const ImportRequest& request,
       const auto now = std::chrono::steady_clock::now();
       {
         std::scoped_lock lock(mutex);
-        if (!progress_trace.started.has_value()) {
-          progress_trace.started = now;
-        }
+        UpdateProgressTrace(progress_trace, progress, now);
 
         if (progress.header.kind == ProgressEventKind::kJobStarted) {
-          progress_trace.started = now;
           recent_logs.push_back("Job Started");
         } else if (progress.header.kind == ProgressEventKind::kJobFinished) {
-          progress_trace.finished = now;
           recent_logs.push_back("Job Finished");
-        }
-
-        const auto phase_index = PhaseIndex(progress.header.phase);
-        if (progress.header.kind == ProgressEventKind::kPhaseUpdate
-          && phase_index < progress_trace.phases.size()) {
-          auto& timing = progress_trace.phases[phase_index];
-          if (!timing.started.has_value()) {
-            timing.started = now;
-          }
-          if (phase_index > 0U) {
-            auto& previous = progress_trace.phases[phase_index - 1U];
-            if (!previous.finished.has_value()) {
-              previous.finished = now;
-            }
-          }
-          if (progress.header.phase == ImportPhase::kComplete
-            || progress.header.phase == ImportPhase::kFailed
-            || progress.header.phase == ImportPhase::kCancelled) {
-            for (auto& entry : progress_trace.phases) {
-              if (!entry.finished.has_value() && entry.started.has_value()) {
-                entry.finished = now;
-              }
-            }
-          }
         }
 
         if (const auto* item = GetItemProgress(progress)) {
           if (!item->item_name.empty()) {
-            std::string key = item->item_kind;
-            if (!key.empty()) {
-              key.append(":");
-            }
-            key.append(item->item_name);
-            auto& trace_item = progress_trace.items[key];
-            trace_item.phase = nostd::to_string(progress.header.phase);
-            trace_item.kind = item->item_kind;
-            trace_item.name = item->item_name;
             if (progress.header.kind == ProgressEventKind::kItemStarted) {
-              trace_item.started = now;
               recent_logs.push_back(fmt::format("Started {}", item->item_name));
             } else if (progress.header.kind
               == ProgressEventKind::kItemFinished) {
-              trace_item.finished = now;
               recent_logs.push_back(
                 fmt::format("Finished {}", item->item_name));
             }
-
-            if (recent_logs.size() > 50) {
-              recent_logs.erase(recent_logs.begin(), recent_logs.end() - 50);
-            }
           }
+        }
+
+        if (recent_logs.size() > 50) {
+          recent_logs.erase(recent_logs.begin(), recent_logs.end() - 50);
         }
       }
 
@@ -269,54 +231,7 @@ auto RunImportJob(const ImportRequest& request,
 
   if (!have_report) {
     writer->Error("ERROR: import failed with no report");
-
-    // If the caller requested a report file, still attempt to write a minimal
-    // failure report so tools can consume structured output even when the
-    // importer didn't produce a full report.
-    if (!report_path.empty()) {
-      ordered_json payload = ordered_json::object();
-      payload["summary"] = {
-        { "jobs", 1 },
-        { "succeeded", 0 },
-        { "failed", 1 },
-        { "total_time_ms", 0 },
-        { "cooked_root", "" },
-      };
-
-      ordered_json job = ordered_json::object();
-      job["index"] = 1;
-      job["source"] = request.source_path.string();
-      job["success"] = false;
-      job["diagnostics"] = ordered_json::array();
-
-      if (submit_error.has_value()) {
-        job["diagnostics"].push_back({
-          { "code", "submit_error" },
-          { "message", *submit_error },
-        });
-      } else {
-        job["diagnostics"].push_back({
-          { "code", "no_report" },
-          { "message", "No report was produced by the import service" },
-        });
-      }
-
-      payload["jobs"] = ordered_json::array({ std::move(job) });
-
-      const auto resolved_path
-        = ResolveReportPath(report_path, std::filesystem::path {}, writer);
-      if (!resolved_path.has_value()) {
-        return std::unexpected(
-          std::make_error_code(std::errc::invalid_argument));
-      }
-
-      if (!WriteJsonReport(payload, *resolved_path, writer)) {
-        return std::unexpected(std::make_error_code(std::errc::io_error));
-      }
-
-      writer->Info(fmt::format("Report written: {}", resolved_path->string()));
-    }
-
+    CHECK_F(false, "Import completed without a report");
     return std::unexpected(
       std::make_error_code(std::errc::state_not_recoverable));
   }
@@ -330,26 +245,51 @@ auto RunImportJob(const ImportRequest& request,
       return std::unexpected(std::make_error_code(std::errc::invalid_argument));
     }
 
-    const auto elapsed = std::chrono::duration<double, std::milli>(
+    const auto session_ended = std::chrono::system_clock::now();
+    const auto elapsed_ms = std::chrono::duration<double, std::milli>(
       std::chrono::steady_clock::now() - start_time)
-                           .count();
+                              .count();
+    CHECK_F(!cooked_root.empty(), "Cooked root is required in report output");
+
     ordered_json payload = ordered_json::object();
-    payload["summary"] = {
-      { "jobs", 1 },
-      { "succeeded", report_copy.success ? 1 : 0 },
-      { "failed", report_copy.success ? 0 : 1 },
-      { "total_time_ms", elapsed },
+    payload["report_version"] = std::string(kReportVersion);
+    payload["session"] = {
+      { "id", MakeSessionId(session_started) },
+      { "started_utc", FormatUtcTimestamp(session_started) },
+      { "ended_utc", FormatUtcTimestamp(session_ended) },
+      { "tool_version", std::string(OXYGEN_IMPORT_TOOL_VERSION) },
+      { "command_line", std::string(command_line) },
       { "cooked_root", cooked_root.string() },
     };
-    payload["jobs"] = ordered_json::array({
-      {
-        { "index", 1 },
-        { "source", request.source_path.string() },
-        { "success", report_copy.success },
-        { "telemetry", BuildTelemetryJson(report_copy.telemetry) },
-        { "progress", BuildProgressJson(progress_trace, start_time) },
-      },
-    });
+
+    const auto stats_json = BuildStatsJson(report_copy.telemetry);
+    const auto time_ms_io = ComputeIoMillis(report_copy.telemetry);
+    const auto time_ms_cpu = ComputeCpuMillis(report_copy.telemetry);
+
+    payload["summary"] = {
+      { "jobs_total", 1 },
+      { "jobs_succeeded", report_copy.success ? 1 : 0 },
+      { "jobs_failed", report_copy.success ? 0 : 1 },
+      { "jobs_skipped", 0 },
+      { "time_ms_total", elapsed_ms },
+      { "time_ms_io", time_ms_io },
+      { "time_ms_cpu", time_ms_cpu },
+    };
+
+    const auto job_type
+      = std::string(request.GetFormat() != ImportFormat::kUnknown
+          ? to_string(request.GetFormat())
+          : "unknown");
+    ordered_json job = ordered_json::object();
+    job["index"] = 1;
+    job["type"] = job_type;
+    job["work_items"] = BuildWorkItemsJson(
+      progress_trace, job_type, request.source_path.string());
+    job["status"] = std::string(JobStatusFromReport(report_copy));
+    job["outputs"] = BuildOutputsJson(report_copy.outputs);
+    job["stats"] = stats_json;
+    job["diagnostics"] = BuildDiagnosticsJson(report_copy.diagnostics);
+    payload["jobs"] = ordered_json::array({ std::move(job) });
 
     if (!WriteJsonReport(payload, *resolved_path, writer)) {
       return std::unexpected(std::make_error_code(std::errc::io_error));
@@ -361,7 +301,18 @@ auto RunImportJob(const ImportRequest& request,
   if (!report_copy.success) {
     writer->Error("ERROR: import failed");
     for (const auto& diag : report_copy.diagnostics) {
-      writer->Error(fmt::format("- {}: {}", diag.code, diag.message));
+      const auto message = fmt::format("- {}: {}", diag.code, diag.message);
+      switch (diag.severity) {
+      case ImportSeverity::kInfo:
+        writer->Info(message);
+        break;
+      case ImportSeverity::kWarning:
+        writer->Warning(message);
+        break;
+      case ImportSeverity::kError:
+        writer->Error(message);
+        break;
+      }
     }
     if (written_report.has_value()) {
       writer->Info(fmt::format("Report written: {}", written_report->string()));

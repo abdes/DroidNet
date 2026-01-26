@@ -21,8 +21,10 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
+#include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Content/Import/ScratchImage.h>
 #include <Oxygen/Content/Import/TextureImportDesc.h>
@@ -35,14 +37,17 @@
 
 namespace oxygen::content::import {
 
-//! Pipeline for CPU-bound texture cooking.
+class IAsyncFileReader;
+
+//! Pipeline for texture cooking.
 /*!
- TexturePipeline is a compute-only pipeline used by async imports. It accepts
+ TexturePipeline is a compute pipeline used by async imports. It accepts
  pre-acquired source bytes (or pre-decoded images), cooks them on a
  `co::ThreadPool`, and returns `CookedTexturePayload` results.
 
- The pipeline does not perform I/O and does not assign resource indices.
- Use `TextureEmitter` to emit cooked payloads.
+ When configured with a file reader, the pipeline can also resolve missing
+ source bytes from `WorkItem::source_path` using async I/O. The pipeline does
+ not assign resource indices. Use `TextureEmitter` to emit cooked payloads.
 
  ### Work Model
 
@@ -76,6 +81,12 @@ public:
      When false, the pipeline MUST NOT compute `content_hash` for textures.
     */
     bool with_content_hashing = true;
+
+    //! Optional async file reader for resolving source_path bytes.
+    observer_ptr<IAsyncFileReader> file_reader;
+
+    //! Optional callback for reporting I/O durations.
+    std::function<void(std::chrono::microseconds)> on_io_duration;
   };
 
   //! Policy for handling failures while cooking.
@@ -136,6 +147,9 @@ public:
     //! Callback fired when a worker starts processing this item.
     std::function<void()> on_started;
 
+    //! Callback fired when a worker finishes processing this item.
+    std::function<void()> on_finished;
+
     //! Cancellation token.
     std::stop_token stop_token;
   };
@@ -160,8 +174,8 @@ public:
     //! Diagnostics produced while cooking.
     std::vector<ImportDiagnostic> diagnostics;
 
-    //! Time spent decoding source bytes, if applicable.
-    std::optional<std::chrono::microseconds> decode_duration;
+    //! Per-item telemetry captured during pipeline execution.
+    ImportWorkItemTelemetry telemetry;
 
     //! True if successful; false if canceled or failed.
     bool success = false;
@@ -209,6 +223,18 @@ public:
 
   //! Get pipeline progress counters.
   OXGN_CNTT_NDAPI auto GetProgress() const noexcept -> PipelineProgress;
+
+  //! Number of queued items waiting in the input queue.
+  OXGN_CNTT_NDAPI auto InputQueueSize() const noexcept -> size_t
+  {
+    return input_channel_.Size();
+  }
+
+  //! Capacity of the input queue.
+  OXGN_CNTT_NDAPI auto InputQueueCapacity() const noexcept -> size_t
+  {
+    return config_.queue_capacity;
+  }
 
   //! Number of completed results waiting in the output queue.
   OXGN_CNTT_NDAPI auto OutputQueueSize() const noexcept -> size_t
