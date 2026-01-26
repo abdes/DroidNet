@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <filesystem>
 #include <memory>
 #include <mutex>
@@ -130,6 +131,56 @@ public:
 
   //! Get the asset emitter (lazy, import-thread only).
   OXGN_CNTT_NDAPI auto AssetEmitter() -> AssetEmitter&;
+
+  //=== Telemetry
+  //===----------------------------------------------------------//
+
+  //! Accumulate time spent reading source bytes.
+  OXGN_CNTT_API auto AddIoDuration(std::chrono::microseconds duration) noexcept
+    -> void;
+
+  //! Accumulate time spent loading the primary source.
+  OXGN_CNTT_API auto AddSourceLoadDuration(
+    std::chrono::microseconds duration) noexcept -> void;
+
+  //! Accumulate time spent decoding source bytes.
+  OXGN_CNTT_API auto AddDecodeDuration(
+    std::chrono::microseconds duration) noexcept -> void;
+
+  //! Accumulate time spent loading non-source resources.
+  OXGN_CNTT_API auto AddLoadDuration(
+    std::chrono::microseconds duration) noexcept -> void;
+
+  //! Accumulate time spent executing pipeline work.
+  OXGN_CNTT_API auto AddCookDuration(
+    std::chrono::microseconds duration) noexcept -> void;
+
+  //! Get total IO duration accumulated for this session.
+  OXGN_CNTT_NDAPI auto IoDuration() const noexcept -> std::chrono::microseconds;
+
+  //! Get total source load duration accumulated for this session.
+  OXGN_CNTT_NDAPI auto SourceLoadDuration() const noexcept
+    -> std::chrono::microseconds;
+
+  //! Get total decode duration accumulated for this session.
+  OXGN_CNTT_NDAPI auto DecodeDuration() const noexcept
+    -> std::chrono::microseconds;
+
+  //! Get total non-source load duration accumulated for this session.
+  OXGN_CNTT_NDAPI auto LoadDuration() const noexcept
+    -> std::chrono::microseconds;
+
+  //! Get total cook duration accumulated for this session.
+  OXGN_CNTT_NDAPI auto CookDuration() const noexcept
+    -> std::chrono::microseconds;
+
+  //! Accumulate time spent emitting cooked outputs.
+  OXGN_CNTT_API auto AddEmitDuration(
+    std::chrono::microseconds duration) noexcept -> void;
+
+  //! Get total emit duration accumulated for this session.
+  OXGN_CNTT_NDAPI auto EmitDuration() const noexcept
+    -> std::chrono::microseconds;
   //=== Diagnostics
   //===--------------------------------------------------------//
 
@@ -187,6 +238,12 @@ private:
   mutable std::mutex diagnostics_mutex_;
   std::vector<ImportDiagnostic> diagnostics_;
   bool has_errors_ = false;
+  std::chrono::microseconds io_duration_ { 0 };
+  std::chrono::microseconds source_load_duration_ { 0 };
+  std::chrono::microseconds decode_duration_ { 0 };
+  std::chrono::microseconds load_duration_ { 0 };
+  std::chrono::microseconds cook_duration_ { 0 };
+  std::chrono::microseconds emit_duration_ { 0 };
 };
 
 } // namespace oxygen::content::import

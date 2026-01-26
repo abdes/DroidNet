@@ -7,6 +7,7 @@
 #include <Oxygen/Content/Import/Internal/Pipelines/ScenePipeline.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <numbers>
@@ -450,6 +451,13 @@ auto ScenePipeline::GetProgress() const noexcept -> PipelineProgress
 
 auto ScenePipeline::Worker() -> co::Co<>
 {
+  const auto MakeDuration
+    = [](const std::chrono::steady_clock::time_point start,
+        const std::chrono::steady_clock::time_point end)
+    -> std::chrono::microseconds {
+    return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+  };
+
   while (true) {
     auto maybe_item = co_await input_channel_.Receive();
     if (!maybe_item.has_value()) {
@@ -466,6 +474,7 @@ auto ScenePipeline::Worker() -> co::Co<>
       item.on_started();
     }
 
+    const auto cook_start = std::chrono::steady_clock::now();
     std::vector<ImportDiagnostic> diagnostics;
     BuildOutcome outcome;
 
@@ -549,6 +558,10 @@ auto ScenePipeline::Worker() -> co::Co<>
       .source_id = std::move(item.source_id),
       .cooked = std::nullopt,
       .diagnostics = std::move(diagnostics),
+      .telemetry = ImportWorkItemTelemetry {
+        .cook_duration = MakeDuration(
+          cook_start, std::chrono::steady_clock::now()),
+      },
       .success = outcome.success,
     };
 
@@ -567,7 +580,9 @@ auto ScenePipeline::Worker() -> co::Co<>
         .descriptor_bytes = std::move(outcome.bytes),
       };
     }
-
+    if (item.on_finished) {
+      item.on_finished();
+    }
     co_await output_channel_.Send(std::move(result));
   }
 }
@@ -580,6 +595,9 @@ auto ScenePipeline::ReportCancelled(WorkItem item) -> co::Co<>
     .diagnostics = { MakeCancelDiagnostic(item.source_id) },
     .success = false,
   };
+  if (item.on_finished) {
+    item.on_finished();
+  }
   co_await output_channel_.Send(std::move(canceled));
 }
 

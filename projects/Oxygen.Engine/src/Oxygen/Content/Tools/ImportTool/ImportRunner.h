@@ -23,7 +23,7 @@ class IMessageWriter;
 
 [[nodiscard]] auto RunImportJob(const ImportRequest& request,
   oxygen::observer_ptr<IMessageWriter> writer, std::string_view report_path,
-  bool enable_tui,
+  std::string_view command_line, bool enable_tui,
   oxygen::observer_ptr<oxygen::content::import::AsyncImportService> service)
   -> std::expected<void, std::error_code>;
 

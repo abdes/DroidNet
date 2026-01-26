@@ -345,6 +345,10 @@ namespace {
     if (!ReadStringField(obj, "node_pruning", settings.node_pruning, errors)) {
       return false;
     }
+    if (!ReadStringField(
+          obj, "naming_policy", settings.naming_policy, errors)) {
+      return false;
+    }
 
     // Apply texture overrides from the same object (flat structure)
     if (!ApplyTextureOverrides(obj, settings.texture_defaults, errors)) {
@@ -584,6 +588,8 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     manifest_job.texture = manifest.defaults.texture;
     manifest_job.fbx = manifest.defaults.fbx;
     manifest_job.gltf = manifest.defaults.gltf;
+    manifest_job.fbx.texture_defaults = manifest.defaults.texture;
+    manifest_job.gltf.texture_defaults = manifest.defaults.texture;
 
     if (!job.contains("type") || !job["type"].is_string()) {
       error_stream << "ERROR: job.type is required and must be a string\n";

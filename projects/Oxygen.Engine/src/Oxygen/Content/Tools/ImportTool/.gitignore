@@ -4,3 +4,4 @@ Testing/**
 !Testing/Models/
 !Testing/Models/**
 !Testing/manifest-*
+!Testing/*.ipynb

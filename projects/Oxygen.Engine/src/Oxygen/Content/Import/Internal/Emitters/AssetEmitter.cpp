@@ -104,8 +104,7 @@ AssetEmitter::AssetEmitter(IAsyncFileWriter& file_writer,
   , cooked_root_(cooked_root)
   , compute_sha256_(compute_sha256)
 {
-  // layout is available for future use if needed
-  (void)layout;
+  (void)layout; // TODO: layout is available for future use if needed
   DLOG_F(INFO, "Created asset emitter: cooked_root='{}' sha256={}",
     cooked_root_.string(), compute_sha256_);
 }

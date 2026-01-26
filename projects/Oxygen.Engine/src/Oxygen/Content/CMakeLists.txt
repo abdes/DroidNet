@@ -23,6 +23,7 @@ find_package(glm CONFIG REQUIRED)
 find_package(tinyexr CONFIG REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(nlohmann_json_schema_validator REQUIRED)
+find_package(SPNG REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -267,6 +268,7 @@ target_link_libraries(
     oxygen::data
   PRIVATE
     glm::glm
+    spng::spng_static
     tinyexr::tinyexr
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator

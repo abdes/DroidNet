@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "thread_pool_size": 35,
+  "max_in_flight_jobs": 35,
+  "concurrency": {
+    "texture": {
+      "workers": 12,
+      "queue_capacity": 64
+    },
+    "buffer": {
+      "workers": 2,
+      "queue_capacity": 64
+    },
+    "material": {
+      "workers": 4,
+      "queue_capacity": 64
+    },
+    "mesh_build": {
+      "workers": 12,
+      "queue_capacity": 128
+    },
+    "geometry": {
+      "workers": 8,
+      "queue_capacity": 64
+    },
+    "scene": {
+      "workers": 1,
+      "queue_capacity": 8
+    }
+  },
+  "defaults": {
+    "texture": {
+      "content_hashing": false,
+      "output_format": "rgba8_srgb",
+      "data_format": "rgba8"
+    },
+    "scene": {
+      "output": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Cooked",
+      "content_hashing": false
+    }
+  },
+  "jobs": [
+    {
+      "type": "gltf",
+      "source": "F:/projects/main_sponza/NewSponza_Main_glTF_003.gltf",
+      "name": "sponza-scene"
+    }
+  ]
+}

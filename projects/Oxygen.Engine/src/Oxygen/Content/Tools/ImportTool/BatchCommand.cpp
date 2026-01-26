@@ -51,6 +51,10 @@
 #include <Oxygen/Content/Tools/ImportTool/UI/Screens/BatchImportScreen.h>
 #include <Oxygen/OxCo/Detail/ScopeGuard.h>
 
+#ifndef OXYGEN_IMPORT_TOOL_VERSION
+#  error OXYGEN_IMPORT_TOOL_VERSION must be defined for ImportTool reports.
+#endif
+
 namespace oxygen::content::import::tool {
 
 namespace {
@@ -83,7 +87,18 @@ namespace {
     writer->Error(fmt::format("ERROR: import failed (job={}, source={})",
       DisplayJobNumber(job_index), source_path));
     for (const auto& diag : report.diagnostics) {
-      writer->Error(fmt::format("- {}: {}", diag.code, diag.message));
+      const auto message = fmt::format("- {}: {}", diag.code, diag.message);
+      switch (diag.severity) {
+      case ImportSeverity::kInfo:
+        writer->Info(message);
+        break;
+      case ImportSeverity::kWarning:
+        writer->Warning(message);
+        break;
+      case ImportSeverity::kError:
+        writer->Error(message);
+        break;
+      }
     }
   }
 
@@ -130,7 +145,8 @@ namespace {
       WorkerUtilizationView entry {};
       entry.kind = std::string(kinds[index]);
       entry.total = totals[index];
-      entry.queue_load = 0.0f;
+      entry.input_queue_load = 0.0f;
+      entry.output_queue_load = 0.0f;
       result.push_back(entry);
     }
     return result;
@@ -223,36 +239,10 @@ namespace {
     return true;
   }
 
-  auto IsCanceledReport(const ImportReport& report) -> bool
-  {
-    for (const auto& diag : report.diagnostics) {
-      if (diag.code == "import.canceled") {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  auto JobStatusFromReport(const std::optional<ImportReport>& report)
-    -> std::string_view
-  {
-    if (!report.has_value()) {
-      return "Not Started";
-    }
-    if (report->success) {
-      return "Success";
-    }
-    if (IsCanceledReport(*report)) {
-      return "Canceled";
-    }
-    return "Failed";
-  }
-
   struct BatchSummaryCounts {
     size_t succeeded = 0;
     size_t failed = 0;
-    size_t canceled = 0;
-    size_t not_started = 0;
+    size_t skipped = 0;
   };
 
   auto BuildBatchSummary(
@@ -261,18 +251,21 @@ namespace {
   {
     BatchSummaryCounts counts {};
     for (const auto& report : reports) {
-      const auto status = JobStatusFromReport(report);
-      if (status == "Success") {
+      if (!report.has_value()) {
+        ++counts.skipped;
+        continue;
+      }
+      const auto status = JobStatusFromReport(*report);
+      if (status == "succeeded") {
         ++counts.succeeded;
-      } else if (status == "Canceled") {
-        ++counts.canceled;
-      } else if (status == "Not Started") {
-        ++counts.not_started;
+      } else if (status == "skipped") {
+        ++counts.skipped;
+      } else {
+        ++counts.failed;
       }
     }
-    if (counts.succeeded + counts.canceled + counts.not_started <= total_jobs) {
-      counts.failed
-        = total_jobs - counts.succeeded - counts.canceled - counts.not_started;
+    if (counts.succeeded + counts.skipped <= total_jobs) {
+      counts.failed = total_jobs - counts.succeeded - counts.skipped;
     }
     return counts;
   }
@@ -355,9 +348,6 @@ auto BatchCommand::PrepareImportServiceConfig()
   DCHECK_F(global_options_ != nullptr && global_options_->writer,
     "Global message writer must be set by main");
   auto writer = global_options_->writer;
-  DCHECK_NOTNULL_F(
-    global_options_->import_service, "Import service must be set by main");
-  auto import_service = global_options_->import_service;
 
   if (options_.manifest_path.empty()) {
     writer->Error("ERROR: --manifest is required");
@@ -404,6 +394,7 @@ auto BatchCommand::PrepareImportServiceConfig()
 
 auto BatchCommand::Run() -> std::expected<void, std::error_code>
 {
+  const auto session_started = std::chrono::system_clock::now();
   // 1. Process Options
   if (global_options_ != nullptr) {
     if (!options_.fail_fast && global_options_->fail_fast) {
@@ -606,7 +597,16 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
     std::vector<bool> job_active(jobs.size(), false);
 
     std::array<uint32_t, 7> outstanding_items { 0U, 0U, 0U, 0U, 0U, 0U, 0U };
-    std::array<float, 7> queue_loads {
+    std::array<float, 7> input_queue_loads {
+      0.0f,
+      0.0f,
+      0.0f,
+      0.0f,
+      0.0f,
+      0.0f,
+      0.0f,
+    };
+    std::array<float, 7> output_queue_loads {
       0.0f,
       0.0f,
       0.0f,
@@ -646,7 +646,8 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
         const auto index = WorkerKindIndex(entry.kind);
         if (index.has_value()) {
           entry.active = std::min(outstanding_items[*index], entry.total);
-          entry.queue_load = queue_loads[*index];
+          entry.input_queue_load = input_queue_loads[*index];
+          entry.output_queue_load = output_queue_loads[*index];
         }
       }
     };
@@ -754,7 +755,9 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
         };
 
         auto on_progress = [&, submitted](const ProgressEvent& progress) {
+          const auto now = std::chrono::steady_clock::now();
           std::scoped_lock lock(common_context->mutex);
+          UpdateProgressTrace(progress_traces[submitted], progress, now);
           if (progress.header.kind == ProgressEventKind::kPhaseUpdate) {
             return;
           }
@@ -816,7 +819,8 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
                 line.append(item->item_name);
               }
               if (progress.header.kind == ProgressEventKind::kItemCollected) {
-                line.append(fmt::format(" load={:.2f}", item->queue_load));
+                line.append(fmt::format(" load={:.2f}|{:.2f}",
+                  item->input_queue_load, item->output_queue_load));
               }
             }
             writer->Progress(line);
@@ -841,10 +845,16 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
               if (!item->item_kind.empty()) {
                 const auto index = WorkerKindIndex(item->item_kind);
                 if (index.has_value()) {
-                  DCHECK_F(item->queue_load >= 0.0f && item->queue_load <= 1.0f,
-                    "Item collection queue load is out of range: {}",
-                    item->queue_load);
-                  queue_loads[*index] = item->queue_load;
+                  DCHECK_F(item->input_queue_load >= 0.0f
+                      && item->input_queue_load <= 1.0f,
+                    "Item collection input queue load is out of range: {}",
+                    item->input_queue_load);
+                  DCHECK_F(item->output_queue_load >= 0.0f
+                      && item->output_queue_load <= 1.0f,
+                    "Item collection output queue load is out of range: {}",
+                    item->output_queue_load);
+                  input_queue_loads[*index] = item->input_queue_load;
+                  output_queue_loads[*index] = item->output_queue_load;
                 }
               }
             } else {
@@ -994,45 +1004,69 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
       = ResolveReportPath(options_.report_path, cooked_root, std::cerr);
 
     if (resolved_path.has_value()) {
+      const auto session_ended = std::chrono::system_clock::now();
       const auto elapsed_ms = std::chrono::duration<double, std::milli>(
         common_context->state.elapsed)
                                 .count();
+      CHECK_F(cooked_root.has_value() && !cooked_root->empty(),
+        "Cooked root is required in report output");
+      CHECK_F(!global_options_->command_line.empty(),
+        "Command line is required in report output");
+
+      double total_io_ms = 0.0;
+      double total_cpu_ms = 0.0;
       ordered_json jobs_json = ordered_json::array();
 
       for (size_t index = 0; index < jobs.size(); ++index) {
         const auto& job = jobs[index];
         const auto& report = common_context->reports[index];
-        const bool success = report.has_value() && report->success;
-        const auto status = JobStatusFromReport(report);
-        ordered_json telemetry = nullptr;
-        if (report.has_value()) {
-          telemetry = BuildTelemetryJson(report->telemetry);
-        }
-        // Note: progress_traces is largely empty in this simplified worker, but
-        // we pass it anyway
-        ordered_json progress_json
-          = nullptr; // BuildProgressJson(progress_traces[index], ...);
 
-        jobs_json.push_back({
-          { "index", DisplayJobNumber(index) },
-          { "source", job.source_path },
-          { "success", success },
-          { "status", status },
-          { "telemetry", telemetry },
-          { "progress", progress_json },
-        });
+        const auto job_type
+          = std::string(job.request.GetFormat() != ImportFormat::kUnknown
+              ? to_string(job.request.GetFormat())
+              : "unknown");
+
+        ordered_json job_json = ordered_json::object();
+        job_json["index"] = DisplayJobNumber(index);
+        job_json["type"] = job_type;
+        job_json["work_items"] = BuildWorkItemsJson(
+          progress_traces[index], job_type, job.request.source_path.string());
+        if (report.has_value()) {
+          const auto& report_value = *report;
+          total_io_ms += ComputeIoMillis(report_value.telemetry);
+          total_cpu_ms += ComputeCpuMillis(report_value.telemetry);
+          job_json["status"] = std::string(JobStatusFromReport(report_value));
+          job_json["outputs"] = BuildOutputsJson(report_value.outputs);
+          job_json["stats"] = BuildStatsJson(report_value.telemetry);
+          job_json["diagnostics"]
+            = BuildDiagnosticsJson(report_value.diagnostics);
+        } else {
+          job_json["status"] = "not_submitted";
+          job_json["outputs"] = ordered_json::array();
+          job_json["stats"] = BuildEmptyStatsJson();
+          job_json["diagnostics"] = ordered_json::array();
+        }
+        jobs_json.push_back(std::move(job_json));
       }
 
       ordered_json payload = ordered_json::object();
+      payload["report_version"] = std::string(kReportVersion);
+      payload["session"] = {
+        { "id", MakeSessionId(session_started) },
+        { "started_utc", FormatUtcTimestamp(session_started) },
+        { "ended_utc", FormatUtcTimestamp(session_ended) },
+        { "tool_version", std::string(OXYGEN_IMPORT_TOOL_VERSION) },
+        { "command_line", std::string(global_options_->command_line) },
+        { "cooked_root", cooked_root->string() },
+      };
       payload["summary"] = {
-        { "jobs", jobs.size() },
-        { "succeeded", counts.succeeded },
-        { "failed", counts.failed },
-        { "canceled", counts.canceled },
-        { "not_started", counts.not_started },
-        { "total_time_ms", elapsed_ms },
-        { "cooked_root",
-          cooked_root.has_value() ? cooked_root->string() : std::string() },
+        { "jobs_total", jobs.size() },
+        { "jobs_succeeded", counts.succeeded },
+        { "jobs_failed", counts.failed },
+        { "jobs_skipped", counts.skipped },
+        { "time_ms_total", elapsed_ms },
+        { "time_ms_io", total_io_ms },
+        { "time_ms_cpu", total_cpu_ms },
       };
       payload["jobs"] = std::move(jobs_json);
 
@@ -1046,14 +1080,23 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
   if (options_.quiet) {
     for (size_t index = 0; index < jobs.size(); ++index) {
       const auto& report = common_context->reports[index];
-      const bool success = report.has_value() && report->success;
-      if (!success) {
-        if (report.has_value()) {
-          for (const auto& diag : report->diagnostics) {
-            writer->Error(fmt::format("{}: {}", diag.code, diag.message));
+      if (!report.has_value()) {
+        continue;
+      }
+      if (!report->success) {
+        for (const auto& diag : report->diagnostics) {
+          const auto message = fmt::format("{}: {}", diag.code, diag.message);
+          switch (diag.severity) {
+          case ImportSeverity::kInfo:
+            writer->Info(message);
+            break;
+          case ImportSeverity::kWarning:
+            writer->Warning(message);
+            break;
+          case ImportSeverity::kError:
+            writer->Error(message);
+            break;
           }
-        } else {
-          writer->Warning("No report available");
         }
       }
     }
@@ -1062,18 +1105,34 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
       = std::chrono::duration<double, std::milli>(common_context->state.elapsed)
           .count();
     writer->Info(
-      fmt::format("Summary: jobs={} succeeded={} failed={} canceled={} "
-                  "not_started={} total_time_ms={}",
-        jobs.size(), counts.succeeded, counts.failed, counts.canceled,
-        counts.not_started, elapsed_ms));
+      fmt::format("Summary: jobs={} succeeded={} failed={} skipped={} "
+                  "total_time_ms={}",
+        jobs.size(), counts.succeeded, counts.failed, counts.skipped,
+        elapsed_ms));
 
     for (size_t index = 0; index < jobs.size(); ++index) {
       const auto& report = common_context->reports[index];
-      const auto status = JobStatusFromReport(report);
+      if (!report.has_value()) {
+        writer->Info(
+          fmt::format("Job {}: not_submitted", DisplayJobNumber(index)));
+        continue;
+      }
+      const auto status = JobStatusFromReport(*report);
       writer->Info(fmt::format("Job {}: {}", DisplayJobNumber(index), status));
-      if (report.has_value() && !report->success) {
+      if (!report->success) {
         for (const auto& diag : report->diagnostics) {
-          writer->Error(fmt::format("{}: {}", diag.code, diag.message));
+          const auto message = fmt::format("{}: {}", diag.code, diag.message);
+          switch (diag.severity) {
+          case ImportSeverity::kInfo:
+            writer->Info(message);
+            break;
+          case ImportSeverity::kWarning:
+            writer->Warning(message);
+            break;
+          case ImportSeverity::kError:
+            writer->Error(message);
+            break;
+          }
         }
       }
     }

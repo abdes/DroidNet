@@ -173,6 +173,13 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
     const auto finalize_end = std::chrono::steady_clock::now();
     telemetry.finalize_duration = MakeDuration(finalize_start, finalize_end);
     telemetry.total_duration = MakeDuration(job_start, finalize_end);
+    telemetry.io_duration = session.IoDuration();
+    telemetry.source_load_duration = session.SourceLoadDuration();
+    telemetry.decode_duration = session.DecodeDuration();
+    telemetry.load_duration
+      = session.SourceLoadDuration() + session.LoadDuration();
+    telemetry.cook_duration = session.CookDuration();
+    telemetry.emit_duration = session.EmitDuration();
     report.telemetry = telemetry;
     co_return report;
   };
@@ -218,9 +225,13 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto load_start = std::chrono::steady_clock::now();
   auto source = co_await LoadSource(session);
   const auto load_end = std::chrono::steady_clock::now();
-  telemetry.load_duration = MakeDuration(load_start, load_end);
-  telemetry.io_duration = source.io_duration;
-  telemetry.decode_duration = source.decode_duration;
+  session.AddSourceLoadDuration(MakeDuration(load_start, load_end));
+  if (source.io_duration.has_value()) {
+    session.AddIoDuration(*source.io_duration);
+  }
+  if (source.decode_duration.has_value()) {
+    session.AddDecodeDuration(*source.decode_duration);
+  }
   if (!source.success) {
     ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Texture load failed");
     co_return co_await FinalizeWithTelemetry(session);
@@ -244,12 +255,15 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
   ReportPhaseProgress(ImportPhase::kWorking, 0.0f, "Cooking texture...");
   ReportItemProgress(ProgressEventKind::kItemStarted, ImportPhase::kWorking,
     0.4f, "Texture item started", "Texture", item_name);
-  const auto cook_start = std::chrono::steady_clock::now();
   auto cooked = co_await CookTexture(source, session, pipeline);
-  const auto cook_end = std::chrono::steady_clock::now();
-  telemetry.cook_duration = MakeDuration(cook_start, cook_end);
-  if (cooked.decode_duration.has_value()) {
-    telemetry.decode_duration = cooked.decode_duration;
+  if (cooked.telemetry.decode_duration.has_value()) {
+    session.AddDecodeDuration(*cooked.telemetry.decode_duration);
+  }
+  if (cooked.telemetry.load_duration.has_value()) {
+    session.AddLoadDuration(*cooked.telemetry.load_duration);
+  }
+  if (cooked.telemetry.cook_duration.has_value()) {
+    session.AddCookDuration(*cooked.telemetry.cook_duration);
   }
   if (!cooked.payload.has_value() && !cooked.used_fallback) {
     ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Texture cook failed");
@@ -714,9 +728,10 @@ auto TextureImportJob::CookTexture(
         .source_path = Request().source_path.string(),
         .object_path = {},
       });
-      (void)session.TextureEmitter();
+      // Ensure the texture emitter is initialized for fallback index use.
+      [[maybe_unused]] auto& texture_emitter = session.TextureEmitter();
       co_return { .payload = std::nullopt,
-        .decode_duration = result.decode_duration,
+        .telemetry = result.telemetry,
         .used_fallback = true };
     }
 
@@ -728,12 +743,12 @@ auto TextureImportJob::CookTexture(
       .object_path = {},
     });
     co_return { .payload = std::nullopt,
-      .decode_duration = result.decode_duration,
+      .telemetry = result.telemetry,
       .used_fallback = false };
   }
 
   co_return { .payload = std::move(result.cooked.value()),
-    .decode_duration = result.decode_duration,
+    .telemetry = result.telemetry,
     .used_fallback = false };
 }
 
@@ -743,7 +758,14 @@ auto TextureImportJob::EmitTexture(
 {
   try {
     auto& emitter = session.TextureEmitter();
-    [[maybe_unused]] const auto index = emitter.Emit(std::move(cooked));
+    const auto signature_salt = Request().source_path.string();
+    const auto emit_start = std::chrono::steady_clock::now();
+    [[maybe_unused]] const auto index
+      = emitter.Emit(std::move(cooked), signature_salt);
+    const auto emit_end = std::chrono::steady_clock::now();
+    session.AddEmitDuration(
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        emit_end - emit_start));
     DLOG_F(INFO, "Texture emitted at index={}", index);
     co_return true;
   } catch (const std::exception& ex) {

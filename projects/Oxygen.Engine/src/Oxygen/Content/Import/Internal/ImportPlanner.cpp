@@ -135,9 +135,9 @@ auto ImportPlanner::MakePlan() -> std::vector<PlanStep>
   for (const auto& deps : dependencies_) {
     dependency_count += deps.size();
   }
-  DLOG_SCOPE_FUNCTION(INFO);
-  DLOG_F(INFO, "items: {}", items_.size());
-  DLOG_F(INFO, " deps: {}", dependency_count);
+  LOG_SCOPE_FUNCTION(INFO);
+  LOG_F(INFO, "items: {}", items_.size());
+  LOG_F(INFO, " deps: {}", dependency_count);
 
   for (const auto& item : items_) {
     const auto index = static_cast<size_t>(item.kind);
@@ -179,11 +179,9 @@ auto ImportPlanner::MakePlan() -> std::vector<PlanStep>
   while (!ready_current.empty()) {
     for (const auto current_index : ready_current) {
       order.emplace_back(static_cast<uint32_t>(current_index));
-#ifndef NDEBUG
       const auto& item = items_.at(current_index);
-      DLOG_F(INFO, "{:>3}: id={:<3} {}/{}", order.size() - 1U, current_index,
+      LOG_F(INFO, "{:>3}: id={:<3} {}/{}", order.size() - 1U, current_index,
         item.kind, item.debug_name);
-#endif // NDEBUG
       for (const auto dependent : dependents[current_index]) {
         const auto u_dependent = ItemIndex(dependent);
         DCHECK_F(in_degree[u_dependent] > 0U, "Invalid in-degree underflow");

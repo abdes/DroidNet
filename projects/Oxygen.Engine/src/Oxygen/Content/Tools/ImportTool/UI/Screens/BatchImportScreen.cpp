@@ -305,9 +305,11 @@ namespace {
   struct UtilizationFormat {
     std::string label;
     float ratio = 0.0f;
-    std::string glyph;
+    std::string input_glyph;
+    std::string output_glyph;
     std::string counts;
-    Color glyph_color = Color::GrayLight;
+    Color input_color = Color::GrayLight;
+    Color output_color = Color::GrayLight;
     bool visible = true;
   };
 
@@ -316,7 +318,8 @@ namespace {
     std::string_view display_kind) -> UtilizationFormat
   {
     if (display_kind.empty()) {
-      return { "", 0.0f, "", "", Color::GrayLight, false };
+      return { "", 0.0f, "", "", "", Color::GrayLight, Color::GrayLight,
+        false };
     }
     const auto lookup_kind
       = (display_kind == "Mesh") ? "MeshBuild" : display_kind;
@@ -331,15 +334,18 @@ namespace {
     const float ratio = entry.total > 0U
       ? static_cast<float>(entry.active) / static_cast<float>(entry.total)
       : 0.0f;
-    const std::string_view glyph = QueueGlyph(entry.queue_load);
+    const std::string_view input_glyph = QueueGlyph(entry.input_queue_load);
+    const std::string_view output_glyph = QueueGlyph(entry.output_queue_load);
     const auto active = static_cast<int>(std::min(entry.active, 99U));
     const auto total = static_cast<int>(std::min(entry.total, 99U));
     return {
       std::string(entry.kind),
       ratio,
-      std::string(glyph),
+      std::string(input_glyph),
+      std::string(output_glyph),
       std::format(" {:>2}/{:<2}", active, total),
-      LoadColor(entry.queue_load),
+      LoadColor(entry.input_queue_load),
+      LoadColor(entry.output_queue_load),
       true,
     };
   }
@@ -356,9 +362,11 @@ namespace {
     return hbox({
       text(label),
       text(" "),
+      text(data.input_glyph) | color(data.input_color),
+      text(" "),
       text(bar) | color(Color::GrayLight),
       text(" "),
-      text(data.glyph) | color(data.glyph_color),
+      text(data.output_glyph) | color(data.output_color),
       text(data.counts),
     });
   }
@@ -396,6 +404,7 @@ namespace {
     for (const auto& name : label_names) {
       label_width = std::max(label_width, static_cast<int>(name.size()));
     }
+    const int cell_width = label_width + 22;
 
     std::vector<Element> rows;
     for (size_t row = 0; row < left_order.size(); ++row) {
@@ -403,7 +412,7 @@ namespace {
       const auto right = FormatUtilization(table, right_order[row]);
       rows.push_back(hbox({
         BuildUtilizationCell(left, label_width)
-          | size(ftxui::WIDTH, ftxui::EQUAL, label_width + 18),
+          | size(ftxui::WIDTH, ftxui::EQUAL, cell_width),
         text(" "),
         BuildUtilizationCell(right, label_width),
       }));

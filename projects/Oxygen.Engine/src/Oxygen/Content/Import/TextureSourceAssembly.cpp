@@ -488,8 +488,12 @@ namespace {
     return { u, v };
   }
 
-  auto ConvertEquirectangularFaceImpl(const ScratchImageMeta& src_meta,
-    std::span<const std::byte> src_pixels, const CubeFace face,
+} // namespace
+
+namespace detail {
+
+  auto ConvertEquirectangularFace(const ScratchImageMeta& src_meta,
+    const std::span<const std::byte> src_pixels, const CubeFace face,
     const uint32_t face_size, const bool use_bicubic, ScratchImage& cube)
     -> void
   {
@@ -523,21 +527,6 @@ namespace {
         dst_data[dst_idx + 3] = color[3];
       }
     }
-  }
-
-} // namespace
-
-namespace detail {
-
-  auto ConvertEquirectangularFace(const ScratchImage& equirect,
-    const ScratchImageMeta& src_meta,
-    const std::span<const std::byte> src_pixels, const CubeFace face,
-    const uint32_t face_size, const bool use_bicubic, ScratchImage& cube)
-    -> void
-  {
-    (void)equirect;
-    ConvertEquirectangularFaceImpl(
-      src_meta, src_pixels, face, face_size, use_bicubic, cube);
   }
 
 } // namespace detail
@@ -599,7 +588,7 @@ auto ConvertEquirectangularToCube(
   for (uint32_t face_idx = 0; face_idx < kCubeFaceCount; ++face_idx) {
     const auto face = static_cast<CubeFace>(face_idx);
     detail::ConvertEquirectangularFace(
-      equirect, src_meta, src_pixels, face, face_size, use_bicubic, cube);
+      src_meta, src_pixels, face, face_size, use_bicubic, cube);
   }
 
   return Ok(std::move(cube));

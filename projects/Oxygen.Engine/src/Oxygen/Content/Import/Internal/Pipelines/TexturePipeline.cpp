@@ -7,10 +7,12 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <iterator>
 #include <optional>
 #include <string_view>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/Import/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Content/Import/Internal/TextureCooker.h>
 #include <Oxygen/Content/Import/Internal/TextureSourceAssembly_internal.h>
@@ -49,6 +51,32 @@ namespace {
       .object_path = {},
     };
     return diag;
+  }
+
+  [[nodiscard]] auto MakeWarningDiagnostic(std::string code,
+    std::string message, std::string_view source_id,
+    std::string_view object_path) -> ImportDiagnostic
+  {
+    return ImportDiagnostic {
+      .severity = ImportSeverity::kWarning,
+      .code = std::move(code),
+      .message = std::move(message),
+      .source_path = std::string(source_id),
+      .object_path = std::string(object_path),
+    };
+  }
+
+  [[nodiscard]] auto MakeErrorDiagnosticMessage(std::string code,
+    std::string message, std::string_view source_id,
+    std::string_view object_path) -> ImportDiagnostic
+  {
+    return ImportDiagnostic {
+      .severity = ImportSeverity::kError,
+      .code = std::move(code),
+      .message = std::move(message),
+      .source_path = std::string(source_id),
+      .object_path = std::string(object_path),
+    };
   }
 
   [[nodiscard]] auto ResolvePackingPolicy(std::string_view id)
@@ -157,8 +185,8 @@ namespace {
 
     for (uint32_t face_idx = 0; face_idx < kCubeFaceCount; ++face_idx) {
       const auto face = static_cast<CubeFace>(face_idx);
-      detail::ConvertEquirectangularFace(equirect, src_meta, src_view.pixels,
-        face, face_size, use_bicubic, cube);
+      detail::ConvertEquirectangularFace(
+        src_meta, src_view.pixels, face, face_size, use_bicubic, cube);
     }
 
     return Ok(std::move(cube));
@@ -810,6 +838,13 @@ auto TexturePipeline::Collect() -> co::Co<WorkResult>
 {
   auto maybe_result = co_await output_channel_.Receive();
   if (!maybe_result.has_value()) {
+    LOG_F(INFO,
+      "TexturePipeline::Collect closed: pending={} submitted={} completed={} "
+      "failed={}",
+      pending_.load(std::memory_order_acquire),
+      submitted_.load(std::memory_order_acquire),
+      completed_.load(std::memory_order_acquire),
+      failed_.load(std::memory_order_acquire));
     co_return WorkResult {
       .source_id = {},
       .texture_id = {},
@@ -821,6 +856,11 @@ auto TexturePipeline::Collect() -> co::Co<WorkResult>
     };
   }
 
+  LOG_F(INFO,
+    "TexturePipeline::Collect result: source_id='{}' texture_id='{}' "
+    "source_key={} success={} placeholder={}",
+    maybe_result->source_id, maybe_result->texture_id, maybe_result->source_key,
+    maybe_result->success, maybe_result->used_placeholder);
   pending_.fetch_sub(1, std::memory_order_acq_rel);
   if (maybe_result->success) {
     completed_.fetch_add(1, std::memory_order_acq_rel);
@@ -858,6 +898,13 @@ auto TexturePipeline::GetProgress() const noexcept -> PipelineProgress
 
 auto TexturePipeline::Worker() -> co::Co<>
 {
+  const auto MakeDuration
+    = [](const std::chrono::steady_clock::time_point start,
+        const std::chrono::steady_clock::time_point end)
+    -> std::chrono::microseconds {
+    return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+  };
+
   while (true) {
     auto maybe_item = co_await input_channel_.Receive();
     if (!maybe_item.has_value()) {
@@ -865,6 +912,12 @@ auto TexturePipeline::Worker() -> co::Co<>
     }
 
     auto item = std::move(*maybe_item);
+    LOG_F(INFO,
+      "TexturePipeline::Worker start: source_id='{}' texture_id='{}' "
+      "source_key={} source_path='{}' stop_requested={} override_format={}",
+      item.source_id, item.texture_id, item.source_key,
+      item.source_path.string(), item.stop_token.stop_requested(),
+      item.output_format_is_override);
     if (item.stop_token.stop_requested()) {
       co_await ReportCancelled(std::move(item));
       continue;
@@ -872,6 +925,51 @@ auto TexturePipeline::Worker() -> co::Co<>
 
     if (item.on_started) {
       item.on_started();
+    }
+    auto NotifyFinished = [&item]() {
+      if (item.on_finished) {
+        item.on_finished();
+      }
+    };
+
+    std::vector<ImportDiagnostic> read_diagnostics;
+    if (auto* source_bytes = std::get_if<SourceBytes>(&item.source);
+      source_bytes != nullptr && source_bytes->bytes.empty()
+      && !item.source_path.empty()) {
+      const auto source_path_string = item.source_path.string();
+      auto reader = config_.file_reader;
+      if (reader == nullptr) {
+        read_diagnostics.push_back(MakeErrorDiagnosticMessage(
+          "import.file_reader", "Import session has no async file reader",
+          item.source_id, source_path_string));
+      } else {
+        const auto read_start = std::chrono::steady_clock::now();
+        auto read_result = co_await reader.get()->ReadFile(item.source_path);
+        const auto read_end = std::chrono::steady_clock::now();
+        if (config_.on_io_duration) {
+          config_.on_io_duration(MakeDuration(read_start, read_end));
+        }
+        if (!read_result.has_value()) {
+          const auto message
+            = "Failed to read texture file: " + read_result.error().ToString();
+          read_diagnostics.push_back(
+            MakeWarningDiagnostic("import.texture.load_failed", message,
+              item.source_id, source_path_string));
+          LOG_F(INFO,
+            "TexturePipeline::Worker read failed: source_id='{}' path='{}'",
+            item.source_id, source_path_string);
+        } else {
+          auto bytes = std::make_shared<std::vector<std::byte>>(
+            std::move(read_result.value()));
+          source_bytes->bytes
+            = std::span<const std::byte>(bytes->data(), bytes->size());
+          source_bytes->owner = std::static_pointer_cast<const void>(bytes);
+          LOG_F(INFO,
+            "TexturePipeline::Worker read ok: source_id='{}' path='{}' "
+            "bytes={}",
+            item.source_id, source_path_string, bytes->size());
+        }
+      }
     }
 
     const auto& policy = ResolvePackingPolicy(item.packing_policy_id);
@@ -881,6 +979,7 @@ auto TexturePipeline::Worker() -> co::Co<>
     local_desc.stop_token = item.stop_token;
 
     auto source_ptr = std::make_shared<SourceContent>(std::move(item.source));
+    const auto cook_start = std::chrono::steady_clock::now();
     auto result = co_await thread_pool_.Run(
       [source_ptr, desc = std::move(local_desc), &policy,
         output_format_is_override = item.output_format_is_override,
@@ -899,6 +998,7 @@ auto TexturePipeline::Worker() -> co::Co<>
           output_format_is_override, equirect_to_cubemap, cubemap_face_size,
           cubemap_layout, with_content_hashing);
       });
+    const auto cook_end = std::chrono::steady_clock::now();
 
     WorkResult output {
       .source_id = std::move(item.source_id),
@@ -914,18 +1014,41 @@ auto TexturePipeline::Worker() -> co::Co<>
       output.diagnostics.push_back(MakePackingPolicyDiagnostic(
         item.packing_policy_id, policy.Id(), output.source_id));
     }
+    if (!read_diagnostics.empty()) {
+      output.diagnostics.insert(output.diagnostics.end(),
+        std::make_move_iterator(read_diagnostics.begin()),
+        std::make_move_iterator(read_diagnostics.end()));
+    }
 
-    output.decode_duration = result.decode_duration;
+    output.telemetry.decode_duration = result.decode_duration;
+    const auto total_cook = MakeDuration(cook_start, cook_end);
+    if (result.decode_duration.has_value()) {
+      const auto decode = *result.decode_duration;
+      output.telemetry.cook_duration
+        = (total_cook > decode) ? (total_cook - decode) : total_cook;
+    } else {
+      output.telemetry.cook_duration = total_cook;
+    }
 
     if (result.cooked.has_value()) {
       output.cooked = std::move(result.cooked.value());
       output.success = true;
+      LOG_F(INFO,
+        "TexturePipeline::Worker cooked: source_id='{}' texture_id='{}' "
+        "source_key={} success=true",
+        output.source_id, output.texture_id, output.source_key);
+      NotifyFinished();
       co_await output_channel_.Send(std::move(output));
       continue;
     }
 
     const auto error = result.cooked.error();
     if (error == TextureImportError::kCancelled) {
+      LOG_F(INFO,
+        "TexturePipeline::Worker cancelled: source_id='{}' texture_id='{}' "
+        "source_key={}",
+        output.source_id, output.texture_id, output.source_key);
+      NotifyFinished();
       co_await output_channel_.Send(std::move(output));
       continue;
     }
@@ -934,11 +1057,22 @@ auto TexturePipeline::Worker() -> co::Co<>
       output.used_placeholder = true;
       output.diagnostics.push_back(
         MakeErrorDiagnostic(error, output.source_id));
+      LOG_F(INFO,
+        "TexturePipeline::Worker placeholder: source_id='{}' texture_id='{}' "
+        "source_key={}",
+        output.source_id, output.texture_id, output.source_key);
+      NotifyFinished();
       co_await output_channel_.Send(std::move(output));
       continue;
     }
 
     output.diagnostics.push_back(MakeErrorDiagnostic(error, output.source_id));
+    LOG_F(INFO,
+      "TexturePipeline::Worker failed: source_id='{}' texture_id='{}' "
+      "source_key={} error={}",
+      output.source_id, output.texture_id, output.source_key,
+      static_cast<int>(error));
+    NotifyFinished();
     co_await output_channel_.Send(std::move(output));
   }
 
@@ -956,6 +1090,9 @@ auto TexturePipeline::ReportCancelled(WorkItem item) -> co::Co<>
     .diagnostics = {},
     .success = false,
   };
+  if (item.on_finished) {
+    item.on_finished();
+  }
   co_await output_channel_.Send(std::move(canceled));
 }
 

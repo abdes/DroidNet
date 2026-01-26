@@ -6,6 +6,7 @@
 
 #include <fstream>
 #include <optional>
+#include <string_view>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/IAsyncFileWriter.h>
@@ -47,6 +48,31 @@ namespace {
     const auto path = cooked_root / std::filesystem::path(relpath);
     EnsureExternalFileExists(path);
     registry.RegisterExternalFile(cooked_root, kind, relpath);
+  }
+
+  auto AppendOutputRecord(std::vector<ImportOutputRecord>& outputs,
+    std::vector<ImportDiagnostic>& diagnostics,
+    const std::filesystem::path& cooked_root, std::string_view relpath,
+    std::string_view source_path) -> bool
+  {
+    std::error_code ec;
+    const auto full_path = cooked_root / std::filesystem::path(relpath);
+    const auto size = std::filesystem::file_size(full_path, ec);
+    if (ec) {
+      diagnostics.push_back({
+        .severity = ImportSeverity::kError,
+        .code = "import.output_missing",
+        .message = "Expected output missing: " + std::string(relpath),
+        .source_path = std::string(source_path),
+      });
+      return false;
+    }
+
+    outputs.push_back({
+      .path = std::string(relpath),
+      .size_bytes = size,
+    });
+    return true;
   }
 
 } // namespace
@@ -178,6 +204,73 @@ auto ImportSession::AssetEmitter() -> import::AssetEmitter&
   return **asset_emitter_;
 }
 
+auto ImportSession::AddIoDuration(std::chrono::microseconds duration) noexcept
+  -> void
+{
+  io_duration_ += duration;
+}
+
+auto ImportSession::AddSourceLoadDuration(
+  std::chrono::microseconds duration) noexcept -> void
+{
+  source_load_duration_ += duration;
+}
+
+auto ImportSession::AddDecodeDuration(
+  std::chrono::microseconds duration) noexcept -> void
+{
+  decode_duration_ += duration;
+}
+
+auto ImportSession::AddLoadDuration(std::chrono::microseconds duration) noexcept
+  -> void
+{
+  load_duration_ += duration;
+}
+
+auto ImportSession::AddCookDuration(std::chrono::microseconds duration) noexcept
+  -> void
+{
+  cook_duration_ += duration;
+}
+
+auto ImportSession::IoDuration() const noexcept -> std::chrono::microseconds
+{
+  return io_duration_;
+}
+
+auto ImportSession::SourceLoadDuration() const noexcept
+  -> std::chrono::microseconds
+{
+  return source_load_duration_;
+}
+
+auto ImportSession::DecodeDuration() const noexcept -> std::chrono::microseconds
+{
+  return decode_duration_;
+}
+
+auto ImportSession::LoadDuration() const noexcept -> std::chrono::microseconds
+{
+  return load_duration_;
+}
+
+auto ImportSession::CookDuration() const noexcept -> std::chrono::microseconds
+{
+  return cook_duration_;
+}
+
+auto ImportSession::AddEmitDuration(std::chrono::microseconds duration) noexcept
+  -> void
+{
+  emit_duration_ += duration;
+}
+
+auto ImportSession::EmitDuration() const noexcept -> std::chrono::microseconds
+{
+  return emit_duration_;
+}
+
 auto ImportSession::AddDiagnostic(ImportDiagnostic diagnostic) -> void
 {
   const bool is_error = (diagnostic.severity == ImportSeverity::kError);
@@ -290,7 +383,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
   }
 
   // Build the report
-  const bool had_errors = HasErrors();
+  bool had_errors = HasErrors();
   ImportReport report {
     .cooked_root = cooked_root_,
     .source_key = {},
@@ -306,6 +399,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
   // invalidating previously cooked content.
   try {
     using data::loose_cooked::v1::FileKind;
+    constexpr std::string_view kIndexFileName = "container.index.bin";
 
     const auto& layout = request_.loose_cooked_layout;
 
@@ -314,12 +408,21 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       "cooked_root='{}'",
       texture_count, buffer_count, asset_count, cooked_root_.string());
 
+    bool output_missing = false;
+
     if (texture_count > 0) {
       index_registry_->RegisterExternalFile(
         cooked_root_, FileKind::kTexturesData, layout.TexturesDataRelPath());
 
       RegisterExternalTable(*index_registry_, FileKind::kTexturesTable,
         cooked_root_, layout.TexturesTableRelPath());
+
+      output_missing
+        |= !AppendOutputRecord(report.outputs, report.diagnostics, cooked_root_,
+          layout.TexturesDataRelPath(), request_.source_path.string());
+      output_missing
+        |= !AppendOutputRecord(report.outputs, report.diagnostics, cooked_root_,
+          layout.TexturesTableRelPath(), request_.source_path.string());
     }
 
     if (buffer_count > 0) {
@@ -328,13 +431,26 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
 
       RegisterExternalTable(*index_registry_, FileKind::kBuffersTable,
         cooked_root_, layout.BuffersTableRelPath());
+
+      output_missing
+        |= !AppendOutputRecord(report.outputs, report.diagnostics, cooked_root_,
+          layout.BuffersDataRelPath(), request_.source_path.string());
+      output_missing
+        |= !AppendOutputRecord(report.outputs, report.diagnostics, cooked_root_,
+          layout.BuffersTableRelPath(), request_.source_path.string());
     }
 
     if (asset_emitter_.has_value()) {
-      for (const auto& rec : (*asset_emitter_)->Records()) {
+      const auto& records = (*asset_emitter_)->Records();
+      report.outputs.reserve(report.outputs.size() + records.size());
+      for (const auto& rec : records) {
         index_registry_->RegisterExternalAssetDescriptor(cooked_root_, rec.key,
           rec.asset_type, rec.virtual_path, rec.descriptor_relpath,
           rec.descriptor_size, rec.descriptor_sha256);
+        report.outputs.push_back({
+          .path = rec.descriptor_relpath,
+          .size_bytes = rec.descriptor_size,
+        });
       }
     }
 
@@ -344,6 +460,8 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
         write_result->assets.size(), write_result->files.size(),
         cooked_root_.string());
       report.source_key = write_result->source_key;
+      output_missing |= !AppendOutputRecord(report.outputs, report.diagnostics,
+        cooked_root_, kIndexFileName, request_.source_path.string());
     } else {
       DLOG_F(INFO,
         "Index write deferred (other sessions active) for cooked_root='{}'",
@@ -367,6 +485,18 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
         }
       }
     }
+
+    if (report.outputs.empty()) {
+      report.diagnostics.push_back({
+        .severity = ImportSeverity::kError,
+        .code = "import.outputs_missing",
+        .message = "Import produced no outputs",
+        .source_path = request_.source_path.string(),
+      });
+      output_missing = true;
+    }
+
+    had_errors = had_errors || output_missing;
 
     if (had_errors) {
       report.diagnostics.push_back({

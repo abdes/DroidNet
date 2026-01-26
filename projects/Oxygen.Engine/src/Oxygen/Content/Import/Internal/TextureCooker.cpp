@@ -547,7 +547,7 @@ namespace detail {
     // which are valid working formats.
     // Future: may need to expand channels or convert between formats
 
-    (void)desc; // Currently unused but may be needed for future conversions
+    (void)desc; // TODO: Currently unused but may be needed for future
 
     if (!image.IsValid()) {
       LOG_F(WARNING, "ConvertToWorkingFormat received invalid image for '{}'",

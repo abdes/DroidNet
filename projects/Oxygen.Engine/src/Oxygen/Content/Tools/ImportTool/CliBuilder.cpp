@@ -15,12 +15,16 @@
 #include <Oxygen/Content/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Content/Tools/ImportTool/ImportCommand.h>
 
+#ifndef OXYGEN_IMPORT_TOOL_VERSION
+#  error OXYGEN_IMPORT_TOOL_VERSION must be defined for ImportTool CLI version.
+#endif
+
 namespace oxygen::content::import::tool {
 
 namespace {
 
   constexpr std::string_view kProgramName = "Oxygen.Content.ImportTool";
-  constexpr std::string_view kVersion = "0.1";
+  constexpr std::string_view kVersion = OXYGEN_IMPORT_TOOL_VERSION;
 
   using oxygen::clap::Option;
   using oxygen::clap::Options;

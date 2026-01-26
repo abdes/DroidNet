@@ -55,8 +55,8 @@ public:
       std::string item_name) const -> void;
 
     auto ReportItemCollected(ImportPhase phase, float overall_progress,
-      std::string message, std::string item_kind, float queue_load) const
-      -> void;
+      std::string message, std::string item_kind, std::string item_name,
+      float input_queue_load, float output_queue_load) const -> void;
   };
 
   //! Context required to execute a plan.

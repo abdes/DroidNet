@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "thread_pool_size": 60,
+  "max_in_flight_jobs": 2,
+  "concurrency": {
+    "texture": {
+      "workers": 12,
+      "queue_capacity": 64
+    },
+    "buffer": {
+      "workers": 2,
+      "queue_capacity": 64
+    },
+    "material": {
+      "workers": 4,
+      "queue_capacity": 64
+    },
+    "mesh_build": {
+      "workers": 8,
+      "queue_capacity": 128
+    },
+    "geometry": {
+      "workers": 8,
+      "queue_capacity": 64
+    },
+    "scene": {
+      "workers": 1,
+      "queue_capacity": 8
+    }
+  },
+  "defaults": {
+    "texture": {
+      "output": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Cooked",
+      "content_hashing": false,
+      "mip_policy": "none",
+      "mip_filter": "box",
+      "mip_filter_space": "linear",
+      "bc7_quality": "none",
+      "hdr_handling": "keep",
+      "max_mips": 1,
+      "flip_y": false,
+      "force_rgba": false,
+      "flip_normal_green": false,
+      "renormalize": false,
+      "bake_hdr": false,
+      "cubemap": false,
+      "equirect_to_cube": false
+    },
+    "scene": {
+      "output": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Tools/ImportTool/Testing/Cooked",
+      "content_hashing": false,
+      "content_flags": {
+        "textures": true,
+        "materials": true,
+        "geometry": true,
+        "scene": true
+      },
+      "unit_policy": "preserve",
+      "bake_transforms": false,
+      "normals_policy": "none",
+      "tangents_policy": "none",
+      "node_pruning": "drop-empty"
+    }
+  },
+  "jobs": [
+    {
+      "type": "fbx",
+      "source": "F:/projects/main_sponza/NewSponza_Main_Zup_003.fbx",
+      "name": "sponza-scene-fbx",
+      "content_hashing": false,
+      "content_flags": {
+        "textures": true,
+        "materials": true,
+        "geometry": true,
+        "scene": true
+      },
+      "unit_policy": "preserve",
+      "bake_transforms": false,
+      "normals_policy": "none",
+      "tangents_policy": "none",
+      "node_pruning": "drop-empty"
+    }
+  ]
+}

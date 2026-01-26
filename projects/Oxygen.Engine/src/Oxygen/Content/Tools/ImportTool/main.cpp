@@ -557,6 +557,20 @@ auto CreateMessageWriter(const GlobalOptions& global_options)
   }
   return std::make_unique<MutedMessageWriter>();
 }
+
+auto BuildCommandLineString(const int argc, char** argv) -> std::string
+{
+  std::string line;
+  for (int index = 0; index < argc; ++index) {
+    if (index > 0) {
+      line.append(" ");
+    }
+    if (argv[index] != nullptr) {
+      line.append(argv[index]);
+    }
+  }
+  return line;
+}
 } // namespace
 
 auto main(int argc, char** argv) -> int
@@ -584,6 +598,7 @@ auto main(int argc, char** argv) -> int
     using oxygen::content::import::tool::TextureCommand;
 
     GlobalOptions global_options;
+    global_options.command_line = BuildCommandLineString(argc, argv);
     BatchCommand batch_command(&global_options);
     FbxCommand fbx_command(&global_options);
     GltfCommand gltf_command(&global_options);
@@ -648,6 +663,11 @@ auto main(int argc, char** argv) -> int
 
       if (options_valid) {
         RunSelectedCommand(*active_command, exit_code);
+      }
+
+      if (service_owner != nullptr) {
+        service_owner->RequestShutdown();
+        service_owner->Stop();
       }
     }
   } catch (const std::exception& ex) {

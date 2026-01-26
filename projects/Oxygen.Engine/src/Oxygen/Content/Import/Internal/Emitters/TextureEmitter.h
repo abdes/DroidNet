@@ -139,7 +139,9 @@ public:
    texture data. The index is valid the moment this method returns.
 
    @param cooked The cooked texture payload containing descriptor and data.
-      @return Table index for this texture. Index
+   @param signature_salt Salt appended to the dedupe signature when
+     `content_hash` is zero.
+   @return Table index for this texture. Index
         `data::pak::kFallbackResourceIndex` is reserved for the fallback
         texture; user-emitted textures start at
         `data::pak::kFallbackResourceIndex + 1`.
@@ -160,7 +162,8 @@ public:
 
    @note The returned index is stable even if the I/O fails later.
   */
-  OXGN_CNTT_NDAPI auto Emit(CookedTexturePayload cooked) -> uint32_t;
+  OXGN_CNTT_NDAPI auto Emit(
+    CookedTexturePayload cooked, std::string_view signature_salt) -> uint32_t;
 
   //=== State Query
   //===-------------------------------------------------------//

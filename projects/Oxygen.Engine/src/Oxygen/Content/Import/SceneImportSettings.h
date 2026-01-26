@@ -35,6 +35,7 @@ struct SceneImportSettings {
   std::string normals_policy;
   std::string tangents_policy;
   std::string node_pruning;
+  std::string naming_policy;
 
   //! Default tuning for all textures in the scene.
   TextureImportSettings texture_defaults;

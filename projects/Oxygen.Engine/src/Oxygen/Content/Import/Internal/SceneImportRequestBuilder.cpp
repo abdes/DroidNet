@@ -11,6 +11,7 @@
 #include <Oxygen/Content/Import/ImportOptions.h>
 #include <Oxygen/Content/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Content/Import/Internal/Utils/ImportSettingsUtils.h>
+#include <Oxygen/Content/Import/Naming.h>
 
 namespace oxygen::content::import::internal {
 
@@ -144,6 +145,18 @@ auto BuildSceneRequest(const SceneImportSettings& settings,
   options.import_content = BuildContentFlags(settings);
   options.coordinate.bake_transforms_into_meshes = settings.bake_transforms;
   options.with_content_hashing = settings.with_content_hashing;
+
+  if (!settings.naming_policy.empty()) {
+    if (settings.naming_policy == "normalize") {
+      options.naming_strategy = std::make_shared<NormalizeNamingStrategy>();
+    } else if (settings.naming_policy == "none"
+      || settings.naming_policy == "preserve") {
+      options.naming_strategy = std::make_shared<NoOpNamingStrategy>();
+    } else {
+      error_stream << "ERROR: invalid naming_policy value\n";
+      return std::nullopt;
+    }
+  }
 
   if (!settings.unit_policy.empty()) {
     const auto parsed = ParseUnitPolicy(settings.unit_policy);

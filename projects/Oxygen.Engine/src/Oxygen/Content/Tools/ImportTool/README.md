@@ -309,7 +309,10 @@ Oxygen.Content.ImportTool texture albedo.png -o ./Cooked \
 | `--report` | path | no | none | Batch report output path |
 | `--quiet` / `-q` | flag | no | false | Suppress non‑error output |
 
-**REQ‑BATCH‑005**: If `--report` is a relative path, it SHALL be resolved relative to the first job's cooked root.
+**REQ‑BATCH‑005**: If `--report` is a relative path, it SHALL be resolved
+relative to the cooked root (first completed job report, otherwise the first
+job's cooked root). Relative report paths require a cooked root; otherwise
+the command SHALL fail with an error.
 
 #### 4.3.3 TUI Control
 
@@ -773,6 +776,23 @@ otherwise default to `std::thread::hardware_concurrency()`.
 ---
 
 ## 7. Result Reporting Specification
+
+### 7.0 Current Implementation Notes (Report v2)
+
+- Reports are emitted only when `--report` is provided.
+- Relative `--report` paths are resolved against the cooked root, then
+  normalized.
+- The report uses `report_version: "2"` with `session`, `summary`, and `jobs`.
+- `jobs[*].status` values are `succeeded`, `failed`, `skipped`, and
+  `not_submitted` (for jobs not submitted due to cancellation).
+- `stats` is always present with `time_ms_total`, `time_ms_io`,
+  `time_ms_decode`, `time_ms_load`, `time_ms_cook`, `time_ms_emit`, and
+  `time_ms_finalize` (no nulls).
+- `outputs` records are container‑relative and include emitted asset
+  descriptors plus resource tables/data and `container.index.bin` when written.
+- Missing outputs are treated as failures and emit diagnostics.
+- Diagnostics are reported as emitted by importers (no extra synthesis beyond
+  cancellation and missing output diagnostics).
 
 **REQ‑REPORT‑000**: Report semantics and field naming SHALL align with `ImportReport.h` and with asset/resource metadata types in `Oxygen::Data` (see `GeometryAsset.h`, `MaterialAsset.h`, `SceneAsset.h`, `TextureResource.h`, `BufferResource.h`).
 

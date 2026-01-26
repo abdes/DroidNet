@@ -97,7 +97,8 @@ struct ProgressHeader {
 struct ItemProgress {
   std::string item_kind;
   std::string item_name;
-  float queue_load = -1.0f;
+  float input_queue_load = -1.0f;
+  float output_queue_load = -1.0f;
 };
 
 //! Variant payload for progress events.
@@ -162,7 +163,8 @@ struct ProgressEvent {
   event.payload = ItemProgress {
     .item_kind = std::move(item_kind),
     .item_name = std::move(item_name),
-    .queue_load = -1.0f,
+    .input_queue_load = -1.0f,
+    .output_queue_load = -1.0f,
   };
   return event;
 }
@@ -170,7 +172,8 @@ struct ProgressEvent {
 //! Create an item collected event.
 [[nodiscard]] inline auto MakeItemCollected(ImportJobId job_id,
   ImportPhase phase, float overall_progress, std::string item_kind,
-  float queue_load, std::string message = {}) -> ProgressEvent
+  std::string item_name, float input_queue_load, float output_queue_load,
+  std::string message = {}) -> ProgressEvent
 {
   ProgressEvent event {};
   event.header = ProgressHeader {
@@ -182,8 +185,9 @@ struct ProgressEvent {
   };
   event.payload = ItemProgress {
     .item_kind = std::move(item_kind),
-    .item_name = {},
-    .queue_load = queue_load,
+    .item_name = std::move(item_name),
+    .input_queue_load = input_queue_load,
+    .output_queue_load = output_queue_load,
   };
   return event;
 }
