@@ -7,6 +7,28 @@ hierarchy, and renders it using the standard single-view example pipeline.
 
 The ImGui overlay is intentionally focused on PAK mounting and scene loading.
 
+## Content Source Behavior (PAK vs Loose Cooked)
+
+The demo supports loading scenes from multiple cooked sources (PAK files and
+loose cooked roots). The underlying content loader can mount multiple sources
+at once, and the same `SceneAsset` key may exist in more than one source (for
+example, a PAK and a loose cooked root built from the same content).
+
+**Demo behavior:** when you select a scene from a source list, the demo
+re-mounts that specific source immediately before the load request. This keeps
+asset resolution deterministic and avoids ambiguous keys when the same asset
+exists in multiple mounts.
+
+In practice, this means:
+
+- Picking a scene from the PAK list re-mounts the selected PAK.
+- Picking a scene from the loose cooked list re-mounts the selected cooked
+  root (via its `container.index.bin`).
+
+This is intentional to ensure the `AssetLoader` resolves the requested key
+against the source the user selected, even if other sources are currently
+mounted.
+
 ## GLB to PakGen YAML
 
 The helper script [Examples/RenderScene/glb_to_pak_spec.py](Examples/RenderScene/glb_to_pak_spec.py)
