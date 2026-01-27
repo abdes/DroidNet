@@ -52,6 +52,18 @@ auto RenderGraph::SetupRenderPasses() -> void
     shader_pass_ = std::make_shared<engine::ShaderPass>(shader_pass_config_);
   }
 
+  // Wireframe pass (dedicated, unlit)
+  if (!wireframe_pass_config_) {
+    wireframe_pass_config_ = std::make_shared<engine::WireframePassConfig>();
+    wireframe_pass_config_->clear_color
+      = graphics::Color { 0.04F, 0.04F, 0.04F, 1.0F };
+    wireframe_pass_config_->debug_name = "WireframePass";
+  }
+  if (!wireframe_pass_) {
+    wireframe_pass_
+      = std::make_shared<engine::WireframePass>(wireframe_pass_config_);
+  }
+
   // Wireframe-only pass stack for PiP rendering
   if (!wireframe_depth_pass_config_) {
     wireframe_depth_pass_config_
@@ -141,6 +153,10 @@ auto RenderGraph::ClearBackbufferReferences() -> void
     shader_pass_config_->color_texture.reset();
   }
 
+  if (wireframe_pass_config_) {
+    wireframe_pass_config_->color_texture.reset();
+  }
+
   // Depth pass configs may hold depth textures pointing to the swapchain
   // backbuffer; clear those as well to avoid stale references after a
   // resize/ recreate sequence.
@@ -173,6 +189,13 @@ auto RenderGraph::PrepareForRenderFrame(
       shader_pass_config_->color_texture = desc.color_attachments[0].texture;
     else
       shader_pass_config_->color_texture.reset();
+  }
+
+  if (wireframe_pass_config_) {
+    if (!desc.color_attachments.empty())
+      wireframe_pass_config_->color_texture = desc.color_attachments[0].texture;
+    else
+      wireframe_pass_config_->color_texture.reset();
   }
 
   if (transparent_pass_config_) {
@@ -217,11 +240,24 @@ auto RenderGraph::PrepareForWireframeRenderFrame(
       wireframe_shader_pass_config_->color_texture.reset();
     }
   }
+
+  if (wireframe_pass_config_) {
+    if (!desc.color_attachments.empty()) {
+      wireframe_pass_config_->color_texture = desc.color_attachments[0].texture;
+    } else {
+      wireframe_pass_config_->color_texture.reset();
+    }
+  }
 }
 
 auto RenderGraph::RunPasses(const oxygen::engine::RenderContext& ctx,
   oxygen::graphics::CommandRecorder& recorder) -> co::Co<>
 {
+  if (wireframe_enabled_) {
+    co_await RunWireframePasses(ctx, recorder);
+    co_return;
+  }
+
   // Sky Atmosphere LUT Compute Pass (runs early, only when LUTs need
   // regeneration)
   if (sky_atmo_lut_pass_) {
@@ -273,14 +309,15 @@ auto RenderGraph::RunPasses(const oxygen::engine::RenderContext& ctx,
 auto RenderGraph::RunWireframePasses(const oxygen::engine::RenderContext& ctx,
   oxygen::graphics::CommandRecorder& recorder) -> co::Co<>
 {
-  if (wireframe_depth_pass_) {
-    co_await wireframe_depth_pass_->PrepareResources(ctx, recorder);
-    co_await wireframe_depth_pass_->Execute(ctx, recorder);
+  if (depth_pass_) {
+    co_await depth_pass_->PrepareResources(ctx, recorder);
+    co_await depth_pass_->Execute(ctx, recorder);
+    ctx.RegisterPass<engine::DepthPrePass>(depth_pass_.get());
   }
 
-  if (wireframe_shader_pass_) {
-    co_await wireframe_shader_pass_->PrepareResources(ctx, recorder);
-    co_await wireframe_shader_pass_->Execute(ctx, recorder);
+  if (wireframe_pass_) {
+    co_await wireframe_pass_->PrepareResources(ctx, recorder);
+    co_await wireframe_pass_->Execute(ctx, recorder);
   }
 
   co_return;

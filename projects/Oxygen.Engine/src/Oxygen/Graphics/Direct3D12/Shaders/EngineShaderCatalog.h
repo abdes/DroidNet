@@ -57,6 +57,12 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     std::array { EntryPoint { kPixel, "PS" } },
     std::array<std::string_view, 1> { "ALPHA_TEST" }
   },
+  // Wireframe pass pixel shader: ALPHA_TEST permutation
+  ShaderFileSpec {
+    "Passes/Forward/ForwardWireframe_PS.hlsl",
+    std::array { EntryPoint { kPixel, "PS" } },
+    std::array<std::string_view, 1> { "ALPHA_TEST" }
+  },
   // Forward pass pixel shader: DEBUG_LIGHT_HEATMAP with ALPHA_TEST permutation
   ShaderFileSpec {
     "Passes/Forward/ForwardMesh_PS.hlsl",
@@ -167,6 +173,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // Compile-time verification:
 // - ForwardMesh_VS: 1 entry
 // - ForwardMesh_PS base: 2 (with/without ALPHA_TEST)
+// - ForwardWireframe_PS base: 2 (with/without ALPHA_TEST)
 // - ForwardMesh_PS DEBUG_*: 4 each (debug define x ALPHA_TEST)
 // - DepthPrePass: 4 (2 entries x 2 permutations)
 // - LightCulling: 2 (1 entry x 2 permutations)
@@ -178,6 +185,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - IblFiltering: 2 entries
 // - ImGui: 2 entries
 // Total: 55
-static_assert(kEngineShaders.size() == 55, "Expected 55 shader entries");
+static_assert(kEngineShaders.size() == 57, "Expected 57 shader entries");
 
 } // namespace oxygen::graphics::d3d12
