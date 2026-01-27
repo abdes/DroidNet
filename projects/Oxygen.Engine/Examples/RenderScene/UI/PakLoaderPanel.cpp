@@ -169,6 +169,11 @@ void PakLoaderPanel::Draw()
     if (ImGui::BeginListBox("##PakScenes", ImVec2(-1.0f, available_height))) {
       for (const auto& scene_item : scenes_) {
         if (ImGui::Selectable(scene_item.virtual_path.c_str(), false)) {
+          // Re-mount the selected PAK before loading to avoid ambiguous asset
+          // resolution when the same AssetKey exists in multiple sources.
+          if (config_.on_pak_mounted && HasLoadedPak()) {
+            config_.on_pak_mounted(loaded_pak_path_);
+          }
           if (config_.on_scene_selected) {
             config_.on_scene_selected(scene_item.key);
           }

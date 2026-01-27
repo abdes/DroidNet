@@ -160,6 +160,11 @@ void LooseCookedLoaderPanel::Draw()
           "##LooseCookedScenes", ImVec2(-1.0f, available_height))) {
       for (const auto& scene_item : scenes_) {
         if (ImGui::Selectable(scene_item.virtual_path.c_str(), false)) {
+          // Re-mount the selected cooked root before loading to avoid
+          // ambiguous asset resolution across multiple sources.
+          if (config_.on_index_loaded && HasLoadedIndex()) {
+            config_.on_index_loaded(loaded_index_path_);
+          }
           if (config_.on_scene_selected) {
             config_.on_scene_selected(scene_item.key);
           }
