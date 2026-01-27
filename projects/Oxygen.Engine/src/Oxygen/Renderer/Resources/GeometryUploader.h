@@ -12,7 +12,6 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Renderer/RendererTag.h>
@@ -36,6 +35,10 @@ struct UploadTicket;
 namespace oxygen::data {
 class Mesh;
 } // namespace oxygen::data
+
+namespace oxygen::content {
+class IAssetLoader;
+} // namespace oxygen::content
 
 namespace oxygen::renderer::resources {
 

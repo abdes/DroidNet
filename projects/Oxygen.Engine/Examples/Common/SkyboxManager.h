@@ -6,31 +6,51 @@
 
 #pragma once
 
+#include <cstdint>
+#include <functional>
+#include <memory>
 #include <string>
+#include <vector>
 
 #include <glm/glm.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
-#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Scene/Scene.h>
 
-namespace oxygen::examples::render_scene {
+namespace oxygen::content {
+class IAssetLoader;
+} // namespace oxygen::content
+
+namespace oxygen::examples::common {
 
 //! Manages skybox loading and scene environment configuration.
-/*!\
- This helper supports loading a skybox image from disk (HDR/EXR or LDR), cooking
- it into a cubemap `TextureResource` payload, and publishing it through the
- engine `AssetLoader` using a synthetic `ResourceKey`.
+/*!
+ This class handles:
+ - Loading skybox images from various layouts (equirectangular, cross, strip)
+ - Converting to cubemap format
+ - Configuring scene environment with sky sphere and sky lighting
 
- Once loaded, the cubemap can be applied to the scene environment via
- `SkySphere` (background) and `SkyLight` (IBL).
+ ### Supported Layouts
 
- This exists in the RenderScene example because cooked scene assets currently
- store environment cubemap references as `AssetKey` values, while runtime
- environment systems consume `content::ResourceKey`. Loading from disk provides
- a reliable path for exercising the IBL pipeline in the example.
+ - Equirectangular (2:1 panorama)
+ - Horizontal Cross (4x3)
+ - Vertical Cross (3x4)
+ - Horizontal Strip (6x1)
+ - Vertical Strip (1x6)
+
+ ### Usage
+
+ ```cpp
+ SkyboxManager manager(asset_loader, scene);
+ SkyboxManager::SkyLightParams params {};
+ manager.StartLoadSkybox(path, options,
+   [&](SkyboxManager::LoadResult result) {
+     if (result.success) {
+       manager.ApplyToScene(params);
+     }
+   });
+ ```
 */
 class SkyboxManager final {
 public:
@@ -60,15 +80,15 @@ public:
 
     // HDR handling: required when cooking HDR sources to LDR formats.
     bool tonemap_hdr_to_ldr { false };
-    float hdr_exposure_ev { 0.0F };
+    float hdr_exposure_ev { 0.0f };
   };
 
-  //! Sky light parameters used when applying the skybox.
+  //! Sky lighting parameters.
   struct SkyLightParams {
-    float intensity { 1.0F };
-    float diffuse_intensity { 1.0F };
-    float specular_intensity { 1.0F };
-    glm::vec3 tint_rgb { 1.0F, 1.0F, 1.0F };
+    float intensity { 1.0f };
+    float diffuse_intensity { 1.0f };
+    float specular_intensity { 1.0f };
+    glm::vec3 tint_rgb { 1.0f, 1.0f, 1.0f };
   };
 
   //! Result of a skybox load operation.
@@ -77,9 +97,15 @@ public:
     oxygen::content::ResourceKey resource_key { 0U };
     std::string status_message {};
     int face_size { 0 };
+    //! Estimated sun direction (if detectable from the skybox).
+    glm::vec3 estimated_sun_dir { 0.35f, -0.45f, -1.0f };
+    bool sun_dir_valid { false };
   };
 
-  SkyboxManager(oxygen::observer_ptr<oxygen::content::AssetLoader> asset_loader,
+  using LoadCallback = std::function<void(LoadResult)>;
+
+  SkyboxManager(
+    oxygen::observer_ptr<oxygen::content::IAssetLoader> asset_loader,
     std::shared_ptr<scene::Scene> scene);
 
   ~SkyboxManager() = default;
@@ -89,9 +115,12 @@ public:
   SkyboxManager(SkyboxManager&&) = delete;
   auto operator=(SkyboxManager&&) -> SkyboxManager& = delete;
 
-  //! Load a skybox from file asynchronously.
-  auto LoadSkyboxAsync(const std::string& file_path, const LoadOptions& options)
-    -> co::Co<LoadResult>;
+  //! Begin loading a skybox and invoke `on_complete` when finished.
+  auto StartLoadSkybox(const std::string& file_path, const LoadOptions& options,
+    LoadCallback on_complete) -> void;
+
+  //! Set the skybox resource key directly (e.g., from cooked content).
+  auto SetSkyboxResourceKey(oxygen::content::ResourceKey key) -> void;
 
   //! Apply loaded skybox to the scene environment.
   auto ApplyToScene(const SkyLightParams& params) -> void;
@@ -107,9 +136,14 @@ public:
   }
 
 private:
-  oxygen::observer_ptr<oxygen::content::AssetLoader> asset_loader_;
+  oxygen::observer_ptr<oxygen::content::IAssetLoader> asset_loader_;
   std::shared_ptr<scene::Scene> scene_;
   oxygen::content::ResourceKey current_resource_key_ { 0U };
+
+  //! Cached RGBA8 pixel data for sun direction estimation.
+  std::vector<std::byte> cached_rgba8_;
+  std::uint32_t cached_width_ { 0U };
+  std::uint32_t cached_height_ { 0U };
 };
 
-} // namespace oxygen::examples::render_scene
+} // namespace oxygen::examples::common

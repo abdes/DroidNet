@@ -90,7 +90,7 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
     if (asset_loader) {
       texture_service_ = std::make_unique<TextureLoadingService>(
         observer_ptr { asset_loader.get() });
-      skybox_manager_ = std::make_unique<SkyboxManager>(
+      skybox_manager_ = std::make_unique<common::SkyboxManager>(
         observer_ptr { asset_loader.get() }, scene_);
     }
 
@@ -382,49 +382,56 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
 
     DebugUI::BrowserAction action {};
     if (debug_ui_->ConsumeBrowserAction(action)) {
-      auto result
-        = co_await texture_service_->LoadCookedTextureAsync(action.entry_index);
+      debug_ui_->SetImportStatus("Loading cooked texture...", true, 0.0f);
 
-      if (!result.success) {
-        debug_ui_->SetImportStatus(result.status_message, false, 0.0f);
-      } else {
-        switch (action.type) {
-        case DebugUI::BrowserAction::Type::kSetSphere:
-          sphere_texture_.mode = SceneSetup::TextureIndexMode::kCustom;
-          sphere_texture_.resource_index = action.entry_index;
-          sphere_texture_.resource_key = result.resource_key;
-          debug_ui_->GetSphereTextureState().mode
-            = SceneSetup::TextureIndexMode::kCustom;
-          debug_ui_->GetSphereTextureState().resource_index
-            = action.entry_index;
-          cube_needs_rebuild_ = true;
-          break;
-        case DebugUI::BrowserAction::Type::kSetCube:
-          cube_texture_.mode = SceneSetup::TextureIndexMode::kCustom;
-          cube_texture_.resource_index = action.entry_index;
-          cube_texture_.resource_key = result.resource_key;
-          debug_ui_->GetCubeTextureState().mode
-            = SceneSetup::TextureIndexMode::kCustom;
-          debug_ui_->GetCubeTextureState().resource_index = action.entry_index;
-          cube_needs_rebuild_ = true;
-          break;
-        case DebugUI::BrowserAction::Type::kSetSkybox:
-          if (skybox_manager_
-            && result.texture_type == oxygen::TextureType::kTextureCube) {
-            skybox_manager_->SetSkyboxResourceKey(result.resource_key);
-            auto& lighting = debug_ui_->GetLightingState();
-            skybox_manager_->ApplyToScene(SkyboxManager::SkyLightParams {
-              .intensity = lighting.sky_light_intensity,
-              .diffuse_intensity = lighting.sky_light_diffuse,
-              .specular_intensity = lighting.sky_light_specular,
-            });
+      texture_service_->StartLoadCookedTexture(action.entry_index,
+        [this, action](TextureLoadingService::LoadResult result) {
+          if (!result.success) {
+            debug_ui_->SetImportStatus(result.status_message, false, 0.0f);
+            return;
           }
-          break;
-        case DebugUI::BrowserAction::Type::kNone:
-        default:
-          break;
-        }
-      }
+
+          debug_ui_->SetImportStatus(result.status_message, false, 1.0f);
+
+          switch (action.type) {
+          case DebugUI::BrowserAction::Type::kSetSphere:
+            sphere_texture_.mode = SceneSetup::TextureIndexMode::kCustom;
+            sphere_texture_.resource_index = action.entry_index;
+            sphere_texture_.resource_key = result.resource_key;
+            debug_ui_->GetSphereTextureState().mode
+              = SceneSetup::TextureIndexMode::kCustom;
+            debug_ui_->GetSphereTextureState().resource_index
+              = action.entry_index;
+            cube_needs_rebuild_ = true;
+            break;
+          case DebugUI::BrowserAction::Type::kSetCube:
+            cube_texture_.mode = SceneSetup::TextureIndexMode::kCustom;
+            cube_texture_.resource_index = action.entry_index;
+            cube_texture_.resource_key = result.resource_key;
+            debug_ui_->GetCubeTextureState().mode
+              = SceneSetup::TextureIndexMode::kCustom;
+            debug_ui_->GetCubeTextureState().resource_index
+              = action.entry_index;
+            cube_needs_rebuild_ = true;
+            break;
+          case DebugUI::BrowserAction::Type::kSetSkybox:
+            if (skybox_manager_
+              && result.texture_type == oxygen::TextureType::kTextureCube) {
+              skybox_manager_->SetSkyboxResourceKey(result.resource_key);
+              auto& lighting = debug_ui_->GetLightingState();
+              skybox_manager_->ApplyToScene(
+                common::SkyboxManager::SkyLightParams {
+                  .intensity = lighting.sky_light_intensity,
+                  .diffuse_intensity = lighting.sky_light_diffuse,
+                  .specular_intensity = lighting.sky_light_specular,
+                });
+            }
+            break;
+          case DebugUI::BrowserAction::Type::kNone:
+          default:
+            break;
+          }
+        });
     }
   }
 

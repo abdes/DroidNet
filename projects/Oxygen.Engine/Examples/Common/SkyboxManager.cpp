@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "SkyboxManager.h"
-
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -13,6 +11,7 @@
 #include <string>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/Import/TextureImporter.h>
 #include <Oxygen/Content/Import/TexturePackingPolicy.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -21,30 +20,38 @@
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 
-namespace oxygen::examples::textured_cube {
+#include "SkyboxManager.h"
+
+namespace oxygen::examples::common {
 
 SkyboxManager::SkyboxManager(
-  oxygen::observer_ptr<oxygen::content::AssetLoader> asset_loader,
+  oxygen::observer_ptr<oxygen::content::IAssetLoader> asset_loader,
   std::shared_ptr<scene::Scene> scene)
   : asset_loader_(asset_loader)
   , scene_(std::move(scene))
 {
 }
 
-auto SkyboxManager::LoadSkyboxAsync(const std::string& file_path,
-  const LoadOptions& options) -> co::Co<LoadResult>
+auto SkyboxManager::StartLoadSkybox(const std::string& file_path,
+  const LoadOptions& options, LoadCallback on_complete) -> void
 {
   LoadResult result;
 
   const std::filesystem::path img_path { file_path };
   if (img_path.empty()) {
     result.status_message = "No skybox path provided";
-    co_return result;
+    if (on_complete) {
+      on_complete(std::move(result));
+    }
+    return;
   }
 
   if (!asset_loader_) {
     result.status_message = "AssetLoader unavailable";
-    co_return result;
+    if (on_complete) {
+      on_complete(std::move(result));
+    }
+    return;
   }
 
   using namespace oxygen::content::import;
@@ -116,7 +123,10 @@ auto SkyboxManager::LoadSkyboxAsync(const std::string& file_path,
 
     if (!equirect_result.has_value()) {
       result.status_message = to_string(equirect_result.error());
-      co_return result;
+      if (on_complete) {
+        on_complete(std::move(result));
+      }
+      return;
     }
     cooked_result = std::move(*equirect_result);
   } else {
@@ -149,14 +159,20 @@ auto SkyboxManager::LoadSkyboxAsync(const std::string& file_path,
 
     if (!layout_result.has_value()) {
       result.status_message = to_string(layout_result.error());
-      co_return result;
+      if (on_complete) {
+        on_complete(std::move(result));
+      }
+      return;
     }
     cooked_result = std::move(*layout_result);
   }
 
   if (!cooked_result.has_value()) {
     result.status_message = "Failed to cook cubemap";
-    co_return result;
+    if (on_complete) {
+      on_complete(std::move(result));
+    }
+    return;
   }
 
   // Access the cooked payload
@@ -180,35 +196,43 @@ auto SkyboxManager::LoadSkyboxAsync(const std::string& file_path,
   pak_desc.alignment = 256U;
 
   // Mint a fresh key
-  current_resource_key_ = asset_loader_->MintSyntheticTextureKey();
-  result.resource_key = current_resource_key_;
+  const auto resource_key = asset_loader_->MintSyntheticTextureKey();
 
-  std::vector<std::uint8_t> packed;
-  packed.resize(sizeof(TextureResourceDesc) + payload.payload.size());
-  std::memcpy(packed.data(), &pak_desc, sizeof(TextureResourceDesc));
-  std::memcpy(packed.data() + sizeof(TextureResourceDesc),
+  auto packed = std::make_shared<std::vector<std::uint8_t>>();
+  packed->resize(sizeof(TextureResourceDesc) + payload.payload.size());
+  std::memcpy(packed->data(), &pak_desc, sizeof(TextureResourceDesc));
+  std::memcpy(packed->data() + sizeof(TextureResourceDesc),
     payload.payload.data(), payload.payload.size());
 
-  auto tex
-    = co_await asset_loader_->LoadResourceAsync<oxygen::data::TextureResource>(
-      oxygen::content::CookedResourceData<oxygen::data::TextureResource> {
-        .key = current_resource_key_,
-        .bytes = std::span<const std::uint8_t>(packed.data(), packed.size()),
-      });
+  asset_loader_->StartLoadTexture(
+    oxygen::content::CookedResourceData<oxygen::data::TextureResource> {
+      .key = resource_key,
+      .bytes = std::span<const std::uint8_t>(packed->data(), packed->size()),
+    },
+    [this, on_complete = std::move(on_complete), packed, format_name,
+      should_tonemap_hdr_to_ldr, tonemap_forced,
+      face_size = static_cast<int>(payload.desc.width),
+      mip_levels = payload.desc.mip_levels, resource_key](
+      std::shared_ptr<oxygen::data::TextureResource> tex) mutable {
+      LoadResult callback_result;
+      callback_result.resource_key = resource_key;
+      callback_result.face_size = face_size;
 
-  if (!tex) {
-    result.status_message = "Skybox texture upload failed";
-    co_return result;
-  }
+      if (!tex) {
+        callback_result.status_message = "Skybox texture upload failed";
+      } else {
+        current_resource_key_ = resource_key;
+        callback_result.success = true;
+        callback_result.status_message = std::string("Loaded (") + format_name
+          + (should_tonemap_hdr_to_ldr ? ", HDR->LDR" : "")
+          + (tonemap_forced ? " [auto]" : "")
+          + ", mips=" + std::to_string(mip_levels) + ")";
+      }
 
-  result.success = true;
-  result.face_size = static_cast<int>(payload.desc.width);
-  result.status_message = std::string("Loaded (") + format_name
-    + (should_tonemap_hdr_to_ldr ? ", HDR->LDR" : "")
-    + (tonemap_forced ? " [auto]" : "")
-    + ", mips=" + std::to_string(payload.desc.mip_levels) + ")";
-
-  co_return result;
+      if (on_complete) {
+        on_complete(std::move(callback_result));
+      }
+    });
 }
 
 auto SkyboxManager::SetSkyboxResourceKey(oxygen::content::ResourceKey key)
@@ -287,4 +311,4 @@ auto SkyboxManager::UpdateSkyLightParams(const SkyLightParams& params) -> void
   }
 }
 
-} // namespace oxygen::examples::textured_cube
+} // namespace oxygen::examples::common

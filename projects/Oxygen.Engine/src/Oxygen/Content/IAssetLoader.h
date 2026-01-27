@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <span>
@@ -20,6 +21,7 @@
 #include <Oxygen/data/AssetKey.h>
 #include <Oxygen/data/GeometryAsset.h>
 #include <Oxygen/data/MaterialAsset.h>
+#include <Oxygen/data/SceneAsset.h>
 
 namespace oxygen::content {
 
@@ -62,6 +64,7 @@ public:
     = std::function<void(std::shared_ptr<data::MaterialAsset>)>;
   using GeometryCallback
     = std::function<void(std::shared_ptr<data::GeometryAsset>)>;
+  using SceneCallback = std::function<void(std::shared_ptr<data::SceneAsset>)>;
   using EvictionHandler = std::function<void(const EvictionEvent&)>;
 
   //! RAII handle for resource eviction subscriptions.
@@ -151,6 +154,21 @@ public:
   virtual void StartLoadGeometryAsset(
     const data::AssetKey& key, GeometryCallback on_complete)
     = 0;
+
+  //! Begin loading a scene asset and invoke `on_complete` on completion.
+  virtual void StartLoadScene(
+    const data::AssetKey& key, SceneCallback on_complete)
+    = 0;
+
+  //! Mount a pak file for asset loading.
+  virtual auto AddPakFile(const std::filesystem::path& path) -> void = 0;
+
+  //! Mount a loose cooked content root for asset loading.
+  virtual auto AddLooseCookedRoot(const std::filesystem::path& path) -> void
+    = 0;
+
+  //! Clear all mounted roots and pak files.
+  virtual auto ClearMounts() -> void = 0;
 
   //! Get cached resource without triggering a load.
   [[nodiscard]] virtual auto GetTexture(ResourceKey key) const noexcept

@@ -19,6 +19,7 @@
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/Bindless/Generated.Constants.h>
 #include <Oxygen/Core/Types/Epoch.h>
 #include <Oxygen/Data/GeometryAsset.h>
