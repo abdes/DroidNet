@@ -4,12 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <imgui.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
+#include <Oxygen/ImGui/Styles/Spectrum.h>
 #include <Oxygen/Platform/ImGui/ImGuiSdl3Backend.h>
 #include <Oxygen/Platform/Platform.h>
-#include <imgui.h>
 
 namespace oxygen::imgui {
 
@@ -45,6 +47,12 @@ auto ImGuiModule::OnAttached(const observer_ptr<AsyncEngine> engine) noexcept
   } catch (const std::exception& e) {
     LOG_F(ERROR, "ImGuiModule: failed to create ImGuiPass: {}", e.what());
     return false;
+  }
+
+  if (auto* ctx = graphics_backend_->GetImGuiContext()) {
+    ImGui::SetCurrentContext(ctx);
+    spectrum::StyleColorsSpectrum();
+    spectrum::LoadFont();
   }
 
   return true;
