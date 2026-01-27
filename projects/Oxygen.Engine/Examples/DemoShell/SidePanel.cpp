@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <string>
 
 #include <imgui.h>
 
@@ -49,15 +50,14 @@ auto SidePanel::Draw(float toolbar_height) -> void
   constexpr auto kFlags = ImGuiWindowFlags_NoMove
     | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse;
 
-  if (!ImGui::Begin("SidePanel", nullptr, kFlags)) {
+  const std::string panel_title { active_panel->GetName() };
+  if (!ImGui::Begin(panel_title.c_str(), nullptr, kFlags)) {
     ImGui::End();
     return;
   }
 
   width_ = ImGui::GetWindowSize().x;
 
-  ImGui::TextUnformatted(active_panel->GetName().data());
-  ImGui::Separator();
   active_panel->DrawContents();
 
   ImGui::End();
