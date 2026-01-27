@@ -1738,7 +1738,7 @@ auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
     }
 
     item.inputs.alpha_cutoff = static_cast<float>(material.alpha_cutoff);
-    item.inputs.double_sided = true;
+    item.inputs.double_sided = material.double_sided != 0;
     item.inputs.unlit = material.unlit != 0;
 
     if (material.has_pbr_metallic_roughness) {
