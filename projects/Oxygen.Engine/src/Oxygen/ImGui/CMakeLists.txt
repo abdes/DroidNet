@@ -57,6 +57,9 @@ set(
   OXYGEN_IMGUI_PRIVATE_SOURCES
   "ImGuiPass.cpp"
   "ImGuiModule.cpp"
+  "Styles/Spectrum.cpp"
+  "Styles/Spectrum.h"
+  "Styles/SourceSansProRegular.cpp"
 )
 
 target_sources(
@@ -76,6 +79,7 @@ target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE
+    OXYGEN_IMGUI_USE_DARK_THEME
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_IMGUI_STATIC>
 )
 
