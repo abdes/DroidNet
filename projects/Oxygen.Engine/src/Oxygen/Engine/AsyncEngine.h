@@ -25,6 +25,7 @@
 #include <Oxygen/OxCo/Nursery.h>
 
 namespace oxygen::content {
+class IAssetLoader;
 class AssetLoader;
 }
 
@@ -145,7 +146,7 @@ public:
 
   //! Access the optional AssetLoader service created during initialization.
   OXGN_NGIN_NDAPI auto GetAssetLoader() const noexcept
-    -> observer_ptr<content::AssetLoader>;
+    -> observer_ptr<content::IAssetLoader>;
 
   //! Set the engine target frames-per-second at runtime. 0 = uncapped.
   //! Value will be clamped to range [0, 240]. Thread-safety is caller's
@@ -257,8 +258,8 @@ private:
   frame::Slot frame_slot_ { 0 };
 
   engine::FrameSnapshot snapshot_ {};
-  engine::FrameContext
-    frame_context_; // Persistent across frames for stable view IDs
+  // Persistent across frames for stable view IDs
+  engine::FrameContext frame_context_;
 
   std::shared_ptr<Platform> platform_;
   std::weak_ptr<Graphics> gfx_weak_;

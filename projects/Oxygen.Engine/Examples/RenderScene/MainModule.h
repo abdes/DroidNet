@@ -26,9 +26,9 @@
 
 #include "../Common/AsyncEngineApp.h"
 #include "../Common/SingleViewExample.h"
+#include "../Common/SkyboxManager.h"
 #include "FlyCameraController.h"
 #include "OrbitCameraController.h"
-#include "SkyboxManager.h"
 #include "UI/AxesWidget.h"
 #include "UI/CameraControlPanel.h"
 #include "UI/ContentLoaderPanel.h"
@@ -127,7 +127,7 @@ private:
 
   std::optional<PendingSceneSwap> pending_scene_swap_;
   std::shared_ptr<SceneLoader> scene_loader_;
-  std::unique_ptr<SkyboxManager> skybox_manager_;
+  std::unique_ptr<common::SkyboxManager> skybox_manager_;
   scene::Scene* skybox_manager_scene_ { nullptr };
 
   // Camera input.

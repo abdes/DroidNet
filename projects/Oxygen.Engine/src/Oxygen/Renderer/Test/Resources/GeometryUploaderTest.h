@@ -77,6 +77,21 @@ public:
     on_complete(nullptr);
   }
 
+  void StartLoadScene(
+    const data::AssetKey& /*key*/, SceneCallback on_complete) override
+  {
+    on_complete(nullptr);
+  }
+
+  auto AddPakFile(const std::filesystem::path& /*path*/) -> void override { }
+
+  auto AddLooseCookedRoot(const std::filesystem::path& /*path*/)
+    -> void override
+  {
+  }
+
+  auto ClearMounts() -> void override { }
+
   [[nodiscard]] auto GetTexture(content::ResourceKey /*key*/) const noexcept
     -> std::shared_ptr<data::TextureResource> override
   {

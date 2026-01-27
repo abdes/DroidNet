@@ -20,10 +20,10 @@
 
 #include "../Common/AsyncEngineApp.h"
 #include "../Common/SingleViewExample.h"
+#include "../Common/SkyboxManager.h"
 #include "CameraController.h"
 #include "DebugUI.h"
 #include "SceneSetup.h"
-#include "SkyboxManager.h"
 #include "TextureLoadingService.h"
 
 namespace oxygen::examples::textured_cube {
@@ -114,7 +114,7 @@ private:
   // Component modules
   std::unique_ptr<CameraController> camera_controller_;
   std::unique_ptr<TextureLoadingService> texture_service_;
-  std::unique_ptr<SkyboxManager> skybox_manager_;
+  std::unique_ptr<common::SkyboxManager> skybox_manager_;
   std::unique_ptr<SceneSetup> scene_setup_;
   std::unique_ptr<DebugUI> debug_ui_;
 

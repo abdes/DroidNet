@@ -16,7 +16,6 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Renderer/Resources/IResourceBinder.h>
@@ -38,6 +37,10 @@ class Texture;
 namespace oxygen::data {
 class TextureResource;
 } // namespace oxygen::data
+
+namespace oxygen::content {
+class IAssetLoader;
+} // namespace oxygen::content
 
 namespace oxygen::renderer::resources {
 

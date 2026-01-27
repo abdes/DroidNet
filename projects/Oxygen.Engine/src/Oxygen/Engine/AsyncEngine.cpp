@@ -220,7 +220,7 @@ auto AsyncEngine::GetEngineConfig() const noexcept -> const EngineConfig&
 }
 
 auto AsyncEngine::GetAssetLoader() const noexcept
-  -> observer_ptr<content::AssetLoader>
+  -> observer_ptr<content::IAssetLoader>
 {
   return observer_ptr { asset_loader_.get() };
 }

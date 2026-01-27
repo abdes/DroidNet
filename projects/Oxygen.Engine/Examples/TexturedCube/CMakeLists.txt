@@ -10,7 +10,8 @@
 
 asap_module_declare(
   MODULE_NAME "Oxygen.Examples.TexturedCube"
-  DESCRIPTION [=[
+  DESCRIPTION
+    [=[
 A minimal example that renders a textured cube using the engine's bindless
 material/texture binding path. The sample intentionally references an invalid
 texture resource index for the cube material so the TextureBinder resolves it
@@ -34,16 +35,18 @@ asap_push_module("${META_MODULE_NAME}")
 add_executable(
   ${META_MODULE_TARGET}
   "../main.cpp"
-  "../Common/AsyncEngineApp.h"
-  "../Common/WorkspaceRoot.h"
-  "../Common/AppWindow.h"
   "../Common/AppWindow.cpp"
-  "../Common/RenderGraph.h"
-  "../Common/RenderGraph.cpp"
-  "../Common/ExampleModuleBase.h"
+  "../Common/AppWindow.h"
+  "../Common/AsyncEngineApp.h"
   "../Common/ExampleModuleBase.cpp"
-  "../Common/SingleViewExample.h"
+  "../Common/ExampleModuleBase.h"
+  "../Common/RenderGraph.cpp"
+  "../Common/RenderGraph.h"
   "../Common/SingleViewExample.cpp"
+  "../Common/SingleViewExample.h"
+  "../Common/SkyboxManager.cpp"
+  "../Common/SkyboxManager.h"
+  "../Common/WorkspaceRoot.h"
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"
@@ -51,8 +54,6 @@ add_executable(
   "CameraController.cpp"
   "TextureLoadingService.h"
   "TextureLoadingService.cpp"
-  "SkyboxManager.h"
-  "SkyboxManager.cpp"
   "SceneSetup.h"
   "SceneSetup.cpp"
   "DebugUI.h"
@@ -62,8 +63,10 @@ add_executable(
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
-    FOLDER "Examples"
-    OUTPUT_NAME ${META_MODULE_NAME}
+    FOLDER
+      "Examples"
+    OUTPUT_NAME
+      ${META_MODULE_NAME}
 )
 
 target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})

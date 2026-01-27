@@ -28,7 +28,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/StringUtils.h>
-#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/LooseCookedInspection.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Core/Constants.h>
@@ -163,7 +163,7 @@ auto MainModule::UpdateActiveCameraInputContext() -> void
 class SceneLoader : public std::enable_shared_from_this<SceneLoader> {
 public:
   SceneLoader(
-    oxygen::content::AssetLoader& loader, const int width, const int height)
+    oxygen::content::IAssetLoader& loader, const int width, const int height)
     : loader_(loader)
     , width_(width)
     , height_(height)
@@ -179,7 +179,7 @@ public:
 
     swap_.scene_key = key;
     // Start loading the scene asset
-    loader_.StartLoadAsset<data::SceneAsset>(key,
+    loader_.StartLoadScene(key,
       [weak_self = weak_from_this()](std::shared_ptr<data::SceneAsset> asset) {
         if (auto self = weak_self.lock()) {
           self->OnSceneLoaded(std::move(asset));
@@ -889,7 +889,7 @@ private:
     }
   }
 
-  oxygen::content::AssetLoader& loader_;
+  oxygen::content::IAssetLoader& loader_;
   int width_;
   int height_;
   MainModule::PendingSceneSwap swap_;
@@ -1022,7 +1022,7 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
   if (skybox_manager_scene_ != scene_.get()) {
     auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
     if (asset_loader) {
-      skybox_manager_ = std::make_unique<SkyboxManager>(
+      skybox_manager_ = std::make_unique<common::SkyboxManager>(
         observer_ptr { asset_loader.get() }, scene_);
       skybox_manager_scene_ = scene_.get();
     } else {
@@ -1079,17 +1079,20 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   // Handle skybox load requests from the environment debug panel.
   if (scene_ && skybox_manager_) {
     if (auto req = environment_debug_panel_.TakeSkyboxLoadRequest()) {
-      auto result
-        = co_await skybox_manager_->LoadSkyboxAsync(req->path, req->options);
-
       environment_debug_panel_.SetSkyboxLoadStatus(
-        result.status_message, result.face_size, result.resource_key);
+        "Loading skybox...", 0, oxygen::content::ResourceKey { 0U });
 
-      if (result.success) {
-        skybox_manager_->ApplyToScene(
-          environment_debug_panel_.GetSkyLightParams());
-        environment_debug_panel_.RequestResync();
-      }
+      skybox_manager_->StartLoadSkybox(req->path, req->options,
+        [this](common::SkyboxManager::LoadResult result) {
+          environment_debug_panel_.SetSkyboxLoadStatus(
+            result.status_message, result.face_size, result.resource_key);
+
+          if (result.success && skybox_manager_) {
+            skybox_manager_->ApplyToScene(
+              environment_debug_panel_.GetSkyLightParams());
+            environment_debug_panel_.RequestResync();
+          }
+        });
     }
   }
 

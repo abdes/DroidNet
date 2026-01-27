@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <span>
@@ -15,18 +16,20 @@
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Import/AsyncImportService.h>
 #include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::data {
 class TextureResource;
 } // namespace oxygen::data
+
+namespace oxygen::content {
+class IAssetLoader;
+} // namespace oxygen::content
 
 namespace oxygen::examples::textured_cube {
 
@@ -47,7 +50,12 @@ namespace oxygen::examples::textured_cube {
  TextureLoadingService loader(asset_loader);
  loader.SubmitImport(settings);
  loader.RefreshCookedTextureEntries(cooked_root, nullptr);
- auto result = co_await loader.LoadCookedTextureAsync(entry_index);
+ loader.StartLoadCookedTexture(entry_index,
+   [](TextureLoadingService::LoadResult result) {
+     if (result.success) {
+       // Handle success.
+     }
+   });
  ```
 */
 class TextureLoadingService final {
@@ -104,8 +112,10 @@ public:
     oxygen::TextureType texture_type { oxygen::TextureType::kTexture2D };
   };
 
+  using LoadCallback = std::function<void(LoadResult)>;
+
   explicit TextureLoadingService(
-    oxygen::observer_ptr<oxygen::content::AssetLoader> asset_loader);
+    oxygen::observer_ptr<oxygen::content::IAssetLoader> asset_loader);
 
   //! Ensure the import service is stopped before destruction.
   ~TextureLoadingService();
@@ -134,11 +144,12 @@ public:
   [[nodiscard]] auto GetCookedTextureEntries() const
     -> std::span<const CookedTextureEntry>;
 
-  //! Load a cooked texture by table index asynchronously.
-  auto LoadCookedTextureAsync(std::uint32_t entry_index) -> co::Co<LoadResult>;
+  //! Begin loading a cooked texture by table index.
+  auto StartLoadCookedTexture(
+    std::uint32_t entry_index, LoadCallback on_complete) -> void;
 
 private:
-  oxygen::observer_ptr<oxygen::content::AssetLoader> asset_loader_;
+  oxygen::observer_ptr<oxygen::content::IAssetLoader> asset_loader_;
   oxygen::content::import::AsyncImportService import_service_ {};
 
   mutable std::mutex import_mutex_ {};

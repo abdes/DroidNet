@@ -95,6 +95,7 @@ public:
   using IAssetLoader::EvictionSubscription;
   using IAssetLoader::GeometryCallback;
   using IAssetLoader::MaterialCallback;
+  using IAssetLoader::SceneCallback;
   using IAssetLoader::TextureCallback;
 
   //! LiveObject contract
@@ -416,6 +417,12 @@ public:
     const data::AssetKey& key, GeometryCallback on_complete) override
   {
     StartLoadAsset<data::GeometryAsset>(key, std::move(on_complete));
+  }
+
+  OXGN_CNTT_API void StartLoadScene(
+    const data::AssetKey& key, SceneCallback on_complete) override
+  {
+    StartLoadAsset<data::SceneAsset>(key, std::move(on_complete));
   }
 
   //! Start an async resource load and invoke a callback on completion.

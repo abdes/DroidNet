@@ -51,7 +51,7 @@ class CommandRecorder;
 } // namespace oxygen::graphics
 
 namespace oxygen::content {
-class AssetLoader;
+class IAssetLoader;
 }
 
 namespace oxygen::data {
@@ -413,7 +413,7 @@ private:
 
   // Texture binding coordinator: manages texture SRV allocation and loading
   std::unique_ptr<renderer::resources::TextureBinder> texture_binder_;
-  observer_ptr<content::AssetLoader> asset_loader_;
+  observer_ptr<content::IAssetLoader> asset_loader_;
 
   // View resolver and render graph registration (per-view API). Access is
   // coordinated through a shared mutex so registration can occur from UI or

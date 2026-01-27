@@ -15,6 +15,7 @@
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/Import/ImportOptions.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/Import/TextureImportTypes.h>
@@ -157,7 +158,7 @@ auto LoadPackedTable(const std::filesystem::path& table_path) -> std::vector<T>
 namespace oxygen::examples::textured_cube {
 
 TextureLoadingService::TextureLoadingService(
-  oxygen::observer_ptr<oxygen::content::AssetLoader> asset_loader)
+  oxygen::observer_ptr<oxygen::content::IAssetLoader> asset_loader)
   : asset_loader_(asset_loader)
 {
 }
@@ -375,38 +376,53 @@ auto TextureLoadingService::GetCookedTextureEntries() const
   return cooked_entries_;
 }
 
-auto TextureLoadingService::LoadCookedTextureAsync(
-  const std::uint32_t entry_index) -> co::Co<LoadResult>
+auto TextureLoadingService::StartLoadCookedTexture(
+  const std::uint32_t entry_index, LoadCallback on_complete) -> void
 {
   LoadResult result;
 
   if (!asset_loader_) {
     result.status_message = "AssetLoader unavailable";
-    co_return result;
+    if (on_complete) {
+      on_complete(std::move(result));
+    }
+    return;
   }
 
   if (entry_index >= texture_table_.size()) {
     result.status_message = "Texture index out of range";
-    co_return result;
+    if (on_complete) {
+      on_complete(std::move(result));
+    }
+    return;
   }
 
   if (textures_data_path_.empty()) {
     result.status_message = "textures.data is not available";
-    co_return result;
+    if (on_complete) {
+      on_complete(std::move(result));
+    }
+    return;
   }
 
   auto desc = texture_table_[entry_index];
   std::ifstream data_stream(textures_data_path_, std::ios::binary);
   if (!data_stream) {
     result.status_message = "Failed to open textures.data";
-    co_return result;
+    if (on_complete) {
+      on_complete(std::move(result));
+    }
+    return;
   }
 
   data_stream.seekg(
     static_cast<std::streamoff>(desc.data_offset), std::ios::beg);
   if (!data_stream) {
     result.status_message = "Failed to seek textures.data";
-    co_return result;
+    if (on_complete) {
+      on_complete(std::move(result));
+    }
+    return;
   }
 
   std::vector<std::uint8_t> payload(desc.size_bytes);
@@ -414,39 +430,50 @@ auto TextureLoadingService::LoadCookedTextureAsync(
     static_cast<std::streamsize>(payload.size()));
   if (!data_stream) {
     result.status_message = "Failed to read texture payload";
-    co_return result;
+    if (on_complete) {
+      on_complete(std::move(result));
+    }
+    return;
   }
 
   desc.data_offset
     = static_cast<oxygen::data::pak::OffsetT>(sizeof(TextureResourceDesc));
 
-  std::vector<std::uint8_t> packed;
-  packed.resize(sizeof(TextureResourceDesc) + payload.size());
-  std::memcpy(packed.data(), &desc, sizeof(TextureResourceDesc));
-  std::memcpy(packed.data() + sizeof(TextureResourceDesc), payload.data(),
+  auto packed = std::make_shared<std::vector<std::uint8_t>>();
+  packed->resize(sizeof(TextureResourceDesc) + payload.size());
+  std::memcpy(packed->data(), &desc, sizeof(TextureResourceDesc));
+  std::memcpy(packed->data() + sizeof(TextureResourceDesc), payload.data(),
     payload.size());
 
-  result.resource_key = asset_loader_->MintSyntheticTextureKey();
+  const auto resource_key = asset_loader_->MintSyntheticTextureKey();
 
-  auto tex
-    = co_await asset_loader_->LoadResourceAsync<oxygen::data::TextureResource>(
-      oxygen::content::CookedResourceData<oxygen::data::TextureResource> {
-        .key = result.resource_key,
-        .bytes = std::span<const std::uint8_t>(packed.data(), packed.size()),
-      });
+  asset_loader_->StartLoadTexture(
+    oxygen::content::CookedResourceData<oxygen::data::TextureResource> {
+      .key = resource_key,
+      .bytes = std::span<const std::uint8_t>(packed->data(), packed->size()),
+    },
+    [on_complete = std::move(on_complete), packed,
+      width = static_cast<int>(desc.width),
+      height = static_cast<int>(desc.height),
+      texture_type = static_cast<TextureType>(desc.texture_type), resource_key](
+      std::shared_ptr<oxygen::data::TextureResource> tex) mutable {
+      LoadResult callback_result;
+      callback_result.resource_key = resource_key;
+      callback_result.width = width;
+      callback_result.height = height;
+      callback_result.texture_type = texture_type;
 
-  if (!tex) {
-    result.status_message = "Texture upload failed";
-    co_return result;
-  }
+      if (!tex) {
+        callback_result.status_message = "Texture upload failed";
+      } else {
+        callback_result.success = true;
+        callback_result.status_message = "Loaded cooked texture";
+      }
 
-  result.success = true;
-  result.width = static_cast<int>(desc.width);
-  result.height = static_cast<int>(desc.height);
-  result.texture_type = static_cast<TextureType>(desc.texture_type);
-  result.status_message = "Loaded cooked texture";
-
-  co_return result;
+      if (on_complete) {
+        on_complete(std::move(callback_result));
+      }
+    });
 }
 
 } // namespace oxygen::examples::textured_cube

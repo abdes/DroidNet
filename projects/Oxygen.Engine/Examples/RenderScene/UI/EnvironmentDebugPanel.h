@@ -18,7 +18,7 @@
 
 #include <Oxygen/Scene/SceneNode.h>
 
-#include "../SkyboxManager.h"
+#include "../../Common/SkyboxManager.h"
 
 // Forward declarations
 namespace oxygen::scene {
@@ -145,7 +145,7 @@ public:
 
   struct SkyboxLoadRequest {
     std::string path;
-    SkyboxManager::LoadOptions options;
+    common::SkyboxManager::LoadOptions options;
   };
 
   //! Returns true if the user requested a skybox load.
@@ -162,7 +162,8 @@ public:
     oxygen::content::ResourceKey resource_key);
 
   //! Get the current sky light parameters from the UI cache.
-  [[nodiscard]] auto GetSkyLightParams() const -> SkyboxManager::SkyLightParams;
+  [[nodiscard]] auto GetSkyLightParams() const
+    -> common::SkyboxManager::SkyLightParams;
 
   //! Get current atmosphere debug flags for renderer.
   [[nodiscard]] auto GetAtmosphereFlags() const -> uint32_t;

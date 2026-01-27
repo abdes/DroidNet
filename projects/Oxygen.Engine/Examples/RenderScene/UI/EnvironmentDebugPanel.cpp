@@ -721,6 +721,8 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
 auto EnvironmentDebugPanel::TakeSkyboxLoadRequest()
   -> std::optional<SkyboxLoadRequest>
 {
+  using oxygen::examples::common::SkyboxManager;
+
   if (!skybox_load_requested_) {
     return std::nullopt;
   }
@@ -749,9 +751,9 @@ void EnvironmentDebugPanel::SetSkyboxLoadStatus(std::string_view status,
 }
 
 auto EnvironmentDebugPanel::GetSkyLightParams() const
-  -> SkyboxManager::SkyLightParams
+  -> common::SkyboxManager::SkyLightParams
 {
-  return SkyboxManager::SkyLightParams {
+  return {
     .intensity = sky_light_intensity_,
     .diffuse_intensity = sky_light_diffuse_,
     .specular_intensity = sky_light_specular_,

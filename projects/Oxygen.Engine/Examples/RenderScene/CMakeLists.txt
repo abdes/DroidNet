@@ -10,7 +10,8 @@
 
 asap_module_declare(
   MODULE_NAME "Oxygen.Examples.RenderScene"
-  DESCRIPTION [=[
+  DESCRIPTION
+    [=[
 An example demonstrating how to mount an existing cooked .pak file, resolve a
 Scene asset key (via embedded browse index virtual paths or manual key entry),
 load the SceneAsset through the engine AssetLoader, instantiate a runtime
@@ -31,21 +32,21 @@ asap_push_module("${META_MODULE_NAME}")
 add_executable(
   ${META_MODULE_TARGET}
   "../main.cpp"
-  "../Common/AsyncEngineApp.h"
-  "../Common/WorkspaceRoot.h"
-  "../Common/AppWindow.h"
   "../Common/AppWindow.cpp"
-  "../Common/RenderGraph.h"
-  "../Common/RenderGraph.cpp"
-  "../Common/ExampleModuleBase.h"
+  "../Common/AppWindow.h"
+  "../Common/AsyncEngineApp.h"
   "../Common/ExampleModuleBase.cpp"
-  "../Common/SingleViewExample.h"
+  "../Common/ExampleModuleBase.h"
+  "../Common/RenderGraph.cpp"
+  "../Common/RenderGraph.h"
   "../Common/SingleViewExample.cpp"
+  "../Common/SingleViewExample.h"
+  "../Common/SkyboxManager.cpp"
+  "../Common/SkyboxManager.h"
+  "../Common/WorkspaceRoot.h"
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"
-  "SkyboxManager.h"
-  "SkyboxManager.cpp"
   "OrbitCameraController.h"
   "OrbitCameraController.cpp"
   "FlyCameraController.h"
@@ -73,8 +74,10 @@ add_executable(
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
-    FOLDER "Examples"
-    OUTPUT_NAME ${META_MODULE_NAME}
+    FOLDER
+      "Examples"
+    OUTPUT_NAME
+      ${META_MODULE_NAME}
 )
 
 target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
