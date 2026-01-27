@@ -44,15 +44,14 @@ namespace {
 
   auto ToSpectrumColor(const unsigned int color, const float alpha) -> ImVec4
   {
-    ImVec4 result = ImGui::ColorConvertU32ToFloat4(
-      static_cast<ImU32>(color));
+    ImVec4 result = ImGui::ColorConvertU32ToFloat4(static_cast<ImU32>(color));
     result.w = alpha;
     return result;
   }
 
   template <std::size_t N>
-  auto DrawSegmentedIconButtons(const char* id,
-    const std::array<SegmentedIconOption, N>& options) -> int
+  auto DrawSegmentedIconButtons(
+    const char* id, const std::array<SegmentedIconOption, N>& options) -> int
   {
     ImGui::PushID(id);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0F, 0.0F));
@@ -68,15 +67,15 @@ namespace {
     int selected = -1;
 
     for (std::size_t i = 0; i < N; ++i) {
-      const float rounding = (i == 0 || i + 1 == N)
-        ? ImGui::GetStyle().FrameRounding
-        : 0.0F;
+      const float rounding
+        = (i == 0 || i + 1 == N) ? ImGui::GetStyle().FrameRounding : 0.0F;
       ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rounding);
 
       const ImVec4 base_color = ImGui::GetStyleColorVec4(ImGuiCol_Button);
-      const ImVec4 active_color = ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
-      const ImVec4 accent_color = ToSpectrumColor(
-        oxygen::imgui::spectrum::Static::kBlue500, 0.35F);
+      const ImVec4 active_color
+        = ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
+      const ImVec4 accent_color
+        = ToSpectrumColor(oxygen::imgui::spectrum::Static::kBlue500, 0.35F);
       const ImVec4 button_color = options[i].active ? active_color : base_color;
       const ImVec4 button_hover = accent_color;
 
@@ -91,16 +90,15 @@ namespace {
       if (options[i].active) {
         const ImVec2 min = ImGui::GetItemRectMin();
         const ImVec2 max = ImGui::GetItemRectMax();
-        const float underline_bottom = max.y
-          - std::max(1.0F, ImGui::GetStyle().FramePadding.y * 0.5F);
-        const float underline_top = std::max(
-          min.y, underline_bottom - kSelectedUnderlineHeight);
-        const ImVec4 underline_color = ToSpectrumColor(
-          oxygen::imgui::spectrum::Static::kBlue500, 1.0F);
+        const float underline_bottom
+          = max.y - std::max(1.0F, ImGui::GetStyle().FramePadding.y * 0.5F);
+        const float underline_top
+          = std::max(min.y, underline_bottom - kSelectedUnderlineHeight);
+        const ImVec4 underline_color
+          = ToSpectrumColor(oxygen::imgui::spectrum::Static::kBlue500, 1.0F);
         ImDrawList* draw_list = ImGui::GetForegroundDrawList();
         draw_list->PushClipRect(min, max, true);
-        draw_list->AddRectFilled(
-          ImVec2(min.x + 1.0F, underline_top),
+        draw_list->AddRectFilled(ImVec2(min.x + 1.0F, underline_top),
           ImVec2(max.x - 1.0F, std::min(underline_bottom, max.y)),
           ImGui::ColorConvertFloat4ToU32(underline_color));
         draw_list->PopClipRect();
