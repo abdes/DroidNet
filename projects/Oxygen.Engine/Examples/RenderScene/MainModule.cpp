@@ -1816,6 +1816,7 @@ auto MainModule::ApplyRenderModeFromKnobs() -> void
       = (demo_knobs_.render_mode == demo_shell::RenderMode::kWireframe)
       ? FillMode::kWireFrame
       : FillMode::kSolid;
+    render_graph->SetWireframeEnabled(mode == FillMode::kWireFrame);
     shader_pass_config->fill_mode = mode;
     transparent_pass_config->fill_mode = mode;
 

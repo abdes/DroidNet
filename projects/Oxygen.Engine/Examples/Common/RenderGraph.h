@@ -15,6 +15,7 @@
 #include <Oxygen/Renderer/Passes/SkyAtmosphereLutComputePass.h>
 #include <Oxygen/Renderer/Passes/SkyPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
+#include <Oxygen/Renderer/Passes/WireframePass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 
 namespace oxygen::graphics {
@@ -70,6 +71,17 @@ public:
     -> std::shared_ptr<oxygen::engine::ShaderPassConfig>&
   {
     return shader_pass_config_;
+  }
+
+  auto GetWireframePass() -> std::shared_ptr<oxygen::engine::WireframePass>&
+  {
+    return wireframe_pass_;
+  }
+
+  auto GetWireframePassConfig()
+    -> std::shared_ptr<oxygen::engine::WireframePassConfig>&
+  {
+    return wireframe_pass_config_;
   }
 
   auto GetWireframeShaderPassConfig()
@@ -138,6 +150,16 @@ public:
   auto PrepareForWireframeRenderFrame(
     observer_ptr<const oxygen::graphics::Framebuffer> fb) -> void;
 
+  auto SetWireframeEnabled(const bool enabled) noexcept -> void
+  {
+    wireframe_enabled_ = enabled;
+  }
+
+  [[nodiscard]] auto IsWireframeEnabled() const noexcept -> bool
+  {
+    return wireframe_enabled_;
+  }
+
   // Execute the configured pass list (DepthPrePass, ShaderPass,
   // TransparentPass) using the supplied recorder. This reuses the
   // RenderGraph's internal RenderContext and performs the PrepareResources
@@ -165,6 +187,10 @@ private:
   std::shared_ptr<oxygen::engine::ShaderPassConfig>
     wireframe_shader_pass_config_ {};
 
+  std::shared_ptr<oxygen::engine::WireframePass> wireframe_pass_ {};
+  std::shared_ptr<oxygen::engine::WireframePassConfig>
+    wireframe_pass_config_ {};
+
   std::shared_ptr<oxygen::engine::TransparentPass> transparent_pass_ {};
   std::shared_ptr<oxygen::engine::TransparentPass::Config>
     transparent_pass_config_ {};
@@ -186,6 +212,8 @@ private:
 
   // Shared per-frame render context used by example modules.
   oxygen::engine::RenderContext render_context_ {};
+
+  bool wireframe_enabled_ { false };
 };
 
 } // namespace oxygen::examples::common

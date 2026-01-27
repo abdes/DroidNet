@@ -73,6 +73,7 @@ class LightCullingPass;
 class ShaderPass;
 class SkyPass;
 class TransparentPass;
+class WireframePass;
 
 /*!
  Defines the list of all known render pass types for the current render graph.
@@ -80,7 +81,7 @@ class TransparentPass;
  binary compatibility. Update this list as new passes are added.
 */
 using KnownPassTypes = PassTypeList<DepthPrePass, LightCullingPass, ShaderPass,
-  SkyPass, TransparentPass>;
+  SkyPass, TransparentPass, WireframePass>;
 
 //! The number of known pass types, used for static array sizing and sanity
 //! checks.
