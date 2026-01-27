@@ -37,6 +37,13 @@ m_gtest_program(Frustum SOURCES "Frustum_test.cpp")
 # MaterialPermutations unit tests (no backend dependency)
 m_gtest_program(MaterialPermutations SOURCES "MaterialPermutations_test.cpp")
 
+m_gtest_program(SunResolver SOURCES "SunResolver_basic_test.cpp")
+target_compile_definitions(
+  Oxygen.Renderer.SunResolver.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
+)
+
 m_gtest_program(
   ScenePrep
   SOURCES

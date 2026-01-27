@@ -53,6 +53,7 @@
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
+#include <Oxygen/Scene/Environment/Sun.h>
 #include <Oxygen/Scene/Environment/VolumetricClouds.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
@@ -240,6 +241,14 @@ private:
       }
 
       auto environment = std::make_unique<scene::SceneEnvironment>();
+
+      auto& sun = environment->AddSystem<scene::environment::Sun>();
+      sun.SetEnabled(true);
+      sun.SetSunSource(scene::environment::SunSource::kFromScene);
+      if (sky_atmo_record) {
+        sun.SetDiskAngularRadiusRadians(
+          sky_atmo_record->sun_disk_angular_radius_radians);
+      }
 
       // SkyAtmosphere takes priority over SkySphere
       if (sky_atmo_enabled) {

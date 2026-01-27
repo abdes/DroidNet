@@ -529,7 +529,7 @@ float4 PS(VSOutput input) : SV_Target0 {
             // GetSunDirectionWS() returns override direction if enabled.
             float3 sun_dir = GetSunDirectionWS();
             // Only use fallback if there's no valid sun AND no override enabled
-            if (EnvironmentDynamicData.sun_valid == 0 && !IsOverrideSunEnabled())
+            if (EnvironmentDynamicData.sun_enabled == 0 && !IsOverrideSunEnabled())
             {
                 sun_dir = float3(0.5f, 0.707f, 0.5f);
             }

@@ -6,39 +6,36 @@
 
 #pragma once
 
-#include <array>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <shared_mutex>
-#include <span>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
-#include <glm/vec2.hpp>
+#include <glm/fwd.hpp>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewResolver.h>
-#include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
-#include <Oxygen/Renderer/Types/DrawMetadata.h>
-#include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Renderer/Types/SunState.h>
 #include <Oxygen/Renderer/api_export.h>
-#include <mutex>
 
 namespace oxygen {
 class Graphics;
@@ -304,20 +301,6 @@ public:
   //! Get current debug override flags for atmosphere rendering.
   OXGN_RNDR_NDAPI auto GetAtmosphereDebugFlags() const noexcept -> uint32_t;
 
-  //! Set debug sun direction override for atmosphere rendering.
-  /*!
-   When enabled, the atmosphere system uses this sun direction instead of
-   the scene's directional lights. Useful for testing lighting without
-   modifying scene content.
-
-   @param sun The sun state to use as override. Set sun.enabled=false to
-   disable.
-  */
-  OXGN_RNDR_API auto SetSunOverride(const SunState& sun) -> void;
-
-  //! Get the current sun override state.
-  OXGN_RNDR_NDAPI auto GetSunOverride() const noexcept -> const SunState&;
-
   //! Override a material's UV transform used by the shader.
   /*!
    This is intended for editor and runtime authoring workflows. It updates the
@@ -374,14 +357,9 @@ private:
   auto PrepareAndWireSceneConstantsForView(ViewId view_id,
     const FrameContext& frame_context, RenderContext& render_context) -> bool;
 
-  //! Resolve exposure for the view based on camera and post-process settings.
-  /*!
-   Calculates the resolved exposure multiplier ($2^-EV$) and updates the
-   EnvironmentDynamicDataManager.
-   @return The resolved exposure multiplier.
-  */
-  auto UpdateViewExposure(ViewId view_id, RenderContext& render_context)
-    -> float;
+  //! Resolves exposure for the view (manual EV only, auto unsupported).
+  auto UpdateViewExposure(ViewId view_id, const scene::Scene& scene,
+    const SunState& sun_state) -> float;
 
   // Execute the view's render graph factory (awaits the coroutine). Returns
   // true on successful completion, false on exception.
@@ -484,7 +462,8 @@ private:
 
   // Debug override state for sun light.
   uint32_t atmosphere_debug_flags_ { 0u };
-  SunState sun_override_ { kNoSun }; //!< Override sun state for debugging
+  // Internal debug override only; no public API.
+  SunState sun_override_ { kNoSun };
 };
 
 } // namespace oxygen::engine

@@ -129,15 +129,15 @@ auto EnvironmentDynamicDataManager::SetSunState(
   dirty |= (state.data.sun_direction_ws_illuminance.w != sun.illuminance);
   dirty |= (glm::vec3(state.data.sun_color_rgb_intensity) != sun.color_rgb);
   dirty |= (state.data.sun_color_rgb_intensity.w != sun.intensity);
-  const auto valid_flag = sun.enabled ? 1u : 0u;
-  dirty |= (state.data.sun_valid != valid_flag);
+  const auto enabled_flag = sun.enabled ? 1u : 0u;
+  dirty |= (state.data.sun_enabled != enabled_flag);
 
   if (dirty) {
     state.data.sun_direction_ws_illuminance
       = glm::vec4(sun.direction_ws, sun.illuminance);
     state.data.sun_color_rgb_intensity
       = glm::vec4(sun.color_rgb, sun.intensity);
-    state.data.sun_valid = valid_flag;
+    state.data.sun_enabled = enabled_flag;
     MarkAllSlotsDirty(view_id);
   }
 }

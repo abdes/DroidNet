@@ -23,6 +23,7 @@
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
+#include <Oxygen/Scene/Environment/Sun.h>
 #include <Oxygen/Scene/Environment/VolumetricClouds.h>
 #include <Oxygen/Scene/Scene.h>
 
@@ -270,9 +271,17 @@ auto EnvironmentStaticDataManager::PopulateAtmosphere(
     next.atmosphere.absorption_scale_height_m
       = atmo->GetAbsorptionScaleHeightMeters();
     next.atmosphere.multi_scattering_factor = atmo->GetMultiScatteringFactor();
-    next.atmosphere.sun_disk_enabled = atmo->GetSunDiskEnabled() ? 1u : 0u;
-    next.atmosphere.sun_disk_angular_radius_radians
-      = atmo->GetSunDiskAngularRadiusRadians();
+
+    if (const auto sun = env->TryGetSystem<scene::environment::Sun>();
+      sun && sun->IsEnabled()) {
+      const float sun_disk_radius = sun->GetDiskAngularRadiusRadians();
+      next.atmosphere.sun_disk_enabled = sun_disk_radius > 0.0F ? 1u : 0u;
+      next.atmosphere.sun_disk_angular_radius_radians = sun_disk_radius;
+    } else {
+      next.atmosphere.sun_disk_enabled = atmo->GetSunDiskEnabled() ? 1u : 0u;
+      next.atmosphere.sun_disk_angular_radius_radians
+        = atmo->GetSunDiskAngularRadiusRadians();
+    }
     next.atmosphere.aerial_perspective_distance_scale
       = atmo->GetAerialPerspectiveDistanceScale();
 

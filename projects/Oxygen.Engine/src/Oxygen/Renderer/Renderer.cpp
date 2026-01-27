@@ -4,25 +4,44 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include <fmt/format.h>
 #include <glm/common.hpp>
 #include <glm/geometric.hpp>
 
+#include "PreparedSceneFrame.h"
+#include "Resources/DrawMetadataEmitter.h"
+#include "Resources/GeometryUploader.h"
+#include "Resources/MaterialBinder.h"
+#include "Resources/TransformUploader.h"
+#include "Types/DrawMetadata.h"
+#include "Types/SunState.h"
+#include "Upload/StagingProvider.h"
+#include "Upload/UploadPolicy.h"
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewResolver.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Engine/AsyncEngine.h>
@@ -32,14 +51,17 @@
 #include <Oxygen/Graphics/Common/GpuEventScope.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
-#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/Internal/BrdfLutManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Internal/IblManager.h>
 #include <Oxygen/Renderer/Internal/SceneConstantsManager.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
+#include <Oxygen/Renderer/Internal/SunResolver.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/IblComputePass.h>
 #include <Oxygen/Renderer/RenderContext.h>
@@ -84,58 +106,6 @@ using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferUsage;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::SingleQueueStrategy;
-
-namespace {
-
-struct SunLightSelection {
-  // Default sun at +Y direction with 30° elevation (Z-up)
-  glm::vec3 direction_to_sun { 0.0F, 0.866F, 0.5F };
-  glm::vec3 color_rgb { 1.0F, 1.0F, 1.0F };
-  float intensity { 0.0F };
-  float illuminance { 0.0F };
-  bool valid { false };
-};
-
-auto SelectSunLight(std::span<const oxygen::engine::DirectionalLightBasic> dir)
-  -> SunLightSelection
-{
-  SunLightSelection first_flagged;
-  SunLightSelection first_any;
-
-  for (const auto& light : dir) {
-    const bool is_sun = (light.flags
-                          & static_cast<std::uint32_t>(
-                            oxygen::engine::DirectionalLightFlags::kSunLight))
-      != 0U;
-
-    // Simple illuminance proxy: peak channel * intensity.
-    const float peak_rgb = (std::max)(light.color_rgb.x,
-      (std::max)(light.color_rgb.y, light.color_rgb.z));
-    const float illum = light.intensity * peak_rgb;
-
-    SunLightSelection candidate {
-      .direction_to_sun = -glm::normalize(light.direction_ws),
-      .color_rgb = light.color_rgb,
-      .intensity = light.intensity,
-      .illuminance = illum,
-      .valid = true,
-    };
-
-    if (is_sun && !first_flagged.valid) {
-      first_flagged = candidate;
-    }
-    if (!first_any.valid) {
-      first_any = candidate;
-    }
-  }
-
-  if (first_flagged.valid) {
-    return first_flagged;
-  }
-  return first_any;
-}
-
-} // namespace
 
 //===----------------------------------------------------------------------===//
 // Renderer Implementation
@@ -376,16 +346,6 @@ auto Renderer::SetAtmosphereDebugFlags(const uint32_t flags) -> void
 auto Renderer::GetAtmosphereDebugFlags() const noexcept -> uint32_t
 {
   return atmosphere_debug_flags_;
-}
-
-auto Renderer::SetSunOverride(const SunState& sun) -> void
-{
-  sun_override_ = sun;
-}
-
-auto Renderer::GetSunOverride() const noexcept -> const SunState&
-{
-  return sun_override_;
 }
 
 auto Renderer::OverrideMaterialUvTransform(const data::MaterialAsset& material,
@@ -892,9 +852,6 @@ auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
   WireContext(render_context, buffer_info.buffer);
   render_context.env_dynamic_manager.reset(env_dynamic_manager_.get());
 
-  // Resolve and set exposure for the view.
-  UpdateViewExposure(view_id, render_context);
-
   // Populate render_context.current_view
   render_context.current_view.view_id = view_id;
   render_context.current_view.resolved_view.reset(&resolved_it->second);
@@ -903,22 +860,22 @@ auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
   return true;
 }
 
-auto Renderer::UpdateViewExposure(ViewId view_id, RenderContext& render_context)
-  -> float
+auto Renderer::UpdateViewExposure(
+  ViewId view_id, const scene::Scene& scene, const SunState& sun_state) -> float
 {
-  // Default: exposure = 1.0. If authored exposure_compensation exists, apply it
-  // multiplicatively. In Phase 1.5, we do not support physical camera
-  // parameters.
   float exposure = 1.0F;
 
-  if (const auto scene_ptr = render_context.GetScene()) {
-    if (const auto env = scene_ptr->GetEnvironment()) {
-      if (const auto pp
-        = env->TryGetSystem<scene::environment::PostProcessVolume>();
-        pp && pp->IsEnabled()) {
-        // Scene authoring stores EV; GPU expects a multi-view resolved
-        // multiplier.
-        exposure *= std::exp2(pp->GetExposureCompensationEv());
+  (void)sun_state;
+
+  // NOTE: Only manual EV compensation is supported at the moment.
+  // Auto exposure requires HDR rendering + tone mapping, which is not wired
+  // yet. Manual EV is applied only when explicitly enabled.
+  if (const auto env = scene.GetEnvironment()) {
+    if (const auto pp
+      = env->TryGetSystem<scene::environment::PostProcessVolume>();
+      pp && pp->IsEnabled()) {
+      if (pp->GetExposureMode() == scene::environment::ExposureMode::kManual) {
+        exposure = std::exp2(pp->GetExposureCompensationEv());
       }
     }
   }
@@ -1006,14 +963,10 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
       const oxygen::observer_ptr<renderer::LightManager> light_mgr
         = scene_prep_state_->GetLightManager();
       if (light_mgr) {
-        const auto sun = SelectSunLight(light_mgr->GetDirectionalLights());
-        const SunState scene_sun
-          = (sun.valid
-              && glm::dot(sun.direction_to_sun, sun.direction_to_sun) > 0.0F)
-          ? SunState::FromDirectionAndLight(
-              sun.direction_to_sun, sun.color_rgb, sun.intensity, true)
-          : kNoSun;
+        const SunState scene_sun = internal::ResolveSunForView(
+          scene, light_mgr->GetDirectionalLights());
         env_dynamic_manager_->SetSunState(view_id, scene_sun);
+        UpdateViewExposure(view_id, scene, scene_sun);
 
         // Populate SkyAtmosphere per-view context. Defaults stay conservative
         // until LUT precompute is wired; analytic fallback stays enabled.

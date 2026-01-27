@@ -44,12 +44,27 @@ struct EnvironmentDynamicData
     // bit3: use override sun values
     uint atmosphere_flags;
 
-    // 1 = sun fields valid; 0 = fallback to default sun.
-    uint sun_valid;
+    // 1 = sun enabled; 0 = fallback to default sun.
+    uint sun_enabled;
 
     // Designated sun light (toward the sun, not incoming radiance).
     // xyz = direction, w = illuminance.
     float4 sun_direction_ws_illuminance;
+
+    // Sun spectral payload.
+    // xyz = color_rgb (linear, not premultiplied), w = intensity.
+    float4 sun_color_rgb_intensity;
+
+    // Debug override sun for testing (internal only).
+    // xyz = direction, w = illuminance.
+    float4 override_sun_direction_ws_illuminance;
+
+    // x = override_sun_enabled; remaining lanes reserved for future flags.
+    uint4 override_sun_flags;
+
+    // Override sun spectral payload.
+    // xyz = color_rgb (linear, not premultiplied), w = intensity.
+    float4 override_sun_color_rgb_intensity;
 
     // Planet/frame context for atmospheric sampling.
     // xyz = planet center, w = padding (unused).
@@ -61,21 +76,6 @@ struct EnvironmentDynamicData
 
     // x = sky view LUT slice, y = planet_to_sun_cos_zenith.
     float4 sky_view_lut_slice_cos_zenith;
-
-    // Debug override sun for testing.
-    // xyz = direction, w = illuminance.
-    float4 override_sun_direction_ws_illuminance;
-
-    // x = override_sun_enabled; remaining lanes reserved for future flags.
-    uint4 override_sun_flags;
-
-    // Sun spectral payload.
-    // xyz = color_rgb (linear, not premultiplied), w = intensity.
-    float4 sun_color_rgb_intensity;
-
-    // Override sun spectral payload.
-    // xyz = color_rgb (linear, not premultiplied), w = intensity.
-    float4 override_sun_color_rgb_intensity;
 };
 
 /**
@@ -92,7 +92,7 @@ ConstantBuffer<EnvironmentDynamicData> EnvironmentDynamicData : register(b3, spa
  */
 static inline bool HasSunLight()
 {
-    return EnvironmentDynamicData.sun_valid != 0;
+    return EnvironmentDynamicData.sun_enabled != 0;
 }
 
 /**
