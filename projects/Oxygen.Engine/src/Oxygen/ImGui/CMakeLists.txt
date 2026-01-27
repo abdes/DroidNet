@@ -54,13 +54,13 @@ set(
   "ImGuiPass.h"
   "Styles/FontAwesome-400.h"
   "Styles/IconsFontAwesome.h"
+  "Styles/Spectrum.h"
 )
 set(
   OXYGEN_IMGUI_PRIVATE_SOURCES
   "ImGuiPass.cpp"
   "ImGuiModule.cpp"
   "Styles/Spectrum.cpp"
-  "Styles/Spectrum.h"
   "Styles/SourceSansProRegular.cpp"
   "Styles/FontAwesome-400.cpp"
 )

@@ -60,6 +60,7 @@ auto ImGuiModule::OnAttached(const observer_ptr<AsyncEngine> engine) noexcept
 
     ImGuiIO& io = ImGui::GetIO();
     const float icon_font_size = std::max(16.0F, ImGui::GetFontSize());
+    constexpr float kToolbarIconFontSize = 24.0F;
 
     ImFontConfig icon_config {};
     icon_config.MergeMode = true;
@@ -73,6 +74,16 @@ auto ImGuiModule::OnAttached(const observer_ptr<AsyncEngine> engine) noexcept
       static_cast<int>(styles::FontAwesome_compressed_size), icon_font_size,
       &icon_config, icon_ranges);
     IM_ASSERT(icon_font != nullptr);
+
+    ImFontConfig icon_only_config {};
+    icon_only_config.MergeMode = false;
+    icon_only_config.PixelSnapH = true;
+    icon_only_config.GlyphMinAdvanceX = kToolbarIconFontSize;
+    ImFont* toolbar_icon_font = io.Fonts->AddFontFromMemoryCompressedTTF(
+      styles::FontAwesome_compressed_data,
+      static_cast<int>(styles::FontAwesome_compressed_size),
+      kToolbarIconFontSize, &icon_only_config, icon_ranges);
+    IM_ASSERT(toolbar_icon_font != nullptr);
   }
 
   return true;
