@@ -103,6 +103,8 @@ set(
   "Internal/SceneConstantsManager.h"
   "Internal/SkyAtmosphereLutManager.cpp"
   "Internal/SkyAtmosphereLutManager.h"
+  "Internal/SunResolver.cpp"
+  "Internal/SunResolver.h"
   "LightManager.cpp"
   "Passes/ComputeRenderPass.cpp"
   "Passes/DepthPrePass.cpp"

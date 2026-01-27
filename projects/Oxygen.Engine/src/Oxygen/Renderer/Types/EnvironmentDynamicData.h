@@ -152,12 +152,27 @@ struct alignas(16) EnvironmentDynamicData {
   // bit3: use override sun values
   uint32_t atmosphere_flags { 0u };
 
-  // 1 = sun fields valid; 0 = fallback to default sun.
-  uint32_t sun_valid { 0u };
+  // 1 = sun enabled; 0 = fallback to default sun.
+  uint32_t sun_enabled { 0u };
 
   // Designated sun light (toward the sun, not incoming radiance).
   // xyz = direction (Z-up: +Y with 30° elevation), w = illuminance.
   glm::vec4 sun_direction_ws_illuminance { 0.0F, 0.866F, 0.5F, 0.0F };
+
+  // Sun spectral payload.
+  // xyz = color_rgb (linear, not premultiplied), w = intensity.
+  glm::vec4 sun_color_rgb_intensity { 1.0F, 1.0F, 1.0F, 1.0F };
+
+  // Debug override sun for testing (internal only).
+  // xyz = direction (Z-up: +Y with 30° elevation), w = illuminance.
+  glm::vec4 override_sun_direction_ws_illuminance { 0.0F, 0.866F, 0.5F, 0.0F };
+
+  // x = override_sun_enabled; remaining lanes reserved for future flags.
+  glm::uvec4 override_sun_flags { 0u, 0u, 0u, 0u };
+
+  // Override sun spectral payload (internal only).
+  // xyz = color_rgb (linear, not premultiplied), w = intensity.
+  glm::vec4 override_sun_color_rgb_intensity { 1.0F, 1.0F, 1.0F, 1.0F };
 
   // Planet/frame context for atmospheric sampling.
   // xyz = planet center (below Z=0 ground). w = padding (unused).
@@ -169,21 +184,6 @@ struct alignas(16) EnvironmentDynamicData {
 
   // x = sky view LUT slice, y = planet_to_sun_cos_zenith.
   glm::vec4 sky_view_lut_slice_cos_zenith { 0.0F, 0.0F, 0.0F, 0.0F };
-
-  // Debug override sun for testing.
-  // xyz = direction (Z-up: +Y with 30° elevation), w = illuminance.
-  glm::vec4 override_sun_direction_ws_illuminance { 0.0F, 0.866F, 0.5F, 0.0F };
-
-  // x = override_sun_enabled; remaining lanes reserved for future flags.
-  glm::uvec4 override_sun_flags { 0u, 0u, 0u, 0u };
-
-  // Sun spectral payload.
-  // xyz = color_rgb (linear, not premultiplied), w = intensity.
-  glm::vec4 sun_color_rgb_intensity { 1.0F, 1.0F, 1.0F, 1.0F };
-
-  // Override sun spectral payload.
-  // xyz = color_rgb (linear, not premultiplied), w = intensity.
-  glm::vec4 override_sun_color_rgb_intensity { 1.0F, 1.0F, 1.0F, 1.0F };
 };
 static_assert(alignof(EnvironmentDynamicData) == 16,
   "EnvironmentDynamicData must stay 16-byte aligned for root CBV");

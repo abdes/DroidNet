@@ -10,6 +10,8 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <numbers>
+#include <utility>
 
 #include <glm/gtc/quaternion.hpp>
 
@@ -21,6 +23,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
+#include <Oxygen/Scene/Environment/Sun.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 
@@ -54,6 +57,20 @@ auto MakeRotationFromForwardToDirWs(const Vec3& dir_ws) -> Quat
   axis = glm::normalize(axis);
   const float angle = std::acos(std::clamp(d, -1.0f, 1.0f));
   return glm::angleAxis(angle, axis);
+}
+
+auto DirectionToAzimuthElevationDegrees(const Vec3& direction_ws)
+  -> std::pair<float, float>
+{
+  constexpr float kRadToDeg = 180.0F / std::numbers::pi_v<float>;
+  const Vec3 dir = glm::normalize(direction_ws);
+  const float elevation_deg
+    = std::asin(std::clamp(dir.z, -1.0F, 1.0F)) * kRadToDeg;
+  float azimuth_deg = std::atan2(dir.y, dir.x) * kRadToDeg;
+  if (azimuth_deg < 0.0F) {
+    azimuth_deg += 360.0F;
+  }
+  return { azimuth_deg, elevation_deg };
 }
 
 auto ResolveBaseColorTextureResourceIndex(
@@ -368,14 +385,44 @@ auto SceneSetup::UpdateSunLight(const SunLightParams& params) -> void
   }
 
   auto tf = sun_node_.GetTransform();
-  const Vec3 dir = params.use_custom_direction
+  const Vec3 ray_dir_ws = params.use_custom_direction
     ? glm::normalize(params.ray_direction)
     : kDefaultSunRayDirWs;
-  const Quat rot = MakeRotationFromForwardToDirWs(dir);
-  tf.SetLocalRotation(rot);
+  const Vec3 sun_dir_ws = -ray_dir_ws;
 
-  // Position the node along the sun's apparent direction
-  tf.SetLocalPosition(Vec3 { 0.0f, 0.0f, 0.0f } + dir * 50.0f);
+  if (scene_) {
+    auto env = scene_->GetEnvironment();
+    if (!env) {
+      scene_->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+      env = scene_->GetEnvironment();
+    }
+    if (env) {
+      auto* sun = env->TryGetSystem<scene::environment::Sun>().get();
+      if (!sun) {
+        sun = &env->AddSystem<scene::environment::Sun>();
+      }
+      const auto [azimuth_deg, elevation_deg]
+        = DirectionToAzimuthElevationDegrees(sun_dir_ws);
+      sun->SetEnabled(true);
+      sun->SetSunSource(scene::environment::SunSource::kSynthetic);
+      sun->SetAzimuthElevationDegrees(azimuth_deg, elevation_deg);
+      sun->SetColorRgb(params.color_rgb);
+      sun->SetIntensityLux(params.intensity);
+
+      const Vec3 resolved_sun_dir_ws = sun->GetDirectionWs();
+      const Vec3 resolved_ray_dir_ws = -resolved_sun_dir_ws;
+      const Quat rot = MakeRotationFromForwardToDirWs(resolved_ray_dir_ws);
+      tf.SetLocalRotation(rot);
+      tf.SetLocalPosition(
+        Vec3 { 0.0f, 0.0f, 0.0f } + resolved_ray_dir_ws * 50.0f);
+    }
+  }
+
+  if (!scene_) {
+    const Quat rot = MakeRotationFromForwardToDirWs(ray_dir_ws);
+    tf.SetLocalRotation(rot);
+    tf.SetLocalPosition(Vec3 { 0.0f, 0.0f, 0.0f } + ray_dir_ws * 50.0f);
+  }
 
   if (auto sun_light = sun_node_.GetLightAs<scene::DirectionalLight>()) {
     auto& light = sun_light->get();
@@ -396,6 +443,15 @@ auto SceneSetup::EnsureEnvironment(const EnvironmentParams& params) -> void
   if (!env) {
     auto new_env = std::make_unique<scene::SceneEnvironment>();
 
+    auto& sun = new_env->AddSystem<scene::environment::Sun>();
+    sun.SetEnabled(true);
+    sun.SetSunSource(scene::environment::SunSource::kSynthetic);
+    const auto [azimuth_deg, elevation_deg]
+      = DirectionToAzimuthElevationDegrees(-kDefaultSunRayDirWs);
+    sun.SetAzimuthElevationDegrees(azimuth_deg, elevation_deg);
+    sun.SetColorRgb(SceneSetup::SunLightParams {}.color_rgb);
+    sun.SetIntensityLux(SceneSetup::SunLightParams {}.intensity);
+
     auto& sky = new_env->AddSystem<scene::environment::SkySphere>();
     sky.SetEnabled(true);
     sky.SetSource(scene::environment::SkySphereSource::kSolidColor);
@@ -412,6 +468,16 @@ auto SceneSetup::EnsureEnvironment(const EnvironmentParams& params) -> void
 
     scene_->SetEnvironment(std::move(new_env));
   } else {
+    if (!env->TryGetSystem<scene::environment::Sun>()) {
+      auto& sun = env->AddSystem<scene::environment::Sun>();
+      sun.SetEnabled(true);
+      sun.SetSunSource(scene::environment::SunSource::kSynthetic);
+      const auto [azimuth_deg, elevation_deg]
+        = DirectionToAzimuthElevationDegrees(-kDefaultSunRayDirWs);
+      sun.SetAzimuthElevationDegrees(azimuth_deg, elevation_deg);
+      sun.SetColorRgb(SceneSetup::SunLightParams {}.color_rgb);
+      sun.SetIntensityLux(SceneSetup::SunLightParams {}.intensity);
+    }
     if (!env->TryGetSystem<scene::environment::SkySphere>()) {
       auto& sky = env->AddSystem<scene::environment::SkySphere>();
       sky.SetEnabled(true);

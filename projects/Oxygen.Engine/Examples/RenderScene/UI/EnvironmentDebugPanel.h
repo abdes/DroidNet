@@ -16,11 +16,14 @@
 
 #include <glm/vec3.hpp>
 
+#include <Oxygen/Scene/SceneNode.h>
+
 #include "../SkyboxManager.h"
 
 // Forward declarations
 namespace oxygen::scene {
 class Scene;
+class SceneNode;
 } // namespace oxygen::scene
 
 namespace oxygen::engine {
@@ -48,7 +51,6 @@ enum class AtmosphereDebugFlags : uint32_t {
   kUseLut = 0x1,
   kVisualizeLut = 0x2,
   kForceAnalytic = 0x4,
-  kOverrideSun = 0x8,
 };
 
 //! Configuration for the environment debug panel.
@@ -74,7 +76,7 @@ struct EnvironmentDebugConfig {
  - **SkySphere**: Background source, cubemap, solid color
  - **SkyLight**: IBL source, tint, intensity
  - **PostProcessVolume**: Exposure, bloom, color grading
- - **Sun Override**: Manual sun direction for testing
+ - **Sun**: Primary sun component controls
 
  ### Design Goals
 
@@ -165,18 +167,6 @@ public:
   //! Get current atmosphere debug flags for renderer.
   [[nodiscard]] auto GetAtmosphereFlags() const -> uint32_t;
 
-  //! Get sun override direction (valid when override enabled).
-  [[nodiscard]] auto GetSunOverrideDirection() const -> glm::vec3;
-
-  //! Get sun override intensity (valid when override enabled).
-  [[nodiscard]] auto GetSunOverrideIntensity() const -> float;
-
-  //! Get sun override color (valid when override enabled).
-  [[nodiscard]] auto GetSunOverrideColor() const -> glm::vec3;
-
-  //! Check if sun override is enabled.
-  [[nodiscard]] auto IsSunOverrideEnabled() const -> bool;
-
 private:
   //=== UI Drawing Methods ===-----------------------------------------------//
   void DrawSkyAtmosphereSection();
@@ -184,13 +174,19 @@ private:
   void DrawSkyLightSection();
   // NOTE: Fog UI removed - use Aerial Perspective instead. Real fog TBD.
   void DrawPostProcessSection();
-  void DrawSunOverrideSection();
+  void DrawSunSection();
   void DrawRendererDebugSection();
 
   //=== Helper Methods ===---------------------------------------------------//
   void SyncFromScene();
   void SyncDebugFlagsFromRenderer();
   void MarkDirty();
+  //! Resets cached sun UI state to Sun component defaults.
+  void ResetSunUiToDefaults();
+  //! Finds a directional light node to use as sun when FromScene is selected.
+  auto FindSunLightCandidate() const -> std::optional<scene::SceneNode>;
+  //! Ensures the cached sun light node is valid or refreshes it if needed.
+  void UpdateSunLightCandidate();
 
   //=== Configuration ===----------------------------------------------------//
   EnvironmentDebugConfig config_ {};
@@ -239,6 +235,20 @@ private:
   float sky_light_diffuse_ { 1.0F };
   float sky_light_specular_ { 1.0F };
 
+  // Sun component
+  bool sun_present_ { false };
+  bool sun_enabled_ { true };
+  int sun_source_ { 0 }; // 0=FromScene, 1=Synthetic
+  float sun_azimuth_deg_ { 90.0F };
+  float sun_elevation_deg_ { 30.0F };
+  glm::vec3 sun_color_rgb_ { 1.0F, 1.0F, 1.0F };
+  float sun_intensity_lux_ { 10.0F };
+  bool sun_use_temperature_ { false };
+  float sun_temperature_kelvin_ { 6500.0F };
+  float sun_component_disk_radius_deg_ { 0.268F };
+  scene::SceneNode sun_light_node_ {};
+  bool sun_light_available_ { false };
+
   // NOTE: Fog member variables removed - use Aerial Perspective instead.
   // Real volumetric fog system to be implemented in the future.
 
@@ -256,13 +266,6 @@ private:
   float saturation_ { 1.0F };
   float contrast_ { 1.0F };
   float vignette_ { 0.0F };
-
-  // Sun Light Override (controls the DirectionalLight marked as sun)
-  bool sun_override_enabled_ { false };
-  float sun_override_azimuth_deg_ { 45.0F };
-  float sun_override_elevation_deg_ { 45.0F };
-  float sun_override_intensity_ { 2.0F };
-  glm::vec3 sun_override_color_ { 1.0F, 1.0F, 1.0F };
 
   // Atmosphere Debug Flags
   bool use_lut_ { true };

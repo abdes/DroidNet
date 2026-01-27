@@ -9,21 +9,25 @@
 #include <filesystem>
 #include <numbers>
 #include <string>
+#include <vector>
 
 #include <imgui.h>
 
 #include <glm/geometric.hpp>
+#include <glm/gtc/constants.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <glm/trigonometric.hpp>
 
 #include <Oxygen/Base/Platforms.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Renderer.h>
-#include <Oxygen/Renderer/Types/SunState.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
+#include <Oxygen/Scene/Environment/Sun.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 
 #include "EnvironmentDebugPanel.h"
@@ -50,6 +54,57 @@ namespace {
     const float cos_el = std::cos(el_rad);
     return glm::vec3(
       cos_el * std::cos(az_rad), cos_el * std::sin(az_rad), std::sin(el_rad));
+  }
+
+  auto KelvinToLinearRgb(float kelvin) -> glm::vec3
+  {
+    kelvin = glm::clamp(kelvin, 1000.0F, 40000.0F);
+    const float temp = kelvin / 100.0F;
+
+    float red = 1.0F;
+    float green = 1.0F;
+    float blue = 1.0F;
+
+    if (temp <= 66.0F) {
+      red = 1.0F;
+      green = std::clamp(
+        0.39008157877F * std::log(temp) - 0.63184144378F, 0.0F, 1.0F);
+      if (temp <= 19.0F) {
+        blue = 0.0F;
+      } else {
+        blue = std::clamp(
+          0.54320678911F * std::log(temp - 10.0F) - 1.19625408914F, 0.0F, 1.0F);
+      }
+    } else {
+      red = std::clamp(
+        1.29293618606F * std::pow(temp - 60.0F, -0.1332047592F), 0.0F, 1.0F);
+      green = std::clamp(
+        1.1298908609F * std::pow(temp - 60.0F, -0.0755148492F), 0.0F, 1.0F);
+      blue = 1.0F;
+    }
+
+    return { red, green, blue };
+  }
+
+  auto RotationFromDirection(const glm::vec3& direction_ws) -> glm::quat
+  {
+    const glm::vec3 from_dir(0.0F, -1.0F, 0.0F);
+    const glm::vec3 to_dir = glm::normalize(direction_ws);
+
+    const float cos_theta = std::clamp(glm::dot(from_dir, to_dir), -1.0F, 1.0F);
+    glm::quat rotation(1.0F, 0.0F, 0.0F, 0.0F);
+    if (cos_theta < 0.9999F) {
+      if (cos_theta > -0.9999F) {
+        const glm::vec3 axis = glm::normalize(glm::cross(from_dir, to_dir));
+        const float angle = std::acos(cos_theta);
+        rotation = glm::angleAxis(angle, axis);
+      } else {
+        const glm::vec3 axis = glm::vec3(0.0F, 0.0F, 1.0F);
+        rotation = glm::angleAxis(glm::pi<float>(), axis);
+      }
+    }
+
+    return rotation;
   }
 
   auto MakeSkyboxFilePickerConfig() -> FilePickerConfig
@@ -116,6 +171,7 @@ void EnvironmentDebugPanel::Draw()
   }
 
   ImGui::SetNextWindowSize(ImVec2(400, 600), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowBgAlpha(0.45F);
 
   if (!ImGui::Begin("Environment Systems")) {
     ImGui::End();
@@ -136,8 +192,8 @@ void EnvironmentDebugPanel::Draw()
 
   ImGui::Separator();
 
-  // Sun Override for testing (affects all lighting)
-  DrawSunOverrideSection();
+  // Sun controls
+  DrawSunSection();
 
   ImGui::Separator();
 
@@ -230,50 +286,109 @@ void EnvironmentDebugPanel::DrawRendererDebugSection()
   ImGui::Unindent();
 }
 
-void EnvironmentDebugPanel::DrawSunOverrideSection()
+void EnvironmentDebugPanel::DrawSunSection()
 {
-  ImGui::Text("Sun Light Override");
+  ImGui::Text("Sun");
   ImGui::Indent();
 
-  ImGui::TextColored(ImVec4(0.7F, 0.7F, 0.7F, 1.0F),
-    "Controls the scene's DirectionalLight marked as sun.");
+  if (!sun_present_) {
+    ImGui::TextColored(ImVec4(0.7F, 0.7F, 0.7F, 1.0F),
+      "No Sun component found in the scene environment.");
+    if (ImGui::Button("Add Sun")) {
+      ResetSunUiToDefaults();
+      MarkDirty();
+    }
+    ImGui::Unindent();
+    return;
+  }
 
-  if (ImGui::Checkbox("Enable Override", &sun_override_enabled_)) {
+  if (ImGui::Checkbox("Enabled##Sun", &sun_enabled_)) {
     MarkDirty();
   }
 
-  if (sun_override_enabled_) {
-    ImGui::PushItemWidth(150);
-
-    ImGui::Text("Direction:");
-    if (ImGui::SliderFloat(
-          "Azimuth (deg)", &sun_override_azimuth_deg_, 0.0F, 360.0F, "%.1f")) {
-      MarkDirty();
-    }
-
-    if (ImGui::DragFloat("Elevation (deg)", &sun_override_elevation_deg_, 0.1F,
-          -90.0F, 90.0F, "%.1f")) {
-      MarkDirty();
-    }
-
-    ImGui::Separator();
-    ImGui::Text("Light Properties:");
-
-    if (ImGui::DragFloat("Intensity##SunLight", &sun_override_intensity_, 0.1F,
-          0.0F, 100.0F, "%.2f")) {
-      MarkDirty();
-    }
-
-    if (ImGui::ColorEdit3("Color##SunLight", &sun_override_color_.x)) {
-      MarkDirty();
-    }
-
-    ImGui::PopItemWidth();
-
-    // Show computed direction
-    const auto dir = GetSunOverrideDirection();
-    ImGui::Text("Direction: (%.2f, %.2f, %.2f)", dir.x, dir.y, dir.z);
+  constexpr const char* kSourceLabels[] = { "From Scene", "Synthetic" };
+  ImGui::SetNextItemWidth(180.0F);
+  if (ImGui::Combo(
+        "Source", &sun_source_, kSourceLabels, IM_ARRAYSIZE(kSourceLabels))) {
+    MarkDirty();
   }
+
+  const bool sun_from_scene = (sun_source_ == 0);
+  if (sun_from_scene) {
+    UpdateSunLightCandidate();
+    if (!sun_light_available_) {
+      ImGui::TextColored(ImVec4(1.0F, 0.5F, 0.0F, 1.0F),
+        "No DirectionalLight found to use as the sun.");
+    }
+  }
+
+  if (sun_source_ == 0) {
+    ImGui::TextDisabled("Uses the first DirectionalLight flagged as sun "
+                        "(or first available).");
+  }
+
+  const bool disable_sun_controls = sun_from_scene && !sun_light_available_;
+  ImGui::BeginDisabled(disable_sun_controls);
+
+  ImGui::Separator();
+  ImGui::Text("Direction (toward sun):");
+
+  if (ImGui::SliderFloat(
+        "Azimuth (deg)", &sun_azimuth_deg_, 0.0F, 360.0F, "%.1f")) {
+    MarkDirty();
+  }
+
+  if (ImGui::DragFloat(
+        "Elevation (deg)", &sun_elevation_deg_, 0.1F, -90.0F, 90.0F, "%.1f")) {
+    MarkDirty();
+  }
+
+  const auto sun_dir
+    = DirectionFromAzimuthElevation(sun_azimuth_deg_, sun_elevation_deg_);
+  ImGui::Text("Direction: (%.2f, %.2f, %.2f)", sun_dir.x, sun_dir.y, sun_dir.z);
+
+  ImGui::Separator();
+  ImGui::Text("Light:");
+
+  if (ImGui::DragFloat("Intensity (lux)", &sun_intensity_lux_, 10.0F, 0.0F,
+        500000.0F, "%.1f")) {
+    MarkDirty();
+  }
+
+  if (ImGui::Checkbox("Use temperature", &sun_use_temperature_)) {
+    MarkDirty();
+  }
+
+  if (sun_use_temperature_) {
+    if (ImGui::DragFloat("Temperature (K)", &sun_temperature_kelvin_, 50.0F,
+          1000.0F, 40000.0F, "%.0f")) {
+      MarkDirty();
+    }
+    const auto preview = KelvinToLinearRgb(sun_temperature_kelvin_);
+    ImGui::ColorButton("Temperature Preview",
+      ImVec4(preview.r, preview.g, preview.b, 1.0F), ImGuiColorEditFlags_Float);
+  }
+
+  ImGui::BeginDisabled(sun_use_temperature_);
+  float sun_color[3] = {
+    sun_color_rgb_.x,
+    sun_color_rgb_.y,
+    sun_color_rgb_.z,
+  };
+  if (ImGui::ColorEdit3("Color", sun_color,
+        ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR)) {
+    sun_color_rgb_ = { sun_color[0], sun_color[1], sun_color[2] };
+    MarkDirty();
+  }
+  ImGui::EndDisabled();
+
+  ImGui::Separator();
+  if (ImGui::DragFloat("Disk radius (deg)", &sun_component_disk_radius_deg_,
+        0.01F, 0.01F, 5.0F, "%.3f")) {
+    MarkDirty();
+  }
+
+  ImGui::EndDisabled();
 
   ImGui::Unindent();
 }
@@ -352,7 +467,7 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
     MarkDirty();
   }
   if (ImGui::SliderFloat(
-        "Mie Anisotropy", &mie_anisotropy_, -1.0F, 1.0F, "%.2f")) {
+        "Mie Anisotropy", &mie_anisotropy_, 0.0F, 0.99F, "%.2f")) {
     MarkDirty();
   }
   if (ImGui::SliderFloat(
@@ -369,7 +484,7 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   }
   if (sun_disk_enabled_) {
     if (ImGui::SliderFloat(
-          "Angular Radius (deg)", &sun_disk_radius_deg_, 0.1F, 5.0F, "%.3f")) {
+          "Angular Radius (deg)", &sun_disk_radius_deg_, 0.01F, 5.0F, "%.3f")) {
       MarkDirty();
     }
   }
@@ -755,6 +870,7 @@ void EnvironmentDebugPanel::SyncFromScene()
     sky_sphere_enabled_ = false;
     sky_light_enabled_ = false;
     post_process_enabled_ = false;
+    sun_present_ = false;
     return;
   }
 
@@ -765,6 +881,7 @@ void EnvironmentDebugPanel::SyncFromScene()
     sky_sphere_enabled_ = false;
     sky_light_enabled_ = false;
     post_process_enabled_ = false;
+    sun_present_ = false;
     return;
   }
 
@@ -811,6 +928,37 @@ void EnvironmentDebugPanel::SyncFromScene()
     sky_light_enabled_ = false;
   }
 
+  // Sun
+  if (auto* sun = env->TryGetSystem<scene::environment::Sun>().get()) {
+    sun_present_ = true;
+    sun_enabled_ = sun->IsEnabled();
+    const bool from_scene
+      = (sun->GetSunSource() == scene::environment::SunSource::kFromScene);
+    sun_source_ = from_scene ? 0 : 1;
+    sun_azimuth_deg_ = sun->GetAzimuthDegrees();
+    sun_elevation_deg_ = sun->GetElevationDegrees();
+    sun_color_rgb_ = sun->GetColorRgb();
+    sun_intensity_lux_ = sun->GetIntensityLux();
+    sun_use_temperature_ = sun->HasLightTemperature();
+    if (sun_use_temperature_) {
+      sun_temperature_kelvin_ = sun->GetLightTemperatureKelvin();
+    }
+    sun_component_disk_radius_deg_
+      = sun->GetDiskAngularRadiusRadians() * kRadToDeg;
+
+    if (from_scene) {
+      UpdateSunLightCandidate();
+      if (sun_light_available_) {
+        if (auto light
+          = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
+          sun_enabled_ = light->get().Common().affects_world;
+        }
+      }
+    }
+  } else {
+    sun_present_ = false;
+  }
+
   // NOTE: Fog sync removed - use Aerial Perspective from SkyAtmosphere.
 
   // PostProcess
@@ -833,9 +981,41 @@ void EnvironmentDebugPanel::SyncFromScene()
     post_process_enabled_ = false;
   }
 
-  // NOTE: Debug flags (use_lut_, force_analytic_, sun_override_*, etc.)
+  // NOTE: Debug flags (use_lut_, force_analytic_, etc.)
   // are NOT synced from scene - they are renderer debug controls that
   // persist across scene loads. See SyncDebugFlagsFromRenderer().
+}
+
+/*!
+ Resets cached sun UI values to match the Sun component defaults.
+
+ @return None.
+
+ ### Performance Characteristics
+
+ - Time Complexity: O(1)
+ - Memory: None.
+ - Optimization: Stack-only defaults object.
+*/
+void EnvironmentDebugPanel::ResetSunUiToDefaults()
+{
+  const scene::environment::Sun defaults;
+
+  sun_present_ = true;
+  sun_enabled_ = defaults.IsEnabled();
+  sun_source_
+    = (defaults.GetSunSource() == scene::environment::SunSource::kFromScene)
+    ? 0
+    : 1;
+  sun_azimuth_deg_ = defaults.GetAzimuthDegrees();
+  sun_elevation_deg_ = defaults.GetElevationDegrees();
+  sun_color_rgb_ = defaults.GetColorRgb();
+  sun_intensity_lux_ = defaults.GetIntensityLux();
+  sun_use_temperature_ = defaults.HasLightTemperature();
+  sun_temperature_kelvin_
+    = sun_use_temperature_ ? defaults.GetLightTemperatureKelvin() : 6500.0F;
+  sun_component_disk_radius_deg_
+    = defaults.GetDiskAngularRadiusRadians() * kRadToDeg;
 }
 
 void EnvironmentDebugPanel::SyncDebugFlagsFromRenderer()
@@ -854,23 +1034,6 @@ void EnvironmentDebugPanel::SyncDebugFlagsFromRenderer()
 
   // Derive use_lut_ state: if neither force_analytic nor disabled
   use_lut_ = !force_analytic_;
-
-  // Sync sun override state from Renderer SunState
-  const auto sun = config_.renderer->GetSunOverride();
-  sun_override_enabled_ = sun.enabled;
-  if (sun_override_enabled_) {
-    const auto dir = sun.direction_ws;
-    // Convert direction to azimuth/elevation (Z-up: elevation from Z, azimuth
-    // from X toward Y)
-    sun_override_elevation_deg_
-      = std::asin(glm::clamp(dir.z, -1.0F, 1.0F)) * kRadToDeg;
-    sun_override_azimuth_deg_ = std::atan2(dir.y, dir.x) * kRadToDeg;
-    if (sun_override_azimuth_deg_ < 0.0F) {
-      sun_override_azimuth_deg_ += 360.0F;
-    }
-    sun_override_intensity_ = sun.intensity;
-    sun_override_color_ = sun.color_rgb;
-  }
 }
 
 void EnvironmentDebugPanel::MarkDirty() { pending_changes_ = true; }
@@ -892,6 +1055,57 @@ void EnvironmentDebugPanel::ApplyPendingChanges()
   if (!env) {
     config_.scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
     env = config_.scene->GetEnvironment().get();
+  }
+
+  // Sun
+  auto* sun = env->TryGetSystem<scene::environment::Sun>().get();
+  if (sun_present_ && !sun) {
+    sun = &env->AddSystem<scene::environment::Sun>();
+  }
+  if (sun) {
+    sun->SetEnabled(sun_enabled_);
+    const auto sun_source = (sun_source_ == 0)
+      ? scene::environment::SunSource::kFromScene
+      : scene::environment::SunSource::kSynthetic;
+    sun->SetSunSource(sun_source);
+    sun->SetAzimuthElevationDegrees(sun_azimuth_deg_, sun_elevation_deg_);
+    sun->SetIntensityLux(sun_intensity_lux_);
+    sun->SetDiskAngularRadiusRadians(
+      sun_component_disk_radius_deg_ * kDegToRad);
+    if (sun_use_temperature_) {
+      sun->SetLightTemperatureKelvin(sun_temperature_kelvin_);
+    } else {
+      sun->SetColorRgb(sun_color_rgb_);
+    }
+
+    if (sun_source == scene::environment::SunSource::kFromScene) {
+      UpdateSunLightCandidate();
+      if (sun_light_available_) {
+        if (auto light
+          = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
+          light->get().SetIsSunLight(true);
+
+          auto& common = light->get().Common();
+          common.affects_world = sun_enabled_;
+          common.intensity = sun_intensity_lux_;
+          common.color_rgb = sun_use_temperature_
+            ? KelvinToLinearRgb(sun_temperature_kelvin_)
+            : sun_color_rgb_;
+
+          const auto sun_dir = DirectionFromAzimuthElevation(
+            sun_azimuth_deg_, sun_elevation_deg_);
+          const glm::vec3 light_dir = -sun_dir;
+          auto transform = sun_light_node_.GetTransform();
+          transform.SetLocalRotation(RotationFromDirection(light_dir));
+        }
+
+        sun->SetLightReference(sun_light_node_);
+      } else {
+        sun->ClearLightReference();
+      }
+    } else {
+      sun->ClearLightReference();
+    }
   }
 
   // SkyAtmosphere
@@ -976,7 +1190,7 @@ void EnvironmentDebugPanel::ApplyPendingChanges()
     }
   }
 
-  // Update renderer debug overrides
+  // Update renderer debug flags
   if (config_.renderer) {
     // Set atmosphere debug flags (use the centralized GetAtmosphereFlags
     // method)
@@ -984,18 +1198,77 @@ void EnvironmentDebugPanel::ApplyPendingChanges()
     LOG_F(INFO, "ApplyPendingChanges: Setting atmosphere debug flags=0x{:x}",
       debug_flags);
     config_.renderer->SetAtmosphereDebugFlags(debug_flags);
-
-    // Set sun light override (direction, intensity, color)
-    const auto sun_dir = DirectionFromAzimuthElevation(
-      sun_override_azimuth_deg_, sun_override_elevation_deg_);
-    // Apply sun override using SunState value object
-    const oxygen::engine::SunState sun_state
-      = oxygen::engine::SunState::FromDirectionAndLight(sun_dir,
-        sun_override_color_, sun_override_intensity_, sun_override_enabled_);
-    config_.renderer->SetSunOverride(sun_state);
   }
 
   pending_changes_ = false;
+}
+
+auto EnvironmentDebugPanel::FindSunLightCandidate() const
+  -> std::optional<scene::SceneNode>
+{
+  if (!config_.scene) {
+    return std::nullopt;
+  }
+
+  auto roots = config_.scene->GetRootNodes();
+  std::vector<scene::SceneNode> stack;
+  stack.reserve(roots.size());
+  for (auto& root : roots) {
+    stack.push_back(root);
+  }
+
+  std::optional<scene::SceneNode> first_directional;
+  while (!stack.empty()) {
+    auto node = stack.back();
+    stack.pop_back();
+
+    if (!node.IsAlive()) {
+      continue;
+    }
+
+    if (auto light = node.GetLightAs<scene::DirectionalLight>()) {
+      if (light->get().IsSunLight()) {
+        return node;
+      }
+      if (!first_directional.has_value()) {
+        first_directional = node;
+      }
+    }
+
+    auto child_opt = node.GetFirstChild();
+    while (child_opt.has_value()) {
+      stack.push_back(*child_opt);
+      child_opt = child_opt->GetNextSibling();
+    }
+  }
+
+  return first_directional;
+}
+
+void EnvironmentDebugPanel::UpdateSunLightCandidate()
+{
+  sun_light_available_ = false;
+
+  if (!config_.scene) {
+    sun_light_node_ = scene::SceneNode {};
+    return;
+  }
+
+  if (sun_light_node_.IsAlive()) {
+    if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
+      sun_light_available_ = true;
+      return;
+    }
+  }
+
+  auto candidate = FindSunLightCandidate();
+  if (candidate.has_value() && candidate->IsAlive()) {
+    sun_light_node_ = *candidate;
+    sun_light_available_ = true;
+    return;
+  }
+
+  sun_light_node_ = scene::SceneNode {};
 }
 
 auto EnvironmentDebugPanel::GetAtmosphereFlags() const -> uint32_t
@@ -1010,31 +1283,7 @@ auto EnvironmentDebugPanel::GetAtmosphereFlags() const -> uint32_t
   if (force_analytic_) {
     flags |= static_cast<uint32_t>(AtmosphereDebugFlags::kForceAnalytic);
   }
-  if (sun_override_enabled_) {
-    flags |= static_cast<uint32_t>(AtmosphereDebugFlags::kOverrideSun);
-  }
   return flags;
-}
-
-auto EnvironmentDebugPanel::GetSunOverrideDirection() const -> glm::vec3
-{
-  return DirectionFromAzimuthElevation(
-    sun_override_azimuth_deg_, sun_override_elevation_deg_);
-}
-
-auto EnvironmentDebugPanel::GetSunOverrideIntensity() const -> float
-{
-  return sun_override_intensity_;
-}
-
-auto EnvironmentDebugPanel::GetSunOverrideColor() const -> glm::vec3
-{
-  return sun_override_color_;
-}
-
-auto EnvironmentDebugPanel::IsSunOverrideEnabled() const -> bool
-{
-  return sun_override_enabled_;
 }
 
 } // namespace oxygen::examples::render_scene::ui

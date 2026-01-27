@@ -195,3 +195,13 @@ target_link_libraries(
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::cs-init>
 )
 add_test_scene_factory_dependencies(Oxygen.Scene.PrettyPrinter)
+
+# -- Scene Environment Tests ---------------------------------------------------
+
+m_gtest_program(
+  SunEnvironment
+  SOURCES
+    ${TEST_FACTORY_SOURCES}
+    "Sun_basic_test.cpp"
+)
+add_test_scene_factory_dependencies(${META_MODULE_NAME}.SunEnvironment.Tests)

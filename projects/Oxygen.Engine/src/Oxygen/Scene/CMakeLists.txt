@@ -70,21 +70,19 @@ set(
   "SceneTraversalBase.h"
   "Camera/Orthographic.h"
   "Camera/Perspective.h"
-
   "Environment/EnvironmentSystem.h"
   "Environment/Fog.h"
   "Environment/PostProcessVolume.h"
   "Environment/SceneEnvironment.h"
+  "Environment/Sun.h"
   "Environment/SkyAtmosphere.h"
   "Environment/SkyLight.h"
   "Environment/SkySphere.h"
   "Environment/VolumetricClouds.h"
-
   "Light/DirectionalLight.h"
   "Light/LightCommon.h"
   "Light/PointLight.h"
   "Light/SpotLight.h"
-
   "Detail/GraphData.h"
   "Detail/NodeData.h"
   "Detail/PathMatcher.h"
@@ -125,6 +123,7 @@ set(
   "Detail/Scene_safecall_impl.cpp"
   "Detail/StringConverters.cpp"
   "Detail/TransformComponent.cpp"
+  "Environment/Sun.cpp"
 )
 
 target_sources(

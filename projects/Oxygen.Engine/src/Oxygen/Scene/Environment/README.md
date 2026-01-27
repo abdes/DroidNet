@@ -27,6 +27,24 @@ The systems below are designed to map cleanly to common modern real-time
 rendering techniques (UE5/Unity/Godot-style), without prescribing a single
 renderer implementation.
 
+### Sun
+
+**Component:** `Sun`
+
+**Intent:** Author the primary sun for sky, atmosphere, fog, clouds, and IBL.
+
+**Typical technique:** Resolve one effective sun per view using the authored
+sun component or a tagged directional light.
+
+- **Pass implications**
+  - Provides sun direction, color, and intensity to sky/atmosphere and fog.
+  - Drives sun disk size used by sky rendering.
+- **Shader implications**
+  - Reads sun direction and luminance from the environment dynamic data.
+
+**Coupling:** The renderer may resolve the sun from a referenced directional
+light or a selection rule; this component stores authored parameters only.
+
 ### SkyAtmosphere
 
 **Component:** `SkyAtmosphere`
