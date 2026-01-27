@@ -13,7 +13,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/Queues.h> // SharedTransferQueueStrategy
 
-#include "WorkspaceRoot.h"
+#include "Common/WorkspaceRoot.h"
 
 namespace oxygen {
 

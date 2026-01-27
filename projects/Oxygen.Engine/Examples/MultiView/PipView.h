@@ -9,7 +9,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Types/Geometry.h>
 
-#include "DemoView.h"
+#include "MultiView/DemoView.h"
 
 namespace oxygen::examples::multiview {
 
@@ -39,7 +39,8 @@ protected:
 private:
   void EnsurePipRenderTargets(const SubPixelExtent& viewport_extent);
 
-  static auto ComputePipExtent(const PixelExtent& surface_extent) -> PixelExtent;
+  static auto ComputePipExtent(const PixelExtent& surface_extent)
+    -> PixelExtent;
 
   static auto ComputePipViewport(const PixelExtent& surface_extent) -> ViewPort;
 

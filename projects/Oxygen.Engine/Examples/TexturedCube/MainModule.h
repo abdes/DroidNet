@@ -18,13 +18,13 @@
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "../Common/AsyncEngineApp.h"
-#include "../Common/SingleViewExample.h"
-#include "../Common/SkyboxManager.h"
-#include "CameraController.h"
-#include "DebugUI.h"
-#include "SceneSetup.h"
-#include "TextureLoadingService.h"
+#include "Common/AsyncEngineApp.h"
+#include "Common/SingleViewExample.h"
+#include "Common/SkyboxManager.h"
+#include "TexturedCube/CameraController.h"
+#include "TexturedCube/DebugUI.h"
+#include "TexturedCube/SceneSetup.h"
+#include "TexturedCube/TextureLoadingService.h"
 
 namespace oxygen::examples::textured_cube {
 

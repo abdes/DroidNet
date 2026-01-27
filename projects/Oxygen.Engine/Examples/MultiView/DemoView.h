@@ -19,7 +19,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Scene/SceneNode.h>
 
-#include "ViewRenderer.h"
+#include "MultiView/ViewRenderer.h"
 
 namespace oxygen {
 class Graphics;

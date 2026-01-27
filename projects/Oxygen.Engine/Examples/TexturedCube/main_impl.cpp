@@ -42,8 +42,8 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Renderer/Renderer.h>
 
-#include "../Common/AsyncEngineApp.h"
-#include "MainModule.h"
+#include "Common/AsyncEngineApp.h"
+#include "TexturedCube/MainModule.h"
 
 using namespace oxygen;
 using namespace oxygen::engine;

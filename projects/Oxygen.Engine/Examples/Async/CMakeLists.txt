@@ -63,7 +63,7 @@ target_compile_features(${META_MODULE_TARGET} PRIVATE cxx_std_23)
 target_include_directories(
   ${META_MODULE_TARGET}
   PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+    ${OXYGEN_EXAMPLES_SOURCE_DIR}
 )
 
 target_link_libraries(

@@ -30,8 +30,8 @@
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "EnvironmentDebugPanel.h"
-#include "FilePicker.h"
+#include "RenderScene/UI/EnvironmentDebugPanel.h"
+#include "RenderScene/UI/FilePicker.h"
 
 namespace oxygen::examples::render_scene::ui {
 
@@ -178,12 +178,18 @@ void EnvironmentDebugPanel::Draw()
     return;
   }
 
+  DrawContents();
+
+  ImGui::End();
+}
+
+void EnvironmentDebugPanel::DrawContents()
+{
   const bool has_scene = config_.scene != nullptr;
 
   if (!has_scene) {
     ImGui::TextColored(ImVec4(1.0F, 0.5F, 0.0F, 1.0F),
       "No scene loaded. Load a scene to edit environment settings.");
-    ImGui::End();
     return;
   }
 
@@ -217,8 +223,6 @@ void EnvironmentDebugPanel::Draw()
   if (ImGui::CollapsingHeader("Post Process")) {
     DrawPostProcessSection();
   }
-
-  ImGui::End();
 }
 
 void EnvironmentDebugPanel::DrawRendererDebugSection()

@@ -52,6 +52,8 @@ set(
   "ImGuiModule.h"
   "ImGuiGraphicsBackend.h"
   "ImGuiPass.h"
+  "Styles/FontAwesome-400.h"
+  "Styles/IconsFontAwesome.h"
 )
 set(
   OXYGEN_IMGUI_PRIVATE_SOURCES
@@ -60,6 +62,7 @@ set(
   "Styles/Spectrum.cpp"
   "Styles/Spectrum.h"
   "Styles/SourceSansProRegular.cpp"
+  "Styles/FontAwesome-400.cpp"
 )
 
 target_sources(

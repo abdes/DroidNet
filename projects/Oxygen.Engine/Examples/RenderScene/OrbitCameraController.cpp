@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "OrbitCameraController.h"
+#include "RenderScene/OrbitCameraController.h"
 #include <algorithm>
 #include <cmath>
 #include <numbers>

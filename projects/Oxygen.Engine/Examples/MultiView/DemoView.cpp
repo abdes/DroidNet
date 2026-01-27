@@ -14,7 +14,7 @@
 
 #include <utility>
 
-#include "DemoView.h"
+#include "MultiView/DemoView.h"
 
 namespace oxygen::examples::multiview {
 
@@ -47,8 +47,7 @@ void DemoView::EnsureCamera(scene::Scene& scene, std::string_view node_name)
   }
 
   if (!camera_node_.HasCamera()) {
-    auto camera
-      = std::make_unique<PerspectiveCamera>();
+    auto camera = std::make_unique<PerspectiveCamera>();
     const bool attached = camera_node_.AttachCamera(std::move(camera));
     CHECK_F(attached, "Failed to attach PerspectiveCamera to {}", node_name);
   }

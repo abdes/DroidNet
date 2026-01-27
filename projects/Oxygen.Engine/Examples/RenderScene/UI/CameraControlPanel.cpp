@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "CameraControlPanel.h"
-
 #include <cmath>
 
 #include <imgui.h>
@@ -14,8 +12,9 @@
 
 #include <Oxygen/Input/Action.h>
 
-#include "../FlyCameraController.h"
-#include "../OrbitCameraController.h"
+#include "RenderScene/FlyCameraController.h"
+#include "RenderScene/OrbitCameraController.h"
+#include "RenderScene/UI/CameraControlPanel.h"
 
 namespace oxygen::examples::render_scene::ui {
 
@@ -39,6 +38,13 @@ void CameraControlPanel::Draw()
     return;
   }
 
+  DrawContents();
+
+  ImGui::End();
+}
+
+void CameraControlPanel::DrawContents()
+{
   if (ImGui::BeginTabBar("CameraControlTabs")) {
     if (ImGui::BeginTabItem("Camera Mode")) {
       DrawCameraModeTab();
@@ -52,8 +58,6 @@ void CameraControlPanel::Draw()
 
     ImGui::EndTabBar();
   }
-
-  ImGui::End();
 }
 
 void CameraControlPanel::DrawCameraModeTab()
@@ -252,7 +256,8 @@ void CameraControlPanel::DrawInputDebugInfo()
 
   // Layout: action name, state string, flags
   const auto show_action
-    = [this](const char* label, const oxygen::input::Action* action) {
+    = [this](const char* label,
+        const std::shared_ptr<oxygen::input::Action>& action) {
         const char* state = GetActionStateString(action);
         const bool ongoing = action && action->IsOngoing();
         const bool triggered = action && action->WasTriggeredThisFrame();
@@ -289,7 +294,7 @@ void CameraControlPanel::DrawInputDebugInfo()
 }
 
 auto CameraControlPanel::GetActionStateString(
-  const oxygen::input::Action* action) const -> const char*
+  const std::shared_ptr<oxygen::input::Action>& action) const -> const char*
 {
   if (!action) {
     return "<null>";

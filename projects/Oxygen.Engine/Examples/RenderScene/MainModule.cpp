@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "MainModule.h"
-
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -15,6 +13,7 @@
 #include <functional>
 #include <numbers>
 #include <string_view>
+#include <type_traits>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -27,6 +26,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/LooseCookedInspection.h>
@@ -59,6 +59,8 @@
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Types/Flags.h>
+
+#include "RenderScene/MainModule.h"
 
 using oxygen::scene::SceneNodeFlags;
 
@@ -132,6 +134,32 @@ auto FindRenderSceneContentRoot() -> std::filesystem::path
 
   return std::filesystem::current_path();
 }
+
+template <typename PanelType>
+class PanelAdapter final : public oxygen::examples::demo_shell::DemoPanel {
+public:
+  PanelAdapter(std::string_view name, oxygen::observer_ptr<PanelType> panel)
+    : name_(name)
+    , panel_(panel)
+  {
+  }
+
+  [[nodiscard]] auto GetName() const noexcept -> std::string_view override
+  {
+    return name_;
+  }
+
+  auto DrawContents() -> void override
+  {
+    if (panel_) {
+      panel_->DrawContents();
+    }
+  }
+
+private:
+  std::string name_ {};
+  oxygen::observer_ptr<PanelType> panel_ { nullptr };
+};
 
 } // namespace
 
@@ -904,6 +932,10 @@ MainModule::MainModule(const oxygen::examples::common::AsyncEngineApp& app)
   : Base(app)
 {
   content_root_ = FindRenderSceneContentRoot();
+  demo_knobs_.camera_mode = demo_shell::CameraMode::kFly;
+  demo_knobs_.render_mode = demo_shell::RenderMode::kSolid;
+  demo_knobs_.show_axes_widget = true;
+  demo_knobs_.show_frame_stats = false;
 }
 
 MainModule::~MainModule() = default;
@@ -949,7 +981,12 @@ auto MainModule::OnAttached(
   content_root_ = FindRenderSceneContentRoot();
 
   // Initialize UI panels
+  demo_shell_ui_.Initialize(demo_shell::DemoShellUiConfig {
+    .knobs = observer_ptr { &demo_knobs_ },
+    .panel_registry = observer_ptr { &panel_registry_ },
+  });
   InitializeUIPanels();
+  RegisterDemoPanels();
 
   LOG_F(WARNING, "RenderScene: InitInputBindings ok");
   return true;
@@ -1488,6 +1525,7 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
   ImGui::SetCurrentContext(imgui_context);
 
   DrawUI();
+  SyncCameraModeFromKnobs();
   co_return;
 }
 
@@ -1501,6 +1539,8 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
       ImGui::SetCurrentContext(imgui_context);
     }
   }
+
+  ApplyRenderModeFromKnobs();
 
   if (auto rg = GetRenderGraph(); rg) {
     rg->SetupRenderPasses();
@@ -1645,9 +1685,10 @@ auto MainModule::InitializeUIPanels() -> void
   // Configure light culling debug panel
   if (auto render_graph = GetRenderGraph()) {
     ui::LightCullingDebugConfig debug_config;
-    debug_config.shader_pass_config = render_graph->GetShaderPassConfig().get();
+    debug_config.shader_pass_config
+      = observer_ptr { render_graph->GetShaderPassConfig().get() };
     debug_config.light_culling_pass_config
-      = render_graph->GetLightCullingPassConfig().get();
+      = observer_ptr { render_graph->GetLightCullingPassConfig().get() };
     debug_config.initial_mode = ui::ShaderDebugMode::kDisabled;
 
     // Callback to invalidate PSO when cluster mode changes
@@ -1665,7 +1706,7 @@ auto MainModule::InitializeUIPanels() -> void
   env_config.scene = scene_;
   auto* renderer = ResolveRenderer();
   if (renderer) {
-    env_config.renderer = renderer;
+    env_config.renderer = observer_ptr { renderer };
   }
   env_config.on_atmosphere_params_changed = [renderer]() {
     LOG_F(INFO, "Atmosphere parameters changed, LUTs will regenerate");
@@ -1683,22 +1724,22 @@ auto MainModule::InitializeUIPanels() -> void
 auto MainModule::UpdateCameraControlPanelConfig() -> void
 {
   ui::CameraControlConfig camera_config;
-  camera_config.active_camera = &active_camera_;
-  camera_config.orbit_controller = orbit_controller_.get();
-  camera_config.fly_controller = fly_controller_.get();
-  camera_config.move_fwd_action = move_fwd_action_.get();
-  camera_config.move_bwd_action = move_bwd_action_.get();
-  camera_config.move_left_action = move_left_action_.get();
-  camera_config.move_right_action = move_right_action_.get();
-  camera_config.fly_boost_action = fly_boost_action_.get();
-  camera_config.fly_plane_lock_action = fly_plane_lock_action_.get();
-  camera_config.rmb_action = rmb_action_.get();
-  camera_config.orbit_action = orbit_action_.get();
+  camera_config.active_camera = observer_ptr { &active_camera_ };
+  camera_config.orbit_controller = observer_ptr { orbit_controller_.get() };
+  camera_config.fly_controller = observer_ptr { fly_controller_.get() };
+  camera_config.move_fwd_action = move_fwd_action_;
+  camera_config.move_bwd_action = move_bwd_action_;
+  camera_config.move_left_action = move_left_action_;
+  camera_config.move_right_action = move_right_action_;
+  camera_config.fly_boost_action = fly_boost_action_;
+  camera_config.fly_plane_lock_action = fly_plane_lock_action_;
+  camera_config.rmb_action = rmb_action_;
+  camera_config.orbit_action = orbit_action_;
 
   camera_config.on_mode_changed = [this](ui::CameraControlMode mode) {
-    camera_mode_ = (mode == ui::CameraControlMode::kOrbit) ? CameraMode::kOrbit
-                                                           : CameraMode::kFly;
-    UpdateActiveCameraInputContext();
+    demo_knobs_.camera_mode = (mode == ui::CameraControlMode::kOrbit)
+      ? demo_shell::CameraMode::kOrbit
+      : demo_shell::CameraMode::kFly;
     pending_sync_active_camera_ = true;
   };
 
@@ -1707,10 +1748,81 @@ auto MainModule::UpdateCameraControlPanelConfig() -> void
   camera_control_panel_.UpdateConfig(camera_config);
 
   // Sync mode
+  const auto ui_mode
+    = (demo_knobs_.camera_mode == demo_shell::CameraMode::kOrbit)
+    ? ui::CameraControlMode::kOrbit
+    : ui::CameraControlMode::kFly;
+  camera_control_panel_.SetMode(ui_mode);
+}
+
+auto MainModule::RegisterDemoPanels() -> void
+{
+  panel_registry_ = demo_shell::PanelRegistry {};
+  demo_panels_.clear();
+
+  const auto register_panel = [this](auto panel_ptr, std::string_view name) {
+    using PanelType = std::remove_reference_t<decltype(*panel_ptr)>;
+    auto adapter = std::make_unique<PanelAdapter<PanelType>>(
+      name, observer_ptr { panel_ptr });
+    auto* adapter_ptr = adapter.get();
+    demo_panels_.push_back(std::move(adapter));
+
+    const auto result
+      = panel_registry_.RegisterPanel(observer_ptr { adapter_ptr });
+    if (!result) {
+      LOG_F(WARNING, "DemoShell: failed to register panel '{}'", name);
+    }
+  };
+
+  register_panel(&content_loader_panel_, "Content Loader");
+  register_panel(&camera_control_panel_, "Camera Controls");
+  register_panel(&environment_debug_panel_, "Environment");
+  register_panel(&light_culling_debug_panel_, "Light Culling");
+
+  (void)panel_registry_.SetActivePanelByName("Content Loader");
+}
+
+auto MainModule::SyncCameraModeFromKnobs() -> void
+{
+  const auto desired
+    = (demo_knobs_.camera_mode == demo_shell::CameraMode::kOrbit)
+    ? CameraMode::kOrbit
+    : CameraMode::kFly;
+  if (camera_mode_ == desired) {
+    return;
+  }
+
+  camera_mode_ = desired;
+  UpdateActiveCameraInputContext();
+  pending_sync_active_camera_ = true;
+
   const auto ui_mode = (camera_mode_ == CameraMode::kOrbit)
     ? ui::CameraControlMode::kOrbit
     : ui::CameraControlMode::kFly;
   camera_control_panel_.SetMode(ui_mode);
+}
+
+auto MainModule::ApplyRenderModeFromKnobs() -> void
+{
+  if (auto render_graph = GetRenderGraph()) {
+    auto shader_pass_config = render_graph->GetShaderPassConfig();
+    auto transparent_pass_config = render_graph->GetTransparentPassConfig();
+    if (!shader_pass_config || !transparent_pass_config) {
+      return;
+    }
+
+    using graphics::FillMode;
+    const FillMode mode
+      = (demo_knobs_.render_mode == demo_shell::RenderMode::kWireframe)
+      ? FillMode::kWireFrame
+      : FillMode::kSolid;
+    shader_pass_config->fill_mode = mode;
+    transparent_pass_config->fill_mode = mode;
+
+    const bool force_clear = (mode == FillMode::kWireFrame);
+    shader_pass_config->clear_color_target = true;
+    shader_pass_config->auto_skip_clear_when_sky_pass_present = !force_clear;
+  }
 }
 
 auto MainModule::UpdateUIPanels() -> void
@@ -1720,9 +1832,10 @@ auto MainModule::UpdateUIPanels() -> void
   // Update light culling debug panel config if render graph exists
   if (auto render_graph = GetRenderGraph()) {
     ui::LightCullingDebugConfig debug_config;
-    debug_config.shader_pass_config = render_graph->GetShaderPassConfig().get();
+    debug_config.shader_pass_config
+      = observer_ptr { render_graph->GetShaderPassConfig().get() };
     debug_config.light_culling_pass_config
-      = render_graph->GetLightCullingPassConfig().get();
+      = observer_ptr { render_graph->GetLightCullingPassConfig().get() };
     debug_config.initial_mode = light_culling_debug_panel_.GetDebugMode();
 
     // Callback to invalidate PSO when cluster mode changes
@@ -1738,7 +1851,7 @@ auto MainModule::UpdateUIPanels() -> void
     ui::EnvironmentDebugConfig env_config;
     env_config.scene = scene_;
     auto* renderer = ResolveRenderer();
-    env_config.renderer = renderer;
+    env_config.renderer = observer_ptr { renderer };
     // IMPORTANT: Re-set the callbacks (they get cleared if not set)
     env_config.on_atmosphere_params_changed = [renderer]() {
       LOG_F(INFO, "Atmosphere parameters changed, LUTs will regenerate");
@@ -1761,42 +1874,10 @@ auto MainModule::UpdateUIPanels() -> void
 
 auto MainModule::DrawUI() -> void
 {
-  content_loader_panel_.Draw();
-  camera_control_panel_.Draw();
-  light_culling_debug_panel_.Draw();
-  environment_debug_panel_.Draw();
-
-  if (auto render_graph = GetRenderGraph()) {
-    auto shader_pass_config = render_graph->GetShaderPassConfig();
-    auto transparent_pass_config = render_graph->GetTransparentPassConfig();
-    if (shader_pass_config && transparent_pass_config) {
-      using graphics::FillMode;
-      const bool is_wireframe
-        = shader_pass_config->fill_mode == FillMode::kWireFrame;
-      bool use_wireframe = is_wireframe;
-
-      if (ImGui::Begin("Render Mode")) {
-        ImGui::TextUnformatted("Rasterization");
-        if (ImGui::RadioButton("Solid", !use_wireframe)) {
-          use_wireframe = false;
-        }
-        if (ImGui::RadioButton("Wireframe", use_wireframe)) {
-          use_wireframe = true;
-        }
-      }
-      ImGui::End();
-
-      if (use_wireframe != is_wireframe) {
-        const auto mode
-          = use_wireframe ? FillMode::kWireFrame : FillMode::kSolid;
-        shader_pass_config->fill_mode = mode;
-        transparent_pass_config->fill_mode = mode;
-      }
-    }
-  }
+  demo_shell_ui_.Draw();
 
   // Draw axes widget with current camera view matrix
-  if (active_camera_.IsAlive()) {
+  if (demo_knobs_.show_axes_widget && active_camera_.IsAlive()) {
     // Compute view matrix from camera transform
     glm::vec3 cam_pos { 0.0F, 0.0F, 0.0F };
     glm::quat cam_rot { 1.0F, 0.0F, 0.0F, 0.0F };

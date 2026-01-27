@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "DebugUI.h"
+#include "TexturedCube/DebugUI.h"
 
 #include <algorithm>
 #include <cctype>

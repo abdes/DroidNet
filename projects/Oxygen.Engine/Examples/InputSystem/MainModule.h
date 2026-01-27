@@ -17,8 +17,8 @@
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "../Common/AsyncEngineApp.h"
-#include "../Common/SingleViewExample.h"
+#include "Common/AsyncEngineApp.h"
+#include "Common/SingleViewExample.h"
 
 namespace oxygen::examples::input {
 

@@ -14,10 +14,10 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "../Common/AsyncEngineApp.h"
-#include "../Common/ExampleModuleBase.h"
-#include "DemoView.h"
-#include "SceneBootstrapper.h"
+#include "Common/AsyncEngineApp.h"
+#include "Common/ExampleModuleBase.h"
+#include "MultiView/DemoView.h"
+#include "MultiView/SceneBootstrapper.h"
 
 namespace oxygen {
 class Graphics;

@@ -24,16 +24,17 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
-#include "../Common/AsyncEngineApp.h"
-#include "../Common/SingleViewExample.h"
-#include "../Common/SkyboxManager.h"
-#include "FlyCameraController.h"
-#include "OrbitCameraController.h"
-#include "UI/AxesWidget.h"
-#include "UI/CameraControlPanel.h"
-#include "UI/ContentLoaderPanel.h"
-#include "UI/EnvironmentDebugPanel.h"
-#include "UI/LightCullingDebugPanel.h"
+#include "Common/AsyncEngineApp.h"
+#include "Common/SingleViewExample.h"
+#include "Common/SkyboxManager.h"
+#include "DemoShell/DemoShellUi.h"
+#include "RenderScene/FlyCameraController.h"
+#include "RenderScene/OrbitCameraController.h"
+#include "RenderScene/UI/AxesWidget.h"
+#include "RenderScene/UI/CameraControlPanel.h"
+#include "RenderScene/UI/ContentLoaderPanel.h"
+#include "RenderScene/UI/EnvironmentDebugPanel.h"
+#include "RenderScene/UI/LightCullingDebugPanel.h"
 
 namespace oxygen::data {
 class SceneAsset;
@@ -47,6 +48,10 @@ class LooseCookedInspection;
 namespace oxygen::content::import {
 class AssetImporter;
 } // namespace oxygen::content::import
+
+namespace oxygen::examples::demo_shell {
+class DemoPanel;
+} // namespace oxygen::examples::demo_shell
 
 namespace oxygen::examples::render_scene {
 
@@ -118,6 +123,9 @@ private:
 
   auto UpdateUIPanels() -> void;
   auto DrawUI() -> void;
+  auto ApplyRenderModeFromKnobs() -> void;
+  auto SyncCameraModeFromKnobs() -> void;
+  auto RegisterDemoPanels() -> void;
   auto ClearSceneRuntime(const char* reason) -> void;
 
   // Scene and rendering.
@@ -160,6 +168,23 @@ private:
   ui::LightCullingDebugPanel light_culling_debug_panel_;
   ui::EnvironmentDebugPanel environment_debug_panel_;
   ui::AxesWidget axes_widget_;
+
+  //! Demo shell UI state and registration.
+  /*!
+   Lifetime guarantees for the demo shell:
+
+   - **Panels**: Stored in `demo_panels_` and registered once via
+     `RegisterDemoPanels()`. The registry stores non-owning pointers and assumes
+     the panel objects live for the lifetime of `MainModule`.
+   - **Knobs**: `demo_knobs_` is owned by `MainModule` and referenced by the
+     toolbar via `observer_ptr`, so updates are immediate and stable.
+   - **UI Shell**: `demo_shell_ui_` does not own panels; it only orchestrates
+     layout and draws through the registry each frame.
+  */
+  demo_shell::DemoKnobsViewModel demo_knobs_ {};
+  demo_shell::PanelRegistry panel_registry_ {};
+  demo_shell::DemoShellUi demo_shell_ui_ {};
+  std::vector<std::unique_ptr<demo_shell::DemoPanel>> demo_panels_ {};
 
   // Content and scene state
   std::filesystem::path content_root_;

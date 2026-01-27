@@ -22,8 +22,8 @@
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 
-#include "OffscreenCompositor.h"
-#include "PipView.h"
+#include "MultiView/OffscreenCompositor.h"
+#include "MultiView/PipView.h"
 
 namespace oxygen::examples::multiview {
 

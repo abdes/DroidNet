@@ -8,7 +8,7 @@
 
 #include <Oxygen/Base/Macros.h>
 
-#include "DemoView.h"
+#include "MultiView/DemoView.h"
 
 namespace oxygen::examples::multiview {
 

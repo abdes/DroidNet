@@ -16,8 +16,8 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
 
-#include "AppWindow.h"
-#include "AsyncEngineApp.h"
+#include "Common/AppWindow.h"
+#include "Common/AsyncEngineApp.h"
 
 using namespace oxygen;
 
