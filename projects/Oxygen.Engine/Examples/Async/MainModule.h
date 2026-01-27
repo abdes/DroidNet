@@ -27,8 +27,8 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "../Common/AsyncEngineApp.h"
-#include "../Common/SingleViewExample.h"
+#include "Common/AsyncEngineApp.h"
+#include "Common/SingleViewExample.h"
 
 namespace oxygen::examples::async {
 

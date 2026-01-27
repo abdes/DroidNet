@@ -14,9 +14,9 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Renderer/Renderer.h>
 
-#include "MainModule.h"
-#include "MainView.h"
-#include "PipView.h"
+#include "MultiView/MainModule.h"
+#include "MultiView/MainView.h"
+#include "MultiView/PipView.h"
 
 namespace oxygen::examples::multiview {
 

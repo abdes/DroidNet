@@ -23,8 +23,8 @@
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Data/AssetType.h>
 
-#include "FilePicker.h"
-#include "ImportPanel.h"
+#include "RenderScene/UI/FilePicker.h"
+#include "RenderScene/UI/ImportPanel.h"
 
 namespace oxygen::examples::render_scene::ui {
 

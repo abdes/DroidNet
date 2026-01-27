@@ -8,7 +8,7 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 
-#include "OffscreenCompositor.h"
+#include "MultiView/OffscreenCompositor.h"
 
 namespace oxygen::examples::multiview {
 auto OffscreenCompositor::CompositeFullscreen(
@@ -110,8 +110,8 @@ auto OffscreenCompositor::CompositeToRegion(graphics::CommandRecorder& recorder,
   // both src and dst are guaranteed valid; CopyTextureRegion does not scale
   // so we copy the largest overlapping rectangle starting at 0,0 in source
   // into the destination position.
-  const auto &s_desc = source_texture.GetDescriptor();
-  const auto &d_desc = backbuffer.GetDescriptor();
+  const auto& s_desc = source_texture.GetDescriptor();
+  const auto& d_desc = backbuffer.GetDescriptor();
 
   const uint32_t dst_x = static_cast<uint32_t>(
     std::clamp(viewport.top_left_x, 0.0F, static_cast<float>(d_desc.width)));

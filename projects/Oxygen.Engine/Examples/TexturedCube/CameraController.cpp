@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "CameraController.h"
+#include "TexturedCube/CameraController.h"
 
 #include <algorithm>
 #include <cmath>

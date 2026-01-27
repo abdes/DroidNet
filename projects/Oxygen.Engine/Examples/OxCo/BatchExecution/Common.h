@@ -5,6 +5,6 @@
 
 #pragma once
 
-#include "./Common/BatchExecutionEventLoop.h"
-#include "./Common/shared_examples.h"
-#include "./Common/shared_utilities.h"
+#include "OxCo/BatchExecution/Common/BatchExecutionEventLoop.h"
+#include "OxCo/BatchExecution/Common/shared_examples.h"
+#include "OxCo/BatchExecution/Common/shared_utilities.h"

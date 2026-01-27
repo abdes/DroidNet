@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "FilePicker.h"
+#include "RenderScene/UI/FilePicker.h"
 
 #include <Oxygen/Base/Platforms.h>
 #include <Oxygen/Base/StringUtils.h>

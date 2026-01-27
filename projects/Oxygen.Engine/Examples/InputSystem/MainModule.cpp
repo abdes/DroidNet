@@ -43,9 +43,9 @@
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "../Common/AsyncEngineApp.h"
-#include "../Common/SingleViewExample.h"
-#include "./MainModule.h"
+#include "Common/AsyncEngineApp.h"
+#include "Common/SingleViewExample.h"
+#include "InputSystem/MainModule.h"
 
 namespace {
 

@@ -11,6 +11,7 @@ add_subdirectory("Devices")
 add_subdirectory("Async")
 add_subdirectory("InputSystem")
 add_subdirectory("TexturedCube")
+add_subdirectory("DemoShell")
 add_subdirectory("RenderScene")
 add_subdirectory("MultiView")
 

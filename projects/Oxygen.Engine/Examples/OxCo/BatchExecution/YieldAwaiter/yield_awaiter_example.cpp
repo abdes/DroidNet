@@ -15,7 +15,7 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 
-#include "../Common.h"
+#include "OxCo/BatchExecution/Common.h"
 
 using namespace oxygen::co;
 

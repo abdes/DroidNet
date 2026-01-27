@@ -4,14 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "LightCullingDebugPanel.h"
-
 #include <cmath>
 
-#include <Oxygen/Base/Logging.h>
+#include <fmt/format.h>
 #include <imgui.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
+
+#include "RenderScene/UI/LightCullingDebugPanel.h"
 
 namespace oxygen::examples::render_scene::ui {
 
@@ -54,6 +55,13 @@ void LightCullingDebugPanel::Draw()
     return;
   }
 
+  DrawContents();
+
+  ImGui::End();
+}
+
+void LightCullingDebugPanel::DrawContents()
+{
   DrawModeControls();
   ImGui::Spacing();
   ImGui::Separator();
@@ -70,8 +78,6 @@ void LightCullingDebugPanel::Draw()
   ImGui::Spacing();
 
   DrawInfoSection();
-
-  ImGui::End();
 }
 
 void LightCullingDebugPanel::DrawModeControls()
@@ -410,16 +416,15 @@ void LightCullingDebugPanel::ApplyClusterConfigToPass()
     LOG_F(INFO,
       "ApplyClusterConfigToPass: config={} depth_slices={} z_range=AUTO "
       "(camera)",
-      static_cast<void*>(config_.light_culling_pass_config),
-      cluster.depth_slices);
+      fmt::ptr(config_.light_culling_pass_config.get()), cluster.depth_slices);
   } else {
     cluster.z_near = ui_z_near_;
     cluster.z_far = ui_z_far_;
     LOG_F(INFO,
       "ApplyClusterConfigToPass: config={} depth_slices={} z_near={:.4f} "
       "z_far={:.1f}",
-      static_cast<void*>(config_.light_culling_pass_config),
-      cluster.depth_slices, cluster.z_near, cluster.z_far);
+      fmt::ptr(config_.light_culling_pass_config.get()), cluster.depth_slices,
+      cluster.z_near, cluster.z_far);
   }
 
   // Notify that config changed (triggers buffer resize/rebuild)

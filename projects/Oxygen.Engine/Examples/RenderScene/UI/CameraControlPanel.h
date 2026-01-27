@@ -12,6 +12,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/vec3.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
 namespace oxygen::examples::render_scene {
@@ -35,20 +36,35 @@ using CameraModeChangeCallback = std::function<void(CameraControlMode)>;
 using CameraResetCallback = std::function<void()>;
 
 //! Configuration for camera control panel
+/*!
+ Provides non-owning access to camera state and controllers.
+
+ ### Lifetime Guarantees
+
+ - **Active Camera**: Points at the `MainModule::active_camera_` member, so
+   camera switches update the handle in-place.
+ - **Controllers**: Owned by `MainModule`. Call
+   `MainModule::UpdateCameraControlPanelConfig()` after changing or recreating
+   controllers to refresh the references.
+ - **Actions**: Shared ownership to keep input actions alive while UI is
+   rendering.
+
+ @see CameraControlPanel::UpdateConfig
+*/
 struct CameraControlConfig {
-  scene::SceneNode* active_camera { nullptr };
-  OrbitCameraController* orbit_controller { nullptr };
-  FlyCameraController* fly_controller { nullptr };
+  observer_ptr<scene::SceneNode> active_camera { nullptr };
+  observer_ptr<OrbitCameraController> orbit_controller { nullptr };
+  observer_ptr<FlyCameraController> fly_controller { nullptr };
 
   // Input actions for debugging
-  oxygen::input::Action* move_fwd_action { nullptr };
-  oxygen::input::Action* move_bwd_action { nullptr };
-  oxygen::input::Action* move_left_action { nullptr };
-  oxygen::input::Action* move_right_action { nullptr };
-  oxygen::input::Action* fly_boost_action { nullptr };
-  oxygen::input::Action* fly_plane_lock_action { nullptr };
-  oxygen::input::Action* rmb_action { nullptr };
-  oxygen::input::Action* orbit_action { nullptr };
+  std::shared_ptr<oxygen::input::Action> move_fwd_action {};
+  std::shared_ptr<oxygen::input::Action> move_bwd_action {};
+  std::shared_ptr<oxygen::input::Action> move_left_action {};
+  std::shared_ptr<oxygen::input::Action> move_right_action {};
+  std::shared_ptr<oxygen::input::Action> fly_boost_action {};
+  std::shared_ptr<oxygen::input::Action> fly_plane_lock_action {};
+  std::shared_ptr<oxygen::input::Action> rmb_action {};
+  std::shared_ptr<oxygen::input::Action> orbit_action {};
 
   CameraModeChangeCallback on_mode_changed;
   CameraResetCallback on_reset_requested;
@@ -112,6 +128,9 @@ public:
    */
   void Draw();
 
+  //! Draws the panel content without creating a window.
+  void DrawContents();
+
   //! Set current camera control mode
   void SetMode(CameraControlMode mode) { current_mode_ = mode; }
 
@@ -127,8 +146,8 @@ private:
   void DrawCameraPoseInfo();
   void DrawInputDebugInfo();
 
-  auto GetActionStateString(const oxygen::input::Action* action) const -> const
-    char*;
+  auto GetActionStateString(
+    const std::shared_ptr<oxygen::input::Action>& action) const -> const char*;
 
   CameraControlConfig config_;
   CameraControlMode current_mode_ { CameraControlMode::kOrbit };

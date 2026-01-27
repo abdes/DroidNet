@@ -17,7 +17,7 @@
 #include <Oxygen/OxCo/RepeatableShared.h>
 #include <Oxygen/OxCo/Run.h>
 
-#include "../Common.h"
+#include "OxCo/BatchExecution/Common.h"
 
 using namespace oxygen::co;
 

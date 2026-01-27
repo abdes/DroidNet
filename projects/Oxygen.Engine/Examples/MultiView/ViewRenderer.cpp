@@ -12,7 +12,7 @@
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
 
-#include "ViewRenderer.h"
+#include "MultiView/ViewRenderer.h"
 #include <Oxygen/Renderer/Renderer.h>
 
 namespace oxygen::examples::multiview {

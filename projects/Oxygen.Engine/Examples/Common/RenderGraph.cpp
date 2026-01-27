@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "RenderGraph.h"
+#include "Common/RenderGraph.h"
 
-#include "AsyncEngineApp.h"
+#include "Common/AsyncEngineApp.h"
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>

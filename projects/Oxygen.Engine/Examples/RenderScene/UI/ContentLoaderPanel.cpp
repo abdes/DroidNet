@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "ContentLoaderPanel.h"
-
 #include <imgui.h>
+
+#include "RenderScene/UI/ContentLoaderPanel.h"
 
 namespace oxygen::examples::render_scene::ui {
 
@@ -56,6 +56,13 @@ void ContentLoaderPanel::Draw()
     return;
   }
 
+  DrawContents();
+
+  ImGui::End();
+}
+
+void ContentLoaderPanel::DrawContents()
+{
   if (get_last_released_scene_key_) {
     const auto last_key = get_last_released_scene_key_();
     if (last_key.has_value()) {
@@ -94,8 +101,6 @@ void ContentLoaderPanel::Draw()
 
     ImGui::EndTabBar();
   }
-
-  ImGui::End();
 }
 
 } // namespace oxygen::examples::render_scene::ui

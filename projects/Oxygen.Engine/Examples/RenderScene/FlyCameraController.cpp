@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "FlyCameraController.h"
+#include "RenderScene/FlyCameraController.h"
 
 #include <chrono>
 

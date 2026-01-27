@@ -62,9 +62,9 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 
-#include "../Common/AsyncEngineApp.h"
-#include "../Common/RenderGraph.h"
-#include "MainModule.h"
+#include "Async/MainModule.h"
+#include "Common/AsyncEngineApp.h"
+#include "Common/RenderGraph.h"
 
 using oxygen::examples::async::MainModule;
 using WindowProps = oxygen::platform::window::Properties;

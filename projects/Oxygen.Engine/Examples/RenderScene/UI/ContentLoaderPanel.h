@@ -12,10 +12,10 @@
 #include <memory>
 #include <optional>
 
-#include "CameraControlPanel.h"
-#include "ImportPanel.h"
-#include "LooseCookedLoaderPanel.h"
-#include "PakLoaderPanel.h"
+#include "RenderScene/UI/CameraControlPanel.h"
+#include "RenderScene/UI/ImportPanel.h"
+#include "RenderScene/UI/LooseCookedLoaderPanel.h"
+#include "RenderScene/UI/PakLoaderPanel.h"
 
 namespace oxygen::examples::render_scene::ui {
 
@@ -92,6 +92,9 @@ public:
 
   //! Draw the ImGui panel content
   void Draw();
+
+  //! Draw the panel content without creating a window.
+  void DrawContents();
 
   //! Get unified import panel
   [[nodiscard]] auto GetImportPanel() -> ImportPanel& { return import_panel_; }

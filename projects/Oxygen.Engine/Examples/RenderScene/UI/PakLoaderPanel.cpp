@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "PakLoaderPanel.h"
+#include "RenderScene/UI/PakLoaderPanel.h"
 
 #include <algorithm>
 #include <system_error>
@@ -16,7 +16,7 @@
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Data/AssetType.h>
 
-#include "FilePicker.h"
+#include "RenderScene/UI/FilePicker.h"
 
 namespace oxygen::examples::render_scene::ui {
 

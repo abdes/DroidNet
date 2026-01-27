@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "MainModule.h"
+#include "TexturedCube/MainModule.h"
 
 #include <filesystem>
 

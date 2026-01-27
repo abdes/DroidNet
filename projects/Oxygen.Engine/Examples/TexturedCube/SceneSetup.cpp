@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "SceneSetup.h"
+#include "TexturedCube/SceneSetup.h"
 
 #include <algorithm>
 #include <cmath>

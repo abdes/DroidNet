@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "TextureLoadingService.h"
+#include "TexturedCube/TextureLoadingService.h"
 
 #include <algorithm>
 #include <cctype>

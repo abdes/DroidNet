@@ -16,9 +16,11 @@
 
 #include <glm/vec3.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
+
 #include <Oxygen/Scene/SceneNode.h>
 
-#include "../../Common/SkyboxManager.h"
+#include "Common/SkyboxManager.h"
 
 // Forward declarations
 namespace oxygen::scene {
@@ -59,7 +61,7 @@ struct EnvironmentDebugConfig {
   std::shared_ptr<oxygen::scene::Scene> scene { nullptr };
 
   //! Renderer to query LUT state from.
-  oxygen::engine::Renderer* renderer { nullptr };
+  observer_ptr<oxygen::engine::Renderer> renderer { nullptr };
 
   //! Callback invoked when atmosphere parameters change (triggers LUT regen).
   std::function<void()> on_atmosphere_params_changed {};
@@ -129,6 +131,9 @@ public:
 
   //! Draw the ImGui panel. Call during OnGuiUpdate.
   void Draw();
+
+  //! Draws the panel content without creating a window.
+  void DrawContents();
 
   //! Returns true if there are pending changes to apply.
   [[nodiscard]] auto HasPendingChanges() const -> bool;

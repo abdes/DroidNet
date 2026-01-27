@@ -20,7 +20,7 @@
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 
-#include "SkyboxManager.h"
+#include "Common/SkyboxManager.h"
 
 namespace oxygen::examples::common {
 

@@ -25,7 +25,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
 
-#include "../../Common/WorkspaceRoot.h"
+#include "Common/WorkspaceRoot.h"
 
 #include <MainModule.h>
 

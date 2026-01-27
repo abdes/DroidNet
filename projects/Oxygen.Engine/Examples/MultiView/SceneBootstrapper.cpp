@@ -19,9 +19,9 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 
-#include "SceneBootstrapper.h"
+#include "MultiView/SceneBootstrapper.h"
 
-#include "Oxygen/Content/PakFile.h"
+#include <Oxygen/Content/PakFile.h>
 
 namespace oxygen::examples::multiview {
 namespace {

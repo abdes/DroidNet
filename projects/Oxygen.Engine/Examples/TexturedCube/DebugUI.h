@@ -18,8 +18,8 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 
-#include "CameraController.h"
-#include "SceneSetup.h"
+#include "TexturedCube/CameraController.h"
+#include "TexturedCube/SceneSetup.h"
 
 // Forward declarations
 struct ImGuiContext;

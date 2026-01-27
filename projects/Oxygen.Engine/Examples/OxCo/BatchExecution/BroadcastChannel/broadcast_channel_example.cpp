@@ -18,7 +18,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Yield.h>
 
-#include "../Common.h"
+#include "OxCo/BatchExecution/Common.h"
 
 using namespace oxygen::co;
 using namespace oxygen::co::detail::channel;

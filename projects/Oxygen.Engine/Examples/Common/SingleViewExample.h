@@ -17,9 +17,9 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Scene/SceneNode.h>
 
-#include "AsyncEngineApp.h"
-#include "ExampleModuleBase.h"
-#include "RenderGraph.h"
+#include "Common/AsyncEngineApp.h"
+#include "Common/ExampleModuleBase.h"
+#include "Common/RenderGraph.h"
 
 namespace oxygen::examples::common {
 

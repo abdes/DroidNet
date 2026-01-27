@@ -4,11 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
+#include <Oxygen/ImGui/Styles/FontAwesome-400.h>
+#include <Oxygen/ImGui/Styles/IconsFontAwesome.h>
 #include <Oxygen/ImGui/Styles/Spectrum.h>
 #include <Oxygen/Platform/ImGui/ImGuiSdl3Backend.h>
 #include <Oxygen/Platform/Platform.h>
@@ -53,6 +57,22 @@ auto ImGuiModule::OnAttached(const observer_ptr<AsyncEngine> engine) noexcept
     ImGui::SetCurrentContext(ctx);
     spectrum::StyleColorsSpectrum();
     spectrum::LoadFont();
+
+    ImGuiIO& io = ImGui::GetIO();
+    const float icon_font_size = std::max(16.0F, ImGui::GetFontSize());
+
+    ImFontConfig icon_config {};
+    icon_config.MergeMode = true;
+    icon_config.PixelSnapH = true;
+    icon_config.GlyphMinAdvanceX = icon_font_size;
+
+    constexpr ImWchar icon_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+
+    ImFont* icon_font = io.Fonts->AddFontFromMemoryCompressedTTF(
+      styles::FontAwesome_compressed_data,
+      static_cast<int>(styles::FontAwesome_compressed_size), icon_font_size,
+      &icon_config, icon_ranges);
+    IM_ASSERT(icon_font != nullptr);
   }
 
   return true;

@@ -9,6 +9,7 @@
 #include <functional>
 #include <memory>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 
 namespace oxygen::engine {
@@ -23,10 +24,11 @@ using ShaderDebugMode = oxygen::engine::ShaderDebugMode;
 //! Configuration for light culling debug panel
 struct LightCullingDebugConfig {
   //! Pointer to the shader pass config to control
-  oxygen::engine::ShaderPassConfig* shader_pass_config { nullptr };
+  observer_ptr<oxygen::engine::ShaderPassConfig> shader_pass_config { nullptr };
 
   //! Pointer to the light culling pass config to control tile/cluster mode
-  oxygen::engine::LightCullingPassConfig* light_culling_pass_config { nullptr };
+  observer_ptr<oxygen::engine::LightCullingPassConfig>
+    light_culling_pass_config { nullptr };
 
   //! Callback to notify when cluster mode changes (triggers PSO rebuild)
   std::function<void()> on_cluster_mode_changed {};
@@ -82,6 +84,9 @@ public:
 
   //! Draw the ImGui panel (call once per frame)
   void Draw();
+
+  //! Draws the panel content without creating a window.
+  void DrawContents();
 
   //! Get current debug mode
   [[nodiscard]] auto GetDebugMode() const -> ShaderDebugMode

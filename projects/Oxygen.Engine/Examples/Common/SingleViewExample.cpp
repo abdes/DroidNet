@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "SingleViewExample.h"
+#include "Common/SingleViewExample.h"
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>

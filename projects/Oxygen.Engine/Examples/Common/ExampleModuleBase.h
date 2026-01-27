@@ -10,7 +10,7 @@
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Platform/Window.h>
 
-#include "AppWindow.h"
+#include "Common/AppWindow.h"
 
 namespace oxygen::examples::common {
 
@@ -60,7 +60,7 @@ protected:
   virtual auto BuildDefaultWindowProperties() const
     -> platform::window::Properties;
 
-    auto MarkSurfacePresentable(engine::FrameContext& context) -> void;
+  auto MarkSurfacePresentable(engine::FrameContext& context) -> void;
 
   //! Hook: clear backbuffer references before resize. Each example must
   //! implement this to clear any texture references that point to the

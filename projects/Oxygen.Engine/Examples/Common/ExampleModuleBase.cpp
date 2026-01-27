@@ -9,8 +9,8 @@
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/OxCo/Co.h>
 
-#include "AsyncEngineApp.h"
-#include "ExampleModuleBase.h"
+#include "Common/AsyncEngineApp.h"
+#include "Common/ExampleModuleBase.h"
 
 using namespace oxygen;
 

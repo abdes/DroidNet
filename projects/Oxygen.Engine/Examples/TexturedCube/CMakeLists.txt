@@ -71,6 +71,12 @@ set_target_properties(
 
 target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 
+target_include_directories(
+  ${META_MODULE_TARGET}
+  PRIVATE
+    ${OXYGEN_EXAMPLES_SOURCE_DIR}
+)
+
 target_link_libraries(
   ${META_MODULE_TARGET}
   PRIVATE
