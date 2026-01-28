@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-#include "DemoShell/FileBrowser/FileBrowserService.h"
+#include "DemoShell/Services/FileBrowserService.h"
 
 #include <Oxygen/Data/AssetKey.h>
 
@@ -21,7 +21,7 @@ namespace oxygen::content {
 class PakFile;
 } // namespace oxygen::content
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
 
 //! Scene item in PAK file browse index
 struct SceneListItem {
@@ -38,6 +38,7 @@ using PakMountCallback = std::function<void(const std::filesystem::path&)>;
 //! Configuration for PAK loader panel
 struct PakLoaderConfig {
   std::filesystem::path pak_directory;
+  observer_ptr<FileBrowserService> file_browser_service { nullptr };
   SceneSelectCallback on_scene_selected;
   PakMountCallback on_pak_mounted;
 };
@@ -60,7 +61,10 @@ struct PakLoaderConfig {
  ```cpp
  PakLoaderPanel panel;
  PakLoaderConfig config;
- config.pak_directory = content_root / "pak";
+ FileBrowserService browser_service;
+ const auto roots = browser_service.GetContentRoots();
+ config.pak_directory = roots.pak_directory;
+ config.file_browser_service = observer_ptr { &browser_service };
  config.on_scene_selected = [](const data::AssetKey& key) {
    StartLoadingScene(key);
  };
@@ -119,7 +123,7 @@ private:
   auto EnumeratePakFiles() const -> std::vector<std::filesystem::path>;
 
   PakLoaderConfig config_;
-  FileBrowserService file_browser_ {};
+  observer_ptr<FileBrowserService> file_browser_ { nullptr };
   std::unique_ptr<content::PakFile> pak_file_;
   std::vector<SceneListItem> scenes_;
   std::filesystem::path loaded_pak_path_;
@@ -127,4 +131,4 @@ private:
   bool files_cached_ { false };
 };
 
-} // namespace oxygen::examples::render_scene::ui
+} // namespace oxygen::examples::ui

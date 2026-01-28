@@ -10,18 +10,20 @@
 #include <string>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Scene/SceneNode.h>
 
-#include "DemoShell/DemoKnobsViewModel.h"
 #include "DemoShell/PanelRegistry.h"
-#include "DemoShell/PanelSideBar.h"
-#include "DemoShell/SidePanel.h"
+#include "DemoShell/UI/AxesWidget.h"
+#include "DemoShell/UI/PanelSideBar.h"
+#include "DemoShell/UI/SidePanel.h"
+#include "DemoShell/UI/StatsOverlay.h"
 
 namespace oxygen::examples {
 
 //! Configuration for the DemoShellUi controller.
 struct DemoShellUiConfig {
-  observer_ptr<DemoKnobsViewModel> knobs { nullptr };
   observer_ptr<PanelRegistry> panel_registry { nullptr };
+  observer_ptr<oxygen::scene::SceneNode> active_camera { nullptr };
 };
 
 //! UI shell hosting the side bar and side panel.
@@ -45,13 +47,24 @@ public:
   //! Draws the side bar and side panel.
   auto Draw() -> void;
 
+  //! Access the axes widget instance.
+  [[nodiscard]] auto GetAxesWidget() -> ui::AxesWidget& { return axes_widget_; }
+
+  //! Access the stats overlay instance.
+  [[nodiscard]] auto GetStatsOverlay() -> ui::StatsOverlay&
+  {
+    return stats_overlay_;
+  }
+
 private:
-  observer_ptr<DemoKnobsViewModel> knobs_ { nullptr };
   observer_ptr<PanelRegistry> panel_registry_ { nullptr };
+  observer_ptr<oxygen::scene::SceneNode> active_camera_ { nullptr };
   PanelSideBar panel_side_bar_ {};
   SidePanel side_panel_ {};
   std::string last_active_panel_name_ {};
   std::optional<std::string> pending_active_panel_ {};
+  ui::AxesWidget axes_widget_ {};
+  ui::StatsOverlay stats_overlay_ {};
 };
 
 } // namespace oxygen::examples

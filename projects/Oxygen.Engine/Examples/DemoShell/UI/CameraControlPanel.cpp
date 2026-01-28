@@ -4,28 +4,32 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <array>
 #include <cmath>
-
-#include <imgui.h>
+#include <cstdio>
+#include <string_view>
 
 #include <glm/geometric.hpp>
+#include <imgui.h>
 
 #include <Oxygen/Input/Action.h>
 
+#include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/CameraControlPanel.h"
-#include "RenderScene/FlyCameraController.h"
-#include "RenderScene/OrbitCameraController.h"
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
 
 void CameraControlPanel::Initialize(const CameraControlConfig& config)
 {
   config_ = config;
+  LoadSettings();
 }
 
 void CameraControlPanel::UpdateConfig(const CameraControlConfig& config)
 {
   config_ = config;
+  LoadSettings();
 }
 
 void CameraControlPanel::Draw()
@@ -74,6 +78,7 @@ void CameraControlPanel::DrawCameraModeTab()
       if (config_.on_mode_changed) {
         config_.on_mode_changed(current_mode_);
       }
+      SaveModeSetting();
     }
   }
   ImGui::SameLine();
@@ -83,11 +88,10 @@ void CameraControlPanel::DrawCameraModeTab()
       if (config_.on_mode_changed) {
         config_.on_mode_changed(current_mode_);
       }
+      SaveModeSetting();
     }
   }
 
-  ImGui::Spacing();
-  ImGui::Separator();
   ImGui::Spacing();
 
   // Mode-specific controls
@@ -98,27 +102,27 @@ void CameraControlPanel::DrawCameraModeTab()
       // Orbit mode selection
       const auto current_orbit_mode = config_.orbit_controller->GetMode();
       const bool is_trackball
-        = (current_orbit_mode == render_scene::OrbitMode::kTrackball);
+        = (current_orbit_mode == ui::OrbitMode::kTrackball);
       const bool is_turntable
-        = (current_orbit_mode == render_scene::OrbitMode::kTurntable);
+        = (current_orbit_mode == ui::OrbitMode::kTurntable);
 
       if (ImGui::RadioButton("Trackball", is_trackball)) {
         if (!is_trackball) {
-          config_.orbit_controller->SetMode(
-            render_scene::OrbitMode::kTrackball);
+          config_.orbit_controller->SetMode(ui::OrbitMode::kTrackball);
           if (config_.active_camera && config_.active_camera->IsAlive()) {
             config_.orbit_controller->SyncFromTransform(*config_.active_camera);
           }
+          SaveOrbitModeSetting(ui::OrbitMode::kTrackball);
         }
       }
       ImGui::SameLine();
       if (ImGui::RadioButton("Turntable", is_turntable)) {
         if (!is_turntable) {
-          config_.orbit_controller->SetMode(
-            render_scene::OrbitMode::kTurntable);
+          config_.orbit_controller->SetMode(ui::OrbitMode::kTurntable);
           if (config_.active_camera && config_.active_camera->IsAlive()) {
             config_.orbit_controller->SyncFromTransform(*config_.active_camera);
           }
+          SaveOrbitModeSetting(ui::OrbitMode::kTurntable);
         }
       }
 
@@ -139,6 +143,7 @@ void CameraControlPanel::DrawCameraModeTab()
       if (ImGui::SliderFloat("Move Speed", &speed, 0.1f, 100.0f, "%.2f",
             ImGuiSliderFlags_Logarithmic)) {
         config_.fly_controller->SetMoveSpeed(speed);
+        SaveFlySpeedSetting(speed);
       }
 
       ImGui::Spacing();
@@ -153,8 +158,6 @@ void CameraControlPanel::DrawCameraModeTab()
     }
   }
 
-  ImGui::Spacing();
-  ImGui::Separator();
   ImGui::Spacing();
 
   // Reset button
@@ -174,10 +177,10 @@ void CameraControlPanel::DrawCameraModeTab()
 void CameraControlPanel::DrawDebugTab()
 {
   DrawCameraPoseInfo();
-  ImGui::Spacing();
-  ImGui::Separator();
-  ImGui::Spacing();
-  DrawInputDebugInfo();
+  if (current_mode_ == CameraControlMode::kFly) {
+    ImGui::Spacing();
+    DrawInputDebugInfo();
+  }
 }
 
 void CameraControlPanel::DrawCameraPoseInfo()
@@ -201,18 +204,10 @@ void CameraControlPanel::DrawCameraPoseInfo()
     rotation = *rot;
   }
 
-  // Position
-  ImGui::Text(
-    "Position: (%.2f, %.2f, %.2f)", position.x, position.y, position.z);
-
   // Basis vectors
   const glm::vec3 forward = rotation * glm::vec3(0.0f, 0.0f, -1.0f);
   const glm::vec3 up = rotation * glm::vec3(0.0f, 1.0f, 0.0f);
   const glm::vec3 right = rotation * glm::vec3(1.0f, 0.0f, 0.0f);
-
-  ImGui::Text("Forward:  (%.3f, %.3f, %.3f)", forward.x, forward.y, forward.z);
-  ImGui::Text("Up:       (%.3f, %.3f, %.3f)", up.x, up.y, up.z);
-  ImGui::Text("Right:    (%.3f, %.3f, %.3f)", right.x, right.y, right.z);
 
   // World space alignment checks
   const auto safe_normalize = [](const glm::vec3& v) -> glm::vec3 {
@@ -230,14 +225,67 @@ void CameraControlPanel::DrawCameraPoseInfo()
   const glm::vec3 world_neg_y(0.0f, -1.0f, 0.0f);
   const glm::vec3 world_pos_z(0.0f, 0.0f, 1.0f);
 
-  ImGui::Spacing();
-  ImGui::Text("Alignment (dot products):");
-  ImGui::Text(
-    "  forward · +Y: %.3f", glm::dot(forward_normalized, world_pos_y));
-  ImGui::Text(
-    "  forward · -Y: %.3f", glm::dot(forward_normalized, world_neg_y));
-  ImGui::Text("  up · +Z:      %.3f (expect ~1.0 for Z-up)",
-    glm::dot(up_normalized, world_pos_z));
+  const float forward_dot_pos_y = glm::dot(forward_normalized, world_pos_y);
+  const float forward_dot_neg_y = glm::dot(forward_normalized, world_neg_y);
+  const float up_dot_pos_z = glm::dot(up_normalized, world_pos_z);
+
+  ImGui::PushID("CameraPoseTable");
+  if (ImGui::BeginTable(
+        "##CameraPoseTable", 2, ImGuiTableFlags_SizingStretchProp)) {
+    ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 160.0f);
+    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+    constexpr float kValueFieldWidth = 240.0f;
+    const auto right_align = [kValueFieldWidth]() {
+      const float start = ImGui::GetCursorPosX();
+      const float col_width = ImGui::GetColumnWidth();
+      const float offset = std::max(0.0f, col_width - kValueFieldWidth);
+      ImGui::SetCursorPosX(start + offset);
+    };
+
+    auto row_vec3 = [kValueFieldWidth, right_align](
+                      const char* label, const glm::vec3& value) {
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn();
+      ImGui::TextUnformatted(label);
+      ImGui::TableNextColumn();
+      float data[3] = { value.x, value.y, value.z };
+      ImGui::BeginDisabled();
+      const std::string id = std::string("##") + label;
+      right_align();
+      ImGui::SetNextItemWidth(kValueFieldWidth);
+      ImGui::InputFloat3(
+        id.c_str(), data, "%.3f", ImGuiInputTextFlags_ReadOnly);
+      ImGui::EndDisabled();
+    };
+
+    auto row_float
+      = [kValueFieldWidth, right_align](const char* label, float value) {
+          ImGui::TableNextRow();
+          ImGui::TableNextColumn();
+          ImGui::TextUnformatted(label);
+          ImGui::TableNextColumn();
+          float data = value;
+          ImGui::BeginDisabled();
+          const std::string id = std::string("##") + label;
+          right_align();
+          ImGui::SetNextItemWidth(kValueFieldWidth);
+          ImGui::InputFloat(id.c_str(), &data, 0.0f, 0.0f, "%.3f",
+            ImGuiInputTextFlags_ReadOnly);
+          ImGui::EndDisabled();
+        };
+
+    row_vec3("Position", position);
+    row_vec3("Forward", forward);
+    row_vec3("Up", up);
+    row_vec3("Right", right);
+    row_float("forward · +Y", forward_dot_pos_y);
+    row_float("forward · -Y", forward_dot_neg_y);
+    row_float("up · +Z", up_dot_pos_z);
+
+    ImGui::EndTable();
+  }
+  ImGui::PopID();
 }
 
 void CameraControlPanel::DrawInputDebugInfo()
@@ -245,35 +293,72 @@ void CameraControlPanel::DrawInputDebugInfo()
   ImGui::SeparatorText("Input State");
 
   const auto& io = ImGui::GetIO();
-  ImGui::Text(
-    "ImGui WantCaptureKeyboard: %s", io.WantCaptureKeyboard ? "true" : "false");
-  ImGui::Text(
-    "ImGui WantCaptureMouse: %s", io.WantCaptureMouse ? "true" : "false");
+  const ImVec4 kActiveColor { 0.2f, 0.8f, 0.2f, 1.0f };
+  const ImVec4 kInactiveColor { 0.6f, 0.6f, 0.6f, 1.0f };
+  ImGui::PushID("InputStateTable");
+  if (ImGui::BeginTable(
+        "##InputStateTable", 2, ImGuiTableFlags_SizingStretchProp)) {
+    ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 260.0f);
+    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+    auto row_bool
+      = [kActiveColor, kInactiveColor](const char* label, bool value) {
+          ImGui::TableNextRow();
+          ImGui::TableNextColumn();
+          ImGui::TextUnformatted(label);
+          ImGui::TableNextColumn();
+          const ImVec4 color = value ? kActiveColor : kInactiveColor;
+          ImGui::TextColored(color, "%s", value ? "Active" : "Inactive");
+        };
+
+    row_bool("ImGui WantCaptureKeyboard", io.WantCaptureKeyboard);
+    row_bool("ImGui WantCaptureMouse", io.WantCaptureMouse);
+    ImGui::EndTable();
+  }
+  ImGui::PopID();
 
   ImGui::Spacing();
-  ImGui::Text("Action States:");
+  ImGui::TextUnformatted("Action States:");
   ImGui::Separator();
 
-  // Layout: action name, state string, flags
-  const auto show_action
-    = [this](const char* label,
-        const std::shared_ptr<oxygen::input::Action>& action) {
-        const char* state = GetActionStateString(action);
-        const bool ongoing = action && action->IsOngoing();
-        const bool triggered = action && action->WasTriggeredThisFrame();
-        const bool released = action && action->WasReleasedThisFrame();
+  if (ImGui::BeginTable(
+        "##ActionStatesTable", 3, ImGuiTableFlags_SizingStretchProp)) {
+    ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+    ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+    ImGui::TableSetupColumn("Flags", ImGuiTableColumnFlags_WidthStretch);
 
-        ImGui::Text("%-12s  %-10s  [O:%d T:%d R:%d]", label, state,
-          ongoing ? 1 : 0, triggered ? 1 : 0, released ? 1 : 0);
-      };
+    const auto show_action
+      = [this](const char* label,
+          const std::shared_ptr<oxygen::input::Action>& action) {
+          const char* state = GetActionStateString(action);
+          const bool ongoing = action && action->IsOngoing();
+          const bool triggered = action && action->WasTriggeredThisFrame();
+          const bool released = action && action->WasReleasedThisFrame();
+          const bool is_active = std::string_view(state) != "Idle"
+            && std::string_view(state) != "<null>";
+          const ImVec4 color = is_active
+            ? ImVec4(1.0f, 0.75f, 0.2f, 1.0f)
+            : ImGui::GetStyleColorVec4(ImGuiCol_Text);
 
-  show_action("W (Fwd)", config_.move_fwd_action);
-  show_action("S (Bwd)", config_.move_bwd_action);
-  show_action("A (Left)", config_.move_left_action);
-  show_action("D (Right)", config_.move_right_action);
-  show_action("Shift", config_.fly_boost_action);
-  show_action("Space", config_.fly_plane_lock_action);
-  show_action("RMB", config_.rmb_action);
+          ImGui::TableNextRow();
+          ImGui::TableNextColumn();
+          ImGui::TextUnformatted(label);
+          ImGui::TableNextColumn();
+          ImGui::TextColored(color, "%s", state);
+          ImGui::TableNextColumn();
+          ImGui::TextColored(color, "O:%d  T:%d  R:%d", ongoing ? 1 : 0,
+            triggered ? 1 : 0, released ? 1 : 0);
+        };
+
+    show_action("W (Fwd)", config_.move_fwd_action);
+    show_action("S (Bwd)", config_.move_bwd_action);
+    show_action("A (Left)", config_.move_left_action);
+    show_action("D (Right)", config_.move_right_action);
+    show_action("Shift", config_.fly_boost_action);
+    show_action("Space", config_.fly_plane_lock_action);
+    show_action("RMB", config_.rmb_action);
+    ImGui::EndTable();
+  }
 
   // Mouse delta
   if (config_.orbit_action
@@ -289,8 +374,106 @@ void CameraControlPanel::DrawInputDebugInfo()
     }
 
     ImGui::Spacing();
-    ImGui::Text("Mouse Delta: (%.2f, %.2f)", mouse_delta.x, mouse_delta.y);
+    ImGui::PushID("MouseDeltaTable");
+    if (ImGui::BeginTable(
+          "##MouseDeltaTable", 2, ImGuiTableFlags_SizingStretchProp)) {
+      ImGui::TableSetupColumn(
+        "Label", ImGuiTableColumnFlags_WidthFixed, 160.0f);
+      ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn();
+      ImGui::TextUnformatted("Mouse Delta");
+      ImGui::TableNextColumn();
+      float delta[2] = { mouse_delta.x, mouse_delta.y };
+      ImGui::BeginDisabled();
+      ImGui::SetNextItemWidth(220.0f);
+      ImGui::InputFloat2(
+        "##MouseDelta", delta, "%.2f", ImGuiInputTextFlags_ReadOnly);
+      ImGui::EndDisabled();
+      ImGui::EndTable();
+    }
+    ImGui::PopID();
   }
+}
+
+auto CameraControlPanel::LoadSettings() -> void
+{
+  if (settings_loaded_) {
+    return;
+  }
+  const auto settings = oxygen::examples::SettingsService::Default();
+  if (!settings) {
+    return;
+  }
+
+  settings_loaded_ = true;
+
+  if (const auto mode = settings->GetString("camera_control.mode")) {
+    if (*mode == "fly") {
+      current_mode_ = CameraControlMode::kFly;
+    } else if (*mode == "orbit") {
+      current_mode_ = CameraControlMode::kOrbit;
+    }
+    if (config_.on_mode_changed) {
+      config_.on_mode_changed(current_mode_);
+    }
+  }
+
+  if (config_.orbit_controller) {
+    if (const auto orbit_mode
+      = settings->GetString("camera_control.orbit_mode")) {
+      if (*orbit_mode == "turntable") {
+        config_.orbit_controller->SetMode(ui::OrbitMode::kTurntable);
+      } else if (*orbit_mode == "trackball") {
+        config_.orbit_controller->SetMode(ui::OrbitMode::kTrackball);
+      }
+      if (config_.active_camera && config_.active_camera->IsAlive()) {
+        config_.orbit_controller->SyncFromTransform(*config_.active_camera);
+      }
+    }
+  }
+
+  if (config_.fly_controller) {
+    if (const auto speed = settings->GetFloat("camera_control.fly_speed")) {
+      config_.fly_controller->SetMoveSpeed(*speed);
+    }
+  }
+}
+
+auto CameraControlPanel::SaveModeSetting() const -> void
+{
+  const auto settings = oxygen::examples::SettingsService::Default();
+  if (!settings) {
+    return;
+  }
+
+  settings->SetString("camera_control.mode",
+    current_mode_ == CameraControlMode::kFly ? "fly" : "orbit");
+  settings->Save();
+}
+
+auto CameraControlPanel::SaveOrbitModeSetting(ui::OrbitMode mode) const -> void
+{
+  const auto settings = oxygen::examples::SettingsService::Default();
+  if (!settings) {
+    return;
+  }
+
+  const char* value
+    = mode == ui::OrbitMode::kTurntable ? "turntable" : "trackball";
+  settings->SetString("camera_control.orbit_mode", value);
+  settings->Save();
+}
+
+auto CameraControlPanel::SaveFlySpeedSetting(float speed) const -> void
+{
+  const auto settings = oxygen::examples::SettingsService::Default();
+  if (!settings) {
+    return;
+  }
+
+  settings->SetFloat("camera_control.fly_speed", speed);
+  settings->Save();
 }
 
 auto CameraControlPanel::GetActionStateString(
@@ -322,4 +505,4 @@ auto CameraControlPanel::GetActionStateString(
   return "Idle";
 }
 
-} // namespace oxygen::examples::render_scene::ui
+} // namespace oxygen::examples::ui

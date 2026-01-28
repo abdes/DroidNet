@@ -12,13 +12,11 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 
-#include "DemoShell/DemoKnobsViewModel.h"
-
 namespace oxygen::engine {
 struct LightCullingPassConfig;
 } // namespace oxygen::engine
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
 
 // Re-export ShaderDebugMode for convenience in UI code
 using ShaderDebugMode = oxygen::engine::ShaderDebugMode;
@@ -34,9 +32,6 @@ struct LightCullingDebugConfig {
 
   //! Callback to notify when cluster mode changes (triggers PSO rebuild)
   std::function<void()> on_cluster_mode_changed {};
-
-  //! Pointer to the demo knobs view model (rendering panel).
-  observer_ptr<DemoKnobsViewModel> demo_knobs { nullptr };
 };
 
 //! Lighting panel with light culling and visualization controls
@@ -60,6 +55,10 @@ public:
   void DrawContents();
 
 private:
+  auto LoadSettings() -> void;
+  auto SaveCullingModeSetting() const -> void;
+  auto SaveClusterSettings() const -> void;
+
   void DrawVisualizationModes();
   void DrawLightCullingSettings();
   void DrawCullingModeControls();
@@ -71,6 +70,7 @@ private:
   LightCullingDebugConfig config_ {};
   bool use_clustered_culling_ { false };
   bool show_window_ { true };
+  bool settings_loaded_ { false };
 
   // Cluster config UI state (cached for editing)
   int ui_depth_slices_ { 24 };
@@ -79,4 +79,4 @@ private:
   bool ui_use_camera_z_ { true }; // Use camera near/far by default
 };
 
-} // namespace oxygen::examples::render_scene::ui
+} // namespace oxygen::examples::ui

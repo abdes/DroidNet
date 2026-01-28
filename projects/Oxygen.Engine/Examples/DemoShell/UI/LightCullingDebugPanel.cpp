@@ -12,30 +12,41 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 
+#include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/LightCullingDebugPanel.h"
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
 
 void LightingPanel::Initialize(const LightCullingDebugConfig& config)
 {
   config_ = config;
 
+  if (config_.shader_pass_config) {
+    config_.shader_pass_config->debug_mode = ShaderDebugMode::kDisabled;
+  }
+
   if (config_.light_culling_pass_config) {
     const auto& cluster = config_.light_culling_pass_config->cluster;
     use_clustered_culling_ = cluster.depth_slices > 1;
-    ui_depth_slices_ = static_cast<int>(cluster.depth_slices);
+    if (use_clustered_culling_) {
+      ui_depth_slices_ = static_cast<int>(cluster.depth_slices);
+    }
     ui_z_near_ = cluster.z_near;
     ui_z_far_ = cluster.z_far;
   }
+
+  LoadSettings();
 }
 
 void LightingPanel::UpdateConfig(const LightCullingDebugConfig& config)
 {
   config_ = config;
-  if (config_.light_culling_pass_config) {
+  if (!settings_loaded_ && config_.light_culling_pass_config) {
     const auto& cluster = config_.light_culling_pass_config->cluster;
     use_clustered_culling_ = cluster.depth_slices > 1;
-    ui_depth_slices_ = static_cast<int>(cluster.depth_slices);
+    if (use_clustered_culling_) {
+      ui_depth_slices_ = static_cast<int>(cluster.depth_slices);
+    }
     ui_z_near_ = cluster.z_near;
     ui_z_far_ = cluster.z_far;
   }
@@ -239,9 +250,6 @@ void LightingPanel::DrawClusterConfigControls()
     ImGui::TextColored(ImVec4(0.7F, 0.7F, 0.7F, 1.0F),
       "Range: %.3f - %.1f (ratio: %.0fx)", ui_z_near_, ui_z_far_,
       ui_z_far_ / ui_z_near_);
-  } else {
-    ImGui::TextColored(ImVec4(0.5F, 1.0F, 0.5F, 1.0F),
-      "Using camera near/far planes automatically");
   }
 
   if (config_changed) {
@@ -260,6 +268,9 @@ void LightingPanel::ApplyCullingModeToPass()
 
   if (use_clustered_culling_) {
     // Switch to clustered with current UI settings
+    if (ui_depth_slices_ < 2) {
+      ui_depth_slices_ = 24;
+    }
     cluster.depth_slices = static_cast<uint32_t>(ui_depth_slices_);
   } else {
     // Switch to tile-based (depth_slices = 1)
@@ -275,6 +286,8 @@ void LightingPanel::ApplyCullingModeToPass()
   if (config_.on_cluster_mode_changed) {
     config_.on_cluster_mode_changed();
   }
+
+  SaveCullingModeSetting();
 }
 
 void LightingPanel::ApplyClusterConfigToPass()
@@ -316,6 +329,79 @@ void LightingPanel::ApplyClusterConfigToPass()
   if (config_.on_cluster_mode_changed) {
     config_.on_cluster_mode_changed();
   }
+
+  SaveClusterSettings();
 }
 
-} // namespace oxygen::examples::render_scene::ui
+auto LightingPanel::LoadSettings() -> void
+{
+  if (settings_loaded_) {
+    return;
+  }
+
+  const auto settings = oxygen::examples::SettingsService::Default();
+  if (!settings) {
+    return;
+  }
+
+  settings_loaded_ = true;
+
+  if (const auto mode = settings->GetString("light_culling.mode")) {
+    use_clustered_culling_ = (*mode == "clustered");
+  }
+
+  if (const auto depth_slices
+    = settings->GetFloat("light_culling.depth_slices")) {
+    ui_depth_slices_ = static_cast<int>(*depth_slices);
+    if (ui_depth_slices_ < 2) {
+      ui_depth_slices_ = 24;
+    }
+  }
+
+  if (const auto use_camera
+    = settings->GetString("light_culling.use_camera_z")) {
+    ui_use_camera_z_ = (*use_camera == "true");
+  }
+
+  if (const auto z_near = settings->GetFloat("light_culling.z_near")) {
+    ui_z_near_ = *z_near;
+  }
+  if (const auto z_far = settings->GetFloat("light_culling.z_far")) {
+    ui_z_far_ = *z_far;
+  }
+
+  if (config_.light_culling_pass_config) {
+    ApplyCullingModeToPass();
+    ApplyClusterConfigToPass();
+  }
+}
+
+auto LightingPanel::SaveCullingModeSetting() const -> void
+{
+  const auto settings = oxygen::examples::SettingsService::Default();
+  if (!settings) {
+    return;
+  }
+
+  settings->SetString(
+    "light_culling.mode", use_clustered_culling_ ? "clustered" : "tiled");
+  settings->Save();
+}
+
+auto LightingPanel::SaveClusterSettings() const -> void
+{
+  const auto settings = oxygen::examples::SettingsService::Default();
+  if (!settings) {
+    return;
+  }
+
+  settings->SetFloat(
+    "light_culling.depth_slices", static_cast<float>(ui_depth_slices_));
+  settings->SetString(
+    "light_culling.use_camera_z", ui_use_camera_z_ ? "true" : "false");
+  settings->SetFloat("light_culling.z_near", ui_z_near_);
+  settings->SetFloat("light_culling.z_far", ui_z_far_);
+  settings->Save();
+}
+
+} // namespace oxygen::examples::ui

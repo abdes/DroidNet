@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-#include "DemoShell/FileBrowser/FileBrowserService.h"
+#include "DemoShell/Services/FileBrowserService.h"
 
 #include <Oxygen/Data/AssetKey.h>
 
@@ -21,7 +21,7 @@ namespace oxygen::content {
 class LooseCookedInspection;
 } // namespace oxygen::content
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
 
 //! Scene item from loose cooked index
 struct LooseCookedSceneItem {
@@ -39,6 +39,7 @@ using IndexLoadCallback = std::function<void(const std::filesystem::path&)>;
 //! Configuration for loose cooked loader panel
 struct LooseCookedLoaderConfig {
   std::filesystem::path cooked_directory;
+  observer_ptr<FileBrowserService> file_browser_service { nullptr };
   LooseCookedSceneSelectCallback on_scene_selected;
   IndexLoadCallback on_index_loaded;
 };
@@ -61,7 +62,9 @@ struct LooseCookedLoaderConfig {
  ```cpp
  LooseCookedLoaderPanel panel;
  LooseCookedLoaderConfig config;
- config.cooked_directory = content_root / ".cooked";
+ config.cooked_directory = cooked_root;
+ FileBrowserService browser_service;
+ config.file_browser_service = observer_ptr { &browser_service };
  config.on_scene_selected = [](const data::AssetKey& key) {
    StartLoadingScene(key);
  };
@@ -130,11 +133,11 @@ private:
   void LoadIndexFile(const std::filesystem::path& index_path);
 
   LooseCookedLoaderConfig config_;
-  FileBrowserService file_browser_ {};
+  observer_ptr<FileBrowserService> file_browser_ { nullptr };
   std::unique_ptr<content::LooseCookedInspection> inspection_;
   std::vector<LooseCookedSceneItem> scenes_;
   std::filesystem::path loaded_index_path_;
   bool auto_load_attempted_ { false };
 };
 
-} // namespace oxygen::examples::render_scene::ui
+} // namespace oxygen::examples::ui

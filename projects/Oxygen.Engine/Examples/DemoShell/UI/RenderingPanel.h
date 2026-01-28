@@ -8,7 +8,10 @@
 
 #include "DemoShell/UI/LightCullingDebugPanel.h"
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
+
+//! View mode selection for rendering panel.
+enum class RenderingViewMode { kSolid, kWireframe };
 
 //! Rendering panel with view and debug mode controls
 /*!
@@ -30,6 +33,15 @@ public:
   //! Draws the panel content without creating a window.
   void DrawContents();
 
+  //! Set the current view mode.
+  void SetViewMode(RenderingViewMode mode) { view_mode_ = mode; }
+
+  //! Get the current view mode.
+  [[nodiscard]] auto GetViewMode() const -> RenderingViewMode
+  {
+    return view_mode_;
+  }
+
 private:
   void DrawViewModeControls();
   void DrawDebugModes();
@@ -37,6 +49,7 @@ private:
 
   LightCullingDebugConfig config_ {};
   bool show_window_ { true };
+  RenderingViewMode view_mode_ { RenderingViewMode::kSolid };
 };
 
-} // namespace oxygen::examples::render_scene::ui
+} // namespace oxygen::examples::ui

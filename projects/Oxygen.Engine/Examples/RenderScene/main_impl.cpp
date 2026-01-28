@@ -44,7 +44,7 @@
 #include <Oxygen/Renderer/Renderer.h>
 
 #include "Common/AsyncEngineApp.h"
-#include "DemoShell/Settings/SettingsService.h"
+#include "DemoShell/Services/SettingsService.h"
 #include "RenderScene/MainModule.h"
 
 using namespace oxygen;

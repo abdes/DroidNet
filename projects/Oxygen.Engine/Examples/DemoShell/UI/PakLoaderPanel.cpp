@@ -15,11 +15,14 @@
 
 #include "DemoShell/UI/PakLoaderPanel.h"
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
 
 void PakLoaderPanel::Initialize(const PakLoaderConfig& config)
 {
   config_ = config;
+  CHECK_NOTNULL_F(config_.file_browser_service,
+    "PakLoaderPanel requires a FileBrowserService");
+  file_browser_ = config_.file_browser_service;
   files_cached_ = false;
   cached_pak_files_.clear();
   UnloadPak();
@@ -123,14 +126,15 @@ void PakLoaderPanel::Draw()
 
   // File picker and controls
   if (ImGui::Button("Browse for PAK...")) {
-    auto picker_config = MakePakFileBrowserConfig();
+    const auto roots = file_browser_->GetContentRoots();
+    auto picker_config = MakePakFileBrowserConfig(roots);
     picker_config.initial_directory = config_.pak_directory;
-    file_browser_.Open(picker_config);
+    file_browser_->Open(picker_config);
   }
   ImGui::SameLine();
 
-  file_browser_.UpdateAndDraw();
-  if (const auto selected_path = file_browser_.ConsumeSelection()) {
+  file_browser_->UpdateAndDraw();
+  if (const auto selected_path = file_browser_->ConsumeSelection()) {
     LoadPakFile(*selected_path);
     return;
   }
@@ -214,4 +218,4 @@ void PakLoaderPanel::Draw()
   }
 }
 
-} // namespace oxygen::examples::render_scene::ui
+} // namespace oxygen::examples::ui

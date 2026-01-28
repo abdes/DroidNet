@@ -8,7 +8,7 @@
 
 #include "DemoShell/UI/RenderingPanel.h"
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
 
 void RenderingPanel::Initialize(const LightCullingDebugConfig& config)
 {
@@ -52,18 +52,12 @@ void RenderingPanel::DrawContents()
 
 void RenderingPanel::DrawViewModeControls()
 {
-  if (!config_.demo_knobs) {
-    ImGui::TextUnformatted("No render settings available");
-    return;
-  }
-
-  auto& knobs = *config_.demo_knobs;
-  if (ImGui::RadioButton("Solid", knobs.render_mode == RenderMode::kSolid)) {
-    knobs.render_mode = RenderMode::kSolid;
+  if (ImGui::RadioButton("Solid", view_mode_ == RenderingViewMode::kSolid)) {
+    view_mode_ = RenderingViewMode::kSolid;
   }
   if (ImGui::RadioButton(
-        "Wireframe", knobs.render_mode == RenderMode::kWireframe)) {
-    knobs.render_mode = RenderMode::kWireframe;
+        "Wireframe", view_mode_ == RenderingViewMode::kWireframe)) {
+    view_mode_ = RenderingViewMode::kWireframe;
   }
 }
 
@@ -107,4 +101,4 @@ void RenderingPanel::ApplyDebugMode(ShaderDebugMode mode)
   config_.shader_pass_config->debug_mode = mode;
 }
 
-} // namespace oxygen::examples::render_scene::ui
+} // namespace oxygen::examples::ui

@@ -1,0 +1,4 @@
+pak/
+.cooked/
+!glb/*.glb
+glb/

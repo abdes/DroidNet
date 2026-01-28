@@ -9,10 +9,15 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec2.hpp>
 
-namespace oxygen::examples::render_scene::ui {
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Scene/SceneNode.h>
+
+namespace oxygen::examples::ui {
 
 //! Configuration for the axes widget
 struct AxesWidgetConfig {
+  //! Enable rendering the widget.
+  bool show_widget { true };
   //! Size of the widget in pixels (width and height)
   float size { 80.0F };
 
@@ -64,6 +69,12 @@ public:
   //! Set widget configuration
   void SetConfig(const AxesWidgetConfig& config) { config_ = config; }
 
+  //! Set widget visibility.
+  void SetVisible(bool visible) { config_.show_widget = visible; }
+
+  //! Get widget visibility.
+  [[nodiscard]] auto IsVisible() const -> bool { return config_.show_widget; }
+
   //! Get current widget configuration
   [[nodiscard]] auto GetConfig() const -> const AxesWidgetConfig&
   {
@@ -72,13 +83,16 @@ public:
 
   //! Draw the axes widget
   /*!
-   Renders the 3D axes indicator based on the current camera view matrix.
-   The widget is positioned at the bottom-left corner of the main viewport.
+    Renders the 3D axes indicator based on the current camera view matrix.
+    The widget is positioned at the bottom-left corner of the main viewport.
 
-   @param view_matrix The camera's view matrix (world-to-view transform)
-   @note Must be called within ImGui rendering context
+    @param view_matrix The camera's view matrix (world-to-view transform)
+    @note Must be called within ImGui rendering context
    */
   void Draw(const glm::mat4& view_matrix);
+
+  //! Draw the axes widget using the provided camera.
+  void Draw(observer_ptr<oxygen::scene::SceneNode> camera);
 
 private:
   //! Project a 3D direction to 2D widget space
@@ -88,4 +102,4 @@ private:
   AxesWidgetConfig config_;
 };
 
-} // namespace oxygen::examples::render_scene::ui
+} // namespace oxygen::examples::ui

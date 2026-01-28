@@ -20,7 +20,7 @@
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Data/AssetKey.h>
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
 
 //! Callback invoked when a scene is ready to be loaded
 using SceneLoadCallback = std::function<void(const data::AssetKey&)>;
@@ -74,8 +74,11 @@ struct FbxLoaderConfig {
  ```cpp
  FbxLoaderPanel panel;
  FbxLoaderConfig config;
- config.fbx_directory = content_root / "fbx";
- config.cooked_output_directory = content_root / ".cooked";
+ FileBrowserService::ConfigureContentRoots(
+   { .cooked_root = std::filesystem::path("...") / ".cooked" });
+ const auto roots = FileBrowserService::GetContentRoots();
+ config.fbx_directory = roots.fbx_directory;
+ config.cooked_output_directory = roots.cooked_root;
  config.on_scene_ready = [](const data::AssetKey& key) {
    LoadScene(key);
  };
@@ -161,4 +164,4 @@ private:
   int dump_top_n_ { 20 };
 };
 
-} // namespace oxygen::examples::render_scene::ui
+} // namespace oxygen::examples::ui

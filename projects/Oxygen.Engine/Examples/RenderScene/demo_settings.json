@@ -1,12 +1,27 @@
 {
+  "camera_control": {
+    "mode": "fly"
+  },
   "demo_shell": {
-    "active_panel": "Camera Controls",
+    "active_panel": "Content Loader",
     "panels": {
       "camera_controls": {
-        "width": 360.0
+        "width": 477.0
       },
       "content_loader": {
         "width": 709.0
+      },
+      "environment": {
+        "width": 491.0
+      },
+      "lighting": {
+        "width": 553.0
+      },
+      "rendering": {
+        "width": 320.0
+      },
+      "settings": {
+        "width": 320.0
       }
     }
   },
@@ -16,6 +31,31 @@
         1151,
         479
       ]
+    },
+    "select_pak_file": {
+      "window_size": [
+        1127,
+        450
+      ]
+    },
+    "select_skybox_image": {
+      "window_size": [
+        1046,
+        505
+      ]
+    }
+  },
+  "light_culling": {
+    "depth_slices": 32.0,
+    "mode": "clustered",
+    "use_camera_z": "false",
+    "z_far": 1000.0,
+    "z_near": 0.10000000149011612
+  },
+  "ui": {
+    "stats": {
+      "show_fps": "true",
+      "show_frame_timing_detail": "true"
     }
   }
 }

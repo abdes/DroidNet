@@ -20,7 +20,7 @@
 
 #include "Common/AsyncEngineApp.h"
 #include "Common/SingleViewExample.h"
-#include "Common/SkyboxManager.h"
+#include "DemoShell/Services/SkyboxService.h"
 #include "TexturedCube/CameraController.h"
 #include "TexturedCube/DebugUI.h"
 #include "TexturedCube/SceneSetup.h"
@@ -38,7 +38,7 @@ namespace oxygen::examples::textured_cube {
  The module is structured into several focused components:
  - **CameraController**: Handles orbit camera with mouse controls
  - **TextureLoadingService**: Loads and uploads textures asynchronously
- - **SkyboxManager**: Manages skybox loading and scene environment
+ - **SkyboxService**: Manages skybox loading and scene environment
  - **SceneSetup**: Creates and configures scene objects (cube, lights)
  - **DebugUI**: ImGui-based debug overlay for runtime tweaking
 
@@ -47,7 +47,7 @@ namespace oxygen::examples::textured_cube {
  - Mouse wheel: zoom in/out
  - RMB + mouse drag: orbit camera
 
- @see CameraController, TextureLoadingService, SkyboxManager, SceneSetup,
+ @see CameraController, TextureLoadingService, SkyboxService, SceneSetup,
  DebugUI
 */
 class MainModule final : public common::SingleViewExample {
@@ -114,7 +114,7 @@ private:
   // Component modules
   std::unique_ptr<CameraController> camera_controller_;
   std::unique_ptr<TextureLoadingService> texture_service_;
-  std::unique_ptr<common::SkyboxManager> skybox_manager_;
+  std::unique_ptr<SkyboxService> skybox_service_;
   std::unique_ptr<SceneSetup> scene_setup_;
   std::unique_ptr<DebugUI> debug_ui_;
 

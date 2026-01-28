@@ -15,7 +15,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 
-#include "DemoShell/DemoPanel.h"
+#include "DemoShell/UI/DemoPanel.h"
 
 namespace oxygen::examples {
 

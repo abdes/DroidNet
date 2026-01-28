@@ -15,15 +15,16 @@
 #include <string>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Import/AsyncImportService.h>
 #include <Oxygen/Content/Import/ImportOptions.h>
 #include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Data/AssetKey.h>
 
-#include "DemoShell/FileBrowser/FileBrowserService.h"
+#include "DemoShell/Services/FileBrowserService.h"
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
 
 //! Callback invoked when a scene is ready to be loaded.
 using SceneLoadCallback = std::function<void(const data::AssetKey&)>;
@@ -36,6 +37,7 @@ struct ImportPanelConfig {
   std::filesystem::path fbx_directory;
   std::filesystem::path gltf_directory;
   std::filesystem::path cooked_output_directory;
+  observer_ptr<FileBrowserService> file_browser_service { nullptr };
   SceneLoadCallback on_scene_ready;
   IndexLoadCallback on_index_loaded;
 
@@ -61,9 +63,14 @@ struct ImportPanelConfig {
  ```cpp
  ImportPanel panel;
  ImportPanelConfig config;
- config.fbx_directory = content_root / "fbx";
- config.gltf_directory = content_root / "glb";
- config.cooked_output_directory = content_root / ".cooked";
+ FileBrowserService browser_service;
+ browser_service.ConfigureContentRoots(
+   { .cooked_root = std::filesystem::path("...") / ".cooked" });
+ const auto roots = browser_service.GetContentRoots();
+ config.fbx_directory = roots.fbx_directory;
+ config.gltf_directory = roots.glb_directory;
+ config.cooked_output_directory = roots.cooked_root;
+ config.file_browser_service = observer_ptr { &browser_service };
  config.on_scene_ready = [](const data::AssetKey& key) { LoadScene(key); };
 
  panel.Initialize(config);
@@ -137,7 +144,7 @@ private:
   auto DrawJobSummaryUi() -> void;
 
   ImportPanelConfig config_ {};
-  FileBrowserService file_browser_ {};
+  observer_ptr<FileBrowserService> file_browser_ { nullptr };
   BrowseMode browse_mode_ { BrowseMode::kNone };
   std::unique_ptr<content::import::AsyncImportService> import_service_;
   content::import::AsyncImportService::Config service_config_ {};
@@ -183,4 +190,4 @@ private:
   bool service_config_dirty_ = false;
 };
 
-} // namespace oxygen::examples::render_scene::ui
+} // namespace oxygen::examples::ui

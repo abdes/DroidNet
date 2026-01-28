@@ -6,29 +6,39 @@
 
 #include <imgui.h>
 
+#include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/SettingsPanel.h"
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
 
 void SettingsPanel::Initialize(const SettingsPanelConfig& config)
 {
   config_ = config;
+  LoadSettings();
 }
 
 void SettingsPanel::UpdateConfig(const SettingsPanelConfig& config)
 {
   config_ = config;
+  LoadSettings();
 }
 
 void SettingsPanel::DrawContents()
 {
-  if (!config_.demo_knobs) {
+  if (!config_.axes_widget && !config_.stats_overlay) {
     ImGui::TextUnformatted("No settings available");
     return;
   }
 
-  auto& knobs = *config_.demo_knobs;
-  ImGui::Checkbox("Axis visibility", &knobs.show_axes_widget);
+  if (config_.axes_widget) {
+    bool visible = config_.axes_widget->IsVisible();
+    if (ImGui::Checkbox("Axis visibility", &visible)) {
+      config_.axes_widget->SetVisible(visible);
+      SaveAxesVisibleSetting(visible);
+    }
+  } else {
+    ImGui::TextDisabled("Axis visibility (no widget)");
+  }
   ImGui::Spacing();
 
   if (ImGui::CollapsingHeader("Show Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -38,22 +48,79 @@ void SettingsPanel::DrawContents()
 
 void SettingsPanel::DrawStatsSection()
 {
-  if (!config_.demo_knobs) {
+  if (!config_.stats_overlay) {
     return;
   }
 
-  auto& knobs = *config_.demo_knobs;
-  const bool hide_all
-    = !knobs.show_stats_fps && !knobs.show_stats_frame_timing_detail;
+  auto config = config_.stats_overlay->GetConfig();
+  const bool hide_all = !config.show_fps && !config.show_frame_timing_detail;
   bool hide_all_toggle = hide_all;
   if (ImGui::Checkbox("Hide all", &hide_all_toggle) && hide_all_toggle) {
-    knobs.show_stats_fps = false;
-    knobs.show_stats_frame_timing_detail = false;
+    config.show_fps = false;
+    config.show_frame_timing_detail = false;
   }
 
-  ImGui::Checkbox("FPS", &knobs.show_stats_fps);
-  ImGui::Checkbox(
-    "Frame timings detail", &knobs.show_stats_frame_timing_detail);
+  ImGui::Checkbox("FPS", &config.show_fps);
+  ImGui::Checkbox("Frame timings detail", &config.show_frame_timing_detail);
+  config_.stats_overlay->SetConfig(config);
+  SaveStatsSettings(config);
 }
 
-} // namespace oxygen::examples::render_scene::ui
+auto SettingsPanel::LoadSettings() -> void
+{
+  if (settings_loaded_) {
+    return;
+  }
+  const auto settings = oxygen::examples::SettingsService::Default();
+  if (!settings) {
+    return;
+  }
+
+  settings_loaded_ = true;
+
+  if (config_.axes_widget) {
+    if (const auto visible = settings->GetString("ui.axes.visible")) {
+      const bool is_visible = (*visible == "true");
+      config_.axes_widget->SetVisible(is_visible);
+    }
+  }
+
+  if (config_.stats_overlay) {
+    auto config = config_.stats_overlay->GetConfig();
+    if (const auto show_fps = settings->GetString("ui.stats.show_fps")) {
+      config.show_fps = (*show_fps == "true");
+    }
+    if (const auto show_detail
+      = settings->GetString("ui.stats.show_frame_timing_detail")) {
+      config.show_frame_timing_detail = (*show_detail == "true");
+    }
+    config_.stats_overlay->SetConfig(config);
+  }
+}
+
+auto SettingsPanel::SaveAxesVisibleSetting(const bool visible) const -> void
+{
+  const auto settings = oxygen::examples::SettingsService::Default();
+  if (!settings) {
+    return;
+  }
+
+  settings->SetString("ui.axes.visible", visible ? "true" : "false");
+  settings->Save();
+}
+
+auto SettingsPanel::SaveStatsSettings(const StatsOverlayConfig& config) const
+  -> void
+{
+  const auto settings = oxygen::examples::SettingsService::Default();
+  if (!settings) {
+    return;
+  }
+
+  settings->SetString("ui.stats.show_fps", config.show_fps ? "true" : "false");
+  settings->SetString("ui.stats.show_frame_timing_detail",
+    config.show_frame_timing_detail ? "true" : "false");
+  settings->Save();
+}
+
+} // namespace oxygen::examples::ui
