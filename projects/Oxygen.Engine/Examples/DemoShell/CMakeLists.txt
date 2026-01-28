@@ -21,6 +21,7 @@ asap_push_module("${META_MODULE_NAME}")
 # ------------------------------------------------------------------------------
 
 find_package(fmt CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -55,6 +56,19 @@ set(
   "PanelRegistry.h"
   "SidePanel.h"
   "PanelSideBar.h"
+  "Settings/SettingsService.h"
+  "UI/AxesWidget.h"
+  "UI/CameraControlPanel.h"
+  "UI/ContentLoaderPanel.h"
+  "UI/EnvironmentDebugPanel.h"
+  "UI/FbxLoaderPanel.h"
+  "FileBrowser/FileBrowserService.h"
+  "UI/ImportPanel.h"
+  "UI/LightCullingDebugPanel.h"
+  "UI/LooseCookedLoaderPanel.h"
+  "UI/PakLoaderPanel.h"
+  "UI/RenderingPanel.h"
+  "UI/SettingsPanel.h"
 )
 set(
   OXYGEN_DEMOSHELL_PRIVATE_SOURCES
@@ -62,6 +76,19 @@ set(
   "PanelRegistry.cpp"
   "PanelSideBar.cpp"
   "SidePanel.cpp"
+  "FileBrowser/imfilebrowser.h"
+  "Settings/SettingsService.cpp"
+  "UI/AxesWidget.cpp"
+  "UI/CameraControlPanel.cpp"
+  "UI/ContentLoaderPanel.cpp"
+  "UI/EnvironmentDebugPanel.cpp"
+  "FileBrowser/FileBrowserService.cpp"
+  "UI/ImportPanel.cpp"
+  "UI/LightCullingDebugPanel.cpp"
+  "UI/LooseCookedLoaderPanel.cpp"
+  "UI/PakLoaderPanel.cpp"
+  "UI/RenderingPanel.cpp"
+  "UI/SettingsPanel.cpp"
 )
 
 if(NOT DEFINED OXYGEN_EXAMPLES_SOURCE_DIR)
@@ -105,8 +132,14 @@ target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
     oxygen::base
+    oxygen::content
+    oxygen::data
     oxygen::imgui
+    oxygen::input
+    oxygen::renderer
+    oxygen::scene
     fmt::fmt-header-only
+    nlohmann_json::nlohmann_json
 )
 
 # ------------------------------------------------------------------------------

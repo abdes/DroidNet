@@ -36,7 +36,7 @@ struct LightCullingDebugConfig {
   std::function<void()> on_cluster_mode_changed {};
 
   //! Pointer to the demo knobs view model (rendering panel).
-  observer_ptr<demo_shell::DemoKnobsViewModel> demo_knobs { nullptr };
+  observer_ptr<DemoKnobsViewModel> demo_knobs { nullptr };
 };
 
 //! Lighting panel with light culling and visualization controls

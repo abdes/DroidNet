@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <optional>
+#include <string>
+
 #include <Oxygen/Base/ObserverPtr.h>
 
 #include "DemoShell/DemoKnobsViewModel.h"
@@ -13,7 +16,7 @@
 #include "DemoShell/PanelSideBar.h"
 #include "DemoShell/SidePanel.h"
 
-namespace oxygen::examples::demo_shell {
+namespace oxygen::examples {
 
 //! Configuration for the DemoShellUi controller.
 struct DemoShellUiConfig {
@@ -47,6 +50,8 @@ private:
   observer_ptr<PanelRegistry> panel_registry_ { nullptr };
   PanelSideBar panel_side_bar_ {};
   SidePanel side_panel_ {};
+  std::string last_active_panel_name_ {};
+  std::optional<std::string> pending_active_panel_ {};
 };
 
-} // namespace oxygen::examples::demo_shell
+} // namespace oxygen::examples

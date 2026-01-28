@@ -12,7 +12,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 
-#include "RenderScene/UI/LightCullingDebugPanel.h"
+#include "DemoShell/UI/LightCullingDebugPanel.h"
 
 namespace oxygen::examples::render_scene::ui {
 

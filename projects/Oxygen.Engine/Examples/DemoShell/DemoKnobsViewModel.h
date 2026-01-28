@@ -6,7 +6,7 @@
 
 #pragma once
 
-namespace oxygen::examples::demo_shell {
+namespace oxygen::examples {
 
 //! Rendering fill modes for demo UIs.
 enum class RenderMode { kSolid, kWireframe };
@@ -32,4 +32,4 @@ struct DemoKnobsViewModel {
   bool show_stats_frame_timing_detail { false };
 };
 
-} // namespace oxygen::examples::demo_shell
+} // namespace oxygen::examples

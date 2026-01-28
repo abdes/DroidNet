@@ -4,19 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "RenderScene/UI/LooseCookedLoaderPanel.h"
-
 #include <algorithm>
 #include <system_error>
 
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Platforms.h>
 #include <Oxygen/Content/LooseCookedInspection.h>
 #include <Oxygen/Data/AssetType.h>
 
-#include "RenderScene/UI/FilePicker.h"
+#include "DemoShell/UI/LooseCookedLoaderPanel.h"
 
 namespace oxygen::examples::render_scene::ui {
 
@@ -119,17 +116,17 @@ void LooseCookedLoaderPanel::Draw()
   }
 
   // File picker
-#if defined(OXYGEN_WINDOWS)
   if (ImGui::Button("Browse for Index...")) {
-    auto picker_config = MakeLooseCookedIndexPickerConfig();
+    auto picker_config = MakeLooseCookedIndexBrowserConfig();
     picker_config.initial_directory = config_.cooked_directory;
-
-    if (const auto selected_path = ShowFilePicker(picker_config)) {
-      LoadIndexFile(*selected_path);
-      return;
-    }
+    file_browser_.Open(picker_config);
   }
-#endif
+
+  file_browser_.UpdateAndDraw();
+  if (const auto selected_path = file_browser_.ConsumeSelection()) {
+    LoadIndexFile(*selected_path);
+    return;
+  }
 
   if (HasLoadedIndex()) {
     ImGui::SameLine();

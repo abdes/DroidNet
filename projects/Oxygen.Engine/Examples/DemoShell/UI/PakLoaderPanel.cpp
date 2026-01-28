@@ -4,19 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "RenderScene/UI/PakLoaderPanel.h"
-
 #include <algorithm>
 #include <system_error>
 
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Platforms.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Data/AssetType.h>
 
-#include "RenderScene/UI/FilePicker.h"
+#include "DemoShell/UI/PakLoaderPanel.h"
 
 namespace oxygen::examples::render_scene::ui {
 
@@ -125,18 +122,18 @@ void PakLoaderPanel::Draw()
   }
 
   // File picker and controls
-#if defined(OXYGEN_WINDOWS)
   if (ImGui::Button("Browse for PAK...")) {
-    auto picker_config = MakePakFilePickerConfig();
+    auto picker_config = MakePakFileBrowserConfig();
     picker_config.initial_directory = config_.pak_directory;
-
-    if (const auto selected_path = ShowFilePicker(picker_config)) {
-      LoadPakFile(*selected_path);
-      return;
-    }
+    file_browser_.Open(picker_config);
   }
   ImGui::SameLine();
-#endif
+
+  file_browser_.UpdateAndDraw();
+  if (const auto selected_path = file_browser_.ConsumeSelection()) {
+    LoadPakFile(*selected_path);
+    return;
+  }
 
   if (ImGui::Button("Refresh List")) {
     files_cached_ = false;

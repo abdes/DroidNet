@@ -5,18 +5,37 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cctype>
+#include <cmath>
 #include <string>
 
 #include <imgui.h>
 
+#include "DemoShell/Settings/SettingsService.h"
 #include "DemoShell/SidePanel.h"
 
-namespace oxygen::examples::demo_shell {
+namespace oxygen::examples {
 
 namespace {
 
   constexpr float kMinPanelWidth = 300.0F;
   constexpr float kMaxPanelWidthRatio = 0.6F;
+
+  auto MakePanelWidthKey(std::string_view panel_name) -> std::string
+  {
+    std::string key;
+    key.reserve(panel_name.size());
+    for (const char ch : panel_name) {
+      if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
+        || (ch >= '0' && ch <= '9')) {
+        key.push_back(
+          static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+      } else {
+        key.push_back('_');
+      }
+    }
+    return "demo_shell.panels." + key + ".width";
+  }
 
 } // namespace
 
@@ -44,6 +63,14 @@ auto SidePanel::Draw(float left_offset) -> void
     last_active_panel_name_ = std::string(active_name);
     width_ = std::clamp(active_panel->GetPreferredWidth(), kMinPanelWidth,
       io.DisplaySize.x * kMaxPanelWidthRatio);
+
+    if (const auto settings = SettingsService::Default()) {
+      if (const auto saved_width
+        = settings->GetFloat(MakePanelWidthKey(last_active_panel_name_))) {
+        width_ = std::clamp(
+          *saved_width, kMinPanelWidth, io.DisplaySize.x * kMaxPanelWidthRatio);
+      }
+    }
   }
 
   const float height = std::max(0.0F, io.DisplaySize.y);
@@ -67,9 +94,21 @@ auto SidePanel::Draw(float left_offset) -> void
 
   width_ = ImGui::GetWindowSize().x;
 
+  if (const auto settings = SettingsService::Default()) {
+    const std::string key = MakePanelWidthKey(last_active_panel_name_);
+    const bool same_panel = last_saved_panel_name_ == last_active_panel_name_;
+    const float delta = std::abs(width_ - last_saved_panel_width_);
+    if (!same_panel || delta > 0.5F) {
+      settings->SetFloat(key, width_);
+      settings->Save();
+      last_saved_panel_name_ = last_active_panel_name_;
+      last_saved_panel_width_ = width_;
+    }
+  }
+
   active_panel->DrawContents();
 
   ImGui::End();
 }
 
-} // namespace oxygen::examples::demo_shell
+} // namespace oxygen::examples

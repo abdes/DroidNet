@@ -1,0 +1,21 @@
+{
+  "demo_shell": {
+    "active_panel": "Camera Controls",
+    "panels": {
+      "camera_controls": {
+        "width": 360.0
+      },
+      "content_loader": {
+        "width": 709.0
+      }
+    }
+  },
+  "file_browser": {
+    "select_model_directory": {
+      "window_size": [
+        1151,
+        479
+      ]
+    }
+  }
+}

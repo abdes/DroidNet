@@ -30,8 +30,7 @@
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "RenderScene/UI/EnvironmentDebugPanel.h"
-#include "RenderScene/UI/FilePicker.h"
+#include "DemoShell/UI/EnvironmentDebugPanel.h"
 
 namespace oxygen::examples::render_scene::ui {
 
@@ -105,22 +104,6 @@ namespace {
     }
 
     return rotation;
-  }
-
-  auto MakeSkyboxFilePickerConfig() -> FilePickerConfig
-  {
-    FilePickerConfig config;
-    config.filters = {
-      { L"Skybox images (*.hdr;*.exr;*.png;*.jpg;*.jpeg;*.tga;*.bmp)",
-        L"*.hdr;*.exr;*.png;*.jpg;*.jpeg;*.tga;*.bmp" },
-      { L"HDR images (*.hdr;*.exr)", L"*.hdr;*.exr" },
-      { L"LDR images (*.png;*.jpg;*.jpeg;*.tga;*.bmp)",
-        L"*.png;*.jpg;*.jpeg;*.tga;*.bmp" },
-      { L"All files (*.*)", L"*.*" },
-    };
-    config.default_extension = L"hdr";
-    config.title = L"Select Skybox Image";
-    return config;
   }
 
   auto CopyPathToBuffer(
@@ -578,10 +561,9 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
     ImGui::InputText("Path##Skybox", skybox_path_.data(), skybox_path_.size());
     ImGui::PopItemWidth();
 
-#if defined(OXYGEN_WINDOWS)
     ImGui::SameLine();
     if (ImGui::Button("Browse...##Skybox")) {
-      auto picker_config = MakeSkyboxFilePickerConfig();
+      auto picker_config = MakeSkyboxFileBrowserConfig();
 
       // If the user already entered a path, use its parent as the starting dir.
       const std::filesystem::path current_path(
@@ -590,12 +572,14 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
         picker_config.initial_directory = current_path.parent_path();
       }
 
-      if (const auto selected_path = ShowFilePicker(picker_config)) {
-        CopyPathToBuffer(*selected_path,
-          std::span<char>(skybox_path_.data(), skybox_path_.size()));
-      }
+      skybox_file_browser_.Open(picker_config);
     }
-#endif
+
+    skybox_file_browser_.UpdateAndDraw();
+    if (const auto selected_path = skybox_file_browser_.ConsumeSelection()) {
+      CopyPathToBuffer(*selected_path,
+        std::span<char>(skybox_path_.data(), skybox_path_.size()));
+    }
 
     const char* layouts[] = { "Equirectangular", "Horizontal Cross",
       "Vertical Cross", "Horizontal Strip", "Vertical Strip" };

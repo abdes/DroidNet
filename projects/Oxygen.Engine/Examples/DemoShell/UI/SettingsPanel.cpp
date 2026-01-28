@@ -6,7 +6,7 @@
 
 #include <imgui.h>
 
-#include "RenderScene/UI/SettingsPanel.h"
+#include "DemoShell/UI/SettingsPanel.h"
 
 namespace oxygen::examples::render_scene::ui {
 

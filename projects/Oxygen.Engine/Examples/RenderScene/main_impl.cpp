@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <source_location>
 #include <span>
 #include <string>
 #include <string_view>
@@ -43,6 +44,7 @@
 #include <Oxygen/Renderer/Renderer.h>
 
 #include "Common/AsyncEngineApp.h"
+#include "DemoShell/Settings/SettingsService.h"
 #include "RenderScene/MainModule.h"
 
 using namespace oxygen;
@@ -176,6 +178,11 @@ auto AsyncMain(oxygen::examples::common::AsyncEngineApp& app, uint32_t frames)
 extern "C" auto MainImpl(std::span<const char*> args) -> void
 {
   using namespace oxygen::clap; // NOLINT
+
+  static auto settings = oxygen::examples::SettingsService::CreateForDemo(
+    std::source_location::current());
+  oxygen::examples::SettingsService::SetDefault(
+    oxygen::observer_ptr { settings.get() });
 
   uint32_t frames = 0U;
   uint32_t target_fps = 100U; // desired frame pacing

@@ -138,7 +138,7 @@ auto FindRenderSceneContentRoot() -> std::filesystem::path
 }
 
 template <typename PanelType>
-class PanelAdapter final : public oxygen::examples::demo_shell::DemoPanel {
+class PanelAdapter final : public oxygen::examples::DemoPanel {
 public:
   PanelAdapter(std::string_view name, oxygen::observer_ptr<PanelType> panel,
     std::string_view icon = {}, float preferred_width = 420.0F)
@@ -949,8 +949,8 @@ MainModule::MainModule(const oxygen::examples::common::AsyncEngineApp& app)
   : Base(app)
 {
   content_root_ = FindRenderSceneContentRoot();
-  demo_knobs_.camera_mode = demo_shell::CameraMode::kFly;
-  demo_knobs_.render_mode = demo_shell::RenderMode::kSolid;
+  demo_knobs_.camera_mode = CameraMode::kFly;
+  demo_knobs_.render_mode = RenderMode::kSolid;
   demo_knobs_.show_axes_widget = true;
   demo_knobs_.show_stats_fps = false;
   demo_knobs_.show_stats_frame_timing_detail = false;
@@ -999,7 +999,7 @@ auto MainModule::OnAttached(
   content_root_ = FindRenderSceneContentRoot();
 
   // Initialize UI panels
-  demo_shell_ui_.Initialize(demo_shell::DemoShellUiConfig {
+  demo_shell_ui_.Initialize(DemoShellUiConfig {
     .knobs = observer_ptr { &demo_knobs_ },
     .panel_registry = observer_ptr { &panel_registry_ },
   });
@@ -1762,8 +1762,8 @@ auto MainModule::UpdateCameraControlPanelConfig() -> void
 
   camera_config.on_mode_changed = [this](ui::CameraControlMode mode) {
     demo_knobs_.camera_mode = (mode == ui::CameraControlMode::kOrbit)
-      ? demo_shell::CameraMode::kOrbit
-      : demo_shell::CameraMode::kFly;
+      ? CameraMode::kOrbit
+      : CameraMode::kFly;
     pending_sync_active_camera_ = true;
   };
 
@@ -1772,8 +1772,7 @@ auto MainModule::UpdateCameraControlPanelConfig() -> void
   camera_control_panel_.UpdateConfig(camera_config);
 
   // Sync mode
-  const auto ui_mode
-    = (demo_knobs_.camera_mode == demo_shell::CameraMode::kOrbit)
+  const auto ui_mode = (demo_knobs_.camera_mode == CameraMode::kOrbit)
     ? ui::CameraControlMode::kOrbit
     : ui::CameraControlMode::kFly;
   camera_control_panel_.SetMode(ui_mode);
@@ -1781,7 +1780,7 @@ auto MainModule::UpdateCameraControlPanelConfig() -> void
 
 auto MainModule::RegisterDemoPanels() -> void
 {
-  panel_registry_ = demo_shell::PanelRegistry {};
+  panel_registry_ = PanelRegistry {};
   demo_panels_.clear();
 
   const auto register_panel
@@ -1810,13 +1809,11 @@ auto MainModule::RegisterDemoPanels() -> void
   register_panel(&lighting_panel_, "Lighting", icons::kIconLighting, 360.0F);
   register_panel(&rendering_panel_, "Rendering", icons::kIconRendering, 320.0F);
   register_panel(&settings_panel_, "Settings", icons::kIconSettings, 320.0F);
-  (void)panel_registry_.SetActivePanelByName("Content Loader");
 }
 
 auto MainModule::SyncCameraModeFromKnobs() -> void
 {
-  const auto desired
-    = (demo_knobs_.camera_mode == demo_shell::CameraMode::kOrbit)
+  const auto desired = (demo_knobs_.camera_mode == CameraMode::kOrbit)
     ? CameraMode::kOrbit
     : CameraMode::kFly;
   if (camera_mode_ == desired) {
@@ -1843,8 +1840,7 @@ auto MainModule::ApplyRenderModeFromKnobs() -> void
     }
 
     using graphics::FillMode;
-    const FillMode mode
-      = (demo_knobs_.render_mode == demo_shell::RenderMode::kWireframe)
+    const FillMode mode = (demo_knobs_.render_mode == RenderMode::kWireframe)
       ? FillMode::kWireFrame
       : FillMode::kSolid;
     render_graph->SetWireframeEnabled(mode == FillMode::kWireFrame);

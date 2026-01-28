@@ -21,6 +21,8 @@
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Data/AssetKey.h>
 
+#include "DemoShell/FileBrowser/FileBrowserService.h"
+
 namespace oxygen::examples::render_scene::ui {
 
 //! Callback invoked when a scene is ready to be loaded.
@@ -93,6 +95,12 @@ public:
   void CancelImport();
 
 private:
+  enum class BrowseMode {
+    kNone,
+    kPickFile,
+    kPickDirectory,
+  };
+
   struct SourceEntry {
     std::filesystem::path path;
     content::import::ImportFormat format
@@ -129,6 +137,8 @@ private:
   auto DrawJobSummaryUi() -> void;
 
   ImportPanelConfig config_ {};
+  FileBrowserService file_browser_ {};
+  BrowseMode browse_mode_ { BrowseMode::kNone };
   std::unique_ptr<content::import::AsyncImportService> import_service_;
   content::import::AsyncImportService::Config service_config_ {};
 

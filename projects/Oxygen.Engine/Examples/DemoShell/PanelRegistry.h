@@ -17,7 +17,7 @@
 
 #include "DemoShell/DemoPanel.h"
 
-namespace oxygen::examples::demo_shell {
+namespace oxygen::examples {
 
 //! Errors reported by the panel registry.
 enum class PanelRegistryError {
@@ -70,4 +70,4 @@ private:
   std::optional<std::size_t> active_index_ {};
 };
 
-} // namespace oxygen::examples::demo_shell
+} // namespace oxygen::examples

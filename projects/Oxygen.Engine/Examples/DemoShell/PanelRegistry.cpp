@@ -10,7 +10,7 @@
 
 #include "DemoShell/PanelRegistry.h"
 
-namespace oxygen::examples::demo_shell {
+namespace oxygen::examples {
 
 auto PanelRegistry::RegisterPanel(observer_ptr<DemoPanel> panel)
   -> std::expected<void, PanelRegistryError>
@@ -27,9 +27,6 @@ auto PanelRegistry::RegisterPanel(observer_ptr<DemoPanel> panel)
   }
 
   panels_.push_back(PanelEntry { std::string(name), panel });
-  if (!active_index_.has_value()) {
-    active_index_ = panels_.size() - 1U;
-  }
 
   return {};
 }
@@ -81,4 +78,4 @@ auto PanelRegistry::GetPanels() const noexcept -> std::span<const PanelEntry>
   return panels_;
 }
 
-} // namespace oxygen::examples::demo_shell
+} // namespace oxygen::examples

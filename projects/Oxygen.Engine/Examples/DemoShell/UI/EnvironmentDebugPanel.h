@@ -21,6 +21,7 @@
 #include <Oxygen/Scene/SceneNode.h>
 
 #include "Common/SkyboxManager.h"
+#include "DemoShell/FileBrowser/FileBrowserService.h"
 
 // Forward declarations
 namespace oxygen::scene {
@@ -232,6 +233,7 @@ private:
   std::string skybox_status_message_ {};
   int skybox_last_face_size_ { 0 };
   oxygen::content::ResourceKey skybox_last_resource_key_ { 0U };
+  FileBrowserService skybox_file_browser_ {};
 
   // SkyLight
   bool sky_light_enabled_ { false };

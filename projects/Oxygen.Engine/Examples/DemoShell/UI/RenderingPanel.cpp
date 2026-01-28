@@ -6,7 +6,7 @@
 
 #include <imgui.h>
 
-#include "RenderScene/UI/RenderingPanel.h"
+#include "DemoShell/UI/RenderingPanel.h"
 
 namespace oxygen::examples::render_scene::ui {
 
@@ -58,13 +58,12 @@ void RenderingPanel::DrawViewModeControls()
   }
 
   auto& knobs = *config_.demo_knobs;
-  if (ImGui::RadioButton(
-        "Solid", knobs.render_mode == demo_shell::RenderMode::kSolid)) {
-    knobs.render_mode = demo_shell::RenderMode::kSolid;
+  if (ImGui::RadioButton("Solid", knobs.render_mode == RenderMode::kSolid)) {
+    knobs.render_mode = RenderMode::kSolid;
   }
   if (ImGui::RadioButton(
-        "Wireframe", knobs.render_mode == demo_shell::RenderMode::kWireframe)) {
-    knobs.render_mode = demo_shell::RenderMode::kWireframe;
+        "Wireframe", knobs.render_mode == RenderMode::kWireframe)) {
+    knobs.render_mode = RenderMode::kWireframe;
   }
 }
 
