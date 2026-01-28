@@ -102,7 +102,7 @@ auto MainModule::OnAttached(
     return false;
   }
 
-  LOG_F(WARNING, "RenderScene: OnAttached; input_system={} engine={}",
+  LOG_F(INFO, "RenderScene: OnAttached; input_system={} engine={}",
     static_cast<const void*>(app_.input_system.get()),
     static_cast<const void*>(engine.get()));
 
@@ -170,7 +170,7 @@ auto MainModule::OnAttached(
     return false;
   }
 
-  LOG_F(WARNING, "RenderScene: DemoShell initialized");
+  LOG_F(INFO, "RenderScene: DemoShell initialized");
   return true;
 }
 
@@ -195,7 +195,7 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
     if (scene_loader_->IsReady()) {
       auto loader = scene_loader_;
       auto swap = scene_loader_->GetResult();
-      LOG_F(WARNING, "RenderScene: Applying staged scene swap (scene_key={})",
+      LOG_F(INFO, "RenderScene: Applying staged scene swap (scene_key={})",
         oxygen::data::to_string(swap.scene_key));
       ReleaseCurrentSceneAsset("scene swap");
       ClearSceneRuntime("scene swap");
@@ -285,7 +285,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
         scene_loader_ = std::make_shared<SceneLoaderService>(
           *asset_loader, last_viewport_w_, last_viewport_h_);
         scene_loader_->StartLoad(*pending_scene_key_);
-        LOG_F(WARNING, "RenderScene: Started async scene load (scene_key={})",
+        LOG_F(INFO, "RenderScene: Started async scene load (scene_key={})",
           oxygen::data::to_string(*pending_scene_key_));
       } else {
         LOG_F(ERROR, "AssetLoader unavailable");
@@ -335,7 +335,7 @@ auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
 {
   if (!logged_gameplay_tick_) {
     logged_gameplay_tick_ = true;
-    LOG_F(WARNING, "RenderScene: OnGameplay is running");
+    LOG_F(INFO, "RenderScene: OnGameplay is running");
   }
 
   // Input edges are finalized during kInput earlier in the frame (mirrors the
@@ -362,7 +362,7 @@ auto MainModule::EnsureViewCameraRegistered() -> void
   if (registered_view_camera_ != camera_handle) {
     registered_view_camera_ = camera_handle;
     UnregisterViewForRendering("camera changed");
-    LOG_F(WARNING, "RenderScene: Active camera changed; re-registering view");
+    LOG_F(INFO, "RenderScene: Active camera changed; re-registering view");
   }
 
   RegisterViewForRendering(active_camera);

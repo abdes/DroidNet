@@ -14,6 +14,13 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Renderer/Passes/DepthPrePass.h>
+#include <Oxygen/Renderer/Passes/LightCullingPass.h>
+#include <Oxygen/Renderer/Passes/ShaderPass.h>
+#include <Oxygen/Renderer/Passes/SkyAtmosphereLutComputePass.h>
+#include <Oxygen/Renderer/Passes/SkyPass.h>
+#include <Oxygen/Renderer/Passes/TransparentPass.h>
+#include <Oxygen/Renderer/Passes/WireframePass.h>
 #include <Oxygen/Renderer/Renderer.h>
 
 using namespace oxygen;

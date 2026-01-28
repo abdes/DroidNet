@@ -61,7 +61,7 @@ auto DemoModuleBase::OnAttached(
 
   const auto props = BuildDefaultWindowProperties();
   if (!app_window_->CreateAppWindow(props)) {
-    DLOG_F(INFO, "-failed- could not create application window");
+    LOG_F(ERROR, "-failed- could not create application window");
     return false;
   }
 
@@ -77,7 +77,7 @@ auto DemoModuleBase::OnFrameStart(engine::FrameContext& context) -> void
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "OnFrameStart error: {}", ex.what());
   } catch (...) {
-    DLOG_F(ERROR, "OnFrameStart unknown exception");
+    LOG_F(ERROR, "OnFrameStart unknown exception");
   }
 }
 
@@ -105,7 +105,8 @@ auto DemoModuleBase::OnFrameStartCommon(engine::FrameContext& context) -> void
 
   // Update our surface in the FrameContext if needed.
   auto surfaces = context.GetSurfaces();
-  if (auto surface = app_window_->GetSurface().lock()) {
+  auto surface = app_window_->GetSurface().lock();
+  if (surface) {
     // Check if already registered.
     const bool already_registered = std::ranges::any_of(
       surfaces, [&](const auto& s) { return s.get() == surface.get(); });
@@ -115,17 +116,20 @@ auto DemoModuleBase::OnFrameStartCommon(engine::FrameContext& context) -> void
       // Guaranteed to stay alive until next frame start.
       context.AddSurface(observer_ptr { surface.get() });
     }
+    last_surface_ = observer_ptr { surface.get() };
   } else {
-    DLOG_F(WARNING, "AppWindow has no valid surface at frame start");
+    LOG_F(WARNING, "AppWindow has no valid surface at frame start");
 
-    // Find and remove expired surface.
-    auto it = std::ranges::find_if(surfaces, [&](const auto& s) {
-      return s.get() == app_window_->GetSurface().lock().get();
-    });
+    if (last_surface_) {
+      // Find and remove expired surface.
+      auto it = std::ranges::find_if(surfaces,
+        [&](const auto& s) { return s.get() == last_surface_.get(); });
 
-    if (it != surfaces.end()) {
-      DLOG_F(INFO, "Unregistering expired surface from FrameContext");
-      context.RemoveSurfaceAt(std::distance(surfaces.begin(), it));
+      if (it != surfaces.end()) {
+        DLOG_F(INFO, "Unregistering expired surface from FrameContext");
+        context.RemoveSurfaceAt(std::distance(surfaces.begin(), it));
+      }
+      last_surface_ = nullptr;
     }
   }
 }

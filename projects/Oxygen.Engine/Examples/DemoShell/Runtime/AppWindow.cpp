@@ -9,10 +9,14 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
+#include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
+#include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Event.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
 
@@ -25,28 +29,26 @@ namespace {
 
 void MaybeUnhookImgui(observer_ptr<oxygen::AsyncEngine> engine)
 {
-  try {
-    auto imgui_module_ref = engine->GetModule<imgui::ImGuiModule>();
-    if (imgui_module_ref) {
-      imgui_module_ref->get().SetWindowId(platform::kInvalidWindowId);
-    }
-  } catch (...) {
-    // ignore
+  auto imgui_module_ref = engine->GetModule<imgui::ImGuiModule>();
+  if (!imgui_module_ref) {
+    DLOG_F(INFO, "ImGui module not available; skipping window detach");
+    return;
   }
+
+  imgui_module_ref->get().SetWindowId(platform::kInvalidWindowId);
 }
 
 bool MaybeHookImgui(
   observer_ptr<oxygen::AsyncEngine> engine, platform::WindowIdType window_id)
 {
-  try {
-    auto imgui_module_ref = engine->GetModule<imgui::ImGuiModule>();
-    if (imgui_module_ref) {
-      imgui_module_ref->get().SetWindowId(window_id);
-    }
-  } catch (...) {
-    // ignore
+  auto imgui_module_ref = engine->GetModule<imgui::ImGuiModule>();
+  if (!imgui_module_ref) {
+    LOG_F(WARNING, "ImGui module not available; cannot bind to window {}",
+      window_id);
     return false;
   }
+
+  imgui_module_ref->get().SetWindowId(window_id);
 
   return true;
 }
@@ -63,6 +65,8 @@ AppWindow::AppWindow(const DemoAppContext& app) noexcept
   // Sanity checks only; heavyweight initialization is explicit and deferred.
   CHECK_NOTNULL_F(platform_);
   CHECK_NOTNULL_F(engine_);
+
+  shutdown_event_ = std::make_shared<co::Event>();
 
   DLOG_F(INFO, "AppWindow constructed");
 }
@@ -85,10 +89,12 @@ struct AppWindow::SubscriptionToken {
 AppWindow::~AppWindow() noexcept
 {
   DLOG_SCOPE_FUNCTION(INFO);
+  if (shutdown_event_) {
+    shutdown_event_->Trigger();
+  }
   // Remove any stored subscription for this instance (subscription dtor
-  // will call Cancel()). Use best-effort and swallow exceptions.
-  // Destroy subscription token (if present) so the subscription is
-  // cancelled before this instance is torn down.
+  // will call Cancel()). Destroy subscription token (if present) so the
+  // subscription is cancelled before this instance is torn down.
   imgui_subscription_token_.reset();
   // Unregister any platform-level handler we previously installed.
   if (platform_ && window_lifecycle_token_ != 0) {
@@ -127,9 +133,10 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
   }
 
   const auto weak_self = weak_from_this();
+  const auto shutdown_event = shutdown_event_;
 
   // Close-request handler.
-  platform_->Async().Nursery().Start([weak_self]() -> co::Co<> {
+  platform_->Async().Nursery().Start([weak_self, shutdown_event]() -> co::Co<> {
     while (true) {
       auto self = weak_self.lock();
       if (!self) {
@@ -139,7 +146,18 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
       if (!w) {
         co_return;
       }
-      co_await w->CloseRequested();
+      auto [close_requested, shutdown] = co_await co::AnyOf(
+        [w]() -> co::Co<bool> {
+          co_await w->CloseRequested();
+          co_return true;
+        },
+        [shutdown_event]() -> co::Co<> { co_await *shutdown_event; });
+      if (shutdown.has_value()) {
+        co_return;
+      }
+      if (!close_requested.has_value()) {
+        continue;
+      }
       self = weak_self.lock();
       if (!self) {
         co_return;
@@ -151,7 +169,7 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
   });
 
   // Resize/expose handler.
-  platform_->Async().Nursery().Start([weak_self]() -> co::Co<> {
+  platform_->Async().Nursery().Start([weak_self, shutdown_event]() -> co::Co<> {
     using WindowEvent = platform::window::Event;
     while (true) {
       auto self = weak_self.lock();
@@ -162,13 +180,26 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
       if (!w) {
         co_return;
       }
-      const auto [from, to] = co_await w->Events().UntilChanged();
+      auto [event_opt, shutdown] = co_await co::AnyOf(
+        [w]() -> co::Co<WindowEvent> {
+          const auto [from, to] = co_await w->Events().UntilChanged();
+          (void)from;
+          co_return to;
+        },
+        [shutdown_event]() -> co::Co<> { co_await *shutdown_event; });
+      if (shutdown.has_value()) {
+        co_return;
+      }
+      if (!event_opt.has_value()) {
+        continue;
+      }
+      const auto to = event_opt.value();
       self = weak_self.lock();
       if (!self) {
         co_return;
       }
       if (to == WindowEvent::kResized) {
-        LOG_F(1, "Window resized -> marking surface for resize");
+        DLOG_F(INFO, "Window resized -> marking surface for resize");
         if (self->surface_) {
           self->surface_->ShouldResize(true);
         }
@@ -178,15 +209,24 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
 
   // Platform termination -> request close.
   auto platform = platform_;
-  platform_->Async().Nursery().Start([weak_self, platform]() -> co::Co<> {
-    co_await platform->Async().OnTerminate();
-    LOG_F(INFO, "platform OnTerminate -> requesting window close");
-    if (auto self = weak_self.lock()) {
-      if (auto w = self->window_.lock()) {
-        w->RequestClose();
+  platform_->Async().Nursery().Start(
+    [weak_self, platform, shutdown_event]() -> co::Co<> {
+      auto [terminated, shutdown]
+        = co_await co::AnyOf(platform->Async().OnTerminate(),
+          [shutdown_event]() -> co::Co<> { co_await *shutdown_event; });
+      if (shutdown.has_value()) {
+        co_return;
       }
-    }
-  });
+      if (!terminated.has_value()) {
+        co_return;
+      }
+      LOG_F(INFO, "platform OnTerminate -> requesting window close");
+      if (auto self = weak_self.lock()) {
+        if (auto w = self->window_.lock()) {
+          w->RequestClose();
+        }
+      }
+    });
 
   // Register pre-destroy handler.
   const auto win_ref = window_.lock();
