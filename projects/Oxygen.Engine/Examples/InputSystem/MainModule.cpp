@@ -10,7 +10,6 @@
 #include <cstring>
 #include <random>
 #include <ranges>
-#include <unordered_map>
 #include <variant>
 
 #include <imgui.h>
@@ -50,150 +49,8 @@
 
 namespace {
 
-constexpr std::uint32_t kWindowWidth = 1900;
-constexpr std::uint32_t kWindowHeight = 900;
-
-//=== ImGui Quick-Visual Helpers ---------------------------------------------//
-
-//! Draw a simple keyboard/mouse keycap (rounded rect + centered label).
-static void DrawKeycap(ImDrawList* dl, ImVec2 p, const char* label, ImU32 bg,
-  ImU32 border, ImU32 text, float scale = 1.0f)
-{
-  const float pad = 6.0f * scale;
-  const ImVec2 text_size = ImGui::CalcTextSize(label);
-  const ImVec2 size
-    = ImVec2(text_size.x + pad * 2.0f, text_size.y + pad * 1.5f);
-  const float r = 6.0f * scale;
-
-  const ImVec2 p_max(p.x + size.x, p.y + size.y);
-  dl->AddRectFilled(p, p_max, bg, r);
-  dl->AddRect(p, p_max, border, r, 0, 1.5f * scale);
-
-  const ImVec2 tp = ImVec2(
-    p.x + (size.x - text_size.x) * 0.5f, p.y + (size.y - text_size.y) * 0.5f);
-  dl->AddText(tp, text, label, label + std::strlen(label));
-}
-
-//! Compute the rendered size of a keycap for spacing/layout.
-static ImVec2 MeasureKeycap(const char* label, float scale = 1.0f)
-{
-  const float pad = 6.0f * scale;
-  const ImVec2 text_size = ImGui::CalcTextSize(label);
-  return ImVec2(text_size.x + pad * 2.0f, text_size.y + pad * 1.5f);
-}
-
-//! Draw a tiny horizontal analog bar for scalar values in [vmin, vmax].
-static void DrawAnalogBar(ImDrawList* dl, ImVec2 p, ImVec2 sz, float v,
-  float vmin = -1.0f, float vmax = 1.0f, ImU32 bg = IM_COL32(30, 30, 34, 255),
-  ImU32 fg = IM_COL32(90, 170, 255, 255))
-{
-  const ImVec2 p_max(p.x + sz.x, p.y + sz.y);
-  dl->AddRectFilled(p, p_max, bg, 3.0f);
-  const float t = (v - vmin) / (vmax - vmin);
-  const float tt = std::clamp(t, 0.0f, 1.0f);
-  const ImVec2 fill = ImVec2(p.x + sz.x * tt, p.y + sz.y);
-  dl->AddRectFilled(p, ImVec2(fill.x, fill.y), fg, 3.0f);
-  // zero line
-  const float zt = (-vmin) / (vmax - vmin);
-  const float zx = p.x + sz.x * std::clamp(zt, 0.0f, 1.0f);
-  dl->AddLine(ImVec2(zx, p.y), ImVec2(zx, p.y + sz.y),
-    IM_COL32(180, 180, 190, 120), 1.0f);
-}
-
-//! Plot a tiny sparkline from a circular buffer (values[filled], head==next).
-static void PlotSparkline(const char* id, const float* values, int filled,
-  int head, int capacity, ImVec2 size)
-{
-  if (!values || filled <= 0) {
-    return;
-  }
-  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-  ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(0, 0, 0, 0));
-  ImGui::PushStyleColor(ImGuiCol_PlotLines, IM_COL32(140, 200, 255, 220));
-  // rotate to chronological order into a small local buffer
-  static float tmp[128];
-  const int N = (std::min)(filled, 128);
-  const int cap = (std::min)(capacity, 128);
-  // Start at the oldest sample index in the ring buffer
-  const int start = (head - filled + cap) % cap;
-  for (int i = 0; i < N; ++i) {
-    tmp[i] = values[(start + i) % cap];
-  }
-  ImGui::PlotLines(id, tmp, N, 0, nullptr, -1.0f, 1.0f, size);
-  ImGui::PopStyleColor(2);
-  ImGui::PopStyleVar();
-}
-
-struct History {
-  static constexpr int kCapacity = 64;
-  float values[kCapacity] = {};
-  int head = 0; // next write index
-  int count = 0; // number of valid samples (<= kCapacity)
-  void Push(float v) noexcept
-  {
-    values[head] = v;
-    head = (head + 1) % kCapacity;
-    if (count < kCapacity) {
-      ++count;
-    }
-  }
-};
-
-//! Compute an action state label and color for a compact badge.
-static std::pair<const char*, ImU32> ActionStateBadge(
-  const std::shared_ptr<oxygen::input::Action>& a)
-{
-  if (!a) {
-    return { "<null>", IM_COL32(80, 80, 90, 255) };
-  }
-  if (a->WasCanceledThisFrame()) {
-    return { "Canceled", IM_COL32(230, 120, 70, 255) };
-  }
-  if (a->WasCompletedThisFrame()) {
-    return { "Completed", IM_COL32(110, 200, 120, 255) };
-  }
-  if (a->WasTriggeredThisFrame()) {
-    return { "Triggered", IM_COL32(90, 170, 255, 255) };
-  }
-  if (a->WasReleasedThisFrame()) {
-    return { "Released", IM_COL32(160, 160, 200, 255) };
-  }
-  if (a->IsOngoing()) {
-    return { "Ongoing", IM_COL32(200, 200, 80, 255) };
-  }
-  return { "Idle", IM_COL32(70, 70, 80, 255) };
-}
-
-//! Compute a scalar analog value in [-1, 1] for plotting bars/sparklines.
-//! For bool actions, returns 0 or 1. For Axis2D, returns magnitude.
-static float ActionScalarValue(
-  const std::shared_ptr<oxygen::input::Action>& a) noexcept
-{
-  if (!a) {
-    return 0.0f;
-  }
-
-  using oxygen::input::ActionValueType;
-  const auto vt = a->GetValueType();
-  switch (vt) {
-  case ActionValueType::kAxis2D: {
-    // Safe to access Axis2D
-    const auto& axis = a->GetValue().GetAs<oxygen::Axis2D>();
-    const float mag = std::sqrt(axis.x * axis.x + axis.y * axis.y);
-    return (std::min)(mag, 1.0f);
-  }
-  case ActionValueType::kAxis1D: {
-    const auto& ax = a->GetValue().GetAs<oxygen::Axis1D>();
-    return std::clamp(ax.x, -1.0f, 1.0f);
-  }
-  case ActionValueType::kBool: {
-    const bool b = a->GetValue().GetAs<bool>();
-    return b ? 1.0f : 0.0f;
-  }
-  default:
-    return 0.0f;
-  }
-}
+constexpr std::uint32_t kWindowWidth = 2400;
+constexpr std::uint32_t kWindowHeight = 1400;
 
 // Helper: make a solid-color material asset snapshot (opaque by default)
 auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
@@ -250,6 +107,21 @@ MainModule::MainModule(const DemoAppContext& app)
   DCHECK_F(!app_.gfx_weak.expired());
 }
 
+auto MainModule::BuildDefaultWindowProperties() const
+  -> platform::window::Properties
+{
+  platform::window::Properties p("Oxygen Input System");
+  p.extent = { .width = kWindowWidth, .height = kWindowHeight };
+  p.flags = { .hidden = false,
+    .always_on_top = false,
+    .full_screen = app_.fullscreen,
+    .maximized = false,
+    .minimized = false,
+    .resizable = true,
+    .borderless = false };
+  return p;
+}
+
 auto MainModule::OnAttached(
   oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept -> bool
 {
@@ -266,6 +138,35 @@ auto MainModule::OnAttached(
   }
 
   if (!InitInputBindings()) {
+    return false;
+  }
+
+  file_browser_service_ = std::make_unique<FileBrowserService>();
+
+  shell_ = std::make_unique<DemoShell>();
+  DemoShellConfig shell_config;
+  shell_config.input_system = observer_ptr { app_.input_system.get() };
+  shell_config.scene = scene_;
+  shell_config.file_browser_service
+    = observer_ptr { file_browser_service_.get() };
+  shell_config.panel_config = DemoShellPanelConfig {
+    .content_loader = false,
+    .camera_controls = false,
+    .environment = true,
+    .lighting = false,
+    .rendering = false,
+    .settings = false,
+  };
+  shell_config.enable_camera_rig = false;
+
+  if (!shell_->Initialize(shell_config)) {
+    LOG_F(WARNING, "InputSystem: DemoShell initialization failed");
+    return false;
+  }
+
+  UpdateInputDebugPanelConfig();
+  if (!shell_->RegisterPanel(observer_ptr { &input_debug_panel_ })) {
+    LOG_F(WARNING, "InputSystem: failed to register Input Debug panel");
     return false;
   }
 
@@ -400,6 +301,10 @@ auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
     }
     tf.SetLocalPosition(pos);
   }
+
+  if (shell_) {
+    shell_->Update(context.GetGameDeltaTime());
+  }
   co_return;
 }
 
@@ -445,6 +350,9 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
   // concerns for this frame.
   if (!scene_) {
     scene_ = std::make_shared<scene::Scene>("InputSystem-Scene");
+    if (shell_) {
+      shell_->UpdateScene(scene_);
+    }
   }
   context.SetScene(observer_ptr { scene_.get() });
 }
@@ -458,9 +366,16 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   UpdateFrameContext(context, [this](int w, int h) {
     EnsureMainCamera(w, h);
     RegisterViewForRendering(main_camera_);
+    if (shell_) {
+      shell_->SetActiveCamera(main_camera_);
+    }
   });
   if (!app_window_->GetWindow()) {
     co_return;
+  }
+
+  if (shell_) {
+    shell_->Update(time::CanonicalDuration {});
   }
 
   // Build a single-LOD sphere mesh using ProceduralMeshes + MeshBuilder
@@ -526,19 +441,28 @@ auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
 auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
-  const auto wnd = app_window_->GetWindow();
-  if (!wnd) {
+  if (!app_window_->GetWindow()) {
     co_return;
   }
-  // Set ImGui current context before making any ImGui calls
-  if (auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>()) {
-    auto& imgui_module = imgui_module_ref->get();
-    if (auto* imgui_context = imgui_module.GetImGuiContext()) {
-      ImGui::SetCurrentContext(imgui_context);
-    }
-  }
 
-  DrawDebugOverlay(context);
+  auto imgui_module_ref
+    = app_.engine ? app_.engine->GetModule<imgui::ImGuiModule>() : std::nullopt;
+  if (!imgui_module_ref) {
+    co_return;
+  }
+  auto& imgui_module = imgui_module_ref->get();
+  if (!imgui_module.IsWitinFrameScope()) {
+    co_return;
+  }
+  auto* imgui_context = imgui_module.GetImGuiContext();
+  if (imgui_context == nullptr) {
+    co_return;
+  }
+  ImGui::SetCurrentContext(imgui_context);
+
+  if (shell_) {
+    shell_->Draw();
+  }
 
   co_return;
 }
@@ -769,220 +693,28 @@ auto MainModule::InitInputBindings() noexcept -> bool
   return true;
 }
 
-//=== Debug Overlay Implementation
-//===========================================//
-
-auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
+//! Update the Input Debug panel configuration from current demo state.
+auto MainModule::UpdateInputDebugPanelConfig() -> void
 {
-  // Quick win UI: compact action cards with keycaps, bar, sparkline.
-  ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(460, 420), ImGuiCond_FirstUseEver);
-  if (!ImGui::Begin(
-        "Input Debug", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-    ImGui::End();
-    return;
-  }
+  InputDebugPanelConfig config;
+  config.input_system = observer_ptr { app_.input_system.get() };
+  config.main_camera = &main_camera_;
+  config.shift_action = shift_action_;
+  config.jump_action = jump_action_;
+  config.jump_higher_action = jump_higher_action_;
+  config.swim_up_action = swim_up_action_;
+  config.zoom_in_action = zoom_in_action_;
+  config.zoom_out_action = zoom_out_action_;
+  config.left_mouse_action = left_mouse_action_;
+  config.pan_action = pan_action_;
+  config.ground_movement_ctx = ground_movement_ctx_;
+  config.swimming_ctx = swimming_ctx_;
+  config.swimming_mode = &swimming_mode_;
+  config.pending_ground_reset = &pending_ground_reset_;
+  config.pan_sensitivity = &pan_sensitivity_;
+  config.zoom_step = &zoom_step_;
 
-  // Camera position
-  if (main_camera_.IsAlive()) {
-    const auto tf = main_camera_.GetTransform();
-    const auto pos
-      = tf.GetLocalPosition().value_or(glm::vec3(0.0F, 0.0F, 5.0F));
-    ImGui::Text("Camera: (%.2f, %.2f, %.2f)", pos.x, pos.y, pos.z);
-  } else {
-    ImGui::TextUnformatted("Camera: <not alive>");
-  }
-
-  // ImGui mouse capture state
-  const auto& io = ImGui::GetIO();
-  ImGui::Text("WantCaptureMouse: %s", io.WantCaptureMouse ? "true" : "false");
-  ImGui::Separator();
-
-  // Toggle between Ground and Swimming mapping contexts
-  {
-    bool prev_mode = swimming_mode_;
-    ImGui::Checkbox("Swimming mode", &swimming_mode_);
-    if (swimming_mode_ != prev_mode && app_.input_system) {
-      if (swimming_mode_) {
-        app_.input_system->DeactivateMappingContext(ground_movement_ctx_);
-        app_.input_system->ActivateMappingContext(swimming_ctx_);
-      } else {
-        app_.input_system->DeactivateMappingContext(swimming_ctx_);
-        app_.input_system->ActivateMappingContext(ground_movement_ctx_);
-        // Defer sphere reset to avoid accessing world data before propagation
-        pending_ground_reset_ = true;
-      }
-    }
-  }
-
-  // Gather actions to show. Keep labels small and stable.
-  struct Row {
-    const char* label;
-    std::shared_ptr<oxygen::input::Action> act;
-  };
-  Row rows[] = {
-    { "Shift", shift_action_ },
-    { "LMB", left_mouse_action_ },
-    { "Pan", pan_action_ },
-    { "Zoom In", zoom_in_action_ },
-    { "Zoom Out", zoom_out_action_ },
-    { "Jump", jump_action_ },
-    { "Jump Higher", jump_higher_action_ },
-    { "Swim Up", swim_up_action_ },
-  };
-
-  // Keep defined order; no sorting.
-
-  static bool show_inactive = true;
-  ImGui::Checkbox("Show inactive", &show_inactive);
-  ImGui::Spacing();
-
-  // Per-action history ring buffers keyed by label pointer (stable literals).
-  static std::unordered_map<const char*, History> histories;
-
-  // Table layout for cards: Label | Glyphs | State | Value | Sparkline
-  if (ImGui::BeginTable("##actions", 5, ImGuiTableFlags_SizingStretchProp)) {
-    ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 110.0f);
-    ImGui::TableSetupColumn(
-      "Bindings", ImGuiTableColumnFlags_WidthFixed, 200.0f);
-    ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, 90.0f);
-    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 1.0f);
-    ImGui::TableSetupColumn(
-      "History", ImGuiTableColumnFlags_WidthStretch, 1.0f);
-
-    // Track recent triggers to flash a fading highlight per action row.
-    static std::unordered_map<const char*, double> last_trigger_time;
-    const double now = ImGui::GetTime();
-
-    for (const auto& r : rows) {
-      const bool active = r.act
-        && (r.act->IsOngoing() || r.act->WasTriggeredThisFrame()
-          || r.act->WasCompletedThisFrame() || r.act->WasReleasedThisFrame()
-          || r.act->WasCanceledThisFrame()
-          || r.act->WasValueUpdatedThisFrame());
-      if (!show_inactive && !active) {
-        continue;
-      }
-
-      // Bump trigger time stamp
-      if (r.act && r.act->WasTriggeredThisFrame()) {
-        last_trigger_time[r.label] = now;
-      }
-
-      // Scope all row widgets with a unique ID to avoid label collisions
-      ImGui::PushID(r.label);
-
-      // Update history with current scalar value
-      const float v = ActionScalarValue(r.act);
-      auto& hist = histories[r.label];
-      hist.Push(v);
-
-      const auto [state_text, state_col] = ActionStateBadge(r.act);
-
-      ImGui::TableNextRow();
-      // Flash background highlight for recent trigger
-      {
-        float flash_alpha = 0.0f;
-        constexpr float kFlashDuration = 1.5f; // seconds
-        auto it = last_trigger_time.find(r.label);
-        if (it != last_trigger_time.end()) {
-          const float age = static_cast<float>(now - it->second);
-          if (age >= 0.0f && age < kFlashDuration) {
-            float t = 1.0f - (age / kFlashDuration);
-            t = t * t; // ease-out quad
-            flash_alpha = t;
-          }
-        }
-        if (flash_alpha > 0.0f) {
-          const int a = static_cast<int>(flash_alpha * 110.0f);
-          const ImU32 col = IM_COL32(255, 220, 120, a);
-          ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, col);
-        }
-      }
-
-      // Action label
-      ImGui::TableSetColumnIndex(0);
-      ImGui::AlignTextToFramePadding();
-      ImGui::TextUnformatted(r.label);
-
-      // Bindings (quick illustrative keycaps; not wired to real mappings yet)
-      ImGui::TableSetColumnIndex(1);
-      {
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        ImVec2 p = ImGui::GetCursorScreenPos();
-        const float scale = ImGui::GetIO().FontGlobalScale;
-        const float gap = 8.0f * scale;
-        float used_w = 0.0f;
-        float used_h = 0.0f;
-        auto draw_and_advance = [&](const char* cap) {
-          const ImVec2 sz = MeasureKeycap(cap, scale);
-          DrawKeycap(dl, p, cap, IM_COL32(40, 40, 46, 255),
-            IM_COL32(80, 80, 90, 255), IM_COL32(230, 230, 240, 255), scale);
-          p.x += sz.x + gap;
-          used_w += sz.x + gap;
-          used_h = (std::max)(used_h, sz.y);
-        };
-
-        if (r.label == std::string("Pan")) {
-          draw_and_advance("Shift");
-          draw_and_advance("LMB");
-        } else if (r.label == std::string("Zoom In")) {
-          draw_and_advance("Wheel+");
-        } else if (r.label == std::string("Zoom Out")) {
-          draw_and_advance("Wheel-");
-        } else if (r.label == std::string("Jump")) {
-          draw_and_advance("Space");
-        } else if (r.label == std::string("Jump Higher")) {
-          draw_and_advance("Shift");
-          draw_and_advance("Space");
-        } else if (r.label == std::string("Shift")) {
-          draw_and_advance("Shift");
-        } else if (r.label == std::string("LMB")) {
-          draw_and_advance("LMB");
-        } else if (r.label == std::string("Swim Up")) {
-          draw_and_advance("Space");
-        }
-        if (used_w > 0.0f && used_h > 0.0f) {
-          // Remove trailing gap from width reservation
-          used_w -= gap;
-          ImGui::Dummy(ImVec2(used_w, used_h));
-        } else {
-          ImGui::Dummy(ImVec2(1, 26.0f * scale));
-        }
-      }
-
-      // State badge
-      ImGui::TableSetColumnIndex(2);
-      ImGui::AlignTextToFramePadding();
-      {
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, state_col);
-        ImGui::TextDisabled("  %s  ", state_text);
-        ImGui::PopStyleColor();
-      }
-
-      // Analog bar
-      ImGui::TableSetColumnIndex(3);
-      {
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        ImVec2 p = ImGui::GetCursorScreenPos();
-        DrawAnalogBar(dl, p, ImVec2(160, 8), v, 0.0f, 1.0f);
-        ImGui::Dummy(ImVec2(160, 10));
-      }
-
-      // Sparkline
-      ImGui::TableSetColumnIndex(4);
-      PlotSparkline("##spark", hist.values, hist.count, hist.head,
-        History::kCapacity, ImVec2(160, 28));
-
-      ImGui::PopID();
-    }
-    ImGui::EndTable();
-  }
-
-  ImGui::Separator();
-  ImGui::Text(
-    "pan_sensitivity=%.4f, zoom_step=%.3f", pan_sensitivity_, zoom_step_);
-  ImGui::End();
+  input_debug_panel_.Initialize(config);
 }
 
 } // namespace oxygen::examples::input

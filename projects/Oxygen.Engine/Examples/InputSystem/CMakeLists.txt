@@ -40,6 +40,8 @@ add_executable(
   ${META_MODULE_TARGET}
   "../main.cpp"
   "main_impl.cpp"
+  "InputDebugPanel.h"
+  "InputDebugPanel.cpp"
   "MainModule.h"
   "MainModule.cpp"
 )
