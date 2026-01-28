@@ -70,7 +70,7 @@ auto MainModule::OnShutdown() noexcept -> void
 {
   camera_controller_.reset();
   texture_service_.reset();
-  skybox_manager_.reset();
+  skybox_service_.reset();
   scene_setup_.reset();
   debug_ui_.reset();
 }
@@ -90,7 +90,7 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
     if (asset_loader) {
       texture_service_ = std::make_unique<TextureLoadingService>(
         observer_ptr { asset_loader.get() });
-      skybox_manager_ = std::make_unique<common::SkyboxManager>(
+      skybox_service_ = std::make_unique<SkyboxService>(
         observer_ptr { asset_loader.get() }, scene_);
     }
 
@@ -415,16 +415,15 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
             cube_needs_rebuild_ = true;
             break;
           case DebugUI::BrowserAction::Type::kSetSkybox:
-            if (skybox_manager_
+            if (skybox_service_
               && result.texture_type == oxygen::TextureType::kTextureCube) {
-              skybox_manager_->SetSkyboxResourceKey(result.resource_key);
+              skybox_service_->SetSkyboxResourceKey(result.resource_key);
               auto& lighting = debug_ui_->GetLightingState();
-              skybox_manager_->ApplyToScene(
-                common::SkyboxManager::SkyLightParams {
-                  .intensity = lighting.sky_light_intensity,
-                  .diffuse_intensity = lighting.sky_light_diffuse,
-                  .specular_intensity = lighting.sky_light_specular,
-                });
+              skybox_service_->ApplyToScene(SkyboxService::SkyLightParams {
+                .intensity = lighting.sky_light_intensity,
+                .diffuse_intensity = lighting.sky_light_diffuse,
+                .specular_intensity = lighting.sky_light_specular,
+              });
             }
             break;
           case DebugUI::BrowserAction::Type::kNone:

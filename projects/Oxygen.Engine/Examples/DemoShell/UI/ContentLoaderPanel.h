@@ -12,18 +12,22 @@
 #include <memory>
 #include <optional>
 
+#include <Oxygen/Base/ObserverPtr.h>
+
+#include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/UI/CameraControlPanel.h"
 #include "DemoShell/UI/ImportPanel.h"
 #include "DemoShell/UI/LooseCookedLoaderPanel.h"
 #include "DemoShell/UI/PakLoaderPanel.h"
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
 
 //! Unified content loader panel combining all loading options
 /*!
  Provides a single ImGui window with tabs for Import, PAK, and Loose Cooked
  content loading. Manages all loader panels internally and provides a clean
- interface for scene loading operations.
+ interface for scene loading operations. The shared content root is resolved
+ by FileBrowserService and points to Examples/Content.
 
  ### Key Features
 
@@ -37,8 +41,12 @@ namespace oxygen::examples::render_scene::ui {
  ```cpp
  ContentLoaderPanel loader_panel;
 
- ContentLoaderConfig config;
- config.content_root = FindRenderSceneContentRoot();
+ ContentLoaderPanel::Config config;
+ FileBrowserService browser_service;
+ browser_service.ConfigureContentRoots(
+   { .cooked_root = std::filesystem::path("...") / ".cooked" });
+ config.file_browser_service = observer_ptr { &browser_service };
+ config.cooked_root = std::filesystem::path("...") / ".cooked";
  config.on_scene_load_requested = [this](const data::AssetKey& key) {
    pending_scene_key_ = key;
    pending_load_scene_ = true;
@@ -72,7 +80,9 @@ public:
 
   //! Configuration for content loader panel
   struct Config {
-    std::filesystem::path content_root;
+    observer_ptr<FileBrowserService> file_browser_service { nullptr };
+    //! Demo-specific cooked output root (e.g. "Examples/MyDemo/.cooked").
+    std::filesystem::path cooked_root;
     SceneLoadCallback on_scene_load_requested;
     PakMountCallback on_pak_mounted;
     IndexLoadCallback on_loose_index_loaded;
@@ -116,4 +126,4 @@ private:
   std::function<void()> on_force_trim_;
 };
 
-} // namespace oxygen::examples::render_scene::ui
+} // namespace oxygen::examples::ui

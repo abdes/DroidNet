@@ -41,16 +41,10 @@ add_executable(
   "../Common/RenderGraph.h"
   "../Common/SingleViewExample.cpp"
   "../Common/SingleViewExample.h"
-  "../Common/SkyboxManager.cpp"
-  "../Common/SkyboxManager.h"
   "../Common/WorkspaceRoot.h"
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"
-  "OrbitCameraController.h"
-  "OrbitCameraController.cpp"
-  "FlyCameraController.h"
-  "FlyCameraController.cpp"
 )
 
 set_target_properties(

@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <memory>
+#include <string>
 
 #include <glm/gtc/quaternion.hpp>
 #include <glm/vec3.hpp>
@@ -15,16 +16,14 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
-namespace oxygen::examples::render_scene {
-class OrbitCameraController;
-class FlyCameraController;
-} // namespace oxygen::examples::render_scene
+#include "DemoShell/UI/FlyCameraController.h"
+#include "DemoShell/UI/OrbitCameraController.h"
 
 namespace oxygen::input {
 class Action;
 } // namespace oxygen::input
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
 
 //! Camera control mode
 enum class CameraControlMode { kOrbit, kFly };
@@ -141,6 +140,11 @@ public:
   }
 
 private:
+  auto LoadSettings() -> void;
+  auto SaveModeSetting() const -> void;
+  auto SaveOrbitModeSetting(OrbitMode mode) const -> void;
+  auto SaveFlySpeedSetting(float speed) const -> void;
+
   void DrawCameraModeTab();
   void DrawDebugTab();
   void DrawCameraPoseInfo();
@@ -151,6 +155,7 @@ private:
 
   CameraControlConfig config_;
   CameraControlMode current_mode_ { CameraControlMode::kOrbit };
+  bool settings_loaded_ { false };
 };
 
-} // namespace oxygen::examples::render_scene::ui
+} // namespace oxygen::examples::ui

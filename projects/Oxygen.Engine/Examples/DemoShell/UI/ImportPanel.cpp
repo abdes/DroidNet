@@ -24,7 +24,7 @@
 
 #include "DemoShell/UI/ImportPanel.h"
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
 
 /*!
  Ensure the import service is stopped before panel destruction.
@@ -320,10 +320,15 @@ namespace {
 void ImportPanel::Initialize(const ImportPanelConfig& config)
 {
   config_ = config;
+  CHECK_NOTNULL_F(
+    config_.file_browser_service, "ImportPanel requires a FileBrowserService");
+  file_browser_ = config_.file_browser_service;
 
-  model_directory_text_ = !config_.gltf_directory.empty()
-    ? config_.gltf_directory.string()
-    : config_.fbx_directory.string();
+  const auto roots = file_browser_->GetContentRoots();
+  config_.fbx_directory = roots.content_root;
+  config_.gltf_directory = roots.content_root;
+
+  model_directory_text_ = roots.content_root.string();
   fbx_directory_text_ = model_directory_text_;
   gltf_directory_text_ = model_directory_text_;
   cooked_output_text_ = config_.cooked_output_directory.string();
@@ -747,32 +752,33 @@ auto ImportPanel::DrawSourceSelectionUi() -> void
     ImGui::OpenPopup("ImportBrowsePopup");
   }
   if (ImGui::BeginPopup("ImportBrowsePopup")) {
+    const auto roots = file_browser_->GetContentRoots();
     if (ImGui::MenuItem("Pick file...")) {
-      auto picker_config = MakeModelFileBrowserConfig();
+      auto picker_config = MakeModelFileBrowserConfig(roots);
       if (!model_directory_text_.empty()) {
         picker_config.initial_directory
           = std::filesystem::path(model_directory_text_);
       }
-      file_browser_.Open(picker_config);
+      file_browser_->Open(picker_config);
       browse_mode_ = BrowseMode::kPickFile;
       ImGui::CloseCurrentPopup();
     }
 
     if (ImGui::MenuItem("Pick directory...")) {
-      auto picker_config = MakeModelDirectoryBrowserConfig();
+      auto picker_config = MakeModelDirectoryBrowserConfig(roots);
       if (!model_directory_text_.empty()) {
         picker_config.initial_directory
           = std::filesystem::path(model_directory_text_);
       }
-      file_browser_.Open(picker_config);
+      file_browser_->Open(picker_config);
       browse_mode_ = BrowseMode::kPickDirectory;
       ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();
   }
 
-  file_browser_.UpdateAndDraw();
-  if (const auto selected_path = file_browser_.ConsumeSelection()) {
+  file_browser_->UpdateAndDraw();
+  if (const auto selected_path = file_browser_->ConsumeSelection()) {
     if (browse_mode_ == BrowseMode::kPickFile) {
       StartImport(*selected_path);
       browse_mode_ = BrowseMode::kNone;
@@ -788,7 +794,7 @@ auto ImportPanel::DrawSourceSelectionUi() -> void
       files_cached_ = false;
       browse_mode_ = BrowseMode::kNone;
     }
-  } else if (browse_mode_ != BrowseMode::kNone && !file_browser_.IsOpen()) {
+  } else if (browse_mode_ != BrowseMode::kNone && !file_browser_->IsOpen()) {
     browse_mode_ = BrowseMode::kNone;
   }
 
@@ -995,35 +1001,16 @@ auto ImportPanel::DrawTextureTuningUi() -> void
   static TexturePreset selected_preset = TexturePreset::kBalanced;
   (void)DrawEnumCombo("Preset", selected_preset, kPresets, ToString,
     "Apply a preset to reset texture tuning.");
-  ImGui::SameLine();
-  if (ImGui::Button("Apply")) {
-    ApplyTexturePreset(texture_tuning_, selected_preset);
-  }
 
-  ImGui::Separator();
-  ImGui::Checkbox("Enable texture cooking overrides", &texture_tuning_.enabled);
-
-  if (!texture_tuning_.enabled) {
-    ImGui::TextDisabled(
-      "When disabled, textures are emitted in their decoded format without "
-      "mips. This is fast but can use significant VRAM at runtime.");
-    return;
-  }
-
-  static constexpr std::array<content::import::TextureIntent, 12> kIntents = {
-    content::import::TextureIntent::kAlbedo,
-    content::import::TextureIntent::kNormalTS,
-    content::import::TextureIntent::kRoughness,
-    content::import::TextureIntent::kMetallic,
-    content::import::TextureIntent::kAO,
-    content::import::TextureIntent::kEmissive,
-    content::import::TextureIntent::kOpacity,
-    content::import::TextureIntent::kORMPacked,
-    content::import::TextureIntent::kHdrEnvironment,
-    content::import::TextureIntent::kHdrLightProbe,
-    content::import::TextureIntent::kData,
-    content::import::TextureIntent::kHeightMap,
-  };
+  static constexpr std::array<content::import::TextureIntent, 6> kTextureIntents
+    = {
+        content::import::TextureIntent::kOpacity,
+        content::import::TextureIntent::kORMPacked,
+        content::import::TextureIntent::kHdrEnvironment,
+        content::import::TextureIntent::kHdrLightProbe,
+        content::import::TextureIntent::kData,
+        content::import::TextureIntent::kHeightMap,
+      };
 
   static constexpr std::array<ColorSpace, 2> kColorSpaces = {
     ColorSpace::kLinear,
@@ -1097,8 +1084,8 @@ auto ImportPanel::DrawTextureTuningUi() -> void
   }
 
   if (ImGui::TreeNode("Advanced")) {
-    (void)DrawEnumCombo("Texture intent", texture_tuning_.intent, kIntents,
-      content::import::to_string);
+    (void)DrawEnumCombo("Texture intent", texture_tuning_.intent,
+      kTextureIntents, content::import::to_string);
     (void)DrawEnumCombo("Source color space",
       texture_tuning_.source_color_space, kColorSpaces, oxygen::to_string);
 
@@ -1254,4 +1241,4 @@ auto ImportPanel::DrawJobSummaryUi() -> void
   ImGui::Text("Success: %s", last_report_->success ? "Yes" : "No");
 }
 
-} // namespace oxygen::examples::render_scene::ui
+} // namespace oxygen::examples::ui

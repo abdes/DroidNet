@@ -18,7 +18,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/trigonometric.hpp>
 
-#include <Oxygen/Base/Platforms.h>
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
@@ -32,7 +32,7 @@
 
 #include "DemoShell/UI/EnvironmentDebugPanel.h"
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
 
 namespace {
 
@@ -124,6 +124,9 @@ namespace {
 void EnvironmentDebugPanel::Initialize(const EnvironmentDebugConfig& config)
 {
   config_ = config;
+  CHECK_NOTNULL_F(config_.file_browser_service,
+    "EnvironmentDebugPanel requires a FileBrowserService");
+  file_browser_ = config_.file_browser_service;
   initialized_ = true;
   needs_sync_ = true;
 
@@ -136,6 +139,7 @@ void EnvironmentDebugPanel::UpdateConfig(const EnvironmentDebugConfig& config)
   // Only trigger sync if the scene actually changed
   const bool scene_changed = config_.scene.get() != config.scene.get();
   config_ = config;
+  file_browser_ = config_.file_browser_service;
   if (scene_changed) {
     needs_sync_ = true;
   }
@@ -182,7 +186,9 @@ void EnvironmentDebugPanel::DrawContents()
   ImGui::Separator();
 
   // Sun controls
-  DrawSunSection();
+  if (ImGui::CollapsingHeader("Sun", ImGuiTreeNodeFlags_DefaultOpen)) {
+    DrawSunSection();
+  }
 
   ImGui::Separator();
 
@@ -254,22 +260,6 @@ void EnvironmentDebugPanel::DrawRendererDebugSection()
     MarkDirty();
   }
 
-  ImGui::Separator();
-  ImGui::Text("Sun (Atmosphere):");
-  if (config_.renderer) {
-    if (auto lut_mgr = config_.renderer->GetSkyAtmosphereLutManager()) {
-      const auto& sun = lut_mgr->GetSunState();
-      ImGui::Text("Enabled: %s", sun.enabled ? "Yes" : "No");
-      ImGui::Text("Dir: (%.2f, %.2f, %.2f)", sun.direction_ws.x,
-        sun.direction_ws.y, sun.direction_ws.z);
-      ImGui::Text("Color: (%.2f, %.2f, %.2f)", sun.color_rgb.x, sun.color_rgb.y,
-        sun.color_rgb.z);
-      ImGui::Text("Intensity: %.3f", sun.intensity);
-      ImGui::Text("Illuminance: %.3f", sun.illuminance);
-      ImGui::Text("Cos Zenith: %.3f", sun.cos_zenith);
-    }
-  }
-
   ImGui::Unindent();
 }
 
@@ -281,8 +271,12 @@ void EnvironmentDebugPanel::DrawSunSection()
   if (!sun_present_) {
     ImGui::TextColored(ImVec4(0.7F, 0.7F, 0.7F, 1.0F),
       "No Sun component found in the scene environment.");
-    if (ImGui::Button("Add Sun")) {
-      ResetSunUiToDefaults();
+    ImGui::TextDisabled(
+      "From Scene is selected; no sun settings are available.");
+    if (ImGui::Button("Add Synthetic Sun")) {
+      sun_present_ = true;
+      sun_source_ = 1;
+      LoadSunSettingsFromProfile(sun_source_);
       MarkDirty();
     }
     ImGui::Unindent();
@@ -294,9 +288,12 @@ void EnvironmentDebugPanel::DrawSunSection()
   }
 
   constexpr const char* kSourceLabels[] = { "From Scene", "Synthetic" };
+  const int previous_source = sun_source_;
   ImGui::SetNextItemWidth(180.0F);
   if (ImGui::Combo(
         "Source", &sun_source_, kSourceLabels, IM_ARRAYSIZE(kSourceLabels))) {
+    SaveSunSettingsToProfile(previous_source);
+    LoadSunSettingsFromProfile(sun_source_);
     MarkDirty();
   }
 
@@ -376,6 +373,8 @@ void EnvironmentDebugPanel::DrawSunSection()
   }
 
   ImGui::EndDisabled();
+
+  SaveSunSettingsToProfile(sun_source_);
 
   ImGui::Unindent();
 }
@@ -563,7 +562,8 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
 
     ImGui::SameLine();
     if (ImGui::Button("Browse...##Skybox")) {
-      auto picker_config = MakeSkyboxFileBrowserConfig();
+      const auto roots = file_browser_->GetContentRoots();
+      auto picker_config = MakeSkyboxFileBrowserConfig(roots);
 
       // If the user already entered a path, use its parent as the starting dir.
       const std::filesystem::path current_path(
@@ -572,11 +572,11 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
         picker_config.initial_directory = current_path.parent_path();
       }
 
-      skybox_file_browser_.Open(picker_config);
+      file_browser_->Open(picker_config);
     }
 
-    skybox_file_browser_.UpdateAndDraw();
-    if (const auto selected_path = skybox_file_browser_.ConsumeSelection()) {
+    file_browser_->UpdateAndDraw();
+    if (const auto selected_path = file_browser_->ConsumeSelection()) {
       CopyPathToBuffer(*selected_path,
         std::span<char>(skybox_path_.data(), skybox_path_.size()));
     }
@@ -600,8 +600,33 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
     }
 
     if (ImGui::Button("Load Skybox##Skybox")) {
-      skybox_load_requested_ = true;
-      skybox_status_message_.clear();
+      skybox_status_message_ = "Loading skybox...";
+      skybox_last_face_size_ = 0;
+      skybox_last_resource_key_ = oxygen::content::ResourceKey { 0U };
+
+      if (!config_.skybox_service) {
+        skybox_status_message_ = "Skybox service unavailable";
+      } else {
+        SkyboxService::LoadOptions options;
+        options.layout = static_cast<SkyboxService::Layout>(
+          std::clamp(skybox_layout_idx_, 0, 4));
+        options.output_format = static_cast<SkyboxService::OutputFormat>(
+          std::clamp(skybox_output_format_idx_, 0, 3));
+        options.cube_face_size = std::clamp(skybox_face_size_, 16, 4096);
+        options.flip_y = skybox_flip_y_;
+        options.tonemap_hdr_to_ldr = skybox_tonemap_hdr_to_ldr_;
+        options.hdr_exposure_ev = skybox_hdr_exposure_ev_;
+
+        config_.skybox_service->LoadAndEquip(std::string(skybox_path_.data()),
+          options, GetSkyLightParams(),
+          [this](SkyboxService::LoadResult result) {
+            SetSkyboxLoadStatus(
+              result.status_message, result.face_size, result.resource_key);
+            if (result.success) {
+              RequestResync();
+            }
+          });
+      }
     }
     ImGui::SameLine();
     if (!skybox_status_message_.empty()) {
@@ -706,29 +731,6 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
   ImGui::Unindent();
 }
 
-auto EnvironmentDebugPanel::TakeSkyboxLoadRequest()
-  -> std::optional<SkyboxLoadRequest>
-{
-  using oxygen::examples::common::SkyboxManager;
-
-  if (!skybox_load_requested_) {
-    return std::nullopt;
-  }
-  skybox_load_requested_ = false;
-
-  SkyboxLoadRequest req;
-  req.path = std::string(skybox_path_.data());
-  req.options.layout
-    = static_cast<SkyboxManager::Layout>(std::clamp(skybox_layout_idx_, 0, 4));
-  req.options.output_format = static_cast<SkyboxManager::OutputFormat>(
-    std::clamp(skybox_output_format_idx_, 0, 3));
-  req.options.cube_face_size = std::clamp(skybox_face_size_, 16, 4096);
-  req.options.flip_y = skybox_flip_y_;
-  req.options.tonemap_hdr_to_ldr = skybox_tonemap_hdr_to_ldr_;
-  req.options.hdr_exposure_ev = skybox_hdr_exposure_ev_;
-  return req;
-}
-
 void EnvironmentDebugPanel::SetSkyboxLoadStatus(std::string_view status,
   int face_size, oxygen::content::ResourceKey resource_key)
 {
@@ -739,7 +741,7 @@ void EnvironmentDebugPanel::SetSkyboxLoadStatus(std::string_view status,
 }
 
 auto EnvironmentDebugPanel::GetSkyLightParams() const
-  -> common::SkyboxManager::SkyLightParams
+  -> SkyboxService::SkyLightParams
 {
   return {
     .intensity = sky_light_intensity_,
@@ -945,8 +947,12 @@ void EnvironmentDebugPanel::SyncFromScene()
         }
       }
     }
+
+    SaveSunSettingsToProfile(sun_source_);
   } else {
     sun_present_ = false;
+    sun_source_ = 0;
+    sun_enabled_ = false;
   }
 
   // NOTE: Fog sync removed - use Aerial Perspective from SkyAtmosphere.
@@ -1006,6 +1012,9 @@ void EnvironmentDebugPanel::ResetSunUiToDefaults()
     = sun_use_temperature_ ? defaults.GetLightTemperatureKelvin() : 6500.0F;
   sun_component_disk_radius_deg_
     = defaults.GetDiskAngularRadiusRadians() * kRadToDeg;
+
+  SaveSunSettingsToProfile(0);
+  SaveSunSettingsToProfile(1);
 }
 
 void EnvironmentDebugPanel::SyncDebugFlagsFromRenderer()
@@ -1027,6 +1036,38 @@ void EnvironmentDebugPanel::SyncDebugFlagsFromRenderer()
 }
 
 void EnvironmentDebugPanel::MarkDirty() { pending_changes_ = true; }
+
+auto EnvironmentDebugPanel::GetSunSettingsForSource(const int source)
+  -> SunUiSettings&
+{
+  return (source == 0) ? sun_scene_settings_ : sun_synthetic_settings_;
+}
+
+void EnvironmentDebugPanel::LoadSunSettingsFromProfile(const int source)
+{
+  const auto& settings = GetSunSettingsForSource(source);
+  sun_enabled_ = settings.enabled;
+  sun_azimuth_deg_ = settings.azimuth_deg;
+  sun_elevation_deg_ = settings.elevation_deg;
+  sun_color_rgb_ = settings.color_rgb;
+  sun_intensity_lux_ = settings.intensity_lux;
+  sun_use_temperature_ = settings.use_temperature;
+  sun_temperature_kelvin_ = settings.temperature_kelvin;
+  sun_component_disk_radius_deg_ = settings.disk_radius_deg;
+}
+
+void EnvironmentDebugPanel::SaveSunSettingsToProfile(const int source)
+{
+  auto& settings = GetSunSettingsForSource(source);
+  settings.enabled = sun_enabled_;
+  settings.azimuth_deg = sun_azimuth_deg_;
+  settings.elevation_deg = sun_elevation_deg_;
+  settings.color_rgb = sun_color_rgb_;
+  settings.intensity_lux = sun_intensity_lux_;
+  settings.use_temperature = sun_use_temperature_;
+  settings.temperature_kelvin = sun_temperature_kelvin_;
+  settings.disk_radius_deg = sun_component_disk_radius_deg_;
+}
 
 auto EnvironmentDebugPanel::HasPendingChanges() const -> bool
 {
@@ -1069,6 +1110,7 @@ void EnvironmentDebugPanel::ApplyPendingChanges()
     }
 
     if (sun_source == scene::environment::SunSource::kFromScene) {
+      DestroySyntheticSunLight();
       UpdateSunLightCandidate();
       if (sun_light_available_) {
         if (auto light
@@ -1094,7 +1136,40 @@ void EnvironmentDebugPanel::ApplyPendingChanges()
         sun->ClearLightReference();
       }
     } else {
-      sun->ClearLightReference();
+      UpdateSunLightCandidate();
+      if (sun_light_available_) {
+        if (auto light
+          = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
+          light->get().SetIsSunLight(false);
+          light->get().Common().affects_world = false;
+        }
+      }
+
+      EnsureSyntheticSunLight();
+      if (synthetic_sun_light_node_.IsAlive()) {
+        if (auto light
+          = synthetic_sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
+          light->get().SetIsSunLight(sun_enabled_);
+          light->get().SetEnvironmentContribution(true);
+
+          auto& common = light->get().Common();
+          common.affects_world = sun_enabled_;
+          common.intensity = sun_intensity_lux_;
+          common.color_rgb = sun_use_temperature_
+            ? KelvinToLinearRgb(sun_temperature_kelvin_)
+            : sun_color_rgb_;
+
+          const auto sun_dir = DirectionFromAzimuthElevation(
+            sun_azimuth_deg_, sun_elevation_deg_);
+          const glm::vec3 light_dir = -sun_dir;
+          auto transform = synthetic_sun_light_node_.GetTransform();
+          transform.SetLocalRotation(RotationFromDirection(light_dir));
+        }
+
+        sun->SetLightReference(synthetic_sun_light_node_);
+      } else {
+        sun->ClearLightReference();
+      }
     }
   }
 
@@ -1261,6 +1336,53 @@ void EnvironmentDebugPanel::UpdateSunLightCandidate()
   sun_light_node_ = scene::SceneNode {};
 }
 
+void EnvironmentDebugPanel::EnsureSyntheticSunLight()
+{
+  if (!config_.scene) {
+    synthetic_sun_light_node_ = scene::SceneNode {};
+    synthetic_sun_light_created_ = false;
+    return;
+  }
+
+  if (synthetic_sun_light_node_.IsAlive()) {
+    if (auto light
+      = synthetic_sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
+      return;
+    }
+  }
+
+  synthetic_sun_light_node_ = config_.scene->CreateNode("SyntheticSunLight");
+  synthetic_sun_light_created_ = synthetic_sun_light_node_.IsAlive();
+  if (!synthetic_sun_light_created_) {
+    return;
+  }
+
+  if (!synthetic_sun_light_node_.HasLight()) {
+    auto light = std::make_unique<scene::DirectionalLight>();
+    (void)synthetic_sun_light_node_.AttachLight(std::move(light));
+  }
+}
+
+void EnvironmentDebugPanel::DestroySyntheticSunLight()
+{
+  if (!synthetic_sun_light_created_) {
+    return;
+  }
+
+  if (!config_.scene) {
+    synthetic_sun_light_node_ = scene::SceneNode {};
+    synthetic_sun_light_created_ = false;
+    return;
+  }
+
+  if (synthetic_sun_light_node_.IsAlive()) {
+    (void)config_.scene->DestroyNode(synthetic_sun_light_node_);
+  }
+
+  synthetic_sun_light_node_ = scene::SceneNode {};
+  synthetic_sun_light_created_ = false;
+}
+
 auto EnvironmentDebugPanel::GetAtmosphereFlags() const -> uint32_t
 {
   uint32_t flags = 0;
@@ -1276,4 +1398,4 @@ auto EnvironmentDebugPanel::GetAtmosphereFlags() const -> uint32_t
   return flags;
 }
 
-} // namespace oxygen::examples::render_scene::ui
+} // namespace oxygen::examples::ui

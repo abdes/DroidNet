@@ -20,8 +20,8 @@
 
 #include <Oxygen/Scene/SceneNode.h>
 
-#include "Common/SkyboxManager.h"
-#include "DemoShell/FileBrowser/FileBrowserService.h"
+#include "DemoShell/Services/FileBrowserService.h"
+#include "DemoShell/Services/SkyboxService.h"
 
 // Forward declarations
 namespace oxygen::scene {
@@ -45,7 +45,7 @@ namespace oxygen::engine::internal {
 class SkyAtmosphereLutManager;
 } // namespace oxygen::engine::internal
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
 
 //! Atmosphere flags for debug UI control.
 //! Must match AtmosphereFlags in EnvironmentDynamicData.h
@@ -60,6 +60,12 @@ enum class AtmosphereDebugFlags : uint32_t {
 struct EnvironmentDebugConfig {
   //! Scene to inspect/modify (can be null when no scene is loaded).
   std::shared_ptr<oxygen::scene::Scene> scene { nullptr };
+
+  //! File browser service for picking skybox images.
+  observer_ptr<FileBrowserService> file_browser_service { nullptr };
+
+  //! Skybox service for loading/equipping skyboxes.
+  observer_ptr<SkyboxService> skybox_service { nullptr };
 
   //! Renderer to query LUT state from.
   observer_ptr<oxygen::engine::Renderer> renderer { nullptr };
@@ -149,27 +155,12 @@ public:
   */
   void RequestResync() { needs_sync_ = true; }
 
-  struct SkyboxLoadRequest {
-    std::string path;
-    common::SkyboxManager::LoadOptions options;
-  };
-
-  //! Returns true if the user requested a skybox load.
-  [[nodiscard]] auto IsSkyboxLoadRequested() const -> bool
-  {
-    return skybox_load_requested_;
-  }
-
-  //! Take and clear the pending skybox load request.
-  auto TakeSkyboxLoadRequest() -> std::optional<SkyboxLoadRequest>;
-
   //! Update the skybox status text shown in the UI.
   void SetSkyboxLoadStatus(std::string_view status, int face_size,
     oxygen::content::ResourceKey resource_key);
 
   //! Get the current sky light parameters from the UI cache.
-  [[nodiscard]] auto GetSkyLightParams() const
-    -> common::SkyboxManager::SkyLightParams;
+  [[nodiscard]] auto GetSkyLightParams() const -> SkyboxService::SkyLightParams;
 
   //! Get current atmosphere debug flags for renderer.
   [[nodiscard]] auto GetAtmosphereFlags() const -> uint32_t;
@@ -185,6 +176,17 @@ private:
   void DrawRendererDebugSection();
 
   //=== Helper Methods ===---------------------------------------------------//
+  struct SunUiSettings {
+    bool enabled { true };
+    float azimuth_deg { 90.0F };
+    float elevation_deg { 30.0F };
+    glm::vec3 color_rgb { 1.0F, 1.0F, 1.0F };
+    float intensity_lux { 10.0F };
+    bool use_temperature { false };
+    float temperature_kelvin { 6500.0F };
+    float disk_radius_deg { 0.268F };
+  };
+
   void SyncFromScene();
   void SyncDebugFlagsFromRenderer();
   void MarkDirty();
@@ -194,6 +196,16 @@ private:
   auto FindSunLightCandidate() const -> std::optional<scene::SceneNode>;
   //! Ensures the cached sun light node is valid or refreshes it if needed.
   void UpdateSunLightCandidate();
+  //! Ensures a synthetic sun directional light exists in the scene.
+  void EnsureSyntheticSunLight();
+  //! Removes the synthetic sun light if it was created by this panel.
+  void DestroySyntheticSunLight();
+  //! Returns a reference to the cached settings for the chosen sun source.
+  auto GetSunSettingsForSource(int source) -> SunUiSettings&;
+  //! Loads cached settings for the chosen sun source into the UI state.
+  void LoadSunSettingsFromProfile(int source);
+  //! Saves UI state into the cached settings for the chosen sun source.
+  void SaveSunSettingsToProfile(int source);
 
   //=== Configuration ===----------------------------------------------------//
   EnvironmentDebugConfig config_ {};
@@ -229,11 +241,10 @@ private:
   bool skybox_flip_y_ { false };
   bool skybox_tonemap_hdr_to_ldr_ { false };
   float skybox_hdr_exposure_ev_ { 0.0F };
-  bool skybox_load_requested_ { false };
   std::string skybox_status_message_ {};
   int skybox_last_face_size_ { 0 };
   oxygen::content::ResourceKey skybox_last_resource_key_ { 0U };
-  FileBrowserService skybox_file_browser_ {};
+  observer_ptr<FileBrowserService> file_browser_ { nullptr };
 
   // SkyLight
   bool sky_light_enabled_ { false };
@@ -256,6 +267,11 @@ private:
   float sun_component_disk_radius_deg_ { 0.268F };
   scene::SceneNode sun_light_node_ {};
   bool sun_light_available_ { false };
+  scene::SceneNode synthetic_sun_light_node_ {};
+  bool synthetic_sun_light_created_ { false };
+
+  SunUiSettings sun_scene_settings_ {};
+  SunUiSettings sun_synthetic_settings_ {};
 
   // NOTE: Fog member variables removed - use Aerial Perspective instead.
   // Real volumetric fog system to be implemented in the future.
@@ -285,4 +301,4 @@ private:
   bool needs_sync_ { true };
 };
 
-} // namespace oxygen::examples::render_scene::ui
+} // namespace oxygen::examples::ui

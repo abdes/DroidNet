@@ -8,14 +8,18 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 
-#include "DemoShell/DemoKnobsViewModel.h"
+#include "DemoShell/UI/AxesWidget.h"
+#include "DemoShell/UI/StatsOverlay.h"
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
 
 //! Configuration for the settings panel.
 struct SettingsPanelConfig {
-  //! Shared demo knob state for settings toggles.
-  observer_ptr<DemoKnobsViewModel> demo_knobs { nullptr };
+  //! Axes widget to control.
+  observer_ptr<AxesWidget> axes_widget { nullptr };
+
+  //! Stats overlay to control.
+  observer_ptr<StatsOverlay> stats_overlay { nullptr };
 };
 
 //! Settings panel for UI visibility and stats toggles.
@@ -35,9 +39,14 @@ public:
   void DrawContents();
 
 private:
+  auto LoadSettings() -> void;
+  auto SaveAxesVisibleSetting(bool visible) const -> void;
+  auto SaveStatsSettings(const StatsOverlayConfig& config) const -> void;
+
   void DrawStatsSection();
 
   SettingsPanelConfig config_ {};
+  bool settings_loaded_ { false };
 };
 
-} // namespace oxygen::examples::render_scene::ui
+} // namespace oxygen::examples::ui

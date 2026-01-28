@@ -1,0 +1,537 @@
+# PakGen spec for testing emissive materials (Phase 2 validation).
+# Reuses cube geometry from cube_scene_spec.yaml.
+# Tests:
+#   - Emissive factor only (no texture)
+#   - Emissive with texture
+#   - Emissive + alpha-tested materials
+#   - Emissive-only objects with no scene lighting
+
+version: 4
+content_version: 1
+
+buffers:
+  - name: default_empty_buffer
+    data_hex: ""
+    size: 0
+    usage: 0
+
+  - name: cube_vb
+    # oxygen::data::BufferResource::UsageFlags::kVertexBuffer
+    usage: 1
+    # Structured buffer of oxygen::data::Vertex (18 float32 = 72 bytes)
+    stride: 72
+    format: 0
+    data_hex: |
+      000000bf000000bf000000bf0000000000000000000080bf0000000000000000
+      0000803f00000000000000000000000000000000000000000000803f0000803f
+      0000803f0000803f0000003f000000bf000000bf0000000000000000000080bf
+      0000803f000000000000803f0000000000000000000000000000000000000000
+      0000803f0000803f0000803f0000803f0000003f0000003f000000bf00000000
+      00000000000080bf0000803f0000803f0000803f000000000000000000000000
+      00000000000000000000803f0000803f0000803f0000803f000000bf0000003f
+      000000bf0000000000000000000080bf000000000000803f0000803f00000000
+      000000000000000000000000000000000000803f0000803f0000803f0000803f
+      000000bf000000bf0000003f00000000000000000000803f0000000000000000
+      0000803f00000000000000000000000000000000000000000000803f0000803f
+      0000803f0000803f0000003f000000bf0000003f00000000000000000000803f
+      0000803f000000000000803f0000000000000000000000000000000000000000
+      0000803f0000803f0000803f0000803f0000003f0000003f0000003f00000000
+      000000000000803f0000803f0000803f0000803f000000000000000000000000
+      00000000000000000000803f0000803f0000803f0000803f000000bf0000003f
+      0000003f00000000000000000000803f000000000000803f0000803f00000000
+      000000000000000000000000000000000000803f0000803f0000803f0000803f
+      000000bf000000bf000000bf000080bf00000000000000000000000000000000
+      000000000000803f000000000000000000000000000000000000803f0000803f
+      0000803f0000803f000000bf0000003f000000bf000080bf0000000000000000
+      0000803f00000000000000000000803f00000000000000000000000000000000
+      0000803f0000803f0000803f0000803f000000bf0000003f0000003f000080bf
+      00000000000000000000803f0000803f000000000000803f0000000000000000
+      00000000000000000000803f0000803f0000803f0000803f000000bf000000bf
+      0000003f000080bf0000000000000000000000000000803f000000000000803f
+      000000000000000000000000000000000000803f0000803f0000803f0000803f
+      0000003f000000bf000000bf0000803f00000000000000000000000000000000
+      000000000000803f000000000000000000000000000000000000803f0000803f
+      0000803f0000803f0000003f0000003f000000bf0000803f0000000000000000
+      0000803f00000000000000000000803f00000000000000000000000000000000
+      0000803f0000803f0000803f0000803f0000003f0000003f0000003f0000803f
+      00000000000000000000803f0000803f000000000000803f0000000000000000
+      00000000000000000000803f0000803f0000803f0000803f0000003f000000bf
+      0000003f0000803f0000000000000000000000000000803f000000000000803f
+      000000000000000000000000000000000000803f0000803f0000803f0000803f
+      000000bf000000bf000000bf00000000000080bf000000000000000000000000
+      0000803f00000000000000000000000000000000000000000000803f0000803f
+      0000803f0000803f0000003f000000bf000000bf00000000000080bf00000000
+      0000803f000000000000803f0000000000000000000000000000000000000000
+      0000803f0000803f0000803f0000803f0000003f000000bf0000003f00000000
+      000080bf000000000000803f0000803f0000803f000000000000000000000000
+      00000000000000000000803f0000803f0000803f0000803f000000bf000000bf
+      0000003f00000000000080bf00000000000000000000803f0000803f00000000
+      000000000000000000000000000000000000803f0000803f0000803f0000803f
+      000000bf0000003f000000bf000000000000803f000000000000000000000000
+      0000803f00000000000000000000000000000000000000000000803f0000803f
+      0000803f0000803f0000003f0000003f000000bf000000000000803f00000000
+      0000803f000000000000803f0000000000000000000000000000000000000000
+      0000803f0000803f0000803f0000803f0000003f0000003f0000003f00000000
+      0000803f000000000000803f0000803f0000803f000000000000000000000000
+      00000000000000000000803f0000803f0000803f0000803f000000bf0000003f
+      0000003f000000000000803f00000000000000000000803f0000803f00000000
+      000000000000000000000000000000000000803f0000803f0000803f0000803f
+
+  - name: cube_ib
+    # oxygen::data::BufferResource::UsageFlags::kIndexBuffer
+    usage: 2
+    stride: 0
+    format: 10
+    data_hex: |
+      0000000002000000010000000000000003000000020000000400000005000000
+      06000000040000000600000007000000080000000a0000000900000008000000
+      0b0000000a0000000c0000000d0000000e0000000c0000000e0000000f000000
+      1000000011000000120000001000000012000000130000001400000016000000
+      15000000140000001700000016000000
+
+textures:
+  - name: default_texture
+    width: 1
+    height: 1
+    format: 30
+    texture_type: 3
+    compression_type: 0
+    data_hex: |
+      ffffffff00000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+
+  # 2x2 emissive texture: bright cyan/magenta pattern for visibility
+  # RGBA: [(0,255,255,255), (255,0,255,255), (255,0,255,255), (0,255,255,255)]
+  - name: emissive_checker_2x2
+    width: 2
+    height: 2
+    format: 30
+    texture_type: 3
+    compression_type: 0
+    data_hex: |
+      00ffffffff00ffff000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      ff00ffff00ffffff000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+
+  # 2x2 alpha checker for masked+emissive test
+  - name: alpha_checker_2x2
+    width: 2
+    height: 2
+    format: 30
+    texture_type: 3
+    compression_type: 0
+    data_hex: |
+      ffffffffffffff00000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      ffffff00ffffffff000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+
+audios: []
+
+assets:
+  # =========================================================================
+  # EMISSIVE MATERIALS
+  # =========================================================================
+
+  # Emissive factor only (bright red glow, no texture)
+  - type: material
+    name: MatEmissiveRed
+    asset_key: "e0010000000000000000000000000001"
+    alignment: 1
+    material_domain: 1
+    shader_stages: 0
+    base_color: [0.1, 0.02, 0.02, 1.0]
+    metalness: 0.0
+    roughness: 0.8
+    ambient_occlusion: 1.0
+    # Emissive factor: bright red HDR glow
+    emissive_factor: [5.0, 0.2, 0.1]
+
+  # Emissive factor only (bright green glow)
+  - type: material
+    name: MatEmissiveGreen
+    asset_key: "e0020000000000000000000000000002"
+    alignment: 1
+    material_domain: 1
+    shader_stages: 0
+    base_color: [0.02, 0.1, 0.02, 1.0]
+    metalness: 0.0
+    roughness: 0.8
+    ambient_occlusion: 1.0
+    emissive_factor: [0.1, 4.0, 0.2]
+
+  # Emissive factor only (bright blue glow)
+  - type: material
+    name: MatEmissiveBlue
+    asset_key: "e0030000000000000000000000000003"
+    alignment: 1
+    material_domain: 1
+    shader_stages: 0
+    base_color: [0.02, 0.02, 0.1, 1.0]
+    metalness: 0.0
+    roughness: 0.8
+    ambient_occlusion: 1.0
+    emissive_factor: [0.1, 0.3, 6.0]
+
+  # Emissive with texture (cyan/magenta checker pattern)
+  - type: material
+    name: MatEmissiveTextured
+    asset_key: "e0040000000000000000000000000004"
+    alignment: 1
+    material_domain: 1
+    shader_stages: 0
+    base_color: [0.05, 0.05, 0.05, 1.0]
+    metalness: 0.0
+    roughness: 0.9
+    ambient_occlusion: 1.0
+    # Emissive factor multiplies the texture
+    emissive_factor: [3.0, 3.0, 3.0]
+    texture_refs:
+      emissive_texture: emissive_checker_2x2
+
+  # Emissive + alpha-tested (masked) material
+  - type: material
+    name: MatEmissiveMasked
+    asset_key: "e0050000000000000000000000000005"
+    alignment: 1
+    # MaterialDomain::kMasked = 3
+    material_domain: 3
+    # pak::kMaterialFlag_AlphaTest = (1u << 2)
+    flags: 0x0004
+    shader_stages: 0
+    base_color: [1.0, 0.8, 0.2, 1.0]
+    alpha_cutoff: 0.5
+    metalness: 0.0
+    roughness: 0.5
+    ambient_occlusion: 1.0
+    # Yellow-orange glow through the holes
+    emissive_factor: [4.0, 2.0, 0.3]
+    texture_refs:
+      base_color_texture: alpha_checker_2x2
+
+  # Non-emissive reference material (for comparison)
+  - type: material
+    name: MatReference
+    asset_key: "e0060000000000000000000000000006"
+    alignment: 1
+    material_domain: 1
+    shader_stages: 0
+    base_color: [0.5, 0.5, 0.5, 1.0]
+    metalness: 0.0
+    roughness: 0.5
+    ambient_occlusion: 1.0
+
+  # =========================================================================
+  # GEOMETRY ASSETS
+  # =========================================================================
+
+  - type: geometry
+    name: GeoEmissiveRed
+    asset_key: "a0010000000000000000000000000001"
+    alignment: 1
+    bounding_box_min: [-0.5, -0.5, -0.5]
+    bounding_box_max: [0.5, 0.5, 0.5]
+    lods:
+      - name: lod0
+        mesh_type: 1
+        vertex_buffer: cube_vb
+        index_buffer: cube_ib
+        bounding_box_min: [-0.5, -0.5, -0.5]
+        bounding_box_max: [0.5, 0.5, 0.5]
+        submeshes:
+          - name: full
+            material: MatEmissiveRed
+            bounding_box_min: [-0.5, -0.5, -0.5]
+            bounding_box_max: [0.5, 0.5, 0.5]
+            mesh_views:
+              - first_index: 0
+                index_count: 36
+                first_vertex: 0
+                vertex_count: 24
+
+  - type: geometry
+    name: GeoEmissiveGreen
+    asset_key: "a0020000000000000000000000000002"
+    alignment: 1
+    bounding_box_min: [-0.5, -0.5, -0.5]
+    bounding_box_max: [0.5, 0.5, 0.5]
+    lods:
+      - name: lod0
+        mesh_type: 1
+        vertex_buffer: cube_vb
+        index_buffer: cube_ib
+        bounding_box_min: [-0.5, -0.5, -0.5]
+        bounding_box_max: [0.5, 0.5, 0.5]
+        submeshes:
+          - name: full
+            material: MatEmissiveGreen
+            bounding_box_min: [-0.5, -0.5, -0.5]
+            bounding_box_max: [0.5, 0.5, 0.5]
+            mesh_views:
+              - first_index: 0
+                index_count: 36
+                first_vertex: 0
+                vertex_count: 24
+
+  - type: geometry
+    name: GeoEmissiveBlue
+    asset_key: "a0030000000000000000000000000003"
+    alignment: 1
+    bounding_box_min: [-0.5, -0.5, -0.5]
+    bounding_box_max: [0.5, 0.5, 0.5]
+    lods:
+      - name: lod0
+        mesh_type: 1
+        vertex_buffer: cube_vb
+        index_buffer: cube_ib
+        bounding_box_min: [-0.5, -0.5, -0.5]
+        bounding_box_max: [0.5, 0.5, 0.5]
+        submeshes:
+          - name: full
+            material: MatEmissiveBlue
+            bounding_box_min: [-0.5, -0.5, -0.5]
+            bounding_box_max: [0.5, 0.5, 0.5]
+            mesh_views:
+              - first_index: 0
+                index_count: 36
+                first_vertex: 0
+                vertex_count: 24
+
+  - type: geometry
+    name: GeoEmissiveTextured
+    asset_key: "a0040000000000000000000000000004"
+    alignment: 1
+    bounding_box_min: [-0.5, -0.5, -0.5]
+    bounding_box_max: [0.5, 0.5, 0.5]
+    lods:
+      - name: lod0
+        mesh_type: 1
+        vertex_buffer: cube_vb
+        index_buffer: cube_ib
+        bounding_box_min: [-0.5, -0.5, -0.5]
+        bounding_box_max: [0.5, 0.5, 0.5]
+        submeshes:
+          - name: full
+            material: MatEmissiveTextured
+            bounding_box_min: [-0.5, -0.5, -0.5]
+            bounding_box_max: [0.5, 0.5, 0.5]
+            mesh_views:
+              - first_index: 0
+                index_count: 36
+                first_vertex: 0
+                vertex_count: 24
+
+  - type: geometry
+    name: GeoEmissiveMasked
+    asset_key: "a0050000000000000000000000000005"
+    alignment: 1
+    bounding_box_min: [-0.5, -0.5, -0.5]
+    bounding_box_max: [0.5, 0.5, 0.5]
+    lods:
+      - name: lod0
+        mesh_type: 1
+        vertex_buffer: cube_vb
+        index_buffer: cube_ib
+        bounding_box_min: [-0.5, -0.5, -0.5]
+        bounding_box_max: [0.5, 0.5, 0.5]
+        submeshes:
+          - name: full
+            material: MatEmissiveMasked
+            bounding_box_min: [-0.5, -0.5, -0.5]
+            bounding_box_max: [0.5, 0.5, 0.5]
+            mesh_views:
+              - first_index: 0
+                index_count: 36
+                first_vertex: 0
+                vertex_count: 24
+
+  - type: geometry
+    name: GeoReference
+    asset_key: "a0060000000000000000000000000006"
+    alignment: 1
+    bounding_box_min: [-0.5, -0.5, -0.5]
+    bounding_box_max: [0.5, 0.5, 0.5]
+    lods:
+      - name: lod0
+        mesh_type: 1
+        vertex_buffer: cube_vb
+        index_buffer: cube_ib
+        bounding_box_min: [-0.5, -0.5, -0.5]
+        bounding_box_max: [0.5, 0.5, 0.5]
+        submeshes:
+          - name: full
+            material: MatReference
+            bounding_box_min: [-0.5, -0.5, -0.5]
+            bounding_box_max: [0.5, 0.5, 0.5]
+            mesh_views:
+              - first_index: 0
+                index_count: 36
+                first_vertex: 0
+                vertex_count: 24
+
+  # =========================================================================
+  # SCENE ASSET
+  # =========================================================================
+
+  - type: scene
+    name: EmissiveScene
+    asset_key: "50010000000000000000000000000001"
+    alignment: 1
+    nodes:
+      - name: Root
+        parent: 0
+        node_id: "00000000000000000000000000000001"
+        flags: 0
+
+      # Row of emissive cubes (front row)
+      - name: EmissiveRed
+        parent: 0
+        node_id: "00000000000000000000000000000002"
+        flags: 0
+        translation: [-3.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: EmissiveGreen
+        parent: 0
+        node_id: "00000000000000000000000000000003"
+        flags: 0
+        translation: [-1.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: EmissiveBlue
+        parent: 0
+        node_id: "00000000000000000000000000000004"
+        flags: 0
+        translation: [1.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: EmissiveTextured
+        parent: 0
+        node_id: "00000000000000000000000000000005"
+        flags: 0
+        translation: [3.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      # Back row: masked emissive + non-emissive reference
+      - name: EmissiveMasked
+        parent: 0
+        node_id: "00000000000000000000000000000006"
+        flags: 0
+        translation: [-1.0, 0.0, -2.5]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.2, 1.2, 1.2]
+
+      - name: Reference
+        parent: 0
+        node_id: "00000000000000000000000000000007"
+        flags: 0
+        translation: [1.0, 0.0, -2.5]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.2, 1.2, 1.2]
+
+      - name: MainCamera
+        parent: 0
+        node_id: "00000000000000000000000000000008"
+        flags: 0
+        translation: [0.0, 2.0, 8.0]
+        # Slight downward tilt to see all cubes
+        rotation: [-0.1, 0.0, 0.0, 0.995]
+        scale: [1.0, 1.0, 1.0]
+
+      # Minimal ambient light (very dim) to show that emissive dominates
+      - name: AmbientFill
+        parent: 0
+        node_id: "00000000000000000000000000000009"
+        flags: 0
+        translation: [0.0, 5.0, 0.0]
+        rotation: [0.70710678, 0.0, 0.0, 0.70710678]
+        scale: [1.0, 1.0, 1.0]
+
+    renderables:
+      - node_index: 1
+        geometry: GeoEmissiveRed
+        visible: true
+
+      - node_index: 2
+        geometry: GeoEmissiveGreen
+        visible: true
+
+      - node_index: 3
+        geometry: GeoEmissiveBlue
+        visible: true
+
+      - node_index: 4
+        geometry: GeoEmissiveTextured
+        visible: true
+
+      - node_index: 5
+        geometry: GeoEmissiveMasked
+        visible: true
+
+      - node_index: 6
+        geometry: GeoReference
+        visible: true
+
+    perspective_cameras:
+      - node_index: 7
+        fov_y: 0.785398
+        aspect_ratio: 1.777778
+        near_plane: 0.1
+        far_plane: 100.0
+
+    # Very dim directional light - emissive should dominate
+    directional_lights:
+      - node_index: 8
+        affects_world: true
+        color_rgb: [0.2, 0.2, 0.25]
+        intensity: 0.3
+        mobility: 0
+        casts_shadows: 0
+        angular_size_radians: 0.01
+        environment_contribution: false
+
+    point_lights: []
+    spot_lights: []
+
+    environment:
+      sky_atmosphere:
+        sun_disk_enabled: false
+
+      post_process_volume:
+        tone_mapper: 0
+        exposure_mode: 1

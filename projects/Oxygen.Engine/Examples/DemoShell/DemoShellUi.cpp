@@ -5,15 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "DemoShell/DemoShellUi.h"
-#include "DemoShell/PanelSideBar.h"
-#include "DemoShell/Settings/SettingsService.h"
+#include "DemoShell/Services/SettingsService.h"
+#include "DemoShell/UI/PanelSideBar.h"
 
 namespace oxygen::examples {
 
 auto DemoShellUi::Initialize(const DemoShellUiConfig& config) -> void
 {
-  knobs_ = config.knobs;
   panel_registry_ = config.panel_registry;
+  active_camera_ = config.active_camera;
 
   panel_side_bar_.Initialize(
     PanelSideBarConfig { .panel_registry = panel_registry_ });
@@ -31,12 +31,15 @@ auto DemoShellUi::Initialize(const DemoShellUiConfig& config) -> void
 
 auto DemoShellUi::Draw() -> void
 {
-  if (!knobs_ || !panel_registry_) {
+  if (!panel_registry_) {
     return;
   }
 
   panel_side_bar_.Draw();
   side_panel_.Draw(panel_side_bar_.GetWidth());
+
+  axes_widget_.Draw(active_camera_);
+  stats_overlay_.Draw();
 
   if (pending_active_panel_.has_value()) {
     if (pending_active_panel_->empty()) {

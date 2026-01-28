@@ -6,17 +6,24 @@
 
 #include <imgui.h>
 
+#include <Oxygen/Base/Logging.h>
+
 #include "DemoShell/UI/ContentLoaderPanel.h"
 
-namespace oxygen::examples::render_scene::ui {
+namespace oxygen::examples::ui {
 
 void ContentLoaderPanel::Initialize(const Config& config)
 {
+  CHECK_NOTNULL_F(config.file_browser_service,
+    "ContentLoaderPanel requires a FileBrowserService");
+  const auto roots = config.file_browser_service->GetContentRoots();
+
   // Configure unified import panel
   ImportPanelConfig import_config;
-  import_config.fbx_directory = config.content_root / "fbx";
-  import_config.gltf_directory = config.content_root / "glb";
-  import_config.cooked_output_directory = config.content_root / ".cooked";
+  import_config.fbx_directory = roots.fbx_directory;
+  import_config.gltf_directory = roots.glb_directory;
+  import_config.cooked_output_directory = roots.cooked_root;
+  import_config.file_browser_service = config.file_browser_service;
   import_config.on_scene_ready = config.on_scene_load_requested;
   import_config.on_index_loaded = config.on_loose_index_loaded;
   import_config.on_dump_texture_memory = config.on_dump_texture_memory;
@@ -24,14 +31,16 @@ void ContentLoaderPanel::Initialize(const Config& config)
 
   // Configure PAK loader panel
   PakLoaderConfig pak_config;
-  pak_config.pak_directory = config.content_root / "pak";
+  pak_config.pak_directory = roots.pak_directory;
+  pak_config.file_browser_service = config.file_browser_service;
   pak_config.on_scene_selected = config.on_scene_load_requested;
   pak_config.on_pak_mounted = config.on_pak_mounted;
   pak_panel_.Initialize(pak_config);
 
   // Configure loose cooked loader panel
   LooseCookedLoaderConfig loose_config;
-  loose_config.cooked_directory = config.content_root / ".cooked";
+  loose_config.cooked_directory = roots.cooked_root;
+  loose_config.file_browser_service = config.file_browser_service;
   loose_config.on_scene_selected = config.on_scene_load_requested;
   loose_config.on_index_loaded = config.on_loose_index_loaded;
   loose_cooked_panel_.Initialize(loose_config);
@@ -57,7 +66,6 @@ void ContentLoaderPanel::Draw()
   }
 
   DrawContents();
-
   ImGui::End();
 }
 
@@ -103,4 +111,4 @@ void ContentLoaderPanel::DrawContents()
   }
 }
 
-} // namespace oxygen::examples::render_scene::ui
+} // namespace oxygen::examples::ui

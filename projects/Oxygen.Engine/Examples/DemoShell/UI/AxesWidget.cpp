@@ -4,18 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "DemoShell/UI/AxesWidget.h"
-
 #include <algorithm>
 #include <array>
 
 #include <imgui.h>
 
 #include <glm/geometric.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <glm/mat3x3.hpp>
+#include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
-namespace oxygen::examples::render_scene::ui {
+#include "DemoShell/UI/AxesWidget.h"
+
+namespace oxygen::examples::ui {
 
 namespace {
 
@@ -77,6 +80,10 @@ auto AxesWidget::ProjectAxis(const glm::vec3& axis_dir,
  */
 void AxesWidget::Draw(const glm::mat4& view_matrix)
 {
+  if (!config_.show_widget) {
+    return;
+  }
+
   // Get main viewport and calculate widget position (bottom-left corner)
   const ImGuiViewport* viewport = ImGui::GetMainViewport();
   const glm::vec2 widget_pos {
@@ -184,4 +191,34 @@ void AxesWidget::Draw(const glm::mat4& view_matrix)
   }
 }
 
-} // namespace oxygen::examples::render_scene::ui
+void AxesWidget::Draw(observer_ptr<oxygen::scene::SceneNode> camera)
+{
+  if (!camera || !camera->IsAlive()) {
+    return;
+  }
+
+  glm::vec3 cam_pos { 0.0F, 0.0F, 0.0F };
+  glm::quat cam_rot { 1.0F, 0.0F, 0.0F, 0.0F };
+
+  const auto& tf = camera->GetTransform();
+  if (auto wp = tf.GetWorldPosition()) {
+    cam_pos = *wp;
+  } else if (auto lp = tf.GetLocalPosition()) {
+    cam_pos = *lp;
+  }
+  if (auto wr = tf.GetWorldRotation()) {
+    cam_rot = *wr;
+  } else if (auto lr = tf.GetLocalRotation()) {
+    cam_rot = *lr;
+  }
+
+  constexpr glm::vec3 kViewForward { 0.0F, 0.0F, -1.0F };
+  constexpr glm::vec3 kViewUp { 0.0F, 1.0F, 0.0F };
+  const glm::vec3 forward = cam_rot * kViewForward;
+  const glm::vec3 up = cam_rot * kViewUp;
+  const glm::mat4 view_matrix = glm::lookAt(cam_pos, cam_pos + forward, up);
+
+  Draw(view_matrix);
+}
+
+} // namespace oxygen::examples::ui
