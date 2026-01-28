@@ -10,8 +10,8 @@
 
 #include "DemoShell/DemoKnobsViewModel.h"
 #include "DemoShell/PanelRegistry.h"
+#include "DemoShell/PanelSideBar.h"
 #include "DemoShell/SidePanel.h"
-#include "DemoShell/Toolbar.h"
 
 namespace oxygen::examples::demo_shell {
 
@@ -21,10 +21,10 @@ struct DemoShellUiConfig {
   observer_ptr<PanelRegistry> panel_registry { nullptr };
 };
 
-//! UI shell hosting the demo toolbar and side panel.
+//! UI shell hosting the side bar and side panel.
 /*!
- Provides a reusable UI layout for demos, consisting of a fixed top toolbar and
- a left-docked SidePanel hosting a single active panel.
+ Provides a reusable UI layout for demos, consisting of a left-docked
+ `PanelSideBar` and a `SidePanel` hosting a single active panel.
 */
 class DemoShellUi {
 public:
@@ -39,21 +39,13 @@ public:
   //! Initialize the UI shell with required dependencies.
   auto Initialize(const DemoShellUiConfig& config) -> void;
 
-  //! Draws the toolbar and side panel.
+  //! Draws the side bar and side panel.
   auto Draw() -> void;
 
-  //! Returns the fixed toolbar height in pixels.
-  [[nodiscard]] static constexpr auto ToolbarHeight() noexcept -> float
-  {
-    return kToolbarHeight;
-  }
-
 private:
-  static constexpr float kToolbarHeight = 36.0F;
-
   observer_ptr<DemoKnobsViewModel> knobs_ { nullptr };
   observer_ptr<PanelRegistry> panel_registry_ { nullptr };
-  Toolbar toolbar_ {};
+  PanelSideBar panel_side_bar_ {};
   SidePanel side_panel_ {};
 };
 

@@ -16,41 +16,41 @@
 
 namespace oxygen::examples::render_scene::ui {
 
-void LightCullingDebugPanel::Initialize(const LightCullingDebugConfig& config)
+void LightingPanel::Initialize(const LightCullingDebugConfig& config)
 {
   config_ = config;
-  current_mode_ = config.initial_mode;
 
-  // Initialize clustered mode from current config
   if (config_.light_culling_pass_config) {
     const auto& cluster = config_.light_culling_pass_config->cluster;
     use_clustered_culling_ = cluster.depth_slices > 1;
-
-    // Initialize UI state from config
     ui_depth_slices_ = static_cast<int>(cluster.depth_slices);
     ui_z_near_ = cluster.z_near;
     ui_z_far_ = cluster.z_far;
   }
-
-  ApplySettingsToShaderPass();
 }
 
-void LightCullingDebugPanel::UpdateConfig(const LightCullingDebugConfig& config)
+void LightingPanel::UpdateConfig(const LightCullingDebugConfig& config)
 {
   config_ = config;
+  if (config_.light_culling_pass_config) {
+    const auto& cluster = config_.light_culling_pass_config->cluster;
+    use_clustered_culling_ = cluster.depth_slices > 1;
+    ui_depth_slices_ = static_cast<int>(cluster.depth_slices);
+    ui_z_near_ = cluster.z_near;
+    ui_z_far_ = cluster.z_far;
+  }
 }
 
-void LightCullingDebugPanel::Draw()
+void LightingPanel::Draw()
 {
   if (!show_window_) {
     return;
   }
 
   ImGui::SetNextWindowPos(ImVec2(1020, 20), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(400, 550), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(360, 520), ImGuiCond_FirstUseEver);
 
-  if (!ImGui::Begin(
-        "Light Culling Debug", &show_window_, ImGuiWindowFlags_None)) {
+  if (!ImGui::Begin("Lighting", &show_window_, ImGuiWindowFlags_None)) {
     ImGui::End();
     return;
   }
@@ -60,133 +60,68 @@ void LightCullingDebugPanel::Draw()
   ImGui::End();
 }
 
-void LightCullingDebugPanel::DrawContents()
+void LightingPanel::DrawContents()
 {
-  DrawModeControls();
-  ImGui::Spacing();
-  ImGui::Separator();
-  ImGui::Spacing();
+  if (ImGui::CollapsingHeader(
+        "Light Culling", ImGuiTreeNodeFlags_DefaultOpen)) {
+    DrawLightCullingSettings();
+  }
 
+  if (ImGui::CollapsingHeader(
+        "Visualization Modes", ImGuiTreeNodeFlags_DefaultOpen)) {
+    DrawVisualizationModes();
+  }
+}
+
+void LightingPanel::DrawVisualizationModes()
+{
+  const auto current_mode = config_.shader_pass_config
+    ? config_.shader_pass_config->debug_mode
+    : ShaderDebugMode::kDisabled;
+
+  const bool is_lighting_mode = current_mode == ShaderDebugMode::kDepthSlice
+    || current_mode == ShaderDebugMode::kClusterIndex
+    || current_mode == ShaderDebugMode::kLightCullingHeatMap;
+
+  const bool normal_selected
+    = (current_mode == ShaderDebugMode::kDisabled) || !is_lighting_mode;
+
+  if (ImGui::RadioButton("Normal", normal_selected)) {
+    ApplyVisualizationMode(ShaderDebugMode::kDisabled);
+  }
+
+  if (ImGui::RadioButton(
+        "Heat Map", current_mode == ShaderDebugMode::kLightCullingHeatMap)) {
+    ApplyVisualizationMode(ShaderDebugMode::kLightCullingHeatMap);
+  }
+
+  if (ImGui::RadioButton(
+        "Slices", current_mode == ShaderDebugMode::kDepthSlice)) {
+    ApplyVisualizationMode(ShaderDebugMode::kDepthSlice);
+  }
+
+  if (ImGui::RadioButton(
+        "Clusters", current_mode == ShaderDebugMode::kClusterIndex)) {
+    ApplyVisualizationMode(ShaderDebugMode::kClusterIndex);
+  }
+}
+
+void LightingPanel::DrawLightCullingSettings()
+{
   DrawCullingModeControls();
   ImGui::Spacing();
-  ImGui::Separator();
-  ImGui::Spacing();
-
   DrawClusterConfigControls();
-  ImGui::Spacing();
-  ImGui::Separator();
-  ImGui::Spacing();
-
-  DrawInfoSection();
 }
 
-void LightCullingDebugPanel::DrawModeControls()
+void LightingPanel::ApplyVisualizationMode(ShaderDebugMode mode)
 {
-  ImGui::SeparatorText("Debug Visualization");
-
-  bool mode_changed = false;
-
-  // Enable/Disable checkbox
-  bool enabled = IsEnabled();
-  if (ImGui::Checkbox("Enable Debug Overlay", &enabled)) {
-    if (enabled && current_mode_ == ShaderDebugMode::kDisabled) {
-      current_mode_ = ShaderDebugMode::kLightCullingHeatMap;
-      mode_changed = true;
-    } else if (!enabled) {
-      current_mode_ = ShaderDebugMode::kDisabled;
-      mode_changed = true;
-    }
+  if (!config_.shader_pass_config) {
+    return;
   }
-
-  if (!enabled) {
-    ImGui::BeginDisabled();
-  }
-
-  ImGui::Spacing();
-  ImGui::Text("Visualization Mode:");
-
-  // Light culling visualization modes
-  if (ImGui::RadioButton(
-        "Heat Map", current_mode_ == ShaderDebugMode::kLightCullingHeatMap)) {
-    current_mode_ = ShaderDebugMode::kLightCullingHeatMap;
-    mode_changed = true;
-  }
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("Light count heat map (smooth gradient):\n\n"
-                      "  BLACK  = 0 lights\n"
-                      "  GREEN  = 1-16 lights\n"
-                      "  YELLOW = 17-32 lights\n"
-                      "  RED    = 33-48 lights\n\n"
-                      "Scale: 48 lights = maximum (full red)");
-  }
-
-  if (ImGui::RadioButton(
-        "Slice Visualization", current_mode_ == ShaderDebugMode::kDepthSlice)) {
-    current_mode_ = ShaderDebugMode::kDepthSlice;
-    mode_changed = true;
-  }
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("Visualize depth slices with distinct colors.\n"
-                      "Colors cycle: Red, Orange, Yellow, Green,\n"
-                      "Pink, Dark Red, Dark Green, Light Yellow.\n\n"
-                      "Only meaningful in clustered (3D) mode.\n"
-                      "Gray = tile-based (no depth slices).");
-  }
-
-  if (ImGui::RadioButton(
-        "Cluster Index", current_mode_ == ShaderDebugMode::kClusterIndex)) {
-    current_mode_ = ShaderDebugMode::kClusterIndex;
-    mode_changed = true;
-  }
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("Checkerboard pattern showing cluster boundaries.\n"
-                      "Useful for verifying tile/cluster alignment.");
-  }
-
-  ImGui::Spacing();
-  ImGui::SeparatorText("Material / UV Debug");
-
-  if (ImGui::RadioButton(
-        "Base Color", current_mode_ == ShaderDebugMode::kBaseColor)) {
-    current_mode_ = ShaderDebugMode::kBaseColor;
-    mode_changed = true;
-  }
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip(
-      "Visualize base color/albedo texture after UV transform.\n"
-      "If this looks wrong, UVs or texture binding are wrong.");
-  }
-
-  if (ImGui::RadioButton("UV0", current_mode_ == ShaderDebugMode::kUv0)) {
-    current_mode_ = ShaderDebugMode::kUv0;
-    mode_changed = true;
-  }
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip(
-      "Visualize UV0 as color (R=U, G=V).\n"
-      "Solid gradients are correct; noisy patches imply bad UVs.");
-  }
-
-  if (ImGui::RadioButton(
-        "Opacity", current_mode_ == ShaderDebugMode::kOpacity)) {
-    current_mode_ = ShaderDebugMode::kOpacity;
-    mode_changed = true;
-  }
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("Visualize base alpha/opacity.\n"
-                      "White = fully opaque, black = transparent.");
-  }
-
-  if (!enabled) {
-    ImGui::EndDisabled();
-  }
-
-  if (mode_changed) {
-    ApplySettingsToShaderPass();
-  }
+  config_.shader_pass_config->debug_mode = mode;
 }
 
-void LightCullingDebugPanel::DrawCullingModeControls()
+void LightingPanel::DrawCullingModeControls()
 {
   ImGui::SeparatorText("Culling Algorithm");
 
@@ -223,7 +158,7 @@ void LightCullingDebugPanel::DrawCullingModeControls()
   }
 }
 
-void LightCullingDebugPanel::DrawClusterConfigControls()
+void LightingPanel::DrawClusterConfigControls()
 {
   ImGui::SeparatorText("Cluster Configuration");
 
@@ -314,57 +249,7 @@ void LightCullingDebugPanel::DrawClusterConfigControls()
   }
 }
 
-void LightCullingDebugPanel::DrawInfoSection()
-{
-  ImGui::SeparatorText("Information");
-
-  // Show current culling mode
-  ImGui::Text("Culling Mode: %s",
-    use_clustered_culling_ ? "Clustered (3D)" : "Tile-Based (2D)");
-
-  // Show actual config values (for debugging)
-  if (config_.light_culling_pass_config) {
-    const auto& cluster = config_.light_culling_pass_config->cluster;
-    ImGui::TextColored(ImVec4(0.5F, 0.8F, 0.5F, 1.0F),
-      "Config: slices=%u z=%.3f-%.1f", cluster.depth_slices, cluster.z_near,
-      cluster.z_far);
-  }
-
-  if (IsEnabled()) {
-    ImGui::Text("Debug Status: ACTIVE");
-
-    const char* mode_name = "Unknown";
-    switch (current_mode_) {
-    case ShaderDebugMode::kLightCullingHeatMap:
-      mode_name = "Heat Map";
-      break;
-    case ShaderDebugMode::kDepthSlice:
-      mode_name = "Slice Visualization";
-      break;
-    case ShaderDebugMode::kClusterIndex:
-      mode_name = "Cluster Index";
-      break;
-    default:
-      break;
-    }
-    ImGui::Text("Visualization: %s", mode_name);
-  } else {
-    ImGui::TextColored(
-      ImVec4(0.6F, 0.6F, 0.6F, 1.0F), "Debug Status: Disabled");
-  }
-}
-
-void LightCullingDebugPanel::ApplySettingsToShaderPass()
-{
-  if (!config_.shader_pass_config) {
-    return;
-  }
-
-  // Update the shader pass config with the debug mode
-  config_.shader_pass_config->debug_mode = current_mode_;
-}
-
-void LightCullingDebugPanel::ApplyCullingModeToPass()
+void LightingPanel::ApplyCullingModeToPass()
 {
   if (!config_.light_culling_pass_config) {
     return;
@@ -392,7 +277,7 @@ void LightCullingDebugPanel::ApplyCullingModeToPass()
   }
 }
 
-void LightCullingDebugPanel::ApplyClusterConfigToPass()
+void LightingPanel::ApplyClusterConfigToPass()
 {
   if (!config_.light_culling_pass_config) {
     LOG_F(WARNING, "ApplyClusterConfigToPass: No config!");

@@ -36,6 +36,18 @@ public:
 
   //! Draws the panel content inside the shared SidePanel window.
   virtual auto DrawContents() -> void = 0;
+
+  //! Preferred width (in pixels) for the SidePanel when this panel is active.
+  [[nodiscard]] virtual auto GetPreferredWidth() const noexcept -> float
+  {
+    return 420.0F;
+  }
+
+  //! Returns an icon string suitable for icon fonts (empty if none).
+  [[nodiscard]] virtual auto GetIcon() const noexcept -> std::string_view
+  {
+    return {};
+  }
 };
 
 } // namespace oxygen::examples::demo_shell

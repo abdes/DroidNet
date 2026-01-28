@@ -28,7 +28,8 @@ struct DemoKnobsViewModel {
   RenderMode render_mode { RenderMode::kSolid };
   CameraMode camera_mode { CameraMode::kFly };
   bool show_axes_widget { true };
-  bool show_frame_stats { false };
+  bool show_stats_fps { false };
+  bool show_stats_frame_timing_detail { false };
 };
 
 } // namespace oxygen::examples::demo_shell

@@ -12,6 +12,8 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 
+#include "DemoShell/DemoKnobsViewModel.h"
+
 namespace oxygen::engine {
 struct LightCullingPassConfig;
 } // namespace oxygen::engine
@@ -21,7 +23,7 @@ namespace oxygen::examples::render_scene::ui {
 // Re-export ShaderDebugMode for convenience in UI code
 using ShaderDebugMode = oxygen::engine::ShaderDebugMode;
 
-//! Configuration for light culling debug panel
+//! Configuration shared by lighting/debug UI panels
 struct LightCullingDebugConfig {
   //! Pointer to the shader pass config to control
   observer_ptr<oxygen::engine::ShaderPassConfig> shader_pass_config { nullptr };
@@ -33,48 +35,17 @@ struct LightCullingDebugConfig {
   //! Callback to notify when cluster mode changes (triggers PSO rebuild)
   std::function<void()> on_cluster_mode_changed {};
 
-  //! Initial debug mode
-  ShaderDebugMode initial_mode { ShaderDebugMode::kDisabled };
+  //! Pointer to the demo knobs view model (rendering panel).
+  observer_ptr<demo_shell::DemoKnobsViewModel> demo_knobs { nullptr };
 };
 
-//! Light culling debug visualization panel
+//! Lighting panel with light culling and visualization controls
 /*!
- Displays an ImGui panel for controlling light culling debug visualization.
- Provides controls for enabling/disabling the debug overlay, selecting
- visualization modes, and adjusting overlay parameters.
-
- ### Key Features
-
- - **Enable/Disable:** Toggle debug visualization on/off
- - **Visualization Modes:**
-   - Heat Map: Color gradient based on light count (blue = few, red = many)
-   - Discrete Colors: Distinct colors for light count ranges
-   - Depth Slice: Visualize depth slices (clustered mode)
-   - Cluster Index: Checkerboard pattern showing cluster boundaries
-   - Base Color: Visualize base color/albedo texture
-   - UV0: Visualize UV0 coordinates as color
-   - Opacity: Visualize base alpha/opacity
-
- ### Usage Example
-
- ```cpp
- LightCullingDebugPanel panel;
- LightCullingDebugConfig config;
- config.shader_pass_config = shader_pass_config_.get();
- config.initial_mode = ShaderDebugMode::kLightCullingHeatMap;
- panel.Initialize(config);
-
- // In frame loop:
- panel.Draw();
- ```
-
- ### Integration
-
- The panel directly modifies the `debug_mode` field in the provided
- `ShaderPassConfig`. The ShaderPass compiles the pixel shader with the
- appropriate DEBUG_MODE define based on this setting.
+ Provides two collapsible sections: "Light Culling" and
+ "Visualization Modes". Visualization modes toggle the shader debug
+ mode automatically (Normal disables debug).
 */
-class LightCullingDebugPanel {
+class LightingPanel {
 public:
   //! Initialize the panel with configuration
   void Initialize(const LightCullingDebugConfig& config);
@@ -88,29 +59,16 @@ public:
   //! Draws the panel content without creating a window.
   void DrawContents();
 
-  //! Get current debug mode
-  [[nodiscard]] auto GetDebugMode() const -> ShaderDebugMode
-  {
-    return current_mode_;
-  }
-
-  //! Check if debug visualization is enabled
-  [[nodiscard]] auto IsEnabled() const -> bool
-  {
-    return current_mode_ != ShaderDebugMode::kDisabled;
-  }
-
 private:
-  void DrawModeControls();
+  void DrawVisualizationModes();
+  void DrawLightCullingSettings();
   void DrawCullingModeControls();
   void DrawClusterConfigControls();
-  void DrawInfoSection();
-  void ApplySettingsToShaderPass();
+  void ApplyVisualizationMode(ShaderDebugMode mode);
   void ApplyCullingModeToPass();
   void ApplyClusterConfigToPass();
 
   LightCullingDebugConfig config_ {};
-  ShaderDebugMode current_mode_ { ShaderDebugMode::kDisabled };
   bool use_clustered_culling_ { false };
   bool show_window_ { true };
 
