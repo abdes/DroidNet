@@ -79,6 +79,8 @@ protected:
 
 private:
   auto OnFrameStartCommon(engine::FrameContext& context) -> void;
+
+  oxygen::observer_ptr<graphics::Surface> last_surface_ { nullptr };
 };
 
 } // namespace oxygen::examples

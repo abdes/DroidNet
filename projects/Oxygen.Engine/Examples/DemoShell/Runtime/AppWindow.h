@@ -14,14 +14,15 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Graphics/Common/Framebuffer.h>
-#include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Platform/Types.h>
 
 namespace oxygen {
 class Platform;
 class Graphics;
 class AsyncEngine;
+namespace co {
+  class Event;
+}
 namespace platform {
   class Window;
 }
@@ -93,6 +94,9 @@ private:
 
   // Platform destructor token.
   size_t window_lifecycle_token_ { 0 };
+
+  // Per-instance shutdown event used to cancel async handlers.
+  std::shared_ptr<co::Event> shutdown_event_ {};
 
   // GPU state owned by this component. Because of the volatile nature of
   // surfaces, these should nvere be shared outside of this component unless via

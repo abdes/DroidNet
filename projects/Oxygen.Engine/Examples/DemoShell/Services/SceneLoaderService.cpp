@@ -531,6 +531,14 @@ void SceneLoaderService::EnsureCameraAndViewport()
     auto tf = swap_.active_camera.GetTransform();
     tf.SetLocalPosition(cam_pos);
     tf.SetLocalRotation(MakeLookRotationFromPosition(cam_pos, cam_target));
+    const auto handle = swap_.active_camera.GetHandle();
+    const bool already_tracked
+      = std::ranges::any_of(runtime_nodes_, [&](const scene::SceneNode& node) {
+          return node.IsAlive() && node.GetHandle() == handle;
+        });
+    if (!already_tracked) {
+      runtime_nodes_.push_back(swap_.active_camera);
+    }
     LOG_F(INFO, "SceneLoader: No camera in scene; created fallback camera '{}'",
       swap_.active_camera.GetName().c_str());
   }

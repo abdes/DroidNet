@@ -9,18 +9,28 @@
 #include <memory>
 
 #include <Oxygen/Composition/Component.h>
-#include <Oxygen/Renderer/Passes/DepthPrePass.h>
-#include <Oxygen/Renderer/Passes/LightCullingPass.h>
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
-#include <Oxygen/Renderer/Passes/SkyAtmosphereLutComputePass.h>
-#include <Oxygen/Renderer/Passes/SkyPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
-#include <Oxygen/Renderer/Passes/WireframePass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 
 namespace oxygen::graphics {
 class Framebuffer;
+class CommandRecorder;
 }
+
+namespace oxygen::engine {
+class DepthPrePass;
+struct DepthPrePassConfig;
+class ShaderPass;
+struct ShaderPassConfig;
+class WireframePass;
+struct WireframePassConfig;
+struct SkyPassConfig;
+class SkyPass;
+class LightCullingPass;
+struct LightCullingPassConfig;
+class SkyAtmosphereLutComputePass;
+struct SkyAtmosphereLutComputePassConfig;
+} // namespace oxygen::engine
 
 #include <Oxygen/OxCo/Co.h>
 
