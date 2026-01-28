@@ -1,0 +1,13 @@
+{
+  "demo_shell": {
+    "active_panel": "Input Debug",
+    "panels": {
+      "environment": {
+        "width": 634.0
+      },
+      "input_debug": {
+        "width": 718.0
+      }
+    }
+  }
+}

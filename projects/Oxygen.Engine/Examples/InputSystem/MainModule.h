@@ -17,8 +17,11 @@
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Scene/Scene.h>
 
+#include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/SingleViewModuleBase.h"
+#include "DemoShell/Services/FileBrowserService.h"
+#include "InputSystem/InputDebugPanel.h"
 
 namespace oxygen::examples::input {
 
@@ -56,6 +59,9 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(MainModule);
   OXYGEN_MAKE_NON_MOVABLE(MainModule);
 
+  auto BuildDefaultWindowProperties() const
+    -> platform::window::Properties override;
+
   // EngineModule lifecycle
   auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
     -> bool override;
@@ -77,7 +83,7 @@ protected:
 private:
   auto InitInputBindings() noexcept -> bool;
   auto EnsureMainCamera(const int width, const int height) -> void;
-  auto DrawDebugOverlay(engine::FrameContext& context) -> void;
+  auto UpdateInputDebugPanelConfig() -> void;
 
   // The ExampleModuleBase provides `app_` and common window/render helpers.
 
@@ -120,6 +126,10 @@ private:
   float swim_up_speed_ { 2.5f }; // units per second when Space is held
   // Defer sphere reset to a phase before transform propagation
   bool pending_ground_reset_ { false };
+
+  std::unique_ptr<DemoShell> shell_ {};
+  std::unique_ptr<FileBrowserService> file_browser_service_ {};
+  InputDebugPanel input_debug_panel_ {};
 };
 
 } // namespace oxygen::examples::input
