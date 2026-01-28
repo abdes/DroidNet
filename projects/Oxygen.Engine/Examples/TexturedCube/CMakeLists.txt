@@ -46,7 +46,6 @@ add_executable(
   "../Common/SingleViewExample.h"
   "../DemoShell/Services/SkyboxService.cpp"
   "../DemoShell/Services/SkyboxService.h"
-  "../Common/WorkspaceRoot.h"
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"

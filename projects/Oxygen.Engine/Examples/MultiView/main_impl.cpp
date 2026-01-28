@@ -244,8 +244,6 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .thread_pool_size = (std::min)(4U, std::thread::hardware_concurrency()),
     });
 
-    app.workspace_root = o::examples::common::FindWorkspaceRoot();
-
     const o::GraphicsConfig gfx_config {
       .enable_debug = true,
       .enable_validation = false,
