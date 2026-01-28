@@ -54,14 +54,14 @@ set(
   "DemoShellUi.h"
   "PanelRegistry.h"
   "SidePanel.h"
-  "Toolbar.h"
+  "PanelSideBar.h"
 )
 set(
   OXYGEN_DEMOSHELL_PRIVATE_SOURCES
   "DemoShellUi.cpp"
   "PanelRegistry.cpp"
+  "PanelSideBar.cpp"
   "SidePanel.cpp"
-  "Toolbar.cpp"
 )
 
 if(NOT DEFINED OXYGEN_EXAMPLES_SOURCE_DIR)

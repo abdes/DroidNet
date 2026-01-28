@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -37,6 +38,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
@@ -138,9 +140,12 @@ auto FindRenderSceneContentRoot() -> std::filesystem::path
 template <typename PanelType>
 class PanelAdapter final : public oxygen::examples::demo_shell::DemoPanel {
 public:
-  PanelAdapter(std::string_view name, oxygen::observer_ptr<PanelType> panel)
+  PanelAdapter(std::string_view name, oxygen::observer_ptr<PanelType> panel,
+    std::string_view icon = {}, float preferred_width = 420.0F)
     : name_(name)
     , panel_(panel)
+    , icon_(icon)
+    , preferred_width_(preferred_width)
   {
   }
 
@@ -156,9 +161,21 @@ public:
     }
   }
 
+  [[nodiscard]] auto GetPreferredWidth() const noexcept -> float override
+  {
+    return preferred_width_;
+  }
+
+  [[nodiscard]] auto GetIcon() const noexcept -> std::string_view override
+  {
+    return icon_;
+  }
+
 private:
   std::string name_ {};
   oxygen::observer_ptr<PanelType> panel_ { nullptr };
+  std::string icon_ {};
+  float preferred_width_ { 420.0F };
 };
 
 } // namespace
@@ -935,7 +952,8 @@ MainModule::MainModule(const oxygen::examples::common::AsyncEngineApp& app)
   demo_knobs_.camera_mode = demo_shell::CameraMode::kFly;
   demo_knobs_.render_mode = demo_shell::RenderMode::kSolid;
   demo_knobs_.show_axes_widget = true;
-  demo_knobs_.show_frame_stats = false;
+  demo_knobs_.show_stats_fps = false;
+  demo_knobs_.show_stats_frame_timing_detail = false;
 }
 
 MainModule::~MainModule() = default;
@@ -1682,14 +1700,14 @@ auto MainModule::InitializeUIPanels() -> void
   // Configure camera control panel
   UpdateCameraControlPanelConfig();
 
-  // Configure light culling debug panel
+  // Configure lighting/rendering panels
   if (auto render_graph = GetRenderGraph()) {
     ui::LightCullingDebugConfig debug_config;
     debug_config.shader_pass_config
       = observer_ptr { render_graph->GetShaderPassConfig().get() };
     debug_config.light_culling_pass_config
       = observer_ptr { render_graph->GetLightCullingPassConfig().get() };
-    debug_config.initial_mode = ui::ShaderDebugMode::kDisabled;
+    debug_config.demo_knobs = observer_ptr { &demo_knobs_ };
 
     // Callback to invalidate PSO when cluster mode changes
     debug_config.on_cluster_mode_changed = [this]() {
@@ -1698,8 +1716,14 @@ auto MainModule::InitializeUIPanels() -> void
       LOG_F(INFO, "Light culling mode changed, PSO will rebuild next frame");
     };
 
-    light_culling_debug_panel_.Initialize(debug_config);
+    lighting_panel_.Initialize(debug_config);
+    rendering_panel_.Initialize(debug_config);
   }
+
+  // Configure settings panel
+  ui::SettingsPanelConfig settings_config;
+  settings_config.demo_knobs = observer_ptr { &demo_knobs_ };
+  settings_panel_.Initialize(settings_config);
 
   // Configure environment debug panel
   ui::EnvironmentDebugConfig env_config;
@@ -1760,25 +1784,32 @@ auto MainModule::RegisterDemoPanels() -> void
   panel_registry_ = demo_shell::PanelRegistry {};
   demo_panels_.clear();
 
-  const auto register_panel = [this](auto panel_ptr, std::string_view name) {
-    using PanelType = std::remove_reference_t<decltype(*panel_ptr)>;
-    auto adapter = std::make_unique<PanelAdapter<PanelType>>(
-      name, observer_ptr { panel_ptr });
-    auto* adapter_ptr = adapter.get();
-    demo_panels_.push_back(std::move(adapter));
+  const auto register_panel
+    = [this](auto panel_ptr, std::string_view name, std::string_view icon = {},
+        float preferred_width = 420.0F) {
+        using PanelType = std::remove_reference_t<decltype(*panel_ptr)>;
+        auto adapter = std::make_unique<PanelAdapter<PanelType>>(
+          name, observer_ptr { panel_ptr }, icon, preferred_width);
+        auto* adapter_ptr = adapter.get();
+        demo_panels_.push_back(std::move(adapter));
 
-    const auto result
-      = panel_registry_.RegisterPanel(observer_ptr { adapter_ptr });
-    if (!result) {
-      LOG_F(WARNING, "DemoShell: failed to register panel '{}'", name);
-    }
-  };
+        const auto result
+          = panel_registry_.RegisterPanel(observer_ptr { adapter_ptr });
+        if (!result) {
+          LOG_F(WARNING, "DemoShell: failed to register panel '{}'", name);
+        }
+      };
 
-  register_panel(&content_loader_panel_, "Content Loader");
-  register_panel(&camera_control_panel_, "Camera Controls");
-  register_panel(&environment_debug_panel_, "Environment");
-  register_panel(&light_culling_debug_panel_, "Light Culling");
-
+  namespace icons = oxygen::imgui::icons;
+  register_panel(&content_loader_panel_, "Content Loader",
+    icons::kIconContentLoader, 520.0F);
+  register_panel(&camera_control_panel_, "Camera Controls",
+    icons::kIconCameraControls, 360.0F);
+  register_panel(
+    &environment_debug_panel_, "Environment", icons::kIconEnvironment, 420.0F);
+  register_panel(&lighting_panel_, "Lighting", icons::kIconLighting, 360.0F);
+  register_panel(&rendering_panel_, "Rendering", icons::kIconRendering, 320.0F);
+  register_panel(&settings_panel_, "Settings", icons::kIconSettings, 320.0F);
   (void)panel_registry_.SetActivePanelByName("Content Loader");
 }
 
@@ -1830,22 +1861,27 @@ auto MainModule::UpdateUIPanels() -> void
 {
   content_loader_panel_.Update();
 
-  // Update light culling debug panel config if render graph exists
+  // Update lighting/rendering panel configs if render graph exists
   if (auto render_graph = GetRenderGraph()) {
     ui::LightCullingDebugConfig debug_config;
     debug_config.shader_pass_config
       = observer_ptr { render_graph->GetShaderPassConfig().get() };
     debug_config.light_culling_pass_config
       = observer_ptr { render_graph->GetLightCullingPassConfig().get() };
-    debug_config.initial_mode = light_culling_debug_panel_.GetDebugMode();
+    debug_config.demo_knobs = observer_ptr { &demo_knobs_ };
 
     // Callback to invalidate PSO when cluster mode changes
     debug_config.on_cluster_mode_changed = [this]() {
       LOG_F(INFO, "Light culling mode changed, PSO will rebuild next frame");
     };
 
-    light_culling_debug_panel_.UpdateConfig(debug_config);
+    lighting_panel_.UpdateConfig(debug_config);
+    rendering_panel_.UpdateConfig(debug_config);
   }
+
+  ui::SettingsPanelConfig settings_config;
+  settings_config.demo_knobs = observer_ptr { &demo_knobs_ };
+  settings_panel_.UpdateConfig(settings_config);
 
   // Update environment debug panel when scene is available
   if (scene_) {
@@ -1905,6 +1941,72 @@ auto MainModule::DrawUI() -> void
 
     axes_widget_.Draw(view_matrix);
   }
+
+  DrawStatsOverlay();
+}
+
+auto MainModule::DrawStatsOverlay() -> void
+{
+  if (!demo_knobs_.show_stats_fps
+    && !demo_knobs_.show_stats_frame_timing_detail) {
+    return;
+  }
+
+  const auto& io = ImGui::GetIO();
+  const float dpi_scale
+    = (io.FontGlobalScale > 0.0F) ? io.FontGlobalScale : 1.0F;
+  const float min_width = 300.0F * dpi_scale;
+  const float width = std::max(io.DisplaySize.x * 0.25F, min_width);
+  const float height = io.DisplaySize.y;
+
+  ImGui::SetNextWindowPos(
+    ImVec2(io.DisplaySize.x - width, 0.0F), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(width, height), ImGuiCond_Always);
+  ImGui::SetNextWindowBgAlpha(0.0F);
+
+  constexpr auto kFlags = ImGuiWindowFlags_NoDecoration
+    | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize
+    | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing
+    | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus
+    | ImGuiWindowFlags_NoInputs;
+
+  ImGui::PushStyleVar(
+    ImGuiStyleVar_WindowPadding, ImVec2(12.0F * dpi_scale, 12.0F * dpi_scale));
+
+  if (!ImGui::Begin("FrameStatsOverlay", nullptr, kFlags)) {
+    ImGui::End();
+    ImGui::PopStyleVar();
+    return;
+  }
+
+  auto draw_right_aligned = [](const char* text) {
+    const float available = ImGui::GetContentRegionAvail().x;
+    const float text_width = ImGui::CalcTextSize(text).x;
+    ImGui::SetCursorPosX(
+      ImGui::GetCursorPosX() + std::max(0.0F, available - text_width));
+    ImGui::TextUnformatted(text);
+  };
+
+  if (demo_knobs_.show_stats_fps) {
+    std::array<char, 64> buffer {};
+    std::snprintf(buffer.data(), buffer.size(), "FPS %.1f", io.Framerate);
+    draw_right_aligned(buffer.data());
+  }
+
+  if (demo_knobs_.show_stats_frame_timing_detail) {
+    std::array<char, 64> buffer {};
+    const float frame_ms = io.DeltaTime * 1000.0F;
+    std::snprintf(buffer.data(), buffer.size(), "Frame %.2f ms", frame_ms);
+    draw_right_aligned(buffer.data());
+
+    const float avg_ms
+      = (io.Framerate > 0.0F) ? (1000.0F / io.Framerate) : 0.0F;
+    std::snprintf(buffer.data(), buffer.size(), "Avg %.2f ms", avg_ms);
+    draw_right_aligned(buffer.data());
+  }
+
+  ImGui::End();
+  ImGui::PopStyleVar();
 }
 
 auto MainModule::ResetCameraToInitialPose() -> void

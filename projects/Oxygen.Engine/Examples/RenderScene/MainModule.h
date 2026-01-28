@@ -35,6 +35,8 @@
 #include "RenderScene/UI/ContentLoaderPanel.h"
 #include "RenderScene/UI/EnvironmentDebugPanel.h"
 #include "RenderScene/UI/LightCullingDebugPanel.h"
+#include "RenderScene/UI/RenderingPanel.h"
+#include "RenderScene/UI/SettingsPanel.h"
 
 namespace oxygen::data {
 class SceneAsset;
@@ -123,6 +125,7 @@ private:
 
   auto UpdateUIPanels() -> void;
   auto DrawUI() -> void;
+  auto DrawStatsOverlay() -> void;
   auto ApplyRenderModeFromKnobs() -> void;
   auto SyncCameraModeFromKnobs() -> void;
   auto RegisterDemoPanels() -> void;
@@ -165,7 +168,9 @@ private:
   // UI panels
   ui::ContentLoaderPanel content_loader_panel_;
   ui::CameraControlPanel camera_control_panel_;
-  ui::LightCullingDebugPanel light_culling_debug_panel_;
+  ui::LightingPanel lighting_panel_;
+  ui::RenderingPanel rendering_panel_;
+  ui::SettingsPanel settings_panel_;
   ui::EnvironmentDebugPanel environment_debug_panel_;
   ui::AxesWidget axes_widget_;
 
@@ -176,8 +181,8 @@ private:
    - **Panels**: Stored in `demo_panels_` and registered once via
      `RegisterDemoPanels()`. The registry stores non-owning pointers and assumes
      the panel objects live for the lifetime of `MainModule`.
-   - **Knobs**: `demo_knobs_` is owned by `MainModule` and referenced by the
-     toolbar via `observer_ptr`, so updates are immediate and stable.
+   - **Knobs**: `demo_knobs_` is owned by `MainModule` and referenced by panels
+     via `observer_ptr`, so updates are immediate and stable.
    - **UI Shell**: `demo_shell_ui_` does not own panels; it only orchestrates
      layout and draws through the registry each frame.
   */

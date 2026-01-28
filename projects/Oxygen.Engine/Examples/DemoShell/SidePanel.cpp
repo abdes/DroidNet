@@ -25,7 +25,7 @@ auto SidePanel::Initialize(const SidePanelConfig& config) -> void
   config_ = config;
 }
 
-auto SidePanel::Draw(float toolbar_height) -> void
+auto SidePanel::Draw(float left_offset) -> void
 {
   if (!config_.panel_registry) {
     return;
@@ -37,11 +37,20 @@ auto SidePanel::Draw(float toolbar_height) -> void
   }
 
   const auto& io = ImGui::GetIO();
-  const float height = std::max(0.0F, io.DisplaySize.y - toolbar_height);
+
+  // If the active panel changed, adopt its preferred width.
+  const auto active_name = config_.panel_registry->GetActivePanelName();
+  if (active_name != last_active_panel_name_) {
+    last_active_panel_name_ = std::string(active_name);
+    width_ = std::clamp(active_panel->GetPreferredWidth(), kMinPanelWidth,
+      io.DisplaySize.x * kMaxPanelWidthRatio);
+  }
+
+  const float height = std::max(0.0F, io.DisplaySize.y);
   const float max_width
     = std::max(kMinPanelWidth, io.DisplaySize.x * kMaxPanelWidthRatio);
 
-  ImGui::SetNextWindowPos(ImVec2(0.0F, toolbar_height), ImGuiCond_Always);
+  ImGui::SetNextWindowPos(ImVec2(left_offset, 0.0F), ImGuiCond_Always);
   ImGui::SetNextWindowSize(ImVec2(width_, height), ImGuiCond_Always);
   ImGui::SetNextWindowSizeConstraints(
     ImVec2(kMinPanelWidth, height), ImVec2(max_width, height));
