@@ -17,17 +17,17 @@
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "Common/AsyncEngineApp.h"
-#include "Common/SingleViewExample.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/SingleViewModuleBase.h"
 
 namespace oxygen::examples::input {
 
-class MainModule : public common::SingleViewExample {
+class MainModule : public SingleViewModuleBase {
   OXYGEN_TYPED(MainModule)
 public:
-  using Base = oxygen::examples::common::SingleViewExample;
+  using Base = oxygen::examples::SingleViewModuleBase;
 
-  explicit MainModule(const oxygen::examples::common::AsyncEngineApp& app);
+  explicit MainModule(const oxygen::examples::DemoAppContext& app);
 
   // EngineModule metadata overrides
   // -------------------------------------------------

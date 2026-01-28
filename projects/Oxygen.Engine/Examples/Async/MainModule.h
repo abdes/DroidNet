@@ -27,8 +27,8 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "Common/AsyncEngineApp.h"
-#include "Common/SingleViewExample.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/SingleViewModuleBase.h"
 
 namespace oxygen::examples::async {
 
@@ -44,11 +44,11 @@ namespace oxygen::examples::async {
 
 @see ExampleModuleBase, AsyncEngine, Graphics
 */
-class MainModule final : public common::SingleViewExample {
+class MainModule final : public SingleViewModuleBase {
   OXYGEN_TYPED(MainModule)
 
 public:
-  using Base = common::SingleViewExample;
+  using Base = SingleViewModuleBase;
 
   OXYGEN_MAKE_NON_COPYABLE(MainModule)
   OXYGEN_MAKE_NON_MOVABLE(MainModule)
@@ -57,7 +57,7 @@ public:
   /*!
    @param app Aggregated application context (non-owning reference)
   */
-  explicit MainModule(const common::AsyncEngineApp& app);
+  explicit MainModule(const DemoAppContext& app);
 
   ~MainModule() override;
 
@@ -136,7 +136,7 @@ private:
   auto EndFrameTracking() -> void;
 
   //! Dependencies (aggregated app context, non-owning).
-  const oxygen::examples::common::AsyncEngineApp& app_;
+  const DemoAppContext& app_;
 
   //! Scene and rendering.
   std::shared_ptr<scene::Scene> scene_;

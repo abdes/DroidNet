@@ -20,7 +20,7 @@
 
 namespace oxygen::examples::multiview {
 
-MainModule::MainModule(const common::AsyncEngineApp& app) noexcept
+MainModule::MainModule(const DemoAppContext& app) noexcept
   : Base(app)
   , app_(app)
 {

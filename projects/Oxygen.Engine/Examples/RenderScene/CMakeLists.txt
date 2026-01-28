@@ -32,15 +32,6 @@ asap_push_module("${META_MODULE_NAME}")
 add_executable(
   ${META_MODULE_TARGET}
   "../main.cpp"
-  "../Common/AppWindow.cpp"
-  "../Common/AppWindow.h"
-  "../Common/AsyncEngineApp.h"
-  "../Common/ExampleModuleBase.cpp"
-  "../Common/ExampleModuleBase.h"
-  "../Common/RenderGraph.cpp"
-  "../Common/RenderGraph.h"
-  "../Common/SingleViewExample.cpp"
-  "../Common/SingleViewExample.h"
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"

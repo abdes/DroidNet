@@ -14,8 +14,8 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "Common/AsyncEngineApp.h"
-#include "Common/ExampleModuleBase.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/DemoModuleBase.h"
 #include "MultiView/DemoView.h"
 #include "MultiView/SceneBootstrapper.h"
 
@@ -34,16 +34,16 @@ namespace oxygen::examples::multiview {
  Both views render the same scene with different cameras.
  Demonstrates PrepareView/RenderView APIs and per-view state isolation.
 */
-class MainModule final : public common::ExampleModuleBase {
+class MainModule final : public DemoModuleBase {
   OXYGEN_TYPED(MainModule)
 
 public:
-  using Base = ExampleModuleBase;
+  using Base = DemoModuleBase;
 
   OXYGEN_MAKE_NON_COPYABLE(MainModule)
   OXYGEN_MAKE_NON_MOVABLE(MainModule)
 
-  explicit MainModule(const common::AsyncEngineApp& app) noexcept;
+  explicit MainModule(const DemoAppContext& app) noexcept;
   ~MainModule() override = default;
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
@@ -79,7 +79,7 @@ private:
     const std::shared_ptr<graphics::Surface>& surface) -> void;
   auto ReleaseAllViews(std::string_view reason) -> void;
 
-  const common::AsyncEngineApp& app_;
+  const DemoAppContext& app_;
   SceneBootstrapper scene_bootstrapper_;
 
   std::vector<std::unique_ptr<DemoView>> views_;

@@ -51,6 +51,11 @@ set_target_properties(
 set(
   OXYGEN_DEMOSHELL_HEADERS
   "DemoShell.h"
+  "Runtime/DemoAppContext.h"
+  "Runtime/AppWindow.h"
+  "Runtime/RenderGraph.h"
+  "Runtime/DemoModuleBase.h"
+  "Runtime/SingleViewModuleBase.h"
   "UI/DemoPanel.h"
   "DemoShellUi.h"
   "PanelRegistry.h"
@@ -61,7 +66,7 @@ set(
   "Services/SceneLoaderService.h"
   "Services/SkyboxService.h"
   "UI/StatsOverlay.h"
-  "Services//SettingsService.h"
+  "Services/SettingsService.h"
   "UI/AxesWidget.h"
   "UI/CameraControlPanel.h"
   "UI/CameraRigController.h"
@@ -82,6 +87,10 @@ set(
   OXYGEN_DEMOSHELL_PRIVATE_SOURCES
   "DemoShell.cpp"
   "DemoShellUi.cpp"
+  "Runtime/AppWindow.cpp"
+  "Runtime/RenderGraph.cpp"
+  "Runtime/DemoModuleBase.cpp"
+  "Runtime/SingleViewModuleBase.cpp"
   "PanelRegistry.cpp"
   "UI/PanelSideBar.cpp"
   "UI/SidePanel.cpp"
@@ -91,6 +100,8 @@ set(
   "Services/SkyboxService.cpp"
   "UI/StatsOverlay.cpp"
   "FileBrowser/imfilebrowser.h"
+  "FileBrowser/LICENSE.txt"
+  "FileBrowser/VERSION.txt"
   "Services/SettingsService.cpp"
   "UI/AxesWidget.cpp"
   "UI/CameraControlPanel.cpp"
@@ -151,8 +162,11 @@ target_link_libraries(
     oxygen::base
     oxygen::content
     oxygen::data
+    oxygen::engine
+    oxygen::graphics-common
     oxygen::imgui
     oxygen::input
+    oxygen::platform
     oxygen::renderer
     oxygen::scene
     fmt::fmt-header-only

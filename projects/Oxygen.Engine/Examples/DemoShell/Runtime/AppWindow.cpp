@@ -16,8 +16,8 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
 
-#include "Common/AppWindow.h"
-#include "Common/AsyncEngineApp.h"
+#include "DemoShell/Runtime/AppWindow.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
 
 using namespace oxygen;
 
@@ -53,10 +53,9 @@ bool MaybeHookImgui(
 
 } // namespace
 
-namespace oxygen::examples::common {
+namespace oxygen::examples {
 
-AppWindow::AppWindow(
-  const oxygen::examples::common::AsyncEngineApp& app) noexcept
+AppWindow::AppWindow(const DemoAppContext& app) noexcept
   : platform_(app.platform.get()) // observe only
   , engine_(app.engine.get()) // observe only
   , gfx_weak_(app.gfx_weak)
@@ -129,7 +128,7 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
 
   const auto weak_self = weak_from_this();
 
-  // Close-request handler
+  // Close-request handler.
   platform_->Async().Nursery().Start([weak_self]() -> co::Co<> {
     while (true) {
       auto self = weak_self.lock();
@@ -151,7 +150,7 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
     }
   });
 
-  // Resize/expose handler
+  // Resize/expose handler.
   platform_->Async().Nursery().Start([weak_self]() -> co::Co<> {
     using WindowEvent = platform::window::Event;
     while (true) {
@@ -177,7 +176,7 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
     }
   });
 
-  // Platform termination -> request close
+  // Platform termination -> request close.
   auto platform = platform_;
   platform_->Async().Nursery().Start([weak_self, platform]() -> co::Co<> {
     co_await platform->Async().OnTerminate();
@@ -189,7 +188,7 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
     }
   });
 
-  // Register pre-destroy handler
+  // Register pre-destroy handler.
   const auto win_ref = window_.lock();
   if (!win_ref) {
     LOG_F(ERROR, "Failed to lock platform window handle");
@@ -204,7 +203,7 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
       if (auto self = weak_self.lock()) {
         LOG_F(INFO, "Platform about to destroy window {} -> detaching state",
           win_id);
-        // Release resources and clear the state
+        // Release resources and clear the state.
         MaybeUnhookImgui(self->engine_);
         self->ClearFramebuffers();
         self->surface_.reset();
@@ -252,7 +251,7 @@ auto AppWindow::ShouldResize() const noexcept -> bool
 
 auto AppWindow::CreateSurface() -> bool
 {
-  // Sanity checks - all these are programming errors
+  // Sanity checks - all these are programming errors.
   DCHECK_F(!surface_,
     "Surface already exists, properly reset (at frame start) before you "
     "recreate.");
@@ -262,7 +261,7 @@ auto AppWindow::CreateSurface() -> bool
     "Cannot create surface without a valid Graphics instance.");
 
   const auto gfx = gfx_weak_.lock();
-  CHECK_NOTNULL_F(gfx); // see above
+  CHECK_NOTNULL_F(gfx); // see above.
 
   auto queue = gfx->GetCommandQueue(oxygen::graphics::QueueRole::kGraphics);
   if (!queue) {
@@ -370,7 +369,7 @@ auto AppWindow::ApplyPendingResize() -> void
   // gfx->Flush();
 
   try {
-    // Drop owned framebuffer references so Resize() can succeed
+    // Drop owned framebuffer references so Resize() can succeed.
     ClearFramebuffers();
     surface_->Resize();
     EnsureFramebuffers();
@@ -378,22 +377,7 @@ auto AppWindow::ApplyPendingResize() -> void
     LOG_F(WARNING, "-failed- resize threw: {}", ex.what());
   }
 
-  //// Notify ImGui module (safe no-op for non-D3D backends)
-  // try {
-  //   if (engine_) {
-  //     auto imgui_module_ref =
-  //     engine_->GetModule<oxygen::imgui::ImGuiModule>(); if (imgui_module_ref)
-  //     {
-  //       imgui_module_ref->get().RecreateDeviceObjects();
-  //     }
-  //   }
-  // } catch (const std::exception& e) {
-  //   LOG_F(WARNING, "-failed- ImGui error: {}", e.what());
-  // } catch (...) {
-  //   LOG_F(WARNING, "-failed- ImGui error (unknown)");
-  // }
-
-  // Acknowledge the resize
+  // Acknowledge the resize.
   surface_->ShouldResize(false);
 }
 
@@ -411,4 +395,4 @@ auto AppWindow::GetCurrentFrameBuffer() const
   return framebuffers_.at(surface_->GetCurrentBackBufferIndex());
 }
 
-} // namespace oxygen::examples::common
+} // namespace oxygen::examples

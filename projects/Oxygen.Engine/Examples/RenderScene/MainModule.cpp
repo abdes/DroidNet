@@ -65,7 +65,7 @@ using oxygen::scene::SceneNodeFlags;
 
 namespace oxygen::examples::render_scene {
 
-MainModule::MainModule(const oxygen::examples::common::AsyncEngineApp& app)
+MainModule::MainModule(const oxygen::examples::DemoAppContext& app)
   : Base(app)
 {
   cooked_root_

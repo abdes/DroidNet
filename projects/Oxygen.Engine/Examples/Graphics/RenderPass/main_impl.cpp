@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdlib>
+#include <filesystem>
 #include <memory>
 #include <span>
 #include <type_traits>
@@ -24,8 +25,6 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
-
-#include "Common/WorkspaceRoot.h"
 
 #include <MainModule.h>
 
@@ -185,7 +184,7 @@ extern "C" void MainImpl(std::span<const char*> /*args*/)
     .headless = false,
     .extra = {},
     .path_finder_config = oxygen::PathFinderConfig::Create()
-      .WithWorkspaceRoot(oxygen::examples::common::FindWorkspaceRoot())
+      .WithWorkspaceRoot(std::filesystem::current_path())
       .Build(),
   };
   auto& loader = oxygen::GraphicsBackendLoader::GetInstance();
