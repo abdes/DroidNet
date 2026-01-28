@@ -17,19 +17,19 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Scene/SceneNode.h>
 
-#include "Common/AsyncEngineApp.h"
-#include "Common/ExampleModuleBase.h"
-#include "Common/RenderGraph.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/DemoModuleBase.h"
+#include "DemoShell/Runtime/RenderGraph.h"
 
-namespace oxygen::examples::common {
+namespace oxygen::examples {
 
-//! Base class for single-view examples sharing the same renderer wiring.
-class SingleViewExample : public ExampleModuleBase {
-  OXYGEN_TYPED(SingleViewExample)
+//! Base class for single-view demos sharing the same renderer wiring.
+class SingleViewModuleBase : public DemoModuleBase {
+  OXYGEN_TYPED(SingleViewModuleBase)
 
 public:
-  explicit SingleViewExample(const AsyncEngineApp& app);
-  ~SingleViewExample() override = default;
+  explicit SingleViewModuleBase(const DemoAppContext& app);
+  ~SingleViewModuleBase() override = default;
 
   void OnShutdown() noexcept override;
 
@@ -45,8 +45,7 @@ protected:
 
   auto ResolveRenderer() const -> oxygen::engine::Renderer*;
 
-  auto GetRenderGraph() const
-    -> oxygen::observer_ptr<oxygen::examples::common::RenderGraph>
+  auto GetRenderGraph() const -> oxygen::observer_ptr<RenderGraph>
   {
     return render_graph_;
   }
@@ -58,9 +57,7 @@ protected:
 private:
   ViewId view_id_ { kInvalidViewId };
   bool renderer_view_registered_ { false };
-  oxygen::observer_ptr<oxygen::examples::common::RenderGraph> render_graph_ {
-    nullptr
-  };
+  oxygen::observer_ptr<RenderGraph> render_graph_ { nullptr };
 };
 
-} // namespace oxygen::examples::common
+} // namespace oxygen::examples

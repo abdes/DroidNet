@@ -35,17 +35,6 @@ asap_push_module("${META_MODULE_NAME}")
 add_executable(
   ${META_MODULE_TARGET}
   "../main.cpp"
-  "../Common/AppWindow.cpp"
-  "../Common/AppWindow.h"
-  "../Common/AsyncEngineApp.h"
-  "../Common/ExampleModuleBase.cpp"
-  "../Common/ExampleModuleBase.h"
-  "../Common/RenderGraph.cpp"
-  "../Common/RenderGraph.h"
-  "../Common/SingleViewExample.cpp"
-  "../Common/SingleViewExample.h"
-  "../DemoShell/Services/SkyboxService.cpp"
-  "../DemoShell/Services/SkyboxService.h"
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"
@@ -79,6 +68,7 @@ target_include_directories(
 target_link_libraries(
   ${META_MODULE_TARGET}
   PRIVATE
+    oxygen::examples-demoshell
     oxygen::platform
     oxygen::input
     oxygen::data

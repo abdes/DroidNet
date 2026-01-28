@@ -63,8 +63,8 @@
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 
 #include "Async/MainModule.h"
-#include "Common/AsyncEngineApp.h"
-#include "Common/RenderGraph.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/RenderGraph.h"
 
 using oxygen::examples::async::MainModule;
 using WindowProps = oxygen::platform::window::Properties;
@@ -507,7 +507,7 @@ auto AnimateSphereOrbit(oxygen::scene::SceneNode& sphere_node, double angle,
 
 namespace oxygen::examples::async {
 
-MainModule::MainModule(const common::AsyncEngineApp& app)
+MainModule::MainModule(const DemoAppContext& app)
   : Base(app)
   , app_(app)
 {

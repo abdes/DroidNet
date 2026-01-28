@@ -32,15 +32,6 @@ find_package(sdl3 CONFIG REQUIRED)
 add_executable(
   ${META_MODULE_TARGET}
   "../main.cpp"
-  "../Common/AsyncEngineApp.h"
-  "../Common/AppWindow.h"
-  "../Common/AppWindow.cpp"
-  "../Common/RenderGraph.h"
-  "../Common/RenderGraph.cpp"
-  "../Common/ExampleModuleBase.h"
-  "../Common/ExampleModuleBase.cpp"
-  "../Common/SingleViewExample.h"
-  "../Common/SingleViewExample.cpp"
   "main_impl.cpp"
   "MainModule.cpp"
   "MainModule.h"
@@ -74,6 +65,7 @@ target_link_libraries(
     oxygen::composition
     oxygen::oxco
     oxygen::clap
+    oxygen::examples-demoshell
     oxygen::platform
     oxygen::input
     oxygen::imgui

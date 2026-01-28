@@ -18,8 +18,8 @@
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "Common/AsyncEngineApp.h"
-#include "Common/SingleViewExample.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/SingleViewModuleBase.h"
 #include "DemoShell/Services/SkyboxService.h"
 #include "TexturedCube/CameraController.h"
 #include "TexturedCube/DebugUI.h"
@@ -50,13 +50,13 @@ namespace oxygen::examples::textured_cube {
  @see CameraController, TextureLoadingService, SkyboxService, SceneSetup,
  DebugUI
 */
-class MainModule final : public common::SingleViewExample {
+class MainModule final : public SingleViewModuleBase {
   OXYGEN_TYPED(MainModule)
 
 public:
-  using Base = oxygen::examples::common::SingleViewExample;
+  using Base = oxygen::examples::SingleViewModuleBase;
 
-  explicit MainModule(const oxygen::examples::common::AsyncEngineApp& app);
+  explicit MainModule(const oxygen::examples::DemoAppContext& app);
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {

@@ -9,20 +9,19 @@
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/OxCo/Co.h>
 
-#include "Common/AsyncEngineApp.h"
-#include "Common/ExampleModuleBase.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/DemoModuleBase.h"
 
 using namespace oxygen;
 
-namespace oxygen::examples::common {
+namespace oxygen::examples {
 
-ExampleModuleBase::ExampleModuleBase(
-  const oxygen::examples::common::AsyncEngineApp& app) noexcept
+DemoModuleBase::DemoModuleBase(const DemoAppContext& app) noexcept
   : app_(app)
 {
   LOG_SCOPE_FUNCTION(INFO);
 
-  // Construct example components eagerly so derived classes get a
+  // Construct demo components eagerly so derived classes get a
   // fully-configured Composition during OnAttached. The components are
   // responsible for window creation and lifecycle — the base only adds
   // them to the composition.
@@ -32,7 +31,7 @@ ExampleModuleBase::ExampleModuleBase(
   }
 }
 
-auto ExampleModuleBase::BuildDefaultWindowProperties() const
+auto DemoModuleBase::BuildDefaultWindowProperties() const
   -> platform::window::Properties
 {
   platform::window::Properties p("Oxygen Example");
@@ -47,14 +46,14 @@ auto ExampleModuleBase::BuildDefaultWindowProperties() const
   return p;
 }
 
-auto ExampleModuleBase::OnAttached(
+auto DemoModuleBase::OnAttached(
   [[maybe_unused]] oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
   -> bool
 {
   DCHECK_NOTNULL_F(engine);
   LOG_SCOPE_FUNCTION(INFO);
 
-  // If headless, skip creating a window
+  // If headless, skip creating a window.
   if (app_.headless) {
     return true;
   }
@@ -69,7 +68,7 @@ auto ExampleModuleBase::OnAttached(
   return true;
 }
 
-auto ExampleModuleBase::OnFrameStart(engine::FrameContext& context) -> void
+auto DemoModuleBase::OnFrameStart(engine::FrameContext& context) -> void
 {
   DLOG_SCOPE_FUNCTION(2);
   try {
@@ -82,8 +81,7 @@ auto ExampleModuleBase::OnFrameStart(engine::FrameContext& context) -> void
   }
 }
 
-auto ExampleModuleBase::OnFrameStartCommon(engine::FrameContext& context)
-  -> void
+auto DemoModuleBase::OnFrameStartCommon(engine::FrameContext& context) -> void
 {
   if (app_.headless) {
     return;
@@ -94,7 +92,7 @@ auto ExampleModuleBase::OnFrameStartCommon(engine::FrameContext& context)
   // errors when a window is abruptly closed.
 
   if (!app_window_->GetWindow()) {
-    // probably closed
+    // probably closed.
     DLOG_F(1, "AppWindow's platform window has expired");
     return;
   }
@@ -105,10 +103,10 @@ auto ExampleModuleBase::OnFrameStartCommon(engine::FrameContext& context)
     app_window_->ApplyPendingResize();
   }
 
-  // Update our surface in the FraemContext if needed
+  // Update our surface in the FrameContext if needed.
   auto surfaces = context.GetSurfaces();
   if (auto surface = app_window_->GetSurface().lock()) {
-    // Check if already registered
+    // Check if already registered.
     const bool already_registered = std::ranges::any_of(
       surfaces, [&](const auto& s) { return s.get() == surface.get(); });
 
@@ -120,7 +118,7 @@ auto ExampleModuleBase::OnFrameStartCommon(engine::FrameContext& context)
   } else {
     DLOG_F(WARNING, "AppWindow has no valid surface at frame start");
 
-    // Find and remove expired surface
+    // Find and remove expired surface.
     auto it = std::ranges::find_if(surfaces, [&](const auto& s) {
       return s.get() == app_window_->GetSurface().lock().get();
     });
@@ -132,7 +130,7 @@ auto ExampleModuleBase::OnFrameStartCommon(engine::FrameContext& context)
   }
 }
 
-auto ExampleModuleBase::MarkSurfacePresentable(engine::FrameContext& context)
+auto DemoModuleBase::MarkSurfacePresentable(engine::FrameContext& context)
   -> void
 {
   auto surface = app_window_->GetSurface().lock();
@@ -149,4 +147,4 @@ auto ExampleModuleBase::MarkSurfacePresentable(engine::FrameContext& context)
   }
 }
 
-} // namespace oxygen::examples::common
+} // namespace oxygen::examples

@@ -10,7 +10,8 @@
 
 asap_module_declare(
   MODULE_NAME "Oxygen.Examples.InputSystem"
-  DESCRIPTION [=[
+  DESCRIPTION
+    [=[
 An example demonstrating the Oxygen engine InputSystem: it creates and registers
 typed Actions and InputActionMappings, groups mappings into InputMappingContexts
 (modifier keys, ground movement, camera controls, swimming), uses ActionTriggers
@@ -38,15 +39,6 @@ asap_push_module("${META_MODULE_NAME}")
 add_executable(
   ${META_MODULE_TARGET}
   "../main.cpp"
-  "../Common/AsyncEngineApp.h"
-  "../Common/AppWindow.h"
-  "../Common/AppWindow.cpp"
-  "../Common/RenderGraph.h"
-  "../Common/RenderGraph.cpp"
-  "../Common/ExampleModuleBase.h"
-  "../Common/ExampleModuleBase.cpp"
-  "../Common/SingleViewExample.h"
-  "../Common/SingleViewExample.cpp"
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"
@@ -68,6 +60,7 @@ target_include_directories(
 target_link_libraries(
   ${META_MODULE_TARGET}
   PRIVATE
+    oxygen::examples-demoshell
     oxygen::platform
     oxygen::input
     oxygen::core

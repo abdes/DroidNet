@@ -43,8 +43,8 @@
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "Common/AsyncEngineApp.h"
-#include "Common/SingleViewExample.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/SingleViewModuleBase.h"
 #include "InputSystem/MainModule.h"
 
 namespace {
@@ -242,7 +242,7 @@ auto CheckLimits(float& direction, float& new_distance) -> void
 
 namespace oxygen::examples::input {
 
-MainModule::MainModule(const common::AsyncEngineApp& app)
+MainModule::MainModule(const DemoAppContext& app)
   : Base(app)
 {
   DCHECK_NOTNULL_F(app_.platform);

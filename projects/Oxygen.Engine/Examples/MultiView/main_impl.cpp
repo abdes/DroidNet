@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <filesystem>
 #include <span>
 #include <string>
 #include <string_view>
@@ -39,7 +40,7 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Renderer/Renderer.h>
 
-#include "Common/AsyncEngineApp.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
 #include "MultiView/MainModule.h"
 
 using namespace std::chrono_literals;
@@ -50,7 +51,7 @@ namespace co = oxygen::co;
 namespace g = oxygen::graphics;
 
 namespace {
-auto EventLoopRun(const oxygen::examples::common::AsyncEngineApp& app) -> void
+auto EventLoopRun(const oxygen::examples::DemoAppContext& app) -> void
 {
   while (app.running.load(std::memory_order_relaxed)) {
     app.platform->Async().PollOne();
@@ -65,20 +66,17 @@ auto EventLoopRun(const oxygen::examples::common::AsyncEngineApp& app) -> void
 } // namespace
 
 template <>
-struct oxygen::co::EventLoopTraits<oxygen::examples::common::AsyncEngineApp> {
-  static auto Run(examples::common::AsyncEngineApp& app) -> void
-  {
-    EventLoopRun(app);
-  }
-  static auto Stop(examples::common::AsyncEngineApp& app) -> void
+struct oxygen::co::EventLoopTraits<oxygen::examples::DemoAppContext> {
+  static auto Run(examples::DemoAppContext& app) -> void { EventLoopRun(app); }
+  static auto Stop(examples::DemoAppContext& app) -> void
   {
     app.running.store(false, std::memory_order_relaxed);
   }
-  static auto IsRunning(const examples::common::AsyncEngineApp& app) -> bool
+  static auto IsRunning(const examples::DemoAppContext& app) -> bool
   {
     return app.running.load(std::memory_order_relaxed);
   }
-  static auto EventLoopId(examples::common::AsyncEngineApp& app) -> EventLoopID
+  static auto EventLoopId(examples::DemoAppContext& app) -> EventLoopID
   {
     return EventLoopID(&app);
   }
@@ -86,8 +84,7 @@ struct oxygen::co::EventLoopTraits<oxygen::examples::common::AsyncEngineApp> {
 
 namespace {
 
-auto RegisterEngineModules(oxygen::examples::common::AsyncEngineApp& app)
-  -> void
+auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
 {
   LOG_F(INFO, "Registering engine modules...");
 
@@ -119,7 +116,7 @@ auto RegisterEngineModules(oxygen::examples::common::AsyncEngineApp& app)
   register_module(std::move(renderer_unique));
 }
 
-auto AsyncMain(oxygen::examples::common::AsyncEngineApp& app, uint32_t frames)
+auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames)
   -> co::Co<int>
 {
   OXCO_WITH_NURSERY(n)
@@ -168,7 +165,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
   uint32_t target_fps = 100U;
   bool headless = false;
   bool enable_vsync = true;
-  oxygen::examples::common::AsyncEngineApp app {};
+  oxygen::examples::DemoAppContext app {};
 
   try {
     CommandBuilder default_command(Command::DEFAULT);
@@ -252,7 +249,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .enable_vsync = enable_vsync,
       .extra = {},
       .path_finder_config = o::PathFinderConfig::Create()
-        .WithWorkspaceRoot(app.workspace_root)
+        .WithWorkspaceRoot(std::filesystem::current_path())
         .Build(),
     };
     const auto& loader = o::GraphicsBackendLoader::GetInstance();

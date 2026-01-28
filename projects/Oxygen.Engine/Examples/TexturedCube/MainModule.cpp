@@ -21,7 +21,7 @@
 
 namespace oxygen::examples::textured_cube {
 
-MainModule::MainModule(const common::AsyncEngineApp& app)
+MainModule::MainModule(const DemoAppContext& app)
   : Base(app)
 {
   DCHECK_NOTNULL_F(app_.platform);

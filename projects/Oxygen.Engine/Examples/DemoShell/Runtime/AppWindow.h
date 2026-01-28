@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <memory>
 #include <vector>
@@ -30,9 +31,9 @@ namespace graphics {
 }
 } // namespace oxygen
 
-namespace oxygen::examples::common {
+namespace oxygen::examples {
 
-struct AsyncEngineApp;
+class DemoAppContext;
 
 //! Single component combining native window + surface + framebuffers.
 /*!
@@ -41,17 +42,16 @@ struct AsyncEngineApp;
  async handlers and the engine-thread-only GPU resource lifecycle (resize,
  framebuffer creation/cleanup, and notifications for ImGui device objects).
 
- The component is self-contained and intentionally avoids depending on any
- other example components so example modules can AddComponent<AppWindow>(app)
- and treat this as the single window / render lifecycle owner.
+ The component is self-contained and intentionally avoids depending on other
+ demo components so demo modules can AddComponent<AppWindow>(app) and treat
+ this as the single window / render lifecycle owner.
 */
 class AppWindow final : public oxygen::Component,
                         public std::enable_shared_from_this<AppWindow> {
   OXYGEN_COMPONENT(AppWindow)
 
 public:
-  explicit AppWindow(
-    const oxygen::examples::common::AsyncEngineApp& app) noexcept;
+  explicit AppWindow(const DemoAppContext& app) noexcept;
   ~AppWindow() noexcept override;
 
   auto CreateAppWindow(const platform::window::Properties& props) -> bool;
@@ -71,7 +71,7 @@ public:
   auto ApplyPendingResize() -> void;
 
 private:
-  // Surface / framebuffer lifecycle (engine thread usage)
+  // Surface / framebuffer lifecycle (engine thread usage).
   auto CreateSurface() -> bool;
   // Ensure framebuffers are created/re-created for the current surface size.
   auto EnsureFramebuffers() -> bool;
@@ -91,7 +91,7 @@ private:
   // it is closed.
   std::weak_ptr<platform::Window> window_ {};
 
-  // Platform destructor token
+  // Platform destructor token.
   size_t window_lifecycle_token_ { 0 };
 
   // GPU state owned by this component. Because of the volatile nature of
@@ -112,4 +112,4 @@ private:
   std::unique_ptr<SubscriptionToken> imgui_subscription_token_ {};
 };
 
-} // namespace oxygen::examples::common
+} // namespace oxygen::examples

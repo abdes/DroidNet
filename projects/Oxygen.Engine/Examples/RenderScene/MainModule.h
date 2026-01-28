@@ -19,9 +19,9 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
-#include "Common/AsyncEngineApp.h"
-#include "Common/SingleViewExample.h"
 #include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/SingleViewModuleBase.h"
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/Services/SkyboxService.h"
 
@@ -44,12 +44,12 @@ class SceneLoaderService;
 
 namespace oxygen::examples::render_scene {
 
-class MainModule final : public common::SingleViewExample {
+class MainModule final : public SingleViewModuleBase {
   OXYGEN_TYPED(MainModule)
 public:
-  using Base = oxygen::examples::common::SingleViewExample;
+  using Base = oxygen::examples::SingleViewModuleBase;
 
-  explicit MainModule(const oxygen::examples::common::AsyncEngineApp& app);
+  explicit MainModule(const oxygen::examples::DemoAppContext& app);
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {

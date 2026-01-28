@@ -24,30 +24,30 @@ class Framebuffer;
 
 #include <Oxygen/OxCo/Co.h>
 
-namespace oxygen::examples::common {
+namespace oxygen::examples {
 
-struct AsyncEngineApp;
+class DemoAppContext;
 
 //! Small component that owns a lightweight render-graph and per-frame
-//! RenderContext used by example modules.
+//! RenderContext used by demo modules.
 /*!
-  The component encapsulates the common example pattern of creating a small
+  The component encapsulates the common demo pattern of creating a small
   set of passes (DepthPrePass, ShaderPass, TransparentPass) and exposes the
-  pass objects + their configuration objects so example modules can access
+  pass objects + their configuration objects so demo modules can access
   and tweak them. It also holds an engine::RenderContext instance which is
-  reused across frames by examples.
+  reused across frames by demos.
 */
 class RenderGraph final : public oxygen::Component {
   OXYGEN_COMPONENT(RenderGraph)
 
 public:
-  explicit RenderGraph(const AsyncEngineApp& app) noexcept;
+  explicit RenderGraph(const DemoAppContext& app) noexcept;
   ~RenderGraph() noexcept override = default;
 
   // Create default pass objects and configs if missing.
   auto SetupRenderPasses() -> void;
 
-  // Accessors
+  // Accessors.
   auto GetRenderContext() noexcept -> oxygen::engine::RenderContext&
   {
     return render_context_;
@@ -138,10 +138,10 @@ public:
     return sky_atmo_lut_pass_config_;
   }
 
-  // Helpers for per-frame attachment management. Examples frequently need to
+  // Helpers for per-frame attachment management. Demos frequently need to
   // assign the current swapchain framebuffer to the render-context and wire
   // the pass configs to the back-buffer textures. These convenience helpers
-  // centralize that logic so examples only call a single API point.
+  // centralize that logic so demos only call a single API point.
   auto ClearBackbufferReferences() -> void;
 
   auto PrepareForRenderFrame(
@@ -172,7 +172,7 @@ public:
     oxygen::graphics::CommandRecorder& recorder) -> co::Co<>;
 
 private:
-  // Passes and configuration owned by the component
+  // Passes and configuration owned by the component.
   std::shared_ptr<oxygen::engine::DepthPrePass> depth_pass_ {};
   std::shared_ptr<oxygen::engine::DepthPrePassConfig> depth_pass_config_ {};
 
@@ -207,13 +207,13 @@ private:
   std::shared_ptr<oxygen::engine::LightCullingPassConfig>
     light_culling_pass_config_ {};
 
-  // Reference to app for accessing Graphics
-  const AsyncEngineApp* app_ { nullptr };
+  // Reference to app for accessing Graphics.
+  const DemoAppContext* app_ { nullptr };
 
-  // Shared per-frame render context used by example modules.
+  // Shared per-frame render context used by demo modules.
   oxygen::engine::RenderContext render_context_ {};
 
   bool wireframe_enabled_ { false };
 };
 
-} // namespace oxygen::examples::common
+} // namespace oxygen::examples

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Common/SingleViewExample.h"
+#include "DemoShell/Runtime/SingleViewModuleBase.h"
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -13,27 +13,26 @@
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/SceneCameraViewResolver.h>
 
-namespace oxygen::examples::common {
+namespace oxygen::examples {
 
-SingleViewExample::SingleViewExample(const AsyncEngineApp& app)
-  : ExampleModuleBase(app)
+SingleViewModuleBase::SingleViewModuleBase(const DemoAppContext& app)
+  : DemoModuleBase(app)
 {
   try {
-    auto& rg = AddComponent<oxygen::examples::common::RenderGraph>(app);
-    render_graph_
-      = oxygen::observer_ptr<oxygen::examples::common::RenderGraph>(&rg);
+    auto& rg = AddComponent<RenderGraph>(app);
+    render_graph_ = oxygen::observer_ptr<RenderGraph>(&rg);
   } catch (const std::exception& ex) {
-    LOG_F(WARNING, "SingleViewExample: failed to create RenderGraph: {}",
+    LOG_F(WARNING, "SingleViewModuleBase: failed to create RenderGraph: {}",
       ex.what());
   }
 }
 
-void SingleViewExample::OnShutdown() noexcept
+void SingleViewModuleBase::OnShutdown() noexcept
 {
   UnregisterViewForRendering("module shutdown");
 }
 
-auto SingleViewExample::ClearBackbufferReferences() -> void
+auto SingleViewModuleBase::ClearBackbufferReferences() -> void
 {
   if (!render_graph_) {
     return;
@@ -46,7 +45,7 @@ auto SingleViewExample::ClearBackbufferReferences() -> void
   }
 }
 
-auto SingleViewExample::UpdateFrameContext(
+auto SingleViewModuleBase::UpdateFrameContext(
   engine::FrameContext& context, ViewReadyCallback on_view_ready) -> void
 {
   const bool has_view = app_window_ && app_window_->GetWindow()
@@ -113,8 +112,8 @@ auto SingleViewExample::UpdateFrameContext(
   }
 }
 
-auto SingleViewExample::RegisterViewForRendering(scene::SceneNode camera_node)
-  -> void
+auto SingleViewModuleBase::RegisterViewForRendering(
+  scene::SceneNode camera_node) -> void
 {
   if (renderer_view_registered_) {
     return;
@@ -170,7 +169,7 @@ auto SingleViewExample::RegisterViewForRendering(scene::SceneNode camera_node)
   LOG_F(INFO, "Registered renderer view {}", view_id_.get());
 }
 
-auto SingleViewExample::UnregisterViewForRendering(std::string_view reason)
+auto SingleViewModuleBase::UnregisterViewForRendering(std::string_view reason)
   -> void
 {
   if (!renderer_view_registered_) {
@@ -188,7 +187,7 @@ auto SingleViewExample::UnregisterViewForRendering(std::string_view reason)
   renderer_view_registered_ = false;
 }
 
-auto SingleViewExample::ResolveRenderer() const -> oxygen::engine::Renderer*
+auto SingleViewModuleBase::ResolveRenderer() const -> oxygen::engine::Renderer*
 {
   if (!app_.engine) {
     return nullptr;
@@ -202,4 +201,4 @@ auto SingleViewExample::ResolveRenderer() const -> oxygen::engine::Renderer*
   return &(renderer_module->get());
 }
 
-} // namespace oxygen::examples::common
+} // namespace oxygen::examples

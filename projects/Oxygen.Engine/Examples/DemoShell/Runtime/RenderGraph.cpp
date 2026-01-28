@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Common/RenderGraph.h"
+#include "DemoShell/Runtime/RenderGraph.h"
 
-#include "Common/AsyncEngineApp.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -18,21 +18,21 @@
 
 using namespace oxygen;
 
-namespace oxygen::examples::common {
+namespace oxygen::examples {
 
-RenderGraph::RenderGraph(const AsyncEngineApp& app) noexcept
+RenderGraph::RenderGraph(const DemoAppContext& app) noexcept
   : app_(&app)
 {
   // Nothing to do eagerly — pass objects are created lazily in
   // SetupRenderPasses() on demand. Keeping construction cheap allows
-  // examples to add this component early without heavy work.
+  // demos to add this component early without heavy work.
 }
 
 auto RenderGraph::SetupRenderPasses() -> void
 {
   LOG_SCOPE_F(3, "RenderGraph::SetupRenderPasses");
 
-  // DepthPrePass
+  // DepthPrePass.
   if (!depth_pass_config_) {
     depth_pass_config_ = std::make_shared<engine::DepthPrePassConfig>();
     depth_pass_config_->debug_name = "DepthPrePass";
@@ -41,7 +41,7 @@ auto RenderGraph::SetupRenderPasses() -> void
     depth_pass_ = std::make_shared<engine::DepthPrePass>(depth_pass_config_);
   }
 
-  // Shader pass
+  // Shader pass.
   if (!shader_pass_config_) {
     shader_pass_config_ = std::make_shared<engine::ShaderPassConfig>();
     shader_pass_config_->clear_color
@@ -52,7 +52,7 @@ auto RenderGraph::SetupRenderPasses() -> void
     shader_pass_ = std::make_shared<engine::ShaderPass>(shader_pass_config_);
   }
 
-  // Wireframe pass (dedicated, unlit)
+  // Wireframe pass (dedicated, unlit).
   if (!wireframe_pass_config_) {
     wireframe_pass_config_ = std::make_shared<engine::WireframePassConfig>();
     wireframe_pass_config_->clear_color
@@ -64,7 +64,7 @@ auto RenderGraph::SetupRenderPasses() -> void
       = std::make_shared<engine::WireframePass>(wireframe_pass_config_);
   }
 
-  // Wireframe-only pass stack for PiP rendering
+  // Wireframe-only pass stack for PiP rendering.
   if (!wireframe_depth_pass_config_) {
     wireframe_depth_pass_config_
       = std::make_shared<engine::DepthPrePassConfig>();
@@ -87,7 +87,7 @@ auto RenderGraph::SetupRenderPasses() -> void
       = std::make_shared<engine::ShaderPass>(wireframe_shader_pass_config_);
   }
 
-  // Transparent pass
+  // Transparent pass.
   if (!transparent_pass_config_) {
     transparent_pass_config_
       = std::make_shared<engine::TransparentPass::Config>();
@@ -98,7 +98,7 @@ auto RenderGraph::SetupRenderPasses() -> void
       = std::make_shared<engine::TransparentPass>(transparent_pass_config_);
   }
 
-  // Light culling pass (requires Graphics for transient buffer allocation)
+  // Light culling pass (requires Graphics for transient buffer allocation).
   if (!light_culling_pass_config_) {
     light_culling_pass_config_
       = std::make_shared<engine::LightCullingPassConfig>();
@@ -111,7 +111,7 @@ auto RenderGraph::SetupRenderPasses() -> void
     }
   }
 
-  // Sky pass (after opaque, before transparent)
+  // Sky pass (after opaque, before transparent).
   if (!sky_pass_config_) {
     sky_pass_config_ = std::make_shared<engine::SkyPassConfig>();
     sky_pass_config_->debug_name = "SkyPass";
@@ -120,8 +120,9 @@ auto RenderGraph::SetupRenderPasses() -> void
     sky_pass_ = std::make_shared<engine::SkyPass>(sky_pass_config_);
   }
 
-  // Sky Atmosphere LUT compute pass (requires LUT manager from Renderer)
-  // The LUT manager is owned by Renderer; we just configure and create the pass
+  // Sky Atmosphere LUT compute pass (requires LUT manager from Renderer).
+  // The LUT manager is owned by Renderer; we just configure and create the
+  // pass.
   if (!sky_atmo_lut_pass_config_ && app_ && app_->renderer) {
     if (auto* lut_manager
       = app_->renderer->GetSkyAtmosphereLutManager().get()) {
@@ -259,20 +260,20 @@ auto RenderGraph::RunPasses(const oxygen::engine::RenderContext& ctx,
   }
 
   // Sky Atmosphere LUT Compute Pass (runs early, only when LUTs need
-  // regeneration)
+  // regeneration).
   if (sky_atmo_lut_pass_) {
     co_await sky_atmo_lut_pass_->PrepareResources(ctx, recorder);
     co_await sky_atmo_lut_pass_->Execute(ctx, recorder);
   }
 
-  // Depth Pre-Pass execution
+  // Depth Pre-Pass execution.
   if (depth_pass_) {
     co_await depth_pass_->PrepareResources(ctx, recorder);
     co_await depth_pass_->Execute(ctx, recorder);
     ctx.RegisterPass<engine::DepthPrePass>(depth_pass_.get());
   }
 
-  // Light Culling Pass execution (after depth, before shading)
+  // Light Culling Pass execution (after depth, before shading).
   if (light_culling_pass_) {
     co_await light_culling_pass_->PrepareResources(ctx, recorder);
     co_await light_culling_pass_->Execute(ctx, recorder);
@@ -285,19 +286,19 @@ auto RenderGraph::RunPasses(const oxygen::engine::RenderContext& ctx,
     ctx.RegisterPass<engine::SkyPass>(sky_pass_.get());
   }
 
-  // Shader Pass execution
+  // Shader Pass execution.
   if (shader_pass_) {
     co_await shader_pass_->PrepareResources(ctx, recorder);
     co_await shader_pass_->Execute(ctx, recorder);
   }
 
-  // Sky Pass execution (after opaque geometry, before transparent)
+  // Sky Pass execution (after opaque geometry, before transparent).
   if (sky_pass_) {
     co_await sky_pass_->PrepareResources(ctx, recorder);
     co_await sky_pass_->Execute(ctx, recorder);
   }
 
-  // Transparent Pass execution
+  // Transparent Pass execution.
   if (transparent_pass_) {
     co_await transparent_pass_->PrepareResources(ctx, recorder);
     co_await transparent_pass_->Execute(ctx, recorder);
@@ -323,4 +324,4 @@ auto RenderGraph::RunWireframePasses(const oxygen::engine::RenderContext& ctx,
   co_return;
 }
 
-} // namespace oxygen::examples::common
+} // namespace oxygen::examples
