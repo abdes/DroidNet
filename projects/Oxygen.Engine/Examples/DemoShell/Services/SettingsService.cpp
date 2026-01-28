@@ -82,7 +82,7 @@ auto SettingsService::Save() const -> void
     return;
   }
 
-  output << storage_->data.dump(2);
+  output << storage_->data.dump(2) << '\n';
 }
 
 auto SettingsService::SplitKey(std::string_view key) -> std::vector<std::string>
