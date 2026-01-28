@@ -30,6 +30,7 @@
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 
+#include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/EnvironmentDebugPanel.h"
 
 namespace oxygen::examples::ui {
@@ -132,6 +133,8 @@ void EnvironmentDebugPanel::Initialize(const EnvironmentDebugConfig& config)
 
   // Sync debug flags from renderer (these persist across scene loads)
   SyncDebugFlagsFromRenderer();
+
+  LoadSettings();
 }
 
 void EnvironmentDebugPanel::UpdateConfig(const EnvironmentDebugConfig& config)
@@ -141,7 +144,17 @@ void EnvironmentDebugPanel::UpdateConfig(const EnvironmentDebugConfig& config)
   config_ = config;
   file_browser_ = config_.file_browser_service;
   if (scene_changed) {
+    LOG_F(INFO, "EnvironmentDebugPanel: scene changed (scene_present={})",
+      config_.scene ? "true" : "false");
     needs_sync_ = true;
+    apply_saved_sun_on_next_sync_ = true;
+    SyncFromScene();
+    needs_sync_ = false;
+    if (config_.scene && pending_changes_) {
+      LOG_F(INFO,
+        "EnvironmentDebugPanel: applying pending changes after scene sync");
+      ApplyPendingChanges();
+    }
   }
 }
 
@@ -874,6 +887,12 @@ void EnvironmentDebugPanel::SyncFromScene()
     sky_light_enabled_ = false;
     post_process_enabled_ = false;
     sun_present_ = false;
+    if (apply_saved_sun_on_next_sync_) {
+      LOG_F(INFO,
+        "EnvironmentDebugPanel: no environment yet; applying saved sun source");
+      ApplySavedSunSourcePreference();
+      apply_saved_sun_on_next_sync_ = false;
+    }
     return;
   }
 
@@ -927,6 +946,8 @@ void EnvironmentDebugPanel::SyncFromScene()
     const bool from_scene
       = (sun->GetSunSource() == scene::environment::SunSource::kFromScene);
     sun_source_ = from_scene ? 0 : 1;
+    LOG_F(INFO, "EnvironmentDebugPanel: scene sun source={} enabled={}",
+      from_scene ? "FromScene" : "Synthetic", sun_enabled_ ? "true" : "false");
     sun_azimuth_deg_ = sun->GetAzimuthDegrees();
     sun_elevation_deg_ = sun->GetElevationDegrees();
     sun_color_rgb_ = sun->GetColorRgb();
@@ -953,6 +974,15 @@ void EnvironmentDebugPanel::SyncFromScene()
     sun_present_ = false;
     sun_source_ = 0;
     sun_enabled_ = false;
+    LOG_F(INFO,
+      "EnvironmentDebugPanel: no sun in scene; defaulting to source=FromScene "
+      "enabled=false");
+  }
+
+  if (apply_saved_sun_on_next_sync_) {
+    LOG_F(INFO, "EnvironmentDebugPanel: applying saved sun source on sync");
+    ApplySavedSunSourcePreference();
+    apply_saved_sun_on_next_sync_ = false;
   }
 
   // NOTE: Fog sync removed - use Aerial Perspective from SkyAtmosphere.
@@ -1037,6 +1067,306 @@ void EnvironmentDebugPanel::SyncDebugFlagsFromRenderer()
 
 void EnvironmentDebugPanel::MarkDirty() { pending_changes_ = true; }
 
+void EnvironmentDebugPanel::ApplySavedSunSourcePreference()
+{
+  if (!saved_sun_source_) {
+    LOG_F(INFO, "EnvironmentDebugPanel: no saved sun source to apply");
+    return;
+  }
+
+  const int desired_source = *saved_sun_source_;
+  if (desired_source == 1) {
+    sun_source_ = 1;
+    sun_present_ = true;
+    LOG_F(INFO, "EnvironmentDebugPanel: forcing synthetic sun from settings");
+    LoadSunSettingsFromProfile(sun_source_);
+    pending_changes_ = true;
+    return;
+  }
+
+  if (sun_source_ != desired_source) {
+    LOG_F(INFO,
+      "EnvironmentDebugPanel: switching sun source to FromScene from settings");
+    sun_source_ = desired_source;
+    LoadSunSettingsFromProfile(sun_source_);
+    pending_changes_ = true;
+  }
+}
+
+auto EnvironmentDebugPanel::LoadSettings() -> void
+{
+  if (settings_loaded_) {
+    return;
+  }
+
+  const auto settings = oxygen::examples::SettingsService::Default();
+  if (!settings) {
+    return;
+  }
+
+  auto load_bool = [&](std::string_view key, bool& out) -> bool {
+    if (const auto value = settings->GetString(key)) {
+      out = (*value == "true");
+      return true;
+    }
+    return false;
+  };
+  auto load_float = [&](std::string_view key, float& out) -> bool {
+    if (const auto value = settings->GetFloat(key)) {
+      out = *value;
+      return true;
+    }
+    return false;
+  };
+  auto load_vec3 = [&](std::string_view prefix, glm::vec3& out) -> bool {
+    bool loaded = false;
+    std::string key(prefix);
+    key += ".x";
+    loaded |= load_float(key, out.x);
+    key.resize(prefix.size());
+    key += ".y";
+    loaded |= load_float(key, out.y);
+    key.resize(prefix.size());
+    key += ".z";
+    loaded |= load_float(key, out.z);
+    return loaded;
+  };
+  auto load_int = [&](std::string_view key, int& out) -> bool {
+    float value = 0.0f;
+    if (load_float(key, value)) {
+      out = static_cast<int>(value);
+      return true;
+    }
+    return false;
+  };
+
+  bool any_loaded = false;
+  any_loaded |= load_bool("environment.sky_atmo.enabled", sky_atmo_enabled_);
+  any_loaded
+    |= load_float("environment.sky_atmo.planet_radius_km", planet_radius_km_);
+  any_loaded |= load_float(
+    "environment.sky_atmo.atmosphere_height_km", atmosphere_height_km_);
+  any_loaded |= load_vec3("environment.sky_atmo.ground_albedo", ground_albedo_);
+  any_loaded |= load_float(
+    "environment.sky_atmo.rayleigh_scale_height_km", rayleigh_scale_height_km_);
+  any_loaded |= load_float(
+    "environment.sky_atmo.mie_scale_height_km", mie_scale_height_km_);
+  any_loaded
+    |= load_float("environment.sky_atmo.mie_anisotropy", mie_anisotropy_);
+  any_loaded
+    |= load_float("environment.sky_atmo.multi_scattering", multi_scattering_);
+  any_loaded
+    |= load_bool("environment.sky_atmo.sun_disk_enabled", sun_disk_enabled_);
+  any_loaded |= load_float(
+    "environment.sky_atmo.sun_disk_radius_deg", sun_disk_radius_deg_);
+  any_loaded |= load_float(
+    "environment.sky_atmo.aerial_perspective_scale", aerial_perspective_scale_);
+  any_loaded |= load_float("environment.sky_atmo.aerial_scattering_strength",
+    aerial_scattering_strength_);
+
+  any_loaded
+    |= load_bool("environment.sky_sphere.enabled", sky_sphere_enabled_);
+  any_loaded |= load_int("environment.sky_sphere.source", sky_sphere_source_);
+  any_loaded
+    |= load_vec3("environment.sky_sphere.solid_color", sky_sphere_solid_color_);
+  any_loaded
+    |= load_float("environment.sky_sphere.intensity", sky_sphere_intensity_);
+  any_loaded |= load_float(
+    "environment.sky_sphere.rotation_deg", sky_sphere_rotation_deg_);
+
+  any_loaded |= load_int("environment.skybox.layout", skybox_layout_idx_);
+  any_loaded
+    |= load_int("environment.skybox.output_format", skybox_output_format_idx_);
+  any_loaded |= load_int("environment.skybox.face_size", skybox_face_size_);
+  any_loaded |= load_bool("environment.skybox.flip_y", skybox_flip_y_);
+  any_loaded |= load_bool(
+    "environment.skybox.tonemap_hdr_to_ldr", skybox_tonemap_hdr_to_ldr_);
+  any_loaded |= load_float(
+    "environment.skybox.hdr_exposure_ev", skybox_hdr_exposure_ev_);
+  if (const auto path = settings->GetString("environment.skybox.path")) {
+    std::memset(skybox_path_.data(), 0, skybox_path_.size());
+    const std::size_t to_copy
+      = (std::min)(skybox_path_.size() - 1, path->size());
+    std::memcpy(skybox_path_.data(), path->data(), to_copy);
+    any_loaded = true;
+  }
+
+  any_loaded |= load_bool("environment.sky_light.enabled", sky_light_enabled_);
+  any_loaded |= load_int("environment.sky_light.source", sky_light_source_);
+  any_loaded |= load_vec3("environment.sky_light.tint", sky_light_tint_);
+  any_loaded
+    |= load_float("environment.sky_light.intensity", sky_light_intensity_);
+  any_loaded |= load_float("environment.sky_light.diffuse", sky_light_diffuse_);
+  any_loaded
+    |= load_float("environment.sky_light.specular", sky_light_specular_);
+
+  any_loaded |= load_bool("environment.sun.enabled", sun_enabled_);
+  const bool sun_source_loaded
+    = load_int("environment.sun.source", sun_source_);
+  any_loaded |= sun_source_loaded;
+  any_loaded |= load_float("environment.sun.azimuth_deg", sun_azimuth_deg_);
+  any_loaded |= load_float("environment.sun.elevation_deg", sun_elevation_deg_);
+  any_loaded |= load_vec3("environment.sun.color", sun_color_rgb_);
+  any_loaded |= load_float("environment.sun.intensity_lux", sun_intensity_lux_);
+  any_loaded
+    |= load_bool("environment.sun.use_temperature", sun_use_temperature_);
+  any_loaded |= load_float(
+    "environment.sun.temperature_kelvin", sun_temperature_kelvin_);
+  any_loaded |= load_float(
+    "environment.sun.disk_radius_deg", sun_component_disk_radius_deg_);
+
+  if (sun_source_loaded) {
+    saved_sun_source_ = sun_source_;
+    apply_saved_sun_on_next_sync_ = true;
+    SaveSunSettingsToProfile(sun_source_);
+    if (sun_source_ == 1) {
+      sun_present_ = true;
+    }
+    LOG_F(INFO, "EnvironmentDebugPanel: loaded sun source from settings={}",
+      sun_source_ == 0 ? "FromScene" : "Synthetic");
+  }
+
+  any_loaded
+    |= load_bool("environment.post_process.enabled", post_process_enabled_);
+  any_loaded |= load_int("environment.post_process.tone_mapper", tone_mapper_);
+  any_loaded
+    |= load_int("environment.post_process.exposure_mode", exposure_mode_);
+  any_loaded |= load_float("environment.post_process.exposure_compensation_ev",
+    exposure_compensation_ev_);
+  any_loaded |= load_float(
+    "environment.post_process.auto_exposure_min_ev", auto_exposure_min_ev_);
+  any_loaded |= load_float(
+    "environment.post_process.auto_exposure_max_ev", auto_exposure_max_ev_);
+  any_loaded |= load_float(
+    "environment.post_process.auto_exposure_speed_up", auto_exposure_speed_up_);
+  any_loaded |= load_float("environment.post_process.auto_exposure_speed_down",
+    auto_exposure_speed_down_);
+  any_loaded
+    |= load_float("environment.post_process.bloom_intensity", bloom_intensity_);
+  any_loaded
+    |= load_float("environment.post_process.bloom_threshold", bloom_threshold_);
+  any_loaded |= load_float("environment.post_process.saturation", saturation_);
+  any_loaded |= load_float("environment.post_process.contrast", contrast_);
+  any_loaded |= load_float("environment.post_process.vignette", vignette_);
+
+  any_loaded |= load_bool("environment.debug.use_lut", use_lut_);
+  any_loaded |= load_bool("environment.debug.visualize_lut", visualize_lut_);
+  any_loaded |= load_bool("environment.debug.force_analytic", force_analytic_);
+
+  if (any_loaded) {
+    LOG_F(INFO, "EnvironmentDebugPanel: settings loaded; pending apply");
+    settings_loaded_ = true;
+    needs_sync_ = false;
+    pending_changes_ = true;
+  }
+}
+
+auto EnvironmentDebugPanel::SaveSettings() const -> void
+{
+  const auto settings = oxygen::examples::SettingsService::Default();
+  if (!settings) {
+    return;
+  }
+
+  auto save_bool = [&](std::string_view key, bool value) {
+    settings->SetString(key, value ? "true" : "false");
+  };
+  auto save_float = [&](std::string_view key, float value) {
+    settings->SetFloat(key, value);
+  };
+  auto save_vec3 = [&](std::string_view prefix, const glm::vec3& value) {
+    std::string key(prefix);
+    key += ".x";
+    save_float(key, value.x);
+    key.resize(prefix.size());
+    key += ".y";
+    save_float(key, value.y);
+    key.resize(prefix.size());
+    key += ".z";
+    save_float(key, value.z);
+  };
+  auto save_int = [&](std::string_view key, int value) {
+    save_float(key, static_cast<float>(value));
+  };
+
+  save_bool("environment.sky_atmo.enabled", sky_atmo_enabled_);
+  save_float("environment.sky_atmo.planet_radius_km", planet_radius_km_);
+  save_float(
+    "environment.sky_atmo.atmosphere_height_km", atmosphere_height_km_);
+  save_vec3("environment.sky_atmo.ground_albedo", ground_albedo_);
+  save_float(
+    "environment.sky_atmo.rayleigh_scale_height_km", rayleigh_scale_height_km_);
+  save_float("environment.sky_atmo.mie_scale_height_km", mie_scale_height_km_);
+  save_float("environment.sky_atmo.mie_anisotropy", mie_anisotropy_);
+  save_float("environment.sky_atmo.multi_scattering", multi_scattering_);
+  save_bool("environment.sky_atmo.sun_disk_enabled", sun_disk_enabled_);
+  save_float("environment.sky_atmo.sun_disk_radius_deg", sun_disk_radius_deg_);
+  save_float(
+    "environment.sky_atmo.aerial_perspective_scale", aerial_perspective_scale_);
+  save_float("environment.sky_atmo.aerial_scattering_strength",
+    aerial_scattering_strength_);
+
+  save_bool("environment.sky_sphere.enabled", sky_sphere_enabled_);
+  save_int("environment.sky_sphere.source", sky_sphere_source_);
+  save_vec3("environment.sky_sphere.solid_color", sky_sphere_solid_color_);
+  save_float("environment.sky_sphere.intensity", sky_sphere_intensity_);
+  save_float("environment.sky_sphere.rotation_deg", sky_sphere_rotation_deg_);
+
+  save_int("environment.skybox.layout", skybox_layout_idx_);
+  save_int("environment.skybox.output_format", skybox_output_format_idx_);
+  save_int("environment.skybox.face_size", skybox_face_size_);
+  save_bool("environment.skybox.flip_y", skybox_flip_y_);
+  save_bool(
+    "environment.skybox.tonemap_hdr_to_ldr", skybox_tonemap_hdr_to_ldr_);
+  save_float("environment.skybox.hdr_exposure_ev", skybox_hdr_exposure_ev_);
+  if (!skybox_path_.empty()) {
+    settings->SetString(
+      "environment.skybox.path", std::string(skybox_path_.data()));
+  }
+
+  save_bool("environment.sky_light.enabled", sky_light_enabled_);
+  save_int("environment.sky_light.source", sky_light_source_);
+  save_vec3("environment.sky_light.tint", sky_light_tint_);
+  save_float("environment.sky_light.intensity", sky_light_intensity_);
+  save_float("environment.sky_light.diffuse", sky_light_diffuse_);
+  save_float("environment.sky_light.specular", sky_light_specular_);
+
+  save_bool("environment.sun.enabled", sun_enabled_);
+  save_int("environment.sun.source", sun_source_);
+  save_float("environment.sun.azimuth_deg", sun_azimuth_deg_);
+  save_float("environment.sun.elevation_deg", sun_elevation_deg_);
+  save_vec3("environment.sun.color", sun_color_rgb_);
+  save_float("environment.sun.intensity_lux", sun_intensity_lux_);
+  save_bool("environment.sun.use_temperature", sun_use_temperature_);
+  save_float("environment.sun.temperature_kelvin", sun_temperature_kelvin_);
+  save_float("environment.sun.disk_radius_deg", sun_component_disk_radius_deg_);
+
+  save_bool("environment.post_process.enabled", post_process_enabled_);
+  save_int("environment.post_process.tone_mapper", tone_mapper_);
+  save_int("environment.post_process.exposure_mode", exposure_mode_);
+  save_float("environment.post_process.exposure_compensation_ev",
+    exposure_compensation_ev_);
+  save_float(
+    "environment.post_process.auto_exposure_min_ev", auto_exposure_min_ev_);
+  save_float(
+    "environment.post_process.auto_exposure_max_ev", auto_exposure_max_ev_);
+  save_float(
+    "environment.post_process.auto_exposure_speed_up", auto_exposure_speed_up_);
+  save_float("environment.post_process.auto_exposure_speed_down",
+    auto_exposure_speed_down_);
+  save_float("environment.post_process.bloom_intensity", bloom_intensity_);
+  save_float("environment.post_process.bloom_threshold", bloom_threshold_);
+  save_float("environment.post_process.saturation", saturation_);
+  save_float("environment.post_process.contrast", contrast_);
+  save_float("environment.post_process.vignette", vignette_);
+
+  save_bool("environment.debug.use_lut", use_lut_);
+  save_bool("environment.debug.visualize_lut", visualize_lut_);
+  save_bool("environment.debug.force_analytic", force_analytic_);
+
+  settings->Save();
+}
+
 auto EnvironmentDebugPanel::GetSunSettingsForSource(const int source)
   -> SunUiSettings&
 {
@@ -1077,6 +1407,13 @@ auto EnvironmentDebugPanel::HasPendingChanges() const -> bool
 void EnvironmentDebugPanel::ApplyPendingChanges()
 {
   if (!pending_changes_ || !config_.scene) {
+    if (!pending_changes_) {
+      LOG_F(INFO,
+        "EnvironmentDebugPanel: ApplyPendingChanges skipped (no changes)");
+    } else {
+      LOG_F(
+        INFO, "EnvironmentDebugPanel: ApplyPendingChanges skipped (no scene)");
+    }
     return;
   }
 
@@ -1098,6 +1435,9 @@ void EnvironmentDebugPanel::ApplyPendingChanges()
     const auto sun_source = (sun_source_ == 0)
       ? scene::environment::SunSource::kFromScene
       : scene::environment::SunSource::kSynthetic;
+    LOG_F(INFO, "EnvironmentDebugPanel: applying sun source={} enabled={}",
+      sun_source_ == 0 ? "FromScene" : "Synthetic",
+      sun_enabled_ ? "true" : "false");
     sun->SetSunSource(sun_source);
     sun->SetAzimuthElevationDegrees(sun_azimuth_deg_, sun_elevation_deg_);
     sun->SetIntensityLux(sun_intensity_lux_);
@@ -1266,6 +1606,8 @@ void EnvironmentDebugPanel::ApplyPendingChanges()
   }
 
   pending_changes_ = false;
+  saved_sun_source_ = sun_source_;
+  SaveSettings();
 }
 
 auto EnvironmentDebugPanel::FindSunLightCandidate() const
