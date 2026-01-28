@@ -4,15 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// clang-format off
-
 // File: 'fa-regular-400.ttf' (33736 bytes)
-// Exported using binary_to_compressed_c.exe -u8 "fa-regular-400.ttf" FontAwesome
+// Exported using binary_to_compressed_c.exe -u8 "fa-regular-400.ttf"
+// FontAwesome
 
 #include <Oxygen/ImGui/Styles/FontAwesome-400.h>
 
 namespace oxygen::imgui::styles {
 
+// clang-format off
 const unsigned int FontAwesome_compressed_size = 21551;
 const unsigned char FontAwesome_compressed_data[21551] =
 {
@@ -375,6 +375,6 @@ const unsigned char FontAwesome_compressed_data[21551] =
     45,99,114,121,8,131,7,131,174,65,71,6,131,111,47,8,115,117,114,112,114,105,115,101,5,116,105,114,101,100,0,130,0,38,1,255,255,0,2,0,1,130,9,32,12,130,3,32,22,130,3,131,13,38,3,0,153,
     0,2,0,4,132,13,130,4,130,2,32,1,130,3,36,0,219,216,102,212,131,7,43,221,48,125,97,0,0,0,0,221,48,125,105,5,250,198,88,113,161,
 };
+// clang-format on
 
 } // namespace oxygen::imgui::styles
-// clang-format on

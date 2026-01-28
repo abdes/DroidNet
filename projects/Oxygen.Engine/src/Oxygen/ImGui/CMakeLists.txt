@@ -52,6 +52,8 @@ set(
   "ImGuiModule.h"
   "ImGuiGraphicsBackend.h"
   "ImGuiPass.h"
+  "Icons/IconsOxygenIcons.h"
+  "Icons/OxygenIcons.h"
   "Styles/FontAwesome-400.h"
   "Styles/IconsFontAwesome.h"
   "Styles/Spectrum.h"
@@ -60,6 +62,7 @@ set(
   OXYGEN_IMGUI_PRIVATE_SOURCES
   "ImGuiPass.cpp"
   "ImGuiModule.cpp"
+  "Icons/OxygenIcons.cpp"
   "Styles/Spectrum.cpp"
   "Styles/SourceSansProRegular.cpp"
   "Styles/FontAwesome-400.cpp"
