@@ -17,10 +17,6 @@
 
 #include <Oxygen/Data/AssetKey.h>
 
-namespace oxygen::content {
-class LooseCookedInspection;
-} // namespace oxygen::content
-
 namespace oxygen::examples::ui {
 
 //! Scene item from loose cooked index
@@ -82,8 +78,8 @@ struct LooseCookedLoaderConfig {
  */
 class LooseCookedLoaderPanel {
 public:
-  LooseCookedLoaderPanel() = default;
-  ~LooseCookedLoaderPanel() = default;
+  LooseCookedLoaderPanel();
+  ~LooseCookedLoaderPanel();
 
   //! Initialize panel with configuration
   void Initialize(const LooseCookedLoaderConfig& config);
@@ -106,25 +102,12 @@ public:
    */
   auto TryAutoLoad() -> bool;
 
-  //! Get currently loaded inspection
-  [[nodiscard]] auto GetInspection() const
-    -> const content::LooseCookedInspection*
-  {
-    return inspection_.get();
-  }
-
   //! Get list of scenes in currently loaded index
   [[nodiscard]] auto GetScenes() const
-    -> const std::vector<LooseCookedSceneItem>&
-  {
-    return scenes_;
-  }
+    -> const std::vector<LooseCookedSceneItem>&;
 
   //! Check if an index file is currently loaded
-  [[nodiscard]] auto HasLoadedIndex() const -> bool
-  {
-    return inspection_ != nullptr;
-  }
+  [[nodiscard]] auto HasLoadedIndex() const -> bool;
 
   //! Unload current index
   void UnloadIndex();
@@ -132,12 +115,8 @@ public:
 private:
   void LoadIndexFile(const std::filesystem::path& index_path);
 
-  LooseCookedLoaderConfig config_;
-  observer_ptr<FileBrowserService> file_browser_ { nullptr };
-  std::unique_ptr<content::LooseCookedInspection> inspection_;
-  std::vector<LooseCookedSceneItem> scenes_;
-  std::filesystem::path loaded_index_path_;
-  bool auto_load_attempted_ { false };
+  struct Impl;
+  std::unique_ptr<Impl> impl_ {};
 };
 
 } // namespace oxygen::examples::ui

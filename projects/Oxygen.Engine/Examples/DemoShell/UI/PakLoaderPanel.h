@@ -17,10 +17,6 @@
 
 #include <Oxygen/Data/AssetKey.h>
 
-namespace oxygen::content {
-class PakFile;
-} // namespace oxygen::content
-
 namespace oxygen::examples::ui {
 
 //! Scene item in PAK file browse index
@@ -82,8 +78,8 @@ struct PakLoaderConfig {
  */
 class PakLoaderPanel {
 public:
-  PakLoaderPanel() = default;
-  ~PakLoaderPanel() = default;
+  PakLoaderPanel();
+  ~PakLoaderPanel();
 
   //! Initialize panel with configuration
   void Initialize(const PakLoaderConfig& config);
@@ -97,23 +93,11 @@ public:
    */
   void Draw();
 
-  //! Get currently loaded PAK file
-  [[nodiscard]] auto GetLoadedPak() const -> const content::PakFile*
-  {
-    return pak_file_.get();
-  }
-
   //! Get list of scenes in currently loaded PAK
-  [[nodiscard]] auto GetScenes() const -> const std::vector<SceneListItem>&
-  {
-    return scenes_;
-  }
+  [[nodiscard]] auto GetScenes() const -> const std::vector<SceneListItem>&;
 
   //! Check if a PAK file is currently loaded
-  [[nodiscard]] auto HasLoadedPak() const -> bool
-  {
-    return pak_file_ != nullptr;
-  }
+  [[nodiscard]] auto HasLoadedPak() const -> bool;
 
   //! Unload current PAK file
   void UnloadPak();
@@ -122,13 +106,8 @@ private:
   void LoadPakFile(const std::filesystem::path& pak_path);
   auto EnumeratePakFiles() const -> std::vector<std::filesystem::path>;
 
-  PakLoaderConfig config_;
-  observer_ptr<FileBrowserService> file_browser_ { nullptr };
-  std::unique_ptr<content::PakFile> pak_file_;
-  std::vector<SceneListItem> scenes_;
-  std::filesystem::path loaded_pak_path_;
-  std::vector<std::filesystem::path> cached_pak_files_;
-  bool files_cached_ { false };
+  struct Impl;
+  std::unique_ptr<Impl> impl_ {};
 };
 
 } // namespace oxygen::examples::ui
