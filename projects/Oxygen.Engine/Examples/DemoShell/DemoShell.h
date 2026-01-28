@@ -19,17 +19,9 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 
-#include "DemoShell/DemoShellUi.h"
-#include "DemoShell/PanelRegistry.h"
 #include "DemoShell/Services/CameraLifecycleService.h"
-#include "DemoShell/UI/CameraControlPanel.h"
-#include "DemoShell/UI/CameraRigController.h"
-#include "DemoShell/UI/ContentLoaderPanel.h"
 #include "DemoShell/UI/DemoPanel.h"
-#include "DemoShell/UI/EnvironmentDebugPanel.h"
-#include "DemoShell/UI/LightCullingDebugPanel.h"
 #include "DemoShell/UI/RenderingPanel.h"
-#include "DemoShell/UI/SettingsPanel.h"
 
 namespace oxygen::engine {
 class InputSystem;
@@ -42,6 +34,16 @@ class FileBrowserService;
 } // namespace oxygen::examples
 
 namespace oxygen::examples {
+
+//! Standard panel enablement settings for the demo shell.
+struct DemoShellPanelConfig {
+  bool content_loader { true };
+  bool camera_controls { true };
+  bool environment { true };
+  bool lighting { true };
+  bool rendering { true };
+  bool settings { true };
+};
 
 //! Configuration for the demo shell and its standard panels.
 /*!
@@ -73,6 +75,8 @@ struct DemoShellConfig {
   std::filesystem::path cooked_root {};
   observer_ptr<FileBrowserService> file_browser_service { nullptr };
   observer_ptr<SkyboxService> skybox_service { nullptr };
+  DemoShellPanelConfig panel_config {};
+  bool enable_camera_rig { true };
 
   std::function<void(const data::AssetKey&)> on_scene_load_requested {};
   std::function<void(std::size_t)> on_dump_texture_memory {};
@@ -113,8 +117,8 @@ struct DemoShellConfig {
 */
 class DemoShell final {
 public:
-  DemoShell() = default;
-  ~DemoShell() = default;
+  DemoShell();
+  ~DemoShell();
 
   OXYGEN_MAKE_NON_COPYABLE(DemoShell);
   OXYGEN_MAKE_NON_MOVABLE(DemoShell);
@@ -127,6 +131,9 @@ public:
 
   //! Draw the demo shell UI layout and active panel contents.
   auto Draw() -> void;
+
+  //! Register a demo-specific panel with the shell.
+  auto RegisterPanel(observer_ptr<DemoPanel> panel) -> bool;
 
   //! Update the active scene reference for panel and camera use.
   auto UpdateScene(std::shared_ptr<scene::Scene> scene) -> void;
@@ -152,22 +159,8 @@ private:
   auto UpdateCameraControlPanelConfig() -> void;
   auto RegisterDemoPanels() -> void;
 
-  DemoShellConfig config_ {};
-  bool initialized_ { false };
-
-  PanelRegistry panel_registry_ {};
-  DemoShellUi demo_shell_ui_ {};
-  std::vector<std::unique_ptr<DemoPanel>> demo_panels_ {};
-
-  ui::ContentLoaderPanel content_loader_panel_ {};
-  ui::CameraControlPanel camera_control_panel_ {};
-  ui::LightingPanel lighting_panel_ {};
-  ui::RenderingPanel rendering_panel_ {};
-  ui::SettingsPanel settings_panel_ {};
-  ui::EnvironmentDebugPanel environment_debug_panel_ {};
-
-  std::unique_ptr<ui::CameraRigController> camera_rig_ {};
-  CameraLifecycleService camera_lifecycle_ {};
+  struct Impl;
+  std::unique_ptr<Impl> impl_ {};
 };
 
 } // namespace oxygen::examples

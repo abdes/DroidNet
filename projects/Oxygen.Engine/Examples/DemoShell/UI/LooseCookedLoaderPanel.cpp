@@ -17,13 +17,29 @@
 
 namespace oxygen::examples::ui {
 
+struct LooseCookedLoaderPanel::Impl {
+  LooseCookedLoaderConfig config {};
+  observer_ptr<FileBrowserService> file_browser { nullptr };
+  std::unique_ptr<content::LooseCookedInspection> inspection {};
+  std::vector<LooseCookedSceneItem> scenes {};
+  std::filesystem::path loaded_index_path {};
+  bool auto_load_attempted { false };
+};
+
+LooseCookedLoaderPanel::LooseCookedLoaderPanel()
+  : impl_(std::make_unique<Impl>())
+{
+}
+
+LooseCookedLoaderPanel::~LooseCookedLoaderPanel() = default;
+
 void LooseCookedLoaderPanel::Initialize(const LooseCookedLoaderConfig& config)
 {
-  config_ = config;
-  CHECK_NOTNULL_F(config_.file_browser_service,
+  impl_->config = config;
+  CHECK_NOTNULL_F(impl_->config.file_browser_service,
     "LooseCookedLoaderPanel requires a FileBrowserService");
-  file_browser_ = config_.file_browser_service;
-  auto_load_attempted_ = false;
+  impl_->file_browser = impl_->config.file_browser_service;
+  impl_->auto_load_attempted = false;
   UnloadIndex();
 
   // Attempt auto-load on initialization
@@ -36,33 +52,33 @@ void LooseCookedLoaderPanel::LoadIndexFile(
   UnloadIndex();
 
   try {
-    inspection_ = std::make_unique<content::LooseCookedInspection>();
-    inspection_->LoadFromFile(index_path);
-    loaded_index_path_ = index_path;
+    impl_->inspection = std::make_unique<content::LooseCookedInspection>();
+    impl_->inspection->LoadFromFile(index_path);
+    impl_->loaded_index_path = index_path;
 
     // Extract scene list
-    for (const auto& asset : inspection_->Assets()) {
+    for (const auto& asset : impl_->inspection->Assets()) {
       if (asset.asset_type != static_cast<uint8_t>(data::AssetType::kScene)) {
         continue;
       }
 
-      scenes_.push_back(LooseCookedSceneItem {
+      impl_->scenes.push_back(LooseCookedSceneItem {
         .virtual_path = asset.virtual_path,
         .key = asset.key,
       });
     }
 
-    std::sort(scenes_.begin(), scenes_.end(),
+    std::sort(impl_->scenes.begin(), impl_->scenes.end(),
       [](const LooseCookedSceneItem& a, const LooseCookedSceneItem& b) {
         return a.virtual_path < b.virtual_path;
       });
 
-    LOG_F(INFO, "Loaded loose cooked index with {} scenes: {}", scenes_.size(),
-      index_path.string());
+    LOG_F(INFO, "Loaded loose cooked index with {} scenes: {}",
+      impl_->scenes.size(), index_path.string());
 
     // Notify load callback
-    if (config_.on_index_loaded) {
-      config_.on_index_loaded(index_path);
+    if (impl_->config.on_index_loaded) {
+      impl_->config.on_index_loaded(index_path);
     }
 
   } catch (const std::exception& e) {
@@ -73,15 +89,15 @@ void LooseCookedLoaderPanel::LoadIndexFile(
 
 auto LooseCookedLoaderPanel::TryAutoLoad() -> bool
 {
-  if (auto_load_attempted_) {
+  if (impl_->auto_load_attempted) {
     return false;
   }
 
-  auto_load_attempted_ = true;
+  impl_->auto_load_attempted = true;
 
   std::error_code ec;
   const auto cooked_dir
-    = std::filesystem::absolute(config_.cooked_directory, ec);
+    = std::filesystem::absolute(impl_->config.cooked_directory, ec);
   if (ec) {
     return false;
   }
@@ -103,15 +119,26 @@ auto LooseCookedLoaderPanel::TryAutoLoad() -> bool
 
 void LooseCookedLoaderPanel::UnloadIndex()
 {
-  inspection_.reset();
-  scenes_.clear();
-  loaded_index_path_.clear();
+  impl_->inspection.reset();
+  impl_->scenes.clear();
+  impl_->loaded_index_path.clear();
+}
+
+auto LooseCookedLoaderPanel::GetScenes() const
+  -> const std::vector<LooseCookedSceneItem>&
+{
+  return impl_->scenes;
+}
+
+auto LooseCookedLoaderPanel::HasLoadedIndex() const -> bool
+{
+  return impl_->inspection != nullptr;
 }
 
 void LooseCookedLoaderPanel::Draw()
 {
   // Auto-load status
-  if (!auto_load_attempted_) {
+  if (!impl_->auto_load_attempted) {
     if (ImGui::Button("Auto-Load from .cooked")) {
       TryAutoLoad();
     }
@@ -120,14 +147,14 @@ void LooseCookedLoaderPanel::Draw()
 
   // File picker
   if (ImGui::Button("Browse for Index...")) {
-    const auto roots = file_browser_->GetContentRoots();
+    const auto roots = impl_->file_browser->GetContentRoots();
     auto picker_config = MakeLooseCookedIndexBrowserConfig(roots);
-    picker_config.initial_directory = config_.cooked_directory;
-    file_browser_->Open(picker_config);
+    picker_config.initial_directory = impl_->config.cooked_directory;
+    impl_->file_browser->Open(picker_config);
   }
 
-  file_browser_->UpdateAndDraw();
-  if (const auto selected_path = file_browser_->ConsumeSelection()) {
+  impl_->file_browser->UpdateAndDraw();
+  if (const auto selected_path = impl_->file_browser->ConsumeSelection()) {
     LoadIndexFile(*selected_path);
     return;
   }
@@ -145,29 +172,30 @@ void LooseCookedLoaderPanel::Draw()
   if (HasLoadedIndex()) {
     ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Loaded Index:");
     ImGui::SameLine();
-    ImGui::TextUnformatted(loaded_index_path_.filename().string().c_str());
+    ImGui::TextUnformatted(
+      impl_->loaded_index_path.filename().string().c_str());
 
     if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("%s", loaded_index_path_.string().c_str());
+      ImGui::SetTooltip("%s", impl_->loaded_index_path.string().c_str());
     }
 
-    ImGui::Text("Scenes: %zu", scenes_.size());
-    ImGui::Text("Total Assets: %zu", inspection_->Assets().size());
+    ImGui::Text("Scenes: %zu", impl_->scenes.size());
+    ImGui::Text("Total Assets: %zu", impl_->inspection->Assets().size());
     ImGui::Separator();
 
     // Scene selection list - stretch to fill available space
     const float available_height = ImGui::GetContentRegionAvail().y;
     if (ImGui::BeginListBox(
           "##LooseCookedScenes", ImVec2(-1.0f, available_height))) {
-      for (const auto& scene_item : scenes_) {
+      for (const auto& scene_item : impl_->scenes) {
         if (ImGui::Selectable(scene_item.virtual_path.c_str(), false)) {
           // Re-mount the selected cooked root before loading to avoid
           // ambiguous asset resolution across multiple sources.
-          if (config_.on_index_loaded && HasLoadedIndex()) {
-            config_.on_index_loaded(loaded_index_path_);
+          if (impl_->config.on_index_loaded && HasLoadedIndex()) {
+            impl_->config.on_index_loaded(impl_->loaded_index_path);
           }
-          if (config_.on_scene_selected) {
-            config_.on_scene_selected(scene_item.key);
+          if (impl_->config.on_scene_selected) {
+            impl_->config.on_scene_selected(scene_item.key);
           }
         }
 
@@ -180,18 +208,20 @@ void LooseCookedLoaderPanel::Draw()
       ImGui::EndListBox();
     }
 
-    if (scenes_.empty()) {
+    if (impl_->scenes.empty()) {
       ImGui::TextDisabled("No scenes found in index");
     }
 
   } else {
     ImGui::TextDisabled("No index loaded");
     ImGui::TextDisabled("Expected location: %s",
-      (config_.cooked_directory / "container.index.bin").string().c_str());
+      (impl_->config.cooked_directory / "container.index.bin")
+        .string()
+        .c_str());
 
     std::error_code ec;
     const bool cooked_exists
-      = std::filesystem::exists(config_.cooked_directory, ec);
+      = std::filesystem::exists(impl_->config.cooked_directory, ec);
 
     if (!cooked_exists) {
       ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f),

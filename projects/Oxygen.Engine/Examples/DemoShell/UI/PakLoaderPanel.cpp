@@ -17,14 +17,31 @@
 
 namespace oxygen::examples::ui {
 
+struct PakLoaderPanel::Impl {
+  PakLoaderConfig config {};
+  observer_ptr<FileBrowserService> file_browser { nullptr };
+  std::unique_ptr<content::PakFile> pak_file {};
+  std::vector<SceneListItem> scenes {};
+  std::filesystem::path loaded_pak_path {};
+  std::vector<std::filesystem::path> cached_pak_files {};
+  bool files_cached { false };
+};
+
+PakLoaderPanel::PakLoaderPanel()
+  : impl_(std::make_unique<Impl>())
+{
+}
+
+PakLoaderPanel::~PakLoaderPanel() = default;
+
 void PakLoaderPanel::Initialize(const PakLoaderConfig& config)
 {
-  config_ = config;
-  CHECK_NOTNULL_F(config_.file_browser_service,
+  impl_->config = config;
+  CHECK_NOTNULL_F(impl_->config.file_browser_service,
     "PakLoaderPanel requires a FileBrowserService");
-  file_browser_ = config_.file_browser_service;
-  files_cached_ = false;
-  cached_pak_files_.clear();
+  impl_->file_browser = impl_->config.file_browser_service;
+  impl_->files_cached = false;
+  impl_->cached_pak_files.clear();
   UnloadPak();
 }
 
@@ -34,13 +51,13 @@ auto PakLoaderPanel::EnumeratePakFiles() const
   std::vector<std::filesystem::path> files;
 
   std::error_code ec;
-  if (!std::filesystem::exists(config_.pak_directory, ec)
-    || !std::filesystem::is_directory(config_.pak_directory, ec)) {
+  if (!std::filesystem::exists(impl_->config.pak_directory, ec)
+    || !std::filesystem::is_directory(impl_->config.pak_directory, ec)) {
     return files;
   }
 
   for (const auto& entry :
-    std::filesystem::directory_iterator(config_.pak_directory, ec)) {
+    std::filesystem::directory_iterator(impl_->config.pak_directory, ec)) {
     if (ec) {
       break;
     }
@@ -67,13 +84,13 @@ void PakLoaderPanel::LoadPakFile(const std::filesystem::path& pak_path)
   UnloadPak();
 
   try {
-    pak_file_ = std::make_unique<content::PakFile>(pak_path);
-    loaded_pak_path_ = pak_path;
+    impl_->pak_file = std::make_unique<content::PakFile>(pak_path);
+    impl_->loaded_pak_path = pak_path;
 
     // Extract scene list from browse index
-    if (pak_file_->HasBrowseIndex()) {
-      for (const auto& browse_entry : pak_file_->BrowseIndex()) {
-        const auto entry = pak_file_->FindEntry(browse_entry.asset_key);
+    if (impl_->pak_file->HasBrowseIndex()) {
+      for (const auto& browse_entry : impl_->pak_file->BrowseIndex()) {
+        const auto entry = impl_->pak_file->FindEntry(browse_entry.asset_key);
         if (!entry) {
           continue;
         }
@@ -83,24 +100,24 @@ void PakLoaderPanel::LoadPakFile(const std::filesystem::path& pak_path)
           continue;
         }
 
-        scenes_.push_back(SceneListItem {
+        impl_->scenes.push_back(SceneListItem {
           .virtual_path = browse_entry.virtual_path,
           .key = browse_entry.asset_key,
         });
       }
 
-      std::sort(scenes_.begin(), scenes_.end(),
+      std::sort(impl_->scenes.begin(), impl_->scenes.end(),
         [](const SceneListItem& a, const SceneListItem& b) {
           return a.virtual_path < b.virtual_path;
         });
 
-      LOG_F(INFO, "Loaded PAK file with {} scenes: {}", scenes_.size(),
+      LOG_F(INFO, "Loaded PAK file with {} scenes: {}", impl_->scenes.size(),
         pak_path.string());
     }
 
     // Notify mount callback
-    if (config_.on_pak_mounted) {
-      config_.on_pak_mounted(pak_path);
+    if (impl_->config.on_pak_mounted) {
+      impl_->config.on_pak_mounted(pak_path);
     }
 
   } catch (const std::exception& e) {
@@ -111,36 +128,46 @@ void PakLoaderPanel::LoadPakFile(const std::filesystem::path& pak_path)
 
 void PakLoaderPanel::UnloadPak()
 {
-  pak_file_.reset();
-  scenes_.clear();
-  loaded_pak_path_.clear();
+  impl_->pak_file.reset();
+  impl_->scenes.clear();
+  impl_->loaded_pak_path.clear();
+}
+
+auto PakLoaderPanel::GetScenes() const -> const std::vector<SceneListItem>&
+{
+  return impl_->scenes;
+}
+
+auto PakLoaderPanel::HasLoadedPak() const -> bool
+{
+  return impl_->pak_file != nullptr;
 }
 
 void PakLoaderPanel::Draw()
 {
   // Cache file list on first draw
-  if (!files_cached_) {
-    cached_pak_files_ = EnumeratePakFiles();
-    files_cached_ = true;
+  if (!impl_->files_cached) {
+    impl_->cached_pak_files = EnumeratePakFiles();
+    impl_->files_cached = true;
   }
 
   // File picker and controls
   if (ImGui::Button("Browse for PAK...")) {
-    const auto roots = file_browser_->GetContentRoots();
+    const auto roots = impl_->file_browser->GetContentRoots();
     auto picker_config = MakePakFileBrowserConfig(roots);
-    picker_config.initial_directory = config_.pak_directory;
-    file_browser_->Open(picker_config);
+    picker_config.initial_directory = impl_->config.pak_directory;
+    impl_->file_browser->Open(picker_config);
   }
   ImGui::SameLine();
 
-  file_browser_->UpdateAndDraw();
-  if (const auto selected_path = file_browser_->ConsumeSelection()) {
+  impl_->file_browser->UpdateAndDraw();
+  if (const auto selected_path = impl_->file_browser->ConsumeSelection()) {
     LoadPakFile(*selected_path);
     return;
   }
 
   if (ImGui::Button("Refresh List")) {
-    files_cached_ = false;
+    impl_->files_cached = false;
   }
 
   if (HasLoadedPak()) {
@@ -156,27 +183,27 @@ void PakLoaderPanel::Draw()
   if (HasLoadedPak()) {
     ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Loaded PAK:");
     ImGui::SameLine();
-    ImGui::TextUnformatted(loaded_pak_path_.filename().string().c_str());
+    ImGui::TextUnformatted(impl_->loaded_pak_path.filename().string().c_str());
 
     if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("%s", loaded_pak_path_.string().c_str());
+      ImGui::SetTooltip("%s", impl_->loaded_pak_path.string().c_str());
     }
 
-    ImGui::Text("Scenes: %zu", scenes_.size());
+    ImGui::Text("Scenes: %zu", impl_->scenes.size());
     ImGui::Separator();
 
     // Scene selection list - stretch to fill available space
     const float available_height = ImGui::GetContentRegionAvail().y;
     if (ImGui::BeginListBox("##PakScenes", ImVec2(-1.0f, available_height))) {
-      for (const auto& scene_item : scenes_) {
+      for (const auto& scene_item : impl_->scenes) {
         if (ImGui::Selectable(scene_item.virtual_path.c_str(), false)) {
           // Re-mount the selected PAK before loading to avoid ambiguous asset
           // resolution when the same AssetKey exists in multiple sources.
-          if (config_.on_pak_mounted && HasLoadedPak()) {
-            config_.on_pak_mounted(loaded_pak_path_);
+          if (impl_->config.on_pak_mounted && HasLoadedPak()) {
+            impl_->config.on_pak_mounted(impl_->loaded_pak_path);
           }
-          if (config_.on_scene_selected) {
-            config_.on_scene_selected(scene_item.key);
+          if (impl_->config.on_scene_selected) {
+            impl_->config.on_scene_selected(scene_item.key);
           }
         }
 
@@ -195,7 +222,7 @@ void PakLoaderPanel::Draw()
 
     const float available_height = ImGui::GetContentRegionAvail().y;
     if (ImGui::BeginListBox("##PakFiles", ImVec2(-1.0f, available_height))) {
-      for (const auto& pak_path : cached_pak_files_) {
+      for (const auto& pak_path : impl_->cached_pak_files) {
         const auto filename = pak_path.filename().string();
 
         if (ImGui::Selectable(filename.c_str(), false)) {
@@ -210,10 +237,10 @@ void PakLoaderPanel::Draw()
       ImGui::EndListBox();
     }
 
-    if (cached_pak_files_.empty()) {
+    if (impl_->cached_pak_files.empty()) {
       ImGui::TextDisabled("No PAK files found in directory");
       ImGui::TextDisabled(
-        "Directory: %s", config_.pak_directory.string().c_str());
+        "Directory: %s", impl_->config.pak_directory.string().c_str());
     }
   }
 }
