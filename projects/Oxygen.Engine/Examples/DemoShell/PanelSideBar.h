@@ -10,7 +10,7 @@
 
 #include "DemoShell/PanelRegistry.h"
 
-namespace oxygen::examples::demo_shell {
+namespace oxygen::examples {
 
 struct PanelSideBarConfig {
   observer_ptr<PanelRegistry> panel_registry { nullptr };
@@ -40,4 +40,4 @@ private:
   static constexpr float kIconSize = 24.0F;
 };
 
-} // namespace oxygen::examples::demo_shell
+} // namespace oxygen::examples

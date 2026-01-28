@@ -6,7 +6,7 @@
 
 #include <imgui.h>
 
-#include "RenderScene/UI/ContentLoaderPanel.h"
+#include "DemoShell/UI/ContentLoaderPanel.h"
 
 namespace oxygen::examples::render_scene::ui {
 

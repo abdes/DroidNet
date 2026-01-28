@@ -766,7 +766,7 @@ auto KelvinToLinearRgb(float kelvin) -> glm::vec3 {
 - [X] File: [Examples/RenderScene/MainModule.cpp](Examples/RenderScene/MainModule.cpp)
 - [X] Currently creates DirectionalLight at line 578
 - [X] Add Sun component to SceneEnvironment for default scene
-- [X] File: [Examples/RenderScene/UI/EnvironmentDebugPanel.cpp](Examples/RenderScene/UI/EnvironmentDebugPanel.cpp)
+- [X] File: [Examples/DemoShell/UI/EnvironmentDebugPanel.cpp](Examples/DemoShell/UI/EnvironmentDebugPanel.cpp)
 - [X] Add ImGui controls for Sun component (sun source mode, azimuth/elevation, color, intensity, temperature, disk radius)
 - [X] Update existing sun direction controls to use Sun component API
 - [X] Add UI toggle between Synthetic and FromScene modes

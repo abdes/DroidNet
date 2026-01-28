@@ -15,7 +15,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Base/Platforms.h>
 #include <Oxygen/Content/Import/ImportDiagnostics.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/Import/Naming.h>
@@ -23,8 +22,7 @@
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Data/AssetType.h>
 
-#include "RenderScene/UI/FilePicker.h"
-#include "RenderScene/UI/ImportPanel.h"
+#include "DemoShell/UI/ImportPanel.h"
 
 namespace oxygen::examples::render_scene::ui {
 
@@ -745,44 +743,54 @@ auto ImportPanel::DrawSourceSelectionUi() -> void
     files_cached_ = false;
   }
 
-#if defined(OXYGEN_WINDOWS)
   if (ImGui::Button("Browse...")) {
     ImGui::OpenPopup("ImportBrowsePopup");
   }
   if (ImGui::BeginPopup("ImportBrowsePopup")) {
     if (ImGui::MenuItem("Pick file...")) {
-      auto picker_config = MakeModelFilePickerConfig();
+      auto picker_config = MakeModelFileBrowserConfig();
       if (!model_directory_text_.empty()) {
         picker_config.initial_directory
           = std::filesystem::path(model_directory_text_);
       }
-
-      if (const auto selected_path = ShowFilePicker(picker_config)) {
-        StartImport(*selected_path);
-        ImGui::EndPopup();
-        return;
-      }
+      file_browser_.Open(picker_config);
+      browse_mode_ = BrowseMode::kPickFile;
+      ImGui::CloseCurrentPopup();
     }
 
     if (ImGui::MenuItem("Pick directory...")) {
-      auto picker_config = MakeModelDirectoryPickerConfig();
+      auto picker_config = MakeModelDirectoryBrowserConfig();
       if (!model_directory_text_.empty()) {
         picker_config.initial_directory
           = std::filesystem::path(model_directory_text_);
       }
-
-      if (const auto selected_path = ShowDirectoryPicker(picker_config)) {
-        model_directory_text_ = selected_path->string();
-        fbx_directory_text_ = model_directory_text_;
-        gltf_directory_text_ = model_directory_text_;
-        config_.fbx_directory = *selected_path;
-        config_.gltf_directory = *selected_path;
-        files_cached_ = false;
-      }
+      file_browser_.Open(picker_config);
+      browse_mode_ = BrowseMode::kPickDirectory;
+      ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();
   }
-#endif
+
+  file_browser_.UpdateAndDraw();
+  if (const auto selected_path = file_browser_.ConsumeSelection()) {
+    if (browse_mode_ == BrowseMode::kPickFile) {
+      StartImport(*selected_path);
+      browse_mode_ = BrowseMode::kNone;
+      return;
+    }
+
+    if (browse_mode_ == BrowseMode::kPickDirectory) {
+      model_directory_text_ = selected_path->string();
+      fbx_directory_text_ = model_directory_text_;
+      gltf_directory_text_ = model_directory_text_;
+      config_.fbx_directory = *selected_path;
+      config_.gltf_directory = *selected_path;
+      files_cached_ = false;
+      browse_mode_ = BrowseMode::kNone;
+    }
+  } else if (browse_mode_ != BrowseMode::kNone && !file_browser_.IsOpen()) {
+    browse_mode_ = BrowseMode::kNone;
+  }
 
   ImGui::Separator();
   ImGui::Text("Format filters");

@@ -6,13 +6,9 @@
 
 #pragma once
 
-#include <array>
-#include <atomic>
 #include <filesystem>
-#include <future>
 #include <memory>
 #include <optional>
-#include <string>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -28,15 +24,16 @@
 #include "Common/SingleViewExample.h"
 #include "Common/SkyboxManager.h"
 #include "DemoShell/DemoShellUi.h"
+#include "DemoShell/UI/AxesWidget.h"
+#include "DemoShell/UI/CameraControlPanel.h"
+#include "DemoShell/UI/ContentLoaderPanel.h"
+#include "DemoShell/UI/EnvironmentDebugPanel.h"
+#include "DemoShell/UI/LightCullingDebugPanel.h"
+#include "DemoShell/UI/RenderingPanel.h"
+#include "DemoShell/UI/SettingsPanel.h"
 #include "RenderScene/FlyCameraController.h"
 #include "RenderScene/OrbitCameraController.h"
-#include "RenderScene/UI/AxesWidget.h"
-#include "RenderScene/UI/CameraControlPanel.h"
-#include "RenderScene/UI/ContentLoaderPanel.h"
-#include "RenderScene/UI/EnvironmentDebugPanel.h"
-#include "RenderScene/UI/LightCullingDebugPanel.h"
-#include "RenderScene/UI/RenderingPanel.h"
-#include "RenderScene/UI/SettingsPanel.h"
+#include <DemoShell/PanelRegistry.h>
 
 namespace oxygen::data {
 class SceneAsset;
@@ -51,9 +48,9 @@ namespace oxygen::content::import {
 class AssetImporter;
 } // namespace oxygen::content::import
 
-namespace oxygen::examples::demo_shell {
+namespace oxygen::examples {
 class DemoPanel;
-} // namespace oxygen::examples::demo_shell
+} // namespace oxygen::examples
 
 namespace oxygen::examples::render_scene {
 
@@ -157,7 +154,6 @@ private:
   std::shared_ptr<oxygen::input::InputMappingContext> orbit_controls_ctx_;
   std::shared_ptr<oxygen::input::InputMappingContext> fly_controls_ctx_;
 
-  enum class CameraMode { kOrbit, kFly };
   CameraMode camera_mode_ { CameraMode::kFly };
   std::unique_ptr<OrbitCameraController> orbit_controller_;
   std::unique_ptr<FlyCameraController> fly_controller_;
@@ -186,10 +182,10 @@ private:
    - **UI Shell**: `demo_shell_ui_` does not own panels; it only orchestrates
      layout and draws through the registry each frame.
   */
-  demo_shell::DemoKnobsViewModel demo_knobs_ {};
-  demo_shell::PanelRegistry panel_registry_ {};
-  demo_shell::DemoShellUi demo_shell_ui_ {};
-  std::vector<std::unique_ptr<demo_shell::DemoPanel>> demo_panels_ {};
+  DemoKnobsViewModel demo_knobs_ {};
+  PanelRegistry panel_registry_ {};
+  DemoShellUi demo_shell_ui_ {};
+  std::vector<std::unique_ptr<DemoPanel>> demo_panels_ {};
 
   // Content and scene state
   std::filesystem::path content_root_;

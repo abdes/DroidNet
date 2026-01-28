@@ -12,10 +12,10 @@
 #include <memory>
 #include <optional>
 
-#include "RenderScene/UI/CameraControlPanel.h"
-#include "RenderScene/UI/ImportPanel.h"
-#include "RenderScene/UI/LooseCookedLoaderPanel.h"
-#include "RenderScene/UI/PakLoaderPanel.h"
+#include "DemoShell/UI/CameraControlPanel.h"
+#include "DemoShell/UI/ImportPanel.h"
+#include "DemoShell/UI/LooseCookedLoaderPanel.h"
+#include "DemoShell/UI/PakLoaderPanel.h"
 
 namespace oxygen::examples::render_scene::ui {
 

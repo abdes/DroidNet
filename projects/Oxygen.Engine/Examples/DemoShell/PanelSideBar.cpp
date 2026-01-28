@@ -17,7 +17,7 @@
 
 #include "DemoShell/PanelSideBar.h"
 
-namespace oxygen::examples::demo_shell {
+namespace oxygen::examples {
 
 auto PanelSideBar::Initialize(const PanelSideBarConfig& config) -> void
 {
@@ -179,4 +179,4 @@ auto PanelSideBar::Draw() -> void
   ImGui::End();
 }
 
-} // namespace oxygen::examples::demo_shell
+} // namespace oxygen::examples

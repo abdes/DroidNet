@@ -12,9 +12,9 @@
 
 #include <Oxygen/Input/Action.h>
 
+#include "DemoShell/UI/CameraControlPanel.h"
 #include "RenderScene/FlyCameraController.h"
 #include "RenderScene/OrbitCameraController.h"
-#include "RenderScene/UI/CameraControlPanel.h"
 
 namespace oxygen::examples::render_scene::ui {
 

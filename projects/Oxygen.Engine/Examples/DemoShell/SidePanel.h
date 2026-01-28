@@ -10,7 +10,7 @@
 
 #include "DemoShell/PanelRegistry.h"
 
-namespace oxygen::examples::demo_shell {
+namespace oxygen::examples {
 
 //! Side panel configuration for the demo shell.
 struct SidePanelConfig {
@@ -47,6 +47,8 @@ private:
   float width_ { 420.0F };
   // Track last active panel name to detect selection changes.
   std::string last_active_panel_name_ {};
+  std::string last_saved_panel_name_ {};
+  float last_saved_panel_width_ { 0.0F };
 };
 
-} // namespace oxygen::examples::demo_shell
+} // namespace oxygen::examples

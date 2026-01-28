@@ -15,7 +15,7 @@ namespace oxygen::examples::render_scene::ui {
 //! Configuration for the settings panel.
 struct SettingsPanelConfig {
   //! Shared demo knob state for settings toggles.
-  observer_ptr<demo_shell::DemoKnobsViewModel> demo_knobs { nullptr };
+  observer_ptr<DemoKnobsViewModel> demo_knobs { nullptr };
 };
 
 //! Settings panel for UI visibility and stats toggles.

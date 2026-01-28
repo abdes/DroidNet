@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 
+#include "DemoShell/FileBrowser/FileBrowserService.h"
+
 #include <Oxygen/Data/AssetKey.h>
 
 namespace oxygen::content {
@@ -117,6 +119,7 @@ private:
   auto EnumeratePakFiles() const -> std::vector<std::filesystem::path>;
 
   PakLoaderConfig config_;
+  FileBrowserService file_browser_ {};
   std::unique_ptr<content::PakFile> pak_file_;
   std::vector<SceneListItem> scenes_;
   std::filesystem::path loaded_pak_path_;

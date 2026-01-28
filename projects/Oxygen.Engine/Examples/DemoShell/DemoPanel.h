@@ -8,7 +8,7 @@
 
 #include <string_view>
 
-namespace oxygen::examples::demo_shell {
+namespace oxygen::examples {
 
 //! Base interface for demo UI panels.
 /*!
@@ -50,4 +50,4 @@ public:
   }
 };
 
-} // namespace oxygen::examples::demo_shell
+} // namespace oxygen::examples

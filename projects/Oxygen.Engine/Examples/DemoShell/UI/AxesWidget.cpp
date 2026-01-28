@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "RenderScene/UI/AxesWidget.h"
+#include "DemoShell/UI/AxesWidget.h"
 
 #include <algorithm>
 #include <array>

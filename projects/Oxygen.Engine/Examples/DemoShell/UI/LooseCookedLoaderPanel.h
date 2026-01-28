@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 
+#include "DemoShell/FileBrowser/FileBrowserService.h"
+
 #include <Oxygen/Data/AssetKey.h>
 
 namespace oxygen::content {
@@ -128,6 +130,7 @@ private:
   void LoadIndexFile(const std::filesystem::path& index_path);
 
   LooseCookedLoaderConfig config_;
+  FileBrowserService file_browser_ {};
   std::unique_ptr<content::LooseCookedInspection> inspection_;
   std::vector<LooseCookedSceneItem> scenes_;
   std::filesystem::path loaded_index_path_;
