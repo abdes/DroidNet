@@ -11,7 +11,6 @@ This folder contains small, reusable helper classes used by the Oxygen Engine ex
 - `AppWindow.h` / `AppWindow.cpp` — Lightweight platform window wrapper used by examples to create and manage the main window and handle basic input/resizing.
 - `AsyncEngineApp.h` — Small application bootstrap helper for running the engine main loop on a background thread and coordinating startup/shutdown for examples.
 - `ExampleModuleBase.h` / `ExampleModuleBase.cpp` — Base class for example modules. Provides common lifecycle hooks (Initialize, Update, Render, Shutdown) and helper utilities for registering resources with the engine.
-- `ExampleComposition.h` — Utility composing Renderer/Scene/Camera sets used by multiple examples to avoid duplicated setup code.
 - `RenderGraph.h` / `RenderGraph.cpp` — A simplified render graph implementation used by examples to demonstrate rendering passes without pulling in the full engine render-pipeline code.
 
 ## Quick usage
@@ -22,8 +21,6 @@ This folder contains small, reusable helper classes used by the Oxygen Engine ex
 #include "Examples/Common/ExampleModuleBase.h"
 #include "Examples/Common/AppWindow.h"
 ```
-
-- Derive your example module from `ExampleModuleBase` and implement `OnInitialize`, `OnUpdate`, and `OnRender` (or the engine-specific lifecycle hooks provided). Use `ExampleComposition` helpers to set up a default camera/scene when appropriate.
 
 - Typical example flow:
   1. Create an `AppWindow` instance and show the window.

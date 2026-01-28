@@ -39,7 +39,6 @@ add_executable(
   ${META_MODULE_TARGET}
   "../main.cpp"
   "../Common/AsyncEngineApp.h"
-  "../Common/WorkspaceRoot.h"
   "../Common/AppWindow.h"
   "../Common/AppWindow.cpp"
   "../Common/RenderGraph.h"

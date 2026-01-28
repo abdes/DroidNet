@@ -41,7 +41,6 @@ add_executable(
   "../Common/RenderGraph.h"
   "../Common/SingleViewExample.cpp"
   "../Common/SingleViewExample.h"
-  "../Common/WorkspaceRoot.h"
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"

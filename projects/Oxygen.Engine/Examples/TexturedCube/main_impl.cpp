@@ -278,8 +278,6 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .thread_pool_size = (std::min)(4u, std::thread::hardware_concurrency()),
     });
 
-    app.workspace_root = oxygen::examples::common::FindWorkspaceRoot();
-
     // Load the graphics backend
     const GraphicsConfig gfx_config {
       .enable_debug = true,
