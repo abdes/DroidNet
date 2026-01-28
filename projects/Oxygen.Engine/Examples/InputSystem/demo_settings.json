@@ -1,6 +1,6 @@
 {
   "demo_shell": {
-    "active_panel": "Environment",
+    "active_panel": "Input Debug",
     "panels": {
       "environment": {
         "width": 634.0
@@ -89,9 +89,9 @@
         "z": 1.0
       },
       "disk_radius_deg": 0.2680000066757202,
-      "elevation_deg": 30.0,
+      "elevation_deg": 90.0,
       "enabled": "true",
-      "intensity_lux": 10.0,
+      "intensity_lux": 4.0,
       "source": 1.0,
       "temperature_kelvin": 6500.0,
       "use_temperature": "false"
