@@ -189,7 +189,11 @@ private:
 
   void SyncFromScene();
   void SyncDebugFlagsFromRenderer();
+  void LoadSettings();
+  void SaveSettings() const;
   void MarkDirty();
+  //! Applies persisted sun source preference after a scene sync.
+  void ApplySavedSunSourcePreference();
   //! Resets cached sun UI state to Sun component defaults.
   void ResetSunUiToDefaults();
   //! Finds a directional light node to use as sun when FromScene is selected.
@@ -210,6 +214,7 @@ private:
   //=== Configuration ===----------------------------------------------------//
   EnvironmentDebugConfig config_ {};
   bool initialized_ { false };
+  bool settings_loaded_ { false };
 
   //=== Cached State ===-----------------------------------------------------//
   // SkyAtmosphere
@@ -258,6 +263,8 @@ private:
   bool sun_present_ { false };
   bool sun_enabled_ { true };
   int sun_source_ { 0 }; // 0=FromScene, 1=Synthetic
+  std::optional<int> saved_sun_source_ {};
+  bool apply_saved_sun_on_next_sync_ { false };
   float sun_azimuth_deg_ { 90.0F };
   float sun_elevation_deg_ { 30.0F };
   glm::vec3 sun_color_rgb_ { 1.0F, 1.0F, 1.0F };
