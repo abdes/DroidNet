@@ -1,10 +1,11 @@
 {
   "camera_controls": 57344,
   "content_loader": 57345,
-  "environment": 57346,
-  "lighting": 57347,
-  "render_solid": 57348,
-  "render_wireframe": 57349,
-  "rendering": 57350,
-  "settings": 57351
+  "demo_panel": 57346,
+  "environment": 57347,
+  "lighting": 57348,
+  "render_solid": 57349,
+  "render_wireframe": 57350,
+  "rendering": 57351,
+  "settings": 57352
 }
