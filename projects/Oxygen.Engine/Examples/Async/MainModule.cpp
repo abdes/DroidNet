@@ -41,6 +41,7 @@
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/ImGui/ImGuiPass.h>
 #include <Oxygen/ImGui/ImguiModule.h>
 #include <Oxygen/Input/ActionTriggers.h>
@@ -63,8 +64,11 @@
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 
 #include "Async/MainModule.h"
+#include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/RenderGraph.h"
+#include "DemoShell/Services/FileBrowserService.h"
+#include "DemoShell/UI/DemoPanel.h"
 
 using oxygen::examples::async::MainModule;
 using WindowProps = oxygen::platform::window::Properties;
@@ -128,7 +132,8 @@ auto GetLocalTimeOfDayNow() -> LocalTimeOfDay
 
 // Helper: make a solid-color material asset snapshot
 auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
-  oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::kOpaque)
+  oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::kOpaque,
+  bool double_sided = false)
 {
   using namespace oxygen::data;
 
@@ -142,7 +147,7 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.header.version = 1;
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(domain);
-  desc.flags = 0;
+  desc.flags = double_sided ? pak::kMaterialFlag_DoubleSided : 0u;
   desc.shader_stages = 0;
   desc.base_color[0] = rgba.r;
   desc.base_color[1] = rgba.g;
@@ -273,9 +278,10 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
   std::vector<uint32_t> indices { 0, 1, 2, 2, 1, 3 };
 
   // Create two distinct solid-color materials
-  const auto red = MakeSolidColorMaterial("Red", { 1.0f, 0.1f, 0.1f, 1.0f });
-  const auto green
-    = MakeSolidColorMaterial("Green", { 0.1f, 1.0f, 0.1f, 1.0f });
+  const auto red = MakeSolidColorMaterial("Red", { 1.0f, 0.1f, 0.1f, 1.0f },
+    oxygen::data::MaterialDomain::kOpaque, true);
+  const auto green = MakeSolidColorMaterial("Green", { 0.1f, 1.0f, 0.1f, 1.0f },
+    oxygen::data::MaterialDomain::kOpaque, true);
 
   auto mesh = MeshBuilder(0, "Quad2SM")
                 .WithVertices(vertices)
@@ -507,6 +513,54 @@ auto AnimateSphereOrbit(oxygen::scene::SceneNode& sphere_node, double angle,
 
 namespace oxygen::examples::async {
 
+class AsyncDebugPanel final : public DemoPanel {
+public:
+  explicit AsyncDebugPanel(observer_ptr<MainModule> owner)
+    : owner_(owner)
+  {
+  }
+
+  [[nodiscard]] auto GetName() const noexcept -> std::string_view override
+  {
+    return "Async";
+  }
+
+  [[nodiscard]] auto GetPreferredWidth() const noexcept -> float override
+  {
+    return 520.0F;
+  }
+
+  [[nodiscard]] auto GetIcon() const noexcept -> std::string_view override
+  {
+    return oxygen::imgui::icons::kIconRenderWireframe;
+  }
+
+  auto DrawContents() -> void override
+  {
+    if (!owner_) {
+      return;
+    }
+
+    ImGui::Text("Async Demo");
+    ImGui::Separator();
+
+    if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen)) {
+      owner_->DrawSceneInfoPanel();
+    }
+
+    if (ImGui::CollapsingHeader("Spotlight")) {
+      owner_->DrawSpotLightPanel();
+    }
+
+    if (ImGui::CollapsingHeader("Actions", ImGuiTreeNodeFlags_DefaultOpen)) {
+      owner_->DrawFrameActionsPanel();
+    }
+  }
+
+private:
+  observer_ptr<MainModule> owner_ { nullptr };
+};
+
 MainModule::MainModule(const DemoAppContext& app)
   : Base(app)
   , app_(app)
@@ -555,6 +609,31 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
     SetupShaders();
     SetupInput();
     EnsureExampleScene();
+
+    file_browser_service_ = std::make_unique<FileBrowserService>();
+
+    shell_ = std::make_unique<DemoShell>();
+    async_panel_ = std::make_unique<AsyncDebugPanel>(observer_ptr { this });
+    DemoShellConfig shell_config;
+    shell_config.input_system = observer_ptr { app_.input_system.get() };
+    shell_config.scene = scene_;
+    shell_config.file_browser_service
+      = observer_ptr { file_browser_service_.get() };
+    shell_config.panel_config = DemoShellPanelConfig {
+      .content_loader = false,
+      .camera_controls = false,
+      .environment = true,
+      .lighting = true,
+      .rendering = true,
+      .settings = true,
+    };
+    shell_config.enable_camera_rig = false;
+
+    if (!shell_->Initialize(shell_config)) {
+      LOG_F(WARNING, "Async: DemoShell initialization failed");
+    } else if (!shell_->RegisterPanel(observer_ptr { async_panel_.get() })) {
+      LOG_F(WARNING, "Async: failed to register Async panel");
+    }
 
     // --- ImGuiPass configuration ---
     auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
@@ -836,19 +915,22 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   UpdateFrameContext(context, [this](int width, int height) {
     EnsureMainCamera(width, height);
     EnsureCameraSpotLight();
+    if (shell_) {
+      shell_->SetActiveCamera(main_camera_);
+    }
   });
-
-  UpdateSunFromLocalTime();
 
   // Handle scene mutations (material overrides, visibility changes)
   // Use the engine-provided frame start time so all modules use a
-  // consistent timestamp for this frame. This avoids micro-jitter caused
-  // by sampling the clock at slightly different moments inside the frame
-  // pipeline.
+  // consistent timestamp for this frame.
   const auto now = context.GetFrameStartTime();
   const float delta_time
     = std::chrono::duration<float>(now - start_time_).count();
   UpdateSceneMutations(delta_time);
+
+  if (shell_) {
+    shell_->Update(time::CanonicalDuration {});
+  }
 
   TrackFrameAction("Scene mutations updated");
   TrackPhaseEnd();
@@ -891,43 +973,6 @@ auto MainModule::EnsureCameraSpotLight() -> void
 
     const bool attached = camera_spot_light_.ReplaceLight(std::move(light));
     CHECK_F(attached, "Failed to attach SpotLight to CameraSpotLight");
-  }
-}
-
-auto MainModule::UpdateSunFromLocalTime() -> void
-{
-  if (!sun_follow_local_time_ || !sun_light_.IsAlive()) {
-    return;
-  }
-
-  const auto tod = GetLocalTimeOfDayNow();
-
-  // Simple day cycle driven by local time.
-  // - Sunrise around 06:00, noon around 12:00, sunset around 18:00.
-  // This is not a geographic solar model; it is a deterministic time-of-day
-  // visualization.
-  const double day_t = tod.day_fraction;
-  const double azimuth = (day_t * 2.0 * std::numbers::pi)
-    + static_cast<double>(sun_azimuth_offset_radians_);
-  const double phase = (day_t - 0.25) * 2.0 * std::numbers::pi;
-  const double altitude = std::sin(phase); // [-1, 1]
-
-  const glm::vec3 horiz(static_cast<float>(std::cos(azimuth)), 0.0F,
-    static_cast<float>(std::sin(azimuth)));
-
-  // Light ray direction points from the light toward the scene.
-  const glm::vec3 to_dir = glm::normalize(
-    glm::vec3(horiz.x, static_cast<float>(-altitude), horiz.z));
-
-  sun_light_.GetTransform().SetLocalRotation(RotationFromForwardToDir(to_dir));
-
-  if (auto sun_ref = sun_light_.GetLightAs<scene::DirectionalLight>()) {
-    auto& sun = sun_ref->get();
-    const float daylight
-      = std::clamp(static_cast<float>((std::max)(0.0, altitude)), 0.0F, 1.0F);
-    const float shaped = std::pow(daylight, sun_intensity_gamma_);
-    sun.Common().intensity = sun_night_intensity_
-      + (sun_day_intensity_ - sun_night_intensity_) * shaped;
   }
 }
 
@@ -1094,8 +1139,9 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
     }
   }
 
-  // Build ImGui overlay here
-  DrawDebugOverlay(context);
+  if (shell_) {
+    shell_->Draw();
+  }
 
   TrackFrameAction("GUI overlay built");
   TrackPhaseEnd();
@@ -1235,6 +1281,10 @@ auto MainModule::EnsureExampleScene() -> void
 
   scene_ = std::make_shared<Scene>("ExampleScene");
 
+  if (shell_) {
+    shell_->UpdateScene(scene_);
+  }
+
   // Create a LOD sphere and a multi-submesh quad
   auto sphere_geo = BuildSphereLodAsset();
   auto quad2sm_geo = BuildTwoSubmeshQuadAsset();
@@ -1321,49 +1371,6 @@ auto MainModule::EnsureExampleScene() -> void
   multisubmesh_.GetTransform().SetLocalPosition(glm::vec3(0.0F));
   multisubmesh_.GetTransform().SetLocalRotation(glm::quat(1, 0, 0, 0));
 
-  // Add a sunlight for the scene.
-  if (!sun_light_.IsAlive()) {
-    sun_light_ = scene_->CreateNode("Sun");
-    auto sun_tf = sun_light_.GetTransform();
-    sun_tf.SetLocalPosition(glm::vec3(0.0F, 0.0F, 0.0F));
-
-    // Set a natural sun direction (angled, not straight down).
-    // Convention: engine forward is -Y and Z-up.
-    // We compute a rotation that maps local Forward (-Y) to the desired
-    // world-space ray direction (from light toward the scene).
-    const glm::vec3 from_dir(0.0F, -1.0F, 0.0F);
-    const glm::vec3 to_dir = glm::normalize(glm::vec3(-1.0F, -0.6F, -1.4F));
-
-    const float cos_theta = std::clamp(glm::dot(from_dir, to_dir), -1.0F, 1.0F);
-    glm::quat sun_rot(1.0F, 0.0F, 0.0F, 0.0F);
-    if (cos_theta < 0.9999F) {
-      if (cos_theta > -0.9999F) {
-        const glm::vec3 axis = glm::normalize(glm::cross(from_dir, to_dir));
-        const float angle = std::acos(cos_theta);
-        sun_rot = glm::angleAxis(angle, axis);
-      } else {
-        // Opposite vectors: pick a stable orthogonal axis.
-        const glm::vec3 axis = glm::vec3(0.0F, 0.0F, 1.0F);
-        sun_rot = glm::angleAxis(std::numbers::pi_v<float>, axis);
-      }
-    }
-    sun_tf.SetLocalRotation(sun_rot);
-  }
-
-  if (sun_light_.IsAlive() && !sun_light_.HasLight()) {
-    auto sun_light = std::make_unique<scene::DirectionalLight>();
-    sun_light->Common().affects_world = true;
-    sun_light->Common().color_rgb = { 1.0F, 0.98F, 0.92F };
-    sun_light->Common().intensity = 2.0F;
-    sun_light->Common().mobility = scene::LightMobility::kRealtime;
-    sun_light->Common().casts_shadows = true;
-    sun_light->SetAngularSizeRadians(0.01F);
-    sun_light->SetEnvironmentContribution(true);
-
-    const bool attached = sun_light_.ReplaceLight(std::move(sun_light));
-    CHECK_F(attached, "Failed to attach DirectionalLight to Sun");
-  }
-
   // Set up a default flight path for the camera drone
   InitializeDefaultFlightPath();
 
@@ -1427,6 +1434,14 @@ auto MainModule::UpdateAnimations(double delta_time) -> void
     AnimateSphereOrbit(s.node, angle, s.radius, s.inclination, spin);
   }
 
+  if (multisubmesh_.IsAlive()) {
+    constexpr double kQuadSpinSpeed = 0.6; // radians/sec
+    const double quad_angle = std::fmod(anim_time_ * kQuadSpinSpeed, two_pi);
+    const glm::quat quad_rot = glm::angleAxis(
+      static_cast<float>(quad_angle), glm::vec3(0.0f, 1.0f, 0.0f));
+    multisubmesh_.GetTransform().SetLocalRotation(quad_rot);
+  }
+
   // Periodic lightweight logging to inspect very small deltas (avoid spam)
   static int dbg_counter = 0;
   ++dbg_counter;
@@ -1487,155 +1502,6 @@ auto MainModule::UpdateSceneMutations(const float delta_time) -> void
       LOG_F(INFO, "[MultiSubmesh] Submesh 1 override -> {}",
         apply_override ? "blue" : "clear");
     }
-  }
-}
-
-//=== Debug Overlay Implementation
-//===========================================//
-
-auto MainModule::DrawDebugOverlay(engine::FrameContext& context) -> void
-{
-  // Main debug window with docking capabilities
-  ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(400, 600), ImGuiCond_FirstUseEver);
-
-  if (ImGui::Begin("Debug - Oxygen Engine", nullptr,
-        ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_AlwaysAutoResize)) {
-
-    if (ImGui::BeginMenuBar()) {
-      if (ImGui::BeginMenu("View")) {
-        static bool show_performance = true;
-        static bool show_actions = true;
-        static bool show_scene = true;
-        static bool show_render_passes = true;
-
-        ImGui::MenuItem("Performance", nullptr, &show_performance);
-        ImGui::MenuItem("Frame Actions", nullptr, &show_actions);
-        ImGui::MenuItem("Scene Info", nullptr, &show_scene);
-        ImGui::MenuItem("Render Passes", nullptr, &show_render_passes);
-        ImGui::EndMenu();
-      }
-      ImGui::EndMenuBar();
-    }
-
-    // Basic frame info at the top
-    ImGui::Text("Frame: %u", context.GetFrameSequenceNumber().get());
-    ImGui::SameLine();
-    const auto frame_time
-      = std::chrono::duration<float>(context.GetFrameStartTime() - start_time_)
-          .count();
-    ImGui::Text("Time: %.2f s", frame_time);
-
-    ImGui::Separator();
-
-    // Tabbed interface for different panels
-    if (ImGui::BeginTabBar("DebugTabs")) {
-      if (ImGui::BeginTabItem("Performance")) {
-        DrawPerformancePanel();
-        ImGui::EndTabItem();
-      }
-
-      if (ImGui::BeginTabItem("Actions")) {
-        DrawFrameActionsPanel();
-        ImGui::EndTabItem();
-      }
-
-      if (ImGui::BeginTabItem("Scene")) {
-        DrawSceneInfoPanel();
-        ImGui::EndTabItem();
-      }
-
-      if (ImGui::BeginTabItem("Render")) {
-        DrawRenderPassesPanel();
-        ImGui::EndTabItem();
-      }
-
-      if (ImGui::BeginTabItem("Sun")) {
-        DrawSunLightPanel();
-        ImGui::EndTabItem();
-      }
-
-      if (ImGui::BeginTabItem("Spotlight")) {
-        DrawSpotLightPanel();
-        ImGui::EndTabItem();
-      }
-
-      ImGui::EndTabBar();
-    }
-  }
-  ImGui::End();
-}
-
-auto MainModule::DrawSunLightPanel() -> void
-{
-  ImGui::Text("Sun (Directional Light)");
-  ImGui::Separator();
-
-  const auto tod = GetLocalTimeOfDayNow();
-  ImGui::Text("Local time: %02d:%02d:%02d", tod.hour, tod.minute, tod.second);
-
-  ImGui::Checkbox("Follow local time", &sun_follow_local_time_);
-
-  ImGui::SliderFloat("Day Intensity", &sun_day_intensity_, 0.0F, 20.0F, "%.2f");
-  ImGui::SliderFloat(
-    "Night Intensity", &sun_night_intensity_, 0.0F, 2.0F, "%.3f");
-  ImGui::SliderFloat(
-    "Intensity Gamma", &sun_intensity_gamma_, 0.2F, 4.0F, "%.2f");
-  ImGui::SliderAngle(
-    "Azimuth Offset", &sun_azimuth_offset_radians_, -180.0F, 180.0F);
-
-  if (!sun_light_.IsAlive() || !sun_light_.HasLight()) {
-    ImGui::Spacing();
-    ImGui::TextColored(
-      ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "[ERROR] Sun node/light missing");
-    return;
-  }
-
-  auto sun_ref = sun_light_.GetLightAs<scene::DirectionalLight>();
-  if (!sun_ref) {
-    ImGui::TextColored(
-      ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "[ERROR] Sun is not a DirectionalLight");
-    return;
-  }
-
-  auto& sun = sun_ref->get();
-
-  bool affects_world = sun.Common().affects_world;
-  if (ImGui::Checkbox("Affects world", &affects_world)) {
-    sun.Common().affects_world = affects_world;
-  }
-
-  bool casts_shadows = sun.Common().casts_shadows;
-  if (ImGui::Checkbox("Casts shadows", &casts_shadows)) {
-    sun.Common().casts_shadows = casts_shadows;
-  }
-
-  bool env = sun.GetEnvironmentContribution();
-  if (ImGui::Checkbox("Environment contribution", &env)) {
-    sun.SetEnvironmentContribution(env);
-  }
-
-  float color[3] = { sun.Common().color_rgb.x, sun.Common().color_rgb.y,
-    sun.Common().color_rgb.z };
-  if (ImGui::ColorEdit3("Color", color)) {
-    sun.Common().color_rgb = { color[0], color[1], color[2] };
-  }
-
-  float intensity = sun.Common().intensity;
-  if (ImGui::SliderFloat(
-        "Intensity (current)", &intensity, 0.0F, 20.0F, "%.2f")) {
-    sun.Common().intensity = intensity;
-  }
-
-  float angular_size = sun.GetAngularSizeRadians();
-  if (ImGui::SliderAngle("Angular size", &angular_size, 0.0F, 5.0F)) {
-    sun.SetAngularSizeRadians(angular_size);
-  }
-
-  float ev = sun.Common().exposure_compensation_ev;
-  if (ImGui::SliderFloat(
-        "Exposure compensation (EV)", &ev, -8.0F, 8.0F, "%.2f")) {
-    sun.Common().exposure_compensation_ev = ev;
   }
 }
 
@@ -1714,105 +1580,6 @@ auto MainModule::DrawSpotLightPanel() -> void
   float source_radius = spot.GetSourceRadius();
   if (ImGui::SliderFloat("Source radius", &source_radius, 0.0F, 2.0F, "%.2f")) {
     spot.SetSourceRadius(source_radius);
-  }
-
-  float ev = spot.Common().exposure_compensation_ev;
-  if (ImGui::SliderFloat(
-        "Exposure compensation (EV)", &ev, -8.0F, 8.0F, "%.2f")) {
-    spot.Common().exposure_compensation_ev = ev;
-  }
-}
-
-auto MainModule::DrawPerformancePanel() -> void
-{
-  ImGui::Text("Performance Metrics");
-  ImGui::Separator();
-
-  // Current frame timing
-  if (!current_frame_tracker_.phase_timings.empty()) {
-    ImGui::Text("Current Frame Phases:");
-    ImGui::Indent();
-
-    float total_time = 0.0f;
-    for (const auto& [phase, duration] : current_frame_tracker_.phase_timings) {
-      const float ms = duration.count() / 1000.0f;
-      total_time += ms;
-
-      // Color code based on timing
-      ImVec4 color = ImVec4(0.0f, 1.0f, 0.0f, 1.0f); // Green
-      if (ms > 5.0f)
-        color = ImVec4(1.0f, 1.0f, 0.0f, 1.0f); // Yellow
-      if (ms > 10.0f)
-        color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f); // Red
-
-      ImGui::TextColored(color, "  %s: %.2f ms", phase.c_str(), ms);
-    }
-
-    ImGui::Unindent();
-    ImGui::Text("Total Frame: %.2f ms (%.1f FPS)", total_time,
-      total_time > 0 ? 1000.0f / total_time : 0.0f);
-  } else {
-    // Show frame time even if we don't have phase breakdown
-    if (current_frame_tracker_.frame_start_time.time_since_epoch().count()
-      > 0) {
-      const auto now = std::chrono::steady_clock::now();
-      const auto duration
-        = std::chrono::duration_cast<std::chrono::microseconds>(
-          now - current_frame_tracker_.frame_start_time);
-      const float ms = duration.count() / 1000.0f;
-
-      ImVec4 color = ImVec4(0.0f, 1.0f, 0.0f, 1.0f); // Green
-      if (ms > 16.67f)
-        color = ImVec4(1.0f, 1.0f, 0.0f, 1.0f); // Yellow (>60fps)
-      if (ms > 33.33f)
-        color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f); // Red (>30fps)
-
-      ImGui::TextColored(color, "Frame Time: %.2f ms (%.1f FPS)", ms,
-        ms > 0 ? 1000.0f / ms : 0.0f);
-    }
-  }
-
-  // Frame history graph
-  if (frame_history_.size() > 1) {
-    ImGui::Spacing();
-    ImGui::Text("Frame Time History:");
-
-    std::vector<float> frame_times;
-    frame_times.reserve(frame_history_.size());
-
-    for (const auto& frame : frame_history_) {
-      float total = 0.0f;
-      if (!frame.phase_timings.empty()) {
-        for (const auto& [_, duration] : frame.phase_timings) {
-          total += duration.count() / 1000.0f;
-        }
-      } else {
-        // Fallback: calculate total frame time directly
-        const auto duration
-          = std::chrono::duration_cast<std::chrono::microseconds>(
-            frame.frame_end_time - frame.frame_start_time);
-        total = duration.count() / 1000.0f;
-      }
-      frame_times.push_back(total);
-    }
-
-    // Calculate appropriate scale based on data
-    float max_time = 0.0f;
-    for (float time : frame_times) {
-      max_time = std::max(max_time, time);
-    }
-
-    // Use a reasonable scale: either the max value * 1.2, or at least 33ms
-    // (30fps)
-    float scale_max = std::max(max_time * 1.2f, 33.33f);
-
-    ImGui::PlotLines("##FrameTimes", frame_times.data(),
-      static_cast<int>(frame_times.size()), 0,
-      ("Max: " + std::to_string(max_time) + "ms").c_str(), 0.0f, scale_max,
-      ImVec2(0, 80));
-
-    // Add reference lines info
-    ImGui::Text("Reference: 16.7ms (60fps), 33.3ms (30fps)");
   }
 }
 
@@ -1923,15 +1690,31 @@ auto MainModule::DrawSceneInfoPanel() -> void
     ImGui::Text("Camera Drone:");
     ImGui::Indent();
 
-    ImGui::Text(
-      "Status: %s", camera_drone_.enabled ? "[FLYING]" : "[GROUNDED]");
-    ImGui::Text("Speed: %.1f units/s", camera_drone_.path_speed);
     ImGui::Text("Position: (%.1f, %.1f, %.1f)", camera_drone_.current_pos.x,
       camera_drone_.current_pos.y, camera_drone_.current_pos.z);
     ImGui::Text("Path Progress: %.1f%%", camera_drone_.path_u * 100.0);
 
     // Interactive controls
-    if (ImGui::Button(camera_drone_.enabled ? "Land Drone" : "Launch Drone")) {
+    float drone_speed = static_cast<float>(camera_drone_.path_speed);
+    ImGui::Text("Drone Speed");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(140.0F);
+    if (ImGui::SliderFloat("##DroneSpeed", &drone_speed, 1.0f, 15.0f, "%.1f")) {
+      camera_drone_.path_speed = static_cast<double>(drone_speed);
+    }
+    ImGui::SameLine();
+    bool used_accent = false;
+    if (!camera_drone_.enabled) {
+      used_accent = true;
+      const ImVec4 accent(0.28f, 0.58f, 1.0f, 1.0f);
+      ImGui::PushStyleColor(ImGuiCol_Button, accent);
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+        ImVec4(accent.x + 0.08f, accent.y + 0.08f, accent.z, 1.0f));
+      ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+        ImVec4(accent.x + 0.12f, accent.y + 0.12f, accent.z, 1.0f));
+    }
+    const char* action_label = camera_drone_.enabled ? "Land" : "Launch";
+    if (ImGui::Button(action_label)) {
       camera_drone_.enabled = !camera_drone_.enabled;
       if (camera_drone_.enabled) {
         InitializeDefaultFlightPath();
@@ -1940,10 +1723,8 @@ auto MainModule::DrawSceneInfoPanel() -> void
         TrackFrameAction("Camera drone landed");
       }
     }
-
-    float drone_speed = static_cast<float>(camera_drone_.path_speed);
-    if (ImGui::SliderFloat("Drone Speed", &drone_speed, 1.0f, 15.0f, "%.1f")) {
-      camera_drone_.path_speed = static_cast<double>(drone_speed);
+    if (used_accent) {
+      ImGui::PopStyleColor(3);
     }
 
     ImGui::Unindent();
@@ -1980,52 +1761,6 @@ auto MainModule::DrawSceneInfoPanel() -> void
   } else {
     ImGui::TextColored(
       ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "[ERROR] No scene loaded");
-  }
-}
-
-auto MainModule::DrawRenderPassesPanel() -> void
-{
-  ImGui::Text("Render Pipeline");
-  ImGui::Separator();
-
-  // Render pass status
-  ImGui::Text("Configured Passes:");
-  ImGui::Indent();
-
-  // Get render passes from RenderGraph component in base class
-  bool depth_pass_ok = false;
-  bool shader_pass_ok = false;
-  bool transparent_pass_ok = false;
-  if (auto rg = GetRenderGraph(); rg != nullptr) {
-    depth_pass_ok = rg->GetDepthPass() != nullptr;
-    shader_pass_ok = rg->GetShaderPass() != nullptr;
-    transparent_pass_ok = rg->GetTransparentPass() != nullptr;
-  }
-
-  const char* pass_icon = depth_pass_ok ? "[OK]" : "[--]";
-  ImGui::Text("%s Depth Pre-Pass", pass_icon);
-
-  pass_icon = shader_pass_ok ? "[OK]" : "[--]";
-  ImGui::Text("%s Shader Pass", pass_icon);
-
-  pass_icon = transparent_pass_ok ? "[OK]" : "[--]";
-  ImGui::Text("%s Transparent Pass", pass_icon);
-
-  ImGui::Unindent();
-
-  // Surface info
-  if (app_window_) {
-    const auto surface_weak = app_window_->GetSurface();
-    if (!surface_weak.expired()) {
-      ImGui::Spacing();
-      ImGui::Text("Surface: Active");
-    } else {
-      ImGui::TextColored(
-        ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "[WARN] Surface: Not Available");
-    }
-  } else {
-    ImGui::TextColored(
-      ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "[ERROR] AppWindow: Not Available");
   }
 }
 

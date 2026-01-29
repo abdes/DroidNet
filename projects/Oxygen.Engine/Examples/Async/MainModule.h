@@ -27,10 +27,14 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Scene/Scene.h>
 
+#include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/SingleViewModuleBase.h"
+#include "DemoShell/Services/FileBrowserService.h"
 
 namespace oxygen::examples::async {
+
+class AsyncDebugPanel;
 
 //! Graphics module demonstrating AsyncEngine and Common example patterns.
 /*!
@@ -101,6 +105,7 @@ public:
   auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
 
 private:
+  friend class AsyncDebugPanel;
   //! Setup functions (called once).
   auto SetupShaders() -> void;
   // Input actions/mappings for camera drone speed control
@@ -118,16 +123,9 @@ private:
   //! Ensures a spotlight exists as a child of the main camera node.
   auto EnsureCameraSpotLight() -> void;
 
-  //! Updates the sun direction/intensity from the current local time.
-  auto UpdateSunFromLocalTime() -> void;
-
   //! Debug overlay methods.
-  auto DrawDebugOverlay(engine::FrameContext& context) -> void;
-  auto DrawPerformancePanel() -> void;
   auto DrawFrameActionsPanel() -> void;
   auto DrawSceneInfoPanel() -> void;
-  auto DrawRenderPassesPanel() -> void;
-  auto DrawSunLightPanel() -> void;
   auto DrawSpotLightPanel() -> void;
   auto TrackPhaseStart(const std::string& phase_name) -> void;
   auto TrackPhaseEnd() -> void;
@@ -191,15 +189,7 @@ private:
   //! Scene nodes for the example.
   scene::SceneNode multisubmesh_; // Per-submesh visibility/overrides
   scene::SceneNode main_camera_; // "MainCamera"
-  scene::SceneNode sun_light_; // "Sun" directional light
   scene::SceneNode camera_spot_light_; // Child of main camera
-
-  // Sun time-of-day behavior (simple local-time driven cycle).
-  bool sun_follow_local_time_ { true };
-  float sun_day_intensity_ { 2.0F };
-  float sun_night_intensity_ { 0.05F };
-  float sun_intensity_gamma_ { 1.6F };
-  float sun_azimuth_offset_radians_ { 0.0F };
 
   //! Animation state (quad rotation removed; sphere orbits, camera fixed).
   int last_vis_toggle_ { -1 };
@@ -267,6 +257,10 @@ private:
   std::shared_ptr<oxygen::input::InputMappingContext> input_ctx_;
   // Token for a registered platform pre-destroy callback; zero means none.
   size_t platform_window_destroy_handler_token_ { 0 };
+
+  std::unique_ptr<DemoShell> shell_ {};
+  std::unique_ptr<FileBrowserService> file_browser_service_ {};
+  std::unique_ptr<AsyncDebugPanel> async_panel_ {};
 };
 
 } // namespace oxygen::examples::async
