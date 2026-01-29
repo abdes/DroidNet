@@ -7,6 +7,7 @@
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 
 #include "DemoShell/UI/ContentLoaderPanel.h"
 
@@ -55,21 +56,7 @@ void ContentLoaderPanel::Update()
   import_panel_.Update();
 }
 
-void ContentLoaderPanel::Draw()
-{
-  ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(540, 350), ImGuiCond_FirstUseEver);
-
-  if (!ImGui::Begin("Content Loader", nullptr, ImGuiWindowFlags_None)) {
-    ImGui::End();
-    return;
-  }
-
-  DrawContents();
-  ImGui::End();
-}
-
-void ContentLoaderPanel::DrawContents()
+auto ContentLoaderPanel::DrawContents() -> void
 {
   if (get_last_released_scene_key_) {
     const auto last_key = get_last_released_scene_key_();
@@ -110,5 +97,24 @@ void ContentLoaderPanel::DrawContents()
     ImGui::EndTabBar();
   }
 }
+
+auto ContentLoaderPanel::GetName() const noexcept -> std::string_view
+{
+  return "Content Loader";
+}
+
+auto ContentLoaderPanel::GetPreferredWidth() const noexcept -> float
+{
+  return 520.0F;
+}
+
+auto ContentLoaderPanel::GetIcon() const noexcept -> std::string_view
+{
+  return oxygen::imgui::icons::kIconContentLoader;
+}
+
+auto ContentLoaderPanel::OnLoaded() -> void { }
+
+auto ContentLoaderPanel::OnUnloaded() -> void { }
 
 } // namespace oxygen::examples::ui

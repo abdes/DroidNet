@@ -6,11 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cmath>
 #include <cstring>
-#include <random>
-#include <ranges>
-#include <variant>
 
 #include <imgui.h>
 
@@ -21,11 +17,7 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/ShaderReference.h>
-#include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/Framebuffer.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Input/Action.h>
@@ -37,10 +29,8 @@
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Platform/input.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
-#include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/SceneCameraViewResolver.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
-#include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Scene.h>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
@@ -146,7 +136,6 @@ auto MainModule::OnAttached(
   shell_ = std::make_unique<DemoShell>();
   DemoShellConfig shell_config;
   shell_config.input_system = observer_ptr { app_.input_system.get() };
-  shell_config.scene = scene_;
   shell_config.file_browser_service
     = observer_ptr { file_browser_service_.get() };
   shell_config.panel_config = DemoShellPanelConfig {
@@ -155,7 +144,6 @@ auto MainModule::OnAttached(
     .environment = true,
     .lighting = false,
     .rendering = false,
-    .settings = false,
   };
   shell_config.enable_camera_rig = false;
 
@@ -164,8 +152,9 @@ auto MainModule::OnAttached(
     return false;
   }
 
+  input_debug_panel_ = std::make_shared<InputDebugPanel>();
   UpdateInputDebugPanelConfig();
-  if (!shell_->RegisterPanel(observer_ptr { &input_debug_panel_ })) {
+  if (!shell_->RegisterPanel(input_debug_panel_)) {
     LOG_F(WARNING, "InputSystem: failed to register Input Debug panel");
     return false;
   }
@@ -173,7 +162,18 @@ auto MainModule::OnAttached(
   return true;
 }
 
-void MainModule::OnShutdown() noexcept { }
+void MainModule::OnShutdown() noexcept
+{
+  if (shell_) {
+    shell_->SetScene(std::unique_ptr<scene::Scene> {});
+    shell_->SetSkyboxService(observer_ptr<SkyboxService> { nullptr });
+  }
+  active_scene_ = {};
+
+  input_debug_panel_.reset();
+  shell_.reset();
+  file_browser_service_.reset();
+}
 
 auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
 {
@@ -348,19 +348,27 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
 
   // Set or create the scene now that the base has handled window/lifecycle
   // concerns for this frame.
-  if (!scene_) {
-    scene_ = std::make_shared<scene::Scene>("InputSystem-Scene");
+  if (!active_scene_.IsValid()) {
+    auto scene = std::make_unique<scene::Scene>("InputSystem-Scene");
     if (shell_) {
-      shell_->UpdateScene(scene_);
+      active_scene_ = shell_->SetScene(std::move(scene));
     }
   }
-  context.SetScene(observer_ptr { scene_.get() });
+
+  const auto scene_ptr
+    = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
+  context.SetScene(observer_ptr { scene_ptr.get() });
 }
 
 auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
-  DCHECK_NOTNULL_F(scene_);
+  DCHECK_F(active_scene_.IsValid());
+
+  const auto scene_ptr
+    = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
+  auto* scene = scene_ptr.get();
+  DCHECK_NOTNULL_F(scene);
 
   // Use base helper which registers views and invokes a ready callback
   UpdateFrameContext(context, [this](int w, int h) {
@@ -384,7 +392,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   using oxygen::data::pak::GeometryAssetDesc;
   using oxygen::data::pak::MeshViewDesc;
 
-  if (!std::ranges::any_of(scene_->GetRootNodes(),
+  if (!std::ranges::any_of(scene->GetRootNodes(),
         [](auto& n) { return n.GetName() == "Sphere"; })) {
     auto sphere_data = oxygen::data::MakeSphereMeshAsset(24, 48);
     if (sphere_data) {
@@ -422,7 +430,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
         std::vector<std::shared_ptr<oxygen::data::Mesh>> { std::move(mesh) });
 
       // Create a node and attach the geometry
-      sphere_node_ = scene_->CreateNode("Sphere");
+      sphere_node_ = scene->CreateNode("Sphere");
       sphere_node_.GetRenderable().SetGeometry(std::move(sphere_geo));
       // Place sphere in front of the camera along -Z
       sphere_node_.GetTransform().SetLocalPosition(sphere_base_pos_);
@@ -477,12 +485,15 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
 auto MainModule::EnsureMainCamera(const int width, const int height) -> void
 {
   using scene::PerspectiveCamera;
-  if (!scene_) {
+  const auto scene_ptr
+    = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
+  auto* scene = scene_ptr.get();
+  if (!scene) {
     return;
   }
 
   if (!main_camera_.IsAlive()) {
-    main_camera_ = scene_->CreateNode("MainCamera");
+    main_camera_ = scene->CreateNode("MainCamera");
   }
 
   if (!main_camera_.HasCamera()) {
@@ -714,7 +725,9 @@ auto MainModule::UpdateInputDebugPanelConfig() -> void
   config.pan_sensitivity = &pan_sensitivity_;
   config.zoom_step = &zoom_step_;
 
-  input_debug_panel_.Initialize(config);
+  if (input_debug_panel_) {
+    input_debug_panel_->Initialize(config);
+  }
 }
 
 } // namespace oxygen::examples::input

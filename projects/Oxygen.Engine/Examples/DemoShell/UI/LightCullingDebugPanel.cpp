@@ -10,6 +10,7 @@
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 
 #include "DemoShell/Services/SettingsService.h"
@@ -34,8 +35,6 @@ void LightingPanel::Initialize(const LightCullingDebugConfig& config)
     ui_z_near_ = cluster.z_near;
     ui_z_far_ = cluster.z_far;
   }
-
-  LoadSettings();
 }
 
 void LightingPanel::UpdateConfig(const LightCullingDebugConfig& config)
@@ -52,40 +51,41 @@ void LightingPanel::UpdateConfig(const LightCullingDebugConfig& config)
   }
 }
 
-void LightingPanel::Draw()
+auto LightingPanel::DrawContents() -> void
 {
-  if (!show_window_) {
-    return;
-  }
-
-  ImGui::SetNextWindowPos(ImVec2(1020, 20), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(360, 520), ImGuiCond_FirstUseEver);
-
-  if (!ImGui::Begin("Lighting", &show_window_, ImGuiWindowFlags_None)) {
-    ImGui::End();
-    return;
-  }
-
-  DrawContents();
-
-  ImGui::End();
+  DrawVisualizationModes();
+  DrawLightCullingSettings();
 }
 
-void LightingPanel::DrawContents()
+auto LightingPanel::GetName() const noexcept -> std::string_view
 {
-  if (ImGui::CollapsingHeader(
-        "Light Culling", ImGuiTreeNodeFlags_DefaultOpen)) {
-    DrawLightCullingSettings();
-  }
+  return "Lighting";
+}
 
-  if (ImGui::CollapsingHeader(
-        "Visualization Modes", ImGuiTreeNodeFlags_DefaultOpen)) {
-    DrawVisualizationModes();
-  }
+auto LightingPanel::GetPreferredWidth() const noexcept -> float
+{
+  return 360.0F;
+}
+
+auto LightingPanel::GetIcon() const noexcept -> std::string_view
+{
+  return oxygen::imgui::icons::kIconLighting;
+}
+
+auto LightingPanel::OnRegistered() -> void { LoadSettings(); }
+
+auto LightingPanel::OnLoaded() -> void { }
+
+auto LightingPanel::OnUnloaded() -> void
+{
+  SaveCullingModeSetting();
+  SaveClusterSettings();
 }
 
 void LightingPanel::DrawVisualizationModes()
 {
+  ImGui::SeparatorText("Visualization Modes");
+
   const auto current_mode = config_.shader_pass_config
     ? config_.shader_pass_config->debug_mode
     : ShaderDebugMode::kDisabled;
@@ -286,8 +286,6 @@ void LightingPanel::ApplyCullingModeToPass()
   if (config_.on_cluster_mode_changed) {
     config_.on_cluster_mode_changed();
   }
-
-  SaveCullingModeSetting();
 }
 
 void LightingPanel::ApplyClusterConfigToPass()
@@ -329,8 +327,6 @@ void LightingPanel::ApplyClusterConfigToPass()
   if (config_.on_cluster_mode_changed) {
     config_.on_cluster_mode_changed();
   }
-
-  SaveClusterSettings();
 }
 
 auto LightingPanel::LoadSettings() -> void
@@ -358,9 +354,8 @@ auto LightingPanel::LoadSettings() -> void
     }
   }
 
-  if (const auto use_camera
-    = settings->GetString("light_culling.use_camera_z")) {
-    ui_use_camera_z_ = (*use_camera == "true");
+  if (const auto use_camera = settings->GetBool("light_culling.use_camera_z")) {
+    ui_use_camera_z_ = *use_camera;
   }
 
   if (const auto z_near = settings->GetFloat("light_culling.z_near")) {
@@ -385,7 +380,6 @@ auto LightingPanel::SaveCullingModeSetting() const -> void
 
   settings->SetString(
     "light_culling.mode", use_clustered_culling_ ? "clustered" : "tiled");
-  settings->Save();
 }
 
 auto LightingPanel::SaveClusterSettings() const -> void
@@ -397,11 +391,9 @@ auto LightingPanel::SaveClusterSettings() const -> void
 
   settings->SetFloat(
     "light_culling.depth_slices", static_cast<float>(ui_depth_slices_));
-  settings->SetString(
-    "light_culling.use_camera_z", ui_use_camera_z_ ? "true" : "false");
+  settings->SetBool("light_culling.use_camera_z", ui_use_camera_z_);
   settings->SetFloat("light_culling.z_near", ui_z_near_);
   settings->SetFloat("light_culling.z_far", ui_z_far_);
-  settings->Save();
 }
 
 } // namespace oxygen::examples::ui

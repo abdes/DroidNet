@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "TexturedCube/SceneSetup.h"
-
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -26,6 +24,8 @@
 #include <Oxygen/Scene/Environment/Sun.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
+
+#include "TexturedCube/SceneSetup.h"
 
 namespace {
 
@@ -247,8 +247,8 @@ const Vec3 kDefaultSunRayDirWs = glm::normalize(Vec3 { 0.35F, -0.45F, -1.0F });
 
 namespace oxygen::examples::textured_cube {
 
-SceneSetup::SceneSetup(std::shared_ptr<scene::Scene> scene)
-  : scene_(std::move(scene))
+SceneSetup::SceneSetup(observer_ptr<scene::Scene> scene)
+  : scene_(scene)
 {
 }
 

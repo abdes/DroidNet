@@ -10,13 +10,24 @@
 
 #include <imgui.h>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+
 #include "DemoShell/UI/StatsOverlay.h"
+#include "DemoShell/UI/UiSettingsVm.h"
 
 namespace oxygen::examples::ui {
 
+StatsOverlay::StatsOverlay(observer_ptr<UiSettingsVm> settings_vm)
+  : vm_(settings_vm)
+{
+  DCHECK_NOTNULL_F(settings_vm, "expecting UiSettingsVm");
+}
+
 auto StatsOverlay::Draw() const -> void
 {
-  if (!config_.show_fps && !config_.show_frame_timing_detail) {
+  const auto config = vm_->GetStatsConfig();
+  if (!config.show_fps && !config.show_frame_timing_detail) {
     return;
   }
 
@@ -55,13 +66,13 @@ auto StatsOverlay::Draw() const -> void
     ImGui::TextUnformatted(text);
   };
 
-  if (config_.show_fps) {
+  if (config.show_fps) {
     std::array<char, 64> buffer {};
     std::snprintf(buffer.data(), buffer.size(), "FPS %.1f", io.Framerate);
     draw_right_aligned(buffer.data());
   }
 
-  if (config_.show_frame_timing_detail) {
+  if (config.show_frame_timing_detail) {
     std::array<char, 64> buffer {};
     const float frame_ms = io.DeltaTime * 1000.0F;
     std::snprintf(buffer.data(), buffer.size(), "Frame %.2f ms", frame_ms);

@@ -152,7 +152,6 @@ void FileBrowserService::UpdateAndDraw()
         const int width = static_cast<int>(window->Size.x);
         const int height = static_cast<int>(window->Size.y);
         settings->SetVec2i(settings_key_ + ".window_size", { width, height });
-        settings->Save();
       }
     }
   }

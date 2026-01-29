@@ -6,16 +6,14 @@
 
 #pragma once
 
-#include <cstddef>
 #include <filesystem>
 #include <functional>
-#include <memory>
 #include <optional>
 
 #include <Oxygen/Base/ObserverPtr.h>
 
 #include "DemoShell/Services/FileBrowserService.h"
-#include "DemoShell/UI/CameraControlPanel.h"
+#include "DemoShell/UI/DemoPanel.h"
 #include "DemoShell/UI/ImportPanel.h"
 #include "DemoShell/UI/LooseCookedLoaderPanel.h"
 #include "DemoShell/UI/PakLoaderPanel.h"
@@ -67,16 +65,15 @@ namespace oxygen::examples::ui {
  // In update loop (before ImGui rendering)
  loader_panel.Update();
 
- // In ImGui rendering
- loader_panel.Draw();
+ // Registered with DemoShell; the shell draws DrawContents() when active.
  ```
 
  @see ImportPanel, PakLoaderPanel, LooseCookedLoaderPanel
  */
-class ContentLoaderPanel {
+class ContentLoaderPanel final : public DemoPanel {
 public:
   ContentLoaderPanel() = default;
-  ~ContentLoaderPanel() = default;
+  ~ContentLoaderPanel() override = default;
 
   //! Configuration for content loader panel
   struct Config {
@@ -100,11 +97,14 @@ public:
   //! Update all loader panels (call before ImGui rendering)
   void Update();
 
-  //! Draw the ImGui panel content
-  void Draw();
-
   //! Draw the panel content without creating a window.
-  void DrawContents();
+  auto DrawContents() -> void override;
+
+  [[nodiscard]] auto GetName() const noexcept -> std::string_view override;
+  [[nodiscard]] auto GetPreferredWidth() const noexcept -> float override;
+  [[nodiscard]] auto GetIcon() const noexcept -> std::string_view override;
+  auto OnLoaded() -> void override;
+  auto OnUnloaded() -> void override;
 
   //! Get unified import panel
   [[nodiscard]] auto GetImportPanel() -> ImportPanel& { return import_panel_; }

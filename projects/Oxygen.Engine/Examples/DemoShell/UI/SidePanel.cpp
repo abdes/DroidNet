@@ -6,15 +6,16 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cmath>
 #include <string>
 
 #include <imgui.h>
 
+#include <Oxygen/Base/Logging.h>
+
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/SidePanel.h"
 
-namespace oxygen::examples {
+namespace oxygen::examples::ui {
 
 namespace {
 
@@ -39,18 +40,15 @@ namespace {
 
 } // namespace
 
-auto SidePanel::Initialize(const SidePanelConfig& config) -> void
+SidePanel::SidePanel(observer_ptr<PanelRegistry> panel_registry)
+  : panel_registry_(panel_registry)
 {
-  config_ = config;
+  DCHECK_NOTNULL_F(panel_registry, "expecting valid PanelRegistry");
 }
 
 auto SidePanel::Draw(float left_offset) -> void
 {
-  if (!config_.panel_registry) {
-    return;
-  }
-
-  const auto active_panel = config_.panel_registry->GetActivePanel();
+  const auto active_panel = panel_registry_->GetActivePanel();
   if (!active_panel) {
     return;
   }
@@ -58,8 +56,9 @@ auto SidePanel::Draw(float left_offset) -> void
   const auto& io = ImGui::GetIO();
 
   // If the active panel changed, adopt its preferred width.
-  const auto active_name = config_.panel_registry->GetActivePanelName();
-  if (active_name != last_active_panel_name_) {
+  const auto active_name = panel_registry_->GetActivePanelName();
+  const bool panel_changed = active_name != last_active_panel_name_;
+  if (panel_changed) {
     last_active_panel_name_ = std::string(active_name);
     width_ = std::clamp(active_panel->GetPreferredWidth(), kMinPanelWidth,
       io.DisplaySize.x * kMaxPanelWidthRatio);
@@ -71,6 +70,8 @@ auto SidePanel::Draw(float left_offset) -> void
           *saved_width, kMinPanelWidth, io.DisplaySize.x * kMaxPanelWidthRatio);
       }
     }
+
+    last_saved_panel_width_ = width_;
   }
 
   const float height = std::max(0.0F, io.DisplaySize.y);
@@ -94,14 +95,11 @@ auto SidePanel::Draw(float left_offset) -> void
 
   width_ = ImGui::GetWindowSize().x;
 
-  if (const auto settings = SettingsService::Default()) {
-    const std::string key = MakePanelWidthKey(last_active_panel_name_);
-    const bool same_panel = last_saved_panel_name_ == last_active_panel_name_;
-    const float delta = std::abs(width_ - last_saved_panel_width_);
-    if (!same_panel || delta > 0.5F) {
-      settings->SetFloat(key, width_);
-      settings->Save();
-      last_saved_panel_name_ = last_active_panel_name_;
+  const float delta = std::abs(width_ - last_saved_panel_width_);
+  const bool resize_finished = !ImGui::IsMouseDown(ImGuiMouseButton_Left);
+  if (resize_finished && delta > 0.5F) {
+    if (const auto settings = SettingsService::Default()) {
+      settings->SetFloat(MakePanelWidthKey(last_active_panel_name_), width_);
       last_saved_panel_width_ = width_;
     }
   }
@@ -111,4 +109,4 @@ auto SidePanel::Draw(float left_offset) -> void
   ImGui::End();
 }
 
-} // namespace oxygen::examples
+} // namespace oxygen::examples::ui

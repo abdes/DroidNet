@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "DemoShell/UI/DemoPanel.h"
 #include "DemoShell/UI/LightCullingDebugPanel.h"
 
 namespace oxygen::examples::ui {
@@ -19,7 +20,7 @@ enum class RenderingViewMode { kSolid, kWireframe };
  Debug modes toggle the shader debug mode automatically (Normal disables
  debug).
 */
-class RenderingPanel {
+class RenderingPanel final : public DemoPanel {
 public:
   //! Initialize the panel with configuration
   void Initialize(const LightCullingDebugConfig& config);
@@ -27,11 +28,14 @@ public:
   //! Update configuration (call when shader pass config changes)
   void UpdateConfig(const LightCullingDebugConfig& config);
 
-  //! Draw the ImGui panel (call once per frame)
-  void Draw();
-
   //! Draws the panel content without creating a window.
-  void DrawContents();
+  auto DrawContents() -> void override;
+
+  [[nodiscard]] auto GetName() const noexcept -> std::string_view override;
+  [[nodiscard]] auto GetPreferredWidth() const noexcept -> float override;
+  [[nodiscard]] auto GetIcon() const noexcept -> std::string_view override;
+  auto OnLoaded() -> void override;
+  auto OnUnloaded() -> void override;
 
   //! Set the current view mode.
   void SetViewMode(RenderingViewMode mode) { view_mode_ = mode; }
@@ -48,7 +52,6 @@ private:
   void ApplyDebugMode(ShaderDebugMode mode);
 
   LightCullingDebugConfig config_ {};
-  bool show_window_ { true };
   RenderingViewMode view_mode_ { RenderingViewMode::kSolid };
 };
 

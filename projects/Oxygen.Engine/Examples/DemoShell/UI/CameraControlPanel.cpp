@@ -5,17 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <cmath>
-#include <cstdio>
 #include <string_view>
 
 #include <glm/geometric.hpp>
 #include <imgui.h>
 
+#include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/Input/Action.h>
 
-#include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/CameraControlPanel.h"
 
 namespace oxygen::examples::ui {
@@ -23,31 +21,15 @@ namespace oxygen::examples::ui {
 void CameraControlPanel::Initialize(const CameraControlConfig& config)
 {
   config_ = config;
-  LoadSettings();
+  current_mode_ = config_.current_mode;
 }
 
 void CameraControlPanel::UpdateConfig(const CameraControlConfig& config)
 {
   config_ = config;
-  LoadSettings();
+  current_mode_ = config_.current_mode;
 }
-
-void CameraControlPanel::Draw()
-{
-  ImGui::SetNextWindowPos(ImVec2(550, 20), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(450, 500), ImGuiCond_FirstUseEver);
-
-  if (!ImGui::Begin("Camera Controls", nullptr, ImGuiWindowFlags_None)) {
-    ImGui::End();
-    return;
-  }
-
-  DrawContents();
-
-  ImGui::End();
-}
-
-void CameraControlPanel::DrawContents()
+auto CameraControlPanel::DrawContents() -> void
 {
   if (ImGui::BeginTabBar("CameraControlTabs")) {
     if (ImGui::BeginTabItem("Camera Mode")) {
@@ -61,6 +43,33 @@ void CameraControlPanel::DrawContents()
     }
 
     ImGui::EndTabBar();
+  }
+}
+
+auto CameraControlPanel::GetName() const noexcept -> std::string_view
+{
+  return "Camera Controls";
+}
+
+auto CameraControlPanel::GetPreferredWidth() const noexcept -> float
+{
+  return 360.0F;
+}
+
+auto CameraControlPanel::GetIcon() const noexcept -> std::string_view
+{
+  return oxygen::imgui::icons::kIconCameraControls;
+}
+
+auto CameraControlPanel::OnLoaded() -> void
+{
+  current_mode_ = config_.current_mode;
+}
+
+auto CameraControlPanel::OnUnloaded() -> void
+{
+  if (config_.on_panel_closed) {
+    config_.on_panel_closed();
   }
 }
 
@@ -78,7 +87,6 @@ void CameraControlPanel::DrawCameraModeTab()
       if (config_.on_mode_changed) {
         config_.on_mode_changed(current_mode_);
       }
-      SaveModeSetting();
     }
   }
   ImGui::SameLine();
@@ -88,7 +96,6 @@ void CameraControlPanel::DrawCameraModeTab()
       if (config_.on_mode_changed) {
         config_.on_mode_changed(current_mode_);
       }
-      SaveModeSetting();
     }
   }
 
@@ -112,7 +119,6 @@ void CameraControlPanel::DrawCameraModeTab()
           if (config_.active_camera && config_.active_camera->IsAlive()) {
             config_.orbit_controller->SyncFromTransform(*config_.active_camera);
           }
-          SaveOrbitModeSetting(ui::OrbitMode::kTrackball);
         }
       }
       ImGui::SameLine();
@@ -122,7 +128,6 @@ void CameraControlPanel::DrawCameraModeTab()
           if (config_.active_camera && config_.active_camera->IsAlive()) {
             config_.orbit_controller->SyncFromTransform(*config_.active_camera);
           }
-          SaveOrbitModeSetting(ui::OrbitMode::kTurntable);
         }
       }
 
@@ -143,7 +148,6 @@ void CameraControlPanel::DrawCameraModeTab()
       if (ImGui::SliderFloat("Move Speed", &speed, 0.1f, 100.0f, "%.2f",
             ImGuiSliderFlags_Logarithmic)) {
         config_.fly_controller->SetMoveSpeed(speed);
-        SaveFlySpeedSetting(speed);
       }
 
       ImGui::Spacing();
@@ -394,86 +398,6 @@ void CameraControlPanel::DrawInputDebugInfo()
     }
     ImGui::PopID();
   }
-}
-
-auto CameraControlPanel::LoadSettings() -> void
-{
-  if (settings_loaded_) {
-    return;
-  }
-  const auto settings = oxygen::examples::SettingsService::Default();
-  if (!settings) {
-    return;
-  }
-
-  settings_loaded_ = true;
-
-  if (const auto mode = settings->GetString("camera_control.mode")) {
-    if (*mode == "fly") {
-      current_mode_ = CameraControlMode::kFly;
-    } else if (*mode == "orbit") {
-      current_mode_ = CameraControlMode::kOrbit;
-    }
-    if (config_.on_mode_changed) {
-      config_.on_mode_changed(current_mode_);
-    }
-  }
-
-  if (config_.orbit_controller) {
-    if (const auto orbit_mode
-      = settings->GetString("camera_control.orbit_mode")) {
-      if (*orbit_mode == "turntable") {
-        config_.orbit_controller->SetMode(ui::OrbitMode::kTurntable);
-      } else if (*orbit_mode == "trackball") {
-        config_.orbit_controller->SetMode(ui::OrbitMode::kTrackball);
-      }
-      if (config_.active_camera && config_.active_camera->IsAlive()) {
-        config_.orbit_controller->SyncFromTransform(*config_.active_camera);
-      }
-    }
-  }
-
-  if (config_.fly_controller) {
-    if (const auto speed = settings->GetFloat("camera_control.fly_speed")) {
-      config_.fly_controller->SetMoveSpeed(*speed);
-    }
-  }
-}
-
-auto CameraControlPanel::SaveModeSetting() const -> void
-{
-  const auto settings = oxygen::examples::SettingsService::Default();
-  if (!settings) {
-    return;
-  }
-
-  settings->SetString("camera_control.mode",
-    current_mode_ == CameraControlMode::kFly ? "fly" : "orbit");
-  settings->Save();
-}
-
-auto CameraControlPanel::SaveOrbitModeSetting(ui::OrbitMode mode) const -> void
-{
-  const auto settings = oxygen::examples::SettingsService::Default();
-  if (!settings) {
-    return;
-  }
-
-  const char* value
-    = mode == ui::OrbitMode::kTurntable ? "turntable" : "trackball";
-  settings->SetString("camera_control.orbit_mode", value);
-  settings->Save();
-}
-
-auto CameraControlPanel::SaveFlySpeedSetting(float speed) const -> void
-{
-  const auto settings = oxygen::examples::SettingsService::Default();
-  if (!settings) {
-    return;
-  }
-
-  settings->SetFloat("camera_control.fly_speed", speed);
-  settings->Save();
 }
 
 auto CameraControlPanel::GetActionStateString(

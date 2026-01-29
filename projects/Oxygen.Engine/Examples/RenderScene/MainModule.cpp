@@ -5,56 +5,25 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
-#include <atomic>
 #include <chrono>
-#include <cmath>
-#include <cstdio>
 #include <filesystem>
 #include <functional>
-#include <numbers>
 #include <source_location>
-#include <string_view>
 #include <type_traits>
-#include <unordered_set>
 #include <utility>
-#include <vector>
 
 #include <imgui.h>
-
-#include <glm/ext/matrix_transform.hpp>
-#include <glm/geometric.hpp>
-#include <glm/gtc/constants.hpp>
-#include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Content/IAssetLoader.h>
-#include <Oxygen/Content/LooseCookedInspection.h>
-#include <Oxygen/Content/PakFile.h>
-#include <Oxygen/Core/Constants.h>
-#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/AssetKey.h>
-#include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Renderer.h>
-#include <Oxygen/Scene/Camera/Orthographic.h>
-#include <Oxygen/Scene/Camera/Perspective.h>
-#include <Oxygen/Scene/Environment/Fog.h>
-#include <Oxygen/Scene/Environment/PostProcessVolume.h>
-#include <Oxygen/Scene/Environment/SceneEnvironment.h>
-#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
-#include <Oxygen/Scene/Environment/SkyLight.h>
-#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Environment/Sun.h>
-#include <Oxygen/Scene/Environment/VolumetricClouds.h>
-#include <Oxygen/Scene/Light/DirectionalLight.h>
-#include <Oxygen/Scene/Light/PointLight.h>
-#include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Types/Flags.h>
 
 #include "DemoShell/DemoShell.h"
@@ -113,8 +82,12 @@ auto MainModule::OnAttached(
   });
   DemoShellConfig shell_config;
   shell_config.input_system = observer_ptr { app_.input_system.get() };
-  shell_config.scene = scene_;
   shell_config.cooked_root = cooked_root_;
+  shell_config.panel_config.content_loader = true;
+  shell_config.panel_config.camera_controls = true;
+  shell_config.panel_config.lighting = true;
+  shell_config.panel_config.environment = true;
+  shell_config.panel_config.rendering = true;
   shell_config.file_browser_service
     = observer_ptr { file_browser_service_.get() };
   shell_config.skybox_service = observer_ptr { skybox_service_.get() };
@@ -200,10 +173,16 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
       ReleaseCurrentSceneAsset("scene swap");
       ClearSceneRuntime("scene swap");
 
-      scene_ = std::move(swap.scene);
       if (shell_) {
-        shell_->UpdateScene(scene_);
-        shell_->SetActiveCamera(std::move(swap.active_camera));
+        auto scene = std::make_unique<scene::Scene>("RenderScene");
+        active_scene_ = shell_->SetScene(std::move(scene));
+        const auto scene_ptr = shell_->TryGetScene();
+        if (scene_ptr && swap.asset && loader) {
+          auto active_camera = loader->BuildScene(*scene_ptr, *swap.asset);
+          shell_->SetActiveCamera(std::move(active_camera));
+        } else {
+          LOG_F(ERROR, "RenderScene: Scene swap missing asset or scene");
+        }
       }
       current_scene_key_ = swap.scene_key;
       if (shell_ && shell_->GetCameraLifecycle().GetActiveCamera().IsAlive()) {
@@ -225,20 +204,23 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
     }
   }
 
-  if (!scene_) {
-    scene_ = std::make_shared<scene::Scene>("RenderScene");
+  if (!active_scene_.IsValid()) {
+    auto scene = std::make_unique<scene::Scene>("RenderScene");
     if (shell_) {
-      shell_->UpdateScene(scene_);
+      active_scene_ = shell_->SetScene(std::move(scene));
     }
   }
 
+  const auto scene_ptr
+    = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
+
   // Keep the skybox helper bound to the current scene.
-  if (skybox_service_scene_ != scene_.get()) {
+  if (skybox_service_scene_ != scene_ptr.get()) {
     auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
     if (asset_loader) {
       skybox_service_ = std::make_unique<SkyboxService>(
-        observer_ptr { asset_loader.get() }, scene_);
-      skybox_service_scene_ = scene_.get();
+        observer_ptr { asset_loader.get() }, scene_ptr);
+      skybox_service_scene_ = scene_ptr.get();
     } else {
       skybox_service_.reset();
       skybox_service_scene_ = nullptr;
@@ -247,13 +229,13 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
       shell_->SetSkyboxService(observer_ptr { skybox_service_.get() });
     }
   }
-  context.SetScene(observer_ptr { scene_.get() });
+  context.SetScene(observer_ptr { scene_ptr.get() });
 }
 
 auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
-  DCHECK_NOTNULL_F(scene_);
+  DCHECK_F(active_scene_.IsValid());
 
   UpdateFrameContext(context, [this, &context](int w, int h) {
     last_viewport_w_ = w;
@@ -278,8 +260,6 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     pending_load_scene_ = false;
 
     if (pending_scene_key_) {
-      ReleaseCurrentSceneAsset("scene load request");
-      ClearSceneRuntime("scene load request");
       auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
       if (asset_loader) {
         scene_loader_ = std::make_shared<SceneLoaderService>(
@@ -319,10 +299,10 @@ auto MainModule::ReleaseCurrentSceneAsset(const char* reason) -> void
 auto MainModule::ClearSceneRuntime(const char* reason) -> void
 {
   UnregisterViewForRendering(reason);
-  scene_.reset();
+  active_scene_ = {};
   scene_loader_.reset();
   if (shell_) {
-    shell_->UpdateScene(nullptr);
+    shell_->SetScene(std::unique_ptr<scene::Scene> {});
     shell_->GetCameraLifecycle().Clear();
     shell_->SetSkyboxService(observer_ptr<SkyboxService> { nullptr });
   }

@@ -4,10 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "TexturedCube/DebugUI.h"
-
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -21,10 +18,10 @@
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
-
 #include <Oxygen/Scene/Environment/SkySphere.h>
-#include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
+
+#include "TexturedCube/DebugUI.h"
 
 #if defined(OXYGEN_WINDOWS)
 #  include <shobjidl_core.h>

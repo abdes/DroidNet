@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -18,16 +19,13 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Scene/Light/PointLight.h>
+#include <Oxygen/Scene/Light/SpotLight.h>
 
 #include "MultiView/SceneBootstrapper.h"
 
-#include <Oxygen/Content/PakFile.h>
-
 namespace oxygen::examples::multiview {
 namespace {
-
-  constexpr const char* kSceneName = "MultiViewScene";
-
   auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba)
     -> std::shared_ptr<const data::MaterialAsset>
   {
@@ -66,30 +64,35 @@ namespace {
 
 } // namespace
 
-auto SceneBootstrapper::EnsureScene() -> std::shared_ptr<scene::Scene>
+void SceneBootstrapper::BindToScene(observer_ptr<scene::Scene> scene)
 {
+  scene_ = scene;
   if (!scene_) {
-    scene_ = std::make_shared<scene::Scene>(kSceneName);
-    LOG_F(
-      INFO, "[MultiView] SceneBootstrapper created scene '{}'.", kSceneName);
+    sphere_node_ = {};
+    cube_node_ = {};
+    cylinder_node_ = {};
+    cone_node_ = {};
+    key_light_node_ = {};
+    fill_light_node_ = {};
   }
+}
+
+auto SceneBootstrapper::EnsureSceneWithContent() -> observer_ptr<scene::Scene>
+{
+  auto* scene = scene_.get();
+  if (scene == nullptr) {
+    return observer_ptr<scene::Scene> { nullptr };
+  }
+
+  EnsureSphere(*scene);
+  EnsureCube(*scene);
+  EnsureCylinder(*scene);
+  EnsureCone(*scene);
+  EnsureLighting(*scene);
   return scene_;
 }
 
-auto SceneBootstrapper::EnsureSceneWithContent()
-  -> std::shared_ptr<scene::Scene>
-{
-  auto scene = EnsureScene();
-  if (scene) {
-    EnsureSphere(*scene);
-    EnsureCube(*scene);
-    EnsureCylinder(*scene);
-    EnsureCone(*scene);
-  }
-  return scene;
-}
-
-auto SceneBootstrapper::GetScene() const -> std::shared_ptr<scene::Scene>
+auto SceneBootstrapper::GetScene() const -> observer_ptr<scene::Scene>
 {
   return scene_;
 }
@@ -365,6 +368,72 @@ auto SceneBootstrapper::EnsureCone(scene::Scene& scene) -> void
   LOG_F(INFO,
     "[MultiView] SceneBootstrapper created cone node (alive={}, geom_set={}).",
     cone_node_.IsAlive(), cone_node_.GetRenderable().GetGeometry() != nullptr);
+}
+
+auto SceneBootstrapper::EnsureLighting(scene::Scene& scene) -> void
+{
+  // Key light: Spotlight from upper-front-right, aiming at center of scene
+  if (!key_light_node_.IsAlive()) {
+    key_light_node_ = scene.CreateNode("KeyLight");
+
+    auto spot_light = std::make_unique<scene::SpotLight>();
+    spot_light->Common().affects_world = true;
+    spot_light->Common().color_rgb
+      = glm::vec3(1.0F, 0.98F, 0.95F); // Warm white
+    spot_light->Common().intensity = 120.0F;
+    spot_light->SetRange(25.0F);
+    spot_light->SetSourceRadius(0.1F);
+    spot_light->SetConeAnglesRadians(glm::radians(25.0F), // Inner cone
+      glm::radians(45.0F) // Outer cone
+    );
+
+    const bool attached = key_light_node_.AttachLight(std::move(spot_light));
+    CHECK_F(attached, "Failed to attach SpotLight to KeyLight node");
+
+    // Position above and in front of the scene
+    key_light_node_.GetTransform().SetLocalPosition({ 3.0F, 5.0F, 6.0F });
+
+    // Aim toward scene center (objects are roughly at origin)
+    const glm::vec3 light_pos = { 3.0F, 5.0F, 6.0F };
+    const glm::vec3 target = { -0.5F, 0.0F, 0.0F };
+    const glm::vec3 direction = glm::normalize(target - light_pos);
+    const glm::vec3 forward = glm::vec3(0.0F, 0.0F, -1.0F);
+    const float cos_theta = glm::dot(forward, direction);
+
+    if (cos_theta < 0.9999F && cos_theta > -0.9999F) {
+      const glm::vec3 axis = glm::normalize(glm::cross(forward, direction));
+      const float angle = std::acos(cos_theta);
+      key_light_node_.GetTransform().SetLocalRotation(
+        glm::angleAxis(angle, axis));
+    }
+
+    LOG_F(INFO,
+      "[MultiView] SceneBootstrapper created key light (spotlight) at "
+      "(3, 5, 6).");
+  }
+
+  // Fill light: Point light from the left side for ambient fill
+  if (!fill_light_node_.IsAlive()) {
+    fill_light_node_ = scene.CreateNode("FillLight");
+
+    auto point_light = std::make_unique<scene::PointLight>();
+    point_light->Common().affects_world = true;
+    point_light->Common().color_rgb
+      = glm::vec3(0.7F, 0.85F, 1.0F); // Cool blue tint
+    point_light->Common().intensity = 140.0F;
+    point_light->SetRange(15.0F);
+    point_light->SetSourceRadius(0.2F);
+
+    const bool attached = fill_light_node_.AttachLight(std::move(point_light));
+    CHECK_F(attached, "Failed to attach PointLight to FillLight node");
+
+    // Position to the left and slightly behind, lower than key
+    fill_light_node_.GetTransform().SetLocalPosition({ -5.0F, 2.0F, 2.0F });
+
+    LOG_F(INFO,
+      "[MultiView] SceneBootstrapper created fill light (point) at "
+      "(-5, 2, 2).");
+  }
 }
 
 } // namespace oxygen::examples::multiview

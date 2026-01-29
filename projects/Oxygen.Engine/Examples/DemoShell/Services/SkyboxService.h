@@ -8,7 +8,6 @@
 
 #include <cstdint>
 #include <functional>
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -104,7 +103,7 @@ public:
 
   SkyboxService(
     oxygen::observer_ptr<oxygen::content::IAssetLoader> asset_loader,
-    std::shared_ptr<scene::Scene> scene);
+    observer_ptr<scene::Scene> scene);
 
   ~SkyboxService() = default;
 
@@ -139,7 +138,7 @@ public:
 
 private:
   oxygen::observer_ptr<oxygen::content::IAssetLoader> asset_loader_;
-  std::shared_ptr<scene::Scene> scene_;
+  observer_ptr<scene::Scene> scene_ { nullptr };
   oxygen::content::ResourceKey current_resource_key_ { 0U };
 
   //! Cached RGBA8 pixel data for sun direction estimation.

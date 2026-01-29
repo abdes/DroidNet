@@ -7,7 +7,6 @@
 #pragma once
 
 #include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -38,9 +37,36 @@ public:
 
   // --- Configuration ---
   void SetTarget(const glm::vec3& target) { target_ = target; }
+  //! Returns the current orbit target in world space.
+  [[nodiscard]] auto GetTarget() const noexcept -> const glm::vec3&
+  {
+    return target_;
+  }
   void SetDistance(float distance) { distance_ = distance; }
+  //! Returns the current orbit distance.
+  [[nodiscard]] auto GetDistance() const noexcept -> float { return distance_; }
   void SetMode(OrbitMode mode) { mode_ = mode; }
   [[nodiscard]] auto GetMode() const noexcept -> OrbitMode { return mode_; }
+  //! Returns the orbit sensitivity.
+  [[nodiscard]] auto GetSensitivity() const noexcept -> float
+  {
+    return sensitivity_;
+  }
+  //! Returns the zoom step size.
+  [[nodiscard]] auto GetZoomStep() const noexcept -> float
+  {
+    return zoom_step_;
+  }
+  //! Returns the minimum orbit distance.
+  [[nodiscard]] auto GetMinDistance() const noexcept -> float
+  {
+    return min_distance_;
+  }
+  //! Returns the maximum orbit distance.
+  [[nodiscard]] auto GetMaxDistance() const noexcept -> float
+  {
+    return max_distance_;
+  }
 
   /**
    * @brief Synchronizes the controller state from the node's current transform.

@@ -6,6 +6,8 @@
 
 #include <imgui.h>
 
+#include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
+
 #include "DemoShell/UI/RenderingPanel.h"
 
 namespace oxygen::examples::ui {
@@ -20,26 +22,7 @@ void RenderingPanel::UpdateConfig(const LightCullingDebugConfig& config)
   config_ = config;
 }
 
-void RenderingPanel::Draw()
-{
-  if (!show_window_) {
-    return;
-  }
-
-  ImGui::SetNextWindowPos(ImVec2(980, 20), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(320, 420), ImGuiCond_FirstUseEver);
-
-  if (!ImGui::Begin("Rendering", &show_window_, ImGuiWindowFlags_None)) {
-    ImGui::End();
-    return;
-  }
-
-  DrawContents();
-
-  ImGui::End();
-}
-
-void RenderingPanel::DrawContents()
+auto RenderingPanel::DrawContents() -> void
 {
   if (ImGui::CollapsingHeader("View Mode", ImGuiTreeNodeFlags_DefaultOpen)) {
     DrawViewModeControls();
@@ -49,6 +32,25 @@ void RenderingPanel::DrawContents()
     DrawDebugModes();
   }
 }
+
+auto RenderingPanel::GetName() const noexcept -> std::string_view
+{
+  return "Rendering";
+}
+
+auto RenderingPanel::GetPreferredWidth() const noexcept -> float
+{
+  return 320.0F;
+}
+
+auto RenderingPanel::GetIcon() const noexcept -> std::string_view
+{
+  return oxygen::imgui::icons::kIconRendering;
+}
+
+auto RenderingPanel::OnLoaded() -> void { }
+
+auto RenderingPanel::OnUnloaded() -> void { }
 
 void RenderingPanel::DrawViewModeControls()
 {

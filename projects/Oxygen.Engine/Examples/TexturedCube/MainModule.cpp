@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "TexturedCube/MainModule.h"
-
 #include <filesystem>
 
 #include <imgui.h>
@@ -13,11 +11,13 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Engine/AsyncEngine.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
+#include <Oxygen/Platform/Window.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Renderer.h>
-#include <Oxygen/Scene/Camera/Perspective.h>
+
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "TexturedCube/MainModule.h"
 
 namespace oxygen::examples::textured_cube {
 
@@ -91,10 +91,10 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
       texture_service_ = std::make_unique<TextureLoadingService>(
         observer_ptr { asset_loader.get() });
       skybox_service_ = std::make_unique<SkyboxService>(
-        observer_ptr { asset_loader.get() }, scene_);
+        observer_ptr { asset_loader.get() }, observer_ptr { scene_.get() });
     }
 
-    scene_setup_ = std::make_unique<SceneSetup>(scene_);
+    scene_setup_ = std::make_unique<SceneSetup>(observer_ptr { scene_.get() });
   }
   context.SetScene(observer_ptr { scene_.get() });
 }
@@ -106,7 +106,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 
   UpdateFrameContext(context, [this](int w, int h) {
     if (camera_controller_) {
-      camera_controller_->EnsureCamera(scene_, w, h);
+      camera_controller_->EnsureCamera(observer_ptr { scene_.get() }, w, h);
       RegisterViewForRendering(camera_controller_->GetCameraNode());
     }
   });

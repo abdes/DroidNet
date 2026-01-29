@@ -10,31 +10,29 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/NamedType.h>
-#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
-#include <Oxygen/Core/PhaseRegistry.h>
-#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/Renderer/RenderContext.h>
-#include <Oxygen/Scene/Scene.h>
 
+#include "DemoShell/ActiveScene.h"
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/SingleViewModuleBase.h"
 #include "DemoShell/Services/FileBrowserService.h"
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Platform/Window.h>
+#include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen::examples::async {
 
-class AsyncDebugPanel;
+class DroneControlPanel;
 
 //! Graphics module demonstrating AsyncEngine and Common example patterns.
 /*!
@@ -88,10 +86,13 @@ public:
 
   //! Customize window properties for this example.
   auto BuildDefaultWindowProperties() const
-    -> oxygen::platform::window::Properties override;
+    -> platform::window::Properties override;
 
   //! Example-specific setup: scene, input, and animation.
   auto OnExampleFrameStart(engine::FrameContext& context) -> void override;
+
+  //! Shutdown cleanup.
+  void OnShutdown() noexcept override;
 
   //! Execute phase-specific work.
   auto OnFrameStart(engine::FrameContext& context) -> void override;
@@ -105,7 +106,7 @@ public:
   auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
 
 private:
-  friend class AsyncDebugPanel;
+  friend class DroneControlPanel;
   //! Setup functions (called once).
   auto SetupShaders() -> void;
   // Input actions/mappings for camera drone speed control
@@ -137,7 +138,7 @@ private:
   const DemoAppContext& app_;
 
   //! Scene and rendering.
-  std::shared_ptr<scene::Scene> scene_;
+  ActiveScene active_scene_ {};
 
   //! State tracking.
   bool initialized_ { false };
@@ -260,7 +261,7 @@ private:
 
   std::unique_ptr<DemoShell> shell_ {};
   std::unique_ptr<FileBrowserService> file_browser_service_ {};
-  std::unique_ptr<AsyncDebugPanel> async_panel_ {};
+  std::shared_ptr<DroneControlPanel> async_panel_ {};
 };
 
 } // namespace oxygen::examples::async

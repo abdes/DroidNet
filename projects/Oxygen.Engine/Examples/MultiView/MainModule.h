@@ -11,17 +11,21 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/Scene/Scene.h>
 
+#include "DemoShell/ActiveScene.h"
+#include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
+#include "MultiView/CompositorGraph.h"
 #include "MultiView/DemoView.h"
 #include "MultiView/SceneBootstrapper.h"
 
 namespace oxygen {
+class AsyncEngine;
 class Graphics;
-}
+} // namespace oxygen
 
 namespace oxygen::examples::multiview {
 
@@ -29,10 +33,13 @@ namespace oxygen::examples::multiview {
 /*!
  This example showcases multi-view rendering with:
  - Main view: Full-screen solid-shaded sphere
- - PiP view: Top-right corner (25% size)
+ - PiP view: Top-right corner (45% size)
 
  Both views render the same scene with different cameras.
  Demonstrates PrepareView/RenderView APIs and per-view state isolation.
+
+ Integrates with DemoShell for architectural consistency but disables all
+ standard panels since this demo has no interactive settings.
 */
 class MainModule final : public DemoModuleBase {
   OXYGEN_TYPED(MainModule)
@@ -60,6 +67,10 @@ public:
   [[nodiscard]] auto GetSupportedPhases() const noexcept
     -> engine::ModulePhaseMask override;
 
+  auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool override;
+  auto OnShutdown() noexcept -> void override;
+
+  auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
   auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
   auto OnPreRender(engine::FrameContext& context) -> co::Co<> override;
   auto OnCompositing(engine::FrameContext& context) -> co::Co<> override;
@@ -82,7 +93,12 @@ private:
   const DemoAppContext& app_;
   SceneBootstrapper scene_bootstrapper_;
 
+  // DemoShell integration (all panels disabled for this non-interactive demo)
+  std::unique_ptr<DemoShell> shell_;
+
   std::vector<std::unique_ptr<DemoView>> views_;
+  CompositorGraph compositor_graph_ {};
+  ActiveScene active_scene_ {};
   bool initialized_ { false };
 };
 

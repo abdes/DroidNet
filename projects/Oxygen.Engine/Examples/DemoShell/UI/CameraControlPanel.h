@@ -8,14 +8,10 @@
 
 #include <functional>
 #include <memory>
-#include <string>
-
-#include <glm/gtc/quaternion.hpp>
-#include <glm/vec3.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Scene/Types/NodeHandle.h>
 
+#include "DemoShell/UI/DemoPanel.h"
 #include "DemoShell/UI/FlyCameraController.h"
 #include "DemoShell/UI/OrbitCameraController.h"
 
@@ -65,8 +61,11 @@ struct CameraControlConfig {
   std::shared_ptr<oxygen::input::Action> rmb_action {};
   std::shared_ptr<oxygen::input::Action> orbit_action {};
 
+  CameraControlMode current_mode { CameraControlMode::kOrbit };
+
   CameraModeChangeCallback on_mode_changed;
   CameraResetCallback on_reset_requested;
+  std::function<void()> on_panel_closed {};
 };
 
 //! Camera control panel with mode switching and debugging
@@ -102,16 +101,15 @@ struct CameraControlConfig {
 
  panel.Initialize(config);
 
- // In ImGui update loop
- panel.Draw();
+ // Registered with DemoShell; the shell draws DrawContents() when active.
  ```
 
  @see CameraControlConfig, CameraControlMode
  */
-class CameraControlPanel {
+class CameraControlPanel final : public DemoPanel {
 public:
   CameraControlPanel() = default;
-  ~CameraControlPanel() = default;
+  ~CameraControlPanel() override = default;
 
   //! Initialize panel with configuration
   void Initialize(const CameraControlConfig& config);
@@ -119,16 +117,14 @@ public:
   //! Update panel configuration (e.g., when camera changes)
   void UpdateConfig(const CameraControlConfig& config);
 
-  //! Draw the ImGui panel content
-  /*!
-   Renders the camera control UI with tabs for mode control and debugging.
-
-   @note Must be called within ImGui rendering context
-   */
-  void Draw();
-
   //! Draws the panel content without creating a window.
-  void DrawContents();
+  auto DrawContents() -> void override;
+
+  [[nodiscard]] auto GetName() const noexcept -> std::string_view override;
+  [[nodiscard]] auto GetPreferredWidth() const noexcept -> float override;
+  [[nodiscard]] auto GetIcon() const noexcept -> std::string_view override;
+  auto OnLoaded() -> void override;
+  auto OnUnloaded() -> void override;
 
   //! Set current camera control mode
   void SetMode(CameraControlMode mode) { current_mode_ = mode; }
@@ -140,11 +136,6 @@ public:
   }
 
 private:
-  auto LoadSettings() -> void;
-  auto SaveModeSetting() const -> void;
-  auto SaveOrbitModeSetting(OrbitMode mode) const -> void;
-  auto SaveFlySpeedSetting(float speed) const -> void;
-
   void DrawCameraModeTab();
   void DrawDebugTab();
   void DrawCameraPoseInfo();
@@ -155,7 +146,6 @@ private:
 
   CameraControlConfig config_;
   CameraControlMode current_mode_ { CameraControlMode::kOrbit };
-  bool settings_loaded_ { false };
 };
 
 } // namespace oxygen::examples::ui

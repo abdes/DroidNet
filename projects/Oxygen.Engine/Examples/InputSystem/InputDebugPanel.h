@@ -87,6 +87,8 @@ public:
   [[nodiscard]] auto GetPreferredWidth() const noexcept -> float override;
   [[nodiscard]] auto GetIcon() const noexcept -> std::string_view override;
   auto DrawContents() -> void override;
+  auto OnLoaded() -> void override;
+  auto OnUnloaded() -> void override;
 
 private:
   struct History {

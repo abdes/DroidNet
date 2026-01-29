@@ -12,6 +12,7 @@
 
 #include <glm/glm.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -70,7 +71,7 @@ public:
     kCustom = 2,
   };
 
-  explicit SceneSetup(std::shared_ptr<scene::Scene> scene);
+  explicit SceneSetup(observer_ptr<scene::Scene> scene);
 
   ~SceneSetup() = default;
 
@@ -141,7 +142,7 @@ public:
   auto CleanupRetiredGeometries(std::size_t max_keep = 16) -> void;
 
 private:
-  std::shared_ptr<scene::Scene> scene_;
+  observer_ptr<scene::Scene> scene_ { nullptr };
 
   scene::SceneNode cube_node_;
   scene::SceneNode comparison_cube_node_;

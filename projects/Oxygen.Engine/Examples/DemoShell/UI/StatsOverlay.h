@@ -6,13 +6,12 @@
 
 #pragma once
 
-namespace oxygen::examples::ui {
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 
-//! Configuration for the stats overlay.
-struct StatsOverlayConfig {
-  bool show_fps { false };
-  bool show_frame_timing_detail { false };
-};
+#include "DemoShell/UI/UiSettingsVm.h"
+
+namespace oxygen::examples::ui {
 
 //! Transparent overlay for engine statistics.
 /*!
@@ -21,28 +20,17 @@ struct StatsOverlayConfig {
  */
 class StatsOverlay {
 public:
-  StatsOverlay() = default;
+  explicit StatsOverlay(observer_ptr<UiSettingsVm> settings_vm);
   ~StatsOverlay() = default;
 
-  StatsOverlay(const StatsOverlay&) = delete;
-  auto operator=(const StatsOverlay&) -> StatsOverlay& = delete;
-  StatsOverlay(StatsOverlay&&) = default;
-  auto operator=(StatsOverlay&&) -> StatsOverlay& = default;
-
-  //! Set the stats overlay configuration.
-  void SetConfig(const StatsOverlayConfig& config) { config_ = config; }
-
-  //! Get the stats overlay configuration.
-  [[nodiscard]] auto GetConfig() const -> const StatsOverlayConfig&
-  {
-    return config_;
-  }
+  OXYGEN_MAKE_NON_COPYABLE(StatsOverlay)
+  OXYGEN_DEFAULT_MOVABLE(StatsOverlay)
 
   //! Draw the stats overlay.
   auto Draw() const -> void;
 
 private:
-  StatsOverlayConfig config_ {};
+  observer_ptr<UiSettingsVm> vm_ {};
 };
 
 } // namespace oxygen::examples::ui

@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <cmath>
 
 #include <glm/geometric.hpp>
 

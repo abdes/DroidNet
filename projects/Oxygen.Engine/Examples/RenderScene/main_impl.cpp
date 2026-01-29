@@ -11,11 +11,8 @@
 #include <source_location>
 #include <span>
 #include <string>
-#include <string_view>
 #include <thread>
-#include <vector>
 
-#include <SDL3/SDL.h>
 #include <asio/signal_set.hpp>
 
 #include <Oxygen/Base/Logging.h>
@@ -34,13 +31,10 @@
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
-#include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/EventLoop.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
-#include <Oxygen/OxCo/ThreadPool.h>
-#include <Oxygen/OxCo/asio.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Renderer/Renderer.h>
 
@@ -267,6 +261,12 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .thread_pool_size = (std::min)(4u, std::thread::hardware_concurrency()),
     });
 
+    const auto workspace_root
+      = std::filesystem::path(std::source_location::current().file_name())
+          .parent_path()
+          .parent_path()
+          .parent_path();
+
     // Load the graphics backend
     const GraphicsConfig gfx_config {
       .enable_debug = true,
@@ -275,9 +275,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .headless = app.headless,
       .enable_vsync = enable_vsync,
       .extra = {},
-      .path_finder_config = PathFinderConfig::Create()
-        .WithWorkspaceRoot(std::filesystem::current_path())
-        .Build(),
+      .path_finder_config
+      = PathFinderConfig::Create().WithWorkspaceRoot(workspace_root).Build(),
     };
     const auto& loader = GraphicsBackendLoader::GetInstance();
     app.gfx_weak = loader.LoadBackend(

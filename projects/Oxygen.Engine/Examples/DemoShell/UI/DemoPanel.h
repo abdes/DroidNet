@@ -37,6 +37,15 @@ public:
   //! Draws the panel content inside the shared SidePanel window.
   virtual auto DrawContents() -> void = 0;
 
+  //! Called when the panel is registered with the demo shell.
+  virtual auto OnRegistered() -> void { }
+
+  //! Called when the panel becomes the active panel.
+  virtual auto OnLoaded() -> void = 0;
+
+  //! Called when the panel is deactivated or the shell is shutting down.
+  virtual auto OnUnloaded() -> void = 0;
+
   //! Preferred width (in pixels) for the SidePanel when this panel is active.
   [[nodiscard]] virtual auto GetPreferredWidth() const noexcept -> float
   {

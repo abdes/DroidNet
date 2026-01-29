@@ -1,8 +1,18 @@
 {
+  "async": {
+    "drone_panel": {
+      "actions_open": false,
+      "scene_open": false,
+      "spotlight_open": true
+    }
+  },
   "demo_shell": {
-    "active_panel": "Environment",
+    "active_panel": "Drone Control",
     "panels": {
       "async": {
+        "width": 520.0
+      },
+      "drone_control": {
         "width": 520.0
       },
       "environment": {
@@ -18,9 +28,9 @@
   },
   "environment": {
     "debug": {
-      "force_analytic": "false",
-      "use_lut": "true",
-      "visualize_lut": "false"
+      "force_analytic": false,
+      "use_lut": true,
+      "visualize_lut": false
     },
     "post_process": {
       "auto_exposure_max_ev": 16.0,
@@ -30,7 +40,7 @@
       "bloom_intensity": 0.0,
       "bloom_threshold": 1.0,
       "contrast": 1.0,
-      "enabled": "true",
+      "enabled": false,
       "exposure_compensation_ev": -10.0,
       "exposure_mode": 0.0,
       "saturation": 1.0,
@@ -41,7 +51,7 @@
       "aerial_perspective_scale": 1.0,
       "aerial_scattering_strength": 1.0,
       "atmosphere_height_km": 80.0,
-      "enabled": "true",
+      "enabled": false,
       "ground_albedo": {
         "x": 0.2187945544719696,
         "y": 0.3243902325630188,
@@ -52,12 +62,12 @@
       "multi_scattering": 1.0,
       "planet_radius_km": 6360.0,
       "rayleigh_scale_height_km": 8.0,
-      "sun_disk_enabled": "true",
+      "sun_disk_enabled": true,
       "sun_disk_radius_deg": 0.2680000066757202
     },
     "sky_light": {
       "diffuse": 1.0,
-      "enabled": "false",
+      "enabled": false,
       "intensity": 1.0,
       "source": 0.0,
       "specular": 1.0,
@@ -68,7 +78,7 @@
       }
     },
     "sky_sphere": {
-      "enabled": "false",
+      "enabled": false,
       "intensity": 1.0,
       "rotation_deg": 0.0,
       "solid_color": {
@@ -80,12 +90,12 @@
     },
     "skybox": {
       "face_size": 512.0,
-      "flip_y": "false",
+      "flip_y": false,
       "hdr_exposure_ev": 0.0,
       "layout": 0.0,
       "output_format": 0.0,
       "path": "",
-      "tonemap_hdr_to_ldr": "false"
+      "tonemap_hdr_to_ldr": false
     },
     "sun": {
       "azimuth_deg": 177.39999389648438,
@@ -94,19 +104,22 @@
         "y": 1.0,
         "z": 1.0
       },
-      "disk_radius_deg": 0.2680000066757202,
+      "disk_radius_deg": 0.26799994707107544,
       "elevation_deg": 17.399999618530273,
-      "enabled": "true",
+      "enabled": true,
       "intensity_lux": 100000.0,
       "source": 1.0,
       "temperature_kelvin": 6500.0,
-      "use_temperature": "false"
+      "use_temperature": false
     }
   },
   "ui": {
+    "axes": {
+      "visible": true
+    },
     "stats": {
-      "show_fps": "true",
-      "show_frame_timing_detail": "true"
+      "show_fps": false,
+      "show_frame_timing_detail": false
     }
   }
 }

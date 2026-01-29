@@ -16,11 +16,22 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
+#include <Oxygen/Base/Logging.h>
+
 #include "DemoShell/UI/AxesWidget.h"
+#include "DemoShell/UI/UiSettingsVm.h"
 
 namespace oxygen::examples::ui {
 
 namespace {
+
+  struct AxesWidgetConfig {
+    float size { 80.0F };
+    float padding { 10.0F };
+    float axis_length { 0.35F };
+    float line_thickness { 2.0F };
+    bool show_labels { true };
+  };
 
   // Axis colors: X=Red, Y=Green, Z=Blue (matching standard conventions)
   constexpr ImU32 kAxisColorX = IM_COL32(230, 60, 60, 255);
@@ -44,26 +55,26 @@ namespace {
     float depth; // For sorting (higher = nearer to camera)
   };
 
+  [[nodiscard]] auto ProjectAxis(const glm::vec3& axis_dir,
+    const glm::mat4& view_matrix, const glm::vec2& center,
+    const AxesWidgetConfig& config) -> glm::vec2
+  {
+    const glm::mat3 rotation(view_matrix);
+    const glm::vec3 view_axis = rotation * axis_dir;
+    const float axis_pixel_length = config.size * config.axis_length;
+
+    return {
+      center.x + view_axis.x * axis_pixel_length,
+      center.y - view_axis.y * axis_pixel_length,
+    };
+  }
+
 } // namespace
 
-auto AxesWidget::ProjectAxis(const glm::vec3& axis_dir,
-  const glm::mat4& view_matrix, const glm::vec2& center) const -> glm::vec2
+AxesWidget::AxesWidget(observer_ptr<UiSettingsVm> settings_vm)
+  : settings_vm_(settings_vm)
 {
-  // Extract the rotation part of the view matrix (upper-left 3x3)
-  // This transforms world axes to view space
-  const glm::mat3 rotation(view_matrix);
-
-  // Transform the axis direction to view space
-  const glm::vec3 view_axis = rotation * axis_dir;
-
-  // Project to 2D: view space X maps to screen X, view space Y maps to screen
-  // Y (inverted because screen Y grows downward)
-  const float axis_pixel_length = config_.size * config_.axis_length;
-
-  return {
-    center.x + view_axis.x * axis_pixel_length,
-    center.y - view_axis.y * axis_pixel_length, // Y inverted for screen coords
-  };
+  DCHECK_NOTNULL_F(settings_vm, "AxesWidget requires UiSettingsVm");
 }
 
 /*!
@@ -80,21 +91,22 @@ auto AxesWidget::ProjectAxis(const glm::vec3& axis_dir,
  */
 void AxesWidget::Draw(const glm::mat4& view_matrix)
 {
-  if (!config_.show_widget) {
+  if (!settings_vm_->GetAxesVisible()) {
     return;
   }
 
   // Get main viewport and calculate widget position (bottom-left corner)
   const ImGuiViewport* viewport = ImGui::GetMainViewport();
+  const AxesWidgetConfig config {};
   const glm::vec2 widget_pos {
-    viewport->WorkPos.x + config_.padding,
-    viewport->WorkPos.y + viewport->WorkSize.y - config_.size - config_.padding,
+    viewport->WorkPos.x + config.padding,
+    viewport->WorkPos.y + viewport->WorkSize.y - config.size - config.padding,
   };
 
   // Center of the widget where axes originate
   const glm::vec2 center {
-    widget_pos.x + config_.size * 0.5F,
-    widget_pos.y + config_.size * 0.5F,
+    widget_pos.x + config.size * 0.5F,
+    widget_pos.y + config.size * 0.5F,
   };
 
   // Extract view rotation for depth calculation
@@ -104,7 +116,8 @@ void AxesWidget::Draw(const glm::mat4& view_matrix)
   std::array<AxisInfo, 3> axes = { {
     {
       .direction = { 1.0F, 0.0F, 0.0F },
-      .screen_end = ProjectAxis({ 1.0F, 0.0F, 0.0F }, view_matrix, center),
+      .screen_end
+      = ProjectAxis({ 1.0F, 0.0F, 0.0F }, view_matrix, center, config),
       .color = kAxisColorX,
       .color_dim = kAxisColorXDim,
       .label = "X",
@@ -112,7 +125,8 @@ void AxesWidget::Draw(const glm::mat4& view_matrix)
     },
     {
       .direction = { 0.0F, 1.0F, 0.0F },
-      .screen_end = ProjectAxis({ 0.0F, 1.0F, 0.0F }, view_matrix, center),
+      .screen_end
+      = ProjectAxis({ 0.0F, 1.0F, 0.0F }, view_matrix, center, config),
       .color = kAxisColorY,
       .color_dim = kAxisColorYDim,
       .label = "Y",
@@ -120,7 +134,8 @@ void AxesWidget::Draw(const glm::mat4& view_matrix)
     },
     {
       .direction = { 0.0F, 0.0F, 1.0F },
-      .screen_end = ProjectAxis({ 0.0F, 0.0F, 1.0F }, view_matrix, center),
+      .screen_end
+      = ProjectAxis({ 0.0F, 0.0F, 1.0F }, view_matrix, center, config),
       .color = kAxisColorZ,
       .color_dim = kAxisColorZDim,
       .label = "Z",
@@ -138,18 +153,17 @@ void AxesWidget::Draw(const glm::mat4& view_matrix)
   ImDrawList* draw_list = ImGui::GetForegroundDrawList();
 
   // Draw a subtle background circle
-  draw_list->AddCircleFilled(ImVec2(center.x, center.y), config_.size * 0.45F,
+  draw_list->AddCircleFilled(ImVec2(center.x, center.y), config.size * 0.45F,
     IM_COL32(30, 30, 30, 150), 32);
-  draw_list->AddCircle(ImVec2(center.x, center.y), config_.size * 0.45F,
+  draw_list->AddCircle(ImVec2(center.x, center.y), config.size * 0.45F,
     IM_COL32(80, 80, 80, 200), 32, 1.0F);
 
   // Draw each axis line
   for (const auto& axis : axes) {
     // Use dimmed color if axis points away from camera (negative depth)
     const ImU32 color = (axis.depth >= 0.0F) ? axis.color : axis.color_dim;
-    const float thickness = (axis.depth >= 0.0F)
-      ? config_.line_thickness
-      : config_.line_thickness * 0.7F;
+    const float thickness = (axis.depth >= 0.0F) ? config.line_thickness
+                                                 : config.line_thickness * 0.7F;
 
     // Draw the axis line from center to projected endpoint
     draw_list->AddLine(ImVec2(center.x, center.y),
@@ -177,7 +191,7 @@ void AxesWidget::Draw(const glm::mat4& view_matrix)
     }
 
     // Draw axis label if enabled
-    if (config_.show_labels && axis.depth >= -0.3F) {
+    if (config.show_labels && axis.depth >= -0.3F) {
       // Position label slightly beyond the axis endpoint
       const glm::vec2 label_offset = (dir_len > 1.0F)
         ? (axis.screen_end - center) / dir_len * 12.0F

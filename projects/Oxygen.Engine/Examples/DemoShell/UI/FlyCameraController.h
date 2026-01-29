@@ -46,14 +46,34 @@ public:
   // --- Configuration ---
   [[nodiscard]] auto GetMoveSpeed() const -> float { return move_speed_; }
   void SetMoveSpeed(float speed) { move_speed_ = speed; }
+  //! Returns the current look sensitivity.
+  [[nodiscard]] auto GetLookSensitivity() const noexcept -> float
+  {
+    return look_sensitivity_;
+  }
   void SetLookSensitivity(float sensitivity)
   {
     look_sensitivity_ = sensitivity;
   }
 
   void SetBoostActive(bool active) { boost_active_ = active; }
+  //! Returns whether boost is active.
+  [[nodiscard]] auto GetBoostActive() const noexcept -> bool
+  {
+    return boost_active_;
+  }
   void SetBoostMultiplier(float multiplier) { boost_multiplier_ = multiplier; }
+  //! Returns the boost multiplier.
+  [[nodiscard]] auto GetBoostMultiplier() const noexcept -> float
+  {
+    return boost_multiplier_;
+  }
   void SetPlaneLockActive(bool active) { plane_lock_active_ = active; }
+  //! Returns whether plane lock is active.
+  [[nodiscard]] auto GetPlaneLockActive() const noexcept -> bool
+  {
+    return plane_lock_active_;
+  }
 
   /**
    * @brief Synchronizes the controller state from the node's current transform.

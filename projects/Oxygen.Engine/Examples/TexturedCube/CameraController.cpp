@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "TexturedCube/CameraController.h"
-
 #include <algorithm>
 #include <cmath>
 
@@ -20,6 +18,8 @@
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+
+#include "TexturedCube/CameraController.h"
 
 namespace {
 
@@ -151,7 +151,7 @@ auto CameraController::InitInputBindings() noexcept -> bool
 }
 
 auto CameraController::EnsureCamera(
-  std::shared_ptr<scene::Scene>& scene, int width, int height) -> void
+  observer_ptr<scene::Scene> scene, int width, int height) -> void
 {
   using scene::PerspectiveCamera;
 

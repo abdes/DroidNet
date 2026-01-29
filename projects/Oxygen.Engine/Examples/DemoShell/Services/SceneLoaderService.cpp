@@ -123,6 +123,9 @@ void SceneLoaderService::StartLoad(const data::AssetKey& key)
 void SceneLoaderService::MarkConsumed()
 {
   consumed_ = true;
+  swap_.asset.reset();
+  runtime_nodes_.clear();
+  active_camera_ = {};
   linger_frames_ = 2;
 }
 
@@ -147,38 +150,50 @@ void SceneLoaderService::OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset)
       return;
     }
 
-    LOG_F(INFO, "SceneLoader: Scene asset loaded. Instantiating nodes...");
+    LOG_F(INFO, "SceneLoader: Scene asset loaded. Ready to instantiate.");
 
-    swap_.scene = std::make_shared<scene::Scene>(std::string(kSceneName));
     runtime_nodes_.clear();
-
-    swap_.scene->SetEnvironment(BuildEnvironment(*asset));
-    LogSceneSummary(*asset);
-    InstantiateNodes(*asset);
-    ApplyHierarchy(*asset);
-    AttachRenderables(*asset);
-    AttachLights(*asset);
-    SelectActiveCamera(*asset);
-    EnsureCameraAndViewport();
-    LogSceneHierarchy();
-
+    active_camera_ = {};
+    swap_.asset = std::move(asset);
     ready_ = true;
-    LOG_F(INFO,
-      "SceneLoader: Scene loading and instantiation complete. Ready for "
-      "swap.");
+    failed_ = false;
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "SceneLoader: Exception while building scene: {}", ex.what());
     swap_ = {};
     runtime_nodes_.clear();
+    active_camera_ = {};
     ready_ = false;
     failed_ = true;
   } catch (...) {
     LOG_F(ERROR, "SceneLoader: Unknown exception while building scene");
     swap_ = {};
     runtime_nodes_.clear();
+    active_camera_ = {};
     ready_ = false;
     failed_ = true;
   }
+}
+
+auto SceneLoaderService::BuildScene(
+  scene::Scene& scene, const data::SceneAsset& asset) -> scene::SceneNode
+{
+  LOG_F(INFO, "SceneLoader: Instantiating runtime scene '{}'", kSceneName);
+
+  runtime_nodes_.clear();
+  active_camera_ = {};
+
+  scene.SetEnvironment(BuildEnvironment(asset));
+  LogSceneSummary(asset);
+  InstantiateNodes(scene, asset);
+  ApplyHierarchy(scene, asset);
+  AttachRenderables(asset);
+  AttachLights(asset);
+  SelectActiveCamera(asset);
+  EnsureCameraAndViewport(scene);
+  LogSceneHierarchy(scene);
+
+  LOG_F(INFO, "SceneLoader: Runtime scene instantiation complete.");
+  return std::move(active_camera_);
 }
 
 auto SceneLoaderService::BuildEnvironment(const data::SceneAsset& asset)
@@ -212,7 +227,8 @@ void SceneLoaderService::LogSceneSummary(const data::SceneAsset& asset) const
     asset.GetComponents<SpotLightRecord>().size());
 }
 
-void SceneLoaderService::InstantiateNodes(const data::SceneAsset& asset)
+void SceneLoaderService::InstantiateNodes(
+  scene::Scene& scene, const data::SceneAsset& asset)
 {
   using oxygen::data::pak::NodeRecord;
 
@@ -223,7 +239,7 @@ void SceneLoaderService::InstantiateNodes(const data::SceneAsset& asset)
     const NodeRecord& node = nodes[i];
     const std::string name = MakeNodeName(asset.GetNodeName(node), i);
 
-    auto n = swap_.scene->CreateNode(name);
+    auto n = scene.CreateNode(name);
     auto tf = n.GetTransform();
     tf.SetLocalPosition(
       glm::vec3(node.translation[0], node.translation[1], node.translation[2]));
@@ -235,7 +251,8 @@ void SceneLoaderService::InstantiateNodes(const data::SceneAsset& asset)
   }
 }
 
-void SceneLoaderService::ApplyHierarchy(const data::SceneAsset& asset)
+void SceneLoaderService::ApplyHierarchy(
+  scene::Scene& scene, const data::SceneAsset& asset)
 {
   const auto nodes = asset.GetNodes();
 
@@ -249,7 +266,7 @@ void SceneLoaderService::ApplyHierarchy(const data::SceneAsset& asset)
       continue;
     }
 
-    const bool ok = swap_.scene->ReparentNode(runtime_nodes_[i],
+    const bool ok = scene.ReparentNode(runtime_nodes_[i],
       runtime_nodes_[parent_index], /*preserve_world_transform=*/false);
     if (!ok) {
       LOG_F(WARNING, "Failed to reparent node {} under {}", i, parent_index);
@@ -421,18 +438,17 @@ void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)
     const auto& rec = perspective_cams.front();
     const auto node_index = static_cast<size_t>(rec.node_index);
     if (node_index < runtime_nodes_.size()) {
-      swap_.active_camera = runtime_nodes_[node_index];
+      active_camera_ = runtime_nodes_[node_index];
       LOG_F(INFO,
         "SceneLoader: Using perspective camera node_index={} name='{}'",
-        rec.node_index, swap_.active_camera.GetName().c_str());
-      if (!swap_.active_camera.HasCamera()) {
+        rec.node_index, active_camera_.GetName().c_str());
+      if (!active_camera_.HasCamera()) {
         auto cam = std::make_unique<scene::PerspectiveCamera>();
-        const bool attached = swap_.active_camera.AttachCamera(std::move(cam));
+        const bool attached = active_camera_.AttachCamera(std::move(cam));
         CHECK_F(
           attached, "Failed to attach PerspectiveCamera to scene camera node");
       }
-      if (auto cam_ref
-        = swap_.active_camera.GetCameraAs<scene::PerspectiveCamera>();
+      if (auto cam_ref = active_camera_.GetCameraAs<scene::PerspectiveCamera>();
         cam_ref) {
         auto& cam = cam_ref->get();
         float near_plane = std::abs(rec.near_plane);
@@ -451,7 +467,7 @@ void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)
           "near={} far={} aspect_hint={}",
           fov_y_deg, near_plane, far_plane, rec.aspect_ratio);
 
-        auto tf = swap_.active_camera.GetTransform();
+        auto tf = active_camera_.GetTransform();
         glm::vec3 cam_pos { 0.0F, 0.0F, 0.0F };
         glm::quat cam_rot { 1.0F, 0.0F, 0.0F, 0.0F };
         if (auto lp = tf.GetLocalPosition()) {
@@ -471,7 +487,7 @@ void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)
     }
   }
 
-  if (!swap_.active_camera.IsAlive()) {
+  if (!active_camera_.IsAlive()) {
     const auto ortho_cams = asset.GetComponents<OrthographicCameraRecord>();
     if (!ortho_cams.empty()) {
       LOG_F(INFO, "SceneLoader: Found {} orthographic camera(s)",
@@ -479,19 +495,18 @@ void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)
       const auto& rec = ortho_cams.front();
       const auto node_index = static_cast<size_t>(rec.node_index);
       if (node_index < runtime_nodes_.size()) {
-        swap_.active_camera = runtime_nodes_[node_index];
+        active_camera_ = runtime_nodes_[node_index];
         LOG_F(INFO,
           "SceneLoader: Using orthographic camera node_index={} name='{}'",
-          rec.node_index, swap_.active_camera.GetName().c_str());
-        if (!swap_.active_camera.HasCamera()) {
+          rec.node_index, active_camera_.GetName().c_str());
+        if (!active_camera_.HasCamera()) {
           auto cam = std::make_unique<scene::OrthographicCamera>();
-          const bool attached
-            = swap_.active_camera.AttachCamera(std::move(cam));
+          const bool attached = active_camera_.AttachCamera(std::move(cam));
           CHECK_F(attached,
             "Failed to attach OrthographicCamera to scene camera node");
         }
         if (auto cam_ref
-          = swap_.active_camera.GetCameraAs<scene::OrthographicCamera>();
+          = active_camera_.GetCameraAs<scene::OrthographicCamera>();
           cam_ref) {
           float near_plane = std::abs(rec.near_plane);
           float far_plane = std::abs(rec.far_plane);
@@ -511,7 +526,7 @@ void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)
   }
 }
 
-void SceneLoaderService::EnsureCameraAndViewport()
+void SceneLoaderService::EnsureCameraAndViewport(scene::Scene& scene)
 {
   const float aspect = height_ > 0
     ? (static_cast<float>(width_) / static_cast<float>(height_))
@@ -524,32 +539,31 @@ void SceneLoaderService::EnsureCameraAndViewport()
     .min_depth = 0.0F,
     .max_depth = 1.0F };
 
-  if (!swap_.active_camera.IsAlive()) {
-    swap_.active_camera = swap_.scene->CreateNode("MainCamera");
+  if (!active_camera_.IsAlive()) {
+    active_camera_ = scene.CreateNode("MainCamera");
     const glm::vec3 cam_pos(10.0F, 10.0F, 10.0F);
     const glm::vec3 cam_target(0.0F, 0.0F, 0.0F);
-    auto tf = swap_.active_camera.GetTransform();
+    auto tf = active_camera_.GetTransform();
     tf.SetLocalPosition(cam_pos);
     tf.SetLocalRotation(MakeLookRotationFromPosition(cam_pos, cam_target));
-    const auto handle = swap_.active_camera.GetHandle();
+    const auto handle = active_camera_.GetHandle();
     const bool already_tracked
       = std::ranges::any_of(runtime_nodes_, [&](const scene::SceneNode& node) {
           return node.IsAlive() && node.GetHandle() == handle;
         });
     if (!already_tracked) {
-      runtime_nodes_.push_back(swap_.active_camera);
+      runtime_nodes_.push_back(active_camera_);
     }
     LOG_F(INFO, "SceneLoader: No camera in scene; created fallback camera '{}'",
-      swap_.active_camera.GetName().c_str());
+      active_camera_.GetName().c_str());
   }
 
-  if (!swap_.active_camera.HasCamera()) {
+  if (!active_camera_.HasCamera()) {
     auto camera = std::make_unique<scene::PerspectiveCamera>();
-    swap_.active_camera.AttachCamera(std::move(camera));
+    active_camera_.AttachCamera(std::move(camera));
   }
 
-  if (auto cam_ref
-    = swap_.active_camera.GetCameraAs<scene::PerspectiveCamera>();
+  if (auto cam_ref = active_camera_.GetCameraAs<scene::PerspectiveCamera>();
     cam_ref) {
     auto& cam = cam_ref->get();
     cam.SetAspectRatio(aspect);
@@ -557,19 +571,14 @@ void SceneLoaderService::EnsureCameraAndViewport()
     return;
   }
 
-  if (auto ortho_ref
-    = swap_.active_camera.GetCameraAs<scene::OrthographicCamera>();
+  if (auto ortho_ref = active_camera_.GetCameraAs<scene::OrthographicCamera>();
     ortho_ref) {
     ortho_ref->get().SetViewport(viewport);
   }
 }
 
-void SceneLoaderService::LogSceneHierarchy()
+void SceneLoaderService::LogSceneHierarchy(const scene::Scene& scene)
 {
-  if (!swap_.scene) {
-    return;
-  }
-
   LOG_F(INFO, "SceneLoader: Runtime scene hierarchy:");
   std::unordered_set<scene::NodeHandle> visited_nodes;
   visited_nodes.reserve(runtime_nodes_.size());
@@ -599,7 +608,7 @@ void SceneLoaderService::LogSceneHierarchy()
     }
   };
 
-  for (auto& root : swap_.scene->GetRootNodes()) {
+  for (auto& root : scene.GetRootNodes()) {
     PrintSubtree(PrintSubtree, root, 0);
   }
 

@@ -7,13 +7,12 @@
 #pragma once
 
 #include <expected>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <vector>
-
-#include <Oxygen/Base/ObserverPtr.h>
 
 #include "DemoShell/UI/DemoPanel.h"
 
@@ -42,11 +41,11 @@ public:
   //! Panel entry stored in the registry.
   struct PanelEntry {
     std::string name;
-    observer_ptr<DemoPanel> panel { nullptr };
+    std::shared_ptr<DemoPanel> panel {};
   };
 
   //! Register a panel instance.
-  auto RegisterPanel(observer_ptr<DemoPanel> panel)
+  auto RegisterPanel(std::shared_ptr<DemoPanel> panel)
     -> std::expected<void, PanelRegistryError>;
 
   //! Activate a panel by name.
@@ -57,7 +56,8 @@ public:
   auto ClearActivePanel() noexcept -> void;
 
   //! Returns the currently active panel, if any.
-  [[nodiscard]] auto GetActivePanel() const noexcept -> observer_ptr<DemoPanel>;
+  [[nodiscard]] auto GetActivePanel() const noexcept
+    -> std::shared_ptr<DemoPanel>;
 
   //! Returns the active panel name, or empty if none.
   [[nodiscard]] auto GetActivePanelName() const noexcept -> std::string_view;

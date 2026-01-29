@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <shared_mutex>
 #include <source_location>
 #include <string>
 #include <string_view>
@@ -23,7 +24,7 @@ namespace oxygen::examples {
 class SettingsService {
 public:
   explicit SettingsService(std::filesystem::path storage_path);
-  ~SettingsService();
+  ~SettingsService() noexcept;
 
   //! Creates a settings service stored alongside the calling demo source file.
   static auto CreateForDemo(std::source_location location
@@ -60,6 +61,12 @@ public:
   //! Sets a string stored under the given key.
   auto SetString(std::string_view key, std::string value) -> void;
 
+  //! Gets a boolean stored under the given key.
+  auto GetBool(std::string_view key) const -> std::optional<bool>;
+
+  //! Sets a boolean stored under the given key.
+  auto SetBool(std::string_view key, bool value) -> void;
+
   //! Gets the storage path.
   [[nodiscard]] auto GetStoragePath() const noexcept
     -> const std::filesystem::path&
@@ -72,8 +79,10 @@ private:
   auto FindNode(std::string_view key) const -> const void*;
   auto ResolveNode(std::string_view key) -> void*;
 
+  mutable std::shared_mutex mutex_ {};
   std::filesystem::path storage_path_;
   bool dirty_ { false };
+  bool loaded_ { false };
   struct JsonStorage;
   std::unique_ptr<JsonStorage> storage_;
 };

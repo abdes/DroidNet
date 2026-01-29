@@ -7,10 +7,11 @@
 #pragma once
 
 #include <functional>
-#include <memory>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
+
+#include "DemoShell/UI/DemoPanel.h"
 
 namespace oxygen::engine {
 struct LightCullingPassConfig;
@@ -40,7 +41,7 @@ struct LightCullingDebugConfig {
  "Visualization Modes". Visualization modes toggle the shader debug
  mode automatically (Normal disables debug).
 */
-class LightingPanel {
+class LightingPanel final : public DemoPanel {
 public:
   //! Initialize the panel with configuration
   void Initialize(const LightCullingDebugConfig& config);
@@ -48,11 +49,15 @@ public:
   //! Update configuration (call when shader pass config changes)
   void UpdateConfig(const LightCullingDebugConfig& config);
 
-  //! Draw the ImGui panel (call once per frame)
-  void Draw();
-
   //! Draws the panel content without creating a window.
-  void DrawContents();
+  auto DrawContents() -> void override;
+
+  [[nodiscard]] auto GetName() const noexcept -> std::string_view override;
+  [[nodiscard]] auto GetPreferredWidth() const noexcept -> float override;
+  [[nodiscard]] auto GetIcon() const noexcept -> std::string_view override;
+  auto OnRegistered() -> void override;
+  auto OnLoaded() -> void override;
+  auto OnUnloaded() -> void override;
 
 private:
   auto LoadSettings() -> void;
@@ -69,7 +74,6 @@ private:
 
   LightCullingDebugConfig config_ {};
   bool use_clustered_culling_ { false };
-  bool show_window_ { true };
   bool settings_loaded_ { false };
 
   // Cluster config UI state (cached for editing)

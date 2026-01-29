@@ -177,15 +177,20 @@ extern "C" void MainImpl(std::span<const char*> /*args*/)
   auto platform
     = std::make_shared<Platform>(PlatformConfig { .headless = false });
 
+  const auto workspace_root
+    = std::filesystem::path(std::source_location::current().file_name())
+        .parent_path()
+        .parent_path()
+        .parent_path();
+
   // Load the graphics backend
   GraphicsConfig gfx_config {
     .enable_debug = true,
     .enable_validation = false,
     .headless = false,
     .extra = {},
-    .path_finder_config = oxygen::PathFinderConfig::Create()
-      .WithWorkspaceRoot(std::filesystem::current_path())
-      .Build(),
+    .path_finder_config
+    = PathFinderConfig::Create().WithWorkspaceRoot(workspace_root).Build(),
   };
   auto& loader = oxygen::GraphicsBackendLoader::GetInstance();
   auto gfx_weak = loader.LoadBackend(BackendType::kDirect3D12, gfx_config);

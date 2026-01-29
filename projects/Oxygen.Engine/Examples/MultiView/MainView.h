@@ -7,8 +7,23 @@
 #pragma once
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/OxCo/Co.h>
 
 #include "MultiView/DemoView.h"
+
+namespace oxygen::engine {
+class Renderer;
+struct RenderContext;
+} // namespace oxygen
+
+namespace oxygen::graphics {
+class CommandRecorder;
+class Texture;
+} // namespace oxygen::graphics
+
+namespace oxygen::scene {
+class Scene;
+} // namespace oxygen::scene
 
 namespace oxygen::examples::multiview {
 

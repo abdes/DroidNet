@@ -13,7 +13,6 @@
 #include <numbers>
 #include <random>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #define GLM_ENABLE_EXPERIMENTAL
@@ -24,7 +23,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Scissors.h>
-#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
@@ -32,17 +30,12 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/ShaderReference.h>
-#include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/Internal/Commander.h>
-#include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
-#include <Oxygen/ImGui/ImGuiPass.h>
 #include <Oxygen/ImGui/ImguiModule.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/InputActionMapping.h>
@@ -52,23 +45,19 @@
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
-#include <Oxygen/Renderer/Passes/TransparentPass.h>
-#include <Oxygen/Renderer/RenderContext.h>
-#include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/SceneCameraViewResolver.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
-#include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 
+#include "Async/DroneControlPanel.h"
 #include "Async/MainModule.h"
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/RenderGraph.h"
 #include "DemoShell/Services/FileBrowserService.h"
-#include "DemoShell/UI/DemoPanel.h"
 
 using oxygen::examples::async::MainModule;
 using WindowProps = oxygen::platform::window::Properties;
@@ -513,54 +502,6 @@ auto AnimateSphereOrbit(oxygen::scene::SceneNode& sphere_node, double angle,
 
 namespace oxygen::examples::async {
 
-class AsyncDebugPanel final : public DemoPanel {
-public:
-  explicit AsyncDebugPanel(observer_ptr<MainModule> owner)
-    : owner_(owner)
-  {
-  }
-
-  [[nodiscard]] auto GetName() const noexcept -> std::string_view override
-  {
-    return "Async";
-  }
-
-  [[nodiscard]] auto GetPreferredWidth() const noexcept -> float override
-  {
-    return 520.0F;
-  }
-
-  [[nodiscard]] auto GetIcon() const noexcept -> std::string_view override
-  {
-    return oxygen::imgui::icons::kIconRenderWireframe;
-  }
-
-  auto DrawContents() -> void override
-  {
-    if (!owner_) {
-      return;
-    }
-
-    ImGui::Text("Async Demo");
-    ImGui::Separator();
-
-    if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen)) {
-      owner_->DrawSceneInfoPanel();
-    }
-
-    if (ImGui::CollapsingHeader("Spotlight")) {
-      owner_->DrawSpotLightPanel();
-    }
-
-    if (ImGui::CollapsingHeader("Actions", ImGuiTreeNodeFlags_DefaultOpen)) {
-      owner_->DrawFrameActionsPanel();
-    }
-  }
-
-private:
-  observer_ptr<MainModule> owner_ { nullptr };
-};
-
 MainModule::MainModule(const DemoAppContext& app)
   : Base(app)
   , app_(app)
@@ -572,7 +513,7 @@ MainModule::MainModule(const DemoAppContext& app)
   start_time_ = std::chrono::steady_clock::now();
 }
 
-MainModule::~MainModule() { scene_.reset(); }
+MainModule::~MainModule() { active_scene_ = {}; }
 
 auto MainModule::GetSupportedPhases() const noexcept -> engine::ModulePhaseMask
 {
@@ -608,15 +549,12 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
   if (!initialized_) {
     SetupShaders();
     SetupInput();
-    EnsureExampleScene();
-
     file_browser_service_ = std::make_unique<FileBrowserService>();
 
     shell_ = std::make_unique<DemoShell>();
-    async_panel_ = std::make_unique<AsyncDebugPanel>(observer_ptr { this });
+    async_panel_ = std::make_shared<DroneControlPanel>(observer_ptr { this });
     DemoShellConfig shell_config;
     shell_config.input_system = observer_ptr { app_.input_system.get() };
-    shell_config.scene = scene_;
     shell_config.file_browser_service
       = observer_ptr { file_browser_service_.get() };
     shell_config.panel_config = DemoShellPanelConfig {
@@ -625,15 +563,16 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
       .environment = true,
       .lighting = true,
       .rendering = true,
-      .settings = true,
     };
     shell_config.enable_camera_rig = false;
 
     if (!shell_->Initialize(shell_config)) {
       LOG_F(WARNING, "Async: DemoShell initialization failed");
-    } else if (!shell_->RegisterPanel(observer_ptr { async_panel_.get() })) {
+    } else if (!shell_->RegisterPanel(async_panel_)) {
       LOG_F(WARNING, "Async: failed to register Async panel");
     }
+
+    EnsureExampleScene();
 
     // --- ImGuiPass configuration ---
     auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
@@ -648,9 +587,24 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
   }
 
   // Register scene with frame context (required for rendering)
-  if (scene_) {
-    context.SetScene(oxygen::observer_ptr { scene_.get() });
+  const auto scene_ptr
+    = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
+  if (scene_ptr) {
+    context.SetScene(oxygen::observer_ptr { scene_ptr.get() });
   }
+}
+
+void MainModule::OnShutdown() noexcept
+{
+  if (shell_) {
+    shell_->SetScene(std::unique_ptr<scene::Scene> {});
+    shell_->SetSkyboxService(observer_ptr<SkyboxService> { nullptr });
+  }
+  active_scene_ = {};
+
+  async_panel_.reset();
+  shell_.reset();
+  file_browser_service_.reset();
 }
 
 auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
@@ -898,7 +852,11 @@ auto MainModule::UpdateCameraDrone(double delta_time) -> void
 
 auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 {
-  DCHECK_NOTNULL_F(scene_);
+  DCHECK_F(active_scene_.IsValid());
+  const auto scene_ptr
+    = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
+  auto* scene = scene_ptr.get();
+  DCHECK_NOTNULL_F(scene);
   DCHECK_NOTNULL_F(app_window_);
   if (!app_window_->GetWindow()) {
     UpdateFrameContext(context, nullptr);
@@ -939,12 +897,15 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 
 auto MainModule::EnsureCameraSpotLight() -> void
 {
-  if (!scene_ || !main_camera_.IsAlive()) {
+  const auto scene_ptr
+    = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
+  auto* scene = scene_ptr.get();
+  if (!scene || !main_camera_.IsAlive()) {
     return;
   }
 
   if (!camera_spot_light_.IsAlive()) {
-    auto child_opt = scene_->CreateChildNode(main_camera_, "CameraSpotLight");
+    auto child_opt = scene->CreateChildNode(main_camera_, "CameraSpotLight");
     if (!child_opt.has_value()) {
       return;
     }
@@ -963,7 +924,7 @@ auto MainModule::EnsureCameraSpotLight() -> void
     auto light = std::make_unique<scene::SpotLight>();
     light->Common().affects_world = true;
     light->Common().color_rgb = { 1.0F, 1.0F, 1.0F };
-    light->Common().intensity = 18.0F;
+    light->Common().intensity = 300.0F;
     light->Common().mobility = scene::LightMobility::kRealtime;
     light->Common().casts_shadows = false;
     light->SetRange(35.0F);
@@ -1273,17 +1234,22 @@ auto MainModule::SetupShaders() -> void
 
 auto MainModule::EnsureExampleScene() -> void
 {
-  if (scene_) {
+  if (active_scene_.IsValid()) {
     return;
   }
 
   using scene::Scene;
 
-  scene_ = std::make_shared<Scene>("ExampleScene");
+  auto scene = std::make_unique<Scene>("ExampleScene");
 
   if (shell_) {
-    shell_->UpdateScene(scene_);
+    active_scene_ = shell_->SetScene(std::move(scene));
   }
+
+  const auto scene_ptr
+    = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
+  auto* scene_raw = scene_ptr.get();
+  CHECK_NOTNULL_F(scene_raw, "Async: active scene not available");
 
   // Create a LOD sphere and a multi-submesh quad
   auto sphere_geo = BuildSphereLodAsset();
@@ -1308,7 +1274,7 @@ auto MainModule::EnsureExampleScene() -> void
 
   for (std::size_t i = 0; i < kNumSpheres; ++i) {
     const std::string name = std::string("Sphere_") + std::to_string(i);
-    auto node = scene_->CreateNode(name.c_str());
+    auto node = scene_raw->CreateNode(name.c_str());
     node.GetRenderable().SetGeometry(sphere_geo);
 
     // Enlarge sphere to better showcase transparency layering against
@@ -1366,7 +1332,7 @@ auto MainModule::EnsureExampleScene() -> void
   }
 
   // Multi-submesh quad centered at origin facing +Z (already in XY plane)
-  multisubmesh_ = scene_->CreateNode("MultiSubmesh");
+  multisubmesh_ = scene_raw->CreateNode("MultiSubmesh");
   multisubmesh_.GetRenderable().SetGeometry(quad2sm_geo);
   multisubmesh_.GetTransform().SetLocalPosition(glm::vec3(0.0F));
   multisubmesh_.GetTransform().SetLocalRotation(glm::quat(1, 0, 0, 0));
@@ -1382,12 +1348,15 @@ auto MainModule::EnsureMainCamera(const int width, const int height) -> void
 {
   using scene::PerspectiveCamera;
 
-  if (!scene_) {
+  const auto scene_ptr
+    = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
+  auto* scene = scene_ptr.get();
+  if (!scene) {
     return;
   }
 
   if (!main_camera_.IsAlive()) {
-    main_camera_ = scene_->CreateNode("MainCamera");
+    main_camera_ = scene->CreateNode("MainCamera");
   }
 
   if (!main_camera_.HasCamera()) {
@@ -1545,7 +1514,7 @@ auto MainModule::DrawSpotLightPanel() -> void
   }
 
   float intensity = spot.Common().intensity;
-  if (ImGui::SliderFloat("Intensity", &intensity, 0.0F, 50.0F, "%.2f")) {
+  if (ImGui::SliderFloat("Intensity", &intensity, 0.0F, 5000.0F, "%.2f")) {
     spot.Common().intensity = intensity;
   }
 
@@ -1685,7 +1654,7 @@ auto MainModule::DrawSceneInfoPanel() -> void
   ImGui::Text("Scene Information");
   ImGui::Separator();
 
-  if (scene_) {
+  if (active_scene_.IsValid()) {
     // Camera drone info
     ImGui::Text("Camera Drone:");
     ImGui::Indent();

@@ -8,9 +8,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <string>
-
-#include <glm/glm.hpp>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/ResourceKey.h>
