@@ -6,7 +6,8 @@
 
 #pragma once
 
-#include <memory>
+#include <array>
+#include <string>
 
 #include <glm/gtc/quaternion.hpp>
 #include <glm/vec3.hpp>
@@ -42,7 +43,7 @@ public:
   auto operator=(CameraLifecycleService&&) -> CameraLifecycleService& = default;
 
   //! Set the current scene used for fallback camera creation.
-  void SetScene(std::shared_ptr<scene::Scene> scene);
+  void SetScene(observer_ptr<scene::Scene> scene);
 
   //! Bind the camera rig controller (optional).
   void BindCameraRig(observer_ptr<ui::CameraRigController> rig);
@@ -83,14 +84,46 @@ public:
   //! Apply pending camera reset.
   void ApplyPendingReset();
 
+  //! Persist the active camera state using SettingsService.
+  void PersistActiveCameraSettings();
+
   //! Clear camera state when the scene is released.
   void Clear();
 
 private:
+  struct PersistedCameraState {
+    bool valid { false };
+    std::string camera_id {};
+    int camera_mode { 0 };
+    glm::vec3 position { 0.0F, 0.0F, 0.0F };
+    glm::quat rotation { 1.0F, 0.0F, 0.0F, 0.0F };
+    glm::vec3 scale { 1.0F, 1.0F, 1.0F };
+
+    bool has_perspective { false };
+    float perspective_fov { 1.0F };
+    float perspective_near { 0.1F };
+    float perspective_far { 1000.0F };
+
+    bool has_orthographic { false };
+    std::array<float, 6> ortho_extents { -1.0F, 1.0F, -1.0F, 1.0F, 0.1F,
+      1000.0F };
+
+    glm::vec3 orbit_target { 0.0F, 0.0F, 0.0F };
+    float orbit_distance { 5.0F };
+    int orbit_mode { 0 };
+
+    float fly_move_speed { 5.0F };
+    float fly_look_sensitivity { 0.0015F };
+    float fly_boost_multiplier { 4.0F };
+    bool fly_plane_lock { false };
+  };
+
   void EnsureFallbackCamera();
   void ApplyViewportToActive(float aspect, const ViewPort& viewport);
+  void RestoreActiveCameraSettings();
+  [[nodiscard]] auto CaptureActiveCameraState() -> PersistedCameraState;
 
-  std::shared_ptr<scene::Scene> scene_ {};
+  observer_ptr<scene::Scene> scene_ { nullptr };
   scene::SceneNode active_camera_ {};
   observer_ptr<ui::CameraRigController> camera_rig_ { nullptr };
 
@@ -100,6 +133,8 @@ private:
 
   bool pending_sync_ { false };
   bool pending_reset_ { false };
+
+  PersistedCameraState last_saved_state_ {};
 };
 
 } // namespace oxygen::examples

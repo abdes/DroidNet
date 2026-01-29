@@ -11,10 +11,13 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 
-namespace oxygen::graphics {
-class CommandRecorder;
-class Texture;
-}
+namespace oxygen {
+struct ViewPort;
+namespace graphics {
+  class CommandRecorder;
+  class Texture;
+} // namespace graphics
+} // namespace oxygen
 
 namespace oxygen::examples::multiview {
 

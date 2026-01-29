@@ -8,12 +8,18 @@
 
 #include <memory>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen::examples::multiview {
 
 //! Builds and maintains the sample scene graph for the MultiView demo.
+/*!
+ Creates geometry (Sphere, Cube, Cylinder, Cone) and lighting (key + fill)
+ for the multi-view rendering example. The lighting setup follows a classic
+ 2-point arrangement optimized for product visualization.
+*/
 class SceneBootstrapper {
 public:
   SceneBootstrapper() = default;
@@ -23,9 +29,9 @@ public:
   auto operator=(SceneBootstrapper&&) -> SceneBootstrapper& = delete;
   ~SceneBootstrapper() = default;
 
-  [[nodiscard]] auto EnsureScene() -> std::shared_ptr<scene::Scene>;
-  [[nodiscard]] auto EnsureSceneWithContent() -> std::shared_ptr<scene::Scene>;
-  [[nodiscard]] auto GetScene() const -> std::shared_ptr<scene::Scene>;
+  void BindToScene(observer_ptr<scene::Scene> scene);
+  [[nodiscard]] auto EnsureSceneWithContent() -> observer_ptr<scene::Scene>;
+  [[nodiscard]] auto GetScene() const -> observer_ptr<scene::Scene>;
   [[nodiscard]] auto GetSphereNode() const -> scene::SceneNode;
   [[nodiscard]] auto GetCubeNode() const -> scene::SceneNode;
   [[nodiscard]] auto GetCylinderNode() const -> scene::SceneNode;
@@ -36,12 +42,17 @@ private:
   auto EnsureCube(scene::Scene& scene) -> void;
   auto EnsureCylinder(scene::Scene& scene) -> void;
   auto EnsureCone(scene::Scene& scene) -> void;
+  auto EnsureLighting(scene::Scene& scene) -> void;
 
-  std::shared_ptr<scene::Scene> scene_;
+  observer_ptr<scene::Scene> scene_ { nullptr };
   scene::SceneNode sphere_node_;
   scene::SceneNode cube_node_;
   scene::SceneNode cylinder_node_;
   scene::SceneNode cone_node_;
+
+  // Lighting nodes
+  scene::SceneNode key_light_node_;
+  scene::SceneNode fill_light_node_;
 };
 
 } // namespace oxygen::examples::multiview

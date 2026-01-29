@@ -5,9 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #include <fstream>
+#include <mutex>
+#include <shared_mutex>
 #include <stdexcept>
 
 #include <nlohmann/json.hpp>
+
+#include <Oxygen/Base/Logging.h>
 
 #include "DemoShell/Services/SettingsService.h"
 
@@ -38,7 +42,23 @@ SettingsService::SettingsService(std::filesystem::path storage_path)
   Load();
 }
 
-SettingsService::~SettingsService() = default;
+SettingsService::~SettingsService() noexcept
+{
+  try {
+    bool should_save = false;
+    {
+      std::shared_lock lock(mutex_);
+      should_save = dirty_;
+    }
+    if (should_save) {
+      Save();
+    }
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "SettingsService: destructor Save failed: {}", ex.what());
+  } catch (...) {
+    LOG_F(ERROR, "SettingsService: destructor Save failed with unknown error");
+  }
+}
 
 auto SettingsService::CreateForDemo(std::source_location location)
   -> std::unique_ptr<SettingsService>
@@ -50,6 +70,10 @@ auto SettingsService::CreateForDemo(std::source_location location)
 auto SettingsService::SetDefault(oxygen::observer_ptr<SettingsService> service)
   -> void
 {
+  CHECK_NOTNULL_F(
+    service.get(), "SettingsService::SetDefault requires a valid service");
+  CHECK_F(
+    service->loaded_, "SettingsService::SetDefault requires loaded settings");
   g_default_settings = service;
 }
 
@@ -60,11 +84,13 @@ auto SettingsService::Default() -> oxygen::observer_ptr<SettingsService>
 
 auto SettingsService::Load() -> void
 {
+  std::unique_lock lock(mutex_);
   dirty_ = false;
   storage_->data = nlohmann::json::object();
 
   std::ifstream input(storage_path_);
   if (!input.is_open()) {
+    loaded_ = true;
     return;
   }
 
@@ -73,16 +99,24 @@ auto SettingsService::Load() -> void
   } catch (const nlohmann::json::exception&) {
     storage_->data = nlohmann::json::object();
   }
+  loaded_ = true;
 }
 
 auto SettingsService::Save() const -> void
 {
+  nlohmann::json snapshot;
+  {
+    std::shared_lock lock(mutex_);
+    CHECK_F(loaded_, "SettingsService: settings not loaded");
+    snapshot = storage_->data;
+  }
+
   std::ofstream output(storage_path_);
   if (!output.is_open()) {
     return;
   }
 
-  output << storage_->data.dump(2) << '\n';
+  output << snapshot.dump(2) << '\n';
 }
 
 auto SettingsService::SplitKey(std::string_view key) -> std::vector<std::string>
@@ -138,6 +172,8 @@ auto SettingsService::ResolveNode(std::string_view key) -> void*
 auto SettingsService::GetVec2i(std::string_view key) const
   -> std::optional<std::pair<int, int>>
 {
+  std::shared_lock lock(mutex_);
+  CHECK_F(loaded_, "SettingsService: settings not loaded");
   const auto* node = static_cast<const nlohmann::json*>(FindNode(key));
   if (node == nullptr || !node->is_array() || node->size() != 2) {
     return std::nullopt;
@@ -155,6 +191,8 @@ auto SettingsService::GetVec2i(std::string_view key) const
 auto SettingsService::SetVec2i(std::string_view key, std::pair<int, int> value)
   -> void
 {
+  std::unique_lock lock(mutex_);
+  CHECK_F(loaded_, "SettingsService: settings not loaded");
   auto* node = static_cast<nlohmann::json*>(ResolveNode(key));
   *node = nlohmann::json::array({ value.first, value.second });
   dirty_ = true;
@@ -163,6 +201,8 @@ auto SettingsService::SetVec2i(std::string_view key, std::pair<int, int> value)
 auto SettingsService::GetFloat(std::string_view key) const
   -> std::optional<float>
 {
+  std::shared_lock lock(mutex_);
+  CHECK_F(loaded_, "SettingsService: settings not loaded");
   const auto* node = static_cast<const nlohmann::json*>(FindNode(key));
   if (node == nullptr || !node->is_number()) {
     return std::nullopt;
@@ -173,6 +213,8 @@ auto SettingsService::GetFloat(std::string_view key) const
 
 auto SettingsService::SetFloat(std::string_view key, float value) -> void
 {
+  std::unique_lock lock(mutex_);
+  CHECK_F(loaded_, "SettingsService: settings not loaded");
   auto* node = static_cast<nlohmann::json*>(ResolveNode(key));
   *node = value;
   dirty_ = true;
@@ -181,6 +223,8 @@ auto SettingsService::SetFloat(std::string_view key, float value) -> void
 auto SettingsService::GetString(std::string_view key) const
   -> std::optional<std::string>
 {
+  std::shared_lock lock(mutex_);
+  CHECK_F(loaded_, "SettingsService: settings not loaded");
   const auto* node = static_cast<const nlohmann::json*>(FindNode(key));
   if (node == nullptr || !node->is_string()) {
     return std::nullopt;
@@ -191,8 +235,31 @@ auto SettingsService::GetString(std::string_view key) const
 
 auto SettingsService::SetString(std::string_view key, std::string value) -> void
 {
+  std::unique_lock lock(mutex_);
+  CHECK_F(loaded_, "SettingsService: settings not loaded");
   auto* node = static_cast<nlohmann::json*>(ResolveNode(key));
   *node = std::move(value);
+  dirty_ = true;
+}
+
+auto SettingsService::GetBool(std::string_view key) const -> std::optional<bool>
+{
+  std::shared_lock lock(mutex_);
+  CHECK_F(loaded_, "SettingsService: settings not loaded");
+  const auto* node = static_cast<const nlohmann::json*>(FindNode(key));
+  if (node == nullptr || !node->is_boolean()) {
+    return std::nullopt;
+  }
+
+  return node->get<bool>();
+}
+
+auto SettingsService::SetBool(std::string_view key, bool value) -> void
+{
+  std::unique_lock lock(mutex_);
+  CHECK_F(loaded_, "SettingsService: settings not loaded");
+  auto* node = static_cast<nlohmann::json*>(ResolveNode(key));
+  *node = value; // JSON boolean
   dirty_ = true;
 }
 

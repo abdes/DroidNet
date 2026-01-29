@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
+#include <source_location>
 #include <span>
 #include <string>
 #include <string_view>
@@ -29,6 +30,8 @@
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h>
+#include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 #include <Oxygen/OxCo/Algorithms.h>
@@ -41,6 +44,7 @@
 #include <Oxygen/Renderer/Renderer.h>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Services/SettingsService.h"
 #include "MultiView/MainModule.h"
 
 using namespace std::chrono_literals;
@@ -110,10 +114,18 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
     = std::make_unique<engine::Renderer>(app.gfx_weak, renderer_config);
 
   app.renderer = o::observer_ptr { renderer_unique.get() };
+  register_module(std::move(renderer_unique));
+
   register_module(
     std::make_unique<oxygen::examples::multiview::MainModule>(app));
 
-  register_module(std::move(renderer_unique));
+  if (!app.headless) {
+    auto imgui_backend
+      = std::make_unique<oxygen::graphics::d3d12::D3D12ImGuiGraphicsBackend>();
+    auto imgui_module = std::make_unique<oxygen::imgui::ImGuiModule>(
+      app.platform, std::move(imgui_backend));
+    register_module(std::move(imgui_module));
+  }
 }
 
 auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames)
@@ -160,6 +172,11 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
   using oxygen::clap::Command;
   using oxygen::clap::CommandBuilder;
   using oxygen::clap::Option;
+
+  static auto settings = oxygen::examples::SettingsService::CreateForDemo(
+    std::source_location::current());
+  oxygen::examples::SettingsService::SetDefault(
+    oxygen::observer_ptr { settings.get() });
 
   uint32_t frames = 0U;
   uint32_t target_fps = 100U;
@@ -241,6 +258,12 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .thread_pool_size = (std::min)(4U, std::thread::hardware_concurrency()),
     });
 
+    const auto workspace_root
+      = std::filesystem::path(std::source_location::current().file_name())
+          .parent_path()
+          .parent_path()
+          .parent_path();
+
     const o::GraphicsConfig gfx_config {
       .enable_debug = true,
       .enable_validation = false,
@@ -248,9 +271,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .headless = headless,
       .enable_vsync = enable_vsync,
       .extra = {},
-      .path_finder_config = o::PathFinderConfig::Create()
-        .WithWorkspaceRoot(std::filesystem::current_path())
-        .Build(),
+      .path_finder_config
+      = o::PathFinderConfig::Create().WithWorkspaceRoot(workspace_root).Build(),
     };
     const auto& loader = o::GraphicsBackendLoader::GetInstance();
     app.gfx_weak = loader.LoadBackend(

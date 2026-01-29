@@ -10,7 +10,6 @@
 #include <functional>
 #include <memory>
 #include <optional>
-#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -19,6 +18,7 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 
+#include "DemoShell/ActiveScene.h"
 #include "DemoShell/Services/CameraLifecycleService.h"
 #include "DemoShell/UI/DemoPanel.h"
 #include "DemoShell/UI/RenderingPanel.h"
@@ -37,12 +37,11 @@ namespace oxygen::examples {
 
 //! Standard panel enablement settings for the demo shell.
 struct DemoShellPanelConfig {
-  bool content_loader { true };
-  bool camera_controls { true };
-  bool environment { true };
-  bool lighting { true };
-  bool rendering { true };
-  bool settings { true };
+  bool content_loader { false };
+  bool camera_controls { false };
+  bool environment { false };
+  bool lighting { false };
+  bool rendering { false };
 };
 
 //! Configuration for the demo shell and its standard panels.
@@ -71,7 +70,6 @@ struct DemoShellPanelConfig {
 */
 struct DemoShellConfig {
   observer_ptr<engine::InputSystem> input_system { nullptr };
-  std::shared_ptr<scene::Scene> scene { nullptr };
   std::filesystem::path cooked_root {};
   observer_ptr<FileBrowserService> file_browser_service { nullptr };
   observer_ptr<SkyboxService> skybox_service { nullptr };
@@ -118,7 +116,7 @@ struct DemoShellConfig {
 class DemoShell final {
 public:
   DemoShell();
-  ~DemoShell();
+  ~DemoShell() noexcept;
 
   OXYGEN_MAKE_NON_COPYABLE(DemoShell);
   OXYGEN_MAKE_NON_MOVABLE(DemoShell);
@@ -133,10 +131,16 @@ public:
   auto Draw() -> void;
 
   //! Register a demo-specific panel with the shell.
-  auto RegisterPanel(observer_ptr<DemoPanel> panel) -> bool;
+  auto RegisterPanel(std::shared_ptr<DemoPanel> panel) -> bool;
 
-  //! Update the active scene reference for panel and camera use.
-  auto UpdateScene(std::shared_ptr<scene::Scene> scene) -> void;
+  //! Set the active scene (ownership transferred to the shell).
+  auto SetScene(std::unique_ptr<scene::Scene> scene) -> ActiveScene;
+
+  //! Returns a value object for accessing the current active scene.
+  [[nodiscard]] auto GetActiveScene() const -> ActiveScene;
+
+  //! Returns a non-owning pointer to the active scene (may be null).
+  [[nodiscard]] auto TryGetScene() const -> observer_ptr<scene::Scene>;
 
   //! Set the active camera node used by the camera rig and panels.
   auto SetActiveCamera(scene::SceneNode camera) -> void;
@@ -152,6 +156,9 @@ public:
 
   //! Get the current rendering view mode selection.
   [[nodiscard]] auto GetRenderingViewMode() const -> ui::RenderingViewMode;
+
+  //! Force an active panel by name (no-op if not registered).
+  auto SetActivePanel(std::string_view panel_name) -> void;
 
 private:
   auto InitializePanels() -> void;

@@ -9,34 +9,37 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
-#include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
-#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
+#include "DemoShell/ActiveScene.h"
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/SingleViewModuleBase.h"
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/Services/SkyboxService.h"
 
-namespace oxygen::data {
-class SceneAsset;
-} // namespace oxygen::data
-
-namespace oxygen::content {
-class PakFile;
-class LooseCookedInspection;
-} // namespace oxygen::content
-
-namespace oxygen::content::import {
-class AssetImporter;
-} // namespace oxygen::content::import
+namespace oxygen {
+class AsyncEngine;
+namespace data {
+  class SceneAsset;
+} // namespace data
+namespace content {
+  class PakFile;
+  class LooseCookedInspection;
+} // namespace content
+namespace content::import {
+  class AssetImporter;
+} // namespace content::import
+} // namespace oxygen
 
 namespace oxygen::examples {
 class SceneLoaderService;
@@ -100,7 +103,7 @@ private:
   auto ClearSceneRuntime(const char* reason) -> void;
 
   // Scene and rendering.
-  std::shared_ptr<scene::Scene> scene_;
+  ActiveScene active_scene_ {};
   scene::NodeHandle registered_view_camera_ {};
 
   std::shared_ptr<oxygen::examples::SceneLoaderService> scene_loader_;

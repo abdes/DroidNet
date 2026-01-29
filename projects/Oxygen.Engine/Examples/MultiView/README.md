@@ -1,75 +1,57 @@
 # Multi-View Rendering Example
 
-Demonstrates **Phase 2 Multi-View Support** using the new `PrepareView`/`RenderView` APIs.
+Production‑style **Multi‑View** demo with explicit render graphs and
+compositing. The render graph is just C++ code: you pass in data and the graph
+executes logic directly in coroutines.
 
 ## Features
 
-- **Two simultaneous views** rendering the same scene with different cameras
-- **Main View**: Full-screen perspective of a green sphere
-- **PiP View**: Picture-in-picture (25% size, top-right corner) showing the same sphere from a different angle
-- **Per-view isolation**: Each view has independent camera, viewport, and scissor rectangles
-- **Zero-copy architecture**: `PreparedSceneFrame` is reused per frame, shared via `observer_ptr`
+- **Two simultaneous views** rendering the same scene with different cameras.
+- **Main View**: full‑screen solid view.
+- **PiP View**: picture‑in‑picture view with its own viewport/scissor.
+- **Compositing graph**: view outputs are composed into the swapchain.
+- **GUI overlay**: ImGui renders after compositing.
+- **Contracts enforced**: hard CHECK_* assertions on required data.
 
-## Phase 2 Implementation
+## Architecture Overview
 
-This example showcases the multi-view architecture:
+### View Render Graph (per view)
 
-### View Setup (OnSceneMutation)
+Each view uses a `ViewRenderer` render graph that is configured with a
+`ViewRenderData` struct (textures, flags, clear color). The graph then executes
+passes using that data.
 
-```cpp
-// Main view: full screen
-main_camera_view_ = std::make_shared<CameraView>(params, surface);
-main_view_id_ = context.AddView(ViewContext { ... });
+Key points:
 
-// PiP view: top-right quarter
-pip_camera_view_ = std::make_shared<CameraView>(params, surface);
-pip_view_id_ = context.AddView(ViewContext { ... });
-```
+- **Data‑only inputs** (`ViewRenderData`).
+- **Graph is C++**: branching and customization happen in code.
+- **Per‑view isolation** via view‑specific `RenderContext` data.
 
-### Rendering (OnCommandRecord)
+### Compositing Graph
 
-```cpp
-// Main view
-const auto view = main_camera_view_->Resolve();
-renderer->PrepareView(main_view_id_, view, context);
-co_await renderer->RenderView(main_view_id_, render_lambda, render_context, context);
+`CompositorGraph` runs after view rendering. It composites all view outputs
+to the swapchain backbuffer, then renders ImGui **after** compositing.
 
-// PiP view
-const auto view = pip_camera_view_->Resolve();
-renderer->PrepareView(pip_view_id_, view, context);
-co_await renderer->RenderView(pip_view_id_, render_lambda, render_context, context);
-```
+### GUI Overlay
 
-## Future: Phase 3
-
-Phase 3 will add:
-
-- **Wireframe toggle**: PiP view will render in wireframe mode via pass flags
-- **Compositing**: Final composition of multiple views into a single output
-- Currently both views render solid (demonstrating per-view isolation)
+ImGui is rendered post‑composite through the view renderer graph routine,
+ensuring a consistent render order and correct resource states.
 
 ## Building
 
 ```bash
-cmake --build cmake-build-relwithdebinfo --target oxygen-example-multiview
+cmake --build out/build --target Oxygen.Examples.MultiView
 ```
 
 ## Running
 
 ```bash
-./bin/Oxygen/oxygen-example-multiview
+./out/build/bin/Debug/Oxygen.Examples.MultiView.exe
 ```
-
-## Controls
-
-- **ESC**: Exit application
-- Window is resizable (views will adapt)
 
 ## Architecture Notes
 
-- Uses `ExampleModuleBase` from `Examples/Common`
-- Scene created once with a single sphere entity
-- Two cameras positioned at different locations
-- `RenderGraph` shared between views (same render passes)
-- `PerViewState` maintains per-view `PreparedSceneFrame` values
-- `RenderContext` gets `observer_ptr<const PreparedSceneFrame>` for zero-copy access
+- Scene created once; views share the scene but not view state.
+- Each view registers its own resolver and render graph with the engine.
+- Compositing is isolated in a dedicated graph stage.
+- Runtime contracts are enforced via CHECK_* assertions.

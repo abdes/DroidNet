@@ -32,6 +32,8 @@ add_executable(
   ${META_MODULE_TARGET}
   "../main.cpp"
   "main_impl.cpp"
+  "CompositorGraph.h"
+  "CompositorGraph.cpp"
   "MainModule.h"
   "MainModule.cpp"
   "SceneBootstrapper.h"

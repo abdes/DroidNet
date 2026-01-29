@@ -13,10 +13,8 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
-#include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Input/InputSystem.h>
-#include <Oxygen/Scene/Scene.h>
 
+#include "DemoShell/ActiveScene.h"
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/SingleViewModuleBase.h"
@@ -32,8 +30,6 @@ public:
 
   explicit MainModule(const oxygen::examples::DemoAppContext& app);
 
-  // EngineModule metadata overrides
-  // -------------------------------------------------
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
     return "MainModule";
@@ -88,7 +84,7 @@ private:
   // The ExampleModuleBase provides `app_` and common window/render helpers.
 
   //! Scene and rendering.
-  std::shared_ptr<scene::Scene> scene_;
+  ActiveScene active_scene_ {};
   scene::SceneNode main_camera_; // "MainCamera"
   scene::SceneNode sphere_node_; // Sphere for jump animation
 
@@ -129,7 +125,7 @@ private:
 
   std::unique_ptr<DemoShell> shell_ {};
   std::unique_ptr<FileBrowserService> file_browser_service_ {};
-  InputDebugPanel input_debug_panel_ {};
+  std::shared_ptr<InputDebugPanel> input_debug_panel_ {};
 };
 
 } // namespace oxygen::examples::input

@@ -6,10 +6,28 @@
 
 #pragma once
 
+#include <optional>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Types/Geometry.h>
+#include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/OxCo/Co.h>
 
 #include "MultiView/DemoView.h"
+
+namespace oxygen {
+namespace engine {
+  class Renderer;
+  struct RenderContext;
+} // namespace engine
+namespace graphics {
+  class CommandRecorder;
+  class Texture;
+} // namespace graphics
+namespace scene {
+  class Scene;
+} // namespace scene
+} // namespace oxygen
 
 namespace oxygen::examples::multiview {
 

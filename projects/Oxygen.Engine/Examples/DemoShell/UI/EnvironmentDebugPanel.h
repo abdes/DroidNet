@@ -9,7 +9,6 @@
 #include <array>
 #include <cstdint>
 #include <functional>
-#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -18,10 +17,9 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 
-#include <Oxygen/Scene/SceneNode.h>
-
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/Services/SkyboxService.h"
+#include "DemoShell/UI/DemoPanel.h"
 
 // Forward declarations
 namespace oxygen::scene {
@@ -59,7 +57,7 @@ enum class AtmosphereDebugFlags : uint32_t {
 //! Configuration for the environment debug panel.
 struct EnvironmentDebugConfig {
   //! Scene to inspect/modify (can be null when no scene is loaded).
-  std::shared_ptr<oxygen::scene::Scene> scene { nullptr };
+  observer_ptr<oxygen::scene::Scene> scene { nullptr };
 
   //! File browser service for picking skybox images.
   observer_ptr<FileBrowserService> file_browser_service { nullptr };
@@ -112,17 +110,16 @@ struct EnvironmentDebugConfig {
  config.renderer = &renderer;
  panel.Initialize(config);
 
- // In OnGuiUpdate:
- panel.Draw();
+ // Registered with DemoShell; the shell draws DrawContents() when active.
 
  // In OnSceneMutation (if HasPendingChanges()):
  panel.ApplyPendingChanges();
  ```
 */
-class EnvironmentDebugPanel {
+class EnvironmentDebugPanel final : public DemoPanel {
 public:
   EnvironmentDebugPanel() = default;
-  ~EnvironmentDebugPanel() = default;
+  ~EnvironmentDebugPanel() override = default;
 
   EnvironmentDebugPanel(const EnvironmentDebugPanel&) = delete;
   auto operator=(const EnvironmentDebugPanel&)
@@ -136,11 +133,15 @@ public:
   //! Update configuration (e.g., when scene changes).
   void UpdateConfig(const EnvironmentDebugConfig& config);
 
-  //! Draw the ImGui panel. Call during OnGuiUpdate.
-  void Draw();
-
   //! Draws the panel content without creating a window.
-  void DrawContents();
+  auto DrawContents() -> void override;
+
+  [[nodiscard]] auto GetName() const noexcept -> std::string_view override;
+  [[nodiscard]] auto GetPreferredWidth() const noexcept -> float override;
+  [[nodiscard]] auto GetIcon() const noexcept -> std::string_view override;
+  auto OnRegistered() -> void override;
+  auto OnLoaded() -> void override;
+  auto OnUnloaded() -> void override;
 
   //! Returns true if there are pending changes to apply.
   [[nodiscard]] auto HasPendingChanges() const -> bool;

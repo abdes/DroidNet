@@ -6,38 +6,33 @@
 
 #pragma once
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 
-#include "DemoShell/PanelRegistry.h"
-
 namespace oxygen::examples {
+class PanelRegistry;
+} // namespace oxygen::examples
 
-struct PanelSideBarConfig {
-  observer_ptr<PanelRegistry> panel_registry { nullptr };
-};
+namespace oxygen::examples::ui {
+
+class UiSettingsVm;
 
 class PanelSideBar {
 public:
-  PanelSideBar() = default;
+  PanelSideBar(observer_ptr<PanelRegistry> panel_registry,
+    observer_ptr<UiSettingsVm> ui_settings_vm);
   ~PanelSideBar() = default;
 
-  PanelSideBar(const PanelSideBar&) = delete;
-  auto operator=(const PanelSideBar&) -> PanelSideBar& = delete;
-  PanelSideBar(PanelSideBar&&) = default;
-  auto operator=(PanelSideBar&&) -> PanelSideBar& = default;
+  OXYGEN_MAKE_NON_COPYABLE(PanelSideBar)
+  OXYGEN_DEFAULT_MOVABLE(PanelSideBar)
 
-  auto Initialize(const PanelSideBarConfig& config) -> void;
   auto Draw() -> void;
 
-  [[nodiscard]] auto GetWidth() const noexcept -> float
-  {
-    return kSidebarWidth;
-  }
+  [[nodiscard]] auto GetWidth() const noexcept -> float;
 
 private:
-  PanelSideBarConfig config_ {};
-  static constexpr float kSidebarWidth = 120.0F;
-  static constexpr float kIconSize = 24.0F;
+  observer_ptr<PanelRegistry> panel_registry_ {};
+  observer_ptr<UiSettingsVm> ui_settings_vm_ {};
 };
 
-} // namespace oxygen::examples
+} // namespace oxygen::examples::ui

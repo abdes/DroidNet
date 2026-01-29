@@ -16,7 +16,6 @@
 #include <glm/geometric.hpp>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include <glm/trigonometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
@@ -29,6 +28,8 @@
 #include <Oxygen/Scene/Environment/Sun.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
+
+#include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/EnvironmentDebugPanel.h"
@@ -133,8 +134,6 @@ void EnvironmentDebugPanel::Initialize(const EnvironmentDebugConfig& config)
 
   // Sync debug flags from renderer (these persist across scene loads)
   SyncDebugFlagsFromRenderer();
-
-  LoadSettings();
 }
 
 void EnvironmentDebugPanel::UpdateConfig(const EnvironmentDebugConfig& config)
@@ -158,33 +157,17 @@ void EnvironmentDebugPanel::UpdateConfig(const EnvironmentDebugConfig& config)
   }
 }
 
-void EnvironmentDebugPanel::Draw()
+auto EnvironmentDebugPanel::DrawContents() -> void
 {
   if (!initialized_) {
     return;
   }
 
-  // Sync from scene on first draw or when scene changes
   if (needs_sync_) {
     SyncFromScene();
     needs_sync_ = false;
   }
 
-  ImGui::SetNextWindowSize(ImVec2(400, 600), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowBgAlpha(0.45F);
-
-  if (!ImGui::Begin("Environment Systems")) {
-    ImGui::End();
-    return;
-  }
-
-  DrawContents();
-
-  ImGui::End();
-}
-
-void EnvironmentDebugPanel::DrawContents()
-{
   const bool has_scene = config_.scene != nullptr;
 
   if (!has_scene) {
@@ -226,6 +209,40 @@ void EnvironmentDebugPanel::DrawContents()
     DrawPostProcessSection();
   }
 }
+
+auto EnvironmentDebugPanel::GetName() const noexcept -> std::string_view
+{
+  return "Environment";
+}
+
+auto EnvironmentDebugPanel::GetPreferredWidth() const noexcept -> float
+{
+  return 420.0F;
+}
+
+auto EnvironmentDebugPanel::GetIcon() const noexcept -> std::string_view
+{
+  return oxygen::imgui::icons::kIconEnvironment;
+}
+
+auto EnvironmentDebugPanel::OnRegistered() -> void
+{
+  if (!initialized_) {
+    return;
+  }
+
+  LoadSettings();
+}
+
+auto EnvironmentDebugPanel::OnLoaded() -> void
+{
+  if (!initialized_) {
+    return;
+  }
+  needs_sync_ = true;
+}
+
+auto EnvironmentDebugPanel::OnUnloaded() -> void { SaveSettings(); }
 
 void EnvironmentDebugPanel::DrawRendererDebugSection()
 {
@@ -1105,8 +1122,8 @@ auto EnvironmentDebugPanel::LoadSettings() -> void
   }
 
   auto load_bool = [&](std::string_view key, bool& out) -> bool {
-    if (const auto value = settings->GetString(key)) {
-      out = (*value == "true");
+    if (const auto value = settings->GetBool(key)) {
+      out = *value;
       return true;
     }
     return false;
@@ -1268,9 +1285,8 @@ auto EnvironmentDebugPanel::SaveSettings() const -> void
     return;
   }
 
-  auto save_bool = [&](std::string_view key, bool value) {
-    settings->SetString(key, value ? "true" : "false");
-  };
+  auto save_bool
+    = [&](std::string_view key, bool value) { settings->SetBool(key, value); };
   auto save_float = [&](std::string_view key, float value) {
     settings->SetFloat(key, value);
   };
@@ -1363,8 +1379,6 @@ auto EnvironmentDebugPanel::SaveSettings() const -> void
   save_bool("environment.debug.use_lut", use_lut_);
   save_bool("environment.debug.visualize_lut", visualize_lut_);
   save_bool("environment.debug.force_analytic", force_analytic_);
-
-  settings->Save();
 }
 
 auto EnvironmentDebugPanel::GetSunSettingsForSource(const int source)
@@ -1607,7 +1621,6 @@ void EnvironmentDebugPanel::ApplyPendingChanges()
 
   pending_changes_ = false;
   saved_sun_source_ = sun_source_;
-  SaveSettings();
 }
 
 auto EnvironmentDebugPanel::FindSunLightCandidate() const

@@ -6,16 +6,12 @@
 
 #pragma once
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 
 #include "DemoShell/PanelRegistry.h"
 
-namespace oxygen::examples {
-
-//! Side panel configuration for the demo shell.
-struct SidePanelConfig {
-  observer_ptr<PanelRegistry> panel_registry { nullptr };
-};
+namespace oxygen::examples::ui {
 
 //! Left-docked side panel hosting the active demo panel.
 /*!
@@ -25,16 +21,11 @@ struct SidePanelConfig {
 */
 class SidePanel {
 public:
-  SidePanel() = default;
+  SidePanel(observer_ptr<PanelRegistry> panel_registry);
   ~SidePanel() = default;
 
-  SidePanel(const SidePanel&) = delete;
-  auto operator=(const SidePanel&) -> SidePanel& = delete;
-  SidePanel(SidePanel&&) = default;
-  auto operator=(SidePanel&&) -> SidePanel& = default;
-
-  //! Initialize the side panel with its dependencies.
-  auto Initialize(const SidePanelConfig& config) -> void;
+  OXYGEN_MAKE_NON_COPYABLE(SidePanel)
+  OXYGEN_DEFAULT_MOVABLE(SidePanel)
 
   //! Draws the side panel window and the active panel content.
   //!
@@ -43,12 +34,11 @@ public:
   auto Draw(float left_offset) -> void;
 
 private:
-  SidePanelConfig config_ {};
+  observer_ptr<PanelRegistry> panel_registry_;
   float width_ { 420.0F };
   // Track last active panel name to detect selection changes.
   std::string last_active_panel_name_ {};
-  std::string last_saved_panel_name_ {};
   float last_saved_panel_width_ { 0.0F };
 };
 
-} // namespace oxygen::examples
+} // namespace oxygen::examples::ui

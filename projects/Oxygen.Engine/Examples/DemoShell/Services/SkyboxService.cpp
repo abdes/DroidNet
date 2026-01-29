@@ -26,9 +26,9 @@ namespace oxygen::examples {
 
 SkyboxService::SkyboxService(
   oxygen::observer_ptr<oxygen::content::IAssetLoader> asset_loader,
-  std::shared_ptr<scene::Scene> scene)
+  observer_ptr<scene::Scene> scene)
   : asset_loader_(asset_loader)
-  , scene_(std::move(scene))
+  , scene_(scene)
 {
 }
 

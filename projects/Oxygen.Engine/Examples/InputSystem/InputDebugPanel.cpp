@@ -17,7 +17,6 @@
 
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/Input/Action.h>
-#include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Scene/SceneNode.h>
 
@@ -173,8 +172,12 @@ auto InputDebugPanel::GetPreferredWidth() const noexcept -> float
 
 auto InputDebugPanel::GetIcon() const noexcept -> std::string_view
 {
-  return oxygen::imgui::icons::kIconCameraControls;
+  return oxygen::imgui::icons::kIconDemoPanel;
 }
+
+auto InputDebugPanel::OnLoaded() -> void { }
+
+auto InputDebugPanel::OnUnloaded() -> void { }
 
 void InputDebugPanel::History::Push(float v) noexcept
 {

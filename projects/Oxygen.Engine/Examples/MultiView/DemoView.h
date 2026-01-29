@@ -6,13 +6,14 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
@@ -23,7 +24,24 @@
 
 namespace oxygen {
 class Graphics;
-}
+namespace graphics {
+  class Surface;
+  class CommandRecorder;
+  class Texture;
+  class Framebuffer;
+} // namespace graphics
+namespace engine {
+  class FrameContext;
+  class Renderer;
+  struct RenderContext;
+} // namespace engine
+namespace imgui {
+  class ImGuiModule;
+} // namespace imgui
+namespace scene {
+  class Scene;
+} // namespace scene
+} // namespace oxygen
 
 namespace oxygen::examples::multiview {
 
@@ -103,6 +121,23 @@ public:
   virtual void Composite(
     graphics::CommandRecorder& recorder, graphics::Texture& backbuffer)
     = 0;
+
+  //! Render ImGui after compositing (optional per view).
+  auto RenderGuiAfterComposite(graphics::CommandRecorder& recorder,
+    const graphics::Framebuffer& framebuffer) -> co::Co<>
+  {
+    return renderer_.RenderGuiAfterComposite(recorder, framebuffer);
+  }
+
+  [[nodiscard]] auto IsGuiEnabled() const -> bool
+  {
+    return renderer_.IsGuiEnabled();
+  }
+
+  void SetImGuiModule(observer_ptr<imgui::ImGuiModule> module)
+  {
+    renderer_.SetImGuiModule(module);
+  }
 
   // Release resources. Public non-virtual entry point that must be called
   // while the object is still fully alive. This will call the protected

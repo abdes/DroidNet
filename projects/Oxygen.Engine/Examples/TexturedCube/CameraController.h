@@ -67,7 +67,7 @@ public:
   auto InitInputBindings() noexcept -> bool;
 
   //! Ensure a camera node exists in the scene with proper configuration.
-  auto EnsureCamera(std::shared_ptr<scene::Scene>& scene, int width, int height)
+  auto EnsureCamera(observer_ptr<scene::Scene> scene, int width, int height)
     -> void;
 
   //! Update camera based on input actions (call each frame).

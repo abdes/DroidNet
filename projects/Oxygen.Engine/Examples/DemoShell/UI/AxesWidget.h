@@ -6,33 +6,14 @@
 
 #pragma once
 
-#include <glm/mat4x4.hpp>
-#include <glm/vec2.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen::examples::ui {
 
-//! Configuration for the axes widget
-struct AxesWidgetConfig {
-  //! Enable rendering the widget.
-  bool show_widget { true };
-  //! Size of the widget in pixels (width and height)
-  float size { 80.0F };
-
-  //! Padding from screen edges in pixels
-  float padding { 10.0F };
-
-  //! Length of each axis line (relative to widget size, 0.0-0.5)
-  float axis_length { 0.35F };
-
-  //! Thickness of axis lines in pixels
-  float line_thickness { 2.0F };
-
-  //! Show axis labels (X, Y, Z)
-  bool show_labels { true };
-};
+class UiSettingsVm;
 
 //! Draws a 3D axes indicator showing camera orientation
 /*!
@@ -51,55 +32,25 @@ struct AxesWidgetConfig {
  ### Usage
 
  ```cpp
- AxesWidget axes_widget;
- axes_widget.SetConfig({ .size = 100.0F, .show_labels = true });
+ AxesWidget axes_widget(settings_vm);
 
  // In ImGui update loop
  glm::mat4 view_matrix = camera.GetViewMatrix();
  axes_widget.Draw(view_matrix);
  ```
-
- @see AxesWidgetConfig
  */
 class AxesWidget {
 public:
-  AxesWidget() = default;
+  explicit AxesWidget(observer_ptr<UiSettingsVm> settings_vm);
   ~AxesWidget() = default;
-
-  //! Set widget configuration
-  void SetConfig(const AxesWidgetConfig& config) { config_ = config; }
-
-  //! Set widget visibility.
-  void SetVisible(bool visible) { config_.show_widget = visible; }
-
-  //! Get widget visibility.
-  [[nodiscard]] auto IsVisible() const -> bool { return config_.show_widget; }
-
-  //! Get current widget configuration
-  [[nodiscard]] auto GetConfig() const -> const AxesWidgetConfig&
-  {
-    return config_;
-  }
-
-  //! Draw the axes widget
-  /*!
-    Renders the 3D axes indicator based on the current camera view matrix.
-    The widget is positioned at the bottom-left corner of the main viewport.
-
-    @param view_matrix The camera's view matrix (world-to-view transform)
-    @note Must be called within ImGui rendering context
-   */
-  void Draw(const glm::mat4& view_matrix);
 
   //! Draw the axes widget using the provided camera.
   void Draw(observer_ptr<oxygen::scene::SceneNode> camera);
 
 private:
-  //! Project a 3D direction to 2D widget space
-  [[nodiscard]] auto ProjectAxis(const glm::vec3& axis_dir,
-    const glm::mat4& view_matrix, const glm::vec2& center) const -> glm::vec2;
+  void Draw(const glm::mat4& view_matrix);
 
-  AxesWidgetConfig config_;
+  observer_ptr<UiSettingsVm> settings_vm_ { nullptr };
 };
 
 } // namespace oxygen::examples::ui

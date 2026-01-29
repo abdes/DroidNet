@@ -33,6 +33,16 @@ find_package(nlohmann_json CONFIG REQUIRED)
 
 add_library(${META_MODULE_TARGET} STATIC)
 add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
+
+set_target_properties(
+  ${META_MODULE_TARGET}
+  PROPERTIES
+    FOLDER
+      "Examples"
+    OUTPUT_NAME
+      ${META_MODULE_NAME}
+)
+
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
@@ -50,6 +60,7 @@ set_target_properties(
 
 set(
   OXYGEN_DEMOSHELL_HEADERS
+  "ActiveScene.h"
   "DemoShell.h"
   "Runtime/DemoAppContext.h"
   "Runtime/AppWindow.h"
@@ -57,7 +68,7 @@ set(
   "Runtime/DemoModuleBase.h"
   "Runtime/SingleViewModuleBase.h"
   "UI/DemoPanel.h"
-  "DemoShellUi.h"
+  "UI/DemoShellUi.h"
   "PanelRegistry.h"
   "UI/SidePanel.h"
   "UI/PanelSideBar.h"
@@ -66,7 +77,9 @@ set(
   "Services/SceneLoaderService.h"
   "Services/SkyboxService.h"
   "UI/StatsOverlay.h"
+  "UI/StatsOverlayConfig.h"
   "Services/SettingsService.h"
+  "Services/UiSettingsService.h"
   "UI/AxesWidget.h"
   "UI/CameraControlPanel.h"
   "UI/CameraRigController.h"
@@ -79,44 +92,49 @@ set(
   "UI/LooseCookedLoaderPanel.h"
   "UI/PakLoaderPanel.h"
   "UI/RenderingPanel.h"
-  "UI/SettingsPanel.h"
+  "UI/UiSettingsPanel.h"
+  "UI/UiSettingsVm.h"
   "UI/OrbitCameraController.h"
   "UI/FlyCameraController.h"
 )
 set(
   OXYGEN_DEMOSHELL_PRIVATE_SOURCES
+  "ActiveScene.cpp"
   "DemoShell.cpp"
-  "DemoShellUi.cpp"
-  "Runtime/AppWindow.cpp"
-  "Runtime/RenderGraph.cpp"
-  "Runtime/DemoModuleBase.cpp"
-  "Runtime/SingleViewModuleBase.cpp"
-  "PanelRegistry.cpp"
-  "UI/PanelSideBar.cpp"
-  "UI/SidePanel.cpp"
-  "Services/CameraLifecycleService.cpp"
-  "Services/EnvironmentHydrator.cpp"
-  "Services/SceneLoaderService.cpp"
-  "Services/SkyboxService.cpp"
-  "UI/StatsOverlay.cpp"
+  "UI/DemoShellUi.cpp"
   "FileBrowser/imfilebrowser.h"
   "FileBrowser/LICENSE.txt"
   "FileBrowser/VERSION.txt"
+  "Internal/SceneControlBlock.h"
+  "PanelRegistry.cpp"
+  "Runtime/AppWindow.cpp"
+  "Runtime/DemoModuleBase.cpp"
+  "Runtime/RenderGraph.cpp"
+  "Runtime/SingleViewModuleBase.cpp"
+  "Services/CameraLifecycleService.cpp"
+  "Services/EnvironmentHydrator.cpp"
+  "Services/FileBrowserService.cpp"
+  "Services/SceneLoaderService.cpp"
   "Services/SettingsService.cpp"
+  "Services/UiSettingsService.cpp"
+  "Services/SkyboxService.cpp"
   "UI/AxesWidget.cpp"
   "UI/CameraControlPanel.cpp"
   "UI/CameraRigController.cpp"
   "UI/ContentLoaderPanel.cpp"
   "UI/EnvironmentDebugPanel.cpp"
-  "Services/FileBrowserService.cpp"
+  "UI/FlyCameraController.cpp"
   "UI/ImportPanel.cpp"
   "UI/LightCullingDebugPanel.cpp"
   "UI/LooseCookedLoaderPanel.cpp"
-  "UI/PakLoaderPanel.cpp"
-  "UI/RenderingPanel.cpp"
-  "UI/SettingsPanel.cpp"
   "UI/OrbitCameraController.cpp"
-  "UI/FlyCameraController.cpp"
+  "UI/PakLoaderPanel.cpp"
+  "UI/PanelSideBar.cpp"
+  "UI/RenderingPanel.cpp"
+  "UI/UiSettingsPanel.cpp"
+  "UI/UiSettingsVm.cpp"
+  "UI/SidePanel.cpp"
+  "UI/StatsOverlay.cpp"
 )
 
 if(NOT DEFINED OXYGEN_EXAMPLES_SOURCE_DIR)

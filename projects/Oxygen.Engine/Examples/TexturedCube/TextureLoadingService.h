@@ -9,7 +9,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
-#include <memory>
 #include <mutex>
 #include <span>
 #include <string>

@@ -11,9 +11,11 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 
+#include "MultiView/DemoView.h"
 #include "MultiView/MainView.h"
 #include "MultiView/OffscreenCompositor.h"
 
@@ -91,27 +93,30 @@ auto MainView::OnPreRender(engine::Renderer& renderer) -> co::Co<>
 {
   (void)renderer;
 
-  // Configure the renderer if not already configured
+  // Configure the renderer each frame with current view data
   LOG_F(INFO,
     "[MainView] OnPreRender: color_tex={}, depth_tex={}, "
     "renderer_configured={}",
     static_cast<bool>(ColorTextureRef()), static_cast<bool>(DepthTextureRef()),
     RendererRef().IsConfigured());
 
-  if (ColorTextureRef() && DepthTextureRef() && !RendererRef().IsConfigured()) {
-    LOG_F(INFO,
-      "[MainView] Configuring renderer with clear_color=({},{},{},{})",
-      Config().clear_color.r, Config().clear_color.g, Config().clear_color.b,
-      Config().clear_color.a);
-    ViewRenderer::Config config {
-      .color_texture = ColorTextureRef(),
-      .depth_texture = DepthTextureRef(),
-      .clear_color = Config().clear_color,
-      .wireframe = Config().wireframe,
-    };
-    RendererRef().Configure(config);
-    LOG_F(INFO, "[MainView] Renderer configured successfully");
-  }
+  CHECK_F(static_cast<bool>(ColorTextureRef()),
+    "MainView requires a color render target");
+  CHECK_F(static_cast<bool>(DepthTextureRef()),
+    "MainView requires a depth render target");
+
+  LOG_F(INFO, "[MainView] Configuring renderer with clear_color=({},{},{},{})",
+    Config().clear_color.r, Config().clear_color.g, Config().clear_color.b,
+    Config().clear_color.a);
+  ViewRenderer::ViewRenderData data {
+    .color_texture = ColorTextureRef(),
+    .depth_texture = DepthTextureRef(),
+    .clear_color = Config().clear_color,
+    .wireframe = Config().wireframe,
+    .render_gui = true,
+  };
+  RendererRef().Configure(data);
+  LOG_F(INFO, "[MainView] Renderer configured successfully");
 
   co_return;
 }

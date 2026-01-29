@@ -7,20 +7,31 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/ViewResolver.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/OxCo/Co.h>
 
-namespace oxygen::engine {
-class DepthPrePass;
-struct DepthPrePassConfig;
-class ShaderPass;
-struct ShaderPassConfig;
-class Renderer; // forward declare so examples can register/unregister
-} // namespace oxygen::engine
+namespace oxygen {
+namespace graphics {
+  class CommandRecorder;
+} // namespace graphics
+namespace engine {
+  class DepthPrePass;
+  struct DepthPrePassConfig;
+  struct RenderContext;
+  class ShaderPass;
+  struct ShaderPassConfig;
+  class Renderer; // forward declare so examples can register/unregister
+} // namespace engine
+namespace imgui {
+  class ImGuiModule;
+} // namespace imgui
+} // namespace oxygen
 
 namespace oxygen::examples::multiview {
 
@@ -31,11 +42,12 @@ namespace oxygen::examples::multiview {
 */
 class ViewRenderer {
 public:
-  struct Config {
+  struct ViewRenderData {
     std::shared_ptr<graphics::Texture> color_texture;
     std::shared_ptr<graphics::Texture> depth_texture;
     graphics::Color clear_color { 0.1F, 0.2F, 0.38F, 1.0F };
     bool wireframe { false };
+    bool render_gui { false };
   };
 
   ViewRenderer() = default;
@@ -44,8 +56,8 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(ViewRenderer)
   OXYGEN_DEFAULT_MOVABLE(ViewRenderer)
 
-  //! Configure the renderer with textures and settings.
-  auto Configure(const Config& config) -> void;
+  //! Configure the renderer with per-frame view data.
+  auto Configure(const ViewRenderData& data) -> void;
 
   //! Reset any configuration and clear persistent texture references.
   /*!
@@ -64,6 +76,10 @@ public:
   auto Render(const engine::RenderContext& ctx,
     graphics::CommandRecorder& recorder) const -> co::Co<>;
 
+  //! Render ImGui after compositing to the swapchain.
+  auto RenderGuiAfterComposite(graphics::CommandRecorder& recorder,
+    const graphics::Framebuffer& framebuffer) const -> co::Co<>;
+
   //! Register this ViewRenderer with the engine Renderer for a given view id.
   /*!
     This stores an internal reference to the engine renderer and registers a
@@ -75,9 +91,19 @@ public:
   //! Unregister from the engine renderer if previously registered.
   auto UnregisterFromEngine() -> void;
 
+  void SetImGuiModule(observer_ptr<imgui::ImGuiModule> module)
+  {
+    imgui_module_ = module;
+  }
+
+  [[nodiscard]] auto IsGuiEnabled() const -> bool
+  {
+    return render_data_.has_value() && render_data_->render_gui;
+  }
+
   [[nodiscard]] auto IsConfigured() const -> bool
   {
-    return config_.has_value();
+    return render_data_.has_value();
   }
 
 private:
@@ -87,13 +113,24 @@ private:
   auto RenderColorPass(const engine::RenderContext& ctx,
     graphics::CommandRecorder& recorder) const -> co::Co<>;
 
-  std::optional<Config> config_;
+  auto ExecuteGraph(const ViewRenderData& data,
+    const engine::RenderContext& ctx, graphics::CommandRecorder& recorder) const
+    -> co::Co<>;
+
+  auto SyncPassConfigs(const ViewRenderData& data) const -> void;
+
+  auto LogViewInputs(
+    const engine::RenderContext& ctx, const ViewRenderData& data) const -> void;
+
+  std::optional<ViewRenderData> render_data_;
 
   // Persistent passes (created once, reused every frame)
   std::shared_ptr<engine::DepthPrePassConfig> depth_pass_config_;
   std::shared_ptr<engine::DepthPrePass> depth_pass_;
   std::shared_ptr<engine::ShaderPassConfig> shader_pass_config_;
   std::shared_ptr<engine::ShaderPass> shader_pass_;
+
+  observer_ptr<imgui::ImGuiModule> imgui_module_ { nullptr };
 
   // Optional registration bookkeeping for convenience: non-owning pointer to
   // engine renderer and registered view id. Used by RegisterWithEngine /

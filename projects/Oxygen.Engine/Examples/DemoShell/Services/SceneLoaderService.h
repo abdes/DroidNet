@@ -28,8 +28,7 @@ namespace oxygen::examples {
 
 //! Result payload for a completed scene load.
 struct PendingSceneSwap {
-  std::shared_ptr<scene::Scene> scene;
-  scene::SceneNode active_camera;
+  std::shared_ptr<data::SceneAsset> asset;
   data::AssetKey scene_key {};
 };
 
@@ -63,6 +62,10 @@ public:
   //! Take the pending swap payload.
   auto GetResult() -> PendingSceneSwap { return std::move(swap_); }
 
+  //! Build the runtime scene from a loaded asset.
+  auto BuildScene(scene::Scene& scene, const data::SceneAsset& asset)
+    -> scene::SceneNode;
+
   //! Mark the result as consumed and begin cleanup.
   void MarkConsumed();
   //! Tick cleanup and return true once it can be destroyed.
@@ -76,9 +79,9 @@ private:
   auto BuildEnvironment(const data::SceneAsset& asset)
     -> std::unique_ptr<scene::SceneEnvironment>;
   //! Instantiate scene nodes with transforms.
-  void InstantiateNodes(const data::SceneAsset& asset);
+  void InstantiateNodes(scene::Scene& scene, const data::SceneAsset& asset);
   //! Apply parent/child relationships to instantiated nodes.
-  void ApplyHierarchy(const data::SceneAsset& asset);
+  void ApplyHierarchy(scene::Scene& scene, const data::SceneAsset& asset);
   //! Attach renderable components to nodes.
   void AttachRenderables(const data::SceneAsset& asset);
   //! Attach light components to nodes.
@@ -86,17 +89,18 @@ private:
   //! Choose an active camera based on the asset content.
   void SelectActiveCamera(const data::SceneAsset& asset);
   //! Ensure active camera is valid and viewport is applied.
-  void EnsureCameraAndViewport();
+  void EnsureCameraAndViewport(scene::Scene& scene);
   //! Log a summary of scene contents.
   void LogSceneSummary(const data::SceneAsset& asset) const;
   //! Log the runtime scene hierarchy.
-  void LogSceneHierarchy();
+  void LogSceneHierarchy(const scene::Scene& scene);
 
   oxygen::content::IAssetLoader& loader_;
   int width_;
   int height_;
   PendingSceneSwap swap_ {};
   std::vector<scene::SceneNode> runtime_nodes_ {};
+  scene::SceneNode active_camera_ {};
   bool ready_ { false };
   bool failed_ { false };
   bool consumed_ { false };

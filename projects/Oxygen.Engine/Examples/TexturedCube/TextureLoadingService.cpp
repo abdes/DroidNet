@@ -4,12 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "TexturedCube/TextureLoadingService.h"
-
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <optional>
 #include <utility>
@@ -24,6 +23,8 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
+
+#include "TexturedCube/TextureLoadingService.h"
 
 namespace {
 

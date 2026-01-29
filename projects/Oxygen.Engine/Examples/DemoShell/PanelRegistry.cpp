@@ -5,14 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-
-#include <Oxygen/Base/ObserverPtr.h>
+#include <stdexcept>
 
 #include "DemoShell/PanelRegistry.h"
 
 namespace oxygen::examples {
 
-auto PanelRegistry::RegisterPanel(observer_ptr<DemoPanel> panel)
+auto PanelRegistry::RegisterPanel(std::shared_ptr<DemoPanel> panel)
   -> std::expected<void, PanelRegistryError>
 {
   if (!panel) {
@@ -20,13 +19,20 @@ auto PanelRegistry::RegisterPanel(observer_ptr<DemoPanel> panel)
   }
 
   const std::string_view name = panel->GetName();
+  if (name.empty()) {
+    throw std::invalid_argument("PanelRegistry: empty panel name");
+  }
   const auto it = std::ranges::find_if(
     panels_, [&](const PanelEntry& entry) { return entry.name == name; });
   if (it != panels_.end()) {
-    return std::unexpected(PanelRegistryError::kDuplicateName);
+    throw std::invalid_argument("PanelRegistry: duplicate panel name");
   }
 
-  panels_.push_back(PanelEntry { std::string(name), panel });
+  panels_.push_back(PanelEntry { std::string(name), std::move(panel) });
+
+  if (panels_.back().panel) {
+    panels_.back().panel->OnRegistered();
+  }
 
   return {};
 }
@@ -34,29 +40,55 @@ auto PanelRegistry::RegisterPanel(observer_ptr<DemoPanel> panel)
 auto PanelRegistry::SetActivePanelByName(std::string_view name)
   -> std::expected<void, PanelRegistryError>
 {
+  if (name.empty()) {
+    throw std::invalid_argument("PanelRegistry: empty panel name");
+  }
   const auto it = std::ranges::find_if(
     panels_, [&](const PanelEntry& entry) { return entry.name == name; });
   if (it == panels_.end()) {
     return std::unexpected(PanelRegistryError::kPanelNotFound);
   }
 
-  active_index_ = static_cast<std::size_t>(std::distance(panels_.begin(), it));
+  const auto new_index
+    = static_cast<std::size_t>(std::distance(panels_.begin(), it));
+  if (active_index_.has_value() && *active_index_ == new_index) {
+    return {};
+  }
+
+  if (active_index_.has_value()) {
+    const auto old_index = *active_index_;
+    if (old_index < panels_.size() && panels_[old_index].panel) {
+      panels_[old_index].panel->OnUnloaded();
+    }
+  }
+
+  active_index_ = new_index;
+  if (panels_[new_index].panel) {
+    panels_[new_index].panel->OnLoaded();
+  }
   return {};
 }
 
 auto PanelRegistry::ClearActivePanel() noexcept -> void
 {
+  if (active_index_.has_value()) {
+    const auto old_index = *active_index_;
+    if (old_index < panels_.size() && panels_[old_index].panel) {
+      panels_[old_index].panel->OnUnloaded();
+    }
+  }
   active_index_.reset();
 }
 
-auto PanelRegistry::GetActivePanel() const noexcept -> observer_ptr<DemoPanel>
+auto PanelRegistry::GetActivePanel() const noexcept
+  -> std::shared_ptr<DemoPanel>
 {
   if (!active_index_.has_value()) {
-    return nullptr;
+    return {};
   }
   const auto index = *active_index_;
   if (index >= panels_.size()) {
-    return nullptr;
+    return {};
   }
   return panels_[index].panel;
 }

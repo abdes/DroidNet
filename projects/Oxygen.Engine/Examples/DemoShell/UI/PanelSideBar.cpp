@@ -6,25 +6,26 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <string>
 #include <string_view>
-#include <utility>
 
 #include <imgui.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/ImGui/Styles/Spectrum.h>
 
+#include "DemoShell/PanelRegistry.h"
 #include "DemoShell/UI/PanelSideBar.h"
+#include "DemoShell/UI/UiSettingsVm.h"
 
-namespace oxygen::examples {
-
-auto PanelSideBar::Initialize(const PanelSideBarConfig& config) -> void
-{
-  config_ = config;
-}
+namespace oxygen::examples::ui {
 
 namespace {
+
+  constexpr float kSidebarWidth = 120.0F;
+  constexpr float kIconSize = 24.0F;
 
   auto MatchesFontName(const ImFont* font, std::string_view name) -> bool
   {
@@ -76,10 +77,29 @@ namespace {
 
 } // namespace
 
+PanelSideBar::PanelSideBar(observer_ptr<PanelRegistry> panel_registry,
+  observer_ptr<UiSettingsVm> ui_settings_vm)
+  : panel_registry_(panel_registry)
+  , ui_settings_vm_(ui_settings_vm)
+{
+  DCHECK_NOTNULL_F(panel_registry, "PanelSideBar requires PanelRegistry");
+  DCHECK_NOTNULL_F(ui_settings_vm, "PanelSideBar requires UiSettingsVm");
+}
+
 auto PanelSideBar::Draw() -> void
 {
-  if (!config_.panel_registry) {
-    return;
+  const auto desired_active = ui_settings_vm_->GetActivePanelName();
+  if (desired_active.has_value()) {
+    DCHECK_F(!desired_active->empty(), "expecting non-empty panel names");
+  }
+
+  const auto current_active = panel_registry_->GetActivePanelName();
+  if (!desired_active.has_value()) {
+    if (!current_active.empty()) {
+      panel_registry_->ClearActivePanel();
+    }
+  } else if (desired_active.value() != current_active) {
+    (void)panel_registry_->SetActivePanelByName(*desired_active);
   }
 
   const auto& io = ImGui::GetIO();
@@ -118,9 +138,9 @@ auto PanelSideBar::Draw() -> void
     ImVec2(icon_button_padding, icon_button_padding));
   // Panels toggle: click active to close, click inactive to open.
 
-  const auto active_name = config_.panel_registry->GetActivePanelName();
+  const auto active_name = panel_registry_->GetActivePanelName();
 
-  for (const auto& entry : config_.panel_registry->GetPanels()) {
+  for (const auto& entry : panel_registry_->GetPanels()) {
     const bool is_active = entry.name == active_name;
 
     CenterCursorForButton(icon_button_size);
@@ -130,9 +150,11 @@ auto PanelSideBar::Draw() -> void
     const auto* icon_text = icon.empty() ? kDefaultIcon.data() : icon.data();
     if (ImGui::Button(icon_text, ImVec2(icon_button_size, icon_button_size))) {
       if (is_active) {
-        config_.panel_registry->ClearActivePanel();
+        panel_registry_->ClearActivePanel();
+        ui_settings_vm_->SetActivePanelName(std::optional<std::string> {});
       } else {
-        (void)config_.panel_registry->SetActivePanelByName(entry.name);
+        (void)panel_registry_->SetActivePanelByName(entry.name);
+        ui_settings_vm_->SetActivePanelName(entry.name);
       }
     }
 
@@ -179,4 +201,6 @@ auto PanelSideBar::Draw() -> void
   ImGui::End();
 }
 
-} // namespace oxygen::examples
+auto PanelSideBar::GetWidth() const noexcept -> float { return kSidebarWidth; }
+
+} // namespace oxygen::examples::ui
