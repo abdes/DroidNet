@@ -1,0 +1,112 @@
+{
+  "demo_shell": {
+    "active_panel": "Environment",
+    "panels": {
+      "async": {
+        "width": 520.0
+      },
+      "environment": {
+        "width": 692.0
+      },
+      "rendering": {
+        "width": 320.0
+      },
+      "settings": {
+        "width": 320.0
+      }
+    }
+  },
+  "environment": {
+    "debug": {
+      "force_analytic": "false",
+      "use_lut": "true",
+      "visualize_lut": "false"
+    },
+    "post_process": {
+      "auto_exposure_max_ev": 16.0,
+      "auto_exposure_min_ev": -4.0,
+      "auto_exposure_speed_down": 1.0,
+      "auto_exposure_speed_up": 3.0,
+      "bloom_intensity": 0.0,
+      "bloom_threshold": 1.0,
+      "contrast": 1.0,
+      "enabled": "true",
+      "exposure_compensation_ev": -10.0,
+      "exposure_mode": 0.0,
+      "saturation": 1.0,
+      "tone_mapper": 0.0,
+      "vignette": 0.0
+    },
+    "sky_atmo": {
+      "aerial_perspective_scale": 1.0,
+      "aerial_scattering_strength": 1.0,
+      "atmosphere_height_km": 80.0,
+      "enabled": "true",
+      "ground_albedo": {
+        "x": 0.2187945544719696,
+        "y": 0.3243902325630188,
+        "z": 0.053801294416189194
+      },
+      "mie_anisotropy": 0.800000011920929,
+      "mie_scale_height_km": 1.2000000476837158,
+      "multi_scattering": 1.0,
+      "planet_radius_km": 6360.0,
+      "rayleigh_scale_height_km": 8.0,
+      "sun_disk_enabled": "true",
+      "sun_disk_radius_deg": 0.2680000066757202
+    },
+    "sky_light": {
+      "diffuse": 1.0,
+      "enabled": "false",
+      "intensity": 1.0,
+      "source": 0.0,
+      "specular": 1.0,
+      "tint": {
+        "x": 1.0,
+        "y": 1.0,
+        "z": 1.0
+      }
+    },
+    "sky_sphere": {
+      "enabled": "false",
+      "intensity": 1.0,
+      "rotation_deg": 0.0,
+      "solid_color": {
+        "x": 0.20000000298023224,
+        "y": 0.30000001192092896,
+        "z": 0.5
+      },
+      "source": 0.0
+    },
+    "skybox": {
+      "face_size": 512.0,
+      "flip_y": "false",
+      "hdr_exposure_ev": 0.0,
+      "layout": 0.0,
+      "output_format": 0.0,
+      "path": "",
+      "tonemap_hdr_to_ldr": "false"
+    },
+    "sun": {
+      "azimuth_deg": 177.39999389648438,
+      "color": {
+        "x": 1.0,
+        "y": 1.0,
+        "z": 1.0
+      },
+      "disk_radius_deg": 0.2680000066757202,
+      "elevation_deg": 17.399999618530273,
+      "enabled": "true",
+      "intensity_lux": 100000.0,
+      "source": 1.0,
+      "temperature_kelvin": 6500.0,
+      "use_temperature": "false"
+    }
+  },
+  "ui": {
+    "stats": {
+      "show_fps": "true",
+      "show_frame_timing_detail": "true"
+    }
+  }
+}
