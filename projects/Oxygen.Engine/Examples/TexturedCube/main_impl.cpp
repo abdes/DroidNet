@@ -39,6 +39,7 @@
 #include <Oxygen/Renderer/Renderer.h>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Services/SettingsService.h"
 #include "TexturedCube/MainModule.h"
 
 using namespace oxygen;
@@ -185,6 +186,11 @@ auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames)
 extern "C" auto MainImpl(std::span<const char*> args) -> void
 {
   using namespace oxygen::clap; // NOLINT
+
+  static auto settings = oxygen::examples::SettingsService::CreateForDemo(
+    std::source_location::current());
+  oxygen::examples::SettingsService::SetDefault(
+    oxygen::observer_ptr { settings.get() });
 
   uint32_t frames = 0U;
   uint32_t target_fps = 100U; // desired frame pacing

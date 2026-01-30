@@ -12,6 +12,7 @@
 #include <mutex>
 #include <span>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -79,6 +80,13 @@ public:
     bool force_rgba { true };
     int cube_face_size { 512 };
     int layout_idx { 0 };
+    bool with_content_hashing { true };
+
+    // New
+    bool flip_normal_green { false };
+    float exposure_ev { 0.0f };
+    int bc7_quality_idx { 2 };
+    int hdr_handling_idx { 1 };
   };
 
   //! Status snapshot for an in-flight import.
@@ -97,6 +105,7 @@ public:
     std::uint32_t array_layers { 0U };
     std::uint64_t size_bytes { 0U };
     std::uint64_t content_hash { 0U };
+    std::string name {};
     oxygen::Format format { oxygen::Format::kUnknown };
     oxygen::TextureType texture_type { oxygen::TextureType::kTexture2D };
   };
@@ -147,7 +156,26 @@ public:
   auto StartLoadCookedTexture(
     std::uint32_t entry_index, LoadCallback on_complete) -> void;
 
+  //! Get metadata for a texture as a formatted JSON string.
+  auto GetTextureMetadataJson(uint64_t hash) const -> std::string;
+
 private:
+  void LoadTexturesJson();
+  void SaveTexturesJson();
+
+  struct TextureMetadata {
+    std::string source_path;
+    ImportSettings settings;
+  };
+  struct PendingMetadata {
+    ImportSettings settings;
+    size_t baseline_table_size { 0 };
+  };
+  std::unordered_map<uint64_t, TextureMetadata> texture_metadata_;
+  std::unordered_map<std::string, PendingMetadata> pending_metadata_;
+  std::unordered_set<uint64_t> known_hashes_;
+  bool metadata_loaded_ { false };
+
   oxygen::observer_ptr<oxygen::content::IAssetLoader> asset_loader_;
   oxygen::content::import::AsyncImportService import_service_ {};
 
