@@ -122,11 +122,11 @@ public:
     graphics::CommandRecorder& recorder, graphics::Texture& backbuffer)
     = 0;
 
-  //! Render ImGui after compositing (optional per view).
-  auto RenderGuiAfterComposite(graphics::CommandRecorder& recorder,
+  //! Render ImGui into the provided framebuffer (optional per view).
+  auto RenderGui(graphics::CommandRecorder& recorder,
     const graphics::Framebuffer& framebuffer) -> co::Co<>
   {
-    return renderer_.RenderGuiAfterComposite(recorder, framebuffer);
+    return renderer_.RenderGui(recorder, framebuffer);
   }
 
   [[nodiscard]] auto IsGuiEnabled() const -> bool
@@ -147,6 +147,10 @@ public:
   void ReleaseResources();
 
   [[nodiscard]] auto GetViewId() const -> ViewId { return view_id_; }
+
+  //! Returns the color render target for this view, if available.
+  [[nodiscard]] auto GetColorTexture() const
+    -> std::shared_ptr<graphics::Texture>;
 
   // Get camera node for resolver
   [[nodiscard]] auto GetCameraNode() const -> scene::SceneNode

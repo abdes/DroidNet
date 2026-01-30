@@ -11,6 +11,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <string_view>
 #include <unordered_map>
@@ -33,6 +34,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
+#include <Oxygen/Renderer/Types/CompositingTask.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Renderer/Types/SunState.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -62,6 +64,8 @@ class MaterialAsset;
 namespace oxygen::engine {
 class RenderContextPool;
 class IblComputePass;
+class CompositingPass;
+struct CompositingPassConfig;
 namespace internal {
   class EnvironmentDynamicDataManager;
   class EnvironmentStaticDataManager;
@@ -141,13 +145,16 @@ public:
     // Participate in frame start, transform propagation and command record.
     return MakeModuleMask<core::PhaseId::kFrameStart,
       core::PhaseId::kTransformPropagation, core::PhaseId::kPreRender,
-      core::PhaseId::kRender, core::PhaseId::kFrameEnd>();
+      core::PhaseId::kRender, core::PhaseId::kCompositing,
+      core::PhaseId::kFrameEnd>();
     // Note: PreRender work is performed via OnPreRender; Render work is in
     // kRender. Renderer participates in both via its module hooks.
   }
 
   OXGN_RNDR_NDAPI auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept
     -> bool override;
+
+  OXGN_RNDR_API auto OnShutdown() noexcept -> void override;
 
   OXGN_RNDR_NDAPI auto OnFrameStart(FrameContext& context) -> void override;
 
@@ -158,6 +165,10 @@ public:
 
   // Submit deferred uploads and retire completed ones during render phase.
   OXGN_RNDR_NDAPI auto OnRender(FrameContext& context) -> co::Co<> override;
+
+  // Execute compositor tasks submitted during kCompositing.
+  OXGN_RNDR_NDAPI auto OnCompositing(FrameContext& context)
+    -> co::Co<> override;
 
   // Perform deferred per-frame cleanup for views that were unregistered
   // during the frame. This runs after rendering completes.
@@ -187,6 +198,10 @@ public:
     @param view_id The unique identifier for the view to remove
   */
   OXGN_RNDR_API auto UnregisterView(ViewId view_id) -> void;
+
+  //! Submit compositing tasks for the current frame.
+  OXGN_RNDR_API auto RegisterComposition(CompositionSubmission submission)
+    -> void;
 
   //! Query if a view completed rendering successfully this frame.
   /*!
@@ -434,10 +449,15 @@ private:
 
   // Render Passes
   // NOTE: IBL compute generation is currently not wired in this build.
+  std::shared_ptr<CompositingPass> compositing_pass_ {};
+  std::shared_ptr<CompositingPassConfig> compositing_pass_config_ {};
 
   // Cache of prepared frames from OnPreRender, used in OnRender to ensure
   // each view renders with its own draw list (not the last view's data)
   std::unordered_map<ViewId, PreparedSceneFrame> prepared_frames_;
+
+  std::mutex composition_mutex_ {};
+  std::optional<CompositionSubmission> composition_submission_ {};
 
   // Pending cleanup set guarded by a mutex so arbitrary threads may
   // enqueue view ids for deferred cleanup while OnFrameEnd drains the set.

@@ -13,9 +13,9 @@
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
+#include <Oxygen/Renderer/Renderer.h>
 
 #include "MultiView/ViewRenderer.h"
-#include <Oxygen/Renderer/Renderer.h>
 
 namespace oxygen::examples::multiview {
 auto ViewRenderer::Configure(const ViewRenderData& data) -> void
@@ -218,19 +218,21 @@ auto ViewRenderer::RenderColorPass(const engine::RenderContext& ctx,
   co_return;
 }
 
-auto ViewRenderer::RenderGuiAfterComposite(graphics::CommandRecorder& recorder,
+auto ViewRenderer::RenderGui(graphics::CommandRecorder& recorder,
   const graphics::Framebuffer& framebuffer) const -> co::Co<>
 {
   CHECK_F(render_data_.has_value(),
-    "ViewRenderer::RenderGuiAfterComposite requires ViewRenderData");
+    "ViewRenderer::RenderGui requires ViewRenderData");
   if (!render_data_->render_gui) {
     co_return;
   }
 
   CHECK_F(static_cast<bool>(imgui_module_),
     "ImGui module required for GUI rendering");
-  CHECK_F(
-    imgui_module_->IsWitinFrameScope(), "ImGui module is outside frame scope");
+  if (!imgui_module_->IsWitinFrameScope()) {
+    LOG_F(INFO, "[ViewRenderer] ImGui frame not active; skipping GUI render");
+    co_return;
+  }
 
   const auto imgui_pass = imgui_module_->GetRenderPass();
   CHECK_F(static_cast<bool>(imgui_pass), "ImGui render pass unavailable");

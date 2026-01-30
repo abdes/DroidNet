@@ -113,7 +113,7 @@ auto MainView::OnPreRender(engine::Renderer& renderer) -> co::Co<>
     .depth_texture = DepthTextureRef(),
     .clear_color = Config().clear_color,
     .wireframe = Config().wireframe,
-    .render_gui = true,
+    .render_gui = false,
   };
   RendererRef().Configure(data);
   LOG_F(INFO, "[MainView] Renderer configured successfully");

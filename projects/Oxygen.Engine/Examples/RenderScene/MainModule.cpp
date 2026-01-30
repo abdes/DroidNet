@@ -23,11 +23,14 @@
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Renderer/Passes/LightCullingPass.h>
+#include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Scene/Environment/Sun.h>
 #include <Oxygen/Scene/Types/Flags.h>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Services/SceneLoaderService.h"
+#include "DemoShell/UI/RenderingVm.h"
 #include "RenderScene/MainModule.h"
 
 using oxygen::scene::SceneNodeFlags;
@@ -93,15 +96,15 @@ auto MainModule::OnAttached(
   shell_config.skybox_service = observer_ptr { skybox_service_.get() };
   shell_config.get_renderer
     = [this]() { return observer_ptr { ResolveRenderer() }; };
-  shell_config.get_light_culling_debug_config = [this]() {
-    ui::LightCullingDebugConfig debug_config;
+  shell_config.get_pass_config_refs = [this]() {
+    ui::PassConfigRefs refs;
     if (auto render_graph = GetRenderGraph()) {
-      debug_config.shader_pass_config
+      refs.shader_pass_config
         = observer_ptr { render_graph->GetShaderPassConfig().get() };
-      debug_config.light_culling_pass_config
+      refs.light_culling_pass_config
         = observer_ptr { render_graph->GetLightCullingPassConfig().get() };
     }
-    return debug_config;
+    return refs;
   };
   shell_config.on_scene_load_requested = [this](const data::AssetKey& key) {
     pending_scene_key_ = key;
@@ -432,6 +435,13 @@ auto MainModule::ApplyRenderModeFromPanel() -> void
     const bool force_clear = (mode == FillMode::kWireFrame);
     shader_pass_config->clear_color_target = true;
     shader_pass_config->auto_skip_clear_when_sky_pass_present = !force_clear;
+
+    // Apply debug mode. Rendering debug modes take precedence if set.
+    auto debug_mode = shell_->GetRenderingDebugMode();
+    if (debug_mode == engine::ShaderDebugMode::kDisabled) {
+      debug_mode = shell_->GetLightCullingVisualizationMode();
+    }
+    shader_pass_config->debug_mode = debug_mode;
   }
 }
 

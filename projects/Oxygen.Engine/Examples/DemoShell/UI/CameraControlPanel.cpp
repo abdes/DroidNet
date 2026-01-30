@@ -11,24 +11,21 @@
 #include <glm/geometric.hpp>
 #include <imgui.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/Input/Action.h>
 
 #include "DemoShell/UI/CameraControlPanel.h"
+#include "DemoShell/UI/CameraVm.h"
 
 namespace oxygen::examples::ui {
 
-void CameraControlPanel::Initialize(const CameraControlConfig& config)
+CameraControlPanel::CameraControlPanel(observer_ptr<CameraVm> vm)
+  : vm_(vm)
 {
-  config_ = config;
-  current_mode_ = config_.current_mode;
+  DCHECK_NOTNULL_F(vm, "CameraControlPanel requires CameraVm");
 }
 
-void CameraControlPanel::UpdateConfig(const CameraControlConfig& config)
-{
-  config_ = config;
-  current_mode_ = config_.current_mode;
-}
 auto CameraControlPanel::DrawContents() -> void
 {
   if (ImGui::BeginTabBar("CameraControlTabs")) {
@@ -63,114 +60,73 @@ auto CameraControlPanel::GetIcon() const noexcept -> std::string_view
 
 auto CameraControlPanel::OnLoaded() -> void
 {
-  current_mode_ = config_.current_mode;
 }
 
 auto CameraControlPanel::OnUnloaded() -> void
 {
-  if (config_.on_panel_closed) {
-    config_.on_panel_closed();
-  }
+  vm_->PersistActiveCameraSettings();
 }
 
 void CameraControlPanel::DrawCameraModeTab()
 {
   ImGui::SeparatorText("Control Mode");
 
-  // Mode selection with radio buttons
-  const bool is_orbit = (current_mode_ == CameraControlMode::kOrbit);
-  const bool is_fly = (current_mode_ == CameraControlMode::kFly);
+  const auto current_mode = vm_->GetControlMode();
+  const bool is_orbit = (current_mode == CameraControlMode::kOrbit);
+  const bool is_fly = (current_mode == CameraControlMode::kFly);
 
   if (ImGui::RadioButton("Orbit", is_orbit)) {
-    if (!is_orbit) {
-      current_mode_ = CameraControlMode::kOrbit;
-      if (config_.on_mode_changed) {
-        config_.on_mode_changed(current_mode_);
-      }
-    }
+    vm_->SetControlMode(CameraControlMode::kOrbit);
   }
   ImGui::SameLine();
   if (ImGui::RadioButton("Fly", is_fly)) {
-    if (!is_fly) {
-      current_mode_ = CameraControlMode::kFly;
-      if (config_.on_mode_changed) {
-        config_.on_mode_changed(current_mode_);
-      }
-    }
+    vm_->SetControlMode(CameraControlMode::kFly);
   }
 
   ImGui::Spacing();
 
-  // Mode-specific controls
-  if (current_mode_ == CameraControlMode::kOrbit) {
+  if (current_mode == CameraControlMode::kOrbit) {
     ImGui::SeparatorText("Orbit Settings");
 
-    if (config_.orbit_controller) {
-      // Orbit mode selection
-      const auto current_orbit_mode = config_.orbit_controller->GetMode();
-      const bool is_trackball
-        = (current_orbit_mode == ui::OrbitMode::kTrackball);
-      const bool is_turntable
-        = (current_orbit_mode == ui::OrbitMode::kTurntable);
+    const auto orbit_mode = vm_->GetOrbitMode();
+    const bool is_trackball = (orbit_mode == OrbitMode::kTrackball);
+    const bool is_turntable = (orbit_mode == OrbitMode::kTurntable);
 
-      if (ImGui::RadioButton("Trackball", is_trackball)) {
-        if (!is_trackball) {
-          config_.orbit_controller->SetMode(ui::OrbitMode::kTrackball);
-          if (config_.active_camera && config_.active_camera->IsAlive()) {
-            config_.orbit_controller->SyncFromTransform(*config_.active_camera);
-          }
-        }
-      }
-      ImGui::SameLine();
-      if (ImGui::RadioButton("Turntable", is_turntable)) {
-        if (!is_turntable) {
-          config_.orbit_controller->SetMode(ui::OrbitMode::kTurntable);
-          if (config_.active_camera && config_.active_camera->IsAlive()) {
-            config_.orbit_controller->SyncFromTransform(*config_.active_camera);
-          }
-        }
-      }
-
-      ImGui::Spacing();
-      ImGui::TextWrapped("Controls: Hold Right Mouse Button and drag to orbit. "
-                         "Mouse wheel to zoom in/out.");
-
-    } else {
-      ImGui::TextDisabled("Orbit controller not available");
+    if (ImGui::RadioButton("Trackball", is_trackball)) {
+      vm_->SetOrbitMode(OrbitMode::kTrackball);
     }
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Turntable", is_turntable)) {
+      vm_->SetOrbitMode(OrbitMode::kTurntable);
+    }
+
+    ImGui::Spacing();
+    ImGui::TextWrapped("Controls: Hold Right Mouse Button and drag to orbit. "
+                       "Mouse wheel to zoom in/out.");
 
   } else {
     ImGui::SeparatorText("Fly Settings");
 
-    if (config_.fly_controller) {
-      float speed = config_.fly_controller->GetMoveSpeed();
-
-      if (ImGui::SliderFloat("Move Speed", &speed, 0.1f, 100.0f, "%.2f",
-            ImGuiSliderFlags_Logarithmic)) {
-        config_.fly_controller->SetMoveSpeed(speed);
-      }
-
-      ImGui::Spacing();
-      ImGui::TextWrapped(
-        "Controls: WASD to move, Q/E for down/up. "
-        "Hold Right Mouse Button and drag to look around. "
-        "Hold Shift to boost speed. Hold Space to lock to horizontal plane. "
-        "Mouse wheel to adjust speed.");
-
-    } else {
-      ImGui::TextDisabled("Fly controller not available");
+    float speed = vm_->GetFlyMoveSpeed();
+    if (ImGui::SliderFloat("Move Speed", &speed, 0.1f, 100.0f, "%.2f",
+          ImGuiSliderFlags_Logarithmic)) {
+      vm_->SetFlyMoveSpeed(speed);
     }
+
+    ImGui::Spacing();
+    ImGui::TextWrapped(
+      "Controls: WASD to move, Q/E for down/up. "
+      "Hold Right Mouse Button and drag to look around. "
+      "Hold Shift to boost speed. Hold Space to lock to horizontal plane. "
+      "Mouse wheel to adjust speed.");
   }
 
   ImGui::Spacing();
 
-  // Reset button
   ImGui::SeparatorText("Actions");
 
   if (ImGui::Button("Reset Camera Position", ImVec2(-1, 0))) {
-    if (config_.on_reset_requested) {
-      config_.on_reset_requested();
-    }
+    vm_->RequestReset();
   }
 
   if (ImGui::IsItemHovered()) {
@@ -181,7 +137,7 @@ void CameraControlPanel::DrawCameraModeTab()
 void CameraControlPanel::DrawDebugTab()
 {
   DrawCameraPoseInfo();
-  if (current_mode_ == CameraControlMode::kFly) {
+  if (vm_->GetControlMode() == CameraControlMode::kFly) {
     ImGui::Spacing();
     DrawInputDebugInfo();
   }
@@ -191,22 +147,13 @@ void CameraControlPanel::DrawCameraPoseInfo()
 {
   ImGui::SeparatorText("Camera Pose");
 
-  if (!config_.active_camera || !config_.active_camera->IsAlive()) {
+  if (!vm_->HasActiveCamera()) {
     ImGui::TextDisabled("No active camera");
     return;
   }
 
-  auto transform = config_.active_camera->GetTransform();
-
-  glm::vec3 position { 0.0f, 0.0f, 0.0f };
-  glm::quat rotation { 1.0f, 0.0f, 0.0f, 0.0f };
-
-  if (auto pos = transform.GetLocalPosition()) {
-    position = *pos;
-  }
-  if (auto rot = transform.GetLocalRotation()) {
-    rotation = *rot;
-  }
+  const glm::vec3 position = vm_->GetCameraPosition();
+  const glm::quat rotation = vm_->GetCameraRotation();
 
   // Basis vectors
   const glm::vec3 forward = rotation * glm::vec3(0.0f, 0.0f, -1.0f);
@@ -334,7 +281,7 @@ void CameraControlPanel::DrawInputDebugInfo()
     const auto show_action
       = [this](const char* label,
           const std::shared_ptr<oxygen::input::Action>& action) {
-          const char* state = GetActionStateString(action);
+          const char* state = vm_->GetActionStateString(action);
           const bool ongoing = action && action->IsOngoing();
           const bool triggered = action && action->WasTriggeredThisFrame();
           const bool released = action && action->WasReleasedThisFrame();
@@ -354,23 +301,24 @@ void CameraControlPanel::DrawInputDebugInfo()
             triggered ? 1 : 0, released ? 1 : 0);
         };
 
-    show_action("W (Fwd)", config_.move_fwd_action);
-    show_action("S (Bwd)", config_.move_bwd_action);
-    show_action("A (Left)", config_.move_left_action);
-    show_action("D (Right)", config_.move_right_action);
-    show_action("Shift", config_.fly_boost_action);
-    show_action("Space", config_.fly_plane_lock_action);
-    show_action("RMB", config_.rmb_action);
+    show_action("W (Fwd)", vm_->GetMoveForwardAction());
+    show_action("S (Bwd)", vm_->GetMoveBackwardAction());
+    show_action("A (Left)", vm_->GetMoveLeftAction());
+    show_action("D (Right)", vm_->GetMoveRightAction());
+    show_action("Shift", vm_->GetFlyBoostAction());
+    show_action("Space", vm_->GetFlyPlaneLockAction());
+    show_action("RMB", vm_->GetRmbAction());
     ImGui::EndTable();
   }
 
   // Mouse delta
-  if (config_.orbit_action
-    && config_.orbit_action->GetValueType()
+  auto orbit_action = vm_->GetOrbitAction();
+  if (orbit_action
+    && orbit_action->GetValueType()
       == oxygen::input::ActionValueType::kAxis2D) {
     glm::vec2 mouse_delta(0.0f);
 
-    for (const auto& transition : config_.orbit_action->GetFrameTransitions()) {
+    for (const auto& transition : orbit_action->GetFrameTransitions()) {
       const auto& value
         = transition.value_at_transition.GetAs<oxygen::Axis2D>();
       mouse_delta.x += value.x;
@@ -398,35 +346,6 @@ void CameraControlPanel::DrawInputDebugInfo()
     }
     ImGui::PopID();
   }
-}
-
-auto CameraControlPanel::GetActionStateString(
-  const std::shared_ptr<oxygen::input::Action>& action) const -> const char*
-{
-  if (!action) {
-    return "<null>";
-  }
-
-  if (action->WasCanceledThisFrame()) {
-    return "Canceled";
-  }
-  if (action->WasCompletedThisFrame()) {
-    return "Completed";
-  }
-  if (action->WasTriggeredThisFrame()) {
-    return "Triggered";
-  }
-  if (action->WasReleasedThisFrame()) {
-    return "Released";
-  }
-  if (action->IsOngoing()) {
-    return "Ongoing";
-  }
-  if (action->WasValueUpdatedThisFrame()) {
-    return "Updated";
-  }
-
-  return "Idle";
 }
 
 } // namespace oxygen::examples::ui

@@ -6,27 +6,29 @@
 
 #pragma once
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Renderer/Passes/ShaderPass.h>
+
 #include "DemoShell/UI/DemoPanel.h"
-#include "DemoShell/UI/LightCullingDebugPanel.h"
+#include "DemoShell/UI/RenderingVm.h"
 
 namespace oxygen::examples::ui {
 
-//! View mode selection for rendering panel.
-enum class RenderingViewMode { kSolid, kWireframe };
+class RenderingVm;
 
 //! Rendering panel with view and debug mode controls
 /*!
  Provides two collapsible sections: "View Mode" and "Debug Modes".
  Debug modes toggle the shader debug mode automatically (Normal disables
  debug).
+
+ This panel follows the MVVM pattern, receiving a RenderingVm that owns
+ the state and handles persistence.
 */
 class RenderingPanel final : public DemoPanel {
 public:
-  //! Initialize the panel with configuration
-  void Initialize(const LightCullingDebugConfig& config);
-
-  //! Update configuration (call when shader pass config changes)
-  void UpdateConfig(const LightCullingDebugConfig& config);
+  //! Create the panel bound to a rendering view model.
+  explicit RenderingPanel(observer_ptr<RenderingVm> vm);
 
   //! Draws the panel content without creating a window.
   auto DrawContents() -> void override;
@@ -34,25 +36,18 @@ public:
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override;
   [[nodiscard]] auto GetPreferredWidth() const noexcept -> float override;
   [[nodiscard]] auto GetIcon() const noexcept -> std::string_view override;
+  auto OnRegistered() -> void override;
   auto OnLoaded() -> void override;
   auto OnUnloaded() -> void override;
 
-  //! Set the current view mode.
-  void SetViewMode(RenderingViewMode mode) { view_mode_ = mode; }
-
-  //! Get the current view mode.
-  [[nodiscard]] auto GetViewMode() const -> RenderingViewMode
-  {
-    return view_mode_;
-  }
+  //! Get the current view mode from the view model.
+  [[nodiscard]] auto GetViewMode() const -> RenderingViewMode;
 
 private:
   void DrawViewModeControls();
   void DrawDebugModes();
-  void ApplyDebugMode(ShaderDebugMode mode);
 
-  LightCullingDebugConfig config_ {};
-  RenderingViewMode view_mode_ { RenderingViewMode::kSolid };
+  observer_ptr<RenderingVm> vm_ {};
 };
 
 } // namespace oxygen::examples::ui

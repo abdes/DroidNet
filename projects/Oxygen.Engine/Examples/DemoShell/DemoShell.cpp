@@ -16,34 +16,17 @@
 #include "DemoShell/Internal/SceneControlBlock.h"
 #include "DemoShell/PanelRegistry.h"
 #include "DemoShell/Services/CameraLifecycleService.h"
+#include "DemoShell/Services/LightCullingSettingsService.h"
+#include "DemoShell/Services/RenderingSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/Services/UiSettingsService.h"
-#include "DemoShell/UI/CameraControlPanel.h"
+#include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/UI/CameraRigController.h"
 #include "DemoShell/UI/ContentLoaderPanel.h"
 #include "DemoShell/UI/DemoShellUi.h"
 #include "DemoShell/UI/EnvironmentDebugPanel.h"
-#include "DemoShell/UI/LightCullingDebugPanel.h"
-#include "DemoShell/UI/RenderingPanel.h"
-
-namespace {
-auto HasLightCullingConfig(
-  const oxygen::examples::ui::LightCullingDebugConfig& config) -> bool
-{
-  return config.shader_pass_config && config.light_culling_pass_config;
-}
-
-auto ApplyDefaultClusterCallback(
-  oxygen::examples::ui::LightCullingDebugConfig& config) -> void
-{
-  if (!config.on_cluster_mode_changed) {
-    config.on_cluster_mode_changed = []() {
-      LOG_F(INFO, "Light culling mode changed, PSO will rebuild next frame");
-    };
-  }
-}
-
-} // namespace
+#include "DemoShell/UI/RenderingVm.h"
+#include "DemoShell/UI/LightCullingVm.h"
 
 namespace oxygen::examples {
 
@@ -54,12 +37,14 @@ struct DemoShell::Impl {
   PanelRegistry panel_registry {};
   std::optional<ui::DemoShellUi> demo_shell_ui {};
 
+  // Services (owned by DemoShell)
   UiSettingsService ui_settings_service {};
+  RenderingSettingsService rendering_settings_service {};
+  LightCullingSettingsService light_culling_settings_service {};
+  CameraSettingsService camera_settings_service {};
 
+  // Panels still managed by DemoShell (non-MVVM panels)
   std::shared_ptr<ui::ContentLoaderPanel> content_loader_panel {};
-  std::shared_ptr<ui::CameraControlPanel> camera_control_panel {};
-  std::shared_ptr<ui::LightingPanel> lighting_panel {};
-  std::shared_ptr<ui::RenderingPanel> rendering_panel {};
   std::shared_ptr<ui::EnvironmentDebugPanel> environment_debug_panel {};
 
   std::unique_ptr<ui::CameraRigController> camera_rig {};
@@ -87,33 +72,6 @@ DemoShell::~DemoShell() noexcept
   }
 }
 
-/*!
- Initializes the demo shell and registers the standard panel set.
-
- @param config Shell configuration with dependencies and callbacks.
- @return True when the shell is ready for use.
-
-### Performance Characteristics
-
-- Time Complexity: $O(n)$ for registering $n$ panels.
-- Memory: $O(n)$ for panel adapters.
-- Optimization: Reuses persistent panel instances across frames.
-
-### Usage Examples
-
- ```cpp
- DemoShell shell;
- DemoShellConfig config;
- config.input_system = observer_ptr { input_system };
- if (!shell.Initialize(config)) {
-   return false;
- }
- ```
-
- @note Initialization config is cached for subsequent updates.
- @warning The input system must outlive the demo shell.
- @see DemoShell::Update, DemoShell::Draw
-*/
 auto DemoShell::Initialize(const DemoShellConfig& config) -> bool
 {
   impl_->config = config;
@@ -145,9 +103,14 @@ auto DemoShell::Initialize(const DemoShellConfig& config) -> bool
   }
   impl_->camera_lifecycle.SetScene(impl_->scene_control.TryGetScene());
 
+  // Create DemoShellUi with all services
   impl_->demo_shell_ui.emplace(observer_ptr { &impl_->panel_registry },
     observer_ptr { &impl_->camera_lifecycle },
-    observer_ptr { &impl_->ui_settings_service });
+    observer_ptr { &impl_->ui_settings_service },
+    observer_ptr { &impl_->rendering_settings_service },
+    observer_ptr { &impl_->light_culling_settings_service },
+    observer_ptr { &impl_->camera_settings_service },
+    observer_ptr { impl_->camera_rig.get() });
 
   InitializePanels();
   RegisterDemoPanels();
@@ -156,29 +119,6 @@ auto DemoShell::Initialize(const DemoShellConfig& config) -> bool
   return true;
 }
 
-/*!
- Updates the demo shell for the current frame phase.
-
- @param delta_time Frame delta. Pass a zero duration for scene mutation
-   updates and a non-zero duration for gameplay camera updates.
-
-### Performance Characteristics
-
-- Time Complexity: $O(p)$ for $p$ panel updates during mutation.
-- Memory: $O(1)$ additional allocations.
-- Optimization: Skips redundant work based on the update phase.
-
-### Usage Examples
-
- ```cpp
- shell.Update(time::CanonicalDuration {}); // Scene mutation
- shell.Update(context.GetGameDeltaTime()); // Gameplay
- ```
-
- @note Panel orchestration runs only when the delta time is zero.
- @warning Do not call with non-zero delta twice per frame.
- @see DemoShell::Draw, DemoShell::UpdateScene
-*/
 auto DemoShell::Update(time::CanonicalDuration delta_time) -> void
 {
   if (!impl_->initialized) {
@@ -197,24 +137,6 @@ auto DemoShell::Update(time::CanonicalDuration delta_time) -> void
   }
 }
 
-/*!
- Draws the demo shell UI layout and active panel contents.
-
-### Performance Characteristics
-
-- Time Complexity: $O(1)$ plus active panel draw cost.
-- Memory: $O(1)$ additional allocations.
-- Optimization: Delegates layout to the shared DemoShellUi.
-
-### Usage Examples
-
- ```cpp
- shell.Draw();
- ```
-
- @note Must be called within an active ImGui frame scope.
- @see DemoShellUi::Draw
-*/
 auto DemoShell::Draw() -> void
 {
   if (!impl_->initialized) {
@@ -226,28 +148,6 @@ auto DemoShell::Draw() -> void
   }
 }
 
-/*!
- Registers a demo-specific panel with the shell registry.
-
- @param panel Panel instance to register.
- @return True when the panel was registered successfully.
-
-### Performance Characteristics
-
-- Time Complexity: $O(n)$ for $n$ registered panels.
-- Memory: $O(1)$ additional allocations.
-- Optimization: Uses the existing panel registry storage.
-
-### Usage Examples
-
- ```cpp
- shell.RegisterPanel(std::make_shared<MyPanel>());
- ```
-
- @note Panels must remain alive while registered.
- @warning Call only after DemoShell::Initialize.
- @see PanelRegistry::RegisterPanel
-*/
 auto DemoShell::RegisterPanel(std::shared_ptr<DemoPanel> panel) -> bool
 {
   if (!impl_->initialized) {
@@ -269,27 +169,6 @@ auto DemoShell::RegisterPanel(std::shared_ptr<DemoPanel> panel) -> bool
   return true;
 }
 
-/*!
- Sets the active scene, transferring ownership to the shell.
-
- @param scene Scene ownership to transfer (may be null to clear).
- @return ActiveScene value for accessing the new active scene.
-
-### Performance Characteristics
-
-- Time Complexity: $O(1)$.
-- Memory: $O(1)$.
-- Optimization: Avoids redundant initialization by reusing panel instances.
-
-### Usage Examples
-
- ```cpp
- auto active_scene = shell.SetScene(std::move(scene));
- ```
-
- @note Call this when the active scene is replaced or cleared.
- @see CameraLifecycleService::SetScene
-*/
 auto DemoShell::SetScene(std::unique_ptr<scene::Scene> scene) -> ActiveScene
 {
   impl_->scene_control.SetScene(std::move(scene));
@@ -307,26 +186,6 @@ auto DemoShell::TryGetScene() const -> observer_ptr<scene::Scene>
   return impl_->scene_control.TryGetScene();
 }
 
-/*!
- Assigns the active camera node used by the rig and camera panels.
-
- @param camera Camera node to control and inspect.
-
-### Performance Characteristics
-
-- Time Complexity: $O(1)$.
-- Memory: $O(1)$.
-- Optimization: Reuses existing camera controllers.
-
-### Usage Examples
-
- ```cpp
- shell.SetActiveCamera(std::move(active_camera));
- ```
-
- @note This refreshes the camera control panel bindings.
- @see CameraControlPanel::UpdateConfig
-*/
 auto DemoShell::SetActiveCamera(scene::SceneNode camera) -> void
 {
   impl_->camera_lifecycle.SetActiveCamera(std::move(camera));
@@ -335,54 +194,14 @@ auto DemoShell::SetActiveCamera(scene::SceneNode camera) -> void
     impl_->camera_rig->SetActiveCamera(
       observer_ptr { &impl_->camera_lifecycle.GetActiveCamera() });
   }
-
-  UpdateCameraControlPanelConfig();
 }
 
-/*!
- Updates the skybox service reference for environment panels.
-
- @param skybox_service Non-owning pointer to the skybox service.
-
-### Performance Characteristics
-
-- Time Complexity: $O(1)$.
-- Memory: $O(1)$.
-- Optimization: Uses non-owning references to avoid lifetime coupling.
-
-### Usage Examples
-
- ```cpp
- shell.SetSkyboxService(observer_ptr { skybox_service_.get() });
- ```
-
- @note Call this whenever the skybox service is recreated.
- @see EnvironmentDebugPanel::UpdateConfig
-*/
 auto DemoShell::SetSkyboxService(observer_ptr<SkyboxService> skybox_service)
   -> void
 {
   impl_->config.skybox_service = skybox_service;
 }
 
-/*!
- Cancels any in-flight content import operations.
-
-### Performance Characteristics
-
-- Time Complexity: $O(1)$.
-- Memory: $O(1)$.
-- Optimization: Delegates to the content loader panel.
-
-### Usage Examples
-
- ```cpp
- shell.CancelContentImport();
- ```
-
- @note Intended for shutdown or scene reset workflows.
- @see ui::ImportPanel::CancelImport
-*/
 auto DemoShell::CancelContentImport() -> void
 {
   if (!impl_->config.panel_config.content_loader) {
@@ -393,57 +212,21 @@ auto DemoShell::CancelContentImport() -> void
   }
 }
 
-/*!
- Returns the camera lifecycle service for advanced control.
-
- @return Reference to the internal camera lifecycle helper.
-
-### Performance Characteristics
-
-- Time Complexity: $O(1)$.
-- Memory: $O(1)$.
-- Optimization: Returns a reference without copying.
-
-### Usage Examples
-
- ```cpp
- shell.GetCameraLifecycle().EnsureViewport(width, height);
- ```
-
- @note The reference remains valid for the shell lifetime.
- @see CameraLifecycleService
-*/
 auto DemoShell::GetCameraLifecycle() -> CameraLifecycleService&
 {
   return impl_->camera_lifecycle;
 }
 
-/*!
- Returns the current rendering view mode from the rendering panel.
-
- @return The selected view mode.
-
-### Performance Characteristics
-
-- Time Complexity: $O(1)$.
-- Memory: $O(1)$.
-- Optimization: Directly queries the cached UI state.
-
-### Usage Examples
-
- ```cpp
- const auto mode = shell.GetRenderingViewMode();
- ```
-
- @note Used to apply wireframe or solid render modes.
- @see ui::RenderingPanel
-*/
 auto DemoShell::GetRenderingViewMode() const -> ui::RenderingViewMode
 {
-  if (!impl_->rendering_panel) {
+  if (!impl_->demo_shell_ui) {
     return ui::RenderingViewMode::kSolid;
   }
-  return impl_->rendering_panel->GetViewMode();
+  auto vm = impl_->demo_shell_ui->GetRenderingVm();
+  if (!vm) {
+    return ui::RenderingViewMode::kSolid;
+  }
+  return vm->GetViewMode();
 }
 
 auto DemoShell::SetActivePanel(std::string_view panel_name) -> void
@@ -462,6 +245,36 @@ auto DemoShell::SetActivePanel(std::string_view panel_name) -> void
     return;
   }
   impl_->ui_settings_service.SetActivePanelName(std::string(panel_name));
+}
+
+auto DemoShell::GetActivePanelName() const -> std::optional<std::string>
+{
+  return impl_->ui_settings_service.GetActivePanelName();
+}
+
+auto DemoShell::GetRenderingDebugMode() const -> engine::ShaderDebugMode
+{
+  if (!impl_->demo_shell_ui) {
+    return engine::ShaderDebugMode::kDisabled;
+  }
+  auto vm = impl_->demo_shell_ui->GetRenderingVm();
+  if (!vm) {
+    return engine::ShaderDebugMode::kDisabled;
+  }
+  return vm->GetDebugMode();
+}
+
+auto DemoShell::GetLightCullingVisualizationMode() const
+  -> engine::ShaderDebugMode
+{
+  if (!impl_->demo_shell_ui) {
+    return engine::ShaderDebugMode::kDisabled;
+  }
+  auto vm = impl_->demo_shell_ui->GetLightCullingVm();
+  if (!vm) {
+    return engine::ShaderDebugMode::kDisabled;
+  }
+  return vm->GetVisualizationMode();
 }
 
 auto DemoShell::InitializePanels() -> void
@@ -484,34 +297,9 @@ auto DemoShell::InitializePanels() -> void
     impl_->content_loader_panel->Initialize(loader_config);
   }
 
-  if (impl_->config.panel_config.camera_controls) {
-    if (!impl_->camera_control_panel) {
-      impl_->camera_control_panel = std::make_shared<ui::CameraControlPanel>();
-    }
-    UpdateCameraControlPanelConfig();
-  }
-
-  if (impl_->config.panel_config.lighting
-    || impl_->config.panel_config.rendering) {
-    if (impl_->config.get_light_culling_debug_config) {
-      auto debug_config = impl_->config.get_light_culling_debug_config();
-      ApplyDefaultClusterCallback(debug_config);
-      if (HasLightCullingConfig(debug_config)) {
-        if (impl_->config.panel_config.lighting) {
-          if (!impl_->lighting_panel) {
-            impl_->lighting_panel = std::make_shared<ui::LightingPanel>();
-          }
-          impl_->lighting_panel->Initialize(debug_config);
-        }
-        if (impl_->config.panel_config.rendering) {
-          if (!impl_->rendering_panel) {
-            impl_->rendering_panel = std::make_shared<ui::RenderingPanel>();
-          }
-          impl_->rendering_panel->Initialize(debug_config);
-        }
-      }
-    }
-  }
+  // Camera panel is created by DemoShellUi if requested.
+  // Rendering and Lighting panels are created lazily by DemoShellUi
+  // when pass configs become available (via EnsureXxxPanelReady)
 
   if (impl_->config.panel_config.environment) {
     if (!impl_->environment_debug_panel) {
@@ -544,33 +332,23 @@ auto DemoShell::InitializePanels() -> void
 
 auto DemoShell::UpdatePanels() -> void
 {
-  if (impl_->config.panel_config.camera_controls) {
-    UpdateCameraControlPanelConfig();
-  }
-
   if (impl_->config.panel_config.content_loader) {
     if (impl_->content_loader_panel) {
       impl_->content_loader_panel->Update();
     }
   }
 
-  if (impl_->config.panel_config.lighting
-    || impl_->config.panel_config.rendering) {
-    if (impl_->config.get_light_culling_debug_config) {
-      auto debug_config = impl_->config.get_light_culling_debug_config();
-      ApplyDefaultClusterCallback(debug_config);
-      if (HasLightCullingConfig(debug_config)) {
-        if (impl_->config.panel_config.lighting) {
-          if (impl_->lighting_panel) {
-            impl_->lighting_panel->UpdateConfig(debug_config);
-          }
-        }
-        if (impl_->config.panel_config.rendering) {
-          if (impl_->rendering_panel) {
-            impl_->rendering_panel->UpdateConfig(debug_config);
-          }
-        }
-      }
+  // Lazily create rendering and lighting panels via DemoShellUi
+  if ((impl_->config.panel_config.lighting
+        || impl_->config.panel_config.rendering)
+    && impl_->demo_shell_ui && impl_->config.get_pass_config_refs) {
+    auto refs = impl_->config.get_pass_config_refs();
+
+    if (impl_->config.panel_config.rendering) {
+      impl_->demo_shell_ui->EnsureRenderingPanelReady(refs);
+    }
+    if (impl_->config.panel_config.lighting) {
+      impl_->demo_shell_ui->EnsureLightingPanelReady(refs);
     }
   }
 
@@ -603,47 +381,7 @@ auto DemoShell::UpdatePanels() -> void
   }
 }
 
-auto DemoShell::UpdateCameraControlPanelConfig() -> void
-{
-  if (!impl_->config.panel_config.camera_controls) {
-    return;
-  }
 
-  ui::CameraControlConfig camera_config;
-  camera_config.active_camera
-    = observer_ptr { &impl_->camera_lifecycle.GetActiveCamera() };
-  if (impl_->camera_rig) {
-    camera_config.orbit_controller = impl_->camera_rig->GetOrbitController();
-    camera_config.fly_controller = impl_->camera_rig->GetFlyController();
-    camera_config.move_fwd_action = impl_->camera_rig->GetMoveForwardAction();
-    camera_config.move_bwd_action = impl_->camera_rig->GetMoveBackwardAction();
-    camera_config.move_left_action = impl_->camera_rig->GetMoveLeftAction();
-    camera_config.move_right_action = impl_->camera_rig->GetMoveRightAction();
-    camera_config.fly_boost_action = impl_->camera_rig->GetFlyBoostAction();
-    camera_config.fly_plane_lock_action
-      = impl_->camera_rig->GetFlyPlaneLockAction();
-    camera_config.rmb_action = impl_->camera_rig->GetRmbAction();
-    camera_config.orbit_action = impl_->camera_rig->GetOrbitAction();
-    camera_config.current_mode = impl_->camera_rig->GetMode();
-  }
-
-  camera_config.on_mode_changed = [this](ui::CameraControlMode mode) {
-    if (impl_->camera_rig) {
-      impl_->camera_rig->SetMode(mode);
-    }
-    impl_->camera_lifecycle.RequestSyncFromActive();
-  };
-
-  camera_config.on_reset_requested
-    = [this]() { impl_->camera_lifecycle.RequestReset(); };
-
-  camera_config.on_panel_closed
-    = [this]() { impl_->camera_lifecycle.PersistActiveCameraSettings(); };
-
-  if (impl_->camera_control_panel) {
-    impl_->camera_control_panel->UpdateConfig(camera_config);
-  }
-}
 
 auto DemoShell::RegisterDemoPanels() -> void
 {
@@ -658,18 +396,12 @@ auto DemoShell::RegisterDemoPanels() -> void
   if (impl_->config.panel_config.content_loader) {
     register_panel(impl_->content_loader_panel);
   }
-  if (impl_->config.panel_config.camera_controls) {
-    register_panel(impl_->camera_control_panel);
-  }
   if (impl_->config.panel_config.environment) {
     register_panel(impl_->environment_debug_panel);
   }
-  if (impl_->config.panel_config.lighting) {
-    register_panel(impl_->lighting_panel);
-  }
-  if (impl_->config.panel_config.rendering) {
-    register_panel(impl_->rendering_panel);
-  }
+
+  // Rendering and Lighting panels are registered by DemoShellUi
+  // when they are lazily created via EnsureXxxPanelReady
 }
 
 } // namespace oxygen::examples

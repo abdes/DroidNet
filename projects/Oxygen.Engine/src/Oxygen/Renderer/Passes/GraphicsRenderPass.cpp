@@ -13,8 +13,10 @@
 using oxygen::engine::GraphicsRenderPass;
 using oxygen::graphics::CommandRecorder;
 
-GraphicsRenderPass::GraphicsRenderPass(const std::string_view name)
+GraphicsRenderPass::GraphicsRenderPass(
+  const std::string_view name, bool require_scene_constants)
   : RenderPass(name)
+  , require_scene_constants_(require_scene_constants)
 {
 }
 
@@ -37,7 +39,9 @@ auto GraphicsRenderPass::OnExecute(CommandRecorder& recorder) -> void
 
   // Bind common resources
   BindIndicesBuffer(recorder);
-  BindSceneConstantsBuffer(recorder);
+  if (require_scene_constants_) {
+    BindSceneConstantsBuffer(recorder);
+  }
   BindPassConstantsIndexConstant(recorder, GetPassConstantsIndex());
 
   // Allow derived class additional setup

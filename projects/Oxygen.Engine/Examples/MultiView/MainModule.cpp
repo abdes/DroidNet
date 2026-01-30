@@ -6,7 +6,9 @@
 
 #include <algorithm>
 #include <iterator>
+#include <ranges>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <imgui.h>
@@ -14,26 +16,43 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Renderer/Types/CompositingTask.h>
 
+#include "MultiView/ImGuiView.h"
 #include "MultiView/MainModule.h"
 #include "MultiView/MainView.h"
 #include "MultiView/PipView.h"
 
 namespace oxygen::examples::multiview {
 
-MainModule::MainModule(const DemoAppContext& app) noexcept
+MainModule::MainModule(
+  const DemoAppContext& app, CompositingMode compositing_mode) noexcept
   : Base(app)
   , app_(app)
+  , compositing_mode_(compositing_mode)
 {
   // Create views
-  views_.push_back(std::make_unique<MainView>());
-  views_.push_back(std::make_unique<PipView>());
+  auto main_view = std::make_unique<MainView>();
+  main_view_.reset(main_view.get());
+  views_.push_back(std::move(main_view));
+
+  auto pip_view = std::make_unique<PipView>();
+  pip_view_.reset(pip_view.get());
+  views_.push_back(std::move(pip_view));
+
+  auto imgui_view = std::make_unique<ImGuiView>();
+  imgui_view_.reset(imgui_view.get());
+  views_.push_back(std::move(imgui_view));
 }
 
 auto MainModule::GetSupportedPhases() const noexcept -> engine::ModulePhaseMask
@@ -139,6 +158,10 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& /*context*/) -> co::Co<>
 
   for (auto& view : views_) {
     view->SetImGuiModule(observer_ptr { &imgui_module });
+  }
+
+  if (imgui_view_) {
+    imgui_view_->SetImGui(observer_ptr { &imgui_module });
   }
 
   CHECK_NOTNULL_F(shell_, "DemoShell required for GUI update");
@@ -257,53 +280,70 @@ auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
   auto gfx = app_.renderer->GetGraphics();
   CHECK_F(static_cast<bool>(gfx), "Graphics required for compositing");
 
+  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
+
   const auto fb_weak = app_window_->GetCurrentFrameBuffer();
   CHECK_F(!fb_weak.expired(), "Swapchain framebuffer must exist");
   const auto fb = fb_weak.lock();
 
-  const auto& fb_desc = fb->GetDescriptor();
-  CHECK_F(!fb_desc.color_attachments.empty(),
-    "Backbuffer must have a color attachment");
-  CHECK_F(static_cast<bool>(fb_desc.color_attachments[0].texture),
-    "Backbuffer color attachment missing");
-  auto& backbuffer = *fb_desc.color_attachments[0].texture;
-  LOG_F(INFO, "[MultiView] Backbuffer texture acquired");
+  CHECK_NOTNULL_F(main_view_, "MainView must exist for compositing");
+  CHECK_NOTNULL_F(pip_view_, "PipView must exist for compositing");
+  CHECK_NOTNULL_F(imgui_view_, "ImGuiView must exist for compositing");
 
-  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder
-    = gfx->AcquireCommandRecorder(queue_key, "MultiView Compositing");
+  engine::CompositingTaskList tasks {};
+  const auto fullscreen = BuildFullscreenViewport(*fb);
+  CHECK_F(fullscreen.IsValid(), "Fullscreen viewport must be valid");
 
-  CHECK_F(
-    static_cast<bool>(recorder), "Compositing recorder acquisition failed");
-  LOG_F(INFO, "[MultiView] Command recorder acquired");
-  TrackSwapchainFramebuffer(*recorder, *fb);
-  LOG_F(INFO, "[MultiView] Swapchain framebuffer tracked");
+  if (compositing_mode_ == CompositingMode::kBlend) {
+    auto main_texture = main_view_->GetColorTexture();
+    CHECK_F(static_cast<bool>(main_texture),
+      "MainView color texture required for blend");
+    tasks.push_back(engine::CompositingTask::MakeTextureBlend(
+      std::move(main_texture), fullscreen, 1.0F));
+  } else {
+    CHECK_F(
+      main_view_->GetViewId().get() != 0, "MainView view id required for copy");
+    tasks.push_back(
+      engine::CompositingTask::MakeCopy(main_view_->GetViewId(), fullscreen));
+  }
 
-  std::vector<DemoView*> view_ptrs;
-  view_ptrs.reserve(views_.size());
-  std::ranges::transform(views_, std::back_inserter(view_ptrs),
-    [](const auto& view) { return view.get(); });
+  const auto viewport = pip_view_->GetViewport();
+  CHECK_F(viewport && viewport->IsValid(), "PiP viewport must be valid");
 
-  LOG_F(INFO, "[MultiView] Compositing {} views", views_.size());
-  CompositorGraph::Inputs inputs {
-    .views = view_ptrs,
-    .recorder = *recorder,
-    .backbuffer = backbuffer,
-    .backbuffer_framebuffer = *fb,
-  };
-  co_await compositor_graph_.Execute(inputs);
+  // Keep task alpha at 1.0F so the PiP texture's own alpha (set on creation)
+  // controls opacity. This preserves the clear color while making it half
+  // transparent.
+  const float alpha = 1.0F;
+  if (compositing_mode_ == CompositingMode::kBlend) {
+    auto pip_texture = pip_view_->GetColorTexture();
+    CHECK_F(static_cast<bool>(pip_texture),
+      "PipView color texture required for blend");
+    tasks.push_back(engine::CompositingTask::MakeTextureBlend(
+      std::move(pip_texture), *viewport, alpha));
+  } else {
+    CHECK_F(
+      pip_view_->GetViewId().get() != 0, "PipView view id required for copy");
+    tasks.push_back(
+      engine::CompositingTask::MakeCopy(pip_view_->GetViewId(), *viewport));
+  }
 
-  // CRITICAL: Transition backbuffer to present state
-  LOG_F(INFO, "[MultiView] Transitioning backbuffer to kPresent");
-  recorder->RequireResourceStateFinal(
-    backbuffer, graphics::ResourceStates::kPresent);
-  recorder->FlushBarriers();
+  // Add ImGui overlay
+  if (imgui_view_->IsViewReady()) {
+    auto ui_texture = imgui_view_->GetColorTexture();
+    // Assuming UI covers the whole screen or we want to composite it as such
+    if (ui_texture) {
+      tasks.push_back(engine::CompositingTask::MakeTextureBlend(
+        std::move(ui_texture), fullscreen, 1.0F));
+    }
+  }
 
-  // CRITICAL: Mark surface as presentable
-  LOG_F(INFO, "[MultiView] Marking surface as presentable");
-  MarkSurfacePresentable(context, surface);
+  oxygen::engine::CompositionSubmission submission;
+  submission.target_framebuffer = fb;
+  submission.target_surface = surface;
+  submission.tasks = std::move(tasks);
+  app_.renderer->RegisterComposition(std::move(submission));
 
-  LOG_F(INFO, "[MultiView] OnCompositing complete");
+  LOG_F(INFO, "[MultiView] OnCompositing submit complete");
   co_return;
 }
 
@@ -322,44 +362,6 @@ auto MainModule::BuildDefaultWindowProperties() const
 }
 
 // Helpers
-auto MainModule::AcquireCommandRecorder(Graphics& gfx)
-  -> std::shared_ptr<graphics::CommandRecorder>
-{
-  const auto queue_key = gfx.QueueKeyFor(graphics::QueueRole::kGraphics);
-  return gfx.AcquireCommandRecorder(queue_key, "MultiView");
-}
-
-auto MainModule::TrackSwapchainFramebuffer(graphics::CommandRecorder& recorder,
-  const graphics::Framebuffer& framebuffer) -> void
-{
-  const auto& fb_desc = framebuffer.GetDescriptor();
-  for (const auto& attachment : fb_desc.color_attachments) {
-    if (attachment.texture) {
-      recorder.BeginTrackingResourceState(
-        *attachment.texture, graphics::ResourceStates::kPresent);
-    }
-  }
-
-  if (fb_desc.depth_attachment.texture) {
-    recorder.BeginTrackingResourceState(
-      *fb_desc.depth_attachment.texture, graphics::ResourceStates::kDepthWrite);
-    recorder.FlushBarriers();
-  }
-}
-
-auto MainModule::MarkSurfacePresentable(engine::FrameContext& context,
-  const std::shared_ptr<graphics::Surface>& surface) -> void
-{
-  CHECK_F(static_cast<bool>(surface), "Surface must be valid");
-
-  const auto surfaces = context.GetSurfaces();
-  for (size_t i = 0; i < surfaces.size(); ++i) {
-    if (surfaces[i].get() == surface.get()) {
-      context.SetSurfacePresentable(i, true);
-      break;
-    }
-  }
-}
 
 auto MainModule::ReleaseAllViews(std::string_view reason) -> void
 {
@@ -371,6 +373,27 @@ auto MainModule::ReleaseAllViews(std::string_view reason) -> void
   }
 
   initialized_ = false;
+}
+
+auto MainModule::BuildFullscreenViewport(
+  const graphics::Framebuffer& target_framebuffer) const -> ViewPort
+{
+  const auto& fb_desc = target_framebuffer.GetDescriptor();
+  if (fb_desc.color_attachments.empty()
+    || !fb_desc.color_attachments[0].texture) {
+    return {};
+  }
+
+  const auto& target_desc
+    = fb_desc.color_attachments[0].texture->GetDescriptor();
+  return ViewPort {
+    .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
+    .width = static_cast<float>(target_desc.width),
+    .height = static_cast<float>(target_desc.height),
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
+  };
 }
 
 } // namespace oxygen::examples::multiview

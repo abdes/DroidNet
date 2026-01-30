@@ -23,6 +23,9 @@
 
 namespace oxygen::examples::ui {
 
+CameraRigController::CameraRigController() = default;
+CameraRigController::~CameraRigController() = default;
+
 /*!
  Initializes camera input bindings and mapping contexts for orbit and fly
  controls.

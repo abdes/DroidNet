@@ -154,10 +154,14 @@ auto PipView::OnPreRender(engine::Renderer& renderer) -> co::Co<>
   LOG_F(INFO, "[PipView] Configuring renderer with clear_color=({},{},{},{})",
     Config().clear_color.r, Config().clear_color.g, Config().clear_color.b,
     Config().clear_color.a);
+
+  auto clear_color = Config().clear_color;
+  clear_color.a = 0.5F;
+
   ViewRenderer::ViewRenderData data {
     .color_texture = ColorTextureRef(),
     .depth_texture = DepthTextureRef(),
-    .clear_color = Config().clear_color,
+    .clear_color = clear_color,
     .wireframe = Config().wireframe,
     .render_gui = false,
   };
@@ -174,6 +178,22 @@ auto PipView::RenderFrame(const engine::RenderContext& render_ctx,
     co_await RendererRef().Render(render_ctx, recorder);
   }
   co_return;
+}
+
+/*!
+ Returns the current PiP viewport when it has been computed.
+
+ @return Optional viewport describing the PiP region.
+
+### Performance Characteristics
+
+ - Time Complexity: O(1)
+ - Memory: None
+ - Optimization: None
+*/
+auto PipView::GetViewport() const -> std::optional<ViewPort>
+{
+  return viewport_;
 }
 
 void PipView::Composite(
@@ -282,7 +302,14 @@ void PipView::EnsurePipRenderTargets(const SubPixelExtent& viewport_extent)
   color_desc.sample_count = 1;
   color_desc.depth = 1;
   color_desc.use_clear_value = true;
-  color_desc.clear_value = Config().clear_color;
+  auto clear_color = Config().clear_color;
+
+  // Use per-pixel alpha in the PiP render target. This keeps the PiP clear
+  // color visible while making it half transparent during blend. The
+  // compositing task alpha stays at 1.0F, so only the texture alpha controls
+  // opacity.
+  clear_color.a = 0.5F;
+  color_desc.clear_value = clear_color;
   ColorTextureRef() = gfx.CreateTexture(color_desc);
 
   // Create depth texture

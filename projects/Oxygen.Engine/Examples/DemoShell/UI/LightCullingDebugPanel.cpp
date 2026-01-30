@@ -6,49 +6,20 @@
 
 #include <cmath>
 
-#include <fmt/format.h>
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
-#include <Oxygen/Renderer/Passes/LightCullingPass.h>
 
-#include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/LightCullingDebugPanel.h"
+#include "DemoShell/UI/LightCullingVm.h"
 
 namespace oxygen::examples::ui {
 
-void LightingPanel::Initialize(const LightCullingDebugConfig& config)
+LightingPanel::LightingPanel(observer_ptr<LightCullingVm> vm)
+  : vm_(vm)
 {
-  config_ = config;
-
-  if (config_.shader_pass_config) {
-    config_.shader_pass_config->debug_mode = ShaderDebugMode::kDisabled;
-  }
-
-  if (config_.light_culling_pass_config) {
-    const auto& cluster = config_.light_culling_pass_config->cluster;
-    use_clustered_culling_ = cluster.depth_slices > 1;
-    if (use_clustered_culling_) {
-      ui_depth_slices_ = static_cast<int>(cluster.depth_slices);
-    }
-    ui_z_near_ = cluster.z_near;
-    ui_z_far_ = cluster.z_far;
-  }
-}
-
-void LightingPanel::UpdateConfig(const LightCullingDebugConfig& config)
-{
-  config_ = config;
-  if (!settings_loaded_ && config_.light_culling_pass_config) {
-    const auto& cluster = config_.light_culling_pass_config->cluster;
-    use_clustered_culling_ = cluster.depth_slices > 1;
-    if (use_clustered_culling_) {
-      ui_depth_slices_ = static_cast<int>(cluster.depth_slices);
-    }
-    ui_z_near_ = cluster.z_near;
-    ui_z_far_ = cluster.z_far;
-  }
+  DCHECK_NOTNULL_F(vm, "LightingPanel requires LightCullingVm");
 }
 
 auto LightingPanel::DrawContents() -> void
@@ -72,23 +43,23 @@ auto LightingPanel::GetIcon() const noexcept -> std::string_view
   return oxygen::imgui::icons::kIconLighting;
 }
 
-auto LightingPanel::OnRegistered() -> void { LoadSettings(); }
+auto LightingPanel::OnRegistered() -> void
+{
+  // Settings are loaded via the ViewModel on construction.
+}
 
 auto LightingPanel::OnLoaded() -> void { }
 
 auto LightingPanel::OnUnloaded() -> void
 {
-  SaveCullingModeSetting();
-  SaveClusterSettings();
+  // Persistence is handled by LightCullingSettingsService via the ViewModel.
 }
 
 void LightingPanel::DrawVisualizationModes()
 {
   ImGui::SeparatorText("Visualization Modes");
 
-  const auto current_mode = config_.shader_pass_config
-    ? config_.shader_pass_config->debug_mode
-    : ShaderDebugMode::kDisabled;
+  const auto current_mode = vm_->GetVisualizationMode();
 
   const bool is_lighting_mode = current_mode == ShaderDebugMode::kDepthSlice
     || current_mode == ShaderDebugMode::kClusterIndex
@@ -98,22 +69,22 @@ void LightingPanel::DrawVisualizationModes()
     = (current_mode == ShaderDebugMode::kDisabled) || !is_lighting_mode;
 
   if (ImGui::RadioButton("Normal", normal_selected)) {
-    ApplyVisualizationMode(ShaderDebugMode::kDisabled);
+    vm_->SetVisualizationMode(ShaderDebugMode::kDisabled);
   }
 
   if (ImGui::RadioButton(
         "Heat Map", current_mode == ShaderDebugMode::kLightCullingHeatMap)) {
-    ApplyVisualizationMode(ShaderDebugMode::kLightCullingHeatMap);
+    vm_->SetVisualizationMode(ShaderDebugMode::kLightCullingHeatMap);
   }
 
   if (ImGui::RadioButton(
         "Slices", current_mode == ShaderDebugMode::kDepthSlice)) {
-    ApplyVisualizationMode(ShaderDebugMode::kDepthSlice);
+    vm_->SetVisualizationMode(ShaderDebugMode::kDepthSlice);
   }
 
   if (ImGui::RadioButton(
         "Clusters", current_mode == ShaderDebugMode::kClusterIndex)) {
-    ApplyVisualizationMode(ShaderDebugMode::kClusterIndex);
+    vm_->SetVisualizationMode(ShaderDebugMode::kClusterIndex);
   }
 }
 
@@ -124,25 +95,16 @@ void LightingPanel::DrawLightCullingSettings()
   DrawClusterConfigControls();
 }
 
-void LightingPanel::ApplyVisualizationMode(ShaderDebugMode mode)
-{
-  if (!config_.shader_pass_config) {
-    return;
-  }
-  config_.shader_pass_config->debug_mode = mode;
-}
-
 void LightingPanel::DrawCullingModeControls()
 {
   ImGui::SeparatorText("Culling Algorithm");
 
-  bool mode_changed = false;
+  const bool use_clustered = vm_->IsClusteredCulling();
 
   // Radio buttons for tile vs clustered
-  if (ImGui::RadioButton("Tile-Based (2D)", !use_clustered_culling_)) {
-    if (use_clustered_culling_) {
-      use_clustered_culling_ = false;
-      mode_changed = true;
+  if (ImGui::RadioButton("Tile-Based (2D)", !use_clustered)) {
+    if (use_clustered) {
+      vm_->SetClusteredCulling(false);
     }
   }
   if (ImGui::IsItemHovered()) {
@@ -151,10 +113,9 @@ void LightingPanel::DrawCullingModeControls()
                       "Efficient for most scenes.");
   }
 
-  if (ImGui::RadioButton("Clustered (3D)", use_clustered_culling_)) {
-    if (!use_clustered_culling_) {
-      use_clustered_culling_ = true;
-      mode_changed = true;
+  if (ImGui::RadioButton("Clustered (3D)", use_clustered)) {
+    if (!use_clustered) {
+      vm_->SetClusteredCulling(true);
     }
   }
   if (ImGui::IsItemHovered()) {
@@ -163,22 +124,11 @@ void LightingPanel::DrawCullingModeControls()
       "Uses logarithmic depth distribution.\n"
       "Better for depth-complex scenes with many overlapping lights.");
   }
-
-  if (mode_changed) {
-    ApplyCullingModeToPass();
-  }
 }
 
 void LightingPanel::DrawClusterConfigControls()
 {
   ImGui::SeparatorText("Cluster Configuration");
-
-  if (!config_.light_culling_pass_config) {
-    ImGui::TextColored(ImVec4(1.0F, 0.5F, 0.0F, 1.0F), "No config available");
-    return;
-  }
-
-  bool config_changed = false;
 
   // Tile size is fixed at 16x16 (compile-time constant in compute shader)
   ImGui::TextColored(
@@ -189,10 +139,13 @@ void LightingPanel::DrawClusterConfigControls()
       "16x16 is the optimal choice for most GPUs.");
   }
 
+  const bool use_clustered = vm_->IsClusteredCulling();
+
   // Only show depth slices control in clustered mode
-  if (use_clustered_culling_) {
-    if (ImGui::SliderInt("Depth Slices", &ui_depth_slices_, 2, 64)) {
-      config_changed = true;
+  if (use_clustered) {
+    int depth_slices = vm_->GetDepthSlices();
+    if (ImGui::SliderInt("Depth Slices", &depth_slices, 2, 64)) {
+      vm_->SetDepthSlices(depth_slices);
     }
     if (ImGui::IsItemHovered()) {
       ImGui::SetTooltip("Number of depth slices for 3D clustering.\n"
@@ -205,195 +158,54 @@ void LightingPanel::DrawClusterConfigControls()
   ImGui::Text("Depth Range:");
 
   // Checkbox for automatic camera-based depth range
-  if (ImGui::Checkbox("Use Camera Planes", &ui_use_camera_z_)) {
-    config_changed = true;
+  bool use_camera_z = vm_->GetUseCameraZ();
+  if (ImGui::Checkbox("Use Camera Planes", &use_camera_z)) {
+    vm_->SetUseCameraZ(use_camera_z);
   }
   if (ImGui::IsItemHovered()) {
     ImGui::SetTooltip("Automatically use camera near/far planes.\n"
                       "Recommended for most scenes.");
   }
 
-  if (!ui_use_camera_z_) {
-    float z_near_log = std::log10(ui_z_near_);
-    float z_far_log = std::log10(ui_z_far_);
+  if (!use_camera_z) {
+    float z_near = vm_->GetZNear();
+    float z_far = vm_->GetZFar();
+    float z_near_log = std::log10(z_near);
+    float z_far_log = std::log10(z_far);
 
     if (ImGui::SliderFloat("Z Near", &z_near_log, -2.0F, 2.0F, "10^%.2f")) {
-      ui_z_near_ = std::pow(10.0F, z_near_log);
+      z_near = std::pow(10.0F, z_near_log);
       // Ensure z_near < z_far
-      if (ui_z_near_ >= ui_z_far_) {
-        ui_z_near_ = ui_z_far_ * 0.1F;
+      if (z_near >= z_far) {
+        z_near = z_far * 0.1F;
       }
-      config_changed = true;
+      vm_->SetZNear(z_near);
     }
     if (ImGui::IsItemHovered()) {
       ImGui::SetTooltip(
         "Near plane for depth slicing (%.3f units).\n"
         "Should match or be slightly less than camera near plane.",
-        ui_z_near_);
+        z_near);
     }
 
     if (ImGui::SliderFloat("Z Far", &z_far_log, 1.0F, 4.0F, "10^%.2f")) {
-      ui_z_far_ = std::pow(10.0F, z_far_log);
+      z_far = std::pow(10.0F, z_far_log);
       // Ensure z_far > z_near
-      if (ui_z_far_ <= ui_z_near_) {
-        ui_z_far_ = ui_z_near_ * 10.0F;
+      if (z_far <= z_near) {
+        z_far = z_near * 10.0F;
       }
-      config_changed = true;
+      vm_->SetZFar(z_far);
     }
     if (ImGui::IsItemHovered()) {
       ImGui::SetTooltip("Far plane for depth slicing (%.1f units).\n"
                         "Should match or exceed camera far plane.",
-        ui_z_far_);
+        z_far);
     }
 
     // Show actual values
     ImGui::TextColored(ImVec4(0.7F, 0.7F, 0.7F, 1.0F),
-      "Range: %.3f - %.1f (ratio: %.0fx)", ui_z_near_, ui_z_far_,
-      ui_z_far_ / ui_z_near_);
+      "Range: %.3f - %.1f (ratio: %.0fx)", z_near, z_far, z_far / z_near);
   }
-
-  if (config_changed) {
-    ApplyClusterConfigToPass();
-  }
-}
-
-void LightingPanel::ApplyCullingModeToPass()
-{
-  if (!config_.light_culling_pass_config) {
-    return;
-  }
-
-  // Update cluster config based on UI selection
-  auto& cluster = config_.light_culling_pass_config->cluster;
-
-  if (use_clustered_culling_) {
-    // Switch to clustered with current UI settings
-    if (ui_depth_slices_ < 2) {
-      ui_depth_slices_ = 24;
-    }
-    cluster.depth_slices = static_cast<uint32_t>(ui_depth_slices_);
-  } else {
-    // Switch to tile-based (depth_slices = 1)
-    cluster.depth_slices = 1;
-  }
-
-  // Tile size is fixed at 16 (compile-time constant in compute shader)
-  cluster.tile_size_px = 16;
-  cluster.z_near = ui_z_near_;
-  cluster.z_far = ui_z_far_;
-
-  // Notify that cluster mode changed (triggers PSO rebuild)
-  if (config_.on_cluster_mode_changed) {
-    config_.on_cluster_mode_changed();
-  }
-}
-
-void LightingPanel::ApplyClusterConfigToPass()
-{
-  if (!config_.light_culling_pass_config) {
-    LOG_F(WARNING, "ApplyClusterConfigToPass: No config!");
-    return;
-  }
-
-  auto& cluster = config_.light_culling_pass_config->cluster;
-
-  // Tile size is fixed at 16 (compile-time constant in compute shader)
-  cluster.tile_size_px = 16;
-
-  // Apply depth slices (only meaningful in clustered mode)
-  if (use_clustered_culling_) {
-    cluster.depth_slices = static_cast<uint32_t>(ui_depth_slices_);
-  }
-
-  // Apply Z range - 0 means "use camera near/far"
-  if (ui_use_camera_z_) {
-    cluster.z_near = 0.0F;
-    cluster.z_far = 0.0F;
-    LOG_F(INFO,
-      "ApplyClusterConfigToPass: config={} depth_slices={} z_range=AUTO "
-      "(camera)",
-      fmt::ptr(config_.light_culling_pass_config.get()), cluster.depth_slices);
-  } else {
-    cluster.z_near = ui_z_near_;
-    cluster.z_far = ui_z_far_;
-    LOG_F(INFO,
-      "ApplyClusterConfigToPass: config={} depth_slices={} z_near={:.4f} "
-      "z_far={:.1f}",
-      fmt::ptr(config_.light_culling_pass_config.get()), cluster.depth_slices,
-      cluster.z_near, cluster.z_far);
-  }
-
-  // Notify that config changed (triggers buffer resize/rebuild)
-  if (config_.on_cluster_mode_changed) {
-    config_.on_cluster_mode_changed();
-  }
-}
-
-auto LightingPanel::LoadSettings() -> void
-{
-  if (settings_loaded_) {
-    return;
-  }
-
-  const auto settings = oxygen::examples::SettingsService::Default();
-  if (!settings) {
-    return;
-  }
-
-  settings_loaded_ = true;
-
-  if (const auto mode = settings->GetString("light_culling.mode")) {
-    use_clustered_culling_ = (*mode == "clustered");
-  }
-
-  if (const auto depth_slices
-    = settings->GetFloat("light_culling.depth_slices")) {
-    ui_depth_slices_ = static_cast<int>(*depth_slices);
-    if (ui_depth_slices_ < 2) {
-      ui_depth_slices_ = 24;
-    }
-  }
-
-  if (const auto use_camera = settings->GetBool("light_culling.use_camera_z")) {
-    ui_use_camera_z_ = *use_camera;
-  }
-
-  if (const auto z_near = settings->GetFloat("light_culling.z_near")) {
-    ui_z_near_ = *z_near;
-  }
-  if (const auto z_far = settings->GetFloat("light_culling.z_far")) {
-    ui_z_far_ = *z_far;
-  }
-
-  if (config_.light_culling_pass_config) {
-    ApplyCullingModeToPass();
-    ApplyClusterConfigToPass();
-  }
-}
-
-auto LightingPanel::SaveCullingModeSetting() const -> void
-{
-  const auto settings = oxygen::examples::SettingsService::Default();
-  if (!settings) {
-    return;
-  }
-
-  settings->SetString(
-    "light_culling.mode", use_clustered_culling_ ? "clustered" : "tiled");
-}
-
-auto LightingPanel::SaveClusterSettings() const -> void
-{
-  const auto settings = oxygen::examples::SettingsService::Default();
-  if (!settings) {
-    return;
-  }
-
-  settings->SetFloat(
-    "light_culling.depth_slices", static_cast<float>(ui_depth_slices_));
-  settings->SetBool("light_culling.use_camera_z", ui_use_camera_z_);
-  settings->SetFloat("light_culling.z_near", ui_z_near_);
-  settings->SetFloat("light_culling.z_far", ui_z_far_);
 }
 
 } // namespace oxygen::examples::ui

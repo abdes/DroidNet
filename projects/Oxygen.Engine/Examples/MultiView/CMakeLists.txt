@@ -32,8 +32,7 @@ add_executable(
   ${META_MODULE_TARGET}
   "../main.cpp"
   "main_impl.cpp"
-  "CompositorGraph.h"
-  "CompositorGraph.cpp"
+  "CompositingMode.h"
   "MainModule.h"
   "MainModule.cpp"
   "SceneBootstrapper.h"
@@ -48,6 +47,8 @@ add_executable(
   "MainView.cpp"
   "PipView.h"
   "PipView.cpp"
+  "ImGuiView.h"
+  "ImGuiView.cpp"
 )
 set_target_properties(
   ${META_MODULE_TARGET}

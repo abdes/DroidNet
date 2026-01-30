@@ -95,6 +95,7 @@ void DemoView::AddViewToFrameContext(
       .id = view_id_,
       .view = view,
       .metadata = metadata,
+      .output = observer_ptr { framebuffer_.get() },
     });
   } else {
     frame_context_->UpdateView(view_id_,
@@ -125,6 +126,22 @@ void DemoView::RegisterViewForRendering(engine::Renderer& renderer)
         [view_ptr](const ViewId&) { return view_ptr->GetCameraNode(); });
       return resolver(view_context.id);
     });
+}
+
+/*!
+ Returns the color render target for this view if one is configured.
+
+ @return Shared pointer to the color texture, or null when unavailable.
+
+### Performance Characteristics
+
+ - Time Complexity: O(1)
+ - Memory: None
+ - Optimization: None
+*/
+auto DemoView::GetColorTexture() const -> std::shared_ptr<graphics::Texture>
+{
+  return color_texture_;
 }
 
 void DemoView::ReleaseResources()

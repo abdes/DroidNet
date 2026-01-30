@@ -6,20 +6,18 @@
 
 #include <imgui.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 
 #include "DemoShell/UI/RenderingPanel.h"
+#include "DemoShell/UI/RenderingVm.h"
 
 namespace oxygen::examples::ui {
 
-void RenderingPanel::Initialize(const LightCullingDebugConfig& config)
+RenderingPanel::RenderingPanel(observer_ptr<RenderingVm> vm)
+  : vm_(vm)
 {
-  config_ = config;
-}
-
-void RenderingPanel::UpdateConfig(const LightCullingDebugConfig& config)
-{
-  config_ = config;
+  DCHECK_NOTNULL_F(vm, "RenderingPanel requires RenderingVm");
 }
 
 auto RenderingPanel::DrawContents() -> void
@@ -48,26 +46,37 @@ auto RenderingPanel::GetIcon() const noexcept -> std::string_view
   return oxygen::imgui::icons::kIconRendering;
 }
 
+auto RenderingPanel::OnRegistered() -> void { }
+
 auto RenderingPanel::OnLoaded() -> void { }
 
-auto RenderingPanel::OnUnloaded() -> void { }
+auto RenderingPanel::OnUnloaded() -> void
+{
+  // Persistence is handled by RenderingSettingsService via the ViewModel.
+}
+
+auto RenderingPanel::GetViewMode() const -> RenderingViewMode
+{
+  return vm_->GetViewMode();
+}
 
 void RenderingPanel::DrawViewModeControls()
 {
-  if (ImGui::RadioButton("Solid", view_mode_ == RenderingViewMode::kSolid)) {
-    view_mode_ = RenderingViewMode::kSolid;
+  auto mode = vm_->GetViewMode();
+
+  if (ImGui::RadioButton("Solid", mode == RenderingViewMode::kSolid)) {
+    vm_->SetViewMode(RenderingViewMode::kSolid);
   }
-  if (ImGui::RadioButton(
-        "Wireframe", view_mode_ == RenderingViewMode::kWireframe)) {
-    view_mode_ = RenderingViewMode::kWireframe;
+  if (ImGui::RadioButton("Wireframe", mode == RenderingViewMode::kWireframe)) {
+    vm_->SetViewMode(RenderingViewMode::kWireframe);
   }
 }
 
 void RenderingPanel::DrawDebugModes()
 {
-  const auto current_mode = config_.shader_pass_config
-    ? config_.shader_pass_config->debug_mode
-    : ShaderDebugMode::kDisabled;
+  using engine::ShaderDebugMode;
+
+  const auto current_mode = vm_->GetDebugMode();
 
   const bool is_rendering_mode = current_mode == ShaderDebugMode::kBaseColor
     || current_mode == ShaderDebugMode::kUv0
@@ -77,30 +86,21 @@ void RenderingPanel::DrawDebugModes()
     = (current_mode == ShaderDebugMode::kDisabled) || !is_rendering_mode;
 
   if (ImGui::RadioButton("Normal", normal_selected)) {
-    ApplyDebugMode(ShaderDebugMode::kDisabled);
+    vm_->SetDebugMode(ShaderDebugMode::kDisabled);
   }
 
   if (ImGui::RadioButton(
         "Base Color", current_mode == ShaderDebugMode::kBaseColor)) {
-    ApplyDebugMode(ShaderDebugMode::kBaseColor);
+    vm_->SetDebugMode(ShaderDebugMode::kBaseColor);
   }
 
   if (ImGui::RadioButton("UV0", current_mode == ShaderDebugMode::kUv0)) {
-    ApplyDebugMode(ShaderDebugMode::kUv0);
+    vm_->SetDebugMode(ShaderDebugMode::kUv0);
   }
 
-  if (ImGui::RadioButton(
-        "Opacity", current_mode == ShaderDebugMode::kOpacity)) {
-    ApplyDebugMode(ShaderDebugMode::kOpacity);
+  if (ImGui::RadioButton("Opacity", current_mode == ShaderDebugMode::kOpacity)) {
+    vm_->SetDebugMode(ShaderDebugMode::kOpacity);
   }
-}
-
-void RenderingPanel::ApplyDebugMode(ShaderDebugMode mode)
-{
-  if (!config_.shader_pass_config) {
-    return;
-  }
-  config_.shader_pass_config->debug_mode = mode;
 }
 
 } // namespace oxygen::examples::ui

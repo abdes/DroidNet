@@ -13,6 +13,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Scene/Scene.h>
@@ -21,11 +22,13 @@
 #include "DemoShell/ActiveScene.h"
 #include "DemoShell/Services/CameraLifecycleService.h"
 #include "DemoShell/UI/DemoPanel.h"
-#include "DemoShell/UI/RenderingPanel.h"
+#include "DemoShell/UI/DemoShellUi.h"
 
 namespace oxygen::engine {
 class InputSystem;
 class Renderer;
+struct ShaderPassConfig;
+struct LightCullingPassConfig;
 } // namespace oxygen::engine
 
 namespace oxygen::examples {
@@ -84,8 +87,9 @@ struct DemoShellConfig {
   std::function<void(const std::filesystem::path&)> on_loose_index_loaded {};
 
   std::function<observer_ptr<engine::Renderer>()> get_renderer {};
-  std::function<ui::LightCullingDebugConfig()>
-    get_light_culling_debug_config {};
+
+  //! Returns pass config references for rendering/lighting panels.
+  std::function<ui::PassConfigRefs()> get_pass_config_refs {};
 };
 
 //! Orchestrates the demo shell UI, panels, and camera helpers.
@@ -160,10 +164,19 @@ public:
   //! Force an active panel by name (no-op if not registered).
   auto SetActivePanel(std::string_view panel_name) -> void;
 
+  //! Returns the name of the currently active panel, if any.
+  [[nodiscard]] auto GetActivePanelName() const -> std::optional<std::string>;
+
+  //! Returns the current rendering debug mode.
+  [[nodiscard]] auto GetRenderingDebugMode() const -> engine::ShaderDebugMode;
+
+  //! Returns the current light culling visualization mode.
+  [[nodiscard]] auto GetLightCullingVisualizationMode() const
+    -> engine::ShaderDebugMode;
+
 private:
   auto InitializePanels() -> void;
   auto UpdatePanels() -> void;
-  auto UpdateCameraControlPanelConfig() -> void;
   auto RegisterDemoPanels() -> void;
 
   struct Impl;

@@ -76,8 +76,8 @@ public:
   auto Render(const engine::RenderContext& ctx,
     graphics::CommandRecorder& recorder) const -> co::Co<>;
 
-  //! Render ImGui after compositing to the swapchain.
-  auto RenderGuiAfterComposite(graphics::CommandRecorder& recorder,
+  //! Render ImGui into the provided framebuffer.
+  auto RenderGui(graphics::CommandRecorder& recorder,
     const graphics::Framebuffer& framebuffer) const -> co::Co<>;
 
   //! Register this ViewRenderer with the engine Renderer for a given view id.

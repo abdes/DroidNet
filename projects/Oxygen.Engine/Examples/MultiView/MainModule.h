@@ -12,13 +12,14 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/OxCo/Co.h>
 
 #include "DemoShell/ActiveScene.h"
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
-#include "MultiView/CompositorGraph.h"
+#include "MultiView/CompositingMode.h"
 #include "MultiView/DemoView.h"
 #include "MultiView/SceneBootstrapper.h"
 
@@ -27,7 +28,17 @@ class AsyncEngine;
 class Graphics;
 } // namespace oxygen
 
+namespace oxygen::graphics {
+class CommandRecorder;
+class Framebuffer;
+class Texture;
+} // namespace oxygen::graphics
+
 namespace oxygen::examples::multiview {
+
+class MainView;
+class PipView;
+class ImGuiView;
 
 //! Multi-view rendering example demonstrating Phase 2 features.
 /*!
@@ -50,7 +61,8 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(MainModule)
   OXYGEN_MAKE_NON_MOVABLE(MainModule)
 
-  explicit MainModule(const DemoAppContext& app) noexcept;
+  explicit MainModule(
+    const DemoAppContext& app, CompositingMode compositing_mode) noexcept;
   ~MainModule() override = default;
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
@@ -82,13 +94,9 @@ protected:
     -> platform::window::Properties override;
 
 private:
-  auto AcquireCommandRecorder(Graphics& gfx)
-    -> std::shared_ptr<graphics::CommandRecorder>;
-  auto TrackSwapchainFramebuffer(graphics::CommandRecorder& recorder,
-    const graphics::Framebuffer& framebuffer) -> void;
-  auto MarkSurfacePresentable(engine::FrameContext& context,
-    const std::shared_ptr<graphics::Surface>& surface) -> void;
   auto ReleaseAllViews(std::string_view reason) -> void;
+  [[nodiscard]] auto BuildFullscreenViewport(
+    const graphics::Framebuffer& target_framebuffer) const -> ViewPort;
 
   const DemoAppContext& app_;
   SceneBootstrapper scene_bootstrapper_;
@@ -97,7 +105,12 @@ private:
   std::unique_ptr<DemoShell> shell_;
 
   std::vector<std::unique_ptr<DemoView>> views_;
-  CompositorGraph compositor_graph_ {};
+  observer_ptr<MainView> main_view_ { nullptr };
+  observer_ptr<PipView> pip_view_ { nullptr };
+  observer_ptr<ImGuiView> imgui_view_ { nullptr };
+  CompositingMode compositing_mode_ {
+    CompositingMode::kBlend
+  }; // Default to kBlend for ImGui
   ActiveScene active_scene_ {};
   bool initialized_ { false };
 };

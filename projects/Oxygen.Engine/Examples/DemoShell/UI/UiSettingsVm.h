@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <mutex>
 #include <optional>
 #include <string>
 
@@ -83,6 +84,7 @@ private:
   auto Refresh() -> void;
   [[nodiscard]] auto IsStale() const -> bool;
 
+  mutable std::mutex mutex_ {};
   observer_ptr<UiSettingsService> service_;
   observer_ptr<CameraLifecycleService> camera_lifecycle_;
   std::uint64_t epoch_ { 0 };
