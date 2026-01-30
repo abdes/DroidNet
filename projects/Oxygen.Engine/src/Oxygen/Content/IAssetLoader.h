@@ -170,6 +170,9 @@ public:
   //! Clear all mounted roots and pak files.
   virtual auto ClearMounts() -> void = 0;
 
+  //! Clear cached assets/resources without unmounting sources.
+  virtual auto TrimCache() -> void = 0;
+
   //! Get cached resource without triggering a load.
   [[nodiscard]] virtual auto GetTexture(ResourceKey key) const noexcept
     -> std::shared_ptr<data::TextureResource>

@@ -120,6 +120,7 @@ set(
   "Import/AsyncImportService.cpp"
   "Import/FileError.cpp"
   "Import/ImportManifest.cpp"
+  "Import/ImportOptions.cpp"
   "Import/ImportRequest.cpp"
   "Import/Internal/ImportManifest_schema.h"
   "Import/Internal/SceneImportRequestBuilder.h"

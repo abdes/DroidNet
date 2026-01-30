@@ -135,6 +135,8 @@ public:
 
   //! Clear all mounted roots and pak files.
   OXGN_CNTT_API auto ClearMounts() -> void;
+  //! Clear cached assets/resources without unmounting sources.
+  OXGN_CNTT_API auto TrimCache() -> void override;
 
   //=== Dependency Management ===---------------------------------------------//
 

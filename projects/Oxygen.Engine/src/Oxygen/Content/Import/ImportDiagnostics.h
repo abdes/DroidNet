@@ -8,6 +8,8 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
+
 
 namespace oxygen::content::import {
 
@@ -17,6 +19,22 @@ enum class ImportSeverity : uint8_t {
   kWarning,
   kError,
 };
+
+//! Convert an import severity to a string label.
+[[nodiscard]] inline auto to_string(ImportSeverity severity) -> std::string_view
+{
+  switch (severity) {
+  case ImportSeverity::kInfo:
+    return "Info";
+  case ImportSeverity::kWarning:
+    return "Warning";
+  case ImportSeverity::kError:
+    return "Error";
+  }
+  return "Unknown";
+}
+
+
 
 //! One diagnostic emitted during import.
 struct ImportDiagnostic final {
