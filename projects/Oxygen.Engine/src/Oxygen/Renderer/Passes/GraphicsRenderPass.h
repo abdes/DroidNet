@@ -43,16 +43,24 @@ namespace oxygen::engine {
 */
 class GraphicsRenderPass : public RenderPass {
 public:
-  OXGN_RNDR_API explicit GraphicsRenderPass(std::string_view name);
   ~GraphicsRenderPass() override = default;
 
   OXYGEN_DEFAULT_COPYABLE(GraphicsRenderPass)
   OXYGEN_DEFAULT_MOVABLE(GraphicsRenderPass)
 
 protected:
+  //! Construct with optional SceneConstants binding.
+  OXGN_RNDR_API explicit GraphicsRenderPass(
+    std::string_view name, bool require_scene_constants = true);
+
   [[nodiscard]] auto LastBuiltPsoDesc() const -> const auto&
   {
     return last_built_pso_desc_;
+  }
+
+  [[nodiscard]] auto RequiresSceneConstants() const noexcept -> bool
+  {
+    return require_scene_constants_;
   }
 
   //=== RenderPass Interface (implemented by GraphicsRenderPass) ===---------//
@@ -104,6 +112,7 @@ private:
   auto BindIndicesBuffer(graphics::CommandRecorder& recorder) const -> void;
 
   std::optional<graphics::GraphicsPipelineDesc> last_built_pso_desc_;
+  bool require_scene_constants_ { true };
 };
 
 } // namespace oxygen::engine

@@ -15,6 +15,7 @@
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Platform/Window.h>
+#include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
@@ -22,7 +23,7 @@
 #include "DemoShell/Runtime/RenderGraph.h"
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/Services/SkyboxService.h"
-#include "DemoShell/UI/LightCullingDebugPanel.h"
+#include "DemoShell/UI/RenderingVm.h"
 #include "LightBench/LightBenchPanel.h"
 #include "LightBench/MainModule.h"
 
@@ -74,15 +75,15 @@ auto MainModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
     = observer_ptr { file_browser_service_.get() };
   shell_config.get_renderer
     = [this]() { return observer_ptr { ResolveRenderer() }; };
-  shell_config.get_light_culling_debug_config = [this]() {
-    ui::LightCullingDebugConfig debug_config;
+  shell_config.get_pass_config_refs = [this]() {
+    ui::PassConfigRefs refs;
     if (auto render_graph = GetRenderGraph()) {
-      debug_config.shader_pass_config
+      refs.shader_pass_config
         = observer_ptr { render_graph->GetShaderPassConfig().get() };
-      debug_config.light_culling_pass_config
+      refs.light_culling_pass_config
         = observer_ptr { render_graph->GetLightCullingPassConfig().get() };
     }
-    return debug_config;
+    return refs;
   };
   shell_config.panel_config = DemoShellPanelConfig {
     .content_loader = false,
@@ -311,6 +312,13 @@ auto MainModule::ApplyRenderModeFromPanel() -> void
     const bool force_clear = (mode == FillMode::kWireFrame);
     shader_pass_config->clear_color_target = true;
     shader_pass_config->auto_skip_clear_when_sky_pass_present = !force_clear;
+
+    // Apply debug mode. Rendering debug modes take precedence if set.
+    auto debug_mode = shell_->GetRenderingDebugMode();
+    if (debug_mode == engine::ShaderDebugMode::kDisabled) {
+      debug_mode = shell_->GetLightCullingVisualizationMode();
+    }
+    shader_pass_config->debug_mode = debug_mode;
   }
 }
 

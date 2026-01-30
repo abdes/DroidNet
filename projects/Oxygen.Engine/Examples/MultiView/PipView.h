@@ -48,6 +48,9 @@ public:
   auto RenderFrame(const engine::RenderContext& render_ctx,
     graphics::CommandRecorder& recorder) -> co::Co<> override;
 
+  //! Returns the current PiP viewport, if available.
+  [[nodiscard]] auto GetViewport() const -> std::optional<ViewPort>;
+
   void Composite(graphics::CommandRecorder& recorder,
     graphics::Texture& backbuffer) override;
 

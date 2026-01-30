@@ -76,6 +76,8 @@ set(
   "Services/EnvironmentHydrator.h"
   "Services/SceneLoaderService.h"
   "Services/SkyboxService.h"
+  "Services/LightCullingSettingsService.h"
+  "Services/RenderingSettingsService.h"
   "UI/StatsOverlay.h"
   "UI/StatsOverlayConfig.h"
   "Services/SettingsService.h"
@@ -96,6 +98,10 @@ set(
   "UI/UiSettingsVm.h"
   "UI/OrbitCameraController.h"
   "UI/FlyCameraController.h"
+  "UI/RenderingVm.h"
+  "UI/LightCullingVm.h"
+  "Services/CameraSettingsService.h"
+  "UI/CameraVm.h"
 )
 set(
   OXYGEN_DEMOSHELL_PRIVATE_SOURCES
@@ -118,6 +124,8 @@ set(
   "Services/SettingsService.cpp"
   "Services/UiSettingsService.cpp"
   "Services/SkyboxService.cpp"
+  "Services/LightCullingSettingsService.cpp"
+  "Services/RenderingSettingsService.cpp"
   "UI/AxesWidget.cpp"
   "UI/CameraControlPanel.cpp"
   "UI/CameraRigController.cpp"
@@ -135,6 +143,10 @@ set(
   "UI/UiSettingsVm.cpp"
   "UI/SidePanel.cpp"
   "UI/StatsOverlay.cpp"
+  "UI/LightCullingVm.cpp"
+  "UI/RenderingVm.cpp"
+  "Services/CameraSettingsService.cpp"
+  "UI/CameraVm.cpp"
 )
 
 if(NOT DEFINED OXYGEN_EXAMPLES_SOURCE_DIR)

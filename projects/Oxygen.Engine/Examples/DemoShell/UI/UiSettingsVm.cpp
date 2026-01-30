@@ -22,6 +22,7 @@ UiSettingsVm::UiSettingsVm(observer_ptr<UiSettingsService> service,
 
 auto UiSettingsVm::GetAxesVisible() -> bool
 {
+  std::lock_guard lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -30,6 +31,7 @@ auto UiSettingsVm::GetAxesVisible() -> bool
 
 auto UiSettingsVm::GetStatsConfig() -> StatsOverlayConfig
 {
+  std::lock_guard lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -38,6 +40,7 @@ auto UiSettingsVm::GetStatsConfig() -> StatsOverlayConfig
 
 auto UiSettingsVm::GetActivePanelName() -> std::optional<std::string>
 {
+  std::lock_guard lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -58,6 +61,7 @@ auto UiSettingsVm::GetActiveCamera() const
 
 auto UiSettingsVm::SetAxesVisible(const bool visible) -> void
 {
+  std::lock_guard lock(mutex_);
   if (axes_visible_ == visible) {
     return;
   }
@@ -70,6 +74,7 @@ auto UiSettingsVm::SetAxesVisible(const bool visible) -> void
 
 auto UiSettingsVm::SetStatsShowFps(const bool visible) -> void
 {
+  std::lock_guard lock(mutex_);
   if (stats_config_.show_fps == visible) {
     return;
   }
@@ -82,6 +87,7 @@ auto UiSettingsVm::SetStatsShowFps(const bool visible) -> void
 
 auto UiSettingsVm::SetStatsShowFrameTimingDetail(const bool visible) -> void
 {
+  std::lock_guard lock(mutex_);
   if (stats_config_.show_frame_timing_detail == visible) {
     return;
   }
@@ -95,6 +101,7 @@ auto UiSettingsVm::SetStatsShowFrameTimingDetail(const bool visible) -> void
 auto UiSettingsVm::SetActivePanelName(std::optional<std::string> panel_name)
   -> void
 {
+  std::lock_guard lock(mutex_);
   if (panel_name.has_value()) {
     DCHECK_F(!panel_name->empty(), "expecting non-empty panel names");
   }

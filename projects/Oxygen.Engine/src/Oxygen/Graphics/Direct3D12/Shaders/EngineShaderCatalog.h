@@ -166,6 +166,15 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   ShaderFileSpec {
     "Passes/Ui/ImGui.hlsl",
     std::array { EntryPoint { kVertex, "VS" }, EntryPoint { kPixel, "PS" } }
+  },
+  // Compositing shaders (no permutations)
+  ShaderFileSpec {
+    "Passes/Compositing/Compositing_VS.hlsl",
+    std::array { EntryPoint { kVertex, "VS" } }
+  },
+  ShaderFileSpec {
+    "Passes/Compositing/Compositing_PS.hlsl",
+    std::array { EntryPoint { kPixel, "PS" } }
   }
 );
 // clang-format on
@@ -185,6 +194,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - IblFiltering: 2 entries
 // - ImGui: 2 entries
 // Total: 55
-static_assert(kEngineShaders.size() == 57, "Expected 57 shader entries");
+static_assert(kEngineShaders.size() == 59, "Expected 59 shader entries");
 
 } // namespace oxygen::graphics::d3d12

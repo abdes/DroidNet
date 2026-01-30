@@ -6,8 +6,10 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstdint>
 #include <filesystem>
+#include <ranges>
 #include <source_location>
 #include <span>
 #include <string>
@@ -45,6 +47,7 @@
 
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Services/SettingsService.h"
+#include "MultiView/CompositingMode.h"
 #include "MultiView/MainModule.h"
 
 using namespace std::chrono_literals;
@@ -88,7 +91,8 @@ struct oxygen::co::EventLoopTraits<oxygen::examples::DemoAppContext> {
 
 namespace {
 
-auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
+auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
+  oxygen::examples::multiview::CompositingMode compositing_mode) -> void
 {
   LOG_F(INFO, "Registering engine modules...");
 
@@ -116,8 +120,8 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
   app.renderer = o::observer_ptr { renderer_unique.get() };
   register_module(std::move(renderer_unique));
 
-  register_module(
-    std::make_unique<oxygen::examples::multiview::MainModule>(app));
+  register_module(std::make_unique<oxygen::examples::multiview::MainModule>(
+    app, compositing_mode));
 
   if (!app.headless) {
     auto imgui_backend
@@ -128,8 +132,8 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
   }
 }
 
-auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames)
-  -> co::Co<int>
+auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames,
+  oxygen::examples::multiview::CompositingMode compositing_mode) -> co::Co<int>
 {
   OXCO_WITH_NURSERY(n)
   {
@@ -146,7 +150,7 @@ auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames)
     co_await n.Start(&o::AsyncEngine::ActivateAsync, std::ref(*app.engine));
     app.engine->Run();
 
-    RegisterEngineModules(app);
+    RegisterEngineModules(app, compositing_mode);
 
     n.Start([&app]() -> co::Co<> {
       co_await app.platform->Windows().LastWindowClosed();
@@ -182,6 +186,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
   uint32_t target_fps = 100U;
   bool headless = false;
   bool enable_vsync = true;
+  std::string compositing_mode_value = "copy";
   oxygen::examples::DemoAppContext app {};
 
   try {
@@ -229,6 +234,15 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .UserFriendlyName("vsync")
         .StoreTo(&enable_vsync)
         .Build());
+    default_command.WithOption(Option::WithKey("composite-mode")
+        .About("Compositing mode: copy or blend")
+        .Short("c")
+        .Long("composite-mode")
+        .WithValue<std::string>()
+        .DefaultValue("copy")
+        .UserFriendlyName("mode")
+        .StoreTo(&compositing_mode_value)
+        .Build());
 
     auto cli = CliBuilder()
                  .ProgramName("multiview-example")
@@ -252,6 +266,20 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     LOG_F(INFO, "Parsed fps option = {}", target_fps);
     LOG_F(INFO, "Parsed fullscreen option = {}", app.fullscreen);
     LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
+    LOG_F(INFO, "Parsed composite mode option = {}", compositing_mode_value);
+
+    auto compositing_mode
+      = oxygen::examples::multiview::CompositingMode::kBlend;
+    auto mode_lower = compositing_mode_value;
+    std::ranges::transform(mode_lower, mode_lower.begin(),
+      [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (mode_lower == "copy") {
+      compositing_mode = oxygen::examples::multiview::CompositingMode::kCopy;
+    } else if (mode_lower == "blend") {
+      compositing_mode = oxygen::examples::multiview::CompositingMode::kBlend;
+    } else if (!mode_lower.empty()) {
+      throw std::runtime_error("Invalid composite mode; use 'copy' or 'blend'");
+    }
 
     app.platform = std::make_shared<o::Platform>(o::PlatformConfig {
       .headless = headless,
@@ -295,7 +323,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       }
     );
 
-    const auto rc = co::Run(app, AsyncMain(app, frames));
+    const auto rc = co::Run(app, AsyncMain(app, frames, compositing_mode));
 
     app.platform->Stop();
     app.engine.reset();

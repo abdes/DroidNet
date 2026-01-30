@@ -48,8 +48,8 @@ class FlyCameraController;
 */
 class CameraRigController {
 public:
-  CameraRigController() = default;
-  ~CameraRigController() = default;
+  CameraRigController();
+  ~CameraRigController();
 
   OXYGEN_MAKE_NON_COPYABLE(CameraRigController);
   OXYGEN_MAKE_NON_MOVABLE(CameraRigController);

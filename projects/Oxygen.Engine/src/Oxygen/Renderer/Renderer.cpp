@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -51,6 +52,7 @@
 #include <Oxygen/Graphics/Common/GpuEventScope.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
@@ -63,6 +65,7 @@
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Internal/SunResolver.h>
 #include <Oxygen/Renderer/LightManager.h>
+#include <Oxygen/Renderer/Passes/CompositingPass.h>
 #include <Oxygen/Renderer/Passes/IblComputePass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderContextPool.h>
@@ -73,11 +76,116 @@
 #include <Oxygen/Renderer/ScenePrep/FinalizationConfig.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
+#include <Oxygen/Renderer/Types/CompositingTask.h>
 #include <Oxygen/Renderer/Types/EnvironmentDynamicData.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
+
+namespace {
+auto ResolveViewOutputTexture(const oxygen::engine::FrameContext& context,
+  const oxygen::ViewId view_id) -> std::shared_ptr<oxygen::graphics::Texture>
+{
+  const auto& view_ctx = context.GetViewContext(view_id);
+  if (!view_ctx.output) {
+    return {};
+  }
+  const auto& fb_desc = view_ctx.output->GetDescriptor();
+  if (fb_desc.color_attachments.empty()
+    || !fb_desc.color_attachments[0].texture) {
+    return {};
+  }
+  return fb_desc.color_attachments[0].texture;
+}
+
+auto TrackCompositionFramebuffer(oxygen::graphics::CommandRecorder& recorder,
+  const oxygen::graphics::Framebuffer& framebuffer) -> void
+{
+  const auto& fb_desc = framebuffer.GetDescriptor();
+  for (const auto& attachment : fb_desc.color_attachments) {
+    if (!attachment.texture) {
+      continue;
+    }
+    auto initial = attachment.texture->GetDescriptor().initial_state;
+    if (initial == oxygen::graphics::ResourceStates::kUnknown
+      || initial == oxygen::graphics::ResourceStates::kUndefined) {
+      initial = oxygen::graphics::ResourceStates::kPresent;
+    }
+    recorder.BeginTrackingResourceState(*attachment.texture, initial, true);
+  }
+
+  if (fb_desc.depth_attachment.texture) {
+    recorder.BeginTrackingResourceState(*fb_desc.depth_attachment.texture,
+      oxygen::graphics::ResourceStates::kDepthWrite, true);
+    recorder.FlushBarriers();
+  }
+}
+
+auto CopyTextureToRegion(oxygen::graphics::CommandRecorder& recorder,
+  oxygen::graphics::Texture& source, oxygen::graphics::Texture& backbuffer,
+  const oxygen::ViewPort& viewport) -> void
+{
+  recorder.BeginTrackingResourceState(
+    source, oxygen::graphics::ResourceStates::kCommon);
+  recorder.RequireResourceState(
+    source, oxygen::graphics::ResourceStates::kCopySource);
+  recorder.RequireResourceState(
+    backbuffer, oxygen::graphics::ResourceStates::kCopyDest);
+  recorder.FlushBarriers();
+
+  const auto& src_desc = source.GetDescriptor();
+  const auto& dst_desc = backbuffer.GetDescriptor();
+
+  const uint32_t dst_x = static_cast<uint32_t>(
+    std::clamp(viewport.top_left_x, 0.0F, static_cast<float>(dst_desc.width)));
+  const uint32_t dst_y = static_cast<uint32_t>(
+    std::clamp(viewport.top_left_y, 0.0F, static_cast<float>(dst_desc.height)));
+
+  const uint32_t max_dst_w
+    = dst_desc.width > dst_x ? dst_desc.width - dst_x : 0U;
+  const uint32_t max_dst_h
+    = dst_desc.height > dst_y ? dst_desc.height - dst_y : 0U;
+
+  const uint32_t copy_width = std::min(src_desc.width, max_dst_w);
+  const uint32_t copy_height = std::min(src_desc.height, max_dst_h);
+
+  if (copy_width == 0 || copy_height == 0) {
+    return;
+  }
+
+  const oxygen::graphics::TextureSlice src_slice {
+    .x = 0,
+    .y = 0,
+    .z = 0,
+    .width = copy_width,
+    .height = copy_height,
+    .depth = 1,
+  };
+
+  const oxygen::graphics::TextureSlice dst_slice {
+    .x = dst_x,
+    .y = dst_y,
+    .z = 0,
+    .width = copy_width,
+    .height = copy_height,
+    .depth = 1,
+  };
+
+  constexpr oxygen::graphics::TextureSubResourceSet subresources {
+    .base_mip_level = 0,
+    .num_mip_levels = 1,
+    .base_array_slice = 0,
+    .num_array_slices = 1,
+  };
+
+  recorder.CopyTexture(
+    source, src_slice, subresources, backbuffer, dst_slice, subresources);
+  recorder.RequireResourceState(
+    source, oxygen::graphics::ResourceStates::kCommon);
+  recorder.FlushBarriers();
+}
+} // namespace
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
@@ -259,6 +367,17 @@ auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
   return true;
 }
 
+auto Renderer::OnShutdown() noexcept -> void
+{
+  {
+    std::lock_guard lock(composition_mutex_);
+    composition_submission_.reset();
+  }
+
+  compositing_pass_.reset();
+  compositing_pass_config_.reset();
+}
+
 auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
 {
   auto graphics_ptr = gfx_weak_.lock();
@@ -348,6 +467,18 @@ auto Renderer::GetAtmosphereDebugFlags() const noexcept -> uint32_t
   return atmosphere_debug_flags_;
 }
 
+/*!
+ Returns the active render context for the current frame.
+
+ @return Observer pointer to the active render context, or null if the
+   renderer is outside a frame scope.
+
+### Performance Characteristics
+
+ - Time Complexity: O(1)
+ - Memory: None
+ - Optimization: None
+*/
 auto Renderer::OverrideMaterialUvTransform(const data::MaterialAsset& material,
   const glm::vec2 uv_scale, const glm::vec2 uv_offset) -> bool
 {
@@ -400,6 +531,12 @@ auto Renderer::UnregisterView(ViewId view_id) -> void
     std::unique_lock state_lock(view_state_mutex_);
     view_ready_states_.erase(view_id);
   }
+}
+
+auto Renderer::RegisterComposition(CompositionSubmission submission) -> void
+{
+  std::lock_guard lock(composition_mutex_);
+  composition_submission_ = std::move(submission);
 }
 
 auto Renderer::IsViewReady(ViewId view_id) const -> bool
@@ -672,6 +809,194 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
   // debug in-use marker.
   render_context_pool_->Release(context.GetFrameSlot());
   render_context_.reset();
+
+  co_return;
+}
+
+auto Renderer::OnCompositing(FrameContext& context) -> co::Co<>
+{
+  std::optional<CompositionSubmission> submission;
+  {
+    std::lock_guard lock(composition_mutex_);
+    if (!composition_submission_) {
+      co_return;
+    }
+    submission = std::move(composition_submission_);
+    composition_submission_.reset();
+  }
+
+  CHECK_F(submission.has_value(), "Compositing submission required");
+  auto& payload = *submission;
+  if (payload.tasks.empty()) {
+    co_return;
+  }
+
+  CHECK_F(static_cast<bool>(payload.target_framebuffer),
+    "Compositing requires a target framebuffer");
+
+  auto gfx = GetGraphics();
+  CHECK_F(static_cast<bool>(gfx), "Graphics required for compositing");
+
+  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
+  auto recorder_ptr
+    = gfx->AcquireCommandRecorder(queue_key, "Renderer Compositing");
+  CHECK_F(
+    static_cast<bool>(recorder_ptr), "Compositing recorder acquisition failed");
+  auto& recorder = *recorder_ptr;
+  auto& target_fb = *payload.target_framebuffer;
+  TrackCompositionFramebuffer(recorder, target_fb);
+
+  const auto& fb_desc = target_fb.GetDescriptor();
+  CHECK_F(!fb_desc.color_attachments.empty(),
+    "Compositing requires a color attachment");
+  CHECK_F(static_cast<bool>(fb_desc.color_attachments[0].texture),
+    "Compositing target missing color texture");
+  auto& backbuffer = *fb_desc.color_attachments[0].texture;
+  const auto& back_desc = backbuffer.GetDescriptor();
+  LOG_F(INFO,
+    "Compositing target: tex={} size={}x{} fmt={} samples={} name={}",
+    static_cast<const void*>(&backbuffer), back_desc.width, back_desc.height,
+    static_cast<int>(back_desc.format), back_desc.sample_count,
+    back_desc.debug_name);
+
+  RenderContext comp_context {};
+  comp_context.SetRenderer(this, gfx.get());
+  comp_context.framebuffer = observer_ptr { payload.target_framebuffer.get() };
+  comp_context.frame_slot = frame_slot_;
+  comp_context.frame_sequence = frame_seq_num;
+
+  if (!compositing_pass_) {
+    compositing_pass_config_ = std::make_shared<CompositingPassConfig>();
+    compositing_pass_config_->debug_name = "CompositingPass";
+    compositing_pass_
+      = std::make_shared<CompositingPass>(compositing_pass_config_);
+  }
+
+  for (const auto& task : payload.tasks) {
+    switch (task.type) {
+    case CompositingTaskType::kCopy: {
+      if (!IsViewReady(task.copy.source_view)) {
+        LOG_F(INFO, "Compositing: view {} not ready; skipping copy",
+          task.copy.source_view.get());
+        continue;
+      }
+      auto source = ResolveViewOutputTexture(context, task.copy.source_view);
+      if (!source) {
+        LOG_F(INFO, "Compositing: missing source texture for view {}",
+          task.copy.source_view.get());
+        continue;
+      }
+      const auto& src_desc = source->GetDescriptor();
+      LOG_F(INFO,
+        "Compositing copy: view={} src={} size={}x{} fmt={} samples={}",
+        task.copy.source_view.get(), static_cast<const void*>(source.get()),
+        src_desc.width, src_desc.height, static_cast<int>(src_desc.format),
+        src_desc.sample_count);
+      LOG_F(INFO, "Compositing copy: viewport=({}, {}) {}x{}",
+        task.copy.viewport.top_left_x, task.copy.viewport.top_left_y,
+        task.copy.viewport.width, task.copy.viewport.height);
+      if (source->GetDescriptor().format
+        != backbuffer.GetDescriptor().format) {
+        LOG_F(INFO,
+          "Compositing: format mismatch for view {}; using blend fallback",
+          task.copy.source_view.get());
+        CHECK_NOTNULL_F(
+          compositing_pass_config_.get(), "CompositingPass config missing");
+        compositing_pass_config_->source_texture = source;
+        compositing_pass_config_->viewport = task.copy.viewport;
+        compositing_pass_config_->alpha = 1.0F;
+
+        co_await compositing_pass_->PrepareResources(comp_context, recorder);
+        co_await compositing_pass_->Execute(comp_context, recorder);
+        break;
+      }
+      CopyTextureToRegion(recorder, *source, backbuffer, task.copy.viewport);
+      break;
+    }
+    case CompositingTaskType::kBlend: {
+      if (!IsViewReady(task.blend.source_view)) {
+        LOG_F(INFO, "Compositing: view {} not ready; skipping blend",
+          task.blend.source_view.get());
+        continue;
+      }
+      auto source = ResolveViewOutputTexture(context, task.blend.source_view);
+      if (!source) {
+        LOG_F(INFO, "Compositing: missing source texture for view {}",
+          task.blend.source_view.get());
+        continue;
+      }
+      const auto& src_desc = source->GetDescriptor();
+      LOG_F(INFO,
+        "Compositing blend: view={} src={} size={}x{} fmt={} samples={}",
+        task.blend.source_view.get(), static_cast<const void*>(source.get()),
+        src_desc.width, src_desc.height, static_cast<int>(src_desc.format),
+        src_desc.sample_count);
+      LOG_F(INFO,
+        "Compositing blend: viewport=({}, {}) {}x{} alpha={}",
+        task.blend.viewport.top_left_x, task.blend.viewport.top_left_y,
+        task.blend.viewport.width, task.blend.viewport.height,
+        task.blend.alpha);
+
+      CHECK_NOTNULL_F(
+        compositing_pass_config_.get(), "CompositingPass config missing");
+      compositing_pass_config_->source_texture = source;
+      compositing_pass_config_->viewport = task.blend.viewport;
+      compositing_pass_config_->alpha = task.blend.alpha;
+
+      co_await compositing_pass_->PrepareResources(comp_context, recorder);
+      co_await compositing_pass_->Execute(comp_context, recorder);
+      break;
+    }
+    case CompositingTaskType::kBlendTexture: {
+      if (!task.texture_blend.source_texture) {
+        LOG_F(INFO, "Compositing: missing source texture for blend");
+        continue;
+      }
+      const auto& src_desc = task.texture_blend.source_texture->GetDescriptor();
+      LOG_F(INFO,
+        "Compositing tex blend: src={} size={}x{} fmt={} samples={} name={}",
+        static_cast<const void*>(task.texture_blend.source_texture.get()),
+        src_desc.width, src_desc.height, static_cast<int>(src_desc.format),
+        src_desc.sample_count, src_desc.debug_name);
+      LOG_F(INFO,
+        "Compositing tex blend: viewport=({}, {}) {}x{} alpha={}",
+        task.texture_blend.viewport.top_left_x,
+        task.texture_blend.viewport.top_left_y,
+        task.texture_blend.viewport.width,
+        task.texture_blend.viewport.height, task.texture_blend.alpha);
+
+      CHECK_NOTNULL_F(
+        compositing_pass_config_.get(), "CompositingPass config missing");
+      compositing_pass_config_->source_texture
+        = task.texture_blend.source_texture;
+      compositing_pass_config_->viewport = task.texture_blend.viewport;
+      compositing_pass_config_->alpha = task.texture_blend.alpha;
+
+      co_await compositing_pass_->PrepareResources(comp_context, recorder);
+      co_await compositing_pass_->Execute(comp_context, recorder);
+      break;
+    }
+    case CompositingTaskType::kTonemap:
+    case CompositingTaskType::kTaa:
+    default:
+      LOG_F(INFO, "Compositing: task type not implemented");
+      break;
+    }
+  }
+
+  recorder.RequireResourceStateFinal(
+    backbuffer, graphics::ResourceStates::kPresent);
+  recorder.FlushBarriers();
+
+  if (payload.target_surface) {
+    const auto surfaces = context.GetSurfaces();
+    for (size_t i = 0; i < surfaces.size(); ++i) {
+      if (surfaces[i].get() == payload.target_surface.get()) {
+        context.SetSurfacePresentable(i, true);
+        break;
+      }
+    }
+  }
 
   co_return;
 }
@@ -1134,6 +1459,11 @@ auto Renderer::UpdateSceneConstantsFromView(const ResolvedView& view) -> void
 auto Renderer::OnFrameStart(FrameContext& context) -> void
 {
   DLOG_SCOPE_FUNCTION(2);
+
+  {
+    std::lock_guard lock(composition_mutex_);
+    composition_submission_.reset();
+  }
 
   if (!scene_prep_state_ || !texture_binder_) {
     LOG_F(

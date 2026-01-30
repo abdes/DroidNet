@@ -1,7 +1,4 @@
 {
-  "camera_control": {
-    "mode": "orbit"
-  },
   "camera_rig": {
     "MainCamera": {
       "camera": {
@@ -19,9 +16,9 @@
         "move_speed": 5.0,
         "plane_lock": false
       },
-      "mode": "fly",
+      "mode": "orbit",
       "orbit": {
-        "distance": 20.50705909729004,
+        "distance": 19.82050895690918,
         "mode": "turntable",
         "target": {
           "x": 0.0,
@@ -30,15 +27,15 @@
         }
       },
       "position": {
-        "x": 19.21637535095215,
-        "y": 1.84717857837677,
-        "z": 6.917971134185791
+        "x": -10.52524471282959,
+        "y": 12.872885704040527,
+        "z": 10.787059783935547
       },
       "rotation": {
-        "w": 0.5498598217964172,
-        "x": 0.3870558440685272,
-        "y": 0.426045686006546,
-        "z": 0.6052496433258057
+        "w": -0.2952709496021271,
+        "x": -0.16041064262390137,
+        "y": 0.44961073994636536,
+        "z": 0.8276073336601257
       },
       "scale": {
         "x": 1.0,
@@ -48,27 +45,7 @@
     }
   },
   "demo_shell": {
-    "active_panel": "Content Loader",
-    "panels": {
-      "camera_controls": {
-        "width": 477.0
-      },
-      "content_loader": {
-        "width": 709.0
-      },
-      "environment": {
-        "width": 641.0
-      },
-      "lighting": {
-        "width": 553.0
-      },
-      "rendering": {
-        "width": 320.0
-      },
-      "settings": {
-        "width": 320.0
-      }
-    }
+    "active_panel": "Camera Controls"
   },
   "environment": {
     "debug": {
@@ -78,7 +55,7 @@
     },
     "post_process": {
       "auto_exposure_max_ev": 16.0,
-      "auto_exposure_min_ev": -6.0,
+      "auto_exposure_min_ev": -4.0,
       "auto_exposure_speed_down": 1.0,
       "auto_exposure_speed_up": 3.0,
       "bloom_intensity": 0.0,
@@ -86,7 +63,7 @@
       "contrast": 1.0,
       "enabled": false,
       "exposure_compensation_ev": 0.0,
-      "exposure_mode": 1.0,
+      "exposure_mode": 0.0,
       "saturation": 1.0,
       "tone_mapper": 0.0,
       "vignette": 0.0
@@ -104,16 +81,16 @@
       "mie_anisotropy": 0.800000011920929,
       "mie_scale_height_km": 1.2000000476837158,
       "multi_scattering": 1.0,
-      "planet_radius_km": 6360.0009765625,
+      "planet_radius_km": 6360.0,
       "rayleigh_scale_height_km": 8.0,
       "sun_disk_enabled": true,
-      "sun_disk_radius_deg": 0.26785776019096375
+      "sun_disk_radius_deg": 0.2680000066757202
     },
     "sky_light": {
       "diffuse": 1.0,
       "enabled": false,
       "intensity": 1.0,
-      "source": 1.0,
+      "source": 0.0,
       "specular": 1.0,
       "tint": {
         "x": 1.0,
@@ -126,9 +103,9 @@
       "intensity": 1.0,
       "rotation_deg": 0.0,
       "solid_color": {
-        "x": 0.25,
-        "y": 0.44999998807907104,
-        "z": 0.8999999761581421
+        "x": 0.20000000298023224,
+        "y": 0.30000001192092896,
+        "z": 0.5
       },
       "source": 0.0
     },
@@ -137,8 +114,8 @@
       "flip_y": false,
       "hdr_exposure_ev": 0.0,
       "layout": 0.0,
-      "output_format": 2.0,
-      "path": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\Content\\images\\hdr_skybox_f32.hdr",
+      "output_format": 0.0,
+      "path": "",
       "tonemap_hdr_to_ldr": false
     },
     "sun": {
@@ -148,46 +125,13 @@
         "y": 1.0,
         "z": 1.0
       },
-      "disk_radius_deg": 0.26799994707107544,
+      "disk_radius_deg": 0.2680000066757202,
       "elevation_deg": 30.0,
       "enabled": true,
       "intensity_lux": 10.0,
       "source": 1.0,
       "temperature_kelvin": 6500.0,
       "use_temperature": false
-    }
-  },
-  "file_browser": {
-    "select_model_directory": {
-      "window_size": [
-        1151,
-        479
-      ]
-    },
-    "select_pak_file": {
-      "window_size": [
-        1127,
-        450
-      ]
-    },
-    "select_skybox_image": {
-      "window_size": [
-        1046,
-        505
-      ]
-    }
-  },
-  "light_culling": {
-    "depth_slices": 32.0,
-    "mode": "clustered",
-    "use_camera_z": "false",
-    "z_far": 1000.0,
-    "z_near": 0.10000000149011612
-  },
-  "ui": {
-    "stats": {
-      "show_fps": false,
-      "show_frame_timing_detail": false
     }
   }
 }
