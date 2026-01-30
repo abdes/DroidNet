@@ -896,10 +896,6 @@ TextureBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
         return;
       }
 
-      if (event.reason == content::EvictionReason::kRefCountZero) {
-        return;
-      }
-
       LOG_F(2, "TextureBinder: eviction notification for {} (reason={})",
         event.key, event.reason);
 

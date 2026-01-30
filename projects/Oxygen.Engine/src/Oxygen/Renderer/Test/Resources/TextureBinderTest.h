@@ -44,12 +44,25 @@ public:
     std::function<void(std::shared_ptr<data::TextureResource>)> on_complete)
     override
   {
+    // If a decoded resource is cached, return it immediately.
     const auto it = textures_.find(key);
-    if (it == textures_.end()) {
-      on_complete(nullptr);
+    if (it != textures_.end()) {
+      on_complete(it->second);
       return;
     }
-    on_complete(it->second);
+
+    // Otherwise, try to decode from previously preloaded cooked bytes (simulate
+    // a disk/cooked root being available for reload after eviction).
+    const auto it2 = cooked_payloads_.find(key);
+    if (it2 != cooked_payloads_.end()) {
+      const auto decoded
+        = DecodeCookedTexturePayload(std::span { it2->second });
+      textures_.insert_or_assign(key, decoded);
+      on_complete(decoded);
+      return;
+    }
+
+    on_complete(nullptr);
   }
 
   void StartLoadTexture(
@@ -57,6 +70,10 @@ public:
     TextureCallback on_complete) override
   {
     const auto decoded = DecodeCookedTexturePayload(cooked.bytes);
+    // Record both the cooked payload and the decoded resource so the fake can
+    // simulate reloads after eviction.
+    cooked_payloads_.insert_or_assign(cooked.key,
+      std::vector<uint8_t>(cooked.bytes.begin(), cooked.bytes.end()));
     textures_.insert_or_assign(cooked.key, decoded);
     on_complete(std::move(decoded));
   }
@@ -165,6 +182,8 @@ public:
     return false;
   }
 
+  auto TrimCache() -> void override { textures_.clear(); }
+
   auto SubscribeResourceEvictions(TypeId resource_type, EvictionHandler handler)
     -> EvictionSubscription override
   {
@@ -177,6 +196,9 @@ public:
   auto EmitTextureEviction(
     content::ResourceKey key, content::EvictionReason reason) -> void
   {
+    // Simulate an eviction by removing the cached decoded resource first so
+    // readers see the asset as gone; then notify subscribers.
+    ReleaseResource(key);
     EmitEviction(key, data::TextureResource::ClassTypeId(), reason);
   }
 
@@ -215,7 +237,11 @@ public:
     const auto decoded = DecodeCookedTexturePayload(payload);
     if (decoded == nullptr) {
       throw std::runtime_error("DecodeCookedTexturePayload failed");
-    }
+    } // Store both the cooked bytes and the decoded resource so the fake can
+    // simulate reload behavior after eviction (disk/cooked source still
+    // exists).
+    cooked_payloads_.insert_or_assign(
+      key, std::vector<uint8_t>(payload.begin(), payload.end()));
     SetTexture(key, decoded);
   }
 
@@ -253,6 +279,11 @@ private:
   std::unordered_map<content::ResourceKey,
     std::shared_ptr<data::TextureResource>>
     textures_;
+
+  // Cooked payloads (raw bytes) stored to allow deterministic reloads after
+  // eviction without re-calling PreloadCookedTexture during tests.
+  std::unordered_map<content::ResourceKey, std::vector<uint8_t>>
+    cooked_payloads_;
 
   std::unordered_map<TypeId, std::unordered_map<std::uint64_t, EvictionHandler>>
     eviction_handlers_;

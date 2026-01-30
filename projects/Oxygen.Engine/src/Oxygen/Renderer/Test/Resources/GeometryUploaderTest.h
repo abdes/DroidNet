@@ -92,6 +92,8 @@ public:
 
   auto ClearMounts() -> void override { }
 
+  auto TrimCache() -> void override { }
+
   [[nodiscard]] auto GetTexture(content::ResourceKey /*key*/) const noexcept
     -> std::shared_ptr<data::TextureResource> override
   {
