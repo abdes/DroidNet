@@ -105,8 +105,8 @@ struct DemoShellUi::Impl {
     // Create Content VM and Panel
     if (panel_config.content_loader && content_settings && file_browser) {
       content_vm = std::make_shared<ContentVm>(content_settings, file_browser);
-      content_panel = std::make_shared<ContentLoaderPanel>();
-      content_panel->Initialize(observer_ptr { content_vm.get() });
+      content_panel = std::make_shared<ContentLoaderPanel>(
+        observer_ptr { content_vm.get() });
       if (panel_registry->RegisterPanel(content_panel)) {
         LOG_F(INFO, "DemoShellUi: registered Content panel");
       }

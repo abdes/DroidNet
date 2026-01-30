@@ -30,6 +30,29 @@ namespace {
 
   // Paths
   constexpr auto kLastCookedOutputKey = "content.paths.last_cooked_output";
+
+  // Texture Tuning Keys
+  constexpr auto kTexTuningEnabledKey = "content.import.tuning.enabled";
+  constexpr auto kTexTuningIntentKey = "content.import.tuning.intent";
+  constexpr auto kTexTuningColorSpaceKey = "content.import.tuning.color_space";
+  constexpr auto kTexTuningMipPolicyKey = "content.import.tuning.mip_policy";
+  constexpr auto kTexTuningMaxMipsKey = "content.import.tuning.max_mips";
+  constexpr auto kTexTuningMipFilterKey = "content.import.tuning.mip_filter";
+  constexpr auto kTexTuningColorFormatKey
+    = "content.import.tuning.color_format";
+  constexpr auto kTexTuningDataFormatKey = "content.import.tuning.data_format";
+  constexpr auto kTexTuningBc7QualityKey = "content.import.tuning.bc7_quality";
+  constexpr auto kTexTuningHdrHandlingKey
+    = "content.import.tuning.hdr_handling";
+
+  // Layout Keys
+  constexpr auto kLayoutVirtualRootKey = "content.layout.virtual_root";
+  constexpr auto kLayoutIndexNameKey = "content.layout.index_name";
+  constexpr auto kLayoutResourcesDirKey = "content.layout.resources_dir";
+  constexpr auto kLayoutDescriptorsDirKey = "content.layout.descriptors_dir";
+  constexpr auto kLayoutScenesSubdirKey = "content.layout.scenes_subdir";
+  constexpr auto kLayoutGeometrySubdirKey = "content.layout.geometry_subdir";
+  constexpr auto kLayoutMaterialsSubdirKey = "content.layout.materials_subdir";
 } // namespace
 
 auto ContentSettingsService::GetExplorerSettings() const
@@ -128,30 +151,106 @@ auto ContentSettingsService::SetImportOptions(
 auto ContentSettingsService::GetTextureTuning() const
   -> content::import::ImportOptions::TextureTuning
 {
-  // Texture tuning is complex, for now we return defaults
-  // or add specific fields if needed.
-  return {};
+  content::import::ImportOptions::TextureTuning t;
+  const auto settings = ResolveSettings();
+  if (!settings)
+    return t;
+
+  if (auto val = settings->GetBool(kTexTuningEnabledKey))
+    t.enabled = *val;
+  if (auto val = settings->GetFloat(kTexTuningIntentKey))
+    t.intent
+      = static_cast<content::import::TextureIntent>(static_cast<int>(*val));
+  if (auto val = settings->GetFloat(kTexTuningColorSpaceKey))
+    t.source_color_space = static_cast<ColorSpace>(static_cast<int>(*val));
+  if (auto val = settings->GetFloat(kTexTuningMipPolicyKey))
+    t.mip_policy
+      = static_cast<content::import::MipPolicy>(static_cast<int>(*val));
+  if (auto val = settings->GetFloat(kTexTuningMaxMipsKey))
+    t.max_mip_levels = static_cast<uint8_t>(*val);
+  if (auto val = settings->GetFloat(kTexTuningMipFilterKey))
+    t.mip_filter
+      = static_cast<content::import::MipFilter>(static_cast<int>(*val));
+  if (auto val = settings->GetFloat(kTexTuningColorFormatKey))
+    t.color_output_format = static_cast<Format>(static_cast<int>(*val));
+  if (auto val = settings->GetFloat(kTexTuningDataFormatKey))
+    t.data_output_format = static_cast<Format>(static_cast<int>(*val));
+  if (auto val = settings->GetFloat(kTexTuningBc7QualityKey))
+    t.bc7_quality
+      = static_cast<content::import::Bc7Quality>(static_cast<int>(*val));
+  if (auto val = settings->GetFloat(kTexTuningHdrHandlingKey))
+    t.hdr_handling
+      = static_cast<content::import::HdrHandling>(static_cast<int>(*val));
+
+  return t;
 }
 
 auto ContentSettingsService::SetTextureTuning(
-  const content::import::ImportOptions::TextureTuning& tuning) -> void
+  const content::import::ImportOptions::TextureTuning& t) -> void
 {
-  // Placeholder for complex settings
-  (void)tuning;
-  ++epoch_;
+  if (const auto settings = ResolveSettings()) {
+    settings->SetBool(kTexTuningEnabledKey, t.enabled);
+    settings->SetFloat(
+      kTexTuningIntentKey, static_cast<float>(static_cast<int>(t.intent)));
+    settings->SetFloat(kTexTuningColorSpaceKey,
+      static_cast<float>(static_cast<int>(t.source_color_space)));
+    settings->SetFloat(kTexTuningMipPolicyKey,
+      static_cast<float>(static_cast<int>(t.mip_policy)));
+    settings->SetFloat(
+      kTexTuningMaxMipsKey, static_cast<float>(t.max_mip_levels));
+    settings->SetFloat(kTexTuningMipFilterKey,
+      static_cast<float>(static_cast<int>(t.mip_filter)));
+    settings->SetFloat(kTexTuningColorFormatKey,
+      static_cast<float>(static_cast<int>(t.color_output_format)));
+    settings->SetFloat(kTexTuningDataFormatKey,
+      static_cast<float>(static_cast<int>(t.data_output_format)));
+    settings->SetFloat(kTexTuningBc7QualityKey,
+      static_cast<float>(static_cast<int>(t.bc7_quality)));
+    settings->SetFloat(kTexTuningHdrHandlingKey,
+      static_cast<float>(static_cast<int>(t.hdr_handling)));
+    ++epoch_;
+  }
 }
 
 auto ContentSettingsService::GetDefaultLayout() const
   -> content::import::LooseCookedLayout
 {
-  return {};
+  content::import::LooseCookedLayout l;
+  const auto settings = ResolveSettings();
+  if (!settings)
+    return l;
+
+  if (auto val = settings->GetString(kLayoutVirtualRootKey))
+    l.virtual_mount_root = *val;
+  if (auto val = settings->GetString(kLayoutIndexNameKey))
+    l.index_file_name = *val;
+  if (auto val = settings->GetString(kLayoutResourcesDirKey))
+    l.resources_dir = *val;
+  if (auto val = settings->GetString(kLayoutDescriptorsDirKey))
+    l.descriptors_dir = *val;
+  if (auto val = settings->GetString(kLayoutScenesSubdirKey))
+    l.scenes_subdir = *val;
+  if (auto val = settings->GetString(kLayoutGeometrySubdirKey))
+    l.geometry_subdir = *val;
+  if (auto val = settings->GetString(kLayoutMaterialsSubdirKey))
+    l.materials_subdir = *val;
+
+  return l;
 }
 
 auto ContentSettingsService::SetDefaultLayout(
-  const content::import::LooseCookedLayout& layout) -> void
+  const content::import::LooseCookedLayout& l) -> void
 {
-  (void)layout;
-  ++epoch_;
+  if (const auto settings = ResolveSettings()) {
+    settings->SetString(kLayoutVirtualRootKey, l.virtual_mount_root);
+    settings->SetString(kLayoutIndexNameKey, l.index_file_name);
+    settings->SetString(kLayoutResourcesDirKey, l.resources_dir);
+    settings->SetString(kLayoutDescriptorsDirKey, l.descriptors_dir);
+    settings->SetString(kLayoutScenesSubdirKey, l.scenes_subdir);
+    settings->SetString(kLayoutGeometrySubdirKey, l.geometry_subdir);
+    settings->SetString(kLayoutMaterialsSubdirKey, l.materials_subdir);
+    ++epoch_;
+  }
 }
 
 auto ContentSettingsService::GetLastCookedOutputDirectory() const -> std::string

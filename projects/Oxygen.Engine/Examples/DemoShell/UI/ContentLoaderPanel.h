@@ -20,11 +20,8 @@ class ContentVm;
 */
 class ContentLoaderPanel final : public DemoPanel {
 public:
-  ContentLoaderPanel() = default;
+  explicit ContentLoaderPanel(observer_ptr<ContentVm> vm);
   ~ContentLoaderPanel() override = default;
-
-  //! Initialize panel with its View Model.
-  void Initialize(observer_ptr<ContentVm> vm);
 
   //! Draw the panel content.
   auto DrawContents() -> void override;
@@ -36,14 +33,14 @@ public:
   auto OnUnloaded() -> void override;
 
 private:
-  auto DrawImportWorkflow() -> void;
-  auto DrawLibraryWorkflow() -> void;
-  auto DrawDiagnosticsWorkflow() -> void;
+  auto DrawSourcesSection() -> void;
+  auto DrawLibrarySection() -> void;
+  auto DrawDiagnosticsSection() -> void;
+  auto DrawAdvancedSection() -> void;
 
   auto DrawWorkflowSettings() -> void;
   auto DrawImportSettings() -> void;
   auto DrawTextureTuningSettings() -> void;
-  auto DrawAdvancedSettings() -> void;
 
   observer_ptr<ContentVm> vm_ { nullptr };
 };
