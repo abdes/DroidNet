@@ -29,6 +29,12 @@ An ImGui overlay shows the current camera/orbit parameters.
 asap_push_module("${META_MODULE_NAME}")
 
 # ------------------------------------------------------------------------------
+# Dependencies
+# ------------------------------------------------------------------------------
+
+find_package(nlohmann_json CONFIG REQUIRED)
+
+# ------------------------------------------------------------------------------
 # Build instructions
 # ------------------------------------------------------------------------------
 
@@ -38,14 +44,16 @@ add_executable(
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"
-  "CameraController.h"
-  "CameraController.cpp"
+
   "TextureLoadingService.h"
   "TextureLoadingService.cpp"
   "SceneSetup.h"
   "SceneSetup.cpp"
-  "DebugUI.h"
-  "DebugUI.cpp"
+
+  "UI/TextureBrowserVm.h"
+  "UI/TextureBrowserVm.cpp"
+  "UI/TextureBrowserPanel.h"
+  "UI/TextureBrowserPanel.cpp"
 )
 
 set_target_properties(
@@ -81,6 +89,7 @@ target_link_libraries(
     oxygen::renderer
     oxygen::loader
     oxygen::content
+    nlohmann_json::nlohmann_json
 )
 
 if(WIN32)

@@ -12,12 +12,15 @@
 
 #include <glm/glm.hpp>
 
+#include "DemoShell/Services/SkyboxService.h"
+#include "TexturedCube/TextureLoadingService.h"
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <filesystem>
 
 namespace oxygen::examples::textured_cube {
 
@@ -71,7 +74,9 @@ public:
     kCustom = 2,
   };
 
-  explicit SceneSetup(observer_ptr<scene::Scene> scene);
+  explicit SceneSetup(observer_ptr<scene::Scene> scene,
+    TextureLoadingService& texture_service, SkyboxService& skybox_service,
+    const std::filesystem::path& cooked_root);
 
   ~SceneSetup() = default;
 
@@ -143,6 +148,9 @@ public:
 
 private:
   observer_ptr<scene::Scene> scene_ { nullptr };
+  observer_ptr<TextureLoadingService> texture_service_;
+  observer_ptr<SkyboxService> skybox_service_;
+  std::filesystem::path cooked_root_;
 
   scene::SceneNode cube_node_;
   scene::SceneNode comparison_cube_node_;

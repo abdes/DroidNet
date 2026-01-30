@@ -247,8 +247,13 @@ const Vec3 kDefaultSunRayDirWs = glm::normalize(Vec3 { 0.35F, -0.45F, -1.0F });
 
 namespace oxygen::examples::textured_cube {
 
-SceneSetup::SceneSetup(observer_ptr<scene::Scene> scene)
+SceneSetup::SceneSetup(observer_ptr<scene::Scene> scene,
+  TextureLoadingService& texture_service, SkyboxService& skybox_service,
+  const std::filesystem::path& cooked_root)
   : scene_(scene)
+  , texture_service_(&texture_service)
+  , skybox_service_(&skybox_service)
+  , cooked_root_(cooked_root)
 {
 }
 

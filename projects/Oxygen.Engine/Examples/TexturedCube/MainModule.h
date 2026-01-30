@@ -15,13 +15,15 @@
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Scene/Scene.h>
 
+#include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/SingleViewModuleBase.h"
+#include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/Services/SkyboxService.h"
-#include "TexturedCube/CameraController.h"
-#include "TexturedCube/DebugUI.h"
 #include "TexturedCube/SceneSetup.h"
 #include "TexturedCube/TextureLoadingService.h"
+#include "TexturedCube/UI/TextureBrowserPanel.h"
+#include "TexturedCube/UI/TextureBrowserVm.h"
 
 namespace oxygen::examples::textured_cube {
 
@@ -33,19 +35,18 @@ namespace oxygen::examples::textured_cube {
  ### Architecture
 
  The module is structured into several focused components:
- - **CameraController**: Handles orbit camera with mouse controls
+ - **DemoShell**: Handles camera, standard panels, and UI framework
  - **TextureLoadingService**: Loads and uploads textures asynchronously
  - **SkyboxService**: Manages skybox loading and scene environment
  - **SceneSetup**: Creates and configures scene objects (cube, lights)
- - **DebugUI**: ImGui-based debug overlay for runtime tweaking
+ - **TextureBrowserPanel**: Custom UI for texture browsing and assignment
 
  ### Controls
 
  - Mouse wheel: zoom in/out
- - RMB + mouse drag: orbit camera
+ - RMB + mouse drag: orbit camera (standard DemoShell controls)
 
- @see CameraController, TextureLoadingService, SkyboxService, SceneSetup,
- DebugUI
+ @see DemoShell, TextureLoadingService, SkyboxService, SceneSetup
 */
 class MainModule final : public SingleViewModuleBase {
   OXYGEN_TYPED(MainModule)
@@ -98,28 +99,31 @@ protected:
     -> platform::window::Properties override;
 
 private:
-  struct TextureSlotSelection {
-    SceneSetup::TextureIndexMode mode {
-      SceneSetup::TextureIndexMode::kFallback
-    };
-    std::uint32_t resource_index { 0U };
-    oxygen::content::ResourceKey resource_key { 0U };
-  };
+  auto EnsureViewCameraRegistered() -> void;
+  auto ApplyRenderModeFromPanel() -> void;
 
-  std::shared_ptr<scene::Scene> scene_;
-
-  // Component modules
-  std::unique_ptr<CameraController> camera_controller_;
+  std::unique_ptr<oxygen::examples::DemoShell> shell_;
+  // Scene is owned by DemoShell, we keep a weak reference
+  oxygen::observer_ptr<scene::Scene> scene_;
+  scene::NodeHandle registered_view_camera_;
+  std::unique_ptr<FileBrowserService> file_browser_service_;
   std::unique_ptr<TextureLoadingService> texture_service_;
   std::unique_ptr<SkyboxService> skybox_service_;
   std::unique_ptr<SceneSetup> scene_setup_;
-  std::unique_ptr<DebugUI> debug_ui_;
+
+  // Custom UI
+  std::unique_ptr<ui::TextureBrowserVm> texture_vm_;
+  std::shared_ptr<ui::TextureBrowserPanel> texture_panel_;
 
   // State
-  TextureSlotSelection sphere_texture_ {};
-  TextureSlotSelection cube_texture_ {};
+  std::filesystem::path cooked_root_;
+  std::filesystem::path content_root_;
   oxygen::content::ResourceKey forced_error_key_ { 0U };
-  bool cube_needs_rebuild_ { true };
+  scene::SceneNode pending_camera_node_;
+
+  // Track last viewport size to inform camera
+  int last_viewport_w_ { 0 };
+  int last_viewport_h_ { 0 };
 };
 
 } // namespace oxygen::examples::textured_cube

@@ -1,0 +1,173 @@
+{
+  "TextureImportModal": {
+    "Size": [
+      600,
+      700
+    ]
+  },
+  "camera_rig": {
+    "MainCamera": {
+      "camera": {
+        "has_orthographic": false,
+        "has_perspective": true,
+        "perspective": {
+          "far": 1000.0,
+          "fov": 1.0,
+          "near": 0.10000000149011612
+        }
+      },
+      "fly": {
+        "boost_multiplier": 4.0,
+        "look_sensitivity": 0.001500000013038516,
+        "move_speed": 5.0,
+        "plane_lock": false
+      },
+      "mode": "orbit",
+      "orbit": {
+        "distance": 9.385164260864258,
+        "mode": "turntable",
+        "target": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        }
+      },
+      "position": {
+        "x": 6.104175090789795,
+        "y": 6.937305450439453,
+        "z": 1.6413869857788086
+      },
+      "rotation": {
+        "w": 0.27057501673698425,
+        "x": 0.22674843668937683,
+        "y": 0.600948691368103,
+        "z": 0.7171018123626709
+      },
+      "scale": {
+        "x": 1.0,
+        "y": 1.0,
+        "z": 1.0
+      }
+    }
+  },
+  "demo_shell": {
+    "active_panel": "Texture Browser",
+    "panels": {
+      "environment": {
+        "width": 669.0
+      },
+      "texture_browser": {
+        "width": 652.0
+      }
+    }
+  },
+  "environment": {
+    "debug": {
+      "force_analytic": false,
+      "use_lut": true,
+      "visualize_lut": false
+    },
+    "post_process": {
+      "auto_exposure_max_ev": 16.0,
+      "auto_exposure_min_ev": -4.0,
+      "auto_exposure_speed_down": 1.0,
+      "auto_exposure_speed_up": 3.0,
+      "bloom_intensity": 0.0,
+      "bloom_threshold": 1.0,
+      "contrast": 1.0,
+      "enabled": false,
+      "exposure_compensation_ev": 0.0,
+      "exposure_mode": 0.0,
+      "saturation": 1.0,
+      "tone_mapper": 0.0,
+      "vignette": 0.0
+    },
+    "sky_atmo": {
+      "aerial_perspective_scale": 1.0,
+      "aerial_scattering_strength": 1.0,
+      "atmosphere_height_km": 80.0,
+      "enabled": false,
+      "ground_albedo": {
+        "x": 0.10000000149011612,
+        "y": 0.10000000149011612,
+        "z": 0.10000000149011612
+      },
+      "mie_anisotropy": 0.800000011920929,
+      "mie_scale_height_km": 1.2000000476837158,
+      "multi_scattering": 1.0,
+      "planet_radius_km": 6360.0,
+      "rayleigh_scale_height_km": 8.0,
+      "sun_disk_enabled": true,
+      "sun_disk_radius_deg": 0.2680000066757202
+    },
+    "sky_light": {
+      "diffuse": 1.0,
+      "enabled": true,
+      "intensity": 1.0,
+      "source": 0.0,
+      "specular": 1.0,
+      "tint": {
+        "x": 1.0,
+        "y": 1.0,
+        "z": 1.0
+      }
+    },
+    "sky_sphere": {
+      "enabled": true,
+      "intensity": 1.0,
+      "rotation_deg": 0.0,
+      "solid_color": {
+        "x": 0.05999999865889549,
+        "y": 0.07999999821186066,
+        "z": 0.11999999731779099
+      },
+      "source": 1.0
+    },
+    "skybox": {
+      "face_size": 512.0,
+      "flip_y": false,
+      "hdr_exposure_ev": 0.0,
+      "layout": 0.0,
+      "output_format": 0.0,
+      "path": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\Content\\images\\hdr_skybox_f32.hdr",
+      "tonemap_hdr_to_ldr": false
+    },
+    "sun": {
+      "azimuth_deg": 127.87496948242188,
+      "color": {
+        "x": 1.0,
+        "y": 0.9800000190734863,
+        "z": 0.949999988079071
+      },
+      "disk_radius_deg": 0.26785776019096375,
+      "elevation_deg": 60.31306838989258,
+      "enabled": true,
+      "intensity_lux": 12.0,
+      "source": 1.0,
+      "temperature_kelvin": 6500.0,
+      "use_temperature": false
+    }
+  },
+  "file_browser": {
+    "select_skybox_image": {
+      "window_size": [
+        700,
+        450
+      ]
+    },
+    "select_source_texture": {
+      "window_size": [
+        1009,
+        451
+      ]
+    }
+  },
+  "rendering": {
+    "view_mode": "solid"
+  },
+  "ui": {
+    "stats": {
+      "show_fps": true
+    }
+  }
+}
