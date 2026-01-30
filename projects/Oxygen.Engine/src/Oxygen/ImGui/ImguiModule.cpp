@@ -59,42 +59,41 @@ auto ImGuiModule::OnAttached(const observer_ptr<AsyncEngine> engine) noexcept
   if (auto* ctx = graphics_backend_->GetImGuiContext()) {
     ImGui::SetCurrentContext(ctx);
     spectrum::StyleColorsSpectrum();
-    spectrum::LoadFont();
+    spectrum::LoadFont(); // This adds the default font at 16.0f
 
     ImGuiIO& io = ImGui::GetIO();
+    constexpr float kDefaultFontSize = 16.0F;
     constexpr float kToolbarIconFontSize = 24.0F;
 
-    constexpr ImWchar kOxygenIconRanges[] = {
+    // 1. Merge FontAwesome Icons into the default font for easy use everywhere
+    constexpr ImWchar fa_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+    ImFontConfig fa_config {};
+    fa_config.MergeMode = true;
+    fa_config.PixelSnapH = true;
+    io.Fonts->AddFontFromMemoryCompressedTTF(
+      styles::FontAwesome_compressed_data,
+      static_cast<int>(styles::FontAwesome_compressed_size), kDefaultFontSize,
+      &fa_config, fa_ranges);
+
+    // 2. Oxygen Icons (Separate font for toolbars/special UI)
+    constexpr ImWchar oxygen_icon_ranges[] = {
       static_cast<ImWchar>(icons::kIconCameraControlsCodepoint),
       static_cast<ImWchar>(icons::kIconSettingsCodepoint),
       0,
     };
 
-    ImFontConfig oxygen_icon_config {};
-    oxygen_icon_config.MergeMode = false;
-    oxygen_icon_config.PixelSnapH = true;
-    oxygen_icon_config.GlyphMinAdvanceX = kToolbarIconFontSize;
-    std::snprintf(oxygen_icon_config.Name,
-      IM_ARRAYSIZE(oxygen_icon_config.Name), "oxygen-icons");
+    ImFontConfig oxygen_config {};
+    oxygen_config.MergeMode = false;
+    oxygen_config.PixelSnapH = true;
+    oxygen_config.GlyphMinAdvanceX = kToolbarIconFontSize;
+    std::snprintf(
+      oxygen_config.Name, IM_ARRAYSIZE(oxygen_config.Name), "oxygen-icons");
+
     ImFont* oxygen_icon_font = io.Fonts->AddFontFromMemoryCompressedTTF(
       icons::OxygenIcons_compressed_data,
       static_cast<int>(icons::OxygenIcons_compressed_size),
-      kToolbarIconFontSize, &oxygen_icon_config, kOxygenIconRanges);
+      kToolbarIconFontSize, &oxygen_config, oxygen_icon_ranges);
     IM_ASSERT(oxygen_icon_font != nullptr);
-
-    constexpr ImWchar icon_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
-
-    ImFontConfig icon_only_config {};
-    icon_only_config.MergeMode = false;
-    icon_only_config.PixelSnapH = true;
-    icon_only_config.GlyphMinAdvanceX = kToolbarIconFontSize;
-    std::snprintf(icon_only_config.Name, IM_ARRAYSIZE(icon_only_config.Name),
-      "fa-solid-icons");
-    ImFont* icon_only_font = io.Fonts->AddFontFromMemoryCompressedTTF(
-      styles::FontAwesome_compressed_data,
-      static_cast<int>(styles::FontAwesome_compressed_size),
-      kToolbarIconFontSize, &icon_only_config, icon_ranges);
-    IM_ASSERT(icon_only_font != nullptr);
   }
 
   return true;
