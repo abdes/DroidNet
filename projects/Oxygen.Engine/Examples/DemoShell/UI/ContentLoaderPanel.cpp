@@ -17,6 +17,7 @@
 #include <Oxygen/Content/Import/Naming.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
+#include <Oxygen/ImGui/Styles/IconsFontAwesome.h>
 
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/FileBrowserService.h"
@@ -189,20 +190,26 @@ auto ContentLoaderPanel::DrawContents() -> void
 
 auto ContentLoaderPanel::DrawImportWorkflow() -> void
 {
+  DrawWorkflowSettings();
+  DrawImportSettings();
+  DrawTextureTuningSettings();
+
   auto explorer = vm_->GetExplorerSettings();
   bool explorer_changed = false;
 
-  if (ImGui::CollapsingHeader(
-        "Source Selection", ImGuiTreeNodeFlags_DefaultOpen)) {
+  if (ImGui::CollapsingHeader("Content Root", ImGuiTreeNodeFlags_DefaultOpen)) {
     std::string root_path = explorer.model_root.string();
+    ImGui::Dummy(ImVec2(0, 20));
     if (InputTextString("Model Root", root_path)) {
       explorer.model_root = root_path;
       explorer_changed = true;
     }
     ImGui::SameLine();
-    if (ImGui::Button("Browse...##root")) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f));
+    if (ImGui::Button(ICON_FA_FOLDER " Browse##root")) {
       vm_->BrowseForModelRoot();
     }
+    ImGui::PopStyleColor();
 
     if (ImGui::Checkbox("FBX", &explorer.include_fbx))
       explorer_changed = true;
@@ -212,32 +219,26 @@ auto ContentLoaderPanel::DrawImportWorkflow() -> void
     ImGui::SameLine();
     if (ImGui::Checkbox("GLTF", &explorer.include_gltf))
       explorer_changed = true;
-
-    if (ImGui::Button("Refresh Sources")) {
-      vm_->RefreshSources();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Choose File...")) {
-      vm_->BrowseForSourceFile();
-    }
   }
 
   if (explorer_changed) {
     vm_->SetExplorerSettings(explorer);
   }
 
-  ImGui::Separator();
-  ImGui::Text("Task Configuration:");
-  DrawWorkflowSettings();
-  DrawImportSettings();
-  DrawTextureTuningSettings();
-
-  ImGui::Separator();
-  ImGui::Text("Available Discoverable Sources:");
-
+  ImGui::Dummy(ImVec2(0, 20));
+  if (ImGui::Button(ICON_FA_ARROW_ROTATE_RIGHT "##refresh_sources")) {
+    vm_->RefreshSources();
+  }
+  ImGui::SameLine();
   static char source_filter[128] = "";
   ImGui::InputTextWithHint("##SourceFilter", "Filter sources...", source_filter,
     sizeof(source_filter));
+  ImGui::SameLine();
+  if (ImGui::Button(ICON_FA_FILE " Select File##browse_file")) {
+    vm_->BrowseForSourceFile();
+  }
+
+  ImGui::Dummy(ImVec2(0, 20));
 
   const auto& sources = vm_->GetSources();
   if (sources.empty()) {
@@ -264,17 +265,18 @@ auto ContentLoaderPanel::DrawImportWorkflow() -> void
 
 auto ContentLoaderPanel::DrawLibraryWorkflow() -> void
 {
-  if (ImGui::Button("Refresh Files"))
-    vm_->RefreshLibrary();
-  ImGui::SameLine();
-  if (ImGui::Button("Browse for PAK..."))
+  if (ImGui::Button(ICON_FA_FILE " Select PAK##select_pak")) {
     vm_->BrowseForPak();
+  }
   ImGui::SameLine();
-  if (ImGui::Button("Browse for Index..."))
+  if (ImGui::Button(ICON_FA_FILE " Select Index##select_index")) {
     vm_->BrowseForIndex();
+  }
   ImGui::SameLine();
   if (ImGui::Button("Unload All"))
     vm_->UnloadAllLibrary();
+
+  ImGui::Dummy(ImVec2(0, 20));
 
   if (ImGui::TreeNode("Mounted Items")) {
     for (const auto& pak : vm_->GetLoadedPaks()) {
@@ -286,11 +288,18 @@ auto ContentLoaderPanel::DrawLibraryWorkflow() -> void
     ImGui::TreePop();
   }
 
-  ImGui::Separator();
-  ImGui::Text("Library Scenes (Ready to Load):");
+  ImGui::Dummy(ImVec2(0, 20));
+
+  ImGui::SeparatorText("Library Scenes");
+  if (ImGui::Button(ICON_FA_ARROW_ROTATE_RIGHT "##refresh_scenes")) {
+    vm_->RefreshLibrary();
+  }
   static char scene_filter[128] = "";
+  ImGui::SameLine();
   ImGui::InputTextWithHint(
     "##SceneFilter", "Search scenes...", scene_filter, sizeof(scene_filter));
+
+  ImGui::Dummy(ImVec2(0, 20));
 
   if (ImGui::BeginChild("LibraryScenes", ImVec2(0, 0), true)) {
     for (const auto& scene : vm_->GetAvailableScenes()) {
@@ -559,27 +568,40 @@ auto ContentLoaderPanel::DrawAdvancedSettings() -> void
     auto draw_pipe = [&](const char* label,
                        content::import::ImportPipelineConcurrency& pipe) {
       ImGui::PushID(label);
+      ImGui::AlignTextToFramePadding();
       ImGui::Text("%s", label);
       ImGui::SameLine(100);
+
+      const float spacing = ImGui::GetStyle().ItemSpacing.x;
+      const float avail_width = ImGui::GetContentRegionAvail().x;
+      const float item_width = (avail_width - spacing) / 2.0f;
+
+      ImGui::SetNextItemWidth(item_width);
       int w = (int)pipe.workers;
-      if (ImGui::DragInt("Workers", &w, 0.1f, 1, 64)) {
+      if (ImGui::DragInt("##Workers", &w, 0.1f, 1, 64, "W: %d")) {
         pipe.workers = (uint32_t)w;
         changed = true;
       }
       ImGui::SameLine();
+      ImGui::SetNextItemWidth(item_width);
       int q = (int)pipe.queue_capacity;
-      if (ImGui::DragInt("Queue", &q, 1.0f, 1, 256)) {
+      if (ImGui::DragInt("##Queue", &q, 1.0f, 1, 256, "Q: %d")) {
         pipe.queue_capacity = (uint32_t)q;
         changed = true;
       }
       ImGui::PopID();
     };
 
+    ImGui::SeparatorText("Global Thread Pool");
+
     int pool = (int)cfg.thread_pool_size;
-    if (ImGui::DragInt("Global Thread Pool", &pool, 0.1f, 1, 128)) {
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::DragInt("##global_threads", &pool, 0.1f, 1, 128, "Size: %d")) {
       cfg.thread_pool_size = (uint32_t)pool;
       changed = true;
     }
+
+    ImGui::SeparatorText("Pipeline Concurrency");
 
     draw_pipe("Texture", cfg.concurrency.texture);
     draw_pipe("Buffer", cfg.concurrency.buffer);
