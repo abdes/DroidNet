@@ -896,6 +896,10 @@ TextureBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
         return;
       }
 
+      if (event.reason == content::EvictionReason::kRefCountZero) {
+        return;
+      }
+
       LOG_F(2, "TextureBinder: eviction notification for {} (reason={})",
         event.key, event.reason);
 
@@ -1284,9 +1288,11 @@ auto TextureBinder::Impl::InitiateAsyncLoad(
         return;
       }
 
-      std::scoped_lock lock(gate->mutex);
-      if (!gate->alive) {
-        return;
+      {
+        std::scoped_lock lock(gate->mutex);
+        if (!gate->alive) {
+          return;
+        }
       }
 
       this->OnTextureResourceLoaded(

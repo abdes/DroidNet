@@ -337,9 +337,42 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
 {
   AssertOwningThread();
   std::filesystem::path normalized = std::filesystem::weakly_canonical(path);
+  const auto normalized_s = normalized.string();
 
   auto new_source = std::make_unique<internal::LooseCookedSource>(
     normalized, verify_content_hashes_);
+
+  auto clear_content_caches = [this]() {
+    auto eviction_guard = content_cache_.OnEviction(
+      [&](const uint64_t cache_key, std::shared_ptr<void> value,
+        const TypeId type_id) {
+        static_cast<void>(value);
+        UnloadObject(cache_key, type_id, EvictionReason::kClear);
+      });
+    content_cache_.Clear();
+    resource_key_by_hash_.clear();
+    asset_key_by_hash_.clear();
+  };
+
+  for (size_t source_index = 0; source_index < impl_->sources.size();
+    ++source_index) {
+    auto& existing = impl_->sources[source_index];
+    if (!existing) {
+      continue;
+    }
+    const auto source_id = impl_->source_ids.at(source_index);
+    if (source_id < kLooseCookedSourceIdBase) {
+      continue;
+    }
+    if (existing->DebugName() == normalized_s) {
+      LOG_F(INFO,
+        "Refreshing loose cooked content source: root={} (reloading index)",
+        normalized_s);
+      existing = std::move(new_source);
+      clear_content_caches();
+      return;
+    }
+  }
 #if !defined(NDEBUG)
   {
     const auto source_key = new_source->GetSourceKey();
@@ -404,6 +437,25 @@ auto AssetLoader::ClearMounts() -> void
       });
     content_cache_.Clear();
   }
+
+  resource_key_by_hash_.clear();
+  asset_key_by_hash_.clear();
+}
+
+auto AssetLoader::TrimCache() -> void
+{
+  LOG_F(INFO, "AssetLoader::TrimCache thread={} owner={}",
+    std::hash<std::thread::id> {}(std::this_thread::get_id()),
+    std::hash<std::thread::id> {}(owning_thread_id_));
+  AssertOwningThread();
+
+  auto eviction_guard = content_cache_.OnEviction(
+    [&](const uint64_t cache_key, std::shared_ptr<void> value,
+      const TypeId type_id) {
+      static_cast<void>(value);
+      UnloadObject(cache_key, type_id, EvictionReason::kClear);
+    });
+  content_cache_.Clear();
 
   resource_key_by_hash_.clear();
   asset_key_by_hash_.clear();
