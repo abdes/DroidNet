@@ -2,29 +2,24 @@
   "async": {
     "drone_panel": {
       "actions_open": false,
-      "scene_open": false,
-      "spotlight_open": true
+      "scene_open": true,
+      "spotlight_open": false
+    }
+  },
+  "content": {
+    "explorer": {
+      "auto_dump_delay": 180.0,
+      "auto_dump_tex_mem": true,
+      "auto_load_on_import": true,
+      "dump_top_n": 20.0,
+      "include_fbx": true,
+      "include_glb": true,
+      "include_gltf": true,
+      "model_root": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\Content"
     }
   },
   "demo_shell": {
-    "active_panel": "Drone Control",
-    "panels": {
-      "async": {
-        "width": 520.0
-      },
-      "drone_control": {
-        "width": 520.0
-      },
-      "environment": {
-        "width": 692.0
-      },
-      "rendering": {
-        "width": 320.0
-      },
-      "settings": {
-        "width": 320.0
-      }
-    }
+    "active_panel": "Drone Control"
   },
   "environment": {
     "debug": {
@@ -41,7 +36,7 @@
       "bloom_threshold": 1.0,
       "contrast": 1.0,
       "enabled": false,
-      "exposure_compensation_ev": -10.0,
+      "exposure_compensation_ev": 0.0,
       "exposure_mode": 0.0,
       "saturation": 1.0,
       "tone_mapper": 0.0,
@@ -53,9 +48,9 @@
       "atmosphere_height_km": 80.0,
       "enabled": false,
       "ground_albedo": {
-        "x": 0.2187945544719696,
-        "y": 0.3243902325630188,
-        "z": 0.053801294416189194
+        "x": 0.10000000149011612,
+        "y": 0.10000000149011612,
+        "z": 0.10000000149011612
       },
       "mie_anisotropy": 0.800000011920929,
       "mie_scale_height_km": 1.2000000476837158,
@@ -98,28 +93,19 @@
       "tonemap_hdr_to_ldr": false
     },
     "sun": {
-      "azimuth_deg": 177.39999389648438,
+      "azimuth_deg": 90.0,
       "color": {
         "x": 1.0,
         "y": 1.0,
         "z": 1.0
       },
-      "disk_radius_deg": 0.26799994707107544,
-      "elevation_deg": 17.399999618530273,
+      "disk_radius_deg": 0.2680000066757202,
+      "elevation_deg": 30.0,
       "enabled": true,
-      "intensity_lux": 100000.0,
+      "intensity_lux": 10.0,
       "source": 1.0,
       "temperature_kelvin": 6500.0,
       "use_temperature": false
-    }
-  },
-  "ui": {
-    "axes": {
-      "visible": true
-    },
-    "stats": {
-      "show_fps": false,
-      "show_frame_timing_detail": false
     }
   }
 }

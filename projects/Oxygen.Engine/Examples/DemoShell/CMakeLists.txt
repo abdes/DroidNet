@@ -89,10 +89,8 @@ set(
   "UI/EnvironmentDebugPanel.h"
   "UI/FbxLoaderPanel.h"
   "Services/FileBrowserService.h"
-  "UI/ImportPanel.h"
-  "UI/LightCullingDebugPanel.h"
-  "UI/LooseCookedLoaderPanel.h"
   "UI/PakLoaderPanel.h"
+  "UI/LightCullingDebugPanel.h"
   "UI/RenderingPanel.h"
   "UI/UiSettingsPanel.h"
   "UI/UiSettingsVm.h"
@@ -101,7 +99,9 @@ set(
   "UI/RenderingVm.h"
   "UI/LightCullingVm.h"
   "Services/CameraSettingsService.h"
+  "Services/ContentSettingsService.h"
   "UI/CameraVm.h"
+  "UI/ContentVm.h"
 )
 set(
   OXYGEN_DEMOSHELL_PRIVATE_SOURCES
@@ -132,11 +132,8 @@ set(
   "UI/ContentLoaderPanel.cpp"
   "UI/EnvironmentDebugPanel.cpp"
   "UI/FlyCameraController.cpp"
-  "UI/ImportPanel.cpp"
   "UI/LightCullingDebugPanel.cpp"
-  "UI/LooseCookedLoaderPanel.cpp"
   "UI/OrbitCameraController.cpp"
-  "UI/PakLoaderPanel.cpp"
   "UI/PanelSideBar.cpp"
   "UI/RenderingPanel.cpp"
   "UI/UiSettingsPanel.cpp"
@@ -146,7 +143,9 @@ set(
   "UI/LightCullingVm.cpp"
   "UI/RenderingVm.cpp"
   "Services/CameraSettingsService.cpp"
+  "Services/ContentSettingsService.cpp"
   "UI/CameraVm.cpp"
+  "UI/ContentVm.cpp"
 )
 
 if(NOT DEFINED OXYGEN_EXAMPLES_SOURCE_DIR)

@@ -110,21 +110,34 @@ private:
   std::unique_ptr<FileBrowserService> file_browser_service_;
   std::unique_ptr<SkyboxService> skybox_service_;
   scene::Scene* skybox_service_scene_ { nullptr };
+  bool scene_load_cancel_requested_ { false };
 
   std::unique_ptr<DemoShell> shell_ {};
 
   // Content and scene state
   std::filesystem::path cooked_root_;
-  bool pending_load_scene_ { false };
-  std::optional<data::AssetKey> pending_scene_key_;
   std::optional<data::AssetKey> current_scene_key_;
   std::optional<data::AssetKey> last_released_scene_key_;
+  std::optional<data::AssetKey> active_scene_load_key_;
   int last_viewport_w_ { 0 };
   int last_viewport_h_ { 0 };
 
   // Debug/instrumentation.
   bool logged_gameplay_tick_ { false };
   bool was_orbiting_last_frame_ { false };
+
+  // Deferred lifecycle actions (applied in OnFrameStart)
+  enum class PendingSourceAction {
+    kNone,
+    kClear,
+    kTrimCache,
+    kMountPak,
+    kMountIndex,
+  };
+  PendingSourceAction pending_source_action_ { PendingSourceAction::kNone };
+  std::filesystem::path pending_path_;
+  std::optional<data::AssetKey> pending_scene_load_;
+  std::vector<std::filesystem::path> mounted_loose_roots_ {};
 };
 
 } // namespace oxygen::examples::render_scene

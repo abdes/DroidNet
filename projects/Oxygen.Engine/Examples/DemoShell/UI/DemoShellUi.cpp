@@ -6,19 +6,24 @@
 
 #include <Oxygen/Base/Logging.h>
 
+#include "DemoShell/DemoShell.h"
 #include "DemoShell/PanelRegistry.h"
 #include "DemoShell/Services/CameraLifecycleService.h"
+#include "DemoShell/Services/CameraSettingsService.h"
+#include "DemoShell/Services/ContentSettingsService.h"
+#include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/Services/LightCullingSettingsService.h"
 #include "DemoShell/Services/RenderingSettingsService.h"
 #include "DemoShell/Services/UiSettingsService.h"
-#include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/UI/AxesWidget.h"
+#include "DemoShell/UI/CameraControlPanel.h"
+#include "DemoShell/UI/CameraVm.h"
+#include "DemoShell/UI/ContentLoaderPanel.h"
+#include "DemoShell/UI/ContentVm.h"
 #include "DemoShell/UI/DemoShellUi.h"
 #include "DemoShell/UI/LightCullingDebugPanel.h"
 #include "DemoShell/UI/LightCullingVm.h"
 #include "DemoShell/UI/PanelSideBar.h"
-#include "DemoShell/UI/CameraControlPanel.h"
-#include "DemoShell/UI/CameraVm.h"
 #include "DemoShell/UI/RenderingPanel.h"
 #include "DemoShell/UI/RenderingVm.h"
 #include "DemoShell/UI/SidePanel.h"
@@ -33,6 +38,7 @@ struct DemoShellUi::Impl {
   observer_ptr<RenderingSettingsService> rendering_settings_service {};
   observer_ptr<LightCullingSettingsService> light_culling_settings_service {};
   observer_ptr<CameraSettingsService> camera_settings_service {};
+  DemoShellPanelConfig panel_config {};
 
   // UI Settings (always created)
   UiSettingsVm ui_settings_vm;
@@ -57,17 +63,25 @@ struct DemoShellUi::Impl {
   std::unique_ptr<CameraVm> camera_vm {};
   std::shared_ptr<CameraControlPanel> camera_panel {};
 
+  // Content panel
+  std::shared_ptr<ContentVm> content_vm {};
+  std::shared_ptr<ContentLoaderPanel> content_panel {};
+
   Impl(observer_ptr<PanelRegistry> registry,
     observer_ptr<CameraLifecycleService> camera_lifecycle,
     observer_ptr<UiSettingsService> ui_settings_service,
     observer_ptr<RenderingSettingsService> rendering_settings,
     observer_ptr<LightCullingSettingsService> light_culling_settings,
     observer_ptr<CameraSettingsService> camera_settings,
-    observer_ptr<CameraRigController> camera_rig)
+    observer_ptr<ContentSettingsService> content_settings,
+    observer_ptr<CameraRigController> camera_rig,
+    observer_ptr<FileBrowserService> file_browser,
+    const DemoShellPanelConfig& panel_config_in)
     : panel_registry(registry)
     , rendering_settings_service(rendering_settings)
     , light_culling_settings_service(light_culling_settings)
     , camera_settings_service(camera_settings)
+    , panel_config(panel_config_in)
     , ui_settings_vm(ui_settings_service, camera_lifecycle)
     , side_bar(panel_registry, ui_settings_vm_ptr)
     , side_panel(panel_registry)
@@ -78,13 +92,23 @@ struct DemoShellUi::Impl {
     DCHECK_NOTNULL_F(ui_settings_service, "expecting valid UiSettingsService");
 
     // Create Camera VM and Panel
-    if (camera_settings && camera_rig) {
-      camera_vm = std::make_unique<CameraVm>(camera_settings,
-        camera_lifecycle, camera_rig);
+    if (panel_config.camera_controls && camera_settings && camera_rig) {
+      camera_vm = std::make_unique<CameraVm>(
+        camera_settings, camera_lifecycle, camera_rig);
       camera_panel = std::make_shared<CameraControlPanel>(
         observer_ptr { camera_vm.get() });
       if (panel_registry->RegisterPanel(camera_panel)) {
         LOG_F(INFO, "DemoShellUi: registered Camera panel");
+      }
+    }
+
+    // Create Content VM and Panel
+    if (panel_config.content_loader && content_settings && file_browser) {
+      content_vm = std::make_shared<ContentVm>(content_settings, file_browser);
+      content_panel = std::make_shared<ContentLoaderPanel>();
+      content_panel->Initialize(observer_ptr { content_vm.get() });
+      if (panel_registry->RegisterPanel(content_panel)) {
+        LOG_F(INFO, "DemoShellUi: registered Content panel");
       }
     }
 
@@ -102,10 +126,14 @@ DemoShellUi::DemoShellUi(observer_ptr<PanelRegistry> panel_registry,
   observer_ptr<RenderingSettingsService> rendering_settings_service,
   observer_ptr<LightCullingSettingsService> light_culling_settings_service,
   observer_ptr<CameraSettingsService> camera_settings_service,
-  observer_ptr<CameraRigController> camera_rig)
+  observer_ptr<ContentSettingsService> content_settings_service,
+  observer_ptr<CameraRigController> camera_rig,
+  observer_ptr<FileBrowserService> file_browser_service,
+  const DemoShellPanelConfig& panel_config)
   : impl_(std::make_unique<Impl>(panel_registry, camera_lifecycle,
       ui_settings_service, rendering_settings_service,
-      light_culling_settings_service, camera_settings_service, camera_rig))
+      light_culling_settings_service, camera_settings_service,
+      content_settings_service, camera_rig, file_browser_service, panel_config))
 {
 }
 
@@ -123,6 +151,9 @@ auto DemoShellUi::Draw() -> void
 
 auto DemoShellUi::EnsureRenderingPanelReady(const PassConfigRefs& refs) -> void
 {
+  if (!impl_->panel_config.rendering) {
+    return;
+  }
   if (impl_->rendering_panel) {
     // Already created, just update pass config if needed
     if (impl_->rendering_vm) {
@@ -136,8 +167,9 @@ auto DemoShellUi::EnsureRenderingPanelReady(const PassConfigRefs& refs) -> void
   }
 
   if (!impl_->rendering_settings_service) {
-    LOG_F(WARNING, "DemoShellUi: cannot create RenderingPanel without "
-                   "RenderingSettingsService");
+    LOG_F(WARNING,
+      "DemoShellUi: cannot create RenderingPanel without "
+      "RenderingSettingsService");
     return;
   }
 
@@ -146,8 +178,8 @@ auto DemoShellUi::EnsureRenderingPanelReady(const PassConfigRefs& refs) -> void
     impl_->rendering_settings_service, refs.shader_pass_config);
 
   // Create the Panel with the ViewModel
-  impl_->rendering_panel
-    = std::make_shared<RenderingPanel>(observer_ptr { impl_->rendering_vm.get() });
+  impl_->rendering_panel = std::make_shared<RenderingPanel>(
+    observer_ptr { impl_->rendering_vm.get() });
 
   // Register with panel registry
   if (impl_->panel_registry->RegisterPanel(impl_->rendering_panel)) {
@@ -159,6 +191,9 @@ auto DemoShellUi::EnsureRenderingPanelReady(const PassConfigRefs& refs) -> void
 
 auto DemoShellUi::EnsureLightingPanelReady(const PassConfigRefs& refs) -> void
 {
+  if (!impl_->panel_config.lighting) {
+    return;
+  }
   if (impl_->lighting_panel) {
     // Already created, just update pass configs if needed
     if (impl_->light_culling_vm) {
@@ -173,8 +208,9 @@ auto DemoShellUi::EnsureLightingPanelReady(const PassConfigRefs& refs) -> void
   }
 
   if (!impl_->light_culling_settings_service) {
-    LOG_F(WARNING, "DemoShellUi: cannot create LightingPanel without "
-                   "LightCullingSettingsService");
+    LOG_F(WARNING,
+      "DemoShellUi: cannot create LightingPanel without "
+      "LightCullingSettingsService");
     return;
   }
 
@@ -208,6 +244,11 @@ auto DemoShellUi::GetLightCullingVm() const -> observer_ptr<LightCullingVm>
 auto DemoShellUi::GetCameraVm() const -> observer_ptr<CameraVm>
 {
   return observer_ptr { impl_->camera_vm.get() };
+}
+
+auto DemoShellUi::GetContentVm() const -> observer_ptr<ContentVm>
+{
+  return observer_ptr { impl_->content_vm.get() };
 }
 
 } // namespace oxygen::examples::ui

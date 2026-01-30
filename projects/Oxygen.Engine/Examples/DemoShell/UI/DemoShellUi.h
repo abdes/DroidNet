@@ -25,12 +25,16 @@ class CameraLifecycleService;
 class RenderingSettingsService;
 class LightCullingSettingsService;
 class CameraSettingsService;
+class ContentSettingsService;
+class FileBrowserService;
+struct DemoShellPanelConfig;
 
 namespace ui {
 
   class RenderingVm;
   class LightCullingVm;
   class CameraVm;
+  class ContentVm;
   class CameraRigController;
   enum class RenderingViewMode;
 
@@ -59,7 +63,10 @@ namespace ui {
       observer_ptr<RenderingSettingsService> rendering_settings_service,
       observer_ptr<LightCullingSettingsService> light_culling_settings_service,
       observer_ptr<CameraSettingsService> camera_settings_service,
-      observer_ptr<CameraRigController> camera_rig);
+      observer_ptr<ContentSettingsService> content_settings_service,
+      observer_ptr<CameraRigController> camera_rig,
+      observer_ptr<FileBrowserService> file_browser_service,
+      const DemoShellPanelConfig& panel_config);
     ~DemoShellUi();
 
     OXYGEN_MAKE_NON_COPYABLE(DemoShellUi)
@@ -83,6 +90,9 @@ namespace ui {
 
     //! Returns the camera view model.
     [[nodiscard]] auto GetCameraVm() const -> observer_ptr<CameraVm>;
+
+    //! Returns the content view model.
+    [[nodiscard]] auto GetContentVm() const -> observer_ptr<ContentVm>;
 
   private:
     struct Impl;

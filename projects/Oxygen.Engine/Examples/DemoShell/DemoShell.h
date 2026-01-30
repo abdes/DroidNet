@@ -13,9 +13,9 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 
@@ -33,8 +33,14 @@ struct LightCullingPassConfig;
 
 namespace oxygen::examples {
 class SkyboxService;
-class FileBrowserService;
+class CameraSettingsService;
+class ContentSettingsService;
 } // namespace oxygen::examples
+
+namespace oxygen::examples::ui {
+class CameraVm;
+class ContentVm;
+} // namespace oxygen::examples::ui
 
 namespace oxygen::examples {
 
@@ -73,13 +79,13 @@ struct DemoShellPanelConfig {
 */
 struct DemoShellConfig {
   observer_ptr<engine::InputSystem> input_system { nullptr };
-  std::filesystem::path cooked_root {};
   observer_ptr<FileBrowserService> file_browser_service { nullptr };
   observer_ptr<SkyboxService> skybox_service { nullptr };
   DemoShellPanelConfig panel_config {};
   bool enable_camera_rig { true };
 
   std::function<void(const data::AssetKey&)> on_scene_load_requested {};
+  std::function<void()> on_scene_load_cancel_requested {};
   std::function<void(std::size_t)> on_dump_texture_memory {};
   std::function<std::optional<data::AssetKey>()> get_last_released_scene_key {};
   std::function<void()> on_force_trim {};
@@ -173,6 +179,9 @@ public:
   //! Returns the current light culling visualization mode.
   [[nodiscard]] auto GetLightCullingVisualizationMode() const
     -> engine::ShaderDebugMode;
+
+  //! Returns the content loader view model (may be null).
+  [[nodiscard]] auto GetContentVm() const -> observer_ptr<ui::ContentVm>;
 
 private:
   auto InitializePanels() -> void;

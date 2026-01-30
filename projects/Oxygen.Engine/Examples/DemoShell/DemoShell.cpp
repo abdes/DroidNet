@@ -16,17 +16,19 @@
 #include "DemoShell/Internal/SceneControlBlock.h"
 #include "DemoShell/PanelRegistry.h"
 #include "DemoShell/Services/CameraLifecycleService.h"
+#include "DemoShell/Services/CameraSettingsService.h"
+#include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/LightCullingSettingsService.h"
 #include "DemoShell/Services/RenderingSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/Services/UiSettingsService.h"
-#include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/UI/CameraRigController.h"
-#include "DemoShell/UI/ContentLoaderPanel.h"
+#include "DemoShell/UI/CameraVm.h"
+#include "DemoShell/UI/ContentVm.h"
 #include "DemoShell/UI/DemoShellUi.h"
 #include "DemoShell/UI/EnvironmentDebugPanel.h"
-#include "DemoShell/UI/RenderingVm.h"
 #include "DemoShell/UI/LightCullingVm.h"
+#include "DemoShell/UI/RenderingVm.h"
 
 namespace oxygen::examples {
 
@@ -42,12 +44,13 @@ struct DemoShell::Impl {
   RenderingSettingsService rendering_settings_service {};
   LightCullingSettingsService light_culling_settings_service {};
   CameraSettingsService camera_settings_service {};
+  ContentSettingsService content_settings_service {};
 
   // Panels still managed by DemoShell (non-MVVM panels)
-  std::shared_ptr<ui::ContentLoaderPanel> content_loader_panel {};
   std::shared_ptr<ui::EnvironmentDebugPanel> environment_debug_panel {};
 
   std::unique_ptr<ui::CameraRigController> camera_rig {};
+  observer_ptr<ui::ContentVm> content_vm {};
   CameraLifecycleService camera_lifecycle {};
   internal::SceneControlBlock scene_control {};
 };
@@ -110,7 +113,30 @@ auto DemoShell::Initialize(const DemoShellConfig& config) -> bool
     observer_ptr { &impl_->rendering_settings_service },
     observer_ptr { &impl_->light_culling_settings_service },
     observer_ptr { &impl_->camera_settings_service },
-    observer_ptr { impl_->camera_rig.get() });
+    observer_ptr { &impl_->content_settings_service },
+    observer_ptr { impl_->camera_rig.get() },
+    impl_->config.file_browser_service, impl_->config.panel_config);
+
+  impl_->content_vm = impl_->demo_shell_ui->GetContentVm();
+  if (impl_->content_vm) {
+    if (impl_->config.on_scene_load_requested) {
+      impl_->content_vm->SetOnSceneLoadRequested(
+        impl_->config.on_scene_load_requested);
+    }
+    if (impl_->config.on_scene_load_cancel_requested) {
+      impl_->content_vm->SetOnSceneLoadCancelRequested(
+        impl_->config.on_scene_load_cancel_requested);
+    }
+    if (impl_->config.on_force_trim) {
+      impl_->content_vm->SetOnForceTrim(impl_->config.on_force_trim);
+    }
+    if (impl_->config.on_pak_mounted) {
+      impl_->content_vm->SetOnPakMounted(impl_->config.on_pak_mounted);
+    }
+    if (impl_->config.on_loose_index_loaded) {
+      impl_->content_vm->SetOnIndexLoaded(impl_->config.on_loose_index_loaded);
+    }
+  }
 
   InitializePanels();
   RegisterDemoPanels();
@@ -123,6 +149,10 @@ auto DemoShell::Update(time::CanonicalDuration delta_time) -> void
 {
   if (!impl_->initialized) {
     return;
+  }
+
+  if (impl_->content_vm) {
+    impl_->content_vm->Update();
   }
 
   const auto u_delta_time = delta_time.get();
@@ -204,11 +234,8 @@ auto DemoShell::SetSkyboxService(observer_ptr<SkyboxService> skybox_service)
 
 auto DemoShell::CancelContentImport() -> void
 {
-  if (!impl_->config.panel_config.content_loader) {
-    return;
-  }
-  if (impl_->content_loader_panel) {
-    impl_->content_loader_panel->GetImportPanel().CancelImport();
+  if (impl_->content_vm) {
+    impl_->content_vm->CancelActiveImport();
   }
 }
 
@@ -227,6 +254,14 @@ auto DemoShell::GetRenderingViewMode() const -> ui::RenderingViewMode
     return ui::RenderingViewMode::kSolid;
   }
   return vm->GetViewMode();
+}
+
+auto DemoShell::GetContentVm() const -> observer_ptr<ui::ContentVm>
+{
+  if (!impl_) {
+    return observer_ptr<ui::ContentVm> { nullptr };
+  }
+  return impl_->content_vm;
 }
 
 auto DemoShell::SetActivePanel(std::string_view panel_name) -> void
@@ -279,27 +314,7 @@ auto DemoShell::GetLightCullingVisualizationMode() const
 
 auto DemoShell::InitializePanels() -> void
 {
-  if (impl_->config.panel_config.content_loader) {
-    if (!impl_->content_loader_panel) {
-      impl_->content_loader_panel = std::make_shared<ui::ContentLoaderPanel>();
-    }
-    ui::ContentLoaderPanel::Config loader_config;
-    loader_config.file_browser_service = impl_->config.file_browser_service;
-    loader_config.cooked_root = impl_->config.cooked_root;
-    loader_config.on_scene_load_requested
-      = impl_->config.on_scene_load_requested;
-    loader_config.on_dump_texture_memory = impl_->config.on_dump_texture_memory;
-    loader_config.get_last_released_scene_key
-      = impl_->config.get_last_released_scene_key;
-    loader_config.on_force_trim = impl_->config.on_force_trim;
-    loader_config.on_pak_mounted = impl_->config.on_pak_mounted;
-    loader_config.on_loose_index_loaded = impl_->config.on_loose_index_loaded;
-    impl_->content_loader_panel->Initialize(loader_config);
-  }
-
-  // Camera panel is created by DemoShellUi if requested.
-  // Rendering and Lighting panels are created lazily by DemoShellUi
-  // when pass configs become available (via EnsureXxxPanelReady)
+  // Content and Camera panels are now managed by DemoShellUi.
 
   if (impl_->config.panel_config.environment) {
     if (!impl_->environment_debug_panel) {
@@ -332,12 +347,6 @@ auto DemoShell::InitializePanels() -> void
 
 auto DemoShell::UpdatePanels() -> void
 {
-  if (impl_->config.panel_config.content_loader) {
-    if (impl_->content_loader_panel) {
-      impl_->content_loader_panel->Update();
-    }
-  }
-
   // Lazily create rendering and lighting panels via DemoShellUi
   if ((impl_->config.panel_config.lighting
         || impl_->config.panel_config.rendering)
@@ -381,8 +390,6 @@ auto DemoShell::UpdatePanels() -> void
   }
 }
 
-
-
 auto DemoShell::RegisterDemoPanels() -> void
 {
   const auto register_panel = [this](std::shared_ptr<DemoPanel> panel) {
@@ -393,15 +400,11 @@ auto DemoShell::RegisterDemoPanels() -> void
     }
   };
 
-  if (impl_->config.panel_config.content_loader) {
-    register_panel(impl_->content_loader_panel);
-  }
+  // Content, Camera, Rendering, and Lighting panels are managed by DemoShellUi.
+
   if (impl_->config.panel_config.environment) {
     register_panel(impl_->environment_debug_panel);
   }
-
-  // Rendering and Lighting panels are registered by DemoShellUi
-  // when they are lazily created via EnsureXxxPanelReady
 }
 
 } // namespace oxygen::examples

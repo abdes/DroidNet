@@ -1,4 +1,8 @@
 {
+  "camera": {
+    "control_mode": "orbit",
+    "fly_move_speed": 100.0
+  },
   "camera_rig": {
     "MainCamera": {
       "camera": {
@@ -13,12 +17,12 @@
       "fly": {
         "boost_multiplier": 4.0,
         "look_sensitivity": 0.001500000013038516,
-        "move_speed": 5.0,
+        "move_speed": 100.0,
         "plane_lock": false
       },
       "mode": "orbit",
       "orbit": {
-        "distance": 19.82050895690918,
+        "distance": 11.338199615478516,
         "mode": "turntable",
         "target": {
           "x": 0.0,
@@ -27,25 +31,85 @@
         }
       },
       "position": {
-        "x": -10.52524471282959,
-        "y": 12.872885704040527,
-        "z": 10.787059783935547
+        "x": 8.355891227722168,
+        "y": 6.486519813537598,
+        "z": 4.081532955169678
       },
       "rotation": {
-        "w": -0.2952709496021271,
-        "x": -0.16041064262390137,
-        "y": 0.44961073994636536,
-        "z": 0.8276073336601257
+        "w": 0.3626415431499481,
+        "x": 0.24877555668354034,
+        "y": 0.5080555081367493,
+        "z": 0.7405953407287598
       },
       "scale": {
         "x": 1.0,
         "y": 1.0,
         "z": 1.0
       }
+    },
+    "PhysCamera001": {
+      "camera": {
+        "has_orthographic": false,
+        "has_perspective": true,
+        "perspective": {
+          "far": 10000.0,
+          "fov": 1.0212266445159912,
+          "near": 0.10000000149011612
+        }
+      },
+      "fly": {
+        "boost_multiplier": 4.0,
+        "look_sensitivity": 0.001500000013038516,
+        "move_speed": 5.0,
+        "plane_lock": false
+      },
+      "mode": "fly",
+      "orbit": {
+        "distance": 9.283685684204102,
+        "mode": "turntable",
+        "target": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        }
+      },
+      "position": {
+        "x": 8.718137741088867,
+        "y": 2.000545024871826,
+        "z": 2.485699415206909
+      },
+      "rotation": {
+        "w": 0.3388625681400299,
+        "x": 0.5450535416603088,
+        "y": 0.6512666344642639,
+        "z": 0.40489575266838074
+      },
+      "scale": {
+        "x": 0.9999999403953552,
+        "y": 0.9999998211860657,
+        "z": 0.9999998807907104
+      }
+    }
+  },
+  "content": {
+    "explorer": {
+      "auto_dump_delay": 180.0,
+      "auto_dump_tex_mem": true,
+      "auto_load_on_import": true,
+      "dump_top_n": 20.0,
+      "include_fbx": true,
+      "include_glb": true,
+      "include_gltf": true,
+      "model_root": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\Content"
     }
   },
   "demo_shell": {
-    "active_panel": "Camera Controls"
+    "active_panel": "Content Loader",
+    "panels": {
+      "content_loader": {
+        "width": 660.0
+      }
+    }
   },
   "environment": {
     "debug": {
@@ -55,7 +119,7 @@
     },
     "post_process": {
       "auto_exposure_max_ev": 16.0,
-      "auto_exposure_min_ev": -4.0,
+      "auto_exposure_min_ev": -6.0,
       "auto_exposure_speed_down": 1.0,
       "auto_exposure_speed_up": 3.0,
       "bloom_intensity": 0.0,
@@ -63,7 +127,7 @@
       "contrast": 1.0,
       "enabled": false,
       "exposure_compensation_ev": 0.0,
-      "exposure_mode": 0.0,
+      "exposure_mode": 1.0,
       "saturation": 1.0,
       "tone_mapper": 0.0,
       "vignette": 0.0
@@ -81,10 +145,10 @@
       "mie_anisotropy": 0.800000011920929,
       "mie_scale_height_km": 1.2000000476837158,
       "multi_scattering": 1.0,
-      "planet_radius_km": 6360.0,
+      "planet_radius_km": 6360.00048828125,
       "rayleigh_scale_height_km": 8.0,
-      "sun_disk_enabled": true,
-      "sun_disk_radius_deg": 0.2680000066757202
+      "sun_disk_enabled": false,
+      "sun_disk_radius_deg": 0.26785776019096375
     },
     "sky_light": {
       "diffuse": 1.0,
@@ -103,11 +167,11 @@
       "intensity": 1.0,
       "rotation_deg": 0.0,
       "solid_color": {
-        "x": 0.20000000298023224,
-        "y": 0.30000001192092896,
-        "z": 0.5
+        "x": 0.25,
+        "y": 0.44999998807907104,
+        "z": 0.8999999761581421
       },
-      "source": 0.0
+      "source": 1.0
     },
     "skybox": {
       "face_size": 512.0,
@@ -125,7 +189,7 @@
         "y": 1.0,
         "z": 1.0
       },
-      "disk_radius_deg": 0.2680000066757202,
+      "disk_radius_deg": 0.26799994707107544,
       "elevation_deg": 30.0,
       "enabled": true,
       "intensity_lux": 10.0,
@@ -133,5 +197,32 @@
       "temperature_kelvin": 6500.0,
       "use_temperature": false
     }
+  },
+  "file_browser": {
+    "select_loose_cooked_index": {
+      "window_size": [
+        1223,
+        463
+      ]
+    },
+    "select_model_file": {
+      "window_size": [
+        1045,
+        452
+      ]
+    },
+    "select_pak_file": {
+      "window_size": [
+        700,
+        450
+      ]
+    }
+  },
+  "light_culling": {
+    "visualization_mode": 0.0
+  },
+  "rendering": {
+    "debug_mode": 0.0,
+    "view_mode": "solid"
   }
 }

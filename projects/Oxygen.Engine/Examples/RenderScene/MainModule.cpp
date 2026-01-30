@@ -22,14 +22,15 @@
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
-#include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
+#include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Environment/Sun.h>
 #include <Oxygen/Scene/Types/Flags.h>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Services/SceneLoaderService.h"
+#include "DemoShell/UI/ContentVm.h"
 #include "DemoShell/UI/RenderingVm.h"
 #include "RenderScene/MainModule.h"
 
@@ -85,7 +86,6 @@ auto MainModule::OnAttached(
   });
   DemoShellConfig shell_config;
   shell_config.input_system = observer_ptr { app_.input_system.get() };
-  shell_config.cooked_root = cooked_root_;
   shell_config.panel_config.content_loader = true;
   shell_config.panel_config.camera_controls = true;
   shell_config.panel_config.lighting = true;
@@ -106,10 +106,10 @@ auto MainModule::OnAttached(
     }
     return refs;
   };
-  shell_config.on_scene_load_requested = [this](const data::AssetKey& key) {
-    pending_scene_key_ = key;
-    pending_load_scene_ = true;
-  };
+  shell_config.on_scene_load_requested
+    = [this](const data::AssetKey& key) { pending_scene_load_ = key; };
+  shell_config.on_scene_load_cancel_requested
+    = [this]() { scene_load_cancel_requested_ = true; };
   shell_config.on_dump_texture_memory = [this](const std::size_t top_n) {
     if (auto* renderer = ResolveRenderer()) {
       renderer->DumpEstimatedTextureMemory(top_n);
@@ -117,29 +117,17 @@ auto MainModule::OnAttached(
   };
   shell_config.get_last_released_scene_key
     = [this]() { return last_released_scene_key_; };
-  shell_config.on_force_trim = [this]() {
-    ReleaseCurrentSceneAsset("force trim");
-    ClearSceneRuntime("force trim");
-  };
+  shell_config.on_force_trim
+    = [this]() { pending_source_action_ = PendingSourceAction::kTrimCache; };
   shell_config.on_pak_mounted = [this](const std::filesystem::path& path) {
-    auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
-    if (asset_loader) {
-      ReleaseCurrentSceneAsset("pak mounted");
-      ClearSceneRuntime("pak mounted");
-      asset_loader->ClearMounts();
-      asset_loader->AddPakFile(path);
-    }
+    pending_source_action_ = PendingSourceAction::kMountPak;
+    pending_path_ = path;
   };
-  shell_config.on_loose_index_loaded = [this](
-                                         const std::filesystem::path& path) {
-    auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
-    if (asset_loader) {
-      ReleaseCurrentSceneAsset("loose cooked root");
-      ClearSceneRuntime("loose cooked root");
-      asset_loader->ClearMounts();
-      asset_loader->AddLooseCookedRoot(path.parent_path());
-    }
-  };
+  shell_config.on_loose_index_loaded
+    = [this](const std::filesystem::path& path) {
+        pending_source_action_ = PendingSourceAction::kMountIndex;
+        pending_path_ = path;
+      };
 
   if (!shell_->Initialize(shell_config)) {
     LOG_F(WARNING, "RenderScene: DemoShell initialization failed");
@@ -167,6 +155,89 @@ auto MainModule::OnFrameStart(oxygen::engine::FrameContext& context) -> void
 
 auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
 {
+  // 1. Process deferred lifecycle actions before anything else this frame.
+  if (pending_source_action_ != PendingSourceAction::kNone) {
+    const char* reason = "source change";
+    if (pending_source_action_ == PendingSourceAction::kMountPak) {
+      reason = "pak mounted";
+    } else if (pending_source_action_ == PendingSourceAction::kMountIndex) {
+      reason = "loose cooked root";
+    } else if (pending_source_action_ == PendingSourceAction::kClear) {
+      reason = "force trim";
+    } else if (pending_source_action_ == PendingSourceAction::kTrimCache) {
+      reason = "trim cache";
+    }
+
+    if (pending_source_action_ == PendingSourceAction::kClear) {
+      ReleaseCurrentSceneAsset(reason);
+      ClearSceneRuntime(reason);
+    }
+
+    auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+    if (asset_loader) {
+      if (pending_source_action_ == PendingSourceAction::kClear) {
+        asset_loader->ClearMounts();
+        mounted_loose_roots_.clear();
+      } else if (pending_source_action_ == PendingSourceAction::kTrimCache) {
+        asset_loader->TrimCache();
+      } else if (pending_source_action_ == PendingSourceAction::kMountPak) {
+        asset_loader->AddPakFile(pending_path_);
+      } else if (pending_source_action_ == PendingSourceAction::kMountIndex) {
+        std::error_code ec;
+        auto root = pending_path_.parent_path();
+        auto normalized = std::filesystem::weakly_canonical(root, ec);
+        if (ec) {
+          normalized = root.lexically_normal();
+        }
+
+        const auto already_mounted = std::any_of(mounted_loose_roots_.begin(),
+          mounted_loose_roots_.end(),
+          [&normalized](const std::filesystem::path& existing) {
+            return existing == normalized;
+          });
+
+        if (already_mounted) {
+          LOG_F(INFO, "RenderScene: Refreshing loose cooked mount for '{}'",
+            normalized.string());
+          asset_loader->AddLooseCookedRoot(root);
+        } else {
+          asset_loader->AddLooseCookedRoot(root);
+          mounted_loose_roots_.push_back(std::move(normalized));
+        }
+      }
+    }
+
+    pending_source_action_ = PendingSourceAction::kNone;
+    pending_path_.clear();
+  }
+
+  // 2. Process pending scene loads
+  if (scene_load_cancel_requested_) {
+    LOG_F(INFO, "RenderScene: Scene load cancellation requested");
+    scene_load_cancel_requested_ = false;
+    pending_scene_load_.reset();
+    scene_loader_.reset();
+    active_scene_load_key_.reset();
+  }
+
+  if (pending_scene_load_) {
+    const auto key = *pending_scene_load_;
+    pending_scene_load_.reset();
+
+    auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+    if (asset_loader) {
+      scene_loader_ = std::make_shared<SceneLoaderService>(
+        *asset_loader, last_viewport_w_, last_viewport_h_);
+      active_scene_load_key_ = key;
+      scene_loader_->StartLoad(key);
+      LOG_F(INFO, "RenderScene: Started async scene load (scene_key={})",
+        oxygen::data::to_string(key));
+    } else {
+      LOG_F(ERROR, "AssetLoader unavailable");
+    }
+  }
+
+  // 3. Process async scene loading results
   if (scene_loader_) {
     if (scene_loader_->IsReady()) {
       auto loader = scene_loader_;
@@ -187,6 +258,12 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
           LOG_F(ERROR, "RenderScene: Scene swap missing asset or scene");
         }
       }
+      if (shell_) {
+        if (const auto vm = shell_->GetContentVm()) {
+          vm->NotifySceneLoadCompleted(swap.scene_key, true);
+        }
+      }
+      active_scene_load_key_.reset();
       current_scene_key_ = swap.scene_key;
       if (shell_ && shell_->GetCameraLifecycle().GetActiveCamera().IsAlive()) {
         shell_->GetCameraLifecycle().CaptureInitialPose();
@@ -199,6 +276,14 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
       }
     } else if (scene_loader_->IsFailed()) {
       LOG_F(ERROR, "RenderScene: Scene loading failed");
+      if (shell_) {
+        if (const auto vm = shell_->GetContentVm()) {
+          if (active_scene_load_key_.has_value()) {
+            vm->NotifySceneLoadCompleted(*active_scene_load_key_, false);
+          }
+        }
+      }
+      active_scene_load_key_.reset();
       scene_loader_.reset();
     } else if (scene_loader_->IsConsumed()) {
       if (scene_loader_->Tick()) {
@@ -238,7 +323,9 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
 auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
-  DCHECK_F(active_scene_.IsValid());
+  if (!active_scene_.IsValid()) {
+    co_return;
+  }
 
   UpdateFrameContext(context, [this, &context](int w, int h) {
     last_viewport_w_ = w;
@@ -257,23 +344,6 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   // Panel updates happen here before scene loading
   if (shell_) {
     shell_->Update(time::CanonicalDuration {});
-  }
-
-  if (pending_load_scene_) {
-    pending_load_scene_ = false;
-
-    if (pending_scene_key_) {
-      auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
-      if (asset_loader) {
-        scene_loader_ = std::make_shared<SceneLoaderService>(
-          *asset_loader, last_viewport_w_, last_viewport_h_);
-        scene_loader_->StartLoad(*pending_scene_key_);
-        LOG_F(INFO, "RenderScene: Started async scene load (scene_key={})",
-          oxygen::data::to_string(*pending_scene_key_));
-      } else {
-        LOG_F(ERROR, "AssetLoader unavailable");
-      }
-    }
   }
 
   co_return;
