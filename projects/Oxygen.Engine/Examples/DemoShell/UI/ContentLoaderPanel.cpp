@@ -19,6 +19,9 @@
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/ImGui/Styles/IconsFontAwesome.h>
 
+#include <Oxygen/Content/Import/ImportOptions.h>
+#include <Oxygen/Content/Import/TextureSourceAssembly.h>
+
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/UI/ContentLoaderPanel.h"
@@ -76,14 +79,14 @@ namespace {
 
 }
 
-void ContentLoaderPanel::Initialize(observer_ptr<ContentVm> vm) { vm_ = vm; }
+ContentLoaderPanel::ContentLoaderPanel(observer_ptr<ContentVm> vm)
+  : vm_(vm)
+{
+  DCHECK_NOTNULL_F(vm, "ContentLoaderPanel requires ContentVm");
+}
 
 auto ContentLoaderPanel::DrawContents() -> void
 {
-  if (!vm_) {
-    ImGui::TextDisabled("No Content VM connected");
-    return;
-  }
 
   // Global Progress (rendered at bottom)
   const bool isImporting = vm_->IsImportInProgress();
@@ -104,19 +107,19 @@ auto ContentLoaderPanel::DrawContents() -> void
   if (ImGui::BeginChild("ContentLoaderMain", ImVec2(0.0f, main_height))) {
     if (ImGui::BeginTabBar("ContentLoaderTabs", ImGuiTabBarFlags_None)) {
       if (ImGui::BeginTabItem("Sources")) {
-        DrawImportWorkflow();
+        DrawSourcesSection();
         ImGui::EndTabItem();
       }
       if (ImGui::BeginTabItem("Library")) {
-        DrawLibraryWorkflow();
+        DrawLibrarySection();
         ImGui::EndTabItem();
       }
       if (ImGui::BeginTabItem("Diagnostics")) {
-        DrawDiagnosticsWorkflow();
+        DrawDiagnosticsSection();
         ImGui::EndTabItem();
       }
       if (ImGui::BeginTabItem("Advanced")) {
-        DrawAdvancedSettings();
+        DrawAdvancedSection();
         ImGui::EndTabItem();
       }
       ImGui::EndTabBar();
@@ -188,18 +191,21 @@ auto ContentLoaderPanel::DrawContents() -> void
   }
 }
 
-auto ContentLoaderPanel::DrawImportWorkflow() -> void
+auto ContentLoaderPanel::DrawSourcesSection() -> void
 {
   DrawWorkflowSettings();
+  ImGui::Spacing();
   DrawImportSettings();
+  ImGui::Spacing();
   DrawTextureTuningSettings();
 
   auto explorer = vm_->GetExplorerSettings();
   bool explorer_changed = false;
 
+  ImGui::Dummy({ 0, 4 });
   if (ImGui::CollapsingHeader("Content Root", ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::Indent();
     std::string root_path = explorer.model_root.string();
-    ImGui::Dummy(ImVec2(0, 20));
     if (InputTextString("Model Root", root_path)) {
       explorer.model_root = root_path;
       explorer_changed = true;
@@ -219,13 +225,16 @@ auto ContentLoaderPanel::DrawImportWorkflow() -> void
     ImGui::SameLine();
     if (ImGui::Checkbox("GLTF", &explorer.include_gltf))
       explorer_changed = true;
+    ImGui::Unindent();
   }
 
   if (explorer_changed) {
     vm_->SetExplorerSettings(explorer);
   }
 
-  ImGui::Dummy(ImVec2(0, 20));
+  ImGui::Spacing();
+  ImGui::SeparatorText("Discovery");
+
   if (ImGui::Button(ICON_FA_ARROW_ROTATE_RIGHT "##refresh_sources")) {
     vm_->RefreshSources();
   }
@@ -263,8 +272,9 @@ auto ContentLoaderPanel::DrawImportWorkflow() -> void
   ImGui::EndChild();
 }
 
-auto ContentLoaderPanel::DrawLibraryWorkflow() -> void
+auto ContentLoaderPanel::DrawLibrarySection() -> void
 {
+  ImGui::SeparatorText("Mount Management");
   if (ImGui::Button(ICON_FA_FILE " Select PAK##select_pak")) {
     vm_->BrowseForPak();
   }
@@ -319,29 +329,21 @@ auto ContentLoaderPanel::DrawLibraryWorkflow() -> void
   ImGui::EndChild();
 }
 
-auto ContentLoaderPanel::DrawDiagnosticsWorkflow() -> void
+auto ContentLoaderPanel::DrawDiagnosticsSection() -> void
 {
+  ImGui::SeparatorText("Diagnostics Control");
   if (ImGui::Button("Clear All"))
     vm_->ClearDiagnostics();
-  ImGui::Separator();
+  ImGui::Spacing();
 
   if (ImGui::BeginChild("DiagnosticsList", ImVec2(0, 0), true)) {
     for (const auto& diag : vm_->GetDiagnostics()) {
-      ImVec4 color = ImVec4(1, 1, 1, 1);
+      ImVec4 color = ImVec4(0.8f, 0.8f, 0.8f, 1);
 
-      // Check for diagnostic markers (operation boundaries)
-      bool is_marker = diag.message.find("---") != std::string::npos;
-      if (is_marker) {
-        color = ImVec4(0.4f, 1.0f, 0.8f, 1.0f); // Teal for markers
-        ImGui::Separator();
-        ImGui::TextColored(color, "%s", diag.message.c_str());
-        ImGui::Separator();
-        continue;
-      }
-
-      if (diag.severity == content::import::ImportSeverity::kError)
+      if (diag.severity == ::oxygen::content::import::ImportSeverity::kError)
         color = ImVec4(1, 0.4f, 0.4f, 1);
-      else if (diag.severity == content::import::ImportSeverity::kWarning)
+      else if (diag.severity
+        == ::oxygen::content::import::ImportSeverity::kWarning)
         color = ImVec4(1, 0.8f, 0.4f, 1);
 
       ImGui::TextColored(color, "[%s] %s: %s",
@@ -387,10 +389,10 @@ auto ContentLoaderPanel::DrawImportSettings() -> void
     bool changed = false;
 
     if (ImGui::TreeNodeEx("Identifiers", ImGuiTreeNodeFlags_DefaultOpen)) {
-      static constexpr std::array<content::import::AssetKeyPolicy, 2>
-        kKeyPolicies
-        = { content::import::AssetKeyPolicy::kDeterministicFromVirtualPath,
-            content::import::AssetKeyPolicy::kRandom };
+      static constexpr std::array<::oxygen::content::import::AssetKeyPolicy, 2>
+        kKeyPolicies = { ::oxygen::content::import::AssetKeyPolicy::
+                           kDeterministicFromVirtualPath,
+          ::oxygen::content::import::AssetKeyPolicy::kRandom };
       if (DrawEnumCombo(
             "Asset Key Policy", options.asset_key_policy, kKeyPolicies))
         changed = true;
@@ -399,18 +401,21 @@ auto ContentLoaderPanel::DrawImportSettings() -> void
 
     if (ImGui::TreeNodeEx(
           "Content Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
-      bool textures = (options.import_content
-                        & content::import::ImportContentFlags::kTextures)
-        != content::import::ImportContentFlags::kNone;
-      bool materials = (options.import_content
-                         & content::import::ImportContentFlags::kMaterials)
-        != content::import::ImportContentFlags::kNone;
-      bool geometry = (options.import_content
-                        & content::import::ImportContentFlags::kGeometry)
-        != content::import::ImportContentFlags::kNone;
-      bool scene
-        = (options.import_content & content::import::ImportContentFlags::kScene)
-        != content::import::ImportContentFlags::kNone;
+      bool textures
+        = (options.import_content
+            & ::oxygen::content::import::ImportContentFlags::kTextures)
+        != ::oxygen::content::import::ImportContentFlags::kNone;
+      bool materials
+        = (options.import_content
+            & ::oxygen::content::import::ImportContentFlags::kMaterials)
+        != ::oxygen::content::import::ImportContentFlags::kNone;
+      bool geometry
+        = (options.import_content
+            & ::oxygen::content::import::ImportContentFlags::kGeometry)
+        != ::oxygen::content::import::ImportContentFlags::kNone;
+      bool scene = (options.import_content
+                     & ::oxygen::content::import::ImportContentFlags::kScene)
+        != ::oxygen::content::import::ImportContentFlags::kNone;
 
       if (ImGui::Checkbox("Textures", &textures))
         changed = true;
@@ -425,18 +430,20 @@ auto ContentLoaderPanel::DrawImportSettings() -> void
         changed = true;
 
       if (changed) {
-        options.import_content = content::import::ImportContentFlags::kNone;
+        options.import_content
+          = ::oxygen::content::import::ImportContentFlags::kNone;
         if (textures)
           options.import_content
-            |= content::import::ImportContentFlags::kTextures;
+            |= ::oxygen::content::import::ImportContentFlags::kTextures;
         if (materials)
           options.import_content
-            |= content::import::ImportContentFlags::kMaterials;
+            |= ::oxygen::content::import::ImportContentFlags::kMaterials;
         if (geometry)
           options.import_content
-            |= content::import::ImportContentFlags::kGeometry;
+            |= ::oxygen::content::import::ImportContentFlags::kGeometry;
         if (scene)
-          options.import_content |= content::import::ImportContentFlags::kScene;
+          options.import_content
+            |= ::oxygen::content::import::ImportContentFlags::kScene;
       }
       ImGui::TreePop();
     }
@@ -444,29 +451,55 @@ auto ContentLoaderPanel::DrawImportSettings() -> void
     if (ImGui::TreeNodeEx("Processing", ImGuiTreeNodeFlags_DefaultOpen)) {
       if (ImGui::Checkbox("Enable Hashing", &options.with_content_hashing))
         changed = true;
+      if (ImGui::Checkbox(
+            "Ignore Non-Mesh Primitives", &options.ignore_non_mesh_primitives))
+        changed = true;
 
-      static constexpr std::array<content::import::UnitNormalizationPolicy, 3>
+      static constexpr std::array<::oxygen::content::import::NodePruningPolicy,
+        2>
+        kPruningModes = {
+          ::oxygen::content::import::NodePruningPolicy::kKeepAll,
+          ::oxygen::content::import::NodePruningPolicy::kDropEmptyNodes,
+        };
+      if (DrawEnumCombo("Node Pruning", options.node_pruning, kPruningModes))
+        changed = true;
+
+      static constexpr std::array<
+        ::oxygen::content::import::UnitNormalizationPolicy, 3>
         kUnitPolicies = {
-          content::import::UnitNormalizationPolicy::kNormalizeToMeters,
-          content::import::UnitNormalizationPolicy::kPreserveSource,
-          content::import::UnitNormalizationPolicy::kApplyCustomFactor,
+          ::oxygen::content::import::UnitNormalizationPolicy::
+            kNormalizeToMeters,
+          ::oxygen::content::import::UnitNormalizationPolicy::kPreserveSource,
+          ::oxygen::content::import::UnitNormalizationPolicy::
+            kApplyCustomFactor,
         };
       if (DrawEnumCombo(
             "Units", options.coordinate.unit_normalization, kUnitPolicies))
         changed = true;
 
-      static constexpr std::array<content::import::GeometryAttributePolicy, 4>
-        kAttrPolicies = {
-          content::import::GeometryAttributePolicy::kNone,
-          content::import::GeometryAttributePolicy::kPreserveIfPresent,
-          content::import::GeometryAttributePolicy::kGenerateMissing,
-          content::import::GeometryAttributePolicy::kAlwaysRecalculate,
-        };
-      if (DrawEnumCombo("Normals", options.normal_policy, kAttrPolicies))
-        changed = true;
-      if (DrawEnumCombo("Tangents", options.tangent_policy, kAttrPolicies))
-        changed = true;
+      if (options.coordinate.unit_normalization
+        == ::oxygen::content::import::UnitNormalizationPolicy::
+          kApplyCustomFactor) {
+        if (ImGui::DragFloat("Scale Factor", &options.coordinate.unit_scale,
+              0.1f, 0.001f, 1000.0f))
+          changed = true;
+      }
 
+      static constexpr std::array<
+        ::oxygen::content::import::GeometryAttributePolicy, 4>
+        kGeometryPolicies = {
+          ::oxygen::content::import::GeometryAttributePolicy::kNone,
+          ::oxygen::content::import::GeometryAttributePolicy::
+            kPreserveIfPresent,
+          ::oxygen::content::import::GeometryAttributePolicy::kGenerateMissing,
+          ::oxygen::content::import::GeometryAttributePolicy::kAlwaysRecalculate
+        };
+      if (DrawEnumCombo(
+            "Normal Policy", options.normal_policy, kGeometryPolicies))
+        changed = true;
+      if (DrawEnumCombo(
+            "Tangent Policy", options.tangent_policy, kGeometryPolicies))
+        changed = true;
       ImGui::TreePop();
     }
 
@@ -482,72 +515,148 @@ auto ContentLoaderPanel::DrawTextureTuningSettings() -> void
     auto tuning = vm_->GetTextureTuning();
     bool changed = false;
 
-    if (ImGui::TreeNodeEx(
-          "Texture Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
-      if (ImGui::Checkbox("Enabled", &tuning.enabled))
-        changed = true;
+    if (ImGui::Checkbox("Enabled", &tuning.enabled))
+      changed = true;
 
-      static constexpr std::array<content::import::TextureIntent, 8> kIntents
-        = { content::import::TextureIntent::kAlbedo,
-            content::import::TextureIntent::kNormalTS,
-            content::import::TextureIntent::kRoughness,
-            content::import::TextureIntent::kMetallic,
-            content::import::TextureIntent::kAO,
-            content::import::TextureIntent::kEmissive,
-            content::import::TextureIntent::kORMPacked,
-            content::import::TextureIntent::kData };
-      if (DrawEnumCombo("Intent", tuning.intent, kIntents))
-        changed = true;
+    static constexpr std::array<::oxygen::content::import::TextureIntent, 12>
+      kIntents = {
+        ::oxygen::content::import::TextureIntent::kAlbedo,
+        ::oxygen::content::import::TextureIntent::kNormalTS,
+        ::oxygen::content::import::TextureIntent::kRoughness,
+        ::oxygen::content::import::TextureIntent::kMetallic,
+        ::oxygen::content::import::TextureIntent::kAO,
+        ::oxygen::content::import::TextureIntent::kEmissive,
+        ::oxygen::content::import::TextureIntent::kOpacity,
+        ::oxygen::content::import::TextureIntent::kORMPacked,
+        ::oxygen::content::import::TextureIntent::kHdrEnvironment,
+        ::oxygen::content::import::TextureIntent::kHdrLightProbe,
+        ::oxygen::content::import::TextureIntent::kData,
+        ::oxygen::content::import::TextureIntent::kHeightMap,
+      };
+    if (DrawEnumCombo("Intent", tuning.intent, kIntents))
+      changed = true;
 
-      static constexpr std::array<ColorSpace, 2> kColorSpaces
-        = { ColorSpace::kLinear, ColorSpace::kSRGB };
-      static constexpr std::array<content::import::MipPolicy, 3> kMipPolicies
-        = { content::import::MipPolicy::kNone,
-            content::import::MipPolicy::kFullChain,
-            content::import::MipPolicy::kMaxCount };
-      static constexpr std::array<content::import::MipFilter, 3> kMipFilters
-        = { content::import::MipFilter::kBox,
-            content::import::MipFilter::kKaiser,
-            content::import::MipFilter::kLanczos };
+    static constexpr std::array<ColorSpace, 2> kColorSpaces
+      = { ColorSpace::kLinear, ColorSpace::kSRGB };
+    static constexpr std::array<::oxygen::content::import::MipPolicy, 3>
+      kMipPolicies = { ::oxygen::content::import::MipPolicy::kNone,
+        ::oxygen::content::import::MipPolicy::kFullChain,
+        ::oxygen::content::import::MipPolicy::kMaxCount };
+    static constexpr std::array<::oxygen::content::import::MipFilter, 3>
+      kMipFilters = { ::oxygen::content::import::MipFilter::kBox,
+        ::oxygen::content::import::MipFilter::kKaiser,
+        ::oxygen::content::import::MipFilter::kLanczos };
 
-      if (DrawEnumCombo(
-            "Source Color Space", tuning.source_color_space, kColorSpaces))
+    if (DrawEnumCombo(
+          "Source Color Space", tuning.source_color_space, kColorSpaces))
+      changed = true;
+    if (DrawEnumCombo("Mip Policy", tuning.mip_policy, kMipPolicies))
+      changed = true;
+    if (tuning.mip_policy == ::oxygen::content::import::MipPolicy::kMaxCount) {
+      int max_mips = (int)tuning.max_mip_levels;
+      if (ImGui::SliderInt("Max Mips", &max_mips, 1, 16)) {
+        tuning.max_mip_levels = (uint8_t)max_mips;
         changed = true;
-      if (DrawEnumCombo("Mip Policy", tuning.mip_policy, kMipPolicies))
+      }
+    }
+    if (DrawEnumCombo("Mip Filter", tuning.mip_filter, kMipFilters))
+      changed = true;
+
+    static constexpr std::array<Format, 24> kFormats = {
+      Format::kR8UNorm,
+      Format::kR8SNorm,
+      Format::kR16Float,
+      Format::kR32Float,
+      Format::kRG8UNorm,
+      Format::kRG8SNorm,
+      Format::kRG16Float,
+      Format::kRG32Float,
+      Format::kRGB32Float,
+      Format::kRGBA8UNorm,
+      Format::kRGBA8UNormSRGB,
+      Format::kRGBA16Float,
+      Format::kRGBA32Float,
+      Format::kBC1UNorm,
+      Format::kBC1UNormSRGB,
+      Format::kBC2UNorm,
+      Format::kBC2UNormSRGB,
+      Format::kBC3UNorm,
+      Format::kBC3UNormSRGB,
+      Format::kBC4UNorm,
+      Format::kBC5UNorm,
+      Format::kBC6HFloatU,
+      Format::kBC7UNorm,
+      Format::kBC7UNormSRGB,
+    };
+    if (DrawEnumCombo("Color Format", tuning.color_output_format, kFormats))
+      changed = true;
+    if (DrawEnumCombo("Data Format", tuning.data_output_format, kFormats))
+      changed = true;
+
+    static constexpr std::array<::oxygen::content::import::Bc7Quality, 4>
+      kBc7Tiers = { ::oxygen::content::import::Bc7Quality::kNone,
+        ::oxygen::content::import::Bc7Quality::kFast,
+        ::oxygen::content::import::Bc7Quality::kDefault,
+        ::oxygen::content::import::Bc7Quality::kHigh };
+    if (DrawEnumCombo("BC7 Quality", tuning.bc7_quality, kBc7Tiers))
+      changed = true;
+
+    static constexpr std::array<::oxygen::content::import::HdrHandling, 3>
+      kHdrModes = { ::oxygen::content::import::HdrHandling::kError,
+        ::oxygen::content::import::HdrHandling::kTonemapAuto,
+        ::oxygen::content::import::HdrHandling::kKeepFloat };
+    if (DrawEnumCombo("HDR Handling", tuning.hdr_handling, kHdrModes))
+      changed = true;
+
+    if (tuning.hdr_handling
+      != ::oxygen::content::import::HdrHandling::kKeepFloat) {
+      if (ImGui::Checkbox("Bake HDR to LDR", &tuning.bake_hdr_to_ldr))
         changed = true;
-      if (tuning.mip_policy == content::import::MipPolicy::kMaxCount) {
-        int max_mips = (int)tuning.max_mip_levels;
-        if (ImGui::SliderInt("Max Mips", &max_mips, 1, 16)) {
-          tuning.max_mip_levels = (uint8_t)max_mips;
+      if (tuning.bake_hdr_to_ldr) {
+        ImGui::Indent();
+        if (ImGui::DragFloat(
+              "Exposure (EV)", &tuning.exposure_ev, 0.1f, -10.0f, 10.0f))
+          changed = true;
+        ImGui::Unindent();
+      }
+    }
+
+    ImGui::Separator();
+    if (ImGui::Checkbox(
+          "Flip Green Channel (Normal)", &tuning.flip_normal_green))
+      changed = true;
+    if (ImGui::Checkbox(
+          "Renormalize Mips", &tuning.renormalize_normals_in_mips))
+      changed = true;
+
+    ImGui::Separator();
+    if (ImGui::Checkbox("Import as Cubemap", &tuning.import_cubemap))
+      changed = true;
+    if (tuning.import_cubemap) {
+      ImGui::Indent();
+      if (ImGui::Checkbox("Equirect to Cubemap", &tuning.equirect_to_cubemap))
+        changed = true;
+      if (tuning.equirect_to_cubemap) {
+        int face_size = (int)tuning.cubemap_face_size;
+        if (ImGui::DragInt("Face Size", &face_size, 256, 0, 8192)) {
+          tuning.cubemap_face_size = (uint32_t)face_size;
           changed = true;
         }
       }
-      if (DrawEnumCombo("Mip Filter", tuning.mip_filter, kMipFilters))
-        changed = true;
 
-      static constexpr std::array<Format, 2> kFormats
-        = { Format::kBC7UNorm, Format::kBC7UNormSRGB };
-      if (DrawEnumCombo("Color Format", tuning.color_output_format, kFormats))
+      static constexpr std::array<::oxygen::content::import::CubeMapImageLayout,
+        6>
+        kCubeLayouts = {
+          ::oxygen::content::import::CubeMapImageLayout::kUnknown,
+          ::oxygen::content::import::CubeMapImageLayout::kAuto,
+          ::oxygen::content::import::CubeMapImageLayout::kHorizontalStrip,
+          ::oxygen::content::import::CubeMapImageLayout::kVerticalStrip,
+          ::oxygen::content::import::CubeMapImageLayout::kHorizontalCross,
+          ::oxygen::content::import::CubeMapImageLayout::kVerticalCross,
+        };
+      if (DrawEnumCombo("Cube Layout", tuning.cubemap_layout, kCubeLayouts))
         changed = true;
-      if (DrawEnumCombo("Data Format", tuning.data_output_format, kFormats))
-        changed = true;
-
-      static constexpr std::array<content::import::Bc7Quality, 4> kBc7Tiers
-        = { content::import::Bc7Quality::kNone,
-            content::import::Bc7Quality::kFast,
-            content::import::Bc7Quality::kDefault,
-            content::import::Bc7Quality::kHigh };
-      if (DrawEnumCombo("BC7 Quality", tuning.bc7_quality, kBc7Tiers))
-        changed = true;
-
-      static constexpr std::array<content::import::HdrHandling, 3> kHdrModes
-        = { content::import::HdrHandling::kError,
-            content::import::HdrHandling::kTonemapAuto,
-            content::import::HdrHandling::kKeepFloat };
-      if (DrawEnumCombo("HDR Handling", tuning.hdr_handling, kHdrModes))
-        changed = true;
-
-      ImGui::TreePop();
+      ImGui::Unindent();
     }
 
     if (changed) {
@@ -556,7 +665,7 @@ auto ContentLoaderPanel::DrawTextureTuningSettings() -> void
   }
 }
 
-auto ContentLoaderPanel::DrawAdvancedSettings() -> void
+auto ContentLoaderPanel::DrawAdvancedSection() -> void
 {
   static bool service_dirty = false;
 
@@ -565,32 +674,33 @@ auto ContentLoaderPanel::DrawAdvancedSettings() -> void
     auto cfg = vm_->GetServiceConfig();
     bool changed = false;
 
-    auto draw_pipe = [&](const char* label,
-                       content::import::ImportPipelineConcurrency& pipe) {
-      ImGui::PushID(label);
-      ImGui::AlignTextToFramePadding();
-      ImGui::Text("%s", label);
-      ImGui::SameLine(100);
+    auto draw_pipe
+      = [&](const char* label,
+          ::oxygen::content::import::ImportPipelineConcurrency& pipe) {
+          ImGui::PushID(label);
+          ImGui::AlignTextToFramePadding();
+          ImGui::Text("%s", label);
+          ImGui::SameLine(100);
 
-      const float spacing = ImGui::GetStyle().ItemSpacing.x;
-      const float avail_width = ImGui::GetContentRegionAvail().x;
-      const float item_width = (avail_width - spacing) / 2.0f;
+          const float spacing = ImGui::GetStyle().ItemSpacing.x;
+          const float avail_width = ImGui::GetContentRegionAvail().x;
+          const float item_width = (avail_width - spacing) / 2.0f;
 
-      ImGui::SetNextItemWidth(item_width);
-      int w = (int)pipe.workers;
-      if (ImGui::DragInt("##Workers", &w, 0.1f, 1, 64, "W: %d")) {
-        pipe.workers = (uint32_t)w;
-        changed = true;
-      }
-      ImGui::SameLine();
-      ImGui::SetNextItemWidth(item_width);
-      int q = (int)pipe.queue_capacity;
-      if (ImGui::DragInt("##Queue", &q, 1.0f, 1, 256, "Q: %d")) {
-        pipe.queue_capacity = (uint32_t)q;
-        changed = true;
-      }
-      ImGui::PopID();
-    };
+          ImGui::SetNextItemWidth(item_width);
+          int w = (int)pipe.workers;
+          if (ImGui::DragInt("##Workers", &w, 0.1f, 1, 64, "W: %d")) {
+            pipe.workers = (uint32_t)w;
+            changed = true;
+          }
+          ImGui::SameLine();
+          ImGui::SetNextItemWidth(item_width);
+          int q = (int)pipe.queue_capacity;
+          if (ImGui::DragInt("##Queue", &q, 1.0f, 1, 256, "Q: %d")) {
+            pipe.queue_capacity = (uint32_t)q;
+            changed = true;
+          }
+          ImGui::PopID();
+        };
 
     ImGui::SeparatorText("Global Thread Pool");
 
@@ -629,20 +739,36 @@ auto ContentLoaderPanel::DrawAdvancedSettings() -> void
     auto layout = vm_->GetLayout();
     bool changed = false;
 
-    if (InputTextString("Virtual Root", layout.virtual_mount_root))
-      changed = true;
-    if (InputTextString("Index Name", layout.index_file_name))
-      changed = true;
-    if (InputTextString("Resources Dir", layout.resources_dir))
-      changed = true;
-    if (InputTextString("Descriptors Dir", layout.descriptors_dir))
-      changed = true;
-    if (InputTextString("Scenes Subdir", layout.scenes_subdir))
-      changed = true;
-    if (InputTextString("Geometry Subdir", layout.geometry_subdir))
-      changed = true;
-    if (InputTextString("Materials Subdir", layout.materials_subdir))
-      changed = true;
+    ImGui::PushID("OutputLayoutTable");
+    if (ImGui::BeginTable(
+          "##OutputLayoutTable", 2, ImGuiTableFlags_SizingStretchProp)) {
+      ImGui::TableSetupColumn(
+        "Label", ImGuiTableColumnFlags_WidthFixed, 140.0f);
+      ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+      auto row_input = [&](const char* label, std::string& value) {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label);
+        ImGui::TableNextColumn();
+        ImGui::SetNextItemWidth(-1.0f);
+        if (InputTextString((std::string("##") + label).c_str(), value)) {
+          changed = true;
+        }
+      };
+
+      row_input("Virtual Root", layout.virtual_mount_root);
+      row_input("Index Name", layout.index_file_name);
+      row_input("Resources Dir", layout.resources_dir);
+      row_input("Descriptors Dir", layout.descriptors_dir);
+      row_input("Scenes Subdir", layout.scenes_subdir);
+      row_input("Geometry Subdir", layout.geometry_subdir);
+      row_input("Materials Subdir", layout.materials_subdir);
+
+      ImGui::EndTable();
+    }
+    ImGui::PopID();
 
     if (changed) {
       vm_->SetLayout(layout);
