@@ -41,6 +41,7 @@ m_gtest_program(
     "AssetLoader_cancellation_test.cpp"
     "AssetLoader_deps_test.cpp"
     "AssetLoader_eviction_test.cpp"
+    "AssetLoader_eviction_reentrancy_test.cpp"
     "AssetLoader_lifetime_test.cpp"
     "AssetLoader_loading_test.cpp"
     "AssetLoader_scene_test.cpp"
