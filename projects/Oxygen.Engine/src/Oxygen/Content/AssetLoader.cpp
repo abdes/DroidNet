@@ -34,6 +34,7 @@
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
+#include <thread>
 
 using oxygen::content::AssetLoader;
 using oxygen::content::LoaderContext;
@@ -1916,6 +1917,21 @@ void oxygen::content::AssetLoader::UnloadObject(const uint64_t cache_key,
   if (sub_it == eviction_subscribers_.end()) {
     return;
   }
+
+  // Prevent re-entrant eviction notifications for the same cache key.
+  if (eviction_in_progress_.contains(cache_key)) {
+    LOG_F(
+      2, "AssetLoader: nested eviction ignored for cache_key={}", cache_key);
+    return;
+  }
+
+  eviction_in_progress_.insert(cache_key);
+  // Ensure the guard is cleared on all exit paths
+  struct Guard {
+    std::unordered_set<uint64_t>& s;
+    uint64_t key;
+    ~Guard() noexcept { s.erase(key); }
+  } guard { eviction_in_progress_, cache_key };
 
   for (const auto& subscriber : sub_it->second) {
     if (!subscriber.handler) {

@@ -866,6 +866,10 @@ private:
   uint64_t next_eviction_subscriber_id_ { 1 };
   std::shared_ptr<int> eviction_alive_token_ {};
 
+  // Eviction in-progress guard to prevent re-entrant notifications for the
+  // same cache key (safely handles subscribers calling back into the loader).
+  std::unordered_set<uint64_t> eviction_in_progress_;
+
   //=== In-flight Deduplication (Phase 2) ===--------------------------------//
 
   // Maps are owning-thread only.
