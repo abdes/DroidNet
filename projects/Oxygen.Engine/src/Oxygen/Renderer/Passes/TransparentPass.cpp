@@ -234,7 +234,7 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
 
   const auto MakeRasterDesc = [&](CullMode cull_mode) -> RasterizerStateDesc {
     const auto effective_cull
-      = (requested_fill == FillMode::kWireFrame) ? CullMode::kNone : cull_mode;
+      = (requested_fill == FillMode::kWireframe) ? CullMode::kNone : cull_mode;
     return RasterizerStateDesc {
       .fill_mode = requested_fill,
       .cull_mode = effective_cull,

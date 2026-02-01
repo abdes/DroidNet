@@ -19,6 +19,15 @@ class CommandRecorder;
 
 namespace oxygen::engine {
 
+struct TransparentPassConfig {
+  std::shared_ptr<const graphics::Texture> color_texture; //!< Target color RT
+  std::shared_ptr<const graphics::Texture>
+    depth_texture; //!< Shared depth buffer
+  std::string debug_name { "TransparentPass" };
+  //! Rasterization fill mode for this pass (default: solid)
+  graphics::FillMode fill_mode { graphics::FillMode::kSolid };
+};
+
 //! Forward shading pass for transparent (blended) geometry.
 /*! \brief Consumes DrawMetadata (SoA) and issues only records classified with
     the transparent pass flag (bit1) set.
@@ -36,13 +45,7 @@ namespace oxygen::engine {
 */
 class TransparentPass : public GraphicsRenderPass {
 public:
-  struct Config {
-    std::shared_ptr<graphics::Texture> color_texture; //!< Target color RT
-    std::shared_ptr<graphics::Texture> depth_texture; //!< Shared depth buffer
-    std::string debug_name { "TransparentPass" };
-    //! Rasterization fill mode for this pass (default: solid)
-    graphics::FillMode fill_mode { graphics::FillMode::kSolid };
-  };
+  using Config = TransparentPassConfig;
 
   OXGN_RNDR_API explicit TransparentPass(std::shared_ptr<Config> config);
   ~TransparentPass() override = default;
