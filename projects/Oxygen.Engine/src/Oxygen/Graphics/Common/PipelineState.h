@@ -28,7 +28,7 @@ namespace oxygen::graphics {
 //! Fill mode for polygon rasterization.
 enum class FillMode : uint8_t {
   kSolid, //!< Solid fill for polygons.
-  kWireFrame, //!< Wire-frame rendering.
+  kWireframe, //!< Wire-frame rendering.
 
   kMaxFillMode //!< Not a valid mode; sentinel for enum size.
 };
@@ -188,7 +188,7 @@ struct RasterizerStateDesc {
   static auto WireframeNoCulling() -> RasterizerStateDesc
   {
     return RasterizerStateDesc {
-      .fill_mode = FillMode::kWireFrame,
+      .fill_mode = FillMode::kWireframe,
       .cull_mode = CullMode::kNone,
     };
   }
@@ -197,7 +197,7 @@ struct RasterizerStateDesc {
   static auto WireframeBackFaceCulling() -> RasterizerStateDesc
   {
     return RasterizerStateDesc {
-      .fill_mode = FillMode::kWireFrame,
+      .fill_mode = FillMode::kWireframe,
       .cull_mode = CullMode::kBack,
     };
   }
@@ -206,7 +206,7 @@ struct RasterizerStateDesc {
   static auto WireframeFrontFaceCulling() -> RasterizerStateDesc
   {
     return RasterizerStateDesc {
-      .fill_mode = FillMode::kWireFrame,
+      .fill_mode = FillMode::kWireframe,
       .cull_mode = CullMode::kFront,
     };
   }
