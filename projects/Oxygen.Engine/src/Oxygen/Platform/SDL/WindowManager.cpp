@@ -107,7 +107,8 @@ auto WindowManager::ProcessPlatformEvents() -> co::Co<>
         std::erase_if(windows_, [&sdl_event](const auto& window) {
           return window->Id() == sdl_event.window.windowID;
         });
-        LOG_F(INFO, "Window [id = {}] is closed", sdl_event.window.windowID);
+        LOG_F(
+          INFO, "SDL window [id = {}] is closed", sdl_event.window.windowID);
 
         if (windows_.empty()) {
           last_window_closed_.Trigger();
@@ -175,11 +176,12 @@ auto WindowManager::ProcessPendingCloses() -> void
     // Remove the window from the windows_ table
     std::erase_if(windows_,
       [window_id](const auto& window) { return window->Id() == window_id; });
-    LOG_F(INFO, "Window [id = {}] is closed", window_id);
+    LOG_F(INFO, "Managed window [id = {}] is closed", window_id);
   }
 
   // Check if all windows are now closed
   if (windows_.empty()) {
+    LOG_F(INFO, "Last window is closed");
     last_window_closed_.Trigger();
   }
 
