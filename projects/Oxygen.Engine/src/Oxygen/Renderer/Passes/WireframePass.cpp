@@ -32,6 +32,7 @@
 #include <Oxygen/Renderer/Types/PassMask.h>
 
 using oxygen::Scissors;
+using oxygen::TextureType;
 using oxygen::ViewPort;
 using oxygen::engine::WireframePass;
 using oxygen::engine::WireframePassConfig;
@@ -45,7 +46,6 @@ using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceRegistry;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::Texture;
-using oxygen::TextureType;
 
 namespace {
 struct alignas(16) WireframePassConstants {
@@ -92,8 +92,8 @@ auto WireframePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
     const auto state = (config_ && config_->depth_write_enable)
       ? graphics::ResourceStates::kDepthWrite
       : graphics::ResourceStates::kDepthRead;
-    recorder.RequireResourceState(*fb->GetDescriptor().depth_attachment.texture,
-      state);
+    recorder.RequireResourceState(
+      *fb->GetDescriptor().depth_attachment.texture, state);
   }
 
   recorder.FlushBarriers();
@@ -118,7 +118,8 @@ auto WireframePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
     }
     pass_constants_buffer_->SetName(desc.debug_name);
 
-    pass_constants_mapped_ptr_ = pass_constants_buffer_->Map(0, desc.size_bytes);
+    pass_constants_mapped_ptr_
+      = pass_constants_buffer_->Map(0, desc.size_bytes);
     if (!pass_constants_mapped_ptr_) {
       throw std::runtime_error(
         "WireframePass: Failed to map pass constants buffer");
@@ -129,8 +130,8 @@ auto WireframePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
     cbv_view_desc.visibility = DescriptorVisibility::kShaderVisible;
     cbv_view_desc.range = { 0u, desc.size_bytes };
 
-    auto cbv_handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
-      DescriptorVisibility::kShaderVisible);
+    auto cbv_handle = allocator.Allocate(
+      ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
     if (!cbv_handle.IsValid()) {
       throw std::runtime_error(
         "WireframePass: Failed to allocate CBV descriptor handle");
@@ -278,8 +279,7 @@ auto WireframePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
       continue;
     }
 
-    const bool is_masked
-      = md.flags.IsSet(oxygen::engine::PassMaskBit::kMasked);
+    const bool is_masked = md.flags.IsSet(oxygen::engine::PassMaskBit::kMasked);
     const bool is_double_sided
       = md.flags.IsSet(oxygen::engine::PassMaskBit::kDoubleSided);
 
@@ -406,7 +406,7 @@ auto WireframePass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     .stencil_write_mask = 0xFF,
   };
 
-  RasterizerStateDesc raster_desc { .fill_mode = FillMode::kWireFrame,
+  RasterizerStateDesc raster_desc { .fill_mode = FillMode::kWireframe,
     .cull_mode = CullMode::kBack,
     .front_counter_clockwise = true,
     .multisample_enable = false };
@@ -420,33 +420,33 @@ auto WireframePass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
 
   auto generated_bindings = BuildRootBindings();
 
-  const auto BuildDesc = [&](CullMode cull_mode,
-                           std::vector<graphics::ShaderDefine> defines) {
-    RasterizerStateDesc raster = raster_desc;
-    raster.cull_mode = cull_mode;
+  const auto BuildDesc
+    = [&](CullMode cull_mode, std::vector<graphics::ShaderDefine> defines) {
+        RasterizerStateDesc raster = raster_desc;
+        raster.cull_mode = cull_mode;
 
-    return GraphicsPipelineDesc::Builder()
-      .SetVertexShader(ShaderRequest {
-        .stage = ShaderType::kVertex,
-        .source_path = "Passes/Forward/ForwardMesh_VS.hlsl",
-        .entry_point = "VS",
-        .defines = {},
-      })
-      .SetPixelShader(ShaderRequest {
-        .stage = ShaderType::kPixel,
-        .source_path = "Passes/Forward/ForwardWireframe_PS.hlsl",
-        .entry_point = "PS",
-        .defines = defines,
-      })
-      .SetPrimitiveTopology(PrimitiveType::kTriangleList)
-      .SetRasterizerState(raster)
-      .SetDepthStencilState(ds_desc)
-      .SetBlendState({})
-      .SetFramebufferLayout(fb_layout_desc)
-      .SetRootBindings(std::span<const graphics::RootBindingItem>(
-        generated_bindings.data(), generated_bindings.size()))
-      .Build();
-  };
+        return GraphicsPipelineDesc::Builder()
+          .SetVertexShader(ShaderRequest {
+            .stage = ShaderType::kVertex,
+            .source_path = "Passes/Forward/ForwardMesh_VS.hlsl",
+            .entry_point = "VS",
+            .defines = {},
+          })
+          .SetPixelShader(ShaderRequest {
+            .stage = ShaderType::kPixel,
+            .source_path = "Passes/Forward/ForwardWireframe_PS.hlsl",
+            .entry_point = "PS",
+            .defines = defines,
+          })
+          .SetPrimitiveTopology(PrimitiveType::kTriangleList)
+          .SetRasterizerState(raster)
+          .SetDepthStencilState(ds_desc)
+          .SetBlendState({})
+          .SetFramebufferLayout(fb_layout_desc)
+          .SetRootBindings(std::span<const graphics::RootBindingItem>(
+            generated_bindings.data(), generated_bindings.size()))
+          .Build();
+      };
 
   pso_opaque_single_
     = BuildDesc(CullMode::kBack, ToDefines(permutation::kOpaqueDefines));
@@ -480,7 +480,7 @@ auto WireframePass::NeedRebuildPipelineState() const -> bool
   }
 
   if (last_built->RasterizerState().fill_mode
-    != graphics::FillMode::kWireFrame) {
+    != graphics::FillMode::kWireframe) {
     return true;
   }
 

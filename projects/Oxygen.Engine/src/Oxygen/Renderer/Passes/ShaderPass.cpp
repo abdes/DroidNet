@@ -394,7 +394,7 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     // When wireframe is requested disable culling so edges for all faces are
     // visible.
     const auto effective_cull
-      = (requested_fill == FillMode::kWireFrame) ? CullMode::kNone : cull_mode;
+      = (requested_fill == FillMode::kWireframe) ? CullMode::kNone : cull_mode;
     return RasterizerStateDesc {
       .fill_mode = requested_fill,
       .cull_mode = effective_cull,
@@ -425,7 +425,7 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   }
 
   DepthStencilStateDesc ds_desc {
-    .depth_test_enable = has_depth && (requested_fill != FillMode::kWireFrame),
+    .depth_test_enable = has_depth && (requested_fill != FillMode::kWireframe),
     .depth_write_enable = false,
     .depth_func = CompareOp::kLessOrEqual,
     .stencil_enable = false,
