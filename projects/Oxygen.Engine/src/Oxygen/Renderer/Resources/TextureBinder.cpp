@@ -563,6 +563,10 @@ private:
     std::shared_ptr<graphics::Texture> texture;
     std::shared_ptr<graphics::Texture> placeholder_texture;
 
+    content::EvictionReason last_eviction_reason {
+      content::EvictionReason::kRefCountZero
+    };
+
     ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
     bindless::HeapIndex descriptor_index { kInvalidBindlessHeapIndex };
   };
@@ -586,8 +590,8 @@ private:
   auto CreatePlaceholderTexture(std::optional<content::ResourceKey> for_key)
     -> std::shared_ptr<graphics::Texture>;
   auto CreateErrorTexture() -> std::shared_ptr<graphics::Texture>;
-  auto InitiateAsyncLoad(content::ResourceKey resource_key, TextureEntry& entry)
-    -> void;
+  auto InitiateAsyncLoad(content::ResourceKey resource_key, TextureEntry& entry,
+    const char* reason) -> void;
 
   auto OnTextureResourceLoaded(content::ResourceKey resource_key,
     std::uint64_t generation, std::shared_ptr<data::TextureResource> tex_res)
@@ -774,6 +778,9 @@ auto TextureBinder::Impl::GetOrAllocate(
       DLOG_F(4,
         "TextureBinder GetOrAllocate: evicted entry -> reloading resource {}",
         resource_key);
+      LOG_F(INFO,
+        "TextureBinder: reloading evicted resource {} (reason={}, gen={})",
+        resource_key, entry.last_eviction_reason, entry.generation);
       entry.evicted = false;
       entry.load_failed = false;
       entry.is_placeholder = true;
@@ -782,7 +789,7 @@ auto TextureBinder::Impl::GetOrAllocate(
       entry.pending_generation = 0U;
       entry.texture = placeholder_texture_;
       entry.placeholder_texture = placeholder_texture_;
-      InitiateAsyncLoad(resource_key, entry);
+      InitiateAsyncLoad(resource_key, entry, "evicted_entry");
     }
     // Preserve per-resource stable indices. On failure, the descriptor is
     // repointed to the error texture, but the shader-visible handle remains
@@ -856,7 +863,7 @@ auto TextureBinder::Impl::GetOrAllocate(
   DCHECK_F(inserted);
 
   // Initiate async load using the opaque ResourceKey.
-  InitiateAsyncLoad(resource_key, insert_it->second);
+  InitiateAsyncLoad(resource_key, insert_it->second, "allocate_entry");
 
   DLOG_F(4, "Allocated SRV index {} for resource key {}", result_index,
     resource_key);
@@ -1266,13 +1273,17 @@ auto TextureBinder::Impl::CreateErrorTexture()
  @param resource_key Opaque ResourceKey identifying the resource to load
  @param entry Texture entry to update when load completes
 */
-auto TextureBinder::Impl::InitiateAsyncLoad(
-  content::ResourceKey resource_key, TextureEntry& entry) -> void
+auto TextureBinder::Impl::InitiateAsyncLoad(content::ResourceKey resource_key,
+  TextureEntry& entry, const char* reason) -> void
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DLOG_SCOPE_F(3, "TextureBinder InitiateAsyncLoad");
   DLOG_F(3, "resource: {}", resource_key);
-  LOG_F(INFO, "Initiating async load for resource key: {}", resource_key);
+  LOG_F(INFO,
+    "Initiating async load for resource key: {} (reason={}, gen={}, "
+    "pending={}, placeholder={}, evicted={}, last_eviction_reason={})",
+    resource_key, reason, entry.generation, entry.pending_ticket.has_value(),
+    entry.is_placeholder, entry.evicted, entry.last_eviction_reason);
 
   const auto generation = entry.generation;
 
@@ -1537,6 +1548,7 @@ auto TextureBinder::Impl::ProcessEvictions() -> void
     }
 
     entry.evicted = true;
+    entry.last_eviction_reason = eviction.reason;
     ++entry.generation;
     entry.pending_generation = 0U;
     entry.pending_ticket.reset();
@@ -1579,7 +1591,7 @@ auto TextureBinder::Impl::ProcessEvictions() -> void
       }
     }
 
-    LOG_F(2, "TextureBinder: eviction processed for {} (reason={})",
+    LOG_F(INFO, "TextureBinder: eviction processed for {} (reason={})",
       eviction.key, eviction.reason);
   }
 }

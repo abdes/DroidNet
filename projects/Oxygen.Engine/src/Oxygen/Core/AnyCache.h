@@ -18,6 +18,7 @@
 #include <tuple>
 #include <type_traits>
 #include <unordered_map>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/Typed.h>
@@ -557,6 +558,55 @@ public:
   {
     std::shared_lock lock(mutex_);
     return map_.size();
+  }
+
+  //! Returns the shared ownership count for a cached entry.
+  /*!
+    This is the `std::shared_ptr` use count of the stored value. It can be
+    used to detect cache-only entries (`use_count == 1`) during trim passes.
+
+    @param key The key to query.
+    @return The stored value's `use_count`, or 0 if the key is not present.
+
+    ### Performance Characteristics
+
+    - Time Complexity: $O(1)$ average lookup.
+    - Memory: No additional allocations.
+    - Optimization: Acquires a shared lock only.
+  */
+  auto GetValueUseCount(const KeyType& key) const noexcept -> std::size_t
+  {
+    std::shared_lock lock(mutex_);
+    const auto it = map_.find(key);
+    if (it == map_.end()) {
+      return 0U;
+    }
+    const auto& entry = *(it->second);
+    return std::get<2>(entry).use_count();
+  }
+
+  //! Returns a thread-safe snapshot of cache keys.
+  /*!
+    @return A vector containing the keys present at the time of the call.
+
+    ### Performance Characteristics
+
+    - Time Complexity: $O(n)$ over cached items.
+    - Memory: $O(n)$ for the snapshot.
+    - Optimization: Reserves capacity before copying.
+
+    @note This method acquires a shared lock for the duration of the copy.
+  */
+  auto KeysSnapshot() const -> std::vector<KeyType>
+  {
+    std::shared_lock lock(mutex_);
+    std::vector<KeyType> keys;
+    keys.reserve(map_.size());
+    for (const auto& [key, it] : map_) {
+      static_cast<void>(it);
+      keys.push_back(key);
+    }
+    return keys;
   }
 
   //! Returns the current total cost consumed by all items in the cache.

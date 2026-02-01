@@ -456,10 +456,13 @@ auto AssetLoader::TrimCache() -> void
       static_cast<void>(value);
       UnloadObject(cache_key, type_id, EvictionReason::kClear);
     });
-  content_cache_.Clear();
 
-  resource_key_by_hash_.clear();
-  asset_key_by_hash_.clear();
+  const auto keys = content_cache_.KeysSnapshot();
+  for (const auto& key : keys) {
+    if (content_cache_.GetValueUseCount(key) <= 1U) {
+      (void)content_cache_.Remove(key);
+    }
+  }
 }
 
 auto AssetLoader::BindResourceRefToKey(const internal::ResourceRef& ref)
@@ -837,7 +840,8 @@ auto AssetLoader::ReleaseAsset(const data::AssetKey& key) -> bool
     [&]([[maybe_unused]] uint64_t cache_key,
       [[maybe_unused]] std::shared_ptr<void> value, TypeId type_id) {
       static_cast<void>(value);
-      LOG_F(2, "Evict entry: key_hash={} type_id={}", cache_key, type_id);
+      LOG_F(2, "Evict entry: key_hash={} type_id={} reason={}", cache_key,
+        type_id, EvictionReason::kRefCountZero);
       UnloadObject(cache_key, type_id, EvictionReason::kRefCountZero);
     });
 
@@ -845,7 +849,7 @@ auto AssetLoader::ReleaseAsset(const data::AssetKey& key) -> bool
   ReleaseAssetTree(key);
   // Return true if the asset is no longer present in the cache
   const bool still_present = content_cache_.Contains(HashAssetKey(key));
-  LOG_F(2, "AssetLoader: ReleaseAsset key={} evicted={}", data::to_string(key),
+  LOG_F(2, "ReleaseAsset key={} evicted={}", data::to_string(key),
     still_present ? "false" : "true");
   return !still_present;
 }
@@ -930,6 +934,29 @@ auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key) -> void
 }
 
 template <typename ResourceT>
+/*!
+ Publish resource dependencies and update cache refcounts.
+
+ This enumerates the dependency collector, loads each referenced resource,
+ and registers it as a dependency of the provided asset. Registration
+ touches the cache to increment the dependency refcount.
+
+ @tparam ResourceT Resource type to publish (must satisfy PakResource).
+ @param dependent_asset_key Asset key that owns the dependencies.
+ @param collector Dependency collector populated during decode.
+
+ ### Ref-count Contract
+
+ - This call increments the dependency refcount via `AddResourceDependency`.
+ - The caller remains responsible for its own resource references.
+ - Any explicit checkouts acquired by the caller must be released separately.
+
+ ### Performance Characteristics
+
+ - Time Complexity: $O(n)$ over referenced dependencies.
+ - Memory: $O(n)$ for seen-key tracking.
+ - Optimization: Deduplicates dependencies by hashed key.
+*/
 auto AssetLoader::PublishResourceDependenciesAsync(
   const data::AssetKey& dependent_asset_key,
   const internal::DependencyCollector& collector) -> co::Co<>
@@ -958,7 +985,6 @@ auto AssetLoader::PublishResourceDependenciesAsync(
     }
 
     AddResourceDependency(dependent_asset_key, dep_key);
-    (void)ReleaseResource(dep_key);
   }
 
   for (const auto& dep_key : collector.ResourceKeyDependencies()) {
@@ -982,7 +1008,6 @@ auto AssetLoader::PublishResourceDependenciesAsync(
     }
 
     AddResourceDependency(dependent_asset_key, dep_key);
-    (void)ReleaseResource(dep_key);
   }
 
   co_return;
@@ -1387,7 +1412,32 @@ auto AssetLoader::BindGeometryRuntimePointers(data::GeometryAsset& asset,
   }
 }
 
-auto AssetLoader::PublishGeometryDependencyEdgesAndRelease(
+/*!
+ Publish geometry dependency edges and release temporary checkouts.
+
+ Registers resource and asset dependencies for a geometry asset that has
+ already been decoded and bound. This updates cache refcounts via
+ `AddResourceDependency` and `AddAssetDependency`, then releases any
+ temporary asset checkouts acquired during loading.
+
+ @param dependent_asset_key Geometry asset key that owns the dependencies.
+ @param buffers_by_index Loaded buffer resources indexed by buffer slot.
+ @param materials_by_key Loaded material assets indexed by asset key.
+
+ ### Ref-count Contract
+
+ - Resource dependencies are retained through cache Touch semantics.
+ - Material dependencies are touched, then the temporary checkout held
+   by the loader is released via `CheckIn`.
+ - Callers that keep additional references must release them separately.
+
+ ### Performance Characteristics
+
+ - Time Complexity: $O(n)$ over buffers and materials.
+ - Memory: No additional allocations.
+ - Optimization: Skips null dependencies.
+*/
+auto AssetLoader::PublishGeometryDependencyEdges(
   const data::AssetKey& dependent_asset_key,
   const LoadedGeometryBuffersByIndex& buffers_by_index,
   const LoadedGeometryMaterialsByKey& materials_by_key) -> void
@@ -1400,7 +1450,6 @@ auto AssetLoader::PublishGeometryDependencyEdgesAndRelease(
       continue;
     }
     AddResourceDependency(dependent_asset_key, loaded.key);
-    (void)ReleaseResource(loaded.key);
   }
 
   for (const auto& [dep_key, dep_asset] : materials_by_key) {
@@ -1483,7 +1532,7 @@ auto AssetLoader::LoadGeometryAssetAsyncImpl(const data::AssetKey& key)
       content_cache_.Store(hash_key, decoded);
       asset_key_by_hash_.insert_or_assign(hash_key, key);
 
-      PublishGeometryDependencyEdgesAndRelease(
+      PublishGeometryDependencyEdges(
         key, loaded_buffers_by_index, loaded_materials);
 
       co_return decoded;
@@ -1896,8 +1945,8 @@ void oxygen::content::AssetLoader::UnloadObject(const uint64_t cache_key,
 
     event.key = it->second;
     resource_key_by_hash_.erase(it);
-    LOG_F(2, "AssetLoader: Evicted resource {} type_id={} reason={}",
-      to_string(event.key), type_id, reason);
+    LOG_F(2, "Evicted resource {} type_id={} reason={}", to_string(event.key),
+      type_id, reason);
   } else {
     const auto it = asset_key_by_hash_.find(cache_key);
     if (it == asset_key_by_hash_.end()) {
@@ -1909,7 +1958,7 @@ void oxygen::content::AssetLoader::UnloadObject(const uint64_t cache_key,
 
     event.asset_key = it->second;
     asset_key_by_hash_.erase(it);
-    LOG_F(2, "AssetLoader: Evicted asset {} type_id={} reason={}",
+    LOG_F(2, "Evicted asset {} type_id={} reason={}",
       data::to_string(*event.asset_key), type_id, reason);
   }
 

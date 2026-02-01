@@ -831,7 +831,7 @@ private:
     const LoadedGeometryBuffersByIndex& buffers_by_index,
     const LoadedGeometryMaterialsByKey& materials_by_key) -> void;
 
-  auto PublishGeometryDependencyEdgesAndRelease(
+  auto PublishGeometryDependencyEdges(
     const data::AssetKey& dependent_asset_key,
     const LoadedGeometryBuffersByIndex& buffers_by_index,
     const LoadedGeometryMaterialsByKey& materials_by_key) -> void;
