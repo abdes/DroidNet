@@ -113,12 +113,6 @@ auto AsyncEngine::Run() -> void
 
 auto AsyncEngine::Shutdown() -> co::Co<>
 {
-  // No need to flush the Graphics backend here, as it should have been done
-  // already when the engine frame loop was terminating.
-  // Shutdown order: first stop modules (so they can safely access platform
-  // and graphics resources during their OnShutdown), then shutdown the
-  // platform to tear down native windows and event pumps.
-
   // Drain outstanding GPU work and process any pending deferred releases
   // registered during normal frame processing before we start shutting down
   // modules. This ensures modules' destructors won't final-release resources
