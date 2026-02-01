@@ -41,6 +41,7 @@
 
 namespace oxygen {
 class Graphics;
+class AsyncEngine;
 }
 
 namespace oxygen::scene {
