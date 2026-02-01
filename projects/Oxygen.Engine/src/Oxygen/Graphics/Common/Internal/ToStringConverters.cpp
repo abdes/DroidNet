@@ -374,7 +374,7 @@ auto oxygen::graphics::to_string(const FillMode mode) -> std::string
   switch (mode) { // NOLINT(clang-diagnostic-switch)
   case FillMode::kSolid:
     return "Solid";
-  case FillMode::kWireFrame:
+  case FillMode::kWireframe:
     return "Wire-frame";
   }
 

@@ -80,7 +80,7 @@ NOLINT_TEST(GraphicsPipelineDescTest, BuilderFullConfiguration)
           .entry_point = "GSMain",
         })
         .SetPrimitiveTopology(PrimitiveType::kTriangleStrip)
-        .SetRasterizerState({ .fill_mode = FillMode::kWireFrame,
+        .SetRasterizerState({ .fill_mode = FillMode::kWireframe,
           .cull_mode = CullMode::kNone,
           .multisample_enable = true })
         .SetDepthStencilState({ .depth_test_enable = true,
@@ -109,7 +109,7 @@ NOLINT_TEST(GraphicsPipelineDescTest, BuilderFullConfiguration)
   EXPECT_EQ(pipeline.PrimitiveTopology(), PrimitiveType::kTriangleStrip);
 
   const auto& raster = pipeline.RasterizerState();
-  EXPECT_EQ(raster.fill_mode, FillMode::kWireFrame);
+  EXPECT_EQ(raster.fill_mode, FillMode::kWireframe);
   EXPECT_EQ(raster.cull_mode, CullMode::kNone);
   EXPECT_TRUE(raster.multisample_enable);
 
@@ -664,7 +664,7 @@ NOLINT_TEST(GraphicsPipelineDescTest, Hashing_AllFieldsAffectHash)
       .stage = ShaderType::kDomain, .source_path = "ds", .entry_point = "DSMain"
     };
     PrimitiveType primitive_topology = PrimitiveType::kTriangleStrip;
-    RasterizerStateDesc rasterizer { .fill_mode = FillMode::kWireFrame,
+    RasterizerStateDesc rasterizer { .fill_mode = FillMode::kWireframe,
       .cull_mode = CullMode::kNone,
       .multisample_enable = true };
     DepthStencilStateDesc depth_stencil { .depth_test_enable = true,

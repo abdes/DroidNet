@@ -106,7 +106,7 @@ auto ConvertFillMode(const FillMode value) -> D3D12_FILL_MODE
   switch (value) { // NOLINT(clang-diagnostic-switch)
   case FillMode::kSolid:
     return D3D12_FILL_MODE_SOLID;
-  case FillMode::kWireFrame:
+  case FillMode::kWireframe:
     return D3D12_FILL_MODE_WIREFRAME;
   }
 
