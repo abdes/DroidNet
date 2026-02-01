@@ -853,8 +853,7 @@ auto Renderer::OnCompositing(FrameContext& context) -> co::Co<>
     "Compositing target missing color texture");
   auto& backbuffer = *fb_desc.color_attachments[0].texture;
   const auto& back_desc = backbuffer.GetDescriptor();
-  LOG_F(INFO,
-    "Compositing target: tex={} size={}x{} fmt={} samples={} name={}",
+  LOG_F(INFO, "Compositing target: tex={} size={}x{} fmt={} samples={} name={}",
     static_cast<const void*>(&backbuffer), back_desc.width, back_desc.height,
     static_cast<int>(back_desc.format), back_desc.sample_count,
     back_desc.debug_name);
@@ -895,8 +894,7 @@ auto Renderer::OnCompositing(FrameContext& context) -> co::Co<>
       LOG_F(INFO, "Compositing copy: viewport=({}, {}) {}x{}",
         task.copy.viewport.top_left_x, task.copy.viewport.top_left_y,
         task.copy.viewport.width, task.copy.viewport.height);
-      if (source->GetDescriptor().format
-        != backbuffer.GetDescriptor().format) {
+      if (source->GetDescriptor().format != backbuffer.GetDescriptor().format) {
         LOG_F(INFO,
           "Compositing: format mismatch for view {}; using blend fallback",
           task.copy.source_view.get());
@@ -931,8 +929,7 @@ auto Renderer::OnCompositing(FrameContext& context) -> co::Co<>
         task.blend.source_view.get(), static_cast<const void*>(source.get()),
         src_desc.width, src_desc.height, static_cast<int>(src_desc.format),
         src_desc.sample_count);
-      LOG_F(INFO,
-        "Compositing blend: viewport=({}, {}) {}x{} alpha={}",
+      LOG_F(INFO, "Compositing blend: viewport=({}, {}) {}x{} alpha={}",
         task.blend.viewport.top_left_x, task.blend.viewport.top_left_y,
         task.blend.viewport.width, task.blend.viewport.height,
         task.blend.alpha);
@@ -958,12 +955,11 @@ auto Renderer::OnCompositing(FrameContext& context) -> co::Co<>
         static_cast<const void*>(task.texture_blend.source_texture.get()),
         src_desc.width, src_desc.height, static_cast<int>(src_desc.format),
         src_desc.sample_count, src_desc.debug_name);
-      LOG_F(INFO,
-        "Compositing tex blend: viewport=({}, {}) {}x{} alpha={}",
+      LOG_F(INFO, "Compositing tex blend: viewport=({}, {}) {}x{} alpha={}",
         task.texture_blend.viewport.top_left_x,
         task.texture_blend.viewport.top_left_y,
-        task.texture_blend.viewport.width,
-        task.texture_blend.viewport.height, task.texture_blend.alpha);
+        task.texture_blend.viewport.width, task.texture_blend.viewport.height,
+        task.texture_blend.alpha);
 
       CHECK_NOTNULL_F(
         compositing_pass_config_.get(), "CompositingPass config missing");

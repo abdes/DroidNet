@@ -143,8 +143,7 @@ auto CompositingPass::DoPrepareResources(graphics::CommandRecorder& recorder)
     static_cast<const void*>(&output), out_desc.width, out_desc.height,
     static_cast<int>(out_desc.format), out_desc.sample_count,
     out_desc.debug_name);
-  LOG_F(INFO,
-    "[CompositingPass] viewport=({}, {}) {}x{} alpha={}",
+  LOG_F(INFO, "[CompositingPass] viewport=({}, {}) {}x{} alpha={}",
     config_->viewport.top_left_x, config_->viewport.top_left_y,
     config_->viewport.width, config_->viewport.height, config_->alpha);
 
@@ -284,8 +283,7 @@ auto CompositingPass::EnsurePassConstantsBuffer() -> void
   pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
   registry.Register(pass_constants_buffer_);
   for (size_t slot = 0; slot < kPassConstantsSlots; ++slot) {
-    const uint32_t offset
-      = static_cast<uint32_t>(slot * kPassConstantsStride);
+    const uint32_t offset = static_cast<uint32_t>(slot * kPassConstantsStride);
 
     graphics::BufferViewDescription cbv_view_desc;
     cbv_view_desc.view_type = graphics::ResourceViewType::kConstantBuffer;
@@ -299,8 +297,7 @@ auto CompositingPass::EnsurePassConstantsBuffer() -> void
       throw std::runtime_error(
         "CompositingPass: Failed to allocate CBV descriptor handle");
     }
-    pass_constants_indices_[slot]
-      = allocator.GetShaderVisibleIndex(cbv_handle);
+    pass_constants_indices_[slot] = allocator.GetShaderVisibleIndex(cbv_handle);
 
     auto cbv_view = registry.RegisterView(
       *pass_constants_buffer_, std::move(cbv_handle), cbv_view_desc);

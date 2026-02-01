@@ -91,8 +91,8 @@ struct CompositingTask {
   }
 
   [[nodiscard]] static auto MakeTextureBlend(
-    std::shared_ptr<graphics::Texture> texture, ViewPort viewport,
-    float alpha) -> CompositingTask
+    std::shared_ptr<graphics::Texture> texture, ViewPort viewport, float alpha)
+    -> CompositingTask
   {
     return CompositingTask {
       .type = CompositingTaskType::kBlendTexture,
