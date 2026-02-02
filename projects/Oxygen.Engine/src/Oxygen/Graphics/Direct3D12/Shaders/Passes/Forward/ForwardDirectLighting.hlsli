@@ -65,13 +65,13 @@ float3 AccumulateDirectionalLights(
                 // Use override sun direction (already points toward sun)
                 light_dir_ws = override_sun_dir;
                 // Override illuminance normalized by original intensity
-                light_intensity = override_sun_illum / max(dl.intensity, 0.001);
+                light_intensity = override_sun_illum / max(dl.intensity_lux, 0.001);
                 light_color = dl.color_rgb;
             } else {
                 // Scene publishes dl.direction_ws as incoming ray direction
                 // (from light toward the scene). Shading expects surface->light.
                 light_dir_ws = -dl.direction_ws;
-                light_intensity = dl.intensity;
+                light_intensity = dl.intensity_lux;
                 light_color = dl.color_rgb;
             }
 
@@ -225,7 +225,7 @@ float3 AccumulatePositionalLights(
             const float3 kD = (1.0 - kS) * (1.0 - metalness);
             const float3 diffuse = kD * base_rgb / kPi;
 
-            direct += (diffuse + specular) * pl.color_rgb * pl.intensity * (NdotL * atten);
+            direct += (diffuse + specular) * pl.color_rgb * pl.luminous_flux_lm * (NdotL * atten);
         }
     }
 
@@ -382,7 +382,7 @@ float3 AccumulatePositionalLightsClustered(
         const float3 kD = (1.0 - kS) * (1.0 - metalness);
         const float3 diffuse = kD * base_rgb / kPi;
 
-        direct += (diffuse + specular) * pl.color_rgb * pl.intensity * (NdotL * atten);
+        direct += (diffuse + specular) * pl.color_rgb * pl.luminous_flux_lm * (NdotL * atten);
     }
 
     return direct;

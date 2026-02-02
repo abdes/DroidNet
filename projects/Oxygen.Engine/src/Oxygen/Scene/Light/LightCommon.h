@@ -44,10 +44,20 @@ struct ShadowSettings {
 };
 
 //! Authored properties shared by all light types.
+/*!
+  This structure contains the common parameters for all light types in the
+  engine. Intensity values with explicit physical units are stored in specific
+  light classes, not here:
+  - DirectionalLight: intensity_lux (lm/m²)
+  - PointLight/SpotLight: luminous_flux_lm (lm)
+
+  @see DirectionalLight, PointLight, SpotLight
+*/
 struct CommonLightProperties {
   bool affects_world = true;
   Vec3 color_rgb { 1.0F, 1.0F, 1.0F };
-  float intensity = 1.0F;
+  // intensity REMOVED - now in specific light classes with physical units
+
   LightMobility mobility = LightMobility::kRealtime;
   bool casts_shadows = false;
   ShadowSettings shadow {};

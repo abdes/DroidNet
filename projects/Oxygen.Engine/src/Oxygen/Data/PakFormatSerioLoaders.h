@@ -304,7 +304,7 @@ inline auto Load(AnyReader& reader, data::pak::LightCommonRecord& r)
   for (auto& v : r.color_rgb) {
     CHECK_RESULT(reader.ReadInto(v));
   }
-  CHECK_RESULT(reader.ReadInto(r.intensity));
+  // intensity REMOVED from common - now in specific light records
 
   CHECK_RESULT(reader.ReadInto(r.mobility));
   CHECK_RESULT(reader.ReadInto(r.casts_shadows));
@@ -335,6 +335,7 @@ inline auto Load(AnyReader& reader, data::pak::DirectionalLightRecord& r)
     CHECK_RESULT(reader.ReadInto(v));
   }
   CHECK_RESULT(reader.ReadInto(r.distribution_exponent));
+  CHECK_RESULT(reader.ReadInto(r.intensity_lux));
   CHECK_RESULT(
     reader.ReadBlobInto(std::as_writable_bytes(std::span { r.reserved })));
 
@@ -354,6 +355,7 @@ inline auto Load(AnyReader& reader, data::pak::PointLightRecord& r)
     reader.ReadBlobInto(std::as_writable_bytes(std::span { r.reserved0 })));
   CHECK_RESULT(reader.ReadInto(r.decay_exponent));
   CHECK_RESULT(reader.ReadInto(r.source_radius));
+  CHECK_RESULT(reader.ReadInto(r.luminous_flux_lm));
   CHECK_RESULT(
     reader.ReadBlobInto(std::as_writable_bytes(std::span { r.reserved1 })));
 
@@ -375,6 +377,7 @@ inline auto Load(AnyReader& reader, data::pak::SpotLightRecord& r)
   CHECK_RESULT(reader.ReadInto(r.inner_cone_angle_radians));
   CHECK_RESULT(reader.ReadInto(r.outer_cone_angle_radians));
   CHECK_RESULT(reader.ReadInto(r.source_radius));
+  CHECK_RESULT(reader.ReadInto(r.luminous_flux_lm));
   CHECK_RESULT(
     reader.ReadBlobInto(std::as_writable_bytes(std::span { r.reserved1 })));
 

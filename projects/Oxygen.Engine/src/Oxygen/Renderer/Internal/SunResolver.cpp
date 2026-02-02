@@ -45,12 +45,12 @@ namespace {
 
       const float peak_rgb = (std::max)(light.color_rgb.x,
         (std::max)(light.color_rgb.y, light.color_rgb.z));
-      const float illum = light.intensity * peak_rgb;
+      const float illum = light.intensity_lux * peak_rgb;
 
       SunLightSelection candidate {
         .direction_to_sun = -glm::normalize(light.direction_ws),
         .color_rgb = light.color_rgb,
-        .intensity = light.intensity,
+        .intensity = light.intensity_lux,
         .illuminance = illum,
         .valid = true,
       };
@@ -140,7 +140,7 @@ auto ResolveSunForView(scene::Scene& scene,
             ? sun->GetColorRgb()
             : light.Common().color_rgb;
           return SunState::FromDirectionAndLight(
-            *direction_opt, color, light.Common().intensity, true);
+            *direction_opt, color, light.GetIntensityLux(), true);
         }
       }
 

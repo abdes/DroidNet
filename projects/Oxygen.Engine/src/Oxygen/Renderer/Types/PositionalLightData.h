@@ -69,7 +69,7 @@ struct alignas(16) PositionalLightData {
 
   // Register 1
   glm::vec3 color_rgb { 1.0F, 1.0F, 1.0F };
-  float intensity { 1.0F };
+  float luminous_flux_lm { 800.0F }; //!< Luminous flux in lumens (lm)
 
   // Register 2
   glm::vec3 direction_ws { 0.0F, 0.0F, -1.0F };

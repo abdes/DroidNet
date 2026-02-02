@@ -357,7 +357,7 @@ auto SceneSetup::EnsureLighting(
     sun_node_.GetTransform().SetLocalPosition({ 0.0F, -20.0F, 20.0F });
 
     auto sun_light = std::make_unique<scene::DirectionalLight>();
-    sun_light->Common().intensity = sun.intensity;
+    sun_light->SetIntensityLux(sun.intensity);
     sun_light->Common().color_rgb = sun.color_rgb;
     sun_light->SetIsSunLight(true);
     sun_light->SetEnvironmentContribution(true);
@@ -374,7 +374,7 @@ auto SceneSetup::EnsureLighting(
     fill_light_node_.GetTransform().SetLocalPosition(fill.position);
 
     auto fill_light = std::make_unique<scene::PointLight>();
-    fill_light->Common().intensity = fill.intensity;
+    fill_light->SetLuminousFluxLm(fill.intensity);
     fill_light->Common().color_rgb = fill.color_rgb;
     fill_light->SetRange(fill.range);
 
@@ -431,7 +431,7 @@ auto SceneSetup::UpdateSunLight(const SunLightParams& params) -> void
 
   if (auto sun_light = sun_node_.GetLightAs<scene::DirectionalLight>()) {
     auto& light = sun_light->get();
-    light.Common().intensity = params.intensity;
+    light.SetIntensityLux(params.intensity);
     light.Common().color_rgb = params.color_rgb;
     light.SetEnvironmentContribution(true);
     light.SetIsSunLight(true);

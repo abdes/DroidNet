@@ -90,7 +90,7 @@ auto AsyncDemoVm::GetSpotlightIntensity() -> float
   if (IsSpotlightAvailable()) {
     auto light = spotlight_node_->GetLightAs<scene::SpotLight>();
     if (light)
-      return light->get().Common().intensity;
+      return light->get().GetLuminousFluxLm();
   }
   return settings_->GetSpotlightIntensity();
 }
@@ -101,7 +101,7 @@ auto AsyncDemoVm::SetSpotlightIntensity(float intensity) -> void
   if (IsSpotlightAvailable()) {
     auto light = spotlight_node_->GetLightAs<scene::SpotLight>();
     if (light)
-      light->get().Common().intensity = intensity;
+      light->get().SetLuminousFluxLm(intensity);
   }
 }
 

@@ -31,7 +31,7 @@ namespace {
     DirectionalLightBasic light {};
     light.direction_ws = direction_ws;
     light.color_rgb = color_rgb;
-    light.intensity = intensity;
+    light.intensity_lux = intensity;
     light.flags = is_sun
       ? static_cast<std::uint32_t>(DirectionalLightFlags::kSunLight)
       : 0u;
@@ -118,7 +118,7 @@ NOLINT_TEST_F(SunResolverTest, FromSceneUsesReferencedDirectionalLight)
   ASSERT_TRUE(light_opt.has_value());
   auto& light = light_opt->get();
   light.Common().color_rgb = { 0.1F, 0.2F, 0.3F };
-  light.Common().intensity = 4.0F;
+  light.SetIntensityLux(4.0F);
   sun.SetLightReference(node);
   scene->Update();
 

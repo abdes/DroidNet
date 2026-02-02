@@ -22,7 +22,7 @@ struct PositionalLightData
     float range;
 
     float3 color_rgb;
-    float intensity;
+    float luminous_flux_lm;  // Luminous flux in lumens (lm)
 
     float3 direction_ws;
     uint flags; // See POSITIONAL_LIGHT_FLAG_*

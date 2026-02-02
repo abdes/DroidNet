@@ -217,7 +217,7 @@ auto LightManager::CollectFromNode(const scene::SceneNodeImpl& node) -> void
 
     engine::DirectionalLightBasic out {};
     out.color_rgb = common.color_rgb;
-    out.intensity = common.intensity;
+    out.intensity_lux = light.GetIntensityLux();
     out.direction_ws = ComputeDirectionWs(transform);
     out.angular_size_radians = light.GetAngularSizeRadians();
     out.shadow_index = effective_casts_shadows
@@ -262,7 +262,7 @@ auto LightManager::CollectFromNode(const scene::SceneNodeImpl& node) -> void
     out.position_ws = transform.GetWorldPosition();
     out.range = light.GetRange();
     out.color_rgb = common.color_rgb;
-    out.intensity = common.intensity;
+    out.luminous_flux_lm = light.GetLuminousFluxLm();
     out.direction_ws = ComputeDirectionWs(transform);
     out.flags = PackPositionalFlags(
       engine::PositionalLightType::kPoint, common, effective_casts_shadows);
@@ -306,7 +306,7 @@ auto LightManager::CollectFromNode(const scene::SceneNodeImpl& node) -> void
     out.position_ws = transform.GetWorldPosition();
     out.range = light.GetRange();
     out.color_rgb = common.color_rgb;
-    out.intensity = common.intensity;
+    out.luminous_flux_lm = light.GetLuminousFluxLm();
     out.direction_ws = ComputeDirectionWs(transform);
     out.flags = PackPositionalFlags(
       engine::PositionalLightType::kSpot, common, effective_casts_shadows);

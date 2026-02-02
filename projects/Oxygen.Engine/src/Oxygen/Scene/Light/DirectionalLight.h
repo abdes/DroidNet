@@ -62,6 +62,19 @@ public:
     return angular_size_radians_;
   }
 
+  //! Sets the light's intensity in lux (lm/m²).
+  auto SetIntensityLux(const float intensity_lux) noexcept -> void
+  {
+    intensity_lux_ = intensity_lux;
+  }
+
+  //! Gets the light's intensity in lux (lm/m²).
+  //! Typical values: 100,000 lux (bright sun), 10,000 lux (overcast).
+  OXGN_SCN_NDAPI auto GetIntensityLux() const noexcept -> float
+  {
+    return intensity_lux_;
+  }
+
   //! Enables or disables environment contribution.
   auto SetEnvironmentContribution(const bool enabled) noexcept -> void
   {
@@ -112,6 +125,11 @@ protected:
 private:
   CommonLightProperties common_ {};
   float angular_size_radians_ = 0.0F;
+
+  //! Intensity in lux (lm/m²).
+  //! Typical values: 100,000 lux (bright sun), 10,000 lux (overcast).
+  float intensity_lux_ = 100000.0F;
+
   bool environment_contribution_ = false;
   bool is_sun_light_ = false;
   CascadedShadowSettings csm_ {};

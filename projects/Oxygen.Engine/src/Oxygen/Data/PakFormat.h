@@ -1313,11 +1313,17 @@ struct LightShadowSettingsRecord {
 static_assert(sizeof(LightShadowSettingsRecord) == 16);
 
 //! Common authored properties shared by all light records.
+/*!
+  @note Intensity fields are now in specific light records:
+  - DirectionalLightRecord::intensity_lux (lux, lm/m²)
+  - PointLightRecord::luminous_flux_lm (lumens)
+  - SpotLightRecord::luminous_flux_lm (lumens)
+*/
 #pragma pack(push, 1)
 struct LightCommonRecord {
   uint32_t affects_world = 1;
   float color_rgb[3] = { 1.0F, 1.0F, 1.0F };
-  float intensity = 1.0F;
+  // intensity REMOVED - now in specific light records with physical units
 
   uint8_t mobility = 0; // LightMobility
   uint8_t casts_shadows = 0;
@@ -1328,9 +1334,13 @@ struct LightCommonRecord {
   uint8_t reserved1[4] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(LightCommonRecord) == 48);
+static_assert(sizeof(LightCommonRecord) == 44);
 
 //! Packed directional light component record.
+/*!
+  Contains `intensity_lux` for physical illuminance in lux (lm/m²).
+  Typical values: 100,000 lux (bright sun), 10,000 lux (overcast).
+*/
 #pragma pack(push, 1)
 struct DirectionalLightRecord {
   SceneNodeIndexT node_index = 0;
@@ -1344,12 +1354,17 @@ struct DirectionalLightRecord {
   float cascade_distances[4] = { 0.0F, 0.0F, 0.0F, 0.0F };
   float distribution_exponent = 1.0F;
 
-  uint8_t reserved[8] = {};
+  float intensity_lux = 100000.0F; //!< Illuminance in lux (lm/m²)
+  uint8_t reserved[8] = {}; // Original 8 bytes preserved
 };
 #pragma pack(pop)
 static_assert(sizeof(DirectionalLightRecord) == 96);
 
 //! Packed point light component record.
+/*!
+  Contains `luminous_flux_lm` for physical luminous flux in lumens.
+  Typical values: 800 lm (~60W incandescent), 1600 lm (~100W).
+*/
 #pragma pack(push, 1)
 struct PointLightRecord {
   SceneNodeIndexT node_index = 0;
@@ -1359,12 +1374,17 @@ struct PointLightRecord {
   uint8_t reserved0[3] = {};
   float decay_exponent = 2.0F;
   float source_radius = 0.0F;
-  uint8_t reserved1[12] = {};
+  float luminous_flux_lm = 800.0F; //!< Luminous flux in lumens (lm)
+  uint8_t reserved1[12] = {}; // Original 12 bytes preserved
 };
 #pragma pack(pop)
 static_assert(sizeof(PointLightRecord) == 80);
 
 //! Packed spot light component record.
+/*!
+  Contains `luminous_flux_lm` for physical luminous flux in lumens.
+  Typical values: 800 lm (~60W incandescent), 1600 lm (~100W).
+*/
 #pragma pack(push, 1)
 struct SpotLightRecord {
   SceneNodeIndexT node_index = 0;
@@ -1376,7 +1396,8 @@ struct SpotLightRecord {
   float inner_cone_angle_radians = 0.4F;
   float outer_cone_angle_radians = 0.6F;
   float source_radius = 0.0F;
-  uint8_t reserved1[12] = {};
+  float luminous_flux_lm = 800.0F; //!< Luminous flux in lumens (lm)
+  uint8_t reserved1[12] = {}; // Original 12 bytes preserved
 };
 #pragma pack(pop)
 static_assert(sizeof(SpotLightRecord) == 88);
