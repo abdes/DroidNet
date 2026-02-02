@@ -9,11 +9,12 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include <string>
+#include <optional>
+#include <span>
+
+#include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
 
 #include "DemoShell/UI/CameraControlPanel.h"
 #include "DemoShell/UI/OrbitCameraController.h"
@@ -46,8 +47,8 @@ class CameraRigController;
 */
 class CameraVm {
 public:
-  using CameraControlMode = ui::CameraControlMode;
-  using OrbitMode = ui::OrbitMode;
+  using CameraControlMode = CameraControlMode;
+  using OrbitMode = OrbitMode;
 
   explicit CameraVm(observer_ptr<CameraSettingsService> service,
     observer_ptr<CameraLifecycleService> camera_lifecycle,
@@ -64,25 +65,83 @@ public:
   auto SetOrbitMode(OrbitMode mode) -> void;
 
   [[nodiscard]] auto GetFlyMoveSpeed() -> float;
+
   auto SetFlyMoveSpeed(float speed) -> void;
+
+  // --- Drone Settings (Passthrough to Service + Rig) ---
+
+  [[nodiscard]] auto IsDroneAvailable() const -> bool;
+  [[nodiscard]] auto GetDroneProgress() const -> double;
+
+  [[nodiscard]] auto GetDroneSpeed() -> float;
+  auto SetDroneSpeed(float speed) -> void;
+
+  [[nodiscard]] auto GetDroneDamping() -> float;
+  auto SetDroneDamping(float damping) -> void;
+
+  [[nodiscard]] auto GetDroneFocusHeight() -> float;
+  auto SetDroneFocusHeight(float height) -> void;
+
+  [[nodiscard]] auto GetDroneFocusOffset() -> glm::vec2;
+  auto SetDroneFocusOffset(glm::vec2 offset) -> void;
+
+  [[nodiscard]] auto GetDroneRunning() -> bool;
+  auto SetDroneRunning(bool running) -> void;
+
+  // Cinematics
+  [[nodiscard]] auto GetDroneBobAmplitude() -> float;
+  auto SetDroneBobAmplitude(float amp) -> void;
+
+  [[nodiscard]] auto GetDroneBobFrequency() -> float;
+  auto SetDroneBobFrequency(float hz) -> void;
+
+  [[nodiscard]] auto GetDroneNoiseAmplitude() -> float;
+  auto SetDroneNoiseAmplitude(float amp) -> void;
+
+  [[nodiscard]] auto GetDroneBankFactor() -> float;
+  auto SetDroneBankFactor(float factor) -> void;
+
+  // POI
+  [[nodiscard]] auto GetDronePOISlowdownRadius() -> float;
+  auto SetDronePOISlowdownRadius(float radius) -> void;
+
+  [[nodiscard]] auto GetDronePOIMinSpeed() -> float;
+  auto SetDronePOIMinSpeed(float factor) -> void;
+
+  // Debug
+  [[nodiscard]] auto GetDroneShowPath() -> bool;
+  auto SetDroneShowPath(bool show) -> void;
 
   // --- Live Camera Data (Direct Pull) ---
 
   [[nodiscard]] auto HasActiveCamera() const -> bool;
+  [[nodiscard]] auto GetActiveCameraNode() const
+    -> std::optional<scene::SceneNode>;
   [[nodiscard]] auto GetCameraPosition() -> glm::vec3;
   [[nodiscard]] auto GetCameraRotation() -> glm::quat;
 
+  // --- Drone Path ---
+
+  [[nodiscard]] auto GetDronePathPoints() const -> std::span<const glm::vec3>;
+
   // --- Input & Debug ---
 
-  [[nodiscard]] auto GetActionStateString(const std::shared_ptr<input::Action>& action) const -> const char*;
+  [[nodiscard]] auto GetActionStateString(
+    const std::shared_ptr<input::Action>& action) const -> const char*;
 
   // Expose actions for the panel
-  [[nodiscard]] auto GetMoveForwardAction() const -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetMoveBackwardAction() const -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetMoveLeftAction() const -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetMoveRightAction() const -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetFlyBoostAction() const -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetFlyPlaneLockAction() const -> std::shared_ptr<input::Action>;
+  [[nodiscard]] auto GetMoveForwardAction() const
+    -> std::shared_ptr<input::Action>;
+  [[nodiscard]] auto GetMoveBackwardAction() const
+    -> std::shared_ptr<input::Action>;
+  [[nodiscard]] auto GetMoveLeftAction() const
+    -> std::shared_ptr<input::Action>;
+  [[nodiscard]] auto GetMoveRightAction() const
+    -> std::shared_ptr<input::Action>;
+  [[nodiscard]] auto GetFlyBoostAction() const
+    -> std::shared_ptr<input::Action>;
+  [[nodiscard]] auto GetFlyPlaneLockAction() const
+    -> std::shared_ptr<input::Action>;
   [[nodiscard]] auto GetRmbAction() const -> std::shared_ptr<input::Action>;
   [[nodiscard]] auto GetOrbitAction() const -> std::shared_ptr<input::Action>;
 
@@ -105,7 +164,7 @@ private:
   // Cached settings state
   CameraControlMode control_mode_ { CameraControlMode::kOrbit };
   OrbitMode orbit_mode_ { OrbitMode::kTurntable };
-  float fly_move_speed_ { 5.0f };
+  float fly_move_speed_ { 5.0F };
 };
 
 } // namespace oxygen::examples::ui

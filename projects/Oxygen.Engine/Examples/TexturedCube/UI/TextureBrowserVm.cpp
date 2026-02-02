@@ -26,6 +26,7 @@ TextureBrowserVm::TextureBrowserVm(
   // Initialize defaults from file browser service if available
   if (file_browser_) {
     const auto roots = file_browser_->GetContentRoots();
+    content_root_ = roots.content_root;
     if (!roots.cooked_root.empty()) {
       const auto path_str = roots.cooked_root.string();
       // Ensure null termination and size fit
@@ -63,7 +64,7 @@ void TextureBrowserVm::StartImportFlow()
 {
   // 1. Reset State
   import_state_.status_message.clear();
-  import_state_.progress = 0.0f;
+  import_state_.progress = 0.0F;
   import_state_.workflow_state = ImportState::WorkflowState::Idle;
   import_state_.last_import_success = false;
 
@@ -80,7 +81,7 @@ void TextureBrowserVm::CancelImport()
 {
   import_state_.workflow_state = ImportState::WorkflowState::Idle;
   import_state_.status_message.clear();
-  import_state_.progress = 0.0f;
+  import_state_.progress = 0.0F;
 }
 
 void TextureBrowserVm::OnFileSelected(const std::filesystem::path& path)
@@ -250,7 +251,7 @@ void TextureBrowserVm::BrowseForSourcePath()
         = std::filesystem::path(import_state_.source_path.data()).parent_path();
     }
 
-    file_browser_->Open(config);
+    active_request_id_ = file_browser_->Open(config);
     browse_mode_ = BrowseMode::kSourcePath;
   }
 }
@@ -265,7 +266,7 @@ void TextureBrowserVm::BrowseForCookedRoot()
       config.initial_directory
         = std::filesystem::path(import_state_.cooked_root.data());
     }
-    file_browser_->Open(config);
+    active_request_id_ = file_browser_->Open(config);
     browse_mode_ = BrowseMode::kCookedRoot;
   }
 }
@@ -279,7 +280,7 @@ bool TextureBrowserVm::SelectTextureForSlot(
 
   import_state_.status_message = "Loading cooked texture...";
   // import_state_.in_flight = true;
-  import_state_.progress = 0.0f;
+  import_state_.progress = 0.0F;
 
   texture_service_->StartLoadCookedTexture(entry_index,
     [this, entry_index, is_sphere](TextureLoadingService::LoadResult result) {
@@ -287,11 +288,11 @@ bool TextureBrowserVm::SelectTextureForSlot(
       // import_state_.in_flight = false;
 
       if (!result.success) {
-        import_state_.progress = 0.0f;
+        import_state_.progress = 0.0F;
         return;
       }
 
-      import_state_.progress = 1.0f;
+      import_state_.progress = 1.0F;
 
       if (is_sphere) {
         sphere_texture_.mode = SceneSetup::TextureIndexMode::kCustom;
@@ -335,7 +336,7 @@ bool TextureBrowserVm::SelectSkybox(uint32_t entry_index,
   // for the Inline Import Flow for now, as that flow is about importing NEW
   // textures. Skybox loading is about loading EXISTING cooked textures.
 
-  import_state_.progress = 0.0f;
+  import_state_.progress = 0.0F;
 
   texture_service_->StartLoadCookedTexture(
     entry_index, [this, on_loaded](TextureLoadingService::LoadResult result) {
@@ -350,7 +351,7 @@ bool TextureBrowserVm::SelectSkybox(uint32_t entry_index,
         import_state_.status_message = result.status_message;
       }
       // import_state_.in_flight = false;
-      import_state_.progress = 1.0f;
+      import_state_.progress = 1.0F;
     });
 
   return true;
@@ -373,11 +374,15 @@ void TextureBrowserVm::Update()
 
   // Handle File Browser results
   if (file_browser_ && browse_mode_ != BrowseMode::kNone) {
-    if (const auto selected_path = file_browser_->ConsumeSelection()) {
-      OnFileSelected(*selected_path);
+    if (const auto result = file_browser_->ConsumeResult(active_request_id_)) {
+      if (result->kind == FileBrowserService::ResultKind::kSelected) {
+        OnFileSelected(result->path);
+      }
       browse_mode_ = BrowseMode::kNone;
+      active_request_id_ = 0;
     } else if (!file_browser_->IsOpen()) {
       browse_mode_ = BrowseMode::kNone;
+      active_request_id_ = 0;
     }
   }
 
@@ -389,7 +394,7 @@ void TextureBrowserVm::Update()
       // import_state_.in_flight = false;
       import_state_.workflow_state = ImportState::WorkflowState::Finished;
       import_state_.last_import_success = false;
-      import_state_.progress = 1.0f;
+      import_state_.progress = 1.0F;
     } else {
       // Success case?
       // Report success handled below.
@@ -414,13 +419,13 @@ void TextureBrowserVm::Update()
       // Auto-hide on success:
       import_state_.workflow_state = ImportState::WorkflowState::Idle;
 
-      import_state_.progress = 1.0f;
+      import_state_.progress = 1.0F;
     } else {
       import_state_.status_message = error;
       // import_state_.in_flight = false;
       import_state_.workflow_state = ImportState::WorkflowState::Finished;
       import_state_.last_import_success = false;
-      import_state_.progress = 1.0f;
+      import_state_.progress = 1.0F;
     }
   }
 }
@@ -451,7 +456,7 @@ void TextureBrowserVm::HandleRefresh()
     import_state_.status_message = error;
   }
   // import_state_.in_flight = false;
-  import_state_.progress = 0.0f;
+  import_state_.progress = 0.0F;
 }
 
 void TextureBrowserVm::UpdateCookedEntries()
@@ -465,6 +470,15 @@ void TextureBrowserVm::UpdateCookedEntries()
   cooked_entries_.reserve(service_entries.size());
 
   for (const auto& se : service_entries) {
+    std::string display_name = se.name;
+    if (!content_root_.empty()) {
+      std::error_code ec;
+      auto rel = std::filesystem::proximate(display_name, content_root_, ec);
+      if (!ec) {
+        display_name = rel.string();
+      }
+    }
+
     cooked_entries_.push_back(CookedTextureEntry {
       .index = se.index,
       .width = se.width,
@@ -473,7 +487,7 @@ void TextureBrowserVm::UpdateCookedEntries()
       .array_layers = se.array_layers,
       .size_bytes = se.size_bytes,
       .content_hash = se.content_hash,
-      .name = se.name,
+      .name = std::move(display_name),
       .format = se.format,
       .texture_type = se.texture_type,
     });
@@ -509,20 +523,20 @@ TextureBrowserVm::GetEffectiveUvTransform() const
   // had this logic:
 
   if (uv_state_.uv_origin == UvOrigin::kBottomLeft) {
-    scale.y *= -1.0f;
-    offset.y += 1.0f; // Shift to keep in [0,1] range roughly
+    scale.y *= -1.0F;
+    offset.y += 1.0F; // Shift to keep in [0,1] range roughly
   }
 
   // 2. Extra Flips
   if (uv_state_.extra_flip_u) {
-    scale.x *= -1.0f;
-    offset.x = 1.0f - offset.x; // Pivot around center? Or just simple flip?
+    scale.x *= -1.0F;
+    offset.x = 1.0F - offset.x; // Pivot around center? Or just simple flip?
     // Simple flip usually means u' = (1-u) or u' = -u + 1.
     // With scale/offset: u' = (u * -s) + (o + 1)?
     // Let's stick to simple scale flip for now, user can adjust offset.
   }
   if (uv_state_.extra_flip_v) {
-    scale.y *= -1.0f;
+    scale.y *= -1.0F;
     // offset adjustment usually needed to bring back to visible range
   }
 

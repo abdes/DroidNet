@@ -9,21 +9,19 @@
 
 namespace oxygen::examples::ui {
 
-RenderingVm::RenderingVm(observer_ptr<RenderingSettingsService> service,
-  observer_ptr<engine::ShaderPassConfig> pass_config)
+RenderingVm::RenderingVm(observer_ptr<RenderingSettingsService> service)
   : service_(service)
-  , pass_config_(pass_config)
 {
   Refresh();
 }
 
-auto RenderingVm::GetViewMode() -> RenderingViewMode
+auto RenderingVm::GetRenderMode() -> RenderMode
 {
   std::lock_guard lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
-  return view_mode_;
+  return render_mode_;
 }
 
 auto RenderingVm::GetDebugMode() -> engine::ShaderDebugMode
@@ -35,15 +33,15 @@ auto RenderingVm::GetDebugMode() -> engine::ShaderDebugMode
   return debug_mode_;
 }
 
-auto RenderingVm::SetViewMode(RenderingViewMode mode) -> void
+auto RenderingVm::SetRenderMode(RenderMode mode) -> void
 {
   std::lock_guard lock(mutex_);
-  if (view_mode_ == mode) {
+  if (render_mode_ == mode) {
     return;
   }
 
-  view_mode_ = mode;
-  service_->SetViewMode(FromViewMode(mode));
+  render_mode_ = mode;
+  service_->SetRenderMode(mode);
   epoch_ = service_->GetEpoch();
 }
 
@@ -57,28 +55,37 @@ auto RenderingVm::SetDebugMode(engine::ShaderDebugMode mode) -> void
   debug_mode_ = mode;
   service_->SetDebugMode(mode);
   epoch_ = service_->GetEpoch();
-
-  // Apply directly to pass config
-  if (pass_config_) {
-    pass_config_->debug_mode = mode;
-  }
 }
 
-auto RenderingVm::SetPassConfig(
-  observer_ptr<engine::ShaderPassConfig> pass_config) -> void
+auto RenderingVm::GetWireframeColor() -> graphics::Color
 {
   std::lock_guard lock(mutex_);
-  pass_config_ = pass_config;
-  // State is now applied every frame by the application module
-  // to avoid conflicts between multiple ViewModels.
+  if (IsStale()) {
+    Refresh();
+  }
+  return wire_color_;
+}
+
+auto RenderingVm::SetWireframeColor(const graphics::Color& color) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (wire_color_.r == color.r && wire_color_.g == color.g
+    && wire_color_.b == color.b && wire_color_.a == color.a) {
+    return;
+  }
+
+  wire_color_ = color;
+  service_->SetWireframeColor(color);
+  epoch_ = service_->GetEpoch();
 }
 
 auto RenderingVm::Refresh() -> void
 {
-  // Assume mutex is already held by caller (GetViewMode/GetDebugMode)
+  // Assume mutex is already held by caller (GetRenderMode/GetDebugMode)
   // or it's called from constructor (which doesn't need it)
-  view_mode_ = ToViewMode(service_->GetViewMode());
+  render_mode_ = service_->GetRenderMode();
   debug_mode_ = service_->GetDebugMode();
+  wire_color_ = service_->GetWireframeColor();
   epoch_ = service_->GetEpoch();
 }
 
@@ -86,30 +93,6 @@ auto RenderingVm::IsStale() const -> bool
 {
   // Assume mutex is already held
   return epoch_ != service_->GetEpoch();
-}
-
-auto RenderingVm::ToViewMode(RenderingSettingsService::ViewMode mode)
-  -> RenderingViewMode
-{
-  switch (mode) {
-  case RenderingSettingsService::ViewMode::kWireframe:
-    return RenderingViewMode::kWireframe;
-  case RenderingSettingsService::ViewMode::kSolid:
-  default:
-    return RenderingViewMode::kSolid;
-  }
-}
-
-auto RenderingVm::FromViewMode(RenderingViewMode mode)
-  -> RenderingSettingsService::ViewMode
-{
-  switch (mode) {
-  case RenderingViewMode::kWireframe:
-    return RenderingSettingsService::ViewMode::kWireframe;
-  case RenderingViewMode::kSolid:
-  default:
-    return RenderingSettingsService::ViewMode::kSolid;
-  }
 }
 
 } // namespace oxygen::examples::ui

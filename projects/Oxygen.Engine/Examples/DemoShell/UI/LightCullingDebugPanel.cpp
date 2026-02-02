@@ -40,7 +40,7 @@ auto LightingPanel::GetPreferredWidth() const noexcept -> float
 
 auto LightingPanel::GetIcon() const noexcept -> std::string_view
 {
-  return oxygen::imgui::icons::kIconLighting;
+  return imgui::icons::kIconLighting;
 }
 
 auto LightingPanel::OnRegistered() -> void
@@ -66,7 +66,7 @@ void LightingPanel::DrawVisualizationModes()
     || current_mode == ShaderDebugMode::kLightCullingHeatMap;
 
   const bool normal_selected
-    = (current_mode == ShaderDebugMode::kDisabled) || !is_lighting_mode;
+    = current_mode == ShaderDebugMode::kDisabled || !is_lighting_mode;
 
   if (ImGui::RadioButton("Normal", normal_selected)) {
     vm_->SetVisualizationMode(ShaderDebugMode::kDisabled);
@@ -173,7 +173,7 @@ void LightingPanel::DrawClusterConfigControls()
     float z_near_log = std::log10(z_near);
     float z_far_log = std::log10(z_far);
 
-    if (ImGui::SliderFloat("Z Near", &z_near_log, -2.0F, 2.0F, "10^%.2f")) {
+    if (ImGui::SliderFloat("Z Near", &z_near_log, -2.0F, 2.0F, "10^%.2F")) {
       z_near = std::pow(10.0F, z_near_log);
       // Ensure z_near < z_far
       if (z_near >= z_far) {
@@ -183,12 +183,12 @@ void LightingPanel::DrawClusterConfigControls()
     }
     if (ImGui::IsItemHovered()) {
       ImGui::SetTooltip(
-        "Near plane for depth slicing (%.3f units).\n"
+        "Near plane for depth slicing (%.3F units).\n"
         "Should match or be slightly less than camera near plane.",
         z_near);
     }
 
-    if (ImGui::SliderFloat("Z Far", &z_far_log, 1.0F, 4.0F, "10^%.2f")) {
+    if (ImGui::SliderFloat("Z Far", &z_far_log, 1.0F, 4.0F, "10^%.2F")) {
       z_far = std::pow(10.0F, z_far_log);
       // Ensure z_far > z_near
       if (z_far <= z_near) {
@@ -197,14 +197,14 @@ void LightingPanel::DrawClusterConfigControls()
       vm_->SetZFar(z_far);
     }
     if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Far plane for depth slicing (%.1f units).\n"
+      ImGui::SetTooltip("Far plane for depth slicing (%.1F units).\n"
                         "Should match or exceed camera far plane.",
         z_far);
     }
 
     // Show actual values
     ImGui::TextColored(ImVec4(0.7F, 0.7F, 0.7F, 1.0F),
-      "Range: %.3f - %.1f (ratio: %.0fx)", z_near, z_far, z_far / z_near);
+      "Range: %.3F - %.1F (ratio: %.0Fx)", z_near, z_far, z_far / z_near);
   }
 }
 

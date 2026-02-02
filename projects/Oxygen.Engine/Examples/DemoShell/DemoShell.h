@@ -17,29 +17,36 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/SceneNode.h>
 
 #include "DemoShell/ActiveScene.h"
 #include "DemoShell/Services/CameraLifecycleService.h"
+#include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/UI/DemoPanel.h"
-#include "DemoShell/UI/DemoShellUi.h"
+#include "DemoShell/UI/RenderingVm.h"
 
-namespace oxygen::engine {
-class InputSystem;
-class Renderer;
-struct ShaderPassConfig;
-struct LightCullingPassConfig;
+namespace oxygen {
+class AsyncEngine;
+namespace engine {
+  class FrameContext;
+  class InputSystem;
+  class Renderer;
+  struct ShaderPassConfig;
+  struct LightCullingPassConfig;
 } // namespace oxygen::engine
+}
 
 namespace oxygen::examples {
 class SkyboxService;
 class CameraSettingsService;
 class ContentSettingsService;
+class RenderingPipeline;
 } // namespace oxygen::examples
 
 namespace oxygen::examples::ui {
 class CameraVm;
 class ContentVm;
+class CameraRigController;
+struct SceneEntry;
 } // namespace oxygen::examples::ui
 
 namespace oxygen::examples {
@@ -51,6 +58,7 @@ struct DemoShellPanelConfig {
   bool environment { false };
   bool lighting { false };
   bool rendering { false };
+  bool post_process { false };
 };
 
 //! Configuration for the demo shell and its standard panels.
@@ -78,13 +86,13 @@ struct DemoShellPanelConfig {
  @see DemoShell, DemoShell::Initialize
 */
 struct DemoShellConfig {
-  observer_ptr<engine::InputSystem> input_system { nullptr };
-  observer_ptr<FileBrowserService> file_browser_service { nullptr };
-  observer_ptr<SkyboxService> skybox_service { nullptr };
-  DemoShellPanelConfig panel_config {};
+  observer_ptr<AsyncEngine> engine { nullptr };
   bool enable_camera_rig { true };
 
-  std::function<void(const data::AssetKey&)> on_scene_load_requested {};
+  ContentRootConfig content_roots {};
+  DemoShellPanelConfig panel_config {};
+
+  std::function<void(const ui::SceneEntry&)> on_scene_load_requested {};
   std::function<void()> on_scene_load_cancel_requested {};
   std::function<void(std::size_t)> on_dump_texture_memory {};
   std::function<std::optional<data::AssetKey>()> get_last_released_scene_key {};
@@ -92,10 +100,7 @@ struct DemoShellConfig {
   std::function<void(const std::filesystem::path&)> on_pak_mounted {};
   std::function<void(const std::filesystem::path&)> on_loose_index_loaded {};
 
-  std::function<observer_ptr<engine::Renderer>()> get_renderer {};
-
-  //! Returns pass config references for rendering/lighting panels.
-  std::function<ui::PassConfigRefs()> get_pass_config_refs {};
+  std::function<observer_ptr<RenderingPipeline>()> get_active_pipeline {};
 };
 
 //! Orchestrates the demo shell UI, panels, and camera helpers.
@@ -138,9 +143,13 @@ public:
   auto Update(time::CanonicalDuration delta_time) -> void;
 
   //! Draw the demo shell UI layout and active panel contents.
-  auto Draw() -> void;
+  auto Draw(engine::FrameContext& fc) -> void;
 
   //! Register a demo-specific panel with the shell.
+  //!
+  //! Panels can be registered before initialization; they will be deferred
+  //! until the shell completes initialization and then forwarded to
+  //! `DemoShellUi` for registration.
   auto RegisterPanel(std::shared_ptr<DemoPanel> panel) -> bool;
 
   //! Set the active scene (ownership transferred to the shell).
@@ -155,8 +164,8 @@ public:
   //! Set the active camera node used by the camera rig and panels.
   auto SetActiveCamera(scene::SceneNode camera) -> void;
 
-  //! Update the skybox service used by environment panels.
-  auto SetSkyboxService(observer_ptr<SkyboxService> skybox_service) -> void;
+  //! Returns the skybox service used by environment panels (created on demand).
+  [[nodiscard]] auto GetSkyboxService() -> observer_ptr<SkyboxService>;
 
   //! Cancel any in-flight content imports.
   auto CancelContentImport() -> void;
@@ -164,8 +173,15 @@ public:
   //! Access the camera lifecycle service for advanced control.
   [[nodiscard]] auto GetCameraLifecycle() -> CameraLifecycleService&;
 
+  //! Access the file browser service.
+  [[nodiscard]] auto GetFileBrowserService() const -> FileBrowserService&;
+
+  //! Access the camera rig controller (may be null if camera rig is disabled).
+  [[nodiscard]] auto GetCameraRig() const
+    -> observer_ptr<ui::CameraRigController>;
+
   //! Get the current rendering view mode selection.
-  [[nodiscard]] auto GetRenderingViewMode() const -> ui::RenderingViewMode;
+  [[nodiscard]] auto GetRenderingViewMode() const -> RenderMode;
 
   //! Force an active panel by name (no-op if not registered).
   auto SetActivePanel(std::string_view panel_name) -> void;
@@ -184,9 +200,9 @@ public:
   [[nodiscard]] auto GetContentVm() const -> observer_ptr<ui::ContentVm>;
 
 private:
-  auto InitializePanels() -> void;
+  //! Completes initialization once required modules are available.
+  auto CompleteInitialization() -> bool;
   auto UpdatePanels() -> void;
-  auto RegisterDemoPanels() -> void;
 
   struct Impl;
   std::unique_ptr<Impl> impl_ {};

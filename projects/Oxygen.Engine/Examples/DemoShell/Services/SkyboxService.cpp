@@ -6,11 +6,9 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstring>
 #include <filesystem>
 #include <string>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/Import/TextureImporter.h>
 #include <Oxygen/Content/Import/TexturePackingPolicy.h>
@@ -24,8 +22,7 @@
 
 namespace oxygen::examples {
 
-SkyboxService::SkyboxService(
-  oxygen::observer_ptr<oxygen::content::IAssetLoader> asset_loader,
+SkyboxService::SkyboxService(observer_ptr<content::IAssetLoader> asset_loader,
   observer_ptr<scene::Scene> scene)
   : asset_loader_(asset_loader)
   , scene_(scene)
@@ -57,37 +54,37 @@ auto SkyboxService::StartLoadSkybox(const std::string& file_path,
   using namespace oxygen::content::import;
 
   // Determine output format
-  oxygen::Format output_fmt = oxygen::Format::kRGBA8UNormSRGB;
+  auto output_fmt = Format::kRGBA8UNormSRGB;
   bool use_bc7 = false;
-  const char* format_name = "RGBA8";
+  auto format_name = "RGBA8";
 
   switch (options.output_format) {
   case OutputFormat::kRGBA8:
-    output_fmt = oxygen::Format::kRGBA8UNormSRGB;
+    output_fmt = Format::kRGBA8UNormSRGB;
     format_name = "RGBA8";
     break;
   case OutputFormat::kRGBA16Float:
-    output_fmt = oxygen::Format::kRGBA16Float;
+    output_fmt = Format::kRGBA16Float;
     format_name = "RGBA16F";
     break;
   case OutputFormat::kRGBA32Float:
-    output_fmt = oxygen::Format::kRGBA32Float;
+    output_fmt = Format::kRGBA32Float;
     format_name = "RGBA32F";
     break;
   case OutputFormat::kBC7:
-    output_fmt = oxygen::Format::kBC7UNormSRGB;
+    output_fmt = Format::kBC7UNormSRGB;
     use_bc7 = true;
     format_name = "BC7";
     break;
   }
 
   std::string ext = img_path.extension().string();
-  std::transform(ext.begin(), ext.end(), ext.begin(),
+  std::ranges::transform(ext, ext.begin(),
     [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   const bool is_hdr_source = (ext == ".hdr") || (ext == ".exr");
 
-  const bool is_ldr_output = (output_fmt == oxygen::Format::kRGBA8UNormSRGB)
-    || (output_fmt == oxygen::Format::kBC7UNormSRGB);
+  const bool is_ldr_output = (output_fmt == Format::kRGBA8UNormSRGB)
+    || (output_fmt == Format::kBC7UNormSRGB);
   const bool should_tonemap_hdr_to_ldr = is_hdr_source && is_ldr_output;
   const bool tonemap_forced
     = should_tonemap_hdr_to_ldr && !options.tonemap_hdr_to_ldr;
@@ -179,12 +176,11 @@ auto SkyboxService::StartLoadSkybox(const std::string& file_path,
   const auto& payload = cooked_result->payload;
 
   // Build PAK descriptor
-  using oxygen::data::pak::TextureResourceDesc;
+  using data::pak::TextureResourceDesc;
   TextureResourceDesc pak_desc {};
-  pak_desc.data_offset
-    = static_cast<oxygen::data::pak::OffsetT>(sizeof(TextureResourceDesc));
+  pak_desc.data_offset = sizeof(TextureResourceDesc);
   pak_desc.size_bytes
-    = static_cast<oxygen::data::pak::DataBlobSizeT>(payload.payload.size());
+    = static_cast<data::pak::DataBlobSizeT>(payload.payload.size());
   pak_desc.texture_type = static_cast<std::uint8_t>(payload.desc.texture_type);
   pak_desc.compression_type = 0;
   pak_desc.width = payload.desc.width;
@@ -205,15 +201,15 @@ auto SkyboxService::StartLoadSkybox(const std::string& file_path,
     payload.payload.data(), payload.payload.size());
 
   asset_loader_->StartLoadTexture(
-    oxygen::content::CookedResourceData<oxygen::data::TextureResource> {
+    oxygen::content::CookedResourceData<data::TextureResource> {
       .key = resource_key,
       .bytes = std::span<const std::uint8_t>(packed->data(), packed->size()),
     },
-    [this, on_complete = std::move(on_complete), packed, format_name,
+    [this, on_complete = std::move(on_complete), format_name,
       should_tonemap_hdr_to_ldr, tonemap_forced,
       face_size = static_cast<int>(payload.desc.width),
-      mip_levels = payload.desc.mip_levels, resource_key](
-      std::shared_ptr<oxygen::data::TextureResource> tex) mutable {
+      mip_levels = payload.desc.mip_levels,
+      resource_key](std::shared_ptr<data::TextureResource> tex) mutable {
       LoadResult callback_result;
       callback_result.resource_key = resource_key;
       callback_result.face_size = face_size;
@@ -250,15 +246,14 @@ auto SkyboxService::LoadAndEquip(const std::string& file_path,
     });
 }
 
-auto SkyboxService::SetSkyboxResourceKey(oxygen::content::ResourceKey key)
-  -> void
+auto SkyboxService::SetSkyboxResourceKey(content::ResourceKey key) -> void
 {
   current_resource_key_ = key;
 }
 
 auto SkyboxService::ApplyToScene(const SkyLightParams& params) -> void
 {
-  if (!scene_ || current_resource_key_ == oxygen::content::ResourceKey { 0U }) {
+  if (!scene_ || current_resource_key_ == content::ResourceKey { 0U }) {
     return;
   }
 
@@ -285,7 +280,7 @@ auto SkyboxService::ApplyToScene(const SkyLightParams& params) -> void
     auto sky = env->TryGetSystem<scene::environment::SkySphere>();
     if (!sky) {
       auto& sky_ref = env->AddSystem<scene::environment::SkySphere>();
-      sky = observer_ptr<scene::environment::SkySphere>(&sky_ref);
+      sky = observer_ptr(&sky_ref);
     }
     sky->SetEnabled(true);
     sky->SetSource(scene::environment::SkySphereSource::kCubemap);
@@ -294,7 +289,7 @@ auto SkyboxService::ApplyToScene(const SkyLightParams& params) -> void
     auto sky_light = env->TryGetSystem<scene::environment::SkyLight>();
     if (!sky_light) {
       auto& sky_light_ref = env->AddSystem<scene::environment::SkyLight>();
-      sky_light = observer_ptr<scene::environment::SkyLight>(&sky_light_ref);
+      sky_light = observer_ptr(&sky_light_ref);
     }
     sky_light->SetEnabled(true);
     sky_light->SetSource(scene::environment::SkyLightSource::kSpecifiedCubemap);

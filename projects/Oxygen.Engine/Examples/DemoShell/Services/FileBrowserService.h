@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -60,10 +61,12 @@ struct ContentRootPaths {
 /*!
  Provides a lightweight wrapper over ImGuiFileBrowser that can be reused across
  panels and demos. Call `Open()` on demand, then call `UpdateAndDraw()` each
- frame. Consume the selection with `ConsumeSelection()`.
+ frame. Consume the result with `ConsumeResult()`.
  */
 class FileBrowserService {
 public:
+  using RequestId = std::uint64_t;
+
   FileBrowserService();
   ~FileBrowserService();
 
@@ -73,13 +76,26 @@ public:
   auto operator=(FileBrowserService&&) -> FileBrowserService& = delete;
 
   //! Open the file browser with the given configuration.
-  void Open(const FileBrowserConfig& config);
+  auto Open(const FileBrowserConfig& config) -> RequestId;
 
   //! Draw the file browser if open and capture selection.
   void UpdateAndDraw();
 
-  //! Returns the selected path if available and clears it.
-  auto ConsumeSelection() -> std::optional<std::filesystem::path>;
+  //! Indicates the type of file browser result.
+  enum class ResultKind {
+    kSelected,
+    kCanceled,
+  };
+
+  //! File browser outcome.
+  struct Result {
+    ResultKind kind { ResultKind::kSelected };
+    std::filesystem::path path;
+    RequestId request_id { 0 };
+  };
+
+  //! Returns the latest result if available and clears it.
+  auto ConsumeResult(RequestId request_id) -> std::optional<Result>;
 
   //! Returns true if the browser window is currently open.
   [[nodiscard]] auto IsOpen() const noexcept -> bool;
@@ -96,12 +112,15 @@ public:
 private:
   auto BuildTypeFilters(const FileBrowserConfig& config)
     -> std::vector<std::string>;
-  auto ResolveSettings() const noexcept
-    -> oxygen::observer_ptr<SettingsService>;
+  auto ResolveSettings() const noexcept -> observer_ptr<SettingsService>;
   auto MakeSettingsKey(std::string_view title) const -> std::string;
 
   std::unique_ptr<ImGui::FileBrowser> browser_;
-  std::optional<std::filesystem::path> selection_;
+  std::optional<Result> result_;
+  bool was_open_ { false };
+  int last_update_frame_ { -1 };
+  RequestId next_request_id_ { 0 };
+  RequestId active_request_id_ { 0 };
   std::string open_label_ {};
   std::string settings_key_override_ {};
   std::string settings_key_ {};

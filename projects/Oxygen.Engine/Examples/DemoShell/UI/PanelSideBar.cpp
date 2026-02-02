@@ -70,7 +70,7 @@ namespace {
 
   auto ToSpectrumColor(const unsigned int color, const float alpha) -> ImVec4
   {
-    ImVec4 result = ImGui::ColorConvertU32ToFloat4(static_cast<ImU32>(color));
+    ImVec4 result = ImGui::ColorConvertU32ToFloat4(color);
     result.w = alpha;
     return result;
   }
@@ -122,7 +122,7 @@ auto PanelSideBar::Draw() -> void
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0F, 14.0F));
 
   constexpr float kIconButtonPadding = 16.0F;
-  constexpr float kIconButtonBaseSize = kIconSize + (kIconButtonPadding * 2.0F);
+  constexpr float kIconButtonBaseSize = kIconSize + kIconButtonPadding * 2.0F;
 
   // None button
   constexpr std::string_view kSideBarIconFontName = "oxygen-icons";
@@ -130,8 +130,7 @@ auto PanelSideBar::Draw() -> void
   if (icon_font_24) {
     ImGui::PushFont(icon_font_24, kIconSize);
   }
-  const float dpi_scale
-    = (io.FontGlobalScale > 0.0F) ? io.FontGlobalScale : 1.0F;
+  const float dpi_scale = io.FontGlobalScale > 0.0F ? io.FontGlobalScale : 1.0F;
   const float icon_button_size = kIconButtonBaseSize * dpi_scale;
   const float icon_button_padding = kIconButtonPadding * dpi_scale;
   ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
@@ -146,7 +145,7 @@ auto PanelSideBar::Draw() -> void
     CenterCursorForButton(icon_button_size);
 
     const auto icon = entry.panel->GetIcon();
-    constexpr auto kDefaultIcon = oxygen::imgui::icons::kIconSettings;
+    constexpr auto kDefaultIcon = imgui::icons::kIconSettings;
     const auto* icon_text = icon.empty() ? kDefaultIcon.data() : icon.data();
     if (ImGui::Button(icon_text, ImVec2(icon_button_size, icon_button_size))) {
       if (is_active) {
@@ -163,12 +162,12 @@ auto PanelSideBar::Draw() -> void
       const ImVec2 max = ImGui::GetItemRectMax();
       const float underline_height = 3.0F * dpi_scale;
       const ImVec4 underline_color
-        = ToSpectrumColor(oxygen::imgui::spectrum::Static::kBlue500, 1.0F);
+        = ToSpectrumColor(imgui::spectrum::Static::kBlue500, 1.0F);
       ImDrawList* draw_list = ImGui::GetForegroundDrawList();
       draw_list->PushClipRect(min, max, true);
-      draw_list->AddRectFilled(ImVec2(min.x + (6.0F * dpi_scale),
-                                 max.y - underline_height - (2.0F * dpi_scale)),
-        ImVec2(max.x - (6.0F * dpi_scale), max.y - (2.0F * dpi_scale)),
+      draw_list->AddRectFilled(ImVec2(min.x + 6.0F * dpi_scale,
+                                 max.y - underline_height - 2.0F * dpi_scale),
+        ImVec2(max.x - 6.0F * dpi_scale, max.y - 2.0F * dpi_scale),
         ImGui::ColorConvertFloat4ToU32(underline_color));
       draw_list->PopClipRect();
     }

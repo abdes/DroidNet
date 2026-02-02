@@ -184,7 +184,7 @@ auto TextureLoadingService::SubmitImport(const ImportSettings& settings) -> bool
   import_status_ = {};
   import_status_.message = "Preparing import...";
   import_status_.in_flight = false;
-  import_status_.overall_progress = 0.0f;
+  import_status_.overall_progress = 0.0F;
   import_completed_ = false;
   import_report_ = {};
 
@@ -305,7 +305,7 @@ auto TextureLoadingService::SubmitImport(const ImportSettings& settings) -> bool
     import_report_ = report;
     import_completed_ = true;
     import_status_.in_flight = false;
-    import_status_.overall_progress = 1.0f;
+    import_status_.overall_progress = 1.0F;
     import_status_.message
       = report.success ? "Import complete" : "Import failed";
 
@@ -796,7 +796,7 @@ void TextureLoadingService::LoadTexturesJson()
           meta.settings.layout_idx = sets.value("layout_idx", 0);
           meta.settings.flip_normal_green
             = sets.value("flip_normal_green", false);
-          meta.settings.exposure_ev = sets.value("exposure_ev", 0.0f);
+          meta.settings.exposure_ev = sets.value("exposure_ev", 0.0F);
           meta.settings.bc7_quality_idx = sets.value("bc7_quality_idx", 2);
           meta.settings.hdr_handling_idx = sets.value("hdr_handling_idx", 1);
         }

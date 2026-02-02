@@ -28,7 +28,7 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderItem.h>
 
-#include <MainModule.h>
+#include "Graphics/MainModule.h"
 
 using oxygen::examples::MainModule;
 using WindowProps = oxygen::platform::window::Properties;
@@ -275,7 +275,7 @@ auto MainModule::RenderScene() -> co::Co<>
       glm::mat4 worldViewProjectionMatrix;
     } constants;
     constants.worldViewProjectionMatrix
-      = glm::mat4(1.0f); // Replace with actual transform if needed
+      = glm::mat4(1.0F); // Replace with actual transform if needed
     void* mapped = constant_buffer_->Map();
     memcpy(mapped, &constants, sizeof(constants));
     constant_buffer_->UnMap();
@@ -313,7 +313,7 @@ auto MainModule::SetupFramebuffers() -> void
     depth_desc.is_shader_resource = true;
     depth_desc.is_render_target = true;
     depth_desc.use_clear_value = true;
-    depth_desc.clear_value = { 1.0f, 0.0f, 0.0f, 0.0f };
+    depth_desc.clear_value = { 1.0F, 0.0F, 0.0F, 0.0F };
     depth_desc.initial_state = ResourceStates::kDepthWrite;
     const auto depth_tex = gfx->CreateTexture(depth_desc);
 
@@ -333,15 +333,15 @@ auto MainModule::SetupRenderPasses() -> void
   const auto gfx = gfx_weak_.lock();
 
   // Generate a simple quad mesh asset (XY plane, 1x1)
-  auto quad_mesh = data::MakeQuadMeshAsset(1.0f, 1.0f);
+  auto quad_mesh = data::MakeQuadMeshAsset(1.0F, 1.0F);
   CHECK_NOTNULL_F(quad_mesh, "Failed to create quad mesh asset");
 
   // TODO: Material asset
   // std::shared_ptr<oxygen::data::MaterialAsset> material = nullptr;
 
   // Set up world and normal transforms (identity for this example)
-  constexpr auto world_transform = glm::mat4(1.0f);
-  constexpr auto normal_transform = glm::mat3(1.0f);
+  constexpr auto world_transform = glm::mat4(1.0F);
+  constexpr auto normal_transform = glm::mat3(1.0F);
 
   // Create RenderItem (data-driven, immutable)
   RenderItem quad_item {

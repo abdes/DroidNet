@@ -50,7 +50,13 @@ namespace {
 
   auto CameraModeToString(const ui::CameraControlMode mode) -> std::string_view
   {
-    return mode == ui::CameraControlMode::kOrbit ? "orbit" : "fly";
+    if (mode == ui::CameraControlMode::kOrbit) {
+      return "orbit";
+    }
+    if (mode == ui::CameraControlMode::kDrone) {
+      return "drone";
+    }
+    return "fly";
   }
 
   auto ParseCameraMode(const std::string_view value)
@@ -58,6 +64,9 @@ namespace {
   {
     if (value == "orbit") {
       return ui::CameraControlMode::kOrbit;
+    }
+    if (value == "drone") {
+      return ui::CameraControlMode::kDrone;
     }
     if (value == "fly") {
       return ui::CameraControlMode::kFly;
@@ -208,8 +217,8 @@ void CameraLifecycleService::EnsureFlyCameraFacingScene()
   const glm::vec3 cam_pos = tf.GetLocalPosition().value_or(glm::vec3(0.0F));
   const glm::quat cam_rot
     = tf.GetLocalRotation().value_or(glm::quat(1.0F, 0.0F, 0.0F, 0.0F));
-  const glm::vec3 forward = cam_rot * oxygen::space::look::Forward;
-  const glm::vec3 target(0.0F, 0.0F, 0.0F);
+  const glm::vec3 forward = cam_rot * space::look::Forward;
+  constexpr glm::vec3 target(0.0F, 0.0F, 0.0F);
   const glm::vec3 to_target = target - cam_pos;
   const float len2 = glm::dot(to_target, to_target);
   if (len2 <= 1e-6F) {
@@ -225,9 +234,7 @@ void CameraLifecycleService::EnsureFlyCameraFacingScene()
   tf.SetLocalRotation(look_rot);
   initial_camera_rotation_ = look_rot;
 
-  if (camera_rig_) {
-    camera_rig_->SyncFromActiveCamera();
-  }
+  camera_rig_->SyncFromActiveCamera();
 }
 
 void CameraLifecycleService::RequestSyncFromActive() { pending_sync_ = true; }
@@ -396,8 +403,8 @@ void CameraLifecycleService::EnsureFallbackCamera()
 
     // Camera at -Y axis looking at origin with Z-up.
     // User is at (0, -15, 0) watching the scene at origin.
-    const glm::vec3 cam_pos(0.0F, -15.0F, 0.0F);
-    const glm::vec3 cam_target(0.0F, 0.0F, 0.0F);
+    constexpr glm::vec3 cam_pos(0.0F, -15.0F, 0.0F);
+    constexpr glm::vec3 cam_target(0.0F, 0.0F, 0.0F);
     const glm::quat cam_rot = MakeLookRotationFromPosition(cam_pos, cam_target);
 
     auto tf = active_camera_.GetTransform();

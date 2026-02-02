@@ -6,19 +6,15 @@
 
 #pragma once
 
-#include <cstdint>
-
 #include <mutex>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 
+#include "DemoShell/Runtime/RenderingPipeline.h"
 #include "DemoShell/Services/RenderingSettingsService.h"
 
 namespace oxygen::examples::ui {
-
-//! View mode selection for rendering panel.
-enum class RenderingViewMode { kSolid, kWireframe };
 
 //! View model for rendering panel state.
 /*!
@@ -38,40 +34,33 @@ enum class RenderingViewMode { kSolid, kWireframe };
 class RenderingVm {
 public:
   //! Creates a view model backed by the provided settings service.
-  explicit RenderingVm(observer_ptr<RenderingSettingsService> service,
-    observer_ptr<engine::ShaderPassConfig> pass_config);
+  explicit RenderingVm(observer_ptr<RenderingSettingsService> service);
 
   //! Returns the cached view mode.
-  [[nodiscard]] auto GetViewMode() -> RenderingViewMode;
+  [[nodiscard]] auto GetRenderMode() -> RenderMode;
 
   //! Returns the cached debug mode.
   [[nodiscard]] auto GetDebugMode() -> engine::ShaderDebugMode;
 
   //! Sets view mode and forwards changes to the service.
-  auto SetViewMode(RenderingViewMode mode) -> void;
+  auto SetRenderMode(RenderMode mode) -> void;
 
-  //! Sets debug mode and forwards changes to the service and pass config.
+  //! Sets debug mode and forwards changes to the service.
   auto SetDebugMode(engine::ShaderDebugMode mode) -> void;
 
-  //! Updates the shader pass config pointer (for late initialization).
-  auto SetPassConfig(observer_ptr<engine::ShaderPassConfig> pass_config)
-    -> void;
+  [[nodiscard]] auto GetWireframeColor() -> graphics::Color;
+  auto SetWireframeColor(const graphics::Color& color) -> void;
 
 private:
   auto Refresh() -> void;
   [[nodiscard]] auto IsStale() const -> bool;
 
-  static auto ToViewMode(RenderingSettingsService::ViewMode mode)
-    -> RenderingViewMode;
-  static auto FromViewMode(RenderingViewMode mode)
-    -> RenderingSettingsService::ViewMode;
-
   mutable std::mutex mutex_ {};
   observer_ptr<RenderingSettingsService> service_;
-  observer_ptr<engine::ShaderPassConfig> pass_config_;
   std::uint64_t epoch_ { 0 };
-  RenderingViewMode view_mode_ { RenderingViewMode::kSolid };
+  RenderMode render_mode_ { RenderMode::kSolid };
   engine::ShaderDebugMode debug_mode_ { engine::ShaderDebugMode::kDisabled };
+  graphics::Color wire_color_ { 1.0F, 1.0F, 1.0F, 1.0F };
 };
 
 } // namespace oxygen::examples::ui

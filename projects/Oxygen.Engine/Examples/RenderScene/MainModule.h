@@ -23,9 +23,10 @@
 #include "DemoShell/ActiveScene.h"
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Runtime/SingleViewModuleBase.h"
-#include "DemoShell/Services/FileBrowserService.h"
+#include "DemoShell/Runtime/DemoModuleBase.h"
+#include "DemoShell/Runtime/SceneView.h"
 #include "DemoShell/Services/SkyboxService.h"
+#include "DemoShell/UI/ContentVm.h"
 
 namespace oxygen {
 class AsyncEngine;
@@ -47,10 +48,10 @@ class SceneLoaderService;
 
 namespace oxygen::examples::render_scene {
 
-class MainModule final : public SingleViewModuleBase {
+class MainModule final : public DemoModuleBase {
   OXYGEN_TYPED(MainModule)
 public:
-  using Base = oxygen::examples::SingleViewModuleBase;
+  using Base = oxygen::examples::DemoModuleBase;
 
   explicit MainModule(const oxygen::examples::DemoAppContext& app);
 
@@ -82,12 +83,14 @@ public:
   auto BuildDefaultWindowProperties() const
     -> platform::window::Properties override;
 
+  auto ClearBackbufferReferences() -> void override;
+
   auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
     -> bool override;
   void OnShutdown() noexcept override;
 
   auto OnFrameStart(oxygen::engine::FrameContext& context) -> void override;
-  auto OnExampleFrameStart(engine::FrameContext& context) -> void override;
+  auto HandleOnFrameStart(engine::FrameContext& context) -> void override;
   auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
   auto OnGameplay(engine::FrameContext& context) -> co::Co<> override;
   auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
@@ -102,25 +105,28 @@ private:
   auto ApplyRenderModeFromPanel() -> void;
   auto ClearSceneRuntime(const char* reason) -> void;
 
+  struct SceneLoadRequest {
+    data::AssetKey key {};
+    ui::SceneSourceKind source_kind { ui::SceneSourceKind::kPak };
+    std::filesystem::path source_path;
+    std::string scene_name;
+  };
+
   // Scene and rendering.
   ActiveScene active_scene_ {};
-  scene::NodeHandle registered_view_camera_ {};
+  observer_ptr<SceneView> main_view_ {};
 
   std::shared_ptr<oxygen::examples::SceneLoaderService> scene_loader_;
-  std::unique_ptr<FileBrowserService> file_browser_service_;
-  std::unique_ptr<SkyboxService> skybox_service_;
-  scene::Scene* skybox_service_scene_ { nullptr };
   bool scene_load_cancel_requested_ { false };
 
   std::unique_ptr<DemoShell> shell_ {};
 
   // Content and scene state
-  std::filesystem::path cooked_root_;
   std::optional<data::AssetKey> current_scene_key_;
   std::optional<data::AssetKey> last_released_scene_key_;
   std::optional<data::AssetKey> active_scene_load_key_;
-  int last_viewport_w_ { 0 };
-  int last_viewport_h_ { 0 };
+  int last_viewport_w_ { 2560 };
+  int last_viewport_h_ { 1400 };
 
   // Debug/instrumentation.
   bool logged_gameplay_tick_ { false };
@@ -136,7 +142,7 @@ private:
   };
   PendingSourceAction pending_source_action_ { PendingSourceAction::kNone };
   std::filesystem::path pending_path_;
-  std::optional<data::AssetKey> pending_scene_load_;
+  std::optional<SceneLoadRequest> pending_scene_load_;
   std::vector<std::filesystem::path> mounted_loose_roots_ {};
 };
 

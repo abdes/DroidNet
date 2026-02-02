@@ -120,7 +120,8 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
 
     // Graphics main module (replaces RenderController/RenderThread pattern)
     app.renderer = observer_ptr { renderer_unique.get() };
-    register_module(std::make_unique<oxygen::examples::input::MainModule>(app));
+    register_module(
+      std::make_unique<oxygen::examples::input_system::MainModule>(app));
 
     // Register as module
     register_module(std::move(renderer_unique));

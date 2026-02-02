@@ -4,19 +4,111 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "DemoShell/UI/ContentVm.h"
+#include <algorithm>
+#include <unordered_map>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/LooseCookedInspection.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <algorithm>
-#include <unordered_map>
 
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/FileBrowserService.h"
+#include "DemoShell/UI/ContentVm.h"
+
+#include <ranges>
 
 namespace oxygen::examples::ui {
+
+namespace {
+
+  auto NormalizePathForKey(const std::filesystem::path& path) -> std::string
+  {
+    std::error_code ec;
+    auto normalized = std::filesystem::weakly_canonical(path, ec);
+    if (ec) {
+      normalized = path.lexically_normal();
+    }
+    return normalized.string();
+  }
+
+  auto IsPathUnderRoot(const std::filesystem::path& path,
+    const std::filesystem::path& root) -> bool
+  {
+    if (path.empty() || root.empty()) {
+      return false;
+    }
+
+    std::error_code ec;
+    auto normalized_path = std::filesystem::weakly_canonical(path, ec);
+    if (ec) {
+      normalized_path = path.lexically_normal();
+    }
+
+    auto normalized_root = std::filesystem::weakly_canonical(root, ec);
+    if (ec) {
+      normalized_root = root.lexically_normal();
+    }
+
+    auto path_it = normalized_path.begin();
+    auto root_it = normalized_root.begin();
+    for (; root_it != normalized_root.end(); ++root_it, ++path_it) {
+      if (path_it == normalized_path.end() || *path_it != *root_it) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  auto ShouldOverrideCookedRoot(const std::filesystem::path& current_root)
+    -> bool
+  {
+    if (current_root.empty()) {
+      return true;
+    }
+
+    std::error_code ec;
+    const auto temp_root = std::filesystem::temp_directory_path(ec);
+    if (ec) {
+      return false;
+    }
+
+    return IsPathUnderRoot(current_root, temp_root);
+  }
+
+} // namespace
+
+auto ContentVm::MakeSceneEntryKey(const SceneEntry& entry) -> SceneEntryKey
+{
+  return SceneEntryKey {
+    .key = entry.key,
+    .source_kind = entry.source.kind,
+    .source_key = NormalizePathForKey(entry.source.path),
+  };
+}
+
+auto ContentVm::RebuildSceneList(
+  const std::unordered_map<SceneEntryKey, SceneEntry, SceneEntryKeyHash,
+    SceneEntryKeyEq>& entries,
+  std::vector<SceneEntry>& out) -> void
+{
+  out.clear();
+  out.reserve(entries.size());
+  for (const auto& entry : entries | std::views::values) {
+    out.push_back(entry);
+  }
+
+  std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) {
+    if (a.name != b.name) {
+      return a.name < b.name;
+    }
+    if (a.source.kind != b.source.kind) {
+      return static_cast<int>(a.source.kind) < static_cast<int>(b.source.kind);
+    }
+    return a.source.path.string() < b.source.path.string();
+  });
+}
 
 ContentVm::ContentVm(observer_ptr<ContentSettingsService> settings_service,
   observer_ptr<FileBrowserService> file_browser_service)
@@ -53,6 +145,14 @@ ContentVm::ContentVm(observer_ptr<ContentSettingsService> settings_service,
         s.model_root.string());
       settings_->SetExplorerSettings(s);
     }
+
+    const auto cooked_root = settings_->GetLastCookedOutputDirectory();
+    if (ShouldOverrideCookedRoot(cooked_root)) {
+      const auto defaults = file_browser_->GetContentRoots();
+      settings_->SetLastCookedOutputDirectory(defaults.cooked_root.string());
+      LOG_F(INFO, "ContentVm: Initializing cooked output to: '{}'",
+        defaults.cooked_root.string());
+    }
   }
 
   RefreshSources();
@@ -70,22 +170,35 @@ auto ContentVm::Update() -> void
 {
   // Handle File Browser results
   if (file_browser_) {
-    if (const auto selected_path = file_browser_->ConsumeSelection()) {
-      if (browse_mode_ == BrowseMode::kModelRoot) {
-        auto s = settings_->GetExplorerSettings();
-        s.model_root = *selected_path;
-        settings_->SetExplorerSettings(s);
-        RefreshSources();
-      } else if (browse_mode_ == BrowseMode::kSourceFile) {
-        StartImport(*selected_path);
-      } else if (browse_mode_ == BrowseMode::kPakFile) {
-        MountPak(*selected_path);
-      } else if (browse_mode_ == BrowseMode::kIndexFile) {
-        LoadIndex(*selected_path);
+    if (browse_request_id_ != 0) {
+      const auto result = file_browser_->ConsumeResult(browse_request_id_);
+      if (result) {
+        if (result->kind == FileBrowserService::ResultKind::kSelected) {
+          LOG_F(INFO, "ContentVm: FileBrowser selection '{}' (mode={})",
+            result->path.string(), static_cast<int>(browse_mode_));
+          if (browse_mode_ == BrowseMode::kModelRoot) {
+            auto s = settings_->GetExplorerSettings();
+            s.model_root = result->path;
+            settings_->SetExplorerSettings(s);
+            RefreshSources();
+          } else if (browse_mode_ == BrowseMode::kSourceFile) {
+            StartImport(result->path);
+          } else if (browse_mode_ == BrowseMode::kPakFile) {
+            MountPak(result->path);
+          } else if (browse_mode_ == BrowseMode::kIndexFile) {
+            LoadIndex(result->path);
+          } else {
+            LOG_F(
+              WARNING, "ContentVm: FileBrowser selection ignored (mode=None)");
+          }
+        } else if (result->kind == FileBrowserService::ResultKind::kCanceled) {
+          if (browse_mode_ != BrowseMode::kNone) {
+            LOG_F(INFO, "ContentVm: FileBrowser closed without selection");
+          }
+        }
+        browse_mode_ = BrowseMode::kNone;
+        browse_request_id_ = 0;
       }
-      browse_mode_ = BrowseMode::kNone;
-    } else if (browse_mode_ != BrowseMode::kNone && !file_browser_->IsOpen()) {
-      browse_mode_ = BrowseMode::kNone;
     }
   }
 
@@ -152,27 +265,25 @@ auto ContentVm::Update() -> void
         int scene_count = 0;
         std::vector<SceneEntry> imported_scenes;
         std::unordered_map<std::string, SceneEntry> scene_by_descriptor;
+        const SceneSource source { .kind = SceneSourceKind::kLooseIndex,
+          .path = index_path };
         {
           std::lock_guard data_lock(data_mutex_);
           for (const auto& asset : inspection.Assets()) {
             if (asset.asset_type
               == static_cast<uint8_t>(data::AssetType::kScene)) {
-              scenes_map_[asset.key] = { asset.virtual_path, asset.key };
+              const SceneEntry entry {
+                .name = asset.virtual_path,
+                .key = asset.key,
+                .source = source,
+              };
+              scenes_map_[MakeSceneEntryKey(entry)] = entry;
               scene_count++;
-              scene_by_descriptor.emplace(asset.descriptor_relpath,
-                SceneEntry { asset.virtual_path, asset.key });
+              scene_by_descriptor.emplace(asset.descriptor_relpath, entry);
             }
           }
 
-          // Rebuild vector for UI
-          available_scenes_.clear();
-          available_scenes_.reserve(scenes_map_.size());
-          for (const auto& [key, entry] : scenes_map_) {
-            available_scenes_.push_back(entry);
-          }
-          // Sort by name for better UI presentation
-          std::sort(available_scenes_.begin(), available_scenes_.end(),
-            [](const auto& a, const auto& b) { return a.name < b.name; });
+          RebuildSceneList(scenes_map_, available_scenes_);
         }
         LOG_F(INFO, "ContentVm: Discovered {} new scenes in imported content.",
           scene_count);
@@ -203,12 +314,12 @@ auto ContentVm::Update() -> void
             const auto& imported_scene = imported_scenes.back();
             LOG_F(INFO, "ContentVm: Auto-loading imported scene: '{}'",
               imported_scene.name);
-            RequestSceneLoad(imported_scene.key);
+            RequestSceneLoad(imported_scene);
           } else if (!available_scenes_.empty()) {
             const auto& fallback_scene = available_scenes_.back();
             LOG_F(INFO, "ContentVm: Auto-loading latest scene: '{}'",
               fallback_scene.name);
-            RequestSceneLoad(fallback_scene.key);
+            RequestSceneLoad(fallback_scene);
           }
         }
       } catch (const std::exception& ex) {
@@ -281,7 +392,7 @@ auto ContentVm::BrowseForModelRoot() -> void
   if (!s.model_root.empty()) {
     config.initial_directory = s.model_root;
   }
-  file_browser_->Open(config);
+  browse_request_id_ = file_browser_->Open(config);
   browse_mode_ = BrowseMode::kModelRoot;
 }
 
@@ -294,7 +405,7 @@ auto ContentVm::BrowseForSourceFile() -> void
   if (!s.model_root.empty()) {
     config.initial_directory = s.model_root;
   }
-  file_browser_->Open(config);
+  browse_request_id_ = file_browser_->Open(config);
   browse_mode_ = BrowseMode::kSourceFile;
 }
 
@@ -332,6 +443,9 @@ auto ContentVm::RefreshSources() -> void
     LOG_F(WARNING, "ContentVm: Model root is empty. No sources will be found.");
   } else if (!std::filesystem::exists(s.model_root, ec)) {
     LOG_F(WARNING, "ContentVm: Model root does not exist: '{}' (error: {})",
+      s.model_root.string(), ec.message());
+  } else if (!std::filesystem::is_directory(s.model_root, ec)) {
+    LOG_F(WARNING, "ContentVm: Model root is not a directory: '{}' (error: {})",
       s.model_root.string(), ec.message());
   } else {
     LOG_F(INFO, "ContentVm: Scanning model root for FBX/GLB/GLTF files...");
@@ -384,7 +498,7 @@ auto ContentVm::RefreshLibrary() -> void
   std::vector<std::filesystem::path> paks;
 
   std::error_code ec;
-  if (std::filesystem::exists(roots.pak_directory, ec)) {
+  if (std::filesystem::is_directory(roots.pak_directory, ec)) {
     for (const auto& entry :
       std::filesystem::directory_iterator(roots.pak_directory, ec)) {
       if (entry.path().extension() == ".pak") {
@@ -396,15 +510,7 @@ auto ContentVm::RefreshLibrary() -> void
   {
     std::lock_guard lock(data_mutex_);
     discovered_paks_ = std::move(paks);
-
-    // Sync available_scenes_ from current map
-    available_scenes_.clear();
-    available_scenes_.reserve(scenes_map_.size());
-    for (const auto& [key, entry] : scenes_map_) {
-      available_scenes_.push_back(entry);
-    }
-    std::sort(available_scenes_.begin(), available_scenes_.end(),
-      [](const auto& a, const auto& b) { return a.name < b.name; });
+    RebuildSceneList(scenes_map_, available_scenes_);
   }
 }
 
@@ -423,6 +529,7 @@ auto ContentVm::MountPak(const std::filesystem::path& path) -> void
 {
   try {
     content::PakFile pak(path);
+    const SceneSource source { .kind = SceneSourceKind::kPak, .path = path };
     {
       std::lock_guard lock(data_mutex_);
 
@@ -433,8 +540,12 @@ auto ContentVm::MountPak(const std::filesystem::path& path) -> void
           if (dir_entry
             && dir_entry->asset_type
               == static_cast<uint8_t>(data::AssetType::kScene)) {
-            scenes_map_[entry.asset_key]
-              = { entry.virtual_path, entry.asset_key };
+            const SceneEntry scene_entry {
+              .name = entry.virtual_path,
+              .key = entry.asset_key,
+              .source = source,
+            };
+            scenes_map_[MakeSceneEntryKey(scene_entry)] = scene_entry;
           }
         }
       }
@@ -443,7 +554,12 @@ auto ContentVm::MountPak(const std::filesystem::path& path) -> void
       for (const auto& dir_entry : pak.Directory()) {
         if (dir_entry.asset_type
           == static_cast<uint8_t>(data::AssetType::kScene)) {
-          if (scenes_map_.find(dir_entry.asset_key) == scenes_map_.end()) {
+          const SceneEntryKey key {
+            .key = dir_entry.asset_key,
+            .source_kind = source.kind,
+            .source_key = NormalizePathForKey(source.path),
+          };
+          if (!scenes_map_.contains(key)) {
             std::string name = "Scene (No Name)";
             try {
               auto reader = pak.CreateReader(dir_entry);
@@ -456,7 +572,12 @@ auto ContentVm::MountPak(const std::filesystem::path& path) -> void
               }
             } catch (...) {
             }
-            scenes_map_[dir_entry.asset_key] = { name, dir_entry.asset_key };
+            const SceneEntry scene_entry {
+              .name = name,
+              .key = dir_entry.asset_key,
+              .source = source,
+            };
+            scenes_map_[MakeSceneEntryKey(scene_entry)] = scene_entry;
           }
         }
       }
@@ -466,14 +587,7 @@ auto ContentVm::MountPak(const std::filesystem::path& path) -> void
         loaded_paks_.push_back(path);
       }
 
-      // Sync available_scenes_ vector across ALL sources (merging)
-      available_scenes_.clear();
-      available_scenes_.reserve(scenes_map_.size());
-      for (const auto& [key, entry] : scenes_map_) {
-        available_scenes_.push_back(entry);
-      }
-      std::sort(available_scenes_.begin(), available_scenes_.end(),
-        [](const auto& a, const auto& b) { return a.name < b.name; });
+      RebuildSceneList(scenes_map_, available_scenes_);
     }
     if (on_pak_mounted_)
       on_pak_mounted_(path);
@@ -487,29 +601,46 @@ auto ContentVm::LoadIndex(const std::filesystem::path& path) -> void
 {
   try {
     content::LooseCookedInspection inspection;
-    inspection.LoadFromFile(path);
+    std::error_code ec;
+    const bool is_dir = std::filesystem::is_directory(path, ec);
+    if (ec) {
+      LOG_F(WARNING,
+        "ContentVm: Failed to stat index path '{}': {} (treating as file)",
+        path.string(), ec.message());
+    }
+
+    std::filesystem::path index_path = path;
+    if (!ec && is_dir) {
+      LOG_F(INFO, "ContentVm: Loading loose cooked root '{}'", path.string());
+      inspection.LoadFromRoot(path);
+      index_path = path / "container.index.bin";
+    } else {
+      LOG_F(INFO, "ContentVm: Loading loose cooked index '{}'", path.string());
+      inspection.LoadFromFile(path);
+    }
+
+    const SceneSource source { .kind = SceneSourceKind::kLooseIndex,
+      .path = index_path };
 
     std::lock_guard lock(data_mutex_);
     for (const auto& asset : inspection.Assets()) {
       if (asset.asset_type == static_cast<uint8_t>(data::AssetType::kScene)) {
-        scenes_map_[asset.key] = { asset.virtual_path, asset.key };
+        const SceneEntry scene_entry {
+          .name = asset.virtual_path,
+          .key = asset.key,
+          .source = source,
+        };
+        scenes_map_[MakeSceneEntryKey(scene_entry)] = scene_entry;
       }
     }
-    if (std::find(loaded_indices_.begin(), loaded_indices_.end(), path)
+    if (std::find(loaded_indices_.begin(), loaded_indices_.end(), index_path)
       == loaded_indices_.end()) {
-      loaded_indices_.push_back(path);
+      loaded_indices_.push_back(index_path);
     }
 
-    // Sync available_scenes_ vector
-    available_scenes_.clear();
-    available_scenes_.reserve(scenes_map_.size());
-    for (const auto& [key, entry] : scenes_map_) {
-      available_scenes_.push_back(entry);
-    }
-    std::sort(available_scenes_.begin(), available_scenes_.end(),
-      [](const auto& a, const auto& b) { return a.name < b.name; });
+    RebuildSceneList(scenes_map_, available_scenes_);
     if (on_index_loaded_)
-      on_index_loaded_(path);
+      on_index_loaded_(index_path);
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "ContentVm: Failed to load index '{}': {}", path.string(),
       ex.what());
@@ -546,7 +677,7 @@ auto ContentVm::BrowseForPak() -> void
   if (!file_browser_)
     return;
   auto config = MakePakFileBrowserConfig(file_browser_->GetContentRoots());
-  file_browser_->Open(config);
+  browse_request_id_ = file_browser_->Open(config);
   browse_mode_ = BrowseMode::kPakFile;
 }
 
@@ -554,9 +685,10 @@ auto ContentVm::BrowseForIndex() -> void
 {
   if (!file_browser_)
     return;
+  LOG_F(INFO, "ContentVm: Opening file browser for loose cooked index");
   auto config
     = MakeLooseCookedIndexBrowserConfig(file_browser_->GetContentRoots());
-  file_browser_->Open(config);
+  browse_request_id_ = file_browser_->Open(config);
   browse_mode_ = BrowseMode::kIndexFile;
 }
 
@@ -565,25 +697,26 @@ auto ContentVm::GetAvailableScenes() const -> const std::vector<SceneEntry>&
   return available_scenes_;
 }
 
-auto ContentVm::RequestSceneLoad(const data::AssetKey& key) -> void
+auto ContentVm::RequestSceneLoad(const SceneEntry& entry) -> void
 {
   if (IsSceneLoading()) {
     LOG_F(WARNING, "ContentVm: Scene load already in progress");
     return;
   }
   if (on_scene_load_requested_) {
-    const auto scene_name = ResolveSceneLabel(key);
+    const auto scene_name = entry.name;
     {
       std::lock_guard lock(import_state_.progress_mutex);
       import_state_.is_scene_loading = true;
-      import_state_.scene_load_progress = 0.0f;
+      import_state_.scene_load_progress = 0.0F;
       import_state_.scene_load_message = "Loading scene: " + scene_name;
-      import_state_.scene_load_key = key;
+      import_state_.scene_load_label = scene_name;
+      import_state_.scene_load_key = entry.key;
       import_state_.scene_load_finish_time.reset();
     }
 
     AddDiagnosticMarker("Load Scene: " + scene_name + " (Started)", true);
-    on_scene_load_requested_(key);
+    on_scene_load_requested_(entry);
   }
 }
 
@@ -617,17 +750,21 @@ auto ContentVm::CancelSceneLoad() -> void
   }
 
   std::optional<data::AssetKey> scene_key;
+  std::string scene_label;
   {
     std::lock_guard lock(import_state_.progress_mutex);
     scene_key = import_state_.scene_load_key;
+    scene_label = import_state_.scene_load_label;
   }
-  const auto scene_name = ResolveSceneLabel(scene_key);
+  const auto scene_name
+    = scene_label.empty() ? ResolveSceneLabel(scene_key) : scene_label;
   {
     std::lock_guard lock(import_state_.progress_mutex);
     import_state_.is_scene_loading = false;
-    import_state_.scene_load_progress = 1.0f;
+    import_state_.scene_load_progress = 1.0F;
     import_state_.scene_load_message = "Cancelled scene load: " + scene_name;
     import_state_.scene_load_key.reset();
+    import_state_.scene_load_label.clear();
     import_state_.scene_load_finish_time = std::chrono::steady_clock::now();
   }
   AddDiagnosticMarker("Load Scene: " + scene_name + " (Cancelled)", false);
@@ -641,24 +778,28 @@ auto ContentVm::NotifySceneLoadCompleted(
   }
 
   std::optional<data::AssetKey> active_key;
+  std::string scene_label;
   {
     std::lock_guard lock(import_state_.progress_mutex);
     active_key = import_state_.scene_load_key;
+    scene_label = import_state_.scene_load_label;
   }
   if (active_key.has_value() && *active_key != key) {
     LOG_F(WARNING, "ContentVm: Ignoring scene completion for stale key");
     return;
   }
 
-  const auto scene_name = ResolveSceneLabel(key);
+  const auto scene_name
+    = scene_label.empty() ? ResolveSceneLabel(key) : scene_label;
   {
     std::lock_guard lock(import_state_.progress_mutex);
     import_state_.is_scene_loading = false;
-    import_state_.scene_load_progress = 1.0f;
+    import_state_.scene_load_progress = 1.0F;
     import_state_.scene_load_message = success
       ? "Loaded scene: " + scene_name
       : "Failed to load scene: " + scene_name;
     import_state_.scene_load_key.reset();
+    import_state_.scene_load_label.clear();
     import_state_.scene_load_finish_time = std::chrono::steady_clock::now();
   }
   AddDiagnosticMarker(
@@ -667,7 +808,7 @@ auto ContentVm::NotifySceneLoadCompleted(
 }
 
 auto ContentVm::SetOnSceneLoadRequested(
-  std::function<void(const data::AssetKey&)> callback) -> void
+  std::function<void(const SceneEntry&)> callback) -> void
 {
   on_scene_load_requested_ = std::move(callback);
 }
@@ -687,13 +828,12 @@ auto ContentVm::SetLastCookedOutput(const std::string& path) -> void
   settings_->SetLastCookedOutputDirectory(path);
 }
 
-auto ContentVm::GetExplorerSettings() const
-  -> oxygen::examples::ContentExplorerSettings
+auto ContentVm::GetExplorerSettings() const -> ContentExplorerSettings
 {
   return settings_->GetExplorerSettings();
 }
-auto ContentVm::SetExplorerSettings(
-  const oxygen::examples::ContentExplorerSettings& settings) -> void
+auto ContentVm::SetExplorerSettings(const ContentExplorerSettings& settings)
+  -> void
 {
   settings_->SetExplorerSettings(settings);
 }
@@ -827,13 +967,14 @@ auto ContentVm::ResolveSceneLabel(
 
   {
     std::lock_guard lock(data_mutex_);
-    const auto it = scenes_map_.find(*key);
-    if (it != scenes_map_.end()) {
-      return it->second.name;
+    for (const auto& [entry_key, entry] : scenes_map_) {
+      if (entry_key.key == *key) {
+        return entry.name;
+      }
     }
   }
 
-  return oxygen::data::to_string(*key);
+  return data::to_string(*key);
 }
 
 } // namespace oxygen::examples::ui

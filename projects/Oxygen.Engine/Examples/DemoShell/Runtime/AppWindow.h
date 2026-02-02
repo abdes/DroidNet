@@ -7,9 +7,7 @@
 #pragma once
 
 #include <array>
-#include <atomic>
 #include <memory>
-#include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Component.h>
@@ -47,7 +45,7 @@ class DemoAppContext;
  demo components so demo modules can AddComponent<AppWindow>(app) and treat
  this as the single window / render lifecycle owner.
 */
-class AppWindow final : public oxygen::Component,
+class AppWindow final : public Component,
                         public std::enable_shared_from_this<AppWindow> {
   OXYGEN_COMPONENT(AppWindow)
 
@@ -71,12 +69,17 @@ public:
 
   auto ApplyPendingResize() -> void;
 
+  [[nodiscard]] auto IsShuttingDown() const noexcept -> bool;
+
 private:
   // Surface / framebuffer lifecycle (engine thread usage).
   auto CreateSurface() -> bool;
-  // Ensure framebuffers are created/re-created for the current surface size.
   auto EnsureFramebuffers() -> bool;
   auto ClearFramebuffers() -> void;
+
+  // Internal lifecycle management.
+  auto ManageLifecycle() -> co::Co<>;
+  auto Cleanup() -> void;
 
   // The platform and the engine are guaranteed to outlive this component.
   // We store them as observer_ptr to avoid unnecessarily extending their

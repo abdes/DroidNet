@@ -45,7 +45,7 @@ public:
   ~AxesWidget() = default;
 
   //! Draw the axes widget using the provided camera.
-  void Draw(observer_ptr<oxygen::scene::SceneNode> camera);
+  void Draw(observer_ptr<scene::SceneNode> camera);
 
 private:
   void Draw(const glm::mat4& view_matrix);

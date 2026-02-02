@@ -40,8 +40,7 @@ class UiSettingsVm {
 public:
   //! Creates a view model backed by the provided settings service.
   explicit UiSettingsVm(observer_ptr<UiSettingsService> service,
-    observer_ptr<oxygen::examples::CameraLifecycleService> camera_lifecycle
-    = nullptr);
+    observer_ptr<CameraLifecycleService> camera_lifecycle = nullptr);
 
   //! Returns the cached axes visibility.
   [[nodiscard]] auto GetAxesVisible() -> bool;
@@ -53,8 +52,7 @@ public:
   [[nodiscard]] auto GetActivePanelName() -> std::optional<std::string>;
 
   //! Returns the active camera node (null when unavailable).
-  [[nodiscard]] auto GetActiveCamera() const
-    -> observer_ptr<oxygen::scene::SceneNode>;
+  [[nodiscard]] auto GetActiveCamera() const -> observer_ptr<scene::SceneNode>;
 
   //! Sets axes visibility and forwards changes to the service.
   auto SetAxesVisible(bool visible) -> void;
@@ -64,6 +62,8 @@ public:
 
   //! Sets frame timing detail visibility and forwards changes to the service.
   auto SetStatsShowFrameTimingDetail(bool visible) -> void;
+  auto SetStatsShowEngineTiming(bool visible) -> void;
+  auto SetStatsShowBudgetStats(bool visible) -> void;
 
   //! Sets the active panel name and forwards changes to the service.
   auto SetActivePanelName(std::optional<std::string> panel_name) -> void;

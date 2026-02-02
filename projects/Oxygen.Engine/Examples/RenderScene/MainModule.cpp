@@ -29,6 +29,8 @@
 #include <Oxygen/Scene/Types/Flags.h>
 
 #include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/ForwardPipeline.h"
+#include "DemoShell/Runtime/SceneView.h"
 #include "DemoShell/Services/SceneLoaderService.h"
 #include "DemoShell/UI/ContentVm.h"
 #include "DemoShell/UI/RenderingVm.h"
@@ -41,10 +43,6 @@ namespace oxygen::examples::render_scene {
 MainModule::MainModule(const oxygen::examples::DemoAppContext& app)
   : Base(app)
 {
-  cooked_root_
-    = std::filesystem::path(std::source_location::current().file_name())
-        .parent_path()
-    / ".cooked";
 }
 
 MainModule::~MainModule() = default;
@@ -79,39 +77,41 @@ auto MainModule::OnAttached(
     static_cast<const void*>(app_.input_system.get()),
     static_cast<const void*>(engine.get()));
 
+  // Create Pipeline
+  pipeline_
+    = std::make_unique<ForwardPipeline>(observer_ptr { app_.engine.get() });
+
   shell_ = std::make_unique<DemoShell>();
-  file_browser_service_ = std::make_unique<FileBrowserService>();
-  file_browser_service_->ConfigureContentRoots(ContentRootConfig {
-    .cooked_root = cooked_root_,
-  });
   DemoShellConfig shell_config;
-  shell_config.input_system = observer_ptr { app_.input_system.get() };
+  shell_config.engine = observer_ptr { engine.get() };
+  const auto demo_root
+    = std::filesystem::path(std::source_location::current().file_name())
+        .parent_path();
+  shell_config.content_roots
+    = { .content_root = demo_root.parent_path() / "Content",
+        .cooked_root = demo_root / ".cooked" };
   shell_config.panel_config.content_loader = true;
   shell_config.panel_config.camera_controls = true;
   shell_config.panel_config.lighting = true;
   shell_config.panel_config.environment = true;
   shell_config.panel_config.rendering = true;
-  shell_config.file_browser_service
-    = observer_ptr { file_browser_service_.get() };
-  shell_config.skybox_service = observer_ptr { skybox_service_.get() };
-  shell_config.get_renderer
-    = [this]() { return observer_ptr { ResolveRenderer() }; };
-  shell_config.get_pass_config_refs = [this]() {
-    ui::PassConfigRefs refs;
-    if (auto render_graph = GetRenderGraph()) {
-      refs.shader_pass_config
-        = observer_ptr { render_graph->GetShaderPassConfig().get() };
-      refs.light_culling_pass_config
-        = observer_ptr { render_graph->GetLightCullingPassConfig().get() };
-    }
-    return refs;
+  shell_config.enable_camera_rig = true;
+  shell_config.get_active_pipeline
+    = [this]() -> observer_ptr<RenderingPipeline> {
+    return observer_ptr { pipeline_.get() };
   };
-  shell_config.on_scene_load_requested
-    = [this](const data::AssetKey& key) { pending_scene_load_ = key; };
+  shell_config.on_scene_load_requested = [this](const ui::SceneEntry& entry) {
+    pending_scene_load_ = SceneLoadRequest {
+      .key = entry.key,
+      .source_kind = entry.source.kind,
+      .source_path = entry.source.path,
+      .scene_name = entry.name,
+    };
+  };
   shell_config.on_scene_load_cancel_requested
     = [this]() { scene_load_cancel_requested_ = true; };
   shell_config.on_dump_texture_memory = [this](const std::size_t top_n) {
-    if (auto* renderer = ResolveRenderer()) {
+    if (auto* renderer = app_.renderer.get()) {
       renderer->DumpEstimatedTextureMemory(top_n);
     }
   };
@@ -134,6 +134,16 @@ auto MainModule::OnAttached(
     return false;
   }
 
+  // Create Main View
+  auto view = std::make_unique<SceneView>(scene::SceneNode {});
+  main_view_ = observer_ptr(static_cast<SceneView*>(AddView(std::move(view))));
+
+  if (!app_.headless && app_window_ && app_window_->GetWindow()) {
+    const auto extent = app_window_->GetWindow()->Size();
+    last_viewport_w_ = extent.width;
+    last_viewport_h_ = extent.height;
+  }
+
   LOG_F(INFO, "RenderScene: DemoShell initialized");
   return true;
 }
@@ -145,6 +155,7 @@ void MainModule::OnShutdown() noexcept
   }
   ReleaseCurrentSceneAsset("module shutdown");
   ClearSceneRuntime("module shutdown");
+  main_view_ = nullptr;
   Base::OnShutdown();
 }
 
@@ -153,7 +164,7 @@ auto MainModule::OnFrameStart(oxygen::engine::FrameContext& context) -> void
   Base::OnFrameStart(context);
 }
 
-auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
+auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
 {
   // 1. Process deferred lifecycle actions before anything else this frame.
   if (pending_source_action_ != PendingSourceAction::kNone) {
@@ -176,8 +187,7 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
     auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
     if (asset_loader) {
       if (pending_source_action_ == PendingSourceAction::kClear) {
-        asset_loader->ClearMounts();
-        mounted_loose_roots_.clear();
+        asset_loader->TrimCache();
       } else if (pending_source_action_ == PendingSourceAction::kTrimCache) {
         asset_loader->TrimCache();
       } else if (pending_source_action_ == PendingSourceAction::kMountPak) {
@@ -197,13 +207,20 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
           });
 
         if (already_mounted) {
-          LOG_F(INFO, "RenderScene: Refreshing loose cooked mount for '{}'",
+          LOG_F(INFO,
+            "RenderScene: Loose cooked root already mounted; skipping "
+            "refresh for '{}'",
             normalized.string());
-          asset_loader->AddLooseCookedRoot(root);
         } else {
           asset_loader->AddLooseCookedRoot(root);
           mounted_loose_roots_.push_back(std::move(normalized));
         }
+      }
+    }
+
+    if (shell_) {
+      if (const auto vm = shell_->GetContentVm()) {
+        vm->RefreshLibrary();
       }
     }
 
@@ -221,17 +238,64 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
   }
 
   if (pending_scene_load_) {
-    const auto key = *pending_scene_load_;
+    const auto request = *pending_scene_load_;
     pending_scene_load_.reset();
 
     auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
     if (asset_loader) {
+      try {
+        if (request.source_kind == ui::SceneSourceKind::kPak) {
+          asset_loader->AddPakFile(request.source_path);
+          LOG_F(INFO,
+            "RenderScene: Ensured PAK source '{}' for scene load '{}'",
+            request.source_path.string(), request.scene_name);
+        } else if (request.source_kind == ui::SceneSourceKind::kLooseIndex) {
+          const auto root = request.source_path.parent_path();
+          std::error_code ec;
+          auto normalized = std::filesystem::weakly_canonical(root, ec);
+          if (ec) {
+            normalized = root.lexically_normal();
+          }
+
+          const auto already_mounted = std::any_of(mounted_loose_roots_.begin(),
+            mounted_loose_roots_.end(),
+            [&normalized](const std::filesystem::path& existing) {
+              return existing == normalized;
+            });
+
+          if (already_mounted) {
+            LOG_F(INFO,
+              "RenderScene: Loose cooked root already mounted; skipping "
+              "refresh for '{}'",
+              normalized.string());
+          } else {
+            asset_loader->AddLooseCookedRoot(root);
+            mounted_loose_roots_.push_back(std::move(normalized));
+          }
+          LOG_F(INFO,
+            "RenderScene: Ensured loose cooked root '{}' for scene load '{}'",
+            root.string(), request.scene_name);
+        }
+      } catch (const std::exception& ex) {
+        LOG_F(ERROR,
+          "RenderScene: Failed to remount source for scene load (scene='{}' "
+          "error='{}')",
+          request.scene_name, ex.what());
+        if (shell_) {
+          if (const auto vm = shell_->GetContentVm()) {
+            vm->NotifySceneLoadCompleted(request.key, false);
+          }
+        }
+        return;
+      }
+
       scene_loader_ = std::make_shared<SceneLoaderService>(
         *asset_loader, last_viewport_w_, last_viewport_h_);
-      active_scene_load_key_ = key;
-      scene_loader_->StartLoad(key);
-      LOG_F(INFO, "RenderScene: Started async scene load (scene_key={})",
-        oxygen::data::to_string(key));
+      active_scene_load_key_ = request.key;
+      scene_loader_->StartLoad(request.key);
+      LOG_F(INFO,
+        "RenderScene: Started async scene load (scene_key={} scene='{}')",
+        oxygen::data::to_string(request.key), request.scene_name);
     } else {
       LOG_F(ERROR, "AssetLoader unavailable");
     }
@@ -244,7 +308,11 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
       auto swap = scene_loader_->GetResult();
       LOG_F(INFO, "RenderScene: Applying staged scene swap (scene_key={})",
         oxygen::data::to_string(swap.scene_key));
-      ReleaseCurrentSceneAsset("scene swap");
+      const bool same_scene_key = current_scene_key_.has_value()
+        && swap.scene_key == *current_scene_key_;
+      if (!same_scene_key) {
+        ReleaseCurrentSceneAsset("scene swap");
+      }
       ClearSceneRuntime("scene swap");
 
       if (shell_) {
@@ -268,8 +336,12 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
       if (shell_ && shell_->GetCameraLifecycle().GetActiveCamera().IsAlive()) {
         shell_->GetCameraLifecycle().CaptureInitialPose();
         shell_->GetCameraLifecycle().EnsureFlyCameraFacingScene();
+        shell_->GetCameraLifecycle().EnsureViewport(
+          last_viewport_w_, last_viewport_h_);
+        shell_->GetCameraLifecycle().RequestSyncFromActive();
+        shell_->GetCameraLifecycle().ApplyPendingSync();
       }
-      registered_view_camera_ = scene::NodeHandle();
+
       scene_loader_ = std::move(loader);
       if (scene_loader_) {
         scene_loader_->MarkConsumed();
@@ -302,21 +374,6 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
   const auto scene_ptr
     = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
 
-  // Keep the skybox helper bound to the current scene.
-  if (skybox_service_scene_ != scene_ptr.get()) {
-    auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
-    if (asset_loader) {
-      skybox_service_ = std::make_unique<SkyboxService>(
-        observer_ptr { asset_loader.get() }, scene_ptr);
-      skybox_service_scene_ = scene_ptr.get();
-    } else {
-      skybox_service_.reset();
-      skybox_service_scene_ = nullptr;
-    }
-    if (shell_) {
-      shell_->SetSkyboxService(observer_ptr { skybox_service_.get() });
-    }
-  }
   context.SetScene(observer_ptr { scene_ptr.get() });
 }
 
@@ -327,16 +384,18 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     co_return;
   }
 
-  UpdateFrameContext(context, [this, &context](int w, int h) {
-    last_viewport_w_ = w;
-    last_viewport_h_ = h;
-    if (shell_) {
-      auto& camera_lifecycle = shell_->GetCameraLifecycle();
-      camera_lifecycle.EnsureViewport(w, h);
-      camera_lifecycle.ApplyPendingSync();
-      camera_lifecycle.ApplyPendingReset();
+  if (shell_) {
+    auto& camera_lifecycle = shell_->GetCameraLifecycle();
+    if (app_window_->GetWindow()) {
+      const auto extent = app_window_->GetWindow()->Size();
+      camera_lifecycle.EnsureViewport(extent.width, extent.height);
+      last_viewport_w_ = extent.width;
+      last_viewport_h_ = extent.height;
     }
-  });
+    camera_lifecycle.ApplyPendingSync();
+    camera_lifecycle.ApplyPendingReset();
+  }
+
   if (!app_window_->GetWindow()) {
     co_return;
   }
@@ -346,7 +405,10 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     shell_->Update(time::CanonicalDuration {});
   }
 
-  co_return;
+  EnsureViewCameraRegistered();
+
+  // Delegate to pipeline to register views
+  co_await Base::OnSceneMutation(context);
 }
 
 auto MainModule::ReleaseCurrentSceneAsset(const char* reason) -> void
@@ -369,19 +431,21 @@ auto MainModule::ReleaseCurrentSceneAsset(const char* reason) -> void
   current_scene_key_.reset();
 }
 
-auto MainModule::ClearSceneRuntime(const char* reason) -> void
+auto MainModule::ClearSceneRuntime(const char* /*reason*/) -> void
 {
-  UnregisterViewForRendering(reason);
   active_scene_ = {};
   scene_loader_.reset();
   if (shell_) {
-    shell_->SetScene(std::unique_ptr<scene::Scene> {});
+    shell_->SetScene(nullptr);
     shell_->GetCameraLifecycle().Clear();
-    shell_->SetSkyboxService(observer_ptr<SkyboxService> { nullptr });
   }
-  registered_view_camera_ = scene::NodeHandle();
-  skybox_service_.reset();
-  skybox_service_scene_ = nullptr;
+}
+
+auto MainModule::ClearBackbufferReferences() -> void
+{
+  if (pipeline_) {
+    pipeline_->ClearBackbufferReferences();
+  }
 }
 
 auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
@@ -411,14 +475,18 @@ auto MainModule::EnsureViewCameraRegistered() -> void
     return;
   }
 
-  const auto camera_handle = active_camera.GetHandle();
-  if (registered_view_camera_ != camera_handle) {
-    registered_view_camera_ = camera_handle;
-    UnregisterViewForRendering("camera changed");
-    LOG_F(INFO, "RenderScene: Active camera changed; re-registering view");
+  if (main_view_) {
+    bool needs_refresh = true;
+    if (const auto current = main_view_->GetCamera()) {
+      if (current->IsAlive()) {
+        needs_refresh = current->GetHandle() != active_camera.GetHandle();
+      }
+    }
+    if (needs_refresh) {
+      main_view_->SetCamera(active_camera);
+      main_view_->SetRendererRegistered(false);
+    }
   }
-
-  RegisterViewForRendering(active_camera);
 }
 
 auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
@@ -427,24 +495,9 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
   if (!app_window_->GetWindow()) {
     co_return;
   }
-  auto imgui_module_ref
-    = app_.engine ? app_.engine->GetModule<imgui::ImGuiModule>() : std::nullopt;
-
-  if (!imgui_module_ref) {
-    co_return;
-  }
-  auto& imgui_module = imgui_module_ref->get();
-  if (!imgui_module.IsWitinFrameScope()) {
-    co_return;
-  }
-  auto* imgui_context = imgui_module.GetImGuiContext();
-  if (imgui_context == nullptr) {
-    co_return;
-  }
-  ImGui::SetCurrentContext(imgui_context);
 
   if (shell_) {
-    shell_->Draw();
+    shell_->Draw(context);
   }
   co_return;
 }
@@ -462,18 +515,12 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
 
   ApplyRenderModeFromPanel();
 
-  if (auto rg = GetRenderGraph(); rg) {
-    rg->SetupRenderPasses();
-  }
-
-  EnsureViewCameraRegistered();
-  co_return;
+  co_await Base::OnPreRender(context);
 }
 
 auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
 {
-  MarkSurfacePresentable(context);
-  co_return;
+  co_await Base::OnCompositing(context);
 }
 
 auto MainModule::OnFrameEnd(engine::FrameContext& context) -> void
@@ -483,36 +530,24 @@ auto MainModule::OnFrameEnd(engine::FrameContext& context) -> void
 
 auto MainModule::ApplyRenderModeFromPanel() -> void
 {
-  if (!shell_) {
+  if (!shell_ || !pipeline_) {
     return;
   }
-  if (auto render_graph = GetRenderGraph()) {
-    auto shader_pass_config = render_graph->GetShaderPassConfig();
-    auto transparent_pass_config = render_graph->GetTransparentPassConfig();
-    if (!shader_pass_config || !transparent_pass_config) {
-      return;
-    }
+  // We can cast because we created it as ForwardPipeline
+  auto* forward_pipeline = static_cast<ForwardPipeline*>(pipeline_.get());
 
-    using graphics::FillMode;
-    const auto view_mode = shell_->GetRenderingViewMode();
-    const FillMode mode = (view_mode == ui::RenderingViewMode::kWireframe)
-      ? FillMode::kWireFrame
-      : FillMode::kSolid;
-    render_graph->SetWireframeEnabled(mode == FillMode::kWireFrame);
-    shader_pass_config->fill_mode = mode;
-    transparent_pass_config->fill_mode = mode;
+  const auto render_mode = shell_->GetRenderingViewMode();
+  forward_pipeline->SetRenderMode(render_mode);
 
-    const bool force_clear = (mode == FillMode::kWireFrame);
-    shader_pass_config->clear_color_target = true;
-    shader_pass_config->auto_skip_clear_when_sky_pass_present = !force_clear;
-
-    // Apply debug mode. Rendering debug modes take precedence if set.
-    auto debug_mode = shell_->GetRenderingDebugMode();
-    if (debug_mode == engine::ShaderDebugMode::kDisabled) {
-      debug_mode = shell_->GetLightCullingVisualizationMode();
-    }
-    shader_pass_config->debug_mode = debug_mode;
+  // Apply debug mode. Rendering debug modes take precedence if set.
+  auto debug_mode = shell_->GetRenderingDebugMode();
+  if (debug_mode == engine::ShaderDebugMode::kDisabled) {
+    debug_mode = shell_->GetLightCullingVisualizationMode();
   }
+  forward_pipeline->SetShaderDebugMode(debug_mode);
+
+  // Note: ForwardPipeline might need other settings from shell if available,
+  // but for now this matches the original logic.
 }
 
 } // namespace oxygen::examples::render_scene

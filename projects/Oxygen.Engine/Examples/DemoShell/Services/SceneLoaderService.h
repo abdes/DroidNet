@@ -7,6 +7,7 @@
 #pragma once
 
 #include <memory>
+#include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Data/AssetKey.h>
@@ -44,8 +45,7 @@ class SceneLoaderService
   : public std::enable_shared_from_this<SceneLoaderService> {
 public:
   //! Create the service with the asset loader and initial viewport size.
-  SceneLoaderService(
-    oxygen::content::IAssetLoader& loader, int width, int height);
+  SceneLoaderService(content::IAssetLoader& loader, int width, int height);
   //! Destroy the loader service.
   ~SceneLoaderService();
 
@@ -75,6 +75,11 @@ private:
   //! Handle completion of the async scene load.
   void OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset);
 
+  //! Begin loading geometry dependencies and block readiness until loaded.
+  void QueueGeometryDependencies(const data::SceneAsset& asset);
+  //! Release pinned geometry assets after scene instantiation.
+  void ReleasePinnedGeometryAssets();
+
   //! Build environment systems from the scene asset.
   auto BuildEnvironment(const data::SceneAsset& asset)
     -> std::unique_ptr<scene::SceneEnvironment>;
@@ -95,7 +100,7 @@ private:
   //! Log the runtime scene hierarchy.
   void LogSceneHierarchy(const scene::Scene& scene);
 
-  oxygen::content::IAssetLoader& loader_;
+  content::IAssetLoader& loader_;
   int width_;
   int height_;
   PendingSceneSwap swap_ {};
@@ -105,6 +110,9 @@ private:
   bool failed_ { false };
   bool consumed_ { false };
   int linger_frames_ { 0 };
+
+  std::unordered_set<data::AssetKey> pending_geometry_keys_ {};
+  std::vector<data::AssetKey> pinned_geometry_keys_ {};
 };
 
 } // namespace oxygen::examples

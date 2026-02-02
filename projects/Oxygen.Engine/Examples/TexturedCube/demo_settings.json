@@ -24,7 +24,7 @@
       },
       "mode": "orbit",
       "orbit": {
-        "distance": 9.385164260864258,
+        "distance": 16.385164260864258,
         "mode": "turntable",
         "target": {
           "x": 0.0,
@@ -33,15 +33,15 @@
         }
       },
       "position": {
-        "x": 6.104175090789795,
-        "y": 6.937305450439453,
-        "z": 1.6413869857788086
+        "x": -1.5025560855865479,
+        "y": -16.076690673828125,
+        "z": 2.7849528789520264
       },
       "rotation": {
-        "w": 0.27057501673698425,
-        "x": 0.22674843668937683,
-        "y": 0.600948691368103,
-        "z": 0.7171018123626709
+        "w": 0.764012336730957,
+        "x": 0.6435181498527527,
+        "y": -0.030006788671016693,
+        "z": -0.03562534227967262
       },
       "scale": {
         "x": 1.0,
@@ -59,6 +59,77 @@
       "texture_browser": {
         "width": 652.0
       }
+    }
+  },
+  "env": {
+    "atmo": {
+      "aerial_perspective_scale": 1.0,
+      "aerial_scattering_strength": 1.0,
+      "atmosphere_height_km": 80.0,
+      "enabled": true,
+      "ground_albedo": {
+        "x": 0.10000000149011612,
+        "y": 0.10000000149011612,
+        "z": 0.10000000149011612
+      },
+      "mie_anisotropy": 0.800000011920929,
+      "mie_scale_height_km": 1.2000000476837158,
+      "multi_scattering": 1.0,
+      "planet_radius_km": 6360.001953125,
+      "rayleigh_scale_height_km": 8.0,
+      "sun_disk_enabled": true,
+      "sun_disk_radius_deg": 0.26799994707107544
+    },
+    "debug": {
+      "force_analytic": false,
+      "use_lut": true,
+      "visualize_lut": false
+    },
+    "sky_light": {
+      "diffuse": 1.0,
+      "enabled": true,
+      "intensity": 1.0,
+      "source": 0.0,
+      "specular": 1.0,
+      "tint": {
+        "x": 1.0,
+        "y": 1.0,
+        "z": 1.0
+      }
+    },
+    "sky_sphere": {
+      "enabled": false,
+      "intensity": 1.0,
+      "rotation_deg": 0.0,
+      "solid_color": {
+        "x": 0.05999999865889549,
+        "y": 0.07999999821186066,
+        "z": 0.11999999731779099
+      },
+      "source": 1.0
+    },
+    "skybox": {
+      "face_size": 512.0,
+      "flip_y": false,
+      "hdr_exposure_ev": 0.0,
+      "layout": 0.0,
+      "output": 0.0,
+      "tonemap_hdr_to_ldr": false
+    },
+    "sun": {
+      "azimuth_deg": 127.87496948242188,
+      "color": {
+        "x": 1.0,
+        "y": 0.9800000190734863,
+        "z": 0.949999988079071
+      },
+      "disk_radius_deg": 0.26785776019096375,
+      "elevation_deg": 60.31306838989258,
+      "enabled": true,
+      "intensity_lux": 12.0,
+      "source": 1.0,
+      "temperature_kelvin": 6500.0,
+      "use_temperature": false
     }
   },
   "environment": {

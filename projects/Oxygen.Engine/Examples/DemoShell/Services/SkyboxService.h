@@ -13,6 +13,7 @@
 
 #include <glm/glm.hpp>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Scene/Scene.h>
@@ -77,40 +78,37 @@ public:
 
     // HDR handling: required when cooking HDR sources to LDR formats.
     bool tonemap_hdr_to_ldr { false };
-    float hdr_exposure_ev { 0.0f };
+    float hdr_exposure_ev { 0.0F };
   };
 
   //! Sky lighting parameters.
   struct SkyLightParams {
-    float intensity { 1.0f };
-    float diffuse_intensity { 1.0f };
-    float specular_intensity { 1.0f };
-    glm::vec3 tint_rgb { 1.0f, 1.0f, 1.0f };
+    float intensity { 1.0F };
+    float diffuse_intensity { 1.0F };
+    float specular_intensity { 1.0F };
+    glm::vec3 tint_rgb { 1.0F, 1.0F, 1.0F };
   };
 
   //! Result of a skybox load operation.
   struct LoadResult {
     bool success { false };
-    oxygen::content::ResourceKey resource_key { 0U };
+    content::ResourceKey resource_key { 0U };
     std::string status_message {};
     int face_size { 0 };
     //! Estimated sun direction (if detectable from the skybox).
-    glm::vec3 estimated_sun_dir { 0.35f, -0.45f, -1.0f };
+    glm::vec3 estimated_sun_dir { 0.35F, -0.45F, -1.0F };
     bool sun_dir_valid { false };
   };
 
   using LoadCallback = std::function<void(LoadResult)>;
 
-  SkyboxService(
-    oxygen::observer_ptr<oxygen::content::IAssetLoader> asset_loader,
+  SkyboxService(observer_ptr<content::IAssetLoader> asset_loader,
     observer_ptr<scene::Scene> scene);
 
   ~SkyboxService() = default;
 
-  SkyboxService(const SkyboxService&) = delete;
-  auto operator=(const SkyboxService&) -> SkyboxService& = delete;
-  SkyboxService(SkyboxService&&) = delete;
-  auto operator=(SkyboxService&&) -> SkyboxService& = delete;
+  OXYGEN_MAKE_NON_COPYABLE(SkyboxService)
+  OXYGEN_DEFAULT_MOVABLE(SkyboxService)
 
   //! Begin loading a skybox and invoke `on_complete` when finished.
   auto StartLoadSkybox(const std::string& file_path, const LoadOptions& options,
@@ -121,7 +119,7 @@ public:
     const SkyLightParams& params, LoadCallback on_complete) -> void;
 
   //! Set the skybox resource key directly (e.g., from cooked content).
-  auto SetSkyboxResourceKey(oxygen::content::ResourceKey key) -> void;
+  auto SetSkyboxResourceKey(content::ResourceKey key) -> void;
 
   //! Apply loaded skybox to the scene environment.
   auto ApplyToScene(const SkyLightParams& params) -> void;
@@ -130,16 +128,15 @@ public:
   auto UpdateSkyLightParams(const SkyLightParams& params) -> void;
 
   //! Get the current skybox resource key.
-  [[nodiscard]] auto GetCurrentResourceKey() const
-    -> oxygen::content::ResourceKey
+  [[nodiscard]] auto GetCurrentResourceKey() const -> content::ResourceKey
   {
     return current_resource_key_;
   }
 
 private:
-  oxygen::observer_ptr<oxygen::content::IAssetLoader> asset_loader_;
+  observer_ptr<content::IAssetLoader> asset_loader_;
   observer_ptr<scene::Scene> scene_ { nullptr };
-  oxygen::content::ResourceKey current_resource_key_ { 0U };
+  content::ResourceKey current_resource_key_ { 0U };
 
   //! Cached RGBA8 pixel data for sun direction estimation.
   std::vector<std::byte> cached_rgba8_;

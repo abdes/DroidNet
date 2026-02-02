@@ -20,8 +20,8 @@
 #include "DemoShell/ActiveScene.h"
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Runtime/SingleViewModuleBase.h"
-#include "DemoShell/Services/FileBrowserService.h"
+#include "DemoShell/Runtime/DemoModuleBase.h"
+#include "DemoShell/Runtime/SceneView.h"
 #include "DemoShell/Services/SkyboxService.h"
 #include "LightBench/LightBenchPanel.h"
 #include "LightBench/LightScene.h"
@@ -35,11 +35,11 @@ namespace oxygen::examples::light_bench {
 
  @see DemoShell
 */
-class MainModule final : public SingleViewModuleBase {
+class MainModule final : public DemoModuleBase {
   OXYGEN_TYPED(MainModule)
 
 public:
-  using Base = oxygen::examples::SingleViewModuleBase;
+  using Base = oxygen::examples::DemoModuleBase;
 
   explicit MainModule(const oxygen::examples::DemoAppContext& app);
 
@@ -73,7 +73,7 @@ public:
   auto OnShutdown() noexcept -> void override;
 
   auto OnFrameStart(oxygen::engine::FrameContext& context) -> void override;
-  auto OnExampleFrameStart(engine::FrameContext& context) -> void override;
+  auto HandleOnFrameStart(engine::FrameContext& context) -> void override;
   auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
   auto OnGameplay(engine::FrameContext& context) -> co::Co<> override;
   auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
@@ -85,8 +85,10 @@ protected:
   auto BuildDefaultWindowProperties() const
     -> platform::window::Properties override;
 
+  auto ClearBackbufferReferences() -> void override;
+
 private:
-  auto EnsureViewCameraRegistered() -> void;
+  auto EnsureViewCameraRegistered(engine::FrameContext& context) -> void;
   auto ApplyRenderModeFromPanel() -> void;
 
   ActiveScene active_scene_ {};
@@ -96,9 +98,9 @@ private:
 
   std::unique_ptr<DemoShell> shell_ {};
   std::shared_ptr<LightBenchPanel> light_bench_panel_ {};
-  std::unique_ptr<FileBrowserService> file_browser_service_ {};
-  std::unique_ptr<SkyboxService> skybox_service_ {};
-  scene::Scene* skybox_service_scene_ { nullptr };
+
+  // Hosted view
+  observer_ptr<SceneView> main_view_ {};
 };
 
 } // namespace oxygen::examples::light_bench

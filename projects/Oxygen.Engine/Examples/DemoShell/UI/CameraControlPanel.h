@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <memory>
 #include <string_view>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -18,7 +17,7 @@ namespace oxygen::examples::ui {
 class CameraVm;
 
 //! Camera control mode
-enum class CameraControlMode { kOrbit, kFly };
+enum class CameraControlMode { kOrbit, kFly, kDrone };
 
 //! Camera control panel with mode switching and debugging
 /*!
@@ -54,6 +53,7 @@ private:
   void DrawDebugTab();
   void DrawCameraPoseInfo();
   void DrawInputDebugInfo();
+  void DrawDroneMinimap();
 
   observer_ptr<CameraVm> vm_;
 };

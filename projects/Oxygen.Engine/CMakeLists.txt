@@ -262,6 +262,13 @@ if(OXYGEN_WITH_ASAN)
   )
     add_link_options("-fsanitize=address")
   endif()
+  if(MSVC)
+    add_link_options(
+      /LARGEADDRESSAWARE
+      /DEBUG
+      /INCREMENTAL:NO # Disable incremental linking.
+    )
+  endif()
 endif()
 # MSVC-specific sanitizer handling will be done at the end of this file to ensure
 # it overrides any flags added by subdirectories or toolchains.
@@ -390,86 +397,5 @@ endif()
 # Call after sub-modules have been added so that source code files can be
 # properly collected for analysis.
 # ------------------------------------------------------------------------------
-
-# ------------------------------------------------------------------------------
-# Final scrubbing of MSVC Linker Flags for Sanitizers
-# ------------------------------------------------------------------------------
-
-if(MSVC)
-  if(OXYGEN_WITH_ASAN OR OXYGEN_WITH_UBSAN OR OXYGEN_WITH_TSAN)
-    message(
-      STATUS
-      "[ASAN Fix] Scrubbing all /INCREMENTAL flags from linker variables..."
-    )
-    # When using MSVC or clang-cl with sanitizers, incremental linking must be disabled.
-    # We exhaustively scrub any /INCREMENTAL flag (case-insensitive) from ALL linker variables
-    # at the final stage of configuration.
-    foreach(
-      _var_base
-      IN
-      ITEMS
-        CMAKE_EXE_LINKER_FLAGS
-        CMAKE_SHARED_LINKER_FLAGS
-        CMAKE_MODULE_LINKER_FLAGS
-        CMAKE_STATIC_LINKER_FLAGS
-    )
-      foreach(
-        _suffix
-        IN
-        ITEMS
-          ""
-          _DEBUG
-          _RELEASE
-          _MINSIZEREL
-          _RELWITHDEBINFO
-      )
-        set(_link_var "${_var_base}${_suffix}")
-        if(DEFINED ${_link_var} OR DEFINED CACHE{${_link_var}})
-          # Case-insensitive removal of /INCREMENTAL (both dash and slash, with or without value)
-          string(
-            REGEX
-            REPLACE
-            "(?i)[-/]INCREMENTAL(:[^ \t\r\n]*)?"
-            ""
-            _clean_val
-            "${${_link_var}}"
-          )
-          # Also remove any potential leftovers like trailing / or dangling colons
-          string(STRIP "${_clean_val}" _clean_val)
-
-          if(NOT "${${_link_var}}" STREQUAL "${_clean_val}")
-            message(
-              STATUS
-              "  - Cleaned ${_link_var}: '${${_link_var}}' -> '${_clean_val}'"
-            )
-            set(
-              ${_link_var}
-              "${_clean_val}"
-              CACHE STRING
-              "MSVC Linker Flags (Sanitizer Cleaned)"
-              FORCE
-            )
-          endif()
-        endif()
-      endforeach()
-    endforeach()
-
-    # Also ensure we use a compatible debug info format (ProgramDatabase /Zi or Embedded /Z7)
-    # and NOT EditAndContinue (/ZI) which implicitly forces incremental linking.
-    # We FORCE this in the cache as well.
-    set(
-      CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
-      "ProgramDatabase"
-      CACHE STRING
-      "Forcing /Zi for Sanitizer compatibility"
-      FORCE
-    )
-
-    # For the Visual Studio generator, it uses this property to decide whether to add /INCREMENTAL.
-    # We set it to NO to be safe, but if the user really hates seeing /INCREMENTAL:NO,
-    # we can try setting it to an empty string, though that often reverts to default (YES).
-    # Given the user's strong feedback, we will try to NOT set it here and rely on flag scrubbing.
-  endif()
-endif()
 
 asap_pop_project(${META_PROJECT_NAME})

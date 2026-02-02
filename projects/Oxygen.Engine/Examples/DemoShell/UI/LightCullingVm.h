@@ -24,7 +24,7 @@ class LightCullingSettingsService;
 namespace oxygen::examples::ui {
 
 // Re-export ShaderDebugMode for convenience in UI code
-using ShaderDebugMode = oxygen::engine::ShaderDebugMode;
+using ShaderDebugMode = engine::ShaderDebugMode;
 
 //! View model for light culling panel state.
 /*!
@@ -37,7 +37,8 @@ using ShaderDebugMode = oxygen::engine::ShaderDebugMode;
 - **Epoch-driven refresh**: Reacquires state when stale.
 - **Immediate persistence**: Setters forward changes to the service.
 - **Pass config sync**: Applies changes directly to shader and culling configs.
-- **Cluster mode callback**: Notifies when cluster mode changes (triggers PSO rebuild).
+- **Cluster mode callback**: Notifies when cluster mode changes (triggers PSO
+rebuild).
 - **Thread-safe**: Protected by a mutex.
 
 @see oxygen::examples::LightCullingSettingsService
@@ -46,8 +47,6 @@ class LightCullingVm {
 public:
   //! Creates a view model backed by the provided settings service.
   explicit LightCullingVm(observer_ptr<LightCullingSettingsService> service,
-    observer_ptr<engine::ShaderPassConfig> shader_config,
-    observer_ptr<engine::LightCullingPassConfig> culling_config,
     std::function<void()> on_cluster_mode_changed);
 
   //! Returns the cached visualization mode.
@@ -68,30 +67,23 @@ public:
   //! Returns the cached Z far value.
   [[nodiscard]] auto GetZFar() -> float;
 
-  //! Sets visualization mode and forwards to service/config.
+  //! Sets visualization mode and forwards to service.
   auto SetVisualizationMode(ShaderDebugMode mode) -> void;
 
-  //! Sets clustered culling and forwards to service/config.
+  //! Sets clustered culling and forwards to service.
   auto SetClusteredCulling(bool enabled) -> void;
 
-  //! Sets depth slices and forwards to service/config.
+  //! Sets depth slices and forwards to service.
   auto SetDepthSlices(int slices) -> void;
 
-  //! Sets camera Z usage and forwards to service/config.
+  //! Sets camera Z usage and forwards to service.
   auto SetUseCameraZ(bool use_camera) -> void;
 
-  //! Sets Z near and forwards to service/config.
+  //! Sets Z near and forwards to service.
   auto SetZNear(float z_near) -> void;
 
-  //! Sets Z far and forwards to service/config.
+  //! Sets Z far and forwards to service.
   auto SetZFar(float z_far) -> void;
-
-  //! Updates the pass config pointers (for late initialization).
-  auto SetPassConfigs(observer_ptr<engine::ShaderPassConfig> shader_config,
-    observer_ptr<engine::LightCullingPassConfig> culling_config) -> void;
-
-  //! Applies all current settings to the pass configs.
-  auto ApplyToPassConfigs() -> void;
 
 private:
   auto Refresh() -> void;
@@ -100,8 +92,6 @@ private:
 
   mutable std::mutex mutex_ {};
   observer_ptr<LightCullingSettingsService> service_;
-  observer_ptr<engine::ShaderPassConfig> shader_config_;
-  observer_ptr<engine::LightCullingPassConfig> culling_config_;
   std::function<void()> on_cluster_mode_changed_;
   std::uint64_t epoch_ { 0 };
 

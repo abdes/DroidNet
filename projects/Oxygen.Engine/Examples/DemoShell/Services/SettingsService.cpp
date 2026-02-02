@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <exception>
 #include <fstream>
 #include <mutex>
 #include <shared_mutex>
-#include <stdexcept>
 
 #include <nlohmann/json.hpp>
 
@@ -33,7 +33,7 @@ namespace {
 
 } // namespace
 
-static oxygen::observer_ptr<SettingsService> g_default_settings { nullptr };
+static observer_ptr<SettingsService> g_default_settings { nullptr };
 
 SettingsService::SettingsService(std::filesystem::path storage_path)
   : storage_path_(std::move(storage_path))
@@ -67,8 +67,7 @@ auto SettingsService::CreateForDemo(std::source_location location)
     MakeStoragePathFromLocation(location));
 }
 
-auto SettingsService::SetDefault(oxygen::observer_ptr<SettingsService> service)
-  -> void
+auto SettingsService::SetDefault(observer_ptr<SettingsService> service) -> void
 {
   CHECK_NOTNULL_F(
     service.get(), "SettingsService::SetDefault requires a valid service");
@@ -77,7 +76,7 @@ auto SettingsService::SetDefault(oxygen::observer_ptr<SettingsService> service)
   g_default_settings = service;
 }
 
-auto SettingsService::Default() -> oxygen::observer_ptr<SettingsService>
+auto SettingsService::Default() -> observer_ptr<SettingsService>
 {
   return g_default_settings;
 }
@@ -185,7 +184,7 @@ auto SettingsService::GetVec2i(std::string_view key) const
     return std::nullopt;
   }
 
-  return std::pair<int, int> { x.get<int>(), y.get<int>() };
+  return std::pair { x.get<int>(), y.get<int>() };
 }
 
 auto SettingsService::SetVec2i(std::string_view key, std::pair<int, int> value)

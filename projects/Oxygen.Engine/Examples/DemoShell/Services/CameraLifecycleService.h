@@ -9,9 +9,6 @@
 #include <array>
 #include <string>
 
-#include <glm/gtc/quaternion.hpp>
-#include <glm/vec3.hpp>
-
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/SceneNode.h>

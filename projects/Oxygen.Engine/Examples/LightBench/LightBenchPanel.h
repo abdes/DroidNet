@@ -12,7 +12,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 
 #include "DemoShell/UI/DemoPanel.h"
-#include <LightBench/LightScene.h>
+#include "LightBench/LightScene.h"
 
 namespace oxygen::examples::light_bench {
 

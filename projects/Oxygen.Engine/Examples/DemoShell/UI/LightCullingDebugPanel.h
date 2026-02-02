@@ -16,7 +16,7 @@ namespace oxygen::examples::ui {
 class LightCullingVm;
 
 // Re-export ShaderDebugMode for convenience in UI code
-using ShaderDebugMode = oxygen::engine::ShaderDebugMode;
+using ShaderDebugMode = engine::ShaderDebugMode;
 
 //! Lighting panel with light culling and visualization controls
 /*!

@@ -17,22 +17,29 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/OxCo/Co.h>
-
-#include "DemoShell/ActiveScene.h"
-#include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Runtime/SingleViewModuleBase.h"
-#include "DemoShell/Services/FileBrowserService.h"
-#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/SceneNode.h>
 
+#include "Async/AsyncDemoTypes.h"
+#include "DemoShell/ActiveScene.h"
+#include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/DemoModuleBase.h"
+#include "DemoShell/Runtime/SceneView.h"
+
+namespace oxygen::examples::ui {
+class CameraRigController;
+}
+
 namespace oxygen::examples::async {
 
-class DroneControlPanel;
+class AsyncDemoPanel;
+class AsyncDemoVm;
+class AsyncDemoSettingsService;
 
 //! Graphics module demonstrating AsyncEngine and Common example patterns.
 /*!
@@ -46,11 +53,11 @@ class DroneControlPanel;
 
 @see ExampleModuleBase, AsyncEngine, Graphics
 */
-class MainModule final : public SingleViewModuleBase {
+class MainModule final : public DemoModuleBase {
   OXYGEN_TYPED(MainModule)
 
 public:
-  using Base = SingleViewModuleBase;
+  using Base = DemoModuleBase;
 
   OXYGEN_MAKE_NON_COPYABLE(MainModule)
   OXYGEN_MAKE_NON_MOVABLE(MainModule)
@@ -89,10 +96,18 @@ public:
     -> platform::window::Properties override;
 
   //! Example-specific setup: scene, input, and animation.
-  auto OnExampleFrameStart(engine::FrameContext& context) -> void override;
+  auto HandleOnFrameStart(engine::FrameContext& context) -> void override;
+
+  //! Module attachment (initialization).
+  auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
+    -> bool override;
 
   //! Shutdown cleanup.
   void OnShutdown() noexcept override;
+
+protected:
+  //! Clear backbuffer references (required by DemoModuleBase).
+  auto ClearBackbufferReferences() -> void override;
 
   //! Execute phase-specific work.
   auto OnFrameStart(engine::FrameContext& context) -> void override;
@@ -106,11 +121,10 @@ public:
   auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
 
 private:
-  friend class DroneControlPanel;
+  friend class AsyncDemoVm;
   //! Setup functions (called once).
   auto SetupShaders() -> void;
   // Input actions/mappings for camera drone speed control
-  auto SetupInput() -> void;
 
   //! Scene and rendering functions.
   auto EnsureExampleScene() -> void;
@@ -125,9 +139,7 @@ private:
   auto EnsureCameraSpotLight() -> void;
 
   //! Debug overlay methods.
-  auto DrawFrameActionsPanel() -> void;
-  auto DrawSceneInfoPanel() -> void;
-  auto DrawSpotLightPanel() -> void;
+
   auto TrackPhaseStart(const std::string& phase_name) -> void;
   auto TrackPhaseEnd() -> void;
   auto TrackFrameAction(const std::string& action) -> void;
@@ -150,20 +162,7 @@ private:
   // engine frame timestamp for stable sampling across phases.
   double anim_time_ { 0.0 };
 
-  //! Debug overlay tracking structures
-  struct FrameActionTracker {
-    std::chrono::steady_clock::time_point frame_start_time;
-    std::chrono::steady_clock::time_point frame_end_time;
-    std::vector<std::pair<std::string, std::chrono::microseconds>>
-      phase_timings;
-    std::vector<std::string> frame_actions;
-    std::uint32_t spheres_updated { 0 };
-    std::uint32_t render_items_count { 0 };
-    bool scene_mutation_occurred { false };
-    bool transform_propagation_occurred { false };
-    bool frame_graph_setup { false };
-    bool command_recording { false };
-  };
+  // struct FrameActionTracker moved to AsyncDemoTypes.h
 
   FrameActionTracker current_frame_tracker_;
   std::vector<FrameActionTracker> frame_history_;
@@ -174,16 +173,7 @@ private:
   std::string current_phase_name_;
 
   // Per-sphere animation state (multiple spheres with different speeds)
-  struct SphereState {
-    scene::SceneNode node;
-    // Base phases used for absolute-time evaluation (no per-frame drift)
-    double base_angle { 0.0 };
-    double speed { 0.6 }; // radians/sec
-    double radius { 4.0 }; // orbit radius in world units
-    double inclination { 0.5 }; // tilt of orbital plane (radians)
-    double spin_speed { 0.0 }; // self-rotation speed (radians/sec)
-    double base_spin_angle { 0.0 }; // initial spin phase
-  };
+  // struct SphereState moved to AsyncDemoTypes.h
 
   std::vector<SphereState> spheres_;
 
@@ -196,72 +186,23 @@ private:
   int last_vis_toggle_ { -1 };
   int last_ovr_toggle_ { -1 };
   // Encapsulated camera drone state and behavior
-  struct CameraDrone {
-    bool enabled { true };
-    double angle { 0.0 };
-    double radius { 15.0 };
-    double speed { 0.2 }; // radians/sec
-    double inclination { 0.15 }; // tilt in radians
 
-    // Drone-style dynamics
-    glm::vec3 current_pos { 0.0f, 0.0f, 0.0f };
-    glm::quat current_rot { 1.0f, 0.0f, 0.0f, 0.0f };
-    bool initialized { false };
-    // Maximum allowed linear speed (world units per second) to cap sudden
-    // motion
-    double max_speed { 7.0 };
-    // Ramp parameters to smoothly introduce drone motion
-    double ramp_time { 2.0 }; // seconds during which motion ramps up
-    double ramp_elapsed { 0.0 }; // internal accumulator
-    // Focus point offsets: camera will look at (focus_offset.x, focus_height,
-    // focus_offset.y)
-    glm::vec2 focus_offset { 0.0f, 0.0f };
-    float focus_height { 0.8f }; // target height to look at (world units)
-    // Flight path spline (closed Catmull-Rom control points in world space)
-    std::vector<glm::vec3> path_points;
-    double path_length { 0.0 }; // cached approximate length
-    double path_speed {
-      6.0
-    }; // world units per second along path (increased for quicker survey)
-    double path_u { 0.0 }; // current parameter along path [0,1)
-    // Arc-length traversal state: advance by distance, not param u
-    double path_s { 0.0 }; // current arc-length position in [0, path_length)
-    struct ArcLengthLut {
-      std::vector<double> u_samples; // monotonically increasing in [0,1]
-      std::vector<double> s_samples; // cumulative lengths in [0, path_length]
-    } arc_lut;
-    // (streamlined) gimbal dynamics were removed to keep the demo focused
-    // on a single body-controlled camera with gentle smoothing and banking.
-    // Points of interest the camera may slow near for inspection
-    std::vector<glm::vec3> pois;
-    double damping { 8.0 }; // higher = stiffer follow
-    double bob_amp {
-      0.06
-    }; // vertical bob amplitude (reduced to avoid vibration)
-    double bob_freq { 1.6 }; // bob frequency (Hz)
-    double noise_amp { 0.03 }; // lateral jitter amplitude (reduced)
-    double bank_factor { 0.045 }; // how much bank per linear speed
-    double max_bank { 0.45 }; // max roll in radians
-    // Procedural noise smoothing state to reduce high-frequency vibration
-    glm::vec2 noise_state { 0.0f, 0.0f };
-    float noise_response { 8.0f }; // responsiveness for noise smoothing (Hz)
-    float lateral_osc_amp { 0.03f }; // lateral oscillation magnitude
-  } camera_drone_;
+  // Drone configuration
+  auto ConfigureDrone() -> void;
 
-  // Camera update helper
-  void InitializeDefaultFlightPath();
-  auto UpdateCameraDrone(double delta_time) -> void;
+  // Helper validation
+  auto EnsureViewCameraRegistered() -> void;
 
-  // --- Input actions for drone speed control ---
-  std::shared_ptr<oxygen::input::Action> action_speed_up_;
-  std::shared_ptr<oxygen::input::Action> action_speed_down_;
-  std::shared_ptr<oxygen::input::InputMappingContext> input_ctx_;
   // Token for a registered platform pre-destroy callback; zero means none.
   size_t platform_window_destroy_handler_token_ { 0 };
 
   std::unique_ptr<DemoShell> shell_ {};
-  std::unique_ptr<FileBrowserService> file_browser_service_ {};
-  std::shared_ptr<DroneControlPanel> async_panel_ {};
+  std::shared_ptr<AsyncDemoSettingsService> settings_service_ {};
+  std::shared_ptr<AsyncDemoVm> vm_ {};
+  std::shared_ptr<AsyncDemoPanel> async_panel_ {};
+  observer_ptr<SceneView> main_view_ { nullptr };
+  observer_ptr<ui::CameraRigController> last_camera_rig_ { nullptr };
+  bool drone_configured_ { false };
 };
 
 } // namespace oxygen::examples::async

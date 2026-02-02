@@ -4,29 +4,40 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <chrono>
+#include <mutex>
 #include <optional>
 #include <string_view>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/ModuleEvent.h>
+#include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Renderer.h>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Internal/SceneControlBlock.h"
 #include "DemoShell/PanelRegistry.h"
+#include "DemoShell/Runtime/RenderingPipeline.h"
 #include "DemoShell/Services/CameraLifecycleService.h"
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/ContentSettingsService.h"
+#include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/LightCullingSettingsService.h"
+#include "DemoShell/Services/PostProcessSettingsService.h"
 #include "DemoShell/Services/RenderingSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
+#include "DemoShell/Services/SkyboxService.h"
 #include "DemoShell/Services/UiSettingsService.h"
 #include "DemoShell/UI/CameraRigController.h"
-#include "DemoShell/UI/CameraVm.h"
 #include "DemoShell/UI/ContentVm.h"
 #include "DemoShell/UI/DemoShellUi.h"
-#include "DemoShell/UI/EnvironmentDebugPanel.h"
+#include "DemoShell/UI/EnvironmentVm.h"
 #include "DemoShell/UI/LightCullingVm.h"
 #include "DemoShell/UI/RenderingVm.h"
 
@@ -38,6 +49,7 @@ struct DemoShell::Impl {
 
   PanelRegistry panel_registry {};
   std::optional<ui::DemoShellUi> demo_shell_ui {};
+  std::vector<std::shared_ptr<DemoPanel>> pending_panels {};
 
   // Services (owned by DemoShell)
   UiSettingsService ui_settings_service {};
@@ -45,14 +57,64 @@ struct DemoShell::Impl {
   LightCullingSettingsService light_culling_settings_service {};
   CameraSettingsService camera_settings_service {};
   ContentSettingsService content_settings_service {};
+  EnvironmentSettingsService environment_settings_service {};
+  ui::PostProcessSettingsService post_process_settings_service {};
 
   // Panels still managed by DemoShell (non-MVVM panels)
-  std::shared_ptr<ui::EnvironmentDebugPanel> environment_debug_panel {};
+  std::unique_ptr<SkyboxService> skybox_service {};
+  observer_ptr<scene::Scene> skybox_service_scene { nullptr };
 
   std::unique_ptr<ui::CameraRigController> camera_rig {};
   observer_ptr<ui::ContentVm> content_vm {};
   CameraLifecycleService camera_lifecycle {};
+  FileBrowserService file_browser_service {};
   internal::SceneControlBlock scene_control {};
+
+  // Track the pipeline we've initialized the services with
+  observer_ptr<RenderingPipeline> bound_pipeline {};
+
+  bool pending_init { false };
+
+  mutable std::once_flag input_system_flag;
+  mutable observer_ptr<engine::InputSystem> input_system { nullptr };
+  mutable observer_ptr<engine::Renderer> renderer { nullptr };
+  AsyncEngine::ModuleSubscription renderer_subscription {};
+
+  auto GetInputSystem() const -> observer_ptr<engine::InputSystem>
+  {
+    std::call_once(input_system_flag, [this] {
+      if (config.engine) {
+        if (auto it = config.engine->GetModule<engine::InputSystem>()) {
+          input_system = observer_ptr { &it->get() };
+        }
+      }
+    });
+    return input_system;
+  }
+
+  auto GetRenderer() const -> observer_ptr<engine::Renderer>
+  {
+    DCHECK_NOTNULL_F(renderer, "Renderer module not attached");
+    return renderer;
+  }
+
+  auto GetSkyboxService(observer_ptr<scene::Scene> scene)
+    -> observer_ptr<SkyboxService>
+  {
+    if (skybox_service_scene != scene) {
+      skybox_service.reset();
+      skybox_service_scene = nullptr;
+
+      if (scene) {
+        if (auto asset_loader
+          = config.engine ? config.engine->GetAssetLoader() : nullptr) {
+          skybox_service = std::make_unique<SkyboxService>(asset_loader, scene);
+          skybox_service_scene = scene;
+        }
+      }
+    }
+    return observer_ptr { skybox_service.get() };
+  }
 };
 
 DemoShell::DemoShell()
@@ -69,36 +131,58 @@ DemoShell::~DemoShell() noexcept
   try {
     impl_->panel_registry.ClearActivePanel();
   } catch (const std::exception& ex) {
-    LOG_F(ERROR, "DemoShell: OnUnloaded threw: {}", ex.what());
+    LOG_F(ERROR, "OnUnloaded threw: {}", ex.what());
   } catch (...) {
-    LOG_F(ERROR, "DemoShell: OnUnloaded threw unknown exception");
+    LOG_F(ERROR, "OnUnloaded threw unknown exception");
   }
 }
 
 auto DemoShell::Initialize(const DemoShellConfig& config) -> bool
 {
   impl_->config = config;
+  DCHECK_NOTNULL_F(impl_->config.engine,
+    "DemoShell::Initialize requires a valid engine pointer");
+  impl_->pending_init = true;
+  impl_->renderer_subscription = impl_->config.engine->SubscribeModuleAttached(
+    [this](const engine::ModuleEvent& event) {
+      if (event.type_id != engine::Renderer::ClassTypeId()) {
+        return;
+      }
+      impl_->renderer
+        = observer_ptr { static_cast<engine::Renderer*>(event.module.get()) };
+      if (!impl_->pending_init) {
+        return;
+      }
+      impl_->pending_init = false;
+      (void)CompleteInitialization();
+    },
+    true);
+
+  return true;
+}
+
+auto DemoShell::CompleteInitialization() -> bool
+{
+  if (impl_->initialized) {
+    return true;
+  }
 
   const auto settings = SettingsService::Default();
   CHECK_NOTNULL_F(settings.get(),
     "DemoShell requires SettingsService before panel registration");
 
-  const bool needs_file_browser = impl_->config.panel_config.content_loader
-    || impl_->config.panel_config.environment;
-  if (needs_file_browser) {
-    CHECK_NOTNULL_F(impl_->config.file_browser_service,
-      "DemoShell requires a FileBrowserService");
-  }
+  impl_->file_browser_service.ConfigureContentRoots(
+    impl_->config.content_roots);
 
   if (impl_->config.enable_camera_rig) {
-    if (!impl_->config.input_system) {
-      LOG_F(WARNING, "DemoShell: input system required for camera rig");
+    auto input_system = impl_->GetInputSystem();
+    if (!input_system) {
+      LOG_F(WARNING, "Input system required for camera rig");
       return false;
     }
     impl_->camera_rig = std::make_unique<ui::CameraRigController>();
-    if (!impl_->camera_rig->Initialize(
-          observer_ptr { impl_->config.input_system })) {
-      LOG_F(WARNING, "DemoShell: CameraRigController initialization failed");
+    if (!impl_->camera_rig->Initialize(input_system)) {
+      LOG_F(WARNING, "CameraRigController initialization failed");
       return false;
     }
     impl_->camera_lifecycle.BindCameraRig(
@@ -107,15 +191,18 @@ auto DemoShell::Initialize(const DemoShellConfig& config) -> bool
   impl_->camera_lifecycle.SetScene(impl_->scene_control.TryGetScene());
 
   // Create DemoShellUi with all services
-  impl_->demo_shell_ui.emplace(observer_ptr { &impl_->panel_registry },
+  impl_->demo_shell_ui.emplace(impl_->config.engine,
+    observer_ptr { &impl_->panel_registry },
     observer_ptr { &impl_->camera_lifecycle },
     observer_ptr { &impl_->ui_settings_service },
     observer_ptr { &impl_->rendering_settings_service },
     observer_ptr { &impl_->light_culling_settings_service },
     observer_ptr { &impl_->camera_settings_service },
     observer_ptr { &impl_->content_settings_service },
+    observer_ptr { &impl_->environment_settings_service },
+    observer_ptr { &impl_->post_process_settings_service },
     observer_ptr { impl_->camera_rig.get() },
-    impl_->config.file_browser_service, impl_->config.panel_config);
+    observer_ptr { &impl_->file_browser_service }, impl_->config.panel_config);
 
   impl_->content_vm = impl_->demo_shell_ui->GetContentVm();
   if (impl_->content_vm) {
@@ -138,8 +225,12 @@ auto DemoShell::Initialize(const DemoShellConfig& config) -> bool
     }
   }
 
-  InitializePanels();
-  RegisterDemoPanels();
+  if (impl_->demo_shell_ui && !impl_->pending_panels.empty()) {
+    for (auto& panel : impl_->pending_panels) {
+      (void)impl_->demo_shell_ui->RegisterCustomPanel(panel);
+    }
+    impl_->pending_panels.clear();
+  }
   impl_->initialized = true;
 
   return true;
@@ -155,9 +246,17 @@ auto DemoShell::Update(time::CanonicalDuration delta_time) -> void
     impl_->content_vm->Update();
   }
 
+  if (auto camera = impl_->camera_lifecycle.GetActiveCamera();
+    camera.IsAlive()) {
+    impl_->camera_settings_service.SetActiveCameraId(camera.GetName());
+  } else {
+    impl_->camera_settings_service.SetActiveCameraId({});
+  }
+
+  UpdatePanels();
+
   const auto u_delta_time = delta_time.get();
   if (u_delta_time == std::chrono::nanoseconds::zero()) {
-    UpdatePanels();
     return;
   }
 
@@ -167,36 +266,47 @@ auto DemoShell::Update(time::CanonicalDuration delta_time) -> void
   }
 }
 
-auto DemoShell::Draw() -> void
+auto DemoShell::Draw(engine::FrameContext& fc) -> void
 {
   if (!impl_->initialized) {
     return;
   }
 
   if (impl_->demo_shell_ui) {
-    impl_->demo_shell_ui->Draw();
+    impl_->demo_shell_ui->Draw(fc);
   }
 }
 
 auto DemoShell::RegisterPanel(std::shared_ptr<DemoPanel> panel) -> bool
 {
-  if (!impl_->initialized) {
-    LOG_F(WARNING, "DemoShell: cannot register panel before initialization");
-    return false;
-  }
   if (!panel) {
-    LOG_F(WARNING, "DemoShell: cannot register null panel");
+    LOG_F(WARNING, "Cannot register null panel");
     return false;
   }
 
-  const auto result = impl_->panel_registry.RegisterPanel(panel);
-  if (!result) {
-    LOG_F(
-      WARNING, "DemoShell: failed to register panel '{}'", panel->GetName());
-    return false;
+  if (!impl_->initialized) {
+    const auto name = std::string_view(panel->GetName());
+    if (name.empty()) {
+      LOG_F(WARNING, "Cannot register panel with empty name");
+      return false;
+    }
+    const auto duplicate = std::ranges::any_of(
+      impl_->pending_panels, [&](const std::shared_ptr<DemoPanel>& existing) {
+        return existing && existing->GetName() == name;
+      });
+    if (duplicate) {
+      LOG_F(WARNING, "Duplicate pending panel '{}'", name);
+      return false;
+    }
+    impl_->pending_panels.push_back(std::move(panel));
+    return true;
   }
 
-  return true;
+  if (!impl_->demo_shell_ui) {
+    LOG_F(WARNING, "UI not available for panel registration");
+    return false;
+  }
+  return impl_->demo_shell_ui->RegisterCustomPanel(std::move(panel));
 }
 
 auto DemoShell::SetScene(std::unique_ptr<scene::Scene> scene) -> ActiveScene
@@ -218,6 +328,7 @@ auto DemoShell::TryGetScene() const -> observer_ptr<scene::Scene>
 
 auto DemoShell::SetActiveCamera(scene::SceneNode camera) -> void
 {
+  LOG_SCOPE_FUNCTION(INFO);
   impl_->camera_lifecycle.SetActiveCamera(std::move(camera));
 
   if (impl_->camera_rig) {
@@ -225,11 +336,9 @@ auto DemoShell::SetActiveCamera(scene::SceneNode camera) -> void
       observer_ptr { &impl_->camera_lifecycle.GetActiveCamera() });
   }
 }
-
-auto DemoShell::SetSkyboxService(observer_ptr<SkyboxService> skybox_service)
-  -> void
+auto DemoShell::GetSkyboxService() -> observer_ptr<SkyboxService>
 {
-  impl_->config.skybox_service = skybox_service;
+  return impl_->GetSkyboxService(TryGetScene());
 }
 
 auto DemoShell::CancelContentImport() -> void
@@ -244,16 +353,26 @@ auto DemoShell::GetCameraLifecycle() -> CameraLifecycleService&
   return impl_->camera_lifecycle;
 }
 
-auto DemoShell::GetRenderingViewMode() const -> ui::RenderingViewMode
+auto DemoShell::GetFileBrowserService() const -> FileBrowserService&
+{
+  return impl_->file_browser_service;
+}
+
+auto DemoShell::GetCameraRig() const -> observer_ptr<ui::CameraRigController>
+{
+  return observer_ptr { impl_->camera_rig.get() };
+}
+
+auto DemoShell::GetRenderingViewMode() const -> RenderMode
 {
   if (!impl_->demo_shell_ui) {
-    return ui::RenderingViewMode::kSolid;
+    return RenderMode::kSolid;
   }
   auto vm = impl_->demo_shell_ui->GetRenderingVm();
   if (!vm) {
-    return ui::RenderingViewMode::kSolid;
+    return RenderMode::kSolid;
   }
-  return vm->GetViewMode();
+  return vm->GetRenderMode();
 }
 
 auto DemoShell::GetContentVm() const -> observer_ptr<ui::ContentVm>
@@ -312,65 +431,41 @@ auto DemoShell::GetLightCullingVisualizationMode() const
   return vm->GetVisualizationMode();
 }
 
-auto DemoShell::InitializePanels() -> void
-{
-  // Content and Camera panels are now managed by DemoShellUi.
-
-  if (impl_->config.panel_config.environment) {
-    if (!impl_->environment_debug_panel) {
-      impl_->environment_debug_panel
-        = std::make_shared<ui::EnvironmentDebugPanel>();
-    }
-    ui::EnvironmentDebugConfig env_config;
-    env_config.scene = TryGetScene();
-    env_config.file_browser_service = impl_->config.file_browser_service;
-    env_config.skybox_service = impl_->config.skybox_service;
-
-    const auto renderer = impl_->config.get_renderer
-      ? impl_->config.get_renderer()
-      : observer_ptr<engine::Renderer> { nullptr };
-    env_config.renderer = renderer;
-    env_config.on_atmosphere_params_changed = [renderer]() {
-      LOG_F(INFO, "Atmosphere parameters changed, LUTs will regenerate");
-      if (renderer) {
-        if (auto lut_mgr = renderer->GetSkyAtmosphereLutManager()) {
-          lut_mgr->MarkDirty();
-        }
-      }
-    };
-    env_config.on_exposure_changed
-      = []() { LOG_F(INFO, "Exposure settings changed"); };
-
-    impl_->environment_debug_panel->Initialize(env_config);
-  }
-}
-
 auto DemoShell::UpdatePanels() -> void
 {
-  // Lazily create rendering and lighting panels via DemoShellUi
-  if ((impl_->config.panel_config.lighting
-        || impl_->config.panel_config.rendering)
-    && impl_->demo_shell_ui && impl_->config.get_pass_config_refs) {
-    auto refs = impl_->config.get_pass_config_refs();
+  auto pipeline = impl_->config.get_active_pipeline
+    ? impl_->config.get_active_pipeline()
+    : observer_ptr<RenderingPipeline> { nullptr };
+
+  if (pipeline && impl_->demo_shell_ui) {
+    // If the pipeline has changed, re-initialize services
+    if (impl_->bound_pipeline != pipeline) {
+      impl_->rendering_settings_service.Initialize(pipeline);
+      impl_->light_culling_settings_service.Initialize(pipeline);
+      impl_->post_process_settings_service.Initialize(pipeline);
+      impl_->bound_pipeline = pipeline;
+    }
 
     if (impl_->config.panel_config.rendering) {
-      impl_->demo_shell_ui->EnsureRenderingPanelReady(refs);
+      impl_->demo_shell_ui->EnsureRenderingPanelReady(*pipeline);
     }
     if (impl_->config.panel_config.lighting) {
-      impl_->demo_shell_ui->EnsureLightingPanelReady(refs);
+      impl_->demo_shell_ui->EnsureLightingPanelReady(*pipeline);
     }
   }
 
-  if (impl_->config.panel_config.environment && TryGetScene()) {
-    ui::EnvironmentDebugConfig env_config;
-    env_config.scene = TryGetScene();
-    env_config.file_browser_service = impl_->config.file_browser_service;
-    env_config.skybox_service = impl_->config.skybox_service;
-    const auto renderer = impl_->config.get_renderer
-      ? impl_->config.get_renderer()
-      : observer_ptr<engine::Renderer> { nullptr };
-    env_config.renderer = renderer;
-    env_config.on_atmosphere_params_changed = [renderer]() {
+  if (impl_->config.panel_config.environment && impl_->demo_shell_ui) {
+    auto env_vm = impl_->demo_shell_ui->GetEnvironmentVm();
+    if (!env_vm) {
+      return;
+    }
+    const auto renderer = impl_->GetRenderer();
+    EnvironmentRuntimeConfig runtime_config {};
+    runtime_config.scene = TryGetScene();
+    runtime_config.skybox_service
+      = impl_->GetSkyboxService(runtime_config.scene);
+    runtime_config.renderer = renderer;
+    runtime_config.on_atmosphere_params_changed = [renderer] {
       LOG_F(INFO, "Atmosphere parameters changed, LUTs will regenerate");
       if (renderer) {
         if (auto lut_mgr = renderer->GetSkyAtmosphereLutManager()) {
@@ -378,32 +473,12 @@ auto DemoShell::UpdatePanels() -> void
         }
       }
     };
-    env_config.on_exposure_changed
-      = []() { LOG_F(INFO, "Exposure settings changed"); };
-    if (impl_->environment_debug_panel) {
-      impl_->environment_debug_panel->UpdateConfig(env_config);
-
-      if (impl_->environment_debug_panel->HasPendingChanges()) {
-        impl_->environment_debug_panel->ApplyPendingChanges();
-      }
+    runtime_config.on_exposure_changed
+      = [] { LOG_F(INFO, "Exposure settings changed"); };
+    env_vm->SetRuntimeConfig(runtime_config);
+    if (env_vm->HasPendingChanges()) {
+      env_vm->ApplyPendingChanges();
     }
-  }
-}
-
-auto DemoShell::RegisterDemoPanels() -> void
-{
-  const auto register_panel = [this](std::shared_ptr<DemoPanel> panel) {
-    const auto name = panel ? std::string_view(panel->GetName()) : "<null>";
-    const auto result = impl_->panel_registry.RegisterPanel(panel);
-    if (!result) {
-      LOG_F(WARNING, "DemoShell: failed to register panel '{}'", name);
-    }
-  };
-
-  // Content, Camera, Rendering, and Lighting panels are managed by DemoShellUi.
-
-  if (impl_->config.panel_config.environment) {
-    register_panel(impl_->environment_debug_panel);
   }
 }
 

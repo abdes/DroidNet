@@ -780,12 +780,12 @@ inline void ImGui::FileBrowser::Display()
   if (!statusStr_.empty() && !(flags_ & ImGuiFileBrowserFlags_NoStatusBar)) {
     SameLine();
     Text("%s", statusStr_.c_str());
-    if (ImGui::IsItemHovered()) {
-      ImGui::BeginTooltip();
-      ImGui::PushTextWrapPos(300.0f);
-      ImGui::Text("%s", statusStr_.c_str());
-      ImGui::PopTextWrapPos();
-      ImGui::EndTooltip();
+    if (IsItemHovered()) {
+      BeginTooltip();
+      PushTextWrapPos(300.0F);
+      Text("%s", statusStr_.c_str());
+      PopTextWrapPos();
+      EndTooltip();
     }
   }
 
@@ -884,7 +884,7 @@ inline void ImGui::FileBrowser::SetTypeFilters(
   hasAllFilter_ = false;
   if (typeFilters.size() > 1) {
     hasAllFilter_ = true;
-    std::string allFiltersName = std::string();
+    auto allFiltersName = std::string();
     for (size_t i = 0; i < typeFilters.size(); ++i) {
       if (typeFilters[i] == std::string_view(".*")) {
         hasAllFilter_ = false;
@@ -931,10 +931,10 @@ inline std::string ImGui::FileBrowser::ToLower(const std::string& s)
 
 inline void ImGui::FileBrowser::ToolTip(const std::string_view& s)
 {
-  if (!ImGui::IsItemHovered()) {
+  if (!IsItemHovered()) {
     return;
   }
-  ImGui::SetTooltip("%s", s.data());
+  SetTooltip("%s", s.data());
 }
 
 inline void ImGui::FileBrowser::UpdateFileRecords()

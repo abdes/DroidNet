@@ -5,25 +5,17 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <iterator>
-#include <ranges>
 #include <string_view>
 #include <utility>
 #include <vector>
 
-#include <imgui.h>
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
-#include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Graphics/Common/Types/Color.h>
-#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
@@ -71,9 +63,7 @@ auto MainModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
   // Initialize DemoShell with all panels disabled (non-interactive demo)
   shell_ = std::make_unique<DemoShell>();
   DemoShellConfig shell_config;
-  shell_config.input_system = observer_ptr { app_.input_system.get() };
-  shell_config.get_renderer
-    = [this]() { return observer_ptr { app_.renderer }; };
+  shell_config.engine = engine;
   shell_config.panel_config = DemoShellPanelConfig {
     .content_loader = false,
     .camera_controls = false,
@@ -103,7 +93,7 @@ auto MainModule::OnShutdown() noexcept -> void
   ReleaseAllViews("module shutdown");
 }
 
-auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
+auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
 {
   CHECK_NOTNULL_F(app_window_, "AppWindow must exist in MultiView");
   CHECK_NOTNULL_F(shell_, "DemoShell must exist in MultiView");
@@ -138,7 +128,7 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
   }
 }
 
-auto MainModule::OnGuiUpdate(engine::FrameContext& /*context*/) -> co::Co<>
+auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
 {
   if (!app_window_ || !app_window_->GetWindow()) {
     co_return;
@@ -148,13 +138,6 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& /*context*/) -> co::Co<>
   auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
   CHECK_F(imgui_module_ref.has_value(), "ImGui module required");
   auto& imgui_module = imgui_module_ref->get();
-  if (!imgui_module.IsWitinFrameScope()) {
-    LOG_F(INFO, "[MultiView] ImGui frame not active; skipping GUI update");
-    co_return;
-  }
-  if (auto* imgui_context = imgui_module.GetImGuiContext()) {
-    ImGui::SetCurrentContext(imgui_context);
-  }
 
   for (auto& view : views_) {
     view->SetImGuiModule(observer_ptr { &imgui_module });
@@ -165,7 +148,7 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& /*context*/) -> co::Co<>
   }
 
   CHECK_NOTNULL_F(shell_, "DemoShell required for GUI update");
-  shell_->Draw();
+  shell_->Draw(context);
 
   co_return;
 }
@@ -349,8 +332,9 @@ auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
 
 auto MainModule::ClearBackbufferReferences() -> void
 {
-  // This example does offscreen rendering and only composites to the swapchain,
-  // which only uses tyemporary references to the backbuffers.
+  if (pipeline_) {
+    pipeline_->ClearBackbufferReferences();
+  }
 }
 
 auto MainModule::BuildDefaultWindowProperties() const

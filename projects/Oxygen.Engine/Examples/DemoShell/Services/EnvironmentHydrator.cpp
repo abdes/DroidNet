@@ -126,17 +126,16 @@ void EnvironmentHydrator::HydrateSystem(
 {
   target.SetPlanetRadiusMeters(source.planet_radius_m);
   target.SetAtmosphereHeightMeters(source.atmosphere_height_m);
-  target.SetGroundAlbedoRgb(oxygen::Vec3 { source.ground_albedo_rgb[0],
+  target.SetGroundAlbedoRgb(Vec3 { source.ground_albedo_rgb[0],
     source.ground_albedo_rgb[1], source.ground_albedo_rgb[2] });
-  target.SetRayleighScatteringRgb(
-    oxygen::Vec3 { source.rayleigh_scattering_rgb[0],
-      source.rayleigh_scattering_rgb[1], source.rayleigh_scattering_rgb[2] });
+  target.SetRayleighScatteringRgb(Vec3 { source.rayleigh_scattering_rgb[0],
+    source.rayleigh_scattering_rgb[1], source.rayleigh_scattering_rgb[2] });
   target.SetRayleighScaleHeightMeters(source.rayleigh_scale_height_m);
-  target.SetMieScatteringRgb(oxygen::Vec3 { source.mie_scattering_rgb[0],
+  target.SetMieScatteringRgb(Vec3 { source.mie_scattering_rgb[0],
     source.mie_scattering_rgb[1], source.mie_scattering_rgb[2] });
   target.SetMieScaleHeightMeters(source.mie_scale_height_m);
   target.SetMieAnisotropy(source.mie_g);
-  target.SetAbsorptionRgb(oxygen::Vec3 { source.absorption_rgb[0],
+  target.SetAbsorptionRgb(Vec3 { source.absorption_rgb[0],
     source.absorption_rgb[1], source.absorption_rgb[2] });
   target.SetAbsorptionScaleHeightMeters(source.absorption_scale_height_m);
   target.SetMultiScatteringFactor(source.multi_scattering_factor);
@@ -174,12 +173,12 @@ void EnvironmentHydrator::HydrateSystem(scene::environment::SkySphere& target,
     target.SetSource(scene::environment::SkySphereSource::kSolidColor);
   }
 
-  target.SetSolidColorRgb(oxygen::Vec3 { source.solid_color_rgb[0],
+  target.SetSolidColorRgb(Vec3 { source.solid_color_rgb[0],
     source.solid_color_rgb[1], source.solid_color_rgb[2] });
   target.SetIntensity(source.intensity);
   target.SetRotationRadians(source.rotation_radians);
-  target.SetTintRgb(oxygen::Vec3 {
-    source.tint_rgb[0], source.tint_rgb[1], source.tint_rgb[2] });
+  target.SetTintRgb(
+    Vec3 { source.tint_rgb[0], source.tint_rgb[1], source.tint_rgb[2] });
 }
 
 /*!
@@ -203,8 +202,8 @@ void EnvironmentHydrator::HydrateSystem(scene::environment::Fog& target,
   target.SetHeightOffsetMeters(source.height_offset_m);
   target.SetStartDistanceMeters(source.start_distance_m);
   target.SetMaxOpacity(source.max_opacity);
-  target.SetAlbedoRgb(oxygen::Vec3 {
-    source.albedo_rgb[0], source.albedo_rgb[1], source.albedo_rgb[2] });
+  target.SetAlbedoRgb(
+    Vec3 { source.albedo_rgb[0], source.albedo_rgb[1], source.albedo_rgb[2] });
   target.SetAnisotropy(source.anisotropy_g);
   target.SetScatteringIntensity(source.scattering_intensity);
 }
@@ -234,8 +233,8 @@ void EnvironmentHydrator::HydrateSystem(scene::environment::SkyLight& target,
       "panel Skybox Loader to bind a cubemap at runtime.");
   }
   target.SetIntensity(source.intensity);
-  target.SetTintRgb(oxygen::Vec3 {
-    source.tint_rgb[0], source.tint_rgb[1], source.tint_rgb[2] });
+  target.SetTintRgb(
+    Vec3 { source.tint_rgb[0], source.tint_rgb[1], source.tint_rgb[2] });
   target.SetDiffuseIntensity(source.diffuse_intensity);
   target.SetSpecularIntensity(source.specular_intensity);
 }
@@ -260,11 +259,11 @@ void EnvironmentHydrator::HydrateSystem(
   target.SetLayerThicknessMeters(source.layer_thickness_m);
   target.SetCoverage(source.coverage);
   target.SetDensity(source.density);
-  target.SetAlbedoRgb(oxygen::Vec3 {
-    source.albedo_rgb[0], source.albedo_rgb[1], source.albedo_rgb[2] });
+  target.SetAlbedoRgb(
+    Vec3 { source.albedo_rgb[0], source.albedo_rgb[1], source.albedo_rgb[2] });
   target.SetExtinctionScale(source.extinction_scale);
   target.SetPhaseAnisotropy(source.phase_g);
-  target.SetWindDirectionWs(oxygen::Vec3 {
+  target.SetWindDirectionWs(Vec3 {
     source.wind_dir_ws[0], source.wind_dir_ws[1], source.wind_dir_ws[2] });
   target.SetWindSpeedMps(source.wind_speed_mps);
   target.SetShadowStrength(source.shadow_strength);

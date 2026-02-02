@@ -4,67 +4,66 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "InputSystem/InputDebugPanel.h"
-
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <utility>
+#include <vector>
 
 #include <imgui.h>
-
-#include <glm/glm.hpp>
 
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/InputSystem.h>
-#include <Oxygen/Scene/SceneNode.h>
+
+#include "DemoShell/UI/CameraRigController.h"
+#include "InputSystem/InputDebugPanel.h"
 
 namespace {
 
 //! Draw a simple keyboard/mouse keycap (rounded rect + centered label).
 auto DrawKeycap(ImDrawList* dl, ImVec2 p, const char* label, ImU32 bg,
-  ImU32 border, ImU32 text, float scale = 1.0f) -> void
+  ImU32 border, ImU32 text, float scale = 1.0F) -> void
 {
-  const float pad = 6.0f * scale;
+  const float pad = 6.0F * scale;
   const ImVec2 text_size = ImGui::CalcTextSize(label);
   const ImVec2 size
-    = ImVec2(text_size.x + pad * 2.0f, text_size.y + pad * 1.5f);
-  const float r = 6.0f * scale;
+    = ImVec2(text_size.x + pad * 2.0F, text_size.y + pad * 1.5F);
+  const float r = 6.0F * scale;
 
   const ImVec2 p_max(p.x + size.x, p.y + size.y);
   dl->AddRectFilled(p, p_max, bg, r);
-  dl->AddRect(p, p_max, border, r, 0, 1.5f * scale);
+  dl->AddRect(p, p_max, border, r, 0, 1.5F * scale);
 
   const ImVec2 tp = ImVec2(
-    p.x + (size.x - text_size.x) * 0.5f, p.y + (size.y - text_size.y) * 0.5f);
+    p.x + (size.x - text_size.x) * 0.5F, p.y + (size.y - text_size.y) * 0.5F);
   dl->AddText(tp, text, label, label + std::strlen(label));
 }
 
 //! Compute the rendered size of a keycap for spacing/layout.
-auto MeasureKeycap(const char* label, float scale = 1.0f) -> ImVec2
+auto MeasureKeycap(const char* label, float scale = 1.0F) -> ImVec2
 {
-  const float pad = 6.0f * scale;
+  const float pad = 6.0F * scale;
   const ImVec2 text_size = ImGui::CalcTextSize(label);
-  return ImVec2(text_size.x + pad * 2.0f, text_size.y + pad * 1.5f);
+  return ImVec2(text_size.x + pad * 2.0F, text_size.y + pad * 1.5F);
 }
 
 //! Draw a tiny horizontal analog bar for scalar values in [vmin, vmax].
 auto DrawAnalogBar(ImDrawList* dl, ImVec2 p, ImVec2 sz, float v,
-  float vmin = -1.0f, float vmax = 1.0f, ImU32 bg = IM_COL32(30, 30, 34, 255),
+  float vmin = -1.0F, float vmax = 1.0F, ImU32 bg = IM_COL32(30, 30, 34, 255),
   ImU32 fg = IM_COL32(90, 170, 255, 255)) -> void
 {
   const ImVec2 p_max(p.x + sz.x, p.y + sz.y);
-  dl->AddRectFilled(p, p_max, bg, 3.0f);
+  dl->AddRectFilled(p, p_max, bg, 3.0F);
   const float t = (v - vmin) / (vmax - vmin);
-  const float tt = std::clamp(t, 0.0f, 1.0f);
+  const float tt = std::clamp(t, 0.0F, 1.0F);
   const ImVec2 fill = ImVec2(p.x + sz.x * tt, p.y + sz.y);
-  dl->AddRectFilled(p, ImVec2(fill.x, fill.y), fg, 3.0f);
+  dl->AddRectFilled(p, ImVec2(fill.x, fill.y), fg, 3.0F);
   // zero line
   const float zt = (-vmin) / (vmax - vmin);
-  const float zx = p.x + sz.x * std::clamp(zt, 0.0f, 1.0f);
+  const float zx = p.x + sz.x * std::clamp(zt, 0.0F, 1.0F);
   dl->AddLine(ImVec2(zx, p.y), ImVec2(zx, p.y + sz.y),
-    IM_COL32(180, 180, 190, 120), 1.0f);
+    IM_COL32(180, 180, 190, 120), 1.0F);
 }
 
 //! Plot a tiny sparkline from a circular buffer (values[filled], head==next).
@@ -86,7 +85,7 @@ auto PlotSparkline(const char* id, const float* values, int filled, int head,
   for (int i = 0; i < N; ++i) {
     tmp[i] = values[(start + i) % cap];
   }
-  ImGui::PlotLines(id, tmp, N, 0, nullptr, -1.0f, 1.0f, size);
+  ImGui::PlotLines(id, tmp, N, 0, nullptr, -1.0F, 1.0F, size);
   ImGui::PopStyleColor(2);
   ImGui::PopStyleVar();
 }
@@ -122,7 +121,7 @@ auto ActionScalarValue(const std::shared_ptr<oxygen::input::Action>& a) noexcept
   -> float
 {
   if (!a) {
-    return 0.0f;
+    return 0.0F;
   }
 
   using oxygen::input::ActionValueType;
@@ -131,24 +130,24 @@ auto ActionScalarValue(const std::shared_ptr<oxygen::input::Action>& a) noexcept
   case ActionValueType::kAxis2D: {
     const auto& axis = a->GetValue().GetAs<oxygen::Axis2D>();
     const float mag = std::sqrt(axis.x * axis.x + axis.y * axis.y);
-    return (std::min)(mag, 1.0f);
+    return (std::min)(mag, 1.0F);
   }
   case ActionValueType::kAxis1D: {
     const auto& ax = a->GetValue().GetAs<oxygen::Axis1D>();
-    return std::clamp(ax.x, -1.0f, 1.0f);
+    return std::clamp(ax.x, -1.0F, 1.0F);
   }
   case ActionValueType::kBool: {
     const bool b = a->GetValue().GetAs<bool>();
-    return b ? 1.0f : 0.0f;
+    return b ? 1.0F : 0.0F;
   }
   default:
-    return 0.0f;
+    return 0.0F;
   }
 }
 
 } // namespace
 
-namespace oxygen::examples::input {
+namespace oxygen::examples::input_system {
 
 void InputDebugPanel::Initialize(const InputDebugPanelConfig& config)
 {
@@ -190,19 +189,6 @@ void InputDebugPanel::History::Push(float v) noexcept
 
 auto InputDebugPanel::DrawContents() -> void
 {
-  if (config_.main_camera) {
-    if (config_.main_camera->IsAlive()) {
-      const auto tf = config_.main_camera->GetTransform();
-      const auto pos
-        = tf.GetLocalPosition().value_or(glm::vec3(0.0F, 0.0F, 5.0F));
-      ImGui::Text("Camera: (%.2f, %.2f, %.2f)", pos.x, pos.y, pos.z);
-    } else {
-      ImGui::TextUnformatted("Camera: <not alive>");
-    }
-  } else {
-    ImGui::TextUnformatted("Camera: <unassigned>");
-  }
-
   const auto& io = ImGui::GetIO();
   ImGui::Text("WantCaptureMouse: %s", io.WantCaptureMouse ? "true" : "false");
   ImGui::Separator();
@@ -231,28 +217,34 @@ auto InputDebugPanel::DrawContents() -> void
     std::shared_ptr<oxygen::input::Action> act;
   };
 
-  Row rows[] = {
-    { "Shift", config_.shift_action },
-    { "LMB", config_.left_mouse_action },
-    { "Pan", config_.pan_action },
-    { "Zoom In", config_.zoom_in_action },
-    { "Zoom Out", config_.zoom_out_action },
-    { "Jump", config_.jump_action },
-    { "Jump Higher", config_.jump_higher_action },
-    { "Swim Up", config_.swim_up_action },
-  };
+  // Build rows from demo actions + camera rig actions
+  std::vector<Row> rows;
+
+  // Demo-specific actions
+  rows.push_back({ "Shift", config_.shift_action });
+  rows.push_back({ "Jump", config_.jump_action });
+  rows.push_back({ "Jump Higher", config_.jump_higher_action });
+  rows.push_back({ "Swim Up", config_.swim_up_action });
+
+  // Camera rig actions (if available)
+  if (config_.camera_rig) {
+    rows.push_back({ "RMB", config_.camera_rig->GetRmbAction() });
+    rows.push_back({ "Orbit", config_.camera_rig->GetOrbitAction() });
+    rows.push_back({ "Zoom In", config_.camera_rig->GetZoomInAction() });
+    rows.push_back({ "Zoom Out", config_.camera_rig->GetZoomOutAction() });
+  }
 
   ImGui::Checkbox("Show inactive", &show_inactive_);
   ImGui::Spacing();
 
   if (ImGui::BeginTable("##actions", 5, ImGuiTableFlags_SizingStretchProp)) {
-    ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+    ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 110.0F);
     ImGui::TableSetupColumn(
-      "Bindings", ImGuiTableColumnFlags_WidthFixed, 200.0f);
-    ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, 90.0f);
-    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+      "Bindings", ImGuiTableColumnFlags_WidthFixed, 200.0F);
+    ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, 90.0F);
+    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 1.0F);
     ImGui::TableSetupColumn(
-      "History", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+      "History", ImGuiTableColumnFlags_WidthStretch, 1.0F);
 
     const double now = ImGui::GetTime();
 
@@ -280,19 +272,19 @@ auto InputDebugPanel::DrawContents() -> void
 
       ImGui::TableNextRow();
       {
-        float flash_alpha = 0.0f;
-        constexpr float kFlashDuration = 1.5f;
+        float flash_alpha = 0.0F;
+        constexpr float kFlashDuration = 1.5F;
         auto it = last_trigger_time_.find(r.label);
         if (it != last_trigger_time_.end()) {
           const float age = static_cast<float>(now - it->second);
-          if (age >= 0.0f && age < kFlashDuration) {
-            float t = 1.0f - (age / kFlashDuration);
+          if (age >= 0.0F && age < kFlashDuration) {
+            float t = 1.0F - (age / kFlashDuration);
             t = t * t;
             flash_alpha = t;
           }
         }
-        if (flash_alpha > 0.0f) {
-          const int a = static_cast<int>(flash_alpha * 110.0f);
+        if (flash_alpha > 0.0F) {
+          const int a = static_cast<int>(flash_alpha * 110.0F);
           const ImU32 col = IM_COL32(255, 220, 120, a);
           ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, col);
         }
@@ -307,9 +299,9 @@ auto InputDebugPanel::DrawContents() -> void
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 p = ImGui::GetCursorScreenPos();
         const float scale = ImGui::GetIO().FontGlobalScale;
-        const float gap = 8.0f * scale;
-        float used_w = 0.0f;
-        float used_h = 0.0f;
+        const float gap = 8.0F * scale;
+        float used_w = 0.0F;
+        float used_h = 0.0F;
         auto draw_and_advance = [&](const char* cap) {
           const ImVec2 sz = MeasureKeycap(cap, scale);
           DrawKeycap(dl, p, cap, IM_COL32(40, 40, 46, 255),
@@ -320,30 +312,30 @@ auto InputDebugPanel::DrawContents() -> void
         };
 
         const std::string_view label_view = r.label;
-        if (label_view == "Pan") {
-          draw_and_advance("Shift");
-          draw_and_advance("LMB");
-        } else if (label_view == "Zoom In") {
-          draw_and_advance("Wheel+");
-        } else if (label_view == "Zoom Out") {
-          draw_and_advance("Wheel-");
-        } else if (label_view == "Jump") {
+        if (label_view == "Jump") {
           draw_and_advance("Space");
         } else if (label_view == "Jump Higher") {
           draw_and_advance("Shift");
           draw_and_advance("Space");
         } else if (label_view == "Shift") {
           draw_and_advance("Shift");
-        } else if (label_view == "LMB") {
-          draw_and_advance("LMB");
         } else if (label_view == "Swim Up") {
           draw_and_advance("Space");
+        } else if (label_view == "RMB") {
+          draw_and_advance("RMB");
+        } else if (label_view == "Orbit") {
+          draw_and_advance("RMB");
+          draw_and_advance("Drag");
+        } else if (label_view == "Zoom In") {
+          draw_and_advance("Wheel+");
+        } else if (label_view == "Zoom Out") {
+          draw_and_advance("Wheel-");
         }
-        if (used_w > 0.0f && used_h > 0.0f) {
+        if (used_w > 0.0F && used_h > 0.0F) {
           used_w -= gap;
           ImGui::Dummy(ImVec2(used_w, used_h));
         } else {
-          ImGui::Dummy(ImVec2(1, 26.0f * scale));
+          ImGui::Dummy(ImVec2(1, 26.0F * scale));
         }
       }
 
@@ -359,7 +351,7 @@ auto InputDebugPanel::DrawContents() -> void
       {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 p = ImGui::GetCursorScreenPos();
-        DrawAnalogBar(dl, p, ImVec2(160, 8), v, 0.0f, 1.0f);
+        DrawAnalogBar(dl, p, ImVec2(160, 8), v, 0.0F, 1.0F);
         ImGui::Dummy(ImVec2(160, 10));
       }
 
@@ -371,13 +363,6 @@ auto InputDebugPanel::DrawContents() -> void
     }
     ImGui::EndTable();
   }
-
-  ImGui::Separator();
-  const float pan_sensitivity
-    = config_.pan_sensitivity ? *config_.pan_sensitivity : 0.0f;
-  const float zoom_step = config_.zoom_step ? *config_.zoom_step : 0.0f;
-  ImGui::Text(
-    "pan_sensitivity=%.4f, zoom_step=%.3f", pan_sensitivity, zoom_step);
 }
 
-} // namespace oxygen::examples::input
+} // namespace oxygen::examples::input_system

@@ -11,6 +11,7 @@
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Renderer/Passes/ToneMapPass.h>
 
 namespace oxygen::engine {
 
@@ -39,25 +40,6 @@ enum class SkyLightSource : uint32_t {
 enum class SkySphereSource : uint32_t {
   kCubemap = 0u,
   kSolidColor = 1u,
-};
-
-//! GPU-facing tonemapper selection.
-/*!
- Values are a renderer-side ABI for shaders.
-*/
-enum class ToneMapper : uint32_t {
-  kAcesFitted = 0u,
-  kReinhard = 1u,
-  kNone = 2u,
-};
-
-//! GPU-facing exposure behavior.
-/*!
- Values are a renderer-side ABI for shaders.
-*/
-enum class ExposureMode : uint32_t {
-  kManual = 0u,
-  kAuto = 1u,
 };
 
 //! GPU-facing fog parameters.

@@ -57,7 +57,7 @@ public:
 
   //! Hydrate a runtime environment from a scene asset.
   static void HydrateEnvironment(
-    scene::SceneEnvironment& target_env, const data::SceneAsset& source_asset);
+    scene::SceneEnvironment& target, const data::SceneAsset& source_asset);
 
   //! Hydrate SkyAtmosphere runtime system from asset record.
   static void HydrateSystem(scene::environment::SkyAtmosphere& target,

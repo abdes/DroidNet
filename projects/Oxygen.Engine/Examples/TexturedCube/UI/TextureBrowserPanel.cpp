@@ -24,7 +24,7 @@ void DrawHelpMarker(const char* desc)
   ImGui::TextDisabled("(?)");
   if (ImGui::IsItemHovered()) {
     ImGui::BeginTooltip();
-    ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+    ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0F);
     ImGui::TextUnformatted(desc);
     ImGui::PopTextWrapPos();
     ImGui::EndTooltip();
@@ -146,7 +146,7 @@ auto TextureBrowserPanel::DrawImportSection() -> void
 {
   auto& state = vm_->GetImportState();
 
-  ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+  ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15F, 0.15F, 0.15F, 1.0F));
   ImGui::BeginChild("ImportPanel", ImVec2(0, 0),
     ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY
       | ImGuiChildFlags_AlwaysAutoResize);
@@ -179,7 +179,7 @@ auto TextureBrowserPanel::DrawImportSection() -> void
     }
     if (state.usage == TextureBrowserVm::ImportState::Usage::kHdrEnvironment) {
       ImGui::Indent();
-      ImGui::SliderFloat("Exposure (EV)", &state.exposure_ev, -5.0f, 5.0f);
+      ImGui::SliderFloat("Exposure (EV)", &state.exposure_ev, -5.0F, 5.0F);
       ImGui::Unindent();
     }
 
@@ -229,9 +229,9 @@ auto TextureBrowserPanel::DrawImportSection() -> void
     == TextureBrowserVm::ImportState::WorkflowState::Finished) {
     if (state.last_import_success) {
       ImGui::TextColored(
-        ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "%s", state.status_message.c_str());
+        ImVec4(0.2F, 1.0F, 0.2F, 1.0F), "%s", state.status_message.c_str());
     } else {
-      ImGui::TextColored(ImVec4(1.0f, 0.2f, 0.2f, 1.0f), "Error: %s",
+      ImGui::TextColored(ImVec4(1.0F, 0.2F, 0.2F, 1.0F), "Error: %s",
         state.status_message.c_str());
     }
   }
@@ -270,8 +270,8 @@ auto TextureBrowserPanel::DrawMaterialsSection() -> void
   auto& uv = vm_->GetUvState();
 
   ImGui::TextDisabled("Surface Props");
-  ImGui::SliderFloat("Metalness", &surface.metalness, 0.0f, 1.0f);
-  ImGui::SliderFloat("Roughness", &surface.roughness, 0.0f, 1.0f);
+  ImGui::SliderFloat("Metalness", &surface.metalness, 0.0F, 1.0F);
+  ImGui::SliderFloat("Roughness", &surface.roughness, 0.0F, 1.0F);
   ImGui::Checkbox("Use Constant Base Color", &surface.use_constant_base_color);
   if (surface.use_constant_base_color) {
     ImGui::ColorEdit3("Base Color", &surface.constant_base_color_rgb.x);
@@ -281,11 +281,11 @@ auto TextureBrowserPanel::DrawMaterialsSection() -> void
   ImGui::TextDisabled("UV Transform");
 
   if (ImGui::Button("Reset UV")) {
-    uv.scale = { 1.0f, 1.0f };
-    uv.offset = { 0.0f, 0.0f };
+    uv.scale = { 1.0F, 1.0F };
+    uv.offset = { 0.0F, 0.0F };
   }
-  ImGui::DragFloat2("Scale", &uv.scale.x, 0.01f);
-  ImGui::DragFloat2("Offset", &uv.offset.x, 0.01f);
+  ImGui::DragFloat2("Scale", &uv.scale.x, 0.01F);
+  ImGui::DragFloat2("Offset", &uv.offset.x, 0.01F);
 
   // UV/Image Origin options
   static const std::array<TextureBrowserVm::UvOrigin, 2> kUvOrigins
@@ -299,7 +299,7 @@ auto TextureBrowserPanel::DrawMaterialsSection() -> void
 
   // Calculate and show effective logic for debugging
   auto [eff_s, eff_o] = vm_->GetEffectiveUvTransform();
-  ImGui::TextDisabled("Effective: S(%.2f, %.2f) O(%.2f, %.2f)", eff_s.x,
+  ImGui::TextDisabled("Effective: S(%.2F, %.2F) O(%.2F, %.2F)", eff_s.x,
     eff_s.y, eff_o.x, eff_o.y);
 
   if (ImGui::Button("Apply/Rebuild Cube")) {
@@ -382,7 +382,7 @@ auto TextureBrowserPanel::DrawBrowserSection() -> void
       std::string settings_json = vm_->GetMetadataJson(entry.index);
       if (!settings_json.empty()) {
         ImGui::Separator();
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 1.0f, 1.0f), "Import Settings:");
+        ImGui::TextColored(ImVec4(0.7F, 0.7F, 1.0F, 1.0F), "Import Settings:");
         ImGui::TextUnformatted(settings_json.c_str());
       }
       ImGui::EndTooltip();

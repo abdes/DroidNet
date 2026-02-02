@@ -37,10 +37,10 @@ auto MakeRotationFromForwardToDirWs(const Vec3& dir_ws) -> Quat
   const Vec3 from = glm::normalize(oxygen::space::move::Forward);
   const Vec3 to = glm::normalize(dir_ws);
   const float d = glm::dot(from, to);
-  if (d > 0.9999f) {
-    return Quat { 1.0f, 0.0f, 0.0f, 0.0f };
+  if (d > 0.9999F) {
+    return Quat { 1.0F, 0.0F, 0.0F, 0.0F };
   }
-  if (d < -0.9999f) {
+  if (d < -0.9999F) {
     Vec3 axis = glm::cross(from, oxygen::space::move::Up);
     if (glm::dot(axis, axis) < 1e-6f) {
       axis = glm::cross(from, oxygen::space::move::Right);
@@ -52,10 +52,10 @@ auto MakeRotationFromForwardToDirWs(const Vec3& dir_ws) -> Quat
   Vec3 axis = glm::cross(from, to);
   const float axis_len2 = glm::dot(axis, axis);
   if (axis_len2 < 1e-8f) {
-    return Quat { 1.0f, 0.0f, 0.0f, 0.0f };
+    return Quat { 1.0F, 0.0F, 0.0F, 0.0F };
   }
   axis = glm::normalize(axis);
-  const float angle = std::acos(std::clamp(d, -1.0f, 1.0f));
+  const float angle = std::acos(std::clamp(d, -1.0F, 1.0F));
   return glm::angleAxis(angle, axis);
 }
 
@@ -121,11 +121,11 @@ auto MakeCubeMaterial(const char* name, const glm::vec4& rgba,
   desc.base_color[2] = rgba.b;
   desc.base_color[3] = rgba.a;
 
-  desc.normal_scale = 1.0f;
+  desc.normal_scale = 1.0F;
 
-  desc.metalness = Unorm16 { std::clamp(metalness, 0.0f, 1.0f) };
-  desc.roughness = Unorm16 { std::clamp(roughness, 0.0f, 1.0f) };
-  desc.ambient_occlusion = Unorm16 { 1.0f };
+  desc.metalness = Unorm16 { std::clamp(metalness, 0.0F, 1.0F) };
+  desc.roughness = Unorm16 { std::clamp(roughness, 0.0F, 1.0F) };
+  desc.ambient_occlusion = Unorm16 { 1.0F };
 
   desc.base_color_texture = base_color_texture_resource_index;
 
@@ -268,15 +268,15 @@ auto SceneSetup::EnsureCubeNode() -> scene::SceneNode
   }
 
   // Place the sphere above the cube (Z-up world).
-  cube_node_.GetTransform().SetLocalPosition({ 0.0f, 0.0f, 3.0f });
+  cube_node_.GetTransform().SetLocalPosition({ 0.0F, 0.0F, 3.0F });
 
   if (!comparison_cube_node_.IsAlive()) {
     comparison_cube_node_ = scene_->CreateNode("Cube");
   }
 
   // Make the cube the scene center and scale it up for easier inspection.
-  comparison_cube_node_.GetTransform().SetLocalPosition({ 0.0f, 0.0f, 0.0f });
-  comparison_cube_node_.GetTransform().SetLocalScale({ 4.0f, 4.0f, 4.0f });
+  comparison_cube_node_.GetTransform().SetLocalPosition({ 0.0F, 0.0F, 0.0F });
+  comparison_cube_node_.GetTransform().SetLocalScale({ 4.0F, 4.0F, 4.0F });
 
   return cube_node_;
 }
@@ -354,7 +354,7 @@ auto SceneSetup::EnsureLighting(
   // Sun (directional) light
   if (!sun_node_.IsAlive()) {
     sun_node_ = scene_->CreateNode("Sun");
-    sun_node_.GetTransform().SetLocalPosition({ 0.0f, -20.0f, 20.0f });
+    sun_node_.GetTransform().SetLocalPosition({ 0.0F, -20.0F, 20.0F });
 
     auto sun_light = std::make_unique<scene::DirectionalLight>();
     sun_light->Common().intensity = sun.intensity;
@@ -419,14 +419,14 @@ auto SceneSetup::UpdateSunLight(const SunLightParams& params) -> void
       const Quat rot = MakeRotationFromForwardToDirWs(resolved_ray_dir_ws);
       tf.SetLocalRotation(rot);
       tf.SetLocalPosition(
-        Vec3 { 0.0f, 0.0f, 0.0f } + resolved_ray_dir_ws * 50.0f);
+        Vec3 { 0.0F, 0.0F, 0.0F } + resolved_ray_dir_ws * 50.0F);
     }
   }
 
   if (!scene_) {
     const Quat rot = MakeRotationFromForwardToDirWs(ray_dir_ws);
     tf.SetLocalRotation(rot);
-    tf.SetLocalPosition(Vec3 { 0.0f, 0.0f, 0.0f } + ray_dir_ws * 50.0f);
+    tf.SetLocalPosition(Vec3 { 0.0F, 0.0F, 0.0F } + ray_dir_ws * 50.0F);
   }
 
   if (auto sun_light = sun_node_.GetLightAs<scene::DirectionalLight>()) {
@@ -468,7 +468,7 @@ auto SceneSetup::EnsureEnvironment(const EnvironmentParams& params) -> void
     sky_light.SetIntensity(params.sky_light_intensity);
     sky_light.SetDiffuseIntensity(params.sky_light_diffuse);
     sky_light.SetSpecularIntensity(params.sky_light_specular);
-    sky_light.SetTintRgb(Vec3 { 1.0f, 1.0f, 1.0f });
+    sky_light.SetTintRgb(Vec3 { 1.0F, 1.0F, 1.0F });
     sky_light.SetSource(scene::environment::SkyLightSource::kCapturedScene);
 
     scene_->SetEnvironment(std::move(new_env));
@@ -496,7 +496,7 @@ auto SceneSetup::EnsureEnvironment(const EnvironmentParams& params) -> void
       sky_light.SetIntensity(params.sky_light_intensity);
       sky_light.SetDiffuseIntensity(params.sky_light_diffuse);
       sky_light.SetSpecularIntensity(params.sky_light_specular);
-      sky_light.SetTintRgb(Vec3 { 1.0f, 1.0f, 1.0f });
+      sky_light.SetTintRgb(Vec3 { 1.0F, 1.0F, 1.0F });
       sky_light.SetSource(scene::environment::SkyLightSource::kCapturedScene);
     }
   }

@@ -176,6 +176,12 @@ auto FrameContext::SetFrameTiming(const FrameTiming& t, EngineTag) noexcept
   metrics_.timing = t;
 }
 
+auto FrameContext::SetPhaseDuration(core::PhaseId phase,
+  std::chrono::microseconds duration, EngineTag) noexcept -> void
+{
+  metrics_.timing.stage_timings[phase] = duration;
+}
+
 auto FrameContext::SetFrameStartTime(
   std::chrono::steady_clock::time_point t, EngineTag) noexcept -> void
 {
@@ -452,16 +458,16 @@ auto FrameContext::PopulateFrameSnapshot(FrameSnapshot& frame_snapshot,
   frame_snapshot.frame_start_time = GetFrameStartTime();
   frame_snapshot.frame_budget
     = std::chrono::duration_cast<std::chrono::microseconds>(
-      metrics_.budget.cpuBudget);
+      metrics_.budget.cpu_budget);
 
   // Enhanced timing data for parallel tasks
   frame_snapshot.timing = module_timing_;
 
   // Budget context for adaptive scheduling
-  frame_snapshot.budget.cpu_budget = metrics_.budget.cpuBudget;
-  frame_snapshot.budget.gpu_budget = metrics_.budget.gpuBudget;
+  frame_snapshot.budget.cpu_budget = metrics_.budget.cpu_budget;
+  frame_snapshot.budget.gpu_budget = metrics_.budget.gpu_budget;
   frame_snapshot.budget.is_over_budget
-    = (metrics_.timing.cpuTime > frame_snapshot.frame_budget);
+    = (metrics_.timing.frame_duration > frame_snapshot.frame_budget);
   frame_snapshot.budget.should_degrade_quality
     = frame_snapshot.budget.is_over_budget;
 

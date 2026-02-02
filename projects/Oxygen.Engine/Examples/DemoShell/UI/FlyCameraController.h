@@ -6,9 +6,6 @@
 
 #pragma once
 
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
-
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Scene/SceneNode.h>
 
@@ -81,20 +78,20 @@ public:
   void SyncFromTransform(scene::SceneNode& node);
 
 private:
-  float move_speed_ { 5.0f };
+  float move_speed_ { 5.0F };
   // Mouse-look sensitivity in radians per input unit (typically pixels).
-  float look_sensitivity_ { 0.0015f };
+  float look_sensitivity_ { 0.0015F };
 
   bool boost_active_ { false };
-  float boost_multiplier_ { 4.0f };
+  float boost_multiplier_ { 4.0F };
   bool plane_lock_active_ { false };
 
-  glm::vec3 move_input_ { 0.0f };
-  glm::vec2 look_input_ { 0.0f };
+  glm::vec3 move_input_ { 0.0F };
+  glm::vec2 look_input_ { 0.0F };
 
   // Stored in radians.
-  float pitch_ { 0.0f };
-  float yaw_ { 0.0f };
+  float pitch_ { 0.0F };
+  float yaw_ { 0.0F };
 };
 
 } // namespace oxygen::examples::render_scene

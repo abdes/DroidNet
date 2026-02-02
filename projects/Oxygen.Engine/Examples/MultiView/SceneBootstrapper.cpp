@@ -243,7 +243,7 @@ auto SceneBootstrapper::EnsureCylinder(scene::Scene& scene) -> void
   }
 
   // Use a reasonable default — 16 segments, height 1.0, radius 0.5
-  auto cyl_data = data::MakeCylinderMeshAsset(16U, 1.0f, 0.5f);
+  auto cyl_data = data::MakeCylinderMeshAsset(16U, 1.0F, 0.5F);
   if (!cyl_data.has_value()) {
     LOG_F(WARNING,
       "[MultiView] SceneBootstrapper failed to create cylinder mesh data.");
@@ -294,7 +294,7 @@ auto SceneBootstrapper::EnsureCylinder(scene::Scene& scene) -> void
   // Apply 30° pitch and 45° yaw (converted to radians) to give a clear 3D
   // perspective.
   cylinder_node_.GetTransform().SetLocalRotation(
-    glm::quat(glm::vec3(glm::radians(30.0f), glm::radians(45.0f), 0.0f)));
+    glm::quat(glm::vec3(glm::radians(30.0F), glm::radians(45.0F), 0.0F)));
 
   LOG_F(INFO,
     "[MultiView] SceneBootstrapper created cylinder node (alive={}, "
@@ -310,7 +310,7 @@ auto SceneBootstrapper::EnsureCone(scene::Scene& scene) -> void
   }
 
   // Use a reasonable default for the cone — 16 segments, height 1.0, radius 0.5
-  auto cone_data = data::MakeConeMeshAsset(16U, 1.0f, 0.5f);
+  auto cone_data = data::MakeConeMeshAsset(16U, 1.0F, 0.5F);
   if (!cone_data.has_value()) {
     LOG_F(WARNING,
       "[MultiView] SceneBootstrapper failed to create cone mesh data.");
@@ -363,7 +363,7 @@ auto SceneBootstrapper::EnsureCone(scene::Scene& scene) -> void
   // base normal (-Y) maps to -Z (facing the camera). Add a small yaw for
   // better perspective.
   cone_node_.GetTransform().SetLocalRotation(
-    glm::quat(glm::vec3(glm::radians(30.0f), glm::radians(20.0f), 0.0f)));
+    glm::quat(glm::vec3(glm::radians(30.0F), glm::radians(20.0F), 0.0F)));
 
   LOG_F(INFO,
     "[MultiView] SceneBootstrapper created cone node (alive={}, geom_set={}).",

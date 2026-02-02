@@ -42,8 +42,7 @@ public:
   auto operator->() const -> scene::Scene*;
 
 private:
-  [[nodiscard]] auto Validate(const bool abort_on_failure) const noexcept
-    -> bool;
+  [[nodiscard]] auto Validate(bool abort_on_failure) const noexcept -> bool;
 
   observer_ptr<internal::SceneControlBlock> control_ { nullptr };
   uint64_t generation_snapshot_ { 0U };

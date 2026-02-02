@@ -11,6 +11,10 @@
 
 #include "DemoShell/UI/UiSettingsVm.h"
 
+namespace oxygen::engine {
+class FrameContext;
+}
+
 namespace oxygen::examples::ui {
 
 //! Transparent overlay for engine statistics.
@@ -27,7 +31,7 @@ public:
   OXYGEN_DEFAULT_MOVABLE(StatsOverlay)
 
   //! Draw the stats overlay.
-  auto Draw() const -> void;
+  auto Draw(const engine::FrameContext& fc) const -> void;
 
 private:
   observer_ptr<UiSettingsVm> vm_ {};
