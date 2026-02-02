@@ -16,12 +16,9 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 
+#include "DemoShell/Services/FileBrowserService.h"
 #include "TexturedCube/SceneSetup.h"
 #include "TexturedCube/TextureLoadingService.h"
-
-namespace oxygen::examples {
-class FileBrowserService;
-}
 
 namespace oxygen::examples::textured_cube::ui {
 
@@ -44,7 +41,7 @@ public:
 
     // New Tuning
     bool flip_normal_green { false };
-    float exposure_ev { 0.0f };
+    float exposure_ev { 0.0F };
     int bc7_quality_idx { 2 }; // Default
     int hdr_handling_idx { 1 }; // AutoTonemap
     int output_format_idx { 0 };
@@ -61,7 +58,7 @@ public:
     WorkflowState workflow_state { WorkflowState::Idle };
 
     // Status
-    float progress { 0.0f };
+    float progress { 0.0F };
     std::string status_message {};
     bool last_import_success { false };
   };
@@ -110,8 +107,8 @@ public:
 
   //! State for UV transformation UI.
   struct UvState {
-    glm::vec2 scale { 1.0f, 1.0f };
-    glm::vec2 offset { 0.0f, 0.0f };
+    glm::vec2 scale { 1.0F, 1.0F };
+    glm::vec2 offset { 0.0F, 0.0F };
     UvOrigin uv_origin { UvOrigin::kBottomLeft };
     ImageOrigin image_origin { ImageOrigin::kTopLeft };
     OrientationFixMode fix_mode {
@@ -123,10 +120,10 @@ public:
 
   //! State for the demo surface material.
   struct SurfaceState {
-    float metalness { 0.85f };
-    float roughness { 0.12f };
+    float metalness { 0.85F };
+    float roughness { 0.12F };
     bool use_constant_base_color { false };
-    glm::vec3 constant_base_color_rgb { 0.82f, 0.82f, 0.82f };
+    glm::vec3 constant_base_color_rgb { 0.82F, 0.82F, 0.82F };
   };
 
   explicit TextureBrowserVm(observer_ptr<TextureLoadingService> texture_service,
@@ -206,9 +203,11 @@ private:
 
   observer_ptr<TextureLoadingService> texture_service_;
   observer_ptr<oxygen::examples::FileBrowserService> file_browser_;
+  std::filesystem::path content_root_;
 
   enum class BrowseMode { kNone, kSourcePath, kCookedRoot };
   BrowseMode browse_mode_ { BrowseMode::kNone };
+  FileBrowserService::RequestId active_request_id_ { 0 };
 
   ImportState import_state_;
   TextureSlotState sphere_texture_;

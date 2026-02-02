@@ -7,26 +7,38 @@
 #pragma once
 
 #include <memory>
+#include <string_view>
 
 #include <glm/glm.hpp>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Platform/Window.h>
+#include <Oxygen/Scene/Scene.h>
 
 #include "DemoShell/ActiveScene.h"
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Runtime/SingleViewModuleBase.h"
-#include "DemoShell/Services/FileBrowserService.h"
+#include "DemoShell/Runtime/DemoModuleBase.h"
+#include "DemoShell/Runtime/SceneView.h"
 #include "InputSystem/InputDebugPanel.h"
 
-namespace oxygen::examples::input {
+namespace oxygen::examples::input_system {
 
-class MainModule : public SingleViewModuleBase {
+//! Main module for the InputSystem demo.
+/*!
+  Demonstrates the Oxygen InputSystem with actions, mappings, and triggers.
+  Migrated to use DemoModuleBase and ForwardPipeline for rendering.
+
+  @see DemoShell, DemoModuleBase
+*/
+class MainModule final : public DemoModuleBase {
   OXYGEN_TYPED(MainModule)
+
 public:
-  using Base = oxygen::examples::SingleViewModuleBase;
+  using Base = oxygen::examples::DemoModuleBase;
 
   explicit MainModule(const oxygen::examples::DemoAppContext& app);
 
@@ -55,19 +67,14 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(MainModule);
   OXYGEN_MAKE_NON_MOVABLE(MainModule);
 
-  auto BuildDefaultWindowProperties() const
-    -> platform::window::Properties override;
-
   // EngineModule lifecycle
   auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
     -> bool override;
   void OnShutdown() noexcept override;
 
-  // EngineModule phase handlers we participate in
+  // EngineModule phase handlers
   auto OnFrameStart(oxygen::engine::FrameContext& context) -> void override;
-  // Hook called by ExampleModuleBase::OnFrameStart for example-specific
-  // setup like scene creation and context.SetScene.
-  auto OnExampleFrameStart(engine::FrameContext& context) -> void override;
+  auto HandleOnFrameStart(engine::FrameContext& context) -> void override;
   auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
   auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
   auto OnGameplay(engine::FrameContext& context) -> co::Co<> override;
@@ -76,56 +83,48 @@ public:
   auto OnFrameEnd(engine::FrameContext& context) -> void override;
 
 protected:
+  auto BuildDefaultWindowProperties() const
+    -> platform::window::Properties override;
+  auto ClearBackbufferReferences() -> void override;
+
 private:
   auto InitInputBindings() noexcept -> bool;
-  auto EnsureMainCamera(const int width, const int height) -> void;
   auto UpdateInputDebugPanelConfig() -> void;
 
-  // The ExampleModuleBase provides `app_` and common window/render helpers.
-
-  //! Scene and rendering.
+  // Scene and rendering
   ActiveScene active_scene_ {};
-  scene::SceneNode main_camera_; // "MainCamera"
-  scene::SceneNode sphere_node_; // Sphere for jump animation
+  scene::SceneNode sphere_node_;
 
-  // Stored actions for querying state later during frames
+  // View managed by base class, we just keep a reference
+  observer_ptr<SceneView> main_view_ { nullptr };
+
+  // Input actions
   std::shared_ptr<oxygen::input::Action> shift_action_;
   std::shared_ptr<oxygen::input::Action> jump_action_;
   std::shared_ptr<oxygen::input::Action> jump_higher_action_;
   std::shared_ptr<oxygen::input::Action> swim_up_action_;
-  std::shared_ptr<oxygen::input::Action> zoom_in_action_;
-  std::shared_ptr<oxygen::input::Action> zoom_out_action_;
-  std::shared_ptr<oxygen::input::Action>
-    left_mouse_action_; // helper for chains
-  std::shared_ptr<oxygen::input::Action> pan_action_; // Axis2D mouse pan
 
-  // Mapping contexts we may toggle/inspect later
+  // Mapping contexts
   std::shared_ptr<oxygen::input::InputMappingContext> modifier_keys_ctx_;
   std::shared_ptr<oxygen::input::InputMappingContext> ground_movement_ctx_;
   std::shared_ptr<oxygen::input::InputMappingContext> swimming_ctx_;
-  std::shared_ptr<oxygen::input::InputMappingContext> camera_controls_ctx_;
 
-  // Simple physics and camera controls
-  glm::vec3 sphere_base_pos_ { 0.0f, 0.0f, -2.0f };
+  // Simple physics (Z is up in Oxygen)
+  glm::vec3 sphere_base_pos_ { 0.0F, -5.0F, 0.0F }; // Forward along -Y
   bool sphere_in_air_ { false };
-  float sphere_vel_y_ { 0.0f };
-  float gravity_ { -9.81f };
-  float jump_impulse_ { 4.5f };
-  float jump_higher_impulse_ { 7.0f };
-  float zoom_step_ { 0.75f };
-  float min_cam_distance_ { 0.75f };
-  float max_cam_distance_ { 40.0f };
-  float pan_sensitivity_ { 0.005f }; // world units per pixel
+  float sphere_vel_z_ { 0.0F };
+  float gravity_ { -9.81F };
+  float jump_impulse_ { 4.5F };
+  float jump_higher_impulse_ { 7.0F };
 
-  // Demo mode: ground vs swimming
+  // Demo mode
   bool swimming_mode_ { false };
-  float swim_up_speed_ { 2.5f }; // units per second when Space is held
-  // Defer sphere reset to a phase before transform propagation
+  float swim_up_speed_ { 2.5F };
   bool pending_ground_reset_ { false };
 
+  // DemoShell and panels
   std::unique_ptr<DemoShell> shell_ {};
-  std::unique_ptr<FileBrowserService> file_browser_service_ {};
   std::shared_ptr<InputDebugPanel> input_debug_panel_ {};
 };
 
-} // namespace oxygen::examples::input
+} // namespace oxygen::examples::input_system

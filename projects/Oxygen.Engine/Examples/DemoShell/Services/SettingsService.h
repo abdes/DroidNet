@@ -31,10 +31,10 @@ public:
     = std::source_location::current()) -> std::unique_ptr<SettingsService>;
 
   //! Sets the process-wide default settings service.
-  static auto SetDefault(oxygen::observer_ptr<SettingsService> service) -> void;
+  static auto SetDefault(observer_ptr<SettingsService> service) -> void;
 
   //! Returns the process-wide default settings service.
-  static auto Default() -> oxygen::observer_ptr<SettingsService>;
+  static auto Default() -> observer_ptr<SettingsService>;
 
   //! Loads settings from disk (called automatically by constructor).
   auto Load() -> void;

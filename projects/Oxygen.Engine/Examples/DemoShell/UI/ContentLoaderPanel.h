@@ -6,8 +6,9 @@
 
 #pragma once
 
-#include "DemoShell/UI/DemoPanel.h"
 #include <Oxygen/Base/ObserverPtr.h>
+
+#include "DemoShell/UI/DemoPanel.h"
 
 namespace oxygen::examples::ui {
 

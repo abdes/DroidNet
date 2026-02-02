@@ -29,7 +29,7 @@ TEST(TimeManager, FrameLifecycleBasic)
   // Run a few frames; we cannot sleep here, but Begin/EndFrame should update
   // state
   for (int i = 0; i < 3; ++i) {
-    tm.BeginFrame();
+    tm.BeginFrame(phys.Now());
     tm.EndFrame();
   }
 
@@ -56,11 +56,11 @@ TEST(TimeManager, InterpolationAlphaFlow)
   TimeManager tm { phys, cfg };
 
   // Simulate a couple of frames to accumulate some time
-  tm.BeginFrame();
+  tm.BeginFrame(phys.Now());
   tm.EndFrame();
   const auto prev_sim = tm.GetSimulationClock().Now();
 
-  tm.BeginFrame();
+  tm.BeginFrame(phys.Now());
   // After BeginFrame, interpolation alpha is computed and set on
   // PresentationClock
   const auto curr_sim = tm.GetSimulationClock().Now();
@@ -96,12 +96,12 @@ TEST(TimeManager, RendererSmoke_InterpolatedSampling)
   TimeManager tm { phys, cfg };
 
   // Simulate frame N
-  tm.BeginFrame();
+  tm.BeginFrame(phys.Now());
   tm.EndFrame();
   auto prev_sim = tm.GetSimulationClock().Now();
 
   // Simulate frame N+1 (update side)
-  tm.BeginFrame();
+  tm.BeginFrame(phys.Now());
   auto curr_sim = tm.GetSimulationClock().Now();
 
   // Renderer samples interpolated presentation time using stored alpha

@@ -4,17 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <mutex>
-#include <unordered_map>
+#include <exception>
+#include <memory>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/Platform/Platform.h>
@@ -27,7 +30,7 @@ using namespace oxygen;
 
 namespace {
 
-void MaybeUnhookImgui(observer_ptr<oxygen::AsyncEngine> engine)
+void MaybeUnhookImgui(observer_ptr<AsyncEngine> engine) noexcept
 {
   auto imgui_module_ref = engine->GetModule<imgui::ImGuiModule>();
   if (!imgui_module_ref) {
@@ -35,16 +38,20 @@ void MaybeUnhookImgui(observer_ptr<oxygen::AsyncEngine> engine)
     return;
   }
 
-  imgui_module_ref->get().SetWindowId(platform::kInvalidWindowId);
+  try {
+    imgui_module_ref->get().SetWindowId(platform::kInvalidWindowId);
+  } catch (const std::exception& e) {
+    LOG_F(ERROR, "Failed to unhook ImGui from window: {}", e.what());
+  }
 }
 
 bool MaybeHookImgui(
-  observer_ptr<oxygen::AsyncEngine> engine, platform::WindowIdType window_id)
+  observer_ptr<AsyncEngine> engine, platform::WindowIdType window_id)
 {
   auto imgui_module_ref = engine->GetModule<imgui::ImGuiModule>();
   if (!imgui_module_ref) {
-    LOG_F(WARNING, "ImGui module not available; cannot bind to window {}",
-      window_id);
+    LOG_F(
+      INFO, "ImGui module not available; cannot bind to window {}", window_id);
     return false;
   }
 
@@ -89,13 +96,13 @@ struct AppWindow::SubscriptionToken {
 AppWindow::~AppWindow() noexcept
 {
   DLOG_SCOPE_FUNCTION(INFO);
-  if (shutdown_event_) {
-    shutdown_event_->Trigger();
-  }
-  // Remove any stored subscription for this instance (subscription dtor
-  // will call Cancel()). Destroy subscription token (if present) so the
-  // subscription is cancelled before this instance is torn down.
+
+  // Ensure all resources are detached and cleaned up.
+  Cleanup();
+
+  // Remove any stored subscription for this instance.
   imgui_subscription_token_.reset();
+
   // Unregister any platform-level handler we previously installed.
   if (platform_ && window_lifecycle_token_ != 0) {
     platform_->UnregisterWindowAboutToBeDestroyedHandler(
@@ -132,99 +139,12 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
     return false;
   }
 
-  const auto weak_self = weak_from_this();
-  const auto shutdown_event = shutdown_event_;
-
-  // Close-request handler.
-  platform_->Async().Nursery().Start([weak_self, shutdown_event]() -> co::Co<> {
-    while (true) {
-      auto self = weak_self.lock();
-      if (!self) {
-        co_return;
-      }
-      const auto w = self->window_.lock();
-      if (!w) {
-        co_return;
-      }
-      auto [close_requested, shutdown] = co_await co::AnyOf(
-        [w]() -> co::Co<bool> {
-          co_await w->CloseRequested();
-          co_return true;
-        },
-        [shutdown_event]() -> co::Co<> { co_await *shutdown_event; });
-      if (shutdown.has_value()) {
-        co_return;
-      }
-      if (!close_requested.has_value()) {
-        continue;
-      }
-      self = weak_self.lock();
-      if (!self) {
-        co_return;
-      }
-      if (auto sw = self->window_.lock()) {
-        sw->VoteToClose();
-      }
-    }
-  });
-
-  // Resize/expose handler.
-  platform_->Async().Nursery().Start([weak_self, shutdown_event]() -> co::Co<> {
-    using WindowEvent = platform::window::Event;
-    while (true) {
-      auto self = weak_self.lock();
-      if (!self) {
-        co_return;
-      }
-      const auto w = self->window_.lock();
-      if (!w) {
-        co_return;
-      }
-      auto [event_opt, shutdown] = co_await co::AnyOf(
-        [w]() -> co::Co<WindowEvent> {
-          const auto [from, to] = co_await w->Events().UntilChanged();
-          (void)from;
-          co_return to;
-        },
-        [shutdown_event]() -> co::Co<> { co_await *shutdown_event; });
-      if (shutdown.has_value()) {
-        co_return;
-      }
-      if (!event_opt.has_value()) {
-        continue;
-      }
-      const auto to = event_opt.value();
-      self = weak_self.lock();
-      if (!self) {
-        co_return;
-      }
-      if (to == WindowEvent::kResized) {
-        DLOG_F(INFO, "Window resized -> marking surface for resize");
-        if (self->surface_) {
-          self->surface_->ShouldResize(true);
-        }
-      }
-    }
-  });
-
-  // Platform termination -> request close.
-  auto platform = platform_;
+  // Start the consolidated window lifecycle manager using a weak pointer
+  // to avoid circular references that prevent destruction.
   platform_->Async().Nursery().Start(
-    [weak_self, platform, shutdown_event]() -> co::Co<> {
-      auto [terminated, shutdown]
-        = co_await co::AnyOf(platform->Async().OnTerminate(),
-          [shutdown_event]() -> co::Co<> { co_await *shutdown_event; });
-      if (shutdown.has_value()) {
-        co_return;
-      }
-      if (!terminated.has_value()) {
-        co_return;
-      }
-      LOG_F(INFO, "platform OnTerminate -> requesting window close");
+    [weak_self = weak_from_this()]() -> co::Co<> {
       if (auto self = weak_self.lock()) {
-        if (auto w = self->window_.lock()) {
-          w->RequestClose();
-        }
+        co_await self->ManageLifecycle();
       }
     });
 
@@ -236,31 +156,20 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
   }
   const auto win_id = win_ref->Id();
   window_lifecycle_token_ = platform_->RegisterWindowAboutToBeDestroyedHandler(
-    [weak_self, win_id](platform::WindowIdType closing_window_id) {
+    [weak_self = weak_from_this(), win_id](
+      platform::WindowIdType closing_window_id) {
       if (closing_window_id != win_id) {
         return;
       }
       if (auto self = weak_self.lock()) {
-        LOG_F(INFO, "Platform about to destroy window {} -> detaching state",
-          win_id);
-        // Release resources and clear the state.
-        MaybeUnhookImgui(self->engine_);
-        self->ClearFramebuffers();
-        self->surface_.reset();
-        self->window_.reset();
+        self->Cleanup();
       }
     });
 
   if (CreateSurface() && EnsureFramebuffers()) {
-
-    // Subscribe for any ImGui module attachments; replay_existing=true ensures
-    // already-attached ImGui modules will be hooked up now that we have a
-    // window available.
-    // Install per-instance subscription and keep it in the local map to avoid
-    // exposing the subscription type in the header.
     auto sub = engine_->SubscribeModuleAttached(
-      [this](::oxygen::engine::ModuleEvent const& ev) {
-        if (ev.type_id == oxygen::imgui::ImGuiModule::ClassTypeId()) {
+      [this](engine::ModuleEvent const& ev) {
+        if (ev.type_id == imgui::ImGuiModule::ClassTypeId()) {
           MaybeHookImgui(engine_, GetWindowId());
         }
       },
@@ -303,7 +212,7 @@ auto AppWindow::CreateSurface() -> bool
   const auto gfx = gfx_weak_.lock();
   CHECK_NOTNULL_F(gfx); // see above.
 
-  auto queue = gfx->GetCommandQueue(oxygen::graphics::QueueRole::kGraphics);
+  auto queue = gfx->GetCommandQueue(graphics::QueueRole::kGraphics);
   if (!queue) {
     LOG_F(ERROR,
       "Failed to acquire graphics command queue for surface creation for "
@@ -324,6 +233,10 @@ auto AppWindow::CreateSurface() -> bool
 
 auto AppWindow::EnsureFramebuffers() -> bool
 {
+  if (IsShuttingDown()) {
+    DLOG_F(INFO, "EnsureFramebuffers: skipping due to shutdown in progress");
+    return false;
+  }
   DCHECK_NOTNULL_F(surface_, "Cannot ensure framebuffers without a surface");
   DCHECK_F(!gfx_weak_.expired(),
     "Cannot ensure framebuffers without a Graphics instance");
@@ -334,21 +247,34 @@ auto AppWindow::EnsureFramebuffers() -> bool
   DLOG_SCOPE_FUNCTION(INFO);
   const auto surface_width = surface_->Width();
   const auto surface_height = surface_->Height();
-  DLOG_F(INFO, "surface w={} h={}", surface_->Width(), surface_->Height());
+  DLOG_F(INFO, "surface w={} h={}", surface_width, surface_height);
 
   auto failed = false;
-  for (auto i = 0U; i < oxygen::frame::kFramesInFlight.get(); ++i) {
+  for (auto i = 0U; i < frame::kFramesInFlight.get(); ++i) {
     DLOG_SCOPE_F(INFO, fmt::format("framebuffer slot {}", i).c_str());
-    oxygen::graphics::TextureDesc depth_desc;
-    depth_desc.width = surface_width;
-    depth_desc.height = surface_height;
-    depth_desc.format = oxygen::Format::kDepth32;
-    depth_desc.texture_type = oxygen::TextureType::kTexture2D;
+    auto color_attachment = surface_->GetBackBuffer(i);
+    if (!color_attachment) {
+      LOG_F(ERROR, "Failed to get back buffer for slot {}", i);
+      failed = true;
+      break;
+    }
+
+    const auto& rt_desc = color_attachment->GetDescriptor();
+    if (rt_desc.width != surface_width || rt_desc.height != surface_height) {
+      LOG_F(WARNING, "Swapchain size mismatch: window={}x{} back-buffer={}x{}",
+        surface_width, surface_height, rt_desc.width, rt_desc.height);
+    }
+
+    graphics::TextureDesc depth_desc;
+    depth_desc.width = rt_desc.width;
+    depth_desc.height = rt_desc.height;
+    depth_desc.format = Format::kDepth32;
+    depth_desc.texture_type = TextureType::kTexture2D;
     depth_desc.is_shader_resource = true;
     depth_desc.is_render_target = true;
     depth_desc.use_clear_value = true;
     depth_desc.clear_value = { 1.0F, 0.0F, 0.0F, 0.0F };
-    depth_desc.initial_state = oxygen::graphics::ResourceStates::kDepthWrite;
+    depth_desc.initial_state = graphics::ResourceStates::kDepthWrite;
 
     const auto gfx = gfx_weak_.lock();
     const auto depth_tex = gfx->CreateTexture(depth_desc);
@@ -358,8 +284,7 @@ auto AppWindow::EnsureFramebuffers() -> bool
       break;
     }
 
-    auto color_attachment = surface_->GetBackBuffer(i);
-    auto desc = oxygen::graphics::FramebufferDesc {}
+    auto desc = graphics::FramebufferDesc {}
                   .AddColorAttachment(color_attachment)
                   .SetDepthAttachment(depth_tex);
     DLOG_F(1, "color attachment {}", color_attachment ? "valid" : "null");
@@ -383,17 +308,34 @@ auto AppWindow::EnsureFramebuffers() -> bool
 
 auto AppWindow::ClearFramebuffers() -> void
 {
-  for (auto& fb : framebuffers_) {
-    // We are the sole owner of the framebuffer resources;
-    // resetting the shared_ptr will trigger destruction of the Framebuffer,
-    // which in turn releases GPU resources.
-    fb.reset();
+  DLOG_SCOPE_FUNCTION(1);
+
+  // co::detail::ScopeGuard guard([&]() noexcept { framebuffers_.fill(nullptr);
+  // });
+  try {
+    if (gfx_weak_.expired()) {
+      LOG_F(WARNING, "gfx expired, cannot properly release framebuffers");
+      framebuffers_.fill(nullptr);
+      return;
+    }
+    auto gfx = gfx_weak_.lock();
+    for (auto& fb : framebuffers_) {
+      using graphics::DeferredObjectRelease;
+      // We are the sole owner of the framebuffer resources;
+      // resetting the shared_ptr will trigger destruction of the Framebuffer,
+      // which in turn releases GPU resources.
+      DeferredObjectRelease(fb, gfx->GetDeferredReclaimer());
+    }
+  } catch (const std::exception& ex) {
+    LOG_F(WARNING, "ClearFramebuffers threw: {}", ex.what());
   }
-  framebuffers_.fill(nullptr);
 }
 
 auto AppWindow::ApplyPendingResize() -> void
 {
+  if (IsShuttingDown()) {
+    return;
+  }
   DCHECK_NOTNULL_F(surface_, "Cannot apply resize without a surface");
   DCHECK_F(
     ShouldResize(), "ApplyPendingResize called but no resize is pending");
@@ -406,11 +348,11 @@ auto AppWindow::ApplyPendingResize() -> void
     return;
   }
   auto gfx = gfx_weak_.lock();
-  // gfx->Flush();
 
   try {
     // Drop owned framebuffer references so Resize() can succeed.
     ClearFramebuffers();
+    gfx->Flush();
     surface_->Resize();
     EnsureFramebuffers();
   } catch (const std::exception& ex) {
@@ -421,7 +363,7 @@ auto AppWindow::ApplyPendingResize() -> void
   surface_->ShouldResize(false);
 }
 
-auto AppWindow::GetSurface() const -> std::weak_ptr<oxygen::graphics::Surface>
+auto AppWindow::GetSurface() const -> std::weak_ptr<graphics::Surface>
 {
   return surface_;
 }
@@ -429,10 +371,110 @@ auto AppWindow::GetSurface() const -> std::weak_ptr<oxygen::graphics::Surface>
 auto AppWindow::GetCurrentFrameBuffer() const
   -> std::weak_ptr<graphics::Framebuffer>
 {
-  if (!surface_) {
+  if (!surface_ || IsShuttingDown()) {
     return {};
   }
   return framebuffers_.at(surface_->GetCurrentBackBufferIndex());
+}
+
+auto AppWindow::ManageLifecycle() -> co::Co<>
+{
+  auto weak_self = weak_from_this();
+  bool term_signaled = false;
+
+  while (true) {
+    auto self = weak_self.lock();
+    if (!self) {
+      co_return;
+    }
+
+    const auto w = self->window_.lock();
+    if (!w) {
+      co_return;
+    }
+
+    // We race: window close, window events (resize), system termination, and
+    // component shutdown. Use lambda for terminal to ensure we stop listening
+    // once signaled.
+    auto [close, event, terminal, shutdown]
+      = co_await co::AnyOf([w]() -> co::Co<> { co_await w->CloseRequested(); },
+        [w]() -> co::Co<platform::window::Event> {
+          const auto [from, to] = co_await w->Events().UntilChanged();
+          co_return to;
+        },
+        [p = self->platform_, term_signaled]() -> co::Co<> {
+          if (term_signaled) {
+            co_await co::kSuspendForever;
+          }
+          co_await p->Async().OnTerminate();
+        },
+        *self->shutdown_event_);
+
+    if (shutdown) {
+      co_return;
+    }
+
+    // Re-lock to ensure we haven't been destroyed while waiting.
+    self = weak_self.lock();
+    if (!self) {
+      co_return;
+    }
+
+    if (terminal) {
+      term_signaled = true;
+      LOG_F(INFO, "platform OnTerminate -> requesting window close");
+      if (auto sw = self->window_.lock()) {
+        sw->RequestClose();
+      }
+    } else if (close) {
+      if (auto sw = self->window_.lock()) {
+        sw->VoteToClose();
+      }
+    } else if (event) {
+      if (*event == platform::window::Event::kResized) {
+        DLOG_F(INFO, "Window resized -> marking surface for resize");
+        if (self->surface_) {
+          self->surface_->ShouldResize(true);
+        }
+      }
+    }
+  }
+}
+
+auto AppWindow::Cleanup() -> void
+{
+  if (!surface_ && window_.expired()) {
+    return; // Already cleaned up
+  }
+
+  // Trigger shutdown event if not already done to stop coroutines and block
+  // rendering.
+  if (shutdown_event_ && !shutdown_event_->Triggered()) {
+    shutdown_event_->Trigger();
+  }
+
+  LOG_F(INFO, "Cleanup and release resources (window_id={})", GetWindowId());
+
+  // Release resources and clear the state.
+  MaybeUnhookImgui(engine_);
+  ClearFramebuffers();
+
+  if (!gfx_weak_.expired()) {
+    if (auto gfx = gfx_weak_.lock()) {
+      using graphics::DeferredObjectRelease;
+      if (surface_) {
+        DeferredObjectRelease(surface_, gfx->GetDeferredReclaimer());
+      }
+    }
+  }
+
+  surface_.reset();
+  window_.reset();
+}
+
+auto AppWindow::IsShuttingDown() const noexcept -> bool
+{
+  return shutdown_event_ && shutdown_event_->Triggered();
 }
 
 } // namespace oxygen::examples

@@ -18,6 +18,7 @@
 #include <Oxygen/Scene/SceneNode.h>
 
 #include "DemoShell/UI/CameraRigController.h"
+#include "DemoShell/UI/DroneCameraController.h"
 #include "DemoShell/UI/FlyCameraController.h"
 #include "DemoShell/UI/OrbitCameraController.h"
 
@@ -57,15 +58,15 @@ auto CameraRigController::Initialize(
 
   input_system_ = input_system;
 
-  using oxygen::input::Action;
-  using oxygen::input::ActionTriggerChain;
-  using oxygen::input::ActionTriggerDown;
-  using oxygen::input::ActionTriggerPulse;
-  using oxygen::input::ActionTriggerTap;
-  using oxygen::input::ActionValueType;
-  using oxygen::input::InputActionMapping;
-  using oxygen::input::InputMappingContext;
-  using oxygen::platform::InputSlots;
+  using input::Action;
+  using input::ActionTriggerChain;
+  using input::ActionTriggerDown;
+  using input::ActionTriggerPulse;
+  using input::ActionTriggerTap;
+  using input::ActionValueType;
+  using input::InputActionMapping;
+  using input::InputMappingContext;
+  using platform::InputSlots;
 
   LOG_F(INFO, "CameraRigController: Creating camera input actions");
 
@@ -301,6 +302,13 @@ auto CameraRigController::Update(time::CanonicalDuration delta_time) -> void
 
   auto& camera = *active_camera_;
 
+  if (current_mode_ == CameraControlMode::kDrone) {
+    if (drone_controller_ && drone_controller_->HasPath()) {
+      drone_controller_->Update(camera, delta_time);
+    }
+    return;
+  }
+
   if (current_mode_ == CameraControlMode::kOrbit) {
     if (!orbit_controller_) {
       return;
@@ -314,11 +322,10 @@ auto CameraRigController::Update(time::CanonicalDuration delta_time) -> void
     }
 
     if (orbit_action_
-      && orbit_action_->GetValueType()
-        == oxygen::input::ActionValueType::kAxis2D) {
+      && orbit_action_->GetValueType() == input::ActionValueType::kAxis2D) {
       glm::vec2 orbit_delta(0.0F);
       for (const auto& tr : orbit_action_->GetFrameTransitions()) {
-        const auto& v = tr.value_at_transition.GetAs<oxygen::Axis2D>();
+        const auto& v = tr.value_at_transition.GetAs<Axis2D>();
         orbit_delta.x += v.x;
         orbit_delta.y += v.y;
       }
@@ -357,11 +364,10 @@ auto CameraRigController::Update(time::CanonicalDuration delta_time) -> void
   }
 
   if (orbit_action_
-    && orbit_action_->GetValueType()
-      == oxygen::input::ActionValueType::kAxis2D) {
+    && orbit_action_->GetValueType() == input::ActionValueType::kAxis2D) {
     glm::vec2 look_delta(0.0F);
     for (const auto& tr : orbit_action_->GetFrameTransitions()) {
-      const auto& v = tr.value_at_transition.GetAs<oxygen::Axis2D>();
+      const auto& v = tr.value_at_transition.GetAs<Axis2D>();
       look_delta.x += v.x;
       look_delta.y += v.y;
     }
@@ -416,6 +422,7 @@ auto CameraRigController::SyncFromActiveCamera() -> void
   EnsureControllers();
   orbit_controller_->SyncFromTransform(*active_camera_);
   fly_controller_->SyncFromTransform(*active_camera_);
+  drone_controller_->SyncFromTransform(*active_camera_);
 }
 
 /*!
@@ -429,9 +436,10 @@ auto CameraRigController::SyncFromActiveCamera() -> void
  - Memory: None.
  - Optimization: None.
 */
-auto CameraRigController::GetOrbitController() const noexcept
+auto CameraRigController::GetOrbitController() noexcept
   -> observer_ptr<OrbitCameraController>
 {
+  EnsureControllers();
   return observer_ptr { orbit_controller_.get() };
 }
 
@@ -446,9 +454,10 @@ auto CameraRigController::GetOrbitController() const noexcept
  - Memory: None.
  - Optimization: None.
 */
-auto CameraRigController::GetFlyController() const noexcept
+auto CameraRigController::GetFlyController() noexcept
   -> observer_ptr<FlyCameraController>
 {
+  EnsureControllers();
   return observer_ptr { fly_controller_.get() };
 }
 
@@ -662,21 +671,22 @@ auto CameraRigController::UpdateActiveCameraInputContext() -> void
     return;
   }
 
-  if (current_mode_ == CameraControlMode::kOrbit) {
-    if (orbit_controls_ctx_) {
-      input_system_->ActivateMappingContext(orbit_controls_ctx_);
-    }
-    if (fly_controls_ctx_) {
-      input_system_->DeactivateMappingContext(fly_controls_ctx_);
-    }
-    return;
-  }
-
+  // Deactivate all first
   if (orbit_controls_ctx_) {
     input_system_->DeactivateMappingContext(orbit_controls_ctx_);
   }
   if (fly_controls_ctx_) {
-    input_system_->ActivateMappingContext(fly_controls_ctx_);
+    input_system_->DeactivateMappingContext(fly_controls_ctx_);
+  }
+
+  if (current_mode_ == CameraControlMode::kOrbit) {
+    if (orbit_controls_ctx_) {
+      input_system_->ActivateMappingContext(orbit_controls_ctx_);
+    }
+  } else if (current_mode_ == CameraControlMode::kFly) {
+    if (fly_controls_ctx_) {
+      input_system_->ActivateMappingContext(fly_controls_ctx_);
+    }
   }
 }
 
@@ -690,6 +700,32 @@ auto CameraRigController::EnsureControllers() -> void
     fly_controller_ = std::make_unique<FlyCameraController>();
     fly_controller_->SetLookSensitivity(0.0015F);
   }
+
+  if (!drone_controller_) {
+    drone_controller_ = std::make_unique<DroneCameraController>();
+  }
+}
+
+/*!
+ Retrieves the drone controller handle.
+
+ @return Observer pointer to the drone controller, or null when unavailable.
+*/
+auto CameraRigController::GetDroneController() noexcept
+  -> observer_ptr<DroneCameraController>
+{
+  EnsureControllers();
+  return observer_ptr { drone_controller_.get() };
+}
+
+/*!
+ Checks if drone mode is available (valid path configured).
+
+ @return True if drone has a path, false otherwise.
+*/
+auto CameraRigController::IsDroneAvailable() const noexcept -> bool
+{
+  return drone_controller_ && drone_controller_->HasPath();
 }
 
 } // namespace oxygen::examples::ui

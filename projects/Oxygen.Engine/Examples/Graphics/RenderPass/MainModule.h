@@ -75,7 +75,7 @@ private:
   graphics::NativeView index_mapping_cbv_ {};
 
   co::Nursery* nursery_ { nullptr };
-  float rotation_angle_ { 0.0f };
+  float rotation_angle_ { 0.0F };
 
   std::vector<engine::RenderItem> render_items_;
   std::shared_ptr<engine::DepthPrePassConfig> depth_pre_pass_config_;

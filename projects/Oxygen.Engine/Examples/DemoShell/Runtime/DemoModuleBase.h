@@ -6,81 +6,82 @@
 
 #pragma once
 
+#include <memory>
+#include <span>
+#include <vector>
+
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
 
 #include "DemoShell/Runtime/AppWindow.h"
 
+namespace oxygen {
+class AsyncEngine;
+namespace engine {
+  class FrameContext;
+}
+namespace graphics {
+  class Surface;
+}
+} // namespace oxygen
+
 namespace oxygen::examples {
 
 class DemoAppContext;
+class DemoView;
+class RenderingPipeline;
 
 //! Base class for demo engine modules.
 /*!
- Implements shared helpers and storage for common demo lifecycle pieces such
- as the main window, window controller and render lifecycle helper.
-
- Derived demo modules should either call the helper methods provided by this
- base from their OnAttached() handler (recommended) or rely on the base to
- perform common setup. The base will add per-window components during
- construction so demos receive a fully configured Composition during
- OnAttached.
+  Implements shared helpers and storage for common demo lifecycle pieces such
+  as the main window, window controller and render lifecycle helper.
 */
-class DemoModuleBase : public oxygen::engine::EngineModule,
-                       public oxygen::Composition {
+class DemoModuleBase : public engine::EngineModule, public Composition {
   OXYGEN_TYPED(DemoModuleBase)
 public:
   explicit DemoModuleBase(const DemoAppContext& app) noexcept;
 
-  ~DemoModuleBase() override = default;
+  ~DemoModuleBase() override;
 
-  // Lifecycle: create window and install helpers when attached to engine.
-  auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
-    -> bool override;
+  auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool override;
+  auto OnShutdown() noexcept -> void override;
 
-  // Common OnFrameStart handler. Derived demos should implement
-  // OnDemoFrameStart to provide per-demo behavior (scene setup,
-  // context.SetScene, etc.). The base handles shared lifecycle tasks such
-  // as handling expired windows, resize flow, surface registration and
-  // ImGui window assignment.
-  auto OnFrameStart(oxygen::engine::FrameContext& context) -> void override;
+  auto OnFrameStart(engine::FrameContext& context) -> void override;
+  auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
+  auto OnPreRender(engine::FrameContext& context) -> co::Co<> override;
+  auto OnCompositing(engine::FrameContext& context) -> co::Co<> override;
 
 protected:
-  //! Hook: allow derived demos to customize window properties. Default
-  //! implementation returns reasonable defaults. Derived classes should
-  //! override to tune title, size, flags.
+  //! Hook: allow derived demos to customize window properties.
   virtual auto BuildDefaultWindowProperties() const
     -> platform::window::Properties;
 
-  auto MarkSurfacePresentable(engine::FrameContext& context) -> void;
-
-  //! Hook: clear backbuffer references before resize. Each demo must
-  //! implement this to clear any texture references that point to the
-  //! backbuffer before it is resized/recreated. Typical references come from
-  //! the render graph.
+  //! Hook: clear backbuffer references before resize.
   virtual auto ClearBackbufferReferences() -> void = 0;
 
-  // Reference to the shared demo App state (must outlive the module).
+  // Example specific hooks
+  virtual auto HandleOnFrameStart(engine::FrameContext& /*context*/) -> void { }
+
+  // Helpers
+  auto AddView(std::unique_ptr<DemoView> view) -> DemoView*;
+  auto ClearViews() -> void;
+  [[nodiscard]] auto GetViews() const
+    -> std::span<const std::unique_ptr<DemoView>>;
+
+  // State
   const DemoAppContext& app_;
-
-  // Per-window helpers.
-
-  // This module is itself a Composition so it can own demo components
-  // directly (AddComponent is protected in Composition, deriving allows us
-  // to construct components here).
-  oxygen::observer_ptr<AppWindow> app_window_ { nullptr };
-
-  // Hook called by the base OnFrameStart so derived demos only implement
-  // the app-specific parts (scene setup, context.SetScene, etc.). Default
-  // implementation is a no-op.
-  virtual auto OnExampleFrameStart(engine::FrameContext& /*context*/) -> void {
-  }
+  observer_ptr<AppWindow> app_window_ { nullptr };
+  std::unique_ptr<RenderingPipeline> pipeline_;
+  std::vector<std::unique_ptr<DemoView>> views_;
 
 private:
   auto OnFrameStartCommon(engine::FrameContext& context) -> void;
+  auto MarkSurfacePresentable(engine::FrameContext& context) -> void;
 
-  oxygen::observer_ptr<graphics::Surface> last_surface_ { nullptr };
+  observer_ptr<graphics::Surface> last_surface_ { nullptr };
 };
 
 } // namespace oxygen::examples

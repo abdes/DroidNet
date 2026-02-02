@@ -89,7 +89,7 @@ public:
   auto ClearBackbufferReferences() -> void override;
 
 protected:
-  auto OnExampleFrameStart(engine::FrameContext& context) -> void override;
+  auto HandleOnFrameStart(engine::FrameContext& context) -> void override;
   auto BuildDefaultWindowProperties() const
     -> platform::window::Properties override;
 

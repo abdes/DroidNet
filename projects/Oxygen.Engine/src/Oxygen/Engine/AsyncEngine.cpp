@@ -51,6 +51,32 @@ using namespace oxygen::engine;
 // For convenience in timing configuration access
 using TimingConfig = TimingConfig;
 
+namespace {
+  struct PhaseTimer {
+    PhaseTimer(FrameContext& context, core::PhaseId phase,
+      const time::PhysicalClock& clock)
+      : context_(context)
+      , phase_(phase)
+      , clock_(clock)
+      , start_(clock.Now())
+    {
+    }
+
+    ~PhaseTimer()
+    {
+      const auto duration
+        = duration_cast<microseconds>(clock_.Since(start_).get());
+      context_.SetPhaseDuration(
+        phase_, duration, engine::internal::EngineTagFactory::Get());
+    }
+
+    FrameContext& context_;
+    core::PhaseId phase_;
+    const time::PhysicalClock& clock_;
+    time::PhysicalTime start_;
+  };
+} // namespace
+
 AsyncEngine::AsyncEngine(std::shared_ptr<Platform> platform,
   std::weak_ptr<Graphics> graphics, EngineConfig config) noexcept
   : config_(std::move(config))
@@ -279,59 +305,135 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
     // Use persistent frame context (views persist across frames with stable
     // IDs)
     auto& context = frame_context_;
+    const auto tag = internal::EngineTagFactory::Get();
+
+    // Reset stage timings for the new frame to ensure zero-duration phases are
+    // correctly reported.
+    auto timing = context.GetFrameTiming();
+    for (const auto phase : enum_as_index<core::PhaseId>) {
+      timing.stage_timings[phase] = std::chrono::microseconds(0);
+    }
+    context.SetFrameTiming(timing, tag);
 
     // Fence polling, epoch advance, deferred destruction retirement
-    co_await PhaseFrameStart(context);
+    {
+      PhaseTimer timer(context, core::PhaseId::kFrameStart, GetPhysicalClock());
+      co_await PhaseFrameStart(context);
+    }
 
     // B0: Input snapshot
-    co_await PhaseInput(context);
+    {
+      PhaseTimer timer(context, core::PhaseId::kInput, GetPhysicalClock());
+      co_await PhaseInput(context);
+    }
     // Network packet application & reconciliation
-    co_await PhaseNetworkReconciliation(context);
+    {
+      PhaseTimer timer(
+        context, core::PhaseId::kNetworkReconciliation, GetPhysicalClock());
+      co_await PhaseNetworkReconciliation(context);
+    }
     // Random seed management for determinism (BEFORE any systems use
     // randomness)
-    PhaseRandomSeedManagement(context);
+    {
+      PhaseTimer timer(
+        context, core::PhaseId::kRandomSeedManagement, GetPhysicalClock());
+      PhaseRandomSeedManagement(context);
+    }
     // B1: Fixed simulation deterministic state
-    co_await PhaseFixedSim(context);
+    {
+      PhaseTimer timer(
+        context, core::PhaseId::kFixedSimulation, GetPhysicalClock());
+      co_await PhaseFixedSim(context);
+    }
     // Variable gameplay logic
-    co_await PhaseGameplay(context);
+    {
+      PhaseTimer timer(context, core::PhaseId::kGameplay, GetPhysicalClock());
+      co_await PhaseGameplay(context);
+    }
     // B2: Structural mutations
-    co_await PhaseSceneMutation(context);
+    {
+      PhaseTimer timer(
+        context, core::PhaseId::kSceneMutation, GetPhysicalClock());
+      co_await PhaseSceneMutation(context);
+    }
     // Transform propagation
-    co_await PhaseTransforms(context);
+    {
+      PhaseTimer timer(
+        context, core::PhaseId::kTransformPropagation, GetPhysicalClock());
+      co_await PhaseTransforms(context);
+    }
 
     // Immutable snapshot build (B3)
-    const auto& snapshot = co_await PhaseSnapshot(context);
+    const UnifiedSnapshot* snapshot_ptr = nullptr;
+    {
+      PhaseTimer timer(context, core::PhaseId::kSnapshot, GetPhysicalClock());
+      snapshot_ptr = &co_await PhaseSnapshot(context);
+    }
+    const auto& snapshot = *snapshot_ptr;
 
     // Launch and join Category B barriered parallel tasks (B4 upon completion).
-    co_await ParallelTasks(context, snapshot);
+    {
+      PhaseTimer timer(
+        context, core::PhaseId::kParallelTasks, GetPhysicalClock());
+      co_await ParallelTasks(context, snapshot);
+    }
     // Serial post-parallel integration (Category A resumes after B4)
-    co_await PhasePostParallel(context);
+    {
+      PhaseTimer timer(
+        context, core::PhaseId::kPostParallel, GetPhysicalClock());
+      co_await PhasePostParallel(context);
+    }
 
     // UI update phase: process UI systems, generate rendering artifacts
-    co_await PhaseGuiUpdate(context);
+    {
+      PhaseTimer timer(context, core::PhaseId::kGuiUpdate, GetPhysicalClock());
+      co_await PhaseGuiUpdate(context);
+    }
 
     // Frame multi-view rendering
     {
+      PhaseTimer timer_pre(
+        context, core::PhaseId::kPreRender, GetPhysicalClock());
       co_await PhasePreRender(context);
+      PhaseTimer timer_render(
+        context, core::PhaseId::kRender, GetPhysicalClock());
       co_await PhaseRender(context);
+      PhaseTimer timer_comp(
+        context, core::PhaseId::kCompositing, GetPhysicalClock());
       co_await PhaseCompositing(context);
     }
 
     // Synchronous sequential presentation
-    PhasePresent(context);
+    {
+      PhaseTimer timer(context, core::PhaseId::kPresent, GetPhysicalClock());
+      PhasePresent(context);
+    }
 
     // Poll async pipeline readiness and integrate ready resources
-    PhaseAsyncPoll(context);
+    {
+      PhaseTimer timer(context, core::PhaseId::kAsyncPoll, GetPhysicalClock());
+      PhaseAsyncPoll(context);
+    }
 
     // Adaptive budget management for next frame
-    PhaseBudgetAdapt();
+    {
+      PhaseTimer timer(
+        context, core::PhaseId::kBudgetAdapt, GetPhysicalClock());
+      PhaseBudgetAdapt(context);
+    }
 
     // Frame end timing and metrics
-    co_await PhaseFrameEnd(context);
+    {
+      PhaseTimer timer(context, core::PhaseId::kFrameEnd, GetPhysicalClock());
+      co_await PhaseFrameEnd(context);
+    }
 
     // Yield control to thread pool before pacing so any residual
     // work doesn't skew the next frame start timestamp.
     co_await platform_->Threads().Run([](co::ThreadPool::CancelToken) { });
+
+    // Measure pacing separately
+    const auto pacing_start = GetPhysicalClock().Now();
 
     // Deadline-based frame pacing for improved accuracy
     if (config_.target_fps > 0) {
@@ -381,6 +483,17 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
         duration_cast<microseconds>(next_frame_deadline_.get() - now.get())
           .count());
     }
+    const auto pacing_end = GetPhysicalClock().Now();
+    const auto pacing_duration
+      = duration_cast<microseconds>(pacing_end.get() - pacing_start.get());
+
+    // Update the metrics for the frame just completed (will be seen by next
+    // frame's UI)
+    {
+      auto final_timing = context.GetFrameTiming();
+      final_timing.pacing_duration = pacing_duration;
+      context.SetFrameTiming(final_timing, tag);
+    }
   }
   co_return;
 }
@@ -404,7 +517,7 @@ auto AsyncEngine::PhaseFrameStart(FrameContext& context) -> co::Co<>
 
   // Update timing data for this frame via TimeManager
   if (time_manager_) {
-    time_manager_->BeginFrame();
+    time_manager_->BeginFrame(frame_start_ts_);
     // Populate ModuleTimingData for modules
     const auto& td = time_manager_->GetFrameTimingData();
     ModuleTimingData module_timing {};
@@ -744,8 +857,30 @@ auto AsyncEngine::PhaseAsyncPoll(FrameContext& context) -> void
 }
 
 // ReSharper disable once CppMemberFunctionMayBeStatic
-auto AsyncEngine::PhaseBudgetAdapt() -> void
+auto AsyncEngine::PhaseBudgetAdapt(FrameContext& context) -> void
 {
+  const auto tag = internal::EngineTagFactory::Get();
+
+  // Set default budget stats based on target FPS
+  FrameContext::BudgetStats budget;
+  if (config_.target_fps > 0) {
+    const auto budget_ms = milliseconds(1000) / config_.target_fps;
+    budget.cpu_budget = budget_ms;
+    budget.gpu_budget = budget_ms;
+  } else {
+    // Uncapped: use a default 16ms budget for metrics
+    budget.cpu_budget = milliseconds(16);
+    budget.gpu_budget = milliseconds(16);
+  }
+
+  // DEBUG: Force non-zero values
+  if (budget.cpu_budget.count() == 0)
+    budget.cpu_budget = milliseconds(16);
+  if (budget.gpu_budget.count() == 0)
+    budget.gpu_budget = milliseconds(16);
+
+  context.SetBudgetStats(budget, tag);
+
   // TODO: Implement adaptive budget management
   // Monitor CPU frame time, GPU idle %, and queue depths
   // Degrade/defer tasks when over budget (IK refinement, particle collisions,
@@ -769,11 +904,27 @@ auto AsyncEngine::PhaseFrameEnd(FrameContext& context) -> co::Co<>
     throw std::logic_error("Graphics backend no longer valid.");
   }
   gfx->EndFrame(frame_number_, frame_slot_);
+  if (time_manager_) {
+    time_manager_->EndFrame();
+  }
 
   const auto frame_end = GetPhysicalClock().Now();
   const auto total
     = duration_cast<microseconds>((frame_end.get() - frame_start_ts_.get()));
-  LOG_F(2, "Frame {} end | total={}us", frame_number_, total.count());
+
+  // Update frame timing metrics in context
+  FrameContext::FrameTiming timing;
+  timing = context.GetFrameTiming(); // preserves stage timings already set
+  timing.frame_duration = total;
+
+  // Ensure we never set exactly zero if any time elapsed
+  if (timing.frame_duration.count() == 0 && total.count() > 0) {
+    timing.frame_duration = microseconds(1);
+  }
+
+  context.SetFrameTiming(timing, tag);
+
+  LOG_F(1, "Frame {} end | total={}us", frame_number_, total.count());
   // Let the platform finalize frame-level deferred operations (e.g. native
   // window destruction). Doing this after EndFrame-present ensures the
   // window and any per-frame resources are still valid during the frame and

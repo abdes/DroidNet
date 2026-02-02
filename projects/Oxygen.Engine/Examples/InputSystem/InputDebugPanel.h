@@ -27,21 +27,23 @@ namespace oxygen::scene {
 class SceneNode;
 } // namespace oxygen::scene
 
-namespace oxygen::examples::input {
+namespace oxygen::examples::ui {
+class CameraRigController;
+} // namespace oxygen::examples::ui
+
+namespace oxygen::examples::input_system {
 
 //! Configuration for the InputSystem debug panel.
 struct InputDebugPanelConfig {
   observer_ptr<engine::InputSystem> input_system { nullptr };
-  scene::SceneNode* main_camera { nullptr };
+  observer_ptr<oxygen::examples::ui::CameraRigController> camera_rig {
+    nullptr
+  };
 
   std::shared_ptr<oxygen::input::Action> shift_action { nullptr };
   std::shared_ptr<oxygen::input::Action> jump_action { nullptr };
   std::shared_ptr<oxygen::input::Action> jump_higher_action { nullptr };
   std::shared_ptr<oxygen::input::Action> swim_up_action { nullptr };
-  std::shared_ptr<oxygen::input::Action> zoom_in_action { nullptr };
-  std::shared_ptr<oxygen::input::Action> zoom_out_action { nullptr };
-  std::shared_ptr<oxygen::input::Action> left_mouse_action { nullptr };
-  std::shared_ptr<oxygen::input::Action> pan_action { nullptr };
 
   std::shared_ptr<oxygen::input::InputMappingContext> ground_movement_ctx {
     nullptr,
@@ -50,8 +52,6 @@ struct InputDebugPanelConfig {
 
   bool* swimming_mode { nullptr };
   bool* pending_ground_reset { nullptr };
-  float* pan_sensitivity { nullptr };
-  float* zoom_step { nullptr };
 };
 
 //! Demo panel that visualizes InputSystem actions and mapping state.
@@ -106,4 +106,4 @@ private:
   bool show_inactive_ { true };
 };
 
-} // namespace oxygen::examples::input
+} // namespace oxygen::examples::input_system

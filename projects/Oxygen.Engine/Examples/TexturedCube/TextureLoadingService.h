@@ -84,7 +84,7 @@ public:
 
     // New
     bool flip_normal_green { false };
-    float exposure_ev { 0.0f };
+    float exposure_ev { 0.0F };
     int bc7_quality_idx { 2 };
     int hdr_handling_idx { 1 };
   };
@@ -92,7 +92,7 @@ public:
   //! Status snapshot for an in-flight import.
   struct ImportStatus {
     bool in_flight { false };
-    float overall_progress { 0.0f };
+    float overall_progress { 0.0F };
     std::string message {};
   };
 

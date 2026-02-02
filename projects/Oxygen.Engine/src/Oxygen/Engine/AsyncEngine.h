@@ -218,7 +218,7 @@ private:
   // Poll futures from async jobs (Assets, PSOs, BLAS, LightMaps)
   auto PhaseAsyncPoll(engine::FrameContext& context) -> void;
 
-  auto PhaseBudgetAdapt() -> void;
+  auto PhaseBudgetAdapt(engine::FrameContext& context) -> void;
 
   auto PhaseFrameEnd(engine::FrameContext& context) -> co::Co<>;
 

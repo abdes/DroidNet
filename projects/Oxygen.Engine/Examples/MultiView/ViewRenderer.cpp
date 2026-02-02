@@ -165,7 +165,7 @@ auto ViewRenderer::SyncPassConfigs(const ViewRenderData& data) const -> void
   shader_pass_config_->color_texture = data.color_texture;
   shader_pass_config_->clear_color = data.clear_color;
   shader_pass_config_->fill_mode = data.wireframe
-    ? graphics::FillMode::kWireFrame
+    ? graphics::FillMode::kWireframe
     : graphics::FillMode::kSolid;
 }
 

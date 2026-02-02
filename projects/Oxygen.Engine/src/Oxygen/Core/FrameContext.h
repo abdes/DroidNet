@@ -707,15 +707,15 @@ public:
 
   // Public lightweight timing and surface lists used by subsystems
   struct FrameTiming {
-    std::chrono::microseconds frameDuration { 0 };
-    std::chrono::microseconds cpuTime { 0 };
-    std::chrono::microseconds gpuTime { 0 };
+    std::chrono::microseconds frame_duration { 0 };
+    std::chrono::microseconds pacing_duration { 0 };
+    EnumIndexedArray<core::PhaseId, std::chrono::microseconds> stage_timings {};
   };
 
   // Minimal budget stats used by PhaseBudgetAdapt
   struct BudgetStats {
-    std::chrono::milliseconds cpuBudget { 0 };
-    std::chrono::milliseconds gpuBudget { 0 };
+    std::chrono::milliseconds cpu_budget { 0 };
+    std::chrono::milliseconds gpu_budget { 0 };
     // other adaptive counters may be added as needed
   };
 
@@ -731,6 +731,9 @@ public:
   // coordinated by the engine to maintain frame rate targets
   OXGN_CORE_API auto SetFrameTiming(const FrameTiming& t, EngineTag) noexcept
     -> void;
+
+  OXGN_CORE_API auto SetPhaseDuration(core::PhaseId phase,
+    std::chrono::microseconds duration, EngineTag) noexcept -> void;
 
   auto GetFrameTiming() const noexcept { return metrics_.timing; }
 

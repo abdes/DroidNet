@@ -5,46 +5,88 @@
 //===----------------------------------------------------------------------===//
 
 #include "DemoShell/Services/RenderingSettingsService.h"
+#include "DemoShell/Runtime/RenderingPipeline.h"
 #include "DemoShell/Services/SettingsService.h"
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Renderer/Passes/ShaderPass.h>
 
 namespace oxygen::examples {
 
-auto RenderingSettingsService::GetViewMode() const -> ViewMode
+auto RenderingSettingsService::Initialize(
+  observer_ptr<RenderingPipeline> pipeline) -> void
 {
-  const auto settings = ResolveSettings();
-  if (!settings) {
-    return ViewMode::kSolid;
-  }
+  DCHECK_NOTNULL_F(pipeline);
+  pipeline_ = pipeline;
 
-  if (const auto value = settings->GetString(kViewModeKey)) {
-    if (*value == "wireframe") {
-      return ViewMode::kWireframe;
-    }
-  }
-  return ViewMode::kSolid;
+  // Push initial state
+  pipeline_->SetShaderDebugMode(GetDebugMode());
+  pipeline_->SetRenderMode(GetRenderMode());
+  pipeline_->SetWireframeColor(GetWireframeColor());
 }
 
-auto RenderingSettingsService::SetViewMode(ViewMode mode) -> void
+auto RenderingSettingsService::GetRenderMode() const -> RenderMode
 {
   const auto settings = ResolveSettings();
-  if (!settings) {
-    return;
+  if (settings) {
+    auto val = settings->GetString(kViewModeKey).value_or("solid");
+    if (val == "wireframe") {
+      return RenderMode::kWireframe;
+    }
+    if (val == "overlay_wireframe") {
+      return RenderMode::kOverlayWireframe;
+    }
   }
+  return RenderMode::kSolid;
+}
 
-  const char* value = (mode == ViewMode::kWireframe) ? "wireframe" : "solid";
-  settings->SetString(kViewModeKey, value);
-  ++epoch_;
+auto RenderingSettingsService::SetRenderMode(RenderMode mode) -> void
+{
+  const auto settings = ResolveSettings();
+  if (settings) {
+    settings->SetString(kViewModeKey, std::string(to_string(mode)));
+    epoch_++;
+
+    if (pipeline_) {
+      pipeline_->SetRenderMode(mode);
+    }
+  }
+}
+
+auto RenderingSettingsService::GetWireframeColor() const -> graphics::Color
+{
+  const auto settings = ResolveSettings();
+  const auto r
+    = settings ? settings->GetFloat(kWireColorRKey).value_or(1.0F) : 1.0F;
+  const auto g
+    = settings ? settings->GetFloat(kWireColorGKey).value_or(1.0F) : 1.0F;
+  const auto b
+    = settings ? settings->GetFloat(kWireColorBKey).value_or(1.0F) : 1.0F;
+  return graphics::Color { r, g, b, 1.0F };
+}
+
+auto RenderingSettingsService::SetWireframeColor(const graphics::Color& color)
+  -> void
+{
+  const auto settings = ResolveSettings();
+  if (settings) {
+    settings->SetFloat(kWireColorRKey, color.r);
+    settings->SetFloat(kWireColorGKey, color.g);
+    settings->SetFloat(kWireColorBKey, color.b);
+    epoch_++;
+
+    if (pipeline_) {
+      pipeline_->SetWireframeColor(color);
+    }
+  }
 }
 
 auto RenderingSettingsService::GetDebugMode() const -> engine::ShaderDebugMode
 {
   const auto settings = ResolveSettings();
-  if (!settings) {
-    return engine::ShaderDebugMode::kDisabled;
-  }
-
-  if (const auto value = settings->GetFloat(kDebugModeKey)) {
-    return static_cast<engine::ShaderDebugMode>(static_cast<int>(*value));
+  if (settings) {
+    auto val = settings->GetString(kDebugModeKey).value_or("0");
+    return static_cast<engine::ShaderDebugMode>(std::stoi(val));
   }
   return engine::ShaderDebugMode::kDisabled;
 }
@@ -53,14 +95,15 @@ auto RenderingSettingsService::SetDebugMode(engine::ShaderDebugMode mode)
   -> void
 {
   const auto settings = ResolveSettings();
-  if (!settings) {
-    return;
+  if (settings) {
+    settings->SetString(kDebugModeKey, std::to_string(static_cast<int>(mode)));
+    epoch_++;
+
+    if (pipeline_) {
+      pipeline_->SetShaderDebugMode(mode);
+    }
   }
-
-  settings->SetFloat(kDebugModeKey, static_cast<float>(static_cast<int>(mode)));
-  ++epoch_;
 }
-
 auto RenderingSettingsService::GetEpoch() const noexcept -> std::uint64_t
 {
   return epoch_.load(std::memory_order_acquire);

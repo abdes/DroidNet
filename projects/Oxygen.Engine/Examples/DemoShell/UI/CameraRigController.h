@@ -31,6 +31,7 @@ namespace oxygen::examples::ui {
 
 class OrbitCameraController;
 class FlyCameraController;
+class DroneCameraController;
 
 //! Orchestrates camera input, controllers, and mode switching.
 /*!
@@ -77,12 +78,19 @@ public:
   auto SyncFromActiveCamera() -> void;
 
   //! Access the orbit controller instance.
-  [[nodiscard]] auto GetOrbitController() const noexcept
+  [[nodiscard]] auto GetOrbitController() noexcept
     -> observer_ptr<OrbitCameraController>;
 
   //! Access the fly controller instance.
-  [[nodiscard]] auto GetFlyController() const noexcept
+  [[nodiscard]] auto GetFlyController() noexcept
     -> observer_ptr<FlyCameraController>;
+
+  //! Access the drone controller instance.
+  [[nodiscard]] auto GetDroneController() noexcept
+    -> observer_ptr<DroneCameraController>;
+
+  //! Check if drone mode is available (has a valid path).
+  [[nodiscard]] auto IsDroneAvailable() const noexcept -> bool;
 
   //! Access shared input actions for UI debugging.
   [[nodiscard]] auto GetZoomInAction() const noexcept
@@ -136,6 +144,7 @@ private:
   CameraControlMode current_mode_ { CameraControlMode::kFly };
   std::unique_ptr<OrbitCameraController> orbit_controller_ {};
   std::unique_ptr<FlyCameraController> fly_controller_ {};
+  std::unique_ptr<DroneCameraController> drone_controller_ {};
 };
 
 } // namespace oxygen::examples::ui

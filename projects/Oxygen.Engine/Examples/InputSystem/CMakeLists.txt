@@ -72,6 +72,8 @@ target_link_libraries(
     oxygen::graphics-direct3d12
     oxygen::renderer
     oxygen::loader
+    oxygen::scene
+    oxygen::data
 )
 
 # -- Utility to dump SDL3 code names -------------------------------------------

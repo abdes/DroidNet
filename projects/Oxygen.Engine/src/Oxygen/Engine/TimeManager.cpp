@@ -9,6 +9,7 @@
 #include <Oxygen/Engine/TimeManager.h>
 
 using namespace std::chrono;
+using namespace std::chrono_literals;
 using namespace oxygen::time;
 
 namespace oxygen::engine {
@@ -27,9 +28,8 @@ TimeManager::TimeManager(
   last_frame_time_ = physical_clock_->Now();
 }
 
-auto TimeManager::BeginFrame() noexcept -> void
+auto TimeManager::BeginFrame(time::PhysicalTime now) noexcept -> void
 {
-  const auto now = physical_clock_->Now();
   const auto phys_dt = CanonicalDuration { duration_cast<nanoseconds>(
     static_cast<steady_clock::time_point>(now)
     - static_cast<steady_clock::time_point>(last_frame_time_)) };
@@ -50,9 +50,29 @@ auto TimeManager::BeginFrame() noexcept -> void
   frame_data_.fixed_steps_executed = step.steps_executed;
   frame_data_.interpolation_alpha = step.interpolation_alpha;
 
-  // Current FPS estimate from physical delta (avoid div by zero)
+  // 1) Update the instantaneous and averaged metrics for internal history
   const auto ns = static_cast<nanoseconds>(phys_dt).count();
-  frame_data_.current_fps = ns > 0 ? 1e9 / static_cast<double>(ns) : 0.0;
+  const double instantaneous_fps = ns > 0 ? 1e9 / static_cast<double>(ns) : 0.0;
+
+  // 2) Update the Stable FPS Display (Sample-and-Hold)
+  // This updates every 500ms to provide a rock-solid display value that
+  // doesn't flicker, matching the behavior of NVIDIA/Steam overlays.
+  fps_accumulator_ += static_cast<nanoseconds>(phys_dt);
+  fps_frame_count_++;
+
+  if (fps_accumulator_ >= 500ms) {
+    stable_fps_ = (1e9 * fps_frame_count_)
+      / static_cast<double>(fps_accumulator_.count());
+    fps_accumulator_ = 0ns;
+    fps_frame_count_ = 0;
+  }
+
+  // On the very first frames, use instantaneous so we don't show 0.0
+  if (frame_counter_ < 10 && stable_fps_ == 0.0) {
+    frame_data_.current_fps = instantaneous_fps;
+  } else {
+    frame_data_.current_fps = stable_fps_;
+  }
 }
 
 auto TimeManager::EndFrame() noexcept -> void

@@ -11,19 +11,20 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
-
 #include <imgui.h>
 
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
-#include <Oxygen/Platform/Window.h>
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Renderer.h>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/ForwardPipeline.h"
+#include "DemoShell/Runtime/SceneView.h"
 #include "DemoShell/Services/FileBrowserService.h"
+#include "DemoShell/Services/SkyboxService.h"
 #include "DemoShell/UI/DemoShellUi.h"
 #include "DemoShell/UI/RenderingVm.h"
 #include "Oxygen/Scene/Camera/Perspective.h"
@@ -63,6 +64,13 @@ auto MainModule::BuildDefaultWindowProperties() const
   return p;
 }
 
+auto MainModule::ClearBackbufferReferences() -> void
+{
+  if (pipeline_) {
+    pipeline_->ClearBackbufferReferences();
+  }
+}
+
 auto MainModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
 {
   if (!engine) {
@@ -73,20 +81,19 @@ auto MainModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
     return false;
   }
 
-  // initialize Demo Shell
+  // Create Pipeline
+  auto fw_pipeline
+    = std::make_unique<ForwardPipeline>(observer_ptr { app_.engine.get() });
+
+  pipeline_ = std::move(fw_pipeline);
+
   shell_ = std::make_unique<DemoShell>();
-
   DemoShellConfig shell_config;
-
-  file_browser_service_ = std::make_unique<FileBrowserService>();
-  file_browser_service_->ConfigureContentRoots(ContentRootConfig {
+  shell_config.engine = engine;
+  shell_config.content_roots = {
     .content_root = content_root_,
     .cooked_root = cooked_root_,
-  });
-  shell_config.file_browser_service
-    = observer_ptr { file_browser_service_.get() };
-
-  shell_config.input_system = observer_ptr { app_.input_system.get() };
+  };
 
   shell_config.panel_config.content_loader
     = false; // We use custom texture loader
@@ -99,18 +106,9 @@ auto MainModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
   // Note: We initialize SkyboxService later when Scene is ready,
   // so we update the shell with it later.
 
-  shell_config.get_renderer
-    = [this]() { return observer_ptr { ResolveRenderer() }; };
-
-  shell_config.get_pass_config_refs = [this]() {
-    oxygen::examples::ui::PassConfigRefs refs;
-    if (auto render_graph = GetRenderGraph()) {
-      refs.shader_pass_config
-        = observer_ptr { render_graph->GetShaderPassConfig().get() };
-      refs.light_culling_pass_config
-        = observer_ptr { render_graph->GetLightCullingPassConfig().get() };
-    }
-    return refs;
+  shell_config.get_active_pipeline
+    = [this]() -> observer_ptr<RenderingPipeline> {
+    return observer_ptr { pipeline_.get() };
   };
 
   if (!shell_->Initialize(shell_config)) {
@@ -118,11 +116,10 @@ auto MainModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
     return false;
   }
 
-  // Custom UI components
-  // TextureService is initialized in OnExampleFrameStart because it needs
-  // asset_loader (which is available, but consistent with old code). Actually,
-  // engine is available here, so we can init services here if we want? Old code
-  // did it in OnExampleFrameStart. Let's stick to that for Scene dependency.
+  // Create Main View (placeholder camera, updated later)
+  auto view = std::make_unique<SceneView>(scene::SceneNode {});
+  main_view_
+    = observer_ptr { static_cast<SceneView*>(AddView(std::move(view))) };
 
   LOG_F(INFO, "TexturedCube: Module initialized");
   return true;
@@ -147,7 +144,8 @@ auto MainModule::OnShutdown() noexcept -> void
   shell_.reset();
 
   // Clear observers
-  scene_ = nullptr;
+  active_scene_ = {};
+  Base::OnShutdown();
 }
 
 auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
@@ -155,27 +153,26 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
   Base::OnFrameStart(context);
 }
 
-auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
+auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
 {
-  if (!scene_) {
+  if (!active_scene_.IsValid()) {
     // 1. Create Scene and transfer to Shell
     auto scene_unique = std::make_unique<scene::Scene>("TexturedCube-Scene");
-    auto* scene_ptr = scene_unique.get();
-    shell_->SetScene(std::move(scene_unique));
-    scene_ = observer_ptr<scene::Scene>(scene_ptr);
+    active_scene_ = shell_->SetScene(std::move(scene_unique));
 
     // 2. Initialize Services
     auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
     if (asset_loader) {
       texture_service_ = std::make_unique<TextureLoadingService>(
-        observer_ptr { asset_loader.get() });
+        observer_ptr<oxygen::content::IAssetLoader> { asset_loader.get() });
       skybox_service_ = std::make_unique<SkyboxService>(
-        observer_ptr { asset_loader.get() }, scene_);
+        observer_ptr<oxygen::content::IAssetLoader> { asset_loader.get() },
+        observer_ptr { active_scene_.operator->() });
 
       // Init VM
       texture_vm_ = std::make_unique<ui::TextureBrowserVm>(
         observer_ptr { texture_service_.get() },
-        observer_ptr { file_browser_service_.get() });
+        observer_ptr { &shell_->GetFileBrowserService() });
       texture_vm_->SetCubeRebuildNeeded();
 
       texture_vm_->SetOnSkyboxSelected(
@@ -183,9 +180,9 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
           if (skybox_service_) {
             skybox_service_->SetSkyboxResourceKey(key);
             SkyboxService::SkyLightParams params;
-            params.intensity = 1.0f;
-            params.diffuse_intensity = 1.0f;
-            params.specular_intensity = 1.0f;
+            params.intensity = 1.0F;
+            params.diffuse_intensity = 1.0F;
+            params.specular_intensity = 1.0F;
             skybox_service_->ApplyToScene(params);
           }
         });
@@ -195,74 +192,50 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
       texture_panel_->Initialize(observer_ptr { texture_vm_.get() });
 
       shell_->RegisterPanel(texture_panel_);
-      shell_->SetActivePanel("Texture Browser"); // Optional: set active
-      shell_->SetSkyboxService(observer_ptr { skybox_service_.get() });
-    }
+      shell_->SetActivePanel("Texture Browser");
 
-    // 3. Initialize Scene Setup
-    // Ensure services are ready before passing to SceneSetup
-    if (texture_service_ && skybox_service_) {
+      // 3. Initialize Scene Setup
       scene_setup_ = std::make_unique<SceneSetup>(
-        scene_, *texture_service_, *skybox_service_, cooked_root_);
-
-      // Initial Scene Content
-      scene_setup_->EnsureCubeNode();
+        observer_ptr { active_scene_.operator->() }, *texture_service_,
+        *skybox_service_, cooked_root_);
       scene_setup_->EnsureEnvironment({});
       scene_setup_->EnsureLighting({}, {});
+      scene_setup_->EnsureCubeNode();
     }
-
-    // 4. Setup Camera
-    auto camera_node = scene_ptr->CreateNode("MainCamera");
-    auto transform = camera_node.GetTransform();
-    const glm::vec3 position { 0.0f, 2.0f, -5.0f };
-    const glm::vec3 target { 0.0f, 0.0f, 0.0f };
-    const glm::vec3 up { 0.0f, 1.0f, 0.0f };
-
-    transform.SetLocalPosition(position);
-    const auto view_mat = glm::lookAt(position, target, up);
-    const auto world_rot = glm::quat_cast(glm::inverse(view_mat));
-    transform.SetLocalRotation(world_rot);
-
-    // Attach Perspective Camera Component
-    auto camera = std::make_unique<oxygen::scene::PerspectiveCamera>();
-    camera->SetFieldOfView(60.0f);
-    camera->SetNearPlane(0.1f);
-    camera->SetFarPlane(1000.0f);
-    camera_node.AttachCamera(std::move(camera));
-
-    // Defer SetActiveCamera to OnPreRender to ensure valid world transforms
-    pending_camera_node_ = std::move(camera_node);
   }
 
-  if (auto scene_ptr = shell_->TryGetScene()) {
-    context.SetScene(scene_ptr);
-  }
+  context.SetScene(shell_->TryGetScene());
 }
 
 auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
-
-  auto scene_ptr = shell_ ? shell_->TryGetScene() : nullptr;
-  if (!scene_ptr) {
-    co_return; // Not ready
-  }
-
-  UpdateFrameContext(context, [this](int w, int h) {
-    last_viewport_w_ = w;
-    last_viewport_h_ = h;
-    if (shell_) {
-      shell_->GetCameraLifecycle().EnsureViewport(w, h);
-    }
-  });
+  DCHECK_NOTNULL_F(shell_);
 
   if (!app_window_->GetWindow()) {
     co_return;
   }
 
-  // Shell Update
-  if (shell_) {
-    shell_->Update(time::CanonicalDuration {});
+  if (!active_scene_.IsValid()) {
+    co_return;
+  }
+
+  // Get window extent for camera setup via shell's camera lifecycle
+  const auto extent = app_window_->GetWindow()->Size();
+  auto& camera_lifecycle = shell_->GetCameraLifecycle();
+  camera_lifecycle.EnsureViewport(extent.width, extent.height);
+  camera_lifecycle.ApplyPendingSync();
+  camera_lifecycle.ApplyPendingReset();
+
+  // Update shell
+  shell_->Update(context.GetGameDeltaTime());
+
+  // Update view camera from shell's camera rig
+  if (main_view_) {
+    auto& active_camera = camera_lifecycle.GetActiveCamera();
+    if (active_camera.IsAlive()) {
+      main_view_->SetCamera(active_camera);
+    }
   }
 
   // Ensure scene objects (idempotent)
@@ -284,7 +257,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
       auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
       if ((sphere_state.mode == SceneSetup::TextureIndexMode::kForcedError
             || cube_state.mode == SceneSetup::TextureIndexMode::kForcedError)
-        && forced_error_key_ == static_cast<oxygen::content::ResourceKey>(0)
+        && (forced_error_key_ == oxygen::content::ResourceKey { 0U })
         && asset_loader) {
         forced_error_key_ = asset_loader->MintSyntheticTextureKey();
       }
@@ -293,9 +266,9 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 
       auto [uv_scale, uv_offset] = texture_vm_->GetEffectiveUvTransform();
 
-      glm::vec4 base_color { 1.0f };
+      glm::vec4 base_color { 1.0F };
       if (surface.use_constant_base_color) {
-        base_color = { surface.constant_base_color_rgb, 1.0f };
+        base_color = { surface.constant_base_color_rgb, 1.0F };
       }
 
       // Rebuild Cube
@@ -306,7 +279,14 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
         surface.use_constant_base_color);
 
       // Apply overrides immediately
-      if (auto* renderer = ResolveRenderer(); renderer && material) {
+      auto* renderer = [this]() -> engine::Renderer* {
+        if (app_.engine) {
+          if (auto r = app_.engine->GetModule<engine::Renderer>())
+            return &r->get();
+        }
+        return nullptr;
+      }();
+      if (renderer && material) {
         // Sticky overrides
         if (auto sphere_mat = scene_setup_->GetSphereMaterial()) {
           (void)renderer->OverrideMaterialUvTransform(
@@ -319,7 +299,14 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
       }
     } else {
       // Sticky Overrides even if not rebuilt (e.g. UV changed)
-      if (auto* renderer = ResolveRenderer()) {
+      auto* renderer = [this]() -> engine::Renderer* {
+        if (app_.engine) {
+          if (auto r = app_.engine->GetModule<engine::Renderer>())
+            return &r->get();
+        }
+        return nullptr;
+      }();
+      if (renderer) {
         auto [uv_scale, uv_offset] = texture_vm_->GetEffectiveUvTransform();
         if (auto sphere_mat = scene_setup_->GetSphereMaterial()) {
           (void)renderer->OverrideMaterialUvTransform(
@@ -333,7 +320,8 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     }
   }
 
-  co_return;
+  // Delegate to pipeline
+  co_await Base::OnSceneMutation(context);
 }
 
 auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
@@ -346,34 +334,14 @@ auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
 
 auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
 {
+  // We only draw ImGui if we still have an app window open
   DCHECK_NOTNULL_F(app_window_);
-
   if (!app_window_->GetWindow()) {
     co_return;
   }
 
-  auto imgui_module_ref
-    = app_.engine ? app_.engine->GetModule<imgui::ImGuiModule>() : std::nullopt;
-
-  if (!imgui_module_ref) {
-    co_return;
-  }
-  auto& imgui_module = imgui_module_ref->get();
-  if (!imgui_module.IsWitinFrameScope()) {
-    co_return;
-  }
-  auto* imgui_context = imgui_module.GetImGuiContext();
-  if (imgui_context == nullptr) {
-    co_return;
-  }
-  ImGui::SetCurrentContext(imgui_context);
-
   if (shell_) {
-    shell_->Draw();
-  }
-
-  if (file_browser_service_) {
-    file_browser_service_->UpdateAndDraw();
+    shell_->Draw(context);
   }
 
   co_return;
@@ -383,100 +351,48 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
 
-  if (auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>()) {
-    auto& imgui_module = imgui_module_ref->get();
-    if (auto* imgui_context = imgui_module.GetImGuiContext()) {
-      ImGui::SetCurrentContext(imgui_context);
-    }
-  }
-
   if (shell_) {
     ApplyRenderModeFromPanel();
   }
 
-  if (auto rg = GetRenderGraph(); rg) {
-    rg->SetupRenderPasses();
-
-    if (auto shader_pass_config = rg->GetShaderPassConfig();
-      shader_pass_config) {
+  if (auto* fw_pipeline = static_cast<ForwardPipeline*>(pipeline_.get())) {
+    if (auto shader_pass_config = fw_pipeline->GetShaderPassConfig()) {
       shader_pass_config->clear_color
         = graphics::Color { 0.08F, 0.08F, 0.10F, 1.0F };
       shader_pass_config->debug_name = "ShaderPass";
     }
   }
 
-  EnsureViewCameraRegistered();
-
-  if (shell_ && pending_camera_node_.IsAlive()) {
-    shell_->SetActiveCamera(std::move(pending_camera_node_));
-    shell_->GetCameraLifecycle().CaptureInitialPose();
-    // pending_camera_node_ is now invalid (moved), which is correct
-  }
-
-  co_return;
+  co_await Base::OnPreRender(context);
 }
 
 auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
 {
-  MarkSurfacePresentable(context);
-  co_return;
+  co_await Base::OnCompositing(context);
 }
 
 auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void { }
-
-auto MainModule::EnsureViewCameraRegistered() -> void
-{
-  if (!shell_) {
-    return;
-  }
-  auto& active_camera = shell_->GetCameraLifecycle().GetActiveCamera();
-  if (!active_camera.IsAlive()) {
-    return;
-  }
-
-  const auto camera_handle = active_camera.GetHandle();
-  if (registered_view_camera_ != camera_handle) {
-    registered_view_camera_ = camera_handle;
-    UnregisterViewForRendering("camera changed");
-    LOG_F(INFO, "TexturedCube: Active camera changed; re-registering view");
-  }
-
-  RegisterViewForRendering(active_camera);
-}
 
 auto MainModule::ApplyRenderModeFromPanel() -> void
 {
   if (!shell_) {
     return;
   }
-  if (auto render_graph = GetRenderGraph()) {
-    auto shader_pass_config = render_graph->GetShaderPassConfig();
-    auto transparent_pass_config = render_graph->GetTransparentPassConfig();
-    if (!shader_pass_config || !transparent_pass_config) {
-      return;
-    }
 
-    using namespace oxygen::examples::ui;
-    using oxygen::graphics::FillMode;
-    const auto view_mode = shell_->GetRenderingViewMode();
-    const FillMode mode = (view_mode == RenderingViewMode::kWireframe)
-      ? FillMode::kWireFrame
-      : FillMode::kSolid;
-    render_graph->SetWireframeEnabled(mode == FillMode::kWireFrame);
-    shader_pass_config->fill_mode = mode;
-    transparent_pass_config->fill_mode = mode;
-
-    const bool force_clear = (mode == FillMode::kWireFrame);
-    shader_pass_config->clear_color_target = true;
-    shader_pass_config->auto_skip_clear_when_sky_pass_present = !force_clear;
-
-    // Apply debug mode. Rendering debug modes take precedence if set.
-    auto debug_mode = shell_->GetRenderingDebugMode();
-    if (debug_mode == engine::ShaderDebugMode::kDisabled) {
-      debug_mode = shell_->GetLightCullingVisualizationMode();
-    }
-    shader_pass_config->debug_mode = debug_mode;
+  auto* fw_pipeline = static_cast<ForwardPipeline*>(pipeline_.get());
+  if (!fw_pipeline) {
+    return;
   }
+
+  const auto render_mode = shell_->GetRenderingViewMode();
+  fw_pipeline->SetRenderMode(render_mode);
+
+  // Apply debug mode. Rendering debug modes take precedence if set.
+  auto debug_mode = shell_->GetRenderingDebugMode();
+  if (debug_mode == engine::ShaderDebugMode::kDisabled) {
+    debug_mode = shell_->GetLightCullingVisualizationMode();
+  }
+  fw_pipeline->SetShaderDebugMode(debug_mode);
 }
 
 } // namespace oxygen::examples::textured_cube

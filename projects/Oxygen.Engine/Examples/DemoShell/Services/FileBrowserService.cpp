@@ -16,6 +16,8 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 
+#include <Oxygen/Base/Logging.h>
+
 #include "DemoShell/FileBrowser/imfilebrowser.h"
 #include "DemoShell/Services/FileBrowserService.h"
 
@@ -30,8 +32,7 @@ namespace {
     return source_path.parent_path().parent_path().parent_path() / "Content";
   }
 
-  auto ResolveContentRoots(const oxygen::examples::ContentRootConfig& config)
-    -> oxygen::examples::ContentRootPaths
+  auto ResolveContentRoots(const ContentRootConfig& config) -> ContentRootPaths
   {
     const auto content_root = config.content_root.empty()
       ? ResolveDefaultContentRoot()
@@ -40,7 +41,7 @@ namespace {
       ? content_root / ".cooked"
       : config.cooked_root;
 
-    return oxygen::examples::ContentRootPaths {
+    return ContentRootPaths {
       .content_root = content_root,
       .fbx_directory = content_root / "fbx",
       .glb_directory = content_root / "glb",
@@ -67,9 +68,8 @@ namespace {
     if (extensions.empty()) {
       extensions.emplace_back(".*");
     }
-    std::sort(extensions.begin(), extensions.end());
-    extensions.erase(
-      std::unique(extensions.begin(), extensions.end()), extensions.end());
+    std::ranges::sort(extensions);
+    extensions.erase(std::ranges::unique(extensions).begin(), extensions.end());
     return extensions;
   }
 
@@ -92,7 +92,7 @@ FileBrowserService::FileBrowserService()
 
 FileBrowserService::~FileBrowserService() = default;
 
-void FileBrowserService::Open(const FileBrowserConfig& config)
+auto FileBrowserService::Open(const FileBrowserConfig& config) -> RequestId
 {
   ImGuiFileBrowserFlags flags
     = ImGuiFileBrowserFlags_CloseOnEsc | ImGuiFileBrowserFlags_ConfirmOnEnter;
@@ -107,12 +107,19 @@ void FileBrowserService::Open(const FileBrowserConfig& config)
     flags |= ImGuiFileBrowserFlags_MultipleSelection;
   }
 
-  const auto base_directory = config.initial_directory.empty()
-    ? std::filesystem::current_path()
-    : config.initial_directory;
+  const auto base_directory
+    = config.initial_directory.empty() ? std::filesystem::current_path() : [&] {
+        std::error_code ec;
+        if (std::filesystem::exists(config.initial_directory, ec)
+          && std::filesystem::is_directory(config.initial_directory, ec)) {
+          return config.initial_directory;
+        }
+        return std::filesystem::current_path();
+      }();
   const std::string title
     = config.title.empty() ? "file browser" : config.title;
 
+  flags |= ImGuiFileBrowserFlags_SkipItemsCausingError;
   browser_ = std::make_unique<ImGui::FileBrowser>(flags, base_directory);
   browser_->SetTitle(title);
 
@@ -134,7 +141,9 @@ void FileBrowserService::Open(const FileBrowserConfig& config)
   }
 
   browser_->Open();
-  selection_.reset();
+  result_.reset();
+  active_request_id_ = ++next_request_id_;
+  return active_request_id_;
 }
 
 void FileBrowserService::UpdateAndDraw()
@@ -143,8 +152,18 @@ void FileBrowserService::UpdateAndDraw()
     return;
   }
 
+  const int frame = ImGui::GetFrameCount();
+  if (frame == last_update_frame_) {
+    return;
+  }
+  last_update_frame_ = frame;
+
   browser_->Display();
-  if (browser_->IsOpened() && !open_label_.empty()) {
+  const bool is_open = browser_->IsOpened();
+  if (is_open != was_open_) {
+    LOG_F(INFO, "FileBrowserService: Open state changed (open={})", is_open);
+  }
+  if (is_open && !open_label_.empty()) {
     if (const ImGuiWindow* window
       = ImGui::FindWindowByName(open_label_.c_str())) {
       const auto settings = ResolveSettings();
@@ -155,19 +174,33 @@ void FileBrowserService::UpdateAndDraw()
       }
     }
   }
-  if (!browser_->HasSelected()) {
-    return;
+  const bool has_selection = browser_->HasSelected();
+  if (has_selection) {
+    LOG_F(INFO, "FileBrowserService: Selection confirmed");
+    result_ = Result {
+      .kind = ResultKind::kSelected,
+      .path = browser_->GetSelected(),
+      .request_id = active_request_id_,
+    };
+    browser_->ClearSelected();
+    browser_->Close();
+  } else if (was_open_ && !is_open && !result_) {
+    LOG_F(INFO, "FileBrowserService: Closed without selection");
+    result_ = Result { .kind = ResultKind::kCanceled,
+      .path = {},
+      .request_id = active_request_id_ };
   }
 
-  selection_ = browser_->GetSelected();
-  browser_->ClearSelected();
-  browser_->Close();
+  was_open_ = is_open;
 }
 
-auto FileBrowserService::ConsumeSelection()
-  -> std::optional<std::filesystem::path>
+auto FileBrowserService::ConsumeResult(const RequestId request_id)
+  -> std::optional<Result>
 {
-  return std::exchange(selection_, std::nullopt);
+  if (!result_ || result_->request_id != request_id) {
+    return std::nullopt;
+  }
+  return std::exchange(result_, std::nullopt);
 }
 
 auto FileBrowserService::IsOpen() const noexcept -> bool
@@ -198,7 +231,7 @@ auto FileBrowserService::BuildTypeFilters(const FileBrowserConfig& config)
 }
 
 auto FileBrowserService::ResolveSettings() const noexcept
-  -> oxygen::observer_ptr<SettingsService>
+  -> observer_ptr<SettingsService>
 {
   return SettingsService::Default();
 }

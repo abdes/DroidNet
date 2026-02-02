@@ -45,7 +45,7 @@ auto UiSettingsPanel::GetPreferredWidth() const noexcept -> float
 
 auto UiSettingsPanel::GetIcon() const noexcept -> std::string_view
 {
-  return oxygen::imgui::icons::kIconSettings;
+  return imgui::icons::kIconSettings;
 }
 
 auto UiSettingsPanel::OnRegistered() -> void { }
@@ -60,7 +60,8 @@ auto UiSettingsPanel::OnUnloaded() -> void
 void UiSettingsPanel::DrawStatsSection()
 {
   auto config = vm_->GetStatsConfig();
-  const bool hide_all = !config.show_fps && !config.show_frame_timing_detail;
+  const bool hide_all = !config.show_fps && !config.show_frame_timing_detail
+    && !config.show_engine_timing && !config.show_budget_stats;
   bool hide_all_toggle = hide_all;
   if (ImGui::Checkbox("Hide all", &hide_all_toggle) && hide_all_toggle) {
     if (config.show_fps) {
@@ -68,6 +69,12 @@ void UiSettingsPanel::DrawStatsSection()
     }
     if (config.show_frame_timing_detail) {
       vm_->SetStatsShowFrameTimingDetail(false);
+    }
+    if (config.show_engine_timing) {
+      vm_->SetStatsShowEngineTiming(false);
+    }
+    if (config.show_budget_stats) {
+      vm_->SetStatsShowBudgetStats(false);
     }
     return;
   }
@@ -78,6 +85,12 @@ void UiSettingsPanel::DrawStatsSection()
   if (ImGui::Checkbox(
         "Frame timings detail", &config.show_frame_timing_detail)) {
     vm_->SetStatsShowFrameTimingDetail(config.show_frame_timing_detail);
+  }
+  if (ImGui::Checkbox("Engine timing", &config.show_engine_timing)) {
+    vm_->SetStatsShowEngineTiming(config.show_engine_timing);
+  }
+  if (ImGui::Checkbox("Budget stats", &config.show_budget_stats)) {
+    vm_->SetStatsShowBudgetStats(config.show_budget_stats);
   }
 }
 

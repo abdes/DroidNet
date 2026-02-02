@@ -80,25 +80,25 @@ private:
 
   OrbitMode mode_ { OrbitMode::kTurntable };
 
-  glm::vec3 target_ { 0.0f };
-  float distance_ { 5.0f };
-  glm::quat orbit_rot_ { 1.0f, 0.0f, 0.0f, 0.0f };
+  glm::vec3 target_ { 0.0F };
+  float distance_ { 5.0F };
+  glm::quat orbit_rot_ { 1.0F, 0.0F, 0.0F, 0.0F };
 
   // Turntable state
-  float turntable_yaw_ { 0.0f };
-  float turntable_pitch_ { 0.0f };
+  float turntable_yaw_ { 0.0F };
+  float turntable_pitch_ { 0.0F };
   bool turntable_inverted_ { false };
 
   // Input accumulation
-  glm::vec2 orbit_delta_ { 0.0f };
-  float zoom_delta_ { 0.0f };
-  glm::vec2 pan_delta_ { 0.0f };
+  glm::vec2 orbit_delta_ { 0.0F };
+  float zoom_delta_ { 0.0F };
+  glm::vec2 pan_delta_ { 0.0F };
 
   // Settings
-  float sensitivity_ { 0.005f };
-  float zoom_step_ { 0.5f };
-  float min_distance_ { 0.1f };
-  float max_distance_ { 100.0f };
+  float sensitivity_ { 0.005F };
+  float zoom_step_ { 0.5F };
+  float min_distance_ { 0.1F };
+  float max_distance_ { 100.0F };
 };
 
 } // namespace oxygen::examples::ui

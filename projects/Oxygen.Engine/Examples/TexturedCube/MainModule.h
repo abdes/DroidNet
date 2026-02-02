@@ -17,8 +17,8 @@
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Runtime/SingleViewModuleBase.h"
-#include "DemoShell/Services/FileBrowserService.h"
+#include "DemoShell/Runtime/DemoModuleBase.h"
+#include "DemoShell/Runtime/SceneView.h"
 #include "DemoShell/Services/SkyboxService.h"
 #include "TexturedCube/SceneSetup.h"
 #include "TexturedCube/TextureLoadingService.h"
@@ -48,11 +48,11 @@ namespace oxygen::examples::textured_cube {
 
  @see DemoShell, TextureLoadingService, SkyboxService, SceneSetup
 */
-class MainModule final : public SingleViewModuleBase {
+class MainModule final : public DemoModuleBase {
   OXYGEN_TYPED(MainModule)
 
 public:
-  using Base = oxygen::examples::SingleViewModuleBase;
+  using Base = oxygen::examples::DemoModuleBase;
 
   explicit MainModule(const oxygen::examples::DemoAppContext& app);
 
@@ -86,7 +86,7 @@ public:
   auto OnShutdown() noexcept -> void override;
 
   auto OnFrameStart(oxygen::engine::FrameContext& context) -> void override;
-  auto OnExampleFrameStart(engine::FrameContext& context) -> void override;
+  auto HandleOnFrameStart(engine::FrameContext& context) -> void override;
   auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
   auto OnGameplay(engine::FrameContext& context) -> co::Co<> override;
   auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
@@ -98,18 +98,20 @@ protected:
   auto BuildDefaultWindowProperties() const
     -> platform::window::Properties override;
 
+  auto ClearBackbufferReferences() -> void override;
+
 private:
-  auto EnsureViewCameraRegistered() -> void;
   auto ApplyRenderModeFromPanel() -> void;
 
   std::unique_ptr<oxygen::examples::DemoShell> shell_;
-  // Scene is owned by DemoShell, we keep a weak reference
-  oxygen::observer_ptr<scene::Scene> scene_;
-  scene::NodeHandle registered_view_camera_;
-  std::unique_ptr<FileBrowserService> file_browser_service_;
+  // Scene is owned by DemoShell, we keep a value object for safe access
+  ActiveScene active_scene_ {};
   std::unique_ptr<TextureLoadingService> texture_service_;
   std::unique_ptr<SkyboxService> skybox_service_;
   std::unique_ptr<SceneSetup> scene_setup_;
+
+  // Hosted view
+  observer_ptr<SceneView> main_view_ { nullptr };
 
   // Custom UI
   std::unique_ptr<ui::TextureBrowserVm> texture_vm_;
@@ -119,7 +121,6 @@ private:
   std::filesystem::path cooked_root_;
   std::filesystem::path content_root_;
   oxygen::content::ResourceKey forced_error_key_ { 0U };
-  scene::SceneNode pending_camera_node_;
 
   // Track last viewport size to inform camera
   int last_viewport_w_ { 0 };

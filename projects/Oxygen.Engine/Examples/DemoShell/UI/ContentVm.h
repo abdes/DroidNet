@@ -7,6 +7,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -16,6 +17,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Import/AsyncImportService.h>
 #include <Oxygen/Content/Import/ImportOptions.h>
@@ -25,17 +27,27 @@
 #include <Oxygen/Data/AssetKey.h>
 
 #include "DemoShell/Services/ContentSettingsService.h"
-
-namespace oxygen::examples {
-class FileBrowserService;
-} // namespace oxygen::examples
+#include "DemoShell/Services/FileBrowserService.h"
 
 namespace oxygen::examples::ui {
+
+//! Identifies the content source for a scene entry.
+enum class SceneSourceKind : uint8_t {
+  kPak,
+  kLooseIndex,
+};
+
+//! Represents a mount source for a scene entry.
+struct SceneSource {
+  SceneSourceKind kind { SceneSourceKind::kPak };
+  std::filesystem::path path;
+};
 
 //! Represents a scene that can be loaded.
 struct SceneEntry {
   std::string name;
   data::AssetKey key;
+  SceneSource source;
 };
 
 //! Represents a source file (FBX, GLB, etc.) that can be imported.
@@ -79,7 +91,7 @@ public:
 
   [[nodiscard]] auto GetAvailableScenes() const
     -> const std::vector<SceneEntry>&;
-  auto RequestSceneLoad(const data::AssetKey& key) -> void;
+  auto RequestSceneLoad(const SceneEntry& entry) -> void;
 
   [[nodiscard]] auto IsSceneLoading() const -> bool;
   [[nodiscard]] auto GetSceneLoadProgress() const -> float;
@@ -111,8 +123,8 @@ public:
   auto BrowseForIndex() -> void;
 
   //! Register callback for scene load requests.
-  auto SetOnSceneLoadRequested(
-    std::function<void(const data::AssetKey&)> callback) -> void;
+  auto SetOnSceneLoadRequested(std::function<void(const SceneEntry&)> callback)
+    -> void;
   //! Register callback for scene load cancellation requests.
   auto SetOnSceneLoadCancelRequested(std::function<void()> callback) -> void;
 
@@ -178,8 +190,9 @@ private:
 
     // --- Scene Loading Progress ---
     std::atomic_bool is_scene_loading { false };
-    std::atomic<float> scene_load_progress { 0.0f };
+    std::atomic<float> scene_load_progress { 0.0F };
     std::string scene_load_message;
+    std::string scene_load_label;
     std::optional<data::AssetKey> scene_load_key;
     std::optional<std::chrono::steady_clock::time_point> scene_load_finish_time;
   };
@@ -190,6 +203,36 @@ private:
   [[nodiscard]] auto ResolveSceneLabel(
     const std::optional<data::AssetKey>& key) const -> std::string;
 
+  struct SceneEntryKey {
+    data::AssetKey key {};
+    SceneSourceKind source_kind { SceneSourceKind::kPak };
+    std::string source_key {};
+  };
+
+  struct SceneEntryKeyHash {
+    auto operator()(const SceneEntryKey& value) const noexcept -> size_t
+    {
+      size_t seed = std::hash<data::AssetKey> {}(value.key);
+      HashCombine(seed, static_cast<uint8_t>(value.source_kind));
+      HashCombine(seed, std::hash<std::string> {}(value.source_key));
+      return seed;
+    }
+  };
+
+  struct SceneEntryKeyEq {
+    auto operator()(
+      const SceneEntryKey& lhs, const SceneEntryKey& rhs) const noexcept -> bool
+    {
+      return lhs.key == rhs.key && lhs.source_kind == rhs.source_kind
+        && lhs.source_key == rhs.source_key;
+    }
+  };
+
+  auto MakeSceneEntryKey(const SceneEntry& entry) -> SceneEntryKey;
+  auto RebuildSceneList(const std::unordered_map<SceneEntryKey, SceneEntry,
+                          SceneEntryKeyHash, SceneEntryKeyEq>& entries,
+    std::vector<SceneEntry>& out) -> void;
+
   enum class BrowseMode {
     kNone,
     kModelRoot,
@@ -198,6 +241,7 @@ private:
     kIndexFile
   };
   BrowseMode browse_mode_ { BrowseMode::kNone };
+  FileBrowserService::RequestId browse_request_id_ { 0 };
 
   observer_ptr<ContentSettingsService> settings_;
   observer_ptr<FileBrowserService> file_browser_;
@@ -212,13 +256,15 @@ private:
   std::vector<std::filesystem::path> loaded_paks_;
   std::vector<std::filesystem::path> loaded_indices_;
   std::vector<SceneEntry> available_scenes_;
-  std::unordered_map<data::AssetKey, SceneEntry> scenes_map_;
+  std::unordered_map<SceneEntryKey, SceneEntry, SceneEntryKeyHash,
+    SceneEntryKeyEq>
+    scenes_map_;
   std::uint64_t settings_epoch_ { 0 };
 
   //! Callbacks to update engine state
   std::function<void(const std::filesystem::path&)> on_pak_mounted_;
   std::function<void(const std::filesystem::path&)> on_index_loaded_;
-  std::function<void(const data::AssetKey&)> on_scene_load_requested_;
+  std::function<void(const SceneEntry&)> on_scene_load_requested_;
   std::function<void()> on_scene_load_cancel_requested_;
   std::function<void()> on_force_trim_;
 };

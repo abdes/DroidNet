@@ -55,6 +55,10 @@ public:
   virtual auto SetStatsShowFps(bool visible) -> void;
   //! Sets frame timing detail visibility.
   virtual auto SetStatsShowFrameTimingDetail(bool visible) -> void;
+  //! Sets engine timing visibility.
+  virtual auto SetStatsShowEngineTiming(bool visible) -> void;
+  //! Sets budget stats visibility.
+  virtual auto SetStatsShowBudgetStats(bool visible) -> void;
 
   //! Returns the persisted active panel name (empty if none).
   [[nodiscard]] virtual auto GetActivePanelName() const
@@ -80,6 +84,10 @@ private:
   static constexpr std::string_view kStatsShowFpsKey = "ui.stats.show_fps";
   static constexpr std::string_view kStatsShowDetailKey
     = "ui.stats.show_frame_timing_detail";
+  static constexpr std::string_view kStatsShowEngineKey
+    = "ui.stats.show_engine_timing";
+  static constexpr std::string_view kStatsShowBudgetKey
+    = "ui.stats.show_budget_stats";
   static constexpr std::string_view kActivePanelKey = "demo_shell.active_panel";
   static constexpr bool kDefaultAxesVisible = true;
 

@@ -7,20 +7,21 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <vector>
 
 #include <glm/glm.hpp>
 
-#include "DemoShell/Services/SkyboxService.h"
-#include "TexturedCube/TextureLoadingService.h"
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
-#include <filesystem>
+
+#include "DemoShell/Services/SkyboxService.h"
+#include "TexturedCube/TextureLoadingService.h"
 
 namespace oxygen::examples::textured_cube {
 
@@ -44,27 +45,27 @@ class SceneSetup final {
 public:
   //! Sun light parameters.
   struct SunLightParams {
-    float intensity { 12.0f };
-    glm::vec3 color_rgb { 1.0f, 0.98f, 0.95f };
-    glm::vec3 ray_direction { 0.35f, -0.45f, -1.0f };
+    float intensity { 12.0F };
+    glm::vec3 color_rgb { 1.0F, 0.98F, 0.95F };
+    glm::vec3 ray_direction { 0.35F, -0.45F, -1.0F };
     bool use_custom_direction { false };
   };
 
   //! Fill light parameters.
   struct FillLightParams {
-    glm::vec3 position { -6.0f, 5.0f, 3.0f };
-    float intensity { 80.0f };
-    glm::vec3 color_rgb { 0.85f, 0.90f, 1.0f };
-    float range { 45.0f };
+    glm::vec3 position { -6.0F, 5.0F, 3.0F };
+    float intensity { 80.0F };
+    glm::vec3 color_rgb { 0.85F, 0.90F, 1.0F };
+    float range { 45.0F };
   };
 
   //! Environment parameters.
   struct EnvironmentParams {
-    glm::vec3 solid_sky_color { 0.06f, 0.08f, 0.12f };
-    float sky_intensity { 1.0f };
-    float sky_light_intensity { 1.0f };
-    float sky_light_diffuse { 1.0f };
-    float sky_light_specular { 1.0f };
+    glm::vec3 solid_sky_color { 0.06F, 0.08F, 0.12F };
+    float sky_intensity { 1.0F };
+    float sky_light_intensity { 1.0F };
+    float sky_light_diffuse { 1.0F };
+    float sky_light_specular { 1.0F };
   };
 
   //! Texture index mode for the cube material.

@@ -13,7 +13,7 @@
 namespace oxygen::examples::ui {
 
 UiSettingsVm::UiSettingsVm(observer_ptr<UiSettingsService> service,
-  observer_ptr<oxygen::examples::CameraLifecycleService> camera_lifecycle)
+  observer_ptr<CameraLifecycleService> camera_lifecycle)
   : service_(service)
   , camera_lifecycle_(camera_lifecycle)
 {
@@ -47,16 +47,13 @@ auto UiSettingsVm::GetActivePanelName() -> std::optional<std::string>
   return active_panel_name_;
 }
 
-auto UiSettingsVm::GetActiveCamera() const
-  -> observer_ptr<oxygen::scene::SceneNode>
+auto UiSettingsVm::GetActiveCamera() const -> observer_ptr<scene::SceneNode>
 {
   if (!camera_lifecycle_) {
     return nullptr;
   }
 
-  return observer_ptr<oxygen::scene::SceneNode> {
-    &camera_lifecycle_->GetActiveCamera()
-  };
+  return observer_ptr { &camera_lifecycle_->GetActiveCamera() };
 }
 
 auto UiSettingsVm::SetAxesVisible(const bool visible) -> void
@@ -95,6 +92,32 @@ auto UiSettingsVm::SetStatsShowFrameTimingDetail(const bool visible) -> void
   stats_config_.show_frame_timing_detail = visible;
   stats_dirty_ = true;
   service_->SetStatsShowFrameTimingDetail(visible);
+  epoch_ = service_->GetEpoch();
+}
+
+auto UiSettingsVm::SetStatsShowEngineTiming(const bool visible) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (stats_config_.show_engine_timing == visible) {
+    return;
+  }
+
+  stats_config_.show_engine_timing = visible;
+  stats_dirty_ = true;
+  service_->SetStatsShowEngineTiming(visible);
+  epoch_ = service_->GetEpoch();
+}
+
+auto UiSettingsVm::SetStatsShowBudgetStats(const bool visible) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (stats_config_.show_budget_stats == visible) {
+    return;
+  }
+
+  stats_config_.show_budget_stats = visible;
+  stats_dirty_ = true;
+  service_->SetStatsShowBudgetStats(visible);
   epoch_ = service_->GetEpoch();
 }
 

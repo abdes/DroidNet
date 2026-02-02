@@ -10,7 +10,6 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include <string>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -36,7 +35,7 @@ public:
   auto SetScene(std::unique_ptr<scene::Scene> scene) -> void
   {
     std::scoped_lock lock(scene_mutex_);
-    scene_ = std::shared_ptr<scene::Scene>(std::move(scene));
+    scene_ = std::shared_ptr(std::move(scene));
     scene_ptr_.store(scene_.get(), std::memory_order_release);
     generation_.fetch_add(1U, std::memory_order_acq_rel);
   }
@@ -47,8 +46,7 @@ public:
   //! Return a non-owning pointer to the active scene (may be null).
   [[nodiscard]] auto TryGetScene() const noexcept -> observer_ptr<scene::Scene>
   {
-    return observer_ptr<scene::Scene> { scene_ptr_.load(
-      std::memory_order_acquire) };
+    return observer_ptr { scene_ptr_.load(std::memory_order_acquire) };
   }
 
 private:
@@ -60,4 +58,4 @@ private:
   std::shared_ptr<scene::Scene> scene_ {};
 };
 
-} // namespace oxygen::examples
+} // namespace oxygen::examples::internal

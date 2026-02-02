@@ -84,18 +84,18 @@ auto ContentSettingsService::GetExplorerSettings() const
 }
 
 auto ContentSettingsService::SetExplorerSettings(
-  const ContentExplorerSettings& s) -> void
+  const ContentExplorerSettings& settings) -> void
 {
-  if (const auto settings = ResolveSettings()) {
-    settings->SetString(kModelRootKey, s.model_root.string());
-    settings->SetBool(kIncludeFbxKey, s.include_fbx);
-    settings->SetBool(kIncludeGlbKey, s.include_glb);
-    settings->SetBool(kIncludeGltfKey, s.include_gltf);
-    settings->SetBool(kAutoLoadOnImportKey, s.auto_load_on_import);
-    settings->SetBool(kAutoDumpTexMemKey, s.auto_dump_texture_memory);
-    settings->SetFloat(
-      kAutoDumpDelayKey, static_cast<float>(s.auto_dump_delay_frames));
-    settings->SetFloat(kDumpTopNKey, static_cast<float>(s.dump_top_n));
+  if (const auto s = ResolveSettings()) {
+    s->SetString(kModelRootKey, settings.model_root.string());
+    s->SetBool(kIncludeFbxKey, settings.include_fbx);
+    s->SetBool(kIncludeGlbKey, settings.include_glb);
+    s->SetBool(kIncludeGltfKey, settings.include_gltf);
+    s->SetBool(kAutoLoadOnImportKey, settings.auto_load_on_import);
+    s->SetBool(kAutoDumpTexMemKey, settings.auto_dump_texture_memory);
+    s->SetFloat(
+      kAutoDumpDelayKey, static_cast<float>(settings.auto_dump_delay_frames));
+    s->SetFloat(kDumpTopNKey, static_cast<float>(settings.dump_top_n));
     ++epoch_;
   }
 }
@@ -130,20 +130,20 @@ auto ContentSettingsService::GetImportOptions() const
 }
 
 auto ContentSettingsService::SetImportOptions(
-  const content::import::ImportOptions& o) -> void
+  const content::import::ImportOptions& options) -> void
 {
-  if (const auto settings = ResolveSettings()) {
-    settings->SetFloat(kAssetKeyPolicyKey,
-      static_cast<float>(static_cast<int>(o.asset_key_policy)));
-    settings->SetFloat(
-      kNodePruningKey, static_cast<float>(static_cast<int>(o.node_pruning)));
-    settings->SetFloat(kImportContentFlagsKey,
-      static_cast<float>(static_cast<uint32_t>(o.import_content)));
-    settings->SetBool(kWithHashingKey, o.with_content_hashing);
-    settings->SetFloat(
-      kNormalPolicyKey, static_cast<float>(static_cast<int>(o.normal_policy)));
-    settings->SetFloat(kTangentPolicyKey,
-      static_cast<float>(static_cast<int>(o.tangent_policy)));
+  if (const auto s = ResolveSettings()) {
+    s->SetFloat(kAssetKeyPolicyKey,
+      static_cast<float>(static_cast<int>(options.asset_key_policy)));
+    s->SetFloat(kNodePruningKey,
+      static_cast<float>(static_cast<int>(options.node_pruning)));
+    s->SetFloat(kImportContentFlagsKey,
+      static_cast<float>(static_cast<uint32_t>(options.import_content)));
+    s->SetBool(kWithHashingKey, options.with_content_hashing);
+    s->SetFloat(kNormalPolicyKey,
+      static_cast<float>(static_cast<int>(options.normal_policy)));
+    s->SetFloat(kTangentPolicyKey,
+      static_cast<float>(static_cast<int>(options.tangent_policy)));
     ++epoch_;
   }
 }
@@ -196,8 +196,7 @@ auto ContentSettingsService::SetTextureTuning(
       static_cast<float>(static_cast<int>(t.source_color_space)));
     settings->SetFloat(kTexTuningMipPolicyKey,
       static_cast<float>(static_cast<int>(t.mip_policy)));
-    settings->SetFloat(
-      kTexTuningMaxMipsKey, static_cast<float>(t.max_mip_levels));
+    settings->SetFloat(kTexTuningMaxMipsKey, t.max_mip_levels);
     settings->SetFloat(kTexTuningMipFilterKey,
       static_cast<float>(static_cast<int>(t.mip_filter)));
     settings->SetFloat(kTexTuningColorFormatKey,

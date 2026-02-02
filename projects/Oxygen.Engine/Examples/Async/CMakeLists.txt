@@ -32,8 +32,13 @@ find_package(sdl3 CONFIG REQUIRED)
 add_executable(
   ${META_MODULE_TARGET}
   "../main.cpp"
-  "DroneControlPanel.cpp"
-  "DroneControlPanel.h"
+  "AsyncDemoPanel.cpp"
+  "AsyncDemoPanel.h"
+  "AsyncDemoSettingsService.cpp"
+  "AsyncDemoSettingsService.h"
+  "AsyncDemoTypes.h"
+  "AsyncDemoVm.cpp"
+  "AsyncDemoVm.h"
   "main_impl.cpp"
   "MainModule.cpp"
   "MainModule.h"

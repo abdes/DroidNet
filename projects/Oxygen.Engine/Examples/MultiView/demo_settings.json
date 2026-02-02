@@ -1,11 +1,8 @@
 {
   "demo_shell": {
-    "active_panel": ""
+    "active_panel": "Settings"
   },
   "ui": {
-    "axes": {
-      "visible": false
-    },
     "stats": {
       "show_fps": true,
       "show_frame_timing_detail": true

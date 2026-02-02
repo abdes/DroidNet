@@ -11,14 +11,13 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Component.h>
-#include <Oxygen/Engine/api_export.h>
-
 #include <Oxygen/Core/Time/AuditClock.h>
 #include <Oxygen/Core/Time/NetworkClock.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
 #include <Oxygen/Core/Time/PresentationClock.h>
 #include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Core/Time/Types.h>
+#include <Oxygen/Engine/api_export.h>
 
 namespace oxygen::engine {
 
@@ -116,7 +115,7 @@ public:
   }
 
   // Frame integration
-  OXGN_NGIN_API auto BeginFrame() noexcept -> void;
+  OXGN_NGIN_API auto BeginFrame(time::PhysicalTime now) noexcept -> void;
   OXGN_NGIN_API auto EndFrame() noexcept -> void;
 
   //! Snapshot of per-frame timing values (updated in BeginFrame).
@@ -160,6 +159,11 @@ private:
   FrameTimingData frame_data_ {};
   time::PhysicalTime last_frame_time_ {};
   uint64_t frame_counter_ { 0 };
+
+  // Stable FPS measurement (Sample-and-Hold)
+  std::chrono::nanoseconds fps_accumulator_ { 0 };
+  uint32_t fps_frame_count_ { 0 };
+  double stable_fps_ { 0.0 };
 
   // Performance history (ring buffer)
   static constexpr size_t kPerfHistory = 120; // ~2s @60fps

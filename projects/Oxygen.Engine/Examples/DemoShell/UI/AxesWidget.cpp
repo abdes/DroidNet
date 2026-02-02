@@ -13,7 +13,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat3x3.hpp>
-#include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Base/Logging.h>
@@ -97,7 +96,7 @@ void AxesWidget::Draw(const glm::mat4& view_matrix)
 
   // Get main viewport and calculate widget position (bottom-left corner)
   const ImGuiViewport* viewport = ImGui::GetMainViewport();
-  const AxesWidgetConfig config {};
+  constexpr AxesWidgetConfig config {};
   const glm::vec2 widget_pos {
     viewport->WorkPos.x + config.padding,
     viewport->WorkPos.y + viewport->WorkSize.y - config.size - config.padding,
@@ -144,10 +143,9 @@ void AxesWidget::Draw(const glm::mat4& view_matrix)
   } };
 
   // Sort axes by depth (draw furthest first, nearest last)
-  std::sort(
-    axes.begin(), axes.end(), [](const AxisInfo& lhs, const AxisInfo& rhs) {
-      return lhs.depth < rhs.depth;
-    });
+  std::ranges::sort(axes, [](const AxisInfo& lhs, const AxisInfo& rhs) {
+    return lhs.depth < rhs.depth;
+  });
 
   // Get foreground draw list to draw on top of other UI
   ImDrawList* draw_list = ImGui::GetForegroundDrawList();
@@ -161,9 +159,9 @@ void AxesWidget::Draw(const glm::mat4& view_matrix)
   // Draw each axis line
   for (const auto& axis : axes) {
     // Use dimmed color if axis points away from camera (negative depth)
-    const ImU32 color = (axis.depth >= 0.0F) ? axis.color : axis.color_dim;
-    const float thickness = (axis.depth >= 0.0F) ? config.line_thickness
-                                                 : config.line_thickness * 0.7F;
+    const ImU32 color = axis.depth >= 0.0F ? axis.color : axis.color_dim;
+    const float thickness = axis.depth >= 0.0F ? config.line_thickness
+                                               : config.line_thickness * 0.7F;
 
     // Draw the axis line from center to projected endpoint
     draw_list->AddLine(ImVec2(center.x, center.y),
@@ -191,9 +189,9 @@ void AxesWidget::Draw(const glm::mat4& view_matrix)
     }
 
     // Draw axis label if enabled
-    if (config.show_labels && axis.depth >= -0.3F) {
+    if (axis.depth >= -0.3F) {
       // Position label slightly beyond the axis endpoint
-      const glm::vec2 label_offset = (dir_len > 1.0F)
+      const glm::vec2 label_offset = dir_len > 1.0F
         ? (axis.screen_end - center) / dir_len * 12.0F
         : glm::vec2(0.0F);
 
@@ -205,7 +203,7 @@ void AxesWidget::Draw(const glm::mat4& view_matrix)
   }
 }
 
-void AxesWidget::Draw(observer_ptr<oxygen::scene::SceneNode> camera)
+void AxesWidget::Draw(observer_ptr<scene::SceneNode> camera)
 {
   if (!camera || !camera->IsAlive()) {
     return;

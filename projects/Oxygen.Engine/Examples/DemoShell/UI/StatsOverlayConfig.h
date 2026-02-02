@@ -12,6 +12,8 @@ namespace oxygen::examples::ui {
 struct StatsOverlayConfig {
   bool show_fps { false };
   bool show_frame_timing_detail { false };
+  bool show_engine_timing { false };
+  bool show_budget_stats { false };
 };
 
 } // namespace oxygen::examples::ui

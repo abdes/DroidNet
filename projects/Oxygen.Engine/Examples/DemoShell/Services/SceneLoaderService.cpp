@@ -16,9 +16,7 @@
 #include <unordered_set>
 #include <utility>
 
-#include <glm/ext/matrix_transform.hpp>
 #include <glm/geometric.hpp>
-#include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
@@ -93,7 +91,7 @@ namespace {
 } // namespace
 
 SceneLoaderService::SceneLoaderService(
-  oxygen::content::IAssetLoader& loader, const int width, const int height)
+  content::IAssetLoader& loader, const int width, const int height)
   : loader_(loader)
   , width_(width)
   , height_(height)
@@ -102,6 +100,8 @@ SceneLoaderService::SceneLoaderService(
 
 SceneLoaderService::~SceneLoaderService()
 {
+  // Ensure any geometry pins are released if the loader is torn down early.
+  ReleasePinnedGeometryAssets();
   LOG_F(INFO, "SceneLoader: Destroying loader.");
 }
 
@@ -126,6 +126,8 @@ void SceneLoaderService::MarkConsumed()
   swap_.asset.reset();
   runtime_nodes_.clear();
   active_camera_ = {};
+  // Drop any pins that were never released due to early consumption.
+  ReleasePinnedGeometryAssets();
   linger_frames_ = 2;
 }
 
@@ -155,8 +157,11 @@ void SceneLoaderService::OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset)
     runtime_nodes_.clear();
     active_camera_ = {};
     swap_.asset = std::move(asset);
-    ready_ = true;
+    // Block readiness until geometry dependencies are pinned to avoid
+    // evictions during rapid scene swaps.
+    ready_ = false;
     failed_ = false;
+    QueueGeometryDependencies(*swap_.asset);
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "SceneLoader: Exception while building scene: {}", ex.what());
     swap_ = {};
@@ -172,6 +177,96 @@ void SceneLoaderService::OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset)
     ready_ = false;
     failed_ = true;
   }
+}
+
+/*!
+ Prime geometry dependencies while the scene asset is pending instantiation.
+
+ This pins geometry assets by issuing load requests and keeping the
+ loader references alive until `BuildScene()` completes. It prevents
+ rapid swaps from evicting geometry between dependency resolution and
+ attachment.
+
+ @param asset Scene asset providing renderable records.
+
+ ### Performance Characteristics
+
+ - Time Complexity: $O(n)$ over renderables.
+ - Memory: $O(n)$ for key bookkeeping.
+ - Optimization: Deduplicates keys before issuing async loads.
+
+ @note Readiness is only reported once all geometry dependencies have
+ either loaded or failed.
+*/
+void SceneLoaderService::QueueGeometryDependencies(
+  const data::SceneAsset& asset)
+{
+  ReleasePinnedGeometryAssets();
+
+  pending_geometry_keys_.clear();
+
+  for (const auto& renderable :
+    asset.GetComponents<data::pak::RenderableRecord>()) {
+    pending_geometry_keys_.insert(renderable.geometry_key);
+  }
+
+  if (pending_geometry_keys_.empty()) {
+    ready_ = true;
+    return;
+  }
+
+  for (const auto& geom_key : pending_geometry_keys_) {
+    loader_.StartLoadGeometryAsset(geom_key,
+      [weak_self = weak_from_this(), geom_key](
+        std::shared_ptr<data::GeometryAsset> geom) {
+        if (auto self = weak_self.lock()) {
+          const auto it = self->pending_geometry_keys_.find(geom_key);
+          if (it == self->pending_geometry_keys_.end()) {
+            return;
+          }
+
+          self->pending_geometry_keys_.erase(it);
+          if (geom) {
+            self->pinned_geometry_keys_.push_back(geom_key);
+          } else {
+            LOG_F(WARNING, "SceneLoader: Failed to load geometry dependency {}",
+              oxygen::data::to_string(geom_key));
+          }
+
+          if (self->pending_geometry_keys_.empty()) {
+            self->ready_ = true;
+          }
+        }
+      });
+  }
+}
+
+/*!
+ Release loader-held geometry references after scene instantiation.
+
+ Geometry assets are pinned only for the narrow window between scene load
+ completion and runtime scene construction. Releasing here restores
+ normal cache eviction behavior without leaving stale loader references
+ behind.
+
+ ### Performance Characteristics
+
+ - Time Complexity: $O(n)$ over pinned geometry keys.
+ - Memory: Releases pin bookkeeping.
+ - Optimization: Early-out when nothing is pinned.
+*/
+void SceneLoaderService::ReleasePinnedGeometryAssets()
+{
+  if (pinned_geometry_keys_.empty()) {
+    pending_geometry_keys_.clear();
+    return;
+  }
+
+  for (const auto& key : pinned_geometry_keys_) {
+    (void)loader_.ReleaseAsset(key);
+  }
+  pinned_geometry_keys_.clear();
+  pending_geometry_keys_.clear();
 }
 
 auto SceneLoaderService::BuildScene(
@@ -190,6 +285,8 @@ auto SceneLoaderService::BuildScene(
   AttachLights(asset);
   SelectActiveCamera(asset);
   EnsureCameraAndViewport(scene);
+  // Geometry pins are only needed until scene instantiation finishes.
+  ReleasePinnedGeometryAssets();
   LogSceneHierarchy(scene);
 
   LOG_F(INFO, "SceneLoader: Runtime scene instantiation complete.");
@@ -206,12 +303,12 @@ auto SceneLoaderService::BuildEnvironment(const data::SceneAsset& asset)
 
 void SceneLoaderService::LogSceneSummary(const data::SceneAsset& asset) const
 {
-  using oxygen::data::pak::DirectionalLightRecord;
-  using oxygen::data::pak::OrthographicCameraRecord;
-  using oxygen::data::pak::PerspectiveCameraRecord;
-  using oxygen::data::pak::PointLightRecord;
-  using oxygen::data::pak::RenderableRecord;
-  using oxygen::data::pak::SpotLightRecord;
+  using data::pak::DirectionalLightRecord;
+  using data::pak::OrthographicCameraRecord;
+  using data::pak::PerspectiveCameraRecord;
+  using data::pak::PointLightRecord;
+  using data::pak::RenderableRecord;
+  using data::pak::SpotLightRecord;
 
   const auto nodes = asset.GetNodes();
 
@@ -230,7 +327,7 @@ void SceneLoaderService::LogSceneSummary(const data::SceneAsset& asset) const
 void SceneLoaderService::InstantiateNodes(
   scene::Scene& scene, const data::SceneAsset& asset)
 {
-  using oxygen::data::pak::NodeRecord;
+  using data::pak::NodeRecord;
 
   const auto nodes = asset.GetNodes();
   runtime_nodes_.reserve(nodes.size());
@@ -276,7 +373,7 @@ void SceneLoaderService::ApplyHierarchy(
 
 void SceneLoaderService::AttachRenderables(const data::SceneAsset& asset)
 {
-  using oxygen::data::pak::RenderableRecord;
+  using data::pak::RenderableRecord;
 
   const auto renderables = asset.GetComponents<RenderableRecord>();
   int valid_renderables = 0;
@@ -310,25 +407,24 @@ void SceneLoaderService::AttachRenderables(const data::SceneAsset& asset)
 
 void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
 {
-  using oxygen::data::pak::DirectionalLightRecord;
-  using oxygen::data::pak::PointLightRecord;
-  using oxygen::data::pak::SpotLightRecord;
+  using data::pak::DirectionalLightRecord;
+  using data::pak::PointLightRecord;
+  using data::pak::SpotLightRecord;
 
-  const auto ApplyCommonLight =
-    [](scene::CommonLightProperties& dst,
-      const oxygen::data::pak::LightCommonRecord& src) {
-      dst.affects_world = (src.affects_world != 0U);
-      dst.color_rgb = { src.color_rgb[0], src.color_rgb[1], src.color_rgb[2] };
-      dst.intensity = src.intensity;
-      dst.mobility = static_cast<scene::LightMobility>(src.mobility);
-      dst.casts_shadows = (src.casts_shadows != 0U);
-      dst.shadow.bias = src.shadow.bias;
-      dst.shadow.normal_bias = src.shadow.normal_bias;
-      dst.shadow.contact_shadows = (src.shadow.contact_shadows != 0U);
-      dst.shadow.resolution_hint
-        = static_cast<scene::ShadowResolutionHint>(src.shadow.resolution_hint);
-      dst.exposure_compensation_ev = src.exposure_compensation_ev;
-    };
+  const auto ApplyCommonLight = [](scene::CommonLightProperties& dst,
+                                  const data::pak::LightCommonRecord& src) {
+    dst.affects_world = (src.affects_world != 0U);
+    dst.color_rgb = { src.color_rgb[0], src.color_rgb[1], src.color_rgb[2] };
+    dst.intensity = src.intensity;
+    dst.mobility = static_cast<scene::LightMobility>(src.mobility);
+    dst.casts_shadows = (src.casts_shadows != 0U);
+    dst.shadow.bias = src.shadow.bias;
+    dst.shadow.normal_bias = src.shadow.normal_bias;
+    dst.shadow.contact_shadows = (src.shadow.contact_shadows != 0U);
+    dst.shadow.resolution_hint
+      = static_cast<scene::ShadowResolutionHint>(src.shadow.resolution_hint);
+    dst.exposure_compensation_ev = src.exposure_compensation_ev;
+  };
 
   int attached_directional = 0;
   for (const DirectionalLightRecord& rec :
@@ -428,8 +524,8 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
 
 void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)
 {
-  using oxygen::data::pak::OrthographicCameraRecord;
-  using oxygen::data::pak::PerspectiveCameraRecord;
+  using data::pak::OrthographicCameraRecord;
+  using data::pak::PerspectiveCameraRecord;
 
   const auto perspective_cams = asset.GetComponents<PerspectiveCameraRecord>();
   if (!perspective_cams.empty()) {
@@ -479,8 +575,8 @@ void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)
         const glm::vec3 forward = cam_rot * glm::vec3(0.0F, 0.0F, -1.0F);
         const glm::vec3 up = cam_rot * glm::vec3(0.0F, 1.0F, 0.0F);
         LOG_F(INFO,
-          "SceneLoader: Camera local pose pos=({:.3f}, {:.3f}, {:.3f}) "
-          "forward=({:.3f}, {:.3f}, {:.3f}) up=({:.3f}, {:.3f}, {:.3f})",
+          "SceneLoader: Camera local pose pos=({:.3F}, {:.3F}, {:.3F}) "
+          "forward=({:.3F}, {:.3F}, {:.3F}) up=({:.3F}, {:.3F}, {:.3F})",
           cam_pos.x, cam_pos.y, cam_pos.z, forward.x, forward.y, forward.z,
           up.x, up.y, up.z);
       }
@@ -541,8 +637,8 @@ void SceneLoaderService::EnsureCameraAndViewport(scene::Scene& scene)
 
   if (!active_camera_.IsAlive()) {
     active_camera_ = scene.CreateNode("MainCamera");
-    const glm::vec3 cam_pos(10.0F, 10.0F, 10.0F);
-    const glm::vec3 cam_target(0.0F, 0.0F, 0.0F);
+    constexpr glm::vec3 cam_pos(10.0F, 10.0F, 10.0F);
+    constexpr glm::vec3 cam_target(0.0F, 0.0F, 0.0F);
     auto tf = active_camera_.GetTransform();
     tf.SetLocalPosition(cam_pos);
     tf.SetLocalRotation(MakeLookRotationFromPosition(cam_pos, cam_target));

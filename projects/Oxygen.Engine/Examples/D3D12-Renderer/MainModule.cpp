@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "D3D12-Renderer/MainModule.h"
-
 #include <random>
 
 #include <glm/glm.hpp>
@@ -23,6 +21,8 @@
 #include <Oxygen/ImGui/ImGuiRenderInterface.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/Types.h>
+
+#include "D3D12-Renderer/MainModule.h"
 
 using oxygen::Engine;
 using oxygen::graphics::CommandListPtr;
@@ -77,7 +77,7 @@ void MainModule::Render(const oxygen::Graphics* gfx)
   // command_list->OMSetRenderTargets(1, &backbuffer, FALSE, nullptr);
 
   //// Define the clear color (RGBA)
-  // constexpr float clear_color[4] = { 0.0f, 0.2f, 0.4f, 1.0f }; // Example
+  // constexpr float clear_color[4] = { 0.0F, 0.2F, 0.4F, 1.0F }; // Example
   // color: dark blue
 
   //// Clear the render target (backbuffer)
@@ -129,7 +129,7 @@ auto MainModule::RenderGame(const oxygen::Graphics* gfx,
   // Set pipeline state
   command_recorder->SetPipelineState(vertex_shader, pixel_shader);
 
-  constexpr glm::vec4 clear_color = { 0.4F, 0.4F, .8f, 1.0F }; // Violet color
+  constexpr glm::vec4 clear_color = { 0.4F, 0.4F, .8F, 1.0F }; // Violet color
   command_recorder->Clear(
     oxygen::graphics::kClearFlagsColor, 1, nullptr, &clear_color, 0.0F, 0);
 
