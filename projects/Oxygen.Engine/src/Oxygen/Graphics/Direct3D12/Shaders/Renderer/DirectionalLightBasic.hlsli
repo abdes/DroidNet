@@ -16,14 +16,14 @@ static const uint DIRECTIONAL_LIGHT_FLAG_SUN_LIGHT = 1u << 4;
 struct DirectionalLightBasic
 {
     float3 color_rgb;
-    float intensity;
+    float intensity_lux;  // Illuminance in lux (lm/m²)
     float3 direction_ws;
     float angular_size_radians;
 
     uint shadow_index;
     uint flags; // See DIRECTIONAL_LIGHT_FLAG_*
-    uint _pad0;
-    uint _pad1;
+    uint _reserved0;
+    uint _reserved1;
 };
 
 #endif  // OXYGEN_D3D12_SHADERS_RENDERER_DIRECTIONALLIGHTBASIC_HLSLI

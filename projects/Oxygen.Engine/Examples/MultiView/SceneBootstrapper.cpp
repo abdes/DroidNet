@@ -380,7 +380,7 @@ auto SceneBootstrapper::EnsureLighting(scene::Scene& scene) -> void
     spot_light->Common().affects_world = true;
     spot_light->Common().color_rgb
       = glm::vec3(1.0F, 0.98F, 0.95F); // Warm white
-    spot_light->Common().intensity = 120.0F;
+    spot_light->SetLuminousFluxLm(120.0F);
     spot_light->SetRange(25.0F);
     spot_light->SetSourceRadius(0.1F);
     spot_light->SetConeAnglesRadians(glm::radians(25.0F), // Inner cone
@@ -420,7 +420,7 @@ auto SceneBootstrapper::EnsureLighting(scene::Scene& scene) -> void
     point_light->Common().affects_world = true;
     point_light->Common().color_rgb
       = glm::vec3(0.7F, 0.85F, 1.0F); // Cool blue tint
-    point_light->Common().intensity = 140.0F;
+    point_light->SetLuminousFluxLm(140.0F);
     point_light->SetRange(15.0F);
     point_light->SetSourceRadius(0.2F);
 

@@ -84,11 +84,23 @@ public:
   {
     source_radius_ = source_radius;
   }
-
   //! Gets the source radius in world units.
   OXGN_SCN_NDAPI auto GetSourceRadius() const noexcept -> float
   {
     return source_radius_;
+  }
+
+  //! Sets the light's luminous flux in lumens.
+  auto SetLuminousFluxLm(const float luminous_flux_lm) noexcept -> void
+  {
+    luminous_flux_lm_ = luminous_flux_lm;
+  }
+
+  //! Gets the light's luminous flux in lumens.
+  //! Typical values: 800 lm (~60W incandescent), 1600 lm (~100W).
+  OXGN_SCN_NDAPI auto GetLuminousFluxLm() const noexcept -> float
+  {
+    return luminous_flux_lm_;
   }
 
 protected:
@@ -102,6 +114,11 @@ private:
   AttenuationModel attenuation_model_ = AttenuationModel::kInverseSquare;
   float decay_exponent_ = 2.0F;
   float source_radius_ = 0.0F;
+
+  //! Luminous flux in lumens.
+  //! Typical values: 800 lm (~60W incandescent), 1600 lm (~100W).
+  float luminous_flux_lm_ = 800.0F;
+
   detail::TransformComponent* transform_ { nullptr };
 };
 

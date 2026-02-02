@@ -957,7 +957,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
 
           auto& common = light->get().Common();
           common.affects_world = sun_enabled_;
-          common.intensity = sun_intensity_lux_;
+          light->get().SetIntensityLux(sun_intensity_lux_);
           common.color_rgb = sun_use_temperature_
             ? KelvinToLinearRgb(sun_temperature_kelvin_)
             : sun_color_rgb_;
@@ -992,7 +992,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
 
           auto& common = light->get().Common();
           common.affects_world = sun_enabled_;
-          common.intensity = sun_intensity_lux_;
+          light->get().SetIntensityLux(sun_intensity_lux_);
           common.color_rgb = sun_use_temperature_
             ? KelvinToLinearRgb(sun_temperature_kelvin_)
             : sun_color_rgb_;

@@ -2533,7 +2533,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color.x);
         rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color.y);
         rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color.z);
-        rec_light.common.intensity = (std::max)(0.0F, light.intensity);
+        rec_light.intensity_lux = (std::max)(0.0F, light.intensity);
         rec_light.common.casts_shadows = light.cast_shadows ? 1U : 0U;
         build.directional_lights.push_back(rec_light);
         break;
@@ -2547,7 +2547,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color.x);
         rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color.y);
         rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color.z);
-        rec_light.common.intensity = (std::max)(0.0F, light.intensity);
+        rec_light.luminous_flux_lm = (std::max)(0.0F, light.intensity);
         rec_light.common.casts_shadows = light.cast_shadows ? 1U : 0U;
         build.point_lights.push_back(rec_light);
         if (light.type != UFBX_LIGHT_POINT) {
@@ -2565,7 +2565,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color.x);
         rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color.y);
         rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color.z);
-        rec_light.common.intensity = (std::max)(0.0F, light.intensity);
+        rec_light.luminous_flux_lm = (std::max)(0.0F, light.intensity);
         rec_light.common.casts_shadows = light.cast_shadows ? 1U : 0U;
         const float inner = light.inner_angle;
         const float outer = light.outer_angle;

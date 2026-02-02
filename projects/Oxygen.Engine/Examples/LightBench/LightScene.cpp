@@ -345,7 +345,7 @@ auto LightScene::EnsurePointLightNode() -> void
     auto point_light = std::make_unique<scene::PointLight>();
     point_light->Common().affects_world = true;
     point_light->Common().color_rgb = point_light_state_.color_rgb;
-    point_light->Common().intensity = point_light_state_.intensity;
+    point_light->SetLuminousFluxLm(point_light_state_.intensity);
     point_light->SetRange(point_light_state_.range);
     point_light->SetSourceRadius(point_light_state_.source_radius);
     const bool attached = point_light_node_.AttachLight(std::move(point_light));
@@ -364,7 +364,7 @@ auto LightScene::EnsureSpotLightNode() -> void
     auto spot_light = std::make_unique<scene::SpotLight>();
     spot_light->Common().affects_world = true;
     spot_light->Common().color_rgb = spot_light_state_.color_rgb;
-    spot_light->Common().intensity = spot_light_state_.intensity;
+    spot_light->SetLuminousFluxLm(spot_light_state_.intensity);
     spot_light->SetRange(spot_light_state_.range);
     spot_light->SetSourceRadius(spot_light_state_.source_radius);
     const bool attached = spot_light_node_.AttachLight(std::move(spot_light));
@@ -385,7 +385,7 @@ auto LightScene::ApplyPointLightState() -> void
     auto& light = point->get();
     light.Common().affects_world = point_light_state_.enabled;
     light.Common().color_rgb = point_light_state_.color_rgb;
-    light.Common().intensity = point_light_state_.intensity;
+    light.SetLuminousFluxLm(point_light_state_.intensity);
     light.SetRange(point_light_state_.range);
     light.SetSourceRadius(point_light_state_.source_radius);
   }
@@ -406,7 +406,7 @@ auto LightScene::ApplySpotLightState() -> void
     auto& light = spot->get();
     light.Common().affects_world = spot_light_state_.enabled;
     light.Common().color_rgb = spot_light_state_.color_rgb;
-    light.Common().intensity = spot_light_state_.intensity;
+    light.SetLuminousFluxLm(spot_light_state_.intensity);
     light.SetRange(spot_light_state_.range);
     light.SetSourceRadius(spot_light_state_.source_radius);
     const float inner_angle_rad

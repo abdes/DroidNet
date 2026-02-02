@@ -796,7 +796,7 @@ auto MainModule::EnsureCameraSpotLight() -> void
 
     light->Common().affects_world = enabled;
     light->Common().color_rgb = color;
-    light->Common().intensity = intensity;
+    light->SetLuminousFluxLm(intensity);
     light->Common().mobility = scene::LightMobility::kRealtime;
     light->Common().casts_shadows = casts_shadows;
     light->SetRange(range);

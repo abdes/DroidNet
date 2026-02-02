@@ -415,7 +415,7 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
                                   const data::pak::LightCommonRecord& src) {
     dst.affects_world = (src.affects_world != 0U);
     dst.color_rgb = { src.color_rgb[0], src.color_rgb[1], src.color_rgb[2] };
-    dst.intensity = src.intensity;
+    // intensity REMOVED from common - set via specific light class methods
     dst.mobility = static_cast<scene::LightMobility>(src.mobility);
     dst.casts_shadows = (src.casts_shadows != 0U);
     dst.shadow.bias = src.shadow.bias;
@@ -436,6 +436,7 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
 
     auto light = std::make_unique<scene::DirectionalLight>();
     ApplyCommonLight(light->Common(), rec.common);
+    light->SetIntensityLux(rec.intensity_lux);
     light->SetAngularSizeRadians(rec.angular_size_radians);
     light->SetEnvironmentContribution(rec.environment_contribution != 0U);
     light->SetIsSunLight(rec.is_sun_light != 0U);
@@ -469,6 +470,7 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
 
     auto light = std::make_unique<scene::PointLight>();
     ApplyCommonLight(light->Common(), rec.common);
+    light->SetLuminousFluxLm(rec.luminous_flux_lm);
     light->SetRange(std::abs(rec.range));
     light->SetAttenuationModel(
       static_cast<scene::AttenuationModel>(rec.attenuation_model));
@@ -495,6 +497,7 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
 
     auto light = std::make_unique<scene::SpotLight>();
     ApplyCommonLight(light->Common(), rec.common);
+    light->SetLuminousFluxLm(rec.luminous_flux_lm);
     light->SetRange(std::abs(rec.range));
     light->SetAttenuationModel(
       static_cast<scene::AttenuationModel>(rec.attenuation_model));
