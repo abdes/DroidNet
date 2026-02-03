@@ -1,7 +1,7 @@
 {
   "version": 6,
   "include": [
-    "../../ConanPresets.json"
+    "../../ConanPresets-Ninja.json"
   ],
   "cmakeMinimumRequired": {
     "major": 3,
@@ -10,7 +10,7 @@
   },
   "configurePresets": [
     {
-      "name": "base",
+      "name": "default",
       "inherits": "conan-default",
       "hidden": true,
       "cacheVariables": {
@@ -22,21 +22,21 @@
   ],
   "buildPresets": [
     {
-      "name": "base-debug",
+      "name": "build-debug",
       "hidden": true,
       "configuration": "Debug",
       "jobs": 8,
       "verbose": false
     },
     {
-      "name": "base-release",
+      "name": "build-release",
       "hidden": true,
       "configuration": "Release",
       "jobs": 8,
       "verbose": false
     },
     {
-      "name": "base-relwithdebinfo",
+      "name": "build-relwithd",
       "hidden": true,
       "configuration": "RelWithDebInfo",
       "jobs": 8,
@@ -45,9 +45,22 @@
   ],
   "testPresets": [
     {
-      "name": "test-base",
-      "description": "Enable output on failure",
-      "hidden": true
+      "name": "test-debug",
+      "inherits": "conan-debug",
+      "description": "Verbose",
+      "output": {
+        "outputOnFailure": true,
+        "verbosity": "verbose"
+      }
+    },
+    {
+      "name": "test-release",
+      "inherits": "conan-release",
+      "description": "Verbose",
+      "output": {
+        "outputOnFailure": true,
+        "verbosity": "default"
+      }
     }
   ]
 }

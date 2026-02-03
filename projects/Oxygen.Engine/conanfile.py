@@ -16,6 +16,13 @@ from pathlib import Path
 
 class OxygenConan(ConanFile):
     deploy_folder: str  # let Pyright know this exists
+    # Common Conan dynamic attributes annotated to satisfy static checkers
+    output: Any
+    settings: Any
+    cpp: Any
+    conf: Any
+    folders: Any
+    dependencies: Any
 
     # Reference
     name = "Oxygen"
@@ -28,7 +35,9 @@ class OxygenConan(ConanFile):
     topics = ("graphics programming", "gamedev", "math")
 
     # Binary model: Settings and Options
-    settings = "os", "arch", "compiler", "build_type"
+    # Include `sanitizer` so profiles can control sanitizer across the
+    # whole dependency graph and it is part of package identity.
+    settings = "os", "arch", "compiler", "build_type", "sanitizer"
     options: Any = {
         # Options
         "shared": [True, False],
@@ -117,7 +126,16 @@ class OxygenConan(ConanFile):
     def configure(self):
         sanitizer = self.settings.get_safe("sanitizer")
         if sanitizer == "asan":
-            self.options.with_asan = True
+            # Do not reassign recipe options here. If the global
+            # `sanitizer` setting is present but the `with_asan` option
+            # is not enabled, log a clear warning so users can fix their
+            # profiles. This keeps behavior explicit and avoids Conan
+            # errors about modifying fixed options.
+            if not bool(getattr(self.options, "with_asan", False)):
+                self.output.warning(
+                    "Profile sets sanitizer=asan; please set "
+                    "Oxygen/*:with_asan=True in your profile to enable ASAN"
+                )
 
         if self.options.shared:
             self.options.rm_safe("fPIC")
@@ -129,9 +147,17 @@ class OxygenConan(ConanFile):
                 )
                 raise Exception("Invalid build configuration")
 
-        # Link to test frameworks always as static libs
-        self.options["gtest"].shared = False
-        self.options["catch2"].shared = False
+        # Link to test frameworks always as static libs (guard if not present)
+        try:
+            self.options["gtest"].shared = False
+        except Exception:
+            # gtest may not be present in this configuration
+            pass
+        try:
+            self.options["catch2"].shared = False
+        except Exception:
+            # catch2 may not be present in this configuration
+            pass
 
         # Enable tinyexr to build with threading and OpenMP support when available
         try:
@@ -148,14 +174,32 @@ class OxygenConan(ConanFile):
             # If pdcurses isn't present in this configuration, ignore silently
             pass
 
+    @property
+    def _is_ninja(self):
+        """Identify if Ninja (Multi-Config) is requested via conf or environment."""
+        gen = self.conf.get("tools.cmake.cmaketoolchain:generator", default="")
+        return "Ninja" in str(gen) or (not gen and "VSCODE_PID" in os.environ)
+
+    @property
+    def _with_asan(self):
+        """Determine if ASAN is enabled via settings or options."""
+        if self.settings.get_safe("sanitizer") == "asan":
+            return True
+        try:
+            return bool(self.options.get_safe("with_asan"))
+        except Exception:
+            return False
+
     def generate(self):
         tc = CMakeToolchain(self)
-
-        # We want to use conan generated presets, but we want to have our own
-        # ones too. Specify the path of ConanPresets so that it's not put in
-        # place where we cannot `include` it.
         tc.absolute_paths = True
-        tc.user_presets_path = "ConanPresets.json"
+        # Use distinct preset names to allow simultaneous builds without collisions
+        # Match the exact MixedCase naming used in tools/presets/BasePresets.json
+        tc.user_presets_path = (
+            "ConanPresets-Ninja.json"
+            if self._is_ninja
+            else "ConanPresets-VS.json"
+        )
 
         self._set_cmake_defs(tc.variables)
         if is_msvc(self):
@@ -163,10 +207,13 @@ class OxygenConan(ConanFile):
                 not is_msvc_static_runtime(self)
             )
 
-        sanitizer = self.settings.get_safe("sanitizer")
-        enable_asan = sanitizer == "asan" or bool(self.options.with_asan)
+        # Restored ASAN logic
+        # Only enable ASan when the explicit option `with_asan` is set.
+        # Do not fall back to the `sanitizer` setting to avoid
+        # unpredictable behavior from implicit profile values.
+        enable_asan = self._with_asan
+        tc.variables["OXYGEN_WITH_ASAN"] = "ON" if enable_asan else "OFF"
 
-        # Check if we need to enable COVERAGE
         if self.options.with_coverage:
             tc.cache_variables["OXYGEN_WITH_COVERAGE"] = "ON"
 
@@ -176,12 +223,18 @@ class OxygenConan(ConanFile):
         deps.generate()
 
     def layout(self):
-        # Use the cmake layout with a custom build dir,
-        cmake_layout(self, build_folder="out/build")
-        # and add the generated headers to the includedirs
-        generated_headers = os.path.join(self.folders.build, "include")
-        build_info: Any = self.cpp.build  # type: ignore
-        build_info.includedirs.append(generated_headers)
+        # Dynamically set build folder based on the generator and ASAN status
+        suffix = "ninja" if self._is_ninja else "vs"
+        if self._with_asan:
+            suffix = f"asan-{suffix}"
+
+        build_folder = f"out/build-{suffix}"
+        cmake_layout(self, build_folder=build_folder)
+
+        # Ensure generated headers are available to the build
+        self.cpp.build.includedirs.append(
+            os.path.join(self.folders.build, "include")
+        )
 
     def _set_cmake_defs(self, defs):
         defs["OXYGEN_BUILD_TOOLS"] = self.options.tools
@@ -253,6 +306,17 @@ class OxygenConan(ConanFile):
 
     def deploy(self):
         test_deps = getattr(self, "_test_deps", set())
+
+        def try_copy(patterns, src, dst, pkg_name):
+            for pattern in patterns:
+                try:
+                    copy(self, pattern, src=src, dst=dst)
+                except Exception as e:
+                    self.output.error(
+                        f"Failed copying {pattern} from {pkg_name}: {e}"
+                    )
+                    raise
+
         for dep in self.dependencies.values():
             # Derive a safe package name (ref may be None for some deps)
             try:
@@ -272,72 +336,40 @@ class OxygenConan(ConanFile):
                     name = "unknown"
 
             # ---- Headers (namespaced per package) ----
-            for incdir in dep.cpp_info.includedirs:
+            for incdir in getattr(dep.cpp_info, "includedirs", []) or []:
+                try:
+                    copy(
+                        self,
+                        "*",
+                        src=incdir,
+                        dst=os.path.join(self.deploy_folder, "include"),
+                    )
+                except Exception as e:
+                    self.output.error(
+                        f"Failed copying headers from {name}: {e}"
+                    )
+                    raise
 
-                copy(
-                    self,
-                    "*",
-                    src=incdir,
-                    dst=os.path.join(self.deploy_folder, "include"),
+            # Static/import libs go to lib; shared libs may be in libdirs but belong in bin
+            for libdir in getattr(dep.cpp_info, "libdirs", []) or []:
+                try_copy(
+                    ["*.lib", "*.a"],
+                    libdir,
+                    os.path.join(self.deploy_folder, "lib"),
+                    name,
                 )
-
-            # Static + import libs
-            for libdir in dep.cpp_info.libdirs:
-                copy(
-                    self,
-                    "*.lib",
-                    src=libdir,
-                    dst=os.path.join(self.deploy_folder, "lib"),
-                )
-                copy(
-                    self,
-                    "*.a",
-                    src=libdir,
-                    dst=os.path.join(self.deploy_folder, "lib"),
-                )
-                # DLLs sometimes land here too
-                copy(
-                    self,
-                    "*.dll",
-                    src=libdir,
-                    dst=os.path.join(self.deploy_folder, "bin"),
-                )
-                copy(
-                    self,
-                    "*.so*",
-                    src=libdir,
-                    dst=os.path.join(self.deploy_folder, "bin"),
-                )
-                copy(
-                    self,
-                    "*.dylib*",
-                    src=libdir,
-                    dst=os.path.join(self.deploy_folder, "bin"),
+                try_copy(
+                    ["*.dll", "*.so*", "*.dylib*"],
+                    libdir,
+                    os.path.join(self.deploy_folder, "bin"),
+                    name,
                 )
 
-            # Executables + DLLs in bindirs
-            for bindir in dep.cpp_info.bindirs:
-                copy(
-                    self,
-                    "*.exe",
-                    src=bindir,
-                    dst=os.path.join(self.deploy_folder, "bin"),
-                )
-                copy(
-                    self,
-                    "*.dll",
-                    src=bindir,
-                    dst=os.path.join(self.deploy_folder, "bin"),
-                )
-                copy(
-                    self,
-                    "*.so*",
-                    src=bindir,
-                    dst=os.path.join(self.deploy_folder, "bin"),
-                )
-                copy(
-                    self,
-                    "*.dylib*",
-                    src=bindir,
-                    dst=os.path.join(self.deploy_folder, "bin"),
+            # Executables + shared objects in bindirs
+            for bindir in getattr(dep.cpp_info, "bindirs", []) or []:
+                try_copy(
+                    ["*.exe", "*.dll", "*.so*", "*.dylib*"],
+                    bindir,
+                    os.path.join(self.deploy_folder, "bin"),
+                    name,
                 )

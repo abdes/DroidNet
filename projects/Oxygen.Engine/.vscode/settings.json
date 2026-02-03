@@ -7,7 +7,7 @@
     "C_Cpp.codeAnalysis.exclude": {
         "**/*.h.in": true
     },
-    "C_Cpp.default.compileCommands": "${workspaceFolder}/out/build/compile_commands.json",
+    "C_Cpp.default.compileCommands": "${command:cmake.buildDirectory}/compile_commands.json",
     "C_Cpp.default.defines": [
         "LOGURU_USE_FMTLIB=1"
     ],
@@ -36,7 +36,7 @@
         "**/${workspaceFolder}/out": true
     },
     "[cpp]": {
-        "editor.defaultFormatter": "ms-vscode.cpptools",
+        "editor.defaultFormatter": "xaver.clang-format",
         "editor.formatOnSave": true
     },
     "[python]": {
@@ -90,8 +90,7 @@
         ]
     },
     "yaml.validate": true,
-    "cmake.sourceDirectory": "F:/projects/DroidNet/projects/Oxygen.Engine",
-    "dotnet.testWindow.useTestingPlatformProtocol": true,
+    "cmake.useCMakePresets": "always",
     "editor.rulers": [
         80,
         {

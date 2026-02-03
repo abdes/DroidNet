@@ -1,8 +1,6 @@
 {
   "version": 6,
   "include": [
-    "./tools/presets/WindowsPresets.json",
-    "./tools/presets/LinuxPresets.json",
-    "./tools/presets/MacPresets.json"
+    "./tools/presets/WindowsPresets.json"
   ]
 }

@@ -82,6 +82,11 @@ set_property(
 )
 set(IDE_FOLDER "${META_PROJECT_NAME}")
 
+# Silence redundant toolchain warnings (often caused by IDEs passing the
+# toolchain manually when it is already defined in the CMake preset).
+if(CMAKE_TOOLCHAIN_FILE)
+endif()
+
 # Declare project
 project(
   ${META_PROJECT_NAME}
@@ -89,6 +94,7 @@ project(
   DESCRIPTION ${META_PROJECT_DESCRIPTION}
   HOMEPAGE_URL ${META_GITHUB_REPO}
   LANGUAGES
+    C
     CXX
 )
 
@@ -165,18 +171,15 @@ foreach(index RANGE 0 ${OPTIONS_LIST_length} 3)
   math(EXPR index "${index}+1")
   list(GET OPTIONS_LIST ${index} OPTION_DEFAULT)
 
-  if(DEFINED ${OPTION_NAME})
-    if(NOT "${${OPTION_NAME}}" STREQUAL "$CACHE{${OPTION_NAME}}")
-      message(
-        STATUS
-        ". ${OPTION_NAME}: ${${OPTION_NAME}} - provided (cache: $CACHE{${OPTION_NAME}})"
-      )
-    else()
-      message(STATUS ". ${OPTION_NAME}: ${${OPTION_NAME}} - cache")
-    endif()
+  if(DEFINED CACHE{${OPTION_NAME}})
+    set(${OPTION_NAME} "$CACHE{${OPTION_NAME}}")
+    message(STATUS ". ${OPTION_NAME}: ${${OPTION_NAME}} - cache")
+  elseif(DEFINED ${OPTION_NAME})
+    set(${OPTION_NAME} "${${OPTION_NAME}}" CACHE BOOL ${OPTION_DESCRIPTION})
+    message(STATUS ". ${OPTION_NAME}: ${${OPTION_NAME}} - toolchain")
   else()
-    set(${OPTION_NAME} ${OPTION_DEFAULT} CACHE BOOL ${OPTION_DESCRIPTION} FORCE)
-    message(STATUS ". ${OPTION_NAME}: ${${OPTION_NAME}} - force set")
+    set(${OPTION_NAME} ${OPTION_DEFAULT} CACHE BOOL ${OPTION_DESCRIPTION})
+    message(STATUS ". ${OPTION_NAME}: ${${OPTION_NAME}} - default")
   endif()
 endforeach()
 
@@ -189,9 +192,7 @@ endforeach()
 # different for every preset and can be different as well when the user decides
 # to build somewhere else. Currently we cannot configure this properly in vscode
 # settings. See https://github.com/clangd/vscode-clangd/issues/48
-if(NOT EXISTS ${CMAKE_SOURCE_DIR}/.clangd)
-  configure_file(.clangd.in ${CMAKE_SOURCE_DIR}/.clangd @ONLY)
-endif()
+configure_file(.clangd.in ${CMAKE_SOURCE_DIR}/.clangd @ONLY)
 
 # ------------------------------------------------------------------------------
 # Testing
@@ -263,10 +264,32 @@ if(OXYGEN_WITH_ASAN)
     add_link_options("-fsanitize=address")
   endif()
   if(MSVC)
+    # ASAN on MSVC does not support incremental linking. We must ensure that
+    # /INCREMENTAL:NO is set in the cache variables so that it's reflected
+    # in the IDE and all link commands correctly.
+    set(CMAKE_MSVC_INCREMENTAL_LINKING OFF CACHE BOOL "Disable incremental linking for ASAN" FORCE)
+    set(CMAKE_MSVC_INCREMENTAL_LINKING_DEBUG OFF CACHE BOOL "Disable incremental linking for ASAN" FORCE)
+    set(CMAKE_MSVC_INCREMENTAL_LINKING_MINSIZEREL OFF CACHE BOOL "Disable incremental linking for ASAN" FORCE)
+    set(CMAKE_MSVC_INCREMENTAL_LINKING_RELEASE OFF CACHE BOOL "Disable incremental linking for ASAN" FORCE)
+    set(CMAKE_MSVC_INCREMENTAL_LINKING_RELWITHDEBINFO OFF CACHE BOOL "Disable incremental linking for ASAN" FORCE)
+    set_property(DIRECTORY PROPERTY MSVC_INCREMENTAL_LINKING OFF)
+    set(CMAKE_EXE_LINKER_FLAGS_DEBUG "/debug /INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
+    set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "/INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "/INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
+    set(CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO "/debug /INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
+    set(CMAKE_MODULE_LINKER_FLAGS_DEBUG "/debug /INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
+    set(CMAKE_MODULE_LINKER_FLAGS_MINSIZEREL "/INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
+    set(CMAKE_MODULE_LINKER_FLAGS_RELEASE "/INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
+    set(CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO "/debug /INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
+    set(CMAKE_SHARED_LINKER_FLAGS_DEBUG "/debug /INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
+    set(CMAKE_SHARED_LINKER_FLAGS_MINSIZEREL "/INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
+    set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "/INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
+    set(CMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO "/debug /INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
+
     add_link_options(
       /LARGEADDRESSAWARE
       /DEBUG
-      /INCREMENTAL:NO # Disable incremental linking.
+      /INCREMENTAL:NO # Ensure it is also added to the link command
     )
   endif()
 endif()

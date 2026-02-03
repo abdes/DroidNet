@@ -6,5 +6,5 @@
 
 CompileFlags:
   CompilationDatabase: "@CMAKE_BINARY_DIR@"
-  Add: [-std=c++23, -Wno-unknown-warning-option]
-  Remove: [-m*, -f*]
+  Add: [/std:c++latest, -Wno-unknown-warning-option, -fms-compatibility, -fms-extensions]
+  Remove: [-MDd, -m*, -std=*, /std:*]
