@@ -5,79 +5,21 @@
   ],
   "configurePresets": [
     {
-      "name": "windows",
-      "inherits": "base",
-      "hidden": true,
-      "installDir": "${sourceDir}/out/install",
-      "cacheVariables": {
-        "USE_PIX": "ON"
-      },
-      "vendor": {
-        "microsoft.com/VisualStudioSettings/CMake/1.0": {
-          "hostOS": [
-            "Windows"
-          ],
-          "enableMicrosoftCodeAnalysis": true,
-          "enableClangTidyCodeAnalysis": true
-        }
-      }
-    },
-    {
-      "name": "windows-debug",
-      "inherits": "windows",
-      "cacheVariables": {
-        "OXYGEN_WITH_ASAN": "OFF"
-      }
-    },
-    {
-      "name": "windows-release",
-      "inherits": "windows",
-      "cacheVariables": {
-        "OXYGEN_WITH_ASAN": "OFF"
-      }
-    },
-    {
-      "name": "windows-asan",
-      "inherits": "windows-debug",
-      "cacheVariables": {
-        "OXYGEN_WITH_ASAN": "ON"
-      }
+      "name": "windows-default",
+      "displayName": "Windows Default (Ninja)",
+      "inherits": "default"
     }
   ],
   "buildPresets": [
     {
       "name": "windows-debug",
-      "inherits": "base-debug",
-      "configurePreset": "windows-debug"
+      "inherits": "build-debug",
+      "configurePreset": "windows-default"
     },
     {
       "name": "windows-release",
-      "inherits": "base-release",
-      "configurePreset": "windows-release"
-    },
-    {
-      "name": "windows-relwithdebinfo",
-      "inherits": "base-relwithdebinfo",
-      "configurePreset": "windows"
-    },
-    {
-      "name": "windows-asan",
-      "inherits": "windows-debug",
-      "configurePreset": "windows-asan"
-    }
-  ],
-  "testPresets": [
-    {
-      "name": "test-windows",
-      "inherits": [
-        "test-base"
-      ],
-      "configurePreset": "windows",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
-      }
+      "inherits": "build-release",
+      "configurePreset": "windows-default"
     }
   ]
 }
