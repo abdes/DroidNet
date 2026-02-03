@@ -33,17 +33,30 @@ if ($hostProfilePath) {
     $isAsan = [bool](Select-String -Path $hostProfilePath -Pattern "^\s*sanitizer\s*=\s*asan\s*$")
 }
 
-# Clean up
-Write-Host "Cleaning build environment..." -ForegroundColor Gray
-$outDir = "$PSScriptRoot/../out"
-if (Test-Path $outDir) { Remove-Item -Path $outDir -Recurse -Force -ErrorAction SilentlyContinue }
-Remove-Item -Path "$PSScriptRoot/../CMakeCache.txt", "$PSScriptRoot/../CMakeFiles", "$PSScriptRoot/../_deps" -Recurse -Force -ErrorAction SilentlyContinue
-
-$ninjaPreset = "windows-ninja"
 $suffix = if ($isAsan) { "asan-" } else { "" }
 $vsBuildDir = "out/build-${suffix}vs"
 $ninjaBuildDir = "out/build-${suffix}ninja"
-$configurations = @("Debug", "Release")
+$configurations = if ($isAsan) { @("Debug") } else { @("Debug", "Release") }
+
+# Clean up specific directories
+Write-Host "Cleaning build environment..." -ForegroundColor Gray
+$targetsToClean = @(
+    (Join-Path $repoRoot $vsBuildDir),
+    (Join-Path $repoRoot $ninjaBuildDir)
+)
+
+foreach ($config in $configurations) {
+    $sub = if ($isAsan) { "Asan" } else { $config }
+    $targetsToClean += (Join-Path $repoRoot $DeployerFolder $sub)
+}
+
+foreach ($target in $targetsToClean) {
+    if (Test-Path $target) {
+        Remove-Item -Path $target -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+$ninjaPreset = "windows-ninja"
 
 # Common base args
 $conanBaseArgs = @(
@@ -52,7 +65,11 @@ $conanBaseArgs = @(
     "--build=$Build",
     "--deployer-folder=$DeployerFolder",
     "--deployer-package=$DeployerPackage",
-    "-c", "tools.cmake.cmakedeps:new=will_break_next"
+    "-c", "tools.cmake.cmakedeps:new=will_break_next",
+    # Force binary isolation in the Conan cache so that ASan and non-ASan
+    # dependencies are treated as different packages and don't pollute each other.
+    "-c", "tools.info.package_id:confs=['user.oxygen:sanitizer']",
+    "-c", "user.oxygen:sanitizer=$($isAsan ? 'asan' : 'none')"
 )
 
 Write-Host "`n=== Phase 1: Ninja Multi-Config ===" -ForegroundColor Cyan

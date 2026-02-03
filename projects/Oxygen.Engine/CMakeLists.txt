@@ -184,6 +184,38 @@ foreach(index RANGE 0 ${OPTIONS_LIST_length} 3)
 endforeach()
 
 # ------------------------------------------------------------------------------
+# Installation Setup
+# ------------------------------------------------------------------------------
+
+if(NOT DEFINED OXYGEN_CONAN_DEPLOY_DIR)
+  set(OXYGEN_CONAN_DEPLOY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/out/install")
+endif()
+
+if(OXYGEN_WITH_ASAN)
+  set(_OXYGEN_INSTALL_SUBDIR "Asan")
+else()
+  get_property(_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+  if(_IS_MULTI_CONFIG)
+    # For multi-config generators, CMAKE_BUILD_TYPE is not available.
+    # Default to 'Debug' for the install prefix; users can override
+    # at install time using --prefix if needed.
+    set(_OXYGEN_INSTALL_SUBDIR "Debug")
+  else()
+    set(_OXYGEN_INSTALL_SUBDIR "${CMAKE_BUILD_TYPE}")
+  endif()
+endif()
+
+if(NOT _OXYGEN_INSTALL_SUBDIR STREQUAL "")
+  set(
+    CMAKE_INSTALL_PREFIX
+    "${OXYGEN_CONAN_DEPLOY_DIR}/${_OXYGEN_INSTALL_SUBDIR}"
+    CACHE PATH
+    "Install path prefix, prepended onto install directories."
+    FORCE
+  )
+endif()
+
+# ------------------------------------------------------------------------------
 # Top level code generation
 # ------------------------------------------------------------------------------
 
@@ -267,24 +299,131 @@ if(OXYGEN_WITH_ASAN)
     # ASAN on MSVC does not support incremental linking. We must ensure that
     # /INCREMENTAL:NO is set in the cache variables so that it's reflected
     # in the IDE and all link commands correctly.
-    set(CMAKE_MSVC_INCREMENTAL_LINKING OFF CACHE BOOL "Disable incremental linking for ASAN" FORCE)
-    set(CMAKE_MSVC_INCREMENTAL_LINKING_DEBUG OFF CACHE BOOL "Disable incremental linking for ASAN" FORCE)
-    set(CMAKE_MSVC_INCREMENTAL_LINKING_MINSIZEREL OFF CACHE BOOL "Disable incremental linking for ASAN" FORCE)
-    set(CMAKE_MSVC_INCREMENTAL_LINKING_RELEASE OFF CACHE BOOL "Disable incremental linking for ASAN" FORCE)
-    set(CMAKE_MSVC_INCREMENTAL_LINKING_RELWITHDEBINFO OFF CACHE BOOL "Disable incremental linking for ASAN" FORCE)
-    set_property(DIRECTORY PROPERTY MSVC_INCREMENTAL_LINKING OFF)
-    set(CMAKE_EXE_LINKER_FLAGS_DEBUG "/debug /INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
-    set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "/INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
-    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "/INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
-    set(CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO "/debug /INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
-    set(CMAKE_MODULE_LINKER_FLAGS_DEBUG "/debug /INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
-    set(CMAKE_MODULE_LINKER_FLAGS_MINSIZEREL "/INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
-    set(CMAKE_MODULE_LINKER_FLAGS_RELEASE "/INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
-    set(CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO "/debug /INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
-    set(CMAKE_SHARED_LINKER_FLAGS_DEBUG "/debug /INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
-    set(CMAKE_SHARED_LINKER_FLAGS_MINSIZEREL "/INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
-    set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "/INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
-    set(CMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO "/debug /INCREMENTAL:NO" CACHE STRING "Forced ASAN linker flags" FORCE)
+    set(
+      CMAKE_MSVC_INCREMENTAL_LINKING
+      OFF
+      CACHE BOOL
+      "Disable incremental linking for ASAN"
+      FORCE
+    )
+    set(
+      CMAKE_MSVC_INCREMENTAL_LINKING_DEBUG
+      OFF
+      CACHE BOOL
+      "Disable incremental linking for ASAN"
+      FORCE
+    )
+    set(
+      CMAKE_MSVC_INCREMENTAL_LINKING_MINSIZEREL
+      OFF
+      CACHE BOOL
+      "Disable incremental linking for ASAN"
+      FORCE
+    )
+    set(
+      CMAKE_MSVC_INCREMENTAL_LINKING_RELEASE
+      OFF
+      CACHE BOOL
+      "Disable incremental linking for ASAN"
+      FORCE
+    )
+    set(
+      CMAKE_MSVC_INCREMENTAL_LINKING_RELWITHDEBINFO
+      OFF
+      CACHE BOOL
+      "Disable incremental linking for ASAN"
+      FORCE
+    )
+    set_property(
+      DIRECTORY
+      PROPERTY
+        MSVC_INCREMENTAL_LINKING
+          OFF
+    )
+    set(
+      CMAKE_EXE_LINKER_FLAGS_DEBUG
+      "/debug /INCREMENTAL:NO"
+      CACHE STRING
+      "Forced ASAN linker flags"
+      FORCE
+    )
+    set(
+      CMAKE_EXE_LINKER_FLAGS_MINSIZEREL
+      "/INCREMENTAL:NO"
+      CACHE STRING
+      "Forced ASAN linker flags"
+      FORCE
+    )
+    set(
+      CMAKE_EXE_LINKER_FLAGS_RELEASE
+      "/INCREMENTAL:NO"
+      CACHE STRING
+      "Forced ASAN linker flags"
+      FORCE
+    )
+    set(
+      CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO
+      "/debug /INCREMENTAL:NO"
+      CACHE STRING
+      "Forced ASAN linker flags"
+      FORCE
+    )
+    set(
+      CMAKE_MODULE_LINKER_FLAGS_DEBUG
+      "/debug /INCREMENTAL:NO"
+      CACHE STRING
+      "Forced ASAN linker flags"
+      FORCE
+    )
+    set(
+      CMAKE_MODULE_LINKER_FLAGS_MINSIZEREL
+      "/INCREMENTAL:NO"
+      CACHE STRING
+      "Forced ASAN linker flags"
+      FORCE
+    )
+    set(
+      CMAKE_MODULE_LINKER_FLAGS_RELEASE
+      "/INCREMENTAL:NO"
+      CACHE STRING
+      "Forced ASAN linker flags"
+      FORCE
+    )
+    set(
+      CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO
+      "/debug /INCREMENTAL:NO"
+      CACHE STRING
+      "Forced ASAN linker flags"
+      FORCE
+    )
+    set(
+      CMAKE_SHARED_LINKER_FLAGS_DEBUG
+      "/debug /INCREMENTAL:NO"
+      CACHE STRING
+      "Forced ASAN linker flags"
+      FORCE
+    )
+    set(
+      CMAKE_SHARED_LINKER_FLAGS_MINSIZEREL
+      "/INCREMENTAL:NO"
+      CACHE STRING
+      "Forced ASAN linker flags"
+      FORCE
+    )
+    set(
+      CMAKE_SHARED_LINKER_FLAGS_RELEASE
+      "/INCREMENTAL:NO"
+      CACHE STRING
+      "Forced ASAN linker flags"
+      FORCE
+    )
+    set(
+      CMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO
+      "/debug /INCREMENTAL:NO"
+      CACHE STRING
+      "Forced ASAN linker flags"
+      FORCE
+    )
 
     add_link_options(
       /LARGEADDRESSAWARE

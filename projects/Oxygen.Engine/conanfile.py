@@ -11,6 +11,7 @@ from conan.tools.cmake import CMakeToolchain, CMakeDeps  # type: ignore
 from conan.tools.files import load, copy  # type: ignore
 from conan.tools.cmake import cmake_layout, CMake  # type: ignore
 from conan.tools.microsoft import is_msvc_static_runtime, is_msvc  # type: ignore
+from conan.errors import ConanInvalidConfiguration  # type: ignore
 from pathlib import Path
 
 
@@ -174,6 +175,13 @@ class OxygenConan(ConanFile):
             # If pdcurses isn't present in this configuration, ignore silently
             pass
 
+    def validate(self):
+        if self._with_asan and self.settings.build_type != "Debug":
+            raise ConanInvalidConfiguration(
+                "ASan is only supported for Debug builds. "
+                f"Current build_type is {self.settings.build_type}."
+            )
+
     @property
     def _is_ninja(self):
         """Identify if Ninja (Multi-Config) is requested via conf or environment."""
@@ -189,6 +197,11 @@ class OxygenConan(ConanFile):
             return bool(self.options.get_safe("with_asan"))
         except Exception:
             return False
+
+    @property
+    def _install_subfolder(self):
+        """Determine the subfolder for deployment/installation: (Debug, Release, Asan)."""
+        return "Asan" if self._with_asan else str(self.settings.build_type)
 
     def generate(self):
         tc = CMakeToolchain(self)
@@ -206,6 +219,14 @@ class OxygenConan(ConanFile):
             tc.variables["USE_MSVC_RUNTIME_LIBRARY_DLL"] = (
                 not is_msvc_static_runtime(self)
             )
+
+        # Set OXYGEN_CONAN_DEPLOY_DIR to the base install directory.
+        # CMakeLists.txt will append the configuration (Debug, Release, Asan)
+        # to form the actual CMAKE_INSTALL_PREFIX.
+        install_base = os.path.join(self.recipe_folder, "out", "install")
+        tc.variables["OXYGEN_CONAN_DEPLOY_DIR"] = (
+            install_base.replace("\\", "/")
+        )
 
         # Restored ASAN logic
         # Only enable ASan when the explicit option `with_asan` is set.
@@ -307,6 +328,11 @@ class OxygenConan(ConanFile):
     def deploy(self):
         test_deps = getattr(self, "_test_deps", set())
 
+        # Determine the target subfolder for deployment using the common logic
+        target_deploy_folder = os.path.join(
+            self.deploy_folder, self._install_subfolder
+        )
+
         def try_copy(patterns, src, dst, pkg_name):
             for pattern in patterns:
                 try:
@@ -342,7 +368,7 @@ class OxygenConan(ConanFile):
                         self,
                         "*",
                         src=incdir,
-                        dst=os.path.join(self.deploy_folder, "include"),
+                        dst=os.path.join(target_deploy_folder, "include"),
                     )
                 except Exception as e:
                     self.output.error(
@@ -355,13 +381,13 @@ class OxygenConan(ConanFile):
                 try_copy(
                     ["*.lib", "*.a"],
                     libdir,
-                    os.path.join(self.deploy_folder, "lib"),
+                    os.path.join(target_deploy_folder, "lib"),
                     name,
                 )
                 try_copy(
                     ["*.dll", "*.so*", "*.dylib*"],
                     libdir,
-                    os.path.join(self.deploy_folder, "bin"),
+                    os.path.join(target_deploy_folder, "bin"),
                     name,
                 )
 
@@ -370,6 +396,6 @@ class OxygenConan(ConanFile):
                 try_copy(
                     ["*.exe", "*.dll", "*.so*", "*.dylib*"],
                     bindir,
-                    os.path.join(self.deploy_folder, "bin"),
+                    os.path.join(target_deploy_folder, "bin"),
                     name,
                 )
