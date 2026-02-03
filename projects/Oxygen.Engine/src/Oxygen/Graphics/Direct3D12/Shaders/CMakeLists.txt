@@ -20,13 +20,24 @@ set(SHADER_LIBRARY_OUTPUT "${CMAKE_SOURCE_DIR}/bin/Oxygen/shaders.bin")
 # The ShaderBake tool target name (executable)
 set(OXYGEN_D3D12_SHADERBAKE_TARGET "oxygen-graphics-direct3d12-shaderbake")
 
+set(
+  _OXYGEN_INSTALL_CONFIG_DIR
+  "$<IF:$<BOOL:${OXYGEN_WITH_ASAN}>,Asan,$<CONFIG>>"
+)
+set(
+  _OXYGEN_CONAN_BIN_DIR
+  "${OXYGEN_CONAN_DEPLOY_DIR}/${_OXYGEN_INSTALL_CONFIG_DIR}/bin"
+)
+
 add_custom_command(
   OUTPUT
     "${SHADER_LIBRARY_OUTPUT}"
   COMMAND
-    ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/bin/Oxygen"
+    "${CMAKE_COMMAND}" -E make_directory "${CMAKE_SOURCE_DIR}/bin/Oxygen"
   COMMAND
-    $<TARGET_FILE:${OXYGEN_D3D12_SHADERBAKE_TARGET}> --workspace-root
+    "${CMAKE_COMMAND}" -E env
+    "PATH=$<TARGET_FILE_DIR:${OXYGEN_D3D12_SHADERBAKE_TARGET}>;${_OXYGEN_CONAN_BIN_DIR};$ENV{PATH}"
+    "$<TARGET_FILE:${OXYGEN_D3D12_SHADERBAKE_TARGET}>" --workspace-root
     "${CMAKE_SOURCE_DIR}" --out "${SHADER_LIBRARY_OUTPUT}"
   WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
   VERBATIM

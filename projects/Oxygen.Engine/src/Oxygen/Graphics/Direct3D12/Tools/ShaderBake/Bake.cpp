@@ -11,13 +11,13 @@
 #include <fstream>
 #include <ios>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include <fmt/format.h>
 #include <windows.h>
 
 #include <Oxygen/Base/Hash.h>
@@ -89,14 +89,15 @@ namespace {
 
     std::vector<std::byte> data;
     data.resize(size);
-    if (!GetFileVersionInfoW(file_w.c_str(), handle, size, data.data())) {
+    if (GetFileVersionInfoW(file_w.c_str(), handle, size, data.data()) == 0) {
       return std::nullopt;
     }
 
     VS_FIXEDFILEINFO* file_info = nullptr;
     UINT file_info_len = 0;
-    if (!VerQueryValueW(data.data(), L"\\",
-          reinterpret_cast<void**>(&file_info), &file_info_len)
+    if (VerQueryValueW(data.data(), L"\\", reinterpret_cast<void**>(&file_info),
+          &file_info_len)
+        == 0
       || file_info == nullptr || file_info_len < sizeof(VS_FIXEDFILEINFO)) {
       return std::nullopt;
     }
@@ -135,7 +136,9 @@ namespace {
   {
     std::ifstream in(file, std::ios::binary);
     if (!in.is_open()) {
-      throw std::runtime_error("failed to open shader source file");
+      throw std::runtime_error(
+        fmt::format("failed to open shader source file: {}",
+          WideToUtf8String(file.wstring())));
     }
 
     std::vector<char> bytes(
@@ -266,7 +269,8 @@ auto BakeShaderLibrary(const BakeArgs& args) -> int
 {
   LOG_SCOPE_F(INFO, "ShaderBake");
 
-  DxcShaderCompiler compiler(DxcShaderCompiler::Config { .name = "DXC" });
+  DxcShaderCompiler compiler(
+    DxcShaderCompiler::Config { .name = "DXC", .global_defines = {} });
   DxcShaderCompiler::CompileOptions options {
     .include_dirs = BuildIncludeDirs(args),
     .defines = {},
