@@ -15,6 +15,7 @@
 #include <d3dcommon.h>
 #include <minwindef.h>
 
+#include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Base/logging.h>
 
@@ -453,8 +454,8 @@ struct D3d12RootSignatureDesc : public D3D12_ROOT_SIGNATURE_DESC1 {
   }
 };
 
-#pragma warning(push)
-#pragma warning(disable : 4324) // disable padding warning
+OXYGEN_DIAGNOSTIC_PUSH
+OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4324) // disable padding warning
 template <D3D12_PIPELINE_STATE_SUBOBJECT_TYPE Type, typename T>
 class alignas(void*) D3D12PipelineStateSubObject {
 public:
@@ -473,7 +474,7 @@ private:
   D3D12_PIPELINE_STATE_SUBOBJECT_TYPE type_ { Type };
   T sub_object_ {};
 };
-#pragma warning(pop)
+OXYGEN_DIAGNOSTIC_POP
 
 // Pipeline State SubObject (PSS) macro
 #define PSS(name, ...)                                                         \

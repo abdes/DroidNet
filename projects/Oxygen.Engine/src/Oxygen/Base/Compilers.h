@@ -439,24 +439,49 @@
 #if defined(OXYGEN_DIAGNOSTIC_DISABLE)
 #  undef OXYGEN_DIAGNOSTIC_DISABLE
 #endif
+#if defined(OXYGEN_DIAGNOSTIC_DISABLE_CLANG)
+#  undef OXYGEN_DIAGNOSTIC_DISABLE_CLANG
+#endif
+#if defined(OXYGEN_DIAGNOSTIC_DISABLE_MSVC)
+#  undef OXYGEN_DIAGNOSTIC_DISABLE_MSVC
+#endif
+#if defined(OXYGEN_DIAGNOSTIC_DISABLE_GCC)
+#  undef OXYGEN_DIAGNOSTIC_DISABLE_GCC
+#endif
 
 #if defined(OXYGEN_CLANG_VERSION)
 #  define OXYGEN_DIAGNOSTIC_PUSH _Pragma("clang diagnostic push")
 #  define OXYGEN_DIAGNOSTIC_POP _Pragma("clang diagnostic pop")
 #  define OXYGEN_DIAGNOSTIC_DISABLE(id)                                        \
     OXYGEN_PRAGMA(clang diagnostic ignored id)
+#  define OXYGEN_DIAGNOSTIC_DISABLE_CLANG(id) OXYGEN_DIAGNOSTIC_DISABLE(id)
+#  if defined(OXYGEN_MSVC_VERSION)
+#    define OXYGEN_DIAGNOSTIC_DISABLE_MSVC(id) __pragma(warning(disable : id))
+#  else
+#    define OXYGEN_DIAGNOSTIC_DISABLE_MSVC(id)
+#  endif
+#  define OXYGEN_DIAGNOSTIC_DISABLE_GCC(id)
 #elif OXYGEN_GCC_VERSION_CHECK(4, 6, 0)
 #  define OXYGEN_DIAGNOSTIC_PUSH _Pragma("GCC diagnostic push")
 #  define OXYGEN_DIAGNOSTIC_POP _Pragma("GCC diagnostic pop")
 #  define OXYGEN_DIAGNOSTIC_DISABLE(id) OXYGEN_PRAGMA(GCC diagnostic ignored id)
+#  define OXYGEN_DIAGNOSTIC_DISABLE_CLANG(id)
+#  define OXYGEN_DIAGNOSTIC_DISABLE_MSVC(id)
+#  define OXYGEN_DIAGNOSTIC_DISABLE_GCC(id) OXYGEN_DIAGNOSTIC_DISABLE(id)
 #elif OXYGEN_MSVC_VERSION_CHECK(15, 0, 0)
 #  define OXYGEN_DIAGNOSTIC_PUSH __pragma(warning(push))
 #  define OXYGEN_DIAGNOSTIC_POP __pragma(warning(pop))
 #  define OXYGEN_DIAGNOSTIC_DISABLE(id) __pragma(warning(disable : id))
+#  define OXYGEN_DIAGNOSTIC_DISABLE_CLANG(id)
+#  define OXYGEN_DIAGNOSTIC_DISABLE_MSVC(id) OXYGEN_DIAGNOSTIC_DISABLE(id)
+#  define OXYGEN_DIAGNOSTIC_DISABLE_GCC(id)
 #else
 #  define OXYGEN_DIAGNOSTIC_PUSH
 #  define OXYGEN_DIAGNOSTIC_POP
 #  define OXYGEN_DIAGNOSTIC_DISABLE(id)
+#  define OXYGEN_DIAGNOSTIC_DISABLE_CLANG(id)
+#  define OXYGEN_DIAGNOSTIC_DISABLE_MSVC(id)
+#  define OXYGEN_DIAGNOSTIC_DISABLE_GCC(id)
 #endif
 /*!
  * \def OXYGEN_DIAGNOSTIC_PUSH

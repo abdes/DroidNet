@@ -86,14 +86,16 @@ TEST(WindowsExceptionTest, FromErrorCode)
 // We need to disable warning 4702 here because the test is expected to throw an
 // exception.
 OXYGEN_DIAGNOSTIC_PUSH
-OXYGEN_DIAGNOSTIC_DISABLE(4702)
+OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4702)
+OXYGEN_DIAGNOSTIC_DISABLE_CLANG("-Wunreachable-code")
 TEST(WindowsExceptionTest, ThrowFromLastError)
 {
   SetLastError(ERROR_ACCESS_DENIED);
   try {
     WindowsException::ThrowFromLastError();
     OXYGEN_DIAGNOSTIC_PUSH
-    OXYGEN_DIAGNOSTIC_DISABLE(4702)
+    OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4702)
+    OXYGEN_DIAGNOSTIC_DISABLE_CLANG("-Wunreachable-code")
     // ReSharper disable once CppUnreachableCode
     FAIL() << "Expected WindowsException";
     OXYGEN_DIAGNOSTIC_POP

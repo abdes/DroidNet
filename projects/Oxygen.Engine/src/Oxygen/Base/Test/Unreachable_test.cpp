@@ -13,11 +13,9 @@
 namespace {
 
 OXYGEN_DIAGNOSTIC_PUSH
-#if defined(OXYGEN_GNUC_VERSION) || defined(OXYGEN_CLANG_VERSION)
-OXYGEN_DIAGNOSTIC_DISABLE(-Wunreachable - code) // For Clang and GCC
-#elif defined(OXYGEN_MSVC_VERSION)
-OXYGEN_DIAGNOSTIC_DISABLE(4702) // For MSVC
-#endif
+OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4702)
+OXYGEN_DIAGNOSTIC_DISABLE_CLANG("-Wunreachable-code")
+OXYGEN_DIAGNOSTIC_DISABLE_GCC("-Wunreachable-code")
 
 //! Tests that unreachable code paths are not taken.
 NOLINT_TEST(UnreachableTest, IsNeverReached)
