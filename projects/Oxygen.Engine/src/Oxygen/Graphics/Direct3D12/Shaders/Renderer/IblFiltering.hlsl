@@ -31,6 +31,8 @@ struct IblFilteringPassConstants {
     uint target_uav_slot; // Texture2DArray UAV (faces as array slices)
     float roughness;
     uint face_size; // Dimensions of the target face
+    float source_intensity;
+    float3 _pad0;
 };
 
 // -----------------------------------------------------------------------------
@@ -140,6 +142,8 @@ void CS_IrradianceConvolution(uint3 DTid : SV_DispatchThreadID)
     TextureCube<float4> source = ResourceDescriptorHeap[pass.source_cubemap_slot];
     SamplerState linearSampler = SamplerDescriptorHeap[0];
 
+    const float source_scale = pass.source_intensity;
+
     float3 irradiance = 0.0;
     uint samples = 0;
 
@@ -160,7 +164,9 @@ void CS_IrradianceConvolution(uint3 DTid : SV_DispatchThreadID)
 
             // Sample Source
             // Note: source texture is also Y-up (standard D3D), so sampleVec (Y-up) is correct.
-            irradiance += source.SampleLevel(linearSampler, sampleVec, 0).rgb * cos(theta) * sin(theta);
+            irradiance += source_scale
+                * source.SampleLevel(linearSampler, sampleVec, 0).rgb
+                * cos(theta) * sin(theta);
             nrSamples++;
         }
     }
@@ -192,6 +198,8 @@ void CS_SpecularPrefilter(uint3 DTid : SV_DispatchThreadID)
     TextureCube<float4> source = ResourceDescriptorHeap[pass.source_cubemap_slot];
     SamplerState linearSampler = SamplerDescriptorHeap[0];
 
+    const float source_scale = pass.source_intensity;
+
     const uint SAMPLE_COUNT = 1024u;
     float totalWeight = 0.0;
     float3 prefilteredColor = 0.0;
@@ -222,7 +230,9 @@ void CS_SpecularPrefilter(uint3 DTid : SV_DispatchThreadID)
             float saSample = 1.0 / (float(SAMPLE_COUNT) * pdf + 0.0001);
             float mipLevel = roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel);
 
-            prefilteredColor += source.SampleLevel(linearSampler, L, mipLevel).rgb * NdotL;
+            prefilteredColor += source_scale
+                * source.SampleLevel(linearSampler, L, mipLevel).rgb
+                * NdotL;
             totalWeight      += NdotL;
         }
     }

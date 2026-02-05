@@ -44,6 +44,9 @@ struct SkyAtmosphereLutConfig {
 
   //! Sky-view LUT height (zenith parameterization).
   uint32_t sky_view_height { 216u };
+
+  //! Multiple scattering LUT size (32x32 common).
+  uint32_t multi_scat_size { 32u };
 };
 
 //! Default LUT configuration for atmosphere precomputation.
@@ -108,6 +111,16 @@ public:
     return { config_.sky_view_width, config_.sky_view_height };
   }
 
+  //! Returns shader-visible SRV index for the multiple scattering LUT.
+  OXGN_RNDR_NDAPI auto GetMultiScatLutSlot() const noexcept
+    -> ShaderVisibleIndex;
+
+  //! Returns multiple scattering LUT dimensions.
+  [[nodiscard]] auto GetMultiScatLutSize() const noexcept -> Extent<uint32_t>
+  {
+    return { config_.multi_scat_size, config_.multi_scat_size };
+  }
+
   //=== Parameter Tracking ===------------------------------------------------//
 
   //! Updates cached atmosphere parameters and sets dirty flag if changed.
@@ -153,7 +166,7 @@ public:
    When true, the LUT textures are in SRV state (ready for sampling).
    When false, they're still in their creation state (UAV).
   */
-  OXGN_RNDR_NDAPI auto HasBeenGenerated() const noexcept -> bool;
+  OXGN_RNDR_NDAPI auto HasBeenGenerated() const noexcept -> bool override;
 
   //! Marks that LUTs have been successfully generated.
   /*!
@@ -161,6 +174,13 @@ public:
    SRV state, ready for sampling in rendering passes.
   */
   OXGN_RNDR_API auto MarkGenerated() noexcept -> void;
+
+  //! Returns a monotonic generation token that increases when parameters
+  //! change.
+  [[nodiscard]] auto GetGeneration() const noexcept -> std::uint64_t override
+  {
+    return generation_;
+  }
 
   //! Returns the current planet radius in meters.
   /*!
@@ -203,6 +223,10 @@ public:
   OXGN_RNDR_NDAPI auto GetSkyViewLutTexture() const noexcept
     -> observer_ptr<graphics::Texture>;
 
+  //! Returns the multiple scattering LUT texture.
+  OXGN_RNDR_NDAPI auto GetMultiScatLutTexture() const noexcept
+    -> observer_ptr<graphics::Texture>;
+
   //! Returns shader-visible UAV index for the transmittance LUT.
   /*!
    Used by the compute pass to bind the LUT as a write target.
@@ -217,6 +241,10 @@ public:
    Returns `kInvalidShaderVisibleIndex` if resources are not yet created.
   */
   OXGN_RNDR_NDAPI auto GetSkyViewLutUavSlot() const noexcept
+    -> ShaderVisibleIndex;
+
+  //! Returns shader-visible UAV index for the multiple scattering LUT.
+  OXGN_RNDR_NDAPI auto GetMultiScatLutUavSlot() const noexcept
     -> ShaderVisibleIndex;
 
   //! Ensures textures and descriptors are created.
@@ -269,12 +297,14 @@ private:
   CachedParams cached_params_ {};
   SunState sun_state_ {};
   uint32_t atmosphere_flags_ { 0 }; //!< Debug/feature flags for LUT generation
+  std::uint64_t generation_ { 1 };
   bool dirty_ { true };
   bool resources_created_ { false };
   bool luts_generated_ { false }; //!< True after first successful compute
 
   LutResources transmittance_lut_ {};
   LutResources sky_view_lut_ {};
+  LutResources multi_scat_lut_ {};
 
   auto CreateLutTexture(uint32_t width, uint32_t height, bool is_rgba,
     const char* debug_name) -> std::shared_ptr<graphics::Texture>;

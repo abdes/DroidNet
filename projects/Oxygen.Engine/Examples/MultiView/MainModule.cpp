@@ -19,11 +19,14 @@
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
 
-#include "MultiView/ImGuiView.h"
+#include "DemoShell/Runtime/CompositionView.h"
+#include "DemoShell/Runtime/ForwardPipeline.h"
+#include "DemoShell/UI/CameraRigController.h"
 #include "MultiView/MainModule.h"
-#include "MultiView/MainView.h"
-#include "MultiView/PipView.h"
 
 namespace oxygen::examples::multiview {
 
@@ -31,34 +34,23 @@ MainModule::MainModule(
   const DemoAppContext& app, CompositingMode compositing_mode) noexcept
   : Base(app)
   , app_(app)
-  , compositing_mode_(compositing_mode)
 {
-  // Create views
-  auto main_view = std::make_unique<MainView>();
-  main_view_.reset(main_view.get());
-  views_.push_back(std::move(main_view));
-
-  auto pip_view = std::make_unique<PipView>();
-  pip_view_.reset(pip_view.get());
-  views_.push_back(std::move(pip_view));
-
-  auto imgui_view = std::make_unique<ImGuiView>();
-  imgui_view_.reset(imgui_view.get());
-  views_.push_back(std::move(imgui_view));
+  compositing_mode_ = compositing_mode;
+  main_view_id_ = this->GetOrCreateViewId("MainView");
+  pip_view_id_ = this->GetOrCreateViewId("PipView");
 }
 
-auto MainModule::GetSupportedPhases() const noexcept -> engine::ModulePhaseMask
-{
-  return engine::MakeModuleMask<core::PhaseId::kFrameStart,
-    core::PhaseId::kSceneMutation, core::PhaseId::kGuiUpdate,
-    core::PhaseId::kPreRender, core::PhaseId::kCompositing>();
-}
-
-auto MainModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
+auto MainModule::OnAttached(
+  oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept -> bool
 {
   CHECK_F(static_cast<bool>(engine), "MultiView requires a valid engine");
-
   CHECK_F(Base::OnAttached(engine), "MultiView base attach failed");
+
+  // Initialize the pipeline if it hasn't been already.
+  pipeline_ = std::make_unique<ForwardPipeline>(engine);
+  CHECK_NOTNULL_F(pipeline_, "Failed to create ForwardPipeline");
+  // Boost exposure to compensate for lower light intensity
+  pipeline_->SetExposureValue(2.5F);
 
   // Initialize DemoShell with all panels disabled (non-interactive demo)
   shell_ = std::make_unique<DemoShell>();
@@ -70,8 +62,11 @@ auto MainModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
     .environment = false,
     .lighting = false,
     .rendering = false,
+    .post_process = true,
   };
   shell_config.enable_camera_rig = false; // Non-interactive demo
+  shell_config.get_active_pipeline
+    = [this]() { return observer_ptr<RenderingPipeline> { pipeline_.get() }; };
 
   CHECK_F(shell_->Initialize(shell_config),
     "MultiView: DemoShell initialization failed");
@@ -89,8 +84,6 @@ auto MainModule::OnShutdown() noexcept -> void
   active_scene_ = {};
 
   scene_bootstrapper_.BindToScene(observer_ptr<scene::Scene> { nullptr });
-
-  ReleaseAllViews("module shutdown");
 }
 
 auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
@@ -98,53 +91,121 @@ auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
   CHECK_NOTNULL_F(app_window_, "AppWindow must exist in MultiView");
   CHECK_NOTNULL_F(shell_, "DemoShell must exist in MultiView");
 
-  // Check if we need to drop resources (e.g. resize)
-  if (app_window_->ShouldResize()) {
-    LOG_F(INFO, "[MultiView] Window resize detected, releasing view resources");
-    ReleaseAllViews("window resize");
-  }
-
   // CRITICAL: Ensure scene is created and set on context
   if (!active_scene_.IsValid()) {
     auto scene = std::make_unique<scene::Scene>("MultiViewScene");
     active_scene_ = shell_->SetScene(std::move(scene));
     scene_bootstrapper_.BindToScene(shell_->TryGetScene());
+
+    // Ensure cameras exist
+    if (auto s = shell_->TryGetScene()) {
+      main_camera_node_ = s->CreateNode("MainCamera");
+      main_camera_node_.AttachCamera(
+        std::make_unique<scene::PerspectiveCamera>());
+      shell_->SetActiveCamera(main_camera_node_);
+
+      pip_camera_node_ = s->CreateNode("PipCamera");
+      pip_camera_node_.AttachCamera(
+        std::make_unique<scene::PerspectiveCamera>());
+
+      UpdateCameras(app_window_->GetWindow()->Size());
+    }
   }
 
   const auto scene_ptr = shell_->TryGetScene();
   CHECK_F(static_cast<bool>(scene_ptr), "Scene must be available");
   context.SetScene(oxygen::observer_ptr { scene_ptr.get() });
 
-  // Initialize views on first frame
-  if (!initialized_) {
-    // Ensure scene+content exists and use the returned scene (nodiscard)
-    const auto content_scene = scene_bootstrapper_.EnsureSceneWithContent();
-    CHECK_F(static_cast<bool>(content_scene),
-      "SceneBootstrapper must produce content scene");
-    for (auto& view : views_) {
-      view->Initialize(*content_scene.get());
-    }
-    initialized_ = true;
+  // Ensure content exists
+  (void)scene_bootstrapper_.EnsureSceneWithContent();
+
+  // Ensure drone is configured once the rig is available
+  const auto rig = shell_->GetCameraRig();
+  if (rig != last_camera_rig_) {
+    last_camera_rig_ = rig;
   }
 }
 
-auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
+auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
+{
+  auto& camera_lifecycle = shell_->GetCameraLifecycle();
+  camera_lifecycle.EnsureViewport(extent);
+  camera_lifecycle.ApplyPendingSync();
+  camera_lifecycle.ApplyPendingReset();
+
+  // Update Main camera (match legacy)
+  if (main_camera_node_.IsAlive()) {
+    const auto cam_opt
+      = main_camera_node_.GetCameraAs<scene::PerspectiveCamera>();
+    if (cam_opt) {
+      auto& cam = cam_opt->get();
+      constexpr auto kMainCamPos = glm::vec3(0.0F, 0.0F, 5.0F);
+      constexpr float kMainCamFov = 45.0F;
+      constexpr float kMainCamNear = 0.1F;
+      constexpr float kMainCamFar = 100.0F;
+
+      main_camera_node_.GetTransform().SetLocalPosition(kMainCamPos);
+      cam.SetFieldOfView(glm::radians(kMainCamFov));
+      cam.SetAspectRatio(extent.height > 0
+          ? (static_cast<float>(extent.width)
+              / static_cast<float>(extent.height))
+          : 1.0F);
+      cam.SetNearPlane(kMainCamNear);
+      cam.SetFarPlane(kMainCamFar);
+    }
+  }
+
+  // Update PiP camera
+  if (pip_camera_node_.IsAlive()) {
+    const auto cam_opt
+      = pip_camera_node_.GetCameraAs<scene::PerspectiveCamera>();
+    if (cam_opt) {
+      auto& cam = cam_opt->get();
+
+      // Position the PiP camera (match legacy)
+      constexpr glm::vec3 pip_position = glm::vec3(-5.0F, 0.4F, 4.0F);
+      pip_camera_node_.GetTransform().SetLocalPosition(pip_position);
+
+      constexpr glm::vec3 target = glm::vec3(0.0F, 0.0F, -2.0F);
+      constexpr glm::vec3 world_up = glm::vec3(0.0F, 1.0F, 0.0F);
+      const glm::mat4 view_mat = glm::lookAt(pip_position, target, world_up);
+      const glm::quat pip_rot = glm::quat_cast(glm::inverse(view_mat));
+      pip_camera_node_.GetTransform().SetLocalRotation(pip_rot);
+
+      // PiP aspect ratio from its intended viewport
+      constexpr float kPipWidthRatio = 0.45F;
+      constexpr float kPipHeightRatio = 0.45F;
+      const float sw = static_cast<float>(extent.width);
+      const float sh = static_cast<float>(extent.height);
+      const float pip_w = sw * kPipWidthRatio;
+      const float pip_h = sh * kPipHeightRatio;
+
+      constexpr float kPipCamFov = 35.0F;
+      constexpr float kPipCamNear = 0.05F;
+      constexpr float kPipCamFar = 100.0F;
+
+      cam.SetFieldOfView(glm::radians(kPipCamFov));
+      cam.SetAspectRatio(pip_h > 0 ? (pip_w / pip_h) : 1.0F);
+      cam.SetNearPlane(kPipCamNear);
+      cam.SetFarPlane(kPipCamFar);
+    }
+  }
+}
+
+auto MainModule::OnFrameStart(oxygen::engine::FrameContext& context) -> void
+{
+  Base::OnFrameStart(context);
+}
+
+auto MainModule::OnFrameEnd(engine::FrameContext& context) -> void
+{
+  Base::OnFrameEnd(context);
+}
+
+auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> oxygen::co::Co<>
 {
   if (!app_window_ || !app_window_->GetWindow()) {
     co_return;
-  }
-
-  CHECK_NOTNULL_F(app_.engine, "Engine must exist for GUI update");
-  auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
-  CHECK_F(imgui_module_ref.has_value(), "ImGui module required");
-  auto& imgui_module = imgui_module_ref->get();
-
-  for (auto& view : views_) {
-    view->SetImGuiModule(observer_ptr { &imgui_module });
-  }
-
-  if (imgui_view_) {
-    imgui_view_->SetImGui(observer_ptr { &imgui_module });
   }
 
   CHECK_NOTNULL_F(shell_, "DemoShell required for GUI update");
@@ -153,181 +214,130 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
   co_return;
 }
 
-auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
+auto MainModule::OnGameplay(engine::FrameContext& context) -> oxygen::co::Co<>
+{
+  shell_->Update(context.GetGameDeltaTime());
+  co_return;
+}
+
+auto MainModule::OnSceneMutation(engine::FrameContext& context)
+  -> oxygen::co::Co<>
 {
   CHECK_NOTNULL_F(app_window_, "AppWindow required for scene mutation");
   if (!app_window_->GetWindow()) {
     co_return;
   }
 
-  const auto surface_weak = app_window_->GetSurface();
-  if (surface_weak.expired()) {
-    co_return;
+  const auto extent = app_window_->GetWindow()->Size();
+  if (extent.width != last_viewport_.width
+    || extent.height != last_viewport_.height) {
+    UpdateCameras(extent);
+    last_viewport_ = extent;
   }
-  const auto surface = surface_weak.lock();
 
-  CHECK_NOTNULL_F(app_.renderer, "Renderer required for scene mutation");
+  shell_->Update(oxygen::time::CanonicalDuration {});
 
-  auto gfx = app_.renderer->GetGraphics();
-  CHECK_F(static_cast<bool>(gfx), "Graphics required for scene mutation");
+  co_await Base::OnSceneMutation(context);
+  co_return;
+}
 
-  // CRITICAL: Mark sphere transform as dirty (workaround)
-  const auto sphere_node = scene_bootstrapper_.GetSphereNode();
-  if (sphere_node.IsAlive()) {
-    auto pos = sphere_node.GetTransform().GetLocalPosition();
-    if (pos.has_value()) {
-      sphere_node.GetTransform().SetLocalPosition(pos.value());
+auto MainModule::OnPreRender(engine::FrameContext& context) -> oxygen::co::Co<>
+{
+  auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
+  if (imgui_module_ref) {
+    auto& imgui_module = imgui_module_ref->get();
+    if (auto* imgui_context = imgui_module.GetImGuiContext()) {
+      ImGui::SetCurrentContext(imgui_context);
     }
   }
 
-  // Create a SINGLE command recorder for all resource tracking
-  // This matches the OLDMainModule pattern and ensures all tracking is in one
-  // command list
-  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder = gfx->AcquireCommandRecorder(queue_key, "MultiView Setup");
-  CHECK_F(static_cast<bool>(recorder), "Command recorder acquisition failed");
+  co_await Base::OnPreRender(context);
+  co_return;
+}
 
-  // Call OnSceneMutation on each view, passing the shared recorder
-  // This will also call RegisterView() which assigns real ViewIds
-  LOG_F(INFO, "[MultiView] OnSceneMutation: {} views", views_.size());
+auto MainModule::UpdateComposition(engine::FrameContext& /*context*/,
+  std::vector<CompositionView>& views) -> void
+{
+  if (!shell_) {
+    return;
+  }
+  auto& active_camera = shell_->GetCameraLifecycle().GetActiveCamera();
+  if (!active_camera.IsAlive()) {
+    return;
+  }
 
-  // Create rendering context to be shared by all views
-  const DemoViewContext view_ctx {
-    .frame_context = context,
-    .graphics = *gfx,
-    .surface = *surface,
-    .recorder = *recorder,
+  const auto extent = app_window_->GetWindow()->Size();
+  const float sw = static_cast<float>(extent.width);
+  const float sh = static_cast<float>(extent.height);
+
+  // 1. Main Scene (Full screen)
+  View main_view {};
+  main_view.viewport = ViewPort {
+    .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
+    .width = sw,
+    .height = sh,
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
   };
+  auto main_comp
+    = CompositionView::ForScene(main_view_id_, main_view, active_camera);
+  const graphics::Color kMainClearColor { 0.1F, 0.2F, 0.38F, 1.0F };
+  main_comp.clear_color = kMainClearColor;
+  views.push_back(std::move(main_comp));
 
-  for (auto& view : views_) {
-    // Set graphics context for deferred resource release
-    view->SetGraphicsContext(app_.gfx_weak);
-    // Set rendering context (now used by views for resource creation)
-    view->SetRenderingContext(view_ctx);
-    // Call OnSceneMutation - no parameters needed anymore
-    view->OnSceneMutation();
-    view->RegisterViewForRendering(*app_.renderer);
+  // 2. PiP View
+  if (pip_camera_node_.IsAlive()) {
+    constexpr float kPipWidthRatio = 0.45F;
+    constexpr float kPipHeightRatio = 0.45F;
+    constexpr float kPipMargin = 24.0F;
+
+    const float pip_w = std::floor(sw * kPipWidthRatio);
+    const float pip_h = std::floor(sh * kPipHeightRatio);
+
+    const float offset_x = std::max(0.0F, sw - pip_w - kPipMargin);
+    const float offset_y
+      = std::clamp(kPipMargin, 0.0F, std::max(0.0F, sh - pip_h));
+
+    View pip_view {};
+    pip_view.viewport = ViewPort {
+      .top_left_x = offset_x,
+      .top_left_y = offset_y,
+      .width = pip_w,
+      .height = pip_h,
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    };
+    pip_view.scissor = Scissors {
+      .left = static_cast<int32_t>(offset_x),
+      .top = static_cast<int32_t>(offset_y),
+      .right = static_cast<int32_t>(offset_x + pip_w),
+      .bottom = static_cast<int32_t>(offset_y + pip_h),
+    };
+
+    auto pip_comp = CompositionView::ForPip(pip_view_id_,
+      CompositionView::ZOrder { CompositionView::kZOrderScene.get() + 1 },
+      pip_view, pip_camera_node_);
+
+    // Match legacy PiP clear color (dark gray, half transparent)
+    const graphics::Color kPipClearColor { 0.1F, 0.1F, 0.1F, 0.5F };
+    pip_comp.clear_color = kPipClearColor;
+    pip_comp.opacity = 1.0F;
+    pip_comp.force_wireframe = true;
+
+    views.push_back(std::move(pip_comp));
   }
 
-  // Clear the phase-specific recorder - it's no longer valid after
-  // OnSceneMutation
-  for (auto& view : views_) {
-    view->ClearPhaseRecorder();
-  }
-
-  co_return;
+  // 3. ImGui
+  const auto imgui_view_id = this->GetOrCreateViewId("ImGuiView");
+  views.push_back(CompositionView::ForImGui(
+    imgui_view_id, main_view, [](graphics::CommandRecorder&) { }));
 }
 
-auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
+auto MainModule::OnCompositing(engine::FrameContext& context)
+  -> oxygen::co::Co<>
 {
-  CHECK_NOTNULL_F(app_window_, "AppWindow required for pre-render");
-  if (!app_window_->GetWindow()) {
-    co_return;
-  }
-
-  const auto surface_weak = app_window_->GetSurface();
-  if (surface_weak.expired()) {
-    co_return;
-  }
-
-  // CRITICAL: Call OnPreRender on each view to configure their renderers
-  CHECK_NOTNULL_F(app_.renderer, "Renderer required for pre-render");
-  auto gfx = app_.renderer->GetGraphics();
-  CHECK_F(static_cast<bool>(gfx), "Graphics required for pre-render");
-
-  for (auto& view : views_) {
-    co_await view->OnPreRender(*app_.renderer);
-  }
-
-  co_return;
-}
-
-auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
-{
-  LOG_F(INFO, "[MultiView] OnCompositing start: initialized={}, app_window={}",
-    initialized_, static_cast<bool>(app_window_));
-
-  CHECK_F(initialized_, "Views must be initialized before compositing");
-  CHECK_NOTNULL_F(app_window_, "AppWindow required for compositing");
-  if (!app_window_->GetWindow()) {
-    co_return;
-  }
-
-  const auto surface_weak = app_window_->GetSurface();
-  if (surface_weak.expired()) {
-    co_return;
-  }
-  auto surface = surface_weak.lock();
-
-  CHECK_NOTNULL_F(app_.renderer, "Renderer required for compositing");
-  auto gfx = app_.renderer->GetGraphics();
-  CHECK_F(static_cast<bool>(gfx), "Graphics required for compositing");
-
-  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-
-  const auto fb_weak = app_window_->GetCurrentFrameBuffer();
-  CHECK_F(!fb_weak.expired(), "Swapchain framebuffer must exist");
-  const auto fb = fb_weak.lock();
-
-  CHECK_NOTNULL_F(main_view_, "MainView must exist for compositing");
-  CHECK_NOTNULL_F(pip_view_, "PipView must exist for compositing");
-  CHECK_NOTNULL_F(imgui_view_, "ImGuiView must exist for compositing");
-
-  engine::CompositingTaskList tasks {};
-  const auto fullscreen = BuildFullscreenViewport(*fb);
-  CHECK_F(fullscreen.IsValid(), "Fullscreen viewport must be valid");
-
-  if (compositing_mode_ == CompositingMode::kBlend) {
-    auto main_texture = main_view_->GetColorTexture();
-    CHECK_F(static_cast<bool>(main_texture),
-      "MainView color texture required for blend");
-    tasks.push_back(engine::CompositingTask::MakeTextureBlend(
-      std::move(main_texture), fullscreen, 1.0F));
-  } else {
-    CHECK_F(
-      main_view_->GetViewId().get() != 0, "MainView view id required for copy");
-    tasks.push_back(
-      engine::CompositingTask::MakeCopy(main_view_->GetViewId(), fullscreen));
-  }
-
-  const auto viewport = pip_view_->GetViewport();
-  CHECK_F(viewport && viewport->IsValid(), "PiP viewport must be valid");
-
-  // Keep task alpha at 1.0F so the PiP texture's own alpha (set on creation)
-  // controls opacity. This preserves the clear color while making it half
-  // transparent.
-  const float alpha = 1.0F;
-  if (compositing_mode_ == CompositingMode::kBlend) {
-    auto pip_texture = pip_view_->GetColorTexture();
-    CHECK_F(static_cast<bool>(pip_texture),
-      "PipView color texture required for blend");
-    tasks.push_back(engine::CompositingTask::MakeTextureBlend(
-      std::move(pip_texture), *viewport, alpha));
-  } else {
-    CHECK_F(
-      pip_view_->GetViewId().get() != 0, "PipView view id required for copy");
-    tasks.push_back(
-      engine::CompositingTask::MakeCopy(pip_view_->GetViewId(), *viewport));
-  }
-
-  // Add ImGui overlay
-  if (imgui_view_->IsViewReady()) {
-    auto ui_texture = imgui_view_->GetColorTexture();
-    // Assuming UI covers the whole screen or we want to composite it as such
-    if (ui_texture) {
-      tasks.push_back(engine::CompositingTask::MakeTextureBlend(
-        std::move(ui_texture), fullscreen, 1.0F));
-    }
-  }
-
-  oxygen::engine::CompositionSubmission submission;
-  submission.target_framebuffer = fb;
-  submission.target_surface = surface;
-  submission.tasks = std::move(tasks);
-  app_.renderer->RegisterComposition(std::move(submission));
-
-  LOG_F(INFO, "[MultiView] OnCompositing submit complete");
-  co_return;
+  co_await Base::OnCompositing(context);
 }
 
 auto MainModule::ClearBackbufferReferences() -> void
@@ -338,46 +348,11 @@ auto MainModule::ClearBackbufferReferences() -> void
 }
 
 auto MainModule::BuildDefaultWindowProperties() const
-  -> platform::window::Properties
+  -> oxygen::platform::window::Properties
 {
   auto props = Base::BuildDefaultWindowProperties();
   props.title = "Oxygen Engine - MultiView Example";
   return props;
-}
-
-// Helpers
-
-auto MainModule::ReleaseAllViews(std::string_view reason) -> void
-{
-  LOG_F(INFO, "[MultiView] Releasing all views ({})", reason);
-  for (auto& view : views_) {
-    if (view) {
-      view->ReleaseResources();
-    }
-  }
-
-  initialized_ = false;
-}
-
-auto MainModule::BuildFullscreenViewport(
-  const graphics::Framebuffer& target_framebuffer) const -> ViewPort
-{
-  const auto& fb_desc = target_framebuffer.GetDescriptor();
-  if (fb_desc.color_attachments.empty()
-    || !fb_desc.color_attachments[0].texture) {
-    return {};
-  }
-
-  const auto& target_desc
-    = fb_desc.color_attachments[0].texture->GetDescriptor();
-  return ViewPort {
-    .top_left_x = 0.0F,
-    .top_left_y = 0.0F,
-    .width = static_cast<float>(target_desc.width),
-    .height = static_cast<float>(target_desc.height),
-    .min_depth = 0.0F,
-    .max_depth = 1.0F,
-  };
 }
 
 } // namespace oxygen::examples::multiview

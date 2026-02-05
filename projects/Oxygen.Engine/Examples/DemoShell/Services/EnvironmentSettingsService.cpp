@@ -177,15 +177,16 @@ auto EnvironmentSettingsService::SetRuntimeConfig(
     LoadSettings();
   }
 
+  NormalizeSkySystems();
+
   SyncDebugFlagsFromRenderer();
 
   if (scene_changed) {
     needs_sync_ = true;
     apply_saved_sun_on_next_sync_ = true;
-    if (config_.scene && pending_changes_) {
-      ApplyPendingChanges();
+    if (!pending_changes_) {
+      SyncFromSceneIfNeeded();
     }
-    SyncFromSceneIfNeeded();
   }
 }
 
@@ -208,7 +209,7 @@ auto EnvironmentSettingsService::SyncFromSceneIfNeeded() -> void
 
 auto EnvironmentSettingsService::HasPendingChanges() const -> bool
 {
-  return pending_changes_ && !needs_sync_;
+  return pending_changes_;
 }
 
 auto EnvironmentSettingsService::GetAtmosphereLutStatus() const
@@ -238,9 +239,7 @@ auto EnvironmentSettingsService::SetSkyAtmosphereEnabled(bool enabled) -> void
     return;
   }
   sky_atmo_enabled_ = enabled;
-  if (enabled) {
-    sky_sphere_enabled_ = false;
-  }
+  NormalizeSkySystems();
   MarkDirty();
 }
 
@@ -411,9 +410,7 @@ auto EnvironmentSettingsService::SetSkySphereEnabled(bool enabled) -> void
     return;
   }
   sky_sphere_enabled_ = enabled;
-  if (enabled) {
-    sky_atmo_enabled_ = false;
-  }
+  NormalizeSkySystems();
   MarkDirty();
 }
 
@@ -446,17 +443,17 @@ auto EnvironmentSettingsService::SetSkySphereSolidColor(const glm::vec3& value)
   MarkDirty();
 }
 
-auto EnvironmentSettingsService::GetSkySphereIntensity() const -> float
+auto EnvironmentSettingsService::GetSkyIntensity() const -> float
 {
-  return sky_sphere_intensity_;
+  return sky_intensity_;
 }
 
-auto EnvironmentSettingsService::SetSkySphereIntensity(float value) -> void
+auto EnvironmentSettingsService::SetSkyIntensity(const float value) -> void
 {
-  if (sky_sphere_intensity_ == value) {
+  if (sky_intensity_ == value) {
     return;
   }
-  sky_sphere_intensity_ = value;
+  sky_intensity_ = value;
   MarkDirty();
 }
 
@@ -674,7 +671,7 @@ auto EnvironmentSettingsService::GetSkyLightIntensity() const -> float
   return sky_light_intensity_;
 }
 
-auto EnvironmentSettingsService::SetSkyLightIntensity(float value) -> void
+auto EnvironmentSettingsService::SetSkyLightIntensity(const float value) -> void
 {
   if (sky_light_intensity_ == value) {
     return;
@@ -921,6 +918,8 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     return;
   }
 
+  NormalizeSkySystems();
+
   auto* env = config_.scene->GetEnvironment().get();
   if (!env) {
     config_.scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
@@ -928,11 +927,33 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   }
 
   auto* sun = env->TryGetSystem<scene::environment::Sun>().get();
-  if (sun_present_ && !sun) {
+  if (sun_present_ && sun_enabled_ && !sun) {
     sun = &env->AddSystem<scene::environment::Sun>();
   }
   if (sun) {
     sun->SetEnabled(sun_enabled_);
+  }
+  if (sun && !sun_enabled_) {
+    UpdateSunLightCandidate();
+    if (sun_light_available_) {
+      if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
+        light->get().SetIsSunLight(false);
+        light->get().Common().affects_world = false;
+      }
+    }
+
+    if (synthetic_sun_light_node_.IsAlive()) {
+      if (auto light
+        = synthetic_sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
+        light->get().SetIsSunLight(false);
+        light->get().Common().affects_world = false;
+      }
+    }
+
+    sun->ClearLightReference();
+  }
+
+  if (sun_enabled_ && sun) {
     const auto sun_source = (sun_source_ == 0)
       ? scene::environment::SunSource::kFromScene
       : scene::environment::SunSource::kSynthetic;
@@ -1009,6 +1030,8 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
         sun->ClearLightReference();
       }
     }
+  } else if (sun) {
+    sun->ClearLightReference();
   }
 
   auto* atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>().get();
@@ -1017,6 +1040,8 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   }
   if (atmo) {
     atmo->SetEnabled(sky_atmo_enabled_);
+  }
+  if (sky_atmo_enabled_ && atmo) {
     atmo->SetPlanetRadiusMeters(planet_radius_km_ * kKmToMeters);
     atmo->SetAtmosphereHeightMeters(atmosphere_height_km_ * kKmToMeters);
     atmo->SetGroundAlbedoRgb(ground_albedo_);
@@ -1040,10 +1065,12 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   }
   if (sky) {
     sky->SetEnabled(sky_sphere_enabled_);
+  }
+  if (sky_sphere_enabled_ && sky) {
     sky->SetSource(
       static_cast<scene::environment::SkySphereSource>(sky_sphere_source_));
     sky->SetSolidColorRgb(sky_sphere_solid_color_);
-    sky->SetIntensity(sky_sphere_intensity_);
+    sky->SetIntensity(sky_intensity_);
     sky->SetRotationRadians(sky_sphere_rotation_deg_ * kDegToRad);
   }
 
@@ -1053,6 +1080,8 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   }
   if (light) {
     light->SetEnabled(sky_light_enabled_);
+  }
+  if (sky_light_enabled_ && light) {
     light->SetSource(
       static_cast<scene::environment::SkyLightSource>(sky_light_source_));
     light->SetTintRgb(sky_light_tint_);
@@ -1107,7 +1136,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     sky_sphere_enabled_ = sky->IsEnabled();
     sky_sphere_source_ = static_cast<int>(sky->GetSource());
     sky_sphere_solid_color_ = sky->GetSolidColorRgb();
-    sky_sphere_intensity_ = sky->GetIntensity();
+    sky_intensity_ = sky->GetIntensity();
     sky_sphere_rotation_deg_ = sky->GetRotationRadians() * kRadToDeg;
   }
 
@@ -1153,6 +1182,15 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
   if (apply_saved_sun_on_next_sync_) {
     ApplySavedSunSourcePreference();
     apply_saved_sun_on_next_sync_ = false;
+  }
+
+  NormalizeSkySystems();
+}
+
+auto EnvironmentSettingsService::NormalizeSkySystems() -> void
+{
+  if (sky_atmo_enabled_ && sky_sphere_enabled_) {
+    sky_sphere_enabled_ = false;
   }
 }
 
@@ -1233,8 +1271,14 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   any_loaded |= load_bool(kSkySphereEnabledKey, sky_sphere_enabled_);
   any_loaded |= load_int(kSkySphereSourceKey, sky_sphere_source_);
   any_loaded |= load_vec3(kSkySphereSolidColorKey, sky_sphere_solid_color_);
-  any_loaded |= load_float(kSkySphereIntensityKey, sky_sphere_intensity_);
   any_loaded |= load_float(kSkySphereRotationKey, sky_sphere_rotation_deg_);
+
+  const bool sky_intensity_loaded
+    = load_float(kSkySphereIntensityKey, sky_intensity_);
+  const bool sky_light_intensity_loaded
+    = load_float(kSkyLightIntensityKey, sky_light_intensity_);
+
+  any_loaded |= sky_intensity_loaded || sky_light_intensity_loaded;
 
   any_loaded |= load_int(kSkyboxLayoutKey, skybox_layout_idx_);
   any_loaded |= load_int(kSkyboxOutputFormatKey, skybox_output_format_idx_);
@@ -1250,7 +1294,6 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   any_loaded |= load_bool(kSkyLightEnabledKey, sky_light_enabled_);
   any_loaded |= load_int(kSkyLightSourceKey, sky_light_source_);
   any_loaded |= load_vec3(kSkyLightTintKey, sky_light_tint_);
-  any_loaded |= load_float(kSkyLightIntensityKey, sky_light_intensity_);
   any_loaded |= load_float(kSkyLightDiffuseKey, sky_light_diffuse_);
   any_loaded |= load_float(kSkyLightSpecularKey, sky_light_specular_);
 
@@ -1328,8 +1371,8 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_bool(kSkySphereEnabledKey, sky_sphere_enabled_);
   save_int(kSkySphereSourceKey, sky_sphere_source_);
   save_vec3(kSkySphereSolidColorKey, sky_sphere_solid_color_);
-  save_float(kSkySphereIntensityKey, sky_sphere_intensity_);
   save_float(kSkySphereRotationKey, sky_sphere_rotation_deg_);
+  save_float(kSkySphereIntensityKey, sky_intensity_);
 
   save_int(kSkyboxLayoutKey, skybox_layout_idx_);
   save_int(kSkyboxOutputFormatKey, skybox_output_format_idx_);

@@ -10,6 +10,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Scene/SceneNode.h>
 
@@ -23,6 +25,7 @@ class SceneAsset;
 
 namespace oxygen::scene {
 class Scene;
+class SceneEnvironment;
 } // namespace oxygen::scene
 
 namespace oxygen::examples {
@@ -45,9 +48,12 @@ class SceneLoaderService
   : public std::enable_shared_from_this<SceneLoaderService> {
 public:
   //! Create the service with the asset loader and initial viewport size.
-  SceneLoaderService(content::IAssetLoader& loader, int width, int height);
+  SceneLoaderService(content::IAssetLoader& loader, Extent<uint32_t> viewport);
   //! Destroy the loader service.
   ~SceneLoaderService();
+
+  OXYGEN_MAKE_NON_COPYABLE(SceneLoaderService)
+  OXYGEN_DEFAULT_MOVABLE(SceneLoaderService)
 
   //! Begin loading the scene associated with the asset key.
   void StartLoad(const data::AssetKey& key);
@@ -100,19 +106,18 @@ private:
   //! Log the runtime scene hierarchy.
   void LogSceneHierarchy(const scene::Scene& scene);
 
-  content::IAssetLoader& loader_;
-  int width_;
-  int height_;
+  content::IAssetLoader& loader_; // FIXME
+  Extent<uint32_t> extent_ {};
   PendingSceneSwap swap_ {};
-  std::vector<scene::SceneNode> runtime_nodes_ {};
-  scene::SceneNode active_camera_ {};
+  std::vector<scene::SceneNode> runtime_nodes_;
+  scene::SceneNode active_camera_;
   bool ready_ { false };
   bool failed_ { false };
   bool consumed_ { false };
   int linger_frames_ { 0 };
 
-  std::unordered_set<data::AssetKey> pending_geometry_keys_ {};
-  std::vector<data::AssetKey> pinned_geometry_keys_ {};
+  std::unordered_set<data::AssetKey> pending_geometry_keys_;
+  std::vector<data::AssetKey> pinned_geometry_keys_;
 };
 
 } // namespace oxygen::examples

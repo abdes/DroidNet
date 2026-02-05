@@ -23,7 +23,7 @@ asap_push_module("${META_MODULE_NAME}")
 
 find_package(glm CONFIG REQUIRED)
 find_package(asio CONFIG REQUIRED)
-find_package(sdl3 CONFIG REQUIRED)
+find_package(SDL3 CONFIG REQUIRED)
 
 # ------------------------------------------------------------------------------
 # Sources

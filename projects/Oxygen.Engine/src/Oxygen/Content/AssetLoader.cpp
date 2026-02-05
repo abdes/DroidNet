@@ -933,30 +933,30 @@ auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key) -> void
   content_cache_.CheckIn(HashAssetKey(key));
 }
 
-template <typename ResourceT>
 /*!
- Publish resource dependencies and update cache refcounts.
+Publish resource dependencies and update cache refcounts.
 
- This enumerates the dependency collector, loads each referenced resource,
- and registers it as a dependency of the provided asset. Registration
- touches the cache to increment the dependency refcount.
+This enumerates the dependency collector, loads each referenced resource,
+and registers it as a dependency of the provided asset. Registration
+touches the cache to increment the dependency refcount.
 
- @tparam ResourceT Resource type to publish (must satisfy PakResource).
- @param dependent_asset_key Asset key that owns the dependencies.
- @param collector Dependency collector populated during decode.
+@tparam ResourceT Resource type to publish (must satisfy PakResource).
+@param dependent_asset_key Asset key that owns the dependencies.
+@param collector Dependency collector populated during decode.
 
- ### Ref-count Contract
+### Ref-count Contract
 
- - This call increments the dependency refcount via `AddResourceDependency`.
- - The caller remains responsible for its own resource references.
- - Any explicit checkouts acquired by the caller must be released separately.
+- This call increments the dependency refcount via `AddResourceDependency`.
+- The caller remains responsible for its own resource references.
+- Any explicit checkouts acquired by the caller must be released separately.
 
- ### Performance Characteristics
+### Performance Characteristics
 
- - Time Complexity: $O(n)$ over referenced dependencies.
- - Memory: $O(n)$ for seen-key tracking.
- - Optimization: Deduplicates dependencies by hashed key.
+- Time Complexity: $O(n)$ over referenced dependencies.
+- Memory: $O(n)$ for seen-key tracking.
+- Optimization: Deduplicates dependencies by hashed key.
 */
+template <typename ResourceT>
 auto AssetLoader::PublishResourceDependenciesAsync(
   const data::AssetKey& dependent_asset_key,
   const internal::DependencyCollector& collector) -> co::Co<>

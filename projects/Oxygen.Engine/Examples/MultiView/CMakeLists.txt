@@ -37,18 +37,6 @@ add_executable(
   "MainModule.cpp"
   "SceneBootstrapper.h"
   "SceneBootstrapper.cpp"
-  "ViewRenderer.h"
-  "ViewRenderer.cpp"
-  "OffscreenCompositor.h"
-  "OffscreenCompositor.cpp"
-  "DemoView.h"
-  "DemoView.cpp"
-  "MainView.h"
-  "MainView.cpp"
-  "PipView.h"
-  "PipView.cpp"
-  "ImGuiView.h"
-  "ImGuiView.cpp"
 )
 set_target_properties(
   ${META_MODULE_TARGET}

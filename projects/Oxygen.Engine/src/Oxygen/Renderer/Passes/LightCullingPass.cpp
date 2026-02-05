@@ -748,7 +748,7 @@ auto LightCullingPass::NeedRebuildPipelineState() const -> bool
   const bool last_clustered = impl_->last_built_depth_slices > 1;
   if (current_clustered != last_clustered) {
     LOG_F(INFO,
-      "LightCullingPass: Cluster mode changed (%s -> %s), rebuilding PSO",
+      "LightCullingPass: Cluster mode changed ({} -> {}), rebuilding PSO",
       last_clustered ? "clustered" : "tile-based",
       current_clustered ? "clustered" : "tile-based");
     return true;

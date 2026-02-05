@@ -11,13 +11,13 @@
 #include <Oxygen/Base/Logging.h>
 
 #include "DemoShell/Services/FileBrowserService.h"
-#include "TexturedCube/UI/TextureBrowserVm.h"
+#include "TexturedCube/UI/MaterialsSandboxVm.h"
 
 namespace oxygen::examples::textured_cube::ui {
 
 using oxygen::examples::FileBrowserService;
 
-TextureBrowserVm::TextureBrowserVm(
+MaterialsSandboxVm::MaterialsSandboxVm(
   observer_ptr<TextureLoadingService> texture_service,
   observer_ptr<FileBrowserService> file_browser)
   : texture_service_(texture_service)
@@ -58,9 +58,9 @@ TextureBrowserVm::TextureBrowserVm(
   }
 }
 
-TextureBrowserVm::~TextureBrowserVm() = default;
+MaterialsSandboxVm::~MaterialsSandboxVm() = default;
 
-void TextureBrowserVm::StartImportFlow()
+void MaterialsSandboxVm::StartImportFlow()
 {
   // 1. Reset State
   import_state_.status_message.clear();
@@ -77,14 +77,14 @@ void TextureBrowserVm::StartImportFlow()
   BrowseForSourcePath();
 }
 
-void TextureBrowserVm::CancelImport()
+void MaterialsSandboxVm::CancelImport()
 {
   import_state_.workflow_state = ImportState::WorkflowState::Idle;
   import_state_.status_message.clear();
   import_state_.progress = 0.0F;
 }
 
-void TextureBrowserVm::OnFileSelected(const std::filesystem::path& path)
+void MaterialsSandboxVm::OnFileSelected(const std::filesystem::path& path)
 {
   if (browse_mode_ == BrowseMode::kSourcePath) {
     // Called when browser returns a file
@@ -110,7 +110,7 @@ void TextureBrowserVm::OnFileSelected(const std::filesystem::path& path)
   }
 }
 
-void TextureBrowserVm::UpdateImportSettingsFromUsage()
+void MaterialsSandboxVm::UpdateImportSettingsFromUsage()
 {
   std::string source_path = import_state_.source_path.data();
   std::filesystem::path path(source_path);
@@ -198,7 +198,7 @@ void TextureBrowserVm::UpdateImportSettingsFromUsage()
   }
 }
 
-void TextureBrowserVm::RequestImport()
+void MaterialsSandboxVm::RequestImport()
 {
   if (!texture_service_) {
     return;
@@ -229,9 +229,9 @@ void TextureBrowserVm::RequestImport()
   }
 }
 
-void TextureBrowserVm::RequestRefresh() { refresh_requested_ = true; }
+void MaterialsSandboxVm::RequestRefresh() { refresh_requested_ = true; }
 
-void TextureBrowserVm::BrowseForSourcePath()
+void MaterialsSandboxVm::BrowseForSourcePath()
 {
   if (file_browser_) {
     // Use a generic file browser config for now, or imagine a helper
@@ -256,7 +256,7 @@ void TextureBrowserVm::BrowseForSourcePath()
   }
 }
 
-void TextureBrowserVm::BrowseForCookedRoot()
+void MaterialsSandboxVm::BrowseForCookedRoot()
 {
   if (file_browser_) {
     FileBrowserConfig config;
@@ -271,7 +271,7 @@ void TextureBrowserVm::BrowseForCookedRoot()
   }
 }
 
-bool TextureBrowserVm::SelectTextureForSlot(
+bool MaterialsSandboxVm::SelectTextureForSlot(
   uint32_t entry_index, bool is_sphere)
 {
   if (!texture_service_) {
@@ -295,11 +295,11 @@ bool TextureBrowserVm::SelectTextureForSlot(
       import_state_.progress = 1.0F;
 
       if (is_sphere) {
-        sphere_texture_.mode = SceneSetup::TextureIndexMode::kCustom;
+        sphere_texture_.mode = TextureIndexMode::kCustom;
         sphere_texture_.resource_index = entry_index;
         sphere_texture_.resource_key = result.resource_key;
       } else {
-        cube_texture_.mode = SceneSetup::TextureIndexMode::kCustom;
+        cube_texture_.mode = TextureIndexMode::kCustom;
         cube_texture_.resource_index = entry_index;
         cube_texture_.resource_key = result.resource_key;
       }
@@ -309,13 +309,13 @@ bool TextureBrowserVm::SelectTextureForSlot(
   return true;
 }
 
-void TextureBrowserVm::SetOnSkyboxSelected(
+void MaterialsSandboxVm::SetOnSkyboxSelected(
   std::function<void(oxygen::content::ResourceKey)> callback)
 {
   on_skybox_selected_ = std::move(callback);
 }
 
-bool TextureBrowserVm::SelectSkybox(uint32_t entry_index,
+bool MaterialsSandboxVm::SelectSkybox(uint32_t entry_index,
   std::function<void(oxygen::content::ResourceKey)> on_loaded)
 {
 
@@ -357,7 +357,7 @@ bool TextureBrowserVm::SelectSkybox(uint32_t entry_index,
   return true;
 }
 
-void TextureBrowserVm::Update()
+void MaterialsSandboxVm::Update()
 {
   if (!texture_service_) {
     return;
@@ -430,7 +430,7 @@ void TextureBrowserVm::Update()
   }
 }
 
-void TextureBrowserVm::UpdateImportStatus()
+void MaterialsSandboxVm::UpdateImportStatus()
 {
   const auto status = texture_service_->GetImportStatus();
   if (!status.message.empty()) {
@@ -440,7 +440,7 @@ void TextureBrowserVm::UpdateImportStatus()
   }
 }
 
-void TextureBrowserVm::HandleRefresh()
+void MaterialsSandboxVm::HandleRefresh()
 {
   const auto root_path
     = std::filesystem::path(import_state_.cooked_root.data());
@@ -459,7 +459,7 @@ void TextureBrowserVm::HandleRefresh()
   import_state_.progress = 0.0F;
 }
 
-void TextureBrowserVm::UpdateCookedEntries()
+void MaterialsSandboxVm::UpdateCookedEntries()
 {
   if (!texture_service_) {
     return;
@@ -497,7 +497,7 @@ void TextureBrowserVm::UpdateCookedEntries()
     cooked_entries_.size());
 }
 
-auto TextureBrowserVm::GetMetadataJson(uint32_t entry_index) const
+auto MaterialsSandboxVm::GetMetadataJson(uint32_t entry_index) const
   -> std::string
 {
   if (!texture_service_ || entry_index >= cooked_entries_.size()) {
@@ -508,7 +508,7 @@ auto TextureBrowserVm::GetMetadataJson(uint32_t entry_index) const
 }
 
 std::pair<glm::vec2, glm::vec2>
-TextureBrowserVm::GetEffectiveUvTransform() const
+MaterialsSandboxVm::GetEffectiveUvTransform() const
 {
   glm::vec2 scale = uv_state_.scale;
   glm::vec2 offset = uv_state_.offset;

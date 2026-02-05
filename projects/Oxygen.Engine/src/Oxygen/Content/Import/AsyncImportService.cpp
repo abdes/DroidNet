@@ -330,10 +330,12 @@ struct AsyncImportService::Impl {
 //=== AsyncImportService Public API
 //===-----------------------------------------//
 
-AsyncImportService::AsyncImportService(Config config)
-  : impl_(std::make_unique<Impl>(config))
+AsyncImportService::AsyncImportService(std::optional<Config> config)
+  : impl_(
+      std::make_unique<Impl>(config.has_value() ? config.value() : Config {}))
 {
-  DLOG_F(INFO, "Created with {} thread pool workers", config.thread_pool_size);
+  DLOG_F(INFO, "Created with {} thread pool workers",
+    impl_->config_.thread_pool_size);
 
   impl_->StartThread();
 }

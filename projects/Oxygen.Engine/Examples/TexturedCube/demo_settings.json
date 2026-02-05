@@ -8,6 +8,12 @@
   "camera_rig": {
     "MainCamera": {
       "camera": {
+        "exposure": {
+          "aperture_f": 11.0,
+          "enabled": true,
+          "iso": 100.0,
+          "shutter_rate": 125.0
+        },
         "has_orthographic": false,
         "has_perspective": true,
         "perspective": {
@@ -24,7 +30,7 @@
       },
       "mode": "orbit",
       "orbit": {
-        "distance": 16.385164260864258,
+        "distance": 11.385164260864258,
         "mode": "turntable",
         "target": {
           "x": 0.0,
@@ -33,15 +39,15 @@
         }
       },
       "position": {
-        "x": -1.5025560855865479,
-        "y": -16.076690673828125,
-        "z": 2.7849528789520264
+        "x": -8.768495559692383,
+        "y": 6.9158782958984375,
+        "z": 2.214970588684082
       },
       "rotation": {
-        "w": 0.764012336730957,
-        "x": 0.6435181498527527,
-        "y": -0.030006788671016693,
-        "z": -0.03562534227967262
+        "w": -0.3371904790401459,
+        "x": -0.2768808901309967,
+        "y": 0.5710189342498779,
+        "z": 0.6953970193862915
       },
       "scale": {
         "x": 1.0,
@@ -51,10 +57,19 @@
     }
   },
   "demo_shell": {
-    "active_panel": "Texture Browser",
+    "active_panel": "",
     "panels": {
       "environment": {
+        "sky_light": {
+          "open": true
+        },
+        "sky_sphere": {
+          "open": true
+        },
         "width": 669.0
+      },
+      "post_process": {
+        "width": 550.0
       },
       "texture_browser": {
         "width": 652.0
@@ -75,7 +90,7 @@
       "mie_anisotropy": 0.800000011920929,
       "mie_scale_height_km": 1.2000000476837158,
       "multi_scattering": 1.0,
-      "planet_radius_km": 6360.001953125,
+      "planet_radius_km": 6360.0107421875,
       "rayleigh_scale_height_km": 8.0,
       "sun_disk_enabled": true,
       "sun_disk_radius_deg": 0.26799994707107544
@@ -102,18 +117,19 @@
       "intensity": 1.0,
       "rotation_deg": 0.0,
       "solid_color": {
-        "x": 0.05999999865889549,
-        "y": 0.07999999821186066,
-        "z": 0.11999999731779099
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
       },
-      "source": 1.0
+      "source": 0.0
     },
     "skybox": {
       "face_size": 512.0,
       "flip_y": false,
-      "hdr_exposure_ev": 0.0,
+      "hdr_exposure_ev": 16.0,
       "layout": 0.0,
-      "output": 0.0,
+      "output": 2.0,
+      "path": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\Content\\images\\hdr_skybox_f32.hdr",
       "tonemap_hdr_to_ldr": false
     },
     "sun": {
@@ -124,9 +140,9 @@
         "z": 0.949999988079071
       },
       "disk_radius_deg": 0.26785776019096375,
-      "elevation_deg": 60.31306838989258,
+      "elevation_deg": 43.099998474121094,
       "enabled": true,
-      "intensity_lux": 12.0,
+      "intensity_lux": 150000.0,
       "source": 1.0,
       "temperature_kelvin": 6500.0,
       "use_temperature": false
@@ -233,8 +249,29 @@
       ]
     }
   },
+  "light_culling": {
+    "mode": true,
+    "visualization_mode": "0"
+  },
+  "post_process": {
+    "compositing": {
+      "enabled": true
+    },
+    "exposure": {
+      "manual_ev100": 13.890000343322754
+    },
+    "tonemapping": {
+      "mode": "aces"
+    }
+  },
   "rendering": {
-    "view_mode": "solid"
+    "debug_mode": "0",
+    "view_mode": "solid",
+    "wire_color": {
+      "b": 0.06710291653871536,
+      "g": 0.06710291653871536,
+      "r": 0.5731707215309143
+    }
   },
   "ui": {
     "stats": {

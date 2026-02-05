@@ -349,11 +349,12 @@ namespace {
 
 } // namespace
 
-ScenePipeline::ScenePipeline(co::ThreadPool& thread_pool, Config config)
+ScenePipeline::ScenePipeline(
+  co::ThreadPool& thread_pool, std::optional<Config> config)
   : thread_pool_(thread_pool)
-  , config_(config)
-  , input_channel_(config.queue_capacity)
-  , output_channel_(config.queue_capacity)
+  , config_(config.has_value() ? config.value() : Config {})
+  , input_channel_(config_.queue_capacity)
+  , output_channel_(config_.queue_capacity)
 {
 }
 

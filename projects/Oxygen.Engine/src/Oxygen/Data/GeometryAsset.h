@@ -456,7 +456,7 @@ namespace detail {
 
 class Mesh {
 public:
-  ~Mesh() = default;
+  virtual ~Mesh() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(Mesh)
   OXYGEN_DEFAULT_MOVABLE(Mesh)
@@ -907,7 +907,7 @@ private:
 */
 class MeshBuilder {
 public:
-  MeshBuilder(uint32_t lod = 0, std::string_view name = {})
+  explicit MeshBuilder(uint32_t lod = 0, std::string_view name = {})
     : lod_(lod)
     , name_(name.empty() ? fmt::format("LOD_{}", lod) : std::string(name))
   {

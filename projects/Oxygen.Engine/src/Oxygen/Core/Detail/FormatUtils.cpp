@@ -102,4 +102,10 @@ auto GetFormatInfo(Format format) -> const FormatInfo&
   return info;
 }
 
+auto IsHdr(Format format) -> bool
+{
+  const auto& info = GetFormatInfo(format);
+  return info.kind == FormatKind::kFloat && !info.is_srgb;
+}
+
 } // namespace oxygen::graphics::detail

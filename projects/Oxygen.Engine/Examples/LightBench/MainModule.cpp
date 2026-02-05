@@ -20,10 +20,9 @@
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Renderer/Renderer.h>
 
+#include "DemoShell/Runtime/CompositionView.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/ForwardPipeline.h"
-#include "DemoShell/Runtime/SceneView.h"
-#include "DemoShell/Services/FileBrowserService.h"
 #include "LightBench/LightBenchPanel.h"
 #include "LightBench/MainModule.h"
 
@@ -93,6 +92,7 @@ auto MainModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
       .environment = true,
       .lighting = true,
       .rendering = true,
+      .post_process = true,
     },
     .get_active_pipeline = [this]() -> observer_ptr<RenderingPipeline> {
       return observer_ptr { pipeline_.get() };
@@ -115,9 +115,9 @@ auto MainModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
     LOG_F(WARNING, "LightBench: failed to register LightBench panel");
   }
 
-  // Create Main View (placeholder camera, updated later)
-  auto view = std::make_unique<SceneView>(scene::SceneNode {});
-  main_view_ = observer_ptr(static_cast<SceneView*>(AddView(std::move(view))));
+  // Create Main View ID
+  main_view_id_ = GetOrCreateViewId("MainView");
+  LOG_F(INFO, "LightBench: MainView ID created: {}", main_view_id_.get());
 
   LOG_F(INFO, "LightBench: Module initialized");
   return true;
@@ -134,8 +134,6 @@ auto MainModule::OnShutdown() noexcept -> void
 
   light_bench_panel_.reset();
   shell_.reset();
-
-  main_view_ = nullptr; // Owned by base, just clear ptr
 
   Base::OnShutdown();
 }
@@ -168,7 +166,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 
   const auto extent = app_window_->GetWindow()->Size();
   auto& camera_lifecycle = shell_->GetCameraLifecycle();
-  camera_lifecycle.EnsureViewport(extent.width, extent.height);
+  camera_lifecycle.EnsureViewport(extent);
   camera_lifecycle.ApplyPendingSync();
   camera_lifecycle.ApplyPendingReset();
 
@@ -176,11 +174,40 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 
   light_scene_.Update();
 
-  // Ensure camera is up to date in the view
-  EnsureViewCameraRegistered(context);
-
   // Delegate to pipeline to register views
   co_await Base::OnSceneMutation(context);
+}
+
+auto MainModule::UpdateComposition(engine::FrameContext& /*context*/,
+  std::vector<CompositionView>& views) -> void
+{
+  DCHECK_NOTNULL_F(shell_);
+
+  auto& active_camera = shell_->GetCameraLifecycle().GetActiveCamera();
+  if (!active_camera.IsAlive()) {
+    return;
+  }
+
+  View view {};
+  if (app_window_ && app_window_->GetWindow()) {
+    const auto extent = app_window_->GetWindow()->Size();
+    view.viewport = ViewPort {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
+      .width = static_cast<float>(extent.width),
+      .height = static_cast<float>(extent.height),
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    };
+  }
+
+  // Create the main scene view intent
+  views.push_back(
+    CompositionView::ForScene(main_view_id_, view, active_camera));
+
+  const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
+  views.push_back(CompositionView::ForImGui(
+    imgui_view_id, view, [](graphics::CommandRecorder&) { }));
 }
 
 auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
@@ -240,22 +267,5 @@ auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
 }
 
 auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void { }
-
-auto MainModule::EnsureViewCameraRegistered(engine::FrameContext& /*context*/)
-  -> void
-{
-  DCHECK_NOTNULL_F(shell_);
-  if (!main_view_) {
-    DLOG_F(1, "EnsureViewCameraRegistered: no valid window - skipping");
-    return;
-  }
-  auto& active_camera = shell_->GetCameraLifecycle().GetActiveCamera();
-  if (!active_camera.IsAlive()) {
-    return;
-  }
-
-  // Just update the view's camera. The pipeline will pick it up.
-  main_view_->SetCamera(active_camera);
-}
 
 } // namespace oxygen::examples::light_bench

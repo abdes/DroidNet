@@ -204,7 +204,7 @@ public:
 
   //! Create a material pipeline using the given ThreadPool.
   OXGN_CNTT_API explicit MaterialPipeline(
-    co::ThreadPool& thread_pool, Config config = {});
+    co::ThreadPool& thread_pool, std::optional<Config> config = {});
 
   OXGN_CNTT_API ~MaterialPipeline();
 

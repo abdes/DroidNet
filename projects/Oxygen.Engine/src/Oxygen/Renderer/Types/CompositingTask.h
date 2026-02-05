@@ -14,7 +14,6 @@
 
 namespace oxygen::graphics {
 class Framebuffer;
-class Surface;
 class Texture;
 } // namespace oxygen::graphics
 
@@ -110,7 +109,6 @@ using CompositingTaskList = std::vector<CompositingTask>;
 //! Composition submission for the kCompositing phase.
 struct CompositionSubmission {
   std::shared_ptr<graphics::Framebuffer> target_framebuffer {};
-  std::shared_ptr<graphics::Surface> target_surface {};
   CompositingTaskList tasks {};
 };
 

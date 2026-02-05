@@ -5,6 +5,12 @@
   "camera_rig": {
     "MainCamera": {
       "camera": {
+        "exposure": {
+          "aperture_f": 11.0,
+          "enabled": true,
+          "iso": 100.0,
+          "shutter_rate": 125.0
+        },
         "has_orthographic": false,
         "has_perspective": true,
         "perspective": {
@@ -30,15 +36,15 @@
         }
       },
       "position": {
-        "x": 0.29483261704444885,
-        "y": 5.46429967880249,
-        "z": -0.5518208742141724
+        "x": -0.5519965887069702,
+        "y": 5.441493988037109,
+        "z": -0.5791751146316528
       },
       "rotation": {
-        "w": 0.01807440258562565,
-        "x": 0.019988685846328735,
-        "y": 0.7414620518684387,
-        "z": 0.6704534292221069
+        "w": -0.03379425033926964,
+        "x": -0.03756178170442581,
+        "y": 0.742456316947937,
+        "z": 0.6679863333702087
       },
       "scale": {
         "x": 1.0,
@@ -51,10 +57,22 @@
     "active_panel": "Input Debug",
     "panels": {
       "environment": {
+        "sky_atmo": {
+          "open": false
+        },
+        "sky_light": {
+          "open": false
+        },
+        "sun": {
+          "open": false
+        },
         "width": 634.0
       },
       "input_debug": {
         "width": 692.0
+      },
+      "post_process": {
+        "width": 477.0
       }
     }
   },
@@ -72,7 +90,7 @@
       "mie_anisotropy": 0.800000011920929,
       "mie_scale_height_km": 1.2000000476837158,
       "multi_scattering": 1.0,
-      "planet_radius_km": 6360.00439453125,
+      "planet_radius_km": 6360.00732421875,
       "rayleigh_scale_height_km": 8.0,
       "sun_disk_enabled": true,
       "sun_disk_radius_deg": 0.26799994707107544
@@ -84,7 +102,7 @@
     },
     "sky_light": {
       "diffuse": 1.0,
-      "enabled": false,
+      "enabled": true,
       "intensity": 1.0,
       "source": 0.0,
       "specular": 1.0,
@@ -124,7 +142,7 @@
       "disk_radius_deg": 0.26799994707107544,
       "elevation_deg": 31.100000381469727,
       "enabled": true,
-      "intensity_lux": 10.0,
+      "intensity_lux": 150000.0,
       "source": 1.0,
       "temperature_kelvin": 6500.0,
       "use_temperature": false
@@ -223,6 +241,11 @@
         700,
         450
       ]
+    }
+  },
+  "post_process": {
+    "exposure": {
+      "manual_ev100": 13.937999725341797
     }
   },
   "ui": {

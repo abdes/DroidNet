@@ -31,8 +31,8 @@ public:
   [[nodiscard]] auto GetWidth() const noexcept -> float;
 
 private:
-  observer_ptr<PanelRegistry> panel_registry_ {};
-  observer_ptr<UiSettingsVm> ui_settings_vm_ {};
+  observer_ptr<PanelRegistry> panel_registry_;
+  observer_ptr<UiSettingsVm> ui_settings_vm_;
 };
 
 } // namespace oxygen::examples::ui

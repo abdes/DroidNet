@@ -72,6 +72,7 @@ class DepthPrePass;
 class LightCullingPass;
 class ShaderPass;
 class SkyPass;
+class SkyCapturePass;
 class TransparentPass;
 class WireframePass;
 
@@ -81,7 +82,7 @@ class WireframePass;
  binary compatibility. Update this list as new passes are added.
 */
 using KnownPassTypes = PassTypeList<DepthPrePass, LightCullingPass, ShaderPass,
-  SkyPass, TransparentPass, WireframePass>;
+  SkyPass, SkyCapturePass, TransparentPass, WireframePass>;
 
 //! The number of known pass types, used for static array sizing and sanity
 //! checks.

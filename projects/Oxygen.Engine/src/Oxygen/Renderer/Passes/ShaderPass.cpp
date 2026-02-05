@@ -8,6 +8,7 @@
 #include <utility>
 
 #include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -490,6 +491,12 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
         std::vector<ShaderDefine> defines) -> GraphicsPipelineDesc {
     // Add debug define if a debug mode is active
     std::vector<ShaderDefine> ps_defines = defines;
+    if (graphics::detail::IsHdr(color_tex_desc.format)) {
+      ps_defines.push_back(ShaderDefine {
+        .name = "OXYGEN_HDR_OUTPUT",
+        .value = "1",
+      });
+    }
     if (const char* debug_define = GetDebugDefineName(debug_mode)) {
       ps_defines.push_back(ShaderDefine {
         .name = debug_define,

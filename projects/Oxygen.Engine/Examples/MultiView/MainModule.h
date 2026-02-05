@@ -14,13 +14,13 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Platform/Window.h>
 
 #include "DemoShell/ActiveScene.h"
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
 #include "MultiView/CompositingMode.h"
-#include "MultiView/DemoView.h"
 #include "MultiView/SceneBootstrapper.h"
 
 namespace oxygen {
@@ -34,11 +34,11 @@ class Framebuffer;
 class Texture;
 } // namespace oxygen::graphics
 
-namespace oxygen::examples::multiview {
+namespace oxygen::examples::ui {
+class CameraRigController;
+}
 
-class MainView;
-class PipView;
-class ImGuiView;
+namespace oxygen::examples::multiview {
 
 //! Multi-view rendering example demonstrating Phase 2 features.
 /*!
@@ -52,18 +52,18 @@ class ImGuiView;
  Integrates with DemoShell for architectural consistency but disables all
  standard panels since this demo has no interactive settings.
 */
-class MainModule final : public DemoModuleBase {
+class MainModule final : public oxygen::examples::DemoModuleBase {
   OXYGEN_TYPED(MainModule)
 
 public:
-  using Base = DemoModuleBase;
+  using Base = oxygen::examples::DemoModuleBase;
 
-  OXYGEN_MAKE_NON_COPYABLE(MainModule)
-  OXYGEN_MAKE_NON_MOVABLE(MainModule)
-
-  explicit MainModule(
-    const DemoAppContext& app, CompositingMode compositing_mode) noexcept;
+  explicit MainModule(const oxygen::examples::DemoAppContext& app,
+    CompositingMode compositing_mode) noexcept;
   ~MainModule() override = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(MainModule);
+  OXYGEN_MAKE_NON_MOVABLE(MainModule);
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
@@ -71,48 +71,81 @@ public:
   }
 
   [[nodiscard]] auto GetPriority() const noexcept
-    -> engine::ModulePriority override
+    -> oxygen::engine::ModulePriority override
   {
-    return engine::ModulePriority { 500 };
+    constexpr int32_t kPriority = 500;
+    return oxygen::engine::ModulePriority { kPriority };
   }
 
   [[nodiscard]] auto GetSupportedPhases() const noexcept
-    -> engine::ModulePhaseMask override;
+    -> oxygen::engine::ModulePhaseMask override
+  {
+    return engine::MakeModuleMask<core::PhaseId::kFrameStart,
+      core::PhaseId::kSceneMutation, core::PhaseId::kGameplay,
+      core::PhaseId::kGuiUpdate, core::PhaseId::kPreRender,
+      core::PhaseId::kCompositing, core::PhaseId::kFrameEnd>();
+  }
 
-  auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool override;
-  auto OnShutdown() noexcept -> void override;
+  [[nodiscard]] auto IsCritical() const noexcept -> bool override
+  {
+    return true; // Critical module
+  }
 
-  auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
-  auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
-  auto OnPreRender(engine::FrameContext& context) -> co::Co<> override;
-  auto OnCompositing(engine::FrameContext& context) -> co::Co<> override;
-  auto ClearBackbufferReferences() -> void override;
+  // EngineModule lifecycle
+  auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
+    -> bool override;
+  void OnShutdown() noexcept override;
+
+  // Example-specific setup
+  auto HandleOnFrameStart(oxygen::engine::FrameContext& context)
+    -> void override;
 
 protected:
-  auto HandleOnFrameStart(engine::FrameContext& context) -> void override;
+  // DemoModuleBase hooks
   auto BuildDefaultWindowProperties() const
-    -> platform::window::Properties override;
+    -> oxygen::platform::window::Properties override;
+  auto ClearBackbufferReferences() -> void override;
+  auto UpdateComposition(oxygen::engine::FrameContext& context,
+    std::vector<oxygen::examples::CompositionView>& views) -> void override;
+
+  // EngineModule phase handlers
+  auto OnFrameStart(oxygen::engine::FrameContext& context) -> void override;
+  auto OnSceneMutation(oxygen::engine::FrameContext& context)
+    -> oxygen::co::Co<> override;
+  auto OnGameplay(oxygen::engine::FrameContext& context)
+    -> oxygen::co::Co<> override;
+  auto OnGuiUpdate(oxygen::engine::FrameContext& context)
+    -> oxygen::co::Co<> override;
+  auto OnPreRender(oxygen::engine::FrameContext& context)
+    -> oxygen::co::Co<> override;
+  auto OnCompositing(oxygen::engine::FrameContext& context)
+    -> oxygen::co::Co<> override;
+  auto OnFrameEnd(oxygen::engine::FrameContext& context) -> void override;
 
 private:
-  auto ReleaseAllViews(std::string_view reason) -> void;
-  [[nodiscard]] auto BuildFullscreenViewport(
-    const graphics::Framebuffer& target_framebuffer) const -> ViewPort;
+  auto UpdateCameras(const oxygen::platform::window::ExtentT& extent) -> void;
 
-  const DemoAppContext& app_;
+  const oxygen::examples::DemoAppContext& app_;
   SceneBootstrapper scene_bootstrapper_;
 
   // DemoShell integration (all panels disabled for this non-interactive demo)
-  std::unique_ptr<DemoShell> shell_;
+  std::unique_ptr<oxygen::examples::DemoShell> shell_;
 
-  std::vector<std::unique_ptr<DemoView>> views_;
-  observer_ptr<MainView> main_view_ { nullptr };
-  observer_ptr<PipView> pip_view_ { nullptr };
-  observer_ptr<ImGuiView> imgui_view_ { nullptr };
-  CompositingMode compositing_mode_ {
-    CompositingMode::kBlend
-  }; // Default to kBlend for ImGui
-  ActiveScene active_scene_ {};
-  bool initialized_ { false };
+  oxygen::examples::ActiveScene active_scene_;
+
+  // View identifiers
+  ViewId main_view_id_ { kInvalidViewId };
+  ViewId pip_view_id_ { kInvalidViewId };
+
+  // Cameras
+  oxygen::scene::SceneNode main_camera_node_;
+  oxygen::scene::SceneNode pip_camera_node_;
+
+  observer_ptr<oxygen::examples::ui::CameraRigController> last_camera_rig_ {
+    nullptr
+  };
+  CompositingMode compositing_mode_ { CompositingMode::kBlend };
+  oxygen::platform::window::ExtentT last_viewport_ { 0, 0 };
 };
 
 } // namespace oxygen::examples::multiview

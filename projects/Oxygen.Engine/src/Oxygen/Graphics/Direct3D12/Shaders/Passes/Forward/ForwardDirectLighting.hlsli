@@ -171,27 +171,28 @@ float3 AccumulatePositionalLights(
                 continue;
             }
 
-            // Distance attenuation based on authored model.
+            // --- Distance and Spot Attenuation ---
             float distance_atten = 1.0;
             if (pl.attenuation_model == 0u) { // kInverseSquare
-                distance_atten = 1.0 / max(dist_sq, 1e-4);
+                // Physically-based sphere light approximation (Karalis/Frostbite):
+                // Atten = 1 / (dist^2 + source_radius^2)
+                // This caps the intensity and softens the hotspot directly under the light.
+                const float r2 = pl.source_radius * pl.source_radius;
+                distance_atten = 1.0 / (dist_sq + r2 + 1e-4);
             } else if (pl.attenuation_model == 1u) { // kLinear
                 distance_atten = saturate(1.0 - (dist / range));
             } else { // kCustomExponent
-                // More intuitive authored falloff: 1 / dist^exp, then apply a
-                // smooth range fade for a soft cutoff at the specified range.
                 const float exp = max(pl.decay_exponent, 0.0);
                 distance_atten = (exp <= 0.0) ? 1.0 : (1.0 / pow(max(dist, 1e-3), exp));
             }
 
-            // Optional smoothing near range edge to reduce harsh cutoffs.
             const float range_fade = saturate(1.0 - (dist / range));
-            if (pl.attenuation_model != 1u) { // != kLinear
+            if (pl.attenuation_model != 1u) {
                 distance_atten *= (range_fade * range_fade);
             }
 
-            // Spot cone attenuation.
             float spot_atten = 1.0;
+            float normalization = 4.0 * kPi;
             const uint type_bits = (pl.flags & POSITIONAL_LIGHT_TYPE_MASK);
             if (type_bits == POSITIONAL_LIGHT_TYPE_SPOT) {
                 const float3 light_dir = SafeNormalize(pl.direction_ws);
@@ -202,6 +203,9 @@ float3 AccumulatePositionalLights(
                 const float denom = max(inner_cos - outer_cos, 1e-4);
                 spot_atten = saturate((cos_theta - outer_cos) / denom);
                 spot_atten *= spot_atten;
+
+                // Solid angle of a cone: Omega = 2PI * (1 - cos(theta_outer))
+                normalization = 2.0 * kPi * (1.0 - pl.outer_cone_cos);
             }
 
             const float atten = distance_atten * spot_atten;
@@ -209,6 +213,7 @@ float3 AccumulatePositionalLights(
                 continue;
             }
 
+            // --- PBR Shading ---
             const float3 H = SafeNormalize(V + L);
             const float  NdotH = saturate(dot(N, H));
             const float  VdotH = saturate(dot(V, H));
@@ -225,7 +230,8 @@ float3 AccumulatePositionalLights(
             const float3 kD = (1.0 - kS) * (1.0 - metalness);
             const float3 diffuse = kD * base_rgb / kPi;
 
-            direct += (diffuse + specular) * pl.color_rgb * pl.luminous_flux_lm * (NdotL * atten);
+            const float physical_intensity = pl.luminous_flux_lm / max(normalization, 1e-4);
+            direct += (diffuse + specular) * pl.color_rgb * physical_intensity * (NdotL * atten);
         }
     }
 
@@ -330,7 +336,8 @@ float3 AccumulatePositionalLightsClustered(
         // Distance attenuation
         float distance_atten = 1.0;
         if (pl.attenuation_model == 0u) { // kInverseSquare
-            distance_atten = 1.0 / max(dist_sq, 1e-4);
+            const float r2 = pl.source_radius * pl.source_radius;
+            distance_atten = 1.0 / (dist_sq + r2 + 1e-4);
         } else if (pl.attenuation_model == 1u) { // kLinear
             distance_atten = saturate(1.0 - (dist / range));
         } else { // kCustomExponent
@@ -346,7 +353,8 @@ float3 AccumulatePositionalLightsClustered(
             distance_atten *= (range_fade * range_fade);
         }
 
-        // Spot cone attenuation
+        // --- Physically Correct Flux Normalization ---
+        float normalization = 4.0 * kPi;
         float spot_atten = 1.0;
         const uint type_bits = (pl.flags & POSITIONAL_LIGHT_TYPE_MASK);
         if (type_bits == POSITIONAL_LIGHT_TYPE_SPOT) {
@@ -358,6 +366,9 @@ float3 AccumulatePositionalLightsClustered(
             const float denom = max(inner_cos - outer_cos, 1e-4);
             spot_atten = saturate((cos_theta - outer_cos) / denom);
             spot_atten *= spot_atten;
+
+            // Solid angle of a cone: Omega = 2PI * (1 - cos(theta_outer))
+            normalization = 2.0 * kPi * (1.0 - pl.outer_cone_cos);
         }
 
         const float atten = distance_atten * spot_atten;
@@ -382,7 +393,8 @@ float3 AccumulatePositionalLightsClustered(
         const float3 kD = (1.0 - kS) * (1.0 - metalness);
         const float3 diffuse = kD * base_rgb / kPi;
 
-        direct += (diffuse + specular) * pl.color_rgb * pl.luminous_flux_lm * (NdotL * atten);
+        const float physical_intensity = pl.luminous_flux_lm / max(normalization, 1e-4);
+        direct += (diffuse + specular) * pl.color_rgb * physical_intensity * (NdotL * atten);
     }
 
     return direct;

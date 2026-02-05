@@ -48,6 +48,14 @@ public:
   [[nodiscard]] virtual auto GetSkyViewLutSize() const noexcept
     -> Extent<uint32_t>
     = 0;
+
+  //! Returns true if LUTs have been generated at least once.
+  [[nodiscard]] virtual auto HasBeenGenerated() const noexcept -> bool = 0;
+
+  //! Returns a monotonic generation token that increases when parameters
+  //! change.
+  [[nodiscard]] virtual auto GetGeneration() const noexcept -> std::uint64_t
+    = 0;
 };
 
 } // namespace oxygen::engine::internal

@@ -208,8 +208,8 @@ auto LightBenchPanel::DrawPointLightControls() -> void
   if (ImGui::ColorEdit3("Color##point", &point.color_rgb.x)) {
     MarkChanged();
   }
-  if (ImGui::DragFloat("Intensity##point", &point.intensity, 1.0F, 0.0F,
-        200000.0F, "%.2F", ImGuiSliderFlags_Logarithmic)) {
+  if (ImGui::DragFloat("Luminous Flux (lm)##point", &point.intensity, 1.0F,
+        0.0F, 200000.0F, "%.2F", ImGuiSliderFlags_Logarithmic)) {
     MarkChanged();
   }
   if (ImGui::DragFloat("Range##point", &point.range, 0.1F, 0.1F, 500.0F)) {
@@ -244,7 +244,7 @@ auto LightBenchPanel::DrawSpotLightControls() -> void
   if (ImGui::ColorEdit3("Color##spot", &spot.color_rgb.x)) {
     MarkChanged();
   }
-  if (ImGui::DragFloat("Intensity##spot", &spot.intensity, 1.0F, 0.0F,
+  if (ImGui::DragFloat("Luminous Flux (lm)##spot", &spot.intensity, 1.0F, 0.0F,
         200000.0F, "%.2F", ImGuiSliderFlags_Logarithmic)) {
     MarkChanged();
   }

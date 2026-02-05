@@ -19,9 +19,8 @@ namespace oxygen::scene::detail {
 // Padding will be expected here as we align all glm types to 16 bytes for
 // SIMD optimizations to be possible
 OXYGEN_DIAGNOSTIC_PUSH
-#if defined(OXYGEN_MSVC_VERSION)
-OXYGEN_DIAGNOSTIC_DISABLE(4324)
-#endif
+OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4324)
+OXYGEN_DIAGNOSTIC_DISABLE_CLANG("-Wpadded")
 
 //! Component managing 3D spatial transformations with hierarchical support and
 //! performance optimization.
@@ -195,7 +194,7 @@ private:
 
   //! Cached world transformation matrix (lazy-computed, mutable for const
   //! access).
-  mutable alignas(16) Mat4 world_matrix_ { 1.0f };
+  alignas(16) mutable Mat4 world_matrix_ { 1.0f };
 
   ObjectMetadata* meta_data_ { nullptr };
 

@@ -11,16 +11,16 @@
 #include <Oxygen/Base/ObserverPtr.h>
 
 #include "DemoShell/UI/DemoPanel.h"
-#include "TexturedCube/UI/TextureBrowserVm.h"
+#include "TexturedCube/UI/MaterialsSandboxVm.h"
 
 namespace oxygen::examples::textured_cube::ui {
 
-class TextureBrowserPanel final : public oxygen::examples::DemoPanel {
+class MaterialsSandboxPanel final : public oxygen::examples::DemoPanel {
 public:
-  TextureBrowserPanel() = default;
-  ~TextureBrowserPanel() override = default;
+  MaterialsSandboxPanel() = default;
+  ~MaterialsSandboxPanel() override = default;
 
-  void Initialize(observer_ptr<TextureBrowserVm> vm);
+  void Initialize(observer_ptr<MaterialsSandboxVm> vm);
 
   // DemoPanel interface
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override;
@@ -35,7 +35,7 @@ private:
   auto DrawMaterialsSection() -> void;
   auto DrawBrowserSection() -> void;
 
-  observer_ptr<TextureBrowserVm> vm_;
+  observer_ptr<MaterialsSandboxVm> vm_;
 };
 
 } // namespace oxygen::examples::textured_cube::ui

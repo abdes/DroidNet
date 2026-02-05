@@ -254,7 +254,7 @@ auto LightScene::EnsureGeometryAssets() -> void
   const auto glossy_mat = MakeSolidColorMaterial(
     "GlossySphere", Vec4 { 0.9F, 0.9F, 0.9F, 1.0F }, 0.08F, 0.0F, false);
   const auto ground_mat = MakeSolidColorMaterial(
-    "Ground", Vec4 { 0.15F, 0.15F, 0.15F, 1.0F }, 0.9F, 0.0F, false);
+    "Ground", Vec4 { 0.18F, 0.18F, 0.18F, 1.0F }, 0.9F, 0.0F, false);
 
   gray_card_geo_ = BuildQuadGeometry("GrayCard", gray_mat);
   white_card_geo_ = BuildQuadGeometry("WhiteCard", white_mat);
@@ -508,7 +508,8 @@ auto LightScene::MakeSolidColorMaterial(std::string_view name, const Vec4& rgba,
   using namespace oxygen::data;
 
   pak::MaterialAssetDesc desc {};
-  desc.header.asset_type = 7;
+  desc.header.asset_type
+    = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
   constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
   const std::size_t n = (std::min)(maxn, name.size());
   std::memcpy(desc.header.name, name.data(), n);

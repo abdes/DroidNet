@@ -25,8 +25,12 @@ auto PostProcessVm::Refresh() -> void
   epoch_ = service_->GetEpoch();
   compositing_enabled_ = service_->GetCompositingEnabled();
   compositing_alpha_ = service_->GetCompositingAlpha();
+  exposure_enabled_ = service_->GetExposureEnabled();
   exposure_mode_ = service_->GetExposureMode();
   manual_ev100_ = service_->GetManualExposureEV100();
+  manual_camera_aperture_ = service_->GetManualCameraAperture();
+  manual_camera_shutter_rate_ = service_->GetManualCameraShutterRate();
+  manual_camera_iso_ = service_->GetManualCameraIso();
   exposure_compensation_ = service_->GetExposureCompensation();
   tonemapping_enabled_ = service_->GetTonemappingEnabled();
   tonemapping_mode_ = service_->GetToneMapper();
@@ -75,6 +79,23 @@ auto PostProcessVm::SetCompositingAlpha(float alpha) -> void
 
 // Exposure
 
+auto PostProcessVm::GetExposureEnabled() -> bool
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale())
+    Refresh();
+  return exposure_enabled_;
+}
+
+auto PostProcessVm::SetExposureEnabled(bool enabled) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->SetExposureEnabled(enabled);
+    Refresh();
+  }
+}
+
 auto PostProcessVm::GetExposureMode() -> engine::ExposureMode
 {
   std::lock_guard lock(mutex_);
@@ -107,6 +128,68 @@ auto PostProcessVm::SetManualExposureEV100(float ev100) -> void
     service_->SetManualExposureEV100(ev100);
     Refresh();
   }
+}
+
+auto PostProcessVm::GetManualCameraAperture() -> float
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale())
+    Refresh();
+  return manual_camera_aperture_;
+}
+
+auto PostProcessVm::SetManualCameraAperture(float aperture) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->SetManualCameraAperture(aperture);
+    Refresh();
+  }
+}
+
+auto PostProcessVm::GetManualCameraShutterRate() -> float
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale())
+    Refresh();
+  return manual_camera_shutter_rate_;
+}
+
+auto PostProcessVm::SetManualCameraShutterRate(float shutter_rate) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->SetManualCameraShutterRate(shutter_rate);
+    Refresh();
+  }
+}
+
+auto PostProcessVm::GetManualCameraIso() -> float
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale())
+    Refresh();
+  return manual_camera_iso_;
+}
+
+auto PostProcessVm::SetManualCameraIso(float iso) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->SetManualCameraIso(iso);
+    Refresh();
+  }
+}
+
+auto PostProcessVm::GetManualCameraEV100() -> float
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale())
+    Refresh();
+  if (service_) {
+    return service_->GetManualCameraEV100();
+  }
+  return manual_ev100_;
 }
 
 auto PostProcessVm::GetExposureCompensation() -> float

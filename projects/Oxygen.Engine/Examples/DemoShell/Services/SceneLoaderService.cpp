@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <filesystem>
 #include <numbers>
 #include <optional>
 #include <ranges>
@@ -91,10 +90,9 @@ namespace {
 } // namespace
 
 SceneLoaderService::SceneLoaderService(
-  content::IAssetLoader& loader, const int width, const int height)
+  content::IAssetLoader& loader, const Extent<uint32_t> viewport)
   : loader_(loader)
-  , width_(width)
-  , height_(height)
+  , extent_(viewport)
 {
 }
 
@@ -627,14 +625,14 @@ void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)
 
 void SceneLoaderService::EnsureCameraAndViewport(scene::Scene& scene)
 {
-  const float aspect = height_ > 0
-    ? (static_cast<float>(width_) / static_cast<float>(height_))
+  const float aspect = extent_.height > 0
+    ? (static_cast<float>(extent_.width) / static_cast<float>(extent_.height))
     : 1.0F;
 
   const ViewPort viewport { .top_left_x = 0.0F,
     .top_left_y = 0.0F,
-    .width = static_cast<float>(width_),
-    .height = static_cast<float>(height_),
+    .width = static_cast<float>(extent_.width),
+    .height = static_cast<float>(extent_.height),
     .min_depth = 0.0F,
     .max_depth = 1.0F };
 

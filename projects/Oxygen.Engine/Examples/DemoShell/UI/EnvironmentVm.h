@@ -83,8 +83,8 @@ public:
   auto SetSkySphereSource(int source) -> void;
   [[nodiscard]] auto GetSkySphereSolidColor() const -> glm::vec3;
   auto SetSkySphereSolidColor(const glm::vec3& value) -> void;
-  [[nodiscard]] auto GetSkySphereIntensity() const -> float;
-  auto SetSkySphereIntensity(float value) -> void;
+  [[nodiscard]] auto GetSkyIntensity() const -> float;
+  auto SetSkyIntensity(float value) -> void;
   [[nodiscard]] auto GetSkySphereRotationDeg() const -> float;
   auto SetSkySphereRotationDeg(float value) -> void;
 

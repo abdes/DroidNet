@@ -7,9 +7,16 @@
 #pragma once
 
 #include <span>
+#include <string_view>
 
 #include <Oxygen/Composition/Object.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Renderer/Passes/ShaderPass.h>
+#include <Oxygen/Renderer/Passes/ToneMapPass.h>
+#include <Oxygen/Renderer/Renderer.h>
+
+#include "DemoShell/Runtime/CompositionView.h"
 
 namespace oxygen {
 namespace engine {
@@ -18,6 +25,7 @@ namespace engine {
   struct ShaderPassConfig;
   struct TransparentPassConfig;
   struct LightCullingPassConfig;
+  struct CompositionSubmission;
 }
 namespace scene {
   class Scene;
@@ -27,15 +35,7 @@ namespace graphics {
 }
 }
 
-#include <Oxygen/Graphics/Common/Types/Color.h>
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
-#include <Oxygen/Renderer/Passes/ToneMapPass.h>
-#include <Oxygen/Renderer/Renderer.h>
-#include <string_view>
-
 namespace oxygen::examples {
-
-class DemoView;
 
 //! Bitmask of supported rendering features for pipeline discovery.
 enum class PipelineFeature : std::uint32_t {
@@ -136,22 +136,27 @@ public:
 
   // [Phase: kSceneMutation]
   // Register active views for the frame.
-  // The pipeline iterates 'views' and registers them with the renderer.
+  // The pipeline iterates 'view_descs' and registers them with the renderer.
   virtual auto OnSceneMutation(engine::FrameContext& frame_ctx,
-    engine::Renderer& renderer, scene::Scene& scene, std::span<DemoView*> views,
+    engine::Renderer& renderer, scene::Scene& scene,
+    std::span<const CompositionView> view_descs,
     graphics::Framebuffer* final_output) -> co::Co<>
     = 0;
 
   // [Phase: kPreRender]
   // Configure render passes and graph parameters.
+  // Note: views are now identified by their ID or the descriptors from the
+  // mutation phase.
   virtual auto OnPreRender(engine::FrameContext& frame_ctx,
-    engine::Renderer& renderer, std::span<DemoView*> views) -> co::Co<>
+    engine::Renderer& renderer, std::span<const CompositionView> view_descs)
+    -> co::Co<>
     = 0;
 
   // [Phase: kCompositing]
   // Submit final composition/post-process tasks.
   virtual auto OnCompositing(engine::FrameContext& frame_ctx,
-    engine::Renderer& renderer, graphics::Framebuffer* final_output) -> co::Co<>
+    engine::Renderer& renderer, graphics::Framebuffer* final_output)
+    -> co::Co<engine::CompositionSubmission>
     = 0;
 
   // Clear references to swapchain-backed textures before resize.

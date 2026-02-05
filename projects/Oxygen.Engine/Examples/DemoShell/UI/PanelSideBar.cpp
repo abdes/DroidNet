@@ -29,7 +29,7 @@ namespace {
 
   auto MatchesFontName(const ImFont* font, std::string_view name) -> bool
   {
-    if (!font) {
+    if (font == nullptr) {
       return false;
     }
     if (std::string_view(font->GetDebugName()) == name) {

@@ -202,7 +202,7 @@ public:
 private:
   //! Completes initialization once required modules are available.
   auto CompleteInitialization() -> bool;
-  auto UpdatePanels() -> void;
+  auto UpdatePanels(bool is_scene_mutation) -> void;
 
   struct Impl;
   std::unique_ptr<Impl> impl_ {};

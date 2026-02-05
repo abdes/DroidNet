@@ -189,6 +189,8 @@ auto DemoShell::CompleteInitialization() -> bool
       observer_ptr { impl_->camera_rig.get() });
   }
   impl_->camera_lifecycle.SetScene(impl_->scene_control.TryGetScene());
+  impl_->post_process_settings_service.BindCameraLifecycle(
+    observer_ptr { &impl_->camera_lifecycle });
 
   // Create DemoShellUi with all services
   impl_->demo_shell_ui.emplace(impl_->config.engine,
@@ -242,6 +244,10 @@ auto DemoShell::Update(time::CanonicalDuration delta_time) -> void
     return;
   }
 
+  const auto u_delta_time = delta_time.get();
+  const bool is_scene_mutation
+    = u_delta_time == std::chrono::nanoseconds::zero();
+
   if (impl_->content_vm) {
     impl_->content_vm->Update();
   }
@@ -253,9 +259,8 @@ auto DemoShell::Update(time::CanonicalDuration delta_time) -> void
     impl_->camera_settings_service.SetActiveCameraId({});
   }
 
-  UpdatePanels();
+  UpdatePanels(is_scene_mutation);
 
-  const auto u_delta_time = delta_time.get();
   if (u_delta_time == std::chrono::nanoseconds::zero()) {
     return;
   }
@@ -431,7 +436,7 @@ auto DemoShell::GetLightCullingVisualizationMode() const
   return vm->GetVisualizationMode();
 }
 
-auto DemoShell::UpdatePanels() -> void
+auto DemoShell::UpdatePanels(bool is_scene_mutation) -> void
 {
   auto pipeline = impl_->config.get_active_pipeline
     ? impl_->config.get_active_pipeline()
@@ -454,16 +459,12 @@ auto DemoShell::UpdatePanels() -> void
     }
   }
 
-  if (impl_->config.panel_config.environment && impl_->demo_shell_ui) {
-    auto env_vm = impl_->demo_shell_ui->GetEnvironmentVm();
-    if (!env_vm) {
-      return;
-    }
-    const auto renderer = impl_->GetRenderer();
+  if (impl_->config.panel_config.environment) {
     EnvironmentRuntimeConfig runtime_config {};
     runtime_config.scene = TryGetScene();
     runtime_config.skybox_service
       = impl_->GetSkyboxService(runtime_config.scene);
+    const auto renderer = impl_->GetRenderer();
     runtime_config.renderer = renderer;
     runtime_config.on_atmosphere_params_changed = [renderer] {
       LOG_F(INFO, "Atmosphere parameters changed, LUTs will regenerate");
@@ -475,9 +476,16 @@ auto DemoShell::UpdatePanels() -> void
     };
     runtime_config.on_exposure_changed
       = [] { LOG_F(INFO, "Exposure settings changed"); };
-    env_vm->SetRuntimeConfig(runtime_config);
-    if (env_vm->HasPendingChanges()) {
-      env_vm->ApplyPendingChanges();
+    impl_->environment_settings_service.SetRuntimeConfig(runtime_config);
+    if (runtime_config.scene
+      && impl_->environment_settings_service.HasPendingChanges()) {
+      impl_->environment_settings_service.ApplyPendingChanges();
+    }
+
+    if (impl_->demo_shell_ui) {
+      if (const auto env_vm = impl_->demo_shell_ui->GetEnvironmentVm()) {
+        env_vm->SetRuntimeConfig(runtime_config);
+      }
     }
   }
 }

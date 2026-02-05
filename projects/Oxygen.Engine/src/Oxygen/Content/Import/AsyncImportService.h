@@ -133,7 +133,7 @@ public:
   /*!
    @param config Service configuration.
   */
-  OXGN_CNTT_API explicit AsyncImportService(Config config = {});
+  OXGN_CNTT_API explicit AsyncImportService(std::optional<Config> config = {});
 
   //! Verify the service was stopped before destruction.
   /*!

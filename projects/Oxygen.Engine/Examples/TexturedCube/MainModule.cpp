@@ -20,20 +20,19 @@
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Renderer.h>
 
+#include "DemoShell/Runtime/CompositionView.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/ForwardPipeline.h"
-#include "DemoShell/Runtime/SceneView.h"
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/Services/SkyboxService.h"
 #include "DemoShell/UI/DemoShellUi.h"
-#include "DemoShell/UI/RenderingVm.h"
-#include "Oxygen/Scene/Camera/Perspective.h"
 #include "TexturedCube/MainModule.h"
 
 namespace oxygen::examples::textured_cube {
 
 MainModule::MainModule(const DemoAppContext& app)
   : Base(app)
+  , last_viewport_({ 0, 0 })
 {
   DCHECK_NOTNULL_F(app_.platform);
   DCHECK_F(!app_.gfx_weak.expired());
@@ -52,8 +51,11 @@ MainModule::MainModule(const DemoAppContext& app)
 auto MainModule::BuildDefaultWindowProperties() const
   -> platform::window::Properties
 {
+  constexpr auto kWidth = 2560U;
+  constexpr auto kHeight = 1400U;
+
   platform::window::Properties p("Textured Cube (Demo Shell)");
-  p.extent = { .width = 2560U, .height = 1400U };
+  p.extent = { .width = kWidth, .height = kHeight };
   p.flags = { .hidden = false,
     .always_on_top = false,
     .full_screen = app_.fullscreen,
@@ -101,10 +103,7 @@ auto MainModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
   shell_config.panel_config.lighting = true;
   shell_config.panel_config.environment = true;
   shell_config.panel_config.rendering = true;
-
-  // Shared services wiring
-  // Note: We initialize SkyboxService later when Scene is ready,
-  // so we update the shell with it later.
+  shell_config.panel_config.post_process = true;
 
   shell_config.get_active_pipeline
     = [this]() -> observer_ptr<RenderingPipeline> {
@@ -116,10 +115,8 @@ auto MainModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
     return false;
   }
 
-  // Create Main View (placeholder camera, updated later)
-  auto view = std::make_unique<SceneView>(scene::SceneNode {});
-  main_view_
-    = observer_ptr { static_cast<SceneView*>(AddView(std::move(view))) };
+  // Create Main View ID
+  main_view_id_ = GetOrCreateViewId("MainView");
 
   LOG_F(INFO, "TexturedCube: Module initialized");
   return true;
@@ -143,6 +140,8 @@ auto MainModule::OnShutdown() noexcept -> void
 
   shell_.reset();
 
+  last_viewport_ = { 0, 0 };
+
   // Clear observers
   active_scene_ = {};
   Base::OnShutdown();
@@ -150,6 +149,7 @@ auto MainModule::OnShutdown() noexcept -> void
 
 auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
 {
+  ApplyRenderModeFromPanel();
   Base::OnFrameStart(context);
 }
 
@@ -170,7 +170,7 @@ auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
         observer_ptr { active_scene_.operator->() });
 
       // Init VM
-      texture_vm_ = std::make_unique<ui::TextureBrowserVm>(
+      texture_vm_ = std::make_unique<ui::MaterialsSandboxVm>(
         observer_ptr { texture_service_.get() },
         observer_ptr { &shell_->GetFileBrowserService() });
       texture_vm_->SetCubeRebuildNeeded();
@@ -188,7 +188,7 @@ auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
         });
 
       // Init Panel
-      texture_panel_ = std::make_shared<ui::TextureBrowserPanel>();
+      texture_panel_ = std::make_shared<ui::MaterialsSandboxPanel>();
       texture_panel_->Initialize(observer_ptr { texture_vm_.get() });
 
       shell_->RegisterPanel(texture_panel_);
@@ -198,10 +198,12 @@ auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
       scene_setup_ = std::make_unique<SceneSetup>(
         observer_ptr { active_scene_.operator->() }, *texture_service_,
         *skybox_service_, cooked_root_);
-      scene_setup_->EnsureEnvironment({});
-      scene_setup_->EnsureLighting({}, {});
-      scene_setup_->EnsureCubeNode();
+      scene_setup_->Initialize();
     }
+  }
+
+  if (!app_.headless && app_window_ && app_window_->GetWindow()) {
+    last_viewport_ = app_window_->GetWindow()->Size();
   }
 
   context.SetScene(shell_->TryGetScene());
@@ -221,28 +223,21 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   }
 
   // Get window extent for camera setup via shell's camera lifecycle
-  const auto extent = app_window_->GetWindow()->Size();
   auto& camera_lifecycle = shell_->GetCameraLifecycle();
-  camera_lifecycle.EnsureViewport(extent.width, extent.height);
+  if (app_window_->GetWindow()) {
+    const auto extent = app_window_->GetWindow()->Size();
+    camera_lifecycle.EnsureViewport(extent);
+    last_viewport_ = extent;
+  }
   camera_lifecycle.ApplyPendingSync();
   camera_lifecycle.ApplyPendingReset();
 
   // Update shell
-  shell_->Update(context.GetGameDeltaTime());
-
-  // Update view camera from shell's camera rig
-  if (main_view_) {
-    auto& active_camera = camera_lifecycle.GetActiveCamera();
-    if (active_camera.IsAlive()) {
-      main_view_->SetCamera(active_camera);
-    }
-  }
+  shell_->Update(time::CanonicalDuration {});
 
   // Ensure scene objects (idempotent)
   if (scene_setup_) {
-    scene_setup_->EnsureCubeNode();
-    // scene_setup_->EnsureEnvironment({}); // Managed by SkyboxService + Shell?
-    // scene_setup_->EnsureLighting({}, {}); // Managed by Shell Lighting
+    scene_setup_->Initialize();
   }
 
   // Update Texture State
@@ -251,70 +246,64 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     if (texture_vm_->IsCubeRebuildNeeded()) {
       texture_vm_->ClearCubeRebuildNeeded();
 
-      auto& sphere_state = texture_vm_->GetSphereTextureState();
-      auto& cube_state = texture_vm_->GetCubeTextureState();
+      auto& sphere_slot = texture_vm_->GetSphereTextureState();
+      auto& cube_slot = texture_vm_->GetCubeTextureState();
+      auto& surface_vm = texture_vm_->GetSurfaceState();
 
       auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
-      if ((sphere_state.mode == SceneSetup::TextureIndexMode::kForcedError
-            || cube_state.mode == SceneSetup::TextureIndexMode::kForcedError)
+      if ((sphere_slot.mode == TextureIndexMode::kForcedError
+            || cube_slot.mode == TextureIndexMode::kForcedError)
         && (forced_error_key_ == oxygen::content::ResourceKey { 0U })
         && asset_loader) {
         forced_error_key_ = asset_loader->MintSyntheticTextureKey();
       }
 
-      auto& surface = texture_vm_->GetSurfaceState();
+      const std::pair<glm::vec2, glm::vec2> uv_transform
+        = texture_vm_->GetEffectiveUvTransform();
 
-      auto [uv_scale, uv_offset] = texture_vm_->GetEffectiveUvTransform();
-
-      glm::vec4 base_color { 1.0F };
-      if (surface.use_constant_base_color) {
-        base_color = { surface.constant_base_color_rgb, 1.0F };
+      glm::vec4 surface_base_color { 1.0F };
+      if (surface_vm.use_constant_base_color) {
+        surface_base_color = { surface_vm.constant_base_color_rgb, 1.0F };
       }
 
       // Rebuild Cube
-      auto material = scene_setup_->RebuildCube(sphere_state.mode,
-        sphere_state.resource_index, sphere_state.resource_key, cube_state.mode,
-        cube_state.resource_index, cube_state.resource_key, forced_error_key_,
-        uv_scale, uv_offset, surface.metalness, surface.roughness, base_color,
-        surface.use_constant_base_color);
+      ObjectTextureState sphere_state;
+      sphere_state.mode = sphere_slot.mode;
+      sphere_state.resource_index = sphere_slot.resource_index;
+      sphere_state.resource_key = sphere_slot.resource_key;
+
+      ObjectTextureState cube_state;
+      cube_state.mode = cube_slot.mode;
+      cube_state.resource_index = cube_slot.resource_index;
+      cube_state.resource_key = cube_slot.resource_key;
+
+      SurfaceParams surface_params;
+      surface_params.metalness = surface_vm.metalness;
+      surface_params.roughness = surface_vm.roughness;
+      surface_params.base_color = surface_base_color;
+      surface_params.disable_texture_sampling
+        = surface_vm.use_constant_base_color;
+
+      // Update each object independently so callers can later update only one
+      scene_setup_->UpdateSphere(
+        sphere_state, surface_params, forced_error_key_);
+      scene_setup_->UpdateCube(cube_state, surface_params, forced_error_key_);
 
       // Apply overrides immediately
-      auto* renderer = [this]() -> engine::Renderer* {
-        if (app_.engine) {
-          if (auto r = app_.engine->GetModule<engine::Renderer>())
-            return &r->get();
-        }
-        return nullptr;
-      }();
-      if (renderer && material) {
-        // Sticky overrides
-        if (auto sphere_mat = scene_setup_->GetSphereMaterial()) {
-          (void)renderer->OverrideMaterialUvTransform(
-            *sphere_mat, uv_scale, uv_offset);
-        }
-        if (auto cube_mat = scene_setup_->GetCubeMaterial()) {
-          (void)renderer->OverrideMaterialUvTransform(
-            *cube_mat, uv_scale, uv_offset);
+      if (app_.engine) {
+        if (auto r = app_.engine->GetModule<engine::Renderer>()) {
+          scene_setup_->UpdateUvTransform(
+            r->get(), uv_transform.first, uv_transform.second);
         }
       }
     } else {
       // Sticky Overrides even if not rebuilt (e.g. UV changed)
-      auto* renderer = [this]() -> engine::Renderer* {
-        if (app_.engine) {
-          if (auto r = app_.engine->GetModule<engine::Renderer>())
-            return &r->get();
-        }
-        return nullptr;
-      }();
-      if (renderer) {
-        auto [uv_scale, uv_offset] = texture_vm_->GetEffectiveUvTransform();
-        if (auto sphere_mat = scene_setup_->GetSphereMaterial()) {
-          (void)renderer->OverrideMaterialUvTransform(
-            *sphere_mat, uv_scale, uv_offset);
-        }
-        if (auto cube_mat = scene_setup_->GetCubeMaterial()) {
-          (void)renderer->OverrideMaterialUvTransform(
-            *cube_mat, uv_scale, uv_offset);
+      if (app_.engine) {
+        if (auto r = app_.engine->GetModule<engine::Renderer>()) {
+          const std::pair<glm::vec2, glm::vec2> uv_transform
+            = texture_vm_->GetEffectiveUvTransform();
+          scene_setup_->UpdateUvTransform(
+            r->get(), uv_transform.first, uv_transform.second);
         }
       }
     }
@@ -347,31 +336,39 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
   co_return;
 }
 
-auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
+auto MainModule::UpdateComposition(engine::FrameContext& /*context*/,
+  std::vector<CompositionView>& views) -> void
 {
-  DCHECK_NOTNULL_F(app_window_);
-
-  if (shell_) {
-    ApplyRenderModeFromPanel();
+  if (!shell_) {
+    return;
+  }
+  auto& active_camera = shell_->GetCameraLifecycle().GetActiveCamera();
+  if (!active_camera.IsAlive()) {
+    return;
   }
 
-  if (auto* fw_pipeline = static_cast<ForwardPipeline*>(pipeline_.get())) {
-    if (auto shader_pass_config = fw_pipeline->GetShaderPassConfig()) {
-      shader_pass_config->clear_color
-        = graphics::Color { 0.08F, 0.08F, 0.10F, 1.0F };
-      shader_pass_config->debug_name = "ShaderPass";
-    }
+  View view {};
+  if (app_window_ && app_window_->GetWindow()) {
+    const auto extent = app_window_->GetWindow()->Size();
+    view.viewport = ViewPort {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
+      .width = static_cast<float>(extent.width),
+      .height = static_cast<float>(extent.height),
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    };
   }
 
-  co_await Base::OnPreRender(context);
-}
+  // Create the main scene view intent
+  views.push_back(
+    CompositionView::ForScene(main_view_id_, view, active_camera));
 
-auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
-{
-  co_await Base::OnCompositing(context);
+  // Also render our tools layer
+  const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
+  views.push_back(CompositionView::ForImGui(
+    imgui_view_id, view, [](graphics::CommandRecorder&) { }));
 }
-
-auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void { }
 
 auto MainModule::ApplyRenderModeFromPanel() -> void
 {
@@ -379,20 +376,15 @@ auto MainModule::ApplyRenderModeFromPanel() -> void
     return;
   }
 
-  auto* fw_pipeline = static_cast<ForwardPipeline*>(pipeline_.get());
-  if (!fw_pipeline) {
-    return;
-  }
-
   const auto render_mode = shell_->GetRenderingViewMode();
-  fw_pipeline->SetRenderMode(render_mode);
+  pipeline_->SetRenderMode(render_mode);
 
   // Apply debug mode. Rendering debug modes take precedence if set.
   auto debug_mode = shell_->GetRenderingDebugMode();
   if (debug_mode == engine::ShaderDebugMode::kDisabled) {
     debug_mode = shell_->GetLightCullingVisualizationMode();
   }
-  fw_pipeline->SetShaderDebugMode(debug_mode);
+  pipeline_->SetShaderDebugMode(debug_mode);
 }
 
 } // namespace oxygen::examples::textured_cube

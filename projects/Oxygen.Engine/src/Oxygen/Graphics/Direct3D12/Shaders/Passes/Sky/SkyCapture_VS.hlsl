@@ -4,35 +4,39 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+//! Sky Capture Vertex Shader
+//!
+//! Generates a fullscreen triangle for sky capture.
+//! Uses a dedicated face-specific view/projection matrix.
+
 #include "Renderer/FullscreenTriangle.hlsli"
 
-#include "Core/Bindless/Generated.BindlessLayout.hlsl"
+// Face constants (b2, space0 - shared root param with engine RootConstants)
+// In SkyCapturePass, we'll bind a small CBV here.
+struct SkyCaptureFaceConstants
+{
+    float4x4 view_matrix;
+    float4x4 projection_matrix;
+};
 
-struct SkyCaptureVSOutput
+cbuffer RootConstants : register(b2, space0)
+{
+    uint g_DrawIndex;
+    uint g_FaceConstantsIndex; // Use this to point to the face constants
+}
+
+struct SkyVSOutput
 {
     float4 position : SV_POSITION;
     float3 view_dir : TEXCOORD0;
     float2 uv : TEXCOORD1;
 };
 
-// Root constants b2 (shared root param index with engine)
-// ABI layout:
-//   g_DrawIndex          : unused for dispatch
-//   g_PassConstantsIndex : heap index of a CBV holding pass constants
-cbuffer RootConstants : register(b2, space0) {
-    uint g_DrawIndex;
-    uint g_PassConstantsIndex;
-}
-
-// Pass constants for sky capture.
-// This CBV is fetched via ResourceDescriptorHeap[g_PassConstantsIndex].
-struct SkyCapturePassConstants {
-    float4x4 face_rotation;
-};
-
-SkyCaptureVSOutput VS(uint vertex_id : SV_VertexID)
+SkyVSOutput VS(uint vertex_id : SV_VertexID)
 {
-    SkyCaptureVSOutput output;
+    SkyVSOutput output;
+
+    // Generate fullscreen triangle vertex position and UVs.
     float4 clip_pos;
     float2 uv;
     GenerateFullscreenTriangle(vertex_id, clip_pos, uv);
@@ -40,18 +44,20 @@ SkyCaptureVSOutput VS(uint vertex_id : SV_VertexID)
     output.position = clip_pos;
     output.uv = uv;
 
-    // View space ray for 90 degree FOV cube face.
-    float3 ray_vs = float3(clip_pos.x, clip_pos.y, -1.0);
+    // Load face constants via bindless index
+    ConstantBuffer<SkyCaptureFaceConstants> face
+        = ResourceDescriptorHeap[g_FaceConstantsIndex];
 
-    // Rotate to world space using the per-face rotation matrix.
-    // If pass constants aren't bound, fall back to an arbitrary direction.
-    output.view_dir = float3(0.0, 0.0, 1.0);
-    if (g_PassConstantsIndex != K_INVALID_BINDLESS_INDEX
-        && BX_IN_GLOBAL_SRV(g_PassConstantsIndex)) {
-        ConstantBuffer<SkyCapturePassConstants> pass
-            = ResourceDescriptorHeap[g_PassConstantsIndex];
-        output.view_dir = mul((float3x3)pass.face_rotation, ray_vs);
-    }
+    // Compute world-space view direction
+    // view_x = clip_x / P[0][0], view_y = clip_y / P[1][1], view_z = -1 (forward)
+    float3 view_dir_vs;
+    view_dir_vs.x = clip_pos.x / face.projection_matrix[0][0];
+    view_dir_vs.y = clip_pos.y / face.projection_matrix[1][1];
+    view_dir_vs.z = -1.0f;
+
+    // Rotate to world space
+    float3x3 inv_view_rot = transpose((float3x3)face.view_matrix);
+    output.view_dir = mul(inv_view_rot, view_dir_vs);
 
     return output;
 }

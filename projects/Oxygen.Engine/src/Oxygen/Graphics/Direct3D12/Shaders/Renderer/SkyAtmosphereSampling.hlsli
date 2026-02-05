@@ -296,6 +296,12 @@ float3 ComputeSunDisk(
         cos_sun_radius + edge_softness,
         cos_angle);
 
+    // The sun_luminance parameter is the sun's illuminance (Lux). To get the
+    // radiance (Nits) for the sun disk, we must divide by the solid angle of
+    // the sun disk: Omega = 2 * PI * (1 - cos(angular_radius)).
+    float omega_sun = SKY_TWO_PI * (1.0 - cos_sun_radius);
+    float3 sun_radiance = sun_luminance / max(omega_sun, 1e-6);
+
     // Now handle partial visibility: if view is above horizon but looking
     // toward a sun that's partially below, we need to fade based on how
     // much of the sun disk is above the horizon line.
@@ -318,7 +324,7 @@ float3 ComputeSunDisk(
     float horizon_fade = saturate((sun_above_horizon + angular_radius_radians)
                                    / (2.0 * angular_radius_radians));
 
-    return sun_luminance * disk_factor * horizon_fade;
+    return sun_radiance * disk_factor * horizon_fade;
 }
 
 //! Computes full atmospheric sky color from LUTs.

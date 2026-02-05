@@ -71,9 +71,13 @@ private:
     ShaderVisibleIndex target_uav_slot { kInvalidShaderVisibleIndex };
     float roughness { 0.0F };
     uint32_t face_size { 0 };
+    float source_intensity { 1.0F };
+    float _pad0 { 0.0F };
+    float _pad1 { 0.0F };
+    float _pad2 { 0.0F };
   };
-  static_assert(sizeof(IblFilteringPassConstants) == 16,
-    "IblFilteringPassConstants must be 16 bytes");
+  static_assert(sizeof(IblFilteringPassConstants) == 32,
+    "IblFilteringPassConstants must be 32 bytes");
 
   // TODO: Move this to a shared config or dynamic resizing buffer strategy.
   static constexpr uint32_t kMaxDispatches = 16U;
@@ -84,9 +88,11 @@ private:
   auto ResolveSourceCubemapSlot() const noexcept -> ShaderVisibleIndex;
 
   auto DispatchIrradiance(graphics::CommandRecorder& recorder,
-    internal::IblManager& ibl, ShaderVisibleIndex source_slot) -> void;
+    internal::IblManager& ibl, ShaderVisibleIndex source_slot,
+    float source_intensity) -> void;
   auto DispatchPrefilter(graphics::CommandRecorder& recorder,
-    internal::IblManager& ibl, ShaderVisibleIndex source_slot) -> void;
+    internal::IblManager& ibl, ShaderVisibleIndex source_slot,
+    float source_intensity) -> void;
 
   std::shared_ptr<graphics::Buffer> pass_constants_buffer_;
   void* pass_constants_mapped_ { nullptr };

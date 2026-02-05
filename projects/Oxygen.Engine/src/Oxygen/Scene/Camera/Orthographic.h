@@ -14,6 +14,7 @@
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Scene/Camera/CameraExposure.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/api_export.h>
 
@@ -95,6 +96,34 @@ public:
     return { left_, right_, bottom_, top_, near_, far_ };
   }
 
+  //! Sets the camera exposure parameters.
+  /*!
+   @param exposure Exposure settings to apply.
+   @return None
+  */
+  auto SetExposure(const CameraExposure& exposure) noexcept -> void
+  {
+    exposure_ = exposure;
+  }
+
+  //! Gets the camera exposure parameters.
+  /*!
+   @return Mutable reference to exposure settings.
+  */
+  OXGN_SCN_NDAPI auto Exposure() noexcept -> CameraExposure&
+  {
+    return exposure_;
+  }
+
+  //! Gets the camera exposure parameters.
+  /*!
+   @return Read-only reference to exposure settings.
+  */
+  OXGN_SCN_NDAPI auto Exposure() const noexcept -> const CameraExposure&
+  {
+    return exposure_;
+  }
+
   //! Sets the viewport rectangle for this camera.
   auto SetViewport(const ViewPort& viewport) -> void { viewport_ = viewport; }
 
@@ -141,6 +170,7 @@ private:
   float top_ = 1.0F;
   float near_ = kDefaultNearPlane;
   float far_ = kDefaultFarPlane;
+  CameraExposure exposure_ {};
   std::optional<ViewPort> viewport_;
   detail::TransformComponent* transform_ { nullptr };
 };

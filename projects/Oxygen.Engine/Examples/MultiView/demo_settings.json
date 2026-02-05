@@ -1,6 +1,12 @@
 {
   "demo_shell": {
-    "active_panel": "Settings"
+    "active_panel": ""
+  },
+  "post_process": {
+    "exposure": {
+      "enabled": true,
+      "manual_ev100": 0.9240000247955322
+    }
   },
   "ui": {
     "stats": {

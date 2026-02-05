@@ -88,6 +88,7 @@ auto SceneBootstrapper::EnsureSceneWithContent() -> observer_ptr<scene::Scene>
   EnsureCube(*scene);
   EnsureCylinder(*scene);
   EnsureCone(*scene);
+  EnsureGroundPlane(*scene);
   EnsureLighting(*scene);
   return scene_;
 }
@@ -115,6 +116,11 @@ auto SceneBootstrapper::GetCylinderNode() const -> scene::SceneNode
 auto SceneBootstrapper::GetConeNode() const -> scene::SceneNode
 {
   return cone_node_;
+}
+
+auto SceneBootstrapper::GetGroundPlaneNode() const -> scene::SceneNode
+{
+  return ground_plane_node_;
 }
 
 auto SceneBootstrapper::EnsureSphere(scene::Scene& scene) -> void
@@ -370,6 +376,62 @@ auto SceneBootstrapper::EnsureCone(scene::Scene& scene) -> void
     cone_node_.IsAlive(), cone_node_.GetRenderable().GetGeometry() != nullptr);
 }
 
+auto SceneBootstrapper::EnsureGroundPlane(scene::Scene& scene) -> void
+{
+  if (ground_plane_node_.IsAlive()) {
+    return;
+  }
+
+  auto cube_geom_data = data::MakeCubeMeshAsset();
+  if (!cube_geom_data.has_value()) {
+    return;
+  }
+
+  // 18% Gray ground
+  auto material
+    = MakeSolidColorMaterial("GroundMaterial", { 0.18F, 0.18F, 0.18F, 1.0F });
+
+  using data::MeshBuilder;
+  using data::pak::GeometryAssetDesc;
+  using data::pak::MeshViewDesc;
+
+  auto mesh
+    = MeshBuilder(0, "Ground")
+        .WithVertices(cube_geom_data->first)
+        .WithIndices(cube_geom_data->second)
+        .BeginSubMesh("full", material)
+        .WithMeshView(MeshViewDesc {
+          .first_index = 0,
+          .index_count = static_cast<uint32_t>(cube_geom_data->second.size()),
+          .first_vertex = 0,
+          .vertex_count = static_cast<uint32_t>(cube_geom_data->first.size()),
+        })
+        .EndSubMesh()
+        .Build();
+
+  GeometryAssetDesc geo_desc {};
+  geo_desc.lod_count = 1;
+  const glm::vec3 bb_min = mesh->BoundingBoxMin();
+  const glm::vec3 bb_max = mesh->BoundingBoxMax();
+  geo_desc.bounding_box_min[0] = bb_min.x;
+  geo_desc.bounding_box_min[1] = bb_min.y;
+  geo_desc.bounding_box_min[2] = bb_min.z;
+  geo_desc.bounding_box_max[0] = bb_max.x;
+  geo_desc.bounding_box_max[1] = bb_max.y;
+  geo_desc.bounding_box_max[2] = bb_max.z;
+
+  auto geom_asset = std::make_shared<data::GeometryAsset>(
+    data::AssetKey { .guid = data::GenerateAssetGuid() }, geo_desc,
+    std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
+
+  ground_plane_node_ = scene.CreateNode("GroundPlane");
+  ground_plane_node_.GetRenderable().SetGeometry(std::move(geom_asset));
+  // Flat scale for ground
+  ground_plane_node_.GetTransform().SetLocalScale({ 10.0F, 10.0F, 0.1F });
+  // Position it slightly below the objects (which are at Z=0)
+  ground_plane_node_.GetTransform().SetLocalPosition({ 0.0F, 0.0F, -0.55F });
+}
+
 auto SceneBootstrapper::EnsureLighting(scene::Scene& scene) -> void
 {
   // Key light: Spotlight from upper-front-right, aiming at center of scene
@@ -380,10 +442,10 @@ auto SceneBootstrapper::EnsureLighting(scene::Scene& scene) -> void
     spot_light->Common().affects_world = true;
     spot_light->Common().color_rgb
       = glm::vec3(1.0F, 0.98F, 0.95F); // Warm white
-    spot_light->SetLuminousFluxLm(120.0F);
-    spot_light->SetRange(25.0F);
-    spot_light->SetSourceRadius(0.1F);
-    spot_light->SetConeAnglesRadians(glm::radians(25.0F), // Inner cone
+    spot_light->SetLuminousFluxLm(5000.0F);
+    spot_light->SetRange(250.0F);
+    spot_light->SetSourceRadius(0.4F);
+    spot_light->SetConeAnglesRadians(glm::radians(35.0F), // Inner cone
       glm::radians(45.0F) // Outer cone
     );
 
@@ -391,10 +453,10 @@ auto SceneBootstrapper::EnsureLighting(scene::Scene& scene) -> void
     CHECK_F(attached, "Failed to attach SpotLight to KeyLight node");
 
     // Position above and in front of the scene
-    key_light_node_.GetTransform().SetLocalPosition({ 3.0F, 5.0F, 6.0F });
+    key_light_node_.GetTransform().SetLocalPosition({ 3.0F, 3.0F, 3.0F });
 
     // Aim toward scene center (objects are roughly at origin)
-    const glm::vec3 light_pos = { 3.0F, 5.0F, 6.0F };
+    const glm::vec3 light_pos = { 3.0F, 3.0F, 3.0F };
     const glm::vec3 target = { -0.5F, 0.0F, 0.0F };
     const glm::vec3 direction = glm::normalize(target - light_pos);
     const glm::vec3 forward = glm::vec3(0.0F, 0.0F, -1.0F);
@@ -409,7 +471,7 @@ auto SceneBootstrapper::EnsureLighting(scene::Scene& scene) -> void
 
     LOG_F(INFO,
       "[MultiView] SceneBootstrapper created key light (spotlight) at "
-      "(3, 5, 6).");
+      "(3, 3, 3).");
   }
 
   // Fill light: Point light from the left side for ambient fill
@@ -420,19 +482,19 @@ auto SceneBootstrapper::EnsureLighting(scene::Scene& scene) -> void
     point_light->Common().affects_world = true;
     point_light->Common().color_rgb
       = glm::vec3(0.7F, 0.85F, 1.0F); // Cool blue tint
-    point_light->SetLuminousFluxLm(140.0F);
-    point_light->SetRange(15.0F);
+    point_light->SetLuminousFluxLm(2000.0F);
+    point_light->SetRange(300.0F);
     point_light->SetSourceRadius(0.2F);
 
     const bool attached = fill_light_node_.AttachLight(std::move(point_light));
     CHECK_F(attached, "Failed to attach PointLight to FillLight node");
 
-    // Position to the left and slightly behind, lower than key
-    fill_light_node_.GetTransform().SetLocalPosition({ -5.0F, 2.0F, 2.0F });
+    // Position to the left and slightly in front, lower than key
+    fill_light_node_.GetTransform().SetLocalPosition({ -2.0F, 2.0F, 2.0F });
 
     LOG_F(INFO,
       "[MultiView] SceneBootstrapper created fill light (point) at "
-      "(-5, 2, 2).");
+      "(-2, 2, 2).");
   }
 }
 

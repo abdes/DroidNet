@@ -198,14 +198,14 @@ auto EnvironmentVm::SetSkySphereSolidColor(const glm::vec3& value) -> void
   service_->SetSkySphereSolidColor(value);
 }
 
-auto EnvironmentVm::GetSkySphereIntensity() const -> float
+auto EnvironmentVm::GetSkyIntensity() const -> float
 {
-  return service_->GetSkySphereIntensity();
+  return service_->GetSkyIntensity();
 }
 
-auto EnvironmentVm::SetSkySphereIntensity(float value) -> void
+auto EnvironmentVm::SetSkyIntensity(const float value) -> void
 {
-  service_->SetSkySphereIntensity(value);
+  service_->SetSkyIntensity(value);
 }
 
 auto EnvironmentVm::GetSkySphereRotationDeg() const -> float
@@ -388,7 +388,7 @@ auto EnvironmentVm::GetSkyLightIntensity() const -> float
   return service_->GetSkyLightIntensity();
 }
 
-auto EnvironmentVm::SetSkyLightIntensity(float value) -> void
+auto EnvironmentVm::SetSkyLightIntensity(const float value) -> void
 {
   service_->SetSkyLightIntensity(value);
 }

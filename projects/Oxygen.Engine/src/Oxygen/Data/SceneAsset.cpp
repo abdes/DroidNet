@@ -5,9 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Data/SceneAsset.h>
-
-#include <limits>
-
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 

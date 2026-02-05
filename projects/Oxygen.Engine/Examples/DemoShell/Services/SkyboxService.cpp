@@ -265,6 +265,7 @@ auto SkyboxService::ApplyToScene(const SkyLightParams& params) -> void
     sky.SetEnabled(true);
     sky.SetSource(scene::environment::SkySphereSource::kCubemap);
     sky.SetCubemapResource(current_resource_key_);
+    sky.SetIntensity(params.intensity);
 
     auto& sky_light = new_env->AddSystem<scene::environment::SkyLight>();
     sky_light.SetEnabled(true);
@@ -285,6 +286,7 @@ auto SkyboxService::ApplyToScene(const SkyLightParams& params) -> void
     sky->SetEnabled(true);
     sky->SetSource(scene::environment::SkySphereSource::kCubemap);
     sky->SetCubemapResource(current_resource_key_);
+    sky->SetIntensity(params.intensity);
 
     auto sky_light = env->TryGetSystem<scene::environment::SkyLight>();
     if (!sky_light) {
