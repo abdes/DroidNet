@@ -6,24 +6,23 @@
 
 #pragma once
 
-#include <cstdint>
 #include <memory>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Scene.h>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
-#include "DemoShell/Runtime/SceneView.h"
 #include "DemoShell/Services/SkyboxService.h"
 #include "TexturedCube/SceneSetup.h"
 #include "TexturedCube/TextureLoadingService.h"
-#include "TexturedCube/UI/TextureBrowserPanel.h"
-#include "TexturedCube/UI/TextureBrowserVm.h"
+#include "TexturedCube/UI/MaterialsSandboxPanel.h"
+#include "TexturedCube/UI/MaterialsSandboxVm.h"
 
 namespace oxygen::examples::textured_cube {
 
@@ -39,7 +38,7 @@ namespace oxygen::examples::textured_cube {
  - **TextureLoadingService**: Loads and uploads textures asynchronously
  - **SkyboxService**: Manages skybox loading and scene environment
  - **SceneSetup**: Creates and configures scene objects (cube, lights)
- - **TextureBrowserPanel**: Custom UI for texture browsing and assignment
+ - **MaterialsSandboxPanel**: Custom UI for texture browsing and assignment
 
  ### Controls
 
@@ -64,16 +63,16 @@ public:
   [[nodiscard]] auto GetPriority() const noexcept
     -> oxygen::engine::ModulePriority override
   {
-    return engine::ModulePriority { 500 };
+    constexpr engine::ModulePriority kPriority { 500 };
+    return kPriority;
   }
 
   [[nodiscard]] auto GetSupportedPhases() const noexcept
     -> oxygen::engine::ModulePhaseMask override
   {
-    using namespace core;
-    return engine::MakeModuleMask<PhaseId::kFrameStart, PhaseId::kSceneMutation,
-      PhaseId::kGameplay, PhaseId::kGuiUpdate, PhaseId::kPreRender,
-      PhaseId::kCompositing, PhaseId::kFrameEnd>();
+    using enum core::PhaseId;
+    return engine::MakeModuleMask<kFrameStart, kSceneMutation, kGameplay,
+      kGuiUpdate, kPreRender, kCompositing, kFrameEnd>();
   }
 
   ~MainModule() override = default;
@@ -90,32 +89,31 @@ public:
   auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
   auto OnGameplay(engine::FrameContext& context) -> co::Co<> override;
   auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
-  auto OnPreRender(engine::FrameContext& context) -> co::Co<> override;
-  auto OnCompositing(engine::FrameContext& context) -> co::Co<> override;
-  auto OnFrameEnd(engine::FrameContext& context) -> void override;
 
 protected:
   auto BuildDefaultWindowProperties() const
     -> platform::window::Properties override;
 
   auto ClearBackbufferReferences() -> void override;
+  auto UpdateComposition(engine::FrameContext& context,
+    std::vector<CompositionView>& views) -> void override;
 
 private:
   auto ApplyRenderModeFromPanel() -> void;
 
   std::unique_ptr<oxygen::examples::DemoShell> shell_;
   // Scene is owned by DemoShell, we keep a value object for safe access
-  ActiveScene active_scene_ {};
+  ActiveScene active_scene_;
   std::unique_ptr<TextureLoadingService> texture_service_;
   std::unique_ptr<SkyboxService> skybox_service_;
   std::unique_ptr<SceneSetup> scene_setup_;
 
   // Hosted view
-  observer_ptr<SceneView> main_view_ { nullptr };
+  ViewId main_view_id_ { kInvalidViewId };
 
   // Custom UI
-  std::unique_ptr<ui::TextureBrowserVm> texture_vm_;
-  std::shared_ptr<ui::TextureBrowserPanel> texture_panel_;
+  std::unique_ptr<ui::MaterialsSandboxVm> texture_vm_;
+  std::shared_ptr<ui::MaterialsSandboxPanel> texture_panel_;
 
   // State
   std::filesystem::path cooked_root_;
@@ -123,8 +121,7 @@ private:
   oxygen::content::ResourceKey forced_error_key_ { 0U };
 
   // Track last viewport size to inform camera
-  int last_viewport_w_ { 0 };
-  int last_viewport_h_ { 0 };
+  platform::window::ExtentT last_viewport_ { 0, 0 };
 };
 
 } // namespace oxygen::examples::textured_cube

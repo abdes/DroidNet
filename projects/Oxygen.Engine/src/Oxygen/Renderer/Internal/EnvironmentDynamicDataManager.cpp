@@ -73,6 +73,15 @@ auto EnvironmentDynamicDataManager::SetExposure(ViewId view_id, float exposure)
   }
 }
 
+auto EnvironmentDynamicDataManager::GetExposure(ViewId view_id) const -> float
+{
+  const auto it = view_states_.find(view_id);
+  if (it == view_states_.end()) {
+    return 1.0F;
+  }
+  return it->second.data.exposure;
+}
+
 // SetLightCullingData now contains the logic previously in SetCullingData.
 auto EnvironmentDynamicDataManager::SetLightCullingData(
   ViewId view_id, const LightCullingData& data) -> void

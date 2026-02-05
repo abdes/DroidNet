@@ -44,16 +44,14 @@ add_executable(
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"
-
   "TextureLoadingService.h"
   "TextureLoadingService.cpp"
   "SceneSetup.h"
   "SceneSetup.cpp"
-
-  "UI/TextureBrowserVm.h"
-  "UI/TextureBrowserVm.cpp"
-  "UI/TextureBrowserPanel.h"
-  "UI/TextureBrowserPanel.cpp"
+  "UI/MaterialsSandboxVm.h"
+  "UI/MaterialsSandboxVm.cpp"
+  "UI/MaterialsSandboxPanel.h"
+  "UI/MaterialsSandboxPanel.cpp"
 )
 
 set_target_properties(

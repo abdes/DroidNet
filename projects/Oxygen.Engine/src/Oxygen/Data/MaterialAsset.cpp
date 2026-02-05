@@ -81,7 +81,8 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
     pak::MaterialAssetDesc desc {};
 
     // Asset header - mark as procedural/default
-    desc.header.asset_type = 7; // MaterialAsset type
+    desc.header.asset_type
+      = static_cast<uint8_t>(AssetType::kMaterial); // MaterialAsset type
     // Safe string copy with null termination
     constexpr const char* default_name = "Default";
     std::size_t copy_len

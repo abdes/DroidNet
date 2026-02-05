@@ -55,7 +55,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   ShaderFileSpec {
     "Passes/Forward/ForwardMesh_PS.hlsl",
     std::array { EntryPoint { kPixel, "PS" } },
-    std::array<std::string_view, 1> { "ALPHA_TEST" }
+    std::array<std::string_view, 2> { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Wireframe pass pixel shader: ALPHA_TEST permutation
   ShaderFileSpec {
@@ -67,55 +67,64 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   ShaderFileSpec {
     "Passes/Forward/ForwardMesh_PS.hlsl",
     std::array { EntryPoint { kPixel, "PS" } },
-    std::array<std::string_view, 2> { "DEBUG_LIGHT_HEATMAP", "ALPHA_TEST" }
+    std::array<std::string_view, 3>
+      { "DEBUG_LIGHT_HEATMAP", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_DEPTH_SLICE with ALPHA_TEST permutation
   ShaderFileSpec {
     "Passes/Forward/ForwardMesh_PS.hlsl",
     std::array { EntryPoint { kPixel, "PS" } },
-    std::array<std::string_view, 2> { "DEBUG_DEPTH_SLICE", "ALPHA_TEST" }
+    std::array<std::string_view, 3>
+      { "DEBUG_DEPTH_SLICE", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_CLUSTER_INDEX with ALPHA_TEST permutation
   ShaderFileSpec {
     "Passes/Forward/ForwardMesh_PS.hlsl",
     std::array { EntryPoint { kPixel, "PS" } },
-    std::array<std::string_view, 2> { "DEBUG_CLUSTER_INDEX", "ALPHA_TEST" }
+    std::array<std::string_view, 3>
+      { "DEBUG_CLUSTER_INDEX", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_IBL_SPECULAR with ALPHA_TEST permutation
   ShaderFileSpec {
     "Passes/Forward/ForwardMesh_PS.hlsl",
     std::array { EntryPoint { kPixel, "PS" } },
-    std::array<std::string_view, 2> { "DEBUG_IBL_SPECULAR", "ALPHA_TEST" }
+    std::array<std::string_view, 3>
+      { "DEBUG_IBL_SPECULAR", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_IBL_RAW_SKY with ALPHA_TEST permutation
   ShaderFileSpec {
     "Passes/Forward/ForwardMesh_PS.hlsl",
     std::array { EntryPoint { kPixel, "PS" } },
-    std::array<std::string_view, 2> { "DEBUG_IBL_RAW_SKY", "ALPHA_TEST" }
+    std::array<std::string_view, 3>
+      { "DEBUG_IBL_RAW_SKY", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_IBL_RAW_SKY_VIEWDIR with ALPHA_TEST permutation
   ShaderFileSpec {
     "Passes/Forward/ForwardMesh_PS.hlsl",
     std::array { EntryPoint { kPixel, "PS" } },
-    std::array<std::string_view, 2> { "DEBUG_IBL_RAW_SKY_VIEWDIR", "ALPHA_TEST" }
+    std::array<std::string_view, 3> { "DEBUG_IBL_RAW_SKY_VIEWDIR",
+      "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_BASE_COLOR with ALPHA_TEST permutation
   ShaderFileSpec {
     "Passes/Forward/ForwardMesh_PS.hlsl",
     std::array { EntryPoint { kPixel, "PS" } },
-    std::array<std::string_view, 2> { "DEBUG_BASE_COLOR", "ALPHA_TEST" }
+    std::array<std::string_view, 3>
+      { "DEBUG_BASE_COLOR", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_UV0 with ALPHA_TEST permutation
   ShaderFileSpec {
     "Passes/Forward/ForwardMesh_PS.hlsl",
     std::array { EntryPoint { kPixel, "PS" } },
-    std::array<std::string_view, 2> { "DEBUG_UV0", "ALPHA_TEST" }
+    std::array<std::string_view, 3>
+      { "DEBUG_UV0", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_OPACITY with ALPHA_TEST permutation
   ShaderFileSpec {
     "Passes/Forward/ForwardMesh_PS.hlsl",
     std::array { EntryPoint { kPixel, "PS" } },
-    std::array<std::string_view, 2> { "DEBUG_OPACITY", "ALPHA_TEST" }
+    std::array<std::string_view, 3>
+      { "DEBUG_OPACITY", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Depth pre-pass: VS and PS with ALPHA_TEST permutation
   ShaderFileSpec {
@@ -138,6 +147,10 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     "Passes/Atmosphere/SkyViewLut_CS.hlsl",
     std::array { EntryPoint { kCompute, "CS" } }
   },
+  ShaderFileSpec {
+    "Passes/Atmosphere/MultiScatLut_CS.hlsl",
+    std::array { EntryPoint { kCompute, "CS" } }
+  },
   // Sky sphere shaders (no permutations)
   ShaderFileSpec {
     "Passes/Sky/SkySphere_VS.hlsl",
@@ -145,7 +158,8 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   },
   ShaderFileSpec {
     "Passes/Sky/SkySphere_PS.hlsl",
-    std::array { EntryPoint { kPixel, "PS" } }
+    std::array { EntryPoint { kPixel, "PS" } },
+    std::array<std::string_view, 1> { "OXYGEN_HDR_OUTPUT" }
   },
   // Sky capture shaders (no permutations)
   ShaderFileSpec {
@@ -175,25 +189,38 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   ShaderFileSpec {
     "Passes/Compositing/Compositing_PS.hlsl",
     std::array { EntryPoint { kPixel, "PS" } }
+  },
+  // ToneMap shaders (no permutations)
+  ShaderFileSpec {
+    "Passes/Compositing/ToneMap_VS.hlsl",
+    std::array { EntryPoint { kVertex, "VS" } }
+  },
+  ShaderFileSpec {
+    "Passes/Compositing/ToneMap_PS.hlsl",
+    std::array { EntryPoint { kPixel, "PS" } }
   }
 );
 // clang-format on
 
 // Compile-time verification:
 // - ForwardMesh_VS: 1 entry
-// - ForwardMesh_PS base: 2 (with/without ALPHA_TEST)
+// - ForwardMesh_PS base: 4 (ALPHA_TEST x OXYGEN_HDR_OUTPUT)
 // - ForwardWireframe_PS base: 2 (with/without ALPHA_TEST)
-// - ForwardMesh_PS DEBUG_*: 4 each (debug define x ALPHA_TEST)
+// - ForwardMesh_PS DEBUG_*: 8 each (debug define x ALPHA_TEST x
+// OXYGEN_HDR_OUTPUT)
 // - DepthPrePass: 4 (2 entries x 2 permutations)
 // - LightCulling: 2 (1 entry x 2 permutations)
 // - TransmittanceLut_CS: 1 entry
 // - SkyViewLut_CS: 1 entry
 // - SkySphere_VS: 1 entry
-// - SkySphere_PS: 1 entry
+// - SkySphere_PS: 2 entries
 // - SkyCapture_VS/PS: 2 entries
 // - IblFiltering: 2 entries
 // - ImGui: 2 entries
-// Total: 55
-static_assert(kEngineShaders.size() == 59, "Expected 59 shader entries");
+// - ImGui: 2 entries
+// - Compositing: 2 entries
+// - ToneMap: 2 entries
+// Total: 101
+static_assert(kEngineShaders.size() == 101, "Expected 101 shader entries");
 
 } // namespace oxygen::graphics::d3d12

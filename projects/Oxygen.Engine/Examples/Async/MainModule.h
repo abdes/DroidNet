@@ -10,7 +10,6 @@
 #include <memory>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -29,7 +28,7 @@
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
-#include "DemoShell/Runtime/SceneView.h"
+#include "Oxygen/Core/PhaseRegistry.h"
 
 namespace oxygen::examples::ui {
 class CameraRigController;
@@ -79,12 +78,18 @@ public:
   [[nodiscard]] auto GetPriority() const noexcept
     -> engine::ModulePriority override
   {
-    return engine::ModulePriority { 500 }; // Normal priority
+    constexpr auto kPriority = engine::ModulePriority { 500 };
+    return kPriority; // Normal priority
   }
 
   //! Register for graphics-related phases.
   [[nodiscard]] auto GetSupportedPhases() const noexcept
-    -> engine::ModulePhaseMask override;
+    -> engine::ModulePhaseMask override
+  {
+    using enum core::PhaseId;
+    return engine::MakeModuleMask<kFrameStart, kSceneMutation, kGameplay,
+      kGuiUpdate, kPreRender, kCompositing, kFrameEnd>();
+  }
 
   [[nodiscard]] auto IsCritical() const noexcept -> bool override
   {
@@ -108,15 +113,15 @@ public:
 protected:
   //! Clear backbuffer references (required by DemoModuleBase).
   auto ClearBackbufferReferences() -> void override;
+  auto UpdateComposition(engine::FrameContext& context,
+    std::vector<CompositionView>& views) -> void override;
 
   //! Execute phase-specific work.
   auto OnFrameStart(engine::FrameContext& context) -> void override;
   auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
-  auto OnTransformPropagation(engine::FrameContext& context)
-    -> co::Co<> override;
+  auto OnGameplay(engine::FrameContext& context) -> co::Co<> override;
   auto OnPreRender(engine::FrameContext& context) -> co::Co<> override;
-  auto OnRender(engine::FrameContext& context) -> co::Co<> override;
-  auto OnCompositing(engine::FrameContext& context) -> co::Co<>;
+  auto OnCompositing(engine::FrameContext& context) -> co::Co<> override;
   auto OnFrameEnd(engine::FrameContext& context) -> void override;
   auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
 
@@ -150,14 +155,14 @@ private:
   const DemoAppContext& app_;
 
   //! Scene and rendering.
-  ActiveScene active_scene_ {};
+  ActiveScene active_scene_;
 
   //! State tracking.
   bool initialized_ { false };
   std::chrono::steady_clock::time_point start_time_;
   // Last engine frame timestamp observed by this module. Used to compute
   // per-frame delta time for smooth integration of animations.
-  std::chrono::steady_clock::time_point last_frame_time_ {};
+  std::chrono::steady_clock::time_point last_frame_time_;
   // Elapsed animation time in seconds since module start, computed from
   // engine frame timestamp for stable sampling across phases.
   double anim_time_ { 0.0 };
@@ -196,12 +201,13 @@ private:
   // Token for a registered platform pre-destroy callback; zero means none.
   size_t platform_window_destroy_handler_token_ { 0 };
 
-  std::unique_ptr<DemoShell> shell_ {};
-  std::shared_ptr<AsyncDemoSettingsService> settings_service_ {};
-  std::shared_ptr<AsyncDemoVm> vm_ {};
-  std::shared_ptr<AsyncDemoPanel> async_panel_ {};
-  observer_ptr<SceneView> main_view_ { nullptr };
-  observer_ptr<ui::CameraRigController> last_camera_rig_ { nullptr };
+  std::unique_ptr<DemoShell> shell_;
+  std::shared_ptr<AsyncDemoSettingsService> settings_service_;
+  std::shared_ptr<AsyncDemoVm> vm_;
+  std::shared_ptr<AsyncDemoPanel> async_panel_;
+  // Hosted view
+  ViewId main_view_id_ { kInvalidViewId };
+  observer_ptr<ui::CameraRigController> last_camera_rig_;
   bool drone_configured_ { false };
 };
 

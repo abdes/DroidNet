@@ -45,6 +45,9 @@ struct FormatInfo {
 */
 OXGN_CORE_NDAPI auto GetFormatInfo(Format format) -> const FormatInfo&;
 
+//! Returns true if the format is HDR (float and not sRGB).
+OXGN_CORE_NDAPI auto IsHdr(Format format) -> bool;
+
 //! Flags indicating what operations are supported by a format.
 enum class FormatSupport : uint32_t { // NOLINT(*-enum-size)
   kNone = 0,

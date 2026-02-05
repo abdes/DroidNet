@@ -12,6 +12,7 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
+#include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -447,14 +448,11 @@ private:
   MonotonicVersion version_ { 0 };
   mutable MonotonicVersion cached_version_ { (
     std::numeric_limits<uint64_t>::max)() };
-#ifdef _MSC_VER
-#  pragma warning(push)
-#  pragma warning(disable : 4324) // structure was padded due to alignment
-#endif
+  OXYGEN_DIAGNOSTIC_PUSH
+  OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4324)
+  OXYGEN_DIAGNOSTIC_DISABLE_CLANG("-Wpadded")
   mutable GpuData cached_ {};
-#ifdef _MSC_VER
-#  pragma warning(pop)
-#endif
+  OXYGEN_DIAGNOSTIC_POP
 };
 
 } // namespace oxygen::engine

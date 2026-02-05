@@ -16,7 +16,7 @@
 namespace oxygen::scene::environment {
 
 //! Sun authoring mode.
-enum class SunSource {
+enum class SunSource : uint8_t {
   //! Use authored sun parameters.
   kSynthetic,
 
@@ -57,6 +57,11 @@ class Sun final : public EnvironmentSystem {
   OXYGEN_COMPONENT(Sun)
 
 public:
+  static constexpr float kDefaultAzimuthDeg = 90.0F;
+  static constexpr float kDefaultElevationDeg = 30.0F;
+  static constexpr float kDefaultIntensityLux = 110000.0F;
+  static constexpr float kDefaultDiskAngularRadiusRad = 0.004675F; // ~0.268 deg
+
   //! Constructs the sun component with engine defaults.
   OXGN_SCN_API Sun();
 
@@ -137,18 +142,18 @@ public:
 
 private:
   SunSource sun_source_ = SunSource::kFromScene;
-  std::optional<scene::SceneNode> light_reference_ {};
+  std::optional<scene::SceneNode> light_reference_;
 
   Vec3 direction_ws_ { 0.0F, 0.866F, 0.5F };
-  float azimuth_deg_ = 90.0F;
-  float elevation_deg_ = 30.0F;
+  float azimuth_deg_ = kDefaultAzimuthDeg;
+  float elevation_deg_ = kDefaultElevationDeg;
 
   Vec3 color_rgb_ { 1.0F, 1.0F, 1.0F };
-  // NOTE: LDR pipeline defaults; update once HDR + tone mapping is wired.
-  float intensity_lux_ = 10.0F;
-  float disk_angular_radius_rad_ = 0.004675F;
+  //! Default intensity for a clear sky sun (110,000 lux).
+  float intensity_lux_ = kDefaultIntensityLux;
+  float disk_angular_radius_rad_ = kDefaultDiskAngularRadiusRad;
   bool casts_shadows_ = true;
-  std::optional<float> temperature_kelvin_ = std::nullopt;
+  std::optional<float> temperature_kelvin_;
 };
 
 } // namespace oxygen::scene::environment

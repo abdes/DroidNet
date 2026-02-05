@@ -4,13 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Oxygen/Base/logging.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <ctime>
-#include <numbers>
 #include <random>
 #include <string>
 #include <vector>
@@ -20,7 +19,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ViewPort.h>
@@ -33,15 +31,9 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/ImGui/ImguiModule.h>
-#include <Oxygen/Input/ActionTriggers.h>
-#include <Oxygen/Input/InputActionMapping.h>
-#include <Oxygen/Input/InputSnapshot.h>
-#include <Oxygen/Input/InputSystem.h>
-#include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
@@ -57,10 +49,9 @@
 #include "Async/AsyncDemoVm.h"
 #include "Async/MainModule.h"
 #include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/CompositionView.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/ForwardPipeline.h"
-#include "DemoShell/Runtime/SceneView.h"
-#include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/UI/CameraRigController.h"
 #include "DemoShell/UI/DroneCameraController.h"
 
@@ -77,29 +68,9 @@ using oxygen::scene::DistancePolicy;
 using oxygen::scene::PerspectiveCamera;
 
 namespace {
+
 constexpr std::uint32_t kWindowWidth = 1600;
 constexpr std::uint32_t kWindowHeight = 900;
-
-auto RotationFromForwardToDir(const glm::vec3& to_dir) -> glm::quat
-{
-  const glm::vec3 from_dir = oxygen::space::move::Forward;
-  const glm::vec3 to = glm::normalize(to_dir);
-  const float cos_theta = std::clamp(glm::dot(from_dir, to), -1.0F, 1.0F);
-
-  if (cos_theta >= 0.9999F) {
-    return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
-  }
-
-  if (cos_theta <= -0.9999F) {
-    // Opposite vectors: pick a stable orthogonal axis.
-    const glm::vec3 axis = oxygen::space::move::Up;
-    return glm::angleAxis(std::numbers::pi_v<float>, axis);
-  }
-
-  const glm::vec3 axis = glm::normalize(glm::cross(from_dir, to));
-  const float angle = std::acos(cos_theta);
-  return glm::angleAxis(angle, axis);
-}
 
 struct LocalTimeOfDay {
   int hour = 0;
@@ -108,30 +79,18 @@ struct LocalTimeOfDay {
   double day_fraction = 0.0;
 };
 
-auto GetLocalTimeOfDayNow() -> LocalTimeOfDay
-{
-  const std::time_t t = std::time(nullptr);
-  std::tm tm_local {};
-  localtime_s(&tm_local, &t);
-
-  LocalTimeOfDay tod;
-  tod.hour = tm_local.tm_hour;
-  tod.minute = tm_local.tm_min;
-  tod.second = tm_local.tm_sec;
-  const int seconds = (tod.hour * 3600) + (tod.minute * 60) + tod.second;
-  tod.day_fraction = static_cast<double>(seconds) / 86400.0;
-  return tod;
-}
-
 // Helper: make a solid-color material asset snapshot
 auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::kOpaque,
   bool double_sided = false)
 {
-  using namespace oxygen::data;
+  // NOLINTBEGIN(*-magic-numbers)
+  namespace d = oxygen::data;
+  namespace pak = oxygen::data::pak;
 
   pak::MaterialAssetDesc desc {};
-  desc.header.asset_type = 7; // MaterialAsset (for tooling/debug)
+  desc.header.asset_type = static_cast<uint8_t>(
+    oxygen::data::AssetType::kMaterial); // MaterialAsset (for tooling/debug)
   // Safe copy name
   constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
   const std::size_t n = (std::min)(maxn, std::strlen(name));
@@ -147,18 +106,20 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.base_color[2] = rgba.b;
   desc.base_color[3] = rgba.a;
   desc.normal_scale = 1.0F;
-  desc.metalness = Unorm16 { 0.0F };
-  desc.roughness = Unorm16 { 0.9F };
-  desc.ambient_occlusion = Unorm16 { 1.0F };
+  desc.metalness = d::Unorm16 { 0.0F };
+  desc.roughness = d::Unorm16 { 0.9F };
+  desc.ambient_occlusion = d::Unorm16 { 1.0F };
   // Leave texture indices at default invalid (no textures)
-  const AssetKey asset_key { .guid = GenerateAssetGuid() };
-  return std::make_shared<const MaterialAsset>(
-    asset_key, desc, std::vector<ShaderReference> {});
+  const d::AssetKey asset_key { .guid = d::GenerateAssetGuid() };
+  return std::make_shared<const d::MaterialAsset>(
+    asset_key, desc, std::vector<d::ShaderReference> {});
+  // NOLINTEND(*-magic-numbers)
 };
 
 //! Build a 2-LOD sphere GeometryAsset (high and low tessellation).
 auto BuildSphereLodAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
 {
+  // NOLINTBEGIN(*-magic-numbers)
   using oxygen::data::MaterialAsset;
   using oxygen::data::MeshBuilder;
   using oxygen::data::pak::GeometryAssetDesc;
@@ -313,155 +274,13 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
   return std::make_shared<oxygen::data::GeometryAsset>(
     oxygen::data::AssetKey { .guid = oxygen::data::GenerateAssetGuid() },
     geo_desc, std::vector<std::shared_ptr<Mesh>> { std::move(mesh) });
-}
-
-// ----------------- Camera spline helpers (closed Catmull-Rom)
-// -----------------
-
-// Evaluate closed Catmull-Rom spline at parameter u in [0,1). Control points
-// must have size >= 4
-auto EvalClosedCatmullRom(const std::vector<glm::vec3>& pts, double u)
-  -> glm::vec3
-{
-  const size_t n = pts.size();
-  if (n == 0) {
-    return glm::vec3(0.0F);
-  }
-  if (n < 4) {
-    return pts[0];
-  }
-  // Map u to segment index
-  const double total = u * static_cast<double>(n);
-  int i0 = static_cast<int>(std::floor(total));
-  double local_t = total - static_cast<double>(i0);
-  i0 = i0 % static_cast<int>(n);
-  if (i0 < 0) {
-    i0 += static_cast<int>(n);
-  }
-
-  const int i1 = (i0 + 1) % static_cast<int>(n);
-  const int i_1 = (i0 - 1 + static_cast<int>(n)) % static_cast<int>(n);
-  const int i2 = (i0 + 2) % static_cast<int>(n);
-
-  const auto P0 = glm::dvec3(pts[i_1]);
-  const auto P1 = glm::dvec3(pts[i0]);
-  const auto P2 = glm::dvec3(pts[i1]);
-  const auto P3 = glm::dvec3(pts[i2]);
-
-  const double t = local_t;
-  const double t2 = t * t;
-  const double t3 = t2 * t;
-
-  // Catmull-Rom basis
-  const glm::dvec3 res = 0.5
-    * ((2.0 * P1) + (-P0 + P2) * t + (2.0 * P0 - 5.0 * P1 + 4.0 * P2 - P3) * t2
-      + (-P0 + 3.0 * P1 - 3.0 * P2 + P3) * t3);
-  return glm::vec3(static_cast<float>(res.x), static_cast<float>(res.y),
-    static_cast<float>(res.z));
-}
-
-// Build an arc-length lookup table for a closed Catmull-Rom spline.
-// Returns cumulative lengths (s) and corresponding parameters (u).
-auto BuildArcLengthLut(const std::vector<glm::vec3>& pts, int samples,
-  std::vector<double>& out_u, std::vector<double>& out_s) -> void
-{
-  out_u.clear();
-  out_s.clear();
-  if (pts.size() < 4 || samples < 2) {
-    return;
-  }
-
-  out_u.reserve(static_cast<size_t>(samples) + 1);
-  out_s.reserve(static_cast<size_t>(samples) + 1);
-
-  double s = 0.0;
-  glm::vec3 prev = EvalClosedCatmullRom(pts, 0.0);
-  out_u.push_back(0.0);
-  out_s.push_back(0.0);
-  for (int i = 1; i <= samples; ++i) {
-    const double u = static_cast<double>(i) / static_cast<double>(samples);
-    const glm::vec3 p = EvalClosedCatmullRom(pts, u);
-    s += glm::length(p - prev);
-    out_u.push_back(u);
-    out_s.push_back(s);
-    prev = p;
-  }
-}
-
-// Given an arc-length s in [0, total_len), find u in [0,1) using the LUT.
-auto ArcLengthToParamU(double s, const std::vector<double>& u_samples,
-  const std::vector<double>& s_samples) -> double
-{
-  if (u_samples.empty() || s_samples.empty()) {
-    return 0.0;
-  }
-  const double total = s_samples.back();
-  if (total <= 0.0) {
-    return 0.0;
-  }
-  // Wrap s into [0,total)
-  s = std::fmod(s, total);
-  if (s < 0.0) {
-    s += total;
-  }
-
-  // Binary search for segment
-  auto it = std::lower_bound(s_samples.begin(), s_samples.end(), s);
-  size_t idx = static_cast<size_t>(std::distance(s_samples.begin(), it));
-  if (idx == 0) {
-    return u_samples.front();
-  }
-  if (idx >= s_samples.size()) {
-    return u_samples.back();
-  }
-
-  const double s0 = s_samples[idx - 1];
-  const double s1 = s_samples[idx];
-  const double u0 = u_samples[idx - 1];
-  const double u1 = u_samples[idx];
-  const double t = (s1 > s0) ? ((s - s0) / (s1 - s0)) : 0.0;
-  return u0 + t * (u1 - u0);
-}
-
-// Approximate path length by sampling
-auto ApproximatePathLength(const std::vector<glm::vec3>& pts, int samples = 256)
-  -> double
-{
-  if (pts.empty()) {
-    return 0.0;
-  }
-  double len = 0.0;
-  glm::vec3 prev = EvalClosedCatmullRom(pts, 0.0);
-  for (int i = 1; i <= samples; ++i) {
-    double u = static_cast<double>(i) / static_cast<double>(samples);
-    glm::vec3 p = EvalClosedCatmullRom(pts, u);
-    len += glm::length(p - prev);
-    prev = p;
-  }
-  return len;
-}
-
-//! Update camera position along a smooth orbit.
-// Fixed camera: positioned on a circle at 45deg pitch looking at origin.
-auto SetupFixedCamera(oxygen::scene::SceneNode& camera_node) -> void
-{
-  constexpr float radius = 15.0F;
-  constexpr float pitch_deg = 10.0F;
-  constexpr float pitch = glm::radians(pitch_deg);
-  // Place camera on negative Z so quad (facing +Z) is front-facing.
-  const glm::vec3 position(
-    radius * 0.0F, radius * std::sin(pitch), -radius * std::cos(pitch));
-  auto transform = camera_node.GetTransform();
-  transform.SetLocalPosition(position);
-  constexpr glm::vec3 target(0.0F);
-  constexpr glm::vec3 up(0.0F, 1.0F, 0.0F);
-  const glm::vec3 dir = glm::normalize(target - position);
-  transform.SetLocalRotation(glm::quatLookAtRH(dir, up));
+  // NOLINTEND(*-magic-numbers)
 }
 
 // Convert hue [0,1] to an RGB color (simple H->RGB approx)
 auto ColorFromHue(double h) -> glm::vec3
 {
+  // NOLINTBEGIN(*-magic-numbers)
   // h in [0,1)
   const double hh = std::fmod(h, 1.0);
   const double r = std::abs(hh * 6.0 - 3.0) - 1.0;
@@ -470,6 +289,7 @@ auto ColorFromHue(double h) -> glm::vec3
   return glm::vec3(static_cast<float>(std::clamp(r, 0.0, 1.0)),
     static_cast<float>(std::clamp(g, 0.0, 1.0)),
     static_cast<float>(std::clamp(b, 0.0, 1.0)));
+  // NOLINTEND(*-magic-numbers)
 }
 
 // Orbit sphere around origin on XZ plane with custom radius.
@@ -484,8 +304,9 @@ auto AnimateSphereOrbit(oxygen::scene::SceneNode& sphere_node, double angle,
   const double ci = std::cos(inclination);
   const double si = std::sin(inclination);
   // Rotation matrix for tilt around X: [1 0 0; 0 ci -si; 0 si ci]
-  const glm::dvec3 pos_tilted(pos_local.x, pos_local.y * ci - pos_local.z * si,
-    pos_local.y * si + pos_local.z * ci);
+  const glm::dvec3 pos_tilted(pos_local.x,
+    (pos_local.y * ci) - (pos_local.z * si),
+    (pos_local.y * si) + (pos_local.z * ci));
   const glm::vec3 pos(static_cast<float>(pos_tilted.x),
     static_cast<float>(pos_tilted.y), static_cast<float>(pos_tilted.z));
 
@@ -547,6 +368,7 @@ auto MainModule::OnAttached(
     .environment = true,
     .lighting = true,
     .rendering = true,
+    .post_process = true,
   };
   shell_config.enable_camera_rig = true;
   shell_config.get_active_pipeline
@@ -565,9 +387,8 @@ auto MainModule::OnAttached(
 
   EnsureExampleScene();
 
-  // Create Main View (using placeholder, updated in OnSceneMutation)
-  auto view = std::make_unique<SceneView>(scene::SceneNode {});
-  main_view_ = observer_ptr(static_cast<SceneView*>(AddView(std::move(view))));
+  // Create Main View ID
+  main_view_id_ = GetOrCreateViewId("MainView");
 
   // --- ImGuiPass configuration ---
   auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
@@ -586,13 +407,7 @@ auto MainModule::OnAttached(
 
 MainModule::~MainModule() { active_scene_ = {}; }
 
-auto MainModule::GetSupportedPhases() const noexcept -> engine::ModulePhaseMask
-{
-  using namespace core;
-  return engine::MakeModuleMask<PhaseId::kFrameStart, PhaseId::kSceneMutation,
-    PhaseId::kTransformPropagation, PhaseId::kGuiUpdate, PhaseId::kPreRender,
-    PhaseId::kRender, PhaseId::kCompositing, PhaseId::kFrameEnd>();
-}
+// GetSupportedPhases moved to header
 
 auto MainModule::BuildDefaultWindowProperties() const
   -> oxygen::platform::window::Properties
@@ -685,6 +500,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
   DCHECK_NOTNULL_F(scene_ptr);
   DCHECK_NOTNULL_F(app_window_);
+
   if (!app_window_->GetWindow()) {
     // Window invalid, skip update
     DLOG_F(1, "OnSceneMutation: no valid window - skipping");
@@ -698,46 +514,35 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   current_frame_tracker_.scene_mutation_occurred = true;
   TrackFrameAction("Scene mutation phase started");
 
-  if (app_window_ && app_window_->GetWindow()) {
-    const auto extent = app_window_->GetWindow()->Size();
-    const int width = static_cast<int>(extent.width);
-    const int height = static_cast<int>(extent.height);
-    EnsureMainCamera(width, height);
-    EnsureCameraSpotLight();
-    if (shell_) {
-      auto& camera_lifecycle = shell_->GetCameraLifecycle();
-      auto& active_camera = camera_lifecycle.GetActiveCamera();
-      if (main_camera_.IsAlive()) {
-        const bool needs_activation = !active_camera.IsAlive()
-          || active_camera.GetHandle() != main_camera_.GetHandle();
-        if (needs_activation) {
-          shell_->SetActiveCamera(main_camera_);
-        }
+  const auto extent = app_window_->GetWindow()->Size();
+  const int width = static_cast<int>(extent.width);
+  const int height = static_cast<int>(extent.height);
+
+  EnsureMainCamera(width, height);
+  EnsureCameraSpotLight();
+
+  if (shell_) {
+    auto& camera_lifecycle = shell_->GetCameraLifecycle();
+    camera_lifecycle.EnsureViewport(extent);
+    camera_lifecycle.ApplyPendingSync();
+    camera_lifecycle.ApplyPendingReset();
+
+    auto& active_camera = camera_lifecycle.GetActiveCamera();
+    if (main_camera_.IsAlive()) {
+      const bool needs_activation = !active_camera.IsAlive()
+        || active_camera.GetHandle() != main_camera_.GetHandle();
+      if (needs_activation) {
+        shell_->SetActiveCamera(main_camera_);
       }
     }
-    EnsureViewCameraRegistered();
-  }
-
-  // Update view camera from shell's active camera
-  if (main_view_ && shell_) {
-    auto& active_camera = shell_->GetCameraLifecycle().GetActiveCamera();
-    if (active_camera.IsAlive()) {
-      main_view_->SetCamera(active_camera);
-    }
+    shell_->Update(time::CanonicalDuration {});
   }
 
   // Handle scene mutations (material overrides, visibility changes)
-  // Use the engine-provided frame start time so all modules use a
-  // consistent timestamp for this frame.
   const auto now = context.GetFrameStartTime();
   const float delta_time
     = std::chrono::duration<float>(now - start_time_).count();
   UpdateSceneMutations(delta_time);
-
-  if (shell_) {
-    // Use engine-provided game delta time for physics/input
-    shell_->Update(context.GetGameDeltaTime());
-  }
 
   TrackFrameAction("Scene mutations updated");
 
@@ -753,7 +558,7 @@ auto MainModule::EnsureCameraSpotLight() -> void
   const auto scene_ptr
     = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
   auto* scene = scene_ptr.get();
-  if (!scene || !main_camera_.IsAlive()) {
+  if ((scene == nullptr) || !main_camera_.IsAlive()) {
     return;
   }
 
@@ -811,53 +616,29 @@ auto MainModule::EnsureCameraSpotLight() -> void
   }
 }
 
-auto MainModule::OnTransformPropagation(engine::FrameContext& context)
-  -> co::Co<>
+auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
 {
-  TrackPhaseStart("Transform Propagation");
+  TrackPhaseStart("Gameplay");
+  DCHECK_NOTNULL_F(shell_);
 
-  // Ensure framebuffers are created after a resize
-  DCHECK_NOTNULL_F(app_window_);
-  if (!app_window_->GetWindow()) {
-    TrackFrameAction("GUI update skipped - app window not available");
-    TrackPhaseEnd();
-    co_return;
-  }
-
-  LOG_SCOPE_F(3, "MainModule::OnTransformPropagation");
-  current_frame_tracker_.transform_propagation_occurred = true;
-  TrackFrameAction("Transform propagation phase started");
-
-  // Update animations and transforms (no scene mutations)
-  // Compute per-frame delta from engine frame timestamp. Clamp delta to a
-  // reasonable maximum to avoid large jumps when the app was paused or a
-  // long hiccup occurred.
+  // Compute per-frame delta from engine frame timestamp for animations
   const auto now = context.GetFrameStartTime();
   double delta_seconds = 0.0;
   if (last_frame_time_.time_since_epoch().count() == 0) {
-    // First frame observed by module: initialize last_frame_time_
     last_frame_time_ = now;
-    delta_seconds = 0.0;
   } else {
     delta_seconds
       = std::chrono::duration<double>(now - last_frame_time_).count();
   }
   // Cap delta to, e.g., 50ms to avoid teleporting when resuming from pause.
   constexpr double kMaxDelta = 0.05;
-  if (delta_seconds > kMaxDelta) {
-    delta_seconds = kMaxDelta;
-  }
+  delta_seconds = std::min(delta_seconds, kMaxDelta);
 
-  // Compute per-frame delta_time and forward to UpdateAnimations (double)
-  const double delta_time = delta_seconds;
-  UpdateAnimations(delta_time);
-
-  // Store last frame timestamp for next update
+  UpdateAnimations(delta_seconds);
   last_frame_time_ = now;
 
-  current_frame_tracker_.spheres_updated
-    = static_cast<std::uint32_t>(spheres_.size());
-  TrackFrameAction("Animations and transforms updated");
+  shell_->Update(context.GetGameDeltaTime());
+
   TrackPhaseEnd();
   co_return;
 }
@@ -866,17 +647,15 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
 {
   TrackPhaseStart("PreRender");
 
-  // Ensure framebuffers are created after a resize
   DCHECK_NOTNULL_F(app_window_);
   if (!app_window_->GetWindow()) {
-    TrackFrameAction("GUI update skipped - app window not available");
+    DLOG_F(1, "OnPreRender: no valid window - skipping");
     TrackPhaseEnd();
     co_return;
   }
 
   LOG_SCOPE_F(3, "MainModule::OnPreRender");
 
-  // Set ImGui context before making ImGui calls
   auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
   if (imgui_module_ref) {
     auto& imgui_module = imgui_module_ref->get();
@@ -887,12 +666,6 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
 
   current_frame_tracker_.frame_graph_setup = true;
   TrackFrameAction("Pre-render setup started");
-
-  if (!app_window_ || !app_window_->GetWindow()) {
-    DLOG_F(1, "OnPreRender: no valid window - skipping");
-    TrackPhaseEnd();
-    co_return;
-  }
 
   // Configure pass-specific settings (clear color, debug names, etc.)
   if (pipeline_) {
@@ -953,29 +726,7 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
   co_return;
 }
 
-auto MainModule::OnRender(engine::FrameContext& context) -> co::Co<>
-{
-  TrackPhaseStart("Render");
-
-  // Ensure framebuffers are created after a resize
-  DCHECK_NOTNULL_F(app_window_);
-  if (!app_window_->GetWindow()) {
-    TrackFrameAction("GUI update skipped - app window not available");
-    TrackPhaseEnd();
-    co_return;
-  }
-
-  LOG_SCOPE_F(3, "MainModule::OnRender");
-  current_frame_tracker_.command_recording = true;
-  TrackFrameAction("Render started");
-
-  // Renderer now handles all command recording automatically via registered
-  // render graph factories. App module just tracks that rendering happened.
-
-  TrackFrameAction("Render delegated to Renderer module");
-  TrackPhaseEnd();
-  co_return;
-}
+// OnRender removed - handled by Base and Renderer
 
 auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void
 {
@@ -987,9 +738,11 @@ auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void
 
 auto MainModule::EnsureExampleScene() -> void
 {
+  // NOLINTBEGIN(*-magic-numbers)
   if (active_scene_.IsValid()) {
     return;
   }
+  LOG_SCOPE_FUNCTION(INFO);
 
   using scene::Scene;
 
@@ -1027,7 +780,7 @@ auto MainModule::EnsureExampleScene() -> void
 
   for (std::size_t i = 0; i < kNumSpheres; ++i) {
     const std::string name = std::string("Sphere_") + std::to_string(i);
-    auto node = scene_raw->CreateNode(name.c_str());
+    auto node = scene_raw->CreateNode(name);
     node.GetRenderable().SetGeometry(sphere_geo);
 
     // Enlarge sphere to better showcase transparency layering against
@@ -1082,6 +835,7 @@ auto MainModule::EnsureExampleScene() -> void
     s.spin_speed = spin_dist(rng);
     s.base_spin_angle = 0.0;
     spheres_.push_back(std::move(s));
+    // NOLINTEND(*-magic-numbers)
   }
 
   // Multi-submesh quad centered at origin facing +Z (already in XY plane)
@@ -1089,21 +843,18 @@ auto MainModule::EnsureExampleScene() -> void
   multisubmesh_.GetRenderable().SetGeometry(quad2sm_geo);
   multisubmesh_.GetTransform().SetLocalPosition(glm::vec3(0.0F));
   multisubmesh_.GetTransform().SetLocalRotation(glm::quat(1, 0, 0, 0));
-
-  // Set up a default flight path for the camera drone
-
-  LOG_F(
-    INFO, "Scene created: SphereDistance (LOD) and MultiSubmesh (per-submesh)");
 }
 
 auto MainModule::EnsureMainCamera(const int width, const int height) -> void
 {
+  // NOLINTBEGIN(*-magic-numbers)
+  LOG_SCOPE_FUNCTION(INFO);
   using scene::PerspectiveCamera;
 
   const auto scene_ptr
     = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
   auto* scene = scene_ptr.get();
-  if (!scene) {
+  if (scene == nullptr) {
     return;
   }
 
@@ -1135,10 +886,12 @@ auto MainModule::EnsureMainCamera(const int width, const int height) -> void
       .min_depth = 0.0F,
       .max_depth = 1.0F });
   }
+  // NOLINTEND(*-magic-numbers)
 }
 
 auto MainModule::ConfigureDrone() -> void
 {
+  // NOLINTBEGIN(*-magic-numbers)
   if (!shell_ || !shell_->GetCameraRig()) {
     return;
   }
@@ -1180,39 +933,45 @@ auto MainModule::ConfigureDrone() -> void
   shell_->GetCameraRig()->SetMode(
     oxygen::examples::ui::CameraControlMode::kDrone);
   drone_controller->Start();
+  // NOLINTEND(*-magic-numbers)
 }
 
-auto MainModule::EnsureViewCameraRegistered() -> void
+auto MainModule::UpdateComposition(engine::FrameContext& /*context*/,
+  std::vector<CompositionView>& views) -> void
 {
-  if (!shell_)
+  if (!shell_) {
     return;
-
-  // Use TryGetScene to avoid creating one if missing
-  const auto scene = shell_->TryGetScene();
-  // We need a valid scene for the camera to be meaningful in many cases,
-  // but DemoShell manages the camera availability independent of scene mostly.
-
-  auto& active_camera = shell_->GetCameraLifecycle().GetActiveCamera();
-  if (!active_camera.IsAlive())
-    return;
-
-  if (main_view_) {
-    bool needs_refresh = true;
-    if (const auto current = main_view_->GetCamera()) {
-      if (current->IsAlive()) {
-        needs_refresh = current->GetHandle() != active_camera.GetHandle();
-      }
-    }
-    if (needs_refresh) {
-      main_view_->SetCamera(active_camera);
-      // Force update to ensure pipeline picks it up
-      main_view_->SetRendererRegistered(false);
-    }
   }
+  auto& active_camera = shell_->GetCameraLifecycle().GetActiveCamera();
+  if (!active_camera.IsAlive()) {
+    return;
+  }
+
+  View view {};
+  if (app_window_ && app_window_->GetWindow()) {
+    const auto extent = app_window_->GetWindow()->Size();
+    view.viewport = ViewPort {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
+      .width = static_cast<float>(extent.width),
+      .height = static_cast<float>(extent.height),
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    };
+  }
+
+  // Create the main scene view intent
+  views.push_back(
+    CompositionView::ForScene(main_view_id_, view, active_camera));
+
+  const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
+  views.push_back(CompositionView::ForImGui(
+    imgui_view_id, view, [](graphics::CommandRecorder&) { }));
 }
 
 auto MainModule::UpdateAnimations(double delta_time) -> void
 {
+  // NOLINTBEGIN(*-magic-numbers)
   // delta_time is the elapsed time since last frame in seconds (double).
   // Clamp large deltas to avoid jumps after pause/hitch (50 ms max)
   constexpr double kMaxDelta = 0.05;
@@ -1223,9 +982,10 @@ auto MainModule::UpdateAnimations(double delta_time) -> void
   // Absolute-time sampling for deterministic, jitter-free animation
   anim_time_ += effective_dt;
   for (auto& s : spheres_) {
-    const double angle = std::fmod(s.base_angle + s.speed * anim_time_, two_pi);
+    const double angle
+      = std::fmod(s.base_angle + (s.speed * anim_time_), two_pi);
     const double spin
-      = std::fmod(s.base_spin_angle + s.spin_speed * anim_time_, two_pi);
+      = std::fmod(s.base_spin_angle + (s.spin_speed * anim_time_), two_pi);
     AnimateSphereOrbit(s.node, angle, s.radius, s.inclination, spin);
   }
 
@@ -1244,10 +1004,12 @@ auto MainModule::UpdateAnimations(double delta_time) -> void
     LOG_F(INFO, "[Anim] delta_time={}ms spheres={}", delta_time * 1000.0,
       static_cast<int>(spheres_.size()));
   }
+  // NOLINTEND(*-magic-numbers)
 }
 
 auto MainModule::UpdateSceneMutations(const float delta_time) -> void
 {
+  // NOLINTBEGIN(*-magic-numbers)
   // Toggle per-submesh visibility and material override over time
   if (multisubmesh_.IsAlive()) {
     auto r = multisubmesh_.GetRenderable();
@@ -1270,8 +1032,9 @@ auto MainModule::UpdateSceneMutations(const float delta_time) -> void
       const bool apply_override = (ovr_phase % 2) == 1;
       if (apply_override) {
         data::pak::MaterialAssetDesc desc {};
-        desc.header.asset_type = 7;
-        auto name = "BlueOverride";
+        desc.header.asset_type
+          = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
+        const auto* name = "BlueOverride";
         constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
         const std::size_t n = (std::min)(maxn, std::strlen(name));
         std::memcpy(desc.header.name, name, n);
@@ -1293,6 +1056,7 @@ auto MainModule::UpdateSceneMutations(const float delta_time) -> void
         apply_override ? "blue" : "clear");
     }
   }
+  // NOLINTEND(*-magic-numbers)
 }
 
 // DrawSpotLightPanel removed

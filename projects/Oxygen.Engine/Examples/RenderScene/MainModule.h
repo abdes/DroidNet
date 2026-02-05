@@ -9,37 +9,25 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
-#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Platform/Window.h>
-#include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/Types/NodeHandle.h>
 
-#include "DemoShell/ActiveScene.h"
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
-#include "DemoShell/Runtime/SceneView.h"
-#include "DemoShell/Services/SkyboxService.h"
 #include "DemoShell/UI/ContentVm.h"
 
 namespace oxygen {
 class AsyncEngine;
-namespace data {
-  class SceneAsset;
-} // namespace data
-namespace content {
-  class PakFile;
-  class LooseCookedInspection;
-} // namespace content
-namespace content::import {
-  class AssetImporter;
-} // namespace content::import
+namespace engine {
+  class FrameContext;
+}
 } // namespace oxygen
 
 namespace oxygen::examples {
@@ -63,16 +51,16 @@ public:
   [[nodiscard]] auto GetPriority() const noexcept
     -> oxygen::engine::ModulePriority override
   {
-    return engine::ModulePriority { 500 };
+    constexpr oxygen::engine::ModulePriority kPriority { 500 };
+    return kPriority;
   }
 
   [[nodiscard]] auto GetSupportedPhases() const noexcept
     -> oxygen::engine::ModulePhaseMask override
   {
-    using namespace core;
-    return engine::MakeModuleMask<PhaseId::kFrameStart, PhaseId::kSceneMutation,
-      PhaseId::kGameplay, PhaseId::kGuiUpdate, PhaseId::kPreRender,
-      PhaseId::kCompositing, PhaseId::kFrameEnd>();
+    using enum core::PhaseId;
+    return engine::MakeModuleMask<kFrameStart, kSceneMutation, kGameplay,
+      kGuiUpdate, kPreRender, kCompositing, kFrameEnd>();
   }
 
   ~MainModule() override;
@@ -84,6 +72,8 @@ public:
     -> platform::window::Properties override;
 
   auto ClearBackbufferReferences() -> void override;
+  auto UpdateComposition(engine::FrameContext& context,
+    std::vector<CompositionView>& views) -> void override;
 
   auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
     -> bool override;
@@ -99,7 +89,6 @@ public:
   auto OnFrameEnd(engine::FrameContext& context) -> void override;
 
 private:
-  auto EnsureViewCameraRegistered() -> void;
   auto ReleaseCurrentSceneAsset(const char* reason) -> void;
 
   auto ApplyRenderModeFromPanel() -> void;
@@ -113,27 +102,26 @@ private:
   };
 
   // Scene and rendering.
-  ActiveScene active_scene_ {};
-  observer_ptr<SceneView> main_view_ {};
+  ActiveScene active_scene_;
+  ViewId main_view_id_ { kInvalidViewId };
 
   std::shared_ptr<oxygen::examples::SceneLoaderService> scene_loader_;
   bool scene_load_cancel_requested_ { false };
 
-  std::unique_ptr<DemoShell> shell_ {};
+  std::unique_ptr<DemoShell> shell_;
 
   // Content and scene state
   std::optional<data::AssetKey> current_scene_key_;
   std::optional<data::AssetKey> last_released_scene_key_;
   std::optional<data::AssetKey> active_scene_load_key_;
-  int last_viewport_w_ { 2560 };
-  int last_viewport_h_ { 1400 };
+  Extent<uint32_t> last_viewport_;
 
   // Debug/instrumentation.
   bool logged_gameplay_tick_ { false };
   bool was_orbiting_last_frame_ { false };
 
   // Deferred lifecycle actions (applied in OnFrameStart)
-  enum class PendingSourceAction {
+  enum class PendingSourceAction : uint8_t {
     kNone,
     kClear,
     kTrimCache,
@@ -143,7 +131,7 @@ private:
   PendingSourceAction pending_source_action_ { PendingSourceAction::kNone };
   std::filesystem::path pending_path_;
   std::optional<SceneLoadRequest> pending_scene_load_;
-  std::vector<std::filesystem::path> mounted_loose_roots_ {};
+  std::vector<std::filesystem::path> mounted_loose_roots_;
 };
 
 } // namespace oxygen::examples::render_scene

@@ -22,8 +22,11 @@
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
-#include "DemoShell/Runtime/SceneView.h"
 #include "InputSystem/InputDebugPanel.h"
+
+namespace oxygen::examples::ui {
+class CameraRigController;
+}
 
 namespace oxygen::examples::input_system {
 
@@ -38,9 +41,9 @@ class MainModule final : public DemoModuleBase {
   OXYGEN_TYPED(MainModule)
 
 public:
-  using Base = oxygen::examples::DemoModuleBase;
+  using Base = DemoModuleBase;
 
-  explicit MainModule(const oxygen::examples::DemoAppContext& app);
+  explicit MainModule(const DemoAppContext& app);
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
@@ -48,18 +51,23 @@ public:
   }
 
   [[nodiscard]] auto GetPriority() const noexcept
-    -> oxygen::engine::ModulePriority override
+    -> engine::ModulePriority override
   {
-    return engine::ModulePriority { 500 };
+    constexpr engine::ModulePriority kPriority { 500 };
+    return kPriority;
   }
 
   [[nodiscard]] auto GetSupportedPhases() const noexcept
-    -> oxygen::engine::ModulePhaseMask override
+    -> engine::ModulePhaseMask override
   {
-    using namespace core;
-    return engine::MakeModuleMask<PhaseId::kFrameStart, PhaseId::kSceneMutation,
-      PhaseId::kGameplay, PhaseId::kGuiUpdate, PhaseId::kPreRender,
-      PhaseId::kCompositing, PhaseId::kFrameEnd>();
+    using enum core::PhaseId;
+    return engine::MakeModuleMask<kFrameStart, kSceneMutation, kGameplay,
+      kGuiUpdate, kPreRender, kCompositing, kFrameEnd>();
+  }
+
+  [[nodiscard]] auto IsCritical() const noexcept -> bool override
+  {
+    return true; // Critical module
   }
 
   ~MainModule() override = default;
@@ -68,47 +76,52 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(MainModule);
 
   // EngineModule lifecycle
-  auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
-    -> bool override;
+  auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool override;
   void OnShutdown() noexcept override;
 
-  // EngineModule phase handlers
-  auto OnFrameStart(oxygen::engine::FrameContext& context) -> void override;
+  // Example-specific setup
   auto HandleOnFrameStart(engine::FrameContext& context) -> void override;
-  auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
-  auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
-  auto OnGameplay(engine::FrameContext& context) -> co::Co<> override;
-  auto OnPreRender(engine::FrameContext& context) -> co::Co<> override;
-  auto OnCompositing(engine::FrameContext& context) -> co::Co<> override;
-  auto OnFrameEnd(engine::FrameContext& context) -> void override;
 
 protected:
+  // DemoModuleBase hooks
   auto BuildDefaultWindowProperties() const
     -> platform::window::Properties override;
   auto ClearBackbufferReferences() -> void override;
+  auto UpdateComposition(engine::FrameContext& context,
+    std::vector<CompositionView>& views) -> void override;
+
+  // EngineModule phase handlers
+  auto OnFrameStart(engine::FrameContext& context) -> void override;
+  auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
+  auto OnGameplay(engine::FrameContext& context) -> co::Co<> override;
+  auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
+  auto OnPreRender(engine::FrameContext& context) -> co::Co<> override;
+  auto OnCompositing(engine::FrameContext& context) -> co::Co<> override;
+  auto OnFrameEnd(engine::FrameContext& context) -> void override;
 
 private:
   auto InitInputBindings() noexcept -> bool;
   auto UpdateInputDebugPanelConfig() -> void;
 
   // Scene and rendering
-  ActiveScene active_scene_ {};
+  ActiveScene active_scene_;
   scene::SceneNode sphere_node_;
 
-  // View managed by base class, we just keep a reference
-  observer_ptr<SceneView> main_view_ { nullptr };
+  // Hosted view
+  ViewId main_view_id_ { kInvalidViewId };
 
   // Input actions
-  std::shared_ptr<oxygen::input::Action> shift_action_;
-  std::shared_ptr<oxygen::input::Action> jump_action_;
-  std::shared_ptr<oxygen::input::Action> jump_higher_action_;
-  std::shared_ptr<oxygen::input::Action> swim_up_action_;
+  std::shared_ptr<input::Action> shift_action_;
+  std::shared_ptr<input::Action> jump_action_;
+  std::shared_ptr<input::Action> jump_higher_action_;
+  std::shared_ptr<input::Action> swim_up_action_;
 
   // Mapping contexts
-  std::shared_ptr<oxygen::input::InputMappingContext> modifier_keys_ctx_;
-  std::shared_ptr<oxygen::input::InputMappingContext> ground_movement_ctx_;
-  std::shared_ptr<oxygen::input::InputMappingContext> swimming_ctx_;
+  std::shared_ptr<input::InputMappingContext> modifier_keys_ctx_;
+  std::shared_ptr<input::InputMappingContext> ground_movement_ctx_;
+  std::shared_ptr<input::InputMappingContext> swimming_ctx_;
 
+  // NOLINTBEGIN(*-magic-numbers)
   // Simple physics (Z is up in Oxygen)
   glm::vec3 sphere_base_pos_ { 0.0F, -5.0F, 0.0F }; // Forward along -Y
   bool sphere_in_air_ { false };
@@ -121,10 +134,13 @@ private:
   bool swimming_mode_ { false };
   float swim_up_speed_ { 2.5F };
   bool pending_ground_reset_ { false };
+  // NOLINTEND(*-magic-numbers)
 
   // DemoShell and panels
-  std::unique_ptr<DemoShell> shell_ {};
-  std::shared_ptr<InputDebugPanel> input_debug_panel_ {};
+  std::unique_ptr<DemoShell> shell_;
+  std::shared_ptr<InputDebugPanel> input_debug_panel_;
+
+  observer_ptr<ui::CameraRigController> last_camera_rig_ { nullptr };
 };
 
 } // namespace oxygen::examples::input_system

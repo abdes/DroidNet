@@ -20,6 +20,7 @@
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Scene/Environment/Sun.h>
 
 namespace oxygen {
 namespace engine {
@@ -133,8 +134,8 @@ public:
   [[nodiscard]] virtual auto GetSkySphereSolidColor() const -> glm::vec3;
   virtual auto SetSkySphereSolidColor(const glm::vec3& value) -> void;
 
-  [[nodiscard]] virtual auto GetSkySphereIntensity() const -> float;
-  virtual auto SetSkySphereIntensity(float value) -> void;
+  [[nodiscard]] virtual auto GetSkyIntensity() const -> float;
+  virtual auto SetSkyIntensity(float value) -> void;
 
   [[nodiscard]] virtual auto GetSkySphereRotationDeg() const -> float;
   virtual auto SetSkySphereRotationDeg(float value) -> void;
@@ -240,13 +241,15 @@ protected:
 private:
   struct SunUiSettings {
     bool enabled { true };
-    float azimuth_deg { 90.0F };
-    float elevation_deg { 30.0F };
+    float azimuth_deg { scene::environment::Sun::kDefaultAzimuthDeg };
+    float elevation_deg { scene::environment::Sun::kDefaultElevationDeg };
     glm::vec3 color_rgb { 1.0F, 1.0F, 1.0F };
-    float intensity_lux { 10.0F };
+    float intensity_lux { scene::environment::Sun::kDefaultIntensityLux };
     bool use_temperature { false };
     float temperature_kelvin { 6500.0F };
-    float disk_radius_deg { 0.268F };
+    float disk_radius_deg {
+      scene::environment::Sun::kDefaultDiskAngularRadiusRad * math::RadToDeg
+    };
   };
 
   auto SyncFromScene() -> void;
@@ -254,6 +257,7 @@ private:
   auto LoadSettings() -> void;
   auto SaveSettings() const -> void;
   auto MarkDirty() -> void;
+  auto NormalizeSkySystems() -> void;
   auto ApplySavedSunSourcePreference() -> void;
   auto ResetSunUiToDefaults() -> void;
   auto FindSunLightCandidate() const -> std::optional<scene::SceneNode>;
@@ -294,7 +298,7 @@ private:
   bool sky_sphere_enabled_ { false };
   int sky_sphere_source_ { 0 };
   glm::vec3 sky_sphere_solid_color_ { 0.2F, 0.3F, 0.5F };
-  float sky_sphere_intensity_ { 1.0F };
+  float sky_intensity_ { 1.0F };
   float sky_sphere_rotation_deg_ { 0.0F };
 
   // Skybox settings
@@ -321,13 +325,15 @@ private:
   bool sun_present_ { false };
   bool sun_enabled_ { true };
   int sun_source_ { 0 };
-  float sun_azimuth_deg_ { 90.0F };
-  float sun_elevation_deg_ { 30.0F };
+  float sun_azimuth_deg_ { scene::environment::Sun::kDefaultAzimuthDeg };
+  float sun_elevation_deg_ { scene::environment::Sun::kDefaultElevationDeg };
   glm::vec3 sun_color_rgb_ { 1.0F, 1.0F, 1.0F };
-  float sun_intensity_lux_ { 10.0F };
+  float sun_intensity_lux_ { scene::environment::Sun::kDefaultIntensityLux };
   bool sun_use_temperature_ { false };
   float sun_temperature_kelvin_ { 6500.0F };
-  float sun_component_disk_radius_deg_ { 0.268F };
+  float sun_component_disk_radius_deg_ {
+    scene::environment::Sun::kDefaultDiskAngularRadiusRad * math::RadToDeg
+  };
   scene::SceneNode sun_light_node_ {};
   bool sun_light_available_ { false };
   scene::SceneNode synthetic_sun_light_node_ {};

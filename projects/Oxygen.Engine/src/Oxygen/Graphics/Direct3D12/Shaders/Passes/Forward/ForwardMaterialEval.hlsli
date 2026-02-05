@@ -25,7 +25,8 @@ MaterialSurface EvaluateMaterialSurface(
     float3 world_tangent,
     float3 world_bitangent,
     float2 uv0,
-    uint   draw_index)
+    uint   draw_index,
+    bool   is_front_face)
 {
     MaterialSurface s;
 
@@ -203,6 +204,13 @@ MaterialSurface EvaluateMaterialSurface(
             // Emissive textures are typically sRGB-encoded.
             float3 emissive_sample = SrgbToLinear(emissive_tex.Sample(samp, uv).rgb);
             s.emissive *= emissive_sample;
+        }
+
+        // Double-sided lighting: keep the surface visible (cull mode) and
+        // flip the shading normal for backfaces so lights contribute on both
+        // sides. This does not change geometry winding; it only affects BRDF.
+        if ((mat.flags & MATERIAL_FLAG_DOUBLE_SIDED) != 0u && !is_front_face) {
+            s.N = -s.N;
         }
     }
 

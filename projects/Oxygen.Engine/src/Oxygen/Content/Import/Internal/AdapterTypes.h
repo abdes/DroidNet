@@ -41,7 +41,7 @@ struct AdapterInput final {
   ImportRequest request;
   observer_ptr<NamingService> naming_service;
   std::stop_token stop_token;
-  std::span<const ExternalTextureBytes> external_texture_bytes {};
+  std::span<const ExternalTextureBytes> external_texture_bytes;
 };
 
 //! Tag selecting geometry work item production.

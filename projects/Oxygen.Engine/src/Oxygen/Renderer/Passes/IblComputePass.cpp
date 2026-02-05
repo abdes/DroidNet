@@ -145,8 +145,20 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
 
   DCHECK_NOTNULL_F(Context().scene_constants);
 
-  DispatchIrradiance(recorder, *ibl_manager, source_slot);
-  DispatchPrefilter(recorder, *ibl_manager, source_slot);
+  float source_intensity = 1.0F;
+  const auto sky_light_slot = env_manager->GetSkyLightCubemapSlot();
+  const auto sky_sphere_slot = env_manager->GetSkySphereCubemapSlot();
+  if (source_slot == sky_light_slot) {
+    source_intensity = env_manager->GetSkyLightIntensity();
+  } else if (source_slot == sky_sphere_slot) {
+    source_intensity = env_manager->GetSkySphereIntensity();
+  }
+  if (source_intensity <= 0.0F) {
+    source_intensity = 1.0F;
+  }
+
+  DispatchIrradiance(recorder, *ibl_manager, source_slot, source_intensity);
+  DispatchPrefilter(recorder, *ibl_manager, source_slot, source_intensity);
 
   recorder.FlushBarriers();
   auto tag = oxygen::engine::internal::IblPassTagFactory::Get();
@@ -278,7 +290,8 @@ auto IblComputePass::ResolveSourceCubemapSlot() const noexcept
 }
 
 auto IblComputePass::DispatchIrradiance(graphics::CommandRecorder& recorder,
-  internal::IblManager& ibl, const ShaderVisibleIndex source_slot) -> void
+  internal::IblManager& ibl, const ShaderVisibleIndex source_slot,
+  const float source_intensity) -> void
 {
   auto tag = oxygen::engine::internal::IblPassTagFactory::Get();
 
@@ -316,6 +329,7 @@ auto IblComputePass::DispatchIrradiance(graphics::CommandRecorder& recorder,
     .target_uav_slot = uav_slot,
     .roughness = 0.0F,
     .face_size = ibl.GetConfig().irradiance_size,
+    .source_intensity = source_intensity,
   };
   const uint32_t constants_index = 0U;
   auto* constants_dst = static_cast<std::byte*>(pass_constants_mapped_)
@@ -351,7 +365,8 @@ auto IblComputePass::DispatchIrradiance(graphics::CommandRecorder& recorder,
 }
 
 auto IblComputePass::DispatchPrefilter(graphics::CommandRecorder& recorder,
-  internal::IblManager& ibl, const ShaderVisibleIndex source_slot) -> void
+  internal::IblManager& ibl, const ShaderVisibleIndex source_slot,
+  const float source_intensity) -> void
 {
   auto tag = oxygen::engine::internal::IblPassTagFactory::Get();
 
@@ -420,6 +435,7 @@ auto IblComputePass::DispatchPrefilter(graphics::CommandRecorder& recorder,
       .target_uav_slot = uav_slot,
       .roughness = roughness,
       .face_size = mip_size,
+      .source_intensity = source_intensity,
     };
     const uint32_t constants_index = constants_base + mip;
     auto* constants_dst = static_cast<std::byte*>(pass_constants_mapped_)

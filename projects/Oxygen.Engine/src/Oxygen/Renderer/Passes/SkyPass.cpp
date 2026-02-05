@@ -6,8 +6,10 @@
 
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -314,6 +316,13 @@ auto SkyPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   };
 
   auto generated_bindings = BuildRootBindings();
+  std::vector<graphics::ShaderDefine> ps_defines;
+  if (graphics::detail::IsHdr(color_tex_desc.format)) {
+    ps_defines.push_back(graphics::ShaderDefine {
+      .name = "OXYGEN_HDR_OUTPUT",
+      .value = "1",
+    });
+  }
 
   return GraphicsPipelineDesc::Builder()
     .SetVertexShader(ShaderRequest {
@@ -326,7 +335,7 @@ auto SkyPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
       .stage = ShaderType::kPixel,
       .source_path = "Passes/Sky/SkySphere_PS.hlsl",
       .entry_point = "PS",
-      .defines = {},
+      .defines = ps_defines,
     })
     .SetPrimitiveTopology(PrimitiveType::kTriangleList)
     .SetRasterizerState(raster_desc)

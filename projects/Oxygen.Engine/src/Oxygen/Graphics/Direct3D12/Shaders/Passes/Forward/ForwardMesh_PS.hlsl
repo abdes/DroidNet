@@ -76,6 +76,7 @@ struct VSOutput {
     float3 world_normal : NORMAL;
     float3 world_tangent : TANGENT;
     float3 world_bitangent : BINORMAL;
+    bool is_front_face : SV_IsFrontFace;
 };
 
 //=== Debug Visualization Helpers ===----------------------------------------//
@@ -197,12 +198,12 @@ float4 PS(VSOutput input) : SV_Target0 {
 #elif defined(DEBUG_BASE_COLOR)
     const MaterialSurface s = EvaluateMaterialSurface(input.world_pos,
         input.world_normal, input.world_tangent, input.world_bitangent,
-        input.uv, g_DrawIndex);
+        input.uv, g_DrawIndex, input.is_front_face);
     return float4(s.base_rgb, 1.0f);
 #elif defined(DEBUG_OPACITY)
     const MaterialSurface s = EvaluateMaterialSurface(input.world_pos,
         input.world_normal, input.world_tangent, input.world_bitangent,
-        input.uv, g_DrawIndex);
+        input.uv, g_DrawIndex, input.is_front_face);
     return float4(s.base_a.xxx, 1.0f);
 #elif defined(DEBUG_IBL_SPECULAR)
     // IBL specular visualization: sample the prefilter map (if available) and
@@ -403,7 +404,8 @@ float4 PS(VSOutput input) : SV_Target0 {
         input.world_tangent,
         input.world_bitangent,
         input.uv,
-        g_DrawIndex);
+        g_DrawIndex,
+        input.is_front_face);
 
     const float3 base_rgb = surf.base_rgb;
     const float  metalness = surf.metalness;
@@ -470,6 +472,9 @@ float4 PS(VSOutput input) : SV_Target0 {
         const float3 cube_N = CubemapSamplingDirFromOxygenWS(N);
 
         // Check for generated IBL maps (Irradiance + Prefilter)
+        const float3 sky_tint = env_data.sky_light.tint_rgb;
+        const float sky_intensity = env_data.sky_light.intensity;
+
         if (env_data.sky_light.irradiance_map_slot != K_INVALID_BINDLESS_INDEX
             && env_data.sky_light.prefilter_map_slot != K_INVALID_BINDLESS_INDEX)
         {
@@ -482,17 +487,20 @@ float4 PS(VSOutput input) : SV_Target0 {
              // Specular from Prefilter Map
                const float pf_max_mip = (float)env_data.sky_light.prefilter_max_mip;
                ibl_specular = pref_map.SampleLevel(linear_sampler, cube_R, pf_max_mip * roughness).rgb;
+
+             ibl_diffuse *= sky_tint * env_data.sky_light.diffuse_intensity;
+             ibl_specular *= sky_tint * env_data.sky_light.specular_intensity;
         }
         else
         {
             // Fallback: Approximate from raw skybox (Incorrect but legacy behavior)
             ibl_specular = sky_cube.SampleLevel(linear_sampler, cube_R, max_mip * roughness).rgb;
             ibl_diffuse = sky_cube.SampleLevel(linear_sampler, cube_N, max_mip).rgb;
-        }
 
-        const float3 sky_tint = env_data.sky_light.tint_rgb * env_data.sky_light.intensity;
-        ibl_diffuse *= sky_tint * env_data.sky_light.diffuse_intensity;
-        ibl_specular *= sky_tint * env_data.sky_light.specular_intensity;
+            const float3 sky_scale = sky_tint * sky_intensity;
+            ibl_diffuse *= sky_scale * env_data.sky_light.diffuse_intensity;
+            ibl_specular *= sky_scale * env_data.sky_light.specular_intensity;
+        }
     }
 
     const float3 ambient = ibl_diffuse * base_rgb * (1.0f - metalness);
@@ -545,6 +553,13 @@ float4 PS(VSOutput input) : SV_Target0 {
         }
     }
 
+#ifdef OXYGEN_HDR_OUTPUT
+#ifdef ALPHA_TEST
+    return float4(final_color, 1.0f);
+#else
+    return float4(final_color, surf.base_a);
+#endif
+#else
     // Apply camera exposure after lighting + atmosphere.
     final_color *= GetExposure();
 
@@ -552,6 +567,7 @@ float4 PS(VSOutput input) : SV_Target0 {
     return float4(LinearToSrgb(final_color), 1.0f);
 #else
     return float4(LinearToSrgb(final_color), surf.base_a);
+#endif
 #endif
 
 #endif // DEBUG_MODE_ACTIVE

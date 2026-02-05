@@ -14,8 +14,8 @@
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/ImGui/Styles/IconsFontAwesome.h>
 
-#include "TexturedCube/UI/TextureBrowserPanel.h"
-#include "TexturedCube/UI/TextureBrowserVm.h"
+#include "TexturedCube/UI/MaterialsSandboxPanel.h"
+#include "TexturedCube/UI/MaterialsSandboxVm.h"
 
 namespace {
 
@@ -62,39 +62,39 @@ auto InputTextString(const char* label, std::array<char, 512>& value) -> bool
 
 namespace oxygen::examples::textured_cube::ui {
 
-auto to_string(TextureBrowserVm::UvOrigin origin) -> std::string
+auto to_string(MaterialsSandboxVm::UvOrigin origin) -> std::string
 {
   switch (origin) {
-  case TextureBrowserVm::UvOrigin::kBottomLeft:
+  case MaterialsSandboxVm::UvOrigin::kBottomLeft:
     return "Bottom Left";
-  case TextureBrowserVm::UvOrigin::kTopLeft:
+  case MaterialsSandboxVm::UvOrigin::kTopLeft:
     return "Top Left";
   default:
     return "Unknown";
   }
 }
 
-void TextureBrowserPanel::Initialize(observer_ptr<TextureBrowserVm> vm)
+void MaterialsSandboxPanel::Initialize(observer_ptr<MaterialsSandboxVm> vm)
 {
   vm_ = vm;
 }
 
-auto TextureBrowserPanel::GetName() const noexcept -> std::string_view
+auto MaterialsSandboxPanel::GetName() const noexcept -> std::string_view
 {
   return "Texture Browser";
 }
 
-auto TextureBrowserPanel::GetIcon() const noexcept -> std::string_view
+auto MaterialsSandboxPanel::GetIcon() const noexcept -> std::string_view
 {
   return imgui::icons::kIconDemoPanel;
 }
 
-auto TextureBrowserPanel::GetPreferredWidth() const noexcept -> float
+auto MaterialsSandboxPanel::GetPreferredWidth() const noexcept -> float
 {
   return 480.0F;
 }
 
-auto TextureBrowserPanel::OnLoaded() -> void
+auto MaterialsSandboxPanel::OnLoaded() -> void
 {
   if (vm_) {
     // Refresh cooked list just in case
@@ -102,9 +102,9 @@ auto TextureBrowserPanel::OnLoaded() -> void
   }
 }
 
-auto TextureBrowserPanel::OnUnloaded() -> void { }
+auto MaterialsSandboxPanel::OnUnloaded() -> void { }
 
-auto TextureBrowserPanel::DrawContents() -> void
+auto MaterialsSandboxPanel::DrawContents() -> void
 {
   if (!vm_) {
     ImGui::TextDisabled("No VM attached");
@@ -114,35 +114,49 @@ auto TextureBrowserPanel::DrawContents() -> void
   // Update VM loop
   vm_->Update();
 
-  ImGui::PushID("TextureBrowser");
+  ImGui::PushID("Materials Sandbox");
 
   // Determine interaction state
   const auto state = vm_->GetImportState().workflow_state;
   // const bool is_configuring = ... (Moved to DrawBrowserSection logic)
   const bool is_idle
-    = (state == TextureBrowserVm::ImportState::WorkflowState::Idle);
+    = (state == MaterialsSandboxVm::ImportState::WorkflowState::Idle);
 
   // Inline Import Section
   // Moved to DrawBrowserSection
 
   if (ImGui::CollapsingHeader(
-        "Materials & UVs", ImGuiTreeNodeFlags_DefaultOpen)) {
+        "Custom Materials", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::BeginDisabled(!is_idle);
     DrawMaterialsSection();
     ImGui::EndDisabled();
   }
 
-  if (ImGui::CollapsingHeader(
-        "Texture Browser", ImGuiTreeNodeFlags_DefaultOpen)) {
-    // Note: Disabling handled inside DrawBrowserSection now to allow Import
-    // interaction
-    DrawBrowserSection();
+  // Show/Collapse Texture Browser depending on modes. Solid Color collapses
+  // and disables the browser; Custom auto-expands and enables it.
+  const auto& sphere_slot = vm_->GetSphereTextureState();
+  const auto& cube_slot = vm_->GetCubeTextureState();
+  const bool any_custom = (sphere_slot.mode
+      == oxygen::examples::textured_cube::TextureIndexMode::kCustom
+    || cube_slot.mode
+      == oxygen::examples::textured_cube::TextureIndexMode::kCustom);
+  const bool is_solid_color = vm_->GetSurfaceState().use_constant_base_color;
+
+  // Only draw the Texture Browser when a slot is in Custom mode. Do not
+  // render a disabled/collapsed header in other modes (prevents interactivity
+  // and clutter).
+  if (any_custom) {
+    ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+    if (ImGui::CollapsingHeader(
+          "Texture Browser", ImGuiTreeNodeFlags_DefaultOpen)) {
+      DrawBrowserSection();
+    }
   }
 
   ImGui::PopID();
 }
 
-auto TextureBrowserPanel::DrawImportSection() -> void
+auto MaterialsSandboxPanel::DrawImportSection() -> void
 {
   auto& state = vm_->GetImportState();
 
@@ -156,7 +170,7 @@ auto TextureBrowserPanel::DrawImportSection() -> void
 
   // 1. Configuration (Disable if importing)
   const bool is_importing = (state.workflow_state
-    == TextureBrowserVm::ImportState::WorkflowState::Importing);
+    == MaterialsSandboxVm::ImportState::WorkflowState::Importing);
 
   ImGui::BeginDisabled(is_importing);
   {
@@ -167,17 +181,18 @@ auto TextureBrowserPanel::DrawImportSection() -> void
     if (ImGui::Combo(
           "Usage Preset", &usage_idx, kUsages, IM_ARRAYSIZE(kUsages))) {
       state.usage
-        = static_cast<TextureBrowserVm::ImportState::Usage>(usage_idx);
+        = static_cast<MaterialsSandboxVm::ImportState::Usage>(usage_idx);
       vm_->UpdateImportSettingsFromUsage();
     }
 
     // Contextual Toggles
-    if (state.usage == TextureBrowserVm::ImportState::Usage::kNormal) {
+    if (state.usage == MaterialsSandboxVm::ImportState::Usage::kNormal) {
       ImGui::Indent();
       ImGui::Checkbox("Flip Green Channel (Y)", &state.flip_normal_green);
       ImGui::Unindent();
     }
-    if (state.usage == TextureBrowserVm::ImportState::Usage::kHdrEnvironment) {
+    if (state.usage
+      == MaterialsSandboxVm::ImportState::Usage::kHdrEnvironment) {
       ImGui::Indent();
       ImGui::SliderFloat("Exposure (EV)", &state.exposure_ev, -5.0F, 5.0F);
       ImGui::Unindent();
@@ -217,16 +232,16 @@ auto TextureBrowserPanel::DrawImportSection() -> void
   ImGui::EndDisabled();
 
   ImGui::Spacing();
-  ImGui::Separator();
+  ImGui::SeparatorText("Import Status");
   ImGui::Spacing();
 
   // 2. Status / Progress (Bottom area)
   if (state.workflow_state
-    == TextureBrowserVm::ImportState::WorkflowState::Importing) {
+    == MaterialsSandboxVm::ImportState::WorkflowState::Importing) {
     ImGui::Text("Importing...");
     ImGui::ProgressBar(state.progress, ImVec2(-1, 0));
   } else if (state.workflow_state
-    == TextureBrowserVm::ImportState::WorkflowState::Finished) {
+    == MaterialsSandboxVm::ImportState::WorkflowState::Finished) {
     if (state.last_import_success) {
       ImGui::TextColored(
         ImVec4(0.2F, 1.0F, 0.2F, 1.0F), "%s", state.status_message.c_str());
@@ -252,7 +267,7 @@ auto TextureBrowserPanel::DrawImportSection() -> void
 
   ImGui::BeginDisabled(is_importing);
   if (ImGui::Button(state.workflow_state
-            == TextureBrowserVm::ImportState::WorkflowState::Finished
+            == MaterialsSandboxVm::ImportState::WorkflowState::Finished
           ? "Retry Import"
           : "Import",
         ImVec2(-1, 0))) {
@@ -264,59 +279,146 @@ auto TextureBrowserPanel::DrawImportSection() -> void
   ImGui::PopStyleColor();
 }
 
-auto TextureBrowserPanel::DrawMaterialsSection() -> void
+auto MaterialsSandboxPanel::DrawMaterialsSection() -> void
 {
   auto& surface = vm_->GetSurfaceState();
   auto& uv = vm_->GetUvState();
 
-  ImGui::TextDisabled("Surface Props");
-  ImGui::SliderFloat("Metalness", &surface.metalness, 0.0F, 1.0F);
-  ImGui::SliderFloat("Roughness", &surface.roughness, 0.0F, 1.0F);
-  ImGui::Checkbox("Use Constant Base Color", &surface.use_constant_base_color);
+  // Texture mode controls (global - applies to both sphere and cube)
+  // 0 = Fallback, 1 = Forced Error, 2 = Solid Color, 3 = Custom
+  int current_mode = 0;
+  const auto& sphere_slot = vm_->GetSphereTextureState();
+  const auto& cube_slot = vm_->GetCubeTextureState();
+
+  // Solid color mode takes visual priority
   if (surface.use_constant_base_color) {
-    ImGui::ColorEdit3("Base Color", &surface.constant_base_color_rgb.x);
+    current_mode = 2;
+  } else if (sphere_slot.mode == cube_slot.mode) {
+    switch (sphere_slot.mode) {
+    case oxygen::examples::textured_cube::TextureIndexMode::kForcedError:
+      current_mode = 1;
+      break;
+    case oxygen::examples::textured_cube::TextureIndexMode::kCustom:
+      current_mode = 3;
+      break;
+    case oxygen::examples::textured_cube::TextureIndexMode::kFallback:
+    default:
+      current_mode = 0;
+      break;
+    }
+  } else {
+    // Mixed modes or other case: default to Custom to allow per-slot edits
+    current_mode = 3;
   }
 
-  ImGui::Separator();
-  ImGui::TextDisabled("UV Transform");
-
-  if (ImGui::Button("Reset UV")) {
-    uv.scale = { 1.0F, 1.0F };
-    uv.offset = { 0.0F, 0.0F };
-  }
-  ImGui::DragFloat2("Scale", &uv.scale.x, 0.01F);
-  ImGui::DragFloat2("Offset", &uv.offset.x, 0.01F);
-
-  // UV/Image Origin options
-  static const std::array<TextureBrowserVm::UvOrigin, 2> kUvOrigins
-    = { TextureBrowserVm::UvOrigin::kBottomLeft,
-        TextureBrowserVm::UvOrigin::kTopLeft };
-  DrawEnumCombo("UV Origin", uv.uv_origin, kUvOrigins);
-
-  ImGui::Checkbox("Extra Flip U", &uv.extra_flip_u);
-  ImGui::SameLine();
-  ImGui::Checkbox("Extra Flip V", &uv.extra_flip_v);
-
-  // Calculate and show effective logic for debugging
-  auto [eff_s, eff_o] = vm_->GetEffectiveUvTransform();
-  ImGui::TextDisabled("Effective: S(%.2F, %.2F) O(%.2F, %.2F)", eff_s.x,
-    eff_s.y, eff_o.x, eff_o.y);
-
-  if (ImGui::Button("Apply/Rebuild Cube")) {
+  auto apply_mode = [this](int mode) {
+    switch (mode) {
+    case 0: // Fallback
+      vm_->GetSphereTextureState().mode
+        = oxygen::examples::textured_cube::TextureIndexMode::kFallback;
+      vm_->GetCubeTextureState().mode
+        = oxygen::examples::textured_cube::TextureIndexMode::kFallback;
+      vm_->GetSurfaceState().use_constant_base_color = false;
+      break;
+    case 1: // Forced Error
+      vm_->GetSphereTextureState().mode
+        = oxygen::examples::textured_cube::TextureIndexMode::kForcedError;
+      vm_->GetCubeTextureState().mode
+        = oxygen::examples::textured_cube::TextureIndexMode::kForcedError;
+      vm_->GetSurfaceState().use_constant_base_color = false;
+      break;
+    case 2: // Solid Color
+      vm_->GetSurfaceState().use_constant_base_color = true;
+      // Keep resource indices but ensure textures are ignored by using
+      // fallback mode for sampling
+      vm_->GetSphereTextureState().mode
+        = oxygen::examples::textured_cube::TextureIndexMode::kFallback;
+      vm_->GetCubeTextureState().mode
+        = oxygen::examples::textured_cube::TextureIndexMode::kFallback;
+      break;
+    case 3: // Custom
+      vm_->GetSphereTextureState().mode
+        = oxygen::examples::textured_cube::TextureIndexMode::kCustom;
+      vm_->GetCubeTextureState().mode
+        = oxygen::examples::textured_cube::TextureIndexMode::kCustom;
+      vm_->GetSurfaceState().use_constant_base_color = false;
+      break;
+    default:
+      break;
+    }
     vm_->SetCubeRebuildNeeded();
+  };
+
+  // Vertical radio buttons (one per line)
+  if (ImGui::RadioButton("Fallback", &current_mode, 0)) {
+    apply_mode(0);
+  }
+  if (ImGui::RadioButton("Forced Error", &current_mode, 1)) {
+    apply_mode(1);
+  }
+  if (ImGui::RadioButton("Solid Color", &current_mode, 2)) {
+    apply_mode(2);
+  }
+  if (ImGui::RadioButton("Custom Texture", &current_mode, 3)) {
+    apply_mode(3);
+  }
+
+  // Solid Color exposes the color picker
+  if (surface.use_constant_base_color) {
+    if (ImGui::ColorEdit3("Base Color", &surface.constant_base_color_rgb.x)) {
+      vm_->SetCubeRebuildNeeded();
+    }
+  }
+
+  if (ImGui::SliderFloat("Metalness", &surface.metalness, 0.0F, 1.0F)) {
+    vm_->SetCubeRebuildNeeded();
+  }
+  if (ImGui::SliderFloat("Roughness", &surface.roughness, 0.0F, 1.0F)) {
+    vm_->SetCubeRebuildNeeded();
+  }
+
+  // UV controls are only applicable when at least one slot is Custom
+  const bool any_custom = (vm_->GetSphereTextureState().mode
+      == oxygen::examples::textured_cube::TextureIndexMode::kCustom
+    || vm_->GetCubeTextureState().mode
+      == oxygen::examples::textured_cube::TextureIndexMode::kCustom);
+
+  if (any_custom) {
+    ImGui::Spacing();
+    ImGui::SeparatorText("UV Transform");
+    ImGui::Spacing();
+
+    if (ImGui::Button("Reset UV")) {
+      uv.scale = { 1.0F, 1.0F };
+      uv.offset = { 0.0F, 0.0F };
+    }
+    ImGui::DragFloat2("Scale", &uv.scale.x, 0.01F);
+    ImGui::DragFloat2("Offset", &uv.offset.x, 0.01F);
+
+    // UV/Image Origin options
+    static const std::array<MaterialsSandboxVm::UvOrigin, 2> kUvOrigins
+      = { MaterialsSandboxVm::UvOrigin::kBottomLeft,
+          MaterialsSandboxVm::UvOrigin::kTopLeft };
+    DrawEnumCombo("UV Origin", uv.uv_origin, kUvOrigins);
+
+    ImGui::Checkbox("Extra Flip U", &uv.extra_flip_u);
+    ImGui::SameLine();
+    ImGui::Checkbox("Extra Flip V", &uv.extra_flip_v);
+
+    ImGui::Spacing();
   }
 }
 
-auto TextureBrowserPanel::DrawBrowserSection() -> void
+auto MaterialsSandboxPanel::DrawBrowserSection() -> void
 {
   auto& cooked = vm_->GetCookedEntries();
 
   // Determine state for local UI logic
   const auto state = vm_->GetImportState().workflow_state;
   const bool is_idle
-    = (state == TextureBrowserVm::ImportState::WorkflowState::Idle);
+    = (state == MaterialsSandboxVm::ImportState::WorkflowState::Idle);
   const bool is_configuring
-    = (state != TextureBrowserVm::ImportState::WorkflowState::Idle);
+    = (state != MaterialsSandboxVm::ImportState::WorkflowState::Idle);
 
   if (ImGui::Button(ICON_FA_ARROW_ROTATE_RIGHT " Refresh List")) {
     vm_->RequestRefresh();
@@ -332,9 +434,13 @@ auto TextureBrowserPanel::DrawBrowserSection() -> void
 
   // Inline Import Section (pushes content down)
   if (is_configuring) {
-    ImGui::Separator();
+    ImGui::Spacing();
+    ImGui::SeparatorText("Import");
+    ImGui::Spacing();
     DrawImportSection();
-    ImGui::Separator();
+    ImGui::Spacing();
+    ImGui::SeparatorText("Import");
+    ImGui::Spacing();
   }
 
   ImGui::BeginDisabled(!is_idle);
@@ -356,18 +462,33 @@ auto TextureBrowserPanel::DrawBrowserSection() -> void
     const bool is_cube
       = (entry.texture_type == oxygen::TextureType::kTextureCube);
 
-    ImGui::BeginDisabled(!is_2d);
+    // Enable selection buttons only if the respective slot is in Custom mode.
+    const bool sphere_can_select = is_2d
+      && (vm_->GetSphereTextureState().mode
+        == oxygen::examples::textured_cube::TextureIndexMode::kCustom);
+    const bool cube_can_select = is_2d
+      && (vm_->GetCubeTextureState().mode
+        == oxygen::examples::textured_cube::TextureIndexMode::kCustom);
+
+    ImGui::BeginDisabled(!sphere_can_select);
     if (ImGui::Button("Sphere")) {
       vm_->SelectTextureForSlot(entry.index, true);
     }
+    ImGui::EndDisabled();
+
     ImGui::SameLine();
+
+    ImGui::BeginDisabled(!cube_can_select);
     if (ImGui::Button("Cube")) {
       vm_->SelectTextureForSlot(entry.index, false);
     }
     ImGui::EndDisabled();
 
     ImGui::SameLine();
-    ImGui::BeginDisabled(!is_cube);
+    // Sky selection should be available for cubemap entries regardless of
+    // per-slot texture modes (this applies a global skybox to the scene).
+    const bool sky_can_select = is_cube;
+    ImGui::BeginDisabled(!sky_can_select);
     if (ImGui::Button("Sky")) {
       vm_->SelectSkybox(entry.index, nullptr);
     }
@@ -381,7 +502,9 @@ auto TextureBrowserPanel::DrawBrowserSection() -> void
 
       std::string settings_json = vm_->GetMetadataJson(entry.index);
       if (!settings_json.empty()) {
-        ImGui::Separator();
+        ImGui::Spacing();
+        ImGui::SeparatorText("Import Settings");
+        ImGui::Spacing();
         ImGui::TextColored(ImVec4(0.7F, 0.7F, 1.0F, 1.0F), "Import Settings:");
         ImGui::TextUnformatted(settings_json.c_str());
       }

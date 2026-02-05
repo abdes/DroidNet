@@ -22,6 +22,7 @@ enum class ToneMapper {
 enum class ExposureMode {
   kManual,
   kAuto,
+  kManualCamera,
 };
 
 //! Scene-global post processing parameters.

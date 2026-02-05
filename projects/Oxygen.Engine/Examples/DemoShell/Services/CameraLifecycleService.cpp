@@ -24,6 +24,7 @@
 #include "DemoShell/UI/CameraRigController.h"
 #include "DemoShell/UI/FlyCameraController.h"
 #include "DemoShell/UI/OrbitCameraController.h"
+#include "Oxygen/Base/Types/Geometry.h"
 
 namespace oxygen::examples {
 
@@ -95,10 +96,11 @@ namespace {
     const glm::vec3& target,
     const glm::vec3& up_direction = { 0.0F, 0.0F, 1.0F }) -> glm::quat
   {
+    // NOLINTBEGIN(*-magic-numbers)
     const auto forward_raw = target - position;
     const float forward_len2 = glm::dot(forward_raw, forward_raw);
     if (forward_len2 <= 1e-8F) {
-      return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
+      return { 1.0F, 0.0F, 0.0F, 0.0F };
     }
 
     const auto forward = glm::normalize(forward_raw);
@@ -113,8 +115,8 @@ namespace {
 
     const auto right_raw = glm::cross(forward, up_dir);
     const float right_len2 = glm::dot(right_raw, right_raw);
-    if (right_len2 <= 1e-8F) {
-      return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
+    if (right_len2 <= std::numeric_limits<float>::epsilon()) {
+      return { 1.0F, 0.0F, 0.0F, 0.0F };
     }
 
     const auto right = right_raw / std::sqrt(right_len2);
@@ -128,6 +130,7 @@ namespace {
     // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
 
     return glm::quat_cast(look_matrix);
+    // NOLINTEND(*-magic-numbers)
   }
 
 } // namespace
@@ -179,7 +182,7 @@ void CameraLifecycleService::CaptureInitialPose()
   }
 }
 
-void CameraLifecycleService::EnsureViewport(const int width, const int height)
+void CameraLifecycleService::EnsureViewport(Extent<uint32_t> extent)
 {
   if (!active_camera_.IsAlive()) {
     EnsureFallbackCamera();
@@ -189,14 +192,14 @@ void CameraLifecycleService::EnsureViewport(const int width, const int height)
     return;
   }
 
-  const float aspect = height > 0
-    ? (static_cast<float>(width) / static_cast<float>(height))
+  const float aspect = extent.height > 0
+    ? (static_cast<float>(extent.width) / static_cast<float>(extent.height))
     : 1.0F;
 
   const ViewPort viewport { .top_left_x = 0.0F,
     .top_left_y = 0.0F,
-    .width = static_cast<float>(width),
-    .height = static_cast<float>(height),
+    .width = static_cast<float>(extent.width),
+    .height = static_cast<float>(extent.height),
     .min_depth = 0.0F,
     .max_depth = 1.0F };
 
@@ -221,7 +224,7 @@ void CameraLifecycleService::EnsureFlyCameraFacingScene()
   constexpr glm::vec3 target(0.0F, 0.0F, 0.0F);
   const glm::vec3 to_target = target - cam_pos;
   const float len2 = glm::dot(to_target, to_target);
-  if (len2 <= 1e-6F) {
+  if (len2 <= std::numeric_limits<float>::epsilon()) {
     return;
   }
 
@@ -312,7 +315,14 @@ void CameraLifecycleService::PersistActiveCameraSettings()
       last_saved_state_.fly_look_sensitivity, current.fly_look_sensitivity)
     && NearlyEqual(
       last_saved_state_.fly_boost_multiplier, current.fly_boost_multiplier)
-    && last_saved_state_.fly_plane_lock == current.fly_plane_lock;
+    && last_saved_state_.fly_plane_lock == current.fly_plane_lock
+    && last_saved_state_.has_camera_exposure == current.has_camera_exposure
+    && (!current.has_camera_exposure
+      || (NearlyEqual(
+            last_saved_state_.exposure_aperture_f, current.exposure_aperture_f)
+        && NearlyEqual(last_saved_state_.exposure_shutter_rate,
+          current.exposure_shutter_rate)
+        && NearlyEqual(last_saved_state_.exposure_iso, current.exposure_iso)));
 
   if (unchanged) {
     return;
@@ -358,6 +368,7 @@ void CameraLifecycleService::PersistActiveCameraSettings()
       prefix + ".camera.ortho.bottom", current.ortho_extents[2]);
     settings->SetFloat(prefix + ".camera.ortho.top", current.ortho_extents[3]);
     settings->SetFloat(prefix + ".camera.ortho.near", current.ortho_extents[4]);
+    // NOLINTNEXTLINE(*-magic-numbers)
     settings->SetFloat(prefix + ".camera.ortho.far", current.ortho_extents[5]);
   }
 
@@ -375,6 +386,16 @@ void CameraLifecycleService::PersistActiveCameraSettings()
   settings->SetFloat(
     prefix + ".fly.boost_multiplier", current.fly_boost_multiplier);
   settings->SetBool(prefix + ".fly.plane_lock", current.fly_plane_lock);
+
+  settings->SetBool(
+    prefix + ".camera.exposure.enabled", current.has_camera_exposure);
+  if (current.has_camera_exposure) {
+    settings->SetFloat(
+      prefix + ".camera.exposure.aperture_f", current.exposure_aperture_f);
+    settings->SetFloat(
+      prefix + ".camera.exposure.shutter_rate", current.exposure_shutter_rate);
+    settings->SetFloat(prefix + ".camera.exposure.iso", current.exposure_iso);
+  }
 
   last_saved_state_ = current;
 }
@@ -519,6 +540,25 @@ void CameraLifecycleService::RestoreActiveCameraSettings()
         = settings->GetFloat(prefix + ".camera.perspective.far")) {
         cam.SetFarPlane(*far_plane);
       }
+
+      auto& exposure = cam.Exposure();
+      if (const auto enabled
+        = settings->GetBool(prefix + ".camera.exposure.enabled")) {
+        if (*enabled) {
+          if (const auto aperture_f
+            = settings->GetFloat(prefix + ".camera.exposure.aperture_f")) {
+            exposure.aperture_f = *aperture_f;
+          }
+          if (const auto shutter_rate
+            = settings->GetFloat(prefix + ".camera.exposure.shutter_rate")) {
+            exposure.shutter_rate = *shutter_rate;
+          }
+          if (const auto iso
+            = settings->GetFloat(prefix + ".camera.exposure.iso")) {
+            exposure.iso = *iso;
+          }
+        }
+      }
     }
   }
 
@@ -536,6 +576,25 @@ void CameraLifecycleService::RestoreActiveCameraSettings()
       const auto far_plane = settings->GetFloat(prefix + ".camera.ortho.far");
       if (left && right && bottom && top && near_plane && far_plane) {
         cam.SetExtents(*left, *right, *bottom, *top, *near_plane, *far_plane);
+      }
+
+      auto& exposure = cam.Exposure();
+      if (const auto enabled
+        = settings->GetBool(prefix + ".camera.exposure.enabled")) {
+        if (*enabled) {
+          if (const auto aperture_f
+            = settings->GetFloat(prefix + ".camera.exposure.aperture_f")) {
+            exposure.aperture_f = *aperture_f;
+          }
+          if (const auto shutter_rate
+            = settings->GetFloat(prefix + ".camera.exposure.shutter_rate")) {
+            exposure.shutter_rate = *shutter_rate;
+          }
+          if (const auto iso
+            = settings->GetFloat(prefix + ".camera.exposure.iso")) {
+            exposure.iso = *iso;
+          }
+        }
       }
     }
   }
@@ -617,6 +676,12 @@ auto CameraLifecycleService::CaptureActiveCameraState() -> PersistedCameraState
     current.perspective_fov = cam.GetFieldOfView();
     current.perspective_near = cam.GetNearPlane();
     current.perspective_far = cam.GetFarPlane();
+
+    const auto& exposure = cam.Exposure();
+    current.has_camera_exposure = true;
+    current.exposure_aperture_f = exposure.aperture_f;
+    current.exposure_shutter_rate = exposure.shutter_rate;
+    current.exposure_iso = exposure.iso;
   }
 
   if (auto cam_ref = active_camera_.GetCameraAs<scene::OrthographicCamera>();
@@ -624,6 +689,12 @@ auto CameraLifecycleService::CaptureActiveCameraState() -> PersistedCameraState
     const auto& cam = cam_ref->get();
     current.has_orthographic = true;
     current.ortho_extents = cam.GetExtents();
+
+    const auto& exposure = cam.Exposure();
+    current.has_camera_exposure = true;
+    current.exposure_aperture_f = exposure.aperture_f;
+    current.exposure_shutter_rate = exposure.shutter_rate;
+    current.exposure_iso = exposure.iso;
   }
 
   if (camera_rig_) {

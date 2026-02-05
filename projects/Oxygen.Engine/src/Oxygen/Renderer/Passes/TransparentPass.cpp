@@ -6,9 +6,11 @@
 
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -265,6 +267,13 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
 
   // Generated root binding items (indices + descriptor tables)
   auto generated_bindings = BuildRootBindings();
+  std::vector<graphics::ShaderDefine> ps_defines;
+  if (graphics::detail::IsHdr(color_desc.format)) {
+    ps_defines.push_back(graphics::ShaderDefine {
+      .name = "OXYGEN_HDR_OUTPUT",
+      .value = "1",
+    });
+  }
 
   const auto BuildDesc = [&](CullMode cull_mode) -> GraphicsPipelineDesc {
     return GraphicsPipelineDesc::Builder()
@@ -277,6 +286,7 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
         .stage = ShaderType::kPixel,
         .source_path = "Passes/Forward/ForwardMesh_PS.hlsl",
         .entry_point = "PS",
+        .defines = ps_defines,
       })
       .SetPrimitiveTopology(PrimitiveType::kTriangleList)
       .SetRasterizerState(MakeRasterDesc(cull_mode))

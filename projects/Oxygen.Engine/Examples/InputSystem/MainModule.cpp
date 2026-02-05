@@ -31,15 +31,15 @@
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/Window.h>
-#include <Oxygen/Platform/input.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
 
+#include "DemoShell/Runtime/CompositionView.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/ForwardPipeline.h"
-#include "DemoShell/Runtime/SceneView.h"
 #include "InputSystem/MainModule.h"
 
 namespace {
@@ -52,10 +52,13 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::kOpaque)
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
 {
-  using namespace oxygen::data;
+  // NOLINTBEGIN(*-magic-numbers)
+  namespace d = oxygen::data;
+  namespace pak = oxygen::data::pak;
 
   pak::MaterialAssetDesc desc {};
-  desc.header.asset_type = 7; // MaterialAsset (for tooling/debug)
+  desc.header.asset_type = static_cast<uint8_t>(
+    oxygen::data::AssetType::kMaterial); // MaterialAsset (for tooling/debug)
   // Safe copy name
   constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
   const std::size_t n = (std::min)(maxn, std::strlen(name));
@@ -71,13 +74,14 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.base_color[2] = rgba.b;
   desc.base_color[3] = rgba.a;
   desc.normal_scale = 1.0F;
-  desc.metalness = Unorm16 { 0.0F };
-  desc.roughness = Unorm16 { 0.6F };
-  desc.ambient_occlusion = Unorm16 { 1.0F };
+  desc.metalness = d::Unorm16 { 0.0F };
+  desc.roughness = d::Unorm16 { 0.6F };
+  desc.ambient_occlusion = d::Unorm16 { 1.0F };
   // Leave texture indices invalid (no textures)
-  const AssetKey asset_key { .guid = GenerateAssetGuid() };
-  return std::make_shared<const MaterialAsset>(
-    asset_key, desc, std::vector<ShaderReference> {});
+  const d::AssetKey asset_key { .guid = d::GenerateAssetGuid() };
+  return std::make_shared<const d::MaterialAsset>(
+    asset_key, desc, std::vector<d::ShaderReference> {});
+  // NOLINTEND(*-magic-numbers)
 }
 
 } // namespace
@@ -148,6 +152,7 @@ auto MainModule::OnAttached(
       .environment = true,
       .lighting = false,
       .rendering = false,
+      .post_process = true,
     },
     .get_active_pipeline = [this]() -> observer_ptr<RenderingPipeline> {
       return observer_ptr { pipeline_.get() };
@@ -167,9 +172,8 @@ auto MainModule::OnAttached(
     return false;
   }
 
-  // Create Main View (placeholder camera, updated later)
-  auto view = std::make_unique<SceneView>(scene::SceneNode {});
-  main_view_ = observer_ptr(static_cast<SceneView*>(AddView(std::move(view))));
+  // Create Main View ID
+  main_view_id_ = GetOrCreateViewId("MainView");
 
   LOG_F(INFO, "InputSystem: Module initialized");
   return true;
@@ -184,8 +188,6 @@ void MainModule::OnShutdown() noexcept
 
   input_debug_panel_.reset();
   shell_.reset();
-
-  main_view_ = nullptr; // Owned by base, just clear ptr
 
   Base::OnShutdown();
 }
@@ -207,7 +209,15 @@ auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
     }
   }
 
-  context.SetScene(shell_->TryGetScene());
+  context.SetScene(shell_ ? shell_->TryGetScene() : nullptr);
+
+  // Ensure drone is configured once the rig is available
+  const auto rig = shell_ ? shell_->GetCameraRig()
+                          : observer_ptr<ui::CameraRigController> { nullptr };
+  if (rig != last_camera_rig_) {
+    last_camera_rig_ = rig;
+    // Note: configure drone if needed, depends on demo specifics
+  }
 }
 
 auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void
@@ -219,9 +229,9 @@ auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
 {
   // Check input edges during gameplay. InputSystem finalized edges during
   // kInput earlier in the frame; they remain valid until next frame start.
-  using namespace std::chrono;
+  namespace c = std::chrono;
   const auto u_game_dt = context.GetGameDeltaTime().get(); // nanoseconds
-  const float dt = duration<float>(u_game_dt).count(); // seconds
+  const float dt = c::duration<float>(u_game_dt).count(); // seconds
 
   // Apply any pending sphere reset requested by UI toggles
   if (pending_ground_reset_) {
@@ -319,26 +329,29 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     co_return;
   }
 
-  auto* scene = shell_->TryGetScene().get();
-  DCHECK_NOTNULL_F(scene);
+  const auto scene_ptr = shell_->TryGetScene();
+  if (!scene_ptr) {
+    co_return;
+  }
+  auto* scene = scene_ptr.get();
 
   // Get window extent for camera setup via shell's camera lifecycle
   const auto extent = app_window_->GetWindow()->Size();
   auto& camera_lifecycle = shell_->GetCameraLifecycle();
-  camera_lifecycle.EnsureViewport(extent.width, extent.height);
+  camera_lifecycle.EnsureViewport(extent);
   camera_lifecycle.ApplyPendingSync();
   camera_lifecycle.ApplyPendingReset();
+
+  auto& active_camera = camera_lifecycle.GetActiveCamera();
+  if (active_camera.IsAlive()) {
+    // If we have an active camera rig, it's already set up.
+    // If we needed to set a specific camera as active, we'd do it here.
+  }
 
   // Update shell
   shell_->Update(time::CanonicalDuration {});
 
-  // Update view camera from shell's camera rig
-  if (main_view_) {
-    auto& active_camera = camera_lifecycle.GetActiveCamera();
-    if (active_camera.IsAlive()) {
-      main_view_->SetCamera(active_camera);
-    }
-  }
+  // Note: View camera is now updated via UpdateComposition
 
   // Build sphere mesh if not present
   using oxygen::data::MaterialAsset;
@@ -430,6 +443,7 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
 
 auto MainModule::InitInputBindings() noexcept -> bool
 {
+  // NOLINTBEGIN(*-magic-numbers)
   using oxygen::input::Action;
   using oxygen::input::ActionTriggerDown;
   using oxygen::input::ActionTriggerPressed;
@@ -544,6 +558,40 @@ auto MainModule::UpdateInputDebugPanelConfig() -> void
   if (input_debug_panel_) {
     input_debug_panel_->Initialize(config);
   }
+  // NOLINTEND(*-magic-numbers)
+}
+
+auto MainModule::UpdateComposition(engine::FrameContext& /*context*/,
+  std::vector<CompositionView>& views) -> void
+{
+  if (!shell_) {
+    return;
+  }
+  auto& active_camera = shell_->GetCameraLifecycle().GetActiveCamera();
+  if (!active_camera.IsAlive()) {
+    return;
+  }
+
+  View view {};
+  if (app_window_ && app_window_->GetWindow()) {
+    const auto extent = app_window_->GetWindow()->Size();
+    view.viewport = ViewPort {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
+      .width = static_cast<float>(extent.width),
+      .height = static_cast<float>(extent.height),
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    };
+  }
+
+  // Create the main scene view intent
+  views.push_back(
+    CompositionView::ForScene(main_view_id_, view, active_camera));
+
+  const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
+  views.push_back(CompositionView::ForImGui(
+    imgui_view_id, view, [](graphics::CommandRecorder&) { }));
 }
 
 } // namespace oxygen::examples::input_system

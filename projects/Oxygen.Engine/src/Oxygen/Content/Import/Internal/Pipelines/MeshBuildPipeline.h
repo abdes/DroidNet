@@ -8,7 +8,6 @@
 
 #include <array>
 #include <atomic>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -175,7 +174,7 @@ public:
 
   //! Create a geometry pipeline using the given ThreadPool.
   OXGN_CNTT_API explicit MeshBuildPipeline(
-    co::ThreadPool& thread_pool, Config config = {});
+    co::ThreadPool& thread_pool, std::optional<Config> config = {});
 
   OXGN_CNTT_API ~MeshBuildPipeline();
 

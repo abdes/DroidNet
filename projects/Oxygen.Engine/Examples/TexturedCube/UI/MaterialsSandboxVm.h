@@ -22,7 +22,7 @@
 
 namespace oxygen::examples::textured_cube::ui {
 
-class TextureBrowserVm {
+class MaterialsSandboxVm {
 public:
   //! State for the cooked texture import UI.
   struct ImportState {
@@ -79,9 +79,7 @@ public:
 
   //! State for per-object texture selection.
   struct TextureSlotState {
-    SceneSetup::TextureIndexMode mode {
-      SceneSetup::TextureIndexMode::kFallback
-    };
+    TextureIndexMode mode { TextureIndexMode::kFallback };
     std::uint32_t resource_index { 0U };
     oxygen::content::ResourceKey resource_key { 0U };
   };
@@ -126,12 +124,13 @@ public:
     glm::vec3 constant_base_color_rgb { 0.82F, 0.82F, 0.82F };
   };
 
-  explicit TextureBrowserVm(observer_ptr<TextureLoadingService> texture_service,
+  explicit MaterialsSandboxVm(
+    observer_ptr<TextureLoadingService> texture_service,
     observer_ptr<oxygen::examples::FileBrowserService> file_browser = nullptr);
-  ~TextureBrowserVm();
+  ~MaterialsSandboxVm();
 
-  OXYGEN_MAKE_NON_COPYABLE(TextureBrowserVm);
-  OXYGEN_MAKE_NON_MOVABLE(TextureBrowserVm);
+  OXYGEN_MAKE_NON_COPYABLE(MaterialsSandboxVm);
+  OXYGEN_MAKE_NON_MOVABLE(MaterialsSandboxVm);
 
   // --- Commands ---
 

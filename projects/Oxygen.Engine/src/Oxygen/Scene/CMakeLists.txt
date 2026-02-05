@@ -68,6 +68,7 @@ set(
   "SceneTraversal.h"
   "SceneTraversalAsync.h"
   "SceneTraversalBase.h"
+  "Camera/CameraExposure.h"
   "Camera/Orthographic.h"
   "Camera/Perspective.h"
   "Environment/EnvironmentSystem.h"

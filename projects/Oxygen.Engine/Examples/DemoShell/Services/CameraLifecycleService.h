@@ -10,6 +10,7 @@
 #include <string>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/SceneNode.h>
 
@@ -64,7 +65,7 @@ public:
   void CaptureInitialPose();
 
   //! Ensure a valid camera and apply viewport.
-  void EnsureViewport(int width, int height);
+  void EnsureViewport(Extent<uint32_t> extent);
 
   //! Align fly camera to face the scene origin if needed.
   void EnsureFlyCameraFacingScene();
@@ -88,9 +89,10 @@ public:
   void Clear();
 
 private:
+  // NOLINTBEGIN(*-magic-numbers)
   struct PersistedCameraState {
     bool valid { false };
-    std::string camera_id {};
+    std::string camera_id;
     int camera_mode { 0 };
     glm::vec3 position { 0.0F, 0.0F, 0.0F };
     glm::quat rotation { 1.0F, 0.0F, 0.0F, 0.0F };
@@ -102,8 +104,19 @@ private:
     float perspective_far { 1000.0F };
 
     bool has_orthographic { false };
-    std::array<float, 6> ortho_extents { -1.0F, 1.0F, -1.0F, 1.0F, 0.1F,
-      1000.0F };
+    std::array<float, 6> ortho_extents {
+      -1.0F,
+      1.0F,
+      -1.0F,
+      1.0F,
+      0.1F,
+      1000.0F,
+    };
+
+    bool has_camera_exposure { false };
+    float exposure_aperture_f { 11.0F };
+    float exposure_shutter_rate { 125.0F };
+    float exposure_iso { 100.0F };
 
     glm::vec3 orbit_target { 0.0F, 0.0F, 0.0F };
     float orbit_distance { 5.0F };
@@ -121,7 +134,7 @@ private:
   [[nodiscard]] auto CaptureActiveCameraState() -> PersistedCameraState;
 
   observer_ptr<scene::Scene> scene_ { nullptr };
-  scene::SceneNode active_camera_ {};
+  scene::SceneNode active_camera_;
   observer_ptr<ui::CameraRigController> camera_rig_ { nullptr };
 
   glm::vec3 initial_camera_position_ { 0.0F, -15.0F, 0.0F };
@@ -132,6 +145,7 @@ private:
   bool pending_reset_ { false };
 
   PersistedCameraState last_saved_state_ {};
+  // NOLINTEND(*-magic-numbers)
 };
 
 } // namespace oxygen::examples

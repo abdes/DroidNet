@@ -44,9 +44,6 @@ float3 ComputeSkyColor(EnvironmentStaticData env_data, float3 view_dir)
         {
             float3 sun_dir = GetSunDirectionWS();
             float3 sun_luminance = GetSunLuminanceRGB();
-            // FIXME: Temporary LDR scale: keeps the sky readable until HDR + tone mapping land.
-            const float kLdrSkyLuminanceScale = 0.1f;
-            sun_luminance *= kLdrSkyLuminanceScale;
 
             if (!HasSunLight() && !IsOverrideSunEnabled())
             {

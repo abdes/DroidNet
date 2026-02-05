@@ -15,6 +15,8 @@
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Internal/IBrdfLutProvider.h>
 #include <Oxygen/Renderer/Internal/IIblProvider.h>
+#include <Oxygen/Renderer/Internal/ISkyAtmosphereLutProvider.h>
+#include <Oxygen/Renderer/Internal/ISkyCaptureProvider.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Scene/Environment/Fog.h>
@@ -94,6 +96,8 @@ namespace {
       return ExposureMode::kManual;
     case scene::environment::ExposureMode::kAuto:
       return ExposureMode::kAuto;
+    case scene::environment::ExposureMode::kManualCamera:
+      return ExposureMode::kManualCamera;
     }
     return ExposureMode::kManual;
   }
@@ -105,12 +109,14 @@ EnvironmentStaticDataManager::EnvironmentStaticDataManager(
   observer_ptr<renderer::resources::IResourceBinder> texture_binder,
   observer_ptr<IBrdfLutProvider> brdf_lut_provider,
   observer_ptr<IIblProvider> ibl_manager,
-  observer_ptr<ISkyAtmosphereLutProvider> sky_atmo_lut_provider)
+  observer_ptr<ISkyAtmosphereLutProvider> sky_atmo_lut_provider,
+  observer_ptr<ISkyCaptureProvider> sky_capture_provider)
   : gfx_(gfx)
   , texture_binder_(texture_binder)
   , brdf_lut_provider_(brdf_lut_provider)
   , ibl_provider_(ibl_manager)
   , sky_lut_provider_(sky_atmo_lut_provider)
+  , sky_capture_provider_(sky_capture_provider)
 {
   // These are required dependencies, not guaranteeing them and not guaranteeing
   // that they will survive for the lifetime of the BRDF LUT Manager is a logic
@@ -120,6 +126,8 @@ EnvironmentStaticDataManager::EnvironmentStaticDataManager(
   CHECK_NOTNULL_F(brdf_lut_provider_, "expecting a valid BRDF LUT provider");
   CHECK_NOTNULL_F(ibl_provider_, "expecting a valid IBL provider");
   CHECK_NOTNULL_F(sky_lut_provider_, "expecting a valid sky LUT provider");
+  CHECK_NOTNULL_F(
+    sky_capture_provider_, "expecting a valid sky capture provider");
 
   // Ensure uploaded ids are zero so the initial snapshot (id=1)
   // will be considered not-yet-uploaded for all slots.
@@ -195,6 +203,11 @@ auto EnvironmentStaticDataManager::EnforceBarriers(
   }
 }
 
+auto EnvironmentStaticDataManager::RequestIblRegeneration() noexcept -> void
+{
+  ibl_regeneration_requested_ = true;
+}
+
 auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
   observer_ptr<const scene::SceneEnvironment> env) -> void
 {
@@ -208,12 +221,20 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
     PopulateAtmosphere(env, next);
     PopulateSkyLight(env, next);
     PopulateSkySphere(env, next);
+    PopulateSkyCapture(next);
     PopulateIbl(next);
     PopulateClouds(env, next);
     PopulatePostProcess(env, next);
   }
 
   if (std::memcmp(&next, &cpu_snapshot_, sizeof(EnvironmentStaticData)) != 0) {
+    // If authored intensity or other filtering params changed, flag for IBL
+    // re-filter.
+    if (next.sky_light.intensity != cpu_snapshot_.sky_light.intensity
+      || next.sky_light.tint_rgb != cpu_snapshot_.sky_light.tint_rgb) {
+      RequestIblRegeneration();
+    }
+
     cpu_snapshot_ = next;
     MarkAllSlotsDirty();
   }
@@ -317,7 +338,16 @@ auto EnvironmentStaticDataManager::PopulateSkyLight(
     sky_light && sky_light->IsEnabled()) {
     next.sky_light.enabled = 1u;
     next.sky_light.source = ToGpuSkyLightSource(sky_light->GetSource());
-    next.sky_light.intensity = sky_light->GetIntensity();
+
+    // Intensity is a direct multiplier. For non-physical sources (cubemaps),
+    // we bridge the unit gap by assuming 1.0 Intensity = 5000 Nits (Standard
+    // Sky).
+    const float intensity = sky_light->GetIntensity();
+    const float unit_bridge
+      = (next.sky_light.source == SkyLightSource::kSpecifiedCubemap) ? 5000.0F
+                                                                     : 1.0F;
+    next.sky_light.intensity = intensity * unit_bridge;
+
     next.sky_light.tint_rgb = sky_light->GetTintRgb();
     next.sky_light.diffuse_intensity = sky_light->GetDiffuseIntensity();
     next.sky_light.specular_intensity = sky_light->GetSpecularIntensity();
@@ -363,7 +393,16 @@ auto EnvironmentStaticDataManager::PopulateSkySphere(
     next.sky_sphere.enabled = 1u;
     next.sky_sphere.source = ToGpuSkySphereSource(sky_sphere->GetSource());
     next.sky_sphere.solid_color_rgb = sky_sphere->GetSolidColorRgb();
-    next.sky_sphere.intensity = sky_sphere->GetIntensity();
+
+    // Bridging non-physical assets to 5000 Nit physical baseline.
+    const float intensity = sky_sphere->GetIntensity();
+    const float unit_bridge
+      = (next.sky_sphere.source == SkySphereSource::kCubemap
+          || next.sky_sphere.source == SkySphereSource::kSolidColor)
+      ? 5000.0F
+      : 1.0F;
+    next.sky_sphere.intensity = intensity * unit_bridge;
+
     next.sky_sphere.rotation_radians = sky_sphere->GetRotationRadians();
     next.sky_sphere.tint_rgb = sky_sphere->GetTintRgb();
 
@@ -386,6 +425,31 @@ auto EnvironmentStaticDataManager::PopulateSkySphere(
       }
     } else {
       next.sky_sphere.cubemap_slot = CubeMapSlot { kInvalidShaderVisibleIndex };
+    }
+  }
+}
+
+auto EnvironmentStaticDataManager::PopulateSkyCapture(
+  EnvironmentStaticData& next) -> void
+{
+  if (sky_capture_provider_) {
+    const auto capture_gen = sky_capture_provider_->GetCaptureGeneration();
+    if (capture_gen != last_capture_generation_) {
+      last_capture_generation_ = capture_gen;
+      MarkAllSlotsDirty();
+    }
+
+    // If SkyLight source is kCapturedScene, we provide the captured cubemap
+    // slot. This is used by IblComputePass to decide which source to filter.
+    if (next.sky_light.enabled != 0U
+      && next.sky_light.source == SkyLightSource::kCapturedScene) {
+      if (sky_capture_provider_->IsCaptured()) {
+        next.sky_light.cubemap_slot
+          = CubeMapSlot { sky_capture_provider_->GetCapturedCubemapSlot() };
+      } else {
+        next.sky_light.cubemap_slot
+          = CubeMapSlot { kInvalidShaderVisibleIndex };
+      }
     }
   }
 }

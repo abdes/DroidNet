@@ -37,9 +37,13 @@ float4 PS(SkyPSInput input) : SV_TARGET
     // Compute linear sky color
     float3 sky_color = ComputeSkyColor(env_data, view_dir);
 
+#ifdef OXYGEN_HDR_OUTPUT
+    return float4(sky_color, 1.0f);
+#else
     // Apply exposure (Tonemapping happens in PostProcess, but exposure is applied here often for Sky?)
     // Actually SkySphere_PS applied exposure.
     sky_color *= GetExposure();
 
     return float4(sky_color, 1.0f);
+#endif
 }

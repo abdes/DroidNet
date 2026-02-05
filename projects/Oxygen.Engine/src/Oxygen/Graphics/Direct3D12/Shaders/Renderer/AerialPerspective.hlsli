@@ -208,19 +208,13 @@ AerialPerspectiveResult ComputeAerialPerspectiveLut(
         camera_altitude_m);
 
     // The sky LUT gives radiance for infinite rays. For short geometry segments,
-    // we use opacity as the blend factor. The sky_sample provides color/direction.
-    // Normalize by max component to get a "sky color" without extreme brightness,
-    // then scale by opacity and a subtle intensity factor.
+    // we approximate the inscatter by multiplying the infinite ray radiance
+    // by the view-path opacity (1 - T).
     float3 sun_luminance = GetSunLuminanceRGB();
-    float3 sky_color = sky_sample.rgb;
-    float sky_lum = max(max(sky_color.r, sky_color.g), max(sky_color.b, 0.001));
+    float3 infinite_inscatter = sky_sample.rgb * sun_luminance;
 
-    // Use sky color direction but cap brightness, then apply sun luminance
-    float3 sky_dir = sky_color / sky_lum;
-    float3 inscatter_color = sky_dir * sun_luminance;
-
-    // Final inscatter = color * opacity (already distance-dependent via transmittance)
-    result.inscatter = inscatter_color * opacity;
+    // Final inscatter = infinite_inscatter * opacity
+    result.inscatter = infinite_inscatter * opacity;
 
     return result;
 }

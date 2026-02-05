@@ -66,13 +66,14 @@ public:
     return cubemap_resource_;
   }
 
-  //! Sets intensity multiplier (unitless).
+  //! Sets the sky light intensity multiplier.
+  //! 1.0 is the default (unity) intensity.
   auto SetIntensity(const float intensity) noexcept -> void
   {
     intensity_ = intensity;
   }
 
-  //! Gets intensity.
+  //! Gets the sky light intensity multiplier.
   [[nodiscard]] auto GetIntensity() const noexcept -> float
   {
     return intensity_;

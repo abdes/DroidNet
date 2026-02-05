@@ -29,11 +29,25 @@ public:
   auto SetCompositingAlpha(float alpha) -> void;
 
   // Exposure
+  [[nodiscard]] auto GetExposureEnabled() -> bool;
+  auto SetExposureEnabled(bool enabled) -> void;
+
   [[nodiscard]] auto GetExposureMode() -> engine::ExposureMode;
   auto SetExposureMode(engine::ExposureMode mode) -> void;
 
   [[nodiscard]] auto GetManualExposureEV100() -> float;
   auto SetManualExposureEV100(float ev100) -> void;
+
+  [[nodiscard]] auto GetManualCameraAperture() -> float;
+  auto SetManualCameraAperture(float aperture) -> void;
+
+  [[nodiscard]] auto GetManualCameraShutterRate() -> float;
+  auto SetManualCameraShutterRate(float shutter_rate) -> void;
+
+  [[nodiscard]] auto GetManualCameraIso() -> float;
+  auto SetManualCameraIso(float iso) -> void;
+
+  [[nodiscard]] auto GetManualCameraEV100() -> float;
 
   [[nodiscard]] auto GetExposureCompensation() -> float;
   auto SetExposureCompensation(float stops) -> void;
@@ -56,8 +70,12 @@ private:
   // Cached state
   bool compositing_enabled_ { true };
   float compositing_alpha_ { 1.0F };
+  bool exposure_enabled_ { true };
   engine::ExposureMode exposure_mode_ { engine::ExposureMode::kManual };
   float manual_ev100_ { 9.7F };
+  float manual_camera_aperture_ { 11.0F };
+  float manual_camera_shutter_rate_ { 125.0F };
+  float manual_camera_iso_ { 100.0F };
   float exposure_compensation_ { 0.0F };
   bool tonemapping_enabled_ { true };
   engine::ToneMapper tonemapping_mode_ { engine::ToneMapper::kAcesFitted };

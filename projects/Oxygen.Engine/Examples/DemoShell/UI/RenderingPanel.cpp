@@ -95,12 +95,15 @@ void RenderingPanel::DrawDebugModes()
 
   const auto current_mode = vm_->GetDebugMode();
 
-  const bool is_rendering_mode = current_mode == ShaderDebugMode::kBaseColor
+  const bool is_ui_debug_mode = current_mode == ShaderDebugMode::kBaseColor
     || current_mode == ShaderDebugMode::kUv0
-    || current_mode == ShaderDebugMode::kOpacity;
+    || current_mode == ShaderDebugMode::kOpacity
+    || current_mode == ShaderDebugMode::kIblSpecular
+    || current_mode == ShaderDebugMode::kIblRawSky
+    || current_mode == ShaderDebugMode::kIblRawSkyViewDir;
 
   const bool normal_selected
-    = current_mode == ShaderDebugMode::kDisabled || !is_rendering_mode;
+    = current_mode == ShaderDebugMode::kDisabled || !is_ui_debug_mode;
 
   if (ImGui::RadioButton("Normal", normal_selected)) {
     vm_->SetDebugMode(ShaderDebugMode::kDisabled);
@@ -118,6 +121,21 @@ void RenderingPanel::DrawDebugModes()
   if (ImGui::RadioButton(
         "Opacity", current_mode == ShaderDebugMode::kOpacity)) {
     vm_->SetDebugMode(ShaderDebugMode::kOpacity);
+  }
+
+  if (ImGui::RadioButton(
+        "IBL Specular", current_mode == ShaderDebugMode::kIblSpecular)) {
+    vm_->SetDebugMode(ShaderDebugMode::kIblSpecular);
+  }
+
+  if (ImGui::RadioButton(
+        "IBL Raw Sky", current_mode == ShaderDebugMode::kIblRawSky)) {
+    vm_->SetDebugMode(ShaderDebugMode::kIblRawSky);
+  }
+
+  if (ImGui::RadioButton("IBL Raw Sky (ViewDir)",
+        current_mode == ShaderDebugMode::kIblRawSkyViewDir)) {
+    vm_->SetDebugMode(ShaderDebugMode::kIblRawSkyViewDir);
   }
 }
 

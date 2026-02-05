@@ -51,6 +51,7 @@ class Scene;
 namespace oxygen::graphics {
 class Buffer;
 class CommandRecorder;
+class Surface;
 } // namespace oxygen::graphics
 
 namespace oxygen::content {
@@ -65,6 +66,8 @@ class MaterialAsset;
 namespace oxygen::engine {
 class RenderContextPool;
 class IblComputePass;
+class SkyCapturePass;
+struct SkyCapturePassConfig;
 class CompositingPass;
 struct CompositingPassConfig;
 namespace internal {
@@ -201,8 +204,8 @@ public:
   OXGN_RNDR_API auto UnregisterView(ViewId view_id) -> void;
 
   //! Submit compositing tasks for the current frame.
-  OXGN_RNDR_API auto RegisterComposition(CompositionSubmission submission)
-    -> void;
+  OXGN_RNDR_API auto RegisterComposition(CompositionSubmission submission,
+    std::shared_ptr<graphics::Surface> target_surface) -> void;
 
   //! Query if a view completed rendering successfully this frame.
   /*!
@@ -296,6 +299,10 @@ public:
   OXGN_RNDR_NDAPI auto GetIblManager() const noexcept
     -> observer_ptr<internal::IblManager>;
 
+  //! Returns the IBL compute pass.
+  OXGN_RNDR_NDAPI auto GetIblComputePass() const noexcept
+    -> observer_ptr<IblComputePass>;
+
   //=== Debug Overrides ===---------------------------------------------------//
 
   //! Force an IBL regeneration on the next frame.
@@ -373,7 +380,7 @@ private:
   auto PrepareAndWireSceneConstantsForView(ViewId view_id,
     const FrameContext& frame_context, RenderContext& render_context) -> bool;
 
-  //! Resolves exposure for the view (manual EV only, auto unsupported).
+  //! Resolves exposure for the view (manual and auto).
   auto UpdateViewExposure(ViewId view_id, const scene::Scene& scene,
     const SunState& sun_state) -> float;
 
@@ -404,6 +411,9 @@ private:
   // Manages Image Based Lighting (Irradiance/Prefilter)
   std::unique_ptr<internal::IblManager> ibl_manager_;
 
+  std::unique_ptr<SkyCapturePass> sky_capture_pass_;
+  std::shared_ptr<SkyCapturePassConfig> sky_capture_pass_config_;
+
   std::unique_ptr<IblComputePass> ibl_compute_pass_;
 
   // Environment static data single-owner manager (bindless SRV).
@@ -417,6 +427,10 @@ private:
 
   // Frame sequence number from FrameContext
   frame::SequenceNumber frame_seq_num { 0ULL };
+
+  float last_frame_dt_seconds_ { 1.0F / 60.0F };
+
+  std::unordered_map<ViewId, float> auto_exposure_ev100_ {};
 
   // Frame slot from FrameContext (stored during OnFrameStart for RenderContext)
   frame::Slot frame_slot_ { frame::kInvalidSlot };
@@ -459,6 +473,7 @@ private:
 
   std::mutex composition_mutex_ {};
   std::optional<CompositionSubmission> composition_submission_ {};
+  std::shared_ptr<graphics::Surface> composition_surface_ {};
 
   // Pending cleanup set guarded by a mutex so arbitrary threads may
   // enqueue view ids for deferred cleanup while OnFrameEnd drains the set.
@@ -485,6 +500,9 @@ private:
   uint32_t atmosphere_debug_flags_ { 0u };
   // Internal debug override only; no public API.
   SunState sun_override_ { kNoSun };
+
+  std::uint64_t last_atmo_generation_ { 0 };
+  bool sky_capture_requested_ { false };
 };
 
 } // namespace oxygen::engine

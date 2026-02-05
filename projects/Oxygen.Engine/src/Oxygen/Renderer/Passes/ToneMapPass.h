@@ -6,18 +6,28 @@
 
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 #include <Oxygen/Renderer/Passes/GraphicsRenderPass.h>
 #include <Oxygen/Renderer/api_export.h>
 
+namespace oxygen::graphics {
+class Buffer;
+class Texture;
+} // namespace oxygen::graphics
+
 namespace oxygen::engine {
 
+// FIXME: DUPLICATED IN SEVERAL PLACES - CENTRALIZE
 //! Standardized exposure modes for rendering.
 enum class ExposureMode : std::uint32_t {
   kManual = 0u,
   kAuto = 1u,
+  kManualCamera = 2u,
 };
 
 //! Returns a string representation of the exposure mode.
@@ -28,7 +38,7 @@ enum class ToneMapper : std::uint32_t {
   kAcesFitted = 0u,
   kReinhard = 1u,
   kNone = 2u,
-  kFilmic = 3u, // Added Filmic as per UI requirements
+  kFilmic = 3u,
 };
 
 //! Returns a string representation of the tonemapper.
@@ -36,20 +46,39 @@ OXGN_RNDR_API auto to_string(ToneMapper mapper) -> std::string;
 
 //! Configuration for tone mapping and exposure.
 struct ToneMapPassConfig {
+  //! HDR source texture to tonemap.
+  std::shared_ptr<graphics::Texture> source_texture {};
+
+  //! SDR output texture (if null, uses framebuffer color attachment).
+  std::shared_ptr<graphics::Texture> output_texture {};
+
+  //! Exposure mode selection.
   ExposureMode exposure_mode { ExposureMode::kManual };
+
+  //! Manual exposure multiplier (linear scale, 1.0 = no change).
   float manual_exposure { 1.0F };
-  ToneMapper tone_mapper { ToneMapper::kAcesFitted };
+
+  //! Tonemapping operator to apply.
+  ToneMapper tone_mapper { ToneMapper::kNone };
+
+  //! Whether this pass is enabled.
   bool enabled { true };
+
+  //! Debug label for diagnostics.
   std::string debug_name { "ToneMapPass" };
 };
 
 //! Post-processing pass for exposure control and tonemapping.
+/*!
+ Converts HDR intermediate texture to SDR output using configurable exposure
+ and tonemapping operators. This pass is designed for the OnCompositing phase.
+*/
 class ToneMapPass final : public GraphicsRenderPass {
 public:
   using Config = ToneMapPassConfig;
 
   OXGN_RNDR_API explicit ToneMapPass(std::shared_ptr<ToneMapPassConfig> config);
-  ~ToneMapPass() override;
+  OXGN_RNDR_API ~ToneMapPass() override;
 
 protected:
   auto DoPrepareResources(graphics::CommandRecorder& recorder)
@@ -60,7 +89,32 @@ protected:
   auto NeedRebuildPipelineState() const -> bool override;
 
 private:
-  std::shared_ptr<Config> config_;
+  auto ReleasePassConstantsBuffer() -> void;
+
+  auto SetupRenderTargets(graphics::CommandRecorder& recorder) const -> void;
+  auto SetupViewPortAndScissors(graphics::CommandRecorder& recorder) const
+    -> void;
+
+  [[nodiscard]] auto GetOutputTexture() const -> const graphics::Texture&;
+  [[nodiscard]] auto GetSourceTexture() const -> const graphics::Texture&;
+
+  auto EnsurePassConstantsBuffer() -> void;
+  auto EnsureSourceTextureSrv(const graphics::Texture& texture)
+    -> ShaderVisibleIndex;
+  auto UpdatePassConstants(ShaderVisibleIndex source_texture_index) -> void;
+
+  static constexpr uint32_t kPassConstantsStride = 256u;
+  static constexpr size_t kPassConstantsSlots = 8u;
+
+  std::shared_ptr<Config> config_ {};
+
+  std::shared_ptr<graphics::Buffer> pass_constants_buffer_ {};
+  std::byte* pass_constants_mapped_ptr_ { nullptr };
+  std::array<ShaderVisibleIndex, kPassConstantsSlots> pass_constants_indices_;
+  size_t pass_constants_slot_ { 0u };
+
+  std::unordered_map<const graphics::Texture*, ShaderVisibleIndex>
+    source_texture_srvs_ {};
 };
 
 } // namespace oxygen::engine

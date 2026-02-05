@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <string>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -20,6 +21,7 @@ namespace engine {
 
 namespace examples {
 
+  class CameraLifecycleService;
   class RenderingPipeline;
   class SettingsService;
 
@@ -38,6 +40,10 @@ namespace examples {
       //! initial state.
       virtual auto Initialize(observer_ptr<RenderingPipeline> pipeline) -> void;
 
+      //! Binds the camera lifecycle service used for camera exposure settings.
+      virtual auto BindCameraLifecycle(
+        observer_ptr<CameraLifecycleService> camera_lifecycle) -> void;
+
       // Compositing
       [[nodiscard]] virtual auto GetCompositingEnabled() const -> bool;
       virtual auto SetCompositingEnabled(bool enabled) -> void;
@@ -46,12 +52,26 @@ namespace examples {
       virtual auto SetCompositingAlpha(float alpha) -> void;
 
       // Exposure
+      [[nodiscard]] virtual auto GetExposureEnabled() const -> bool;
+      virtual auto SetExposureEnabled(bool enabled) -> void;
+
       [[nodiscard]] virtual auto GetExposureMode() const
         -> engine::ExposureMode;
       virtual auto SetExposureMode(engine::ExposureMode mode) -> void;
 
       [[nodiscard]] virtual auto GetManualExposureEV100() const -> float;
       virtual auto SetManualExposureEV100(float ev100) -> void;
+
+      [[nodiscard]] virtual auto GetManualCameraAperture() const -> float;
+      virtual auto SetManualCameraAperture(float aperture) -> void;
+
+      [[nodiscard]] virtual auto GetManualCameraShutterRate() const -> float;
+      virtual auto SetManualCameraShutterRate(float shutter_rate) -> void;
+
+      [[nodiscard]] virtual auto GetManualCameraIso() const -> float;
+      virtual auto SetManualCameraIso(float iso) -> void;
+
+      [[nodiscard]] virtual auto GetManualCameraEV100() const -> float;
 
       [[nodiscard]] virtual auto GetExposureCompensation() const -> float;
       virtual auto SetExposureCompensation(float stops) -> void;
@@ -77,6 +97,8 @@ namespace examples {
         = "post_process.compositing.alpha";
 
       static constexpr auto kExposureModeKey = "post_process.exposure.mode";
+      static constexpr auto kExposureEnabledKey
+        = "post_process.exposure.enabled";
       static constexpr auto kExposureManualEV100Key
         = "post_process.exposure.manual_ev100";
       static constexpr auto kExposureCompensationKey
@@ -87,7 +109,9 @@ namespace examples {
       static constexpr auto kToneMapperKey = "post_process.tonemapping.mode";
 
       observer_ptr<RenderingPipeline> pipeline_ {};
+      observer_ptr<CameraLifecycleService> camera_lifecycle_ {};
       mutable std::atomic_uint64_t epoch_ { 0 };
+      mutable std::string last_camera_id_ {};
     };
 
   } // namespace ui

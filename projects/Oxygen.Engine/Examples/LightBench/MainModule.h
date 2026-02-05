@@ -21,7 +21,6 @@
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
-#include "DemoShell/Runtime/SceneView.h"
 #include "DemoShell/Services/SkyboxService.h"
 #include "LightBench/LightBenchPanel.h"
 #include "LightBench/LightScene.h"
@@ -86,9 +85,10 @@ protected:
     -> platform::window::Properties override;
 
   auto ClearBackbufferReferences() -> void override;
+  auto UpdateComposition(engine::FrameContext& context,
+    std::vector<CompositionView>& views) -> void override;
 
 private:
-  auto EnsureViewCameraRegistered(engine::FrameContext& context) -> void;
   auto ApplyRenderModeFromPanel() -> void;
 
   ActiveScene active_scene_ {};
@@ -100,7 +100,7 @@ private:
   std::shared_ptr<LightBenchPanel> light_bench_panel_ {};
 
   // Hosted view
-  observer_ptr<SceneView> main_view_ {};
+  ViewId main_view_id_ { kInvalidViewId };
 };
 
 } // namespace oxygen::examples::light_bench

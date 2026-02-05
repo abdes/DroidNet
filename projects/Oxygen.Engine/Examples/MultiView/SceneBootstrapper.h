@@ -36,12 +36,14 @@ public:
   [[nodiscard]] auto GetCubeNode() const -> scene::SceneNode;
   [[nodiscard]] auto GetCylinderNode() const -> scene::SceneNode;
   [[nodiscard]] auto GetConeNode() const -> scene::SceneNode;
+  [[nodiscard]] auto GetGroundPlaneNode() const -> scene::SceneNode;
 
 private:
   auto EnsureSphere(scene::Scene& scene) -> void;
   auto EnsureCube(scene::Scene& scene) -> void;
   auto EnsureCylinder(scene::Scene& scene) -> void;
   auto EnsureCone(scene::Scene& scene) -> void;
+  auto EnsureGroundPlane(scene::Scene& scene) -> void;
   auto EnsureLighting(scene::Scene& scene) -> void;
 
   observer_ptr<scene::Scene> scene_ { nullptr };
@@ -49,6 +51,7 @@ private:
   scene::SceneNode cube_node_;
   scene::SceneNode cylinder_node_;
   scene::SceneNode cone_node_;
+  scene::SceneNode ground_plane_node_;
 
   // Lighting nodes
   scene::SceneNode key_light_node_;

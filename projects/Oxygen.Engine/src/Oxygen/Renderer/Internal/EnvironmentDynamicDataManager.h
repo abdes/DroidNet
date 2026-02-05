@@ -85,6 +85,9 @@ public:
   //! Set exposure for a specific view.
   OXGN_RNDR_API auto SetExposure(ViewId view_id, float exposure) -> void;
 
+  //! Get exposure for a specific view (defaults to 1.0).
+  OXGN_RNDR_NDAPI auto GetExposure(ViewId view_id) const -> float;
+
   //! Set clustered culling configuration for a specific view.
 
   //! Structured setter for light culling data.

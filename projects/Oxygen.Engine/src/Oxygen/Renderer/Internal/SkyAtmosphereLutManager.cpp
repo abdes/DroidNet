@@ -43,6 +43,7 @@ auto SkyAtmosphereLutManager::UpdateParameters(
 
   cached_params_ = new_params;
   dirty_ = true;
+  ++generation_;
 
   LOG_F(2, "SkyAtmosphereLutManager: parameters changed, marking dirty");
 }
@@ -55,6 +56,7 @@ auto SkyAtmosphereLutManager::UpdateSunState(const SunState& sun) noexcept
 
   if (elevation_changed || enabled_changed) {
     dirty_ = true;
+    ++generation_;
   }
 
   sun_state_ = sun;
@@ -75,6 +77,7 @@ auto SkyAtmosphereLutManager::SetAtmosphereFlags(uint32_t flags) noexcept
   if (atmosphere_flags_ != flags) {
     atmosphere_flags_ = flags;
     dirty_ = true;
+    ++generation_;
   }
 }
 
@@ -100,6 +103,12 @@ auto SkyAtmosphereLutManager::GetSkyViewLutSlot() const noexcept
   return sky_view_lut_.srv_index;
 }
 
+auto SkyAtmosphereLutManager::GetMultiScatLutSlot() const noexcept
+  -> ShaderVisibleIndex
+{
+  return multi_scat_lut_.srv_index;
+}
+
 auto SkyAtmosphereLutManager::GetTransmittanceLutTexture() const noexcept
   -> observer_ptr<graphics::Texture>
 {
@@ -112,6 +121,12 @@ auto SkyAtmosphereLutManager::GetSkyViewLutTexture() const noexcept
   return observer_ptr(sky_view_lut_.texture.get());
 }
 
+auto SkyAtmosphereLutManager::GetMultiScatLutTexture() const noexcept
+  -> observer_ptr<graphics::Texture>
+{
+  return observer_ptr(multi_scat_lut_.texture.get());
+}
+
 auto SkyAtmosphereLutManager::GetTransmittanceLutUavSlot() const noexcept
   -> ShaderVisibleIndex
 {
@@ -122,6 +137,12 @@ auto SkyAtmosphereLutManager::GetSkyViewLutUavSlot() const noexcept
   -> ShaderVisibleIndex
 {
   return sky_view_lut_.uav_index;
+}
+
+auto SkyAtmosphereLutManager::GetMultiScatLutUavSlot() const noexcept
+  -> ShaderVisibleIndex
+{
+  return multi_scat_lut_.uav_index;
 }
 
 auto SkyAtmosphereLutManager::EnsureResourcesCreated() -> bool
@@ -160,13 +181,27 @@ auto SkyAtmosphereLutManager::EnsureResourcesCreated() -> bool
     return false;
   }
 
+  // Create multiple scattering LUT (RGBA16F - total escaped radiance)
+  multi_scat_lut_.texture = CreateLutTexture(config_.multi_scat_size,
+    config_.multi_scat_size, true, "Atmo_MultiScatLUT");
+  if (!multi_scat_lut_.texture) {
+    CleanupResources();
+    return false;
+  }
+
+  if (!CreateLutViews(multi_scat_lut_, true)) {
+    CleanupResources();
+    return false;
+  }
+
   resources_created_ = true;
 
   LOG_F(INFO,
     "SkyAtmosphereLutManager: created LUTs (transmittance={}x{}, "
-    "sky_view={}x{})",
+    "sky_view={}x{}, multi_scat={}x{})",
     config_.transmittance_width, config_.transmittance_height,
-    config_.sky_view_width, config_.sky_view_height);
+    config_.sky_view_width, config_.sky_view_height, config_.multi_scat_size,
+    config_.multi_scat_size);
 
   return true;
 }
@@ -275,6 +310,7 @@ auto SkyAtmosphereLutManager::CleanupResources() -> void
 
   cleanup_lut(transmittance_lut_);
   cleanup_lut(sky_view_lut_);
+  cleanup_lut(multi_scat_lut_);
 
   resources_created_ = false;
 }

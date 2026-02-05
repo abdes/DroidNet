@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -67,6 +68,7 @@
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/CompositingPass.h>
 #include <Oxygen/Renderer/Passes/IblComputePass.h>
+#include <Oxygen/Renderer/Passes/SkyCapturePass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderContextPool.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -262,6 +264,8 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
 
 Renderer::~Renderer()
 {
+  sky_capture_pass_.reset();
+  ibl_compute_pass_.reset();
   env_dynamic_manager_.reset();
   brdf_lut_manager_.reset();
   env_static_manager_.reset();
@@ -348,6 +352,12 @@ auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
     sky_atmo_lut_manager_ = std::make_unique<internal::SkyAtmosphereLutManager>(
       observer_ptr { gfx.get() });
 
+    // Create sky capture pass
+    sky_capture_pass_config_ = std::make_shared<SkyCapturePassConfig>();
+    sky_capture_pass_config_->resolution = 128u;
+    sky_capture_pass_ = std::make_unique<SkyCapturePass>(
+      observer_ptr { gfx.get() }, sky_capture_pass_config_);
+
     // Initialize IBL Manager
     ibl_manager_
       = std::make_unique<internal::IblManager>(observer_ptr { gfx.get() });
@@ -360,7 +370,8 @@ auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
         observer_ptr { gfx.get() }, observer_ptr { texture_binder_.get() },
         observer_ptr { brdf_lut_manager_.get() },
         observer_ptr { ibl_manager_.get() },
-        observer_ptr { sky_atmo_lut_manager_.get() });
+        observer_ptr { sky_atmo_lut_manager_.get() },
+        observer_ptr { sky_capture_pass_.get() });
 
     ibl_compute_pass_ = std::make_unique<IblComputePass>("IblComputePass");
   }
@@ -372,6 +383,7 @@ auto Renderer::OnShutdown() noexcept -> void
   {
     std::lock_guard lock(composition_mutex_);
     composition_submission_.reset();
+    composition_surface_.reset();
   }
 
   compositing_pass_.reset();
@@ -427,6 +439,12 @@ auto Renderer::GetIblManager() const noexcept
   -> observer_ptr<internal::IblManager>
 {
   return observer_ptr { ibl_manager_.get() };
+}
+
+auto Renderer::GetIblComputePass() const noexcept
+  -> observer_ptr<IblComputePass>
+{
+  return observer_ptr { ibl_compute_pass_.get() };
 }
 
 auto Renderer::DumpEstimatedTextureMemory(const std::size_t top_n) const -> void
@@ -533,10 +551,12 @@ auto Renderer::UnregisterView(ViewId view_id) -> void
   }
 }
 
-auto Renderer::RegisterComposition(CompositionSubmission submission) -> void
+auto Renderer::RegisterComposition(CompositionSubmission submission,
+  std::shared_ptr<graphics::Surface> target_surface) -> void
 {
   std::lock_guard lock(composition_mutex_);
   composition_submission_ = std::move(submission);
+  composition_surface_ = std::move(target_surface);
 }
 
 auto Renderer::IsViewReady(ViewId view_id) const -> bool
@@ -549,6 +569,16 @@ auto Renderer::IsViewReady(ViewId view_id) const -> bool
 auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
 {
   LOG_SCOPE_FUNCTION(2);
+
+  const auto dt = context.GetModuleTimingData().game_delta_time;
+  const auto dt_ns = dt.get();
+  const auto dt_seconds
+    = std::chrono::duration_cast<std::chrono::duration<float>>(dt_ns).count();
+  if (dt_seconds > 0.0F) {
+    last_frame_dt_seconds_ = dt_seconds;
+  } else {
+    last_frame_dt_seconds_ = 1.0F / 60.0F;
+  }
 
   DrainPendingViewCleanup("OnPreRender");
 
@@ -568,6 +598,15 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
   // Failing to acquire a slot will throw, and drop the frame.
   render_context_
     = observer_ptr { &render_context_pool_->Acquire(context.GetFrameSlot()) };
+
+  {
+    auto graphics_p = gfx_weak_.lock();
+    if (!graphics_p) {
+      LOG_F(ERROR, "Graphics expired during OnPreRender");
+      co_return;
+    }
+    render_context_->SetRenderer(this, graphics_p.get());
+  }
 
   render_context_->scene = observer_ptr<const scene::Scene> {
     context.GetScene().get(),
@@ -724,6 +763,8 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
   }
 
   bool ran_ibl_compute_this_frame = false;
+  bool ran_sky_capture_this_frame = false;
+
   for (const auto& [view_id, factory] : graphs_snapshot) {
     DLOG_SCOPE_F(2, fmt::format("View {}", nostd::to_string(view_id)).c_str());
 
@@ -756,21 +797,13 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
       graphics::GpuEventScope view_scope(
         *recorder, fmt::format("View {}", view_id.get()));
 
-      if (!SetupFramebufferForView(
-            context, view_id, *recorder, *render_context_)) {
-        LOG_F(ERROR, "Failed to setup framebuffer for view {}; skipping",
-          view_id.get());
-        continue;
-      }
-
       auto update_view_state = [&](ViewId view_id, bool success) -> void {
         std::unique_lock state_lock(view_state_mutex_);
         view_ready_states_[view_id] = success;
       };
 
-      // Prepare and wire per-view SceneConstants and populate the
-      // render_context.current_view when available. The helper handles
-      // the resolved/prepared checks, logging and buffer writes.
+      // --- STEP 1: Wire all constants and context data ---
+      // This MUST happen before any pass (SkyCapture, IBL, or Graph) runs.
       if (!PrepareAndWireSceneConstantsForView(
             view_id, context, *render_context_)) {
         // Failure already logged inside helper; mark the view failed and
@@ -779,7 +812,58 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
         continue;
       }
 
+      // --- STEP 2: Run environment update passes ---
+      // Check if sky needs re-capture.
+      // Run this BEFORE SetupFramebufferForView to avoid touching main scene
+      // targets while performing the internal capture.
+      if (!ran_sky_capture_this_frame && sky_capture_pass_) {
+        bool needs_capture = !sky_capture_pass_->IsCaptured();
+
+        if (sky_atmo_lut_manager_) {
+          const auto current_atmo_gen = sky_atmo_lut_manager_->GetGeneration();
+          if (current_atmo_gen != last_atmo_generation_) {
+            needs_capture = true;
+            last_atmo_generation_ = current_atmo_gen;
+          }
+
+          // Wait until LUTs are ready for capture
+          if (needs_capture && !sky_atmo_lut_manager_->HasBeenGenerated()) {
+            needs_capture = false;
+          }
+        }
+
+        if (needs_capture) {
+          try {
+            graphics::GpuEventScope capture_scope(*recorder, "Sky Capture");
+            co_await sky_capture_pass_->PrepareResources(
+              *render_context_, *recorder);
+            co_await sky_capture_pass_->Execute(*render_context_, *recorder);
+
+            // Force IBL to re-filter the new capture.
+            if (ibl_compute_pass_) {
+              ibl_compute_pass_->RequestRegenerationOnce();
+            }
+          } catch (const std::exception& ex) {
+            LOG_F(ERROR, "SkyCapturePass failed: {}", ex.what());
+          }
+        }
+        ran_sky_capture_this_frame = true;
+      }
+
       if (!ran_ibl_compute_this_frame && ibl_compute_pass_) {
+        bool needs_ibl = false;
+        if (auto env_static = GetEnvironmentStaticDataManager()) {
+          // If the manager flagged a param change, or a capture just happened.
+          if (env_static->IsIblRegenerationRequested()) {
+            needs_ibl = true;
+            env_static->MarkIblRegenerationClean();
+          }
+        }
+
+        if (needs_ibl) {
+          ibl_compute_pass_->RequestRegenerationOnce();
+        }
+
         try {
           graphics::GpuEventScope ibl_scope(*recorder, "IBL Compute");
           co_await ibl_compute_pass_->PrepareResources(
@@ -791,7 +875,16 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
         ran_ibl_compute_this_frame = true;
       }
 
-      // Execute the registered render graph for this view
+      // --- STEP 3: Setup main scene framebuffer ---
+      // This starts tracking the depth and color buffers for the actual view.
+      if (!SetupFramebufferForView(
+            context, view_id, *recorder, *render_context_)) {
+        LOG_F(ERROR, "Failed to setup framebuffer for view {}; skipping",
+          view_id.get());
+        continue;
+      }
+
+      // --- STEP 4: Execute RenderGraph ---
       graphics::GpuEventScope graph_scope(*recorder, "RenderGraph");
       const bool rv = co_await ExecuteRenderGraphForView(
         view_id, factory, *render_context_, *recorder);
@@ -816,6 +909,7 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
 auto Renderer::OnCompositing(FrameContext& context) -> co::Co<>
 {
   std::optional<CompositionSubmission> submission;
+  std::shared_ptr<graphics::Surface> target_surface;
   {
     std::lock_guard lock(composition_mutex_);
     if (!composition_submission_) {
@@ -823,6 +917,8 @@ auto Renderer::OnCompositing(FrameContext& context) -> co::Co<>
     }
     submission = std::move(composition_submission_);
     composition_submission_.reset();
+    target_surface = std::move(composition_surface_);
+    composition_surface_.reset();
   }
 
   CHECK_F(submission.has_value(), "Compositing submission required");
@@ -984,10 +1080,10 @@ auto Renderer::OnCompositing(FrameContext& context) -> co::Co<>
     backbuffer, graphics::ResourceStates::kPresent);
   recorder.FlushBarriers();
 
-  if (payload.target_surface) {
+  if (target_surface) {
     const auto surfaces = context.GetSurfaces();
     for (size_t i = 0; i < surfaces.size(); ++i) {
-      if (surfaces[i].get() == payload.target_surface.get()) {
+      if (surfaces[i].get() == target_surface.get()) {
         context.SetSurfacePresentable(i, true);
         break;
       }
@@ -1101,8 +1197,16 @@ auto Renderer::SetupFramebufferForView(const FrameContext& frame_context,
   }
 
   if (fb_desc.depth_attachment.texture) {
-    recorder.BeginTrackingResourceState(*fb_desc.depth_attachment.texture,
-      graphics::ResourceStates::kDepthWrite, true);
+    auto initial
+      = fb_desc.depth_attachment.texture->GetDescriptor().initial_state;
+    if (initial == graphics::ResourceStates::kUnknown
+      || initial == graphics::ResourceStates::kUndefined) {
+      initial = graphics::ResourceStates::kDepthWrite;
+    }
+    recorder.BeginTrackingResourceState(
+      *fb_desc.depth_attachment.texture, initial, true);
+    recorder.RequireResourceState(
+      *fb_desc.depth_attachment.texture, graphics::ResourceStates::kDepthWrite);
     recorder.FlushBarriers();
   }
 
@@ -1186,17 +1290,47 @@ auto Renderer::UpdateViewExposure(
 {
   float exposure = 1.0F;
 
-  (void)sun_state;
-
-  // NOTE: Only manual EV compensation is supported at the moment.
-  // Auto exposure requires HDR rendering + tone mapping, which is not wired
-  // yet. Manual EV is applied only when explicitly enabled.
+  // Manual and auto exposure use the post-process volume.
   if (const auto env = scene.GetEnvironment()) {
     if (const auto pp
       = env->TryGetSystem<scene::environment::PostProcessVolume>();
       pp && pp->IsEnabled()) {
-      if (pp->GetExposureMode() == scene::environment::ExposureMode::kManual) {
-        exposure = std::exp2(pp->GetExposureCompensationEv());
+      const float compensation_ev = pp->GetExposureCompensationEv();
+      if (pp->GetExposureMode() == scene::environment::ExposureMode::kManual
+        || pp->GetExposureMode()
+          == scene::environment::ExposureMode::kManualCamera) {
+        // Physically calibrated manual exposure:
+        // Exposure = 1 / (q * 2^EV100) where q = 1.2 (standard for digital
+        // sensors)
+        exposure = 1.0F / (1.2F * std::exp2(compensation_ev));
+      } else {
+        const float min_ev = pp->GetAutoExposureMinEv();
+        const float max_ev = pp->GetAutoExposureMaxEv();
+
+        // Estimate scene EV100 from sun illuminance (lux) using a diffuse
+        // Lambertian assumption (L = E / pi) and standard calibration.
+        const float illuminance_lux = std::max(0.0F, sun_state.illuminance);
+        constexpr float kCalibration = 12.5F;
+        constexpr float kPi = 3.14159265359F;
+        const float luminance = illuminance_lux / kPi;
+        const float ev100
+          = std::log2(std::max(1e-4F, luminance * 100.0F / kCalibration));
+        const float target_ev = std::clamp(ev100, min_ev, max_ev);
+
+        float resolved_ev = target_ev;
+        auto it = auto_exposure_ev100_.find(view_id);
+        if (it != auto_exposure_ev100_.end()) {
+          const float prev_ev = it->second;
+          const bool brightening = target_ev < prev_ev;
+          const float speed = brightening ? pp->GetAutoExposureSpeedUp()
+                                          : pp->GetAutoExposureSpeedDown();
+          const float dt = std::max(0.0F, last_frame_dt_seconds_);
+          const float alpha = 1.0F - std::exp(-speed * dt);
+          resolved_ev = prev_ev + (target_ev - prev_ev) * alpha;
+        }
+        auto_exposure_ev100_[view_id] = resolved_ev;
+
+        exposure = std::exp2(compensation_ev - resolved_ev);
       }
     }
   }
@@ -1459,6 +1593,7 @@ auto Renderer::OnFrameStart(FrameContext& context) -> void
   {
     std::lock_guard lock(composition_mutex_);
     composition_submission_.reset();
+    composition_surface_.reset();
   }
 
   if (!scene_prep_state_ || !texture_binder_) {

@@ -41,6 +41,7 @@ namespace oxygen::engine::internal {
 class IBrdfLutProvider;
 class IIblProvider;
 class ISkyAtmosphereLutProvider;
+class ISkyCaptureProvider;
 
 //! Single-owner builder/uploader for bindless EnvironmentStaticData.
 /*!
@@ -77,7 +78,8 @@ public:
     observer_ptr<renderer::resources::IResourceBinder> texture_binder,
     observer_ptr<IBrdfLutProvider> brdf_lut_provider,
     observer_ptr<IIblProvider> ibl_manager,
-    observer_ptr<ISkyAtmosphereLutProvider> sky_atmo_lut_provider = nullptr);
+    observer_ptr<ISkyAtmosphereLutProvider> sky_atmo_lut_provider = nullptr,
+    observer_ptr<ISkyCaptureProvider> sky_capture_provider = nullptr);
 
   OXGN_RNDR_API ~EnvironmentStaticDataManager();
 
@@ -105,6 +107,21 @@ public:
   */
   OXGN_RNDR_API auto EnforceBarriers(graphics::CommandRecorder& recorder)
     -> void;
+
+  //! Request an IBL regeneration on the next frame.
+  OXGN_RNDR_API auto RequestIblRegeneration() noexcept -> void;
+
+  //! Returns true if an IBL regeneration has been requested.
+  [[nodiscard]] auto IsIblRegenerationRequested() const noexcept -> bool
+  {
+    return ibl_regeneration_requested_;
+  }
+
+  //! Clears the IBL regeneration request flag.
+  auto MarkIblRegenerationClean() noexcept -> void
+  {
+    ibl_regeneration_requested_ = false;
+  }
 
   //! Shader-visible SRV index for the environment static data.
   [[nodiscard]] auto GetSrvIndex() const noexcept -> ShaderVisibleIndex
@@ -139,6 +156,14 @@ public:
     return kInvalidShaderVisibleIndex;
   }
 
+  //! Returns the sky light intensity multiplier.
+  [[nodiscard]] auto GetSkyLightIntensity() const noexcept -> float
+  {
+    return cpu_snapshot_.sky_light.enabled != 0U
+      ? cpu_snapshot_.sky_light.intensity
+      : 1.0F;
+  }
+
   //! Returns the current SkySphere cubemap slot.
   [[nodiscard]] auto GetSkySphereCubemapSlot() const noexcept
     -> ShaderVisibleIndex
@@ -150,6 +175,14 @@ public:
     return kInvalidShaderVisibleIndex;
   }
 
+  //! Returns the sky sphere intensity multiplier.
+  [[nodiscard]] auto GetSkySphereIntensity() const noexcept -> float
+  {
+    return cpu_snapshot_.sky_sphere.enabled != 0U
+      ? cpu_snapshot_.sky_sphere.intensity
+      : 1.0F;
+  }
+
 private:
   static constexpr std::uint32_t kStrideBytes
     = static_cast<std::uint32_t>(sizeof(EnvironmentStaticData));
@@ -159,6 +192,7 @@ private:
   observer_ptr<IBrdfLutProvider> brdf_lut_provider_;
   observer_ptr<IIblProvider> ibl_provider_;
   observer_ptr<ISkyAtmosphereLutProvider> sky_lut_provider_;
+  observer_ptr<ISkyCaptureProvider> sky_capture_provider_;
   frame::Slot current_slot_ { frame::kInvalidSlot };
 
   EnvironmentStaticData cpu_snapshot_ {};
@@ -168,6 +202,9 @@ private:
   // uploaded; when it differs from `snapshot_id_` the slot needs upload.
   std::uint64_t snapshot_id_ { 1 };
   std::array<std::uint64_t, frame::kFramesInFlight.get()> slot_uploaded_id_ {};
+
+  std::uint64_t last_capture_generation_ { 0 };
+  bool ibl_regeneration_requested_ { false };
 
   std::shared_ptr<graphics::Buffer> buffer_;
   std::shared_ptr<graphics::Texture> brdf_lut_texture_;
@@ -191,6 +228,7 @@ private:
     EnvironmentStaticData& next) -> void;
   auto PopulateSkySphere(observer_ptr<const scene::SceneEnvironment> env,
     EnvironmentStaticData& next) -> void;
+  auto PopulateSkyCapture(EnvironmentStaticData& next) -> void;
   auto PopulateIbl(EnvironmentStaticData& next) -> void;
   auto PopulateClouds(observer_ptr<const scene::SceneEnvironment> env,
     EnvironmentStaticData& next) -> void;

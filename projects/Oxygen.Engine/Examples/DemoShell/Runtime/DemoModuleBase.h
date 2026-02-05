@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <map>
 #include <memory>
 #include <span>
 #include <vector>
@@ -17,6 +18,8 @@
 #include <Oxygen/Platform/Window.h>
 
 #include "DemoShell/Runtime/AppWindow.h"
+
+#include "DemoShell/Runtime/CompositionView.h"
 
 namespace oxygen {
 class AsyncEngine;
@@ -31,7 +34,6 @@ namespace graphics {
 namespace oxygen::examples {
 
 class DemoAppContext;
-class DemoView;
 class RenderingPipeline;
 
 //! Base class for demo engine modules.
@@ -65,17 +67,26 @@ protected:
   // Example specific hooks
   virtual auto HandleOnFrameStart(engine::FrameContext& /*context*/) -> void { }
 
+  //! Hook: derived classes fill this with the views they want to render this
+  //! frame.
+  virtual auto UpdateComposition(engine::FrameContext& /*context*/,
+    std::vector<CompositionView>& /*views*/) -> void
+  {
+  }
+
   // Helpers
-  auto AddView(std::unique_ptr<DemoView> view) -> DemoView*;
-  auto ClearViews() -> void;
-  [[nodiscard]] auto GetViews() const
-    -> std::span<const std::unique_ptr<DemoView>>;
+  auto GetOrCreateViewId(std::string_view name) -> ViewId;
+  auto ClearViewIds() -> void;
 
   // State
   const DemoAppContext& app_;
   observer_ptr<AppWindow> app_window_ { nullptr };
   std::unique_ptr<RenderingPipeline> pipeline_;
-  std::vector<std::unique_ptr<DemoView>> views_;
+
+  //! Map of logical view names to persistent ViewIds for resource tracking.
+  std::map<std::string, ViewId> view_registry_;
+  //! The active descriptors for the current frame.
+  std::vector<CompositionView> active_views_;
 
 private:
   auto OnFrameStartCommon(engine::FrameContext& context) -> void;
