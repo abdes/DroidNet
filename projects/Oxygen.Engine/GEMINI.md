@@ -63,6 +63,7 @@ The project uses CMake with Conan for dependency management.
     - Markdown: `.markdownlint.yaml`.
 - **Error Handling:** Prefers `Result<T>` or exceptions where appropriate (ASAN issues with exceptions in some contexts).
 - **Bindless Resources:** The engine is 100% bincless rendering. Always register resources with the `ResourceRegistry` to obtain stable indices for shader access.
+- **Engine Conventions:** The engine is +Z UP, -Y forward, and all the conventions and constants for complying with them are in `src/Oxygen/Core/Constants.h`
 
 ## Key Files for Reference
 
@@ -71,3 +72,4 @@ The project uses CMake with Conan for dependency management.
 - `src/Oxygen/Base/Logging.h`: Main logging entry point.
 - `src/Oxygen/OxCo/Co.h`: Coroutine framework entry point.
 - `design/BindlessRenderingDesign.md`: Detailed explanation of the rendering architecture.
+- `src/Oxygen/Core/Constants.h`: Engine space/directions conventions.
