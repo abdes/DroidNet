@@ -44,6 +44,7 @@
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 
+using oxygen::observer_ptr;
 using oxygen::core::ExecutionModel;
 using oxygen::core::kPhaseRegistry;
 using oxygen::core::PhaseId;
@@ -369,9 +370,9 @@ auto ModuleManager::FindModuleByTypeId(TypeId type_id) const noexcept
 }
 
 auto ModuleManager::HandleModuleErrors(
-  FrameContext& ctx, PhaseId /*phase*/) noexcept -> void
+  observer_ptr<FrameContext> ctx, PhaseId /*phase*/) noexcept -> void
 {
-  const auto& errors = ctx.GetErrors();
+  const auto& errors = ctx->GetErrors();
   if (errors.empty()) {
     return;
   }
@@ -408,14 +409,14 @@ auto ModuleManager::HandleModuleErrors(
     | std::ranges::to<std::vector>();
 
   // Handle bad module errors: clear original and report as critical
-  std::ranges::for_each(normalized_errors, [this, &ctx](const auto& pair) {
+  std::ranges::for_each(normalized_errors, [this, ctx](const auto& pair) {
     const auto& [error, module] = pair;
     if (error.source_key.has_value()
       && error.source_key.value() == "__bad_module__") {
       // Clear the original badly reported error
-      ctx.ClearErrorsFromSource(error.source_type_id);
+      ctx->ClearErrorsFromSource(error.source_type_id);
       // Report normalized critical error
-      ctx.ReportError(
+      ctx->ReportError(
         TypeId {}, error.message); // Already formatted as critical
     }
   });
@@ -433,14 +434,14 @@ auto ModuleManager::HandleModuleErrors(
     | std::ranges::to<std::vector>();
 
   // Remove non-critical modules and clear their errors
-  std::ranges::for_each(modules_to_remove, [this, &ctx](const auto& pair) {
+  std::ranges::for_each(modules_to_remove, [this, ctx](const auto& pair) {
     const auto& [error, module] = pair;
     const auto& module_name = error.source_key.value();
     const auto module_type_id = error.source_type_id;
     UnregisterModule(module_name);
 
     // Clear only errors from this specific module (by TypeId AND source_key)
-    ctx.ClearErrorsFromSource(module_type_id, error.source_key);
+    ctx->ClearErrorsFromSource(module_type_id, error.source_key);
   });
 }
 
@@ -449,7 +450,7 @@ auto ModuleManager::HandleModuleErrors(
 namespace {
 
 auto RunHandlerImpl(oxygen::co::Co<> awaitable, const EngineModule* module,
-  FrameContext& ctx) -> oxygen::co::Co<>
+  observer_ptr<FrameContext> ctx) -> oxygen::co::Co<>
 {
   try {
     co_await std::move(awaitable);
@@ -457,13 +458,13 @@ auto RunHandlerImpl(oxygen::co::Co<> awaitable, const EngineModule* module,
     const auto error_message = fmt::format(
       "Module '{}' handler threw: {}", module->GetName(), e.what());
     LOG_F(ERROR, "{}", error_message);
-    ctx.ReportError(
+    ctx->ReportError(
       module->GetTypeId(), error_message, std::string { module->GetName() });
   } catch (...) {
     const auto error_message = fmt::format(
       "Module '{}' handler threw unknown exception", module->GetName());
     LOG_F(ERROR, "{}", error_message);
-    ctx.ReportError(
+    ctx->ReportError(
       module->GetTypeId(), error_message, std::string { module->GetName() });
   }
   co_return;
@@ -474,7 +475,7 @@ auto RunHandlerImpl(oxygen::co::Co<> awaitable, const EngineModule* module,
 // overload above; otherwise just invoke it (synchronous handlers).
 template <typename F, typename... Args>
   requires std::invocable<F, Args...>
-auto RunHandlerImpl(F&& f, EngineModule* module, FrameContext& ctx,
+auto RunHandlerImpl(F&& f, EngineModule* module, observer_ptr<FrameContext> ctx,
   Args&&... args) -> oxygen::co::Co<>
 {
   using Ret = std::invoke_result_t<F, Args...>;
@@ -492,13 +493,13 @@ auto RunHandlerImpl(F&& f, EngineModule* module, FrameContext& ctx,
     const auto error_message = fmt::format(
       "Module '{}' handler threw: {}", module->GetName(), e.what());
     LOG_F(ERROR, "{}", error_message);
-    ctx.ReportError(
+    ctx->ReportError(
       module->GetTypeId(), error_message, std::string { module->GetName() });
   } catch (...) {
     const auto error_message = fmt::format(
       "Module '{}' handler threw unknown exception", module->GetName());
     LOG_F(ERROR, "{}", error_message);
-    ctx.ReportError(
+    ctx->ReportError(
       module->GetTypeId(), error_message, std::string { module->GetName() });
   }
   co_return;
@@ -508,27 +509,31 @@ auto RunHandlerImpl(F&& f, EngineModule* module, FrameContext& ctx,
 // the anonymous namespace so they can be co_awaited from
 // ModuleManager::ExecutePhase and keep the top-level switch on PhaseId.
 auto ExecuteSynchronousPhase(const std::vector<EngineModule*>& list,
-  const PhaseId phase, FrameContext& ctx) -> oxygen::co::Co<>
+  const PhaseId phase, observer_ptr<FrameContext> ctx) -> oxygen::co::Co<>
 {
   for (auto* m : list) {
     switch (phase) { // NOLINT(clang-diagnostic-switch-enum)
     case PhaseId::kFrameStart:
       co_await RunHandlerImpl(
-        [](EngineModule& mm, FrameContext& c) { mm.OnFrameStart(c); }, m, ctx,
-        std::ref(*m), std::ref(ctx));
+        [](EngineModule& mm, observer_ptr<FrameContext> c) {
+          mm.OnFrameStart(c);
+        },
+        m, ctx, std::ref(*m), std::ref(ctx));
       break;
     case PhaseId::kSnapshot:
       co_await RunHandlerImpl(
-        [](EngineModule& mm, FrameContext& c) { mm.OnSnapshot(c); }, m, ctx,
-        std::ref(*m), std::ref(ctx));
+        [](
+          EngineModule& mm, observer_ptr<FrameContext> c) { mm.OnSnapshot(c); },
+        m, ctx, std::ref(*m), std::ref(ctx));
       break;
     case PhaseId::kCompositing:
       co_await RunHandlerImpl(m->OnCompositing(ctx), m, ctx);
       break;
     case PhaseId::kFrameEnd:
       co_await RunHandlerImpl(
-        [](EngineModule& mm, FrameContext& c) { mm.OnFrameEnd(c); }, m, ctx,
-        std::ref(*m), std::ref(ctx));
+        [](
+          EngineModule& mm, observer_ptr<FrameContext> c) { mm.OnFrameEnd(c); },
+        m, ctx, std::ref(*m), std::ref(ctx));
       break;
     default:
       ABORT_F("Check consistency with ExecutePhase() implementation");
@@ -540,7 +545,7 @@ auto ExecuteSynchronousPhase(const std::vector<EngineModule*>& list,
 }
 
 auto ExecuteBarrieredConcurrencyPhase(const std::vector<EngineModule*>& list,
-  PhaseId phase, FrameContext& ctx) -> oxygen::co::Co<>
+  PhaseId phase, observer_ptr<FrameContext> ctx) -> oxygen::co::Co<>
 {
   DLOG_F(2, "ExecutePhase (barriered): phase={} list.size()={}",
     static_cast<int>(phase), list.size());
@@ -604,7 +609,8 @@ auto ExecuteBarrieredConcurrencyPhase(const std::vector<EngineModule*>& list,
 }
 
 auto ExecuteDeferredPipelinesPhase(const std::vector<EngineModule*>& list,
-  FrameContext& ctx, const UnifiedSnapshot& snapshot) -> oxygen::co::Co<>
+  observer_ptr<FrameContext> ctx, const UnifiedSnapshot& snapshot)
+  -> oxygen::co::Co<>
 {
   std::vector<oxygen::co::Co<>> tasks;
   tasks.reserve(list.size());
@@ -623,8 +629,8 @@ auto ExecuteDeferredPipelinesPhase(const std::vector<EngineModule*>& list,
 }
 } // namespace
 
-auto ModuleManager::ExecutePhase(const PhaseId phase, FrameContext& ctx)
-  -> co::Co<>
+auto ModuleManager::ExecutePhase(
+  const PhaseId phase, observer_ptr<FrameContext> ctx) -> co::Co<>
 {
   // Copy the module list for this phase so coroutine lambdas can safely capture
   // module pointers without referencing a temporary container.
@@ -691,7 +697,7 @@ auto ModuleManager::ExecutePhase(const PhaseId phase, FrameContext& ctx)
 }
 
 auto ModuleManager::ExecuteParallelTasks(
-  FrameContext& ctx, const UnifiedSnapshot& snapshot) -> co::Co<>
+  observer_ptr<FrameContext> ctx, const UnifiedSnapshot& snapshot) -> co::Co<>
 {
   // Copy the module list for this phase so coroutine lambdas can safely capture
   // module pointers without referencing a temporary container.

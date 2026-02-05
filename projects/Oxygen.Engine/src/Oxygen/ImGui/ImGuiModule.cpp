@@ -136,7 +136,8 @@ auto ImGuiModule::OnShutdown() noexcept -> void
   loguru::flush();
 }
 
-auto ImGuiModule::OnFrameStart(engine::FrameContext& /*frame_context*/) -> void
+auto ImGuiModule::OnFrameStart(
+  observer_ptr<engine::FrameContext> /*frame_context*/) -> void
 {
   // We should always have a graphics backend
   DCHECK_NOTNULL_F(graphics_backend_);
@@ -280,7 +281,8 @@ auto ImGuiModule::RecreateDeviceObjects() -> void
   }
 }
 
-auto ImGuiModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void
+auto ImGuiModule::OnFrameEnd(observer_ptr<engine::FrameContext> /*context*/)
+  -> void
 {
   // If we started an ImGui frame but no Render/EndFrame was performed by
   // the render code path, call EndFrame here to keep ImGui's internal

@@ -13,6 +13,8 @@
 #include <stdexcept>
 #include <utility>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Scissors.h>
@@ -137,14 +139,12 @@ auto ToneMapPass::DoPrepareResources(graphics::CommandRecorder& recorder)
   const auto& src_desc = source.GetDescriptor();
   const auto& out_desc = output.GetDescriptor();
 
-  LOG_F(INFO, "[ToneMapPass] source={} size={}x{} fmt={} name={}",
-    static_cast<const void*>(&source), src_desc.width, src_desc.height,
-    static_cast<int>(src_desc.format), src_desc.debug_name);
-  LOG_F(INFO, "[ToneMapPass] output={} size={}x{} fmt={} name={}",
-    static_cast<const void*>(&output), out_desc.width, out_desc.height,
-    static_cast<int>(out_desc.format), out_desc.debug_name);
-  LOG_F(INFO, "[ToneMapPass] exposure={} tonemapper={}",
-    config_->manual_exposure, to_string(config_->tone_mapper));
+  DLOG_F(2, "source ptr={} size={}x{} fmt={} name={}", fmt::ptr(&source),
+    src_desc.width, src_desc.height, src_desc.format, src_desc.debug_name);
+  DLOG_F(2, "output ptr={} size={}x{} fmt={} name={}", fmt::ptr(&output),
+    out_desc.width, out_desc.height, out_desc.format, out_desc.debug_name);
+  DLOG_F(2, "exposure={} tonemapper={}", config_->manual_exposure,
+    config_->tone_mapper);
 
   recorder.RequireResourceState(
     source, graphics::ResourceStates::kShaderResource);

@@ -6,6 +6,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/ModuleManager.h>
@@ -21,6 +22,7 @@ using namespace oxygen::engine;
 using namespace oxygen::engine::test;
 using oxygen::co::testing::TestEventLoop;
 using namespace oxygen::co;
+using oxygen::observer_ptr;
 
 //=== Base Test Fixture ===---------------------------------------------------//
 
@@ -100,7 +102,7 @@ NOLINT_TEST_F(SyncModuleErrorTest, NonCriticalSyncRemoved)
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, ctx_);
+    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, observer_ptr { &ctx_ });
     co_return;
   });
 
@@ -140,7 +142,7 @@ NOLINT_TEST_F(SyncModuleErrorTest, CriticalSyncKept)
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, ctx_);
+    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, observer_ptr { &ctx_ });
     co_return;
   });
 
@@ -185,7 +187,7 @@ NOLINT_TEST_F(AsyncModuleErrorTest, NonCriticalAsyncRemoved)
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kInput, ctx_);
+    co_await mgr_.ExecutePhase(PhaseId::kInput, observer_ptr { &ctx_ });
     co_return;
   });
 
@@ -227,7 +229,7 @@ NOLINT_TEST_F(AsyncModuleErrorTest, CriticalAsyncKept)
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kGameplay, ctx_);
+    co_await mgr_.ExecutePhase(PhaseId::kGameplay, observer_ptr { &ctx_ });
     co_return;
   });
 
@@ -262,7 +264,7 @@ NOLINT_TEST_F(MultiModuleErrorTest, CriticalModuleThrows_RemainsRegistered)
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kInput, ctx_);
+    co_await mgr_.ExecutePhase(PhaseId::kInput, observer_ptr { &ctx_ });
     co_return;
   });
 
@@ -287,7 +289,7 @@ NOLINT_TEST_F(MultiModuleErrorTest, NonCriticalModuleThrows_RemovedFromManager)
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kInput, ctx_);
+    co_await mgr_.ExecutePhase(PhaseId::kInput, observer_ptr { &ctx_ });
     co_return;
   });
 
@@ -314,7 +316,7 @@ NOLINT_TEST_F(MultiModuleErrorTest, MixedCriticality_OnlyCriticalErrorsPersist)
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kInput, ctx_);
+    co_await mgr_.ExecutePhase(PhaseId::kInput, observer_ptr { &ctx_ });
     co_return;
   });
 
@@ -350,7 +352,7 @@ NOLINT_TEST_F(
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kInput, ctx_);
+    co_await mgr_.ExecutePhase(PhaseId::kInput, observer_ptr { &ctx_ });
     co_return;
   });
 
@@ -379,7 +381,7 @@ NOLINT_TEST_F(MultiModuleErrorTest, MultipleNonCriticalFail_AllRemoved)
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, ctx_);
+    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, observer_ptr { &ctx_ });
     co_return;
   });
 
@@ -406,7 +408,7 @@ NOLINT_TEST_F(
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, ctx_);
+    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, observer_ptr { &ctx_ });
     co_return;
   });
 
@@ -438,7 +440,7 @@ NOLINT_TEST_F(
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, ctx_);
+    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, observer_ptr { &ctx_ });
     co_return;
   });
 
@@ -476,7 +478,7 @@ NOLINT_TEST_F(MultiModuleErrorTest,
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, ctx_);
+    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, observer_ptr { &ctx_ });
     co_return;
   });
 
@@ -523,7 +525,7 @@ NOLINT_TEST_F(EdgeCaseErrorTest, EmptyPhaseExecution)
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, ctx_);
+    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, observer_ptr { &ctx_ });
     co_return;
   });
 
@@ -540,7 +542,7 @@ NOLINT_TEST_F(EdgeCaseErrorTest, UnknownExceptionHandling)
   public:
     using ConditionalThrowingModule::ConditionalThrowingModule;
 
-    auto OnFrameStart(FrameContext&) -> void override
+    auto OnFrameStart(observer_ptr<FrameContext>) -> void override
     {
       calls.push_back("OnFrameStart");
       throw 42; // Non-exception type
@@ -556,7 +558,7 @@ NOLINT_TEST_F(EdgeCaseErrorTest, UnknownExceptionHandling)
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, ctx_);
+    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, observer_ptr { &ctx_ });
     co_return;
   });
 
@@ -582,7 +584,7 @@ NOLINT_TEST_F(EdgeCaseErrorTest, ConditionalThrowing)
 
   // Act & Assert - First run without errors
   oxygen::co::Run(loop_, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, ctx_);
+    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, observer_ptr { &ctx_ });
     co_return;
   });
 
@@ -594,7 +596,7 @@ NOLINT_TEST_F(EdgeCaseErrorTest, ConditionalThrowing)
   // Act & Assert - Second run with sync error
   conditional_ptr->should_throw_sync = true;
   oxygen::co::Run(loop_, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, ctx_);
+    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, observer_ptr { &ctx_ });
     co_return;
   });
 
@@ -615,8 +617,9 @@ NOLINT_TEST_F(SingleModuleErrorTest, ProperErrorReporting)
   mgr_.RegisterModule(std::move(module));
 
   // Act - Execute phase where module reports error properly
-  oxygen::co::Run(loop_,
-    [&]() -> Co<> { co_await mgr_.ExecutePhase(PhaseId::kFrameStart, ctx_); });
+  oxygen::co::Run(loop_, [&]() -> Co<> {
+    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, observer_ptr { &ctx_ });
+  });
 
   // Assert
   // Module should have reported error but not thrown exception

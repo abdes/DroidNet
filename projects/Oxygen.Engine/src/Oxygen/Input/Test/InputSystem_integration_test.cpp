@@ -6,6 +6,7 @@
 
 #include <Oxygen/Input/Test/InputSystemTest.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/InputActionMapping.h>
@@ -14,6 +15,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Input.h>
 
+using oxygen::observer_ptr;
 using oxygen::input::Action;
 using oxygen::input::ActionTriggerChain;
 using oxygen::input::ActionTriggerDown;
@@ -262,8 +264,8 @@ NOLINT_TEST_F(
       }
 
       // Process a frame through the InputSystem
-      input_system_->OnFrameStart(*frame_context_);
-      co_await input_system_->OnInput(*frame_context_);
+      input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+      co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
 
       // Gather triggered actions for this frame
       std::vector<std::string_view> fired;
@@ -294,8 +296,8 @@ NOLINT_TEST_F(
         + " -> " + act_desc);
 
       // Finalize frame phases
-      input_system_->OnSnapshot(*frame_context_);
-      input_system_->OnFrameEnd(*frame_context_);
+      input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+      input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
     }
 
     // Assert ---------------------------------------------------------------
@@ -365,14 +367,14 @@ NOLINT_TEST_F(
 
     // Step 1: press Shift to arm the chain
     SendKeyEvent(Key::kLeftShift, ButtonState::kPressed);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
 
     // Step 2: Press and release Space (same frame) -> JumpHigher should trigger
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
     SendKeyEvent(Key::kSpace, ButtonState::kReleased);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
 
     // After the release the consuming JumpHigher must trigger and the Jump
     // mapping in the same context (or other contexts) must be cancelled.
@@ -435,8 +437,8 @@ NOLINT_TEST_F(InputSystemIntegrationTest, MappingOrderAcrossContexts)
 
     // Press: high-priority Pressed mapping should trigger on the press frame
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
 
     EXPECT_TRUE(high->WasTriggeredThisFrame());
     EXPECT_FALSE(lowA->WasTriggeredThisFrame());
@@ -444,8 +446,8 @@ NOLINT_TEST_F(InputSystemIntegrationTest, MappingOrderAcrossContexts)
 
     // Release: tap mappings in the low context should trigger on release
     SendKeyEvent(Key::kSpace, ButtonState::kReleased);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
 
     EXPECT_FALSE(high->WasTriggeredThisFrame());
     EXPECT_TRUE(lowA->WasTriggeredThisFrame());
@@ -478,15 +480,15 @@ NOLINT_TEST_F(InputSystemIntegrationTest, MappingOrderAcrossContexts)
 
     // Press: high triggers on press frame
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
 
     EXPECT_TRUE(high->WasTriggeredThisFrame());
 
     // Release: consumer lowB should trigger and cancel the later lowA mapping
     SendKeyEvent(Key::kSpace, ButtonState::kReleased);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
 
     EXPECT_FALSE(high->WasTriggeredThisFrame());
     EXPECT_TRUE(lowB->WasTriggeredThisFrame());
@@ -551,14 +553,14 @@ NOLINT_TEST_F(
 
     // Press Shift
     SendKeyEvent(Key::kLeftShift, ButtonState::kPressed);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
 
     // Press+release Space -> JumpHigher should trigger and Jump canceled
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
     SendKeyEvent(Key::kSpace, ButtonState::kReleased);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
 
     EXPECT_TRUE(jump_higher->WasTriggeredThisFrame());
     EXPECT_TRUE(jump->WasCanceledThisFrame());
@@ -566,13 +568,13 @@ NOLINT_TEST_F(
     // Release Shift so the chain is no longer armed, then single tap Space
     // should allow Jump to trigger on its own.
     SendKeyEvent(Key::kLeftShift, ButtonState::kReleased);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
 
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
     SendKeyEvent(Key::kSpace, ButtonState::kReleased);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
 
     EXPECT_TRUE(jump->WasTriggeredThisFrame());
 

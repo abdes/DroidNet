@@ -13,6 +13,8 @@
 #include <stdexcept>
 #include <utility>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Scissors.h>
@@ -133,19 +135,15 @@ auto CompositingPass::DoPrepareResources(graphics::CommandRecorder& recorder)
   const auto& src_desc = source.GetDescriptor();
   const auto& out_desc = output.GetDescriptor();
 
-  LOG_F(INFO,
-    "[CompositingPass] source={} size={}x{} fmt={} samples={} name={}",
-    static_cast<const void*>(&source), src_desc.width, src_desc.height,
-    static_cast<int>(src_desc.format), src_desc.sample_count,
-    src_desc.debug_name);
-  LOG_F(INFO,
-    "[CompositingPass] output={} size={}x{} fmt={} samples={} name={}",
-    static_cast<const void*>(&output), out_desc.width, out_desc.height,
-    static_cast<int>(out_desc.format), out_desc.sample_count,
-    out_desc.debug_name);
-  LOG_F(INFO, "[CompositingPass] viewport=({}, {}) {}x{} alpha={}",
-    config_->viewport.top_left_x, config_->viewport.top_left_y,
-    config_->viewport.width, config_->viewport.height, config_->alpha);
+  DLOG_F(2, "source ptr={} size={}x{} fmt={} samples={} name={}",
+    fmt::ptr(&source), src_desc.width, src_desc.height, src_desc.format,
+    src_desc.sample_count, src_desc.debug_name);
+  DLOG_F(2, "output ptr={} size={}x{} fmt={} samples={} name={}",
+    fmt::ptr(&output), out_desc.width, out_desc.height, out_desc.format,
+    out_desc.sample_count, out_desc.debug_name);
+  DLOG_F(2, "viewport=({}, {}) {}x{} alpha={}", config_->viewport.top_left_x,
+    config_->viewport.top_left_y, config_->viewport.width,
+    config_->viewport.height, config_->alpha);
 
   recorder.BeginTrackingResourceState(
     source, graphics::ResourceStates::kCommon);

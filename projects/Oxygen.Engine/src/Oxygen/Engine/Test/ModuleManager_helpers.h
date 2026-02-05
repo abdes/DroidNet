@@ -70,11 +70,11 @@ public:
     return mask_;
   }
 
-  auto OnFrameStart(FrameContext&) -> void override
+  auto OnFrameStart(observer_ptr<FrameContext>) -> void override
   {
     calls.push_back("OnFrameStart");
   }
-  auto OnFrameEnd(FrameContext&) -> void override
+  auto OnFrameEnd(observer_ptr<FrameContext>) -> void override
   {
     calls.push_back("OnFrameEnd");
   }
@@ -108,7 +108,7 @@ public:
     return mask_;
   }
 
-  auto OnInput(FrameContext&) -> Co<> override
+  auto OnInput(observer_ptr<FrameContext>) -> Co<> override
   {
     calls.push_back("OnInput-start");
     // Await a zero-duration sleep on the provided test loop so the handler
@@ -186,13 +186,13 @@ public:
   }
   auto IsCritical() const noexcept -> bool override { return is_critical_; }
 
-  auto OnFrameStart(FrameContext&) -> void override
+  auto OnFrameStart(observer_ptr<FrameContext>) -> void override
   {
     calls.push_back("OnFrameStart-before-throw");
     throw std::runtime_error("Test exception from OnFrameStart");
   }
 
-  auto OnFrameEnd(FrameContext&) -> void override
+  auto OnFrameEnd(observer_ptr<FrameContext>) -> void override
   {
     calls.push_back("OnFrameEnd-before-throw");
     throw std::logic_error("Test exception from OnFrameEnd");
@@ -233,14 +233,14 @@ public:
   }
   auto IsCritical() const noexcept -> bool override { return is_critical_; }
 
-  auto OnInput(FrameContext&) -> Co<> override
+  auto OnInput(observer_ptr<FrameContext>) -> Co<> override
   {
     calls.push_back("OnInput-before-throw");
     co_await dummy_loop_->Sleep(milliseconds(0));
     throw std::runtime_error("Test exception from OnInput");
   }
 
-  auto OnGameplay(FrameContext&) -> Co<> override
+  auto OnGameplay(observer_ptr<FrameContext>) -> Co<> override
   {
     calls.push_back("OnGameplay-before-throw");
     co_await dummy_loop_->Sleep(milliseconds(0));
@@ -284,7 +284,7 @@ public:
   }
   auto IsCritical() const noexcept -> bool override { return is_critical_; }
 
-  auto OnFrameStart(FrameContext&) -> void override
+  auto OnFrameStart(observer_ptr<FrameContext>) -> void override
   {
     calls.push_back("OnFrameStart");
     if (should_throw_sync) {
@@ -292,7 +292,7 @@ public:
     }
   }
 
-  auto OnInput(FrameContext&) -> Co<> override
+  auto OnInput(observer_ptr<FrameContext>) -> Co<> override
   {
     calls.push_back("OnInput-start");
     if (dummy_loop_) {
@@ -342,14 +342,14 @@ public:
   }
   auto IsCritical() const noexcept -> bool override { return is_critical_; }
 
-  auto OnFrameStart(FrameContext& context) -> void override
+  auto OnFrameStart(observer_ptr<FrameContext> context) -> void override
   {
     calls.push_back("OnFrameStart-before-error");
     ReportError(context, "Test error from OnFrameStart using helper method");
     calls.push_back("OnFrameStart-after-error");
   }
 
-  auto OnInput(FrameContext& context) -> Co<> override
+  auto OnInput(observer_ptr<FrameContext> context) -> Co<> override
   {
     calls.push_back("OnInput-before-error");
     ReportError(context, "Test error from OnInput using helper method");

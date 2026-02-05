@@ -17,6 +17,7 @@
 #include <vector>
 
 #include <Oxygen/Base/EnumIndexedArray.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Core/EngineModule.h>
@@ -82,11 +83,11 @@ public:
   // Execute a single phase. This is the canonical entry point used by the
   // engine coordinator. Implementations for many phase types are trivial
   // here; modules implement the actual behavior.
-  OXGN_NGIN_API auto ExecutePhase(core::PhaseId phase, FrameContext& ctx)
-    -> co::Co<>;
+  OXGN_NGIN_API auto ExecutePhase(
+    core::PhaseId phase, observer_ptr<FrameContext> ctx) -> co::Co<>;
 
-  OXGN_NGIN_API auto ExecuteParallelTasks(
-    FrameContext& ctx, const UnifiedSnapshot& snapshot) -> co::Co<>;
+  OXGN_NGIN_API auto ExecuteParallelTasks(observer_ptr<FrameContext> ctx,
+    const UnifiedSnapshot& snapshot) -> co::Co<>;
 
   [[nodiscard]] auto GetModules() const -> decltype(auto)
   {
@@ -141,8 +142,8 @@ private:
 
   // Handle module errors - remove non-critical failed modules, report critical
   // failures
-  auto HandleModuleErrors(FrameContext& ctx, core::PhaseId phase) noexcept
-    -> void;
+  auto HandleModuleErrors(
+    observer_ptr<FrameContext> ctx, core::PhaseId phase) noexcept -> void;
 
   // Internal subscription bookkeeping (private API)
   void UnsubscribeSubscription(uint64_t id) noexcept;

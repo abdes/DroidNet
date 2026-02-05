@@ -304,69 +304,73 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
 
     // Use persistent frame context (views persist across frames with stable
     // IDs)
-    auto& context = frame_context_;
+    auto context = observer_ptr { &frame_context_ };
     const auto tag = internal::EngineTagFactory::Get();
 
     // Reset stage timings for the new frame to ensure zero-duration phases are
     // correctly reported.
-    auto timing = context.GetFrameTiming();
+    auto timing = frame_context_.GetFrameTiming();
     for (const auto phase : enum_as_index<core::PhaseId>) {
       timing.stage_timings[phase] = std::chrono::microseconds(0);
     }
-    context.SetFrameTiming(timing, tag);
+    context->SetFrameTiming(timing, tag);
 
     // Fence polling, epoch advance, deferred destruction retirement
     {
-      PhaseTimer timer(context, core::PhaseId::kFrameStart, GetPhysicalClock());
+      PhaseTimer timer(
+        frame_context_, core::PhaseId::kFrameStart, GetPhysicalClock());
       co_await PhaseFrameStart(context);
     }
 
     // B0: Input snapshot
     {
-      PhaseTimer timer(context, core::PhaseId::kInput, GetPhysicalClock());
+      PhaseTimer timer(
+        frame_context_, core::PhaseId::kInput, GetPhysicalClock());
       co_await PhaseInput(context);
     }
     // Network packet application & reconciliation
     {
-      PhaseTimer timer(
-        context, core::PhaseId::kNetworkReconciliation, GetPhysicalClock());
+      PhaseTimer timer(frame_context_, core::PhaseId::kNetworkReconciliation,
+        GetPhysicalClock());
       co_await PhaseNetworkReconciliation(context);
     }
     // Random seed management for determinism (BEFORE any systems use
     // randomness)
     {
-      PhaseTimer timer(
-        context, core::PhaseId::kRandomSeedManagement, GetPhysicalClock());
+      PhaseTimer timer(frame_context_, core::PhaseId::kRandomSeedManagement,
+        GetPhysicalClock());
       PhaseRandomSeedManagement(context);
     }
     // B1: Fixed simulation deterministic state
     {
       PhaseTimer timer(
-        context, core::PhaseId::kFixedSimulation, GetPhysicalClock());
+        frame_context_, core::PhaseId::kFixedSimulation, GetPhysicalClock());
       co_await PhaseFixedSim(context);
     }
     // Variable gameplay logic
     {
-      PhaseTimer timer(context, core::PhaseId::kGameplay, GetPhysicalClock());
+      PhaseTimer timer(
+        frame_context_, core::PhaseId::kGameplay, GetPhysicalClock());
       co_await PhaseGameplay(context);
     }
     // B2: Structural mutations
     {
       PhaseTimer timer(
-        context, core::PhaseId::kSceneMutation, GetPhysicalClock());
+        frame_context_, core::PhaseId::kSceneMutation, GetPhysicalClock());
       co_await PhaseSceneMutation(context);
     }
     // Transform propagation
     {
-      PhaseTimer timer(
-        context, core::PhaseId::kTransformPropagation, GetPhysicalClock());
+      PhaseTimer timer(frame_context_, core::PhaseId::kTransformPropagation,
+        GetPhysicalClock());
       co_await PhaseTransforms(context);
     }
 
     // Immutable snapshot build (B3)
     const UnifiedSnapshot* snapshot_ptr = nullptr;
     {
-      PhaseTimer timer(context, core::PhaseId::kSnapshot, GetPhysicalClock());
+      PhaseTimer timer(
+        frame_context_, core::PhaseId::kSnapshot, GetPhysicalClock());
       snapshot_ptr = &co_await PhaseSnapshot(context);
     }
     const auto& snapshot = *snapshot_ptr;
@@ -374,57 +378,61 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
     // Launch and join Category B barriered parallel tasks (B4 upon completion).
     {
       PhaseTimer timer(
-        context, core::PhaseId::kParallelTasks, GetPhysicalClock());
+        frame_context_, core::PhaseId::kParallelTasks, GetPhysicalClock());
       co_await ParallelTasks(context, snapshot);
     }
     // Serial post-parallel integration (Category A resumes after B4)
     {
       PhaseTimer timer(
-        context, core::PhaseId::kPostParallel, GetPhysicalClock());
+        frame_context_, core::PhaseId::kPostParallel, GetPhysicalClock());
       co_await PhasePostParallel(context);
     }
 
     // UI update phase: process UI systems, generate rendering artifacts
     {
-      PhaseTimer timer(context, core::PhaseId::kGuiUpdate, GetPhysicalClock());
+      PhaseTimer timer(
+        frame_context_, core::PhaseId::kGuiUpdate, GetPhysicalClock());
       co_await PhaseGuiUpdate(context);
     }
 
     // Frame multi-view rendering
     {
       PhaseTimer timer_pre(
-        context, core::PhaseId::kPreRender, GetPhysicalClock());
+        frame_context_, core::PhaseId::kPreRender, GetPhysicalClock());
       co_await PhasePreRender(context);
       PhaseTimer timer_render(
-        context, core::PhaseId::kRender, GetPhysicalClock());
+        frame_context_, core::PhaseId::kRender, GetPhysicalClock());
       co_await PhaseRender(context);
       PhaseTimer timer_comp(
-        context, core::PhaseId::kCompositing, GetPhysicalClock());
+        frame_context_, core::PhaseId::kCompositing, GetPhysicalClock());
       co_await PhaseCompositing(context);
     }
 
     // Synchronous sequential presentation
     {
-      PhaseTimer timer(context, core::PhaseId::kPresent, GetPhysicalClock());
+      PhaseTimer timer(
+        frame_context_, core::PhaseId::kPresent, GetPhysicalClock());
       PhasePresent(context);
     }
 
     // Poll async pipeline readiness and integrate ready resources
     {
-      PhaseTimer timer(context, core::PhaseId::kAsyncPoll, GetPhysicalClock());
+      PhaseTimer timer(
+        frame_context_, core::PhaseId::kAsyncPoll, GetPhysicalClock());
       PhaseAsyncPoll(context);
     }
 
     // Adaptive budget management for next frame
     {
       PhaseTimer timer(
-        context, core::PhaseId::kBudgetAdapt, GetPhysicalClock());
+        frame_context_, core::PhaseId::kBudgetAdapt, GetPhysicalClock());
       PhaseBudgetAdapt(context);
     }
 
     // Frame end timing and metrics
     {
-      PhaseTimer timer(context, core::PhaseId::kFrameEnd, GetPhysicalClock());
+      PhaseTimer timer(
+        frame_context_, core::PhaseId::kFrameEnd, GetPhysicalClock());
       co_await PhaseFrameEnd(context);
     }
 
@@ -490,30 +498,31 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
     // Update the metrics for the frame just completed (will be seen by next
     // frame's UI)
     {
-      auto final_timing = context.GetFrameTiming();
+      auto final_timing = context->GetFrameTiming();
       final_timing.pacing_duration = pacing_duration;
-      context.SetFrameTiming(final_timing, tag);
+      context->SetFrameTiming(final_timing, tag);
     }
   }
   co_return;
 }
 
-auto AsyncEngine::PhaseFrameStart(FrameContext& context) -> co::Co<>
+auto AsyncEngine::PhaseFrameStart(observer_ptr<FrameContext> context)
+  -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kFrameStart, tag);
+  context->SetCurrentPhase(PhaseId::kFrameStart, tag);
   frame_start_ts_ = GetPhysicalClock().Now();
 
   // TODO: setup all the properties of context that need to be set
 
   // NOTE: Views are now persistent with stable IDs across frames
   // Modules register views once (RegisterView) and update them (UpdateView)
-  context.ClearPresentableFlags(tag);
-  context.SetFrameSequenceNumber(frame_number_, tag);
-  context.SetFrameSlot(frame_slot_, tag);
-  context.SetFrameStartTime(frame_start_ts_.get(), tag);
-  context.SetThreadPool(&platform_->Threads(), tag);
-  context.SetGraphicsBackend(gfx_weak_, tag);
+  context->ClearPresentableFlags(tag);
+  context->SetFrameSequenceNumber(frame_number_, tag);
+  context->SetFrameSlot(frame_slot_, tag);
+  context->SetFrameStartTime(frame_start_ts_.get(), tag);
+  context->SetThreadPool(&platform_->Threads(), tag);
+  context->SetGraphicsBackend(gfx_weak_, tag);
 
   // Update timing data for this frame via TimeManager
   if (time_manager_) {
@@ -527,7 +536,7 @@ auto AsyncEngine::PhaseFrameStart(FrameContext& context) -> co::Co<>
     module_timing.interpolation_alpha
       = static_cast<float>(td.interpolation_alpha);
     module_timing.current_fps = static_cast<float>(td.current_fps);
-    context.SetModuleTimingData(module_timing, tag);
+    context->SetModuleTimingData(module_timing, tag);
   }
 
   // Initialize graphics layer for this frame
@@ -551,15 +560,15 @@ auto AsyncEngine::PhaseFrameStart(FrameContext& context) -> co::Co<>
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::PhaseInput(FrameContext& context) -> co::Co<>
+auto AsyncEngine::PhaseInput(observer_ptr<FrameContext> context) -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kInput, tag);
+  context->SetCurrentPhase(PhaseId::kInput, tag);
 
   LOG_F(2, "[F{}][A] PhaseInput", frame_number_);
 
   // Engine core sets the current phase
-  context.SetCurrentPhase(PhaseId::kInput, tag);
+  context->SetCurrentPhase(PhaseId::kInput, tag);
 
   // Execute module input processing first
   co_await module_manager_->ExecutePhase(PhaseId::kInput, context);
@@ -572,16 +581,16 @@ auto AsyncEngine::PhaseInput(FrameContext& context) -> co::Co<>
   const auto& input_sys = input_sys_opt.value().get();
   if (auto snap = input_sys.GetCurrentSnapshot()) {
     // Publish type-erased input snapshot directly as blob
-    context.SetInputSnapshot(
+    context->SetInputSnapshot(
       std::static_pointer_cast<const void>(std::move(snap)), tag);
   }
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::PhaseFixedSim(FrameContext& context) -> co::Co<>
+auto AsyncEngine::PhaseFixedSim(observer_ptr<FrameContext> context) -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kFixedSimulation, tag);
+  context->SetCurrentPhase(PhaseId::kFixedSimulation, tag);
 
   LOG_F(2, "[F{}][A] PhaseFixedSim", frame_number_);
   // NOTE: This phase uses coroutines for cooperative parallelism within the
@@ -598,21 +607,21 @@ auto AsyncEngine::PhaseFixedSim(FrameContext& context) -> co::Co<>
     const uint32_t steps = result.steps_executed;
 
     for (uint32_t s = 0; s < steps; ++s) {
-      ModuleTimingData module_timing = context.GetModuleTimingData();
+      ModuleTimingData module_timing = context->GetModuleTimingData();
       module_timing.fixed_delta_time = sim.GetFixedTimestep();
       module_timing.fixed_steps_this_frame = s + 1;
-      context.SetModuleTimingData(module_timing, tag);
+      context->SetModuleTimingData(module_timing, tag);
 
-      context.SetCurrentPhase(PhaseId::kFixedSimulation, tag);
+      context->SetCurrentPhase(PhaseId::kFixedSimulation, tag);
       co_await module_manager_->ExecutePhase(
         PhaseId::kFixedSimulation, context);
     }
 
-    ModuleTimingData module_timing = context.GetModuleTimingData();
+    ModuleTimingData module_timing = context->GetModuleTimingData();
     module_timing.fixed_steps_this_frame = steps;
     module_timing.interpolation_alpha
       = static_cast<float>(result.interpolation_alpha);
-    context.SetModuleTimingData(module_timing, tag);
+    context->SetModuleTimingData(module_timing, tag);
 
     LOG_F(2, "[F{}][A] PhaseFixedSim completed {} substeps, alpha={:.3f}",
       frame_number_, steps, module_timing.interpolation_alpha);
@@ -623,30 +632,31 @@ auto AsyncEngine::PhaseFixedSim(FrameContext& context) -> co::Co<>
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::PhaseGameplay(FrameContext& context) -> co::Co<>
+auto AsyncEngine::PhaseGameplay(observer_ptr<FrameContext> context) -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kGameplay, tag);
+  context->SetCurrentPhase(PhaseId::kGameplay, tag);
 
   LOG_F(2, "[F{}][A] PhaseGameplay", frame_number_);
 
   // Engine core sets the current phase
-  context.SetCurrentPhase(PhaseId::kGameplay, tag);
+  context->SetCurrentPhase(PhaseId::kGameplay, tag);
 
   // Execute module gameplay logic first
   co_await module_manager_->ExecutePhase(PhaseId::kGameplay, context);
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::PhaseNetworkReconciliation(FrameContext& context) -> co::Co<>
+auto AsyncEngine::PhaseNetworkReconciliation(observer_ptr<FrameContext> context)
+  -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kNetworkReconciliation, tag);
+  context->SetCurrentPhase(PhaseId::kNetworkReconciliation, tag);
 
   LOG_F(2, "[F{}][A] PhaseNetworkReconciliation", frame_number_);
 
   // Engine core sets the current phase
-  context.SetCurrentPhase(PhaseId::kNetworkReconciliation, tag);
+  context->SetCurrentPhase(PhaseId::kNetworkReconciliation, tag);
 
   // TODO: Implement network packet application & authoritative reconciliation
   // Apply received network packets to authoritative game state
@@ -655,10 +665,11 @@ auto AsyncEngine::PhaseNetworkReconciliation(FrameContext& context) -> co::Co<>
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::PhaseRandomSeedManagement(FrameContext& context) -> void
+auto AsyncEngine::PhaseRandomSeedManagement(observer_ptr<FrameContext> context)
+  -> void
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kRandomSeedManagement, tag);
+  context->SetCurrentPhase(PhaseId::kRandomSeedManagement, tag);
 
   LOG_F(2, "[F{}][A] PhaseRandomSeedManagement", frame_number_);
   // CRITICAL: This phase must execute BEFORE any systems that consume
@@ -690,31 +701,33 @@ auto AsyncEngine::PhaseRandomSeedManagement(FrameContext& context) -> void
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::PhaseSceneMutation(FrameContext& context) -> co::Co<>
+auto AsyncEngine::PhaseSceneMutation(observer_ptr<FrameContext> context)
+  -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  context->SetCurrentPhase(PhaseId::kSceneMutation, tag);
 
   LOG_F(2, "[F{}][A] PhaseSceneMutation (B2: structural integrity barrier)",
     frame_number_);
 
   // Engine core sets the current phase
-  context.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  context->SetCurrentPhase(PhaseId::kSceneMutation, tag);
 
   // Execute module scene mutations first
   co_await module_manager_->ExecutePhase(PhaseId::kSceneMutation, context);
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::PhaseTransforms(FrameContext& context) -> co::Co<>
+auto AsyncEngine::PhaseTransforms(observer_ptr<FrameContext> context)
+  -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kTransformPropagation, tag);
+  context->SetCurrentPhase(PhaseId::kTransformPropagation, tag);
 
   LOG_F(2, "[F{}][A] PhaseTransforms", frame_number_);
 
   // Engine core sets the current phase
-  context.SetCurrentPhase(PhaseId::kTransformPropagation, tag);
+  context->SetCurrentPhase(PhaseId::kTransformPropagation, tag);
 
   // Execute module transform propagation first
   co_await module_manager_->ExecutePhase(
@@ -722,11 +735,11 @@ auto AsyncEngine::PhaseTransforms(FrameContext& context) -> co::Co<>
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::PhaseSnapshot(FrameContext& context)
+auto AsyncEngine::PhaseSnapshot(observer_ptr<FrameContext> context)
   -> co::Co<const UnifiedSnapshot&>
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kSnapshot, tag);
+  context->SetCurrentPhase(PhaseId::kSnapshot, tag);
 
   LOG_F(2, "[F{}][A] PhaseSnapshot (build immutable snapshot)", frame_number_);
   // Execute module snapshot handlers synchronously (main thread)
@@ -734,14 +747,14 @@ auto AsyncEngine::PhaseSnapshot(FrameContext& context)
 
   // Engine consolidates contributions and publishes snapshots last
   const auto& snapshot
-    = context.PublishSnapshots(internal::EngineTagFactory::Get());
+    = context->PublishSnapshots(internal::EngineTagFactory::Get());
   LOG_F(2, "[F{}][A] Published snapshots v{}", frame_number_,
     snapshot.frameSnapshot.validation.snapshot_version);
 
   co_return snapshot;
 }
 
-// void AsyncEngine::SetRenderGraphBuilder(FrameContext& context)
+// void AsyncEngine::SetRenderGraphBuilder(observer_ptr<FrameContext> context)
 // {
 //   render_graph_builder_ = std::make_unique<RenderGraphBuilder>();
 //   auto tag = internal::EngineTagFactory::Get();
@@ -750,23 +763,23 @@ auto AsyncEngine::PhaseSnapshot(FrameContext& context)
 //   render_graph_builder_->BeginGraph(context);
 
 //   // Set the builder in the frame context so modules can access it
-//   context.SetRenderGraphBuilder(
+//   context->SetRenderGraphBuilder(
 //     observer_ptr { render_graph_builder_.get() }, tag);
 // }
 
-// void AsyncEngine::ClearRenderGraphBuilder(FrameContext& context)
+// void AsyncEngine::ClearRenderGraphBuilder(observer_ptr<FrameContext> context)
 // {
 //   auto tag = internal::EngineTagFactory::Get();
-//   context.SetRenderGraphBuilder(
+//   context->SetRenderGraphBuilder(
 //     observer_ptr<RenderGraphBuilder> {}, tag);
 //   render_graph_builder_.reset();
 // }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::PhaseGuiUpdate(FrameContext& context) -> co::Co<>
+auto AsyncEngine::PhaseGuiUpdate(observer_ptr<FrameContext> context) -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kGuiUpdate, tag);
+  context->SetCurrentPhase(PhaseId::kGuiUpdate, tag);
 
   LOG_F(2,
     "[F{}][A] PhaseGuiUpdate - UI systems and rendering artifact generation",
@@ -779,10 +792,10 @@ auto AsyncEngine::PhaseGuiUpdate(FrameContext& context) -> co::Co<>
 // Pre-render phase: perform renderer and module preparation work (no
 // command recording).
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::PhasePreRender(FrameContext& context) -> co::Co<>
+auto AsyncEngine::PhasePreRender(observer_ptr<FrameContext> context) -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kPreRender, tag);
+  context->SetCurrentPhase(PhaseId::kPreRender, tag);
 
   LOG_F(2, "[F{}][A] PhasePreRender - prepare rendering data", frame_number_);
 
@@ -791,13 +804,13 @@ auto AsyncEngine::PhasePreRender(FrameContext& context) -> co::Co<>
 
 // Render phase: modules record commands and perform per-view rendering.
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::PhaseRender(FrameContext& context) -> co::Co<>
+auto AsyncEngine::PhaseRender(observer_ptr<FrameContext> context) -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kRender, tag);
+  context->SetCurrentPhase(PhaseId::kRender, tag);
 
   LOG_F(2, "[F{}][A] PhaseRender - {} surfaces (record+submit phase)",
-    frame_number_, context.GetSurfaces().size());
+    frame_number_, context->GetSurfaces().size());
 
   co_await module_manager_->ExecutePhase(PhaseId::kRender, context);
 
@@ -806,10 +819,11 @@ auto AsyncEngine::PhaseRender(FrameContext& context) -> co::Co<>
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::PhaseCompositing(FrameContext& context) -> co::Co<>
+auto AsyncEngine::PhaseCompositing(observer_ptr<FrameContext> context)
+  -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kCompositing, tag);
+  context->SetCurrentPhase(PhaseId::kCompositing, tag);
 
   LOG_F(2, "[F{}][A] PhaseCompositing", frame_number_);
 
@@ -818,15 +832,15 @@ auto AsyncEngine::PhaseCompositing(FrameContext& context) -> co::Co<>
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::PhasePresent(FrameContext& context) -> void
+auto AsyncEngine::PhasePresent(observer_ptr<FrameContext> context) -> void
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kPresent, tag);
+  context->SetCurrentPhase(PhaseId::kPresent, tag);
 
   // If modules marked surfaces as presentable during rendering, use those
   // flags to determine which surfaces to present. This allows modules to
   // mark surfaces as ready asynchronously and the engine to present them.
-  const auto presentable_surfaces = context.GetPresentableSurfaces();
+  const auto presentable_surfaces = context->GetPresentableSurfaces();
 
   LOG_F(2, "[F{}][A] PhasePresent - {} surfaces", frame_number_,
     presentable_surfaces.size());
@@ -846,18 +860,18 @@ auto AsyncEngine::PhasePresent(FrameContext& context) -> void
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::PhaseAsyncPoll(FrameContext& context) -> void
+auto AsyncEngine::PhaseAsyncPoll(observer_ptr<FrameContext> context) -> void
 {
   // Engine core sets the current phase for async work
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kAsyncPoll, tag);
+  context->SetCurrentPhase(PhaseId::kAsyncPoll, tag);
 
   // Execute module async work (fire and forget style for now)
   auto async_work = module_manager_->ExecutePhase(PhaseId::kAsyncPoll, context);
 }
 
 // ReSharper disable once CppMemberFunctionMayBeStatic
-auto AsyncEngine::PhaseBudgetAdapt(FrameContext& context) -> void
+auto AsyncEngine::PhaseBudgetAdapt(observer_ptr<FrameContext> context) -> void
 {
   const auto tag = internal::EngineTagFactory::Get();
 
@@ -879,7 +893,7 @@ auto AsyncEngine::PhaseBudgetAdapt(FrameContext& context) -> void
   if (budget.gpu_budget.count() == 0)
     budget.gpu_budget = milliseconds(16);
 
-  context.SetBudgetStats(budget, tag);
+  context->SetBudgetStats(budget, tag);
 
   // TODO: Implement adaptive budget management
   // Monitor CPU frame time, GPU idle %, and queue depths
@@ -889,10 +903,10 @@ auto AsyncEngine::PhaseBudgetAdapt(FrameContext& context) -> void
   // (time-window averaging)
 }
 
-auto AsyncEngine::PhaseFrameEnd(FrameContext& context) -> co::Co<>
+auto AsyncEngine::PhaseFrameEnd(observer_ptr<FrameContext> context) -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kFrameEnd, tag);
+  context->SetCurrentPhase(PhaseId::kFrameEnd, tag);
 
   // Execute module frame end work first
   co_await module_manager_->ExecutePhase(PhaseId::kFrameEnd, context);
@@ -914,7 +928,7 @@ auto AsyncEngine::PhaseFrameEnd(FrameContext& context) -> co::Co<>
 
   // Update frame timing metrics in context
   FrameContext::FrameTiming timing;
-  timing = context.GetFrameTiming(); // preserves stage timings already set
+  timing = context->GetFrameTiming(); // preserves stage timings already set
   timing.frame_duration = total;
 
   // Ensure we never set exactly zero if any time elapsed
@@ -922,7 +936,7 @@ auto AsyncEngine::PhaseFrameEnd(FrameContext& context) -> co::Co<>
     timing.frame_duration = microseconds(1);
   }
 
-  context.SetFrameTiming(timing, tag);
+  context->SetFrameTiming(timing, tag);
 
   LOG_F(1, "Frame {} end | total={}us", frame_number_, total.count());
   // Let the platform finalize frame-level deferred operations (e.g. native
@@ -940,11 +954,11 @@ auto AsyncEngine::PhaseFrameEnd(FrameContext& context) -> co::Co<>
 }
 
 // ReSharper disable once CppMemberFunctionMayBeStatic
-auto AsyncEngine::ParallelTasks(
-  FrameContext& context, const UnifiedSnapshot& snapshot) -> co::Co<>
+auto AsyncEngine::ParallelTasks(observer_ptr<FrameContext> context,
+  const UnifiedSnapshot& snapshot) -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kParallelTasks, tag);
+  context->SetCurrentPhase(PhaseId::kParallelTasks, tag);
 
   // parallel_results_.clear();
   // parallel_results_.reserve(parallel_specs_.size());
@@ -954,7 +968,7 @@ auto AsyncEngine::ParallelTasks(
 
   // // Engine core sets the current phase for parallel work
   // auto tag = internal::EngineTagFactory::Get();
-  // context.SetCurrentPhase(PhaseId::kParallelWork, tag);
+  // context->SetCurrentPhase(PhaseId::kParallelWork, tag);
 
   // // Create vector of coroutines following the test pattern
   // std::vector<co::Co<>> jobs;
@@ -1013,10 +1027,11 @@ auto AsyncEngine::ParallelTasks(
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::PhasePostParallel(FrameContext& context) -> co::Co<>
+auto AsyncEngine::PhasePostParallel(observer_ptr<FrameContext> context)
+  -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kPostParallel, tag);
+  context->SetCurrentPhase(PhaseId::kPostParallel, tag);
 
   LOG_F(2, "[F{}][A] PhasePostParallel (integrate Category B outputs)",
     frame_number_);
@@ -1052,14 +1067,14 @@ auto AsyncEngine::InitializeDetachedServices() -> void
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::UpdateFrameTiming(FrameContext& context) -> void
+auto AsyncEngine::UpdateFrameTiming(observer_ptr<FrameContext> context) -> void
 {
   // Now delegated to TimeManager at PhaseFrameStart
   if (!time_manager_) {
     return;
   }
   const auto& td = time_manager_->GetFrameTimingData();
-  ModuleTimingData module_timing = context.GetModuleTimingData();
+  ModuleTimingData module_timing = context->GetModuleTimingData();
   module_timing.game_delta_time = td.simulation_delta;
   module_timing.fixed_delta_time
     = time_manager_->GetSimulationClock().GetFixedTimestep();
@@ -1067,7 +1082,7 @@ auto AsyncEngine::UpdateFrameTiming(FrameContext& context) -> void
     = static_cast<float>(td.interpolation_alpha);
   module_timing.current_fps = static_cast<float>(td.current_fps);
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetModuleTimingData(module_timing, tag);
+  context->SetModuleTimingData(module_timing, tag);
 }
 
 // Clock accessors
