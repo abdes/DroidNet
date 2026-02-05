@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <string>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Import/ImportOptions.h>
 #include <Oxygen/Content/Import/LooseCookedLayout.h>
@@ -37,30 +38,41 @@ public:
   ContentSettingsService() = default;
   virtual ~ContentSettingsService() = default;
 
+  OXYGEN_MAKE_NON_COPYABLE(ContentSettingsService)
+  OXYGEN_MAKE_NON_MOVABLE(ContentSettingsService)
+
   // --- Explorer & Workflow ---
-  [[nodiscard]] virtual auto GetExplorerSettings() const -> ContentExplorerSettings;
-  virtual auto SetExplorerSettings(const ContentExplorerSettings& settings) -> void;
+  [[nodiscard]] virtual auto GetExplorerSettings() const
+    -> ContentExplorerSettings;
+  virtual auto SetExplorerSettings(const ContentExplorerSettings& settings)
+    -> void;
 
   // --- Import Profile ---
-  [[nodiscard]] virtual auto GetImportOptions() const -> content::import::ImportOptions;
-  virtual auto SetImportOptions(const content::import::ImportOptions& options) -> void;
+  [[nodiscard]] virtual auto GetImportOptions() const
+    -> content::import::ImportOptions;
+  virtual auto SetImportOptions(const content::import::ImportOptions& options)
+    -> void;
 
-  [[nodiscard]] virtual auto GetTextureTuning() const -> content::import::ImportOptions::TextureTuning;
-  virtual auto SetTextureTuning(const content::import::ImportOptions::TextureTuning& tuning) -> void;
+  [[nodiscard]] virtual auto GetTextureTuning() const
+    -> content::import::ImportOptions::TextureTuning;
+  virtual auto SetTextureTuning(
+    const content::import::ImportOptions::TextureTuning& tuning) -> void;
 
   // --- Layout ---
-  [[nodiscard]] virtual auto GetDefaultLayout() const -> content::import::LooseCookedLayout;
-  virtual auto SetDefaultLayout(const content::import::LooseCookedLayout& layout) -> void;
+  [[nodiscard]] virtual auto GetDefaultLayout() const
+    -> content::import::LooseCookedLayout;
+  virtual auto SetDefaultLayout(
+    const content::import::LooseCookedLayout& layout) -> void;
 
   // --- Paths ---
-  [[nodiscard]] virtual auto GetLastCookedOutputDirectory() const -> std::string;
+  [[nodiscard]] virtual auto GetLastCookedOutputDirectory() const
+    -> std::string;
   virtual auto SetLastCookedOutputDirectory(const std::string& path) -> void;
 
   //! Returns the current settings epoch for cache invalidation.
   [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t;
 
-protected:
-  [[nodiscard]] auto ResolveSettings() const noexcept -> observer_ptr<SettingsService>;
+private:
   mutable std::atomic<std::uint64_t> epoch_ { 0 };
 };
 

@@ -17,7 +17,7 @@
 #include "DemoShell/UI/StatsOverlayConfig.h"
 
 namespace oxygen::examples {
-class CameraLifecycleService;
+class CameraSettingsService;
 class UiSettingsService;
 } // namespace oxygen::examples
 
@@ -40,7 +40,7 @@ class UiSettingsVm {
 public:
   //! Creates a view model backed by the provided settings service.
   explicit UiSettingsVm(observer_ptr<UiSettingsService> service,
-    observer_ptr<CameraLifecycleService> camera_lifecycle = nullptr);
+    observer_ptr<CameraSettingsService> camera_settings = nullptr);
 
   //! Returns the cached axes visibility.
   [[nodiscard]] auto GetAxesVisible() -> bool;
@@ -86,7 +86,7 @@ private:
 
   mutable std::mutex mutex_ {};
   observer_ptr<UiSettingsService> service_;
-  observer_ptr<CameraLifecycleService> camera_lifecycle_;
+  observer_ptr<CameraSettingsService> camera_settings_;
   std::uint64_t epoch_ { 0 };
   bool axes_visible_ { true };
   StatsOverlayConfig stats_config_ {};

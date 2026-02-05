@@ -24,7 +24,6 @@ class Action;
 }
 
 namespace oxygen::examples {
-class CameraLifecycleService;
 class CameraSettingsService;
 } // namespace oxygen::examples
 
@@ -35,7 +34,8 @@ class CameraRigController;
 //! View model for camera control panel state.
 /*!
  Bridges the UI-facing camera panel with the underlying camera simulation
- (CameraRigController) and lifecycle management (CameraLifecycleService).
+ (CameraRigController) and settings/lifecycle management
+(CameraSettingsService).
 
 ### Key Features
 
@@ -51,7 +51,6 @@ public:
   using OrbitMode = OrbitMode;
 
   explicit CameraVm(observer_ptr<CameraSettingsService> service,
-    observer_ptr<CameraLifecycleService> camera_lifecycle,
     observer_ptr<CameraRigController> camera_rig);
 
   ~CameraVm() = default;
@@ -115,10 +114,30 @@ public:
   // --- Live Camera Data (Direct Pull) ---
 
   [[nodiscard]] auto HasActiveCamera() const -> bool;
-  [[nodiscard]] auto GetActiveCameraNode() const
-    -> std::optional<scene::SceneNode>;
   [[nodiscard]] auto GetCameraPosition() -> glm::vec3;
   [[nodiscard]] auto GetCameraRotation() -> glm::quat;
+
+  // --- Projection Settings (via active camera) ---
+
+  [[nodiscard]] auto HasPerspectiveCamera() const -> bool;
+  [[nodiscard]] auto HasOrthographicCamera() const -> bool;
+
+  [[nodiscard]] auto GetPerspectiveFovDegrees() const -> float;
+  auto SetPerspectiveFovDegrees(float fov_degrees) -> void;
+
+  [[nodiscard]] auto GetPerspectiveNearPlane() const -> float;
+  [[nodiscard]] auto GetPerspectiveFarPlane() const -> float;
+  auto SetPerspectiveNearPlane(float near_plane) -> void;
+  auto SetPerspectiveFarPlane(float far_plane) -> void;
+
+  [[nodiscard]] auto GetOrthoWidth() const -> float;
+  [[nodiscard]] auto GetOrthoHeight() const -> float;
+  [[nodiscard]] auto GetOrthoNearPlane() const -> float;
+  [[nodiscard]] auto GetOrthoFarPlane() const -> float;
+  auto SetOrthoWidth(float width) -> void;
+  auto SetOrthoHeight(float height) -> void;
+  auto SetOrthoNearPlane(float near_plane) -> void;
+  auto SetOrthoFarPlane(float far_plane) -> void;
 
   // --- Drone Path ---
 
@@ -156,7 +175,6 @@ private:
 
   mutable std::mutex mutex_ {};
   observer_ptr<CameraSettingsService> service_;
-  observer_ptr<CameraLifecycleService> camera_lifecycle_;
   observer_ptr<CameraRigController> camera_rig_;
 
   std::uint64_t epoch_ { 0 };

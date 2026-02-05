@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -40,11 +41,11 @@ MainModule::MainModule(
   pip_view_id_ = this->GetOrCreateViewId("PipView");
 }
 
-auto MainModule::OnAttached(
-  oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept -> bool
+auto MainModule::OnAttachedImpl(
+  oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
+  -> std::unique_ptr<DemoShell>
 {
   CHECK_F(static_cast<bool>(engine), "MultiView requires a valid engine");
-  CHECK_F(Base::OnAttached(engine), "MultiView base attach failed");
 
   // Initialize the pipeline if it hasn't been already.
   pipeline_ = std::make_unique<ForwardPipeline>(engine);
@@ -52,87 +53,40 @@ auto MainModule::OnAttached(
   // Boost exposure to compensate for lower light intensity
   pipeline_->SetExposureValue(2.5F);
 
-  // Initialize DemoShell with all panels disabled (non-interactive demo)
-  shell_ = std::make_unique<DemoShell>();
+  // Initialize DemoShell with camera controls enabled.
+  auto shell = std::make_unique<DemoShell>();
   DemoShellConfig shell_config;
   shell_config.engine = engine;
   shell_config.panel_config = DemoShellPanelConfig {
     .content_loader = false,
-    .camera_controls = false,
+    .camera_controls = true,
     .environment = false,
     .lighting = false,
     .rendering = false,
     .post_process = true,
   };
-  shell_config.enable_camera_rig = false; // Non-interactive demo
+  shell_config.enable_camera_rig = true;
   shell_config.get_active_pipeline
     = [this]() { return observer_ptr<RenderingPipeline> { pipeline_.get() }; };
 
-  CHECK_F(shell_->Initialize(shell_config),
+  CHECK_F(shell->Initialize(shell_config),
     "MultiView: DemoShell initialization failed");
-  LOG_F(INFO, "[MultiView] DemoShell initialized (all panels disabled)");
+  LOG_F(INFO, "[MultiView] DemoShell initialized (camera controls enabled)");
 
-  return true;
+  return shell;
 }
 
 auto MainModule::OnShutdown() noexcept -> void
 {
-  if (shell_) {
-    shell_->SetScene(std::unique_ptr<scene::Scene> {});
-    shell_.reset();
-  }
+  auto& shell = GetShell();
+  shell.SetScene(std::unique_ptr<scene::Scene> {});
   active_scene_ = {};
 
   scene_bootstrapper_.BindToScene(observer_ptr<scene::Scene> { nullptr });
 }
 
-auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
-{
-  CHECK_NOTNULL_F(app_window_, "AppWindow must exist in MultiView");
-  CHECK_NOTNULL_F(shell_, "DemoShell must exist in MultiView");
-
-  // CRITICAL: Ensure scene is created and set on context
-  if (!active_scene_.IsValid()) {
-    auto scene = std::make_unique<scene::Scene>("MultiViewScene");
-    active_scene_ = shell_->SetScene(std::move(scene));
-    scene_bootstrapper_.BindToScene(shell_->TryGetScene());
-
-    // Ensure cameras exist
-    if (auto s = shell_->TryGetScene()) {
-      main_camera_node_ = s->CreateNode("MainCamera");
-      main_camera_node_.AttachCamera(
-        std::make_unique<scene::PerspectiveCamera>());
-      shell_->SetActiveCamera(main_camera_node_);
-
-      pip_camera_node_ = s->CreateNode("PipCamera");
-      pip_camera_node_.AttachCamera(
-        std::make_unique<scene::PerspectiveCamera>());
-
-      UpdateCameras(app_window_->GetWindow()->Size());
-    }
-  }
-
-  const auto scene_ptr = shell_->TryGetScene();
-  CHECK_F(static_cast<bool>(scene_ptr), "Scene must be available");
-  context.SetScene(oxygen::observer_ptr { scene_ptr.get() });
-
-  // Ensure content exists
-  (void)scene_bootstrapper_.EnsureSceneWithContent();
-
-  // Ensure drone is configured once the rig is available
-  const auto rig = shell_->GetCameraRig();
-  if (rig != last_camera_rig_) {
-    last_camera_rig_ = rig;
-  }
-}
-
 auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
 {
-  auto& camera_lifecycle = shell_->GetCameraLifecycle();
-  camera_lifecycle.EnsureViewport(extent);
-  camera_lifecycle.ApplyPendingSync();
-  camera_lifecycle.ApplyPendingReset();
-
   // Update Main camera (match legacy)
   if (main_camera_node_.IsAlive()) {
     const auto cam_opt
@@ -167,7 +121,7 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
       pip_camera_node_.GetTransform().SetLocalPosition(pip_position);
 
       constexpr glm::vec3 target = glm::vec3(0.0F, 0.0F, -2.0F);
-      constexpr glm::vec3 world_up = glm::vec3(0.0F, 1.0F, 0.0F);
+      constexpr glm::vec3 world_up = space::move::Up;
       const glm::mat4 view_mat = glm::lookAt(pip_position, target, world_up);
       const glm::quat pip_rot = glm::quat_cast(glm::inverse(view_mat));
       pip_camera_node_.GetTransform().SetLocalRotation(pip_rot);
@@ -192,35 +146,79 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
   }
 }
 
-auto MainModule::OnFrameStart(oxygen::engine::FrameContext& context) -> void
+auto MainModule::OnFrameStart(
+  observer_ptr<oxygen::engine::FrameContext> context) -> void
 {
+  DCHECK_NOTNULL_F(context);
+  auto& shell = GetShell();
+  shell.OnFrameStart(*context);
   Base::OnFrameStart(context);
+
+  CHECK_NOTNULL_F(app_window_, "AppWindow must exist in MultiView");
+  CHECK_NOTNULL_F(&shell, "DemoShell must exist in MultiView");
+
+  // CRITICAL: Ensure scene is created and set on context
+  if (!active_scene_.IsValid()) {
+    auto scene = std::make_unique<scene::Scene>("MultiViewScene");
+    active_scene_ = shell.SetScene(std::move(scene));
+    scene_bootstrapper_.BindToScene(shell.TryGetScene());
+
+    // Ensure cameras exist
+    if (auto s = shell.TryGetScene()) {
+      main_camera_node_ = s->CreateNode("MainCamera");
+      main_camera_node_.AttachCamera(
+        std::make_unique<scene::PerspectiveCamera>());
+
+      pip_camera_node_ = s->CreateNode("PipCamera");
+      pip_camera_node_.AttachCamera(
+        std::make_unique<scene::PerspectiveCamera>());
+
+      UpdateCameras(app_window_->GetWindow()->Size());
+    }
+  }
+
+  const auto scene_ptr = shell.TryGetScene();
+  CHECK_F(static_cast<bool>(scene_ptr), "Scene must be available");
+  context->SetScene(oxygen::observer_ptr { scene_ptr.get() });
+
+  // Ensure content exists
+  (void)scene_bootstrapper_.EnsureSceneWithContent();
+
+  // Ensure drone is configured once the rig is available
+  const auto rig = shell.GetCameraRig();
+  if (rig != last_camera_rig_) {
+    last_camera_rig_ = rig;
+  }
 }
 
-auto MainModule::OnFrameEnd(engine::FrameContext& context) -> void
+auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
 {
   Base::OnFrameEnd(context);
 }
 
-auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> oxygen::co::Co<>
+auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
+  -> oxygen::co::Co<>
 {
   if (!app_window_ || !app_window_->GetWindow()) {
     co_return;
   }
 
-  CHECK_NOTNULL_F(shell_, "DemoShell required for GUI update");
-  shell_->Draw(context);
+  auto& shell = GetShell();
+  CHECK_NOTNULL_F(&shell, "DemoShell required for GUI update");
+  shell.Draw(context);
 
   co_return;
 }
 
-auto MainModule::OnGameplay(engine::FrameContext& context) -> oxygen::co::Co<>
+auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
+  -> oxygen::co::Co<>
 {
-  shell_->Update(context.GetGameDeltaTime());
+  auto& shell = GetShell();
+  shell.Update(context->GetGameDeltaTime());
   co_return;
 }
 
-auto MainModule::OnSceneMutation(engine::FrameContext& context)
+auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> oxygen::co::Co<>
 {
   CHECK_NOTNULL_F(app_window_, "AppWindow required for scene mutation");
@@ -235,13 +233,12 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context)
     last_viewport_ = extent;
   }
 
-  shell_->SyncPanels();
-
   co_await Base::OnSceneMutation(context);
   co_return;
 }
 
-auto MainModule::OnPreRender(engine::FrameContext& context) -> oxygen::co::Co<>
+auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
+  -> oxygen::co::Co<>
 {
   auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
   if (imgui_module_ref) {
@@ -255,14 +252,11 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> oxygen::co::Co<>
   co_return;
 }
 
-auto MainModule::UpdateComposition(engine::FrameContext& /*context*/,
+auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
   std::vector<CompositionView>& views) -> void
 {
-  if (!shell_) {
-    return;
-  }
-  auto& active_camera = shell_->GetCameraLifecycle().GetActiveCamera();
-  if (!active_camera.IsAlive()) {
+  auto& shell = GetShell();
+  if (!main_camera_node_.IsAlive()) {
     return;
   }
 
@@ -281,7 +275,8 @@ auto MainModule::UpdateComposition(engine::FrameContext& /*context*/,
     .max_depth = 1.0F,
   };
   auto main_comp
-    = CompositionView::ForScene(main_view_id_, main_view, active_camera);
+    = CompositionView::ForScene(main_view_id_, main_view, main_camera_node_);
+  shell.OnMainViewReady(context, main_comp);
   const graphics::Color kMainClearColor { 0.1F, 0.2F, 0.38F, 1.0F };
   main_comp.clear_color = kMainClearColor;
   views.push_back(std::move(main_comp));
@@ -332,12 +327,6 @@ auto MainModule::UpdateComposition(engine::FrameContext& /*context*/,
   const auto imgui_view_id = this->GetOrCreateViewId("ImGuiView");
   views.push_back(CompositionView::ForImGui(
     imgui_view_id, main_view, [](graphics::CommandRecorder&) { }));
-}
-
-auto MainModule::OnCompositing(engine::FrameContext& context)
-  -> oxygen::co::Co<>
-{
-  co_await Base::OnCompositing(context);
 }
 
 auto MainModule::ClearBackbufferReferences() -> void

@@ -71,11 +71,6 @@ public:
   //! Returns the current settings epoch.
   [[nodiscard]] virtual auto GetEpoch() const noexcept -> std::uint64_t;
 
-protected:
-  //! Returns the settings service used for persistence.
-  [[nodiscard]] virtual auto ResolveSettings() const noexcept
-    -> observer_ptr<SettingsService>;
-
 private:
   auto SetBoolSetting(std::string_view key, bool value, bool default_value)
     -> void;

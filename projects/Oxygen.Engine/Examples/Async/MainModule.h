@@ -101,11 +101,10 @@ public:
     -> platform::window::Properties override;
 
   //! Example-specific setup: scene, input, and animation.
-  auto HandleOnFrameStart(engine::FrameContext& context) -> void override;
 
   //! Module attachment (initialization).
-  auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
-    -> bool override;
+  auto OnAttachedImpl(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
+    -> std::unique_ptr<DemoShell> override;
 
   //! Shutdown cleanup.
   void OnShutdown() noexcept override;
@@ -117,13 +116,17 @@ protected:
     std::vector<CompositionView>& views) -> void override;
 
   //! Execute phase-specific work.
-  auto OnFrameStart(engine::FrameContext& context) -> void override;
-  auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
-  auto OnGameplay(engine::FrameContext& context) -> co::Co<> override;
-  auto OnPreRender(engine::FrameContext& context) -> co::Co<> override;
-  auto OnCompositing(engine::FrameContext& context) -> co::Co<> override;
-  auto OnFrameEnd(engine::FrameContext& context) -> void override;
-  auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
+  auto OnFrameStart(observer_ptr<engine::FrameContext> context)
+    -> void override;
+  auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnGameplay(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnPreRender(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void override;
+  auto OnGuiUpdate(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
 
 private:
   friend class AsyncDemoVm;
@@ -201,7 +204,6 @@ private:
   // Token for a registered platform pre-destroy callback; zero means none.
   size_t platform_window_destroy_handler_token_ { 0 };
 
-  std::unique_ptr<DemoShell> shell_;
   std::shared_ptr<AsyncDemoSettingsService> settings_service_;
   std::shared_ptr<AsyncDemoVm> vm_;
   std::shared_ptr<AsyncDemoPanel> async_panel_;

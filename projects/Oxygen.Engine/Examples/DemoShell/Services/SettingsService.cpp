@@ -31,9 +31,17 @@ namespace {
     return directory / "demo_settings.json";
   }
 
-} // namespace
+  struct DefaultState {
+    std::unique_ptr<SettingsService> owned { nullptr };
+  };
 
-static observer_ptr<SettingsService> g_default_settings { nullptr };
+  auto GetDefaultState() -> auto&
+  {
+    static DefaultState state;
+    return state;
+  }
+
+} // namespace
 
 SettingsService::SettingsService(std::filesystem::path storage_path)
   : storage_path_(std::move(storage_path))
@@ -67,18 +75,14 @@ auto SettingsService::CreateForDemo(std::source_location location)
     MakeStoragePathFromLocation(location));
 }
 
-auto SettingsService::SetDefault(observer_ptr<SettingsService> service) -> void
+auto SettingsService::ResolveDefault(std::source_location location)
+  -> observer_ptr<SettingsService>
 {
-  CHECK_NOTNULL_F(
-    service.get(), "SettingsService::SetDefault requires a valid service");
-  CHECK_F(
-    service->loaded_, "SettingsService::SetDefault requires loaded settings");
-  g_default_settings = service;
-}
-
-auto SettingsService::Default() -> observer_ptr<SettingsService>
-{
-  return g_default_settings;
+  auto& state = GetDefaultState();
+  if (!state.owned) {
+    state.owned = CreateForDemo(location);
+  }
+  return observer_ptr { state.owned.get() };
 }
 
 auto SettingsService::Load() -> void

@@ -16,6 +16,7 @@
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Constants.h>
 
 #include "DemoShell/UI/AxesWidget.h"
 #include "DemoShell/UI/UiSettingsVm.h"
@@ -114,31 +115,29 @@ void AxesWidget::Draw(const glm::mat4& view_matrix)
   // Define the three world axes
   std::array<AxisInfo, 3> axes = { {
     {
-      .direction = { 1.0F, 0.0F, 0.0F },
+      .direction = space::move::Right,
       .screen_end
-      = ProjectAxis({ 1.0F, 0.0F, 0.0F }, view_matrix, center, config),
+      = ProjectAxis(space::move::Right, view_matrix, center, config),
       .color = kAxisColorX,
       .color_dim = kAxisColorXDim,
       .label = "X",
-      .depth = (rotation * glm::vec3(1.0F, 0.0F, 0.0F)).z,
+      .depth = (rotation * space::move::Right).z,
     },
     {
-      .direction = { 0.0F, 1.0F, 0.0F },
-      .screen_end
-      = ProjectAxis({ 0.0F, 1.0F, 0.0F }, view_matrix, center, config),
+      .direction = space::move::Back,
+      .screen_end = ProjectAxis(space::move::Back, view_matrix, center, config),
       .color = kAxisColorY,
       .color_dim = kAxisColorYDim,
       .label = "Y",
-      .depth = (rotation * glm::vec3(0.0F, 1.0F, 0.0F)).z,
+      .depth = (rotation * space::move::Back).z,
     },
     {
-      .direction = { 0.0F, 0.0F, 1.0F },
-      .screen_end
-      = ProjectAxis({ 0.0F, 0.0F, 1.0F }, view_matrix, center, config),
+      .direction = space::move::Up,
+      .screen_end = ProjectAxis(space::move::Up, view_matrix, center, config),
       .color = kAxisColorZ,
       .color_dim = kAxisColorZDim,
       .label = "Z",
-      .depth = (rotation * glm::vec3(0.0F, 0.0F, 1.0F)).z,
+      .depth = (rotation * space::move::Up).z,
     },
   } };
 
@@ -224,10 +223,8 @@ void AxesWidget::Draw(observer_ptr<scene::SceneNode> camera)
     cam_rot = *lr;
   }
 
-  constexpr glm::vec3 kViewForward { 0.0F, 0.0F, -1.0F };
-  constexpr glm::vec3 kViewUp { 0.0F, 1.0F, 0.0F };
-  const glm::vec3 forward = cam_rot * kViewForward;
-  const glm::vec3 up = cam_rot * kViewUp;
+  const glm::vec3 forward = cam_rot * space::look::Forward;
+  const glm::vec3 up = cam_rot * space::look::Up;
   const glm::mat4 view_matrix = glm::lookAt(cam_pos, cam_pos + forward, up);
 
   Draw(view_matrix);

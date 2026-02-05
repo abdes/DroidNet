@@ -56,7 +56,7 @@ struct CompositionView {
   };
 
   //! Human-readable identifier for diagnostics and telemetry.
-  std::string_view name {};
+  std::string_view name;
 
   //! Unique identifier for the view session. Used by the pipeline to
   //! track and reuse persistent GPU resources (textures, framebuffers)
@@ -64,7 +64,7 @@ struct CompositionView {
   ViewId id { kInvalidViewId };
 
   //! Core view configuration (Viewport, Scissors, Jitter, etc.).
-  View view {};
+  View view;
 
   //! Composition stacking order.
   //! - Lower values are rendered further back (closer to the background).
@@ -85,7 +85,7 @@ struct CompositionView {
 
   //! Optional 3D source. If set, the RenderingPipeline executes the full
   //! PBR scene rendering sequence for this view.
-  std::optional<scene::SceneNode> camera {};
+  std::optional<scene::SceneNode> camera;
 
   //! The color value applied during the GPU clear operation.
   graphics::Color clear_color { 0.0F, 0.0F, 0.0F, 1.0F };
@@ -101,7 +101,7 @@ struct CompositionView {
 
   //! Callback for recording view-specific SDR commands (HUD, Gizmos, ImGui).
   //! Executed in the correct hardware phase (Post-Tonemap for HDR views).
-  std::function<void(graphics::CommandRecorder&)> on_overlay {};
+  std::function<void(graphics::CommandRecorder&)> on_overlay;
 
   /*
     FUTURE EXTENSIONS:
@@ -127,6 +127,7 @@ struct CompositionView {
       .z_order = kZOrderScene,
       .camera = std::move(camera),
       .enable_hdr = true,
+      .on_overlay = {},
     };
   }
 
@@ -145,6 +146,7 @@ struct CompositionView {
       .z_order = z_order,
       .camera = std::move(camera),
       .enable_hdr = true,
+      .on_overlay = {},
     };
   }
 
@@ -158,6 +160,7 @@ struct CompositionView {
       .id = id,
       .view = view,
       .z_order = kZOrderGameUI,
+      .camera = {},
       .clear_color = { 0.0F, 0.0F, 0.0F, 0.0F },
       .enable_hdr = false,
       .on_overlay = std::move(on_overlay),
@@ -178,6 +181,7 @@ struct CompositionView {
       .id = id,
       .view = view,
       .z_order = z_order,
+      .camera = {},
       .clear_color = { 0.0F, 0.0F, 0.0F, 0.0F },
       .enable_hdr = false,
       .on_overlay = std::move(on_overlay),
@@ -194,6 +198,7 @@ struct CompositionView {
       .id = id,
       .view = view,
       .z_order = kZOrderTools,
+      .camera = {},
       .clear_color = { 0.0F, 0.0F, 0.0F, 0.0F },
       .enable_hdr = false,
       .on_overlay = std::move(on_overlay),
@@ -211,6 +216,7 @@ struct CompositionView {
       .view = view,
       .z_order = kZOrderDebugOverlay,
       .should_clear = false,
+      .camera = {},
       .enable_hdr = false,
       .on_overlay = std::move(on_overlay),
     };

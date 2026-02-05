@@ -71,10 +71,6 @@ public:
 
   [[nodiscard]] virtual auto GetEpoch() const noexcept -> std::uint64_t;
 
-protected:
-  [[nodiscard]] virtual auto ResolveSettings() const noexcept
-    -> observer_ptr<SettingsService>;
-
 private:
   static constexpr const char* kSceneOpenKey = "async_demo.scene_open";
   static constexpr const char* kSpotlightOpenKey = "async_demo.spotlight_open";

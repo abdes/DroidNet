@@ -14,13 +14,18 @@
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Environment/Sun.h>
+#include <Oxygen/Scene/Environment/VolumetricClouds.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 
@@ -106,6 +111,131 @@ namespace {
     return rotation;
   }
 
+  template <typename Record>
+  auto IsEnabled(const std::optional<Record>& record) -> bool
+  {
+    return record.has_value() && record->enabled != 0U;
+  }
+
+  auto HydrateSkyAtmosphere(scene::environment::SkyAtmosphere& target,
+    const data::pak::SkyAtmosphereEnvironmentRecord& source) -> void
+  {
+    target.SetPlanetRadiusMeters(source.planet_radius_m);
+    target.SetAtmosphereHeightMeters(source.atmosphere_height_m);
+    target.SetGroundAlbedoRgb(Vec3 { source.ground_albedo_rgb[0],
+      source.ground_albedo_rgb[1], source.ground_albedo_rgb[2] });
+    target.SetRayleighScatteringRgb(Vec3 { source.rayleigh_scattering_rgb[0],
+      source.rayleigh_scattering_rgb[1], source.rayleigh_scattering_rgb[2] });
+    target.SetRayleighScaleHeightMeters(source.rayleigh_scale_height_m);
+    target.SetMieScatteringRgb(Vec3 { source.mie_scattering_rgb[0],
+      source.mie_scattering_rgb[1], source.mie_scattering_rgb[2] });
+    target.SetMieScaleHeightMeters(source.mie_scale_height_m);
+    target.SetMieAnisotropy(source.mie_g);
+    target.SetAbsorptionRgb(Vec3 { source.absorption_rgb[0],
+      source.absorption_rgb[1], source.absorption_rgb[2] });
+    target.SetAbsorptionScaleHeightMeters(source.absorption_scale_height_m);
+    target.SetMultiScatteringFactor(source.multi_scattering_factor);
+    target.SetSunDiskEnabled(source.sun_disk_enabled != 0U);
+    target.SetSunDiskAngularRadiusRadians(
+      source.sun_disk_angular_radius_radians);
+    target.SetAerialPerspectiveDistanceScale(
+      source.aerial_perspective_distance_scale);
+  }
+
+  auto HydrateSkySphere(scene::environment::SkySphere& target,
+    const data::pak::SkySphereEnvironmentRecord& source) -> void
+  {
+    if (source.source
+      == static_cast<std::uint32_t>(
+        scene::environment::SkySphereSource::kSolidColor)) {
+      target.SetSource(scene::environment::SkySphereSource::kSolidColor);
+    } else {
+      LOG_F(WARNING,
+        "EnvironmentSettingsService: SkySphere cubemap source requested, "
+        "but scene-authored cubemap AssetKey resolution is not implemented "
+        "in this example. Keeping solid color; use the Environment panel "
+        "Skybox Loader to bind a cubemap at runtime.");
+      target.SetSource(scene::environment::SkySphereSource::kSolidColor);
+    }
+
+    target.SetSolidColorRgb(Vec3 { source.solid_color_rgb[0],
+      source.solid_color_rgb[1], source.solid_color_rgb[2] });
+    target.SetIntensity(source.intensity);
+    target.SetRotationRadians(source.rotation_radians);
+    target.SetTintRgb(
+      Vec3 { source.tint_rgb[0], source.tint_rgb[1], source.tint_rgb[2] });
+  }
+
+  auto HydrateFog(scene::environment::Fog& target,
+    const data::pak::FogEnvironmentRecord& source) -> void
+  {
+    target.SetModel(static_cast<scene::environment::FogModel>(source.model));
+    target.SetDensity(source.density);
+    target.SetHeightFalloff(source.height_falloff);
+    target.SetHeightOffsetMeters(source.height_offset_m);
+    target.SetStartDistanceMeters(source.start_distance_m);
+    target.SetMaxOpacity(source.max_opacity);
+    target.SetAlbedoRgb(Vec3 {
+      source.albedo_rgb[0], source.albedo_rgb[1], source.albedo_rgb[2] });
+    target.SetAnisotropy(source.anisotropy_g);
+    target.SetScatteringIntensity(source.scattering_intensity);
+  }
+
+  auto HydrateSkyLight(scene::environment::SkyLight& target,
+    const data::pak::SkyLightEnvironmentRecord& source) -> void
+  {
+    target.SetSource(
+      static_cast<scene::environment::SkyLightSource>(source.source));
+    if (target.GetSource()
+      == scene::environment::SkyLightSource::kSpecifiedCubemap) {
+      LOG_F(INFO,
+        "EnvironmentSettingsService: SkyLight specifies a cubemap AssetKey, "
+        "but this example does not yet resolve it to a ResourceKey. Use "
+        "the Environment panel Skybox Loader to bind a cubemap at runtime.");
+    }
+    target.SetIntensity(source.intensity);
+    target.SetTintRgb(
+      Vec3 { source.tint_rgb[0], source.tint_rgb[1], source.tint_rgb[2] });
+    target.SetDiffuseIntensity(source.diffuse_intensity);
+    target.SetSpecularIntensity(source.specular_intensity);
+  }
+
+  auto HydrateVolumetricClouds(scene::environment::VolumetricClouds& target,
+    const data::pak::VolumetricCloudsEnvironmentRecord& source) -> void
+  {
+    target.SetBaseAltitudeMeters(source.base_altitude_m);
+    target.SetLayerThicknessMeters(source.layer_thickness_m);
+    target.SetCoverage(source.coverage);
+    target.SetDensity(source.density);
+    target.SetAlbedoRgb(Vec3 {
+      source.albedo_rgb[0], source.albedo_rgb[1], source.albedo_rgb[2] });
+    target.SetExtinctionScale(source.extinction_scale);
+    target.SetPhaseAnisotropy(source.phase_g);
+    target.SetWindDirectionWs(Vec3 {
+      source.wind_dir_ws[0], source.wind_dir_ws[1], source.wind_dir_ws[2] });
+    target.SetWindSpeedMps(source.wind_speed_mps);
+    target.SetShadowStrength(source.shadow_strength);
+  }
+
+  auto HydratePostProcessVolume(scene::environment::PostProcessVolume& target,
+    const data::pak::PostProcessVolumeEnvironmentRecord& source) -> void
+  {
+    target.SetToneMapper(
+      static_cast<scene::environment::ToneMapper>(source.tone_mapper));
+    target.SetExposureMode(
+      static_cast<scene::environment::ExposureMode>(source.exposure_mode));
+    target.SetExposureCompensationEv(source.exposure_compensation_ev);
+    target.SetAutoExposureRangeEv(
+      source.auto_exposure_min_ev, source.auto_exposure_max_ev);
+    target.SetAutoExposureAdaptationSpeeds(
+      source.auto_exposure_speed_up, source.auto_exposure_speed_down);
+    target.SetBloomIntensity(source.bloom_intensity);
+    target.SetBloomThreshold(source.bloom_threshold);
+    target.SetSaturation(source.saturation);
+    target.SetContrast(source.contrast);
+    target.SetVignetteIntensity(source.vignette_intensity);
+  }
+
   constexpr std::string_view kSkyAtmoEnabledKey = "env.atmo.enabled";
   constexpr std::string_view kPlanetRadiusKey = "env.atmo.planet_radius_km";
   constexpr std::string_view kAtmosphereHeightKey
@@ -167,6 +297,88 @@ namespace {
 
 } // namespace
 
+/*!
+ Hydrates a runtime environment from a scene asset.
+
+ @param target Mutable runtime environment to populate.
+ @param source_asset Asset containing environment records.
+
+### Performance Characteristics
+
+- Time Complexity: $O(1)$ for fixed system set.
+- Memory: $O(1)$ additional allocations.
+- Optimization: Avoids system creation when records are absent.
+
+### Usage Examples
+
+ ```cpp
+ auto env = std::make_unique<scene::SceneEnvironment>();
+ EnvironmentSettingsService::HydrateEnvironment(*env, asset);
+ ```
+
+ @note SkyAtmosphere and SkySphere are treated as mutually exclusive.
+*/
+auto EnvironmentSettingsService::HydrateEnvironment(
+  scene::SceneEnvironment& target, const data::SceneAsset& source_asset) -> void
+{
+  const auto sky_atmo_record = source_asset.TryGetSkyAtmosphereEnvironment();
+  const auto sky_sphere_record = source_asset.TryGetSkySphereEnvironment();
+
+  const bool sky_atmo_enabled = IsEnabled(sky_atmo_record);
+  const bool sky_sphere_enabled = IsEnabled(sky_sphere_record);
+
+  if (sky_atmo_enabled && sky_sphere_enabled) {
+    LOG_F(WARNING,
+      "EnvironmentSettingsService: Both SkyAtmosphere and SkySphere are "
+      "enabled in the scene. They are mutually exclusive; SkyAtmosphere "
+      "will be used.");
+  }
+
+  if (sky_atmo_enabled) {
+    auto& atmo = target.AddSystem<scene::environment::SkyAtmosphere>();
+    HydrateSkyAtmosphere(atmo, *sky_atmo_record);
+    LOG_F(
+      INFO, "EnvironmentSettingsService: Applied SkyAtmosphere environment");
+  } else if (sky_sphere_enabled) {
+    auto& sky_sphere = target.AddSystem<scene::environment::SkySphere>();
+    HydrateSkySphere(sky_sphere, *sky_sphere_record);
+    LOG_F(INFO,
+      "EnvironmentSettingsService: Applied SkySphere environment (solid "
+      "color source)");
+  }
+
+  if (const auto fog_record = source_asset.TryGetFogEnvironment();
+    IsEnabled(fog_record)) {
+    auto& fog = target.AddSystem<scene::environment::Fog>();
+    HydrateFog(fog, *fog_record);
+    LOG_F(INFO, "EnvironmentSettingsService: Applied Fog environment");
+  }
+
+  if (const auto sky_light_record = source_asset.TryGetSkyLightEnvironment();
+    IsEnabled(sky_light_record)) {
+    auto& sky_light = target.AddSystem<scene::environment::SkyLight>();
+    HydrateSkyLight(sky_light, *sky_light_record);
+    LOG_F(INFO, "EnvironmentSettingsService: Applied SkyLight environment");
+  }
+
+  if (const auto clouds_record
+    = source_asset.TryGetVolumetricCloudsEnvironment();
+    IsEnabled(clouds_record)) {
+    auto& clouds = target.AddSystem<scene::environment::VolumetricClouds>();
+    HydrateVolumetricClouds(clouds, *clouds_record);
+    LOG_F(
+      INFO, "EnvironmentSettingsService: Applied VolumetricClouds environment");
+  }
+
+  if (const auto pp_record = source_asset.TryGetPostProcessVolumeEnvironment();
+    IsEnabled(pp_record)) {
+    auto& pp = target.AddSystem<scene::environment::PostProcessVolume>();
+    HydratePostProcessVolume(pp, *pp_record);
+    LOG_F(INFO,
+      "EnvironmentSettingsService: Applied PostProcessVolume environment");
+  }
+}
+
 auto EnvironmentSettingsService::SetRuntimeConfig(
   const EnvironmentRuntimeConfig& config) -> void
 {
@@ -188,6 +400,38 @@ auto EnvironmentSettingsService::SetRuntimeConfig(
       SyncFromSceneIfNeeded();
     }
   }
+}
+
+auto EnvironmentSettingsService::GetEpoch() const noexcept -> std::uint64_t
+{
+  return epoch_.load(std::memory_order_acquire);
+}
+
+auto EnvironmentSettingsService::OnFrameStart(
+  const engine::FrameContext& /*context*/) -> void
+{
+  SyncFromSceneIfNeeded();
+  ApplyPendingChanges();
+}
+
+auto EnvironmentSettingsService::OnSceneActivated(scene::Scene& /*scene*/)
+  -> void
+{
+  config_.scene = nullptr;
+  config_.skybox_service = nullptr;
+  needs_sync_ = true;
+  apply_saved_sun_on_next_sync_ = true;
+  sun_light_available_ = false;
+  sun_light_node_ = {};
+  synthetic_sun_light_node_ = {};
+  synthetic_sun_light_created_ = false;
+  epoch_++;
+}
+
+auto EnvironmentSettingsService::OnMainViewReady(
+  const engine::FrameContext& /*context*/, const CompositionView& /*view*/)
+  -> void
+{
 }
 
 auto EnvironmentSettingsService::HasScene() const noexcept -> bool
@@ -939,20 +1183,20 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
 
   NormalizeSkySystems();
 
-  auto* env = config_.scene->GetEnvironment().get();
+  auto env = config_.scene->GetEnvironment();
   if (!env) {
     config_.scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
-    env = config_.scene->GetEnvironment().get();
+    env = config_.scene->GetEnvironment();
   }
 
-  auto* sun = env->TryGetSystem<scene::environment::Sun>().get();
-  if (sun_present_ && sun_enabled_ && !sun) {
-    sun = &env->AddSystem<scene::environment::Sun>();
+  auto sun = env->TryGetSystem<scene::environment::Sun>();
+  if (sun_present_ && sun_enabled_ && (sun == nullptr)) {
+    sun = observer_ptr { &env->AddSystem<scene::environment::Sun>() };
   }
   if (sun) {
     sun->SetEnabled(sun_enabled_);
   }
-  if (sun && !sun_enabled_) {
+  if ((sun) && !sun_enabled_) {
     UpdateSunLightCandidate();
     if (sun_light_available_) {
       if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
@@ -972,7 +1216,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     sun->ClearLightReference();
   }
 
-  if (sun_enabled_ && sun) {
+  if (sun_enabled_ && (sun != nullptr)) {
     const auto sun_source = (sun_source_ == 0)
       ? scene::environment::SunSource::kFromScene
       : scene::environment::SunSource::kSynthetic;
@@ -1053,9 +1297,10 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     sun->ClearLightReference();
   }
 
-  auto* atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>().get();
+  auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>();
   if (sky_atmo_enabled_ && !atmo) {
-    atmo = &env->AddSystem<scene::environment::SkyAtmosphere>();
+    atmo
+      = observer_ptr { &env->AddSystem<scene::environment::SkyAtmosphere>() };
   }
   if (atmo) {
     atmo->SetEnabled(sky_atmo_enabled_);
@@ -1078,9 +1323,9 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     }
   }
 
-  auto* sky = env->TryGetSystem<scene::environment::SkySphere>().get();
+  auto sky = env->TryGetSystem<scene::environment::SkySphere>();
   if (sky_sphere_enabled_ && !sky) {
-    sky = &env->AddSystem<scene::environment::SkySphere>();
+    sky = observer_ptr { &env->AddSystem<scene::environment::SkySphere>() };
   }
   if (sky) {
     sky->SetEnabled(sky_sphere_enabled_);
@@ -1093,9 +1338,9 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     sky->SetRotationRadians(sky_sphere_rotation_deg_ * kDegToRad);
   }
 
-  auto* light = env->TryGetSystem<scene::environment::SkyLight>().get();
+  auto light = env->TryGetSystem<scene::environment::SkyLight>();
   if (sky_light_enabled_ && !light) {
-    light = &env->AddSystem<scene::environment::SkyLight>();
+    light = observer_ptr { &env->AddSystem<scene::environment::SkyLight>() };
   }
   if (light) {
     light->SetEnabled(sky_light_enabled_);
@@ -1127,7 +1372,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     return;
   }
 
-  auto* env = config_.scene->GetEnvironment().get();
+  auto env = config_.scene->GetEnvironment();
   if (!env) {
     if (apply_saved_sun_on_next_sync_) {
       ApplySavedSunSourcePreference();
@@ -1136,8 +1381,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     return;
   }
 
-  if (auto* atmo
-    = env->TryGetSystem<scene::environment::SkyAtmosphere>().get()) {
+  if (auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>()) {
     sky_atmo_enabled_ = atmo->IsEnabled();
     planet_radius_km_ = atmo->GetPlanetRadiusMeters() * kMetersToKm;
     atmosphere_height_km_ = atmo->GetAtmosphereHeightMeters() * kMetersToKm;
@@ -1153,7 +1397,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     aerial_scattering_strength_ = atmo->GetAerialScatteringStrength();
   }
 
-  if (auto* sky = env->TryGetSystem<scene::environment::SkySphere>().get()) {
+  if (auto sky = env->TryGetSystem<scene::environment::SkySphere>()) {
     sky_sphere_enabled_ = sky->IsEnabled();
     sky_sphere_source_ = static_cast<int>(sky->GetSource());
     sky_sphere_solid_color_ = sky->GetSolidColorRgb();
@@ -1161,7 +1405,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     sky_sphere_rotation_deg_ = sky->GetRotationRadians() * kRadToDeg;
   }
 
-  if (auto* light = env->TryGetSystem<scene::environment::SkyLight>().get()) {
+  if (auto light = env->TryGetSystem<scene::environment::SkyLight>()) {
     sky_light_enabled_ = light->IsEnabled();
     sky_light_source_ = static_cast<int>(light->GetSource());
     sky_light_tint_ = light->GetTintRgb();
@@ -1170,7 +1414,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     sky_light_specular_ = light->GetSpecularIntensity();
   }
 
-  if (auto* sun = env->TryGetSystem<scene::environment::Sun>().get()) {
+  if (auto sun = env->TryGetSystem<scene::environment::Sun>()) {
     sun_present_ = true;
     sun_enabled_ = sun->IsEnabled();
     const bool from_scene
@@ -1206,6 +1450,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
   }
 
   NormalizeSkySystems();
+  epoch_++;
 }
 
 auto EnvironmentSettingsService::NormalizeSkySystems() -> void
@@ -1262,10 +1507,8 @@ auto EnvironmentSettingsService::SyncDebugFlagsFromRenderer() -> void
 
 auto EnvironmentSettingsService::LoadSettings() -> void
 {
-  const auto settings = ResolveSettings();
-  if (!settings) {
-    return;
-  }
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
 
   auto load_bool = [&](std::string_view key, bool& out) -> bool {
     if (const auto value = settings->GetBool(key)) {
@@ -1387,10 +1630,8 @@ auto EnvironmentSettingsService::LoadSettings() -> void
 
 auto EnvironmentSettingsService::SaveSettings() const -> void
 {
-  const auto settings = ResolveSettings();
-  if (!settings) {
-    return;
-  }
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
 
   auto save_bool
     = [&](std::string_view key, bool value) { settings->SetBool(key, value); };
@@ -1467,6 +1708,7 @@ auto EnvironmentSettingsService::MarkDirty() -> void
 {
   pending_changes_ = true;
   SaveSettings();
+  epoch_++;
 }
 
 auto EnvironmentSettingsService::ApplySavedSunSourcePreference() -> void
@@ -1638,12 +1880,6 @@ auto EnvironmentSettingsService::GetAtmosphereFlags() const -> uint32_t
     flags |= static_cast<uint32_t>(AtmosphereDebugFlags::kForceAnalytic);
   }
   return flags;
-}
-
-auto EnvironmentSettingsService::ResolveSettings() const noexcept
-  -> observer_ptr<SettingsService>
-{
-  return SettingsService::Default();
 }
 
 } // namespace oxygen::examples

@@ -14,6 +14,7 @@
 #include <Oxygen/Renderer/Types/ShaderDebugMode.h>
 
 #include "DemoShell/Runtime/RenderingPipeline.h"
+#include "DemoShell/Services/DomainService.h"
 
 namespace oxygen::examples {
 
@@ -34,7 +35,7 @@ class SettingsService;
 
 @see SettingsService
 */
-class RenderingSettingsService {
+class RenderingSettingsService : public DomainService {
 public:
   RenderingSettingsService() = default;
   virtual ~RenderingSettingsService() = default;
@@ -64,12 +65,12 @@ public:
   virtual auto SetDebugMode(engine::ShaderDebugMode mode) -> void;
 
   //! Returns the current settings epoch.
-  [[nodiscard]] virtual auto GetEpoch() const noexcept -> std::uint64_t;
+  [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t override;
 
-protected:
-  //! Returns the settings service used for persistence.
-  [[nodiscard]] virtual auto ResolveSettings() const noexcept
-    -> observer_ptr<SettingsService>;
+  auto OnFrameStart(const engine::FrameContext& context) -> void override;
+  auto OnSceneActivated(scene::Scene& scene) -> void override;
+  auto OnMainViewReady(const engine::FrameContext& context,
+    const CompositionView& view) -> void override;
 
 private:
   static constexpr auto kViewModeKey = "rendering.view_mode";

@@ -4,12 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <vector>
 
 #include <Oxygen/Input/Action.h>
+#include <Oxygen/Scene/Camera/Orthographic.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/SceneNode.h>
 
-#include "DemoShell/Services/CameraLifecycleService.h"
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/UI/CameraRigController.h"
 #include "DemoShell/UI/CameraVm.h"
@@ -20,10 +22,8 @@
 namespace oxygen::examples::ui {
 
 CameraVm::CameraVm(observer_ptr<CameraSettingsService> service,
-  observer_ptr<CameraLifecycleService> camera_lifecycle,
   observer_ptr<CameraRigController> camera_rig)
   : service_(service)
-  , camera_lifecycle_(camera_lifecycle)
   , camera_rig_(camera_rig)
 {
   Refresh();
@@ -195,7 +195,7 @@ auto CameraVm::SetDroneFocusOffset(glm::vec2 offset) -> void
   // target.
   if (camera_rig_ && camera_rig_->GetDroneController()) {
     camera_rig_->GetDroneController()->SetFocusTarget(
-      glm::vec3(offset.x, service_->GetDroneFocusHeight(), offset.y));
+      glm::vec3(offset.x, offset.y, service_->GetDroneFocusHeight()));
   }
 }
 
@@ -357,19 +357,7 @@ auto CameraVm::SetDroneShowPath(bool show) -> void
 
 auto CameraVm::HasActiveCamera() const -> bool
 {
-  return camera_lifecycle_ && camera_lifecycle_->GetActiveCamera().IsAlive();
-}
-
-auto CameraVm::GetActiveCameraNode() const -> std::optional<scene::SceneNode>
-{
-  if (!camera_lifecycle_) {
-    return std::nullopt;
-  }
-  auto& camera = camera_lifecycle_->GetActiveCamera();
-  if (!camera.IsAlive()) {
-    return std::nullopt;
-  }
-  return camera;
+  return service_ && service_->GetActiveCamera().IsAlive();
 }
 
 auto CameraVm::GetCameraPosition() -> glm::vec3
@@ -377,7 +365,7 @@ auto CameraVm::GetCameraPosition() -> glm::vec3
   if (!HasActiveCamera()) {
     return glm::vec3(0.0F);
   }
-  auto transform = camera_lifecycle_->GetActiveCamera().GetTransform();
+  auto transform = service_->GetActiveCamera().GetTransform();
   if (auto pos = transform.GetLocalPosition()) {
     return *pos;
   }
@@ -389,11 +377,285 @@ auto CameraVm::GetCameraRotation() -> glm::quat
   if (!HasActiveCamera()) {
     return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
   }
-  auto transform = camera_lifecycle_->GetActiveCamera().GetTransform();
+  auto transform = service_->GetActiveCamera().GetTransform();
   if (auto rot = transform.GetLocalRotation()) {
     return *rot;
   }
   return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
+}
+
+auto CameraVm::HasPerspectiveCamera() const -> bool
+{
+  if (!service_) {
+    return false;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return false;
+  }
+  return camera.GetCameraAs<scene::PerspectiveCamera>().has_value();
+}
+
+auto CameraVm::HasOrthographicCamera() const -> bool
+{
+  if (!service_) {
+    return false;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return false;
+  }
+  return camera.GetCameraAs<scene::OrthographicCamera>().has_value();
+}
+
+auto CameraVm::GetPerspectiveFovDegrees() const -> float
+{
+  if (!service_) {
+    return 0.0F;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return 0.0F;
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::PerspectiveCamera>(); cam_ref) {
+    return glm::degrees(cam_ref->get().GetFieldOfView());
+  }
+  return 0.0F;
+}
+
+auto CameraVm::SetPerspectiveFovDegrees(float fov_degrees) -> void
+{
+  if (!service_) {
+    return;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return;
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::PerspectiveCamera>(); cam_ref) {
+    constexpr float kMinFov = 1.0F;
+    constexpr float kMaxFov = 179.0F;
+    const float clamped = std::clamp(fov_degrees, kMinFov, kMaxFov);
+    cam_ref->get().SetFieldOfView(glm::radians(clamped));
+    service_->PersistActiveCameraSettings();
+  }
+}
+
+auto CameraVm::GetPerspectiveNearPlane() const -> float
+{
+  if (!service_) {
+    return 0.0F;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return 0.0F;
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::PerspectiveCamera>(); cam_ref) {
+    return cam_ref->get().GetNearPlane();
+  }
+  return 0.0F;
+}
+
+auto CameraVm::GetPerspectiveFarPlane() const -> float
+{
+  if (!service_) {
+    return 0.0F;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return 0.0F;
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::PerspectiveCamera>(); cam_ref) {
+    return cam_ref->get().GetFarPlane();
+  }
+  return 0.0F;
+}
+
+auto CameraVm::SetPerspectiveNearPlane(float near_plane) -> void
+{
+  if (!service_) {
+    return;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return;
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::PerspectiveCamera>(); cam_ref) {
+    constexpr float kMinNear = 0.001F;
+    constexpr float kMinRange = 0.001F;
+    const float clamped_near = std::max(near_plane, kMinNear);
+    const float far_plane
+      = std::max(cam_ref->get().GetFarPlane(), clamped_near + kMinRange);
+    cam_ref->get().SetNearPlane(clamped_near);
+    cam_ref->get().SetFarPlane(far_plane);
+    service_->PersistActiveCameraSettings();
+  }
+}
+
+auto CameraVm::SetPerspectiveFarPlane(float far_plane) -> void
+{
+  if (!service_) {
+    return;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return;
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::PerspectiveCamera>(); cam_ref) {
+    constexpr float kMinRange = 0.001F;
+    const float near_plane = cam_ref->get().GetNearPlane();
+    const float clamped_far = std::max(far_plane, near_plane + kMinRange);
+    cam_ref->get().SetFarPlane(clamped_far);
+    service_->PersistActiveCameraSettings();
+  }
+}
+
+auto CameraVm::GetOrthoWidth() const -> float
+{
+  if (!service_) {
+    return 0.0F;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return 0.0F;
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
+    const auto extents = cam_ref->get().GetExtents();
+    return extents[1] - extents[0];
+  }
+  return 0.0F;
+}
+
+auto CameraVm::GetOrthoHeight() const -> float
+{
+  if (!service_) {
+    return 0.0F;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return 0.0F;
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
+    const auto extents = cam_ref->get().GetExtents();
+    return extents[3] - extents[2];
+  }
+  return 0.0F;
+}
+
+auto CameraVm::GetOrthoNearPlane() const -> float
+{
+  if (!service_) {
+    return 0.0F;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return 0.0F;
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
+    return cam_ref->get().GetExtents()[4];
+  }
+  return 0.0F;
+}
+
+auto CameraVm::GetOrthoFarPlane() const -> float
+{
+  if (!service_) {
+    return 0.0F;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return 0.0F;
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
+    return cam_ref->get().GetExtents()[5];
+  }
+  return 0.0F;
+}
+
+auto CameraVm::SetOrthoWidth(float width) -> void
+{
+  if (!service_) {
+    return;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return;
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
+    constexpr float kMinSize = 0.001F;
+    auto extents = cam_ref->get().GetExtents();
+    const float clamped = std::max(width, kMinSize);
+    const float center = 0.5F * (extents[0] + extents[1]);
+    extents[0] = center - 0.5F * clamped;
+    extents[1] = center + 0.5F * clamped;
+    cam_ref->get().SetExtents(
+      extents[0], extents[1], extents[2], extents[3], extents[4], extents[5]);
+    service_->PersistActiveCameraSettings();
+  }
+}
+
+auto CameraVm::SetOrthoHeight(float height) -> void
+{
+  if (!service_) {
+    return;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return;
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
+    constexpr float kMinSize = 0.001F;
+    auto extents = cam_ref->get().GetExtents();
+    const float clamped = std::max(height, kMinSize);
+    const float center = 0.5F * (extents[2] + extents[3]);
+    extents[2] = center - 0.5F * clamped;
+    extents[3] = center + 0.5F * clamped;
+    cam_ref->get().SetExtents(
+      extents[0], extents[1], extents[2], extents[3], extents[4], extents[5]);
+    service_->PersistActiveCameraSettings();
+  }
+}
+
+auto CameraVm::SetOrthoNearPlane(float near_plane) -> void
+{
+  if (!service_) {
+    return;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return;
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
+    constexpr float kMinNear = 0.001F;
+    constexpr float kMinRange = 0.001F;
+    auto extents = cam_ref->get().GetExtents();
+    const float clamped_near = std::max(near_plane, kMinNear);
+    const float far_plane = std::max(extents[5], clamped_near + kMinRange);
+    extents[4] = clamped_near;
+    extents[5] = far_plane;
+    cam_ref->get().SetExtents(
+      extents[0], extents[1], extents[2], extents[3], extents[4], extents[5]);
+    service_->PersistActiveCameraSettings();
+  }
+}
+
+auto CameraVm::SetOrthoFarPlane(float far_plane) -> void
+{
+  if (!service_) {
+    return;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return;
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
+    constexpr float kMinRange = 0.001F;
+    auto extents = cam_ref->get().GetExtents();
+    extents[5] = std::max(far_plane, extents[4] + kMinRange);
+    cam_ref->get().SetExtents(
+      extents[0], extents[1], extents[2], extents[3], extents[4], extents[5]);
+    service_->PersistActiveCameraSettings();
+  }
 }
 
 auto CameraVm::GetDronePathPoints() const -> std::span<const glm::vec3>
@@ -471,15 +733,15 @@ auto CameraVm::GetOrbitAction() const -> std::shared_ptr<input::Action>
 
 auto CameraVm::RequestReset() -> void
 {
-  if (camera_lifecycle_) {
-    camera_lifecycle_->RequestReset();
+  if (service_) {
+    service_->RequestReset();
   }
 }
 
 auto CameraVm::PersistActiveCameraSettings() -> void
 {
-  if (camera_lifecycle_) {
-    camera_lifecycle_->PersistActiveCameraSettings();
+  if (service_) {
+    service_->PersistActiveCameraSettings();
   }
 }
 
@@ -504,7 +766,7 @@ auto CameraVm::Refresh() -> void
       drone->SetDamping(service_->GetDroneDamping());
       drone->SetFocusHeight(service_->GetDroneFocusHeight());
       drone->SetFocusTarget(glm::vec3(service_->GetDroneFocusOffsetX(),
-        service_->GetDroneFocusHeight(), service_->GetDroneFocusOffsetY()));
+        service_->GetDroneFocusOffsetY(), service_->GetDroneFocusHeight()));
       drone->SetBobAmplitude(service_->GetDroneBobAmplitude());
       drone->SetBobFrequency(service_->GetDroneBobFrequency());
       drone->SetNoiseAmplitude(service_->GetDroneNoiseAmplitude());

@@ -10,6 +10,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/quaternion.hpp>
 
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/SceneNode.h>
 
 #include "DemoShell/UI/FlyCameraController.h"
@@ -39,13 +40,13 @@ void FlyCameraController::Update(
 
   const glm::vec3 forward_ws(
     sin_yaw * cos_pitch, -cos_yaw * cos_pitch, sin_pitch);
-  constexpr glm::vec3 world_up(0.0F, 0.0F, 1.0F);
+  constexpr glm::vec3 world_up = space::move::Up;
 
   glm::vec3 right_ws = glm::cross(forward_ws, world_up);
   const float right_len2 = glm::dot(right_ws, right_ws);
   if (right_len2 <= 1e-8f) {
     // Forward is nearly colinear with world up: pick an arbitrary right.
-    right_ws = glm::vec3(1.0F, 0.0F, 0.0F);
+    right_ws = space::move::Right;
   } else {
     right_ws /= std::sqrt(right_len2);
   }
@@ -77,8 +78,8 @@ void FlyCameraController::Update(
       pos += world_up * move_dir.y * speed * dt;
     } else {
       // Movement is relative to full orientation (includes pitch).
-      const glm::vec3 forward = orientation * glm::vec3(0, 0, -1);
-      const glm::vec3 right = orientation * glm::vec3(1, 0, 0);
+      const glm::vec3 forward = orientation * space::look::Forward;
+      const glm::vec3 right = orientation * space::look::Right;
 
       pos += right * move_dir.x * speed * dt;
       pos += forward * move_dir.z * speed * dt;
@@ -103,7 +104,7 @@ void FlyCameraController::SyncFromTransform(scene::SceneNode& node)
     = tf.GetLocalRotation().value_or(glm::quat(1.0F, 0.0F, 0.0F, 0.0F));
 
   // Extract forward vector from rotation
-  const glm::vec3 forward = rot * glm::vec3(0, 0, -1);
+  const glm::vec3 forward = rot * space::look::Forward;
 
   // Calculate yaw and pitch from forward vector (Z-up, forward=-Y reference).
   // forward_xy = (sin(yaw), -cos(yaw)) and forward.z = sin(pitch)

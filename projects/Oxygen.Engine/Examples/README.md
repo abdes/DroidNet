@@ -58,7 +58,7 @@ auto MainModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool {
 Demos should allow the scene to be unloaded and reloaded (e.g., via the Content Loader). Implement this in `HandleOnFrameStart` to ensure the `FrameContext` always has a valid scene.
 
 ```cpp
-auto MainModule::OnFrameStart(engine::FrameContext& context) -> void {
+auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void {
     // 1. Sync pipeline settings FIRST to avoid 1-frame lag
     ApplySettingsFromUI();
 
@@ -66,7 +66,7 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void {
     Base::OnFrameStart(context);
 }
 
-auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void {
+auto MainModule::HandleOnFrameStart(observer_ptr<engine::FrameContext> context) -> void {
     // 3. Ensure the scene is valid (re-create if unloaded)
     if (!active_scene_.IsValid()) {
         auto scene = CreateMyDemoScene();
@@ -77,22 +77,16 @@ auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void {
 }
 ```
 
-### 4. Mutation & Camera Sync
+### 4. Mutation & Panel Sync
 
-The `OnSceneMutation` phase is where you finalize the scene state before the renderer takes a "snapshot". **Crucially**, you must sync the camera lifecycle here.
+The `OnSceneMutation` phase is where you finalize the scene state before the renderer takes a "snapshot". DemoShell now synchronizes camera lifecycle from the view metadata it receives in `UpdateComposition`.
 
 ```cpp
-auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<> {
-    auto& camera_lifecycle = shell_->GetCameraLifecycle();
+auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context) -> co::Co<> {
+    // 1. Sync panel-driven settings.
+    shell_->OnMainViewReady(*context, main_view);
 
-    // 1. Sync viewport and camera transforms (baked from UI/Input)
-    camera_lifecycle.EnsureViewport(app_window_->GetWindow()->Size());
-    camera_lifecycle.ApplyPendingSync();
-
-    // 2. Update the shell (drives rig movement)
-    shell_->Update(time::CanonicalDuration{});
-
-    // 3. Delegation: Required to register views with the pipeline!
+    // 2. Delegation: Required to register views with the pipeline!
     co_await Base::OnSceneMutation(context);
 }
 ```
@@ -102,7 +96,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<> {
 Instead of manually rendering, describe *what* you want to see by overriding `UpdateComposition`. The pipeline will then manage the HDR/SDR resources and tonemapping automatically.
 
 ```cpp
-auto MainModule::UpdateComposition(engine::FrameContext& context,
+auto MainModule::UpdateComposition(observer_ptr<engine::FrameContext> context,
                                  std::vector<CompositionView>& views) -> void {
     auto& active_camera = shell_->GetCameraLifecycle().GetActiveCamera();
     if (!active_camera.IsAlive()) return;
@@ -136,7 +130,7 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
 * **Viewport Construction**: Passing an empty `View {}` to `ForScene` results in a black screen. Always construct a viewport from the current window size.
 * **Settings Sync in `OnFrameStart`**: Apply render modes and debug settings *before* `Base::OnFrameStart`. These settings are used for resource allocation; applying them later (e.g., in `OnPreRender`) causes a visible 1-frame lag.
 * **`context.SetScene(...)`**: The rendering backend retrieves the scene from the `FrameContext`. If you don't call this in `HandleOnFrameStart`, you will get a black screen or an empty world.
-* **`ApplyPendingSync()`**: Without this, the camera will not move or rotate even if the UI/Rig shows it is changing.
+* **Camera lifecycle sync**: The shell derives viewport information from `UpdateComposition` and applies camera sync automatically.
 * **Controlled Shutdown**: Always call `shell_->SetScene(nullptr)` in `OnShutdown` to ensure scene nodes are destroyed while the graphics systems are still alive.
 
 ---

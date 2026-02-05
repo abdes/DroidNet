@@ -54,8 +54,8 @@ private:
 
   std::atomic<uint64_t> generation_ { 0U };
   std::atomic<scene::Scene*> scene_ptr_ { nullptr };
-  mutable std::mutex scene_mutex_ {};
-  std::shared_ptr<scene::Scene> scene_ {};
+  mutable std::mutex scene_mutex_;
+  std::shared_ptr<scene::Scene> scene_;
 };
 
 } // namespace oxygen::examples::internal

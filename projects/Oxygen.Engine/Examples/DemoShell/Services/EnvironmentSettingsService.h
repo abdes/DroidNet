@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -22,12 +23,18 @@
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Scene/Environment/Sun.h>
 
+#include "DemoShell/Services/DomainService.h"
+
 namespace oxygen {
 namespace engine {
   class Renderer;
 }
+namespace data {
+  class SceneAsset;
+}
 namespace scene {
   class Scene;
+  class SceneEnvironment;
 }
 } // namespace oxygen
 
@@ -57,13 +64,17 @@ struct EnvironmentRuntimeConfig {
 
  @see SettingsService
 */
-class EnvironmentSettingsService {
+class EnvironmentSettingsService : public DomainService {
 public:
   EnvironmentSettingsService() = default;
   virtual ~EnvironmentSettingsService() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(EnvironmentSettingsService)
   OXYGEN_MAKE_NON_MOVABLE(EnvironmentSettingsService)
+
+  //! Hydrate runtime environment systems from a scene asset.
+  static auto HydrateEnvironment(scene::SceneEnvironment& target,
+    const data::SceneAsset& source_asset) -> void;
 
   //! Updates the runtime configuration used for applying settings.
   virtual auto SetRuntimeConfig(const EnvironmentRuntimeConfig& config) -> void;
@@ -86,6 +97,14 @@ public:
   //! Returns whether LUTs are valid and dirty (renderer state).
   [[nodiscard]] virtual auto GetAtmosphereLutStatus() const
     -> std::pair<bool, bool>;
+
+  //! Returns the current settings epoch.
+  [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t override;
+
+  auto OnFrameStart(const engine::FrameContext& context) -> void override;
+  auto OnSceneActivated(scene::Scene& scene) -> void override;
+  auto OnMainViewReady(const engine::FrameContext& context,
+    const CompositionView& view) -> void override;
 
   // SkyAtmosphere
   [[nodiscard]] virtual auto GetSkyAtmosphereEnabled() const -> bool;
@@ -234,10 +253,6 @@ public:
   [[nodiscard]] virtual auto GetForceAnalytic() const -> bool;
   virtual auto SetForceAnalytic(bool enabled) -> void;
 
-protected:
-  [[nodiscard]] virtual auto ResolveSettings() const noexcept
-    -> observer_ptr<SettingsService>;
-
 private:
   struct SunUiSettings {
     bool enabled { true };
@@ -355,6 +370,8 @@ private:
   bool use_lut_ { true };
   bool visualize_lut_ { false };
   bool force_analytic_ { false };
+
+  std::atomic_uint64_t epoch_ { 0 };
 };
 
 } // namespace oxygen::examples

@@ -17,6 +17,7 @@
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
 
 #include "DemoShell/ActiveScene.h"
 #include "DemoShell/DemoShell.h"
@@ -76,11 +77,11 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(MainModule);
 
   // EngineModule lifecycle
-  auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool override;
+  auto OnAttachedImpl(observer_ptr<AsyncEngine> engine) noexcept
+    -> std::unique_ptr<DemoShell> override;
   void OnShutdown() noexcept override;
 
   // Example-specific setup
-  auto HandleOnFrameStart(engine::FrameContext& context) -> void override;
 
 protected:
   // DemoModuleBase hooks
@@ -91,21 +92,27 @@ protected:
     std::vector<CompositionView>& views) -> void override;
 
   // EngineModule phase handlers
-  auto OnFrameStart(engine::FrameContext& context) -> void override;
-  auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
-  auto OnGameplay(engine::FrameContext& context) -> co::Co<> override;
-  auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
-  auto OnPreRender(engine::FrameContext& context) -> co::Co<> override;
-  auto OnCompositing(engine::FrameContext& context) -> co::Co<> override;
-  auto OnFrameEnd(engine::FrameContext& context) -> void override;
+  auto OnFrameStart(observer_ptr<engine::FrameContext> context)
+    -> void override;
+  auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnGameplay(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnGuiUpdate(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnPreRender(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void override;
 
 private:
   auto InitInputBindings() noexcept -> bool;
-  auto UpdateInputDebugPanelConfig() -> void;
+  auto UpdateInputDebugPanelConfig(
+    observer_ptr<ui::CameraRigController> camera_rig) -> void;
 
   // Scene and rendering
   ActiveScene active_scene_;
   scene::SceneNode sphere_node_;
+  scene::SceneNode main_camera_ {};
 
   // Hosted view
   ViewId main_view_id_ { kInvalidViewId };
@@ -137,7 +144,6 @@ private:
   // NOLINTEND(*-magic-numbers)
 
   // DemoShell and panels
-  std::unique_ptr<DemoShell> shell_;
   std::shared_ptr<InputDebugPanel> input_debug_panel_;
 
   observer_ptr<ui::CameraRigController> last_camera_rig_ { nullptr };

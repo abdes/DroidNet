@@ -13,8 +13,8 @@ namespace oxygen::examples {
 
 auto UiSettingsService::GetAxesVisible() const -> bool
 {
-  const auto settings = ResolveSettings();
-  CHECK_NOTNULL_F(settings.get(), "UiSettingsService requires SettingsService");
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
 
   const auto value = settings->GetBool(kAxesVisibleKey);
   return value.value_or(kDefaultAxesVisible);
@@ -27,8 +27,8 @@ auto UiSettingsService::SetAxesVisible(const bool visible) -> void
 
 auto UiSettingsService::GetStatsConfig() const -> ui::StatsOverlayConfig
 {
-  const auto settings = ResolveSettings();
-  CHECK_NOTNULL_F(settings.get(), "UiSettingsService requires SettingsService");
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
 
   ui::StatsOverlayConfig config {};
   if (const auto show_fps = settings->GetBool(kStatsShowFpsKey)) {
@@ -70,8 +70,8 @@ auto UiSettingsService::SetStatsShowBudgetStats(const bool visible) -> void
 
 auto UiSettingsService::GetActivePanelName() const -> std::optional<std::string>
 {
-  const auto settings = ResolveSettings();
-  CHECK_NOTNULL_F(settings.get(), "UiSettingsService requires SettingsService");
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
 
   auto name = settings->GetString(kActivePanelKey);
   if (name.has_value() && name->empty()) {
@@ -86,8 +86,8 @@ auto UiSettingsService::GetActivePanelName() const -> std::optional<std::string>
 auto UiSettingsService::SetActivePanelName(
   std::optional<std::string> panel_name) -> void
 {
-  const auto settings = ResolveSettings();
-  CHECK_NOTNULL_F(settings.get(), "UiSettingsService requires SettingsService");
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
 
   if (panel_name.has_value() && panel_name->empty()) {
     LOG_F(WARNING,
@@ -112,17 +112,11 @@ auto UiSettingsService::GetEpoch() const noexcept -> std::uint64_t
   return epoch_.load(std::memory_order_acquire);
 }
 
-auto UiSettingsService::ResolveSettings() const noexcept
-  -> observer_ptr<SettingsService>
-{
-  return SettingsService::Default();
-}
-
 auto UiSettingsService::SetBoolSetting(
   std::string_view key, const bool value, const bool default_value) -> void
 {
-  const auto settings = ResolveSettings();
-  CHECK_NOTNULL_F(settings.get(), "UiSettingsService requires SettingsService");
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
 
   const bool is_changed
     = settings->GetBool(key).value_or(default_value) != value;

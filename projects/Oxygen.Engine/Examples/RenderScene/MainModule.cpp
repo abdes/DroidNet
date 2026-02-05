@@ -19,6 +19,7 @@
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
 
 #include "DemoShell/DemoShell.h"
@@ -33,7 +34,7 @@ using oxygen::scene::SceneNodeFlags;
 
 namespace oxygen::examples::render_scene {
 
-MainModule::MainModule(const oxygen::examples::DemoAppContext& app)
+MainModule::MainModule(const examples::DemoAppContext& app)
   : Base(app)
   , last_viewport_({ 0, 0 })
 {
@@ -60,15 +61,11 @@ auto MainModule::BuildDefaultWindowProperties() const
   return props;
 }
 
-auto MainModule::OnAttached(
-  oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept -> bool
+auto MainModule::OnAttachedImpl(observer_ptr<AsyncEngine> engine) noexcept
+  -> std::unique_ptr<DemoShell>
 {
   if (!engine) {
-    return false;
-  }
-
-  if (!Base::OnAttached(engine)) {
-    return false;
+    return nullptr;
   }
 
   LOG_F(INFO, "RenderScene: OnAttached; input_system={} engine={}",
@@ -79,7 +76,7 @@ auto MainModule::OnAttached(
   pipeline_
     = std::make_unique<ForwardPipeline>(observer_ptr { app_.engine.get() });
 
-  shell_ = std::make_unique<DemoShell>();
+  auto shell = std::make_unique<DemoShell>();
   DemoShellConfig shell_config;
   shell_config.engine = observer_ptr { engine.get() };
   const auto demo_root
@@ -128,9 +125,9 @@ auto MainModule::OnAttached(
         pending_path_ = path;
       };
 
-  if (!shell_->Initialize(shell_config)) {
+  if (!shell->Initialize(shell_config)) {
     LOG_F(WARNING, "RenderScene: DemoShell initialization failed");
-    return false;
+    return nullptr;
   }
 
   // Create Main View ID
@@ -142,27 +139,31 @@ auto MainModule::OnAttached(
   }
 
   LOG_F(INFO, "RenderScene: DemoShell initialized");
-  return true;
+  return shell;
 }
 
 void MainModule::OnShutdown() noexcept
 {
-  if (shell_) {
-    shell_->CancelContentImport();
-  }
+  auto& shell = GetShell();
+  shell.CancelContentImport();
   ReleaseCurrentSceneAsset("module shutdown");
   ClearSceneRuntime("module shutdown");
   Base::OnShutdown();
 }
 
-auto MainModule::OnFrameStart(oxygen::engine::FrameContext& context) -> void
+auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
+  -> void
 {
-  ApplyRenderModeFromPanel();
+  DCHECK_NOTNULL_F(context);
+  auto& shell = GetShell();
+  shell.OnFrameStart(*context);
   Base::OnFrameStart(context);
-}
+  auto& frame_context = *context;
 
-auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
-{
+  if (!app_.headless && app_window_ && app_window_->GetWindow()) {
+    last_viewport_ = app_window_->GetWindow()->Size();
+  }
+
   // 1. Process deferred lifecycle actions before anything else this frame.
   if (pending_source_action_ != PendingSourceAction::kNone) {
     const char* reason = "source change";
@@ -214,10 +215,8 @@ auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
       }
     }
 
-    if (shell_) {
-      if (const auto vm = shell_->GetContentVm()) {
-        vm->RefreshLibrary();
-      }
+    if (const auto vm = shell.GetContentVm()) {
+      vm->RefreshLibrary();
     }
 
     pending_source_action_ = PendingSourceAction::kNone;
@@ -277,10 +276,8 @@ auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
           "RenderScene: Failed to remount source for scene load (scene='{}' "
           "error='{}')",
           request.scene_name, ex.what());
-        if (shell_) {
-          if (const auto vm = shell_->GetContentVm()) {
-            vm->NotifySceneLoadCompleted(request.key, false);
-          }
+        if (const auto vm = shell.GetContentVm()) {
+          vm->NotifySceneLoadCompleted(request.key, false);
         }
         return;
       }
@@ -291,7 +288,7 @@ auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
       scene_loader_->StartLoad(request.key);
       LOG_F(INFO,
         "RenderScene: Started async scene load (scene_key={} scene='{}')",
-        oxygen::data::to_string(request.key), request.scene_name);
+        data::to_string(request.key), request.scene_name);
     } else {
       LOG_F(ERROR, "AssetLoader unavailable");
     }
@@ -303,7 +300,7 @@ auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
       auto loader = scene_loader_;
       auto swap = scene_loader_->GetResult();
       LOG_F(INFO, "RenderScene: Applying staged scene swap (scene_key={})",
-        oxygen::data::to_string(swap.scene_key));
+        data::to_string(swap.scene_key));
       const bool same_scene_key = current_scene_key_.has_value()
         && swap.scene_key == *current_scene_key_;
       if (!same_scene_key) {
@@ -311,31 +308,22 @@ auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
       }
       ClearSceneRuntime("scene swap");
 
-      if (shell_) {
+      {
         auto scene = std::make_unique<scene::Scene>("RenderScene");
-        active_scene_ = shell_->SetScene(std::move(scene));
-        const auto scene_ptr = shell_->TryGetScene();
+        active_scene_ = shell.SetScene(std::move(scene));
+        const auto scene_ptr = shell.TryGetScene();
         if (scene_ptr && swap.asset && loader) {
           auto active_camera = loader->BuildScene(*scene_ptr, *swap.asset);
-          shell_->SetActiveCamera(std::move(active_camera));
+          main_camera_ = std::move(active_camera);
         } else {
           LOG_F(ERROR, "RenderScene: Scene swap missing asset or scene");
         }
       }
-      if (shell_) {
-        if (const auto vm = shell_->GetContentVm()) {
-          vm->NotifySceneLoadCompleted(swap.scene_key, true);
-        }
+      if (const auto vm = shell.GetContentVm()) {
+        vm->NotifySceneLoadCompleted(swap.scene_key, true);
       }
       active_scene_load_key_.reset();
       current_scene_key_ = swap.scene_key;
-      if (shell_ && shell_->GetCameraLifecycle().GetActiveCamera().IsAlive()) {
-        shell_->GetCameraLifecycle().CaptureInitialPose();
-        shell_->GetCameraLifecycle().EnsureFlyCameraFacingScene();
-        shell_->GetCameraLifecycle().EnsureViewport(last_viewport_);
-        shell_->GetCameraLifecycle().RequestSyncFromActive();
-        shell_->GetCameraLifecycle().ApplyPendingSync();
-      }
 
       scene_loader_ = std::move(loader);
       if (scene_loader_) {
@@ -343,11 +331,9 @@ auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
       }
     } else if (scene_loader_->IsFailed()) {
       LOG_F(ERROR, "RenderScene: Scene loading failed");
-      if (shell_) {
-        if (const auto vm = shell_->GetContentVm()) {
-          if (active_scene_load_key_.has_value()) {
-            vm->NotifySceneLoadCompleted(*active_scene_load_key_, false);
-          }
+      if (const auto vm = shell.GetContentVm()) {
+        if (active_scene_load_key_.has_value()) {
+          vm->NotifySceneLoadCompleted(*active_scene_load_key_, false);
         }
       }
       active_scene_load_key_.reset();
@@ -361,15 +347,21 @@ auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
 
   if (!active_scene_.IsValid()) {
     auto scene = std::make_unique<scene::Scene>("RenderScene");
-    if (shell_) {
-      active_scene_ = shell_->SetScene(std::move(scene));
+    active_scene_ = shell.SetScene(std::move(scene));
+  }
+
+  if (!main_camera_.IsAlive()) {
+    if (const auto scene_ptr = shell.TryGetScene()) {
+      main_camera_ = scene_ptr->CreateNode("MainCamera");
+      auto camera = std::make_unique<scene::PerspectiveCamera>();
+      const bool attached = main_camera_.AttachCamera(std::move(camera));
+      CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
     }
   }
 
-  const auto scene_ptr
-    = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
+  const auto scene_ptr = shell.TryGetScene();
 
-  context.SetScene(observer_ptr { scene_ptr.get() });
+  frame_context.SetScene(observer_ptr { scene_ptr.get() });
 }
 
 auto MainModule::ReleaseCurrentSceneAsset(const char* reason) -> void
@@ -386,20 +378,17 @@ auto MainModule::ReleaseCurrentSceneAsset(const char* reason) -> void
   }
 
   LOG_F(INFO, "RenderScene: Releasing scene asset (reason={} key={})", reason,
-    oxygen::data::to_string(*current_scene_key_));
+    data::to_string(*current_scene_key_));
   last_released_scene_key_ = current_scene_key_;
   (void)asset_loader->ReleaseAsset(*current_scene_key_);
   current_scene_key_.reset();
 }
 
-auto MainModule::UpdateComposition(engine::FrameContext& /*context*/,
-  std::vector<CompositionView>& views) -> void
+auto MainModule::UpdateComposition(
+  engine::FrameContext& context, std::vector<CompositionView>& views) -> void
 {
-  if (!shell_) {
-    return;
-  }
-  auto& active_camera = shell_->GetCameraLifecycle().GetActiveCamera();
-  if (!active_camera.IsAlive()) {
+  auto& shell = GetShell();
+  if (!main_camera_.IsAlive()) {
     return;
   }
 
@@ -417,8 +406,9 @@ auto MainModule::UpdateComposition(engine::FrameContext& /*context*/,
   }
 
   // Create the main scene view intent
-  views.push_back(
-    CompositionView::ForScene(main_view_id_, view, active_camera));
+  auto main_comp = CompositionView::ForScene(main_view_id_, view, main_camera_);
+  shell.OnMainViewReady(context, main_comp);
+  views.push_back(std::move(main_comp));
 
   // Also render our tools layer
   const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
@@ -428,12 +418,11 @@ auto MainModule::UpdateComposition(engine::FrameContext& /*context*/,
 
 auto MainModule::ClearSceneRuntime(const char* /*reason*/) -> void
 {
+  auto& shell = GetShell();
   active_scene_ = {};
+  main_camera_ = {};
   scene_loader_.reset();
-  if (shell_) {
-    shell_->SetScene(nullptr);
-    shell_->GetCameraLifecycle().Clear();
-  }
+  shell.SetScene(nullptr);
 }
 
 auto MainModule::ClearBackbufferReferences() -> void
@@ -443,38 +432,10 @@ auto MainModule::ClearBackbufferReferences() -> void
   }
 }
 
-auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
+auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
 {
-  DCHECK_NOTNULL_F(app_window_);
-  if (!active_scene_.IsValid()) {
-    co_return;
-  }
-
-  if (shell_) {
-    auto& camera_lifecycle = shell_->GetCameraLifecycle();
-    if (app_window_->GetWindow()) {
-      const auto extent = app_window_->GetWindow()->Size();
-      camera_lifecycle.EnsureViewport(extent);
-      last_viewport_ = extent;
-    }
-    camera_lifecycle.ApplyPendingSync();
-    camera_lifecycle.ApplyPendingReset();
-  }
-
-  if (!app_window_->GetWindow()) {
-    co_return;
-  }
-
-  if (shell_) {
-    shell_->SyncPanels();
-  }
-
-  // Delegate to pipeline to register views
-  co_await Base::OnSceneMutation(context);
-}
-
-auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
-{
+  auto& shell = GetShell();
   if (!logged_gameplay_tick_) {
     logged_gameplay_tick_ = true;
     LOG_F(INFO, "RenderScene: OnGameplay is running");
@@ -483,27 +444,26 @@ auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
   // Input edges are finalized during kInput earlier in the frame (mirrors the
   // InputSystem example). Apply camera controls here so WASD/Shift/Space and
   // mouse deltas are visible in the same frame.
-  if (shell_) {
-    shell_->Update(context.GetGameDeltaTime());
-  }
+  shell.Update(context->GetGameDeltaTime());
 
   co_return;
 }
 
-auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
+auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
   if (!app_window_->GetWindow()) {
     co_return;
   }
 
-  if (shell_) {
-    shell_->Draw(context);
-  }
+  auto& shell = GetShell();
+  shell.Draw(context);
   co_return;
 }
 
-auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
+auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
 
@@ -517,37 +477,4 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
   co_await Base::OnPreRender(context);
 }
 
-auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
-{
-  co_await Base::OnCompositing(context);
-}
-
-auto MainModule::OnFrameEnd(engine::FrameContext& context) -> void
-{
-  Base::OnFrameEnd(context);
-}
-
-auto MainModule::ApplyRenderModeFromPanel() -> void
-{
-  if (!shell_ || !pipeline_) {
-    return;
-  }
-
-  const auto render_mode = shell_->GetRenderingViewMode();
-  pipeline_->SetRenderMode(render_mode);
-
-  const auto wire_color = shell_->GetRenderingWireframeColor();
-  LOG_F(INFO,
-    "RenderScene: ApplyRenderModeFromPanel wire_color=({}, {}, {}, {})",
-    wire_color.r, wire_color.g, wire_color.b, wire_color.a);
-  pipeline_->SetWireframeColor(wire_color);
-
-  // Apply debug mode. Rendering debug modes take precedence if set.
-  auto debug_mode = shell_->GetRenderingDebugMode();
-  if (debug_mode == engine::ShaderDebugMode::kDisabled) {
-    debug_mode = shell_->GetLightCullingVisualizationMode();
-  }
-  pipeline_->SetShaderDebugMode(debug_mode);
-}
-
-} // namespace oxygen::examples::render_scene
+} // namespace examples::render_scene

@@ -16,7 +16,6 @@
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/PanelRegistry.h"
 #include "DemoShell/Runtime/RenderingPipeline.h"
-#include "DemoShell/Services/CameraLifecycleService.h"
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/EnvironmentSettingsService.h"
@@ -95,7 +94,6 @@ struct DemoShellUi::Impl {
 
   Impl(observer_ptr<AsyncEngine> engine_ptr,
     observer_ptr<PanelRegistry> registry,
-    observer_ptr<CameraLifecycleService> camera_lifecycle,
     observer_ptr<UiSettingsService> ui_settings_service,
     observer_ptr<RenderingSettingsService> rendering_settings,
     observer_ptr<LightCullingSettingsService> light_culling_settings,
@@ -115,7 +113,7 @@ struct DemoShellUi::Impl {
     , post_process_settings_service(post_process_settings)
     , file_browser_service(file_browser)
     , panel_config(panel_config_in)
-    , ui_settings_vm(ui_settings_service, camera_lifecycle)
+    , ui_settings_vm(ui_settings_service, camera_settings)
     , side_bar(panel_registry, ui_settings_vm_ptr)
     , side_panel(panel_registry)
     , axes_widget(ui_settings_vm_ptr)
@@ -126,8 +124,7 @@ struct DemoShellUi::Impl {
 
     // Create Camera VM and Panel
     if (panel_config.camera_controls && camera_settings && camera_rig) {
-      camera_vm = std::make_unique<CameraVm>(
-        camera_settings, camera_lifecycle, camera_rig);
+      camera_vm = std::make_unique<CameraVm>(camera_settings, camera_rig);
       camera_panel = std::make_shared<CameraControlPanel>(
         observer_ptr { camera_vm.get() });
       if (panel_registry->RegisterPanel(camera_panel)) {
@@ -179,7 +176,6 @@ struct DemoShellUi::Impl {
 
 DemoShellUi::DemoShellUi(observer_ptr<AsyncEngine> engine,
   observer_ptr<PanelRegistry> panel_registry,
-  observer_ptr<CameraLifecycleService> camera_lifecycle,
   observer_ptr<UiSettingsService> ui_settings_service,
   observer_ptr<RenderingSettingsService> rendering_settings_service,
   observer_ptr<LightCullingSettingsService> light_culling_settings_service,
@@ -190,18 +186,17 @@ DemoShellUi::DemoShellUi(observer_ptr<AsyncEngine> engine,
   observer_ptr<CameraRigController> camera_rig,
   observer_ptr<FileBrowserService> file_browser_service,
   const DemoShellPanelConfig& panel_config)
-  : impl_(std::make_unique<Impl>(engine, panel_registry, camera_lifecycle,
-      ui_settings_service, rendering_settings_service,
-      light_culling_settings_service, camera_settings_service,
-      content_settings_service, environment_settings_service,
-      post_process_settings_service, camera_rig, file_browser_service,
-      panel_config))
+  : impl_(std::make_unique<Impl>(engine, panel_registry, ui_settings_service,
+      rendering_settings_service, light_culling_settings_service,
+      camera_settings_service, content_settings_service,
+      environment_settings_service, post_process_settings_service, camera_rig,
+      file_browser_service, panel_config))
 {
 }
 
 DemoShellUi::~DemoShellUi() = default;
 
-auto DemoShellUi::Draw(engine::FrameContext& fc) -> void
+auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
 {
   if (!impl_->engine) {
     return;

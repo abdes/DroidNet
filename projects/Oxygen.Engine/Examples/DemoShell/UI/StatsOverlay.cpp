@@ -26,7 +26,8 @@ StatsOverlay::StatsOverlay(observer_ptr<UiSettingsVm> settings_vm)
   DCHECK_NOTNULL_F(settings_vm, "expecting UiSettingsVm");
 }
 
-auto StatsOverlay::Draw(const engine::FrameContext& fc) const -> void
+auto StatsOverlay::Draw(observer_ptr<const engine::FrameContext> fc) const
+  -> void
 {
   const auto config = vm_->GetStatsConfig();
   if (!config.show_fps && !config.show_frame_timing_detail
@@ -83,7 +84,7 @@ auto StatsOverlay::Draw(const engine::FrameContext& fc) const -> void
     draw_right_aligned(buffer.data());
 
     // show engine fps ALWAYS to keep display stable
-    const float engine_fps = fc.GetCurrentFPS();
+    const float engine_fps = fc->GetCurrentFPS();
     std::snprintf(buffer.data(), buffer.size(), "Engine FPS %03d",
       static_cast<int>(std::round(engine_fps)));
     draw_right_aligned(buffer.data());
@@ -109,7 +110,7 @@ auto StatsOverlay::Draw(const engine::FrameContext& fc) const -> void
     if (drawn) {
       ImGui::Dummy(ImVec2(0.0f, 20.0f * dpi_scale));
     }
-    const auto timing = fc.GetFrameTiming();
+    const auto timing = fc->GetFrameTiming();
     const float total_ms
       = static_cast<float>(timing.frame_duration.count()) / 1000.0f;
 
@@ -173,7 +174,7 @@ auto StatsOverlay::Draw(const engine::FrameContext& fc) const -> void
     if (drawn) {
       ImGui::Dummy(ImVec2(0.0f, 20.0f * dpi_scale));
     }
-    const auto budget = fc.GetBudgetStats();
+    const auto budget = fc->GetBudgetStats();
     const float cpu_budget_ms = static_cast<float>(budget.cpu_budget.count());
     const float gpu_budget_ms = static_cast<float>(budget.gpu_budget.count());
 

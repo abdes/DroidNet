@@ -11,8 +11,13 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 
+#include <algorithm>
+
 #include "Async/AsyncDemoPanel.h"
 #include "Async/AsyncDemoVm.h"
+
+// ImGui
+// NOLINTBEGIN(cppcoreguidelines-pro-type-vararg)
 
 // Helper macros for formatted text
 #define IMGUI_TEXT_FMT(fmt_str, ...)                                           \
@@ -44,9 +49,6 @@ auto AsyncDemoPanel::GetIcon() const noexcept -> std::string_view
 
 auto AsyncDemoPanel::DrawContents() -> void
 {
-  if (!vm_)
-    return;
-
   DrawSceneInfo();
   DrawSpotlightControls();
   DrawProfilingInfo();
@@ -107,7 +109,7 @@ void AsyncDemoPanel::DrawSpotlightControls()
       }
 
       float intensity = vm_->GetSpotlightIntensity();
-      if (ImGui::SliderFloat("Intensity", &intensity, 0.0F, 1000.0F)) {
+      if (ImGui::SliderFloat("Intensity", &intensity, 0.0F, 50000.0F)) {
         vm_->SetSpotlightIntensity(intensity);
       }
 
@@ -120,17 +122,12 @@ void AsyncDemoPanel::DrawSpotlightControls()
       float inner = glm::degrees(vm_->GetSpotlightInnerCone());
       float outer = glm::degrees(vm_->GetSpotlightOuterCone());
 
-      bool changed = false;
       if (ImGui::SliderFloat("Inner Cone", &inner, 1.0F, 89.0F, "%.1F deg")) {
-        if (inner > outer)
-          inner = outer;
-        changed = true;
+        inner = std::min(inner, outer);
         vm_->SetSpotlightInnerCone(glm::radians(inner));
       }
       if (ImGui::SliderFloat("Outer Cone", &outer, 1.0F, 89.0F, "%.1F deg")) {
-        if (outer < inner)
-          outer = inner;
-        changed = true;
+        outer = std::max(outer, inner);
         vm_->SetSpotlightOuterCone(glm::radians(outer));
       }
     }
@@ -179,5 +176,7 @@ void AsyncDemoPanel::DrawProfilingInfo()
     vm_->SetProfilerSectionOpen(false);
   }
 }
+
+// NOLINTEND(cppcoreguidelines-pro-type-vararg)
 
 } // namespace oxygen::examples::async
