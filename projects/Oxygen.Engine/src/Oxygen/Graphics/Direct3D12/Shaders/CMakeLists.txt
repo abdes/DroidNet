@@ -20,25 +20,19 @@ set(SHADER_LIBRARY_OUTPUT "${CMAKE_SOURCE_DIR}/bin/Oxygen/shaders.bin")
 # The ShaderBake tool target name (executable)
 set(OXYGEN_D3D12_SHADERBAKE_TARGET "oxygen-graphics-direct3d12-shaderbake")
 
-set(
-  _OXYGEN_INSTALL_CONFIG_DIR
-  "$<IF:$<BOOL:${OXYGEN_WITH_ASAN}>,Asan,$<CONFIG>>"
-)
-set(
-  _OXYGEN_CONAN_BIN_DIR
-  "${OXYGEN_CONAN_DEPLOY_DIR}/${_OXYGEN_INSTALL_CONFIG_DIR}/bin"
-)
+# Convert to native paths for the custom command to ensure robustness in Visual Studio/cmd.exe
+file(TO_NATIVE_PATH "${CMAKE_SOURCE_DIR}/bin/Oxygen" _OXYGEN_BIN_DIR)
+file(TO_NATIVE_PATH "${SHADER_LIBRARY_OUTPUT}" _SHADER_LIBRARY_OUTPUT_NATIVE)
+file(TO_NATIVE_PATH "${CMAKE_SOURCE_DIR}" _WORKSPACE_ROOT_NATIVE)
 
 add_custom_command(
   OUTPUT
     "${SHADER_LIBRARY_OUTPUT}"
   COMMAND
-    "${CMAKE_COMMAND}" -E make_directory "${CMAKE_SOURCE_DIR}/bin/Oxygen"
+    "${CMAKE_COMMAND}" -E make_directory "${_OXYGEN_BIN_DIR}"
   COMMAND
-    "${CMAKE_COMMAND}" -E env
-    "PATH=$<TARGET_FILE_DIR:${OXYGEN_D3D12_SHADERBAKE_TARGET}>$<SEMICOLON>${_OXYGEN_CONAN_BIN_DIR}$<SEMICOLON>$ENV{PATH}"
     "$<TARGET_FILE:${OXYGEN_D3D12_SHADERBAKE_TARGET}>" --workspace-root
-    "${CMAKE_SOURCE_DIR}" --out "${SHADER_LIBRARY_OUTPUT}"
+    "${_WORKSPACE_ROOT_NATIVE}" --out "${_SHADER_LIBRARY_OUTPUT_NATIVE}"
   WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
   VERBATIM
   COMMENT "Baking shaders.bin (OXSL v1) ($<CONFIG> mode)"
