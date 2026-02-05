@@ -261,8 +261,37 @@ struct ForwardPipeline::Impl {
     }
 
     if (tone_map_pass_config) {
-      tone_map_pass_config->exposure_mode = staged.exposure_mode;
-      tone_map_pass_config->manual_exposure = staged.exposure_value;
+      const auto debug_mode = shader_pass_config
+        ? shader_pass_config->debug_mode
+        : engine::ShaderDebugMode::kDisabled;
+      const auto IsNonIblDebug = [](engine::ShaderDebugMode mode) -> bool {
+        switch (mode) {
+        case engine::ShaderDebugMode::kLightCullingHeatMap:
+        case engine::ShaderDebugMode::kDepthSlice:
+        case engine::ShaderDebugMode::kClusterIndex:
+        case engine::ShaderDebugMode::kBaseColor:
+        case engine::ShaderDebugMode::kUv0:
+        case engine::ShaderDebugMode::kOpacity:
+        case engine::ShaderDebugMode::kWorldNormals:
+        case engine::ShaderDebugMode::kRoughness:
+        case engine::ShaderDebugMode::kMetalness:
+          return true;
+        case engine::ShaderDebugMode::kIblSpecular:
+        case engine::ShaderDebugMode::kIblRawSky:
+        case engine::ShaderDebugMode::kIblIrradiance:
+        case engine::ShaderDebugMode::kDisabled:
+        default:
+          return false;
+        }
+      };
+
+      if (IsNonIblDebug(debug_mode)) {
+        tone_map_pass_config->exposure_mode = engine::ExposureMode::kManual;
+        tone_map_pass_config->manual_exposure = 1.0F;
+      } else {
+        tone_map_pass_config->exposure_mode = staged.exposure_mode;
+        tone_map_pass_config->manual_exposure = staged.exposure_value;
+      }
       tone_map_pass_config->tone_mapper = staged.tonemapping_mode;
     }
 
@@ -500,7 +529,32 @@ auto ForwardPipeline::OnSceneMutation(engine::FrameContext& context,
               }
             }
 
-            const bool should_run_sky = sky_atmo_enabled || sky_sphere_enabled;
+            const auto debug_mode = self->shader_pass_config
+              ? self->shader_pass_config->debug_mode
+              : engine::ShaderDebugMode::kDisabled;
+            const auto IsNonIblDebug = [](engine::ShaderDebugMode mode) -> bool {
+              switch (mode) {
+              case engine::ShaderDebugMode::kLightCullingHeatMap:
+              case engine::ShaderDebugMode::kDepthSlice:
+              case engine::ShaderDebugMode::kClusterIndex:
+              case engine::ShaderDebugMode::kBaseColor:
+              case engine::ShaderDebugMode::kUv0:
+              case engine::ShaderDebugMode::kOpacity:
+              case engine::ShaderDebugMode::kWorldNormals:
+              case engine::ShaderDebugMode::kRoughness:
+              case engine::ShaderDebugMode::kMetalness:
+                return true;
+              case engine::ShaderDebugMode::kIblSpecular:
+              case engine::ShaderDebugMode::kIblRawSky:
+              case engine::ShaderDebugMode::kIblIrradiance:
+              case engine::ShaderDebugMode::kDisabled:
+              default:
+                return false;
+              }
+            };
+
+            const bool should_run_sky = (sky_atmo_enabled || sky_sphere_enabled)
+              && !IsNonIblDebug(debug_mode);
             const bool should_run_lut = sky_atmo_enabled;
 
             if (self->sky_atmo_lut_pass_config) {
@@ -536,21 +590,13 @@ auto ForwardPipeline::OnSceneMutation(engine::FrameContext& context,
             }
 
             if (effective_render_mode == RenderMode::kWireframe) {
-              if (self->depth_pass && depth_tex) {
-                co_await self->depth_pass->PrepareResources(rc, rec);
-                co_await self->depth_pass->Execute(rc, rec);
-                rc.RegisterPass<engine::DepthPrePass>(self->depth_pass.get());
-              }
               if (self->wireframe_pass_config) {
-                // If forced for this view, DO NOT clear inside the pass.
-                // We rely on the ForwardPipeline's manual clear (above) which
-                // respects view->intent.clear_color (e.g., for semi-transparent
-                // backgrounds).
+                // For pure wireframe, we DO clear the background to the intent
+                // clear color and we DO NOT run any material or sky passes.
                 const bool is_forced = view->intent.force_wireframe;
                 self->wireframe_pass_config->clear_color_target = !is_forced;
                 self->wireframe_pass_config->depth_write_enable = true;
 
-                // Optional: set a distinct color if forced (e.g. bright green)
                 if (is_forced) {
                   self->wireframe_pass_config->wire_color
                     = graphics::Color(0.0f, 1.0f, 0.0f, 1.0f);
@@ -611,6 +657,8 @@ auto ForwardPipeline::OnSceneMutation(engine::FrameContext& context,
                 if (self->wireframe_pass_config) {
                   self->wireframe_pass_config->clear_color_target = false;
                   self->wireframe_pass_config->depth_write_enable = false;
+                  self->wireframe_pass_config->wire_color
+                    = self->staged.wire_color;
                 }
                 if (self->wireframe_pass) {
                   co_await self->wireframe_pass->PrepareResources(rc, rec);

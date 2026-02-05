@@ -473,14 +473,20 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
       return "DEBUG_IBL_SPECULAR";
     case ShaderDebugMode::kIblRawSky:
       return "DEBUG_IBL_RAW_SKY";
-    case ShaderDebugMode::kIblRawSkyViewDir:
-      return "DEBUG_IBL_RAW_SKY_VIEWDIR";
+    case ShaderDebugMode::kIblIrradiance:
+      return "DEBUG_IBL_IRRADIANCE";
     case ShaderDebugMode::kBaseColor:
       return "DEBUG_BASE_COLOR";
     case ShaderDebugMode::kUv0:
       return "DEBUG_UV0";
     case ShaderDebugMode::kOpacity:
       return "DEBUG_OPACITY";
+    case ShaderDebugMode::kWorldNormals:
+      return "DEBUG_WORLD_NORMALS";
+    case ShaderDebugMode::kRoughness:
+      return "DEBUG_ROUGHNESS";
+    case ShaderDebugMode::kMetalness:
+      return "DEBUG_METALNESS";
     default:
       return nullptr;
     }

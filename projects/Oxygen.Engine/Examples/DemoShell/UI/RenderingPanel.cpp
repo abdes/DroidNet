@@ -100,7 +100,10 @@ void RenderingPanel::DrawDebugModes()
     || current_mode == ShaderDebugMode::kOpacity
     || current_mode == ShaderDebugMode::kIblSpecular
     || current_mode == ShaderDebugMode::kIblRawSky
-    || current_mode == ShaderDebugMode::kIblRawSkyViewDir;
+    || current_mode == ShaderDebugMode::kIblIrradiance
+    || current_mode == ShaderDebugMode::kWorldNormals
+    || current_mode == ShaderDebugMode::kRoughness
+    || current_mode == ShaderDebugMode::kMetalness;
 
   const bool normal_selected
     = current_mode == ShaderDebugMode::kDisabled || !is_ui_debug_mode;
@@ -124,18 +127,33 @@ void RenderingPanel::DrawDebugModes()
   }
 
   if (ImGui::RadioButton(
+        "World Normals", current_mode == ShaderDebugMode::kWorldNormals)) {
+    vm_->SetDebugMode(ShaderDebugMode::kWorldNormals);
+  }
+
+  if (ImGui::RadioButton(
+        "Roughness", current_mode == ShaderDebugMode::kRoughness)) {
+    vm_->SetDebugMode(ShaderDebugMode::kRoughness);
+  }
+
+  if (ImGui::RadioButton(
+        "Metalness", current_mode == ShaderDebugMode::kMetalness)) {
+    vm_->SetDebugMode(ShaderDebugMode::kMetalness);
+  }
+
+  if (ImGui::RadioButton(
         "IBL Specular", current_mode == ShaderDebugMode::kIblSpecular)) {
     vm_->SetDebugMode(ShaderDebugMode::kIblSpecular);
   }
 
   if (ImGui::RadioButton(
-        "IBL Raw Sky", current_mode == ShaderDebugMode::kIblRawSky)) {
-    vm_->SetDebugMode(ShaderDebugMode::kIblRawSky);
+        "IBL Irradiance", current_mode == ShaderDebugMode::kIblIrradiance)) {
+    vm_->SetDebugMode(ShaderDebugMode::kIblIrradiance);
   }
 
-  if (ImGui::RadioButton("IBL Raw Sky (ViewDir)",
-        current_mode == ShaderDebugMode::kIblRawSkyViewDir)) {
-    vm_->SetDebugMode(ShaderDebugMode::kIblRawSkyViewDir);
+  if (ImGui::RadioButton(
+        "Sky Radiance", current_mode == ShaderDebugMode::kIblRawSky)) {
+    vm_->SetDebugMode(ShaderDebugMode::kIblRawSky);
   }
 }
 

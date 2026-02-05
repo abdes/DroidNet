@@ -171,7 +171,9 @@ void CS_IrradianceConvolution(uint3 DTid : SV_DispatchThreadID)
         }
     }
 
-    irradiance = PI * irradiance * (1.0 / float(nrSamples));
+    // Standard normalization for cosine-weighted hemisphere integration:
+    // Result = (1/N) * sum(radiance * cos(theta))
+    irradiance = irradiance * (1.0 / float(nrSamples));
 
     output[DTid] = float4(irradiance, 1.0);
 }

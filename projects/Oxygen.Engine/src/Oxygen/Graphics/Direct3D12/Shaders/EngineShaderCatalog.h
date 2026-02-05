@@ -43,6 +43,9 @@ using enum ShaderType;
 //   DEBUG_BASE_COLOR: Base color/albedo visualization
 //   DEBUG_UV0: UV0 visualization
 //   DEBUG_OPACITY: Opacity visualization
+//   DEBUG_WORLD_NORMALS: World-space normals visualization
+//   DEBUG_ROUGHNESS: Roughness visualization
+//   DEBUG_METALNESS: Metalness visualization
 
 // clang-format off
 inline constexpr auto kEngineShaders = GenerateCatalog(
@@ -98,12 +101,12 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     std::array<std::string_view, 3>
       { "DEBUG_IBL_RAW_SKY", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  // Forward pass pixel shader: DEBUG_IBL_RAW_SKY_VIEWDIR with ALPHA_TEST permutation
+  // Forward pass pixel shader: DEBUG_IBL_IRRADIANCE with ALPHA_TEST permutation
   ShaderFileSpec {
     "Passes/Forward/ForwardMesh_PS.hlsl",
     std::array { EntryPoint { kPixel, "PS" } },
-    std::array<std::string_view, 3> { "DEBUG_IBL_RAW_SKY_VIEWDIR",
-      "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    std::array<std::string_view, 3>
+      { "DEBUG_IBL_IRRADIANCE", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_BASE_COLOR with ALPHA_TEST permutation
   ShaderFileSpec {
@@ -125,6 +128,27 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     std::array { EntryPoint { kPixel, "PS" } },
     std::array<std::string_view, 3>
       { "DEBUG_OPACITY", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
+  // Forward pass pixel shader: DEBUG_WORLD_NORMALS with ALPHA_TEST permutation
+  ShaderFileSpec {
+    "Passes/Forward/ForwardMesh_PS.hlsl",
+    std::array { EntryPoint { kPixel, "PS" } },
+    std::array<std::string_view, 3>
+      { "DEBUG_WORLD_NORMALS", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
+  // Forward pass pixel shader: DEBUG_ROUGHNESS with ALPHA_TEST permutation
+  ShaderFileSpec {
+    "Passes/Forward/ForwardMesh_PS.hlsl",
+    std::array { EntryPoint { kPixel, "PS" } },
+    std::array<std::string_view, 3>
+      { "DEBUG_ROUGHNESS", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
+  // Forward pass pixel shader: DEBUG_METALNESS with ALPHA_TEST permutation
+  ShaderFileSpec {
+    "Passes/Forward/ForwardMesh_PS.hlsl",
+    std::array { EntryPoint { kPixel, "PS" } },
+    std::array<std::string_view, 3>
+      { "DEBUG_METALNESS", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Depth pre-pass: VS and PS with ALPHA_TEST permutation
   ShaderFileSpec {
@@ -220,7 +244,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ImGui: 2 entries
 // - Compositing: 2 entries
 // - ToneMap: 2 entries
-// Total: 101
-static_assert(kEngineShaders.size() == 101, "Expected 101 shader entries");
+// Total: 125
+static_assert(kEngineShaders.size() == 125, "Expected 125 shader entries");
 
 } // namespace oxygen::graphics::d3d12

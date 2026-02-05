@@ -341,7 +341,7 @@ auto EnvironmentStaticDataManager::PopulateSkyLight(
 
     // Intensity is a direct multiplier. For non-physical sources (cubemaps),
     // we bridge the unit gap by assuming 1.0 Intensity = 5000 Nits (Standard
-    // Sky).
+    // Sky). Procedural atmosphere remains at its native physical scale.
     const float intensity = sky_light->GetIntensity();
     const float unit_bridge
       = (next.sky_light.source == SkyLightSource::kSpecifiedCubemap) ? 5000.0F
