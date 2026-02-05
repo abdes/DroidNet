@@ -520,9 +520,11 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
 
   bool enabled = sky_sphere_enabled;
   if (ImGui::Checkbox("Enabled##SkySphere", &enabled)) {
-    environment_vm_->SetSkySphereEnabled(enabled);
     if (enabled) {
       environment_vm_->SetSkyAtmosphereEnabled(false);
+      environment_vm_->SetSkySphereEnabled(true);
+    } else {
+      environment_vm_->SetSkySphereEnabled(false);
     }
     skybox_auto_load_pending_ = true;
   }

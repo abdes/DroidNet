@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 //! @file ForwardMesh_PS.hlsl
-//! @brief Pixel shader for Forward+ mesh rendering with debug visualization modes.
+//! @brief Pixel shader for Forward+ physically based rendering.
 
 #include "Renderer/SceneConstants.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
@@ -14,17 +14,9 @@
 #include "Renderer/PositionalLightData.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/MaterialConstants.hlsli"
+#include "Renderer/Vertex.hlsli"
 
 #include "MaterialFlags.hlsli"
-
-struct Vertex {
-    float3 position;
-    float3 normal;
-    float2 texcoord;
-    float3 tangent;
-    float3 bitangent;
-    float4 color;
-};
 
 #include "Core/Bindless/BindlessHelpers.hlsl"
 #include "Passes/Forward/ForwardPbr.hlsli"
@@ -58,32 +50,6 @@ struct VSOutput {
     bool is_front_face : SV_IsFrontFace;
 };
 
-#if defined(DEBUG_LIGHT_HEATMAP) || defined(DEBUG_DEPTH_SLICE) || defined(DEBUG_CLUSTER_INDEX) || defined(DEBUG_IBL_SPECULAR) || defined(DEBUG_IBL_RAW_SKY) || defined(DEBUG_IBL_IRRADIANCE) || defined(DEBUG_BASE_COLOR) || defined(DEBUG_UV0) || defined(DEBUG_OPACITY) || defined(DEBUG_WORLD_NORMALS) || defined(DEBUG_ROUGHNESS) || defined(DEBUG_METALNESS)
-#define DEBUG_MODE_ACTIVE 1
-#endif
-
-#ifdef DEBUG_MODE_ACTIVE
-float3 HeatMapColor(float t) {
-    t = saturate(t);
-    float3 colors[4] = { float3(0,0,0), float3(0,1,0), float3(1,1,0), float3(1,0,0) };
-    float segment = t * 3.0;
-    uint idx = min((uint)floor(segment), 2);
-    return lerp(colors[idx], colors[idx + 1], frac(segment));
-}
-
-float3 DepthSliceColor(uint slice, uint max_slices) {
-    if (max_slices <= 1) return 0.5.xxx;
-    static const float3 colors[8] = { float3(1,0,0), float3(1,0.5,0), float3(1,1,0), float3(0,1,0), float3(1,0,0.5), float3(0.5,0,0), float3(0,0.5,0), float3(1,1,0.5) };
-    return colors[slice % 8];
-}
-
-float3 ClusterIndexColor(uint3 cluster_id) {
-    uint checker = (cluster_id.x + cluster_id.y + cluster_id.z) % 2;
-    float3 base = float3(frac(float(cluster_id.x)*0.123), frac(float(cluster_id.y)*0.567), frac(float(cluster_id.z)*0.901));
-    return lerp(base * 0.5, base, float(checker));
-}
-#endif
-
 [shader("pixel")]
 float4 PS(VSOutput input) : SV_Target0 {
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
@@ -106,85 +72,7 @@ float4 PS(VSOutput input) : SV_Target0 {
     }
 #endif
 
-#ifdef DEBUG_MODE_ACTIVE
-    float3 debug_out = 0.0f;
-    bool debug_handled = false;
-#if defined(DEBUG_UV0)
-    debug_out = float3(frac(input.uv), 0.0f); debug_handled = true;
-#elif defined(DEBUG_BASE_COLOR) || defined(DEBUG_OPACITY) || defined(DEBUG_WORLD_NORMALS) || defined(DEBUG_ROUGHNESS) || defined(DEBUG_METALNESS)
-    MaterialSurface s = EvaluateMaterialSurface(input.world_pos, input.world_normal, input.world_tangent, input.world_bitangent, input.uv, g_DrawIndex, input.is_front_face);
-    #if defined(DEBUG_BASE_COLOR)
-        debug_out = s.base_rgb * input.color;
-    #elif defined(DEBUG_OPACITY)
-        debug_out = s.base_a.xxx;
-    #elif defined(DEBUG_WORLD_NORMALS)
-        debug_out = s.N * 0.5f + 0.5f;
-    #elif defined(DEBUG_ROUGHNESS)
-        debug_out = s.roughness.xxx;
-    #elif defined(DEBUG_METALNESS)
-        debug_out = s.metalness.xxx;
-    #endif
-    debug_handled = true;
-#elif defined(DEBUG_IBL_SPECULAR) || defined(DEBUG_IBL_RAW_SKY) || defined(DEBUG_IBL_IRRADIANCE)
-    EnvironmentStaticData env_data;
-    if (LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data) && env_data.sky_light.enabled) {
-        uint slot = env_data.sky_light.cubemap_slot;
-        if (slot == K_INVALID_BINDLESS_INDEX) slot = env_data.sky_sphere.cubemap_slot;
-        if (slot != K_INVALID_BINDLESS_INDEX) {
-            TextureCube<float4> sky_cube = ResourceDescriptorHeap[slot];
-            const float3 N_v = SafeNormalize(input.world_normal);
-            const float3 V_v = SafeNormalize(camera_position - input.world_pos);
-            const float3 cube_R = CubemapSamplingDirFromOxygenWS(reflect(-V_v, N_v));
-            const float3 cube_N = CubemapSamplingDirFromOxygenWS(N_v);
-            #if defined(DEBUG_IBL_SPECULAR)
-                if (env_data.sky_light.prefilter_map_slot != K_INVALID_BINDLESS_INDEX) {
-                    TextureCube<float4> pref_map = ResourceDescriptorHeap[env_data.sky_light.prefilter_map_slot];
-                    debug_out = pref_map.SampleLevel(linear_sampler, cube_R, 0.0).rgb * env_data.sky_light.tint_rgb * env_data.sky_light.specular_intensity;
-                } else {
-                    debug_out = sky_cube.SampleLevel(linear_sampler, cube_R, 0.0).rgb * env_data.sky_light.tint_rgb * env_data.sky_light.intensity * env_data.sky_light.specular_intensity;
-                }
-            #elif defined(DEBUG_IBL_IRRADIANCE)
-                if (env_data.sky_light.irradiance_map_slot != K_INVALID_BINDLESS_INDEX) {
-                    TextureCube<float4> irr_map = ResourceDescriptorHeap[env_data.sky_light.irradiance_map_slot];
-                    debug_out = irr_map.SampleLevel(linear_sampler, cube_N, 0.0).rgb * env_data.sky_light.tint_rgb * env_data.sky_light.diffuse_intensity;
-                } else {
-                    debug_out = sky_cube.SampleLevel(linear_sampler, cube_N, 0.0).rgb * env_data.sky_light.tint_rgb * env_data.sky_light.intensity * env_data.sky_light.diffuse_intensity;
-                }
-            #else
-                debug_out = sky_cube.SampleLevel(linear_sampler, cube_R, 0.0).rgb * env_data.sky_light.tint_rgb * env_data.sky_light.intensity;
-            #endif
-            debug_handled = true;
-        }
-    }
-#endif
-    if (!debug_handled) {
-        const uint grid = EnvironmentDynamicData.bindless_cluster_grid_slot;
-        if (grid != K_INVALID_BINDLESS_INDEX) {
-            float linear_depth = max(-mul(view_matrix, float4(input.world_pos, 1.0)).z, 0.0);
-            uint idx = GetClusterIndex(input.position.xy, linear_depth);
-            uint3 dims = GetClusterDimensions();
-            #if defined(DEBUG_LIGHT_HEATMAP)
-                debug_out = HeatMapColor(saturate((float)GetClusterLightInfo(grid, idx).light_count / 48.0f));
-            #elif defined(DEBUG_DEPTH_SLICE)
-                debug_out = DepthSliceColor(idx / (dims.x * dims.y), dims.z);
-            #elif defined(DEBUG_CLUSTER_INDEX)
-                debug_out = ClusterIndexColor(uint3(uint(input.position.x)/EnvironmentDynamicData.tile_size_px, uint(input.position.y)/EnvironmentDynamicData.tile_size_px, idx/(dims.x*dims.y)));
-            #endif
-        }
-    }
-
-    // EXPOSURE BYPASS FIX: Remove the division by exposure.
-    // Instead, just return the debug value directly and apply Gamma Correction.
-#ifdef OXYGEN_HDR_OUTPUT
-    return float4(debug_out, 1.0f);
-#else
-    // For non-IBL debug modes (0..1 range), we need Gamma correction to look right on a monitor.
-    // For IBL debug modes (Physical range), we treat them as lit UI elements.
-    return float4(LinearToSrgb(saturate(debug_out)), 1.0f);
-#endif
-
-#else
-    //=== Normal PBR Path (UNTOUCHED) ===
+    //=== Normal PBR Path ===
     MaterialSurface surf = EvaluateMaterialSurface(input.world_pos, input.world_normal, input.world_tangent, input.world_bitangent, input.uv, g_DrawIndex, input.is_front_face);
     const float3 base_rgb = surf.base_rgb * input.color;
     const float3 N = surf.N;
@@ -238,6 +126,5 @@ float4 PS(VSOutput input) : SV_Target0 {
 #else
     final_color *= GetExposure();
     return float4(LinearToSrgb(final_color), surf.base_a);
-#endif
 #endif
 }

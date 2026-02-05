@@ -466,7 +466,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   }
 
   if (shell_) {
-    shell_->Update(time::CanonicalDuration {});
+    shell_->SyncPanels();
   }
 
   // Delegate to pipeline to register views
@@ -535,6 +535,12 @@ auto MainModule::ApplyRenderModeFromPanel() -> void
 
   const auto render_mode = shell_->GetRenderingViewMode();
   pipeline_->SetRenderMode(render_mode);
+
+  const auto wire_color = shell_->GetRenderingWireframeColor();
+  LOG_F(INFO,
+    "RenderScene: ApplyRenderModeFromPanel wire_color=({}, {}, {}, {})",
+    wire_color.r, wire_color.g, wire_color.b, wire_color.a);
+  pipeline_->SetWireframeColor(wire_color);
 
   // Apply debug mode. Rendering debug modes take precedence if set.
   auto debug_mode = shell_->GetRenderingDebugMode();

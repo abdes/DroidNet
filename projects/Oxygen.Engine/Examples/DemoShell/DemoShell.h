@@ -15,14 +15,15 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Scene/Scene.h>
 
 #include "DemoShell/ActiveScene.h"
+#include "DemoShell/Runtime/RenderingPipeline.h"
 #include "DemoShell/Services/CameraLifecycleService.h"
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/UI/DemoPanel.h"
-#include "DemoShell/UI/RenderingVm.h"
 
 namespace oxygen {
 class AsyncEngine;
@@ -92,15 +93,15 @@ struct DemoShellConfig {
   ContentRootConfig content_roots {};
   DemoShellPanelConfig panel_config {};
 
-  std::function<void(const ui::SceneEntry&)> on_scene_load_requested {};
-  std::function<void()> on_scene_load_cancel_requested {};
-  std::function<void(std::size_t)> on_dump_texture_memory {};
-  std::function<std::optional<data::AssetKey>()> get_last_released_scene_key {};
-  std::function<void()> on_force_trim {};
-  std::function<void(const std::filesystem::path&)> on_pak_mounted {};
-  std::function<void(const std::filesystem::path&)> on_loose_index_loaded {};
+  std::function<void(const ui::SceneEntry&)> on_scene_load_requested;
+  std::function<void()> on_scene_load_cancel_requested;
+  std::function<void(std::size_t)> on_dump_texture_memory;
+  std::function<std::optional<data::AssetKey>()> get_last_released_scene_key;
+  std::function<void()> on_force_trim;
+  std::function<void(const std::filesystem::path&)> on_pak_mounted;
+  std::function<void(const std::filesystem::path&)> on_loose_index_loaded;
 
-  std::function<observer_ptr<RenderingPipeline>()> get_active_pipeline {};
+  std::function<observer_ptr<RenderingPipeline>()> get_active_pipeline;
 };
 
 //! Orchestrates the demo shell UI, panels, and camera helpers.
@@ -144,6 +145,9 @@ public:
 
   //! Draw the demo shell UI layout and active panel contents.
   auto Draw(engine::FrameContext& fc) -> void;
+
+  //! Synchronize panel-driven settings during the scene-mutation phase.
+  auto SyncPanels() -> void;
 
   //! Register a demo-specific panel with the shell.
   //!
@@ -192,6 +196,9 @@ public:
   //! Returns the current rendering debug mode.
   [[nodiscard]] auto GetRenderingDebugMode() const -> engine::ShaderDebugMode;
 
+  //! Returns the current wireframe color.
+  [[nodiscard]] auto GetRenderingWireframeColor() const -> graphics::Color;
+
   //! Returns the current light culling visualization mode.
   [[nodiscard]] auto GetLightCullingVisualizationMode() const
     -> engine::ShaderDebugMode;
@@ -202,10 +209,10 @@ public:
 private:
   //! Completes initialization once required modules are available.
   auto CompleteInitialization() -> bool;
-  auto UpdatePanels(bool is_scene_mutation) -> void;
+  auto UpdatePanels() -> void;
 
   struct Impl;
-  std::unique_ptr<Impl> impl_ {};
+  std::unique_ptr<Impl> impl_;
 };
 
 } // namespace oxygen::examples

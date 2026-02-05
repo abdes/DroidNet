@@ -13,6 +13,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <imgui.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/IAssetLoader.h>
@@ -24,6 +25,7 @@
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/ForwardPipeline.h"
 #include "DemoShell/Services/FileBrowserService.h"
+#include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/Services/SkyboxService.h"
 #include "DemoShell/UI/DemoShellUi.h"
 #include "TexturedCube/MainModule.h"
@@ -159,6 +161,7 @@ auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
     // 1. Create Scene and transfer to Shell
     auto scene_unique = std::make_unique<scene::Scene>("TexturedCube-Scene");
     active_scene_ = shell_->SetScene(std::move(scene_unique));
+    shell_->SyncPanels();
 
     // 2. Initialize Services
     auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
@@ -180,6 +183,12 @@ auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
           if (skybox_service_) {
             skybox_service_->SetSkyboxResourceKey(key);
             SkyboxService::SkyLightParams params;
+            if (const auto settings = SettingsService::Default()) {
+              if (const auto intensity
+                = settings->GetFloat("env.sky_sphere.intensity")) {
+                params.sky_sphere_intensity = *intensity;
+              }
+            }
             params.intensity = 1.0F;
             params.diffuse_intensity = 1.0F;
             params.specular_intensity = 1.0F;
@@ -192,7 +201,6 @@ auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
       texture_panel_->Initialize(observer_ptr { texture_vm_.get() });
 
       shell_->RegisterPanel(texture_panel_);
-      shell_->SetActivePanel("Texture Browser");
 
       // 3. Initialize Scene Setup
       scene_setup_ = std::make_unique<SceneSetup>(
@@ -232,8 +240,8 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   camera_lifecycle.ApplyPendingSync();
   camera_lifecycle.ApplyPendingReset();
 
-  // Update shell
-  shell_->Update(time::CanonicalDuration {});
+  // Sync panel-driven settings during scene mutation.
+  shell_->SyncPanels();
 
   // Ensure scene objects (idempotent)
   if (scene_setup_) {
@@ -378,6 +386,12 @@ auto MainModule::ApplyRenderModeFromPanel() -> void
 
   const auto render_mode = shell_->GetRenderingViewMode();
   pipeline_->SetRenderMode(render_mode);
+
+  const auto wire_color = shell_->GetRenderingWireframeColor();
+  LOG_F(INFO,
+    "TexturedCube: ApplyRenderModeFromPanel wire_color=({}, {}, {}, {})",
+    wire_color.r, wire_color.g, wire_color.b, wire_color.a);
+  pipeline_->SetWireframeColor(wire_color);
 
   // Apply debug mode. Rendering debug modes take precedence if set.
   auto debug_mode = shell_->GetRenderingDebugMode();

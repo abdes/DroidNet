@@ -154,6 +154,29 @@ struct CompositionViewImpl {
   }
 };
 
+namespace {
+  struct RenderPolicy {
+    RenderMode effective_render_mode { RenderMode::kSolid };
+    bool overlay_wireframe { false };
+    bool run_scene_passes { true };
+    bool force_neutral_tonemap { false };
+    bool wireframe_after_tonemap { false };
+    bool wireframe_apply_exposure_compensation { false };
+  };
+
+  auto GetWireframeTargetTexture(const RenderPolicy& policy,
+    const CompositionViewImpl& view) -> std::shared_ptr<const graphics::Texture>
+  {
+    if (policy.wireframe_after_tonemap) {
+      DCHECK_NOTNULL_F(view.sdr_texture.get());
+    }
+    if (policy.wireframe_after_tonemap || !view.hdr_texture) {
+      return view.sdr_texture;
+    }
+    return view.hdr_texture;
+  }
+} // namespace
+
 struct ForwardPipeline::Impl {
   observer_ptr<AsyncEngine> engine;
 
@@ -204,6 +227,92 @@ struct ForwardPipeline::Impl {
     bool dirty { true };
   } staged;
 
+  auto BuildRenderPolicy(const CompositionViewImpl& view) const -> RenderPolicy
+  {
+    RenderPolicy policy {};
+    policy.effective_render_mode = staged.render_mode;
+    if (view.intent.force_wireframe) {
+      policy.effective_render_mode = RenderMode::kWireframe;
+    }
+
+    policy.overlay_wireframe
+      = (staged.render_mode == RenderMode::kOverlayWireframe)
+      && (policy.effective_render_mode != RenderMode::kWireframe);
+    policy.run_scene_passes
+      = policy.effective_render_mode != RenderMode::kWireframe;
+    policy.force_neutral_tonemap
+      = policy.effective_render_mode == RenderMode::kWireframe;
+    policy.wireframe_after_tonemap = policy.overlay_wireframe;
+    policy.wireframe_apply_exposure_compensation = false;
+
+    LOG_F(INFO,
+      "ForwardPipeline: RenderPolicy view='{}' mode={} overlay={} "
+      "scene_passes={} neutral_tonemap={} wireframe_after_tonemap={}",
+      view.intent.name, to_string(policy.effective_render_mode),
+      policy.overlay_wireframe, policy.run_scene_passes,
+      policy.force_neutral_tonemap, policy.wireframe_after_tonemap);
+
+    return policy;
+  }
+
+  auto ConfigureWireframePass(const RenderPolicy& policy,
+    const CompositionViewImpl& view, bool clear_color, bool clear_depth,
+    bool depth_write_enable) const -> void
+  {
+    if (!wireframe_pass_config) {
+      return;
+    }
+
+    wireframe_pass_config->clear_color_target = clear_color;
+    wireframe_pass_config->clear_depth_target = clear_depth;
+    wireframe_pass_config->depth_write_enable = depth_write_enable;
+    wireframe_pass_config->apply_exposure_compensation
+      = policy.wireframe_apply_exposure_compensation;
+    wireframe_pass_config->color_texture
+      = GetWireframeTargetTexture(policy, view);
+
+    if (wireframe_pass) {
+      wireframe_pass->SetWireColor(staged.wire_color);
+    } else {
+      wireframe_pass_config->wire_color = staged.wire_color;
+    }
+  }
+
+  struct ToneMapOverrides {
+    engine::ExposureMode exposure_mode { engine::ExposureMode::kManual };
+    float manual_exposure { 1.0F };
+    engine::ToneMapper tone_mapper { engine::ToneMapper::kAcesFitted };
+  };
+
+  auto ApplyToneMapPolicy(
+    const RenderPolicy& policy, ToneMapOverrides& saved) const -> void
+  {
+    if (!tone_map_pass_config) {
+      return;
+    }
+
+    saved.exposure_mode = tone_map_pass_config->exposure_mode;
+    saved.manual_exposure = tone_map_pass_config->manual_exposure;
+    saved.tone_mapper = tone_map_pass_config->tone_mapper;
+
+    if (policy.force_neutral_tonemap) {
+      tone_map_pass_config->exposure_mode = engine::ExposureMode::kManual;
+      tone_map_pass_config->manual_exposure = 1.0F;
+      tone_map_pass_config->tone_mapper = engine::ToneMapper::kNone;
+    }
+  }
+
+  auto RestoreToneMapPolicy(const ToneMapOverrides& saved) const -> void
+  {
+    if (!tone_map_pass_config) {
+      return;
+    }
+
+    tone_map_pass_config->exposure_mode = saved.exposure_mode;
+    tone_map_pass_config->manual_exposure = saved.manual_exposure;
+    tone_map_pass_config->tone_mapper = saved.tone_mapper;
+  }
+
   explicit Impl(observer_ptr<AsyncEngine> engine_ptr)
     : engine(engine_ptr)
   {
@@ -242,6 +351,10 @@ struct ForwardPipeline::Impl {
       return;
     }
 
+    LOG_F(INFO, "ForwardPipeline: ApplySettings wire_color=({}, {}, {}, {})",
+      staged.wire_color.r, staged.wire_color.g, staged.wire_color.b,
+      staged.wire_color.a);
+
     // Resolve Debug Mode: Priority to Light Culling Visualization if active
     if (shader_pass_config) {
       shader_pass_config->debug_mode = (staged.light_culling_debug_mode
@@ -256,7 +369,9 @@ struct ForwardPipeline::Impl {
         = staged.clustered_culling_enabled ? staged.cluster_depth_slices : 1;
     }
 
-    if (wireframe_pass_config) {
+    if (wireframe_pass) {
+      wireframe_pass->SetWireColor(staged.wire_color);
+    } else if (wireframe_pass_config) {
       wireframe_pass_config->wire_color = staged.wire_color;
     }
 
@@ -471,6 +586,9 @@ auto ForwardPipeline::OnSceneMutation(engine::FrameContext& context,
           auto& renderer = rc.GetRenderer();
           bool sdr_in_render_target = false;
           std::shared_ptr<const graphics::Texture> depth_tex;
+          const auto policy = self->BuildRenderPolicy(*view);
+          DCHECK_F(!policy.overlay_wireframe || policy.wireframe_after_tonemap);
+
           if (view->has_hdr && view->hdr_texture && view->hdr_framebuffer) {
             const auto fb = view->hdr_framebuffer;
             const auto& fb_desc = fb->GetDescriptor();
@@ -532,7 +650,8 @@ auto ForwardPipeline::OnSceneMutation(engine::FrameContext& context,
             const auto debug_mode = self->shader_pass_config
               ? self->shader_pass_config->debug_mode
               : engine::ShaderDebugMode::kDisabled;
-            const auto IsNonIblDebug = [](engine::ShaderDebugMode mode) -> bool {
+            const auto IsNonIblDebug
+              = [](engine::ShaderDebugMode mode) -> bool {
               switch (mode) {
               case engine::ShaderDebugMode::kLightCullingHeatMap:
               case engine::ShaderDebugMode::kDepthSlice:
@@ -582,28 +701,13 @@ auto ForwardPipeline::OnSceneMutation(engine::FrameContext& context,
             // However, if no pass clears it, we might need a manual clear.
             // ShaderPass by default has clear_color_target=true in Impl init.
 
-            // Determine effective render mode (Global vs View Override)
-            const auto render_mode = self->staged.render_mode;
-            auto effective_render_mode = render_mode;
-            if (view->intent.force_wireframe) {
-              effective_render_mode = RenderMode::kWireframe;
-            }
-
-            if (effective_render_mode == RenderMode::kWireframe) {
+            if (!policy.run_scene_passes) {
               if (self->wireframe_pass_config) {
                 // For pure wireframe, we DO clear the background to the intent
                 // clear color and we DO NOT run any material or sky passes.
                 const bool is_forced = view->intent.force_wireframe;
-                self->wireframe_pass_config->clear_color_target = !is_forced;
-                self->wireframe_pass_config->depth_write_enable = true;
-
-                if (is_forced) {
-                  self->wireframe_pass_config->wire_color
-                    = graphics::Color(0.0f, 1.0f, 0.0f, 1.0f);
-                } else {
-                  self->wireframe_pass_config->wire_color
-                    = self->staged.wire_color;
-                }
+                self->ConfigureWireframePass(
+                  policy, *view, !is_forced, true, true);
               }
               if (self->wireframe_pass) {
                 co_await self->wireframe_pass->PrepareResources(rc, rec);
@@ -652,25 +756,15 @@ auto ForwardPipeline::OnSceneMutation(engine::FrameContext& context,
                 rc.RegisterPass<engine::TransparentPass>(
                   self->transparent_pass.get());
               }
-
-              if (render_mode == RenderMode::kOverlayWireframe) {
-                if (self->wireframe_pass_config) {
-                  self->wireframe_pass_config->clear_color_target = false;
-                  self->wireframe_pass_config->depth_write_enable = false;
-                  self->wireframe_pass_config->wire_color
-                    = self->staged.wire_color;
-                }
-                if (self->wireframe_pass) {
-                  co_await self->wireframe_pass->PrepareResources(rc, rec);
-                  co_await self->wireframe_pass->Execute(rc, rec);
-                }
-              }
             }
 
             // Tonemap to SDR
             if (self->tone_map_pass && view->sdr_texture) {
               self->tone_map_pass_config->source_texture = view->hdr_texture;
               self->tone_map_pass_config->output_texture = view->sdr_texture;
+
+              Impl::ToneMapOverrides tone_map_overrides {};
+              self->ApplyToneMapPolicy(policy, tone_map_overrides);
 
               rec.RequireResourceState(
                 *view->hdr_texture, graphics::ResourceStates::kShaderResource);
@@ -681,6 +775,10 @@ auto ForwardPipeline::OnSceneMutation(engine::FrameContext& context,
 
               co_await self->tone_map_pass->PrepareResources(rc, rec);
               co_await self->tone_map_pass->Execute(rc, rec);
+
+              if (policy.force_neutral_tonemap) {
+                self->RestoreToneMapPolicy(tone_map_overrides);
+              }
             }
           } else if (view->sdr_texture && view->sdr_framebuffer) {
             rec.RequireResourceState(
@@ -704,6 +802,12 @@ auto ForwardPipeline::OnSceneMutation(engine::FrameContext& context,
                 *view->sdr_texture, graphics::ResourceStates::kRenderTarget);
               rec.FlushBarriers();
               sdr_in_render_target = true;
+            }
+            if (policy.overlay_wireframe && self->wireframe_pass_config
+              && self->wireframe_pass != nullptr) {
+              self->ConfigureWireframePass(policy, *view, false, false, false);
+              co_await self->wireframe_pass->PrepareResources(rc, rec);
+              co_await self->wireframe_pass->Execute(rc, rec);
             }
 
             rec.BindFrameBuffer(*view->sdr_framebuffer);
@@ -801,6 +905,8 @@ auto ForwardPipeline::SetRenderMode(RenderMode mode) -> void
 }
 auto ForwardPipeline::SetWireframeColor(const graphics::Color& color) -> void
 {
+  LOG_F(INFO, "ForwardPipeline: SetWireframeColor ({}, {}, {}, {})", color.r,
+    color.g, color.b, color.a);
   impl_->staged.wire_color = color;
   impl_->staged.dirty = true;
 }

@@ -104,6 +104,9 @@ protected:
 
   //=== Helper Methods ===---------------------------------------------------//
 
+  auto RebindCommonRootParameters(graphics::CommandRecorder& recorder) const
+    -> void;
+
 private:
   auto BindPassConstantsIndexConstant(graphics::CommandRecorder& recorder,
     ShaderVisibleIndex pass_constants_index) const -> void;

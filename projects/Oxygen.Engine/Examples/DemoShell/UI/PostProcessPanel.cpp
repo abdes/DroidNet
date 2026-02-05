@@ -43,37 +43,12 @@ auto PostProcessPanel::GetIcon() const noexcept -> std::string_view
 
 auto PostProcessPanel::DrawContents() -> void
 {
-  if (ImGui::CollapsingHeader("Compositing", ImGuiTreeNodeFlags_DefaultOpen)) {
-    DrawCompositingSection();
-  }
-
   if (ImGui::CollapsingHeader("Exposure", ImGuiTreeNodeFlags_DefaultOpen)) {
     DrawExposureSection();
   }
 
   if (ImGui::CollapsingHeader("Tonemapping", ImGuiTreeNodeFlags_DefaultOpen)) {
     DrawTonemappingSection();
-  }
-}
-
-void PostProcessPanel::DrawCompositingSection()
-{
-  bool enabled = vm_->GetCompositingEnabled();
-  if (ImGui::Checkbox("Enabled##Compositing", &enabled)) {
-    vm_->SetCompositingEnabled(enabled);
-  }
-
-  if (!enabled) {
-    ImGui::BeginDisabled();
-  }
-
-  float alpha = vm_->GetCompositingAlpha();
-  if (ImGui::SliderFloat("Alpha", &alpha, 0.0F, 1.0F)) {
-    vm_->SetCompositingAlpha(alpha);
-  }
-
-  if (!enabled) {
-    ImGui::EndDisabled();
   }
 }
 

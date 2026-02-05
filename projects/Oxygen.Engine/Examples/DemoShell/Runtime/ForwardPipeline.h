@@ -20,8 +20,21 @@ namespace oxygen::examples {
 
 //! Implements a standard forward rendering pipeline.
 /*!
-  Manages the configuration and execution of a forward rendering pass sequence
-  (Light Culling -> Z-Prepass -> Opaque -> Transparent) for multiple layers.
+ Manages the configuration and execution of a forward rendering pass sequence
+ (Light Culling -> Z-Prepass -> Opaque -> Transparent) for multiple layers.
+
+### Execution Model
+
+- **Per-view coroutine**: Views are registered with the renderer and execute a
+  render coroutine that writes HDR, tonemaps into SDR, and emits the SDR result
+  for compositing.
+- **Settings staging**: Configuration setters stage values that are applied on
+  the engine thread during `OnFrameStart`.
+- **Wireframe handling**: Pure wireframe renders in the HDR path; overlay
+  wireframe renders after tonemapping in SDR to preserve line color.
+
+@note These hooks are expected to be called on the engine thread only.
+@see RenderingPipeline, WireframePass, ToneMapPass
 */
 class ForwardPipeline : public RenderingPipeline {
   OXYGEN_TYPED(ForwardPipeline)
@@ -31,8 +44,10 @@ public:
   ~ForwardPipeline() override;
 
   // Pipeline Interface
+  //! Apply staged settings before render graph execution.
   auto OnFrameStart(engine::FrameContext& context, engine::Renderer& renderer)
     -> void override;
+  //! Register views and bind per-view render coroutines.
   auto OnSceneMutation(engine::FrameContext& context,
     engine::Renderer& renderer, scene::Scene& scene,
     std::span<const CompositionView> view_descs,
@@ -50,8 +65,11 @@ public:
   // Configuration
   [[nodiscard]] auto GetSupportedFeatures() const -> PipelineFeature override;
 
+  //! Stage a shader debug mode update.
   auto SetShaderDebugMode(engine::ShaderDebugMode mode) -> void override;
+  //! Stage a render mode update (solid, wireframe, overlay wireframe).
   auto SetRenderMode(RenderMode mode) -> void override;
+  //! Stage a wireframe line color update.
   auto SetWireframeColor(const graphics::Color& color) -> void override;
   auto SetLightCullingVisualizationMode(engine::ShaderDebugMode mode)
     -> void override;

@@ -84,6 +84,8 @@ void RenderingPanel::DrawWireframeColor()
   float wire_color[3] = { color.r, color.g, color.b };
   if (ImGui::ColorEdit3("Wire Color", wire_color,
         ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR)) {
+    LOG_F(INFO, "RenderingPanel: UI wire_color changed ({}, {}, {})",
+      wire_color[0], wire_color[1], wire_color[2]);
     vm_->SetWireframeColor(
       graphics::Color { wire_color[0], wire_color[1], wire_color[2], 1.0F });
   }
@@ -92,6 +94,11 @@ void RenderingPanel::DrawWireframeColor()
 void RenderingPanel::DrawDebugModes()
 {
   using engine::ShaderDebugMode;
+
+  const bool disable_debug_modes = GetRenderMode() == RenderMode::kWireframe;
+  if (disable_debug_modes) {
+    ImGui::BeginDisabled();
+  }
 
   const auto current_mode = vm_->GetDebugMode();
 
@@ -154,6 +161,10 @@ void RenderingPanel::DrawDebugModes()
   if (ImGui::RadioButton(
         "Sky Radiance", current_mode == ShaderDebugMode::kIblRawSky)) {
     vm_->SetDebugMode(ShaderDebugMode::kIblRawSky);
+  }
+
+  if (disable_debug_modes) {
+    ImGui::EndDisabled();
   }
 }
 

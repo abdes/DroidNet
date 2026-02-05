@@ -1,9 +1,3 @@
-<!--
-Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-copy at https://opensource.org/licenses/BSD-3-Clause.
-SPDX-License-Identifier: BSD-3-Clause
--->
-
 # Physical Lighting Roadmap (Oxygen)
 
 ## Goal
@@ -12,47 +6,57 @@ Deliver end-to-end physically based lighting with **uniform lux units**,
 camera-accurate exposure, robust tonemapping, and consistent PBR rendering
 across all demos and content pipelines.
 
+> **Related Documents:**
+>
+> - [PBR Architecture](PBR.md) — unit conventions and data model
+> - [Forward Pipeline Design](forward_pipeline.md) — rendering architecture
+> - [PostProcessPanel Design](PostProcessPanel.md) — UI integration
+
 ## Current Observations (Codebase Gaps)
 
 ### Units & Exposure
 
-- Light intensities are treated as **unitless scalars**.
-- Exposure is applied as `exp2(EV)` in
- [src/Oxygen/Renderer/Renderer.cpp](../src/Oxygen/Renderer/Renderer.cpp),
- but EV is not derived from physical light/camera parameters.
+- Light intensities use explicit physical units on light components
+  (e.g., lumens for point/spot, lux for directional).
+- Exposure is applied as `exp2(EV)` in `Renderer::UpdateViewExposure`
+  (`src/Oxygen/Renderer/Renderer.cpp`); the renderer path still does not
+  derive EV from camera parameters.
 - `EnvironmentDynamicData.exposure` is populated without a physical
- relationship to lux.
+  relationship to lux for the renderer path.
 
 ### Sun & Environment
 
-- Sun state is stored in `SunState` as `intensity` and `illuminance`, but
- no clear lux semantics are enforced.
+- Sun state is stored in `Sun` class with `intensity_lux_` field
+  (`src/Oxygen/Scene/Environment/Sun.h`) — **this is correctly implemented**.
 - Environment post-process is incomplete; only manual EV compensation
  is supported.
 - Sky/atmosphere does not yet guarantee energy conservation with sun lux.
 
 ### Lights
 
-- Directional/spot/point lights use `intensity` without specifying units.
-- `LightCommon::exposure_compensation_ev` exists but is not documented as
+- `DirectionalLight`, `PointLight`, `SpotLight` use `CommonLightProperties.intensity`
+  without specifying units (`src/Oxygen/Scene/Light/`).
+- `CommonLightProperties::exposure_compensation_ev` exists but is not documented as
  part of a physical pipeline.
 
 ### Rendering & Shaders
 
 - Forward lighting uses light intensity directly in
- [src/Oxygen/Graphics/Direct3D12/Shaders/Passes/Forward/ForwardDirectLighting.hlsli](../src/Oxygen/Graphics/Direct3D12/Shaders/Passes/Forward/ForwardDirectLighting.hlsli)
+ `src/Oxygen/Graphics/Direct3D12/Shaders/Passes/Forward/ForwardDirectLighting.hlsli`
  without lux-to-radiance conversion.
 - Tone mapping is applied after exposure, but exposure is not physical.
 
 ### Camera
 
-- No physical camera model (aperture/shutter/ISO) is wired to exposure.
-- No EV100 pipeline for consistent exposure across scenes.
+- Camera exposure (aperture/shutter/ISO) is stored on camera components via
+  `CameraExposure` and persisted per camera in DemoShell.
+- DemoShell applies manual camera EV100 to the runtime pipeline, but the
+  renderer path is not yet driven by camera exposure.
 
 ## Principles (Target State)
 
 - **All light units are physical**:
-  - Sun: **lux** (illuminance at surface)
+  - Sun: **lux** (illuminance at surface) — ✓ Implemented
   - Directional: **lux** (irradiance/illuminance)
   - Point/Spot: **lumens** (flux) or **candelas** (intensity)
   - Sky/IBL: **cd/m²** or derived radiance with proper calibration
@@ -63,47 +67,68 @@ across all demos and content pipelines.
 
 ---
 
-# Phased Plan with Trackable Tasks
+## Phased Plan with Trackable Tasks
 
-## Phase 0 — Baseline Audit & Definitions
+### Phase 0 — Baseline Audit & Definitions
 
 **Outcome:** agreed unit conventions and internal documentation.
 
 **Deliverables (verifiable):**
 
-- [ ] Unit convention doc committed (lux/lumen/cd/nit) and referenced by code.
-- [ ] LightBench demo spec added and runnable via DemoShell.
-- [ ] PostProcessPanel (DemoShell, reusable) created with an **Exposure**
-  section.
-- [ ] Glossary section updated with final terminology.
-
-- [ ] Define authoritative unit conventions (lux, lumens, candelas, nits).
-- [ ] Document unit usage in `SunState`, `DirectionalLight`, `PointLight`,
-   `SpotLight`, and `PostProcessVolume`.
-- [ ] Add a “physical lighting glossary” to this document.
-- [ ] Create a simple reference scene spec (mid-gray card, white card,
+- [x] Unit convention doc committed (lux/lumen/cd/nit) and referenced by code.
+- [x] LightBench demo spec added and runnable via DemoShell.
+- [x] PostProcessPanel (DemoShell, reusable) created with an **Exposure** section.
+- [x] Glossary section updated with final terminology.
+- [x] Define authoritative unit conventions (lux, lumens, candelas, nits).
+- [ ] Document unit usage in `CommonLightProperties`, `DirectionalLight`,
+      `PointLight`, `SpotLight`, and `PostProcessVolume`.
+- [x] Add a "physical lighting glossary" to this document.
+- [x] Create a simple reference scene spec (mid-gray card, white card,
   18% gray) to validate exposure in LightBench.
 
-## Phase 1 — Data Model & API Alignment
+### Phase 1 — Data Model & API Alignment
 
 **Outcome:** engine APIs describe physical units explicitly.
 
+**Source Files:**
+
+| File | Namespace |
+| ---- | --------- |
+| `src/Oxygen/Scene/Light/LightCommon.h` | `oxygen::scene` |
+| `src/Oxygen/Scene/Light/DirectionalLight.h` | `oxygen::scene` |
+| `src/Oxygen/Scene/Light/PointLight.h` | `oxygen::scene` |
+| `src/Oxygen/Scene/Light/SpotLight.h` | `oxygen::scene` |
+| `src/Oxygen/Scene/Environment/Sun.h` | `oxygen::scene` |
+
 **Deliverables (verifiable):**
 
-- [ ] Public headers show explicit unit names (e.g., `intensity_lux`).
+- [x] Public headers show explicit unit names (e.g., `intensity_lux`).
 - [ ] Doxygen for all light intensity fields references the units.
-- [ ] No ambiguous `intensity` remains for light units in public APIs.
+- [x] No ambiguous `intensity` remains for light units in public APIs.
 
-- [ ] Update `LightCommon` and light classes to clarify units:
-  - Directional: `intensity_lux`
-  - Point/Spot: choose **lumens** (recommended) and expose as such
+**Tasks:**
+
+- [x] Update `CommonLightProperties` in `LightCommon.h` to clarify units:
+  - Remove ambiguous `intensity` from common properties.
+  - For Point/Spot: use `luminous_flux_lm` (lumens).
+  - For Directional: use `intensity_lux` (illuminance).
+- [x] Add typed accessors with unit suffixes:
+  - `DirectionalLight::SetIntensityLux(float)`
+  - `PointLight::SetLuminousFluxLm(float)`
+  - `SpotLight::SetLuminousFluxLm(float)`
 - [ ] Update `SunState` and `EnvironmentDynamicData` fields naming:
-  - `sun_illuminance_lux` and `sun_radiance` (if needed)
+  - `sun_illuminance_lux` (already present in Sun class)
+  - Add `sun_radiance` if needed for shader transport
 - [ ] Add unit annotations in headers and documentation comments.
 
-## Phase 2 — Exposure System (Manual & Physical)
+### Phase 2 — Exposure System (Manual & Physical)
 
 **Outcome:** manual exposure is physically meaningful and stable.
+
+**Architectural Note:** Exposure is integrated into the `ForwardPipeline` via
+the **Interceptor Pattern** (see [forward_pipeline.md, REQ02](forward_pipeline.md#requirements-specification)).
+Raw scene radiance is captured in an HDR intermediate and resolved to SDR
+during the `OnCompositing` phase using `ToneMapPass` and `CompositingPass`.
 
 **Vocabulary note:** exposure is expressed in stops (EV, log₂ space). The
 exposure scalar uses $2^{EV}$, and validation focuses on **adaptation rates**
@@ -113,19 +138,24 @@ absolute tolerance.
 
 **Deliverables (verifiable):**
 
-- [ ] `CameraExposure` struct integrated and serialized.
-- [ ] Manual exposure path uses EV100 formula end-to-end.
-- [ ] Demo UI exposes camera exposure parameters and persists them.
+- [x] `CameraExposure` struct integrated and serialized.
+- [x] Demo UI exposes camera exposure parameters and persists them.
+- [ ] Manual exposure path uses EV100 formula end-to-end in renderer.
 
-- [ ] Introduce **CameraExposure** struct:
+**Tasks:**
+
+- [x] Introduce **CameraExposure** struct:
   - aperture (f-number), shutter (seconds), ISO
-- [ ] Compute EV100 and exposure scale:
+  - Location: `src/Oxygen/Scene/Camera/CameraExposure.h` (new file)
+- [x] Compute EV100:
   - $EV100 = \log_2(\frac{N^2}{t}) - \log_2(\frac{ISO}{100})$
+- [ ] Align exposure scale with physical calibration:
   - $exposure = \frac{1}{1.2} \cdot 2^{-EV100}$
 - [ ] Update `Renderer::UpdateViewExposure` to use physical camera exposure.
 - [ ] Update `PostProcessVolume` to set EV or camera parameters explicitly.
+- [x] Integrate with PostProcessPanel (see [PostProcessPanel.md, Phase C](PostProcessPanel.md#phase-c-postprocess-integration-exposure--tonemapping)).
 
-## Phase 3 — Lux-Consistent Lighting
+### Phase 3 — Lux-Consistent Lighting
 
 **Outcome:** lights produce correct radiance for lux/lumen inputs.
 
@@ -136,6 +166,8 @@ absolute tolerance.
 - [ ] Directional, point, and spot lights visually match reference charts.
 - [ ] Lux-based sun produces expected mid‑gray at target EV100.
 
+**Tasks:**
+
 - [ ] Directional lights: treat input as lux; convert to radiance using
    Lambertian model in shader.
 - [ ] Point lights: if input is lumens, convert to intensity (cd) and then
@@ -143,9 +175,10 @@ absolute tolerance.
 - [ ] Spot lights: apply lumens/candela conversion with cone distribution.
 - [ ] Add conversion helpers in shader library:
   - `LuxToIrradiance`, `LumensToCandela`, `CandelaToRadiance`.
+  - Location: `src/Oxygen/Graphics/Direct3D12/Shaders/Common/PhysicalLighting.hlsli`
 - [ ] Update `ForwardDirectLighting.hlsli` to use conversions.
 
-## Phase 4 — Sun & Environment Integration
+### Phase 4 — Sun & Environment Integration
 
 **Outcome:** sun/sky/atmosphere respond correctly to physical units.
 
@@ -155,12 +188,14 @@ absolute tolerance.
 - [ ] Atmosphere LUTs match sun intensity changes without manual scaling.
 - [ ] IBL brightness is calibrated to a known sky luminance (cd/m²).
 
+**Tasks:**
+
 - [ ] Normalize sun direction and ensure lux stored as illuminance.
 - [ ] Use lux in `EnvironmentDynamicData` and consistently in shaders.
 - [ ] Ensure aerial perspective uses physically correct sun intensity.
 - [ ] Calibrate sky dome / IBL to realistic luminance (cd/m²).
 
-## Phase 5 — Tone Mapping & Color Management
+### Phase 5 — Tone Mapping & Color Management
 
 **Outcome:** stable, predictable output across displays.
 
@@ -170,12 +205,23 @@ absolute tolerance.
 - [ ] Linear->sRGB conversion is applied exactly once per pixel.
 - [ ] White balance and exposure compensation are verified by capture.
 
+**Tasks:**
+
 - [ ] Select a primary tone mapper (ACES fitted recommended).
 - [ ] Add optional white-balance and exposure compensation stage.
 - [ ] Ensure linear->sRGB conversion happens only once.
 - [ ] Validate color pipeline against reference charts.
 
-## Phase 6 — Auto Exposure (Histogram)
+**Tonemapper Options (Engine Support):**
+
+| Enum Value | UI Label | Description |
+| ---------- | -------- | ----------- |
+| `ToneMapper::kAcesFitted` | ACES | Industry-standard filmic curve |
+| `ToneMapper::kFilmic` | Filmic | Classic filmic S-curve |
+| `ToneMapper::kReinhard` | Reinhard | Simple luminance mapping |
+| `ToneMapper::kNone` | None | Passthrough (debug only) |
+
+### Phase 6 — Auto Exposure (Histogram)
 
 **Outcome:** robust auto exposure that works with physical units.
 
@@ -185,12 +231,14 @@ absolute tolerance.
 - [ ] Auto exposure speed parameters affect convergence as expected.
 - [ ] Exposure output is logged/visualized for validation builds.
 
+**Tasks:**
+
 - [ ] Implement luminance histogram pass (compute).
 - [ ] Add metering modes (center-weighted, average, spot).
 - [ ] Add temporal smoothing (speed up/down).
 - [ ] Bind computed exposure to `EnvironmentDynamicData.exposure`.
 
-## Phase 7 — Content & Tooling
+### Phase 7 — Content & Tooling
 
 **Outcome:** content authoring uses correct units and defaults.
 
@@ -200,11 +248,13 @@ absolute tolerance.
 - [ ] UI labels show units for all light and exposure controls.
 - [ ] Import pipeline recognizes light units from source formats.
 
+**Tasks:**
+
 - [ ] Update demo presets to use physical values.
 - [ ] Add UI labels with units in DemoShell panels.
 - [ ] Add import pipeline metadata for light units where applicable.
 
-## Phase 8 — Visualization & Gizmos
+### Phase 8 — Visualization & Gizmos
 
 **Outcome:** light and exposure debugging visuals are available in LightBench.
 
@@ -213,56 +263,64 @@ absolute tolerance.
 - [ ] Light gizmos (position/axis markers) toggleable in LightBench.
 - [ ] Scene widgets for light selection and inspection.
 
+**Tasks:**
+
 - [ ] Design and implement light visualization overlays (point/spot).
 - [ ] Add optional gizmo scaling and visibility toggles.
 - [ ] Capture reference screenshots for validation docs.
 
 ---
 
-# Concrete Code Actions (By Area)
+## Concrete Code Actions (By Area)
 
-## Renderer
+### Renderer
 
 - [ ] Update `Renderer::UpdateViewExposure` to use camera model.
 - [ ] Update `EnvironmentDynamicDataManager::SetSunState` to store lux
    explicitly and/or add conversion to radiance for shaders.
 
-## Lights
+### Lights
 
 - [ ] Rename and document light intensity fields with explicit units.
 - [ ] Add conversion utilities in light data emission.
 
-## Shaders
+### Shaders
 
 - [ ] Add conversion helpers in shared shader headers.
 - [ ] Update forward lighting to apply physical conversions.
 
-## Environment
+### Environment
 
 - [ ] Implement robust post-process pipeline with exposure/tone map stages.
 - [ ] Ensure environment sun/sky values match lux calibration.
 
-## Camera
+### Camera
 
 - [ ] Add camera exposure parameters to scene/camera classes.
 - [ ] Expose camera settings in DemoShell panel.
 
 ---
 
-# Validation & QA Checklist
+## Validation & QA Checklist
 
 - [ ] Middle‑gray mapping matches 0.18 or 0.22 within ±10–20% luminance error.
 - [ ] White point clipping aligns with ~12–16 EV for outdoor scenes.
 - [ ] Scene‑referred luminance is continuous across frames.
 - [ ] Auto exposure adapts smoothly at ~0.1–0.2 EV per frame.
 - [ ] Sun/sky/IBL are energy consistent.
+- [ ] **Coroutine Integrity**: Post-process effects are implemented as awaitable
+      **Coroutine Contributors** ([forward_pipeline.md, REQ07](forward_pipeline.md#requirements-specification)).
+- [ ] **Interceptor Validation**: HDR intermediates are correctly managed and
+      resolved during `OnCompositing` ([forward_pipeline.md, REQ04](forward_pipeline.md#requirements-specification)).
 
 ---
 
-# Glossary
+## Glossary
 
 - **Lux (lx)**: illuminance on a surface.
 - **Lumen (lm)**: total light flux emitted.
 - **Candela (cd)**: luminous intensity (lm/sr).
 - **Nit (cd/m²)**: luminance of emissive surfaces or sky.
 - **EV100**: exposure value referenced to ISO 100.
+- **Coroutine Contributors**: see [forward_pipeline.md](forward_pipeline.md#definitions).
+- **Interceptor Pattern**: see [forward_pipeline.md](forward_pipeline.md#definitions).

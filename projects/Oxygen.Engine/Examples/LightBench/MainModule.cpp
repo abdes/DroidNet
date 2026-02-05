@@ -140,6 +140,7 @@ auto MainModule::OnShutdown() noexcept -> void
 
 auto MainModule::OnFrameStart(oxygen::engine::FrameContext& context) -> void
 {
+  ApplyRenderModeFromPanel();
   Base::OnFrameStart(context);
 }
 
@@ -170,7 +171,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   camera_lifecycle.ApplyPendingSync();
   camera_lifecycle.ApplyPendingReset();
 
-  shell_->Update(time::CanonicalDuration {});
+  shell_->SyncPanels();
 
   light_scene_.Update();
 
@@ -267,5 +268,25 @@ auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
 }
 
 auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void { }
+
+auto MainModule::ApplyRenderModeFromPanel() -> void
+{
+  if (!shell_ || !pipeline_) {
+    return;
+  }
+
+  const auto render_mode = shell_->GetRenderingViewMode();
+  pipeline_->SetRenderMode(render_mode);
+
+  const auto wire_color = shell_->GetRenderingWireframeColor();
+  pipeline_->SetWireframeColor(wire_color);
+
+  // Apply debug mode. Rendering debug modes take precedence if set.
+  auto debug_mode = shell_->GetRenderingDebugMode();
+  if (debug_mode == engine::ShaderDebugMode::kDisabled) {
+    debug_mode = shell_->GetLightCullingVisualizationMode();
+  }
+  pipeline_->SetShaderDebugMode(debug_mode);
+}
 
 } // namespace oxygen::examples::light_bench

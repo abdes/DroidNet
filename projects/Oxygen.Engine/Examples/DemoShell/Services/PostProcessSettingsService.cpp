@@ -125,42 +125,6 @@ auto PostProcessSettingsService::BindCameraLifecycle(
   }
 }
 
-auto PostProcessSettingsService::GetCompositingEnabled() const -> bool
-{
-  const auto settings = ResolveSettings();
-  if (settings) {
-    return settings->GetBool(kCompositingEnabledKey).value_or(true);
-  }
-  return true;
-}
-
-auto PostProcessSettingsService::SetCompositingEnabled(bool enabled) -> void
-{
-  const auto settings = ResolveSettings();
-  if (settings) {
-    settings->SetBool(kCompositingEnabledKey, enabled);
-    epoch_++;
-  }
-}
-
-auto PostProcessSettingsService::GetCompositingAlpha() const -> float
-{
-  const auto settings = ResolveSettings();
-  if (settings) {
-    return settings->GetFloat(kCompositingAlphaKey).value_or(1.0F);
-  }
-  return 1.0F;
-}
-
-auto PostProcessSettingsService::SetCompositingAlpha(float alpha) -> void
-{
-  const auto settings = ResolveSettings();
-  if (settings) {
-    settings->SetFloat(kCompositingAlphaKey, alpha);
-    epoch_++;
-  }
-}
-
 // Exposure
 
 auto PostProcessSettingsService::GetExposureMode() const -> engine::ExposureMode

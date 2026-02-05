@@ -10,6 +10,7 @@
 #include <optional>
 
 #include <Oxygen/Renderer/Passes/GraphicsRenderPass.h>
+#include <Oxygen/Renderer/Types/ShaderDebugMode.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::graphics {
@@ -26,6 +27,8 @@ struct TransparentPassConfig {
   std::string debug_name { "TransparentPass" };
   //! Rasterization fill mode for this pass (default: solid)
   graphics::FillMode fill_mode { graphics::FillMode::kSolid };
+  //! Debug visualization mode (see ShaderDebugMode).
+  ShaderDebugMode debug_mode { ShaderDebugMode::kDisabled };
 };
 
 //! Forward shading pass for transparent (blended) geometry.
@@ -67,8 +70,11 @@ private:
 
   std::shared_ptr<Config> config_;
 
-  std::optional<graphics::GraphicsPipelineDesc> pso_single_sided_ {};
-  std::optional<graphics::GraphicsPipelineDesc> pso_double_sided_ {};
+  //! Cached debug mode from last PSO build
+  ShaderDebugMode last_built_debug_mode_ { ShaderDebugMode::kDisabled };
+
+  std::optional<graphics::GraphicsPipelineDesc> pso_single_sided_;
+  std::optional<graphics::GraphicsPipelineDesc> pso_double_sided_;
 };
 
 } // namespace oxygen::engine

@@ -5,6 +5,9 @@
       700
     ]
   },
+  "camera": {
+    "orbit_mode": "turntable"
+  },
   "camera_rig": {
     "MainCamera": {
       "camera": {
@@ -30,7 +33,7 @@
       },
       "mode": "orbit",
       "orbit": {
-        "distance": 8.385164260864258,
+        "distance": 10.385162353515625,
         "mode": "turntable",
         "target": {
           "x": 0.0,
@@ -39,15 +42,15 @@
         }
       },
       "position": {
-        "x": 7.0588202476501465,
-        "y": 4.481167316436768,
-        "z": -0.6349631547927856
+        "x": -7.835677623748779,
+        "y": -6.815028190612793,
+        "z": 0.09557729959487915
       },
       "rotation": {
-        "w": 0.3274543285369873,
-        "x": 0.3532649874687195,
-        "y": 0.6427022218704224,
-        "z": 0.5957443714141846
+        "w": 0.6464321613311768,
+        "x": 0.6405100226402283,
+        "y": -0.2917966842651367,
+        "z": -0.2944946587085724
       },
       "scale": {
         "x": 1.0,
@@ -57,7 +60,7 @@
     }
   },
   "demo_shell": {
-    "active_panel": "Rendering",
+    "active_panel": "",
     "panels": {
       "environment": {
         "sky_light": {
@@ -70,6 +73,9 @@
       },
       "post_process": {
         "width": 550.0
+      },
+      "rendering": {
+        "width": 544.0
       },
       "texture_browser": {
         "width": 652.0
@@ -101,20 +107,20 @@
       "visualize_lut": false
     },
     "sky_light": {
-      "diffuse": 0.9900000095367432,
+      "diffuse": 1.0,
       "enabled": true,
-      "intensity": 0.9900000095367432,
+      "intensity": 1.0,
       "source": 1.0,
-      "specular": 1.0,
+      "specular": 0.699999988079071,
       "tint": {
-        "x": 0.592682957649231,
-        "y": 0.15901249647140503,
-        "z": 0.15901249647140503
+        "x": 1.0,
+        "y": 1.0,
+        "z": 1.0
       }
     },
     "sky_sphere": {
       "enabled": true,
-      "intensity": 5.449999809265137,
+      "intensity": 6.0,
       "rotation_deg": 0.0,
       "solid_color": {
         "x": 0.0,
@@ -133,7 +139,7 @@
       "tonemap_hdr_to_ldr": true
     },
     "sun": {
-      "azimuth_deg": 117.5,
+      "azimuth_deg": 268.0,
       "color": {
         "x": 1.0,
         "y": 0.9800000190734863,
@@ -201,7 +207,7 @@
     },
     "sky_sphere": {
       "enabled": true,
-      "intensity": 1.0,
+      "intensity": 6.0,
       "rotation_deg": 0.0,
       "solid_color": {
         "x": 0.05999999865889549,
@@ -258,19 +264,21 @@
       "enabled": true
     },
     "exposure": {
-      "manual_ev100": 13.758000373840332
+      "enabled": true,
+      "manual_ev100": 13.946000099182129,
+      "mode": "manual"
     },
     "tonemapping": {
-      "mode": "aces"
+      "mode": "filmic"
     }
   },
   "rendering": {
-    "debug_mode": "5",
+    "debug_mode": "0",
     "view_mode": "solid",
     "wire_color": {
-      "b": 0.0,
-      "g": 0.9560975432395935,
-      "r": 0.9187864661216736
+      "b": 0.10214751958847046,
+      "g": 0.5439023971557617,
+      "r": 0.19696317613124847
     }
   },
   "ui": {

@@ -7,6 +7,8 @@
 #include "DemoShell/UI/RenderingVm.h"
 #include "DemoShell/Services/RenderingSettingsService.h"
 
+#include <Oxygen/Base/Logging.h>
+
 namespace oxygen::examples::ui {
 
 RenderingVm::RenderingVm(observer_ptr<RenderingSettingsService> service)
@@ -74,6 +76,8 @@ auto RenderingVm::SetWireframeColor(const graphics::Color& color) -> void
     return;
   }
 
+  LOG_F(INFO, "RenderingVm: SetWireframeColor ({}, {}, {}, {})", color.r,
+    color.g, color.b, color.a);
   wire_color_ = color;
   service_->SetWireframeColor(color);
   epoch_ = service_->GetEpoch();

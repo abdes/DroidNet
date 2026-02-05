@@ -22,9 +22,9 @@
         "move_speed": 5.0,
         "plane_lock": false
       },
-      "mode": "fly",
+      "mode": "orbit",
       "orbit": {
-        "distance": 17.32050895690918,
+        "distance": 14.651312828063965,
         "mode": "turntable",
         "target": {
           "x": 0.0,
@@ -33,20 +33,69 @@
         }
       },
       "position": {
-        "x": -1.186083197593689,
-        "y": 0.42859238386154175,
-        "z": 4.477078914642334
+        "x": -13.747099876403809,
+        "y": 0.5729999542236328,
+        "z": 5.034865379333496
       },
       "rotation": {
-        "w": 0.4642356336116791,
-        "x": 0.44004979729652405,
-        "y": 0.5288001298904419,
-        "z": 0.557863712310791
+        "w": -0.5673820972442627,
+        "x": -0.3965539038181305,
+        "y": 0.4134272038936615,
+        "z": 0.591524064540863
       },
       "scale": {
         "x": 1.0,
         "y": 1.0,
         "z": 1.0
+      }
+    },
+    "PhysCamera001": {
+      "camera": {
+        "exposure": {
+          "aperture_f": 11.0,
+          "enabled": true,
+          "iso": 100.0,
+          "shutter_rate": 125.0
+        },
+        "has_orthographic": false,
+        "has_perspective": true,
+        "perspective": {
+          "far": 10000.0,
+          "fov": 1.0212266445159912,
+          "near": 0.10000000149011612
+        }
+      },
+      "fly": {
+        "boost_multiplier": 4.0,
+        "look_sensitivity": 0.001500000013038516,
+        "move_speed": 5.0,
+        "plane_lock": false
+      },
+      "mode": "fly",
+      "orbit": {
+        "distance": 8.991250991821289,
+        "mode": "turntable",
+        "target": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        }
+      },
+      "position": {
+        "x": 1.7167932987213135,
+        "y": 0.3241256773471832,
+        "z": 8.819872856140137
+      },
+      "rotation": {
+        "w": -0.39329755306243896,
+        "x": -0.22874107956886292,
+        "y": 0.4477013945579529,
+        "z": 0.7697778940200806
+      },
+      "scale": {
+        "x": 0.9999999403953552,
+        "y": 0.9999998211860657,
+        "z": 0.9999998807907104
       }
     }
   },
@@ -87,7 +136,7 @@
       "mie_anisotropy": 0.800000011920929,
       "mie_scale_height_km": 1.2000000476837158,
       "multi_scattering": 1.0,
-      "planet_radius_km": 6360.00244140625,
+      "planet_radius_km": 6360.0029296875,
       "rayleigh_scale_height_km": 8.0,
       "sun_disk_enabled": true,
       "sun_disk_radius_deg": 0.26799994707107544
@@ -111,14 +160,14 @@
     },
     "sky_sphere": {
       "enabled": false,
-      "intensity": 3.180000066757202,
+      "intensity": 1.0,
       "rotation_deg": 0.0,
       "solid_color": {
-        "x": 0.20000000298023224,
-        "y": 0.30000001192092896,
-        "z": 0.5
+        "x": 0.25,
+        "y": 0.44999998807907104,
+        "z": 0.8999999761581421
       },
-      "source": 0.0
+      "source": 1.0
     },
     "skybox": {
       "face_size": 512.0,
@@ -152,6 +201,12 @@
         450
       ]
     },
+    "select_pak_file": {
+      "window_size": [
+        700,
+        450
+      ]
+    },
     "select_skybox_image": {
       "window_size": [
         700,
@@ -165,6 +220,14 @@
     },
     "tonemapping": {
       "mode": "filmic"
+    }
+  },
+  "rendering": {
+    "view_mode": "solid",
+    "wire_color": {
+      "b": 0.17225459218025208,
+      "g": 0.17225459218025208,
+      "r": 0.6195122003555298
     }
   },
   "ui": {
