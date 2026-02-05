@@ -522,6 +522,9 @@ auto ExecuteSynchronousPhase(const std::vector<EngineModule*>& list,
         [](EngineModule& mm, FrameContext& c) { mm.OnSnapshot(c); }, m, ctx,
         std::ref(*m), std::ref(ctx));
       break;
+    case PhaseId::kCompositing:
+      co_await RunHandlerImpl(m->OnCompositing(ctx), m, ctx);
+      break;
     case PhaseId::kFrameEnd:
       co_await RunHandlerImpl(
         [](EngineModule& mm, FrameContext& c) { mm.OnFrameEnd(c); }, m, ctx,
@@ -633,6 +636,7 @@ auto ModuleManager::ExecutePhase(const PhaseId phase, FrameContext& ctx)
   switch (phase) {
   case PhaseId::kFrameStart:
   case PhaseId::kSnapshot:
+  case PhaseId::kCompositing:
   case PhaseId::kFrameEnd: {
     const auto& desc = kPhaseRegistry[PhaseIndex { phase }];
     if (desc.category == ExecutionModel::kSynchronousOrdered
@@ -651,7 +655,6 @@ auto ModuleManager::ExecutePhase(const PhaseId phase, FrameContext& ctx)
   case PhaseId::kGuiUpdate:
   case PhaseId::kPreRender:
   case PhaseId::kRender:
-  case PhaseId::kCompositing:
   case PhaseId::kAsyncPoll: {
     const auto& desc = kPhaseRegistry[PhaseIndex { phase }];
     if (desc.category == ExecutionModel::kBarrieredConcurrency) {
