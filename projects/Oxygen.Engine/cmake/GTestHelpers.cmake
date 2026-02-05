@@ -49,7 +49,7 @@ function(gtest_program program_name)
   target_link_libraries(${program_name} PRIVATE ${x_DEPS})
 
   # Set the DLL path relative to the build directory
-  set(RUNTIME_DLL_PATH "${CMAKE_BINARY_DIR}/../install/bin")
+  set(RUNTIME_DLL_PATH "${CMAKE_BINARY_DIR}/../install/$<CONFIG>")
   # For all test targets, set the PATH environment
   gtest_discover_tests(
     ${program_name}
