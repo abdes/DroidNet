@@ -160,23 +160,27 @@ public:
 
   OXGN_RNDR_API auto OnShutdown() noexcept -> void override;
 
-  OXGN_RNDR_NDAPI auto OnFrameStart(FrameContext& context) -> void override;
+  OXGN_RNDR_NDAPI auto OnFrameStart(observer_ptr<FrameContext> context)
+    -> void override;
 
-  OXGN_RNDR_NDAPI auto OnTransformPropagation(FrameContext& context)
+  OXGN_RNDR_NDAPI auto OnTransformPropagation(
+    observer_ptr<FrameContext> context) -> co::Co<> override;
+
+  OXGN_RNDR_NDAPI auto OnPreRender(observer_ptr<FrameContext> context)
     -> co::Co<> override;
 
-  OXGN_RNDR_NDAPI auto OnPreRender(FrameContext& context) -> co::Co<> override;
-
   // Submit deferred uploads and retire completed ones during render phase.
-  OXGN_RNDR_NDAPI auto OnRender(FrameContext& context) -> co::Co<> override;
+  OXGN_RNDR_NDAPI auto OnRender(observer_ptr<FrameContext> context)
+    -> co::Co<> override;
 
   // Execute compositor tasks submitted during kCompositing.
-  OXGN_RNDR_NDAPI auto OnCompositing(FrameContext& context)
+  OXGN_RNDR_NDAPI auto OnCompositing(observer_ptr<FrameContext> context)
     -> co::Co<> override;
 
   // Perform deferred per-frame cleanup for views that were unregistered
   // during the frame. This runs after rendering completes.
-  OXGN_RNDR_NDAPI auto OnFrameEnd(FrameContext& context) -> void override;
+  OXGN_RNDR_NDAPI auto OnFrameEnd(observer_ptr<FrameContext> context)
+    -> void override;
 
   //! Register a view for rendering (resolver + render-graph factory).
   /*!

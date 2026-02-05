@@ -518,7 +518,7 @@ auto Renderer::RegisterView(
   std::unique_lock lock(view_registration_mutex_);
   view_resolvers_.insert_or_assign(view_id, std::move(resolver));
   render_graphs_.insert_or_assign(view_id, std::move(factory));
-  LOG_F(INFO, "RegisterView: view_id={}, total_views={}", view_id.get(),
+  DLOG_F(1, "RegisterView: view_id={}, total_views={}", view_id.get(),
     render_graphs_.size());
 }
 
@@ -532,7 +532,7 @@ auto Renderer::UnregisterView(ViewId view_id) -> void
     removed_graph = render_graphs_.erase(view_id);
   }
 
-  LOG_F(INFO,
+  DLOG_F(1,
     "UnregisterView: view_id={}, removed_resolver={}, removed_factory={}",
     view_id.get(), removed_resolver, removed_graph);
 
@@ -543,7 +543,7 @@ auto Renderer::UnregisterView(ViewId view_id) -> void
     pending_size = pending_cleanup_.size();
   }
 
-  LOG_F(INFO, "UnregisterView: pending_cleanup_count={}", pending_size);
+  DLOG_F(1, "UnregisterView: pending_cleanup_count={}", pending_size);
 
   {
     std::unique_lock state_lock(view_state_mutex_);
@@ -566,11 +566,11 @@ auto Renderer::IsViewReady(ViewId view_id) const -> bool
   return it != view_ready_states_.end() && it->second;
 }
 
-auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
+auto Renderer::OnPreRender(observer_ptr<FrameContext> context) -> co::Co<>
 {
   LOG_SCOPE_FUNCTION(2);
 
-  const auto dt = context.GetModuleTimingData().game_delta_time;
+  const auto dt = context->GetModuleTimingData().game_delta_time;
   const auto dt_ns = dt.get();
   const auto dt_seconds
     = std::chrono::duration_cast<std::chrono::duration<float>>(dt_ns).count();
@@ -597,7 +597,7 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
 
   // Failing to acquire a slot will throw, and drop the frame.
   render_context_
-    = observer_ptr { &render_context_pool_->Acquire(context.GetFrameSlot()) };
+    = observer_ptr { &render_context_pool_->Acquire(context->GetFrameSlot()) };
 
   {
     auto graphics_p = gfx_weak_.lock();
@@ -609,7 +609,7 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
   }
 
   render_context_->scene = observer_ptr<const scene::Scene> {
-    context.GetScene().get(),
+    context->GetScene().get(),
   };
 
   // Clear the per-frame and per-view state (per-frame caches are refreshed
@@ -634,7 +634,7 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
   }
 
   // Iterate all views registered in FrameContext and prepare each one
-  auto views_range = context.GetViews();
+  auto views_range = context->GetViews();
   bool first = true;
 
   for (const auto& view_ref : views_range) {
@@ -664,7 +664,7 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
 
       // Build frame data for this view (scene prep, culling, draw list)
       [[maybe_unused]] const auto draw_count
-        = RunScenePrep(view_ctx.id, resolved, context, first);
+        = RunScenePrep(view_ctx.id, resolved, *context, first);
       first = false;
 
       DLOG_F(2, "view prepared with {} draws", draw_count);
@@ -732,7 +732,7 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
   co_return;
 }
 
-auto Renderer::OnRender(FrameContext& context) -> co::Co<>
+auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
 {
   LOG_SCOPE_FUNCTION(2);
 
@@ -776,7 +776,7 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
 
     try {
       // Get the ViewContext for this view to access output framebuffer
-      const auto& view_ctx = context.GetViewContext(view_id);
+      const auto& view_ctx = context->GetViewContext(view_id);
 
       // Skip if no output framebuffer assigned
       if (!view_ctx.output) {
@@ -805,7 +805,7 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
       // --- STEP 1: Wire all constants and context data ---
       // This MUST happen before any pass (SkyCapture, IBL, or Graph) runs.
       if (!PrepareAndWireSceneConstantsForView(
-            view_id, context, *render_context_)) {
+            view_id, *context, *render_context_)) {
         // Failure already logged inside helper; mark the view failed and
         // skip this view's render graph.
         update_view_state(view_id, false);
@@ -878,7 +878,7 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
       // --- STEP 3: Setup main scene framebuffer ---
       // This starts tracking the depth and color buffers for the actual view.
       if (!SetupFramebufferForView(
-            context, view_id, *recorder, *render_context_)) {
+            *context, view_id, *recorder, *render_context_)) {
         LOG_F(ERROR, "Failed to setup framebuffer for view {}; skipping",
           view_id.get());
         continue;
@@ -900,13 +900,13 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
 
   // Return the pooled context for this slot to a clean state and clear the
   // debug in-use marker.
-  render_context_pool_->Release(context.GetFrameSlot());
+  render_context_pool_->Release(context->GetFrameSlot());
   render_context_.reset();
 
   co_return;
 }
 
-auto Renderer::OnCompositing(FrameContext& context) -> co::Co<>
+auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
 {
   std::optional<CompositionSubmission> submission;
   std::shared_ptr<graphics::Surface> target_surface;
@@ -949,10 +949,10 @@ auto Renderer::OnCompositing(FrameContext& context) -> co::Co<>
     "Compositing target missing color texture");
   auto& backbuffer = *fb_desc.color_attachments[0].texture;
   const auto& back_desc = backbuffer.GetDescriptor();
-  LOG_F(INFO, "Compositing target: tex={} size={}x{} fmt={} samples={} name={}",
-    static_cast<const void*>(&backbuffer), back_desc.width, back_desc.height,
-    static_cast<int>(back_desc.format), back_desc.sample_count,
-    back_desc.debug_name);
+  DLOG_F(1,
+    "Log compositing target ptr={} size={}x{} fmt={} samples={} name={}",
+    fmt::ptr(&backbuffer), back_desc.width, back_desc.height, back_desc.format,
+    back_desc.sample_count, back_desc.debug_name);
 
   RenderContext comp_context {};
   comp_context.SetRenderer(this, gfx.get());
@@ -971,28 +971,24 @@ auto Renderer::OnCompositing(FrameContext& context) -> co::Co<>
     switch (task.type) {
     case CompositingTaskType::kCopy: {
       if (!IsViewReady(task.copy.source_view)) {
-        LOG_F(INFO, "Compositing: view {} not ready; skipping copy",
-          task.copy.source_view.get());
+        DLOG_F(1, "Skip copy: view {} not ready", task.copy.source_view.get());
         continue;
       }
-      auto source = ResolveViewOutputTexture(context, task.copy.source_view);
+      auto source = ResolveViewOutputTexture(*context, task.copy.source_view);
       if (!source) {
-        LOG_F(INFO, "Compositing: missing source texture for view {}",
+        DLOG_F(1, "Skip copy: missing source texture for view {}",
           task.copy.source_view.get());
         continue;
       }
       const auto& src_desc = source->GetDescriptor();
-      LOG_F(INFO,
-        "Compositing copy: view={} src={} size={}x{} fmt={} samples={}",
-        task.copy.source_view.get(), static_cast<const void*>(source.get()),
-        src_desc.width, src_desc.height, static_cast<int>(src_desc.format),
-        src_desc.sample_count);
-      LOG_F(INFO, "Compositing copy: viewport=({}, {}) {}x{}",
+      DLOG_F(2, "Log copy: view={} ptr={} size={}x{} fmt={} samples={}",
+        task.copy.source_view.get(), fmt::ptr(source.get()), src_desc.width,
+        src_desc.height, src_desc.format, src_desc.sample_count);
+      DLOG_F(2, "Log copy viewport: ({}, {}) {}x{}",
         task.copy.viewport.top_left_x, task.copy.viewport.top_left_y,
         task.copy.viewport.width, task.copy.viewport.height);
       if (source->GetDescriptor().format != backbuffer.GetDescriptor().format) {
-        LOG_F(INFO,
-          "Compositing: format mismatch for view {}; using blend fallback",
+        DLOG_F(1, "Fallback to blend: format mismatch for view {}",
           task.copy.source_view.get());
         CHECK_NOTNULL_F(
           compositing_pass_config_.get(), "CompositingPass config missing");
@@ -1009,23 +1005,21 @@ auto Renderer::OnCompositing(FrameContext& context) -> co::Co<>
     }
     case CompositingTaskType::kBlend: {
       if (!IsViewReady(task.blend.source_view)) {
-        LOG_F(INFO, "Compositing: view {} not ready; skipping blend",
-          task.blend.source_view.get());
+        DLOG_F(
+          1, "Skip blend: view {} not ready", task.blend.source_view.get());
         continue;
       }
-      auto source = ResolveViewOutputTexture(context, task.blend.source_view);
+      auto source = ResolveViewOutputTexture(*context, task.blend.source_view);
       if (!source) {
-        LOG_F(INFO, "Compositing: missing source texture for view {}",
+        DLOG_F(1, "Skip blend: missing source texture for view {}",
           task.blend.source_view.get());
         continue;
       }
       const auto& src_desc = source->GetDescriptor();
-      LOG_F(INFO,
-        "Compositing blend: view={} src={} size={}x{} fmt={} samples={}",
-        task.blend.source_view.get(), static_cast<const void*>(source.get()),
-        src_desc.width, src_desc.height, static_cast<int>(src_desc.format),
-        src_desc.sample_count);
-      LOG_F(INFO, "Compositing blend: viewport=({}, {}) {}x{} alpha={}",
+      DLOG_F(2, "Blend view={} ptr={} size={}x{} fmt={} samples={}",
+        task.blend.source_view.get(), fmt::ptr(source.get()), src_desc.width,
+        src_desc.height, src_desc.format, src_desc.sample_count);
+      DLOG_F(2, "Blend viewport=({}, {}) {}x{} alpha={}",
         task.blend.viewport.top_left_x, task.blend.viewport.top_left_y,
         task.blend.viewport.width, task.blend.viewport.height,
         task.blend.alpha);
@@ -1042,16 +1036,15 @@ auto Renderer::OnCompositing(FrameContext& context) -> co::Co<>
     }
     case CompositingTaskType::kBlendTexture: {
       if (!task.texture_blend.source_texture) {
-        LOG_F(INFO, "Compositing: missing source texture for blend");
+        DLOG_F(1, "Skip blend texture: missing source texture");
         continue;
       }
       const auto& src_desc = task.texture_blend.source_texture->GetDescriptor();
-      LOG_F(INFO,
-        "Compositing tex blend: src={} size={}x{} fmt={} samples={} name={}",
-        static_cast<const void*>(task.texture_blend.source_texture.get()),
-        src_desc.width, src_desc.height, static_cast<int>(src_desc.format),
-        src_desc.sample_count, src_desc.debug_name);
-      LOG_F(INFO, "Compositing tex blend: viewport=({}, {}) {}x{} alpha={}",
+      DLOG_F(2, "Blend texture ptr={} size={}x{} fmt={} samples={} name={}",
+        fmt::ptr(task.texture_blend.source_texture.get()), src_desc.width,
+        src_desc.height, src_desc.format, src_desc.sample_count,
+        src_desc.debug_name);
+      DLOG_F(2, "Blend texture viewport=({}, {}) {}x{} alpha={}",
         task.texture_blend.viewport.top_left_x,
         task.texture_blend.viewport.top_left_y,
         task.texture_blend.viewport.width, task.texture_blend.viewport.height,
@@ -1071,7 +1064,7 @@ auto Renderer::OnCompositing(FrameContext& context) -> co::Co<>
     case CompositingTaskType::kTonemap:
     case CompositingTaskType::kTaa:
     default:
-      LOG_F(INFO, "Compositing: task type not implemented");
+      DLOG_F(1, "Skip compositing: task type not implemented");
       break;
     }
   }
@@ -1081,10 +1074,10 @@ auto Renderer::OnCompositing(FrameContext& context) -> co::Co<>
   recorder.FlushBarriers();
 
   if (target_surface) {
-    const auto surfaces = context.GetSurfaces();
+    const auto surfaces = context->GetSurfaces();
     for (size_t i = 0; i < surfaces.size(); ++i) {
       if (surfaces[i].get() == target_surface.get()) {
-        context.SetSurfacePresentable(i, true);
+        context->SetSurfacePresentable(i, true);
         break;
       }
     }
@@ -1093,7 +1086,7 @@ auto Renderer::OnCompositing(FrameContext& context) -> co::Co<>
   co_return;
 }
 
-auto Renderer::OnFrameEnd(FrameContext& /*context*/) -> void
+auto Renderer::OnFrameEnd(observer_ptr<FrameContext> /*context*/) -> void
 {
   LOG_SCOPE_FUNCTION(2);
 
@@ -1112,8 +1105,7 @@ auto Renderer::DrainPendingViewCleanup(std::string_view reason) -> void
     pending.swap(pending_cleanup_);
   }
 
-  LOG_F(
-    INFO, "Pending cleanup: processing {} views ({})", pending.size(), reason);
+  DLOG_F(1, "Process pending cleanup: {} views ({})", pending.size(), reason);
 
   for (const auto& id : pending) {
     resolved_views_.erase(id);
@@ -1586,7 +1578,7 @@ auto Renderer::UpdateSceneConstantsFromView(const ResolvedView& view) -> void
     .SetCameraPosition(view.CameraPosition());
 }
 
-auto Renderer::OnFrameStart(FrameContext& context) -> void
+auto Renderer::OnFrameStart(observer_ptr<FrameContext> context) -> void
 {
   DLOG_SCOPE_FUNCTION(2);
 
@@ -1603,8 +1595,8 @@ auto Renderer::OnFrameStart(FrameContext& context) -> void
   }
 
   auto tag = oxygen::renderer::internal::RendererTagFactory::Get();
-  auto frame_slot = context.GetFrameSlot();
-  auto frame_sequence = context.GetFrameSequenceNumber();
+  auto frame_slot = context->GetFrameSlot();
+  auto frame_sequence = context->GetFrameSequenceNumber();
 
   // Store frame lifecycle state for RenderContext propagation
   frame_slot_ = frame_slot;
@@ -1684,12 +1676,13 @@ auto Renderer::OnFrameStart(FrameContext& context) -> void
  @see oxygen::scene::SceneTraversal::UpdateTransforms
  @see oxygen::scene::DirtyTransformFilter
 */
-auto Renderer::OnTransformPropagation(FrameContext& context) -> co::Co<>
+auto Renderer::OnTransformPropagation(observer_ptr<FrameContext> context)
+  -> co::Co<>
 {
   LOG_SCOPE_FUNCTION(2);
 
   // Acquire scene pointer (non-owning). If absent, log once per frame in debug.
-  auto scene_ptr = context.GetScene();
+  auto scene_ptr = context->GetScene();
   if (!scene_ptr) {
     DLOG_F(WARNING,
       "No active scene set in FrameContext; skipping transform propagation");

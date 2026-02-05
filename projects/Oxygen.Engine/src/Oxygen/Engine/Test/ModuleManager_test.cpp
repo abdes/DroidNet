@@ -6,6 +6,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/ModuleManager.h>
@@ -21,6 +22,7 @@ using namespace oxygen::engine;
 using namespace oxygen::engine::test;
 using oxygen::co::testing::TestEventLoop;
 using namespace oxygen::co;
+using oxygen::observer_ptr;
 
 // Test fixture that owns a ModuleManager and provides helpers built on the
 // public ModuleManager API. This demonstrates how tests can derive filtered
@@ -110,7 +112,8 @@ TEST_F(ModuleManagerBasicTest, AsyncPhaseExecution_BarrieredConcurrency)
 
   // Act: run ExecutePhase for Input which is BarrieredConcurrency
   oxygen::co::Run(loop, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kInput, ctx);
+    co_await mgr_.ExecutePhase(
+      PhaseId::kInput, observer_ptr<FrameContext> { &ctx });
     co_return;
   });
 
@@ -181,7 +184,8 @@ TEST_F(ModuleManagerBasicTest, SyncPhaseExecution_OrderedByPriority)
   // synchronous handlers were invoked.
   TestEventLoop loop;
   oxygen::co::Run(loop, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, ctx);
+    co_await mgr_.ExecutePhase(
+      PhaseId::kFrameStart, observer_ptr<FrameContext> { &ctx });
     co_return;
   });
 
@@ -214,7 +218,8 @@ TEST_F(ModuleManagerBasicTest, MultipleAsyncModules_ConcurrentExecution)
 
   // Act: run ExecutePhase on Input which should await both coroutine handlers
   oxygen::co::Run(loop, [&]() -> Co<> {
-    co_await mgr_.ExecutePhase(PhaseId::kInput, ctx);
+    co_await mgr_.ExecutePhase(
+      PhaseId::kInput, observer_ptr<FrameContext> { &ctx });
     co_return;
   });
 

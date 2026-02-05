@@ -70,14 +70,14 @@ public:
 
   OXGN_IMGUI_API auto OnShutdown() noexcept -> void override;
 
-  OXGN_IMGUI_API auto OnFrameStart(engine::FrameContext& /*context*/)
-    -> void override;
+  OXGN_IMGUI_API auto OnFrameStart(
+    observer_ptr<engine::FrameContext> /*context*/) -> void override;
 
   // Ensure ImGui gets a matching EndFrame when NewFrame was started but
   // rendering did not happen for some reason (e.g. surface gone or pass
   // skipped). This prevents ImGui's sanity checks from asserting on the
   // next frame start.
-  OXGN_IMGUI_API auto OnFrameEnd(engine::FrameContext& /*context*/)
+  OXGN_IMGUI_API auto OnFrameEnd(observer_ptr<engine::FrameContext> /*context*/)
     -> void override;
 
   //! Access the owned render pass. Useful so other systems (for example the

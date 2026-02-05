@@ -71,7 +71,7 @@ void InputSystem::SetName(std::string_view name) noexcept
   GetComponent<ObjectMetadata>().SetName(name);
 }
 
-auto InputSystem::OnFrameStart(FrameContext& /*context*/) -> void
+auto InputSystem::OnFrameStart(observer_ptr<FrameContext> /*context*/) -> void
 {
   // Begin frame tracking for all actions
   for (auto& action : actions_) {
@@ -79,7 +79,7 @@ auto InputSystem::OnFrameStart(FrameContext& /*context*/) -> void
   }
 }
 
-auto InputSystem::OnInput(FrameContext& context) -> co::Co<>
+auto InputSystem::OnInput(observer_ptr<FrameContext> context) -> co::Co<>
 {
   // Per-frame pass: advance time for triggers using the game delta time.
   //
@@ -88,11 +88,11 @@ auto InputSystem::OnInput(FrameContext& context) -> co::Co<>
   // (mouse motion / wheel) that clear their local value after evaluation can
   // be re-evaluated in this pass with a cleared (zero) value, overwriting the
   // action's final value before the snapshot is frozen.
-  if (context.GetGameDeltaTime() > time::CanonicalDuration {}) {
+  if (context->GetGameDeltaTime() > time::CanonicalDuration {}) {
     for (const auto& [priority, is_active, mapping_context] :
       std::ranges::reverse_view(mapping_contexts_)) {
       if (is_active) {
-        if (mapping_context->Update(context.GetGameDeltaTime())) {
+        if (mapping_context->Update(context->GetGameDeltaTime())) {
           // Input is consumed
           DLOG_F(1, "Stopping updates to mapping contexts (input consumed)");
           // Flush staged input in remaining active contexts to avoid leaking
@@ -165,7 +165,7 @@ auto InputSystem::OnInput(FrameContext& context) -> co::Co<>
   co_return;
 }
 
-auto InputSystem::OnSnapshot(FrameContext& context) -> void
+auto InputSystem::OnSnapshot(observer_ptr<FrameContext> context) -> void
 {
   // Input snapshot is frozen at the end of kInput. Here, we could publish it
   // into the FrameContext unified snapshot once the context supports our
@@ -173,7 +173,7 @@ auto InputSystem::OnSnapshot(FrameContext& context) -> void
   // TODO: Integrate with FrameContext::SetInputSnapshot when types align.
 }
 
-auto InputSystem::OnFrameEnd(FrameContext& /*context*/) -> void
+auto InputSystem::OnFrameEnd(observer_ptr<FrameContext> /*context*/) -> void
 {
   // Clear frame data for next frame
   frame_events_.clear();

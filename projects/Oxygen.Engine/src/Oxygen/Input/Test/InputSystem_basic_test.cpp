@@ -14,6 +14,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/InputActionMapping.h>
@@ -25,6 +26,7 @@
 
 using namespace std::chrono_literals;
 
+using oxygen::observer_ptr;
 using oxygen::input::Action;
 using oxygen::input::ActionTriggerPressed;
 using oxygen::input::ActionTriggerTap;
@@ -59,14 +61,14 @@ NOLINT_TEST_F(InputSystemTest, ProcessesPressedForJump)
     // Act
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
 
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
 
     // Assert
     EXPECT_TRUE(jump->IsTriggered());
 
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
     co_return;
   });
 }
@@ -107,15 +109,15 @@ NOLINT_TEST_F(InputSystemTest, ConsumptionPreventsSecondMapping)
     // Act
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
 
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
 
     // Assert
     EXPECT_TRUE(primary->IsTriggered());
     EXPECT_FALSE(secondary->IsTriggered());
 
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
     co_return;
   });
 }
@@ -142,14 +144,14 @@ NOLINT_TEST_F(InputSystemTest, TapTriggersOnSameFramePressRelease)
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
     SendKeyEvent(Key::kSpace, ButtonState::kReleased);
 
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
 
     // Assert
     EXPECT_TRUE(tap->IsTriggered());
 
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
     co_return;
   });
 }
@@ -171,20 +173,20 @@ NOLINT_TEST_F(InputSystemTest, ContextActivationToggle)
 
     // Inactive: press ignored
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     EXPECT_FALSE(act->IsTriggered());
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
 
     // Activate, press again -> triggers
     input_system_->ActivateMappingContext(ctx);
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     EXPECT_TRUE(act->IsTriggered());
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
     co_return;
   });
 }
@@ -245,29 +247,29 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseMotionToAxisMappings)
 
     // Act: dx only
     SendMouseMotion(6.0F, 0.0F);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     EXPECT_EQ(look_x->GetValue().GetAs<oxygen::Axis1D>().x, 6.0F);
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
 
     // Act: dy only
     SendMouseMotion(0.0F, -3.0F);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     EXPECT_EQ(look_y->GetValue().GetAs<oxygen::Axis1D>().x, -3.0F);
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
 
     // Act: both
     SendMouseMotion(5.0F, -4.0F);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     const auto v = look_xy->GetValue().GetAs<oxygen::Axis2D>();
     EXPECT_EQ(v.x, 5.0F);
     EXPECT_EQ(v.y, -4.0F);
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
     co_return;
   });
 }
@@ -313,29 +315,29 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseWheelToAxisMappings)
 
     // Act: X only
     SendMouseWheel(-2.0F, 0.0F);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     EXPECT_EQ(wheel_x->GetValue().GetAs<oxygen::Axis1D>().x, -2.0F);
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
 
     // Act: Y only
     SendMouseWheel(0.0F, 1.0F);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     EXPECT_EQ(wheel_y->GetValue().GetAs<oxygen::Axis1D>().x, 1.0F);
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
 
     // Act: both
     SendMouseWheel(-1.0F, 3.0F);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     const auto v = wheel_xy->GetValue().GetAs<oxygen::Axis2D>();
     EXPECT_EQ(v.x, -1.0F);
     EXPECT_EQ(v.y, 3.0F);
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
     co_return;
   });
 }
@@ -389,58 +391,58 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseWheelDirectionalSlots)
 
     // Guard: zero scroll should not trigger any directional actions
     SendMouseWheel(0.0F, 0.0F);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     EXPECT_FALSE(up->IsTriggered());
     EXPECT_FALSE(down->IsTriggered());
     EXPECT_FALSE(left->IsTriggered());
     EXPECT_FALSE(right->IsTriggered());
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
 
     // Act: positive Y scroll -> Up only
     SendMouseWheel(0.0F, 2.0F);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     EXPECT_TRUE(up->IsTriggered());
     EXPECT_FALSE(down->IsTriggered());
     EXPECT_FALSE(left->IsTriggered());
     EXPECT_FALSE(right->IsTriggered());
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
 
     // Act: negative Y scroll -> Down only
     SendMouseWheel(0.0F, -3.0F);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     EXPECT_FALSE(up->IsTriggered());
     EXPECT_TRUE(down->IsTriggered());
     EXPECT_FALSE(left->IsTriggered());
     EXPECT_FALSE(right->IsTriggered());
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
 
     // Act: positive X scroll -> Right only
     SendMouseWheel(4.0F, 0.0F);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     EXPECT_FALSE(up->IsTriggered());
     EXPECT_FALSE(down->IsTriggered());
     EXPECT_FALSE(left->IsTriggered());
     EXPECT_TRUE(right->IsTriggered());
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
 
     // Act: negative X scroll -> Left only
     SendMouseWheel(-5.0F, 0.0F);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     EXPECT_FALSE(up->IsTriggered());
     EXPECT_FALSE(down->IsTriggered());
     EXPECT_TRUE(left->IsTriggered());
     EXPECT_FALSE(right->IsTriggered());
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
 
     co_return;
   });
@@ -486,12 +488,12 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseWheel_MixedDirectionalAcrossContexts)
 
     // Act: mixed scroll (+x, -y) should trigger Right and Down independently
     SendMouseWheel(5.0F, -4.0F);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     EXPECT_TRUE(right->IsTriggered());
     EXPECT_TRUE(down->IsTriggered());
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
 
     co_return;
   });
@@ -534,20 +536,20 @@ NOLINT_TEST_F(InputSystemTest, CrossContextConsumptionFlushesLowerPriority)
 
     // Act: Fire Space; high consumes
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     EXPECT_TRUE(consume->IsTriggered());
     EXPECT_FALSE(lower->IsTriggered());
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
 
     // Next frame: Without new events, low must remain idle (flush ensured no
     // staged leak)
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     EXPECT_FALSE(lower->IsTriggered());
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
     co_return;
   });
 }
@@ -596,11 +598,11 @@ NOLINT_TEST_F(InputSystemTest, ChainPlusTap_TimingWindow)
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
     SendKeyEvent(Key::kSpace, ButtonState::kReleased);
 
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     EXPECT_TRUE(super->IsTriggered());
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
 
     // Negative: release Space after long delay (> window) should not trigger
     // (simulate time via multiple frames)
@@ -614,10 +616,10 @@ NOLINT_TEST_F(InputSystemTest, ChainPlusTap_TimingWindow)
       timing.fixed_delta_time = oxygen::time::CanonicalDuration { 200ms };
       frame_context_->SetModuleTimingData(timing, engine_tag);
     }
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
 
     // Space press, then process two long frames, then release
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
@@ -628,10 +630,10 @@ NOLINT_TEST_F(InputSystemTest, ChainPlusTap_TimingWindow)
       timing.fixed_delta_time = oxygen::time::CanonicalDuration { 200ms };
       frame_context_->SetModuleTimingData(timing, engine_tag);
     }
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
     // Long frame 2
     {
       oxygen::engine::ModuleTimingData timing;
@@ -639,17 +641,17 @@ NOLINT_TEST_F(InputSystemTest, ChainPlusTap_TimingWindow)
       timing.fixed_delta_time = oxygen::time::CanonicalDuration { 250ms };
       frame_context_->SetModuleTimingData(timing, engine_tag);
     }
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
     // Now release (too late for 0.25s threshold given frames processed)
     SendKeyEvent(Key::kSpace, ButtonState::kReleased);
-    input_system_->OnFrameStart(*frame_context_);
-    co_await input_system_->OnInput(*frame_context_);
+    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
+    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
     EXPECT_FALSE(super->IsTriggered());
-    input_system_->OnSnapshot(*frame_context_);
-    input_system_->OnFrameEnd(*frame_context_);
+    input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
+    input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
     co_return;
   });
 }

@@ -98,52 +98,72 @@ public:
   // kNetworkReconciliation, kRandomSeedManagement, kPresent, kBudgetAdapt.
 
   // Ordered phases
-  virtual auto OnFrameStart(FrameContext& /*context*/) -> void { }
-  virtual auto OnFrameEnd(FrameContext& /*context*/) -> void { }
+  virtual auto OnFrameStart(observer_ptr<FrameContext> /*context*/) -> void { }
+  virtual auto OnFrameEnd(observer_ptr<FrameContext> /*context*/) -> void { }
 
   // Synchronous snapshot phase (modules participate; engine publishes last)
   // Must not spawn threads or coroutines; runs on the main thread.
-  virtual auto OnSnapshot(FrameContext& /*context*/) -> void { }
+  virtual auto OnSnapshot(observer_ptr<FrameContext> /*context*/) -> void { }
 
-  virtual auto OnInput(FrameContext& /*context*/) -> co::Co<> { co_return; }
-  virtual auto OnNetworkReconciliation(FrameContext& /*context*/) -> co::Co<>
+  virtual auto OnInput(observer_ptr<FrameContext> /*context*/) -> co::Co<>
   {
     co_return;
   }
-  virtual auto OnFixedSimulation(FrameContext& /*context*/) -> co::Co<>
+  virtual auto OnNetworkReconciliation(observer_ptr<FrameContext> /*context*/)
+    -> co::Co<>
   {
     co_return;
   }
-  virtual auto OnGameplay(FrameContext& /*context*/) -> co::Co<> { co_return; }
-  virtual auto OnSceneMutation(FrameContext& /*context*/) -> co::Co<>
+  virtual auto OnFixedSimulation(observer_ptr<FrameContext> /*context*/)
+    -> co::Co<>
   {
     co_return;
   }
-  virtual auto OnTransformPropagation(FrameContext& /*context*/) -> co::Co<>
+  virtual auto OnGameplay(observer_ptr<FrameContext> /*context*/) -> co::Co<>
+  {
+    co_return;
+  }
+  virtual auto OnSceneMutation(observer_ptr<FrameContext> /*context*/)
+    -> co::Co<>
+  {
+    co_return;
+  }
+  virtual auto OnTransformPropagation(observer_ptr<FrameContext> /*context*/)
+    -> co::Co<>
   {
     co_return;
   }
 
-  virtual auto OnPostParallel(FrameContext& /*context*/) -> co::Co<>
+  virtual auto OnPostParallel(observer_ptr<FrameContext> /*context*/)
+    -> co::Co<>
   {
     co_return;
   }
 
-  virtual auto OnGuiUpdate(FrameContext& /*context*/) -> co::Co<> { co_return; }
+  virtual auto OnGuiUpdate(observer_ptr<FrameContext> /*context*/) -> co::Co<>
+  {
+    co_return;
+  }
 
-  virtual auto OnFrameGraph(FrameContext& /*context*/) -> co::Co<>
+  virtual auto OnFrameGraph(observer_ptr<FrameContext> /*context*/) -> co::Co<>
   {
     co_return;
   }
   // Pre-render: prepare frame-level and view-level render data (no command
   // recording). Runs in the new `kPreRender` phase.
-  virtual auto OnPreRender(FrameContext& /*context*/) -> co::Co<> { co_return; }
+  virtual auto OnPreRender(observer_ptr<FrameContext> /*context*/) -> co::Co<>
+  {
+    co_return;
+  }
 
   // Render: record command lists and perform per-view render work. Runs in
   // the new `kRender` phase.
-  virtual auto OnRender(FrameContext& /*context*/) -> co::Co<> { co_return; }
+  virtual auto OnRender(observer_ptr<FrameContext> /*context*/) -> co::Co<>
+  {
+    co_return;
+  }
 
-  virtual auto OnCompositing(FrameContext& /*context*/) -> co::Co<>
+  virtual auto OnCompositing(observer_ptr<FrameContext> /*context*/) -> co::Co<>
   {
     co_return;
   }
@@ -159,9 +179,13 @@ public:
     co_return;
   }
 
-  virtual auto OnAsyncPoll(FrameContext& /*context*/) -> co::Co<> { co_return; }
+  virtual auto OnAsyncPoll(observer_ptr<FrameContext> /*context*/) -> co::Co<>
+  {
+    co_return;
+  }
 
-  virtual auto OnDetachedService(FrameContext& /*context*/) -> co::Co<>
+  virtual auto OnDetachedService(observer_ptr<FrameContext> /*context*/)
+    -> co::Co<>
   {
     co_return;
   }
@@ -177,10 +201,10 @@ protected:
    @param context The frame context to report the error to
    @param message The error message to report
    */
-  auto ReportError(FrameContext& context, std::string_view message) const
-    -> void
+  auto ReportError(
+    observer_ptr<FrameContext> context, std::string_view message) const -> void
   {
-    context.ReportError(
+    context->ReportError(
       GetTypeId(), std::string { message }, std::string { GetName() });
   }
 };

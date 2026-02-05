@@ -175,52 +175,52 @@ private:
   auto Shutdown() -> co::Co<>;
 
   // Ordered phases (Category A) - now with module integration
-  auto PhaseFrameStart(engine::FrameContext& context) -> co::Co<>;
-  auto PhaseInput(engine::FrameContext& context)
+  auto PhaseFrameStart(observer_ptr<engine::FrameContext> context) -> co::Co<>;
+  auto PhaseInput(observer_ptr<engine::FrameContext> context)
     -> co::Co<>; // async (simulated work)
-  auto PhaseNetworkReconciliation(engine::FrameContext& context)
+  auto PhaseNetworkReconciliation(observer_ptr<engine::FrameContext> context)
     -> co::Co<>; // network packet application & reconciliation
-  auto PhaseRandomSeedManagement(engine::FrameContext& context)
+  auto PhaseRandomSeedManagement(observer_ptr<engine::FrameContext> context)
     -> void; // synchronous random seed management for determinism
-  auto PhaseFixedSim(engine::FrameContext& context)
+  auto PhaseFixedSim(observer_ptr<engine::FrameContext> context)
     -> co::Co<>; // cooperative parallelism within deterministic phase
-  auto PhaseGameplay(engine::FrameContext& context)
+  auto PhaseGameplay(observer_ptr<engine::FrameContext> context)
     -> co::Co<>; // async (simulated work)
-  auto PhaseSceneMutation(engine::FrameContext& context)
+  auto PhaseSceneMutation(observer_ptr<engine::FrameContext> context)
     -> co::Co<>; // async (simulated work) - B2 barrier
-  auto PhaseTransforms(engine::FrameContext& context)
+  auto PhaseTransforms(observer_ptr<engine::FrameContext> context)
     -> co::Co<>; // async (simulated work)
 
   // Synchronous snapshot: modules run OnSnapshot first; engine publishes last
-  auto PhaseSnapshot(engine::FrameContext& context)
+  auto PhaseSnapshot(observer_ptr<engine::FrameContext> context)
     -> co::Co<const engine::UnifiedSnapshot&>;
 
-  auto ParallelTasks(engine::FrameContext& context,
+  auto ParallelTasks(observer_ptr<engine::FrameContext> context,
     const engine::UnifiedSnapshot& snapshot) -> co::Co<>;
-  auto PhasePostParallel(engine::FrameContext& context)
+  auto PhasePostParallel(observer_ptr<engine::FrameContext> context)
     -> co::Co<>; // async (simulated work)
 
-  auto PhaseGuiUpdate(engine::FrameContext& context)
+  auto PhaseGuiUpdate(observer_ptr<engine::FrameContext> context)
     -> co::Co<>; // async UI processing
 
-  auto PhasePreRender(engine::FrameContext& context)
+  auto PhasePreRender(observer_ptr<engine::FrameContext> context)
     -> co::Co<>; // async (simulated work)
 
-  auto PhaseRender(engine::FrameContext& context)
+  auto PhaseRender(observer_ptr<engine::FrameContext> context)
     -> co::Co<>; // async (simulated work)
 
-  auto PhaseCompositing(engine::FrameContext& context)
+  auto PhaseCompositing(observer_ptr<engine::FrameContext> context)
     -> co::Co<>; // async (simulated work)
 
-  auto PhasePresent(engine::FrameContext& context)
+  auto PhasePresent(observer_ptr<engine::FrameContext> context)
     -> void; // synchronous presentation
 
   // Poll futures from async jobs (Assets, PSOs, BLAS, LightMaps)
-  auto PhaseAsyncPoll(engine::FrameContext& context) -> void;
+  auto PhaseAsyncPoll(observer_ptr<engine::FrameContext> context) -> void;
 
-  auto PhaseBudgetAdapt(engine::FrameContext& context) -> void;
+  auto PhaseBudgetAdapt(observer_ptr<engine::FrameContext> context) -> void;
 
-  auto PhaseFrameEnd(engine::FrameContext& context) -> co::Co<>;
+  auto PhaseFrameEnd(observer_ptr<engine::FrameContext> context) -> co::Co<>;
 
   // Detached services (Category D)
   auto InitializeDetachedServices() -> void;
@@ -240,10 +240,10 @@ private:
   auto NextFrame() -> bool;
 
   // Professional timing system integration
-  auto UpdateFrameTiming(engine::FrameContext& context) -> void;
+  auto UpdateFrameTiming(observer_ptr<engine::FrameContext> context) -> void;
 
-  // void SetRenderGraphBuilder(engine::FrameContext& context);
-  // void ClearRenderGraphBuilder(engine::FrameContext& context);
+  // void SetRenderGraphBuilder(observer_ptr<engine::FrameContext> context);
+  // void ClearRenderGraphBuilder(observer_ptr<engine::FrameContext> context);
 
   // std::unique_ptr<RenderGraphBuilder> render_graph_builder_;
   // std::vector<SyntheticTaskSpec> parallel_specs_ {};

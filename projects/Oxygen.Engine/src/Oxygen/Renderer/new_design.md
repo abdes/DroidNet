@@ -497,8 +497,8 @@ The Renderer acts as a **coordinator** that orchestrates module execution and se
 class Renderer {
 public:
   // Phase orchestration - calls modules in correct order
-  auto ExecuteScenePrep(FrameContext& frame_ctx) -> void;
-  auto ExecuteResources(FrameContext& frame_ctx) -> void;
+  auto ExecuteScenePrep(observer_ptr<FrameContext> frame_ctx) -> void;
+  auto ExecuteResources(observer_ptr<FrameContext> frame_ctx) -> void;
   auto ExecuteRenderGraph(RenderContext& render_ctx) -> void;
   // Individual modules manage their own state - NO central RendererInternalState
 };

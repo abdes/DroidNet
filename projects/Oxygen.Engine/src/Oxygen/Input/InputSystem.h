@@ -67,10 +67,14 @@ public:
     -> bool override;
 
   // Frame phase handlers
-  OXGN_NPUT_API auto OnFrameStart(FrameContext& context) -> void override;
-  OXGN_NPUT_API auto OnInput(FrameContext& context) -> co::Co<> override;
-  OXGN_NPUT_API auto OnSnapshot(FrameContext& context) -> void override;
-  OXGN_NPUT_API auto OnFrameEnd(FrameContext& context) -> void override;
+  OXGN_NPUT_API auto OnFrameStart(observer_ptr<FrameContext> context)
+    -> void override;
+  OXGN_NPUT_API auto OnInput(observer_ptr<FrameContext> context)
+    -> co::Co<> override;
+  OXGN_NPUT_API auto OnSnapshot(observer_ptr<FrameContext> context)
+    -> void override;
+  OXGN_NPUT_API auto OnFrameEnd(observer_ptr<FrameContext> context)
+    -> void override;
 
   OXGN_NPUT_API void AddAction(const std::shared_ptr<input::Action>& action);
   OXGN_NPUT_API void RemoveAction(const std::shared_ptr<input::Action>& action);
