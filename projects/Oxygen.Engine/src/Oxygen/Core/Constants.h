@@ -55,6 +55,11 @@ namespace space {
 
   //! Direction vectors for looking in VIEW space. The other directions are
   //! simple negations.
+  //!
+  //! View space is camera-local and uses the standard graphics convention
+  //! forward = -Z. World space remains Z-up with forward = -Y. The view
+  //! matrix is responsible for mapping world-space axes into this camera-
+  //! local basis, which keeps projection and clip-space math consistent.
   namespace look {
     inline constexpr Vec3 Forward { 0.0F, 0.0F, -1.0F }; //! Forward along -Z
     inline constexpr Vec3 Right { +1.0F, 0.0F, 0.0F }; //! Right along +X
