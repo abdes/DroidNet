@@ -604,7 +604,7 @@ constexpr EnumIndexedArray<PhaseId, PhaseDesc> kPhaseRegistry = {
   },
   PhaseDesc {
     .id = PhaseId::kCompositing,
-    .category = ExecutionModel::kBarrieredConcurrency,
+    .category = ExecutionModel::kSynchronousOrdered,
     .allowed_mutations = AllowMutation::kFrameState,
     .thread_safe = true,
   },
