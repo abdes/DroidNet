@@ -8,6 +8,7 @@
 //! @brief Unlit wireframe pixel shader (constant color).
 
 #include "Renderer/SceneConstants.hlsli"
+#include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/MaterialConstants.hlsli"
 #include "MaterialFlags.hlsli"
@@ -90,6 +91,11 @@ float4 PS(VSOutput input) : SV_Target0 {
             ResourceDescriptorHeap[g_PassConstantsIndex];
         color = pc.wire_color;
     }
+
+    // PHYSICAL BYPASS: Divide by exposure.
+    // This ensures that unlit debug lines appear at 'Screen Brightness' (1.0 = white)
+    // even if the scene exposure is set for the Sun (EV 14).
+    color.rgb /= max(GetExposure(), 1e-6f);
 
     return color;
 }

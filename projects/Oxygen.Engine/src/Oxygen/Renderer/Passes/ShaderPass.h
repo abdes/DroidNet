@@ -43,12 +43,15 @@ enum class ShaderDebugMode : int {
   // IBL debug modes
   kIblSpecular = 4, //!< Visualize IBL specular (prefilter map sampling)
   kIblRawSky = 5, //!< Visualize raw sky cubemap sampling (no prefilter)
-  kIblRawSkyViewDir = 6, //!< Visualize raw sky cubemap (view direction)
+  kIblIrradiance = 6, //!< Visualize IBL irradiance (ambient term)
 
   // Material/UV debug modes
   kBaseColor = 7, //!< Visualize base color texture (albedo)
   kUv0 = 8, //!< Visualize UV0 coordinates
   kOpacity = 9, //!< Visualize base alpha/opacity
+  kWorldNormals = 10, //!< Visualize world-space normals
+  kRoughness = 11, //!< Visualize material roughness
+  kMetalness = 12, //!< Visualize material metalness
 };
 
 //! Configuration for a shading pass (main geometry + lighting).
