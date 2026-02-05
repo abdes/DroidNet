@@ -1,4 +1,7 @@
 {
+  "camera": {
+    "orbit_mode": "turntable"
+  },
   "camera_rig": {
     "MainCamera": {
       "camera": {
@@ -11,8 +14,8 @@
         "has_orthographic": false,
         "has_perspective": true,
         "perspective": {
-          "far": 1000.0,
-          "fov": 1.0,
+          "far": 100.0,
+          "fov": 0.891863226890564,
           "near": 0.10000000149011612
         }
       },
@@ -24,7 +27,7 @@
       },
       "mode": "orbit",
       "orbit": {
-        "distance": 5.5,
+        "distance": 7.660317897796631,
         "mode": "turntable",
         "target": {
           "x": 0.0,
@@ -33,15 +36,15 @@
         }
       },
       "position": {
-        "x": -0.706636905670166,
-        "y": 5.392139434814453,
-        "z": 0.8218865394592285
+        "x": -0.9543414115905762,
+        "y": 7.089561462402344,
+        "z": 2.7400388717651367
       },
       "rotation": {
-        "w": -0.04935793951153755,
-        "x": -0.04245892912149429,
-        "y": 0.6507536172866821,
-        "z": 0.7564924359321594
+        "w": -0.05508245527744293,
+        "x": -0.03788645938038826,
+        "y": 0.5654364228248596,
+        "z": 0.8220781087875366
       },
       "scale": {
         "x": 1.0,
@@ -51,8 +54,11 @@
     }
   },
   "demo_shell": {
-    "active_panel": "Environment",
+    "active_panel": "Camera Controls",
     "panels": {
+      "camera_controls": {
+        "width": 492.0
+      },
       "environment": {
         "sky_light": {
           "open": true
@@ -151,6 +157,7 @@
     }
   },
   "light_culling": {
+    "mode": true,
     "visualization_mode": "0"
   },
   "lightbench": {

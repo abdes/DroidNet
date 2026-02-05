@@ -78,7 +78,7 @@ public:
   void SetFocusTarget(glm::vec3 target);
   [[nodiscard]] auto GetFocusTarget() const noexcept -> glm::vec3;
 
-  //! Set focus height (Y component of look-at target).
+  //! Set focus height (Z component of look-at target).
   void SetFocusHeight(float height);
   [[nodiscard]] auto GetFocusHeight() const noexcept -> float;
 

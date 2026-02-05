@@ -10,6 +10,7 @@
 #include <glm/gtc/constants.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/SceneNode.h>
 
 #include "DemoShell/UI/DroneCameraController.h"
@@ -168,7 +169,7 @@ struct DroneCameraController::Impl {
   double damping { 8.0 };
 
   // Focus target
-  glm::vec3 focus_target { 0.0F, 0.8F, 0.0F };
+  glm::vec3 focus_target { 0.0F, 0.0F, 0.8F };
 
   // POI slowdown
   std::vector<glm::vec3> pois;
@@ -274,12 +275,12 @@ auto DroneCameraController::GetFocusTarget() const noexcept -> glm::vec3
 
 void DroneCameraController::SetFocusHeight(float height)
 {
-  impl_->focus_target.y = height;
+  impl_->focus_target.z = height;
 }
 
 auto DroneCameraController::GetFocusHeight() const noexcept -> float
 {
-  return impl_->focus_target.y;
+  return impl_->focus_target.z;
 }
 
 void DroneCameraController::SetPOIs(std::vector<glm::vec3> pois)
@@ -460,17 +461,16 @@ void DroneCameraController::Update(
   if (glm::length(tangent) > 1e-6f) {
     tangent = glm::normalize(tangent);
   } else {
-    tangent = glm::vec3(0.0F, 0.0F, 1.0F);
+    tangent = space::move::Up;
   }
 
   // Apply vertical bob
   const float bob_offset = static_cast<float>(impl_->bob_amp
     * std::sin(impl_->anim_time * impl_->bob_freq * glm::two_pi<double>()));
-  base_pos.y += bob_offset;
+  base_pos.z += bob_offset;
 
   // Apply lateral noise (smoothed)
-  const glm::vec3 right
-    = glm::normalize(glm::cross(tangent, glm::vec3(0.0F, 1.0F, 0.0F)));
+  const glm::vec3 right = glm::normalize(glm::cross(tangent, space::move::Up));
   const float noise_target_x
     = static_cast<float>(impl_->noise_amp * std::sin(impl_->anim_time * 2.3));
   const float noise_target_y
@@ -482,7 +482,7 @@ void DroneCameraController::Update(
   impl_->noise_state.y
     = glm::mix(impl_->noise_state.y, noise_target_y, noise_smooth);
   base_pos += right * impl_->noise_state.x;
-  base_pos.y += impl_->noise_state.y;
+  base_pos.z += impl_->noise_state.y;
 
   // Compute desired rotation toward focus target
   glm::vec3 focus_dir = impl_->focus_target - base_pos;
@@ -500,7 +500,7 @@ void DroneCameraController::Update(
   const float apply_angle = glm::min(max_rot, ang * focus_strength);
   glm::vec3 axis = glm::cross(tangent, focus_dir);
   if (glm::length(axis) < 1e-6f) {
-    axis = glm::vec3(0.0F, 1.0F, 0.0F);
+    axis = (std::abs(tangent.z) > 0.9F) ? space::move::Right : space::move::Up;
   } else {
     axis = glm::normalize(axis);
   }
@@ -510,22 +510,22 @@ void DroneCameraController::Update(
   // Clamp pitch
   auto ClampPitch = [](glm::vec3 fwd) {
     constexpr float max_pitch = glm::radians(45.0F);
-    glm::vec3 horiz = glm::normalize(glm::vec3(fwd.x, 0.0F, fwd.z));
+    glm::vec3 horiz = glm::normalize(glm::vec3(fwd.x, fwd.y, 0.0F));
     if (glm::length(horiz) < 1e-6f) {
       return fwd;
     }
-    const float current_pitch = std::asin(glm::clamp(fwd.y, -1.0F, 1.0F));
+    const float current_pitch = std::asin(glm::clamp(fwd.z, -1.0F, 1.0F));
     if (std::abs(current_pitch) <= max_pitch) {
       return fwd;
     }
     const float clamped = glm::sign(current_pitch) * max_pitch;
-    const float y = std::sin(clamped);
+    const float z = std::sin(clamped);
     const float scale = std::cos(clamped);
-    return glm::normalize(glm::vec3(horiz.x * scale, y, horiz.z * scale));
+    return glm::normalize(glm::vec3(horiz.x * scale, horiz.y * scale, z));
   };
   final_fwd = ClampPitch(final_fwd);
 
-  constexpr glm::vec3 base_up(0.0F, 1.0F, 0.0F);
+  constexpr glm::vec3 base_up = space::move::Up;
   glm::quat desired_rot = glm::quatLookAtRH(final_fwd, base_up);
 
   // Apply banking based on lateral velocity

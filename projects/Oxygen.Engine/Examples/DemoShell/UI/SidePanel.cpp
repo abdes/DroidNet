@@ -63,7 +63,7 @@ auto SidePanel::Draw(float left_offset) -> void
     width_ = std::clamp(active_panel->GetPreferredWidth(), kMinPanelWidth,
       io.DisplaySize.x * kMaxPanelWidthRatio);
 
-    if (const auto settings = SettingsService::Default()) {
+    if (const auto settings = SettingsService::ForDemoApp()) {
       if (const auto saved_width
         = settings->GetFloat(MakePanelWidthKey(last_active_panel_name_))) {
         width_ = std::clamp(
@@ -98,7 +98,7 @@ auto SidePanel::Draw(float left_offset) -> void
   const float delta = std::abs(width_ - last_saved_panel_width_);
   const bool resize_finished = !ImGui::IsMouseDown(ImGuiMouseButton_Left);
   if (resize_finished && delta > 0.5F) {
-    if (const auto settings = SettingsService::Default()) {
+    if (const auto settings = SettingsService::ForDemoApp()) {
       settings->SetFloat(MakePanelWidthKey(last_active_panel_name_), width_);
       last_saved_panel_width_ = width_;
     }

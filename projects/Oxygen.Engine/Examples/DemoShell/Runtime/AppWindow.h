@@ -9,9 +9,11 @@
 #include <array>
 #include <memory>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Types.h>
 
 namespace oxygen {
@@ -23,6 +25,9 @@ namespace co {
 }
 namespace platform {
   class Window;
+  namespace window {
+    struct Properties;
+  }
 }
 namespace graphics {
   class Surface;
@@ -52,6 +57,9 @@ class AppWindow final : public Component,
 public:
   explicit AppWindow(const DemoAppContext& app) noexcept;
   ~AppWindow() noexcept override;
+
+  OXYGEN_MAKE_NON_COPYABLE(AppWindow)
+  OXYGEN_MAKE_NON_MOVABLE(AppWindow)
 
   auto CreateAppWindow(const platform::window::Properties& props) -> bool;
 
@@ -84,27 +92,27 @@ private:
   // The platform and the engine are guaranteed to outlive this component.
   // We store them as observer_ptr to avoid unnecessarily extending their
   // lifetime.
-  observer_ptr<Platform> platform_ {};
-  observer_ptr<AsyncEngine> engine_ {};
+  observer_ptr<Platform> platform_;
+  observer_ptr<AsyncEngine> engine_;
 
   // The Graphics instance is held weakly, because the engine does not guarantee
   // its stability due to dynamic loading/unloading.
-  std::weak_ptr<Graphics> gfx_weak_ {};
+  std::weak_ptr<Graphics> gfx_weak_;
 
   // The platform owns the window, and will expire the shared pointers it when
   // it is closed.
-  std::weak_ptr<platform::Window> window_ {};
+  std::weak_ptr<platform::Window> window_;
 
   // Platform destructor token.
-  size_t window_lifecycle_token_ { 0 };
+  size_t window_lifecycle_token_;
 
   // Per-instance shutdown event used to cancel async handlers.
-  std::shared_ptr<co::Event> shutdown_event_ {};
+  std::shared_ptr<co::Event> shutdown_event_;
 
   // GPU state owned by this component. Because of the volatile nature of
   // surfaces, these should nvere be shared outside of this component unless via
   // `weak_ptr` or `observer_ptr`.
-  std::shared_ptr<graphics::Surface> surface_ {};
+  std::shared_ptr<graphics::Surface> surface_;
   std::array<std::shared_ptr<graphics::Framebuffer>,
     frame::kFramesInFlight.get()>
     framebuffers_ {};
@@ -116,7 +124,7 @@ private:
   // Per-instance token (opaque) stored as unique_ptr so lifetime of the
   // subscription is tied to this component instance without exposing the
   // concrete type in the header.
-  std::unique_ptr<SubscriptionToken> imgui_subscription_token_ {};
+  std::unique_ptr<SubscriptionToken> imgui_subscription_token_;
 };
 
 } // namespace oxygen::examples

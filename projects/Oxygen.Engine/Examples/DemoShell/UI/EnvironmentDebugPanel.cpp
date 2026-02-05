@@ -118,7 +118,7 @@ auto EnvironmentDebugPanel::DrawContents() -> void
   }
 
   if (!collapse_state_loaded_) {
-    if (const auto settings = examples::SettingsService::Default()) {
+    if (const auto settings = examples::SettingsService::ForDemoApp()) {
       if (const auto saved_value
         = settings->GetBool("demo_shell.panels.environment.sun.open")) {
         sun_section_open_ = *saved_value;
@@ -155,7 +155,7 @@ auto EnvironmentDebugPanel::DrawContents() -> void
   const bool sun_section_open = ImGui::CollapsingHeader("Sun");
   if (sun_section_open != sun_section_open_) {
     sun_section_open_ = sun_section_open;
-    if (const auto settings = examples::SettingsService::Default()) {
+    if (const auto settings = examples::SettingsService::ForDemoApp()) {
       settings->SetBool(
         "demo_shell.panels.environment.sun.open", sun_section_open_);
     }
@@ -171,7 +171,7 @@ auto EnvironmentDebugPanel::DrawContents() -> void
   const bool sky_atmo_section_open = ImGui::CollapsingHeader("Sky Atmosphere");
   if (sky_atmo_section_open != sky_atmo_section_open_) {
     sky_atmo_section_open_ = sky_atmo_section_open;
-    if (const auto settings = examples::SettingsService::Default()) {
+    if (const auto settings = examples::SettingsService::ForDemoApp()) {
       settings->SetBool(
         "demo_shell.panels.environment.sky_atmo.open", sky_atmo_section_open_);
     }
@@ -184,7 +184,7 @@ auto EnvironmentDebugPanel::DrawContents() -> void
   const bool sky_sphere_section_open = ImGui::CollapsingHeader("Sky Sphere");
   if (sky_sphere_section_open != sky_sphere_section_open_) {
     sky_sphere_section_open_ = sky_sphere_section_open;
-    if (const auto settings = examples::SettingsService::Default()) {
+    if (const auto settings = examples::SettingsService::ForDemoApp()) {
       settings->SetBool("demo_shell.panels.environment.sky_sphere.open",
         sky_sphere_section_open_);
     }
@@ -198,7 +198,7 @@ auto EnvironmentDebugPanel::DrawContents() -> void
     = ImGui::CollapsingHeader("Sky Light (IBL)");
   if (sky_light_section_open != sky_light_section_open_) {
     sky_light_section_open_ = sky_light_section_open;
-    if (const auto settings = examples::SettingsService::Default()) {
+    if (const auto settings = examples::SettingsService::ForDemoApp()) {
       settings->SetBool("demo_shell.panels.environment.sky_light.open",
         sky_light_section_open_);
     }

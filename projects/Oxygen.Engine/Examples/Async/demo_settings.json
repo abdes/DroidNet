@@ -1,8 +1,13 @@
 {
   "async_demo": {
     "profiler_open": true,
-    "spotlight_enabled": false,
-    "spotlight_open": true
+    "spotlight_enabled": true,
+    "spotlight_inner_cone": 0.6056292653083801,
+    "spotlight_intensity": 30434.78125,
+    "spotlight_open": true,
+    "spotlight_outer_cone": 0.6771877408027649,
+    "spotlight_range": 100.0,
+    "spotlight_shadows": true
   },
   "camera_rig": {
     "MainCamera": {
@@ -53,15 +58,15 @@
         }
       },
       "position": {
-        "x": 9.176657676696777,
-        "y": 13.991867065429688,
-        "z": 8.893340110778809
+        "x": 14.06804370880127,
+        "y": 12.941262245178223,
+        "z": 14.04885482788086
       },
       "rotation": {
-        "w": 0.8716041445732117,
-        "x": -0.2886335849761963,
-        "y": 0.3752674460411072,
-        "z": 0.12716685235500336
+        "w": 0.35833555459976196,
+        "x": 0.209741473197937,
+        "y": 0.47188833355903625,
+        "z": 0.7777695059776306
       },
       "scale": {
         "x": 1.0,
@@ -71,7 +76,7 @@
     }
   },
   "demo_shell": {
-    "active_panel": "Environment",
+    "active_panel": "",
     "panels": {
       "async_demo": {
         "width": 534.0
@@ -119,7 +124,7 @@
       "enabled": true,
       "intensity": 1.0,
       "source": 0.0,
-      "specular": 1.0,
+      "specular": 0.3400000035762787,
       "tint": {
         "x": 1.0,
         "y": 1.0,
@@ -148,25 +153,28 @@
     "sun": {
       "azimuth_deg": 90.0,
       "color": {
-        "x": 1.0,
-        "y": 1.0,
-        "z": 1.0
+        "x": 0.8146341443061829,
+        "y": 0.40891626477241516,
+        "z": 0.09139798581600189
       },
       "disk_radius_deg": 0.26799994707107544,
-      "elevation_deg": 30.0,
+      "elevation_deg": 1.5,
       "enabled": true,
-      "intensity_lux": 150000.0,
+      "intensity_lux": 200.0,
       "source": 1.0,
       "temperature_kelvin": 6500.0,
       "use_temperature": false
     }
   },
+  "light_culling": {
+    "visualization_mode": "0"
+  },
   "post_process": {
     "exposure": {
-      "manual_ev100": 14.039999961853027
+      "manual_ev100": 5.663000106811523
     },
     "tonemapping": {
-      "mode": "filmic"
+      "mode": "aces"
     }
   },
   "ui": {

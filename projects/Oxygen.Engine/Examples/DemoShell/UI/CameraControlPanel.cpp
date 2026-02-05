@@ -13,6 +13,7 @@
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/Input/Action.h>
 
@@ -211,6 +212,62 @@ void CameraControlPanel::DrawCameraModeTab()
 
   ImGui::Spacing();
 
+  ImGui::SeparatorText("Projection");
+  if (!vm_->HasActiveCamera()) {
+    ImGui::TextDisabled("No active camera");
+  } else if (vm_->HasPerspectiveCamera()) {
+    ImGui::TextUnformatted("Perspective");
+    ImGui::Indent();
+    ImGui::PushID("PerspectiveProjection");
+
+    float fov_deg = vm_->GetPerspectiveFovDegrees();
+    if (ImGui::SliderFloat("FOV", &fov_deg, 10.0F, 160.0F, "%.1F deg")) {
+      vm_->SetPerspectiveFovDegrees(fov_deg);
+    }
+
+    float near_plane = vm_->GetPerspectiveNearPlane();
+    if (ImGui::InputFloat("Near", &near_plane, 0.01F, 0.1F, "%.4F")) {
+      vm_->SetPerspectiveNearPlane(near_plane);
+    }
+
+    float far_plane = vm_->GetPerspectiveFarPlane();
+    if (ImGui::InputFloat("Far", &far_plane, 1.0F, 10.0F, "%.2F")) {
+      vm_->SetPerspectiveFarPlane(far_plane);
+    }
+
+    ImGui::PopID();
+    ImGui::Unindent();
+  } else if (vm_->HasOrthographicCamera()) {
+    ImGui::TextUnformatted("Orthographic");
+    ImGui::Indent();
+    ImGui::PushID("OrthoProjection");
+
+    float width = vm_->GetOrthoWidth();
+    if (ImGui::InputFloat("Width", &width, 0.1F, 1.0F, "%.3F")) {
+      vm_->SetOrthoWidth(width);
+    }
+
+    float height = vm_->GetOrthoHeight();
+    if (ImGui::InputFloat("Height", &height, 0.1F, 1.0F, "%.3F")) {
+      vm_->SetOrthoHeight(height);
+    }
+
+    float near_plane = vm_->GetOrthoNearPlane();
+    if (ImGui::InputFloat("Near", &near_plane, 0.01F, 0.1F, "%.4F")) {
+      vm_->SetOrthoNearPlane(near_plane);
+    }
+
+    float far_plane = vm_->GetOrthoFarPlane();
+    if (ImGui::InputFloat("Far", &far_plane, 1.0F, 10.0F, "%.2F")) {
+      vm_->SetOrthoFarPlane(far_plane);
+    }
+
+    ImGui::PopID();
+    ImGui::Unindent();
+  } else {
+    ImGui::TextDisabled("Active camera has no projection component");
+  }
+
   ImGui::SeparatorText("Actions");
 
   if (ImGui::Button("Reset Camera Position", ImVec2(-1, 0))) {
@@ -244,9 +301,9 @@ void CameraControlPanel::DrawCameraPoseInfo()
   const glm::quat rotation = vm_->GetCameraRotation();
 
   // Basis vectors
-  const glm::vec3 forward = rotation * glm::vec3(0.0F, 0.0F, -1.0F);
-  const glm::vec3 up = rotation * glm::vec3(0.0F, 1.0F, 0.0F);
-  const glm::vec3 right = rotation * glm::vec3(1.0F, 0.0F, 0.0F);
+  const glm::vec3 forward = rotation * space::look::Forward;
+  const glm::vec3 up = rotation * space::look::Up;
+  const glm::vec3 right = rotation * space::look::Right;
 
   // World space alignment checks
   const auto safe_normalize = [](const glm::vec3& v) -> glm::vec3 {
@@ -260,9 +317,9 @@ void CameraControlPanel::DrawCameraPoseInfo()
   const glm::vec3 forward_normalized = safe_normalize(forward);
   const glm::vec3 up_normalized = safe_normalize(up);
 
-  constexpr glm::vec3 world_pos_y(0.0F, 1.0F, 0.0F);
-  constexpr glm::vec3 world_neg_y(0.0F, -1.0F, 0.0F);
-  constexpr glm::vec3 world_pos_z(0.0F, 0.0F, 1.0F);
+  constexpr glm::vec3 world_pos_y = space::move::Back;
+  constexpr glm::vec3 world_neg_y = space::move::Forward;
+  constexpr glm::vec3 world_pos_z = space::move::Up;
 
   const float forward_dot_pos_y = glm::dot(forward_normalized, world_pos_y);
   const float forward_dot_neg_y = glm::dot(forward_normalized, world_neg_y);
@@ -459,17 +516,17 @@ void CameraControlPanel::DrawDroneMinimap()
 
   float min_x = points[0].x;
   float max_x = points[0].x;
-  float min_z = points[0].z;
-  float max_z = points[0].z;
+  float min_y = points[0].y;
+  float max_y = points[0].y;
   for (const auto& p : points) {
     min_x = std::min(min_x, p.x);
     max_x = std::max(max_x, p.x);
-    min_z = std::min(min_z, p.z);
-    max_z = std::max(max_z, p.z);
+    min_y = std::min(min_y, p.y);
+    max_y = std::max(max_y, p.y);
   }
 
   const float path_width = std::max(max_x - min_x, 0.001F);
-  const float height = std::max(max_z - min_z, 0.001F);
+  const float height = std::max(max_y - min_y, 0.001F);
 
   constexpr float kPadding = 22.0F;
   const float scale_x = (size.x - 2.0F * kPadding) / path_width;
@@ -483,7 +540,7 @@ void CameraControlPanel::DrawDroneMinimap()
 
   const auto to_minimap = [&](const glm::vec3& p) -> ImVec2 {
     const float x = offset_x + (p.x - min_x) * scale;
-    const float y = offset_y + (p.z - min_z) * scale;
+    const float y = offset_y + (p.y - min_y) * scale;
     return ImVec2(x, y);
   };
 

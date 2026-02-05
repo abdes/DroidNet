@@ -51,6 +51,7 @@
 using namespace oxygen;
 using namespace oxygen::engine;
 using namespace oxygen::graphics;
+using oxygen::examples::SettingsService;
 using namespace std::chrono_literals;
 
 namespace {
@@ -177,10 +178,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
 {
   using namespace oxygen::clap; // NOLINT
 
-  static auto settings = oxygen::examples::SettingsService::CreateForDemo(
-    std::source_location::current());
-  oxygen::examples::SettingsService::SetDefault(
-    oxygen::observer_ptr { settings.get() });
+  // Initialize settings service
+  SettingsService::ForDemoApp();
 
   uint32_t frames = 0U;
   uint32_t target_fps = 100U; // desired frame pacing

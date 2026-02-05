@@ -9,6 +9,7 @@
 #include <span>
 #include <string_view>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/OxCo/Co.h>
@@ -33,7 +34,7 @@ namespace scene {
 namespace graphics {
   class Framebuffer;
 }
-}
+} // namespace oxygen
 
 namespace oxygen::examples {
 
@@ -48,7 +49,11 @@ enum class PipelineFeature : std::uint32_t {
 };
 
 //! Render mode selection for pipelines.
-enum class RenderMode { kSolid, kWireframe, kOverlayWireframe };
+enum class RenderMode : uint8_t {
+  kSolid,
+  kWireframe,
+  kOverlayWireframe,
+};
 
 [[nodiscard]] inline auto to_string(RenderMode mode) -> std::string_view
 {
@@ -77,7 +82,11 @@ inline auto operator&(PipelineFeature a, PipelineFeature b) -> PipelineFeature
 
 class RenderingPipeline : public Object {
 public:
+  RenderingPipeline() = default;
   ~RenderingPipeline() override = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(RenderingPipeline)
+  OXYGEN_MAKE_NON_MOVABLE(RenderingPipeline)
 
   // Discovery
   [[nodiscard]] virtual auto GetSupportedFeatures() const -> PipelineFeature
@@ -129,15 +138,15 @@ public:
   //! Called at the beginning of each frame before any other phase.
   //! Use this to commit staged configuration changes or perform per-frame
   //! setup.
-  virtual auto OnFrameStart(
-    engine::FrameContext& /*context*/, engine::Renderer& /*renderer*/) -> void
+  virtual auto OnFrameStart(observer_ptr<engine::FrameContext> /*context*/,
+    engine::Renderer& /*renderer*/) -> void
   {
   }
 
   // [Phase: kSceneMutation]
   // Register active views for the frame.
   // The pipeline iterates 'view_descs' and registers them with the renderer.
-  virtual auto OnSceneMutation(engine::FrameContext& frame_ctx,
+  virtual auto OnSceneMutation(observer_ptr<engine::FrameContext> frame_ctx,
     engine::Renderer& renderer, scene::Scene& scene,
     std::span<const CompositionView> view_descs,
     graphics::Framebuffer* final_output) -> co::Co<>
@@ -147,14 +156,14 @@ public:
   // Configure render passes and graph parameters.
   // Note: views are now identified by their ID or the descriptors from the
   // mutation phase.
-  virtual auto OnPreRender(engine::FrameContext& frame_ctx,
+  virtual auto OnPreRender(observer_ptr<engine::FrameContext> frame_ctx,
     engine::Renderer& renderer, std::span<const CompositionView> view_descs)
     -> co::Co<>
     = 0;
 
   // [Phase: kCompositing]
   // Submit final composition/post-process tasks.
-  virtual auto OnCompositing(engine::FrameContext& frame_ctx,
+  virtual auto OnCompositing(observer_ptr<engine::FrameContext> frame_ctx,
     engine::Renderer& renderer, graphics::Framebuffer* final_output)
     -> co::Co<engine::CompositionSubmission>
     = 0;

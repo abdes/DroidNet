@@ -26,29 +26,29 @@
 #include "DemoShell/Runtime/AppWindow.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 
-using namespace oxygen;
-
 namespace {
 
-void MaybeUnhookImgui(observer_ptr<AsyncEngine> engine) noexcept
+namespace o = oxygen;
+
+void MaybeUnhookImgui(o::observer_ptr<o::AsyncEngine> engine) noexcept
 {
-  auto imgui_module_ref = engine->GetModule<imgui::ImGuiModule>();
+  auto imgui_module_ref = engine->GetModule<o::imgui::ImGuiModule>();
   if (!imgui_module_ref) {
     DLOG_F(INFO, "ImGui module not available; skipping window detach");
     return;
   }
 
   try {
-    imgui_module_ref->get().SetWindowId(platform::kInvalidWindowId);
+    imgui_module_ref->get().SetWindowId(o::platform::kInvalidWindowId);
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Failed to unhook ImGui from window: {}", e.what());
   }
 }
 
 bool MaybeHookImgui(
-  observer_ptr<AsyncEngine> engine, platform::WindowIdType window_id)
+  o::observer_ptr<o::AsyncEngine> engine, o::platform::WindowIdType window_id)
 {
-  auto imgui_module_ref = engine->GetModule<imgui::ImGuiModule>();
+  auto imgui_module_ref = engine->GetModule<o::imgui::ImGuiModule>();
   if (!imgui_module_ref) {
     LOG_F(
       INFO, "ImGui module not available; cannot bind to window {}", window_id);
@@ -64,20 +64,6 @@ bool MaybeHookImgui(
 
 namespace oxygen::examples {
 
-AppWindow::AppWindow(const DemoAppContext& app) noexcept
-  : platform_(app.platform.get()) // observe only
-  , engine_(app.engine.get()) // observe only
-  , gfx_weak_(app.gfx_weak)
-{
-  // Sanity checks only; heavyweight initialization is explicit and deferred.
-  CHECK_NOTNULL_F(platform_);
-  CHECK_NOTNULL_F(engine_);
-
-  shutdown_event_ = std::make_shared<co::Event>();
-
-  DLOG_F(INFO, "AppWindow constructed");
-}
-
 // Map holding per-AppWindow subscriptions. Kept in translation unit so the
 // public header doesn't need to include heavy engine headers.
 // SubscriptionToken holds the engine subscription object for a
@@ -92,6 +78,21 @@ struct AppWindow::SubscriptionToken {
 
   AsyncEngine::ModuleSubscription sub;
 };
+
+AppWindow::AppWindow(const DemoAppContext& app) noexcept
+  : platform_(app.platform.get()) // observe only
+  , engine_(app.engine.get()) // observe only
+  , gfx_weak_(app.gfx_weak)
+  , window_lifecycle_token_(0)
+{
+  // Sanity checks only; heavyweight initialization is explicit and deferred.
+  CHECK_NOTNULL_F(platform_);
+  CHECK_NOTNULL_F(engine_);
+
+  shutdown_event_ = std::make_shared<co::Event>();
+
+  DLOG_F(INFO, "AppWindow constructed");
+}
 
 AppWindow::~AppWindow() noexcept
 {

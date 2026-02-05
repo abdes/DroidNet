@@ -13,6 +13,8 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Renderer/Types/ShaderDebugMode.h>
 
+#include "DemoShell/Services/DomainService.h"
+
 namespace oxygen::examples {
 class RenderingPipeline;
 class SettingsService;
@@ -31,7 +33,7 @@ class SettingsService;
 
 @see SettingsService
 */
-class LightCullingSettingsService {
+class LightCullingSettingsService : public DomainService {
 public:
   LightCullingSettingsService() = default;
   virtual ~LightCullingSettingsService() = default;
@@ -81,14 +83,16 @@ public:
   virtual auto SetVisualizationMode(engine::ShaderDebugMode mode) -> void;
 
   //! Returns the current settings epoch.
-  [[nodiscard]] virtual auto GetEpoch() const noexcept -> std::uint64_t;
+  [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t override;
 
-protected:
-  //! Returns the settings service used for persistence.
-  [[nodiscard]] virtual auto ResolveSettings() const noexcept
-    -> observer_ptr<SettingsService>;
+  auto OnFrameStart(const engine::FrameContext& context) -> void override;
+  auto OnSceneActivated(scene::Scene& scene) -> void override;
+  auto OnMainViewReady(const engine::FrameContext& context,
+    const CompositionView& view) -> void override;
 
 private:
+  auto ApplyPipelineSettings() -> void;
+
   static constexpr auto kModeKey = "light_culling.mode";
   static constexpr auto kDepthSlicesKey = "light_culling.depth_slices";
   static constexpr auto kUseCameraZKey = "light_culling.use_camera_z";

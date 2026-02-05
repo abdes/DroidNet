@@ -278,7 +278,7 @@ auto LightBenchPanel::LoadSettings() -> void
     return;
   }
 
-  const auto settings = SettingsService::Default();
+  const auto settings = SettingsService::ForDemoApp();
   if (!settings) {
     return;
   }
@@ -369,7 +369,7 @@ auto LightBenchPanel::SaveSettings() -> void
     return;
   }
 
-  const auto settings = SettingsService::Default();
+  const auto settings = SettingsService::ForDemoApp();
   if (!settings) {
     return;
   }

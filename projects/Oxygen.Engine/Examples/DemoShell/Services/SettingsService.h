@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 
 namespace oxygen::examples {
@@ -24,17 +25,22 @@ namespace oxygen::examples {
 class SettingsService {
 public:
   explicit SettingsService(std::filesystem::path storage_path);
+
+  OXYGEN_MAKE_NON_COPYABLE(SettingsService);
+  OXYGEN_MAKE_NON_MOVABLE(SettingsService);
+
   ~SettingsService() noexcept;
 
   //! Creates a settings service stored alongside the calling demo source file.
   static auto CreateForDemo(std::source_location location
     = std::source_location::current()) -> std::unique_ptr<SettingsService>;
 
-  //! Sets the process-wide default settings service.
-  static auto SetDefault(observer_ptr<SettingsService> service) -> void;
-
   //! Returns the process-wide default settings service.
-  static auto Default() -> observer_ptr<SettingsService>;
+  static auto ForDemoApp(std::source_location location
+    = std::source_location::current()) -> observer_ptr<SettingsService>
+  {
+    return ResolveDefault(location);
+  }
 
   //! Loads settings from disk (called automatically by constructor).
   auto Load() -> void;
@@ -75,11 +81,13 @@ public:
   }
 
 private:
+  static auto ResolveDefault(std::source_location location)
+    -> observer_ptr<SettingsService>;
   static auto SplitKey(std::string_view key) -> std::vector<std::string>;
   auto FindNode(std::string_view key) const -> const void*;
   auto ResolveNode(std::string_view key) -> void*;
 
-  mutable std::shared_mutex mutex_ {};
+  mutable std::shared_mutex mutex_;
   std::filesystem::path storage_path_;
   bool dirty_ { false };
   bool loaded_ { false };

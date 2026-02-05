@@ -21,7 +21,7 @@ namespace engine {
 
 namespace examples {
 
-  class CameraLifecycleService;
+  class CameraSettingsService;
   class RenderingPipeline;
   class SettingsService;
 
@@ -40,9 +40,9 @@ namespace examples {
       //! initial state.
       virtual auto Initialize(observer_ptr<RenderingPipeline> pipeline) -> void;
 
-      //! Binds the camera lifecycle service used for camera exposure settings.
-      virtual auto BindCameraLifecycle(
-        observer_ptr<CameraLifecycleService> camera_lifecycle) -> void;
+      //! Binds the camera settings service used for camera exposure settings.
+      virtual auto BindCameraSettings(
+        observer_ptr<CameraSettingsService> camera_settings) -> void;
 
       // Exposure
       [[nodiscard]] virtual auto GetExposureEnabled() const -> bool;
@@ -79,10 +79,6 @@ namespace examples {
       // Cache invalidation
       [[nodiscard]] virtual auto GetEpoch() const noexcept -> std::uint64_t;
 
-    protected:
-      [[nodiscard]] virtual auto ResolveSettings() const noexcept
-        -> observer_ptr<SettingsService>;
-
     private:
       static constexpr auto kExposureModeKey = "post_process.exposure.mode";
       static constexpr auto kExposureEnabledKey
@@ -97,7 +93,7 @@ namespace examples {
       static constexpr auto kToneMapperKey = "post_process.tonemapping.mode";
 
       observer_ptr<RenderingPipeline> pipeline_ {};
-      observer_ptr<CameraLifecycleService> camera_lifecycle_ {};
+      observer_ptr<CameraSettingsService> camera_settings_ {};
       mutable std::atomic_uint64_t epoch_ { 0 };
       mutable std::string last_camera_id_ {};
     };

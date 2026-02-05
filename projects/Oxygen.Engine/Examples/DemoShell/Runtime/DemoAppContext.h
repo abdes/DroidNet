@@ -40,16 +40,16 @@ public:
   bool fullscreen { false };
 
   // Graphics queues setup shared across subsystems.
-  graphics::SharedTransferQueueStrategy queue_strategy {};
+  graphics::SharedTransferQueueStrategy queue_strategy;
 
   // Core systems.
-  std::shared_ptr<Platform> platform {};
-  std::weak_ptr<Graphics> gfx_weak {};
-  std::shared_ptr<AsyncEngine> engine {};
+  std::shared_ptr<Platform> platform;
+  std::weak_ptr<Graphics> gfx_weak;
+  std::shared_ptr<AsyncEngine> engine;
 
   // Observed modules (non-owning).
-  observer_ptr<engine::Renderer> renderer { nullptr };
-  observer_ptr<engine::InputSystem> input_system { nullptr };
+  observer_ptr<engine::Renderer> renderer;
+  observer_ptr<engine::InputSystem> input_system;
 
   //! Flag toggled to request loop continue/stop.
   std::atomic_bool running { false };

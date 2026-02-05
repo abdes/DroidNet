@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Base/Logging.h>
+
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 
@@ -59,72 +61,85 @@ auto ContentSettingsService::GetExplorerSettings() const
   -> ContentExplorerSettings
 {
   ContentExplorerSettings s;
-  const auto settings = ResolveSettings();
-  if (!settings)
-    return s;
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
 
-  if (auto val = settings->GetString(kModelRootKey))
+  if (auto val = settings->GetString(kModelRootKey)) {
     s.model_root = *val;
-  if (auto val = settings->GetBool(kIncludeFbxKey))
+  }
+  if (auto val = settings->GetBool(kIncludeFbxKey)) {
     s.include_fbx = *val;
-  if (auto val = settings->GetBool(kIncludeGlbKey))
+  }
+  if (auto val = settings->GetBool(kIncludeGlbKey)) {
     s.include_glb = *val;
-  if (auto val = settings->GetBool(kIncludeGltfKey))
+  }
+  if (auto val = settings->GetBool(kIncludeGltfKey)) {
     s.include_gltf = *val;
-  if (auto val = settings->GetBool(kAutoLoadOnImportKey))
+  }
+  if (auto val = settings->GetBool(kAutoLoadOnImportKey)) {
     s.auto_load_on_import = *val;
-  if (auto val = settings->GetBool(kAutoDumpTexMemKey))
+  }
+  if (auto val = settings->GetBool(kAutoDumpTexMemKey)) {
     s.auto_dump_texture_memory = *val;
-  if (auto val = settings->GetFloat(kAutoDumpDelayKey))
+  }
+  if (auto val = settings->GetFloat(kAutoDumpDelayKey)) {
     s.auto_dump_delay_frames = static_cast<int>(*val);
-  if (auto val = settings->GetFloat(kDumpTopNKey))
+  }
+  if (auto val = settings->GetFloat(kDumpTopNKey)) {
     s.dump_top_n = static_cast<int>(*val);
+  }
 
   return s;
 }
 
 auto ContentSettingsService::SetExplorerSettings(
-  const ContentExplorerSettings& settings) -> void
+  const ContentExplorerSettings& s) -> void
 {
-  if (const auto s = ResolveSettings()) {
-    s->SetString(kModelRootKey, settings.model_root.string());
-    s->SetBool(kIncludeFbxKey, settings.include_fbx);
-    s->SetBool(kIncludeGlbKey, settings.include_glb);
-    s->SetBool(kIncludeGltfKey, settings.include_gltf);
-    s->SetBool(kAutoLoadOnImportKey, settings.auto_load_on_import);
-    s->SetBool(kAutoDumpTexMemKey, settings.auto_dump_texture_memory);
-    s->SetFloat(
-      kAutoDumpDelayKey, static_cast<float>(settings.auto_dump_delay_frames));
-    s->SetFloat(kDumpTopNKey, static_cast<float>(settings.dump_top_n));
-    ++epoch_;
-  }
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+
+  settings->SetString(kModelRootKey, s.model_root.string());
+  settings->SetBool(kIncludeFbxKey, s.include_fbx);
+  settings->SetBool(kIncludeGlbKey, s.include_glb);
+  settings->SetBool(kIncludeGltfKey, s.include_gltf);
+  settings->SetBool(kAutoLoadOnImportKey, s.auto_load_on_import);
+  settings->SetBool(kAutoDumpTexMemKey, s.auto_dump_texture_memory);
+  settings->SetFloat(
+    kAutoDumpDelayKey, static_cast<float>(s.auto_dump_delay_frames));
+  settings->SetFloat(kDumpTopNKey, static_cast<float>(s.dump_top_n));
+  ++epoch_;
 }
 
 auto ContentSettingsService::GetImportOptions() const
   -> content::import::ImportOptions
 {
   content::import::ImportOptions o;
-  const auto settings = ResolveSettings();
-  if (!settings)
-    return o;
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
 
-  if (auto val = settings->GetFloat(kAssetKeyPolicyKey))
+  if (auto val = settings->GetFloat(kAssetKeyPolicyKey)) {
     o.asset_key_policy
       = static_cast<content::import::AssetKeyPolicy>(static_cast<int>(*val));
-  if (auto val = settings->GetFloat(kNodePruningKey))
+  }
+  if (auto val = settings->GetFloat(kNodePruningKey)) {
     o.node_pruning
       = static_cast<content::import::NodePruningPolicy>(static_cast<int>(*val));
-  if (auto val = settings->GetFloat(kImportContentFlagsKey))
+  }
+  if (auto val = settings->GetFloat(kImportContentFlagsKey)) {
     o.import_content = static_cast<content::import::ImportContentFlags>(
       static_cast<uint32_t>(*val));
-  if (auto val = settings->GetBool(kWithHashingKey))
+  }
+  if (auto val = settings->GetBool(kWithHashingKey)) {
     o.with_content_hashing = *val;
-  if (auto val = settings->GetFloat(kNormalPolicyKey))
+  }
+  if (auto val = settings->GetFloat(kNormalPolicyKey)) {
     o.normal_policy = static_cast<content::import::GeometryAttributePolicy>(
       static_cast<int>(*val));
-  if (auto val = settings->GetFloat(kTangentPolicyKey))
+  }
+  if (auto val = settings->GetFloat(kTangentPolicyKey)) {
     o.tangent_policy = static_cast<content::import::GeometryAttributePolicy>(
       static_cast<int>(*val));
+  }
 
   return o;
 }
@@ -132,55 +147,65 @@ auto ContentSettingsService::GetImportOptions() const
 auto ContentSettingsService::SetImportOptions(
   const content::import::ImportOptions& options) -> void
 {
-  if (const auto s = ResolveSettings()) {
-    s->SetFloat(kAssetKeyPolicyKey,
-      static_cast<float>(static_cast<int>(options.asset_key_policy)));
-    s->SetFloat(kNodePruningKey,
-      static_cast<float>(static_cast<int>(options.node_pruning)));
-    s->SetFloat(kImportContentFlagsKey,
-      static_cast<float>(static_cast<uint32_t>(options.import_content)));
-    s->SetBool(kWithHashingKey, options.with_content_hashing);
-    s->SetFloat(kNormalPolicyKey,
-      static_cast<float>(static_cast<int>(options.normal_policy)));
-    s->SetFloat(kTangentPolicyKey,
-      static_cast<float>(static_cast<int>(options.tangent_policy)));
-    ++epoch_;
-  }
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+
+  settings->SetFloat(kAssetKeyPolicyKey,
+    static_cast<float>(static_cast<int>(options.asset_key_policy)));
+  settings->SetFloat(kNodePruningKey,
+    static_cast<float>(static_cast<int>(options.node_pruning)));
+  settings->SetFloat(kImportContentFlagsKey,
+    static_cast<float>(static_cast<uint32_t>(options.import_content)));
+  settings->SetBool(kWithHashingKey, options.with_content_hashing);
+  settings->SetFloat(kNormalPolicyKey,
+    static_cast<float>(static_cast<int>(options.normal_policy)));
+  settings->SetFloat(kTangentPolicyKey,
+    static_cast<float>(static_cast<int>(options.tangent_policy)));
+  ++epoch_;
 }
 
 auto ContentSettingsService::GetTextureTuning() const
   -> content::import::ImportOptions::TextureTuning
 {
   content::import::ImportOptions::TextureTuning t;
-  const auto settings = ResolveSettings();
-  if (!settings)
-    return t;
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
 
-  if (auto val = settings->GetBool(kTexTuningEnabledKey))
+  if (auto val = settings->GetBool(kTexTuningEnabledKey)) {
     t.enabled = *val;
-  if (auto val = settings->GetFloat(kTexTuningIntentKey))
+  }
+  if (auto val = settings->GetFloat(kTexTuningIntentKey)) {
     t.intent
       = static_cast<content::import::TextureIntent>(static_cast<int>(*val));
-  if (auto val = settings->GetFloat(kTexTuningColorSpaceKey))
+  }
+  if (auto val = settings->GetFloat(kTexTuningColorSpaceKey)) {
     t.source_color_space = static_cast<ColorSpace>(static_cast<int>(*val));
-  if (auto val = settings->GetFloat(kTexTuningMipPolicyKey))
+  }
+  if (auto val = settings->GetFloat(kTexTuningMipPolicyKey)) {
     t.mip_policy
       = static_cast<content::import::MipPolicy>(static_cast<int>(*val));
-  if (auto val = settings->GetFloat(kTexTuningMaxMipsKey))
+  }
+  if (auto val = settings->GetFloat(kTexTuningMaxMipsKey)) {
     t.max_mip_levels = static_cast<uint8_t>(*val);
-  if (auto val = settings->GetFloat(kTexTuningMipFilterKey))
+  }
+  if (auto val = settings->GetFloat(kTexTuningMipFilterKey)) {
     t.mip_filter
       = static_cast<content::import::MipFilter>(static_cast<int>(*val));
-  if (auto val = settings->GetFloat(kTexTuningColorFormatKey))
+  }
+  if (auto val = settings->GetFloat(kTexTuningColorFormatKey)) {
     t.color_output_format = static_cast<Format>(static_cast<int>(*val));
-  if (auto val = settings->GetFloat(kTexTuningDataFormatKey))
+  }
+  if (auto val = settings->GetFloat(kTexTuningDataFormatKey)) {
     t.data_output_format = static_cast<Format>(static_cast<int>(*val));
-  if (auto val = settings->GetFloat(kTexTuningBc7QualityKey))
+  }
+  if (auto val = settings->GetFloat(kTexTuningBc7QualityKey)) {
     t.bc7_quality
       = static_cast<content::import::Bc7Quality>(static_cast<int>(*val));
-  if (auto val = settings->GetFloat(kTexTuningHdrHandlingKey))
+  }
+  if (auto val = settings->GetFloat(kTexTuningHdrHandlingKey)) {
     t.hdr_handling
       = static_cast<content::import::HdrHandling>(static_cast<int>(*val));
+  }
 
   return t;
 }
@@ -188,51 +213,58 @@ auto ContentSettingsService::GetTextureTuning() const
 auto ContentSettingsService::SetTextureTuning(
   const content::import::ImportOptions::TextureTuning& t) -> void
 {
-  if (const auto settings = ResolveSettings()) {
-    settings->SetBool(kTexTuningEnabledKey, t.enabled);
-    settings->SetFloat(
-      kTexTuningIntentKey, static_cast<float>(static_cast<int>(t.intent)));
-    settings->SetFloat(kTexTuningColorSpaceKey,
-      static_cast<float>(static_cast<int>(t.source_color_space)));
-    settings->SetFloat(kTexTuningMipPolicyKey,
-      static_cast<float>(static_cast<int>(t.mip_policy)));
-    settings->SetFloat(kTexTuningMaxMipsKey, t.max_mip_levels);
-    settings->SetFloat(kTexTuningMipFilterKey,
-      static_cast<float>(static_cast<int>(t.mip_filter)));
-    settings->SetFloat(kTexTuningColorFormatKey,
-      static_cast<float>(static_cast<int>(t.color_output_format)));
-    settings->SetFloat(kTexTuningDataFormatKey,
-      static_cast<float>(static_cast<int>(t.data_output_format)));
-    settings->SetFloat(kTexTuningBc7QualityKey,
-      static_cast<float>(static_cast<int>(t.bc7_quality)));
-    settings->SetFloat(kTexTuningHdrHandlingKey,
-      static_cast<float>(static_cast<int>(t.hdr_handling)));
-    ++epoch_;
-  }
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+
+  settings->SetBool(kTexTuningEnabledKey, t.enabled);
+  settings->SetFloat(
+    kTexTuningIntentKey, static_cast<float>(static_cast<int>(t.intent)));
+  settings->SetFloat(kTexTuningColorSpaceKey,
+    static_cast<float>(static_cast<int>(t.source_color_space)));
+  settings->SetFloat(
+    kTexTuningMipPolicyKey, static_cast<float>(static_cast<int>(t.mip_policy)));
+  settings->SetFloat(kTexTuningMaxMipsKey, t.max_mip_levels);
+  settings->SetFloat(
+    kTexTuningMipFilterKey, static_cast<float>(static_cast<int>(t.mip_filter)));
+  settings->SetFloat(kTexTuningColorFormatKey,
+    static_cast<float>(static_cast<int>(t.color_output_format)));
+  settings->SetFloat(kTexTuningDataFormatKey,
+    static_cast<float>(static_cast<int>(t.data_output_format)));
+  settings->SetFloat(kTexTuningBc7QualityKey,
+    static_cast<float>(static_cast<int>(t.bc7_quality)));
+  settings->SetFloat(kTexTuningHdrHandlingKey,
+    static_cast<float>(static_cast<int>(t.hdr_handling)));
+  ++epoch_;
 }
 
 auto ContentSettingsService::GetDefaultLayout() const
   -> content::import::LooseCookedLayout
 {
   content::import::LooseCookedLayout l;
-  const auto settings = ResolveSettings();
-  if (!settings)
-    return l;
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
 
-  if (auto val = settings->GetString(kLayoutVirtualRootKey))
+  if (auto val = settings->GetString(kLayoutVirtualRootKey)) {
     l.virtual_mount_root = *val;
-  if (auto val = settings->GetString(kLayoutIndexNameKey))
+  }
+  if (auto val = settings->GetString(kLayoutIndexNameKey)) {
     l.index_file_name = *val;
-  if (auto val = settings->GetString(kLayoutResourcesDirKey))
+  }
+  if (auto val = settings->GetString(kLayoutResourcesDirKey)) {
     l.resources_dir = *val;
-  if (auto val = settings->GetString(kLayoutDescriptorsDirKey))
+  }
+  if (auto val = settings->GetString(kLayoutDescriptorsDirKey)) {
     l.descriptors_dir = *val;
-  if (auto val = settings->GetString(kLayoutScenesSubdirKey))
+  }
+  if (auto val = settings->GetString(kLayoutScenesSubdirKey)) {
     l.scenes_subdir = *val;
-  if (auto val = settings->GetString(kLayoutGeometrySubdirKey))
+  }
+  if (auto val = settings->GetString(kLayoutGeometrySubdirKey)) {
     l.geometry_subdir = *val;
-  if (auto val = settings->GetString(kLayoutMaterialsSubdirKey))
+  }
+  if (auto val = settings->GetString(kLayoutMaterialsSubdirKey)) {
     l.materials_subdir = *val;
+  }
 
   return l;
 }
@@ -240,42 +272,39 @@ auto ContentSettingsService::GetDefaultLayout() const
 auto ContentSettingsService::SetDefaultLayout(
   const content::import::LooseCookedLayout& l) -> void
 {
-  if (const auto settings = ResolveSettings()) {
-    settings->SetString(kLayoutVirtualRootKey, l.virtual_mount_root);
-    settings->SetString(kLayoutIndexNameKey, l.index_file_name);
-    settings->SetString(kLayoutResourcesDirKey, l.resources_dir);
-    settings->SetString(kLayoutDescriptorsDirKey, l.descriptors_dir);
-    settings->SetString(kLayoutScenesSubdirKey, l.scenes_subdir);
-    settings->SetString(kLayoutGeometrySubdirKey, l.geometry_subdir);
-    settings->SetString(kLayoutMaterialsSubdirKey, l.materials_subdir);
-    ++epoch_;
-  }
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+
+  settings->SetString(kLayoutVirtualRootKey, l.virtual_mount_root);
+  settings->SetString(kLayoutIndexNameKey, l.index_file_name);
+  settings->SetString(kLayoutResourcesDirKey, l.resources_dir);
+  settings->SetString(kLayoutDescriptorsDirKey, l.descriptors_dir);
+  settings->SetString(kLayoutScenesSubdirKey, l.scenes_subdir);
+  settings->SetString(kLayoutGeometrySubdirKey, l.geometry_subdir);
+  settings->SetString(kLayoutMaterialsSubdirKey, l.materials_subdir);
+  ++epoch_;
 }
 
 auto ContentSettingsService::GetLastCookedOutputDirectory() const -> std::string
 {
-  const auto settings = ResolveSettings();
-  return settings ? settings->GetString(kLastCookedOutputKey).value_or("") : "";
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  return settings->GetString(kLastCookedOutputKey).value_or("");
 }
 
 auto ContentSettingsService::SetLastCookedOutputDirectory(
   const std::string& path) -> void
 {
-  if (const auto settings = ResolveSettings()) {
-    settings->SetString(kLastCookedOutputKey, path);
-    ++epoch_;
-  }
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+
+  settings->SetString(kLastCookedOutputKey, path);
+  ++epoch_;
 }
 
 auto ContentSettingsService::GetEpoch() const noexcept -> std::uint64_t
 {
   return epoch_.load(std::memory_order_acquire);
-}
-
-auto ContentSettingsService::ResolveSettings() const noexcept
-  -> observer_ptr<SettingsService>
-{
-  return SettingsService::Default();
 }
 
 } // namespace oxygen::examples

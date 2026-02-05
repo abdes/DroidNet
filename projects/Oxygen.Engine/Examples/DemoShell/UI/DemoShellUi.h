@@ -28,7 +28,6 @@ namespace oxygen::examples {
 class PanelRegistry;
 class DemoPanel;
 class UiSettingsService;
-class CameraLifecycleService;
 class RenderingSettingsService;
 class LightCullingSettingsService;
 class CameraSettingsService;
@@ -60,7 +59,6 @@ namespace ui {
   public:
     DemoShellUi(observer_ptr<AsyncEngine> engine,
       observer_ptr<PanelRegistry> panel_registry,
-      observer_ptr<CameraLifecycleService> camera_lifecycle,
       observer_ptr<UiSettingsService> ui_settings_service,
       observer_ptr<RenderingSettingsService> rendering_settings_service,
       observer_ptr<LightCullingSettingsService> light_culling_settings_service,
@@ -77,7 +75,7 @@ namespace ui {
     OXYGEN_DEFAULT_MOVABLE(DemoShellUi)
 
     //! Draws the side bar and side panel.
-    auto Draw(engine::FrameContext& fc) -> void;
+    auto Draw(observer_ptr<engine::FrameContext> fc) -> void;
 
     //! Ensures rendering panel is created when pass config is available.
     auto EnsureRenderingPanelReady(RenderingPipeline& pipeline) -> void;

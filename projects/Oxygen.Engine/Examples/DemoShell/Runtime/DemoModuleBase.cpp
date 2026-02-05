@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
+#include <string_view>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
@@ -14,33 +17,26 @@
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
-#include <atomic>
-#include <string_view>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
 #include "DemoShell/Runtime/RenderingPipeline.h"
-
-using namespace oxygen;
 
 namespace oxygen::examples {
 
 namespace {
   auto GetRendererFromEngine(AsyncEngine* engine) -> engine::Renderer*
   {
-    if (!engine)
-      return nullptr;
+    DCHECK_NOTNULL_F(engine);
     auto renderer_opt = engine->GetModule<engine::Renderer>();
-    if (renderer_opt)
-      return &renderer_opt->get();
-    return nullptr;
+    return renderer_opt ? &renderer_opt->get() : nullptr;
   }
 } // namespace
 
 DemoModuleBase::DemoModuleBase(const DemoAppContext& app) noexcept
   : app_(app)
 {
-  LOG_SCOPE_FUNCTION(INFO);
+  LOG_SCOPE_FUNCTION(1);
   if (!app_.headless) {
     auto& wnd = AddComponent<AppWindow>(app_);
     app_window_ = observer_ptr(&wnd);
@@ -68,14 +64,21 @@ auto DemoModuleBase::OnAttached(observer_ptr<AsyncEngine> engine) noexcept
   -> bool
 {
   DCHECK_NOTNULL_F(engine);
-  LOG_SCOPE_FUNCTION(INFO);
-  if (app_.headless)
-    return true;
-  DCHECK_NOTNULL_F(app_window_);
+  LOG_SCOPE_FUNCTION(1);
 
-  const auto props = BuildDefaultWindowProperties();
-  if (!app_window_->CreateAppWindow(props)) {
-    LOG_F(ERROR, "-failed- could not create application window");
+  if (!app_.headless) {
+    DCHECK_NOTNULL_F(app_window_);
+
+    const auto props = BuildDefaultWindowProperties();
+    if (!app_window_->CreateAppWindow(props)) {
+      LOG_F(ERROR, "-failed- could not create application window");
+      return false;
+    }
+  }
+
+  shell_ = OnAttachedImpl(engine);
+  if (!shell_) {
+    LOG_F(ERROR, "-failed- DemoShell initialization");
     return false;
   }
   return true;
@@ -83,39 +86,51 @@ auto DemoModuleBase::OnAttached(observer_ptr<AsyncEngine> engine) noexcept
 
 auto DemoModuleBase::OnShutdown() noexcept -> void
 {
+  shell_.reset();
   pipeline_.reset();
   view_registry_.clear();
 }
 
-auto DemoModuleBase::OnFrameStart(engine::FrameContext& context) -> void
+auto DemoModuleBase::GetShell() -> DemoShell&
 {
+  DCHECK_NOTNULL_F(shell_);
+  return *shell_;
+}
+
+auto DemoModuleBase::OnFrameStart(observer_ptr<engine::FrameContext> context)
+  -> void
+{
+  DCHECK_NOTNULL_F(context);
   try {
-    OnFrameStartCommon(context);
+    OnFrameStartCommon(*context);
     if (pipeline_) {
       if (auto* renderer = GetRendererFromEngine(app_.engine.get())) {
         pipeline_->OnFrameStart(context, *renderer);
       }
     }
-    HandleOnFrameStart(context);
   } catch (const std::exception& ex) {
-    LOG_F(ERROR, "OnFrameStart error: {}", ex.what());
+    LOG_F(ERROR, "Report OnFrameStart error: {}", ex.what());
   }
 }
 
-auto DemoModuleBase::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
+auto DemoModuleBase::OnSceneMutation(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
 {
-  if (!pipeline_)
+  if (!pipeline_) {
     co_return;
+  }
   auto* renderer = GetRendererFromEngine(app_.engine.get());
-  if (!renderer)
+  if (renderer == nullptr) {
     co_return;
-  auto scene = context.GetScene();
-  if (!scene)
+  }
+  auto scene = context->GetScene();
+  if (!scene) {
     co_return;
+  }
 
   // 1. Gather composition intent from the demo
   active_views_.clear();
-  UpdateComposition(context, active_views_);
+  UpdateComposition(*context, active_views_);
 
   // 2. Perform any per-frame scene updates or logic before pipeline execution
   // (Registration is now handled by the pipeline mapping layer)
@@ -133,7 +148,8 @@ auto DemoModuleBase::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     context, *renderer, *scene, active_views_, target_fb);
 }
 
-auto DemoModuleBase::OnPreRender(engine::FrameContext& context) -> co::Co<>
+auto DemoModuleBase::OnPreRender(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
 {
   if (pipeline_) {
     if (auto* renderer = GetRendererFromEngine(app_.engine.get())) {
@@ -143,8 +159,16 @@ auto DemoModuleBase::OnPreRender(engine::FrameContext& context) -> co::Co<>
   co_return;
 }
 
-auto DemoModuleBase::OnCompositing(engine::FrameContext& context) -> co::Co<>
+auto DemoModuleBase::OnCompositing(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
 {
+  DCHECK_NOTNULL_F(app_window_);
+
+  if (!app_window_->GetWindow()) {
+    DLOG_F(1, "Skip compositing: no valid window");
+    co_return;
+  }
+
   if (pipeline_) {
     if (auto* renderer = GetRendererFromEngine(app_.engine.get())) {
       // Get the current framebuffer from our window for final composite
@@ -164,7 +188,7 @@ auto DemoModuleBase::OnCompositing(engine::FrameContext& context) -> co::Co<>
         }
         renderer->RegisterComposition(std::move(submission), surface);
         if (surface) {
-          MarkSurfacePresentable(context);
+          MarkSurfacePresentable(*context);
         }
       }
     }
@@ -192,8 +216,9 @@ auto DemoModuleBase::ClearViewIds() -> void { view_registry_.clear(); }
 
 auto DemoModuleBase::OnFrameStartCommon(engine::FrameContext& context) -> void
 {
-  if (app_.headless || !app_window_)
+  if (app_.headless || !app_window_) {
     return;
+  }
   if (!app_window_->GetWindow()) {
     if (last_surface_) {
       const auto surfaces = context.GetSurfaces();
@@ -220,8 +245,7 @@ auto DemoModuleBase::OnFrameStartCommon(engine::FrameContext& context) -> void
       surfaces, [&](const auto& s) { return s.get() == surface.get(); });
     if (!already_registered) {
       context.AddSurface(observer_ptr { surface.get() });
-      LOG_F(INFO, "DemoModuleBase: FrameStart: surface added: '{}'",
-        surface->GetName());
+      DLOG_F(1, "Add surface: '{}'", surface->GetName());
     }
     last_surface_ = observer_ptr { surface.get() };
   } else {
@@ -234,7 +258,7 @@ auto DemoModuleBase::MarkSurfacePresentable(engine::FrameContext& context)
 {
   auto surface = app_window_->GetSurface().lock();
   if (!surface) {
-    LOG_F(INFO, "DemoModuleBase: Presentable: surface=null");
+    DLOG_F(1, "Skip marking presentable: surface=null");
     return;
   }
   const auto surfaces = context.GetSurfaces();
@@ -242,16 +266,16 @@ auto DemoModuleBase::MarkSurfacePresentable(engine::FrameContext& context)
   for (size_t i = 0; i < surfaces.size(); ++i) {
     if (surfaces[i].get() == surface.get()) {
       context.SetSurfacePresentable(i, true);
-      LOG_F(INFO, "DemoModuleBase: Presentable: index={}, surface='{}'", i,
+      DLOG_F(1, "Mark surface presentable: index={}, surface='{}'", i,
         surface->GetName());
       found = true;
       break;
     }
   }
   if (surfaces.empty()) {
-    LOG_F(INFO, "DemoModuleBase: Presentable: no surfaces in FrameContext");
+    DLOG_F(1, "Skip marking presentable: no surfaces in FrameContext");
   } else if (!found) {
-    LOG_F(INFO, "DemoModuleBase: Presentable: surface not found: '{}'",
+    DLOG_F(1, "Skip marking presentable: surface not found: '{}'",
       surface->GetName());
   }
 }

@@ -14,6 +14,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -459,7 +460,7 @@ auto SceneBootstrapper::EnsureLighting(scene::Scene& scene) -> void
     const glm::vec3 light_pos = { 3.0F, 3.0F, 3.0F };
     const glm::vec3 target = { -0.5F, 0.0F, 0.0F };
     const glm::vec3 direction = glm::normalize(target - light_pos);
-    const glm::vec3 forward = glm::vec3(0.0F, 0.0F, -1.0F);
+    const glm::vec3 forward = space::move::Forward;
     const float cos_theta = glm::dot(forward, direction);
 
     if (cos_theta < 0.9999F && cos_theta > -0.9999F) {

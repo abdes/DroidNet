@@ -14,6 +14,7 @@
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
@@ -80,15 +81,18 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(MainModule);
   OXYGEN_MAKE_NON_MOVABLE(MainModule);
 
-  auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
-    -> bool override;
+  auto OnAttachedImpl(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
+    -> std::unique_ptr<DemoShell> override;
   auto OnShutdown() noexcept -> void override;
 
-  auto OnFrameStart(oxygen::engine::FrameContext& context) -> void override;
-  auto HandleOnFrameStart(engine::FrameContext& context) -> void override;
-  auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
-  auto OnGameplay(engine::FrameContext& context) -> co::Co<> override;
-  auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
+  auto OnFrameStart(observer_ptr<oxygen::engine::FrameContext> context)
+    -> void override;
+  auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnGameplay(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnGuiUpdate(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
 
 protected:
   auto BuildDefaultWindowProperties() const
@@ -99,9 +103,6 @@ protected:
     std::vector<CompositionView>& views) -> void override;
 
 private:
-  auto ApplyRenderModeFromPanel() -> void;
-
-  std::unique_ptr<oxygen::examples::DemoShell> shell_;
   // Scene is owned by DemoShell, we keep a value object for safe access
   ActiveScene active_scene_;
   std::unique_ptr<TextureLoadingService> texture_service_;
@@ -110,6 +111,7 @@ private:
 
   // Hosted view
   ViewId main_view_id_ { kInvalidViewId };
+  scene::SceneNode main_camera_ {};
 
   // Custom UI
   std::unique_ptr<ui::MaterialsSandboxVm> texture_vm_;

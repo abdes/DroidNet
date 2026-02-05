@@ -8,17 +8,17 @@
 
 #include <map>
 #include <memory>
-#include <span>
 #include <vector>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
 
+#include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/AppWindow.h"
-
 #include "DemoShell/Runtime/CompositionView.h"
 
 namespace oxygen {
@@ -45,27 +45,38 @@ class DemoModuleBase : public engine::EngineModule, public Composition {
   OXYGEN_TYPED(DemoModuleBase)
 public:
   explicit DemoModuleBase(const DemoAppContext& app) noexcept;
-
   ~DemoModuleBase() override;
 
-  auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool override;
+  OXYGEN_MAKE_NON_COPYABLE(DemoModuleBase)
+  OXYGEN_MAKE_NON_MOVABLE(DemoModuleBase)
+
+  auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool final;
   auto OnShutdown() noexcept -> void override;
 
-  auto OnFrameStart(engine::FrameContext& context) -> void override;
-  auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
-  auto OnPreRender(engine::FrameContext& context) -> co::Co<> override;
-  auto OnCompositing(engine::FrameContext& context) -> co::Co<> override;
+  auto OnFrameStart(observer_ptr<engine::FrameContext> context)
+    -> void override;
+  auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnPreRender(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnCompositing(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> final;
 
 protected:
+  //! Hook: derived demos create and configure the DemoShell instance.
+  virtual auto OnAttachedImpl(observer_ptr<AsyncEngine> engine) noexcept
+    -> std::unique_ptr<DemoShell>
+    = 0;
+
+  //! Access the owned DemoShell instance (must be initialized).
+  auto GetShell() -> DemoShell&;
+
   //! Hook: allow derived demos to customize window properties.
   virtual auto BuildDefaultWindowProperties() const
     -> platform::window::Properties;
 
   //! Hook: clear backbuffer references before resize.
   virtual auto ClearBackbufferReferences() -> void = 0;
-
-  // Example specific hooks
-  virtual auto HandleOnFrameStart(engine::FrameContext& /*context*/) -> void { }
 
   //! Hook: derived classes fill this with the views they want to render this
   //! frame.
@@ -89,6 +100,8 @@ protected:
   std::vector<CompositionView> active_views_;
 
 private:
+  std::unique_ptr<DemoShell> shell_;
+
   auto OnFrameStartCommon(engine::FrameContext& context) -> void;
   auto MarkSurfacePresentable(engine::FrameContext& context) -> void;
 

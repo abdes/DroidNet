@@ -4,12 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "DemoShell/Services/PostProcessSettingsService.h"
-
-#include "DemoShell/Runtime/RenderingPipeline.h"
-#include "DemoShell/Services/CameraLifecycleService.h"
-#include "DemoShell/Services/SettingsService.h"
-
 #include <cmath>
 #include <string>
 
@@ -17,6 +11,11 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+
+#include "DemoShell/Runtime/RenderingPipeline.h"
+#include "DemoShell/Services/CameraSettingsService.h"
+#include "DemoShell/Services/PostProcessSettingsService.h"
+#include "DemoShell/Services/SettingsService.h"
 
 namespace oxygen::examples::ui {
 
@@ -56,14 +55,14 @@ namespace {
   }
 
   auto ResolveActiveCameraExposure(
-    observer_ptr<oxygen::examples::CameraLifecycleService> camera_lifecycle)
+    observer_ptr<oxygen::examples::CameraSettingsService> camera_settings)
     -> oxygen::scene::CameraExposure*
   {
-    if (!camera_lifecycle) {
+    if (!camera_settings) {
       return nullptr;
     }
 
-    auto& active_camera = camera_lifecycle->GetActiveCamera();
+    auto& active_camera = camera_settings->GetActiveCamera();
     if (!active_camera.IsAlive()) {
       return nullptr;
     }
@@ -84,10 +83,10 @@ namespace {
   }
 
   auto ResolveManualCameraEv100(
-    observer_ptr<oxygen::examples::CameraLifecycleService> camera_lifecycle)
+    observer_ptr<oxygen::examples::CameraSettingsService> camera_settings)
     -> float
   {
-    if (auto* exposure = ResolveActiveCameraExposure(camera_lifecycle)) {
+    if (auto* exposure = ResolveActiveCameraExposure(camera_settings)) {
       return exposure->GetEv100();
     }
 
@@ -105,22 +104,22 @@ auto PostProcessSettingsService::Initialize(
   // Push initial state
   if (pipeline_) {
     ApplyExposureToPipeline(pipeline_, GetExposureMode(),
-      GetManualExposureEV100(), ResolveManualCameraEv100(camera_lifecycle_),
+      GetManualExposureEV100(), ResolveManualCameraEv100(camera_settings_),
       GetExposureCompensation(), GetExposureEnabled());
     pipeline_->SetToneMapper(
       GetTonemappingEnabled() ? GetToneMapper() : engine::ToneMapper::kNone);
   }
 }
 
-auto PostProcessSettingsService::BindCameraLifecycle(
-  observer_ptr<CameraLifecycleService> camera_lifecycle) -> void
+auto PostProcessSettingsService::BindCameraSettings(
+  observer_ptr<CameraSettingsService> camera_settings) -> void
 {
-  camera_lifecycle_ = camera_lifecycle;
+  camera_settings_ = camera_settings;
   epoch_++;
 
   if (pipeline_) {
     ApplyExposureToPipeline(pipeline_, GetExposureMode(),
-      GetManualExposureEV100(), ResolveManualCameraEv100(camera_lifecycle_),
+      GetManualExposureEV100(), ResolveManualCameraEv100(camera_settings_),
       GetExposureCompensation(), GetExposureEnabled());
   }
 }
@@ -129,78 +128,70 @@ auto PostProcessSettingsService::BindCameraLifecycle(
 
 auto PostProcessSettingsService::GetExposureMode() const -> engine::ExposureMode
 {
-  const auto settings = ResolveSettings();
-  if (settings) {
-    auto val = settings->GetString(kExposureModeKey).value_or("manual");
-    if (val == "auto")
-      return engine::ExposureMode::kAuto;
-    if (val == "manual_camera")
-      return engine::ExposureMode::kManualCamera;
-  }
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  auto val = settings->GetString(kExposureModeKey).value_or("manual");
+  if (val == "auto")
+    return engine::ExposureMode::kAuto;
+  if (val == "manual_camera")
+    return engine::ExposureMode::kManualCamera;
   return engine::ExposureMode::kManual;
 }
 
 auto PostProcessSettingsService::GetExposureEnabled() const -> bool
 {
-  const auto settings = ResolveSettings();
-  if (settings) {
-    return settings->GetBool(kExposureEnabledKey).value_or(true);
-  }
-  return true;
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  return settings->GetBool(kExposureEnabledKey).value_or(true);
 }
 
 auto PostProcessSettingsService::SetExposureEnabled(bool enabled) -> void
 {
-  const auto settings = ResolveSettings();
-  if (settings) {
-    settings->SetBool(kExposureEnabledKey, enabled);
-    epoch_++;
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  settings->SetBool(kExposureEnabledKey, enabled);
+  epoch_++;
 
-    ApplyExposureToPipeline(pipeline_, GetExposureMode(),
-      GetManualExposureEV100(), ResolveManualCameraEv100(camera_lifecycle_),
-      GetExposureCompensation(), enabled);
-  }
+  ApplyExposureToPipeline(pipeline_, GetExposureMode(),
+    GetManualExposureEV100(), ResolveManualCameraEv100(camera_settings_),
+    GetExposureCompensation(), enabled);
 }
 
 auto PostProcessSettingsService::SetExposureMode(engine::ExposureMode mode)
   -> void
 {
-  const auto settings = ResolveSettings();
-  if (settings) {
-    settings->SetString(kExposureModeKey, engine::to_string(mode));
-    epoch_++;
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  settings->SetString(kExposureModeKey, engine::to_string(mode));
+  epoch_++;
 
-    ApplyExposureToPipeline(pipeline_, mode, GetManualExposureEV100(),
-      ResolveManualCameraEv100(camera_lifecycle_), GetExposureCompensation(),
-      GetExposureEnabled());
-  }
+  ApplyExposureToPipeline(pipeline_, mode, GetManualExposureEV100(),
+    ResolveManualCameraEv100(camera_settings_), GetExposureCompensation(),
+    GetExposureEnabled());
 }
 
 auto PostProcessSettingsService::GetManualExposureEV100() const -> float
 {
-  const auto settings = ResolveSettings();
-  if (settings) {
-    return settings->GetFloat(kExposureManualEV100Key).value_or(9.7F);
-  }
-  return 9.7F;
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  return settings->GetFloat(kExposureManualEV100Key).value_or(9.7F);
 }
 
 auto PostProcessSettingsService::SetManualExposureEV100(float ev100) -> void
 {
-  const auto settings = ResolveSettings();
-  if (settings) {
-    settings->SetFloat(kExposureManualEV100Key, ev100);
-    epoch_++;
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  settings->SetFloat(kExposureManualEV100Key, ev100);
+  epoch_++;
 
-    ApplyExposureToPipeline(pipeline_, GetExposureMode(), ev100,
-      ResolveManualCameraEv100(camera_lifecycle_), GetExposureCompensation(),
-      GetExposureEnabled());
-  }
+  ApplyExposureToPipeline(pipeline_, GetExposureMode(), ev100,
+    ResolveManualCameraEv100(camera_settings_), GetExposureCompensation(),
+    GetExposureEnabled());
 }
 
 auto PostProcessSettingsService::GetManualCameraAperture() const -> float
 {
-  if (const auto* exposure = ResolveActiveCameraExposure(camera_lifecycle_)) {
+  if (const auto* exposure = ResolveActiveCameraExposure(camera_settings_)) {
     return exposure->aperture_f;
   }
   return 11.0F;
@@ -208,19 +199,19 @@ auto PostProcessSettingsService::GetManualCameraAperture() const -> float
 
 auto PostProcessSettingsService::SetManualCameraAperture(float aperture) -> void
 {
-  if (auto* exposure = ResolveActiveCameraExposure(camera_lifecycle_)) {
+  if (auto* exposure = ResolveActiveCameraExposure(camera_settings_)) {
     exposure->aperture_f = aperture;
     epoch_++;
 
     ApplyExposureToPipeline(pipeline_, GetExposureMode(),
-      GetManualExposureEV100(), ResolveManualCameraEv100(camera_lifecycle_),
+      GetManualExposureEV100(), ResolveManualCameraEv100(camera_settings_),
       GetExposureCompensation(), GetExposureEnabled());
   }
 }
 
 auto PostProcessSettingsService::GetManualCameraShutterRate() const -> float
 {
-  if (const auto* exposure = ResolveActiveCameraExposure(camera_lifecycle_)) {
+  if (const auto* exposure = ResolveActiveCameraExposure(camera_settings_)) {
     return exposure->shutter_rate;
   }
   return 125.0F;
@@ -229,19 +220,19 @@ auto PostProcessSettingsService::GetManualCameraShutterRate() const -> float
 auto PostProcessSettingsService::SetManualCameraShutterRate(float shutter_rate)
   -> void
 {
-  if (auto* exposure = ResolveActiveCameraExposure(camera_lifecycle_)) {
+  if (auto* exposure = ResolveActiveCameraExposure(camera_settings_)) {
     exposure->shutter_rate = shutter_rate;
     epoch_++;
 
     ApplyExposureToPipeline(pipeline_, GetExposureMode(),
-      GetManualExposureEV100(), ResolveManualCameraEv100(camera_lifecycle_),
+      GetManualExposureEV100(), ResolveManualCameraEv100(camera_settings_),
       GetExposureCompensation(), GetExposureEnabled());
   }
 }
 
 auto PostProcessSettingsService::GetManualCameraIso() const -> float
 {
-  if (const auto* exposure = ResolveActiveCameraExposure(camera_lifecycle_)) {
+  if (const auto* exposure = ResolveActiveCameraExposure(camera_settings_)) {
     return exposure->iso;
   }
   return 100.0F;
@@ -249,102 +240,95 @@ auto PostProcessSettingsService::GetManualCameraIso() const -> float
 
 auto PostProcessSettingsService::SetManualCameraIso(float iso) -> void
 {
-  if (auto* exposure = ResolveActiveCameraExposure(camera_lifecycle_)) {
+  if (auto* exposure = ResolveActiveCameraExposure(camera_settings_)) {
     exposure->iso = iso;
     epoch_++;
 
     ApplyExposureToPipeline(pipeline_, GetExposureMode(),
-      GetManualExposureEV100(), ResolveManualCameraEv100(camera_lifecycle_),
+      GetManualExposureEV100(), ResolveManualCameraEv100(camera_settings_),
       GetExposureCompensation(), GetExposureEnabled());
   }
 }
 
 auto PostProcessSettingsService::GetManualCameraEV100() const -> float
 {
-  return ResolveManualCameraEv100(camera_lifecycle_);
+  return ResolveManualCameraEv100(camera_settings_);
 }
 
 auto PostProcessSettingsService::GetExposureCompensation() const -> float
 {
-  const auto settings = ResolveSettings();
-  if (settings) {
-    return settings->GetFloat(kExposureCompensationKey).value_or(0.0F);
-  }
-  return 0.0F;
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  return settings->GetFloat(kExposureCompensationKey).value_or(0.0F);
 }
 
 auto PostProcessSettingsService::SetExposureCompensation(float stops) -> void
 {
-  const auto settings = ResolveSettings();
-  if (settings) {
-    settings->SetFloat(kExposureCompensationKey, stops);
-    epoch_++;
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
 
-    ApplyExposureToPipeline(pipeline_, GetExposureMode(),
-      GetManualExposureEV100(), ResolveManualCameraEv100(camera_lifecycle_),
-      stops, GetExposureEnabled());
-  }
+  settings->SetFloat(kExposureCompensationKey, stops);
+  epoch_++;
+
+  ApplyExposureToPipeline(pipeline_, GetExposureMode(),
+    GetManualExposureEV100(), ResolveManualCameraEv100(camera_settings_), stops,
+    GetExposureEnabled());
 }
 
 // Tonemapping
 
 auto PostProcessSettingsService::GetTonemappingEnabled() const -> bool
 {
-  const auto settings = ResolveSettings();
-  if (settings) {
-    return settings->GetBool(kTonemappingEnabledKey).value_or(true);
-  }
-  return true;
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  return settings->GetBool(kTonemappingEnabledKey).value_or(true);
 }
 
 auto PostProcessSettingsService::SetTonemappingEnabled(bool enabled) -> void
 {
-  const auto settings = ResolveSettings();
-  if (settings) {
-    settings->SetBool(kTonemappingEnabledKey, enabled);
-    epoch_++;
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  settings->SetBool(kTonemappingEnabledKey, enabled);
+  epoch_++;
 
-    if (pipeline_) {
-      pipeline_->SetToneMapper(
-        enabled ? GetToneMapper() : engine::ToneMapper::kNone);
-    }
+  if (pipeline_) {
+    pipeline_->SetToneMapper(
+      enabled ? GetToneMapper() : engine::ToneMapper::kNone);
   }
 }
 
 auto PostProcessSettingsService::GetToneMapper() const -> engine::ToneMapper
 {
-  const auto settings = ResolveSettings();
-  if (settings) {
-    auto val = settings->GetString(kToneMapperKey).value_or("aces");
-    if (val == "reinhard")
-      return engine::ToneMapper::kReinhard;
-    if (val == "aces")
-      return engine::ToneMapper::kAcesFitted;
-    if (val == "filmic")
-      return engine::ToneMapper::kFilmic;
-    if (val == "none")
-      return engine::ToneMapper::kNone;
-  }
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  auto val = settings->GetString(kToneMapperKey).value_or("aces");
+  if (val == "reinhard")
+    return engine::ToneMapper::kReinhard;
+  if (val == "aces")
+    return engine::ToneMapper::kAcesFitted;
+  if (val == "filmic")
+    return engine::ToneMapper::kFilmic;
+  if (val == "none")
+    return engine::ToneMapper::kNone;
   return engine::ToneMapper::kAcesFitted;
 }
 
 auto PostProcessSettingsService::SetToneMapper(engine::ToneMapper mode) -> void
 {
-  const auto settings = ResolveSettings();
-  if (settings) {
-    settings->SetString(kToneMapperKey, engine::to_string(mode));
-    epoch_++;
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  settings->SetString(kToneMapperKey, engine::to_string(mode));
+  epoch_++;
 
-    if (pipeline_ && GetTonemappingEnabled()) {
-      pipeline_->SetToneMapper(mode);
-    }
+  if (pipeline_ && GetTonemappingEnabled()) {
+    pipeline_->SetToneMapper(mode);
   }
 }
 
 auto PostProcessSettingsService::GetEpoch() const noexcept -> std::uint64_t
 {
-  if (camera_lifecycle_) {
-    const auto& camera = camera_lifecycle_->GetActiveCamera();
+  if (camera_settings_) {
+    const auto& camera = camera_settings_->GetActiveCamera();
     const std::string camera_id
       = camera.IsAlive() ? camera.GetName() : std::string {};
     if (camera_id != last_camera_id_) {
@@ -353,12 +337,6 @@ auto PostProcessSettingsService::GetEpoch() const noexcept -> std::uint64_t
     }
   }
   return epoch_.load(std::memory_order_acquire);
-}
-
-auto PostProcessSettingsService::ResolveSettings() const noexcept
-  -> observer_ptr<SettingsService>
-{
-  return SettingsService::Default();
 }
 
 } // namespace oxygen::examples::ui

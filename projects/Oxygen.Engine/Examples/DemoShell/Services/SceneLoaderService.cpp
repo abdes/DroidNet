@@ -20,6 +20,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
@@ -30,7 +31,7 @@
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "DemoShell/Services/EnvironmentHydrator.h"
+#include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/SceneLoaderService.h"
 
 namespace oxygen::examples {
@@ -49,8 +50,8 @@ namespace {
   }
 
   auto MakeLookRotationFromPosition(const glm::vec3& position,
-    const glm::vec3& target,
-    const glm::vec3& up_direction = { 0.0F, 0.0F, 1.0F }) -> glm::quat
+    const glm::vec3& target, const glm::vec3& up_direction = space::move::Up)
+    -> glm::quat
   {
     const auto forward_raw = target - position;
     const float forward_len2 = glm::dot(forward_raw, forward_raw);
@@ -64,8 +65,8 @@ namespace {
     const float dot_abs = std::abs(glm::dot(forward, glm::normalize(up_dir)));
     if (dot_abs > 0.999F) {
       // Pick an alternate up that is guaranteed to be non-colinear.
-      up_dir = (std::abs(forward.z) > 0.9F) ? glm::vec3(0.0F, 1.0F, 0.0F)
-                                            : glm::vec3(0.0F, 0.0F, 1.0F);
+      up_dir
+        = (std::abs(forward.z) > 0.9F) ? space::move::Back : space::move::Up;
     }
 
     const auto right_raw = glm::cross(forward, up_dir);
@@ -295,7 +296,7 @@ auto SceneLoaderService::BuildEnvironment(const data::SceneAsset& asset)
   -> std::unique_ptr<scene::SceneEnvironment>
 {
   auto environment = std::make_unique<scene::SceneEnvironment>();
-  EnvironmentHydrator::HydrateEnvironment(*environment, asset);
+  EnvironmentSettingsService::HydrateEnvironment(*environment, asset);
   return environment;
 }
 
@@ -573,8 +574,8 @@ void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)
         if (auto lr = tf.GetLocalRotation()) {
           cam_rot = *lr;
         }
-        const glm::vec3 forward = cam_rot * glm::vec3(0.0F, 0.0F, -1.0F);
-        const glm::vec3 up = cam_rot * glm::vec3(0.0F, 1.0F, 0.0F);
+        const glm::vec3 forward = cam_rot * space::look::Forward;
+        const glm::vec3 up = cam_rot * space::look::Up;
         LOG_F(INFO,
           "SceneLoader: Camera local pose pos=({:.3F}, {:.3F}, {:.3F}) "
           "forward=({:.3F}, {:.3F}, {:.3F}) up=({:.3F}, {:.3F}, {:.3F})",

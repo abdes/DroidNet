@@ -23,8 +23,8 @@
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Internal/SceneControlBlock.h"
 #include "DemoShell/PanelRegistry.h"
+#include "DemoShell/Runtime/CompositionView.h"
 #include "DemoShell/Runtime/RenderingPipeline.h"
-#include "DemoShell/Services/CameraLifecycleService.h"
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/EnvironmentSettingsService.h"
@@ -66,7 +66,6 @@ struct DemoShell::Impl {
 
   std::unique_ptr<ui::CameraRigController> camera_rig;
   observer_ptr<ui::ContentVm> content_vm;
-  CameraLifecycleService camera_lifecycle;
   FileBrowserService file_browser_service;
   internal::SceneControlBlock scene_control;
 
@@ -169,7 +168,7 @@ auto DemoShell::CompleteInitialization() -> bool
     return true;
   }
 
-  const auto settings = SettingsService::Default();
+  const auto settings = SettingsService::ForDemoApp();
   CHECK_NOTNULL_F(settings.get(),
     "DemoShell requires SettingsService before panel registration");
 
@@ -187,17 +186,15 @@ auto DemoShell::CompleteInitialization() -> bool
       LOG_F(WARNING, "CameraRigController initialization failed");
       return false;
     }
-    impl_->camera_lifecycle.BindCameraRig(
+    impl_->camera_settings_service.BindCameraRig(
       observer_ptr { impl_->camera_rig.get() });
   }
-  impl_->camera_lifecycle.SetScene(impl_->scene_control.TryGetScene());
-  impl_->post_process_settings_service.BindCameraLifecycle(
-    observer_ptr { &impl_->camera_lifecycle });
+  impl_->post_process_settings_service.BindCameraSettings(
+    observer_ptr { &impl_->camera_settings_service });
 
   // Create DemoShellUi with all services
   impl_->demo_shell_ui.emplace(impl_->config.engine,
     observer_ptr { &impl_->panel_registry },
-    observer_ptr { &impl_->camera_lifecycle },
     observer_ptr { &impl_->ui_settings_service },
     observer_ptr { &impl_->rendering_settings_service },
     observer_ptr { &impl_->light_culling_settings_service },
@@ -256,20 +253,13 @@ auto DemoShell::Update(time::CanonicalDuration delta_time) -> void
     impl_->content_vm->Update();
   }
 
-  if (auto camera = impl_->camera_lifecycle.GetActiveCamera();
-    camera.IsAlive()) {
-    impl_->camera_settings_service.SetActiveCameraId(camera.GetName());
-  } else {
-    impl_->camera_settings_service.SetActiveCameraId({});
-  }
-
   if (impl_->camera_rig) {
     impl_->camera_rig->Update(delta_time);
-    impl_->camera_lifecycle.PersistActiveCameraSettings();
+    impl_->camera_settings_service.PersistActiveCameraSettings();
   }
 }
 
-auto DemoShell::Draw(engine::FrameContext& fc) -> void
+auto DemoShell::Draw(observer_ptr<engine::FrameContext> fc) -> void
 {
   if (!impl_->initialized) {
     return;
@@ -280,13 +270,31 @@ auto DemoShell::Draw(engine::FrameContext& fc) -> void
   }
 }
 
-auto DemoShell::SyncPanels() -> void
+auto DemoShell::OnFrameStart(const engine::FrameContext& context) -> void
+{
+  if (!impl_->initialized) {
+    return;
+  }
+
+  impl_->camera_settings_service.OnFrameStart(context);
+  impl_->rendering_settings_service.OnFrameStart(context);
+  impl_->light_culling_settings_service.OnFrameStart(context);
+  impl_->environment_settings_service.OnFrameStart(context);
+}
+
+auto DemoShell::OnMainViewReady(
+  const engine::FrameContext& context, const CompositionView& view) -> void
 {
   if (!impl_->initialized) {
     return;
   }
 
   UpdatePanels();
+
+  impl_->camera_settings_service.OnMainViewReady(context, view);
+  impl_->rendering_settings_service.OnMainViewReady(context, view);
+  impl_->light_culling_settings_service.OnMainViewReady(context, view);
+  impl_->environment_settings_service.OnMainViewReady(context, view);
 }
 
 auto DemoShell::RegisterPanel(std::shared_ptr<DemoPanel> panel) -> bool
@@ -323,8 +331,12 @@ auto DemoShell::RegisterPanel(std::shared_ptr<DemoPanel> panel) -> bool
 
 auto DemoShell::SetScene(std::unique_ptr<scene::Scene> scene) -> ActiveScene
 {
+  const auto previous_scene = impl_->scene_control.TryGetScene();
   impl_->scene_control.SetScene(std::move(scene));
-  impl_->camera_lifecycle.SetScene(impl_->scene_control.TryGetScene());
+  const auto new_scene = impl_->scene_control.TryGetScene();
+  if (new_scene && new_scene != previous_scene) {
+    OnSceneActivated(*new_scene);
+  }
   return ActiveScene { observer_ptr { &impl_->scene_control } };
 }
 
@@ -338,16 +350,6 @@ auto DemoShell::TryGetScene() const -> observer_ptr<scene::Scene>
   return impl_->scene_control.TryGetScene();
 }
 
-auto DemoShell::SetActiveCamera(scene::SceneNode camera) -> void
-{
-  LOG_SCOPE_FUNCTION(INFO);
-  impl_->camera_lifecycle.SetActiveCamera(std::move(camera));
-
-  if (impl_->camera_rig) {
-    impl_->camera_rig->SetActiveCamera(
-      observer_ptr { &impl_->camera_lifecycle.GetActiveCamera() });
-  }
-}
 auto DemoShell::GetSkyboxService() -> observer_ptr<SkyboxService>
 {
   return impl_->GetSkyboxService(TryGetScene());
@@ -360,9 +362,9 @@ auto DemoShell::CancelContentImport() -> void
   }
 }
 
-auto DemoShell::GetCameraLifecycle() -> CameraLifecycleService&
+auto DemoShell::GetCameraSettingsService() -> CameraSettingsService&
 {
-  return impl_->camera_lifecycle;
+  return impl_->camera_settings_service;
 }
 
 auto DemoShell::GetFileBrowserService() const -> FileBrowserService&
@@ -419,8 +421,8 @@ auto DemoShell::GetRenderingDebugMode() const -> engine::ShaderDebugMode
 auto DemoShell::GetRenderingWireframeColor() const -> graphics::Color
 {
   const auto color = impl_->rendering_settings_service.GetWireframeColor();
-  LOG_F(INFO, "DemoShell: GetRenderingWireframeColor ({}, {}, {}, {})",
-    color.r, color.g, color.b, color.a);
+  LOG_F(INFO, "DemoShell: GetRenderingWireframeColor ({}, {}, {}, {})", color.r,
+    color.g, color.b, color.a);
   return color;
 }
 
@@ -476,16 +478,14 @@ auto DemoShell::UpdatePanels() -> void
   runtime_config.on_exposure_changed
     = [] { LOG_F(INFO, "Exposure settings changed"); };
   impl_->environment_settings_service.SetRuntimeConfig(runtime_config);
-  if (runtime_config.scene
-    && impl_->environment_settings_service.HasPendingChanges()) {
-    impl_->environment_settings_service.ApplyPendingChanges();
-  }
+}
 
-  if (impl_->demo_shell_ui) {
-    if (const auto env_vm = impl_->demo_shell_ui->GetEnvironmentVm()) {
-      env_vm->SetRuntimeConfig(runtime_config);
-    }
-  }
+auto DemoShell::OnSceneActivated(scene::Scene& scene) -> void
+{
+  impl_->camera_settings_service.OnSceneActivated(scene);
+  impl_->rendering_settings_service.OnSceneActivated(scene);
+  impl_->light_culling_settings_service.OnSceneActivated(scene);
+  impl_->environment_settings_service.OnSceneActivated(scene);
 }
 
 } // namespace oxygen::examples

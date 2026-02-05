@@ -19,6 +19,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ViewPort.h>
@@ -68,9 +69,6 @@ using oxygen::scene::DistancePolicy;
 using oxygen::scene::PerspectiveCamera;
 
 namespace {
-
-constexpr std::uint32_t kWindowWidth = 1600;
-constexpr std::uint32_t kWindowHeight = 900;
 
 struct LocalTimeOfDay {
   int hour = 0;
@@ -292,15 +290,15 @@ auto ColorFromHue(double h) -> glm::vec3
   // NOLINTEND(*-magic-numbers)
 }
 
-// Orbit sphere around origin on XZ plane with custom radius.
+// Orbit sphere around origin on XY plane with custom radius (Z-up).
 auto AnimateSphereOrbit(oxygen::scene::SceneNode& sphere_node, double angle,
   double radius, double inclination, double spin_angle) -> void
 {
-  // Position in XY plane first (XZ orbit, y=0)
+  // Position in XY plane first (Z-up orbit, z=0)
   const double x = radius * std::cos(angle);
-  const double z = radius * std::sin(angle);
+  const double y = radius * std::sin(angle);
   // Tilt the orbital plane by applying a rotation around the X axis
-  const glm::dvec3 pos_local(x, 0.0, z);
+  const glm::dvec3 pos_local(x, y, 0.0);
   const double ci = std::cos(inclination);
   const double si = std::sin(inclination);
   // Rotation matrix for tilt around X: [1 0 0; 0 ci -si; 0 si ci]
@@ -317,9 +315,9 @@ auto AnimateSphereOrbit(oxygen::scene::SceneNode& sphere_node, double angle,
   // Set translation
   sphere_node.GetTransform().SetLocalPosition(pos);
 
-  // Apply self-rotation (spin) around local Y axis
-  const glm::quat spin_quat = glm::angleAxis(
-    static_cast<float>(spin_angle), glm::vec3(0.0F, 1.0F, 0.0F));
+  // Apply self-rotation (spin) around local Z axis
+  const glm::quat spin_quat
+    = glm::angleAxis(static_cast<float>(spin_angle), oxygen::space::move::Up);
   sphere_node.GetTransform().SetLocalRotation(spin_quat);
 }
 
@@ -338,20 +336,17 @@ MainModule::MainModule(const DemoAppContext& app)
   start_time_ = std::chrono::steady_clock::now();
 }
 
-auto MainModule::OnAttached(
-  oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept -> bool
+auto MainModule::OnAttachedImpl(
+  oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
+  -> std::unique_ptr<DemoShell>
 {
   DCHECK_NOTNULL_F(engine);
-
-  if (!Base::OnAttached(engine)) {
-    return false;
-  }
 
   // Create Pipeline
   pipeline_ = std::make_unique<oxygen::examples::ForwardPipeline>(
     observer_ptr { app_.engine.get() });
 
-  shell_ = std::make_unique<DemoShell>();
+  auto shell = std::make_unique<DemoShell>();
 
   settings_service_ = std::make_shared<AsyncDemoSettingsService>();
   vm_ = std::make_shared<AsyncDemoVm>(observer_ptr { settings_service_.get() },
@@ -376,16 +371,14 @@ auto MainModule::OnAttached(
     return observer_ptr { pipeline_.get() };
   };
 
-  if (!shell_->Initialize(shell_config)) {
+  if (!shell->Initialize(shell_config)) {
     LOG_F(WARNING, "Async: DemoShell initialization failed");
-    return false;
+    return nullptr;
   }
 
-  if (!shell_->RegisterPanel(async_panel_)) {
+  if (!shell->RegisterPanel(async_panel_)) {
     LOG_F(WARNING, "Async: failed to register Async panel");
   }
-
-  EnsureExampleScene();
 
   // Create Main View ID
   main_view_id_ = GetOrCreateViewId("MainView");
@@ -399,10 +392,10 @@ auto MainModule::OnAttached(
     }
   }
 
-  // ConfigureDrone removed from here, moved to HandleOnFrameStart
+  // ConfigureDrone moved to OnFrameStart
 
   initialized_ = true;
-  return true;
+  return shell;
 }
 
 MainModule::~MainModule() { active_scene_ = {}; }
@@ -412,6 +405,10 @@ MainModule::~MainModule() { active_scene_ = {}; }
 auto MainModule::BuildDefaultWindowProperties() const
   -> oxygen::platform::window::Properties
 {
+
+  constexpr std::uint32_t kWindowWidth = 2600;
+  constexpr std::uint32_t kWindowHeight = 1400;
+
   oxygen::platform::window::Properties props(
     "Oxygen Graphics Demo - AsyncEngine");
   props.extent = { .width = kWindowWidth, .height = kWindowHeight };
@@ -427,44 +424,15 @@ auto MainModule::BuildDefaultWindowProperties() const
   return props;
 }
 
-auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
-{
-  LOG_SCOPE_F(3, "MainModule::OnExampleFrameStart");
-
-  // Register scene with frame context (required for rendering)
-
-  // Register scene with frame context (required for rendering)
-  const auto scene_ptr
-    = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
-  if (scene_ptr) {
-    context.SetScene(oxygen::observer_ptr { scene_ptr.get() });
-  }
-
-  // Ensure drone is configured once the rig is available
-  const auto rig = shell_ ? shell_->GetCameraRig()
-                          : observer_ptr<ui::CameraRigController> { nullptr };
-  if (rig != last_camera_rig_) {
-    last_camera_rig_ = rig;
-    drone_configured_ = false;
-  }
-  if (!drone_configured_ && rig) {
-    ConfigureDrone();
-    drone_configured_ = true;
-  }
-}
-
 void MainModule::OnShutdown() noexcept
 {
-  if (shell_) {
-    shell_->SetScene(std::unique_ptr<scene::Scene> {});
-  }
+  auto& shell = GetShell();
+  shell.SetScene(std::unique_ptr<scene::Scene> {});
   active_scene_ = {};
 
   async_panel_.reset();
   vm_.reset();
   settings_service_.reset();
-  shell_.reset();
-  shell_.reset();
 }
 
 auto MainModule::ClearBackbufferReferences() -> void
@@ -474,8 +442,12 @@ auto MainModule::ClearBackbufferReferences() -> void
   }
 }
 
-auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
+auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
+  -> void
 {
+  DCHECK_NOTNULL_F(context);
+  auto& shell = GetShell();
+  shell.OnFrameStart(*context);
   StartFrameTracking();
   TrackFrameAction("Frame started");
 
@@ -489,13 +461,35 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
 
   // Call base to handle window lifecycle and surface setup
   Base::OnFrameStart(context);
+
+  LOG_SCOPE_F(3, "MainModule::OnExampleFrameStart");
+
+  EnsureExampleScene();
+
+  // Register scene with frame context (required for rendering)
+  const auto scene_ptr = shell.TryGetScene();
+  if (scene_ptr) {
+    context->SetScene(oxygen::observer_ptr { scene_ptr.get() });
+  }
+
+  // Ensure drone is configured once the rig is available
+  const auto rig = shell.GetCameraRig();
+  if (rig != last_camera_rig_) {
+    last_camera_rig_ = rig;
+    drone_configured_ = false;
+  }
+  if (!drone_configured_ && rig) {
+    ConfigureDrone();
+    drone_configured_ = true;
+  }
 }
 
-auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
+auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
 {
   DCHECK_F(active_scene_.IsValid());
-  const auto scene_ptr
-    = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
+  auto& shell = GetShell();
+  const auto scene_ptr = shell.TryGetScene();
   DCHECK_NOTNULL_F(scene_ptr);
   DCHECK_NOTNULL_F(app_window_);
 
@@ -518,26 +512,8 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 
   EnsureMainCamera(width, height);
   EnsureCameraSpotLight();
-
-  if (shell_) {
-    auto& camera_lifecycle = shell_->GetCameraLifecycle();
-    camera_lifecycle.EnsureViewport(extent);
-    camera_lifecycle.ApplyPendingSync();
-    camera_lifecycle.ApplyPendingReset();
-
-    auto& active_camera = camera_lifecycle.GetActiveCamera();
-    if (main_camera_.IsAlive()) {
-      const bool needs_activation = !active_camera.IsAlive()
-        || active_camera.GetHandle() != main_camera_.GetHandle();
-      if (needs_activation) {
-        shell_->SetActiveCamera(main_camera_);
-      }
-    }
-    shell_->SyncPanels();
-  }
-
   // Handle scene mutations (material overrides, visibility changes)
-  const auto now = context.GetFrameStartTime();
+  const auto now = context->GetFrameStartTime();
   const float delta_time
     = std::chrono::duration<float>(now - start_time_).count();
   UpdateSceneMutations(delta_time);
@@ -553,8 +529,8 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 
 auto MainModule::EnsureCameraSpotLight() -> void
 {
-  const auto scene_ptr
-    = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
+  auto& shell = GetShell();
+  const auto scene_ptr = shell.TryGetScene();
   auto* scene = scene_ptr.get();
   if ((scene == nullptr) || !main_camera_.IsAlive()) {
     return;
@@ -567,13 +543,18 @@ auto MainModule::EnsureCameraSpotLight() -> void
     }
     camera_spot_light_ = std::move(child_opt.value());
     camera_spot_light_.GetTransform().SetLocalPosition(glm::vec3(0.0F));
-    // Camera rotation is produced by glm::quatLookAtRH(), which treats local
-    // forward as -Z. Lights use engine forward = -Y.
-    // Apply a constant correction so the spotlight points exactly where the
-    // camera looks.
-    const glm::quat spot_correction
-      = glm::angleAxis(glm::half_pi<float>(), glm::vec3(1.0F, 0.0F, 0.0F));
-    camera_spot_light_.GetTransform().SetLocalRotation(spot_correction);
+  }
+
+  if (camera_spot_light_.IsAlive()) {
+    // Engine conventions:
+    // - World/light forward = space::move::Forward (-Y).
+    // - Camera look forward = space::look::Forward (-Z).
+    // The camera spot light is a child of the camera, so we rotate the light
+    // by +90deg about +X to map move::Forward to look::Forward while still
+    // inheriting the camera's rotation.
+    constexpr float kPitch = glm::half_pi<float>();
+    camera_spot_light_.GetTransform().SetLocalRotation(
+      glm::angleAxis(kPitch, space::move::Right));
   }
 
   if (camera_spot_light_.IsAlive() && !camera_spot_light_.HasLight()) {
@@ -614,13 +595,14 @@ auto MainModule::EnsureCameraSpotLight() -> void
   }
 }
 
-auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
+auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
 {
   TrackPhaseStart("Gameplay");
-  DCHECK_NOTNULL_F(shell_);
+  auto& shell = GetShell();
 
   // Compute per-frame delta from engine frame timestamp for animations
-  const auto now = context.GetFrameStartTime();
+  const auto now = context->GetFrameStartTime();
   double delta_seconds = 0.0;
   if (last_frame_time_.time_since_epoch().count() == 0) {
     last_frame_time_ = now;
@@ -635,13 +617,14 @@ auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
   UpdateAnimations(delta_seconds);
   last_frame_time_ = now;
 
-  shell_->Update(context.GetGameDeltaTime());
+  shell.Update(context->GetGameDeltaTime());
 
   TrackPhaseEnd();
   co_return;
 }
 
-auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
+auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
 {
   TrackPhaseStart("PreRender");
 
@@ -683,25 +666,27 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
   co_return;
 }
 
-auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
-{
-  TrackPhaseStart("Compositing");
+// auto MainModule::OnCompositing(observer_ptr<engine::FrameContext> context)
+//   -> co::Co<>
+// {
+//   TrackPhaseStart("Compositing");
 
-  // Ensure framebuffers are created after a resize
-  DCHECK_NOTNULL_F(app_window_);
-  if (!app_window_->GetWindow()) {
-    DLOG_F(1, "OnCompositing: no valid window - skipping");
-    TrackFrameAction("Compositing skipped - app window not available");
-    TrackPhaseEnd();
-    co_return;
-  }
+//   // Ensure framebuffers are created after a resize
+//   DCHECK_NOTNULL_F(app_window_);
+//   if (!app_window_->GetWindow()) {
+//     DLOG_F(1, "OnCompositing: no valid window - skipping");
+//     TrackFrameAction("Compositing skipped - app window not available");
+//     TrackPhaseEnd();
+//     co_return;
+//   }
 
-  co_await Base::OnCompositing(context);
-  TrackPhaseEnd();
-  co_return;
-}
+//   co_await Base::OnCompositing(context);
+//   TrackPhaseEnd();
+//   co_return;
+// }
 
-auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
+auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
 {
   TrackPhaseStart("GUI Update");
 
@@ -715,9 +700,8 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
 
   LOG_SCOPE_F(3, "MainModule::OnGuiUpdate");
 
-  if (shell_) {
-    shell_->Draw(context);
-  }
+  auto& shell = GetShell();
+  shell.Draw(context);
 
   TrackFrameAction("GUI overlay built");
   TrackPhaseEnd();
@@ -726,7 +710,8 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
 
 // OnRender removed - handled by Base and Renderer
 
-auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void
+auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> /*context*/)
+  -> void
 {
   LOG_SCOPE_F(3, "MainModule::OnFrameEnd");
 
@@ -746,12 +731,10 @@ auto MainModule::EnsureExampleScene() -> void
 
   auto scene = std::make_unique<Scene>("ExampleScene");
 
-  if (shell_) {
-    active_scene_ = shell_->SetScene(std::move(scene));
-  }
+  auto& shell = GetShell();
+  active_scene_ = shell.SetScene(std::move(scene));
 
-  const auto scene_ptr
-    = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
+  const auto scene_ptr = shell.TryGetScene();
   auto* scene_raw = scene_ptr.get();
   CHECK_NOTNULL_F(scene_raw, "Async: active scene not available");
 
@@ -849,8 +832,8 @@ auto MainModule::EnsureMainCamera(const int width, const int height) -> void
   LOG_SCOPE_FUNCTION(INFO);
   using scene::PerspectiveCamera;
 
-  const auto scene_ptr
-    = shell_ ? shell_->TryGetScene() : observer_ptr<scene::Scene> { nullptr };
+  auto& shell = GetShell();
+  const auto scene_ptr = shell.TryGetScene();
   auto* scene = scene_ptr.get();
   if (scene == nullptr) {
     return;
@@ -890,16 +873,17 @@ auto MainModule::EnsureMainCamera(const int width, const int height) -> void
 auto MainModule::ConfigureDrone() -> void
 {
   // NOLINTBEGIN(*-magic-numbers)
-  if (!shell_ || !shell_->GetCameraRig()) {
+  auto& shell = GetShell();
+  if (!shell.GetCameraRig()) {
     return;
   }
 
-  auto drone_controller = shell_->GetCameraRig()->GetDroneController();
+  auto drone_controller = shell.GetCameraRig()->GetDroneController();
   if (!drone_controller) {
     return;
   }
 
-  // Set path generator
+  // Drone path uses world space (Z-up). Altitude must be Z, not Y.
   drone_controller->SetPathGenerator([]() -> std::vector<glm::vec3> {
     constexpr int points = 96;
     constexpr float a = 36.0F;
@@ -910,8 +894,8 @@ auto MainModule::ConfigureDrone() -> void
       const float t = static_cast<float>(i) / static_cast<float>(points);
       const float ang = t * glm::two_pi<float>();
       const float x = a * std::cos(ang);
-      const float z = a * std::sin(ang) * std::cos(ang);
-      path.push_back(glm::vec3(x, altitude, z));
+      const float y = a * std::sin(ang) * std::cos(ang);
+      path.push_back(glm::vec3(x, y, altitude));
     }
     return path;
   });
@@ -928,20 +912,17 @@ auto MainModule::ConfigureDrone() -> void
   drone_controller->SetFocusHeight(0.8F);
 
   // Switch to drone mode
-  shell_->GetCameraRig()->SetMode(
+  shell.GetCameraRig()->SetMode(
     oxygen::examples::ui::CameraControlMode::kDrone);
   drone_controller->Start();
   // NOLINTEND(*-magic-numbers)
 }
 
-auto MainModule::UpdateComposition(engine::FrameContext& /*context*/,
-  std::vector<CompositionView>& views) -> void
+auto MainModule::UpdateComposition(
+  engine::FrameContext& context, std::vector<CompositionView>& views) -> void
 {
-  if (!shell_) {
-    return;
-  }
-  auto& active_camera = shell_->GetCameraLifecycle().GetActiveCamera();
-  if (!active_camera.IsAlive()) {
+  auto& shell = GetShell();
+  if (!main_camera_.IsAlive()) {
     return;
   }
 
@@ -959,8 +940,9 @@ auto MainModule::UpdateComposition(engine::FrameContext& /*context*/,
   }
 
   // Create the main scene view intent
-  views.push_back(
-    CompositionView::ForScene(main_view_id_, view, active_camera));
+  auto main_comp = CompositionView::ForScene(main_view_id_, view, main_camera_);
+  shell.OnMainViewReady(context, main_comp);
+  views.push_back(std::move(main_comp));
 
   const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
   views.push_back(CompositionView::ForImGui(
@@ -990,8 +972,8 @@ auto MainModule::UpdateAnimations(double delta_time) -> void
   if (multisubmesh_.IsAlive()) {
     constexpr double kQuadSpinSpeed = 0.6; // radians/sec
     const double quad_angle = std::fmod(anim_time_ * kQuadSpinSpeed, two_pi);
-    const glm::quat quad_rot = glm::angleAxis(
-      static_cast<float>(quad_angle), glm::vec3(0.0F, 1.0F, 0.0F));
+    const glm::quat quad_rot
+      = glm::angleAxis(static_cast<float>(quad_angle), space::move::Up);
     multisubmesh_.GetTransform().SetLocalRotation(quad_rot);
   }
 

@@ -56,6 +56,7 @@ namespace engine = oxygen::engine;
 namespace o = oxygen;
 namespace co = oxygen::co;
 namespace g = oxygen::graphics;
+using oxygen::examples::SettingsService;
 
 namespace {
 auto EventLoopRun(const oxygen::examples::DemoAppContext& app) -> void
@@ -177,10 +178,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
   using oxygen::clap::CommandBuilder;
   using oxygen::clap::Option;
 
-  static auto settings = oxygen::examples::SettingsService::CreateForDemo(
-    std::source_location::current());
-  oxygen::examples::SettingsService::SetDefault(
-    oxygen::observer_ptr { settings.get() });
+  // Initialize settings service
+  SettingsService::ForDemoApp();
 
   uint32_t frames = 0U;
   uint32_t target_fps = 100U;

@@ -233,7 +233,7 @@ auto FileBrowserService::BuildTypeFilters(const FileBrowserConfig& config)
 auto FileBrowserService::ResolveSettings() const noexcept
   -> observer_ptr<SettingsService>
 {
-  return SettingsService::Default();
+  return SettingsService::ForDemoApp();
 }
 
 auto FileBrowserService::MakeSettingsKey(std::string_view title) const

@@ -15,6 +15,7 @@
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
 #include "DemoShell/ActiveScene.h"
@@ -67,36 +68,38 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(MainModule);
   OXYGEN_MAKE_NON_MOVABLE(MainModule);
 
-  auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
-    -> bool override;
+  auto OnAttachedImpl(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
+    -> std::unique_ptr<DemoShell> override;
   auto OnShutdown() noexcept -> void override;
 
-  auto OnFrameStart(oxygen::engine::FrameContext& context) -> void override;
-  auto HandleOnFrameStart(engine::FrameContext& context) -> void override;
-  auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
-  auto OnGameplay(engine::FrameContext& context) -> co::Co<> override;
-  auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
-  auto OnPreRender(engine::FrameContext& context) -> co::Co<> override;
-  auto OnCompositing(engine::FrameContext& context) -> co::Co<> override;
-  auto OnFrameEnd(engine::FrameContext& context) -> void override;
+  auto OnFrameStart(observer_ptr<oxygen::engine::FrameContext> context)
+    -> void override;
+  auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnGameplay(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnGuiUpdate(observer_ptr<oxygen::engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnPreRender(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void override;
 
 protected:
   auto BuildDefaultWindowProperties() const
     -> platform::window::Properties override;
 
   auto ClearBackbufferReferences() -> void override;
+
   auto UpdateComposition(engine::FrameContext& context,
     std::vector<CompositionView>& views) -> void override;
 
 private:
-  auto ApplyRenderModeFromPanel() -> void;
-
   ActiveScene active_scene_ {};
   scene::NodeHandle registered_view_camera_ {};
+  scene::SceneNode main_camera_ {};
 
   LightScene light_scene_ {};
 
-  std::unique_ptr<DemoShell> shell_ {};
   std::shared_ptr<LightBenchPanel> light_bench_panel_ {};
 
   // Hosted view

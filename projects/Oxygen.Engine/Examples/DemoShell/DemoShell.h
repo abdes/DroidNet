@@ -20,8 +20,9 @@
 #include <Oxygen/Scene/Scene.h>
 
 #include "DemoShell/ActiveScene.h"
+#include "DemoShell/Runtime/CompositionView.h"
 #include "DemoShell/Runtime/RenderingPipeline.h"
-#include "DemoShell/Services/CameraLifecycleService.h"
+#include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/UI/DemoPanel.h"
 
@@ -127,7 +128,7 @@ struct DemoShellConfig {
  The shell does not own engine systems; it receives them through the config
  and forwards them to each panel.
 
- @see DemoShellUi, PanelRegistry, CameraLifecycleService
+ @see DemoShellUi, PanelRegistry, CameraSettingsService
 */
 class DemoShell final {
 public:
@@ -144,10 +145,14 @@ public:
   auto Update(time::CanonicalDuration delta_time) -> void;
 
   //! Draw the demo shell UI layout and active panel contents.
-  auto Draw(engine::FrameContext& fc) -> void;
+  auto Draw(observer_ptr<engine::FrameContext> fc) -> void;
 
-  //! Synchronize panel-driven settings during the scene-mutation phase.
-  auto SyncPanels() -> void;
+  //! Notify services of the frame start lifecycle.
+  auto OnFrameStart(const engine::FrameContext& context) -> void;
+
+  //! Notify services once the main view is ready in the frame context.
+  auto OnMainViewReady(
+    const engine::FrameContext& context, const CompositionView& view) -> void;
 
   //! Register a demo-specific panel with the shell.
   //!
@@ -165,17 +170,14 @@ public:
   //! Returns a non-owning pointer to the active scene (may be null).
   [[nodiscard]] auto TryGetScene() const -> observer_ptr<scene::Scene>;
 
-  //! Set the active camera node used by the camera rig and panels.
-  auto SetActiveCamera(scene::SceneNode camera) -> void;
-
   //! Returns the skybox service used by environment panels (created on demand).
   [[nodiscard]] auto GetSkyboxService() -> observer_ptr<SkyboxService>;
 
   //! Cancel any in-flight content imports.
   auto CancelContentImport() -> void;
 
-  //! Access the camera lifecycle service for advanced control.
-  [[nodiscard]] auto GetCameraLifecycle() -> CameraLifecycleService&;
+  //! Access the camera settings service for advanced control.
+  [[nodiscard]] auto GetCameraSettingsService() -> CameraSettingsService&;
 
   //! Access the file browser service.
   [[nodiscard]] auto GetFileBrowserService() const -> FileBrowserService&;
@@ -210,6 +212,7 @@ private:
   //! Completes initialization once required modules are available.
   auto CompleteInitialization() -> bool;
   auto UpdatePanels() -> void;
+  auto OnSceneActivated(scene::Scene& scene) -> void;
 
   struct Impl;
   std::unique_ptr<Impl> impl_;

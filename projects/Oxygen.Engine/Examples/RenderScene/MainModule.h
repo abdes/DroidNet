@@ -17,6 +17,7 @@
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Platform/Window.h>
+#include <Oxygen/Scene/SceneNode.h>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
@@ -75,23 +76,22 @@ public:
   auto UpdateComposition(engine::FrameContext& context,
     std::vector<CompositionView>& views) -> void override;
 
-  auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
-    -> bool override;
+  auto OnAttachedImpl(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
+    -> std::unique_ptr<DemoShell> override;
   void OnShutdown() noexcept override;
 
-  auto OnFrameStart(oxygen::engine::FrameContext& context) -> void override;
-  auto HandleOnFrameStart(engine::FrameContext& context) -> void override;
-  auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
-  auto OnGameplay(engine::FrameContext& context) -> co::Co<> override;
-  auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
-  auto OnPreRender(engine::FrameContext& context) -> co::Co<> override;
-  auto OnCompositing(engine::FrameContext& context) -> co::Co<> override;
-  auto OnFrameEnd(engine::FrameContext& context) -> void override;
+  auto OnFrameStart(observer_ptr<oxygen::engine::FrameContext> context)
+    -> void override;
+  auto OnGameplay(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnGuiUpdate(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnPreRender(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
 
 private:
   auto ReleaseCurrentSceneAsset(const char* reason) -> void;
 
-  auto ApplyRenderModeFromPanel() -> void;
   auto ClearSceneRuntime(const char* reason) -> void;
 
   struct SceneLoadRequest {
@@ -104,11 +104,10 @@ private:
   // Scene and rendering.
   ActiveScene active_scene_;
   ViewId main_view_id_ { kInvalidViewId };
+  scene::SceneNode main_camera_ {};
 
   std::shared_ptr<oxygen::examples::SceneLoaderService> scene_loader_;
   bool scene_load_cancel_requested_ { false };
-
-  std::unique_ptr<DemoShell> shell_;
 
   // Content and scene state
   std::optional<data::AssetKey> current_scene_key_;

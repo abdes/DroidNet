@@ -117,17 +117,14 @@ auto MainModule::ClearBackbufferReferences() -> void
   }
 }
 
-auto MainModule::OnAttached(
-  oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept -> bool
+auto MainModule::OnAttachedImpl(
+  oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
+  -> std::unique_ptr<DemoShell>
 {
   DCHECK_NOTNULL_F(engine, "expecting a valid engine");
 
-  if (!Base::OnAttached(engine)) {
-    return false;
-  }
-
   if (!InitInputBindings()) {
-    return false;
+    return nullptr;
   }
 
   // Create Pipeline
@@ -135,7 +132,7 @@ auto MainModule::OnAttached(
     = std::make_unique<ForwardPipeline>(observer_ptr { app_.engine.get() });
 
   // Initialize Shell
-  shell_ = std::make_unique<DemoShell>();
+  auto shell = std::make_unique<DemoShell>();
   const auto demo_root
     = std::filesystem::path(std::source_location::current().file_name())
         .parent_path();
@@ -159,78 +156,88 @@ auto MainModule::OnAttached(
     },
   };
 
-  if (!shell_->Initialize(shell_config)) {
+  if (!shell->Initialize(shell_config)) {
     LOG_F(WARNING, "InputSystem: DemoShell initialization failed");
-    return false;
+    return nullptr;
   }
 
   // Register the InputDebugPanel
   input_debug_panel_ = std::make_shared<InputDebugPanel>();
-  UpdateInputDebugPanelConfig();
-  if (!shell_->RegisterPanel(input_debug_panel_)) {
+  UpdateInputDebugPanelConfig(shell->GetCameraRig());
+  if (!shell->RegisterPanel(input_debug_panel_)) {
     LOG_F(WARNING, "InputSystem: failed to register Input Debug panel");
-    return false;
+    return nullptr;
   }
 
   // Create Main View ID
   main_view_id_ = GetOrCreateViewId("MainView");
 
   LOG_F(INFO, "InputSystem: Module initialized");
-  return true;
+  return shell;
 }
 
 void MainModule::OnShutdown() noexcept
 {
-  DCHECK_NOTNULL_F(shell_);
+  auto& shell = GetShell();
 
   // Clear scene from shell first to ensure controlled destruction
-  shell_->SetScene(nullptr);
+  shell.SetScene(nullptr);
 
   input_debug_panel_.reset();
-  shell_.reset();
-
   Base::OnShutdown();
 }
 
-auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
+auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
+  -> void
 {
-  Base::OnFrameStart(context);
-}
+  DCHECK_NOTNULL_F(context);
+  auto& shell = GetShell();
+  shell.OnFrameStart(*context);
 
-auto MainModule::HandleOnFrameStart(engine::FrameContext& context) -> void
-{
-  LOG_SCOPE_F(3, "MainModule::HandleOnFrameStart");
+  Base::OnFrameStart(context);
+
+  auto& frame_context = *context;
+
+  LOG_SCOPE_F(3, "MainModule::OnFrameStart");
 
   // Set or create the scene now that the base has handled window/lifecycle
   if (!active_scene_.IsValid()) {
     auto scene = std::make_unique<scene::Scene>("InputSystem-Scene");
-    if (shell_) {
-      active_scene_ = shell_->SetScene(std::move(scene));
+    active_scene_ = shell.SetScene(std::move(scene));
+  }
+
+  if (!main_camera_.IsAlive()) {
+    if (const auto scene_ptr = shell.TryGetScene()) {
+      main_camera_ = scene_ptr->CreateNode("MainCamera");
+      auto camera = std::make_unique<scene::PerspectiveCamera>();
+      const bool attached = main_camera_.AttachCamera(std::move(camera));
+      CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
     }
   }
 
-  context.SetScene(shell_ ? shell_->TryGetScene() : nullptr);
+  frame_context.SetScene(shell.TryGetScene());
 
   // Ensure drone is configured once the rig is available
-  const auto rig = shell_ ? shell_->GetCameraRig()
-                          : observer_ptr<ui::CameraRigController> { nullptr };
+  const auto rig = shell.GetCameraRig();
   if (rig != last_camera_rig_) {
     last_camera_rig_ = rig;
     // Note: configure drone if needed, depends on demo specifics
   }
 }
 
-auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void
+auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> /*context*/)
+  -> void
 {
   LOG_SCOPE_F(3, "MainModule::OnFrameEnd");
 }
 
-auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
+auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
 {
   // Check input edges during gameplay. InputSystem finalized edges during
   // kInput earlier in the frame; they remain valid until next frame start.
   namespace c = std::chrono;
-  const auto u_game_dt = context.GetGameDeltaTime().get(); // nanoseconds
+  const auto u_game_dt = context->GetGameDeltaTime().get(); // nanoseconds
   const float dt = c::duration<float>(u_game_dt).count(); // seconds
 
   // Apply any pending sphere reset requested by UI toggles
@@ -286,13 +293,13 @@ auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
     tf.SetLocalPosition(pos);
   }
 
-  if (shell_) {
-    shell_->Update(context.GetGameDeltaTime());
-  }
+  auto& shell = GetShell();
+  shell.Update(context->GetGameDeltaTime());
   co_return;
 }
 
-auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
+auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
 
@@ -315,10 +322,11 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
   co_await Base::OnPreRender(context);
 }
 
-auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
+auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
-  DCHECK_NOTNULL_F(shell_);
+  auto& shell = GetShell();
 
   if (!app_window_->GetWindow()) {
     DLOG_F(1, "OnSceneMutation: no valid window - skipping");
@@ -329,27 +337,11 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     co_return;
   }
 
-  const auto scene_ptr = shell_->TryGetScene();
+  const auto scene_ptr = shell.TryGetScene();
   if (!scene_ptr) {
     co_return;
   }
   auto* scene = scene_ptr.get();
-
-  // Get window extent for camera setup via shell's camera lifecycle
-  const auto extent = app_window_->GetWindow()->Size();
-  auto& camera_lifecycle = shell_->GetCameraLifecycle();
-  camera_lifecycle.EnsureViewport(extent);
-  camera_lifecycle.ApplyPendingSync();
-  camera_lifecycle.ApplyPendingReset();
-
-  auto& active_camera = camera_lifecycle.GetActiveCamera();
-  if (active_camera.IsAlive()) {
-    // If we have an active camera rig, it's already set up.
-    // If we needed to set a specific camera as active, we'd do it here.
-  }
-
-  // Update shell
-  shell_->SyncPanels();
 
   // Note: View camera is now updated via UpdateComposition
 
@@ -407,22 +399,11 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   co_await Base::OnSceneMutation(context);
 }
 
-auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
+auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
-
-  if (!app_window_->GetWindow()) {
-    DLOG_F(1, "OnCompositing: no valid window - skipping");
-    co_return;
-  }
-
-  co_await Base::OnCompositing(context);
-}
-
-auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
-{
-  DCHECK_NOTNULL_F(app_window_);
-  DCHECK_NOTNULL_F(shell_);
+  auto& shell = GetShell();
 
   if (app_window_->IsShuttingDown()) {
     DLOG_F(1, "OnGuiUpdate: window is closed/closing - skipping");
@@ -431,12 +412,12 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
 
   // Update panel config once when camera rig becomes available
   static bool camera_rig_bound = false;
-  if (!camera_rig_bound && shell_->GetCameraRig()) {
-    UpdateInputDebugPanelConfig();
+  if (!camera_rig_bound && shell.GetCameraRig()) {
+    UpdateInputDebugPanelConfig(shell.GetCameraRig());
     camera_rig_bound = true;
   }
 
-  shell_->Draw(context);
+  shell.Draw(context);
 
   co_return;
 }
@@ -541,11 +522,12 @@ auto MainModule::InitInputBindings() noexcept -> bool
 }
 
 //! Update the Input Debug panel configuration from current demo state.
-auto MainModule::UpdateInputDebugPanelConfig() -> void
+auto MainModule::UpdateInputDebugPanelConfig(
+  observer_ptr<ui::CameraRigController> camera_rig) -> void
 {
   InputDebugPanelConfig config;
   config.input_system = observer_ptr { app_.input_system.get() };
-  config.camera_rig = shell_ ? shell_->GetCameraRig() : nullptr;
+  config.camera_rig = camera_rig;
   config.shift_action = shift_action_;
   config.jump_action = jump_action_;
   config.jump_higher_action = jump_higher_action_;
@@ -561,14 +543,11 @@ auto MainModule::UpdateInputDebugPanelConfig() -> void
   // NOLINTEND(*-magic-numbers)
 }
 
-auto MainModule::UpdateComposition(engine::FrameContext& /*context*/,
-  std::vector<CompositionView>& views) -> void
+auto MainModule::UpdateComposition(
+  engine::FrameContext& context, std::vector<CompositionView>& views) -> void
 {
-  if (!shell_) {
-    return;
-  }
-  auto& active_camera = shell_->GetCameraLifecycle().GetActiveCamera();
-  if (!active_camera.IsAlive()) {
+  auto& shell = GetShell();
+  if (!main_camera_.IsAlive()) {
     return;
   }
 
@@ -586,8 +565,9 @@ auto MainModule::UpdateComposition(engine::FrameContext& /*context*/,
   }
 
   // Create the main scene view intent
-  views.push_back(
-    CompositionView::ForScene(main_view_id_, view, active_camera));
+  auto main_comp = CompositionView::ForScene(main_view_id_, view, main_camera_);
+  shell.OnMainViewReady(context, main_comp);
+  views.push_back(std::move(main_comp));
 
   const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
   views.push_back(CompositionView::ForImGui(

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdint>
 #include <map>
 #include <mutex>
 #include <span>
@@ -83,14 +84,16 @@ struct CompositionViewImpl {
 
     if (width == target_w && height == target_h && has_hdr == needs_hdr
       && clear_color == target_clear) {
-      if (needs_hdr && hdr_texture)
+      if (needs_hdr && hdr_texture) {
         return;
-      if (!needs_hdr && sdr_texture)
+      }
+      if (!needs_hdr && sdr_texture) {
         return;
+      }
     }
 
     LOG_F(INFO,
-      "ForwardPipeline: Configuring View '{}' (ID: {}) -> {}x{}, HDR: {}, "
+      "Configuring View '{}' (ID: {}) -> {}x{}, HDR: {}, "
       "Clear: ({}, {}, {}, {})",
       intent.name, intent.id, target_w, target_h, needs_hdr, target_clear.r,
       target_clear.g, target_clear.b, target_clear.a);
@@ -155,26 +158,107 @@ struct CompositionViewImpl {
 };
 
 namespace {
-  struct RenderPolicy {
-    RenderMode effective_render_mode { RenderMode::kSolid };
-    bool overlay_wireframe { false };
-    bool run_scene_passes { true };
-    bool force_neutral_tonemap { false };
-    bool wireframe_after_tonemap { false };
-    bool wireframe_apply_exposure_compensation { false };
+  enum class WireframeTarget : uint8_t {
+    kHdr,
+    kSdr,
   };
 
-  auto GetWireframeTargetTexture(const RenderPolicy& policy,
+  struct ViewRenderPlan {
+    RenderMode effective_render_mode { RenderMode::kSolid };
+    bool has_scene { false };
+    bool hdr_path_enabled { false };
+    bool sdr_path_enabled { false };
+    bool require_neutral_tonemap { false };
+    bool allow_overlay_wireframe { false };
+    bool allow_sky_visuals { false };
+    bool allow_sky_lut { false };
+    bool wireframe_apply_exposure_compensation { false };
+    WireframeTarget wireframe_target { WireframeTarget::kHdr };
+  };
+
+  struct DebugModeIntent {
+    bool is_non_ibl { false };
+    bool force_manual_exposure { false };
+  };
+
+  auto EvaluateDebugModeIntent(engine::ShaderDebugMode mode) -> DebugModeIntent
+  {
+    const auto is_non_ibl = [&] {
+      switch (mode) {
+      case engine::ShaderDebugMode::kLightCullingHeatMap:
+      case engine::ShaderDebugMode::kDepthSlice:
+      case engine::ShaderDebugMode::kClusterIndex:
+      case engine::ShaderDebugMode::kBaseColor:
+      case engine::ShaderDebugMode::kUv0:
+      case engine::ShaderDebugMode::kOpacity:
+      case engine::ShaderDebugMode::kWorldNormals:
+      case engine::ShaderDebugMode::kRoughness:
+      case engine::ShaderDebugMode::kMetalness:
+        return true;
+      case engine::ShaderDebugMode::kIblSpecular:
+      case engine::ShaderDebugMode::kIblRawSky:
+      case engine::ShaderDebugMode::kIblIrradiance:
+      case engine::ShaderDebugMode::kDisabled:
+      default:
+        return false;
+      }
+    }();
+
+    return DebugModeIntent {
+      .is_non_ibl = is_non_ibl,
+      .force_manual_exposure = is_non_ibl,
+    };
+  }
+
+  auto GetWireframeTargetTexture(const ViewRenderPlan& plan,
     const CompositionViewImpl& view) -> std::shared_ptr<const graphics::Texture>
   {
-    if (policy.wireframe_after_tonemap) {
+    if (plan.wireframe_target == WireframeTarget::kSdr) {
       DCHECK_NOTNULL_F(view.sdr_texture.get());
-    }
-    if (policy.wireframe_after_tonemap || !view.hdr_texture) {
       return view.sdr_texture;
     }
     return view.hdr_texture;
   }
+
+  class ToneMapOverrideGuard {
+  public:
+    ToneMapOverrideGuard(engine::ToneMapPassConfig& config, bool enable_neutral)
+      : config_(config)
+      , saved_exposure_mode_(config.exposure_mode)
+      , saved_manual_exposure_(config.manual_exposure)
+      , saved_tone_mapper_(config.tone_mapper)
+      , active_(enable_neutral)
+    {
+      if (!active_) {
+        return;
+      }
+
+      config_.exposure_mode = engine::ExposureMode::kManual;
+      config_.manual_exposure = 1.0F;
+      config_.tone_mapper = engine::ToneMapper::kNone;
+    }
+
+    ~ToneMapOverrideGuard()
+    {
+      if (!active_) {
+        return;
+      }
+
+      config_.exposure_mode = saved_exposure_mode_;
+      config_.manual_exposure = saved_manual_exposure_;
+      config_.tone_mapper = saved_tone_mapper_;
+    }
+
+    OXYGEN_MAKE_NON_COPYABLE(ToneMapOverrideGuard)
+    OXYGEN_MAKE_NON_MOVABLE(ToneMapOverrideGuard)
+
+  private:
+    engine::ToneMapPassConfig& config_;
+    engine::ExposureMode saved_exposure_mode_;
+    float saved_manual_exposure_;
+    engine::ToneMapper saved_tone_mapper_;
+    bool active_;
+  };
 } // namespace
 
 struct ForwardPipeline::Impl {
@@ -227,35 +311,88 @@ struct ForwardPipeline::Impl {
     bool dirty { true };
   } staged;
 
-  auto BuildRenderPolicy(const CompositionViewImpl& view) const -> RenderPolicy
+  struct ViewRenderContext {
+    CompositionViewImpl& view;
+    ViewRenderPlan plan;
+    std::shared_ptr<const graphics::Texture> depth_texture;
+    bool sdr_in_render_target { false };
+  };
+
+  struct SkyState {
+    bool sky_atmo_enabled { false };
+    bool sky_sphere_enabled { false };
+  };
+
+  auto EvaluateSkyState(const engine::RenderContext& rc) const -> SkyState
   {
-    RenderPolicy policy {};
-    policy.effective_render_mode = staged.render_mode;
-    if (view.intent.force_wireframe) {
-      policy.effective_render_mode = RenderMode::kWireframe;
+    SkyState state {};
+    if (const auto scene = rc.GetScene()) {
+      if (const auto env = scene->GetEnvironment()) {
+        if (const auto atmo
+          = env->TryGetSystem<scene::environment::SkyAtmosphere>();
+          atmo && atmo->IsEnabled()) {
+          state.sky_atmo_enabled = true;
+        }
+        if (const auto sphere
+          = env->TryGetSystem<scene::environment::SkySphere>();
+          sphere && sphere->IsEnabled()) {
+          state.sky_sphere_enabled = true;
+        }
+      }
     }
-
-    policy.overlay_wireframe
-      = (staged.render_mode == RenderMode::kOverlayWireframe)
-      && (policy.effective_render_mode != RenderMode::kWireframe);
-    policy.run_scene_passes
-      = policy.effective_render_mode != RenderMode::kWireframe;
-    policy.force_neutral_tonemap
-      = policy.effective_render_mode == RenderMode::kWireframe;
-    policy.wireframe_after_tonemap = policy.overlay_wireframe;
-    policy.wireframe_apply_exposure_compensation = false;
-
-    LOG_F(INFO,
-      "ForwardPipeline: RenderPolicy view='{}' mode={} overlay={} "
-      "scene_passes={} neutral_tonemap={} wireframe_after_tonemap={}",
-      view.intent.name, to_string(policy.effective_render_mode),
-      policy.overlay_wireframe, policy.run_scene_passes,
-      policy.force_neutral_tonemap, policy.wireframe_after_tonemap);
-
-    return policy;
+    return state;
   }
 
-  auto ConfigureWireframePass(const RenderPolicy& policy,
+  auto EvaluateViewRenderPlan(const CompositionViewImpl& view,
+    const engine::RenderContext& rc) const -> ViewRenderPlan
+  {
+    ViewRenderPlan plan {};
+    plan.effective_render_mode = staged.render_mode;
+    if (view.intent.force_wireframe) {
+      plan.effective_render_mode = RenderMode::kWireframe;
+    }
+
+    plan.has_scene = view.intent.camera.has_value();
+    plan.hdr_path_enabled
+      = view.has_hdr && view.hdr_texture && view.hdr_framebuffer;
+    plan.sdr_path_enabled = view.sdr_texture && view.sdr_framebuffer;
+    plan.require_neutral_tonemap = plan.has_scene
+      && (plan.effective_render_mode == RenderMode::kWireframe);
+    plan.allow_overlay_wireframe = plan.has_scene
+      && (staged.render_mode == RenderMode::kOverlayWireframe)
+      && (plan.effective_render_mode != RenderMode::kWireframe);
+    plan.wireframe_apply_exposure_compensation = false;
+
+    plan.wireframe_target
+      = (plan.allow_overlay_wireframe || !plan.hdr_path_enabled)
+      ? WireframeTarget::kSdr
+      : WireframeTarget::kHdr;
+
+    const auto debug_mode = shader_pass_config
+      ? shader_pass_config->debug_mode
+      : engine::ShaderDebugMode::kDisabled;
+    const auto debug_intent = EvaluateDebugModeIntent(debug_mode);
+    const auto sky_state = EvaluateSkyState(rc);
+    const bool run_scene_passes = plan.has_scene && plan.hdr_path_enabled
+      && (plan.effective_render_mode != RenderMode::kWireframe);
+    const bool allow_sky_visuals = run_scene_passes
+      && (sky_state.sky_atmo_enabled || sky_state.sky_sphere_enabled)
+      && !debug_intent.is_non_ibl;
+    plan.allow_sky_visuals = allow_sky_visuals;
+    plan.allow_sky_lut = run_scene_passes && sky_state.sky_atmo_enabled;
+
+    DLOG_F(2,
+      "ViewRenderPlan view='{}' mode={} scene={} hdr={} "
+      "sdr={} overlay={} neutral={} sky={} lut={}",
+      view.intent.name, to_string(plan.effective_render_mode), plan.has_scene,
+      plan.hdr_path_enabled, plan.sdr_path_enabled,
+      plan.allow_overlay_wireframe, plan.require_neutral_tonemap,
+      plan.allow_sky_visuals, plan.allow_sky_lut);
+
+    return plan;
+  }
+
+  auto ConfigureWireframePass(const ViewRenderPlan& plan,
     const CompositionViewImpl& view, bool clear_color, bool clear_depth,
     bool depth_write_enable) const -> void
   {
@@ -267,9 +404,9 @@ struct ForwardPipeline::Impl {
     wireframe_pass_config->clear_depth_target = clear_depth;
     wireframe_pass_config->depth_write_enable = depth_write_enable;
     wireframe_pass_config->apply_exposure_compensation
-      = policy.wireframe_apply_exposure_compensation;
+      = plan.wireframe_apply_exposure_compensation;
     wireframe_pass_config->color_texture
-      = GetWireframeTargetTexture(policy, view);
+      = GetWireframeTargetTexture(plan, view);
 
     if (wireframe_pass) {
       wireframe_pass->SetWireColor(staged.wire_color);
@@ -278,39 +415,262 @@ struct ForwardPipeline::Impl {
     }
   }
 
-  struct ToneMapOverrides {
-    engine::ExposureMode exposure_mode { engine::ExposureMode::kManual };
-    float manual_exposure { 1.0F };
-    engine::ToneMapper tone_mapper { engine::ToneMapper::kAcesFitted };
-  };
-
-  auto ApplyToneMapPolicy(
-    const RenderPolicy& policy, ToneMapOverrides& saved) const -> void
+  void TrackViewResources(
+    ViewRenderContext& ctx, graphics::CommandRecorder& rec) const
   {
-    if (!tone_map_pass_config) {
+    if (!ctx.plan.hdr_path_enabled) {
       return;
     }
 
-    saved.exposure_mode = tone_map_pass_config->exposure_mode;
-    saved.manual_exposure = tone_map_pass_config->manual_exposure;
-    saved.tone_mapper = tone_map_pass_config->tone_mapper;
+    const auto fb = ctx.view.hdr_framebuffer;
+    const auto& fb_desc = fb->GetDescriptor();
+    if (fb_desc.depth_attachment.IsValid()) {
+      ctx.depth_texture = fb_desc.depth_attachment.texture;
+    }
 
-    if (policy.force_neutral_tonemap) {
-      tone_map_pass_config->exposure_mode = engine::ExposureMode::kManual;
-      tone_map_pass_config->manual_exposure = 1.0F;
-      tone_map_pass_config->tone_mapper = engine::ToneMapper::kNone;
+    if (ctx.view.hdr_texture && !rec.IsResourceTracked(*ctx.view.hdr_texture)) {
+      rec.BeginTrackingResourceState(
+        *ctx.view.hdr_texture, graphics::ResourceStates::kCommon, true);
+    }
+    if (ctx.depth_texture && !rec.IsResourceTracked(*ctx.depth_texture)) {
+      rec.BeginTrackingResourceState(
+        *ctx.depth_texture, graphics::ResourceStates::kCommon, true);
+    }
+    if (ctx.view.sdr_texture && !rec.IsResourceTracked(*ctx.view.sdr_texture)) {
+      rec.BeginTrackingResourceState(
+        *ctx.view.sdr_texture, graphics::ResourceStates::kCommon, true);
     }
   }
 
-  auto RestoreToneMapPolicy(const ToneMapOverrides& saved) const -> void
+  void ConfigurePassTargets(const ViewRenderContext& ctx) const
   {
-    if (!tone_map_pass_config) {
+    if (!ctx.plan.hdr_path_enabled) {
       return;
     }
 
-    tone_map_pass_config->exposure_mode = saved.exposure_mode;
-    tone_map_pass_config->manual_exposure = saved.manual_exposure;
-    tone_map_pass_config->tone_mapper = saved.tone_mapper;
+    if (depth_pass_config) {
+      depth_pass_config->depth_texture = ctx.depth_texture;
+    }
+    if (shader_pass_config) {
+      shader_pass_config->color_texture = ctx.view.hdr_texture;
+    }
+    if (wireframe_pass_config) {
+      wireframe_pass_config->color_texture = ctx.view.hdr_texture;
+    }
+    if (sky_pass_config) {
+      sky_pass_config->color_texture = ctx.view.hdr_texture;
+    }
+    if (transparent_pass_config) {
+      transparent_pass_config->color_texture = ctx.view.hdr_texture;
+      transparent_pass_config->depth_texture = ctx.depth_texture;
+    }
+  }
+
+  void ConfigureSkyLutManager(
+    const ViewRenderContext& ctx, engine::Renderer& renderer) const
+  {
+    if (!sky_atmo_lut_pass_config) {
+      return;
+    }
+
+    sky_atmo_lut_pass_config->lut_manager = ctx.plan.allow_sky_lut
+      ? renderer.GetSkyAtmosphereLutManager()
+      : nullptr;
+  }
+
+  void BindHdrAndClear(
+    ViewRenderContext& ctx, graphics::CommandRecorder& rec) const
+  {
+    if (!ctx.plan.hdr_path_enabled) {
+      return;
+    }
+
+    rec.RequireResourceState(
+      *ctx.view.hdr_texture, graphics::ResourceStates::kRenderTarget);
+    if (ctx.depth_texture) {
+      rec.RequireResourceState(
+        *ctx.depth_texture, graphics::ResourceStates::kDepthWrite);
+    }
+    rec.FlushBarriers();
+
+    rec.BindFrameBuffer(*ctx.view.hdr_framebuffer);
+    const auto hdr_clear = ctx.view.hdr_framebuffer->GetDescriptor()
+                             .color_attachments[0]
+                             .ResolveClearColor(std::nullopt);
+    rec.ClearFramebuffer(*ctx.view.hdr_framebuffer,
+      std::vector<std::optional<graphics::Color>> { hdr_clear }, 1.0F);
+  }
+
+  void BindSdrAndMaybeClear(
+    ViewRenderContext& ctx, graphics::CommandRecorder& rec) const
+  {
+    if (!ctx.plan.sdr_path_enabled || ctx.plan.hdr_path_enabled) {
+      return;
+    }
+
+    rec.RequireResourceState(
+      *ctx.view.sdr_texture, graphics::ResourceStates::kRenderTarget);
+    rec.FlushBarriers();
+    ctx.sdr_in_render_target = true;
+    rec.BindFrameBuffer(*ctx.view.sdr_framebuffer);
+    if (ctx.view.intent.should_clear) {
+      const auto sdr_clear = ctx.view.sdr_framebuffer->GetDescriptor()
+                               .color_attachments[0]
+                               .ResolveClearColor(std::nullopt);
+      rec.ClearFramebuffer(*ctx.view.sdr_framebuffer,
+        std::vector<std::optional<graphics::Color>> { sdr_clear });
+    }
+  }
+
+  auto RenderWireframeScene(const ViewRenderContext& ctx,
+    const engine::RenderContext& rc, graphics::CommandRecorder& rec) const
+    -> co::Co<>
+  {
+    if (!wireframe_pass_config || !wireframe_pass) {
+      co_return;
+    }
+
+    const bool is_forced = ctx.view.intent.force_wireframe;
+    ConfigureWireframePass(ctx.plan, ctx.view, !is_forced, true, true);
+    co_await wireframe_pass->PrepareResources(rc, rec);
+    co_await wireframe_pass->Execute(rc, rec);
+  }
+
+  auto RunScenePasses(const ViewRenderContext& ctx,
+    const engine::RenderContext& rc, graphics::CommandRecorder& rec) const
+    -> co::Co<>
+  {
+    if (depth_pass && ctx.depth_texture) {
+      co_await depth_pass->PrepareResources(rc, rec);
+      co_await depth_pass->Execute(rc, rec);
+      rc.RegisterPass<engine::DepthPrePass>(depth_pass.get());
+    }
+
+    if (ctx.plan.allow_sky_lut && sky_atmo_lut_pass && sky_atmo_lut_pass_config
+      && sky_atmo_lut_pass_config->lut_manager) {
+      co_await sky_atmo_lut_pass->PrepareResources(rc, rec);
+      co_await sky_atmo_lut_pass->Execute(rc, rec);
+    }
+
+    if (light_culling_pass) {
+      co_await light_culling_pass->PrepareResources(rc, rec);
+      co_await light_culling_pass->Execute(rc, rec);
+      rc.RegisterPass<engine::LightCullingPass>(light_culling_pass.get());
+    }
+
+    if (shader_pass) {
+      co_await shader_pass->PrepareResources(rc, rec);
+      co_await shader_pass->Execute(rc, rec);
+      rc.RegisterPass<engine::ShaderPass>(shader_pass.get());
+    }
+
+    if (ctx.plan.allow_sky_visuals && sky_pass) {
+      co_await sky_pass->PrepareResources(rc, rec);
+      co_await sky_pass->Execute(rc, rec);
+    }
+
+    if (transparent_pass) {
+      co_await transparent_pass->PrepareResources(rc, rec);
+      co_await transparent_pass->Execute(rc, rec);
+      rc.RegisterPass<engine::TransparentPass>(transparent_pass.get());
+    }
+  }
+
+  auto ToneMapToSdr(ViewRenderContext& ctx, const engine::RenderContext& rc,
+    graphics::CommandRecorder& rec) const -> co::Co<>
+  {
+    const bool should_tonemap
+      = ctx.plan.hdr_path_enabled && ctx.plan.sdr_path_enabled;
+    if (!tone_map_pass || !tone_map_pass_config || !should_tonemap) {
+      co_return;
+    }
+
+    tone_map_pass_config->source_texture = ctx.view.hdr_texture;
+    tone_map_pass_config->output_texture = ctx.view.sdr_texture;
+    ToneMapOverrideGuard override_guard(
+      *tone_map_pass_config, ctx.plan.require_neutral_tonemap);
+
+    rec.RequireResourceState(
+      *ctx.view.hdr_texture, graphics::ResourceStates::kShaderResource);
+    rec.RequireResourceState(
+      *ctx.view.sdr_texture, graphics::ResourceStates::kRenderTarget);
+    rec.FlushBarriers();
+    ctx.sdr_in_render_target = true;
+
+    co_await tone_map_pass->PrepareResources(rc, rec);
+    co_await tone_map_pass->Execute(rc, rec);
+  }
+
+  void EnsureSdrBoundForOverlays(
+    ViewRenderContext& ctx, graphics::CommandRecorder& rec) const
+  {
+    if (!ctx.plan.sdr_path_enabled || ctx.sdr_in_render_target) {
+      return;
+    }
+
+    rec.RequireResourceState(
+      *ctx.view.sdr_texture, graphics::ResourceStates::kRenderTarget);
+    rec.FlushBarriers();
+    ctx.sdr_in_render_target = true;
+  }
+
+  auto RenderOverlayWireframe(const ViewRenderContext& ctx,
+    const engine::RenderContext& rc, graphics::CommandRecorder& rec) const
+    -> co::Co<>
+  {
+    if (!ctx.plan.allow_overlay_wireframe || !wireframe_pass_config
+      || !wireframe_pass) {
+      co_return;
+    }
+
+    const auto scene = rc.GetScene();
+    DCHECK_NOTNULL_F(scene, "Overlay wireframe requires an active scene");
+    DCHECK_F(ctx.view.intent.camera.has_value(),
+      "Overlay wireframe requires a camera node");
+    auto camera_node = *ctx.view.intent.camera;
+    DCHECK_F(camera_node.IsAlive(), "Overlay wireframe requires a live camera");
+    DCHECK_F(
+      camera_node.HasCamera(), "Overlay wireframe requires a camera component");
+    DCHECK_F(scene->Contains(camera_node),
+      "Overlay wireframe camera is not in the active scene");
+
+    ConfigureWireframePass(ctx.plan, ctx.view, false, false, false);
+    co_await wireframe_pass->PrepareResources(rc, rec);
+    co_await wireframe_pass->Execute(rc, rec);
+  }
+
+  void RenderViewOverlay(
+    const ViewRenderContext& ctx, graphics::CommandRecorder& rec) const
+  {
+    rec.BindFrameBuffer(*ctx.view.sdr_framebuffer);
+    if (ctx.view.intent.on_overlay) {
+      ctx.view.intent.on_overlay(rec);
+    }
+  }
+
+  auto RenderToolsImGui(const ViewRenderContext& ctx,
+    graphics::CommandRecorder& rec) const -> co::Co<>
+  {
+    if (ctx.view.intent.z_order != CompositionView::kZOrderTools) {
+      co_return;
+    }
+
+    if (auto imgui = GetImGuiPass()) {
+      co_await imgui->Render(rec);
+    }
+  }
+
+  void TransitionSdrToShaderRead(
+    ViewRenderContext& ctx, graphics::CommandRecorder& rec) const
+  {
+    if (!ctx.plan.sdr_path_enabled) {
+      return;
+    }
+
+    rec.RequireResourceState(
+      *ctx.view.sdr_texture, graphics::ResourceStates::kShaderResource);
+    rec.FlushBarriers();
+    ctx.sdr_in_render_target = false;
   }
 
   explicit Impl(observer_ptr<AsyncEngine> engine_ptr)
@@ -351,9 +711,8 @@ struct ForwardPipeline::Impl {
       return;
     }
 
-    LOG_F(INFO, "ForwardPipeline: ApplySettings wire_color=({}, {}, {}, {})",
-      staged.wire_color.r, staged.wire_color.g, staged.wire_color.b,
-      staged.wire_color.a);
+    DLOG_F(1, "ApplySettings wire_color=({}, {}, {}, {})", staged.wire_color.r,
+      staged.wire_color.g, staged.wire_color.b, staged.wire_color.a);
 
     // Resolve Debug Mode: Priority to Light Culling Visualization if active
     if (shader_pass_config) {
@@ -379,28 +738,8 @@ struct ForwardPipeline::Impl {
       const auto debug_mode = shader_pass_config
         ? shader_pass_config->debug_mode
         : engine::ShaderDebugMode::kDisabled;
-      const auto IsNonIblDebug = [](engine::ShaderDebugMode mode) -> bool {
-        switch (mode) {
-        case engine::ShaderDebugMode::kLightCullingHeatMap:
-        case engine::ShaderDebugMode::kDepthSlice:
-        case engine::ShaderDebugMode::kClusterIndex:
-        case engine::ShaderDebugMode::kBaseColor:
-        case engine::ShaderDebugMode::kUv0:
-        case engine::ShaderDebugMode::kOpacity:
-        case engine::ShaderDebugMode::kWorldNormals:
-        case engine::ShaderDebugMode::kRoughness:
-        case engine::ShaderDebugMode::kMetalness:
-          return true;
-        case engine::ShaderDebugMode::kIblSpecular:
-        case engine::ShaderDebugMode::kIblRawSky:
-        case engine::ShaderDebugMode::kIblIrradiance:
-        case engine::ShaderDebugMode::kDisabled:
-        default:
-          return false;
-        }
-      };
-
-      if (IsNonIblDebug(debug_mode)) {
+      const auto debug_intent = EvaluateDebugModeIntent(debug_mode);
+      if (debug_intent.force_manual_exposure) {
         tone_map_pass_config->exposure_mode = engine::ExposureMode::kManual;
         tone_map_pass_config->manual_exposure = 1.0F;
       } else {
@@ -413,16 +752,20 @@ struct ForwardPipeline::Impl {
     staged.dirty = false;
   }
 
-  void ClearBackbufferReferences()
+  void ClearBackbufferReferences() const
   {
-    if (depth_pass_config)
+    if (depth_pass_config) {
       depth_pass_config->depth_texture.reset();
-    if (shader_pass_config)
+    }
+    if (shader_pass_config) {
       shader_pass_config->color_texture.reset();
-    if (wireframe_pass_config)
+    }
+    if (wireframe_pass_config) {
       wireframe_pass_config->color_texture.reset();
-    if (sky_pass_config)
+    }
+    if (sky_pass_config) {
       sky_pass_config->color_texture.reset();
+    }
     if (transparent_pass_config) {
       transparent_pass_config->color_texture.reset();
       transparent_pass_config->depth_texture.reset();
@@ -433,7 +776,7 @@ struct ForwardPipeline::Impl {
     }
   }
 
-  auto GetImGuiPass() -> observer_ptr<imgui::ImGuiPass>
+  auto GetImGuiPass() const -> observer_ptr<imgui::ImGuiPass>
   {
     std::call_once(imgui_flag, [&] {
       if (auto mod = engine->GetModule<imgui::ImGuiModule>()) {
@@ -444,20 +787,18 @@ struct ForwardPipeline::Impl {
   }
 
   void ReapResources(frame::SequenceNumber current_frame,
-    engine::FrameContext& context, engine::Renderer& renderer)
+    observer_ptr<engine::FrameContext> context, engine::Renderer& renderer)
   {
     static constexpr frame::SequenceNumber kMaxIdleFrames { 60 };
     for (auto it = view_pool.begin(); it != view_pool.end();) {
       if (current_frame - it->second.last_seen_frame > kMaxIdleFrames) {
-        LOG_F(
-          INFO, "ForwardPipeline: Reaping View resources for ID {}", it->first);
+        LOG_F(INFO, "Reaping View resources for ID {}", it->first);
 
         if (it->second.engine_vid != kInvalidViewId) {
           LOG_F(INFO,
-            "ForwardPipeline: Unregistering View '{}' (EngineVID: {}) from "
-            "Engine and Renderer",
+            "Unregistering View '{}' (EngineVID: {}) from Engine and Renderer",
             it->second.intent.name, it->second.engine_vid.get());
-          context.RemoveView(it->second.engine_vid);
+          context->RemoveView(it->second.engine_vid);
           renderer.UnregisterView(it->second.engine_vid);
         }
 
@@ -483,28 +824,29 @@ auto ForwardPipeline::GetSupportedFeatures() const -> PipelineFeature
 }
 
 auto ForwardPipeline::OnFrameStart(
-  engine::FrameContext& /*context*/, engine::Renderer& /*renderer*/) -> void
+  observer_ptr<engine::FrameContext> /*context*/,
+  engine::Renderer& /*renderer*/) -> void
 {
   impl_->ApplySettings();
 }
 
-auto ForwardPipeline::OnSceneMutation(engine::FrameContext& context,
-  engine::Renderer& renderer, scene::Scene& /*scene*/,
-  std::span<const CompositionView> view_descs,
+auto ForwardPipeline::OnSceneMutation(
+  observer_ptr<engine::FrameContext> context, engine::Renderer& renderer,
+  scene::Scene& /*scene*/, std::span<const CompositionView> view_descs,
   graphics::Framebuffer* target_framebuffer) -> co::Co<>
 {
   impl_->sorted_views.clear();
   impl_->sorted_views.reserve(view_descs.size());
 
   auto graphics = impl_->engine->GetGraphics().lock();
-  const auto frame_seq = context.GetFrameSequenceNumber();
+  const auto frame_seq = context->GetFrameSequenceNumber();
 
   uint32_t index = 0;
   for (auto desc : view_descs) { // Copy so we can modify viewport
     // Resolution: if viewport is empty, try to derive from target_framebuffer
     // or default to 1280x720
     if (desc.view.viewport.width <= 0 || desc.view.viewport.height <= 0) {
-      if (target_framebuffer) {
+      if (target_framebuffer != nullptr) {
         const auto& fb_desc = target_framebuffer->GetDescriptor();
         if (!fb_desc.color_attachments.empty()
           && fb_desc.color_attachments[0].texture) {
@@ -537,14 +879,12 @@ auto ForwardPipeline::OnSceneMutation(engine::FrameContext& context,
 
   // Register with engine renderer
   for (auto* view : impl_->sorted_views) {
-    const auto vid = view->intent.id;
-    const auto camera = view->intent.camera;
-
     // Register View Metadata with FrameContext
     engine::ViewContext view_ctx;
     view_ctx.view = view->intent.view;
-    view_ctx.metadata
-      = { .name = std::string(view->intent.name), .purpose = "composed_layer" };
+    const bool has_scene = view->intent.camera.has_value();
+    view_ctx.metadata = { .name = std::string(view->intent.name),
+      .purpose = has_scene ? "scene" : "overlay" };
     if (view->has_hdr && view->hdr_framebuffer) {
       view_ctx.output = observer_ptr { view->hdr_framebuffer.get() };
     } else {
@@ -553,23 +893,21 @@ auto ForwardPipeline::OnSceneMutation(engine::FrameContext& context,
 
     // Maintain stable link to engine's internal view registry
     if (view->engine_vid == kInvalidViewId) {
-      view->engine_vid = context.RegisterView(std::move(view_ctx));
+      view->engine_vid = context->RegisterView(std::move(view_ctx));
       LOG_F(INFO,
-        "ForwardPipeline: Registered View '{}' (IntentID: {}) with Engine "
-        "(EngineVID: {})",
+        "Registered View '{}' (IntentID: {}) with Engine (EngineVID: {})",
         view->intent.name, view->intent.id.get(), view->engine_vid.get());
     } else {
-      context.UpdateView(view->engine_vid, std::move(view_ctx));
-      DLOG_F(1, "ForwardPipeline: Updated View '{}' (EngineVID: {})",
-        view->intent.name, view->engine_vid.get());
+      context->UpdateView(view->engine_vid, std::move(view_ctx));
+      DLOG_F(1, "Updated View '{}' (EngineVID: {})", view->intent.name,
+        view->engine_vid.get());
     }
 
     const auto engine_vid = view->engine_vid;
 
     if (!view->registered_with_renderer) {
       LOG_F(INFO,
-        "ForwardPipeline: Registering RenderGraph for View '{}' (EngineVID: "
-        "{}) with Renderer",
+        "Registering RenderGraph for View '{}' (EngineVID: {}) with Renderer",
         view->intent.name, engine_vid.get());
       renderer.RegisterView(
         engine_vid,
@@ -584,248 +922,40 @@ auto ForwardPipeline::OnSceneMutation(engine::FrameContext& context,
           const engine::RenderContext& rc,
           graphics::CommandRecorder& rec) -> co::Co<> {
           auto& renderer = rc.GetRenderer();
-          bool sdr_in_render_target = false;
-          std::shared_ptr<const graphics::Texture> depth_tex;
-          const auto policy = self->BuildRenderPolicy(*view);
-          DCHECK_F(!policy.overlay_wireframe || policy.wireframe_after_tonemap);
+          Impl::ViewRenderContext ctx { *view,
+            self->EvaluateViewRenderPlan(*view, rc), nullptr, false };
+          const bool run_scene_passes = ctx.plan.has_scene
+            && ctx.plan.hdr_path_enabled
+            && (ctx.plan.effective_render_mode != RenderMode::kWireframe);
+          DCHECK_F(!ctx.plan.allow_overlay_wireframe
+            || ctx.plan.wireframe_target == WireframeTarget::kSdr);
 
-          if (view->has_hdr && view->hdr_texture && view->hdr_framebuffer) {
-            const auto fb = view->hdr_framebuffer;
-            const auto& fb_desc = fb->GetDescriptor();
+          if (ctx.plan.hdr_path_enabled) {
+            // Phase: scene production into HDR (or wireframe-only).
+            self->TrackViewResources(ctx, rec);
+            self->ConfigurePassTargets(ctx);
+            self->ConfigureSkyLutManager(ctx, renderer);
+            self->BindHdrAndClear(ctx, rec);
 
-            std::shared_ptr<const graphics::Texture> color_tex
-              = view->hdr_texture;
-            if (fb_desc.depth_attachment.IsValid()) {
-              depth_tex = fb_desc.depth_attachment.texture;
-            }
-
-            if (view->hdr_texture
-              && !rec.IsResourceTracked(*view->hdr_texture)) {
-              rec.BeginTrackingResourceState(
-                *view->hdr_texture, graphics::ResourceStates::kCommon, true);
-            }
-            if (depth_tex && !rec.IsResourceTracked(*depth_tex)) {
-              rec.BeginTrackingResourceState(
-                *depth_tex, graphics::ResourceStates::kCommon, true);
-            }
-            if (view->sdr_texture
-              && !rec.IsResourceTracked(*view->sdr_texture)) {
-              rec.BeginTrackingResourceState(
-                *view->sdr_texture, graphics::ResourceStates::kCommon, true);
-            }
-
-            // Configure pass render targets
-            if (self->depth_pass_config)
-              self->depth_pass_config->depth_texture = depth_tex;
-            if (self->shader_pass_config)
-              self->shader_pass_config->color_texture = color_tex;
-            if (self->wireframe_pass_config)
-              self->wireframe_pass_config->color_texture = color_tex;
-            if (self->sky_pass_config)
-              self->sky_pass_config->color_texture = color_tex;
-            if (self->transparent_pass_config) {
-              self->transparent_pass_config->color_texture = color_tex;
-              self->transparent_pass_config->depth_texture = depth_tex;
-            }
-
-            // Determine Sky requirements
-            const auto scene = rc.GetScene();
-            bool sky_atmo_enabled = false;
-            bool sky_sphere_enabled = false;
-            if (scene) {
-              if (const auto env = scene->GetEnvironment()) {
-                if (const auto atmo
-                  = env->TryGetSystem<scene::environment::SkyAtmosphere>();
-                  atmo && atmo->IsEnabled()) {
-                  sky_atmo_enabled = true;
-                }
-                if (const auto sphere
-                  = env->TryGetSystem<scene::environment::SkySphere>();
-                  sphere && sphere->IsEnabled()) {
-                  sky_sphere_enabled = true;
-                }
-              }
-            }
-
-            const auto debug_mode = self->shader_pass_config
-              ? self->shader_pass_config->debug_mode
-              : engine::ShaderDebugMode::kDisabled;
-            const auto IsNonIblDebug
-              = [](engine::ShaderDebugMode mode) -> bool {
-              switch (mode) {
-              case engine::ShaderDebugMode::kLightCullingHeatMap:
-              case engine::ShaderDebugMode::kDepthSlice:
-              case engine::ShaderDebugMode::kClusterIndex:
-              case engine::ShaderDebugMode::kBaseColor:
-              case engine::ShaderDebugMode::kUv0:
-              case engine::ShaderDebugMode::kOpacity:
-              case engine::ShaderDebugMode::kWorldNormals:
-              case engine::ShaderDebugMode::kRoughness:
-              case engine::ShaderDebugMode::kMetalness:
-                return true;
-              case engine::ShaderDebugMode::kIblSpecular:
-              case engine::ShaderDebugMode::kIblRawSky:
-              case engine::ShaderDebugMode::kIblIrradiance:
-              case engine::ShaderDebugMode::kDisabled:
-              default:
-                return false;
-              }
-            };
-
-            const bool should_run_sky = (sky_atmo_enabled || sky_sphere_enabled)
-              && !IsNonIblDebug(debug_mode);
-            const bool should_run_lut = sky_atmo_enabled;
-
-            if (self->sky_atmo_lut_pass_config) {
-              self->sky_atmo_lut_pass_config->lut_manager = should_run_lut
-                ? renderer.GetSkyAtmosphereLutManager()
-                : nullptr;
-            }
-
-            // Transitions
-            rec.RequireResourceState(
-              *view->hdr_texture, graphics::ResourceStates::kRenderTarget);
-            if (depth_tex) {
-              rec.RequireResourceState(
-                *depth_tex, graphics::ResourceStates::kDepthWrite);
-            }
-            rec.FlushBarriers();
-
-            rec.BindFrameBuffer(*view->hdr_framebuffer);
-            const auto hdr_clear = view->hdr_framebuffer->GetDescriptor()
-                                     .color_attachments[0]
-                                     .ResolveClearColor(std::nullopt);
-            rec.ClearFramebuffer(*view->hdr_framebuffer,
-              std::vector<std::optional<graphics::Color>> { hdr_clear }, 1.0F);
-            // Pass clears are handled by the passes themselves based on config.
-            // However, if no pass clears it, we might need a manual clear.
-            // ShaderPass by default has clear_color_target=true in Impl init.
-
-            if (!policy.run_scene_passes) {
-              if (self->wireframe_pass_config) {
-                // For pure wireframe, we DO clear the background to the intent
-                // clear color and we DO NOT run any material or sky passes.
-                const bool is_forced = view->intent.force_wireframe;
-                self->ConfigureWireframePass(
-                  policy, *view, !is_forced, true, true);
-              }
-              if (self->wireframe_pass) {
-                co_await self->wireframe_pass->PrepareResources(rc, rec);
-                co_await self->wireframe_pass->Execute(rc, rec);
-              }
+            if (!run_scene_passes) {
+              co_await self->RenderWireframeScene(ctx, rc, rec);
             } else {
-              // 1. DepthPrePass
-              if (self->depth_pass && depth_tex) {
-                co_await self->depth_pass->PrepareResources(rc, rec);
-                co_await self->depth_pass->Execute(rc, rec);
-                rc.RegisterPass<engine::DepthPrePass>(self->depth_pass.get());
-              }
-
-              // 2. SkyAtmosphere LUT
-              if (should_run_lut && self->sky_atmo_lut_pass
-                && self->sky_atmo_lut_pass_config->lut_manager) {
-                co_await self->sky_atmo_lut_pass->PrepareResources(rc, rec);
-                co_await self->sky_atmo_lut_pass->Execute(rc, rec);
-              }
-
-              // 3. LightCullingPass
-              if (self->light_culling_pass) {
-                co_await self->light_culling_pass->PrepareResources(rc, rec);
-                co_await self->light_culling_pass->Execute(rc, rec);
-                rc.RegisterPass<engine::LightCullingPass>(
-                  self->light_culling_pass.get());
-              }
-
-              // 4. ShaderPass (opaque)
-              if (self->shader_pass) {
-                co_await self->shader_pass->PrepareResources(rc, rec);
-                co_await self->shader_pass->Execute(rc, rec);
-                rc.RegisterPass<engine::ShaderPass>(self->shader_pass.get());
-              }
-
-              // 5. SkyPass
-              if (should_run_sky && self->sky_pass) {
-                co_await self->sky_pass->PrepareResources(rc, rec);
-                co_await self->sky_pass->Execute(rc, rec);
-              }
-
-              // 6. TransparentPass
-              if (self->transparent_pass) {
-                co_await self->transparent_pass->PrepareResources(rc, rec);
-                co_await self->transparent_pass->Execute(rc, rec);
-                rc.RegisterPass<engine::TransparentPass>(
-                  self->transparent_pass.get());
-              }
+              co_await self->RunScenePasses(ctx, rc, rec);
             }
 
-            // Tonemap to SDR
-            if (self->tone_map_pass && view->sdr_texture) {
-              self->tone_map_pass_config->source_texture = view->hdr_texture;
-              self->tone_map_pass_config->output_texture = view->sdr_texture;
-
-              Impl::ToneMapOverrides tone_map_overrides {};
-              self->ApplyToneMapPolicy(policy, tone_map_overrides);
-
-              rec.RequireResourceState(
-                *view->hdr_texture, graphics::ResourceStates::kShaderResource);
-              rec.RequireResourceState(
-                *view->sdr_texture, graphics::ResourceStates::kRenderTarget);
-              rec.FlushBarriers();
-              sdr_in_render_target = true;
-
-              co_await self->tone_map_pass->PrepareResources(rc, rec);
-              co_await self->tone_map_pass->Execute(rc, rec);
-
-              if (policy.force_neutral_tonemap) {
-                self->RestoreToneMapPolicy(tone_map_overrides);
-              }
-            }
-          } else if (view->sdr_texture && view->sdr_framebuffer) {
-            rec.RequireResourceState(
-              *view->sdr_texture, graphics::ResourceStates::kRenderTarget);
-            rec.FlushBarriers();
-            sdr_in_render_target = true;
-            rec.BindFrameBuffer(*view->sdr_framebuffer);
-            if (view->intent.should_clear) {
-              const auto sdr_clear = view->sdr_framebuffer->GetDescriptor()
-                                       .color_attachments[0]
-                                       .ResolveClearColor(std::nullopt);
-              rec.ClearFramebuffer(*view->sdr_framebuffer,
-                std::vector<std::optional<graphics::Color>> { sdr_clear });
-            }
+            co_await self->ToneMapToSdr(ctx, rc, rec);
+          } else {
+            // Phase: SDR-only output for non-HDR views.
+            self->BindSdrAndMaybeClear(ctx, rec);
           }
 
-          // SDR Overlays (Applies to both HDR and SDR main paths)
-          if (view->sdr_texture && view->sdr_framebuffer) {
-            if (!sdr_in_render_target) {
-              rec.RequireResourceState(
-                *view->sdr_texture, graphics::ResourceStates::kRenderTarget);
-              rec.FlushBarriers();
-              sdr_in_render_target = true;
-            }
-            if (policy.overlay_wireframe && self->wireframe_pass_config
-              && self->wireframe_pass != nullptr) {
-              self->ConfigureWireframePass(policy, *view, false, false, false);
-              co_await self->wireframe_pass->PrepareResources(rc, rec);
-              co_await self->wireframe_pass->Execute(rc, rec);
-            }
-
-            rec.BindFrameBuffer(*view->sdr_framebuffer);
-            if (view->intent.on_overlay) {
-              view->intent.on_overlay(rec);
-            }
-
-            // If this is the tools view, also render Global ImGui
-            if (view->intent.z_order == CompositionView::kZOrderTools) {
-              if (auto imgui = self->GetImGuiPass()) {
-                co_await imgui->Render(rec);
-              }
-            }
-
-            rec.RequireResourceState(
-              *view->sdr_texture, graphics::ResourceStates::kShaderResource);
-            rec.FlushBarriers();
-            sdr_in_render_target = false;
+          if (ctx.plan.sdr_path_enabled) {
+            // Phase: overlays and compositing preparation.
+            self->EnsureSdrBoundForOverlays(ctx, rec);
+            co_await self->RenderOverlayWireframe(ctx, rc, rec);
+            self->RenderViewOverlay(ctx, rec);
+            co_await self->RenderToolsImGui(ctx, rec);
+            self->TransitionSdrToShaderRead(ctx, rec);
           }
           co_return;
         });
@@ -837,23 +967,27 @@ auto ForwardPipeline::OnSceneMutation(engine::FrameContext& context,
   co_return;
 }
 
-auto ForwardPipeline::OnPreRender(engine::FrameContext& /*context*/,
+auto ForwardPipeline::OnPreRender(
+  observer_ptr<engine::FrameContext> /*context*/,
   engine::Renderer& /*renderer*/,
   std::span<const CompositionView> /*view_descs*/) -> co::Co<>
 {
   co_return;
 }
 
-auto ForwardPipeline::OnCompositing(engine::FrameContext& /*frame_ctx*/,
+auto ForwardPipeline::OnCompositing(
+  observer_ptr<engine::FrameContext> /*frame_ctx*/,
   engine::Renderer& /*renderer*/, graphics::Framebuffer* final_output)
   -> co::Co<engine::CompositionSubmission>
 {
-  if (!final_output)
+  if (final_output == nullptr) {
     co_return {};
+  }
   const auto& target_desc = final_output->GetDescriptor();
   if (target_desc.color_attachments.empty()
-    || !target_desc.color_attachments[0].texture)
+    || !target_desc.color_attachments[0].texture) {
     co_return {};
+  }
 
   const auto& back_desc
     = target_desc.color_attachments[0].texture->GetDescriptor();
@@ -905,8 +1039,8 @@ auto ForwardPipeline::SetRenderMode(RenderMode mode) -> void
 }
 auto ForwardPipeline::SetWireframeColor(const graphics::Color& color) -> void
 {
-  LOG_F(INFO, "ForwardPipeline: SetWireframeColor ({}, {}, {}, {})", color.r,
-    color.g, color.b, color.a);
+  DLOG_F(1, "SetWireframeColor ({}, {}, {}, {})", color.r, color.g, color.b,
+    color.a);
   impl_->staged.wire_color = color;
   impl_->staged.dirty = true;
 }
@@ -945,20 +1079,23 @@ auto ForwardPipeline::SetToneMapper(engine::ToneMapper mode) -> void
 auto ForwardPipeline::UpdateShaderPassConfig(
   const engine::ShaderPassConfig& config) -> void
 {
-  if (impl_->shader_pass_config)
+  if (impl_->shader_pass_config) {
     *impl_->shader_pass_config = config;
+  }
 }
 auto ForwardPipeline::UpdateTransparentPassConfig(
   const engine::TransparentPassConfig& config) -> void
 {
-  if (impl_->transparent_pass_config)
+  if (impl_->transparent_pass_config) {
     *impl_->transparent_pass_config = config;
+  }
 }
 auto ForwardPipeline::UpdateLightCullingPassConfig(
   const engine::LightCullingPassConfig& config) -> void
 {
-  if (impl_->light_culling_pass_config)
+  if (impl_->light_culling_pass_config) {
     *impl_->light_culling_pass_config = config;
+  }
 }
 
 } // namespace oxygen::examples

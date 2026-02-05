@@ -9,6 +9,8 @@
 #include <memory>
 #include <span>
 
+#include <Oxygen/Base/Macros.h>
+
 #include "DemoShell/Runtime/CompositionView.h"
 #include "DemoShell/Runtime/RenderingPipeline.h"
 
@@ -40,24 +42,27 @@ class ForwardPipeline : public RenderingPipeline {
   OXYGEN_TYPED(ForwardPipeline)
 public:
   explicit ForwardPipeline(observer_ptr<AsyncEngine> engine) noexcept;
-
   ~ForwardPipeline() override;
+
+  OXYGEN_MAKE_NON_COPYABLE(ForwardPipeline)
+  OXYGEN_MAKE_NON_MOVABLE(ForwardPipeline)
 
   // Pipeline Interface
   //! Apply staged settings before render graph execution.
-  auto OnFrameStart(engine::FrameContext& context, engine::Renderer& renderer)
-    -> void override;
+  auto OnFrameStart(observer_ptr<engine::FrameContext> context,
+    engine::Renderer& renderer) -> void override;
   //! Register views and bind per-view render coroutines.
-  auto OnSceneMutation(engine::FrameContext& context,
+  auto OnSceneMutation(observer_ptr<engine::FrameContext> context,
     engine::Renderer& renderer, scene::Scene& scene,
     std::span<const CompositionView> view_descs,
     graphics::Framebuffer* target_framebuffer) -> co::Co<> override;
 
-  auto OnPreRender(engine::FrameContext& context, engine::Renderer& renderer,
-    std::span<const CompositionView> view_descs) -> co::Co<> override;
+  auto OnPreRender(observer_ptr<engine::FrameContext> context,
+    engine::Renderer& renderer, std::span<const CompositionView> view_descs)
+    -> co::Co<> override;
 
-  auto OnCompositing(engine::FrameContext& context, engine::Renderer& renderer,
-    graphics::Framebuffer* target_framebuffer)
+  auto OnCompositing(observer_ptr<engine::FrameContext> context,
+    engine::Renderer& renderer, graphics::Framebuffer* target_framebuffer)
     -> co::Co<engine::CompositionSubmission> override;
 
   auto ClearBackbufferReferences() -> void override;

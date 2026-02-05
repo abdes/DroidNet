@@ -6,16 +6,16 @@
 
 #include <Oxygen/Base/Logging.h>
 
-#include "DemoShell/Services/CameraLifecycleService.h"
+#include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/UiSettingsService.h"
 #include "DemoShell/UI/UiSettingsVm.h"
 
 namespace oxygen::examples::ui {
 
 UiSettingsVm::UiSettingsVm(observer_ptr<UiSettingsService> service,
-  observer_ptr<CameraLifecycleService> camera_lifecycle)
+  observer_ptr<CameraSettingsService> camera_settings)
   : service_(service)
-  , camera_lifecycle_(camera_lifecycle)
+  , camera_settings_(camera_settings)
 {
   Refresh();
 }
@@ -49,11 +49,11 @@ auto UiSettingsVm::GetActivePanelName() -> std::optional<std::string>
 
 auto UiSettingsVm::GetActiveCamera() const -> observer_ptr<scene::SceneNode>
 {
-  if (!camera_lifecycle_) {
+  if (!camera_settings_) {
     return nullptr;
   }
 
-  return observer_ptr { &camera_lifecycle_->GetActiveCamera() };
+  return observer_ptr { &camera_settings_->GetActiveCamera() };
 }
 
 auto UiSettingsVm::SetAxesVisible(const bool visible) -> void
