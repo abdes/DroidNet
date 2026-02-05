@@ -120,8 +120,7 @@ auto TransparentPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
       throw std::runtime_error(
         "TransparentPass: failed to allocate RTV descriptor");
     }
-    rtv = registry.RegisterView(
-      const_cast<Texture&>(color_tex), std::move(handle), rtv_desc);
+    rtv = registry.RegisterView(color_tex, std::move(handle), rtv_desc);
   }
 
   graphics::NativeView dsv;
@@ -149,8 +148,7 @@ auto TransparentPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
         throw std::runtime_error(
           "TransparentPass: failed to allocate DSV descriptor");
       }
-      dsv = registry.RegisterView(
-        const_cast<Texture&>(depth_tex), std::move(handle), dsv_desc);
+      dsv = registry.RegisterView(depth_tex, std::move(handle), dsv_desc);
     }
   }
 
@@ -172,6 +170,7 @@ auto TransparentPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     co_return;
   }
 
+  // NOLINTNEXTLINE(*-type-reinterpret-cast)
   const auto* records = reinterpret_cast<const engine::DrawMetadata*>(
     psf->draw_metadata_bytes.data());
   const auto record_count = static_cast<uint32_t>(
@@ -230,6 +229,8 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   using graphics::GraphicsPipelineDesc;
   using graphics::PrimitiveType;
   using graphics::RasterizerStateDesc;
+  using graphics::ShaderDefine;
+  using graphics::ShaderRequest;
 
   const auto requested_fill
     = config_ ? config_->fill_mode : oxygen::graphics::FillMode::kSolid;
@@ -245,13 +246,45 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
     };
   };
 
-  DepthStencilStateDesc ds_desc { .depth_test_enable
-    = (GetDepthTexture() != nullptr),
+  const auto GetDebugDefineName = [](ShaderDebugMode mode) -> const char* {
+    switch (mode) {
+    case ShaderDebugMode::kLightCullingHeatMap:
+      return "DEBUG_LIGHT_HEATMAP";
+    case ShaderDebugMode::kDepthSlice:
+      return "DEBUG_DEPTH_SLICE";
+    case ShaderDebugMode::kClusterIndex:
+      return "DEBUG_CLUSTER_INDEX";
+    case ShaderDebugMode::kIblSpecular:
+      return "DEBUG_IBL_SPECULAR";
+    case ShaderDebugMode::kIblRawSky:
+      return "DEBUG_IBL_RAW_SKY";
+    case ShaderDebugMode::kIblIrradiance:
+      return "DEBUG_IBL_IRRADIANCE";
+    case ShaderDebugMode::kBaseColor:
+      return "DEBUG_BASE_COLOR";
+    case ShaderDebugMode::kUv0:
+      return "DEBUG_UV0";
+    case ShaderDebugMode::kOpacity:
+      return "DEBUG_OPACITY";
+    case ShaderDebugMode::kWorldNormals:
+      return "DEBUG_WORLD_NORMALS";
+    case ShaderDebugMode::kRoughness:
+      return "DEBUG_ROUGHNESS";
+    case ShaderDebugMode::kMetalness:
+      return "DEBUG_METALNESS";
+    default:
+      return nullptr;
+    }
+  };
+
+  DepthStencilStateDesc ds_desc {
+    .depth_test_enable = (GetDepthTexture() != nullptr),
     .depth_write_enable = false, // transparent: no depth writes
     .depth_func = CompareOp::kLessOrEqual,
     .stencil_enable = false,
     .stencil_read_mask = 0xFF,
-    .stencil_write_mask = 0xFF };
+    .stencil_write_mask = 0xFF,
+  };
 
   const auto& color_desc = GetColorTexture().GetDescriptor();
   auto sample_count = color_desc.sample_count;
@@ -265,17 +298,34 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
     .depth_stencil_format = depth_format,
     .sample_count = sample_count };
 
+  // Determine debug mode from config
+  const ShaderDebugMode debug_mode
+    = config_ ? config_->debug_mode : ShaderDebugMode::kDisabled;
+
+  // Cache debug mode for rebuild detection
+  last_built_debug_mode_ = debug_mode;
+
   // Generated root binding items (indices + descriptor tables)
   auto generated_bindings = BuildRootBindings();
-  std::vector<graphics::ShaderDefine> ps_defines;
-  if (graphics::detail::IsHdr(color_desc.format)) {
-    ps_defines.push_back(graphics::ShaderDefine {
-      .name = "OXYGEN_HDR_OUTPUT",
-      .value = "1",
-    });
-  }
 
   const auto BuildDesc = [&](CullMode cull_mode) -> GraphicsPipelineDesc {
+    std::vector<graphics::ShaderDefine> ps_defines;
+    if (graphics::detail::IsHdr(color_desc.format)) {
+      ps_defines.push_back(graphics::ShaderDefine {
+        .name = "OXYGEN_HDR_OUTPUT",
+        .value = "1",
+      });
+    }
+
+    const char* ps_source = "Passes/Forward/ForwardMesh_PS.hlsl";
+    if (const char* debug_define = GetDebugDefineName(debug_mode)) {
+      ps_source = "Passes/Forward/ForwardDebug_PS.hlsl";
+      ps_defines.push_back(ShaderDefine {
+        .name = debug_define,
+        .value = "1",
+      });
+    }
+
     return GraphicsPipelineDesc::Builder()
       .SetVertexShader(graphics::ShaderRequest {
         .stage = ShaderType::kVertex,
@@ -284,7 +334,7 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
       })
       .SetPixelShader(graphics::ShaderRequest {
         .stage = ShaderType::kPixel,
-        .source_path = "Passes/Forward/ForwardMesh_PS.hlsl",
+        .source_path = ps_source,
         .entry_point = "PS",
         .defines = ps_defines,
       })
@@ -339,5 +389,8 @@ auto TransparentPass::NeedRebuildPipelineState() const -> bool
   if (last->RasterizerState().fill_mode != requested_fill) {
     return true;
   }
-  return false;
+  // Rebuild if debug mode changed (requires different shaders)
+  const ShaderDebugMode current_debug_mode
+    = config_ ? config_->debug_mode : ShaderDebugMode::kDisabled;
+  return last_built_debug_mode_ != current_debug_mode;
 }

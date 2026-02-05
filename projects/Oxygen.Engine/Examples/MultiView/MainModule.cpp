@@ -235,7 +235,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context)
     last_viewport_ = extent;
   }
 
-  shell_->Update(oxygen::time::CanonicalDuration {});
+  shell_->SyncPanels();
 
   co_await Base::OnSceneMutation(context);
   co_return;

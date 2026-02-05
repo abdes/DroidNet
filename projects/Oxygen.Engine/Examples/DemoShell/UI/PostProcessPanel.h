@@ -13,8 +13,7 @@
 
 namespace oxygen::examples::ui {
 
-//! Panel for controlling post-process effects (Compositing, Exposure,
-//! Tonemapping).
+//! Panel for controlling post-process effects (Exposure, Tonemapping).
 class PostProcessPanel final : public DemoPanel {
 public:
   explicit PostProcessPanel(observer_ptr<PostProcessVm> vm);
@@ -30,7 +29,6 @@ public:
   auto OnUnloaded() -> void override { }
 
 private:
-  void DrawCompositingSection();
   void DrawExposureSection();
   void DrawTonemappingSection();
 

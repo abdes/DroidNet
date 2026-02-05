@@ -11,103 +11,98 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Renderer/Types/ShaderDebugMode.h>
 
-namespace oxygen {
-namespace engine {
-  enum class ShaderDebugMode : int;
-} // namespace engine
+namespace oxygen::examples {
+class RenderingPipeline;
+class SettingsService;
 
-namespace examples {
-  class RenderingPipeline;
-  class SettingsService;
+//! Settings persistence for light culling panel options.
+/*!
+ Owns UI-facing settings for culling mode, cluster configuration, and
+ visualization mode, delegating persistence to `SettingsService` and exposing
+ an epoch for cache invalidation.
 
-  //! Settings persistence for light culling panel options.
-  /*!
-   Owns UI-facing settings for culling mode, cluster configuration, and
-   visualization mode, delegating persistence to `SettingsService` and exposing
-   an epoch for cache invalidation.
+### Key Features
 
-  ### Key Features
+- **Passive state**: Reads and writes via SettingsService without caching.
+- **Epoch tracking**: Increments on each effective change.
+- **Testable**: Virtual getters and setters for overrides in tests.
 
-  - **Passive state**: Reads and writes via SettingsService without caching.
-  - **Epoch tracking**: Increments on each effective change.
-  - **Testable**: Virtual getters and setters for overrides in tests.
+@see SettingsService
+*/
+class LightCullingSettingsService {
+public:
+  LightCullingSettingsService() = default;
+  virtual ~LightCullingSettingsService() = default;
 
-  @see SettingsService
-  */
-  class LightCullingSettingsService {
-  public:
-    LightCullingSettingsService() = default;
-    virtual ~LightCullingSettingsService() = default;
+  OXYGEN_MAKE_NON_COPYABLE(LightCullingSettingsService)
+  OXYGEN_MAKE_NON_MOVABLE(LightCullingSettingsService)
 
-    OXYGEN_MAKE_NON_COPYABLE(LightCullingSettingsService)
-    OXYGEN_MAKE_NON_MOVABLE(LightCullingSettingsService)
+  //! Associates the service with a rendering pipeline and synchronizes
+  //! initial state.
+  virtual auto Initialize(observer_ptr<RenderingPipeline> pipeline) -> void;
 
-    //! Associates the service with a rendering pipeline and synchronizes
-    //! initial state.
-    virtual auto Initialize(observer_ptr<RenderingPipeline> pipeline) -> void;
+  //! Returns whether clustered culling is enabled.
+  [[nodiscard]] virtual auto GetUseClusteredCulling() const -> bool;
 
-    //! Returns whether clustered culling is enabled.
-    [[nodiscard]] virtual auto GetUseClusteredCulling() const -> bool;
+  //! Sets whether clustered culling is enabled.
+  virtual auto SetUseClusteredCulling(bool enabled) -> void;
 
-    //! Sets whether clustered culling is enabled.
-    virtual auto SetUseClusteredCulling(bool enabled) -> void;
+  //! Returns the number of depth slices for clustered culling.
+  [[nodiscard]] virtual auto GetDepthSlices() const -> int;
 
-    //! Returns the number of depth slices for clustered culling.
-    [[nodiscard]] virtual auto GetDepthSlices() const -> int;
+  //! Sets the number of depth slices.
+  virtual auto SetDepthSlices(int slices) -> void;
 
-    //! Sets the number of depth slices.
-    virtual auto SetDepthSlices(int slices) -> void;
+  //! Returns whether camera near/far planes should be used.
+  [[nodiscard]] virtual auto GetUseCameraZ() const -> bool;
 
-    //! Returns whether camera near/far planes should be used.
-    [[nodiscard]] virtual auto GetUseCameraZ() const -> bool;
+  //! Sets whether to use camera near/far planes.
+  virtual auto SetUseCameraZ(bool use_camera) -> void;
 
-    //! Sets whether to use camera near/far planes.
-    virtual auto SetUseCameraZ(bool use_camera) -> void;
+  //! Returns the custom Z near value.
+  [[nodiscard]] virtual auto GetZNear() const -> float;
 
-    //! Returns the custom Z near value.
-    [[nodiscard]] virtual auto GetZNear() const -> float;
+  //! Sets the custom Z near value.
+  virtual auto SetZNear(float z_near) -> void;
 
-    //! Sets the custom Z near value.
-    virtual auto SetZNear(float z_near) -> void;
+  //! Returns the custom Z far value.
+  [[nodiscard]] virtual auto GetZFar() const -> float;
 
-    //! Returns the custom Z far value.
-    [[nodiscard]] virtual auto GetZFar() const -> float;
+  //! Sets the custom Z far value.
+  virtual auto SetZFar(float z_far) -> void;
 
-    //! Sets the custom Z far value.
-    virtual auto SetZFar(float z_far) -> void;
+  //! Returns the visualization debug mode.
+  [[nodiscard]] virtual auto GetVisualizationMode() const
+    -> engine::ShaderDebugMode;
 
-    //! Returns the visualization debug mode.
-    [[nodiscard]] virtual auto GetVisualizationMode() const
-      -> engine::ShaderDebugMode;
+  //! Sets the visualization debug mode.
+  virtual auto SetVisualizationMode(engine::ShaderDebugMode mode) -> void;
 
-    //! Sets the visualization debug mode.
-    virtual auto SetVisualizationMode(engine::ShaderDebugMode mode) -> void;
+  //! Returns the current settings epoch.
+  [[nodiscard]] virtual auto GetEpoch() const noexcept -> std::uint64_t;
 
-    //! Returns the current settings epoch.
-    [[nodiscard]] virtual auto GetEpoch() const noexcept -> std::uint64_t;
+protected:
+  //! Returns the settings service used for persistence.
+  [[nodiscard]] virtual auto ResolveSettings() const noexcept
+    -> observer_ptr<SettingsService>;
 
-  protected:
-    //! Returns the settings service used for persistence.
-    [[nodiscard]] virtual auto ResolveSettings() const noexcept
-      -> observer_ptr<SettingsService>;
+private:
+  static constexpr auto kModeKey = "light_culling.mode";
+  static constexpr auto kDepthSlicesKey = "light_culling.depth_slices";
+  static constexpr auto kUseCameraZKey = "light_culling.use_camera_z";
+  static constexpr auto kZNearKey = "light_culling.z_near";
+  static constexpr auto kZFarKey = "light_culling.z_far";
+  static constexpr auto kVisualizationModeKey
+    = "light_culling.visualization_mode";
 
-  private:
-    static constexpr auto kModeKey = "light_culling.mode";
-    static constexpr auto kDepthSlicesKey = "light_culling.depth_slices";
-    static constexpr auto kUseCameraZKey = "light_culling.use_camera_z";
-    static constexpr auto kZNearKey = "light_culling.z_near";
-    static constexpr auto kZFarKey = "light_culling.z_far";
-    static constexpr auto kVisualizationModeKey
-      = "light_culling.visualization_mode";
+  static constexpr int kDefaultDepthSlices = 24;
+  static constexpr float kDefaultZNear = 0.1F;
+  static constexpr float kDefaultZFar = 1000.0F;
 
-    static constexpr int kDefaultDepthSlices = 24;
-    static constexpr float kDefaultZNear = 0.1F;
-    static constexpr float kDefaultZFar = 1000.0F;
+  observer_ptr<RenderingPipeline> pipeline_;
+  mutable std::atomic_uint64_t epoch_ { 0 };
+};
 
-    observer_ptr<RenderingPipeline> pipeline_ {};
-    mutable std::atomic_uint64_t epoch_ { 0 };
-  };
-
-} // namespace examples
-} // namespace oxygen
+} // namespace oxygen::examples

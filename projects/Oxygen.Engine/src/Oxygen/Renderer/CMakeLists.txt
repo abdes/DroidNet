@@ -88,6 +88,7 @@ set(
   "Types/PassMask.h"
   "Types/PositionalLightData.h"
   "Types/SceneConstants.h"
+  "Types/ShaderDebugMode.h"
   "Types/SunState.h"
 )
 set(

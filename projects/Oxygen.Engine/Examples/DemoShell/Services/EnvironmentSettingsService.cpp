@@ -411,6 +411,7 @@ auto EnvironmentSettingsService::SetSkySphereEnabled(bool enabled) -> void
   }
   sky_sphere_enabled_ = enabled;
   NormalizeSkySystems();
+  skybox_dirty_ = true;
   MarkDirty();
 }
 
@@ -425,6 +426,7 @@ auto EnvironmentSettingsService::SetSkySphereSource(int source) -> void
     return;
   }
   sky_sphere_source_ = source;
+  skybox_dirty_ = true;
   MarkDirty();
 }
 
@@ -482,6 +484,7 @@ auto EnvironmentSettingsService::SetSkyboxPath(std::string_view path) -> void
     return;
   }
   skybox_path_ = std::string(path);
+  skybox_dirty_ = true;
   MarkDirty();
 }
 
@@ -496,6 +499,7 @@ auto EnvironmentSettingsService::SetSkyboxLayoutIndex(int index) -> void
     return;
   }
   skybox_layout_idx_ = index;
+  skybox_dirty_ = true;
   MarkDirty();
 }
 
@@ -510,6 +514,7 @@ auto EnvironmentSettingsService::SetSkyboxOutputFormatIndex(int index) -> void
     return;
   }
   skybox_output_format_idx_ = index;
+  skybox_dirty_ = true;
   MarkDirty();
 }
 
@@ -524,6 +529,7 @@ auto EnvironmentSettingsService::SetSkyboxFaceSize(int size) -> void
     return;
   }
   skybox_face_size_ = size;
+  skybox_dirty_ = true;
   MarkDirty();
 }
 
@@ -538,6 +544,7 @@ auto EnvironmentSettingsService::SetSkyboxFlipY(bool flip) -> void
     return;
   }
   skybox_flip_y_ = flip;
+  skybox_dirty_ = true;
   MarkDirty();
 }
 
@@ -552,6 +559,7 @@ auto EnvironmentSettingsService::SetSkyboxTonemapHdrToLdr(bool enabled) -> void
     return;
   }
   skybox_tonemap_hdr_to_ldr_ = enabled;
+  skybox_dirty_ = true;
   MarkDirty();
 }
 
@@ -566,6 +574,7 @@ auto EnvironmentSettingsService::SetSkyboxHdrExposureEv(float value) -> void
     return;
   }
   skybox_hdr_exposure_ev_ = value;
+  skybox_dirty_ = true;
   MarkDirty();
 }
 
@@ -610,7 +619,8 @@ auto EnvironmentSettingsService::LoadSkybox(std::string_view path,
   options.hdr_exposure_ev = hdr_exposure_ev;
 
   config_.skybox_service->LoadAndEquip(std::string(path), options,
-    { .intensity = sky_light_intensity_,
+    { .sky_sphere_intensity = sky_intensity_,
+      .intensity = sky_light_intensity_,
       .diffuse_intensity = sky_light_diffuse_,
       .specular_intensity = sky_light_specular_,
       .tint_rgb = sky_light_tint_ },
@@ -622,6 +632,15 @@ auto EnvironmentSettingsService::LoadSkybox(std::string_view path,
         RequestResync();
       }
     });
+
+  skybox_dirty_ = false;
+  last_loaded_skybox_path_ = std::string(path);
+  last_loaded_skybox_layout_idx_ = layout_index;
+  last_loaded_skybox_output_format_idx_ = output_format_index;
+  last_loaded_skybox_face_size_ = face_size;
+  last_loaded_skybox_flip_y_ = flip_y;
+  last_loaded_skybox_tonemap_hdr_to_ldr_ = tonemap_hdr_to_ldr;
+  last_loaded_skybox_hdr_exposure_ev_ = hdr_exposure_ev;
 }
 
 auto EnvironmentSettingsService::GetSkyLightEnabled() const -> bool
@@ -1090,6 +1109,8 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     light->SetSpecularIntensity(sky_light_specular_);
   }
 
+  MaybeAutoLoadSkybox();
+
   if (config_.renderer) {
     const uint32_t debug_flags = GetAtmosphereFlags();
     config_.renderer->SetAtmosphereDebugFlags(debug_flags);
@@ -1194,6 +1215,36 @@ auto EnvironmentSettingsService::NormalizeSkySystems() -> void
   }
 }
 
+auto EnvironmentSettingsService::MaybeAutoLoadSkybox() -> void
+{
+  if (!config_.skybox_service) {
+    return;
+  }
+  if (!sky_sphere_enabled_ || sky_sphere_source_ != 0) {
+    return;
+  }
+  if (skybox_path_.empty()) {
+    return;
+  }
+
+  const bool settings_changed = last_loaded_skybox_path_ != skybox_path_
+    || last_loaded_skybox_layout_idx_ != skybox_layout_idx_
+    || last_loaded_skybox_output_format_idx_ != skybox_output_format_idx_
+    || last_loaded_skybox_face_size_ != skybox_face_size_
+    || last_loaded_skybox_flip_y_ != skybox_flip_y_
+    || last_loaded_skybox_tonemap_hdr_to_ldr_ != skybox_tonemap_hdr_to_ldr_
+    || last_loaded_skybox_hdr_exposure_ev_ != skybox_hdr_exposure_ev_;
+  const bool needs_load = skybox_dirty_ || settings_changed
+    || skybox_last_resource_key_.IsPlaceholder();
+  if (!needs_load) {
+    return;
+  }
+
+  LoadSkybox(skybox_path_, skybox_layout_idx_, skybox_output_format_idx_,
+    skybox_face_size_, skybox_flip_y_, skybox_tonemap_hdr_to_ldr_,
+    skybox_hdr_exposure_ev_);
+}
+
 auto EnvironmentSettingsService::SyncDebugFlagsFromRenderer() -> void
 {
   if (!config_.renderer) {
@@ -1280,16 +1331,21 @@ auto EnvironmentSettingsService::LoadSettings() -> void
 
   any_loaded |= sky_intensity_loaded || sky_light_intensity_loaded;
 
-  any_loaded |= load_int(kSkyboxLayoutKey, skybox_layout_idx_);
-  any_loaded |= load_int(kSkyboxOutputFormatKey, skybox_output_format_idx_);
-  any_loaded |= load_int(kSkyboxFaceSizeKey, skybox_face_size_);
-  any_loaded |= load_bool(kSkyboxFlipYKey, skybox_flip_y_);
-  any_loaded |= load_bool(kSkyboxTonemapKey, skybox_tonemap_hdr_to_ldr_);
-  any_loaded |= load_float(kSkyboxHdrExposureKey, skybox_hdr_exposure_ev_);
+  bool skybox_settings_loaded = false;
+  skybox_settings_loaded |= load_int(kSkyboxLayoutKey, skybox_layout_idx_);
+  skybox_settings_loaded
+    |= load_int(kSkyboxOutputFormatKey, skybox_output_format_idx_);
+  skybox_settings_loaded |= load_int(kSkyboxFaceSizeKey, skybox_face_size_);
+  skybox_settings_loaded |= load_bool(kSkyboxFlipYKey, skybox_flip_y_);
+  skybox_settings_loaded
+    |= load_bool(kSkyboxTonemapKey, skybox_tonemap_hdr_to_ldr_);
+  skybox_settings_loaded
+    |= load_float(kSkyboxHdrExposureKey, skybox_hdr_exposure_ev_);
   if (const auto path = settings->GetString(kSkyboxPathKey)) {
     skybox_path_ = *path;
-    any_loaded = true;
+    skybox_settings_loaded = true;
   }
+  any_loaded |= skybox_settings_loaded;
 
   any_loaded |= load_bool(kSkyLightEnabledKey, sky_light_enabled_);
   any_loaded |= load_int(kSkyLightSourceKey, sky_light_source_);
@@ -1325,6 +1381,7 @@ auto EnvironmentSettingsService::LoadSettings() -> void
     settings_loaded_ = true;
     needs_sync_ = false;
     pending_changes_ = true;
+    skybox_dirty_ = skybox_settings_loaded;
   }
 }
 

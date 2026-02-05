@@ -44,6 +44,8 @@ struct VSOutput {
 
 struct WireframePassConstants {
     float4 wire_color;
+    float apply_exposure_compensation;
+    float3 padding;
 };
 
 [shader("pixel")]
@@ -86,16 +88,19 @@ float4 PS(VSOutput input) : SV_Target0 {
 #endif // ALPHA_TEST
 
     float4 color = float4(1.0f, 1.0f, 1.0f, 1.0f);
+    float apply_exposure_compensation = 1.0f;
     if (BX_IsValidSlot(g_PassConstantsIndex)) {
         ConstantBuffer<WireframePassConstants> pc =
             ResourceDescriptorHeap[g_PassConstantsIndex];
         color = pc.wire_color;
+        apply_exposure_compensation = pc.apply_exposure_compensation;
     }
 
-    // PHYSICAL BYPASS: Divide by exposure.
-    // This ensures that unlit debug lines appear at 'Screen Brightness' (1.0 = white)
-    // even if the scene exposure is set for the Sun (EV 14).
-    color.rgb /= max(GetExposure(), 1e-6f);
+    // PHYSICAL BYPASS: Divide by exposure when requested.
+    // This keeps unlit debug lines stable in HDR paths.
+    if (apply_exposure_compensation > 0.5f) {
+        color.rgb /= max(GetExposure(), 1e-6f);
+    }
 
     return color;
 }

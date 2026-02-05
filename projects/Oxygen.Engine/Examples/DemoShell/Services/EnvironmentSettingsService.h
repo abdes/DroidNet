@@ -258,6 +258,7 @@ private:
   auto SaveSettings() const -> void;
   auto MarkDirty() -> void;
   auto NormalizeSkySystems() -> void;
+  auto MaybeAutoLoadSkybox() -> void;
   auto ApplySavedSunSourcePreference() -> void;
   auto ResetSunUiToDefaults() -> void;
   auto FindSunLightCandidate() const -> std::optional<scene::SceneNode>;
@@ -312,6 +313,14 @@ private:
   std::string skybox_status_message_ {};
   int skybox_last_face_size_ { 0 };
   content::ResourceKey skybox_last_resource_key_ { 0U };
+  bool skybox_dirty_ { false };
+  std::string last_loaded_skybox_path_ {};
+  int last_loaded_skybox_layout_idx_ { -1 };
+  int last_loaded_skybox_output_format_idx_ { -1 };
+  int last_loaded_skybox_face_size_ { 0 };
+  bool last_loaded_skybox_flip_y_ { false };
+  bool last_loaded_skybox_tonemap_hdr_to_ldr_ { false };
+  float last_loaded_skybox_hdr_exposure_ev_ { 0.0F };
 
   // SkyLight
   bool sky_light_enabled_ { false };

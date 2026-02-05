@@ -349,7 +349,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   }
 
   // Update shell
-  shell_->Update(time::CanonicalDuration {});
+  shell_->SyncPanels();
 
   // Note: View camera is now updated via UpdateComposition
 

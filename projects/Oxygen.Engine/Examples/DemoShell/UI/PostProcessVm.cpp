@@ -23,8 +23,6 @@ auto PostProcessVm::Refresh() -> void
     return;
 
   epoch_ = service_->GetEpoch();
-  compositing_enabled_ = service_->GetCompositingEnabled();
-  compositing_alpha_ = service_->GetCompositingAlpha();
   exposure_enabled_ = service_->GetExposureEnabled();
   exposure_mode_ = service_->GetExposureMode();
   manual_ev100_ = service_->GetManualExposureEV100();
@@ -39,42 +37,6 @@ auto PostProcessVm::Refresh() -> void
 auto PostProcessVm::IsStale() const -> bool
 {
   return service_ && service_->GetEpoch() != epoch_;
-}
-
-// Compositing
-
-auto PostProcessVm::GetCompositingEnabled() -> bool
-{
-  std::lock_guard lock(mutex_);
-  if (IsStale())
-    Refresh();
-  return compositing_enabled_;
-}
-
-auto PostProcessVm::SetCompositingEnabled(bool enabled) -> void
-{
-  std::lock_guard lock(mutex_);
-  if (service_) {
-    service_->SetCompositingEnabled(enabled);
-    Refresh();
-  }
-}
-
-auto PostProcessVm::GetCompositingAlpha() -> float
-{
-  std::lock_guard lock(mutex_);
-  if (IsStale())
-    Refresh();
-  return compositing_alpha_;
-}
-
-auto PostProcessVm::SetCompositingAlpha(float alpha) -> void
-{
-  std::lock_guard lock(mutex_);
-  if (service_) {
-    service_->SetCompositingAlpha(alpha);
-    Refresh();
-  }
 }
 
 // Exposure

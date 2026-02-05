@@ -33,15 +33,15 @@
         }
       },
       "position": {
-        "x": 0.37327757477760315,
-        "y": 4.674015045166016,
-        "z": 2.874760627746582
+        "x": -0.706636905670166,
+        "y": 5.392139434814453,
+        "z": 0.8218865394592285
       },
       "rotation": {
-        "w": 0.03475889191031456,
-        "x": 0.019460957497358322,
-        "y": 0.48813876509666443,
-        "z": 0.8718564510345459
+        "w": -0.04935793951153755,
+        "x": -0.04245892912149429,
+        "y": 0.6507536172866821,
+        "z": 0.7564924359321594
       },
       "scale": {
         "x": 1.0,
@@ -51,7 +51,7 @@
     }
   },
   "demo_shell": {
-    "active_panel": "Rendering",
+    "active_panel": "Environment",
     "panels": {
       "environment": {
         "sky_light": {
@@ -75,7 +75,7 @@
       "aerial_perspective_scale": 1.0,
       "aerial_scattering_strength": 1.0,
       "atmosphere_height_km": 80.0,
-      "enabled": false,
+      "enabled": true,
       "ground_albedo": {
         "x": 0.06585365533828735,
         "y": 0.051159005612134933,
@@ -96,7 +96,7 @@
     },
     "sky_light": {
       "diffuse": 0.8899999856948853,
-      "enabled": false,
+      "enabled": true,
       "intensity": 0.03999999910593033,
       "source": 0.0,
       "specular": 0.2199999988079071,
@@ -135,7 +135,7 @@
       },
       "disk_radius_deg": 0.2779998779296875,
       "elevation_deg": 46.0,
-      "enabled": false,
+      "enabled": true,
       "intensity_lux": 150000.0,
       "source": 1.0,
       "temperature_kelvin": 6800.0,
@@ -308,7 +308,7 @@
   },
   "post_process": {
     "exposure": {
-      "manual_ev100": 6.4670000076293945,
+      "manual_ev100": 13.972999572753906,
       "mode": "manual"
     },
     "tonemapping": {

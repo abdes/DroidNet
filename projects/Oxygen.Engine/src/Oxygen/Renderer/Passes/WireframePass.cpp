@@ -22,6 +22,7 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Renderer/Passes/WireframePass.h>
@@ -30,6 +31,7 @@
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Types/MaterialPermutations.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
+
 
 using oxygen::Scissors;
 using oxygen::TextureType;
@@ -50,10 +52,12 @@ using oxygen::graphics::Texture;
 namespace {
 struct alignas(16) WireframePassConstants {
   Color wire_color;
+  float apply_exposure_compensation;
+  float padding[3];
 };
 
-static_assert(sizeof(WireframePassConstants) == 16,
-  "WireframePassConstants must be 16 bytes");
+static_assert(sizeof(WireframePassConstants) == 32,
+  "WireframePassConstants must be 32 bytes");
 } // namespace
 
 WireframePass::WireframePass(std::shared_ptr<WireframePassConfig> config)
@@ -71,6 +75,20 @@ WireframePass::~WireframePass()
   pass_constants_cbv_ = {};
   pass_constants_index_ = kInvalidShaderVisibleIndex;
   pass_constants_buffer_.reset();
+}
+
+auto WireframePass::SetWireColor(const Color& color) -> void
+{
+  if (!config_) {
+    return;
+  }
+  if (config_->wire_color == color) {
+    return;
+  }
+  LOG_F(INFO, "WireframePass: SetWireColor ({}, {}, {}, {})", color.r, color.g,
+    color.b, color.a);
+  config_->wire_color = color;
+  pass_constants_dirty_ = true;
 }
 
 auto WireframePass::ValidateConfig() -> void
@@ -98,8 +116,9 @@ auto WireframePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 
   recorder.FlushBarriers();
 
-  if (!pass_constants_buffer_
-    || pass_constants_index_ == kInvalidShaderVisibleIndex) {
+  const bool need_constants_init = !pass_constants_buffer_
+    || pass_constants_index_ == kInvalidShaderVisibleIndex;
+  if (need_constants_init) {
     auto& graphics = Context().GetGraphics();
     auto& registry = graphics.GetResourceRegistry();
     auto& allocator = graphics.GetDescriptorAllocator();
@@ -145,11 +164,26 @@ auto WireframePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
       throw std::runtime_error(
         "WireframePass: Failed to register pass constants CBV");
     }
+    pass_constants_dirty_ = true;
   }
 
-  const WireframePassConstants snapshot { .wire_color
-    = (config_ ? config_->wire_color : Color { 1.0F, 1.0F, 1.0F, 1.0F }) };
-  std::memcpy(pass_constants_mapped_ptr_, &snapshot, sizeof(snapshot));
+  if (pass_constants_dirty_) {
+    const auto wire_color
+      = (config_ ? config_->wire_color : Color { 1.0F, 1.0F, 1.0F, 1.0F });
+    const float apply_exposure_compensation
+      = (config_ && config_->apply_exposure_compensation) ? 1.0F : 0.0F;
+    const WireframePassConstants snapshot {
+      .wire_color = wire_color,
+      .apply_exposure_compensation = apply_exposure_compensation,
+      .padding = { 0.0F, 0.0F, 0.0F },
+    };
+    LOG_F(INFO,
+      "WireframePass: Upload pass constants wire_color=({}, {}, {}, {})",
+      snapshot.wire_color.r, snapshot.wire_color.g, snapshot.wire_color.b,
+      snapshot.wire_color.a);
+    std::memcpy(pass_constants_mapped_ptr_, &snapshot, sizeof(snapshot));
+    pass_constants_dirty_ = false;
+  }
 
   SetPassConstantsIndex(pass_constants_index_);
 
@@ -195,10 +229,12 @@ auto WireframePass::SetupRenderTargets(CommandRecorder& recorder) const -> void
   std::array rtvs { rtv };
 
   graphics::NativeView dsv = {};
+  const Texture* depth_texture_ptr = nullptr;
   if (const auto* fb = GetFramebuffer(); fb
     && fb->GetDescriptor().depth_attachment.IsValid()
     && fb->GetDescriptor().depth_attachment.texture) {
     auto& depth_texture = *fb->GetDescriptor().depth_attachment.texture;
+    depth_texture_ptr = &depth_texture;
     graphics::TextureViewDescription dsv_view_desc { .view_type
       = ResourceViewType::kTexture_DSV,
       .visibility = DescriptorVisibility::kCpuOnly,
@@ -232,6 +268,13 @@ auto WireframePass::SetupRenderTargets(CommandRecorder& recorder) const -> void
     recorder.SetRenderTargets(std::span(rtvs), dsv);
   } else {
     recorder.SetRenderTargets(std::span(rtvs), std::nullopt);
+  }
+
+  const bool clear_depth = config_ && config_->clear_depth_target
+    && config_->depth_write_enable && depth_texture_ptr;
+  if (clear_depth) {
+    recorder.ClearDepthStencilView(
+      *depth_texture_ptr, dsv, graphics::ClearFlags::kDepth, 1.0F, 0);
   }
 
   const bool clear_enabled = (!config_) || config_->clear_color_target;
@@ -283,6 +326,8 @@ auto WireframePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     const bool is_double_sided
       = md.flags.IsSet(oxygen::engine::PassMaskBit::kDoubleSided);
 
+    // Wireframe selects PSOs per partition (opaque/masked, single/double
+    // sided). Unlike most passes, it switches PSOs inside the draw loop.
     const auto& pso_desc = [&]() -> const graphics::GraphicsPipelineDesc& {
       if (is_masked) {
         return is_double_sided ? *pso_masked_double_ : *pso_masked_single_;
@@ -292,6 +337,9 @@ auto WireframePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
     if (current_pso != &pso_desc) {
       recorder.SetPipelineState(pso_desc);
+      // PSO changes rebind the root signature and invalidate root constants.
+      // Rebind pass constants so the wire color CBV index remains valid.
+      RebindCommonRootParameters(recorder);
       current_pso = &pso_desc;
     }
 

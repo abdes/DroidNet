@@ -18,16 +18,7 @@
 #include "Renderer/EnvironmentDynamicData.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/MaterialConstants.hlsli"
-
-// Define vertex structure to match the CPU-side Vertex struct
-struct Vertex {
-    float3 position;
-    float3 normal;
-    float2 texcoord;
-    float3 tangent;
-    float3 bitangent;
-    float4 color;
-};
+#include "Renderer/Vertex.hlsli"
 
 #include "Core/Bindless/BindlessHelpers.hlsl"
 #include "Passes/Forward/ForwardPbr.hlsli"

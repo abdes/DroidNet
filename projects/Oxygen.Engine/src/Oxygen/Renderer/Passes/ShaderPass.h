@@ -13,46 +13,15 @@
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Renderer/Passes/GraphicsRenderPass.h>
+#include <Oxygen/Renderer/Types/ShaderDebugMode.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::graphics {
-class Framebuffer;
-class Buffer;
-class CommandRecorder;
 class Texture;
-class GraphicsPipelineDesc;
+class Framebuffer;
 } // namespace oxygen::graphics
 
 namespace oxygen::engine {
-
-struct RenderContext;
-
-//! Debug visualization mode for the shader pass.
-//!
-//! These modes correspond to boolean defines in ForwardMesh_PS.hlsl.
-//! The shader is compiled with different defines to create specialized
-//! visualization variants.
-enum class ShaderDebugMode : int {
-  kDisabled = 0, //!< Normal PBR rendering (default)
-
-  // Light culling debug modes
-  kLightCullingHeatMap = 1, //!< Heat map of lights per cluster
-  kDepthSlice = 2, //!< Visualize depth slice (clustered mode)
-  kClusterIndex = 3, //!< Visualize cluster index as checkerboard
-
-  // IBL debug modes
-  kIblSpecular = 4, //!< Visualize IBL specular (prefilter map sampling)
-  kIblRawSky = 5, //!< Visualize raw sky cubemap sampling (no prefilter)
-  kIblIrradiance = 6, //!< Visualize IBL irradiance (ambient term)
-
-  // Material/UV debug modes
-  kBaseColor = 7, //!< Visualize base color texture (albedo)
-  kUv0 = 8, //!< Visualize UV0 coordinates
-  kOpacity = 9, //!< Visualize base alpha/opacity
-  kWorldNormals = 10, //!< Visualize world-space normals
-  kRoughness = 11, //!< Visualize material roughness
-  kMetalness = 12, //!< Visualize material metalness
-};
 
 //! Configuration for a shading pass (main geometry + lighting).
 struct ShaderPassConfig {
@@ -76,7 +45,7 @@ struct ShaderPassConfig {
 
   //! Optional clear color for the color attachment. If present, will override
   //! the default clear value in the texture's descriptor.
-  std::optional<graphics::Color> clear_color {};
+  std::optional<graphics::Color> clear_color;
 
   //! Debug name for diagnostics.
   std::string debug_name { "ShaderPass" };
@@ -132,10 +101,10 @@ private:
   ShaderDebugMode last_built_debug_mode_ { ShaderDebugMode::kDisabled };
 
   //! Cached pipeline state descriptions for partition-aware execution.
-  std::optional<graphics::GraphicsPipelineDesc> pso_opaque_single_ {};
-  std::optional<graphics::GraphicsPipelineDesc> pso_opaque_double_ {};
-  std::optional<graphics::GraphicsPipelineDesc> pso_masked_single_ {};
-  std::optional<graphics::GraphicsPipelineDesc> pso_masked_double_ {};
+  std::optional<graphics::GraphicsPipelineDesc> pso_opaque_single_;
+  std::optional<graphics::GraphicsPipelineDesc> pso_opaque_double_;
+  std::optional<graphics::GraphicsPipelineDesc> pso_masked_single_;
+  std::optional<graphics::GraphicsPipelineDesc> pso_masked_double_;
 };
 
 } // namespace oxygen::engine

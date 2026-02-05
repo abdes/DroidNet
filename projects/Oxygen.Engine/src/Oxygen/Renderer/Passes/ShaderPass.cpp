@@ -97,8 +97,9 @@ auto ShaderPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 namespace {
 // Helper to prepare a render target view for the color texture, mirroring
 // DepthPrePass::PrepareDepthStencilView
-auto PrepareRenderTargetView(Texture& color_texture, ResourceRegistry& registry,
-  DescriptorAllocator& allocator) -> oxygen::graphics::NativeView
+auto PrepareRenderTargetView(const Texture& color_texture,
+  ResourceRegistry& registry, DescriptorAllocator& allocator)
+  -> oxygen::graphics::NativeView
 {
   using oxygen::TextureType;
 
@@ -182,7 +183,7 @@ auto ShaderPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
   auto& graphics = Context().GetGraphics();
   auto& registry = graphics.GetResourceRegistry();
   auto& allocator = graphics.GetDescriptorAllocator();
-  auto& color_texture = const_cast<Texture&>(GetColorTexture());
+  const auto& color_texture = GetColorTexture();
   const auto color_rtv
     = PrepareRenderTargetView(color_texture, registry, allocator);
   std::array rtvs { color_rtv };
@@ -190,7 +191,7 @@ auto ShaderPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
   // Prepare DSV if depth attachment is present
   graphics::NativeView dsv = {};
   const auto* fb = GetFramebuffer();
-  if (fb && fb->GetDescriptor().depth_attachment.IsValid()
+  if ((fb != nullptr) && fb->GetDescriptor().depth_attachment.IsValid()
     && fb->GetDescriptor().depth_attachment.texture) {
     auto& depth_texture = *fb->GetDescriptor().depth_attachment.texture;
     dsv = PrepareDepthStencilView(depth_texture, registry, allocator);
@@ -263,6 +264,7 @@ auto ShaderPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   DCHECK_F(pso_masked_single_.has_value());
   DCHECK_F(pso_masked_double_.has_value());
 
+  // NOLINTNEXTLINE(*-type-reinterpret-cast)
   const auto* records = reinterpret_cast<const engine::DrawMetadata*>(
     psf->draw_metadata_bytes.data());
 
@@ -309,7 +311,7 @@ auto ShaderPass::GetColorTexture() const -> const Texture&
     return *config_->color_texture;
   }
   const auto* fb = GetFramebuffer();
-  if (fb && !fb->GetDescriptor().color_attachments.empty()
+  if ((fb != nullptr) && !fb->GetDescriptor().color_attachments.empty()
     && fb->GetDescriptor().color_attachments[0].texture) {
     return *fb->GetDescriptor().color_attachments[0].texture;
   }
@@ -332,7 +334,7 @@ auto ShaderPass::GetClearColor() const -> const graphics::Color&
 auto ShaderPass::HasDepth() const -> bool
 {
   const auto* fb = GetFramebuffer();
-  return fb && fb->GetDescriptor().depth_attachment.IsValid();
+  return (fb != nullptr) && fb->GetDescriptor().depth_attachment.IsValid();
 }
 
 auto ShaderPass::SetupViewPortAndScissors(CommandRecorder& recorder) const
@@ -342,12 +344,12 @@ auto ShaderPass::SetupViewPortAndScissors(CommandRecorder& recorder) const
   const auto width = common_tex_desc.width;
   const auto height = common_tex_desc.height;
 
-  const ViewPort viewport { .top_left_x = 0.0f,
-    .top_left_y = 0.0f,
+  const ViewPort viewport { .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
     .width = static_cast<float>(width),
     .height = static_cast<float>(height),
-    .min_depth = 0.0f,
-    .max_depth = 1.0f };
+    .min_depth = 0.0F,
+    .max_depth = 1.0F };
   recorder.SetViewport(viewport);
 
   const Scissors scissors { .left = 0,
@@ -404,12 +406,43 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     };
   };
 
+  const auto GetDebugDefineName = [](ShaderDebugMode mode) -> const char* {
+    switch (mode) {
+    case ShaderDebugMode::kLightCullingHeatMap:
+      return "DEBUG_LIGHT_HEATMAP";
+    case ShaderDebugMode::kDepthSlice:
+      return "DEBUG_DEPTH_SLICE";
+    case ShaderDebugMode::kClusterIndex:
+      return "DEBUG_CLUSTER_INDEX";
+    case ShaderDebugMode::kIblSpecular:
+      return "DEBUG_IBL_SPECULAR";
+    case ShaderDebugMode::kIblRawSky:
+      return "DEBUG_IBL_RAW_SKY";
+    case ShaderDebugMode::kIblIrradiance:
+      return "DEBUG_IBL_IRRADIANCE";
+    case ShaderDebugMode::kBaseColor:
+      return "DEBUG_BASE_COLOR";
+    case ShaderDebugMode::kUv0:
+      return "DEBUG_UV0";
+    case ShaderDebugMode::kOpacity:
+      return "DEBUG_OPACITY";
+    case ShaderDebugMode::kWorldNormals:
+      return "DEBUG_WORLD_NORMALS";
+    case ShaderDebugMode::kRoughness:
+      return "DEBUG_ROUGHNESS";
+    case ShaderDebugMode::kMetalness:
+      return "DEBUG_METALNESS";
+    default:
+      return nullptr;
+    }
+  };
+
   // Determine if a depth attachment is present
   const auto* fb = GetFramebuffer();
   bool has_depth = false;
   auto depth_format = Format::kUnknown;
   uint32_t sample_count = 1;
-  if (fb) {
+  if (fb != nullptr) {
     const auto& fb_desc = fb->GetDescriptor();
     if (fb_desc.depth_attachment.IsValid()
       && fb_desc.depth_attachment.texture) {
@@ -460,50 +493,21 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   // Cache debug mode for rebuild detection
   last_built_debug_mode_ = debug_mode;
 
-  // Map ShaderDebugMode to the corresponding define name
-  const auto GetDebugDefineName = [](ShaderDebugMode mode) -> const char* {
-    switch (mode) {
-    case ShaderDebugMode::kLightCullingHeatMap:
-      return "DEBUG_LIGHT_HEATMAP";
-    case ShaderDebugMode::kDepthSlice:
-      return "DEBUG_DEPTH_SLICE";
-    case ShaderDebugMode::kClusterIndex:
-      return "DEBUG_CLUSTER_INDEX";
-    case ShaderDebugMode::kIblSpecular:
-      return "DEBUG_IBL_SPECULAR";
-    case ShaderDebugMode::kIblRawSky:
-      return "DEBUG_IBL_RAW_SKY";
-    case ShaderDebugMode::kIblIrradiance:
-      return "DEBUG_IBL_IRRADIANCE";
-    case ShaderDebugMode::kBaseColor:
-      return "DEBUG_BASE_COLOR";
-    case ShaderDebugMode::kUv0:
-      return "DEBUG_UV0";
-    case ShaderDebugMode::kOpacity:
-      return "DEBUG_OPACITY";
-    case ShaderDebugMode::kWorldNormals:
-      return "DEBUG_WORLD_NORMALS";
-    case ShaderDebugMode::kRoughness:
-      return "DEBUG_ROUGHNESS";
-    case ShaderDebugMode::kMetalness:
-      return "DEBUG_METALNESS";
-    default:
-      return nullptr;
-    }
-  };
-
   const auto BuildDesc
     = [&](CullMode cull_mode,
         std::vector<ShaderDefine> defines) -> GraphicsPipelineDesc {
     // Add debug define if a debug mode is active
-    std::vector<ShaderDefine> ps_defines = defines;
+    std::vector<ShaderDefine> ps_defines = std::move(defines);
     if (graphics::detail::IsHdr(color_tex_desc.format)) {
       ps_defines.push_back(ShaderDefine {
         .name = "OXYGEN_HDR_OUTPUT",
         .value = "1",
       });
     }
+
+    const char* ps_source = "Passes/Forward/ForwardMesh_PS.hlsl";
     if (const char* debug_define = GetDebugDefineName(debug_mode)) {
+      ps_source = "Passes/Forward/ForwardDebug_PS.hlsl";
       ps_defines.push_back(ShaderDefine {
         .name = debug_define,
         .value = "1",
@@ -519,7 +523,7 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
       })
       .SetPixelShader(ShaderRequest {
         .stage = ShaderType::kPixel,
-        .source_path = "Passes/Forward/ForwardMesh_PS.hlsl",
+        .source_path = ps_source,
         .entry_point = "PS",
         .defines = ps_defines,
       })
@@ -583,11 +587,7 @@ auto ShaderPass::NeedRebuildPipelineState() const -> bool
   // Rebuild if debug mode changed (requires different shaders)
   const ShaderDebugMode current_debug_mode
     = config_ ? config_->debug_mode : ShaderDebugMode::kDisabled;
-  if (last_built_debug_mode_ != current_debug_mode) {
-    return true;
-  }
-
-  return false;
+  return last_built_debug_mode_ != current_debug_mode;
 }
 
 // Removed IssueOpaqueDraws (superseded by partition-based IssueDrawCalls).

@@ -491,8 +491,6 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
   Base::OnFrameStart(context);
 }
 
-// Initialize a default looping flight path over the scene (few control points)
-
 auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 {
   DCHECK_F(active_scene_.IsValid());
@@ -535,7 +533,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
         shell_->SetActiveCamera(main_camera_);
       }
     }
-    shell_->Update(time::CanonicalDuration {});
+    shell_->SyncPanels();
   }
 
   // Handle scene mutations (material overrides, visibility changes)

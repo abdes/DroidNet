@@ -53,6 +53,15 @@ auto GraphicsRenderPass::DoSetupPipeline(CommandRecorder& /*recorder*/) -> void
   // Default implementation does nothing
 }
 
+auto GraphicsRenderPass::RebindCommonRootParameters(
+  CommandRecorder& recorder) const -> void
+{
+  if (require_scene_constants_) {
+    BindSceneConstantsBuffer(recorder);
+  }
+  BindPassConstantsIndexConstant(recorder, GetPassConstantsIndex());
+}
+
 auto GraphicsRenderPass::BindSceneConstantsBuffer(
   CommandRecorder& recorder) const -> void
 {

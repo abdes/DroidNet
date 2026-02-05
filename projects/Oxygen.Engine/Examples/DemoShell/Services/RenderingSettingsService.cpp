@@ -18,11 +18,6 @@ auto RenderingSettingsService::Initialize(
 {
   DCHECK_NOTNULL_F(pipeline);
   pipeline_ = pipeline;
-
-  // Push initial state
-  pipeline_->SetShaderDebugMode(GetDebugMode());
-  pipeline_->SetRenderMode(GetRenderMode());
-  pipeline_->SetWireframeColor(GetWireframeColor());
 }
 
 auto RenderingSettingsService::GetRenderMode() const -> RenderMode
@@ -46,10 +41,6 @@ auto RenderingSettingsService::SetRenderMode(RenderMode mode) -> void
   if (settings) {
     settings->SetString(kViewModeKey, std::string(to_string(mode)));
     epoch_++;
-
-    if (pipeline_) {
-      pipeline_->SetRenderMode(mode);
-    }
   }
 }
 
@@ -70,14 +61,12 @@ auto RenderingSettingsService::SetWireframeColor(const graphics::Color& color)
 {
   const auto settings = ResolveSettings();
   if (settings) {
+    LOG_F(INFO, "RenderingSettingsService: SetWireframeColor ({}, {}, {}, {})",
+      color.r, color.g, color.b, color.a);
     settings->SetFloat(kWireColorRKey, color.r);
     settings->SetFloat(kWireColorGKey, color.g);
     settings->SetFloat(kWireColorBKey, color.b);
     epoch_++;
-
-    if (pipeline_) {
-      pipeline_->SetWireframeColor(color);
-    }
   }
 }
 
@@ -98,10 +87,6 @@ auto RenderingSettingsService::SetDebugMode(engine::ShaderDebugMode mode)
   if (settings) {
     settings->SetString(kDebugModeKey, std::to_string(static_cast<int>(mode)));
     epoch_++;
-
-    if (pipeline_) {
-      pipeline_->SetShaderDebugMode(mode);
-    }
   }
 }
 auto RenderingSettingsService::GetEpoch() const noexcept -> std::uint64_t

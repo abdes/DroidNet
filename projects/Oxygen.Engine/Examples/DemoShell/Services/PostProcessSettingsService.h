@@ -44,13 +44,6 @@ namespace examples {
       virtual auto BindCameraLifecycle(
         observer_ptr<CameraLifecycleService> camera_lifecycle) -> void;
 
-      // Compositing
-      [[nodiscard]] virtual auto GetCompositingEnabled() const -> bool;
-      virtual auto SetCompositingEnabled(bool enabled) -> void;
-
-      [[nodiscard]] virtual auto GetCompositingAlpha() const -> float;
-      virtual auto SetCompositingAlpha(float alpha) -> void;
-
       // Exposure
       [[nodiscard]] virtual auto GetExposureEnabled() const -> bool;
       virtual auto SetExposureEnabled(bool enabled) -> void;
@@ -91,11 +84,6 @@ namespace examples {
         -> observer_ptr<SettingsService>;
 
     private:
-      static constexpr auto kCompositingEnabledKey
-        = "post_process.compositing.enabled";
-      static constexpr auto kCompositingAlphaKey
-        = "post_process.compositing.alpha";
-
       static constexpr auto kExposureModeKey = "post_process.exposure.mode";
       static constexpr auto kExposureEnabledKey
         = "post_process.exposure.enabled";

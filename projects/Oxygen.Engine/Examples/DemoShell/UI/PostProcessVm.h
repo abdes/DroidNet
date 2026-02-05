@@ -21,13 +21,6 @@ class PostProcessVm {
 public:
   explicit PostProcessVm(observer_ptr<PostProcessSettingsService> service);
 
-  // Compositing
-  [[nodiscard]] auto GetCompositingEnabled() -> bool;
-  auto SetCompositingEnabled(bool enabled) -> void;
-
-  [[nodiscard]] auto GetCompositingAlpha() -> float;
-  auto SetCompositingAlpha(float alpha) -> void;
-
   // Exposure
   [[nodiscard]] auto GetExposureEnabled() -> bool;
   auto SetExposureEnabled(bool enabled) -> void;
@@ -68,8 +61,6 @@ private:
   std::uint64_t epoch_ { 0 };
 
   // Cached state
-  bool compositing_enabled_ { true };
-  float compositing_alpha_ { 1.0F };
   bool exposure_enabled_ { true };
   engine::ExposureMode exposure_mode_ { engine::ExposureMode::kManual };
   float manual_ev100_ { 9.7F };
