@@ -34,8 +34,8 @@ namespace input {
     OXGN_NPUT_API void HandleInput(
       const platform::InputSlot& slot, const platform::InputEvent& event) const;
 
-    OXGN_NPUT_API [[nodiscard]] bool Update(
-      oxygen::time::CanonicalDuration delta_time) const;
+    OXGN_NPUT_NDAPI auto Update(
+      oxygen::time::CanonicalDuration delta_time) const -> bool;
 
     // Flush staged input state from all mappings without producing action
     // edges. Use this when a higher-priority context consumed input to
