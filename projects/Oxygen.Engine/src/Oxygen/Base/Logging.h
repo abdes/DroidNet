@@ -212,11 +212,10 @@ https://github.com/nothings/stb.
 #  endif
 
 #  include <atomic>
+#  include <cstdarg>
 #  include <initializer_list>
 #  include <limits>
-#  include <stdarg.h>
 #  include <string_view>
-#  include <vector>
 
 // --------------------------------------------------------------------
 LOGURU_ANONYMOUS_NAMESPACE_BEGIN
@@ -231,8 +230,9 @@ public:
   }
   ~Text();
   Text(Text&& t) noexcept
+    : _str(t._str)
   {
-    _str = t._str;
+
     t._str = nullptr;
   }
   Text(Text& t) = delete;
@@ -244,7 +244,7 @@ public:
 
   char* release()
   {
-    const auto result = _str;
+    auto* const result = _str;
     _str = nullptr;
     return result;
   }
@@ -453,7 +453,7 @@ LOGURU_EXPORT const char* filename(const char* path);
 LOGURU_EXPORT bool create_directories(const char* file_path_const);
 
 // Writes date and time with millisecond precision, e.g. "20151017_161503.123"
-LOGURU_EXPORT void write_date_time(char* buff, unsigned long long buff_size);
+LOGURU_EXPORT void write_date_time(char* buff, uint64_t buff_size);
 
 // Helper: thread-safe version strerror
 LOGURU_EXPORT Text errno_as_text();
@@ -464,7 +464,7 @@ LOGURU_EXPORT Text errno_as_text();
    where "app_name" is a sanitized version of argv[0].
 */
 LOGURU_EXPORT void suggest_log_path(
-  const char* prefix, char* buff, unsigned long long buff_size);
+  const char* prefix, char* buff, uint64_t buff_size);
 
 enum FileMode { Truncate, Append };
 
@@ -791,7 +791,7 @@ template <> inline Text format_value(const long long& v)
 {
   return textprintf(LOGURU_FMT(d), v);
 }
-template <> inline Text format_value(const unsigned long long& v)
+template <> inline Text format_value(const uint64_t& v)
 {
   return textprintf(LOGURU_FMT(d), v);
 }
@@ -812,7 +812,7 @@ template <> inline Text format_value(const long long& v)
 {
   return textprintf(LOGURU_FMT(llu), v);
 }
-template <> inline Text format_value(const unsigned long long& v)
+template <> inline Text format_value(const uint64_t& v)
 {
   return textprintf(LOGURU_FMT(lld), v);
 }
@@ -834,7 +834,7 @@ LOGURU_EXPORT void set_thread_name(const char* name);
    hexadecimal thread id will be written to the end of buffer.
 */
 LOGURU_EXPORT void get_thread_name(
-  char* buffer, unsigned long long length, bool right_align_hex_id);
+  char* buffer, uint64_t length, bool right_align_hex_id);
 
 /* Generates a readable stacktrace as a string.
    'skip' specifies how many stack frames to skip.
@@ -987,7 +987,7 @@ template <class T> struct decay_char_array {
   using type = T;
 };
 
-template <unsigned long long N> struct decay_char_array<const char (&)[N]> {
+template <uint64_t N> struct decay_char_array<const char (&)[N]> {
   using type = const char*;
 };
 
@@ -1090,7 +1090,7 @@ LOGURU_EXPORT Text ec_to_text(unsigned int data);
 LOGURU_EXPORT Text ec_to_text(long data);
 LOGURU_EXPORT Text ec_to_text(unsigned long data);
 LOGURU_EXPORT Text ec_to_text(long long data);
-LOGURU_EXPORT Text ec_to_text(unsigned long long data);
+LOGURU_EXPORT Text ec_to_text(uint64_t data);
 LOGURU_EXPORT Text ec_to_text(float data);
 LOGURU_EXPORT Text ec_to_text(double data);
 LOGURU_EXPORT Text ec_to_text(long double data);
@@ -1482,10 +1482,7 @@ inline unsigned int referenceable_value(unsigned int t) { return t; }
 inline long referenceable_value(long t) { return t; }
 inline unsigned long referenceable_value(unsigned long t) { return t; }
 inline long long referenceable_value(long long t) { return t; }
-inline unsigned long long referenceable_value(unsigned long long t)
-{
-  return t;
-}
+inline uint64_t referenceable_value(uint64_t t) { return t; }
 } // namespace loguru
 
 LOGURU_ANONYMOUS_NAMESPACE_END

@@ -58,7 +58,7 @@ public:
   }
 
 private:
-  std::filesystem::path workspace_root_path_ {};
+  std::filesystem::path workspace_root_path_;
   std::filesystem::path shader_library_path_ {
     std::string(kDefaultShaderLibraryPath),
   };
@@ -97,10 +97,10 @@ public:
   }
 
 private:
-  PathFinderConfig config_ {};
+  PathFinderConfig config_;
 };
 
-inline [[nodiscard]] auto PathFinderConfig::Create() -> Builder
+[[nodiscard]] inline auto PathFinderConfig::Create() -> Builder
 {
   return Builder {};
 }

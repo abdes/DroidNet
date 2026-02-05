@@ -75,9 +75,8 @@ namespace {
   }
 
   OXYGEN_DIAGNOSTIC_PUSH
-#if defined(ASAP_MSVC_VERSION)
-#  pragma warning(disable : 4834)
-#endif
+  OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4834)
+  OXYGEN_DIAGNOSTIC_DISABLE_CLANG("-Wunused-result")
   // NOLINTNEXTLINE
   TEST(OptionValuesTest, GetAsThrowsWithIncorrectType)
   {
