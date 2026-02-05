@@ -21,15 +21,17 @@ inline constexpr char32_t kIconDemoPanelCodepoint = 0xE002;
 inline constexpr std::string_view kIconDemoPanel = "\xEE\x80\x82";
 inline constexpr char32_t kIconEnvironmentCodepoint = 0xE003;
 inline constexpr std::string_view kIconEnvironment = "\xEE\x80\x83";
-inline constexpr char32_t kIconLightingCodepoint = 0xE004;
-inline constexpr std::string_view kIconLighting = "\xEE\x80\x84";
-inline constexpr char32_t kIconRenderSolidCodepoint = 0xE005;
-inline constexpr std::string_view kIconRenderSolid = "\xEE\x80\x85";
-inline constexpr char32_t kIconRenderWireframeCodepoint = 0xE006;
-inline constexpr std::string_view kIconRenderWireframe = "\xEE\x80\x86";
-inline constexpr char32_t kIconRenderingCodepoint = 0xE007;
-inline constexpr std::string_view kIconRendering = "\xEE\x80\x87";
-inline constexpr char32_t kIconSettingsCodepoint = 0xE008;
-inline constexpr std::string_view kIconSettings = "\xEE\x80\x88";
+inline constexpr char32_t kIconHdrTonemapCodepoint = 0xE004;
+inline constexpr std::string_view kIconHdrTonemap = "\xEE\x80\x84";
+inline constexpr char32_t kIconLightingCodepoint = 0xE005;
+inline constexpr std::string_view kIconLighting = "\xEE\x80\x85";
+inline constexpr char32_t kIconRenderSolidCodepoint = 0xE006;
+inline constexpr std::string_view kIconRenderSolid = "\xEE\x80\x86";
+inline constexpr char32_t kIconRenderWireframeCodepoint = 0xE007;
+inline constexpr std::string_view kIconRenderWireframe = "\xEE\x80\x87";
+inline constexpr char32_t kIconRenderingCodepoint = 0xE008;
+inline constexpr std::string_view kIconRendering = "\xEE\x80\x88";
+inline constexpr char32_t kIconSettingsCodepoint = 0xE009;
+inline constexpr std::string_view kIconSettings = "\xEE\x80\x89";
 
 } // namespace oxygen::imgui::icons
