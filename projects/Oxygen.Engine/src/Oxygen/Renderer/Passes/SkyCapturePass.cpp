@@ -113,23 +113,26 @@ auto SkyCapturePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
   }
 
   // Ensure internal resources are being tracked by this recorder.
+  // Use the last known GPU state (not always kCommon) so that recapture after
+  // MarkDirty() emits correct barriers.
   if (!recorder.IsResourceTracked(*captured_cubemap_)) {
-    // Start from kCommon (initial state) and transition to RENDER_TARGET.
     recorder.BeginTrackingResourceState(
-      *captured_cubemap_, graphics::ResourceStates::kCommon, false);
+      *captured_cubemap_, cubemap_last_state_, false);
   }
 
   // Transition cubemap to RENDER_TARGET state for capture.
   recorder.RequireResourceState(
     *captured_cubemap_, graphics::ResourceStates::kRenderTarget);
+  cubemap_last_state_ = graphics::ResourceStates::kRenderTarget;
 
   if (!recorder.IsResourceTracked(*face_constants_buffer_)) {
     recorder.BeginTrackingResourceState(
-      *face_constants_buffer_, graphics::ResourceStates::kCommon, false);
+      *face_constants_buffer_, face_cb_last_state_, false);
   }
   // Constant buffers stay in kConstantBuffer.
   recorder.RequireResourceState(
     *face_constants_buffer_, graphics::ResourceStates::kConstantBuffer);
+  face_cb_last_state_ = graphics::ResourceStates::kConstantBuffer;
 
   recorder.FlushBarriers();
 
@@ -186,7 +189,8 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     FaceDir { { 1, 0, 0 }, { 0, 0, 1 } }, // Face 0 (+X): Oxy Right, Oxy Up
     FaceDir { { -1, 0, 0 }, { 0, 0, 1 } }, // Face 1 (-X): Oxy Left, Oxy Up
     FaceDir { { 0, 0, 1 }, { 0, 1, 0 } }, // Face 2 (+Y): Oxy Up, Oxy Back
-    FaceDir { { 0, 0, -1 }, { 0, -1, 0 } }, // Face 3 (-Y): Oxy Down, Oxy Forward
+    FaceDir {
+      { 0, 0, -1 }, { 0, -1, 0 } }, // Face 3 (-Y): Oxy Down, Oxy Forward
     FaceDir { { 0, -1, 0 }, { 0, 0, 1 } }, // Face 4 (+Z): Oxy Forward, Oxy Up
     FaceDir { { 0, 1, 0 }, { 0, 0, 1 } } // Face 5 (-Z): Oxy Back, Oxy Up
   };
@@ -216,6 +220,7 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   // Transition cubemap to SHADER_RESOURCE state so it can be used for IBL.
   recorder.RequireResourceState(
     *captured_cubemap_, graphics::ResourceStates::kShaderResource);
+  cubemap_last_state_ = graphics::ResourceStates::kShaderResource;
   recorder.FlushBarriers();
 
   is_captured_ = true;
