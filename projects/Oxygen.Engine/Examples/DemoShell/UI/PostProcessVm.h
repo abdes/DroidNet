@@ -45,6 +45,9 @@ public:
   [[nodiscard]] auto GetExposureCompensation() -> float;
   auto SetExposureCompensation(float stops) -> void;
 
+  [[nodiscard]] auto GetExposureKey() -> float;
+  auto SetExposureKey(float exposure_key) -> void;
+
   // Tonemapping
   [[nodiscard]] auto GetTonemappingEnabled() -> bool;
   auto SetTonemappingEnabled(bool enabled) -> void;
@@ -68,6 +71,7 @@ private:
   float manual_camera_shutter_rate_ { 125.0F };
   float manual_camera_iso_ { 100.0F };
   float exposure_compensation_ { 0.0F };
+  float exposure_key_ { 10.0F };
   bool tonemapping_enabled_ { true };
   engine::ToneMapper tonemapping_mode_ { engine::ToneMapper::kAcesFitted };
 };

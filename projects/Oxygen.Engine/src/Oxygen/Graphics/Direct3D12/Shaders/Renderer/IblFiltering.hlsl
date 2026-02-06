@@ -163,7 +163,7 @@ void CS_IrradianceConvolution(uint3 DTid : SV_DispatchThreadID)
             float3 sampleVec = tangentSample.x * Right + tangentSample.y * Up + tangentSample.z * N;
 
             // Sample Source
-            // Note: source texture is also Y-up (standard D3D), so sampleVec (Y-up) is correct.
+            // Both source and target cubemaps are now consistently in D3D sampling space.
             irradiance += source_scale
                 * source.SampleLevel(linearSampler, sampleVec, 0).rgb
                 * cos(theta) * sin(theta);

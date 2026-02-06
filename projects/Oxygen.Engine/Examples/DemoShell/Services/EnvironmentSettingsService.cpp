@@ -441,6 +441,19 @@ auto EnvironmentSettingsService::HasScene() const noexcept -> bool
 
 auto EnvironmentSettingsService::RequestResync() -> void { needs_sync_ = true; }
 
+auto EnvironmentSettingsService::BeginUpdate() -> void { update_depth_++; }
+
+auto EnvironmentSettingsService::EndUpdate() -> void
+{
+  if (update_depth_ > 0) {
+    update_depth_--;
+  }
+  if (update_depth_ == 0 && pending_changes_) {
+    SaveSettings();
+    epoch_++;
+  }
+}
+
 auto EnvironmentSettingsService::SyncFromSceneIfNeeded() -> void
 {
   if (!needs_sync_) {
@@ -1128,6 +1141,9 @@ auto EnvironmentSettingsService::UpdateSunLightCandidate() -> void
 
 auto EnvironmentSettingsService::EnableSyntheticSun() -> void
 {
+  if (sun_present_ && sun_source_ == 1) {
+    return;
+  }
   sun_present_ = true;
   SetSunSource(1);
 }
@@ -1359,6 +1375,12 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   if (config_.renderer) {
     const uint32_t debug_flags = GetAtmosphereFlags();
     config_.renderer->SetAtmosphereDebugFlags(debug_flags);
+    if (sky_light_enabled_
+      && sky_light_source_
+        == static_cast<int>(
+          scene::environment::SkyLightSource::kCapturedScene)) {
+      config_.renderer->RequestSkyCapture();
+    }
   }
 
   SaveSettings();
@@ -1707,8 +1729,10 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
 auto EnvironmentSettingsService::MarkDirty() -> void
 {
   pending_changes_ = true;
-  SaveSettings();
-  epoch_++;
+  if (update_depth_ == 0) {
+    SaveSettings();
+    epoch_++;
+  }
 }
 
 auto EnvironmentSettingsService::ApplySavedSunSourcePreference() -> void

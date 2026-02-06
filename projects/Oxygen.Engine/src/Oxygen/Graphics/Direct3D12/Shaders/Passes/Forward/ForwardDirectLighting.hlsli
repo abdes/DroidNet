@@ -12,6 +12,7 @@
 #include "Passes/Forward/ForwardPbr.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/EnvironmentDynamicData.hlsli"
+#include "Common/PhysicalLighting.hlsli"
 
 // Safety caps for fallback loops (pre-clustered culling).
 #ifndef MAX_DIRECTIONAL_LIGHTS
@@ -69,7 +70,7 @@ float3 AccumulateDirectionalLights(
 
             if (is_sun && use_sun_override) {
                 light_dir_ws = override_sun_dir;
-                light_intensity = override_sun_illum / max(dl.intensity_lux, 0.001);
+                light_intensity = override_sun_illum;
                 light_color = dl.color_rgb;
             } else {
                 light_dir_ws = -dl.direction_ws;
@@ -98,11 +99,11 @@ float3 AccumulateDirectionalLights(
             const float3 kS = F;
             const float3 kD = (1.0 - kS) * (1.0 - metalness);
 
-            // Physical engine uses Lux directly. The PI normalization is already
-            // handled by the Sun's physical intensity (150,000 Lux).
             const float3 diffuse = kD * base_rgb;
 
-            direct += (diffuse + specular) * light_color * light_intensity * NdotL;
+            const float irradiance = LuxToIrradiance(light_intensity);
+            const float radiance = irradiance * (1.0 / kPi);
+            direct += (diffuse + specular) * light_color * radiance * NdotL;
         }
 
         if (use_sun_override && !found_sun) {
@@ -125,8 +126,10 @@ float3 AccumulateDirectionalLights(
                 const float3 kD = (1.0 - kS) * (1.0 - metalness);
                 const float3 diffuse = kD * base_rgb;
 
+                const float irradiance = LuxToIrradiance(override_sun_intensity);
+                const float radiance = irradiance * (1.0 / kPi);
                 direct += (diffuse + specular) * override_sun_color
-                          * override_sun_intensity * NdotL;
+                          * radiance * NdotL;
             }
         }
     }
@@ -228,8 +231,9 @@ float3 AccumulatePositionalLights(
             const float3 kD = (1.0 - kS) * (1.0 - metalness);
             const float3 diffuse = kD * base_rgb;
 
-            const float physical_intensity = pl.luminous_flux_lm / max(normalization, 1e-4);
-            direct += (diffuse + specular) * pl.color_rgb * physical_intensity * (NdotL * atten);
+            const float candela = LumensToCandela(pl.luminous_flux_lm, normalization);
+            const float radiance = CandelaToRadiance(candela, atten);
+            direct += (diffuse + specular) * pl.color_rgb * radiance * NdotL;
         }
     }
 
@@ -316,7 +320,9 @@ float3 AccumulatePositionalLightsClustered(
         const float3 specular = (DistributionGGX(saturate(dot(N, H)), roughness) * GeometrySmith(NdotV, NdotL, roughness) * F) / max(4.0 * NdotV * NdotL, 1e-6);
         const float3 diffuse = (1.0 - F) * (1.0 - metalness) * base_rgb;
 
-        direct += (diffuse + specular) * pl.color_rgb * (pl.luminous_flux_lm / max(normalization, 1e-4)) * (NdotL * atten);
+        const float candela = LumensToCandela(pl.luminous_flux_lm, normalization);
+        const float radiance = CandelaToRadiance(candela, atten);
+        direct += (diffuse + specular) * pl.color_rgb * radiance * NdotL;
     }
 
     return direct;

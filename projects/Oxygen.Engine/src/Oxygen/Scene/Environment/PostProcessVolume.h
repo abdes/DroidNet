@@ -30,6 +30,13 @@ enum class ExposureMode {
  This is a minimal, renderer-agnostic post process parameter set inspired by
  UE/Unity volume workflows.
 
+ Exposure uses EV100 (ISO 100) and is resolved by the renderer into a linear
+ scale using the ISO 2720 calibration formula
+ $exposure = \frac{1}{12.5} \cdot 2^{-EV100}$. A display key scale is applied
+ after calibration to map mid-gray to a display-friendly level.
+ Manual mode uses the authored EV100 value, while manual camera mode consumes
+ EV100 derived from camera aperture/shutter/ISO.
+
  The engine can later extend this with per-camera overrides or local volumes;
  for now it represents scene-global authored intent.
 */
@@ -58,7 +65,7 @@ public:
     return tone_mapper_;
   }
 
-  //! Sets exposure mode.
+  //! Sets exposure mode (manual, auto, or manual camera EV100).
   auto SetExposureMode(const ExposureMode mode) noexcept -> void
   {
     exposure_mode_ = mode;
@@ -94,13 +101,25 @@ public:
     return exposure_compensation_ev_;
   }
 
-  //! Sets manual exposure EV100 value.
+  //! Sets the display key scale applied after calibration.
+  auto SetExposureKey(const float exposure_key) noexcept -> void
+  {
+    exposure_key_ = exposure_key;
+  }
+
+  //! Gets the display key scale applied after calibration.
+  [[nodiscard]] auto GetExposureKey() const noexcept -> float
+  {
+    return exposure_key_;
+  }
+
+  //! Sets manual exposure EV100 value (ISO 100 reference).
   auto SetManualExposureEv100(const float ev100) noexcept -> void
   {
     manual_exposure_ev100_ = ev100;
   }
 
-  //! Gets manual exposure EV100 value.
+  //! Gets manual exposure EV100 value (ISO 100 reference).
   [[nodiscard]] auto GetManualExposureEv100() const noexcept -> float
   {
     return manual_exposure_ev100_;
@@ -209,6 +228,7 @@ private:
   ExposureMode exposure_mode_ = ExposureMode::kAuto;
   bool exposure_enabled_ = true;
   float exposure_compensation_ev_ = 0.0F;
+  float exposure_key_ = 10.0F;
   float manual_exposure_ev100_ = 9.7F;
 
   float auto_exposure_min_ev_ = -6.0F;

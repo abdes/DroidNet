@@ -230,7 +230,7 @@ struct alignas(16) GpuSkyLightParams {
   //! Maximum mip index for the prefilter cubemap slot (0 when unknown).
   std::uint32_t prefilter_max_mip { 0U };
 
-  std::uint32_t _pad0 { 0U };
+  std::uint32_t ibl_generation { 0U };
   std::uint32_t _pad1 { 0U };
 };
 static_assert(sizeof(GpuSkyLightParams) % 16 == 0,
