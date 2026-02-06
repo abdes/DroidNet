@@ -126,7 +126,7 @@ namespace {
 
       const float g = GeometrySmith(n_dot_v, n_dot_l, roughness * roughness);
       const float g_vis = (g * v_dot_h) / (n_dot_h * n_dot_v + kEpsilon);
-      const float fc = std::pow(1.0F - glm::dot(v, l), 5.0F);
+      const float fc = std::pow(1.0F - v_dot_h, 5.0F);
 
       a_term += (1.0F - fc) * g_vis;
       b_term += fc * g_vis;
