@@ -481,6 +481,7 @@ auto EnvironmentStaticDataManager::PopulateIbl(EnvironmentStaticData& next)
 
   next.sky_light.irradiance_map_slot = IrradianceMapSlot { outputs.irradiance };
   next.sky_light.prefilter_map_slot = PrefilterMapSlot { outputs.prefilter };
+  next.sky_light.ibl_generation = static_cast<uint32_t>(outputs.generation);
 
   if (outputs.prefilter_mip_levels > 0U) {
     next.sky_light.prefilter_max_mip = outputs.prefilter_mip_levels - 1U;

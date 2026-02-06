@@ -150,6 +150,25 @@ auto EnvironmentDebugPanel::DrawContents() -> void
 
   ImGui::Separator();
 
+  ImGui::Text("Presets");
+  ImGui::Indent();
+  const auto preset_label = environment_vm_->GetPresetLabel();
+  ImGui::SetNextItemWidth(220.0F);
+  if (ImGui::BeginCombo("Environment Preset", preset_label.data())) {
+    const int current_index = environment_vm_->GetPresetIndex();
+    const int preset_count = environment_vm_->GetPresetCount();
+    for (int i = 0; i < preset_count; ++i) {
+      const auto name = environment_vm_->GetPresetName(i);
+      if (ImGui::Selectable(name.data(), i == current_index)) {
+        environment_vm_->ApplyPreset(i);
+      }
+    }
+    ImGui::EndCombo();
+  }
+  ImGui::Unindent();
+
+  ImGui::Separator();
+
   // Sun controls
   ImGui::SetNextItemOpen(sun_section_open_, ImGuiCond_Always);
   const bool sun_section_open = ImGui::CollapsingHeader("Sun");

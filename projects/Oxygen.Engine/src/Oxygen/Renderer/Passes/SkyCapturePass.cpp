@@ -173,18 +173,22 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   const float far_plane = 100.0F;
   const glm::mat4 proj = glm::perspective(fov, aspect, near_plane, far_plane);
 
-  // Directions for 6 cubemap faces (Target, Up)
+  // Directions for 6 cubemap faces (Target, Up) mapped from Oxygen world-space
+  // to D3D standard cubemap convention (Y-up, Left-Handed).
+  //
+  // Oxygen: X=Right, Y=Back, Z=Up (Forward is -Y)
+  // D3D Faces: 0:+X, 1:-X, 2:+Y, 3:-Y, 4:+Z, 5:-Z
   struct FaceDir {
     glm::vec3 target;
     glm::vec3 up;
   };
   std::array<FaceDir, 6> face_dirs = {
-    FaceDir { { 1, 0, 0 }, { 0, 0, 1 } }, // +X
-    FaceDir { { -1, 0, 0 }, { 0, 0, 1 } }, // -X
-    FaceDir { { 0, 1, 0 }, { 0, 0, 1 } }, // +Y
-    FaceDir { { 0, -1, 0 }, { 0, 0, 1 } }, // -Y
-    FaceDir { { 0, 0, 1 }, { 0, -1, 0 } }, // +Z
-    FaceDir { { 0, 0, -1 }, { 0, 1, 0 } } // -Z
+    FaceDir { { 1, 0, 0 }, { 0, 0, 1 } }, // Face 0 (+X): Oxy Right, Oxy Up
+    FaceDir { { -1, 0, 0 }, { 0, 0, 1 } }, // Face 1 (-X): Oxy Left, Oxy Up
+    FaceDir { { 0, 0, 1 }, { 0, 1, 0 } }, // Face 2 (+Y): Oxy Up, Oxy Back
+    FaceDir { { 0, 0, -1 }, { 0, -1, 0 } }, // Face 3 (-Y): Oxy Down, Oxy Forward
+    FaceDir { { 0, -1, 0 }, { 0, 0, 1 } }, // Face 4 (+Z): Oxy Forward, Oxy Up
+    FaceDir { { 0, 1, 0 }, { 0, 0, 1 } } // Face 5 (-Z): Oxy Back, Oxy Up
   };
 
   const glm::vec3 eye(0.0F);

@@ -4,12 +4,228 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <array>
 #include <filesystem>
+#include <string_view>
+
+#include <glm/vec3.hpp>
 
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/UI/EnvironmentVm.h"
 
 namespace oxygen::examples::ui {
+
+namespace {
+  struct EnvironmentPresetData {
+    std::string_view name;
+    bool sun_enabled;
+    int sun_source;
+    float sun_azimuth_deg;
+    float sun_elevation_deg;
+    float sun_intensity_lux;
+    bool sun_use_temperature;
+    float sun_temperature_kelvin;
+    float sun_disk_radius_deg;
+    bool sky_atmo_enabled;
+    bool sky_atmo_sun_disk_enabled;
+    float planet_radius_km;
+    float atmosphere_height_km;
+    glm::vec3 ground_albedo;
+    float rayleigh_scale_height_km;
+    float mie_scale_height_km;
+    float mie_anisotropy;
+    float multi_scattering;
+    float aerial_perspective_scale;
+    float aerial_scattering_strength;
+    bool sky_sphere_enabled;
+    int sky_sphere_source;
+    glm::vec3 sky_sphere_color;
+    float sky_sphere_intensity;
+    float sky_sphere_rotation_deg;
+    bool sky_light_enabled;
+    int sky_light_source;
+    glm::vec3 sky_light_tint;
+    float sky_light_intensity;
+    float sky_light_diffuse;
+    float sky_light_specular;
+  };
+
+  constexpr std::array<EnvironmentPresetData, 5> kEnvironmentPresets = {
+    EnvironmentPresetData {
+      "None",
+      false,
+      1,
+      0.0F,
+      0.0F,
+      0.0F,
+      false,
+      6500.0F,
+      0.27F,
+      false,
+      false,
+      6360.0F,
+      80.0F,
+      { 0.06F, 0.05F, 0.04F },
+      8.0F,
+      1.2F,
+      0.8F,
+      1.0F,
+      1.0F,
+      1.0F,
+      false,
+      0,
+      { 0.0F, 0.0F, 0.0F },
+      1.0F,
+      0.0F,
+      false,
+      0,
+      { 1.0F, 1.0F, 1.0F },
+      1.0F,
+      1.0F,
+      1.0F,
+    },
+    EnvironmentPresetData {
+      "Outdoor Sunny",
+      true,
+      1,
+      135.0F,
+      55.0F,
+      120000.0F,
+      true,
+      5600.0F,
+      0.27F,
+      true,
+      true,
+      6360.0F,
+      80.0F,
+      { 0.06F, 0.05F, 0.04F },
+      8.0F,
+      1.2F,
+      0.8F,
+      1.0F,
+      1.0F,
+      1.0F,
+      false,
+      0,
+      { 0.0F, 0.0F, 0.0F },
+      1.0F,
+      0.0F,
+      true,
+      0,
+      { 1.0F, 1.0F, 1.0F },
+      1.0F,
+      1.0F,
+      1.0F,
+    },
+    EnvironmentPresetData {
+      "Outdoor Cloudy",
+      true,
+      1,
+      135.0F,
+      30.0F,
+      15000.0F,
+      true,
+      6500.0F,
+      0.27F,
+      true,
+      true,
+      6360.0F,
+      80.0F,
+      { 0.06F, 0.05F, 0.04F },
+      8.0F,
+      1.5F,
+      0.75F,
+      1.2F,
+      1.0F,
+      1.1F,
+      false,
+      0,
+      { 0.0F, 0.0F, 0.0F },
+      1.0F,
+      0.0F,
+      true,
+      0,
+      { 1.0F, 1.0F, 1.0F },
+      1.2F,
+      1.2F,
+      0.7F,
+    },
+    EnvironmentPresetData {
+      "Outdoor Dawn",
+      true,
+      1,
+      95.0F,
+      6.0F,
+      3000.0F,
+      true,
+      3500.0F,
+      0.27F,
+      true,
+      true,
+      6360.0F,
+      80.0F,
+      { 0.06F, 0.05F, 0.04F },
+      8.0F,
+      1.2F,
+      0.8F,
+      1.0F,
+      1.0F,
+      1.0F,
+      false,
+      0,
+      { 0.0F, 0.0F, 0.0F },
+      1.0F,
+      0.0F,
+      true,
+      0,
+      { 1.0F, 0.95F, 0.9F },
+      0.6F,
+      0.7F,
+      0.5F,
+    },
+    EnvironmentPresetData {
+      "Outdoor Dusk",
+      true,
+      1,
+      265.0F,
+      4.0F,
+      1500.0F,
+      true,
+      3200.0F,
+      0.27F,
+      true,
+      true,
+      6360.0F,
+      80.0F,
+      { 0.06F, 0.05F, 0.04F },
+      8.0F,
+      1.2F,
+      0.8F,
+      1.0F,
+      1.0F,
+      1.0F,
+      false,
+      0,
+      { 0.0F, 0.0F, 0.0F },
+      1.0F,
+      0.0F,
+      true,
+      0,
+      { 0.95F, 0.92F, 0.9F },
+      0.6F,
+      0.7F,
+      0.5F,
+    },
+  };
+
+  auto GetPreset(int index) -> const EnvironmentPresetData&
+  {
+    const int clamped
+      = std::clamp(index, 0, static_cast<int>(kEnvironmentPresets.size()) - 1);
+    return kEnvironmentPresets[static_cast<std::size_t>(clamped)];
+  }
+} // namespace
 
 EnvironmentVm::EnvironmentVm(observer_ptr<EnvironmentSettingsService> service,
   observer_ptr<FileBrowserService> file_browser_service)
@@ -46,6 +262,92 @@ auto EnvironmentVm::ApplyPendingChanges() -> void
 auto EnvironmentVm::GetAtmosphereLutStatus() const -> std::pair<bool, bool>
 {
   return service_->GetAtmosphereLutStatus();
+}
+
+auto EnvironmentVm::GetPresetCount() const -> int
+{
+  return static_cast<int>(kEnvironmentPresets.size());
+}
+
+auto EnvironmentVm::GetPresetName(int index) const -> std::string_view
+{
+  return GetPreset(index).name;
+}
+
+auto EnvironmentVm::GetPresetLabel() const -> std::string_view
+{
+  if (preset_index_ < 0) {
+    return "Custom";
+  }
+  return GetPreset(preset_index_).name;
+}
+
+auto EnvironmentVm::GetPresetIndex() const -> int { return preset_index_; }
+
+auto EnvironmentVm::ApplyPreset(int index) -> void
+{
+  const auto& preset = GetPreset(index);
+  preset_index_ = index;
+
+  service_->BeginUpdate();
+
+  // 1. Disable all systems to prevent intermediate state updates
+  SetSunEnabled(false);
+  SetSkyAtmosphereEnabled(false);
+  SetSkySphereEnabled(false);
+  SetSkyLightEnabled(false);
+
+  // 2. Configure systems
+  // Sun
+  if (preset.sun_enabled && preset.sun_source == 1) {
+    EnableSyntheticSun();
+  }
+  // Set source first to load profiles if needed
+  SetSunSource(preset.sun_source);
+  SetSunAzimuthDeg(preset.sun_azimuth_deg);
+  SetSunElevationDeg(preset.sun_elevation_deg);
+  SetSunIntensityLux(preset.sun_intensity_lux);
+  SetSunUseTemperature(preset.sun_use_temperature);
+  SetSunTemperatureKelvin(preset.sun_temperature_kelvin);
+  SetSunDiskRadiusDeg(preset.sun_disk_radius_deg);
+
+  // Sky Atmosphere
+  SetSunDiskEnabled(preset.sky_atmo_sun_disk_enabled);
+  SetPlanetRadiusKm(preset.planet_radius_km);
+  SetAtmosphereHeightKm(preset.atmosphere_height_km);
+  SetGroundAlbedo(preset.ground_albedo);
+  SetRayleighScaleHeightKm(preset.rayleigh_scale_height_km);
+  SetMieScaleHeightKm(preset.mie_scale_height_km);
+  SetMieAnisotropy(preset.mie_anisotropy);
+  SetMultiScattering(preset.multi_scattering);
+  SetAerialPerspectiveScale(preset.aerial_perspective_scale);
+  SetAerialScatteringStrength(preset.aerial_scattering_strength);
+
+  // Sky Sphere
+  SetSkySphereSource(preset.sky_sphere_source);
+  SetSkySphereSolidColor(preset.sky_sphere_color);
+  SetSkyIntensity(preset.sky_sphere_intensity);
+  SetSkySphereRotationDeg(preset.sky_sphere_rotation_deg);
+
+  // Sky Light
+  SetSkyLightSource(preset.sky_light_source);
+  SetSkyLightTint(preset.sky_light_tint);
+  SetSkyLightIntensity(preset.sky_light_intensity);
+  SetSkyLightDiffuse(preset.sky_light_diffuse);
+  SetSkyLightSpecular(preset.sky_light_specular);
+
+  // 3. Re-enable systems in dependency order
+  // Background
+  SetSkyAtmosphereEnabled(preset.sky_atmo_enabled);
+  SetSkySphereEnabled(preset.sky_sphere_enabled);
+
+  // Direct Light
+  SetSunEnabled(preset.sun_enabled);
+
+  // Global Illumination (captures background + direct)
+  SetSkyLightEnabled(preset.sky_light_enabled);
+
+  service_->EndUpdate();
 }
 
 auto EnvironmentVm::GetSkyAtmosphereEnabled() const -> bool

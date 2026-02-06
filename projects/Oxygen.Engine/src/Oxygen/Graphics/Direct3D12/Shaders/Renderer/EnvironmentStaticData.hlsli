@@ -94,7 +94,7 @@ struct GpuSkyLightParams
 
     uint cubemap_max_mip;
     uint prefilter_max_mip;
-    uint _pad0;
+    uint ibl_generation;
     uint _pad1;
 };
 

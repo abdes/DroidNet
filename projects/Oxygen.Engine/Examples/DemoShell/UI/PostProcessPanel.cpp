@@ -124,6 +124,11 @@ void PostProcessPanel::DrawExposureSection()
     }
   }
 
+  float exposure_key = vm_->GetExposureKey();
+  if (ImGui::DragFloat("Exposure Key", &exposure_key, 0.1F, 0.1F, 25.0F)) {
+    vm_->SetExposureKey(exposure_key);
+  }
+
   if (current_mode == ExposureMode::kAuto) {
     ImGui::BeginDisabled();
     float speed_placeholder = 0.0F;

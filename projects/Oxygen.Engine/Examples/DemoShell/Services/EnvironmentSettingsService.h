@@ -94,6 +94,12 @@ public:
   //! Applies pending changes to the current scene.
   virtual auto ApplyPendingChanges() -> void;
 
+  //! Starts a batch update of settings.
+  virtual auto BeginUpdate() -> void;
+
+  //! Ends a batch update of settings.
+  virtual auto EndUpdate() -> void;
+
   //! Returns whether LUTs are valid and dirty (renderer state).
   [[nodiscard]] virtual auto GetAtmosphereLutStatus() const
     -> std::pair<bool, bool>;
@@ -289,6 +295,7 @@ private:
 
   EnvironmentRuntimeConfig config_ {};
 
+  int update_depth_ { 0 };
   bool settings_loaded_ { false };
   bool pending_changes_ { false };
   bool needs_sync_ { true };

@@ -469,6 +469,14 @@ auto Renderer::RequestIblRegeneration() noexcept -> void
   ibl_compute_pass_->RequestRegenerationOnce();
 }
 
+auto Renderer::RequestSkyCapture() noexcept -> void
+{
+  sky_capture_requested_ = true;
+  if (sky_capture_pass_) {
+    sky_capture_pass_->MarkDirty();
+  }
+}
+
 auto Renderer::SetAtmosphereDebugFlags(const uint32_t flags) -> void
 {
   atmosphere_debug_flags_ = flags;
@@ -817,27 +825,44 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
       // Run this BEFORE SetupFramebufferForView to avoid touching main scene
       // targets while performing the internal capture.
       if (!ran_sky_capture_this_frame && sky_capture_pass_) {
-        bool needs_capture = !sky_capture_pass_->IsCaptured();
+        bool needs_capture
+          = sky_capture_requested_ || !sky_capture_pass_->IsCaptured();
 
         if (sky_atmo_lut_manager_) {
           const auto current_atmo_gen = sky_atmo_lut_manager_->GetGeneration();
           if (current_atmo_gen != last_atmo_generation_) {
             needs_capture = true;
-            last_atmo_generation_ = current_atmo_gen;
           }
 
-          // Wait until LUTs are ready for capture
-          if (needs_capture && !sky_atmo_lut_manager_->HasBeenGenerated()) {
+          // If atmosphere is enabled, we MUST wait for LUTs to be
+          // generated/clean before capturing the sky, otherwise we'll capture
+          // stale atmosphere state.
+          bool atmo_enabled = false;
+          if (const auto scene = render_context_->scene) {
+            if (const auto env = scene->GetEnvironment()) {
+              if (const auto atmo
+                = env->TryGetSystem<scene::environment::SkyAtmosphere>();
+                atmo && atmo->IsEnabled()) {
+                atmo_enabled = true;
+              }
+            }
+          }
+
+          if (atmo_enabled && needs_capture
+            && (sky_atmo_lut_manager_->IsDirty()
+              || !sky_atmo_lut_manager_->HasBeenGenerated())) {
             needs_capture = false;
           }
         }
 
+        bool capture_completed = false;
         if (needs_capture) {
           try {
             graphics::GpuEventScope capture_scope(*recorder, "Sky Capture");
             co_await sky_capture_pass_->PrepareResources(
               *render_context_, *recorder);
             co_await sky_capture_pass_->Execute(*render_context_, *recorder);
+            capture_completed = true;
 
             // Force IBL to re-filter the new capture.
             if (ibl_compute_pass_) {
@@ -845,6 +870,12 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
             }
           } catch (const std::exception& ex) {
             LOG_F(ERROR, "SkyCapturePass failed: {}", ex.what());
+          }
+        }
+        if (capture_completed) {
+          sky_capture_requested_ = false;
+          if (sky_atmo_lut_manager_) {
+            last_atmo_generation_ = sky_atmo_lut_manager_->GetGeneration();
           }
         }
         ran_sky_capture_this_frame = true;
@@ -1280,6 +1311,7 @@ auto Renderer::UpdateViewExposure(
   ViewId view_id, const scene::Scene& scene, const SunState& sun_state) -> float
 {
   float exposure = 1.0F;
+  float exposure_key = 1.0F;
   std::optional<float> camera_ev100 {};
 
   if (const auto resolved_it = resolved_views_.find(view_id);
@@ -1296,6 +1328,7 @@ auto Renderer::UpdateViewExposure(
         env_dynamic_manager_->SetExposure(view_id, exposure);
         return exposure;
       }
+      exposure_key = std::max(1e-4F, pp->GetExposureKey());
       const float compensation_ev = pp->GetExposureCompensationEv();
       if (pp->GetExposureMode() == scene::environment::ExposureMode::kManual
         || pp->GetExposureMode()
@@ -1304,10 +1337,9 @@ auto Renderer::UpdateViewExposure(
             == scene::environment::ExposureMode::kManualCamera
           ? camera_ev100.value_or(pp->GetManualExposureEv100())
           : pp->GetManualExposureEv100();
-        // Physically calibrated manual exposure:
-        // Exposure = 1 / (q * 2^EV100) where q = 1.2 (standard for digital
-        // sensors)
-        exposure = (1.0F / 1.2F) * std::exp2(compensation_ev - ev100);
+        // Physically calibrated manual exposure (ISO 2720 reflected-light
+        // calibration constant K = 12.5).
+        exposure = (1.0F / 12.5F) * std::exp2(compensation_ev - ev100);
       } else {
         const float min_ev = pp->GetAutoExposureMinEv();
         const float max_ev = pp->GetAutoExposureMaxEv();
@@ -1340,6 +1372,7 @@ auto Renderer::UpdateViewExposure(
     }
   }
 
+  exposure *= exposure_key;
   env_dynamic_manager_->SetExposure(view_id, exposure);
   return exposure;
 }

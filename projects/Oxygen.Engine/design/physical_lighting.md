@@ -143,12 +143,14 @@ absolute tolerance.
 
 - [x] `CameraExposure` struct integrated and serialized.
 - [x] Demo UI exposes camera exposure parameters and persists them.
-- [ ] Manual exposure path uses EV100 formula end-to-end in renderer. (Partial — `CameraExposure` and DemoShell UI apply EV100 into `ForwardPipeline`, but `Renderer::UpdateViewExposure` still uses compensation EV for manual/manual_camera modes instead of camera EV100.)
-- [ ] **Renderer camera EV wiring & calibration:** Update `Renderer::UpdateViewExposure` to consume camera EV100 for `kManualCamera` and apply the physical calibration formula `exposure = (1/1.2) * 2^{-EV100}`. (Files: `src/Oxygen/Renderer/Renderer.cpp`, `src/Oxygen/Scene/Camera/CameraExposure.h`). Verification: unit tests for EV->exposure conversion and an integration test using LightBench mid-gray scene.
+- [x] Manual exposure path uses EV100 formula end-to-end in renderer.
+- [x] **Renderer camera EV wiring & calibration:** Update `Renderer::UpdateViewExposure` to consume camera EV100 for `kManualCamera` and apply the ISO 2720 calibration formula `exposure = (1/12.5) * 2^{-EV100}`. Apply a display key scale after calibration to align mid-gray for display. (Files: `src/Oxygen/Renderer/Renderer.cpp`, `src/Oxygen/Scene/Camera/CameraExposure.h`). Verification: unit tests for EV->exposure conversion and an integration test using LightBench mid-gray scene.
 - [ ] **Histogram-based auto exposure:** Implement an auto-exposure compute pass (luminance histogram), metering modes (average/center-weighted/spot), temporal smoothing and bind computed exposure to `EnvironmentDynamicData.exposure`. (Files: new `src/Oxygen/Renderer/Passes/AutoExposurePass.*`, updates to `EnvironmentDynamicDataManager`). Verification: deterministic tests for histogram outputs and adaptation behavior.
 - [x] **Compositing tonemap behavior documented:** Tonemapping is performed per-view by `ToneMapPass` in `ForwardPipeline`. The `CompositingTaskType::kTonemap` enum value and placeholders were removed to avoid confusion; `Renderer::OnCompositing` focuses on copy/blend/texture-blend/taa operations. (File: `src/Oxygen/Renderer/Renderer.cpp`). Verification: end-to-end compositing test that exercises ForwardPipeline tonemap behavior.
-- [ ] **Shader conversion helpers & refactor:** Add named helpers (`LuxToIrradiance`, `LumensToCandela`, `CandelaToRadiance`) to `src/Oxygen/Graphics/Direct3D12/Shaders/Common/PhysicalLighting.hlsli` and refactor `ForwardDirectLighting.hlsli` to call them. Verification: shader unit tests or numeric validation against reference conversions.
-- [ ] **Validation scenes & tests:** Add LightBench presets and automated tests to verify mid-gray mapping, EV correctness, and daylight references (e.g., EV100 9.7/14-16 scenarios). (Files: `Examples/LightBench`, test assets, `Examples/DemoShell/demo_settings.json`).
+- [x] **Shader conversion helpers & refactor:** Add named helpers (`LuxToIrradiance`, `LumensToCandela`, `CandelaToRadiance`) to `src/Oxygen/Graphics/Direct3D12/Shaders/Common/PhysicalLighting.hlsli` and refactor `ForwardDirectLighting.hlsli` to call them.
+- [ ] **Shader conversion validation:** Add shader unit tests or numeric validation
+  against reference conversions.
+- [X] **Validation scenes & tests:** Add LightBench presets and automated tests to verify mid-gray mapping, EV correctness, and daylight references (e.g., EV100 9.7/14-16 scenarios). (Files: `Examples/LightBench`, test assets, `Examples/DemoShell/demo_settings.json`).
 
 **Tasks:**
 
@@ -157,14 +159,15 @@ absolute tolerance.
   - Location: `src/Oxygen/Scene/Camera/CameraExposure.h` (new file)
 - [x] Compute EV100:
   - $EV100 = \log_2(\frac{N^2}{t}) - \log_2(\frac{ISO}{100})$
-- [ ] Align exposure scale with physical calibration:
-  - $exposure = \frac{1}{1.2} \cdot 2^{-EV100}$
-- [ ] Update `Renderer::UpdateViewExposure` to use physical camera exposure (kManualCamera), add unit tests and a LightBench integration scene to verify mid-gray mapping.
+- [x] Align exposure scale with ISO 2720 calibration and a display key:
+  - $exposure = \frac{1}{12.5} \cdot 2^{-EV100} \cdot key$
+- [x] Update `Renderer::UpdateViewExposure` to use physical camera exposure (kManualCamera), add unit tests and a LightBench integration scene to verify mid-gray mapping.
 - [ ] Implement `AutoExposurePass`: compute luminance histogram, expose metering modes, provide temporal smoothing, and bind results to `EnvironmentDynamicData.exposure`. Add compute shader tests and integration scenarios.
-- [ ] Add `PhysicalLighting.hlsli` shared helpers and refactor `ForwardDirectLighting.hlsli` to use them; add shader validation tests.
+- [x] Add `PhysicalLighting.hlsli` shared helpers and refactor
+  `ForwardDirectLighting.hlsli` to use them.
+- [ ] Add shader validation tests for conversion helpers.
 - [x] Documented that tonemapping is managed by `ForwardPipeline` and removed `CompositingTaskType::kTonemap`; add an end-to-end compositing test to verify ForwardPipeline behavior.
 - [ ] Add docs and Doxygen comments for exposure fields, update `PostProcessVolume` docs to reflect EV/camera parameter support.
-- [ ] Add automated CI tests and regression cases for exposure convergence and scene-based validation.
 - [x] Integrate with PostProcessPanel (see [PostProcessPanel.md, Phase C](PostProcessPanel.md#phase-c-postprocess-integration-exposure--tonemapping)).
 
 ### Phase 3 — Lux-Consistent Lighting
@@ -180,15 +183,15 @@ absolute tolerance.
 
 **Tasks:**
 
-- [ ] Directional lights: treat input as lux; convert to radiance using
+- [x] Directional lights: treat input as lux; convert to radiance using
    Lambertian model in shader.
-- [ ] Point lights: if input is lumens, convert to intensity (cd) and then
+- [x] Point lights: if input is lumens, convert to intensity (cd) and then
    radiance. If input is cd, skip conversion.
-- [ ] Spot lights: apply lumens/candela conversion with cone distribution.
-- [ ] Add conversion helpers in shader library:
+- [x] Spot lights: apply lumens/candela conversion with cone distribution.
+- [x] Add conversion helpers in shader library:
   - `LuxToIrradiance`, `LumensToCandela`, `CandelaToRadiance`.
   - Location: `src/Oxygen/Graphics/Direct3D12/Shaders/Common/PhysicalLighting.hlsli`
-- [ ] Update `ForwardDirectLighting.hlsli` to use conversions.
+- [x] Update `ForwardDirectLighting.hlsli` to use conversions.
 
 ### Phase 4 — Sun & Environment Integration
 

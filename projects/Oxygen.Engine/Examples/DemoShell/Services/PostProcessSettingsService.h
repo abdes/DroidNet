@@ -75,6 +75,9 @@ namespace examples {
       [[nodiscard]] virtual auto GetExposureCompensation() const -> float;
       virtual auto SetExposureCompensation(float stops) -> void;
 
+      [[nodiscard]] virtual auto GetExposureKey() const -> float;
+      virtual auto SetExposureKey(float exposure_key) -> void;
+
       // Tonemapping
       [[nodiscard]] virtual auto GetTonemappingEnabled() const -> bool;
       virtual auto SetTonemappingEnabled(bool enabled) -> void;
@@ -93,6 +96,7 @@ namespace examples {
         = "post_process.exposure.manual_ev100";
       static constexpr auto kExposureCompensationKey
         = "post_process.exposure.compensation";
+      static constexpr auto kExposureKeyKey = "post_process.exposure.key";
 
       static constexpr auto kTonemappingEnabledKey
         = "post_process.tonemapping.enabled";

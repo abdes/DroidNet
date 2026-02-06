@@ -50,6 +50,12 @@ public:
 
   [[nodiscard]] auto GetAtmosphereLutStatus() const -> std::pair<bool, bool>;
 
+  [[nodiscard]] auto GetPresetCount() const -> int;
+  [[nodiscard]] auto GetPresetName(int index) const -> std::string_view;
+  [[nodiscard]] auto GetPresetLabel() const -> std::string_view;
+  [[nodiscard]] auto GetPresetIndex() const -> int;
+  auto ApplyPreset(int index) -> void;
+
   // SkyAtmosphere
   [[nodiscard]] auto GetSkyAtmosphereEnabled() const -> bool;
   auto SetSkyAtmosphereEnabled(bool enabled) -> void;
@@ -163,6 +169,7 @@ private:
   observer_ptr<EnvironmentSettingsService> service_;
   observer_ptr<FileBrowserService> file_browser_ { nullptr };
   FileBrowserService::RequestId skybox_browse_request_id_ { 0 };
+  int preset_index_ { 0 };
 };
 
 } // namespace oxygen::examples::ui

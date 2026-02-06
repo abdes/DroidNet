@@ -315,6 +315,9 @@ public:
   */
   OXGN_RNDR_API auto RequestIblRegeneration() noexcept -> void;
 
+  //! Force a sky capture refresh on the next frame.
+  OXGN_RNDR_API auto RequestSkyCapture() noexcept -> void;
+
   //! Set debug override flags for atmosphere rendering.
   /*!
    When set, these flags augment the automatically computed atmosphere flags.
