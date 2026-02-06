@@ -70,6 +70,18 @@ public:
     return exposure_mode_;
   }
 
+  //! Enables or disables exposure application.
+  auto SetExposureEnabled(const bool enabled) noexcept -> void
+  {
+    exposure_enabled_ = enabled;
+  }
+
+  //! Returns whether exposure is enabled.
+  [[nodiscard]] auto GetExposureEnabled() const noexcept -> bool
+  {
+    return exposure_enabled_;
+  }
+
   //! Sets exposure compensation in EV (stops).
   auto SetExposureCompensationEv(const float ev) noexcept -> void
   {
@@ -80,6 +92,18 @@ public:
   [[nodiscard]] auto GetExposureCompensationEv() const noexcept -> float
   {
     return exposure_compensation_ev_;
+  }
+
+  //! Sets manual exposure EV100 value.
+  auto SetManualExposureEv100(const float ev100) noexcept -> void
+  {
+    manual_exposure_ev100_ = ev100;
+  }
+
+  //! Gets manual exposure EV100 value.
+  [[nodiscard]] auto GetManualExposureEv100() const noexcept -> float
+  {
+    return manual_exposure_ev100_;
   }
 
   //! Sets auto-exposure min/max EV.
@@ -183,7 +207,9 @@ private:
   ToneMapper tone_mapper_ = ToneMapper::kAcesFitted;
 
   ExposureMode exposure_mode_ = ExposureMode::kAuto;
+  bool exposure_enabled_ = true;
   float exposure_compensation_ev_ = 0.0F;
+  float manual_exposure_ev100_ = 9.7F;
 
   float auto_exposure_min_ev_ = -6.0F;
   float auto_exposure_max_ev_ = 16.0F;

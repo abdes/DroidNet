@@ -44,6 +44,8 @@ ResolvedView::ResolvedView(const Params& p)
     camera_position_ = glm::vec3(inv_view_[3]);
   }
 
+  camera_ev100_ = p.camera_ev100;
+
   frustum_ = Frustum::FromViewProj(view_proj_, reverse_z_);
 
   // Derive vertical focal length in pixels from projection and viewport.

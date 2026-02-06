@@ -486,6 +486,7 @@ auto DemoShell::OnSceneActivated(scene::Scene& scene) -> void
   impl_->rendering_settings_service.OnSceneActivated(scene);
   impl_->light_culling_settings_service.OnSceneActivated(scene);
   impl_->environment_settings_service.OnSceneActivated(scene);
+  impl_->post_process_settings_service.BindScene(observer_ptr { &scene });
 }
 
 } // namespace oxygen::examples
