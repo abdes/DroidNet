@@ -1280,20 +1280,34 @@ auto Renderer::UpdateViewExposure(
   ViewId view_id, const scene::Scene& scene, const SunState& sun_state) -> float
 {
   float exposure = 1.0F;
+  std::optional<float> camera_ev100 {};
+
+  if (const auto resolved_it = resolved_views_.find(view_id);
+    resolved_it != resolved_views_.end()) {
+    camera_ev100 = resolved_it->second.CameraEv100();
+  }
 
   // Manual and auto exposure use the post-process volume.
   if (const auto env = scene.GetEnvironment()) {
     if (const auto pp
       = env->TryGetSystem<scene::environment::PostProcessVolume>();
       pp && pp->IsEnabled()) {
+      if (!pp->GetExposureEnabled()) {
+        env_dynamic_manager_->SetExposure(view_id, exposure);
+        return exposure;
+      }
       const float compensation_ev = pp->GetExposureCompensationEv();
       if (pp->GetExposureMode() == scene::environment::ExposureMode::kManual
         || pp->GetExposureMode()
           == scene::environment::ExposureMode::kManualCamera) {
+        const float ev100 = pp->GetExposureMode()
+            == scene::environment::ExposureMode::kManualCamera
+          ? camera_ev100.value_or(pp->GetManualExposureEv100())
+          : pp->GetManualExposureEv100();
         // Physically calibrated manual exposure:
         // Exposure = 1 / (q * 2^EV100) where q = 1.2 (standard for digital
         // sensors)
-        exposure = 1.0F / (1.2F * std::exp2(compensation_ev));
+        exposure = (1.0F / 1.2F) * std::exp2(compensation_ev - ev100);
       } else {
         const float min_ev = pp->GetAutoExposureMinEv();
         const float max_ev = pp->GetAutoExposureMaxEv();

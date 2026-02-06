@@ -11,6 +11,10 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Scene.h>
+
 
 #include "DemoShell/Runtime/RenderingPipeline.h"
 #include "DemoShell/Services/CameraSettingsService.h"
@@ -20,38 +24,69 @@
 namespace oxygen::examples::ui {
 
 namespace {
-  auto ConvertEv100ToExposure(const float ev100, const float compensation_ev)
-    -> float
+  auto ToSceneExposureMode(const engine::ExposureMode mode)
+    -> scene::environment::ExposureMode
   {
-    return std::exp2(compensation_ev - ev100);
+    switch (mode) {
+    case engine::ExposureMode::kManual:
+      return scene::environment::ExposureMode::kManual;
+    case engine::ExposureMode::kAuto:
+      return scene::environment::ExposureMode::kAuto;
+    case engine::ExposureMode::kManualCamera:
+      return scene::environment::ExposureMode::kManualCamera;
+    }
+    return scene::environment::ExposureMode::kManual;
+  }
+
+  auto EnsurePostProcessVolume(observer_ptr<scene::Scene> scene)
+    -> observer_ptr<scene::environment::PostProcessVolume>
+  {
+    if (!scene) {
+      return nullptr;
+    }
+
+    auto env = scene->GetEnvironment();
+    if (!env) {
+      scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+      env = scene->GetEnvironment();
+    }
+
+    if (!env) {
+      return nullptr;
+    }
+
+    if (auto pp = env->TryGetSystem<scene::environment::PostProcessVolume>()) {
+      return pp;
+    }
+
+    auto& pp = env->AddSystem<scene::environment::PostProcessVolume>();
+    return observer_ptr { &pp };
   }
 
   auto ApplyExposureToPipeline(observer_ptr<RenderingPipeline> pipeline,
-    const engine::ExposureMode mode, const float manual_ev100,
-    const float manual_camera_ev100, const float compensation_ev,
-    const bool enabled) -> void
+    const engine::ExposureMode mode, const bool enabled) -> void
   {
     if (!pipeline) {
       return;
     }
 
-    if (!enabled) {
-      pipeline->SetExposureMode(engine::ExposureMode::kManual);
-      pipeline->SetExposureValue(1.0F);
-      return;
-    }
-
     pipeline->SetExposureMode(mode);
-    if (mode == engine::ExposureMode::kManual) {
-      pipeline->SetExposureValue(
-        ConvertEv100ToExposure(manual_ev100, compensation_ev));
+    pipeline->SetExposureValue(1.0F);
+  }
+
+  auto ApplyExposureToScene(observer_ptr<scene::Scene> scene,
+    const engine::ExposureMode mode, const float manual_ev100,
+    const float compensation_ev, const bool enabled) -> void
+  {
+    const auto pp = EnsurePostProcessVolume(scene);
+    if (!pp) {
       return;
     }
 
-    if (mode == engine::ExposureMode::kManualCamera) {
-      pipeline->SetExposureValue(
-        ConvertEv100ToExposure(manual_camera_ev100, compensation_ev));
-    }
+    pp->SetExposureEnabled(enabled);
+    pp->SetExposureMode(ToSceneExposureMode(mode));
+    pp->SetManualExposureEv100(manual_ev100);
+    pp->SetExposureCompensationEv(compensation_ev);
   }
 
   auto ResolveActiveCameraExposure(
@@ -103,12 +138,13 @@ auto PostProcessSettingsService::Initialize(
 
   // Push initial state
   if (pipeline_) {
-    ApplyExposureToPipeline(pipeline_, GetExposureMode(),
-      GetManualExposureEV100(), ResolveManualCameraEv100(camera_settings_),
-      GetExposureCompensation(), GetExposureEnabled());
+    ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetExposureEnabled());
     pipeline_->SetToneMapper(
       GetTonemappingEnabled() ? GetToneMapper() : engine::ToneMapper::kNone);
   }
+
+  ApplyExposureToScene(scene_, GetExposureMode(), GetManualExposureEV100(),
+    GetExposureCompensation(), GetExposureEnabled());
 }
 
 auto PostProcessSettingsService::BindCameraSettings(
@@ -118,10 +154,18 @@ auto PostProcessSettingsService::BindCameraSettings(
   epoch_++;
 
   if (pipeline_) {
-    ApplyExposureToPipeline(pipeline_, GetExposureMode(),
-      GetManualExposureEV100(), ResolveManualCameraEv100(camera_settings_),
-      GetExposureCompensation(), GetExposureEnabled());
+    ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetExposureEnabled());
   }
+}
+
+auto PostProcessSettingsService::BindScene(observer_ptr<scene::Scene> scene)
+  -> void
+{
+  scene_ = scene;
+  epoch_++;
+
+  ApplyExposureToScene(scene_, GetExposureMode(), GetManualExposureEV100(),
+    GetExposureCompensation(), GetExposureEnabled());
 }
 
 // Exposure
@@ -152,8 +196,8 @@ auto PostProcessSettingsService::SetExposureEnabled(bool enabled) -> void
   settings->SetBool(kExposureEnabledKey, enabled);
   epoch_++;
 
-  ApplyExposureToPipeline(pipeline_, GetExposureMode(),
-    GetManualExposureEV100(), ResolveManualCameraEv100(camera_settings_),
+  ApplyExposureToPipeline(pipeline_, GetExposureMode(), enabled);
+  ApplyExposureToScene(scene_, GetExposureMode(), GetManualExposureEV100(),
     GetExposureCompensation(), enabled);
 }
 
@@ -165,9 +209,9 @@ auto PostProcessSettingsService::SetExposureMode(engine::ExposureMode mode)
   settings->SetString(kExposureModeKey, engine::to_string(mode));
   epoch_++;
 
-  ApplyExposureToPipeline(pipeline_, mode, GetManualExposureEV100(),
-    ResolveManualCameraEv100(camera_settings_), GetExposureCompensation(),
-    GetExposureEnabled());
+  ApplyExposureToPipeline(pipeline_, mode, GetExposureEnabled());
+  ApplyExposureToScene(scene_, mode, GetManualExposureEV100(),
+    GetExposureCompensation(), GetExposureEnabled());
 }
 
 auto PostProcessSettingsService::GetManualExposureEV100() const -> float
@@ -184,9 +228,9 @@ auto PostProcessSettingsService::SetManualExposureEV100(float ev100) -> void
   settings->SetFloat(kExposureManualEV100Key, ev100);
   epoch_++;
 
-  ApplyExposureToPipeline(pipeline_, GetExposureMode(), ev100,
-    ResolveManualCameraEv100(camera_settings_), GetExposureCompensation(),
-    GetExposureEnabled());
+  ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetExposureEnabled());
+  ApplyExposureToScene(scene_, GetExposureMode(), ev100,
+    GetExposureCompensation(), GetExposureEnabled());
 }
 
 auto PostProcessSettingsService::GetManualCameraAperture() const -> float
@@ -203,9 +247,7 @@ auto PostProcessSettingsService::SetManualCameraAperture(float aperture) -> void
     exposure->aperture_f = aperture;
     epoch_++;
 
-    ApplyExposureToPipeline(pipeline_, GetExposureMode(),
-      GetManualExposureEV100(), ResolveManualCameraEv100(camera_settings_),
-      GetExposureCompensation(), GetExposureEnabled());
+    ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetExposureEnabled());
   }
 }
 
@@ -224,9 +266,7 @@ auto PostProcessSettingsService::SetManualCameraShutterRate(float shutter_rate)
     exposure->shutter_rate = shutter_rate;
     epoch_++;
 
-    ApplyExposureToPipeline(pipeline_, GetExposureMode(),
-      GetManualExposureEV100(), ResolveManualCameraEv100(camera_settings_),
-      GetExposureCompensation(), GetExposureEnabled());
+    ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetExposureEnabled());
   }
 }
 
@@ -244,9 +284,7 @@ auto PostProcessSettingsService::SetManualCameraIso(float iso) -> void
     exposure->iso = iso;
     epoch_++;
 
-    ApplyExposureToPipeline(pipeline_, GetExposureMode(),
-      GetManualExposureEV100(), ResolveManualCameraEv100(camera_settings_),
-      GetExposureCompensation(), GetExposureEnabled());
+    ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetExposureEnabled());
   }
 }
 
@@ -270,9 +308,9 @@ auto PostProcessSettingsService::SetExposureCompensation(float stops) -> void
   settings->SetFloat(kExposureCompensationKey, stops);
   epoch_++;
 
-  ApplyExposureToPipeline(pipeline_, GetExposureMode(),
-    GetManualExposureEV100(), ResolveManualCameraEv100(camera_settings_), stops,
-    GetExposureEnabled());
+  ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetExposureEnabled());
+  ApplyExposureToScene(scene_, GetExposureMode(), GetManualExposureEV100(),
+    stops, GetExposureEnabled());
 }
 
 // Tonemapping

@@ -739,13 +739,10 @@ struct ForwardPipeline::Impl {
         ? shader_pass_config->debug_mode
         : engine::ShaderDebugMode::kDisabled;
       const auto debug_intent = EvaluateDebugModeIntent(debug_mode);
-      if (debug_intent.force_manual_exposure) {
-        tone_map_pass_config->exposure_mode = engine::ExposureMode::kManual;
-        tone_map_pass_config->manual_exposure = 1.0F;
-      } else {
-        tone_map_pass_config->exposure_mode = staged.exposure_mode;
-        tone_map_pass_config->manual_exposure = staged.exposure_value;
-      }
+      tone_map_pass_config->exposure_mode = debug_intent.force_manual_exposure
+        ? engine::ExposureMode::kManual
+        : staged.exposure_mode;
+      tone_map_pass_config->manual_exposure = 1.0F;
       tone_map_pass_config->tone_mapper = staged.tonemapping_mode;
     }
 

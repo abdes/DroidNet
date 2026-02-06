@@ -27,6 +27,7 @@ public:
     glm::mat4 view_matrix { 1.0f };
     glm::mat4 proj_matrix { 1.0f };
     std::optional<glm::vec3> camera_position {};
+    std::optional<float> camera_ev100 {};
     NdcDepthRange depth_range = NdcDepthRange::ZeroToOne; // default D3D
 
     // Camera clip planes in view-space units.
@@ -72,6 +73,10 @@ public:
   {
     return camera_position_;
   }
+  [[nodiscard]] auto CameraEv100() const noexcept -> std::optional<float>
+  {
+    return camera_ev100_;
+  }
   [[nodiscard]] auto FocalLengthPixels() const noexcept -> float
   {
     return focal_length_pixels_;
@@ -99,6 +104,7 @@ private:
   bool reverse_z_ = false;
   bool mirrored_ = false;
   glm::vec3 camera_position_ { 0.0f, 0.0f, 0.0f };
+  std::optional<float> camera_ev100_ {};
 
   float near_plane_ { 0.1F };
   float far_plane_ { 1000.0F };

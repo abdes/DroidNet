@@ -371,11 +371,9 @@ auto ToneMapPass::UpdatePassConstants(ShaderVisibleIndex source_texture_index)
   CHECK_NOTNULL_F(pass_constants_mapped_ptr_);
 
   float exposure = std::max(config_->manual_exposure, 0.0F);
-  if (config_->exposure_mode == ExposureMode::kAuto) {
-    if (const auto manager = Context().env_dynamic_manager) {
-      const auto view_id = Context().current_view.view_id;
-      exposure = std::max(manager->GetExposure(view_id), 0.0F);
-    }
+  if (const auto manager = Context().env_dynamic_manager) {
+    const auto view_id = Context().current_view.view_id;
+    exposure = std::max(manager->GetExposure(view_id), 0.0F);
   }
   const ToneMapPassConstants constants {
     .source_texture_index = source_texture_index.get(),

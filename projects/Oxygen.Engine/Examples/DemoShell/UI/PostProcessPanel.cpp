@@ -91,7 +91,8 @@ void PostProcessPanel::DrawExposureSection()
   if (current_mode == ExposureMode::kManual) {
     float ev100 = vm_->GetManualExposureEV100();
     // Range roughly covering starlight to bright sunlight
-    if (ImGui::SliderFloat("EV100", &ev100, -6.0F, 16.0F)) {
+    if (ImGui::DragFloat("EV100", &ev100, 0.01F, -6.0F, 16.0F, "%.2f")) {
+      ev100 = std::round(ev100 * 100.0F) / 100.0F;
       vm_->SetManualExposureEV100(ev100);
     }
   }
@@ -116,23 +117,11 @@ void PostProcessPanel::DrawExposureSection()
     ImGui::Text("Computed EV100: %.2f", computed_ev100);
   }
 
-  float comp = vm_->GetExposureCompensation();
-  if (current_mode == ExposureMode::kManual
-    || current_mode == ExposureMode::kManualCamera) {
-    if (comp != 0.0F) {
-      comp = 0.0F;
+  if (current_mode == ExposureMode::kAuto) {
+    float comp = vm_->GetExposureCompensation();
+    if (ImGui::DragFloat("Compensation", &comp, 0.1F, -10.0F, 10.0F)) {
       vm_->SetExposureCompensation(comp);
     }
-    ImGui::BeginDisabled();
-  }
-  if (ImGui::DragFloat("Compensation", &comp, 0.1F, -10.0F, 10.0F)) {
-    if (current_mode != ExposureMode::kManual) {
-      vm_->SetExposureCompensation(comp);
-    }
-  }
-  if (current_mode == ExposureMode::kManual
-    || current_mode == ExposureMode::kManualCamera) {
-    ImGui::EndDisabled();
   }
 
   if (current_mode == ExposureMode::kAuto) {
@@ -146,15 +135,10 @@ void PostProcessPanel::DrawExposureSection()
   }
 
   if (exposure_enabled) {
-    if (current_mode == ExposureMode::kManual
-      || current_mode == ExposureMode::kManualCamera) {
-      const float ev100 = current_mode == ExposureMode::kManual
-        ? vm_->GetManualExposureEV100()
-        : vm_->GetManualCameraEV100();
-      const float final_exposure = std::exp2(comp - ev100);
-      ImGui::Text("Final Exposure (linear): %.4f", final_exposure);
+    if (current_mode == ExposureMode::kAuto) {
+      ImGui::Text("Final Exposure (linear): Renderer (auto)");
     } else {
-      ImGui::Text("Final Exposure (linear): Auto");
+      ImGui::Text("Final Exposure (linear): Renderer");
     }
   } else {
     ImGui::Text("Final Exposure (linear): 1.0000 (disabled)");

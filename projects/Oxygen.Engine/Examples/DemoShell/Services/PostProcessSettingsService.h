@@ -18,6 +18,9 @@ namespace engine {
   enum class ExposureMode : std::uint32_t;
   enum class ToneMapper : std::uint32_t;
 } // namespace engine
+namespace scene {
+  class Scene;
+} // namespace scene
 
 namespace examples {
 
@@ -43,6 +46,9 @@ namespace examples {
       //! Binds the camera settings service used for camera exposure settings.
       virtual auto BindCameraSettings(
         observer_ptr<CameraSettingsService> camera_settings) -> void;
+
+      //! Binds the active scene for post-process system updates.
+      virtual auto BindScene(observer_ptr<scene::Scene> scene) -> void;
 
       // Exposure
       [[nodiscard]] virtual auto GetExposureEnabled() const -> bool;
@@ -94,6 +100,7 @@ namespace examples {
 
       observer_ptr<RenderingPipeline> pipeline_ {};
       observer_ptr<CameraSettingsService> camera_settings_ {};
+      observer_ptr<scene::Scene> scene_ {};
       mutable std::atomic_uint64_t epoch_ { 0 };
       mutable std::string last_camera_id_ {};
     };
