@@ -89,11 +89,9 @@ To consider this implementation complete and "Engine Ready", the following requi
 | ✅ | REQ03 | **Exposure & Tonemapping Persistence**: The pipeline consumes staged exposure and tonemapper settings and applies them to `ToneMapPass` during per-view execution. | Implemented |
 | ✅ | REQ04 | **SDR Composition**: `OnCompositing` blends pre-tonemapped SDR intermediates into the backbuffer via `CompositingTask`s. | Implemented |
 | ✅ | REQ05 | **PBR ImGui Isolation**: ImGui renders in the SDR overlay stage after tonemapping has completed. | Implemented |
-|  | REQ06 | **API Ergonomics**: All public-facing methods must use strong typing (e.g., `ViewId`, `graphics::Texture`) and provide clear lifecycle guarantees for passed resources. | Partial |
-|  | REQ07 | **Coroutine Decoupling**: The system shall support a registry of **Coroutine Contributors** to move feature logic (Bloom, Gizmos) out of the main pipeline source while remaining `co_await`able from the main render sequence. | Pending |
+(Bloom, Gizmos) out of the main pipeline source while remaining `co_await`able from the main render sequence. | Pending |
 | ✅ | REQ08 | **Resource Cleanup**: All intermediate GPU resources must be correctly released during resize events or shutdown via the `ClearBackbufferReferences()` hook. | Implemented |
 | ✅ | REQ09 | **Multi-View Support**: The compositing logic must support multiple views (e.g., PiP), ensuring each one is correctly blended onto the final backbuffer based on its viewport. | Pending |
-|  | REQ10 | **Documentation**: Public headers must be fully documented using Doxygen, specifying thread-safety requirements for all hooks. | Pending |
 
 ---
 

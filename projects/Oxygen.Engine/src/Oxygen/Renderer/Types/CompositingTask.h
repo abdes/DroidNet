@@ -24,7 +24,6 @@ enum class CompositingTaskType {
   kCopy,
   kBlend,
   kBlendTexture,
-  kTonemap,
   kTaa,
 };
 
@@ -48,11 +47,6 @@ struct TextureBlendTask {
   float alpha { 1.0F };
 };
 
-//! Placeholder for future tonemapping tasks.
-struct TonemapTask {
-  float exposure { 1.0F };
-};
-
 //! Placeholder for future temporal AA tasks.
 struct TaaTask {
   float jitter_scale { 1.0F };
@@ -64,7 +58,6 @@ struct CompositingTask {
   CopyTask copy {};
   BlendTask blend {};
   TextureBlendTask texture_blend {};
-  TonemapTask tonemap {};
   TaaTask taa {};
 
   [[nodiscard]] static auto MakeCopy(ViewId view_id, ViewPort viewport)
