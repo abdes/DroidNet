@@ -32,12 +32,19 @@ If multiple targets match, an interactive selection menu will be displayed.
 The build configuration (Debug, Release, etc.). Defaults to "Debug". The script will
 use platform-specific Conan profiles and CMake presets based on this configuration.
 
-Debug builds use ASAN-enabled profiles for better debugging, Release builds use
-optimized profiles without debugging overhead.
+Debug builds use ASAN-enabled profiles for better debugging; **sanitized builds
+are always Debug and you must not pass `-Config` together with `-Sanitized`.**
+Release builds use optimized profiles without debugging overhead.
 
 .PARAMETER DryRun
 Show what would be executed without actually running it. Displays all commands
-(Conan install, CMake configure, build) without performing any actions.
+(CMake configure, build) without performing any actions. Note: these helpers
+will not run Conan automatically; initialize build roots with
+`tools\generate-builds.ps1` or `tools\generate-builds.bat`.
+
+NOTE (Sanitized builds): Sanitized builds are always Debug. Use `-Sanitized` to
+select ASan presets (e.g., `windows-asan`). Do not pass `-Config` together with
+`-Sanitized`.
 
 .EXAMPLE
 oxybuild.ps1 oxygen-asyncengine-simulator
@@ -66,7 +73,7 @@ Build using Release configuration with optimized Conan profile.
 .NOTES
 Build System Integration:
 - Uses standardized out/build directory for all builds
-- Automatically runs Conan install with platform-specific profiles when needed
+- Requires the build root to be initialized (use tools\generate-builds.bat); this script will NOT run Conan automatically
 - Uses platform-specific CMake presets: "windows", "linux", "mac"
 - Runs CMake configure automatically if build system is not configured
 - Falls back to direct cmake --build commands if no presets are found
@@ -94,7 +101,8 @@ Designed for CI/CD:
 param(
     [Parameter(Mandatory = $true, Position = 0)][string]$Target,
     [string]$Config = "Debug",
-    [switch]$DryRun
+    [switch]$DryRun,
+    [switch]$Sanitized
 )
 
 . (Join-Path $PSScriptRoot 'oxy-targets.ps1')
@@ -102,7 +110,16 @@ param(
 # Set global verbose mode based on PowerShell's built-in VerbosePreference
 $global:VerboseMode = ($VerbosePreference -eq 'Continue')
 
-$buildRoot = Get-StandardBuildRoot
+# Validation: -Sanitized implies Debug-only builds. Forbid passing -Config when -Sanitized is used.
+if ($Sanitized -and $PSBoundParameters.ContainsKey('Config')) {
+    $errMsg = @"
+The -Sanitized switch implies Debug-only builds.
+Do not pass -Config when using -Sanitized. Omit -Config (default is Debug).
+"@
+    Write-LogErrorAndExit $errMsg 1
+}
+
+$buildRoot = Get-StandardBuildRoot -Sanitized:$Sanitized
 
 # Resolve target name using fuzzy matching
 $resolvedTarget = Resolve-TargetName $Target $buildRoot
@@ -129,7 +146,7 @@ if ($found -and $found.Count -gt 1) {
     }
 }
 
-Invoke-BuildForTarget -Target $resolvedTarget -Config $Config -DryRun:$DryRun
+Invoke-BuildForTarget -Target $resolvedTarget -Config $Config -DryRun:$DryRun -Sanitized:$Sanitized
 
 if ($DryRun) {
     Write-Host ""

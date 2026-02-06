@@ -8,7 +8,9 @@ Command line arguments can be passed to the target executable by placing them af
 a double dash (--).
 
 The script integrates with CMake's build system and preset mechanism:
-1. Automatically detects and uses CMake build presets (e.g., "windows-debug")
+- Detects and uses CMake build presets (e.g., "windows-debug"). Note: it will
+  NOT run Conan; ensure the build root is initialized via
+  tools\generate-builds.bat
 2. Runs configure presets if needed to generate CMake File API replies
 3. Discovers target executables using CMake File API codemodel
 4. Falls back to direct cmake commands if no presets are found
@@ -97,6 +99,7 @@ param(
     [string]$Config = "Debug",
     [switch]$NoBuild,
     [switch]$DryRun,
+    [switch]$Sanitized,
     [Parameter(ValueFromRemainingArguments = $true)]$RemainingArgs
 )
 
@@ -105,7 +108,16 @@ param(
 # Set global verbose mode based on PowerShell's built-in VerbosePreference
 $global:VerboseMode = ($VerbosePreference -eq 'Continue')
 
-$buildRoot = Get-StandardBuildRoot
+# Validation: -Sanitized implies Debug-only builds. Forbid passing -Config when -Sanitized is used.
+if ($Sanitized -and $PSBoundParameters.ContainsKey('Config')) {
+    $errMsg = @"
+The -Sanitized switch implies Debug-only builds.
+Do not pass -Config when using -Sanitized. Omit -Config (default is Debug).
+"@
+    Write-LogErrorAndExit $errMsg 1
+}
+
+$buildRoot = Get-StandardBuildRoot -Sanitized:$Sanitized
 
 # Resolve target name using fuzzy matching
 $resolvedTarget = Resolve-TargetName $Target $buildRoot
@@ -128,7 +140,13 @@ if (-not $found -or $found.Count -eq 0) {
 
 # Build step - must come before artifact discovery
 if (-not $NoBuild) {
-    Invoke-BuildForTarget -Target $resolvedTarget -Config $Config -DryRun:$DryRun
+    Invoke-BuildForTarget -Target $resolvedTarget -Config $Config -DryRun:$DryRun -Sanitized:$Sanitized
+
+    # After build, attempt to re-resolve the user's fuzzy target into the canonical name
+    try {
+        $maybeResolved = Resolve-TargetName $Target $buildRoot -NoInteractive
+        if ($maybeResolved) { $resolvedTarget = $maybeResolved; Write-LogVerbose "Resolved target after build: $resolvedTarget" }
+    } catch {}
 
     # Retry codemodel lookup after build (CMake File API should now be available)
     if (-not $found) {

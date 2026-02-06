@@ -5,7 +5,8 @@
 # ===-----------------------------------------------------------------------===#
 
 import os
-from typing import Any
+import json
+from typing import Any, cast
 from conan import ConanFile  # type: ignore
 from conan.tools.cmake import CMakeToolchain, CMakeDeps  # type: ignore
 from conan.tools.files import load, copy  # type: ignore
@@ -24,6 +25,7 @@ class OxygenConan(ConanFile):
     conf: Any
     folders: Any
     dependencies: Any
+    recipe_folder: Any
 
     # Reference
     name = "Oxygen"
@@ -223,9 +225,11 @@ class OxygenConan(ConanFile):
         # Set OXYGEN_CONAN_DEPLOY_DIR to the base install directory.
         # CMakeLists.txt will append the configuration (Debug, Release, Asan)
         # to form the actual CMAKE_INSTALL_PREFIX.
-        install_base = os.path.join(self.recipe_folder, "out", "install")
-        tc.variables["OXYGEN_CONAN_DEPLOY_DIR"] = (
-            install_base.replace("\\", "/")
+        install_base = str(
+            Path(cast(str, self.recipe_folder)) / "out" / "install"
+        )
+        tc.variables["OXYGEN_CONAN_DEPLOY_DIR"] = install_base.replace(
+            "\\", "/"
         )
 
         # Restored ASAN logic
@@ -242,6 +246,110 @@ class OxygenConan(ConanFile):
 
         deps = CMakeDeps(self)
         deps.generate()
+
+        # When ASan builds are requested, augment the generated CMakePresets
+        # by adding '-asan' variants of the generated presets so users can
+        # select ASan-specific presets without replacing Conan's originals.
+        if self._with_asan:
+            try:
+                self._append_asan_to_presets()
+            except Exception as e:
+                # Don't fail the generation step if post-processing fails
+                self.output.warning(f"Failed to append -asan presets: {e}")
+
+    def _append_asan_to_presets(self):
+        """Duplicate generated presets appending '-asan' to their names.
+
+        This creates copies of configure, build and test presets with
+        an '-asan' suffix and updates configurePreset/inherits references
+        inside the duplicated entries so they point to each other.
+        This is intentionally non-destructive (duplicates rather than
+        renames) to avoid breaking repo presets that may inherit the
+        original Conan-generated preset names.
+        """
+        build_dir = getattr(self.folders, "build", None)
+
+        # Build folder may not yet be available during `generate()`. Try multiple
+        # candidate locations (explicit build_dir first, then the expected
+        # repo-relative build path used in `layout()`). Log diagnostics to aid
+        # debugging when post-processing is skipped.
+        candidates = []
+        if build_dir:
+            candidates.append(Path(build_dir))
+
+        suffix = "ninja" if self._is_ninja else "vs"
+        if self._with_asan:
+            suffix = f"asan-{suffix}"
+        expected = Path(self.recipe_folder) / f"out/build-{suffix}"
+        candidates.append(expected)
+
+        found = None
+        for cand in candidates:
+            presets_path_obj = cand / "generators" / "CMakePresets.json"
+            # Use info so it is visible in normal logs; keep concise.
+            self.output.info(f"Looking for CMakePresets at {presets_path_obj}")
+            if presets_path_obj.exists():
+                found = presets_path_obj
+                break
+
+        if not found:
+            self.output.info(
+                "Presets not found in candidate locations; skipping -asan augmentation"
+            )
+            return
+
+        presets_path = str(found)
+
+        with open(presets_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        # Rename generated presets in-place to append '-asan' to every preset name
+        # This removes the original non-ASan preset names entirely so only ASan
+        # variants exist in the generated file.
+        name_map = {}
+
+        cfgs = data.get("configurePresets", [])
+
+        # First pass: compute renames and apply to configure presets
+        for p in cfgs:
+            name = p.get("name")
+            if not name or name.endswith("-asan"):
+                continue
+            new_name = name + "-asan"
+            name_map[name] = new_name
+            p["name"] = new_name
+            if "displayName" in p:
+                p["displayName"] = p["displayName"].replace(name, new_name)
+            else:
+                p["displayName"] = f"'{new_name}' config"
+            if "description" in p and "ASan" not in p["description"]:
+                p["description"] = p["description"] + " (ASan)"
+
+        # Second pass: update 'inherits' references among configure presets
+        for p in cfgs:
+            inherits = p.get("inherits")
+            if inherits and inherits in name_map:
+                p["inherits"] = name_map[inherits]
+
+        # Update build and test presets to reference the renamed configure presets
+        for section in ("buildPresets", "testPresets"):
+            presets = data.get(section, [])
+            for p in presets:
+                cfg = p.get("configurePreset")
+                if cfg and cfg in name_map:
+                    p["configurePreset"] = name_map[cfg]
+                # Rename the build/test preset itself to have '-asan' suffix as well
+                pname = p.get("name")
+                if pname and not pname.endswith("-asan"):
+                    p["name"] = pname + "-asan"
+
+        # Write back the modified presets file
+        with open(presets_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+
+        self.output.info(
+            f"Renamed presets to '-asan' variants in {presets_path}"
+        )
 
     def layout(self):
         # Dynamically set build folder based on the generator and ASAN status
