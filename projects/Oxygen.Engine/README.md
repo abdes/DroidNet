@@ -128,6 +128,43 @@ without requiring per-dependency options.
 
 ### Example install commands
 
+**Preferred (recommended):** use the helper script `tools/generate-builds.ps1` to perform Conan installs and generate both Ninja (multi-config) and Visual Studio build trees with sane defaults. The script accepts a single required positional `profile` argument and resolves relative profile/output paths relative to the repository root.
+
+```powershell
+# ASan (recommended)
+.\tools\generate-builds.ps1 profiles/windows-msvc-asan.ini
+
+# Non-ASan
+.\tools\generate-builds.ps1 profiles/windows-msvc.ini
+
+# Show usage
+.\tools\generate-builds.ps1 -Help
+```
+
+CLI tools (oxybuild / oxyrun)
+-----------------------------
+- Use `tools\oxybuild.ps1` and `tools\oxyrun.ps1` to build and run targets with convenient, preset-based workflows.
+- Important: these CLI helpers **do not** run Conan automatically. Initialize build roots with `tools\generate-builds.ps1` (or `tools\generate-builds.bat`).
+- Build-root conventions:
+  - Regular builds: `out/build-ninja`
+  - Sanitized ASan builds: `out/build-asan-ninja`
+- Sanitized builds details:
+  - Use `-Sanitized` to request an ASan build/run.`
+  - **Sanitized builds are always Debug.** Do **not** pass `-Config` together with `-Sanitized`.
+  - When `-Sanitized` is used, the CLI will prefer `*-asan` configure and build presets (e.g., `windows-asan`).
+
+Examples:
+```powershell
+# Initialize build roots (ASan)
+.\tools\generate-builds.ps1 profiles/windows-msvc-asan.ini
+
+# Build and run using sanitized presets (defaults to Debug and uses asan presets)
+.\tools\cli\oxybuild.ps1 MyApp -Sanitized
+.\tools\cli\oxyrun.ps1 MyApp -Sanitized -- --help
+```
+
+**Advanced / manual (direct Conan):**
+
 ```shell
 conan remote remove conancenter
 conan remote add mycenter ./conan-center-index

@@ -8,12 +8,22 @@
     as the foundation for the Oxygen Engine's build and execution workflow.
 
     Key capabilities:
-    - Conan dependency management with platform-specific profiles
     - CMake preset discovery and execution (configure and build presets)
     - CMake File API reply parsing for target metadata
-    - Cross-platform build root resolution and validation
+    - Cross-platform build root resolution and validation (see notes below)
     - Target artifact path discovery from CMake replies
     - Integrated logging with consistent formatting
+
+.NOTES
+    Conventions and important behavior:
+    - Build roots:
+      - Regular builds: `out/build-ninja`
+      - Sanitized ASan builds: `out/build-asan-ninja` (use `-Sanitized` to select)
+    - Sanitized builds are always Debug and are implemented by selecting the `*-asan` presets
+      (for example `windows-asan`).
+    - These helper scripts *do not* invoke Conan automatically. If a required build root is
+      missing, they will error and instruct the user to run `tools\generate-builds.ps1` or
+      `tools\generate-builds.bat` to initialize the build environment.
 
 .NOTES
     File Name   : oxy-targets.ps1
@@ -37,7 +47,9 @@
 #>
 
 # Constants
-$script:BUILD_DIR = "out/build"
+# Default build root base (regular builds use 'out/build-ninja').
+# Sanitized builds append '-asan' (e.g. 'out/build-ninja-asan').
+$script:BUILD_DIR = "out/build-ninja"
 $script:CONAN_DEPLOY_DIR = "out/full_deploy"
 $script:CONAN_PROFILES_DIR = "profiles"
 
@@ -336,8 +348,19 @@ function Get-FuzzyPattern($targetName) {
 .EXAMPLE
     $buildRoot = Get-StandardBuildRoot
 #>
-function Get-StandardBuildRoot() {
-  return Join-Path (Get-Location) $script:BUILD_DIR
+function Get-StandardBuildRoot([switch]$Sanitized) {
+  # Default base like "out/build-ninja". For sanitized builds we want
+  # "out/build-asan-ninja" (insert "-asan" before the "-ninja" suffix).
+  $base = $script:BUILD_DIR
+  if ($Sanitized) {
+    if ($base -match "-ninja$") {
+      $base = $base -replace "-ninja$", "-asan-ninja"
+    } else {
+      # Fallback: append '-asan' if pattern not present
+      $base = $base + "-asan"
+    }
+  }
+  return Join-Path (Get-Location) $base
 }
 
 <#
@@ -386,51 +409,20 @@ function Get-ConanProfile($Config) {
 
 <#
 .SYNOPSIS
-    Runs Conan install to set up dependencies and build environment.
+    Project dependency initialization
 
 .DESCRIPTION
-    Executes conan install with platform-specific profiles to set up the build
-    environment in the standard out/build directory.
-
-.PARAMETER Config
-    The build configuration (Debug, Release, etc.).
-
-.PARAMETER DryRun
-    If specified, shows what command would be executed without running it.
+    This module no longer exposes an internal Conan invocation helper. The
+    project provides `tools\generate-builds.ps1` / `tools\generate-builds.bat`
+    to initialize the build environments (Conan installs and CMake toolchain
+    generation). CLI helpers in this module will not invoke Conan automatically
+    and will instead error and instruct the user to run the helper script when
+    a required build root is missing.
 
 .EXAMPLE
-    Invoke-Conan "Debug"
-
-.NOTES
-    Must be run from the project root directory. Creates the out/build directory
-    and installs all dependencies specified in conanfile.py.
+    # Initialize build environments (ASan)
+    .\tools\generate-builds.ps1 profiles/windows-msvc-asan.ini
 #>
-function Invoke-Conan($Config, [switch]$DryRun) {
-  $conanProfile = Get-ConanProfile $Config
-
-  $conanCmd = "conan install . --profile:host=$script:CONAN_PROFILES_DIR/$conanProfile --profile:build=$script:CONAN_PROFILES_DIR/$conanProfile --deployer-folder=$script:CONAN_DEPLOY_DIR --build=missing --deployer=full_deploy -s build_type=$Config"
-
-  if ($DryRun) {
-    Write-Host ""
-    Write-Host "Dry Run Mode - Would Execute:" -ForegroundColor Magenta
-    Write-Host "  Command: " -NoNewline -ForegroundColor DarkGray
-    Write-Host $conanCmd -ForegroundColor White
-    Write-Host ""
-    return
-  }
-
-  Write-LogAction "Installing dependencies with Conan"
-  Write-LogDim $conanCmd
-
-  Invoke-Expression $conanCmd
-  $exitCode = $LASTEXITCODE
-  if ($exitCode -ne 0) {
-    Write-LogErrorAndExit "Conan install failed with exit code $exitCode" $exitCode
-  }
-
-  Write-LogSuccess "Dependencies installed successfully"
-  Write-Host ""
-}
 
 <#
 .SYNOPSIS
@@ -453,12 +445,17 @@ function Invoke-Conan($Config, [switch]$DryRun) {
     Requires that Conan has already been run to set up the build environment.
     Uses platform-specific configure presets.
 #>
-function Invoke-CMakeConfigure($Config, [switch]$DryRun) {
+function Invoke-CMakeConfigure($Config, [switch]$DryRun, [switch]$Sanitized) {
   $platformName = Get-PlatformName
   $configurePreset = $platformName
 
+  if ($Sanitized) {
+    # Prefer the '-asan' configure preset for sanitized builds (e.g. 'windows-asan')
+    $configurePreset = "$platformName-asan"
+  }
+
   # Ensure CMake File API query exists for target discovery
-  $buildRoot = Get-StandardBuildRoot
+  $buildRoot = Get-StandardBuildRoot -Sanitized:$Sanitized
   $apiQueryDir = Join-Path $buildRoot ".cmake/api/v1/query"
   if (-not (Test-Path $apiQueryDir)) {
     if (-not $DryRun) {
@@ -1002,12 +999,16 @@ function Get-PlatformName() {
     Preset names are expected to follow the pattern '<platform>-<config>' where
     platform comes from Get-PlatformName and config is lowercased.
 #>
-function Find-BuildPreset($buildRoot, $Config) {
+function Find-BuildPreset($buildRoot, $Config, [switch]$Sanitized) {
   $projectPresetsFile = Get-FileUpwards $buildRoot 'CMakePresets.json'
   if (-not $projectPresetsFile) { return $null }
   $presets = Read-Presets $projectPresetsFile
   $platformName = Get-PlatformName
-  $desired = "$platformName-$(($Config).ToLower())"
+  if ($Sanitized) {
+    $desired = "$platformName-asan"
+  } else {
+    $desired = "$platformName-$(($Config).ToLower())"
+  }
   $available = @()
   foreach ($bp in $presets.buildPresets) { if ($bp.name) { $available += $bp.name } }
   if ($available -contains $desired) { return $desired }
@@ -1048,15 +1049,17 @@ function Find-BuildPreset($buildRoot, $Config) {
     Always uses the standard out/build directory. Custom build directories are not supported.
     Target resolution happens automatically when CMake configure runs during this function.
 #>
-function Invoke-BuildForTarget($Target, $Config, [switch]$DryRun) {
-  $buildRoot = Get-StandardBuildRoot
-  $conanRan = $false
+function Invoke-BuildForTarget($Target, $Config, [switch]$DryRun, [switch]$Sanitized) {
+  $buildRoot = Get-StandardBuildRoot -Sanitized:$Sanitized
 
-  # Step 1: Check if we need to run Conan
+  # Step 1: Ensure build root exists. Do NOT run Conan automatically.
   if (-not (Test-Path $buildRoot)) {
-    Write-LogInfo "Build directory not found. Running Conan install..."
-    Invoke-Conan $Config -DryRun:$DryRun
-    $conanRan = $true
+    $errMsg = @"
+Build root not found: $(Format-CompactPath $buildRoot).
+Please initialize the build environments using `tools\generate-builds.bat <profile>`
+(e.g. `tools\generate-builds.bat profiles/smape.ini`)
+"@
+    Write-LogErrorAndExit $errMsg 2
   }
 
   # Step 2: Check if we need to run CMake configure
@@ -1071,11 +1074,11 @@ function Invoke-BuildForTarget($Target, $Config, [switch]$DryRun) {
   $configureRan = $false
   if ($conanRan -or -not $hasCodemodel) {
     Write-LogInfo "CMake not configured. Running CMake configuration..."
-    Invoke-CMakeConfigure $Config -DryRun:$DryRun
+    Invoke-CMakeConfigure $Config -DryRun:$DryRun -Sanitized:$Sanitized
     $configureRan = $true
   }
 
-  # If configure ran, we definitely have codemodel now
+  # If configure ran, we may be able to resolve the fuzzy target name using the CMake codemodel
   $resolvedTarget = $Target
   if ($configureRan) {
     $resolvedTarget = Resolve-TargetName $Target $buildRoot
@@ -1083,7 +1086,7 @@ function Invoke-BuildForTarget($Target, $Config, [switch]$DryRun) {
 
   # Step 4: Build the target
   Write-LogInfo "Building target: $resolvedTarget"
-  $preset = Find-BuildPreset $buildRoot $Config
+  $preset = Find-BuildPreset $buildRoot $Config -Sanitized:$Sanitized
   if ($preset) {
     $buildCmd = "cmake --build --preset $preset --target $resolvedTarget"
     Write-LogVerbose "Using build preset: $preset"
@@ -1109,7 +1112,14 @@ function Invoke-BuildForTarget($Target, $Config, [switch]$DryRun) {
     Write-LogErrorAndExit "Build failed with exit code $LASTEXITCODE" $LASTEXITCODE
   }
   Write-Host ""
-  Write-LogSuccess "Build completed: $Target"
+
+  # After a successful build, try to resolve the target using the codemodel (non-interactive)
+  try {
+    $finalResolved = Resolve-TargetName $Target $buildRoot -NoInteractive
+    if ($finalResolved) { $resolvedTarget = $finalResolved; Write-LogVerbose "Resolved target after build: $resolvedTarget" }
+  } catch {}
+
+  Write-LogSuccess "Build completed: $resolvedTarget"
   Write-Host ""
 }
 

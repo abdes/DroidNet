@@ -8,6 +8,11 @@
       "name": "windows-default",
       "displayName": "Windows Default (Ninja)",
       "inherits": "default"
+    },
+    {
+      "name": "windows-asan",
+      "displayName": "Windows ASAN (Ninja)",
+      "inherits": "default-asan"
     }
   ],
   "buildPresets": [
@@ -15,6 +20,11 @@
       "name": "windows-debug",
       "inherits": "build-debug",
       "configurePreset": "windows-default"
+    },
+    {
+      "name": "windows-asan",
+      "inherits": "build-asan",
+      "configurePreset": "windows-asan"
     },
     {
       "name": "windows-release",
