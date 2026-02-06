@@ -12,6 +12,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Renderer/Internal/ISkyCaptureProvider.h>
 #include <Oxygen/Renderer/Passes/GraphicsRenderPass.h>
 
@@ -122,6 +123,18 @@ private:
 
   std::uint64_t capture_generation_ { 1 };
   bool is_captured_ { false };
+
+  //! Tracks the last known GPU resource state of the captured cubemap so that
+  //! re-capture after MarkDirty() provides the correct initial state to the
+  //! barrier tracker (avoiding RESOURCE_BARRIER_BEFORE_AFTER_MISMATCH).
+  graphics::ResourceStates cubemap_last_state_ {
+    graphics::ResourceStates::kCommon
+  };
+
+  //! Tracks the last known GPU resource state of the face constants buffer.
+  graphics::ResourceStates face_cb_last_state_ {
+    graphics::ResourceStates::kCommon
+  };
 };
 
 } // namespace oxygen::engine
