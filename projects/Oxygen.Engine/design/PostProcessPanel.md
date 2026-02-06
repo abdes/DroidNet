@@ -224,7 +224,7 @@ struct CompositingPassConfig {
 - [x] **Camera Controls**: Implement "Manual (Camera)" exposure mode (Aperture/Shutter/ISO to EV100 conversion).
   - Formula: $EV100 = \log_2(\frac{N^2}{t}) - \log_2(\frac{ISO}{100})$
   - See [physical_lighting.md, Phase 2](physical_lighting.md#phase-2--exposure-system-manual--physical) for `CameraExposure` struct specification.
-- [ ] **Coroutine Contributors** (REQ07): Register post-process passes as awaitable contributors to the main pipeline.
+- [x] **Coroutine Contributors** (REQ07): Register post-process passes as awaitable contributors to the main pipeline. (Implemented — post-process passes are executed as awaitable coroutines; tonemapping runs per-view via `ToneMapPass` in `ForwardPipeline`; `CompositingTaskType::kTonemap` has been removed.)
 - [x] **UI Validation**: Verify UI values correctly update the `ForwardPipeline::staged_` data in real-time.
 
 ---

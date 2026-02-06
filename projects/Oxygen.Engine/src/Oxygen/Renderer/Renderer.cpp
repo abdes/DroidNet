@@ -1061,7 +1061,6 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
       co_await compositing_pass_->Execute(comp_context, recorder);
       break;
     }
-    case CompositingTaskType::kTonemap:
     case CompositingTaskType::kTaa:
     default:
       DLOG_F(1, "Skip compositing: task type not implemented");

@@ -20,7 +20,10 @@ across all demos and content pipelines.
   (e.g., lumens for point/spot, lux for directional).
 - Exposure is applied as `exp2(EV)` in `Renderer::UpdateViewExposure`
   (`src/Oxygen/Renderer/Renderer.cpp`); the renderer path still does not
-  derive EV from camera parameters.
+  derive EV from camera parameters. (Note: DemoShell applies camera EV100 into
+  the `ForwardPipeline`, but `Renderer::UpdateViewExposure` uses compensation
+  EV only for manual/manual_camera modes. Also, automatic histogram-based
+  exposure is not implemented. `CompositingTaskType::kTonemap` has been removed; tonemapping is managed per-view by `ToneMapPass` in `ForwardPipeline`.)
 - `EnvironmentDynamicData.exposure` is populated without a physical
   relationship to lux for the renderer path.
 
@@ -140,7 +143,12 @@ absolute tolerance.
 
 - [x] `CameraExposure` struct integrated and serialized.
 - [x] Demo UI exposes camera exposure parameters and persists them.
-- [ ] Manual exposure path uses EV100 formula end-to-end in renderer.
+- [ ] Manual exposure path uses EV100 formula end-to-end in renderer. (Partial — `CameraExposure` and DemoShell UI apply EV100 into `ForwardPipeline`, but `Renderer::UpdateViewExposure` still uses compensation EV for manual/manual_camera modes instead of camera EV100.)
+- [ ] **Renderer camera EV wiring & calibration:** Update `Renderer::UpdateViewExposure` to consume camera EV100 for `kManualCamera` and apply the physical calibration formula `exposure = (1/1.2) * 2^{-EV100}`. (Files: `src/Oxygen/Renderer/Renderer.cpp`, `src/Oxygen/Scene/Camera/CameraExposure.h`). Verification: unit tests for EV->exposure conversion and an integration test using LightBench mid-gray scene.
+- [ ] **Histogram-based auto exposure:** Implement an auto-exposure compute pass (luminance histogram), metering modes (average/center-weighted/spot), temporal smoothing and bind computed exposure to `EnvironmentDynamicData.exposure`. (Files: new `src/Oxygen/Renderer/Passes/AutoExposurePass.*`, updates to `EnvironmentDynamicDataManager`). Verification: deterministic tests for histogram outputs and adaptation behavior.
+- [x] **Compositing tonemap behavior documented:** Tonemapping is performed per-view by `ToneMapPass` in `ForwardPipeline`. The `CompositingTaskType::kTonemap` enum value and placeholders were removed to avoid confusion; `Renderer::OnCompositing` focuses on copy/blend/texture-blend/taa operations. (File: `src/Oxygen/Renderer/Renderer.cpp`). Verification: end-to-end compositing test that exercises ForwardPipeline tonemap behavior.
+- [ ] **Shader conversion helpers & refactor:** Add named helpers (`LuxToIrradiance`, `LumensToCandela`, `CandelaToRadiance`) to `src/Oxygen/Graphics/Direct3D12/Shaders/Common/PhysicalLighting.hlsli` and refactor `ForwardDirectLighting.hlsli` to call them. Verification: shader unit tests or numeric validation against reference conversions.
+- [ ] **Validation scenes & tests:** Add LightBench presets and automated tests to verify mid-gray mapping, EV correctness, and daylight references (e.g., EV100 9.7/14-16 scenarios). (Files: `Examples/LightBench`, test assets, `Examples/DemoShell/demo_settings.json`).
 
 **Tasks:**
 
@@ -151,8 +159,12 @@ absolute tolerance.
   - $EV100 = \log_2(\frac{N^2}{t}) - \log_2(\frac{ISO}{100})$
 - [ ] Align exposure scale with physical calibration:
   - $exposure = \frac{1}{1.2} \cdot 2^{-EV100}$
-- [ ] Update `Renderer::UpdateViewExposure` to use physical camera exposure.
-- [ ] Update `PostProcessVolume` to set EV or camera parameters explicitly.
+- [ ] Update `Renderer::UpdateViewExposure` to use physical camera exposure (kManualCamera), add unit tests and a LightBench integration scene to verify mid-gray mapping.
+- [ ] Implement `AutoExposurePass`: compute luminance histogram, expose metering modes, provide temporal smoothing, and bind results to `EnvironmentDynamicData.exposure`. Add compute shader tests and integration scenarios.
+- [ ] Add `PhysicalLighting.hlsli` shared helpers and refactor `ForwardDirectLighting.hlsli` to use them; add shader validation tests.
+- [x] Documented that tonemapping is managed by `ForwardPipeline` and removed `CompositingTaskType::kTonemap`; add an end-to-end compositing test to verify ForwardPipeline behavior.
+- [ ] Add docs and Doxygen comments for exposure fields, update `PostProcessVolume` docs to reflect EV/camera parameter support.
+- [ ] Add automated CI tests and regression cases for exposure convergence and scene-based validation.
 - [x] Integrate with PostProcessPanel (see [PostProcessPanel.md, Phase C](PostProcessPanel.md#phase-c-postprocess-integration-exposure--tonemapping)).
 
 ### Phase 3 — Lux-Consistent Lighting
@@ -278,6 +290,7 @@ absolute tolerance.
 - [ ] Update `Renderer::UpdateViewExposure` to use camera model.
 - [ ] Update `EnvironmentDynamicDataManager::SetSunState` to store lux
    explicitly and/or add conversion to radiance for shaders.
+- [x] Document that tonemapping is performed per-view by `ToneMapPass` in `ForwardPipeline` and remove `CompositingTaskType::kTonemap` and related placeholders from the compositing API. (Files: `src/Oxygen/Renderer/Types/CompositingTask.h`, `src/Oxygen/Renderer/Renderer.cpp`)
 
 ### Lights
 
@@ -308,8 +321,7 @@ absolute tolerance.
 - [ ] Scene‑referred luminance is continuous across frames.
 - [ ] Auto exposure adapts smoothly at ~0.1–0.2 EV per frame.
 - [ ] Sun/sky/IBL are energy consistent.
-- [ ] **Coroutine Integrity**: Post-process effects are implemented as awaitable
-      **Coroutine Contributors** ([forward_pipeline.md, REQ07](forward_pipeline.md#requirements-specification)).
+- [x] **Coroutine Integrity**: Post-process effects are implemented as awaitable **Coroutine Contributors** ([forward_pipeline.md, REQ07](forward_pipeline.md#requirements-specification)). (Implemented — passes are co_awaited in `ForwardPipeline` and `Renderer::OnCompositing`; tonemapping is handled per-view by `ToneMapPass` in `ForwardPipeline`; `CompositingTaskType::kTonemap` has been removed.)
 - [ ] **Interceptor Validation**: HDR intermediates are correctly managed and
       resolved during `OnCompositing` ([forward_pipeline.md, REQ04](forward_pipeline.md#requirements-specification)).
 
