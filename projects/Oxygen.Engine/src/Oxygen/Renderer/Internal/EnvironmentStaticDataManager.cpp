@@ -293,28 +293,28 @@ auto EnvironmentStaticDataManager::PopulateAtmosphere(
       = atmo->GetAbsorptionScaleHeightMeters();
     next.atmosphere.multi_scattering_factor = atmo->GetMultiScatteringFactor();
 
-    if (const auto sun = env->TryGetSystem<scene::environment::Sun>();
-      sun && sun->IsEnabled()) {
-      const float sun_disk_radius = sun->GetDiskAngularRadiusRadians();
-      next.atmosphere.sun_disk_enabled = sun_disk_radius > 0.0F ? 1u : 0u;
-      next.atmosphere.sun_disk_angular_radius_radians = sun_disk_radius;
-    } else {
-      next.atmosphere.sun_disk_enabled = atmo->GetSunDiskEnabled() ? 1u : 0u;
-      next.atmosphere.sun_disk_angular_radius_radians
-        = atmo->GetSunDiskAngularRadiusRadians();
+    const bool atmo_disk_enabled = atmo->GetSunDiskEnabled();
+    float sun_disk_radius
+      = scene::environment::Sun::kDefaultDiskAngularRadiusRad;
+    if (const auto sun = env->TryGetSystem<scene::environment::Sun>(); sun) {
+      sun_disk_radius = sun->GetDiskAngularRadiusRadians();
     }
+    // Even if Sun system is present, respect the Atmosphere's explicit sun
+    // disk toggle. This allows UI to hide the sun disk without disabling the
+    // sun light.
+    next.atmosphere.sun_disk_enabled
+      = (atmo_disk_enabled && sun_disk_radius > 0.0F) ? 1u : 0u;
+    next.atmosphere.sun_disk_angular_radius_radians = sun_disk_radius;
+    LOG_F(INFO,
+      "PopulateAtmosphere: sun disk (enabled={}, radius={}, atmo_toggle={})",
+      next.atmosphere.sun_disk_enabled,
+      next.atmosphere.sun_disk_angular_radius_radians, atmo_disk_enabled);
     next.atmosphere.aerial_perspective_distance_scale
       = atmo->GetAerialPerspectiveDistanceScale();
 
     if (sky_lut_provider_) {
-      const auto transmittance_slot
-        = sky_lut_provider_->GetTransmittanceLutSlot();
-      const auto sky_view_slot = sky_lut_provider_->GetSkyViewLutSlot();
-
-      next.atmosphere.transmittance_lut_slot
-        = TransmittanceLutSlot { transmittance_slot };
-
-      next.atmosphere.sky_view_lut_slot = SkyViewLutSlot { sky_view_slot };
+      // Slots are populated later, conditional on generation state, to prevent
+      // exposing uninitialized textures which cause black artifacts.
 
       const auto [trans_w, trans_h]
         = sky_lut_provider_->GetTransmittanceLutSize();
@@ -324,6 +324,24 @@ auto EnvironmentStaticDataManager::PopulateAtmosphere(
       next.atmosphere.transmittance_lut_height = static_cast<float>(trans_h);
       next.atmosphere.sky_view_lut_width = static_cast<float>(sky_w);
       next.atmosphere.sky_view_lut_height = static_cast<float>(sky_h);
+
+      // Populate altitude-slice fields from the LUT provider [T3].
+      next.atmosphere.sky_view_lut_slices
+        = sky_lut_provider_->GetSkyViewLutSlices();
+      next.atmosphere.sky_view_alt_mapping_mode
+        = sky_lut_provider_->GetAltMappingMode();
+
+      // Only expose LUT slots if they contain valid generated data.
+      // Exposing uninitialized textures (during recreation) causes black
+      // artifacts (e.g. black sun in reflection due to 0 transmittance).
+      if (sky_lut_provider_->HasBeenGenerated()) {
+        next.atmosphere.transmittance_lut_slot = TransmittanceLutSlot {
+          sky_lut_provider_->GetTransmittanceLutSlot()
+        };
+
+        next.atmosphere.sky_view_lut_slot
+          = SkyViewLutSlot { sky_lut_provider_->GetSkyViewLutSlot() };
+      }
 
       sky_lut_provider_->UpdateParameters(next.atmosphere);
     }
@@ -446,11 +464,20 @@ auto EnvironmentStaticDataManager::PopulateSkyCapture(
       if (sky_capture_provider_->IsCaptured()) {
         next.sky_light.cubemap_slot
           = CubeMapSlot { sky_capture_provider_->GetCapturedCubemapSlot() };
+        LOG_F(INFO,
+          "PopulateSkyCapture: Using captured cubemap (slot={}, "
+          "captured=true)",
+          next.sky_light.cubemap_slot);
       } else {
         next.sky_light.cubemap_slot
           = CubeMapSlot { kInvalidShaderVisibleIndex };
+        LOG_F(INFO,
+          "PopulateSkyCapture: Capture requested but not ready "
+          "(captured=false)");
       }
     }
+  } else {
+    LOG_F(INFO, "PopulateSkyCapture: Provider not available");
   }
 }
 
@@ -466,6 +493,11 @@ auto EnvironmentStaticDataManager::PopulateIbl(EnvironmentStaticData& next)
       && next.sky_sphere.cubemap_slot.IsValid());
 
   if (!has_source) {
+    LOG_F(INFO,
+      "PopulateIbl: No source detected (sky_light.enabled={}, "
+      "sky_light.cubemap={}, sky_sphere.enabled={}, sky_sphere.cubemap={})",
+      next.sky_light.enabled, next.sky_light.cubemap_slot.IsValid(),
+      next.sky_sphere.enabled, next.sky_sphere.cubemap_slot.IsValid());
     next.sky_light.irradiance_map_slot = IrradianceMapSlot {};
     next.sky_light.prefilter_map_slot = PrefilterMapSlot {};
     next.sky_light.prefilter_max_mip = 0U;

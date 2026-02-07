@@ -140,14 +140,21 @@ public:
   [[nodiscard]] virtual auto GetSunDiskEnabled() const -> bool;
   virtual auto SetSunDiskEnabled(bool enabled) -> void;
 
-  [[nodiscard]] virtual auto GetAtmosphereSunDiskRadiusDeg() const -> float;
-  virtual auto SetAtmosphereSunDiskRadiusDeg(float value) -> void;
-
   [[nodiscard]] virtual auto GetAerialPerspectiveScale() const -> float;
   virtual auto SetAerialPerspectiveScale(float value) -> void;
 
   [[nodiscard]] virtual auto GetAerialScatteringStrength() const -> float;
   virtual auto SetAerialScatteringStrength(float value) -> void;
+
+  // Sky-View LUT slicing
+  [[nodiscard]] virtual auto GetSkyViewLutSlices() const -> int;
+  virtual auto SetSkyViewLutSlices(int value) -> void;
+
+  [[nodiscard]] virtual auto GetSkyViewAltMappingMode() const -> int;
+  virtual auto SetSkyViewAltMappingMode(int value) -> void;
+
+  //! Requests that the sky-view LUT be regenerated on the next frame.
+  virtual auto RequestRegenerateLut() -> void;
 
   // SkySphere
   [[nodiscard]] virtual auto GetSkySphereEnabled() const -> bool;
@@ -313,9 +320,11 @@ private:
   float mie_anisotropy_ { 0.8F };
   float multi_scattering_ { 1.0F };
   bool sun_disk_enabled_ { true };
-  float sun_disk_radius_deg_ { 0.268F };
   float aerial_perspective_scale_ { 1.0F };
   float aerial_scattering_strength_ { 1.0F };
+  int sky_view_lut_slices_ { 16 };
+  int sky_view_alt_mapping_mode_ { 1 }; // 0 = linear, 1 = log
+  bool regenerate_lut_requested_ { false };
 
   // SkySphere
   bool sky_sphere_enabled_ { false };

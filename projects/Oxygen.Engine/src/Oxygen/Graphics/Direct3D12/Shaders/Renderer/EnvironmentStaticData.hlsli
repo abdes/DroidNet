@@ -71,8 +71,8 @@ struct GpuSkyAtmosphereParams
     float sky_view_lut_width;
 
     float sky_view_lut_height;
-    float _reserved5;
-    float _reserved6;
+    uint sky_view_lut_slices;
+    uint sky_view_alt_mapping_mode;
     float _reserved7;
 };
 

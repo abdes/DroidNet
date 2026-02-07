@@ -132,8 +132,8 @@ struct alignas(16) GpuSkyAtmosphereParams {
   float sky_view_lut_width { 0.0F };
 
   float sky_view_lut_height { 0.0F };
-  float _reserved5 { 0.0F };
-  float _reserved6 { 0.0F };
+  uint32_t sky_view_lut_slices { 0u };
+  uint32_t sky_view_alt_mapping_mode { 0u };
   float _reserved7 { 0.0F };
 };
 static_assert(sizeof(GpuSkyAtmosphereParams) % 16 == 0,

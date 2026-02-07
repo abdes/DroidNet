@@ -49,6 +49,13 @@ public:
     -> Extent<uint32_t>
     = 0;
 
+  //! Returns the number of altitude slices in the sky-view LUT array.
+  [[nodiscard]] virtual auto GetSkyViewLutSlices() const noexcept -> uint32_t
+    = 0;
+
+  //! Returns the altitude mapping mode (0 = linear, 1 = log).
+  [[nodiscard]] virtual auto GetAltMappingMode() const noexcept -> uint32_t = 0;
+
   //! Returns true if LUTs have been generated at least once.
   [[nodiscard]] virtual auto HasBeenGenerated() const noexcept -> bool = 0;
 

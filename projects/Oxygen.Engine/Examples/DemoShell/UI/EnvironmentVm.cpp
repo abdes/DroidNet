@@ -440,16 +440,6 @@ auto EnvironmentVm::SetSunDiskEnabled(bool enabled) -> void
   service_->SetSunDiskEnabled(enabled);
 }
 
-auto EnvironmentVm::GetAtmosphereSunDiskRadiusDeg() const -> float
-{
-  return service_->GetAtmosphereSunDiskRadiusDeg();
-}
-
-auto EnvironmentVm::SetAtmosphereSunDiskRadiusDeg(float value) -> void
-{
-  service_->SetAtmosphereSunDiskRadiusDeg(value);
-}
-
 auto EnvironmentVm::GetAerialPerspectiveScale() const -> float
 {
   return service_->GetAerialPerspectiveScale();
@@ -468,6 +458,31 @@ auto EnvironmentVm::GetAerialScatteringStrength() const -> float
 auto EnvironmentVm::SetAerialScatteringStrength(float value) -> void
 {
   service_->SetAerialScatteringStrength(value);
+}
+
+auto EnvironmentVm::GetSkyViewLutSlices() const -> int
+{
+  return service_->GetSkyViewLutSlices();
+}
+
+auto EnvironmentVm::SetSkyViewLutSlices(int value) -> void
+{
+  service_->SetSkyViewLutSlices(value);
+}
+
+auto EnvironmentVm::GetSkyViewAltMappingMode() const -> int
+{
+  return service_->GetSkyViewAltMappingMode();
+}
+
+auto EnvironmentVm::SetSkyViewAltMappingMode(int value) -> void
+{
+  service_->SetSkyViewAltMappingMode(value);
+}
+
+auto EnvironmentVm::RequestRegenerateLut() -> void
+{
+  service_->RequestRegenerateLut();
 }
 
 auto EnvironmentVm::GetSkySphereEnabled() const -> bool

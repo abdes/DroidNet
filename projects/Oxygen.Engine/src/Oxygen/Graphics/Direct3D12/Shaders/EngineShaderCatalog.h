@@ -58,7 +58,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   ShaderFileSpec {
     .path="Passes/Forward/ForwardMesh_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 2> { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .permutations=std::array<std::string_view, 3> { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT", "SKIP_BRDF_LUT" }
   },
   // Wireframe pass pixel shader: ALPHA_TEST permutation
   ShaderFileSpec {
@@ -107,6 +107,13 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_IBL_IRRADIANCE", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
+  // Forward pass pixel shader: DEBUG_IBL_FACE_INDEX with ALPHA_TEST permutation
+  ShaderFileSpec {
+    .path="Passes/Forward/ForwardDebug_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .permutations=std::array<std::string_view, 3>
+      { "DEBUG_IBL_FACE_INDEX", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_BASE_COLOR with ALPHA_TEST permutation
   ShaderFileSpec {

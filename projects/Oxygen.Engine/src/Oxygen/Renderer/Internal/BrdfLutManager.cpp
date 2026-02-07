@@ -73,24 +73,36 @@ namespace {
   {
     const float a = roughness * roughness;
     const float phi = 2.0F * glm::pi<float>() * xi.x;
+
+    // Constrain xi.y to avoid potential singularity when roughness is 0
+    const float xi_y = std::min(xi.y, 0.99999F);
+
     const float cos_theta
-      = std::sqrt((1.0F - xi.y) / (1.0F + (a * a - 1.0F) * xi.y));
+      = std::sqrt((1.0F - xi_y) / (1.0F + (a * a - 1.0F) * xi_y));
     const float sin_theta = std::sqrt((1.0F - cos_theta) * (1.0F + cos_theta));
 
     return { std::cos(phi) * sin_theta, std::sin(phi) * sin_theta, cos_theta };
   }
 
-  [[nodiscard]] auto GeometrySchlickGgx(float n_dot_v, float a) -> float
+  // Schlick-GGX approximation of geometric attenuation function
+  // n_dot_v: Cosine of angle between normal and view vector
+  // k: Remapped roughness parameter (different for IBL vs. Direct)
+  [[nodiscard]] auto GeometrySchlickGgx(float n_dot_v, float k) -> float
   {
-    const float k = (a + 1.0F) * (a + 1.0F) * 0.125F;
-    return n_dot_v / (n_dot_v * (1.0F - k) + k);
+    // Avoid division by zero
+    const float denom = n_dot_v * (1.0F - k) + k;
+    return n_dot_v / std::max(denom, kEpsilon);
   }
 
-  [[nodiscard]] auto GeometrySmith(float n_dot_v, float n_dot_l, float a)
-    -> float
+  // Smith method for geometric shadowing
+  // Note: This uses the IBL remapping for k: k = (roughness^2) / 2
+  [[nodiscard]] auto GeometrySmithIbl(
+    float n_dot_v, float n_dot_l, float roughness) -> float
   {
-    const float ggx1 = GeometrySchlickGgx(n_dot_v, a);
-    const float ggx2 = GeometrySchlickGgx(n_dot_l, a);
+    // For IBL, k is calculated as (Roughness * Roughness) / 2.0;
+    const float k = (roughness * roughness) * 0.5f;
+    const float ggx1 = GeometrySchlickGgx(n_dot_v, k);
+    const float ggx2 = GeometrySchlickGgx(n_dot_l, k);
     return ggx1 * ggx2;
   }
 
@@ -124,7 +136,11 @@ namespace {
         continue;
       }
 
-      const float g = GeometrySmith(n_dot_v, n_dot_l, roughness * roughness);
+      // Use IBL-specific Geometry function.
+      // Note: We pass original roughness, not roughness^2, because the function
+      // handles the squaring for IBL k-value.
+      const float g = GeometrySmithIbl(n_dot_v, n_dot_l, roughness);
+
       const float g_vis = (g * v_dot_h) / (n_dot_h * n_dot_v + kEpsilon);
       const float fc = std::pow(1.0F - v_dot_h, 5.0F);
 
@@ -133,7 +149,19 @@ namespace {
     }
 
     const float inv_samples = 1.0F / static_cast<float>(sample_count);
-    return { a_term * inv_samples, b_term * inv_samples };
+
+    float scale = a_term * inv_samples;
+    float bias = b_term * inv_samples;
+
+    // Sanitize output to avoid NaNs propagating to the LUT
+    if (std::isnan(scale) || std::isinf(scale)) {
+      scale = 0.0f;
+    }
+    if (std::isnan(bias) || std::isinf(bias)) {
+      bias = 0.0f;
+    }
+
+    return { scale, bias };
   }
 
 } // namespace

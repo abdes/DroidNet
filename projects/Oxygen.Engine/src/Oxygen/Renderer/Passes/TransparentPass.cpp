@@ -260,6 +260,8 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
       return "DEBUG_IBL_RAW_SKY";
     case ShaderDebugMode::kIblIrradiance:
       return "DEBUG_IBL_IRRADIANCE";
+    case ShaderDebugMode::kIblFaceIndex:
+      return "DEBUG_IBL_FACE_INDEX";
     case ShaderDebugMode::kBaseColor:
       return "DEBUG_BASE_COLOR";
     case ShaderDebugMode::kUv0:
@@ -301,6 +303,7 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   // Determine debug mode from config
   const ShaderDebugMode debug_mode
     = config_ ? config_->debug_mode : ShaderDebugMode::kDisabled;
+  const bool skip_brdf_lut = debug_mode == ShaderDebugMode::kIblNoBrdfLut;
 
   // Cache debug mode for rebuild detection
   last_built_debug_mode_ = debug_mode;
@@ -322,6 +325,11 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
       ps_source = "Passes/Forward/ForwardDebug_PS.hlsl";
       ps_defines.push_back(ShaderDefine {
         .name = debug_define,
+        .value = "1",
+      });
+    } else if (skip_brdf_lut) {
+      ps_defines.push_back(graphics::ShaderDefine {
+        .name = "SKIP_BRDF_LUT",
         .value = "1",
       });
     }

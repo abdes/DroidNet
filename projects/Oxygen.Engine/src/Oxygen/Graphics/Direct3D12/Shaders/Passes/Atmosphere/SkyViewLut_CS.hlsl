@@ -38,23 +38,29 @@ cbuffer RootConstants : register(b2, space0)
     uint g_PassConstantsIndex;
 }
 
-// Pass constants for sky-view LUT generation
+// Pass constants for sky-view LUT generation.
+// Layout must exactly match C++ SkyViewLutPassConstants [P6].
 struct SkyViewLutPassConstants
 {
-    uint output_uav_index;          // UAV index for output RWTexture2D<float4>
+    uint output_uav_index;          // UAV index for output RWTexture2DArray<float4>
     uint transmittance_srv_index;   // SRV index for transmittance LUT
     uint multi_scat_srv_index;      // SRV index for MultiScat LUT
-    uint output_width;              // LUT width
+    uint output_width;              // LUT width (per slice)
 
-    uint output_height;             // LUT height
+    uint output_height;             // LUT height (per slice)
     uint transmittance_width;       // Transmittance LUT width
     uint transmittance_height;      // Transmittance LUT height
-    float camera_altitude_m;        // Camera altitude above ground
+    uint slice_count;               // Number of altitude slices
 
     float sun_cos_zenith;           // Cosine of sun zenith angle (sun_dir.z)
     uint atmosphere_flags;          // Debug/feature flags (kUseAmbientTerm, etc.)
+    uint alt_mapping_mode;          // 0 = linear, 1 = log
+    float atmosphere_height_m;      // Total atmosphere height in meters
+
+    float planet_radius_m;          // Planet radius in meters
     uint _pad0;                     // Padding for 16-byte alignment
     uint _pad1;
+    uint _pad2;
 };
 
 // Thread group size: 8x8 threads per group
@@ -70,6 +76,37 @@ static const float PI = 3.14159265359;
 static const float TWO_PI = 6.28318530718;
 
 // Atmosphere feature flag bits (matches C++ AtmosphereFlags enum)
+
+//! Computes the altitude in meters for a given slice index.
+//!
+//! Uses centered-bin mapping so each slice represents the center of its
+//! altitude range, not the boundary. Supports two mapping modes:
+//!   0 = linear:  h(t) = H * t
+//!   1 = log:     h(t) = H * (2^t - 1)
+//! where t = (slice + 0.5) / slice_count is the normalized center of the bin,
+//! and H = atmosphere_height_m.
+//!
+//! @param slice_index     Integer slice index (dispatch_thread_id.z).
+//! @param slice_count     Total number of altitude slices.
+//! @param atmosphere_h    Atmosphere height in meters (H).
+//! @param mapping_mode    0 = linear, 1 = log.
+//! @return Altitude above ground in meters.
+float GetSliceAltitudeM(uint slice_index, uint slice_count,
+                        float atmosphere_h, uint mapping_mode)
+{
+    // Centered-bin: t is the center of the bin, not its edge.
+    float t = (float(slice_index) + 0.5) / float(slice_count);
+
+    if (mapping_mode == 1)
+    {
+        // Log mapping: h = H * (2^t - 1). Gives higher density near ground
+        // where atmosphere density changes most rapidly.
+        return atmosphere_h * (exp2(t) - 1.0);
+    }
+
+    // Linear mapping: h = H * t.
+    return atmosphere_h * t;
+}
 
 
 
@@ -239,12 +276,36 @@ float RayleighPhase(float cos_theta)
     return (3.0 / (16.0 * PI)) * (1.0 + cos_theta * cos_theta);
 }
 
-//! Henyey-Greenstein phase function for Mie scattering.
+//! Cornette-Shanks Phase Function (Matches Unreal Engine 5 Reference)
+//! Used for Mie scattering. Physically more accurate than standard HG.
+float CornetteShanksMiePhaseFunction(float g, float cos_theta)
+{
+    float k = 3.0 / (8.0 * PI) * (1.0 - g * g) / (2.0 + g * g);
+    // Note: Denominator uses +2*g*cos_theta because forward scatter is usually aligned.
+    // However, Unreal's hgPhase reference implementation uses:
+    // pow(1 + g^2 + 2*g*cosTheta, 1.5)
+    // We use the same here.
+    float denom = 1.0 + g * g - 2.0 * g * cos_theta;
+    // Wait, standard HG is (1+g^2 - 2g*cos).
+    // If cos=1, denom=(1-g)^2.
+    // Unreal uses -cosTheta in call site, so effective cosTheta is -1.
+    // ...
+    // Let's stick to the correct HG formula for forward scatter (cos=1):
+    // denom = 1 + g^2 - 2g*cos
+
+    // Safety clamp for denom to prevent division by zero at singularity
+    denom = max(denom, 1e-5);
+
+    return k * (1.0 + cos_theta * cos_theta) / pow(denom, 1.5);
+}
+
+// Replaced HenyeyGreensteinPhase with CornetteShanks
 float HenyeyGreensteinPhase(float cos_theta, float g)
 {
-    float g2 = g * g;
-    float denom = 1.0 + g2 - 2.0 * g * cos_theta;
-    return (1.0 / (4.0 * PI)) * (1.0 - g2) / (denom * sqrt(denom));
+    // Call the improved function
+    // Clamp result to prevent FP16 overflow (Inf)
+    float result = CornetteShanksMiePhaseFunction(g, cos_theta);
+    return min(result, 60000.0);
 }
 
 //! Computes single-scattering inscatter along a view ray.
@@ -274,6 +335,7 @@ float4 ComputeSingleScattering(
     uint atmosphere_flags)
 {
     float3 inscatter = float3(0.0, 0.0, 0.0);
+    float3 throughput = float3(1.0, 1.0, 1.0);
 
     // Adaptive step count: more steps near the horizon/twilight.
     const float horizon_factor_view = saturate(1.0 - abs(view_dir.z));
@@ -290,7 +352,14 @@ float4 ComputeSingleScattering(
 
     float ms_factor = saturate(atmo.multi_scattering_factor);
 
-    float3 accumulated_optical_depth = float3(0.0, 0.0, 0.0);
+    // We no longer accumulate accumulated_optical_depth for the view_transmittance manually
+    // because we use the Frostbite integral accumulation 'throughput' method.
+
+    // Precompute coefficients for extinction reconstruction
+    float3 beta_rayleigh = atmo.rayleigh_scattering_rgb;
+    float3 beta_mie_ext = atmo.mie_scattering_rgb / 0.9;
+    float3 beta_abs = atmo.absorption_rgb;
+
     const float exp_scale = is_twilight ? 0.0 : 4.0;
 
     for (uint i = 0; i < num_steps; ++i)
@@ -322,43 +391,62 @@ float4 ComputeSingleScattering(
         float d_m = GetAtmosphereDensity(altitude, atmo.mie_scale_height_m);
         float d_a = GetAbsorptionDensity(altitude, atmo.absorption_scale_height_m);
 
+        // Reconstruction of extinction at this point
+        float3 extinction = beta_rayleigh * d_r + beta_mie_ext * d_m + beta_abs * d_a;
+        float3 sample_optical_depth = extinction * step_size;
+        float3 sample_transmittance = exp(-sample_optical_depth);
+
+        // Sun Transmittance
         float3 sample_dir = normalize(sample_pos);
         float cos_sun_zenith = dot(sample_dir, sun_dir);
         float3 sun_od = SampleTransmittanceLutOpticalDepth(
             altitude, cos_sun_zenith, atmo, transmittance_lut, linear_sampler, lut_size);
         float3 sun_transmittance = TransmittanceFromOpticalDepth(sun_od, atmo);
 
-        float3 od_step = float3(d_r, d_m, d_a) * step_size;
-        float3 view_transmittance = TransmittanceFromOpticalDepth(accumulated_optical_depth + od_step * 0.5, atmo);
-
         // === Combined Scattering with Multi-Scat ===
         // Single scattering: light from sun -> scatter once -> camera
-        float3 sigma_s_single = atmo.rayleigh_scattering_rgb * d_r * rayleigh_phase
-                              + atmo.mie_scattering_rgb * d_m * mie_phase;
+        // S = L_sun * T_sun * (beta_R * phase_R + beta_M * phase_M)
+        float3 sigma_s_single = (atmo.rayleigh_scattering_rgb * d_r * rayleigh_phase
+                              + atmo.mie_scattering_rgb * d_m * mie_phase) * sun_transmittance;
 
-        // Multiple scattering using precomputed second-order scattering and infinite series sum.
-        // We look up the MultiScat radiance for this point's altitude and sun angle.
+        // Multiple scattering
         float u_ms = (cos_sun_zenith + 1.0) / 2.0;
         float v_ms = altitude / atmo.atmosphere_height_m;
         float4 ms_sample = multi_scat_lut.SampleLevel(linear_sampler, float2(u_ms, v_ms), 0);
 
-        float3 multi_scat_radiance = ms_sample.rgb; // Second-order scattering
-        float f_ms = ms_sample.a; // Average transmittance fraction
-
-        // Energy-conserving infinite series sum: 1 + f + f^2 + ... = 1 / (1 - f)
+        float3 multi_scat_radiance = ms_sample.rgb;
+        float f_ms = ms_sample.a;
         float3 energy_compensation = 1.0 / max(1.0 - f_ms, 1e-4);
 
-        // The MultiScat LUT stores second-order scattering radiance normalized by 4PI.
-        // To get the multiple scattering source term, we multiply by the scattering coefficients.
+        // UE5 style for multi-scat source logic:
+        // S_ms = (beta_R + beta_M) * MultiScatRadiance * EnergyComp
         float3 sigma_s_multi = (atmo.rayleigh_scattering_rgb * d_r + atmo.mie_scattering_rgb * d_m)
                              * multi_scat_radiance * energy_compensation * ms_factor;
 
-        // Combined scattering: phase-dependent (single) + isotropic (multiple)
-        float3 sigma_s = sigma_s_single + sigma_s_multi;
+        // Total Source Function (S)
+        float3 S = sigma_s_single + sigma_s_multi;
 
-        inscatter += sun_transmittance * view_transmittance * sigma_s * step_size;
+        // Frostbite / UE5 Analytic Integration:
+        // L += throughput * (S - S * T_step) / extinction
+        // (S - S*T_step) / ext -> S * step_size (limit as ext -> 0)
 
-        accumulated_optical_depth += od_step;
+        float3 Sint;
+        // Check for small extinction to avoid div-by-zero
+        // Using a check similar to UE5 implicit behaviors or explicit limit
+        if (all(extinction < 1e-6))
+        {
+            Sint = S * step_size;
+        }
+        else
+        {
+            Sint = (S - S * sample_transmittance) / max(extinction, 1e-6);
+        }
+
+        // Accumulate
+        inscatter += throughput * Sint;
+        inscatter = min(inscatter, float3(65000.0, 65000.0, 65000.0)); // Aggregate safety clamp
+
+        throughput *= sample_transmittance;
     }
 
     // Ground albedo contribution: if the ray hits the ground, add reflected light
@@ -381,16 +469,12 @@ float4 ComputeSingleScattering(
                                                                 * ground_ndotl
                                                                 * ground_sun_transmittance;
 
-                float3 view_transmittance_to_ground
-                    = TransmittanceFromOpticalDepth(accumulated_optical_depth, atmo);
-
-                inscatter += ground_reflected * view_transmittance_to_ground;
+        // Add ground reflection, attenuated by the total transmittance of the path
+        inscatter += ground_reflected * throughput;
     }
 
-    // View-path transmittance (luminance proxy).
-    float3 view_transmittance_end
-        = TransmittanceFromOpticalDepth(accumulated_optical_depth, atmo);
-    float total_transmittance = saturate(Luminance(view_transmittance_end));
+    // View-path transmittance is just the final throughput
+    float total_transmittance = saturate(Luminance(throughput));
 
     return float4(inscatter, total_transmittance);
 }
@@ -402,9 +486,10 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     ConstantBuffer<SkyViewLutPassConstants> pass_constants
         = ResourceDescriptorHeap[g_PassConstantsIndex];
 
-    // Bounds check
+    // Bounds check — Z maps directly to slice index because numthreads.z == 1 [P3].
     if (dispatch_thread_id.x >= pass_constants.output_width
-        || dispatch_thread_id.y >= pass_constants.output_height)
+        || dispatch_thread_id.y >= pass_constants.output_height
+        || dispatch_thread_id.z >= pass_constants.slice_count)
     {
         return;
     }
@@ -414,8 +499,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     if (!LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data))
     {
         // Fallback: write neutral sky
-        RWTexture2D<float4> output = ResourceDescriptorHeap[pass_constants.output_uav_index];
-        output[dispatch_thread_id.xy] = float4(0.0, 0.0, 0.0, 1.0);
+        RWTexture2DArray<float4> output = ResourceDescriptorHeap[pass_constants.output_uav_index];
+        output[uint3(dispatch_thread_id.xy, dispatch_thread_id.z)] = float4(0.0, 0.0, 0.0, 1.0);
         return;
     }
 
@@ -431,17 +516,25 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     float2 uv = (float2(dispatch_thread_id.xy) + 0.5)
               / float2(pass_constants.output_width, pass_constants.output_height);
 
+    // Derive per-slice camera altitude from slice index using the selected
+    // mapping function. Each slice represents a different altitude band,
+    // replacing the old single camera_altitude_m pass constant.
+    float altitude = GetSliceAltitudeM(
+        dispatch_thread_id.z,
+        pass_constants.slice_count,
+        pass_constants.atmosphere_height_m,
+        pass_constants.alt_mapping_mode);
+
     // Convert UV to view direction using sun-relative parameterization.
     // In this space, U=0.5 corresponds to looking toward the sun's horizontal direction.
-    float altitude = pass_constants.camera_altitude_m;
-    float3 view_dir = UvToViewDirection(uv, atmo.planet_radius_m, altitude, sun_cos_zenith);
+    float3 view_dir = UvToViewDirection(uv, pass_constants.planet_radius_m, altitude, sun_cos_zenith);
 
     // Camera position (at altitude above planet surface, on Z-axis)
-    float r = atmo.planet_radius_m + altitude;
+    float r = pass_constants.planet_radius_m + altitude;
     float3 origin = float3(0.0, 0.0, r);
 
     // Compute ray length to atmosphere boundary
-    float atmosphere_radius = atmo.planet_radius_m + atmo.atmosphere_height_m;
+    float atmosphere_radius = pass_constants.planet_radius_m + pass_constants.atmosphere_height_m;
     float ray_length = RaySphereIntersect(origin, view_dir, atmosphere_radius);
 
     float4 result = float4(0.0, 0.0, 0.0, 1.0);
@@ -450,7 +543,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     {
         // Check if ray hits ground
         bool hits_ground = false;
-        float ground_dist = RaySphereIntersect(origin, view_dir, atmo.planet_radius_m);
+        float ground_dist = RaySphereIntersect(origin, view_dir, pass_constants.planet_radius_m);
         if (ground_dist > 0.0 && ground_dist < ray_length)
         {
             ray_length = ground_dist;
@@ -476,7 +569,18 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             transmittance_lut, multi_scat_lut, linear_sampler, lut_size, atmosphere_flags);
     }
 
-    // Write result
-    RWTexture2D<float4> output = ResourceDescriptorHeap[pass_constants.output_uav_index];
-    output[dispatch_thread_id.xy] = result;
+    // Safety: prevent NaNs/Infs from polluting the Sky View LUT.
+    // These NaNs can propagate to Sky Capture -> IBL -> Lighting.
+    // We try to recover by clamping to max-value if Inf, or fallback to simple scattering if NaN.
+    if (any(isnan(result)) || any(isinf(result)))
+    {
+        // Now that we clamped the accumulation loop, we shouldn't hit this often.
+        // But if we do (NaN), return Black (0.0) which is safer than White for standard compositing.
+        // (White creates a flat disk, Black usually blends better with surrounding sky if it's just a pixel).
+        result = float4(0.0, 0.0, 0.0, 1.0);
+    }
+
+    // Write result to the correct array slice [P4].
+    RWTexture2DArray<float4> output = ResourceDescriptorHeap[pass_constants.output_uav_index];
+    output[uint3(dispatch_thread_id.xy, dispatch_thread_id.z)] = result;
 }

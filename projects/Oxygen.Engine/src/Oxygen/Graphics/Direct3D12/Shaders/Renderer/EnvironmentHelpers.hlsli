@@ -99,7 +99,28 @@ static inline uint3 GetClusterDimensions()
  */
 static inline float3 CubemapSamplingDirFromOxygenWS(float3 dir_ws)
 {
+    // Oxygen Forward (-Y) -> Cubemap Front (+Z)
+    // Oxygen Up (+Z)      -> Cubemap Up (+Y)
     return float3(dir_ws.x, dir_ws.z, -dir_ws.y);
+}
+
+/**
+ * Converts a GPU Cubemap sampling direction (Y-up) back to Oxygen world-space direction (Z-up).
+ * This is the inverse of CubemapSamplingDirFromOxygenWS.
+ *
+ * Use this when you have a direction relative to D3D cubemap faces (e.g. from SkyCapture view)
+ * and need the corresponding Oxygen World Space direction.
+ *
+ * Mapping:
+ *   oxy.x = gpu.x
+ *   oxy.y = -gpu.z
+ *   oxy.z = gpu.y
+ */
+static inline float3 OxygenDirFromCubemapSamplingDir(float3 dir_d3d)
+{
+    // Cubemap Front (+Z) -> Oxygen Forward (-Y)
+    // Cubemap Up (+Y)    -> Oxygen Up (+Z)
+    return float3(dir_d3d.x, -dir_d3d.z, dir_d3d.y);
 }
 
 #endif // OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTHELPERS_HLSLI

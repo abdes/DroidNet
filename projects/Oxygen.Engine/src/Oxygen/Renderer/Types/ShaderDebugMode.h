@@ -35,6 +35,10 @@ enum class ShaderDebugMode : uint8_t {
   kWorldNormals = 10, //!< Visualize world-space normals
   kRoughness = 11, //!< Visualize material roughness
   kMetalness = 12, //!< Visualize material metalness
+
+  // IBL mapping debug modes
+  kIblFaceIndex = 13, //!< Visualize cubemap face selection (no textures)
+  kIblNoBrdfLut = 14, //!< Normal shading with BRDF LUT bypassed
 };
 
 } // namespace oxygen::engine

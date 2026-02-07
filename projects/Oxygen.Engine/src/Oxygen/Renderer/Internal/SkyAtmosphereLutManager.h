@@ -45,6 +45,12 @@ struct SkyAtmosphereLutConfig {
   //! Sky-view LUT height (zenith parameterization).
   uint32_t sky_view_height { 216u };
 
+  //! Number of altitude slices in the sky-view LUT array (UI range: 4..32).
+  uint32_t sky_view_slices { 16u };
+
+  //! Altitude mapping mode for sky-view LUT slices (0 = linear, 1 = log).
+  uint32_t sky_view_alt_mapping_mode { 1u };
+
   //! Multiple scattering LUT size (32x32 common).
   uint32_t multi_scat_size { 32u };
 };
@@ -104,12 +110,33 @@ public:
   OXGN_RNDR_NDAPI auto GetSkyViewLutSlot() const noexcept
     -> ShaderVisibleIndex override;
 
-  //! Returns sky-view LUT dimensions.
+  //! Returns sky-view LUT dimensions (per-slice, not total texels).
   [[nodiscard]] auto GetSkyViewLutSize() const noexcept
     -> Extent<uint32_t> override
   {
     return { config_.sky_view_width, config_.sky_view_height };
   }
+
+  //! Returns the number of altitude slices in the sky-view LUT array.
+  [[nodiscard]] auto GetSkyViewLutSlices() const noexcept -> uint32_t override
+  {
+    return config_.sky_view_slices;
+  }
+
+  //! Returns the altitude mapping mode (0 = linear, 1 = log).
+  [[nodiscard]] auto GetAltMappingMode() const noexcept -> uint32_t override
+  {
+    return config_.sky_view_alt_mapping_mode;
+  }
+
+  //! Sets the number of altitude slices for the sky-view LUT.
+  //!
+  //! If the count changes, existing resources are destroyed and will be
+  //! recreated on the next frame with the new array size. [P16]
+  OXGN_RNDR_API auto SetSkyViewLutSlices(uint32_t slices) -> void;
+
+  //! Sets the altitude mapping mode (0 = linear, 1 = log).
+  OXGN_RNDR_API auto SetAltMappingMode(uint32_t mode) -> void;
 
   //! Returns shader-visible SRV index for the multiple scattering LUT.
   OXGN_RNDR_NDAPI auto GetMultiScatLutSlot() const noexcept
@@ -189,6 +216,16 @@ public:
   [[nodiscard]] auto GetPlanetRadiusMeters() const noexcept -> float
   {
     return cached_params_.planet_radius_m;
+  }
+
+  //! Returns the current atmosphere height in meters.
+  /*!
+   Used by the compute pass to derive per-slice altitude via the mapping
+   function h(t) = H * (2^t - 1).
+  */
+  [[nodiscard]] auto GetAtmosphereHeightMeters() const noexcept -> float
+  {
+    return cached_params_.atmosphere_height_m;
   }
 
   //! Updates cached sun state and marks dirty when elevation changes.
@@ -277,6 +314,16 @@ private:
     float ground_albedo_r { 0.0F };
     float ground_albedo_g { 0.0F };
     float ground_albedo_b { 0.0F };
+    // Slice config is tracked so changes trigger re-creation [P15].
+    uint32_t sky_view_slices { 0 };
+    uint32_t sky_view_alt_mapping_mode { 0 };
+    // Sun disk parameters are tracked to verify propagation.
+    uint32_t sun_disk_enabled { 0 };
+    float sun_disk_angular_radius_radians { 0.0F };
+
+    // Other parameters that affect rendering state
+    float aerial_perspective_distance_scale { 1.0F };
+    uint32_t enabled { 0 };
 
     [[nodiscard]] auto operator==(const CachedParams& other) const noexcept
       -> bool
@@ -306,10 +353,13 @@ private:
   LutResources sky_view_lut_ {};
   LutResources multi_scat_lut_ {};
 
-  auto CreateLutTexture(uint32_t width, uint32_t height, bool is_rgba,
-    const char* debug_name) -> std::shared_ptr<graphics::Texture>;
+  //! Creates a LUT texture, optionally as a 2D array [P1, P11].
+  auto CreateLutTexture(uint32_t width, uint32_t height, uint32_t array_size,
+    bool is_rgba, const char* debug_name) -> std::shared_ptr<graphics::Texture>;
 
-  auto CreateLutViews(LutResources& lut, bool is_rgba) -> bool;
+  //! Creates SRV/UAV views for a LUT, optionally as array views [P2, P11].
+  auto CreateLutViews(LutResources& lut, uint32_t array_size, bool is_rgba)
+    -> bool;
 
   auto CleanupResources() -> void;
 

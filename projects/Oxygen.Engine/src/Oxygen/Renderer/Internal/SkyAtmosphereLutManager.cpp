@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
@@ -45,7 +47,11 @@ auto SkyAtmosphereLutManager::UpdateParameters(
   dirty_ = true;
   ++generation_;
 
-  LOG_F(2, "SkyAtmosphereLutManager: parameters changed, marking dirty");
+  LOG_F(INFO,
+    "SkyAtmosphereLutManager: parameters changed, marking dirty "
+    "(sun_disk_enabled={}, sun_disk_radius={})",
+    cached_params_.sun_disk_enabled,
+    cached_params_.sun_disk_angular_radius_radians);
 }
 
 auto SkyAtmosphereLutManager::UpdateSunState(const SunState& sun) noexcept
@@ -158,38 +164,40 @@ auto SkyAtmosphereLutManager::EnsureResourcesCreated() -> bool
 
   // Create transmittance LUT (RGBA16F - optical depth for Rayleigh/Mie/Abs)
   transmittance_lut_.texture = CreateLutTexture(config_.transmittance_width,
-    config_.transmittance_height, true, "Atmo_TransmittanceLUT");
+    config_.transmittance_height, 1, true, "Atmo_TransmittanceLUT");
   if (!transmittance_lut_.texture) {
     return false;
   }
 
-  if (!CreateLutViews(transmittance_lut_, true)) {
+  if (!CreateLutViews(transmittance_lut_, 1, true)) {
     CleanupResources();
     return false;
   }
 
-  // Create sky-view LUT (RGBA16F - inscatter RGB + transmittance)
-  sky_view_lut_.texture = CreateLutTexture(
-    config_.sky_view_width, config_.sky_view_height, true, "Atmo_SkyViewLUT");
+  // Create sky-view LUT as a 2D texture array with altitude slices [P1].
+  // Each slice is (sky_view_width x sky_view_height); array_size = slices.
+  sky_view_lut_.texture = CreateLutTexture(config_.sky_view_width,
+    config_.sky_view_height, config_.sky_view_slices, true, "Atmo_SkyViewLUT");
   if (!sky_view_lut_.texture) {
     CleanupResources();
     return false;
   }
 
-  if (!CreateLutViews(sky_view_lut_, true)) {
+  // SRV/UAV must use kTexture2DArray dimension to see all slices [P2].
+  if (!CreateLutViews(sky_view_lut_, config_.sky_view_slices, true)) {
     CleanupResources();
     return false;
   }
 
   // Create multiple scattering LUT (RGBA16F - total escaped radiance)
   multi_scat_lut_.texture = CreateLutTexture(config_.multi_scat_size,
-    config_.multi_scat_size, true, "Atmo_MultiScatLUT");
+    config_.multi_scat_size, 1, true, "Atmo_MultiScatLUT");
   if (!multi_scat_lut_.texture) {
     CleanupResources();
     return false;
   }
 
-  if (!CreateLutViews(multi_scat_lut_, true)) {
+  if (!CreateLutViews(multi_scat_lut_, 1, true)) {
     CleanupResources();
     return false;
   }
@@ -198,16 +206,17 @@ auto SkyAtmosphereLutManager::EnsureResourcesCreated() -> bool
 
   LOG_F(INFO,
     "SkyAtmosphereLutManager: created LUTs (transmittance={}x{}, "
-    "sky_view={}x{}, multi_scat={}x{})",
+    "sky_view={}x{}x{} slices, multi_scat={}x{})",
     config_.transmittance_width, config_.transmittance_height,
-    config_.sky_view_width, config_.sky_view_height, config_.multi_scat_size,
-    config_.multi_scat_size);
+    config_.sky_view_width, config_.sky_view_height, config_.sky_view_slices,
+    config_.multi_scat_size, config_.multi_scat_size);
 
   return true;
 }
 
 auto SkyAtmosphereLutManager::CreateLutTexture(uint32_t width, uint32_t height,
-  bool is_rgba, const char* debug_name) -> std::shared_ptr<graphics::Texture>
+  uint32_t array_size, bool is_rgba, const char* debug_name)
+  -> std::shared_ptr<graphics::Texture>
 {
   TextureDesc desc;
   desc.width = width;
@@ -215,12 +224,19 @@ auto SkyAtmosphereLutManager::CreateLutTexture(uint32_t width, uint32_t height,
   desc.mip_levels = 1u;
   desc.sample_count = 1u;
   desc.format = is_rgba ? Format::kRGBA16Float : Format::kRG16Float;
-  desc.texture_type = TextureType::kTexture2D;
   desc.debug_name = debug_name;
   desc.is_shader_resource = true;
   desc.is_uav = true;
   desc.is_render_target = false;
   desc.initial_state = graphics::ResourceStates::kUnorderedAccess;
+
+  // Use Texture2DArray when array_size > 1, otherwise plain Texture2D [P1].
+  if (array_size > 1) {
+    desc.texture_type = TextureType::kTexture2DArray;
+    desc.array_size = array_size;
+  } else {
+    desc.texture_type = TextureType::kTexture2D;
+  }
 
   auto texture = gfx_->CreateTexture(desc);
   if (!texture) {
@@ -235,11 +251,17 @@ auto SkyAtmosphereLutManager::CreateLutTexture(uint32_t width, uint32_t height,
   return texture;
 }
 
-auto SkyAtmosphereLutManager::CreateLutViews(LutResources& lut, bool is_rgba)
-  -> bool
+auto SkyAtmosphereLutManager::CreateLutViews(
+  LutResources& lut, uint32_t array_size, bool is_rgba) -> bool
 {
   auto& allocator = gfx_->GetDescriptorAllocator();
   auto& registry = gfx_->GetResourceRegistry();
+
+  // Choose the correct dimension for SRV/UAV descriptors [P2].
+  // Texture2DArray resources must use kTexture2DArray dimension; otherwise
+  // the GPU only sees slice 0.
+  const auto view_dimension
+    = (array_size > 1) ? TextureType::kTexture2DArray : TextureType::kTexture2D;
 
   // Create SRV for shader sampling
   auto srv_handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
@@ -253,7 +275,13 @@ auto SkyAtmosphereLutManager::CreateLutViews(LutResources& lut, bool is_rgba)
   srv_desc.view_type = graphics::ResourceViewType::kTexture_SRV;
   srv_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
   srv_desc.format = is_rgba ? Format::kRGBA16Float : Format::kRG16Float;
-  srv_desc.dimension = TextureType::kTexture2D;
+  srv_desc.dimension = view_dimension;
+
+  // For array textures, set sub-resource range to cover all slices [P2].
+  if (array_size > 1) {
+    srv_desc.sub_resources.base_array_slice = 0;
+    srv_desc.sub_resources.num_array_slices = array_size;
+  }
 
   lut.srv_index = allocator.GetShaderVisibleIndex(srv_handle);
   lut.srv_view
@@ -271,7 +299,13 @@ auto SkyAtmosphereLutManager::CreateLutViews(LutResources& lut, bool is_rgba)
   uav_desc.view_type = graphics::ResourceViewType::kTexture_UAV;
   uav_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
   uav_desc.format = is_rgba ? Format::kRGBA16Float : Format::kRG16Float;
-  uav_desc.dimension = TextureType::kTexture2D;
+  uav_desc.dimension = view_dimension;
+
+  // For array textures, set sub-resource range to cover all slices [P2].
+  if (array_size > 1) {
+    uav_desc.sub_resources.base_array_slice = 0;
+    uav_desc.sub_resources.num_array_slices = array_size;
+  }
 
   lut.uav_index = allocator.GetShaderVisibleIndex(uav_handle);
   lut.uav_view
@@ -338,7 +372,53 @@ auto SkyAtmosphereLutManager::ExtractCachedParams(
     .ground_albedo_r = params.ground_albedo_rgb.x,
     .ground_albedo_g = params.ground_albedo_rgb.y,
     .ground_albedo_b = params.ground_albedo_rgb.z,
+    .sky_view_slices = params.sky_view_lut_slices,
+    .sky_view_alt_mapping_mode = params.sky_view_alt_mapping_mode,
+    .sun_disk_enabled = params.sun_disk_enabled,
+    .sun_disk_angular_radius_radians = params.sun_disk_angular_radius_radians,
+    .aerial_perspective_distance_scale
+    = params.aerial_perspective_distance_scale,
+    .enabled = params.enabled,
   };
+}
+
+auto SkyAtmosphereLutManager::SetSkyViewLutSlices(uint32_t slices) -> void
+{
+  slices = std::clamp(slices, 4u, 32u);
+  if (config_.sky_view_slices == slices) {
+    return;
+  }
+
+  config_.sky_view_slices = slices;
+
+  // Changing slice count requires destroying and recreating the sky-view
+  // texture because D3D12 array_size is immutable after creation [P16].
+  // We must immediately recreate the resources to ensure that a valid
+  // SRV slot is available for the upcoming frame's EnvironmentStaticData
+  // population. Leaving it destroyed causes a gap where the slot is invalid,
+  // leading to black artifacts in sky capture/reflection passes.
+  if (resources_created_) {
+    CleanupResources();
+    EnsureResourcesCreated();
+    // Force regeneration since texture is fresh
+    luts_generated_ = false;
+  }
+
+  dirty_ = true;
+  ++generation_;
+  LOG_F(INFO, "SkyAtmosphereLutManager: sky_view_slices changed to {}", slices);
+}
+
+auto SkyAtmosphereLutManager::SetAltMappingMode(uint32_t mode) -> void
+{
+  if (config_.sky_view_alt_mapping_mode == mode) {
+    return;
+  }
+
+  config_.sky_view_alt_mapping_mode = mode;
+  dirty_ = true;
+  ++generation_;
+  LOG_F(INFO, "SkyAtmosphereLutManager: alt_mapping_mode changed to {}", mode);
 }
 
 } // namespace oxygen::engine::internal

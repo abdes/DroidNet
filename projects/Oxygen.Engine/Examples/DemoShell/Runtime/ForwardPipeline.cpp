@@ -179,6 +179,7 @@ namespace {
   struct DebugModeIntent {
     bool is_non_ibl { false };
     bool force_manual_exposure { false };
+    bool force_exposure_one { false };
   };
 
   auto EvaluateDebugModeIntent(engine::ShaderDebugMode mode) -> DebugModeIntent
@@ -198,15 +199,33 @@ namespace {
       case engine::ShaderDebugMode::kIblSpecular:
       case engine::ShaderDebugMode::kIblRawSky:
       case engine::ShaderDebugMode::kIblIrradiance:
+      case engine::ShaderDebugMode::kIblFaceIndex:
       case engine::ShaderDebugMode::kDisabled:
       default:
         return false;
       }
     }();
 
+    const auto is_ibl_debug = [&] {
+      switch (mode) {
+      case engine::ShaderDebugMode::kIblSpecular:
+      case engine::ShaderDebugMode::kIblRawSky:
+      case engine::ShaderDebugMode::kIblIrradiance:
+      case engine::ShaderDebugMode::kIblFaceIndex:
+        return true;
+      case engine::ShaderDebugMode::kDisabled:
+      default:
+        return false;
+      }
+    }();
+
+    const bool force_exposure_one
+      = (mode == engine::ShaderDebugMode::kIblRawSky);
+
     return DebugModeIntent {
       .is_non_ibl = is_non_ibl,
-      .force_manual_exposure = is_non_ibl,
+      .force_manual_exposure = is_non_ibl || is_ibl_debug || force_exposure_one,
+      .force_exposure_one = force_exposure_one,
     };
   }
 
@@ -723,6 +742,13 @@ struct ForwardPipeline::Impl {
       shader_pass_config->fill_mode = graphics::FillMode::kSolid;
     }
 
+    if (transparent_pass_config) {
+      transparent_pass_config->debug_mode = shader_pass_config
+        ? shader_pass_config->debug_mode
+        : engine::ShaderDebugMode::kDisabled;
+      transparent_pass_config->fill_mode = graphics::FillMode::kSolid;
+    }
+
     if (light_culling_pass_config) {
       light_culling_pass_config->cluster.depth_slices
         = staged.clustered_culling_enabled ? staged.cluster_depth_slices : 1;
@@ -742,7 +768,9 @@ struct ForwardPipeline::Impl {
       tone_map_pass_config->exposure_mode = debug_intent.force_manual_exposure
         ? engine::ExposureMode::kManual
         : staged.exposure_mode;
-      tone_map_pass_config->manual_exposure = 1.0F;
+      tone_map_pass_config->manual_exposure = debug_intent.force_exposure_one
+        ? 1.0F
+        : (debug_intent.force_manual_exposure ? 1.0F : staged.exposure_value);
       tone_map_pass_config->tone_mapper = staged.tonemapping_mode;
     }
 
