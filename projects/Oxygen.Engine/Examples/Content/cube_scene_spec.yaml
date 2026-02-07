@@ -424,7 +424,7 @@ assets:
       - node_index: 5
         affects_world: true
         color_rgb: [1.0, 0.98, 0.92]
-        intensity: 2.0
+        intensity_lux: 150000.0
         mobility: 0
         casts_shadows: 1
         # Approx. sun angular radius in radians (~0.268°)
@@ -437,7 +437,7 @@ assets:
     #   - node_index: 6
     #     affects_world: true
     #     color_rgb: [1.0, 0.35, 0.25]
-    #     intensity: 18.0
+    #     luminous_flux_lm: 1200.0
     #     casts_shadows: 0
     #     range: 8.0
     #     attenuation_model: 0
@@ -447,7 +447,7 @@ assets:
     #   - node_index: 9
     #     affects_world: true
     #     color_rgb: [1.0, 1.0, 1.0]
-    #     intensity: 60.0
+    #     luminous_flux_lm: 1200.0
     #     casts_shadows: 0
     #     range: 3.0
     #     attenuation_model: 0
@@ -458,7 +458,7 @@ assets:
     #   - node_index: 7
     #     affects_world: true
     #     color_rgb: [0.25, 0.6, 1.0]
-    #     intensity: 25.0
+    #     luminous_flux_lm: 3000.0
     #     casts_shadows: 0
     #     range: 12.0
     #     attenuation_model: 0
@@ -470,7 +470,7 @@ assets:
     #   - node_index: 8
     #     affects_world: true
     #     color_rgb: [1.0, 1.0, 1.0]
-    #     intensity: 35.0
+    #     luminous_flux_lm: 3000.0
     #     casts_shadows: 0
     #     range: 6.0
     #     attenuation_model: 0
@@ -497,7 +497,6 @@ assets:
         mie_anisotropy: 0.8
         multi_scattering_factor: 1.0
         sun_disk_enabled: true
-        sun_disk_angular_radius_rad: 0.004675
         aerial_perspective_distance_scale: 1.0
 
       fog:
@@ -512,7 +511,7 @@ assets:
         anisotropy: 0.0
         scattering_intensity: 1.0
 
-      post_process:
+      post_process_volume:
         enabled: true
         tone_mapper: 1
         exposure_mode: 0

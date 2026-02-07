@@ -65,6 +65,28 @@ namespace {
     return std::clamp(v, 0.0F, 1.0F);
   }
 
+  /*!
+   FBX light `intensity` is a unitless authoring control. We map it to
+   lumens for Oxygen's PBR conventions using a two-segment rule:
+
+   - For values in [0, 15], treat the value as a multiplier on a 15 lm
+     reference. This yields a range of [0, 225] lm, where 15 lm corresponds
+     to a single candle.
+   - For values > 15, treat the value directly as lumens.
+
+   This keeps low-range authoring intuitive while allowing explicit lumens
+   for higher intensities.
+  */
+  [[nodiscard]] auto FbxIntensityToLumens(const float intensity) noexcept
+    -> float
+  {
+    const float clamped = (std::max)(0.0F, intensity);
+    if (clamped <= 15.0F) {
+      return clamped * 15.0F;
+    }
+    return clamped;
+  }
+
   [[nodiscard]] auto ToStringView(const ufbx_string& s) -> std::string_view
   {
     return std::string_view(s.data, s.length);
@@ -2547,7 +2569,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color.x);
         rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color.y);
         rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color.z);
-        rec_light.luminous_flux_lm = (std::max)(0.0F, light.intensity);
+        rec_light.luminous_flux_lm = FbxIntensityToLumens(light.intensity);
         rec_light.common.casts_shadows = light.cast_shadows ? 1U : 0U;
         build.point_lights.push_back(rec_light);
         if (light.type != UFBX_LIGHT_POINT) {
@@ -2565,7 +2587,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color.x);
         rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color.y);
         rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color.z);
-        rec_light.luminous_flux_lm = (std::max)(0.0F, light.intensity);
+        rec_light.luminous_flux_lm = FbxIntensityToLumens(light.intensity);
         rec_light.common.casts_shadows = light.cast_shadows ? 1U : 0U;
         const float inner = light.inner_angle;
         const float outer = light.outer_angle;

@@ -696,15 +696,9 @@ auto KelvinToLinearRgb(float kelvin) -> glm::vec3 {
 #### Task 1.10: Populate GpuSkyAtmosphereParams sun disk from Sun component
 
 - [X] File: [src/Oxygen/Renderer/Internal/EnvironmentStaticDataManager.cpp](src/Oxygen/Renderer/Internal/EnvironmentStaticDataManager.cpp)
-- [X] Modify `EnvironmentStaticDataManager::PopulateAtmosphere()` (currently at line 254)
-- [X] Currently reads sun disk params from `SkyAtmosphere`: `atmo->GetSunDiskEnabled()`, `atmo->GetSunDiskAngularRadiusRadians()`
-- [X] **Change**: Read sun disk params from `Sun` component instead if present and enabled
-- [X] Resolution order:
-  1. Check `env->TryGetSystem<Sun>()`
-  2. If Sun exists and enabled: use `Sun::GetDiskAngularRadiusRadians()` and set `sun_disk_enabled = 1` if disk radius > 0
-  3. Else: fallback to `SkyAtmosphere` sun disk params (preserve current behavior)
-- [X] This supports hybrid usage: Sun component provides disk params when authored, SkyAtmosphere provides fallback
-- [X] **Note**: Current code at lines 273-275 populates `next.atmosphere.sun_disk_enabled` and `next.atmosphere.sun_disk_angular_radius_radians` from `atmo->GetSunDisk*()`; replace with Sun-first logic
+- [X] Modify `EnvironmentStaticDataManager::PopulateAtmosphere()`
+- [X] Sun disk radius is authored on `Sun` and forwarded into
+  `GpuSkyAtmosphereParams` for rendering.
 
 #### Task 1.11: Wire Sun component into SceneEnvironment
 

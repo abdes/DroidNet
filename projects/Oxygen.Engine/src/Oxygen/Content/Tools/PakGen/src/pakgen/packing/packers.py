@@ -103,21 +103,20 @@ def _pack_light_common_record(light: Dict[str, Any]) -> bytes:
     affects_world = _u32_bool(light.get("affects_world"), 1)
     color = light.get("color_rgb", light.get("color", [1.0, 1.0, 1.0]))
     cr, cg, cb = _vec3(color, [1.0, 1.0, 1.0])
-    intensity = _f(light.get("intensity"), 1.0)
     mobility = _u8(light.get("mobility"), 0)
     casts_shadows = _u8(light.get("casts_shadows"), 0)
     shadow = _pack_light_shadow_settings_record(light.get("shadow"))
     exposure_comp = _f(light.get("exposure_compensation_ev"), 0.0)
 
     out = (
-        struct.pack("<I3ff", int(affects_world), cr, cg, cb, intensity)
+        struct.pack("<I3f", int(affects_world), cr, cg, cb)
         + struct.pack("<BB", int(mobility), int(casts_shadows))
         + b"\x00" * 2
         + shadow
         + struct.pack("<f", exposure_comp)
         + b"\x00" * 4
     )
-    if len(out) != 48:
+    if len(out) != 44:
         raise PakError("E_SIZE", f"LightCommonRecord size mismatch: {len(out)}")
     return out
 
@@ -145,6 +144,7 @@ def _pack_directional_light_record(
         ),
         0,
     )
+    intensity_lux = _f(light.get("intensity_lux"), 100000.0)
     cascade_count = int(light.get("cascade_count", 4) or 0)
     if cascade_count < 0 or cascade_count > 4:
         raise PakError(
@@ -166,6 +166,7 @@ def _pack_directional_light_record(
         + struct.pack("<I", int(cascade_count))
         + struct.pack("<4f", *cascade_distances)
         + struct.pack("<f", distribution)
+        + struct.pack("<f", intensity_lux)
         + b"\x00" * 8
     )
     if len(out) != 96:
@@ -193,6 +194,7 @@ def _pack_point_light_record(
     attenuation_model = _u8(light.get("attenuation_model"), 0)
     decay = _f(light.get("decay_exponent"), 2.0)
     source_radius = _f(light.get("source_radius"), 0.0)
+    luminous_flux_lm = _f(light.get("luminous_flux_lm"), 800.0)
 
     out = (
         struct.pack("<I", int(node_index))
@@ -202,6 +204,7 @@ def _pack_point_light_record(
         + b"\x00" * 3
         + struct.pack("<f", decay)
         + struct.pack("<f", source_radius)
+        + struct.pack("<f", luminous_flux_lm)
         + b"\x00" * 12
     )
     if len(out) != 80:
@@ -227,6 +230,7 @@ def _pack_spot_light_record(light: Dict[str, Any], *, node_count: int) -> bytes:
     inner = _f(light.get("inner_cone_angle_radians"), 0.4)
     outer = _f(light.get("outer_cone_angle_radians"), 0.6)
     source_radius = _f(light.get("source_radius"), 0.0)
+    luminous_flux_lm = _f(light.get("luminous_flux_lm"), 800.0)
 
     out = (
         struct.pack("<I", int(node_index))
@@ -238,6 +242,7 @@ def _pack_spot_light_record(light: Dict[str, Any], *, node_count: int) -> bytes:
         + struct.pack("<f", inner)
         + struct.pack("<f", outer)
         + struct.pack("<f", source_radius)
+        + struct.pack("<f", luminous_flux_lm)
         + b"\x00" * 12
     )
     if len(out) != 88:
@@ -267,10 +272,9 @@ def _pack_sky_atmosphere_environment_record(spec: Dict[str, Any]) -> bytes:
     absorption_scale = _f(spec.get("absorption_scale_height_m"), 25000.0)
     multi_scattering = _f(spec.get("multi_scattering_factor"), 1.0)
     sun_disk_enabled = _u32_bool(spec.get("sun_disk_enabled"), 1)
-    sun_disk_radius = _f(spec.get("sun_disk_angular_radius_radians"), 0.004675)
     aerial_scale = _f(spec.get("aerial_perspective_distance_scale"), 1.0)
 
-    record_size = 116
+    record_size = 112
     out = (
         _pack_env_record_header(_ENV_SYSTEM_SKY_ATMOSPHERE, record_size)
         + struct.pack("<I", int(enabled))
@@ -285,7 +289,6 @@ def _pack_sky_atmosphere_environment_record(spec: Dict[str, Any]) -> bytes:
         + struct.pack("<f", absorption_scale)
         + struct.pack("<f", multi_scattering)
         + struct.pack("<I", int(sun_disk_enabled))
-        + struct.pack("<f", sun_disk_radius)
         + struct.pack("<f", aerial_scale)
         + b"\x00" * 16
     )

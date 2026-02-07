@@ -594,7 +594,7 @@ assets:
       - node_index: 2
         affects_world: true
         color_rgb: [1.0, 0.98, 0.92]
-        intensity: 2.5
+        intensity_lux: 2.5
         mobility: 0
         casts_shadows: 0
         angular_size_radians: 0.01
@@ -605,7 +605,7 @@ assets:
       - node_index: 3
         light_type: 0  # Point light
         color_rgb: [1.0, 0.3, 0.3]
-        intensity: 80.0
+        luminous_flux_lm: 1200.0
         range: 6.0
         mobility: 0
         casts_shadows: 0
@@ -613,7 +613,7 @@ assets:
       - node_index: 4
         light_type: 0
         color_rgb: [0.3, 1.0, 0.3]
-        intensity: 80.0
+        luminous_flux_lm: 1200.0
         range: 6.0
         mobility: 0
         casts_shadows: 0
@@ -621,7 +621,7 @@ assets:
       - node_index: 5
         light_type: 0
         color_rgb: [0.3, 0.3, 1.0]
-        intensity: 80.0
+        luminous_flux_lm: 1200.0
         range: 6.0
         mobility: 0
         casts_shadows: 0
@@ -629,7 +629,7 @@ assets:
       - node_index: 6
         light_type: 0
         color_rgb: [1.0, 1.0, 0.3]
-        intensity: 80.0
+        luminous_flux_lm: 1200.0
         range: 6.0
         mobility: 0
         casts_shadows: 0
@@ -637,7 +637,7 @@ assets:
       - node_index: 7
         light_type: 0
         color_rgb: [1.0, 0.3, 1.0]
-        intensity: 80.0
+        luminous_flux_lm: 1200.0
         range: 6.0
         mobility: 0
         casts_shadows: 0
@@ -645,7 +645,7 @@ assets:
       - node_index: 8
         light_type: 0
         color_rgb: [0.3, 1.0, 1.0]
-        intensity: 80.0
+        luminous_flux_lm: 1200.0
         range: 6.0
         mobility: 0
         casts_shadows: 0
@@ -653,7 +653,7 @@ assets:
       - node_index: 9
         light_type: 0
         color_rgb: [1.0, 0.6, 0.3]
-        intensity: 80.0
+        luminous_flux_lm: 1200.0
         range: 6.0
         mobility: 0
         casts_shadows: 0
@@ -661,7 +661,7 @@ assets:
       - node_index: 10
         light_type: 0
         color_rgb: [0.6, 0.3, 1.0]
-        intensity: 80.0
+        luminous_flux_lm: 1200.0
         range: 6.0
         mobility: 0
         casts_shadows: 0
@@ -670,7 +670,7 @@ assets:
       - node_index: 11
         light_type: 0
         color_rgb: [1.0, 1.0, 1.0]
-        intensity: 100.0
+        luminous_flux_lm: 1200.0
         range: 7.0
         mobility: 0
         casts_shadows: 0
@@ -678,7 +678,7 @@ assets:
       - node_index: 12
         light_type: 0
         color_rgb: [1.0, 0.8, 0.8]
-        intensity: 100.0
+        luminous_flux_lm: 1200.0
         range: 7.0
         mobility: 0
         casts_shadows: 0
@@ -686,7 +686,7 @@ assets:
       - node_index: 13
         light_type: 0
         color_rgb: [0.8, 1.0, 0.8]
-        intensity: 100.0
+        luminous_flux_lm: 1200.0
         range: 7.0
         mobility: 0
         casts_shadows: 0
@@ -694,7 +694,7 @@ assets:
       - node_index: 14
         light_type: 0
         color_rgb: [0.8, 0.8, 1.0]
-        intensity: 100.0
+        luminous_flux_lm: 1200.0
         range: 7.0
         mobility: 0
         casts_shadows: 0
@@ -703,7 +703,7 @@ assets:
       - node_index: 15
         light_type: 0
         color_rgb: [1.0, 0.5, 0.2]
-        intensity: 90.0
+        luminous_flux_lm: 1200.0
         range: 7.0
         mobility: 0
         casts_shadows: 0
@@ -711,7 +711,7 @@ assets:
       - node_index: 16
         light_type: 0
         color_rgb: [0.2, 1.0, 0.5]
-        intensity: 90.0
+        luminous_flux_lm: 1200.0
         range: 7.0
         mobility: 0
         casts_shadows: 0
@@ -719,7 +719,7 @@ assets:
       - node_index: 17
         light_type: 0
         color_rgb: [0.5, 0.2, 1.0]
-        intensity: 90.0
+        luminous_flux_lm: 1200.0
         range: 7.0
         mobility: 0
         casts_shadows: 0
@@ -727,7 +727,7 @@ assets:
       - node_index: 18
         light_type: 0
         color_rgb: [1.0, 1.0, 0.5]
-        intensity: 90.0
+        luminous_flux_lm: 1200.0
         range: 7.0
         mobility: 0
         casts_shadows: 0
@@ -736,7 +736,7 @@ assets:
       - node_index: 19
         light_type: 0
         color_rgb: [1.0, 1.0, 1.0]
-        intensity: 50.0
+        luminous_flux_lm: 1200.0
         range: 8.0
         mobility: 0
         casts_shadows: 0
@@ -744,7 +744,7 @@ assets:
       - node_index: 20
         light_type: 0
         color_rgb: [1.0, 0.8, 0.6]
-        intensity: 50.0
+        luminous_flux_lm: 1200.0
         range: 8.0
         mobility: 0
         casts_shadows: 0
@@ -752,7 +752,7 @@ assets:
       - node_index: 21
         light_type: 0
         color_rgb: [0.6, 1.0, 0.8]
-        intensity: 50.0
+        luminous_flux_lm: 1200.0
         range: 8.0
         mobility: 0
         casts_shadows: 0
@@ -760,7 +760,7 @@ assets:
       - node_index: 22
         light_type: 0
         color_rgb: [0.8, 0.6, 1.0]
-        intensity: 50.0
+        luminous_flux_lm: 1200.0
         range: 8.0
         mobility: 0
         casts_shadows: 0
@@ -768,7 +768,7 @@ assets:
       - node_index: 23
         light_type: 0
         color_rgb: [1.0, 0.5, 0.5]
-        intensity: 50.0
+        luminous_flux_lm: 1200.0
         range: 8.0
         mobility: 0
         casts_shadows: 0
@@ -776,7 +776,7 @@ assets:
       - node_index: 24
         light_type: 0
         color_rgb: [0.5, 1.0, 0.5]
-        intensity: 50.0
+        luminous_flux_lm: 1200.0
         range: 8.0
         mobility: 0
         casts_shadows: 0
@@ -784,7 +784,7 @@ assets:
       - node_index: 25
         light_type: 0
         color_rgb: [0.5, 0.5, 1.0]
-        intensity: 50.0
+        luminous_flux_lm: 1200.0
         range: 8.0
         mobility: 0
         casts_shadows: 0
@@ -792,7 +792,7 @@ assets:
       - node_index: 26
         light_type: 0
         color_rgb: [1.0, 1.0, 0.5]
-        intensity: 50.0
+        luminous_flux_lm: 1200.0
         range: 8.0
         mobility: 0
         casts_shadows: 0
@@ -800,7 +800,7 @@ assets:
       - node_index: 27
         light_type: 0
         color_rgb: [0.5, 1.0, 1.0]
-        intensity: 50.0
+        luminous_flux_lm: 1200.0
         range: 8.0
         mobility: 0
         casts_shadows: 0
@@ -808,7 +808,7 @@ assets:
       - node_index: 28
         light_type: 0
         color_rgb: [1.0, 0.5, 1.0]
-        intensity: 50.0
+        luminous_flux_lm: 1200.0
         range: 8.0
         mobility: 0
         casts_shadows: 0
@@ -816,7 +816,7 @@ assets:
       - node_index: 29
         light_type: 0
         color_rgb: [0.9, 0.9, 0.9]
-        intensity: 50.0
+        luminous_flux_lm: 1200.0
         range: 8.0
         mobility: 0
         casts_shadows: 0
@@ -824,7 +824,7 @@ assets:
       - node_index: 30
         light_type: 0
         color_rgb: [0.8, 0.8, 0.6]
-        intensity: 50.0
+        luminous_flux_lm: 1200.0
         range: 8.0
         mobility: 0
         casts_shadows: 0
@@ -832,7 +832,7 @@ assets:
       - node_index: 31
         light_type: 0
         color_rgb: [0.6, 0.8, 0.8]
-        intensity: 50.0
+        luminous_flux_lm: 1200.0
         range: 8.0
         mobility: 0
         casts_shadows: 0
@@ -840,7 +840,7 @@ assets:
       - node_index: 32
         light_type: 0
         color_rgb: [0.8, 0.6, 0.8]
-        intensity: 50.0
+        luminous_flux_lm: 1200.0
         range: 8.0
         mobility: 0
         casts_shadows: 0
@@ -848,7 +848,7 @@ assets:
       - node_index: 33
         light_type: 0
         color_rgb: [1.0, 0.7, 0.4]
-        intensity: 50.0
+        luminous_flux_lm: 1200.0
         range: 8.0
         mobility: 0
         casts_shadows: 0
@@ -856,7 +856,7 @@ assets:
       - node_index: 34
         light_type: 0
         color_rgb: [0.4, 1.0, 0.7]
-        intensity: 50.0
+        luminous_flux_lm: 1200.0
         range: 8.0
         mobility: 0
         casts_shadows: 0
@@ -864,7 +864,7 @@ assets:
       - node_index: 35
         light_type: 0
         color_rgb: [0.7, 0.4, 1.0]
-        intensity: 50.0
+        luminous_flux_lm: 1200.0
         range: 8.0
         mobility: 0
         casts_shadows: 0
@@ -873,7 +873,7 @@ assets:
       - node_index: 36
         light_type: 0
         color_rgb: [1.0, 1.0, 1.0]
-        intensity: 40.0
+        luminous_flux_lm: 1200.0
         range: 10.0
         mobility: 0
         casts_shadows: 0
@@ -881,7 +881,7 @@ assets:
       - node_index: 37
         light_type: 0
         color_rgb: [1.0, 0.9, 0.8]
-        intensity: 40.0
+        luminous_flux_lm: 1200.0
         range: 10.0
         mobility: 0
         casts_shadows: 0
@@ -889,7 +889,7 @@ assets:
       - node_index: 38
         light_type: 0
         color_rgb: [0.8, 1.0, 0.9]
-        intensity: 40.0
+        luminous_flux_lm: 1200.0
         range: 10.0
         mobility: 0
         casts_shadows: 0
@@ -897,7 +897,7 @@ assets:
       - node_index: 39
         light_type: 0
         color_rgb: [0.9, 0.8, 1.0]
-        intensity: 40.0
+        luminous_flux_lm: 1200.0
         range: 10.0
         mobility: 0
         casts_shadows: 0
@@ -905,7 +905,7 @@ assets:
       - node_index: 40
         light_type: 0
         color_rgb: [1.0, 0.7, 0.7]
-        intensity: 40.0
+        luminous_flux_lm: 1200.0
         range: 10.0
         mobility: 0
         casts_shadows: 0
@@ -913,7 +913,7 @@ assets:
       - node_index: 41
         light_type: 0
         color_rgb: [0.7, 1.0, 0.7]
-        intensity: 40.0
+        luminous_flux_lm: 1200.0
         range: 10.0
         mobility: 0
         casts_shadows: 0
@@ -921,7 +921,7 @@ assets:
       - node_index: 42
         light_type: 0
         color_rgb: [0.7, 0.7, 1.0]
-        intensity: 40.0
+        luminous_flux_lm: 1200.0
         range: 10.0
         mobility: 0
         casts_shadows: 0
@@ -929,7 +929,7 @@ assets:
       - node_index: 43
         light_type: 0
         color_rgb: [1.0, 1.0, 0.7]
-        intensity: 40.0
+        luminous_flux_lm: 1200.0
         range: 10.0
         mobility: 0
         casts_shadows: 0
@@ -937,7 +937,7 @@ assets:
       - node_index: 44
         light_type: 0
         color_rgb: [0.7, 1.0, 1.0]
-        intensity: 40.0
+        luminous_flux_lm: 1200.0
         range: 10.0
         mobility: 0
         casts_shadows: 0
@@ -945,7 +945,7 @@ assets:
       - node_index: 45
         light_type: 0
         color_rgb: [1.0, 0.7, 1.0]
-        intensity: 40.0
+        luminous_flux_lm: 1200.0
         range: 10.0
         mobility: 0
         casts_shadows: 0
@@ -953,7 +953,7 @@ assets:
       - node_index: 46
         light_type: 0
         color_rgb: [0.9, 0.9, 0.7]
-        intensity: 40.0
+        luminous_flux_lm: 1200.0
         range: 10.0
         mobility: 0
         casts_shadows: 0
@@ -961,7 +961,7 @@ assets:
       - node_index: 47
         light_type: 0
         color_rgb: [0.7, 0.9, 0.9]
-        intensity: 40.0
+        luminous_flux_lm: 1200.0
         range: 10.0
         mobility: 0
         casts_shadows: 0
@@ -969,7 +969,7 @@ assets:
       - node_index: 48
         light_type: 0
         color_rgb: [0.9, 0.7, 0.9]
-        intensity: 40.0
+        luminous_flux_lm: 1200.0
         range: 10.0
         mobility: 0
         casts_shadows: 0
@@ -977,7 +977,7 @@ assets:
       - node_index: 49
         light_type: 0
         color_rgb: [1.0, 0.6, 0.6]
-        intensity: 40.0
+        luminous_flux_lm: 1200.0
         range: 10.0
         mobility: 0
         casts_shadows: 0
@@ -985,7 +985,7 @@ assets:
       - node_index: 50
         light_type: 0
         color_rgb: [0.6, 1.0, 0.6]
-        intensity: 40.0
+        luminous_flux_lm: 1200.0
         range: 10.0
         mobility: 0
         casts_shadows: 0
@@ -993,7 +993,7 @@ assets:
       - node_index: 51
         light_type: 0
         color_rgb: [0.6, 0.6, 1.0]
-        intensity: 40.0
+        luminous_flux_lm: 1200.0
         range: 10.0
         mobility: 0
         casts_shadows: 0

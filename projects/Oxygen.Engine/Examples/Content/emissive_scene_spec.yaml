@@ -176,7 +176,7 @@ assets:
     roughness: 0.8
     ambient_occlusion: 1.0
     # Emissive factor: bright red HDR glow
-    emissive_factor: [5.0, 0.2, 0.1]
+    emissive_factor: [300.0, 8.0, 4.0]
 
   # Emissive factor only (bright green glow)
   - type: material
@@ -189,7 +189,7 @@ assets:
     metalness: 0.0
     roughness: 0.8
     ambient_occlusion: 1.0
-    emissive_factor: [0.1, 4.0, 0.2]
+    emissive_factor: [4.0, 300.0, 8.0]
 
   # Emissive factor only (bright blue glow)
   - type: material
@@ -202,7 +202,7 @@ assets:
     metalness: 0.0
     roughness: 0.8
     ambient_occlusion: 1.0
-    emissive_factor: [0.1, 0.3, 6.0]
+    emissive_factor: [4.0, 12.0, 300.0]
 
   # Emissive with texture (cyan/magenta checker pattern)
   - type: material
@@ -216,7 +216,7 @@ assets:
     roughness: 0.9
     ambient_occlusion: 1.0
     # Emissive factor multiplies the texture
-    emissive_factor: [3.0, 3.0, 3.0]
+    emissive_factor: [120.0, 120.0, 120.0]
     texture_refs:
       emissive_texture: emissive_checker_2x2
 
@@ -236,7 +236,7 @@ assets:
     roughness: 0.5
     ambient_occlusion: 1.0
     # Yellow-orange glow through the holes
-    emissive_factor: [4.0, 2.0, 0.3]
+    emissive_factor: [160.0, 80.0, 16.0]
     texture_refs:
       base_color_texture: alpha_checker_2x2
 
@@ -514,24 +514,17 @@ assets:
         near_plane: 0.1
         far_plane: 100.0
 
-    # Very dim directional light - emissive should dominate
-    directional_lights:
-      - node_index: 8
-        affects_world: true
-        color_rgb: [0.2, 0.2, 0.25]
-        intensity: 0.3
-        mobility: 0
-        casts_shadows: 0
-        angular_size_radians: 0.01
-        environment_contribution: false
+    directional_lights: []
 
     point_lights: []
     spot_lights: []
 
     environment:
       sky_atmosphere:
+        enabled: false
         sun_disk_enabled: false
 
       post_process_volume:
         tone_mapper: 0
-        exposure_mode: 1
+        exposure_mode: 0
+        exposure_compensation_ev: 9.0

@@ -438,8 +438,6 @@ public:
           "Multi Scattering Factor", rec->multi_scattering_factor, 10);
         PrintUtils::Field(
           "Sun Disk Enabled", static_cast<int>(rec->sun_disk_enabled), 10);
-        PrintUtils::Field("Sun Disk Angular Radius (rad)",
-          rec->sun_disk_angular_radius_radians, 10);
         PrintUtils::Field("Aerial Perspective Distance Scale",
           rec->aerial_perspective_distance_scale, 10);
         break;
