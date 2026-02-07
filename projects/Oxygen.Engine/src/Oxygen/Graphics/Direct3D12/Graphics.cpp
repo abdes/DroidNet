@@ -308,6 +308,26 @@ auto Graphics::GetFormatPlaneCount(DXGI_FORMAT format) const -> uint8_t
   return plane_count;
 }
 
+auto Graphics::GetDrawCommandSignature() const -> ID3D12CommandSignature*
+{
+  if (!draw_command_signature_) {
+    D3D12_INDIRECT_ARGUMENT_DESC args[1];
+    args[0].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
+
+    D3D12_COMMAND_SIGNATURE_DESC desc;
+    desc.ByteStride = sizeof(D3D12_DRAW_ARGUMENTS);
+    desc.NumArgumentDescs = 1;
+    desc.pArgumentDescs = args;
+    desc.NodeMask = 0;
+
+    if (FAILED(GetCurrentDevice()->CreateCommandSignature(
+          &desc, nullptr, IID_PPV_ARGS(&draw_command_signature_)))) {
+      throw std::runtime_error("Failed to create draw command signature");
+    }
+  }
+  return draw_command_signature_.Get();
+}
+
 auto Graphics::CreateSurface(std::weak_ptr<platform::Window> window_weak,
   const observer_ptr<graphics::CommandQueue> command_queue) const
   -> std::unique_ptr<Surface>

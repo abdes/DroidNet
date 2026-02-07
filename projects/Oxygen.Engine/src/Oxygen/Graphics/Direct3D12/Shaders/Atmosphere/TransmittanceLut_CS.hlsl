@@ -22,6 +22,9 @@
 #include "Renderer/EnvironmentStaticData.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/SceneConstants.hlsli"
+#include "Common/Math.hlsli"
+#include "Common/Geometry.hlsli"
+#include "Common/Coordinates.hlsli"
 
 // Root constants (b2, space0)
 cbuffer RootConstants : register(b2, space0)
@@ -66,6 +69,7 @@ float2 UvToAtmosphereParams(float2 uv, float atmosphere_height)
     return float2(altitude, cos_zenith);
 }
 
+
 //! Computes atmospheric density at a given altitude.
 //!
 //! @param altitude Altitude above ground in meters.
@@ -95,38 +99,6 @@ float GetAbsorptionDensity(float altitude, float absorption_center_m)
     return saturate(t);
 }
 
-//! Computes ray-sphere intersection distance.
-//!
-//! @param origin Ray origin (relative to planet center).
-//! @param dir Ray direction (normalized).
-//! @param radius Sphere radius.
-//! @return Distance to sphere, or -1 if no intersection.
-float RaySphereIntersect(float3 origin, float3 dir, float radius)
-{
-    float b = dot(origin, dir);
-    float c = dot(origin, origin) - radius * radius;
-    float discriminant = b * b - c;
-
-    if (discriminant < 0.0)
-    {
-        return -1.0;
-    }
-
-    float sqrt_disc = sqrt(discriminant);
-    float t0 = -b - sqrt_disc;
-    float t1 = -b + sqrt_disc;
-
-    // Return the positive intersection (exit point for inside, entry for outside)
-    if (t0 > 0.0)
-    {
-        return t0;
-    }
-    if (t1 > 0.0)
-    {
-        return t1;
-    }
-    return -1.0;
-}
 
 //! Integrates optical depth along a ray through the atmosphere.
 //!
@@ -210,14 +182,14 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
     // Compute ray length to atmosphere top
     float atmosphere_radius = atmo.planet_radius_m + atmo.atmosphere_height_m;
-    float ray_length = RaySphereIntersect(origin, dir, atmosphere_radius);
+    float ray_length = RaySphereIntersectNearest(origin, dir, atmosphere_radius);
 
     float3 optical_depth = float3(0.0, 0.0, 0.0);
 
     if (ray_length > 0.0)
     {
         // Check if ray hits the ground
-        float ground_dist = RaySphereIntersect(origin, dir, atmo.planet_radius_m);
+        float ground_dist = RaySphereIntersectNearest(origin, dir, atmo.planet_radius_m);
         const float integrate_length
             = (ground_dist > 0.0 && ground_dist < ray_length) ? ground_dist : ray_length;
 

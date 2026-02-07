@@ -34,14 +34,24 @@ public:
     -> ShaderVisibleIndex
     = 0;
 
-  //! Returns shader-visible SRV index for the sky-view LUT.
-  [[nodiscard]] virtual auto GetSkyViewLutSlot() const noexcept
-    -> ShaderVisibleIndex
-    = 0;
-
   //! Returns transmittance LUT dimensions.
   [[nodiscard]] virtual auto GetTransmittanceLutSize() const noexcept
     -> Extent<uint32_t>
+    = 0;
+
+  //! Returns shader-visible SRV index for the multiple scattering LUT.
+  [[nodiscard]] virtual auto GetMultiScatLutSlot() const noexcept
+    -> ShaderVisibleIndex
+    = 0;
+
+  //! Returns multiple scattering LUT dimensions.
+  [[nodiscard]] virtual auto GetMultiScatLutSize() const noexcept
+    -> Extent<uint32_t>
+    = 0;
+
+  //! Returns shader-visible SRV index for the sky-view LUT.
+  [[nodiscard]] virtual auto GetSkyViewLutSlot() const noexcept
+    -> ShaderVisibleIndex
     = 0;
 
   //! Returns sky-view LUT dimensions.
@@ -55,6 +65,16 @@ public:
 
   //! Returns the altitude mapping mode (0 = linear, 1 = log).
   [[nodiscard]] virtual auto GetAltMappingMode() const noexcept -> uint32_t = 0;
+
+  //! Returns shader-visible SRV index for the camera volume LUT.
+  [[nodiscard]] virtual auto GetCameraVolumeLutSlot() const noexcept
+    -> ShaderVisibleIndex
+    = 0;
+
+  //! Returns camera volume LUT dimensions (width, height, depth).
+  [[nodiscard]] virtual auto GetCameraVolumeLutSize() const noexcept
+    -> std::tuple<uint32_t, uint32_t, uint32_t>
+    = 0;
 
   //! Returns true if LUTs have been generated at least once.
   [[nodiscard]] virtual auto HasBeenGenerated() const noexcept -> bool = 0;

@@ -35,6 +35,15 @@ auto RenderingVm::GetDebugMode() -> engine::ShaderDebugMode
   return debug_mode_;
 }
 
+auto RenderingVm::GetGpuDebugPassEnabled() -> bool
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale()) {
+    Refresh();
+  }
+  return gpu_debug_pass_enabled_;
+}
+
 auto RenderingVm::SetRenderMode(RenderMode mode) -> void
 {
   std::lock_guard lock(mutex_);
@@ -56,6 +65,18 @@ auto RenderingVm::SetDebugMode(engine::ShaderDebugMode mode) -> void
 
   debug_mode_ = mode;
   service_->SetDebugMode(mode);
+  epoch_ = service_->GetEpoch();
+}
+
+auto RenderingVm::SetGpuDebugPassEnabled(bool enabled) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (gpu_debug_pass_enabled_ == enabled) {
+    return;
+  }
+
+  gpu_debug_pass_enabled_ = enabled;
+  service_->SetGpuDebugPassEnabled(enabled);
   epoch_ = service_->GetEpoch();
 }
 
@@ -90,6 +111,7 @@ auto RenderingVm::Refresh() -> void
   render_mode_ = service_->GetRenderMode();
   debug_mode_ = service_->GetDebugMode();
   wire_color_ = service_->GetWireframeColor();
+  gpu_debug_pass_enabled_ = service_->GetGpuDebugPassEnabled();
   epoch_ = service_->GetEpoch();
 }
 

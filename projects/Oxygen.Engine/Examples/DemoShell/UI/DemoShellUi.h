@@ -7,9 +7,11 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Types/Geometry.h>
 
 namespace oxygen {
 class AsyncEngine;
@@ -102,9 +104,14 @@ namespace ui {
     //! Returns the environment view model.
     [[nodiscard]] auto GetEnvironmentVm() const -> observer_ptr<EnvironmentVm>;
 
+    //! Returns the last mouse-down position captured by the UI.
+    [[nodiscard]] auto GetLastMouseDownPosition() const
+      -> std::optional<SubPixelPosition>;
+
   private:
     struct Impl;
     std::unique_ptr<Impl> impl_ {};
+    std::optional<SubPixelPosition> last_mouse_down_position_ {};
   };
 
 } // namespace ui

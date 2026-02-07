@@ -12,6 +12,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Renderer/Internal/ISkyAtmosphereLutProvider.h>
 #include <Oxygen/Renderer/Types/SunState.h>
@@ -53,6 +54,15 @@ struct SkyAtmosphereLutConfig {
 
   //! Multiple scattering LUT size (32x32 common).
   uint32_t multi_scat_size { 32u };
+
+  //! Camera volume LUT width (screen-space froxel resolution).
+  uint32_t camera_volume_width { 160u };
+
+  //! Camera volume LUT height (screen-space froxel resolution).
+  uint32_t camera_volume_height { 90u };
+
+  //! Camera volume LUT depth (number of depth slices, typically 32).
+  uint32_t camera_volume_depth { 32u };
 };
 
 //! Default LUT configuration for atmosphere precomputation.
@@ -140,12 +150,25 @@ public:
 
   //! Returns shader-visible SRV index for the multiple scattering LUT.
   OXGN_RNDR_NDAPI auto GetMultiScatLutSlot() const noexcept
-    -> ShaderVisibleIndex;
+    -> ShaderVisibleIndex override;
 
   //! Returns multiple scattering LUT dimensions.
-  [[nodiscard]] auto GetMultiScatLutSize() const noexcept -> Extent<uint32_t>
+  [[nodiscard]] auto GetMultiScatLutSize() const noexcept
+    -> Extent<uint32_t> override
   {
     return { config_.multi_scat_size, config_.multi_scat_size };
+  }
+
+  //! Returns shader-visible SRV index for the camera volume LUT.
+  OXGN_RNDR_NDAPI auto GetCameraVolumeLutSlot() const noexcept
+    -> ShaderVisibleIndex override;
+
+  //! Returns camera volume LUT dimensions (width, height, depth).
+  [[nodiscard]] auto GetCameraVolumeLutSize() const noexcept
+    -> std::tuple<uint32_t, uint32_t, uint32_t> override
+  {
+    return { config_.camera_volume_width, config_.camera_volume_height,
+      config_.camera_volume_depth };
   }
 
   //=== Parameter Tracking ===------------------------------------------------//
@@ -264,6 +287,13 @@ public:
   OXGN_RNDR_NDAPI auto GetMultiScatLutTexture() const noexcept
     -> observer_ptr<graphics::Texture>;
 
+  //! Returns the camera volume LUT texture (for UAV binding in compute pass).
+  /*!
+   @return The camera volume LUT texture, or nullptr if not yet created.
+  */
+  OXGN_RNDR_NDAPI auto GetCameraVolumeLutTexture() const noexcept
+    -> observer_ptr<graphics::Texture>;
+
   //! Returns shader-visible UAV index for the transmittance LUT.
   /*!
    Used by the compute pass to bind the LUT as a write target.
@@ -282,6 +312,14 @@ public:
 
   //! Returns shader-visible UAV index for the multiple scattering LUT.
   OXGN_RNDR_NDAPI auto GetMultiScatLutUavSlot() const noexcept
+    -> ShaderVisibleIndex;
+
+  //! Returns shader-visible UAV index for the camera volume LUT.
+  /*!
+   Used by the compute pass to bind the LUT as a write target.
+   Returns `kInvalidShaderVisibleIndex` if resources are not yet created.
+  */
+  OXGN_RNDR_NDAPI auto GetCameraVolumeLutUavSlot() const noexcept
     -> ShaderVisibleIndex;
 
   //! Ensures textures and descriptors are created.
@@ -352,10 +390,28 @@ private:
   LutResources transmittance_lut_ {};
   LutResources sky_view_lut_ {};
   LutResources multi_scat_lut_ {};
+  LutResources camera_volume_lut_ {};
 
-  //! Creates a LUT texture, optionally as a 2D array [P1, P11].
-  auto CreateLutTexture(uint32_t width, uint32_t height, uint32_t array_size,
-    bool is_rgba, const char* debug_name) -> std::shared_ptr<graphics::Texture>;
+  //! Creates transmittance LUT texture (2D, RGBA16F).
+  auto CreateTransmittanceLutTexture(uint32_t width, uint32_t height)
+    -> std::shared_ptr<graphics::Texture>;
+
+  //! Creates sky-view LUT texture (2D array, RGBA16F).
+  auto CreateSkyViewLutTexture(uint32_t width, uint32_t height,
+    uint32_t num_slices) -> std::shared_ptr<graphics::Texture>;
+
+  //! Creates multi-scattering LUT texture (2D, RGBA16F).
+  auto CreateMultiScatLutTexture(uint32_t size)
+    -> std::shared_ptr<graphics::Texture>;
+
+  //! Creates camera volume LUT texture (3D, RGBA16F).
+  auto CreateCameraVolumeLutTexture(uint32_t width, uint32_t height,
+    uint32_t depth) -> std::shared_ptr<graphics::Texture>;
+
+  //! Common implementation for creating LUT textures.
+  auto CreateLutTexture(uint32_t width, uint32_t height,
+    uint32_t depth_or_array_size, bool is_rgba, const char* debug_name,
+    TextureType texture_type) -> std::shared_ptr<graphics::Texture>;
 
   //! Creates SRV/UAV views for a LUT, optionally as array views [P2, P11].
   auto CreateLutViews(LutResources& lut, uint32_t array_size, bool is_rgba)

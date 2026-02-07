@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Renderer/SceneConstants.hlsli"
-#include "Renderer/DrawMetadata.hlsli" // Required by BindlessHelpers.hlsl.
-#include "Renderer/MaterialConstants.hlsli" // Required by BindlessHelpers.hlsl.
-
+#include "Common/Math.hlsli"
+#include "Forward/ForwardPbr.hlsli"
+#include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
-#include "Passes/Forward/ForwardPbr.hlsli"
+#include "Renderer/MaterialConstants.hlsli"
+#include "Renderer/SceneConstants.hlsli"
 
 #define BX_VERTEX_TYPE uint4
 #include "Core/Bindless/BindlessHelpers.hlsl"
@@ -39,7 +39,6 @@ struct IblFilteringPassConstants {
 // Constants & Helper Math
 // -----------------------------------------------------------------------------
 
-static const float PI = 3.14159265359;
 
 // Hammersley Sequence
 float RadicalInverse_VdC(uint bits)

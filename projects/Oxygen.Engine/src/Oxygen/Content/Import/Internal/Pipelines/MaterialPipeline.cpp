@@ -125,14 +125,14 @@ namespace {
 
     shaders.push_back(ShaderRequest {
       .shader_type = static_cast<uint8_t>(ShaderType::kVertex),
-      .source_path = "Passes/Forward/ForwardMesh_VS.hlsl",
+      .source_path = "Forward/ForwardMesh_VS.hlsl",
       .entry_point = "VS",
       .defines = {},
       .shader_hash = 0,
     });
     shaders.push_back(ShaderRequest {
       .shader_type = static_cast<uint8_t>(ShaderType::kPixel),
-      .source_path = "Passes/Forward/ForwardMesh_PS.hlsl",
+      .source_path = "Forward/ForwardMesh_PS.hlsl",
       .entry_point = "PS",
       .defines = defines,
       .shader_hash = 0,

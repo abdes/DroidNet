@@ -97,6 +97,36 @@ struct SkyViewLutSlot {
   constexpr operator uint32_t() const noexcept { return value.get(); }
 };
 
+struct MultiScatLutSlot {
+  ShaderVisibleIndex value;
+  explicit constexpr MultiScatLutSlot(
+    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+    : value(v)
+  {
+  }
+  constexpr auto IsValid() const noexcept
+  {
+    return value != kInvalidShaderVisibleIndex;
+  }
+  constexpr auto operator<=>(const MultiScatLutSlot&) const = default;
+  constexpr operator uint32_t() const noexcept { return value.get(); }
+};
+
+struct CameraVolumeLutSlot {
+  ShaderVisibleIndex value;
+  explicit constexpr CameraVolumeLutSlot(
+    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+    : value(v)
+  {
+  }
+  constexpr auto IsValid() const noexcept
+  {
+    return value != kInvalidShaderVisibleIndex;
+  }
+  constexpr auto operator<=>(const CameraVolumeLutSlot&) const = default;
+  constexpr operator uint32_t() const noexcept { return value.get(); }
+};
+
 //! GPU-facing sky atmosphere parameters.
 /*!
  Layout mirrors the HLSL struct `GpuSkyAtmosphereParams`.
@@ -126,19 +156,22 @@ struct alignas(16) GpuSkyAtmosphereParams {
   glm::vec3 absorption_rgb { 0.65e-6F, 1.881e-6F, 0.085e-6F };
   TransmittanceLutSlot transmittance_lut_slot {};
 
-  std::uint32_t sky_view_lut_slot { SkyViewLutSlot {} };
+  SkyViewLutSlot sky_view_lut_slot {};
+  MultiScatLutSlot multi_scat_lut_slot {};
+  CameraVolumeLutSlot camera_volume_lut_slot {};
   float transmittance_lut_width { 0.0F };
+
   float transmittance_lut_height { 0.0F };
   float sky_view_lut_width { 0.0F };
-
   float sky_view_lut_height { 0.0F };
   uint32_t sky_view_lut_slices { 0u };
+
   uint32_t sky_view_alt_mapping_mode { 0u };
-  float _reserved7 { 0.0F };
+  uint32_t _pad[3] { 0u };
 };
 static_assert(sizeof(GpuSkyAtmosphereParams) % 16 == 0,
   "GpuSkyAtmosphereParams size must be 16-byte aligned");
-static_assert(sizeof(GpuSkyAtmosphereParams) == 128,
+static_assert(sizeof(GpuSkyAtmosphereParams) == 144,
   "GpuSkyAtmosphereParams size must match HLSL packing");
 
 struct CubeMapSlot {
@@ -339,7 +372,7 @@ struct alignas(16) EnvironmentStaticData {
 };
 static_assert(sizeof(EnvironmentStaticData) % 16 == 0,
   "EnvironmentStaticData size must be 16-byte aligned");
-static_assert(sizeof(EnvironmentStaticData) == 416,
+static_assert(sizeof(EnvironmentStaticData) == 432,
   "EnvironmentStaticData size must match HLSL packing");
 
 } // namespace oxygen::engine

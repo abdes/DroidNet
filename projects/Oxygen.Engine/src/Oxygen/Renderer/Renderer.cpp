@@ -61,6 +61,7 @@
 #include <Oxygen/Renderer/Internal/BrdfLutManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
+#include <Oxygen/Renderer/Internal/GpuDebugManager.h>
 #include <Oxygen/Renderer/Internal/IblManager.h>
 #include <Oxygen/Renderer/Internal/SceneConstantsManager.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
@@ -374,6 +375,10 @@ auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
         observer_ptr { sky_capture_pass_.get() });
 
     ibl_compute_pass_ = std::make_unique<IblComputePass>("IblComputePass");
+
+    // Initialize GPU debug manager.
+    gpu_debug_manager_
+      = std::make_unique<internal::GpuDebugManager>(observer_ptr { gfx.get() });
   }
   return true;
 }
@@ -1166,6 +1171,7 @@ auto Renderer::WireContext(RenderContext& render_context,
   render_context.scene_constants = scene_consts;
   render_context.frame_slot = frame_slot_;
   render_context.frame_sequence = frame_seq_num;
+  render_context.gpu_debug_manager.reset(gpu_debug_manager_.get());
 
   const auto graphics_ptr = gfx_weak_.lock();
   if (!graphics_ptr) {
@@ -1278,6 +1284,26 @@ auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
   view_scene_consts.SetBindlessInstanceDataSlot(
     BindlessInstanceDataSlot(prepared.bindless_instance_data_slot),
     SceneConstants::kRenderer);
+
+  if (gpu_debug_manager_) {
+    view_scene_consts.SetBindlessGpuDebugLineSlot(
+      BindlessGpuDebugLineSlot(
+        ShaderVisibleIndex(gpu_debug_manager_->GetLineBufferSrvIndex())),
+      SceneConstants::kRenderer);
+    view_scene_consts.SetBindlessGpuDebugCounterSlot(
+      BindlessGpuDebugCounterSlot(
+        ShaderVisibleIndex(gpu_debug_manager_->GetCounterBufferUavIndex())),
+      SceneConstants::kRenderer);
+
+    static bool logged_gpu_debug_slots = false;
+    if (!logged_gpu_debug_slots) {
+      LOG_F(WARNING,
+        "Renderer: bindless GPU debug slots set (line_srv={}, counter_uav={})",
+        gpu_debug_manager_->GetLineBufferSrvIndex(),
+        gpu_debug_manager_->GetCounterBufferUavIndex());
+      logged_gpu_debug_slots = true;
+    }
+  }
 
   const auto& proj_matrix = resolved_it->second.ProjectionMatrix();
   view_scene_consts.SetViewMatrix(resolved_it->second.ViewMatrix())

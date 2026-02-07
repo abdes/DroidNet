@@ -353,11 +353,11 @@ The table summarizes common patterns across mainstream engines and how the propo
   (sun‑relative sky‑view LUT UVs, `ComputeSunDisk()` with horizon clipping).
 - Sky‑view LUT generation (sun‑relative parameterization, multi‑scattering
   approximation):
-  [src/Oxygen/Graphics/Direct3D12/Shaders/Passes/Atmosphere/SkyViewLut_CS.hlsl](src/Oxygen/Graphics/Direct3D12/Shaders/Passes/Atmosphere/SkyViewLut_CS.hlsl).
+  [src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/SkyViewLut_CS.hlsl](src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/SkyViewLut_CS.hlsl).
 - Sky rendering and IBL capture:
-  [src/Oxygen/Graphics/Direct3D12/Shaders/Passes/Sky/SkySphereCommon.hlsli](src/Oxygen/Graphics/Direct3D12/Shaders/Passes/Sky/SkySphereCommon.hlsli),
-  [src/Oxygen/Graphics/Direct3D12/Shaders/Passes/Sky/SkySphere_PS.hlsl](src/Oxygen/Graphics/Direct3D12/Shaders/Passes/Sky/SkySphere_PS.hlsl),
-  [src/Oxygen/Graphics/Direct3D12/Shaders/Passes/Sky/SkyCapture_PS.hlsl](src/Oxygen/Graphics/Direct3D12/Shaders/Passes/Sky/SkyCapture_PS.hlsl).
+  [src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/SkySphereCommon.hlsli](src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/SkySphereCommon.hlsli),
+  [src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/SkySphere_PS.hlsl](src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/SkySphere_PS.hlsl),
+  [src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/SkyCapture_PS.hlsl](src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/SkyCapture_PS.hlsl).
 - Aerial perspective applied to geometry (uses sun direction/luminance + LUTs
   with analytic fallback):
   [src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/AerialPerspective.hlsli](src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/AerialPerspective.hlsli).

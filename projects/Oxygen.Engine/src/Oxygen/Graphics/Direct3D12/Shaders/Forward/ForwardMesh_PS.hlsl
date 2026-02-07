@@ -9,7 +9,7 @@
 
 #include "Renderer/SceneConstants.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
-#include "Renderer/AerialPerspective.hlsli"
+#include "Atmosphere/AerialPerspective.hlsli"
 #include "Renderer/DirectionalLightBasic.hlsli"
 #include "Renderer/PositionalLightData.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
@@ -19,10 +19,10 @@
 #include "MaterialFlags.hlsli"
 
 #include "Core/Bindless/BindlessHelpers.hlsl"
-#include "Passes/Forward/ForwardPbr.hlsli"
-#include "Passes/Forward/ForwardMaterialEval.hlsli"
-#include "Passes/Forward/ForwardDirectLighting.hlsli"
-#include "Passes/Lighting/ClusterLookup.hlsli"
+#include "Forward/ForwardPbr.hlsli"
+#include "Forward/ForwardMaterialEval.hlsli"
+#include "Forward/ForwardDirectLighting.hlsli"
+#include "Lighting/ClusterLookup.hlsli"
 
 float3 EnvBrdfApprox(float3 F0, float roughness, float NoV)
 {
@@ -121,7 +121,9 @@ float4 PS(VSOutput input) : SV_Target0 {
     }
     #endif
 
-    float3 final_color = direct + (ibl_spec_term + ibl_diffuse * base_rgb * (1.0f - surf.metalness)) + surf.emissive;
+    float3 final_color = direct
+        + (ibl_spec_term + ibl_diffuse * base_rgb * (1.0f - surf.metalness))
+        + surf.emissive;
 
     if (LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data) && ShouldUseLutAerialPerspective(env_data.atmosphere)) {
         float3 s_dir = normalize(GetSunDirectionWS());

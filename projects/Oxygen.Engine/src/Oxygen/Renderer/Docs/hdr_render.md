@@ -57,7 +57,7 @@ luminance, producing a white background even when sun intensity was zero.
 
 Short-term fix:
 
-- [src/Oxygen/Graphics/Direct3D12/Shaders/Passes/Sky/SkySphereCommon.hlsli]
+ [src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/SkySphereCommon.hlsli]
  now sets fallback sun luminance to zero when no sun is active.
 
 This avoids white sky output while keeping the rest of the pipeline unchanged.

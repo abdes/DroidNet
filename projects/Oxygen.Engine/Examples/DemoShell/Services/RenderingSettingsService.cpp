@@ -74,12 +74,26 @@ auto RenderingSettingsService::GetDebugMode() const -> engine::ShaderDebugMode
   return static_cast<engine::ShaderDebugMode>(std::stoi(val));
 }
 
+auto RenderingSettingsService::GetGpuDebugPassEnabled() const -> bool
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  return settings->GetBool(kGpuDebugPassEnabledKey).value_or(true);
+}
+
 auto RenderingSettingsService::SetDebugMode(engine::ShaderDebugMode mode)
   -> void
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   settings->SetString(kDebugModeKey, std::to_string(static_cast<int>(mode)));
+  epoch_++;
+}
+auto RenderingSettingsService::SetGpuDebugPassEnabled(bool enabled) -> void
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  settings->SetBool(kGpuDebugPassEnabledKey, enabled);
   epoch_++;
 }
 auto RenderingSettingsService::GetEpoch() const noexcept -> std::uint64_t
@@ -107,6 +121,7 @@ auto RenderingSettingsService::OnMainViewReady(
   pipeline_->SetRenderMode(GetRenderMode());
   pipeline_->SetWireframeColor(GetWireframeColor());
   pipeline_->SetShaderDebugMode(GetDebugMode());
+  pipeline_->SetGpuDebugPassEnabled(GetGpuDebugPassEnabled());
 }
 
 } // namespace oxygen::examples

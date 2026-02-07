@@ -30,6 +30,10 @@
 #include "Renderer/EnvironmentDynamicData.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/SceneConstants.hlsli"
+#include "Common/Math.hlsli"
+#include "Common/Geometry.hlsli"
+#include "Common/Coordinates.hlsli"
+#include "Common/Lighting.hlsli"
 
 // Root constants (b2, space0)
 cbuffer RootConstants : register(b2, space0)
@@ -71,11 +75,8 @@ struct SkyViewLutPassConstants
 static const uint MIN_SCATTERING_SAMPLES = 96;
 static const uint MAX_SCATTERING_SAMPLES = 256;
 
-// Mathematical constants
-static const float PI = 3.14159265359;
-static const float TWO_PI = 6.28318530718;
-
 // Atmosphere feature flag bits (matches C++ AtmosphereFlags enum)
+
 
 //! Computes the altitude in meters for a given slice index.
 //!
@@ -136,16 +137,23 @@ float3 UvToViewDirection(float2 uv, float planet_radius, float camera_altitude, 
     float rho = planet_radius / r;
     float cos_horizon = -sqrt(max(0.0, 1.0 - rho * rho));
 
-    // Non-linear V mapping: V=0.5 is horizon.
+    // NON-LINEAR V mapping: V=0.5 is horizon.
+    // Concentrate resolution near the horizon (V=0.5) using squared distribution.
     float cos_zenith;
     if (uv.y < 0.5)
     {
+        // Below horizon: map [0, 0.5] -> [-1, cos_horizon]
         float t = uv.y * 2.0;
+        t = 1.0 - t;
+        t = t * t; // SQUARED for concentration
+        t = 1.0 - t;
         cos_zenith = lerp(-1.0, cos_horizon, t);
     }
     else
     {
+        // Above horizon: map [0.5, 1] -> [cos_horizon, 1]
         float t = (uv.y - 0.5) * 2.0;
+        t = t * t; // SQUARED for concentration
         cos_zenith = lerp(cos_horizon, 1.0, t);
     }
 
@@ -160,37 +168,21 @@ float3 UvToViewDirection(float2 uv, float planet_radius, float camera_altitude, 
         cos_zenith);
 }
 
-//! Computes atmospheric density at a given altitude.
+
+// Atmosphere-specific functions - these will move to AtmosphereMath.hlsli
 float GetAtmosphereDensity(float altitude, float scale_height)
 {
     return exp(-altitude / scale_height);
 }
 
-//! Ray-sphere intersection.
-float RaySphereIntersect(float3 origin, float3 dir, float radius)
+float GetAbsorptionDensity(float altitude, float absorption_center_m)
 {
-    float b = dot(origin, dir);
-    float c = dot(origin, origin) - radius * radius;
-    float discriminant = b * b - c;
+    altitude = max(altitude, 0.0);
 
-    if (discriminant < 0.0)
-    {
-        return -1.0;
-    }
-
-    float sqrt_disc = sqrt(discriminant);
-    float t0 = -b - sqrt_disc;
-    float t1 = -b + sqrt_disc;
-
-    if (t0 > 0.0)
-    {
-        return t0;
-    }
-    if (t1 > 0.0)
-    {
-        return t1;
-    }
-    return -1.0;
+    float center = max(1.0, absorption_center_m);
+    float width = max(1000.0, center * 0.6);
+    float t = 1.0 - abs(altitude - center) / width;
+    return saturate(t);
 }
 
 //! Samples the transmittance LUT.
@@ -209,28 +201,30 @@ float3 SampleTransmittanceLutOpticalDepth(
     SamplerState linear_sampler,
     uint2 lut_size)
 {
-    // Compute the local horizon angle at this sample's altitude.
-    // At altitude h, the horizon is where the ray is tangent to the planet:
-    // cos(horizon_zenith) = -sqrt(1 - (R/(R+h))^2)
-    //
-    // If the sun direction points below this horizon, the PLANET blocks the
-    // sun's rays from reaching this sample. This is the fundamental physics
-    // of sunset/night: Earth rotates and physically blocks the sun.
-    float r = atmo.planet_radius_m + altitude;
-    float rho = atmo.planet_radius_m / r;
-    float cos_horizon = -sqrt(max(0.0, 1.0 - rho * rho));
+    // Compute the local horizon angle at this sample's altitude using common helper
+    float cos_horizon = HorizonCosineFromAltitude(atmo.planet_radius_m, altitude);
 
     // Hard cutoff: if sun is below local horizon, planet blocks it completely.
-    // The planet is a solid body - there's no "soft" transition here.
     if (cos_zenith < cos_horizon)
     {
         // Sun blocked by planet - zero transmittance (infinite optical depth)
         return float3(1e6, 1e6, 1e6);
     }
 
-    // Sun is visible from this sample - look up transmittance through atmosphere
-    float u = (cos_zenith + 0.15) / 1.15;
-    float v = sqrt(altitude / atmo.atmosphere_height_m);
+    float view_height = atmo.planet_radius_m + altitude;
+    float top_radius = atmo.planet_radius_m + atmo.atmosphere_height_m;
+    float H = SafeSqrt(top_radius * top_radius - atmo.planet_radius_m * atmo.planet_radius_m);
+    float rho = SafeSqrt(view_height * view_height - atmo.planet_radius_m * atmo.planet_radius_m);
+
+    float discriminant = view_height * view_height
+        * (cos_zenith * cos_zenith - 1.0)
+        + top_radius * top_radius;
+    float d = max(0.0, (-view_height * cos_zenith + SafeSqrt(discriminant)));
+
+    float d_min = top_radius - view_height;
+    float d_max = rho + H;
+    float u = (d - d_min) / (d_max - d_min);
+    float v = rho / H;
     u = clamp(u, 0.0, 1.0);
     v = clamp(v, 0.0, 1.0);
 
@@ -252,22 +246,6 @@ float3 TransmittanceFromOpticalDepth(float3 optical_depth, GpuSkyAtmosphereParam
                + beta_abs * optical_depth.z;
 
     return exp(-tau);
-}
-
-//! Simple ozone-like absorption density profile.
-float GetAbsorptionDensity(float altitude, float absorption_center_m)
-{
-    altitude = max(altitude, 0.0);
-
-    float center = max(1.0, absorption_center_m);
-    float width = max(1000.0, center * 0.6);
-    float t = 1.0 - abs(altitude - center) / width;
-    return saturate(t);
-}
-
-float Luminance(float3 rgb)
-{
-    return dot(rgb, float3(0.2126, 0.7152, 0.0722));
 }
 
 //! Rayleigh phase function.
@@ -474,7 +452,7 @@ float4 ComputeSingleScattering(
     }
 
     // View-path transmittance is just the final throughput
-    float total_transmittance = saturate(Luminance(throughput));
+    float total_transmittance = Saturate(Luminance(throughput));
 
     return float4(inscatter, total_transmittance);
 }
@@ -535,7 +513,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
     // Compute ray length to atmosphere boundary
     float atmosphere_radius = pass_constants.planet_radius_m + pass_constants.atmosphere_height_m;
-    float ray_length = RaySphereIntersect(origin, view_dir, atmosphere_radius);
+    float ray_length = RaySphereIntersectNearest(origin, view_dir, atmosphere_radius);
 
     float4 result = float4(0.0, 0.0, 0.0, 1.0);
 
@@ -543,7 +521,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     {
         // Check if ray hits ground
         bool hits_ground = false;
-        float ground_dist = RaySphereIntersect(origin, view_dir, pass_constants.planet_radius_m);
+        float ground_dist = RaySphereIntersectNearest(origin, view_dir, pass_constants.planet_radius_m);
         if (ground_dist > 0.0 && ground_dist < ray_length)
         {
             ray_length = ground_dist;
@@ -563,10 +541,10 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         // Get atmosphere flags from pass constants (set by LUT manager)
         uint atmosphere_flags = pass_constants.atmosphere_flags;
 
-        // Compute single scattering with ground bounce contribution
         result = ComputeSingleScattering(
             origin, view_dir, sun_dir, ray_length, hits_ground, atmo,
-            transmittance_lut, multi_scat_lut, linear_sampler, lut_size, atmosphere_flags);
+            transmittance_lut, multi_scat_lut, linear_sampler, lut_size,
+            atmosphere_flags);
     }
 
     // Safety: prevent NaNs/Infs from polluting the Sky View LUT.

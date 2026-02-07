@@ -64,6 +64,12 @@ public:
   //! Sets the debug mode.
   virtual auto SetDebugMode(engine::ShaderDebugMode mode) -> void;
 
+  //! Returns the persisted GPU debug pass flag.
+  [[nodiscard]] virtual auto GetGpuDebugPassEnabled() const -> bool;
+
+  //! Sets whether the GPU debug pass is enabled.
+  virtual auto SetGpuDebugPassEnabled(bool enabled) -> void;
+
   //! Returns the current settings epoch.
   [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t override;
 
@@ -78,6 +84,7 @@ private:
   static constexpr auto kWireColorGKey = "rendering.wire_color.g";
   static constexpr auto kWireColorBKey = "rendering.wire_color.b";
   static constexpr auto kDebugModeKey = "rendering.debug_mode";
+  static constexpr auto kGpuDebugPassEnabledKey = "rendering.debug_gpu_pass";
 
   observer_ptr<RenderingPipeline> pipeline_;
   mutable std::atomic_uint64_t epoch_ { 0 };

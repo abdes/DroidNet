@@ -25,6 +25,10 @@ public:
 
   OXGN_HDLS_API ~CommandRecorder() override;
 
+  auto BeginEvent(std::string_view /*name*/) -> void override { }
+  auto EndEvent() -> void override { }
+  auto SetMarker(std::string_view /*name*/) -> void override { }
+
   // Pipeline state
   auto SetPipelineState(GraphicsPipelineDesc /*desc*/) -> void override { }
   auto SetPipelineState(ComputePipelineDesc /*desc*/) -> void override { }
@@ -54,6 +58,11 @@ public:
   auto Draw(uint32_t, uint32_t, uint32_t, uint32_t) -> void override { }
 
   auto Dispatch(uint32_t, uint32_t, uint32_t) -> void override { }
+
+  auto ExecuteIndirect(const graphics::Buffer& /*argument_buffer*/,
+    uint64_t /*argument_buffer_offset*/) -> void override
+  {
+  }
   auto SetVertexBuffers(uint32_t, const std::shared_ptr<graphics::Buffer>*,
     const uint32_t*) const -> void override
   {

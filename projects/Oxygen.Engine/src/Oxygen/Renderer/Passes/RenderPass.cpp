@@ -39,26 +39,26 @@ auto RangeTypeToViewType(oxygen::engine::binding::RangeType rt)
 
 auto RenderPass::BuildRootBindings() -> std::vector<graphics::RootBindingItem>
 {
-  using namespace oxygen::graphics;
-  using namespace oxygen::engine::binding;
+  namespace g = oxygen::graphics;
+  namespace b = oxygen::engine::binding;
 
-  std::vector<RootBindingItem> out;
-  out.reserve(kRootParamTableCount);
+  std::vector<g::RootBindingItem> out;
+  out.reserve(b::kRootParamTableCount);
 
-  for (uint32_t i = 0; i < kRootParamTableCount; ++i) {
-    const RootParamDesc& d = kRootParamTable[i];
-    RootBindingDesc desc {};
+  for (uint32_t i = 0; i < b::kRootParamTableCount; ++i) {
+    const b::RootParamDesc& d = b::kRootParamTable[i];
+    g::RootBindingDesc desc {};
     desc.binding_slot_desc.register_index = d.shader_register;
     desc.binding_slot_desc.register_space = d.register_space;
-    desc.visibility = ShaderStageFlags::kAll;
+    desc.visibility = g::ShaderStageFlags::kAll;
 
     switch (d.kind) {
-    case RootParamKind::DescriptorTable: {
+    case b::RootParamKind::DescriptorTable: {
       if (d.ranges_count > 0 && d.ranges.data() != nullptr) {
-        const RootParamRange& r = d.ranges[0];
-        DescriptorTableBinding table {};
+        const b::RootParamRange& r = d.ranges[0];
+        g::DescriptorTableBinding table {};
         table.view_type
-          = RangeTypeToViewType(static_cast<RangeType>(r.range_type));
+          = RangeTypeToViewType(static_cast<b::RangeType>(r.range_type));
         table.base_index = r.base_register;
         if (r.num_descriptors == std::numeric_limits<uint32_t>::max()) {
           table.count = (std::numeric_limits<uint32_t>::max)();
@@ -67,27 +67,27 @@ auto RenderPass::BuildRootBindings() -> std::vector<graphics::RootBindingItem>
         }
         desc.data = table;
       } else {
-        DescriptorTableBinding table {};
-        table.view_type = ResourceViewType::kNone;
+        g::DescriptorTableBinding table {};
+        table.view_type = g::ResourceViewType::kNone;
         table.base_index = 0;
         table.count = (std::numeric_limits<uint32_t>::max)();
         desc.data = table;
       }
       break;
     }
-    case RootParamKind::CBV: {
-      desc.data = DirectBufferBinding {};
+    case b::RootParamKind::CBV: {
+      desc.data = g::DirectBufferBinding {};
       break;
     }
-    case RootParamKind::RootConstants: {
-      PushConstantsBinding pc {};
+    case b::RootParamKind::RootConstants: {
+      g::PushConstantsBinding pc {};
       pc.size = d.constants_count;
       desc.data = pc;
       break;
     }
     }
 
-    out.emplace_back(RootBindingItem(desc));
+    out.emplace_back(desc);
   }
 
   return out;

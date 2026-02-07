@@ -17,9 +17,9 @@
 #include "MaterialFlags.hlsli"
 
 #include "Core/Bindless/BindlessHelpers.hlsl"
-#include "Passes/Forward/ForwardPbr.hlsli"
-#include "Passes/Forward/ForwardMaterialEval.hlsli"
-#include "Passes/Lighting/ClusterLookup.hlsli"
+#include "Forward/ForwardPbr.hlsli"
+#include "Forward/ForwardMaterialEval.hlsli"
+#include "Lighting/ClusterLookup.hlsli"
 
 cbuffer RootConstants : register(b2, space0) {
     uint g_DrawIndex;

@@ -178,6 +178,13 @@ void RenderingPanel::DrawDebugModes()
   if (disable_debug_modes) {
     ImGui::EndDisabled();
   }
+
+  {
+    auto gpu_debug_enabled = vm_->GetGpuDebugPassEnabled();
+    if (ImGui::Checkbox("Show GPU Debug Pass", &gpu_debug_enabled)) {
+      vm_->SetGpuDebugPassEnabled(gpu_debug_enabled);
+    }
+  }
 }
 
 } // namespace oxygen::examples::ui

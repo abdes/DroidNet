@@ -4,12 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "IblManager.h"
-
 #include <cmath>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Types/TextureType.h> // For TextureType enum
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
@@ -17,29 +15,37 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Renderer/Internal/IblManager.h>
 
 namespace oxygen::engine::internal {
 
 using graphics::TextureDesc;
 using oxygen::TextureType;
 
+IblManager::IblManager(observer_ptr<Graphics> gfx)
+  : IblManager(gfx, {})
+{
+}
+
 IblManager::IblManager(observer_ptr<Graphics> gfx, Config config)
   : gfx_(gfx)
   , config_(config)
 {
+  // IblManager lifetime is managed by Renderer which guarantees it must always
+  // have a valid gfx_ pointer.
+  DCHECK_NOTNULL_F(gfx_);
 }
 
 IblManager::~IblManager() { CleanupResources(); }
 
 auto IblManager::CleanupResources() -> void
 {
-  if (!gfx_)
-    return;
   auto& registry = gfx_->GetResourceRegistry();
 
   auto cleanup_map = [&](MapResources& map) {
-    if (!map.texture)
+    if (!map.texture) {
       return;
+    }
     if (registry.Contains(*map.texture)) {
       if (map.srv_view.get().IsValid()) {
         registry.UnRegisterView(*map.texture, map.srv_view);
@@ -67,10 +73,9 @@ auto IblManager::CleanupResources() -> void
 
 auto IblManager::EnsureResourcesCreated() -> bool
 {
-  if (resources_created_)
+  if (resources_created_) {
     return true;
-  if (!gfx_)
-    return false;
+  }
 
   if (config_.irradiance_size == 0U || config_.prefilter_size == 0U) {
     LOG_F(ERROR,
@@ -82,8 +87,9 @@ auto IblManager::EnsureResourcesCreated() -> bool
   // Irradiance Map: small cubemap, 1 mip
   irradiance_map_.texture
     = CreateMapTexture(config_.irradiance_size, 1, "IBL_IrradianceMap");
-  if (!irradiance_map_.texture)
+  if (!irradiance_map_.texture) {
     return false;
+  }
 
   if (!CreateViews(irradiance_map_)) {
     CleanupResources();
@@ -154,8 +160,9 @@ auto IblManager::CreateViews(MapResources& map) -> bool
   {
     auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
       graphics::DescriptorVisibility::kShaderVisible);
-    if (!handle.IsValid())
+    if (!handle.IsValid()) {
       return false;
+    }
 
     graphics::TextureViewDescription srv_desc;
     srv_desc.view_type = graphics::ResourceViewType::kTexture_SRV;
@@ -183,8 +190,9 @@ auto IblManager::CreateViews(MapResources& map) -> bool
   for (uint32_t i = 0; i < mips; ++i) {
     auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_UAV,
       graphics::DescriptorVisibility::kShaderVisible);
-    if (!handle.IsValid())
+    if (!handle.IsValid()) {
       return false;
+    }
 
     graphics::TextureViewDescription uav_desc;
     uav_desc.view_type = graphics::ResourceViewType::kTexture_UAV;
@@ -248,15 +256,18 @@ auto IblManager::QueryOutputsFor(ShaderVisibleIndex source_slot) const noexcept
   IIblProvider::OutputMaps out {};
   out.generation = generation_.load(std::memory_order_acquire);
 
-  if (!resources_created_)
+  if (!resources_created_) {
     return out;
+  }
 
-  if (source_slot == kInvalidShaderVisibleIndex)
+  if (source_slot == kInvalidShaderVisibleIndex) {
     return out;
+  }
 
   // Only publish outputs when they were generated for the requested source.
-  if (last_source_cubemap_slot_ != source_slot)
+  if (last_source_cubemap_slot_ != source_slot) {
     return out;
+  }
 
   out.irradiance = irradiance_map_.srv_index;
   out.prefilter = prefilter_map_.srv_index;

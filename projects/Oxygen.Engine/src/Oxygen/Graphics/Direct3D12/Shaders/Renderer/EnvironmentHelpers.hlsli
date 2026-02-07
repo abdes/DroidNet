@@ -10,7 +10,7 @@
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
 #include "Renderer/EnvironmentStaticData.hlsli"
 #include "Renderer/EnvironmentDynamicData.hlsli"
-#include "Passes/Lighting/ClusterLookup.hlsli"
+#include "Lighting/ClusterLookup.hlsli"
 
 /**
  * Loads the EnvironmentStaticData from the global ResourceDescriptorHeap using the provided slot.

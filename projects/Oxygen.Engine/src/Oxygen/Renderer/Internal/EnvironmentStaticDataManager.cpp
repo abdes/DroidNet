@@ -305,7 +305,7 @@ auto EnvironmentStaticDataManager::PopulateAtmosphere(
     next.atmosphere.sun_disk_enabled
       = (atmo_disk_enabled && sun_disk_radius > 0.0F) ? 1u : 0u;
     next.atmosphere.sun_disk_angular_radius_radians = sun_disk_radius;
-    LOG_F(INFO,
+    DLOG_F(3,
       "PopulateAtmosphere: sun disk (enabled={}, radius={}, atmo_toggle={})",
       next.atmosphere.sun_disk_enabled,
       next.atmosphere.sun_disk_angular_radius_radians, atmo_disk_enabled);
@@ -341,6 +341,12 @@ auto EnvironmentStaticDataManager::PopulateAtmosphere(
 
         next.atmosphere.sky_view_lut_slot
           = SkyViewLutSlot { sky_lut_provider_->GetSkyViewLutSlot() };
+
+        next.atmosphere.multi_scat_lut_slot
+          = MultiScatLutSlot { sky_lut_provider_->GetMultiScatLutSlot() };
+
+        next.atmosphere.camera_volume_lut_slot
+          = CameraVolumeLutSlot { sky_lut_provider_->GetCameraVolumeLutSlot() };
       }
 
       sky_lut_provider_->UpdateParameters(next.atmosphere);
@@ -403,7 +409,7 @@ auto EnvironmentStaticDataManager::PopulateSkySphere(
     = env->TryGetSystem<scene::environment::SkySphere>();
     sky_sphere && sky_sphere->IsEnabled()) {
     if (next.atmosphere.enabled != 0U) {
-      DLOG_F(WARNING,
+      LOG_F(WARNING,
         "Both SkyAtmosphere and SkySphere are enabled. They are mutually "
         "exclusive; SkyAtmosphere will take priority for sky rendering.");
     }
@@ -464,16 +470,9 @@ auto EnvironmentStaticDataManager::PopulateSkyCapture(
       if (sky_capture_provider_->IsCaptured()) {
         next.sky_light.cubemap_slot
           = CubeMapSlot { sky_capture_provider_->GetCapturedCubemapSlot() };
-        LOG_F(INFO,
-          "PopulateSkyCapture: Using captured cubemap (slot={}, "
-          "captured=true)",
-          next.sky_light.cubemap_slot);
       } else {
         next.sky_light.cubemap_slot
           = CubeMapSlot { kInvalidShaderVisibleIndex };
-        LOG_F(INFO,
-          "PopulateSkyCapture: Capture requested but not ready "
-          "(captured=false)");
       }
     }
   } else {
@@ -493,7 +492,7 @@ auto EnvironmentStaticDataManager::PopulateIbl(EnvironmentStaticData& next)
       && next.sky_sphere.cubemap_slot.IsValid());
 
   if (!has_source) {
-    LOG_F(INFO,
+    DLOG_F(INFO,
       "PopulateIbl: No source detected (sky_light.enabled={}, "
       "sky_light.cubemap={}, sky_sphere.enabled={}, sky_sphere.cubemap={})",
       next.sky_light.enabled, next.sky_light.cubemap_slot.IsValid(),

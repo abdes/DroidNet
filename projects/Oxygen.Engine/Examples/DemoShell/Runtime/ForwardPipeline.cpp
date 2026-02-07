@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -24,7 +25,10 @@
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/ImGui/ImGuiPass.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
+#include <Oxygen/Renderer/Passes/GpuDebugClearPass.h>
+#include <Oxygen/Renderer/Passes/GpuDebugDrawPass.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Passes/SkyAtmosphereLutComputePass.h>
@@ -39,6 +43,7 @@
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
+
 
 #include "DemoShell/Runtime/ForwardPipeline.h"
 
@@ -308,6 +313,8 @@ struct ForwardPipeline::Impl {
   std::shared_ptr<engine::LightCullingPass> light_culling_pass;
   std::shared_ptr<engine::SkyAtmosphereLutComputePass> sky_atmo_lut_pass;
   std::shared_ptr<engine::ToneMapPass> tone_map_pass;
+  std::shared_ptr<engine::GpuDebugClearPass> gpu_debug_clear_pass;
+  std::shared_ptr<engine::GpuDebugDrawPass> gpu_debug_draw_pass;
 
   // ImGui lazy loading
   mutable std::once_flag imgui_flag;
@@ -327,8 +334,11 @@ struct ForwardPipeline::Impl {
     engine::ExposureMode exposure_mode { engine::ExposureMode::kManual };
     float exposure_value { 1.0F };
     engine::ToneMapper tonemapping_mode { engine::ToneMapper::kAcesFitted };
+    bool gpu_debug_pass_enabled { true };
+    std::optional<SubPixelPosition> gpu_debug_mouse_down_position {};
     bool dirty { true };
   } staged;
+  bool gpu_debug_pass_enabled { true };
 
   struct ViewRenderContext {
     CompositionViewImpl& view;
@@ -478,6 +488,12 @@ struct ForwardPipeline::Impl {
     }
     if (sky_pass_config) {
       sky_pass_config->color_texture = ctx.view.hdr_texture;
+      sky_pass_config->debug_mouse_down_position
+        = staged.gpu_debug_mouse_down_position;
+      sky_pass_config->debug_viewport_extent = SubPixelExtent {
+        .width = ctx.view.intent.view.viewport.width,
+        .height = ctx.view.intent.view.viewport.height,
+      };
     }
     if (transparent_pass_config) {
       transparent_pass_config->color_texture = ctx.view.hdr_texture;
@@ -593,6 +609,28 @@ struct ForwardPipeline::Impl {
       co_await transparent_pass->Execute(rc, rec);
       rc.RegisterPass<engine::TransparentPass>(transparent_pass.get());
     }
+  }
+
+  auto RenderGpuDebugOverlay(ViewRenderContext& ctx,
+    const engine::RenderContext& rc, graphics::CommandRecorder& rec) const
+    -> co::Co<>
+  {
+    if (!gpu_debug_pass_enabled || !gpu_debug_draw_pass) {
+      co_return;
+    }
+    if (!ctx.plan.sdr_path_enabled) {
+      co_return;
+    }
+    if (ctx.view.intent.z_order != CompositionView::kZOrderScene
+      || !ctx.view.intent.camera.has_value()) {
+      co_return;
+    }
+
+    EnsureSdrBoundForOverlays(ctx, rec);
+    gpu_debug_draw_pass->SetColorTexture(ctx.view.sdr_texture);
+    co_await gpu_debug_draw_pass->PrepareResources(rc, rec);
+    co_await gpu_debug_draw_pass->Execute(rc, rec);
+    rc.RegisterPass<engine::GpuDebugDrawPass>(gpu_debug_draw_pass.get());
   }
 
   auto ToneMapToSdr(ViewRenderContext& ctx, const engine::RenderContext& rc,
@@ -722,6 +760,11 @@ struct ForwardPipeline::Impl {
     sky_atmo_lut_pass = std::make_shared<engine::SkyAtmosphereLutComputePass>(
       observer_ptr { graphics.get() }, sky_atmo_lut_pass_config);
     tone_map_pass = std::make_shared<engine::ToneMapPass>(tone_map_pass_config);
+
+    gpu_debug_clear_pass = std::make_shared<engine::GpuDebugClearPass>(
+      observer_ptr { graphics.get() });
+    gpu_debug_draw_pass = std::make_shared<engine::GpuDebugDrawPass>(
+      observer_ptr { graphics.get() });
   }
 
   void ApplySettings()
@@ -772,6 +815,12 @@ struct ForwardPipeline::Impl {
         ? 1.0F
         : (debug_intent.force_manual_exposure ? 1.0F : staged.exposure_value);
       tone_map_pass_config->tone_mapper = staged.tonemapping_mode;
+    }
+
+    gpu_debug_pass_enabled = staged.gpu_debug_pass_enabled;
+    if (gpu_debug_draw_pass) {
+      gpu_debug_draw_pass->SetMouseDownPosition(
+        staged.gpu_debug_mouse_down_position);
     }
 
     staged.dirty = false;
@@ -965,6 +1014,12 @@ auto ForwardPipeline::OnSceneMutation(
             if (!run_scene_passes) {
               co_await self->RenderWireframeScene(ctx, rc, rec);
             } else {
+              if (self->gpu_debug_pass_enabled && self->gpu_debug_clear_pass) {
+                co_await self->gpu_debug_clear_pass->PrepareResources(rc, rec);
+                co_await self->gpu_debug_clear_pass->Execute(rc, rec);
+                rc.RegisterPass<engine::GpuDebugClearPass>(
+                  self->gpu_debug_clear_pass.get());
+              }
               co_await self->RunScenePasses(ctx, rc, rec);
             }
 
@@ -980,6 +1035,7 @@ auto ForwardPipeline::OnSceneMutation(
             co_await self->RenderOverlayWireframe(ctx, rc, rec);
             self->RenderViewOverlay(ctx, rec);
             co_await self->RenderToolsImGui(ctx, rec);
+            co_await self->RenderGpuDebugOverlay(ctx, rc, rec);
             self->TransitionSdrToShaderRead(ctx, rec);
           }
           co_return;
@@ -1060,6 +1116,29 @@ auto ForwardPipeline::SetShaderDebugMode(engine::ShaderDebugMode mode) -> void
 auto ForwardPipeline::SetRenderMode(RenderMode mode) -> void
 {
   impl_->staged.render_mode = mode;
+  impl_->staged.dirty = true;
+}
+auto ForwardPipeline::SetGpuDebugPassEnabled(bool enabled) -> void
+{
+  impl_->staged.gpu_debug_pass_enabled = enabled;
+  impl_->staged.dirty = true;
+}
+/*!
+ Stages the last mouse-down position for GPU debug overlays.
+
+ @param position The last mouse-down position in window coordinates, or
+   std::nullopt when no click has been captured.
+
+### Performance Characteristics
+
+- Time Complexity: O(1)
+- Memory: None
+- Optimization: None
+*/
+auto ForwardPipeline::SetGpuDebugMouseDownPosition(
+  std::optional<SubPixelPosition> position) -> void
+{
+  impl_->staged.gpu_debug_mouse_down_position = position;
   impl_->staged.dirty = true;
 }
 auto ForwardPipeline::SetWireframeColor(const graphics::Color& color) -> void

@@ -13,7 +13,6 @@
 #include <functional>
 #include <iostream>
 #include <memory>
-#include <string>
 #include <type_traits>
 #include <utility>
 
@@ -333,37 +332,18 @@ struct OXYGEN_EBCO BitWiseRightShiftable : Crtp<T, BitWiseRightShiftable> {
   }
 };
 
-//! Provides comparison operators (<, >, <=, >=, ==, !=) for NamedType
+//! Provides comparison operators via spaceship operator for NamedType
 template <typename T> struct OXYGEN_EBCO Comparable : Crtp<T, Comparable> {
-  [[nodiscard]] constexpr bool operator<(Comparable<T> const& other) const
-    noexcept(noexcept(this->underlying().get() < other.underlying().get()))
+  [[nodiscard]] constexpr auto operator<=>(Comparable<T> const& other) const
+    noexcept(noexcept(this->underlying().get() <=> other.underlying().get()))
   {
-    return this->underlying().get() < other.underlying().get();
+    return this->underlying().get() <=> other.underlying().get();
   }
-  [[nodiscard]] constexpr bool operator>(Comparable<T> const& other) const
-    noexcept(noexcept(other.underlying().get() < this->underlying().get()))
-  {
-    return other.underlying().get() < this->underlying().get();
-  }
-  [[nodiscard]] constexpr bool operator<=(Comparable<T> const& other) const
-    noexcept(noexcept(!(other < *this)))
-  {
-    return !(other < *this);
-  }
-  [[nodiscard]] constexpr bool operator>=(Comparable<T> const& other) const
-    noexcept(noexcept(!(*this < other)))
-  {
-    return !(*this < other);
-  }
+
   [[nodiscard]] constexpr bool operator==(Comparable<T> const& other) const
-    noexcept(noexcept(!(*this < other) && !(other < *this)))
+    noexcept(noexcept(this->underlying().get() == other.underlying().get()))
   {
-    return !(*this < other) && !(other < *this);
-  }
-  [[nodiscard]] constexpr bool operator!=(Comparable<T> const& other) const
-    noexcept(noexcept(!(*this == other)))
-  {
-    return !(*this == other);
+    return this->underlying().get() == other.underlying().get();
   }
 };
 
@@ -387,6 +367,7 @@ struct Dereferencable<NamedType<T, Parameter, Skills...>>
 //! Provides implicit conversion capability to specified destination type
 template <typename Destination> struct OXYGEN_EBCO ImplicitlyConvertibleTo {
   template <typename T> struct templ : Crtp<T, templ> {
+    // NOLINTNEXTLINE(google-explicit-constructor)
     [[nodiscard]] constexpr operator Destination() const
       noexcept(noexcept(static_cast<Destination>(this->underlying().get())))
     {
@@ -434,10 +415,12 @@ template <typename NamedType_> struct OXYGEN_EBCO FunctionCallable;
 template <typename T, typename Parameter, template <typename> class... Skills>
 struct FunctionCallable<NamedType<T, Parameter, Skills...>>
   : Crtp<NamedType<T, Parameter, Skills...>, FunctionCallable> {
+  // NOLINTNEXTLINE(google-explicit-constructor)
   [[nodiscard]] constexpr operator T const&() const noexcept
   {
     return this->underlying().get();
   }
+  // NOLINTNEXTLINE(google-explicit-constructor)
   [[nodiscard]] constexpr operator T&() noexcept
   {
     return this->underlying().get();

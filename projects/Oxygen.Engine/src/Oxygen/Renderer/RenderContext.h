@@ -39,6 +39,7 @@ class RenderPass;
 
 namespace internal {
   class EnvironmentDynamicDataManager;
+  class GpuDebugManager;
 }
 
 //=== Pass Type List and Compile-Time Indexing ===----------------------------//
@@ -75,6 +76,8 @@ class SkyPass;
 class SkyCapturePass;
 class TransparentPass;
 class WireframePass;
+class GpuDebugClearPass;
+class GpuDebugDrawPass;
 
 /*!
  Defines the list of all known render pass types for the current render graph.
@@ -82,7 +85,8 @@ class WireframePass;
  binary compatibility. Update this list as new passes are added.
 */
 using KnownPassTypes = PassTypeList<DepthPrePass, LightCullingPass, ShaderPass,
-  SkyPass, SkyCapturePass, TransparentPass, WireframePass>;
+  SkyPass, SkyCapturePass, TransparentPass, WireframePass, GpuDebugClearPass,
+  GpuDebugDrawPass>;
 
 //! The number of known pass types, used for static array sizing and sanity
 //! checks.
@@ -99,25 +103,11 @@ static constexpr std::size_t kNumPassTypes = KnownPassTypes::size;
  @see Renderer, RenderPass
 */
 struct RenderContext {
-  // Application data
-  // Camera parameters
-  // (view/projection matrices, camera position, frustum, etc.)
-  // Add your camera struct or fields here as needed
-
-  // Scene constants (lighting environment, fog, global exposure, etc.)
-  // Add your scene constant struct or fields here as needed
-
-  // Legacy AoS RenderItem lists removed. Passes now consume PreparedSceneFrame
-  // (prepared_frame) for per-draw data.
-
-  // TODO: Light lists
-  // std::vector<scene::Light> light_list;
-
   // Pass enable/disable flags (by pass index in the KnownKnownPassTypes)
   std::unordered_map<size_t, bool> pass_enable_flags;
 
   //! Framebuffer object for broader rendering context.
-  observer_ptr<const graphics::Framebuffer> framebuffer = nullptr;
+  observer_ptr<const graphics::Framebuffer> framebuffer;
 
   //! The constant buffer containing scene-wide constants.
   /*!
@@ -136,6 +126,9 @@ struct RenderContext {
    from this buffer.
   */
   observer_ptr<internal::EnvironmentDynamicDataManager> env_dynamic_manager;
+
+  //! Manages GPU debug resources (line buffer and counters).
+  observer_ptr<internal::GpuDebugManager> gpu_debug_manager;
 
   //! The constant buffer containing material constants for the current render
   //! item.
@@ -159,8 +152,8 @@ struct RenderContext {
   // during per-view iterations.
   struct ViewSpecific {
     oxygen::ViewId view_id {};
-    observer_ptr<const oxygen::ResolvedView> resolved_view { nullptr };
-    observer_ptr<const struct PreparedSceneFrame> prepared_frame { nullptr };
+    observer_ptr<const oxygen::ResolvedView> resolved_view;
+    observer_ptr<const struct PreparedSceneFrame> prepared_frame;
   };
 
   //! Active view iteration state for the currently-executing view.
@@ -295,11 +288,9 @@ private:
     frame_slot = frame::kInvalidSlot;
     frame_sequence = frame::SequenceNumber {};
   }
-  mutable observer_ptr<Renderer> renderer_ { nullptr };
-  mutable observer_ptr<oxygen::Graphics> graphics_ { nullptr };
-  mutable std::array<observer_ptr<RenderPass>, kNumPassTypes> known_passes_ {
-    { nullptr }
-  };
+  mutable observer_ptr<Renderer> renderer_;
+  mutable observer_ptr<oxygen::Graphics> graphics_;
+  mutable std::array<observer_ptr<RenderPass>, kNumPassTypes> known_passes_;
 };
 
 } // namespace oxygen::engine

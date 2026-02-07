@@ -9,10 +9,10 @@
 
 #include "Renderer/DirectionalLightBasic.hlsli"
 #include "Renderer/PositionalLightData.hlsli"
-#include "Passes/Forward/ForwardPbr.hlsli"
+#include "Forward/ForwardPbr.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/EnvironmentDynamicData.hlsli"
-#include "Common/PhysicalLighting.hlsli"
+#include "Common/Lighting.hlsli"
 
 // Safety caps for fallback loops (pre-clustered culling).
 #ifndef MAX_DIRECTIONAL_LIGHTS
@@ -241,7 +241,7 @@ float3 AccumulatePositionalLights(
 }
 
 // Cluster-Based Implementation
-#include "Passes/Lighting/ClusterLookup.hlsli"
+#include "Lighting/ClusterLookup.hlsli"
 
 float3 AccumulatePositionalLightsClustered(
     float3 world_pos,

@@ -9,8 +9,8 @@
 #include <memory>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/ImGui/api_export.h>
-#include <Oxygen/Imgui/ImGuiGraphicsBackend.h>
 #include <Oxygen/OxCo/Co.h>
 
 struct ImDrawData;
@@ -52,7 +52,7 @@ private:
   // anytime such prerequisites are lost.
   bool disabled_ { true };
 
-  std::shared_ptr<ImGuiGraphicsBackend> backend_ {};
+  std::shared_ptr<ImGuiGraphicsBackend> backend_;
 };
 
 } // namespace oxygen::imgui

@@ -51,183 +51,196 @@ using enum ShaderType;
 inline constexpr auto kEngineShaders = GenerateCatalog(
   // Forward pass vertex shader (shared by all modes)
   ShaderFileSpec {
-    .path="Passes/Forward/ForwardMesh_VS.hlsl",
+    .path="Forward/ForwardMesh_VS.hlsl",
     .entries=std::array { EntryPoint { .type=kVertex, .name="VS" } }
   },
   // Forward pass pixel shader: ALPHA_TEST permutation for normal rendering
   ShaderFileSpec {
-    .path="Passes/Forward/ForwardMesh_PS.hlsl",
+    .path="Forward/ForwardMesh_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3> { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT", "SKIP_BRDF_LUT" }
   },
   // Wireframe pass pixel shader: ALPHA_TEST permutation
   ShaderFileSpec {
-    .path="Passes/Forward/ForwardWireframe_PS.hlsl",
+    .path="Forward/ForwardWireframe_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" }
   },
   // Forward pass pixel shader: DEBUG_LIGHT_HEATMAP with ALPHA_TEST permutation
   ShaderFileSpec {
-    .path="Passes/Forward/ForwardDebug_PS.hlsl",
+    .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_LIGHT_HEATMAP", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_DEPTH_SLICE with ALPHA_TEST permutation
   ShaderFileSpec {
-    .path="Passes/Forward/ForwardDebug_PS.hlsl",
+    .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_DEPTH_SLICE", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_CLUSTER_INDEX with ALPHA_TEST permutation
   ShaderFileSpec {
-    .path="Passes/Forward/ForwardDebug_PS.hlsl",
+    .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_CLUSTER_INDEX", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_IBL_SPECULAR with ALPHA_TEST permutation
   ShaderFileSpec {
-    .path="Passes/Forward/ForwardDebug_PS.hlsl",
+    .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_IBL_SPECULAR", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_IBL_RAW_SKY with ALPHA_TEST permutation
   ShaderFileSpec {
-    .path="Passes/Forward/ForwardDebug_PS.hlsl",
+    .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_IBL_RAW_SKY", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_IBL_IRRADIANCE with ALPHA_TEST permutation
   ShaderFileSpec {
-    .path="Passes/Forward/ForwardDebug_PS.hlsl",
+    .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_IBL_IRRADIANCE", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_IBL_FACE_INDEX with ALPHA_TEST permutation
   ShaderFileSpec {
-    .path="Passes/Forward/ForwardDebug_PS.hlsl",
+    .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_IBL_FACE_INDEX", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_BASE_COLOR with ALPHA_TEST permutation
   ShaderFileSpec {
-    .path="Passes/Forward/ForwardDebug_PS.hlsl",
+    .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_BASE_COLOR", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_UV0 with ALPHA_TEST permutation
   ShaderFileSpec {
-    .path="Passes/Forward/ForwardDebug_PS.hlsl",
+    .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_UV0", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_OPACITY with ALPHA_TEST permutation
   ShaderFileSpec {
-    .path="Passes/Forward/ForwardDebug_PS.hlsl",
+    .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_OPACITY", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_WORLD_NORMALS with ALPHA_TEST permutation
   ShaderFileSpec {
-    .path="Passes/Forward/ForwardDebug_PS.hlsl",
+    .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_WORLD_NORMALS", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_ROUGHNESS with ALPHA_TEST permutation
   ShaderFileSpec {
-    .path="Passes/Forward/ForwardDebug_PS.hlsl",
+    .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_ROUGHNESS", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Forward pass pixel shader: DEBUG_METALNESS with ALPHA_TEST permutation
   ShaderFileSpec {
-    .path="Passes/Forward/ForwardDebug_PS.hlsl",
+    .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_METALNESS", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Depth pre-pass: VS and PS with ALPHA_TEST permutation
   ShaderFileSpec {
-    .path="Passes/Depth/DepthPrePass.hlsl",
+    .path="Depth/DepthPrePass.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" }, EntryPoint { .type=kVertex, .name="VS" } },
     .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" }
   },
   // Light culling compute shader (tile-based or clustered mode)
   ShaderFileSpec {
-    .path="Passes/Lighting/LightCulling.hlsl",
+    .path="Lighting/LightCulling.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } },
     .permutations=std::array<std::string_view, 1> { "CLUSTERED" }
   },
   // Sky atmosphere LUT compute shaders (no permutations)
   ShaderFileSpec {
-    .path="Passes/Atmosphere/TransmittanceLut_CS.hlsl",
+    .path="Atmosphere/TransmittanceLut_CS.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
   ShaderFileSpec {
-    .path="Passes/Atmosphere/SkyViewLut_CS.hlsl",
+    .path="Atmosphere/SkyViewLut_CS.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
   ShaderFileSpec {
-    .path="Passes/Atmosphere/MultiScatLut_CS.hlsl",
+    .path="Atmosphere/MultiScatLut_CS.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Atmosphere/CameraVolumeLut_CS.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
   // Sky sphere shaders (no permutations)
   ShaderFileSpec {
-    .path="Passes/Sky/SkySphere_VS.hlsl",
+    .path="Atmosphere/SkySphere_VS.hlsl",
     .entries=std::array { EntryPoint { .type=kVertex, .name="VS" } }
   },
   ShaderFileSpec {
-    .path="Passes/Sky/SkySphere_PS.hlsl",
+    .path="Atmosphere/SkySphere_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 1> { "OXYGEN_HDR_OUTPUT" }
   },
   // Sky capture shaders (no permutations)
   ShaderFileSpec {
-    .path="Passes/Sky/SkyCapture_VS.hlsl",
+    .path="Atmosphere/SkyCapture_VS.hlsl",
     .entries=std::array { EntryPoint { .type=kVertex, .name="VS" } }
   },
   ShaderFileSpec {
-    .path="Passes/Sky/SkyCapture_PS.hlsl",
+    .path="Atmosphere/SkyCapture_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } }
   },
   // IBL filtering compute shaders (no permutations)
   ShaderFileSpec {
-    .path="Renderer/IblFiltering.hlsl",
+    .path="Lighting/IblFiltering.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS_IrradianceConvolution" },
       EntryPoint { .type=kCompute, .name="CS_SpecularPrefilter" } }
   },
+  // GPU Debugging shaders
+  ShaderFileSpec {
+    .path="Renderer/GpuDebugClear.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Renderer/GpuDebugDraw.hlsl",
+    .entries=std::array { EntryPoint { .type=kVertex, .name="VS" }, EntryPoint { .type=kPixel, .name="PS" } }
+  },
   // ImGui UI shaders (no permutations)
   ShaderFileSpec {
-    .path="Passes/Ui/ImGui.hlsl",
+    .path="Ui/ImGui.hlsl",
     .entries=std::array { EntryPoint { .type=kVertex, .name="VS" }, EntryPoint { .type=kPixel, .name="PS" } }
   },
   // Compositing shaders (no permutations)
   ShaderFileSpec {
-    .path="Passes/Compositing/Compositing_VS.hlsl",
+    .path="Compositing/Compositing_VS.hlsl",
     .entries=std::array { EntryPoint { .type=kVertex, .name="VS" } }
   },
   ShaderFileSpec {
-    .path="Passes/Compositing/Compositing_PS.hlsl",
+    .path="Compositing/Compositing_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } }
   },
   // ToneMap shaders (no permutations)
   ShaderFileSpec {
-    .path="Passes/Compositing/ToneMap_VS.hlsl",
+    .path="Compositing/ToneMap_VS.hlsl",
     .entries=std::array { EntryPoint { .type=kVertex, .name="VS" } }
   },
   ShaderFileSpec {
-    .path="Passes/Compositing/ToneMap_PS.hlsl",
+    .path="Compositing/ToneMap_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } }
   }
 );
@@ -243,14 +256,17 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - LightCulling: 2 (1 entry x 2 permutations)
 // - TransmittanceLut_CS: 1 entry
 // - SkyViewLut_CS: 1 entry
+// - MultiScatLut_CS: 1 entry
+// - CameraVolumeLut_CS: 1 entry
 // - SkySphere_VS: 1 entry
 // - SkySphere_PS: 2 entries
 // - SkyCapture_VS/PS: 2 entries
 // - IblFiltering: 2 entries
-// - ImGui: 2 entries
+// - GpuDebugClear: 1 entry
+// - GpuDebugDraw: 2 entries
 // - ImGui: 2 entries
 // - Compositing: 2 entries
 // - ToneMap: 2 entries
-// Total: 125
+// Total: 129
 
 } // namespace oxygen::graphics::d3d12

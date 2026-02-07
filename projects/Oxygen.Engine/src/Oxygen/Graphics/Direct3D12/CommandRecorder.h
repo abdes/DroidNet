@@ -87,6 +87,9 @@ public:
   auto Dispatch(uint32_t thread_group_count_x, uint32_t thread_group_count_y,
     uint32_t thread_group_count_z) -> void override;
 
+  auto ExecuteIndirect(const graphics::Buffer& argument_buffer,
+    uint64_t argument_buffer_offset) -> void override;
+
   // ReSharper disable once CppRedundantQualifier
   auto BindIndexBuffer(const graphics::Buffer& buffer, Format format)
     -> void override;

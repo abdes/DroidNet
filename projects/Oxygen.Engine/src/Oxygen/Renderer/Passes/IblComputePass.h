@@ -65,7 +65,7 @@ public:
   auto RequestRegenerationOnce() noexcept -> void;
 
 private:
-  //! Must match HLSL `IblFilteringPassConstants` in Renderer/IblFiltering.hlsl.
+  //! Must match HLSL `IblFilteringPassConstants` in Lighting/IblFiltering.hlsl.
   struct alignas(16) IblFilteringPassConstants {
     ShaderVisibleIndex source_cubemap_slot { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex target_uav_slot { kInvalidShaderVisibleIndex };

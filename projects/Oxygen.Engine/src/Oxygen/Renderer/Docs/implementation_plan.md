@@ -134,7 +134,7 @@ Supports both tile-based (2D) and clustered (3D) configurations.
      - Follows `BrdfLutManager` pattern for resource lifecycle
 
   2) [x] **Create transmittance LUT compute shader**
-     - Location: `Shaders/Passes/Atmosphere/TransmittanceLut_CS.hlsl`
+     - Location: `Shaders/Atmosphere/TransmittanceLut_CS.hlsl`
      - Thread group: 8×8×1, dispatch covers 256×64 texture
      - Implements optical depth integration along view ray
      - Output: RG16F (Rayleigh + Mie extinction)
@@ -143,7 +143,7 @@ Supports both tile-based (2D) and clustered (3D) configurations.
        `u = (cos_zenith + 0.15) / 1.15`, `v = sqrt(altitude / atmo_height)`
 
   3) [x] **Create sky-view LUT compute shader**
-     - Location: `Shaders/Passes/Atmosphere/SkyViewLut_CS.hlsl`
+     - Location: `Shaders/Atmosphere/SkyViewLut_CS.hlsl`
      - Thread group: 8×8×1, dispatch covers 192×108 texture
      - Performs single-scattering raymarch with transmittance LUT sampling
      - Output: RGBA16F (inscattered radiance RGB, transmittance A)

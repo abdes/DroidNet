@@ -6,10 +6,12 @@
 
 #pragma once
 
+#include <optional>
 #include <span>
 #include <string_view>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/OxCo/Co.h>
@@ -100,6 +102,9 @@ public:
   //! Sets the render mode (solid/wireframe/overlay).
   virtual auto SetRenderMode(RenderMode /*mode*/) -> void { }
 
+  //! Enables or disables GPU debug passes attached to the pipeline.
+  virtual auto SetGpuDebugPassEnabled(bool /*enabled*/) -> void { }
+
   //! Sets the wireframe color used by dedicated wireframe passes.
   virtual auto SetWireframeColor(const graphics::Color& /*color*/) -> void { }
 
@@ -118,6 +123,12 @@ public:
   virtual auto SetExposureMode(engine::ExposureMode /*mode*/) -> void { }
   virtual auto SetExposureValue(float /*value*/) -> void { }
   virtual auto SetToneMapper(engine::ToneMapper /*mode*/) -> void { }
+
+  //! Provide last mouse-down position for GPU debug overlays.
+  virtual auto SetGpuDebugMouseDownPosition(
+    std::optional<SubPixelPosition> /*position*/) -> void
+  {
+  }
 
   // === Advanced Configuration (Engine Debugging) ===------------------------
 

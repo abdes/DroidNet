@@ -14,7 +14,6 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
-#include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Renderer/Internal/IIblProvider.h>
 
@@ -35,16 +34,17 @@ struct IblPassTagFactory {
 
 class IblManager : public IIblProvider {
 public:
-  OXYGEN_MAKE_NON_COPYABLE(IblManager);
-  OXYGEN_MAKE_NON_MOVABLE(IblManager);
-
   struct Config {
     uint32_t irradiance_size { 32 };
     uint32_t prefilter_size { 256 }; // 128 or 256 common for split-sum
   };
 
-  explicit IblManager(observer_ptr<Graphics> gfx, Config config = {});
+  explicit IblManager(observer_ptr<Graphics> gfx);
+  IblManager(observer_ptr<Graphics> gfx, Config config);
   ~IblManager();
+
+  OXYGEN_MAKE_NON_COPYABLE(IblManager)
+  OXYGEN_MAKE_NON_MOVABLE(IblManager)
 
   [[nodiscard]] auto GetConfig() const noexcept -> const Config&
   {
@@ -53,7 +53,7 @@ public:
 
   //! Ensures resources (textures, views) are created.
   //! @return True if successful.
-  auto EnsureResourcesCreated() -> bool;
+  auto EnsureResourcesCreated() -> bool override;
 
   //! Query current outputs and generation for a source slot.
   [[nodiscard]] auto QueryOutputsFor(

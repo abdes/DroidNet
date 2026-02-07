@@ -74,7 +74,7 @@ namespace detail {
 struct ShaderVisibleIndex : detail::ShaderVisibleIndexBase {
   using Base = detail::ShaderVisibleIndexBase;
   using detail::ShaderVisibleIndexBase::ShaderVisibleIndexBase;
-  constexpr auto IsValid() const noexcept
+  [[nodiscard]] constexpr auto IsValid() const noexcept
   {
     return this->get() != kInvalidBindlessIndex;
   }

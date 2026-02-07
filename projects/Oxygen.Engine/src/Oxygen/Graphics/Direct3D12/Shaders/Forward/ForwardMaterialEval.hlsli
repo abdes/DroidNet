@@ -10,7 +10,7 @@
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/MaterialConstants.hlsli"
 #include "MaterialFlags.hlsli"
-#include "Passes/Forward/ForwardPbr.hlsli"
+#include "Forward/ForwardPbr.hlsli"
 
 struct MaterialSurface
 {

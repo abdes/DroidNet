@@ -74,6 +74,11 @@ public:
   auto SetShaderDebugMode(engine::ShaderDebugMode mode) -> void override;
   //! Stage a render mode update (solid, wireframe, overlay wireframe).
   auto SetRenderMode(RenderMode mode) -> void override;
+  //! Stage whether GPU debug passes should run.
+  auto SetGpuDebugPassEnabled(bool enabled) -> void override;
+  //! Stage the last mouse-down position for GPU debug overlays.
+  auto SetGpuDebugMouseDownPosition(std::optional<SubPixelPosition> position)
+    -> void override;
   //! Stage a wireframe line color update.
   auto SetWireframeColor(const graphics::Color& color) -> void override;
   auto SetLightCullingVisualizationMode(engine::ShaderDebugMode mode)

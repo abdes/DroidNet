@@ -675,23 +675,24 @@ auto PipelineStateCache::GetOrCreateGraphicsPipeline(
     return entry;
   }
 
-  // Create the root signature
-  auto* root_signature = CreateRootSignature(desc);
-  if (root_signature == nullptr) {
+  // Create the root signature (RAII to avoid leaks on failure).
+  Microsoft::WRL::ComPtr<dx::IRootSignature> root_signature;
+  root_signature.Attach(CreateRootSignature(desc));
+  if (!root_signature) {
     throw std::runtime_error(
       "failed to create bindless root signature for graphics pipeline");
   }
   auto rs_name = desc.GetName() + "_BindlessRS";
-  NameObject(root_signature, rs_name);
+  NameObject(root_signature.Get(), rs_name);
   DLOG_F(2, "new root signature: 0x{:04X} ({})",
-    reinterpret_cast<std::uintptr_t>(root_signature), rs_name);
+    reinterpret_cast<std::uintptr_t>(root_signature.Get()), rs_name);
 
   // Create new pipeline state
-  dx::IPipelineState* pso = nullptr;
+  Microsoft::WRL::ComPtr<dx::IPipelineState> pso;
 
   // 2. Translate GraphicsPipelineDesc to D3D12_GRAPHICS_PIPELINE_STATE_DESC
   D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
-  pso_desc.pRootSignature = root_signature;
+  pso_desc.pRootSignature = root_signature.Get();
 
   // Set shader stages
   if (desc.VertexShader()) {
@@ -750,18 +751,18 @@ auto PipelineStateCache::GetOrCreateGraphicsPipeline(
 
   // Create the pipeline state object
   auto* device = gfx_->GetCurrentDevice();
-  ThrowOnFailed(
-    device->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&pso)),
+  ThrowOnFailed(device->CreateGraphicsPipelineState(
+                  &pso_desc, IID_PPV_ARGS(pso.GetAddressOf())),
     "Failed to create graphics pipeline state");
 
   auto pso_name = desc.GetName() + "_PSO";
-  NameObject(pso, pso_name);
-  DLOG_F(2, "new pso: 0x{:04X} ({})", reinterpret_cast<std::uintptr_t>(pso),
-    pso_name);
+  NameObject(pso.Get(), pso_name);
+  DLOG_F(2, "new pso: 0x{:04X} ({})",
+    reinterpret_cast<std::uintptr_t>(pso.Get()), pso_name);
 
   Entry entry {
-    .pipeline_state = pso,
-    .root_signature = root_signature,
+    .pipeline_state = pso.Detach(),
+    .root_signature = root_signature.Detach(),
   };
   graphics_pipelines_.emplace(hash, std::make_tuple(std::move(desc), entry));
   return entry;
@@ -777,31 +778,32 @@ auto PipelineStateCache::GetOrCreateComputePipeline(
     return entry;
   }
 
-  // Create the root signature
-  auto* root_signature = CreateRootSignature(desc);
-  if (root_signature == nullptr) {
+  // Create the root signature (RAII to avoid leaks on failure).
+  Microsoft::WRL::ComPtr<dx::IRootSignature> root_signature;
+  root_signature.Attach(CreateRootSignature(desc));
+  if (!root_signature) {
     throw std::runtime_error(
-      "failed to create bindless root signature for graphics pipeline");
+      "failed to create bindless root signature for compute pipeline");
   }
 
-  dx::IPipelineState* pso = nullptr;
+  Microsoft::WRL::ComPtr<dx::IPipelineState> pso;
 
   // 2. Create the compute pipeline state object
   D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {};
-  pso_desc.pRootSignature = root_signature;
+  pso_desc.pRootSignature = root_signature.Get();
 
   // Set compute shader
   const auto& compute_shader_desc = desc.ComputeShader();
   pso_desc.CS = LoadShaderBytecode(gfx_, compute_shader_desc);
   // Create the pipeline state object
   auto* device = gfx_->GetCurrentDevice();
-  ThrowOnFailed(
-    device->CreateComputePipelineState(&pso_desc, IID_PPV_ARGS(&pso)),
+  ThrowOnFailed(device->CreateComputePipelineState(
+                  &pso_desc, IID_PPV_ARGS(pso.GetAddressOf())),
     "Failed to create compute pipeline state");
 
   Entry entry {
-    .pipeline_state = pso,
-    .root_signature = root_signature,
+    .pipeline_state = pso.Detach(),
+    .root_signature = root_signature.Detach(),
   };
   compute_pipelines_.emplace(hash, std::make_tuple(std::move(desc), entry));
   return entry;

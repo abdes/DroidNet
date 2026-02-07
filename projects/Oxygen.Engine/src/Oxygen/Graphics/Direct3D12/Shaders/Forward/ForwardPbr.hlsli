@@ -7,11 +7,17 @@
 #ifndef OXYGEN_PASSES_FORWARD_FORWARDPBR_HLSLI
 #define OXYGEN_PASSES_FORWARD_FORWARDPBR_HLSLI
 
+#include "Common/Math.hlsli"
+
 // -----------------------------------------------------------------------------
 // PBR helpers (metallic-roughness, GGX)
 // -----------------------------------------------------------------------------
 
-static const float kPi = 3.14159265359;
+// Legacy compatibility
+#ifndef kPi
+#define kPi PI
+#endif
+
 
 float3 SafeNormalize(float3 v)
 {

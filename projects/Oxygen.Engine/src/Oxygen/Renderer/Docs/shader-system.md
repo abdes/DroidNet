@@ -438,7 +438,7 @@ using namespace oxygen::engine;
 pso_opaque_ = GraphicsPipelineDesc::Builder()
   .SetPixelShader(ShaderRequest {
     .stage = ShaderType::kPixel,
-    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .source_path = "Forward/ForwardMesh.hlsl",
     .entry_point = "PS",
     .defines = ToDefines(permutation::kOpaqueDefines),  // empty
   })
@@ -447,7 +447,7 @@ pso_opaque_ = GraphicsPipelineDesc::Builder()
 pso_masked_ = GraphicsPipelineDesc::Builder()
   .SetPixelShader(ShaderRequest {
     .stage = ShaderType::kPixel,
-    .source_path = "Passes/Forward/ForwardMesh.hlsl",
+    .source_path = "Forward/ForwardMesh.hlsl",
     .entry_point = "PS",
     .defines = ToDefines(permutation::kMaskedDefines),  // ALPHA_TEST=1
   })
@@ -540,24 +540,24 @@ auto ToShaderInfo(const ShaderEntry& entry) -> ShaderInfo;
 inline constexpr auto kEngineShaders = GenerateCatalog(
   // Forward pass: 2 entry points × 2 permutations = 4 variants
   ShaderFileSpec {
-    "Passes/Forward/ForwardMesh.hlsl",
+    "Forward/ForwardMesh.hlsl",
     std::array { EntryPoint { kPixel, "PS" }, EntryPoint { kVertex, "VS" } },
     std::array<std::string_view, 1> { "ALPHA_TEST" }
   },
   // Depth pre-pass: 2 entry points × 2 permutations = 4 variants
   ShaderFileSpec {
-    "Passes/Depth/DepthPrePass.hlsl",
+    "Depth/DepthPrePass.hlsl",
     std::array { EntryPoint { kPixel, "PS" }, EntryPoint { kVertex, "VS" } },
     std::array<std::string_view, 1> { "ALPHA_TEST" }
   },
   // Light culling: 1 entry point × 1 permutation = 1 variant
   ShaderFileSpec {
-    "Passes/Lighting/LightCulling.hlsl",
+    "Lighting/LightCulling.hlsl",
     std::array { EntryPoint { kCompute, "CS" } }
   },
   // ImGui: 2 entry points × 1 permutation = 2 variants
   ShaderFileSpec {
-    "Passes/Ui/ImGui.hlsl",
+    "Ui/ImGui.hlsl",
     std::array { EntryPoint { kVertex, "VS" }, EntryPoint { kPixel, "PS" } }
   }
 );

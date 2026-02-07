@@ -508,9 +508,9 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
       });
     }
 
-    const char* ps_source = "Passes/Forward/ForwardMesh_PS.hlsl";
+    const char* ps_source = "Forward/ForwardMesh_PS.hlsl";
     if (const char* debug_define = GetDebugDefineName(debug_mode)) {
-      ps_source = "Passes/Forward/ForwardDebug_PS.hlsl";
+      ps_source = "Forward/ForwardDebug_PS.hlsl";
       ps_defines.push_back(ShaderDefine {
         .name = debug_define,
         .value = "1",
@@ -525,7 +525,7 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     return GraphicsPipelineDesc::Builder()
       .SetVertexShader(ShaderRequest {
         .stage = ShaderType::kVertex,
-        .source_path = "Passes/Forward/ForwardMesh_VS.hlsl",
+        .source_path = "Forward/ForwardMesh_VS.hlsl",
         .entry_point = "VS",
         .defines = {}, // Vertex shader has no permutations
       })

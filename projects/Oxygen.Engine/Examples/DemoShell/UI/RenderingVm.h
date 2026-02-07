@@ -42,11 +42,17 @@ public:
   //! Returns the cached debug mode.
   [[nodiscard]] auto GetDebugMode() -> engine::ShaderDebugMode;
 
+  //! Returns whether the GPU debug pass is currently enabled.
+  [[nodiscard]] auto GetGpuDebugPassEnabled() -> bool;
+
   //! Sets view mode and forwards changes to the service.
   auto SetRenderMode(RenderMode mode) -> void;
 
   //! Sets debug mode and forwards changes to the service.
   auto SetDebugMode(engine::ShaderDebugMode mode) -> void;
+
+  //! Toggles the GPU debug pass and persists the change.
+  auto SetGpuDebugPassEnabled(bool enabled) -> void;
 
   [[nodiscard]] auto GetWireframeColor() -> graphics::Color;
   auto SetWireframeColor(const graphics::Color& color) -> void;
@@ -61,6 +67,7 @@ private:
   RenderMode render_mode_ { RenderMode::kSolid };
   engine::ShaderDebugMode debug_mode_ { engine::ShaderDebugMode::kDisabled };
   graphics::Color wire_color_ { 1.0F, 1.0F, 1.0F, 1.0F };
+  bool gpu_debug_pass_enabled_ { true };
 };
 
 } // namespace oxygen::examples::ui
