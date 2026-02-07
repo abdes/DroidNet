@@ -136,8 +136,6 @@ namespace {
     target.SetAbsorptionScaleHeightMeters(source.absorption_scale_height_m);
     target.SetMultiScatteringFactor(source.multi_scattering_factor);
     target.SetSunDiskEnabled(source.sun_disk_enabled != 0U);
-    target.SetSunDiskAngularRadiusRadians(
-      source.sun_disk_angular_radius_radians);
     target.SetAerialPerspectiveDistanceScale(
       source.aerial_perspective_distance_scale);
   }
@@ -248,12 +246,14 @@ namespace {
   constexpr std::string_view kMieAnisotropyKey = "env.atmo.mie_anisotropy";
   constexpr std::string_view kMultiScatteringKey = "env.atmo.multi_scattering";
   constexpr std::string_view kSunDiskEnabledKey = "env.atmo.sun_disk_enabled";
-  constexpr std::string_view kAtmoSunDiskRadiusKey
-    = "env.atmo.sun_disk_radius_deg";
   constexpr std::string_view kAerialPerspectiveScaleKey
     = "env.atmo.aerial_perspective_scale";
   constexpr std::string_view kAerialScatteringStrengthKey
     = "env.atmo.aerial_scattering_strength";
+  constexpr std::string_view kSkyViewLutSlicesKey
+    = "env.atmo.sky_view_lut_slices";
+  constexpr std::string_view kSkyViewAltMappingModeKey
+    = "env.atmo.sky_view_alt_mapping_mode";
 
   constexpr std::string_view kSkySphereEnabledKey = "env.sky_sphere.enabled";
   constexpr std::string_view kSkySphereSourceKey = "env.sky_sphere.source";
@@ -612,21 +612,6 @@ auto EnvironmentSettingsService::SetSunDiskEnabled(bool enabled) -> void
   MarkDirty();
 }
 
-auto EnvironmentSettingsService::GetAtmosphereSunDiskRadiusDeg() const -> float
-{
-  return sun_disk_radius_deg_;
-}
-
-auto EnvironmentSettingsService::SetAtmosphereSunDiskRadiusDeg(float value)
-  -> void
-{
-  if (sun_disk_radius_deg_ == value) {
-    return;
-  }
-  sun_disk_radius_deg_ = value;
-  MarkDirty();
-}
-
 auto EnvironmentSettingsService::GetAerialPerspectiveScale() const -> float
 {
   return aerial_perspective_scale_;
@@ -653,6 +638,40 @@ auto EnvironmentSettingsService::SetAerialScatteringStrength(float value)
     return;
   }
   aerial_scattering_strength_ = value;
+  MarkDirty();
+}
+
+auto EnvironmentSettingsService::GetSkyViewLutSlices() const -> int
+{
+  return sky_view_lut_slices_;
+}
+
+auto EnvironmentSettingsService::SetSkyViewLutSlices(int value) -> void
+{
+  if (sky_view_lut_slices_ == value) {
+    return;
+  }
+  sky_view_lut_slices_ = value;
+  MarkDirty();
+}
+
+auto EnvironmentSettingsService::GetSkyViewAltMappingMode() const -> int
+{
+  return sky_view_alt_mapping_mode_;
+}
+
+auto EnvironmentSettingsService::SetSkyViewAltMappingMode(int value) -> void
+{
+  if (sky_view_alt_mapping_mode_ == value) {
+    return;
+  }
+  sky_view_alt_mapping_mode_ = value;
+  MarkDirty();
+}
+
+auto EnvironmentSettingsService::RequestRegenerateLut() -> void
+{
+  regenerate_lut_requested_ = true;
   MarkDirty();
 }
 
@@ -1330,12 +1349,15 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     atmo->SetMieAnisotropy(mie_anisotropy_);
     atmo->SetMultiScatteringFactor(multi_scattering_);
     atmo->SetSunDiskEnabled(sun_disk_enabled_);
-    atmo->SetSunDiskAngularRadiusRadians(sun_disk_radius_deg_ * kDegToRad);
     atmo->SetAerialPerspectiveDistanceScale(aerial_perspective_scale_);
     atmo->SetAerialScatteringStrength(aerial_scattering_strength_);
 
     if (config_.on_atmosphere_params_changed) {
       config_.on_atmosphere_params_changed();
+      LOG_F(INFO,
+        "EnvironmentSettingsService: atmosphere parameters changed "
+        "(SunDiskEnabled={})",
+        sun_disk_enabled_);
     }
   }
 
@@ -1375,6 +1397,20 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   if (config_.renderer) {
     const uint32_t debug_flags = GetAtmosphereFlags();
     config_.renderer->SetAtmosphereDebugFlags(debug_flags);
+
+    // Apply sky-view LUT slice configuration to the LUT manager.
+    if (auto lut_mgr = config_.renderer->GetSkyAtmosphereLutManager()) {
+      lut_mgr->SetSkyViewLutSlices(static_cast<uint32_t>(sky_view_lut_slices_));
+      lut_mgr->SetAltMappingMode(
+        static_cast<uint32_t>(sky_view_alt_mapping_mode_));
+
+      // Honor explicit "Regenerate LUT" button press.
+      if (regenerate_lut_requested_) {
+        lut_mgr->MarkDirty();
+        regenerate_lut_requested_ = false;
+      }
+    }
+
     if (sky_light_enabled_
       && sky_light_source_
         == static_cast<int>(
@@ -1414,9 +1450,17 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     mie_anisotropy_ = atmo->GetMieAnisotropy();
     multi_scattering_ = atmo->GetMultiScatteringFactor();
     sun_disk_enabled_ = atmo->GetSunDiskEnabled();
-    sun_disk_radius_deg_ = atmo->GetSunDiskAngularRadiusRadians() * kRadToDeg;
     aerial_perspective_scale_ = atmo->GetAerialPerspectiveDistanceScale();
     aerial_scattering_strength_ = atmo->GetAerialScatteringStrength();
+  }
+
+  // Sync LUT slice configuration from the renderer's LUT manager.
+  if (config_.renderer) {
+    if (auto lut_mgr = config_.renderer->GetSkyAtmosphereLutManager()) {
+      sky_view_lut_slices_ = static_cast<int>(lut_mgr->GetSkyViewLutSlices());
+      sky_view_alt_mapping_mode_
+        = static_cast<int>(lut_mgr->GetAltMappingMode());
+    }
   }
 
   if (auto sky = env->TryGetSystem<scene::environment::SkySphere>()) {
@@ -1578,11 +1622,12 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   any_loaded |= load_float(kMieAnisotropyKey, mie_anisotropy_);
   any_loaded |= load_float(kMultiScatteringKey, multi_scattering_);
   any_loaded |= load_bool(kSunDiskEnabledKey, sun_disk_enabled_);
-  any_loaded |= load_float(kAtmoSunDiskRadiusKey, sun_disk_radius_deg_);
   any_loaded
     |= load_float(kAerialPerspectiveScaleKey, aerial_perspective_scale_);
   any_loaded
     |= load_float(kAerialScatteringStrengthKey, aerial_scattering_strength_);
+  any_loaded |= load_int(kSkyViewLutSlicesKey, sky_view_lut_slices_);
+  any_loaded |= load_int(kSkyViewAltMappingModeKey, sky_view_alt_mapping_mode_);
 
   any_loaded |= load_bool(kSkySphereEnabledKey, sky_sphere_enabled_);
   any_loaded |= load_int(kSkySphereSourceKey, sky_sphere_source_);
@@ -1684,9 +1729,10 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kMieAnisotropyKey, mie_anisotropy_);
   save_float(kMultiScatteringKey, multi_scattering_);
   save_bool(kSunDiskEnabledKey, sun_disk_enabled_);
-  save_float(kAtmoSunDiskRadiusKey, sun_disk_radius_deg_);
   save_float(kAerialPerspectiveScaleKey, aerial_perspective_scale_);
   save_float(kAerialScatteringStrengthKey, aerial_scattering_strength_);
+  save_int(kSkyViewLutSlicesKey, sky_view_lut_slices_);
+  save_int(kSkyViewAltMappingModeKey, sky_view_alt_mapping_mode_);
 
   save_bool(kSkySphereEnabledKey, sky_sphere_enabled_);
   save_int(kSkySphereSourceKey, sky_sphere_source_);

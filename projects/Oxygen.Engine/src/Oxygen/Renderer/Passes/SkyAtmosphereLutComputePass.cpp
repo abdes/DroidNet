@@ -55,6 +55,9 @@ static_assert(sizeof(TransmittanceLutPassConstants) == 16,
 //! Pass constants for sky-view LUT generation.
 /*!
  Layout must match `SkyViewLutPassConstants` in SkyViewLut_CS.hlsl.
+ Camera altitude is no longer passed — each slice computes its own
+ altitude from slice_index, slice_count, atmosphere_height_m, and
+ alt_mapping_mode inside the shader [P6].
 */
 struct alignas(16) SkyViewLutPassConstants {
   ShaderVisibleIndex output_uav_index { kInvalidShaderVisibleIndex };
@@ -65,17 +68,20 @@ struct alignas(16) SkyViewLutPassConstants {
   uint32_t output_height { 0 };
   uint32_t transmittance_width { 0 };
   uint32_t transmittance_height { 0 };
-  float camera_altitude_m { 0.0F };
+  uint32_t slice_count { 0 };
 
-  float sun_cos_zenith { 0.0F }; // Cosine of sun zenith angle (sun_dir.z)
-  uint32_t atmosphere_flags {
-    0
-  }; // Debug/feature flags (kUseAmbientTerm, etc.)
+  float sun_cos_zenith { 0.0F };
+  uint32_t atmosphere_flags { 0 };
+  uint32_t alt_mapping_mode { 0 };
+  float atmosphere_height_m { 0.0F };
+
+  float planet_radius_m { 0.0F };
   uint32_t _pad0 { 0 };
   uint32_t _pad1 { 0 };
+  uint32_t _pad2 { 0 };
 };
-static_assert(sizeof(SkyViewLutPassConstants) == 48,
-  "SkyViewLutPassConstants must be 48 bytes");
+static_assert(sizeof(SkyViewLutPassConstants) == 64,
+  "SkyViewLutPassConstants must be 64 bytes");
 
 //! Pass constants for Multiple Scattering LUT generation.
 struct alignas(16) MultiScatLutPassConstants {
@@ -397,14 +403,9 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
   const auto [sky_view_width, sky_view_height] = manager->GetSkyViewLutSize();
 
   const float planet_radius_m = manager->GetPlanetRadiusMeters();
-
-  float camera_altitude_m = 1.0F; // Default to 1m above ground
-  if (const auto& view = Context().current_view.resolved_view) {
-    const auto camera_pos = view->CameraPosition();
-    const glm::vec3 planet_center { 0.0F, 0.0F, -planet_radius_m };
-    const float distance_to_center = glm::length(camera_pos - planet_center);
-    camera_altitude_m = std::max(1.0F, distance_to_center - planet_radius_m);
-  }
+  const float atmosphere_height_m = manager->GetAtmosphereHeightMeters();
+  const uint32_t sky_view_slices = manager->GetSkyViewLutSlices();
+  const uint32_t alt_mapping_mode = manager->GetAltMappingMode();
 
   DCHECK_NOTNULL_F(Context().scene_constants);
   const auto scene_const_addr
@@ -487,9 +488,12 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
       .output_height = sky_view_height,
       .transmittance_width = transmittance_width,
       .transmittance_height = transmittance_height,
-      .camera_altitude_m = camera_altitude_m,
+      .slice_count = sky_view_slices,
       .sun_cos_zenith = manager->GetSunState().cos_zenith,
       .atmosphere_flags = manager->GetAtmosphereFlags(),
+      .alt_mapping_mode = alt_mapping_mode,
+      .atmosphere_height_m = atmosphere_height_m,
+      .planet_radius_m = planet_radius_m,
     };
     std::memcpy(
       impl_->sky_view_constants_mapped, &constants, sizeof(constants));
@@ -505,9 +509,12 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
       static_cast<uint32_t>(binding::RootParam::kRootConstants),
       impl_->sky_view_constants_cbv_index.get(), 1);
 
+    // Dispatch Z = slices (not ceil(slices/8)) because numthreads.z == 1,
+    // so dispatch_thread_id.z == slice index directly [P3].
     recorder.Dispatch(
       (sky_view_width + kThreadGroupSizeX - 1) / kThreadGroupSizeX,
-      (sky_view_height + kThreadGroupSizeY - 1) / kThreadGroupSizeY, 1);
+      (sky_view_height + kThreadGroupSizeY - 1) / kThreadGroupSizeY,
+      sky_view_slices);
   }
 
   // Final transition for Sky-View LUT

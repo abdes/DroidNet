@@ -496,14 +496,7 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   if (ImGui::Checkbox("Show Sun Disk", &sun_disk_enabled)) {
     environment_vm_->SetSunDiskEnabled(sun_disk_enabled);
   }
-  if (sun_disk_enabled) {
-    float sun_disk_radius_deg
-      = environment_vm_->GetAtmosphereSunDiskRadiusDeg();
-    if (ImGui::SliderFloat(
-          "Angular Radius (deg)", &sun_disk_radius_deg, 0.01F, 5.0F, "%.3F")) {
-      environment_vm_->SetAtmosphereSunDiskRadiusDeg(sun_disk_radius_deg);
-    }
-  }
+  ImGui::TextDisabled("Radius is controlled in the Sun section.");
 
   ImGui::Separator();
 
@@ -520,6 +513,27 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   if (ImGui::DragFloat("Scattering Strength", &aerial_scattering_strength,
         0.01F, 0.0F, 50.0F, "%.2F")) {
     environment_vm_->SetAerialScatteringStrength(aerial_scattering_strength);
+  }
+
+  ImGui::Separator();
+
+  // Sky-View LUT Slicing
+  ImGui::Text("Sky-View LUT:");
+  ImGui::TextDisabled("Altitude slices for multi-view sampling");
+
+  int lut_slices = environment_vm_->GetSkyViewLutSlices();
+  if (ImGui::DragInt("Slices", &lut_slices, 1, 4, 32)) {
+    environment_vm_->SetSkyViewLutSlices(lut_slices);
+  }
+
+  const char* mapping_modes[] = { "Linear", "Log" };
+  int mapping_mode = environment_vm_->GetSkyViewAltMappingMode();
+  if (ImGui::Combo("Alt Mapping", &mapping_mode, mapping_modes, 2)) {
+    environment_vm_->SetSkyViewAltMappingMode(mapping_mode);
+  }
+
+  if (ImGui::Button("Regenerate LUT")) {
+    environment_vm_->RequestRegenerateLut();
   }
 
   ImGui::PopItemWidth();

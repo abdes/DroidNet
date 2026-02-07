@@ -55,7 +55,7 @@ SkyCapturePass::SkyCapturePass(observer_ptr<oxygen::Graphics> gfx,
   , all_faces_fb_(nullptr)
   , face_constants_buffer_(nullptr)
   , face_constants_mapped_(nullptr)
-  , face_constants_cbv_({})
+  , face_constants_cbvs_({})
 {
 }
 
@@ -82,8 +82,10 @@ SkyCapturePass::~SkyCapturePass()
 
   if (face_constants_buffer_) {
     if (registry.Contains(*face_constants_buffer_)) {
-      if (face_constants_cbv_.get().IsValid()) {
-        registry.UnRegisterView(*face_constants_buffer_, face_constants_cbv_);
+      for (auto& cbv : face_constants_cbvs_) {
+        if (cbv.get().IsValid()) {
+          registry.UnRegisterView(*face_constants_buffer_, cbv);
+        }
       }
       registry.UnRegisterResource(*face_constants_buffer_);
     }
@@ -162,6 +164,14 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   SetupViewPortAndScissors(recorder);
 
+  // Transition cubemap to RENDER_TARGET state so we can clear and draw.
+  // The framebuffer attachment logic might not automatically transition
+  // sub-resources correctly if they are used as bindings elsewhere.
+  recorder.RequireResourceState(
+    *captured_cubemap_, graphics::ResourceStates::kRenderTarget);
+  cubemap_last_state_ = graphics::ResourceStates::kRenderTarget;
+  recorder.FlushBarriers();
+
   // Clear the whole cubemap once using the single multi-face FB.
   // Use the clear value defined in the texture descriptor to avoid D3D12
   // warnings.
@@ -177,42 +187,56 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   const glm::mat4 proj = glm::perspective(fov, aspect, near_plane, far_plane);
 
   // Directions for 6 cubemap faces (Target, Up) mapped from Oxygen world-space
-  // to D3D standard cubemap convention (Y-up, Left-Handed).
+  // to the standard GPU cubemap convention (Y-up).
   //
   // Oxygen: X=Right, Y=Back, Z=Up (Forward is -Y)
-  // D3D Faces: 0:+X, 1:-X, 2:+Y, 3:-Y, 4:+Z, 5:-Z
-  struct FaceDir {
-    glm::vec3 target;
+  // GPU Faces: 0:+X, 1:-X, 2:+Y, 3:-Y, 4:+Z, 5:-Z
+  struct FaceBasis {
+    glm::vec3 right;
     glm::vec3 up;
+    glm::vec3 forward;
   };
-  std::array<FaceDir, 6> face_dirs = {
-    FaceDir { { 1, 0, 0 }, { 0, 0, 1 } }, // Face 0 (+X): Oxy Right, Oxy Up
-    FaceDir { { -1, 0, 0 }, { 0, 0, 1 } }, // Face 1 (-X): Oxy Left, Oxy Up
-    FaceDir { { 0, 0, 1 }, { 0, 1, 0 } }, // Face 2 (+Y): Oxy Up, Oxy Back
-    FaceDir {
-      { 0, 0, -1 }, { 0, -1, 0 } }, // Face 3 (-Y): Oxy Down, Oxy Forward
-    FaceDir { { 0, -1, 0 }, { 0, 0, 1 } }, // Face 4 (+Z): Oxy Forward, Oxy Up
-    FaceDir { { 0, 1, 0 }, { 0, 0, 1 } } // Face 5 (-Z): Oxy Back, Oxy Up
+  // Oxygen-space basis derived from kGpuCubeFaceBases (center/right/up)
+  // mapped via OxygenDirFromCubemapSamplingDir.
+  std::array<FaceBasis, 6> face_basis = {
+    FaceBasis { { 0, 1, 0 }, { 0, 0, 1 }, { 1, 0, 0 } }, // Face 0 (+X)
+    FaceBasis { { 0, -1, 0 }, { 0, 0, 1 }, { -1, 0, 0 } }, // Face 1 (-X)
+    FaceBasis { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } }, // Face 2 (+Y)
+    FaceBasis { { 1, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 } }, // Face 3 (-Y)
+    FaceBasis { { 1, 0, 0 }, { 0, 0, 1 }, { 0, -1, 0 } }, // Face 4 (+Z)
+    FaceBasis { { -1, 0, 0 }, { 0, 0, 1 }, { 0, 1, 0 } } // Face 5 (-Z)
   };
-
-  const glm::vec3 eye(0.0F);
+  const uint32_t kFaceConstantSize = 256;
 
   for (uint32_t i = 0; i < 6; ++i) {
     // Set render target for this face directly via RTV
     recorder.SetRenderTargets(std::span(&face_rtvs_[i], 1), std::nullopt);
 
-    // Update face constants
+    // Update face constants at the specific offset for this face
+    const glm::vec3 right = glm::normalize(face_basis[i].right);
+    const glm::vec3 up = glm::normalize(face_basis[i].up);
+    const glm::vec3 forward = glm::normalize(face_basis[i].forward);
+
     SkyCaptureFaceConstants face_const {};
-    face_const.view_matrix
-      = glm::lookAt(eye, face_dirs[i].target, face_dirs[i].up);
+    // View matrix: rows are right, up, -forward (world -> view).
+    // glm is column-major, so assign columns from row components explicitly.
+    glm::mat4 view(1.0F);
+    view[0] = glm::vec4(right.x, up.x, -forward.x, 0.0F);
+    view[1] = glm::vec4(right.y, up.y, -forward.y, 0.0F);
+    view[2] = glm::vec4(right.z, up.z, -forward.z, 0.0F);
+    view[3] = glm::vec4(0.0F, 0.0F, 0.0F, 1.0F);
+    face_const.view_matrix = view;
     face_const.projection_matrix = proj;
 
-    std::memcpy(face_constants_mapped_, &face_const, sizeof(face_const));
+    auto* dest
+      = static_cast<uint8_t*>(face_constants_mapped_) + (i * kFaceConstantSize);
+    std::memcpy(dest, &face_const, sizeof(face_const));
 
-    // Bind the face constants index via root constants.
+    // Bind the specific face constants index via root constants.
+    // GPU will see the correct descriptor pointing to the correct buffer slice.
     recorder.SetGraphicsRoot32BitConstant(
       static_cast<uint32_t>(binding::RootParam::kRootConstants),
-      face_constants_cbv_index_.get(), 1);
+      face_constants_indices_[i].get(), 1);
 
     recorder.Draw(3, 1, 0, 0);
   }
@@ -370,8 +394,10 @@ auto SkyCapturePass::EnsureResourcesCreated() -> void
   }
 
   // 4. Create and register the face constants buffer.
+  // We need 6 slots, aligned to 256 bytes each.
+  const uint32_t kFaceConstantSize = 256;
   BufferDesc cb_desc {
-    .size_bytes = 256u, // Must be 256-byte aligned for D3D12 CBV
+    .size_bytes = kFaceConstantSize * 6, // 6 faces
     .usage = BufferUsage::kConstant,
     .memory = BufferMemory::kUpload,
     .debug_name = "SkyCapture_FaceConstants",
@@ -380,17 +406,26 @@ auto SkyCapturePass::EnsureResourcesCreated() -> void
   registry.Register(face_constants_buffer_);
   face_constants_mapped_ = face_constants_buffer_->Map();
 
-  auto cbv_handle
-    = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
-      graphics::DescriptorVisibility::kShaderVisible);
-  graphics::BufferViewDescription cbv_view_desc;
-  cbv_view_desc.view_type = graphics::ResourceViewType::kConstantBuffer;
-  cbv_view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-  cbv_view_desc.range = { 0, 256u };
+  face_constants_cbvs_.reserve(6);
+  face_constants_indices_.reserve(6);
 
-  face_constants_cbv_index_ = allocator.GetShaderVisibleIndex(cbv_handle);
-  face_constants_cbv_ = registry.RegisterView(
-    *face_constants_buffer_, std::move(cbv_handle), cbv_view_desc);
+  for (uint32_t i = 0; i < 6; ++i) {
+    auto cbv_handle
+      = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
+        graphics::DescriptorVisibility::kShaderVisible);
+    graphics::BufferViewDescription cbv_view_desc;
+    cbv_view_desc.view_type = graphics::ResourceViewType::kConstantBuffer;
+    cbv_view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
+    // Each view points to a unique 256-byte slice of the buffer
+    cbv_view_desc.range = { i * kFaceConstantSize, kFaceConstantSize };
+
+    auto index = allocator.GetShaderVisibleIndex(cbv_handle);
+    face_constants_indices_.push_back(index);
+
+    auto view = registry.RegisterView(
+      *face_constants_buffer_, std::move(cbv_handle), cbv_view_desc);
+    face_constants_cbvs_.push_back(std::move(view));
+  }
 }
 
 auto SkyCapturePass::SetupViewPortAndScissors(CommandRecorder& recorder) const

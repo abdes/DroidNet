@@ -62,7 +62,17 @@ float3 ImportanceSampleGGX(float2 Xi, float3 N, float roughness)
     float a = roughness * roughness;
 
     float phi = 2.0 * PI * Xi.x;
-    float cosTheta = sqrt((1.0 - Xi.y) / (1.0 + (a*a - 1.0) * Xi.y));
+
+    // Robust GGX Importance Sampling
+    // Handle singularity when roughness is 0 (a=0) and Xi.y -> 1
+    // (1-u)/(1+(a^2-1)u) -> (1-u)/(1-u) = 1
+
+    // Explicitly clamp denominator to avoid divide-by-zero
+    float denom = 1.0 + (a * a - 1.0) * Xi.y;
+    denom = max(denom, 1e-6);
+
+    float cosTheta = sqrt((1.0 - Xi.y) / denom);
+    cosTheta = clamp(cosTheta, 0.0, 1.0); // Safety clamp
     float sinTheta = sqrt(1.0 - cosTheta*cosTheta);
 
     // Tangent space H vector
@@ -163,7 +173,6 @@ void CS_IrradianceConvolution(uint3 DTid : SV_DispatchThreadID)
             float3 sampleVec = tangentSample.x * Right + tangentSample.y * Up + tangentSample.z * N;
 
             // Sample Source
-            // Both source and target cubemaps are now consistently in D3D sampling space.
             irradiance += source_scale
                 * source.SampleLevel(linearSampler, sampleVec, 0).rgb
                 * cos(theta) * sin(theta);
@@ -171,9 +180,9 @@ void CS_IrradianceConvolution(uint3 DTid : SV_DispatchThreadID)
         }
     }
 
-    // Standard normalization for cosine-weighted hemisphere integration:
-    // Result = (1/N) * sum(radiance * cos(theta))
-    irradiance = irradiance * (1.0 / float(nrSamples));
+    // Standard normalization
+    // Added 0.0001 safety divisor
+    irradiance = irradiance * PI * (1.0 / (float(nrSamples) + 0.0001));
 
     output[DTid] = float4(irradiance, 1.0);
 }
@@ -196,17 +205,26 @@ void CS_SpecularPrefilter(uint3 DTid : SV_DispatchThreadID)
     float3 N = GetCubemapDirection(uv, DTid.z);
     float3 R = N;
     float3 V = R;
-
     TextureCube<float4> source = ResourceDescriptorHeap[pass.source_cubemap_slot];
     SamplerState linearSampler = SamplerDescriptorHeap[0];
-
     const float source_scale = pass.source_intensity;
 
     const uint SAMPLE_COUNT = 1024u;
     float totalWeight = 0.0;
     float3 prefilteredColor = 0.0;
 
+    // COMMENTED OUT REDUNDANT DEFINITIONS THAT ALREADY EXIST ABOVE IN THIS SCOPE
+
     float roughness = pass.roughness;
+
+    // Optimization: For Roughness=0, the specular lobe is a delta function.
+    // Standard importance sampling is unstable/inefficient here.
+    // Just copy the source texel directly.
+    if (roughness < 0.001)
+    {
+        output[DTid] = float4(source.SampleLevel(linearSampler, R, 0).rgb, 1.0);
+        return;
+    }
 
     // Mip level logic to reduce artifacts (Chebychev's inequality approximation)
     uint cubeWidth, cubeHeight, cubeLevels;
@@ -226,11 +244,16 @@ void CS_SpecularPrefilter(uint3 DTid : SV_DispatchThreadID)
             // Sample from the environment's mip level based on PDF
             float D   = DistributionGGX(max(dot(N, H), 0.0), roughness);
             float NdotH = max(dot(N, H), 0.0);
-            float HdotV = max(dot(H, V), 0.0);
-            float pdf = D * NdotH / (4.0 * HdotV) + 0.0001;
+            float HdotV = max(dot(H, V), 1.0e-4);
+            float pdf = max(D * NdotH / (4.0 * HdotV), 1.0e-6);
 
             float saSample = 1.0 / (float(SAMPLE_COUNT) * pdf + 0.0001);
-            float mipLevel = roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel);
+            // Safety: Avoid log2(0) if saSample underflows
+            float mipLevel = roughness == 0.0 ? 0.0
+                : 0.5 * log2(max(saSample / saTexel, 1.0e-12));
+            const float max_mip = max(0.0, float(cubeLevels - 1));
+            const float rough_mip = roughness * max_mip;
+            mipLevel = clamp(max(mipLevel, rough_mip), 0.0, max_mip);
 
             prefilteredColor += source_scale
                 * source.SampleLevel(linearSampler, L, mipLevel).rgb
@@ -239,6 +262,6 @@ void CS_SpecularPrefilter(uint3 DTid : SV_DispatchThreadID)
         }
     }
 
-    prefilteredColor = prefilteredColor / totalWeight;
+    prefilteredColor = prefilteredColor / (totalWeight + 0.0001);
     output[DTid] = float4(prefilteredColor, 1.0);
 }

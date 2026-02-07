@@ -173,18 +173,6 @@ public:
     return sun_disk_enabled_;
   }
 
-  //! Sets the sun disk angular radius (radians).
-  auto SetSunDiskAngularRadiusRadians(const float radians) noexcept -> void
-  {
-    sun_disk_angular_radius_radians_ = radians;
-  }
-
-  //! Gets the sun disk angular radius (radians).
-  [[nodiscard]] auto GetSunDiskAngularRadiusRadians() const noexcept -> float
-  {
-    return sun_disk_angular_radius_radians_;
-  }
-
   //! Sets aerial perspective distance scale (unitless).
   auto SetAerialPerspectiveDistanceScale(const float scale) noexcept -> void
   {
@@ -235,7 +223,6 @@ private:
   float multi_scattering_factor_ = 1.0F;
 
   bool sun_disk_enabled_ = true;
-  float sun_disk_angular_radius_radians_ = 0.004675F;
 
   float aerial_perspective_distance_scale_ = 1.0F;
 

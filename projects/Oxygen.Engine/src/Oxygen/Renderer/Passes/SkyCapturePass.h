@@ -118,8 +118,10 @@ private:
   //! Constants for unprojecting each face.
   std::shared_ptr<graphics::Buffer> face_constants_buffer_;
   void* face_constants_mapped_ { nullptr };
-  graphics::NativeView face_constants_cbv_ {};
-  ShaderVisibleIndex face_constants_cbv_index_ { kInvalidShaderVisibleIndex };
+  // Keep alive the native views for the 6 CBVs
+  std::vector<graphics::NativeView> face_constants_cbvs_;
+  // And their persistent indices
+  std::vector<ShaderVisibleIndex> face_constants_indices_;
 
   std::uint64_t capture_generation_ { 1 };
   bool is_captured_ { false };

@@ -75,12 +75,17 @@ public:
   auto SetMultiScattering(float value) -> void;
   [[nodiscard]] auto GetSunDiskEnabled() const -> bool;
   auto SetSunDiskEnabled(bool enabled) -> void;
-  [[nodiscard]] auto GetAtmosphereSunDiskRadiusDeg() const -> float;
-  auto SetAtmosphereSunDiskRadiusDeg(float value) -> void;
   [[nodiscard]] auto GetAerialPerspectiveScale() const -> float;
   auto SetAerialPerspectiveScale(float value) -> void;
   [[nodiscard]] auto GetAerialScatteringStrength() const -> float;
   auto SetAerialScatteringStrength(float value) -> void;
+
+  // Sky-View LUT slicing
+  [[nodiscard]] auto GetSkyViewLutSlices() const -> int;
+  auto SetSkyViewLutSlices(int value) -> void;
+  [[nodiscard]] auto GetSkyViewAltMappingMode() const -> int;
+  auto SetSkyViewAltMappingMode(int value) -> void;
+  auto RequestRegenerateLut() -> void;
 
   // SkySphere
   [[nodiscard]] auto GetSkySphereEnabled() const -> bool;

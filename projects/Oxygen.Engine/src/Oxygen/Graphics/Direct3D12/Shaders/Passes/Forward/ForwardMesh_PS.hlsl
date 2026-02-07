@@ -107,11 +107,19 @@ float4 PS(VSOutput input) : SV_Target0 {
     }
 
     float3 ibl_spec_term = ibl_specular * EnvBrdfApprox(F0, surf.roughness, NdotV);
+    #if !defined(SKIP_BRDF_LUT)
     if (env_data.sky_light.brdf_lut_slot != K_INVALID_BINDLESS_INDEX) {
         Texture2D<float2> brdf_lut = ResourceDescriptorHeap[env_data.sky_light.brdf_lut_slot];
-        float2 brdf = brdf_lut.SampleLevel(linear_sampler, float2(NdotV, surf.roughness), 0.0).rg;
+        uint lut_w = 1u;
+        uint lut_h = 1u;
+        brdf_lut.GetDimensions(lut_w, lut_h);
+        const float2 lut_size = float2(max(lut_w, 1u), max(lut_h, 1u));
+        const float2 uv_raw = saturate(float2(NdotV, surf.roughness));
+        const float2 uv = (uv_raw * (lut_size - 1.0) + 0.5) / lut_size;
+        float2 brdf = brdf_lut.SampleLevel(linear_sampler, uv, 0.0).rg;
         if (!any(isnan(brdf)) && max(brdf.x, brdf.y) > 1e-5) ibl_spec_term = ibl_specular * (F0 * brdf.x + brdf.y);
     }
+    #endif
 
     float3 final_color = direct + (ibl_spec_term + ibl_diffuse * base_rgb * (1.0f - surf.metalness)) + surf.emissive;
 

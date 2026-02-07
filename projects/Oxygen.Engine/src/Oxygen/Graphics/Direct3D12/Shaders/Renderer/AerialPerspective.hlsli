@@ -205,7 +205,10 @@ AerialPerspectiveResult ComputeAerialPerspectiveLut(
         view_dir,
         sun_dir,
         planet_radius,
-        camera_altitude_m);
+        camera_altitude_m,
+        atmo.sky_view_lut_slices,
+        atmo.sky_view_alt_mapping_mode,
+        atmo.atmosphere_height_m);
 
     // The sky LUT gives radiance for infinite rays. For short geometry segments,
     // we approximate the inscatter by multiplying the infinite ray radiance
