@@ -76,6 +76,7 @@ namespace internal {
   class SceneConstantsManager;
   class BrdfLutManager;
   class SkyAtmosphereLutManager;
+  class GpuDebugManager;
 } // namespace internal
 namespace upload {
   class UploadCoordinator;
@@ -160,7 +161,7 @@ public:
 
   OXGN_RNDR_API auto OnShutdown() noexcept -> void override;
 
-  OXGN_RNDR_NDAPI auto OnFrameStart(observer_ptr<FrameContext> context)
+  OXGN_RNDR_API auto OnFrameStart(observer_ptr<FrameContext> context)
     -> void override;
 
   OXGN_RNDR_NDAPI auto OnTransformPropagation(
@@ -179,7 +180,7 @@ public:
 
   // Perform deferred per-frame cleanup for views that were unregistered
   // during the frame. This runs after rendering completes.
-  OXGN_RNDR_NDAPI auto OnFrameEnd(observer_ptr<FrameContext> context)
+  OXGN_RNDR_API auto OnFrameEnd(observer_ptr<FrameContext> context)
     -> void override;
 
   //! Register a view for rendering (resolver + render-graph factory).
@@ -432,12 +433,15 @@ private:
   std::unique_ptr<sceneprep::ScenePrepState> scene_prep_state_;
   std::unique_ptr<sceneprep::ScenePrepPipeline> scene_prep_;
 
+  // Manages GPU debug resources (line buffer and counters).
+  std::unique_ptr<internal::GpuDebugManager> gpu_debug_manager_;
+
   // Frame sequence number from FrameContext
   frame::SequenceNumber frame_seq_num { 0ULL };
 
   float last_frame_dt_seconds_ { 1.0F / 60.0F };
 
-  std::unordered_map<ViewId, float> auto_exposure_ev100_ {};
+  std::unordered_map<ViewId, float> auto_exposure_ev100_;
 
   // Frame slot from FrameContext (stored during OnFrameStart for RenderContext)
   frame::Slot frame_slot_ { frame::kInvalidSlot };
@@ -467,20 +471,20 @@ private:
   std::unordered_map<ViewId, ResolvedView> resolved_views_;
 
   std::unique_ptr<RenderContextPool> render_context_pool_;
-  observer_ptr<RenderContext> render_context_ {};
+  observer_ptr<RenderContext> render_context_;
 
   // Render Passes
   // NOTE: IBL compute generation is currently not wired in this build.
-  std::shared_ptr<CompositingPass> compositing_pass_ {};
-  std::shared_ptr<CompositingPassConfig> compositing_pass_config_ {};
+  std::shared_ptr<CompositingPass> compositing_pass_;
+  std::shared_ptr<CompositingPassConfig> compositing_pass_config_;
 
   // Cache of prepared frames from OnPreRender, used in OnRender to ensure
   // each view renders with its own draw list (not the last view's data)
   std::unordered_map<ViewId, PreparedSceneFrame> prepared_frames_;
 
-  std::mutex composition_mutex_ {};
-  std::optional<CompositionSubmission> composition_submission_ {};
-  std::shared_ptr<graphics::Surface> composition_surface_ {};
+  std::mutex composition_mutex_;
+  std::optional<CompositionSubmission> composition_submission_;
+  std::shared_ptr<graphics::Surface> composition_surface_;
 
   // Pending cleanup set guarded by a mutex so arbitrary threads may
   // enqueue view ids for deferred cleanup while OnFrameEnd drains the set.
@@ -504,7 +508,7 @@ private:
   std::unordered_map<ViewId, PerViewStorage> per_view_storage_;
 
   // Debug override state for sun light.
-  uint32_t atmosphere_debug_flags_ { 0u };
+  uint32_t atmosphere_debug_flags_ { 0 };
   // Internal debug override only; no public API.
   SunState sun_override_ { kNoSun };
 

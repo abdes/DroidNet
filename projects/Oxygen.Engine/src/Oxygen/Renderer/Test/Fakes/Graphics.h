@@ -151,6 +151,10 @@ public:
   }
 
   // No-op API
+  auto BeginEvent(std::string_view /*name*/) -> void override { }
+  auto EndEvent() -> void override { }
+  auto SetMarker(std::string_view /*name*/) -> void override { }
+
   auto SetPipelineState(graphics::GraphicsPipelineDesc /*desc*/)
     -> void override
   {
@@ -189,6 +193,10 @@ public:
   auto Dispatch(uint32_t /*thread_group_count_x*/,
     uint32_t /*thread_group_count_y*/, uint32_t /*thread_group_count_z*/)
     -> void override
+  {
+  }
+  auto ExecuteIndirect(const Buffer& /*argument_buffer*/,
+    uint64_t /*argument_buffer_offset*/) -> void override
   {
   }
   auto SetVertexBuffers(uint32_t /*num*/,
@@ -373,7 +381,7 @@ private:
     return (static_cast<DomainKey>(static_cast<uint32_t>(vt)) << 32)
       | static_cast<DomainKey>(static_cast<uint32_t>(vis));
   }
-  std::unordered_map<DomainKey, DomainState> domains_ {};
+  std::unordered_map<DomainKey, DomainState> domains_;
 };
 
 //! Fake Graphics implementation providing staging buffers, queues and recorders

@@ -40,7 +40,7 @@ struct GpuFogParams
     uint enabled;
 };
 
-// Mirrors oxygen::engine::GpuSkyAtmosphereParams (sizeof = 128)
+// Mirrors oxygen::engine::GpuSkyAtmosphereParams (sizeof = 144)
 struct GpuSkyAtmosphereParams
 {
     float planet_radius_m;
@@ -66,14 +66,17 @@ struct GpuSkyAtmosphereParams
     uint transmittance_lut_slot;
 
     uint sky_view_lut_slot;
+    uint multi_scat_lut_slot;
+    uint camera_volume_lut_slot;
     float transmittance_lut_width;
+
     float transmittance_lut_height;
     float sky_view_lut_width;
-
     float sky_view_lut_height;
     uint sky_view_lut_slices;
+
     uint sky_view_alt_mapping_mode;
-    float _reserved7;
+    uint _pad[3];
 };
 
 // Mirrors oxygen::engine::GpuSkyLightParams (sizeof = 64)
@@ -157,7 +160,7 @@ struct GpuPostProcessParams
     uint _pad2;
 };
 
-// Mirrors oxygen::engine::EnvironmentStaticData (sizeof = 416)
+// Mirrors oxygen::engine::EnvironmentStaticData (sizeof = 432)
 struct EnvironmentStaticData
 {
     GpuFogParams fog;

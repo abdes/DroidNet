@@ -6,9 +6,9 @@
 
 #pragma once
 
+#include "Oxygen/Base/Macros.h"
 #include <optional>
 #include <string_view>
-#include <vector>
 
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Renderer/Passes/RenderPass.h>
@@ -45,7 +45,7 @@ class GraphicsRenderPass : public RenderPass {
 public:
   ~GraphicsRenderPass() override = default;
 
-  OXYGEN_DEFAULT_COPYABLE(GraphicsRenderPass)
+  OXYGEN_MAKE_NON_COPYABLE(GraphicsRenderPass)
   OXYGEN_DEFAULT_MOVABLE(GraphicsRenderPass)
 
 protected:
@@ -100,7 +100,8 @@ protected:
 
    @param recorder The command recorder.
   */
-  virtual auto DoSetupPipeline(graphics::CommandRecorder& recorder) -> void;
+  virtual OXGN_RNDR_API auto DoSetupPipeline(
+    graphics::CommandRecorder& recorder) -> void;
 
   //=== Helper Methods ===---------------------------------------------------//
 

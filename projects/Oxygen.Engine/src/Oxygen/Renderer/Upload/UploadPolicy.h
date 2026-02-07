@@ -8,7 +8,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <utility>
 
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Renderer/Upload/Types.h>
@@ -51,12 +50,9 @@ struct UploadPolicy {
   oxygen::graphics::QueueKey upload_queue_key;
 
   // Construct an UploadPolicy with a required upload queue key.
-  explicit UploadPolicy(oxygen::graphics::QueueKey qkey,
-    AlignmentPolicy alignment_policy = AlignmentPolicy {}) noexcept
-    : alignment(std::move(alignment_policy))
-    , upload_queue_key(std::move(qkey))
-  {
-  }
+  OXGN_RNDR_API explicit UploadPolicy(oxygen::graphics::QueueKey qkey) noexcept;
+  OXGN_RNDR_API UploadPolicy(
+    oxygen::graphics::QueueKey qkey, AlignmentPolicy alignment_policy) noexcept;
   UploadPolicy() = delete;
 };
 

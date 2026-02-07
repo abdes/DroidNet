@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
-#include "Passes/Sky/SkySphereCommon.hlsli"
+#include "Atmosphere/SkySphereCommon.hlsli"
 
 struct SkyCapturePSInput
 {

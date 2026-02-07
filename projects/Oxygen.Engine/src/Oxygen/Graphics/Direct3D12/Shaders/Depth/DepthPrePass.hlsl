@@ -18,7 +18,7 @@
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/MaterialConstants.hlsli"
 
-#include "Passes/Depth/DepthPrePassConstants.hlsli"
+#include "Depth/DepthPrePassConstants.hlsli"
 
 #include "MaterialFlags.hlsli"
 

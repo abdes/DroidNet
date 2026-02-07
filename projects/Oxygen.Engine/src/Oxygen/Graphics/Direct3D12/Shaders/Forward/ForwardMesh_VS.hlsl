@@ -21,7 +21,7 @@
 #include "Renderer/Vertex.hlsli"
 
 #include "Core/Bindless/BindlessHelpers.hlsl"
-#include "Passes/Forward/ForwardPbr.hlsli"
+#include "Forward/ForwardPbr.hlsli"
 
 // Root constants b2 (shared root param index with engine)
 cbuffer RootConstants : register(b2, space0) {

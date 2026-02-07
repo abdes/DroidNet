@@ -169,7 +169,7 @@ auto IsExcludedFromReflectionValidation(
   const oxygen::graphics::ShaderRequest& r) -> bool
 {
   const auto normalized = NormalizePathForCompare(r.source_path);
-  return EndsWith(normalized, "passes/ui/imgui.hlsl");
+  return EndsWith(normalized, "ui/imgui.hlsl");
 }
 
 auto ParseOxrfOrThrow(std::span<const std::byte> blob)

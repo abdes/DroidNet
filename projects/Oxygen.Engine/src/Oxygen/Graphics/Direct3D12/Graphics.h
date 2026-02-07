@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <string_view>
+#include <wrl/client.h>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/GraphicsConfig.h>
@@ -91,6 +92,9 @@ public:
   OXGN_D3D12_NDAPI auto GetFormatPlaneCount(DXGI_FORMAT format) const
     -> uint8_t;
 
+  OXGN_D3D12_NDAPI auto GetDrawCommandSignature() const
+    -> ID3D12CommandSignature*;
+
   //=== Pipeline State Management ===--------------------------------------//
 
   OXGN_D3D12_NDAPI auto GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc,
@@ -123,6 +127,8 @@ private:
   mutable std::unordered_map<DXGI_FORMAT, uint8_t>
     dxgi_format_plane_count_cache_ {};
   bool enable_vsync_ { true };
+  mutable Microsoft::WRL::ComPtr<ID3D12CommandSignature>
+    draw_command_signature_;
 };
 
 }

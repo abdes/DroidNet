@@ -23,7 +23,11 @@
 
 #include "Renderer/EnvironmentStaticData.hlsli"
 #include "Renderer/EnvironmentDynamicData.hlsli"
+#include "Renderer/SceneConstants.hlsli"
 #include "Renderer/SkyAtmosphereSampling.hlsli"
+#include "Common/Math.hlsli"
+#include "Common/Geometry.hlsli"
+#include "Common/Lighting.hlsli"
 
 // Atmosphere feature flag bits (matches C++ AtmosphereFlags enum)
 static const uint ATMOSPHERE_USE_LUT = 0x1;         // Use LUT sampling when available
@@ -37,35 +41,6 @@ struct AerialPerspectiveResult
     float3 inscatter;     //!< Inscattered radiance to add (linear RGB).
     float3 transmittance; //!< RGB transmittance through atmosphere [0, 1].
 };
-
-float Luminance(float3 rgb)
-{
-    return dot(rgb, float3(0.2126, 0.7152, 0.0722));
-}
-
-float RaySphereIntersectNearest(float3 origin, float3 dir, float radius)
-{
-    float a = dot(dir, dir);
-    float b = 2.0 * dot(origin, dir);
-    float c = dot(origin, origin) - radius * radius;
-    float disc = b * b - 4.0 * a * c;
-    if (disc < 0.0)
-    {
-        return -1.0;
-    }
-    float s = sqrt(disc);
-    float t0 = (-b - s) / (2.0 * a);
-    float t1 = (-b + s) / (2.0 * a);
-    if (t0 > 0.0)
-    {
-        return t0;
-    }
-    if (t1 > 0.0)
-    {
-        return t1;
-    }
-    return -1.0;
-}
 
 float RaySphereIntersectFarthest(float3 origin, float3 dir, float radius)
 {
@@ -130,6 +105,17 @@ bool ShouldUseLutAerialPerspective(GpuSkyAtmosphereParams atmo)
 //! @param sun_dir Normalized direction toward the sun.
 //! @param view_distance Distance from camera to fragment in meters.
 //! @return Aerial perspective result with inscatter and transmittance.
+//! Computes aerial perspective using froxel-based camera volume LUT.
+//!
+//! Replaces the simplified 2-sample approximation with a high-performance
+//! 3D texture lookup into the camera-aligned volume.
+//!
+//! @param atmo Atmosphere parameters from EnvironmentStaticData.
+//! @param world_pos World-space position of the fragment.
+//! @param camera_pos World-space camera position.
+//! @param sun_dir Normalized direction toward the sun.
+//! @param view_distance Distance from camera to fragment in meters.
+//! @return Aerial perspective result with inscatter and transmittance.
 AerialPerspectiveResult ComputeAerialPerspectiveLut(
     GpuSkyAtmosphereParams atmo,
     float3 world_pos,
@@ -141,83 +127,67 @@ AerialPerspectiveResult ComputeAerialPerspectiveLut(
     result.inscatter = float3(0.0, 0.0, 0.0);
     result.transmittance = float3(1.0, 1.0, 1.0);
 
-    if (view_distance < 0.1)
+    if (view_distance < 0.1 || atmo.camera_volume_lut_slot == K_INVALID_BINDLESS_INDEX)
     {
         return result;
     }
 
-    // User controls
+    // User controls from EnvironmentDynamicData
     float distance_scale = max(atmo.aerial_perspective_distance_scale, 0.0);
     float scattering_strength = max(EnvironmentDynamicData.aerial_scattering_strength, 0.0);
 
-    // Early out if disabled
-    if (distance_scale < 0.0001 || scattering_strength < 0.0001)
+    // Early out if disabled via strength
+    if (scattering_strength < 0.0001)
     {
         return result;
     }
 
-    // View direction from camera to fragment
-    float3 view_dir = normalize(world_pos - camera_pos);
-
-    // Camera altitude in meters
-    float camera_altitude_m = max(1.0, GetCameraAltitudeM());
-
-    // Scattering coefficients are in 1/meter units.
-    // Rayleigh: ~5.8e-6 (R), ~13.5e-6 (G), ~33.1e-6 (B) per meter at sea level
-    // Mie: ~21e-6 per meter (gray) at sea level
-    //
-    // For a 1km horizontal path at sea level:
-    //   tau_blue = 33.1e-6 * 1000 = 0.033 → ~3% opacity
-    //
-    // Apply exponential density falloff with altitude.
-    float rayleigh_scale_h = max(atmo.rayleigh_scale_height_m, 100.0);
-    float mie_scale_h = max(atmo.mie_scale_height_m, 100.0);
-
-    float rayleigh_density = exp(-camera_altitude_m / rayleigh_scale_h);
-    float mie_density = exp(-camera_altitude_m / mie_scale_h);
-
     // Effective path length with user scaling
     float effective_distance = view_distance * distance_scale;
+    float view_distance_km = effective_distance / 1000.0;
 
-    // Optical depth: τ = β * d * ρ * user_strength
-    // β is already in 1/m, d is in meters, ρ is dimensionless density factor
-    float3 beta_rayleigh = atmo.rayleigh_scattering_rgb;
-    float3 beta_mie = atmo.mie_scattering_rgb;
+    // Convert view distance to froxel slice coordinate
+    // Must match max_distance_km used in CameraVolumeLut_CS.hlsl
+    const float max_distance_km = 128.0;
+    float slice_t = view_distance_km / max_distance_km;
 
-    float3 tau_rayleigh = beta_rayleigh * effective_distance * rayleigh_density * scattering_strength;
-    float3 tau_mie = beta_mie * effective_distance * mie_density * scattering_strength;
+    // Inverse of squared distribution used during LUT generation: w = sqrt(t)
+    float w = sqrt(saturate(slice_t));
 
-    // Clamp to prevent extreme values at very long distances
-    float3 tau_total = min(tau_rayleigh + tau_mie, float3(10.0, 10.0, 10.0));
+    // Constant for slice count used during LUT generation
+    const float AP_SLICE_COUNT = 32.0;
 
-    // Transmittance via Beer-Lambert
-    result.transmittance = saturate(exp(-tau_total));
+    // Fade near camera to avoid quantization artifacts in the first few froxels
+    float weight = 1.0;
+    if (w < (0.5 / AP_SLICE_COUNT))
+    {
+        weight = saturate(w * AP_SLICE_COUNT * 2.0);
+        w = 0.5 / AP_SLICE_COUNT;
+    }
 
-    // Inscatter: (1 - T) gives the opacity. Modulate by sky color for directionality.
-    float3 opacity = 1.0 - result.transmittance;
+    // Screen UV from world position
+    float4 view_pos = mul(view_matrix, float4(world_pos, 1.0));
+    float4 clip_pos = mul(projection_matrix, view_pos);
+    clip_pos /= clip_pos.w;
+    float2 screen_uv = clip_pos.xy * 0.5 + 0.5;
+    // Handle D3D12/Vulkan Y flip
+    screen_uv.y = 1.0 - screen_uv.y;
 
-    // Sample sky-view LUT for color/directionality (sun angle dependency)
-    float planet_radius = atmo.planet_radius_m;
-    float4 sky_sample = SampleSkyViewLut(
-        atmo.sky_view_lut_slot,
-        atmo.sky_view_lut_width,
-        atmo.sky_view_lut_height,
-        view_dir,
-        sun_dir,
-        planet_radius,
-        camera_altitude_m,
-        atmo.sky_view_lut_slices,
-        atmo.sky_view_alt_mapping_mode,
-        atmo.atmosphere_height_m);
+    // Sample camera volume (32 slices, squared distribution)
+    // RGB = Inscattered Radiance
+    // A   = 1 - Transmittance (Opacity)
+    Texture3D<float4> camera_volume = ResourceDescriptorHeap[atmo.camera_volume_lut_slot];
+    SamplerState linear_sampler = SamplerDescriptorHeap[0]; // Global linear sampler
 
-    // The sky LUT gives radiance for infinite rays. For short geometry segments,
-    // we approximate the inscatter by multiplying the infinite ray radiance
-    // by the view-path opacity (1 - T).
-    float3 sun_luminance = GetSunLuminanceRGB();
-    float3 infinite_inscatter = sky_sample.rgb * sun_luminance;
+    float4 ap_sample = camera_volume.SampleLevel(linear_sampler, float3(screen_uv, w), 0);
 
-    // Final inscatter = infinite_inscatter * opacity
-    result.inscatter = infinite_inscatter * opacity;
+    // Apply user scattering strength
+    result.inscatter = ap_sample.rgb * scattering_strength * weight;
+
+    // Opacity = ap_sample.a; Transmittance = 1 - Opacity
+    // We also modulate opacity by scattering strength for the final transmittance
+    float opacity = saturate(ap_sample.a * scattering_strength) * weight;
+    result.transmittance = 1.0 - opacity;
 
     return result;
 }

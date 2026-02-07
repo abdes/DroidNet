@@ -290,13 +290,13 @@ auto SkyCapturePass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   return GraphicsPipelineDesc::Builder()
     .SetVertexShader(ShaderRequest {
       .stage = ShaderType::kVertex,
-      .source_path = "Passes/Sky/SkyCapture_VS.hlsl",
+      .source_path = "Atmosphere/SkyCapture_VS.hlsl",
       .entry_point = "VS",
       .defines = {},
     })
     .SetPixelShader(ShaderRequest {
       .stage = ShaderType::kPixel,
-      .source_path = "Passes/Sky/SkyCapture_PS.hlsl",
+      .source_path = "Atmosphere/SkyCapture_PS.hlsl",
       .entry_point = "PS",
       .defines = {},
     })

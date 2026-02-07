@@ -103,11 +103,11 @@ auto MainModule::RenderGame(const oxygen::Graphics* gfx,
 
   // Pipeline state and Root Signature
 
-  const auto vertex_shader = renderer->GetEngineShader(MakeShaderIdentifier(
-    ShaderType::kVertex, "Passes/Forward/ForwardMesh_VS.hlsl"));
+  const auto vertex_shader = renderer->GetEngineShader(
+    MakeShaderIdentifier(ShaderType::kVertex, "Forward/ForwardMesh_VS.hlsl"));
 
-  const auto pixel_shader = renderer->GetEngineShader(MakeShaderIdentifier(
-    ShaderType::kPixel, "Passes/Forward/ForwardMesh_PS.hlsl"));
+  const auto pixel_shader = renderer->GetEngineShader(
+    MakeShaderIdentifier(ShaderType::kPixel, "Forward/ForwardMesh_PS.hlsl"));
 
   //...
 

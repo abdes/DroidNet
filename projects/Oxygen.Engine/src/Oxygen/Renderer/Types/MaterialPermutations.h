@@ -94,7 +94,7 @@ inline constexpr std::array kMaskedDefines {
  ```cpp
  auto ps_request = ShaderRequest {
    .stage = ShaderType::kPixel,
-   .source_path = "Passes/Forward/ForwardMesh_PS.hlsl",
+   .source_path = "Forward/ForwardMesh_PS.hlsl",
    .entry_point = "PS",
    .defines = ToDefines(permutation::kMaskedDefines),
  };

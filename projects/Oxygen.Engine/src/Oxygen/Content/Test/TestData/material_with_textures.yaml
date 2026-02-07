@@ -62,11 +62,11 @@ assets:
 
     # Shader references for vertex and pixel shaders
     shader_references:
-      - source_path: "Passes/Forward/ForwardMesh.hlsl"
+      - source_path: "Forward/ForwardMesh.hlsl"
         entry_point: "VS"
         defines: ""
         shader_hash: 0x1234567890abcdef
-      - source_path: "Passes/Forward/ForwardMesh.hlsl"
+      - source_path: "Forward/ForwardMesh.hlsl"
         entry_point: "PS"
         defines: ""
         shader_hash: 0xfedcba0987654321

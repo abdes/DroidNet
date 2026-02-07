@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <stdexcept>
 #include <variant>
 
 #include <wrl/client.h> // For Microsoft::WRL::ComPtr
@@ -126,6 +127,41 @@ auto ConvertResourceStates(oxygen::graphics::ResourceStates common_states)
   }
 
   return d3d_states;
+}
+
+auto ConvertPrimitiveTopology(oxygen::graphics::PrimitiveType topology)
+  -> D3D_PRIMITIVE_TOPOLOGY
+{
+  using oxygen::graphics::PrimitiveType;
+
+  switch (topology) { // NOLINT(clang-diagnostic-switch)
+  case PrimitiveType::kPointList:
+    return D3D_PRIMITIVE_TOPOLOGY_POINTLIST;
+  case PrimitiveType::kLineList:
+    return D3D_PRIMITIVE_TOPOLOGY_LINELIST;
+  case PrimitiveType::kLineStrip:
+  case PrimitiveType::kLineStripWithRestartEnable:
+    return D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
+  case PrimitiveType::kLineListWithAdjacency:
+    return D3D_PRIMITIVE_TOPOLOGY_LINELIST_ADJ;
+  case PrimitiveType::kLineStripWithAdjacency:
+    return D3D_PRIMITIVE_TOPOLOGY_LINESTRIP_ADJ;
+  case PrimitiveType::kTriangleList:
+    return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+  case PrimitiveType::kTriangleStrip:
+  case PrimitiveType::kTriangleStripWithRestartEnable:
+    return D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+  case PrimitiveType::kTriangleListWithAdjacency:
+    return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST_ADJ;
+  case PrimitiveType::kTriangleStripWithAdjacency:
+    return D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP_ADJ;
+  case PrimitiveType::kPatchList:
+    return D3D_PRIMITIVE_TOPOLOGY_1_CONTROL_POINT_PATCHLIST;
+  case PrimitiveType::kMaxPrimitiveType:
+    break;
+  }
+
+  throw std::runtime_error("Unsupported primitive topology");
 }
 
 // Static helper functions to process specific barrier types
@@ -370,12 +406,35 @@ auto CommandRecorder::Dispatch(uint32_t thread_group_count_x,
     thread_group_count_x, thread_group_count_y, thread_group_count_z);
 }
 
+auto CommandRecorder::ExecuteIndirect(const graphics::Buffer& argument_buffer,
+  const uint64_t argument_buffer_offset) -> void
+{
+  auto graphics = graphics_weak_.lock();
+  DCHECK_F(graphics != nullptr, "Graphics backend is no longer valid");
+
+  const auto& command_list = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list.GetCommandList();
+  DCHECK_NOTNULL_F(d3d12_command_list);
+
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+  const auto& buf = static_cast<const Buffer&>(argument_buffer);
+  auto* resource = buf.GetResource();
+  DCHECK_NOTNULL_F(resource);
+
+  auto* signature = graphics->GetDrawCommandSignature();
+  DCHECK_NOTNULL_F(signature);
+
+  d3d12_command_list->ExecuteIndirect(
+    signature, 1, resource, argument_buffer_offset, nullptr, 0);
+}
+
 auto CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc) -> void
 {
   auto graphics = graphics_weak_.lock();
   DCHECK_F(graphics != nullptr, "Graphics backend is no longer valid");
 
   const auto debug_name = desc.GetName(); // Save before moving desc
+  const auto primitive_topology = desc.PrimitiveTopology();
   graphics_pipeline_hash_ = std::hash<GraphicsPipelineDesc> {}(desc);
 
   auto [pipeline_state, root_signature] = graphics->GetOrCreateGraphicsPipeline(
@@ -398,6 +457,8 @@ auto CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc) -> void
   SetupDescriptorTables(
     allocator.GetShaderVisibleHeaps(), /*is_compute=*/false);
 
+  d3d12_command_list->IASetPrimitiveTopology(
+    ConvertPrimitiveTopology(primitive_topology));
   d3d12_command_list->SetPipelineState(pipeline_state);
 }
 

@@ -438,13 +438,13 @@ auto ToneMapPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   return GraphicsPipelineDesc::Builder()
     .SetVertexShader(ShaderRequest {
       .stage = oxygen::ShaderType::kVertex,
-      .source_path = "Passes/Compositing/ToneMap_VS.hlsl",
+      .source_path = "Compositing/ToneMap_VS.hlsl",
       .entry_point = "VS",
       .defines = {},
     })
     .SetPixelShader(ShaderRequest {
       .stage = oxygen::ShaderType::kPixel,
-      .source_path = "Passes/Compositing/ToneMap_PS.hlsl",
+      .source_path = "Compositing/ToneMap_PS.hlsl",
       .entry_point = "PS",
       .defines = {},
     })

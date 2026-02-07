@@ -10,7 +10,7 @@
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 
 namespace {
-auto Mat4Equal(const glm::mat4& a, const glm::mat4& b, float epsilon = 0.0f)
+auto Mat4Equal(const glm::mat4& a, const glm::mat4& b, float epsilon = 0.0F)
   -> bool
 {
   for (int i = 0; i < 4; ++i) {
@@ -53,7 +53,7 @@ auto SceneConstants::SetCameraPosition(const glm::vec3& p) noexcept
   }
   return *this;
 }
-auto SceneConstants::SetTimeSeconds(const float t, RendererTag) noexcept
+auto SceneConstants::SetTimeSeconds(const float t, RendererTag /*tag*/) noexcept
   -> SceneConstants&
 {
   if (std::abs(time_seconds_ - t) > glm::epsilon<float>()) {
@@ -63,8 +63,8 @@ auto SceneConstants::SetTimeSeconds(const float t, RendererTag) noexcept
   return *this;
 }
 
-auto SceneConstants::SetFrameSlot(const frame::Slot slot, RendererTag) noexcept
-  -> SceneConstants&
+auto SceneConstants::SetFrameSlot(
+  const frame::Slot slot, RendererTag /*tag*/) noexcept -> SceneConstants&
 {
   if (frame_slot_ != slot) {
     frame_slot_ = slot;
@@ -73,8 +73,8 @@ auto SceneConstants::SetFrameSlot(const frame::Slot slot, RendererTag) noexcept
   return *this;
 }
 
-auto SceneConstants::SetFrameSequenceNumber(
-  const frame::SequenceNumber seq, RendererTag) noexcept -> SceneConstants&
+auto SceneConstants::SetFrameSequenceNumber(const frame::SequenceNumber seq,
+  RendererTag /*tag*/) noexcept -> SceneConstants&
 {
   if (frame_seq_num_ != seq) {
     frame_seq_num_ = seq;
@@ -84,7 +84,8 @@ auto SceneConstants::SetFrameSequenceNumber(
 }
 
 auto SceneConstants::SetBindlessDrawMetadataSlot(
-  const BindlessDrawMetadataSlot slot, RendererTag) noexcept -> SceneConstants&
+  const BindlessDrawMetadataSlot slot, RendererTag /*tag*/) noexcept
+  -> SceneConstants&
 {
   if (bindless_draw_metadata_slot_ != slot) {
     bindless_draw_metadata_slot_ = slot;
@@ -93,8 +94,8 @@ auto SceneConstants::SetBindlessDrawMetadataSlot(
   return *this;
 }
 
-auto SceneConstants::SetBindlessWorldsSlot(
-  const BindlessWorldsSlot slot, RendererTag) noexcept -> SceneConstants&
+auto SceneConstants::SetBindlessWorldsSlot(const BindlessWorldsSlot slot,
+  RendererTag /*tag*/) noexcept -> SceneConstants&
 {
   if (bindless_transforms_slot_ != slot) {
     bindless_transforms_slot_ = slot;
@@ -104,7 +105,8 @@ auto SceneConstants::SetBindlessWorldsSlot(
 }
 
 auto SceneConstants::SetBindlessNormalMatricesSlot(
-  const BindlessNormalsSlot slot, RendererTag) noexcept -> SceneConstants&
+  const BindlessNormalsSlot slot, RendererTag /*tag*/) noexcept
+  -> SceneConstants&
 {
   if (bindless_normal_matrices_slot_ != slot) {
     bindless_normal_matrices_slot_ = slot;
@@ -114,7 +116,7 @@ auto SceneConstants::SetBindlessNormalMatricesSlot(
 }
 
 auto SceneConstants::SetBindlessMaterialConstantsSlot(
-  const BindlessMaterialConstantsSlot slot, RendererTag) noexcept
+  const BindlessMaterialConstantsSlot slot, RendererTag /*tag*/) noexcept
   -> SceneConstants&
 {
   if (bindless_material_constants_slot_ != slot) {
@@ -125,7 +127,7 @@ auto SceneConstants::SetBindlessMaterialConstantsSlot(
 }
 
 auto SceneConstants::SetBindlessEnvironmentStaticSlot(
-  const BindlessEnvironmentStaticSlot slot, RendererTag) noexcept
+  const BindlessEnvironmentStaticSlot slot, RendererTag /*tag*/) noexcept
   -> SceneConstants&
 {
   if (bindless_env_static_slot_ != slot) {
@@ -136,7 +138,7 @@ auto SceneConstants::SetBindlessEnvironmentStaticSlot(
 }
 
 auto SceneConstants::SetBindlessDirectionalLightsSlot(
-  const BindlessDirectionalLightsSlot slot, RendererTag) noexcept
+  const BindlessDirectionalLightsSlot slot, RendererTag /*tag*/) noexcept
   -> SceneConstants&
 {
   if (bindless_directional_lights_slot_ != slot) {
@@ -147,7 +149,7 @@ auto SceneConstants::SetBindlessDirectionalLightsSlot(
 }
 
 auto SceneConstants::SetBindlessDirectionalShadowsSlot(
-  const BindlessDirectionalShadowsSlot slot, RendererTag) noexcept
+  const BindlessDirectionalShadowsSlot slot, RendererTag /*tag*/) noexcept
   -> SceneConstants&
 {
   if (bindless_directional_shadows_slot_ != slot) {
@@ -158,7 +160,7 @@ auto SceneConstants::SetBindlessDirectionalShadowsSlot(
 }
 
 auto SceneConstants::SetBindlessPositionalLightsSlot(
-  const BindlessPositionalLightsSlot slot, RendererTag) noexcept
+  const BindlessPositionalLightsSlot slot, RendererTag /*tag*/) noexcept
   -> SceneConstants&
 {
   if (bindless_positional_lights_slot_ != slot) {
@@ -169,10 +171,33 @@ auto SceneConstants::SetBindlessPositionalLightsSlot(
 }
 
 auto SceneConstants::SetBindlessInstanceDataSlot(
-  const BindlessInstanceDataSlot slot, RendererTag) noexcept -> SceneConstants&
+  const BindlessInstanceDataSlot slot, RendererTag /*tag*/) noexcept
+  -> SceneConstants&
 {
   if (bindless_instance_data_slot_ != slot) {
     bindless_instance_data_slot_ = slot;
+    version_ = version_.Next();
+  }
+  return *this;
+}
+
+auto SceneConstants::SetBindlessGpuDebugLineSlot(
+  const BindlessGpuDebugLineSlot slot, RendererTag /*tag*/) noexcept
+  -> SceneConstants&
+{
+  if (bindless_gpu_debug_line_slot_ != slot) {
+    bindless_gpu_debug_line_slot_ = slot;
+    version_ = version_.Next();
+  }
+  return *this;
+}
+
+auto SceneConstants::SetBindlessGpuDebugCounterSlot(
+  const BindlessGpuDebugCounterSlot slot, RendererTag /*tag*/) noexcept
+  -> SceneConstants&
+{
+  if (bindless_gpu_debug_counter_slot_ != slot) {
+    bindless_gpu_debug_counter_slot_ = slot;
     version_ = version_.Next();
   }
   return *this;

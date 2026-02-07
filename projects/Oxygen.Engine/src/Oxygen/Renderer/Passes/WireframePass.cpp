@@ -32,7 +32,6 @@
 #include <Oxygen/Renderer/Types/MaterialPermutations.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 
-
 using oxygen::Scissors;
 using oxygen::TextureType;
 using oxygen::ViewPort;
@@ -476,13 +475,13 @@ auto WireframePass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
         return GraphicsPipelineDesc::Builder()
           .SetVertexShader(ShaderRequest {
             .stage = ShaderType::kVertex,
-            .source_path = "Passes/Forward/ForwardMesh_VS.hlsl",
+            .source_path = "Forward/ForwardMesh_VS.hlsl",
             .entry_point = "VS",
             .defines = {},
           })
           .SetPixelShader(ShaderRequest {
             .stage = ShaderType::kPixel,
-            .source_path = "Passes/Forward/ForwardWireframe_PS.hlsl",
+            .source_path = "Forward/ForwardWireframe_PS.hlsl",
             .entry_point = "PS",
             .defines = defines,
           })

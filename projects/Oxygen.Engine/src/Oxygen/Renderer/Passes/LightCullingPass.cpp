@@ -712,7 +712,7 @@ auto LightCullingPass::CreatePipelineStateDesc()
   // Build shader request with optional CLUSTERED define
   graphics::ShaderRequest shader_request {
     .stage = oxygen::ShaderType::kCompute,
-    .source_path = "Passes/Lighting/LightCulling.hlsl",
+    .source_path = "Lighting/LightCulling.hlsl",
     .entry_point = "CS",
     .defines = {},
   };

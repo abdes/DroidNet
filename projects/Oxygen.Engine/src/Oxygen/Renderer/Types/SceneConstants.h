@@ -22,23 +22,28 @@ namespace oxygen::engine {
 
 struct BindlessDrawMetadataSlot {
   ShaderVisibleIndex value;
-  explicit constexpr BindlessDrawMetadataSlot(
-    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+  BindlessDrawMetadataSlot()
+    : BindlessDrawMetadataSlot(kInvalidShaderVisibleIndex)
+  {
+  }
+  explicit constexpr BindlessDrawMetadataSlot(const ShaderVisibleIndex v)
     : value(v)
   {
   }
-  constexpr auto IsValid() const noexcept
+  [[nodiscard]] constexpr auto IsValid() const noexcept
   {
     return value != kInvalidShaderVisibleIndex;
   }
   constexpr auto operator<=>(const BindlessDrawMetadataSlot&) const = default;
-  constexpr operator uint32_t() const noexcept { return value.get(); }
 };
 
 struct BindlessWorldsSlot {
   ShaderVisibleIndex value;
-  explicit constexpr BindlessWorldsSlot(
-    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+  BindlessWorldsSlot()
+    : BindlessWorldsSlot(kInvalidShaderVisibleIndex)
+  {
+  }
+  explicit constexpr BindlessWorldsSlot(const ShaderVisibleIndex v)
     : value(v)
   {
   }
@@ -47,128 +52,179 @@ struct BindlessWorldsSlot {
     return value != kInvalidShaderVisibleIndex;
   }
   constexpr auto operator<=>(const BindlessWorldsSlot&) const = default;
-  constexpr operator uint32_t() const noexcept { return value.get(); }
 };
 
 struct BindlessNormalsSlot {
   ShaderVisibleIndex value;
-  explicit constexpr BindlessNormalsSlot(
-    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+  BindlessNormalsSlot()
+    : BindlessNormalsSlot(kInvalidShaderVisibleIndex)
+  {
+  }
+  explicit constexpr BindlessNormalsSlot(const ShaderVisibleIndex v)
     : value(v)
   {
   }
-  constexpr auto IsValid() const noexcept
+  [[nodiscard]] constexpr auto IsValid() const noexcept
   {
     return value != kInvalidShaderVisibleIndex;
   }
   constexpr auto operator<=>(const BindlessNormalsSlot&) const = default;
-  constexpr operator uint32_t() const noexcept { return value.get(); }
 };
 
 struct BindlessMaterialConstantsSlot {
   ShaderVisibleIndex value;
-  explicit constexpr BindlessMaterialConstantsSlot(
-    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+  BindlessMaterialConstantsSlot()
+    : BindlessMaterialConstantsSlot(kInvalidShaderVisibleIndex)
+  {
+  }
+  explicit constexpr BindlessMaterialConstantsSlot(const ShaderVisibleIndex v)
     : value(v)
   {
   }
-  constexpr auto IsValid() const noexcept
+  [[nodiscard]] constexpr auto IsValid() const noexcept
   {
     return value != kInvalidShaderVisibleIndex;
   }
   constexpr auto operator<=>(const BindlessMaterialConstantsSlot&) const
     = default;
-  constexpr operator uint32_t() const noexcept { return value.get(); }
 };
 
 struct BindlessEnvironmentStaticSlot {
   ShaderVisibleIndex value;
-  explicit constexpr BindlessEnvironmentStaticSlot(
-    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+  BindlessEnvironmentStaticSlot()
+    : BindlessEnvironmentStaticSlot(kInvalidShaderVisibleIndex)
+  {
+  }
+  explicit constexpr BindlessEnvironmentStaticSlot(const ShaderVisibleIndex v)
     : value(v)
   {
   }
-  constexpr auto IsValid() const noexcept
+  [[nodiscard]] constexpr auto IsValid() const noexcept
   {
     return value != kInvalidShaderVisibleIndex;
   }
   constexpr auto operator<=>(const BindlessEnvironmentStaticSlot&) const
     = default;
-  constexpr operator uint32_t() const noexcept { return value.get(); }
 };
 
 struct BindlessDirectionalLightsSlot {
   ShaderVisibleIndex value;
-  explicit constexpr BindlessDirectionalLightsSlot(
-    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+  BindlessDirectionalLightsSlot()
+    : BindlessDirectionalLightsSlot(kInvalidShaderVisibleIndex)
+  {
+  }
+  explicit constexpr BindlessDirectionalLightsSlot(const ShaderVisibleIndex v)
     : value(v)
   {
   }
-  constexpr auto IsValid() const noexcept
+  [[nodiscard]] constexpr auto IsValid() const noexcept
   {
     return value != kInvalidShaderVisibleIndex;
   }
   constexpr auto operator<=>(const BindlessDirectionalLightsSlot&) const
     = default;
-  constexpr operator uint32_t() const noexcept { return value.get(); }
 };
 
 struct BindlessDirectionalShadowsSlot {
   ShaderVisibleIndex value;
-  explicit constexpr BindlessDirectionalShadowsSlot(
-    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+  BindlessDirectionalShadowsSlot()
+    : BindlessDirectionalShadowsSlot(kInvalidShaderVisibleIndex)
+  {
+  }
+  explicit constexpr BindlessDirectionalShadowsSlot(const ShaderVisibleIndex v)
     : value(v)
   {
   }
-  constexpr auto IsValid() const noexcept
+  [[nodiscard]] constexpr auto IsValid() const noexcept
   {
     return value != kInvalidShaderVisibleIndex;
   }
   constexpr auto operator<=>(const BindlessDirectionalShadowsSlot&) const
     = default;
-  constexpr operator uint32_t() const noexcept { return value.get(); }
 };
 
 struct BindlessPositionalLightsSlot {
   ShaderVisibleIndex value;
-  explicit constexpr BindlessPositionalLightsSlot(
-    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+  BindlessPositionalLightsSlot()
+    : BindlessPositionalLightsSlot(kInvalidShaderVisibleIndex)
+  {
+  }
+  explicit constexpr BindlessPositionalLightsSlot(const ShaderVisibleIndex v)
     : value(v)
   {
   }
-  constexpr auto IsValid() const noexcept
+  [[nodiscard]] constexpr auto IsValid() const noexcept
   {
     return value != kInvalidShaderVisibleIndex;
   }
   constexpr auto operator<=>(const BindlessPositionalLightsSlot&) const
     = default;
-  constexpr operator uint32_t() const noexcept { return value.get(); }
 };
 
-//! Bindless slot for per-instance data buffer (GPU instancing).
+// Bindless slot for per-instance data buffer (GPU instancing).
 struct BindlessInstanceDataSlot {
   ShaderVisibleIndex value;
-  explicit constexpr BindlessInstanceDataSlot(
-    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
+  BindlessInstanceDataSlot()
+    : BindlessInstanceDataSlot(kInvalidShaderVisibleIndex)
+  {
+  }
+  explicit constexpr BindlessInstanceDataSlot(const ShaderVisibleIndex v)
     : value(v)
   {
   }
-  constexpr auto IsValid() const noexcept
+  [[nodiscard]] constexpr auto IsValid() const noexcept
   {
     return value != kInvalidShaderVisibleIndex;
   }
   constexpr auto operator<=>(const BindlessInstanceDataSlot&) const = default;
-  constexpr operator uint32_t() const noexcept { return value.get(); }
+};
+
+struct BindlessGpuDebugLineSlot {
+  ShaderVisibleIndex value;
+  BindlessGpuDebugLineSlot()
+    : BindlessGpuDebugLineSlot(kInvalidShaderVisibleIndex)
+  {
+  }
+  explicit constexpr BindlessGpuDebugLineSlot(const ShaderVisibleIndex v)
+    : value(v)
+  {
+  }
+  [[nodiscard]] constexpr auto IsValid() const noexcept
+  {
+    return value != kInvalidShaderVisibleIndex;
+  }
+  constexpr auto operator<=>(const BindlessGpuDebugLineSlot&) const = default;
+};
+
+struct BindlessGpuDebugCounterSlot {
+  ShaderVisibleIndex value;
+  BindlessGpuDebugCounterSlot()
+    : BindlessGpuDebugCounterSlot(kInvalidShaderVisibleIndex)
+  {
+  }
+  explicit constexpr BindlessGpuDebugCounterSlot(const ShaderVisibleIndex v)
+    : value(v)
+  {
+  }
+  [[nodiscard]] constexpr auto IsValid() const noexcept
+  {
+    return value != kInvalidShaderVisibleIndex;
+  }
+  constexpr auto operator<=>(const BindlessGpuDebugCounterSlot&) const
+    = default;
 };
 
 struct MonotonicVersion {
   uint64_t value { 0 };
-  explicit constexpr MonotonicVersion(const uint64_t v = 0)
+  MonotonicVersion()
+    : MonotonicVersion(0)
+  {
+  }
+  explicit constexpr MonotonicVersion(const uint64_t v)
     : value(v)
   {
   }
   constexpr auto operator<=>(const MonotonicVersion&) const = default;
-  constexpr operator uint64_t() const noexcept { return value; }
 
   //! Only Next() is provided; mutation is done via the owner using Next().
   [[nodiscard]] constexpr auto Next() const noexcept -> MonotonicVersion
@@ -226,52 +282,49 @@ public:
 
   // ReSharper disable CppInconsistentNaming
   struct alignas(16) GpuData {
-    glm::mat4 view_matrix { 1.0f };
-    glm::mat4 projection_matrix { 1.0f };
+    glm::mat4 view_matrix { 1.0F };
+    glm::mat4 projection_matrix { 1.0F };
+
     // Aligned at 16 bytes here
-    glm::vec3 camera_position { 0.0f, 0.0f, 0.0f };
+    glm::vec3 camera_position { 0.0F, 0.0F, 0.0F };
     frame::Slot::UnderlyingType frame_slot { 0 };
+
     // Aligned at 16 bytes here
-    frame::SequenceNumber::UnderlyingType frame_seq_num { 0 };
+    frame::SequenceNumber frame_seq_num { 0 };
     // Aligned at 8 bytes here
-    float time_seconds { 0.0f };
+    float time_seconds { 0.0F };
     uint32_t _pad0 { 0 }; // padding - do not use
-    // Aligned at 16 bytes here
-    uint32_t bindless_draw_metadata_slot { BindlessDrawMetadataSlot {} };
-    uint32_t bindless_transforms_slot { BindlessWorldsSlot {} };
-    uint32_t bindless_normal_matrices_slot { BindlessNormalsSlot {} };
-    uint32_t bindless_material_constants_slot {
-      BindlessMaterialConstantsSlot {}
-    };
-    // Aligned at 16 bytes here
 
-    uint32_t bindless_env_static_slot { BindlessEnvironmentStaticSlot {} };
-    uint32_t bindless_directional_lights_slot {
-      BindlessDirectionalLightsSlot {}
-    };
-    uint32_t bindless_directional_shadows_slot {
-      BindlessDirectionalShadowsSlot {}
-    };
-    uint32_t bindless_positional_lights_slot {
-      BindlessPositionalLightsSlot {}
-    };
     // Aligned at 16 bytes here
+    BindlessDrawMetadataSlot bindless_draw_metadata_slot;
+    BindlessWorldsSlot bindless_transforms_slot;
+    BindlessNormalsSlot bindless_normal_matrices_slot;
+    BindlessMaterialConstantsSlot bindless_material_constants_slot;
 
-    uint32_t bindless_instance_data_slot { BindlessInstanceDataSlot {} };
-    uint32_t _pad1[3] { 0, 0, 0 }; // padding to 16-byte alignment
+    // Aligned at 16 bytes here
+    BindlessEnvironmentStaticSlot bindless_env_static_slot;
+    BindlessDirectionalLightsSlot bindless_directional_lights_slot;
+    BindlessDirectionalShadowsSlot bindless_directional_shadows_slot;
+    BindlessPositionalLightsSlot bindless_positional_lights_slot;
+
+    // Aligned at 16 bytes here
+    BindlessInstanceDataSlot bindless_instance_data_slot;
+    BindlessGpuDebugLineSlot bindless_gpu_debug_line_slot;
+    BindlessGpuDebugCounterSlot bindless_gpu_debug_counter_slot;
+    uint32_t _pad1 { 0 }; // padding to 16-byte alignment
     // Aligned at 16 bytes here
 
     // Additional padding to match HLSL cbuffer packing (DXC reflects 256 bytes)
     // HLSL's uint64_t has stricter alignment requirements that cause different
     // packing than C++. We add explicit padding to ensure the C++ struct
     // matches what the GPU expects.
-    uint32_t _hlsl_packing_pad[12] { 0 }; // 48 bytes: 208 + 48 = 256
+    uint32_t _pad[12] { 0 }; // 48 bytes: 208 + 48 = 256
   };
   // ReSharper restore CppInconsistentNaming
-  static_assert(
-    sizeof(GpuData) % 16 == 0, "GpuData size must be 16-byte aligned");
-  static_assert(
-    sizeof(GpuData) == 256, "GpuData size must match HLSL cbuffer packing");
+  // NOLINTBEGIN(*-magic-numbers)
+  static_assert(sizeof(GpuData) % 16 == 0, "GpuData not 16-byte aligned");
+  static_assert(sizeof(GpuData) == 256, "GpuData HLSL cbuffer packing not 256");
+  // NOLINTEND(*-magic-numbers)
 
   SceneConstants() = default;
   OXYGEN_DEFAULT_COPYABLE(SceneConstants)
@@ -327,6 +380,10 @@ public:
 
   OXGN_RNDR_API auto SetBindlessInstanceDataSlot(
     BindlessInstanceDataSlot slot, RendererTag) noexcept -> SceneConstants&;
+  OXGN_RNDR_API auto SetBindlessGpuDebugLineSlot(
+    BindlessGpuDebugLineSlot slot, RendererTag) noexcept -> SceneConstants&;
+  OXGN_RNDR_API auto SetBindlessGpuDebugCounterSlot(
+    BindlessGpuDebugCounterSlot slot, RendererTag) noexcept -> SceneConstants&;
 
   // Getters use GetXXX to avoid conflicts with strong types
   [[nodiscard]] auto GetViewMatrix() const noexcept { return view_matrix_; }
@@ -393,6 +450,16 @@ public:
     return bindless_instance_data_slot_;
   }
 
+  [[nodiscard]] constexpr auto GetBindlessGpuDebugLineSlot() const noexcept
+  {
+    return bindless_gpu_debug_line_slot_;
+  }
+
+  [[nodiscard]] constexpr auto GetBindlessGpuDebugCounterSlot() const noexcept
+  {
+    return bindless_gpu_debug_counter_slot_;
+  }
+
   // Monotonic version counter; incremented on any mutation.
   [[nodiscard]] constexpr auto GetVersion() const noexcept { return version_; }
 
@@ -408,7 +475,7 @@ private:
       .projection_matrix = projection_matrix_,
       .camera_position = camera_position_,
       .frame_slot = frame_slot_.get(),
-      .frame_seq_num = frame_seq_num_.get(),
+      .frame_seq_num = frame_seq_num_,
       .time_seconds = time_seconds_,
       .bindless_draw_metadata_slot = bindless_draw_metadata_slot_,
       .bindless_transforms_slot = bindless_transforms_slot_,
@@ -421,28 +488,32 @@ private:
       .bindless_positional_lights_slot = bindless_positional_lights_slot_,
 
       .bindless_instance_data_slot = bindless_instance_data_slot_,
+      .bindless_gpu_debug_line_slot = bindless_gpu_debug_line_slot_,
+      .bindless_gpu_debug_counter_slot = bindless_gpu_debug_counter_slot_,
     };
   }
 
   // Application-managed fields
-  glm::mat4 view_matrix_ { 1.0f };
-  glm::mat4 projection_matrix_ { 1.0f };
-  glm::vec3 camera_position_ { 0.0f, 0.0f, 0.0f };
+  glm::mat4 view_matrix_ { 1.0F };
+  glm::mat4 projection_matrix_ { 1.0F };
+  glm::vec3 camera_position_ { 0.0F, 0.0F, 0.0F };
 
   // Renderer-managed fields
-  float time_seconds_ { 0.0f };
-  frame::Slot frame_slot_ {};
-  frame::SequenceNumber frame_seq_num_ {};
-  BindlessDrawMetadataSlot bindless_draw_metadata_slot_ {};
-  BindlessWorldsSlot bindless_transforms_slot_ {};
-  BindlessNormalsSlot bindless_normal_matrices_slot_ {};
-  BindlessMaterialConstantsSlot bindless_material_constants_slot_ {};
+  float time_seconds_ { 0.0F };
+  frame::Slot frame_slot_;
+  frame::SequenceNumber frame_seq_num_;
+  BindlessDrawMetadataSlot bindless_draw_metadata_slot_;
+  BindlessWorldsSlot bindless_transforms_slot_;
+  BindlessNormalsSlot bindless_normal_matrices_slot_;
+  BindlessMaterialConstantsSlot bindless_material_constants_slot_;
 
-  BindlessEnvironmentStaticSlot bindless_env_static_slot_ {};
-  BindlessDirectionalLightsSlot bindless_directional_lights_slot_ {};
-  BindlessDirectionalShadowsSlot bindless_directional_shadows_slot_ {};
-  BindlessPositionalLightsSlot bindless_positional_lights_slot_ {};
-  BindlessInstanceDataSlot bindless_instance_data_slot_ {};
+  BindlessEnvironmentStaticSlot bindless_env_static_slot_;
+  BindlessDirectionalLightsSlot bindless_directional_lights_slot_;
+  BindlessDirectionalShadowsSlot bindless_directional_shadows_slot_;
+  BindlessPositionalLightsSlot bindless_positional_lights_slot_;
+  BindlessInstanceDataSlot bindless_instance_data_slot_;
+  BindlessGpuDebugLineSlot bindless_gpu_debug_line_slot_;
+  BindlessGpuDebugCounterSlot bindless_gpu_debug_counter_slot_;
 
   // Versioning + cache
   MonotonicVersion version_ { 0 };

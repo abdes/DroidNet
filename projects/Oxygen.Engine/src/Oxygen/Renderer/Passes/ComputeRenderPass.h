@@ -9,6 +9,7 @@
 #include <optional>
 #include <string_view>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Renderer/Passes/RenderPass.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -42,7 +43,7 @@ public:
   OXGN_RNDR_API explicit ComputeRenderPass(std::string_view name);
   ~ComputeRenderPass() override = default;
 
-  OXYGEN_DEFAULT_COPYABLE(ComputeRenderPass)
+  OXYGEN_MAKE_NON_COPYABLE(ComputeRenderPass)
   OXYGEN_DEFAULT_MOVABLE(ComputeRenderPass)
 
 protected:

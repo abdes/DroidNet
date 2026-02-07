@@ -529,13 +529,13 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
     return GraphicsPipelineDesc::Builder()
       .SetVertexShader(ShaderRequest {
         .stage = ShaderType::kVertex,
-        .source_path = "Passes/Depth/DepthPrePass.hlsl",
+        .source_path = "Depth/DepthPrePass.hlsl",
         .entry_point = "VS",
         .defines = defines,
       })
       .SetPixelShader(ShaderRequest {
         .stage = ShaderType::kPixel,
-        .source_path = "Passes/Depth/DepthPrePass.hlsl",
+        .source_path = "Depth/DepthPrePass.hlsl",
         .entry_point = "PS",
         .defines = defines,
       })

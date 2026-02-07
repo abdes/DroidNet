@@ -21,6 +21,9 @@
 #include "Renderer/EnvironmentDynamicData.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/SceneConstants.hlsli"
+#include "Common/Math.hlsli"
+#include "Common/Geometry.hlsli"
+#include "Common/Coordinates.hlsli"
 
 // Root constants (b2, space0)
 cbuffer RootConstants : register(b2, space0)
@@ -43,12 +46,10 @@ struct MultiScatLutPassConstants
     float planet_radius_m;
 };
 
+
 #define THREAD_GROUP_SIZE 8
 
-static const float PI = 3.14159265359;
-static const float TWO_PI = 6.28318530718;
-
-// Re-use logic from SkyViewLut_CS
+// Re-use logic from common headers - these will move to AtmosphereMath.hlsli
 float GetAtmosphereDensity(float altitude, float scale_height)
 {
     return exp(-altitude / scale_height);
@@ -72,7 +73,7 @@ float HenyeyGreensteinPhase(float cos_theta, float g)
 {
     float g2 = g * g;
     float denom = 1.0 + g2 - 2.0 * g * cos_theta;
-    return (1.0 / (4.0 * PI)) * (1.0 - g2) / (denom * sqrt(denom));
+    return (1.0 / FOUR_PI) * (1.0 - g2) / (denom * sqrt(denom));
 }
 
 float3 TransmittanceFromOpticalDepth(float3 optical_depth, GpuSkyAtmosphereParams atmo)

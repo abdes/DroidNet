@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Headless/Command.h>
 #include <Oxygen/Graphics/Headless/api_export.h>
@@ -39,10 +40,8 @@ public:
   OXGN_HDLS_API CommandList(std::string_view name, QueueRole role);
   OXGN_HDLS_API ~CommandList() override;
 
-  OXGN_HDLS_API CommandList(const CommandList&) = delete;
-  OXGN_HDLS_API auto operator=(const CommandList&) -> CommandList& = delete;
-  OXGN_HDLS_API CommandList(CommandList&&) = delete;
-  OXGN_HDLS_API auto operator=(CommandList&&) -> CommandList& = delete;
+  OXYGEN_MAKE_NON_COPYABLE(CommandList)
+  OXYGEN_MAKE_NON_MOVABLE(CommandList)
 
   //! Queue a command while recording. Throws if not recording.
   OXGN_HDLS_API auto QueueCommand(std::shared_ptr<Command> cmd) -> void;

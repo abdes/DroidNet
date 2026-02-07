@@ -34,15 +34,30 @@ static const float SKY_TWO_PI = 6.28318530718;
 //! @param altitude_m Height above planet surface in meters.
 //! @param atmosphere_height_m Total atmosphere thickness in meters.
 //! @return UV coordinates for transmittance LUT sampling.
-float2 GetTransmittanceLutUv(float cos_zenith, float altitude_m, float atmosphere_height_m)
+float2 GetTransmittanceLutUv(
+    float cos_zenith,
+    float altitude_m,
+    float planet_radius_m,
+    float atmosphere_height_m)
 {
-    // Offset avoids singularity near horizon (cos_zenith = 0).
-    float u = saturate((cos_zenith + 0.15) / 1.15);
+    float view_height = planet_radius_m + altitude_m;
+    float top_radius = planet_radius_m + atmosphere_height_m;
+    float H = sqrt(max(0.0, top_radius * top_radius
+        - planet_radius_m * planet_radius_m));
+    float rho = sqrt(max(0.0, view_height * view_height
+        - planet_radius_m * planet_radius_m));
 
-    // Square-root parameterization gives better sampling at low altitudes.
-    float v = saturate(sqrt(max(0.0, altitude_m / atmosphere_height_m)));
+    float discriminant = view_height * view_height
+        * (cos_zenith * cos_zenith - 1.0)
+        + top_radius * top_radius;
+    float d = max(0.0, (-view_height * cos_zenith + sqrt(discriminant)));
 
-    return float2(u, v);
+    float d_min = top_radius - view_height;
+    float d_max = rho + H;
+    float x_mu = (d - d_min) / (d_max - d_min);
+    float x_r = rho / H;
+
+    return saturate(float2(x_mu, x_r));
 }
 
 //! Samples the transmittance LUT.
@@ -60,6 +75,7 @@ float3 SampleTransmittanceOpticalDepthLut(
     float lut_height,
     float cos_zenith,
     float altitude_m,
+    float planet_radius_m,
     float atmosphere_height_m)
 {
     if (lut_slot == K_INVALID_BINDLESS_INDEX)
@@ -68,7 +84,8 @@ float3 SampleTransmittanceOpticalDepthLut(
         return float3(0.0, 0.0, 0.0);
     }
 
-    float2 uv = GetTransmittanceLutUv(cos_zenith, altitude_m, atmosphere_height_m);
+    float2 uv = GetTransmittanceLutUv(
+        cos_zenith, altitude_m, planet_radius_m, atmosphere_height_m);
 
     // Apply half-texel offset for proper filtering.
     uv = uv * float2((lut_width - 1.0) / lut_width, (lut_height - 1.0) / lut_height);
@@ -113,6 +130,7 @@ float3 SampleTransmittanceLut(
         lut_height,
         cos_zenith,
         altitude_m,
+        atmo.planet_radius_m,
         atmosphere_height_m);
 
     return TransmittanceFromOpticalDepth(od, atmo);
@@ -167,18 +185,19 @@ float2 GetSkyViewLutUv(float3 view_dir, float3 sun_dir, float planet_radius, flo
     float cos_horizon = -sqrt(max(0.0, 1.0 - rho * rho));
 
     // Inverse of the non-linear V mapping used in LUT generation.
+    // Concentrates resolution near horizon (V=0.5) using squared distribution.
     float v;
     if (cos_zenith < cos_horizon)
     {
         // Below horizon: map cos_zenith in [-1, cos_horizon] to V in [0, 0.5]
         float t = (cos_zenith - (-1.0)) / (cos_horizon - (-1.0));
-        v = t * 0.5;
+        v = 0.5 * (1.0 - sqrt(max(0.0, 1.0 - t)));
     }
     else
     {
         // Above horizon: map cos_zenith in [cos_horizon, 1] to V in [0.5, 1]
         float t = (cos_zenith - cos_horizon) / (1.0 - cos_horizon);
-        v = 0.5 + t * 0.5;
+        v = 0.5 + 0.5 * sqrt(max(0.0, t));
     }
 
     // U=0.5 corresponds to looking at sun (relative_azimuth=0).

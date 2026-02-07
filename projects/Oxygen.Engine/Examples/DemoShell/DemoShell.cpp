@@ -446,6 +446,9 @@ auto DemoShell::UpdatePanels() -> void
     : observer_ptr<RenderingPipeline> { nullptr };
 
   if (pipeline && impl_->demo_shell_ui) {
+    pipeline->SetGpuDebugMouseDownPosition(
+      impl_->demo_shell_ui->GetLastMouseDownPosition());
+
     // If the pipeline has changed, re-initialize services
     if (impl_->bound_pipeline != pipeline) {
       impl_->rendering_settings_service.Initialize(pipeline);

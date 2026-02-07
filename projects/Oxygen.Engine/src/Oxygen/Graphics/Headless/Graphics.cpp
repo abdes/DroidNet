@@ -44,7 +44,7 @@ public:
   [[nodiscard]] auto GetAllocator() const -> const auto& { return *allocator_; }
 
 private:
-  std::unique_ptr<hb::DescriptorAllocator> allocator_ {};
+  std::unique_ptr<hb::DescriptorAllocator> allocator_;
 };
 
 } // namespace

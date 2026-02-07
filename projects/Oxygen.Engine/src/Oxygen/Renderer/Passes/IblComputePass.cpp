@@ -240,7 +240,7 @@ auto IblComputePass::EnsurePipelineStateDescs() -> void
 
   graphics::ShaderRequest irradiance_shader {
     .stage = oxygen::ShaderType::kCompute,
-    .source_path = "Renderer/IblFiltering.hlsl",
+    .source_path = "Lighting/IblFiltering.hlsl",
     .entry_point = "CS_IrradianceConvolution",
   };
 
@@ -252,7 +252,7 @@ auto IblComputePass::EnsurePipelineStateDescs() -> void
 
   graphics::ShaderRequest prefilter_shader {
     .stage = oxygen::ShaderType::kCompute,
-    .source_path = "Renderer/IblFiltering.hlsl",
+    .source_path = "Lighting/IblFiltering.hlsl",
     .entry_point = "CS_SpecularPrefilter",
   };
 

@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <cstring>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -11,6 +13,7 @@
 #include <Oxygen/Core/Bindless/Generated.RootSignature.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -28,6 +31,7 @@
 
 using oxygen::engine::SkyPass;
 using oxygen::engine::SkyPassConfig;
+using oxygen::graphics::Buffer;
 using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::DescriptorAllocator;
 using oxygen::graphics::DescriptorVisibility;
@@ -37,11 +41,29 @@ using oxygen::graphics::ResourceRegistry;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::Texture;
 
+namespace {
+struct alignas(16) SkyPassConstants {
+  float mouse_down_x { 0.0F };
+  float mouse_down_y { 0.0F };
+  float viewport_width { 0.0F };
+  float viewport_height { 0.0F };
+  uint32_t mouse_down_valid { 0u };
+  uint32_t pad0 { 0u };
+  uint32_t pad1 { 0u };
+  uint32_t pad2 { 0u };
+};
+
+static_assert(
+  sizeof(SkyPassConstants) == 32, "SkyPassConstants must be 32 bytes");
+} // namespace
+
 SkyPass::SkyPass(std::shared_ptr<SkyPassConfig> config)
   : GraphicsRenderPass(config ? config->debug_name : "SkyPass")
   , config_(std::move(config))
 {
 }
+
+SkyPass::~SkyPass() { ReleasePassConstantsBuffer(); }
 
 auto SkyPass::ValidateConfig() -> void
 {
@@ -67,6 +89,9 @@ auto SkyPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
   }
 
   recorder.FlushBarriers();
+
+  EnsurePassConstantsBuffer();
+  UpdatePassConstants();
 
   co_return;
 }
@@ -204,6 +229,15 @@ auto SkyPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   SetupViewPortAndScissors(recorder);
   SetupRenderTargets(recorder);
 
+  const uint32_t pass_constants_index = pass_constants_index_.IsValid()
+    ? pass_constants_index_.get()
+    : kInvalidShaderVisibleIndex.get();
+  recorder.SetGraphicsRoot32BitConstant(
+    static_cast<uint32_t>(binding::RootParam::kRootConstants), 0U, 0);
+  recorder.SetGraphicsRoot32BitConstant(
+    static_cast<uint32_t>(binding::RootParam::kRootConstants),
+    pass_constants_index, 1);
+
   // Draw fullscreen triangle for sky.
   // The vertex shader generates positions from SV_VertexID.
   // 3 vertices form a single triangle covering the entire screen.
@@ -212,6 +246,91 @@ auto SkyPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   Context().RegisterPass(this);
 
   co_return;
+}
+
+auto SkyPass::EnsurePassConstantsBuffer() -> void
+{
+  if (pass_constants_buffer_ && pass_constants_index_.IsValid()) {
+    return;
+  }
+
+  auto& graphics = Context().GetGraphics();
+  auto& registry = graphics.GetResourceRegistry();
+  auto& allocator = graphics.GetDescriptorAllocator();
+
+  const graphics::BufferDesc desc {
+    .size_bytes = 256u,
+    .usage = graphics::BufferUsage::kConstant,
+    .memory = graphics::BufferMemory::kUpload,
+    .debug_name = "SkyPass_Constants",
+  };
+
+  pass_constants_buffer_ = graphics.CreateBuffer(desc);
+  if (!pass_constants_buffer_) {
+    throw std::runtime_error("SkyPass: Failed to create pass constants buffer");
+  }
+  pass_constants_buffer_->SetName(desc.debug_name);
+
+  pass_constants_mapped_ptr_
+    = static_cast<std::byte*>(pass_constants_buffer_->Map(0, desc.size_bytes));
+  if (!pass_constants_mapped_ptr_) {
+    throw std::runtime_error("SkyPass: Failed to map pass constants buffer");
+  }
+
+  graphics::BufferViewDescription cbv_view_desc;
+  cbv_view_desc.view_type = graphics::ResourceViewType::kConstantBuffer;
+  cbv_view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
+  cbv_view_desc.range = { 0u, desc.size_bytes };
+
+  auto cbv_handle
+    = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
+      graphics::DescriptorVisibility::kShaderVisible);
+  if (!cbv_handle.IsValid()) {
+    throw std::runtime_error("SkyPass: Failed to allocate CBV handle");
+  }
+  pass_constants_index_ = allocator.GetShaderVisibleIndex(cbv_handle);
+
+  registry.Register(pass_constants_buffer_);
+  registry.RegisterView(
+    *pass_constants_buffer_, std::move(cbv_handle), cbv_view_desc);
+}
+
+auto SkyPass::UpdatePassConstants() -> void
+{
+  if (!pass_constants_mapped_ptr_) {
+    return;
+  }
+
+  SkyPassConstants constants {};
+  if (config_) {
+    const bool valid_mouse = config_->debug_mouse_down_position.has_value()
+      && config_->debug_viewport_extent.width > 0.0F
+      && config_->debug_viewport_extent.height > 0.0F;
+    if (valid_mouse) {
+      const auto mouse = *config_->debug_mouse_down_position;
+      constants.mouse_down_x = mouse.x;
+      constants.mouse_down_y = mouse.y;
+      constants.viewport_width = config_->debug_viewport_extent.width;
+      constants.viewport_height = config_->debug_viewport_extent.height;
+      constants.mouse_down_valid = 1u;
+    }
+  }
+
+  std::memcpy(pass_constants_mapped_ptr_, &constants, sizeof(constants));
+}
+
+auto SkyPass::ReleasePassConstantsBuffer() -> void
+{
+  if (!pass_constants_buffer_) {
+    pass_constants_mapped_ptr_ = nullptr;
+    return;
+  }
+
+  pass_constants_buffer_->UnMap();
+
+  pass_constants_mapped_ptr_ = nullptr;
+  pass_constants_buffer_.reset();
+  pass_constants_index_ = kInvalidShaderVisibleIndex;
 }
 
 auto SkyPass::GetColorTexture() const -> const Texture&
@@ -327,13 +446,13 @@ auto SkyPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   return GraphicsPipelineDesc::Builder()
     .SetVertexShader(ShaderRequest {
       .stage = ShaderType::kVertex,
-      .source_path = "Passes/Sky/SkySphere_VS.hlsl",
+      .source_path = "Atmosphere/SkySphere_VS.hlsl",
       .entry_point = "VS",
       .defines = {},
     })
     .SetPixelShader(ShaderRequest {
       .stage = ShaderType::kPixel,
-      .source_path = "Passes/Sky/SkySphere_PS.hlsl",
+      .source_path = "Atmosphere/SkySphere_PS.hlsl",
       .entry_point = "PS",
       .defines = ps_defines,
     })

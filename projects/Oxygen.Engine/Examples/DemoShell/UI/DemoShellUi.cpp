@@ -219,6 +219,14 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
 
   ImGui::SetCurrentContext(imgui_context);
 
+  const auto& io = ImGui::GetIO();
+  if (!io.WantCaptureMouse && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+    last_mouse_down_position_ = SubPixelPosition {
+      .x = io.MousePos.x,
+      .y = io.MousePos.y,
+    };
+  }
+
   impl_->side_bar.Draw();
   impl_->side_panel.Draw(impl_->side_bar.GetWidth());
 
@@ -357,6 +365,24 @@ auto DemoShellUi::GetContentVm() const -> observer_ptr<ContentVm>
 auto DemoShellUi::GetEnvironmentVm() const -> observer_ptr<EnvironmentVm>
 {
   return observer_ptr { impl_->environment_vm.get() };
+}
+
+/*!
+ Returns the last mouse-down position captured by the UI.
+
+ @return The most recent mouse-down position if captured, otherwise an empty
+   optional.
+
+### Performance Characteristics
+
+- Time Complexity: O(1)
+- Memory: None
+- Optimization: None
+*/
+auto DemoShellUi::GetLastMouseDownPosition() const
+  -> std::optional<SubPixelPosition>
+{
+  return last_mouse_down_position_;
 }
 
 } // namespace oxygen::examples::ui

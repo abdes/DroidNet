@@ -6,12 +6,12 @@
 
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <memory>
 #include <vector>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Headless/api_export.h>
 
@@ -40,21 +40,25 @@ namespace oxygen::graphics::headless {
    start of the array slice region).
 */
 struct TextureLayoutStrategy {
+  TextureLayoutStrategy() = default;
   virtual ~TextureLayoutStrategy() = default;
 
+  OXYGEN_MAKE_NON_COPYABLE(TextureLayoutStrategy)
+  OXYGEN_DEFAULT_MOVABLE(TextureLayoutStrategy)
+
   // Compute number of bytes used by a single mip level in one array slice.
-  virtual auto ComputeMipSizeBytes(const TextureDesc& desc, uint32_t mip) const
-    -> uint32_t
+  [[nodiscard]] virtual auto ComputeMipSizeBytes(
+    const TextureDesc& desc, uint32_t mip) const -> uint32_t
     = 0;
 
   // Compute total bytes used by all mips in a single array slice.
-  virtual auto ComputeTotalBytesPerArraySlice(const TextureDesc& desc) const
-    -> uint32_t
+  [[nodiscard]] virtual auto ComputeTotalBytesPerArraySlice(
+    const TextureDesc& desc) const -> uint32_t
     = 0;
 
   // Compute byte offset to the start of the specified mip within the
   // specified array slice.
-  virtual auto ComputeSliceMipBaseOffset(const TextureDesc& desc,
+  [[nodiscard]] virtual auto ComputeSliceMipBaseOffset(const TextureDesc& desc,
     uint32_t array_slice, uint32_t mip) const -> uint32_t
     = 0;
 };
@@ -130,33 +134,36 @@ public:
   // These are headless-only helpers and provide a small, stable contract for
   // tests and the ResourceRegistry to interpret NativeView pointers.
   struct ViewBase {
-    const Texture* texture;
-    Format format;
-    TextureType dimension;
-    TextureSubResourceSet subresources;
+    const Texture* texture { nullptr };
+    Format format { Format::kUnknown };
+    TextureType dimension { TextureType::kTexture2D };
+    TextureSubResourceSet subresources {};
   };
 
   struct SRV : ViewBase {
-    uint32_t base_offset;
-    uint32_t total_size;
+    uint32_t base_offset { 0 };
+    uint32_t total_size { 0 };
   };
 
   struct UAV : ViewBase {
-    uint32_t base_offset;
-    uint32_t total_size;
+    uint32_t base_offset { 0 };
+    uint32_t total_size { 0 };
   };
 
   struct RTV : ViewBase { };
 
   struct DSV : ViewBase {
-    bool read_only;
+    bool read_only { false };
   };
 
   // Nested headless-only contiguous layout strategy. Kept inside the
   // headless Texture so the implementation is not exported as a separate
   // public type.
-  OXGN_HDLS_API Texture(const TextureDesc& desc);
+  OXGN_HDLS_API explicit Texture(const TextureDesc& desc);
   ~Texture() override = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(Texture)
+  OXYGEN_DEFAULT_MOVABLE(Texture)
 
   [[nodiscard]] auto GetDescriptor() const -> const TextureDesc& override;
   [[nodiscard]] auto GetNativeResource() const -> NativeResource override;
@@ -195,19 +202,19 @@ public:
   OXGN_HDLS_API auto GetBackingSize() const -> uint32_t;
 
 protected:
-  OXGN_HDLS_API [[nodiscard]] auto CreateShaderResourceView(
+  OXGN_HDLS_NDAPI auto CreateShaderResourceView(
     const DescriptorHandle& view_handle, Format format, TextureType dimension,
     TextureSubResourceSet sub_resources) const -> NativeView override;
 
-  OXGN_HDLS_API [[nodiscard]] auto CreateUnorderedAccessView(
+  OXGN_HDLS_NDAPI auto CreateUnorderedAccessView(
     const DescriptorHandle& view_handle, Format format, TextureType dimension,
     TextureSubResourceSet sub_resources) const -> NativeView override;
 
-  OXGN_HDLS_API [[nodiscard]] auto CreateRenderTargetView(
+  OXGN_HDLS_NDAPI auto CreateRenderTargetView(
     const DescriptorHandle& view_handle, Format format,
     TextureSubResourceSet sub_resources) const -> NativeView override;
 
-  OXGN_HDLS_API [[nodiscard]] auto CreateDepthStencilView(
+  OXGN_HDLS_NDAPI auto CreateDepthStencilView(
     const DescriptorHandle& view_handle, Format format,
     TextureSubResourceSet sub_resources, bool is_read_only) const
     -> NativeView override;
