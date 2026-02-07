@@ -142,7 +142,6 @@ inline auto Load(AnyReader& reader,
 
   CHECK_RESULT(reader.ReadInto(r.multi_scattering_factor));
   CHECK_RESULT(reader.ReadInto(r.sun_disk_enabled));
-  CHECK_RESULT(reader.ReadInto(r.sun_disk_angular_radius_radians));
   CHECK_RESULT(reader.ReadInto(r.aerial_perspective_distance_scale));
   CHECK_RESULT(
     reader.ReadBlobInto(std::as_writable_bytes(std::span { r._reserved })));

@@ -757,6 +757,66 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
 
     known_geometry_keys = set(geometry_name_to_key.values())
 
+    def _validate_light_list(
+        lights: Any,
+        list_name: str,
+        intensity_field: str,
+        scene_index: int,
+        node_count: int,
+    ) -> None:
+        if lights is None:
+            return
+        if not isinstance(lights, list):
+            _err(
+                errors,
+                "E_TYPE",
+                f"{list_name} must be a list",
+                f"scenes[{scene_index}].{list_name}",
+            )
+            return
+        for li, light in enumerate(lights):
+            lpath = f"scenes[{scene_index}].{list_name}[{li}]"
+            if not isinstance(light, dict):
+                _err(errors, "E_TYPE", "Light must be object", lpath)
+                continue
+            if "intensity" in light:
+                _err(
+                    errors,
+                    "E_FIELD",
+                    "Legacy 'intensity' is not supported; use schema fields",
+                    f"{lpath}.intensity",
+                )
+            node_index = light.get("node_index")
+            if not isinstance(node_index, int):
+                _err(
+                    errors,
+                    "E_FIELD",
+                    "Light missing node_index",
+                    f"{lpath}.node_index",
+                )
+            elif node_index < 0 or node_index >= node_count:
+                _err(
+                    errors,
+                    "E_RANGE",
+                    "node_index out of range",
+                    f"{lpath}.node_index",
+                )
+            intensity_val = light.get(intensity_field)
+            if intensity_val is None:
+                _err(
+                    errors,
+                    "E_FIELD",
+                    f"Missing {intensity_field}",
+                    f"{lpath}.{intensity_field}",
+                )
+            elif not isinstance(intensity_val, (int, float)):
+                _err(
+                    errors,
+                    "E_TYPE",
+                    f"{intensity_field} must be a number",
+                    f"{lpath}.{intensity_field}",
+                )
+
     for si, s in enumerate(
         [
             a
@@ -893,6 +953,28 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                     "node_index out of range",
                     cpath + ".node_index",
                 )
+
+        _validate_light_list(
+            s.get("directional_lights"),
+            "directional_lights",
+            "intensity_lux",
+            si,
+            node_count,
+        )
+        _validate_light_list(
+            s.get("point_lights"),
+            "point_lights",
+            "luminous_flux_lm",
+            si,
+            node_count,
+        )
+        _validate_light_list(
+            s.get("spot_lights"),
+            "spot_lights",
+            "luminous_flux_lm",
+            si,
+            node_count,
+        )
     return errors
 
 

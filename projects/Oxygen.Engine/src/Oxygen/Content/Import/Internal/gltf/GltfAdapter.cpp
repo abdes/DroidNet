@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <limits>
 #include <memory>
+#include <numbers>
 #include <numeric>
 #include <optional>
 #include <span>
@@ -22,6 +23,7 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/Internal/Pipelines/GeometryPipeline.h>
@@ -116,6 +118,20 @@ namespace {
     default:
       return "unknown error";
     }
+  }
+
+  [[nodiscard]] auto CandelaToLumens(const float intensity_cd) noexcept -> float
+  {
+    return intensity_cd * 4.0F * std::numbers::pi_v<float>;
+  }
+
+  [[nodiscard]] auto CandelaToSpotLumens(const float intensity_cd,
+    const float outer_cone_angle_rad) noexcept -> float
+  {
+    const float clamped = (std::max)(0.0F, outer_cone_angle_rad);
+    const float solid_angle
+      = 2.0F * std::numbers::pi_v<float> * (1.0F - std::cos(clamped));
+    return intensity_cd * solid_angle;
   }
 
   [[nodiscard]] auto MakeParseDiagnostic(
@@ -2403,7 +2419,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color[0]);
         rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color[1]);
         rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color[2]);
-        rec_light.luminous_flux_lm = (std::max)(0.0F, light.intensity);
+        const float intensity_cd = (std::max)(0.0F, light.intensity);
+        rec_light.luminous_flux_lm = CandelaToLumens(intensity_cd);
         rec_light.common.casts_shadows = 1U;
         build.point_lights.push_back(rec_light);
         break;
@@ -2415,13 +2432,15 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color[0]);
         rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color[1]);
         rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color[2]);
-        rec_light.luminous_flux_lm = (std::max)(0.0F, light.intensity);
+        const float intensity_cd = (std::max)(0.0F, light.intensity);
         rec_light.common.casts_shadows = 1U;
         rec_light.inner_cone_angle_radians
           = (std::max)(0.0F, light.spot_inner_cone_angle);
         rec_light.outer_cone_angle_radians
           = (std::max)(rec_light.inner_cone_angle_radians,
             light.spot_outer_cone_angle);
+        rec_light.luminous_flux_lm = CandelaToSpotLumens(
+          intensity_cd, rec_light.outer_cone_angle_radians);
         build.spot_lights.push_back(rec_light);
         break;
       }

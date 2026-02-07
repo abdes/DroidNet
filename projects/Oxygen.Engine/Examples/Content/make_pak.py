@@ -4,18 +4,16 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ===----------------------------------------------------------------------===#
 
-"""One-command GLB -> (YAML + payload) -> PAK build helper.
+"""One-command PakGen YAML -> PAK build helper.
 
 Run from the RenderScene directory.
 
 Example:
-  F:/projects/.venv/Scripts/python.exe make_pak.py Tree1.glb
+    F:/projects/.venv/Scripts/python.exe make_pak.py cube_scene_spec.yaml
 
 Outputs:
-  pak/<name>.yaml
-  pak/<name>_payload/*
-  pak/<name>.pak
-  pak/<name>.manifest.json
+    pak/<name>.pak
+    pak/<name>.manifest.json
 """
 
 from __future__ import annotations
@@ -51,15 +49,15 @@ def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
 
     parser = argparse.ArgumentParser(
-        description="Generate an Oxygen PAK from a GLB or PakGen YAML spec in the current directory",
+        description="Generate an Oxygen PAK from a PakGen YAML spec in the current directory",
     )
     parser.add_argument(
         "input",
         nargs="?",
         type=Path,
         help=(
-            "Input file (relative to current directory): a *.glb or a PakGen *.yaml/*.yml spec. "
-            "If omitted, uses the only *.glb or *.yaml/*.yml in cwd."
+            "Input file (relative to current directory): a PakGen *.yaml/*.yml spec. "
+            "If omitted, uses the only *.yaml/*.yml in cwd."
         ),
     )
     parser.add_argument(
@@ -67,15 +65,8 @@ def main(argv: list[str] | None = None) -> int:
         "--all",
         action="store_true",
         help=(
-            "Build all specs in bulk: convert all *.glb in ./glb/ to YAML and build them, "
-            "and also build all *.yaml/*.yml specs in the current directory."
+            "Build all specs in bulk: build all *.yaml/*.yml specs in the current directory."
         ),
-    )
-    parser.add_argument(
-        "--data-mode",
-        choices=["file", "hex"],
-        default="file",
-        help="Payload mode for YAML spec: 'file' (fast) or 'hex' (slow).",
     )
     parser.add_argument(
         "--deterministic",
@@ -100,25 +91,11 @@ def main(argv: list[str] | None = None) -> int:
         pak_path = out_dir / f"{stem}.pak"
         manifest_path = out_dir / f"{stem}.manifest.json"
 
-        if suffix == ".glb":
-            spec_path = out_dir / f"{stem}.yaml"
-            # 1) GLB -> YAML (+payload)
-            from glb_to_pak_spec import GLBToPakSpec  # local module
-            import yaml
-
-            converter = GLBToPakSpec(
-                input_path, output_path=spec_path, data_mode=args.data_mode
-            )
-            spec = converter.generate_spec()
-            spec_path.write_text(
-                yaml.dump(spec, sort_keys=False), encoding="utf-8"
-            )
-            print(f"Wrote: {spec_path}")
-        elif suffix in (".yaml", ".yml"):
+        if suffix in (".yaml", ".yml"):
             spec_path = input_path
         else:
             raise SystemExit(
-                f"Unsupported input type: '{suffix}'. Expected *.glb or *.yaml/*.yml"
+                f"Unsupported input type: '{suffix}'. Expected *.yaml/*.yml"
             )
 
         # 2) YAML -> PAK
@@ -144,30 +121,23 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         yaml_specs = sorted(cwd.glob("*.yaml")) + sorted(cwd.glob("*.yml"))
-        glb_dir = cwd / "glb"
-        glbs = sorted(glb_dir.glob("*.glb")) if glb_dir.is_dir() else []
 
-        if not yaml_specs and not glbs:
+        if not yaml_specs:
             raise SystemExit(
-                "No inputs found for --all: expected *.yaml/*.yml in the current directory "
-                "and/or *.glb files in ./glb/"
+                "No inputs found for --all: expected *.yaml/*.yml in the current directory"
             )
 
-        for path in yaml_specs + glbs:
+        for path in yaml_specs:
             build_one(path)
         return 0
 
     input_path = args.input
     if input_path is None:
-        candidates = (
-            sorted(cwd.glob("*.glb"))
-            + sorted(cwd.glob("*.yaml"))
-            + sorted(cwd.glob("*.yml"))
-        )
+        candidates = sorted(cwd.glob("*.yaml")) + sorted(cwd.glob("*.yml"))
         if len(candidates) != 1:
             names = ", ".join(p.name for p in candidates)
             raise SystemExit(
-                "Please pass an input file, or keep exactly one *.glb or *.yaml/*.yml in this directory. "
+                "Please pass an input file, or keep exactly one *.yaml/*.yml in this directory. "
                 f"Found {len(candidates)}: [{names}]"
             )
         input_path = candidates[0]

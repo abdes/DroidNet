@@ -7,7 +7,7 @@ def test_pack_directional_light_record_writes_is_sunlight_flag():
     # Arrange
     # DirectionalLightRecord layout (little-endian):
     #   u32 node_index
-    #   LightCommonRecord (48 bytes)
+    #   LightCommonRecord (44 bytes)
     #   f32 angular_size
     #   u32 environment_contribution
     #   u32 is_sun_light   <-- asserted below
@@ -26,7 +26,7 @@ def test_pack_directional_light_record_writes_is_sunlight_flag():
     # Assert
     assert len(packed) == 96
 
-    # Offset to is_sun_light = 4 (node_index) + 48 (common) + 4 (angular) + 4 (env)
-    is_sun_light_offset = 60
+    # Offset to is_sun_light = 4 (node_index) + 44 (common) + 4 (angular) + 4 (env)
+    is_sun_light_offset = 56
     (is_sun_light,) = struct.unpack_from("<I", packed, is_sun_light_offset)
     assert is_sun_light == 1

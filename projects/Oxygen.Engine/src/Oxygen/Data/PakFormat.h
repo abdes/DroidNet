@@ -1154,14 +1154,13 @@ struct SkyAtmosphereEnvironmentRecord {
   float multi_scattering_factor = 1.0F;
 
   uint32_t sun_disk_enabled = 1;
-  float sun_disk_angular_radius_radians = 0.004675F;
 
   float aerial_perspective_distance_scale = 1.0F;
 
   uint8_t _reserved[16] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(SkyAtmosphereEnvironmentRecord) == 116);
+static_assert(sizeof(SkyAtmosphereEnvironmentRecord) == 112);
 
 //! Packed VolumetricClouds environment record.
 #pragma pack(push, 1)
