@@ -68,7 +68,7 @@ applyTo: '**/*.cpp;**/*.h'
 - Do not use `auto` for void return types.
 - Use OXYGEN macros (e.g., OXYGEN_MAKE_NON_COPYABLE, OXYGEN_DEFAULT_COPYABLE, OXYGEN_DEFAULT_MOVABLE) for common patterns.
 - Follow the Rule of 5 for all classes that define any special member function.
-- Prefer modern C++ idioms; avoid legacy patterns.
+- Prefer modern C++ idioms; constexpr, consteval, constinit, noexcept, and auto where appropriate. Avoid legacy patterns.
 - Ensure all code is robust, clear, and maintainable.
 
 ## DOC COMMENTS RULES
