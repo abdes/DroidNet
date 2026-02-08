@@ -38,6 +38,7 @@
 #include "Common/Coordinates.hlsli"
 #include "Common/Lighting.hlsli"
 #include "Atmosphere/AtmosphereSampling.hlsli"
+#include "Atmosphere/IntegrateScatteredLuminance.hlsli"
 
 // Root constants (b2, space0)
 cbuffer RootConstants : register(b2, space0)
@@ -201,123 +202,21 @@ float4 ComputeSingleScattering(
     SamplerState linear_sampler,
     float3 sun_illuminance)
 {
-    float3 inscatter = float3(0.0, 0.0, 0.0);
-    float3 throughput = float3(1.0, 1.0, 1.0);
-
-    // Adaptive step count: more steps near the horizon/twilight.
-    const float horizon_factor_view = saturate(1.0 - abs(view_dir.z));
-
     // Adaptive step count: more steps for long paths (horizon/sunset) to reduce banding.
     // Reference suggests 32, but for high quality we can go higher.
     const float min_steps = 32.0;
     const float max_steps = 64.0;
-
-    // 100km path length starts to need more samples.
-    // 600km+ is typical horizon path.
     float step_factor = saturate(ray_length / 200000.0);
     const uint num_steps = (uint)lerp(min_steps, max_steps, step_factor);
 
-    float cos_theta = dot(view_dir, sun_dir);
-    float rayleigh_phase = RayleighPhase(cos_theta);
-    float mie_phase = CornetteShanksMiePhase(cos_theta, atmo.mie_g);
-
-    float ms_factor = atmo.multi_scattering_factor;
-
-    // Precompute coefficients for extinction reconstruction
-    float3 beta_rayleigh = atmo.rayleigh_scattering_rgb;
-    float3 beta_mie_ext = atmo.mie_extinction_rgb;
-    float3 beta_abs = atmo.absorption_rgb;
-
-    for (uint i = 0; i < num_steps; ++i)
-    {
-        // UE5 Reference: Quadratic distribution of samples (t^2)
-        float t0 = float(i) / float(num_steps);
-        float t1 = float(i + 1) / float(num_steps);
-
-        t0 = t0 * t0;
-        t1 = t1 * t1;
-
-        t0 = t0 * ray_length;
-        t1 = t1 * ray_length;
-
-        float dt = t1 - t0;
-        // UE5 Reference: Fixed 0.3 offset within the segment (SampleSegmentT)
-        // No jitter/noise is used in the reference implementation for SkyViewLut.
-        float t = t0 + dt * kSegmentSampleOffset;
-
-        float3 sample_pos = origin + view_dir * t;
-        float altitude_m = length(sample_pos) - atmo.planet_radius_m;
-        altitude_m = max(altitude_m, 0.0);
-
-        if (altitude_m > atmo.atmosphere_height_m) continue;
-
-        float d_r = AtmosphereExponentialDensity(altitude_m, atmo.rayleigh_scale_height_m);
-        float d_m = AtmosphereExponentialDensity(altitude_m, atmo.mie_scale_height_m);
-        float d_a = OzoneAbsorptionDensity(altitude_m, atmo.absorption_density);
-
-        // Reconstruction of extinction at this point
-        float3 extinction = beta_rayleigh * d_r + beta_mie_ext * d_m + beta_abs * d_a;
-        float3 sample_optical_depth = extinction * dt;
-        float3 sample_transmittance = exp(-sample_optical_depth);
-
-        // Sun Transmittance
-        float3 sample_dir = normalize(sample_pos);
-        float cos_sun_zenith = dot(sample_dir, sun_dir);
-        float3 sun_od = SampleTransmittanceOpticalDepthLut(
-            transmittance_srv_index,
-            transmittance_width,
-            transmittance_height,
-            cos_sun_zenith, altitude_m,
-            atmo.planet_radius_m,
-            atmo.atmosphere_height_m);
-        float3 sun_transmittance = TransmittanceFromOpticalDepth(sun_od, atmo);
-
-        // Single scattering: light from sun -> scatter once -> camera
-        // S = L_sun * T_sun * (beta_R * phase_R + beta_M * phase_M)
-        float3 sigma_s_single = (atmo.rayleigh_scattering_rgb * d_r * rayleigh_phase
-                              + atmo.mie_scattering_rgb * d_m * mie_phase)
-                              * sun_transmittance * sun_illuminance;
-
-        // Multiple scattering
-        float u_ms = (cos_sun_zenith + 1.0) / 2.0;
-        float v_ms = altitude_m / atmo.atmosphere_height_m;
-        float4 ms_sample = multi_scat_lut.SampleLevel(linear_sampler, float2(u_ms, v_ms), 0);
-
-        float3 multi_scat_radiance = ms_sample.rgb;
-        float f_ms = ms_sample.a;
-        float3 energy_compensation = 1.0 / max(1.0 - f_ms, 1e-4);
-
-        // UE5 style for multi-scat source logic:
-        // S_ms = (beta_R + beta_M) * MultiScatRadiance * EnergyComp
-        // We also apply sun_illuminance here because MultiScatLUT is typically normalized (unit sun).
-        float3 sigma_s_multi = (atmo.rayleigh_scattering_rgb * d_r + atmo.mie_scattering_rgb * d_m)
-                             * multi_scat_radiance * energy_compensation * ms_factor * sun_illuminance;
-
-        // Total Source Function (S)
-        float3 S = sigma_s_single + sigma_s_multi;
-
-        // Frostbite / UE5 Analytic Integration:
-        // L += throughput * (S - S * T_step) / extinction
-        // (S - S*T_step) / ext -> S * step_size (limit as ext -> 0)
-
-        float3 Sint;
-        // Check for small extinction to avoid div-by-zero
-        // Using a check similar to UE5 implicit behaviors or explicit limit
-        if (all(extinction < kAtmosphereEpsilon))
-        {
-            Sint = S * dt;
-        }
-        else
-        {
-            Sint = (S - S * sample_transmittance) / max(extinction, kAtmosphereEpsilon);
-        }
-
-        // Accumulate
-        inscatter += throughput * Sint;
-        inscatter = min(inscatter, float3(kFP16SafeMax, kFP16SafeMax, kFP16SafeMax)); // Aggregate safety clamp
-
-        throughput *= sample_transmittance;
-    }
+    // Use shared integration helper with quadratic sample distribution
+    float3 throughput;
+    float3 inscatter = IntegrateScatteredLuminanceQuadratic(
+        origin, view_dir, ray_length, num_steps, atmo,
+        sun_dir, sun_illuminance,
+        transmittance_srv_index, transmittance_width, transmittance_height,
+        multi_scat_lut, linear_sampler,
+        throughput);
 
     // Ground albedo contribution: if the ray hits the ground, add reflected light
     if (hits_ground)
@@ -340,18 +239,15 @@ float4 ComputeSingleScattering(
         float3 ground_sun_transmittance = TransmittanceFromOpticalDepth(ground_sun_od, atmo);
 
         // Direct sun illumination on ground (Lambertian BRDF = albedo / PI)
+        // UE5 Reference: Ground-hit uses direct Lambert only. Multi-scattering
+        // contributions are handled by the MS pipeline, not via an extra ambient term.
         float3 ground_reflected = atmo.ground_albedo_rgb * INV_PI
-                                                        * ground_ndotl
-                                                        * ground_sun_transmittance;
+                                * ground_ndotl
+                                * ground_sun_transmittance
+                                * sun_illuminance;
 
-        // Multi-scattering ambient contribution
-        // Sample at (u=0.5, v=0.0) for horizon-averaged ambient at ground level
-        float4 ms_ambient = multi_scat_lut.SampleLevel(linear_sampler, float2(0.5, 0.0), 0);
-        float3 ground_ambient = atmo.ground_albedo_rgb * INV_PI
-                              * ms_ambient.rgb * sun_illuminance * ms_factor;
-
-        // Add both direct and ambient ground reflection, attenuated by path transmittance
-        inscatter += (ground_reflected + ground_ambient) * throughput;
+        // Add direct ground reflection only, attenuated by path transmittance
+        inscatter += ground_reflected * throughput;
     }
 
     // View-path transmittance is just the final throughput

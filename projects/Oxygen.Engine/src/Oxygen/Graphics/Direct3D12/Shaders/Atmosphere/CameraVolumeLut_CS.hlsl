@@ -32,6 +32,7 @@
 #include "Common/Coordinates.hlsli"
 #include "Common/Lighting.hlsli"
 #include "Atmosphere/AtmosphereSampling.hlsli"
+#include "Atmosphere/IntegrateScatteredLuminance.hlsli"
 
 // Root constants (b2, space0)
 cbuffer RootConstants : register(b2, space0)
@@ -144,89 +145,23 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     }
 
     // Integrate scattering along ray segment [0, t_max_m]
-    float3 inscatter = float3(0.0, 0.0, 0.0);
-    float3 throughput = float3(1.0, 1.0, 1.0);
-
     // Variable sample count based on slice depth (more samples for distant slices)
     uint num_steps = max(4, min(32, uint(slice + 1.0) * 2));
-    float step_size = t_max_m / float(num_steps);
 
-    float cos_theta = dot(view_dir_ws, sun_dir);
-    float rayleigh_phase = RayleighPhase(cos_theta);
-    float mie_phase = CornetteShanksMiePhase(cos_theta, atmo.mie_g);
-
-    float3 beta_rayleigh = atmo.rayleigh_scattering_rgb;
-    float3 beta_mie_ext = atmo.mie_extinction_rgb;
-    float3 beta_abs = atmo.absorption_rgb;
-
-    Texture2D<float4> transmittance_lut = ResourceDescriptorHeap[pass_constants.transmittance_srv_index];
+    // Load multi-scat LUT for integration
     Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[pass_constants.multi_scat_srv_index];
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
-    uint2 lut_size = uint2(pass_constants.transmittance_width, pass_constants.transmittance_height);
 
-    for (uint i = 0; i < num_steps; ++i)
-    {
-        // UE tuned parameter: fixed 0.3 offset within each segment (SampleSegmentT).
-        float t = (float(i) + kSegmentSampleOffset) * step_size;
-        float3 sample_pos = origin + view_dir_ws * t;
-        float altitude_m = length(sample_pos) - atmo.planet_radius_m;
-        altitude_m = max(altitude_m, 0.0);
-
-        if (altitude_m > atmo.atmosphere_height_m) continue;
-
-        float d_r = AtmosphereExponentialDensity(altitude_m, atmo.rayleigh_scale_height_m);
-        float d_m = AtmosphereExponentialDensity(altitude_m, atmo.mie_scale_height_m);
-        float d_a = OzoneAbsorptionDensity(altitude_m, atmo.absorption_density);
-
-        float3 extinction = beta_rayleigh * d_r + beta_mie_ext * d_m + beta_abs * d_a;
-        float3 sample_optical_depth = extinction * step_size;
-        float3 sample_transmittance = exp(-sample_optical_depth);
-
-        // Sun transmittance
-        float3 sample_dir = normalize(sample_pos);
-        float cos_sun_zenith = dot(sample_dir, sun_dir);
-        float3 sun_od = SampleTransmittanceOpticalDepthLut(
-            pass_constants.transmittance_srv_index,
-            float(pass_constants.transmittance_width),
-            float(pass_constants.transmittance_height),
-            cos_sun_zenith, altitude_m,
-            atmo.planet_radius_m,
-            atmo.atmosphere_height_m);
-        float3 sun_transmittance = TransmittanceFromOpticalDepth(sun_od, atmo);
-
-        // Single scattering
-        float3 sigma_s_single = (atmo.rayleigh_scattering_rgb * d_r * rayleigh_phase
-                      + atmo.mie_scattering_rgb * d_m * mie_phase)
-                      * sun_transmittance * sun_radiance;
-
-        // Multi-scattering
-        float u_ms = (cos_sun_zenith + 1.0) / 2.0;
-        float v_ms = altitude_m / atmo.atmosphere_height_m;
-        float4 ms_sample = multi_scat_lut.SampleLevel(linear_sampler, float2(u_ms, v_ms), 0);
-        float3 multi_scat_radiance = ms_sample.rgb;
-        float f_ms = ms_sample.a;
-        float3 energy_compensation = 1.0 / max(1.0 - f_ms, 1e-4);
-        float3 sigma_s_multi = (atmo.rayleigh_scattering_rgb * d_r + atmo.mie_scattering_rgb * d_m)
-                     * multi_scat_radiance * energy_compensation
-                     * atmo.multi_scattering_factor * sun_radiance;
-
-        float3 S = sigma_s_single + sigma_s_multi;
-
-        // Frostbite analytic integration
-        float3 Sint;
-        if (all(extinction < kAtmosphereEpsilon))
-        {
-            Sint = S * step_size;
-        }
-        else
-        {
-            Sint = (S - S * sample_transmittance) / max(extinction, kAtmosphereEpsilon);
-        }
-
-        inscatter += throughput * Sint;
-        inscatter = min(inscatter, float3(kFP16SafeMax, kFP16SafeMax, kFP16SafeMax)); // FP16 safety
-        throughput *= sample_transmittance;
-    }
+    // Use shared integration helper with uniform sample distribution
+    float3 throughput;
+    float3 inscatter = IntegrateScatteredLuminanceUniform(
+        origin, view_dir_ws, t_max_m, num_steps, atmo,
+        sun_dir, sun_radiance,
+        pass_constants.transmittance_srv_index,
+        float(pass_constants.transmittance_width),
+        float(pass_constants.transmittance_height),
+        multi_scat_lut, linear_sampler,
+        throughput);
 
     // Output: RGB = inscatter, A = opacity
     // Match UE reference: opacity derived from average (non-colored) transmittance.
