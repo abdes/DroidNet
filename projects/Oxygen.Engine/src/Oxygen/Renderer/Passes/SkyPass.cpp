@@ -502,12 +502,12 @@ auto SkyPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   }
 
   // Restore hardware depth-stencil state for sky pass.
-  // We use CompareOp::kAlways as requested, ensuring AP is applied to every
-  // pixel.
+  // Use CompareOp::kLessOrEqual to ensure sky is only drawn at the far plane
+  // (background), preventing it from drawing over opaque geometry.
   DepthStencilStateDesc ds_desc {
     .depth_test_enable = has_depth,
     .depth_write_enable = false,
-    .depth_func = CompareOp::kAlways,
+    .depth_func = CompareOp::kLessOrEqual,
     .stencil_enable = false,
     .stencil_read_mask = 0xFF,
     .stencil_write_mask = 0xFF,
@@ -523,7 +523,7 @@ auto SkyPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   const BlendTargetDesc blend_desc {
     .blend_enable = true,
     .src_blend = BlendFactor::kOne,
-    .dest_blend = BlendFactor::kSrcAlpha,
+    .dest_blend = BlendFactor::kZero,
     .blend_op = BlendOp::kAdd,
     .src_blend_alpha = BlendFactor::kZero,
     .dest_blend_alpha = BlendFactor::kOne,
