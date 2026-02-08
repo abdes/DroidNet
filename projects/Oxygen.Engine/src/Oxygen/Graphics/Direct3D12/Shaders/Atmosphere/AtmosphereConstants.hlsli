@@ -60,9 +60,9 @@ static const float kSunDiskEdgeSoftness = 0.002;
 // Physical Defaults (Artist Overridable via GpuSkyAtmosphereParams)
 // =============================================================================
 
-//! Default Mie single-scattering albedo for Earth-like atmosphere.
-//! NOTE: This should be an artist parameter.
-static const float kDefaultMieSingleScatteringAlbedo = 0.9;
+// =============================================================================
+// Physical Defaults (Artist Overridable via GpuSkyAtmosphereParams)
+// =============================================================================
 
 //! Default ozone layer width scaling factor.
 //! NOTE: This should be an artist parameter.

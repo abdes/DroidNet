@@ -219,13 +219,13 @@ float4 ComputeSingleScattering(
 
     float cos_theta = dot(view_dir, sun_dir);
     float rayleigh_phase = RayleighPhase(cos_theta);
-    float mie_phase = HenyeyGreensteinPhase(cos_theta, atmo.mie_g);
+    float mie_phase = CornetteShanksMiePhase(cos_theta, atmo.mie_g);
 
     float ms_factor = atmo.multi_scattering_factor;
 
     // Precompute coefficients for extinction reconstruction
     float3 beta_rayleigh = atmo.rayleigh_scattering_rgb;
-    float3 beta_mie_ext = atmo.mie_scattering_rgb + atmo.mie_absorption_rgb;
+    float3 beta_mie_ext = atmo.mie_extinction_rgb;
     float3 beta_abs = atmo.absorption_rgb;
 
     for (uint i = 0; i < num_steps; ++i)

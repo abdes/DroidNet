@@ -179,6 +179,10 @@ struct alignas(16) GpuSkyAtmosphereParams {
   glm::vec3 mie_absorption_rgb { 2.33e-6F, 2.33e-6F, 2.33e-6F };
   float mie_g { 0.8F };
 
+  //! Precomputed Mie extinction (scattering + absorption).
+  glm::vec3 mie_extinction_rgb { 23.33e-6F, 23.33e-6F, 23.33e-6F };
+  float _pad_mie { 0.0F };
+
   glm::vec3 absorption_rgb { 0.65e-6F, 1.881e-6F, 0.085e-6F };
   float absorption_layer_width_m { 25000.0F };
   float absorption_term_below { 0.0F };
@@ -200,10 +204,10 @@ struct alignas(16) GpuSkyAtmosphereParams {
 
   uint32_t sky_view_lut_slices { 0U };
   uint32_t sky_view_alt_mapping_mode { 0U };
-  uint32_t _pad { 0U };
+  uint32_t _pad0 { 0U };
 };
 static_assert(sizeof(GpuSkyAtmosphereParams) % 16 == 0);
-static_assert(sizeof(GpuSkyAtmosphereParams) == 160);
+static_assert(sizeof(GpuSkyAtmosphereParams) == 176);
 
 struct CubeMapSlot {
   ShaderVisibleIndex value;
@@ -402,6 +406,6 @@ struct alignas(16) EnvironmentStaticData {
   GpuPostProcessParams post_process;
 };
 static_assert(sizeof(EnvironmentStaticData) % 16 == 0);
-static_assert(sizeof(EnvironmentStaticData) == 448);
+static_assert(sizeof(EnvironmentStaticData) == 464);
 
 } // namespace oxygen::engine

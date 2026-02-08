@@ -287,6 +287,8 @@ auto EnvironmentStaticDataManager::PopulateAtmosphere(
       = atmo->GetRayleighScaleHeightMeters();
     next.atmosphere.mie_scattering_rgb = atmo->GetMieScatteringRgb();
     next.atmosphere.mie_absorption_rgb = atmo->GetMieAbsorptionRgb();
+    next.atmosphere.mie_extinction_rgb
+      = next.atmosphere.mie_scattering_rgb + next.atmosphere.mie_absorption_rgb;
     next.atmosphere.mie_scale_height_m = atmo->GetMieScaleHeightMeters();
     next.atmosphere.mie_g = atmo->GetMieAnisotropy();
     next.atmosphere.absorption_rgb = atmo->GetAbsorptionRgb();
