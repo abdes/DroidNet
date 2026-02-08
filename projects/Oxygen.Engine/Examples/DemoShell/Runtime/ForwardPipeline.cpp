@@ -44,7 +44,6 @@
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
 
-
 #include "DemoShell/Runtime/ForwardPipeline.h"
 
 namespace oxygen::examples {
@@ -587,6 +586,13 @@ struct ForwardPipeline::Impl {
       co_await sky_atmo_lut_pass->Execute(rc, rec);
     }
 
+    // Sky must run after DepthPrePass so it can depth-test against the
+    // populated depth buffer and only shade background pixels.
+    if (ctx.plan.allow_sky_visuals && sky_pass) {
+      co_await sky_pass->PrepareResources(rc, rec);
+      co_await sky_pass->Execute(rc, rec);
+    }
+
     if (light_culling_pass) {
       co_await light_culling_pass->PrepareResources(rc, rec);
       co_await light_culling_pass->Execute(rc, rec);
@@ -597,11 +603,6 @@ struct ForwardPipeline::Impl {
       co_await shader_pass->PrepareResources(rc, rec);
       co_await shader_pass->Execute(rc, rec);
       rc.RegisterPass<engine::ShaderPass>(shader_pass.get());
-    }
-
-    if (ctx.plan.allow_sky_visuals && sky_pass) {
-      co_await sky_pass->PrepareResources(rc, rec);
-      co_await sky_pass->Execute(rc, rec);
     }
 
     if (transparent_pass) {

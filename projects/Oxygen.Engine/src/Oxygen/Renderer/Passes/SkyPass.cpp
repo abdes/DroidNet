@@ -25,6 +25,7 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
+#include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/SkyPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -218,13 +219,13 @@ auto SkyPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
     = PrepareRenderTargetView(color_texture, registry, allocator);
   std::array rtvs { color_rtv };
 
-  // Prepare DSV if depth attachment is present
+  // Prepare DSV if a depth buffer is available (prefer DepthPrePass output).
   graphics::NativeView dsv = {};
-  const auto* fb = GetFramebuffer();
-  if (fb && fb->GetDescriptor().depth_attachment.IsValid()
-    && fb->GetDescriptor().depth_attachment.texture) {
-    auto& depth_texture = *fb->GetDescriptor().depth_attachment.texture;
-    dsv = PrepareDepthStencilView(depth_texture, registry, allocator);
+  const Texture* depth_texture = GetDepthTexture();
+  if (depth_texture != nullptr) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+    dsv = PrepareDepthStencilView(
+      const_cast<Texture&>(*depth_texture), registry, allocator);
   }
 
   // Bind DSV if present (read-only) to satisfy PSO matching if depth test is
@@ -237,9 +238,8 @@ auto SkyPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
 
   DLOG_F(2, "[SkyPass] SetupRenderTargets: color_tex={}, depth_tex={}",
     static_cast<const void*>(&color_texture),
-    dsv->IsValid() ? static_cast<const void*>(
-                       fb->GetDescriptor().depth_attachment.texture.get())
-                   : nullptr);
+    depth_texture != nullptr ? static_cast<const void*>(depth_texture)
+                             : nullptr);
 }
 
 // NOLINTNEXTLINE(performance-unnecessary-value-param)
@@ -247,16 +247,15 @@ auto SkyPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 {
   LOG_SCOPE_FUNCTION(2);
 
-  // The color target should remain in RENDER_TARGET state from ShaderPass.
+  // Ensure the color target is writable.
   recorder.RequireResourceState(
     GetColorTexture(), graphics::ResourceStates::kRenderTarget);
 
   // Depth buffer should be in DEPTH_READ for both DSV binding and SRV sampling.
-  const auto* fb = GetFramebuffer();
-  if (fb != nullptr && fb->GetDescriptor().depth_attachment.IsValid()
-    && (fb->GetDescriptor().depth_attachment.texture != nullptr)) {
-    recorder.RequireResourceState(*fb->GetDescriptor().depth_attachment.texture,
-      graphics::ResourceStates::kDepthRead);
+  if (const Texture* depth_texture = GetDepthTexture();
+    depth_texture != nullptr) {
+    recorder.RequireResourceState(
+      *depth_texture, graphics::ResourceStates::kDepthRead);
   }
 
   recorder.FlushBarriers();
@@ -375,22 +374,21 @@ auto SkyPass::UpdatePassConstants() -> void
       = Context().current_view.resolved_view->InverseViewProjection();
   }
 
-  const auto* fb = GetFramebuffer();
-  if (fb != nullptr && fb->GetDescriptor().depth_attachment.IsValid()
-    && (fb->GetDescriptor().depth_attachment.texture != nullptr)) {
-    auto& depth_texture = *fb->GetDescriptor().depth_attachment.texture;
+  if (const Texture* depth_texture = GetDepthTexture();
+    depth_texture != nullptr) {
     auto& graphics = Context().GetGraphics();
     auto& registry = graphics.GetResourceRegistry();
     auto& allocator = graphics.GetDescriptorAllocator();
 
-    if (&depth_texture != last_depth_texture_) {
-      last_depth_texture_ = &depth_texture;
+    if (depth_texture != last_depth_texture_) {
+      last_depth_texture_ = depth_texture;
       depth_srv_index_ = oxygen::kInvalidShaderVisibleIndex;
     }
 
     if (!depth_srv_index_.IsValid()) {
-      const auto [srv_view, srv_index]
-        = PrepareDepthShaderResourceView(depth_texture, registry, allocator);
+      const auto [srv_view, srv_index] = PrepareDepthShaderResourceView(
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+        const_cast<Texture&>(*depth_texture), registry, allocator);
       if (srv_index != oxygen::kInvalidShaderVisibleIndex.get()) {
         depth_srv_index_ = oxygen::ShaderVisibleIndex { srv_index };
       }
@@ -481,24 +479,17 @@ auto SkyPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   using graphics::RasterizerStateDesc;
   using graphics::ShaderRequest;
 
-  const auto* fb = GetFramebuffer();
   bool has_depth = false;
   auto depth_format = oxygen::Format::kUnknown;
   uint32_t sample_count = 1U;
-  if (fb != nullptr) {
-    const auto& fb_desc = fb->GetDescriptor();
-    if (fb_desc.depth_attachment.IsValid()
-      && (fb_desc.depth_attachment.texture != nullptr)) {
-      has_depth = true;
-      depth_format = fb_desc.depth_attachment.texture->GetDescriptor().format;
-      sample_count
-        = fb_desc.depth_attachment.texture->GetDescriptor().sample_count;
-    } else if (!fb_desc.color_attachments.empty()
-      && fb_desc.color_attachments[0].IsValid()
-      && (fb_desc.color_attachments[0].texture != nullptr)) {
-      sample_count
-        = fb_desc.color_attachments[0].texture->GetDescriptor().sample_count;
-    }
+  if (const Texture* depth_texture = GetDepthTexture();
+    depth_texture != nullptr) {
+    has_depth = true;
+    depth_format = depth_texture->GetDescriptor().format;
+    sample_count = depth_texture->GetDescriptor().sample_count;
+  } else {
+    const auto& color_tex_desc = GetColorTexture().GetDescriptor();
+    sample_count = color_tex_desc.sample_count;
   }
 
   // Restore hardware depth-stencil state for sky pass.
@@ -588,11 +579,9 @@ auto SkyPass::NeedRebuildPipelineState() const -> bool
 
   // Depth format check
   auto current_depth_format = oxygen::Format::kUnknown;
-  const auto* fb = GetFramebuffer();
-  if (fb != nullptr && fb->GetDescriptor().depth_attachment.IsValid()
-    && fb->GetDescriptor().depth_attachment.texture != nullptr) {
-    current_depth_format
-      = fb->GetDescriptor().depth_attachment.texture->GetDescriptor().format;
+  if (const Texture* depth_texture = GetDepthTexture();
+    depth_texture != nullptr) {
+    current_depth_format = depth_texture->GetDescriptor().format;
   }
 
   if (layout.depth_stencil_format != current_depth_format) {
@@ -605,4 +594,23 @@ auto SkyPass::NeedRebuildPipelineState() const -> bool
   }
 
   return false;
+}
+
+auto SkyPass::GetDepthTexture() const -> const Texture*
+{
+  // Prefer the depth texture produced by the DepthPrePass.
+  if (const auto* depth_pass = Context().GetPass<engine::DepthPrePass>();
+    depth_pass != nullptr) {
+    return &depth_pass->GetDepthTexture();
+  }
+
+  // Fallback to the framebuffer depth attachment when the pre-pass is not
+  // available (e.g. wireframe-only modes).
+  const auto* fb = GetFramebuffer();
+  if (fb != nullptr && fb->GetDescriptor().depth_attachment.IsValid()
+    && (fb->GetDescriptor().depth_attachment.texture != nullptr)) {
+    return fb->GetDescriptor().depth_attachment.texture.get();
+  }
+
+  return nullptr;
 }
