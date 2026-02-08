@@ -448,13 +448,20 @@ float4 ComputeSingleScattering(
             0.0, dot(ground_normal, sun_dir), atmo, transmittance_lut, linear_sampler, lut_size);
         float3 ground_sun_transmittance = TransmittanceFromOpticalDepth(ground_sun_od, atmo);
 
-                // Ground reflected radiance (Lambertian BRDF = albedo / PI)
-                float3 ground_reflected = atmo.ground_albedo_rgb * (1.0 / PI)
-                                                                * ground_ndotl
-                                                                * ground_sun_transmittance;
+        // Direct sun illumination on ground (Lambertian BRDF = albedo / PI)
+        float3 ground_reflected = atmo.ground_albedo_rgb * INV_PI
+                                                        * ground_ndotl
+                                                        * ground_sun_transmittance;
 
-        // Add ground reflection, attenuated by the total transmittance of the path
-        inscatter += ground_reflected * throughput;
+        // Multi-scattering ambient contribution
+        // Sample at (u=0.5, v=0.0) for horizon-averaged ambient at ground level
+        float4 ms_ambient = multi_scat_lut.SampleLevel(linear_sampler, float2(0.5, 0.0), 0);
+        float3 sun_radiance = GetSunColorRGB() * GetSunIlluminance();
+        float3 ground_ambient = atmo.ground_albedo_rgb * INV_PI
+                              * ms_ambient.rgb * sun_radiance * ms_factor;
+
+        // Add both direct and ambient ground reflection, attenuated by path transmittance
+        inscatter += (ground_reflected + ground_ambient) * throughput;
     }
 
     // View-path transmittance is just the final throughput
