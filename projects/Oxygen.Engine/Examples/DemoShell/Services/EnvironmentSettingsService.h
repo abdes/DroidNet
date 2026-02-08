@@ -222,6 +222,31 @@ public:
   [[nodiscard]] virtual auto GetSkyLightSpecular() const -> float;
   virtual auto SetSkyLightSpecular(float value) -> void;
 
+  // Fog
+  [[nodiscard]] virtual auto GetFogEnabled() const -> bool;
+  virtual auto SetFogEnabled(bool enabled) -> void;
+
+  [[nodiscard]] virtual auto GetFogModel() const -> int;
+  virtual auto SetFogModel(int model) -> void;
+
+  [[nodiscard]] virtual auto GetFogDensity() const -> float;
+  virtual auto SetFogDensity(float value) -> void;
+
+  [[nodiscard]] virtual auto GetFogHeightFalloff() const -> float;
+  virtual auto SetFogHeightFalloff(float value) -> void;
+
+  [[nodiscard]] virtual auto GetFogHeightOffsetMeters() const -> float;
+  virtual auto SetFogHeightOffsetMeters(float value) -> void;
+
+  [[nodiscard]] virtual auto GetFogStartDistanceMeters() const -> float;
+  virtual auto SetFogStartDistanceMeters(float value) -> void;
+
+  [[nodiscard]] virtual auto GetFogMaxOpacity() const -> float;
+  virtual auto SetFogMaxOpacity(float value) -> void;
+
+  [[nodiscard]] virtual auto GetFogAlbedo() const -> glm::vec3;
+  virtual auto SetFogAlbedo(const glm::vec3& value) -> void;
+
   // Sun
   [[nodiscard]] virtual auto GetSunPresent() const -> bool;
   [[nodiscard]] virtual auto GetSunEnabled() const -> bool;
@@ -360,6 +385,16 @@ private:
   float sky_light_intensity_ { 1.0F };
   float sky_light_diffuse_ { 1.0F };
   float sky_light_specular_ { 1.0F };
+
+  // Fog
+  bool fog_enabled_ { false };
+  int fog_model_ { 0 }; // 0 = exponential height, 1 = volumetric
+  float fog_density_ { 0.01F };
+  float fog_height_falloff_ { 0.2F };
+  float fog_height_offset_m_ { 0.0F };
+  float fog_start_distance_m_ { 0.0F };
+  float fog_max_opacity_ { 1.0F };
+  glm::vec3 fog_albedo_ { 1.0F, 1.0F, 1.0F };
 
   // Sun component
   bool sun_present_ { false };

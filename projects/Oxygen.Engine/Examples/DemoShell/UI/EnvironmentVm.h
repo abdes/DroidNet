@@ -138,6 +138,24 @@ public:
   [[nodiscard]] auto GetSkyLightSpecular() const -> float;
   auto SetSkyLightSpecular(float value) -> void;
 
+  // Fog
+  [[nodiscard]] auto GetFogEnabled() const -> bool;
+  auto SetFogEnabled(bool enabled) -> void;
+  [[nodiscard]] auto GetFogModel() const -> int;
+  auto SetFogModel(int model) -> void;
+  [[nodiscard]] auto GetFogDensity() const -> float;
+  auto SetFogDensity(float value) -> void;
+  [[nodiscard]] auto GetFogHeightFalloff() const -> float;
+  auto SetFogHeightFalloff(float value) -> void;
+  [[nodiscard]] auto GetFogHeightOffsetMeters() const -> float;
+  auto SetFogHeightOffsetMeters(float value) -> void;
+  [[nodiscard]] auto GetFogStartDistanceMeters() const -> float;
+  auto SetFogStartDistanceMeters(float value) -> void;
+  [[nodiscard]] auto GetFogMaxOpacity() const -> float;
+  auto SetFogMaxOpacity(float value) -> void;
+  [[nodiscard]] auto GetFogAlbedo() const -> glm::vec3;
+  auto SetFogAlbedo(const glm::vec3& value) -> void;
+
   // Sun
   [[nodiscard]] auto GetSunPresent() const -> bool;
   [[nodiscard]] auto GetSunEnabled() const -> bool;

@@ -42,6 +42,68 @@ struct AerialPerspectiveResult
     float3 transmittance; //!< RGB transmittance through atmosphere [0, 1].
 };
 
+//! Henyey-Greenstein phase function.
+//!
+//! Returns a normalized phase value in sr^-1.
+float HenyeyGreensteinPhase(float cos_theta, float g)
+{
+    g = clamp(g, -0.99, 0.99);
+    const float g2 = g * g;
+    const float denom = max(1.0 + g2 - 2.0 * g * cos_theta, 1e-5);
+    return (1.0 - g2) * INV_FOUR_PI / pow(denom, 1.5);
+}
+
+//! Samples the camera-volume LUT at the fragment's screen UV and depth slice.
+//!
+//! Returns float4 where rgb = inscatter, a = opacity (1 - transmittance).
+float4 SampleCameraVolumeLut(
+    GpuSkyAtmosphereParams atmo,
+    float3 world_pos,
+    float3 camera_pos,
+    float view_distance)
+{
+    if (view_distance < 0.1 || atmo.camera_volume_lut_slot == K_INVALID_BINDLESS_INDEX)
+    {
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
+
+    // User controls from EnvironmentDynamicData.
+    // Note: the camera-volume LUT itself is generated at a fixed max distance;
+    // this scale remaps view distance to the LUT slice distribution.
+    float distance_scale = max(EnvironmentDynamicData.aerial_perspective_distance_scale, 0.0);
+
+    // Effective path length with user scaling.
+    float effective_distance = view_distance * distance_scale;
+    float view_distance_km = effective_distance / 1000.0;
+
+    // Camera volume froxel parameterization (UE tuned parameters).
+    const float AP_SLICE_COUNT = 32.0;
+    const float AP_KM_PER_SLICE = 4.0;
+
+    float slice = view_distance_km / AP_KM_PER_SLICE;
+    slice = clamp(slice, 0.0, AP_SLICE_COUNT);
+
+    // Fade near camera to avoid quantization artifacts in the first few froxels.
+    if (slice < 0.5)
+    {
+        slice = 0.5;
+    }
+
+    float w = sqrt(saturate(slice / AP_SLICE_COUNT));
+
+    // Screen UV from world position
+    float4 view_pos = mul(view_matrix, float4(world_pos, 1.0));
+    float4 clip_pos = mul(projection_matrix, view_pos);
+    clip_pos /= clip_pos.w;
+    float2 screen_uv = clip_pos.xy * 0.5 + 0.5;
+    // Handle D3D12/Vulkan Y flip
+    screen_uv.y = 1.0 - screen_uv.y;
+
+    Texture3D<float4> camera_volume = ResourceDescriptorHeap[atmo.camera_volume_lut_slot];
+    SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    return camera_volume.SampleLevel(linear_sampler, float3(screen_uv, w), 0);
+}
+
 float RaySphereIntersectFarthest(float3 origin, float3 dir, float radius)
 {
     float a = dot(dir, dir);
@@ -127,13 +189,7 @@ AerialPerspectiveResult ComputeAerialPerspectiveLut(
     result.inscatter = float3(0.0, 0.0, 0.0);
     result.transmittance = float3(1.0, 1.0, 1.0);
 
-    if (view_distance < 0.1 || atmo.camera_volume_lut_slot == K_INVALID_BINDLESS_INDEX)
-    {
-        return result;
-    }
-
     // User controls from EnvironmentDynamicData
-    float distance_scale = max(atmo.aerial_perspective_distance_scale, 0.0);
     float scattering_strength = max(EnvironmentDynamicData.aerial_scattering_strength, 0.0);
 
     // Early out if disabled via strength
@@ -142,54 +198,25 @@ AerialPerspectiveResult ComputeAerialPerspectiveLut(
         return result;
     }
 
-    // Effective path length with user scaling.
-    float effective_distance = view_distance * distance_scale;
-    float view_distance_km = effective_distance / 1000.0;
-
-    // Camera volume froxel parameterization (UE tuned parameters).
-    // SliceCount = 32, SliceSizeKm = 4 → MaxDistanceKm = 128.
-    // Generation uses squared distribution and sampling uses:
-    //   w = sqrt(slice / SliceCount)
-    // where slice = depth_km / SliceSizeKm.
-    const float AP_SLICE_COUNT = 32.0;
-    const float AP_KM_PER_SLICE = 4.0;
-
-    float slice = view_distance_km / AP_KM_PER_SLICE;
-    slice = clamp(slice, 0.0, AP_SLICE_COUNT);
-
     // Fade near camera to avoid quantization artifacts in the first few froxels.
     // This matches the UE reference behavior (weight is linear in slice).
-    float weight = 1.0;
-    if (slice < 0.5)
-    {
-        weight = saturate(slice * 2.0);
-        slice = 0.5;
-    }
+    // Note: the LUT sampler clamps slice >= 0.5, so we mirror the weight logic here.
+    const float AP_SLICE_COUNT = 32.0;
+    const float AP_KM_PER_SLICE = 4.0;
+    float distance_scale = max(EnvironmentDynamicData.aerial_perspective_distance_scale, 0.0);
+    float view_distance_km = (view_distance * distance_scale) / 1000.0;
+    float slice = clamp(view_distance_km / AP_KM_PER_SLICE, 0.0, AP_SLICE_COUNT);
+    float weight = (slice < 0.5) ? saturate(slice * 2.0) : 1.0;
 
-    float w = sqrt(saturate(slice / AP_SLICE_COUNT));
-
-    // Screen UV from world position
-    float4 view_pos = mul(view_matrix, float4(world_pos, 1.0));
-    float4 clip_pos = mul(projection_matrix, view_pos);
-    clip_pos /= clip_pos.w;
-    float2 screen_uv = clip_pos.xy * 0.5 + 0.5;
-    // Handle D3D12/Vulkan Y flip
-    screen_uv.y = 1.0 - screen_uv.y;
-
-    // Sample camera volume (32 slices, squared distribution)
-    // RGB = Inscattered Radiance
-    // A   = 1 - Transmittance (Opacity)
-    Texture3D<float4> camera_volume = ResourceDescriptorHeap[atmo.camera_volume_lut_slot];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0]; // Global linear sampler
-
-    float4 ap_sample = camera_volume.SampleLevel(linear_sampler, float3(screen_uv, w), 0);
+    float4 ap_sample = SampleCameraVolumeLut(atmo, world_pos, camera_pos, view_distance);
 
     // Apply user scattering strength
     result.inscatter = ap_sample.rgb * scattering_strength * weight;
 
-    // Opacity = ap_sample.a; Transmittance = 1 - Opacity
-    // We also modulate opacity by scattering strength for the final transmittance
-    float opacity = saturate(ap_sample.a * scattering_strength) * weight;
+    // Opacity = ap_sample.a; Transmittance = 1 - Opacity.
+    // Keep transmittance independent of the artistic scattering strength control;
+    // strength scales the added inscatter term only.
+    float opacity = saturate(ap_sample.a) * weight;
     result.transmittance = 1.0 - opacity;
 
     return result;
@@ -223,10 +250,10 @@ AerialPerspectiveResult ComputeAerialPerspective(
         return result;
     }
 
-    // Try LUT-based aerial perspective first
+    // Compute atmosphere aerial perspective (LUT-based) when enabled.
     if (ShouldUseLutAerialPerspective(env_data.atmosphere))
     {
-        return ComputeAerialPerspectiveLut(
+        result = ComputeAerialPerspectiveLut(
             env_data.atmosphere,
             world_pos,
             camera_pos,
@@ -234,7 +261,56 @@ AerialPerspectiveResult ComputeAerialPerspective(
             view_distance);
     }
 
-    // Fallback: No aerial perspective (let caller use analytic fog if available)
+    // Apply Fog environment system in addition to atmosphere.
+    // Fog must remain responsive even when LUT haze is active.
+    if (env_data.fog.enabled)
+    {
+        GpuFogParams fog = env_data.fog;
+
+        const float start_d = max(fog.start_distance_m, 0.0);
+        const float d = max(view_distance - start_d, 0.0);
+        if (d > 1e-4)
+        {
+            const float base_density = max(fog.density, 0.0);
+            const float falloff = max(fog.height_falloff, 0.0);
+
+            // Oxygen convention is Z-up; fog height parameters are authored in meters.
+            const float mid_height_m = 0.5 * (camera_pos.z + world_pos.z);
+            const float height_rel_m = mid_height_m - fog.height_offset_m;
+
+            // Density decreases with height above the offset.
+            const float height_scale = (falloff > 1e-5) ? exp(-falloff * height_rel_m) : 1.0;
+            const float effective_density = base_density * height_scale;
+
+            // Beer-Lambert extinction approximation.
+            float fog_opacity = 1.0 - exp(-effective_density * d);
+            fog_opacity = saturate(fog_opacity);
+            fog_opacity = min(fog_opacity, saturate(fog.max_opacity));
+
+            const float fog_transmittance = 1.0 - fog_opacity;
+
+            // TODO: Rethink Fog
+            // Composite: multiply transmittance, add fog inscatter.
+            // Single-scattering approximation: fog both attenuates and adds
+            // inscattered radiance. This avoids the "pure darkening" look.
+            result.transmittance *= fog_transmittance;
+
+            // Directional single scattering from the sun.
+            const float3 view_dir = view_vec / view_distance; // camera -> point
+            const float cos_theta = dot(sun_dir, -view_dir);  // point->camera
+            const float phase = HenyeyGreensteinPhase(cos_theta, fog.anisotropy_g);
+
+            const float scattering_intensity
+                = (fog.scattering_intensity > 0.0) ? fog.scattering_intensity : 1.0;
+
+            const float sun_irradiance = LuxToIrradiance(GetSunIlluminance());
+            const float3 sun_radiance = GetSunColorRGB() * (sun_irradiance * INV_PI);
+
+            result.inscatter += sun_radiance * fog.albedo_rgb
+                * (fog_opacity * scattering_intensity * phase);
+        }
+    }
+
     return result;
 }
 

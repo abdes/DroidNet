@@ -15,7 +15,6 @@
 //! - Per-instance transform lookups for instanced rendering
 
 #include "Renderer/SceneConstants.hlsli"
-#include "Renderer/EnvironmentDynamicData.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/MaterialConstants.hlsli"
 #include "Renderer/Vertex.hlsli"

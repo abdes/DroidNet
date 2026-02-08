@@ -92,7 +92,7 @@ auto PostProcessVm::SetManualExposureEV100(float ev100) -> void
 {
   std::lock_guard lock(mutex_);
   if (service_) {
-    service_->SetManualExposureEV100(ev100);
+    service_->SetManualExposureEV100(std::max(ev100, 0.0F));
     Refresh();
   }
 }

@@ -19,6 +19,7 @@
 
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/EnvironmentDebugPanel.h"
+#include "DemoShell/UI/EnvironmentVm.h"
 
 namespace oxygen::examples::ui {
 
@@ -185,6 +186,7 @@ auto EnvironmentDebugPanel::DrawContents() -> void
 
   ImGui::Separator();
 
+  DrawFog();
   // Environment system sections
   ImGui::SetNextItemOpen(sky_atmo_section_open_, ImGuiCond_Always);
   const bool sky_atmo_section_open = ImGui::CollapsingHeader("Sky Atmosphere");
@@ -225,11 +227,73 @@ auto EnvironmentDebugPanel::DrawContents() -> void
   if (sky_light_section_open) {
     DrawSkyLightSection();
   }
-
-  // NOTE: Fog section removed - use Aerial Perspective from SkyAtmosphere
-  // instead. Real volumetric fog system to be implemented in the future.
 }
 
+void EnvironmentDebugPanel::DrawFog()
+{
+  if (!ImGui::CollapsingHeader("Fog")) {
+    return;
+  }
+
+  bool fog_enabled = environment_vm_->GetFogEnabled();
+  if (ImGui::Checkbox("Enabled##Fog", &fog_enabled)) {
+    environment_vm_->SetFogEnabled(fog_enabled);
+  }
+
+  int model = environment_vm_->GetFogModel();
+  if (ImGui::RadioButton("Model: Exponential Height", model == 0)) {
+    environment_vm_->SetFogModel(0);
+  }
+  ImGui::SameLine();
+  if (ImGui::RadioButton("Model: Volumetric", model == 1)) {
+    environment_vm_->SetFogModel(1);
+  }
+
+  float density = environment_vm_->GetFogDensity();
+  if (ImGui::SliderFloat("Density", &density, 0.0F, 1.0F, "%.6f",
+        ImGuiSliderFlags_Logarithmic)) {
+    environment_vm_->SetFogDensity(density);
+  }
+
+  float start_distance_m = environment_vm_->GetFogStartDistanceMeters();
+  if (ImGui::DragFloat(
+        "Start Distance (m)", &start_distance_m, 1.0F, 0.0F, 0.0F, "%.1f")) {
+    environment_vm_->SetFogStartDistanceMeters(
+      std::max(start_distance_m, 0.0F));
+  }
+
+  float height_falloff = environment_vm_->GetFogHeightFalloff();
+  if (ImGui::DragFloat(
+        "Height Falloff (1/m)", &height_falloff, 0.0001F, 0.0F, 2.0F, "%.4f")) {
+    environment_vm_->SetFogHeightFalloff(height_falloff);
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+    ImGui::SetTooltip(
+      "Controls how density decays with height above Height Offset.\n"
+      "density(z) = base_density * exp(-falloff * (z - offset)).\n"
+      "0 = uniform with height; higher = fog hugs the ground.\n"
+      "Units: 1/m (inverse meters).\n"
+      "Tip: small changes can have large visual impact.");
+  }
+
+  float height_offset_m = environment_vm_->GetFogHeightOffsetMeters();
+  if (ImGui::DragFloat(
+        "Height Offset (m)", &height_offset_m, 0.25F, 0.0F, 0.0F, "%.1f")) {
+    environment_vm_->SetFogHeightOffsetMeters(height_offset_m);
+  }
+
+  float max_opacity = environment_vm_->GetFogMaxOpacity();
+  if (ImGui::SliderFloat("Max Opacity", &max_opacity, 0.0F, 1.0F, "%.3f")) {
+    environment_vm_->SetFogMaxOpacity(max_opacity);
+  }
+
+  glm::vec3 albedo = environment_vm_->GetFogAlbedo();
+  float albedo_rgb[3] = { albedo.r, albedo.g, albedo.b };
+  if (ImGui::ColorEdit3("Albedo", albedo_rgb, ImGuiColorEditFlags_Float)) {
+    environment_vm_->SetFogAlbedo(
+      glm::vec3(albedo_rgb[0], albedo_rgb[1], albedo_rgb[2]));
+  }
+}
 auto EnvironmentDebugPanel::GetName() const noexcept -> std::string_view
 {
   return "Environment";
@@ -510,8 +574,8 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   }
   float aerial_scattering_strength
     = environment_vm_->GetAerialScatteringStrength();
-  if (ImGui::DragFloat("Scattering Strength", &aerial_scattering_strength,
-        0.01F, 0.0F, 50.0F, "%.2F")) {
+  if (ImGui::DragFloat(
+        "Haze", &aerial_scattering_strength, 0.01F, 0.0F, 50.0F, "%.2F")) {
     environment_vm_->SetAerialScatteringStrength(aerial_scattering_strength);
   }
 
@@ -663,8 +727,9 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
       }
       float skybox_hdr_exposure_ev = environment_vm_->GetSkyboxHdrExposureEv();
       if (ImGui::DragFloat("HDR Exposure (EV)##Skybox", &skybox_hdr_exposure_ev,
-            0.1F, -16.0F, 16.0F, "%.2F")) {
-        environment_vm_->SetSkyboxHdrExposureEv(skybox_hdr_exposure_ev);
+            0.1F, 0.0F, 16.0F, "%.2F")) {
+        environment_vm_->SetSkyboxHdrExposureEv(
+          std::max(skybox_hdr_exposure_ev, 0.0F));
         skybox_auto_load_pending_ = true;
       }
     }
