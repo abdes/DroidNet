@@ -76,10 +76,6 @@ struct SkyViewLutPassConstants
 #define THREAD_GROUP_SIZE_X 8
 #define THREAD_GROUP_SIZE_Y 8
 
-// Number of raymarch samples - higher values reduce banding but cost more.
-static const uint MIN_SCATTERING_SAMPLES = 96;
-static const uint MAX_SCATTERING_SAMPLES = 256;
-
 // Atmosphere feature flag bits (matches C++ AtmosphereFlags enum)
 
 
@@ -112,65 +108,6 @@ float GetSliceAltitudeM(uint slice_index, uint slice_count,
 
     // Linear mapping: h = H * t.
     return atmosphere_h * t;
-}
-
-//! Converts UV coordinates to view direction with sun-relative parameterization.
-//!
-//! This uses a sun-relative azimuth parameterization where U represents the
-//! azimuth relative to the sun direction (U=0.5 is the sun azimuth). This
-//! allows the LUT to remain valid as the sun rotates around the zenith axis,
-//! only requiring regeneration when sun elevation changes.
-//!
-//! The V coordinate uses horizon-aware mapping with V=0.5 at the horizon.
-//!
-//! @param uv Normalized texture coordinates [0, 1].
-//! @param planet_radius Planet radius in meters.
-//! @param camera_altitude_m Camera altitude above surface in meters.
-//! @param sun_cos_zenith Cosine of sun zenith angle (sun_dir.z).
-//! @return Normalized view direction in sun-relative space (Z-up, sun at +X horizon).
-float3 UvToViewDirection(float2 uv, float planet_radius, float camera_altitude_m, float sun_cos_zenith)
-{
-    // u = relative azimuth / 2π, where 0.5 = sun direction
-    // Shift so U=0.5 corresponds to azimuth=0 (sun direction)
-    float relative_azimuth = (uv.x - 0.5) * TWO_PI;
-
-    // Compute horizon angle (from zenith) for this altitude.
-    // cos_horizon is -sqrt(1 - (R/r)^2).
-    float r = planet_radius + camera_altitude_m;
-    float rho = planet_radius / r;
-    float cos_horizon = -sqrt(max(0.0, 1.0 - rho * rho));
-
-    float zenith_horizon_angle = acos(cos_horizon);
-    float beta = PI - zenith_horizon_angle; // Angle from horizon to nadir
-
-    // NON-LINEAR V mapping (Reference): Map angles, not cosines.
-    // V=0.5 is horizon.
-    float view_zenith_angle;
-    if (uv.y < 0.5)
-    {
-        // Below horizon (Sky): map [0, 0.5] -> [0, ZenithHorizonAngle]
-        float coord = uv.y * 2.0;
-        coord = 1.0 - coord;
-        coord *= coord; // SQUARED distribution near horizon
-        coord = 1.0 - coord;
-        view_zenith_angle = zenith_horizon_angle * coord;
-    }
-    else
-    {
-        // Above horizon (Ground): map [0.5, 1] -> [ZenithHorizonAngle, PI]
-        float coord = uv.y * 2.0 - 1.0;
-        coord *= coord; // SQUARED distribution near horizon
-        view_zenith_angle = zenith_horizon_angle + beta * coord;
-    }
-
-    float cos_zenith = cos(view_zenith_angle);
-    float sin_zenith = sqrt(max(0.0, 1.0 - cos_zenith * cos_zenith));
-
-    // View direction in sun-relative coordinates:
-    return float3(
-        sin_zenith * cos(relative_azimuth),
-        sin_zenith * sin(relative_azimuth),
-        cos_zenith);
 }
 
 //! Computes single-scattering inscatter along a view ray.

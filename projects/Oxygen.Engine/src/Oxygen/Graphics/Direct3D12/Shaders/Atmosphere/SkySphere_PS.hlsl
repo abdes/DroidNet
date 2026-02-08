@@ -148,52 +148,13 @@ float4 PS(SkyPSInput input) : SV_TARGET
 
     float3 view_dir = normalize(input.view_dir);
 
-    // Depth-aware ray termination [Phase 4]
-    // If the sky pass is drawn with depth test disabled or forced always,
-    // this allows clamping the atmosphere contribution to the scene geometry.
-    float max_dist = 1e9; // Infinity
-
+    // Debug ray-march visualization (gated by mouse click)
     if (g_PassConstantsIndex != K_INVALID_BINDLESS_INDEX)
     {
-         ConstantBuffer<SkyPassConstants> pass = ResourceDescriptorHeap[g_PassConstantsIndex];
-
-         if (pass.depth_srv_index != K_INVALID_BINDLESS_INDEX)
-         {
-             Texture2D<float> depth_tex = ResourceDescriptorHeap[pass.depth_srv_index];
-             int2 load_coord = int2(input.position.xy);
-
-             // Clamp to viewport to avoid out-of-bounds load on resize edge cases
-             uint w, h;
-             depth_tex.GetDimensions(w, h);
-             if (load_coord.x < w && load_coord.y < h)
-             {
-                 float depth = depth_tex.Load(int3(load_coord, 0));
-
-                 // If not background, calculate world position distance
-                 // Note: Depends on clear depth. Assuming D3D12 standard Far=1.0.
-                 if (depth < 1.0)
-                 {
-                     float2 uv = input.position.xy / pass.viewport_size;
-                     float2 ndc = uv * 2.0 - 1.0;
-                     ndc.y = -ndc.y; // D3D Y-flip
-
-                     float4 h_pos = mul(pass.inv_view_proj, float4(ndc, depth, 1.0));
-                     float3 world_pos = h_pos.xyz / h_pos.w;
-
-                     max_dist = length(world_pos - camera_position);
-                 }
-             }
-         }
-
-         TryEmitSkyRayMarchDebug(env_data, input.position.xy, camera_position, view_dir);
+        TryEmitSkyRayMarchDebug(env_data, input.position.xy, camera_position, view_dir);
     }
 
-    // Compute linear sky color
-    // Note: ComputeSkyColor uses LUTs which are pre-integrated to infinity.
-    // To support max_dist clamping properly with LUTs, one would need to subtract
-    // the transmittance-weighted scattered light beyond max_dist, which requires
-    // more complex LUT usage (e.g. 4D LUTs or reprojection).
-    // For now, this prepares the shader for such logic or analytic fallbacks.
+    // Compute linear sky color from LUTs (pre-integrated to infinity)
     float3 sky_color = ComputeSkyColor(env_data, view_dir);
 
     return float4(sky_color, 1.0f);

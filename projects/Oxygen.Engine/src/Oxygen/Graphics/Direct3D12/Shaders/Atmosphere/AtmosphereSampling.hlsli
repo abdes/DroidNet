@@ -18,8 +18,8 @@
 //!   u = azimuth / (2 * PI)
 //!   v = (cos_zenith + 1) / 2
 
-#ifndef SKY_ATMOSPHERE_SAMPLING_HLSLI
-#define SKY_ATMOSPHERE_SAMPLING_HLSLI
+#ifndef OXYGEN_D3D12_SHADERS_ATMOSPHERE_SAMPLING_HLSLI
+#define OXYGEN_D3D12_SHADERS_ATMOSPHERE_SAMPLING_HLSLI
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
 #include "Renderer/EnvironmentStaticData.hlsli"
@@ -60,6 +60,19 @@ float2 GetTransmittanceLutUv(
     return saturate(float2(x_mu, x_r));
 }
 
+//! Applies half-texel offset for proper bilinear filtering.
+//!
+//! @param uv Raw UV coordinates [0, 1].
+//! @param lut_width LUT texture width.
+//! @param lut_height LUT texture height.
+//! @return UV with half-texel offset applied.
+static inline float2 ApplyHalfTexelOffset(float2 uv, float lut_width, float lut_height)
+{
+    uv = uv * float2((lut_width - 1.0) / lut_width, (lut_height - 1.0) / lut_height);
+    uv += float2(0.5 / lut_width, 0.5 / lut_height);
+    return uv;
+}
+
 //! Samples the transmittance LUT.
 //!
 //! @param lut_slot Bindless SRV index for the transmittance LUT.
@@ -97,8 +110,7 @@ float3 SampleTransmittanceOpticalDepthLut(
         cos_zenith, altitude_m, planet_radius_m, atmosphere_height_m);
 
     // Apply half-texel offset for proper filtering.
-    uv = uv * float2((lut_width - 1.0) / lut_width, (lut_height - 1.0) / lut_height);
-    uv += float2(0.5 / lut_width, 0.5 / lut_height);
+    uv = ApplyHalfTexelOffset(uv, lut_width, lut_height);
 
     // RGB stores optical depth integrals for Rayleigh/Mie/Absorption.
     Texture2D<float4> lut = ResourceDescriptorHeap[lut_slot];
@@ -230,12 +242,6 @@ float2 GetSkyViewLutUv(float3 view_dir, float3 sun_dir, float planet_radius, flo
     return float2(u, v);
 }
 
-static inline float2 ApplyHalfTexelOffset(float2 uv, float lut_width, float lut_height)
-{
-    uv = uv * float2((lut_width - 1.0) / lut_width, (lut_height - 1.0) / lut_height);
-    uv += float2(0.5 / lut_width, 0.5 / lut_height);
-    return uv;
-}
 
 //! Converts a camera altitude (meters) to a fractional slice index.
 //!
@@ -592,4 +598,4 @@ float3 ComputeAtmosphereSkyColor(
     return inscatter + sun_contribution;
 }
 
-#endif // SKY_ATMOSPHERE_SAMPLING_HLSLI
+#endif // OXYGEN_D3D12_SHADERS_ATMOSPHERE_SAMPLING_HLSLI

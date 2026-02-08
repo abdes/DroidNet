@@ -7,7 +7,19 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTSTATICDATA_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTSTATICDATA_HLSLI
 
-#include "../Atmosphere/AtmosphereDensity.hlsli"
+// Atmosphere density profile structures (used by GpuSkyAtmosphereParams)
+struct AtmosphereDensityLayer
+{
+    float width_m;
+    float exp_term;
+    float linear_term;
+    float constant_term;
+};
+
+struct AtmosphereDensityProfile
+{
+    AtmosphereDensityLayer layers[2];
+};
 
 static const uint FOG_MODEL_EXPONENTIAL_HEIGHT = 0u;
 static const uint FOG_MODEL_VOLUMETRIC = 1u;

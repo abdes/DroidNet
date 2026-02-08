@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#ifndef OXYGEN_SHADERS_SKY_SPHERE_COMMON_HLSLI
-#define OXYGEN_SHADERS_SKY_SPHERE_COMMON_HLSLI
+#ifndef OXYGEN_D3D12_SHADERS_ATMOSPHERE_SKY_COLOR_HLSLI
+#define OXYGEN_D3D12_SHADERS_ATMOSPHERE_SKY_COLOR_HLSLI
 
 #include "Renderer/EnvironmentDynamicData.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
@@ -43,12 +43,12 @@ float3 ComputeSkyColor(EnvironmentStaticData env_data, float3 view_dir)
         if (env_data.atmosphere.sky_view_lut_slot != K_INVALID_BINDLESS_INDEX)
         {
             float3 sun_dir = GetSunDirectionWS();
-            float3 sun_luminance = GetSunLuminanceRGB();
+            float3 sun_illuminance = GetSunLuminanceRGB();
 
             if (!HasSunLight() && !IsOverrideSunEnabled())
             {
                 sun_dir = normalize(float3(0.5, 0.5, 0.5));
-                sun_luminance = float3(0.0, 0.0, 0.0);
+                sun_illuminance = float3(0.0, 0.0, 0.0);
             }
 
             float planet_radius = env_data.atmosphere.planet_radius_m;
@@ -58,7 +58,7 @@ float3 ComputeSkyColor(EnvironmentStaticData env_data, float3 view_dir)
                 env_data.atmosphere,
                 view_dir,
                 sun_dir,
-                sun_luminance,
+                sun_illuminance,
                 planet_radius,
                 camera_altitude);
         }
@@ -96,4 +96,4 @@ float3 ComputeSkyColor(EnvironmentStaticData env_data, float3 view_dir)
     return sky_color;
 }
 
-#endif // OXYGEN_SHADERS_SKY_SPHERE_COMMON_HLSLI
+#endif // OXYGEN_D3D12_SHADERS_ATMOSPHERE_SKY_COLOR_HLSLI
