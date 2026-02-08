@@ -31,6 +31,7 @@
 #include "Atmosphere/AtmosphereConstants.hlsli"
 #include "Common/Geometry.hlsli"
 #include "Common/Coordinates.hlsli"
+#include "Atmosphere/AtmosphereSampling.hlsli"
 
 // Root constants (b2, space0)
 cbuffer RootConstants : register(b2, space0)
@@ -53,21 +54,7 @@ struct MultiScatLutPassConstants
     float planet_radius_m;
 };
 
-
 #define THREAD_GROUP_SIZE 8
-
-//! Samples the transmittance LUT to obtain optical depth.
-float3 SampleTransmittanceLutOpticalDepthLocal(
-    float altitude_m,
-    float cos_zenith,
-    GpuSkyAtmosphereParams atmo,
-    Texture2D<float4> transmittance_lut,
-    SamplerState linear_sampler)
-{
-    float u = (cos_zenith + 0.15) / 1.15;
-    float v = sqrt(altitude_m / atmo.atmosphere_height_m);
-    return transmittance_lut.SampleLevel(linear_sampler, float2(u, v), 0).rgb;
-}
 
 [numthreads(THREAD_GROUP_SIZE, THREAD_GROUP_SIZE, 1)]
 void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
@@ -149,7 +136,13 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                 // We need to know how much sun light reaches this scattering point.
                 float3 p_dir = normalize(p);
                 float cos_sun_p = dot(p_dir, sun_dir);
-                float3 sun_od = SampleTransmittanceLutOpticalDepthLocal(h_m, cos_sun_p, atmo, transmittance_lut, linear_sampler);
+                float3 sun_od = SampleTransmittanceOpticalDepthLut(
+                    pass_constants.transmittance_srv_index,
+                    float(pass_constants.transmittance_width),
+                    float(pass_constants.transmittance_height),
+                    cos_sun_p, h_m,
+                    atmo.planet_radius_m,
+                    atmo.atmosphere_height_m);
                 float3 sun_transmittance = TransmittanceFromOpticalDepth(sun_od, atmo);
 
                 // Scattering event: SunLight * Transmittance * ScatteringCoeff
@@ -170,7 +163,13 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                 float ground_ndotl = max(0.0, dot(ground_normal, sun_dir));
 
                 // Sun transmittance to the ground point
-                float3 ground_sun_od = SampleTransmittanceLutOpticalDepthLocal(0.0, ground_ndotl, atmo, transmittance_lut, linear_sampler);
+                float3 ground_sun_od = SampleTransmittanceOpticalDepthLut(
+                    pass_constants.transmittance_srv_index,
+                    float(pass_constants.transmittance_width),
+                    float(pass_constants.transmittance_height),
+                    ground_ndotl, 0.0,
+                    atmo.planet_radius_m,
+                    atmo.atmosphere_height_m);
                 float3 ground_sun_transmittance = TransmittanceFromOpticalDepth(ground_sun_od, atmo);
 
                 float3 view_transmittance = TransmittanceFromOpticalDepth(accumulated_od, atmo);
