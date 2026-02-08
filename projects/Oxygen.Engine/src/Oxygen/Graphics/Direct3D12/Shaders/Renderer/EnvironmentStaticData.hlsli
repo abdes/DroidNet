@@ -57,10 +57,12 @@ struct GpuSkyAtmosphereParams
     float3 mie_scattering_rgb;
     float mie_scale_height_m;
 
-    // Mie absorption coefficient (1/m, RGB).
-    // UE5-style: extinction = scattering + absorption.
     float3 mie_absorption_rgb;
     float mie_g;
+
+    // Precomputed Mie extinction (scattering + absorption).
+    float3 mie_extinction_rgb;
+    float _pad_mie;
 
     float3 absorption_rgb;
     float absorption_layer_width_m;
@@ -84,7 +86,7 @@ struct GpuSkyAtmosphereParams
 
     uint sky_view_lut_slices;
     uint sky_view_alt_mapping_mode;
-    uint _pad;
+    uint _pad0;
 };
 
 // Mirrors oxygen::engine::GpuSkyLightParams (sizeof = 64)
@@ -168,7 +170,7 @@ struct GpuPostProcessParams
     uint _pad2;
 };
 
-// Mirrors oxygen::engine::EnvironmentStaticData (sizeof = 432)
+// Mirrors oxygen::engine::EnvironmentStaticData (sizeof = 464)
 struct EnvironmentStaticData
 {
     GpuFogParams fog;

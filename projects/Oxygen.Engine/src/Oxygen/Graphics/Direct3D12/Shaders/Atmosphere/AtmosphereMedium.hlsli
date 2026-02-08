@@ -88,11 +88,15 @@ float3 TransmittanceFromOpticalDepth(
     float3 optical_depth,
     GpuSkyAtmosphereParams atmo)
 {
-    return TransmittanceFromOpticalDepth(
-        optical_depth,
-        atmo.rayleigh_scattering_rgb,
-        atmo.mie_scattering_rgb + atmo.mie_absorption_rgb,
-        atmo.absorption_rgb);
+    float d_r = optical_depth.x; // Rayleigh optical depth
+    float d_m = optical_depth.y; // Mie optical depth
+    float d_a = optical_depth.z; // Absorption optical depth
+
+    float3 extinction = (atmo.rayleigh_scattering_rgb * d_r)
+        + (atmo.mie_extinction_rgb * d_m)
+        + (atmo.absorption_rgb * d_a);
+
+    return exp(-extinction);
 }
 
 #endif // OXYGEN_GRAPHICS_SHADERS_ATMOSPHERE_MEDIUM_HLSLI
