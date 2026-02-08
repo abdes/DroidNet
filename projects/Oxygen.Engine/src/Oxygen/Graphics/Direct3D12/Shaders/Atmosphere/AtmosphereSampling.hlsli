@@ -418,7 +418,7 @@ float4 SampleSkyViewLut(
 //! @param view_dir Normalized world-space view direction.
 //! @param sun_dir Normalized direction toward the sun.
 //! @param angular_radius_radians Angular radius of the sun disk.
-//! @param sun_luminance Sun luminance (color * intensity).
+//! @param sun_illuminance Sun illuminance in Lux (color * intensity).
 //! @param planet_radius Planet radius in meters.
 //! @param camera_altitude Camera altitude above surface in meters.
 //! @return Sun disk radiance contribution.
@@ -426,7 +426,7 @@ float3 ComputeSunDisk(
     float3 view_dir,
     float3 sun_dir,
     float angular_radius_radians,
-    float3 sun_luminance,
+    float3 sun_illuminance,
     float planet_radius,
     float camera_altitude)
 {
@@ -459,11 +459,11 @@ float3 ComputeSunDisk(
         cos_sun_radius + edge_softness,
         cos_angle);
 
-    // The sun_luminance parameter is the sun's illuminance (Lux). To get the
+    // The sun_illuminance parameter is the sun's illuminance (Lux). To get the
     // radiance (Nits) for the sun disk, we must divide by the solid angle of
     // the sun disk: Omega = 2 * PI * (1 - cos(angular_radius)).
     float omega_sun = TWO_PI * (1.0 - cos_sun_radius);
-    float3 sun_radiance = sun_luminance / max(omega_sun, 1e-6);
+    float3 sun_radiance = sun_illuminance / max(omega_sun, 1e-6);
 
     // Prevent FP16 overflow (max ~65504).
     // Physical sun radiance can easily exceed this (e.g. 10^9 nits), resulting
@@ -504,7 +504,7 @@ float3 ComputeSunDisk(
     if (any(isnan(final_sun)) || any(isinf(final_sun)))
     {
         // Fallback to a safe bright value to indicate error without black hole
-         final_sun = min(sun_luminance, float3(100.0, 100.0, 100.0));
+         final_sun = min(sun_illuminance, float3(100.0, 100.0, 100.0));
     }
 
     return final_sun;
