@@ -190,10 +190,14 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     float3 view_dir_vs = normalize(view_pos.xyz);
     float3 view_dir_ws = normalize(mul((float3x3)inv_view, view_dir_vs));
 
-    // Sun direction
-    float sun_cos_zenith = pass_constants.sun_cos_zenith;
-    float sun_sin_zenith = sqrt(max(0.0, 1.0 - sun_cos_zenith * sun_cos_zenith));
-    float3 sun_dir = float3(sun_sin_zenith, 0.0, sun_cos_zenith);
+    // Sun direction (world space).
+    // Use the designated/override sun from EnvironmentDynamicData to preserve azimuth.
+    float3 sun_dir = normalize(GetSunDirectionWS());
+
+    // Sun radiance proxy (linear RGB).
+    // Keep consistent with SkyViewLut_CS.hlsl: MultiScatLUT is normalized (unit sun),
+    // so we apply the actual sun radiance here.
+    float3 sun_radiance = GetSunColorRGB() * GetSunIlluminance();
 
     // Ray origin in planet-centered coordinates
     float camera_altitude_m = GetCameraAltitudeM();
@@ -230,7 +234,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
     for (uint i = 0; i < num_steps; ++i)
     {
-        float t = (float(i) + 0.5) * step_size;
+        // UE tuned parameter: fixed 0.3 offset within each segment (SampleSegmentT).
+        float t = (float(i) + 0.3) * step_size;
         float3 sample_pos = origin + view_dir_ws * t;
         float altitude = length(sample_pos) - atmo.planet_radius_m;
         altitude = max(altitude, 0.0);
@@ -253,7 +258,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
         // Single scattering
         float3 sigma_s_single = (atmo.rayleigh_scattering_rgb * d_r * rayleigh_phase
-                              + atmo.mie_scattering_rgb * d_m * mie_phase) * sun_transmittance;
+                      + atmo.mie_scattering_rgb * d_m * mie_phase)
+                      * sun_transmittance * sun_radiance;
 
         // Multi-scattering
         float u_ms = (cos_sun_zenith + 1.0) / 2.0;
@@ -263,7 +269,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         float f_ms = ms_sample.a;
         float3 energy_compensation = 1.0 / max(1.0 - f_ms, 1e-4);
         float3 sigma_s_multi = (atmo.rayleigh_scattering_rgb * d_r + atmo.mie_scattering_rgb * d_m)
-                             * multi_scat_radiance * energy_compensation * atmo.multi_scattering_factor;
+                     * multi_scat_radiance * energy_compensation
+                     * atmo.multi_scattering_factor * sun_radiance;
 
         float3 S = sigma_s_single + sigma_s_multi;
 
@@ -284,7 +291,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     }
 
     // Output: RGB = inscatter, A = opacity
-    float opacity = 1.0 - Luminance(throughput);
+    // Match UE reference: opacity derived from average (non-colored) transmittance.
+    float opacity = 1.0 - dot(throughput, float3(1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0));
     opacity = saturate(opacity);
 
     RWTexture3D<float4> output = ResourceDescriptorHeap[pass_constants.output_uav_index];

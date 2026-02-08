@@ -87,6 +87,20 @@ float3 Filmic(float3 color)
     return curr * whiteScale;
 }
 
+// 4x4 Bayer ordered dithering. Returns an offset in [-0.5, 0.5].
+static inline float DitherBayer4x4(uint2 pixel_pos)
+{
+    static const float kBayer4x4[16] = {
+        0.0,  8.0,  2.0, 10.0,
+        12.0, 4.0, 14.0,  6.0,
+        3.0, 11.0,  1.0,  9.0,
+        15.0, 7.0, 13.0,  5.0
+    };
+
+    const uint index = (pixel_pos.x & 3u) | ((pixel_pos.y & 3u) << 2u);
+    return (kBayer4x4[index] / 16.0) - 0.5;
+}
+
 //-----------------------------------------------------------------------------
 // Main Pixel Shader
 //-----------------------------------------------------------------------------
@@ -138,6 +152,13 @@ float4 PS(ToneMapVSOutput input) : SV_TARGET
             color = saturate(color);
             break;
     }
+
+    // TEMPORARY WORKAROUND: Dither just before output quantization
+    // (e.g. RGBA8_UNORM swapchain) to reduce visible sky/ground banding.
+    // TODO(#taa): Remove once we have a higher quality TAA/temporal resolve
+    // that provides stable banding suppression.
+    const uint2 pixel_pos = uint2(input.position.xy);
+    color = saturate(color + (DitherBayer4x4(pixel_pos) / 255.0));
 
     return float4(color, 1.0);
 }
