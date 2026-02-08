@@ -7,8 +7,8 @@
 #pragma once
 
 #include <cstdint>
-#include <utility>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Renderer/Types/EnvironmentStaticData.h>
@@ -23,7 +23,11 @@ namespace oxygen::engine::internal {
 */
 class ISkyAtmosphereLutProvider {
 public:
+  ISkyAtmosphereLutProvider() = default;
   virtual ~ISkyAtmosphereLutProvider() = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(ISkyAtmosphereLutProvider)
+  OXYGEN_DEFAULT_MOVABLE(ISkyAtmosphereLutProvider)
 
   //! Update cached parameters and set dirty flag if changed.
   virtual auto UpdateParameters(const GpuSkyAtmosphereParams& params) -> void
@@ -76,7 +80,18 @@ public:
     -> std::tuple<uint32_t, uint32_t, uint32_t>
     = 0;
 
+  //! Returns shader-visible SRV index for the blue noise texture.
+  [[nodiscard]] virtual auto GetBlueNoiseSlot() const noexcept
+    -> ShaderVisibleIndex
+    = 0;
+
+  //! Returns blue noise texture dimensions (width, height, slices).
+  [[nodiscard]] virtual auto GetBlueNoiseSize() const noexcept
+    -> std::tuple<uint32_t, uint32_t, uint32_t>
+    = 0;
+
   //! Returns true if LUTs have been generated at least once.
+
   [[nodiscard]] virtual auto HasBeenGenerated() const noexcept -> bool = 0;
 
   //! Returns a monotonic generation token that increases when parameters

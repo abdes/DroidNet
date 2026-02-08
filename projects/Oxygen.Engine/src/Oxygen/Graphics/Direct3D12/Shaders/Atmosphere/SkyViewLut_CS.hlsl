@@ -28,8 +28,8 @@
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
 #include "Renderer/EnvironmentStaticData.hlsli"
 #include "Renderer/EnvironmentDynamicData.hlsli"
-#include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/SceneConstants.hlsli"
+#include "Renderer/EnvironmentHelpers.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Geometry.hlsli"
 #include "Common/Coordinates.hlsli"
@@ -132,36 +132,39 @@ float3 UvToViewDirection(float2 uv, float planet_radius, float camera_altitude, 
     // Shift so U=0.5 corresponds to azimuth=0 (sun direction)
     float relative_azimuth = (uv.x - 0.5) * TWO_PI;
 
-    // Compute horizon angle for this altitude.
+    // Compute horizon angle (from zenith) for this altitude.
+    // cos_horizon is -sqrt(1 - (R/r)^2).
     float r = planet_radius + camera_altitude;
     float rho = planet_radius / r;
     float cos_horizon = -sqrt(max(0.0, 1.0 - rho * rho));
 
-    // NON-LINEAR V mapping: V=0.5 is horizon.
-    // Concentrate resolution near the horizon (V=0.5) using squared distribution.
-    float cos_zenith;
+    float zenith_horizon_angle = acos(cos_horizon);
+    float beta = PI - zenith_horizon_angle; // Angle from horizon to nadir
+
+    // NON-LINEAR V mapping (Reference): Map angles, not cosines.
+    // V=0.5 is horizon.
+    float view_zenith_angle;
     if (uv.y < 0.5)
     {
-        // Below horizon: map [0, 0.5] -> [-1, cos_horizon]
-        float t = uv.y * 2.0;
-        t = 1.0 - t;
-        t = t * t; // SQUARED for concentration
-        t = 1.0 - t;
-        cos_zenith = lerp(-1.0, cos_horizon, t);
+        // Below horizon (Sky): map [0, 0.5] -> [0, ZenithHorizonAngle]
+        float coord = uv.y * 2.0;
+        coord = 1.0 - coord;
+        coord *= coord; // SQUARED distribution near horizon
+        coord = 1.0 - coord;
+        view_zenith_angle = zenith_horizon_angle * coord;
     }
     else
     {
-        // Above horizon: map [0.5, 1] -> [cos_horizon, 1]
-        float t = (uv.y - 0.5) * 2.0;
-        t = t * t; // SQUARED for concentration
-        cos_zenith = lerp(cos_horizon, 1.0, t);
+        // Above horizon (Ground): map [0.5, 1] -> [ZenithHorizonAngle, PI]
+        float coord = uv.y * 2.0 - 1.0;
+        coord *= coord; // SQUARED distribution near horizon
+        view_zenith_angle = zenith_horizon_angle + beta * coord;
     }
 
+    float cos_zenith = cos(view_zenith_angle);
     float sin_zenith = sqrt(max(0.0, 1.0 - cos_zenith * cos_zenith));
 
     // View direction in sun-relative coordinates:
-    // X-axis points toward sun's horizontal projection
-    // Z-axis is up (zenith)
     return float3(
         sin_zenith * cos(relative_azimuth),
         sin_zenith * sin(relative_azimuth),
@@ -318,11 +321,15 @@ float4 ComputeSingleScattering(
     // Adaptive step count: more steps near the horizon/twilight.
     const float horizon_factor_view = saturate(1.0 - abs(view_dir.z));
 
-    const bool is_twilight = (sun_dir.z < 0.05);
-    const uint num_steps = is_twilight ? 2048u :
-        (uint)lerp((float)MIN_SCATTERING_SAMPLES,
-                   (float)MAX_SCATTERING_SAMPLES,
-                   horizon_factor_view);
+    // Adaptive step count: more steps for long paths (horizon/sunset) to reduce banding.
+    // Reference suggests 32, but for high quality we can go higher.
+    const float min_steps = 32.0;
+    const float max_steps = 64.0;
+
+    // 100km path length starts to need more samples.
+    // 600km+ is typical horizon path.
+    float step_factor = saturate(ray_length / 200000.0);
+    const uint num_steps = (uint)lerp(min_steps, max_steps, step_factor);
 
     float cos_theta = dot(view_dir, sun_dir);
     float rayleigh_phase = RayleighPhase(cos_theta);
@@ -330,34 +337,27 @@ float4 ComputeSingleScattering(
 
     float ms_factor = saturate(atmo.multi_scattering_factor);
 
-    // We no longer accumulate accumulated_optical_depth for the view_transmittance manually
-    // because we use the Frostbite integral accumulation 'throughput' method.
-
     // Precompute coefficients for extinction reconstruction
     float3 beta_rayleigh = atmo.rayleigh_scattering_rgb;
     float3 beta_mie_ext = atmo.mie_scattering_rgb / 0.9;
     float3 beta_abs = atmo.absorption_rgb;
 
-    const float exp_scale = is_twilight ? 0.0 : 4.0;
-
     for (uint i = 0; i < num_steps; ++i)
     {
-        float u_mid = (float(i) + 0.5) / float(num_steps);
-        float t;
-        float step_size;
+        // UE5 Reference: Quadratic distribution of samples (t^2)
+        float t0 = float(i) / float(num_steps);
+        float t1 = float(i + 1) / float(num_steps);
 
-        if (exp_scale > 0.01)
-        {
-            float exp_warp = (1.0 - exp(-exp_scale * u_mid)) / (1.0 - exp(-exp_scale));
-            t = exp_warp * ray_length;
-            step_size = ray_length * exp_scale * exp(-exp_scale * u_mid)
-                      / (1.0 - exp(-exp_scale)) / float(num_steps);
-        }
-        else
-        {
-            t = u_mid * ray_length;
-            step_size = ray_length / float(num_steps);
-        }
+        t0 = t0 * t0;
+        t1 = t1 * t1;
+
+        t0 = t0 * ray_length;
+        t1 = t1 * ray_length;
+
+        float dt = t1 - t0;
+        // UE5 Reference: Fixed 0.3 offset within the segment (SampleSegmentT)
+        // No jitter/noise is used in the reference implementation for SkyViewLut.
+        float t = t0 + dt * 0.3;
 
         float3 sample_pos = origin + view_dir * t;
         float altitude = length(sample_pos) - atmo.planet_radius_m;
@@ -371,7 +371,7 @@ float4 ComputeSingleScattering(
 
         // Reconstruction of extinction at this point
         float3 extinction = beta_rayleigh * d_r + beta_mie_ext * d_m + beta_abs * d_a;
-        float3 sample_optical_depth = extinction * step_size;
+        float3 sample_optical_depth = extinction * dt;
         float3 sample_transmittance = exp(-sample_optical_depth);
 
         // Sun Transmittance
@@ -381,11 +381,16 @@ float4 ComputeSingleScattering(
             altitude, cos_sun_zenith, atmo, transmittance_lut, linear_sampler, lut_size);
         float3 sun_transmittance = TransmittanceFromOpticalDepth(sun_od, atmo);
 
+        // Retrieve Sun Radiance (Color * Illuminance)
+        // We must apply the sun's physical intensity to get correct sky brightness.
+        float3 sun_radiance = GetSunColorRGB() * GetSunIlluminance();
+
         // === Combined Scattering with Multi-Scat ===
         // Single scattering: light from sun -> scatter once -> camera
         // S = L_sun * T_sun * (beta_R * phase_R + beta_M * phase_M)
         float3 sigma_s_single = (atmo.rayleigh_scattering_rgb * d_r * rayleigh_phase
-                              + atmo.mie_scattering_rgb * d_m * mie_phase) * sun_transmittance;
+                              + atmo.mie_scattering_rgb * d_m * mie_phase)
+                              * sun_transmittance * sun_radiance;
 
         // Multiple scattering
         float u_ms = (cos_sun_zenith + 1.0) / 2.0;
@@ -398,8 +403,9 @@ float4 ComputeSingleScattering(
 
         // UE5 style for multi-scat source logic:
         // S_ms = (beta_R + beta_M) * MultiScatRadiance * EnergyComp
+        // We also apply sun_radiance here because MultiScatLUT is typically normalized (unit sun).
         float3 sigma_s_multi = (atmo.rayleigh_scattering_rgb * d_r + atmo.mie_scattering_rgb * d_m)
-                             * multi_scat_radiance * energy_compensation * ms_factor;
+                             * multi_scat_radiance * energy_compensation * ms_factor * sun_radiance;
 
         // Total Source Function (S)
         float3 S = sigma_s_single + sigma_s_multi;
@@ -413,7 +419,7 @@ float4 ComputeSingleScattering(
         // Using a check similar to UE5 implicit behaviors or explicit limit
         if (all(extinction < 1e-6))
         {
-            Sint = S * step_size;
+            Sint = S * dt;
         }
         else
         {
@@ -494,6 +500,14 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     float2 uv = (float2(dispatch_thread_id.xy) + 0.5)
               / float2(pass_constants.output_width, pass_constants.output_height);
 
+    // Reference: Remap UVs to [0,1] parameter space (Top-left texel center should map to 0,0 parameter).
+    // This allows exact sampling of extrema (Zenith, Horizon, Sun).
+    uv.x = (uv.x - 0.5 / pass_constants.output_width) * (pass_constants.output_width / (pass_constants.output_width - 1.0));
+    uv.y = (uv.y - 0.5 / pass_constants.output_height) * (pass_constants.output_height / (pass_constants.output_height - 1.0));
+
+    // Clamp to [0,1] to handle precision issues
+    uv = saturate(uv);
+
     // Derive per-slice camera altitude from slice index using the selected
     // mapping function. Each slice represents a different altitude band,
     // replacing the old single camera_altitude_m pass constant.
@@ -504,11 +518,56 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         pass_constants.alt_mapping_mode);
 
     // Convert UV to view direction using sun-relative parameterization.
-    // In this space, U=0.5 corresponds to looking toward the sun's horizontal direction.
-    float3 view_dir = UvToViewDirection(uv, pass_constants.planet_radius_m, altitude, sun_cos_zenith);
+    // Reference Azimuth Mapping: 0..1 -> 0..PI (Symmetric around sun).
+    // Squared distribution concentrates samples near the sun.
+
+    // 1. Azimuth (uv.x)
+    float azimuth_coord = uv.x;
+    azimuth_coord *= azimuth_coord; // Squared
+
+    // map [0,1] -> [1, -1] (Cosine of angle 0 to PI)
+    float cos_relative_azimuth = -(azimuth_coord * 2.0 - 1.0);
+    float sin_relative_azimuth = sqrt(saturate(1.0 - cos_relative_azimuth * cos_relative_azimuth));
+
+    // 2. Zenith (uv.y) - Reference Angle Logic
+    // Compute horizon angle (from zenith) for this altitude.
+    float r = pass_constants.planet_radius_m + altitude;
+    float rho = pass_constants.planet_radius_m / r;
+    float cos_horizon = -sqrt(max(0.0, 1.0 - rho * rho));
+
+    float zenith_horizon_angle = acos(cos_horizon);
+    float beta = PI - zenith_horizon_angle;
+
+    float view_zenith_angle;
+    if (uv.y < 0.5)
+    {
+        // Sky
+        float coord = uv.y * 2.0;
+        coord = 1.0 - coord;
+        coord *= coord; // Squared
+        coord = 1.0 - coord;
+        view_zenith_angle = zenith_horizon_angle * coord;
+    }
+    else
+    {
+        // Ground
+        float coord = uv.y * 2.0 - 1.0;
+        coord *= coord; // Squared
+        view_zenith_angle = zenith_horizon_angle + beta * coord;
+    }
+
+    float cos_zenith = cos(view_zenith_angle);
+    float sin_zenith = sqrt(max(0.0, 1.0 - cos_zenith * cos_zenith));
+
+    // View direction construction (Z-up)
+    // Azimuth 0 (Sun) -> +X. Azimuth PI -> -X.
+    // Symmetry implies we only render 0..PI hemisphere (Y >= 0).
+    float3 view_dir = float3(
+        sin_zenith * cos_relative_azimuth,
+        sin_zenith * sin_relative_azimuth,
+        cos_zenith);
 
     // Camera position (at altitude above planet surface, on Z-axis)
-    float r = pass_constants.planet_radius_m + altitude;
     float3 origin = float3(0.0, 0.0, r);
 
     // Compute ray length to atmosphere boundary

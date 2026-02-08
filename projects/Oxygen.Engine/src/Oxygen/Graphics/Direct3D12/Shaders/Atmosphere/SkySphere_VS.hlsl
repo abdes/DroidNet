@@ -39,6 +39,7 @@ float4x4 ComputeInvViewProj()
     return (float4x4)0; // Placeholder - we'll use a different method below.
 }
 
+[shader("vertex")]
 SkyVSOutput VS(uint vertex_id : SV_VertexID)
 {
     SkyVSOutput output;

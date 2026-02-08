@@ -41,26 +41,26 @@ void AddGpuDebugLine(GpuDebugLine debugLine)
 
 void AddGpuDebugLine(float3 p0, float3 p1, float3 c)
 {
-    GpuDebugLine gdl;
-    gdl.colorAlpha0 = gdl.colorAlpha1 = float4(c, 1.0);
-    gdl.worldPos0 = float4(p0, 1.0);
-    gdl.worldPos1 = float4(p1, 1.0);
-    AddGpuDebugLine(gdl);
+	GpuDebugLine gdl;
+	gdl.colorAlpha0 = gdl.colorAlpha1 = float4(c, 1.0);
+	gdl.worldPos0 = float4( p0 ,1.0);
+	gdl.worldPos1 = float4( p1 ,1.0);
+	AddGpuDebugLine(gdl);
 }
 
 void AddGpuDebugCross(float3 p, float3 c, float r)
 {
-    GpuDebugLine gdl;
-    gdl.colorAlpha0 = gdl.colorAlpha1 = float4(c, 1.0);
-    gdl.worldPos0 = float4(p + float3(-r, 0, 0), 1.0);
-    gdl.worldPos1 = float4(p + float3( r, 0, 0), 1.0);
-    AddGpuDebugLine(gdl);
-    gdl.worldPos0 = float4(p + float3(0, -r, 0), 1.0);
-    gdl.worldPos1 = float4(p + float3(0,  r, 0), 1.0);
-    AddGpuDebugLine(gdl);
-    gdl.worldPos0 = float4(p + float3(0, 0, -r), 1.0);
-    gdl.worldPos1 = float4(p + float3(0, 0,  r), 1.0);
-    AddGpuDebugLine(gdl);
+	GpuDebugLine gdl;
+	gdl.colorAlpha0 = gdl.colorAlpha1 = float4(c, 1.0);
+	gdl.worldPos0 = float4( p + float3(-r,0,0) ,1.0);
+	gdl.worldPos1 = float4( p + float3( r,0,0) ,1.0);
+	AddGpuDebugLine(gdl);
+	gdl.worldPos0 = float4( p + float3(0,-r,0) ,1.0);
+	gdl.worldPos1 = float4( p + float3(0, r,0) ,1.0);
+	AddGpuDebugLine(gdl);
+	gdl.worldPos0 = float4( p + float3(0,0,-r) ,1.0);
+	gdl.worldPos1 = float4( p + float3(0,0, r) ,1.0);
+	AddGpuDebugLine(gdl);
 }
 
 #endif // OXYGEN_D3D12_SHADERS_RENDERER_GPUDEBUG_HLSLI

@@ -95,6 +95,8 @@ private:
   std::shared_ptr<graphics::Buffer> pass_constants_buffer_ {};
   std::byte* pass_constants_mapped_ptr_ { nullptr };
   ShaderVisibleIndex pass_constants_index_ { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex depth_srv_index_ { kInvalidShaderVisibleIndex };
+  const graphics::Texture* last_depth_texture_ { nullptr };
 };
 
 } // namespace oxygen::engine

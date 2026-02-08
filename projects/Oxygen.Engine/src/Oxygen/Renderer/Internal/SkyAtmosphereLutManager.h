@@ -8,14 +8,17 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Renderer/Internal/ISkyAtmosphereLutProvider.h>
 #include <Oxygen/Renderer/Types/SunState.h>
+#include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen {
@@ -28,41 +31,46 @@ class Texture;
 
 namespace oxygen::engine {
 struct GpuSkyAtmosphereParams;
+namespace upload {
+  class UploadCoordinator;
+  class StagingProvider;
+} // namespace upload
 } // namespace oxygen::engine
 
 namespace oxygen::engine::internal {
 
 //! LUT dimensions for sky atmosphere precomputation.
+
 struct SkyAtmosphereLutConfig {
   //! Transmittance LUT width (cos_zenith parameterization).
-  uint32_t transmittance_width { 256u };
+  uint32_t transmittance_width { 256U };
 
   //! Transmittance LUT height (altitude parameterization).
-  uint32_t transmittance_height { 96u };
+  uint32_t transmittance_height { 96U };
 
   //! Sky-view LUT width (azimuth parameterization).
-  uint32_t sky_view_width { 384u };
+  uint32_t sky_view_width { 384U };
 
   //! Sky-view LUT height (zenith parameterization).
-  uint32_t sky_view_height { 216u };
+  uint32_t sky_view_height { 216U };
 
   //! Number of altitude slices in the sky-view LUT array (UI range: 4..32).
-  uint32_t sky_view_slices { 16u };
+  uint32_t sky_view_slices { 16U };
 
   //! Altitude mapping mode for sky-view LUT slices (0 = linear, 1 = log).
-  uint32_t sky_view_alt_mapping_mode { 1u };
+  uint32_t sky_view_alt_mapping_mode { 1U };
 
   //! Multiple scattering LUT size (32x32 common).
-  uint32_t multi_scat_size { 32u };
+  uint32_t multi_scat_size { 32U };
 
   //! Camera volume LUT width (screen-space froxel resolution).
-  uint32_t camera_volume_width { 160u };
+  uint32_t camera_volume_width { 160U };
 
   //! Camera volume LUT height (screen-space froxel resolution).
-  uint32_t camera_volume_height { 90u };
+  uint32_t camera_volume_height { 90U };
 
   //! Camera volume LUT depth (number of depth slices, typically 32).
-  uint32_t camera_volume_depth { 32u };
+  uint32_t camera_volume_depth { 32U };
 };
 
 //! Default LUT configuration for atmosphere precomputation.
@@ -93,8 +101,10 @@ class SkyAtmosphereLutManager : public ISkyAtmosphereLutProvider {
 public:
   using Config = SkyAtmosphereLutConfig;
 
-  OXGN_RNDR_API explicit SkyAtmosphereLutManager(
-    observer_ptr<Graphics> gfx, Config config = kDefaultSkyAtmosphereLutConfig);
+  OXGN_RNDR_NDAPI explicit SkyAtmosphereLutManager(observer_ptr<Graphics> gfx,
+    observer_ptr<upload::UploadCoordinator> uploader,
+    observer_ptr<upload::StagingProvider> staging_provider,
+    Config config = kDefaultSkyAtmosphereLutConfig);
 
   OXGN_RNDR_API ~SkyAtmosphereLutManager() override;
 
@@ -112,7 +122,10 @@ public:
   [[nodiscard]] auto GetTransmittanceLutSize() const noexcept
     -> Extent<uint32_t> override
   {
-    return { config_.transmittance_width, config_.transmittance_height };
+    return {
+      .width = config_.transmittance_width,
+      .height = config_.transmittance_height,
+    };
   }
 
   //! Returns shader-visible SRV index for the sky-view LUT, or
@@ -124,7 +137,10 @@ public:
   [[nodiscard]] auto GetSkyViewLutSize() const noexcept
     -> Extent<uint32_t> override
   {
-    return { config_.sky_view_width, config_.sky_view_height };
+    return {
+      .width = config_.sky_view_width,
+      .height = config_.sky_view_height,
+    };
   }
 
   //! Returns the number of altitude slices in the sky-view LUT array.
@@ -170,6 +186,14 @@ public:
     return { config_.camera_volume_width, config_.camera_volume_height,
       config_.camera_volume_depth };
   }
+
+  //! Returns shader-visible SRV index for the blue noise texture.
+  OXGN_RNDR_NDAPI auto GetBlueNoiseSlot() const noexcept
+    -> ShaderVisibleIndex override;
+
+  //! Returns blue noise texture dimensions (width, height, slices).
+  [[nodiscard]] auto GetBlueNoiseSize() const noexcept
+    -> std::tuple<uint32_t, uint32_t, uint32_t> override;
 
   //=== Parameter Tracking ===------------------------------------------------//
 
@@ -294,6 +318,10 @@ public:
   OXGN_RNDR_NDAPI auto GetCameraVolumeLutTexture() const noexcept
     -> observer_ptr<graphics::Texture>;
 
+  //! Returns the blue noise texture.
+  OXGN_RNDR_NDAPI auto GetBlueNoiseTexture() const noexcept
+    -> observer_ptr<graphics::Texture>;
+
   //! Returns shader-visible UAV index for the transmittance LUT.
   /*!
    Used by the compute pass to bind the LUT as a write target.
@@ -370,48 +398,60 @@ private:
 
   struct LutResources {
     std::shared_ptr<graphics::Texture> texture;
-    graphics::NativeView srv_view {};
-    graphics::NativeView uav_view {};
+    graphics::NativeView srv_view;
+    graphics::NativeView uav_view;
     ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex uav_index { kInvalidShaderVisibleIndex };
   };
 
   observer_ptr<Graphics> gfx_;
+  observer_ptr<upload::UploadCoordinator> uploader_;
+  observer_ptr<upload::StagingProvider> staging_;
   Config config_;
 
   CachedParams cached_params_ {};
-  SunState sun_state_ {};
+  SunState sun_state_;
   uint32_t atmosphere_flags_ { 0 }; //!< Debug/feature flags for LUT generation
-  std::uint64_t generation_ { 1 };
+  mutable std::uint64_t generation_ { 1 };
   bool dirty_ { true };
   bool resources_created_ { false };
   bool luts_generated_ { false }; //!< True after first successful compute
+
+  mutable std::optional<upload::UploadTicket> blue_noise_upload_ticket_;
+  mutable bool blue_noise_ready_ { false };
 
   LutResources transmittance_lut_ {};
   LutResources sky_view_lut_ {};
   LutResources multi_scat_lut_ {};
   LutResources camera_volume_lut_ {};
+  LutResources blue_noise_lut_ {};
 
   //! Creates transmittance LUT texture (2D, RGBA16F).
-  auto CreateTransmittanceLutTexture(uint32_t width, uint32_t height)
+  auto CreateTransmittanceLutTexture(Extent<uint32_t> extent)
     -> std::shared_ptr<graphics::Texture>;
 
   //! Creates sky-view LUT texture (2D array, RGBA16F).
-  auto CreateSkyViewLutTexture(uint32_t width, uint32_t height,
-    uint32_t num_slices) -> std::shared_ptr<graphics::Texture>;
+  auto CreateSkyViewLutTexture(Extent<uint32_t> extent, uint32_t num_slices)
+    -> std::shared_ptr<graphics::Texture>;
 
   //! Creates multi-scattering LUT texture (2D, RGBA16F).
   auto CreateMultiScatLutTexture(uint32_t size)
     -> std::shared_ptr<graphics::Texture>;
 
   //! Creates camera volume LUT texture (3D, RGBA16F).
-  auto CreateCameraVolumeLutTexture(uint32_t width, uint32_t height,
-    uint32_t depth) -> std::shared_ptr<graphics::Texture>;
+  auto CreateCameraVolumeLutTexture(Extent<uint32_t> extent, uint32_t depth)
+    -> std::shared_ptr<graphics::Texture>;
 
   //! Common implementation for creating LUT textures.
-  auto CreateLutTexture(uint32_t width, uint32_t height,
-    uint32_t depth_or_array_size, bool is_rgba, const char* debug_name,
-    TextureType texture_type) -> std::shared_ptr<graphics::Texture>;
+  auto CreateLutTexture(Extent<uint32_t> extent, uint32_t depth_or_array_size,
+    bool is_rgba, const char* debug_name, TextureType texture_type)
+    -> std::shared_ptr<graphics::Texture>;
+
+  //! Creates blue noise texture (3D, R8_UNORM).
+  auto CreateBlueNoiseTexture() -> std::shared_ptr<graphics::Texture>;
+
+  //! Submits Blue Noise data for upload to GPU via the uploader coordinator.
+  auto UploadBlueNoiseData() -> void;
 
   //! Creates SRV/UAV views for a LUT, optionally as array views [P2, P11].
   auto CreateLutViews(LutResources& lut, uint32_t array_size, bool is_rgba)

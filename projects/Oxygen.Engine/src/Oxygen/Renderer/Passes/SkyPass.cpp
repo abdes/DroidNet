@@ -47,56 +47,18 @@ struct alignas(16) SkyPassConstants {
   float mouse_down_y { 0.0F };
   float viewport_width { 0.0F };
   float viewport_height { 0.0F };
-  uint32_t mouse_down_valid { 0u };
-  uint32_t pad0 { 0u };
-  uint32_t pad1 { 0u };
-  uint32_t pad2 { 0u };
+  uint32_t mouse_down_valid { 0U };
+  uint32_t depth_srv_index { oxygen::kInvalidShaderVisibleIndex.get() };
+  uint32_t pad1 { 0U };
+  uint32_t pad2 { 0U };
+  glm::mat4 inv_view_proj { 1.0F };
 };
 
-static_assert(
-  sizeof(SkyPassConstants) == 32, "SkyPassConstants must be 32 bytes");
-} // namespace
+constexpr uint32_t kSkyPassConstantsSize = 96U;
+static_assert(sizeof(SkyPassConstants) == kSkyPassConstantsSize,
+  "SkyPassConstants must be 96 bytes");
 
-SkyPass::SkyPass(std::shared_ptr<SkyPassConfig> config)
-  : GraphicsRenderPass(config ? config->debug_name : "SkyPass")
-  , config_(std::move(config))
-{
-}
-
-SkyPass::~SkyPass() { ReleasePassConstantsBuffer(); }
-
-auto SkyPass::ValidateConfig() -> void
-{
-  // Will throw if no valid color texture is found.
-  [[maybe_unused]] const auto& _ = GetColorTexture();
-}
-
-auto SkyPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
-{
-  LOG_SCOPE_FUNCTION(2);
-
-  // The color target should remain in RENDER_TARGET state from ShaderPass.
-  // Just ensure it's in the correct state.
-  recorder.RequireResourceState(
-    GetColorTexture(), graphics::ResourceStates::kRenderTarget);
-
-  // Depth buffer should be in DEPTH_READ for sky depth test.
-  const auto* fb = GetFramebuffer();
-  if (fb && fb->GetDescriptor().depth_attachment.IsValid()
-    && fb->GetDescriptor().depth_attachment.texture) {
-    recorder.RequireResourceState(*fb->GetDescriptor().depth_attachment.texture,
-      graphics::ResourceStates::kDepthRead);
-  }
-
-  recorder.FlushBarriers();
-
-  EnsurePassConstantsBuffer();
-  UpdatePassConstants();
-
-  co_return;
-}
-
-namespace {
+constexpr uint32_t kConstantsBufferMinSize = 256U;
 
 auto PrepareRenderTargetView(Texture& color_texture, ResourceRegistry& registry,
   DescriptorAllocator& allocator) -> oxygen::graphics::NativeView
@@ -174,13 +136,83 @@ auto PrepareDepthStencilView(Texture& depth_texture, ResourceRegistry& registry,
   return dsv;
 }
 
+auto PrepareDepthShaderResourceView(Texture& depth_texture,
+  ResourceRegistry& registry, DescriptorAllocator& allocator)
+  -> std::pair<oxygen::graphics::NativeView, uint32_t>
+{
+  using oxygen::TextureType;
+
+  const auto& tex_desc = depth_texture.GetDescriptor();
+
+  // Choose SRV format based on depth format
+  oxygen::Format srv_format = tex_desc.format;
+  if (tex_desc.format == oxygen::Format::kDepth32) {
+    srv_format = oxygen::Format::kR32Float;
+  }
+
+  oxygen::graphics::TextureViewDescription srv_view_desc {
+    .view_type = ResourceViewType::kTexture_SRV,
+    .visibility = DescriptorVisibility::kShaderVisible,
+    .format = srv_format,
+    .dimension = tex_desc.texture_type,
+    .sub_resources = { .base_mip_level = 0,
+      .num_mip_levels = 1,
+      .base_array_slice = 0,
+      .num_array_slices = (tex_desc.texture_type == TextureType::kTexture3D
+          ? tex_desc.depth
+          : tex_desc.array_size) },
+    .is_read_only_dsv = false,
+  };
+
+  if (const auto srv = registry.Find(depth_texture, srv_view_desc);
+    srv->IsValid()) {
+    // If found, we still need to fish out the shader-visible index.
+    // For now, let's allow finding but return invalid index to trigger
+    // re-lookup if needed, or better, assume allocator can give it back. Since
+    // we don't store it in the view, we return kInvalid for now which will
+    // trigger the re-allocation attempt. Actually, allocator might have it. But
+    // safer to re-allocate if srv index is not known.
+    return { srv, oxygen::kInvalidShaderVisibleIndex.get() };
+  }
+  auto srv_desc_handle = allocator.Allocate(
+    ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+  if (!srv_desc_handle.IsValid()) {
+    throw std::runtime_error(
+      "Failed to allocate SRV descriptor handle for depth texture");
+  }
+  const uint32_t srv_index
+    = allocator.GetShaderVisibleIndex(srv_desc_handle).get();
+  const auto srv = registry.RegisterView(
+    depth_texture, std::move(srv_desc_handle), srv_view_desc);
+  if (!srv->IsValid()) {
+    throw std::runtime_error(
+      "Failed to register depth SRV with resource registry.");
+  }
+  return { srv, srv_index };
+}
+
 } // namespace
+
+SkyPass::SkyPass(std::shared_ptr<SkyPassConfig> config)
+  : GraphicsRenderPass(config ? config->debug_name : "SkyPass")
+  , config_(std::move(config))
+{
+}
+
+SkyPass::~SkyPass() { ReleasePassConstantsBuffer(); }
+
+auto SkyPass::ValidateConfig() -> void
+{
+  // Will throw if no valid color texture is found.
+  [[maybe_unused]] const auto& _ = GetColorTexture();
+}
 
 auto SkyPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
 {
   auto& graphics = Context().GetGraphics();
   auto& registry = graphics.GetResourceRegistry();
   auto& allocator = graphics.GetDescriptorAllocator();
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
   auto& color_texture = const_cast<Texture&>(GetColorTexture());
   const auto color_rtv
     = PrepareRenderTargetView(color_texture, registry, allocator);
@@ -195,8 +227,8 @@ auto SkyPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
     dsv = PrepareDepthStencilView(depth_texture, registry, allocator);
   }
 
-  // Bind both RTV(s) and DSV if present.
-  // Do NOT clear - we want to preserve the scene rendered by ShaderPass.
+  // Bind DSV if present (read-only) to satisfy PSO matching if depth test is
+  // used with kAlways.
   if (dsv->IsValid()) {
     recorder.SetRenderTargets(std::span(rtvs), dsv);
   } else {
@@ -210,11 +242,36 @@ auto SkyPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
                    : nullptr);
 }
 
+// NOLINTNEXTLINE(performance-unnecessary-value-param)
+auto SkyPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
+{
+  LOG_SCOPE_FUNCTION(2);
+
+  // The color target should remain in RENDER_TARGET state from ShaderPass.
+  recorder.RequireResourceState(
+    GetColorTexture(), graphics::ResourceStates::kRenderTarget);
+
+  // Depth buffer should be in DEPTH_READ for both DSV binding and SRV sampling.
+  const auto* fb = GetFramebuffer();
+  if (fb != nullptr && fb->GetDescriptor().depth_attachment.IsValid()
+    && (fb->GetDescriptor().depth_attachment.texture != nullptr)) {
+    recorder.RequireResourceState(*fb->GetDescriptor().depth_attachment.texture,
+      graphics::ResourceStates::kDepthRead);
+  }
+
+  recorder.FlushBarriers();
+
+  EnsurePassConstantsBuffer();
+  UpdatePassConstants();
+
+  co_return;
+}
+
+// NOLINTNEXTLINE(performance-unnecessary-value-param)
 auto SkyPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
   LOG_SCOPE_FUNCTION(2);
 
-  // Bind EnvironmentDynamicData for exposure and other dynamic data.
   if (const auto manager = Context().env_dynamic_manager) {
     const auto view_id = Context().current_view.view_id;
     manager->UpdateIfNeeded(view_id);
@@ -231,16 +288,13 @@ auto SkyPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   const uint32_t pass_constants_index = pass_constants_index_.IsValid()
     ? pass_constants_index_.get()
-    : kInvalidShaderVisibleIndex.get();
+    : oxygen::kInvalidShaderVisibleIndex.get();
   recorder.SetGraphicsRoot32BitConstant(
     static_cast<uint32_t>(binding::RootParam::kRootConstants), 0U, 0);
   recorder.SetGraphicsRoot32BitConstant(
     static_cast<uint32_t>(binding::RootParam::kRootConstants),
     pass_constants_index, 1);
 
-  // Draw fullscreen triangle for sky.
-  // The vertex shader generates positions from SV_VertexID.
-  // 3 vertices form a single triangle covering the entire screen.
   recorder.Draw(3, 1, 0, 0);
 
   Context().RegisterPass(this);
@@ -259,28 +313,28 @@ auto SkyPass::EnsurePassConstantsBuffer() -> void
   auto& allocator = graphics.GetDescriptorAllocator();
 
   const graphics::BufferDesc desc {
-    .size_bytes = 256u,
+    .size_bytes = kConstantsBufferMinSize,
     .usage = graphics::BufferUsage::kConstant,
     .memory = graphics::BufferMemory::kUpload,
     .debug_name = "SkyPass_Constants",
   };
 
   pass_constants_buffer_ = graphics.CreateBuffer(desc);
-  if (!pass_constants_buffer_) {
+  if (pass_constants_buffer_ == nullptr) {
     throw std::runtime_error("SkyPass: Failed to create pass constants buffer");
   }
   pass_constants_buffer_->SetName(desc.debug_name);
 
   pass_constants_mapped_ptr_
     = static_cast<std::byte*>(pass_constants_buffer_->Map(0, desc.size_bytes));
-  if (!pass_constants_mapped_ptr_) {
+  if (pass_constants_mapped_ptr_ == nullptr) {
     throw std::runtime_error("SkyPass: Failed to map pass constants buffer");
   }
 
   graphics::BufferViewDescription cbv_view_desc;
   cbv_view_desc.view_type = graphics::ResourceViewType::kConstantBuffer;
   cbv_view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-  cbv_view_desc.range = { 0u, desc.size_bytes };
+  cbv_view_desc.range = { 0U, desc.size_bytes };
 
   auto cbv_handle
     = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
@@ -297,12 +351,12 @@ auto SkyPass::EnsurePassConstantsBuffer() -> void
 
 auto SkyPass::UpdatePassConstants() -> void
 {
-  if (!pass_constants_mapped_ptr_) {
+  if (pass_constants_mapped_ptr_ == nullptr) {
     return;
   }
 
   SkyPassConstants constants {};
-  if (config_) {
+  if (config_ != nullptr) {
     const bool valid_mouse = config_->debug_mouse_down_position.has_value()
       && config_->debug_viewport_extent.width > 0.0F
       && config_->debug_viewport_extent.height > 0.0F;
@@ -312,35 +366,70 @@ auto SkyPass::UpdatePassConstants() -> void
       constants.mouse_down_y = mouse.y;
       constants.viewport_width = config_->debug_viewport_extent.width;
       constants.viewport_height = config_->debug_viewport_extent.height;
-      constants.mouse_down_valid = 1u;
+      constants.mouse_down_valid = 1U;
     }
   }
+
+  if (Context().current_view.resolved_view != nullptr) {
+    constants.inv_view_proj
+      = Context().current_view.resolved_view->InverseViewProjection();
+  }
+
+  const auto* fb = GetFramebuffer();
+  if (fb != nullptr && fb->GetDescriptor().depth_attachment.IsValid()
+    && (fb->GetDescriptor().depth_attachment.texture != nullptr)) {
+    auto& depth_texture = *fb->GetDescriptor().depth_attachment.texture;
+    auto& graphics = Context().GetGraphics();
+    auto& registry = graphics.GetResourceRegistry();
+    auto& allocator = graphics.GetDescriptorAllocator();
+
+    if (&depth_texture != last_depth_texture_) {
+      last_depth_texture_ = &depth_texture;
+      depth_srv_index_ = oxygen::kInvalidShaderVisibleIndex;
+    }
+
+    if (!depth_srv_index_.IsValid()) {
+      const auto [srv_view, srv_index]
+        = PrepareDepthShaderResourceView(depth_texture, registry, allocator);
+      if (srv_index != oxygen::kInvalidShaderVisibleIndex.get()) {
+        depth_srv_index_ = oxygen::ShaderVisibleIndex { srv_index };
+      }
+    }
+  } else {
+    depth_srv_index_ = oxygen::kInvalidShaderVisibleIndex;
+    last_depth_texture_ = nullptr;
+  }
+  constants.depth_srv_index = depth_srv_index_.get();
 
   std::memcpy(pass_constants_mapped_ptr_, &constants, sizeof(constants));
 }
 
 auto SkyPass::ReleasePassConstantsBuffer() -> void
 {
-  if (!pass_constants_buffer_) {
+  if (pass_constants_buffer_ == nullptr) {
     pass_constants_mapped_ptr_ = nullptr;
     return;
   }
 
-  pass_constants_buffer_->UnMap();
+  if (pass_constants_buffer_->IsMapped()) {
+    pass_constants_buffer_->UnMap();
+  }
 
   pass_constants_mapped_ptr_ = nullptr;
   pass_constants_buffer_.reset();
-  pass_constants_index_ = kInvalidShaderVisibleIndex;
+  pass_constants_index_ = oxygen::kInvalidShaderVisibleIndex;
+  depth_srv_index_ = oxygen::kInvalidShaderVisibleIndex;
+  last_depth_texture_ = nullptr;
 }
 
 auto SkyPass::GetColorTexture() const -> const Texture&
 {
-  if (config_ && config_->color_texture) {
+  if ((config_ != nullptr) && (config_->color_texture != nullptr)) {
     return *config_->color_texture;
   }
   const auto* fb = GetFramebuffer();
-  if (fb && !fb->GetDescriptor().color_attachments.empty()
-    && fb->GetDescriptor().color_attachments[0].texture) {
+  if (fb != nullptr && !fb->GetDescriptor().color_attachments.empty()
+    && (fb->GetDescriptor().color_attachments[0].texture != nullptr)) {
     return *fb->GetDescriptor().color_attachments[0].texture;
   }
   throw std::runtime_error("SkyPass: No valid color texture found.");
@@ -358,12 +447,12 @@ auto SkyPass::SetupViewPortAndScissors(CommandRecorder& recorder) const -> void
   const auto height = tex_desc.height;
 
   const ViewPort viewport {
-    .top_left_x = 0.0f,
-    .top_left_y = 0.0f,
+    .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
     .width = static_cast<float>(width),
     .height = static_cast<float>(height),
-    .min_depth = 0.0f,
-    .max_depth = 1.0f,
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
   };
   recorder.SetViewport(viewport);
 
@@ -378,6 +467,10 @@ auto SkyPass::SetupViewPortAndScissors(CommandRecorder& recorder) const -> void
 
 auto SkyPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
 {
+  using graphics::BlendFactor;
+  using graphics::BlendOp;
+  using graphics::BlendTargetDesc;
+  using graphics::ColorWriteMask;
   using graphics::CompareOp;
   using graphics::CullMode;
   using graphics::DepthStencilStateDesc;
@@ -390,41 +483,52 @@ auto SkyPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
 
   const auto* fb = GetFramebuffer();
   bool has_depth = false;
-  auto depth_format = Format::kUnknown;
-  uint32_t sample_count = 1;
-  if (fb) {
+  auto depth_format = oxygen::Format::kUnknown;
+  uint32_t sample_count = 1U;
+  if (fb != nullptr) {
     const auto& fb_desc = fb->GetDescriptor();
     if (fb_desc.depth_attachment.IsValid()
-      && fb_desc.depth_attachment.texture) {
+      && (fb_desc.depth_attachment.texture != nullptr)) {
       has_depth = true;
       depth_format = fb_desc.depth_attachment.texture->GetDescriptor().format;
       sample_count
         = fb_desc.depth_attachment.texture->GetDescriptor().sample_count;
     } else if (!fb_desc.color_attachments.empty()
       && fb_desc.color_attachments[0].IsValid()
-      && fb_desc.color_attachments[0].texture) {
+      && (fb_desc.color_attachments[0].texture != nullptr)) {
       sample_count
         = fb_desc.color_attachments[0].texture->GetDescriptor().sample_count;
     }
   }
 
-  // Sky renders at z=1.0 (far plane) with LESS_EQUAL test.
-  // Depth writes disabled to not affect subsequent transparent pass.
+  // Restore hardware depth-stencil state for sky pass.
+  // We use CompareOp::kAlways as requested, ensuring AP is applied to every
+  // pixel.
   DepthStencilStateDesc ds_desc {
     .depth_test_enable = has_depth,
     .depth_write_enable = false,
-    .depth_func = CompareOp::kLessOrEqual,
+    .depth_func = CompareOp::kAlways,
     .stencil_enable = false,
     .stencil_read_mask = 0xFF,
     .stencil_write_mask = 0xFF,
   };
 
-  // No culling for fullscreen triangle.
   RasterizerStateDesc raster_desc {
     .fill_mode = FillMode::kSolid,
     .cull_mode = CullMode::kNone,
     .front_counter_clockwise = true,
     .multisample_enable = false,
+  };
+
+  const BlendTargetDesc blend_desc {
+    .blend_enable = true,
+    .src_blend = BlendFactor::kOne,
+    .dest_blend = BlendFactor::kSrcAlpha,
+    .blend_op = BlendOp::kAdd,
+    .src_blend_alpha = BlendFactor::kZero,
+    .dest_blend_alpha = BlendFactor::kOne,
+    .blend_op_alpha = BlendOp::kAdd,
+    .write_mask = ColorWriteMask::kAll,
   };
 
   const auto& color_tex_desc = GetColorTexture().GetDescriptor();
@@ -445,13 +549,13 @@ auto SkyPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
 
   return GraphicsPipelineDesc::Builder()
     .SetVertexShader(ShaderRequest {
-      .stage = ShaderType::kVertex,
+      .stage = oxygen::ShaderType::kVertex,
       .source_path = "Atmosphere/SkySphere_VS.hlsl",
       .entry_point = "VS",
       .defines = {},
     })
     .SetPixelShader(ShaderRequest {
-      .stage = ShaderType::kPixel,
+      .stage = oxygen::ShaderType::kPixel,
       .source_path = "Atmosphere/SkySphere_PS.hlsl",
       .entry_point = "PS",
       .defines = ps_defines,
@@ -459,7 +563,7 @@ auto SkyPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
     .SetPrimitiveTopology(PrimitiveType::kTriangleList)
     .SetRasterizerState(raster_desc)
     .SetDepthStencilState(ds_desc)
-    .SetBlendState({})
+    .AddBlendTarget(blend_desc)
     .SetFramebufferLayout(fb_layout_desc)
     .SetRootBindings(std::span<const graphics::RootBindingItem>(
       generated_bindings.data(), generated_bindings.size()))
@@ -474,14 +578,29 @@ auto SkyPass::NeedRebuildPipelineState() const -> bool
   }
 
   const auto& color_tex_desc = GetColorTexture().GetDescriptor();
-  if (last_built->FramebufferLayout().color_target_formats.empty()
-    || last_built->FramebufferLayout().color_target_formats[0]
-      != color_tex_desc.format) {
+  const auto& layout = last_built->FramebufferLayout();
+
+  // Color format check
+  if (layout.color_target_formats.empty()
+    || (layout.color_target_formats[0] != color_tex_desc.format)) {
     return true;
   }
 
-  if (last_built->FramebufferLayout().sample_count
-    != color_tex_desc.sample_count) {
+  // Depth format check
+  auto current_depth_format = oxygen::Format::kUnknown;
+  const auto* fb = GetFramebuffer();
+  if (fb != nullptr && fb->GetDescriptor().depth_attachment.IsValid()
+    && fb->GetDescriptor().depth_attachment.texture != nullptr) {
+    current_depth_format
+      = fb->GetDescriptor().depth_attachment.texture->GetDescriptor().format;
+  }
+
+  if (layout.depth_stencil_format != current_depth_format) {
+    return true;
+  }
+
+  // Sample count check
+  if (layout.sample_count != color_tex_desc.sample_count) {
     return true;
   }
 

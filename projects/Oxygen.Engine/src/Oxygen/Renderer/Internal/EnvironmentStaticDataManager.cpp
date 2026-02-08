@@ -347,6 +347,9 @@ auto EnvironmentStaticDataManager::PopulateAtmosphere(
 
         next.atmosphere.camera_volume_lut_slot
           = CameraVolumeLutSlot { sky_lut_provider_->GetCameraVolumeLutSlot() };
+
+        next.atmosphere.blue_noise_slot
+          = BlueNoiseSlot { sky_lut_provider_->GetBlueNoiseSlot() };
       }
 
       sky_lut_provider_->UpdateParameters(next.atmosphere);
