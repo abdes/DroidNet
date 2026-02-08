@@ -7,6 +7,7 @@
 #pragma once
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Scene/Environment/EnvironmentSystem.h>
 
 namespace oxygen::scene::environment {
@@ -141,52 +142,30 @@ public:
     return mie_g_;
   }
 
-  //! Sets absorption coefficient (1 / meter, RGB).
-  auto SetAbsorptionRgb(const Vec3& rgb) noexcept -> void
-  {
-    absorption_rgb_ = rgb;
-  }
-
   //! Gets absorption coefficient (1 / meter, RGB).
   [[nodiscard]] auto GetAbsorptionRgb() const noexcept -> const Vec3&
   {
     return absorption_rgb_;
   }
 
-  //! Sets absorption layer width (meters).
-  auto SetAbsorptionLayerWidthMeters(const float meters) noexcept -> void
+  //! Sets ozone absorption coefficient (1 / meter, RGB).
+  auto SetOzoneAbsorptionRgb(const Vec3& rgb) noexcept -> void
   {
-    absorption_layer_width_m_ = meters;
+    absorption_rgb_ = rgb;
   }
 
-  //! Gets absorption layer width (meters).
-  [[nodiscard]] auto GetAbsorptionLayerWidthMeters() const noexcept -> float
+  //! Sets the absorption density profile.
+  auto SetOzoneDensityProfile(
+    const engine::atmos::DensityProfile& profile) noexcept -> void
   {
-    return absorption_layer_width_m_;
+    ozone_density_ = profile;
   }
 
-  //! Sets absorption linear term below the layer width.
-  auto SetAbsorptionTermBelow(const float term) noexcept -> void
+  //! Gets the absorption density profile.
+  [[nodiscard]] auto GetOzoneDensityProfile() const noexcept
+    -> const engine::atmos::DensityProfile&
   {
-    absorption_term_below_ = term;
-  }
-
-  //! Gets absorption linear term below the layer width.
-  [[nodiscard]] auto GetAbsorptionTermBelow() const noexcept -> float
-  {
-    return absorption_term_below_;
-  }
-
-  //! Sets absorption linear term above the layer width.
-  auto SetAbsorptionTermAbove(const float term) noexcept -> void
-  {
-    absorption_term_above_ = term;
-  }
-
-  //! Gets absorption linear term above the layer width.
-  [[nodiscard]] auto GetAbsorptionTermAbove() const noexcept -> float
-  {
-    return absorption_term_above_;
+    return ozone_density_;
   }
 
   //! Sets multi-scattering factor (unitless, typically 0..1).
@@ -243,25 +222,25 @@ public:
   }
 
 private:
-  float planet_radius_m_ = 6360000.0F;
-  float atmosphere_height_m_ = 80000.0F;
+  float planet_radius_m_ = engine::atmos::kDefaultPlanetRadiusM;
+  float atmosphere_height_m_ = engine::atmos::kDefaultAtmosphereHeightM;
 
   Vec3 ground_albedo_rgb_ { 0.1F, 0.1F, 0.1F };
 
   // Earth-like baseline coefficients; treated as authorable parameters.
-  Vec3 rayleigh_scattering_rgb_ { 5.8e-6F, 13.5e-6F, 33.1e-6F };
-  float rayleigh_scale_height_m_ = 8000.0F;
+  Vec3 rayleigh_scattering_rgb_ {
+    engine::atmos::kDefaultRayleighScatteringRgb
+  };
+  float rayleigh_scale_height_m_ = engine::atmos::kDefaultRayleighScaleHeightM;
 
-  Vec3 mie_scattering_rgb_ { 21.0e-6F, 21.0e-6F, 21.0e-6F };
-  // Mie absorption (1/meter, RGB). Default gives SSA ≈ 0.9.
-  Vec3 mie_absorption_rgb_ { 2.33e-6F, 2.33e-6F, 2.33e-6F };
-  float mie_scale_height_m_ = 1200.0F;
-  float mie_g_ = 0.8F;
+  Vec3 mie_scattering_rgb_ { engine::atmos::kDefaultMieScatteringRgb };
+  Vec3 mie_absorption_rgb_ { engine::atmos::kDefaultMieAbsorptionRgb };
+  float mie_scale_height_m_ = engine::atmos::kDefaultMieScaleHeightM;
+  float mie_g_ = engine::atmos::kDefaultMieAnisotropyG;
 
-  Vec3 absorption_rgb_ { 0.65e-6F, 1.881e-6F, 0.085e-6F };
-  float absorption_layer_width_m_ = 25000.0F;
-  float absorption_term_below_ = 1.0F; // Linear ramp 0->1
-  float absorption_term_above_ = -1.0F; // Linear ramp 1->0
+  Vec3 absorption_rgb_ { engine::atmos::kDefaultOzoneAbsorptionRgb };
+  engine::atmos::DensityProfile ozone_density_
+    = engine::atmos::kDefaultOzoneDensityProfile;
 
   float multi_scattering_factor_ = 1.0F;
 

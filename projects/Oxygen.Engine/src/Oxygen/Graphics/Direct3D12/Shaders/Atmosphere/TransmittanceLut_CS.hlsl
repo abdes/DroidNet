@@ -148,7 +148,7 @@ float3 IntegrateOpticalDepth(
 
         float density_rayleigh = AtmosphereExponentialDensity(altitude_m, atmo.rayleigh_scale_height_m);
         float density_mie = AtmosphereExponentialDensity(altitude_m, atmo.mie_scale_height_m);
-        float density_absorption = OzoneAbsorptionDensity(altitude_m, atmo.absorption_layer_width_m, atmo.absorption_term_below, atmo.absorption_term_above);
+        float density_absorption = OzoneAbsorptionDensity(altitude_m, atmo.absorption_density);
 
         optical_depth.x += density_rayleigh * step_size;
         optical_depth.y += density_mie * step_size;

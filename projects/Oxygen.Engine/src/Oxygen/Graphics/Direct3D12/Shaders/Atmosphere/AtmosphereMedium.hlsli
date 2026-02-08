@@ -36,24 +36,46 @@ float AtmosphereExponentialDensity(float altitude_m, float scale_height_m)
 //! @param linear_term_below Slope for altitude < layer_width_m.
 //! @param linear_term_above Slope for altitude >= layer_width_m (typically negative).
 //! @return Normalized density in [0, 1].
-float OzoneAbsorptionDensity(
-    float altitude_m,
-    float layer_width_m,
-    float linear_term_below,
-    float linear_term_above)
+float EvaluateDensityProfile(float altitude_m, AtmosphereDensityProfile profile)
 {
-    altitude_m = max(altitude_m, 0.0);
+    // Clamp altitude to avoid negative heights.
+    float h = max(altitude_m, 0.0);
 
-    // Below peak: linear ramp up from 0 to 1.
-    // layer_width_m is expected to be > 0 (typically ~25km).
-    if (altitude_m < layer_width_m)
+    // Layer 0 is the lower layer (below profile.layers[0].width_m).
+    // Layer 1 is the upper layer.
+    // This matches UE5's implementation of a 2-layer profile.
+    AtmosphereDensityLayer layer;
+    if (h < profile.layers[0].width_m)
     {
-        return saturate(linear_term_below * altitude_m / layer_width_m);
+        layer = profile.layers[0];
+    }
+    else
+    {
+        layer = profile.layers[1];
     }
 
-    // Above peak: linear ramp down from 1.
-    // This requires linear_term_above to be negative (e.g., -0.666).
-    return saturate(1.0 + linear_term_above * (altitude_m - layer_width_m) / layer_width_m);
+    // density = ExpWeight * exp(ExpScale * h) + LinearTerm * h + ConstantTerm
+    // In our AtmosphereDensityLayer:
+    // exp_term -> ExpWeight
+    // We use a simplified model for now:
+    // If exp_term > 0, it's exponential (Rayleigh/Mie style).
+    // Else it's linear (Ozone style).
+
+    // Note: To support both in one layer would require one more param or different mapping.
+    // For Ozone tent: ExpWeight=0, LinearTerm=slope, ConstantTerm=offset.
+    if (layer.exp_term != 0.0)
+    {
+        // For exponential layers, width_m is often unused or a soft limit.
+        // We use linear_term as the scale factor (e.g. -1/H).
+        return layer.exp_term * exp(layer.linear_term * h) + layer.constant_term;
+    }
+
+    return layer.linear_term * h + layer.constant_term;
+}
+
+float OzoneAbsorptionDensity(float altitude_m, AtmosphereDensityProfile profile)
+{
+    return saturate(EvaluateDensityProfile(altitude_m, profile));
 }
 
 //------------------------------------------------------------------------------

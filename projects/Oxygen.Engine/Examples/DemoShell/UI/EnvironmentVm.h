@@ -16,6 +16,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Types/Atmosphere.h>
 
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/FileBrowserService.h"
@@ -73,8 +74,8 @@ public:
   auto SetMieAnisotropy(float value) -> void;
   [[nodiscard]] auto GetMieAbsorptionScale() const -> float;
   auto SetMieAbsorptionScale(float value) -> void;
-  [[nodiscard]] auto GetAbsorptionRgb() const -> glm::vec3;
-  auto SetAbsorptionRgb(const glm::vec3& value) -> void;
+  [[nodiscard]] auto GetOzoneRgb() const -> glm::vec3;
+  auto SetOzoneRgb(const glm::vec3& value) -> void;
   [[nodiscard]] auto GetMultiScattering() const -> float;
   auto SetMultiScattering(float value) -> void;
   [[nodiscard]] auto GetSunDiskEnabled() const -> bool;
@@ -84,12 +85,10 @@ public:
   [[nodiscard]] auto GetAerialScatteringStrength() const -> float;
   auto SetAerialScatteringStrength(float value) -> void;
 
-  [[nodiscard]] auto GetAbsorptionLayerWidthKm() const -> float;
-  auto SetAbsorptionLayerWidthKm(float value) -> void;
-  [[nodiscard]] auto GetAbsorptionTermBelow() const -> float;
-  auto SetAbsorptionTermBelow(float value) -> void;
-  [[nodiscard]] auto GetAbsorptionTermAbove() const -> float;
-  auto SetAbsorptionTermAbove(float value) -> void;
+  [[nodiscard]] auto GetOzoneDensityProfile() const
+    -> engine::atmos::DensityProfile;
+  auto SetOzoneDensityProfile(const engine::atmos::DensityProfile& profile)
+    -> void;
 
   // Sky-View LUT slicing
   [[nodiscard]] auto GetSkyViewLutSlices() const -> int;

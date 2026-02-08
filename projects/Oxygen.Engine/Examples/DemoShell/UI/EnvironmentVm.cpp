@@ -11,12 +11,16 @@
 
 #include <glm/vec3.hpp>
 
+#include <Oxygen/Core/Types/Atmosphere.h>
+
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/UI/EnvironmentVm.h"
 
 namespace oxygen::examples::ui {
 
 namespace {
+  constexpr float kKmToMeters = 1000.0F;
+
   struct EnvironmentPresetData {
     std::string_view name;
     bool sun_enabled;
@@ -38,6 +42,9 @@ namespace {
     float multi_scattering;
     float aerial_perspective_scale;
     float aerial_scattering_strength;
+    glm::vec3 ozone_rgb;
+    float ozone_center_km;
+    float ozone_width_km;
     bool sky_sphere_enabled;
     int sky_sphere_source;
     glm::vec3 sky_sphere_color;
@@ -73,6 +80,9 @@ namespace {
       .multi_scattering = 1.0F,
       .aerial_perspective_scale = 1.0F,
       .aerial_scattering_strength = 1.0F,
+      .ozone_rgb = engine::atmos::kDefaultOzoneAbsorptionRgb,
+      .ozone_center_km = engine::atmos::kDefaultOzoneCenterM * 0.001F,
+      .ozone_width_km = engine::atmos::kDefaultOzoneWidthM * 0.001F,
       .sky_sphere_enabled = false,
       .sky_sphere_source = 0,
       .sky_sphere_color = { 0.0F, 0.0F, 0.0F },
@@ -106,6 +116,9 @@ namespace {
       .multi_scattering = 1.0F,
       .aerial_perspective_scale = 1.0F,
       .aerial_scattering_strength = 1.0F,
+      .ozone_rgb = engine::atmos::kDefaultOzoneAbsorptionRgb,
+      .ozone_center_km = engine::atmos::kDefaultOzoneCenterM * 0.001F,
+      .ozone_width_km = engine::atmos::kDefaultOzoneWidthM * 0.001F,
       .sky_sphere_enabled = false,
       .sky_sphere_source = 0,
       .sky_sphere_color = { 0.0F, 0.0F, 0.0F },
@@ -139,6 +152,9 @@ namespace {
       .multi_scattering = 1.2F,
       .aerial_perspective_scale = 1.0F,
       .aerial_scattering_strength = 1.1F,
+      .ozone_rgb = engine::atmos::kDefaultOzoneAbsorptionRgb,
+      .ozone_center_km = engine::atmos::kDefaultOzoneCenterM * 0.001F,
+      .ozone_width_km = engine::atmos::kDefaultOzoneWidthM * 0.001F,
       .sky_sphere_enabled = false,
       .sky_sphere_source = 0,
       .sky_sphere_color = { 0.0F, 0.0F, 0.0F },
@@ -172,6 +188,9 @@ namespace {
       .multi_scattering = 1.0F,
       .aerial_perspective_scale = 1.0F,
       .aerial_scattering_strength = 1.0F,
+      .ozone_rgb = engine::atmos::kDefaultOzoneAbsorptionRgb,
+      .ozone_center_km = engine::atmos::kDefaultOzoneCenterM * 0.001F,
+      .ozone_width_km = engine::atmos::kDefaultOzoneWidthM * 0.001F,
       .sky_sphere_enabled = false,
       .sky_sphere_source = 0,
       .sky_sphere_color = { 0.0F, 0.0F, 0.0F },
@@ -205,6 +224,9 @@ namespace {
       .multi_scattering = 1.0F,
       .aerial_perspective_scale = 1.0F,
       .aerial_scattering_strength = 1.0F,
+      .ozone_rgb = engine::atmos::kDefaultOzoneAbsorptionRgb,
+      .ozone_center_km = engine::atmos::kDefaultOzoneCenterM * 0.001F,
+      .ozone_width_km = engine::atmos::kDefaultOzoneWidthM * 0.001F,
       .sky_sphere_enabled = false,
       .sky_sphere_source = 0,
       .sky_sphere_color = { 0.0F, 0.0F, 0.0F },
@@ -322,6 +344,9 @@ auto EnvironmentVm::ApplyPreset(int index) -> void
   SetMultiScattering(preset.multi_scattering);
   SetAerialPerspectiveScale(preset.aerial_perspective_scale);
   SetAerialScatteringStrength(preset.aerial_scattering_strength);
+  SetOzoneRgb(preset.ozone_rgb);
+  SetOzoneDensityProfile(engine::atmos::MakeOzoneTentDensityProfile(
+    preset.ozone_center_km * kKmToMeters, preset.ozone_width_km * kKmToMeters));
 
   // Sky Sphere
   SetSkySphereSource(preset.sky_sphere_source);
@@ -430,14 +455,14 @@ auto EnvironmentVm::SetMieAbsorptionScale(float value) -> void
   service_->SetMieAbsorptionScale(value);
 }
 
-auto EnvironmentVm::GetAbsorptionRgb() const -> glm::vec3
+auto EnvironmentVm::GetOzoneRgb() const -> glm::vec3
 {
-  return service_->GetAbsorptionRgb();
+  return service_->GetOzoneRgb();
 }
 
-auto EnvironmentVm::SetAbsorptionRgb(const glm::vec3& value) -> void
+auto EnvironmentVm::SetOzoneRgb(const glm::vec3& value) -> void
 {
-  service_->SetAbsorptionRgb(value);
+  service_->SetOzoneRgb(value);
 }
 
 auto EnvironmentVm::GetMultiScattering() const -> float
@@ -480,34 +505,16 @@ auto EnvironmentVm::SetAerialScatteringStrength(float value) -> void
   service_->SetAerialScatteringStrength(value);
 }
 
-auto EnvironmentVm::GetAbsorptionLayerWidthKm() const -> float
+auto EnvironmentVm::GetOzoneDensityProfile() const
+  -> engine::atmos::DensityProfile
 {
-  return service_->GetAbsorptionLayerWidthKm();
+  return service_->GetOzoneDensityProfile();
 }
 
-auto EnvironmentVm::SetAbsorptionLayerWidthKm(float value) -> void
+auto EnvironmentVm::SetOzoneDensityProfile(
+  const engine::atmos::DensityProfile& profile) -> void
 {
-  service_->SetAbsorptionLayerWidthKm(value);
-}
-
-auto EnvironmentVm::GetAbsorptionTermBelow() const -> float
-{
-  return service_->GetAbsorptionTermBelow();
-}
-
-auto EnvironmentVm::SetAbsorptionTermBelow(float value) -> void
-{
-  service_->SetAbsorptionTermBelow(value);
-}
-
-auto EnvironmentVm::GetAbsorptionTermAbove() const -> float
-{
-  return service_->GetAbsorptionTermAbove();
-}
-
-auto EnvironmentVm::SetAbsorptionTermAbove(float value) -> void
-{
-  service_->SetAbsorptionTermAbove(value);
+  service_->SetOzoneDensityProfile(profile);
 }
 
 auto EnvironmentVm::GetSkyViewLutSlices() const -> int

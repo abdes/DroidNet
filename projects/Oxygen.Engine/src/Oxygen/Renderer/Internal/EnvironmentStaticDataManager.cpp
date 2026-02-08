@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -286,16 +287,12 @@ auto EnvironmentStaticDataManager::PopulateAtmosphere(
     next.atmosphere.rayleigh_scale_height_m
       = atmo->GetRayleighScaleHeightMeters();
     next.atmosphere.mie_scattering_rgb = atmo->GetMieScatteringRgb();
-    next.atmosphere.mie_absorption_rgb = atmo->GetMieAbsorptionRgb();
     next.atmosphere.mie_extinction_rgb
-      = next.atmosphere.mie_scattering_rgb + next.atmosphere.mie_absorption_rgb;
+      = next.atmosphere.mie_scattering_rgb + atmo->GetMieAbsorptionRgb();
     next.atmosphere.mie_scale_height_m = atmo->GetMieScaleHeightMeters();
     next.atmosphere.mie_g = atmo->GetMieAnisotropy();
     next.atmosphere.absorption_rgb = atmo->GetAbsorptionRgb();
-    next.atmosphere.absorption_layer_width_m
-      = atmo->GetAbsorptionLayerWidthMeters();
-    next.atmosphere.absorption_term_below = atmo->GetAbsorptionTermBelow();
-    next.atmosphere.absorption_term_above = atmo->GetAbsorptionTermAbove();
+    next.atmosphere.absorption_density = atmo->GetOzoneDensityProfile();
     next.atmosphere.multi_scattering_factor = atmo->GetMultiScatteringFactor();
 
     const bool atmo_disk_enabled = atmo->GetSunDiskEnabled();
@@ -376,8 +373,9 @@ auto EnvironmentStaticDataManager::PopulateSkyLight(
     // Sky). Procedural atmosphere remains at its native physical scale.
     const float intensity = sky_light->GetIntensity();
     const float unit_bridge
-      = (next.sky_light.source == SkyLightSource::kSpecifiedCubemap) ? 5000.0F
-                                                                     : 1.0F;
+      = (next.sky_light.source == SkyLightSource::kSpecifiedCubemap)
+      ? atmos::kStandardSkyLuminance
+      : 1.0F;
     next.sky_light.intensity = intensity * unit_bridge;
 
     next.sky_light.tint_rgb = sky_light->GetTintRgb();
@@ -431,7 +429,7 @@ auto EnvironmentStaticDataManager::PopulateSkySphere(
     const float unit_bridge
       = (next.sky_sphere.source == SkySphereSource::kCubemap
           || next.sky_sphere.source == SkySphereSource::kSolidColor)
-      ? 5000.0F
+      ? atmos::kStandardSkyLuminance
       : 1.0F;
     next.sky_sphere.intensity = intensity * unit_bridge;
 
