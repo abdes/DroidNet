@@ -7,6 +7,8 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTSTATICDATA_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTSTATICDATA_HLSLI
 
+#include "../Atmosphere/AtmosphereDensity.hlsli"
+
 static const uint FOG_MODEL_EXPONENTIAL_HEIGHT = 0u;
 static const uint FOG_MODEL_VOLUMETRIC = 1u;
 
@@ -40,7 +42,7 @@ struct GpuFogParams
     uint enabled;
 };
 
-// Mirrors oxygen::engine::GpuSkyAtmosphereParams (sizeof = 160)
+// Mirrors oxygen::engine::GpuSkyAtmosphereParams (sizeof = 192)
 struct GpuSkyAtmosphereParams
 {
     float planet_radius_m;
@@ -57,36 +59,34 @@ struct GpuSkyAtmosphereParams
     float3 mie_scattering_rgb;
     float mie_scale_height_m;
 
-    float3 mie_absorption_rgb;
-    float mie_g;
-
     // Precomputed Mie extinction (scattering + absorption).
     float3 mie_extinction_rgb;
-    float _pad_mie;
+    float mie_g;
 
     float3 absorption_rgb;
-    float absorption_layer_width_m;
-    float absorption_term_below;
-    float absorption_term_above;
+    float _pad_absorption;
+
+    AtmosphereDensityProfile absorption_density;
 
     uint sun_disk_enabled;
     uint enabled;
-
     uint transmittance_lut_slot;
-
     uint sky_view_lut_slot;
+
     uint multi_scat_lut_slot;
     uint camera_volume_lut_slot;
     uint blue_noise_slot;
-
     float transmittance_lut_width;
+
     float transmittance_lut_height;
     float sky_view_lut_width;
     float sky_view_lut_height;
-
     uint sky_view_lut_slices;
+
     uint sky_view_alt_mapping_mode;
     uint _pad0;
+    uint _pad1;
+    uint _pad2;
 };
 
 // Mirrors oxygen::engine::GpuSkyLightParams (sizeof = 64)
@@ -170,7 +170,7 @@ struct GpuPostProcessParams
     uint _pad2;
 };
 
-// Mirrors oxygen::engine::EnvironmentStaticData (sizeof = 464)
+// Mirrors oxygen::engine::EnvironmentStaticData (sizeof = 480)
 struct EnvironmentStaticData
 {
     GpuFogParams fog;

@@ -118,6 +118,13 @@ namespace {
     return record.has_value() && record->enabled != 0U;
   }
 
+  [[nodiscard]] auto MakeOzoneTentProfile(const float center_m,
+    const float half_width_m) -> engine::atmos::DensityProfile
+  {
+    return engine::atmos::MakeOzoneTentDensityProfile(
+      center_m, 2.0F * half_width_m);
+  }
+
   auto HydrateSkyAtmosphere(scene::environment::SkyAtmosphere& target,
     const data::pak::SkyAtmosphereEnvironmentRecord& source) -> void
   {
@@ -132,9 +139,13 @@ namespace {
       source.mie_scattering_rgb[1], source.mie_scattering_rgb[2] });
     target.SetMieScaleHeightMeters(source.mie_scale_height_m);
     target.SetMieAnisotropy(source.mie_g);
-    target.SetAbsorptionRgb(Vec3 { source.absorption_rgb[0],
+    target.SetOzoneAbsorptionRgb(Vec3 { source.absorption_rgb[0],
       source.absorption_rgb[1], source.absorption_rgb[2] });
-    target.SetAbsorptionLayerWidthMeters(source.absorption_scale_height_m);
+
+    // Pak format currently exposes a single absorption height parameter.
+    // Map it to a symmetric 2-layer tent profile (half-width = center).
+    const float center_m = source.absorption_scale_height_m;
+    target.SetOzoneDensityProfile(MakeOzoneTentProfile(center_m, center_m));
     // New parameters not yet in PakFormat, use defaults or derived values if
     // needed. For now, we leave them as component defaults.
     target.SetMultiScatteringFactor(source.multi_scattering_factor);
@@ -253,13 +264,18 @@ namespace {
     = "env.atmo.aerial_perspective_scale";
   constexpr std::string_view kAerialScatteringStrengthKey
     = "env.atmo.aerial_scattering_strength";
-  constexpr std::string_view kAbsorptionRgbKey = "env.atmo.absorption_rgb";
-  constexpr std::string_view kAbsorptionLayerWidthKey
-    = "env.atmo.absorption_layer_width_km";
-  constexpr std::string_view kAbsorptionTermBelowKey
-    = "env.atmo.absorption_term_below";
-  constexpr std::string_view kAbsorptionTermAboveKey
-    = "env.atmo.absorption_term_above";
+  constexpr std::string_view kOzoneRgbKey = "env.atmo.ozone_rgb";
+
+  constexpr std::string_view kOzoneProfileLayer0WidthMKey
+    = "env.atmo.ozone_profile.layer0.width_m";
+  constexpr std::string_view kOzoneProfileLayer0LinearTermKey
+    = "env.atmo.ozone_profile.layer0.linear_term";
+  constexpr std::string_view kOzoneProfileLayer0ConstantTermKey
+    = "env.atmo.ozone_profile.layer0.constant_term";
+  constexpr std::string_view kOzoneProfileLayer1LinearTermKey
+    = "env.atmo.ozone_profile.layer1.linear_term";
+  constexpr std::string_view kOzoneProfileLayer1ConstantTermKey
+    = "env.atmo.ozone_profile.layer1.constant_term";
   constexpr std::string_view kSkyViewLutSlicesKey
     = "env.atmo.sky_view_lut_slices";
   constexpr std::string_view kSkyViewAltMappingModeKey
@@ -615,10 +631,6 @@ auto EnvironmentSettingsService::SetMieAbsorptionScale(float value) -> void
     return;
   }
   mie_absorption_scale_ = value;
-
-  constexpr float kBaseAbsorption = 2.33e-6F;
-  mie_absorption_rgb_ = glm::vec3(mie_absorption_scale_ * kBaseAbsorption);
-
   MarkDirty();
 }
 
@@ -636,12 +648,39 @@ auto EnvironmentSettingsService::SetMultiScattering(float value) -> void
   MarkDirty();
 }
 
+auto EnvironmentSettingsService::GetOzoneRgb() const -> glm::vec3
+{
+  return ozone_rgb_;
+}
+
+auto EnvironmentSettingsService::SetOzoneRgb(const glm::vec3& value) -> void
+{
+  if (ozone_rgb_ == value) {
+    return;
+  }
+  ozone_rgb_ = value;
+  MarkDirty();
+}
+
+auto EnvironmentSettingsService::GetOzoneDensityProfile() const
+  -> engine::atmos::DensityProfile
+{
+  return ozone_profile_;
+}
+
+auto EnvironmentSettingsService::SetOzoneDensityProfile(
+  const engine::atmos::DensityProfile& profile) -> void
+{
+  ozone_profile_ = profile;
+  MarkDirty();
+}
+
 auto EnvironmentSettingsService::GetSunDiskEnabled() const -> bool
 {
   return sun_disk_enabled_;
 }
 
-auto EnvironmentSettingsService::SetSunDiskEnabled(bool enabled) -> void
+auto EnvironmentSettingsService::SetSunDiskEnabled(const bool enabled) -> void
 {
   if (sun_disk_enabled_ == enabled) {
     return;
@@ -655,7 +694,8 @@ auto EnvironmentSettingsService::GetAerialPerspectiveScale() const -> float
   return aerial_perspective_scale_;
 }
 
-auto EnvironmentSettingsService::SetAerialPerspectiveScale(float value) -> void
+auto EnvironmentSettingsService::SetAerialPerspectiveScale(const float value)
+  -> void
 {
   if (aerial_perspective_scale_ == value) {
     return;
@@ -669,70 +709,13 @@ auto EnvironmentSettingsService::GetAerialScatteringStrength() const -> float
   return aerial_scattering_strength_;
 }
 
-auto EnvironmentSettingsService::SetAerialScatteringStrength(float value)
+auto EnvironmentSettingsService::SetAerialScatteringStrength(const float value)
   -> void
 {
   if (aerial_scattering_strength_ == value) {
     return;
   }
   aerial_scattering_strength_ = value;
-  MarkDirty();
-}
-
-auto EnvironmentSettingsService::GetAbsorptionRgb() const -> glm::vec3
-{
-  return absorption_rgb_;
-}
-
-auto EnvironmentSettingsService::SetAbsorptionRgb(const glm::vec3& value)
-  -> void
-{
-  if (absorption_rgb_ == value) {
-    return;
-  }
-  absorption_rgb_ = value;
-  MarkDirty();
-}
-
-auto EnvironmentSettingsService::GetAbsorptionLayerWidthKm() const -> float
-{
-  return absorption_layer_width_km_;
-}
-
-auto EnvironmentSettingsService::SetAbsorptionLayerWidthKm(float value) -> void
-{
-  if (absorption_layer_width_km_ == value) {
-    return;
-  }
-  absorption_layer_width_km_ = value;
-  MarkDirty();
-}
-
-auto EnvironmentSettingsService::GetAbsorptionTermBelow() const -> float
-{
-  return absorption_term_below_;
-}
-
-auto EnvironmentSettingsService::SetAbsorptionTermBelow(float value) -> void
-{
-  if (absorption_term_below_ == value) {
-    return;
-  }
-  absorption_term_below_ = value;
-  MarkDirty();
-}
-
-auto EnvironmentSettingsService::GetAbsorptionTermAbove() const -> float
-{
-  return absorption_term_above_;
-}
-
-auto EnvironmentSettingsService::SetAbsorptionTermAbove(float value) -> void
-{
-  if (absorption_term_above_ == value) {
-    return;
-  }
-  absorption_term_above_ = value;
   MarkDirty();
 }
 
@@ -1558,14 +1541,12 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     atmo->SetMieScaleHeightMeters(mie_scale_height_km_ * kKmToMeters);
     atmo->SetMieScaleHeightMeters(mie_scale_height_km_ * kKmToMeters);
     atmo->SetMieAnisotropy(mie_anisotropy_);
-    atmo->SetMieAbsorptionRgb(mie_absorption_rgb_);
+    atmo->SetMieAbsorptionRgb(mie_absorption_scale_ * glm::vec3(2.33e-6F));
     // We now control absorption explicitly via the new parameters.
-    atmo->SetAbsorptionRgb(absorption_rgb_);
+    atmo->SetOzoneAbsorptionRgb(ozone_rgb_);
 
-    atmo->SetAbsorptionLayerWidthMeters(
-      absorption_layer_width_km_ * kKmToMeters);
-    atmo->SetAbsorptionTermBelow(absorption_term_below_);
-    atmo->SetAbsorptionTermAbove(absorption_term_above_);
+    // Apply the 2-layer ozone density profile as-authored (UI/settings).
+    atmo->SetOzoneDensityProfile(ozone_profile_);
 
     atmo->SetMultiScatteringFactor(multi_scattering_);
     atmo->SetSunDiskEnabled(sun_disk_enabled_);
@@ -1697,12 +1678,12 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     aerial_perspective_scale_ = atmo->GetAerialPerspectiveDistanceScale();
     aerial_scattering_strength_ = atmo->GetAerialScatteringStrength();
 
-    // Sync new parameters
-    absorption_layer_width_km_
-      = atmo->GetAbsorptionLayerWidthMeters() * kMetersToKm;
-    absorption_term_below_ = atmo->GetAbsorptionTermBelow();
-    absorption_term_above_ = atmo->GetAbsorptionTermAbove();
-    absorption_rgb_ = atmo->GetAbsorptionRgb();
+    // Sync ozone parameters.
+    ozone_rgb_ = atmo->GetAbsorptionRgb();
+
+    // Keep the full two-layer profile in sync so the UI can reflect
+    // scene-authored values (e.g., from loaded assets).
+    ozone_profile_ = atmo->GetOzoneDensityProfile();
   }
 
   if (auto fog = env->TryGetSystem<scene::environment::Fog>()) {
@@ -1888,12 +1869,27 @@ auto EnvironmentSettingsService::LoadSettings() -> void
     |= load_float(kAerialPerspectiveScaleKey, aerial_perspective_scale_);
   any_loaded
     |= load_float(kAerialScatteringStrengthKey, aerial_scattering_strength_);
-  // Load new parameters
-  any_loaded
-    |= load_float(kAbsorptionLayerWidthKey, absorption_layer_width_km_);
-  any_loaded |= load_float(kAbsorptionTermBelowKey, absorption_term_below_);
-  any_loaded |= load_float(kAbsorptionTermAboveKey, absorption_term_above_);
-  any_loaded |= load_vec3(kAbsorptionRgbKey, absorption_rgb_);
+  any_loaded |= load_vec3(kOzoneRgbKey, ozone_rgb_);
+
+  engine::atmos::DensityProfile loaded_profile = ozone_profile_;
+  bool ozone_profile_loaded = false;
+  ozone_profile_loaded |= load_float(
+    kOzoneProfileLayer0WidthMKey, loaded_profile.layers[0].width_m);
+  ozone_profile_loaded |= load_float(
+    kOzoneProfileLayer0LinearTermKey, loaded_profile.layers[0].linear_term);
+  ozone_profile_loaded |= load_float(
+    kOzoneProfileLayer0ConstantTermKey, loaded_profile.layers[0].constant_term);
+  ozone_profile_loaded |= load_float(
+    kOzoneProfileLayer1LinearTermKey, loaded_profile.layers[1].linear_term);
+  ozone_profile_loaded |= load_float(
+    kOzoneProfileLayer1ConstantTermKey, loaded_profile.layers[1].constant_term);
+
+  if (ozone_profile_loaded) {
+    loaded_profile.layers[0].exp_term = 0.0F;
+    loaded_profile.layers[1].width_m = 0.0F;
+    loaded_profile.layers[1].exp_term = 0.0F;
+    ozone_profile_ = loaded_profile;
+  }
 
   any_loaded |= load_int(kSkyViewLutSlicesKey, sky_view_lut_slices_);
   any_loaded |= load_int(kSkyViewAltMappingModeKey, sky_view_alt_mapping_mode_);
@@ -2011,10 +2007,17 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kAerialPerspectiveScaleKey, aerial_perspective_scale_);
   save_float(kAerialScatteringStrengthKey, aerial_scattering_strength_);
 
-  save_float(kAbsorptionLayerWidthKey, absorption_layer_width_km_);
-  save_float(kAbsorptionTermBelowKey, absorption_term_below_);
-  save_float(kAbsorptionTermAboveKey, absorption_term_above_);
-  save_vec3(kAbsorptionRgbKey, absorption_rgb_);
+  save_vec3(kOzoneRgbKey, ozone_rgb_);
+
+  save_float(kOzoneProfileLayer0WidthMKey, ozone_profile_.layers[0].width_m);
+  save_float(
+    kOzoneProfileLayer0LinearTermKey, ozone_profile_.layers[0].linear_term);
+  save_float(
+    kOzoneProfileLayer0ConstantTermKey, ozone_profile_.layers[0].constant_term);
+  save_float(
+    kOzoneProfileLayer1LinearTermKey, ozone_profile_.layers[1].linear_term);
+  save_float(
+    kOzoneProfileLayer1ConstantTermKey, ozone_profile_.layers[1].constant_term);
 
   save_int(kSkyViewLutSlicesKey, sky_view_lut_slices_);
   save_int(kSkyViewAltMappingModeKey, sky_view_alt_mapping_mode_);

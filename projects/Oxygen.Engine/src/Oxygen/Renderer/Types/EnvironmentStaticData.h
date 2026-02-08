@@ -6,11 +6,14 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
 
 namespace oxygen::engine {
@@ -62,6 +65,7 @@ struct alignas(16) GpuFogParams {
   FogModel model { FogModel::kExponentialHeight };
   uint32_t enabled { 0U };
 };
+static_assert(std::is_standard_layout_v<GpuFogParams>);
 static_assert(sizeof(GpuFogParams) % 16 == 0);
 static_assert(sizeof(GpuFogParams) == 48);
 
@@ -157,57 +161,71 @@ struct BlueNoiseSlot {
  The renderer is expected to provide the sun direction via scene lighting.
 */
 struct alignas(16) GpuSkyAtmosphereParams {
-  float planet_radius_m { 6360000.0F };
-  float atmosphere_height_m { 80000.0F };
+  float planet_radius_m { atmos::kDefaultPlanetRadiusM };
+  float atmosphere_height_m { atmos::kDefaultAtmosphereHeightM };
   float multi_scattering_factor { 1.0F };
   float aerial_perspective_distance_scale { 1.0F };
 
   glm::vec3 ground_albedo_rgb { 0.1F, 0.1F, 0.1F };
-  float sun_disk_angular_radius_radians { 0.004675F };
+  float sun_disk_angular_radius_radians {
+    atmos::kDefaultSunDiskAngularRadiusRad
+  };
 
-  glm::vec3 rayleigh_scattering_rgb { 5.8e-6F, 13.5e-6F, 33.1e-6F };
-  float rayleigh_scale_height_m { 8000.0F };
+  glm::vec3 rayleigh_scattering_rgb { atmos::kDefaultRayleighScatteringRgb };
+  float rayleigh_scale_height_m { atmos::kDefaultRayleighScaleHeightM };
 
-  glm::vec3 mie_scattering_rgb { 21.0e-6F, 21.0e-6F, 21.0e-6F };
-  float mie_scale_height_m { 1200.0F };
-
-  //! Mie absorption coefficient (1/m, RGB).
-  /*!
-   UE5-style explicit absorption. Mie extinction = scattering + absorption.
-   Default corresponds to SSA ≈ 0.9 for Earth-like atmospheres.
-  */
-  glm::vec3 mie_absorption_rgb { 2.33e-6F, 2.33e-6F, 2.33e-6F };
-  float mie_g { 0.8F };
+  glm::vec3 mie_scattering_rgb { atmos::kDefaultMieScatteringRgb };
+  float mie_scale_height_m { atmos::kDefaultMieScaleHeightM };
 
   //! Precomputed Mie extinction (scattering + absorption).
-  glm::vec3 mie_extinction_rgb { 23.33e-6F, 23.33e-6F, 23.33e-6F };
-  float _pad_mie { 0.0F };
+  glm::vec3 mie_extinction_rgb { atmos::kDefaultMieExtinctionRgb };
+  float mie_g { atmos::kDefaultMieAnisotropyG };
 
-  glm::vec3 absorption_rgb { 0.65e-6F, 1.881e-6F, 0.085e-6F };
-  float absorption_layer_width_m { 25000.0F };
-  float absorption_term_below { 0.0F };
-  float absorption_term_above { 0.0F };
+  glm::vec3 absorption_rgb { atmos::kDefaultOzoneAbsorptionRgb };
+  float _pad_absorption { 0.0F };
+
+  atmos::DensityProfile absorption_density;
 
   uint32_t sun_disk_enabled { 1U };
   uint32_t enabled { 0U };
   TransmittanceLutSlot transmittance_lut_slot;
-
   SkyViewLutSlot sky_view_lut_slot;
+
   MultiScatLutSlot multi_scat_lut_slot;
   CameraVolumeLutSlot camera_volume_lut_slot;
   BlueNoiseSlot blue_noise_slot;
-
   float transmittance_lut_width { 0.0F };
+
   float transmittance_lut_height { 0.0F };
   float sky_view_lut_width { 0.0F };
   float sky_view_lut_height { 0.0F };
-
   uint32_t sky_view_lut_slices { 0U };
+
   uint32_t sky_view_alt_mapping_mode { 0U };
   uint32_t _pad0 { 0U };
+  uint32_t _pad1 { 0U };
+  uint32_t _pad2 { 0U };
 };
+static_assert(std::is_standard_layout_v<GpuSkyAtmosphereParams>);
 static_assert(sizeof(GpuSkyAtmosphereParams) % 16 == 0);
-static_assert(sizeof(GpuSkyAtmosphereParams) == 176);
+static_assert(sizeof(GpuSkyAtmosphereParams) == 192);
+
+static_assert(sizeof(glm::vec3) == 12);
+static_assert(alignof(glm::vec3) == 4);
+
+static_assert(offsetof(GpuSkyAtmosphereParams, planet_radius_m) == 0);
+static_assert(offsetof(GpuSkyAtmosphereParams, ground_albedo_rgb) == 16);
+static_assert(offsetof(GpuSkyAtmosphereParams, rayleigh_scattering_rgb) == 32);
+static_assert(offsetof(GpuSkyAtmosphereParams, mie_scattering_rgb) == 48);
+static_assert(offsetof(GpuSkyAtmosphereParams, mie_extinction_rgb) == 64);
+static_assert(offsetof(GpuSkyAtmosphereParams, absorption_rgb) == 80);
+static_assert(offsetof(GpuSkyAtmosphereParams, absorption_density) == 96);
+static_assert(offsetof(GpuSkyAtmosphereParams, sun_disk_enabled) == 128);
+static_assert(offsetof(GpuSkyAtmosphereParams, multi_scat_lut_slot) == 144);
+static_assert(
+  offsetof(GpuSkyAtmosphereParams, transmittance_lut_height) == 160);
+static_assert(
+  offsetof(GpuSkyAtmosphereParams, sky_view_alt_mapping_mode) == 176);
 
 struct CubeMapSlot {
   ShaderVisibleIndex value;
@@ -309,6 +327,7 @@ struct alignas(16) GpuSkyLightParams {
   std::uint32_t ibl_generation { 0U };
   std::uint32_t _pad1 { 0U };
 };
+static_assert(std::is_standard_layout_v<GpuSkyLightParams>);
 static_assert(sizeof(GpuSkyLightParams) % 16 == 0);
 static_assert(sizeof(GpuSkyLightParams) == 64);
 
@@ -331,6 +350,7 @@ struct alignas(16) GpuSkySphereParams {
   CubeMapSlot cubemap_slot;
   std::uint32_t cubemap_max_mip { 0U };
 };
+static_assert(std::is_standard_layout_v<GpuSkySphereParams>);
 static_assert(sizeof(GpuSkySphereParams) % 16 == 0);
 static_assert(sizeof(GpuSkySphereParams) == 48);
 
@@ -355,6 +375,7 @@ struct alignas(16) GpuVolumetricCloudParams {
   uint32_t enabled { 0U };
   uint32_t _pad0 { 0U };
 };
+static_assert(std::is_standard_layout_v<GpuVolumetricCloudParams>);
 static_assert(sizeof(GpuVolumetricCloudParams) % 16 == 0);
 static_assert(sizeof(GpuVolumetricCloudParams) == 64);
 
@@ -383,6 +404,7 @@ struct alignas(16) GpuPostProcessParams {
   uint32_t _pad1 { 0U };
   uint32_t _pad2 { 0U };
 };
+static_assert(std::is_standard_layout_v<GpuPostProcessParams>);
 static_assert(sizeof(GpuPostProcessParams) % 16 == 0);
 static_assert(sizeof(GpuPostProcessParams) == 64);
 
@@ -405,7 +427,14 @@ struct alignas(16) EnvironmentStaticData {
   GpuVolumetricCloudParams clouds;
   GpuPostProcessParams post_process;
 };
+static_assert(std::is_standard_layout_v<EnvironmentStaticData>);
 static_assert(sizeof(EnvironmentStaticData) % 16 == 0);
-static_assert(sizeof(EnvironmentStaticData) == 464);
+static_assert(sizeof(EnvironmentStaticData) == 480);
+static_assert(offsetof(EnvironmentStaticData, fog) == 0);
+static_assert(offsetof(EnvironmentStaticData, atmosphere) == 48);
+static_assert(offsetof(EnvironmentStaticData, sky_light) == 240);
+static_assert(offsetof(EnvironmentStaticData, sky_sphere) == 304);
+static_assert(offsetof(EnvironmentStaticData, clouds) == 352);
+static_assert(offsetof(EnvironmentStaticData, post_process) == 416);
 
 } // namespace oxygen::engine

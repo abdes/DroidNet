@@ -14,6 +14,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Renderer/Internal/ISkyAtmosphereLutProvider.h>
@@ -382,9 +383,7 @@ private:
     float ground_albedo_b { 0.0F };
 
     // New absorption parameters
-    float absorption_layer_width_m { 0.0F };
-    float absorption_term_below { 0.0F };
-    float absorption_term_above { 0.0F };
+    atmos::DensityProfile absorption_density;
 
     // Slice config is tracked so changes trigger re-creation [P15].
     uint32_t sky_view_slices { 0 };

@@ -176,7 +176,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
         float d_r = AtmosphereExponentialDensity(altitude_m, atmo.rayleigh_scale_height_m);
         float d_m = AtmosphereExponentialDensity(altitude_m, atmo.mie_scale_height_m);
-        float d_a = OzoneAbsorptionDensity(altitude_m, atmo.absorption_layer_width_m, atmo.absorption_term_below, atmo.absorption_term_above);
+        float d_a = OzoneAbsorptionDensity(altitude_m, atmo.absorption_density);
 
         float3 extinction = beta_rayleigh * d_r + beta_mie_ext * d_m + beta_abs * d_a;
         float3 sample_optical_depth = extinction * step_size;

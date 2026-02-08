@@ -572,37 +572,77 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
 
   ImGui::Separator();
 
-  // Ozone Profile
-  ImGui::Text("Ozone Profile:");
-  float absorption_layer_width_km
-    = environment_vm_->GetAbsorptionLayerWidthKm();
-  if (ImGui::DragFloat("Layer Width (km)", &absorption_layer_width_km, 1.0F,
-        1.0F, 100.0F, "%.1F")) {
-    environment_vm_->SetAbsorptionLayerWidthKm(absorption_layer_width_km);
+  // Ozone Profile (2-layer density profile)
+  ImGui::Text("Ozone Density Profile (2-layer):");
+
+  constexpr float kMetersToKm = 0.001F;
+  constexpr float kKmToMeters = 1000.0F;
+
+  auto ozone_profile = environment_vm_->GetOzoneDensityProfile();
+  const auto& lower = ozone_profile.layers[0];
+  const auto& upper = ozone_profile.layers[1];
+
+  const bool tent_like = (lower.exp_term == 0.0F && upper.exp_term == 0.0F)
+    && (lower.linear_term > 0.0F)
+    && (std::abs(upper.linear_term + lower.linear_term) < 1.0e-3F);
+  if (tent_like) {
+    const float center_km = lower.width_m * kMetersToKm;
+    const float half_width_km = (1.0F / lower.linear_term) * kMetersToKm;
+    ImGui::TextDisabled("Derived: center=%.1f km, width=%.1f km", center_km,
+      2.0F * half_width_km);
+  } else {
+    ImGui::TextDisabled("Derived: (custom profile)");
   }
 
-  float term_below = environment_vm_->GetAbsorptionTermBelow();
-  if (ImGui::SliderFloat("Term Below", &term_below, 0.0F, 1.0F, "%.2F")) {
-    environment_vm_->SetAbsorptionTermBelow(term_below);
-  }
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
-    ImGui::SetTooltip("Linear increase slope below layer width (0 to 1).");
+  bool ozone_profile_changed = false;
+
+  float peak_alt_km = ozone_profile.layers[0].width_m * kMetersToKm;
+  if (ImGui::DragFloat(
+        "Peak Altitude (km)", &peak_alt_km, 0.1F, 0.0F, 120.0F, "%.2F")) {
+    ozone_profile_changed = true;
   }
 
-  float term_above = environment_vm_->GetAbsorptionTermAbove();
-  if (ImGui::SliderFloat("Term Above", &term_above, -1.0F, 1.0F, "%.2F")) {
-    environment_vm_->SetAbsorptionTermAbove(term_above);
+  float lower_slope_inv_km = ozone_profile.layers[0].linear_term * kKmToMeters;
+  if (ImGui::DragFloat("Lower Slope (1/km)", &lower_slope_inv_km, 0.01F,
+        -1.0e3F, 1.0e3F, "%.4f")) {
+    ozone_profile_changed = true;
   }
-  if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
-    ImGui::SetTooltip("Linear decrease slope above layer width (-1 to 1).\n"
-                      "Should typically be negative to decrease density.");
+  float lower_offset = ozone_profile.layers[0].constant_term;
+  if (ImGui::DragFloat(
+        "Lower Offset", &lower_offset, 0.01F, -1000.0F, 1000.0F, "%.4f")) {
+    ozone_profile_changed = true;
+  }
+
+  float upper_slope_inv_km = ozone_profile.layers[1].linear_term * kKmToMeters;
+  if (ImGui::DragFloat("Upper Slope (1/km)", &upper_slope_inv_km, 0.01F,
+        -1.0e3F, 1.0e3F, "%.4f")) {
+    ozone_profile_changed = true;
+  }
+  float upper_offset = ozone_profile.layers[1].constant_term;
+  if (ImGui::DragFloat(
+        "Upper Offset", &upper_offset, 0.01F, -1000.0F, 1000.0F, "%.4f")) {
+    ozone_profile_changed = true;
+  }
+
+  if (ozone_profile_changed) {
+    ozone_profile.layers[0].width_m = peak_alt_km * kKmToMeters;
+    ozone_profile.layers[0].exp_term = 0.0F;
+    ozone_profile.layers[0].linear_term = lower_slope_inv_km / kKmToMeters;
+    ozone_profile.layers[0].constant_term = lower_offset;
+
+    ozone_profile.layers[1].width_m = 0.0F;
+    ozone_profile.layers[1].exp_term = 0.0F;
+    ozone_profile.layers[1].linear_term = upper_slope_inv_km / kKmToMeters;
+    ozone_profile.layers[1].constant_term = upper_offset;
+
+    environment_vm_->SetOzoneDensityProfile(ozone_profile);
   }
 
   // Ozone Absorption Color (scaled for usability)
   // Ozone absorption is typically ~1e-6. We scale by 1e6 so user sees "0.65"
   // instead of "0.00000065".
   constexpr float kOzoneScale = 1.0e6F;
-  glm::vec3 absorption_rgb = environment_vm_->GetAbsorptionRgb() * kOzoneScale;
+  glm::vec3 absorption_rgb = environment_vm_->GetOzoneRgb() * kOzoneScale;
   float absorption_rgb_arr[3]
     = { absorption_rgb.r, absorption_rgb.g, absorption_rgb.b };
 
@@ -616,17 +656,15 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
 
   if (ImGui::DragFloat3("Ozone Coeffs (x1e-6)", absorption_rgb_arr, 0.01F, 0.0F,
         10.0F, "%.3f")) {
-    environment_vm_->SetAbsorptionRgb(
-      glm::vec3(
-        absorption_rgb_arr[0], absorption_rgb_arr[1], absorption_rgb_arr[2])
+    environment_vm_->SetOzoneRgb(glm::vec3(absorption_rgb_arr[0],
+                                   absorption_rgb_arr[1], absorption_rgb_arr[2])
       / kOzoneScale);
   }
   ImGui::SameLine();
   if (ImGui::ColorEdit3("##OzoneColorPreview", absorption_rgb_arr,
         ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_HDR)) {
-    environment_vm_->SetAbsorptionRgb(
-      glm::vec3(
-        absorption_rgb_arr[0], absorption_rgb_arr[1], absorption_rgb_arr[2])
+    environment_vm_->SetOzoneRgb(glm::vec3(absorption_rgb_arr[0],
+                                   absorption_rgb_arr[1], absorption_rgb_arr[2])
       / kOzoneScale);
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {

@@ -127,7 +127,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
                 float d_r = AtmosphereExponentialDensity(h_m, atmo.rayleigh_scale_height_m);
                 float d_m = AtmosphereExponentialDensity(h_m, atmo.mie_scale_height_m);
-                float d_a = OzoneAbsorptionDensity(h_m, atmo.absorption_layer_width_m, atmo.absorption_term_below, atmo.absorption_term_above);
+                float d_a = OzoneAbsorptionDensity(h_m, atmo.absorption_density);
 
                 float3 od_step = float3(d_r, d_m, d_a) * step_size;
                 float3 view_transmittance = TransmittanceFromOpticalDepth(accumulated_od + od_step * 0.5, atmo);

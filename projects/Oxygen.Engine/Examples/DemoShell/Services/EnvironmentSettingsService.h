@@ -21,6 +21,7 @@
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Scene/Environment/Sun.h>
 
 #include "DemoShell/Services/DomainService.h"
@@ -145,17 +146,14 @@ public:
   virtual auto SetMultiScattering(float value) -> void;
 
   // Absorption
-  [[nodiscard]] virtual auto GetAbsorptionRgb() const -> glm::vec3;
-  virtual auto SetAbsorptionRgb(const glm::vec3& value) -> void;
+  // Ozone Profile
+  [[nodiscard]] virtual auto GetOzoneRgb() const -> glm::vec3;
+  virtual auto SetOzoneRgb(const glm::vec3& value) -> void;
 
-  [[nodiscard]] virtual auto GetAbsorptionLayerWidthKm() const -> float;
-  virtual auto SetAbsorptionLayerWidthKm(float value) -> void;
-
-  [[nodiscard]] virtual auto GetAbsorptionTermBelow() const -> float;
-  virtual auto SetAbsorptionTermBelow(float value) -> void;
-
-  [[nodiscard]] virtual auto GetAbsorptionTermAbove() const -> float;
-  virtual auto SetAbsorptionTermAbove(float value) -> void;
+  [[nodiscard]] virtual auto GetOzoneDensityProfile() const
+    -> engine::atmos::DensityProfile;
+  virtual auto SetOzoneDensityProfile(
+    const engine::atmos::DensityProfile& profile) -> void;
 
   [[nodiscard]] virtual auto GetSunDiskEnabled() const -> bool;
   virtual auto SetSunDiskEnabled(bool enabled) -> void;
@@ -342,8 +340,10 @@ private:
   auto SaveSunSettingsToProfile(int source) -> void;
   [[nodiscard]] auto GetAtmosphereFlags() const -> uint32_t;
 
-  static constexpr float kDefaultPlanetRadiusKm = 6360.0F;
-  static constexpr float kDefaultAtmosphereHeightKm = 80.0F;
+  static constexpr float kDefaultPlanetRadiusKm
+    = engine::atmos::kDefaultPlanetRadiusM * 0.001F;
+  static constexpr float kDefaultAtmosphereHeightKm
+    = engine::atmos::kDefaultAtmosphereHeightM * 0.001F;
 
   EnvironmentRuntimeConfig config_ {};
 
@@ -366,12 +366,13 @@ private:
   float mie_absorption_scale_ {
     1.0F
   }; // 1.0 = Earth-like absorption (SSA ≈ 0.9)
-  glm::vec3 mie_absorption_rgb_ { 2.33e-6F, 2.33e-6F, 2.33e-6F };
   float multi_scattering_ { 1.0F };
-  glm::vec3 absorption_rgb_ { 0.65e-6F, 1.881e-6F, 0.085e-6F };
-  float absorption_layer_width_km_ { 25.0F };
-  float absorption_term_below_ { 1.0F };
-  float absorption_term_above_ { -1.0F };
+
+  // New Ozone Profile (2-layer)
+  glm::vec3 ozone_rgb_ { engine::atmos::kDefaultOzoneAbsorptionRgb };
+  engine::atmos::DensityProfile ozone_profile_ {
+    engine::atmos::kDefaultOzoneDensityProfile
+  };
   bool sun_disk_enabled_ { true };
   float aerial_perspective_scale_ { 1.0F };
   float aerial_scattering_strength_ { 1.0F };
