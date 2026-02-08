@@ -15,6 +15,10 @@
 //! UV Parameterization:
 //!   u = (cos_sun_zenith + 1) / 2
 //!   v = altitude / atmosphere_height
+//!
+//! === Bindless Discipline ===
+//! - All resources accessed via SM 6.6 descriptor heaps
+//! - SceneConstants at b1, RootConstants at b2, EnvironmentDynamicData at b3
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
 #include "Renderer/EnvironmentStaticData.hlsli"
@@ -52,15 +56,16 @@ struct MultiScatLutPassConstants
 
 #define THREAD_GROUP_SIZE 8
 
-float3 SampleTransmittanceLut(
-    float altitude,
+//! Samples the transmittance LUT to obtain optical depth.
+float3 SampleTransmittanceLutOpticalDepthLocal(
+    float altitude_m,
     float cos_zenith,
     GpuSkyAtmosphereParams atmo,
     Texture2D<float4> transmittance_lut,
     SamplerState linear_sampler)
 {
     float u = (cos_zenith + 0.15) / 1.15;
-    float v = sqrt(altitude / atmo.atmosphere_height_m);
+    float v = sqrt(altitude_m / atmo.atmosphere_height_m);
     return transmittance_lut.SampleLevel(linear_sampler, float2(u, v), 0).rgb;
 }
 
@@ -89,10 +94,10 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     // Map UV to Sun Zenith and Altitude
     float2 uv = (float2(dispatch_thread_id.xy) + 0.5) / float2(pass_constants.output_width, pass_constants.output_height);
     float cos_sun_zenith = uv.x * 2.0 - 1.0;
-    float altitude = uv.y * atmo.atmosphere_height_m;
+    float altitude_m = uv.y * atmo.atmosphere_height_m;
 
     float3 sun_dir = float3(sqrt(max(0.0, 1.0 - cos_sun_zenith * cos_sun_zenith)), 0.0, cos_sun_zenith);
-    float r = atmo.planet_radius_m + altitude;
+    float r = atmo.planet_radius_m + altitude_m;
     float3 origin = float3(0.0, 0.0, r);
 
     // Integral over all directions (Sphere)
@@ -131,11 +136,11 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             for (uint j = 0; j < STEPS; ++j)
             {
                 float3 p = origin + view_dir * (j + 0.5) * step_size;
-                float h = length(p) - atmo.planet_radius_m;
+                float h_m = length(p) - atmo.planet_radius_m;
 
-                float d_r = AtmosphereExponentialDensity(h, atmo.rayleigh_scale_height_m);
-                float d_m = AtmosphereExponentialDensity(h, atmo.mie_scale_height_m);
-                float d_a = OzoneAbsorptionDensity(h, atmo.absorption_layer_width_m, atmo.absorption_term_below, atmo.absorption_term_above);
+                float d_r = AtmosphereExponentialDensity(h_m, atmo.rayleigh_scale_height_m);
+                float d_m = AtmosphereExponentialDensity(h_m, atmo.mie_scale_height_m);
+                float d_a = OzoneAbsorptionDensity(h_m, atmo.absorption_layer_width_m, atmo.absorption_term_below, atmo.absorption_term_above);
 
                 float3 od_step = float3(d_r, d_m, d_a) * step_size;
                 float3 view_transmittance = TransmittanceFromOpticalDepth(accumulated_od + od_step * 0.5, atmo);
@@ -144,7 +149,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                 // We need to know how much sun light reaches this scattering point.
                 float3 p_dir = normalize(p);
                 float cos_sun_p = dot(p_dir, sun_dir);
-                float3 sun_od = SampleTransmittanceLut(h, cos_sun_p, atmo, transmittance_lut, linear_sampler);
+                float3 sun_od = SampleTransmittanceLutOpticalDepthLocal(h_m, cos_sun_p, atmo, transmittance_lut, linear_sampler);
                 float3 sun_transmittance = TransmittanceFromOpticalDepth(sun_od, atmo);
 
                 // Scattering event: SunLight * Transmittance * ScatteringCoeff
@@ -165,13 +170,13 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                 float ground_ndotl = max(0.0, dot(ground_normal, sun_dir));
 
                 // Sun transmittance to the ground point
-                float3 ground_sun_od = SampleTransmittanceLut(0.0, dot(ground_normal, sun_dir), atmo, transmittance_lut, linear_sampler);
+                float3 ground_sun_od = SampleTransmittanceLutOpticalDepthLocal(0.0, ground_ndotl, atmo, transmittance_lut, linear_sampler);
                 float3 ground_sun_transmittance = TransmittanceFromOpticalDepth(ground_sun_od, atmo);
 
                 float3 view_transmittance = TransmittanceFromOpticalDepth(accumulated_od, atmo);
 
                 // Lambertian ground bounce: (Albedo / PI) * N.L * SunTransmittance * ViewTransmittance
-                inscatter += (atmo.ground_albedo_rgb / PI) * ground_ndotl * ground_sun_transmittance * view_transmittance;
+                inscatter += (atmo.ground_albedo_rgb * INV_PI) * ground_ndotl * ground_sun_transmittance * view_transmittance;
             }
 
             // Average scattering over the sphere (1/4PI)

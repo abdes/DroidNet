@@ -135,9 +135,9 @@ float3 SampleTransmittanceLut(
 //! @param view_dir Normalized world-space view direction.
 //! @param sun_dir Normalized world-space sun direction.
 //! @param planet_radius Planet radius in meters.
-//! @param camera_altitude Camera altitude above surface in meters.
+//! @param camera_altitude_m Camera altitude above surface in meters.
 //! @return UV coordinates for sky-view LUT sampling.
-float2 GetSkyViewLutUv(float3 view_dir, float3 sun_dir, float planet_radius, float camera_altitude)
+float2 GetSkyViewLutUv(float3 view_dir, float3 sun_dir, float planet_radius, float camera_altitude_m)
 {
     // cos_zenith from Z component (Z is up).
     float cos_zenith = view_dir.z;
@@ -170,7 +170,7 @@ float2 GetSkyViewLutUv(float3 view_dir, float3 sun_dir, float planet_radius, flo
         relative_azimuth -= TWO_PI;
 
     // Compute horizon angle for this altitude.
-    float r = planet_radius + camera_altitude;
+    float r = planet_radius + camera_altitude_m;
     float rho = planet_radius / r;
     float cos_horizon = -sqrt(max(0.0, 1.0 - rho * rho));
 
@@ -325,7 +325,7 @@ static inline float4 SampleSliceBilinear(Texture2DArray<float4> lut,
 //! @param view_dir         Normalized world-space view direction.
 //! @param sun_dir          Normalized world-space sun direction.
 //! @param planet_radius    Planet radius in meters.
-//! @param camera_altitude  Camera altitude above surface in meters.
+//! @param camera_altitude_m Camera altitude above surface in meters.
 //! @param slices           Number of altitude slices in the array.
 //! @param alt_mapping_mode Altitude mapping mode (0 = linear, 1 = log).
 //! @param atmosphere_height_m Total atmosphere height in meters.
@@ -337,7 +337,7 @@ float4 SampleSkyViewLut(
     float3 view_dir,
     float3 sun_dir,
     float planet_radius,
-    float camera_altitude,
+    float camera_altitude_m,
     uint slices,
     uint alt_mapping_mode,
     float atmosphere_height_m)
@@ -353,13 +353,13 @@ float4 SampleSkyViewLut(
 
     // Compute fractional slice index from camera altitude.
     float slice_frac = AltitudeToSliceFrac(
-        camera_altitude, atmosphere_height_m, slices, alt_mapping_mode);
+        camera_altitude_m, atmosphere_height_m, slices, alt_mapping_mode);
 
     int slice_lo = (int)floor(slice_frac);
     int slice_hi = min(slice_lo + 1, (int)slices - 1);
     float blend = slice_frac - float(slice_lo);
 
-    float2 uv_base = GetSkyViewLutUv(view_dir, sun_dir, planet_radius, camera_altitude);
+    float2 uv_base = GetSkyViewLutUv(view_dir, sun_dir, planet_radius, camera_altitude_m);
     float2 uv = ApplyHalfTexelOffset(uv_base, lut_width, lut_height);
 
     // Sample both neighboring slices and lerp.
@@ -412,7 +412,7 @@ float4 SampleSkyViewLut(
 //! @param angular_radius_radians Angular radius of the sun disk.
 //! @param sun_illuminance Sun illuminance in Lux (color * intensity).
 //! @param planet_radius Planet radius in meters.
-//! @param camera_altitude Camera altitude above surface in meters.
+//! @param camera_altitude_m Camera altitude above surface in meters.
 //! @return Sun disk radiance contribution.
 float3 ComputeSunDisk(
     float3 view_dir,
@@ -420,10 +420,10 @@ float3 ComputeSunDisk(
     float angular_radius_radians,
     float3 sun_illuminance,
     float planet_radius,
-    float camera_altitude)
+    float camera_altitude_m)
 {
     // Compute the geometric horizon angle from camera altitude.
-    float r = planet_radius + camera_altitude;
+    float r = planet_radius + camera_altitude_m;
     float rho = planet_radius / r;
     float cos_horizon = -sqrt(max(0.0, 1.0 - rho * rho));
 
@@ -506,17 +506,17 @@ float3 ComputeSunDisk(
 //! @param atmo Atmosphere parameters from EnvironmentStaticData.
 //! @param view_dir Normalized world-space view direction.
 //! @param sun_dir Normalized direction toward the sun.
-//! @param sun_luminance Sun luminance (color * intensity).
+//! @param sun_illuminance Sun illuminance (Lux).
 //! @param planet_radius Planet radius in meters.
-//! @param camera_altitude Camera altitude above surface in meters.
+//! @param camera_altitude_m Camera altitude above surface in meters.
 //! @return Final sky radiance.
 float3 ComputeAtmosphereSkyColor(
     GpuSkyAtmosphereParams atmo,
     float3 view_dir,
     float3 sun_dir,
-    float3 sun_luminance,
+    float3 sun_illuminance,
     float planet_radius,
-    float camera_altitude)
+    float camera_altitude_m)
 {
     // Sample sky-view LUT for inscattered radiance.
     // The LUT stores physically-based inscatter: transmittance naturally handles
@@ -528,7 +528,7 @@ float3 ComputeAtmosphereSkyColor(
         view_dir,
         sun_dir,
         planet_radius,
-        camera_altitude,
+        camera_altitude_m,
         atmo.sky_view_lut_slices,
         atmo.sky_view_alt_mapping_mode,
         atmo.atmosphere_height_m);
@@ -537,8 +537,8 @@ float3 ComputeAtmosphereSkyColor(
     float transmittance = sky_sample.a;
 
     // Sky-view LUT now stores absolute radiance (Nits).
-    // No need to multiply by sun_luminance again.
-    // inscatter *= sun_luminance;
+    // No need to multiply by sun_illuminance again.
+    // inscatter *= sun_illuminance;
 
     // Optionally add sun disk.
     float3 sun_contribution = float3(0.0, 0.0, 0.0);
@@ -553,18 +553,18 @@ float3 ComputeAtmosphereSkyColor(
             atmo.transmittance_lut_width,
             atmo.transmittance_lut_height,
             cos_sun_zenith,
-            camera_altitude,
+            camera_altitude_m,
             atmo.atmosphere_height_m);
 
-        float3 attenuated_sun = sun_luminance * sun_transmittance;
+        float3 attenuated_sun_illuminance = sun_illuminance * sun_transmittance;
 
         sun_contribution = ComputeSunDisk(
             view_dir,
             sun_dir,
             atmo.sun_disk_angular_radius_radians,
-            attenuated_sun,
+            attenuated_sun_illuminance,
             planet_radius,
-            camera_altitude);
+            camera_altitude_m);
 
         // Sun disk is seen through the atmosphere transmittance along view.
         sun_contribution *= transmittance;

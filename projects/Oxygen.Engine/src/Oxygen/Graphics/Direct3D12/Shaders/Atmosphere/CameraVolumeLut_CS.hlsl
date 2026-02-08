@@ -82,20 +82,20 @@ float AerialPerspectiveSliceToDepth(float slice, float max_distance_km)
 
 //! Samples the transmittance LUT for optical depth.
 float3 SampleTransmittanceLutOpticalDepth(
-    float altitude,
+    float altitude_m,
     float cos_zenith,
     GpuSkyAtmosphereParams atmo,
     Texture2D<float4> transmittance_lut,
     SamplerState linear_sampler,
     uint2 lut_size)
 {
-    float cos_horizon = HorizonCosineFromAltitude(atmo.planet_radius_m, altitude);
+    float cos_horizon = HorizonCosineFromAltitude(atmo.planet_radius_m, altitude_m);
     if (cos_zenith < cos_horizon)
     {
         return float3(kInfiniteOpticalDepth, kInfiniteOpticalDepth, kInfiniteOpticalDepth);
     }
 
-    float view_height = atmo.planet_radius_m + altitude;
+    float view_height = atmo.planet_radius_m + altitude_m;
     float top_radius = atmo.planet_radius_m + atmo.atmosphere_height_m;
     float H = SafeSqrt(top_radius * top_radius - atmo.planet_radius_m * atmo.planet_radius_m);
     float rho = SafeSqrt(view_height * view_height - atmo.planet_radius_m * atmo.planet_radius_m);
@@ -170,11 +170,11 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     float3 origin = float3(0.0, 0.0, atmo.planet_radius_m + camera_altitude_m);
 
     // Clamp to ground if camera is underground
-    float view_height = length(origin);
-    if (view_height <= (atmo.planet_radius_m + 0.01))
+    float view_height_m = length(origin);
+    if (view_height_m <= (atmo.planet_radius_m + 1e-1))
     {
-        origin = normalize(origin) * (atmo.planet_radius_m + 0.01);
-        view_height = length(origin);
+        origin = normalize(origin) * (atmo.planet_radius_m + 1e-1);
+        view_height_m = length(origin);
     }
 
     // Integrate scattering along ray segment [0, t_max_m]
@@ -203,14 +203,14 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         // UE tuned parameter: fixed 0.3 offset within each segment (SampleSegmentT).
         float t = (float(i) + kSegmentSampleOffset) * step_size;
         float3 sample_pos = origin + view_dir_ws * t;
-        float altitude = length(sample_pos) - atmo.planet_radius_m;
-        altitude = max(altitude, 0.0);
+        float altitude_m = length(sample_pos) - atmo.planet_radius_m;
+        altitude_m = max(altitude_m, 0.0);
 
-        if (altitude > atmo.atmosphere_height_m) continue;
+        if (altitude_m > atmo.atmosphere_height_m) continue;
 
-        float d_r = AtmosphereExponentialDensity(altitude, atmo.rayleigh_scale_height_m);
-        float d_m = AtmosphereExponentialDensity(altitude, atmo.mie_scale_height_m);
-        float d_a = OzoneAbsorptionDensity(altitude, atmo.absorption_layer_width_m, atmo.absorption_term_below, atmo.absorption_term_above);
+        float d_r = AtmosphereExponentialDensity(altitude_m, atmo.rayleigh_scale_height_m);
+        float d_m = AtmosphereExponentialDensity(altitude_m, atmo.mie_scale_height_m);
+        float d_a = OzoneAbsorptionDensity(altitude_m, atmo.absorption_layer_width_m, atmo.absorption_term_below, atmo.absorption_term_above);
 
         float3 extinction = beta_rayleigh * d_r + beta_mie_ext * d_m + beta_abs * d_a;
         float3 sample_optical_depth = extinction * step_size;
@@ -219,7 +219,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         // Sun transmittance
         float3 sample_dir = normalize(sample_pos);
         float cos_sun_zenith = dot(sample_dir, sun_dir);
-        float3 sun_od = SampleTransmittanceLutOpticalDepth(altitude, cos_sun_zenith, atmo, transmittance_lut, linear_sampler, lut_size);
+        float3 sun_od = SampleTransmittanceLutOpticalDepth(altitude_m, cos_sun_zenith, atmo, transmittance_lut, linear_sampler, lut_size);
         float3 sun_transmittance = TransmittanceFromOpticalDepth(sun_od, atmo);
 
         // Single scattering
@@ -229,7 +229,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
         // Multi-scattering
         float u_ms = (cos_sun_zenith + 1.0) / 2.0;
-        float v_ms = altitude / atmo.atmosphere_height_m;
+        float v_ms = altitude_m / atmo.atmosphere_height_m;
         float4 ms_sample = multi_scat_lut.SampleLevel(linear_sampler, float2(u_ms, v_ms), 0);
         float3 multi_scat_radiance = ms_sample.rgb;
         float f_ms = ms_sample.a;

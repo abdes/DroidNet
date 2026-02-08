@@ -126,10 +126,10 @@ float GetSliceAltitudeM(uint slice_index, uint slice_count,
 //!
 //! @param uv Normalized texture coordinates [0, 1].
 //! @param planet_radius Planet radius in meters.
-//! @param camera_altitude Camera altitude above surface in meters.
+//! @param camera_altitude_m Camera altitude above surface in meters.
 //! @param sun_cos_zenith Cosine of sun zenith angle (sun_dir.z).
 //! @return Normalized view direction in sun-relative space (Z-up, sun at +X horizon).
-float3 UvToViewDirection(float2 uv, float planet_radius, float camera_altitude, float sun_cos_zenith)
+float3 UvToViewDirection(float2 uv, float planet_radius, float camera_altitude_m, float sun_cos_zenith)
 {
     // u = relative azimuth / 2π, where 0.5 = sun direction
     // Shift so U=0.5 corresponds to azimuth=0 (sun direction)
@@ -137,7 +137,7 @@ float3 UvToViewDirection(float2 uv, float planet_radius, float camera_altitude, 
 
     // Compute horizon angle (from zenith) for this altitude.
     // cos_horizon is -sqrt(1 - (R/r)^2).
-    float r = planet_radius + camera_altitude;
+    float r = planet_radius + camera_altitude_m;
     float rho = planet_radius / r;
     float cos_horizon = -sqrt(max(0.0, 1.0 - rho * rho));
 
@@ -175,32 +175,16 @@ float3 UvToViewDirection(float2 uv, float planet_radius, float camera_altitude, 
 }
 
 
-// Atmosphere-specific functions - these will move to AtmosphereMath.hlsli
-float GetAtmosphereDensity(float altitude, float scale_height)
-{
-    return exp(-altitude / scale_height);
-}
-
-float GetAbsorptionDensity(float altitude, float absorption_center_m)
-{
-    altitude = max(altitude, 0.0);
-
-    float center = max(1.0, absorption_center_m);
-    float width = max(1000.0, center * kDefaultOzoneWidthScale);
-    float t = 1.0 - abs(altitude - center) / width;
-    return saturate(t);
-}
-
 //! Samples the transmittance LUT.
 //!
-//! @param altitude Altitude above ground in meters.
+//! @param altitude_m Altitude above ground in meters.
 //! @param cos_zenith Cosine of zenith angle (toward sun).
 //! @param atmo Atmosphere parameters.
 //! @param transmittance_lut Transmittance LUT texture.
 //! @param lut_size LUT dimensions.
 //! @return Optical depth (Rayleigh, Mie, Absorption).
 float3 SampleTransmittanceLutOpticalDepth(
-    float altitude,
+    float altitude_m,
     float cos_zenith,
     GpuSkyAtmosphereParams atmo,
     Texture2D<float4> transmittance_lut,
@@ -208,7 +192,7 @@ float3 SampleTransmittanceLutOpticalDepth(
     uint2 lut_size)
 {
     // Compute the local horizon angle at this sample's altitude using common helper
-    float cos_horizon = HorizonCosineFromAltitude(atmo.planet_radius_m, altitude);
+    float cos_horizon = HorizonCosineFromAltitude(atmo.planet_radius_m, altitude_m);
 
     // Hard cutoff: if sun is below local horizon, planet blocks it completely.
     if (cos_zenith < cos_horizon)
@@ -217,7 +201,7 @@ float3 SampleTransmittanceLutOpticalDepth(
         return float3(kInfiniteOpticalDepth, kInfiniteOpticalDepth, kInfiniteOpticalDepth);
     }
 
-    float view_height = atmo.planet_radius_m + altitude;
+    float view_height = atmo.planet_radius_m + altitude_m;
     float top_radius = atmo.planet_radius_m + atmo.atmosphere_height_m;
     float H = SafeSqrt(top_radius * top_radius - atmo.planet_radius_m * atmo.planet_radius_m);
     float rho = SafeSqrt(view_height * view_height - atmo.planet_radius_m * atmo.planet_radius_m);
@@ -246,9 +230,9 @@ float3 SampleTransmittanceLutOpticalDepth(
 //! @param hits_ground True if the ray terminates at ground level.
 //! @param atmo Atmosphere parameters.
 //! @param transmittance_lut Optical-depth LUT (Rayleigh/Mie/Abs).
+//! @param multi_scat_lut Multi-scatter LUT (RGB=second-bounce, A=average transmittance).
 //! @param linear_sampler Linear sampler.
 //! @param lut_size Transmittance LUT size.
-//! @param atmosphere_flags Bitfield of AtmosphereFlags for debug options.
 //! @return (inscattered_radiance.rgb, total_transmittance).
 float4 ComputeSingleScattering(
     float3 origin,
@@ -261,7 +245,7 @@ float4 ComputeSingleScattering(
     Texture2D<float4> multi_scat_lut,
     SamplerState linear_sampler,
     uint2 lut_size,
-    uint atmosphere_flags)
+    float3 sun_illuminance)
 {
     float3 inscatter = float3(0.0, 0.0, 0.0);
     float3 throughput = float3(1.0, 1.0, 1.0);
@@ -308,14 +292,14 @@ float4 ComputeSingleScattering(
         float t = t0 + dt * kSegmentSampleOffset;
 
         float3 sample_pos = origin + view_dir * t;
-        float altitude = length(sample_pos) - atmo.planet_radius_m;
-        altitude = max(altitude, 0.0);
+        float altitude_m = length(sample_pos) - atmo.planet_radius_m;
+        altitude_m = max(altitude_m, 0.0);
 
-        if (altitude > atmo.atmosphere_height_m) continue;
+        if (altitude_m > atmo.atmosphere_height_m) continue;
 
-        float d_r = AtmosphereExponentialDensity(altitude, atmo.rayleigh_scale_height_m);
-        float d_m = AtmosphereExponentialDensity(altitude, atmo.mie_scale_height_m);
-        float d_a = OzoneAbsorptionDensity(altitude, atmo.absorption_layer_width_m, atmo.absorption_term_below, atmo.absorption_term_above);
+        float d_r = AtmosphereExponentialDensity(altitude_m, atmo.rayleigh_scale_height_m);
+        float d_m = AtmosphereExponentialDensity(altitude_m, atmo.mie_scale_height_m);
+        float d_a = OzoneAbsorptionDensity(altitude_m, atmo.absorption_layer_width_m, atmo.absorption_term_below, atmo.absorption_term_above);
 
         // Reconstruction of extinction at this point
         float3 extinction = beta_rayleigh * d_r + beta_mie_ext * d_m + beta_abs * d_a;
@@ -326,23 +310,18 @@ float4 ComputeSingleScattering(
         float3 sample_dir = normalize(sample_pos);
         float cos_sun_zenith = dot(sample_dir, sun_dir);
         float3 sun_od = SampleTransmittanceLutOpticalDepth(
-            altitude, cos_sun_zenith, atmo, transmittance_lut, linear_sampler, lut_size);
+            altitude_m, cos_sun_zenith, atmo, transmittance_lut, linear_sampler, lut_size);
         float3 sun_transmittance = TransmittanceFromOpticalDepth(sun_od, atmo);
 
-        // Retrieve Sun Radiance (Color * Illuminance)
-        // We must apply the sun's physical intensity to get correct sky brightness.
-        float3 sun_radiance = GetSunColorRGB() * GetSunIlluminance();
-
-        // === Combined Scattering with Multi-Scat ===
         // Single scattering: light from sun -> scatter once -> camera
         // S = L_sun * T_sun * (beta_R * phase_R + beta_M * phase_M)
         float3 sigma_s_single = (atmo.rayleigh_scattering_rgb * d_r * rayleigh_phase
                               + atmo.mie_scattering_rgb * d_m * mie_phase)
-                              * sun_transmittance * sun_radiance;
+                              * sun_transmittance * sun_illuminance;
 
         // Multiple scattering
         float u_ms = (cos_sun_zenith + 1.0) / 2.0;
-        float v_ms = altitude / atmo.atmosphere_height_m;
+        float v_ms = altitude_m / atmo.atmosphere_height_m;
         float4 ms_sample = multi_scat_lut.SampleLevel(linear_sampler, float2(u_ms, v_ms), 0);
 
         float3 multi_scat_radiance = ms_sample.rgb;
@@ -351,9 +330,9 @@ float4 ComputeSingleScattering(
 
         // UE5 style for multi-scat source logic:
         // S_ms = (beta_R + beta_M) * MultiScatRadiance * EnergyComp
-        // We also apply sun_radiance here because MultiScatLUT is typically normalized (unit sun).
+        // We also apply sun_illuminance here because MultiScatLUT is typically normalized (unit sun).
         float3 sigma_s_multi = (atmo.rayleigh_scattering_rgb * d_r + atmo.mie_scattering_rgb * d_m)
-                             * multi_scat_radiance * energy_compensation * ms_factor * sun_radiance;
+                             * multi_scat_radiance * energy_compensation * ms_factor * sun_illuminance;
 
         // Total Source Function (S)
         float3 S = sigma_s_single + sigma_s_multi;
@@ -393,7 +372,7 @@ float4 ComputeSingleScattering(
 
         // Transmittance from sun to ground
         float3 ground_sun_od = SampleTransmittanceLutOpticalDepth(
-            0.0, dot(ground_normal, sun_dir), atmo, transmittance_lut, linear_sampler, lut_size);
+            0.0, ground_ndotl, atmo, transmittance_lut, linear_sampler, lut_size);
         float3 ground_sun_transmittance = TransmittanceFromOpticalDepth(ground_sun_od, atmo);
 
         // Direct sun illumination on ground (Lambertian BRDF = albedo / PI)
@@ -404,9 +383,8 @@ float4 ComputeSingleScattering(
         // Multi-scattering ambient contribution
         // Sample at (u=0.5, v=0.0) for horizon-averaged ambient at ground level
         float4 ms_ambient = multi_scat_lut.SampleLevel(linear_sampler, float2(0.5, 0.0), 0);
-        float3 sun_radiance = GetSunColorRGB() * GetSunIlluminance();
         float3 ground_ambient = atmo.ground_albedo_rgb * INV_PI
-                              * ms_ambient.rgb * sun_radiance * ms_factor;
+                              * ms_ambient.rgb * sun_illuminance * ms_factor;
 
         // Add both direct and ambient ground reflection, attenuated by path transmittance
         inscatter += (ground_reflected + ground_ambient) * throughput;
@@ -466,7 +444,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     // Derive per-slice camera altitude from slice index using the selected
     // mapping function. Each slice represents a different altitude band,
     // replacing the old single camera_altitude_m pass constant.
-    float altitude = GetSliceAltitudeM(
+    float altitude_m = GetSliceAltitudeM(
         dispatch_thread_id.z,
         pass_constants.slice_count,
         pass_constants.atmosphere_height_m,
@@ -486,7 +464,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
     // 2. Zenith (uv.y) - Reference Angle Logic
     // Compute horizon angle (from zenith) for this altitude.
-    float r = pass_constants.planet_radius_m + altitude;
+    float r = pass_constants.planet_radius_m + altitude_m;
     float rho = pass_constants.planet_radius_m / r;
     float cos_horizon = -sqrt(max(0.0, 1.0 - rho * rho));
 
@@ -552,13 +530,13 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         uint2 lut_size = uint2(pass_constants.transmittance_width,
                                pass_constants.transmittance_height);
 
-        // Get atmosphere flags from pass constants (set by LUT manager)
-        uint atmosphere_flags = pass_constants.atmosphere_flags;
+        // Sun illuminance (linear RGB, Lux).
+        float3 sun_illuminance = GetSunColorRGB() * GetSunIlluminance();
 
         result = ComputeSingleScattering(
             origin, view_dir, sun_dir, ray_length, hits_ground, atmo,
             transmittance_lut, multi_scat_lut, linear_sampler, lut_size,
-            atmosphere_flags);
+            sun_illuminance);
     }
 
     // Safety: prevent NaNs/Infs from polluting the Sky View LUT.

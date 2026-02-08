@@ -4,6 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Terminology and Units (Physical conventions used in this system):
+// - Radiance: W/(sr·m²) or Nits (cd/m²). The unit of inscattered light in LUTs.
+// - Illuminance: Lux (lm/m²). The unit of sun light (color * intensity).
+// - Luminance: cd/m². Used for perceived brightness (often Nits).
+
 #ifndef OXYGEN_GRAPHICS_SHADERS_ATMOSPHERE_CONSTANTS_HLSLI
 #define OXYGEN_GRAPHICS_SHADERS_ATMOSPHERE_CONSTANTS_HLSLI
 
