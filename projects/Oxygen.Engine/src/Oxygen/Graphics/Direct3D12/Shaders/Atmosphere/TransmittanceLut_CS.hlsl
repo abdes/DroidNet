@@ -51,19 +51,70 @@ static const uint NUM_INTEGRATION_SAMPLES = 40;
 
 //! Converts UV coordinates to altitude and cos_zenith.
 //!
+//! Uses the UE5/Bruneton distance-based parameterization inverse.
+//! This MUST match the forward mapping in GetTransmittanceLutUv()
+//! (AtmosphereSampling.hlsli) exactly.
+//!
+//! Forward mapping (for reference):
+//!   x_r = rho / H  where rho = sqrt(r² - R²), H = sqrt(R_top² - R²)
+//!   x_mu = (d - d_min) / (d_max - d_min)  where d = distance to atmosphere top
+//!
+//! Inverse:
+//!   rho = x_r * H  →  altitude = sqrt(rho² + R²) - R
+//!   d = x_mu * (d_max - d_min) + d_min  →  solve quadratic for cos_zenith
+//!
 //! @param uv Normalized texture coordinates [0, 1].
+//! @param planet_radius Planet radius in meters.
 //! @param atmosphere_height Atmosphere thickness in meters.
-//! @return (altitude, cos_zenith) in meters and [-1, 1].
-float2 UvToAtmosphereParams(float2 uv, float atmosphere_height)
+//! @return (altitude_m, cos_zenith) in meters and [-1, 1].
+float2 UvToAtmosphereParamsBruneton(
+    float2 uv,
+    float planet_radius,
+    float atmosphere_height)
 {
-    // Invert the UV parameterization
-    // v = sqrt(altitude / atmosphere_height)
-    // => altitude = v^2 * atmosphere_height
-    float altitude = uv.y * uv.y * atmosphere_height;
+    float top_radius = planet_radius + atmosphere_height;
 
-    // u = (cos_zenith + 0.15) / 1.15
-    // => cos_zenith = u * 1.15 - 0.15
-    float cos_zenith = uv.x * 1.15 - 0.15;
+    // H = maximum rho (at atmosphere top)
+    float H = sqrt(max(0.0, top_radius * top_radius - planet_radius * planet_radius));
+
+    // Invert x_r mapping: rho = x_r * H
+    float rho = uv.y * H;
+
+    // view_height = sqrt(rho² + planet_radius²)
+    float view_height = sqrt(rho * rho + planet_radius * planet_radius);
+    float altitude = view_height - planet_radius;
+
+    // Invert x_mu mapping
+    // d_min = top_radius - view_height
+    // d_max = rho + H
+    // d = x_mu * (d_max - d_min) + d_min
+    float d_min = top_radius - view_height;
+    float d_max = rho + H;
+    float d = uv.x * (d_max - d_min) + d_min;
+
+    // Solve for cos_zenith from the distance equation:
+    // d = -view_height * cos_zenith + sqrt(view_height² * (cos_zenith² - 1) + top_radius²)
+    //
+    // Let c = cos_zenith
+    // d + view_height * c = sqrt(view_height² * c² - view_height² + top_radius²)
+    // (d + view_height * c)² = view_height² * c² - view_height² + top_radius²
+    // d² + 2*d*view_height*c + view_height²*c² = view_height²*c² - view_height² + top_radius²
+    // d² + 2*d*view_height*c = top_radius² - view_height²
+    // 2*d*view_height*c = top_radius² - view_height² - d²
+    // c = (top_radius² - view_height² - d²) / (2 * d * view_height)
+    //
+    // Handle edge case where d ≈ 0 or view_height ≈ 0
+    float cos_zenith;
+    float denom = 2.0 * d * view_height;
+    if (abs(denom) < 1e-6)
+    {
+        // At the very top of atmosphere looking straight up
+        cos_zenith = 1.0;
+    }
+    else
+    {
+        cos_zenith = (top_radius * top_radius - view_height * view_height - d * d) / denom;
+    }
     cos_zenith = clamp(cos_zenith, -1.0, 1.0);
 
     return float2(altitude, cos_zenith);
@@ -166,8 +217,11 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     float2 uv = (float2(dispatch_thread_id.xy) + 0.5)
               / float2(pass_constants.output_width, pass_constants.output_height);
 
-    // Convert UV to atmosphere parameters
-    float2 atmo_params = UvToAtmosphereParams(uv, atmo.atmosphere_height_m);
+    // Convert UV to atmosphere parameters (UE5/Bruneton parameterization)
+    float2 atmo_params = UvToAtmosphereParamsBruneton(
+        uv,
+        atmo.planet_radius_m,
+        atmo.atmosphere_height_m);
     float altitude = atmo_params.x;
     float cos_zenith = atmo_params.y;
 
