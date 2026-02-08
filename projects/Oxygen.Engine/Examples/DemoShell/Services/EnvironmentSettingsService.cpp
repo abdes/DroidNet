@@ -593,6 +593,21 @@ auto EnvironmentSettingsService::SetMieAnisotropy(float value) -> void
   MarkDirty();
 }
 
+auto EnvironmentSettingsService::GetMieAbsorptionScale() const -> float
+{
+  return mie_absorption_scale_;
+}
+
+auto EnvironmentSettingsService::SetMieAbsorptionScale(float value) -> void
+{
+  value = std::clamp(value, 0.0F, 5.0F);
+  if (mie_absorption_scale_ == value) {
+    return;
+  }
+  mie_absorption_scale_ = value;
+  MarkDirty();
+}
+
 auto EnvironmentSettingsService::GetMultiScattering() const -> float
 {
   return multi_scattering_;
@@ -1471,6 +1486,12 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     atmo->SetRayleighScaleHeightMeters(rayleigh_scale_height_km_ * kKmToMeters);
     atmo->SetMieScaleHeightMeters(mie_scale_height_km_ * kKmToMeters);
     atmo->SetMieAnisotropy(mie_anisotropy_);
+    // Apply mie absorption from scale: absorption = scale * 2.33e-6 (Earth
+    // default).
+    constexpr float kBaseAbsorption = 2.33e-6F;
+    const float scaled_absorption = mie_absorption_scale_ * kBaseAbsorption;
+    atmo->SetMieAbsorptionRgb(
+      glm::vec3(scaled_absorption, scaled_absorption, scaled_absorption));
     atmo->SetMultiScatteringFactor(multi_scattering_);
     atmo->SetSunDiskEnabled(sun_disk_enabled_);
     atmo->SetAerialPerspectiveDistanceScale(aerial_perspective_scale_);
@@ -1589,6 +1610,13 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
       = atmo->GetRayleighScaleHeightMeters() * kMetersToKm;
     mie_scale_height_km_ = atmo->GetMieScaleHeightMeters() * kMetersToKm;
     mie_anisotropy_ = atmo->GetMieAnisotropy();
+    // Compute scale relative to default Earth absorption (2.33e-6).
+    // If absorption is (2.33e-6, 2.33e-6, 2.33e-6), scale = 1.0.
+    const auto absorption = atmo->GetMieAbsorptionRgb();
+    constexpr float kBaseAbsorption = 2.33e-6F;
+    mie_absorption_scale_ = (kBaseAbsorption > 0.0F)
+      ? (absorption.x + absorption.y + absorption.z) / (3.0F * kBaseAbsorption)
+      : 0.0F;
     multi_scattering_ = atmo->GetMultiScatteringFactor();
     sun_disk_enabled_ = atmo->GetSunDiskEnabled();
     aerial_perspective_scale_ = atmo->GetAerialPerspectiveDistanceScale();

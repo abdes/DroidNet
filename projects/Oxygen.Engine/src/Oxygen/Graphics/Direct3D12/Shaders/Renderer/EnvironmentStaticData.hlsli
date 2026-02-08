@@ -40,7 +40,7 @@ struct GpuFogParams
     uint enabled;
 };
 
-// Mirrors oxygen::engine::GpuSkyAtmosphereParams (sizeof = 144)
+// Mirrors oxygen::engine::GpuSkyAtmosphereParams (sizeof = 160)
 struct GpuSkyAtmosphereParams
 {
     float planet_radius_m;
@@ -57,10 +57,15 @@ struct GpuSkyAtmosphereParams
     float3 mie_scattering_rgb;
     float mie_scale_height_m;
 
+    // Mie absorption coefficient (1/m, RGB).
+    // UE5-style: extinction = scattering + absorption.
+    float3 mie_absorption_rgb;
     float mie_g;
+
     float absorption_scale_height_m;
     uint sun_disk_enabled;
     uint enabled;
+    uint _pad0;
 
     float3 absorption_rgb;
     uint transmittance_lut_slot;

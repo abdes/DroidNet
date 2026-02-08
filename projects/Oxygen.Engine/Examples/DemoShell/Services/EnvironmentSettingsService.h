@@ -134,6 +134,13 @@ public:
   [[nodiscard]] virtual auto GetMieAnisotropy() const -> float;
   virtual auto SetMieAnisotropy(float value) -> void;
 
+  //! Gets Mie absorption scale (multiplier on default Earth aerosol
+  //! absorption).
+  [[nodiscard]] virtual auto GetMieAbsorptionScale() const -> float;
+  //! Sets Mie absorption scale (1.0 = default Earth absorption, 0 = no
+  //! absorption).
+  virtual auto SetMieAbsorptionScale(float value) -> void;
+
   [[nodiscard]] virtual auto GetMultiScattering() const -> float;
   virtual auto SetMultiScattering(float value) -> void;
 
@@ -343,6 +350,9 @@ private:
   float rayleigh_scale_height_km_ { 8.0F };
   float mie_scale_height_km_ { 1.2F };
   float mie_anisotropy_ { 0.8F };
+  float mie_absorption_scale_ {
+    1.0F
+  }; // 1.0 = Earth-like absorption (SSA ≈ 0.9)
   float multi_scattering_ { 1.0F };
   bool sun_disk_enabled_ { true };
   float aerial_perspective_scale_ { 1.0F };

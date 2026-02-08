@@ -71,6 +71,8 @@ public:
   auto SetMieScaleHeightKm(float value) -> void;
   [[nodiscard]] auto GetMieAnisotropy() const -> float;
   auto SetMieAnisotropy(float value) -> void;
+  [[nodiscard]] auto GetMieAbsorptionScale() const -> float;
+  auto SetMieAbsorptionScale(float value) -> void;
   [[nodiscard]] auto GetMultiScattering() const -> float;
   auto SetMultiScattering(float value) -> void;
   [[nodiscard]] auto GetSunDiskEnabled() const -> bool;

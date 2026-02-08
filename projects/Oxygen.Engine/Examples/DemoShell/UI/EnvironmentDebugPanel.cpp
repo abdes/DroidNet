@@ -546,6 +546,17 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
         "Mie Anisotropy", &mie_anisotropy, 0.0F, 0.99F, "%.2F")) {
     environment_vm_->SetMieAnisotropy(mie_anisotropy);
   }
+  float mie_absorption_scale = environment_vm_->GetMieAbsorptionScale();
+  if (ImGui::SliderFloat(
+        "Mie Absorption", &mie_absorption_scale, 0.0F, 5.0F, "%.2F")) {
+    environment_vm_->SetMieAbsorptionScale(mie_absorption_scale);
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+    ImGui::SetTooltip(
+      "Scales Mie absorption relative to Earth-like default.\n"
+      "0 = pure scattering (bright halos), 1 = Earth (SSA ~0.9),\n"
+      "higher = darker/hazier atmosphere.");
+  }
   float multi_scattering = environment_vm_->GetMultiScattering();
   if (ImGui::SliderFloat(
         "Multi-Scattering", &multi_scattering, 0.0F, 1.0F, "%.2F")) {
