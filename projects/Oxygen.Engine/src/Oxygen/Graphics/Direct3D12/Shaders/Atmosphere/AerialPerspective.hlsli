@@ -18,8 +18,8 @@
 //! inscattered radiance. For scene geometry, we raymarch or approximate using
 //! the average inscatter along the view ray.
 
-#ifndef AERIAL_PERSPECTIVE_HLSLI
-#define AERIAL_PERSPECTIVE_HLSLI
+#ifndef OXYGEN_D3D12_SHADERS_ATMOSPHERE_AERIAL_PERSPECTIVE_HLSLI
+#define OXYGEN_D3D12_SHADERS_ATMOSPHERE_AERIAL_PERSPECTIVE_HLSLI
 
 #include "Renderer/EnvironmentStaticData.hlsli"
 #include "Renderer/EnvironmentDynamicData.hlsli"
@@ -100,17 +100,11 @@ float4 SampleCameraVolumeLut(
 
 float RaySphereIntersectFarthest(float3 origin, float3 dir, float radius)
 {
-    float a = dot(dir, dir);
-    float b = 2.0 * dot(origin, dir);
-    float c = dot(origin, origin) - radius * radius;
-    float disc = b * b - 4.0 * a * c;
-    if (disc < 0.0)
+    float t0, t1;
+    if (!RaySphereIntersectBoth(origin, dir, radius, t0, t1))
     {
         return -1.0;
     }
-    float s = sqrt(disc);
-    float t0 = (-b - s) / (2.0 * a);
-    float t1 = (-b + s) / (2.0 * a);
     float t = max(t0, t1);
     return (t > 0.0) ? t : -1.0;
 }
@@ -320,4 +314,4 @@ float3 ApplyAerialPerspective(float3 fragment_color, AerialPerspectiveResult ap)
     return fragment_color * ap.transmittance + ap.inscatter;
 }
 
-#endif // AERIAL_PERSPECTIVE_HLSLI
+#endif // OXYGEN_D3D12_SHADERS_ATMOSPHERE_AERIAL_PERSPECTIVE_HLSLI
