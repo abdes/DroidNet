@@ -338,14 +338,14 @@ void EnvironmentDebugPanel::DrawRendererDebugSection()
   ImGui::Text("Atmosphere LUTs:");
   ImGui::SameLine();
   if (luts_valid) {
-    ImGui::TextColored(ImVec4(0.0F, 1.0F, 0.0F, 1.0F), "Valid");
+    ImGui::TextColored(ImVec4(0.0F, 1.0F, 0.0F, 1.0F), "Generated");
   } else {
     ImGui::TextColored(ImVec4(1.0F, 0.5F, 0.0F, 1.0F), "Not Generated");
   }
 
   if (luts_valid && luts_dirty) {
     ImGui::SameLine();
-    ImGui::TextColored(ImVec4(1.0F, 1.0F, 0.0F, 1.0F), "(pending update)");
+    ImGui::TextColored(ImVec4(1.0F, 1.0F, 0.0F, 1.0F), "(updating)");
   }
 
   // Atmosphere debug flags

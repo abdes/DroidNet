@@ -473,13 +473,13 @@ auto EnvironmentStaticDataManager::PopulateSkyCapture(
     // slot. This is used by IblComputePass to decide which source to filter.
     if (next.sky_light.enabled != 0U
       && next.sky_light.source == SkyLightSource::kCapturedScene) {
-      if (sky_capture_provider_->IsCaptured()) {
-        next.sky_light.cubemap_slot
-          = CubeMapSlot { sky_capture_provider_->GetCapturedCubemapSlot() };
-      } else {
-        next.sky_light.cubemap_slot
-          = CubeMapSlot { kInvalidShaderVisibleIndex };
-      }
+      // Keep publishing the captured cubemap slot even when a re-capture is
+      // pending (IsCaptured()==false). This avoids transient black IBL while
+      // UI interactions (e.g., sun elevation dragging) continuously mark the
+      // capture dirty.
+      const auto captured_slot
+        = sky_capture_provider_->GetCapturedCubemapSlot();
+      next.sky_light.cubemap_slot = CubeMapSlot { captured_slot };
     }
   } else {
     LOG_F(INFO, "PopulateSkyCapture: Provider not available");
@@ -503,9 +503,26 @@ auto EnvironmentStaticDataManager::PopulateIbl(EnvironmentStaticData& next)
       "sky_light.cubemap={}, sky_sphere.enabled={}, sky_sphere.cubemap={})",
       next.sky_light.enabled, next.sky_light.cubemap_slot.IsValid(),
       next.sky_sphere.enabled, next.sky_sphere.cubemap_slot.IsValid());
-    next.sky_light.irradiance_map_slot = IrradianceMapSlot {};
-    next.sky_light.prefilter_map_slot = PrefilterMapSlot {};
-    next.sky_light.prefilter_max_mip = 0U;
+
+    // During sky-capture transitions (e.g. atmosphere slider updates), the
+    // cubemap source can be temporarily unavailable. Avoid flashing by keeping
+    // the last known valid IBL outputs until a new source and its filtered
+    // outputs become available.
+    if (cpu_snapshot_.sky_light.irradiance_map_slot.IsValid()
+      && cpu_snapshot_.sky_light.prefilter_map_slot.IsValid()) {
+      next.sky_light.irradiance_map_slot
+        = cpu_snapshot_.sky_light.irradiance_map_slot;
+      next.sky_light.prefilter_map_slot
+        = cpu_snapshot_.sky_light.prefilter_map_slot;
+      next.sky_light.prefilter_max_mip
+        = cpu_snapshot_.sky_light.prefilter_max_mip;
+      next.sky_light.ibl_generation = cpu_snapshot_.sky_light.ibl_generation;
+    } else {
+      next.sky_light.irradiance_map_slot = IrradianceMapSlot {};
+      next.sky_light.prefilter_map_slot = PrefilterMapSlot {};
+      next.sky_light.prefilter_max_mip = 0U;
+      next.sky_light.ibl_generation = 0U;
+    }
     return;
   }
 
@@ -515,6 +532,23 @@ auto EnvironmentStaticDataManager::PopulateIbl(EnvironmentStaticData& next)
           : next.sky_sphere.cubemap_slot.value };
 
   const auto outputs = ibl_provider_->QueryOutputsFor(source_slot);
+
+  if (!outputs.irradiance.IsValid() || !outputs.prefilter.IsValid()) {
+    // Source is available, but filtered outputs are not ready yet (compute
+    // pass will generate them). Keep previous valid IBL to avoid transient
+    // black frames.
+    if (cpu_snapshot_.sky_light.irradiance_map_slot.IsValid()
+      && cpu_snapshot_.sky_light.prefilter_map_slot.IsValid()) {
+      next.sky_light.irradiance_map_slot
+        = cpu_snapshot_.sky_light.irradiance_map_slot;
+      next.sky_light.prefilter_map_slot
+        = cpu_snapshot_.sky_light.prefilter_map_slot;
+      next.sky_light.prefilter_max_mip
+        = cpu_snapshot_.sky_light.prefilter_max_mip;
+      next.sky_light.ibl_generation = cpu_snapshot_.sky_light.ibl_generation;
+    }
+    return;
+  }
 
   next.sky_light.irradiance_map_slot = IrradianceMapSlot { outputs.irradiance };
   next.sky_light.prefilter_map_slot = PrefilterMapSlot { outputs.prefilter };

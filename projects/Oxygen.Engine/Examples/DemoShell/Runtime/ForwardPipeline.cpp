@@ -31,7 +31,6 @@
 #include <Oxygen/Renderer/Passes/GpuDebugDrawPass.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
-#include <Oxygen/Renderer/Passes/SkyAtmosphereLutComputePass.h>
 #include <Oxygen/Renderer/Passes/SkyPass.h>
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
@@ -299,8 +298,6 @@ struct ForwardPipeline::Impl {
   std::shared_ptr<engine::SkyPassConfig> sky_pass_config;
   std::shared_ptr<engine::TransparentPassConfig> transparent_pass_config;
   std::shared_ptr<engine::LightCullingPassConfig> light_culling_pass_config;
-  std::shared_ptr<engine::SkyAtmosphereLutComputePassConfig>
-    sky_atmo_lut_pass_config;
   std::shared_ptr<engine::ToneMapPassConfig> tone_map_pass_config;
 
   // Pass Instances
@@ -310,7 +307,6 @@ struct ForwardPipeline::Impl {
   std::shared_ptr<engine::SkyPass> sky_pass;
   std::shared_ptr<engine::TransparentPass> transparent_pass;
   std::shared_ptr<engine::LightCullingPass> light_culling_pass;
-  std::shared_ptr<engine::SkyAtmosphereLutComputePass> sky_atmo_lut_pass;
   std::shared_ptr<engine::ToneMapPass> tone_map_pass;
   std::shared_ptr<engine::GpuDebugClearPass> gpu_debug_clear_pass;
   std::shared_ptr<engine::GpuDebugDrawPass> gpu_debug_draw_pass;
@@ -500,18 +496,6 @@ struct ForwardPipeline::Impl {
     }
   }
 
-  void ConfigureSkyLutManager(
-    const ViewRenderContext& ctx, engine::Renderer& renderer) const
-  {
-    if (!sky_atmo_lut_pass_config) {
-      return;
-    }
-
-    sky_atmo_lut_pass_config->lut_manager = ctx.plan.allow_sky_lut
-      ? renderer.GetSkyAtmosphereLutManager()
-      : nullptr;
-  }
-
   void BindHdrAndClear(
     ViewRenderContext& ctx, graphics::CommandRecorder& rec) const
   {
@@ -578,12 +562,6 @@ struct ForwardPipeline::Impl {
       co_await depth_pass->PrepareResources(rc, rec);
       co_await depth_pass->Execute(rc, rec);
       rc.RegisterPass<engine::DepthPrePass>(depth_pass.get());
-    }
-
-    if (ctx.plan.allow_sky_lut && sky_atmo_lut_pass && sky_atmo_lut_pass_config
-      && sky_atmo_lut_pass_config->lut_manager) {
-      co_await sky_atmo_lut_pass->PrepareResources(rc, rec);
-      co_await sky_atmo_lut_pass->Execute(rc, rec);
     }
 
     // Sky must run after DepthPrePass so it can depth-test against the
@@ -742,8 +720,6 @@ struct ForwardPipeline::Impl {
     transparent_pass_config = std::make_shared<engine::TransparentPassConfig>();
     light_culling_pass_config
       = std::make_shared<engine::LightCullingPassConfig>();
-    sky_atmo_lut_pass_config
-      = std::make_shared<engine::SkyAtmosphereLutComputePassConfig>();
     tone_map_pass_config = std::make_shared<engine::ToneMapPassConfig>();
 
     // pass init
@@ -758,8 +734,6 @@ struct ForwardPipeline::Impl {
     auto graphics = engine->GetGraphics().lock();
     light_culling_pass = std::make_shared<engine::LightCullingPass>(
       observer_ptr { graphics.get() }, light_culling_pass_config);
-    sky_atmo_lut_pass = std::make_shared<engine::SkyAtmosphereLutComputePass>(
-      observer_ptr { graphics.get() }, sky_atmo_lut_pass_config);
     tone_map_pass = std::make_shared<engine::ToneMapPass>(tone_map_pass_config);
 
     gpu_debug_clear_pass = std::make_shared<engine::GpuDebugClearPass>(
@@ -1009,7 +983,6 @@ auto ForwardPipeline::OnSceneMutation(
             // Phase: scene production into HDR (or wireframe-only).
             self->TrackViewResources(ctx, rec);
             self->ConfigurePassTargets(ctx);
-            self->ConfigureSkyLutManager(ctx, renderer);
             self->BindHdrAndClear(ctx, rec);
 
             if (!run_scene_passes) {

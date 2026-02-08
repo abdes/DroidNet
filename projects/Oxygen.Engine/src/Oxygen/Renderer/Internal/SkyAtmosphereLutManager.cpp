@@ -108,28 +108,51 @@ auto SkyAtmosphereLutManager::MarkGenerated() noexcept -> void
   luts_generated_ = true;
 }
 
+auto SkyAtmosphereLutManager::SwapBuffers() noexcept -> void
+{
+  // Atomic swap: front becomes back, back becomes front
+  const auto old_index = active_buffer_index_.load(std::memory_order_acquire);
+  active_buffer_index_.store(1 - old_index, std::memory_order_release);
+
+  // Increment swap count (used to determine when both buffers are initialized)
+  swap_count_.fetch_add(1, std::memory_order_release);
+
+  // Mark clean since we've just swapped in fresh LUTs
+  dirty_ = false;
+  luts_generated_ = true;
+
+  LOG_F(1,
+    "SkyAtmosphereLutManager: swapped LUT buffers (now using buffer {}, "
+    "swap_count={})",
+    active_buffer_index_.load(), swap_count_.load());
+}
+
 auto SkyAtmosphereLutManager::GetTransmittanceLutSlot() const noexcept
   -> ShaderVisibleIndex
 {
-  return transmittance_lut_.srv_index;
+  const auto idx = GetFrontBufferIndex();
+  return transmittance_lut_[idx].srv_index;
 }
 
 auto SkyAtmosphereLutManager::GetSkyViewLutSlot() const noexcept
   -> ShaderVisibleIndex
 {
-  return sky_view_lut_.srv_index;
+  const auto idx = GetFrontBufferIndex();
+  return sky_view_lut_[idx].srv_index;
 }
 
 auto SkyAtmosphereLutManager::GetMultiScatLutSlot() const noexcept
   -> ShaderVisibleIndex
 {
-  return multi_scat_lut_.srv_index;
+  const auto idx = GetFrontBufferIndex();
+  return multi_scat_lut_[idx].srv_index;
 }
 
 auto SkyAtmosphereLutManager::GetCameraVolumeLutSlot() const noexcept
   -> ShaderVisibleIndex
 {
-  return camera_volume_lut_.srv_index;
+  const auto idx = GetFrontBufferIndex();
+  return camera_volume_lut_[idx].srv_index;
 }
 
 auto SkyAtmosphereLutManager::GetBlueNoiseSlot() const noexcept
@@ -165,30 +188,36 @@ auto SkyAtmosphereLutManager::GetBlueNoiseSize() const noexcept
 auto SkyAtmosphereLutManager::GetTransmittanceLutTexture() const noexcept
   -> observer_ptr<graphics::Texture>
 {
-  return transmittance_lut_.texture
-    ? observer_ptr(transmittance_lut_.texture.get())
+  const auto idx = GetBackBufferIndex(); // Compute pass writes to back
+  return transmittance_lut_[idx].texture
+    ? observer_ptr(transmittance_lut_[idx].texture.get())
     : nullptr;
 }
 
 auto SkyAtmosphereLutManager::GetSkyViewLutTexture() const noexcept
   -> observer_ptr<graphics::Texture>
 {
-  return sky_view_lut_.texture ? observer_ptr(sky_view_lut_.texture.get())
-                               : nullptr;
+  const auto idx = GetBackBufferIndex(); // Compute pass writes to back
+  return sky_view_lut_[idx].texture
+    ? observer_ptr(sky_view_lut_[idx].texture.get())
+    : nullptr;
 }
 
 auto SkyAtmosphereLutManager::GetMultiScatLutTexture() const noexcept
   -> observer_ptr<graphics::Texture>
 {
-  return multi_scat_lut_.texture ? observer_ptr(multi_scat_lut_.texture.get())
-                                 : nullptr;
+  const auto idx = GetBackBufferIndex(); // Compute pass writes to back
+  return multi_scat_lut_[idx].texture
+    ? observer_ptr(multi_scat_lut_[idx].texture.get())
+    : nullptr;
 }
 
 auto SkyAtmosphereLutManager::GetCameraVolumeLutTexture() const noexcept
   -> observer_ptr<graphics::Texture>
 {
-  return camera_volume_lut_.texture
-    ? observer_ptr(camera_volume_lut_.texture.get())
+  const auto idx = GetBackBufferIndex(); // Compute pass writes to back
+  return camera_volume_lut_[idx].texture
+    ? observer_ptr(camera_volume_lut_[idx].texture.get())
     : nullptr;
 }
 
@@ -202,25 +231,29 @@ auto SkyAtmosphereLutManager::GetBlueNoiseTexture() const noexcept
 auto SkyAtmosphereLutManager::GetTransmittanceLutUavSlot() const noexcept
   -> ShaderVisibleIndex
 {
-  return transmittance_lut_.uav_index;
+  const auto idx = GetBackBufferIndex(); // Compute pass writes to back
+  return transmittance_lut_[idx].uav_index;
 }
 
 auto SkyAtmosphereLutManager::GetSkyViewLutUavSlot() const noexcept
   -> ShaderVisibleIndex
 {
-  return sky_view_lut_.uav_index;
+  const auto idx = GetBackBufferIndex(); // Compute pass writes to back
+  return sky_view_lut_[idx].uav_index;
 }
 
 auto SkyAtmosphereLutManager::GetMultiScatLutUavSlot() const noexcept
   -> ShaderVisibleIndex
 {
-  return multi_scat_lut_.uav_index;
+  const auto idx = GetBackBufferIndex(); // Compute pass writes to back
+  return multi_scat_lut_[idx].uav_index;
 }
 
 auto SkyAtmosphereLutManager::GetCameraVolumeLutUavSlot() const noexcept
   -> ShaderVisibleIndex
 {
-  return camera_volume_lut_.uav_index;
+  const auto idx = GetBackBufferIndex(); // Compute pass writes to back
+  return camera_volume_lut_[idx].uav_index;
 }
 
 auto SkyAtmosphereLutManager::EnsureResourcesCreated() -> bool
@@ -234,66 +267,93 @@ auto SkyAtmosphereLutManager::EnsureResourcesCreated() -> bool
     return false;
   }
 
+  // Helper to create a LUT for both buffers
+  auto create_double_buffered_lut
+    = [this](std::array<LutResources, kLutBufferCount>& lut_array,
+        auto create_texture_fn, uint32_t array_size, bool is_rgba,
+        const char* lut_name) -> bool {
+    for (size_t i = 0; i < kLutBufferCount; ++i) {
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
+      lut_array[i].texture = create_texture_fn(i);
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
+      if (!lut_array[i].texture) {
+        LOG_F(ERROR, "SkyAtmosphereLutManager: failed to create {} buffer {}",
+          lut_name, i);
+        return false;
+      }
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
+      if (!CreateLutViews(lut_array[i], array_size, is_rgba)) {
+        LOG_F(ERROR,
+          "SkyAtmosphereLutManager: failed to create {} views for buffer {}",
+          lut_name, i);
+        return false;
+      }
+    }
+    return true;
+  };
+
   // Create transmittance LUT (RGBA16F - optical depth for Rayleigh/Mie/Abs)
-  transmittance_lut_.texture
-    = CreateTransmittanceLutTexture({ .width = config_.transmittance_width,
-      .height = config_.transmittance_height });
-  if (!transmittance_lut_.texture) {
-    return false;
-  }
-
-  if (!CreateLutViews(transmittance_lut_, 1, true)) {
+  if (!create_double_buffered_lut(
+        transmittance_lut_,
+        [this](size_t buf_idx) {
+          return CreateLutTexture({ .width = config_.transmittance_width,
+                                    .height = config_.transmittance_height },
+            1, true,
+            buf_idx == 0 ? "Atmo_TransmittanceLUT_0"
+                         : "Atmo_TransmittanceLUT_1",
+            TextureType::kTexture2D);
+        },
+        1, true, "transmittance")) {
     CleanupResources();
     return false;
   }
 
-  // Create sky-view LUT as a 2D texture array with altitude slices [P1].
-  // Each slice is (sky_view_width x sky_view_height); array_size = slices.
-  sky_view_lut_.texture = CreateSkyViewLutTexture(
-    { .width = config_.sky_view_width, .height = config_.sky_view_height },
-    config_.sky_view_slices);
-  if (!sky_view_lut_.texture) {
-    CleanupResources();
-    return false;
-  }
-
-  // SRV/UAV must use kTexture2DArray dimension to see all slices [P2].
-  if (!CreateLutViews(sky_view_lut_, config_.sky_view_slices, true)) {
+  // Create sky-view LUT as a 2D texture array with altitude slices
+  if (!create_double_buffered_lut(
+        sky_view_lut_,
+        [this](size_t buf_idx) {
+          return CreateLutTexture({ .width = config_.sky_view_width,
+                                    .height = config_.sky_view_height },
+            config_.sky_view_slices, true,
+            buf_idx == 0 ? "Atmo_SkyViewLUT_0" : "Atmo_SkyViewLUT_1",
+            TextureType::kTexture2DArray);
+        },
+        config_.sky_view_slices, true, "sky_view")) {
     CleanupResources();
     return false;
   }
 
   // Create multiple scattering LUT (RGBA16F - total escaped radiance)
-  multi_scat_lut_.texture = CreateMultiScatLutTexture(config_.multi_scat_size);
-  if (!multi_scat_lut_.texture) {
-    CleanupResources();
-    return false;
-  }
-
-  if (!CreateLutViews(multi_scat_lut_, 1, true)) {
+  if (!create_double_buffered_lut(
+        multi_scat_lut_,
+        [this](size_t buf_idx) {
+          return CreateLutTexture({ .width = config_.multi_scat_size,
+                                    .height = config_.multi_scat_size },
+            1, true,
+            buf_idx == 0 ? "Atmo_MultiScatLUT_0" : "Atmo_MultiScatLUT_1",
+            TextureType::kTexture2D);
+        },
+        1, true, "multi_scat")) {
     CleanupResources();
     return false;
   }
 
   // Create camera volume LUT as a 3D texture (froxel grid)
-  camera_volume_lut_.texture = CreateCameraVolumeLutTexture(
-    {
-      .width = config_.camera_volume_width,
-      .height = config_.camera_volume_height,
-    },
-    config_.camera_volume_depth);
-  if (!camera_volume_lut_.texture) {
+  if (!create_double_buffered_lut(
+        camera_volume_lut_,
+        [this](size_t buf_idx) {
+          return CreateLutTexture({ .width = config_.camera_volume_width,
+                                    .height = config_.camera_volume_height },
+            config_.camera_volume_depth, true,
+            buf_idx == 0 ? "Atmo_CameraVolumeLUT_0" : "Atmo_CameraVolumeLUT_1",
+            TextureType::kTexture3D);
+        },
+        config_.camera_volume_depth, true, "camera_volume")) {
     CleanupResources();
     return false;
   }
 
-  // Camera volume needs special 3D texture view handling
-  if (!CreateLutViews(camera_volume_lut_, config_.camera_volume_depth, true)) {
-    CleanupResources();
-    return false;
-  }
-
-  // Create blue noise texture as a 3D volume (R8_UNORM) [Phase 3]
+  // Create blue noise texture as a 3D volume (R8_UNORM) - NOT double-buffered
   blue_noise_lut_.texture = CreateBlueNoiseTexture();
   if (!blue_noise_lut_.texture) {
     CleanupResources();
@@ -312,9 +372,9 @@ auto SkyAtmosphereLutManager::EnsureResourcesCreated() -> bool
   resources_created_ = true;
 
   LOG_F(INFO,
-    "SkyAtmosphereLutManager: created LUTs (transmittance={}x{}, "
-    "sky_view={}x{}x{} slices, multi_scat={}x{}, camera_volume={}x{}x{}, "
-    "blue_noise={}x{}x{})",
+    "SkyAtmosphereLutManager: created double-buffered LUTs "
+    "(transmittance={}x{}, sky_view={}x{}x{} slices, multi_scat={}x{}, "
+    "camera_volume={}x{}x{}, blue_noise={}x{}x{})",
     config_.transmittance_width, config_.transmittance_height,
     config_.sky_view_width, config_.sky_view_height, config_.sky_view_slices,
     config_.multi_scat_size, config_.multi_scat_size,
@@ -577,14 +637,24 @@ auto SkyAtmosphereLutManager::CleanupResources() -> void
     lut.uav_index = kInvalidShaderVisibleIndex;
   };
 
-  cleanup_lut(transmittance_lut_);
-  cleanup_lut(sky_view_lut_);
-  cleanup_lut(multi_scat_lut_);
-  cleanup_lut(camera_volume_lut_);
-  cleanup_lut(blue_noise_lut_);
+  // Helper to cleanup double-buffered LUT arrays
+  auto cleanup_double_buffered
+    = [&cleanup_lut](std::array<LutResources, kLutBufferCount>& lut_array) {
+        for (auto& lut : lut_array) {
+          cleanup_lut(lut);
+        }
+      };
+
+  cleanup_double_buffered(transmittance_lut_);
+  cleanup_double_buffered(sky_view_lut_);
+  cleanup_double_buffered(multi_scat_lut_);
+  cleanup_double_buffered(camera_volume_lut_);
+  cleanup_lut(blue_noise_lut_); // Blue noise is not double-buffered
 
   blue_noise_upload_ticket_.reset();
   blue_noise_ready_ = false;
+  active_buffer_index_.store(0, std::memory_order_relaxed);
+  swap_count_.store(0, std::memory_order_relaxed);
 
   resources_created_ = false;
 }

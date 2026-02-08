@@ -445,8 +445,10 @@ auto EnvironmentSettingsService::GetEpoch() const noexcept -> std::uint64_t
 auto EnvironmentSettingsService::OnFrameStart(
   const engine::FrameContext& /*context*/) -> void
 {
+  applied_changes_this_frame_ = false;
   SyncFromSceneIfNeeded();
   ApplyPendingChanges();
+  MaybeRequestSkyCapture();
 }
 
 auto EnvironmentSettingsService::OnSceneActivated(scene::Scene& /*scene*/)
@@ -1628,16 +1630,10 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
         regenerate_lut_requested_ = false;
       }
     }
-
-    if (sky_light_enabled_
-      && sky_light_source_
-        == static_cast<int>(
-          scene::environment::SkyLightSource::kCapturedScene)) {
-      config_.renderer->RequestSkyCapture();
-    }
   }
 
   SaveSettings();
+  applied_changes_this_frame_ = true;
   pending_changes_ = false;
   saved_sun_source_ = sun_source_;
 }
@@ -2072,10 +2068,44 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
 auto EnvironmentSettingsService::MarkDirty() -> void
 {
   pending_changes_ = true;
+  if (sky_light_enabled_
+    && sky_light_source_
+      == static_cast<int>(scene::environment::SkyLightSource::kCapturedScene)) {
+    needs_sky_capture_ = true;
+  }
   if (update_depth_ == 0) {
     SaveSettings();
     epoch_++;
   }
+}
+
+auto EnvironmentSettingsService::MaybeRequestSkyCapture() -> void
+{
+  if (!needs_sky_capture_ || applied_changes_this_frame_ || pending_changes_) {
+    return;
+  }
+
+  if (!config_.renderer) {
+    return;
+  }
+
+  if (!(sky_light_enabled_
+        && sky_light_source_
+          == static_cast<int>(
+            scene::environment::SkyLightSource::kCapturedScene))) {
+    return;
+  }
+
+  if (sky_atmo_enabled_) {
+    if (const auto lut_mgr = config_.renderer->GetSkyAtmosphereLutManager()) {
+      if (!lut_mgr->HasBeenGenerated() || lut_mgr->IsDirty()) {
+        return;
+      }
+    }
+  }
+
+  config_.renderer->RequestSkyCapture();
+  needs_sky_capture_ = false;
 }
 
 auto EnvironmentSettingsService::ApplySavedSunSourcePreference() -> void

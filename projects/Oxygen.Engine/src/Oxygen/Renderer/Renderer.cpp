@@ -69,6 +69,7 @@
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/CompositingPass.h>
 #include <Oxygen/Renderer/Passes/IblComputePass.h>
+#include <Oxygen/Renderer/Passes/SkyAtmosphereLutComputePass.h>
 #include <Oxygen/Renderer/Passes/SkyCapturePass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderContextPool.h>
@@ -266,6 +267,7 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
 Renderer::~Renderer()
 {
   sky_capture_pass_.reset();
+  sky_atmo_lut_compute_pass_.reset();
   ibl_compute_pass_.reset();
   env_dynamic_manager_.reset();
   brdf_lut_manager_.reset();
@@ -359,6 +361,15 @@ auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
     sky_capture_pass_config_->resolution = 128u;
     sky_capture_pass_ = std::make_unique<SkyCapturePass>(
       observer_ptr { gfx.get() }, sky_capture_pass_config_);
+
+    // Create sky atmosphere LUT compute pass (explicitly executed before sky
+    // capture so the capture never runs against stale LUTs).
+    sky_atmo_lut_compute_pass_config_
+      = std::make_shared<SkyAtmosphereLutComputePassConfig>();
+    sky_atmo_lut_compute_pass_config_->lut_manager
+      = observer_ptr { sky_atmo_lut_manager_.get() };
+    sky_atmo_lut_compute_pass_ = std::make_unique<SkyAtmosphereLutComputePass>(
+      observer_ptr { gfx.get() }, sky_atmo_lut_compute_pass_config_);
 
     // Initialize IBL Manager
     ibl_manager_
@@ -778,6 +789,7 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
 
   bool ran_ibl_compute_this_frame = false;
   bool ran_sky_capture_this_frame = false;
+  bool ran_atmo_lut_compute_this_frame = false;
 
   for (const auto& [view_id, factory] : graphs_snapshot) {
     DLOG_SCOPE_F(2, fmt::format("View {}", nostd::to_string(view_id)).c_str());
@@ -827,6 +839,39 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
       }
 
       // --- STEP 2: Run environment update passes ---
+      // Regenerate atmosphere LUTs first (if needed) so sky capture and IBL
+      // can run in the same frame against the freshly swapped LUT buffers.
+      if (!ran_atmo_lut_compute_this_frame && sky_atmo_lut_compute_pass_
+        && sky_atmo_lut_manager_) {
+        bool atmo_enabled = false;
+        if (const auto scene = render_context_->scene) {
+          if (const auto env = scene->GetEnvironment()) {
+            if (const auto atmo
+              = env->TryGetSystem<scene::environment::SkyAtmosphere>();
+              atmo && atmo->IsEnabled()) {
+              atmo_enabled = true;
+            }
+          }
+        }
+
+        if (atmo_enabled
+          && (sky_atmo_lut_manager_->IsDirty()
+            || !sky_atmo_lut_manager_->HasBeenGenerated())) {
+          try {
+            graphics::GpuEventScope lut_scope(
+              *recorder, "Atmosphere LUT Compute");
+            co_await sky_atmo_lut_compute_pass_->PrepareResources(
+              *render_context_, *recorder);
+            co_await sky_atmo_lut_compute_pass_->Execute(
+              *render_context_, *recorder);
+          } catch (const std::exception& ex) {
+            LOG_F(ERROR, "SkyAtmosphereLutComputePass failed: {}", ex.what());
+          }
+        }
+
+        ran_atmo_lut_compute_this_frame = true;
+      }
+
       // Check if sky needs re-capture.
       // Run this BEFORE SetupFramebufferForView to avoid touching main scene
       // targets while performing the internal capture.
@@ -840,9 +885,9 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
             needs_capture = true;
           }
 
-          // If atmosphere is enabled, we MUST wait for LUTs to be
-          // generated/clean before capturing the sky, otherwise we'll capture
-          // stale atmosphere state.
+          // If atmosphere is enabled, we MUST have LUTs generated/clean
+          // before capturing the sky. LUT compute is executed just above in
+          // the same step to make interactive sky updates stable.
           bool atmo_enabled = false;
           if (const auto scene = render_context_->scene) {
             if (const auto env = scene->GetEnvironment()) {
