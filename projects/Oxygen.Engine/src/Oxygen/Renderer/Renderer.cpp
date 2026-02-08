@@ -351,7 +351,8 @@ auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
 
     // Create sky atmosphere LUT manager for transmittance and sky-view LUTs.
     sky_atmo_lut_manager_ = std::make_unique<internal::SkyAtmosphereLutManager>(
-      observer_ptr { gfx.get() });
+      observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
+      observer_ptr { upload_staging_provider_.get() });
 
     // Create sky capture pass
     sky_capture_pass_config_ = std::make_shared<SkyCapturePassConfig>();

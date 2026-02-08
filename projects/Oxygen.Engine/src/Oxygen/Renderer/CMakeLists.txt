@@ -95,6 +95,7 @@ set(
 )
 set(
   OXYGEN_RENDERER_PRIVATE_SOURCES
+  "Internal/BlueNoiseData.h"
   "Internal/BrdfLutManager.cpp"
   "Internal/BrdfLutManager.h"
   "Internal/EnvironmentDynamicDataManager.cpp"

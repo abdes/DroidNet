@@ -23,10 +23,7 @@
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
 #include "Renderer/EnvironmentStaticData.hlsli"
-
-// Mathematical constants
-static const float SKY_PI = 3.14159265359;
-static const float SKY_TWO_PI = 6.28318530718;
+#include "Common/Math.hlsli"
 
 //! Computes transmittance LUT UV from altitude and cos_zenith.
 //!
@@ -175,36 +172,48 @@ float2 GetSkyViewLutUv(float3 view_dir, float3 sun_dir, float planet_radius, flo
 
     // Normalize to [0, 2π)
     if (relative_azimuth < 0.0)
-        relative_azimuth += SKY_TWO_PI;
-    if (relative_azimuth >= SKY_TWO_PI)
-        relative_azimuth -= SKY_TWO_PI;
+        relative_azimuth += TWO_PI;
+    if (relative_azimuth >= TWO_PI)
+        relative_azimuth -= TWO_PI;
 
     // Compute horizon angle for this altitude.
     float r = planet_radius + camera_altitude;
     float rho = planet_radius / r;
     float cos_horizon = -sqrt(max(0.0, 1.0 - rho * rho));
 
-    // Inverse of the non-linear V mapping used in LUT generation.
-    // Concentrates resolution near horizon (V=0.5) using squared distribution.
+    // Inverse of the non-linear V mapping used in LUT generation (Reference).
+    // Mapping uses Angles, not Cosines.
+    float zenith_horizon_angle = acos(cos_horizon);
+    float beta = PI - zenith_horizon_angle;
+    float view_zenith_angle = acos(clamp(cos_zenith, -1.0, 1.0));
+
     float v;
-    if (cos_zenith < cos_horizon)
+    if (view_zenith_angle < zenith_horizon_angle)
     {
-        // Below horizon: map cos_zenith in [-1, cos_horizon] to V in [0, 0.5]
-        float t = (cos_zenith - (-1.0)) / (cos_horizon - (-1.0));
-        v = 0.5 * (1.0 - sqrt(max(0.0, 1.0 - t)));
+        // Sky: map [0, ZenithHorizonAngle] -> [0, 0.5]
+        float coord = view_zenith_angle / zenith_horizon_angle;
+        coord = 1.0 - coord;
+        coord = sqrt(max(0.0, coord));
+        coord = 1.0 - coord;
+        v = coord * 0.5;
     }
     else
     {
-        // Above horizon: map cos_zenith in [cos_horizon, 1] to V in [0.5, 1]
-        float t = (cos_zenith - cos_horizon) / (1.0 - cos_horizon);
-        v = 0.5 + 0.5 * sqrt(max(0.0, t));
+        // Ground: map [ZenithHorizonAngle, PI] -> [0.5, 1]
+        float coord = (view_zenith_angle - zenith_horizon_angle) / beta;
+        coord = sqrt(max(0.0, coord));
+        v = (coord + 1.0) * 0.5;
     }
 
-    // U=0.5 corresponds to looking at sun (relative_azimuth=0).
-    // Map relative_azimuth from [0, 2π] to U in [0.5, 1.5] then wrap to [0, 1].
-    float u = relative_azimuth / SKY_TWO_PI + 0.5;
-    if (u >= 1.0)
-        u -= 1.0;
+    // Azimuth U mapping (Reference Squared Distribution)
+    // Mapping: u = sqrt(0.5 * (1 - cos(phi)))
+    // Range: u in [0, 1] maps to phi in [0, PI] (Symmetric)
+    // cos(phi) = cos(relative_azimuth)
+    // Note: dot(view_xy, sun_xy) gives cos(phi) directly if vectors are normalized in 2D or 3D horizontal plane.
+
+    // Since we computed relative_azimuth already:
+    float cos_phi = cos(relative_azimuth);
+    float u = sqrt(max(0.0, 0.5 * (1.0 - cos_phi)));
 
     return float2(u, v);
 }
@@ -453,7 +462,7 @@ float3 ComputeSunDisk(
     // The sun_luminance parameter is the sun's illuminance (Lux). To get the
     // radiance (Nits) for the sun disk, we must divide by the solid angle of
     // the sun disk: Omega = 2 * PI * (1 - cos(angular_radius)).
-    float omega_sun = SKY_TWO_PI * (1.0 - cos_sun_radius);
+    float omega_sun = TWO_PI * (1.0 - cos_sun_radius);
     float3 sun_radiance = sun_luminance / max(omega_sun, 1e-6);
 
     // Prevent FP16 overflow (max ~65504).
@@ -536,8 +545,9 @@ float3 ComputeAtmosphereSkyColor(
     float3 inscatter = sky_sample.rgb;
     float transmittance = sky_sample.a;
 
-    // Sky-view LUT stores inscatter per unit sun radiance.
-    inscatter *= sun_luminance;
+    // Sky-view LUT now stores absolute radiance (Nits).
+    // No need to multiply by sun_luminance again.
+    // inscatter *= sun_luminance;
 
     // Optionally add sun disk.
     float3 sun_contribution = float3(0.0, 0.0, 0.0);

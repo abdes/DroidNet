@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Oxygen/Base/Types/Geometry.h"
 #include <algorithm>
 
 #include <fmt/format.h>
@@ -17,17 +18,27 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Renderer/Internal/BlueNoiseData.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Types/EnvironmentStaticData.h>
+#include <Oxygen/Renderer/Upload/Types.h>
+#include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
 namespace oxygen::engine::internal {
 
+namespace resources = ::oxygen::engine::resources;
+namespace upload = ::oxygen::engine::upload;
+
 using graphics::TextureDesc;
+
 using oxygen::TextureType;
 
-SkyAtmosphereLutManager::SkyAtmosphereLutManager(
-  observer_ptr<Graphics> gfx, Config config)
+SkyAtmosphereLutManager::SkyAtmosphereLutManager(observer_ptr<Graphics> gfx,
+  observer_ptr<upload::UploadCoordinator> uploader,
+  observer_ptr<upload::StagingProvider> staging_provider, Config config)
   : gfx_(gfx)
+  , uploader_(uploader)
+  , staging_(staging_provider)
   , config_(config)
 {
 }
@@ -121,28 +132,71 @@ auto SkyAtmosphereLutManager::GetCameraVolumeLutSlot() const noexcept
   return camera_volume_lut_.srv_index;
 }
 
+auto SkyAtmosphereLutManager::GetBlueNoiseSlot() const noexcept
+  -> ShaderVisibleIndex
+{
+  if (blue_noise_ready_) {
+    return blue_noise_lut_.srv_index;
+  }
+
+  // Poll for upload completion
+  if (blue_noise_upload_ticket_.has_value()) {
+    if (uploader_
+      && uploader_->IsComplete(blue_noise_upload_ticket_.value())
+        .value_or(false)) {
+      blue_noise_ready_ = true;
+      blue_noise_upload_ticket_.reset();
+      // Increment generation to trigger binding update in EnvironmentStaticData
+      ++generation_;
+      return blue_noise_lut_.srv_index;
+    }
+  }
+
+  return kInvalidShaderVisibleIndex;
+}
+
+auto SkyAtmosphereLutManager::GetBlueNoiseSize() const noexcept
+  -> std::tuple<uint32_t, uint32_t, uint32_t>
+{
+  return { resources::kBlueNoiseSize, resources::kBlueNoiseSize,
+    resources::kBlueNoiseSlices };
+}
+
 auto SkyAtmosphereLutManager::GetTransmittanceLutTexture() const noexcept
   -> observer_ptr<graphics::Texture>
 {
-  return observer_ptr(transmittance_lut_.texture.get());
+  return transmittance_lut_.texture
+    ? observer_ptr(transmittance_lut_.texture.get())
+    : nullptr;
 }
 
 auto SkyAtmosphereLutManager::GetSkyViewLutTexture() const noexcept
   -> observer_ptr<graphics::Texture>
 {
-  return observer_ptr(sky_view_lut_.texture.get());
+  return sky_view_lut_.texture ? observer_ptr(sky_view_lut_.texture.get())
+                               : nullptr;
 }
 
 auto SkyAtmosphereLutManager::GetMultiScatLutTexture() const noexcept
   -> observer_ptr<graphics::Texture>
 {
-  return observer_ptr(multi_scat_lut_.texture.get());
+  return multi_scat_lut_.texture ? observer_ptr(multi_scat_lut_.texture.get())
+                                 : nullptr;
 }
 
 auto SkyAtmosphereLutManager::GetCameraVolumeLutTexture() const noexcept
   -> observer_ptr<graphics::Texture>
 {
-  return observer_ptr(camera_volume_lut_.texture.get());
+  return camera_volume_lut_.texture
+    ? observer_ptr(camera_volume_lut_.texture.get())
+    : nullptr;
+}
+
+auto SkyAtmosphereLutManager::GetBlueNoiseTexture() const noexcept
+  -> observer_ptr<graphics::Texture>
+{
+  return blue_noise_lut_.texture ? observer_ptr(blue_noise_lut_.texture.get())
+                                 : nullptr;
 }
 
 auto SkyAtmosphereLutManager::GetTransmittanceLutUavSlot() const noexcept
@@ -181,8 +235,9 @@ auto SkyAtmosphereLutManager::EnsureResourcesCreated() -> bool
   }
 
   // Create transmittance LUT (RGBA16F - optical depth for Rayleigh/Mie/Abs)
-  transmittance_lut_.texture = CreateTransmittanceLutTexture(
-    config_.transmittance_width, config_.transmittance_height);
+  transmittance_lut_.texture
+    = CreateTransmittanceLutTexture({ .width = config_.transmittance_width,
+      .height = config_.transmittance_height });
   if (!transmittance_lut_.texture) {
     return false;
   }
@@ -195,7 +250,8 @@ auto SkyAtmosphereLutManager::EnsureResourcesCreated() -> bool
   // Create sky-view LUT as a 2D texture array with altitude slices [P1].
   // Each slice is (sky_view_width x sky_view_height); array_size = slices.
   sky_view_lut_.texture = CreateSkyViewLutTexture(
-    config_.sky_view_width, config_.sky_view_height, config_.sky_view_slices);
+    { .width = config_.sky_view_width, .height = config_.sky_view_height },
+    config_.sky_view_slices);
   if (!sky_view_lut_.texture) {
     CleanupResources();
     return false;
@@ -220,9 +276,12 @@ auto SkyAtmosphereLutManager::EnsureResourcesCreated() -> bool
   }
 
   // Create camera volume LUT as a 3D texture (froxel grid)
-  camera_volume_lut_.texture
-    = CreateCameraVolumeLutTexture(config_.camera_volume_width,
-      config_.camera_volume_height, config_.camera_volume_depth);
+  camera_volume_lut_.texture = CreateCameraVolumeLutTexture(
+    {
+      .width = config_.camera_volume_width,
+      .height = config_.camera_volume_height,
+    },
+    config_.camera_volume_depth);
   if (!camera_volume_lut_.texture) {
     CleanupResources();
     return false;
@@ -234,30 +293,48 @@ auto SkyAtmosphereLutManager::EnsureResourcesCreated() -> bool
     return false;
   }
 
+  // Create blue noise texture as a 3D volume (R8_UNORM) [Phase 3]
+  blue_noise_lut_.texture = CreateBlueNoiseTexture();
+  if (!blue_noise_lut_.texture) {
+    CleanupResources();
+    return false;
+  }
+
+  // Blue Noise only needs an SRV (read-only)
+  if (!CreateLutViews(blue_noise_lut_, resources::kBlueNoiseSlices, false)) {
+    CleanupResources();
+    return false;
+  }
+
+  // Upload initial Blue Noise data. This is a one-time operation.
+  UploadBlueNoiseData();
+
   resources_created_ = true;
 
   LOG_F(INFO,
     "SkyAtmosphereLutManager: created LUTs (transmittance={}x{}, "
-    "sky_view={}x{}x{} slices, multi_scat={}x{}, camera_volume={}x{}x{})",
+    "sky_view={}x{}x{} slices, multi_scat={}x{}, camera_volume={}x{}x{}, "
+    "blue_noise={}x{}x{})",
     config_.transmittance_width, config_.transmittance_height,
     config_.sky_view_width, config_.sky_view_height, config_.sky_view_slices,
     config_.multi_scat_size, config_.multi_scat_size,
     config_.camera_volume_width, config_.camera_volume_height,
-    config_.camera_volume_depth);
+    config_.camera_volume_depth, resources::kBlueNoiseSize,
+    resources::kBlueNoiseSize, resources::kBlueNoiseSlices);
 
   return true;
 }
 
 // Common implementation for creating LUT textures
-auto SkyAtmosphereLutManager::CreateLutTexture(uint32_t width, uint32_t height,
+auto SkyAtmosphereLutManager::CreateLutTexture(Extent<uint32_t> extent,
   uint32_t depth_or_array_size, bool is_rgba, const char* debug_name,
   TextureType texture_type) -> std::shared_ptr<graphics::Texture>
 {
   TextureDesc desc;
-  desc.width = width;
-  desc.height = height;
-  desc.mip_levels = 1u;
-  desc.sample_count = 1u;
+  desc.width = extent.width;
+  desc.height = extent.height;
+  desc.mip_levels = 1U;
+  desc.sample_count = 1U;
   desc.format = is_rgba ? Format::kRGBA16Float : Format::kRG16Float;
   desc.debug_name = debug_name;
   desc.is_shader_resource = true;
@@ -290,31 +367,117 @@ auto SkyAtmosphereLutManager::CreateLutTexture(uint32_t width, uint32_t height,
 // Domain-specific LUT texture creation methods
 
 auto SkyAtmosphereLutManager::CreateTransmittanceLutTexture(
-  uint32_t width, uint32_t height) -> std::shared_ptr<graphics::Texture>
+  Extent<uint32_t> extent) -> std::shared_ptr<graphics::Texture>
 {
   return CreateLutTexture(
-    width, height, 1, true, "Atmo_TransmittanceLUT", TextureType::kTexture2D);
+    extent, 1, true, "Atmo_TransmittanceLUT", TextureType::kTexture2D);
 }
 
-auto SkyAtmosphereLutManager::CreateSkyViewLutTexture(uint32_t width,
-  uint32_t height, uint32_t num_slices) -> std::shared_ptr<graphics::Texture>
+auto SkyAtmosphereLutManager::CreateSkyViewLutTexture(Extent<uint32_t> extent,
+  uint32_t num_slices) -> std::shared_ptr<graphics::Texture>
 {
-  return CreateLutTexture(width, height, num_slices, true, "Atmo_SkyViewLUT",
-    TextureType::kTexture2DArray);
+  return CreateLutTexture(
+    extent, num_slices, true, "Atmo_SkyViewLUT", TextureType::kTexture2DArray);
 }
 
 auto SkyAtmosphereLutManager::CreateMultiScatLutTexture(uint32_t size)
   -> std::shared_ptr<graphics::Texture>
 {
-  return CreateLutTexture(
-    size, size, 1, true, "Atmo_MultiScatLUT", TextureType::kTexture2D);
+  return CreateLutTexture({ .width = size, .height = size }, 1, true,
+    "Atmo_MultiScatLUT", TextureType::kTexture2D);
 }
 
-auto SkyAtmosphereLutManager::CreateCameraVolumeLutTexture(uint32_t width,
-  uint32_t height, uint32_t depth) -> std::shared_ptr<graphics::Texture>
+auto SkyAtmosphereLutManager::CreateCameraVolumeLutTexture(
+  Extent<uint32_t> extent, uint32_t depth) -> std::shared_ptr<graphics::Texture>
 {
-  return CreateLutTexture(width, height, depth, true, "Atmo_CameraVolumeLUT",
-    TextureType::kTexture3D);
+  return CreateLutTexture(
+    extent, depth, true, "Atmo_CameraVolumeLUT", TextureType::kTexture3D);
+}
+
+auto SkyAtmosphereLutManager::UploadBlueNoiseData() -> void
+{
+  if (!uploader_ || !staging_) {
+    return;
+  }
+
+  const uint32_t size = resources::kBlueNoiseSize;
+  const uint32_t slices = resources::kBlueNoiseSlices;
+  const uint32_t row_pitch = size; // 1 byte per texel
+  const uint32_t slice_pitch = size * size;
+
+  upload::UploadTextureSourceView src_view;
+  src_view.subresources.push_back(upload::UploadTextureSourceSubresource {
+    .bytes = std::span<const std::byte>(
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+      reinterpret_cast<const std::byte*>(resources::TextureData_BlueNoise),
+      resources::kBlueNoiseDataSize),
+    .row_pitch = row_pitch,
+    .slice_pitch = slice_pitch,
+  });
+
+  upload::UploadRequest request {
+    .kind = upload::UploadKind::kTexture3D,
+    .priority = upload::Priority { 0 },
+    .debug_name = "BlueNoise_Upload",
+    .desc = upload::UploadTextureDesc {
+      .dst = blue_noise_lut_.texture,
+      .width = size,
+      .height = size,
+      .depth = slices,
+      .format = Format::kR8UNorm,
+    },
+    .subresources = {
+      upload::UploadSubresource {
+        .mip = 0,
+        .array_slice = 0,
+        .x = 0, .y = 0, .z = 0,
+        .width = size,
+        .height = size,
+        .depth = slices,
+      },
+    },
+    .data = src_view,
+  };
+
+  if (auto result = uploader_->Submit(request, *staging_); !result) {
+    const std::error_code ec = result.error();
+    LOG_F(ERROR,
+      "SkyAtmosphereLutManager: failed to submit Blue Noise upload: {}",
+      ec.message());
+  } else {
+    blue_noise_upload_ticket_ = *result;
+    blue_noise_ready_ = false;
+  }
+}
+
+auto SkyAtmosphereLutManager::CreateBlueNoiseTexture()
+  -> std::shared_ptr<graphics::Texture>
+{
+  TextureDesc desc;
+  desc.width = resources::kBlueNoiseSize;
+  desc.height = resources::kBlueNoiseSize;
+  desc.depth = resources::kBlueNoiseSlices;
+  desc.mip_levels = 1U;
+  desc.sample_count = 1U;
+  desc.format = Format::kR8UNorm;
+  desc.debug_name = "Atmo_BlueNoiseVolume";
+  desc.is_shader_resource = true;
+  desc.is_uav = false;
+  desc.is_render_target = false;
+  desc.initial_state = graphics::ResourceStates::kCommon;
+  desc.texture_type = TextureType::kTexture3D;
+
+  auto texture = gfx_->CreateTexture(desc);
+  if (!texture) {
+    LOG_F(
+      ERROR, "SkyAtmosphereLutManager: failed to create Blue Noise texture");
+    return nullptr;
+  }
+
+  texture->SetName(desc.debug_name);
+  gfx_->GetResourceRegistry().Register(texture);
+
+  return texture;
 }
 
 auto SkyAtmosphereLutManager::CreateLutViews(
@@ -337,12 +500,13 @@ auto SkyAtmosphereLutManager::CreateLutViews(
   graphics::TextureViewDescription srv_desc;
   srv_desc.view_type = graphics::ResourceViewType::kTexture_SRV;
   srv_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-  srv_desc.format = is_rgba ? Format::kRGBA16Float : Format::kRG16Float;
+  srv_desc.format
+    = is_rgba ? Format::kRGBA16Float : (lut.texture->GetDescriptor().format);
   srv_desc.dimension = view_dimension;
 
   // Appropriately set sub-resource range for array textures [P2].
   if (view_dimension == TextureType::kTexture2DArray) {
-    srv_desc.sub_resources.base_array_slice = 0u;
+    srv_desc.sub_resources.base_array_slice = 0U;
     srv_desc.sub_resources.num_array_slices = depth_or_array_size;
   }
 
@@ -350,29 +514,37 @@ auto SkyAtmosphereLutManager::CreateLutViews(
   lut.srv_view
     = registry.RegisterView(*lut.texture, std::move(srv_handle), srv_desc);
 
-  // Create UAV for compute shader writes
-  auto uav_handle = allocator.Allocate(graphics::ResourceViewType::kTexture_UAV,
-    graphics::DescriptorVisibility::kShaderVisible);
-  if (!uav_handle.IsValid()) {
-    LOG_F(ERROR, "SkyAtmosphereLutManager: failed to allocate UAV descriptor");
-    return false;
+  // Create UAV for compute shader writes only if supported [P20]
+  if (tex_desc.is_uav) {
+    auto uav_handle
+      = allocator.Allocate(graphics::ResourceViewType::kTexture_UAV,
+        graphics::DescriptorVisibility::kShaderVisible);
+    if (!uav_handle.IsValid()) {
+      LOG_F(
+        ERROR, "SkyAtmosphereLutManager: failed to allocate UAV descriptor");
+      return false;
+    }
+
+    graphics::TextureViewDescription uav_desc;
+    uav_desc.view_type = graphics::ResourceViewType::kTexture_UAV;
+    uav_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
+    uav_desc.format
+      = is_rgba ? Format::kRGBA16Float : (lut.texture->GetDescriptor().format);
+    uav_desc.dimension = view_dimension;
+
+    // Appropriately set sub-resource range for array textures [P2].
+    if (view_dimension == TextureType::kTexture2DArray) {
+      uav_desc.sub_resources.base_array_slice = 0U;
+      uav_desc.sub_resources.num_array_slices = depth_or_array_size;
+    }
+
+    lut.uav_index = allocator.GetShaderVisibleIndex(uav_handle);
+    lut.uav_view
+      = registry.RegisterView(*lut.texture, std::move(uav_handle), uav_desc);
+  } else {
+    lut.uav_index = kInvalidShaderVisibleIndex;
+    lut.uav_view = {};
   }
-
-  graphics::TextureViewDescription uav_desc;
-  uav_desc.view_type = graphics::ResourceViewType::kTexture_UAV;
-  uav_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-  uav_desc.format = is_rgba ? Format::kRGBA16Float : Format::kRG16Float;
-  uav_desc.dimension = view_dimension;
-
-  // Appropriately set sub-resource range for array textures [P2].
-  if (view_dimension == TextureType::kTexture2DArray) {
-    uav_desc.sub_resources.base_array_slice = 0u;
-    uav_desc.sub_resources.num_array_slices = depth_or_array_size;
-  }
-
-  lut.uav_index = allocator.GetShaderVisibleIndex(uav_handle);
-  lut.uav_view
-    = registry.RegisterView(*lut.texture, std::move(uav_handle), uav_desc);
 
   return true;
 }
@@ -409,6 +581,10 @@ auto SkyAtmosphereLutManager::CleanupResources() -> void
   cleanup_lut(sky_view_lut_);
   cleanup_lut(multi_scat_lut_);
   cleanup_lut(camera_volume_lut_);
+  cleanup_lut(blue_noise_lut_);
+
+  blue_noise_upload_ticket_.reset();
+  blue_noise_ready_ = false;
 
   resources_created_ = false;
 }
@@ -448,7 +624,10 @@ auto SkyAtmosphereLutManager::ExtractCachedParams(
 
 auto SkyAtmosphereLutManager::SetSkyViewLutSlices(uint32_t slices) -> void
 {
-  slices = std::clamp(slices, 4u, 32u);
+  constexpr uint32_t kMinSlices = 4U;
+  constexpr uint32_t kMaxSlices = 32U;
+
+  slices = std::clamp(slices, kMinSlices, kMaxSlices);
   if (config_.sky_view_slices == slices) {
     return;
   }
