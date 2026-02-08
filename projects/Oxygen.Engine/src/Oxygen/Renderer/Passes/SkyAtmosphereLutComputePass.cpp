@@ -381,20 +381,27 @@ auto SkyAtmosphereLutComputePass::DoPrepareResources(CommandRecorder& recorder)
     impl_->BuildPipelineStateDescs();
   }
 
-  // Get textures for barrier setup
+  // Get back-buffer textures for compute shader write
   auto* transmittance_tex = manager->GetTransmittanceLutTexture().get();
   auto* sky_view_tex = manager->GetSkyViewLutTexture().get();
   auto* multi_scat_tex = manager->GetMultiScatLutTexture().get();
   auto* camera_volume_tex = manager->GetCameraVolumeLutTexture().get();
 
-  if (!transmittance_tex || !sky_view_tex || !multi_scat_tex
-    || !camera_volume_tex) {
+  if (transmittance_tex == nullptr || sky_view_tex == nullptr
+    || multi_scat_tex == nullptr || camera_volume_tex == nullptr) {
     LOG_F(ERROR, "SkyAtmosphereLutComputePass: LUT textures not available");
     co_return;
   }
 
-  // Transition LUTs to UAV state for compute shader write.
-  const auto initial_state = manager->HasBeenGenerated()
+  // Determine initial state for the back buffer textures:
+  // - swap_count < 2: back buffer was never used, starts in UAV state
+  //   (first generation writes to buffer 1, second to buffer 0)
+  // - swap_count >= 2: back buffer was the front buffer in a previous frame,
+  //   so it's in SRV state and needs transition to UAV for compute write
+  //
+  // This is more precise than HasBeenGenerated() because we need BOTH buffers
+  // to have been written before we can assume the back buffer is in SRV state.
+  const auto initial_state = manager->GetSwapCount() >= 2
     ? graphics::ResourceStates::kShaderResource
     : graphics::ResourceStates::kUnorderedAccess;
 
@@ -679,10 +686,12 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
     graphics::ResourceStates::kShaderResource);
   recorder.FlushBarriers();
 
-  manager->MarkClean();
-  manager->MarkGenerated();
+  // Atomically swap front/back buffers - shaders will now sample freshly
+  // computed LUTs while next frame's compute writes to previous front buffer
+  manager->SwapBuffers();
 
-  LOG_F(INFO, "SkyAtmosphereLutComputePass: LUTs regenerated");
+  LOG_F(
+    INFO, "SkyAtmosphereLutComputePass: LUTs regenerated and buffers swapped");
 
   co_return;
 }

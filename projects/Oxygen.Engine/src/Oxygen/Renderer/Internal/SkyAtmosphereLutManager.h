@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <array>
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -250,6 +252,41 @@ public:
   */
   OXGN_RNDR_API auto MarkGenerated() noexcept -> void;
 
+  //! Atomically swaps front and back LUT buffers.
+  /*!
+   Called after compute shaders finish writing to the back buffer.
+   After this call, shaders will sample from the newly computed LUTs.
+   This ensures zero visual artifacts during LUT regeneration.
+  */
+  OXGN_RNDR_API auto SwapBuffers() noexcept -> void;
+
+  //! Returns the index of the back buffer (for compute shader writes).
+  /*!
+   The compute pass should write to this buffer while shaders sample from
+   the front buffer (active_buffer_index_).
+  */
+  [[nodiscard]] auto GetBackBufferIndex() const noexcept -> uint32_t
+  {
+    return 1 - active_buffer_index_.load(std::memory_order_acquire);
+  }
+
+  //! Returns the index of the front buffer (for shader sampling).
+  [[nodiscard]] auto GetFrontBufferIndex() const noexcept -> uint32_t
+  {
+    return active_buffer_index_.load(std::memory_order_acquire);
+  }
+
+  //! Returns the number of buffer swaps that have occurred.
+  /*!
+   After 2+ swaps, both front and back buffers have been written to at least
+   once, so the back buffer will be in SRV state (was front buffer previously).
+   Before 2 swaps, the back buffer may still be in its initial UAV state.
+  */
+  [[nodiscard]] auto GetSwapCount() const noexcept -> uint32_t
+  {
+    return swap_count_.load(std::memory_order_acquire);
+  }
+
   //! Returns a monotonic generation token that increases when parameters
   //! change.
   [[nodiscard]] auto GetGeneration() const noexcept -> std::uint64_t override
@@ -425,11 +462,21 @@ private:
   mutable std::optional<upload::UploadTicket> blue_noise_upload_ticket_;
   mutable bool blue_noise_ready_ { false };
 
-  LutResources transmittance_lut_ {};
-  LutResources sky_view_lut_ {};
-  LutResources multi_scat_lut_ {};
-  LutResources camera_volume_lut_ {};
-  LutResources blue_noise_lut_ {};
+  static constexpr size_t kLutBufferCount = 2;
+
+  std::array<LutResources, kLutBufferCount> transmittance_lut_ {};
+  std::array<LutResources, kLutBufferCount> sky_view_lut_ {};
+  std::array<LutResources, kLutBufferCount> multi_scat_lut_ {};
+  std::array<LutResources, kLutBufferCount> camera_volume_lut_ {};
+  LutResources blue_noise_lut_ {}; // Blue noise is static, no double-buffer
+
+  //! Index of the buffer currently used for rendering (front buffer).
+  //! Compute pass writes to (1 - active_buffer_index_), then swaps.
+  std::atomic<uint32_t> active_buffer_index_ { 0 };
+
+  //! Number of buffer swaps performed.
+  //! After 2+ swaps, both buffers have been written to at least once.
+  std::atomic<uint32_t> swap_count_ { 0 };
 
   //! Creates transmittance LUT texture (2D, RGBA16F).
   auto CreateTransmittanceLutTexture(Extent<uint32_t> extent)

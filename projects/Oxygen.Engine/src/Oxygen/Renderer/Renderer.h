@@ -68,6 +68,8 @@ class RenderContextPool;
 class IblComputePass;
 class SkyCapturePass;
 struct SkyCapturePassConfig;
+class SkyAtmosphereLutComputePass;
+struct SkyAtmosphereLutComputePassConfig;
 class CompositingPass;
 struct CompositingPassConfig;
 namespace internal {
@@ -421,6 +423,10 @@ private:
 
   std::unique_ptr<SkyCapturePass> sky_capture_pass_;
   std::shared_ptr<SkyCapturePassConfig> sky_capture_pass_config_;
+
+  std::unique_ptr<SkyAtmosphereLutComputePass> sky_atmo_lut_compute_pass_;
+  std::shared_ptr<SkyAtmosphereLutComputePassConfig>
+    sky_atmo_lut_compute_pass_config_;
 
   std::unique_ptr<IblComputePass> ibl_compute_pass_;
 

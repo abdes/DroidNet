@@ -339,6 +339,7 @@ private:
   auto LoadSunSettingsFromProfile(int source) -> void;
   auto SaveSunSettingsToProfile(int source) -> void;
   [[nodiscard]] auto GetAtmosphereFlags() const -> uint32_t;
+  auto MaybeRequestSkyCapture() -> void;
 
   static constexpr float kDefaultPlanetRadiusKm
     = engine::atmos::kDefaultPlanetRadiusM * 0.001F;
@@ -350,6 +351,8 @@ private:
   int update_depth_ { 0 };
   bool settings_loaded_ { false };
   bool pending_changes_ { false };
+  bool applied_changes_this_frame_ { false };
+  bool needs_sky_capture_ { false };
   bool needs_sync_ { true };
 
   bool apply_saved_sun_on_next_sync_ { false };

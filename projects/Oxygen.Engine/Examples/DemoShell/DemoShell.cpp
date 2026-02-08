@@ -470,14 +470,7 @@ auto DemoShell::UpdatePanels() -> void
   runtime_config.skybox_service = impl_->GetSkyboxService(runtime_config.scene);
   const auto renderer = impl_->GetRenderer();
   runtime_config.renderer = renderer;
-  runtime_config.on_atmosphere_params_changed = [renderer] {
-    LOG_F(INFO, "Atmosphere parameters changed, LUTs will regenerate");
-    if (renderer) {
-      if (auto lut_mgr = renderer->GetSkyAtmosphereLutManager()) {
-        lut_mgr->MarkDirty();
-      }
-    }
-  };
+  runtime_config.on_atmosphere_params_changed = nullptr;
   runtime_config.on_exposure_changed
     = [] { LOG_F(INFO, "Exposure settings changed"); };
   impl_->environment_settings_service.SetRuntimeConfig(runtime_config);
