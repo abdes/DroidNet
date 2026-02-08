@@ -238,10 +238,9 @@ float3 SampleTransmittanceLutOpticalDepth(
 float3 TransmittanceFromOpticalDepth(float3 optical_depth, GpuSkyAtmosphereParams atmo)
 {
     // Extinction = Rayleigh scattering + Mie extinction + absorption.
-    // For Mie, we approximate extinction by assuming a constant single-scattering
-    // albedo (w ~= 0.9). This keeps tuning stable while remaining plausible.
+    // Mie extinction = Mie scattering + Mie absorption (UE5 style).
     float3 beta_rayleigh = atmo.rayleigh_scattering_rgb;
-    float3 beta_mie_ext = atmo.mie_scattering_rgb / 0.9;
+    float3 beta_mie_ext = atmo.mie_scattering_rgb + atmo.mie_absorption_rgb;
     float3 beta_abs = atmo.absorption_rgb;
 
     float3 tau = beta_rayleigh * optical_depth.x
@@ -339,7 +338,7 @@ float4 ComputeSingleScattering(
 
     // Precompute coefficients for extinction reconstruction
     float3 beta_rayleigh = atmo.rayleigh_scattering_rgb;
-    float3 beta_mie_ext = atmo.mie_scattering_rgb / 0.9;
+    float3 beta_mie_ext = atmo.mie_scattering_rgb + atmo.mie_absorption_rgb;
     float3 beta_abs = atmo.absorption_rgb;
 
     for (uint i = 0; i < num_steps; ++i)

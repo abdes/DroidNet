@@ -98,7 +98,7 @@ float3 SampleTransmittanceOpticalDepthLut(
 float3 TransmittanceFromOpticalDepth(float3 optical_depth, GpuSkyAtmosphereParams atmo)
 {
     float3 beta_rayleigh = atmo.rayleigh_scattering_rgb;
-    float3 beta_mie_ext = atmo.mie_scattering_rgb / 0.9;
+    float3 beta_mie_ext = atmo.mie_scattering_rgb + atmo.mie_absorption_rgb;
     float3 beta_abs = atmo.absorption_rgb;
 
     float3 tau = beta_rayleigh * optical_depth.x

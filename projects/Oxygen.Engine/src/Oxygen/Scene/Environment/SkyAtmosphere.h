@@ -116,6 +116,22 @@ public:
     return mie_scale_height_m_;
   }
 
+  //! Sets Mie absorption coefficient (1/meter, RGB).
+  /*!
+   UE5-style explicit absorption. Mie extinction = scattering + absorption.
+   Default corresponds to SSA ≈ 0.9 for Earth-like atmospheres.
+  */
+  auto SetMieAbsorptionRgb(const Vec3& rgb) noexcept -> void
+  {
+    mie_absorption_rgb_ = rgb;
+  }
+
+  //! Gets Mie absorption coefficient (1/meter, RGB).
+  [[nodiscard]] auto GetMieAbsorptionRgb() const noexcept -> const Vec3&
+  {
+    return mie_absorption_rgb_;
+  }
+
   //! Sets Mie anisotropy g in [-1, 1].
   auto SetMieAnisotropy(const float g) noexcept -> void { mie_g_ = g; }
 
@@ -213,6 +229,8 @@ private:
   float rayleigh_scale_height_m_ = 8000.0F;
 
   Vec3 mie_scattering_rgb_ { 21.0e-6F, 21.0e-6F, 21.0e-6F };
+  // Mie absorption (1/meter, RGB). Default gives SSA ≈ 0.9.
+  Vec3 mie_absorption_rgb_ { 2.33e-6F, 2.33e-6F, 2.33e-6F };
   float mie_scale_height_m_ = 1200.0F;
   float mie_g_ = 0.8F;
 

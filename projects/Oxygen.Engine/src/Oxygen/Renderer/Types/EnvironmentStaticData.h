@@ -163,10 +163,18 @@ struct alignas(16) GpuSkyAtmosphereParams {
   glm::vec3 mie_scattering_rgb { 21.0e-6F, 21.0e-6F, 21.0e-6F };
   float mie_scale_height_m { 1200.0F };
 
+  //! Mie absorption coefficient (1/m, RGB).
+  /*!
+   UE5-style explicit absorption. Mie extinction = scattering + absorption.
+   Default corresponds to SSA ≈ 0.9 for Earth-like atmospheres.
+  */
+  glm::vec3 mie_absorption_rgb { 2.33e-6F, 2.33e-6F, 2.33e-6F };
   float mie_g { 0.8F };
+
   float absorption_scale_height_m { 25000.0F };
   uint32_t sun_disk_enabled { 1u };
   uint32_t enabled { 0u };
+  uint32_t _pad0 { 0u };
 
   glm::vec3 absorption_rgb { 0.65e-6F, 1.881e-6F, 0.085e-6F };
   TransmittanceLutSlot transmittance_lut_slot {};
@@ -187,7 +195,7 @@ struct alignas(16) GpuSkyAtmosphereParams {
 };
 static_assert(sizeof(GpuSkyAtmosphereParams) % 16 == 0,
   "GpuSkyAtmosphereParams size must be 16-byte aligned");
-static_assert(sizeof(GpuSkyAtmosphereParams) == 144,
+static_assert(sizeof(GpuSkyAtmosphereParams) == 160,
   "GpuSkyAtmosphereParams size must match HLSL packing");
 
 struct CubeMapSlot {
@@ -388,7 +396,7 @@ struct alignas(16) EnvironmentStaticData {
 };
 static_assert(sizeof(EnvironmentStaticData) % 16 == 0,
   "EnvironmentStaticData size must be 16-byte aligned");
-static_assert(sizeof(EnvironmentStaticData) == 432,
+static_assert(sizeof(EnvironmentStaticData) == 448,
   "EnvironmentStaticData size must match HLSL packing");
 
 } // namespace oxygen::engine

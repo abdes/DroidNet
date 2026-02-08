@@ -420,6 +420,16 @@ auto EnvironmentVm::SetMieAnisotropy(float value) -> void
   service_->SetMieAnisotropy(value);
 }
 
+auto EnvironmentVm::GetMieAbsorptionScale() const -> float
+{
+  return service_->GetMieAbsorptionScale();
+}
+
+auto EnvironmentVm::SetMieAbsorptionScale(float value) -> void
+{
+  service_->SetMieAbsorptionScale(value);
+}
+
 auto EnvironmentVm::GetMultiScattering() const -> float
 {
   return service_->GetMultiScattering();
