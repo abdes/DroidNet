@@ -62,12 +62,14 @@ struct GpuSkyAtmosphereParams
     float3 mie_absorption_rgb;
     float mie_g;
 
-    float absorption_scale_height_m;
+    float3 absorption_rgb;
+    float absorption_layer_width_m;
+    float absorption_term_below;
+    float absorption_term_above;
+
     uint sun_disk_enabled;
     uint enabled;
-    uint _pad0;
 
-    float3 absorption_rgb;
     uint transmittance_lut_slot;
 
     uint sky_view_lut_slot;
@@ -82,7 +84,7 @@ struct GpuSkyAtmosphereParams
 
     uint sky_view_lut_slices;
     uint sky_view_alt_mapping_mode;
-    uint _pad[2];
+    uint _pad;
 };
 
 // Mirrors oxygen::engine::GpuSkyLightParams (sizeof = 64)

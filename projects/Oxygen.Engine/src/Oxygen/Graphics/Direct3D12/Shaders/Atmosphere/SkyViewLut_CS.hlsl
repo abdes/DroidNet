@@ -30,6 +30,7 @@
 #include "Renderer/EnvironmentDynamicData.hlsli"
 #include "Renderer/SceneConstants.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
+#include "Atmosphere/AtmosphereMedium.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Geometry.hlsli"
 #include "Common/Coordinates.hlsli"
@@ -334,7 +335,7 @@ float4 ComputeSingleScattering(
     float rayleigh_phase = RayleighPhase(cos_theta);
     float mie_phase = HenyeyGreensteinPhase(cos_theta, atmo.mie_g);
 
-    float ms_factor = saturate(atmo.multi_scattering_factor);
+    float ms_factor = atmo.multi_scattering_factor;
 
     // Precompute coefficients for extinction reconstruction
     float3 beta_rayleigh = atmo.rayleigh_scattering_rgb;
@@ -364,9 +365,9 @@ float4 ComputeSingleScattering(
 
         if (altitude > atmo.atmosphere_height_m) continue;
 
-        float d_r = GetAtmosphereDensity(altitude, atmo.rayleigh_scale_height_m);
-        float d_m = GetAtmosphereDensity(altitude, atmo.mie_scale_height_m);
-        float d_a = GetAbsorptionDensity(altitude, atmo.absorption_scale_height_m);
+        float d_r = AtmosphereExponentialDensity(altitude, atmo.rayleigh_scale_height_m);
+        float d_m = AtmosphereExponentialDensity(altitude, atmo.mie_scale_height_m);
+        float d_a = OzoneAbsorptionDensity(altitude, atmo.absorption_layer_width_m, atmo.absorption_term_below, atmo.absorption_term_above);
 
         // Reconstruction of extinction at this point
         float3 extinction = beta_rayleigh * d_r + beta_mie_ext * d_m + beta_abs * d_a;

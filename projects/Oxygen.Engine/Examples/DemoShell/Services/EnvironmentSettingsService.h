@@ -47,8 +47,8 @@ struct EnvironmentRuntimeConfig {
   observer_ptr<scene::Scene> scene { nullptr };
   observer_ptr<SkyboxService> skybox_service { nullptr };
   observer_ptr<engine::Renderer> renderer { nullptr };
-  std::function<void()> on_atmosphere_params_changed {};
-  std::function<void()> on_exposure_changed {};
+  std::function<void()> on_atmosphere_params_changed;
+  std::function<void()> on_exposure_changed;
 };
 
 //! Settings persistence and runtime apply logic for the environment panel.
@@ -143,6 +143,19 @@ public:
 
   [[nodiscard]] virtual auto GetMultiScattering() const -> float;
   virtual auto SetMultiScattering(float value) -> void;
+
+  // Absorption
+  [[nodiscard]] virtual auto GetAbsorptionRgb() const -> glm::vec3;
+  virtual auto SetAbsorptionRgb(const glm::vec3& value) -> void;
+
+  [[nodiscard]] virtual auto GetAbsorptionLayerWidthKm() const -> float;
+  virtual auto SetAbsorptionLayerWidthKm(float value) -> void;
+
+  [[nodiscard]] virtual auto GetAbsorptionTermBelow() const -> float;
+  virtual auto SetAbsorptionTermBelow(float value) -> void;
+
+  [[nodiscard]] virtual auto GetAbsorptionTermAbove() const -> float;
+  virtual auto SetAbsorptionTermAbove(float value) -> void;
 
   [[nodiscard]] virtual auto GetSunDiskEnabled() const -> bool;
   virtual auto SetSunDiskEnabled(bool enabled) -> void;
@@ -353,7 +366,12 @@ private:
   float mie_absorption_scale_ {
     1.0F
   }; // 1.0 = Earth-like absorption (SSA ≈ 0.9)
+  glm::vec3 mie_absorption_rgb_ { 2.33e-6F, 2.33e-6F, 2.33e-6F };
   float multi_scattering_ { 1.0F };
+  glm::vec3 absorption_rgb_ { 0.65e-6F, 1.881e-6F, 0.085e-6F };
+  float absorption_layer_width_km_ { 25.0F };
+  float absorption_term_below_ { 1.0F };
+  float absorption_term_above_ { -1.0F };
   bool sun_disk_enabled_ { true };
   float aerial_perspective_scale_ { 1.0F };
   float aerial_scattering_strength_ { 1.0F };
@@ -419,9 +437,9 @@ private:
   float sun_component_disk_radius_deg_ {
     scene::environment::Sun::kDefaultDiskAngularRadiusRad * math::RadToDeg
   };
-  scene::SceneNode sun_light_node_ {};
+  scene::SceneNode sun_light_node_;
   bool sun_light_available_ { false };
-  scene::SceneNode synthetic_sun_light_node_ {};
+  scene::SceneNode synthetic_sun_light_node_;
   bool synthetic_sun_light_created_ { false };
 
   SunUiSettings sun_scene_settings_ {};

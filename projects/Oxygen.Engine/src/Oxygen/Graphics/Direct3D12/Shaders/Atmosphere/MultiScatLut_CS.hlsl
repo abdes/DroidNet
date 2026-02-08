@@ -21,6 +21,7 @@
 #include "Renderer/EnvironmentDynamicData.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/SceneConstants.hlsli"
+#include "Atmosphere/AtmosphereMedium.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Geometry.hlsli"
 #include "Common/Coordinates.hlsli"
@@ -50,19 +51,6 @@ struct MultiScatLutPassConstants
 #define THREAD_GROUP_SIZE 8
 
 // Re-use logic from common headers - these will move to AtmosphereMath.hlsli
-float GetAtmosphereDensity(float altitude, float scale_height)
-{
-    return exp(-altitude / scale_height);
-}
-
-float GetAbsorptionDensity(float altitude, float absorption_center_m)
-{
-    altitude = max(altitude, 0.0);
-    float center = max(1.0, absorption_center_m);
-    float width = max(1000.0, center * 0.6);
-    float t = 1.0 - abs(altitude - center) / width;
-    return saturate(t);
-}
 
 float RayleighPhase(float cos_theta)
 {
@@ -166,9 +154,9 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                 float3 p = origin + view_dir * (j + 0.5) * step_size;
                 float h = length(p) - atmo.planet_radius_m;
 
-                float d_r = GetAtmosphereDensity(h, atmo.rayleigh_scale_height_m);
-                float d_m = GetAtmosphereDensity(h, atmo.mie_scale_height_m);
-                float d_a = GetAbsorptionDensity(h, atmo.absorption_scale_height_m);
+                float d_r = AtmosphereExponentialDensity(h, atmo.rayleigh_scale_height_m);
+                float d_m = AtmosphereExponentialDensity(h, atmo.mie_scale_height_m);
+                float d_a = OzoneAbsorptionDensity(h, atmo.absorption_layer_width_m, atmo.absorption_term_below, atmo.absorption_term_above);
 
                 float3 od_step = float3(d_r, d_m, d_a) * step_size;
                 float3 view_transmittance = TransmittanceFromOpticalDepth(accumulated_od + od_step * 0.5, atmo);

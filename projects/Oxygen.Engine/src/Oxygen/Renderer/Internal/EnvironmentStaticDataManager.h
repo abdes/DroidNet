@@ -149,9 +149,9 @@ public:
   [[nodiscard]] auto GetSkyLightCubemapSlot() const noexcept
     -> ShaderVisibleIndex
   {
-    if (cpu_snapshot_.sky_light.enabled
+    if ((cpu_snapshot_.sky_light.enabled != 0U)
       && cpu_snapshot_.sky_light.cubemap_slot.IsValid()) {
-      return ShaderVisibleIndex { cpu_snapshot_.sky_light.cubemap_slot };
+      return ShaderVisibleIndex { cpu_snapshot_.sky_light.cubemap_slot.value };
     }
     return kInvalidShaderVisibleIndex;
   }
@@ -168,9 +168,9 @@ public:
   [[nodiscard]] auto GetSkySphereCubemapSlot() const noexcept
     -> ShaderVisibleIndex
   {
-    if (cpu_snapshot_.sky_sphere.enabled
+    if ((cpu_snapshot_.sky_sphere.enabled != 0U)
       && cpu_snapshot_.sky_sphere.cubemap_slot.IsValid()) {
-      return ShaderVisibleIndex { cpu_snapshot_.sky_sphere.cubemap_slot };
+      return ShaderVisibleIndex { cpu_snapshot_.sky_sphere.cubemap_slot.value };
     }
     return kInvalidShaderVisibleIndex;
   }
@@ -211,7 +211,7 @@ private:
   bool brdf_lut_transitioned_ { false };
   void* mapped_ptr_ { nullptr };
 
-  graphics::NativeView srv_view_ {};
+  graphics::NativeView srv_view_;
   ShaderVisibleIndex srv_index_ { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex brdf_lut_slot_ { kInvalidShaderVisibleIndex };
 

@@ -16,21 +16,25 @@
 #include "DemoShell/UI/OrbitCameraController.h"
 
 namespace oxygen::examples::ui {
+namespace {
+  constexpr float kPanSensitivityScale = 0.001F;
+  constexpr float kTurntablePitchLimitEpsilon = 0.01F;
+} // namespace
 
 void OrbitCameraController::Update(
   scene::SceneNode& node, time::CanonicalDuration /*delta_time*/)
 {
-  if (std::abs(zoom_delta_) > 1e-6f) {
+  if (std::abs(zoom_delta_) > math::Epsilon) {
     ApplyZoom(zoom_delta_);
     zoom_delta_ = 0.0F;
   }
 
-  if (glm::length(orbit_delta_) > 1e-6f) {
+  if (glm::length(orbit_delta_) > math::Epsilon) {
     ApplyOrbit(orbit_delta_);
     orbit_delta_ = { 0.0F, 0.0F };
   }
 
-  if (glm::length(pan_delta_) > 1e-6f) {
+  if (glm::length(pan_delta_) > math::Epsilon) {
     ApplyPan(pan_delta_);
     pan_delta_ = { 0.0F, 0.0F };
   }
@@ -50,11 +54,12 @@ void OrbitCameraController::Update(
 
     const glm::vec3 world_up
       = space::move::Up * (turntable_inverted_ ? -1.0F : 1.0F);
-    const glm::vec3 forward_ws_norm = glm::normalize(target_ - cam_pos);
+    // forward_ws is already normalized and avoids the 0-distance singularity.
+    const glm::vec3 forward_ws_norm = forward_ws;
 
     glm::vec3 right_ws = glm::cross(forward_ws_norm, world_up);
     const float right_len2 = glm::dot(right_ws, right_ws);
-    if (right_len2 <= 1e-8f) {
+    if (right_len2 <= (math::Epsilon * math::Epsilon)) {
       const float sign = turntable_inverted_ ? 1.0F : -1.0F;
       right_ws
         = glm::normalize(glm::vec3(sign * cos_yaw, -sign * sin_yaw, 0.0F));
@@ -84,7 +89,7 @@ void OrbitCameraController::SyncFromTransform(scene::SceneNode& node)
     = tf.GetLocalRotation().value_or(glm::quat(1.0F, 0.0F, 0.0F, 0.0F));
 
   const glm::vec3 forward = rot * space::look::Forward;
-  distance_ = glm::distance(pos, target_);
+  distance_ = std::max(min_distance_, glm::distance(pos, target_));
   orbit_rot_ = rot;
 
   if (mode_ == OrbitMode::kTurntable) {
@@ -96,8 +101,8 @@ void OrbitCameraController::SyncFromTransform(scene::SceneNode& node)
 
 void OrbitCameraController::ApplyZoom(float delta)
 {
-  distance_
-    = std::clamp(distance_ - delta * zoom_step_, min_distance_, max_distance_);
+  distance_ = std::clamp(
+    distance_ - (delta * zoom_step_), min_distance_, max_distance_);
 }
 
 void OrbitCameraController::ApplyOrbit(const glm::vec2& delta)
@@ -109,14 +114,15 @@ void OrbitCameraController::ApplyOrbit(const glm::vec2& delta)
     const glm::vec3 view_y_ws = glm::normalize(orbit_rot_ * space::look::Up);
     const glm::vec3 rot_vec_ws = view_x_ws * phi0 + view_y_ws * phi1;
     const float angle = glm::length(rot_vec_ws);
-    if (angle > 1e-8f) {
+    if (angle > math::Epsilon) {
       const glm::quat q_delta = glm::angleAxis(angle, rot_vec_ws / angle);
       orbit_rot_ = glm::normalize(q_delta * orbit_rot_);
     }
   } else {
     turntable_yaw_ += delta.x * sensitivity_;
     turntable_pitch_ += delta.y * sensitivity_;
-    constexpr float kLimit = std::numbers::pi_v<float> / 2.0F - 0.01F;
+    constexpr float kLimit
+      = (std::numbers::pi_v<float> / 2.0F) - kTurntablePitchLimitEpsilon;
     turntable_pitch_ = std::clamp(turntable_pitch_, -kLimit, kLimit);
   }
 }
@@ -125,7 +131,8 @@ void OrbitCameraController::ApplyPan(const glm::vec2& delta)
 {
   const glm::vec3 right = orbit_rot_ * space::look::Right;
   const glm::vec3 up = orbit_rot_ * space::look::Up;
-  target_ += (right * -delta.x + up * delta.y) * (distance_ * 0.001F);
+  target_
+    += (right * -delta.x + up * delta.y) * (distance_ * kPanSensitivityScale);
 }
 
 } // namespace oxygen::examples::ui

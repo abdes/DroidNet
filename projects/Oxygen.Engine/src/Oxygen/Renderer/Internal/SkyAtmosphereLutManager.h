@@ -365,7 +365,7 @@ private:
     float rayleigh_scale_height_m { 0.0F };
     float mie_scale_height_m { 0.0F };
     float mie_g { 0.0F };
-    float absorption_scale_height_m { 0.0F };
+
     float multi_scattering_factor { 0.0F };
     // RGB values are compared component-wise.
     float rayleigh_r { 0.0F };
@@ -380,6 +380,12 @@ private:
     float ground_albedo_r { 0.0F };
     float ground_albedo_g { 0.0F };
     float ground_albedo_b { 0.0F };
+
+    // New absorption parameters
+    float absorption_layer_width_m { 0.0F };
+    float absorption_term_below { 0.0F };
+    float absorption_term_above { 0.0F };
+
     // Slice config is tracked so changes trigger re-creation [P15].
     uint32_t sky_view_slices { 0 };
     uint32_t sky_view_alt_mapping_mode { 0 };
