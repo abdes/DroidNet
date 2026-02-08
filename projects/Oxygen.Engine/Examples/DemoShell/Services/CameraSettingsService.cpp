@@ -892,19 +892,6 @@ auto CameraSettingsService::PersistActiveCameraSettings() -> void
     current.exposure.Persist(*settings, prefix);
   }
 
-  LOG_F(INFO,
-    "CameraSettingsService: Persist camera '{}' mode={} pos=({}, {}, {}) "
-    "rot=({}, {}, {}, {}) orbit_target=({}, {}, {}) orbit_distance={} "
-    "orbit_mode={}",
-    current.camera_id,
-    CameraModeToString(static_cast<ui::CameraControlMode>(current.camera_mode)),
-    current.transform.position.x, current.transform.position.y,
-    current.transform.position.z, current.transform.rotation.x,
-    current.transform.rotation.y, current.transform.rotation.z,
-    current.transform.rotation.w, current.orbit_target.x,
-    current.orbit_target.y, current.orbit_target.z, current.orbit_distance,
-    OrbitModeToString(static_cast<ui::OrbitMode>(current.orbit_mode)));
-
   last_saved_state_ = current;
 }
 
@@ -1115,14 +1102,6 @@ auto CameraSettingsService::RestoreActiveCameraSettings() -> bool
 
     camera_rig_->SyncFromActiveCamera();
   }
-
-  LOG_F(INFO,
-    "CameraSettingsService: Restored camera '{}' mode={} pos=({}, {}, {}) "
-    "rot=({}, {}, {}, {}) orbit_target=({}, {}, {}) orbit_distance={} "
-    "orbit_mode={}",
-    camera_id, mode_label, pos.x, pos.y, pos.z, rot.x, rot.y, rot.z, rot.w,
-    orbit_target.x, orbit_target.y, orbit_target.z,
-    orbit_distance.value_or(0.0F), orbit_mode_label);
 
   last_saved_state_ = CaptureActiveCameraState();
   return restored_transform;
