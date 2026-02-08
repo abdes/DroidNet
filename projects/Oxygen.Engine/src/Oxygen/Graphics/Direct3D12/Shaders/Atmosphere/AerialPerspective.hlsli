@@ -142,28 +142,31 @@ AerialPerspectiveResult ComputeAerialPerspectiveLut(
         return result;
     }
 
-    // Effective path length with user scaling
+    // Effective path length with user scaling.
     float effective_distance = view_distance * distance_scale;
     float view_distance_km = effective_distance / 1000.0;
 
-    // Convert view distance to froxel slice coordinate
-    // Must match max_distance_km used in CameraVolumeLut_CS.hlsl
-    const float max_distance_km = 128.0;
-    float slice_t = view_distance_km / max_distance_km;
-
-    // Inverse of squared distribution used during LUT generation: w = sqrt(t)
-    float w = sqrt(saturate(slice_t));
-
-    // Constant for slice count used during LUT generation
+    // Camera volume froxel parameterization (UE tuned parameters).
+    // SliceCount = 32, SliceSizeKm = 4 → MaxDistanceKm = 128.
+    // Generation uses squared distribution and sampling uses:
+    //   w = sqrt(slice / SliceCount)
+    // where slice = depth_km / SliceSizeKm.
     const float AP_SLICE_COUNT = 32.0;
+    const float AP_KM_PER_SLICE = 4.0;
 
-    // Fade near camera to avoid quantization artifacts in the first few froxels
+    float slice = view_distance_km / AP_KM_PER_SLICE;
+    slice = clamp(slice, 0.0, AP_SLICE_COUNT);
+
+    // Fade near camera to avoid quantization artifacts in the first few froxels.
+    // This matches the UE reference behavior (weight is linear in slice).
     float weight = 1.0;
-    if (w < (0.5 / AP_SLICE_COUNT))
+    if (slice < 0.5)
     {
-        weight = saturate(w * AP_SLICE_COUNT * 2.0);
-        w = 0.5 / AP_SLICE_COUNT;
+        weight = saturate(slice * 2.0);
+        slice = 0.5;
     }
+
+    float w = sqrt(saturate(slice / AP_SLICE_COUNT));
 
     // Screen UV from world position
     float4 view_pos = mul(view_matrix, float4(world_pos, 1.0));
