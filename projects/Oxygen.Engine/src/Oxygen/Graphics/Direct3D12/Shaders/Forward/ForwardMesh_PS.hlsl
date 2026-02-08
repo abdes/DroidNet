@@ -80,13 +80,26 @@ float4 PS(VSOutput input) : SV_Target0 {
     const float NdotV = saturate(dot(N, V));
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), base_rgb, surf.metalness);
 
-    float3 direct = AccumulateDirectionalLights(N, V, NdotV, F0, base_rgb, surf.metalness, surf.roughness);
+    // Load environment data early for sun transmittance attenuation
+    EnvironmentStaticData env_data;
+    const bool has_env_data = LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data);
+
+    // Pass atmosphere params for sun transmittance (zero-initialized if no env data)
+    GpuSkyAtmosphereParams atmo;
+    if (has_env_data) {
+        atmo = env_data.atmosphere;
+    } else {
+        atmo = (GpuSkyAtmosphereParams)0;
+    }
+
+    float3 direct = AccumulateDirectionalLights(
+        input.world_pos, atmo,
+        N, V, NdotV, F0, base_rgb, surf.metalness, surf.roughness);
     direct += AccumulatePositionalLightsClustered(input.world_pos, input.position.xy, max(-mul(view_matrix, float4(input.world_pos, 1.0)).z, 0.0), N, V, NdotV, F0, base_rgb, surf.metalness, surf.roughness);
 
     float3 ibl_diffuse = 0.0f;
     float3 ibl_specular = 0.0f;
-    EnvironmentStaticData env_data;
-    if (LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data) && env_data.sky_light.enabled) {
+    if (has_env_data && env_data.sky_light.enabled) {
         uint slot = env_data.sky_light.cubemap_slot;
         if (slot == K_INVALID_BINDLESS_INDEX) slot = env_data.sky_sphere.cubemap_slot;
         if (slot != K_INVALID_BINDLESS_INDEX) {

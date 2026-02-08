@@ -114,6 +114,32 @@ float HorizonDistanceFromAltitude(float planet_radius, float altitude)
     return SafeSqrt(2.0 * planet_radius * altitude + altitude * altitude);
 }
 
+//! Checks if a directional light is below the geometric horizon.
+//!
+//! Used for planet shadow: when the sun/light is below the horizon from
+//! a surface point, direct illumination should be zero because the planet
+//! itself occludes the light source.
+//!
+//! @param world_pos       World-space position of the surface point.
+//! @param planet_center   World-space planet center.
+//! @param planet_radius   Planet radius in meters.
+//! @param light_dir       Light direction (toward light source, normalized).
+//! @return True if light is below horizon (occluded by planet).
+bool IsLightBelowHorizon(
+    float3 world_pos,
+    float3 planet_center,
+    float planet_radius,
+    float3 light_dir)
+{
+    float3 pos_planet = world_pos - planet_center;
+    float height = length(pos_planet);
+    float3 up = pos_planet / max(height, 1e-6);
+    float cos_light_zenith = dot(up, light_dir);
+    float altitude = height - planet_radius;
+    float cos_horizon = HorizonCosineFromAltitude(planet_radius, max(altitude, 0.0));
+    return cos_light_zenith < cos_horizon;
+}
+
 //! Selects the shorter of ground or atmosphere top intersection.
 //!
 //! Helper for determining ray length when raymarching through atmosphere.
