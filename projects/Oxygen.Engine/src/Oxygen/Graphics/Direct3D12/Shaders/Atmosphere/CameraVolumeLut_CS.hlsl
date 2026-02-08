@@ -25,7 +25,9 @@
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/SceneConstants.hlsli"
 #include "Atmosphere/AtmosphereMedium.hlsli"
+#include "Atmosphere/AtmospherePhase.hlsli"
 #include "Common/Math.hlsli"
+#include "Atmosphere/AtmosphereConstants.hlsli"
 #include "Common/Geometry.hlsli"
 #include "Common/Coordinates.hlsli"
 #include "Common/Lighting.hlsli"
@@ -64,8 +66,8 @@ struct CameraVolumeLutPassConstants
 #define THREAD_GROUP_SIZE_Z 1
 
 // Froxel constants (matches UE5)
-static const uint AP_SLICE_COUNT = 32;
-static const float AP_KM_PER_SLICE = 4.0;
+static const uint AP_SLICE_COUNT = kAerialPerspectiveSliceCount;
+static const float AP_KM_PER_SLICE = kAerialPerspectiveKmPerSlice;
 
 //! Converts froxel slice index to world-space depth in meters.
 //! Uses squared distribution for better near-camera detail.
@@ -90,7 +92,7 @@ float3 SampleTransmittanceLutOpticalDepth(
     float cos_horizon = HorizonCosineFromAltitude(atmo.planet_radius_m, altitude);
     if (cos_zenith < cos_horizon)
     {
-        return float3(1e6, 1e6, 1e6);
+        return float3(kInfiniteOpticalDepth, kInfiniteOpticalDepth, kInfiniteOpticalDepth);
     }
 
     float view_height = atmo.planet_radius_m + altitude;
@@ -109,30 +111,6 @@ float3 SampleTransmittanceLutOpticalDepth(
     v = clamp(v, 0.0, 1.0);
 
     return transmittance_lut.SampleLevel(linear_sampler, float2(u, v), 0).rgb;
-}
-
-//! Converts optical depth to transmittance.
-float3 TransmittanceFromOpticalDepth(float3 optical_depth, GpuSkyAtmosphereParams atmo)
-{
-    float3 beta_rayleigh = atmo.rayleigh_scattering_rgb;
-    float3 beta_mie_ext = atmo.mie_scattering_rgb + atmo.mie_absorption_rgb;
-    float3 beta_abs = atmo.absorption_rgb;
-    float3 tau = beta_rayleigh * optical_depth.x + beta_mie_ext * optical_depth.y + beta_abs * optical_depth.z;
-    return exp(-tau);
-}
-
-//! Rayleigh phase function.
-float RayleighPhase(float cos_theta)
-{
-    return (3.0 / (16.0 * PI)) * (1.0 + cos_theta * cos_theta);
-}
-
-//! Cornette-Shanks Mie phase function.
-float CornetteShanksMiePhaseFunction(float g, float cos_theta)
-{
-    float k = 3.0 / (8.0 * PI) * (1.0 - g * g) / (2.0 + g * g);
-    float denom = max(1.0 + g * g - 2.0 * g * cos_theta, 1e-5);
-    return k * (1.0 + cos_theta * cos_theta) / pow(denom, 1.5);
 }
 
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
@@ -209,7 +187,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
     float cos_theta = dot(view_dir_ws, sun_dir);
     float rayleigh_phase = RayleighPhase(cos_theta);
-    float mie_phase = CornetteShanksMiePhaseFunction(atmo.mie_g, cos_theta);
+    float mie_phase = CornetteShanksMiePhase(cos_theta, atmo.mie_g);
 
     float3 beta_rayleigh = atmo.rayleigh_scattering_rgb;
     float3 beta_mie_ext = atmo.mie_scattering_rgb + atmo.mie_absorption_rgb;
@@ -223,7 +201,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     for (uint i = 0; i < num_steps; ++i)
     {
         // UE tuned parameter: fixed 0.3 offset within each segment (SampleSegmentT).
-        float t = (float(i) + 0.3) * step_size;
+        float t = (float(i) + kSegmentSampleOffset) * step_size;
         float3 sample_pos = origin + view_dir_ws * t;
         float altitude = length(sample_pos) - atmo.planet_radius_m;
         altitude = max(altitude, 0.0);
@@ -264,17 +242,17 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
         // Frostbite analytic integration
         float3 Sint;
-        if (all(extinction < 1e-6))
+        if (all(extinction < kAtmosphereEpsilon))
         {
             Sint = S * step_size;
         }
         else
         {
-            Sint = (S - S * sample_transmittance) / max(extinction, 1e-6);
+            Sint = (S - S * sample_transmittance) / max(extinction, kAtmosphereEpsilon);
         }
 
         inscatter += throughput * Sint;
-        inscatter = min(inscatter, float3(65000.0, 65000.0, 65000.0)); // FP16 safety
+        inscatter = min(inscatter, float3(kFP16SafeMax, kFP16SafeMax, kFP16SafeMax)); // FP16 safety
         throughput *= sample_transmittance;
     }
 

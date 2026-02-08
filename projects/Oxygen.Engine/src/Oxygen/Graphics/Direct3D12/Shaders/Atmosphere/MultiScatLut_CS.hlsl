@@ -22,7 +22,9 @@
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/SceneConstants.hlsli"
 #include "Atmosphere/AtmosphereMedium.hlsli"
+#include "Atmosphere/AtmospherePhase.hlsli"
 #include "Common/Math.hlsli"
+#include "Atmosphere/AtmosphereConstants.hlsli"
 #include "Common/Geometry.hlsli"
 #include "Common/Coordinates.hlsli"
 
@@ -49,29 +51,6 @@ struct MultiScatLutPassConstants
 
 
 #define THREAD_GROUP_SIZE 8
-
-// Re-use logic from common headers - these will move to AtmosphereMath.hlsli
-
-float RayleighPhase(float cos_theta)
-{
-    return (3.0 / (16.0 * PI)) * (1.0 + cos_theta * cos_theta);
-}
-
-float HenyeyGreensteinPhase(float cos_theta, float g)
-{
-    float g2 = g * g;
-    float denom = 1.0 + g2 - 2.0 * g * cos_theta;
-    return (1.0 / FOUR_PI) * (1.0 - g2) / (denom * sqrt(denom));
-}
-
-float3 TransmittanceFromOpticalDepth(float3 optical_depth, GpuSkyAtmosphereParams atmo)
-{
-    float3 beta_rayleigh = atmo.rayleigh_scattering_rgb;
-    float3 beta_mie_ext = atmo.mie_scattering_rgb + atmo.mie_absorption_rgb;
-    float3 beta_abs = atmo.absorption_rgb;
-    float3 tau = beta_rayleigh * optical_depth.x + beta_mie_ext * optical_depth.y + beta_abs * optical_depth.z;
-    return exp(-tau);
-}
 
 float3 SampleTransmittanceLut(
     float altitude,
@@ -196,8 +175,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             }
 
             // Average scattering over the sphere (1/4PI)
-            multi_scat_sum += inscatter * (1.0 / (4.0 * PI));
-            f_ms_sum += (1.0 - TransmittanceFromOpticalDepth(accumulated_od, atmo)) * (1.0 / (4.0 * PI));
+            multi_scat_sum += inscatter * INV_FOUR_PI;
+            f_ms_sum += (1.0 - TransmittanceFromOpticalDepth(accumulated_od, atmo)) * INV_FOUR_PI;
         }
     }
 

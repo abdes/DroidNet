@@ -25,7 +25,10 @@
 #include "Renderer/EnvironmentDynamicData.hlsli"
 #include "Renderer/SceneConstants.hlsli"
 #include "Atmosphere/AtmosphereSampling.hlsli"
+#include "Atmosphere/AtmospherePhase.hlsli"
 #include "Common/Math.hlsli"
+#include "Atmosphere/AtmosphereConstants.hlsli"
+
 #include "Common/Geometry.hlsli"
 #include "Common/Lighting.hlsli"
 
@@ -42,16 +45,7 @@ struct AerialPerspectiveResult
     float3 transmittance; //!< RGB transmittance through atmosphere [0, 1].
 };
 
-//! Henyey-Greenstein phase function.
-//!
-//! Returns a normalized phase value in sr^-1.
-float HenyeyGreensteinPhase(float cos_theta, float g)
-{
-    g = clamp(g, -0.99, 0.99);
-    const float g2 = g * g;
-    const float denom = max(1.0 + g2 - 2.0 * g * cos_theta, 1e-5);
-    return (1.0 - g2) * INV_FOUR_PI / pow(denom, 1.5);
-}
+
 
 //! Samples the camera-volume LUT at the fragment's screen UV and depth slice.
 //!
@@ -77,8 +71,8 @@ float4 SampleCameraVolumeLut(
     float view_distance_km = effective_distance / 1000.0;
 
     // Camera volume froxel parameterization (UE tuned parameters).
-    const float AP_SLICE_COUNT = 32.0;
-    const float AP_KM_PER_SLICE = 4.0;
+    const float AP_SLICE_COUNT = (float)kAerialPerspectiveSliceCount;
+    const float AP_KM_PER_SLICE = kAerialPerspectiveKmPerSlice;
 
     float slice = view_distance_km / AP_KM_PER_SLICE;
     slice = clamp(slice, 0.0, AP_SLICE_COUNT);
@@ -201,8 +195,8 @@ AerialPerspectiveResult ComputeAerialPerspectiveLut(
     // Fade near camera to avoid quantization artifacts in the first few froxels.
     // This matches the UE reference behavior (weight is linear in slice).
     // Note: the LUT sampler clamps slice >= 0.5, so we mirror the weight logic here.
-    const float AP_SLICE_COUNT = 32.0;
-    const float AP_KM_PER_SLICE = 4.0;
+    const float AP_SLICE_COUNT = (float)kAerialPerspectiveSliceCount;
+    const float AP_KM_PER_SLICE = kAerialPerspectiveKmPerSlice;
     float distance_scale = max(EnvironmentDynamicData.aerial_perspective_distance_scale, 0.0);
     float view_distance_km = (view_distance * distance_scale) / 1000.0;
     float slice = clamp(view_distance_km / AP_KM_PER_SLICE, 0.0, AP_SLICE_COUNT);
