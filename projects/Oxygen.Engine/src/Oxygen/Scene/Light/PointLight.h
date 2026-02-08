@@ -110,13 +110,26 @@ protected:
 
 private:
   CommonLightProperties common_ {};
+
+  //! Maximum reach of the light in world units.
+  //! Scale: linear (meters).
+  //! Variation: Small changes affect the falloff volume; determines shader
+  //! culling.
   float range_ = 10.0F;
+
   AttenuationModel attenuation_model_ = AttenuationModel::kInverseSquare;
   float decay_exponent_ = 2.0F;
+
+  //! Radius of the emission sphere in world units.
+  //! Scale: linear (meters).
+  //! Variation: Small changes affect the softness of specular highlights and
+  //! contact shadows.
   float source_radius_ = 0.0F;
 
-  //! Luminous flux in lumens.
-  //! Typical values: 800 lm (~60W incandescent), 1600 lm (~100W).
+  //! Total light power in lumens (lm).
+  //! Scale: linear. Typical: 800 (60W bulb), 1600 (100W bulb).
+  //! Variation: Large strides (e.g. 500+) are needed for noticeable brightness
+  //! changes.
   float luminous_flux_lm_ = 800.0F;
 
   detail::TransformComponent* transform_ { nullptr };

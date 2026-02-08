@@ -227,13 +227,41 @@ private:
 
   ExposureMode exposure_mode_ = ExposureMode::kAuto;
   bool exposure_enabled_ = true;
+
+  //! Exposure compensation in stops (EV).
+  //! Scale: logarithmic (base 2).
+  //! Variation: +/- 1.0 reflects a doubling/halving of final image brightness.
   float exposure_compensation_ev_ = 0.0F;
+
+  //! Display key scale applied after EV100-to-linear calibration.
+  //! Scale: linear. Maps mid-gray (18%) to a display level.
+  //! Variation: Small changes (e.g. 0.1) affect overall image brightness
+  //! without changing lighting.
   float exposure_key_ = 10.0F;
+
+  //! Manual exposure value at ISO 100.
+  //! Scale: EV100 (log base 2). Typical: 13 (daylight), 0 (indoor).
+  //! Variation: +/- 1.0 reflects a doubling/halving of sensor sensitivity.
   float manual_exposure_ev100_ = 9.7F;
 
+  //! Minimum allowable exposure value for auto-exposure.
+  //! Scale: EV100.
+  //! Variation: Changes define the lower limit of dark environments.
   float auto_exposure_min_ev_ = -6.0F;
+
+  //! Maximum allowable exposure value for auto-exposure.
+  //! Scale: EV100.
+  //! Variation: Changes define the upper limit for bright environments.
   float auto_exposure_max_ev_ = 16.0F;
+
+  //! Speed of exposure increase (getting darker/entering light).
+  //! Scale: EV per second.
+  //! Variation: Small changes affect temporal stability vs responsiveness.
   float auto_exposure_speed_up_ = 3.0F;
+
+  //! Speed of exposure decrease (getting brighter/leaving light).
+  //! Scale: EV per second.
+  //! Variation: Small changes affect temporal stability vs responsiveness.
   float auto_exposure_speed_down_ = 1.0F;
 
   float bloom_intensity_ = 0.0F;

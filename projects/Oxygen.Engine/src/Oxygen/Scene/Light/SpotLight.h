@@ -130,15 +130,36 @@ protected:
 
 private:
   CommonLightProperties common_ {};
+
+  //! Maximum reach of the light in world units.
+  //! Scale: linear (meters).
+  //! Variation: Small changes affect the falloff volume; determines shader
+  //! culling.
   float range_ = 10.0F;
+
   AttenuationModel attenuation_model_ = AttenuationModel::kInverseSquare;
   float decay_exponent_ = 2.0F;
+
+  //! Angle of the inner cone where attenuation starts.
+  //! Scale: radians. Must be <= outer angle.
+  //! Variation: Small changes affect the sharpness of the light cone's edge.
   float inner_cone_angle_radians_ = 0.4F;
+
+  //! Angle of the outer cone where light reaches zero.
+  //! Scale: radians. Must be >= inner angle.
+  //! Variation: Small changes affect the overall spread of the spot.
   float outer_cone_angle_radians_ = 0.6F;
+
+  //! Radius of the emission disk in world units.
+  //! Scale: linear (meters).
+  //! Variation: Small changes affect the softness of specular highlights and
+  //! contact shadows.
   float source_radius_ = 0.0F;
 
-  //! Luminous flux in lumens.
-  //! Typical values: 800 lm (~60W incandescent), 1600 lm (~100W).
+  //! Total light power in lumens (lm).
+  //! Scale: linear. Typical: 800 (60W bulb), 1600 (100W bulb).
+  //! Variation: Large strides (e.g. 500+) are needed for noticeable brightness
+  //! changes.
   float luminous_flux_lm_ = 800.0F;
 
   detail::TransformComponent* transform_ { nullptr };
