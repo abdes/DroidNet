@@ -124,10 +124,17 @@ protected:
 
 private:
   CommonLightProperties common_ {};
+
+  //! Angular radius of the light source in radians.
+  //! Scale: 0 to pi/2 (radians).
+  //! Variation: Small changes (e.g. 0.01) affect shadow softness and specular
+  //! highlights.
   float angular_size_radians_ = 0.0F;
 
-  //! Intensity in lux (lm/m²).
-  //! Typical values: 100,000 lux (bright sun), 10,000 lux (overcast).
+  //! Illuminance in lux (lm/m^2).
+  //! Scale: linear (base 10). Typical: 100,000 (sun), 1,000 (office).
+  //! Variation: Large strides (e.g. 10x) are needed for significant shifts in
+  //! mood or time-of-day.
   float intensity_lux_ = 100000.0F;
 
   bool environment_contribution_ = false;

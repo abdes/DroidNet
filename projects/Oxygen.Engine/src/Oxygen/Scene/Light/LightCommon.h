@@ -61,6 +61,10 @@ struct CommonLightProperties {
   LightMobility mobility = LightMobility::kRealtime;
   bool casts_shadows = false;
   ShadowSettings shadow {};
+
+  //! Exposure compensation in stops (EV).
+  //! Scale: logarithmic (base 2).
+  //! Variation: +/- 1.0 reflects a doubling/halving of perceived intensity.
   float exposure_compensation_ev = 0.0F;
 };
 
