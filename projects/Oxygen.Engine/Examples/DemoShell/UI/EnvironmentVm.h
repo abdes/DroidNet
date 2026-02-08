@@ -73,6 +73,8 @@ public:
   auto SetMieAnisotropy(float value) -> void;
   [[nodiscard]] auto GetMieAbsorptionScale() const -> float;
   auto SetMieAbsorptionScale(float value) -> void;
+  [[nodiscard]] auto GetAbsorptionRgb() const -> glm::vec3;
+  auto SetAbsorptionRgb(const glm::vec3& value) -> void;
   [[nodiscard]] auto GetMultiScattering() const -> float;
   auto SetMultiScattering(float value) -> void;
   [[nodiscard]] auto GetSunDiskEnabled() const -> bool;
@@ -81,6 +83,13 @@ public:
   auto SetAerialPerspectiveScale(float value) -> void;
   [[nodiscard]] auto GetAerialScatteringStrength() const -> float;
   auto SetAerialScatteringStrength(float value) -> void;
+
+  [[nodiscard]] auto GetAbsorptionLayerWidthKm() const -> float;
+  auto SetAbsorptionLayerWidthKm(float value) -> void;
+  [[nodiscard]] auto GetAbsorptionTermBelow() const -> float;
+  auto SetAbsorptionTermBelow(float value) -> void;
+  [[nodiscard]] auto GetAbsorptionTermAbove() const -> float;
+  auto SetAbsorptionTermAbove(float value) -> void;
 
   // Sky-View LUT slicing
   [[nodiscard]] auto GetSkyViewLutSlices() const -> int;

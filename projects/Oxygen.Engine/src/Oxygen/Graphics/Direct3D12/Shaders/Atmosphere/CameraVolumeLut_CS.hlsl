@@ -24,6 +24,7 @@
 #include "Renderer/EnvironmentDynamicData.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/SceneConstants.hlsli"
+#include "Atmosphere/AtmosphereMedium.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Geometry.hlsli"
 #include "Common/Coordinates.hlsli"
@@ -76,19 +77,6 @@ float AerialPerspectiveSliceToDepth(float slice, float max_distance_km)
 }
 
 // Atmosphere density functions (shared with other shaders)
-float GetAtmosphereDensity(float altitude, float scale_height)
-{
-    return exp(-altitude / scale_height);
-}
-
-float GetAbsorptionDensity(float altitude, float absorption_center_m)
-{
-    altitude = max(altitude, 0.0);
-    float center = max(1.0, absorption_center_m);
-    float width = max(1000.0, center * 0.6);
-    float t = 1.0 - abs(altitude - center) / width;
-    return saturate(t);
-}
 
 //! Samples the transmittance LUT for optical depth.
 float3 SampleTransmittanceLutOpticalDepth(
@@ -242,9 +230,9 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
         if (altitude > atmo.atmosphere_height_m) continue;
 
-        float d_r = GetAtmosphereDensity(altitude, atmo.rayleigh_scale_height_m);
-        float d_m = GetAtmosphereDensity(altitude, atmo.mie_scale_height_m);
-        float d_a = GetAbsorptionDensity(altitude, atmo.absorption_scale_height_m);
+        float d_r = AtmosphereExponentialDensity(altitude, atmo.rayleigh_scale_height_m);
+        float d_m = AtmosphereExponentialDensity(altitude, atmo.mie_scale_height_m);
+        float d_a = OzoneAbsorptionDensity(altitude, atmo.absorption_layer_width_m, atmo.absorption_term_below, atmo.absorption_term_above);
 
         float3 extinction = beta_rayleigh * d_r + beta_mie_ext * d_m + beta_abs * d_a;
         float3 sample_optical_depth = extinction * step_size;

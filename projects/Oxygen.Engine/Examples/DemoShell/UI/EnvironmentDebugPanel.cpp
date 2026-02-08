@@ -21,6 +21,8 @@
 #include "DemoShell/UI/EnvironmentDebugPanel.h"
 #include "DemoShell/UI/EnvironmentVm.h"
 
+// NOLINTBEGIN(cppcoreguidelines-pro-type-vararg)
+
 namespace oxygen::examples::ui {
 
 namespace {
@@ -37,8 +39,11 @@ namespace {
     // Azimuth: angle from +X toward +Y (0° = +X, 90° = +Y)
     // Elevation: angle from horizontal plane toward +Z
     const float cos_el = std::cos(el_rad);
-    return glm::vec3(
-      cos_el * std::cos(az_rad), cos_el * std::sin(az_rad), std::sin(el_rad));
+    return {
+      cos_el * std::cos(az_rad),
+      cos_el * std::sin(az_rad),
+      std::sin(el_rad),
+    };
   }
 
   auto KelvinToLinearRgb(float kelvin) -> glm::vec3
@@ -58,7 +63,8 @@ namespace {
         blue = 0.0F;
       } else {
         blue = std::clamp(
-          0.54320678911F * std::log(temp - 10.0F) - 1.19625408914F, 0.0F, 1.0F);
+          (0.54320678911F * std::log(temp - 10.0F)) - 1.19625408914F, 0.0F,
+          1.0F);
       }
     } else {
       red = std::clamp(
@@ -557,10 +563,76 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
       "0 = pure scattering (bright halos), 1 = Earth (SSA ~0.9),\n"
       "higher = darker/hazier atmosphere.");
   }
+
   float multi_scattering = environment_vm_->GetMultiScattering();
   if (ImGui::SliderFloat(
-        "Multi-Scattering", &multi_scattering, 0.0F, 1.0F, "%.2F")) {
+        "Multi-Scattering", &multi_scattering, 0.0F, 5.0F, "%.2F")) {
     environment_vm_->SetMultiScattering(multi_scattering);
+  }
+
+  ImGui::Separator();
+
+  // Ozone Profile
+  ImGui::Text("Ozone Profile:");
+  float absorption_layer_width_km
+    = environment_vm_->GetAbsorptionLayerWidthKm();
+  if (ImGui::DragFloat("Layer Width (km)", &absorption_layer_width_km, 1.0F,
+        1.0F, 100.0F, "%.1F")) {
+    environment_vm_->SetAbsorptionLayerWidthKm(absorption_layer_width_km);
+  }
+
+  float term_below = environment_vm_->GetAbsorptionTermBelow();
+  if (ImGui::SliderFloat("Term Below", &term_below, 0.0F, 1.0F, "%.2F")) {
+    environment_vm_->SetAbsorptionTermBelow(term_below);
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+    ImGui::SetTooltip("Linear increase slope below layer width (0 to 1).");
+  }
+
+  float term_above = environment_vm_->GetAbsorptionTermAbove();
+  if (ImGui::SliderFloat("Term Above", &term_above, -1.0F, 1.0F, "%.2F")) {
+    environment_vm_->SetAbsorptionTermAbove(term_above);
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+    ImGui::SetTooltip("Linear decrease slope above layer width (-1 to 1).\n"
+                      "Should typically be negative to decrease density.");
+  }
+
+  // Ozone Absorption Color (scaled for usability)
+  // Ozone absorption is typically ~1e-6. We scale by 1e6 so user sees "0.65"
+  // instead of "0.00000065".
+  constexpr float kOzoneScale = 1.0e6F;
+  glm::vec3 absorption_rgb = environment_vm_->GetAbsorptionRgb() * kOzoneScale;
+  float absorption_rgb_arr[3]
+    = { absorption_rgb.r, absorption_rgb.g, absorption_rgb.b };
+
+  // Use DragFloat3 or ColorEdit3. ColorEdit3 is good for picking color ratios,
+  // but if we want to visualize "intensity" maybe DragFloat3 is better?
+  // Let's stick to ColorEdit3 but with the scaled validation.
+  // Actually, ColorEdit3 clamps 0-1 for the picker visual, which is fine if we
+  // map 0..1 to 0..1e-6 range? No, if the values are 0.65 (after scaling), they
+  // fit nicely in 0..1 ColorEdit. So scaling by 1e6 makes it user-friendly
+  // color picker compatible!
+
+  if (ImGui::DragFloat3("Ozone Coeffs (x1e-6)", absorption_rgb_arr, 0.01F, 0.0F,
+        10.0F, "%.3f")) {
+    environment_vm_->SetAbsorptionRgb(
+      glm::vec3(
+        absorption_rgb_arr[0], absorption_rgb_arr[1], absorption_rgb_arr[2])
+      / kOzoneScale);
+  }
+  ImGui::SameLine();
+  if (ImGui::ColorEdit3("##OzoneColorPreview", absorption_rgb_arr,
+        ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_HDR)) {
+    environment_vm_->SetAbsorptionRgb(
+      glm::vec3(
+        absorption_rgb_arr[0], absorption_rgb_arr[1], absorption_rgb_arr[2])
+      / kOzoneScale);
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+    ImGui::SetTooltip(
+      "Absorption coefficient in inverse micrometers (1e-6 m^-1).\n"
+      "Default Earth Ozone ~ (0.65, 1.88, 0.085).");
   }
 
   ImGui::Separator();
@@ -938,3 +1010,5 @@ void EnvironmentDebugPanel::RequestResync()
 }
 
 } // namespace oxygen::examples::ui
+
+// NOLINTEND(cppcoreguidelines-pro-type-vararg)

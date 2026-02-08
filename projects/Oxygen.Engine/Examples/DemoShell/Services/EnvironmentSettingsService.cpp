@@ -42,6 +42,7 @@ namespace {
   constexpr float kMetersToKm = 0.001F;
   constexpr float kKmToMeters = 1000.0F;
 
+  // NOLINTNEXTLINE(performance-enum-size) - we need it as a uint32_t
   enum class AtmosphereDebugFlags : uint32_t {
     kNone = 0x0,
     kUseLut = 0x1,
@@ -133,7 +134,9 @@ namespace {
     target.SetMieAnisotropy(source.mie_g);
     target.SetAbsorptionRgb(Vec3 { source.absorption_rgb[0],
       source.absorption_rgb[1], source.absorption_rgb[2] });
-    target.SetAbsorptionScaleHeightMeters(source.absorption_scale_height_m);
+    target.SetAbsorptionLayerWidthMeters(source.absorption_scale_height_m);
+    // New parameters not yet in PakFormat, use defaults or derived values if
+    // needed. For now, we leave them as component defaults.
     target.SetMultiScatteringFactor(source.multi_scattering_factor);
     target.SetSunDiskEnabled(source.sun_disk_enabled != 0U);
     target.SetAerialPerspectiveDistanceScale(
@@ -250,6 +253,13 @@ namespace {
     = "env.atmo.aerial_perspective_scale";
   constexpr std::string_view kAerialScatteringStrengthKey
     = "env.atmo.aerial_scattering_strength";
+  constexpr std::string_view kAbsorptionRgbKey = "env.atmo.absorption_rgb";
+  constexpr std::string_view kAbsorptionLayerWidthKey
+    = "env.atmo.absorption_layer_width_km";
+  constexpr std::string_view kAbsorptionTermBelowKey
+    = "env.atmo.absorption_term_below";
+  constexpr std::string_view kAbsorptionTermAboveKey
+    = "env.atmo.absorption_term_above";
   constexpr std::string_view kSkyViewLutSlicesKey
     = "env.atmo.sky_view_lut_slices";
   constexpr std::string_view kSkyViewAltMappingModeKey
@@ -605,6 +615,10 @@ auto EnvironmentSettingsService::SetMieAbsorptionScale(float value) -> void
     return;
   }
   mie_absorption_scale_ = value;
+
+  constexpr float kBaseAbsorption = 2.33e-6F;
+  mie_absorption_rgb_ = glm::vec3(mie_absorption_scale_ * kBaseAbsorption);
+
   MarkDirty();
 }
 
@@ -662,6 +676,63 @@ auto EnvironmentSettingsService::SetAerialScatteringStrength(float value)
     return;
   }
   aerial_scattering_strength_ = value;
+  MarkDirty();
+}
+
+auto EnvironmentSettingsService::GetAbsorptionRgb() const -> glm::vec3
+{
+  return absorption_rgb_;
+}
+
+auto EnvironmentSettingsService::SetAbsorptionRgb(const glm::vec3& value)
+  -> void
+{
+  if (absorption_rgb_ == value) {
+    return;
+  }
+  absorption_rgb_ = value;
+  MarkDirty();
+}
+
+auto EnvironmentSettingsService::GetAbsorptionLayerWidthKm() const -> float
+{
+  return absorption_layer_width_km_;
+}
+
+auto EnvironmentSettingsService::SetAbsorptionLayerWidthKm(float value) -> void
+{
+  if (absorption_layer_width_km_ == value) {
+    return;
+  }
+  absorption_layer_width_km_ = value;
+  MarkDirty();
+}
+
+auto EnvironmentSettingsService::GetAbsorptionTermBelow() const -> float
+{
+  return absorption_term_below_;
+}
+
+auto EnvironmentSettingsService::SetAbsorptionTermBelow(float value) -> void
+{
+  if (absorption_term_below_ == value) {
+    return;
+  }
+  absorption_term_below_ = value;
+  MarkDirty();
+}
+
+auto EnvironmentSettingsService::GetAbsorptionTermAbove() const -> float
+{
+  return absorption_term_above_;
+}
+
+auto EnvironmentSettingsService::SetAbsorptionTermAbove(float value) -> void
+{
+  if (absorption_term_above_ == value) {
+    return;
+  }
+  absorption_term_above_ = value;
   MarkDirty();
 }
 
@@ -925,7 +996,7 @@ auto EnvironmentSettingsService::LoadSkybox(std::string_view path,
       .diffuse_intensity = sky_light_diffuse_,
       .specular_intensity = sky_light_specular_,
       .tint_rgb = sky_light_tint_ },
-    [this](SkyboxService::LoadResult result) {
+    [this](const SkyboxService::LoadResult& result) {
       skybox_status_message_ = result.status_message;
       skybox_last_face_size_ = result.face_size;
       skybox_last_resource_key_ = result.resource_key;
@@ -1485,13 +1556,17 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     atmo->SetGroundAlbedoRgb(ground_albedo_);
     atmo->SetRayleighScaleHeightMeters(rayleigh_scale_height_km_ * kKmToMeters);
     atmo->SetMieScaleHeightMeters(mie_scale_height_km_ * kKmToMeters);
+    atmo->SetMieScaleHeightMeters(mie_scale_height_km_ * kKmToMeters);
     atmo->SetMieAnisotropy(mie_anisotropy_);
-    // Apply mie absorption from scale: absorption = scale * 2.33e-6 (Earth
-    // default).
-    constexpr float kBaseAbsorption = 2.33e-6F;
-    const float scaled_absorption = mie_absorption_scale_ * kBaseAbsorption;
-    atmo->SetMieAbsorptionRgb(
-      glm::vec3(scaled_absorption, scaled_absorption, scaled_absorption));
+    atmo->SetMieAbsorptionRgb(mie_absorption_rgb_);
+    // We now control absorption explicitly via the new parameters.
+    atmo->SetAbsorptionRgb(absorption_rgb_);
+
+    atmo->SetAbsorptionLayerWidthMeters(
+      absorption_layer_width_km_ * kKmToMeters);
+    atmo->SetAbsorptionTermBelow(absorption_term_below_);
+    atmo->SetAbsorptionTermAbove(absorption_term_above_);
+
     atmo->SetMultiScatteringFactor(multi_scattering_);
     atmo->SetSunDiskEnabled(sun_disk_enabled_);
     atmo->SetAerialPerspectiveDistanceScale(aerial_perspective_scale_);
@@ -1621,6 +1696,13 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     sun_disk_enabled_ = atmo->GetSunDiskEnabled();
     aerial_perspective_scale_ = atmo->GetAerialPerspectiveDistanceScale();
     aerial_scattering_strength_ = atmo->GetAerialScatteringStrength();
+
+    // Sync new parameters
+    absorption_layer_width_km_
+      = atmo->GetAbsorptionLayerWidthMeters() * kMetersToKm;
+    absorption_term_below_ = atmo->GetAbsorptionTermBelow();
+    absorption_term_above_ = atmo->GetAbsorptionTermAbove();
+    absorption_rgb_ = atmo->GetAbsorptionRgb();
   }
 
   if (auto fog = env->TryGetSystem<scene::environment::Fog>()) {
@@ -1806,6 +1888,13 @@ auto EnvironmentSettingsService::LoadSettings() -> void
     |= load_float(kAerialPerspectiveScaleKey, aerial_perspective_scale_);
   any_loaded
     |= load_float(kAerialScatteringStrengthKey, aerial_scattering_strength_);
+  // Load new parameters
+  any_loaded
+    |= load_float(kAbsorptionLayerWidthKey, absorption_layer_width_km_);
+  any_loaded |= load_float(kAbsorptionTermBelowKey, absorption_term_below_);
+  any_loaded |= load_float(kAbsorptionTermAboveKey, absorption_term_above_);
+  any_loaded |= load_vec3(kAbsorptionRgbKey, absorption_rgb_);
+
   any_loaded |= load_int(kSkyViewLutSlicesKey, sky_view_lut_slices_);
   any_loaded |= load_int(kSkyViewAltMappingModeKey, sky_view_alt_mapping_mode_);
 
@@ -1919,7 +2008,14 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kMultiScatteringKey, multi_scattering_);
   save_bool(kSunDiskEnabledKey, sun_disk_enabled_);
   save_float(kAerialPerspectiveScaleKey, aerial_perspective_scale_);
+  save_float(kAerialPerspectiveScaleKey, aerial_perspective_scale_);
   save_float(kAerialScatteringStrengthKey, aerial_scattering_strength_);
+
+  save_float(kAbsorptionLayerWidthKey, absorption_layer_width_km_);
+  save_float(kAbsorptionTermBelowKey, absorption_term_below_);
+  save_float(kAbsorptionTermAboveKey, absorption_term_above_);
+  save_vec3(kAbsorptionRgbKey, absorption_rgb_);
+
   save_int(kSkyViewLutSlicesKey, sky_view_lut_slices_);
   save_int(kSkyViewAltMappingModeKey, sky_view_alt_mapping_mode_);
 

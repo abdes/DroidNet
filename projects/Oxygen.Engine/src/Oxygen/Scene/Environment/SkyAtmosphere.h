@@ -153,16 +153,40 @@ public:
     return absorption_rgb_;
   }
 
-  //! Sets absorption scale height (meters).
-  auto SetAbsorptionScaleHeightMeters(const float meters) noexcept -> void
+  //! Sets absorption layer width (meters).
+  auto SetAbsorptionLayerWidthMeters(const float meters) noexcept -> void
   {
-    absorption_scale_height_m_ = meters;
+    absorption_layer_width_m_ = meters;
   }
 
-  //! Gets absorption scale height (meters).
-  [[nodiscard]] auto GetAbsorptionScaleHeightMeters() const noexcept -> float
+  //! Gets absorption layer width (meters).
+  [[nodiscard]] auto GetAbsorptionLayerWidthMeters() const noexcept -> float
   {
-    return absorption_scale_height_m_;
+    return absorption_layer_width_m_;
+  }
+
+  //! Sets absorption linear term below the layer width.
+  auto SetAbsorptionTermBelow(const float term) noexcept -> void
+  {
+    absorption_term_below_ = term;
+  }
+
+  //! Gets absorption linear term below the layer width.
+  [[nodiscard]] auto GetAbsorptionTermBelow() const noexcept -> float
+  {
+    return absorption_term_below_;
+  }
+
+  //! Sets absorption linear term above the layer width.
+  auto SetAbsorptionTermAbove(const float term) noexcept -> void
+  {
+    absorption_term_above_ = term;
+  }
+
+  //! Gets absorption linear term above the layer width.
+  [[nodiscard]] auto GetAbsorptionTermAbove() const noexcept -> float
+  {
+    return absorption_term_above_;
   }
 
   //! Sets multi-scattering factor (unitless, typically 0..1).
@@ -234,9 +258,10 @@ private:
   float mie_scale_height_m_ = 1200.0F;
   float mie_g_ = 0.8F;
 
-  // Ozone-like absorption baseline (1 / meter).
   Vec3 absorption_rgb_ { 0.65e-6F, 1.881e-6F, 0.085e-6F };
-  float absorption_scale_height_m_ = 25000.0F;
+  float absorption_layer_width_m_ = 25000.0F;
+  float absorption_term_below_ = 1.0F; // Linear ramp 0->1
+  float absorption_term_above_ = -1.0F; // Linear ramp 1->0
 
   float multi_scattering_factor_ = 1.0F;
 

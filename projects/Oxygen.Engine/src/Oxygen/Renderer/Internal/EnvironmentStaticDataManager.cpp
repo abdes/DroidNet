@@ -149,7 +149,7 @@ EnvironmentStaticDataManager::~EnvironmentStaticDataManager()
   srv_view_ = {};
   srv_index_ = kInvalidShaderVisibleIndex;
 
-  if (mapped_ptr_) {
+  if (mapped_ptr_ != nullptr) {
     buffer_->UnMap();
     mapped_ptr_ = nullptr;
   }
@@ -259,7 +259,7 @@ auto EnvironmentStaticDataManager::PopulateFog(
 {
   if (const auto fog = env->TryGetSystem<scene::environment::Fog>();
     fog && fog->IsEnabled()) {
-    next.fog.enabled = 1u;
+    next.fog.enabled = 1U;
     next.fog.model = ToGpuFogModel(fog->GetModel());
     next.fog.density = fog->GetDensity();
     next.fog.height_falloff = fog->GetHeightFalloff();
@@ -278,7 +278,7 @@ auto EnvironmentStaticDataManager::PopulateAtmosphere(
 {
   if (const auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>();
     atmo && atmo->IsEnabled()) {
-    next.atmosphere.enabled = 1u;
+    next.atmosphere.enabled = 1U;
     next.atmosphere.planet_radius_m = atmo->GetPlanetRadiusMeters();
     next.atmosphere.atmosphere_height_m = atmo->GetAtmosphereHeightMeters();
     next.atmosphere.ground_albedo_rgb = atmo->GetGroundAlbedoRgb();
@@ -290,8 +290,10 @@ auto EnvironmentStaticDataManager::PopulateAtmosphere(
     next.atmosphere.mie_scale_height_m = atmo->GetMieScaleHeightMeters();
     next.atmosphere.mie_g = atmo->GetMieAnisotropy();
     next.atmosphere.absorption_rgb = atmo->GetAbsorptionRgb();
-    next.atmosphere.absorption_scale_height_m
-      = atmo->GetAbsorptionScaleHeightMeters();
+    next.atmosphere.absorption_layer_width_m
+      = atmo->GetAbsorptionLayerWidthMeters();
+    next.atmosphere.absorption_term_below = atmo->GetAbsorptionTermBelow();
+    next.atmosphere.absorption_term_above = atmo->GetAbsorptionTermAbove();
     next.atmosphere.multi_scattering_factor = atmo->GetMultiScatteringFactor();
 
     const bool atmo_disk_enabled = atmo->GetSunDiskEnabled();
@@ -304,7 +306,7 @@ auto EnvironmentStaticDataManager::PopulateAtmosphere(
     // disk toggle. This allows UI to hide the sun disk without disabling the
     // sun light.
     next.atmosphere.sun_disk_enabled
-      = (atmo_disk_enabled && sun_disk_radius > 0.0F) ? 1u : 0u;
+      = (atmo_disk_enabled && sun_disk_radius > 0.0F) ? 1U : 0U;
     next.atmosphere.sun_disk_angular_radius_radians = sun_disk_radius;
     DLOG_F(3,
       "PopulateAtmosphere: sun disk (enabled={}, radius={}, atmo_toggle={})",
@@ -364,7 +366,7 @@ auto EnvironmentStaticDataManager::PopulateSkyLight(
 {
   if (const auto sky_light = env->TryGetSystem<scene::environment::SkyLight>();
     sky_light && sky_light->IsEnabled()) {
-    next.sky_light.enabled = 1u;
+    next.sky_light.enabled = 1U;
     next.sky_light.source = ToGpuSkyLightSource(sky_light->GetSource());
 
     // Intensity is a direct multiplier. For non-physical sources (cubemaps),
@@ -418,7 +420,7 @@ auto EnvironmentStaticDataManager::PopulateSkySphere(
         "exclusive; SkyAtmosphere will take priority for sky rendering.");
     }
 
-    next.sky_sphere.enabled = 1u;
+    next.sky_sphere.enabled = 1U;
     next.sky_sphere.source = ToGpuSkySphereSource(sky_sphere->GetSource());
     next.sky_sphere.solid_color_rgb = sky_sphere->GetSolidColorRgb();
 
@@ -509,8 +511,8 @@ auto EnvironmentStaticDataManager::PopulateIbl(EnvironmentStaticData& next)
 
   const auto source_slot
     = ShaderVisibleIndex { next.sky_light.cubemap_slot.IsValid()
-          ? next.sky_light.cubemap_slot
-          : next.sky_sphere.cubemap_slot };
+          ? next.sky_light.cubemap_slot.value
+          : next.sky_sphere.cubemap_slot.value };
 
   const auto outputs = ibl_provider_->QueryOutputsFor(source_slot);
 
@@ -532,7 +534,7 @@ auto EnvironmentStaticDataManager::PopulateClouds(
   if (const auto clouds
     = env->TryGetSystem<scene::environment::VolumetricClouds>();
     clouds && clouds->IsEnabled()) {
-    next.clouds.enabled = 1u;
+    next.clouds.enabled = 1U;
     next.clouds.base_altitude_m = clouds->GetBaseAltitudeMeters();
     next.clouds.layer_thickness_m = clouds->GetLayerThicknessMeters();
     next.clouds.coverage = clouds->GetCoverage();
@@ -553,7 +555,7 @@ auto EnvironmentStaticDataManager::PopulatePostProcess(
   if (const auto pp
     = env->TryGetSystem<scene::environment::PostProcessVolume>();
     pp && pp->IsEnabled()) {
-    next.post_process.enabled = 1u;
+    next.post_process.enabled = 1U;
     next.post_process.tone_mapper = ToGpuToneMapper(pp->GetToneMapper());
     next.post_process.exposure_mode = ToGpuExposureMode(pp->GetExposureMode());
 
@@ -580,7 +582,8 @@ auto EnvironmentStaticDataManager::UploadIfNeeded() -> void
     "OnFrameStart() method every frame, and before any use");
 
   EnsureResourcesCreated();
-  if (!buffer_ || !mapped_ptr_ || srv_index_ == kInvalidShaderVisibleIndex) {
+  if (!buffer_ || (mapped_ptr_ == nullptr)
+    || srv_index_ == kInvalidShaderVisibleIndex) {
     return;
   }
 
@@ -601,27 +604,30 @@ auto EnvironmentStaticDataManager::UploadIfNeeded() -> void
     []<typename T>
     requires requires(const T& v) {
       { v.IsValid() } -> std::convertible_to<bool>;
-      { static_cast<std::uint32_t>(v) };
+      { v.value } -> std::convertible_to<ShaderVisibleIndex>;
     }(const T& slot)
   -> std::string {
       if (!slot.IsValid()) {
         return "not ready";
       }
 
-      return nostd::to_string(
-        ShaderVisibleIndex { static_cast<std::uint32_t>(slot) });
+      return nostd::to_string(slot.value);
     };
+
+#ifndef NDEBUG
   // clang-format off
   DLOG_F(2, "frame_slot = {}", slot_index);
   {
     DLOG_SCOPE_F(2, "skylight");
-    DLOG_F(2, "      cube = {}", format_slot(cpu_snapshot_.sky_light.cubemap_slot));
-    DLOG_F(2, "irradiance = {}", format_slot(cpu_snapshot_.sky_light.irradiance_map_slot));
-    DLOG_F(2, " prefilter = {}", format_slot(cpu_snapshot_.sky_light.prefilter_map_slot));
-    DLOG_F(2, "      brdf = {}", format_slot(cpu_snapshot_.sky_light.brdf_lut_slot));
+    const auto& sl = cpu_snapshot_.sky_light;
+    DLOG_F(2, "      cube = {}", format_slot(sl.cubemap_slot));
+    DLOG_F(2, "irradiance = {}", format_slot(sl.irradiance_map_slot));
+    DLOG_F(2, " prefilter = {}", format_slot(sl.prefilter_map_slot));
+    DLOG_F(2, "      brdf = {}", format_slot(sl.brdf_lut_slot));
   }
   DLOG_F(2, "skysphere cube = {}", format_slot(cpu_snapshot_.sky_sphere.cubemap_slot));
-  // clang-format on
+// clang-format on
+#endif
 
   const auto offset_bytes
     = static_cast<std::size_t>(slot_index) * sizeof(EnvironmentStaticData);
@@ -659,7 +665,7 @@ auto EnvironmentStaticDataManager::EnsureResourcesCreated() -> void
   gfx_->GetResourceRegistry().Register(buffer_);
 
   mapped_ptr_ = buffer_->Map();
-  if (!mapped_ptr_) {
+  if (mapped_ptr_ == nullptr) {
     LOG_F(ERROR, "-failed-: map buffer for environment static data upload");
     buffer_.reset();
     return;
@@ -678,7 +684,7 @@ auto EnvironmentStaticDataManager::EnsureResourcesCreated() -> void
     .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
     .visibility = graphics::DescriptorVisibility::kShaderVisible,
     .format = oxygen::Format::kUnknown, // TODO: verify if we need a format here
-    .range = { 0u, total_bytes },
+    .range = { 0U, total_bytes },
     .stride = kStrideBytes,
   };
 
