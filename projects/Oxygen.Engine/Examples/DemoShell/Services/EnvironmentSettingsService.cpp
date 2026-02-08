@@ -281,6 +281,15 @@ namespace {
   constexpr std::string_view kSkyLightDiffuseKey = "env.sky_light.diffuse";
   constexpr std::string_view kSkyLightSpecularKey = "env.sky_light.specular";
 
+  constexpr std::string_view kFogEnabledKey = "env.fog.enabled";
+  constexpr std::string_view kFogModelKey = "env.fog.model";
+  constexpr std::string_view kFogDensityKey = "env.fog.density";
+  constexpr std::string_view kFogHeightFalloffKey = "env.fog.height_falloff";
+  constexpr std::string_view kFogHeightOffsetKey = "env.fog.height_offset_m";
+  constexpr std::string_view kFogStartDistanceKey = "env.fog.start_distance_m";
+  constexpr std::string_view kFogMaxOpacityKey = "env.fog.max_opacity";
+  constexpr std::string_view kFogAlbedoKey = "env.fog.albedo";
+
   constexpr std::string_view kSunEnabledKey = "env.sun.enabled";
   constexpr std::string_view kSunSourceKey = "env.sun.source";
   constexpr std::string_view kSunAzimuthKey = "env.sun.azimuth_deg";
@@ -846,6 +855,7 @@ auto EnvironmentSettingsService::GetSkyboxHdrExposureEv() const -> float
 
 auto EnvironmentSettingsService::SetSkyboxHdrExposureEv(float value) -> void
 {
+  value = std::max(value, 0.0F);
   if (skybox_hdr_exposure_ev_ == value) {
     return;
   }
@@ -1000,6 +1010,120 @@ auto EnvironmentSettingsService::SetSkyLightSpecular(float value) -> void
     return;
   }
   sky_light_specular_ = value;
+  MarkDirty();
+}
+
+auto EnvironmentSettingsService::GetFogEnabled() const -> bool
+{
+  return fog_enabled_;
+}
+
+auto EnvironmentSettingsService::SetFogEnabled(const bool enabled) -> void
+{
+  if (fog_enabled_ == enabled) {
+    return;
+  }
+  fog_enabled_ = enabled;
+  MarkDirty();
+}
+
+auto EnvironmentSettingsService::GetFogModel() const -> int
+{
+  return fog_model_;
+}
+
+auto EnvironmentSettingsService::SetFogModel(const int model) -> void
+{
+  if (fog_model_ == model) {
+    return;
+  }
+  fog_model_ = model;
+  MarkDirty();
+}
+
+auto EnvironmentSettingsService::GetFogDensity() const -> float
+{
+  return fog_density_;
+}
+
+auto EnvironmentSettingsService::SetFogDensity(const float value) -> void
+{
+  if (fog_density_ == value) {
+    return;
+  }
+  fog_density_ = value;
+  MarkDirty();
+}
+
+auto EnvironmentSettingsService::GetFogHeightFalloff() const -> float
+{
+  return fog_height_falloff_;
+}
+
+auto EnvironmentSettingsService::SetFogHeightFalloff(const float value) -> void
+{
+  if (fog_height_falloff_ == value) {
+    return;
+  }
+  fog_height_falloff_ = value;
+  MarkDirty();
+}
+
+auto EnvironmentSettingsService::GetFogHeightOffsetMeters() const -> float
+{
+  return fog_height_offset_m_;
+}
+
+auto EnvironmentSettingsService::SetFogHeightOffsetMeters(const float value)
+  -> void
+{
+  if (fog_height_offset_m_ == value) {
+    return;
+  }
+  fog_height_offset_m_ = value;
+  MarkDirty();
+}
+
+auto EnvironmentSettingsService::GetFogStartDistanceMeters() const -> float
+{
+  return fog_start_distance_m_;
+}
+
+auto EnvironmentSettingsService::SetFogStartDistanceMeters(const float value)
+  -> void
+{
+  if (fog_start_distance_m_ == value) {
+    return;
+  }
+  fog_start_distance_m_ = value;
+  MarkDirty();
+}
+
+auto EnvironmentSettingsService::GetFogMaxOpacity() const -> float
+{
+  return fog_max_opacity_;
+}
+
+auto EnvironmentSettingsService::SetFogMaxOpacity(const float value) -> void
+{
+  if (fog_max_opacity_ == value) {
+    return;
+  }
+  fog_max_opacity_ = value;
+  MarkDirty();
+}
+
+auto EnvironmentSettingsService::GetFogAlbedo() const -> glm::vec3
+{
+  return fog_albedo_;
+}
+
+auto EnvironmentSettingsService::SetFogAlbedo(const glm::vec3& value) -> void
+{
+  if (fog_albedo_ == value) {
+    return;
+  }
+  fog_albedo_ = value;
   MarkDirty();
 }
 
@@ -1361,6 +1485,23 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     }
   }
 
+  auto fog = env->TryGetSystem<scene::environment::Fog>();
+  if (fog_enabled_ && !fog) {
+    fog = observer_ptr { &env->AddSystem<scene::environment::Fog>() };
+  }
+  if (fog) {
+    fog->SetEnabled(fog_enabled_);
+  }
+  if (fog_enabled_ && fog) {
+    fog->SetModel(static_cast<scene::environment::FogModel>(fog_model_));
+    fog->SetDensity(fog_density_);
+    fog->SetHeightFalloff(fog_height_falloff_);
+    fog->SetHeightOffsetMeters(fog_height_offset_m_);
+    fog->SetStartDistanceMeters(fog_start_distance_m_);
+    fog->SetMaxOpacity(fog_max_opacity_);
+    fog->SetAlbedoRgb(fog_albedo_);
+  }
+
   auto sky = env->TryGetSystem<scene::environment::SkySphere>();
   if (sky_sphere_enabled_ && !sky) {
     sky = observer_ptr { &env->AddSystem<scene::environment::SkySphere>() };
@@ -1452,6 +1593,17 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     sun_disk_enabled_ = atmo->GetSunDiskEnabled();
     aerial_perspective_scale_ = atmo->GetAerialPerspectiveDistanceScale();
     aerial_scattering_strength_ = atmo->GetAerialScatteringStrength();
+  }
+
+  if (auto fog = env->TryGetSystem<scene::environment::Fog>()) {
+    fog_enabled_ = fog->IsEnabled();
+    fog_model_ = static_cast<int>(fog->GetModel());
+    fog_density_ = fog->GetDensity();
+    fog_height_falloff_ = fog->GetHeightFalloff();
+    fog_height_offset_m_ = fog->GetHeightOffsetMeters();
+    fog_start_distance_m_ = fog->GetStartDistanceMeters();
+    fog_max_opacity_ = fog->GetMaxOpacity();
+    fog_albedo_ = fog->GetAlbedoRgb();
   }
 
   // Sync LUT slice configuration from the renderer's LUT manager.
@@ -1663,6 +1815,15 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   any_loaded |= load_float(kSkyLightDiffuseKey, sky_light_diffuse_);
   any_loaded |= load_float(kSkyLightSpecularKey, sky_light_specular_);
 
+  any_loaded |= load_bool(kFogEnabledKey, fog_enabled_);
+  any_loaded |= load_int(kFogModelKey, fog_model_);
+  any_loaded |= load_float(kFogDensityKey, fog_density_);
+  any_loaded |= load_float(kFogHeightFalloffKey, fog_height_falloff_);
+  any_loaded |= load_float(kFogHeightOffsetKey, fog_height_offset_m_);
+  any_loaded |= load_float(kFogStartDistanceKey, fog_start_distance_m_);
+  any_loaded |= load_float(kFogMaxOpacityKey, fog_max_opacity_);
+  any_loaded |= load_vec3(kFogAlbedoKey, fog_albedo_);
+
   any_loaded |= load_bool(kSunEnabledKey, sun_enabled_);
   const bool sun_source_loaded = load_int(kSunSourceKey, sun_source_);
   any_loaded |= sun_source_loaded;
@@ -1756,6 +1917,15 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kSkyLightIntensityKey, sky_light_intensity_);
   save_float(kSkyLightDiffuseKey, sky_light_diffuse_);
   save_float(kSkyLightSpecularKey, sky_light_specular_);
+
+  save_bool(kFogEnabledKey, fog_enabled_);
+  save_int(kFogModelKey, fog_model_);
+  save_float(kFogDensityKey, fog_density_);
+  save_float(kFogHeightFalloffKey, fog_height_falloff_);
+  save_float(kFogHeightOffsetKey, fog_height_offset_m_);
+  save_float(kFogStartDistanceKey, fog_start_distance_m_);
+  save_float(kFogMaxOpacityKey, fog_max_opacity_);
+  save_vec3(kFogAlbedoKey, fog_albedo_);
 
   save_bool(kSunEnabledKey, sun_enabled_);
   save_int(kSunSourceKey, sun_source_);

@@ -44,7 +44,7 @@ static inline bool LoadEnvironmentStaticData(uint bindless_slot, uint frame_slot
  */
 static inline float GetExposure()
 {
-    return EnvironmentDynamicData.exposure;
+    return max(EnvironmentDynamicData.exposure, 0.0f);
 }
 
 /**

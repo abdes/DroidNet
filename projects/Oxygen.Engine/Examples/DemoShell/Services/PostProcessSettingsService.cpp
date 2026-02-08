@@ -253,6 +253,7 @@ auto PostProcessSettingsService::SetManualExposureEV100(float ev100) -> void
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
+  ev100 = std::max(ev100, 0.0F);
   settings->SetFloat(kExposureManualEV100Key, ev100);
   epoch_++;
 

@@ -125,10 +125,19 @@ float4 PS(VSOutput input) : SV_Target0 {
         + (ibl_spec_term + ibl_diffuse * base_rgb * (1.0f - surf.metalness))
         + surf.emissive;
 
-    if (LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data) && ShouldUseLutAerialPerspective(env_data.atmosphere)) {
+    if (LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data)
+        && (env_data.fog.enabled || ShouldUseLutAerialPerspective(env_data.atmosphere))) {
         float3 s_dir = normalize(GetSunDirectionWS());
-        if (EnvironmentDynamicData.sun_enabled == 0 && !IsOverrideSunEnabled()) s_dir = float3(0.5, 0.707, 0.5);
-        final_color = ApplyAerialPerspective(final_color, ComputeAerialPerspective(env_data, input.world_pos, camera_position, s_dir));
+        if (EnvironmentDynamicData.sun_enabled == 0 && !IsOverrideSunEnabled()) {
+            s_dir = float3(0.5, 0.707, 0.5);
+        }
+
+        const AerialPerspectiveResult ap = ComputeAerialPerspective(
+            env_data,
+            input.world_pos,
+            camera_position,
+            s_dir);
+        final_color = ApplyAerialPerspective(final_color, ap);
     }
 
 #ifdef OXYGEN_HDR_OUTPUT

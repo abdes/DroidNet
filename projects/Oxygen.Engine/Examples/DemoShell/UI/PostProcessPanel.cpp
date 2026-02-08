@@ -91,8 +91,9 @@ void PostProcessPanel::DrawExposureSection()
   if (current_mode == ExposureMode::kManual) {
     float ev100 = vm_->GetManualExposureEV100();
     // Range roughly covering starlight to bright sunlight
-    if (ImGui::DragFloat("EV100", &ev100, 0.01F, -6.0F, 16.0F, "%.2f")) {
+    if (ImGui::DragFloat("EV100", &ev100, 0.01F, 0.0F, 16.0F, "%.2f")) {
       ev100 = std::round(ev100 * 100.0F) / 100.0F;
+      ev100 = std::max(ev100, 0.0F);
       vm_->SetManualExposureEV100(ev100);
     }
   }

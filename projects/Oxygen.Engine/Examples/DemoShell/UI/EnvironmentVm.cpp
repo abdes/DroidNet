@@ -602,7 +602,7 @@ auto EnvironmentVm::GetSkyboxHdrExposureEv() const -> float
 
 auto EnvironmentVm::SetSkyboxHdrExposureEv(float value) -> void
 {
-  service_->SetSkyboxHdrExposureEv(value);
+  service_->SetSkyboxHdrExposureEv(std::max(value, 0.0F));
 }
 
 auto EnvironmentVm::GetSkyboxStatusMessage() const -> std::string_view
@@ -728,6 +728,86 @@ auto EnvironmentVm::GetSkyLightSpecular() const -> float
 auto EnvironmentVm::SetSkyLightSpecular(float value) -> void
 {
   service_->SetSkyLightSpecular(value);
+}
+
+auto EnvironmentVm::GetFogEnabled() const -> bool
+{
+  return service_->GetFogEnabled();
+}
+
+auto EnvironmentVm::SetFogEnabled(const bool enabled) -> void
+{
+  service_->SetFogEnabled(enabled);
+}
+
+auto EnvironmentVm::GetFogModel() const -> int
+{
+  return service_->GetFogModel();
+}
+
+auto EnvironmentVm::SetFogModel(const int model) -> void
+{
+  service_->SetFogModel(model);
+}
+
+auto EnvironmentVm::GetFogDensity() const -> float
+{
+  return service_->GetFogDensity();
+}
+
+auto EnvironmentVm::SetFogDensity(const float value) -> void
+{
+  service_->SetFogDensity(value);
+}
+
+auto EnvironmentVm::GetFogHeightFalloff() const -> float
+{
+  return service_->GetFogHeightFalloff();
+}
+
+auto EnvironmentVm::SetFogHeightFalloff(const float value) -> void
+{
+  service_->SetFogHeightFalloff(value);
+}
+
+auto EnvironmentVm::GetFogHeightOffsetMeters() const -> float
+{
+  return service_->GetFogHeightOffsetMeters();
+}
+
+auto EnvironmentVm::SetFogHeightOffsetMeters(const float value) -> void
+{
+  service_->SetFogHeightOffsetMeters(value);
+}
+
+auto EnvironmentVm::GetFogStartDistanceMeters() const -> float
+{
+  return service_->GetFogStartDistanceMeters();
+}
+
+auto EnvironmentVm::SetFogStartDistanceMeters(const float value) -> void
+{
+  service_->SetFogStartDistanceMeters(value);
+}
+
+auto EnvironmentVm::GetFogMaxOpacity() const -> float
+{
+  return service_->GetFogMaxOpacity();
+}
+
+auto EnvironmentVm::SetFogMaxOpacity(const float value) -> void
+{
+  service_->SetFogMaxOpacity(value);
+}
+
+auto EnvironmentVm::GetFogAlbedo() const -> glm::vec3
+{
+  return service_->GetFogAlbedo();
+}
+
+auto EnvironmentVm::SetFogAlbedo(const glm::vec3& value) -> void
+{
+  service_->SetFogAlbedo(value);
 }
 
 auto EnvironmentVm::GetSunPresent() const -> bool

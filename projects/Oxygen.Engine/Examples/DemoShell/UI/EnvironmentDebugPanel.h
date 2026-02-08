@@ -67,7 +67,7 @@ private:
   void DrawSkyAtmosphereSection();
   void DrawSkySphereSection();
   void DrawSkyLightSection();
-  // NOTE: Fog UI removed - use Aerial Perspective instead. Real fog TBD.
+  void DrawFog();
   void DrawSunSection();
   void DrawRendererDebugSection();
   void HandleSkyboxAutoLoad();
