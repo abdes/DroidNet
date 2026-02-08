@@ -31,6 +31,7 @@
 #include "Common/Geometry.hlsli"
 #include "Common/Coordinates.hlsli"
 #include "Common/Lighting.hlsli"
+#include "Atmosphere/AtmosphereSampling.hlsli"
 
 // Root constants (b2, space0)
 cbuffer RootConstants : register(b2, space0)
@@ -76,41 +77,6 @@ float AerialPerspectiveSliceToDepth(float slice, float max_distance_km)
     // Squared distribution: depth = (slice/32)² × max_distance
     float t = slice / float(AP_SLICE_COUNT);
     return t * t * max_distance_km * 1000.0; // Convert km to meters
-}
-
-// Atmosphere density functions (shared with other shaders)
-
-//! Samples the transmittance LUT for optical depth.
-float3 SampleTransmittanceLutOpticalDepth(
-    float altitude_m,
-    float cos_zenith,
-    GpuSkyAtmosphereParams atmo,
-    Texture2D<float4> transmittance_lut,
-    SamplerState linear_sampler,
-    uint2 lut_size)
-{
-    float cos_horizon = HorizonCosineFromAltitude(atmo.planet_radius_m, altitude_m);
-    if (cos_zenith < cos_horizon)
-    {
-        return float3(kInfiniteOpticalDepth, kInfiniteOpticalDepth, kInfiniteOpticalDepth);
-    }
-
-    float view_height = atmo.planet_radius_m + altitude_m;
-    float top_radius = atmo.planet_radius_m + atmo.atmosphere_height_m;
-    float H = SafeSqrt(top_radius * top_radius - atmo.planet_radius_m * atmo.planet_radius_m);
-    float rho = SafeSqrt(view_height * view_height - atmo.planet_radius_m * atmo.planet_radius_m);
-
-    float discriminant = view_height * view_height * (cos_zenith * cos_zenith - 1.0) + top_radius * top_radius;
-    float d = max(0.0, (-view_height * cos_zenith + SafeSqrt(discriminant)));
-
-    float d_min = top_radius - view_height;
-    float d_max = rho + H;
-    float u = (d - d_min) / (d_max - d_min);
-    float v = rho / H;
-    u = clamp(u, 0.0, 1.0);
-    v = clamp(v, 0.0, 1.0);
-
-    return transmittance_lut.SampleLevel(linear_sampler, float2(u, v), 0).rgb;
 }
 
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
@@ -219,7 +185,13 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         // Sun transmittance
         float3 sample_dir = normalize(sample_pos);
         float cos_sun_zenith = dot(sample_dir, sun_dir);
-        float3 sun_od = SampleTransmittanceLutOpticalDepth(altitude_m, cos_sun_zenith, atmo, transmittance_lut, linear_sampler, lut_size);
+        float3 sun_od = SampleTransmittanceOpticalDepthLut(
+            pass_constants.transmittance_srv_index,
+            float(pass_constants.transmittance_width),
+            float(pass_constants.transmittance_height),
+            cos_sun_zenith, altitude_m,
+            atmo.planet_radius_m,
+            atmo.atmosphere_height_m);
         float3 sun_transmittance = TransmittanceFromOpticalDepth(sun_od, atmo);
 
         // Single scattering

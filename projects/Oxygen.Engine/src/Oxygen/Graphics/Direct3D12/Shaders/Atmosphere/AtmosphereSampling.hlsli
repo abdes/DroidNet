@@ -10,11 +10,11 @@
 //! for physically-based atmospheric scattering.
 //!
 //! === LUT UV Parameterizations ===
-//! Transmittance LUT:
-//!   u = (cos_zenith + 0.15) / 1.15  (avoids horizon singularity)
-//!   v = sqrt(altitude / atmosphere_height)
+//! Transmittance LUT (Bruneton/UE5 distance-based mapping):
+//!   u = x_mu mapping (interpolated distance to atmosphere top)
+//!   v = x_r mapping (normalized altitude relative to top)
 //!
-//! Sky-View LUT:
+//! Sky-View LUT (UE5 sun-relative mapping):
 //!   u = azimuth / (2 * PI)
 //!   v = (cos_zenith + 1) / 2
 
@@ -25,8 +25,8 @@
 #include "Renderer/EnvironmentStaticData.hlsli"
 #include "Atmosphere/AtmosphereMedium.hlsli"
 #include "Common/Math.hlsli"
+#include "Common/Geometry.hlsli"
 #include "Atmosphere/AtmosphereConstants.hlsli"
-
 
 //! Computes transmittance LUT UV from altitude and cos_zenith.
 //!
@@ -67,6 +67,7 @@ float2 GetTransmittanceLutUv(
 //! @param lut_height LUT texture height.
 //! @param cos_zenith Cosine of zenith angle.
 //! @param altitude_m Height above planet surface in meters.
+//! @param planet_radius_m Planet radius in meters.
 //! @param atmosphere_height_m Total atmosphere thickness in meters.
 //! @return RGB transmittance.
 float3 SampleTransmittanceOpticalDepthLut(
@@ -82,6 +83,14 @@ float3 SampleTransmittanceOpticalDepthLut(
     {
         // No LUT available, return zero optical depth.
         return float3(0.0, 0.0, 0.0);
+    }
+
+    // Geometric horizon check: if looking below the horizon, the planet
+    // blocks all light (infinite optical depth).
+    float cos_horizon = HorizonCosineFromAltitude(planet_radius_m, altitude_m);
+    if (cos_zenith < cos_horizon)
+    {
+        return float3(kInfiniteOpticalDepth, kInfiniteOpticalDepth, kInfiniteOpticalDepth);
     }
 
     float2 uv = GetTransmittanceLutUv(
@@ -100,6 +109,16 @@ float3 SampleTransmittanceOpticalDepthLut(
 
 
 
+//! Samples the transmittance LUT and converts it to transmittance RGB.
+//!
+//! @param atmo Atmosphere parameters.
+//! @param lut_slot Bindless SRV index.
+//! @param lut_width LUT texture width.
+//! @param lut_height LUT texture height.
+//! @param cos_zenith Cosine of zenith angle.
+//! @param altitude_m Height above planet surface in meters.
+//! @param atmosphere_height_m Total atmosphere thickness in meters.
+//! @return RGB transmittance.
 float3 SampleTransmittanceLut(
     GpuSkyAtmosphereParams atmo,
     uint lut_slot,
