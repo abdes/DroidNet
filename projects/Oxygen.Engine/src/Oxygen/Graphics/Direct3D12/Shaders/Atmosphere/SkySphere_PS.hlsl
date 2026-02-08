@@ -13,9 +13,9 @@
 //! 4. Black fallback
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
-#include "Atmosphere/SkySphereCommon.hlsli"
 #include "Common/Geometry.hlsli"
 #include "Renderer/GpuDebug.hlsli"
+#include "Atmosphere/SkyColor.hlsli"
 
 // Root constants b2 (shared root param index with engine)
 cbuffer RootConstants : register(b2, space0) {

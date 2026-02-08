@@ -10,7 +10,7 @@
 #include "Renderer/EnvironmentDynamicData.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/SceneConstants.hlsli"
-#include "Renderer/SkyAtmosphereSampling.hlsli"
+#include "Atmosphere/AtmosphereSampling.hlsli"
 
 //! Samples a cubemap using the view direction with optional rotation.
 float3 SampleSkyboxCubemap(uint cubemap_slot, float3 view_dir, float rotation_radians)

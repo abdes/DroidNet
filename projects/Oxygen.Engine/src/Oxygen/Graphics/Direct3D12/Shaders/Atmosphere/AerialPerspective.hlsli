@@ -24,7 +24,7 @@
 #include "Renderer/EnvironmentStaticData.hlsli"
 #include "Renderer/EnvironmentDynamicData.hlsli"
 #include "Renderer/SceneConstants.hlsli"
-#include "Renderer/SkyAtmosphereSampling.hlsli"
+#include "Atmosphere/AtmosphereSampling.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Geometry.hlsli"
 #include "Common/Lighting.hlsli"
