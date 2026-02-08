@@ -1,9 +1,3 @@
-//===----------------------------------------------------------------------===//
-// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause.
-// SPDX-License-Identifier: BSD-3-Clause
-//===----------------------------------------------------------------------===//
-
 #ifndef OXYGEN_PASSES_FORWARD_FORWARDDIRECTLIGHTING_HLSLI
 #define OXYGEN_PASSES_FORWARD_FORWARDDIRECTLIGHTING_HLSLI
 
@@ -13,6 +7,8 @@
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/EnvironmentDynamicData.hlsli"
 #include "Common/Lighting.hlsli"
+#include "Common/Geometry.hlsli"
+#include "Atmosphere/AtmosphereSampling.hlsli"
 
 // Safety caps for fallback loops (pre-clustered culling).
 #ifndef MAX_DIRECTIONAL_LIGHTS
@@ -23,7 +19,72 @@
 #define MAX_POSITIONAL_LIGHTS 1024
 #endif
 
+//! Computes sun transmittance for a surface point.
+//!
+//! Returns the atmospheric transmittance from the surface point toward the sun.
+//! This accounts for both the sun's elevation and the surface altitude.
+//! When atmosphere is disabled (atmo.enabled == 0), returns 1.0.
+//!
+//! In Oxygen's coordinate system (+Z up, -Y forward):
+//! - World Z=0 is at the planet surface (ground level)
+//! - Object altitude = world_pos.z (in the same units as planet_radius)
+//! - Planet center is at (0, 0, -planet_radius) in world space
+//!
+//! @param world_pos World-space position of the surface.
+//! @param atmo Atmosphere parameters from environment data.
+//! @param sun_dir Direction toward the sun (normalized).
+//! @return RGB transmittance (0 when sun below horizon, 1 when no atmosphere).
+float3 ComputeSunTransmittance(
+    float3 world_pos,
+    GpuSkyAtmosphereParams atmo,
+    float3 sun_dir)
+{
+    // No atmosphere = no attenuation
+    if (!atmo.enabled || atmo.transmittance_lut_slot == K_INVALID_BINDLESS_INDEX) {
+        return float3(1.0, 1.0, 1.0);
+    }
+
+    // In Oxygen's convention:
+    // - Ground is at Z=0, so altitude = world_pos.z
+    // - Planet up is +Z
+    // - The sun zenith angle is computed from the local vertical at the surface point
+    //
+    // For objects on/near the ground, the local "up" is approximately +Z.
+    // For more precision, we could compute the actual radial direction from planet center,
+    // but for typical camera altitudes (meters) vs planet radius (millions of meters),
+    // treating up as +Z is accurate enough.
+
+    float altitude = max(world_pos.z, 0.0);
+
+    // Local up direction at this point on the planet surface.
+    // For small altitudes compared to planet radius, this is effectively +Z.
+    // For high altitudes or precision, use the radial direction from planet center.
+    float3 planet_center = GetPlanetCenterWS();
+    float3 to_surface = world_pos - planet_center;
+    float height = length(to_surface);
+    float3 local_up = to_surface / max(height, 1e-6);
+
+    // Compute cosine of sun zenith from the local up direction
+    float cos_sun_zenith = dot(local_up, sun_dir);
+
+    // Sample transmittance LUT
+    // The LUT returns high optical depth (zero transmittance) when sun is below horizon
+    float3 optical_depth = SampleTransmittanceOpticalDepthLut(
+        atmo.transmittance_lut_slot,
+        atmo.transmittance_lut_width,
+        atmo.transmittance_lut_height,
+        cos_sun_zenith,
+        altitude,
+        atmo.planet_radius_m,
+        atmo.atmosphere_height_m);
+
+    // Convert optical depth to transmittance
+    return TransmittanceFromOpticalDepth(optical_depth, atmo);
+}
+
 float3 AccumulateDirectionalLights(
+    float3 world_pos,
+    GpuSkyAtmosphereParams atmo,
     float3 N,
     float3 V,
     float  NdotV,
@@ -84,6 +145,12 @@ float3 AccumulateDirectionalLights(
                 continue;
             }
 
+            // Compute atmospheric transmittance for sun light (sun tagged lights only)
+            float3 sun_transmittance = float3(1.0, 1.0, 1.0);
+            if (is_sun) {
+                sun_transmittance = ComputeSunTransmittance(world_pos, atmo, L);
+            }
+
             const float3 H = SafeNormalize(V + L);
             const float  NdotH = saturate(dot(N, H));
             const float  VdotH = saturate(dot(V, H));
@@ -103,13 +170,16 @@ float3 AccumulateDirectionalLights(
 
             const float irradiance = LuxToIrradiance(light_intensity);
             const float radiance = irradiance * (1.0 / kPi);
-            direct += (diffuse + specular) * light_color * radiance * NdotL;
+            direct += (diffuse + specular) * light_color * sun_transmittance * radiance * NdotL;
         }
 
         if (use_sun_override && !found_sun) {
             const float3 L = SafeNormalize(override_sun_dir);
             const float  NdotL = saturate(dot(N, L));
             if (NdotL > 0.0) {
+                // Compute atmospheric transmittance
+                float3 sun_transmittance = ComputeSunTransmittance(world_pos, atmo, L);
+
                 const float3 H = SafeNormalize(V + L);
                 const float  NdotH = saturate(dot(N, H));
                 const float  VdotH = saturate(dot(V, H));
@@ -128,7 +198,7 @@ float3 AccumulateDirectionalLights(
 
                 const float irradiance = LuxToIrradiance(override_sun_intensity);
                 const float radiance = irradiance * (1.0 / kPi);
-                direct += (diffuse + specular) * override_sun_color
+                direct += (diffuse + specular) * override_sun_color * sun_transmittance
                           * radiance * NdotL;
             }
         }
