@@ -10,9 +10,9 @@
 //! Output: RGBA16F texture where RGB = optical depth for
 //!   Rayleigh, Mie, absorption (ozone-like). Alpha is reserved.
 //!
-//! UV Parameterization:
-//!   u = normalized cos_zenith: (cos_zenith + 0.15) / 1.15
-//!   v = normalized altitude: sqrt(altitude / atmosphere_height)
+//! UV Parameterization (UE5/Bruneton distance-based):
+//!   u = x_mu mapping (distance to top)
+//!   v = x_r mapping (altitude relative to top)
 //!
 //! === Bindless Discipline ===
 //! - All resources accessed via SM 6.6 descriptor heaps
@@ -83,7 +83,7 @@ float2 UvToAtmosphereParamsBruneton(
 
     // view_height = sqrt(rho² + planet_radius²)
     float view_height = sqrt(rho * rho + planet_radius * planet_radius);
-    float altitude = view_height - planet_radius;
+    float altitude_m = view_height - planet_radius;
 
     // Invert x_mu mapping
     // d_min = top_radius - view_height
@@ -118,10 +118,8 @@ float2 UvToAtmosphereParamsBruneton(
     }
     cos_zenith = clamp(cos_zenith, -1.0, 1.0);
 
-    return float2(altitude, cos_zenith);
+    return float2(altitude_m, cos_zenith);
 }
-
-
 
 
 //! Integrates optical depth along a ray through the atmosphere.
@@ -130,7 +128,7 @@ float2 UvToAtmosphereParamsBruneton(
 //! @param dir Ray direction (normalized, pointing upward/outward).
 //! @param ray_length Distance to integrate.
 //! @param atmo Atmosphere parameters.
-//! @return (optical_depth_rayleigh, optical_depth_mie).
+//! @return (optical_depth_rayleigh, optical_depth_mie, optical_depth_absorption).
 float3 IntegrateOpticalDepth(
     float3 origin,
     float3 dir,
@@ -145,12 +143,12 @@ float3 IntegrateOpticalDepth(
         float t = (float(i) + 0.5) * step_size;
         float3 sample_pos = origin + dir * t;
 
-        float altitude = length(sample_pos) - atmo.planet_radius_m;
-        altitude = max(altitude, 0.0);
+        float altitude_m = length(sample_pos) - atmo.planet_radius_m;
+        altitude_m = max(altitude_m, 0.0);
 
-        float density_rayleigh = AtmosphereExponentialDensity(altitude, atmo.rayleigh_scale_height_m);
-        float density_mie = AtmosphereExponentialDensity(altitude, atmo.mie_scale_height_m);
-        float density_absorption = OzoneAbsorptionDensity(altitude, atmo.absorption_layer_width_m, atmo.absorption_term_below, atmo.absorption_term_above);
+        float density_rayleigh = AtmosphereExponentialDensity(altitude_m, atmo.rayleigh_scale_height_m);
+        float density_mie = AtmosphereExponentialDensity(altitude_m, atmo.mie_scale_height_m);
+        float density_absorption = OzoneAbsorptionDensity(altitude_m, atmo.absorption_layer_width_m, atmo.absorption_term_below, atmo.absorption_term_above);
 
         optical_depth.x += density_rayleigh * step_size;
         optical_depth.y += density_mie * step_size;
@@ -195,12 +193,12 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         uv,
         atmo.planet_radius_m,
         atmo.atmosphere_height_m);
-    float altitude = atmo_params.x;
+    float altitude_m = atmo_params.x;
     float cos_zenith = atmo_params.y;
 
     // Compute ray origin and direction
     // Origin is at altitude above planet surface, on the Z-axis
-    float r = atmo.planet_radius_m + altitude;
+    float r = atmo.planet_radius_m + altitude_m;
     float3 origin = float3(0.0, 0.0, r);
 
     // Direction is toward zenith angle
