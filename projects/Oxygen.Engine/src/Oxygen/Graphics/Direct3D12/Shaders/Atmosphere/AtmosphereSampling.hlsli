@@ -23,7 +23,10 @@
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
 #include "Renderer/EnvironmentStaticData.hlsli"
+#include "Atmosphere/AtmosphereMedium.hlsli"
 #include "Common/Math.hlsli"
+#include "Atmosphere/AtmosphereConstants.hlsli"
+
 
 //! Computes transmittance LUT UV from altitude and cos_zenith.
 //!
@@ -95,17 +98,7 @@ float3 SampleTransmittanceOpticalDepthLut(
     return lut.SampleLevel(linear_sampler, uv, 0).rgb;
 }
 
-float3 TransmittanceFromOpticalDepth(float3 optical_depth, GpuSkyAtmosphereParams atmo)
-{
-    float3 beta_rayleigh = atmo.rayleigh_scattering_rgb;
-    float3 beta_mie_ext = atmo.mie_scattering_rgb + atmo.mie_absorption_rgb;
-    float3 beta_abs = atmo.absorption_rgb;
 
-    float3 tau = beta_rayleigh * optical_depth.x
-               + beta_mie_ext * optical_depth.y
-               + beta_abs * optical_depth.z;
-    return exp(-tau);
-}
 
 float3 SampleTransmittanceLut(
     GpuSkyAtmosphereParams atmo,
@@ -156,14 +149,14 @@ float2 GetSkyViewLutUv(float3 view_dir, float3 sun_dir, float planet_radius, flo
     // Safety: atan2(0,0) is undefined/platform-dependent.
     // When looking straight up/down, view_dir.xy is zero. Use 0 azimuth.
     float view_azimuth = 0.0;
-    if (dot(view_dir.xy, view_dir.xy) > 1e-8)
+    if (dot(view_dir.xy, view_dir.xy) > EPSILON_SMALL)
     {
         view_azimuth = atan2(view_dir.y, view_dir.x);
     }
 
     // Same for sun direction, though usually stable.
     float sun_azimuth = 0.0;
-    if (dot(sun_dir.xy, sun_dir.xy) > 1e-8)
+    if (dot(sun_dir.xy, sun_dir.xy) > EPSILON_SMALL)
     {
         sun_azimuth = atan2(sun_dir.y, sun_dir.x);
     }
@@ -379,8 +372,7 @@ float4 SampleSkyViewLut(
     // 4 azimuth-offset samples to suppress flickering.
     const float cos_zenith = view_dir.z;
     const float sin_zenith = sqrt(max(0.0, 1.0 - cos_zenith * cos_zenith));
-    const float kZenithFilterEnd = 0.05; // ~2.9 degrees
-    const float zenith_weight = saturate(1.0 - (sin_zenith / kZenithFilterEnd));
+    const float zenith_weight = saturate(1.0 - (sin_zenith / kZenithFilterThreshold));
 
     if (zenith_weight > 0.0)
     {
@@ -453,7 +445,7 @@ float3 ComputeSunDisk(
     }
 
     // Sun disk with soft edge (anti-aliasing).
-    float edge_softness = 0.002;
+    float edge_softness = kSunDiskEdgeSoftness;
     float disk_factor = smoothstep(
         cos_sun_radius - edge_softness,
         cos_sun_radius + edge_softness,
@@ -463,17 +455,16 @@ float3 ComputeSunDisk(
     // radiance (Nits) for the sun disk, we must divide by the solid angle of
     // the sun disk: Omega = 2 * PI * (1 - cos(angular_radius)).
     float omega_sun = TWO_PI * (1.0 - cos_sun_radius);
-    float3 sun_radiance = sun_illuminance / max(omega_sun, 1e-6);
+    float3 sun_radiance = sun_illuminance / max(omega_sun, kAtmosphereEpsilon);
 
     // Prevent FP16 overflow (max ~65504).
     // Physical sun radiance can easily exceed this (e.g. 10^9 nits), resulting
     // in Infinity in the texture. Subsequent filtering/convolutions can then
     // produce NaNs (Black) if they multiply Inf by 0.
     // Clamping to a safe max ensuring it's still "very bright" but valid.
-    float safe_max = 64000.0;
-    if (any(sun_radiance > safe_max))
+    if (any(sun_radiance > kSunRadianceSafeMax))
     {
-        sun_radiance = min(sun_radiance, safe_max);
+        sun_radiance = min(sun_radiance, kSunRadianceSafeMax);
     }
 
     // Now handle partial visibility: if view is above horizon but looking

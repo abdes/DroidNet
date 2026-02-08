@@ -9,6 +9,8 @@
 
 // Common math functions (saturate, max, etc. are intrinsics, but we might need others)
 #include "Common/Math.hlsli"
+#include "Renderer/EnvironmentStaticData.hlsli"
+
 
 //------------------------------------------------------------------------------
 // Density Functions
@@ -52,6 +54,45 @@ float OzoneAbsorptionDensity(
     // Above peak: linear ramp down from 1.
     // This requires linear_term_above to be negative (e.g., -0.666).
     return saturate(1.0 + linear_term_above * (altitude_m - layer_width_m) / layer_width_m);
+}
+
+//------------------------------------------------------------------------------
+// Transmittance Functions
+//------------------------------------------------------------------------------
+
+//! Converts optical depth to transmittance using Beer-Lambert law.
+//!
+//! @param optical_depth (Rayleigh, Mie, Absorption) optical depths.
+//! @param beta_rayleigh Rayleigh scattering coefficient (RGB).
+//! @param beta_mie_ext Mie extinction coefficient (RGB).
+//! @param beta_absorption Absorption coefficient (RGB).
+//! @return RGB transmittance [0, 1].
+float3 TransmittanceFromOpticalDepth(
+    float3 optical_depth,
+    float3 beta_rayleigh,
+    float3 beta_mie_ext,
+    float3 beta_absorption)
+{
+    float3 tau = beta_rayleigh * optical_depth.x
+               + beta_mie_ext * optical_depth.y
+               + beta_absorption * optical_depth.z;
+    return exp(-tau);
+}
+
+//! Converts optical depth to transmittance using Beer-Lambert law.
+//!
+//! @param optical_depth (Rayleigh, Mie, Absorption) optical depths.
+//! @param atmo Atmosphere parameters containing coefficients.
+//! @return RGB transmittance [0, 1].
+float3 TransmittanceFromOpticalDepth(
+    float3 optical_depth,
+    GpuSkyAtmosphereParams atmo)
+{
+    return TransmittanceFromOpticalDepth(
+        optical_depth,
+        atmo.rayleigh_scattering_rgb,
+        atmo.mie_scattering_rgb + atmo.mie_absorption_rgb,
+        atmo.absorption_rgb);
 }
 
 #endif // OXYGEN_GRAPHICS_SHADERS_ATMOSPHERE_MEDIUM_HLSLI

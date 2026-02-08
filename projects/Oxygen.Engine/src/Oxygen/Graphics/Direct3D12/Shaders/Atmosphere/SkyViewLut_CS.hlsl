@@ -31,7 +31,9 @@
 #include "Renderer/SceneConstants.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Atmosphere/AtmosphereMedium.hlsli"
+#include "Atmosphere/AtmospherePhase.hlsli"
 #include "Common/Math.hlsli"
+#include "Atmosphere/AtmosphereConstants.hlsli"
 #include "Common/Geometry.hlsli"
 #include "Common/Coordinates.hlsli"
 #include "Common/Lighting.hlsli"
@@ -184,7 +186,7 @@ float GetAbsorptionDensity(float altitude, float absorption_center_m)
     altitude = max(altitude, 0.0);
 
     float center = max(1.0, absorption_center_m);
-    float width = max(1000.0, center * 0.6);
+    float width = max(1000.0, center * kDefaultOzoneWidthScale);
     float t = 1.0 - abs(altitude - center) / width;
     return saturate(t);
 }
@@ -212,7 +214,7 @@ float3 SampleTransmittanceLutOpticalDepth(
     if (cos_zenith < cos_horizon)
     {
         // Sun blocked by planet - zero transmittance (infinite optical depth)
-        return float3(1e6, 1e6, 1e6);
+        return float3(kInfiniteOpticalDepth, kInfiniteOpticalDepth, kInfiniteOpticalDepth);
     }
 
     float view_height = atmo.planet_radius_m + altitude;
@@ -233,60 +235,6 @@ float3 SampleTransmittanceLutOpticalDepth(
     v = clamp(v, 0.0, 1.0);
 
     return transmittance_lut.SampleLevel(linear_sampler, float2(u, v), 0).rgb;
-}
-
-//! Converts optical depth (Rayleigh/Mie/Absorption) into RGB transmittance.
-float3 TransmittanceFromOpticalDepth(float3 optical_depth, GpuSkyAtmosphereParams atmo)
-{
-    // Extinction = Rayleigh scattering + Mie extinction + absorption.
-    // Mie extinction = Mie scattering + Mie absorption (UE5 style).
-    float3 beta_rayleigh = atmo.rayleigh_scattering_rgb;
-    float3 beta_mie_ext = atmo.mie_scattering_rgb + atmo.mie_absorption_rgb;
-    float3 beta_abs = atmo.absorption_rgb;
-
-    float3 tau = beta_rayleigh * optical_depth.x
-               + beta_mie_ext * optical_depth.y
-               + beta_abs * optical_depth.z;
-
-    return exp(-tau);
-}
-
-//! Rayleigh phase function.
-float RayleighPhase(float cos_theta)
-{
-    return (3.0 / (16.0 * PI)) * (1.0 + cos_theta * cos_theta);
-}
-
-//! Cornette-Shanks Phase Function (Matches Unreal Engine 5 Reference)
-//! Used for Mie scattering. Physically more accurate than standard HG.
-float CornetteShanksMiePhaseFunction(float g, float cos_theta)
-{
-    float k = 3.0 / (8.0 * PI) * (1.0 - g * g) / (2.0 + g * g);
-    // Note: Denominator uses +2*g*cos_theta because forward scatter is usually aligned.
-    // However, Unreal's hgPhase reference implementation uses:
-    // pow(1 + g^2 + 2*g*cosTheta, 1.5)
-    // We use the same here.
-    float denom = 1.0 + g * g - 2.0 * g * cos_theta;
-    // Wait, standard HG is (1+g^2 - 2g*cos).
-    // If cos=1, denom=(1-g)^2.
-    // Unreal uses -cosTheta in call site, so effective cosTheta is -1.
-    // ...
-    // Let's stick to the correct HG formula for forward scatter (cos=1):
-    // denom = 1 + g^2 - 2g*cos
-
-    // Safety clamp for denom to prevent division by zero at singularity
-    denom = max(denom, 1e-5);
-
-    return k * (1.0 + cos_theta * cos_theta) / pow(denom, 1.5);
-}
-
-// Replaced HenyeyGreensteinPhase with CornetteShanks
-float HenyeyGreensteinPhase(float cos_theta, float g)
-{
-    // Call the improved function
-    // Clamp result to prevent FP16 overflow (Inf)
-    float result = CornetteShanksMiePhaseFunction(g, cos_theta);
-    return min(result, 60000.0);
 }
 
 //! Computes single-scattering inscatter along a view ray.
@@ -357,7 +305,7 @@ float4 ComputeSingleScattering(
         float dt = t1 - t0;
         // UE5 Reference: Fixed 0.3 offset within the segment (SampleSegmentT)
         // No jitter/noise is used in the reference implementation for SkyViewLut.
-        float t = t0 + dt * 0.3;
+        float t = t0 + dt * kSegmentSampleOffset;
 
         float3 sample_pos = origin + view_dir * t;
         float altitude = length(sample_pos) - atmo.planet_radius_m;
@@ -417,18 +365,18 @@ float4 ComputeSingleScattering(
         float3 Sint;
         // Check for small extinction to avoid div-by-zero
         // Using a check similar to UE5 implicit behaviors or explicit limit
-        if (all(extinction < 1e-6))
+        if (all(extinction < kAtmosphereEpsilon))
         {
             Sint = S * dt;
         }
         else
         {
-            Sint = (S - S * sample_transmittance) / max(extinction, 1e-6);
+            Sint = (S - S * sample_transmittance) / max(extinction, kAtmosphereEpsilon);
         }
 
         // Accumulate
         inscatter += throughput * Sint;
-        inscatter = min(inscatter, float3(65000.0, 65000.0, 65000.0)); // Aggregate safety clamp
+        inscatter = min(inscatter, float3(kFP16SafeMax, kFP16SafeMax, kFP16SafeMax)); // Aggregate safety clamp
 
         throughput *= sample_transmittance;
     }
