@@ -447,8 +447,6 @@ private:
 
   float last_frame_dt_seconds_ { 1.0F / 60.0F };
 
-  std::unordered_map<ViewId, float> auto_exposure_ev100_;
-
   // Frame slot from FrameContext (stored during OnFrameStart for RenderContext)
   frame::Slot frame_slot_ { frame::kInvalidSlot };
 
