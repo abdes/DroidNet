@@ -838,6 +838,8 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
         continue;
       }
 
+      namespace env = scene::environment;
+
       // --- STEP 2: Run environment update passes ---
       // Regenerate atmosphere LUTs first (if needed) so sky capture and IBL
       // can run in the same frame against the freshly swapped LUT buffers.
@@ -846,8 +848,7 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
         bool atmo_enabled = false;
         if (const auto scene = render_context_->scene) {
           if (const auto env = scene->GetEnvironment()) {
-            if (const auto atmo
-              = env->TryGetSystem<scene::environment::SkyAtmosphere>();
+            if (const auto atmo = env->TryGetSystem<env::SkyAtmosphere>();
               atmo && atmo->IsEnabled()) {
               atmo_enabled = true;
             }
@@ -891,8 +892,7 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
           bool atmo_enabled = false;
           if (const auto scene = render_context_->scene) {
             if (const auto env = scene->GetEnvironment()) {
-              if (const auto atmo
-                = env->TryGetSystem<scene::environment::SkyAtmosphere>();
+              if (const auto atmo = env->TryGetSystem<env::SkyAtmosphere>();
                 atmo && atmo->IsEnabled()) {
                 atmo_enabled = true;
               }
@@ -1383,6 +1383,8 @@ auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
 auto Renderer::UpdateViewExposure(
   ViewId view_id, const scene::Scene& scene, const SunState& sun_state) -> float
 {
+  namespace env = scene::environment;
+
   float exposure = 1.0F;
   float exposure_key = 1.0F;
   std::optional<float> camera_ev100 {};
@@ -1394,8 +1396,7 @@ auto Renderer::UpdateViewExposure(
 
   // Manual and auto exposure use the post-process volume.
   if (const auto env = scene.GetEnvironment()) {
-    if (const auto pp
-      = env->TryGetSystem<scene::environment::PostProcessVolume>();
+    if (const auto pp = env->TryGetSystem<env::PostProcessVolume>();
       pp && pp->IsEnabled()) {
       if (!pp->GetExposureEnabled()) {
         env_dynamic_manager_->SetExposure(view_id, exposure);
@@ -1403,44 +1404,27 @@ auto Renderer::UpdateViewExposure(
       }
       exposure_key = std::max(1e-4F, pp->GetExposureKey());
       const float compensation_ev = pp->GetExposureCompensationEv();
-      if (pp->GetExposureMode() == scene::environment::ExposureMode::kManual
-        || pp->GetExposureMode()
-          == scene::environment::ExposureMode::kManualCamera) {
-        const float ev100 = pp->GetExposureMode()
-            == scene::environment::ExposureMode::kManualCamera
+      const auto mode = pp->GetExposureMode();
+
+      if (mode == env::ExposureMode::kManual
+        || mode == env::ExposureMode::kManualCamera
+        || mode == env::ExposureMode::kAuto) {
+        const float ev100 = (mode == env::ExposureMode::kManualCamera
+                              || mode == env::ExposureMode::kAuto)
           ? camera_ev100.value_or(pp->GetManualExposureEv100())
           : pp->GetManualExposureEv100();
+
         // Physically calibrated manual exposure (ISO 2720 reflected-light
         // calibration constant K = 12.5).
+        // For ExposureMode::kAuto, this value serves as a physically-aligned
+        // baseline/seed before the histogram-based adaptation pass takes over.
         exposure = (1.0F / 12.5F) * std::exp2(compensation_ev - ev100);
-      } else {
-        const float min_ev = pp->GetAutoExposureMinEv();
-        const float max_ev = pp->GetAutoExposureMaxEv();
 
-        // Estimate scene EV100 from sun illuminance (lux) using a diffuse
-        // Lambertian assumption (L = E / pi) and standard calibration.
-        const float illuminance_lux = std::max(0.0F, sun_state.illuminance);
-        constexpr float kCalibration = 12.5F;
-        constexpr float kPi = 3.14159265359F;
-        const float luminance = illuminance_lux / kPi;
-        const float ev100
-          = std::log2(std::max(1e-4F, luminance * 100.0F / kCalibration));
-        const float target_ev = std::clamp(ev100, min_ev, max_ev);
-
-        float resolved_ev = target_ev;
-        auto it = auto_exposure_ev100_.find(view_id);
-        if (it != auto_exposure_ev100_.end()) {
-          const float prev_ev = it->second;
-          const bool brightening = target_ev < prev_ev;
-          const float speed = brightening ? pp->GetAutoExposureSpeedUp()
-                                          : pp->GetAutoExposureSpeedDown();
-          const float dt = std::max(0.0F, last_frame_dt_seconds_);
-          const float alpha = 1.0F - std::exp(-speed * dt);
-          resolved_ev = prev_ev + (target_ev - prev_ev) * alpha;
+        if (mode == env::ExposureMode::kAuto) {
+          DLOG_F(3,
+            "View {} in auto exposure mode, will use baseline exposure={:.4f}",
+            view_id, exposure);
         }
-        auto_exposure_ev100_[view_id] = resolved_ev;
-
-        exposure = std::exp2(compensation_ev - resolved_ev);
       }
     }
   }
@@ -1552,9 +1536,10 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
         SunState effective_sun
           = sun_override_.enabled ? sun_override_ : scene_sun;
 
+        namespace env = scene::environment;
+
         if (auto env = scene.GetEnvironment()) {
-          if (const auto atmo
-            = env->TryGetSystem<scene::environment::SkyAtmosphere>();
+          if (const auto atmo = env->TryGetSystem<env::SkyAtmosphere>();
             atmo && atmo->IsEnabled()) {
             aerial_distance_scale = atmo->GetAerialPerspectiveDistanceScale();
             aerial_scattering_strength = atmo->GetAerialScatteringStrength();
