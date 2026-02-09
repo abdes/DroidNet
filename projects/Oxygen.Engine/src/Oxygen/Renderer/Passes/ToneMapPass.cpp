@@ -29,20 +29,25 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
+#include <Oxygen/Renderer/Passes/AutoExposurePass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 
 namespace oxygen::engine {
 
 namespace {
-  struct ToneMapPassConstants {
+  struct alignas(16) ToneMapPassConstants {
     uint32_t source_texture_index;
     uint32_t sampler_index;
-    float exposure;
+    uint32_t exposure_buffer_index;
     uint32_t tone_mapper;
+    float exposure;
+    uint32_t debug_flags;
+    float _pad0;
+    float _pad1;
   };
 
-  static_assert(sizeof(ToneMapPassConstants) == 16,
-    "ToneMapPassConstants must be 16 bytes");
+  static_assert(sizeof(ToneMapPassConstants) == 32,
+    "ToneMapPassConstants must be 32 bytes");
 
   auto PrepareRenderTargetView(graphics::Texture& color_texture,
     graphics::ResourceRegistry& registry,
@@ -110,7 +115,7 @@ auto to_string(ToneMapper mapper) -> std::string
 }
 
 ToneMapPass::ToneMapPass(std::shared_ptr<ToneMapPassConfig> config)
-  : GraphicsRenderPass(config ? config->debug_name : "ToneMapPass", false)
+  : GraphicsRenderPass(config ? config->debug_name : "ToneMapPass", true)
   , config_(std::move(config))
 {
   pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
@@ -339,12 +344,29 @@ auto ToneMapPass::EnsureSourceTextureSrv(const graphics::Texture& texture)
     .is_read_only_dsv = false,
   };
 
+  // The resource registry aborts if we try to register a duplicate view (same
+  // resource + same description). This can occur if this pass is re-created
+  // (or its local cache is cleared) while the global registry still holds the
+  // prior view. In that case, explicitly unregister the stale view first.
+  const bool registry_has_view = registry.Contains(texture, srv_desc);
+
   if (auto it = source_texture_srvs_.find(&texture);
     it != source_texture_srvs_.end()) {
-    if (registry.Contains(texture, srv_desc)) {
+    if (registry_has_view) {
       return it->second;
     }
     source_texture_srvs_.erase(it);
+  } else if (registry_has_view) {
+    // Stale registry entry without a matching local cache entry.
+    const auto existing_view = registry.Find(texture, srv_desc);
+    if (existing_view->IsValid()) {
+      try {
+        registry.UnRegisterView(texture, existing_view);
+      } catch (...) {
+        // Best-effort cleanup: if the registry or resource lifetime is
+        // unusual, avoid throwing from here and continue.
+      }
+    }
   }
 
   auto srv_handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
@@ -371,17 +393,52 @@ auto ToneMapPass::UpdatePassConstants(ShaderVisibleIndex source_texture_index)
   CHECK_NOTNULL_F(pass_constants_mapped_ptr_);
 
   float exposure = std::max(config_->manual_exposure, 0.0F);
+  ShaderVisibleIndex exposure_buffer_index = kInvalidShaderVisibleIndex;
+  uint32_t debug_flags = 0u;
   if (config_->exposure_mode == ExposureMode::kAuto) {
-    if (const auto manager = Context().env_dynamic_manager) {
-      const auto view_id = Context().current_view.view_id;
-      exposure = std::max(manager->GetExposure(view_id), 0.0F);
+    debug_flags |= 1u; // want auto exposure
+    const auto view_id = Context().current_view.view_id;
+    const auto* ae = Context().GetPass<AutoExposurePass>();
+
+    if (ae != nullptr) {
+      debug_flags |= 2u; // AutoExposurePass found
+      exposure_buffer_index
+        = ae->GetExposureOutput(view_id).exposure_state_srv_index;
+    }
+
+    if (ae == nullptr) {
+      LOG_F(ERROR,
+        "ToneMapPass: Auto exposure requested, but AutoExposurePass is not "
+        "registered (view_id={})",
+        view_id.get());
+    }
+
+    if (exposure_buffer_index.IsValid()) {
+      debug_flags |= 4u; // exposure buffer valid
+    } else {
+      LOG_F(ERROR,
+        "ToneMapPass: Auto exposure requested, but exposure buffer SRV index "
+        "is invalid (view_id={}, ae_registered={})",
+        view_id.get(), ae != nullptr);
+    }
+
+    // Fallback: if auto exposure pass did not run, keep legacy env exposure.
+    if (!exposure_buffer_index.IsValid()) {
+      if (const auto manager = Context().env_dynamic_manager) {
+        debug_flags |= 8u; // used env fallback exposure
+        exposure = std::max(manager->GetExposure(view_id), 0.0F);
+      }
     }
   }
   const ToneMapPassConstants constants {
     .source_texture_index = source_texture_index.get(),
     .sampler_index = 0u,
-    .exposure = exposure,
+    .exposure_buffer_index = exposure_buffer_index.get(),
     .tone_mapper = static_cast<uint32_t>(config_->tone_mapper),
+    .exposure = exposure,
+    .debug_flags = debug_flags,
+    ._pad0 = 0.0F,
+    ._pad1 = 0.0F,
   };
 
   const auto slot = pass_constants_slot_ % kPassConstantsSlots;

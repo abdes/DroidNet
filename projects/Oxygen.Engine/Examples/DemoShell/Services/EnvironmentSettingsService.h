@@ -101,6 +101,12 @@ public:
   //! Ends a batch update of settings.
   virtual auto EndUpdate() -> void;
 
+  //! Gets the index of the currently active preset.
+  [[nodiscard]] virtual auto GetPresetIndex() const -> int;
+
+  //! Sets the index of the currently active preset.
+  virtual auto SetPresetIndex(int index) -> void;
+
   //! Returns whether LUTs are valid and dirty (renderer state).
   [[nodiscard]] virtual auto GetAtmosphereLutStatus() const
     -> std::pair<bool, bool>;
@@ -398,11 +404,11 @@ private:
   bool skybox_tonemap_hdr_to_ldr_ { false };
   float skybox_hdr_exposure_ev_ { 0.0F };
   std::string skybox_path_ {};
-  std::string skybox_status_message_ {};
+  std::string skybox_status_message_;
   int skybox_last_face_size_ { 0 };
   content::ResourceKey skybox_last_resource_key_ { 0U };
   bool skybox_dirty_ { false };
-  std::string last_loaded_skybox_path_ {};
+  std::string last_loaded_skybox_path_;
   int last_loaded_skybox_layout_idx_ { -1 };
   int last_loaded_skybox_output_format_idx_ { -1 };
   int last_loaded_skybox_face_size_ { 0 };
@@ -455,6 +461,8 @@ private:
   bool force_analytic_ { false };
 
   std::atomic_uint64_t epoch_ { 0 };
+
+  int preset_index_ { 0 };
 };
 
 } // namespace oxygen::examples

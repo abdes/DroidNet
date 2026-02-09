@@ -114,7 +114,12 @@ auto RenderPass::PrepareResources(
   // Let derived base class (Graphics/Compute) handle PSO rebuild
   OnPrepareResources(recorder);
 
-  co_await DoPrepareResources(recorder);
+  try {
+    co_await DoPrepareResources(recorder);
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "{}: PrepareResources failed: {}", GetName(), ex.what());
+    throw;
+  }
 
   co_return;
 }

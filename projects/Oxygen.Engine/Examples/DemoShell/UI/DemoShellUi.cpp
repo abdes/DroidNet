@@ -47,15 +47,15 @@
 namespace oxygen::examples::ui {
 
 struct DemoShellUi::Impl {
-  observer_ptr<AsyncEngine> engine { nullptr };
-  observer_ptr<PanelRegistry> panel_registry {};
-  observer_ptr<RenderingSettingsService> rendering_settings_service {};
-  observer_ptr<LightCullingSettingsService> light_culling_settings_service {};
-  observer_ptr<CameraSettingsService> camera_settings_service {};
-  observer_ptr<EnvironmentSettingsService> environment_settings_service {};
-  observer_ptr<PostProcessSettingsService> post_process_settings_service {};
-  observer_ptr<FileBrowserService> file_browser_service {};
-  DemoShellPanelConfig panel_config {};
+  observer_ptr<AsyncEngine> engine;
+  observer_ptr<PanelRegistry> panel_registry;
+  observer_ptr<RenderingSettingsService> rendering_settings_service;
+  observer_ptr<LightCullingSettingsService> light_culling_settings_service;
+  observer_ptr<CameraSettingsService> camera_settings_service;
+  observer_ptr<EnvironmentSettingsService> environment_settings_service;
+  observer_ptr<PostProcessSettingsService> post_process_settings_service;
+  observer_ptr<FileBrowserService> file_browser_service;
+  DemoShellPanelConfig panel_config;
 
   // UI Settings (always created)
   UiSettingsVm ui_settings_vm;
@@ -66,31 +66,31 @@ struct DemoShellUi::Impl {
   SidePanel side_panel;
   AxesWidget axes_widget;
   StatsOverlay stats_overlay;
-  std::shared_ptr<UiSettingsPanel> settings_panel {};
+  std::shared_ptr<UiSettingsPanel> settings_panel;
 
   // Rendering panel (created lazily when pass config is available)
-  std::unique_ptr<RenderingVm> rendering_vm {};
-  std::shared_ptr<RenderingPanel> rendering_panel {};
+  std::unique_ptr<RenderingVm> rendering_vm;
+  std::shared_ptr<RenderingPanel> rendering_panel;
 
   // Lighting panel (created lazily when pass configs are available)
-  std::unique_ptr<LightCullingVm> light_culling_vm {};
-  std::shared_ptr<LightingPanel> lighting_panel {};
+  std::unique_ptr<LightCullingVm> light_culling_vm;
+  std::shared_ptr<LightingPanel> lighting_panel;
 
   // Camera panel
-  std::unique_ptr<CameraVm> camera_vm {};
-  std::shared_ptr<CameraControlPanel> camera_panel {};
+  std::unique_ptr<CameraVm> camera_vm;
+  std::shared_ptr<CameraControlPanel> camera_panel;
 
   // Content panel
-  std::shared_ptr<ContentVm> content_vm {};
-  std::shared_ptr<ContentLoaderPanel> content_panel {};
+  std::shared_ptr<ContentVm> content_vm;
+  std::shared_ptr<ContentLoaderPanel> content_panel;
 
   // Environment panel
-  std::unique_ptr<EnvironmentVm> environment_vm {};
-  std::shared_ptr<EnvironmentDebugPanel> environment_panel {};
+  std::unique_ptr<EnvironmentVm> environment_vm;
+  std::shared_ptr<EnvironmentDebugPanel> environment_panel;
 
   // PostProcess panel
-  std::unique_ptr<PostProcessVm> post_process_vm {};
-  std::shared_ptr<PostProcessPanel> post_process_panel {};
+  std::unique_ptr<PostProcessVm> post_process_vm;
+  std::shared_ptr<PostProcessPanel> post_process_panel;
 
   Impl(observer_ptr<AsyncEngine> engine_ptr,
     observer_ptr<PanelRegistry> registry,
@@ -144,8 +144,8 @@ struct DemoShellUi::Impl {
 
     // Create Environment VM and Panel
     if (panel_config.environment && environment_settings) {
-      environment_vm
-        = std::make_unique<EnvironmentVm>(environment_settings, file_browser);
+      environment_vm = std::make_unique<EnvironmentVm>(
+        environment_settings, post_process_settings, file_browser);
       environment_panel = std::make_shared<EnvironmentDebugPanel>();
 
       EnvironmentDebugConfig env_config;

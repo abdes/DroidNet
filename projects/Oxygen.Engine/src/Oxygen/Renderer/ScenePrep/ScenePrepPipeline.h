@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <cstdint>
 #include <optional>
 #include <utility>
 
@@ -50,7 +49,7 @@ protected:
   virtual auto FinalizeImpl(ScenePrepState& state) -> void = 0;
 
 private:
-  std::optional<ScenePrepContext> ctx_ {};
+  std::optional<ScenePrepContext> ctx_;
   observer_ptr<ScenePrepState> prep_state_;
 };
 
@@ -113,7 +112,7 @@ public:
     }
   }
 
-  auto FinalizeImpl(ScenePrepState& state) -> void
+  auto FinalizeImpl(ScenePrepState& state) -> void override
   {
     if constexpr (FinalizationCfg::has_geometry_upload) {
       finalization_.geometry_upload(state);

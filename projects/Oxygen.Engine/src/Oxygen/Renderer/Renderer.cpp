@@ -1217,6 +1217,7 @@ auto Renderer::WireContext(RenderContext& render_context,
   render_context.scene_constants = scene_consts;
   render_context.frame_slot = frame_slot_;
   render_context.frame_sequence = frame_seq_num;
+  render_context.delta_time = last_frame_dt_seconds_;
   render_context.gpu_debug_manager.reset(gpu_debug_manager_.get());
 
   const auto graphics_ptr = gfx_weak_.lock();

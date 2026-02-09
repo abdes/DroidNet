@@ -76,6 +76,7 @@ class SkyPass;
 class SkyCapturePass;
 class TransparentPass;
 class WireframePass;
+class AutoExposurePass;
 class GpuDebugClearPass;
 class GpuDebugDrawPass;
 
@@ -85,8 +86,8 @@ class GpuDebugDrawPass;
  binary compatibility. Update this list as new passes are added.
 */
 using KnownPassTypes = PassTypeList<DepthPrePass, LightCullingPass, ShaderPass,
-  SkyPass, SkyCapturePass, TransparentPass, WireframePass, GpuDebugClearPass,
-  GpuDebugDrawPass>;
+  SkyPass, SkyCapturePass, TransparentPass, WireframePass, AutoExposurePass,
+  GpuDebugClearPass, GpuDebugDrawPass>;
 
 //! The number of known pass types, used for static array sizing and sanity
 //! checks.
@@ -176,6 +177,9 @@ struct RenderContext {
   //! Map of per-view outputs captured by the renderer. Keys are `ViewId`.
   std::unordered_map<oxygen::ViewId, observer_ptr<graphics::Framebuffer>>
     view_outputs;
+
+  //! Current frame delta time in seconds.
+  float delta_time { 1.0F / 60.0F };
 
   //! Scene for the current frame.
   /*!

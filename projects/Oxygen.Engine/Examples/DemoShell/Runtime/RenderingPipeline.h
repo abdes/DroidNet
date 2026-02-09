@@ -15,9 +15,9 @@
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Renderer/Passes/AutoExposurePass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
-#include <Oxygen/Renderer/Renderer.h>
 
 #include "DemoShell/Runtime/CompositionView.h"
 
@@ -123,6 +123,24 @@ public:
   virtual auto SetExposureMode(engine::ExposureMode /*mode*/) -> void { }
   virtual auto SetExposureValue(float /*value*/) -> void { }
   virtual auto SetToneMapper(engine::ToneMapper /*mode*/) -> void { }
+
+  // Auto Exposure settings
+  virtual auto SetAutoExposureAdaptationSpeedUp(float /*speed*/) -> void { }
+  virtual auto SetAutoExposureAdaptationSpeedDown(float /*speed*/) -> void { }
+  virtual auto SetAutoExposureLowPercentile(float /*percentile*/) -> void { }
+  virtual auto SetAutoExposureHighPercentile(float /*percentile*/) -> void { }
+  virtual auto SetAutoExposureMinLogLuminance(float /*luminance*/) -> void { }
+  virtual auto SetAutoExposureLogLuminanceRange(float /*range*/) -> void { }
+  virtual auto SetAutoExposureTargetLuminance(float /*luminance*/) -> void { }
+  virtual auto SetAutoExposureMeteringMode(engine::MeteringMode /*mode*/)
+    -> void
+  {
+  }
+
+  //! Resets the auto-exposure history for all active views to the given initial
+  //! EV100 value. This is useful when switching environments/presets to prevent
+  //! adaptation artifacts (flashing).
+  virtual auto ResetAutoExposure(float /*initial_ev100*/) -> void { }
 
   //! Provide last mouse-down position for GPU debug overlays.
   virtual auto SetGpuDebugMouseDownPosition(

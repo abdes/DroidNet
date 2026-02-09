@@ -32,6 +32,16 @@ auto PostProcessVm::Refresh() -> void
   manual_camera_iso_ = service_->GetManualCameraIso();
   exposure_compensation_ = service_->GetExposureCompensation();
   exposure_key_ = service_->GetExposureKey();
+
+  auto_exposure_speed_up_ = service_->GetAutoExposureAdaptationSpeedUp();
+  auto_exposure_speed_down_ = service_->GetAutoExposureAdaptationSpeedDown();
+  auto_exposure_low_percentile_ = service_->GetAutoExposureLowPercentile();
+  auto_exposure_high_percentile_ = service_->GetAutoExposureHighPercentile();
+  auto_exposure_min_log_lum_ = service_->GetAutoExposureMinLogLuminance();
+  auto_exposure_log_lum_range_ = service_->GetAutoExposureLogLuminanceRange();
+  auto_exposure_target_lum_ = service_->GetAutoExposureTargetLuminance();
+  auto_exposure_metering_mode_ = service_->GetAutoExposureMeteringMode();
+
   tonemapping_enabled_ = service_->GetTonemappingEnabled();
   tonemapping_mode_ = service_->GetToneMapper();
 }
@@ -199,6 +209,153 @@ auto PostProcessVm::SetExposureKey(float exposure_key) -> void
   }
 }
 
+// Auto Exposure
+
+auto PostProcessVm::GetAutoExposureAdaptationSpeedUp() -> float
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale()) {
+    Refresh();
+  }
+  return auto_exposure_speed_up_;
+}
+
+auto PostProcessVm::SetAutoExposureAdaptationSpeedUp(float speed) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->SetAutoExposureAdaptationSpeedUp(speed);
+    Refresh();
+  }
+}
+
+auto PostProcessVm::GetAutoExposureAdaptationSpeedDown() -> float
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale()) {
+    Refresh();
+  }
+  return auto_exposure_speed_down_;
+}
+
+auto PostProcessVm::SetAutoExposureAdaptationSpeedDown(float speed) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->SetAutoExposureAdaptationSpeedDown(speed);
+    Refresh();
+  }
+}
+
+auto PostProcessVm::GetAutoExposureLowPercentile() -> float
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale()) {
+    Refresh();
+  }
+  return auto_exposure_low_percentile_;
+}
+
+auto PostProcessVm::SetAutoExposureLowPercentile(float percentile) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->SetAutoExposureLowPercentile(percentile);
+    Refresh();
+  }
+}
+
+auto PostProcessVm::GetAutoExposureHighPercentile() -> float
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale()) {
+    Refresh();
+  }
+  return auto_exposure_high_percentile_;
+}
+
+auto PostProcessVm::SetAutoExposureHighPercentile(float percentile) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->SetAutoExposureHighPercentile(percentile);
+    Refresh();
+  }
+}
+
+auto PostProcessVm::GetAutoExposureMinLogLuminance() -> float
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale()) {
+    Refresh();
+  }
+  return auto_exposure_min_log_lum_;
+}
+
+auto PostProcessVm::SetAutoExposureMinLogLuminance(float min_log_lum) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->SetAutoExposureMinLogLuminance(min_log_lum);
+    Refresh();
+  }
+}
+
+auto PostProcessVm::GetAutoExposureLogLuminanceRange() -> float
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale()) {
+    Refresh();
+  }
+  return auto_exposure_log_lum_range_;
+}
+
+auto PostProcessVm::SetAutoExposureLogLuminanceRange(float range) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->SetAutoExposureLogLuminanceRange(range);
+    Refresh();
+  }
+}
+
+auto PostProcessVm::GetAutoExposureTargetLuminance() -> float
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale()) {
+    Refresh();
+  }
+  return auto_exposure_target_lum_;
+}
+
+auto PostProcessVm::SetAutoExposureTargetLuminance(float target_lum) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->SetAutoExposureTargetLuminance(target_lum);
+    Refresh();
+  }
+}
+
+auto PostProcessVm::GetAutoExposureMeteringMode() -> engine::MeteringMode
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale()) {
+    Refresh();
+  }
+  return auto_exposure_metering_mode_;
+}
+
+auto PostProcessVm::SetAutoExposureMeteringMode(engine::MeteringMode mode)
+  -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->SetAutoExposureMeteringMode(mode);
+    Refresh();
+  }
+}
+
 // Tonemapping
 
 auto PostProcessVm::GetTonemappingEnabled() -> bool
@@ -233,6 +390,24 @@ auto PostProcessVm::SetToneMapper(engine::ToneMapper mode) -> void
   std::lock_guard lock(mutex_);
   if (service_) {
     service_->SetToneMapper(mode);
+    Refresh();
+  }
+}
+
+auto PostProcessVm::ResetToDefaults() -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->ResetToDefaults();
+    Refresh();
+  }
+}
+
+auto PostProcessVm::ResetAutoExposureDefaults() -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->ResetAutoExposureDefaults();
     Refresh();
   }
 }

@@ -12,6 +12,7 @@
 #include <string>
 #include <unordered_map>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Renderer/Passes/GraphicsRenderPass.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -35,10 +36,10 @@ OXGN_RNDR_API auto to_string(ExposureMode mode) -> std::string;
 
 //! Standardized tonemapper selection.
 enum class ToneMapper : std::uint32_t {
-  kAcesFitted = 0u,
-  kReinhard = 1u,
-  kNone = 2u,
-  kFilmic = 3u,
+  kAcesFitted = 0U,
+  kReinhard = 1U,
+  kNone = 2U,
+  kFilmic = 3U,
 };
 
 //! Returns a string representation of the tonemapper.
@@ -47,10 +48,10 @@ OXGN_RNDR_API auto to_string(ToneMapper mapper) -> std::string;
 //! Configuration for tone mapping and exposure.
 struct ToneMapPassConfig {
   //! HDR source texture to tonemap.
-  std::shared_ptr<graphics::Texture> source_texture {};
+  std::shared_ptr<graphics::Texture> source_texture;
 
   //! SDR output texture (if null, uses framebuffer color attachment).
-  std::shared_ptr<graphics::Texture> output_texture {};
+  std::shared_ptr<graphics::Texture> output_texture;
 
   //! Exposure mode selection.
   ExposureMode exposure_mode { ExposureMode::kManual };
@@ -80,6 +81,9 @@ public:
   OXGN_RNDR_API explicit ToneMapPass(std::shared_ptr<ToneMapPassConfig> config);
   OXGN_RNDR_API ~ToneMapPass() override;
 
+  OXYGEN_MAKE_NON_COPYABLE(ToneMapPass)
+  OXYGEN_DEFAULT_MOVABLE(ToneMapPass)
+
 protected:
   auto DoPrepareResources(graphics::CommandRecorder& recorder)
     -> co::Co<> override;
@@ -103,18 +107,19 @@ private:
     -> ShaderVisibleIndex;
   auto UpdatePassConstants(ShaderVisibleIndex source_texture_index) -> void;
 
-  static constexpr uint32_t kPassConstantsStride = 256u;
-  static constexpr size_t kPassConstantsSlots = 8u;
+  static constexpr uint32_t kPassConstantsStride = 256U;
+  static constexpr size_t kPassConstantsSlots = 8U;
 
-  std::shared_ptr<Config> config_ {};
+  std::shared_ptr<Config> config_;
 
-  std::shared_ptr<graphics::Buffer> pass_constants_buffer_ {};
+  std::shared_ptr<graphics::Buffer> pass_constants_buffer_;
   std::byte* pass_constants_mapped_ptr_ { nullptr };
-  std::array<ShaderVisibleIndex, kPassConstantsSlots> pass_constants_indices_;
-  size_t pass_constants_slot_ { 0u };
+  std::array<ShaderVisibleIndex, kPassConstantsSlots>
+    pass_constants_indices_ {};
+  size_t pass_constants_slot_ { 0U };
 
   std::unordered_map<const graphics::Texture*, ShaderVisibleIndex>
-    source_texture_srvs_ {};
+    source_texture_srvs_;
 };
 
 } // namespace oxygen::engine

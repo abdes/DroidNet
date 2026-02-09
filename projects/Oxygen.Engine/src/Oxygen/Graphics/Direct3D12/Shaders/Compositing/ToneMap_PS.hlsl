@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
+#include "Renderer/GpuDebug.hlsli"
 
 struct ToneMapVSOutput
 {
@@ -23,8 +24,11 @@ cbuffer RootConstants : register(b2, space0) {
 struct ToneMapPassConstants {
     uint source_texture_index;
     uint sampler_index;
-    float exposure;
+    uint exposure_buffer_index;
     uint tone_mapper;  // 0=ACES, 1=Reinhard, 2=None, 3=Filmic
+    float exposure;
+    uint debug_flags;
+    float2 _pad;
 };
 
 //-----------------------------------------------------------------------------
@@ -131,7 +135,110 @@ float4 PS(ToneMapVSOutput input) : SV_TARGET
     float3 color = hdr_color.rgb;
 
     // Apply exposure
-    color *= pass.exposure;
+    float exposure = pass.exposure;
+    if (pass.exposure_buffer_index != K_INVALID_BINDLESS_INDEX) {
+        ByteAddressBuffer exposure_buf
+            = ResourceDescriptorHeap[pass.exposure_buffer_index];
+        exposure = max(asfloat(exposure_buf.Load(4)), 0.0f);
+    }
+
+#if 0
+    // Emit a single debug cross per frame from the tonemap shader so we can
+    // validate the exposure inputs in-shader. Guarded to one pixel to avoid
+    // flooding the GPU debug line buffer.
+    if (all(uint2(input.position.xy) == uint2(0u, 0u))) {
+        float dbg_avg_lum = 0.0f;
+        float dbg_exposure = exposure;
+        const bool has_exposure_buffer
+            = (pass.exposure_buffer_index != K_INVALID_BINDLESS_INDEX);
+        if (has_exposure_buffer) {
+            ByteAddressBuffer dbg_buf
+                = ResourceDescriptorHeap[pass.exposure_buffer_index];
+            dbg_avg_lum = asfloat(dbg_buf.Load(0));
+            dbg_exposure = asfloat(dbg_buf.Load(4));
+        }
+
+        // Encode what the shader *actually* sees in the pass constants:
+        // - R: exposure_buffer_index low 8 bits
+        // - G: exposure_buffer_index next 8 bits
+        // - B: debug_flags low 8 bits
+        // This lets us distinguish "shader sees 23" vs "shader sees 0xFFFFFFFF".
+        const uint idx = pass.exposure_buffer_index;
+        const uint flags = pass.debug_flags;
+        float3 cross_color = float3(
+            float(idx & 0xFFu) / 255.0f,
+            float((idx >> 8u) & 0xFFu) / 255.0f,
+            float(flags & 0xFFu) / 255.0f);
+
+        // Place the cross roughly in the center of the camera frustum.
+        // We avoid `inverse()` (not available in this shader compile environment)
+        // by extracting a world-space forward vector from the view matrix.
+        // Note: Engine conventions treat objects in front as negative view-space Z.
+        const float3 forward_vs = float3(0.0f, 0.0f, -1.0f);
+        float3 forward_ws = mul(transpose((float3x3)view_matrix), forward_vs);
+        forward_ws /= max(length(forward_ws), 1e-5f);
+
+        const float3 cross_pos_ws = camera_position + forward_ws * 2.0f;
+        AddGpuDebugCross(cross_pos_ws, cross_color, 0.25f);
+
+        // Debug Cross 2: Average Luminance (Green = 0.18, Red = 0, Blue = Very Bright)
+        // Mapped to Log2 space for visualization.
+        if (has_exposure_buffer) {
+            float log_avg = log2(max(dbg_avg_lum, 0.0001));
+            // Map [-10, +10] to [0, 1] roughly.
+            float t = saturate((log_avg + 10.0) / 20.0);
+            float3 lum_color = float3(t, 1.0 - abs(t - 0.5) * 2.0, 1.0 - t);
+
+            float3 cross2_pos = cross_pos_ws + float3(0.1, 0.0, 0.0); // Offset right
+            AddGpuDebugCross(cross2_pos, lum_color, 0.2f);
+        }
+
+        // Debug Cross 3: Exposure (Cyan = 1.0, changes intensity)
+        if (has_exposure_buffer) {
+             float3 exp_color = float3(0.0, dbg_exposure * 0.1, dbg_exposure * 0.1);
+             // If exposure is massive (white wash), this will be bright cyan/white.
+             // If exposure is tiny, this will be black.
+
+             float3 cross3_pos = cross_pos_ws - float3(0.1, 0.0, 0.0); // Offset left
+             AddGpuDebugCross(cross3_pos, exp_color, 0.2f);
+        }
+
+        // Debug Cross 4: Histogram Count (Blue = Full, Black = Zero)
+        if (has_exposure_buffer) {
+             ByteAddressBuffer dbg_buf = ResourceDescriptorHeap[pass.exposure_buffer_index];
+             uint count = dbg_buf.Load(12);
+
+             // Normalize based on 1080p roughly (2 million pixels)
+             float t = saturate(float(count) / (1920.0 * 1080.0));
+             float3 count_color = float3(0.0, 0.0, max(t, 0.2));
+
+             if (count == 0) count_color = float3(1.0, 0.0, 0.0); // RED ALERT for 0 count.
+
+             float3 cross4_pos = cross_pos_ws - float3(0.2, 0.0, 0.0); // Offset far left
+             AddGpuDebugCross(cross4_pos, count_color, 0.2f);
+        }
+
+        // Debug Cross 4: Histogram Count (Blue = Full, Black = Zero)
+        if (has_exposure_buffer) {
+             ByteAddressBuffer dbg_buf = ResourceDescriptorHeap[pass.exposure_buffer_index];
+             uint count = dbg_buf.Load(12);
+
+             // Normalize based on 1080p roughly (2 million pixels)
+             float t = saturate(float(count) / (1920.0 * 1080.0));
+             float3 count_color = float3(0.0, 0.0, max(t, 0.2));
+             // If count is 0, it will be Dark Blue (0.2). If full, Bright Blue.
+             // If extremely low but non-zero, it will be 0.2.
+             // Only if TRULY 0, we can't tell difference from small count with this max(t, 0.2).
+             // Let's use Red for 0.
+             if (count == 0) count_color = float3(1.0, 0.0, 0.0); // RED ALERT for 0 count.
+
+             float3 cross4_pos = cross_pos_ws - float3(0.2, 0.0, 0.0); // Offset far left
+             AddGpuDebugCross(cross4_pos, count_color, 0.2f);
+        }
+    }
+#endif
+
+    color *= exposure;
 
     // Apply tonemapping based on mode
     switch (pass.tone_mapper) {
