@@ -75,8 +75,6 @@ auto UiSettingsService::GetActivePanelName() const -> std::optional<std::string>
 
   auto name = settings->GetString(kActivePanelKey);
   if (name.has_value() && name->empty()) {
-    LOG_F(WARNING,
-      "UiSettingsService: ignoring empty active panel name persistence");
     return std::nullopt;
   }
 
