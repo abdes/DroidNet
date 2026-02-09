@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0","wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oxygen-codemod"
+version = "0.1.0"
+description = "Repository-wide, AST-aware codemod for Oxygen.Engine — generates safe, reviewable patch files for semantic renames across C++, HLSL, and scene/config files."
+authors = [ { name = "Oxygen Dev" } ]
+requires-python = ">=3.8"
+
+# Core dependencies for codemod functionality
+dependencies = [
+	"clang>=12.0.0",        # libclang Python bindings for C++ AST operations
+	"PyYAML>=6.0",          # YAML parsing for scene/config files
+	"pathspec>=0.10.1",     # .gitignore compatible path matching
+	"GitPython>=3.1.27",    # interact with git and produce patches
+	"ruamel.yaml>=0.17.21", # safer round-trip YAML editing (optional)
+    "rich>=10.0.0",        # Rich for improved terminal output and logging
+]
+
+[project.scripts]
+codemod = "codemod.cli:main"
