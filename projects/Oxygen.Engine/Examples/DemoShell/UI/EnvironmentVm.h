@@ -20,6 +20,7 @@
 
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/FileBrowserService.h"
+#include "DemoShell/Services/PostProcessSettingsService.h"
 
 namespace oxygen::examples::ui {
 
@@ -39,6 +40,7 @@ class EnvironmentVm {
 public:
   //! Creates a view model backed by the provided settings service.
   explicit EnvironmentVm(observer_ptr<EnvironmentSettingsService> service,
+    observer_ptr<PostProcessSettingsService> post_process_service,
     observer_ptr<FileBrowserService> file_browser_service);
 
   auto SetRuntimeConfig(const EnvironmentRuntimeConfig& config) -> void;
@@ -200,9 +202,9 @@ public:
 
 private:
   observer_ptr<EnvironmentSettingsService> service_;
+  observer_ptr<PostProcessSettingsService> post_process_service_;
   observer_ptr<FileBrowserService> file_browser_ { nullptr };
   FileBrowserService::RequestId skybox_browse_request_id_ { 0 };
-  int preset_index_ { 0 };
 };
 
 } // namespace oxygen::examples::ui

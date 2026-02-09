@@ -73,12 +73,13 @@ namespace {
     if (temp <= 66.0F) {
       red = 1.0F;
       green = std::clamp(
-        0.39008157877F * std::log(temp) - 0.63184144378F, 0.0F, 1.0F);
+        (0.39008157877F * std::log(temp)) - 0.63184144378F, 0.0F, 1.0F);
       if (temp <= 19.0F) {
         blue = 0.0F;
       } else {
         blue = std::clamp(
-          0.54320678911F * std::log(temp - 10.0F) - 1.19625408914F, 0.0F, 1.0F);
+          (0.54320678911F * std::log(temp - 10.0F)) - 1.19625408914F, 0.0F,
+          1.0F);
       }
     } else {
       red = std::clamp(
@@ -314,8 +315,10 @@ namespace {
   constexpr std::string_view kFogHeightOffsetKey = "env.fog.height_offset_m";
   constexpr std::string_view kFogStartDistanceKey = "env.fog.start_distance_m";
   constexpr std::string_view kFogMaxOpacityKey = "env.fog.max_opacity";
-  constexpr std::string_view kFogAlbedoKey = "env.fog.albedo";
+  constexpr std::string_view kFogAlbedoKey = "fog_albedo_rgb";
+  constexpr std::string_view kEnvironmentPresetKey = "environment_preset_index";
 
+  // Light Culling Key
   constexpr std::string_view kSunEnabledKey = "env.sun.enabled";
   constexpr std::string_view kSunSourceKey = "env.sun.source";
   constexpr std::string_view kSunAzimuthKey = "env.sun.azimuth_deg";
@@ -484,11 +487,24 @@ auto EnvironmentSettingsService::EndUpdate() -> void
 {
   if (update_depth_ > 0) {
     update_depth_--;
+    if (update_depth_ == 0) {
+      MarkDirty();
+    }
   }
-  if (update_depth_ == 0 && pending_changes_) {
-    SaveSettings();
-    epoch_++;
+}
+
+auto EnvironmentSettingsService::GetPresetIndex() const -> int
+{
+  return preset_index_;
+}
+
+auto EnvironmentSettingsService::SetPresetIndex(int index) -> void
+{
+  if (preset_index_ == index) {
+    return;
   }
+  preset_index_ = index;
+  MarkDirty();
 }
 
 auto EnvironmentSettingsService::SyncFromSceneIfNeeded() -> void
@@ -1933,6 +1949,8 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   any_loaded |= load_float(kFogMaxOpacityKey, fog_max_opacity_);
   any_loaded |= load_vec3(kFogAlbedoKey, fog_albedo_);
 
+  any_loaded |= load_int(kEnvironmentPresetKey, preset_index_);
+
   any_loaded |= load_bool(kSunEnabledKey, sun_enabled_);
   const bool sun_source_loaded = load_int(kSunSourceKey, sun_source_);
   any_loaded |= sun_source_loaded;
@@ -2049,6 +2067,7 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kFogStartDistanceKey, fog_start_distance_m_);
   save_float(kFogMaxOpacityKey, fog_max_opacity_);
   save_vec3(kFogAlbedoKey, fog_albedo_);
+  save_int(kEnvironmentPresetKey, preset_index_);
 
   save_bool(kSunEnabledKey, sun_enabled_);
   save_int(kSunSourceKey, sun_source_);
@@ -2089,10 +2108,9 @@ auto EnvironmentSettingsService::MaybeRequestSkyCapture() -> void
     return;
   }
 
-  if (!(sky_light_enabled_
-        && sky_light_source_
-          == static_cast<int>(
-            scene::environment::SkyLightSource::kCapturedScene))) {
+  if (!sky_light_enabled_
+    || sky_light_source_
+      != static_cast<int>(scene::environment::SkyLightSource::kCapturedScene)) {
     return;
   }
 

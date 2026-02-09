@@ -15,6 +15,7 @@
 
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/UI/EnvironmentVm.h"
+#include <Oxygen/Renderer/Passes/ToneMapPass.h>
 
 namespace oxygen::examples::ui {
 
@@ -56,45 +57,23 @@ namespace {
     float sky_light_intensity;
     float sky_light_diffuse;
     float sky_light_specular;
+    // Fog
+    bool fog_enabled;
+    int fog_model;
+    float fog_density;
+    float fog_height_falloff;
+    float fog_height_offset_m;
+    float fog_start_distance_m;
+    float fog_max_opacity;
+    glm::vec3 fog_albedo;
+
+    // Exposure (PostProcess)
+    bool exposure_enabled;
+    int exposure_mode; // 0=Manual, 1=Auto, 2=ManualCamera
+    float manual_ev100;
   };
 
-  constexpr std::array<EnvironmentPresetData, 5> kEnvironmentPresets = {
-    EnvironmentPresetData {
-      .name = "None",
-      .sun_enabled = false,
-      .sun_source = 1,
-      .sun_azimuth_deg = 0.0F,
-      .sun_elevation_deg = 0.0F,
-      .sun_intensity_lux = 0.0F,
-      .sun_use_temperature = false,
-      .sun_temperature_kelvin = 6500.0F,
-      .sun_disk_radius_deg = 0.27F,
-      .sky_atmo_enabled = false,
-      .sky_atmo_sun_disk_enabled = false,
-      .planet_radius_km = 6360.0F,
-      .atmosphere_height_km = 80.0F,
-      .ground_albedo = { 0.06F, 0.05F, 0.04F },
-      .rayleigh_scale_height_km = 8.0F,
-      .mie_scale_height_km = 1.2F,
-      .mie_anisotropy = 0.8F,
-      .multi_scattering = 1.0F,
-      .aerial_perspective_scale = 1.0F,
-      .aerial_scattering_strength = 1.0F,
-      .ozone_rgb = engine::atmos::kDefaultOzoneAbsorptionRgb,
-      .ozone_center_km = engine::atmos::kDefaultOzoneCenterM * 0.001F,
-      .ozone_width_km = engine::atmos::kDefaultOzoneWidthM * 0.001F,
-      .sky_sphere_enabled = false,
-      .sky_sphere_source = 0,
-      .sky_sphere_color = { 0.0F, 0.0F, 0.0F },
-      .sky_sphere_intensity = 1.0F,
-      .sky_sphere_rotation_deg = 0.0F,
-      .sky_light_enabled = false,
-      .sky_light_source = 0,
-      .sky_light_tint = { 1.0F, 1.0F, 1.0F },
-      .sky_light_intensity = 1.0F,
-      .sky_light_diffuse = 1.0F,
-      .sky_light_specular = 1.0F,
-    },
+  constexpr std::array kEnvironmentPresets = {
     EnvironmentPresetData {
       .name = "Outdoor Sunny",
       .sun_enabled = true,
@@ -130,6 +109,17 @@ namespace {
       .sky_light_intensity = 1.0F,
       .sky_light_diffuse = 1.0F,
       .sky_light_specular = 1.0F,
+      .fog_enabled = false,
+      .fog_model = 0,
+      .fog_density = 0.01F,
+      .fog_height_falloff = 0.2F,
+      .fog_height_offset_m = 0.0F,
+      .fog_start_distance_m = 0.0F,
+      .fog_max_opacity = 1.0F,
+      .fog_albedo = { 1.0F, 1.0F, 1.0F },
+      .exposure_enabled = true,
+      .exposure_mode = 1, // Auto
+      .manual_ev100 = 14.0F,
     },
     EnvironmentPresetData {
       .name = "Outdoor Cloudy",
@@ -166,6 +156,64 @@ namespace {
       .sky_light_intensity = 1.2F,
       .sky_light_diffuse = 1.2F,
       .sky_light_specular = 0.7F,
+      .fog_enabled = false,
+      .fog_model = 0,
+      .fog_density = 0.01F,
+      .fog_height_falloff = 0.2F,
+      .fog_height_offset_m = 0.0F,
+      .fog_start_distance_m = 0.0F,
+      .fog_max_opacity = 1.0F,
+      .fog_albedo = { 1.0F, 1.0F, 1.0F },
+      .exposure_enabled = true,
+      .exposure_mode = 1, // Auto
+      .manual_ev100 = 12.0F,
+    },
+    EnvironmentPresetData {
+      .name = "Foggy Daylight",
+      .sun_enabled = true,
+      .sun_source = 1,
+      .sun_azimuth_deg = 135.0F,
+      .sun_elevation_deg = 45.0F,
+      .sun_intensity_lux = 60000.0F,
+      .sun_use_temperature = true,
+      .sun_temperature_kelvin = 6000.0F,
+      .sun_disk_radius_deg = 0.27F,
+      .sky_atmo_enabled = true,
+      .sky_atmo_sun_disk_enabled = false, // Sun disk obscured by fog usually
+      .planet_radius_km = 6360.0F,
+      .atmosphere_height_km = 80.0F,
+      .ground_albedo = { 0.06F, 0.05F, 0.04F },
+      .rayleigh_scale_height_km = 8.0F,
+      .mie_scale_height_km = 1.2F,
+      .mie_anisotropy = 0.8F,
+      .multi_scattering = 1.0F,
+      .aerial_perspective_scale = 1.0F,
+      .aerial_scattering_strength = 1.0F,
+      .ozone_rgb = engine::atmos::kDefaultOzoneAbsorptionRgb,
+      .ozone_center_km = engine::atmos::kDefaultOzoneCenterM * 0.001F,
+      .ozone_width_km = engine::atmos::kDefaultOzoneWidthM * 0.001F,
+      .sky_sphere_enabled = false,
+      .sky_sphere_source = 0,
+      .sky_sphere_color = { 0.0F, 0.0F, 0.0F },
+      .sky_sphere_intensity = 1.0F,
+      .sky_sphere_rotation_deg = 0.0F,
+      .sky_light_enabled = true,
+      .sky_light_source = 0,
+      .sky_light_tint = { 0.9F, 0.95F, 1.0F },
+      .sky_light_intensity = 1.0F,
+      .sky_light_diffuse = 1.0F,
+      .sky_light_specular = 1.0F,
+      .fog_enabled = true,
+      .fog_model = 0, // Exponential
+      .fog_density = 0.02F,
+      .fog_height_falloff = 0.1F,
+      .fog_height_offset_m = 0.0F,
+      .fog_start_distance_m = 0.0F,
+      .fog_max_opacity = 0.95F,
+      .fog_albedo = { 0.9F, 0.95F, 1.0F },
+      .exposure_enabled = true,
+      .exposure_mode = 1, // Auto
+      .manual_ev100 = 13.0F,
     },
     EnvironmentPresetData {
       .name = "Outdoor Dawn",
@@ -202,6 +250,17 @@ namespace {
       .sky_light_intensity = 0.6F,
       .sky_light_diffuse = 0.7F,
       .sky_light_specular = 0.5F,
+      .fog_enabled = false,
+      .fog_model = 0,
+      .fog_density = 0.01F,
+      .fog_height_falloff = 0.2F,
+      .fog_height_offset_m = 0.0F,
+      .fog_start_distance_m = 0.0F,
+      .fog_max_opacity = 1.0F,
+      .fog_albedo = { 1.0F, 1.0F, 1.0F },
+      .exposure_enabled = true,
+      .exposure_mode = 1, // Auto
+      .manual_ev100 = 9.0F,
     },
     EnvironmentPresetData {
       .name = "Outdoor Dusk",
@@ -238,6 +297,17 @@ namespace {
       .sky_light_intensity = 0.6F,
       .sky_light_diffuse = 0.7F,
       .sky_light_specular = 0.5F,
+      .fog_enabled = false,
+      .fog_model = 0,
+      .fog_density = 0.01F,
+      .fog_height_falloff = 0.2F,
+      .fog_height_offset_m = 0.0F,
+      .fog_start_distance_m = 0.0F,
+      .fog_max_opacity = 1.0F,
+      .fog_albedo = { 1.0F, 1.0F, 1.0F },
+      .exposure_enabled = true,
+      .exposure_mode = 1, // Auto
+      .manual_ev100 = 8.0F,
     },
   };
 
@@ -250,8 +320,10 @@ namespace {
 } // namespace
 
 EnvironmentVm::EnvironmentVm(observer_ptr<EnvironmentSettingsService> service,
+  observer_ptr<PostProcessSettingsService> post_process_service,
   observer_ptr<FileBrowserService> file_browser_service)
   : service_(service)
+  , post_process_service_(post_process_service)
   , file_browser_(file_browser_service)
 {
 }
@@ -298,18 +370,22 @@ auto EnvironmentVm::GetPresetName(int index) const -> std::string_view
 
 auto EnvironmentVm::GetPresetLabel() const -> std::string_view
 {
-  if (preset_index_ < 0) {
+  const int index = service_->GetPresetIndex();
+  if (index < 0) {
     return "Custom";
   }
-  return GetPreset(preset_index_).name;
+  return GetPreset(index).name;
 }
 
-auto EnvironmentVm::GetPresetIndex() const -> int { return preset_index_; }
+auto EnvironmentVm::GetPresetIndex() const -> int
+{
+  return service_->GetPresetIndex();
+}
 
 auto EnvironmentVm::ApplyPreset(int index) -> void
 {
   const auto& preset = GetPreset(index);
-  preset_index_ = index;
+  service_->SetPresetIndex(index);
 
   service_->BeginUpdate();
 
@@ -361,6 +437,16 @@ auto EnvironmentVm::ApplyPreset(int index) -> void
   SetSkyLightDiffuse(preset.sky_light_diffuse);
   SetSkyLightSpecular(preset.sky_light_specular);
 
+  // Fog
+  SetFogEnabled(preset.fog_enabled);
+  SetFogModel(preset.fog_model);
+  SetFogDensity(preset.fog_density);
+  SetFogHeightFalloff(preset.fog_height_falloff);
+  SetFogHeightOffsetMeters(preset.fog_height_offset_m);
+  SetFogStartDistanceMeters(preset.fog_start_distance_m);
+  SetFogMaxOpacity(preset.fog_max_opacity);
+  SetFogAlbedo(preset.fog_albedo);
+
   // 3. Re-enable systems in dependency order
   // Background
   SetSkyAtmosphereEnabled(preset.sky_atmo_enabled);
@@ -373,6 +459,29 @@ auto EnvironmentVm::ApplyPreset(int index) -> void
   SetSkyLightEnabled(preset.sky_light_enabled);
 
   service_->EndUpdate();
+
+  // 4. Apply PostProcess settings (outside of EnvironmentSettingsService
+  // batch)
+  if (post_process_service_) {
+    // Set manual EV first to establish a baseline
+    post_process_service_->SetManualExposureEV100(preset.manual_ev100);
+
+    // Reset auto-exposure history to the manual EV as a starting point.
+    // This prevents the camera from adapting from a dark/default state when
+    // switching to a bright scene, causing a flash.
+    post_process_service_->ResetAutoExposure(preset.manual_ev100);
+
+    // Apply mode
+    if (preset.exposure_mode == 0) {
+      post_process_service_->SetExposureMode(engine::ExposureMode::kManual);
+    } else if (preset.exposure_mode == 1) {
+      post_process_service_->SetExposureMode(engine::ExposureMode::kAuto);
+    } else if (preset.exposure_mode == 2) {
+      post_process_service_->SetExposureMode(
+        engine::ExposureMode::kManualCamera);
+    }
+    post_process_service_->SetExposureEnabled(preset.exposure_enabled);
+  }
 }
 
 auto EnvironmentVm::GetSkyAtmosphereEnabled() const -> bool

@@ -242,6 +242,16 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   ShaderFileSpec {
     .path="Compositing/ToneMap_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } }
+  },
+  // Auto Exposure Histogram shaders (no permutations)
+  ShaderFileSpec {
+    .path="Compositing/AutoExposure_Histogram_CS.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" },
+      EntryPoint { .type=kCompute, .name="ClearHistogram" } }
+  },
+  ShaderFileSpec {
+    .path="Compositing/AutoExposure_Average_CS.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   }
 );
 // clang-format on
@@ -267,6 +277,8 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ImGui: 2 entries
 // - Compositing: 2 entries
 // - ToneMap: 2 entries
-// Total: 129
+// - AutoExposure_Histogram_CS: 1 entry
+// - AutoExposure_Average_CS: 1 entry
+// Total: 131
 
 } // namespace oxygen::graphics::d3d12

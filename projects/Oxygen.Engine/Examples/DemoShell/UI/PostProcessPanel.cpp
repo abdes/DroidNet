@@ -15,6 +15,8 @@
 
 #include "DemoShell/UI/PostProcessPanel.h"
 
+// NOLINTBEGIN(cppcoreguidelines-pro-type-vararg)
+
 namespace oxygen::examples::ui {
 
 PostProcessPanel::PostProcessPanel(observer_ptr<PostProcessVm> vm)
@@ -60,6 +62,9 @@ void PostProcessPanel::DrawExposureSection()
   if (ImGui::Checkbox("Enabled##Exposure", &exposure_enabled)) {
     vm_->SetExposureEnabled(exposure_enabled);
   }
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Master switch for exposure control.");
+  }
 
   if (!exposure_enabled) {
     ImGui::BeginDisabled();
@@ -87,6 +92,9 @@ void PostProcessPanel::DrawExposureSection()
     }
     ImGui::EndCombo();
   }
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Select exposure control mode.");
+  }
 
   if (current_mode == ExposureMode::kManual) {
     float ev100 = vm_->GetManualExposureEV100();
@@ -96,6 +104,9 @@ void PostProcessPanel::DrawExposureSection()
       ev100 = std::max(ev100, 0.0F);
       vm_->SetManualExposureEV100(ev100);
     }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Explicit exposure value (EV100) for the scene.");
+    }
   }
 
   if (current_mode == ExposureMode::kManualCamera) {
@@ -103,15 +114,24 @@ void PostProcessPanel::DrawExposureSection()
     if (ImGui::DragFloat("Aperture (f/)", &aperture, 0.1F, 1.4F, 32.0F)) {
       vm_->SetManualCameraAperture(aperture);
     }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Camera lens aperture (f-number).");
+    }
 
     float shutter_rate = vm_->GetManualCameraShutterRate();
     if (ImGui::DragFloat("Shutter (1/s)", &shutter_rate, 1.0F, 1.0F, 8000.0F)) {
       vm_->SetManualCameraShutterRate(shutter_rate);
     }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Camera shutter speed denominator (1/x seconds).");
+    }
 
     float iso = vm_->GetManualCameraIso();
     if (ImGui::DragFloat("ISO", &iso, 10.0F, 100.0F, 6400.0F)) {
       vm_->SetManualCameraIso(iso);
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Camera ISO sensitivity.");
     }
 
     const float computed_ev100 = vm_->GetManualCameraEV100();
@@ -123,21 +143,120 @@ void PostProcessPanel::DrawExposureSection()
     if (ImGui::DragFloat("Compensation", &comp, 0.1F, -10.0F, 10.0F)) {
       vm_->SetExposureCompensation(comp);
     }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Biases the target exposure (EV stops).");
+    }
   }
 
   float exposure_key = vm_->GetExposureKey();
   if (ImGui::DragFloat("Exposure Key", &exposure_key, 0.1F, 0.1F, 25.0F)) {
     vm_->SetExposureKey(exposure_key);
   }
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip(
+      "Calibration constant (K). Scales global brightness. Default: 10.0.");
+  }
 
   if (current_mode == ExposureMode::kAuto) {
-    ImGui::BeginDisabled();
-    float speed_placeholder = 0.0F;
-    ImGui::DragFloat(
-      "Adapt Speed Up (EV/s)", &speed_placeholder, 0.1F, 0.1F, 20.0F);
-    ImGui::DragFloat(
-      "Adapt Speed Down (EV/s)", &speed_placeholder, 0.1F, 0.1F, 20.0F);
-    ImGui::EndDisabled();
+    ImGui::Separator();
+    ImGui::Text("Auto Exposure Settings");
+
+    if (ImGui::Button("Reset Defaults")) {
+      vm_->ResetAutoExposureDefaults();
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Reset only auto-exposure settings to defaults.");
+    }
+
+    float speed_up = vm_->GetAutoExposureAdaptationSpeedUp();
+    if (ImGui::DragFloat(
+          "Adapt Speed Up", &speed_up, 0.1F, 0.1F, 20.0F, "%.1f EV/s")) {
+      vm_->SetAutoExposureAdaptationSpeedUp(speed_up);
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+        "Speed of adaptation when transitioning from dark to bright.");
+    }
+
+    float speed_down = vm_->GetAutoExposureAdaptationSpeedDown();
+    if (ImGui::DragFloat(
+          "Adapt Speed Down", &speed_down, 0.1F, 0.1F, 20.0F, "%.1f EV/s")) {
+      vm_->SetAutoExposureAdaptationSpeedDown(speed_down);
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+        "Speed of adaptation when transitioning from bright to dark.");
+    }
+
+    float low_pct = vm_->GetAutoExposureLowPercentile();
+    if (ImGui::SliderFloat("Low Percentile", &low_pct, 0.0F, 1.0F)) {
+      vm_->SetAutoExposureLowPercentile(low_pct);
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+        "Lower bound of histogram percentile for average luminance.");
+    }
+
+    float high_pct = vm_->GetAutoExposureHighPercentile();
+    if (ImGui::SliderFloat("High Percentile", &high_pct, 0.0F, 1.0F)) {
+      vm_->SetAutoExposureHighPercentile(high_pct);
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+        "Upper bound of histogram percentile for average luminance.");
+    }
+
+    float min_log = vm_->GetAutoExposureMinLogLuminance();
+    if (ImGui::DragFloat("Min Log Lum", &min_log, 0.1F, -16.0F, 0.0F)) {
+      vm_->SetAutoExposureMinLogLuminance(min_log);
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+        "Minimum luminance (log2) considered for auto exposure.");
+    }
+
+    float range_log = vm_->GetAutoExposureLogLuminanceRange();
+    if (ImGui::DragFloat("Log Lum Range", &range_log, 0.1F, 1.0F, 32.0F)) {
+      vm_->SetAutoExposureLogLuminanceRange(range_log);
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+        "Dynamic range (in stops) of the auto exposure histogram.");
+    }
+
+    float target_lum = vm_->GetAutoExposureTargetLuminance();
+    if (ImGui::DragFloat("Target Lum", &target_lum, 0.01F, 0.01F, 1.0F)) {
+      vm_->SetAutoExposureTargetLuminance(target_lum);
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Target average luminance (middle gray) to aim for.");
+    }
+
+    engine::MeteringMode metering = vm_->GetAutoExposureMeteringMode();
+    auto metering_str = "Average";
+    if (metering == engine::MeteringMode::kCenterWeighted) {
+      metering_str = "Center Weighted";
+    } else if (metering == engine::MeteringMode::kSpot) {
+      metering_str = "Spot";
+    }
+
+    if (ImGui::BeginCombo("Metering", metering_str)) {
+      if (ImGui::Selectable(
+            "Average", metering == engine::MeteringMode::kAverage)) {
+        vm_->SetAutoExposureMeteringMode(engine::MeteringMode::kAverage);
+      }
+      if (ImGui::Selectable("Center Weighted",
+            metering == engine::MeteringMode::kCenterWeighted)) {
+        vm_->SetAutoExposureMeteringMode(engine::MeteringMode::kCenterWeighted);
+      }
+      if (ImGui::Selectable("Spot", metering == engine::MeteringMode::kSpot)) {
+        vm_->SetAutoExposureMeteringMode(engine::MeteringMode::kSpot);
+      }
+      ImGui::EndCombo();
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Weighting method for calculating average luminance.");
+    }
   }
 
   if (exposure_enabled) {
@@ -204,3 +323,5 @@ void PostProcessPanel::DrawTonemappingSection()
 }
 
 } // namespace oxygen::examples::ui
+
+// NOLINTEND(cppcoreguidelines-pro-type-vararg)

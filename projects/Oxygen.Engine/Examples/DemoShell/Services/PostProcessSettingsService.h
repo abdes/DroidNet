@@ -17,6 +17,7 @@ namespace oxygen {
 namespace engine {
   enum class ExposureMode : std::uint32_t;
   enum class ToneMapper : std::uint32_t;
+  enum class MeteringMode : std::uint32_t;
 } // namespace engine
 namespace scene {
   class Scene;
@@ -85,10 +86,53 @@ namespace examples {
       [[nodiscard]] virtual auto GetToneMapper() const -> engine::ToneMapper;
       virtual auto SetToneMapper(engine::ToneMapper mode) -> void;
 
+      // Auto Exposure
+      [[nodiscard]] virtual auto GetAutoExposureAdaptationSpeedUp() const
+        -> float;
+      virtual auto SetAutoExposureAdaptationSpeedUp(float speed) -> void;
+
+      [[nodiscard]] virtual auto GetAutoExposureAdaptationSpeedDown() const
+        -> float;
+      virtual auto SetAutoExposureAdaptationSpeedDown(float speed) -> void;
+
+      [[nodiscard]] virtual auto GetAutoExposureLowPercentile() const -> float;
+      virtual auto SetAutoExposureLowPercentile(float percentile) -> void;
+
+      [[nodiscard]] virtual auto GetAutoExposureHighPercentile() const -> float;
+      virtual auto SetAutoExposureHighPercentile(float percentile) -> void;
+
+      [[nodiscard]] virtual auto GetAutoExposureMinLogLuminance() const
+        -> float;
+      virtual auto SetAutoExposureMinLogLuminance(float luminance) -> void;
+
+      [[nodiscard]] virtual auto GetAutoExposureLogLuminanceRange() const
+        -> float;
+      virtual auto SetAutoExposureLogLuminanceRange(float range) -> void;
+
+      [[nodiscard]] virtual auto GetAutoExposureTargetLuminance() const
+        -> float;
+      virtual auto SetAutoExposureTargetLuminance(float luminance) -> void;
+
+      [[nodiscard]] virtual auto GetAutoExposureMeteringMode() const
+        -> engine::MeteringMode;
+      virtual auto SetAutoExposureMeteringMode(engine::MeteringMode mode)
+        -> void;
+
+      //! Resets all post-process settings to their default values.
+      virtual auto ResetToDefaults() -> void;
+
+      //! Resets only auto-exposure settings to their default values.
+      virtual auto ResetAutoExposureDefaults() -> void;
+
+      //! Resets the auto-exposure history for all views to the given EV100.
+      virtual auto ResetAutoExposure(float initial_ev100) -> void;
+
       // Cache invalidation
       [[nodiscard]] virtual auto GetEpoch() const noexcept -> std::uint64_t;
 
     private:
+      auto UpdateAutoExposureTarget() -> void;
+
       static constexpr auto kExposureModeKey = "post_process.exposure.mode";
       static constexpr auto kExposureEnabledKey
         = "post_process.exposure.enabled";
@@ -102,11 +146,28 @@ namespace examples {
         = "post_process.tonemapping.enabled";
       static constexpr auto kToneMapperKey = "post_process.tonemapping.mode";
 
-      observer_ptr<RenderingPipeline> pipeline_ {};
-      observer_ptr<CameraSettingsService> camera_settings_ {};
-      observer_ptr<scene::Scene> scene_ {};
+      static constexpr auto kAutoExposureSpeedUpKey
+        = "post_process.auto_exposure.speed_up";
+      static constexpr auto kAutoExposureSpeedDownKey
+        = "post_process.auto_exposure.speed_down";
+      static constexpr auto kAutoExposureLowPercentileKey
+        = "post_process.auto_exposure.low_percentile";
+      static constexpr auto kAutoExposureHighPercentileKey
+        = "post_process.auto_exposure.high_percentile";
+      static constexpr auto kAutoExposureMinLogLumKey
+        = "post_process.auto_exposure.min_log_lum";
+      static constexpr auto kAutoExposureLogLumRangeKey
+        = "post_process.auto_exposure.log_lum_range";
+      static constexpr auto kAutoExposureTargetLumKey
+        = "post_process.auto_exposure.target_lum";
+      static constexpr auto kAutoExposureMeteringKey
+        = "post_process.auto_exposure.metering";
+
+      observer_ptr<RenderingPipeline> pipeline_;
+      observer_ptr<CameraSettingsService> camera_settings_;
+      observer_ptr<scene::Scene> scene_;
       mutable std::atomic_uint64_t epoch_ { 0 };
-      mutable std::string last_camera_id_ {};
+      mutable std::string last_camera_id_;
     };
 
   } // namespace ui

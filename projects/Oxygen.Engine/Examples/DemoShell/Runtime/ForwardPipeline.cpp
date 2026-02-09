@@ -25,7 +25,9 @@
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/ImGui/ImGuiPass.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
+#include <Oxygen/Renderer/Passes/AutoExposurePass.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/GpuDebugClearPass.h>
 #include <Oxygen/Renderer/Passes/GpuDebugDrawPass.h>
@@ -299,6 +301,7 @@ struct ForwardPipeline::Impl {
   std::shared_ptr<engine::TransparentPassConfig> transparent_pass_config;
   std::shared_ptr<engine::LightCullingPassConfig> light_culling_pass_config;
   std::shared_ptr<engine::ToneMapPassConfig> tone_map_pass_config;
+  std::shared_ptr<engine::AutoExposurePassConfig> auto_exposure_config;
 
   // Pass Instances
   std::shared_ptr<engine::DepthPrePass> depth_pass;
@@ -308,12 +311,15 @@ struct ForwardPipeline::Impl {
   std::shared_ptr<engine::TransparentPass> transparent_pass;
   std::shared_ptr<engine::LightCullingPass> light_culling_pass;
   std::shared_ptr<engine::ToneMapPass> tone_map_pass;
+  std::shared_ptr<engine::AutoExposurePass> auto_exposure_pass;
   std::shared_ptr<engine::GpuDebugClearPass> gpu_debug_clear_pass;
   std::shared_ptr<engine::GpuDebugDrawPass> gpu_debug_draw_pass;
 
   // ImGui lazy loading
   mutable std::once_flag imgui_flag;
   mutable observer_ptr<imgui::ImGuiPass> imgui_pass;
+
+  std::optional<float> pending_auto_exposure_reset;
 
   struct {
     engine::ShaderDebugMode shader_debug_mode {
@@ -329,8 +335,37 @@ struct ForwardPipeline::Impl {
     engine::ExposureMode exposure_mode { engine::ExposureMode::kManual };
     float exposure_value { 1.0F };
     engine::ToneMapper tonemapping_mode { engine::ToneMapper::kAcesFitted };
+
+    // Auto Exposure Staged Config
+    float auto_exposure_adaptation_speed_up {
+      engine::AutoExposurePassConfig::kDefaultAdaptationSpeedUp
+    };
+    float auto_exposure_adaptation_speed_down {
+      engine::AutoExposurePassConfig::kDefaultAdaptationSpeedDown
+    };
+    float auto_exposure_low_percentile {
+      engine::AutoExposurePassConfig::kDefaultLowPercentile
+    };
+    float auto_exposure_high_percentile {
+      engine::AutoExposurePassConfig::kDefaultHighPercentile
+    };
+    float auto_exposure_min_log_luminance {
+      engine::AutoExposurePassConfig::kDefaultMinLogLuminance
+    };
+    float auto_exposure_log_luminance_range {
+      engine::AutoExposurePassConfig::kDefaultLogLuminanceRange
+    };
+    float auto_exposure_target_luminance {
+      engine::AutoExposurePassConfig::kDefaultTargetLuminance
+    };
+    engine::MeteringMode auto_exposure_metering {
+      engine::AutoExposurePassConfig::kDefaultMeteringMode
+    };
+    bool auto_exposure_reset_pending { false };
+    float auto_exposure_reset_ev100 { 0.0F };
+
     bool gpu_debug_pass_enabled { true };
-    std::optional<SubPixelPosition> gpu_debug_mouse_down_position {};
+    std::optional<SubPixelPosition> gpu_debug_mouse_down_position;
     bool dirty { true };
   } staged;
   bool gpu_debug_pass_enabled { true };
@@ -721,6 +756,7 @@ struct ForwardPipeline::Impl {
     light_culling_pass_config
       = std::make_shared<engine::LightCullingPassConfig>();
     tone_map_pass_config = std::make_shared<engine::ToneMapPassConfig>();
+    auto_exposure_config = std::make_shared<engine::AutoExposurePassConfig>();
 
     // pass init
     depth_pass = std::make_shared<engine::DepthPrePass>(depth_pass_config);
@@ -735,6 +771,8 @@ struct ForwardPipeline::Impl {
     light_culling_pass = std::make_shared<engine::LightCullingPass>(
       observer_ptr { graphics.get() }, light_culling_pass_config);
     tone_map_pass = std::make_shared<engine::ToneMapPass>(tone_map_pass_config);
+    auto_exposure_pass = std::make_shared<engine::AutoExposurePass>(
+      observer_ptr { graphics.get() }, auto_exposure_config);
 
     gpu_debug_clear_pass = std::make_shared<engine::GpuDebugClearPass>(
       observer_ptr { graphics.get() });
@@ -792,10 +830,35 @@ struct ForwardPipeline::Impl {
       tone_map_pass_config->tone_mapper = staged.tonemapping_mode;
     }
 
+    if (auto_exposure_config) {
+      auto_exposure_config->adaptation_speed_up
+        = staged.auto_exposure_adaptation_speed_up;
+      auto_exposure_config->adaptation_speed_down
+        = staged.auto_exposure_adaptation_speed_down;
+      auto_exposure_config->low_percentile
+        = staged.auto_exposure_low_percentile;
+      auto_exposure_config->high_percentile
+        = staged.auto_exposure_high_percentile;
+      auto_exposure_config->min_log_luminance
+        = staged.auto_exposure_min_log_luminance;
+      auto_exposure_config->log_luminance_range
+        = staged.auto_exposure_log_luminance_range;
+      auto_exposure_config->target_luminance
+        = staged.auto_exposure_target_luminance;
+      auto_exposure_config->metering_mode = staged.auto_exposure_metering;
+    }
+
     gpu_debug_pass_enabled = staged.gpu_debug_pass_enabled;
     if (gpu_debug_draw_pass) {
       gpu_debug_draw_pass->SetMouseDownPosition(
         staged.gpu_debug_mouse_down_position);
+    }
+
+    if (staged.auto_exposure_reset_pending) {
+      pending_auto_exposure_reset = staged.auto_exposure_reset_ev100;
+      staged.auto_exposure_reset_pending = false;
+    } else {
+      pending_auto_exposure_reset.reset();
     }
 
     staged.dirty = false;
@@ -822,6 +885,9 @@ struct ForwardPipeline::Impl {
     if (tone_map_pass_config) {
       tone_map_pass_config->source_texture.reset();
       tone_map_pass_config->output_texture.reset();
+    }
+    if (auto_exposure_config) {
+      auto_exposure_config->source_texture.reset();
     }
   }
 
@@ -914,6 +980,7 @@ auto ForwardPipeline::OnSceneMutation(
     auto& view_impl = impl_->view_pool[desc.id];
     view_impl.Sync(desc, index++, frame_seq);
     view_impl.EnsureResources(*graphics);
+
     impl_->sorted_views.push_back(&view_impl);
   }
 
@@ -970,9 +1037,14 @@ auto ForwardPipeline::OnSceneMutation(
         [self = impl_.get(), view](ViewId /*id*/,
           const engine::RenderContext& rc,
           graphics::CommandRecorder& rec) -> co::Co<> {
-          auto& renderer = rc.GetRenderer();
-          Impl::ViewRenderContext ctx { *view,
-            self->EvaluateViewRenderPlan(*view, rc), nullptr, false };
+          [[maybe_unused]] auto& renderer = rc.GetRenderer();
+
+          Impl::ViewRenderContext ctx {
+            .view = *view,
+            .plan = self->EvaluateViewRenderPlan(*view, rc),
+            .depth_texture = nullptr,
+            .sdr_in_render_target = false,
+          };
           const bool run_scene_passes = ctx.plan.has_scene
             && ctx.plan.hdr_path_enabled
             && (ctx.plan.effective_render_mode != RenderMode::kWireframe);
@@ -995,6 +1067,27 @@ auto ForwardPipeline::OnSceneMutation(
                   self->gpu_debug_clear_pass.get());
               }
               co_await self->RunScenePasses(ctx, rc, rec);
+
+              // Auto Exposure (Histogram & Average dispatches)
+              if (self->auto_exposure_pass) {
+                if (self->pending_auto_exposure_reset.has_value()) {
+                  // Convert EV100 to Average Luminance (assuming ISO 100,
+                  // K=12.5) L = 2^EV * K / 100
+                  const float k = 12.5F;
+                  const float ev = *self->pending_auto_exposure_reset;
+                  const float lum = std::pow(2.0F, ev) * k / 100.0F;
+                  const auto vid = ctx.view.engine_vid;
+                  if (vid != kInvalidViewId) {
+                    self->auto_exposure_pass->ResetExposure(rec, vid, lum);
+                  }
+                }
+
+                self->auto_exposure_config->source_texture = view->hdr_texture;
+                co_await self->auto_exposure_pass->PrepareResources(rc, rec);
+                co_await self->auto_exposure_pass->Execute(rc, rec);
+                rc.RegisterPass<engine::AutoExposurePass>(
+                  self->auto_exposure_pass.get());
+              }
             }
 
             co_await self->ToneMapToSdr(ctx, rc, rec);
@@ -1151,6 +1244,55 @@ auto ForwardPipeline::SetExposureValue(float value) -> void
 auto ForwardPipeline::SetToneMapper(engine::ToneMapper mode) -> void
 {
   impl_->staged.tonemapping_mode = mode;
+  impl_->staged.dirty = true;
+}
+
+auto ForwardPipeline::SetAutoExposureAdaptationSpeedUp(float speed) -> void
+{
+  impl_->staged.auto_exposure_adaptation_speed_up = speed;
+  impl_->staged.dirty = true;
+}
+auto ForwardPipeline::SetAutoExposureAdaptationSpeedDown(float speed) -> void
+{
+  impl_->staged.auto_exposure_adaptation_speed_down = speed;
+  impl_->staged.dirty = true;
+}
+auto ForwardPipeline::SetAutoExposureLowPercentile(float percentile) -> void
+{
+  impl_->staged.auto_exposure_low_percentile = percentile;
+  impl_->staged.dirty = true;
+}
+auto ForwardPipeline::SetAutoExposureHighPercentile(float percentile) -> void
+{
+  impl_->staged.auto_exposure_high_percentile = percentile;
+  impl_->staged.dirty = true;
+}
+auto ForwardPipeline::SetAutoExposureMinLogLuminance(float luminance) -> void
+{
+  impl_->staged.auto_exposure_min_log_luminance = luminance;
+  impl_->staged.dirty = true;
+}
+auto ForwardPipeline::SetAutoExposureLogLuminanceRange(float range) -> void
+{
+  impl_->staged.auto_exposure_log_luminance_range = range;
+  impl_->staged.dirty = true;
+}
+auto ForwardPipeline::SetAutoExposureTargetLuminance(float luminance) -> void
+{
+  impl_->staged.auto_exposure_target_luminance = luminance;
+  impl_->staged.dirty = true;
+}
+auto ForwardPipeline::SetAutoExposureMeteringMode(engine::MeteringMode mode)
+  -> void
+{
+  impl_->staged.auto_exposure_metering = mode;
+  impl_->staged.dirty = true;
+}
+
+auto ForwardPipeline::ResetAutoExposure(float initial_ev100) -> void
+{
+  impl_->staged.auto_exposure_reset_pending = true;
+  impl_->staged.auto_exposure_reset_ev100 = initial_ev100;
   impl_->staged.dirty = true;
 }
 

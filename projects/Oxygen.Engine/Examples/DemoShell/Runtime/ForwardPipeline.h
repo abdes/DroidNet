@@ -87,6 +87,17 @@ public:
   auto SetClusterDepthSlices(uint32_t slices) -> void override;
   auto SetExposureMode(engine::ExposureMode mode) -> void override;
   auto SetExposureValue(float value) -> void override;
+
+  auto SetAutoExposureAdaptationSpeedUp(float speed) -> void override;
+  auto SetAutoExposureAdaptationSpeedDown(float speed) -> void override;
+  auto SetAutoExposureLowPercentile(float percentile) -> void override;
+  auto SetAutoExposureHighPercentile(float percentile) -> void override;
+  auto SetAutoExposureMinLogLuminance(float luminance) -> void override;
+  auto SetAutoExposureLogLuminanceRange(float range) -> void override;
+  auto SetAutoExposureTargetLuminance(float luminance) -> void override;
+  auto SetAutoExposureMeteringMode(engine::MeteringMode mode) -> void override;
+  auto ResetAutoExposure(float initial_ev100) -> void override;
+
   auto SetToneMapper(engine::ToneMapper mode) -> void override;
 
   auto UpdateShaderPassConfig(const engine::ShaderPassConfig& config)
