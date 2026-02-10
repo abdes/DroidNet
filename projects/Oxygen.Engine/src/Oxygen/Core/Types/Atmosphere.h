@@ -15,18 +15,17 @@ namespace oxygen::engine::atmos {
 //! Radius of the planet in meters (Earth ≈ 6360km).
 inline constexpr float kDefaultPlanetRadiusM = 6360000.0F;
 
-//! Height of the atmosphere in meters (Earth ≈ 80km).
-inline constexpr float kDefaultAtmosphereHeightM = 80000.0F;
+//! Height of the atmosphere in meters (Earth ≈ 100km).
+inline constexpr float kDefaultAtmosphereHeightM = 100000.0F;
 
-//! Sun disk angular radius in radians (Earth sun ≈ 0.5 degrees total, so 0.25
-//! deg radius).
-inline constexpr float kDefaultSunDiskAngularRadiusRad = 0.004675F;
+//! Sun disk angular radius in radians (Earth sun ≈ 0.545 degrees total).
+inline constexpr float kDefaultSunDiskAngularRadiusRad = 0.004756022F;
 
 //! Standard baseline sky luminance for non-physical cubemaps (Nits).
 inline constexpr float kStandardSkyLuminance = 5000.0F;
 
 //! Rayleigh scattering coefficients at sea level (Earth-like).
-inline constexpr glm::vec3 kDefaultRayleighScatteringRgb { 5.805e-6F,
+inline constexpr glm::vec3 kDefaultRayleighScatteringRgb { 5.802e-6F,
   13.558e-6F, 33.1e-6F };
 
 //! Rayleigh scale height in meters (Earth ≈ 8km).
@@ -37,8 +36,8 @@ inline constexpr glm::vec3 kDefaultMieScatteringRgb { 3.996e-6F, 3.996e-6F,
   3.996e-6F };
 
 //! Mie absorption coefficients at sea level (Earth-like).
-inline constexpr glm::vec3 kDefaultMieAbsorptionRgb { 4.405e-6F, 4.405e-6F,
-  4.405e-6F };
+inline constexpr glm::vec3 kDefaultMieAbsorptionRgb { 4.405e-7F, 4.405e-7F,
+  4.405e-7F };
 
 //! Mie extinction (scattering + absorption) at sea level.
 inline constexpr glm::vec3 kDefaultMieExtinctionRgb { kDefaultMieScatteringRgb
@@ -50,15 +49,14 @@ inline constexpr float kDefaultMieScaleHeightM = 1200.0F;
 //! Mie phase function anisotropy (Earth ≈ 0.8).
 inline constexpr float kDefaultMieAnisotropyG = 0.8F;
 
-//! Ozone (Absorption) coefficients at sea level.
+//! Ozone (Absorption) coefficients at peak density (Earth-like).
 inline constexpr glm::vec3 kDefaultOzoneAbsorptionRgb { 0.650e-6F, 1.881e-6F,
   0.085e-6F };
 
-//! Default ozone hump center in meters (Earth ≈ 25km).
-inline constexpr float kDefaultOzoneCenterM = 25000.0F;
-
-//! Default ozone hump width in meters (Earth ≈ 15km).
-inline constexpr float kDefaultOzoneWidthM = 15000.0F;
+//! Default ozone profile altitude bounds in meters (Earth-like).
+inline constexpr float kDefaultOzoneBottomM = 10000.0F;
+inline constexpr float kDefaultOzonePeakM = 25000.0F;
+inline constexpr float kDefaultOzoneTopM = 40000.0F;
 
 //! Defines a single atmospheric density layer (linear distribution).
 /*!
@@ -89,42 +87,46 @@ static_assert(std::is_standard_layout_v<DensityProfile>);
 static_assert(sizeof(DensityLayer) == 16);
 static_assert(sizeof(DensityProfile) == 32);
 
-//! Creates a 2-layer tent ozone density profile.
+//! Creates a 2-layer linear ozone density profile.
 /*!
- The tent peaks at `center_m` with value 1.0, and reaches 0.0 at
- `center_m ± width_m/2`.
+ The profile follows the piecewise linear distribution commonly used in
+ real-time sky models:
+
+ - `bottom_m` to `peak_m`: linear increase (0.0 -> 1.0)
+ - `peak_m` to `top_m`: linear decrease (1.0 -> 0.0)
+ - below `bottom_m` and above `top_m`: density clamps to 0.0
 */
-[[nodiscard]] constexpr auto MakeOzoneTentDensityProfile(
-  const float center_m, const float width_m) noexcept -> DensityProfile
+[[nodiscard]] constexpr auto MakeOzoneTwoLayerLinearDensityProfile(
+  const float bottom_m, const float peak_m, const float top_m) noexcept
+  -> DensityProfile
 {
-  const float half_width_m = width_m * 0.5F;
-  const float inv_half_width
-    = (half_width_m > 0.0F) ? (1.0F / half_width_m) : 0.0F;
+  const float denom_below = peak_m - bottom_m;
+  const float denom_above = top_m - peak_m;
+
+  const float slope_below = (denom_below > 0.0F) ? (1.0F / denom_below) : 0.0F;
+  const float slope_above = (denom_above > 0.0F) ? (-1.0F / denom_above) : 0.0F;
 
   return DensityProfile {
-      .layers = {
-        DensityLayer {
-          .width_m = center_m,
-          .exp_term = 0.0F,
-          .linear_term = inv_half_width,
-          .constant_term = (half_width_m > 0.0F)
-            ? (-(center_m - half_width_m) * inv_half_width)
-            : 1.0F,
-        },
-        DensityLayer {
-          .width_m = 0.0F,
-          .exp_term = 0.0F,
-          .linear_term = -inv_half_width,
-          .constant_term = (half_width_m > 0.0F)
-            ? ((center_m + half_width_m) * inv_half_width)
-            : 1.0F,
-        },
+    .layers = {
+      DensityLayer {
+        .width_m = peak_m,
+        .exp_term = 0.0F,
+        .linear_term = slope_below,
+        .constant_term = -bottom_m * slope_below,
       },
-    };
+      DensityLayer {
+        .width_m = 0.0F,
+        .exp_term = 0.0F,
+        .linear_term = slope_above,
+        .constant_term = (denom_above > 0.0F) ? (top_m / denom_above) : 0.0F,
+      },
+    },
+  };
 }
 
 //! Default ozone density profile (2-layer tent).
 inline constexpr DensityProfile kDefaultOzoneDensityProfile
-  = MakeOzoneTentDensityProfile(kDefaultOzoneCenterM, kDefaultOzoneWidthM);
+  = MakeOzoneTwoLayerLinearDensityProfile(
+    kDefaultOzoneBottomM, kDefaultOzonePeakM, kDefaultOzoneTopM);
 
 } // namespace oxygen::engine::atmos

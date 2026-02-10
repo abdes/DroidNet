@@ -28,7 +28,7 @@ namespace {
     int sun_source;
     float sun_azimuth_deg;
     float sun_elevation_deg;
-    float sun_intensity_lux;
+    float sun_illuminance_lx;
     bool sun_use_temperature;
     float sun_temperature_kelvin;
     float sun_disk_radius_deg;
@@ -44,8 +44,9 @@ namespace {
     float aerial_perspective_scale;
     float aerial_scattering_strength;
     glm::vec3 ozone_rgb;
-    float ozone_center_km;
-    float ozone_width_km;
+    float ozone_bottom_km;
+    float ozone_peak_km;
+    float ozone_top_km;
     bool sky_sphere_enabled;
     int sky_sphere_source;
     glm::vec3 sky_sphere_color;
@@ -80,14 +81,14 @@ namespace {
       .sun_source = 1,
       .sun_azimuth_deg = 135.0F,
       .sun_elevation_deg = 55.0F,
-      .sun_intensity_lux = 120000.0F,
+      .sun_illuminance_lx = 120000.0F,
       .sun_use_temperature = true,
       .sun_temperature_kelvin = 5600.0F,
-      .sun_disk_radius_deg = 0.27F,
+      .sun_disk_radius_deg = 0.2725F,
       .sky_atmo_enabled = true,
       .sky_atmo_sun_disk_enabled = true,
       .planet_radius_km = 6360.0F,
-      .atmosphere_height_km = 80.0F,
+      .atmosphere_height_km = 100.0F,
       .ground_albedo = { 0.06F, 0.05F, 0.04F },
       .rayleigh_scale_height_km = 8.0F,
       .mie_scale_height_km = 1.2F,
@@ -96,8 +97,9 @@ namespace {
       .aerial_perspective_scale = 1.0F,
       .aerial_scattering_strength = 1.0F,
       .ozone_rgb = engine::atmos::kDefaultOzoneAbsorptionRgb,
-      .ozone_center_km = engine::atmos::kDefaultOzoneCenterM * 0.001F,
-      .ozone_width_km = engine::atmos::kDefaultOzoneWidthM * 0.001F,
+      .ozone_bottom_km = engine::atmos::kDefaultOzoneBottomM * 0.001F,
+      .ozone_peak_km = engine::atmos::kDefaultOzonePeakM * 0.001F,
+      .ozone_top_km = engine::atmos::kDefaultOzoneTopM * 0.001F,
       .sky_sphere_enabled = false,
       .sky_sphere_source = 0,
       .sky_sphere_color = { 0.0F, 0.0F, 0.0F },
@@ -127,14 +129,14 @@ namespace {
       .sun_source = 1,
       .sun_azimuth_deg = 135.0F,
       .sun_elevation_deg = 30.0F,
-      .sun_intensity_lux = 15000.0F,
+      .sun_illuminance_lx = 15000.0F,
       .sun_use_temperature = true,
       .sun_temperature_kelvin = 6500.0F,
-      .sun_disk_radius_deg = 0.27F,
+      .sun_disk_radius_deg = 0.2725F,
       .sky_atmo_enabled = true,
       .sky_atmo_sun_disk_enabled = true,
       .planet_radius_km = 6360.0F,
-      .atmosphere_height_km = 80.0F,
+      .atmosphere_height_km = 100.0F,
       .ground_albedo = { 0.06F, 0.05F, 0.04F },
       .rayleigh_scale_height_km = 8.0F,
       .mie_scale_height_km = 1.5F,
@@ -143,8 +145,9 @@ namespace {
       .aerial_perspective_scale = 1.0F,
       .aerial_scattering_strength = 1.1F,
       .ozone_rgb = engine::atmos::kDefaultOzoneAbsorptionRgb,
-      .ozone_center_km = engine::atmos::kDefaultOzoneCenterM * 0.001F,
-      .ozone_width_km = engine::atmos::kDefaultOzoneWidthM * 0.001F,
+      .ozone_bottom_km = engine::atmos::kDefaultOzoneBottomM * 0.001F,
+      .ozone_peak_km = engine::atmos::kDefaultOzonePeakM * 0.001F,
+      .ozone_top_km = engine::atmos::kDefaultOzoneTopM * 0.001F,
       .sky_sphere_enabled = false,
       .sky_sphere_source = 0,
       .sky_sphere_color = { 0.0F, 0.0F, 0.0F },
@@ -174,14 +177,14 @@ namespace {
       .sun_source = 1,
       .sun_azimuth_deg = 135.0F,
       .sun_elevation_deg = 45.0F,
-      .sun_intensity_lux = 60000.0F,
+      .sun_illuminance_lx = 60000.0F,
       .sun_use_temperature = true,
       .sun_temperature_kelvin = 6000.0F,
-      .sun_disk_radius_deg = 0.27F,
+      .sun_disk_radius_deg = 0.2725F,
       .sky_atmo_enabled = true,
       .sky_atmo_sun_disk_enabled = false, // Sun disk obscured by fog usually
       .planet_radius_km = 6360.0F,
-      .atmosphere_height_km = 80.0F,
+      .atmosphere_height_km = 100.0F,
       .ground_albedo = { 0.06F, 0.05F, 0.04F },
       .rayleigh_scale_height_km = 8.0F,
       .mie_scale_height_km = 1.2F,
@@ -190,8 +193,9 @@ namespace {
       .aerial_perspective_scale = 1.0F,
       .aerial_scattering_strength = 1.0F,
       .ozone_rgb = engine::atmos::kDefaultOzoneAbsorptionRgb,
-      .ozone_center_km = engine::atmos::kDefaultOzoneCenterM * 0.001F,
-      .ozone_width_km = engine::atmos::kDefaultOzoneWidthM * 0.001F,
+      .ozone_bottom_km = engine::atmos::kDefaultOzoneBottomM * 0.001F,
+      .ozone_peak_km = engine::atmos::kDefaultOzonePeakM * 0.001F,
+      .ozone_top_km = engine::atmos::kDefaultOzoneTopM * 0.001F,
       .sky_sphere_enabled = false,
       .sky_sphere_source = 0,
       .sky_sphere_color = { 0.0F, 0.0F, 0.0F },
@@ -221,14 +225,14 @@ namespace {
       .sun_source = 1,
       .sun_azimuth_deg = 95.0F,
       .sun_elevation_deg = 6.0F,
-      .sun_intensity_lux = 3000.0F,
+      .sun_illuminance_lx = 3000.0F,
       .sun_use_temperature = true,
       .sun_temperature_kelvin = 3500.0F,
-      .sun_disk_radius_deg = 0.27F,
+      .sun_disk_radius_deg = 0.2725F,
       .sky_atmo_enabled = true,
       .sky_atmo_sun_disk_enabled = true,
       .planet_radius_km = 6360.0F,
-      .atmosphere_height_km = 80.0F,
+      .atmosphere_height_km = 100.0F,
       .ground_albedo = { 0.06F, 0.05F, 0.04F },
       .rayleigh_scale_height_km = 8.0F,
       .mie_scale_height_km = 1.2F,
@@ -237,8 +241,9 @@ namespace {
       .aerial_perspective_scale = 1.0F,
       .aerial_scattering_strength = 1.0F,
       .ozone_rgb = engine::atmos::kDefaultOzoneAbsorptionRgb,
-      .ozone_center_km = engine::atmos::kDefaultOzoneCenterM * 0.001F,
-      .ozone_width_km = engine::atmos::kDefaultOzoneWidthM * 0.001F,
+      .ozone_bottom_km = engine::atmos::kDefaultOzoneBottomM * 0.001F,
+      .ozone_peak_km = engine::atmos::kDefaultOzonePeakM * 0.001F,
+      .ozone_top_km = engine::atmos::kDefaultOzoneTopM * 0.001F,
       .sky_sphere_enabled = false,
       .sky_sphere_source = 0,
       .sky_sphere_color = { 0.0F, 0.0F, 0.0F },
@@ -268,14 +273,14 @@ namespace {
       .sun_source = 1,
       .sun_azimuth_deg = 265.0F,
       .sun_elevation_deg = 4.0F,
-      .sun_intensity_lux = 1500.0F,
+      .sun_illuminance_lx = 1500.0F,
       .sun_use_temperature = true,
       .sun_temperature_kelvin = 3200.0F,
-      .sun_disk_radius_deg = 0.27F,
+      .sun_disk_radius_deg = 0.2725F,
       .sky_atmo_enabled = true,
       .sky_atmo_sun_disk_enabled = true,
       .planet_radius_km = 6360.0F,
-      .atmosphere_height_km = 80.0F,
+      .atmosphere_height_km = 100.0F,
       .ground_albedo = { 0.06F, 0.05F, 0.04F },
       .rayleigh_scale_height_km = 8.0F,
       .mie_scale_height_km = 1.2F,
@@ -284,8 +289,9 @@ namespace {
       .aerial_perspective_scale = 1.0F,
       .aerial_scattering_strength = 1.0F,
       .ozone_rgb = engine::atmos::kDefaultOzoneAbsorptionRgb,
-      .ozone_center_km = engine::atmos::kDefaultOzoneCenterM * 0.001F,
-      .ozone_width_km = engine::atmos::kDefaultOzoneWidthM * 0.001F,
+      .ozone_bottom_km = engine::atmos::kDefaultOzoneBottomM * 0.001F,
+      .ozone_peak_km = engine::atmos::kDefaultOzonePeakM * 0.001F,
+      .ozone_top_km = engine::atmos::kDefaultOzoneTopM * 0.001F,
       .sky_sphere_enabled = false,
       .sky_sphere_source = 0,
       .sky_sphere_color = { 0.0F, 0.0F, 0.0F },
@@ -404,7 +410,7 @@ auto EnvironmentVm::ApplyPreset(int index) -> void
   SetSunSource(preset.sun_source);
   SetSunAzimuthDeg(preset.sun_azimuth_deg);
   SetSunElevationDeg(preset.sun_elevation_deg);
-  SetSunIntensityLux(preset.sun_intensity_lux);
+  SetSunIlluminanceLx(preset.sun_illuminance_lx);
   SetSunUseTemperature(preset.sun_use_temperature);
   SetSunTemperatureKelvin(preset.sun_temperature_kelvin);
   SetSunDiskRadiusDeg(preset.sun_disk_radius_deg);
@@ -421,8 +427,9 @@ auto EnvironmentVm::ApplyPreset(int index) -> void
   SetAerialPerspectiveScale(preset.aerial_perspective_scale);
   SetAerialScatteringStrength(preset.aerial_scattering_strength);
   SetOzoneRgb(preset.ozone_rgb);
-  SetOzoneDensityProfile(engine::atmos::MakeOzoneTentDensityProfile(
-    preset.ozone_center_km * kKmToMeters, preset.ozone_width_km * kKmToMeters));
+  SetOzoneDensityProfile(engine::atmos::MakeOzoneTwoLayerLinearDensityProfile(
+    preset.ozone_bottom_km * kKmToMeters, preset.ozone_peak_km * kKmToMeters,
+    preset.ozone_top_km * kKmToMeters));
 
   // Sky Sphere
   SetSkySphereSource(preset.sky_sphere_source);
@@ -1031,14 +1038,14 @@ auto EnvironmentVm::SetSunColorRgb(const glm::vec3& value) -> void
   service_->SetSunColorRgb(value);
 }
 
-auto EnvironmentVm::GetSunIntensityLux() const -> float
+auto EnvironmentVm::GetSunIlluminanceLx() const -> float
 {
-  return service_->GetSunIntensityLux();
+  return service_->GetSunIlluminanceLx();
 }
 
-auto EnvironmentVm::SetSunIntensityLux(float value) -> void
+auto EnvironmentVm::SetSunIlluminanceLx(float value) -> void
 {
-  service_->SetSunIntensityLux(value);
+  service_->SetSunIlluminanceLx(value);
 }
 
 auto EnvironmentVm::GetSunUseTemperature() const -> bool
