@@ -155,10 +155,8 @@ auto EnvironmentDebugPanel::DrawContents() -> void
 
   HandleSkyboxAutoLoad();
 
-  ImGui::Separator();
-
-  ImGui::Text("Presets");
-  ImGui::Indent();
+  ImGui::Spacing();
+  ImGui::SeparatorText("Presets");
   const auto preset_label = environment_vm_->GetPresetLabel();
   ImGui::SetNextItemWidth(220.0F);
   if (ImGui::BeginCombo("Environment Preset", preset_label.data())) {
@@ -172,7 +170,6 @@ auto EnvironmentDebugPanel::DrawContents() -> void
     }
     ImGui::EndCombo();
   }
-  ImGui::Unindent();
 
   ImGui::Separator();
 
@@ -189,8 +186,6 @@ auto EnvironmentDebugPanel::DrawContents() -> void
   if (sun_section_open) {
     DrawSunSection();
   }
-
-  ImGui::Separator();
 
   DrawFog();
   // Environment system sections
@@ -255,10 +250,11 @@ void EnvironmentDebugPanel::DrawFog()
     environment_vm_->SetFogModel(1);
   }
 
-  float density = environment_vm_->GetFogDensity();
-  if (ImGui::SliderFloat("Density", &density, 0.0F, 1.0F, "%.6f",
-        ImGuiSliderFlags_Logarithmic)) {
-    environment_vm_->SetFogDensity(density);
+  float extinction_sigma_t_per_m
+    = environment_vm_->GetFogExtinctionSigmaTPerMeter();
+  if (ImGui::SliderFloat("Extinction σt (1/m)", &extinction_sigma_t_per_m, 0.0F,
+        1.0F, "%.6f", ImGuiSliderFlags_Logarithmic)) {
+    environment_vm_->SetFogExtinctionSigmaTPerMeter(extinction_sigma_t_per_m);
   }
 
   float start_distance_m = environment_vm_->GetFogStartDistanceMeters();
@@ -268,15 +264,16 @@ void EnvironmentDebugPanel::DrawFog()
       std::max(start_distance_m, 0.0F));
   }
 
-  float height_falloff = environment_vm_->GetFogHeightFalloff();
-  if (ImGui::DragFloat(
-        "Height Falloff (1/m)", &height_falloff, 0.0001F, 0.0F, 2.0F, "%.4f")) {
-    environment_vm_->SetFogHeightFalloff(height_falloff);
+  float height_falloff_per_m = environment_vm_->GetFogHeightFalloffPerMeter();
+  if (ImGui::DragFloat("Height Falloff (1/m)", &height_falloff_per_m, 0.0001F,
+        0.0F, 2.0F, "%.4f")) {
+    environment_vm_->SetFogHeightFalloffPerMeter(height_falloff_per_m);
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
     ImGui::SetTooltip(
-      "Controls how density decays with height above Height Offset.\n"
-      "density(z) = base_density * exp(-falloff * (z - offset)).\n"
+      "Controls how extinction increases with decreasing height below Height "
+      "Offset.\n"
+      "sigma_t(z) = base_sigma_t * exp(-falloff * (z - offset)).\n"
       "0 = uniform with height; higher = fog hugs the ground.\n"
       "Units: 1/m (inverse meters).\n"
       "Tip: small changes can have large visual impact.");
@@ -293,13 +290,17 @@ void EnvironmentDebugPanel::DrawFog()
     environment_vm_->SetFogMaxOpacity(max_opacity);
   }
 
-  glm::vec3 albedo = environment_vm_->GetFogAlbedo();
-  float albedo_rgb[3] = { albedo.r, albedo.g, albedo.b };
-  if (ImGui::ColorEdit3("Albedo", albedo_rgb, ImGuiColorEditFlags_Float)) {
-    environment_vm_->SetFogAlbedo(
+  glm::vec3 single_scattering_albedo_rgb
+    = environment_vm_->GetFogSingleScatteringAlbedoRgb();
+  float albedo_rgb[3] = { single_scattering_albedo_rgb.r,
+    single_scattering_albedo_rgb.g, single_scattering_albedo_rgb.b };
+  if (ImGui::ColorEdit3(
+        "Single-Scattering Albedo", albedo_rgb, ImGuiColorEditFlags_Float)) {
+    environment_vm_->SetFogSingleScatteringAlbedoRgb(
       glm::vec3(albedo_rgb[0], albedo_rgb[1], albedo_rgb[2]));
   }
 }
+
 auto EnvironmentDebugPanel::GetName() const noexcept -> std::string_view
 {
   return "Environment";
@@ -328,8 +329,7 @@ auto EnvironmentDebugPanel::OnUnloaded() -> void { }
 
 void EnvironmentDebugPanel::DrawRendererDebugSection()
 {
-  ImGui::Text("Renderer State");
-  ImGui::Indent();
+  ImGui::SeparatorText("Renderer State");
 
   // LUT status
   const auto [luts_valid, luts_dirty]
@@ -348,31 +348,16 @@ void EnvironmentDebugPanel::DrawRendererDebugSection()
     ImGui::TextColored(ImVec4(1.0F, 1.0F, 0.0F, 1.0F), "(updating)");
   }
 
-  // Atmosphere debug flags
-  ImGui::Separator();
-  ImGui::Text("Aerial Perspective Mode:");
-  ImGui::TextDisabled("(affects geometry only, not sky)");
-
-  const bool use_lut = environment_vm_->GetUseLut();
-  const bool force_analytic = environment_vm_->GetForceAnalytic();
-  if (ImGui::RadioButton("Enabled", use_lut && !force_analytic)) {
-    environment_vm_->SetUseLut(true);
-    environment_vm_->SetForceAnalytic(false);
-  }
   ImGui::SameLine();
-  if (ImGui::RadioButton("Disabled", !use_lut)) {
-    environment_vm_->SetUseLut(false);
-    environment_vm_->SetForceAnalytic(false);
+  ImGui::Spacing();
+  ImGui::SameLine();
+  if (ImGui::Button("Regenerate LUT")) {
+    environment_vm_->RequestRegenerateLut();
   }
-
-  ImGui::Unindent();
 }
 
 void EnvironmentDebugPanel::DrawSunSection()
 {
-  ImGui::Text("Sun");
-  ImGui::Indent();
-
   if (!environment_vm_->GetSunPresent()) {
     ImGui::TextColored(ImVec4(0.7F, 0.7F, 0.7F, 1.0F),
       "No Sun component found in the scene environment.");
@@ -482,8 +467,6 @@ void EnvironmentDebugPanel::DrawSunSection()
   }
 
   ImGui::EndDisabled();
-
-  ImGui::Unindent();
 }
 
 void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
@@ -509,11 +492,10 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
     return;
   }
 
-  ImGui::Indent();
   ImGui::PushItemWidth(150);
 
   // Planet parameters
-  ImGui::Text("Planet:");
+  ImGui::SeparatorText("Planet:");
   // Note: Max radius limited to 15000 km due to float precision issues in
   // ray-sphere intersection at larger values (causes sky/ground flip).
   // Min radius 10 km allows testing small asteroid-like bodies.
@@ -536,7 +518,7 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   ImGui::Separator();
 
   // Scattering parameters
-  ImGui::Text("Scattering:");
+  ImGui::SeparatorText("Scattering:");
   float rayleigh_scale_height_km = environment_vm_->GetRayleighScaleHeightKm();
   if (ImGui::DragFloat("Rayleigh Scale H (km)", &rayleigh_scale_height_km, 0.1F,
         0.1F, 100.0F, "%.1F")) {
@@ -570,10 +552,8 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
     environment_vm_->SetMultiScattering(multi_scattering);
   }
 
-  ImGui::Separator();
-
   // Ozone Profile (2-layer density profile)
-  ImGui::Text("Ozone Density Profile (2-layer):");
+  ImGui::SeparatorText("Ozone Density Profile (2-layer):");
 
   constexpr float kMetersToKm = 0.001F;
   constexpr float kKmToMeters = 1000.0F;
@@ -673,21 +653,23 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
       "Default Earth Ozone ~ (0.65, 1.88, 0.085).");
   }
 
-  ImGui::Separator();
-
   // Sun disk
-  ImGui::Text("Sun Disk:");
+  ImGui::SeparatorText("Sun Disk");
   bool sun_disk_enabled = environment_vm_->GetSunDiskEnabled();
   if (ImGui::Checkbox("Show Sun Disk", &sun_disk_enabled)) {
     environment_vm_->SetSunDiskEnabled(sun_disk_enabled);
   }
   ImGui::TextDisabled("Radius is controlled in the Sun section.");
 
-  ImGui::Separator();
+  ImGui::SeparatorText("Aerial Perspective");
 
-  // Aerial perspective
-  ImGui::Text("Aerial Perspective:");
-  ImGui::TextDisabled("0 disables; higher increases effect");
+  bool aerial_perspective_enabled = environment_vm_->GetUseLut();
+  if (ImGui::Checkbox("Enabled (LUT)", &aerial_perspective_enabled)) {
+    environment_vm_->SetUseLut(aerial_perspective_enabled);
+  }
+  ImGui::TextDisabled("Affects geometry only, not sky");
+
+  ImGui::BeginDisabled(!aerial_perspective_enabled);
   float aerial_perspective_scale = environment_vm_->GetAerialPerspectiveScale();
   if (ImGui::DragFloat("Distance Scale", &aerial_perspective_scale, 0.01F, 0.0F,
         50.0F, "%.2F")) {
@@ -699,11 +681,11 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
         "Haze", &aerial_scattering_strength, 0.01F, 0.0F, 50.0F, "%.2F")) {
     environment_vm_->SetAerialScatteringStrength(aerial_scattering_strength);
   }
-
-  ImGui::Separator();
+  ImGui::EndDisabled();
 
   // Sky-View LUT Slicing
-  ImGui::Text("Sky-View LUT:");
+  ImGui::SeparatorText("Sky-View LUT");
+
   ImGui::TextDisabled("Altitude slices for multi-view sampling");
 
   int lut_slices = environment_vm_->GetSkyViewLutSlices();
@@ -717,12 +699,7 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
     environment_vm_->SetSkyViewAltMappingMode(mapping_mode);
   }
 
-  if (ImGui::Button("Regenerate LUT")) {
-    environment_vm_->RequestRegenerateLut();
-  }
-
   ImGui::PopItemWidth();
-  ImGui::Unindent();
 }
 
 void EnvironmentDebugPanel::DrawSkySphereSection()
@@ -925,7 +902,6 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
     return;
   }
 
-  ImGui::Indent();
   ImGui::PushItemWidth(150);
 
   const char* sources[] = { "Captured Scene", "Specified Cubemap" };
@@ -972,7 +948,6 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
   }
 
   ImGui::PopItemWidth();
-  ImGui::Unindent();
 }
 
 void EnvironmentDebugPanel::HandleSkyboxAutoLoad()

@@ -520,8 +520,8 @@ Implement real volumetric fog as a screen-space or froxel-based effect.
 - [ ] Create `VolumetricFogPass` class in `src/Oxygen/Renderer/Passes/`
 - [ ] Create froxel volume texture (e.g., 160×90×128, RGBA16F)
 - [ ] Define `GpuVolumetricFogParams` struct:
-  - `density`, `height_falloff`, `height_offset`
-  - `albedo_rgb`, `anisotropy_g`, `scattering_intensity`
+  - `extinction_sigma_t_per_m`, `height_falloff_per_m`, `height_offset_m`
+  - `single_scattering_albedo_rgb`, `anisotropy_g`
   - `temporal_blend_factor`, `max_distance`
   - `extinction_coefficient`, `ambient_contribution`
 - [ ] Add to `EnvironmentStaticData` alongside existing `GpuFogParams`

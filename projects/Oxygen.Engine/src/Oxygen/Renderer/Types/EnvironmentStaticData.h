@@ -52,16 +52,20 @@ enum class SkySphereSource : uint32_t { // NOLINT(*-enum-size)
  All values are authored in scene space and consumed by shaders in linear HDR.
 */
 struct alignas(16) GpuFogParams {
-  glm::vec3 albedo_rgb { 1.0F, 1.0F, 1.0F };
-  float density { 0.01F };
+  //! Single-scattering albedo (linear RGB) in [0, 1].
+  glm::vec3 single_scattering_albedo_rgb { 1.0F, 1.0F, 1.0F };
 
-  float height_falloff { 0.2F };
+  //! Base extinction coefficient @f$\sigma_t@f$ (m^-1).
+  float extinction_sigma_t_per_m { 0.01F };
+
+  //! Exponential height falloff @f$k@f$ (m^-1).
+  float height_falloff_per_m { 0.2F };
   float height_offset_m { 0.0F };
   float start_distance_m { 0.0F };
   float max_opacity { 1.0F };
 
   float anisotropy_g { 0.0F };
-  float scattering_intensity { 1.0F };
+  float _pad0 { 0.0F };
   FogModel model { FogModel::kExponentialHeight };
   uint32_t enabled { 0U };
 };
@@ -362,21 +366,25 @@ static_assert(sizeof(GpuSkySphereParams) == 48);
  Layout mirrors the HLSL struct `GpuVolumetricCloudParams`.
 */
 struct alignas(16) GpuVolumetricCloudParams {
-  glm::vec3 albedo_rgb { 0.9F, 0.9F, 0.9F };
+  //! Single-scattering albedo (linear RGB) in [0, 1].
+  glm::vec3 single_scattering_albedo_rgb { 0.9F, 0.9F, 0.9F };
   float base_altitude_m { 1500.0F };
 
   glm::vec3 wind_dir_ws { 1.0F, 0.0F, 0.0F };
   float layer_thickness_m { 4000.0F };
 
   float coverage { 0.5F };
-  float density { 0.5F };
-  float extinction_scale { 1.0F };
+
+  //! Base extinction coefficient @f$\sigma_t@f$ (m^-1).
+  float extinction_sigma_t_per_m { 1.0e-3F };
+
   float phase_g { 0.6F };
+  float _pad0 { 0.0F };
 
   float wind_speed_mps { 10.0F };
   float shadow_strength { 0.8F };
   uint32_t enabled { 0U };
-  uint32_t _pad0 { 0U };
+  uint32_t _pad1 { 0U };
 };
 static_assert(std::is_standard_layout_v<GpuVolumetricCloudParams>);
 static_assert(sizeof(GpuVolumetricCloudParams) % 16 == 0);

@@ -159,12 +159,12 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(r.base_altitude_m));
   CHECK_RESULT(reader.ReadInto(r.layer_thickness_m));
   CHECK_RESULT(reader.ReadInto(r.coverage));
-  CHECK_RESULT(reader.ReadInto(r.density));
+  CHECK_RESULT(reader.ReadInto(r.extinction_sigma_t_per_m));
 
-  for (auto& v : r.albedo_rgb) {
+  for (auto& v : r.single_scattering_albedo_rgb) {
     CHECK_RESULT(reader.ReadInto(v));
   }
-  CHECK_RESULT(reader.ReadInto(r.extinction_scale));
+  CHECK_RESULT(reader.ReadInto(r._pad0));
   CHECK_RESULT(reader.ReadInto(r.phase_g));
 
   for (auto& v : r.wind_dir_ws) {
@@ -186,16 +186,16 @@ inline auto Load(AnyReader& reader, data::pak::FogEnvironmentRecord& r)
   CHECK_RESULT(reader.ReadInto(r.header));
   CHECK_RESULT(reader.ReadInto(r.enabled));
   CHECK_RESULT(reader.ReadInto(r.model));
-  CHECK_RESULT(reader.ReadInto(r.density));
-  CHECK_RESULT(reader.ReadInto(r.height_falloff));
+  CHECK_RESULT(reader.ReadInto(r.extinction_sigma_t_per_m));
+  CHECK_RESULT(reader.ReadInto(r.height_falloff_per_m));
   CHECK_RESULT(reader.ReadInto(r.height_offset_m));
   CHECK_RESULT(reader.ReadInto(r.start_distance_m));
   CHECK_RESULT(reader.ReadInto(r.max_opacity));
-  for (auto& v : r.albedo_rgb) {
+  for (auto& v : r.single_scattering_albedo_rgb) {
     CHECK_RESULT(reader.ReadInto(v));
   }
   CHECK_RESULT(reader.ReadInto(r.anisotropy_g));
-  CHECK_RESULT(reader.ReadInto(r.scattering_intensity));
+  CHECK_RESULT(reader.ReadInto(r._pad0));
   CHECK_RESULT(
     reader.ReadBlobInto(std::as_writable_bytes(std::span { r._reserved })));
 

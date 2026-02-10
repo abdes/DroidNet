@@ -7,7 +7,7 @@
 //! Aerial Perspective Sampling for Forward Rendering
 //!
 //! Computes atmospheric scattering between the camera and scene geometry.
-//! Uses precomputed LUTs when available, falling back to analytic fog.
+//! Uses precomputed LUTs when enabled.
 //!
 //! === Algorithm Overview ===
 //! Aerial perspective adds color and fades distant objects by simulating
@@ -34,9 +34,7 @@
 
 // Atmosphere feature flag bits (matches C++ AtmosphereFlags enum)
 static const uint ATMOSPHERE_USE_LUT = 0x1;         // Use LUT sampling when available
-static const uint ATMOSPHERE_VISUALIZE_LUT = 0x2;   // Debug: show LUT as overlay
-static const uint ATMOSPHERE_FORCE_ANALYTIC = 0x4;  // Force analytic fallback
-static const uint ATMOSPHERE_OVERRIDE_SUN = 0x8;    // Use debug override sun
+static const uint ATMOSPHERE_OVERRIDE_SUN = 0x2;    // Use debug override sun
 
 //! Result of aerial perspective computation.
 struct AerialPerspectiveResult
@@ -132,12 +130,6 @@ bool ShouldUseLutAerialPerspective(GpuSkyAtmosphereParams atmo)
 
     // Check atmosphere flags
     uint flags = EnvironmentDynamicData.atmosphere_flags;
-
-    // Force analytic fallback overrides everything
-    if (flags & ATMOSPHERE_FORCE_ANALYTIC)
-    {
-        return false;
-    }
 
     // Use LUT if the flag is set
     return (flags & ATMOSPHERE_USE_LUT) != 0;
@@ -259,8 +251,8 @@ AerialPerspectiveResult ComputeAerialPerspective(
         const float d = max(view_distance - start_d, 0.0);
         if (d > 1e-4)
         {
-            const float base_density = max(fog.density, 0.0);
-            const float falloff = max(fog.height_falloff, 0.0);
+            const float base_sigma_t = max(fog.extinction_sigma_t_per_m, 0.0);
+            const float falloff = max(fog.height_falloff_per_m, 0.0);
 
             // Oxygen convention is Z-up; fog height parameters are authored in meters.
             const float mid_height_m = 0.5 * (camera_pos.z + world_pos.z);
@@ -268,19 +260,14 @@ AerialPerspectiveResult ComputeAerialPerspective(
 
             // Density decreases with height above the offset.
             const float height_scale = (falloff > 1e-5) ? exp(-falloff * height_rel_m) : 1.0;
-            const float effective_density = base_density * height_scale;
+            const float sigma_t = base_sigma_t * height_scale;
 
             // Beer-Lambert extinction approximation.
-            float fog_opacity = 1.0 - exp(-effective_density * d);
-            fog_opacity = saturate(fog_opacity);
-            fog_opacity = min(fog_opacity, saturate(fog.max_opacity));
+            const float transmittance = exp(-sigma_t * d);
+            const float min_transmittance = 1.0 - saturate(fog.max_opacity);
+            const float fog_transmittance = max(transmittance, min_transmittance);
 
-            const float fog_transmittance = 1.0 - fog_opacity;
-
-            // TODO: Rethink Fog
             // Composite: multiply transmittance, add fog inscatter.
-            // Single-scattering approximation: fog both attenuates and adds
-            // inscattered radiance. This avoids the "pure darkening" look.
             result.transmittance *= fog_transmittance;
 
             // Directional single scattering from the sun.
@@ -288,14 +275,12 @@ AerialPerspectiveResult ComputeAerialPerspective(
             const float cos_theta = dot(sun_dir, -view_dir);  // point->camera
             const float phase = HenyeyGreensteinPhase(cos_theta, fog.anisotropy_g);
 
-            const float scattering_intensity
-                = (fog.scattering_intensity > 0.0) ? fog.scattering_intensity : 1.0;
-
             const float sun_irradiance = LuxToIrradiance(GetSunIlluminance());
             const float3 sun_radiance = GetSunColorRGB() * (sun_irradiance * INV_PI);
 
-            result.inscatter += sun_radiance * fog.albedo_rgb
-                * (fog_opacity * scattering_intensity * phase);
+            const float scattering_weight = (1.0 - fog_transmittance);
+            result.inscatter += sun_radiance * fog.single_scattering_albedo_rgb
+                * (scattering_weight * phase);
         }
     }
 

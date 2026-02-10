@@ -44,22 +44,43 @@ public:
   //! Gets the fog model.
   [[nodiscard]] auto GetModel() const noexcept -> FogModel { return model_; }
 
-  //! Sets base density (unitless).
-  auto SetDensity(const float density) noexcept -> void { density_ = density; }
+  //! Sets the base extinction coefficient @f$\sigma_t@f$ (m^-1).
+  /*!
+   This is the participating media extinction used by the analytic height fog
+   evaluation.
 
-  //! Gets base density.
-  [[nodiscard]] auto GetDensity() const noexcept -> float { return density_; }
+   Conceptually, when height fog is enabled the shader evaluates:
 
-  //! Sets height falloff (unitless).
-  auto SetHeightFalloff(const float falloff) noexcept -> void
+   - transmittance @f$T = e^{-\sigma_t d}@f$
+
+   where @f$d@f$ is the view distance in meters.
+  */
+  auto SetExtinctionSigmaTPerMeter(const float sigma_t_per_m) noexcept -> void
   {
-    height_falloff_ = falloff;
+    extinction_sigma_t_per_m_ = sigma_t_per_m;
   }
 
-  //! Gets height falloff.
-  [[nodiscard]] auto GetHeightFalloff() const noexcept -> float
+  //! Gets the base extinction coefficient @f$\sigma_t@f$ (m^-1).
+  [[nodiscard]] auto GetExtinctionSigmaTPerMeter() const noexcept -> float
   {
-    return height_falloff_;
+    return extinction_sigma_t_per_m_;
+  }
+
+  //! Sets exponential height falloff (m^-1).
+  /*!
+   The fog extinction varies with height as:
+   @f$\sigma_t(h) = \sigma_{t,0} \cdot e^{-k(h-h_0)}@f$
+   where @f$k@f$ is this falloff coefficient.
+  */
+  auto SetHeightFalloffPerMeter(const float falloff_per_m) noexcept -> void
+  {
+    height_falloff_per_m_ = falloff_per_m;
+  }
+
+  //! Gets exponential height falloff (m^-1).
+  [[nodiscard]] auto GetHeightFalloffPerMeter() const noexcept -> float
+  {
+    return height_falloff_per_m_;
   }
 
   //! Sets height offset (meters).
@@ -98,16 +119,26 @@ public:
     return max_opacity_;
   }
 
-  //! Sets fog albedo (linear RGB).
-  auto SetAlbedoRgb(const Vec3& rgb) noexcept -> void { albedo_rgb_ = rgb; }
+  //! Sets single-scattering albedo (linear RGB) in [0, 1].
+  /*!
+   This is the ratio @f$\sigma_s / \sigma_t@f$ and controls how much of the
+   extinction is due to scattering vs. absorption.
 
-  //! Gets fog albedo.
-  [[nodiscard]] auto GetAlbedoRgb() const noexcept -> const Vec3&
+   @note This parameter is used only for the fog inscatter approximation.
+  */
+  auto SetSingleScatteringAlbedoRgb(const Vec3& rgb) noexcept -> void
   {
-    return albedo_rgb_;
+    single_scattering_albedo_rgb_ = rgb;
   }
 
-  //! Sets anisotropy g in [-1, 1] (used for volumetric model).
+  //! Gets single-scattering albedo (linear RGB).
+  [[nodiscard]] auto GetSingleScatteringAlbedoRgb() const noexcept
+    -> const Vec3&
+  {
+    return single_scattering_albedo_rgb_;
+  }
+
+  //! Sets anisotropy g in [-1, 1].
   auto SetAnisotropy(const float g) noexcept -> void { anisotropy_g_ = g; }
 
   //! Gets anisotropy.
@@ -116,31 +147,18 @@ public:
     return anisotropy_g_;
   }
 
-  //! Sets scattering intensity multiplier (used for volumetric model).
-  auto SetScatteringIntensity(const float intensity) noexcept -> void
-  {
-    scattering_intensity_ = intensity;
-  }
-
-  //! Gets scattering intensity.
-  [[nodiscard]] auto GetScatteringIntensity() const noexcept -> float
-  {
-    return scattering_intensity_;
-  }
-
 private:
   FogModel model_ = FogModel::kExponentialHeight;
 
-  float density_ = 0.01F;
-  float height_falloff_ = 0.2F;
+  float extinction_sigma_t_per_m_ = 0.01F;
+  float height_falloff_per_m_ = 0.2F;
   float height_offset_m_ = 0.0F;
   float start_distance_m_ = 0.0F;
 
   float max_opacity_ = 1.0F;
-  Vec3 albedo_rgb_ { 1.0F, 1.0F, 1.0F };
+  Vec3 single_scattering_albedo_rgb_ { 1.0F, 1.0F, 1.0F };
 
   float anisotropy_g_ = 0.0F;
-  float scattering_intensity_ = 0.0F; // Default 0 for simple exponential fog
 };
 
 } // namespace oxygen::scene::environment

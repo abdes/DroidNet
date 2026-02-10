@@ -324,8 +324,8 @@ public:
   //! Set debug override flags for atmosphere rendering.
   /*!
    When set, these flags augment the automatically computed atmosphere flags.
-   Use `AtmosphereFlags::kForceAnalytic` to disable LUT sampling.
-   Use `AtmosphereFlags::kVisualizeLut` for debug visualization.
+    Currently, the renderer supports toggling LUT sampling via
+    `AtmosphereFlags::kUseLut`.
 
    @param flags Bitfield of AtmosphereFlags to apply.
   */

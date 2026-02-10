@@ -61,12 +61,12 @@ namespace {
     // Fog
     bool fog_enabled;
     int fog_model;
-    float fog_density;
-    float fog_height_falloff;
+    float fog_extinction_sigma_t_per_m;
+    float fog_height_falloff_per_m;
     float fog_height_offset_m;
     float fog_start_distance_m;
     float fog_max_opacity;
-    glm::vec3 fog_albedo;
+    glm::vec3 fog_single_scattering_albedo_rgb;
 
     // Exposure (PostProcess)
     bool exposure_enabled;
@@ -113,12 +113,12 @@ namespace {
       .sky_light_specular = 1.0F,
       .fog_enabled = false,
       .fog_model = 0,
-      .fog_density = 0.01F,
-      .fog_height_falloff = 0.2F,
+      .fog_extinction_sigma_t_per_m = 0.01F,
+      .fog_height_falloff_per_m = 0.2F,
       .fog_height_offset_m = 0.0F,
       .fog_start_distance_m = 0.0F,
       .fog_max_opacity = 1.0F,
-      .fog_albedo = { 1.0F, 1.0F, 1.0F },
+      .fog_single_scattering_albedo_rgb = { 1.0F, 1.0F, 1.0F },
       .exposure_enabled = true,
       .exposure_mode = 1, // Auto
       .manual_ev = 14.0F,
@@ -161,12 +161,12 @@ namespace {
       .sky_light_specular = 0.7F,
       .fog_enabled = false,
       .fog_model = 0,
-      .fog_density = 0.01F,
-      .fog_height_falloff = 0.2F,
+      .fog_extinction_sigma_t_per_m = 0.01F,
+      .fog_height_falloff_per_m = 0.2F,
       .fog_height_offset_m = 0.0F,
       .fog_start_distance_m = 0.0F,
       .fog_max_opacity = 1.0F,
-      .fog_albedo = { 1.0F, 1.0F, 1.0F },
+      .fog_single_scattering_albedo_rgb = { 1.0F, 1.0F, 1.0F },
       .exposure_enabled = true,
       .exposure_mode = 1, // Auto
       .manual_ev = 12.0F,
@@ -209,12 +209,12 @@ namespace {
       .sky_light_specular = 1.0F,
       .fog_enabled = true,
       .fog_model = 0, // Exponential
-      .fog_density = 0.02F,
-      .fog_height_falloff = 0.1F,
+      .fog_extinction_sigma_t_per_m = 0.02F,
+      .fog_height_falloff_per_m = 0.1F,
       .fog_height_offset_m = 0.0F,
       .fog_start_distance_m = 0.0F,
       .fog_max_opacity = 0.95F,
-      .fog_albedo = { 0.9F, 0.95F, 1.0F },
+      .fog_single_scattering_albedo_rgb = { 0.9F, 0.95F, 1.0F },
       .exposure_enabled = true,
       .exposure_mode = 1, // Auto
       .manual_ev = 13.0F,
@@ -257,12 +257,12 @@ namespace {
       .sky_light_specular = 0.5F,
       .fog_enabled = false,
       .fog_model = 0,
-      .fog_density = 0.01F,
-      .fog_height_falloff = 0.2F,
+      .fog_extinction_sigma_t_per_m = 0.01F,
+      .fog_height_falloff_per_m = 0.2F,
       .fog_height_offset_m = 0.0F,
       .fog_start_distance_m = 0.0F,
       .fog_max_opacity = 1.0F,
-      .fog_albedo = { 1.0F, 1.0F, 1.0F },
+      .fog_single_scattering_albedo_rgb = { 1.0F, 1.0F, 1.0F },
       .exposure_enabled = true,
       .exposure_mode = 1, // Auto
       .manual_ev = 9.0F,
@@ -305,12 +305,12 @@ namespace {
       .sky_light_specular = 0.5F,
       .fog_enabled = false,
       .fog_model = 0,
-      .fog_density = 0.01F,
-      .fog_height_falloff = 0.2F,
+      .fog_extinction_sigma_t_per_m = 0.01F,
+      .fog_height_falloff_per_m = 0.2F,
       .fog_height_offset_m = 0.0F,
       .fog_start_distance_m = 0.0F,
       .fog_max_opacity = 1.0F,
-      .fog_albedo = { 1.0F, 1.0F, 1.0F },
+      .fog_single_scattering_albedo_rgb = { 1.0F, 1.0F, 1.0F },
       .exposure_enabled = true,
       .exposure_mode = 1, // Auto
       .manual_ev = 8.0F,
@@ -447,12 +447,12 @@ auto EnvironmentVm::ApplyPreset(int index) -> void
   // Fog
   SetFogEnabled(preset.fog_enabled);
   SetFogModel(preset.fog_model);
-  SetFogDensity(preset.fog_density);
-  SetFogHeightFalloff(preset.fog_height_falloff);
+  SetFogExtinctionSigmaTPerMeter(preset.fog_extinction_sigma_t_per_m);
+  SetFogHeightFalloffPerMeter(preset.fog_height_falloff_per_m);
   SetFogHeightOffsetMeters(preset.fog_height_offset_m);
   SetFogStartDistanceMeters(preset.fog_start_distance_m);
   SetFogMaxOpacity(preset.fog_max_opacity);
-  SetFogAlbedo(preset.fog_albedo);
+  SetFogSingleScatteringAlbedoRgb(preset.fog_single_scattering_albedo_rgb);
 
   // 3. Re-enable systems in dependency order
   // Background
@@ -923,24 +923,24 @@ auto EnvironmentVm::SetFogModel(const int model) -> void
   service_->SetFogModel(model);
 }
 
-auto EnvironmentVm::GetFogDensity() const -> float
+auto EnvironmentVm::GetFogExtinctionSigmaTPerMeter() const -> float
 {
-  return service_->GetFogDensity();
+  return service_->GetFogExtinctionSigmaTPerMeter();
 }
 
-auto EnvironmentVm::SetFogDensity(const float value) -> void
+auto EnvironmentVm::SetFogExtinctionSigmaTPerMeter(const float value) -> void
 {
-  service_->SetFogDensity(value);
+  service_->SetFogExtinctionSigmaTPerMeter(value);
 }
 
-auto EnvironmentVm::GetFogHeightFalloff() const -> float
+auto EnvironmentVm::GetFogHeightFalloffPerMeter() const -> float
 {
-  return service_->GetFogHeightFalloff();
+  return service_->GetFogHeightFalloffPerMeter();
 }
 
-auto EnvironmentVm::SetFogHeightFalloff(const float value) -> void
+auto EnvironmentVm::SetFogHeightFalloffPerMeter(const float value) -> void
 {
-  service_->SetFogHeightFalloff(value);
+  service_->SetFogHeightFalloffPerMeter(value);
 }
 
 auto EnvironmentVm::GetFogHeightOffsetMeters() const -> float
@@ -973,14 +973,15 @@ auto EnvironmentVm::SetFogMaxOpacity(const float value) -> void
   service_->SetFogMaxOpacity(value);
 }
 
-auto EnvironmentVm::GetFogAlbedo() const -> glm::vec3
+auto EnvironmentVm::GetFogSingleScatteringAlbedoRgb() const -> glm::vec3
 {
-  return service_->GetFogAlbedo();
+  return service_->GetFogSingleScatteringAlbedoRgb();
 }
 
-auto EnvironmentVm::SetFogAlbedo(const glm::vec3& value) -> void
+auto EnvironmentVm::SetFogSingleScatteringAlbedoRgb(const glm::vec3& value)
+  -> void
 {
-  service_->SetFogAlbedo(value);
+  service_->SetFogSingleScatteringAlbedoRgb(value);
 }
 
 auto EnvironmentVm::GetSunPresent() const -> bool
@@ -1098,26 +1099,6 @@ auto EnvironmentVm::GetUseLut() const -> bool { return service_->GetUseLut(); }
 auto EnvironmentVm::SetUseLut(bool enabled) -> void
 {
   service_->SetUseLut(enabled);
-}
-
-auto EnvironmentVm::GetVisualizeLut() const -> bool
-{
-  return service_->GetVisualizeLut();
-}
-
-auto EnvironmentVm::SetVisualizeLut(bool enabled) -> void
-{
-  service_->SetVisualizeLut(enabled);
-}
-
-auto EnvironmentVm::GetForceAnalytic() const -> bool
-{
-  return service_->GetForceAnalytic();
-}
-
-auto EnvironmentVm::SetForceAnalytic(bool enabled) -> void
-{
-  service_->SetForceAnalytic(enabled);
 }
 
 } // namespace oxygen::examples::ui

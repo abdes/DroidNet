@@ -41,16 +41,16 @@ static const uint EXPOSURE_MODE_AUTO = 1u;
 // Mirrors oxygen::engine::GpuFogParams (sizeof = 48)
 struct GpuFogParams
 {
-    float3 albedo_rgb;
-    float density;
+    float3 single_scattering_albedo_rgb;
+    float extinction_sigma_t_per_m;
 
-    float height_falloff;
+    float height_falloff_per_m;
     float height_offset_m;
     float start_distance_m;
     float max_opacity;
 
     float anisotropy_g;
-    float scattering_intensity;
+    float _pad0;
     uint model;
     uint enabled;
 };
@@ -142,21 +142,21 @@ struct GpuSkySphereParams
 // Mirrors oxygen::engine::GpuVolumetricCloudParams (sizeof = 64)
 struct GpuVolumetricCloudParams
 {
-    float3 albedo_rgb;
+    float3 single_scattering_albedo_rgb;
     float base_altitude_m;
 
     float3 wind_dir_ws;
     float layer_thickness_m;
 
     float coverage;
-    float density;
-    float extinction_scale;
+    float extinction_sigma_t_per_m;
     float phase_g;
+    float _pad0;
 
     float wind_speed_mps;
     float shadow_strength;
     uint enabled;
-    uint _pad0;
+    uint _pad1;
 };
 
 // Mirrors oxygen::engine::GpuPostProcessParams (sizeof = 64)

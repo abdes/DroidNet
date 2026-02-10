@@ -1582,21 +1582,6 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
             atmosphere_flags |= static_cast<uint32_t>(AtmosphereFlags::kUseLut);
           }
         }
-        // If user chose force analytic mode
-        if ((debug_flags
-              & static_cast<uint32_t>(AtmosphereFlags::kForceAnalytic))
-          != 0) {
-          // Debug override: force analytic, clear LUT flag.
-          atmosphere_flags &= ~static_cast<uint32_t>(AtmosphereFlags::kUseLut);
-          atmosphere_flags
-            |= static_cast<uint32_t>(AtmosphereFlags::kForceAnalytic);
-        }
-        if ((debug_flags
-              & static_cast<uint32_t>(AtmosphereFlags::kVisualizeLut))
-          != 0) {
-          atmosphere_flags
-            |= static_cast<uint32_t>(AtmosphereFlags::kVisualizeLut);
-        }
         if (sun_override_.enabled) {
           atmosphere_flags
             |= static_cast<uint32_t>(AtmosphereFlags::kOverrideSun);
