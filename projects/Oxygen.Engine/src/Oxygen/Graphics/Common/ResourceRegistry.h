@@ -892,6 +892,21 @@ public:
       key);
   }
 
+  // Returns the shader-visible index for an existing view description if one
+  // has already been registered for the given resource; useful to avoid
+  // allocating/registering duplicate views.
+  template <ResourceWithViews Resource>
+  [[nodiscard]] auto FindShaderVisibleIndex(const Resource& resource,
+    const typename Resource::ViewDescriptionT& desc) const
+    -> std::optional<bindless::ShaderVisibleIndex>
+  {
+    auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
+    return FindShaderVisibleIndex(
+      NativeResource { const_cast<Resource*>(&resource),
+        Resource::ClassTypeId() },
+      key);
+  }
+
   //! Unregister a specific view while preserving the resource and other views.
   /*!
    Removes a specific native view object from the registry, releasing its
@@ -1193,6 +1208,11 @@ private:
 
   OXGN_GFX_NDAPI auto Find(
     const NativeResource& resource, size_t key_hash) const -> NativeView;
+  // Find the shader-visible index (if any) for a registered view description
+  // associated with `resource` and `key_hash`.
+  OXGN_GFX_NDAPI auto FindShaderVisibleIndex(
+    const NativeResource& resource, size_t key_hash) const
+    -> std::optional<bindless::ShaderVisibleIndex>;
 
   // Thread safety
   mutable std::mutex registry_mutex_;
