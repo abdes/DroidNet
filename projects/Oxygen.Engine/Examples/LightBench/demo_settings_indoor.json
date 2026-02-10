@@ -97,7 +97,7 @@
     "sky_light": {
       "diffuse": 0.8899999856948853,
       "enabled": false,
-      "intensity": 0.03999999910593033,
+      "intensity_mul": 0.03999999910593033,
       "source": 0.0,
       "specular": 0.2199999988079071,
       "tint": {

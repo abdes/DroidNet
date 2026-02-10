@@ -106,7 +106,7 @@ struct GpuSkyAtmosphereParams
 struct GpuSkyLightParams
 {
     float3 tint_rgb;
-    float intensity;
+    float radiance_scale;
 
     float diffuse_intensity;
     float specular_intensity;

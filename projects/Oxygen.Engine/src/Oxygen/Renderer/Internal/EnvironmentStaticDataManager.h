@@ -156,11 +156,11 @@ public:
     return kInvalidShaderVisibleIndex;
   }
 
-  //! Returns the sky light intensity multiplier.
-  [[nodiscard]] auto GetSkyLightIntensity() const noexcept -> float
+  //! Returns the sky light IBL radiance scale.
+  [[nodiscard]] auto GetSkyLightRadianceScale() const noexcept -> float
   {
     return cpu_snapshot_.sky_light.enabled != 0U
-      ? cpu_snapshot_.sky_light.intensity
+      ? cpu_snapshot_.sky_light.radiance_scale
       : 1.0F;
   }
 

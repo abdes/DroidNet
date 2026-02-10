@@ -109,18 +109,21 @@ float4 PS(VSOutput input) : SV_Target0 {
             if (env_data.sky_light.irradiance_map_slot != K_INVALID_BINDLESS_INDEX && env_data.sky_light.prefilter_map_slot != K_INVALID_BINDLESS_INDEX) {
                 TextureCube<float4> irr_map = ResourceDescriptorHeap[env_data.sky_light.irradiance_map_slot];
                 TextureCube<float4> pref_map = ResourceDescriptorHeap[env_data.sky_light.prefilter_map_slot];
-                ibl_diffuse = irr_map.SampleLevel(linear_sampler, cube_N, 0.0).rgb * env_data.sky_light.tint_rgb * env_data.sky_light.diffuse_intensity;
-                ibl_specular = pref_map.SampleLevel(linear_sampler, cube_R, (float)env_data.sky_light.prefilter_max_mip * surf.roughness).rgb * env_data.sky_light.tint_rgb * env_data.sky_light.specular_intensity;
+                ibl_diffuse = irr_map.SampleLevel(linear_sampler, cube_N, 0.0).rgb * env_data.sky_light.tint_rgb * env_data.sky_light.radiance_scale * env_data.sky_light.diffuse_intensity;
+                ibl_specular = pref_map.SampleLevel(linear_sampler, cube_R, (float)env_data.sky_light.prefilter_max_mip * surf.roughness).rgb * env_data.sky_light.tint_rgb * env_data.sky_light.radiance_scale * env_data.sky_light.specular_intensity;
             } else {
                 float max_m = (slot == env_data.sky_sphere.cubemap_slot) ? (float)env_data.sky_sphere.cubemap_max_mip : (float)env_data.sky_light.cubemap_max_mip;
-                ibl_specular = sky_cube.SampleLevel(linear_sampler, cube_R, max_m * surf.roughness).rgb * env_data.sky_light.tint_rgb * env_data.sky_light.intensity * env_data.sky_light.specular_intensity;
-                ibl_diffuse = sky_cube.SampleLevel(linear_sampler, cube_N, max_m).rgb * env_data.sky_light.tint_rgb * env_data.sky_light.intensity * env_data.sky_light.diffuse_intensity;
+                ibl_specular = sky_cube.SampleLevel(linear_sampler, cube_R, max_m * surf.roughness).rgb * env_data.sky_light.tint_rgb * env_data.sky_light.radiance_scale * env_data.sky_light.specular_intensity;
+                ibl_diffuse = sky_cube.SampleLevel(linear_sampler, cube_N, max_m).rgb * env_data.sky_light.tint_rgb * env_data.sky_light.radiance_scale * env_data.sky_light.diffuse_intensity;
             }
         }
     }
 
-    float3 ibl_spec_term = ibl_specular * EnvBrdfApprox(F0, surf.roughness, NdotV);
-    #if !defined(SKIP_BRDF_LUT)
+    #if defined(SKIP_BRDF_LUT)
+    // Debug mode: Skip BRDF LUT and fallback. Show raw specular IBL.
+    float3 ibl_spec_term = ibl_specular;
+    #else
+    float3 ibl_spec_term;
     if (env_data.sky_light.brdf_lut_slot != K_INVALID_BINDLESS_INDEX) {
         Texture2D<float2> brdf_lut = ResourceDescriptorHeap[env_data.sky_light.brdf_lut_slot];
         uint lut_w = 1u;
@@ -130,7 +133,9 @@ float4 PS(VSOutput input) : SV_Target0 {
         const float2 uv_raw = saturate(float2(NdotV, surf.roughness));
         const float2 uv = (uv_raw * (lut_size - 1.0) + 0.5) / lut_size;
         float2 brdf = brdf_lut.SampleLevel(linear_sampler, uv, 0.0).rg;
-        if (!any(isnan(brdf)) && max(brdf.x, brdf.y) > 1e-5) ibl_spec_term = ibl_specular * (F0 * brdf.x + brdf.y);
+        ibl_spec_term = ibl_specular * (F0 * brdf.x + brdf.y);
+    } else {
+        ibl_spec_term = ibl_specular * EnvBrdfApprox(F0, surf.roughness, NdotV);
     }
     #endif
 

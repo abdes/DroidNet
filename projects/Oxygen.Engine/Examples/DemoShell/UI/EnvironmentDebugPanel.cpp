@@ -953,10 +953,10 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
     environment_vm_->SetSkyLightTint(sky_light_tint);
   }
 
-  float sky_light_intensity = environment_vm_->GetSkyLightIntensity();
-  if (ImGui::DragFloat("SkyLight Intensity", &sky_light_intensity, 0.01F, 0.0F,
-        20.0F, "%.2F")) {
-    environment_vm_->SetSkyLightIntensity(sky_light_intensity);
+  float sky_light_intensity_mul = environment_vm_->GetSkyLightIntensityMul();
+  if (ImGui::DragFloat("SkyLight Multiplier", &sky_light_intensity_mul, 0.01F,
+        0.0F, 20.0F, "%.2F")) {
+    environment_vm_->SetSkyLightIntensityMul(sky_light_intensity_mul);
   }
 
   float sky_light_diffuse = environment_vm_->GetSkyLightDiffuse();

@@ -212,7 +212,7 @@ Integrate the HDRI luminance over the hemisphere to find its total energy in arb
 **Step 3: Intensity Mapping:**
 
 - **Formula**: $multiplier = \frac{E_{target}}{E_{raw}}$
-- **Result**: `SkyLight::SetIntensity(multiplier)` ensures the HDRI provides the exact desired Lux (e.g., 500 Lux for an overcast sky).
+- **Result**: `SkyLight::SetIntensityMul(multiplier)` ensures the HDRI provides the exact desired Lux (e.g., 500 Lux for an overcast sky).
 
 ### 2. Calibration for Dynamic/Synthetic Environments
 
@@ -227,7 +227,7 @@ Since the `SkyAtmosphere` is driven by the physical `Sun::illuminance_lx_`, the 
 1. **Source**: The `SkyAtmosphere` generates radiance based on Sun **`_lx`** and atmospheric coefficients (Rayleigh, Mie).
 2. **Capture**: The `SkyCapturePass` renders this synthetic sky into a cubemap (at runtime or cubemap generation time).
 3. **Consistency**: Because the source is already calibrated in **`_lx`** / **`_nit`**, the captured IBL is **intrinsically calibrated**.
-4. **Intensity**: For captured scenes, `SkyLight::intensity_` should default to **1.0 (unity)** to maintain the physical relationship established by the atmosphere model.
+4. **Intensity**: For captured scenes, `SkyLight::intensity_mul_` should default to **1.0 (unity)** to maintain the physical relationship established by the atmosphere model.
 
 **Handling Ground & Emissive Contributions:**
 
@@ -242,7 +242,7 @@ To achieve energy-consistent Image-Based Lighting (IBL) in both hybrid (HDRI + S
 ### 3. Oxygen Pipeline Integration
 
 - **Input**: HDRI file + `target_ambient_lx` (Static) OR `SkyCapturePass` output (Dynamic).
-- **Output**: `SkyLight::intensity_` (multiplier).
+- **Output**: `SkyLight::intensity_mul_` (unitless multiplier).
 - **Component Flow**: The `EnvironmentSystem` syncs these parameters to `EnvironmentDynamicData`. Shaders use the resulting radiance values directly, ensuring that a "100,000 **`_lx`**" sun and its "10,000 **`_lx`**" atmosphere contribution work together without manual scaling.
 
 ---
