@@ -138,9 +138,11 @@ public:
   }
 
   //! Resets the auto-exposure history for all active views to the given initial
-  //! EV100 value. This is useful when switching environments/presets to prevent
-  //! adaptation artifacts (flashing).
-  virtual auto ResetAutoExposure(float /*initial_ev100*/) -> void { }
+  //! EV value (referenced to ISO 100 / EV100).
+  //!
+  //! Useful when switching environments/presets to prevent adaptation artifacts
+  //! (flashing).
+  virtual auto ResetAutoExposure(float /*initial_ev*/) -> void { }
 
   //! Provide last mouse-down position for GPU debug overlays.
   virtual auto SetGpuDebugMouseDownPosition(

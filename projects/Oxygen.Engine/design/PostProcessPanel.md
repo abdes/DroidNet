@@ -25,7 +25,7 @@ Manages persistence of settings using keys under the `post_process.` namespace.
 | **Exposure** | Enabled | `post_process.exposure.enabled` | Bool | `true` |
 | | Mode | `post_process.exposure.mode` | Enum (Manual, ManualCamera, Auto) | `Manual` |
 | | Compensation (EV) | `post_process.exposure.compensation` | Float | `0.0` |
-| | Manual EV100 | `post_process.exposure.manual_ev100` | Float | `9.7` |
+| | Manual EV (EV100) | `post_process.exposure.manual_ev` | Float | `9.7` |
 | **Tonemap** | Enabled | `post_process.tonemapping.enabled` | Bool | `true` |
 | | Mode | `post_process.tonemapping.mode` | Enum | `ACES` |
 
@@ -43,12 +43,13 @@ stored in the post-process settings service.
 | ISO | `camera_rig.<camera_id>.camera.exposure.iso` | Float | `100.0` |
 
 The post-process service binds to the camera lifecycle to read and update the
-active camera exposure, then applies the resulting EV100 to the runtime
+active camera exposure, then applies the resulting EV (EV100) to the runtime
 pipeline. The post-process service does not own camera exposure data.
 
-**Default EV100 Rationale:**
+**Default EV Rationale:**
 
-The default EV100 of `9.7` corresponds to a typical sunny outdoor scene with:
+The default EV of `9.7` (referenced to ISO 100 / EV100) corresponds to a
+typical sunny outdoor scene with:
 
 - Aperture: f/11 (`aperture = 11.0`)
 - Shutter: 1/125s (`shutter = 125.0`)
@@ -59,7 +60,7 @@ This provides a sensible starting point that matches real-world photography and 
 ### 2. View Model (`PostProcessVm`)
 
 Bridges the settings service and the UI. It exposes reactive properties that
-the view binds to and delegates orchestration to the service; EV100 conversion
+the view binds to and delegates orchestration to the service; EV conversion
 for manual camera exposure is provided by the camera exposure model.
 
 **Location:** `Examples/DemoShell/UI/PostProcessVm.h`
@@ -79,15 +80,15 @@ Implements the UI using ImGui.
 
 - **Exposure** (Collapsing Header, primary)
   - [x] Toggle: Enable Exposure
-  - [x] Combo: Mode [Manual (EV100) | Manual (Camera) | Automatic]
-  - *Manual (EV100)*:
-    - [x] Slider: EV100 [-6.0, 16.0]
+  - [x] Combo: Mode [Manual (EV) | Manual (Camera) | Automatic]
+  - *Manual (EV)*:
+    - [x] Slider: EV [0.0, 16.0]
     - [x] Drag: Compensation (EV) [-10.0, +10.0] (disabled)
   - *Manual (Camera)*:
     - [x] Drag: Aperture (f/) [1.4, 32.0]
     - [x] Drag: Shutter (1/s) [1/8000, 60]
     - [x] Drag: ISO [100, 6400]
-    - [x] Text: Computed EV100 (Read-only)
+    - [x] Text: Computed EV (Read-only)
     - [x] Drag: Compensation (EV) [-10.0, +10.0] (disabled)
   - *Automatic*:
     - [x] Drag: Compensation (EV) [-10.0, +10.0]

@@ -70,7 +70,7 @@ void PostProcessPanel::DrawExposureSection()
     ImGui::BeginDisabled();
   }
 
-  auto mode_preview = "Manual (EV100)";
+  auto mode_preview = "Manual (EV)";
   ExposureMode current_mode = vm_->GetExposureMode();
   if (current_mode == ExposureMode::kAuto) {
     mode_preview = "Automatic";
@@ -80,7 +80,7 @@ void PostProcessPanel::DrawExposureSection()
 
   if (ImGui::BeginCombo("Mode##Exposure", mode_preview)) {
     if (ImGui::Selectable(
-          "Manual (EV100)", current_mode == ExposureMode::kManual)) {
+          "Manual (EV)", current_mode == ExposureMode::kManual)) {
       vm_->SetExposureMode(ExposureMode::kManual);
     }
     if (ImGui::Selectable(
@@ -97,15 +97,16 @@ void PostProcessPanel::DrawExposureSection()
   }
 
   if (current_mode == ExposureMode::kManual) {
-    float ev100 = vm_->GetManualExposureEV100();
+    float ev = vm_->GetManualExposureEv();
     // Range roughly covering starlight to bright sunlight
-    if (ImGui::DragFloat("EV100", &ev100, 0.01F, 0.0F, 16.0F, "%.2f")) {
-      ev100 = std::round(ev100 * 100.0F) / 100.0F;
-      ev100 = std::max(ev100, 0.0F);
-      vm_->SetManualExposureEV100(ev100);
+    if (ImGui::DragFloat("EV", &ev, 0.01F, 0.0F, 16.0F, "%.2f")) {
+      ev = std::round(ev * 100.0F) / 100.0F;
+      ev = std::max(ev, 0.0F);
+      vm_->SetManualExposureEv(ev);
     }
     if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Explicit exposure value (EV100) for the scene.");
+      ImGui::SetTooltip("Explicit exposure value (EV, referenced to ISO 100 / "
+                        "EV100) for the scene.");
     }
   }
 
@@ -134,8 +135,8 @@ void PostProcessPanel::DrawExposureSection()
       ImGui::SetTooltip("Camera ISO sensitivity.");
     }
 
-    const float computed_ev100 = vm_->GetManualCameraEV100();
-    ImGui::Text("Computed EV100: %.2f", computed_ev100);
+    const float computed_ev = vm_->GetManualCameraEv();
+    ImGui::Text("Computed EV: %.2f", computed_ev);
   }
 
   if (current_mode == ExposureMode::kAuto) {

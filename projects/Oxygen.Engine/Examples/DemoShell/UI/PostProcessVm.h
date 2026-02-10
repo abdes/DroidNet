@@ -29,8 +29,8 @@ public:
   [[nodiscard]] auto GetExposureMode() -> engine::ExposureMode;
   auto SetExposureMode(engine::ExposureMode mode) -> void;
 
-  [[nodiscard]] auto GetManualExposureEV100() -> float;
-  auto SetManualExposureEV100(float ev100) -> void;
+  [[nodiscard]] auto GetManualExposureEv() -> float;
+  auto SetManualExposureEv(float ev) -> void;
 
   [[nodiscard]] auto GetManualCameraAperture() -> float;
   auto SetManualCameraAperture(float aperture) -> void;
@@ -41,7 +41,7 @@ public:
   [[nodiscard]] auto GetManualCameraIso() -> float;
   auto SetManualCameraIso(float iso) -> void;
 
-  [[nodiscard]] auto GetManualCameraEV100() -> float;
+  [[nodiscard]] auto GetManualCameraEv() -> float;
 
   [[nodiscard]] auto GetExposureCompensation() -> float;
   auto SetExposureCompensation(float stops) -> void;
@@ -95,7 +95,7 @@ private:
   // Cached state
   bool exposure_enabled_ { true };
   engine::ExposureMode exposure_mode_ { engine::ExposureMode::kManual };
-  float manual_ev100_ { 9.7F };
+  float manual_ev_ { 9.7F };
   float manual_camera_aperture_ { 11.0F };
   float manual_camera_shutter_rate_ { 125.0F };
   float manual_camera_iso_ { 100.0F };

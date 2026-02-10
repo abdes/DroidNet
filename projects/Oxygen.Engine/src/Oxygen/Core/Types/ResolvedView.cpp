@@ -44,7 +44,7 @@ ResolvedView::ResolvedView(const Params& p)
     camera_position_ = glm::vec3(inv_view_[3]);
   }
 
-  camera_ev100_ = p.camera_ev100;
+  camera_ev_ = p.camera_ev;
 
   frustum_ = Frustum::FromViewProj(view_proj_, reverse_z_);
 

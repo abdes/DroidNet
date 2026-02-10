@@ -89,7 +89,7 @@ To consider this implementation complete and "Engine Ready", the following requi
 | ✅ | REQ03 | **Exposure & Tonemapping Persistence**: The pipeline consumes staged exposure and tonemapper settings and applies them to `ToneMapPass` during per-view execution. | Implemented |
 | ✅ | REQ04 | **SDR Composition**: `OnCompositing` blends pre-tonemapped SDR intermediates into the backbuffer via `CompositingTask`s. | Implemented |
 | ✅ | REQ05 | **PBR ImGui Isolation**: ImGui renders in the SDR overlay stage after tonemapping has completed. | Implemented |
-(Bloom, Gizmos) out of the main pipeline source while remaining `co_await`able from the main render sequence. | Pending |
+| ⬜ | REQ06 | **Coroutine Contributors**: The pipeline shall support factoring optional contributors (Bloom, Gizmos) out of the main pipeline source while remaining `co_await`able from the main render sequence. | Pending |
 | ✅ | REQ08 | **Resource Cleanup**: All intermediate GPU resources must be correctly released during resize events or shutdown via the `ClearBackbufferReferences()` hook. | Implemented |
 | ✅ | REQ09 | **Multi-View Support**: The compositing logic must support multiple views (e.g., PiP), ensuring each one is correctly blended onto the final backbuffer based on its viewport. | Pending |
 
@@ -108,7 +108,7 @@ tonemaps into SDR, and emits the SDR result for compositing.
 
 The transition from HDR Intermediate to SDR Backbuffer involves:
 
-- **Exposure Control**: Managed by `ToneMapPass` using Manual EV100 or Automatic Exposure modes.
+- **Exposure Control**: Managed by `ToneMapPass` using Manual EV (EV100) or Automatic Exposure modes.
 - **Tone Mapping**: ACES, Filmic, Reinhard, or None operators executed as part of the `ToneMapPass`.
 - **Blending**: Alpha compositing of multiple SDR view results via `CompositingTask`.
 
