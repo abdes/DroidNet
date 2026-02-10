@@ -86,20 +86,20 @@ struct GpuSkyAtmosphereParams
     uint transmittance_lut_slot;
     uint sky_view_lut_slot;
 
+    uint sky_irradiance_lut_slot;
     uint multi_scat_lut_slot;
     uint camera_volume_lut_slot;
     uint blue_noise_slot;
-    float transmittance_lut_width;
 
+    float transmittance_lut_width;
     float transmittance_lut_height;
     float sky_view_lut_width;
     float sky_view_lut_height;
-    uint sky_view_lut_slices;
 
+    float sky_irradiance_lut_width;
+    float sky_irradiance_lut_height;
+    uint sky_view_lut_slices;
     uint sky_view_alt_mapping_mode;
-    uint _pad0;
-    uint _pad1;
-    uint _pad2;
 };
 
 // Mirrors oxygen::engine::GpuSkyLightParams (sizeof = 64)

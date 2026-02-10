@@ -107,6 +107,23 @@ struct SkyViewLutSlot {
   constexpr auto operator<=>(const SkyViewLutSlot&) const = default;
 };
 
+struct SkyIrradianceLutSlot {
+  ShaderVisibleIndex value;
+  SkyIrradianceLutSlot()
+    : value(kInvalidShaderVisibleIndex)
+  {
+  }
+  explicit constexpr SkyIrradianceLutSlot(const ShaderVisibleIndex v)
+    : value(v)
+  {
+  }
+  [[nodiscard]] constexpr auto IsValid() const noexcept
+  {
+    return value != kInvalidShaderVisibleIndex;
+  }
+  constexpr auto operator<=>(const SkyIrradianceLutSlot&) const = default;
+};
+
 struct MultiScatLutSlot {
   ShaderVisibleIndex value;
   MultiScatLutSlot()
@@ -195,20 +212,20 @@ struct alignas(16) GpuSkyAtmosphereParams {
   TransmittanceLutSlot transmittance_lut_slot;
   SkyViewLutSlot sky_view_lut_slot;
 
+  SkyIrradianceLutSlot sky_irradiance_lut_slot;
   MultiScatLutSlot multi_scat_lut_slot;
   CameraVolumeLutSlot camera_volume_lut_slot;
   BlueNoiseSlot blue_noise_slot;
-  float transmittance_lut_width { 0.0F };
 
+  float transmittance_lut_width { 0.0F };
   float transmittance_lut_height { 0.0F };
   float sky_view_lut_width { 0.0F };
   float sky_view_lut_height { 0.0F };
-  uint32_t sky_view_lut_slices { 0U };
 
+  float sky_irradiance_lut_width { 0.0F };
+  float sky_irradiance_lut_height { 0.0F };
+  uint32_t sky_view_lut_slices { 0U };
   uint32_t sky_view_alt_mapping_mode { 0U };
-  uint32_t _pad0 { 0U };
-  uint32_t _pad1 { 0U };
-  uint32_t _pad2 { 0U };
 };
 static_assert(std::is_standard_layout_v<GpuSkyAtmosphereParams>);
 static_assert(sizeof(GpuSkyAtmosphereParams) % 16 == 0);
@@ -225,11 +242,13 @@ static_assert(offsetof(GpuSkyAtmosphereParams, mie_extinction_rgb) == 64);
 static_assert(offsetof(GpuSkyAtmosphereParams, absorption_rgb) == 80);
 static_assert(offsetof(GpuSkyAtmosphereParams, absorption_density) == 96);
 static_assert(offsetof(GpuSkyAtmosphereParams, sun_disk_enabled) == 128);
-static_assert(offsetof(GpuSkyAtmosphereParams, multi_scat_lut_slot) == 144);
+static_assert(offsetof(GpuSkyAtmosphereParams, sky_irradiance_lut_slot) == 144);
+static_assert(offsetof(GpuSkyAtmosphereParams, multi_scat_lut_slot) == 148);
+static_assert(offsetof(GpuSkyAtmosphereParams, transmittance_lut_width) == 160);
 static_assert(
-  offsetof(GpuSkyAtmosphereParams, transmittance_lut_height) == 160);
+  offsetof(GpuSkyAtmosphereParams, sky_irradiance_lut_width) == 176);
 static_assert(
-  offsetof(GpuSkyAtmosphereParams, sky_view_alt_mapping_mode) == 176);
+  offsetof(GpuSkyAtmosphereParams, sky_view_alt_mapping_mode) == 188);
 
 struct CubeMapSlot {
   ShaderVisibleIndex value;

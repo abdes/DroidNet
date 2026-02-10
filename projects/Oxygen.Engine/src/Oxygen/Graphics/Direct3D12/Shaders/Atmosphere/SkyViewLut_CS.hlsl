@@ -54,6 +54,8 @@ struct SkyViewLutPassConstants
     uint output_uav_index;          // UAV index for output RWTexture2DArray<float4>
     uint transmittance_srv_index;   // SRV index for transmittance LUT
     uint multi_scat_srv_index;      // SRV index for MultiScat LUT
+    uint sky_irradiance_srv_index;  // SRV index for sky irradiance LUT
+
     uint output_width;              // LUT width (per slice)
 
     uint output_height;             // LUT height (per slice)
@@ -67,10 +69,36 @@ struct SkyViewLutPassConstants
     float atmosphere_height_m;      // Total atmosphere height in meters
 
     float planet_radius_m;          // Planet radius in meters
-    uint _pad0;                     // Padding for 16-byte alignment
-    uint _pad1;
-    uint _pad2;
+    float sky_irradiance_width;     // Sky irradiance LUT width
+    float sky_irradiance_height;    // Sky irradiance LUT height
 };
+
+float3 SampleSkyIrradianceLut(
+    uint sky_irradiance_srv_index,
+    float sky_irradiance_width,
+    float sky_irradiance_height,
+    float cos_sun_zenith,
+    float altitude_m,
+    GpuSkyAtmosphereParams atmo,
+    SamplerState linear_sampler)
+{
+    if (sky_irradiance_srv_index == K_INVALID_BINDLESS_INDEX)
+    {
+        return float3(0.0, 0.0, 0.0);
+    }
+
+    float u = cos_sun_zenith * 0.5 + 0.5;
+    float v = altitude_m / max(1e-3, atmo.atmosphere_height_m);
+    float2 uv = saturate(float2(u, v));
+
+    // Match other LUT sampling code: apply half-texel offset for stable bilinear
+    // filtering and to avoid sampling outside the intended texel domain.
+    uv = ApplyHalfTexelOffset(uv, sky_irradiance_width, sky_irradiance_height);
+
+    Texture2D<float4> sky_irradiance_lut
+        = ResourceDescriptorHeap[sky_irradiance_srv_index];
+    return sky_irradiance_lut.SampleLevel(linear_sampler, uv, 0).rgb;
+}
 
 // Thread group size: 8x8 threads per group
 #define THREAD_GROUP_SIZE_X 8
@@ -135,6 +163,9 @@ float4 ComputeSingleScattering(
     uint transmittance_srv_index,
     float transmittance_width,
     float transmittance_height,
+    uint sky_irradiance_srv_index,
+    float sky_irradiance_width,
+    float sky_irradiance_height,
     Texture2D<float4> multi_scat_lut,
     SamplerState linear_sampler,
     float3 sun_illuminance)
@@ -163,7 +194,8 @@ float4 ComputeSingleScattering(
         float3 ground_normal = normalize(ground_pos);
 
         // Sun illumination on ground (Lambertian)
-        float ground_ndotl = max(0.0, dot(ground_normal, sun_dir));
+        float mu_s = dot(ground_normal, sun_dir);
+        float ground_ndotl = max(0.0, mu_s);
 
         // Transmittance from sun to ground
         float3 ground_sun_od = SampleTransmittanceOpticalDepthLut(
@@ -175,15 +207,22 @@ float4 ComputeSingleScattering(
             atmo.atmosphere_height_m);
         float3 ground_sun_transmittance = TransmittanceFromOpticalDepth(ground_sun_od, atmo);
 
-        // Direct sun illumination on ground (Lambertian BRDF = albedo / PI)
-        // UE5 Reference: Ground-hit uses direct Lambert only. Multi-scattering
-        // contributions are handled by the MS pipeline, not via an extra ambient term.
-        float3 ground_reflected = atmo.ground_albedo_rgb * INV_PI
-                                * ground_ndotl
-                                * ground_sun_transmittance
-                                * sun_illuminance;
+        float3 E_direct = ground_ndotl * ground_sun_transmittance
+                        * sun_illuminance;
 
-        // Add direct ground reflection only, attenuated by path transmittance
+        float3 E_sky = SampleSkyIrradianceLut(
+            sky_irradiance_srv_index,
+            sky_irradiance_width,
+            sky_irradiance_height,
+            mu_s,
+            0.0,
+            atmo,
+            linear_sampler);
+
+        float3 ground_reflected = atmo.ground_albedo_rgb * INV_PI
+                                * (E_direct + E_sky);
+
+        // Add ground reflection, attenuated by view-path transmittance.
         inscatter += ground_reflected * throughput;
     }
 
@@ -330,6 +369,9 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             pass_constants.transmittance_srv_index,
             float(pass_constants.transmittance_width),
             float(pass_constants.transmittance_height),
+            pass_constants.sky_irradiance_srv_index,
+            pass_constants.sky_irradiance_width,
+            pass_constants.sky_irradiance_height,
             multi_scat_lut, linear_sampler,
             sun_illuminance);
     }

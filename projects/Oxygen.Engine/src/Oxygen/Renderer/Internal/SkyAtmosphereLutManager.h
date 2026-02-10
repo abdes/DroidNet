@@ -66,6 +66,9 @@ struct SkyAtmosphereLutConfig {
   //! Multiple scattering LUT size (32x32 common).
   uint32_t multi_scat_size { 32U };
 
+  //! Sky irradiance LUT size (diffuse hemispherical sky irradiance).
+  uint32_t sky_irradiance_size { 64U };
+
   //! Camera volume LUT width (screen-space froxel resolution).
   uint32_t camera_volume_width { 160U };
 
@@ -121,6 +124,14 @@ public:
   OXGN_RNDR_NDAPI auto GetTransmittanceLutSlot() const noexcept
     -> ShaderVisibleIndex override;
 
+  //! Returns shader-visible SRV index for the transmittance LUT back buffer.
+  /*!
+   Intended for compute-pass chaining within the same frame. The compute pass
+   writes to the back buffer and must read the freshly generated SRV indices.
+  */
+  [[nodiscard]] auto GetTransmittanceLutBackSlot() const noexcept
+    -> ShaderVisibleIndex;
+
   //! Returns transmittance LUT dimensions.
   [[nodiscard]] auto GetTransmittanceLutSize() const noexcept
     -> Extent<uint32_t> override
@@ -171,11 +182,37 @@ public:
   OXGN_RNDR_NDAPI auto GetMultiScatLutSlot() const noexcept
     -> ShaderVisibleIndex override;
 
+  //! Returns shader-visible SRV index for the multiple scattering LUT back
+  //! buffer.
+  /*!
+   Intended for compute-pass chaining within the same frame.
+  */
+  [[nodiscard]] auto GetMultiScatLutBackSlot() const noexcept
+    -> ShaderVisibleIndex;
+
   //! Returns multiple scattering LUT dimensions.
   [[nodiscard]] auto GetMultiScatLutSize() const noexcept
     -> Extent<uint32_t> override
   {
     return { config_.multi_scat_size, config_.multi_scat_size };
+  }
+
+  //! Returns shader-visible SRV index for the sky irradiance LUT.
+  OXGN_RNDR_NDAPI auto GetSkyIrradianceLutSlot() const noexcept
+    -> ShaderVisibleIndex override;
+
+  //! Returns shader-visible SRV index for the sky irradiance LUT back buffer.
+  /*!
+   Intended for compute-pass chaining within the same frame.
+  */
+  [[nodiscard]] auto GetSkyIrradianceLutBackSlot() const noexcept
+    -> ShaderVisibleIndex;
+
+  //! Returns sky irradiance LUT dimensions.
+  [[nodiscard]] auto GetSkyIrradianceLutSize() const noexcept
+    -> Extent<uint32_t> override
+  {
+    return { config_.sky_irradiance_size, config_.sky_irradiance_size };
   }
 
   //! Returns shader-visible SRV index for the camera volume LUT.
@@ -259,6 +296,14 @@ public:
    This ensures zero visual artifacts during LUT regeneration.
   */
   OXGN_RNDR_API auto SwapBuffers() noexcept -> void;
+
+  //! Returns sky irradiance LUT texture for compute shader write (back buffer).
+  OXGN_RNDR_NDAPI auto GetSkyIrradianceLutTexture() const noexcept
+    -> observer_ptr<graphics::Texture>;
+
+  //! Returns shader-visible UAV index for the sky irradiance LUT (back buffer).
+  OXGN_RNDR_NDAPI auto GetSkyIrradianceLutUavSlot() const noexcept
+    -> ShaderVisibleIndex;
 
   //! Returns the index of the back buffer (for compute shader writes).
   /*!
@@ -467,6 +512,7 @@ private:
   std::array<LutResources, kLutBufferCount> transmittance_lut_ {};
   std::array<LutResources, kLutBufferCount> sky_view_lut_ {};
   std::array<LutResources, kLutBufferCount> multi_scat_lut_ {};
+  std::array<LutResources, kLutBufferCount> sky_irradiance_lut_ {};
   std::array<LutResources, kLutBufferCount> camera_volume_lut_ {};
   LutResources blue_noise_lut_ {}; // Blue noise is static, no double-buffer
 
@@ -488,6 +534,10 @@ private:
 
   //! Creates multi-scattering LUT texture (2D, RGBA16F).
   auto CreateMultiScatLutTexture(uint32_t size)
+    -> std::shared_ptr<graphics::Texture>;
+
+  //! Creates sky irradiance LUT texture (2D, RGBA16F).
+  auto CreateSkyIrradianceLutTexture(uint32_t size)
     -> std::shared_ptr<graphics::Texture>;
 
   //! Creates camera volume LUT texture (3D, RGBA16F).

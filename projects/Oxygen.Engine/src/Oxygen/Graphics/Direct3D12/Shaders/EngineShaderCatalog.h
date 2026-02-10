@@ -183,6 +183,10 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
   ShaderFileSpec {
+    .path="Atmosphere/SkyIrradianceLut_CS.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
     .path="Atmosphere/CameraVolumeLut_CS.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
@@ -267,6 +271,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - TransmittanceLut_CS: 1 entry
 // - SkyViewLut_CS: 1 entry
 // - MultiScatLut_CS: 1 entry
+// - SkyIrradianceLut_CS: 1 entry
 // - CameraVolumeLut_CS: 1 entry
 // - SkySphere_VS: 1 entry
 // - SkySphere_PS: 2 entries
@@ -279,6 +284,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ToneMap: 2 entries
 // - AutoExposure_Histogram_CS: 1 entry
 // - AutoExposure_Average_CS: 1 entry
-// Total: 131
+// Total: 132
 
 } // namespace oxygen::graphics::d3d12

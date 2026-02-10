@@ -135,17 +135,17 @@ auto EnvironmentDynamicDataManager::SetSunState(
   bool dirty = false;
   dirty
     |= (glm::vec3(state.data.sun_direction_ws_illuminance) != sun.direction_ws);
-  dirty |= (state.data.sun_direction_ws_illuminance.w != sun.illuminance);
+  dirty |= (state.data.sun_direction_ws_illuminance.w != sun.illuminance_lx);
   dirty |= (glm::vec3(state.data.sun_color_rgb_intensity) != sun.color_rgb);
-  dirty |= (state.data.sun_color_rgb_intensity.w != sun.intensity);
+  dirty |= (state.data.sun_color_rgb_intensity.w != sun.illuminance_lx);
   const auto enabled_flag = sun.enabled ? 1u : 0u;
   dirty |= (state.data.sun_enabled != enabled_flag);
 
   if (dirty) {
     state.data.sun_direction_ws_illuminance
-      = glm::vec4(sun.direction_ws, sun.illuminance);
+      = glm::vec4(sun.direction_ws, sun.illuminance_lx);
     state.data.sun_color_rgb_intensity
-      = glm::vec4(sun.color_rgb, sun.intensity);
+      = glm::vec4(sun.color_rgb, sun.illuminance_lx);
     state.data.sun_enabled = enabled_flag;
     MarkAllSlotsDirty(view_id);
   }
@@ -212,19 +212,20 @@ auto EnvironmentDynamicDataManager::SetAtmosphereSunOverride(
   bool dirty = false;
   dirty |= (glm::vec3(state.data.override_sun_direction_ws_illuminance)
     != sun.direction_ws);
-  dirty
-    |= (state.data.override_sun_direction_ws_illuminance.w != sun.illuminance);
+  dirty |= (state.data.override_sun_direction_ws_illuminance.w
+    != sun.illuminance_lx);
   dirty |= (glm::vec3(state.data.override_sun_color_rgb_intensity)
     != sun.color_rgb);
-  dirty |= (state.data.override_sun_color_rgb_intensity.w != sun.intensity);
+  dirty
+    |= (state.data.override_sun_color_rgb_intensity.w != sun.illuminance_lx);
   const auto enabled_flag = sun.enabled ? 1u : 0u;
   dirty |= (state.data.override_sun_flags.x != enabled_flag);
 
   if (dirty) {
     state.data.override_sun_direction_ws_illuminance
-      = glm::vec4(sun.direction_ws, sun.illuminance);
+      = glm::vec4(sun.direction_ws, sun.illuminance_lx);
     state.data.override_sun_color_rgb_intensity
-      = glm::vec4(sun.color_rgb, sun.intensity);
+      = glm::vec4(sun.color_rgb, sun.illuminance_lx);
     state.data.override_sun_flags.x = enabled_flag;
     MarkAllSlotsDirty(view_id);
   }

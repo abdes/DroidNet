@@ -70,6 +70,16 @@ public:
   //! Returns the altitude mapping mode (0 = linear, 1 = log).
   [[nodiscard]] virtual auto GetAltMappingMode() const noexcept -> uint32_t = 0;
 
+  //! Returns shader-visible SRV index for the sky irradiance LUT.
+  [[nodiscard]] virtual auto GetSkyIrradianceLutSlot() const noexcept
+    -> ShaderVisibleIndex
+    = 0;
+
+  //! Returns sky irradiance LUT dimensions.
+  [[nodiscard]] virtual auto GetSkyIrradianceLutSize() const noexcept
+    -> Extent<uint32_t>
+    = 0;
+
   //! Returns shader-visible SRV index for the camera volume LUT.
   [[nodiscard]] virtual auto GetCameraVolumeLutSlot() const noexcept
     -> ShaderVisibleIndex

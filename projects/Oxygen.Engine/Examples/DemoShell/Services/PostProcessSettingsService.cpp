@@ -94,6 +94,13 @@ namespace {
     }
 
     pipeline->SetExposureValue(exposure);
+
+    // Auto exposure has temporal state (history). When EV-related inputs change
+    // (or when switching modes), re-seed the history so the new settings take
+    // effect immediately rather than being perceived as a compounding drift.
+    if (mode == engine::ExposureMode::kAuto) {
+      pipeline->ResetAutoExposure(ev);
+    }
   }
 
   auto ApplyExposureToScene(observer_ptr<scene::Scene> scene,

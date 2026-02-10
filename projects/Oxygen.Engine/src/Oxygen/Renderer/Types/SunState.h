@@ -16,8 +16,8 @@ namespace oxygen::engine {
 //! Immutable value object representing the sun's state for atmospheric systems.
 /*!
  Encapsulates all sun-related parameters needed by the atmosphere, lighting,
- and LUT generation systems. Provides derived quantities (zenith cosine,
- illuminance) computed once at construction.
+ and LUT generation systems. Provides derived quantities (zenith cosine)
+ computed once at construction.
 
  ### Design Rationale
 
@@ -27,7 +27,7 @@ namespace oxygen::engine {
  object groups all sun state together with clear semantics:
 
  - **Semantic clarity**: `direction_ws` is always toward the sun (normalized)
- - **Derived values cached**: `cos_zenith`, `illuminance` computed once
+ - **Derived values cached**: `cos_zenith` computed once
  - **Immutable**: Create a new instance when sun changes; no partial updates
  - **GPU-friendly**: Layout designed for easy packing into constant buffers
 
@@ -44,15 +44,15 @@ namespace oxygen::engine {
  // From scene light
  SunState sun = SunState::FromDirectionAndLight(
      glm::normalize(light_direction),
-     light_color,
-     light_intensity);
+   light_color,
+   light_illuminance_lx);
 
  // From azimuth/elevation (degrees)
  SunState sun = SunState::FromAzimuthElevation(
      45.0F,   // azimuth: 0=+X, 90=+Y
      30.0F,   // elevation: degrees above horizon
      {1,1,1}, // color
-     2.0F);   // intensity
+   120000.0F);   // illuminance (lux)
 
  // Pass to systems
  lut_manager->UpdateSunState(sun);
@@ -65,14 +65,15 @@ struct SunState {
   //! Direction toward the sun in world space (normalized, Z-up).
   glm::vec3 direction_ws { 0.0F, 0.866F, 0.5F };
 
-  //! Sun color (linear RGB, not premultiplied by intensity).
+  //! Sun color (linear RGB, not premultiplied by illuminance).
   glm::vec3 color_rgb { 1.0F, 1.0F, 1.0F };
 
-  //! Sun intensity multiplier.
-  float intensity { 1.0F };
-
-  //! Computed illuminance (intensity * max(color_rgb)).
-  float illuminance { 1.0F };
+  //! Sun illuminance in lux.
+  /*!
+   Authored in lux (lm/m²). Shaders derive per-channel illuminance by
+   multiplying this scalar by `color_rgb`.
+  */
+  float illuminance_lx { 1.0F };
 
   //! Cosine of zenith angle (direction_ws.z). Cached for atmosphere lookups.
   float cos_zenith { 0.5F };
@@ -89,17 +90,17 @@ struct SunState {
   /*!
    @param direction Normalized direction toward sun (Z-up world space).
    @param color Linear RGB color (not premultiplied).
-   @param inten Intensity multiplier.
+   @param illuminance_lx Sun illuminance in lux.
    @param is_enabled Whether this sun contributes to rendering.
   */
   static auto FromDirectionAndLight(const glm::vec3& direction,
-    const glm::vec3& color, float inten, bool is_enabled = true) -> SunState
+    const glm::vec3& color, float illuminance_lx, bool is_enabled = true)
+    -> SunState
   {
     SunState s;
     s.direction_ws = glm::normalize(direction);
     s.color_rgb = color;
-    s.intensity = inten;
-    s.illuminance = inten * std::max(color.x, std::max(color.y, color.z));
+    s.illuminance_lx = illuminance_lx;
     s.cos_zenith = s.direction_ws.z;
     s.enabled = is_enabled;
     return s;
@@ -110,11 +111,12 @@ struct SunState {
    @param azimuth_deg Horizontal angle in degrees (0=+X, 90=+Y, CCW from above).
    @param elevation_deg Angle above horizon in degrees (0=horizon, 90=zenith).
    @param color Linear RGB color.
-   @param inten Intensity multiplier.
+   @param illuminance_lx Sun illuminance in lux.
    @param is_enabled Whether this sun contributes to rendering.
   */
   static auto FromAzimuthElevation(float azimuth_deg, float elevation_deg,
-    const glm::vec3& color, float inten, bool is_enabled = true) -> SunState
+    const glm::vec3& color, float illuminance_lx, bool is_enabled = true)
+    -> SunState
   {
     constexpr float kDegToRad = 3.14159265359F / 180.0F;
     const float az = azimuth_deg * kDegToRad;
@@ -132,16 +134,7 @@ struct SunState {
       sin_el,
     };
 
-    return FromDirectionAndLight(dir, color, inten, is_enabled);
-  }
-
-  //=== Derived Accessors
-  //===--------------------------------------------------//
-
-  //! Returns the luminance-weighted color (color * intensity).
-  [[nodiscard]] auto GetLuminance() const noexcept -> glm::vec3
-  {
-    return color_rgb * intensity;
+    return FromDirectionAndLight(dir, color, illuminance_lx, is_enabled);
   }
 
   //! Returns sin(zenith) for atmosphere calculations.
@@ -176,7 +169,7 @@ struct SunState {
     return enabled == other.enabled
       && vec3_approx(direction_ws, other.direction_ws)
       && vec3_approx(color_rgb, other.color_rgb)
-      && std::abs(intensity - other.intensity) < epsilon;
+      && std::abs(illuminance_lx - other.illuminance_lx) < epsilon;
   }
 
   //! Returns true if only elevation changed (azimuth can differ).
@@ -195,8 +188,7 @@ struct SunState {
 inline constexpr SunState kNoSun = [] {
   SunState s;
   s.enabled = false;
-  s.intensity = 0.0F;
-  s.illuminance = 0.0F;
+  s.illuminance_lx = 0.0F;
   return s;
 }();
 
