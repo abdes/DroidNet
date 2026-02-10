@@ -199,7 +199,7 @@ namespace {
         "but this example does not yet resolve it to a ResourceKey. Use "
         "the Environment panel Skybox Loader to bind a cubemap at runtime.");
     }
-    target.SetIntensity(source.intensity);
+    target.SetIntensityMul(source.intensity);
     target.SetTintRgb(
       Vec3 { source.tint_rgb[0], source.tint_rgb[1], source.tint_rgb[2] });
     target.SetDiffuseIntensity(source.diffuse_intensity);
@@ -297,7 +297,8 @@ namespace {
   constexpr std::string_view kSkyLightEnabledKey = "env.sky_light.enabled";
   constexpr std::string_view kSkyLightSourceKey = "env.sky_light.source";
   constexpr std::string_view kSkyLightTintKey = "env.sky_light.tint";
-  constexpr std::string_view kSkyLightIntensityKey = "env.sky_light.intensity";
+  constexpr std::string_view kSkyLightIntensityMulKey
+    = "env.sky_light.intensity_mul";
   constexpr std::string_view kSkyLightDiffuseKey = "env.sky_light.diffuse";
   constexpr std::string_view kSkyLightSpecularKey = "env.sky_light.specular";
 
@@ -986,7 +987,7 @@ auto EnvironmentSettingsService::LoadSkybox(std::string_view path,
 
   config_.skybox_service->LoadAndEquip(std::string(path), options,
     { .sky_sphere_intensity = sky_intensity_,
-      .intensity = sky_light_intensity_,
+      .intensity_mul = sky_light_intensity_mul_,
       .diffuse_intensity = sky_light_diffuse_,
       .specular_intensity = sky_light_specular_,
       .tint_rgb = sky_light_tint_ },
@@ -1051,17 +1052,18 @@ auto EnvironmentSettingsService::SetSkyLightTint(const glm::vec3& value) -> void
   MarkDirty();
 }
 
-auto EnvironmentSettingsService::GetSkyLightIntensity() const -> float
+auto EnvironmentSettingsService::GetSkyLightIntensityMul() const -> float
 {
-  return sky_light_intensity_;
+  return sky_light_intensity_mul_;
 }
 
-auto EnvironmentSettingsService::SetSkyLightIntensity(const float value) -> void
+auto EnvironmentSettingsService::SetSkyLightIntensityMul(const float value)
+  -> void
 {
-  if (sky_light_intensity_ == value) {
+  if (sky_light_intensity_mul_ == value) {
     return;
   }
-  sky_light_intensity_ = value;
+  sky_light_intensity_mul_ = value;
   MarkDirty();
 }
 
@@ -1616,7 +1618,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     light->SetSource(
       static_cast<scene::environment::SkyLightSource>(sky_light_source_));
     light->SetTintRgb(sky_light_tint_);
-    light->SetIntensity(sky_light_intensity_);
+    light->SetIntensityMul(sky_light_intensity_mul_);
     light->SetDiffuseIntensity(sky_light_diffuse_);
     light->SetSpecularIntensity(sky_light_specular_);
   }
@@ -1724,7 +1726,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     sky_light_enabled_ = light->IsEnabled();
     sky_light_source_ = static_cast<int>(light->GetSource());
     sky_light_tint_ = light->GetTintRgb();
-    sky_light_intensity_ = light->GetIntensity();
+    sky_light_intensity_mul_ = light->GetIntensityMul();
     sky_light_diffuse_ = light->GetDiffuseIntensity();
     sky_light_specular_ = light->GetSpecularIntensity();
   }
@@ -1907,10 +1909,10 @@ auto EnvironmentSettingsService::LoadSettings() -> void
 
   const bool sky_intensity_loaded
     = load_float(kSkySphereIntensityKey, sky_intensity_);
-  const bool sky_light_intensity_loaded
-    = load_float(kSkyLightIntensityKey, sky_light_intensity_);
+  const bool sky_light_intensity_mul_loaded
+    = load_float(kSkyLightIntensityMulKey, sky_light_intensity_mul_);
 
-  any_loaded |= sky_intensity_loaded || sky_light_intensity_loaded;
+  any_loaded |= sky_intensity_loaded || sky_light_intensity_mul_loaded;
 
   bool skybox_settings_loaded = false;
   skybox_settings_loaded |= load_int(kSkyboxLayoutKey, skybox_layout_idx_);
@@ -1931,6 +1933,7 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   any_loaded |= load_bool(kSkyLightEnabledKey, sky_light_enabled_);
   any_loaded |= load_int(kSkyLightSourceKey, sky_light_source_);
   any_loaded |= load_vec3(kSkyLightTintKey, sky_light_tint_);
+  any_loaded |= load_float(kSkyLightIntensityMulKey, sky_light_intensity_mul_);
   any_loaded |= load_float(kSkyLightDiffuseKey, sky_light_diffuse_);
   any_loaded |= load_float(kSkyLightSpecularKey, sky_light_specular_);
 
@@ -2049,7 +2052,7 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_bool(kSkyLightEnabledKey, sky_light_enabled_);
   save_int(kSkyLightSourceKey, sky_light_source_);
   save_vec3(kSkyLightTintKey, sky_light_tint_);
-  save_float(kSkyLightIntensityKey, sky_light_intensity_);
+  save_float(kSkyLightIntensityMulKey, sky_light_intensity_mul_);
   save_float(kSkyLightDiffuseKey, sky_light_diffuse_);
   save_float(kSkyLightSpecularKey, sky_light_specular_);
 

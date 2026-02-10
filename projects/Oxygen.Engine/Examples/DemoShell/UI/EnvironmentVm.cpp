@@ -55,7 +55,7 @@ namespace {
     bool sky_light_enabled;
     int sky_light_source;
     glm::vec3 sky_light_tint;
-    float sky_light_intensity;
+    float sky_light_intensity_mul;
     float sky_light_diffuse;
     float sky_light_specular;
     // Fog
@@ -108,7 +108,7 @@ namespace {
       .sky_light_enabled = true,
       .sky_light_source = 0,
       .sky_light_tint = { 1.0F, 1.0F, 1.0F },
-      .sky_light_intensity = 1.0F,
+      .sky_light_intensity_mul = 1.0F,
       .sky_light_diffuse = 1.0F,
       .sky_light_specular = 1.0F,
       .fog_enabled = false,
@@ -156,7 +156,7 @@ namespace {
       .sky_light_enabled = true,
       .sky_light_source = 0,
       .sky_light_tint = { 1.0F, 1.0F, 1.0F },
-      .sky_light_intensity = 1.2F,
+      .sky_light_intensity_mul = 1.2F,
       .sky_light_diffuse = 1.2F,
       .sky_light_specular = 0.7F,
       .fog_enabled = false,
@@ -204,7 +204,7 @@ namespace {
       .sky_light_enabled = true,
       .sky_light_source = 0,
       .sky_light_tint = { 0.9F, 0.95F, 1.0F },
-      .sky_light_intensity = 1.0F,
+      .sky_light_intensity_mul = 1.0F,
       .sky_light_diffuse = 1.0F,
       .sky_light_specular = 1.0F,
       .fog_enabled = true,
@@ -252,7 +252,7 @@ namespace {
       .sky_light_enabled = true,
       .sky_light_source = 0,
       .sky_light_tint = { 1.0F, 0.95F, 0.9F },
-      .sky_light_intensity = 0.6F,
+      .sky_light_intensity_mul = 0.6F,
       .sky_light_diffuse = 0.7F,
       .sky_light_specular = 0.5F,
       .fog_enabled = false,
@@ -300,7 +300,7 @@ namespace {
       .sky_light_enabled = true,
       .sky_light_source = 0,
       .sky_light_tint = { 0.95F, 0.92F, 0.9F },
-      .sky_light_intensity = 0.6F,
+      .sky_light_intensity_mul = 0.6F,
       .sky_light_diffuse = 0.7F,
       .sky_light_specular = 0.5F,
       .fog_enabled = false,
@@ -440,7 +440,7 @@ auto EnvironmentVm::ApplyPreset(int index) -> void
   // Sky Light
   SetSkyLightSource(preset.sky_light_source);
   SetSkyLightTint(preset.sky_light_tint);
-  SetSkyLightIntensity(preset.sky_light_intensity);
+  SetSkyLightIntensityMul(preset.sky_light_intensity_mul);
   SetSkyLightDiffuse(preset.sky_light_diffuse);
   SetSkyLightSpecular(preset.sky_light_specular);
 
@@ -873,14 +873,14 @@ auto EnvironmentVm::SetSkyLightTint(const glm::vec3& value) -> void
   service_->SetSkyLightTint(value);
 }
 
-auto EnvironmentVm::GetSkyLightIntensity() const -> float
+auto EnvironmentVm::GetSkyLightIntensityMul() const -> float
 {
-  return service_->GetSkyLightIntensity();
+  return service_->GetSkyLightIntensityMul();
 }
 
-auto EnvironmentVm::SetSkyLightIntensity(const float value) -> void
+auto EnvironmentVm::SetSkyLightIntensityMul(const float value) -> void
 {
-  service_->SetSkyLightIntensity(value);
+  service_->SetSkyLightIntensityMul(value);
 }
 
 auto EnvironmentVm::GetSkyLightDiffuse() const -> float

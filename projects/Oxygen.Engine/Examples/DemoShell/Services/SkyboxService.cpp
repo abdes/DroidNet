@@ -271,7 +271,7 @@ auto SkyboxService::ApplyToScene(const SkyLightParams& params) -> void
     sky_light.SetEnabled(true);
     sky_light.SetSource(scene::environment::SkyLightSource::kSpecifiedCubemap);
     sky_light.SetCubemapResource(current_resource_key_);
-    sky_light.SetIntensity(params.intensity);
+    sky_light.SetIntensityMul(params.intensity_mul);
     sky_light.SetDiffuseIntensity(params.diffuse_intensity);
     sky_light.SetSpecularIntensity(params.specular_intensity);
     sky_light.SetTintRgb(params.tint_rgb);
@@ -296,7 +296,7 @@ auto SkyboxService::ApplyToScene(const SkyLightParams& params) -> void
     sky_light->SetEnabled(true);
     sky_light->SetSource(scene::environment::SkyLightSource::kSpecifiedCubemap);
     sky_light->SetCubemapResource(current_resource_key_);
-    sky_light->SetIntensity(params.intensity);
+    sky_light->SetIntensityMul(params.intensity_mul);
     sky_light->SetDiffuseIntensity(params.diffuse_intensity);
     sky_light->SetSpecularIntensity(params.specular_intensity);
     sky_light->SetTintRgb(params.tint_rgb);
@@ -316,7 +316,7 @@ auto SkyboxService::UpdateSkyLightParams(const SkyLightParams& params) -> void
 
   auto sky_light = env->TryGetSystem<scene::environment::SkyLight>();
   if (sky_light) {
-    sky_light->SetIntensity(params.intensity);
+    sky_light->SetIntensityMul(params.intensity_mul);
     sky_light->SetDiffuseIntensity(params.diffuse_intensity);
     sky_light->SetSpecularIntensity(params.specular_intensity);
     sky_light->SetTintRgb(params.tint_rgb);

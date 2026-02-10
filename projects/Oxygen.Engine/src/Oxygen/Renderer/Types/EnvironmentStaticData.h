@@ -305,7 +305,10 @@ struct PrefilterMapSlot {
 */
 struct alignas(16) GpuSkyLightParams {
   glm::vec3 tint_rgb { 1.0F, 1.0F, 1.0F };
-  float intensity { 1.0F };
+
+  //! Scales sampled sky radiance (includes authored intensity multiplier and
+  //! any unit-bridging for non-physical sources).
+  float radiance_scale { 1.0F };
 
   float diffuse_intensity { 1.0F };
   float specular_intensity { 1.0F };

@@ -143,8 +143,8 @@ public:
   auto SetSkyLightSource(int source) -> void;
   [[nodiscard]] auto GetSkyLightTint() const -> glm::vec3;
   auto SetSkyLightTint(const glm::vec3& value) -> void;
-  [[nodiscard]] auto GetSkyLightIntensity() const -> float;
-  auto SetSkyLightIntensity(float value) -> void;
+  [[nodiscard]] auto GetSkyLightIntensityMul() const -> float;
+  auto SetSkyLightIntensityMul(float value) -> void;
   [[nodiscard]] auto GetSkyLightDiffuse() const -> float;
   auto SetSkyLightDiffuse(float value) -> void;
   [[nodiscard]] auto GetSkyLightSpecular() const -> float;

@@ -237,8 +237,8 @@ public:
   [[nodiscard]] virtual auto GetSkyLightTint() const -> glm::vec3;
   virtual auto SetSkyLightTint(const glm::vec3& value) -> void;
 
-  [[nodiscard]] virtual auto GetSkyLightIntensity() const -> float;
-  virtual auto SetSkyLightIntensity(float value) -> void;
+  [[nodiscard]] virtual auto GetSkyLightIntensityMul() const -> float;
+  virtual auto SetSkyLightIntensityMul(float value) -> void;
 
   [[nodiscard]] virtual auto GetSkyLightDiffuse() const -> float;
   virtual auto SetSkyLightDiffuse(float value) -> void;
@@ -420,7 +420,7 @@ private:
   bool sky_light_enabled_ { false };
   int sky_light_source_ { 0 };
   glm::vec3 sky_light_tint_ { 1.0F, 1.0F, 1.0F };
-  float sky_light_intensity_ { 1.0F };
+  float sky_light_intensity_mul_ { 1.0F };
   float sky_light_diffuse_ { 1.0F };
   float sky_light_specular_ { 1.0F };
 

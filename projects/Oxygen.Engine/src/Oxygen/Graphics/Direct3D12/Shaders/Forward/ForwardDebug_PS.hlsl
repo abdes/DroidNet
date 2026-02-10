@@ -210,7 +210,7 @@ float4 PS(VSOutput input) : SV_Target0 {
                 if (slot != K_INVALID_BINDLESS_INDEX) {
                     TextureCube<float4> sky_cube = ResourceDescriptorHeap[slot];
                     float3 raw = sky_cube.SampleLevel(linear_sampler, cube_R, 0.0).rgb;
-                    debug_out = raw * env_data.sky_light.tint_rgb * env_data.sky_light.intensity;
+                    debug_out = raw * env_data.sky_light.tint_rgb * env_data.sky_light.radiance_scale;
                     debug_handled = true;
                 }
             }

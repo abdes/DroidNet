@@ -66,17 +66,17 @@ public:
     return cubemap_resource_;
   }
 
-  //! Sets the sky light intensity multiplier.
+  //! Sets the sky light intensity multiplier (unitless).
   //! 1.0 is the default (unity) intensity.
-  auto SetIntensity(const float intensity) noexcept -> void
+  auto SetIntensityMul(const float intensity_mul) noexcept -> void
   {
-    intensity_ = intensity;
+    intensity_mul_ = intensity_mul;
   }
 
-  //! Gets the sky light intensity multiplier.
-  [[nodiscard]] auto GetIntensity() const noexcept -> float
+  //! Gets the sky light intensity multiplier (unitless).
+  [[nodiscard]] auto GetIntensityMul() const noexcept -> float
   {
-    return intensity_;
+    return intensity_mul_;
   }
 
   //! Sets tint (linear RGB).
@@ -116,7 +116,7 @@ private:
   SkyLightSource source_ = SkyLightSource::kCapturedScene;
   content::ResourceKey cubemap_resource_ {};
 
-  float intensity_ = 1.0F;
+  float intensity_mul_ = 1.0F;
   Vec3 tint_rgb_ { 1.0F, 1.0F, 1.0F };
 
   float diffuse_intensity_ = 1.0F;

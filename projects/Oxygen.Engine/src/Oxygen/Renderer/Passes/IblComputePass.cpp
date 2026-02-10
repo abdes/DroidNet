@@ -145,17 +145,11 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
 
   DCHECK_NOTNULL_F(Context().scene_constants);
 
-  float source_intensity = 1.0F;
-  const auto sky_light_slot = env_manager->GetSkyLightCubemapSlot();
-  const auto sky_sphere_slot = env_manager->GetSkySphereCubemapSlot();
-  if (source_slot == sky_light_slot) {
-    source_intensity = env_manager->GetSkyLightIntensity();
-  } else if (source_slot == sky_sphere_slot) {
-    source_intensity = env_manager->GetSkySphereIntensity();
-  }
-  if (source_intensity <= 0.0F) {
-    source_intensity = 1.0F;
-  }
+  // Intensity is applied at shading time via EnvironmentStaticData (e.g.
+  // `env_data.sky_light.radiance_scale`). Keep the filtered IBL maps in the
+  // same scale as the source cubemap to avoid requiring regeneration when
+  // artists tweak intensity.
+  constexpr float source_intensity = 1.0F;
 
   DispatchIrradiance(recorder, *ibl_manager, source_slot, source_intensity);
   DispatchPrefilter(recorder, *ibl_manager, source_slot, source_intensity);

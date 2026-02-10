@@ -194,7 +194,7 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
                 params.sky_sphere_intensity = *intensity;
               }
             }
-            params.intensity = 1.0F;
+            params.intensity_mul = 1.0F;
             params.diffuse_intensity = 1.0F;
             params.specular_intensity = 1.0F;
             skybox_service_->ApplyToScene(params);

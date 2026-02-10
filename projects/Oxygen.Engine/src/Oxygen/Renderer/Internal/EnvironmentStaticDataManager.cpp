@@ -231,13 +231,6 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
   }
 
   if (std::memcmp(&next, &cpu_snapshot_, sizeof(EnvironmentStaticData)) != 0) {
-    // If authored intensity or other filtering params changed, flag for IBL
-    // re-filter.
-    if (next.sky_light.intensity != cpu_snapshot_.sky_light.intensity
-      || next.sky_light.tint_rgb != cpu_snapshot_.sky_light.tint_rgb) {
-      RequestIblRegeneration();
-    }
-
     cpu_snapshot_ = next;
     MarkAllSlotsDirty();
   }
@@ -370,15 +363,16 @@ auto EnvironmentStaticDataManager::PopulateSkyLight(
     next.sky_light.enabled = 1U;
     next.sky_light.source = ToGpuSkyLightSource(sky_light->GetSource());
 
-    // Intensity is a direct multiplier. For non-physical sources (cubemaps),
-    // we bridge the unit gap by assuming 1.0 Intensity = 5000 Nits (Standard
-    // Sky). Procedural atmosphere remains at its native physical scale.
-    const float intensity = sky_light->GetIntensity();
+    // `intensity_mul` is authored as a unitless multiplier.
+    // For non-physical sources (cubemaps), we bridge the unit gap by assuming
+    // 1.0 intensity_mul = 5000 Nits (Standard Sky). Procedural atmosphere
+    // remains at its native physical scale.
+    const float intensity_mul = sky_light->GetIntensityMul();
     const float unit_bridge
       = (next.sky_light.source == SkyLightSource::kSpecifiedCubemap)
       ? atmos::kStandardSkyLuminance
       : 1.0F;
-    next.sky_light.intensity = intensity * unit_bridge;
+    next.sky_light.radiance_scale = intensity_mul * unit_bridge;
 
     next.sky_light.tint_rgb = sky_light->GetTintRgb();
     next.sky_light.diffuse_intensity = sky_light->GetDiffuseIntensity();
