@@ -98,8 +98,8 @@ namespace {
 
   auto ApplyExposureToScene(observer_ptr<scene::Scene> scene,
     const engine::ExposureMode mode, const float manual_ev100,
-    const float compensation_ev, const float exposure_key, const bool enabled)
-    -> void
+    const float compensation_ev, const float exposure_key, const bool enabled,
+    const engine::MeteringMode metering_mode) -> void
   {
     const auto pp = EnsurePostProcessVolume(scene);
     if (!pp) {
@@ -111,6 +111,7 @@ namespace {
     pp->SetManualExposureEv100(manual_ev100);
     pp->SetExposureCompensationEv(compensation_ev);
     pp->SetExposureKey(exposure_key);
+    pp->SetAutoExposureMeteringMode(metering_mode);
   }
 
   auto ResolveActiveCameraExposure(
@@ -183,7 +184,8 @@ auto PostProcessSettingsService::Initialize(
   }
 
   ApplyExposureToScene(scene_, GetExposureMode(), GetManualExposureEV100(),
-    GetExposureCompensation(), GetExposureKey(), GetExposureEnabled());
+    GetExposureCompensation(), GetExposureKey(), GetExposureEnabled(),
+    GetAutoExposureMeteringMode());
 }
 
 auto PostProcessSettingsService::BindCameraSettings(
@@ -211,7 +213,8 @@ auto PostProcessSettingsService::BindScene(observer_ptr<scene::Scene> scene)
       GetExposureCompensation(), GetExposureKey(), GetExposureEnabled());
   }
   ApplyExposureToScene(scene_, GetExposureMode(), GetManualExposureEV100(),
-    GetExposureCompensation(), GetExposureKey(), GetExposureEnabled());
+    GetExposureCompensation(), GetExposureKey(), GetExposureEnabled(),
+    GetAutoExposureMeteringMode());
 }
 
 // Exposure
@@ -248,7 +251,8 @@ auto PostProcessSettingsService::SetExposureEnabled(bool enabled) -> void
     GetManualExposureEV100(), ResolveManualCameraEv100(camera_settings_),
     GetExposureCompensation(), GetExposureKey(), enabled);
   ApplyExposureToScene(scene_, GetExposureMode(), GetManualExposureEV100(),
-    GetExposureCompensation(), GetExposureKey(), enabled);
+    GetExposureCompensation(), GetExposureKey(), enabled,
+    GetAutoExposureMeteringMode());
 
   if (enabled) {
     UpdateAutoExposureTarget();
@@ -270,7 +274,8 @@ auto PostProcessSettingsService::SetExposureMode(engine::ExposureMode mode)
     ResolveManualCameraEv100(camera_settings_), GetExposureCompensation(),
     GetExposureKey(), GetExposureEnabled());
   ApplyExposureToScene(scene_, mode, GetManualExposureEV100(),
-    GetExposureCompensation(), GetExposureKey(), GetExposureEnabled());
+    GetExposureCompensation(), GetExposureKey(), GetExposureEnabled(),
+    GetAutoExposureMeteringMode());
 }
 
 auto PostProcessSettingsService::GetManualExposureEV100() const -> float
@@ -292,7 +297,8 @@ auto PostProcessSettingsService::SetManualExposureEV100(float ev100) -> void
     ResolveManualCameraEv100(camera_settings_), GetExposureCompensation(),
     GetExposureKey(), GetExposureEnabled());
   ApplyExposureToScene(scene_, GetExposureMode(), ev100,
-    GetExposureCompensation(), GetExposureKey(), GetExposureEnabled());
+    GetExposureCompensation(), GetExposureKey(), GetExposureEnabled(),
+    GetAutoExposureMeteringMode());
 }
 
 auto PostProcessSettingsService::GetManualCameraAperture() const -> float
@@ -380,7 +386,8 @@ auto PostProcessSettingsService::SetExposureCompensation(float stops) -> void
     GetManualExposureEV100(), ResolveManualCameraEv100(camera_settings_), stops,
     GetExposureKey(), GetExposureEnabled());
   ApplyExposureToScene(scene_, GetExposureMode(), GetManualExposureEV100(),
-    stops, GetExposureKey(), GetExposureEnabled());
+    stops, GetExposureKey(), GetExposureEnabled(),
+    GetAutoExposureMeteringMode());
 
   UpdateAutoExposureTarget();
 }
@@ -404,7 +411,8 @@ auto PostProcessSettingsService::SetExposureKey(float exposure_key) -> void
     GetManualExposureEV100(), ResolveManualCameraEv100(camera_settings_),
     GetExposureCompensation(), exposure_key, GetExposureEnabled());
   ApplyExposureToScene(scene_, GetExposureMode(), GetManualExposureEV100(),
-    GetExposureCompensation(), exposure_key, GetExposureEnabled());
+    GetExposureCompensation(), exposure_key, GetExposureEnabled(),
+    GetAutoExposureMeteringMode());
 
   // Also update auto-exposure target if in use (as Key affects Target scalar)
   UpdateAutoExposureTarget();
@@ -584,6 +592,9 @@ auto PostProcessSettingsService::SetAutoExposureMeteringMode(
   if (pipeline_) {
     pipeline_->SetAutoExposureMeteringMode(mode);
   }
+
+  ApplyExposureToScene(scene_, GetExposureMode(), GetManualExposureEV100(),
+    GetExposureCompensation(), GetExposureKey(), GetExposureEnabled(), mode);
 }
 
 // Tonemapping

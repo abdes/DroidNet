@@ -40,10 +40,12 @@
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/SceneCameraViewResolver.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
+
 
 #include "DemoShell/Runtime/ForwardPipeline.h"
 
@@ -947,11 +949,22 @@ auto ForwardPipeline::OnFrameStart(
 
 auto ForwardPipeline::OnSceneMutation(
   observer_ptr<engine::FrameContext> context, engine::Renderer& renderer,
-  scene::Scene& /*scene*/, std::span<const CompositionView> view_descs,
+  scene::Scene& scene, std::span<const CompositionView> view_descs,
   graphics::Framebuffer* target_framebuffer) -> co::Co<>
 {
   impl_->sorted_views.clear();
   impl_->sorted_views.reserve(view_descs.size());
+
+  if (impl_->auto_exposure_config) {
+    if (const auto env = scene.GetEnvironment()) {
+      if (const auto pp
+        = env->TryGetSystem<scene::environment::PostProcessVolume>();
+        pp && pp->IsEnabled()) {
+        impl_->auto_exposure_config->metering_mode
+          = pp->GetAutoExposureMeteringMode();
+      }
+    }
+  }
 
   auto graphics = impl_->engine->GetGraphics().lock();
   const auto frame_seq = context->GetFrameSequenceNumber();
