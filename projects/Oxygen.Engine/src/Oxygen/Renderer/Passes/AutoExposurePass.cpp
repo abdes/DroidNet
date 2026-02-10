@@ -388,20 +388,48 @@ auto AutoExposurePass::UpdateHistogramConstants(
       .is_read_only_dsv = false,
     };
 
-    auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
-    if (!handle.IsValid()) {
-      throw std::runtime_error(
-        "AutoExposurePass: failed to allocate source texture SRV descriptor");
+    // If an equivalent view is already registered, reuse its shader-visible
+    // index instead of allocating and attempting to re-register the view.
+    if (registry.Contains(*config_->source_texture, srv_desc)) {
+      if (auto maybe_index
+        = registry.FindShaderVisibleIndex(*config_->source_texture, srv_desc);
+        maybe_index.has_value()) {
+        source_texture_srv_index_ = *maybe_index;
+        last_source_texture_ = config_->source_texture;
+      } else {
+        // Fallback: allocate and register (should be rare/edge-case)
+        auto handle
+          = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
+            graphics::DescriptorVisibility::kShaderVisible);
+        if (!handle.IsValid()) {
+          throw std::runtime_error("AutoExposurePass: failed to allocate "
+                                   "source texture SRV descriptor");
+        }
+        source_texture_srv_index_ = allocator.GetShaderVisibleIndex(handle);
+        const auto view = registry.RegisterView(
+          *config_->source_texture, std::move(handle), srv_desc);
+        if (!view->IsValid()) {
+          throw std::runtime_error(
+            "AutoExposurePass: failed to register source texture SRV view");
+        }
+        last_source_texture_ = config_->source_texture;
+      }
+    } else {
+      auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
+        graphics::DescriptorVisibility::kShaderVisible);
+      if (!handle.IsValid()) {
+        throw std::runtime_error(
+          "AutoExposurePass: failed to allocate source texture SRV descriptor");
+      }
+      source_texture_srv_index_ = allocator.GetShaderVisibleIndex(handle);
+      const auto view = registry.RegisterView(
+        *config_->source_texture, std::move(handle), srv_desc);
+      if (!view->IsValid()) {
+        throw std::runtime_error(
+          "AutoExposurePass: failed to register source texture SRV view");
+      }
+      last_source_texture_ = config_->source_texture;
     }
-    source_texture_srv_index_ = allocator.GetShaderVisibleIndex(handle);
-    const auto view = registry.RegisterView(
-      *config_->source_texture, std::move(handle), srv_desc);
-    if (!view->IsValid()) {
-      throw std::runtime_error(
-        "AutoExposurePass: failed to register source texture SRV view");
-    }
-    last_source_texture_ = config_->source_texture;
   }
 
   const auto& tex_desc = config_->source_texture->GetDescriptor();
