@@ -65,7 +65,7 @@ not overwrite intrinsic values.
 
 ### SkyAtmosphere
 
-- Uses `direction_ws`, `color_rgb`, `intensity`, and `disk_angular_radius_rad`.
+- Uses `direction_ws`, `color_rgb`, `illuminance_lx`, and `disk_angular_radius_rad`.
 - Sun disk rendering uses `disk_angular_radius_rad` and atmospheric transmittance.
 - Atmosphere applies an **aerial perspective strength** multiplier to the
   sun’s light when shading distant geometry. This scales atmospheric scattering
@@ -75,7 +75,7 @@ not overwrite intrinsic values.
 
 - Uses the sun when capturing the sky into IBL.
 - Allowed modifiers (non‑destructive), each multiplies a **sun intrinsic**:
-  - `sun_intensity_multiplier` multiplies the sun’s `intensity` (lux).
+  - `sun_illuminance_multiplier` multiplies the sun’s `illuminance_lx` (lux).
   - `sun_color_multiplier_rgb` multiplies the sun’s `color_rgb` per channel
     (r·mr, g·mg, b·mb).
 - SkyLight never rewrites the sun; it only scales the IBL contribution.
@@ -84,13 +84,13 @@ not overwrite intrinsic values.
 
 - Uses sun direction and luminance for in-scattering and phase response.
 - Fog uses sun direction/luminance for scattering but does not modify the sun’s
-  intrinsic `color_rgb` or `intensity`.
+  intrinsic `color_rgb` or `illuminance_lx`.
 
 ### VolumetricClouds
 
 - Uses sun direction and luminance for lighting and shadows.
 - Cloud density/phase controls how much sunlight scatters through clouds, but
-  does not modify the sun’s intrinsic `color_rgb` or `intensity`.
+  does not modify the sun’s intrinsic `color_rgb` or `illuminance_lx`.
 
 ### PostProcess
 
@@ -254,7 +254,7 @@ const getters, no ownership of external objects, and minimal state.
 - **Azimuth/Elevation (degrees)**: `SetAzimuthElevationDegrees(float az_deg,
   float el_deg)` / `GetAzimuthDegrees()` / `GetElevationDegrees()`
 - **Color (linear RGB)**: `SetColorRgb(const Vec3&)` / `GetColorRgb()`
-- **Intensity (lux)**: `SetIntensityLux(float)` / `GetIntensityLux()`
+- **Illuminance (lux)**: `SetIlluminanceLx(float)` / `GetIlluminanceLx()`
 - **Sun disk size**: `SetDiskAngularRadiusRadians(float)` /
   `GetDiskAngularRadiusRadians()`
 - **Shadowing** (only used when no light is referenced):
@@ -527,7 +527,7 @@ namespace {
 **Normalization**:
 
 - Return normalized RGB (max component = 1.0)
-- Intensity scaling handled separately via `intensity_lux_` parameter
+- Illuminance scaling handled separately via `illuminance_lx_` parameter
 
 **Tanner Helland algorithm** (reference implementation for Sun.cpp):
 
@@ -611,11 +611,11 @@ auto KelvinToLinearRgb(float kelvin) -> glm::vec3 {
 - [X] File: [src/Oxygen/Scene/Environment/Sun.cpp](src/Oxygen/Scene/Environment/Sun.cpp)
 - [X] Derive from `EnvironmentSystem`
 - [X] Implement `SunSource` enum class with `kSynthetic`, `kFromScene` values
-- [X] Add members: `sun_source_`, `light_reference_` (SceneNode), `direction_ws_`, `azimuth_deg_`, `elevation_deg_`, `color_rgb_`, `intensity_lux_`, `disk_angular_radius_rad_`, `casts_shadows_`, `temperature_kelvin_` (`std::optional<float>`)
-- [X] Implement API: `SetSunSource()`, `GetSunSource()`, `SetDirectionWs()`, `GetDirectionWs()`, `SetAzimuthElevationDegrees()`, `GetAzimuthDegrees()`, `GetElevationDegrees()`, `SetColorRgb()`, `GetColorRgb()`, `SetIntensityLux()`, `GetIntensityLux()`, `SetDiskAngularRadiusRadians()`, `GetDiskAngularRadiusRadians()`, `SetCastsShadows()`, `CastsShadows()`, `SetLightTemperatureKelvin()`, `GetLightTemperatureKelvin()`, `HasLightTemperature()`, `ClearLightTemperature()`, `SetLightReference()`, `GetLightReference()`, `ClearLightReference()`
+- [X] Add members: `sun_source_`, `light_reference_` (SceneNode), `direction_ws_`, `azimuth_deg_`, `elevation_deg_`, `color_rgb_`, `illuminance_lx_`, `disk_angular_radius_rad_`, `casts_shadows_`, `temperature_kelvin_` (`std::optional<float>`)
+- [X] Implement API: `SetSunSource()`, `GetSunSource()`, `SetDirectionWs()`, `GetDirectionWs()`, `SetAzimuthElevationDegrees()`, `GetAzimuthDegrees()`, `GetElevationDegrees()`, `SetColorRgb()`, `GetColorRgb()`, `SetIlluminanceLx()`, `GetIlluminanceLx()`, `SetDiskAngularRadiusRadians()`, `GetDiskAngularRadiusRadians()`, `SetCastsShadows()`, `CastsShadows()`, `SetLightTemperatureKelvin()`, `GetLightTemperatureKelvin()`, `HasLightTemperature()`, `ClearLightTemperature()`, `SetLightReference()`, `GetLightReference()`, `ClearLightReference()`
 - [X] **Caching strategy**: `color_rgb_` always stores the active color (either set directly or computed from temperature). `SetLightTemperatureKelvin(kelvin)` calls `KelvinToLinearRgb(kelvin)` once and caches result in `color_rgb_`, then stores kelvin in `temperature_kelvin_`. `SetColorRgb(color)` stores color and clears `temperature_kelvin_`. `GetColorRgb()` returns cached `color_rgb_`.
 - [X] Maintain mutual consistency between `direction_ws_` and `azimuth_deg_`/`elevation_deg_` via internal helper functions `DirectionToAzimuthElevation()` and `AzimuthElevationToDirection()`
-- [X] Default: `sun_source_ = kFromScene`, `direction_ws_ = {0, 0.866, 0.5}` (30° elevation), `color_rgb_ = {1,1,1}`, `intensity_lux_ = 100000.0`, `disk_angular_radius_rad_ = 0.004675`, `casts_shadows_ = true`, `temperature_kelvin_ = std::nullopt`
+- [X] Default: `sun_source_ = kFromScene`, `direction_ws_ = {0, 0.866, 0.5}` (30° elevation), `color_rgb_ = {1,1,1}`, `illuminance_lx_ = 100000.0`, `disk_angular_radius_rad_ = 0.004756022`, `casts_shadows_ = true`, `temperature_kelvin_ = std::nullopt`
 - [X] Register with `OXYGEN_COMPONENT(Sun)` macro
 
 #### Task 1.2: Add azimuth/elevation conversion utilities

@@ -438,10 +438,10 @@ void EnvironmentDebugPanel::DrawSunSection()
   ImGui::Separator();
   ImGui::Text("Light:");
 
-  float sun_intensity_lux = environment_vm_->GetSunIntensityLux();
-  if (ImGui::DragFloat("Illuminance (lux)", &sun_intensity_lux, 100.0F, 0.0F,
+  float sun_illuminance_lx = environment_vm_->GetSunIlluminanceLx();
+  if (ImGui::DragFloat("Illuminance (lux)", &sun_illuminance_lx, 100.0F, 0.0F,
         1000000.0F, "%.1F")) {
-    environment_vm_->SetSunIntensityLux(sun_intensity_lux);
+    environment_vm_->SetSunIlluminanceLx(sun_illuminance_lx);
   }
 
   bool sun_use_temperature = environment_vm_->GetSunUseTemperature();

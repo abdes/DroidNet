@@ -6,6 +6,10 @@ Deliver end-to-end physically based lighting with **uniform units**,
 camera-accurate exposure, robust tonemapping, and consistent PBR rendering
 across all demos and content pipelines.
 
+> **Scope (Implementation Note)**
+>
+> This document specifies a **practical real-time game engine implementation**. It focuses on how Oxygen transports and converts **photometric** quantities (Lux/Lumens/Nits) through CPU data models and HLSL shaders, and how those values integrate with exposure/tonemapping and sky/atmosphere. It is not intended to be a general radiometry/photometry textbook.
+>
 > **Related Documents:**
 >
 > - [PBR Architecture](PBR.md) — unit conventions and data model
@@ -25,6 +29,14 @@ To ensure consistency in the shader pipeline, the following conversions are used
 | **Point / Spot** | Lumens (`_lm`) | Luminous Flux | $L = \frac{\Phi_v}{4\pi \cdot d^2}$ (Point) / Area-weighted (Spot) |
 | **Area / Emissive** | Nits (`_nit`) | Luminance | $L = L_v$ |
 
+> [!IMPORTANT]
+> **Sun is one object with two responsibilities** in Oxygen:
+>
+> 1. **Directional-light role (lighting):** the Sun stores **illuminance at the receiver** in Lux (`_lx`) and is used as the source of truth for direct lighting and atmosphere energy.
+> 2. **Optional visible-disk role (rendering):** when the sky pass renders a visible sun disk, the disk’s **luminance** in Nits (`_nit`) is **derived from the same Sun illuminance** and the configured sun angular diameter.
+>
+> Conceptually: the *same physical sun* provides both the scene’s incident illuminance (Lux) and, if drawn, a bright emissive disk in the sky (Nits). There is no separate “sun” and “sun disk” light source in the data model.
+>
 > [!NOTE]
 > All local light sources (Point, Spot) **must** follow the Inverse-Square Law for attenuation ($Intensity \propto 1/d^2$). This is a requirement for physical unit consistency; without it, Lumen and Candela units cannot be calibrated against Lux-based surfaces or Camera Exposure.
 
@@ -133,7 +145,7 @@ A deep dive into the engine's exposure path (across CPU `Renderer` and HLSL shad
 
 ### Sun & Environment
 
-- Sun state is stored in `Sun` class with **`intensity_lx_`** field
+- Sun state is stored in `Sun` class with **`illuminance_lx_`** field
   (`src/Oxygen/Scene/Environment/Sun.h`) — **this is correctly implemented**.
 - Environment post-process is incomplete; only manual **`_ev`** compensation
  is supported.
@@ -194,6 +206,9 @@ Integrate the HDRI luminance over the hemisphere to find its total energy in arb
 - **Action**: In the pre-processing tool, mask out the captured sun disk and fill it with surrounding sky colors.
 - **Why**: The analytical `Sun` component will provide the direct sunlight. Keeping the sun in the HDRI results in incorrect "double-lighting."
 
+> [!NOTE]
+> In the HDRI context, **“sun disk”** refers to the **visual sun blob** (the very bright pixels corresponding to the solar disk) present in the captured panorama. It is *not* a separate light type—it's an emissive feature baked into the image that must be removed if the engine also renders/uses the analytical Sun for direct lighting.
+
 **Step 3: Intensity Mapping:**
 
 - **Formula**: $multiplier = \frac{E_{target}}{E_{raw}}$
@@ -205,7 +220,7 @@ In modern engine workflows (like Oxygen), the environment is often generated pro
 
 **The Continuity Principle:**
 
-Since the `SkyAtmosphere` is driven by the physical `Sun::intensity_lx_`, the radiance it generates is already physically correct (**`_nit`**). No external "mapping" or arbitrary scaling is required.
+Since the `SkyAtmosphere` is driven by the physical `Sun::illuminance_lx_`, the radiance it generates is already physically correct (**`_nit`**). No external "mapping" or arbitrary scaling is required.
 
 **Procedural Calibration Flow:**
 
@@ -220,7 +235,7 @@ To achieve energy-consistent Image-Based Lighting (IBL) in both hybrid (HDRI + S
 
 - **Ground Radiance Evaluation**: Following established prior work (e.g., *Lagarde & de Rousiers 2014, "Moving Frostbite to PBR"*), the radiance from the terrain $L_{ground}$ in the lower hemisphere of the captured cubemap must be calculated as:
   $$L_{ground} = \frac{\rho}{\pi} \cdot E_{sun}$$
-  Where $\rho$ is the **base color (reflectance)** and $E_{sun}$ is the **sun's irradiance** derived from `Sun::intensity_lx_`. This ensures that a "100,000 **`_lx`**" sun correctly produces a proportional "31,830 **`_nit`**" ($100,000 / \pi$) radiance for a perfectly white ground, providing consistent indirect lighting (bounce) to scene objects via the pre-filtered IBL.
+  Where $\rho$ is the **base color (reflectance)** and $E_{sun}$ is the **sun's irradiance** derived from `Sun::illuminance_lx_`. This ensures that a "100,000 **`_lx`**" sun correctly produces a proportional "31,830 **`_nit`**" ($100,000 / \pi$) radiance for a perfectly white ground, providing consistent indirect lighting (bounce) to scene objects via the pre-filtered IBL.
 - **Emissive Calibration**: Emissive surfaces or volumetric clouds appearing in the `SkyCapturePass` must be specified in **Luminance (**`_nit`**)**. The `SkyCapture_PS.hlsl` must treat these as absolute **Radiance** values. This allows the IBL to capture high-energy events (e.g., a glowing sky at sunset) that contribute correctly to the scene's ambient energy when integrated across the probe's hemisphere.
 - **Energy Balance**: By evaluating the ground at the correct radiance scale, the resulting **Irradiance (Diffuse)** and **Prefiltered (Specular)** maps derived from the capture will naturally include "ground bounce," removing the need for unphysical "ambient" or "hemisphere" light components.
 
@@ -271,7 +286,7 @@ To achieve energy-consistent Image-Based Lighting (IBL) in both hybrid (HDRI + S
 
 **Deliverables (verifiable):**
 
-- [X] Public headers show explicit unit names (e.g., `intensity_lx_`).
+- [X] Public headers show explicit unit names (e.g., `illuminance_lx_`).
 - [X] Doxygen for all light intensity fields references the units.
 - [X] No ambiguous `intensity` remains for light units in public APIs.
 

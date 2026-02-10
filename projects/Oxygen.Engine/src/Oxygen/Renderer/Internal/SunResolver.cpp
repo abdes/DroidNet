@@ -115,7 +115,7 @@ auto ResolveSunForView(scene::Scene& scene,
       }
       if (sun->GetSunSource() == scene::environment::SunSource::kSynthetic) {
         return SunState::FromDirectionAndLight(sun->GetDirectionWs(),
-          sun->GetColorRgb(), sun->GetIntensityLux(), true);
+          sun->GetColorRgb(), sun->GetIlluminanceLx(), true);
       }
 
       const auto& light_reference = sun->GetLightReference();
@@ -126,13 +126,13 @@ auto ResolveSunForView(scene::Scene& scene,
           if (!light_opt) {
             sun->ClearLightReference();
             return SunState::FromDirectionAndLight(sun->GetDirectionWs(),
-              sun->GetColorRgb(), sun->GetIntensityLux(), true);
+              sun->GetColorRgb(), sun->GetIlluminanceLx(), true);
           }
 
           const auto direction_opt = ComputeDirectionToSun(node);
           if (!direction_opt) {
             return SunState::FromDirectionAndLight(sun->GetDirectionWs(),
-              sun->GetColorRgb(), sun->GetIntensityLux(), true);
+              sun->GetColorRgb(), sun->GetIlluminanceLx(), true);
           }
 
           const auto& light = light_opt->get();

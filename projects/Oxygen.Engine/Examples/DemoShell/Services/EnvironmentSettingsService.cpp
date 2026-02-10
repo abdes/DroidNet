@@ -119,13 +119,6 @@ namespace {
     return record.has_value() && record->enabled != 0U;
   }
 
-  [[nodiscard]] auto MakeOzoneTentProfile(const float center_m,
-    const float half_width_m) -> engine::atmos::DensityProfile
-  {
-    return engine::atmos::MakeOzoneTentDensityProfile(
-      center_m, 2.0F * half_width_m);
-  }
-
   auto HydrateSkyAtmosphere(scene::environment::SkyAtmosphere& target,
     const data::pak::SkyAtmosphereEnvironmentRecord& source) -> void
   {
@@ -144,9 +137,9 @@ namespace {
       source.absorption_rgb[1], source.absorption_rgb[2] });
 
     // Pak format currently exposes a single absorption height parameter.
-    // Map it to a symmetric 2-layer tent profile (half-width = center).
-    const float center_m = source.absorption_scale_height_m;
-    target.SetOzoneDensityProfile(MakeOzoneTentProfile(center_m, center_m));
+    // The physical lighting spec uses a fixed two-layer linear ozone profile,
+    // so we ignore this field and apply the default Earth-like profile.
+    target.SetOzoneDensityProfile(engine::atmos::kDefaultOzoneDensityProfile);
     // New parameters not yet in PakFormat, use defaults or derived values if
     // needed. For now, we leave them as component defaults.
     target.SetMultiScatteringFactor(source.multi_scattering_factor);
@@ -324,7 +317,7 @@ namespace {
   constexpr std::string_view kSunAzimuthKey = "env.sun.azimuth_deg";
   constexpr std::string_view kSunElevationKey = "env.sun.elevation_deg";
   constexpr std::string_view kSunColorKey = "env.sun.color";
-  constexpr std::string_view kSunIntensityKey = "env.sun.intensity_lux";
+  constexpr std::string_view kSunIlluminanceKey = "env.sun.illuminance_lx";
   constexpr std::string_view kSunUseTemperatureKey = "env.sun.use_temperature";
   constexpr std::string_view kSunTemperatureKey = "env.sun.temperature_kelvin";
   constexpr std::string_view kSunDiskRadiusKey = "env.sun.disk_radius_deg";
@@ -1292,17 +1285,17 @@ auto EnvironmentSettingsService::SetSunColorRgb(const glm::vec3& value) -> void
   MarkDirty();
 }
 
-auto EnvironmentSettingsService::GetSunIntensityLux() const -> float
+auto EnvironmentSettingsService::GetSunIlluminanceLx() const -> float
 {
-  return sun_intensity_lux_;
+  return sun_illuminance_lx_;
 }
 
-auto EnvironmentSettingsService::SetSunIntensityLux(float value) -> void
+auto EnvironmentSettingsService::SetSunIlluminanceLx(float value) -> void
 {
-  if (sun_intensity_lux_ == value) {
+  if (sun_illuminance_lx_ == value) {
     return;
   }
-  sun_intensity_lux_ = value;
+  sun_illuminance_lx_ = value;
   MarkDirty();
 }
 
@@ -1468,7 +1461,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
       : scene::environment::SunSource::kSynthetic;
     sun->SetSunSource(sun_source);
     sun->SetAzimuthElevationDegrees(sun_azimuth_deg_, sun_elevation_deg_);
-    sun->SetIntensityLux(sun_intensity_lux_);
+    sun->SetIlluminanceLx(sun_illuminance_lx_);
     sun->SetDiskAngularRadiusRadians(
       sun_component_disk_radius_deg_ * kDegToRad);
     if (sun_use_temperature_) {
@@ -1487,7 +1480,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
 
           auto& common = light->get().Common();
           common.affects_world = sun_enabled_;
-          light->get().SetIntensityLux(sun_intensity_lux_);
+          light->get().SetIntensityLux(sun_illuminance_lx_);
           common.color_rgb = sun_use_temperature_
             ? KelvinToLinearRgb(sun_temperature_kelvin_)
             : sun_color_rgb_;
@@ -1522,7 +1515,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
 
           auto& common = light->get().Common();
           common.affects_world = sun_enabled_;
-          light->get().SetIntensityLux(sun_intensity_lux_);
+          light->get().SetIntensityLux(sun_illuminance_lx_);
           common.color_rgb = sun_use_temperature_
             ? KelvinToLinearRgb(sun_temperature_kelvin_)
             : sun_color_rgb_;
@@ -1678,12 +1671,13 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
       = atmo->GetRayleighScaleHeightMeters() * kMetersToKm;
     mie_scale_height_km_ = atmo->GetMieScaleHeightMeters() * kMetersToKm;
     mie_anisotropy_ = atmo->GetMieAnisotropy();
-    // Compute scale relative to default Earth absorption (2.33e-6).
-    // If absorption is (2.33e-6, 2.33e-6, 2.33e-6), scale = 1.0.
+    // Compute scale relative to the engine's Earth-like default.
     const auto absorption = atmo->GetMieAbsorptionRgb();
-    constexpr float kBaseAbsorption = 2.33e-6F;
-    mie_absorption_scale_ = (kBaseAbsorption > 0.0F)
-      ? (absorption.x + absorption.y + absorption.z) / (3.0F * kBaseAbsorption)
+    const auto base_absorption = engine::atmos::kDefaultMieAbsorptionRgb;
+    const float base_avg
+      = (base_absorption.x + base_absorption.y + base_absorption.z) / 3.0F;
+    mie_absorption_scale_ = (base_avg > 0.0F)
+      ? (absorption.x + absorption.y + absorption.z) / (3.0F * base_avg)
       : 0.0F;
     multi_scattering_ = atmo->GetMultiScatteringFactor();
     sun_disk_enabled_ = atmo->GetSunDiskEnabled();
@@ -1744,7 +1738,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     sun_azimuth_deg_ = sun->GetAzimuthDegrees();
     sun_elevation_deg_ = sun->GetElevationDegrees();
     sun_color_rgb_ = sun->GetColorRgb();
-    sun_intensity_lux_ = sun->GetIntensityLux();
+    sun_illuminance_lx_ = sun->GetIlluminanceLx();
     sun_use_temperature_ = sun->HasLightTemperature();
     if (sun_use_temperature_) {
       sun_temperature_kelvin_ = sun->GetLightTemperatureKelvin();
@@ -1957,7 +1951,7 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   any_loaded |= load_float(kSunAzimuthKey, sun_azimuth_deg_);
   any_loaded |= load_float(kSunElevationKey, sun_elevation_deg_);
   any_loaded |= load_vec3(kSunColorKey, sun_color_rgb_);
-  any_loaded |= load_float(kSunIntensityKey, sun_intensity_lux_);
+  any_loaded |= load_float(kSunIlluminanceKey, sun_illuminance_lx_);
   any_loaded |= load_bool(kSunUseTemperatureKey, sun_use_temperature_);
   any_loaded |= load_float(kSunTemperatureKey, sun_temperature_kelvin_);
   any_loaded |= load_float(kSunDiskRadiusKey, sun_component_disk_radius_deg_);
@@ -2074,7 +2068,7 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kSunAzimuthKey, sun_azimuth_deg_);
   save_float(kSunElevationKey, sun_elevation_deg_);
   save_vec3(kSunColorKey, sun_color_rgb_);
-  save_float(kSunIntensityKey, sun_intensity_lux_);
+  save_float(kSunIlluminanceKey, sun_illuminance_lx_);
   save_bool(kSunUseTemperatureKey, sun_use_temperature_);
   save_float(kSunTemperatureKey, sun_temperature_kelvin_);
   save_float(kSunDiskRadiusKey, sun_component_disk_radius_deg_);
@@ -2161,7 +2155,7 @@ auto EnvironmentSettingsService::ResetSunUiToDefaults() -> void
   sun_azimuth_deg_ = defaults.GetAzimuthDegrees();
   sun_elevation_deg_ = defaults.GetElevationDegrees();
   sun_color_rgb_ = defaults.GetColorRgb();
-  sun_intensity_lux_ = defaults.GetIntensityLux();
+  sun_illuminance_lx_ = defaults.GetIlluminanceLx();
   sun_use_temperature_ = defaults.HasLightTemperature();
   sun_temperature_kelvin_
     = sun_use_temperature_ ? defaults.GetLightTemperatureKelvin() : 6500.0F;
@@ -2262,7 +2256,7 @@ auto EnvironmentSettingsService::LoadSunSettingsFromProfile(const int source)
   sun_azimuth_deg_ = settings.azimuth_deg;
   sun_elevation_deg_ = settings.elevation_deg;
   sun_color_rgb_ = settings.color_rgb;
-  sun_intensity_lux_ = settings.intensity_lux;
+  sun_illuminance_lx_ = settings.illuminance_lx;
   sun_use_temperature_ = settings.use_temperature;
   sun_temperature_kelvin_ = settings.temperature_kelvin;
   sun_component_disk_radius_deg_ = settings.disk_radius_deg;
@@ -2276,7 +2270,7 @@ auto EnvironmentSettingsService::SaveSunSettingsToProfile(const int source)
   settings.azimuth_deg = sun_azimuth_deg_;
   settings.elevation_deg = sun_elevation_deg_;
   settings.color_rgb = sun_color_rgb_;
-  settings.intensity_lux = sun_intensity_lux_;
+  settings.illuminance_lx = sun_illuminance_lx_;
   settings.use_temperature = sun_use_temperature_;
   settings.temperature_kelvin = sun_temperature_kelvin_;
   settings.disk_radius_deg = sun_component_disk_radius_deg_;

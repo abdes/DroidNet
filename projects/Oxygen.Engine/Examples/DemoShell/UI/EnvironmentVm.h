@@ -180,8 +180,8 @@ public:
   auto SetSunElevationDeg(float value) -> void;
   [[nodiscard]] auto GetSunColorRgb() const -> glm::vec3;
   auto SetSunColorRgb(const glm::vec3& value) -> void;
-  [[nodiscard]] auto GetSunIntensityLux() const -> float;
-  auto SetSunIntensityLux(float value) -> void;
+  [[nodiscard]] auto GetSunIlluminanceLx() const -> float;
+  auto SetSunIlluminanceLx(float value) -> void;
   [[nodiscard]] auto GetSunUseTemperature() const -> bool;
   auto SetSunUseTemperature(bool enabled) -> void;
   [[nodiscard]] auto GetSunTemperatureKelvin() const -> float;

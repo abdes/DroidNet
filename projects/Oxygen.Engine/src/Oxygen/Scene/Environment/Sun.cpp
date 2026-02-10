@@ -325,9 +325,9 @@ auto Sun::SetColorRgb(const Vec3& rgb) noexcept -> void
 auto Sun::GetColorRgb() const noexcept -> const Vec3& { return color_rgb_; }
 
 /*!
- Sets the sun intensity in lux.
+ Sets the sun illuminance in lux.
 
- @param intensity_lux Sun illuminance in lux.
+ @param illuminance_lx Sun illuminance in lux.
  @return None.
 
  ### Performance Characteristics
@@ -336,13 +336,13 @@ auto Sun::GetColorRgb() const noexcept -> const Vec3& { return color_rgb_; }
  - Memory: None.
  - Optimization: Direct assignment.
 */
-auto Sun::SetIntensityLux(const float intensity_lux) noexcept -> void
+auto Sun::SetIlluminanceLx(const float illuminance_lx) noexcept -> void
 {
-  intensity_lux_ = intensity_lux;
+  illuminance_lx_ = illuminance_lx;
 }
 
 /*!
- Gets the sun intensity in lux.
+ Gets the sun illuminance in lux.
 
  @return Sun illuminance in lux.
 
@@ -352,7 +352,7 @@ auto Sun::SetIntensityLux(const float intensity_lux) noexcept -> void
  - Memory: None.
  - Optimization: Direct access.
 */
-auto Sun::GetIntensityLux() const noexcept -> float { return intensity_lux_; }
+auto Sun::GetIlluminanceLx() const noexcept -> float { return illuminance_lx_; }
 
 /*!
  Sets the sun disk angular radius in radians.

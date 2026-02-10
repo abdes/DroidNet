@@ -288,8 +288,8 @@ public:
   [[nodiscard]] virtual auto GetSunColorRgb() const -> glm::vec3;
   virtual auto SetSunColorRgb(const glm::vec3& value) -> void;
 
-  [[nodiscard]] virtual auto GetSunIntensityLux() const -> float;
-  virtual auto SetSunIntensityLux(float value) -> void;
+  [[nodiscard]] virtual auto GetSunIlluminanceLx() const -> float;
+  virtual auto SetSunIlluminanceLx(float value) -> void;
 
   [[nodiscard]] virtual auto GetSunUseTemperature() const -> bool;
   virtual auto SetSunUseTemperature(bool enabled) -> void;
@@ -321,7 +321,7 @@ private:
     float azimuth_deg { scene::environment::Sun::kDefaultAzimuthDeg };
     float elevation_deg { scene::environment::Sun::kDefaultElevationDeg };
     glm::vec3 color_rgb { 1.0F, 1.0F, 1.0F };
-    float intensity_lux { scene::environment::Sun::kDefaultIntensityLux };
+    float illuminance_lx { scene::environment::Sun::kDefaultIlluminanceLx };
     bool use_temperature { false };
     float temperature_kelvin { 6500.0F };
     float disk_radius_deg {
@@ -441,7 +441,7 @@ private:
   float sun_azimuth_deg_ { scene::environment::Sun::kDefaultAzimuthDeg };
   float sun_elevation_deg_ { scene::environment::Sun::kDefaultElevationDeg };
   glm::vec3 sun_color_rgb_ { 1.0F, 1.0F, 1.0F };
-  float sun_intensity_lux_ { scene::environment::Sun::kDefaultIntensityLux };
+  float sun_illuminance_lx_ { scene::environment::Sun::kDefaultIlluminanceLx };
   bool sun_use_temperature_ { false };
   float sun_temperature_kelvin_ { 6500.0F };
   float sun_component_disk_radius_deg_ {

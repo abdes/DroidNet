@@ -34,7 +34,7 @@ enum class SunSource : uint8_t {
 
  - **Authored Direction**: Supports both world-space vectors and azimuth/
    elevation authoring.
- - **Spectral Control**: Color and intensity in lux, with optional temperature
+ - **Spectral Control**: Color and illuminance in lux, with optional
    conversion to linear RGB.
  - **Light Binding**: Optional reference to a scene directional light for
    FromScene mode.
@@ -59,8 +59,9 @@ class Sun final : public EnvironmentSystem {
 public:
   static constexpr float kDefaultAzimuthDeg = 90.0F;
   static constexpr float kDefaultElevationDeg = 30.0F;
-  static constexpr float kDefaultIntensityLux = 110000.0F;
-  static constexpr float kDefaultDiskAngularRadiusRad = 0.004675F; // ~0.268 deg
+  static constexpr float kDefaultIlluminanceLx = 110000.0F;
+  static constexpr float kDefaultDiskAngularRadiusRad
+    = 0.004756022F; // ~0.2725 deg (0.545° diameter)
 
   //! Constructs the sun component with engine defaults.
   OXGN_SCN_API Sun();
@@ -99,11 +100,11 @@ public:
   //! Gets the cached sun color (linear RGB).
   OXGN_SCN_NDAPI auto GetColorRgb() const noexcept -> const Vec3&;
 
-  //! Sets the sun intensity in lux.
-  OXGN_SCN_API auto SetIntensityLux(float intensity_lux) noexcept -> void;
+  //! Sets the sun illuminance in lux.
+  OXGN_SCN_API auto SetIlluminanceLx(float illuminance_lx) noexcept -> void;
 
-  //! Gets the sun intensity in lux.
-  OXGN_SCN_NDAPI auto GetIntensityLux() const noexcept -> float;
+  //! Gets the sun illuminance in lux.
+  OXGN_SCN_NDAPI auto GetIlluminanceLx() const noexcept -> float;
 
   //! Sets the sun disk angular radius in radians.
   OXGN_SCN_API auto SetDiskAngularRadiusRadians(float radians) noexcept -> void;
@@ -149,8 +150,8 @@ private:
   float elevation_deg_ = kDefaultElevationDeg;
 
   Vec3 color_rgb_ { 1.0F, 1.0F, 1.0F };
-  //! Default intensity for a clear sky sun (110,000 lux).
-  float intensity_lux_ = kDefaultIntensityLux;
+  //! Default illuminance for a clear sky sun (110,000 lux).
+  float illuminance_lx_ = kDefaultIlluminanceLx;
   float disk_angular_radius_rad_ = kDefaultDiskAngularRadiusRad;
   bool casts_shadows_ = true;
   std::optional<float> temperature_kelvin_;

@@ -79,7 +79,7 @@ NOLINT_TEST_F(SunResolverTest, SyntheticSunOverridesDirectionalLights)
   sun.SetSunSource(scene::environment::SunSource::kSynthetic);
   sun.SetDirectionWs({ 0.0F, 0.0F, 1.0F });
   sun.SetColorRgb({ 0.2F, 0.3F, 0.4F });
-  sun.SetIntensityLux(12345.0F);
+  sun.SetIlluminanceLx(12345.0F);
   scene->SetEnvironment(std::move(environment));
 
   const auto lights = std::array {
@@ -152,7 +152,7 @@ NOLINT_TEST_F(SunResolverTest, InvalidReferenceFallsBackToSynthetic)
   sun.SetSunSource(scene::environment::SunSource::kFromScene);
   sun.SetDirectionWs({ 0.0F, 0.0F, 1.0F });
   sun.SetColorRgb({ 0.25F, 0.5F, 0.75F });
-  sun.SetIntensityLux(8.0F);
+  sun.SetIlluminanceLx(8.0F);
   scene->SetEnvironment(std::move(environment));
 
   auto node = scene->CreateNode("MissingLight");
