@@ -64,22 +64,22 @@ struct alignas(16) SkyViewLutPassConstants {
   ShaderVisibleIndex output_uav_index { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex transmittance_srv_index { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex multi_scat_srv_index { kInvalidShaderVisibleIndex };
-  uint32_t output_width { 0 };
+  ShaderVisibleIndex sky_irradiance_srv_index { kInvalidShaderVisibleIndex };
 
+  uint32_t output_width { 0 };
   uint32_t output_height { 0 };
   uint32_t transmittance_width { 0 };
   uint32_t transmittance_height { 0 };
-  uint32_t slice_count { 0 };
 
+  uint32_t slice_count { 0 };
   float sun_cos_zenith { 0.0F };
   uint32_t atmosphere_flags { 0 };
   uint32_t alt_mapping_mode { 0 };
-  float atmosphere_height_m { 0.0F };
 
+  float atmosphere_height_m { 0.0F };
   float planet_radius_m { 0.0F };
-  uint32_t _pad0 { 0 };
-  uint32_t _pad1 { 0 };
-  uint32_t _pad2 { 0 };
+  float sky_irradiance_width { 0.0F };
+  float sky_irradiance_height { 0.0F };
 };
 static_assert(sizeof(SkyViewLutPassConstants) == 64,
   "SkyViewLutPassConstants must be 64 bytes");
@@ -98,6 +98,29 @@ struct alignas(16) MultiScatLutPassConstants {
 };
 static_assert(sizeof(MultiScatLutPassConstants) == 32,
   "MultiScatLutPassConstants must be 32 bytes");
+
+//! Pass constants for sky irradiance LUT generation.
+/*!
+ Layout must match `SkyIrradianceLutPassConstants` in SkyIrradianceLut_CS.hlsl.
+*/
+struct alignas(16) SkyIrradianceLutPassConstants {
+  ShaderVisibleIndex output_uav_index { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex transmittance_srv_index { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex multi_scat_srv_index { kInvalidShaderVisibleIndex };
+  uint32_t output_width { 0 };
+
+  uint32_t output_height { 0 };
+  uint32_t transmittance_width { 0 };
+  uint32_t transmittance_height { 0 };
+  float atmosphere_height_m { 0.0F };
+
+  float planet_radius_m { 0.0F };
+  uint32_t _pad0 { 0 };
+  uint32_t _pad1 { 0 };
+  uint32_t _pad2 { 0 };
+};
+static_assert(sizeof(SkyIrradianceLutPassConstants) == 48,
+  "SkyIrradianceLutPassConstants must be 48 bytes");
 
 //! Pass constants for camera volume LUT generation.
 /*!
@@ -146,11 +169,13 @@ struct SkyAtmosphereLutComputePass::Impl {
   // Pass constants buffers (one for each shader)
   std::shared_ptr<Buffer> transmittance_constants_buffer;
   std::shared_ptr<Buffer> multi_scat_constants_buffer;
+  std::shared_ptr<Buffer> sky_irradiance_constants_buffer;
   std::shared_ptr<Buffer> sky_view_constants_buffer;
   std::shared_ptr<Buffer> camera_volume_constants_buffer;
 
   void* transmittance_constants_mapped { nullptr };
   void* multi_scat_constants_mapped { nullptr };
+  void* sky_irradiance_constants_mapped { nullptr };
   void* sky_view_constants_mapped { nullptr };
   void* camera_volume_constants_mapped { nullptr };
 
@@ -158,6 +183,9 @@ struct SkyAtmosphereLutComputePass::Impl {
     kInvalidShaderVisibleIndex
   };
   ShaderVisibleIndex multi_scat_constants_cbv_index {
+    kInvalidShaderVisibleIndex
+  };
+  ShaderVisibleIndex sky_irradiance_constants_cbv_index {
     kInvalidShaderVisibleIndex
   };
   ShaderVisibleIndex sky_view_constants_cbv_index {
@@ -170,6 +198,7 @@ struct SkyAtmosphereLutComputePass::Impl {
   // Pipeline state descriptions (cached for rebuild detection)
   std::optional<ComputePipelineDesc> transmittance_pso_desc;
   std::optional<ComputePipelineDesc> multi_scat_pso_desc;
+  std::optional<ComputePipelineDesc> sky_irradiance_pso_desc;
   std::optional<ComputePipelineDesc> sky_view_pso_desc;
   std::optional<ComputePipelineDesc> camera_volume_pso_desc;
 
@@ -194,6 +223,10 @@ struct SkyAtmosphereLutComputePass::Impl {
       multi_scat_constants_buffer->UnMap();
       multi_scat_constants_mapped = nullptr;
     }
+    if (sky_irradiance_constants_buffer && sky_irradiance_constants_mapped) {
+      sky_irradiance_constants_buffer->UnMap();
+      sky_irradiance_constants_mapped = nullptr;
+    }
     if (sky_view_constants_buffer && sky_view_constants_mapped) {
       sky_view_constants_buffer->UnMap();
       sky_view_constants_mapped = nullptr;
@@ -208,7 +241,8 @@ struct SkyAtmosphereLutComputePass::Impl {
   auto EnsurePassConstantsBuffers() -> void
   {
     if (transmittance_constants_buffer && multi_scat_constants_buffer
-      && sky_view_constants_buffer) {
+      && sky_irradiance_constants_buffer && sky_view_constants_buffer
+      && camera_volume_constants_buffer) {
       return;
     }
 
@@ -261,6 +295,8 @@ struct SkyAtmosphereLutComputePass::Impl {
       transmittance_constants_mapped, transmittance_constants_cbv_index);
     create_cbv("MultiScatConstants", multi_scat_constants_buffer,
       multi_scat_constants_mapped, multi_scat_constants_cbv_index);
+    create_cbv("SkyIrradianceConstants", sky_irradiance_constants_buffer,
+      sky_irradiance_constants_mapped, sky_irradiance_constants_cbv_index);
     create_cbv("SkyViewConstants", sky_view_constants_buffer,
       sky_view_constants_mapped, sky_view_constants_cbv_index);
     create_cbv("CameraVolumeConstants", camera_volume_constants_buffer,
@@ -302,6 +338,20 @@ struct SkyAtmosphereLutComputePass::Impl {
                             .SetRootBindings(bindings)
                             .SetDebugName("SkyAtmo_MultiScatLUT_PSO")
                             .Build();
+
+    // Sky irradiance LUT compute shader
+    graphics::ShaderRequest sky_irradiance_shader {
+      .stage = oxygen::ShaderType::kCompute,
+      .source_path = "Atmosphere/SkyIrradianceLut_CS.hlsl",
+      .entry_point = "CS",
+    };
+
+    sky_irradiance_pso_desc
+      = ComputePipelineDesc::Builder()
+          .SetComputeShader(std::move(sky_irradiance_shader))
+          .SetRootBindings(bindings)
+          .SetDebugName("SkyAtmo_SkyIrradianceLUT_PSO")
+          .Build();
 
     // Sky-view LUT compute shader
     graphics::ShaderRequest sky_view_shader {
@@ -385,10 +435,12 @@ auto SkyAtmosphereLutComputePass::DoPrepareResources(CommandRecorder& recorder)
   auto* transmittance_tex = manager->GetTransmittanceLutTexture().get();
   auto* sky_view_tex = manager->GetSkyViewLutTexture().get();
   auto* multi_scat_tex = manager->GetMultiScatLutTexture().get();
+  auto* sky_irradiance_tex = manager->GetSkyIrradianceLutTexture().get();
   auto* camera_volume_tex = manager->GetCameraVolumeLutTexture().get();
 
   if (transmittance_tex == nullptr || sky_view_tex == nullptr
-    || multi_scat_tex == nullptr || camera_volume_tex == nullptr) {
+    || multi_scat_tex == nullptr || sky_irradiance_tex == nullptr
+    || camera_volume_tex == nullptr) {
     LOG_F(ERROR, "SkyAtmosphereLutComputePass: LUT textures not available");
     co_return;
   }
@@ -408,12 +460,15 @@ auto SkyAtmosphereLutComputePass::DoPrepareResources(CommandRecorder& recorder)
   recorder.BeginTrackingResourceState(*transmittance_tex, initial_state, false);
   recorder.BeginTrackingResourceState(*sky_view_tex, initial_state, false);
   recorder.BeginTrackingResourceState(*multi_scat_tex, initial_state, false);
+  recorder.BeginTrackingResourceState(
+    *sky_irradiance_tex, initial_state, false);
   recorder.BeginTrackingResourceState(*camera_volume_tex, initial_state, false);
 
   // Enable automatic UAV memory barriers for proper UAV-to-UAV sync
   recorder.EnableAutoMemoryBarriers(*transmittance_tex);
   recorder.EnableAutoMemoryBarriers(*sky_view_tex);
   recorder.EnableAutoMemoryBarriers(*multi_scat_tex);
+  recorder.EnableAutoMemoryBarriers(*sky_irradiance_tex);
   recorder.EnableAutoMemoryBarriers(*camera_volume_tex);
 
   recorder.RequireResourceState(
@@ -422,6 +477,8 @@ auto SkyAtmosphereLutComputePass::DoPrepareResources(CommandRecorder& recorder)
     *sky_view_tex, graphics::ResourceStates::kUnorderedAccess);
   recorder.RequireResourceState(
     *multi_scat_tex, graphics::ResourceStates::kUnorderedAccess);
+  recorder.RequireResourceState(
+    *sky_irradiance_tex, graphics::ResourceStates::kUnorderedAccess);
   recorder.RequireResourceState(
     *camera_volume_tex, graphics::ResourceStates::kUnorderedAccess);
 
@@ -436,7 +493,10 @@ auto SkyAtmosphereLutComputePass::DoPrepareResources(CommandRecorder& recorder)
  Executes LUT generation shaders in order:
  1. Transmittance LUT - optical depth integration
  2. MultiScat LUT - integral over directions (requires transmittance)
- 3. Sky-view LUT - raymarch (requires transmittance and multi-scat)
+ 3. Sky irradiance LUT - hemispherical irradiance (requires transmittance and
+   multi-scat)
+ 4. Sky-view LUT - raymarch (requires transmittance, multi-scat, and sky
+   irradiance)
 */
 auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
   -> co::Co<>
@@ -451,6 +511,7 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
   // Verify resources are ready
   if (!impl_->transmittance_pso_desc.has_value()
     || !impl_->multi_scat_pso_desc.has_value()
+    || !impl_->sky_irradiance_pso_desc.has_value()
     || !impl_->sky_view_pso_desc.has_value()
     || !impl_->camera_volume_pso_desc.has_value()) {
     LOG_F(WARNING, "SkyAtmosphereLutComputePass: PSOs not built, skipping");
@@ -459,18 +520,22 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
 
   const auto transmittance_uav = manager->GetTransmittanceLutUavSlot();
   const auto multi_scat_uav = manager->GetMultiScatLutUavSlot();
+  const auto sky_irradiance_uav = manager->GetSkyIrradianceLutUavSlot();
   const auto sky_view_uav = manager->GetSkyViewLutUavSlot();
   const auto camera_volume_uav = manager->GetCameraVolumeLutUavSlot();
 
-  const auto transmittance_srv = manager->GetTransmittanceLutSlot();
-  const auto multi_scat_srv = manager->GetMultiScatLutSlot();
+  const auto transmittance_srv = manager->GetTransmittanceLutBackSlot();
+  const auto multi_scat_srv = manager->GetMultiScatLutBackSlot();
+  const auto sky_irradiance_srv = manager->GetSkyIrradianceLutBackSlot();
 
   if (transmittance_uav == kInvalidShaderVisibleIndex
     || multi_scat_uav == kInvalidShaderVisibleIndex
+    || sky_irradiance_uav == kInvalidShaderVisibleIndex
     || sky_view_uav == kInvalidShaderVisibleIndex
     || camera_volume_uav == kInvalidShaderVisibleIndex
     || transmittance_srv == kInvalidShaderVisibleIndex
-    || multi_scat_srv == kInvalidShaderVisibleIndex) {
+    || multi_scat_srv == kInvalidShaderVisibleIndex
+    || sky_irradiance_srv == kInvalidShaderVisibleIndex) {
     LOG_F(WARNING,
       "SkyAtmosphereLutComputePass: UAV/SRV indices not valid, skipping");
     co_return;
@@ -480,6 +545,8 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
     = manager->GetTransmittanceLutSize();
   const auto [multi_scat_width, multi_scat_height]
     = manager->GetMultiScatLutSize();
+  const auto [sky_irradiance_width, sky_irradiance_height]
+    = manager->GetSkyIrradianceLutSize();
   const auto [sky_view_width, sky_view_height] = manager->GetSkyViewLutSize();
   const auto [camera_volume_width, camera_volume_height, camera_volume_depth]
     = manager->GetCameraVolumeLutSize();
@@ -547,7 +614,7 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
       .output_height = multi_scat_height,
       .transmittance_width = transmittance_width,
       .transmittance_height = transmittance_height,
-      .atmosphere_height_m = 80000.0F, // TODO: Pull from atmo params
+      .atmosphere_height_m = atmosphere_height_m,
       .planet_radius_m = planet_radius_m,
     };
     std::memcpy(
@@ -579,12 +646,55 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
     graphics::ResourceStates::kShaderResource);
   recorder.FlushBarriers();
 
-  //=== Dispatch 3: Sky-View LUT ===------------------------------------------//
+  //=== Dispatch 3: Sky Irradiance LUT ===------------------------------------//
+  {
+    SkyIrradianceLutPassConstants constants {
+      .output_uav_index = sky_irradiance_uav,
+      .transmittance_srv_index = transmittance_srv,
+      .multi_scat_srv_index = multi_scat_srv,
+      .output_width = sky_irradiance_width,
+      .output_height = sky_irradiance_height,
+      .transmittance_width = transmittance_width,
+      .transmittance_height = transmittance_height,
+      .atmosphere_height_m = atmosphere_height_m,
+      .planet_radius_m = planet_radius_m,
+    };
+    std::memcpy(
+      impl_->sky_irradiance_constants_mapped, &constants, sizeof(constants));
+
+    recorder.SetPipelineState(*impl_->sky_irradiance_pso_desc);
+    recorder.SetComputeRootConstantBufferView(
+      static_cast<uint32_t>(binding::RootParam::kSceneConstants),
+      scene_const_addr);
+    if (env_dynamic_addr.has_value()) {
+      recorder.SetComputeRootConstantBufferView(
+        static_cast<uint32_t>(binding::RootParam::kEnvironmentDynamicData),
+        *env_dynamic_addr);
+    }
+
+    recorder.SetComputeRoot32BitConstant(
+      static_cast<uint32_t>(binding::RootParam::kRootConstants), 0U, 0);
+    recorder.SetComputeRoot32BitConstant(
+      static_cast<uint32_t>(binding::RootParam::kRootConstants),
+      impl_->sky_irradiance_constants_cbv_index.get(), 1);
+
+    recorder.Dispatch(
+      (sky_irradiance_width + kThreadGroupSizeX - 1) / kThreadGroupSizeX,
+      (sky_irradiance_height + kThreadGroupSizeY - 1) / kThreadGroupSizeY, 1);
+  }
+
+  // Barrier: UAV -> SRV for sky irradiance
+  recorder.RequireResourceState(*manager->GetSkyIrradianceLutTexture(),
+    graphics::ResourceStates::kShaderResource);
+  recorder.FlushBarriers();
+
+  //=== Dispatch 4: Sky-View LUT ===------------------------------------------//
   {
     SkyViewLutPassConstants constants {
       .output_uav_index = sky_view_uav,
       .transmittance_srv_index = transmittance_srv,
       .multi_scat_srv_index = multi_scat_srv,
+      .sky_irradiance_srv_index = sky_irradiance_srv,
       .output_width = sky_view_width,
       .output_height = sky_view_height,
       .transmittance_width = transmittance_width,
@@ -595,6 +705,8 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
       .alt_mapping_mode = alt_mapping_mode,
       .atmosphere_height_m = atmosphere_height_m,
       .planet_radius_m = planet_radius_m,
+      .sky_irradiance_width = static_cast<float>(sky_irradiance_width),
+      .sky_irradiance_height = static_cast<float>(sky_irradiance_height),
     };
     std::memcpy(
       impl_->sky_view_constants_mapped, &constants, sizeof(constants));
@@ -638,7 +750,7 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
     graphics::ResourceStates::kShaderResource);
   recorder.FlushBarriers();
 
-  //=== Dispatch 4: Camera Volume LUT ===-------------------------------------//
+  //=== Dispatch 5: Camera Volume LUT ===-------------------------------------//
   {
     CameraVolumeLutPassConstants constants {
       .output_uav_index = camera_volume_uav,

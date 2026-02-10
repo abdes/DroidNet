@@ -2068,11 +2068,14 @@ auto EnvironmentSettingsService::MaybeRequestSkyCapture() -> void
   if (sky_atmo_enabled_) {
     if (const auto lut_mgr = config_.renderer->GetSkyAtmosphereLutManager()) {
       if (!lut_mgr->HasBeenGenerated() || lut_mgr->IsDirty()) {
+        DLOG_F(
+          INFO, "Skipping sky capture because LUT Manager will regenerate");
         return;
       }
     }
   }
 
+  DLOG_F(INFO, "Requesting sky capture from renderer");
   config_.renderer->RequestSkyCapture();
   needs_sky_capture_ = false;
 }

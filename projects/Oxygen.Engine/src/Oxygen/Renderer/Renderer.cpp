@@ -1399,6 +1399,9 @@ auto Renderer::UpdateViewExposure(
     if (const auto pp = env->TryGetSystem<env::PostProcessVolume>();
       pp && pp->IsEnabled()) {
       if (!pp->GetExposureEnabled()) {
+        LOG_F(WARNING,
+          "Exposure not enabled for view {}; using default exposure={}",
+          view_id.get(), exposure);
         env_dynamic_manager_->SetExposure(view_id, exposure);
         return exposure;
       }

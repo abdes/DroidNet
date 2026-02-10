@@ -1081,7 +1081,10 @@ auto ForwardPipeline::OnSceneMutation(
               co_await self->RunScenePasses(ctx, rc, rec);
 
               // Auto Exposure (Histogram & Average dispatches)
-              if (self->auto_exposure_pass) {
+              const bool want_auto_exposure = self->tone_map_pass_config
+                && self->tone_map_pass_config->exposure_mode
+                  == engine::ExposureMode::kAuto;
+              if (want_auto_exposure && self->auto_exposure_pass) {
                 if (self->pending_auto_exposure_reset.has_value()) {
                   // Convert EV (EV100, ISO 100) to Average Luminance,
                   // K=12.5) L = 2^EV * K / 100
@@ -1245,11 +1248,13 @@ auto ForwardPipeline::SetClusterDepthSlices(uint32_t slices) -> void
 }
 auto ForwardPipeline::SetExposureMode(engine::ExposureMode mode) -> void
 {
+  DLOG_F(INFO, "SetExposureMode {}", mode);
   impl_->staged.exposure_mode = mode;
   impl_->staged.dirty = true;
 }
 auto ForwardPipeline::SetExposureValue(float value) -> void
 {
+  DLOG_F(INFO, "SetExposureValue {}", value);
   impl_->staged.exposure_value = value;
   impl_->staged.dirty = true;
 }

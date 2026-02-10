@@ -146,7 +146,10 @@ static inline float GetSunIntensity()
  */
 static inline float3 GetSunLuminanceRGB()
 {
-    return GetSunColorRGB() * GetSunIntensity();
+    // Return RGB illuminance derived from the authored lux scalar.
+    // (Historically this used `GetSunIntensity()`, but the engine now treats
+    // the sun intensity UI/control as illuminance in lux.)
+    return GetSunColorRGB() * GetSunIlluminance();
 }
 
 /**

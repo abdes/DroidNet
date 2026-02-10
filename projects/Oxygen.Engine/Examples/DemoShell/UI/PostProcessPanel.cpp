@@ -99,14 +99,18 @@ void PostProcessPanel::DrawExposureSection()
   if (current_mode == ExposureMode::kManual) {
     float ev = vm_->GetManualExposureEv();
     // Range roughly covering starlight to bright sunlight
-    if (ImGui::DragFloat("EV", &ev, 0.01F, 0.0F, 16.0F, "%.2f")) {
+    if (ImGui::DragFloat(
+          "Manual Exposure (EV100)", &ev, 0.01F, 0.0F, 16.0F, "%.2f")) {
       ev = std::round(ev * 100.0F) / 100.0F;
       ev = std::max(ev, 0.0F);
       vm_->SetManualExposureEv(ev);
     }
     if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Explicit exposure value (EV, referenced to ISO 100 / "
-                        "EV100) for the scene.");
+      ImGui::SetTooltip(
+        "Scene luminance in Exposure Values (EV100). Higher values represent "
+        "brighter light sources (e.g., 15 for sun), resulting in a darker "
+        "image "
+        "to maintain balance.");
     }
   }
 

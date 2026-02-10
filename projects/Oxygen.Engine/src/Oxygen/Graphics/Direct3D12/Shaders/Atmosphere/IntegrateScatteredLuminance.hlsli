@@ -108,32 +108,56 @@ IntegrationStepResult IntegrateSingleStep(
     // Sun transmittance from sample point
     float3 sample_dir = normalize(sample_pos);
     float cos_sun_zenith = dot(sample_dir, sun_dir);
-    float3 sun_od = SampleTransmittanceOpticalDepthLut(
-        transmittance_srv,
-        transmittance_w,
-        transmittance_h,
-        cos_sun_zenith, altitude_m,
+
+    // Planet shadowing: if the sun is below the geometric horizon at this
+    // altitude, direct sunlight is occluded by the planet. Because this
+    // atmosphere model is sun-driven, we also suppress the multi-scattering
+    // source term when the sun is occluded (prevents unphysical night-time
+    // energy injection).
+    const float cos_horizon = HorizonCosineFromAltitude(
         atmo.planet_radius_m,
-        atmo.atmosphere_height_m);
-    float3 sun_transmittance = TransmittanceFromOpticalDepth(sun_od, atmo);
+        altitude_m);
+    const bool sun_visible = (cos_sun_zenith >= cos_horizon);
+    float3 sun_transmittance = float3(0.0, 0.0, 0.0);
+    if (sun_visible)
+    {
+        float3 sun_od = SampleTransmittanceOpticalDepthLut(
+            transmittance_srv,
+            transmittance_w,
+            transmittance_h,
+            cos_sun_zenith, altitude_m,
+            atmo.planet_radius_m,
+            atmo.atmosphere_height_m);
+        sun_transmittance = TransmittanceFromOpticalDepth(sun_od, atmo);
+    }
 
     // Single scattering: L_sun * T_sun * (beta_R * phase_R + beta_M * phase_M)
-    float3 sigma_s_single = (atmo.rayleigh_scattering_rgb * d_r * rayleigh_phase
-                          + atmo.mie_scattering_rgb * d_m * mie_phase)
-                          * sun_transmittance * sun_illuminance;
+    float3 sigma_s_single = float3(0.0, 0.0, 0.0);
+    if (sun_visible)
+    {
+        sigma_s_single = (atmo.rayleigh_scattering_rgb * d_r * rayleigh_phase
+                       + atmo.mie_scattering_rgb * d_m * mie_phase)
+                       * sun_transmittance * sun_illuminance;
+    }
 
     // Multi-scattering contribution
-    float u_ms = (cos_sun_zenith + 1.0) / 2.0;
-    float v_ms = altitude_m / atmo.atmosphere_height_m;
-    float4 ms_sample = multi_scat_lut.SampleLevel(linear_sampler, float2(u_ms, v_ms), 0);
+    float3 sigma_s_multi = float3(0.0, 0.0, 0.0);
+    if (sun_visible)
+    {
+        float u_ms = (cos_sun_zenith + 1.0) / 2.0;
+        float v_ms = altitude_m / atmo.atmosphere_height_m;
+        float4 ms_sample
+            = multi_scat_lut.SampleLevel(linear_sampler, float2(u_ms, v_ms), 0);
 
-    float3 multi_scat_radiance = ms_sample.rgb;
-    float f_ms = ms_sample.a;
-    float3 energy_compensation = 1.0 / max(1.0 - f_ms, 1e-4);
+        float3 multi_scat_radiance = ms_sample.rgb;
+        float f_ms = ms_sample.a;
+        float3 energy_compensation = 1.0 / max(1.0 - f_ms, 1e-4);
 
-    float3 sigma_s_multi = (atmo.rayleigh_scattering_rgb * d_r + atmo.mie_scattering_rgb * d_m)
-                         * multi_scat_radiance * energy_compensation
-                         * atmo.multi_scattering_factor * sun_illuminance;
+        sigma_s_multi = (atmo.rayleigh_scattering_rgb * d_r
+                      + atmo.mie_scattering_rgb * d_m)
+                      * multi_scat_radiance * energy_compensation
+                      * atmo.multi_scattering_factor * sun_illuminance;
+    }
 
     // Total source function
     float3 S = sigma_s_single + sigma_s_multi;

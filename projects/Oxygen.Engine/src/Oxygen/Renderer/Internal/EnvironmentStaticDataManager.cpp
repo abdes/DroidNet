@@ -315,11 +315,15 @@ auto EnvironmentStaticDataManager::PopulateAtmosphere(
       const auto [trans_w, trans_h]
         = sky_lut_provider_->GetTransmittanceLutSize();
       const auto [sky_w, sky_h] = sky_lut_provider_->GetSkyViewLutSize();
+      const auto [sky_irr_w, sky_irr_h]
+        = sky_lut_provider_->GetSkyIrradianceLutSize();
 
       next.atmosphere.transmittance_lut_width = static_cast<float>(trans_w);
       next.atmosphere.transmittance_lut_height = static_cast<float>(trans_h);
       next.atmosphere.sky_view_lut_width = static_cast<float>(sky_w);
       next.atmosphere.sky_view_lut_height = static_cast<float>(sky_h);
+      next.atmosphere.sky_irradiance_lut_width = static_cast<float>(sky_irr_w);
+      next.atmosphere.sky_irradiance_lut_height = static_cast<float>(sky_irr_h);
 
       // Populate altitude-slice fields from the LUT provider [T3].
       next.atmosphere.sky_view_lut_slices
@@ -340,6 +344,10 @@ auto EnvironmentStaticDataManager::PopulateAtmosphere(
 
         next.atmosphere.multi_scat_lut_slot
           = MultiScatLutSlot { sky_lut_provider_->GetMultiScatLutSlot() };
+
+        next.atmosphere.sky_irradiance_lut_slot = SkyIrradianceLutSlot {
+          sky_lut_provider_->GetSkyIrradianceLutSlot()
+        };
 
         next.atmosphere.camera_volume_lut_slot
           = CameraVolumeLutSlot { sky_lut_provider_->GetCameraVolumeLutSlot() };
@@ -493,12 +501,6 @@ auto EnvironmentStaticDataManager::PopulateIbl(EnvironmentStaticData& next)
       && next.sky_sphere.cubemap_slot.IsValid());
 
   if (!has_source) {
-    DLOG_F(INFO,
-      "PopulateIbl: No source detected (sky_light.enabled={}, "
-      "sky_light.cubemap={}, sky_sphere.enabled={}, sky_sphere.cubemap={})",
-      next.sky_light.enabled, next.sky_light.cubemap_slot.IsValid(),
-      next.sky_sphere.enabled, next.sky_sphere.cubemap_slot.IsValid());
-
     // During sky-capture transitions (e.g. atmosphere slider updates), the
     // cubemap source can be temporarily unavailable. Avoid flashing by keeping
     // the last known valid IBL outputs until a new source and its filtered

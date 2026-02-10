@@ -66,7 +66,7 @@ NOLINT_TEST_F(SunResolverTest, NoSunComponentFallsBackToTaggedDirectional)
   EXPECT_NEAR(sun.color_rgb.x, 1.0F, 0.001F);
   EXPECT_NEAR(sun.color_rgb.y, 0.9F, 0.001F);
   EXPECT_NEAR(sun.color_rgb.z, 0.8F, 0.001F);
-  EXPECT_NEAR(sun.intensity, 5.0F, 0.001F);
+  EXPECT_NEAR(sun.illuminance_lx, 5.0F, 0.001F);
 }
 
 //! Uses authored sun values when Sun is in synthetic mode.
@@ -99,7 +99,7 @@ NOLINT_TEST_F(SunResolverTest, SyntheticSunOverridesDirectionalLights)
   EXPECT_NEAR(resolved.color_rgb.x, 0.2F, 0.001F);
   EXPECT_NEAR(resolved.color_rgb.y, 0.3F, 0.001F);
   EXPECT_NEAR(resolved.color_rgb.z, 0.4F, 0.001F);
-  EXPECT_NEAR(resolved.intensity, 12345.0F, 0.001F);
+  EXPECT_NEAR(resolved.illuminance_lx, 12345.0F, 0.001F);
 }
 
 //! Resolves from the referenced directional light in FromScene mode.
@@ -139,7 +139,7 @@ NOLINT_TEST_F(SunResolverTest, FromSceneUsesReferencedDirectionalLight)
   EXPECT_NEAR(resolved.color_rgb.x, 0.1F, 0.001F);
   EXPECT_NEAR(resolved.color_rgb.y, 0.2F, 0.001F);
   EXPECT_NEAR(resolved.color_rgb.z, 0.3F, 0.001F);
-  EXPECT_NEAR(resolved.intensity, 4.0F, 0.001F);
+  EXPECT_NEAR(resolved.illuminance_lx, 4.0F, 0.001F);
 }
 
 //! Clears invalid references and falls back to synthetic sun values.
@@ -174,7 +174,7 @@ NOLINT_TEST_F(SunResolverTest, InvalidReferenceFallsBackToSynthetic)
   EXPECT_NEAR(resolved.color_rgb.x, 0.25F, 0.001F);
   EXPECT_NEAR(resolved.color_rgb.y, 0.5F, 0.001F);
   EXPECT_NEAR(resolved.color_rgb.z, 0.75F, 0.001F);
-  EXPECT_NEAR(resolved.intensity, 8.0F, 0.001F);
+  EXPECT_NEAR(resolved.illuminance_lx, 8.0F, 0.001F);
   EXPECT_FALSE(sun.GetLightReference().has_value());
 }
 
@@ -203,7 +203,7 @@ NOLINT_TEST_F(SunResolverTest, FromSceneWithoutReferenceUsesSelectionRule)
   EXPECT_NEAR(resolved.color_rgb.x, 0.2F, 0.001F);
   EXPECT_NEAR(resolved.color_rgb.y, 0.4F, 0.001F);
   EXPECT_NEAR(resolved.color_rgb.z, 0.6F, 0.001F);
-  EXPECT_NEAR(resolved.intensity, 2.5F, 0.001F);
+  EXPECT_NEAR(resolved.illuminance_lx, 2.5F, 0.001F);
 }
 
 //! Uses selection rule when a referenced node is no longer alive.
@@ -237,7 +237,7 @@ NOLINT_TEST_F(SunResolverTest, DeadReferenceFallsBackToSelectionRule)
   EXPECT_NEAR(resolved.color_rgb.x, 0.7F, 0.001F);
   EXPECT_NEAR(resolved.color_rgb.y, 0.8F, 0.001F);
   EXPECT_NEAR(resolved.color_rgb.z, 0.9F, 0.001F);
-  EXPECT_NEAR(resolved.intensity, 3.0F, 0.001F);
+  EXPECT_NEAR(resolved.illuminance_lx, 3.0F, 0.001F);
 }
 
 } // namespace oxygen::engine::internal::testing
