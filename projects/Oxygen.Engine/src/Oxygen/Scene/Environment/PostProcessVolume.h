@@ -7,6 +7,7 @@
 #pragma once
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Scene/Environment/EnvironmentSystem.h>
 
 namespace oxygen::scene::environment {
@@ -165,6 +166,20 @@ public:
     return auto_exposure_speed_down_;
   }
 
+  //! Sets the auto-exposure metering mode.
+  auto SetAutoExposureMeteringMode(const engine::MeteringMode mode) noexcept
+    -> void
+  {
+    auto_exposure_metering_mode_ = mode;
+  }
+
+  //! Gets the auto-exposure metering mode.
+  [[nodiscard]] auto GetAutoExposureMeteringMode() const noexcept
+    -> engine::MeteringMode
+  {
+    return auto_exposure_metering_mode_;
+  }
+
   //! Sets bloom intensity (unitless).
   auto SetBloomIntensity(const float intensity) noexcept -> void
   {
@@ -263,6 +278,9 @@ private:
   //! Scale: EV per second.
   //! Variation: Small changes affect temporal stability vs responsiveness.
   float auto_exposure_speed_down_ = 1.0F;
+
+  engine::MeteringMode auto_exposure_metering_mode_
+    = engine::MeteringMode::kAverage;
 
   float bloom_intensity_ = 0.0F;
   float bloom_threshold_ = 1.0F;

@@ -15,6 +15,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Renderer/Passes/ComputeRenderPass.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -33,14 +34,6 @@ class Graphics;
 namespace oxygen::engine {
 
 struct RenderContext;
-
-//! Metering modes for auto exposure.
-// NOLINTNEXTLINE(performance-enum-size)
-enum class MeteringMode : uint32_t {
-  kAverage = 0U,
-  kCenterWeighted = 1U,
-  kSpot = 2U,
-};
 
 [[nodiscard]] OXGN_RNDR_API auto to_string(MeteringMode mode)
   -> std::string_view;
