@@ -65,31 +65,33 @@ public:
   //! Gets coverage.
   [[nodiscard]] auto GetCoverage() const noexcept -> float { return coverage_; }
 
-  //! Sets density in [0, 1].
-  auto SetDensity(const float density) noexcept -> void { density_ = density; }
+  //! Sets the base extinction coefficient @f$\sigma_t@f$ (m^-1).
+  /*!
+   Volumetric cloud rendering is expected to interpret this as the participating
+   media extinction used during ray marching.
+  */
+  auto SetExtinctionSigmaTPerMeter(const float sigma_t_per_m) noexcept -> void
+  {
+    extinction_sigma_t_per_m_ = sigma_t_per_m;
+  }
 
-  //! Gets density.
-  [[nodiscard]] auto GetDensity() const noexcept -> float { return density_; }
+  //! Gets the base extinction coefficient @f$\sigma_t@f$ (m^-1).
+  [[nodiscard]] auto GetExtinctionSigmaTPerMeter() const noexcept -> float
+  {
+    return extinction_sigma_t_per_m_;
+  }
 
-  //! Sets single-scattering albedo (linear RGB).
-  auto SetAlbedoRgb(const Vec3& rgb) noexcept -> void { albedo_rgb_ = rgb; }
+  //! Sets single-scattering albedo (linear RGB) in [0, 1].
+  auto SetSingleScatteringAlbedoRgb(const Vec3& rgb) noexcept -> void
+  {
+    single_scattering_albedo_rgb_ = rgb;
+  }
 
   //! Gets single-scattering albedo (linear RGB).
-  [[nodiscard]] auto GetAlbedoRgb() const noexcept -> const Vec3&
+  [[nodiscard]] auto GetSingleScatteringAlbedoRgb() const noexcept
+    -> const Vec3&
   {
-    return albedo_rgb_;
-  }
-
-  //! Sets extinction scale (unitless multiplier).
-  auto SetExtinctionScale(const float scale) noexcept -> void
-  {
-    extinction_scale_ = scale;
-  }
-
-  //! Gets extinction scale.
-  [[nodiscard]] auto GetExtinctionScale() const noexcept -> float
-  {
-    return extinction_scale_;
+    return single_scattering_albedo_rgb_;
   }
 
   //! Sets phase anisotropy g in [-1, 1].
@@ -142,10 +144,9 @@ private:
   float layer_thickness_m_ = 4000.0F;
 
   float coverage_ = 0.5F;
-  float density_ = 0.5F;
+  float extinction_sigma_t_per_m_ = 1.0e-3F;
 
-  Vec3 albedo_rgb_ { 0.9F, 0.9F, 0.9F };
-  float extinction_scale_ = 1.0F;
+  Vec3 single_scattering_albedo_rgb_ { 0.9F, 0.9F, 0.9F };
   float phase_g_ = 0.6F;
 
   Vec3 wind_dir_ws_ { 1.0F, 0.0F, 0.0F };

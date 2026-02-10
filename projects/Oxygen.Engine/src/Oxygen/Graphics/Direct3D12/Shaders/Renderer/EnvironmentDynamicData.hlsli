@@ -39,9 +39,7 @@ struct EnvironmentDynamicData
 
     // Atmospheric debug/feature flags (bitfield)
     // bit0: use LUT sampling when available
-    // bit1: visualize LUT
-    // bit2: force analytic fallback (ignore LUT)
-    // bit3: use override sun values
+    // bit1: use override sun values
     uint atmosphere_flags;
 
     // 1 = sun enabled; 0 = fallback to default sun.

@@ -305,9 +305,11 @@ def _pack_volumetric_clouds_environment_record(spec: Dict[str, Any]) -> bytes:
     base_altitude = _f(spec.get("base_altitude_m"), 1500.0)
     thickness = _f(spec.get("layer_thickness_m"), 4000.0)
     coverage = _f(spec.get("coverage"), 0.5)
-    density = _f(spec.get("density"), 0.5)
-    albedo = _vec3(spec.get("albedo_rgb", [0.9, 0.9, 0.9]), [0.9, 0.9, 0.9])
-    extinction = _f(spec.get("extinction_scale"), 1.0)
+    extinction_sigma_t_per_m = _f(spec.get("extinction_sigma_t_per_m"), 1.0e-3)
+    albedo = _vec3(
+        spec.get("single_scattering_albedo_rgb", [0.9, 0.9, 0.9]),
+        [0.9, 0.9, 0.9],
+    )
     phase_g = _f(spec.get("phase_g"), 0.6)
     wind_dir = _vec3(spec.get("wind_dir_ws", [1.0, 0.0, 0.0]), [1.0, 0.0, 0.0])
     wind_speed = _f(spec.get("wind_speed_mps"), 10.0)
@@ -318,9 +320,9 @@ def _pack_volumetric_clouds_environment_record(spec: Dict[str, Any]) -> bytes:
         _pack_env_record_header(_ENV_SYSTEM_VOLUMETRIC_CLOUDS, record_size)
         + struct.pack("<I", int(enabled))
         + struct.pack("<ff", base_altitude, thickness)
-        + struct.pack("<ff", coverage, density)
+        + struct.pack("<ff", coverage, extinction_sigma_t_per_m)
         + struct.pack("<3f", *albedo)
-        + struct.pack("<f", extinction)
+        + struct.pack("<f", 0.0)
         + struct.pack("<f", phase_g)
         + struct.pack("<3f", *wind_dir)
         + struct.pack("<f", wind_speed)
@@ -430,28 +432,30 @@ def _pack_post_process_volume_environment_record(spec: Dict[str, Any]) -> bytes:
 def _pack_fog_environment_record(spec: Dict[str, Any]) -> bytes:
     enabled = _u32_bool(spec.get("enabled"), 1)
     model = int(spec.get("model", 0) or 0)
-    density = _f(spec.get("density"), 0.01)
-    height_falloff = _f(spec.get("height_falloff"), 0.2)
+    extinction_sigma_t_per_m = _f(spec.get("extinction_sigma_t_per_m"), 0.01)
+    height_falloff_per_m = _f(spec.get("height_falloff_per_m"), 0.2)
     height_offset_m = _f(spec.get("height_offset_m"), 0.0)
     start_distance_m = _f(spec.get("start_distance_m"), 0.0)
     max_opacity = _f(spec.get("max_opacity"), 1.0)
-    albedo = _vec3(spec.get("albedo_rgb", [1.0, 1.0, 1.0]), [1.0, 1.0, 1.0])
+    albedo = _vec3(
+        spec.get("single_scattering_albedo_rgb", [1.0, 1.0, 1.0]),
+        [1.0, 1.0, 1.0],
+    )
     anisotropy_g = _f(spec.get("anisotropy_g"), 0.0)
-    scattering_intensity = _f(spec.get("scattering_intensity"), 1.0)
 
     record_size = 72
     out = (
         _pack_env_record_header(_ENV_SYSTEM_FOG, record_size)
         + struct.pack("<I", int(enabled))
         + struct.pack("<I", model)
-        + struct.pack("<f", density)
-        + struct.pack("<f", height_falloff)
+        + struct.pack("<f", extinction_sigma_t_per_m)
+        + struct.pack("<f", height_falloff_per_m)
         + struct.pack("<f", height_offset_m)
         + struct.pack("<f", start_distance_m)
         + struct.pack("<f", max_opacity)
         + struct.pack("<3f", *albedo)
         + struct.pack("<f", anisotropy_g)
-        + struct.pack("<f", scattering_intensity)
+        + struct.pack("<f", 0.0)
         + b"\x00" * 16
     )
     if len(out) != record_size:

@@ -23,9 +23,7 @@ namespace oxygen::engine {
 enum class AtmosphereFlags : uint32_t {
   kNone = 0x0,
   kUseLut = 0x1, //!< Use LUT sampling when LUTs are available.
-  kVisualizeLut = 0x2, //!< Debug: render LUT as overlay.
-  kForceAnalytic = 0x4, //!< Force analytic fog fallback (ignore LUT).
-  kOverrideSun = 0x8, //!< Use debug override sun direction/intensity.
+  kOverrideSun = 0x2, //!< Use debug override sun direction/intensity.
 };
 
 //! Bitwise OR for AtmosphereFlags.
@@ -147,9 +145,7 @@ struct alignas(16) EnvironmentDynamicData {
 
   // Atmospheric debug/feature flags (bitfield)
   // bit0: use LUT sampling when available
-  // bit1: visualize LUT
-  // bit2: force analytic fallback (ignore LUT)
-  // bit3: use override sun values
+  // bit1: use override sun values
   uint32_t atmosphere_flags { 0u };
 
   // 1 = sun enabled; 0 = fallback to default sun.

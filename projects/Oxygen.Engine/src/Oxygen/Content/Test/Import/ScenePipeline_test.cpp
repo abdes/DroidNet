@@ -311,7 +311,7 @@ NOLINT_TEST_F(ScenePipelineTest, Collect_WithEnvironmentBlock_AppendsBlock)
 {
   // Arrange
   data::pak::FogEnvironmentRecord fog {};
-  fog.density = 0.05F;
+  fog.extinction_sigma_t_per_m = 0.05F;
   const auto fog_bytes = std::as_bytes(
     std::span<const data::pak::FogEnvironmentRecord, 1>(&fog, 1));
 

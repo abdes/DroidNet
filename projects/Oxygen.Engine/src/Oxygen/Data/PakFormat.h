@@ -1177,10 +1177,10 @@ struct VolumetricCloudsEnvironmentRecord {
   float layer_thickness_m = 4000.0F;
 
   float coverage = 0.5F;
-  float density = 0.5F;
+  float extinction_sigma_t_per_m = 1.0e-3F;
 
-  float albedo_rgb[3] = { 0.9F, 0.9F, 0.9F };
-  float extinction_scale = 1.0F;
+  float single_scattering_albedo_rgb[3] = { 0.9F, 0.9F, 0.9F };
+  float _pad0 = 0.0F;
   float phase_g = 0.6F;
 
   float wind_dir_ws[3] = { 1.0F, 0.0F, 0.0F };
@@ -1204,14 +1204,14 @@ struct FogEnvironmentRecord {
   uint32_t enabled = 1; //!< Whether this system is enabled (boolean).
 
   uint32_t model = 0; //!< FogModel (0=ExponentialHeight, 1=Volumetric).
-  float density = 0.01F;
-  float height_falloff = 0.2F;
+  float extinction_sigma_t_per_m = 0.01F;
+  float height_falloff_per_m = 0.2F;
   float height_offset_m = 0.0F;
   float start_distance_m = 0.0F;
   float max_opacity = 1.0F;
-  float albedo_rgb[3] = { 1.0F, 1.0F, 1.0F };
+  float single_scattering_albedo_rgb[3] = { 1.0F, 1.0F, 1.0F };
   float anisotropy_g = 0.0F;
-  float scattering_intensity = 1.0F;
+  float _pad0 = 0.0F;
 
   uint8_t _reserved[16] = {};
 };

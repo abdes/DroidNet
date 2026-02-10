@@ -452,10 +452,11 @@ public:
         PrintUtils::Field("Base Altitude (m)", rec->base_altitude_m, 10);
         PrintUtils::Field("Layer Thickness (m)", rec->layer_thickness_m, 10);
         PrintUtils::Field("Coverage", rec->coverage, 10);
-        PrintUtils::Field("Density", rec->density, 10);
         PrintUtils::Field(
-          "Albedo", asset_dump_helpers::FormatVec3(rec->albedo_rgb), 10);
-        PrintUtils::Field("Extinction Scale", rec->extinction_scale, 10);
+          "Extinction σt (1/m)", rec->extinction_sigma_t_per_m, 10);
+        PrintUtils::Field("Single-Scattering Albedo",
+          asset_dump_helpers::FormatVec3(rec->single_scattering_albedo_rgb),
+          10);
         PrintUtils::Field("Phase g", rec->phase_g, 10);
         PrintUtils::Field("Wind Dir (ws)",
           asset_dump_helpers::FormatVec3(rec->wind_dir_ws), 10);

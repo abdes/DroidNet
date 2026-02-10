@@ -257,14 +257,13 @@ auto EnvironmentStaticDataManager::PopulateFog(
     fog && fog->IsEnabled()) {
     next.fog.enabled = 1U;
     next.fog.model = ToGpuFogModel(fog->GetModel());
-    next.fog.density = fog->GetDensity();
-    next.fog.height_falloff = fog->GetHeightFalloff();
+    next.fog.extinction_sigma_t_per_m = fog->GetExtinctionSigmaTPerMeter();
+    next.fog.height_falloff_per_m = fog->GetHeightFalloffPerMeter();
     next.fog.height_offset_m = fog->GetHeightOffsetMeters();
     next.fog.start_distance_m = fog->GetStartDistanceMeters();
     next.fog.max_opacity = fog->GetMaxOpacity();
-    next.fog.albedo_rgb = fog->GetAlbedoRgb();
+    next.fog.single_scattering_albedo_rgb = fog->GetSingleScatteringAlbedoRgb();
     next.fog.anisotropy_g = fog->GetAnisotropy();
-    next.fog.scattering_intensity = fog->GetScatteringIntensity();
   }
 }
 
@@ -568,9 +567,10 @@ auto EnvironmentStaticDataManager::PopulateClouds(
     next.clouds.base_altitude_m = clouds->GetBaseAltitudeMeters();
     next.clouds.layer_thickness_m = clouds->GetLayerThicknessMeters();
     next.clouds.coverage = clouds->GetCoverage();
-    next.clouds.density = clouds->GetDensity();
-    next.clouds.albedo_rgb = clouds->GetAlbedoRgb();
-    next.clouds.extinction_scale = clouds->GetExtinctionScale();
+    next.clouds.extinction_sigma_t_per_m
+      = clouds->GetExtinctionSigmaTPerMeter();
+    next.clouds.single_scattering_albedo_rgb
+      = clouds->GetSingleScatteringAlbedoRgb();
     next.clouds.phase_g = clouds->GetPhaseAnisotropy();
     next.clouds.wind_dir_ws = clouds->GetWindDirectionWs();
     next.clouds.wind_speed_mps = clouds->GetWindSpeedMps();
