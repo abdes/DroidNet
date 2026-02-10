@@ -662,13 +662,13 @@ auto AutoExposurePass::ResetExposure(graphics::CommandRecorder& recorder,
 
   EnsureExposureInitUploadBuffer(recorder);
 
-  float ev100 = 0.0F;
+  float ev = 0.0F;
   if (initial_avg_luminance > 0.0001F) {
-    ev100 = std::log2(initial_avg_luminance * 100.0F / 12.5F);
+    ev = std::log2(initial_avg_luminance * 100.0F / 12.5F);
   }
 
   const float init_values[4]
-    = { std::max(initial_avg_luminance, 0.0001F), 1.0F, ev100, 0.0F };
+    = { std::max(initial_avg_luminance, 0.0001F), 1.0F, ev, 0.0F };
 
   std::memcpy(
     exposure_init_upload_mapped_ptr_, init_values, sizeof(init_values));

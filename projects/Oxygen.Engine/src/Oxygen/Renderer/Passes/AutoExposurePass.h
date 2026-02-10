@@ -100,7 +100,7 @@ public:
     //! Layout:
     //!  - offset 0 = avg_lum (float)
     //!  - offset 4 = exposure_multiplier (float)
-    //!  - offset 8 = ev100 (float)
+    //!  - offset 8 = ev (float)
     bindless::ShaderVisibleIndex exposure_state_srv_index {
       kInvalidShaderVisibleIndex
     };

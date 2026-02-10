@@ -1387,11 +1387,11 @@ auto Renderer::UpdateViewExposure(
 
   float exposure = 1.0F;
   float exposure_key = 1.0F;
-  std::optional<float> camera_ev100 {};
+  std::optional<float> camera_ev {};
 
   if (const auto resolved_it = resolved_views_.find(view_id);
     resolved_it != resolved_views_.end()) {
-    camera_ev100 = resolved_it->second.CameraEv100();
+    camera_ev = resolved_it->second.CameraEv();
   }
 
   // Manual and auto exposure use the post-process volume.
@@ -1409,16 +1409,16 @@ auto Renderer::UpdateViewExposure(
       if (mode == env::ExposureMode::kManual
         || mode == env::ExposureMode::kManualCamera
         || mode == env::ExposureMode::kAuto) {
-        const float ev100 = (mode == env::ExposureMode::kManualCamera
-                              || mode == env::ExposureMode::kAuto)
-          ? camera_ev100.value_or(pp->GetManualExposureEv100())
-          : pp->GetManualExposureEv100();
+        const float ev = (mode == env::ExposureMode::kManualCamera
+                           || mode == env::ExposureMode::kAuto)
+          ? camera_ev.value_or(pp->GetManualExposureEv())
+          : pp->GetManualExposureEv();
 
         // Physically calibrated manual exposure (ISO 2720 reflected-light
         // calibration constant K = 12.5).
         // For ExposureMode::kAuto, this value serves as a physically-aligned
         // baseline/seed before the histogram-based adaptation pass takes over.
-        exposure = (1.0F / 12.5F) * std::exp2(compensation_ev - ev100);
+        exposure = (1.0F / 12.5F) * std::exp2(compensation_ev - ev);
 
         if (mode == env::ExposureMode::kAuto) {
           DLOG_F(3,

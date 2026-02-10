@@ -136,7 +136,7 @@
       "disk_radius_deg": 0.2779998779296875,
       "elevation_deg": 46.0,
       "enabled": false,
-      "intensity_lux": 150000.0,
+      "illuminance_lx": 150000.0,
       "source": 1.0,
       "temperature_kelvin": 6800.0,
       "use_temperature": false
@@ -308,7 +308,7 @@
   },
   "post_process": {
     "exposure": {
-      "manual_ev100": 6.0,
+      "manual_ev": 6.0,
       "mode": "manual"
     },
     "tonemapping": {

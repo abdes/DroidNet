@@ -169,7 +169,7 @@ A deep dive into the engine's exposure path (across CPU `Renderer` and HLSL shad
 
 - Camera exposure (aperture/shutter/ISO) is stored on camera components via
   `CameraExposure` and persisted per camera in DemoShell.
-- DemoShell applies manual camera EV100 to the runtime pipeline, but the
+- DemoShell applies manual camera EV (EV100) to the runtime pipeline, but the
   renderer path is not yet driven by camera exposure.
 
 ## Principles (Target State)

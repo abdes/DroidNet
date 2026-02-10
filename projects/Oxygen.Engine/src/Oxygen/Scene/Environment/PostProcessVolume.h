@@ -32,12 +32,13 @@ enum class ExposureMode {
  This is a minimal, renderer-agnostic post process parameter set inspired by
  UE/Unity volume workflows.
 
- Exposure uses EV100 (ISO 100) and is resolved by the renderer into a linear
+ Exposure uses EV (EV100, ISO 100) and is resolved by the renderer into a
+ linear
  scale using the ISO 2720 calibration formula
  $exposure = \frac{1}{12.5} \cdot 2^{-EV100}$. A display key scale is applied
  after calibration to map mid-gray to a display-friendly level.
- Manual mode uses the authored EV100 value, while manual camera mode consumes
- EV100 derived from camera aperture/shutter/ISO.
+ Manual mode uses the authored EV value, while manual camera mode consumes EV
+ derived from camera aperture/shutter/ISO.
 
  The engine can later extend this with per-camera overrides or local volumes;
  for now it represents scene-global authored intent.
@@ -67,7 +68,7 @@ public:
     return tone_mapper_;
   }
 
-  //! Sets exposure mode (manual, auto, or manual camera EV100).
+  //! Sets exposure mode (manual, auto, or manual camera EV).
   auto SetExposureMode(const ExposureMode mode) noexcept -> void
   {
     exposure_mode_ = mode;
@@ -115,16 +116,16 @@ public:
     return exposure_key_;
   }
 
-  //! Sets manual exposure EV100 value (ISO 100 reference).
-  auto SetManualExposureEv100(const float ev100) noexcept -> void
+  //! Sets manual exposure EV value (EV100, ISO 100 reference).
+  auto SetManualExposureEv(const float ev) noexcept -> void
   {
-    manual_exposure_ev100_ = ev100;
+    manual_exposure_ev_ = ev;
   }
 
-  //! Gets manual exposure EV100 value (ISO 100 reference).
-  [[nodiscard]] auto GetManualExposureEv100() const noexcept -> float
+  //! Gets manual exposure EV value (EV100, ISO 100 reference).
+  [[nodiscard]] auto GetManualExposureEv() const noexcept -> float
   {
-    return manual_exposure_ev100_;
+    return manual_exposure_ev_;
   }
 
   //! Sets auto-exposure min/max EV.
@@ -249,24 +250,24 @@ private:
   //! Variation: +/- 1.0 reflects a doubling/halving of final image brightness.
   float exposure_compensation_ev_ = 0.0F;
 
-  //! Display key scale applied after EV100-to-linear calibration.
+  //! Display key scale applied after EV-to-linear calibration.
   //! Scale: linear. Maps mid-gray (18%) to a display level.
   //! Variation: Small changes (e.g. 0.1) affect overall image brightness
   //! without changing lighting.
   float exposure_key_ = 10.0F;
 
   //! Manual exposure value at ISO 100.
-  //! Scale: EV100 (log base 2). Typical: 13 (daylight), 0 (indoor).
+  //! Scale: EV (EV100, log base 2). Typical: 13 (daylight), 0 (indoor).
   //! Variation: +/- 1.0 reflects a doubling/halving of sensor sensitivity.
-  float manual_exposure_ev100_ = 9.7F;
+  float manual_exposure_ev_ = 9.7F;
 
   //! Minimum allowable exposure value for auto-exposure.
-  //! Scale: EV100.
+  //! Scale: EV (EV100).
   //! Variation: Changes define the lower limit of dark environments.
   float auto_exposure_min_ev_ = -6.0F;
 
   //! Maximum allowable exposure value for auto-exposure.
-  //! Scale: EV100.
+  //! Scale: EV (EV100).
   //! Variation: Changes define the upper limit for bright environments.
   float auto_exposure_max_ev_ = 16.0F;
 

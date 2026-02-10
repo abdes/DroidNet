@@ -31,7 +31,7 @@ struct AutoExposureAverageConstants {
 // exposure_buffer structure:
 // [0] = average luminance (smoothed)
 // [4] = exposure multiplier
-// [8] = resolved EV100 (smoothed, derived from avg luminance)
+// [8] = resolved EV (EV100, smoothed, derived from avg luminance)
 
 [numthreads(1, 1, 1)]
 void CS(uint3 dispatchThreadId : SV_DispatchThreadID)
@@ -125,16 +125,17 @@ void CS(uint3 dispatchThreadId : SV_DispatchThreadID)
         exposure = 1.0;
     }
 
-    // Derive EV100 from the smoothed average luminance using the ISO 2720
+    // Derive EV (EV100, ISO 100 reference) from the smoothed average luminance
+    // using the ISO 2720
     // reflected-light calibration constant K=12.5:
     //   EV100 = log2( L * 100 / K )
     // This is useful for UI/debugging and to keep auto-exposure semantics
     // aligned with the engine's EV100-based exposure model.
     const float kCalibrationK = 12.5;
-    float ev100 = log2(max(1.0e-4, avgLum * 100.0 / kCalibrationK));
+    float ev = log2(max(1.0e-4, avgLum * 100.0 / kCalibrationK));
 
     exposureBuffer.Store(0, asuint(avgLum));
     exposureBuffer.Store(4, asuint(exposure));
-    exposureBuffer.Store(8, asuint(ev100));
+    exposureBuffer.Store(8, asuint(ev));
     exposureBuffer.Store(12, count); // Debug: Store histogram sample count
 }

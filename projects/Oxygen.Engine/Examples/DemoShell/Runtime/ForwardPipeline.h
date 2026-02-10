@@ -96,7 +96,7 @@ public:
   auto SetAutoExposureLogLuminanceRange(float range) -> void override;
   auto SetAutoExposureTargetLuminance(float luminance) -> void override;
   auto SetAutoExposureMeteringMode(engine::MeteringMode mode) -> void override;
-  auto ResetAutoExposure(float initial_ev100) -> void override;
+  auto ResetAutoExposure(float initial_ev) -> void override;
 
   auto SetToneMapper(engine::ToneMapper mode) -> void override;
 

@@ -59,8 +59,8 @@ namespace examples {
         -> engine::ExposureMode;
       virtual auto SetExposureMode(engine::ExposureMode mode) -> void;
 
-      [[nodiscard]] virtual auto GetManualExposureEV100() const -> float;
-      virtual auto SetManualExposureEV100(float ev100) -> void;
+      [[nodiscard]] virtual auto GetManualExposureEv() const -> float;
+      virtual auto SetManualExposureEv(float ev) -> void;
 
       [[nodiscard]] virtual auto GetManualCameraAperture() const -> float;
       virtual auto SetManualCameraAperture(float aperture) -> void;
@@ -71,7 +71,7 @@ namespace examples {
       [[nodiscard]] virtual auto GetManualCameraIso() const -> float;
       virtual auto SetManualCameraIso(float iso) -> void;
 
-      [[nodiscard]] virtual auto GetManualCameraEV100() const -> float;
+      [[nodiscard]] virtual auto GetManualCameraEv() const -> float;
 
       [[nodiscard]] virtual auto GetExposureCompensation() const -> float;
       virtual auto SetExposureCompensation(float stops) -> void;
@@ -124,8 +124,10 @@ namespace examples {
       //! Resets only auto-exposure settings to their default values.
       virtual auto ResetAutoExposureDefaults() -> void;
 
-      //! Resets the auto-exposure history for all views to the given EV100.
-      virtual auto ResetAutoExposure(float initial_ev100) -> void;
+      //! Resets the auto-exposure history for all views to the given EV.
+      //!
+      //! The EV value is referenced to ISO 100 (i.e. EV100).
+      virtual auto ResetAutoExposure(float initial_ev) -> void;
 
       // Cache invalidation
       [[nodiscard]] virtual auto GetEpoch() const noexcept -> std::uint64_t;
@@ -136,8 +138,8 @@ namespace examples {
       static constexpr auto kExposureModeKey = "post_process.exposure.mode";
       static constexpr auto kExposureEnabledKey
         = "post_process.exposure.enabled";
-      static constexpr auto kExposureManualEV100Key
-        = "post_process.exposure.manual_ev100";
+      static constexpr auto kExposureManualEVKey
+        = "post_process.exposure.manual_ev";
       static constexpr auto kExposureCompensationKey
         = "post_process.exposure.compensation";
       static constexpr auto kExposureKeyKey = "post_process.exposure.key";

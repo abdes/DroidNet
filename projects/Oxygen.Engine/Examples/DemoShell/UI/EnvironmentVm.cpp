@@ -71,7 +71,7 @@ namespace {
     // Exposure (PostProcess)
     bool exposure_enabled;
     int exposure_mode; // 0=Manual, 1=Auto, 2=ManualCamera
-    float manual_ev100;
+    float manual_ev;
   };
 
   constexpr std::array kEnvironmentPresets = {
@@ -121,7 +121,7 @@ namespace {
       .fog_albedo = { 1.0F, 1.0F, 1.0F },
       .exposure_enabled = true,
       .exposure_mode = 1, // Auto
-      .manual_ev100 = 14.0F,
+      .manual_ev = 14.0F,
     },
     EnvironmentPresetData {
       .name = "Outdoor Cloudy",
@@ -169,7 +169,7 @@ namespace {
       .fog_albedo = { 1.0F, 1.0F, 1.0F },
       .exposure_enabled = true,
       .exposure_mode = 1, // Auto
-      .manual_ev100 = 12.0F,
+      .manual_ev = 12.0F,
     },
     EnvironmentPresetData {
       .name = "Foggy Daylight",
@@ -217,7 +217,7 @@ namespace {
       .fog_albedo = { 0.9F, 0.95F, 1.0F },
       .exposure_enabled = true,
       .exposure_mode = 1, // Auto
-      .manual_ev100 = 13.0F,
+      .manual_ev = 13.0F,
     },
     EnvironmentPresetData {
       .name = "Outdoor Dawn",
@@ -265,7 +265,7 @@ namespace {
       .fog_albedo = { 1.0F, 1.0F, 1.0F },
       .exposure_enabled = true,
       .exposure_mode = 1, // Auto
-      .manual_ev100 = 9.0F,
+      .manual_ev = 9.0F,
     },
     EnvironmentPresetData {
       .name = "Outdoor Dusk",
@@ -313,7 +313,7 @@ namespace {
       .fog_albedo = { 1.0F, 1.0F, 1.0F },
       .exposure_enabled = true,
       .exposure_mode = 1, // Auto
-      .manual_ev100 = 8.0F,
+      .manual_ev = 8.0F,
     },
   };
 
@@ -471,12 +471,12 @@ auto EnvironmentVm::ApplyPreset(int index) -> void
   // batch)
   if (post_process_service_) {
     // Set manual EV first to establish a baseline
-    post_process_service_->SetManualExposureEV100(preset.manual_ev100);
+    post_process_service_->SetManualExposureEv(preset.manual_ev);
 
     // Reset auto-exposure history to the manual EV as a starting point.
     // This prevents the camera from adapting from a dark/default state when
     // switching to a bright scene, causing a flash.
-    post_process_service_->ResetAutoExposure(preset.manual_ev100);
+    post_process_service_->ResetAutoExposure(preset.manual_ev);
 
     // Apply mode
     if (preset.exposure_mode == 0) {

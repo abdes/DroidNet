@@ -46,7 +46,6 @@
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
 
-
 #include "DemoShell/Runtime/ForwardPipeline.h"
 
 namespace oxygen::examples {
@@ -364,7 +363,7 @@ struct ForwardPipeline::Impl {
       engine::AutoExposurePassConfig::kDefaultMeteringMode
     };
     bool auto_exposure_reset_pending { false };
-    float auto_exposure_reset_ev100 { 0.0F };
+    float auto_exposure_reset_ev { 0.0F };
 
     bool gpu_debug_pass_enabled { true };
     std::optional<SubPixelPosition> gpu_debug_mouse_down_position;
@@ -857,7 +856,7 @@ struct ForwardPipeline::Impl {
     }
 
     if (staged.auto_exposure_reset_pending) {
-      pending_auto_exposure_reset = staged.auto_exposure_reset_ev100;
+      pending_auto_exposure_reset = staged.auto_exposure_reset_ev;
       staged.auto_exposure_reset_pending = false;
     } else {
       pending_auto_exposure_reset.reset();
@@ -1084,7 +1083,7 @@ auto ForwardPipeline::OnSceneMutation(
               // Auto Exposure (Histogram & Average dispatches)
               if (self->auto_exposure_pass) {
                 if (self->pending_auto_exposure_reset.has_value()) {
-                  // Convert EV100 to Average Luminance (assuming ISO 100,
+                  // Convert EV (EV100, ISO 100) to Average Luminance,
                   // K=12.5) L = 2^EV * K / 100
                   const float k = 12.5F;
                   const float ev = *self->pending_auto_exposure_reset;
@@ -1302,10 +1301,10 @@ auto ForwardPipeline::SetAutoExposureMeteringMode(engine::MeteringMode mode)
   impl_->staged.dirty = true;
 }
 
-auto ForwardPipeline::ResetAutoExposure(float initial_ev100) -> void
+auto ForwardPipeline::ResetAutoExposure(float initial_ev) -> void
 {
   impl_->staged.auto_exposure_reset_pending = true;
-  impl_->staged.auto_exposure_reset_ev100 = initial_ev100;
+  impl_->staged.auto_exposure_reset_ev = initial_ev;
   impl_->staged.dirty = true;
 }
 

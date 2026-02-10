@@ -14,12 +14,12 @@ namespace oxygen::scene {
 //! Camera exposure settings expressed as physical camera parameters.
 /*!
  Stores exposure in terms of aperture, shutter rate, and ISO. This structure
- provides helpers to derive EV100 values for exposure computation.
+ provides helpers to derive exposure values in EV (EV100, ISO 100 reference).
 
  ### Usage Patterns
 
   - Author the exposure settings on a camera component.
-  - Convert to EV100 when building exposure values for rendering.
+  - Convert to EV when building exposure values for rendering.
 
  @see PerspectiveCamera, OrthographicCamera
 */
@@ -33,9 +33,9 @@ struct CameraExposure {
   //! Sensor ISO sensitivity (e.g. 100, 400).
   float iso = 100.0F;
 
-  //! Computes EV100 for the current exposure settings.
+  //! Computes EV (EV100, ISO 100 reference) for the current exposure settings.
   /*!
-   @return EV100 for this exposure configuration.
+   @return EV (EV100, ISO 100 reference) for this exposure configuration.
 
   ### Performance Characteristics
 
@@ -43,15 +43,15 @@ struct CameraExposure {
   - Memory: $O(1)$
   - Optimization: None
   */
-  [[nodiscard]] auto GetEv100() const noexcept -> float
+  [[nodiscard]] auto GetEv() const noexcept -> float
   {
     const float safe_aperture = std::max(aperture_f, 0.1F);
     const float safe_shutter_rate = std::max(shutter_rate, 0.001F);
     const float safe_iso = std::max(iso, 1.0F);
     const float t = 1.0F / safe_shutter_rate;
-    const float ev100 = std::log2((safe_aperture * safe_aperture) / t)
+    const float ev = std::log2((safe_aperture * safe_aperture) / t)
       - std::log2(safe_iso / 100.0F);
-    return ev100;
+    return ev;
   }
 };
 
