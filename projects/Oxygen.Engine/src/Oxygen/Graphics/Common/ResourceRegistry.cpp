@@ -8,6 +8,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 
 using oxygen::graphics::ResourceRegistry;
@@ -191,6 +192,40 @@ auto ResourceRegistry::Find(
   }
 
   return {}; // Return invalid NativeView
+}
+
+auto ResourceRegistry::FindShaderVisibleIndex(const NativeResource& resource,
+  size_t key_hash) const -> std::optional<bindless::ShaderVisibleIndex>
+{
+  std::lock_guard lock(registry_mutex_);
+
+  const CacheKey cache_key { .resource = resource, .view_desc_hash = key_hash };
+  const auto cache_it = view_cache_.find(cache_key);
+  if (cache_it == view_cache_.end()) {
+    return std::nullopt;
+  }
+
+  const NativeView view_obj = cache_it->second.view_object;
+
+  // Find the resource entry and search its descriptor map for the matching
+  // view object to obtain the descriptor handle and therefore the
+  // shader-visible index.
+  const auto res_it = resources_.find(resource);
+  if (res_it == resources_.end()) {
+    return std::nullopt;
+  }
+
+  for (const auto& [index, ve] : res_it->second.descriptors) {
+    if (ve.view_object == view_obj) {
+      if (ve.descriptor.IsValid() && ve.descriptor.GetAllocator() != nullptr) {
+        return ve.descriptor.GetAllocator()->GetShaderVisibleIndex(
+          ve.descriptor);
+      }
+      return std::nullopt;
+    }
+  }
+
+  return std::nullopt;
 }
 
 auto ResourceRegistry::UnRegisterView(
