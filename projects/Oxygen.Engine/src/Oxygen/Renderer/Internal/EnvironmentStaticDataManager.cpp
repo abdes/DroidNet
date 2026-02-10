@@ -83,6 +83,8 @@ namespace {
       return ToneMapper::kAcesFitted;
     case scene::environment::ToneMapper::kReinhard:
       return ToneMapper::kReinhard;
+    case scene::environment::ToneMapper::kFilmic:
+      return ToneMapper::kFilmic;
     case scene::environment::ToneMapper::kNone:
       return ToneMapper::kNone;
     }

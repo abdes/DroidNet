@@ -16,6 +16,7 @@ namespace oxygen::scene::environment {
 enum class ToneMapper {
   kAcesFitted,
   kReinhard,
+  kFilmic,
   kNone,
 };
 

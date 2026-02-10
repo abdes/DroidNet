@@ -33,6 +33,7 @@ static const uint SKY_SPHERE_SOURCE_SOLID_COLOR = 1u;
 static const uint TONEMAPPER_ACES_FITTED = 0u;
 static const uint TONEMAPPER_REINHARD = 1u;
 static const uint TONEMAPPER_NONE = 2u;
+static const uint TONEMAPPER_FILMIC = 3u;
 
 static const uint EXPOSURE_MODE_MANUAL = 0u;
 static const uint EXPOSURE_MODE_AUTO = 1u;

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
+#include "Renderer/EnvironmentStaticData.hlsli"
 #include "Renderer/GpuDebug.hlsli"
 
 struct ToneMapVSOutput
@@ -25,7 +26,7 @@ struct ToneMapPassConstants {
     uint source_texture_index;
     uint sampler_index;
     uint exposure_buffer_index;
-    uint tone_mapper;  // 0=ACES, 1=Reinhard, 2=None, 3=Filmic
+    uint tone_mapper;  // One of TONEMAPPER_* constants.
     float exposure;
     uint debug_flags;
     float2 _pad;
@@ -242,17 +243,17 @@ float4 PS(ToneMapVSOutput input) : SV_TARGET
 
     // Apply tonemapping based on mode
     switch (pass.tone_mapper) {
-        case 0: // ACES Fitted
+        case TONEMAPPER_ACES_FITTED:
             color = ACESFitted(color);
             break;
-        case 1: // Reinhard
+        case TONEMAPPER_REINHARD:
             color = Reinhard(color);
             break;
-        case 2: // None (passthrough)
+        case TONEMAPPER_NONE:
             // Just clamp to [0,1] for display
             color = saturate(color);
             break;
-        case 3: // Filmic
+        case TONEMAPPER_FILMIC:
             color = Filmic(color);
             break;
         default:
