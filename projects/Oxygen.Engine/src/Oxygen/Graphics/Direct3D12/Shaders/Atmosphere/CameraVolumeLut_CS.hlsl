@@ -34,34 +34,14 @@
 #include "Atmosphere/AtmosphereSampling.hlsli"
 #include "Atmosphere/IntegrateScatteredLuminance.hlsli"
 
+#include "Atmosphere/AtmospherePassConstants.hlsli"
+
 // Root constants (b2, space0)
 cbuffer RootConstants : register(b2, space0)
 {
     uint g_DrawIndex;
     uint g_PassConstantsIndex;
 }
-
-// Pass constants for camera volume LUT generation
-struct CameraVolumeLutPassConstants
-{
-    uint output_uav_index;          // UAV index for RWTexture3D<float4>
-    uint transmittance_srv_index;   // Transmittance LUT
-    uint multi_scat_srv_index;      // Multi-scatter LUT
-    uint output_width;              // Resolution (e.g., 160)
-
-    uint output_height;             // Resolution (e.g., 90)
-    uint output_depth;              // Slice count (32)
-    uint transmittance_width;
-    uint transmittance_height;
-
-    float max_distance_km;          // Maximum froxel distance (e.g., 128 km)
-    float sun_cos_zenith;
-    uint atmosphere_flags;
-    uint _pad0;
-
-    float4x4 inv_projection_matrix;
-    float4x4 inv_view_matrix;
-};
 
 #define THREAD_GROUP_SIZE_X 8
 #define THREAD_GROUP_SIZE_Y 8
@@ -83,11 +63,11 @@ float AerialPerspectiveSliceToDepth(float slice, float max_distance_km)
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
 void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 {
-    ConstantBuffer<CameraVolumeLutPassConstants> pass_constants
+    ConstantBuffer<AtmospherePassConstants> pass_constants
         = ResourceDescriptorHeap[g_PassConstantsIndex];
 
-    if (dispatch_thread_id.x >= pass_constants.output_width
-        || dispatch_thread_id.y >= pass_constants.output_height
+    if (dispatch_thread_id.x >= pass_constants.output_extent.x
+        || dispatch_thread_id.y >= pass_constants.output_extent.y
         || dispatch_thread_id.z >= pass_constants.output_depth)
     {
         return;
@@ -108,7 +88,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     float t_max_m = AerialPerspectiveSliceToDepth(slice, pass_constants.max_distance_km);
 
     // Reconstruct view ray from UV
-    float2 uv = (float2(dispatch_thread_id.xy) + 0.5) / float2(pass_constants.output_width, pass_constants.output_height);
+    float2 uv = (float2(dispatch_thread_id.xy) + 0.5) / float2(pass_constants.output_extent);
     float2 ndc = uv * 2.0 - 1.0;
     ndc.y = -ndc.y;
 
@@ -158,8 +138,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         origin, view_dir_ws, t_max_m, num_steps, atmo,
         sun_dir, sun_radiance,
         pass_constants.transmittance_srv_index,
-        float(pass_constants.transmittance_width),
-        float(pass_constants.transmittance_height),
+        float(pass_constants.transmittance_extent.x),
+        float(pass_constants.transmittance_extent.y),
         multi_scat_lut, linear_sampler,
         throughput);
 

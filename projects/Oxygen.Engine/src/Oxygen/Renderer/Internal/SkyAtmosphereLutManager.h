@@ -20,7 +20,7 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Renderer/Internal/ISkyAtmosphereLutProvider.h>
-#include <Oxygen/Renderer/Types/SunState.h>
+#include <Oxygen/Renderer/Types/EnvironmentDynamicData.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -259,22 +259,6 @@ public:
   */
   OXGN_RNDR_API auto MarkDirty() noexcept -> void;
 
-  //! Sets atmosphere debug/feature flags for LUT generation.
-  /*!
-   These flags affect how the sky-view LUT is computed (e.g., use ambient term
-   instead of Rayleigh phase function). If the flags change, the LUTs are
-   marked dirty and will regenerate.
-
-   @param flags Bitfield of AtmosphereFlags values.
-  */
-  OXGN_RNDR_API auto SetAtmosphereFlags(uint32_t flags) noexcept -> void;
-
-  //! Returns the current atmosphere flags.
-  [[nodiscard]] auto GetAtmosphereFlags() const noexcept -> uint32_t
-  {
-    return atmosphere_flags_;
-  }
-
   //! Returns true if LUTs have been generated at least once.
   /*!
    When true, the LUT textures are in SRV state (ready for sampling).
@@ -368,10 +352,10 @@ public:
    @param sun Value object containing sun direction/intensity and derived
      zenith cosine.
   */
-  auto UpdateSunState(const SunState& sun) noexcept -> void;
+  auto UpdateSunState(const SyntheticSunData& sun) noexcept -> void;
 
   //! Returns the cached sun state used for LUT generation.
-  [[nodiscard]] auto GetSunState() const noexcept -> const SunState&
+  [[nodiscard]] auto GetSunState() const noexcept -> const SyntheticSunData&
   {
     return sun_state_;
   }
@@ -497,8 +481,7 @@ private:
   Config config_;
 
   CachedParams cached_params_ {};
-  SunState sun_state_;
-  uint32_t atmosphere_flags_ { 0 }; //!< Debug/feature flags for LUT generation
+  SyntheticSunData sun_state_;
   mutable std::uint64_t generation_ { 1 };
   bool dirty_ { true };
   bool resources_created_ { false };

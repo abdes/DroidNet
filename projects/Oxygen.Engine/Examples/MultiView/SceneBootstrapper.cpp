@@ -446,9 +446,8 @@ auto SceneBootstrapper::EnsureLighting(scene::Scene& scene) -> void
     spot_light->SetLuminousFluxLm(5000.0F);
     spot_light->SetRange(250.0F);
     spot_light->SetSourceRadius(0.4F);
-    spot_light->SetConeAnglesRadians(glm::radians(35.0F), // Inner cone
-      glm::radians(45.0F) // Outer cone
-    );
+    spot_light->SetInnerConeAngleRadians(glm::radians(35.0F)); // Inner cone
+    spot_light->SetOuterConeAngleRadians(glm::radians(45.0F)); // Outer cone
 
     const bool attached = key_light_node_.AttachLight(std::move(spot_light));
     CHECK_F(attached, "Failed to attach SpotLight to KeyLight node");

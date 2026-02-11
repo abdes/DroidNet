@@ -40,6 +40,8 @@
 #include "Atmosphere/AtmosphereSampling.hlsli"
 #include "Atmosphere/IntegrateScatteredLuminance.hlsli"
 
+#include "Atmosphere/AtmospherePassConstants.hlsli"
+
 // Root constants (b2, space0)
 cbuffer RootConstants : register(b2, space0)
 {
@@ -47,36 +49,9 @@ cbuffer RootConstants : register(b2, space0)
     uint g_PassConstantsIndex;
 }
 
-// Pass constants for sky-view LUT generation.
-// Layout must exactly match C++ SkyViewLutPassConstants [P6].
-struct SkyViewLutPassConstants
-{
-    uint output_uav_index;          // UAV index for output RWTexture2DArray<float4>
-    uint transmittance_srv_index;   // SRV index for transmittance LUT
-    uint multi_scat_srv_index;      // SRV index for MultiScat LUT
-    uint sky_irradiance_srv_index;  // SRV index for sky irradiance LUT
-
-    uint output_width;              // LUT width (per slice)
-
-    uint output_height;             // LUT height (per slice)
-    uint transmittance_width;       // Transmittance LUT width
-    uint transmittance_height;      // Transmittance LUT height
-    uint slice_count;               // Number of altitude slices
-
-    float sun_cos_zenith;           // Cosine of sun zenith angle (sun_dir.z)
-    uint atmosphere_flags;          // Debug/feature flags (kUseAmbientTerm, etc.)
-    uint alt_mapping_mode;          // 0 = linear, 1 = log
-    float atmosphere_height_m;      // Total atmosphere height in meters
-
-    float planet_radius_m;          // Planet radius in meters
-    float sky_irradiance_width;     // Sky irradiance LUT width
-    float sky_irradiance_height;    // Sky irradiance LUT height
-};
-
 float3 SampleSkyIrradianceLut(
     uint sky_irradiance_srv_index,
-    float sky_irradiance_width,
-    float sky_irradiance_height,
+    uint2 sky_irradiance_extent,
     float cos_sun_zenith,
     float altitude_m,
     GpuSkyAtmosphereParams atmo,
@@ -93,7 +68,7 @@ float3 SampleSkyIrradianceLut(
 
     // Match other LUT sampling code: apply half-texel offset for stable bilinear
     // filtering and to avoid sampling outside the intended texel domain.
-    uv = ApplyHalfTexelOffset(uv, sky_irradiance_width, sky_irradiance_height);
+    uv = ApplyHalfTexelOffset(uv, float(sky_irradiance_extent.x), float(sky_irradiance_extent.y));
 
     Texture2D<float4> sky_irradiance_lut
         = ResourceDescriptorHeap[sky_irradiance_srv_index];
@@ -103,9 +78,6 @@ float3 SampleSkyIrradianceLut(
 // Thread group size: 8x8 threads per group
 #define THREAD_GROUP_SIZE_X 8
 #define THREAD_GROUP_SIZE_Y 8
-
-// Atmosphere feature flag bits (matches C++ AtmosphereFlags enum)
-
 
 //! Computes the altitude in meters for a given slice index.
 //!
@@ -147,8 +119,7 @@ float GetSliceAltitudeM(uint slice_index, uint slice_count,
 //! @param hits_ground True if the ray terminates at ground level.
 //! @param atmo Atmosphere parameters.
 //! @param transmittance_srv_index SRV index for transmittance LUT.
-//! @param transmittance_width Transmittance LUT width.
-//! @param transmittance_height Transmittance LUT height.
+//! @param transmittance_extent Transmittance LUT extent.
 //! @param multi_scat_lut Multi-scatter LUT.
 //! @param linear_sampler Linear sampler.
 //! @param sun_illuminance Sun illuminance at the camera.
@@ -161,11 +132,9 @@ float4 ComputeSingleScattering(
     bool hits_ground,
     GpuSkyAtmosphereParams atmo,
     uint transmittance_srv_index,
-    float transmittance_width,
-    float transmittance_height,
+    uint2 transmittance_extent,
     uint sky_irradiance_srv_index,
-    float sky_irradiance_width,
-    float sky_irradiance_height,
+    uint2 sky_irradiance_extent,
     Texture2D<float4> multi_scat_lut,
     SamplerState linear_sampler,
     float3 sun_illuminance)
@@ -182,7 +151,7 @@ float4 ComputeSingleScattering(
     float3 inscatter = IntegrateScatteredLuminanceQuadratic(
         origin, view_dir, ray_length, num_steps, atmo,
         sun_dir, sun_illuminance,
-        transmittance_srv_index, transmittance_width, transmittance_height,
+        transmittance_srv_index, float(transmittance_extent.x), float(transmittance_extent.y),
         multi_scat_lut, linear_sampler,
         throughput);
 
@@ -200,8 +169,8 @@ float4 ComputeSingleScattering(
         // Transmittance from sun to ground
         float3 ground_sun_od = SampleTransmittanceOpticalDepthLut(
             transmittance_srv_index,
-            transmittance_width,
-            transmittance_height,
+            float(transmittance_extent.x),
+            float(transmittance_extent.y),
             ground_ndotl, 0.0,
             atmo.planet_radius_m,
             atmo.atmosphere_height_m);
@@ -212,8 +181,7 @@ float4 ComputeSingleScattering(
 
         float3 E_sky = SampleSkyIrradianceLut(
             sky_irradiance_srv_index,
-            sky_irradiance_width,
-            sky_irradiance_height,
+            sky_irradiance_extent,
             mu_s,
             0.0,
             atmo,
@@ -236,13 +204,13 @@ float4 ComputeSingleScattering(
 void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 {
     // Load pass constants
-    ConstantBuffer<SkyViewLutPassConstants> pass_constants
+    ConstantBuffer<AtmospherePassConstants> pass_constants
         = ResourceDescriptorHeap[g_PassConstantsIndex];
 
     // Bounds check — Z maps directly to slice index because numthreads.z == 1 [P3].
-    if (dispatch_thread_id.x >= pass_constants.output_width
-        || dispatch_thread_id.y >= pass_constants.output_height
-        || dispatch_thread_id.z >= pass_constants.slice_count)
+    if (dispatch_thread_id.x >= pass_constants.output_extent.x
+        || dispatch_thread_id.y >= pass_constants.output_extent.y
+        || dispatch_thread_id.z >= pass_constants.output_depth)
     {
         return;
     }
@@ -267,12 +235,12 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
     // Compute UV from texel center
     float2 uv = (float2(dispatch_thread_id.xy) + 0.5)
-              / float2(pass_constants.output_width, pass_constants.output_height);
+              / float2(pass_constants.output_extent);
 
     // Reference: Remap UVs to [0,1] parameter space (Top-left texel center should map to 0,0 parameter).
     // This allows exact sampling of extrema (Zenith, Horizon, Sun).
-    uv.x = (uv.x - 0.5 / pass_constants.output_width) * (pass_constants.output_width / (pass_constants.output_width - 1.0));
-    uv.y = (uv.y - 0.5 / pass_constants.output_height) * (pass_constants.output_height / (pass_constants.output_height - 1.0));
+    uv.x = (uv.x - 0.5 / pass_constants.output_extent.x) * (pass_constants.output_extent.x / (pass_constants.output_extent.x - 1.0));
+    uv.y = (uv.y - 0.5 / pass_constants.output_extent.y) * (pass_constants.output_extent.y / (pass_constants.output_extent.y - 1.0));
 
     // Clamp to [0,1] to handle precision issues
     uv = saturate(uv);
@@ -282,7 +250,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     // replacing the old single camera_altitude_m pass constant.
     float altitude_m = GetSliceAltitudeM(
         dispatch_thread_id.z,
-        pass_constants.slice_count,
+        pass_constants.output_depth,
         pass_constants.atmosphere_height_m,
         pass_constants.alt_mapping_mode);
 
@@ -361,17 +329,15 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             = ResourceDescriptorHeap[pass_constants.multi_scat_srv_index];
         SamplerState linear_sampler = SamplerDescriptorHeap[0]; // Assume sampler 0 is linear
 
-        // Sun illuminance (linear RGB, Lux).
-        float3 sun_illuminance = GetSunColorRGB() * GetSunIlluminance();
+        // Physical sun illuminance (linear RGB).
+        float3 sun_illuminance = GetSunLuminanceRGB();
 
         result = ComputeSingleScattering(
             origin, view_dir, sun_dir, ray_length, hits_ground, atmo,
             pass_constants.transmittance_srv_index,
-            float(pass_constants.transmittance_width),
-            float(pass_constants.transmittance_height),
+            pass_constants.transmittance_extent,
             pass_constants.sky_irradiance_srv_index,
-            pass_constants.sky_irradiance_width,
-            pass_constants.sky_irradiance_height,
+            pass_constants.sky_irradiance_extent,
             multi_scat_lut, linear_sampler,
             sun_illuminance);
     }

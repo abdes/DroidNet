@@ -6,33 +6,31 @@
 
 #pragma once
 
+#include <cmath>
 #include <cstdint>
-#include <type_traits>
 
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Scene/Light/PointLight.h>
+#include <Oxygen/Scene/Light/SpotLight.h>
 
 namespace oxygen::engine {
 
 //! Light type encoded into `PositionalLightData::flags` bits [1:0].
-enum class PositionalLightType : uint32_t {
-  kPoint = 0u,
-  kSpot = 1u,
+enum class PositionalLightType : uint32_t { // NOLINT(*enum-size)
+  kPoint = 0,
+  kSpot = 1,
 };
 
 //! Flags for GPU-facing positional lights (point/spot).
-/*!\brief Bit values used by `PositionalLightData::flags`.
-
-Bit layout (uint32_t):
-
-- bits[1:0]: light_type (see PositionalLightType)
-- bit2: affects_world
-- bit3: casts_shadows
-- bit4: contact_shadows
+/*!
+ @note bits[1:0]: light_type (see PositionalLightType)
 */
-enum class PositionalLightFlags : uint32_t {
-  kNone = 0u,
+enum class PositionalLightFlags : uint32_t { // NOLINT(*enum-size)
+  // 0 - reserved for light type
+  // 1 - reserved for light type
   kAffectsWorld = OXYGEN_FLAG(2),
   kCastsShadows = OXYGEN_FLAG(3),
   kContactShadows = OXYGEN_FLAG(4),
@@ -40,36 +38,34 @@ enum class PositionalLightFlags : uint32_t {
 
 OXYGEN_DEFINE_FLAGS_OPERATORS(PositionalLightFlags)
 
-inline constexpr uint32_t kPositionalLightTypeShift = 0u;
-inline constexpr uint32_t kPositionalLightTypeMask = 0x3u
-  << kPositionalLightTypeShift;
+inline constexpr auto kPositionalLightTypeMask
+  = static_cast<PositionalLightFlags>(0b11);
 
-[[nodiscard]] inline constexpr auto PackPositionalLightType(
-  const PositionalLightType type) noexcept -> uint32_t
+[[nodiscard]] constexpr auto PackPositionalLightType(
+  const PositionalLightType type) noexcept -> PositionalLightFlags
 {
-  return (static_cast<uint32_t>(type) << kPositionalLightTypeShift)
+  return static_cast<PositionalLightFlags>(static_cast<uint32_t>(type))
     & kPositionalLightTypeMask;
 }
 
 //! GPU-facing payload for point and spot lights (local/positional lights).
-/*!\brief Layout mirrors HLSL struct `PositionalLightData` (112 bytes).
+/*!
+ This type is designed for `StructuredBuffer<PositionalLightData>` uploads.
+ The payload is intentionally self-contained so shaders can evaluate both point
+ and spot lights with a single element stride.
 
-This type is designed for `StructuredBuffer<PositionalLightData>` uploads.
-The payload is intentionally self-contained so shaders can evaluate both point
-and spot lights with a single element stride.
-
-Packing rules:
-- Fields are ordered to match HLSL 16-byte register packing.
-- Explicit padding is included to ensure the size is a multiple of 16 bytes.
+ Packing rules:
+ - Fields are ordered to match HLSL 16-byte register packing.
+ - Explicit padding is included to ensure the size is a multiple of 16 bytes.
 */
-struct alignas(16) PositionalLightData {
+struct alignas(packing::kShaderDataFieldAlignment) PositionalLightData {
   // Register 0
   glm::vec3 position_ws { 0.0F, 0.0F, 0.0F };
-  float range { 0.0F };
+  float range { scene::PointLight::kDefaultRange };
 
   // Register 1
   glm::vec3 color_rgb { 1.0F, 1.0F, 1.0F };
-  float luminous_flux_lm { 800.0F }; //!< Luminous flux in lumens (lm)
+  float luminous_flux_lm { scene::PointLight::kDefaultLuminousFluxLm };
 
   // Register 2
   glm::vec3 direction_ws { 0.0F, 0.0F, -1.0F };
@@ -77,10 +73,10 @@ struct alignas(16) PositionalLightData {
   uint32_t flags { 0 };
 
   // Register 3
-  float inner_cone_cos { 0.0F };
-  float outer_cone_cos { 0.0F };
-  float source_radius { 0.0F };
-  float decay_exponent { 2.0F };
+  float inner_cone_cos { std::cos(scene::SpotLight::kDefaultInnerConeAngle) };
+  float outer_cone_cos { std::cos(scene::SpotLight::kDefaultOuterConeAngle) };
+  float source_radius { scene::PointLight::kDefaultSourceRadius };
+  float decay_exponent { scene::PointLight::kDefaultDecayExponent };
 
   // Register 4
   uint32_t attenuation_model { 0 };
@@ -92,17 +88,9 @@ struct alignas(16) PositionalLightData {
   float shadow_bias { 0.0F };
   float shadow_normal_bias { 0.0F };
   float exposure_compensation_ev { 0.0F };
-  float _pad0 { 0.0F };
-
-  // Register 6
   uint32_t shadow_map_index { 0 };
-  uint32_t _pad1 { 0 };
-  uint32_t _pad2 { 0 };
-  uint32_t _pad3 { 0 };
 };
-static_assert(sizeof(PositionalLightData) == 112,
-  "PositionalLightData size must match HLSL packing");
-static_assert(sizeof(PositionalLightData) % 16 == 0,
-  "PositionalLightData size must be 16-byte aligned");
+static_assert(
+  sizeof(PositionalLightData) % packing::kShaderDataFieldAlignment == 0);
 
 } // namespace oxygen::engine

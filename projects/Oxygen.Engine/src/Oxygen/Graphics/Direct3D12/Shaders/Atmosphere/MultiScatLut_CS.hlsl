@@ -33,6 +33,8 @@
 #include "Common/Coordinates.hlsli"
 #include "Atmosphere/AtmosphereSampling.hlsli"
 
+#include "Atmosphere/AtmospherePassConstants.hlsli"
+
 // Root constants (b2, space0)
 cbuffer RootConstants : register(b2, space0)
 {
@@ -40,30 +42,16 @@ cbuffer RootConstants : register(b2, space0)
     uint g_PassConstantsIndex;
 }
 
-// Pass constants for MultiScat LUT generation
-struct MultiScatLutPassConstants
-{
-    uint output_uav_index;
-    uint transmittance_srv_index;
-    uint output_width;
-    uint output_height;
-
-    uint transmittance_width;
-    uint transmittance_height;
-    float atmosphere_height_m;
-    float planet_radius_m;
-};
-
 #define THREAD_GROUP_SIZE 8
 
 [numthreads(THREAD_GROUP_SIZE, THREAD_GROUP_SIZE, 1)]
 void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 {
-    ConstantBuffer<MultiScatLutPassConstants> pass_constants
+    ConstantBuffer<AtmospherePassConstants> pass_constants
         = ResourceDescriptorHeap[g_PassConstantsIndex];
 
-    if (dispatch_thread_id.x >= pass_constants.output_width
-        || dispatch_thread_id.y >= pass_constants.output_height)
+    if (dispatch_thread_id.x >= pass_constants.output_extent.x
+        || dispatch_thread_id.y >= pass_constants.output_extent.y)
     {
         return;
     }
@@ -81,7 +69,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
 
     // Map UV to Sun Zenith and Altitude
-    float2 uv = (float2(dispatch_thread_id.xy) + 0.5) / float2(pass_constants.output_width, pass_constants.output_height);
+    float2 uv = (float2(dispatch_thread_id.xy) + 0.5) / float2(pass_constants.output_extent);
     float cos_sun_zenith = uv.x * 2.0 - 1.0;
     float altitude_m = uv.y * atmo.atmosphere_height_m;
 
@@ -140,8 +128,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                 float cos_sun_p = dot(p_dir, sun_dir);
                 float3 sun_od = SampleTransmittanceOpticalDepthLut(
                     pass_constants.transmittance_srv_index,
-                    float(pass_constants.transmittance_width),
-                    float(pass_constants.transmittance_height),
+                    float(pass_constants.transmittance_extent.x),
+                    float(pass_constants.transmittance_extent.y),
                     cos_sun_p, h_m,
                     atmo.planet_radius_m,
                     atmo.atmosphere_height_m);
@@ -167,8 +155,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                 // Sun transmittance to the ground point
                 float3 ground_sun_od = SampleTransmittanceOpticalDepthLut(
                     pass_constants.transmittance_srv_index,
-                    float(pass_constants.transmittance_width),
-                    float(pass_constants.transmittance_height),
+                    float(pass_constants.transmittance_extent.x),
+                    float(pass_constants.transmittance_extent.y),
                     ground_ndotl, 0.0,
                     atmo.planet_radius_m,
                     atmo.atmosphere_height_m);

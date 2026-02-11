@@ -45,12 +45,6 @@ public:
   //! initial state.
   virtual auto Initialize(observer_ptr<RenderingPipeline> pipeline) -> void;
 
-  //! Returns whether clustered culling is enabled.
-  [[nodiscard]] virtual auto GetUseClusteredCulling() const -> bool;
-
-  //! Sets whether clustered culling is enabled.
-  virtual auto SetUseClusteredCulling(bool enabled) -> void;
-
   //! Returns the number of depth slices for clustered culling.
   [[nodiscard]] virtual auto GetDepthSlices() const -> int;
 
@@ -93,7 +87,6 @@ public:
 private:
   auto ApplyPipelineSettings() -> void;
 
-  static constexpr auto kModeKey = "light_culling.mode";
   static constexpr auto kDepthSlicesKey = "light_culling.depth_slices";
   static constexpr auto kUseCameraZKey = "light_culling.use_camera_z";
   static constexpr auto kZNearKey = "light_culling.z_near";

@@ -6,6 +6,8 @@
 
 #include <cstring>
 
+#include <string>
+
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
@@ -40,7 +42,7 @@ EnvironmentDynamicDataManager::~EnvironmentDynamicDataManager()
 {
   // Unmap all buffers
   for (auto& [key, info] : buffers_) {
-    if (info.buffer && info.mapped_ptr) {
+    if (info.buffer && info.mapped_ptr != nullptr) {
       info.buffer->UnMap();
       info.mapped_ptr = nullptr;
     }
@@ -55,7 +57,7 @@ auto EnvironmentDynamicDataManager::OnFrameStart(frame::Slot slot) -> void
   // Reset the data for each view to ensure a clean slate every frame.
   // This ensures that if a pass (like LightCullingPass) does not run for a view
   // in a given frame, the shading passes will use safe default values
-  // (e.g., zero light count, identity exposure) instead of stale data from
+  // (e.g., zero light count) instead of stale data from
   // previous frames.
   for (auto& [view_id, state] : view_states_) {
     state.data = EnvironmentDynamicData {};
@@ -63,90 +65,39 @@ auto EnvironmentDynamicDataManager::OnFrameStart(frame::Slot slot) -> void
   }
 }
 
-auto EnvironmentDynamicDataManager::SetExposure(ViewId view_id, float exposure)
-  -> void
-{
-  auto& state = view_states_[view_id];
-  if (state.data.exposure != exposure) {
-    state.data.exposure = exposure;
-    MarkAllSlotsDirty(view_id);
-  }
-}
-
-auto EnvironmentDynamicDataManager::GetExposure(ViewId view_id) const -> float
-{
-  const auto it = view_states_.find(view_id);
-  if (it == view_states_.end()) {
-    return 1.0F;
-  }
-  return it->second.data.exposure;
-}
-
-// SetLightCullingData now contains the logic previously in SetCullingData.
-auto EnvironmentDynamicDataManager::SetLightCullingData(
-  ViewId view_id, const LightCullingData& data) -> void
+auto EnvironmentDynamicDataManager::SetLightCullingConfig(
+  ViewId view_id, const LightCullingConfig& config) -> void
 {
   auto& state = view_states_[view_id];
   bool dirty = false;
-  dirty |= (state.data.bindless_cluster_grid_slot
-    != data.bindless_cluster_grid_slot);
-  dirty |= (state.data.bindless_cluster_index_list_slot
-    != data.bindless_cluster_index_list_slot);
-  dirty |= (state.data.cluster_dim_x != data.cluster_dim_x);
-  dirty |= (state.data.cluster_dim_y != data.cluster_dim_y);
-  dirty |= (state.data.cluster_dim_z != data.cluster_dim_z);
-  dirty |= (state.data.tile_size_px != data.tile_size_px);
+  dirty |= (state.data.light_culling.bindless_cluster_grid_slot
+    != config.bindless_cluster_grid_slot);
+  dirty |= (state.data.light_culling.bindless_cluster_index_list_slot
+    != config.bindless_cluster_index_list_slot);
+  dirty |= (state.data.light_culling.cluster_dim_x != config.cluster_dim_x);
+  dirty |= (state.data.light_culling.cluster_dim_y != config.cluster_dim_y);
+  dirty |= (state.data.light_culling.cluster_dim_z != config.cluster_dim_z);
+  dirty |= (state.data.light_culling.tile_size_px != config.tile_size_px);
+  dirty |= (state.data.light_culling.z_near != config.z_near);
+  dirty |= (state.data.light_culling.z_far != config.z_far);
+  dirty |= (state.data.light_culling.z_scale != config.z_scale);
+  dirty |= (state.data.light_culling.z_bias != config.z_bias);
+  dirty |= (state.data.light_culling.max_lights_per_cluster
+    != config.max_lights_per_cluster);
 
   if (dirty) {
-    state.data.bindless_cluster_grid_slot = data.bindless_cluster_grid_slot;
-    state.data.bindless_cluster_index_list_slot
-      = data.bindless_cluster_index_list_slot;
-    state.data.cluster_dim_x = data.cluster_dim_x;
-    state.data.cluster_dim_y = data.cluster_dim_y;
-    state.data.cluster_dim_z = data.cluster_dim_z;
-    state.data.tile_size_px = data.tile_size_px;
-    MarkAllSlotsDirty(view_id);
-  }
-}
-
-auto EnvironmentDynamicDataManager::SetZBinning(ViewId view_id, float z_near,
-  float z_far, float z_scale, float z_bias) -> void
-{
-  auto& state = view_states_[view_id];
-  bool dirty = false;
-  dirty |= (state.data.z_near != z_near);
-  dirty |= (state.data.z_far != z_far);
-  dirty |= (state.data.z_scale != z_scale);
-  dirty |= (state.data.z_bias != z_bias);
-
-  if (dirty) {
-    state.data.z_near = z_near;
-    state.data.z_far = z_far;
-    state.data.z_scale = z_scale;
-    state.data.z_bias = z_bias;
+    state.data.light_culling = config;
     MarkAllSlotsDirty(view_id);
   }
 }
 
 auto EnvironmentDynamicDataManager::SetSunState(
-  ViewId view_id, const SunState& sun) -> void
+  ViewId view_id, const SyntheticSunData& sun) -> void
 {
+  constexpr auto kEpsilon = 0.001F;
   auto& state = view_states_[view_id];
-  bool dirty = false;
-  dirty
-    |= (glm::vec3(state.data.sun_direction_ws_illuminance) != sun.direction_ws);
-  dirty |= (state.data.sun_direction_ws_illuminance.w != sun.illuminance_lx);
-  dirty |= (glm::vec3(state.data.sun_color_rgb_intensity) != sun.color_rgb);
-  dirty |= (state.data.sun_color_rgb_intensity.w != sun.illuminance_lx);
-  const auto enabled_flag = sun.enabled ? 1u : 0u;
-  dirty |= (state.data.sun_enabled != enabled_flag);
-
-  if (dirty) {
-    state.data.sun_direction_ws_illuminance
-      = glm::vec4(sun.direction_ws, sun.illuminance_lx);
-    state.data.sun_color_rgb_intensity
-      = glm::vec4(sun.color_rgb, sun.illuminance_lx);
-    state.data.sun_enabled = enabled_flag;
+  if (!state.data.sun.ApproxEquals(sun, kEpsilon)) {
+    state.data.sun = sun;
     MarkAllSlotsDirty(view_id);
   }
 }
@@ -157,14 +108,16 @@ auto EnvironmentDynamicDataManager::SetAtmosphereScattering(ViewId view_id,
 {
   auto& state = view_states_[view_id];
   bool dirty = false;
-  dirty
-    |= (state.data.aerial_perspective_distance_scale != aerial_distance_scale);
-  dirty
-    |= (state.data.aerial_scattering_strength != aerial_scattering_strength);
+  dirty |= (state.data.atmosphere.aerial_perspective_distance_scale
+    != aerial_distance_scale);
+  dirty |= (state.data.atmosphere.aerial_scattering_strength
+    != aerial_scattering_strength);
 
   if (dirty) {
-    state.data.aerial_perspective_distance_scale = aerial_distance_scale;
-    state.data.aerial_scattering_strength = aerial_scattering_strength;
+    state.data.atmosphere.aerial_perspective_distance_scale
+      = aerial_distance_scale;
+    state.data.atmosphere.aerial_scattering_strength
+      = aerial_scattering_strength;
     MarkAllSlotsDirty(view_id);
   }
 }
@@ -176,57 +129,23 @@ auto EnvironmentDynamicDataManager::SetAtmosphereFrameContext(ViewId view_id,
 {
   auto& state = view_states_[view_id];
   bool dirty = false;
-  dirty |= (glm::vec3(state.data.planet_center_ws_pad) != planet_center_ws);
-  dirty
-    |= (glm::vec3(state.data.planet_up_ws_camera_altitude_m) != planet_up_ws);
-  dirty |= (state.data.planet_up_ws_camera_altitude_m.w != camera_altitude_m);
-  dirty |= (state.data.sky_view_lut_slice_cos_zenith.x != sky_view_lut_slice);
-  dirty
-    |= (state.data.sky_view_lut_slice_cos_zenith.y != planet_to_sun_cos_zenith);
+  dirty |= (glm::vec3(state.data.atmosphere.planet_center_ws_pad)
+    != planet_center_ws);
+  dirty |= (glm::vec3(state.data.atmosphere.planet_up_ws_camera_altitude_m)
+    != planet_up_ws);
+  dirty |= (state.data.atmosphere.planet_up_ws_camera_altitude_m.w
+    != camera_altitude_m);
+  dirty |= (state.data.atmosphere.sky_view_lut_slice != sky_view_lut_slice);
+  dirty |= (state.data.atmosphere.planet_to_sun_cos_zenith
+    != planet_to_sun_cos_zenith);
 
   if (dirty) {
-    state.data.planet_center_ws_pad
+    state.data.atmosphere.planet_center_ws_pad
       = glm::vec4(planet_center_ws, 0.0F); // w is padding
-    state.data.planet_up_ws_camera_altitude_m
+    state.data.atmosphere.planet_up_ws_camera_altitude_m
       = glm::vec4(planet_up_ws, camera_altitude_m);
-    state.data.sky_view_lut_slice_cos_zenith
-      = glm::vec4(sky_view_lut_slice, planet_to_sun_cos_zenith, 0.0F, 0.0F);
-    MarkAllSlotsDirty(view_id);
-  }
-}
-
-auto EnvironmentDynamicDataManager::SetAtmosphereFlags(
-  ViewId view_id, const std::uint32_t atmosphere_flags) -> void
-{
-  auto& state = view_states_[view_id];
-  if (state.data.atmosphere_flags != atmosphere_flags) {
-    state.data.atmosphere_flags = atmosphere_flags;
-    MarkAllSlotsDirty(view_id);
-  }
-}
-
-auto EnvironmentDynamicDataManager::SetAtmosphereSunOverride(
-  ViewId view_id, const SunState& sun) -> void
-{
-  auto& state = view_states_[view_id];
-  bool dirty = false;
-  dirty |= (glm::vec3(state.data.override_sun_direction_ws_illuminance)
-    != sun.direction_ws);
-  dirty |= (state.data.override_sun_direction_ws_illuminance.w
-    != sun.illuminance_lx);
-  dirty |= (glm::vec3(state.data.override_sun_color_rgb_intensity)
-    != sun.color_rgb);
-  dirty
-    |= (state.data.override_sun_color_rgb_intensity.w != sun.illuminance_lx);
-  const auto enabled_flag = sun.enabled ? 1u : 0u;
-  dirty |= (state.data.override_sun_flags.x != enabled_flag);
-
-  if (dirty) {
-    state.data.override_sun_direction_ws_illuminance
-      = glm::vec4(sun.direction_ws, sun.illuminance_lx);
-    state.data.override_sun_color_rgb_intensity
-      = glm::vec4(sun.color_rgb, sun.illuminance_lx);
-    state.data.override_sun_flags.x = enabled_flag;
+    state.data.atmosphere.sky_view_lut_slice = sky_view_lut_slice;
+    state.data.atmosphere.planet_to_sun_cos_zenith = planet_to_sun_cos_zenith;
     MarkAllSlotsDirty(view_id);
   }
 }
@@ -237,7 +156,13 @@ auto EnvironmentDynamicDataManager::UpdateIfNeeded(ViewId view_id) -> void
     return;
   }
 
-  auto& state = view_states_[view_id];
+  auto [it, inserted] = view_states_.try_emplace(view_id);
+  auto& state = it->second;
+  if (inserted) {
+    // This view has never been written via setters yet. Mark it dirty so the
+    // first use uploads a deterministic default (zero-initialized) struct.
+    MarkAllSlotsDirty(view_id);
+  }
   const auto u_current_slot = current_slot_.get();
   const auto slot_index = static_cast<std::size_t>(u_current_slot);
   if (!state.slot_dirty_[slot_index]) {
@@ -245,7 +170,7 @@ auto EnvironmentDynamicDataManager::UpdateIfNeeded(ViewId view_id) -> void
   }
 
   auto info = GetOrCreateBuffer(view_id);
-  if (info.buffer && info.mapped_ptr) {
+  if (info.buffer && info.mapped_ptr != nullptr) {
     std::memcpy(info.mapped_ptr, &state.data, sizeof(EnvironmentDynamicData));
     state.slot_dirty_[slot_index] = false;
   }
@@ -262,6 +187,66 @@ auto EnvironmentDynamicDataManager::GetBuffer(ViewId view_id)
   -> std::shared_ptr<graphics::Buffer>
 {
   return GetOrCreateBuffer(view_id).buffer;
+}
+
+auto EnvironmentDynamicDataManager::DebugFormat(ViewId view_id) -> std::string
+{
+  const auto it = view_states_.find(view_id);
+  if (it == view_states_.end()) {
+    return fmt::format(
+      "<no EnvironmentDynamicData for view {}>", nostd::to_string(view_id));
+  }
+
+  const auto& d = it->second.data;
+  const auto cluster_grid = d.light_culling.bindless_cluster_grid_slot;
+  const auto light_list = d.light_culling.bindless_cluster_index_list_slot;
+
+  std::string result
+    = fmt::format("view={} slot={} [EnvironmentDynamicData]:\n",
+      nostd::to_string(view_id), current_slot_.get());
+
+  result += fmt::format(
+    "  [LightCulling]: grid_slot={} list_slot={} dims=({}x{}x{}) tile={}px\n",
+    cluster_grid.IsValid() ? fmt::to_string(cluster_grid.value.get())
+                           : "invalid",
+    light_list.IsValid() ? fmt::to_string(light_list.value.get()) : "invalid",
+    d.light_culling.cluster_dim_x, d.light_culling.cluster_dim_y,
+    d.light_culling.cluster_dim_z, d.light_culling.tile_size_px);
+
+  result += fmt::format(
+    "  [Z-Binning]: near={:.4g} far={:.4g} scale={:.4g} bias={:.4g}\n",
+    d.light_culling.z_near, d.light_culling.z_far, d.light_culling.z_scale,
+    d.light_culling.z_bias);
+
+  result
+    += fmt::format("  [Atmosphere]: flags=0x{:x} sky_view_lut_slice={:.4g} "
+                   "cos_zenith={:.4g}\n",
+      d.atmosphere.flags, d.atmosphere.sky_view_lut_slice,
+      d.atmosphere.planet_to_sun_cos_zenith);
+
+  result += fmt::format("  [AerialPerspective]: dist_scale={:.4g} "
+                        "scat_strength={:.4g}\n",
+    d.atmosphere.aerial_perspective_distance_scale,
+    d.atmosphere.aerial_scattering_strength);
+
+  result += fmt::format("  [PlanetContext]: center=({:.4g}, {:.4g}, {:.4g}) "
+                        "up=({:.4g}, {:.4g}, {:.4g}) alt={:.4g}m\n",
+    d.atmosphere.planet_center_ws_pad.x, d.atmosphere.planet_center_ws_pad.y,
+    d.atmosphere.planet_center_ws_pad.z,
+    d.atmosphere.planet_up_ws_camera_altitude_m.x,
+    d.atmosphere.planet_up_ws_camera_altitude_m.y,
+    d.atmosphere.planet_up_ws_camera_altitude_m.z,
+    d.atmosphere.planet_up_ws_camera_altitude_m.w);
+
+  result += fmt::format("  [Sun]: enabled={} cos_zenith={:.4g} "
+                        "dir=({:.4g}, {:.4g}, {:.4g}) "
+                        "illuminance={:.4g}lx color=({:.4g}, {:.4g}, {:.4g})\n",
+    d.sun.enabled, d.sun.cos_zenith, d.sun.direction_ws_illuminance.x,
+    d.sun.direction_ws_illuminance.y, d.sun.direction_ws_illuminance.z,
+    d.sun.direction_ws_illuminance.w, d.sun.color_rgb_intensity.x,
+    d.sun.color_rgb_intensity.y, d.sun.color_rgb_intensity.z);
+
+  return result;
 }
 
 auto EnvironmentDynamicDataManager::GetOrCreateBuffer(ViewId view_id)
@@ -299,12 +284,16 @@ auto EnvironmentDynamicDataManager::GetOrCreateBuffer(ViewId view_id)
 
   // Persistently map the buffer
   void* mapped_ptr = buffer->Map();
-  if (!mapped_ptr) {
+  if (mapped_ptr == nullptr) {
     LOG_F(ERROR,
       "Failed to map environment dynamic data buffer for view {} slot {}",
       view_id, current_slot_);
     return {};
   }
+
+  // Ensure deterministic contents even if UpdateIfNeeded is not called before
+  // the buffer is bound (or if the view never receives setter updates).
+  std::memset(mapped_ptr, 0, kBufferSize);
 
   BufferInfo info { buffer, mapped_ptr };
   buffers_[key] = info;

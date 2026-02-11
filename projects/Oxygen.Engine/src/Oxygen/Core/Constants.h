@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat3x3.hpp>
@@ -105,5 +106,15 @@ namespace math {
   inline constexpr float EpsilonDirection = 1e-4F;
   inline constexpr float EpsilonQuaternion = 1e-5F;
 } // namespace math
+
+namespace packing {
+
+  inline constexpr uint32_t kRootConstantsMaxSize = 256;
+  inline constexpr uint32_t kStructuredBufferAlignment = 16;
+  inline constexpr uint32_t kShaderDataFieldAlignment = 16;
+  inline constexpr uint32_t kShaderDataSizeAlignment = 256;
+  inline constexpr uint32_t kConstantBufferAlignment = kShaderDataSizeAlignment;
+
+} // namespace packing
 
 } // namespace oxygen

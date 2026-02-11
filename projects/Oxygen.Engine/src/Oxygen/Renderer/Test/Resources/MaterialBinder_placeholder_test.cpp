@@ -62,12 +62,12 @@ NOLINT_TEST_F(
     oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
 
-  constexpr uint32_t kRawBaseColorIndex = 999999U;
-  constexpr uint32_t kRawNormalIndex = 888888U;
+  constexpr oxygen::ShaderVisibleIndex kRawBaseColorIndex { 999999U };
+  constexpr oxygen::ShaderVisibleIndex kRawNormalIndex { 888888U };
 
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial(
-    base_color_key, normal_key, kRawBaseColorIndex, kRawNormalIndex);
+  ref.resolved_asset = MakeMaterial(base_color_key, normal_key,
+    kRawBaseColorIndex.get(), kRawNormalIndex.get());
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
@@ -78,8 +78,8 @@ NOLINT_TEST_F(
   // Now create the textures — binder is expected to repoint constants to final
   // SRV indices.
   const auto expected_base_color_srv
-    = TexBinder().GetOrAllocate(base_color_key).get();
-  const auto expected_normal_srv = TexBinder().GetOrAllocate(normal_key).get();
+    = TexBinder().GetOrAllocate(base_color_key);
+  const auto expected_normal_srv = TexBinder().GetOrAllocate(normal_key);
 
   const auto all_constants = MatBinder().GetMaterialConstants();
   ASSERT_LT(
@@ -123,8 +123,8 @@ NOLINT_TEST_F(MaterialBinderPlaceholderTest, RepointingAcrossFrames)
     oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 2 });
 
-  const auto expectedBase = TexBinder().GetOrAllocate(base_color_key).get();
-  const auto expectedNormal = TexBinder().GetOrAllocate(normal_key).get();
+  const auto expectedBase = TexBinder().GetOrAllocate(base_color_key);
+  const auto expectedNormal = TexBinder().GetOrAllocate(normal_key);
 
   const auto all_constants = MatBinder().GetMaterialConstants();
   ASSERT_LT(static_cast<std::size_t>(h.get()), all_constants.size());
@@ -154,7 +154,7 @@ NOLINT_TEST_F(MaterialBinderPlaceholderTest, PartialResourceAvailability)
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
   // Allocate only one texture
-  const auto baseSrv = TexBinder().GetOrAllocate(base_color_key).get();
+  const auto baseSrv = TexBinder().GetOrAllocate(base_color_key);
   const auto h = MatBinder().GetOrAllocate(ref);
   ASSERT_TRUE(MatBinder().IsHandleValid(h));
 

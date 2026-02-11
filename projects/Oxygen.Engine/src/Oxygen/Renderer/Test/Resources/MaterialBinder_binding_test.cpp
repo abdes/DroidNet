@@ -86,12 +86,12 @@ NOLINT_TEST_F(MaterialBinderBindingTest,
     oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
 
-  constexpr uint32_t kRawBaseColorIndex = 123456U;
-  constexpr uint32_t kRawNormalIndex = 654321U;
+  constexpr oxygen::ShaderVisibleIndex kRawBaseColorIndex { 123456U };
+  constexpr oxygen::ShaderVisibleIndex kRawNormalIndex { 654321U };
 
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial(
-    base_color_key, normal_key, kRawBaseColorIndex, kRawNormalIndex);
+  ref.resolved_asset = MakeMaterial(base_color_key, normal_key,
+    kRawBaseColorIndex.get(), kRawNormalIndex.get());
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
@@ -100,8 +100,8 @@ NOLINT_TEST_F(MaterialBinderBindingTest,
   EXPECT_TRUE(MatBinder().IsHandleValid(material_handle));
 
   const auto expected_base_color_srv
-    = TexBinder().GetOrAllocate(base_color_key).get();
-  const auto expected_normal_srv = TexBinder().GetOrAllocate(normal_key).get();
+    = TexBinder().GetOrAllocate(base_color_key);
+  const auto expected_normal_srv = TexBinder().GetOrAllocate(normal_key);
 
   const auto all_constants = MatBinder().GetMaterialConstants();
   ASSERT_LT(
@@ -212,8 +212,8 @@ NOLINT_TEST_F(MaterialBinderBindingTest, SharedSrvIndicesForSameResource)
   ASSERT_TRUE(MatBinder().IsHandleValid(handleA));
   ASSERT_TRUE(MatBinder().IsHandleValid(handleB));
 
-  const auto expectedBaseSrv = TexBinder().GetOrAllocate(base_color_key).get();
-  const auto expectedNormalSrv = TexBinder().GetOrAllocate(normal_key).get();
+  const auto expectedBaseSrv = TexBinder().GetOrAllocate(base_color_key);
+  const auto expectedNormalSrv = TexBinder().GetOrAllocate(normal_key);
 
   const auto all_constants = MatBinder().GetMaterialConstants();
   ASSERT_LT(static_cast<std::size_t>(handleA.get()), all_constants.size());
@@ -265,20 +265,20 @@ NOLINT_TEST_F(MaterialBinderBindingTest, BindlessIndexStabilityWithinFrame)
   const auto all_constants = MatBinder().GetMaterialConstants();
   // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
   const auto& constants0 = all_constants[static_cast<std::size_t>(h.get())];
-  EXPECT_EQ(constants0.base_color_texture_index, placeholder_base.get());
+  EXPECT_EQ(constants0.base_color_texture_index, placeholder_base);
 
   // Now simulate the texture becoming available and allocate the shader-visible
   // descriptor — TextureBinder must keep the index stable.
   SetTextureBinderAllocateOnRequest(true);
   const auto real_base = TexBinder().GetOrAllocate(base_color_key);
-  EXPECT_EQ(placeholder_base.get(), real_base.get());
+  EXPECT_EQ(placeholder_base, real_base);
 
   // Material constants must still report the same bindless index.
   const auto all_constants_after = MatBinder().GetMaterialConstants();
   const auto& constants1
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     = all_constants_after[static_cast<std::size_t>(h.get())];
-  EXPECT_EQ(constants1.base_color_texture_index, real_base.get());
+  EXPECT_EQ(constants1.base_color_texture_index, real_base);
 }
 
 //! TextureBinder must return stable indices for the same key when called
@@ -331,8 +331,8 @@ NOLINT_TEST_F(MaterialBinderBindingTest, PlaceholderReferenceCounting)
   // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
   const auto& constants = all_constants[static_cast<std::size_t>(h.get())];
 
-  EXPECT_EQ(constants.base_color_texture_index, expected_base.get());
-  EXPECT_EQ(constants.normal_texture_index, expected_normal.get());
+  EXPECT_EQ(constants.base_color_texture_index, expected_base);
+  EXPECT_EQ(constants.normal_texture_index, expected_normal);
 
   // Subsequent GetOrAllocate calls must not increase allocator count (stable)
   const auto after = AllocatedTextureSrvCount();
@@ -352,12 +352,12 @@ NOLINT_TEST_F(
     oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
 
-  constexpr uint32_t kRawBase = 555555U;
-  constexpr uint32_t kRawNormal = 666666U;
+  constexpr oxygen::ShaderVisibleIndex kRawBase { 555555U };
+  constexpr oxygen::ShaderVisibleIndex kRawNormal { 666666U };
 
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.resolved_asset
-    = MakeMaterial(base_color_key, normal_key, kRawBase, kRawNormal);
+  ref.resolved_asset = MakeMaterial(
+    base_color_key, normal_key, kRawBase.get(), kRawNormal.get());
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 

@@ -37,32 +37,14 @@
 #include "Atmosphere/IntegrateScatteredLuminance.hlsli"
 #include "Common/Lighting.hlsli"
 
+#include "Atmosphere/AtmospherePassConstants.hlsli"
+
 // Root constants (b2, space0)
 cbuffer RootConstants : register(b2, space0)
 {
     uint g_DrawIndex;
     uint g_PassConstantsIndex;
 }
-
-// Pass constants for sky irradiance LUT generation.
-// Layout must exactly match C++ SkyIrradianceLutPassConstants.
-struct SkyIrradianceLutPassConstants
-{
-    uint output_uav_index;
-    uint transmittance_srv_index;
-    uint multi_scat_srv_index;
-    uint output_width;
-
-    uint output_height;
-    uint transmittance_width;
-    uint transmittance_height;
-    float atmosphere_height_m;
-
-    float planet_radius_m;
-    uint _pad0;
-    uint _pad1;
-    uint _pad2;
-};
 
 #define THREAD_GROUP_SIZE_X 8
 #define THREAD_GROUP_SIZE_Y 8
@@ -96,11 +78,11 @@ static inline void UniformHemisphereSample(uint i, uint n,
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, 1)]
 void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 {
-    ConstantBuffer<SkyIrradianceLutPassConstants> pass_constants
+    ConstantBuffer<AtmospherePassConstants> pass_constants
         = ResourceDescriptorHeap[g_PassConstantsIndex];
 
-    if (dispatch_thread_id.x >= pass_constants.output_width
-        || dispatch_thread_id.y >= pass_constants.output_height)
+    if (dispatch_thread_id.x >= pass_constants.output_extent.x
+        || dispatch_thread_id.y >= pass_constants.output_extent.y)
     {
         return;
     }
@@ -117,7 +99,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
     // UV -> cos_sun_zenith and altitude
     float2 uv = (float2(dispatch_thread_id.xy) + 0.5)
-              / float2(pass_constants.output_width, pass_constants.output_height);
+              / float2(pass_constants.output_extent);
 
     float cos_sun_zenith = uv.x * 2.0 - 1.0;
     float altitude_m = uv.y * atmo.atmosphere_height_m;
@@ -130,9 +112,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     float r = atmo.planet_radius_m + altitude_m;
     float3 origin = float3(0.0, 0.0, r);
 
-    // Actual sun radiance/illuminance proxy (linear RGB).
-    // This is used consistently with the other LUT integrators in Oxygen.
-    float3 sun_illuminance = GetSunColorRGB() * GetSunIlluminance();
+    // Physical sun illuminance (linear RGB).
+    float3 sun_illuminance = GetSunLuminanceRGB();
 
     // Bind LUT inputs.
     Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[pass_constants.multi_scat_srv_index];
@@ -170,8 +151,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             sun_dir,
             sun_illuminance,
             pass_constants.transmittance_srv_index,
-            float(pass_constants.transmittance_width),
-            float(pass_constants.transmittance_height),
+            float(pass_constants.transmittance_extent.x),
+            float(pass_constants.transmittance_extent.y),
             multi_scat_lut,
             linear_sampler,
             throughput);

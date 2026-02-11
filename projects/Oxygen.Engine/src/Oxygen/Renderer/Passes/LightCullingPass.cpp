@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cmath>
 #include <cstring>
 #include <stdexcept>
 #include <unordered_map>
@@ -32,7 +31,7 @@
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
-#include <Oxygen/Renderer/Types/EnvironmentDynamicData.h>
+#include <Oxygen/Renderer/Types/LightCullingConfig.h>
 
 using oxygen::kInvalidShaderVisibleIndex;
 using oxygen::ShaderVisibleIndex;
@@ -62,7 +61,7 @@ struct alignas(16) LightCullingPassConstants {
   uint32_t num_lights { 0 };
   uint32_t _pad0 { 0 };
 
-  // Cluster config (for 3D clustering)
+  // Config (mirrors LightCullingConfig GPU block)
   uint32_t cluster_dim_x { 0 };
   uint32_t cluster_dim_y { 0 };
   uint32_t cluster_dim_z { 0 };
@@ -88,7 +87,7 @@ struct LightCullingPass::Impl {
   std::string name;
 
   // Current grid dimensions (computed per-frame based on screen size)
-  ClusterConfig::GridDimensions grid_dims {};
+  LightCullingConfig::GridDimensions grid_dims {};
 
   // GPU-only buffers for compute output (default heap, UAV+SRV)
   std::shared_ptr<Buffer> cluster_grid_buffer; // uint2 per cluster
@@ -123,9 +122,6 @@ struct LightCullingPass::Impl {
   ShaderVisibleIndex pass_constants_index { kInvalidShaderVisibleIndex };
   void* pass_constants_mapped_ptr { nullptr };
 
-  // Track last built cluster mode to detect PSO rebuild needs
-  uint32_t last_built_depth_slices { 0 };
-
   // Track last logged grid dimensions to avoid spam
   uint32_t last_logged_z { 0 };
 
@@ -144,19 +140,9 @@ struct LightCullingPass::Impl {
       pass_constants_buffer->UnMap();
       pass_constants_mapped_ptr = nullptr;
     }
-    // GPU buffers (cluster_grid_buffer, light_index_list_buffer) are cleaned
-    // up automatically via shared_ptr. Associated descriptors are managed by
-    // ResourceRegistry and will be released when views are unregistered.
   }
 
   //! Create or update the depth texture SRV for reading depth in compute.
-  /*!
-   Depth textures use typeless formats (e.g., R32_TYPELESS for D32_FLOAT).
-   For SRV access, we must use the corresponding readable format (R32_FLOAT).
-
-   With multi-buffered framebuffers, different depth textures may be used
-   each frame. We cache the SRV for each texture in a map.
-  */
   auto EnsureDepthTextureSrv(const graphics::Texture& depth_tex)
     -> ShaderVisibleIndex
   {
@@ -167,7 +153,6 @@ struct LightCullingPass::Impl {
     const auto depth_format = depth_tex.GetDescriptor().format;
     Format srv_format = Format::kR32Float;
 
-    // Map depth formats to their SRV-readable equivalents
     switch (depth_format) {
     case Format::kDepth32:
     case Format::kDepth32Stencil8:
@@ -184,7 +169,6 @@ struct LightCullingPass::Impl {
       break;
     }
 
-    // Create the SRV view description
     graphics::TextureViewDescription srv_desc {
       .view_type = ResourceViewType::kTexture_SRV,
       .visibility = graphics::DescriptorVisibility::kShaderVisible,
@@ -194,19 +178,15 @@ struct LightCullingPass::Impl {
       .is_read_only_dsv = false,
     };
 
-    // Check if we have a cached SRV AND the registry still has this view
-    // (protects against address reuse after texture destruction)
     if (auto it = depth_texture_srvs.find(&depth_tex);
       it != depth_texture_srvs.end()) {
       if (registry.Contains(depth_tex, srv_desc)) {
         depth_texture_srv = it->second;
         return depth_texture_srv;
       }
-      // Stale entry - texture was destroyed and address reused
       depth_texture_srvs.erase(it);
     }
 
-    // Allocate descriptor handle and create SRV
     auto srv_handle = allocator.Allocate(ResourceViewType::kTexture_SRV,
       graphics::DescriptorVisibility::kShaderVisible);
     if (!srv_handle.IsValid()) {
@@ -215,7 +195,6 @@ struct LightCullingPass::Impl {
     }
     depth_texture_srv = allocator.GetShaderVisibleIndex(srv_handle);
 
-    // Register the view (move handle ownership to registry)
     auto native_view
       = registry.RegisterView(const_cast<graphics::Texture&>(depth_tex),
         std::move(srv_handle), srv_desc);
@@ -225,11 +204,7 @@ struct LightCullingPass::Impl {
       return kInvalidShaderVisibleIndex;
     }
 
-    // Cache in our map
     depth_texture_srvs[&depth_tex] = depth_texture_srv;
-
-    LOG_F(1, "LightCullingPass: Created depth SRV at index {} for texture {}",
-      depth_texture_srv.get(), static_cast<const void*>(&depth_tex));
     return depth_texture_srv;
   }
 
@@ -278,14 +253,8 @@ struct LightCullingPass::Impl {
     registry.Register(pass_constants_buffer);
     pass_constants_cbv = registry.RegisterView(
       *pass_constants_buffer, std::move(cbv_handle), cbv_view_desc);
-    // RegisterView internally validates and throws on failure
   }
 
-  //! Create or resize GPU buffers for cluster grid output.
-  /*!
-   Creates default-heap buffers with both UAV (for compute write) and SRV
-   (for pixel shader read) views. Resizes if capacity is insufficient.
-  */
   auto EnsureClusterBuffers(
     uint32_t total_clusters, uint32_t max_lights_per_cluster) -> void
   {
@@ -295,12 +264,7 @@ struct LightCullingPass::Impl {
     const uint32_t required_light_list_capacity
       = total_clusters * max_lights_per_cluster;
 
-    // Check if we need to create/resize cluster grid buffer
     if (!cluster_grid_buffer || cluster_buffer_capacity < total_clusters) {
-      // Release old descriptors if resizing
-      // (DescriptorAllocator handles this via RAII when views are
-      // re-registered)
-
       constexpr uint32_t kClusterGridStride = sizeof(uint32_t) * 2; // uint2
       const uint32_t buffer_size = total_clusters * kClusterGridStride;
 
@@ -319,7 +283,6 @@ struct LightCullingPass::Impl {
       cluster_grid_buffer->SetName(desc.debug_name);
       registry.Register(cluster_grid_buffer);
 
-      // Create UAV view
       auto uav_handle
         = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
           graphics::DescriptorVisibility::kShaderVisible);
@@ -337,7 +300,6 @@ struct LightCullingPass::Impl {
       registry.RegisterView(
         *cluster_grid_buffer, std::move(uav_handle), uav_desc);
 
-      // Create SRV view
       auto srv_handle
         = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
           graphics::DescriptorVisibility::kShaderVisible);
@@ -360,7 +322,6 @@ struct LightCullingPass::Impl {
         total_clusters);
     }
 
-    // Check if we need to create/resize light index list buffer
     if (!light_index_list_buffer
       || light_list_buffer_capacity < required_light_list_capacity) {
       constexpr uint32_t kLightIndexStride = sizeof(uint32_t);
@@ -382,7 +343,6 @@ struct LightCullingPass::Impl {
       light_index_list_buffer->SetName(desc.debug_name);
       registry.Register(light_index_list_buffer);
 
-      // Create UAV view
       auto uav_handle
         = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
           graphics::DescriptorVisibility::kShaderVisible);
@@ -400,7 +360,6 @@ struct LightCullingPass::Impl {
       registry.RegisterView(
         *light_index_list_buffer, std::move(uav_handle), uav_desc);
 
-      // Create SRV view
       auto srv_handle
         = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
           graphics::DescriptorVisibility::kShaderVisible);
@@ -439,7 +398,6 @@ LightCullingPass::~LightCullingPass() = default;
 
 auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 {
-  // Get screen dimensions from depth texture
   const auto* depth_pass = Context().GetPass<DepthPrePass>();
   if (!depth_pass) {
     LOG_F(WARNING, "LightCullingPass: No DepthPrePass found, skipping");
@@ -448,40 +406,29 @@ auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 
   const auto& depth_tex = depth_pass->GetDepthTexture();
   const auto& depth_desc = depth_tex.GetDescriptor();
-  const uint32_t screen_width = depth_desc.width;
-  const uint32_t screen_height = depth_desc.height;
 
-  // Compute grid dimensions
   const auto& cluster_cfg = impl_->config->cluster;
-  impl_->grid_dims
-    = cluster_cfg.ComputeGridDimensions(screen_width, screen_height);
+  impl_->grid_dims = cluster_cfg.ComputeGridDimensions(
+    { .width = depth_desc.width, .height = depth_desc.height });
 
-  // Debug: Log grid dimensions when they change
   if (impl_->grid_dims.z != impl_->last_logged_z) {
-    LOG_F(INFO,
-      "LightCullingPass: config={} grid_dims={}x{}x{} depth_slices={} "
-      "z_scale={:.3f}",
+    LOG_F(INFO, "LightCullingPass: config={} grid_dims={}x{}x{} ",
       static_cast<const void*>(impl_->config.get()), impl_->grid_dims.x,
-      impl_->grid_dims.y, impl_->grid_dims.z, cluster_cfg.depth_slices,
-      cluster_cfg.ComputeZScale());
+      impl_->grid_dims.y, impl_->grid_dims.z);
     impl_->last_logged_z = impl_->grid_dims.z;
   }
 
-  // Ensure GPU buffers exist with sufficient capacity
   impl_->EnsureClusterBuffers(
     impl_->grid_dims.total_clusters, cluster_cfg.max_lights_per_cluster);
 
-  // Create depth texture SRV for compute shader access
   impl_->depth_texture_srv = impl_->EnsureDepthTextureSrv(depth_tex);
   if (impl_->depth_texture_srv == kInvalidShaderVisibleIndex) {
     LOG_F(ERROR, "LightCullingPass: Failed to create depth texture SRV");
     co_return;
   }
 
-  // Gather light data from LightManager
   auto& renderer = Context().GetRenderer();
   if (const auto light_manager = renderer.GetLightManager()) {
-    // Ensure light manager has uploaded its GPU buffers for this frame
     light_manager->EnsureFrameResources();
     impl_->positional_lights_srv = light_manager->GetPositionalLightsSrvIndex();
     impl_->num_positional_lights
@@ -491,22 +438,17 @@ auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
     impl_->num_positional_lights = 0;
   }
 
-  // Ensure pass constants buffer exists
   impl_->EnsurePassConstantsBuffer();
   SetPassConstantsIndex(impl_->pass_constants_index);
 
-  // Begin tracking cluster buffers if newly created (initial state is kCommon)
-  // The keep_initial_state=true means no transition barrier is inserted here
   recorder.BeginTrackingResourceState(
     *impl_->cluster_grid_buffer, graphics::ResourceStates::kCommon, true);
   recorder.BeginTrackingResourceState(
     *impl_->light_index_list_buffer, graphics::ResourceStates::kCommon, true);
 
-  // Transition depth texture to shader resource state for reading
   recorder.RequireResourceState(
     depth_tex, graphics::ResourceStates::kShaderResource);
 
-  // Transition cluster buffers to UAV state for compute shader write
   recorder.RequireResourceState(
     *impl_->cluster_grid_buffer, graphics::ResourceStates::kUnorderedAccess);
   recorder.RequireResourceState(*impl_->light_index_list_buffer,
@@ -519,8 +461,6 @@ auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 
 auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
-  // Get effective z_near/z_far from camera if not explicitly set in config
-  // Config value of 0 means "use camera"
   const auto& cluster_cfg = impl_->config->cluster;
   float effective_z_near = cluster_cfg.z_near;
   float effective_z_far = cluster_cfg.z_far;
@@ -534,39 +474,27 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     }
   }
 
-  // Calculate Z-binning parameters
-  auto compute_z_scale = [&]() -> float {
-    if (cluster_cfg.depth_slices <= 1 || effective_z_near <= 0.0F
-      || effective_z_far <= effective_z_near) {
-      return 0.0F;
-    }
-    const float log_ratio = std::log2(effective_z_far / effective_z_near);
-    return static_cast<float>(cluster_cfg.depth_slices) / log_ratio;
-  };
-  const float z_scale = compute_z_scale();
+  const float z_scale
+    = cluster_cfg.ComputeZScale(effective_z_near, effective_z_far);
   const float z_bias = cluster_cfg.ComputeZBias();
 
-  // Wire clustered data into EnvironmentDynamicDataManager (root CBV b3)
   if (auto manager = Context().env_dynamic_manager) {
     const auto view_id = Context().current_view.view_id;
 
-    // Aggregate culling data into a single struct to simplify the API.
-    LightCullingData cull_data {
-      .bindless_cluster_grid_slot = ClusterGridSlot { impl_->cluster_grid_srv },
-      .bindless_cluster_index_list_slot
-      = ClusterIndexListSlot { impl_->light_index_list_srv },
-      .cluster_dim_x = impl_->grid_dims.x,
-      .cluster_dim_y = impl_->grid_dims.y,
-      .cluster_dim_z = impl_->grid_dims.z,
-      .tile_size_px = cluster_cfg.tile_size_px,
-    };
+    LightCullingConfig cull_data = cluster_cfg;
+    cull_data.bindless_cluster_grid_slot
+      = ClusterGridSlot { impl_->cluster_grid_srv };
+    cull_data.bindless_cluster_index_list_slot
+      = ClusterIndexListSlot { impl_->light_index_list_srv };
+    cull_data.cluster_dim_x = impl_->grid_dims.x;
+    cull_data.cluster_dim_y = impl_->grid_dims.y;
+    cull_data.cluster_dim_z = impl_->grid_dims.z;
+    cull_data.z_near = effective_z_near;
+    cull_data.z_far = effective_z_far;
+    cull_data.z_scale = z_scale;
+    cull_data.z_bias = z_bias;
 
-    manager->SetLightCullingData(view_id, cull_data);
-
-    manager->SetZBinning(
-      view_id, effective_z_near, effective_z_far, z_scale, z_bias);
-
-    // Resolve and upload to GPU
+    manager->SetLightCullingConfig(view_id, cull_data);
     manager->UpdateIfNeeded(view_id);
   }
 
@@ -576,7 +504,6 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     co_return;
   }
 
-  // Get required resources
   const auto* depth_pass = Context().GetPass<DepthPrePass>();
   if (!depth_pass) {
     co_return;
@@ -585,29 +512,20 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   const auto& depth_tex = depth_pass->GetDepthTexture();
   const auto& depth_desc = depth_tex.GetDescriptor();
 
-  // Use light data gathered during PrepareResources
   const ShaderVisibleIndex positional_lights_srv = impl_->positional_lights_srv;
   const uint32_t num_lights = impl_->num_positional_lights;
 
   if (num_lights == 0) {
-    // No positional lights to cull - output buffers remain zeroed
-    // Skip dispatch but still transition buffers for consistency
-    LOG_F(2, "LightCullingPass: No positional lights, skipping dispatch");
-
-    // Transition buffers to SRV state for shading passes
     recorder.RequireResourceState(
       *impl_->cluster_grid_buffer, graphics::ResourceStates::kShaderResource);
     recorder.RequireResourceState(*impl_->light_index_list_buffer,
       graphics::ResourceStates::kShaderResource);
     recorder.FlushBarriers();
-
     co_return;
   }
 
-  // Use the depth SRV created during PrepareResources
   const ShaderVisibleIndex depth_srv_index = impl_->depth_texture_srv;
 
-  // Update pass constants - use UAV indices for compute shader write
   LightCullingPassConstants constants {
     .depth_texture_index = depth_srv_index,
     .light_buffer_index = positional_lights_srv,
@@ -632,24 +550,8 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   std::memcpy(impl_->pass_constants_mapped_ptr, &constants, sizeof(constants));
 
-  // Diagnostic: log dispatch parameters
-  static uint32_t last_z_dim = 0;
-  if (impl_->grid_dims.z != last_z_dim) {
-    LOG_F(INFO,
-      "LightCullingPass::DoExecute: dispatching {}x{}x{}, z_scale={:.4f}, "
-      "z_bias={:.4f}",
-      impl_->grid_dims.x, impl_->grid_dims.y, impl_->grid_dims.z,
-      constants.z_scale, constants.z_bias);
-    last_z_dim = impl_->grid_dims.z;
-  }
-
-  // Pipeline state is set by ComputeRenderPass::OnExecute()
-
-  // Dispatch compute shader
-  // One thread group per tile
   recorder.Dispatch(impl_->grid_dims.x, impl_->grid_dims.y, impl_->grid_dims.z);
 
-  // Transition buffers from UAV to SRV for pixel shader read
   recorder.RequireResourceState(
     *impl_->cluster_grid_buffer, graphics::ResourceStates::kShaderResource);
   recorder.RequireResourceState(
@@ -671,13 +573,14 @@ auto LightCullingPass::GetLightIndexListSrvIndex() const noexcept
   return impl_->light_index_list_srv;
 }
 
-auto LightCullingPass::GetClusterConfig() const noexcept -> const ClusterConfig&
+auto LightCullingPass::GetClusterConfig() const noexcept
+  -> const LightCullingConfig&
 {
   return impl_->config->cluster;
 }
 
 auto LightCullingPass::GetGridDimensions() const noexcept
-  -> ClusterConfig::GridDimensions
+  -> LightCullingConfig::GridDimensions
 {
   return impl_->grid_dims;
 }
@@ -686,15 +589,13 @@ auto LightCullingPass::GetGridDimensions() const noexcept
 
 auto LightCullingPass::ValidateConfig() -> void
 {
-  // Validate cluster configuration
   const auto& cluster = impl_->config->cluster;
   if (cluster.tile_size_px == 0) {
     throw std::runtime_error("LightCullingPass: tile_size_px must be > 0");
   }
-  if (cluster.depth_slices == 0) {
-    throw std::runtime_error("LightCullingPass: depth_slices must be > 0");
+  if (cluster.cluster_dim_z == 0) {
+    throw std::runtime_error("LightCullingPass: cluster_dim_z must be > 0");
   }
-  // z_near = 0 means "use camera", so only validate if both are explicitly set
   if (cluster.z_near > 0.0F && cluster.z_far > 0.0F
     && cluster.z_near >= cluster.z_far) {
     throw std::runtime_error("LightCullingPass: z_near must be < z_far");
@@ -706,55 +607,24 @@ auto LightCullingPass::CreatePipelineStateDesc()
 {
   auto generated_bindings = BuildRootBindings();
 
-  // Determine if we need the clustered permutation
-  const bool use_clustered = impl_->config->cluster.depth_slices > 1;
-
-  // Build shader request with optional CLUSTERED define
   graphics::ShaderRequest shader_request {
     .stage = oxygen::ShaderType::kCompute,
     .source_path = "Lighting/LightCulling.hlsl",
     .entry_point = "CS",
-    .defines = {},
+    .defines = { { "CLUSTERED", "1" } },
   };
-
-  if (use_clustered) {
-    shader_request.defines.push_back({ "CLUSTERED", "1" });
-    LOG_F(INFO, "LightCullingPass: Using CLUSTERED shader variant");
-  } else {
-    LOG_F(INFO, "LightCullingPass: Using tile-based shader variant");
-  }
-
-  // Track what we built for NeedRebuildPipelineState()
-  impl_->last_built_depth_slices = impl_->config->cluster.depth_slices;
 
   return ComputePipelineDesc::Builder()
     .SetComputeShader(std::move(shader_request))
     .SetRootBindings(std::span<const graphics::RootBindingItem>(
       generated_bindings.data(), generated_bindings.size()))
-    .SetDebugName(use_clustered ? "LightCulling_Clustered_PSO"
-                                : "LightCulling_TileBased_PSO")
+    .SetDebugName("LightCulling_Clustered_PSO")
     .Build();
 }
 
 auto LightCullingPass::NeedRebuildPipelineState() const -> bool
 {
-  // Rebuild if never built
-  if (!LastBuiltPsoDesc().has_value()) {
-    return true;
-  }
-
-  // Rebuild if cluster mode changed (tile-based vs clustered)
-  const bool current_clustered = impl_->config->cluster.depth_slices > 1;
-  const bool last_clustered = impl_->last_built_depth_slices > 1;
-  if (current_clustered != last_clustered) {
-    LOG_F(INFO,
-      "LightCullingPass: Cluster mode changed ({} -> {}), rebuilding PSO",
-      last_clustered ? "clustered" : "tile-based",
-      current_clustered ? "clustered" : "tile-based");
-    return true;
-  }
-
-  return false;
+  return !LastBuiltPsoDesc().has_value();
 }
 
 } // namespace oxygen::engine

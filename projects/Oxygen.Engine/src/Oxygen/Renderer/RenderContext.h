@@ -124,8 +124,8 @@ struct RenderContext {
 
   //! Per-view environment dynamic data manager.
   /*!
-   Supports root CBV binding at b3. Shaders query cluster indices and exposure
-   from this buffer.
+    Supports root CBV binding at b3. Shaders query cluster indices and other
+    high-frequency environment fields from this buffer.
   */
   observer_ptr<internal::EnvironmentDynamicDataManager> env_dynamic_manager;
 

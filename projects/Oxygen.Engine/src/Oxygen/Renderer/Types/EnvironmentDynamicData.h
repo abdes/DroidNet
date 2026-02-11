@@ -6,203 +6,165 @@
 
 #pragma once
 
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 
 #include <glm/vec4.hpp>
 
+#include <Oxygen/Core/Types/Atmosphere.h>
+#include <Oxygen/Renderer/Types/LightCullingConfig.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 
 namespace oxygen::engine {
 
-//! Bitfield flags for atmosphere rendering features.
-/*!
- Controls which atmosphere rendering path is used and enables debug features.
- These flags must match the HLSL constants in AerialPerspective.hlsli.
-*/
-enum class AtmosphereFlags : uint32_t {
-  kNone = 0x0,
-  kUseLut = 0x1, //!< Use LUT sampling when LUTs are available.
-  kOverrideSun = 0x2, //!< Use debug override sun direction/intensity.
+//! Atmospheric scattering and planet context data.
+struct AtmosphereData {
+  static constexpr size_t kSize = 64;
+
+  uint32_t flags { 0U };
+  float sky_view_lut_slice { 0.0F };
+  float planet_to_sun_cos_zenith { 0.0F };
+  float aerial_perspective_distance_scale {
+    atmos::kDefaultAerialPerspectiveDistanceScale
+  };
+  float aerial_scattering_strength { atmos::kDefaultAerialScatteringStrength };
+  std::array<uint32_t, 3> _pad { 0, 0, 0 }; // Padding to align vec4 members
+  glm::vec4 planet_center_ws_pad { 0.0F, 0.0F, -atmos::kDefaultPlanetRadiusM,
+    0.0F };
+  glm::vec4 planet_up_ws_camera_altitude_m { atmos::kDefaultPlanetUp, 0.0F };
 };
+static_assert(sizeof(AtmosphereData) == AtmosphereData::kSize);
 
-//! Bitwise OR for AtmosphereFlags.
-constexpr auto operator|(AtmosphereFlags lhs, AtmosphereFlags rhs) noexcept
-  -> AtmosphereFlags
-{
-  return static_cast<AtmosphereFlags>(
-    static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
-}
+//! Primary directional light (Sun) state for atmospheric effects.
+struct SyntheticSunData {
+  static constexpr size_t kSize = 48;
 
-//! Bitwise AND for AtmosphereFlags.
-constexpr auto operator&(AtmosphereFlags lhs, AtmosphereFlags rhs) noexcept
-  -> AtmosphereFlags
-{
-  return static_cast<AtmosphereFlags>(
-    static_cast<uint32_t>(lhs) & static_cast<uint32_t>(rhs));
-}
+  uint32_t enabled { 0U };
+  float cos_zenith { 0.0F };
+  std::array<uint32_t, 2> _pad { 0, 0 };
+  glm::vec4 direction_ws_illuminance { atmos::kDefaultSunDirection,
+    atmos::kDefaultSunIlluminanceLx };
+  glm::vec4 color_rgb_intensity { atmos::kDefaultSunColorRgb,
+    atmos::kDefaultSunIlluminanceLx };
 
-//! Check if a flag is set.
-constexpr auto HasFlag(uint32_t flags, AtmosphereFlags flag) noexcept -> bool
-{
-  return (flags & static_cast<uint32_t>(flag)) != 0;
-}
+  //=== Utilities ===---------------------------------------------------------//
 
-struct ClusterGridSlot {
-  ShaderVisibleIndex value;
-  explicit constexpr ClusterGridSlot(
-    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
-    : value(v)
+  [[nodiscard]] static auto FromDirectionAndLight(const glm::vec3& direction,
+    const glm::vec3& color, float illuminance_lx, bool is_enabled = true)
+    -> SyntheticSunData
   {
+    SyntheticSunData s;
+    s.enabled = is_enabled ? 1U : 0U;
+    const glm::vec3 dir = glm::normalize(direction);
+    s.direction_ws_illuminance = { dir, illuminance_lx };
+    s.color_rgb_intensity = { color, illuminance_lx };
+    s.cos_zenith = dir.z;
+    return s;
   }
-  constexpr auto IsValid() const noexcept
+
+  [[nodiscard]] auto GetDirection() const noexcept -> glm::vec3
   {
-    return value != kInvalidShaderVisibleIndex;
+    return { direction_ws_illuminance.x, direction_ws_illuminance.y,
+      direction_ws_illuminance.z };
   }
-  constexpr auto operator<=>(const ClusterGridSlot&) const = default;
-  constexpr operator uint32_t() const noexcept { return value.get(); }
+
+  [[nodiscard]] auto GetColor() const noexcept -> glm::vec3
+  {
+    return { color_rgb_intensity.x, color_rgb_intensity.y,
+      color_rgb_intensity.z };
+  }
+
+  [[nodiscard]] auto GetIlluminance() const noexcept -> float
+  {
+    return direction_ws_illuminance.w;
+  }
+
+  [[nodiscard]] auto GetSinZenith() const noexcept -> float
+  {
+    return std::sqrt(std::max(0.0F, 1.0F - (cos_zenith * cos_zenith)));
+  }
+
+  [[nodiscard]] auto GetElevationRadians() const noexcept -> float
+  {
+    return std::asin(std::clamp(cos_zenith, -1.0F, 1.0F));
+  }
+
+  [[nodiscard]] auto GetAzimuthRadians() const noexcept -> float
+  {
+    return std::atan2(direction_ws_illuminance.y, direction_ws_illuminance.x);
+  }
+
+  [[nodiscard]] auto ApproxEquals(
+    const SyntheticSunData& other, float epsilon) const noexcept -> bool
+  {
+    const auto vec4_approx = [epsilon](const glm::vec4& a, const glm::vec4& b) {
+      return std::abs(a.x - b.x) < epsilon && std::abs(a.y - b.y) < epsilon
+        && std::abs(a.z - b.z) < epsilon && std::abs(a.w - b.w) < epsilon;
+    };
+
+    return enabled == other.enabled
+      && vec4_approx(direction_ws_illuminance, other.direction_ws_illuminance)
+      && vec4_approx(color_rgb_intensity, other.color_rgb_intensity);
+  }
+
+  [[nodiscard]] auto ElevationDiffers(
+    const SyntheticSunData& other, float epsilon) const noexcept -> bool
+  {
+    return std::abs(cos_zenith - other.cos_zenith) > epsilon;
+  }
 };
+static_assert(sizeof(SyntheticSunData) == SyntheticSunData::kSize);
 
-struct ClusterIndexListSlot {
-  ShaderVisibleIndex value;
-  explicit constexpr ClusterIndexListSlot(
-    const ShaderVisibleIndex v = kInvalidShaderVisibleIndex)
-    : value(v)
-  {
-  }
-  constexpr auto IsValid() const noexcept
-  {
-    return value != kInvalidShaderVisibleIndex;
-  }
-  constexpr auto operator<=>(const ClusterIndexListSlot&) const = default;
-  constexpr operator uint32_t() const noexcept { return value.get(); }
-};
+//! Disabled/invalid sun state constant.
+inline constexpr SyntheticSunData kNoSun = [] {
+  SyntheticSunData s;
+  s.enabled = 0U;
+  s.direction_ws_illuminance.w = 0.0F;
+  s.color_rgb_intensity.w = 0.0F;
+  return s;
+}();
 
-//! Per-frame environment payload consumed directly by shaders.
-/*!
- This structure is intended to be bound as a **root CBV** (register b3) and is
- therefore kept small and frequently updated ("hot").
-
- The payload contains:
-
- - View-exposure values computed by the renderer (potentially from authored
-   post-process settings + auto-exposure).
- - Bindless SRV slots and dimensions for clustered lighting buffers.
- - Z-binning parameters for clustered light culling.
-
- Layout mirrors the HLSL struct `EnvironmentDynamicData`.
-
- ### Cluster Configuration
-
- For tile-based Forward+ (cluster_dim_z == 1):
- - Only X/Y dimensions are used
- - Z-binning parameters are ignored
- - Per-tile min/max depth from depth prepass provides depth bounds
-
- For clustered (cluster_dim_z > 1):
- - Full 3D grid with logarithmic depth slices
- - Z-binning: slice = log2(z / z_near) * z_scale + z_bias
-
- ### Ownership and Future Extension
-
- Currently owned and uploaded by **LightCullingPass**, which populates cluster
- data and uses a default value (1.0) for exposure.
-
- When post-process/auto-exposure is implemented, the owning pass has two
- options:
- 1. Query the LightCullingPass buffer and overwrite exposure fields, or
- 2. Split into separate CBVs (ClusterData on b3, ExposureData on b4).
+/**
+//! EnvironmentDynamicData holds per-frame, per-view dynamic environment state
+//! such as light culling configuration, atmosphere context, and sun state.
+//! It is updated every frame and bound to the GPU as a Root Constant Buffer
+//! View (CBV).
 
  @warning This struct must remain 16-byte aligned for D3D12 root CBV bindings.
- @see ClusterConfig, LightCullingPass
+ @see LightCullingConfig, LightCullingPass
 */
-struct alignas(16) EnvironmentDynamicData {
-  // Exposure
-  float exposure { 1.0F };
-
-  // Cluster grid bindless slots (from LightCullingPass)
-  ClusterGridSlot bindless_cluster_grid_slot {};
-  ClusterIndexListSlot bindless_cluster_index_list_slot {};
-
-  // Padding to complete the first 16-byte register.
-  uint32_t _pad0 { 0u };
-
-  // Cluster grid dimensions
-  uint32_t cluster_dim_x { 0 };
-  uint32_t cluster_dim_y { 0 };
-  uint32_t cluster_dim_z { 0 };
-  uint32_t tile_size_px { 16 };
-
-  // Z-binning parameters for clustered lighting
-  float z_near { 0.1F };
-  float z_far { 1000.0F };
-  float z_scale { 0.0F };
-  float z_bias { 0.0F };
-
-  // Per-view aerial perspective controls (SkyAtmosphere).
-  float aerial_perspective_distance_scale { 1.0F };
-  float aerial_scattering_strength { 1.0F };
-
-  // Atmospheric debug/feature flags (bitfield)
-  // bit0: use LUT sampling when available
-  // bit1: use override sun values
-  uint32_t atmosphere_flags { 0u };
-
-  // 1 = sun enabled; 0 = fallback to default sun.
-  uint32_t sun_enabled { 0u };
-
-  // Designated sun light (toward the sun, not incoming radiance).
-  // xyz = direction (Z-up: +Y with 30° elevation), w = illuminance.
-  glm::vec4 sun_direction_ws_illuminance { 0.0F, 0.866F, 0.5F, 0.0F };
-
-  // Sun spectral payload.
-  // xyz = color_rgb (linear, not premultiplied), w = intensity.
-  glm::vec4 sun_color_rgb_intensity { 1.0F, 1.0F, 1.0F, 1.0F };
-
-  // Debug override sun for testing (internal only).
-  // xyz = direction (Z-up: +Y with 30° elevation), w = illuminance.
-  glm::vec4 override_sun_direction_ws_illuminance { 0.0F, 0.866F, 0.5F, 0.0F };
-
-  // x = override_sun_enabled; remaining lanes reserved for future flags.
-  glm::uvec4 override_sun_flags { 0u, 0u, 0u, 0u };
-
-  // Override sun spectral payload (internal only).
-  // xyz = color_rgb (linear, not premultiplied), w = intensity.
-  glm::vec4 override_sun_color_rgb_intensity { 1.0F, 1.0F, 1.0F, 1.0F };
-
-  // Planet/frame context for atmospheric sampling.
-  // xyz = planet center (below Z=0 ground). w = padding (unused).
-  // Note: planet_radius is in EnvironmentStaticData (static parameter).
-  glm::vec4 planet_center_ws_pad { 0.0F, 0.0F, -6360000.0F, 0.0F };
-
-  // xyz = planet up, w = camera altitude (m).
-  glm::vec4 planet_up_ws_camera_altitude_m { 0.0F, 0.0F, 1.0F, 0.0F };
-
-  // x = sky view LUT slice, y = planet_to_sun_cos_zenith.
-  glm::vec4 sky_view_lut_slice_cos_zenith { 0.0F, 0.0F, 0.0F, 0.0F };
+struct alignas(packing::kShaderDataFieldAlignment) EnvironmentDynamicData {
+  LightCullingConfig light_culling;
+  AtmosphereData atmosphere;
+  SyntheticSunData sun;
 };
-static_assert(alignof(EnvironmentDynamicData) == 16,
-  "EnvironmentDynamicData must stay 16-byte aligned for root CBV");
-static_assert(sizeof(EnvironmentDynamicData) % 16 == 0,
-  "EnvironmentDynamicData size must be 16-byte aligned");
-static_assert(sizeof(EnvironmentDynamicData) == 192,
+
+namespace layout {
+  inline constexpr size_t kEnvironmentDynamicDataSize = 160;
+  inline constexpr size_t kClusterDimXOffset
+    = offsetof(EnvironmentDynamicData, light_culling.cluster_dim_x);
+  inline constexpr size_t kSunDirectionBlockOffset
+    = offsetof(EnvironmentDynamicData, sun.direction_ws_illuminance);
+} // namespace layout
+
+static_assert(
+  alignof(EnvironmentDynamicData) == packing::kShaderDataFieldAlignment,
+  "EnvironmentDynamicData must stay aligned for root CBV");
+static_assert(
+  sizeof(EnvironmentDynamicData) % packing::kShaderDataFieldAlignment == 0,
+  "EnvironmentDynamicData size must be aligned");
+static_assert(
+  sizeof(EnvironmentDynamicData) == layout::kEnvironmentDynamicDataSize,
   "EnvironmentDynamicData size must match HLSL cbuffer packing");
 
-static_assert(offsetof(EnvironmentDynamicData, cluster_dim_x) == 16,
+static_assert(offsetof(EnvironmentDynamicData, light_culling.cluster_dim_x)
+    == layout::kClusterDimXOffset,
   "EnvironmentDynamicData layout mismatch: cluster_dim_x offset");
-static_assert(
-  offsetof(EnvironmentDynamicData, sun_direction_ws_illuminance) == 64,
+static_assert(offsetof(EnvironmentDynamicData, sun.direction_ws_illuminance)
+    == layout::kSunDirectionBlockOffset,
   "EnvironmentDynamicData layout mismatch: sun block offset");
-
-//! Simple POD to aggregate light-culling related binding/configuration data
-//! passed from the culling pass into the environment dynamic data manager.
-struct LightCullingData {
-  ClusterGridSlot bindless_cluster_grid_slot {};
-  ClusterIndexListSlot bindless_cluster_index_list_slot {};
-  uint32_t cluster_dim_x { 0 };
-  uint32_t cluster_dim_y { 0 };
-  uint32_t cluster_dim_z { 0 };
-  uint32_t tile_size_px { 16 };
-};
 
 } // namespace oxygen::engine

@@ -88,43 +88,7 @@ void LightingPanel::DrawVisualizationModes()
   }
 }
 
-void LightingPanel::DrawLightCullingSettings()
-{
-  DrawCullingModeControls();
-  ImGui::Spacing();
-  DrawClusterConfigControls();
-}
-
-void LightingPanel::DrawCullingModeControls()
-{
-  ImGui::SeparatorText("Culling Algorithm");
-
-  const bool use_clustered = vm_->IsClusteredCulling();
-
-  // Radio buttons for tile vs clustered
-  if (ImGui::RadioButton("Tile-Based (2D)", !use_clustered)) {
-    if (use_clustered) {
-      vm_->SetClusteredCulling(false);
-    }
-  }
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("Traditional Forward+ tiled culling.\n"
-                      "Uses per-tile depth bounds from depth prepass.\n"
-                      "Efficient for most scenes.");
-  }
-
-  if (ImGui::RadioButton("Clustered (3D)", use_clustered)) {
-    if (!use_clustered) {
-      vm_->SetClusteredCulling(true);
-    }
-  }
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip(
-      "Full 3D clustered culling with depth slices.\n"
-      "Uses logarithmic depth distribution.\n"
-      "Better for depth-complex scenes with many overlapping lights.");
-  }
-}
+void LightingPanel::DrawLightCullingSettings() { DrawClusterConfigControls(); }
 
 void LightingPanel::DrawClusterConfigControls()
 {
@@ -139,19 +103,14 @@ void LightingPanel::DrawClusterConfigControls()
       "16x16 is the optimal choice for most GPUs.");
   }
 
-  const bool use_clustered = vm_->IsClusteredCulling();
-
-  // Only show depth slices control in clustered mode
-  if (use_clustered) {
-    int depth_slices = vm_->GetDepthSlices();
-    if (ImGui::SliderInt("Depth Slices", &depth_slices, 2, 64)) {
-      vm_->SetDepthSlices(depth_slices);
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Number of depth slices for 3D clustering.\n"
-                        "More slices = finer depth granularity.\n"
-                        "16-32 is typical, 24 is default.");
-    }
+  int depth_slices = vm_->GetDepthSlices();
+  if (ImGui::SliderInt("Depth Slices", &depth_slices, 2, 64)) {
+    vm_->SetDepthSlices(depth_slices);
+  }
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Number of depth slices for 3D clustering.\n"
+                      "More slices = finer depth granularity.\n"
+                      "16-32 is typical, 24 is default.");
   }
 
   // Z range controls

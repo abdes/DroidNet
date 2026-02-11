@@ -28,6 +28,13 @@ class SpotLight final : public Component {
   OXYGEN_COMPONENT_REQUIRES(detail::TransformComponent)
 
 public:
+  static constexpr float kDefaultRange = 10.0F;
+  static constexpr float kDefaultLuminousFluxLm = 800.0F;
+  static constexpr float kDefaultDecayExponent = 2.0F;
+  static constexpr float kDefaultInnerConeAngle = 0.4F;
+  static constexpr float kDefaultOuterConeAngle = 0.6F;
+  static constexpr float kDefaultSourceRadius = 0.0F;
+
   //! Creates a default spot light.
   SpotLight() = default;
 
@@ -79,11 +86,17 @@ public:
     return decay_exponent_;
   }
 
-  //! Sets the inner and outer cone angles in radians.
-  auto SetConeAnglesRadians(const float inner_cone_angle_radians,
-    const float outer_cone_angle_radians) noexcept -> void
+  //! Sets the inner cone angle in radians.
+  auto SetInnerConeAngleRadians(const float inner_cone_angle_radians) noexcept
+    -> void
   {
     inner_cone_angle_radians_ = inner_cone_angle_radians;
+  }
+
+  //! Sets the outer cone angle in radians.
+  auto SetOuterConeAngleRadians(const float outer_cone_angle_radians) noexcept
+    -> void
+  {
     outer_cone_angle_radians_ = outer_cone_angle_radians;
   }
 
@@ -135,32 +148,36 @@ private:
   //! Scale: linear (meters).
   //! Variation: Small changes affect the falloff volume; determines shader
   //! culling.
-  float range_ = 10.0F;
+  //! Maximum reach of the light in world units.
+  //! Scale: linear (meters).
+  //! Variation: Small changes affect the falloff volume; determines shader
+  //! culling.
+  float range_ = kDefaultRange;
 
   AttenuationModel attenuation_model_ = AttenuationModel::kInverseSquare;
-  float decay_exponent_ = 2.0F;
+  float decay_exponent_ = kDefaultDecayExponent;
 
   //! Angle of the inner cone where attenuation starts.
   //! Scale: radians. Must be <= outer angle.
   //! Variation: Small changes affect the sharpness of the light cone's edge.
-  float inner_cone_angle_radians_ = 0.4F;
+  float inner_cone_angle_radians_ = kDefaultInnerConeAngle;
 
   //! Angle of the outer cone where light reaches zero.
   //! Scale: radians. Must be >= inner angle.
   //! Variation: Small changes affect the overall spread of the spot.
-  float outer_cone_angle_radians_ = 0.6F;
+  float outer_cone_angle_radians_ = kDefaultOuterConeAngle;
 
   //! Radius of the emission disk in world units.
   //! Scale: linear (meters).
   //! Variation: Small changes affect the softness of specular highlights and
   //! contact shadows.
-  float source_radius_ = 0.0F;
+  float source_radius_ = kDefaultSourceRadius;
 
   //! Total light power in lumens (lm).
   //! Scale: linear. Typical: 800 (60W bulb), 1600 (100W bulb).
   //! Variation: Large strides (e.g. 500+) are needed for noticeable brightness
   //! changes.
-  float luminous_flux_lm_ = 800.0F;
+  float luminous_flux_lm_ = kDefaultLuminousFluxLm;
 
   detail::TransformComponent* transform_ { nullptr };
 };

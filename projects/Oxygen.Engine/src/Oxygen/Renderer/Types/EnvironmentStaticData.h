@@ -6,13 +6,13 @@
 
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
 
@@ -45,13 +45,49 @@ enum class SkySphereSource : uint32_t { // NOLINT(*-enum-size)
   kSolidColor = 1U,
 };
 
+// We defines and use strong types for bindless slots to avoid accidental
+// mixups.
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+#define OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(TypeName)                             \
+  struct TypeName {                                                            \
+    ShaderVisibleIndex value;                                                  \
+    TypeName()                                                                 \
+      : TypeName(kInvalidShaderVisibleIndex)                                   \
+    {                                                                          \
+    }                                                                          \
+    explicit constexpr TypeName(const ShaderVisibleIndex v)                    \
+      : value(v)                                                               \
+    {                                                                          \
+    }                                                                          \
+    [[nodiscard]] constexpr auto IsValid() const noexcept                      \
+    {                                                                          \
+      return value != kInvalidShaderVisibleIndex;                              \
+    }                                                                          \
+    constexpr auto operator<=>(const TypeName&) const = default;               \
+  };                                                                           \
+  static_assert(sizeof(TypeName) == 4);
+
+OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(TransmittanceLutSlot)
+OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(SkyViewLutSlot)
+OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(SkyIrradianceLutSlot)
+OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(MultiScatLutSlot)
+OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(CameraVolumeLutSlot)
+OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(BlueNoiseSlot)
+OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(CubeMapSlot)
+OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(BrdfLutSlot)
+OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(IrradianceMapSlot)
+OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(SpecularLutSlot)
+OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(PrefilterMapSlot)
+
+#undef OXYGEN_DEFINE_BINDLESS_SLOT_TYPE
+
 //! GPU-facing fog parameters.
 /*!
  Layout mirrors the HLSL struct `GpuFogParams`.
 
  All values are authored in scene space and consumed by shaders in linear HDR.
 */
-struct alignas(16) GpuFogParams {
+struct alignas(packing::kShaderDataFieldAlignment) GpuFogParams {
   //! Single-scattering albedo (linear RGB) in [0, 1].
   glm::vec3 single_scattering_albedo_rgb { 1.0F, 1.0F, 1.0F };
 
@@ -70,110 +106,8 @@ struct alignas(16) GpuFogParams {
   uint32_t enabled { 0U };
 };
 static_assert(std::is_standard_layout_v<GpuFogParams>);
-static_assert(sizeof(GpuFogParams) % 16 == 0);
-static_assert(sizeof(GpuFogParams) == 48);
-
-struct TransmittanceLutSlot {
-  ShaderVisibleIndex value;
-  TransmittanceLutSlot()
-    : value(kInvalidShaderVisibleIndex)
-  {
-  }
-  explicit constexpr TransmittanceLutSlot(const ShaderVisibleIndex v)
-    : value(v)
-  {
-  }
-  [[nodiscard]] constexpr auto IsValid() const noexcept
-  {
-    return value != kInvalidShaderVisibleIndex;
-  }
-  constexpr auto operator<=>(const TransmittanceLutSlot&) const = default;
-};
-
-struct SkyViewLutSlot {
-  ShaderVisibleIndex value;
-  SkyViewLutSlot()
-    : value(kInvalidShaderVisibleIndex)
-  {
-  }
-  explicit constexpr SkyViewLutSlot(const ShaderVisibleIndex v)
-    : value(v)
-  {
-  }
-  [[nodiscard]] constexpr auto IsValid() const noexcept
-  {
-    return value != kInvalidShaderVisibleIndex;
-  }
-  constexpr auto operator<=>(const SkyViewLutSlot&) const = default;
-};
-
-struct SkyIrradianceLutSlot {
-  ShaderVisibleIndex value;
-  SkyIrradianceLutSlot()
-    : value(kInvalidShaderVisibleIndex)
-  {
-  }
-  explicit constexpr SkyIrradianceLutSlot(const ShaderVisibleIndex v)
-    : value(v)
-  {
-  }
-  [[nodiscard]] constexpr auto IsValid() const noexcept
-  {
-    return value != kInvalidShaderVisibleIndex;
-  }
-  constexpr auto operator<=>(const SkyIrradianceLutSlot&) const = default;
-};
-
-struct MultiScatLutSlot {
-  ShaderVisibleIndex value;
-  MultiScatLutSlot()
-    : value(kInvalidShaderVisibleIndex)
-  {
-  }
-  explicit constexpr MultiScatLutSlot(const ShaderVisibleIndex v)
-    : value(v)
-  {
-  }
-  [[nodiscard]] constexpr auto IsValid() const noexcept
-  {
-    return value != kInvalidShaderVisibleIndex;
-  }
-  constexpr auto operator<=>(const MultiScatLutSlot&) const = default;
-};
-
-struct CameraVolumeLutSlot {
-  ShaderVisibleIndex value;
-  CameraVolumeLutSlot()
-    : value(kInvalidShaderVisibleIndex)
-  {
-  }
-  explicit constexpr CameraVolumeLutSlot(const ShaderVisibleIndex v)
-    : value(v)
-  {
-  }
-  [[nodiscard]] constexpr auto IsValid() const noexcept
-  {
-    return value != kInvalidShaderVisibleIndex;
-  }
-  constexpr auto operator<=>(const CameraVolumeLutSlot&) const = default;
-};
-
-struct BlueNoiseSlot {
-  ShaderVisibleIndex value;
-  BlueNoiseSlot()
-    : value(kInvalidShaderVisibleIndex)
-  {
-  }
-  explicit constexpr BlueNoiseSlot(const ShaderVisibleIndex v)
-    : value(v)
-  {
-  }
-  [[nodiscard]] constexpr auto IsValid() const noexcept
-  {
-    return value != kInvalidShaderVisibleIndex;
-  }
-  constexpr auto operator<=>(const BlueNoiseSlot&) const = default;
-};
+static_assert(sizeof(GpuFogParams) % packing::kShaderDataFieldAlignment == 0);
+static_assert(sizeof(GpuFogParams) == 48); // NOLINT(*-magic-numbers)
 
 //! GPU-facing sky atmosphere parameters.
 /*!
@@ -181,7 +115,7 @@ struct BlueNoiseSlot {
 
  The renderer is expected to provide the sun direction via scene lighting.
 */
-struct alignas(16) GpuSkyAtmosphereParams {
+struct alignas(packing::kShaderDataFieldAlignment) GpuSkyAtmosphereParams {
   float planet_radius_m { atmos::kDefaultPlanetRadiusM };
   float atmosphere_height_m { atmos::kDefaultAtmosphereHeightM };
   float multi_scattering_factor { 1.0F };
@@ -228,95 +162,9 @@ struct alignas(16) GpuSkyAtmosphereParams {
   uint32_t sky_view_alt_mapping_mode { 0U };
 };
 static_assert(std::is_standard_layout_v<GpuSkyAtmosphereParams>);
-static_assert(sizeof(GpuSkyAtmosphereParams) % 16 == 0);
-static_assert(sizeof(GpuSkyAtmosphereParams) == 192);
-
-static_assert(sizeof(glm::vec3) == 12);
-static_assert(alignof(glm::vec3) == 4);
-
-static_assert(offsetof(GpuSkyAtmosphereParams, planet_radius_m) == 0);
-static_assert(offsetof(GpuSkyAtmosphereParams, ground_albedo_rgb) == 16);
-static_assert(offsetof(GpuSkyAtmosphereParams, rayleigh_scattering_rgb) == 32);
-static_assert(offsetof(GpuSkyAtmosphereParams, mie_scattering_rgb) == 48);
-static_assert(offsetof(GpuSkyAtmosphereParams, mie_extinction_rgb) == 64);
-static_assert(offsetof(GpuSkyAtmosphereParams, absorption_rgb) == 80);
-static_assert(offsetof(GpuSkyAtmosphereParams, absorption_density) == 96);
-static_assert(offsetof(GpuSkyAtmosphereParams, sun_disk_enabled) == 128);
-static_assert(offsetof(GpuSkyAtmosphereParams, sky_irradiance_lut_slot) == 144);
-static_assert(offsetof(GpuSkyAtmosphereParams, multi_scat_lut_slot) == 148);
-static_assert(offsetof(GpuSkyAtmosphereParams, transmittance_lut_width) == 160);
 static_assert(
-  offsetof(GpuSkyAtmosphereParams, sky_irradiance_lut_width) == 176);
-static_assert(
-  offsetof(GpuSkyAtmosphereParams, sky_view_alt_mapping_mode) == 188);
-
-struct CubeMapSlot {
-  ShaderVisibleIndex value;
-  CubeMapSlot()
-    : value(kInvalidShaderVisibleIndex)
-  {
-  }
-  explicit constexpr CubeMapSlot(const ShaderVisibleIndex v)
-    : value(v)
-  {
-  }
-  [[nodiscard]] constexpr auto IsValid() const noexcept
-  {
-    return value != kInvalidShaderVisibleIndex;
-  }
-  constexpr auto operator<=>(const CubeMapSlot&) const = default;
-};
-
-struct BrdfLutSlot {
-  ShaderVisibleIndex value;
-  BrdfLutSlot()
-    : value(kInvalidShaderVisibleIndex)
-  {
-  }
-  explicit constexpr BrdfLutSlot(const ShaderVisibleIndex v)
-    : value(v)
-  {
-  }
-  [[nodiscard]] constexpr auto IsValid() const noexcept
-  {
-    return value != kInvalidShaderVisibleIndex;
-  }
-  constexpr auto operator<=>(const BrdfLutSlot&) const = default;
-};
-
-struct IrradianceMapSlot {
-  ShaderVisibleIndex value;
-  IrradianceMapSlot()
-    : value(kInvalidShaderVisibleIndex)
-  {
-  }
-  explicit constexpr IrradianceMapSlot(const ShaderVisibleIndex v)
-    : value(v)
-  {
-  }
-  [[nodiscard]] constexpr auto IsValid() const noexcept
-  {
-    return value != kInvalidShaderVisibleIndex;
-  }
-  constexpr auto operator<=>(const IrradianceMapSlot&) const = default;
-};
-
-struct PrefilterMapSlot {
-  ShaderVisibleIndex value;
-  PrefilterMapSlot()
-    : value(kInvalidShaderVisibleIndex)
-  {
-  }
-  explicit constexpr PrefilterMapSlot(const ShaderVisibleIndex v)
-    : value(v)
-  {
-  }
-  [[nodiscard]] constexpr auto IsValid() const noexcept
-  {
-    return value != kInvalidShaderVisibleIndex;
-  }
-  constexpr auto operator<=>(const PrefilterMapSlot&) const = default;
-};
+  sizeof(GpuSkyAtmosphereParams) % packing::kShaderDataFieldAlignment == 0);
+static_assert(sizeof(GpuSkyAtmosphereParams) == 192); // NOLINT(*-magic-numbers)
 
 //! GPU-facing sky light (IBL) parameters.
 /*!
@@ -326,7 +174,7 @@ struct PrefilterMapSlot {
  sky light is disabled or missing, set `enabled = 0` and set `cubemap_slot` to
  `kInvalidDescriptorSlot`.
 */
-struct alignas(16) GpuSkyLightParams {
+struct alignas(packing::kShaderDataFieldAlignment) GpuSkyLightParams {
   glm::vec3 tint_rgb { 1.0F, 1.0F, 1.0F };
 
   //! Scales sampled sky radiance (includes authored intensity multiplier and
@@ -354,8 +202,9 @@ struct alignas(16) GpuSkyLightParams {
   std::uint32_t _pad1 { 0U };
 };
 static_assert(std::is_standard_layout_v<GpuSkyLightParams>);
-static_assert(sizeof(GpuSkyLightParams) % 16 == 0);
-static_assert(sizeof(GpuSkyLightParams) == 64);
+static_assert(
+  sizeof(GpuSkyLightParams) % packing::kShaderDataFieldAlignment == 0);
+static_assert(sizeof(GpuSkyLightParams) == 64); // NOLINT(*-magic-numbers)
 
 //! GPU-facing sky sphere background parameters.
 /*!
@@ -364,7 +213,7 @@ static_assert(sizeof(GpuSkyLightParams) == 64);
  `cubemap_slot` is a shader-visible descriptor slot (bindless SRV). When the
  sky sphere is disabled or missing, set `enabled = 0`.
 */
-struct alignas(16) GpuSkySphereParams {
+struct alignas(packing::kShaderDataFieldAlignment) GpuSkySphereParams {
   glm::vec3 solid_color_rgb { 0.0F, 0.0F, 0.0F };
   float intensity { 1.0F };
 
@@ -377,14 +226,15 @@ struct alignas(16) GpuSkySphereParams {
   std::uint32_t cubemap_max_mip { 0U };
 };
 static_assert(std::is_standard_layout_v<GpuSkySphereParams>);
-static_assert(sizeof(GpuSkySphereParams) % 16 == 0);
-static_assert(sizeof(GpuSkySphereParams) == 48);
+static_assert(
+  sizeof(GpuSkySphereParams) % packing::kShaderDataFieldAlignment == 0);
+static_assert(sizeof(GpuSkySphereParams) == 48); // NOLINT(*-magic-numbers)
 
 //! GPU-facing volumetric clouds parameters.
 /*!
  Layout mirrors the HLSL struct `GpuVolumetricCloudParams`.
 */
-struct alignas(16) GpuVolumetricCloudParams {
+struct alignas(packing::kShaderDataFieldAlignment) GpuVolumetricCloudParams {
   //! Single-scattering albedo (linear RGB) in [0, 1].
   glm::vec3 single_scattering_albedo_rgb { 0.9F, 0.9F, 0.9F };
   float base_altitude_m { 1500.0F };
@@ -406,14 +256,16 @@ struct alignas(16) GpuVolumetricCloudParams {
   uint32_t _pad1 { 0U };
 };
 static_assert(std::is_standard_layout_v<GpuVolumetricCloudParams>);
-static_assert(sizeof(GpuVolumetricCloudParams) % 16 == 0);
-static_assert(sizeof(GpuVolumetricCloudParams) == 64);
+static_assert(
+  sizeof(GpuVolumetricCloudParams) % packing::kShaderDataFieldAlignment == 0);
+static_assert(
+  sizeof(GpuVolumetricCloudParams) == 64); // NOLINT(*-magic-numbers)
 
 //! GPU-facing post process parameters.
 /*!
  Layout mirrors the HLSL struct `GpuPostProcessParams`.
 */
-struct alignas(16) GpuPostProcessParams {
+struct alignas(packing::kShaderDataFieldAlignment) GpuPostProcessParams {
   float exposure_compensation { 1.0F };
   float auto_exposure_min_ev { -6.0F };
   float auto_exposure_max_ev { 16.0F };
@@ -435,8 +287,9 @@ struct alignas(16) GpuPostProcessParams {
   uint32_t _pad2 { 0U };
 };
 static_assert(std::is_standard_layout_v<GpuPostProcessParams>);
-static_assert(sizeof(GpuPostProcessParams) % 16 == 0);
-static_assert(sizeof(GpuPostProcessParams) == 64);
+static_assert(
+  sizeof(GpuPostProcessParams) % packing::kShaderDataFieldAlignment == 0);
+static_assert(sizeof(GpuPostProcessParams) == 64); // NOLINT(*-magic-numbers)
 
 //! GPU-facing environment payload uploaded as a bindless SRV.
 /*!
@@ -449,7 +302,7 @@ static_assert(sizeof(GpuPostProcessParams) == 64);
  @note The renderer is responsible for mapping scene assets to bindless slots
        (e.g., cubemaps) and for selecting which sky system is active.
 */
-struct alignas(16) EnvironmentStaticData {
+struct alignas(packing::kShaderDataFieldAlignment) EnvironmentStaticData {
   GpuFogParams fog;
   GpuSkyAtmosphereParams atmosphere;
   GpuSkyLightParams sky_light;
@@ -458,13 +311,8 @@ struct alignas(16) EnvironmentStaticData {
   GpuPostProcessParams post_process;
 };
 static_assert(std::is_standard_layout_v<EnvironmentStaticData>);
-static_assert(sizeof(EnvironmentStaticData) % 16 == 0);
-static_assert(sizeof(EnvironmentStaticData) == 480);
-static_assert(offsetof(EnvironmentStaticData, fog) == 0);
-static_assert(offsetof(EnvironmentStaticData, atmosphere) == 48);
-static_assert(offsetof(EnvironmentStaticData, sky_light) == 240);
-static_assert(offsetof(EnvironmentStaticData, sky_sphere) == 304);
-static_assert(offsetof(EnvironmentStaticData, clouds) == 352);
-static_assert(offsetof(EnvironmentStaticData, post_process) == 416);
+static_assert(
+  sizeof(EnvironmentStaticData) % packing::kShaderDataFieldAlignment == 0);
+static_assert(sizeof(EnvironmentStaticData) == 480); // NOLINT(*-magic-numbers)
 
 } // namespace oxygen::engine

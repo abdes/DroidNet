@@ -78,7 +78,7 @@ set(
   "SceneCameraViewResolver.h"
   "ScenePrep/CollectionConfig.h"
   "ScenePrep/FinalizationConfig.h"
-  "Types/ClusterConfig.h"
+  "Types/LightCullingConfig.h"
   "Types/CompositingTask.h"
   "Types/DirectionalLightBasic.h"
   "Types/DirectionalLightShadows.h"
@@ -92,7 +92,6 @@ set(
   "Types/PositionalLightData.h"
   "Types/SceneConstants.h"
   "Types/ShaderDebugMode.h"
-  "Types/SunState.h"
 )
 set(
   OXYGEN_RENDERER_PRIVATE_SOURCES

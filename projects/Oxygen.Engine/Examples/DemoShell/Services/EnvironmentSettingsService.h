@@ -338,7 +338,6 @@ private:
   auto GetSunSettingsForSource(int source) -> SunUiSettings&;
   auto LoadSunSettingsFromProfile(int source) -> void;
   auto SaveSunSettingsToProfile(int source) -> void;
-  [[nodiscard]] auto GetAtmosphereFlags() const -> uint32_t;
   auto MaybeRequestSkyCapture() -> void;
 
   static constexpr float kDefaultPlanetRadiusKm

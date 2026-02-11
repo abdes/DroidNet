@@ -28,8 +28,8 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
-#include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/Passes/AutoExposurePass.h>
+#include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
 
 namespace oxygen::engine {
@@ -357,15 +357,12 @@ auto ToneMapPass::EnsureSourceTextureSrv(const graphics::Texture& texture)
     }
     source_texture_srvs_.erase(it);
   } else if (registry_has_view) {
-    // Stale registry entry without a matching local cache entry.
-    const auto existing_view = registry.Find(texture, srv_desc);
-    if (existing_view->IsValid()) {
-      try {
-        registry.UnRegisterView(texture, existing_view);
-      } catch (...) {
-        // Best-effort cleanup: if the registry or resource lifetime is
-        // unusual, avoid throwing from here and continue.
-      }
+    // If the registry already has this view, use its index.
+    const auto existing_index
+      = registry.FindShaderVisibleIndex(texture, srv_desc);
+    if (existing_index.has_value()) {
+      source_texture_srvs_[&texture] = *existing_index;
+      return *existing_index;
     }
   }
 
@@ -422,11 +419,12 @@ auto ToneMapPass::UpdatePassConstants(ShaderVisibleIndex source_texture_index)
         view_id.get(), ae != nullptr);
     }
 
-    // Fallback: if auto exposure pass did not run, keep legacy env exposure.
+    // Fallback: if auto exposure pass did not run, use the resolved view
+    // exposure captured during scene prep.
     if (!exposure_buffer_index.IsValid()) {
-      if (const auto manager = Context().env_dynamic_manager) {
-        debug_flags |= 8u; // used env fallback exposure
-        exposure = std::max(manager->GetExposure(view_id), 0.0F);
+      if (const auto* prepared = Context().current_view.prepared_frame.get()) {
+        debug_flags |= 8u; // used prepared-frame fallback exposure
+        exposure = std::max(prepared->exposure, 0.0F);
       }
     }
   }

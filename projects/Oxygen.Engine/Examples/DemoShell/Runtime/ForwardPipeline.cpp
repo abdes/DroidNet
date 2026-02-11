@@ -289,6 +289,13 @@ namespace {
 struct ForwardPipeline::Impl {
   observer_ptr<AsyncEngine> engine;
 
+  struct {
+    std::optional<engine::ExposureMode> exposure_mode;
+    std::optional<float> manual_exposure;
+    std::optional<engine::ToneMapper> tone_mapper;
+    std::optional<engine::ShaderDebugMode> debug_mode;
+  } last_applied_tonemap_config;
+
   // Persistent workers
   std::map<ViewId, CompositionViewImpl> view_pool;
   // Frame active views (sorted)
@@ -331,7 +338,6 @@ struct ForwardPipeline::Impl {
     engine::ShaderDebugMode light_culling_debug_mode {
       engine::ShaderDebugMode::kDisabled
     };
-    bool clustered_culling_enabled { false };
     uint32_t cluster_depth_slices { 24 };
     engine::ExposureMode exposure_mode { engine::ExposureMode::kManual };
     float exposure_value { 1.0F };
@@ -807,8 +813,8 @@ struct ForwardPipeline::Impl {
     }
 
     if (light_culling_pass_config) {
-      light_culling_pass_config->cluster.depth_slices
-        = staged.clustered_culling_enabled ? staged.cluster_depth_slices : 1;
+      light_culling_pass_config->cluster.cluster_dim_z
+        = staged.cluster_depth_slices;
     }
 
     if (wireframe_pass) {
@@ -829,6 +835,36 @@ struct ForwardPipeline::Impl {
         ? 1.0F
         : (debug_intent.force_manual_exposure ? 1.0F : staged.exposure_value);
       tone_map_pass_config->tone_mapper = staged.tonemapping_mode;
+
+      const bool config_changed = last_applied_tonemap_config.exposure_mode
+          != tone_map_pass_config->exposure_mode
+        || last_applied_tonemap_config.manual_exposure
+          != tone_map_pass_config->manual_exposure
+        || last_applied_tonemap_config.tone_mapper
+          != tone_map_pass_config->tone_mapper
+        || last_applied_tonemap_config.debug_mode != debug_mode;
+      if (config_changed) {
+        LOG_F(INFO,
+          "ForwardPipeline: ToneMap config applied (debug_mode={}, "
+          "force_manual={}, force_one={}, "
+          "exp_mode={}, manual_exp={}, tone_mapper={}, staged_exp_mode={}, "
+          "staged_exp={}, staged_mapper={})",
+          static_cast<uint32_t>(debug_mode), debug_intent.force_manual_exposure,
+          debug_intent.force_exposure_one,
+          engine::to_string(tone_map_pass_config->exposure_mode),
+          tone_map_pass_config->manual_exposure,
+          engine::to_string(tone_map_pass_config->tone_mapper),
+          engine::to_string(staged.exposure_mode), staged.exposure_value,
+          engine::to_string(staged.tonemapping_mode));
+
+        last_applied_tonemap_config.exposure_mode
+          = tone_map_pass_config->exposure_mode;
+        last_applied_tonemap_config.manual_exposure
+          = tone_map_pass_config->manual_exposure;
+        last_applied_tonemap_config.tone_mapper
+          = tone_map_pass_config->tone_mapper;
+        last_applied_tonemap_config.debug_mode = debug_mode;
+      }
     }
 
     if (auto_exposure_config) {
@@ -961,6 +997,38 @@ auto ForwardPipeline::OnSceneMutation(
         pp && pp->IsEnabled()) {
         impl_->auto_exposure_config->metering_mode
           = pp->GetAutoExposureMeteringMode();
+
+        // HACK: Read tonemapper from Scene PPV to allow Renderer to force
+        // changes This makes the pipeline responsive to direct Scene PPV
+        // modifications
+        const auto scene_tonemap = pp->GetToneMapper();
+
+        // Convert scene::environment::ToneMapper to engine::ToneMapper
+        engine::ToneMapper engine_tonemap = engine::ToneMapper::kAcesFitted;
+        switch (scene_tonemap) {
+        case scene::environment::ToneMapper::kAcesFitted:
+          engine_tonemap = engine::ToneMapper::kAcesFitted;
+          break;
+        case scene::environment::ToneMapper::kReinhard:
+          engine_tonemap = engine::ToneMapper::kReinhard;
+          break;
+        case scene::environment::ToneMapper::kFilmic:
+          engine_tonemap = engine::ToneMapper::kFilmic;
+          break;
+        case scene::environment::ToneMapper::kNone:
+          engine_tonemap = engine::ToneMapper::kNone;
+          break;
+        }
+
+        if (impl_->staged.tonemapping_mode != engine_tonemap) {
+          LOG_F(INFO,
+            "ForwardPipeline: Detected Scene PPV tonemapper change ({} -> {}), "
+            "applying",
+            static_cast<int>(impl_->staged.tonemapping_mode),
+            static_cast<int>(engine_tonemap));
+          impl_->staged.tonemapping_mode = engine_tonemap;
+          impl_->staged.dirty = true;
+        }
       }
     }
   }
@@ -1195,16 +1263,19 @@ auto ForwardPipeline::SetShaderDebugMode(engine::ShaderDebugMode mode) -> void
   impl_->staged.shader_debug_mode = mode;
   impl_->staged.dirty = true;
 }
+
 auto ForwardPipeline::SetRenderMode(RenderMode mode) -> void
 {
   impl_->staged.render_mode = mode;
   impl_->staged.dirty = true;
 }
+
 auto ForwardPipeline::SetGpuDebugPassEnabled(bool enabled) -> void
 {
   impl_->staged.gpu_debug_pass_enabled = enabled;
   impl_->staged.dirty = true;
 }
+
 /*!
  Stages the last mouse-down position for GPU debug overlays.
 
@@ -1223,6 +1294,7 @@ auto ForwardPipeline::SetGpuDebugMouseDownPosition(
   impl_->staged.gpu_debug_mouse_down_position = position;
   impl_->staged.dirty = true;
 }
+
 auto ForwardPipeline::SetWireframeColor(const graphics::Color& color) -> void
 {
   DLOG_F(1, "SetWireframeColor ({}, {}, {}, {})", color.r, color.g, color.b,
@@ -1230,36 +1302,40 @@ auto ForwardPipeline::SetWireframeColor(const graphics::Color& color) -> void
   impl_->staged.wire_color = color;
   impl_->staged.dirty = true;
 }
+
 auto ForwardPipeline::SetLightCullingVisualizationMode(
   engine::ShaderDebugMode mode) -> void
 {
   impl_->staged.light_culling_debug_mode = mode;
   impl_->staged.dirty = true;
 }
-auto ForwardPipeline::SetClusteredCullingEnabled(bool enabled) -> void
-{
-  impl_->staged.clustered_culling_enabled = enabled;
-  impl_->staged.dirty = true;
-}
+
 auto ForwardPipeline::SetClusterDepthSlices(uint32_t slices) -> void
 {
   impl_->staged.cluster_depth_slices = slices;
   impl_->staged.dirty = true;
 }
+
 auto ForwardPipeline::SetExposureMode(engine::ExposureMode mode) -> void
 {
+  if (mode == impl_->staged.exposure_mode) {
+    return;
+  }
   DLOG_F(INFO, "SetExposureMode {}", mode);
   impl_->staged.exposure_mode = mode;
   impl_->staged.dirty = true;
 }
+
 auto ForwardPipeline::SetExposureValue(float value) -> void
 {
   DLOG_F(INFO, "SetExposureValue {}", value);
   impl_->staged.exposure_value = value;
   impl_->staged.dirty = true;
 }
+
 auto ForwardPipeline::SetToneMapper(engine::ToneMapper mode) -> void
 {
+  LOG_F(INFO, "ForwardPipeline: SetToneMapper {}", engine::to_string(mode));
   impl_->staged.tonemapping_mode = mode;
   impl_->staged.dirty = true;
 }
@@ -1269,21 +1345,25 @@ auto ForwardPipeline::SetAutoExposureAdaptationSpeedUp(float speed) -> void
   impl_->staged.auto_exposure_adaptation_speed_up = speed;
   impl_->staged.dirty = true;
 }
+
 auto ForwardPipeline::SetAutoExposureAdaptationSpeedDown(float speed) -> void
 {
   impl_->staged.auto_exposure_adaptation_speed_down = speed;
   impl_->staged.dirty = true;
 }
+
 auto ForwardPipeline::SetAutoExposureLowPercentile(float percentile) -> void
 {
   impl_->staged.auto_exposure_low_percentile = percentile;
   impl_->staged.dirty = true;
 }
+
 auto ForwardPipeline::SetAutoExposureHighPercentile(float percentile) -> void
 {
   impl_->staged.auto_exposure_high_percentile = percentile;
   impl_->staged.dirty = true;
 }
+
 auto ForwardPipeline::SetAutoExposureMinLogLuminance(float luminance) -> void
 {
   impl_->staged.auto_exposure_min_log_luminance = luminance;
@@ -1320,6 +1400,7 @@ auto ForwardPipeline::UpdateShaderPassConfig(
     *impl_->shader_pass_config = config;
   }
 }
+
 auto ForwardPipeline::UpdateTransparentPassConfig(
   const engine::TransparentPassConfig& config) -> void
 {
@@ -1327,6 +1408,7 @@ auto ForwardPipeline::UpdateTransparentPassConfig(
     *impl_->transparent_pass_config = config;
   }
 }
+
 auto ForwardPipeline::UpdateLightCullingPassConfig(
   const engine::LightCullingPassConfig& config) -> void
 {

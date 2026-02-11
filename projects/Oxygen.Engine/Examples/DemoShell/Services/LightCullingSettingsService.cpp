@@ -21,21 +21,6 @@ auto LightCullingSettingsService::Initialize(
   pipeline_ = pipeline;
 }
 
-auto LightCullingSettingsService::GetUseClusteredCulling() const -> bool
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  return settings->GetBool(kModeKey).value_or(true); // Default to Clustered
-}
-
-auto LightCullingSettingsService::SetUseClusteredCulling(bool enabled) -> void
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  settings->SetBool(kModeKey, enabled);
-  epoch_++;
-}
-
 auto LightCullingSettingsService::GetDepthSlices() const -> int
 {
   const auto settings = SettingsService::ForDemoApp();
@@ -145,16 +130,12 @@ auto LightCullingSettingsService::ApplyPipelineSettings() -> void
     return;
   }
 
-  const bool use_clustered = GetUseClusteredCulling();
   const auto depth_slices = static_cast<uint32_t>(GetDepthSlices());
 
-  pipeline_->SetClusteredCullingEnabled(use_clustered);
   pipeline_->SetClusterDepthSlices(depth_slices);
   pipeline_->SetLightCullingVisualizationMode(GetVisualizationMode());
 
   engine::LightCullingPassConfig config {};
-  config.cluster = engine::ClusterConfig::TileBased();
-  config.cluster.depth_slices = use_clustered ? depth_slices : 1U;
 
   if (GetUseCameraZ()) {
     config.cluster.z_near = 0.0F;

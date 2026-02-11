@@ -143,10 +143,9 @@ float4 PS(VSOutput input) : SV_Target0 {
         + (ibl_spec_term + ibl_diffuse * base_rgb * (1.0f - surf.metalness))
         + surf.emissive;
 
-    if (LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data)
-        && (env_data.fog.enabled || ShouldUseLutAerialPerspective(env_data.atmosphere))) {
+    if (LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data)) {
         float3 s_dir = normalize(GetSunDirectionWS());
-        if (EnvironmentDynamicData.sun_enabled == 0 && !IsOverrideSunEnabled()) {
+        if (!HasSunLight()) {
             s_dir = float3(0.5, 0.707, 0.5);
         }
 

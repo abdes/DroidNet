@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <unordered_map>
 
 #include <glm/vec3.hpp>
@@ -20,7 +21,6 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/Types/EnvironmentDynamicData.h>
-#include <Oxygen/Renderer/Types/SunState.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine::internal {
@@ -82,24 +82,16 @@ public:
   OXGN_RNDR_NDAPI auto GetBuffer(ViewId view_id)
     -> std::shared_ptr<graphics::Buffer>;
 
-  //! Set exposure for a specific view.
-  OXGN_RNDR_API auto SetExposure(ViewId view_id, float exposure) -> void;
+  //! Formats the current CPU snapshot for a view for diagnostic logging.
+  OXGN_RNDR_API auto DebugFormat(ViewId view_id) -> std::string;
 
-  //! Get exposure for a specific view (defaults to 1.0).
-  OXGN_RNDR_NDAPI auto GetExposure(ViewId view_id) const -> float;
+  //! Set light culling configuration for a specific view.
+  OXGN_RNDR_API auto SetLightCullingConfig(
+    ViewId view_id, const LightCullingConfig& config) -> void;
 
-  //! Set clustered culling configuration for a specific view.
-
-  //! Structured setter for light culling data.
-  OXGN_RNDR_API auto SetLightCullingData(
-    ViewId view_id, const LightCullingData& data) -> void;
-
-  //! Set Z-binning parameters for a specific view.
-  OXGN_RNDR_API auto SetZBinning(ViewId view_id, float z_near, float z_far,
-    float z_scale, float z_bias) -> void;
-
-  //! Set the designated sun state for a view.
-  OXGN_RNDR_API auto SetSunState(ViewId view_id, const SunState& sun) -> void;
+  //! Set the sun state for a view.
+  OXGN_RNDR_API auto SetSunState(ViewId view_id, const SyntheticSunData& sun)
+    -> void;
 
   //! Set aerial perspective strength/scales for SkyAtmosphere.
   OXGN_RNDR_API auto SetAtmosphereScattering(ViewId view_id,
@@ -111,14 +103,6 @@ public:
     const glm::vec3& planet_center_ws, const glm::vec3& planet_up_ws,
     float camera_altitude_m, float sky_view_lut_slice,
     float planet_to_sun_cos_zenith) -> void;
-
-  //! Set debug/feature flags for the atmospheric pipeline.
-  OXGN_RNDR_API auto SetAtmosphereFlags(
-    ViewId view_id, uint32_t atmosphere_flags) -> void;
-
-  //! Set optional override sun values for atmosphere debugging.
-  OXGN_RNDR_API auto SetAtmosphereSunOverride(
-    ViewId view_id, const SunState& sun) -> void;
 
 private:
   struct BufferKey {

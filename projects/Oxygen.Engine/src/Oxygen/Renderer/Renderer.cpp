@@ -26,15 +26,6 @@
 #include <glm/common.hpp>
 #include <glm/geometric.hpp>
 
-#include "PreparedSceneFrame.h"
-#include "Resources/DrawMetadataEmitter.h"
-#include "Resources/GeometryUploader.h"
-#include "Resources/MaterialBinder.h"
-#include "Resources/TransformUploader.h"
-#include "Types/DrawMetadata.h"
-#include "Types/SunState.h"
-#include "Upload/StagingProvider.h"
-#include "Upload/UploadPolicy.h"
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -71,21 +62,33 @@
 #include <Oxygen/Renderer/Passes/IblComputePass.h>
 #include <Oxygen/Renderer/Passes/SkyAtmosphereLutComputePass.h>
 #include <Oxygen/Renderer/Passes/SkyCapturePass.h>
+#include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderContextPool.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/RendererTag.h>
+#include <Oxygen/Renderer/Resources/DrawMetadataEmitter.h>
+#include <Oxygen/Renderer/Resources/GeometryUploader.h>
+#include <Oxygen/Renderer/Resources/MaterialBinder.h>
 #include <Oxygen/Renderer/Resources/TextureBinder.h>
+#include <Oxygen/Renderer/Resources/TransformUploader.h>
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h>
 #include <Oxygen/Renderer/ScenePrep/FinalizationConfig.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
+#include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Types/EnvironmentDynamicData.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
+#include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
+#include <Oxygen/Renderer/Upload/UploadPolicy.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/Scene.h>
 
 namespace {
 auto ResolveViewOutputTexture(const oxygen::engine::FrameContext& context,
@@ -190,10 +193,6 @@ auto CopyTextureToRegion(oxygen::graphics::CommandRecorder& recorder,
   recorder.FlushBarriers();
 }
 } // namespace
-#include <Oxygen/Scene/Environment/PostProcessVolume.h>
-#include <Oxygen/Scene/Environment/SceneEnvironment.h>
-#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
-#include <Oxygen/Scene/Scene.h>
 
 // Implementation of RendererTagFactory. Provides access to RendererTag
 // capability tokens, only from the engine core. When building tests, allow
@@ -494,22 +493,6 @@ auto Renderer::RequestSkyCapture() noexcept -> void
   }
 }
 
-auto Renderer::SetAtmosphereDebugFlags(const uint32_t flags) -> void
-{
-  atmosphere_debug_flags_ = flags;
-
-  // Forward flags to LUT manager so the sky-view LUT can use them during
-  // compute dispatch. The LUT manager will mark itself dirty if flags change.
-  if (sky_atmo_lut_manager_) {
-    sky_atmo_lut_manager_->SetAtmosphereFlags(flags);
-  }
-}
-
-auto Renderer::GetAtmosphereDebugFlags() const noexcept -> uint32_t
-{
-  return atmosphere_debug_flags_;
-}
-
 /*!
  Returns the active render context for the current frame.
 
@@ -637,6 +620,14 @@ auto Renderer::OnPreRender(observer_ptr<FrameContext> context) -> co::Co<>
     context->GetScene().get(),
   };
 
+  // Populate frame identity on the pooled RenderContext as early as possible.
+  // Several subsystems (e.g. EnvironmentStaticDataManager) are invoked during
+  // OnPreRender and rely on these values for correct per-frame publication and
+  // diagnostics.
+  render_context_->frame_slot = context->GetFrameSlot();
+  render_context_->frame_sequence = context->GetFrameSequenceNumber();
+  render_context_->delta_time = last_frame_dt_seconds_;
+
   // Clear the per-frame and per-view state (per-frame caches are refreshed
   // at the start of PreRender). Deferred cleanup of unregistered views is
   // performed at frame end (OnFrameEnd) to avoid destroying entries while
@@ -653,6 +644,18 @@ auto Renderer::OnPreRender(observer_ptr<FrameContext> context) -> co::Co<>
   if (env_static_manager_) {
     auto tag = oxygen::renderer::internal::RendererTagFactory::Get();
     env_static_manager_->UpdateIfNeeded(tag, *render_context_);
+    {
+      static ShaderVisibleIndex last_logged_env_static_srv
+        = kInvalidShaderVisibleIndex;
+      const auto env_srv = env_static_manager_->GetSrvIndex();
+      if (env_srv != last_logged_env_static_srv) {
+        LOG_F(INFO,
+          "Renderer: EnvStatic SRV updated (srv={} frame_slot={} frame_seq={})",
+          env_srv.get(), context->GetFrameSlot().get(),
+          context->GetFrameSequenceNumber().get());
+        last_logged_env_static_srv = env_srv;
+      }
+    }
     scene_const_cpu_.SetBindlessEnvironmentStaticSlot(
       BindlessEnvironmentStaticSlot(env_static_manager_->GetSrvIndex()),
       SceneConstants::kRenderer);
@@ -845,6 +848,7 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
       // can run in the same frame against the freshly swapped LUT buffers.
       if (!ran_atmo_lut_compute_this_frame && sky_atmo_lut_compute_pass_
         && sky_atmo_lut_manager_) {
+        const auto swap_count_before = sky_atmo_lut_manager_->GetSwapCount();
         bool atmo_enabled = false;
         if (const auto scene = render_context_->scene) {
           if (const auto env = scene->GetEnvironment()) {
@@ -858,6 +862,60 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
         if (atmo_enabled
           && (sky_atmo_lut_manager_->IsDirty()
             || !sky_atmo_lut_manager_->HasBeenGenerated())) {
+          // Validate PPV exposure settings at LUT regeneration time.
+          if (const auto scene = render_context_->scene) {
+            namespace env = scene::environment;
+            if (const auto env_sys = scene->GetEnvironment()) {
+              if (const auto pp
+                = env_sys->TryGetSystem<env::PostProcessVolume>();
+                pp && pp->IsEnabled()) {
+                const auto ModeToString
+                  = [](env::ExposureMode m) -> const char* {
+                  switch (m) {
+                  case env::ExposureMode::kManual:
+                    return "manual";
+                  case env::ExposureMode::kAuto:
+                    return "auto";
+                  case env::ExposureMode::kManualCamera:
+                    return "manual_camera";
+                  }
+                  return "unknown";
+                };
+                LOG_F(INFO,
+                  "Renderer: LUT regen gated by PPV (view={}, pp_enabled={}, "
+                  "exp_enabled={}, mode={}, manual_ev={:.3f}, comp_ev={:.3f}, "
+                  "key={:.6f})",
+                  view_id.get(), pp->IsEnabled(), pp->GetExposureEnabled(),
+                  ModeToString(pp->GetExposureMode()),
+                  pp->GetManualExposureEv(), pp->GetExposureCompensationEv(),
+                  pp->GetExposureKey());
+              } else {
+                LOG_F(INFO,
+                  "Renderer: LUT regen PPV missing/disabled (view={})",
+                  view_id.get());
+              }
+            }
+          }
+          // Toggle tonemapper: modify Scene AND force pipeline update via hack
+          static bool force_tonemap_toggle = false;
+          force_tonemap_toggle = !force_tonemap_toggle;
+
+          if (const auto scene = render_context_->scene) {
+            if (auto env_sys = scene->GetEnvironment()) {
+              if (auto pp = env_sys->TryGetSystem<env::PostProcessVolume>()) {
+                auto* mutable_pp
+                  = const_cast<env::PostProcessVolume*>(pp.get());
+                const auto new_tonemap = force_tonemap_toggle
+                  ? env::ToneMapper::kNone
+                  : env::ToneMapper::kAcesFitted;
+                mutable_pp->SetToneMapper(new_tonemap);
+                LOG_F(INFO,
+                  "Renderer: TOGGLED tonemapper before LUT regen (view={}, "
+                  "toNone={})",
+                  view_id.get(), force_tonemap_toggle);
+              }
+            }
+          }
           try {
             graphics::GpuEventScope lut_scope(
               *recorder, "Atmosphere LUT Compute");
@@ -865,6 +923,31 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
               *render_context_, *recorder);
             co_await sky_atmo_lut_compute_pass_->Execute(
               *render_context_, *recorder);
+
+            // SkyCapturePass typically runs immediately after LUT compute.
+            // Since the LUT manager swaps front/back buffers inside Execute(),
+            // we must refresh EnvStatic *now* so subsequent passes in the same
+            // frame (sky capture and IBL) sample the newly published SRV slots.
+            const auto swap_count_after = sky_atmo_lut_manager_->GetSwapCount();
+            if (env_static_manager_ && swap_count_after != swap_count_before) {
+              auto tag = oxygen::renderer::internal::RendererTagFactory::Get();
+              env_static_manager_->UpdateIfNeeded(tag, *render_context_);
+              scene_const_cpu_.SetBindlessEnvironmentStaticSlot(
+                BindlessEnvironmentStaticSlot(
+                  env_static_manager_->GetSrvIndex()),
+                SceneConstants::kRenderer);
+
+              LOG_F(INFO,
+                "Renderer: EnvStatic refreshed after LUT swap (view={} swap "
+                "{}->{} env_srv={} atmo_front(T={},V={},M={},I={},C={}))",
+                view_id.get(), swap_count_before, swap_count_after,
+                env_static_manager_->GetSrvIndex().get(),
+                sky_atmo_lut_manager_->GetTransmittanceLutSlot().get(),
+                sky_atmo_lut_manager_->GetSkyViewLutSlot().get(),
+                sky_atmo_lut_manager_->GetMultiScatLutSlot().get(),
+                sky_atmo_lut_manager_->GetSkyIrradianceLutSlot().get(),
+                sky_atmo_lut_manager_->GetCameraVolumeLutSlot().get());
+            }
           } catch (const std::exception& ex) {
             LOG_F(ERROR, "SkyAtmosphereLutComputePass failed: {}", ex.what());
           }
@@ -880,10 +963,21 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
         bool needs_capture
           = sky_capture_requested_ || !sky_capture_pass_->IsCaptured();
 
+        const auto capture_gen_before
+          = sky_capture_pass_->GetCaptureGeneration();
+        const auto capture_captured_before = sky_capture_pass_->IsCaptured();
+
+        const bool capture_requested_flag = sky_capture_requested_;
+        const bool capture_missing = !sky_capture_pass_->IsCaptured();
+        std::optional<std::uint64_t> atmo_gen_before;
+        bool atmo_gen_changed = false;
+
         if (sky_atmo_lut_manager_) {
           const auto current_atmo_gen = sky_atmo_lut_manager_->GetGeneration();
+          atmo_gen_before = current_atmo_gen;
           if (current_atmo_gen != last_atmo_generation_) {
             needs_capture = true;
+            atmo_gen_changed = true;
           }
 
           // If atmosphere is enabled, we MUST have LUTs generated/clean
@@ -908,6 +1002,34 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
 
         bool capture_completed = false;
         if (needs_capture) {
+          const char* reason = capture_requested_flag
+            ? "explicit"
+            : (capture_missing ? "missing"
+                               : (atmo_gen_changed ? "atmo_gen" : "other"));
+
+          // If the atmosphere LUT generation changed, we must invalidate the
+          // previous capture so SkyCapturePass doesn't early-out as "already
+          // captured".
+          if (atmo_gen_changed && sky_capture_pass_->IsCaptured()) {
+            sky_capture_pass_->MarkDirty();
+          }
+
+          LOG_F(INFO,
+            "Renderer: sky capture requested (view={} frame_slot={} "
+            "frame_seq={} "
+            "env_srv={} requested={} missing={} atmo_gen={} last_atmo_gen={} "
+            "atmo_front={} atmo_back={} atmo_swaps={} reason={})",
+            view_id.get(), context->GetFrameSlot().get(),
+            context->GetFrameSequenceNumber().get(),
+            env_static_manager_ ? env_static_manager_->GetSrvIndex().get() : 0U,
+            capture_requested_flag, capture_missing,
+            atmo_gen_before.value_or(0u), last_atmo_generation_,
+            sky_atmo_lut_manager_ ? sky_atmo_lut_manager_->GetFrontBufferIndex()
+                                  : 0U,
+            sky_atmo_lut_manager_ ? sky_atmo_lut_manager_->GetBackBufferIndex()
+                                  : 0U,
+            sky_atmo_lut_manager_ ? sky_atmo_lut_manager_->GetSwapCount() : 0U,
+            reason);
           try {
             graphics::GpuEventScope capture_scope(*recorder, "Sky Capture");
             co_await sky_capture_pass_->PrepareResources(
@@ -915,9 +1037,50 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
             co_await sky_capture_pass_->Execute(*render_context_, *recorder);
             capture_completed = true;
 
+            const auto capture_gen_after
+              = sky_capture_pass_->GetCaptureGeneration();
+            const auto capture_captured_after = sky_capture_pass_->IsCaptured();
+            LOG_F(INFO,
+              "Renderer: sky capture result (view={}, captured {}->{} gen "
+              "{}->{})",
+              view_id.get(), capture_captured_before, capture_captured_after,
+              capture_gen_before, capture_gen_after);
+
+            if (capture_gen_after == capture_gen_before) {
+              LOG_F(INFO,
+                "Renderer: sky capture was a no-op (view={}, reason={}, "
+                "requested={}, missing={}, atmo_gen_changed={})",
+                view_id.get(), reason, capture_requested_flag, capture_missing,
+                atmo_gen_changed);
+            }
+
+            // EnvironmentStaticData is built once in OnPreRender, but sky
+            // capture happens later. Refresh it here so IBL filtering in the
+            // same frame sees the latest captured cubemap slot.
+            if (env_static_manager_
+              && (capture_gen_after != capture_gen_before)) {
+              auto tag = oxygen::renderer::internal::RendererTagFactory::Get();
+              env_static_manager_->UpdateIfNeeded(tag, *render_context_);
+              scene_const_cpu_.SetBindlessEnvironmentStaticSlot(
+                BindlessEnvironmentStaticSlot(
+                  env_static_manager_->GetSrvIndex()),
+                SceneConstants::kRenderer);
+
+              LOG_F(INFO,
+                "Renderer: EnvStatic refreshed after sky capture (view={}, "
+                "SkyLightSlot={}, SkySphereSlot={})",
+                view_id.get(),
+                env_static_manager_->GetSkyLightCubemapSlot().get(),
+                env_static_manager_->GetSkySphereCubemapSlot().get());
+            }
+
             // Force IBL to re-filter the new capture.
             if (ibl_compute_pass_) {
               ibl_compute_pass_->RequestRegenerationOnce();
+              LOG_F(INFO,
+                "Renderer: IBL regeneration requested (reason=SkyCapture, "
+                "view={})",
+                view_id.get());
             }
           } catch (const std::exception& ex) {
             LOG_F(ERROR, "SkyCapturePass failed: {}", ex.what());
@@ -944,6 +1107,10 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
 
         if (needs_ibl) {
           ibl_compute_pass_->RequestRegenerationOnce();
+          LOG_F(INFO,
+            "Renderer: IBL regeneration requested (reason=EnvStaticChange, "
+            "view={})",
+            view_id.get());
         }
 
         try {
@@ -1356,12 +1523,37 @@ auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
   view_scene_consts.SetViewMatrix(resolved_it->second.ViewMatrix())
     .SetProjectionMatrix(proj_matrix)
     .SetCameraPosition(resolved_it->second.CameraPosition())
+    .SetExposure(prepared.exposure, SceneConstants::kRenderer)
     .SetFrameSlot(frame_context.GetFrameSlot(), SceneConstants::kRenderer)
     .SetFrameSequenceNumber(
       frame_context.GetFrameSequenceNumber(), SceneConstants::kRenderer);
 
   // Write constants into per-view mapped buffer
   const auto& snapshot = view_scene_consts.GetSnapshot();
+
+  if (snapshot.frame_slot != frame_context.GetFrameSlot().get()) {
+    LOG_F(ERROR,
+      "Renderer: SceneConstants frame_slot mismatch (view={} snapshot={} "
+      "expected={})",
+      view_id.get(), snapshot.frame_slot, frame_context.GetFrameSlot().get());
+  }
+
+  if (env_static_manager_) {
+    const auto expected_env_srv = env_static_manager_->GetSrvIndex();
+    const auto bound_env_srv = snapshot.env_static_bslot.value;
+    if (!bound_env_srv.IsValid()) {
+      LOG_F(ERROR,
+        "Renderer: SceneConstants EnvStatic SRV invalid (view={} "
+        "expected_srv={})",
+        view_id.get(), expected_env_srv.get());
+    } else if (bound_env_srv != expected_env_srv) {
+      LOG_F(ERROR,
+        "Renderer: SceneConstants EnvStatic SRV mismatch (view={} bound={} "
+        "expected={})",
+        view_id.get(), bound_env_srv.get(), expected_env_srv.get());
+    }
+  }
+
   auto buffer_info = scene_const_manager_->WriteSceneConstants(
     view_id, &snapshot, sizeof(SceneConstants::GpuData));
   if (!buffer_info.buffer) {
@@ -1380,14 +1572,32 @@ auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
   return true;
 }
 
-auto Renderer::UpdateViewExposure(
-  ViewId view_id, const scene::Scene& scene, const SunState& sun_state) -> float
+auto Renderer::UpdateViewExposure(ViewId view_id, const scene::Scene& scene,
+  const SyntheticSunData& sun_state) -> float
 {
   namespace env = scene::environment;
 
+  static std::unordered_map<std::uint32_t, float> last_logged_exposure_by_view;
+  static std::unordered_set<std::uint32_t> logged_suspicious_exposure_views;
+  struct ExposureInputs {
+    bool enabled { true };
+    env::ExposureMode mode { env::ExposureMode::kManual };
+    float manual_ev { 0.0F };
+    float compensation_ev { 0.0F };
+    float exposure_key_raw { 1.0F };
+  };
+  static std::unordered_map<std::uint32_t, ExposureInputs>
+    last_logged_inputs_by_view;
+
   float exposure = 1.0F;
   float exposure_key = 1.0F;
+  float raw_exposure_key = 1.0F;
+  float compensation_ev = 0.0F;
+  std::optional<float> used_ev {};
+  env::ExposureMode exposure_mode = env::ExposureMode::kManual;
   std::optional<float> camera_ev {};
+  bool exposure_enabled = true;
+  std::optional<float> manual_ev_read {};
 
   if (const auto resolved_it = resolved_views_.find(view_id);
     resolved_it != resolved_views_.end()) {
@@ -1398,24 +1608,28 @@ auto Renderer::UpdateViewExposure(
   if (const auto env = scene.GetEnvironment()) {
     if (const auto pp = env->TryGetSystem<env::PostProcessVolume>();
       pp && pp->IsEnabled()) {
-      if (!pp->GetExposureEnabled()) {
+      exposure_enabled = pp->GetExposureEnabled();
+      if (!exposure_enabled) {
         LOG_F(WARNING,
           "Exposure not enabled for view {}; using default exposure={}",
           view_id.get(), exposure);
-        env_dynamic_manager_->SetExposure(view_id, exposure);
         return exposure;
       }
-      exposure_key = std::max(1e-4F, pp->GetExposureKey());
-      const float compensation_ev = pp->GetExposureCompensationEv();
+      raw_exposure_key = pp->GetExposureKey();
+      exposure_key = std::max(1e-4F, raw_exposure_key);
+      compensation_ev = pp->GetExposureCompensationEv();
       const auto mode = pp->GetExposureMode();
+      exposure_mode = mode;
+      manual_ev_read = pp->GetManualExposureEv();
 
       if (mode == env::ExposureMode::kManual
         || mode == env::ExposureMode::kManualCamera
         || mode == env::ExposureMode::kAuto) {
         const float ev = (mode == env::ExposureMode::kManualCamera
                            || mode == env::ExposureMode::kAuto)
-          ? camera_ev.value_or(pp->GetManualExposureEv())
-          : pp->GetManualExposureEv();
+          ? camera_ev.value_or(*manual_ev_read)
+          : *manual_ev_read;
+        used_ev = ev;
 
         // Physically calibrated manual exposure (ISO 2720 reflected-light
         // calibration constant K = 12.5).
@@ -1433,7 +1647,90 @@ auto Renderer::UpdateViewExposure(
   }
 
   exposure *= exposure_key;
-  env_dynamic_manager_->SetExposure(view_id, exposure);
+
+  // Validate PPV settings seen by the renderer (change-detected).
+  {
+    const auto u_view_id = view_id.get();
+    ExposureInputs now {};
+    now.enabled = exposure_enabled;
+    now.mode = exposure_mode;
+    now.manual_ev = manual_ev_read.value_or(0.0F);
+    now.compensation_ev = compensation_ev;
+    now.exposure_key_raw = raw_exposure_key;
+
+    const auto it_inputs = last_logged_inputs_by_view.find(u_view_id);
+    const bool changed = (it_inputs == last_logged_inputs_by_view.end())
+      || std::memcmp(&it_inputs->second, &now, sizeof(ExposureInputs)) != 0;
+    if (changed) {
+      last_logged_inputs_by_view[u_view_id] = now;
+      const auto ModeToString = [](env::ExposureMode m) -> const char* {
+        switch (m) {
+        case env::ExposureMode::kManual:
+          return "manual";
+        case env::ExposureMode::kAuto:
+          return "auto";
+        case env::ExposureMode::kManualCamera:
+          return "manual_camera";
+        }
+        return "unknown";
+      };
+      const auto camera_ev_str
+        = camera_ev.has_value() ? fmt::format("{:.3f}", *camera_ev) : "<none>";
+      const auto used_ev_str
+        = used_ev.has_value() ? fmt::format("{:.3f}", *used_ev) : "<none>";
+      LOG_F(INFO,
+        "Renderer: PPV exposure inputs (view={}, enabled={}, mode={}, "
+        "manual_ev={:.3f}, camera_ev={}, used_ev={}, comp_ev={:.3f}, "
+        "key_raw={:.6f}, key_used={:.6f})",
+        u_view_id, exposure_enabled, ModeToString(exposure_mode), now.manual_ev,
+        camera_ev_str, used_ev_str, compensation_ev, raw_exposure_key,
+        exposure_key);
+    }
+  }
+
+  const auto u_view_id = view_id.get();
+  const auto it = last_logged_exposure_by_view.find(u_view_id);
+  if (it == last_logged_exposure_by_view.end()) {
+    last_logged_exposure_by_view.emplace(u_view_id, exposure);
+  } else {
+    const float previous = it->second;
+    it->second = exposure;
+    if (std::abs(exposure - previous) > 1e-4F) {
+      LOG_F(INFO, "Renderer: exposure changed (view={}, {:.4f} -> {:.4f})",
+        u_view_id, previous, exposure);
+    }
+  }
+
+  if (exposure <= 1e-3F
+    && logged_suspicious_exposure_views.insert(u_view_id).second) {
+    const auto ModeToString = [](env::ExposureMode m) -> const char* {
+      switch (m) {
+      case env::ExposureMode::kManual:
+        return "manual";
+      case env::ExposureMode::kAuto:
+        return "auto";
+      case env::ExposureMode::kManualCamera:
+        return "manual_camera";
+      }
+      return "unknown";
+    };
+    const auto camera_ev_str
+      = camera_ev.has_value() ? fmt::format("{:.3f}", *camera_ev) : "<none>";
+    const auto used_ev_str
+      = used_ev.has_value() ? fmt::format("{:.3f}", *used_ev) : "<none>";
+    const float base_exposure = used_ev.has_value()
+      ? (1.0F / 12.5F) * std::exp2(compensation_ev - *used_ev)
+      : exposure;
+    LOG_F(WARNING,
+      "Renderer: low exposure (view={}, mode={}, exposure={:.6f}, base={:.6f}, "
+      "key_raw={:.6f}, key_used={:.6f}, used_ev={}, camera_ev={}, "
+      "comp_ev={:.3f}, "
+      "sun_enabled={}, sun_lx={:.3f})",
+      u_view_id, ModeToString(exposure_mode), exposure, base_exposure,
+      raw_exposure_key, exposure_key, used_ev_str, camera_ev_str,
+      compensation_ev, sun_state.enabled, sun_state.GetIlluminance());
+  }
+
   return exposure;
 }
 
@@ -1516,16 +1813,15 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
       const oxygen::observer_ptr<renderer::LightManager> light_mgr
         = scene_prep_state_->GetLightManager();
       if (light_mgr) {
-        const SunState scene_sun = internal::ResolveSunForView(
+        const SyntheticSunData scene_sun = internal::ResolveSunForView(
           scene, light_mgr->GetDirectionalLights());
         env_dynamic_manager_->SetSunState(view_id, scene_sun);
-        UpdateViewExposure(view_id, scene, scene_sun);
+        prepared_frame.exposure = UpdateViewExposure(view_id, scene, scene_sun);
 
         // Populate SkyAtmosphere per-view context. Defaults stay conservative
         // until LUT precompute is wired; analytic fallback stays enabled.
         float aerial_distance_scale = 1.0F;
         float aerial_scattering_strength = 1.0F;
-        std::uint32_t atmosphere_flags = 0u;
         // Planet center positioned below Z=0 ground plane so camera at Z>=0
         // is on/above surface. Default radius places center at Z=-6360km.
         float planet_radius_m = 6'360'000.0F;
@@ -1534,10 +1830,6 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
         float camera_altitude_m = 0.0F;
         float sky_view_lut_slice = 0.0F;
         float planet_to_sun_cos_zenith = 0.0F;
-
-        // Compute effective sun state: use override if enabled, else scene sun.
-        SunState effective_sun
-          = sun_override_.enabled ? sun_override_ : scene_sun;
 
         namespace env = scene::environment;
 
@@ -1558,9 +1850,9 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
             camera_altitude_m = glm::max(
               glm::length(camera_pos - planet_center_ws) - planet_radius_m,
               0.0F);
-            // Use effective sun's cos_zenith for atmosphere.
+            // Use scene sun's cos_zenith for atmosphere.
             planet_to_sun_cos_zenith
-              = effective_sun.enabled ? effective_sun.cos_zenith : 0.0F;
+              = (scene_sun.enabled != 0U) ? scene_sun.cos_zenith : 0.0F;
           }
         }
 
@@ -1571,31 +1863,9 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
           planet_center_ws, planet_up_ws, camera_altitude_m, sky_view_lut_slice,
           planet_to_sun_cos_zenith);
 
-        // Merge debug flags with computed atmosphere flags.
-        // Debug flags control whether aerial perspective is enabled at all.
-        const uint32_t debug_flags = atmosphere_debug_flags_;
-
-        // Only enable LUT mode if:
-        // 1. The debug UI has kUseLut set (user wants it enabled), AND
-        // 2. LUTs are actually available
-        if ((debug_flags & static_cast<uint32_t>(AtmosphereFlags::kUseLut))
-          != 0) {
-          if (sky_atmo_lut_manager_
-            && sky_atmo_lut_manager_->HasBeenGenerated()) {
-            atmosphere_flags |= static_cast<uint32_t>(AtmosphereFlags::kUseLut);
-          }
-        }
-        if (sun_override_.enabled) {
-          atmosphere_flags
-            |= static_cast<uint32_t>(AtmosphereFlags::kOverrideSun);
-        }
-
-        env_dynamic_manager_->SetAtmosphereFlags(view_id, atmosphere_flags);
-        env_dynamic_manager_->SetAtmosphereSunOverride(view_id, sun_override_);
-
-        // Update LUT manager with effective sun for regeneration.
+        // Update LUT manager with scene sun for regeneration.
         if (sky_atmo_lut_manager_) {
-          sky_atmo_lut_manager_->UpdateSunState(effective_sun);
+          sky_atmo_lut_manager_->UpdateSunState(scene_sun);
         }
       }
     }

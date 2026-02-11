@@ -45,10 +45,10 @@ float3 ComputeSkyColor(EnvironmentStaticData env_data, float3 view_dir)
             float3 sun_dir = GetSunDirectionWS();
             float3 sun_illuminance = GetSunLuminanceRGB();
 
-            if (!HasSunLight() && !IsOverrideSunEnabled())
+            if (!HasSunLight())
             {
-                sun_dir = normalize(float3(0.5, 0.5, 0.5));
-                sun_illuminance = float3(0.0, 0.0, 0.0);
+                sun_dir = normalize(float3(0.5f, 0.5f, 0.5f));
+                sun_illuminance = float3(0.0f, 0.0f, 0.0f);
             }
 
             float planet_radius = env_data.atmosphere.planet_radius_m;

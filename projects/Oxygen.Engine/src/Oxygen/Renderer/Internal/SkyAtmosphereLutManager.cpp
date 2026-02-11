@@ -65,13 +65,14 @@ auto SkyAtmosphereLutManager::UpdateParameters(
     cached_params_.sun_disk_angular_radius_radians);
 }
 
-auto SkyAtmosphereLutManager::UpdateSunState(const SunState& sun) noexcept
-  -> void
+auto SkyAtmosphereLutManager::UpdateSunState(
+  const SyntheticSunData& sun) noexcept -> void
 {
-  const bool elevation_changed = sun_state_.ElevationDiffers(sun);
+  constexpr auto kEpsilon = 0.001F;
+  const bool elevation_changed = sun_state_.ElevationDiffers(sun, kEpsilon);
   const bool enabled_changed = sun_state_.enabled != sun.enabled;
   const bool illuminance_changed
-    = std::abs(sun_state_.illuminance_lx - sun.illuminance_lx) > 0.001F;
+    = std::abs(sun_state_.GetIlluminance() - sun.GetIlluminance()) > kEpsilon;
 
   if (elevation_changed || enabled_changed || illuminance_changed) {
     dirty_ = true;
@@ -88,16 +89,19 @@ auto SkyAtmosphereLutManager::IsDirty() const noexcept -> bool
 
 auto SkyAtmosphereLutManager::MarkClean() noexcept -> void { dirty_ = false; }
 
-auto SkyAtmosphereLutManager::MarkDirty() noexcept -> void { dirty_ = true; }
-
-auto SkyAtmosphereLutManager::SetAtmosphereFlags(uint32_t flags) noexcept
-  -> void
+auto SkyAtmosphereLutManager::MarkDirty() noexcept -> void
 {
-  if (atmosphere_flags_ != flags) {
-    atmosphere_flags_ = flags;
-    dirty_ = true;
+  // Treat generation_ as a content/version marker for dependent systems (e.g.
+  // sky capture and IBL) rather than only as a parameter-diff marker.
+  //
+  // Some callers (e.g. explicit "Regenerate LUT" UI) request a regeneration
+  // without changing any parameters. In that case, we still want the
+  // generation to advance so that downstream consumers can reliably detect
+  // that the LUT content will change once recomputed.
+  if (!dirty_) {
     ++generation_;
   }
+  dirty_ = true;
 }
 
 auto SkyAtmosphereLutManager::HasBeenGenerated() const noexcept -> bool

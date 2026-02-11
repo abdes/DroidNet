@@ -29,15 +29,6 @@ auto LightCullingVm::GetVisualizationMode() -> ShaderDebugMode
   return visualization_mode_;
 }
 
-auto LightCullingVm::IsClusteredCulling() -> bool
-{
-  std::lock_guard lock(mutex_);
-  if (IsStale()) {
-    Refresh();
-  }
-  return use_clustered_culling_;
-}
-
 auto LightCullingVm::GetDepthSlices() -> int
 {
   std::lock_guard lock(mutex_);
@@ -84,20 +75,6 @@ auto LightCullingVm::SetVisualizationMode(ShaderDebugMode mode) -> void
   visualization_mode_ = mode;
   service_->SetVisualizationMode(mode);
   epoch_ = service_->GetEpoch();
-}
-
-auto LightCullingVm::SetClusteredCulling(bool enabled) -> void
-{
-  std::lock_guard lock(mutex_);
-  if (use_clustered_culling_ == enabled) {
-    return;
-  }
-
-  use_clustered_culling_ = enabled;
-  service_->SetUseClusteredCulling(enabled);
-  epoch_ = service_->GetEpoch();
-
-  NotifyClusterModeChanged();
 }
 
 auto LightCullingVm::SetDepthSlices(int slices) -> void
@@ -159,7 +136,6 @@ auto LightCullingVm::SetZFar(float z_far) -> void
 auto LightCullingVm::Refresh() -> void
 {
   visualization_mode_ = service_->GetVisualizationMode();
-  use_clustered_culling_ = service_->GetUseClusteredCulling();
   depth_slices_ = service_->GetDepthSlices();
   use_camera_z_ = service_->GetUseCameraZ();
   z_near_ = service_->GetZNear();
