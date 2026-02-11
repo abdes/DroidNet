@@ -83,7 +83,6 @@ public:
   auto SetWireframeColor(const graphics::Color& color) -> void override;
   auto SetLightCullingVisualizationMode(engine::ShaderDebugMode mode)
     -> void override;
-  auto SetClusteredCullingEnabled(bool enabled) -> void override;
   auto SetClusterDepthSlices(uint32_t slices) -> void override;
   auto SetExposureMode(engine::ExposureMode mode) -> void override;
   auto SetExposureValue(float value) -> void override;

@@ -587,7 +587,8 @@ auto MainModule::EnsureCameraSpotLight() -> void
     light->SetAttenuationModel(scene::AttenuationModel::kInverseSquare);
     const float clamped_inner = std::min(inner_cone, outer_cone);
     const float clamped_outer = std::max(inner_cone, outer_cone);
-    light->SetConeAnglesRadians(clamped_inner, clamped_outer);
+    light->SetInnerConeAngleRadians(clamped_inner);
+    light->SetOuterConeAngleRadians(clamped_outer);
     light->SetSourceRadius(0.0F);
 
     const bool attached = camera_spot_light_.ReplaceLight(std::move(light));

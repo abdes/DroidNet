@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <type_traits>
 
 #include <glm/vec3.hpp>
@@ -15,14 +16,42 @@ namespace oxygen::engine::atmos {
 //! Radius of the planet in meters (Earth ≈ 6360km).
 inline constexpr float kDefaultPlanetRadiusM = 6360000.0F;
 
+//! Earth's average radius in meters.
+inline constexpr float kEarthRadiusM = 6360000.0F;
+
 //! Height of the atmosphere in meters (Earth ≈ 100km).
 inline constexpr float kDefaultAtmosphereHeightM = 100000.0F;
+
+//! Earth's atmosphere height in meters.
+inline constexpr float kEarthAtmosphereHeightM = 100000.0F;
+
+//! Default planet up direction (+Z).
+inline constexpr glm::vec3 kDefaultPlanetUp { 0.0F, 0.0F, 1.0F };
 
 //! Sun disk angular radius in radians (Earth sun ≈ 0.545 degrees total).
 inline constexpr float kDefaultSunDiskAngularRadiusRad = 0.004756022F;
 
+//! Default sun color (linear RGB white).
+inline constexpr glm::vec3 kDefaultSunColorRgb { 1.0F, 1.0F, 1.0F };
+
+//! Default sun illuminance in Lux (Earth at noon ≈ 100,000 Lux).
+//! By default we use 0.0F to indicate "unset" or "unlighted" if disabled,
+//! but the default payload uses 0.0F as a placeholder.
+inline constexpr float kDefaultSunIlluminanceLx = 0.0F;
+
 //! Standard baseline sky luminance for non-physical cubemaps (Nits).
 inline constexpr float kStandardSkyLuminance = 5000.0F;
+
+//! Default sun elevation in degrees (30.0 degrees).
+inline constexpr float kDefaultSunElevationDeg = 30.0F;
+
+//! Default sun direction (Z-up: +Y with 30° elevation).
+//! Direction vector is towards the sun (not incoming radiance direction).
+inline constexpr glm::vec3 kDefaultSunDirection { 0.0F, 0.8660254F, 0.5F };
+
+//! Default aerial perspective controls.
+inline constexpr float kDefaultAerialPerspectiveDistanceScale = 1.0F;
+inline constexpr float kDefaultAerialScatteringStrength = 1.0F;
 
 //! Rayleigh scattering coefficients at sea level (Earth-like).
 inline constexpr glm::vec3 kDefaultRayleighScatteringRgb { 5.802e-6F,
@@ -77,15 +106,15 @@ struct DensityLayer {
   Up to 2 layers are supported in the core renderer.
 */
 struct DensityProfile {
-  DensityLayer layers[2];
+  std::array<DensityLayer, 2> layers {};
 
   auto operator<=>(const DensityProfile&) const = default;
 };
 
 static_assert(std::is_standard_layout_v<DensityLayer>);
 static_assert(std::is_standard_layout_v<DensityProfile>);
-static_assert(sizeof(DensityLayer) == 16);
-static_assert(sizeof(DensityProfile) == 32);
+static_assert(sizeof(DensityLayer) == 16); // NOLINT(*-magic-numbers)
+static_assert(sizeof(DensityProfile) == 32); // NOLINT(*-magic-numbers)
 
 //! Creates a 2-layer linear ozone density profile.
 /*!

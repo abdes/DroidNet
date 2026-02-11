@@ -27,6 +27,7 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
+#include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 
@@ -144,11 +145,51 @@ auto SkyCapturePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
   if (is_captured_) {
+    // This pass is often invoked by the renderer when upstream state changed
+    // (e.g. sky-atmosphere LUT generation). If we are not marked dirty,
+    // execution will be a no-op; log once per generation/view to validate.
+    static std::unordered_map<std::uint32_t, std::uint64_t>
+      last_logged_skip_gen_by_view;
+    const auto view_id = Context().current_view.view_id.get();
+    const auto gen = capture_generation_;
+    const auto it = last_logged_skip_gen_by_view.find(view_id);
+    if (it == last_logged_skip_gen_by_view.end() || it->second != gen) {
+      last_logged_skip_gen_by_view[view_id] = gen;
+      LOG_F(INFO,
+        "SkyCapturePass: skipping (already captured) (view={} frame_slot={} frame_seq={} env_srv={} slot={} gen={})",
+        view_id, Context().frame_slot.get(), Context().frame_sequence.get(),
+        Context().GetRenderer().GetEnvironmentStaticDataManager()
+          ? Context().GetRenderer().GetEnvironmentStaticDataManager()
+              ->GetSrvIndex()
+              .get()
+          : 0U,
+        captured_cubemap_srv_.get(), gen);
+    }
     co_return;
   }
 
-  LOG_F(INFO, "SkyCapturePass: Capturing sky to {}x{} cubemap",
-    config_->resolution, config_->resolution);
+  const auto view_id = Context().current_view.view_id;
+  LOG_F(INFO,
+    "SkyCapturePass: capture begin (view={} frame_slot={} frame_seq={} env_srv={} res={} slot={})",
+    view_id.get(), Context().frame_slot.get(), Context().frame_sequence.get(),
+    Context().GetRenderer().GetEnvironmentStaticDataManager()
+      ? Context().GetRenderer().GetEnvironmentStaticDataManager()->GetSrvIndex()
+          .get()
+      : 0U,
+    config_->resolution, captured_cubemap_srv_.get());
+
+  // SkyCapture shaders load EnvironmentStaticData using SceneConstants
+  // (bindless_env_static_slot + frame_slot). Bind it explicitly to avoid any
+  // root-CBV leakage from previous passes.
+  if (Context().scene_constants == nullptr) {
+    LOG_F(ERROR,
+      "SkyCapturePass: missing SceneConstants (view={} frame_slot={} frame_seq={})",
+      view_id.get(), Context().frame_slot.get(), Context().frame_sequence.get());
+    co_return;
+  }
+  recorder.SetGraphicsRootConstantBufferView(
+    static_cast<uint32_t>(binding::RootParam::kSceneConstants),
+    Context().scene_constants->GetGPUVirtualAddress());
 
   // Bind EnvironmentDynamicData for exposure and other dynamic data.
   if (const auto manager = Context().env_dynamic_manager) {
@@ -249,6 +290,10 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   is_captured_ = true;
   ++capture_generation_;
+
+  LOG_F(INFO,
+    "SkyCapturePass: capture done (view={}, slot={} gen={})",
+    view_id.get(), captured_cubemap_srv_.get(), capture_generation_);
   co_return;
 }
 

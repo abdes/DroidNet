@@ -114,9 +114,6 @@ public:
   {
   }
 
-  //! Sets whether clustered culling is enabled (false = tile-based).
-  virtual auto SetClusteredCullingEnabled(bool /*enabled*/) -> void { }
-
   //! Sets the number of depth slices for clustered culling.
   virtual auto SetClusterDepthSlices(uint32_t /*slices*/) -> void { }
 

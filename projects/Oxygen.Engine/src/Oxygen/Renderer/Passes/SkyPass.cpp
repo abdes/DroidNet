@@ -271,6 +271,15 @@ auto SkyPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
   LOG_SCOPE_FUNCTION(2);
 
+  // Bind SceneConstants (b1) so shader can load EnvironmentStaticData correctly.
+  if (Context().scene_constants == nullptr) {
+    LOG_F(ERROR, "SkyPass: SceneConstants not bound; skipping draw");
+    co_return;
+  }
+  recorder.SetGraphicsRootConstantBufferView(
+    static_cast<uint32_t>(binding::RootParam::kSceneConstants),
+    Context().scene_constants->GetGPUVirtualAddress());
+
   if (const auto manager = Context().env_dynamic_manager) {
     const auto view_id = Context().current_view.view_id;
     manager->UpdateIfNeeded(view_id);

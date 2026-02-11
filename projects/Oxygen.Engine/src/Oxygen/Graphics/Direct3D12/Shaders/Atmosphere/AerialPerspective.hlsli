@@ -32,18 +32,12 @@
 #include "Common/Geometry.hlsli"
 #include "Common/Lighting.hlsli"
 
-// Atmosphere feature flag bits (matches C++ AtmosphereFlags enum)
-static const uint ATMOSPHERE_USE_LUT = 0x1;         // Use LUT sampling when available
-static const uint ATMOSPHERE_OVERRIDE_SUN = 0x2;    // Use debug override sun
-
 //! Result of aerial perspective computation.
 struct AerialPerspectiveResult
 {
     float3 inscatter;     //!< Inscattered radiance to add (linear RGB).
     float3 transmittance; //!< RGB transmittance through atmosphere [0, 1].
 };
-
-
 
 //! Samples the camera-volume LUT at the fragment's screen UV and depth slice.
 //!
@@ -62,7 +56,7 @@ float4 SampleCameraVolumeLut(
     // User controls from EnvironmentDynamicData.
     // Note: the camera-volume LUT itself is generated at a fixed max distance;
     // this scale remaps view distance to the LUT slice distribution.
-    float distance_scale = max(EnvironmentDynamicData.aerial_perspective_distance_scale, 0.0);
+    float distance_scale = max(EnvironmentDynamicData.atmosphere.aerial_perspective_distance_scale, 0.0);
 
     // Effective path length with user scaling.
     float effective_distance = view_distance * distance_scale;
@@ -107,34 +101,6 @@ float RaySphereIntersectFarthest(float3 origin, float3 dir, float radius)
     return (t > 0.0) ? t : -1.0;
 }
 
-//! Returns whether LUT-based aerial perspective should be used.
-//!
-//! Checks atmosphere flags and LUT availability.
-//!
-//! @param atmo Atmosphere parameters from EnvironmentStaticData.
-//! @return True if LUT sampling should be used for aerial perspective.
-bool ShouldUseLutAerialPerspective(GpuSkyAtmosphereParams atmo)
-{
-    // Check if atmosphere is enabled
-    if (!atmo.enabled)
-    {
-        return false;
-    }
-
-    // Check if LUTs are valid
-    if (atmo.transmittance_lut_slot == K_INVALID_BINDLESS_INDEX ||
-        atmo.sky_view_lut_slot == K_INVALID_BINDLESS_INDEX)
-    {
-        return false;
-    }
-
-    // Check atmosphere flags
-    uint flags = EnvironmentDynamicData.atmosphere_flags;
-
-    // Use LUT if the flag is set
-    return (flags & ATMOSPHERE_USE_LUT) != 0;
-}
-
 //! Computes aerial perspective using LUT sampling.
 //!
 //! Approximates inscattering along the view ray by sampling the sky-view LUT
@@ -170,7 +136,7 @@ AerialPerspectiveResult ComputeAerialPerspectiveLut(
     result.transmittance = float3(1.0, 1.0, 1.0);
 
     // User controls from EnvironmentDynamicData
-    float scattering_strength = max(EnvironmentDynamicData.aerial_scattering_strength, 0.0);
+    float scattering_strength = max(EnvironmentDynamicData.atmosphere.aerial_scattering_strength, 0.0);
 
     // Early out if disabled via strength
     if (scattering_strength < 0.0001)
@@ -183,7 +149,7 @@ AerialPerspectiveResult ComputeAerialPerspectiveLut(
     // Note: the LUT sampler clamps slice >= 0.5, so we mirror the weight logic here.
     const float AP_SLICE_COUNT = (float)kAerialPerspectiveSliceCount;
     const float AP_KM_PER_SLICE = kAerialPerspectiveKmPerSlice;
-    float distance_scale = max(EnvironmentDynamicData.aerial_perspective_distance_scale, 0.0);
+    float distance_scale = max(EnvironmentDynamicData.atmosphere.aerial_perspective_distance_scale, 0.0);
     float view_distance_km = (view_distance * distance_scale) / 1000.0;
     float slice = clamp(view_distance_km / AP_KM_PER_SLICE, 0.0, AP_SLICE_COUNT);
     float weight = (slice < 0.5) ? saturate(slice * 2.0) : 1.0;
@@ -203,9 +169,6 @@ AerialPerspectiveResult ComputeAerialPerspectiveLut(
 }
 
 //! Computes aerial perspective (main entry point).
-//!
-//! Selects between LUT-based and analytic fog based on availability and flags.
-//! This is the recommended function to call from forward shaders.
 //!
 //! @param env_data Static environment data.
 //! @param world_pos World-space position of the fragment.
@@ -230,16 +193,12 @@ AerialPerspectiveResult ComputeAerialPerspective(
         return result;
     }
 
-    // Compute atmosphere aerial perspective (LUT-based) when enabled.
-    if (ShouldUseLutAerialPerspective(env_data.atmosphere))
-    {
-        result = ComputeAerialPerspectiveLut(
-            env_data.atmosphere,
-            world_pos,
-            camera_pos,
-            sun_dir,
-            view_distance);
-    }
+    result = ComputeAerialPerspectiveLut(
+        env_data.atmosphere,
+        world_pos,
+        camera_pos,
+        sun_dir,
+        view_distance);
 
     // Apply Fog environment system in addition to atmosphere.
     // Fog must remain responsive even when LUT haze is active.

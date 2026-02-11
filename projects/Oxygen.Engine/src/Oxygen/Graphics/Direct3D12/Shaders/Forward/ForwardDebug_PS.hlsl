@@ -185,8 +185,8 @@ float4 PS(VSOutput input) : SV_Target0 {
             debug_handled = true;
         #elif defined(DEBUG_IBL_IRRADIANCE)
             const float screen_w = max(
-                1.0, (float)EnvironmentDynamicData.cluster_dim_x
-                      * (float)EnvironmentDynamicData.tile_size_px);
+                1.0, (float)EnvironmentDynamicData.light_culling.cluster_dim_x
+                      * (float)EnvironmentDynamicData.light_culling.tile_size_px);
             const bool show_world = (input.position.x < 0.5 * screen_w);
             if (show_world) {
                 debug_out = input.world_normal * 0.5 + 0.5;
@@ -210,7 +210,7 @@ float4 PS(VSOutput input) : SV_Target0 {
                 if (slot != K_INVALID_BINDLESS_INDEX) {
                     TextureCube<float4> sky_cube = ResourceDescriptorHeap[slot];
                     float3 raw = sky_cube.SampleLevel(linear_sampler, cube_R, 0.0).rgb;
-                    debug_out = raw * env_data.sky_light.tint_rgb * env_data.sky_light.radiance_scale;
+                    debug_out = raw;
                     debug_handled = true;
                 }
             }
@@ -219,17 +219,17 @@ float4 PS(VSOutput input) : SV_Target0 {
 #endif
 
     if (!debug_handled) {
-        const uint grid = EnvironmentDynamicData.bindless_cluster_grid_slot;
+        const uint grid = EnvironmentDynamicData.light_culling.bindless_cluster_grid_slot;
         if (grid != K_INVALID_BINDLESS_INDEX) {
             float linear_depth = max(-mul(view_matrix, float4(input.world_pos, 1.0)).z, 0.0);
             uint idx = GetClusterIndex(input.position.xy, linear_depth);
             uint3 dims = GetClusterDimensions();
             #if defined(DEBUG_LIGHT_HEATMAP)
-                debug_out = HeatMapColor(saturate((float)GetClusterLightInfo(grid, idx).light_count / 48.0f));
+                debug_out = HeatMapColor(saturate((float)GetClusterLightInfo(grid, idx).light_count / (float)EnvironmentDynamicData.light_culling.max_lights_per_cluster));
             #elif defined(DEBUG_DEPTH_SLICE)
                 debug_out = DepthSliceColor(idx / (dims.x * dims.y), dims.z);
             #elif defined(DEBUG_CLUSTER_INDEX)
-                debug_out = ClusterIndexColor(uint3(uint(input.position.x)/EnvironmentDynamicData.tile_size_px, uint(input.position.y)/EnvironmentDynamicData.tile_size_px, idx/(dims.x*dims.y)));
+                debug_out = ClusterIndexColor(uint3(uint(input.position.x)/EnvironmentDynamicData.light_culling.tile_size_px, uint(input.position.y)/EnvironmentDynamicData.light_culling.tile_size_px, idx/(dims.x*dims.y)));
             #endif
         }
     }

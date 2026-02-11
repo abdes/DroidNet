@@ -34,11 +34,13 @@ namespace {
     light.intensity_lux = intensity;
     light.flags = is_sun
       ? static_cast<std::uint32_t>(DirectionalLightFlags::kSunLight)
-      : 0u;
+      : 0U;
     return light;
   }
 
   class SunResolverTest : public ::testing::Test { };
+
+  constexpr float kEpsilon = 0.001F;
 
 } // namespace
 
@@ -55,18 +57,18 @@ NOLINT_TEST_F(SunResolverTest, NoSunComponentFallsBackToTaggedDirectional)
   };
 
   // Act
-  const SunState sun
+  const SyntheticSunData sun
     = ResolveSunForView(*scene, std::span<const DirectionalLightBasic>(lights));
 
   // Assert
   EXPECT_TRUE(sun.enabled);
-  EXPECT_NEAR(sun.direction_ws.x, 0.0F, 0.001F);
-  EXPECT_NEAR(sun.direction_ws.y, 1.0F, 0.001F);
-  EXPECT_NEAR(sun.direction_ws.z, 0.0F, 0.001F);
-  EXPECT_NEAR(sun.color_rgb.x, 1.0F, 0.001F);
-  EXPECT_NEAR(sun.color_rgb.y, 0.9F, 0.001F);
-  EXPECT_NEAR(sun.color_rgb.z, 0.8F, 0.001F);
-  EXPECT_NEAR(sun.illuminance_lx, 5.0F, 0.001F);
+  EXPECT_NEAR(sun.GetDirection().x, 0.0F, kEpsilon);
+  EXPECT_NEAR(sun.GetDirection().y, 1.0F, kEpsilon);
+  EXPECT_NEAR(sun.GetDirection().z, 0.0F, kEpsilon);
+  EXPECT_NEAR(sun.GetColor().x, 1.0F, kEpsilon);
+  EXPECT_NEAR(sun.GetColor().y, 0.9F, kEpsilon);
+  EXPECT_NEAR(sun.GetColor().z, 0.8F, kEpsilon);
+  EXPECT_NEAR(sun.GetIlluminance(), 5.0F, kEpsilon);
 }
 
 //! Uses authored sun values when Sun is in synthetic mode.
@@ -88,18 +90,18 @@ NOLINT_TEST_F(SunResolverTest, SyntheticSunOverridesDirectionalLights)
   };
 
   // Act
-  const SunState resolved
+  const SyntheticSunData resolved
     = ResolveSunForView(*scene, std::span<const DirectionalLightBasic>(lights));
 
   // Assert
   EXPECT_TRUE(resolved.enabled);
-  EXPECT_NEAR(resolved.direction_ws.x, 0.0F, 0.001F);
-  EXPECT_NEAR(resolved.direction_ws.y, 0.0F, 0.001F);
-  EXPECT_NEAR(resolved.direction_ws.z, 1.0F, 0.001F);
-  EXPECT_NEAR(resolved.color_rgb.x, 0.2F, 0.001F);
-  EXPECT_NEAR(resolved.color_rgb.y, 0.3F, 0.001F);
-  EXPECT_NEAR(resolved.color_rgb.z, 0.4F, 0.001F);
-  EXPECT_NEAR(resolved.illuminance_lx, 12345.0F, 0.001F);
+  EXPECT_NEAR(resolved.GetDirection().x, 0.0F, kEpsilon);
+  EXPECT_NEAR(resolved.GetDirection().y, 0.0F, kEpsilon);
+  EXPECT_NEAR(resolved.GetDirection().z, 1.0F, kEpsilon);
+  EXPECT_NEAR(resolved.GetColor().x, 0.2F, kEpsilon);
+  EXPECT_NEAR(resolved.GetColor().y, 0.3F, kEpsilon);
+  EXPECT_NEAR(resolved.GetColor().z, 0.4F, kEpsilon);
+  EXPECT_NEAR(resolved.GetIlluminance(), 12345.0F, kEpsilon);
 }
 
 //! Resolves from the referenced directional light in FromScene mode.
@@ -128,18 +130,18 @@ NOLINT_TEST_F(SunResolverTest, FromSceneUsesReferencedDirectionalLight)
   };
 
   // Act
-  const SunState resolved
+  const SyntheticSunData resolved
     = ResolveSunForView(*scene, std::span<const DirectionalLightBasic>(lights));
 
   // Assert
   EXPECT_TRUE(resolved.enabled);
-  EXPECT_NEAR(resolved.direction_ws.x, 0.0F, 0.001F);
-  EXPECT_NEAR(resolved.direction_ws.y, 1.0F, 0.001F);
-  EXPECT_NEAR(resolved.direction_ws.z, 0.0F, 0.001F);
-  EXPECT_NEAR(resolved.color_rgb.x, 0.1F, 0.001F);
-  EXPECT_NEAR(resolved.color_rgb.y, 0.2F, 0.001F);
-  EXPECT_NEAR(resolved.color_rgb.z, 0.3F, 0.001F);
-  EXPECT_NEAR(resolved.illuminance_lx, 4.0F, 0.001F);
+  EXPECT_NEAR(resolved.GetDirection().x, 0.0F, kEpsilon);
+  EXPECT_NEAR(resolved.GetDirection().y, 1.0F, kEpsilon);
+  EXPECT_NEAR(resolved.GetDirection().z, 0.0F, kEpsilon);
+  EXPECT_NEAR(resolved.GetColor().x, 0.1F, kEpsilon);
+  EXPECT_NEAR(resolved.GetColor().y, 0.2F, kEpsilon);
+  EXPECT_NEAR(resolved.GetColor().z, 0.3F, kEpsilon);
+  EXPECT_NEAR(resolved.GetIlluminance(), 4.0F, kEpsilon);
 }
 
 //! Clears invalid references and falls back to synthetic sun values.
@@ -165,16 +167,16 @@ NOLINT_TEST_F(SunResolverTest, InvalidReferenceFallsBackToSynthetic)
   };
 
   // Act
-  const SunState resolved
+  const SyntheticSunData resolved
     = ResolveSunForView(*scene, std::span<const DirectionalLightBasic>(lights));
 
   // Assert
   EXPECT_TRUE(resolved.enabled);
-  EXPECT_NEAR(resolved.direction_ws.z, 1.0F, 0.001F);
-  EXPECT_NEAR(resolved.color_rgb.x, 0.25F, 0.001F);
-  EXPECT_NEAR(resolved.color_rgb.y, 0.5F, 0.001F);
-  EXPECT_NEAR(resolved.color_rgb.z, 0.75F, 0.001F);
-  EXPECT_NEAR(resolved.illuminance_lx, 8.0F, 0.001F);
+  EXPECT_NEAR(resolved.GetDirection().z, 1.0F, kEpsilon);
+  EXPECT_NEAR(resolved.GetColor().x, 0.25F, kEpsilon);
+  EXPECT_NEAR(resolved.GetColor().y, 0.5F, kEpsilon);
+  EXPECT_NEAR(resolved.GetColor().z, 0.75F, kEpsilon);
+  EXPECT_NEAR(resolved.GetIlluminance(), 8.0F, kEpsilon);
   EXPECT_FALSE(sun.GetLightReference().has_value());
 }
 
@@ -194,16 +196,16 @@ NOLINT_TEST_F(SunResolverTest, FromSceneWithoutReferenceUsesSelectionRule)
   };
 
   // Act
-  const SunState resolved
+  const SyntheticSunData resolved
     = ResolveSunForView(*scene, std::span<const DirectionalLightBasic>(lights));
 
   // Assert
   EXPECT_TRUE(resolved.enabled);
-  EXPECT_NEAR(resolved.direction_ws.y, 1.0F, 0.001F);
-  EXPECT_NEAR(resolved.color_rgb.x, 0.2F, 0.001F);
-  EXPECT_NEAR(resolved.color_rgb.y, 0.4F, 0.001F);
-  EXPECT_NEAR(resolved.color_rgb.z, 0.6F, 0.001F);
-  EXPECT_NEAR(resolved.illuminance_lx, 2.5F, 0.001F);
+  EXPECT_NEAR(resolved.GetDirection().y, 1.0F, kEpsilon);
+  EXPECT_NEAR(resolved.GetColor().x, 0.2F, kEpsilon);
+  EXPECT_NEAR(resolved.GetColor().y, 0.4F, kEpsilon);
+  EXPECT_NEAR(resolved.GetColor().z, 0.6F, kEpsilon);
+  EXPECT_NEAR(resolved.GetIlluminance(), 2.5F, kEpsilon);
 }
 
 //! Uses selection rule when a referenced node is no longer alive.
@@ -228,16 +230,16 @@ NOLINT_TEST_F(SunResolverTest, DeadReferenceFallsBackToSelectionRule)
   };
 
   // Act
-  const SunState resolved
+  const SyntheticSunData resolved
     = ResolveSunForView(*scene, std::span<const DirectionalLightBasic>(lights));
 
   // Assert
   EXPECT_TRUE(resolved.enabled);
-  EXPECT_NEAR(resolved.direction_ws.y, 1.0F, 0.001F);
-  EXPECT_NEAR(resolved.color_rgb.x, 0.7F, 0.001F);
-  EXPECT_NEAR(resolved.color_rgb.y, 0.8F, 0.001F);
-  EXPECT_NEAR(resolved.color_rgb.z, 0.9F, 0.001F);
-  EXPECT_NEAR(resolved.illuminance_lx, 3.0F, 0.001F);
+  EXPECT_NEAR(resolved.GetDirection().y, 1.0F, kEpsilon);
+  EXPECT_NEAR(resolved.GetColor().x, 0.7F, kEpsilon);
+  EXPECT_NEAR(resolved.GetColor().y, 0.8F, kEpsilon);
+  EXPECT_NEAR(resolved.GetColor().z, 0.9F, kEpsilon);
+  EXPECT_NEAR(resolved.GetIlluminance(), 3.0F, kEpsilon);
 }
 
 } // namespace oxygen::engine::internal::testing

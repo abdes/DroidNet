@@ -52,9 +52,6 @@ public:
   //! Returns the cached visualization mode.
   [[nodiscard]] auto GetVisualizationMode() -> ShaderDebugMode;
 
-  //! Returns whether clustered culling is enabled.
-  [[nodiscard]] auto IsClusteredCulling() -> bool;
-
   //! Returns the cached depth slices count.
   [[nodiscard]] auto GetDepthSlices() -> int;
 
@@ -69,9 +66,6 @@ public:
 
   //! Sets visualization mode and forwards to service.
   auto SetVisualizationMode(ShaderDebugMode mode) -> void;
-
-  //! Sets clustered culling and forwards to service.
-  auto SetClusteredCulling(bool enabled) -> void;
 
   //! Sets depth slices and forwards to service.
   auto SetDepthSlices(int slices) -> void;
@@ -97,7 +91,6 @@ private:
 
   // Cached state
   ShaderDebugMode visualization_mode_ { ShaderDebugMode::kDisabled };
-  bool use_clustered_culling_ { false };
   int depth_slices_ { 24 };
   bool use_camera_z_ { true };
   float z_near_ { 0.1F };

@@ -195,6 +195,11 @@ private:
   observer_ptr<ISkyCaptureProvider> sky_capture_provider_;
   frame::Slot current_slot_ { frame::kInvalidSlot };
 
+  // Last frame identity observed by UpdateIfNeeded(). Used only for logging to
+  // correlate uploads and publication with the renderer's frame lifecycle.
+  frame::Slot last_update_frame_slot_ { frame::kInvalidSlot };
+  frame::SequenceNumber last_update_frame_sequence_ { 0 };
+
   EnvironmentStaticData cpu_snapshot_ {};
   // Monotonic snapshot id and per-slot uploaded snapshot ids.
   // When the CPU snapshot changes, increment `snapshot_id_` so every slot

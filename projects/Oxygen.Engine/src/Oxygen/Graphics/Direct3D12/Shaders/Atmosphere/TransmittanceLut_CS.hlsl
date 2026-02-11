@@ -27,6 +27,8 @@
 #include "Common/Geometry.hlsli"
 #include "Common/Coordinates.hlsli"
 
+#include "Atmosphere/AtmospherePassConstants.hlsli"
+
 // Root constants (b2, space0)
 cbuffer RootConstants : register(b2, space0)
 {
@@ -34,14 +36,7 @@ cbuffer RootConstants : register(b2, space0)
     uint g_PassConstantsIndex;
 }
 
-// Pass constants for transmittance LUT generation
-struct TransmittanceLutPassConstants
-{
-    uint output_uav_index;      // UAV index for output RWTexture2D<float4>
-    uint output_width;          // LUT width
-    uint output_height;         // LUT height
-    uint _pad0;
-};
+// Thread group size: 8x8 threads per group
 
 // Thread group size: 8x8 threads per group
 #define THREAD_GROUP_SIZE_X 8
@@ -162,12 +157,12 @@ float3 IntegrateOpticalDepth(
 void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 {
     // Load pass constants
-    ConstantBuffer<TransmittanceLutPassConstants> pass_constants
+    ConstantBuffer<AtmospherePassConstants> pass_constants
         = ResourceDescriptorHeap[g_PassConstantsIndex];
 
     // Bounds check
-    if (dispatch_thread_id.x >= pass_constants.output_width
-        || dispatch_thread_id.y >= pass_constants.output_height)
+    if (dispatch_thread_id.x >= pass_constants.output_extent.x
+        || dispatch_thread_id.y >= pass_constants.output_extent.y)
     {
         return;
     }
@@ -186,7 +181,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
     // Compute UV from texel center
     float2 uv = (float2(dispatch_thread_id.xy) + 0.5)
-              / float2(pass_constants.output_width, pass_constants.output_height);
+              / float2(pass_constants.output_extent);
 
     // Convert UV to atmosphere parameters (UE5/Bruneton parameterization)
     float2 atmo_params = UvToAtmosphereParamsBruneton(

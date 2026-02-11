@@ -254,6 +254,22 @@ auto PostProcessSettingsService::SetExposureEnabled(bool enabled) -> void
   settings->SetBool(kExposureEnabledKey, enabled);
   epoch_++;
 
+  {
+    const auto mode = GetExposureMode();
+    const float manual_ev = GetManualExposureEv();
+    const float camera_ev = ResolveManualCameraEv(camera_settings_);
+    const float comp_ev = GetExposureCompensation();
+    const float key = GetExposureKey();
+    const float used_ev
+      = (mode == engine::ExposureMode::kManualCamera) ? camera_ev : manual_ev;
+    const float baseline_exposure
+      = (1.0F / 12.5F) * std::exp2(comp_ev - used_ev) * key;
+    LOG_F(INFO,
+      "PostProcessSettings: exposure enabled={} (mode={}, manual_ev={:.3f}, cam_ev={:.3f}, used_ev={:.3f}, comp_ev={:.3f}, key={:.3f}, baseline={:.6f})",
+      enabled, engine::to_string(mode), manual_ev, camera_ev, used_ev, comp_ev,
+      key, baseline_exposure);
+  }
+
   ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetManualExposureEv(),
     ResolveManualCameraEv(camera_settings_), GetExposureCompensation(),
     GetExposureKey(), enabled);
@@ -273,6 +289,22 @@ auto PostProcessSettingsService::SetExposureMode(engine::ExposureMode mode)
   DCHECK_NOTNULL_F(settings);
   settings->SetString(kExposureModeKey, engine::to_string(mode));
   epoch_++;
+
+  {
+    const float manual_ev = GetManualExposureEv();
+    const float camera_ev = ResolveManualCameraEv(camera_settings_);
+    const float comp_ev = GetExposureCompensation();
+    const float key = GetExposureKey();
+    const bool enabled = GetExposureEnabled();
+    const float used_ev
+      = (mode == engine::ExposureMode::kManualCamera) ? camera_ev : manual_ev;
+    const float baseline_exposure
+      = (1.0F / 12.5F) * std::exp2(comp_ev - used_ev) * key;
+    LOG_F(INFO,
+      "PostProcessSettings: exposure mode={} (enabled={}, manual_ev={:.3f}, cam_ev={:.3f}, used_ev={:.3f}, comp_ev={:.3f}, key={:.3f}, baseline={:.6f})",
+      engine::to_string(mode), enabled, manual_ev, camera_ev, used_ev, comp_ev,
+      key, baseline_exposure);
+  }
 
   // Ensure target is updated when switching modes (e.g. into Auto)
   UpdateAutoExposureTarget();
@@ -299,6 +331,22 @@ auto PostProcessSettingsService::SetManualExposureEv(float ev) -> void
   ev = std::max(ev, 0.0F);
   settings->SetFloat(kExposureManualEVKey, ev);
   epoch_++;
+
+  {
+    const auto mode = GetExposureMode();
+    const float camera_ev = ResolveManualCameraEv(camera_settings_);
+    const float comp_ev = GetExposureCompensation();
+    const float key = GetExposureKey();
+    const bool enabled = GetExposureEnabled();
+    const float used_ev
+      = (mode == engine::ExposureMode::kManualCamera) ? camera_ev : ev;
+    const float baseline_exposure
+      = (1.0F / 12.5F) * std::exp2(comp_ev - used_ev) * key;
+    LOG_F(INFO,
+      "PostProcessSettings: manual EV set {:.3f} (enabled={}, mode={}, cam_ev={:.3f}, used_ev={:.3f}, comp_ev={:.3f}, key={:.3f}, baseline={:.6f})",
+      ev, enabled, engine::to_string(mode), camera_ev, used_ev, comp_ev, key,
+      baseline_exposure);
+  }
 
   ApplyExposureToPipeline(pipeline_, GetExposureMode(), ev,
     ResolveManualCameraEv(camera_settings_), GetExposureCompensation(),
@@ -388,6 +436,23 @@ auto PostProcessSettingsService::SetExposureCompensation(float stops) -> void
   settings->SetFloat(kExposureCompensationKey, stops);
   epoch_++;
 
+  {
+    const auto mode = GetExposureMode();
+    const float manual_ev = GetManualExposureEv();
+    const float camera_ev = ResolveManualCameraEv(camera_settings_);
+    const float key = GetExposureKey();
+    const bool enabled = GetExposureEnabled();
+    const float used_ev = (mode == engine::ExposureMode::kManualCamera)
+      ? camera_ev
+      : manual_ev;
+    const float baseline_exposure
+      = (1.0F / 12.5F) * std::exp2(stops - used_ev) * key;
+    LOG_F(INFO,
+      "PostProcessSettings: exposure comp_ev={:.3f} (enabled={}, mode={}, manual_ev={:.3f}, cam_ev={:.3f}, used_ev={:.3f}, key={:.3f}, baseline={:.6f})",
+      stops, enabled, engine::to_string(mode), manual_ev, camera_ev, used_ev,
+      key, baseline_exposure);
+  }
+
   ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetManualExposureEv(),
     ResolveManualCameraEv(camera_settings_), stops, GetExposureKey(),
     GetExposureEnabled());
@@ -411,6 +476,23 @@ auto PostProcessSettingsService::SetExposureKey(float exposure_key) -> void
 
   settings->SetFloat(kExposureKeyKey, exposure_key);
   epoch_++;
+
+  {
+    const auto mode = GetExposureMode();
+    const float manual_ev = GetManualExposureEv();
+    const float camera_ev = ResolveManualCameraEv(camera_settings_);
+    const float comp_ev = GetExposureCompensation();
+    const bool enabled = GetExposureEnabled();
+    const float used_ev = (mode == engine::ExposureMode::kManualCamera)
+      ? camera_ev
+      : manual_ev;
+    const float baseline_exposure
+      = (1.0F / 12.5F) * std::exp2(comp_ev - used_ev) * exposure_key;
+    LOG_F(INFO,
+      "PostProcessSettings: exposure key={:.3f} (enabled={}, mode={}, manual_ev={:.3f}, cam_ev={:.3f}, used_ev={:.3f}, comp_ev={:.3f}, baseline={:.6f})",
+      exposure_key, enabled, engine::to_string(mode), manual_ev, camera_ev,
+      used_ev, comp_ev, baseline_exposure);
+  }
 
   ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetManualExposureEv(),
     ResolveManualCameraEv(camera_settings_), GetExposureCompensation(),
@@ -618,6 +700,26 @@ auto PostProcessSettingsService::SetTonemappingEnabled(bool enabled) -> void
   settings->SetBool(kTonemappingEnabledKey, enabled);
   epoch_++;
 
+  scene::environment::ToneMapper scene_mapper
+    = scene::environment::ToneMapper::kAcesFitted;
+  bool has_scene_ppv = false;
+  if (scene_) {
+    if (const auto env = scene_->GetEnvironment()) {
+      if (const auto pp
+        = env->TryGetSystem<scene::environment::PostProcessVolume>()) {
+        has_scene_ppv = true;
+        scene_mapper = pp->GetToneMapper();
+      }
+    }
+  }
+
+  LOG_F(INFO,
+    "PostProcessSettings: tonemapping enabled set {} (pipeline={}, will_set_mapper={}, stored_mapper={}, scene_ppv={}, scene_mapper={})",
+    enabled, pipeline_ != nullptr,
+    enabled ? engine::to_string(GetToneMapper()) : engine::to_string(engine::ToneMapper::kNone),
+    engine::to_string(GetToneMapper()), has_scene_ppv,
+    static_cast<uint32_t>(scene_mapper));
+
   if (pipeline_) {
     pipeline_->SetToneMapper(
       enabled ? GetToneMapper() : engine::ToneMapper::kNone);
@@ -650,6 +752,24 @@ auto PostProcessSettingsService::SetToneMapper(engine::ToneMapper mode) -> void
   DCHECK_NOTNULL_F(settings);
   settings->SetString(kToneMapperKey, engine::to_string(mode));
   epoch_++;
+
+  scene::environment::ToneMapper scene_mapper
+    = scene::environment::ToneMapper::kAcesFitted;
+  bool has_scene_ppv = false;
+  if (scene_) {
+    if (const auto env = scene_->GetEnvironment()) {
+      if (const auto pp
+        = env->TryGetSystem<scene::environment::PostProcessVolume>()) {
+        has_scene_ppv = true;
+        scene_mapper = pp->GetToneMapper();
+      }
+    }
+  }
+
+  LOG_F(INFO,
+    "PostProcessSettings: tone mapper set {} (enabled={}, pipeline={}, scene_ppv={}, scene_mapper={})",
+    engine::to_string(mode), GetTonemappingEnabled(), pipeline_ != nullptr,
+    has_scene_ppv, static_cast<uint32_t>(scene_mapper));
 
   if (pipeline_ && GetTonemappingEnabled()) {
     pipeline_->SetToneMapper(mode);

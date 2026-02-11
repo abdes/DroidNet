@@ -18,34 +18,35 @@ static const uint POSITIONAL_LIGHT_FLAG_CONTACT_SHADOWS = 1u << 4;
 
 struct PositionalLightData
 {
+    // Register 0
     float3 position_ws;
     float range;
 
+    // Register 1
     float3 color_rgb;
     float luminous_flux_lm;  // Luminous flux in lumens (lm)
 
+    // Register 2
     float3 direction_ws;
     uint flags; // See POSITIONAL_LIGHT_FLAG_*
 
+    // Register 3
     float inner_cone_cos;
     float outer_cone_cos;
     float source_radius;
     float decay_exponent;
 
+    // Register 4
     uint attenuation_model;
     uint mobility;
     uint shadow_resolution_hint;
     uint shadow_flags;
 
+    // Register 5
     float shadow_bias;
     float shadow_normal_bias;
     float exposure_compensation_ev;
-    float _pad0;
-
     uint shadow_map_index;
-    uint _pad1;
-    uint _pad2;
-    uint _pad3;
 };
 
 #endif  // OXYGEN_D3D12_SHADERS_RENDERER_POSITIONALLIGHTDATA_HLSLI

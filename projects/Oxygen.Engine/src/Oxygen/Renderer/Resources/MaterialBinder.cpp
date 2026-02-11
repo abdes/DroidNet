@@ -169,18 +169,18 @@ auto SerializeMaterialConstants(
         & oxygen::data::pak::kMaterialFlag_NoTextureSampling)
     != 0U;
 
-  const auto kDoNotSample = oxygen::kInvalidShaderVisibleIndex.get();
+  const auto kDoNotSample = oxygen::kInvalidShaderVisibleIndex;
 
   const auto ResolveTextureIndex
     = [&texture_binder, no_texture_sampling](
         const oxygen::content::ResourceKey key,
-        const std::uint32_t authored_index) -> uint32_t {
+        const std::uint32_t authored_index) -> oxygen::ShaderVisibleIndex {
     if (no_texture_sampling) {
-      return oxygen::kInvalidShaderVisibleIndex.get();
+      return oxygen::kInvalidShaderVisibleIndex;
     }
 
     if (key.get() != 0U) {
-      return texture_binder.GetOrAllocate(key).get();
+      return texture_binder.GetOrAllocate(key);
     }
 
     // No runtime key:
@@ -188,13 +188,11 @@ auto SerializeMaterialConstants(
     // - If author index is non-zero, a texture was authored but not resolved
     //   yet, so bind a shared placeholder to keep sampling stable.
     if (authored_index == oxygen::data::pak::kFallbackResourceIndex) {
-      return texture_binder
-        .GetOrAllocate(oxygen::content::ResourceKey::kFallback)
-        .get();
+      return texture_binder.GetOrAllocate(
+        oxygen::content::ResourceKey::kFallback);
     }
-    return texture_binder
-      .GetOrAllocate(oxygen::content::ResourceKey::kPlaceholder)
-      .get();
+    return texture_binder.GetOrAllocate(
+      oxygen::content::ResourceKey::kPlaceholder);
   };
 
   // For normal/ORM slots there is no "fallback texture". If the texture is
@@ -202,14 +200,14 @@ auto SerializeMaterialConstants(
   // scalar defaults in the shader.
   const auto ResolveOptionalTextureIndex
     = [kDoNotSample, &texture_binder, no_texture_sampling](
-        const oxygen::content::ResourceKey key) -> uint32_t {
+        const oxygen::content::ResourceKey key) -> oxygen::ShaderVisibleIndex {
     if (no_texture_sampling) {
       return kDoNotSample;
     }
     if (key.get() == 0U) {
       return kDoNotSample;
     }
-    return texture_binder.GetOrAllocate(key).get();
+    return texture_binder.GetOrAllocate(key);
   };
 
   constants.base_color_texture_index
@@ -240,7 +238,7 @@ auto SerializeMaterialConstants(
   if (alpha_test_enabled) {
     constants.opacity_texture_index = constants.base_color_texture_index;
   } else {
-    constants.opacity_texture_index = oxygen::kInvalidShaderVisibleIndex.get();
+    constants.opacity_texture_index = oxygen::kInvalidShaderVisibleIndex;
   }
 
   const auto uv_scale = material.resolved_asset->GetUvScale();

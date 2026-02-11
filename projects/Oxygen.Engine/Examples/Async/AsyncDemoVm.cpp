@@ -146,7 +146,8 @@ auto AsyncDemoVm::SetSpotlightInnerCone(float angle_rad) -> void
       float outer = light->get().GetOuterConeAngleRadians();
       if (outer < angle_rad)
         outer = angle_rad; // Maintain valid state
-      light->get().SetConeAnglesRadians(angle_rad, outer);
+      light->get().SetInnerConeAngleRadians(angle_rad);
+      light->get().SetOuterConeAngleRadians(outer);
     }
   }
 }
@@ -170,7 +171,8 @@ auto AsyncDemoVm::SetSpotlightOuterCone(float angle_rad) -> void
       float inner = light->get().GetInnerConeAngleRadians();
       if (inner > angle_rad)
         inner = angle_rad;
-      light->get().SetConeAnglesRadians(inner, angle_rad);
+      light->get().SetInnerConeAngleRadians(inner);
+      light->get().SetOuterConeAngleRadians(angle_rad);
     }
   }
 }

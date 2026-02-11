@@ -501,8 +501,8 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
     light->SetAttenuationModel(
       static_cast<scene::AttenuationModel>(rec.attenuation_model));
     light->SetDecayExponent(rec.decay_exponent);
-    light->SetConeAnglesRadians(
-      rec.inner_cone_angle_radians, rec.outer_cone_angle_radians);
+    light->SetInnerConeAngleRadians(rec.inner_cone_angle_radians);
+    light->SetOuterConeAngleRadians(rec.outer_cone_angle_radians);
     light->SetSourceRadius(std::abs(rec.source_radius));
 
     const bool attached

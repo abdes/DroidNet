@@ -7,138 +7,84 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTDYNAMICDATA_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTDYNAMICDATA_HLSLI
 
-// Mirrors oxygen::engine::EnvironmentDynamicData (sizeof = 192)
+// Mirrors oxygen::engine::EnvironmentDynamicData (sizeof = 208)
 // Per-frame environment payload bound as root CBV at b3.
-struct EnvironmentDynamicData
-{
-    // Exposure
-    float exposure;
 
-    // Cluster grid bindless slots (from LightCullingPass)
+struct LightCullingConfig {
     uint bindless_cluster_grid_slot;
     uint bindless_cluster_index_list_slot;
-
-    // Padding to complete the first 16-byte register.
-    uint _pad0;
-
-    // Cluster grid dimensions
     uint cluster_dim_x;
     uint cluster_dim_y;
     uint cluster_dim_z;
     uint tile_size_px;
-
-    // Z-binning parameters for clustered lighting
     float z_near;
     float z_far;
     float z_scale;
     float z_bias;
-
-    // Per-view aerial perspective controls (SkyAtmosphere).
-    float aerial_perspective_distance_scale;
-    float aerial_scattering_strength;
-
-    // Atmospheric debug/feature flags (bitfield)
-    // bit0: use LUT sampling when available
-    // bit1: use override sun values
-    uint atmosphere_flags;
-
-    // 1 = sun enabled; 0 = fallback to default sun.
-    uint sun_enabled;
-
-    // Designated sun light (toward the sun, not incoming radiance).
-    // xyz = direction, w = illuminance.
-    float4 sun_direction_ws_illuminance;
-
-    // Sun spectral payload.
-    // xyz = color_rgb (linear, not premultiplied), w = intensity.
-    float4 sun_color_rgb_intensity;
-
-    // Debug override sun for testing (internal only).
-    // xyz = direction, w = illuminance.
-    float4 override_sun_direction_ws_illuminance;
-
-    // x = override_sun_enabled; remaining lanes reserved for future flags.
-    uint4 override_sun_flags;
-
-    // Override sun spectral payload.
-    // xyz = color_rgb (linear, not premultiplied), w = intensity.
-    float4 override_sun_color_rgb_intensity;
-
-    // Planet/frame context for atmospheric sampling.
-    // xyz = planet center, w = padding (unused).
-    // Note: planet_radius is in EnvironmentStaticData (static parameter).
-    float4 planet_center_ws_pad;
-
-    // xyz = planet up, w = camera altitude (m).
-    float4 planet_up_ws_camera_altitude_m;
-
-    // x = sky view LUT slice, y = planet_to_sun_cos_zenith.
-    float4 sky_view_lut_slice_cos_zenith;
+    uint max_lights_per_cluster;
+    uint _pad;
 };
 
-/**
- * Global declaration for the EnvironmentDynamicData root CBV.
- *
- * This payload contains high-frequency environment data like exposure and
- * clustered lighting configuration. It is bound at the engine-reserved root
- * CBV slot b3.
- */
+struct AtmosphereData {
+    uint flags;
+    float sky_view_lut_slice;
+    float planet_to_sun_cos_zenith;
+    float aerial_perspective_distance_scale;
+    float aerial_scattering_strength;
+    uint3 _pad;
+    float4 planet_center_ws_pad;
+    float4 planet_up_ws_camera_altitude_m;
+};
+
+struct SyntheticSunData {
+    uint enabled;
+    float cos_zenith;
+    uint2 _pad;
+    float4 direction_ws_illuminance;
+    float4 color_rgb_intensity;
+};
+
+struct EnvironmentDynamicData
+{
+    LightCullingConfig light_culling;
+    AtmosphereData atmosphere;
+    SyntheticSunData sun;
+};
+
 ConstantBuffer<EnvironmentDynamicData> EnvironmentDynamicData : register(b3, space0);
 
-/**
- * Returns whether the designated sun light values are valid.
- */
-static inline bool HasSunLight()
-{
-    return EnvironmentDynamicData.sun_enabled != 0;
-}
+//=== Inline Accessors ===----------------------------------------------------//
 
 /**
- * Returns the designated sun direction (world space).
- * Respects the override sun if enabled.
+ * Returns the direction towards the sun.
  */
 static inline float3 GetSunDirectionWS()
 {
-    if (EnvironmentDynamicData.override_sun_flags.x != 0) {
-        return EnvironmentDynamicData.override_sun_direction_ws_illuminance.xyz;
-    }
-    return EnvironmentDynamicData.sun_direction_ws_illuminance.xyz;
+    return EnvironmentDynamicData.sun.direction_ws_illuminance.xyz;
 }
 
 /**
- * Returns the designated sun illuminance.
- * Respects the override sun if enabled.
+ * Returns the sun's illuminance at the top of the atmosphere.
  */
 static inline float GetSunIlluminance()
 {
-    if (EnvironmentDynamicData.override_sun_flags.x != 0) {
-        return EnvironmentDynamicData.override_sun_direction_ws_illuminance.w;
-    }
-    return EnvironmentDynamicData.sun_direction_ws_illuminance.w;
+    return EnvironmentDynamicData.sun.direction_ws_illuminance.w;
 }
 
 /**
- * Returns the designated sun color (linear RGB).
- * Respects the override sun if enabled.
+ * Returns the sun disk color.
  */
 static inline float3 GetSunColorRGB()
 {
-    if (EnvironmentDynamicData.override_sun_flags.x != 0) {
-        return EnvironmentDynamicData.override_sun_color_rgb_intensity.xyz;
-    }
-    return EnvironmentDynamicData.sun_color_rgb_intensity.xyz;
+    return EnvironmentDynamicData.sun.color_rgb_intensity.xyz;
 }
 
 /**
- * Returns the designated sun intensity.
- * Respects the override sun if enabled.
+ * Returns the sun intensity.
  */
 static inline float GetSunIntensity()
 {
-    if (EnvironmentDynamicData.override_sun_flags.x != 0) {
-        return EnvironmentDynamicData.override_sun_color_rgb_intensity.w;
-    }
-    return EnvironmentDynamicData.sun_color_rgb_intensity.w;
+    return EnvironmentDynamicData.sun.color_rgb_intensity.w;
 }
 
 /**
@@ -153,11 +99,11 @@ static inline float3 GetSunLuminanceRGB()
 }
 
 /**
- * Returns the planet center (world space).
+ * Returns the planet center in world-space.
  */
 static inline float3 GetPlanetCenterWS()
 {
-    return EnvironmentDynamicData.planet_center_ws_pad.xyz;
+    return EnvironmentDynamicData.atmosphere.planet_center_ws_pad.xyz;
 }
 
 // NOTE: GetPlanetRadiusM() has been REMOVED.
@@ -165,59 +111,67 @@ static inline float3 GetPlanetCenterWS()
 // from EnvironmentStaticData after loading it with LoadEnvironmentStaticData().
 
 /**
- * Returns the planet up vector (world space).
+ * Returns the planet up vector in world-space.
  */
 static inline float3 GetPlanetUpWS()
 {
-    return EnvironmentDynamicData.planet_up_ws_camera_altitude_m.xyz;
+    return EnvironmentDynamicData.atmosphere.planet_up_ws_camera_altitude_m.xyz;
 }
 
 /**
- * Returns the camera altitude relative to the planet in meters.
+ * Returns the camera altitude relative to the planet's surface (sea-level).
  */
 static inline float GetCameraAltitudeM()
 {
-    return EnvironmentDynamicData.planet_up_ws_camera_altitude_m.w;
+    return EnvironmentDynamicData.atmosphere.planet_up_ws_camera_altitude_m.w;
 }
 
 /**
- * Returns the sky view LUT slice for the current view.
+ * Returns the distance scale for aerial perspective.
+ */
+static inline float GetAerialPerspectiveDistanceScale()
+{
+    return EnvironmentDynamicData.atmosphere.aerial_perspective_distance_scale;
+}
+
+/**
+ * Returns the scattering strength for aerial perspective.
+ */
+static inline float GetAerialScatteringStrength()
+{
+    return EnvironmentDynamicData.atmosphere.aerial_scattering_strength;
+}
+
+/**
+ * Returns the atmosphere sampling flags.
+ */
+static inline uint GetAtmosphereFlags()
+{
+    return EnvironmentDynamicData.atmosphere.flags;
+}
+
+/**
+ * Returns the SkyView LUT slice index for the current view.
  */
 static inline float GetSkyViewLutSlice()
 {
-    return EnvironmentDynamicData.sky_view_lut_slice_cos_zenith.x;
+    return EnvironmentDynamicData.atmosphere.sky_view_lut_slice;
 }
 
 /**
- * Returns the cosine of the zenith angle between planet up and sun direction.
+ * Returns the cosine of the sun's zenith angle relative to the planet.
  */
 static inline float GetPlanetToSunCosZenith()
 {
-    return EnvironmentDynamicData.sky_view_lut_slice_cos_zenith.y;
+    return EnvironmentDynamicData.atmosphere.planet_to_sun_cos_zenith;
 }
 
 /**
- * Returns whether the debug override sun is enabled.
+ * Returns true if the synthetic sun is enabled.
  */
-static inline bool IsOverrideSunEnabled()
+static inline bool HasSunLight()
 {
-    return EnvironmentDynamicData.override_sun_flags.x != 0;
-}
-
-/**
- * Returns the debug override sun direction (world space).
- */
-static inline float3 GetOverrideSunDirectionWS()
-{
-    return EnvironmentDynamicData.override_sun_direction_ws_illuminance.xyz;
-}
-
-/**
- * Returns the debug override sun illuminance.
- */
-static inline float GetOverrideSunIlluminance()
-{
-    return EnvironmentDynamicData.override_sun_direction_ws_illuminance.w;
+    return (EnvironmentDynamicData.sun.enabled != 0);
 }
 
 #endif  // OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTDYNAMICDATA_HLSLI

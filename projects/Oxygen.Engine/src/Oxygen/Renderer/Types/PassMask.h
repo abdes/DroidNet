@@ -6,9 +6,11 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <string_view>
+
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
@@ -18,33 +20,35 @@ namespace oxygen::engine {
 
 //! Render pass classification flags for DrawMetadata records.
 /*!
- * Each DrawMetadata carries a bit mask describing which high-level rendering
- * bucket(s) it belongs to. Current taxonomy is conservative; future bits are
- * reserved and documented for design continuity.
- *
- * Active bits:
- *  - kDoubleSided  : Disable backface culling for this draw.
- *  - kOpaque       : Depth-writing opaque surfaces.
- *  - kMasked       : Depth-writing alpha-tested (cutout) surfaces.
- *  - kTransparent  : Alpha blended surfaces (depth read, no depth write).
- *
- * Reserved (not yet produced):
- *  - kAdditive     : Additive/emissive order-dependent.
- *  - kTransmission : Refraction / glass / subsurface.
- *  - kDecal        : Projected decals.
- *  - kUi           : Overlay / UI.
+ Each DrawMetadata carries a bit mask describing which high-level rendering
+ bucket(s) it belongs to. Current taxonomy is conservative; future bits are
+ reserved and documented for design continuity.
+
+ Active bits:
+  - kDoubleSided  : Disable backface culling for this draw.
+  - kOpaque       : Depth-writing opaque surfaces.
+  - kMasked       : Depth-writing alpha-tested (cutout) surfaces.
+  - kTransparent  : Alpha blended surfaces (depth read, no depth write).
+
+ Reserved (not yet produced):
+  - kAdditive     : Additive/emissive order-dependent.
+  - kTransmission : Refraction / glass / subsurface.
+  - kDecal        : Projected decals.
+  - kUi           : Overlay / UI.
  */
-enum class PassMaskBit : uint32_t {
-  kNone = 0u,
-  kDoubleSided = 1u << 0,
-  kOpaque = 1u << 1,
-  kMasked = 1u << 2,
-  kTransparent = 1u << 3,
-  kAdditive = 1u << 4,
-  kTransmission = 1u << 5,
-  kDecal = 1u << 6,
-  kUi = 1u << 7,
+enum class PassMaskBit : uint32_t { // NOLINT(*-enum-size)
+  kNone = 0,
+  kDoubleSided = OXYGEN_FLAG(1),
+  kOpaque = OXYGEN_FLAG(2),
+  kMasked = OXYGEN_FLAG(3),
+  kTransparent = OXYGEN_FLAG(4),
+  kAdditive = OXYGEN_FLAG(5),
+  kTransmission = OXYGEN_FLAG(6),
+  kDecal = OXYGEN_FLAG(7),
+  kUi = OXYGEN_FLAG(8),
 };
+
+OXYGEN_DEFINE_FLAGS_OPERATORS(PassMaskBit)
 
 using PassMaskBase = oxygen::NamedType<uint32_t,
   // clang-format off
@@ -69,7 +73,12 @@ class PassMask : public PassMaskBase {
     std::is_same_v<typename PassMaskBase::UnderlyingType, uint32_t>);
 
 public:
-  PassMask(PassMaskBit value = PassMaskBit::kNone)
+  PassMask()
+    : PassMask(PassMaskBit::kNone)
+  {
+  }
+
+  explicit PassMask(PassMaskBit value)
     : PassMaskBase(nostd::to_underlying(value))
   {
   }
@@ -89,12 +98,12 @@ public:
 
   ~PassMask() noexcept = default;
 
-  bool IsEmpty() const
+  [[nodiscard]] auto IsEmpty() const -> bool
   {
     return get() == nostd::to_underlying(PassMaskBit::kNone);
   }
 
-  bool IsSet(PassMaskBit flag) const
+  [[nodiscard]] auto IsSet(PassMaskBit flag) const -> bool
   {
     return (get() & nostd::to_underlying(flag)) == nostd::to_underlying(flag);
   }
@@ -129,16 +138,16 @@ inline auto to_string(PassMask mask) -> std::string
     PassMaskBit flag;
     std::string_view name;
   };
-  static constexpr Entry kTable[] = {
-    { PassMaskBit::kDoubleSided, "DoubleSided" },
-    { PassMaskBit::kOpaque, "Opaque" },
-    { PassMaskBit::kMasked, "Masked" },
-    { PassMaskBit::kTransparent, "Transparent" },
-    { PassMaskBit::kAdditive, "Additive" },
-    { PassMaskBit::kTransmission, "Transmission" },
-    { PassMaskBit::kDecal, "Decal" },
-    { PassMaskBit::kUi, "UI" },
-  };
+  static constexpr std::array<Entry, 8> kTable = { {
+    { .flag = PassMaskBit::kDoubleSided, .name = "DoubleSided" },
+    { .flag = PassMaskBit::kOpaque, .name = "Opaque" },
+    { .flag = PassMaskBit::kMasked, .name = "Masked" },
+    { .flag = PassMaskBit::kTransparent, .name = "Transparent" },
+    { .flag = PassMaskBit::kAdditive, .name = "Additive" },
+    { .flag = PassMaskBit::kTransmission, .name = "Transmission" },
+    { .flag = PassMaskBit::kDecal, .name = "Decal" },
+    { .flag = PassMaskBit::kUi, .name = "UI" },
+  } };
   std::string out;
   for (const auto& e : kTable) {
     if (mask.IsSet(e.flag)) {

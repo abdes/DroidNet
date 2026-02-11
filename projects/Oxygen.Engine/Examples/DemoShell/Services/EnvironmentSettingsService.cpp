@@ -42,12 +42,6 @@ namespace {
   constexpr float kMetersToKm = 0.001F;
   constexpr float kKmToMeters = 1000.0F;
 
-  // NOLINTNEXTLINE(performance-enum-size) - we need it as a uint32_t
-  enum class AtmosphereDebugFlags : uint32_t {
-    kNone = 0x0,
-    kUseLut = 0x1,
-  };
-
   auto DirectionFromAzimuthElevation(float azimuth_deg, float elevation_deg)
     -> glm::vec3
   {
@@ -325,8 +319,6 @@ namespace {
   constexpr std::string_view kSunUseTemperatureKey = "env.sun.use_temperature";
   constexpr std::string_view kSunTemperatureKey = "env.sun.temperature_kelvin";
   constexpr std::string_view kSunDiskRadiusKey = "env.sun.disk_radius_deg";
-
-  constexpr std::string_view kUseLutKey = "env.debug.use_lut";
 
 } // namespace
 
@@ -1597,9 +1589,6 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   MaybeAutoLoadSkybox();
 
   if (config_.renderer) {
-    const uint32_t debug_flags = GetAtmosphereFlags();
-    config_.renderer->SetAtmosphereDebugFlags(debug_flags);
-
     // Apply sky-view LUT slice configuration to the LUT manager.
     if (auto lut_mgr = config_.renderer->GetSkyAtmosphereLutManager()) {
       lut_mgr->SetSkyViewLutSlices(static_cast<uint32_t>(sky_view_lut_slices_));
@@ -1926,8 +1915,6 @@ auto EnvironmentSettingsService::LoadSettings() -> void
     }
   }
 
-  any_loaded |= load_bool(kUseLutKey, use_lut_);
-
   if (any_loaded) {
     settings_loaded_ = true;
     needs_sync_ = false;
@@ -2031,8 +2018,6 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_bool(kSunUseTemperatureKey, sun_use_temperature_);
   save_float(kSunTemperatureKey, sun_temperature_kelvin_);
   save_float(kSunDiskRadiusKey, sun_component_disk_radius_deg_);
-
-  save_bool(kUseLutKey, use_lut_);
 }
 
 auto EnvironmentSettingsService::MarkDirty() -> void
@@ -2075,7 +2060,9 @@ auto EnvironmentSettingsService::MaybeRequestSkyCapture() -> void
     }
   }
 
-  DLOG_F(INFO, "Requesting sky capture from renderer");
+  DLOG_F(INFO,
+    "Requesting sky capture from renderer because user clicked the button or "
+    "changed a setting that requires it");
   config_.renderer->RequestSkyCapture();
   needs_sky_capture_ = false;
 }
@@ -2234,15 +2221,6 @@ auto EnvironmentSettingsService::SaveSunSettingsToProfile(const int source)
   settings.use_temperature = sun_use_temperature_;
   settings.temperature_kelvin = sun_temperature_kelvin_;
   settings.disk_radius_deg = sun_component_disk_radius_deg_;
-}
-
-auto EnvironmentSettingsService::GetAtmosphereFlags() const -> uint32_t
-{
-  uint32_t flags = 0;
-  if (use_lut_) {
-    flags |= static_cast<uint32_t>(AtmosphereDebugFlags::kUseLut);
-  }
-  return flags;
 }
 
 } // namespace oxygen::examples

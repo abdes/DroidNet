@@ -95,13 +95,43 @@ float3 AccumulateDirectionalLights(
 {
     float3 direct = float3(0.0, 0.0, 0.0);
 
-    // Check if sun override is enabled
-    const bool use_sun_override = IsOverrideSunEnabled();
-    const float3 override_sun_dir = GetOverrideSunDirectionWS();
-    const float  override_sun_illum = GetOverrideSunIlluminance();
-    const float3 override_sun_color = GetSunColorRGB();
-    const float  override_sun_intensity = GetSunIntensity();
-    bool found_sun = false;
+    // Render the Sun separately using the resolved EnvironmentDynamicData.sun
+    bool sun_rendered = false;
+    if (HasSunLight()) {
+        const float3 sun_dir_ws = GetSunDirectionWS();
+        const float3 sun_color = GetSunColorRGB();
+        const float  sun_illuminance = GetSunIlluminance();
+
+        const float3 L = SafeNormalize(sun_dir_ws);
+        const float  NdotL = saturate(dot(N, L));
+
+        if (NdotL > 0.0) {
+            // Compute atmospheric transmittance specifically for the sun
+            float3 sun_transmittance = ComputeSunTransmittance(world_pos, atmo, L);
+
+            const float3 H = SafeNormalize(V + L);
+            const float  NdotH = saturate(dot(N, H));
+            const float  VdotH = saturate(dot(V, H));
+
+            const float3 F = FresnelSchlick(VdotH, F0);
+            const float  D = DistributionGGX(NdotH, roughness);
+            const float  G = GeometrySmith(NdotV, NdotL, roughness);
+
+            const float3 numerator = D * G * F;
+            const float  denom = max(4.0 * NdotV * NdotL, 1e-6);
+            const float3 specular = numerator / denom;
+
+            const float3 kS = F;
+            const float3 kD = (1.0 - kS) * (1.0 - metalness);
+
+            const float3 diffuse = kD * base_rgb;
+
+            const float irradiance = LuxToIrradiance(sun_illuminance);
+            const float radiance = irradiance * (1.0 / kPi);
+            direct += (diffuse + specular) * sun_color * sun_transmittance * radiance * NdotL;
+        }
+        sun_rendered = true;
+    }
 
     if (bindless_directional_lights_slot != K_INVALID_BINDLESS_INDEX
         && BX_IN_GLOBAL_SRV(bindless_directional_lights_slot)) {
@@ -119,25 +149,21 @@ float3 AccumulateDirectionalLights(
                 continue;
             }
 
-            // Check if this is the sun light and we have an override
+            // If this light is tagged as a sun light, and we've already rendered the sun
+            // via the resolved data, skip it to avoid double lighting.
             const bool is_sun = (dl.flags & DIRECTIONAL_LIGHT_FLAG_SUN_LIGHT) != 0u;
-            if (is_sun) {
-                found_sun = true;
+            if (is_sun && sun_rendered) {
+                continue;
             }
 
-            float3 light_dir_ws;
-            float  light_intensity;
-            float3 light_color;
+            // Note: If we have multiple sun lights and HasSunLight() is false (e.g. synthetic sun disabled,
+            // but scene lights exist?), then we shouldn't skip them.
+            // But HasSunLight() reflects the resolved state. If resolved state says enabled,
+            // we render it once efficiently above and skip here.
 
-            if (is_sun && use_sun_override) {
-                light_dir_ws = override_sun_dir;
-                light_intensity = override_sun_illum;
-                light_color = dl.color_rgb;
-            } else {
-                light_dir_ws = -dl.direction_ws;
-                light_intensity = dl.intensity_lux;
-                light_color = dl.color_rgb;
-            }
+            const float3 light_dir_ws = -dl.direction_ws;
+            const float3 light_color = dl.color_rgb;
+            const float  light_intensity = dl.intensity_lux; // Assuming lux for all dir lighting
 
             const float3 L = SafeNormalize(light_dir_ws);
             const float  NdotL = saturate(dot(N, L));
@@ -145,11 +171,11 @@ float3 AccumulateDirectionalLights(
                 continue;
             }
 
-            // Compute atmospheric transmittance for sun light (sun tagged lights only)
-            float3 sun_transmittance = float3(1.0, 1.0, 1.0);
-            if (is_sun) {
-                sun_transmittance = ComputeSunTransmittance(world_pos, atmo, L);
-            }
+            // Non-sun directional lights generally don't get atmospheric transmittance
+            // unless we want them to. Standard path assumes they are "local" or extra/rim/studio lights.
+            // If they are strictly extraterrestrial, they should have transmittance too,
+            // but usually only the main sun does.
+            float3 transmittance = float3(1.0, 1.0, 1.0);
 
             const float3 H = SafeNormalize(V + L);
             const float  NdotH = saturate(dot(N, H));
@@ -170,37 +196,7 @@ float3 AccumulateDirectionalLights(
 
             const float irradiance = LuxToIrradiance(light_intensity);
             const float radiance = irradiance * (1.0 / kPi);
-            direct += (diffuse + specular) * light_color * sun_transmittance * radiance * NdotL;
-        }
-
-        if (use_sun_override && !found_sun) {
-            const float3 L = SafeNormalize(override_sun_dir);
-            const float  NdotL = saturate(dot(N, L));
-            if (NdotL > 0.0) {
-                // Compute atmospheric transmittance
-                float3 sun_transmittance = ComputeSunTransmittance(world_pos, atmo, L);
-
-                const float3 H = SafeNormalize(V + L);
-                const float  NdotH = saturate(dot(N, H));
-                const float  VdotH = saturate(dot(V, H));
-
-                const float3 F = FresnelSchlick(VdotH, F0);
-                const float  D = DistributionGGX(NdotH, roughness);
-                const float  G = GeometrySmith(NdotV, NdotL, roughness);
-
-                const float3 numerator = D * G * F;
-                const float  denom = max(4.0 * NdotV * NdotL, 1e-6);
-                const float3 specular = numerator / denom;
-
-                const float3 kS = F;
-                const float3 kD = (1.0 - kS) * (1.0 - metalness);
-                const float3 diffuse = kD * base_rgb;
-
-                const float irradiance = LuxToIrradiance(override_sun_intensity);
-                const float radiance = irradiance * (1.0 / kPi);
-                direct += (diffuse + specular) * override_sun_color * sun_transmittance
-                          * radiance * NdotL;
-            }
+            direct += (diffuse + specular) * light_color * transmittance * radiance * NdotL;
         }
     }
 
@@ -325,12 +321,12 @@ float3 AccumulatePositionalLightsClustered(
     float  metalness,
     float  roughness)
 {
-    const uint cluster_grid_slot = EnvironmentDynamicData.bindless_cluster_grid_slot;
-    const uint light_list_slot = EnvironmentDynamicData.bindless_cluster_index_list_slot;
+    const uint cluster_grid_slot = EnvironmentDynamicData.light_culling.bindless_cluster_grid_slot;
+    const uint light_list_slot = EnvironmentDynamicData.light_culling.bindless_cluster_index_list_slot;
 
     const bool has_cluster_data = (cluster_grid_slot != K_INVALID_BINDLESS_INDEX)
                                && (light_list_slot != K_INVALID_BINDLESS_INDEX)
-                               && (EnvironmentDynamicData.cluster_dim_x > 0);
+                               && (EnvironmentDynamicData.light_culling.cluster_dim_x > 0);
 
     if (!has_cluster_data) {
         return AccumulatePositionalLights(world_pos, N, V, NdotV, F0, base_rgb, metalness, roughness);

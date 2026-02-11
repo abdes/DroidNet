@@ -35,8 +35,8 @@
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
+#include <Oxygen/Renderer/Types/EnvironmentDynamicData.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
-#include <Oxygen/Renderer/Types/SunState.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen {
@@ -321,19 +321,6 @@ public:
   //! Force a sky capture refresh on the next frame.
   OXGN_RNDR_API auto RequestSkyCapture() noexcept -> void;
 
-  //! Set debug override flags for atmosphere rendering.
-  /*!
-   When set, these flags augment the automatically computed atmosphere flags.
-    Currently, the renderer supports toggling LUT sampling via
-    `AtmosphereFlags::kUseLut`.
-
-   @param flags Bitfield of AtmosphereFlags to apply.
-  */
-  OXGN_RNDR_API auto SetAtmosphereDebugFlags(uint32_t flags) -> void;
-
-  //! Get current debug override flags for atmosphere rendering.
-  OXGN_RNDR_NDAPI auto GetAtmosphereDebugFlags() const noexcept -> uint32_t;
-
   //! Override a material's UV transform used by the shader.
   /*!
    This is intended for editor and runtime authoring workflows. It updates the
@@ -392,7 +379,7 @@ private:
 
   //! Resolves exposure for the view (manual and auto).
   auto UpdateViewExposure(ViewId view_id, const scene::Scene& scene,
-    const SunState& sun_state) -> float;
+    const SyntheticSunData& sun_state) -> float;
 
   // Execute the view's render graph factory (awaits the coroutine). Returns
   // true on successful completion, false on exception.
@@ -511,10 +498,8 @@ private:
 
   std::unordered_map<ViewId, PerViewStorage> per_view_storage_;
 
-  // Debug override state for sun light.
+  // Debug override state for atmosphere.
   uint32_t atmosphere_debug_flags_ { 0 };
-  // Internal debug override only; no public API.
-  SunState sun_override_ { kNoSun };
 
   std::uint64_t last_atmo_generation_ { 0 };
   bool sky_capture_requested_ { false };

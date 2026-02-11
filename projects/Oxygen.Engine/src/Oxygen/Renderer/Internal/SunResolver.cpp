@@ -70,7 +70,7 @@ namespace {
   }
 
   [[nodiscard]] auto ResolveSunFromSelection(const SunLightSelection& selection,
-    const glm::vec3* color_override) noexcept -> SunState
+    const glm::vec3* color_override) noexcept -> SyntheticSunData
   {
     if (!selection.valid
       || glm::dot(selection.direction_to_sun, selection.direction_to_sun)
@@ -80,7 +80,7 @@ namespace {
 
     const glm::vec3 color
       = color_override != nullptr ? *color_override : selection.color_rgb;
-    return SunState::FromDirectionAndLight(
+    return SyntheticSunData::FromDirectionAndLight(
       selection.direction_to_sun, color, selection.intensity, true);
   }
 
@@ -106,7 +106,7 @@ namespace {
 } // namespace
 
 auto ResolveSunForView(scene::Scene& scene,
-  std::span<const DirectionalLightBasic> directional_lights) -> SunState
+  std::span<const DirectionalLightBasic> directional_lights) -> SyntheticSunData
 {
   if (auto env = scene.GetEnvironment()) {
     if (auto sun = env->TryGetSystem<scene::environment::Sun>(); sun) {
@@ -114,7 +114,7 @@ auto ResolveSunForView(scene::Scene& scene,
         return kNoSun;
       }
       if (sun->GetSunSource() == scene::environment::SunSource::kSynthetic) {
-        return SunState::FromDirectionAndLight(sun->GetDirectionWs(),
+        return SyntheticSunData::FromDirectionAndLight(sun->GetDirectionWs(),
           sun->GetColorRgb(), sun->GetIlluminanceLx(), true);
       }
 
@@ -125,21 +125,23 @@ auto ResolveSunForView(scene::Scene& scene,
           auto light_opt = node.GetLightAs<scene::DirectionalLight>();
           if (!light_opt) {
             sun->ClearLightReference();
-            return SunState::FromDirectionAndLight(sun->GetDirectionWs(),
-              sun->GetColorRgb(), sun->GetIlluminanceLx(), true);
+            return SyntheticSunData::FromDirectionAndLight(
+              sun->GetDirectionWs(), sun->GetColorRgb(),
+              sun->GetIlluminanceLx(), true);
           }
 
           const auto direction_opt = ComputeDirectionToSun(node);
           if (!direction_opt) {
-            return SunState::FromDirectionAndLight(sun->GetDirectionWs(),
-              sun->GetColorRgb(), sun->GetIlluminanceLx(), true);
+            return SyntheticSunData::FromDirectionAndLight(
+              sun->GetDirectionWs(), sun->GetColorRgb(),
+              sun->GetIlluminanceLx(), true);
           }
 
           const auto& light = light_opt->get();
           const glm::vec3 color = sun->HasLightTemperature()
             ? sun->GetColorRgb()
             : light.Common().color_rgb;
-          return SunState::FromDirectionAndLight(
+          return SyntheticSunData::FromDirectionAndLight(
             *direction_opt, color, light.GetIntensityLux(), true);
         }
       }

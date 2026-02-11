@@ -70,6 +70,9 @@ struct PreparedSceneFrame {
     oxygen::kInvalidShaderVisibleIndex
   };
 
+  // View exposure resolved during scene prep (manual or auto baseline).
+  float exposure { 1.0F };
+
   [[nodiscard]] auto IsValid() const noexcept -> bool
   {
     // For now validity is trivial; will evolve as fields are populated.

@@ -6,11 +6,10 @@
 
 #pragma once
 
-#include <compare>
-#include <concepts>
 #include <functional>
 #include <type_traits>
-#include <utility>
+
+#include <Oxygen/Base/Macros.h>
 
 namespace oxygen {
 
@@ -80,6 +79,7 @@ public:
   }
 
   //! Constructs an observer_ptr that has no corresponding watched object.
+  // NOLINTNEXTLINE(google-explicit-constructor)
   constexpr observer_ptr(std::nullptr_t) noexcept
     : ptr_(nullptr)
   {
@@ -91,14 +91,15 @@ public:
   {
   }
 
-  //! Copy constructor
-  constexpr observer_ptr(const observer_ptr&) noexcept = default;
-  //! Copy assignment
-  constexpr observer_ptr& operator=(const observer_ptr&) noexcept = default;
+  ~observer_ptr() = default;
+
+  OXYGEN_DEFAULT_COPYABLE(observer_ptr)
+  OXYGEN_DEFAULT_MOVABLE(observer_ptr)
 
   //! Implicit conversion to observer_ptr<U> if T* convertible to U*.
   template <typename U>
     requires ObservableType<U> && std::convertible_to<T*, U*>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   constexpr operator observer_ptr<U>() const noexcept
   {
     return observer_ptr<U>(ptr_);
@@ -109,18 +110,19 @@ public:
 
   //! Returns a pointer to the watched object or nullptr if no object is
   //! watched.
-  constexpr T* get() const noexcept { return ptr_; }
+  constexpr auto get() const noexcept -> T* { return ptr_; }
 
   //! Provides access to the watched object. Bihavior is undefined if get() ==
   //! nullptr.
   template <typename U = T>
-  constexpr std::enable_if_t<Dereferenceable<U>, U&> operator*() const noexcept
+  constexpr auto operator*() const noexcept -> U&
+    requires(Dereferenceable<U>)
   {
     return *ptr_;
   }
 
   //! Provides access to the watched pointer.
-  constexpr T* operator->() const noexcept { return ptr_; }
+  constexpr auto operator->() const noexcept -> T* { return ptr_; }
 
   //! Checks whether the observed_ptr has an associated watched object, i.e.
   //! whether get() != nullptr.
@@ -186,7 +188,8 @@ constexpr observer_ptr<T> make_observer(T* p) noexcept
 //! Non-member comparison with nullptr (nullptr on left)
 template <typename T>
   requires oxygen::ObservableType<T>
-constexpr bool operator==(std::nullptr_t, const observer_ptr<T>& rhs) noexcept
+constexpr auto operator==(std::nullptr_t, const observer_ptr<T>& rhs) noexcept
+  -> bool
 {
   return rhs == nullptr;
 }
@@ -197,8 +200,8 @@ constexpr bool operator==(std::nullptr_t, const observer_ptr<T>& rhs) noexcept
 template <typename T>
   requires oxygen::ObservableType<T>
 struct std::hash<oxygen::observer_ptr<T>> {
-  constexpr std::size_t operator()(
-    const oxygen::observer_ptr<T>& ptr) const noexcept
+  constexpr auto operator()(const oxygen::observer_ptr<T>& ptr) const noexcept
+    -> std::size_t
   {
     return std::hash<T*> {}(ptr.get());
   }

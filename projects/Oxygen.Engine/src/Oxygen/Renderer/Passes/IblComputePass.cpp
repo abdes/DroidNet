@@ -99,10 +99,14 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
     if (!logged_missing_source_slot_) {
       const auto sky_light_slot = env_manager->GetSkyLightCubemapSlot();
       const auto sky_sphere_slot = env_manager->GetSkySphereCubemapSlot();
+      const auto env_static_srv = env_manager->GetSrvIndex();
       LOG_F(WARNING,
-        "IblComputePass: No environment cubemap source slot (SkyLight={}, "
-        "SkySphere={}); IBL will be black",
-        sky_light_slot.get(), sky_sphere_slot.get());
+        "IblComputePass: No environment cubemap source slot (frame_slot={} frame_seq={} "
+        "SkyLight={} SkySphere={} EnvStaticSRV={} ExplicitSourceValid={} "
+        "ExplicitSource={}); IBL will be black",
+        Context().frame_slot.get(), Context().frame_sequence.get(),
+        sky_light_slot.get(), sky_sphere_slot.get(), env_static_srv.get(),
+        explicit_source_slot_.IsValid(), explicit_source_slot_.get());
       logged_missing_source_slot_ = true;
     }
     co_return;
@@ -123,8 +127,10 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
     co_return;
   }
 
-  LOG_F(INFO, "IblComputePass: Regenerating IBL for source slot {}",
-    source_slot.get());
+  LOG_F(INFO,
+    "IblComputePass: Regenerating IBL (frame_slot={} frame_seq={} env_srv={} source={})",
+    Context().frame_slot.get(), Context().frame_sequence.get(),
+    env_manager->GetSrvIndex().get(), source_slot.get());
 
   LOG_F(2, "IblComputePass: targets (irr_srv={}, pref_srv={})",
     current_outputs.irradiance.get(), current_outputs.prefilter.get());

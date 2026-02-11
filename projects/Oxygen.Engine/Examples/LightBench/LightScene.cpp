@@ -413,7 +413,8 @@ auto LightScene::ApplySpotLightState() -> void
       = glm::radians(spot_light_state_.inner_angle_deg);
     const float outer_angle_rad
       = glm::radians(spot_light_state_.outer_angle_deg);
-    light.SetConeAnglesRadians(inner_angle_rad, outer_angle_rad);
+    light.SetInnerConeAngleRadians(inner_angle_rad);
+    light.SetOuterConeAngleRadians(outer_angle_rad);
   }
 }
 

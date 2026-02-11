@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string_view>
 
 namespace oxygen::engine {
 
@@ -40,5 +41,28 @@ enum class ShaderDebugMode : uint8_t {
   kIblFaceIndex = 13, //!< Visualize cubemap face selection (no textures)
   kIblNoBrdfLut = 14, //!< Normal shading with BRDF LUT bypassed
 };
+
+constexpr auto to_string(ShaderDebugMode mode) -> std::string_view
+{
+  switch (mode) {
+    // clang-format off
+      case ShaderDebugMode::kDisabled: return "Disabled";
+      case ShaderDebugMode::kLightCullingHeatMap: return "LightCullingHeatMap";
+      case ShaderDebugMode::kDepthSlice: return "DepthSlice";
+      case ShaderDebugMode::kClusterIndex: return "ClusterIndex";
+      case ShaderDebugMode::kIblSpecular: return "IblSpecular";
+      case ShaderDebugMode::kIblRawSky: return "IblRawSky";
+      case ShaderDebugMode::kIblIrradiance: return "IblIrradiance";
+      case ShaderDebugMode::kBaseColor: return "BaseColor";
+      case ShaderDebugMode::kUv0: return "Uv0";
+      case ShaderDebugMode::kOpacity: return "Opacity";
+      case ShaderDebugMode::kWorldNormals: return "WorldNormals";
+      case ShaderDebugMode::kRoughness: return "Roughness";
+      case ShaderDebugMode::kMetalness: return "Metalness";
+      case ShaderDebugMode::kIblFaceIndex: return "IblFaceIndex";
+      case ShaderDebugMode::kIblNoBrdfLut: return "IblNoBrdfLut";
+    // clang-format on
+  }
+}
 
 } // namespace oxygen::engine

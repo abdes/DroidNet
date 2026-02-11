@@ -11,60 +11,58 @@
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine {
 
 //! Per-material (draw-scope) constants snapshot.
-/*! \brief Layout mirrors HLSL cbuffer MaterialConstants (b2, space0).
-
-Fields (match shader order):
-  - base_color (float4)
-  - metalness (float)
-  - roughness (float)
-  - normal_scale (float)
-  - ambient_occlusion (float)
-  - base_color_texture_index (uint)
-  - normal_texture_index (uint)
-  - metallic_texture_index (uint)
-  - roughness_texture_index (uint)
-  - ambient_occlusion_texture_index (uint)
-  - opacity_texture_index (uint)
-  - flags (uint)
-  - alpha_cutoff (float)
-  - uv_scale (float2)
-  - uv_offset (float2)
-  - uv_rotation_radians (float)
-  - uv_set (uint)
-
-The final two floats pad to a 16-byte multiple so the struct size is root-CBV
-friendly. Provided as a whole-snapshot API similar to SceneConstants.
+/*!
+ @note Layout mirrors HLSL cbuffer MaterialConstants (b2, space0).
 */
-struct MaterialConstants {
+struct alignas(packing::kShaderDataFieldAlignment) MaterialConstants {
+  // Register 0
   glm::vec4 base_color { 1.0F, 1.0F, 1.0F, 1.0F };
+
+  // Register 1
+  glm::vec3 emissive_factor { 0.0F, 0.0F, 0.0F };
+  uint32_t flags { 0 };
+
+  // Register 2
   float metalness { 0.0F };
   float roughness { 1.0F };
   float normal_scale { 1.0F };
   float ambient_occlusion { 1.0F };
-  uint32_t base_color_texture_index { 0 };
-  uint32_t normal_texture_index { 0 };
-  uint32_t metallic_texture_index { 0 };
-  uint32_t roughness_texture_index { 0 };
-  uint32_t ambient_occlusion_texture_index { 0 };
-  uint32_t opacity_texture_index { 0 };
-  uint32_t flags { 0 };
-  float alpha_cutoff { 0.5F };
+
+  // Register 3
+  ShaderVisibleIndex base_color_texture_index { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex normal_texture_index { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex metallic_texture_index { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex roughness_texture_index { kInvalidShaderVisibleIndex };
+
+  // Register 4
+  ShaderVisibleIndex ambient_occlusion_texture_index {
+    kInvalidShaderVisibleIndex
+  };
+  ShaderVisibleIndex opacity_texture_index { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex emissive_texture_index { kInvalidShaderVisibleIndex };
+  float alpha_cutoff { 0.5F }; // NOLINT(*-magic-numbers)
+
+  // Register 5
   glm::vec2 uv_scale { 1.0F, 1.0F };
   glm::vec2 uv_offset { 0.0F, 0.0F };
+
+  // Register 6
   float uv_rotation_radians { 0.0F };
   uint32_t uv_set { 0U };
-  glm::vec3 emissive_factor { 0.0F, 0.0F, 0.0F };
-  uint32_t emissive_texture_index { 0xFFFFFFFFU };
-  glm::vec2 padding { 0.0F, 0.0F };
+  uint32_t _pad0 { 0U };
+  uint32_t _pad1 { 0U };
 };
-static_assert(sizeof(MaterialConstants) == 112,
-  "MaterialConstants size must be 112 bytes (7 x 16-byte rows)");
-static_assert(sizeof(MaterialConstants) % 16 == 0,
-  "MaterialConstants size must be 16-byte aligned");
+static_assert(sizeof(ShaderVisibleIndex) == sizeof(uint32_t));
+static_assert(
+  sizeof(MaterialConstants) % packing::kShaderDataFieldAlignment == 0);
+static_assert(sizeof(MaterialConstants) <= packing::kRootConstantsMaxSize);
+static_assert(sizeof(MaterialConstants) == 112); // NOLINT(*-magic-numbers)
 
 } // namespace oxygen::engine

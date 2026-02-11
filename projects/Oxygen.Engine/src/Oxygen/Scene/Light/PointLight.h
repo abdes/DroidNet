@@ -28,6 +28,11 @@ class PointLight final : public Component {
   OXYGEN_COMPONENT_REQUIRES(detail::TransformComponent)
 
 public:
+  static constexpr float kDefaultRange = 10.0F;
+  static constexpr float kDefaultLuminousFluxLm = 800.0F;
+  static constexpr float kDefaultSourceRadius = 0.0F;
+  static constexpr float kDefaultDecayExponent = 2.0F;
+
   //! Creates a default point light.
   PointLight() = default;
 
@@ -115,22 +120,22 @@ private:
   //! Scale: linear (meters).
   //! Variation: Small changes affect the falloff volume; determines shader
   //! culling.
-  float range_ = 10.0F;
+  float range_ = kDefaultRange;
 
   AttenuationModel attenuation_model_ = AttenuationModel::kInverseSquare;
-  float decay_exponent_ = 2.0F;
+  float decay_exponent_ = kDefaultDecayExponent;
 
   //! Radius of the emission sphere in world units.
   //! Scale: linear (meters).
   //! Variation: Small changes affect the softness of specular highlights and
   //! contact shadows.
-  float source_radius_ = 0.0F;
+  float source_radius_ = kDefaultSourceRadius;
 
   //! Total light power in lumens (lm).
   //! Scale: linear. Typical: 800 (60W bulb), 1600 (100W bulb).
   //! Variation: Large strides (e.g. 500+) are needed for noticeable brightness
   //! changes.
-  float luminous_flux_lm_ = 800.0F;
+  float luminous_flux_lm_ = kDefaultLuminousFluxLm;
 
   detail::TransformComponent* transform_ { nullptr };
 };

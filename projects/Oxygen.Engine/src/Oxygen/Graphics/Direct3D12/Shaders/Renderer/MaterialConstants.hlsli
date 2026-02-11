@@ -10,26 +10,40 @@
 // ABI: must match sizeof(oxygen::engine::MaterialConstants) == 112
 struct MaterialConstants
 {
+    // Register 0
     float4 base_color;
+
+    // Register 1
+    float3 emissive_factor;
+    uint flags;
+
+    // Register 2
     float metalness;
     float roughness;
     float normal_scale;
     float ambient_occlusion;
+
+    // Register 3
     uint base_color_texture_index;
     uint normal_texture_index;
     uint metallic_texture_index;
     uint roughness_texture_index;
+
+    // Register 4
     uint ambient_occlusion_texture_index;
     uint opacity_texture_index;
-    uint flags;
+    uint emissive_texture_index;
     float alpha_cutoff;
+
+    // Register 5
     float2 uv_scale;
     float2 uv_offset;
+
+    // Register 6
     float uv_rotation_radians;
     uint uv_set;
-    float3 emissive_factor;
-    uint emissive_texture_index;
-    float2 padding;
+    uint _pad0;
+    uint _pad1;
 };
 
 // UV convention:

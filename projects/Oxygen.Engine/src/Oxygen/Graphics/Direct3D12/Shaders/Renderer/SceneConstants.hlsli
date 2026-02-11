@@ -10,13 +10,13 @@
 // Mirrors oxygen::engine::SceneConstants::GpuData (sizeof = 256)
 cbuffer SceneConstants : register(b1, space0)
 {
+    uint64_t frame_seq_num;
+    uint frame_slot;
+    float time_seconds;
     float4x4 view_matrix;
     float4x4 projection_matrix;
     float3 camera_position;
-    uint frame_slot;
-    uint64_t frame_seq_num;
-    float time_seconds;
-    uint _pad0;
+    float exposure;
 
     uint bindless_draw_metadata_slot;
     uint bindless_transforms_slot;
@@ -31,9 +31,11 @@ cbuffer SceneConstants : register(b1, space0)
     uint bindless_instance_data_slot;
     uint bindless_gpu_debug_line_slot;
     uint bindless_gpu_debug_counter_slot;
-    uint _pad1;
+    uint _pad_to_16_1;
 
-    uint4 _hlsl_packing_pad[3];
+    float4 _pad_to_256_1;
+    float4 _pad_to_256_2;
+    float4 _pad_to_256_3;
 };
 
 #endif  // OXYGEN_D3D12_SHADERS_RENDERER_SCENECONSTANTS_HLSLI

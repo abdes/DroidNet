@@ -8,6 +8,7 @@
 #define OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTHELPERS_HLSLI
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
+#include "Renderer/SceneConstants.hlsli"
 #include "Renderer/EnvironmentStaticData.hlsli"
 #include "Renderer/EnvironmentDynamicData.hlsli"
 #include "Lighting/ClusterLookup.hlsli"
@@ -44,7 +45,7 @@ static inline bool LoadEnvironmentStaticData(uint bindless_slot, uint frame_slot
  */
 static inline float GetExposure()
 {
-    return max(EnvironmentDynamicData.exposure, 0.0f);
+    return max(exposure, 0.0f);
 }
 
 /**
@@ -56,21 +57,21 @@ static inline float GetExposure()
  */
 static inline uint GetClusterIndex(float2 screen_pos, float linear_depth)
 {
-    const uint3 cluster_dims = uint3(EnvironmentDynamicData.cluster_dim_x,
-                                     EnvironmentDynamicData.cluster_dim_y,
-                                     EnvironmentDynamicData.cluster_dim_z);
-    const float2 screen_dims = float2(EnvironmentDynamicData.cluster_dim_x * EnvironmentDynamicData.tile_size_px,
-                                      EnvironmentDynamicData.cluster_dim_y * EnvironmentDynamicData.tile_size_px);
+    const uint3 cluster_dims = uint3(EnvironmentDynamicData.light_culling.cluster_dim_x,
+                                     EnvironmentDynamicData.light_culling.cluster_dim_y,
+                                     EnvironmentDynamicData.light_culling.cluster_dim_z);
+    const float2 screen_dims = float2(EnvironmentDynamicData.light_culling.cluster_dim_x * EnvironmentDynamicData.light_culling.tile_size_px,
+                                      EnvironmentDynamicData.light_culling.cluster_dim_y * EnvironmentDynamicData.light_culling.tile_size_px);
 
     return ComputeClusterIndex(
         screen_pos,
         linear_depth,
         screen_dims,
         cluster_dims,
-        EnvironmentDynamicData.tile_size_px,
-        EnvironmentDynamicData.z_near,
-        EnvironmentDynamicData.z_scale,
-        EnvironmentDynamicData.z_bias);
+        EnvironmentDynamicData.light_culling.tile_size_px,
+        EnvironmentDynamicData.light_culling.z_near,
+        EnvironmentDynamicData.light_culling.z_scale,
+        EnvironmentDynamicData.light_culling.z_bias);
 }
 
 /**
@@ -78,9 +79,9 @@ static inline uint GetClusterIndex(float2 screen_pos, float linear_depth)
  */
 static inline uint3 GetClusterDimensions()
 {
-    return uint3(EnvironmentDynamicData.cluster_dim_x,
-                 EnvironmentDynamicData.cluster_dim_y,
-                 EnvironmentDynamicData.cluster_dim_z);
+    return uint3(EnvironmentDynamicData.light_culling.cluster_dim_x,
+                 EnvironmentDynamicData.light_culling.cluster_dim_y,
+                 EnvironmentDynamicData.light_culling.cluster_dim_z);
 }
 
 /**

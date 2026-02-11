@@ -169,6 +169,22 @@ auto EnvironmentStaticDataManager::OnFrameStart(
 auto EnvironmentStaticDataManager::UpdateIfNeeded(
   renderer::RendererTag /*tag*/, const RenderContext& context) -> void
 {
+  last_update_frame_slot_ = context.frame_slot;
+  last_update_frame_sequence_ = context.frame_sequence;
+
+  if (current_slot_ != frame::kInvalidSlot
+    && context.frame_slot != frame::kInvalidSlot
+    && current_slot_ != context.frame_slot) {
+    static frame::SequenceNumber last_logged_mismatch_seq { 0 };
+    if (last_logged_mismatch_seq != context.frame_sequence) {
+      LOG_F(ERROR,
+        "EnvStatic: frame slot mismatch (current_slot={} ctx_slot={} frame_seq={})",
+        current_slot_.get(), context.frame_slot.get(),
+        context.frame_sequence.get());
+      last_logged_mismatch_seq = context.frame_sequence;
+    }
+  }
+
   observer_ptr<const scene::SceneEnvironment> env = nullptr;
   if (const auto scene_ptr = context.GetScene()) {
     env = scene_ptr->GetEnvironment();
@@ -231,8 +247,89 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
   }
 
   if (std::memcmp(&next, &cpu_snapshot_, sizeof(EnvironmentStaticData)) != 0) {
+    auto format_slot =
+      []<typename T>
+      requires requires(const T& v) {
+        { v.IsValid() } -> std::convertible_to<bool>;
+        { v.value } -> std::convertible_to<ShaderVisibleIndex>;
+      }(const T& slot)
+    -> std::string {
+        if (!slot.IsValid()) {
+          return "not ready";
+        }
+
+        return nostd::to_string(slot.value);
+      };
+
+    const auto old_snapshot_id = snapshot_id_;
+    const auto u_slot_index = CurrentSlotIndex();
+    const auto old_uploaded_id = u_slot_index < slot_uploaded_id_.size()
+      ? slot_uploaded_id_[u_slot_index]
+      : 0ULL;
+
+    const auto& old_sl = cpu_snapshot_.sky_light;
+    const auto& old_ss = cpu_snapshot_.sky_sphere;
+    const auto& old_pp = cpu_snapshot_.post_process;
+    const auto& old_atmo = cpu_snapshot_.atmosphere;
+    const auto& next_sl = next.sky_light;
+    const auto& next_ss = next.sky_sphere;
+    const auto& next_pp = next.post_process;
+    const auto& next_atmo = next.atmosphere;
+
+    LOG_F(INFO,
+      "EnvStatic: snapshot changed (snapshot_id={} slot={} srv={} uploaded_id={}) "
+      "skylight(en:{}->{} src:{}->{} cube:{}->{} ) "
+      "skysphere(en:{}->{} src:{}->{} cube:{}->{} ) "
+      "pp(en:{}->{} mapper:{}->{} exp_mode:{}->{})",
+      old_snapshot_id, u_slot_index, srv_index_.get(), old_uploaded_id,
+      old_sl.enabled, next_sl.enabled, static_cast<uint32_t>(old_sl.source),
+      static_cast<uint32_t>(next_sl.source), format_slot(old_sl.cubemap_slot),
+      format_slot(next_sl.cubemap_slot), old_ss.enabled, next_ss.enabled,
+      static_cast<uint32_t>(old_ss.source), static_cast<uint32_t>(next_ss.source),
+      format_slot(old_ss.cubemap_slot), format_slot(next_ss.cubemap_slot),
+      old_pp.enabled, next_pp.enabled,
+      static_cast<uint32_t>(old_pp.tone_mapper),
+      static_cast<uint32_t>(next_pp.tone_mapper),
+      static_cast<uint32_t>(old_pp.exposure_mode),
+      static_cast<uint32_t>(next_pp.exposure_mode));
+
+    if (std::memcmp(&old_atmo, &next_atmo, sizeof(old_atmo)) != 0) {
+      LOG_F(INFO,
+        "EnvStatic: atmosphere changed (enabled:{}->{} trans:{}->{} sky:{}->{} "
+        "ms:{}->{} irr:{}->{} cv:{}->{} bn:{}->{})",
+        old_atmo.enabled, next_atmo.enabled,
+        format_slot(old_atmo.transmittance_lut_slot),
+        format_slot(next_atmo.transmittance_lut_slot),
+        format_slot(old_atmo.sky_view_lut_slot),
+        format_slot(next_atmo.sky_view_lut_slot),
+        format_slot(old_atmo.multi_scat_lut_slot),
+        format_slot(next_atmo.multi_scat_lut_slot),
+        format_slot(old_atmo.sky_irradiance_lut_slot),
+        format_slot(next_atmo.sky_irradiance_lut_slot),
+        format_slot(old_atmo.camera_volume_lut_slot),
+        format_slot(next_atmo.camera_volume_lut_slot),
+        format_slot(old_atmo.blue_noise_slot),
+        format_slot(next_atmo.blue_noise_slot));
+    }
+
+    if (old_sl.irradiance_map_slot != next_sl.irradiance_map_slot
+      || old_sl.prefilter_map_slot != next_sl.prefilter_map_slot
+      || old_sl.ibl_generation != next_sl.ibl_generation) {
+      LOG_F(INFO,
+        "EnvStatic: skylight IBL outputs changed (gen:{}->{} irr:{}->{} pref:{}->{} max_mip:{}->{})",
+        old_sl.ibl_generation, next_sl.ibl_generation,
+        format_slot(old_sl.irradiance_map_slot),
+        format_slot(next_sl.irradiance_map_slot),
+        format_slot(old_sl.prefilter_map_slot),
+        format_slot(next_sl.prefilter_map_slot), old_sl.prefilter_max_mip,
+        next_sl.prefilter_max_mip);
+    }
+
     cpu_snapshot_ = next;
     MarkAllSlotsDirty();
+
+    LOG_F(INFO, "EnvStatic: snapshot invalidated (snapshot_id {}->{} slot={})",
+      old_snapshot_id, snapshot_id_, u_slot_index);
   }
 }
 
@@ -241,6 +338,8 @@ auto EnvironmentStaticDataManager::ProcessBrdfLut() -> void
   if (brdf_lut_provider_) {
     const auto [tex, slot] = brdf_lut_provider_->GetOrCreateLut();
     if (slot != brdf_lut_slot_) {
+      LOG_F(INFO, "EnvStatic: BRDF LUT slot changed ({} -> {})",
+        brdf_lut_slot_.get(), slot.get());
       brdf_lut_slot_ = slot;
       brdf_lut_texture_ = tex;
       brdf_lut_transitioned_ = false;
@@ -334,6 +433,48 @@ auto EnvironmentStaticDataManager::PopulateAtmosphere(
       // Only expose LUT slots if they contain valid generated data.
       // Exposing uninitialized textures (during recreation) causes black
       // artifacts (e.g. black sun in reflection due to 0 transmittance).
+      {
+        struct LutPublicationState final {
+          bool generated { false };
+          std::uint64_t generation { 0U };
+          ShaderVisibleIndex trans_srv { kInvalidShaderVisibleIndex };
+          ShaderVisibleIndex sky_srv { kInvalidShaderVisibleIndex };
+          ShaderVisibleIndex ms_srv { kInvalidShaderVisibleIndex };
+          ShaderVisibleIndex irr_srv { kInvalidShaderVisibleIndex };
+          ShaderVisibleIndex cv_srv { kInvalidShaderVisibleIndex };
+          ShaderVisibleIndex bn_srv { kInvalidShaderVisibleIndex };
+        };
+
+        static LutPublicationState last;
+
+        const LutPublicationState cur {
+          .generated = sky_lut_provider_->HasBeenGenerated(),
+          .generation = sky_lut_provider_->GetGeneration(),
+          .trans_srv = sky_lut_provider_->GetTransmittanceLutSlot(),
+          .sky_srv = sky_lut_provider_->GetSkyViewLutSlot(),
+          .ms_srv = sky_lut_provider_->GetMultiScatLutSlot(),
+          .irr_srv = sky_lut_provider_->GetSkyIrradianceLutSlot(),
+          .cv_srv = sky_lut_provider_->GetCameraVolumeLutSlot(),
+          .bn_srv = sky_lut_provider_->GetBlueNoiseSlot(),
+        };
+
+        const bool changed = (cur.generated != last.generated)
+          || (cur.generation != last.generation)
+          || (cur.trans_srv != last.trans_srv) || (cur.sky_srv != last.sky_srv)
+          || (cur.ms_srv != last.ms_srv) || (cur.irr_srv != last.irr_srv)
+          || (cur.cv_srv != last.cv_srv) || (cur.bn_srv != last.bn_srv);
+
+        if (changed) {
+          LOG_F(INFO,
+            "EnvStatic: SkyAtmo LUT publication (generated={} gen={} "
+            "trans_srv={} sky_srv={} ms_srv={} irr_srv={} cv_srv={} bn_srv={})",
+            cur.generated, cur.generation, cur.trans_srv.get(),
+            cur.sky_srv.get(), cur.ms_srv.get(), cur.irr_srv.get(),
+            cur.cv_srv.get(), cur.bn_srv.get());
+          last = cur;
+        }
+      }
+
       if (sky_lut_provider_->HasBeenGenerated()) {
         next.atmosphere.transmittance_lut_slot = TransmittanceLutSlot {
           sky_lut_provider_->GetTransmittanceLutSlot()
@@ -468,6 +609,9 @@ auto EnvironmentStaticDataManager::PopulateSkyCapture(
   if (sky_capture_provider_) {
     const auto capture_gen = sky_capture_provider_->GetCaptureGeneration();
     if (capture_gen != last_capture_generation_) {
+      LOG_F(INFO,
+        "EnvStatic: sky capture generation changed ({} -> {})",
+        last_capture_generation_, capture_gen);
       last_capture_generation_ = capture_gen;
       MarkAllSlotsDirty();
     }
@@ -569,8 +713,7 @@ auto EnvironmentStaticDataManager::PopulateClouds(
     next.clouds.base_altitude_m = clouds->GetBaseAltitudeMeters();
     next.clouds.layer_thickness_m = clouds->GetLayerThicknessMeters();
     next.clouds.coverage = clouds->GetCoverage();
-    next.clouds.extinction_sigma_t_per_m
-      = clouds->GetExtinctionSigmaTPerMeter();
+    next.clouds.extinction_sigma_t_per_m = clouds->GetExtinctionSigmaTPerMeter();
     next.clouds.single_scattering_albedo_rgb
       = clouds->GetSingleScatteringAlbedoRgb();
     next.clouds.phase_g = clouds->GetPhaseAnisotropy();
@@ -587,6 +730,8 @@ auto EnvironmentStaticDataManager::PopulatePostProcess(
   if (const auto pp
     = env->TryGetSystem<scene::environment::PostProcessVolume>();
     pp && pp->IsEnabled()) {
+    const auto prev = cpu_snapshot_.post_process;
+
     next.post_process.enabled = 1U;
     next.post_process.tone_mapper = ToGpuToneMapper(pp->GetToneMapper());
     next.post_process.exposure_mode = ToGpuExposureMode(pp->GetExposureMode());
@@ -604,6 +749,15 @@ auto EnvironmentStaticDataManager::PopulatePostProcess(
     next.post_process.saturation = pp->GetSaturation();
     next.post_process.contrast = pp->GetContrast();
     next.post_process.vignette_intensity = pp->GetVignetteIntensity();
+
+    if (std::memcmp(&prev, &next.post_process, sizeof(prev)) != 0) {
+      LOG_F(INFO,
+        "EnvStatic: PostProcessVolume changed (pp_enabled={}, exp_enabled={}, mode={}, comp_ev={:.3f}, key={:.6f}, tone_mapper={})",
+        pp->IsEnabled(), pp->GetExposureEnabled(),
+        static_cast<uint32_t>(pp->GetExposureMode()),
+        pp->GetExposureCompensationEv(), pp->GetExposureKey(),
+        static_cast<uint32_t>(next.post_process.tone_mapper));
+    }
   }
 }
 
@@ -630,6 +784,8 @@ auto EnvironmentStaticDataManager::UploadIfNeeded() -> void
   if (slot_uploaded_id_[slot_index] == snapshot_id_) {
     return;
   }
+
+  const auto prev_uploaded_id = slot_uploaded_id_[slot_index];
 
   DLOG_SCOPE_F(2, "Uploading environment static data");
   auto format_slot =
@@ -666,6 +822,35 @@ auto EnvironmentStaticDataManager::UploadIfNeeded() -> void
   std::memcpy(static_cast<std::byte*>(mapped_ptr_) + offset_bytes,
     &cpu_snapshot_, sizeof(EnvironmentStaticData));
   slot_uploaded_id_[slot_index] = snapshot_id_;
+
+  LOG_F(INFO,
+    "EnvStatic: uploaded (slot={} srv={} snapshot_id={} prev_uploaded={}) "
+    "ctx(slot={} seq={}) "
+    "skylight(en={} src={} cube={}) skysphere(en={} src={} cube={}) "
+    "pp(en={} mapper={} exp_mode={}) "
+    "atmo(en={} T={} V={} M={} I={} C={} BN={}) "
+    "ibl(gen={} irr={} pref={})",
+    slot_index, srv_index_.get(), snapshot_id_, prev_uploaded_id,
+    last_update_frame_slot_.get(), last_update_frame_sequence_.get(),
+    cpu_snapshot_.sky_light.enabled,
+    static_cast<uint32_t>(cpu_snapshot_.sky_light.source),
+    format_slot(cpu_snapshot_.sky_light.cubemap_slot),
+    cpu_snapshot_.sky_sphere.enabled,
+    static_cast<uint32_t>(cpu_snapshot_.sky_sphere.source),
+    format_slot(cpu_snapshot_.sky_sphere.cubemap_slot),
+    cpu_snapshot_.post_process.enabled,
+    static_cast<uint32_t>(cpu_snapshot_.post_process.tone_mapper),
+    static_cast<uint32_t>(cpu_snapshot_.post_process.exposure_mode),
+    cpu_snapshot_.atmosphere.enabled,
+    format_slot(cpu_snapshot_.atmosphere.transmittance_lut_slot),
+    format_slot(cpu_snapshot_.atmosphere.sky_view_lut_slot),
+    format_slot(cpu_snapshot_.atmosphere.multi_scat_lut_slot),
+    format_slot(cpu_snapshot_.atmosphere.sky_irradiance_lut_slot),
+    format_slot(cpu_snapshot_.atmosphere.camera_volume_lut_slot),
+    format_slot(cpu_snapshot_.atmosphere.blue_noise_slot),
+    cpu_snapshot_.sky_light.ibl_generation,
+    format_slot(cpu_snapshot_.sky_light.irradiance_map_slot),
+    format_slot(cpu_snapshot_.sky_light.prefilter_map_slot));
 }
 
 auto EnvironmentStaticDataManager::EnsureResourcesCreated() -> void
@@ -726,17 +911,21 @@ auto EnvironmentStaticDataManager::EnsureResourcesCreated() -> void
 
   srv_index_ = srv_index;
 
-  DLOG_F(1, "srv index = {}", srv_index_.get());
-  DLOG_F(1, "   stride = {} (bytes)", kStrideBytes);
-  DLOG_F(1, "    total = {} (bytes)", total_bytes);
+  LOG_F(INFO,
+    "EnvStatic: created upload buffer (srv={} stride_bytes={} total_bytes={} frames_in_flight={})",
+    srv_index_.get(), kStrideBytes, total_bytes,
+    frame::kFramesInFlight.get());
 
   MarkAllSlotsDirty();
 }
 
 auto EnvironmentStaticDataManager::MarkAllSlotsDirty() -> void
 {
-  DLOG_F(2, "Marking all slots as needing upload (invalidating snapshot)");
+  const auto old = snapshot_id_;
   ++snapshot_id_;
+  LOG_F(INFO,
+    "EnvStatic: MarkAllSlotsDirty (snapshot_id {}->{} current_slot={})", old,
+    snapshot_id_, CurrentSlotIndex());
 }
 
 } // namespace oxygen::engine::internal
