@@ -862,60 +862,6 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
         if (atmo_enabled
           && (sky_atmo_lut_manager_->IsDirty()
             || !sky_atmo_lut_manager_->HasBeenGenerated())) {
-          // Validate PPV exposure settings at LUT regeneration time.
-          if (const auto scene = render_context_->scene) {
-            namespace env = scene::environment;
-            if (const auto env_sys = scene->GetEnvironment()) {
-              if (const auto pp
-                = env_sys->TryGetSystem<env::PostProcessVolume>();
-                pp && pp->IsEnabled()) {
-                const auto ModeToString
-                  = [](env::ExposureMode m) -> const char* {
-                  switch (m) {
-                  case env::ExposureMode::kManual:
-                    return "manual";
-                  case env::ExposureMode::kAuto:
-                    return "auto";
-                  case env::ExposureMode::kManualCamera:
-                    return "manual_camera";
-                  }
-                  return "unknown";
-                };
-                LOG_F(INFO,
-                  "Renderer: LUT regen gated by PPV (view={}, pp_enabled={}, "
-                  "exp_enabled={}, mode={}, manual_ev={:.3f}, comp_ev={:.3f}, "
-                  "key={:.6f})",
-                  view_id.get(), pp->IsEnabled(), pp->GetExposureEnabled(),
-                  ModeToString(pp->GetExposureMode()),
-                  pp->GetManualExposureEv(), pp->GetExposureCompensationEv(),
-                  pp->GetExposureKey());
-              } else {
-                LOG_F(INFO,
-                  "Renderer: LUT regen PPV missing/disabled (view={})",
-                  view_id.get());
-              }
-            }
-          }
-          // Toggle tonemapper: modify Scene AND force pipeline update via hack
-          static bool force_tonemap_toggle = false;
-          force_tonemap_toggle = !force_tonemap_toggle;
-
-          if (const auto scene = render_context_->scene) {
-            if (auto env_sys = scene->GetEnvironment()) {
-              if (auto pp = env_sys->TryGetSystem<env::PostProcessVolume>()) {
-                auto* mutable_pp
-                  = const_cast<env::PostProcessVolume*>(pp.get());
-                const auto new_tonemap = force_tonemap_toggle
-                  ? env::ToneMapper::kNone
-                  : env::ToneMapper::kAcesFitted;
-                mutable_pp->SetToneMapper(new_tonemap);
-                LOG_F(INFO,
-                  "Renderer: TOGGLED tonemapper before LUT regen (view={}, "
-                  "toNone={})",
-                  view_id.get(), force_tonemap_toggle);
-              }
-            }
-          }
           try {
             graphics::GpuEventScope lut_scope(
               *recorder, "Atmosphere LUT Compute");
