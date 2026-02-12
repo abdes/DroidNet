@@ -1000,38 +1000,6 @@ auto ForwardPipeline::OnSceneMutation(
         pp && pp->IsEnabled()) {
         impl_->auto_exposure_config->metering_mode
           = pp->GetAutoExposureMeteringMode();
-
-        // HACK: Read tonemapper from Scene PPV to allow Renderer to force
-        // changes This makes the pipeline responsive to direct Scene PPV
-        // modifications
-        const auto scene_tonemap = pp->GetToneMapper();
-
-        // Convert scene::environment::ToneMapper to engine::ToneMapper
-        engine::ToneMapper engine_tonemap = engine::ToneMapper::kAcesFitted;
-        switch (scene_tonemap) {
-        case scene::environment::ToneMapper::kAcesFitted:
-          engine_tonemap = engine::ToneMapper::kAcesFitted;
-          break;
-        case scene::environment::ToneMapper::kReinhard:
-          engine_tonemap = engine::ToneMapper::kReinhard;
-          break;
-        case scene::environment::ToneMapper::kFilmic:
-          engine_tonemap = engine::ToneMapper::kFilmic;
-          break;
-        case scene::environment::ToneMapper::kNone:
-          engine_tonemap = engine::ToneMapper::kNone;
-          break;
-        }
-
-        if (impl_->staged.tonemapping_mode != engine_tonemap) {
-          LOG_F(INFO,
-            "ForwardPipeline: Detected Scene PPV tonemapper change ({} -> {}), "
-            "applying",
-            static_cast<int>(impl_->staged.tonemapping_mode),
-            static_cast<int>(engine_tonemap));
-          impl_->staged.tonemapping_mode = engine_tonemap;
-          impl_->staged.dirty = true;
-        }
       }
     }
   }
