@@ -10,6 +10,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 
 namespace oxygen::engine::internal {
@@ -29,6 +30,9 @@ public:
     ShaderVisibleIndex prefilter { kInvalidShaderVisibleIndex };
     std::uint32_t prefilter_mip_levels { 0U };
     std::uint64_t generation { 0ULL };
+    // Version of the input source content used to produce these outputs.
+    // For captured-scene sources this is the sky-capture generation.
+    std::uint64_t source_content_version { 0ULL };
   };
 
   //! Query the provider for the outputs corresponding to a given source
@@ -36,7 +40,7 @@ public:
   //! slots while outputs are not ready and a monotonic `generation` that
   //! increases each time outputs are (re)generated.
   [[nodiscard]] virtual auto QueryOutputsFor(
-    ShaderVisibleIndex source_slot) const noexcept -> OutputMaps
+    ViewId view_id, ShaderVisibleIndex source_slot) const noexcept -> OutputMaps
     = 0;
 };
 

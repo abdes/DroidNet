@@ -1080,7 +1080,8 @@ auto ForwardPipeline::OnSceneMutation(
     view_ctx.view = view->intent.view;
     const bool has_scene = view->intent.camera.has_value();
     view_ctx.metadata = { .name = std::string(view->intent.name),
-      .purpose = has_scene ? "scene" : "overlay" };
+      .purpose = has_scene ? "scene" : "overlay",
+      .with_atmosphere = view->intent.with_atmosphere };
     if (view->has_hdr && view->hdr_framebuffer) {
       view_ctx.output = observer_ptr { view->hdr_framebuffer.get() };
     } else {

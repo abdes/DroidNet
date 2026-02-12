@@ -11,6 +11,7 @@
 #include <optional>
 
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Renderer/Passes/RenderPass.h>
@@ -88,10 +89,10 @@ private:
   auto ResolveSourceCubemapSlot() const noexcept -> ShaderVisibleIndex;
 
   auto DispatchIrradiance(graphics::CommandRecorder& recorder,
-    internal::IblManager& ibl, ShaderVisibleIndex source_slot,
+    internal::IblManager& ibl, ViewId view_id, ShaderVisibleIndex source_slot,
     float source_intensity) -> void;
   auto DispatchPrefilter(graphics::CommandRecorder& recorder,
-    internal::IblManager& ibl, ShaderVisibleIndex source_slot,
+    internal::IblManager& ibl, ViewId view_id, ShaderVisibleIndex source_slot,
     float source_intensity) -> void;
 
   std::shared_ptr<graphics::Buffer> pass_constants_buffer_;

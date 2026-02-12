@@ -9,6 +9,7 @@
 #include <cstdint>
 
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/View.h>
 
 namespace oxygen::engine::internal {
 
@@ -18,16 +19,18 @@ public:
   virtual ~ISkyCaptureProvider() = default;
 
   //! Returns the shader-visible SRV index for the captured cubemap.
-  [[nodiscard]] virtual auto GetCapturedCubemapSlot() const noexcept
+  [[nodiscard]] virtual auto GetCapturedCubemapSlot(
+    ViewId view_id) const noexcept
     -> ShaderVisibleIndex
     = 0;
 
   //! Returns true if the sky has been captured at least once and is ready.
-  [[nodiscard]] virtual auto IsCaptured() const noexcept -> bool = 0;
+  [[nodiscard]] virtual auto IsCaptured(ViewId view_id) const noexcept -> bool
+    = 0;
 
   //! Returns a monotonic generation token that increases when the capture
   //! has been updated.
-  [[nodiscard]] virtual auto GetCaptureGeneration() const noexcept
+  [[nodiscard]] virtual auto GetCaptureGeneration(ViewId view_id) const noexcept
     -> std::uint64_t
     = 0;
 };

@@ -276,6 +276,7 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
   };
   auto main_comp
     = CompositionView::ForScene(main_view_id_, main_view, main_camera_node_);
+  main_comp.with_atmosphere = true;
   shell.OnMainViewReady(context, main_comp);
   const graphics::Color kMainClearColor { 0.1F, 0.2F, 0.38F, 1.0F };
   main_comp.clear_color = kMainClearColor;

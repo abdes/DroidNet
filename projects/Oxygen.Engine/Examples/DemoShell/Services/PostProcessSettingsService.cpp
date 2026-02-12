@@ -265,7 +265,9 @@ auto PostProcessSettingsService::SetExposureEnabled(bool enabled) -> void
     const float baseline_exposure
       = (1.0F / 12.5F) * std::exp2(comp_ev - used_ev) * key;
     LOG_F(INFO,
-      "PostProcessSettings: exposure enabled={} (mode={}, manual_ev={:.3f}, cam_ev={:.3f}, used_ev={:.3f}, comp_ev={:.3f}, key={:.3f}, baseline={:.6f})",
+      "PostProcessSettings: exposure enabled={} (mode={}, manual_ev={:.3f}, "
+      "cam_ev={:.3f}, used_ev={:.3f}, comp_ev={:.3f}, key={:.3f}, "
+      "baseline={:.6f})",
       enabled, engine::to_string(mode), manual_ev, camera_ev, used_ev, comp_ev,
       key, baseline_exposure);
   }
@@ -301,7 +303,9 @@ auto PostProcessSettingsService::SetExposureMode(engine::ExposureMode mode)
     const float baseline_exposure
       = (1.0F / 12.5F) * std::exp2(comp_ev - used_ev) * key;
     LOG_F(INFO,
-      "PostProcessSettings: exposure mode={} (enabled={}, manual_ev={:.3f}, cam_ev={:.3f}, used_ev={:.3f}, comp_ev={:.3f}, key={:.3f}, baseline={:.6f})",
+      "PostProcessSettings: exposure mode={} (enabled={}, manual_ev={:.3f}, "
+      "cam_ev={:.3f}, used_ev={:.3f}, comp_ev={:.3f}, key={:.3f}, "
+      "baseline={:.6f})",
       engine::to_string(mode), enabled, manual_ev, camera_ev, used_ev, comp_ev,
       key, baseline_exposure);
   }
@@ -343,7 +347,9 @@ auto PostProcessSettingsService::SetManualExposureEv(float ev) -> void
     const float baseline_exposure
       = (1.0F / 12.5F) * std::exp2(comp_ev - used_ev) * key;
     LOG_F(INFO,
-      "PostProcessSettings: manual EV set {:.3f} (enabled={}, mode={}, cam_ev={:.3f}, used_ev={:.3f}, comp_ev={:.3f}, key={:.3f}, baseline={:.6f})",
+      "PostProcessSettings: manual EV set {:.3f} (enabled={}, mode={}, "
+      "cam_ev={:.3f}, used_ev={:.3f}, comp_ev={:.3f}, key={:.3f}, "
+      "baseline={:.6f})",
       ev, enabled, engine::to_string(mode), camera_ev, used_ev, comp_ev, key,
       baseline_exposure);
   }
@@ -442,13 +448,14 @@ auto PostProcessSettingsService::SetExposureCompensation(float stops) -> void
     const float camera_ev = ResolveManualCameraEv(camera_settings_);
     const float key = GetExposureKey();
     const bool enabled = GetExposureEnabled();
-    const float used_ev = (mode == engine::ExposureMode::kManualCamera)
-      ? camera_ev
-      : manual_ev;
+    const float used_ev
+      = (mode == engine::ExposureMode::kManualCamera) ? camera_ev : manual_ev;
     const float baseline_exposure
       = (1.0F / 12.5F) * std::exp2(stops - used_ev) * key;
     LOG_F(INFO,
-      "PostProcessSettings: exposure comp_ev={:.3f} (enabled={}, mode={}, manual_ev={:.3f}, cam_ev={:.3f}, used_ev={:.3f}, key={:.3f}, baseline={:.6f})",
+      "PostProcessSettings: exposure comp_ev={:.3f} (enabled={}, mode={}, "
+      "manual_ev={:.3f}, cam_ev={:.3f}, used_ev={:.3f}, key={:.3f}, "
+      "baseline={:.6f})",
       stops, enabled, engine::to_string(mode), manual_ev, camera_ev, used_ev,
       key, baseline_exposure);
   }
@@ -483,13 +490,14 @@ auto PostProcessSettingsService::SetExposureKey(float exposure_key) -> void
     const float camera_ev = ResolveManualCameraEv(camera_settings_);
     const float comp_ev = GetExposureCompensation();
     const bool enabled = GetExposureEnabled();
-    const float used_ev = (mode == engine::ExposureMode::kManualCamera)
-      ? camera_ev
-      : manual_ev;
+    const float used_ev
+      = (mode == engine::ExposureMode::kManualCamera) ? camera_ev : manual_ev;
     const float baseline_exposure
       = (1.0F / 12.5F) * std::exp2(comp_ev - used_ev) * exposure_key;
     LOG_F(INFO,
-      "PostProcessSettings: exposure key={:.3f} (enabled={}, mode={}, manual_ev={:.3f}, cam_ev={:.3f}, used_ev={:.3f}, comp_ev={:.3f}, baseline={:.6f})",
+      "PostProcessSettings: exposure key={:.3f} (enabled={}, mode={}, "
+      "manual_ev={:.3f}, cam_ev={:.3f}, used_ev={:.3f}, comp_ev={:.3f}, "
+      "baseline={:.6f})",
       exposure_key, enabled, engine::to_string(mode), manual_ev, camera_ev,
       used_ev, comp_ev, baseline_exposure);
   }
@@ -714,9 +722,11 @@ auto PostProcessSettingsService::SetTonemappingEnabled(bool enabled) -> void
   }
 
   LOG_F(INFO,
-    "PostProcessSettings: tonemapping enabled set {} (pipeline={}, will_set_mapper={}, stored_mapper={}, scene_ppv={}, scene_mapper={})",
+    "PostProcessSettings: tonemapping enabled set {} (pipeline={}, "
+    "will_set_mapper={}, stored_mapper={}, scene_ppv={}, scene_mapper={})",
     enabled, pipeline_ != nullptr,
-    enabled ? engine::to_string(GetToneMapper()) : engine::to_string(engine::ToneMapper::kNone),
+    enabled ? engine::to_string(GetToneMapper())
+            : engine::to_string(engine::ToneMapper::kNone),
     engine::to_string(GetToneMapper()), has_scene_ppv,
     static_cast<uint32_t>(scene_mapper));
 
@@ -767,7 +777,8 @@ auto PostProcessSettingsService::SetToneMapper(engine::ToneMapper mode) -> void
   }
 
   LOG_F(INFO,
-    "PostProcessSettings: tone mapper set {} (enabled={}, pipeline={}, scene_ppv={}, scene_mapper={})",
+    "PostProcessSettings: tone mapper set {} (enabled={}, pipeline={}, "
+    "scene_ppv={}, scene_mapper={})",
     engine::to_string(mode), GetTonemappingEnabled(), pipeline_ != nullptr,
     has_scene_ppv, static_cast<uint32_t>(scene_mapper));
 

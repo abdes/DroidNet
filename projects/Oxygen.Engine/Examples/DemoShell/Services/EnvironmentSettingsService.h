@@ -22,6 +22,7 @@
 
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Scene/Environment/Sun.h>
 
 #include "DemoShell/Services/DomainService.h"
@@ -106,6 +107,7 @@ public:
 
   //! Sets the index of the currently active preset.
   virtual auto SetPresetIndex(int index) -> void;
+  virtual auto ActivateUseSceneMode() -> void;
 
   //! Returns whether LUTs are valid and dirty (renderer state).
   [[nodiscard]] virtual auto GetAtmosphereLutStatus() const
@@ -311,6 +313,46 @@ public:
   virtual auto SetUseLut(bool enabled) -> void;
 
 private:
+  struct AtmosphereCanonicalState {
+    bool enabled { false };
+    float planet_radius_km { 0.0F };
+    float atmosphere_height_km { 0.0F };
+    glm::vec3 ground_albedo { 0.0F };
+    float rayleigh_scale_height_km { 0.0F };
+    float mie_scale_height_km { 0.0F };
+    float mie_anisotropy { 0.0F };
+    float mie_absorption_scale { 0.0F };
+    float multi_scattering { 0.0F };
+    glm::vec3 ozone_rgb { 0.0F };
+    engine::atmos::DensityProfile ozone_profile {};
+    bool sun_disk_enabled { false };
+    float aerial_perspective_scale { 0.0F };
+    float aerial_scattering_strength { 0.0F };
+  };
+
+  enum class DirtyDomain : uint32_t {
+    kNone = 0u,
+    kAtmosphere = 1u << 0u,
+    kSkySphere = 1u << 1u,
+    kSkybox = 1u << 2u,
+    kSkyLight = 1u << 3u,
+    kFog = 1u << 4u,
+    kSun = 1u << 5u,
+    kRendererFlags = 1u << 6u,
+    kPreset = 1u << 7u,
+    kAll = 0xFFFFFFFFu,
+  };
+
+  static constexpr auto ToMask(DirtyDomain domain) noexcept -> uint32_t
+  {
+    return static_cast<uint32_t>(domain);
+  }
+  static constexpr auto HasDirty(
+    const uint32_t mask, const DirtyDomain domain) noexcept -> bool
+  {
+    return (mask & ToMask(domain)) != 0U;
+  }
+
   struct SunUiSettings {
     bool enabled { true };
     float azimuth_deg { scene::environment::Sun::kDefaultAzimuthDeg };
@@ -327,7 +369,9 @@ private:
   auto SyncFromScene() -> void;
   auto LoadSettings() -> void;
   auto SaveSettings() const -> void;
-  auto MarkDirty() -> void;
+  auto PersistSettingsIfDirty() -> void;
+  auto ValidateAndClampState() -> void;
+  auto MarkDirty(uint32_t dirty_domains = ToMask(DirtyDomain::kAll)) -> void;
   auto NormalizeSkySystems() -> void;
   auto MaybeAutoLoadSkybox() -> void;
   auto ApplySavedSunSourcePreference() -> void;
@@ -338,7 +382,15 @@ private:
   auto GetSunSettingsForSource(int source) -> SunUiSettings&;
   auto LoadSunSettingsFromProfile(int source) -> void;
   auto SaveSunSettingsToProfile(int source) -> void;
-  auto MaybeRequestSkyCapture() -> void;
+  [[nodiscard]] auto CaptureAtmosphereCanonicalState() const
+    -> AtmosphereCanonicalState;
+  [[nodiscard]] auto CaptureSceneAtmosphereCanonicalState() const
+    -> std::optional<AtmosphereCanonicalState>;
+  [[nodiscard]] static auto HashAtmosphereState(
+    const AtmosphereCanonicalState& state) -> std::uint64_t;
+  static auto LogAtmosphereStateDiff(std::string_view prefix,
+    const AtmosphereCanonicalState& before,
+    const AtmosphereCanonicalState& after) -> void;
 
   static constexpr float kDefaultPlanetRadiusKm
     = engine::atmos::kDefaultPlanetRadiusM * 0.001F;
@@ -349,10 +401,17 @@ private:
 
   int update_depth_ { 0 };
   bool settings_loaded_ { false };
+  bool has_persisted_settings_ { false };
+  bool settings_persist_dirty_ { false };
   bool pending_changes_ { false };
   bool applied_changes_this_frame_ { false };
   bool needs_sky_capture_ { false };
   bool needs_sync_ { true };
+  uint32_t dirty_domains_ { ToMask(DirtyDomain::kAll) };
+  uint32_t batched_dirty_domains_ { ToMask(DirtyDomain::kNone) };
+  std::uint64_t settings_revision_ { 0 };
+  std::uint64_t last_persisted_settings_revision_ { 0 };
+  std::optional<ViewId> main_view_id_ {};
 
   bool apply_saved_sun_on_next_sync_ { false };
   std::optional<int> saved_sun_source_ {};
@@ -453,7 +512,7 @@ private:
 
   std::atomic_uint64_t epoch_ { 0 };
 
-  int preset_index_ { 0 };
+  int preset_index_ { -1 };
 };
 
 } // namespace oxygen::examples

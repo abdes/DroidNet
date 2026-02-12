@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <numbers>
 #include <string>
@@ -30,6 +31,7 @@
 #include <Oxygen/Scene/Scene.h>
 
 #include "DemoShell/Services/EnvironmentSettingsService.h"
+#include "DemoShell/Runtime/CompositionView.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/Services/SkyboxService.h"
 
@@ -246,6 +248,8 @@ namespace {
   constexpr std::string_view kMieScaleHeightKey
     = "env.atmo.mie_scale_height_km";
   constexpr std::string_view kMieAnisotropyKey = "env.atmo.mie_anisotropy";
+  constexpr std::string_view kMieAbsorptionScaleKey
+    = "env.atmo.mie_absorption_scale";
   constexpr std::string_view kMultiScatteringKey = "env.atmo.multi_scattering";
   constexpr std::string_view kSunDiskEnabledKey = "env.atmo.sun_disk_enabled";
   constexpr std::string_view kAerialPerspectiveScaleKey
@@ -264,11 +268,6 @@ namespace {
     = "env.atmo.ozone_profile.layer1.linear_term";
   constexpr std::string_view kOzoneProfileLayer1ConstantTermKey
     = "env.atmo.ozone_profile.layer1.constant_term";
-  constexpr std::string_view kSkyViewLutSlicesKey
-    = "env.atmo.sky_view_lut_slices";
-  constexpr std::string_view kSkyViewAltMappingModeKey
-    = "env.atmo.sky_view_alt_mapping_mode";
-
   constexpr std::string_view kSkySphereEnabledKey = "env.sky_sphere.enabled";
   constexpr std::string_view kSkySphereSourceKey = "env.sky_sphere.source";
   constexpr std::string_view kSkySphereSolidColorKey
@@ -319,6 +318,34 @@ namespace {
   constexpr std::string_view kSunUseTemperatureKey = "env.sun.use_temperature";
   constexpr std::string_view kSunTemperatureKey = "env.sun.temperature_kelvin";
   constexpr std::string_view kSunDiskRadiusKey = "env.sun.disk_radius_deg";
+  constexpr std::string_view kEnvironmentSettingsSchemaVersionKey
+    = "env.settings.schema_version";
+  constexpr std::string_view kEnvironmentCustomStatePresentKey
+    = "env.settings.custom_state_present";
+  constexpr float kCurrentSettingsSchemaVersion = 2.0F;
+  constexpr int kPresetUseScene = -2;
+  constexpr int kPresetCustom = -1;
+
+  auto ClampVec3(const glm::vec3& value, float min_value, float max_value)
+    -> glm::vec3
+  {
+    return glm::clamp(value, glm::vec3(min_value), glm::vec3(max_value));
+  }
+
+  auto HashCombineU64(std::uint64_t seed, std::uint64_t value) -> std::uint64_t
+  {
+    seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
+    return seed;
+  }
+
+  auto FloatBits(const float v) -> std::uint32_t
+  {
+    const auto bytes = reinterpret_cast<const std::uint8_t*>(&v);
+    return static_cast<std::uint32_t>(bytes[0])
+      | (static_cast<std::uint32_t>(bytes[1]) << 8U)
+      | (static_cast<std::uint32_t>(bytes[2]) << 16U)
+      | (static_cast<std::uint32_t>(bytes[3]) << 24U);
+  }
 
 } // namespace
 
@@ -417,10 +444,43 @@ auto EnvironmentSettingsService::SetRuntimeConfig(
   NormalizeSkySystems();
 
   if (scene_changed) {
-    needs_sync_ = true;
-    apply_saved_sun_on_next_sync_ = true;
-    if (!pending_changes_) {
+    if (!config_.scene) {
+      PersistSettingsIfDirty();
+      pending_changes_ = false;
+      dirty_domains_ = ToMask(DirtyDomain::kNone);
+      batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
+      needs_sync_ = true;
+      return;
+    }
+
+    if (preset_index_ == kPresetUseScene) {
+      pending_changes_ = false;
+      dirty_domains_ = ToMask(DirtyDomain::kNone);
+      batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
+      needs_sync_ = true;
+      apply_saved_sun_on_next_sync_ = true;
       SyncFromSceneIfNeeded();
+    } else if (preset_index_ == kPresetCustom) {
+      // Custom mode applies persisted settings when available; otherwise it
+      // mirrors the scene as source-of-truth until user edits.
+      if (has_persisted_settings_) {
+        pending_changes_ = true;
+        dirty_domains_ = ToMask(DirtyDomain::kAll);
+        needs_sync_ = false;
+        skybox_dirty_ = true;
+      } else {
+        pending_changes_ = false;
+        dirty_domains_ = ToMask(DirtyDomain::kNone);
+        needs_sync_ = true;
+        apply_saved_sun_on_next_sync_ = true;
+        SyncFromSceneIfNeeded();
+      }
+    } else {
+      // Built-in presets are applied by EnvironmentVm, not synced from scene.
+      pending_changes_ = false;
+      dirty_domains_ = ToMask(DirtyDomain::kNone);
+      batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
+      needs_sync_ = false;
     }
   }
 }
@@ -436,27 +496,33 @@ auto EnvironmentSettingsService::OnFrameStart(
   applied_changes_this_frame_ = false;
   SyncFromSceneIfNeeded();
   ApplyPendingChanges();
-  MaybeRequestSkyCapture();
+  PersistSettingsIfDirty();
 }
 
 auto EnvironmentSettingsService::OnSceneActivated(scene::Scene& /*scene*/)
   -> void
 {
+  PersistSettingsIfDirty();
   config_.scene = nullptr;
   config_.skybox_service = nullptr;
+  main_view_id_.reset();
   needs_sync_ = true;
   apply_saved_sun_on_next_sync_ = true;
   sun_light_available_ = false;
   sun_light_node_ = {};
   synthetic_sun_light_node_ = {};
   synthetic_sun_light_created_ = false;
+  pending_changes_ = false;
+  dirty_domains_ = ToMask(DirtyDomain::kNone);
+  batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
   epoch_++;
 }
 
 auto EnvironmentSettingsService::OnMainViewReady(
-  const engine::FrameContext& /*context*/, const CompositionView& /*view*/)
+  const engine::FrameContext& /*context*/, const CompositionView& view)
   -> void
 {
+  main_view_id_ = view.id;
 }
 
 auto EnvironmentSettingsService::HasScene() const noexcept -> bool
@@ -473,7 +539,11 @@ auto EnvironmentSettingsService::EndUpdate() -> void
   if (update_depth_ > 0) {
     update_depth_--;
     if (update_depth_ == 0) {
-      MarkDirty();
+      if (batched_dirty_domains_ != ToMask(DirtyDomain::kNone)) {
+        const auto merged_domains = batched_dirty_domains_;
+        batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
+        MarkDirty(merged_domains);
+      }
     }
   }
 }
@@ -489,12 +559,38 @@ auto EnvironmentSettingsService::SetPresetIndex(int index) -> void
     return;
   }
   preset_index_ = index;
-  MarkDirty();
+  settings_persist_dirty_ = true;
+  settings_revision_++;
+  DLOG_F(INFO,
+    "EnvironmentSettingsService: preset index changed to {} (rev={})",
+    preset_index_, settings_revision_);
+}
+
+auto EnvironmentSettingsService::ActivateUseSceneMode() -> void
+{
+  pending_changes_ = false;
+  dirty_domains_ = ToMask(DirtyDomain::kNone);
+  batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
+  needs_sync_ = true;
+  apply_saved_sun_on_next_sync_ = true;
+  SyncFromSceneIfNeeded();
 }
 
 auto EnvironmentSettingsService::SyncFromSceneIfNeeded() -> void
 {
   if (!needs_sync_) {
+    return;
+  }
+  if (pending_changes_) {
+    DLOG_F(WARNING,
+      "EnvironmentSettingsService: deferring scene sync while pending UI changes exist (mask=0x{:X} rev={})",
+      dirty_domains_, settings_revision_);
+    return;
+  }
+  if (update_depth_ > 0) {
+    DLOG_F(WARNING,
+      "EnvironmentSettingsService: deferring scene sync while update transaction is active (depth={})",
+      update_depth_);
     return;
   }
 
@@ -513,8 +609,9 @@ auto EnvironmentSettingsService::GetAtmosphereLutStatus() const
   bool luts_valid = false;
   bool luts_dirty = true;
 
-  if (config_.renderer) {
-    if (auto lut_mgr = config_.renderer->GetSkyAtmosphereLutManager()) {
+  if (config_.renderer && main_view_id_.has_value()) {
+    if (auto lut_mgr
+      = config_.renderer->GetSkyAtmosphereLutManagerForView(*main_view_id_)) {
       luts_valid = lut_mgr->HasBeenGenerated();
       luts_dirty = lut_mgr->IsDirty();
     }
@@ -535,7 +632,7 @@ auto EnvironmentSettingsService::SetSkyAtmosphereEnabled(bool enabled) -> void
   }
   sky_atmo_enabled_ = enabled;
   NormalizeSkySystems();
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
 }
 
 auto EnvironmentSettingsService::GetPlanetRadiusKm() const -> float
@@ -549,7 +646,7 @@ auto EnvironmentSettingsService::SetPlanetRadiusKm(float value) -> void
     return;
   }
   planet_radius_km_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
 }
 
 auto EnvironmentSettingsService::GetAtmosphereHeightKm() const -> float
@@ -563,7 +660,7 @@ auto EnvironmentSettingsService::SetAtmosphereHeightKm(float value) -> void
     return;
   }
   atmosphere_height_km_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
 }
 
 auto EnvironmentSettingsService::GetGroundAlbedo() const -> glm::vec3
@@ -577,7 +674,7 @@ auto EnvironmentSettingsService::SetGroundAlbedo(const glm::vec3& value) -> void
     return;
   }
   ground_albedo_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
 }
 
 auto EnvironmentSettingsService::GetRayleighScaleHeightKm() const -> float
@@ -591,7 +688,7 @@ auto EnvironmentSettingsService::SetRayleighScaleHeightKm(float value) -> void
     return;
   }
   rayleigh_scale_height_km_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
 }
 
 auto EnvironmentSettingsService::GetMieScaleHeightKm() const -> float
@@ -605,7 +702,7 @@ auto EnvironmentSettingsService::SetMieScaleHeightKm(float value) -> void
     return;
   }
   mie_scale_height_km_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
 }
 
 auto EnvironmentSettingsService::GetMieAnisotropy() const -> float
@@ -619,7 +716,7 @@ auto EnvironmentSettingsService::SetMieAnisotropy(float value) -> void
     return;
   }
   mie_anisotropy_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
 }
 
 auto EnvironmentSettingsService::GetMieAbsorptionScale() const -> float
@@ -634,7 +731,7 @@ auto EnvironmentSettingsService::SetMieAbsorptionScale(float value) -> void
     return;
   }
   mie_absorption_scale_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
 }
 
 auto EnvironmentSettingsService::GetMultiScattering() const -> float
@@ -648,7 +745,7 @@ auto EnvironmentSettingsService::SetMultiScattering(float value) -> void
     return;
   }
   multi_scattering_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
 }
 
 auto EnvironmentSettingsService::GetOzoneRgb() const -> glm::vec3
@@ -662,7 +759,7 @@ auto EnvironmentSettingsService::SetOzoneRgb(const glm::vec3& value) -> void
     return;
   }
   ozone_rgb_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
 }
 
 auto EnvironmentSettingsService::GetOzoneDensityProfile() const
@@ -675,7 +772,7 @@ auto EnvironmentSettingsService::SetOzoneDensityProfile(
   const engine::atmos::DensityProfile& profile) -> void
 {
   ozone_profile_ = profile;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
 }
 
 auto EnvironmentSettingsService::GetSunDiskEnabled() const -> bool
@@ -689,7 +786,7 @@ auto EnvironmentSettingsService::SetSunDiskEnabled(const bool enabled) -> void
     return;
   }
   sun_disk_enabled_ = enabled;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
 }
 
 auto EnvironmentSettingsService::GetAerialPerspectiveScale() const -> float
@@ -704,7 +801,7 @@ auto EnvironmentSettingsService::SetAerialPerspectiveScale(const float value)
     return;
   }
   aerial_perspective_scale_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
 }
 
 auto EnvironmentSettingsService::GetAerialScatteringStrength() const -> float
@@ -719,7 +816,7 @@ auto EnvironmentSettingsService::SetAerialScatteringStrength(const float value)
     return;
   }
   aerial_scattering_strength_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
 }
 
 auto EnvironmentSettingsService::GetSkyViewLutSlices() const -> int
@@ -729,11 +826,14 @@ auto EnvironmentSettingsService::GetSkyViewLutSlices() const -> int
 
 auto EnvironmentSettingsService::SetSkyViewLutSlices(int value) -> void
 {
+  value = std::clamp(value, 1, 128);
   if (sky_view_lut_slices_ == value) {
     return;
   }
-  sky_view_lut_slices_ = value;
-  MarkDirty();
+  DLOG_F(INFO,
+    "EnvironmentSettingsService: SkyView LUT slices are renderer-owned; "
+    "ignoring UI write {} (current={})",
+    value, sky_view_lut_slices_);
 }
 
 auto EnvironmentSettingsService::GetSkyViewAltMappingMode() const -> int
@@ -743,17 +843,20 @@ auto EnvironmentSettingsService::GetSkyViewAltMappingMode() const -> int
 
 auto EnvironmentSettingsService::SetSkyViewAltMappingMode(int value) -> void
 {
+  value = std::clamp(value, 0, 1);
   if (sky_view_alt_mapping_mode_ == value) {
     return;
   }
-  sky_view_alt_mapping_mode_ = value;
-  MarkDirty();
+  DLOG_F(INFO,
+    "EnvironmentSettingsService: SkyView mapping mode is renderer-owned; "
+    "ignoring UI write {} (current={})",
+    value, sky_view_alt_mapping_mode_);
 }
 
 auto EnvironmentSettingsService::RequestRegenerateLut() -> void
 {
-  regenerate_lut_requested_ = true;
-  MarkDirty();
+  DLOG_F(INFO,
+    "EnvironmentSettingsService: RequestRegenerateLut ignored; renderer owns LUT regeneration");
 }
 
 auto EnvironmentSettingsService::GetSkySphereEnabled() const -> bool
@@ -769,7 +872,7 @@ auto EnvironmentSettingsService::SetSkySphereEnabled(bool enabled) -> void
   sky_sphere_enabled_ = enabled;
   NormalizeSkySystems();
   skybox_dirty_ = true;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkySphere) | ToMask(DirtyDomain::kSkybox));
 }
 
 auto EnvironmentSettingsService::GetSkySphereSource() const -> int
@@ -784,7 +887,7 @@ auto EnvironmentSettingsService::SetSkySphereSource(int source) -> void
   }
   sky_sphere_source_ = source;
   skybox_dirty_ = true;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkySphere) | ToMask(DirtyDomain::kSkybox));
 }
 
 auto EnvironmentSettingsService::GetSkySphereSolidColor() const -> glm::vec3
@@ -799,7 +902,7 @@ auto EnvironmentSettingsService::SetSkySphereSolidColor(const glm::vec3& value)
     return;
   }
   sky_sphere_solid_color_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkySphere));
 }
 
 auto EnvironmentSettingsService::GetSkyIntensity() const -> float
@@ -813,7 +916,7 @@ auto EnvironmentSettingsService::SetSkyIntensity(const float value) -> void
     return;
   }
   sky_intensity_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkySphere));
 }
 
 auto EnvironmentSettingsService::GetSkySphereRotationDeg() const -> float
@@ -827,7 +930,7 @@ auto EnvironmentSettingsService::SetSkySphereRotationDeg(float value) -> void
     return;
   }
   sky_sphere_rotation_deg_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkySphere));
 }
 
 auto EnvironmentSettingsService::GetSkyboxPath() const -> std::string
@@ -842,7 +945,7 @@ auto EnvironmentSettingsService::SetSkyboxPath(std::string_view path) -> void
   }
   skybox_path_ = std::string(path);
   skybox_dirty_ = true;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkybox));
 }
 
 auto EnvironmentSettingsService::GetSkyboxLayoutIndex() const -> int
@@ -857,7 +960,7 @@ auto EnvironmentSettingsService::SetSkyboxLayoutIndex(int index) -> void
   }
   skybox_layout_idx_ = index;
   skybox_dirty_ = true;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkybox));
 }
 
 auto EnvironmentSettingsService::GetSkyboxOutputFormatIndex() const -> int
@@ -872,7 +975,7 @@ auto EnvironmentSettingsService::SetSkyboxOutputFormatIndex(int index) -> void
   }
   skybox_output_format_idx_ = index;
   skybox_dirty_ = true;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkybox));
 }
 
 auto EnvironmentSettingsService::GetSkyboxFaceSize() const -> int
@@ -887,7 +990,7 @@ auto EnvironmentSettingsService::SetSkyboxFaceSize(int size) -> void
   }
   skybox_face_size_ = size;
   skybox_dirty_ = true;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkybox));
 }
 
 auto EnvironmentSettingsService::GetSkyboxFlipY() const -> bool
@@ -902,7 +1005,7 @@ auto EnvironmentSettingsService::SetSkyboxFlipY(bool flip) -> void
   }
   skybox_flip_y_ = flip;
   skybox_dirty_ = true;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkybox));
 }
 
 auto EnvironmentSettingsService::GetSkyboxTonemapHdrToLdr() const -> bool
@@ -917,7 +1020,7 @@ auto EnvironmentSettingsService::SetSkyboxTonemapHdrToLdr(bool enabled) -> void
   }
   skybox_tonemap_hdr_to_ldr_ = enabled;
   skybox_dirty_ = true;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkybox));
 }
 
 auto EnvironmentSettingsService::GetSkyboxHdrExposureEv() const -> float
@@ -933,7 +1036,7 @@ auto EnvironmentSettingsService::SetSkyboxHdrExposureEv(float value) -> void
   }
   skybox_hdr_exposure_ev_ = value;
   skybox_dirty_ = true;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkybox));
 }
 
 auto EnvironmentSettingsService::GetSkyboxStatusMessage() const
@@ -1012,7 +1115,7 @@ auto EnvironmentSettingsService::SetSkyLightEnabled(bool enabled) -> void
     return;
   }
   sky_light_enabled_ = enabled;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkyLight));
 }
 
 auto EnvironmentSettingsService::GetSkyLightSource() const -> int
@@ -1026,7 +1129,7 @@ auto EnvironmentSettingsService::SetSkyLightSource(int source) -> void
     return;
   }
   sky_light_source_ = source;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkyLight));
 }
 
 auto EnvironmentSettingsService::GetSkyLightTint() const -> glm::vec3
@@ -1040,7 +1143,7 @@ auto EnvironmentSettingsService::SetSkyLightTint(const glm::vec3& value) -> void
     return;
   }
   sky_light_tint_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkyLight));
 }
 
 auto EnvironmentSettingsService::GetSkyLightIntensityMul() const -> float
@@ -1055,7 +1158,7 @@ auto EnvironmentSettingsService::SetSkyLightIntensityMul(const float value)
     return;
   }
   sky_light_intensity_mul_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkyLight));
 }
 
 auto EnvironmentSettingsService::GetSkyLightDiffuse() const -> float
@@ -1069,7 +1172,7 @@ auto EnvironmentSettingsService::SetSkyLightDiffuse(float value) -> void
     return;
   }
   sky_light_diffuse_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkyLight));
 }
 
 auto EnvironmentSettingsService::GetSkyLightSpecular() const -> float
@@ -1083,7 +1186,7 @@ auto EnvironmentSettingsService::SetSkyLightSpecular(float value) -> void
     return;
   }
   sky_light_specular_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSkyLight));
 }
 
 auto EnvironmentSettingsService::GetFogEnabled() const -> bool
@@ -1097,7 +1200,7 @@ auto EnvironmentSettingsService::SetFogEnabled(const bool enabled) -> void
     return;
   }
   fog_enabled_ = enabled;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kFog));
 }
 
 auto EnvironmentSettingsService::GetFogModel() const -> int
@@ -1111,7 +1214,7 @@ auto EnvironmentSettingsService::SetFogModel(const int model) -> void
     return;
   }
   fog_model_ = model;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kFog));
 }
 
 auto EnvironmentSettingsService::GetFogExtinctionSigmaTPerMeter() const -> float
@@ -1126,7 +1229,7 @@ auto EnvironmentSettingsService::SetFogExtinctionSigmaTPerMeter(
     return;
   }
   fog_extinction_sigma_t_per_m_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kFog));
 }
 
 auto EnvironmentSettingsService::GetFogHeightFalloffPerMeter() const -> float
@@ -1141,7 +1244,7 @@ auto EnvironmentSettingsService::SetFogHeightFalloffPerMeter(const float value)
     return;
   }
   fog_height_falloff_per_m_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kFog));
 }
 
 auto EnvironmentSettingsService::GetFogHeightOffsetMeters() const -> float
@@ -1156,7 +1259,7 @@ auto EnvironmentSettingsService::SetFogHeightOffsetMeters(const float value)
     return;
   }
   fog_height_offset_m_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kFog));
 }
 
 auto EnvironmentSettingsService::GetFogStartDistanceMeters() const -> float
@@ -1171,7 +1274,7 @@ auto EnvironmentSettingsService::SetFogStartDistanceMeters(const float value)
     return;
   }
   fog_start_distance_m_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kFog));
 }
 
 auto EnvironmentSettingsService::GetFogMaxOpacity() const -> float
@@ -1185,7 +1288,7 @@ auto EnvironmentSettingsService::SetFogMaxOpacity(const float value) -> void
     return;
   }
   fog_max_opacity_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kFog));
 }
 
 auto EnvironmentSettingsService::GetFogSingleScatteringAlbedoRgb() const
@@ -1201,7 +1304,7 @@ auto EnvironmentSettingsService::SetFogSingleScatteringAlbedoRgb(
     return;
   }
   fog_single_scattering_albedo_rgb_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kFog));
 }
 
 auto EnvironmentSettingsService::GetSunPresent() const -> bool
@@ -1220,7 +1323,7 @@ auto EnvironmentSettingsService::SetSunEnabled(bool enabled) -> void
     return;
   }
   sun_enabled_ = enabled;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSun));
 }
 
 auto EnvironmentSettingsService::GetSunSource() const -> int
@@ -1237,7 +1340,7 @@ auto EnvironmentSettingsService::SetSunSource(int source) -> void
   SaveSunSettingsToProfile(sun_source_);
   sun_source_ = source;
   LoadSunSettingsFromProfile(sun_source_);
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSun));
 }
 
 auto EnvironmentSettingsService::GetSunAzimuthDeg() const -> float
@@ -1251,7 +1354,7 @@ auto EnvironmentSettingsService::SetSunAzimuthDeg(float value) -> void
     return;
   }
   sun_azimuth_deg_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSun));
 }
 
 auto EnvironmentSettingsService::GetSunElevationDeg() const -> float
@@ -1265,7 +1368,7 @@ auto EnvironmentSettingsService::SetSunElevationDeg(float value) -> void
     return;
   }
   sun_elevation_deg_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSun));
 }
 
 auto EnvironmentSettingsService::GetSunColorRgb() const -> glm::vec3
@@ -1279,7 +1382,7 @@ auto EnvironmentSettingsService::SetSunColorRgb(const glm::vec3& value) -> void
     return;
   }
   sun_color_rgb_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSun));
 }
 
 auto EnvironmentSettingsService::GetSunIlluminanceLx() const -> float
@@ -1293,7 +1396,7 @@ auto EnvironmentSettingsService::SetSunIlluminanceLx(float value) -> void
     return;
   }
   sun_illuminance_lx_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSun));
 }
 
 auto EnvironmentSettingsService::GetSunUseTemperature() const -> bool
@@ -1307,7 +1410,7 @@ auto EnvironmentSettingsService::SetSunUseTemperature(bool enabled) -> void
     return;
   }
   sun_use_temperature_ = enabled;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSun));
 }
 
 auto EnvironmentSettingsService::GetSunTemperatureKelvin() const -> float
@@ -1321,7 +1424,7 @@ auto EnvironmentSettingsService::SetSunTemperatureKelvin(float value) -> void
     return;
   }
   sun_temperature_kelvin_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSun));
 }
 
 auto EnvironmentSettingsService::GetSunDiskRadiusDeg() const -> float
@@ -1335,7 +1438,7 @@ auto EnvironmentSettingsService::SetSunDiskRadiusDeg(float value) -> void
     return;
   }
   sun_component_disk_radius_deg_ = value;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kSun));
 }
 
 auto EnvironmentSettingsService::GetSunLightAvailable() const -> bool
@@ -1376,7 +1479,7 @@ auto EnvironmentSettingsService::SetUseLut(bool enabled) -> void
     return;
   }
   use_lut_ = enabled;
-  MarkDirty();
+  MarkDirty(ToMask(DirtyDomain::kRendererFlags));
 }
 
 auto EnvironmentSettingsService::ApplyPendingChanges() -> void
@@ -1384,8 +1487,30 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   if (!pending_changes_ || !config_.scene) {
     return;
   }
+  if (dirty_domains_ == ToMask(DirtyDomain::kNone)) {
+    pending_changes_ = false;
+    return;
+  }
 
+  DLOG_F(INFO,
+    "EnvironmentSettingsService: applying pending changes mask=0x{:X} rev={}",
+    dirty_domains_, settings_revision_);
+  ValidateAndClampState();
   NormalizeSkySystems();
+  const bool apply_atmosphere = HasDirty(dirty_domains_, DirtyDomain::kAtmosphere);
+  const bool apply_sun = HasDirty(dirty_domains_, DirtyDomain::kSun);
+  const bool apply_fog = HasDirty(dirty_domains_, DirtyDomain::kFog);
+  const bool apply_sky_sphere = HasDirty(dirty_domains_, DirtyDomain::kSkySphere);
+  const bool apply_sky_light = HasDirty(dirty_domains_, DirtyDomain::kSkyLight);
+  const bool apply_skybox = HasDirty(dirty_domains_, DirtyDomain::kSkybox);
+
+  const auto cache_atmo_before = CaptureAtmosphereCanonicalState();
+  const auto scene_atmo_before = CaptureSceneAtmosphereCanonicalState();
+  if (apply_atmosphere) {
+    DLOG_F(INFO, "EnvironmentSettingsService: atmosphere hash before apply cache=0x{:X} scene=0x{:X}",
+      HashAtmosphereState(cache_atmo_before),
+      scene_atmo_before.has_value() ? HashAtmosphereState(*scene_atmo_before) : 0ULL);
+  }
 
   auto env = config_.scene->GetEnvironment();
   if (!env) {
@@ -1394,13 +1519,13 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   }
 
   auto sun = env->TryGetSystem<scene::environment::Sun>();
-  if (sun_present_ && sun_enabled_ && (sun == nullptr)) {
+  if (apply_sun && sun_present_ && sun_enabled_ && (sun == nullptr)) {
     sun = observer_ptr { &env->AddSystem<scene::environment::Sun>() };
   }
-  if (sun) {
+  if (apply_sun && sun) {
     sun->SetEnabled(sun_enabled_);
   }
-  if ((sun) && !sun_enabled_) {
+  if (apply_sun && (sun) && !sun_enabled_) {
     UpdateSunLightCandidate();
     if (sun_light_available_) {
       if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
@@ -1420,7 +1545,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     sun->ClearLightReference();
   }
 
-  if (sun_enabled_ && (sun != nullptr)) {
+  if (apply_sun && sun_enabled_ && (sun != nullptr)) {
     const auto sun_source = (sun_source_ == 0)
       ? scene::environment::SunSource::kFromScene
       : scene::environment::SunSource::kSynthetic;
@@ -1497,37 +1622,44 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
         sun->ClearLightReference();
       }
     }
-  } else if (sun) {
+  } else if (apply_sun && sun) {
     sun->ClearLightReference();
   }
 
   auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>();
-  if (sky_atmo_enabled_ && !atmo) {
+  if (apply_atmosphere && sky_atmo_enabled_ && !atmo) {
     atmo
       = observer_ptr { &env->AddSystem<scene::environment::SkyAtmosphere>() };
   }
-  if (atmo) {
+  if (apply_atmosphere && atmo) {
     atmo->SetEnabled(sky_atmo_enabled_);
   }
-  if (sky_atmo_enabled_ && atmo) {
-    atmo->SetPlanetRadiusMeters(planet_radius_km_ * kKmToMeters);
-    atmo->SetAtmosphereHeightMeters(atmosphere_height_km_ * kKmToMeters);
-    atmo->SetGroundAlbedoRgb(ground_albedo_);
-    atmo->SetRayleighScaleHeightMeters(rayleigh_scale_height_km_ * kKmToMeters);
-    atmo->SetMieScaleHeightMeters(mie_scale_height_km_ * kKmToMeters);
-    atmo->SetMieScaleHeightMeters(mie_scale_height_km_ * kKmToMeters);
-    atmo->SetMieAnisotropy(mie_anisotropy_);
-    atmo->SetMieAbsorptionRgb(mie_absorption_scale_ * glm::vec3(2.33e-6F));
+  if (apply_atmosphere && sky_atmo_enabled_ && atmo) {
+    const auto atmosphere_state = CaptureAtmosphereCanonicalState();
+    atmo->SetPlanetRadiusMeters(atmosphere_state.planet_radius_km * kKmToMeters);
+    atmo->SetAtmosphereHeightMeters(
+      atmosphere_state.atmosphere_height_km * kKmToMeters);
+    atmo->SetGroundAlbedoRgb(atmosphere_state.ground_albedo);
+    atmo->SetRayleighScaleHeightMeters(
+      atmosphere_state.rayleigh_scale_height_km * kKmToMeters);
+    atmo->SetMieScaleHeightMeters(
+      atmosphere_state.mie_scale_height_km * kKmToMeters);
+    atmo->SetMieAnisotropy(atmosphere_state.mie_anisotropy);
+    atmo->SetMieAbsorptionRgb(
+      atmosphere_state.mie_absorption_scale
+      * engine::atmos::kDefaultMieAbsorptionRgb);
     // We now control absorption explicitly via the new parameters.
-    atmo->SetOzoneAbsorptionRgb(ozone_rgb_);
+    atmo->SetOzoneAbsorptionRgb(atmosphere_state.ozone_rgb);
 
     // Apply the 2-layer ozone density profile as-authored (UI/settings).
-    atmo->SetOzoneDensityProfile(ozone_profile_);
+    atmo->SetOzoneDensityProfile(atmosphere_state.ozone_profile);
 
-    atmo->SetMultiScatteringFactor(multi_scattering_);
-    atmo->SetSunDiskEnabled(sun_disk_enabled_);
-    atmo->SetAerialPerspectiveDistanceScale(aerial_perspective_scale_);
-    atmo->SetAerialScatteringStrength(aerial_scattering_strength_);
+    atmo->SetMultiScatteringFactor(atmosphere_state.multi_scattering);
+    atmo->SetSunDiskEnabled(atmosphere_state.sun_disk_enabled);
+    atmo->SetAerialPerspectiveDistanceScale(
+      atmosphere_state.aerial_perspective_scale);
+    atmo->SetAerialScatteringStrength(
+      atmosphere_state.aerial_scattering_strength);
 
     if (config_.on_atmosphere_params_changed) {
       config_.on_atmosphere_params_changed();
@@ -1539,13 +1671,13 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   }
 
   auto fog = env->TryGetSystem<scene::environment::Fog>();
-  if (fog_enabled_ && !fog) {
+  if (apply_fog && fog_enabled_ && !fog) {
     fog = observer_ptr { &env->AddSystem<scene::environment::Fog>() };
   }
-  if (fog) {
+  if (apply_fog && fog) {
     fog->SetEnabled(fog_enabled_);
   }
-  if (fog_enabled_ && fog) {
+  if (apply_fog && fog_enabled_ && fog) {
     fog->SetModel(static_cast<scene::environment::FogModel>(fog_model_));
     fog->SetExtinctionSigmaTPerMeter(fog_extinction_sigma_t_per_m_);
     fog->SetHeightFalloffPerMeter(fog_height_falloff_per_m_);
@@ -1556,13 +1688,13 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   }
 
   auto sky = env->TryGetSystem<scene::environment::SkySphere>();
-  if (sky_sphere_enabled_ && !sky) {
+  if (apply_sky_sphere && sky_sphere_enabled_ && !sky) {
     sky = observer_ptr { &env->AddSystem<scene::environment::SkySphere>() };
   }
-  if (sky) {
+  if (apply_sky_sphere && sky) {
     sky->SetEnabled(sky_sphere_enabled_);
   }
-  if (sky_sphere_enabled_ && sky) {
+  if (apply_sky_sphere && sky_sphere_enabled_ && sky) {
     sky->SetSource(
       static_cast<scene::environment::SkySphereSource>(sky_sphere_source_));
     sky->SetSolidColorRgb(sky_sphere_solid_color_);
@@ -1571,13 +1703,13 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   }
 
   auto light = env->TryGetSystem<scene::environment::SkyLight>();
-  if (sky_light_enabled_ && !light) {
+  if (apply_sky_light && sky_light_enabled_ && !light) {
     light = observer_ptr { &env->AddSystem<scene::environment::SkyLight>() };
   }
-  if (light) {
+  if (apply_sky_light && light) {
     light->SetEnabled(sky_light_enabled_);
   }
-  if (sky_light_enabled_ && light) {
+  if (apply_sky_light && sky_light_enabled_ && light) {
     light->SetSource(
       static_cast<scene::environment::SkyLightSource>(sky_light_source_));
     light->SetTintRgb(sky_light_tint_);
@@ -1586,26 +1718,28 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     light->SetSpecularIntensity(sky_light_specular_);
   }
 
-  MaybeAutoLoadSkybox();
+  if (apply_skybox || apply_sky_sphere) {
+    MaybeAutoLoadSkybox();
+  }
 
-  if (config_.renderer) {
-    // Apply sky-view LUT slice configuration to the LUT manager.
-    if (auto lut_mgr = config_.renderer->GetSkyAtmosphereLutManager()) {
-      lut_mgr->SetSkyViewLutSlices(static_cast<uint32_t>(sky_view_lut_slices_));
-      lut_mgr->SetAltMappingMode(
-        static_cast<uint32_t>(sky_view_alt_mapping_mode_));
-
-      // Honor explicit "Regenerate LUT" button press.
-      if (regenerate_lut_requested_) {
-        lut_mgr->MarkDirty();
-        regenerate_lut_requested_ = false;
-      }
+  if (apply_atmosphere) {
+    const auto cache_atmo_after = CaptureAtmosphereCanonicalState();
+    const auto scene_atmo_after = CaptureSceneAtmosphereCanonicalState();
+    DLOG_F(INFO,
+      "EnvironmentSettingsService: atmosphere hash after apply cache=0x{:X} scene=0x{:X}",
+      HashAtmosphereState(cache_atmo_after),
+      scene_atmo_after.has_value() ? HashAtmosphereState(*scene_atmo_after) : 0ULL);
+    if (scene_atmo_before.has_value() && scene_atmo_after.has_value()) {
+      LogAtmosphereStateDiff(
+        "EnvironmentSettingsService: scene atmosphere diff",
+        *scene_atmo_before, *scene_atmo_after);
     }
   }
 
-  SaveSettings();
+  settings_persist_dirty_ = true;
   applied_changes_this_frame_ = true;
   pending_changes_ = false;
+  dirty_domains_ = ToMask(DirtyDomain::kNone);
   saved_sun_source_ = sun_source_;
 }
 
@@ -1614,6 +1748,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
   if (!config_.scene) {
     return;
   }
+  const auto cache_atmo_before = CaptureAtmosphereCanonicalState();
 
   auto env = config_.scene->GetEnvironment();
   if (!env) {
@@ -1621,37 +1756,30 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
       ApplySavedSunSourcePreference();
       apply_saved_sun_on_next_sync_ = false;
     }
+    pending_changes_ = false;
+    dirty_domains_ = ToMask(DirtyDomain::kNone);
     return;
   }
 
-  if (auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>()) {
-    sky_atmo_enabled_ = atmo->IsEnabled();
-    planet_radius_km_ = atmo->GetPlanetRadiusMeters() * kMetersToKm;
-    atmosphere_height_km_ = atmo->GetAtmosphereHeightMeters() * kMetersToKm;
-    ground_albedo_ = atmo->GetGroundAlbedoRgb();
-    rayleigh_scale_height_km_
-      = atmo->GetRayleighScaleHeightMeters() * kMetersToKm;
-    mie_scale_height_km_ = atmo->GetMieScaleHeightMeters() * kMetersToKm;
-    mie_anisotropy_ = atmo->GetMieAnisotropy();
-    // Compute scale relative to the engine's Earth-like default.
-    const auto absorption = atmo->GetMieAbsorptionRgb();
-    const auto base_absorption = engine::atmos::kDefaultMieAbsorptionRgb;
-    const float base_avg
-      = (base_absorption.x + base_absorption.y + base_absorption.z) / 3.0F;
-    mie_absorption_scale_ = (base_avg > 0.0F)
-      ? (absorption.x + absorption.y + absorption.z) / (3.0F * base_avg)
-      : 0.0F;
-    multi_scattering_ = atmo->GetMultiScatteringFactor();
-    sun_disk_enabled_ = atmo->GetSunDiskEnabled();
-    aerial_perspective_scale_ = atmo->GetAerialPerspectiveDistanceScale();
-    aerial_scattering_strength_ = atmo->GetAerialScatteringStrength();
-
-    // Sync ozone parameters.
-    ozone_rgb_ = atmo->GetAbsorptionRgb();
-
-    // Keep the full two-layer profile in sync so the UI can reflect
-    // scene-authored values (e.g., from loaded assets).
-    ozone_profile_ = atmo->GetOzoneDensityProfile();
+  if (const auto atmosphere_from_scene = CaptureSceneAtmosphereCanonicalState();
+    atmosphere_from_scene.has_value()) {
+    const auto& atmo_state = *atmosphere_from_scene;
+    sky_atmo_enabled_ = atmo_state.enabled;
+    planet_radius_km_ = atmo_state.planet_radius_km;
+    atmosphere_height_km_ = atmo_state.atmosphere_height_km;
+    ground_albedo_ = atmo_state.ground_albedo;
+    rayleigh_scale_height_km_ = atmo_state.rayleigh_scale_height_km;
+    mie_scale_height_km_ = atmo_state.mie_scale_height_km;
+    mie_anisotropy_ = atmo_state.mie_anisotropy;
+    mie_absorption_scale_ = std::clamp(atmo_state.mie_absorption_scale, 0.0F, 5.0F);
+    multi_scattering_ = atmo_state.multi_scattering;
+    sun_disk_enabled_ = atmo_state.sun_disk_enabled;
+    aerial_perspective_scale_ = atmo_state.aerial_perspective_scale;
+    aerial_scattering_strength_ = atmo_state.aerial_scattering_strength;
+    ozone_rgb_ = atmo_state.ozone_rgb;
+    ozone_profile_ = atmo_state.ozone_profile;
+  } else {
+    sky_atmo_enabled_ = false;
   }
 
   if (auto fog = env->TryGetSystem<scene::environment::Fog>()) {
@@ -1663,11 +1791,14 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     fog_start_distance_m_ = fog->GetStartDistanceMeters();
     fog_max_opacity_ = fog->GetMaxOpacity();
     fog_single_scattering_albedo_rgb_ = fog->GetSingleScatteringAlbedoRgb();
+  } else {
+    fog_enabled_ = false;
   }
 
   // Sync LUT slice configuration from the renderer's LUT manager.
-  if (config_.renderer) {
-    if (auto lut_mgr = config_.renderer->GetSkyAtmosphereLutManager()) {
+  if (config_.renderer && main_view_id_.has_value()) {
+    if (auto lut_mgr
+      = config_.renderer->GetSkyAtmosphereLutManagerForView(*main_view_id_)) {
       sky_view_lut_slices_ = static_cast<int>(lut_mgr->GetSkyViewLutSlices());
       sky_view_alt_mapping_mode_
         = static_cast<int>(lut_mgr->GetAltMappingMode());
@@ -1680,6 +1811,8 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     sky_sphere_solid_color_ = sky->GetSolidColorRgb();
     sky_intensity_ = sky->GetIntensity();
     sky_sphere_rotation_deg_ = sky->GetRotationRadians() * kRadToDeg;
+  } else {
+    sky_sphere_enabled_ = false;
   }
 
   if (auto light = env->TryGetSystem<scene::environment::SkyLight>()) {
@@ -1689,6 +1822,8 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     sky_light_intensity_mul_ = light->GetIntensityMul();
     sky_light_diffuse_ = light->GetDiffuseIntensity();
     sky_light_specular_ = light->GetSpecularIntensity();
+  } else {
+    sky_light_enabled_ = false;
   }
 
   if (auto sun = env->TryGetSystem<scene::environment::Sun>()) {
@@ -1719,6 +1854,9 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     }
 
     SaveSunSettingsToProfile(sun_source_);
+  } else {
+    sun_present_ = false;
+    sun_light_available_ = false;
   }
 
   if (apply_saved_sun_on_next_sync_) {
@@ -1726,7 +1864,17 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     apply_saved_sun_on_next_sync_ = false;
   }
 
+  const auto cache_atmo_after = CaptureAtmosphereCanonicalState();
+  if (HashAtmosphereState(cache_atmo_before) != HashAtmosphereState(cache_atmo_after)) {
+    LogAtmosphereStateDiff(
+      "EnvironmentSettingsService: scene sync overwrote UI cache",
+      cache_atmo_before, cache_atmo_after);
+  }
+
+  ValidateAndClampState();
   NormalizeSkySystems();
+  pending_changes_ = false;
+  dirty_domains_ = ToMask(DirtyDomain::kNone);
   epoch_++;
 }
 
@@ -1767,10 +1915,276 @@ auto EnvironmentSettingsService::MaybeAutoLoadSkybox() -> void
     skybox_hdr_exposure_ev_);
 }
 
+auto EnvironmentSettingsService::CaptureAtmosphereCanonicalState() const
+  -> AtmosphereCanonicalState
+{
+  AtmosphereCanonicalState state {};
+  state.enabled = sky_atmo_enabled_;
+  state.planet_radius_km = planet_radius_km_;
+  state.atmosphere_height_km = atmosphere_height_km_;
+  state.ground_albedo = ground_albedo_;
+  state.rayleigh_scale_height_km = rayleigh_scale_height_km_;
+  state.mie_scale_height_km = mie_scale_height_km_;
+  state.mie_anisotropy = mie_anisotropy_;
+  state.mie_absorption_scale = mie_absorption_scale_;
+  state.multi_scattering = multi_scattering_;
+  state.ozone_rgb = ozone_rgb_;
+  state.ozone_profile = ozone_profile_;
+  state.sun_disk_enabled = sun_disk_enabled_;
+  state.aerial_perspective_scale = aerial_perspective_scale_;
+  state.aerial_scattering_strength = aerial_scattering_strength_;
+  return state;
+}
+
+auto EnvironmentSettingsService::CaptureSceneAtmosphereCanonicalState() const
+  -> std::optional<AtmosphereCanonicalState>
+{
+  if (!config_.scene) {
+    return std::nullopt;
+  }
+  auto env = config_.scene->GetEnvironment();
+  if (!env) {
+    return std::nullopt;
+  }
+  auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>();
+  if (!atmo) {
+    return std::nullopt;
+  }
+
+  AtmosphereCanonicalState state {};
+  state.enabled = atmo->IsEnabled();
+  state.planet_radius_km = atmo->GetPlanetRadiusMeters() * kMetersToKm;
+  state.atmosphere_height_km = atmo->GetAtmosphereHeightMeters() * kMetersToKm;
+  state.ground_albedo = atmo->GetGroundAlbedoRgb();
+  state.rayleigh_scale_height_km
+    = atmo->GetRayleighScaleHeightMeters() * kMetersToKm;
+  state.mie_scale_height_km = atmo->GetMieScaleHeightMeters() * kMetersToKm;
+  state.mie_anisotropy = atmo->GetMieAnisotropy();
+  const auto absorption = atmo->GetMieAbsorptionRgb();
+  const auto base_absorption = engine::atmos::kDefaultMieAbsorptionRgb;
+  const float base_avg
+    = (base_absorption.x + base_absorption.y + base_absorption.z) / 3.0F;
+  state.mie_absorption_scale = (base_avg > 0.0F)
+    ? (absorption.x + absorption.y + absorption.z) / (3.0F * base_avg)
+    : 0.0F;
+  state.multi_scattering = atmo->GetMultiScatteringFactor();
+  state.ozone_rgb = atmo->GetAbsorptionRgb();
+  state.ozone_profile = atmo->GetOzoneDensityProfile();
+  state.sun_disk_enabled = atmo->GetSunDiskEnabled();
+  state.aerial_perspective_scale = atmo->GetAerialPerspectiveDistanceScale();
+  state.aerial_scattering_strength = atmo->GetAerialScatteringStrength();
+  return state;
+}
+
+auto EnvironmentSettingsService::HashAtmosphereState(
+  const AtmosphereCanonicalState& state) -> std::uint64_t
+{
+  std::uint64_t seed = 1469598103934665603ULL;
+  seed = HashCombineU64(seed, static_cast<std::uint64_t>(state.enabled));
+  seed = HashCombineU64(seed, FloatBits(state.planet_radius_km));
+  seed = HashCombineU64(seed, FloatBits(state.atmosphere_height_km));
+  seed = HashCombineU64(seed, FloatBits(state.ground_albedo.x));
+  seed = HashCombineU64(seed, FloatBits(state.ground_albedo.y));
+  seed = HashCombineU64(seed, FloatBits(state.ground_albedo.z));
+  seed = HashCombineU64(seed, FloatBits(state.rayleigh_scale_height_km));
+  seed = HashCombineU64(seed, FloatBits(state.mie_scale_height_km));
+  seed = HashCombineU64(seed, FloatBits(state.mie_anisotropy));
+  seed = HashCombineU64(seed, FloatBits(state.mie_absorption_scale));
+  seed = HashCombineU64(seed, FloatBits(state.multi_scattering));
+  seed = HashCombineU64(seed, FloatBits(state.ozone_rgb.x));
+  seed = HashCombineU64(seed, FloatBits(state.ozone_rgb.y));
+  seed = HashCombineU64(seed, FloatBits(state.ozone_rgb.z));
+  seed = HashCombineU64(seed, FloatBits(state.ozone_profile.layers[0].width_m));
+  seed = HashCombineU64(seed, FloatBits(state.ozone_profile.layers[0].exp_term));
+  seed = HashCombineU64(
+    seed, FloatBits(state.ozone_profile.layers[0].linear_term));
+  seed = HashCombineU64(
+    seed, FloatBits(state.ozone_profile.layers[0].constant_term));
+  seed = HashCombineU64(seed, FloatBits(state.ozone_profile.layers[1].width_m));
+  seed = HashCombineU64(seed, FloatBits(state.ozone_profile.layers[1].exp_term));
+  seed = HashCombineU64(
+    seed, FloatBits(state.ozone_profile.layers[1].linear_term));
+  seed = HashCombineU64(
+    seed, FloatBits(state.ozone_profile.layers[1].constant_term));
+  seed = HashCombineU64(seed, static_cast<std::uint64_t>(state.sun_disk_enabled));
+  seed = HashCombineU64(seed, FloatBits(state.aerial_perspective_scale));
+  seed = HashCombineU64(seed, FloatBits(state.aerial_scattering_strength));
+  return seed;
+}
+
+auto EnvironmentSettingsService::LogAtmosphereStateDiff(std::string_view prefix,
+  const AtmosphereCanonicalState& before, const AtmosphereCanonicalState& after)
+  -> void
+{
+  if (before.enabled != after.enabled) {
+    DLOG_F(INFO, "{} atmosphere.enabled: {} -> {}", prefix, before.enabled,
+      after.enabled);
+  }
+  if (before.planet_radius_km != after.planet_radius_km) {
+    DLOG_F(INFO, "{} atmosphere.planet_radius_km: {} -> {}", prefix,
+      before.planet_radius_km, after.planet_radius_km);
+  }
+  if (before.atmosphere_height_km != after.atmosphere_height_km) {
+    DLOG_F(INFO, "{} atmosphere.atmosphere_height_km: {} -> {}", prefix,
+      before.atmosphere_height_km, after.atmosphere_height_km);
+  }
+  if (before.mie_absorption_scale != after.mie_absorption_scale) {
+    DLOG_F(INFO, "{} atmosphere.mie_absorption_scale: {} -> {}", prefix,
+      before.mie_absorption_scale, after.mie_absorption_scale);
+  }
+  if (before.multi_scattering != after.multi_scattering) {
+    DLOG_F(INFO, "{} atmosphere.multi_scattering: {} -> {}", prefix,
+      before.multi_scattering, after.multi_scattering);
+  }
+  if (before.sun_disk_enabled != after.sun_disk_enabled) {
+    DLOG_F(INFO, "{} atmosphere.sun_disk_enabled: {} -> {}", prefix,
+      before.sun_disk_enabled, after.sun_disk_enabled);
+  }
+}
+
+auto EnvironmentSettingsService::ValidateAndClampState() -> void
+{
+  auto clamp_float = [](std::string_view key, float& value, float min_v,
+                       float max_v) {
+    const float before = value;
+    value = std::clamp(value, min_v, max_v);
+    if (before != value) {
+      DLOG_F(WARNING, "EnvironmentSettingsService: clamped {}: {} -> {}", key,
+        before, value);
+    }
+  };
+  auto clamp_int = [](std::string_view key, int& value, int min_v, int max_v) {
+    const int before = value;
+    value = std::clamp(value, min_v, max_v);
+    if (before != value) {
+      DLOG_F(WARNING, "EnvironmentSettingsService: clamped {}: {} -> {}", key,
+        before, value);
+    }
+  };
+  auto clamp_vec3 = [](std::string_view key, glm::vec3& value, float min_v,
+                      float max_v) {
+    const glm::vec3 before = value;
+    value = ClampVec3(value, min_v, max_v);
+    if (before != value) {
+      DLOG_F(WARNING,
+        "EnvironmentSettingsService: clamped {}: ({}, {}, {}) -> ({}, {}, {})",
+        key, before.x, before.y, before.z, value.x, value.y, value.z);
+    }
+  };
+  auto clamp_vec3_min = [](std::string_view key, glm::vec3& value, float min_v) {
+    const glm::vec3 before = value;
+    value = glm::max(value, glm::vec3(min_v));
+    if (before != value) {
+      DLOG_F(WARNING,
+        "EnvironmentSettingsService: clamped {}: ({}, {}, {}) -> ({}, {}, {})",
+        key, before.x, before.y, before.z, value.x, value.y, value.z);
+    }
+  };
+
+  clamp_float("env.atmo.planet_radius_km", planet_radius_km_, 1.0F, 100000.0F);
+  clamp_float(
+    "env.atmo.atmosphere_height_km", atmosphere_height_km_, 0.1F, 1000.0F);
+  clamp_vec3("env.atmo.ground_albedo", ground_albedo_, 0.0F, 1.0F);
+  clamp_float("env.atmo.rayleigh_scale_height_km", rayleigh_scale_height_km_,
+    0.01F, 100.0F);
+  clamp_float(
+    "env.atmo.mie_scale_height_km", mie_scale_height_km_, 0.01F, 50.0F);
+  clamp_float("env.atmo.mie_anisotropy", mie_anisotropy_, 0.0F, 0.999F);
+  clamp_float(
+    "env.atmo.mie_absorption_scale", mie_absorption_scale_, 0.0F, 5.0F);
+  clamp_float("env.atmo.multi_scattering", multi_scattering_, 0.0F, 5.0F);
+  clamp_vec3_min("env.atmo.ozone_rgb", ozone_rgb_, 0.0F);
+  clamp_float("env.atmo.aerial_perspective_scale", aerial_perspective_scale_,
+    0.0F, 16.0F);
+  clamp_float("env.atmo.aerial_scattering_strength", aerial_scattering_strength_,
+    0.0F, 16.0F);
+
+  clamp_float("env.atmo.ozone_profile.layer0.width_m",
+    ozone_profile_.layers[0].width_m, 0.0F, 200000.0F);
+  clamp_float("env.atmo.ozone_profile.layer0.linear_term",
+    ozone_profile_.layers[0].linear_term, -1.0F, 1.0F);
+  clamp_float("env.atmo.ozone_profile.layer0.constant_term",
+    ozone_profile_.layers[0].constant_term, -1.0F, 1.0F);
+  ozone_profile_.layers[0].exp_term = 0.0F;
+  ozone_profile_.layers[1].width_m = 0.0F;
+  ozone_profile_.layers[1].exp_term = 0.0F;
+  clamp_float("env.atmo.ozone_profile.layer1.linear_term",
+    ozone_profile_.layers[1].linear_term, -1.0F, 1.0F);
+  // For the canonical two-layer ozone profile, this term is commonly > 1
+  // (Earth defaults to ~2.6667), so [-1, 1] causes false clamping.
+  clamp_float("env.atmo.ozone_profile.layer1.constant_term",
+    ozone_profile_.layers[1].constant_term, -1.0F, 8.0F);
+
+  clamp_int("env.atmo.sky_view_lut_slices", sky_view_lut_slices_, 1, 128);
+  clamp_int("env.atmo.sky_view_alt_mapping_mode", sky_view_alt_mapping_mode_, 0,
+    1);
+
+  clamp_int("env.sky_sphere.source", sky_sphere_source_, 0, 1);
+  clamp_vec3_min("env.sky_sphere.solid_color", sky_sphere_solid_color_, 0.0F);
+  clamp_float("env.sky_sphere.intensity", sky_intensity_, 0.0F, 1000.0F);
+  clamp_float(
+    "env.sky_sphere.rotation_deg", sky_sphere_rotation_deg_, -3600.0F, 3600.0F);
+
+  clamp_int("env.skybox.layout", skybox_layout_idx_, 0, 4);
+  clamp_int("env.skybox.output", skybox_output_format_idx_, 0, 3);
+  clamp_int("env.skybox.face_size", skybox_face_size_, 16, 4096);
+  clamp_float("env.skybox.hdr_exposure_ev", skybox_hdr_exposure_ev_, 0.0F, 24.0F);
+
+  clamp_int("env.sky_light.source", sky_light_source_, 0, 1);
+  clamp_vec3_min("env.sky_light.tint", sky_light_tint_, 0.0F);
+  clamp_float(
+    "env.sky_light.intensity_mul", sky_light_intensity_mul_, 0.0F, 100.0F);
+  clamp_float("env.sky_light.diffuse", sky_light_diffuse_, 0.0F, 100.0F);
+  clamp_float("env.sky_light.specular", sky_light_specular_, 0.0F, 100.0F);
+
+  clamp_int("env.fog.model", fog_model_, 0, 1);
+  clamp_float("env.fog.extinction_sigma_t_per_m", fog_extinction_sigma_t_per_m_,
+    0.0F, 10.0F);
+  clamp_float("env.fog.height_falloff_per_m", fog_height_falloff_per_m_, 0.0F,
+    10.0F);
+  clamp_float(
+    "env.fog.height_offset_m", fog_height_offset_m_, -100000.0F, 100000.0F);
+  clamp_float(
+    "env.fog.start_distance_m", fog_start_distance_m_, 0.0F, 1000000.0F);
+  clamp_float("env.fog.max_opacity", fog_max_opacity_, 0.0F, 1.0F);
+  clamp_vec3("env.fog.single_scattering_albedo_rgb",
+    fog_single_scattering_albedo_rgb_, 0.0F, 1.0F);
+
+  clamp_int("env.sun.source", sun_source_, 0, 1);
+  clamp_float("env.sun.azimuth_deg", sun_azimuth_deg_, -720.0F, 720.0F);
+  clamp_float("env.sun.elevation_deg", sun_elevation_deg_, -90.0F, 90.0F);
+  clamp_vec3_min("env.sun.color", sun_color_rgb_, 0.0F);
+  clamp_float(
+    "env.sun.illuminance_lx", sun_illuminance_lx_, 0.0F, 250000.0F);
+  clamp_float("env.sun.temperature_kelvin", sun_temperature_kelvin_, 1000.0F,
+    40000.0F);
+  clamp_float("env.sun.disk_radius_deg", sun_component_disk_radius_deg_, 0.01F,
+    2.0F);
+
+  clamp_int("environment_preset_index", preset_index_, -2, 64);
+}
+
+auto EnvironmentSettingsService::PersistSettingsIfDirty() -> void
+{
+  if (!settings_persist_dirty_) {
+    return;
+  }
+  if (settings_revision_ == last_persisted_settings_revision_) {
+    settings_persist_dirty_ = false;
+    return;
+  }
+
+  SaveSettings();
+  last_persisted_settings_revision_ = settings_revision_;
+  settings_persist_dirty_ = false;
+}
+
 auto EnvironmentSettingsService::LoadSettings() -> void
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
+  const float loaded_schema_version
+    = settings->GetFloat(kEnvironmentSettingsSchemaVersionKey).value_or(1.0F);
 
   auto load_bool = [&](std::string_view key, bool& out) -> bool {
     if (const auto value = settings->GetBool(key)) {
@@ -1802,6 +2216,12 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   auto load_int = [&](std::string_view key, int& out) -> bool {
     float value = 0.0F;
     if (load_float(key, value)) {
+      if (!std::isfinite(value)) {
+        return false;
+      }
+      value = std::round(value);
+      value = std::clamp(value, static_cast<float>(std::numeric_limits<int>::min()),
+        static_cast<float>(std::numeric_limits<int>::max()));
       out = static_cast<int>(value);
       return true;
     }
@@ -1809,13 +2229,27 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   };
 
   bool any_loaded = false;
-  any_loaded |= load_bool(kSkyAtmoEnabledKey, sky_atmo_enabled_);
+  any_loaded |= load_int(kEnvironmentPresetKey, preset_index_);
+  const bool load_custom_state = preset_index_ == kPresetCustom;
+  bool custom_state_loaded = false;
+  if (load_custom_state) {
+    custom_state_loaded
+      = settings->GetBool(kEnvironmentCustomStatePresentKey).value_or(false)
+      || settings->GetBool(kSkyAtmoEnabledKey).has_value();
+  }
+
+  bool skybox_settings_loaded = false;
+  bool sun_source_loaded = false;
+  if (load_custom_state) {
+    any_loaded |= load_bool(kSkyAtmoEnabledKey, sky_atmo_enabled_);
   any_loaded |= load_float(kPlanetRadiusKey, planet_radius_km_);
   any_loaded |= load_float(kAtmosphereHeightKey, atmosphere_height_km_);
   any_loaded |= load_vec3(kGroundAlbedoKey, ground_albedo_);
   any_loaded |= load_float(kRayleighScaleHeightKey, rayleigh_scale_height_km_);
   any_loaded |= load_float(kMieScaleHeightKey, mie_scale_height_km_);
   any_loaded |= load_float(kMieAnisotropyKey, mie_anisotropy_);
+  any_loaded |= load_float(kMieAbsorptionScaleKey, mie_absorption_scale_);
+  mie_absorption_scale_ = std::clamp(mie_absorption_scale_, 0.0F, 5.0F);
   any_loaded |= load_float(kMultiScatteringKey, multi_scattering_);
   any_loaded |= load_bool(kSunDiskEnabledKey, sun_disk_enabled_);
   any_loaded
@@ -1844,9 +2278,6 @@ auto EnvironmentSettingsService::LoadSettings() -> void
     ozone_profile_ = loaded_profile;
   }
 
-  any_loaded |= load_int(kSkyViewLutSlicesKey, sky_view_lut_slices_);
-  any_loaded |= load_int(kSkyViewAltMappingModeKey, sky_view_alt_mapping_mode_);
-
   any_loaded |= load_bool(kSkySphereEnabledKey, sky_sphere_enabled_);
   any_loaded |= load_int(kSkySphereSourceKey, sky_sphere_source_);
   any_loaded |= load_vec3(kSkySphereSolidColorKey, sky_sphere_solid_color_);
@@ -1859,7 +2290,6 @@ auto EnvironmentSettingsService::LoadSettings() -> void
 
   any_loaded |= sky_intensity_loaded || sky_light_intensity_mul_loaded;
 
-  bool skybox_settings_loaded = false;
   skybox_settings_loaded |= load_int(kSkyboxLayoutKey, skybox_layout_idx_);
   skybox_settings_loaded
     |= load_int(kSkyboxOutputFormatKey, skybox_output_format_idx_);
@@ -1893,10 +2323,8 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   any_loaded |= load_vec3(
     kFogSingleScatteringAlbedoKey, fog_single_scattering_albedo_rgb_);
 
-  any_loaded |= load_int(kEnvironmentPresetKey, preset_index_);
-
   any_loaded |= load_bool(kSunEnabledKey, sun_enabled_);
-  const bool sun_source_loaded = load_int(kSunSourceKey, sun_source_);
+  sun_source_loaded = load_int(kSunSourceKey, sun_source_);
   any_loaded |= sun_source_loaded;
   any_loaded |= load_float(kSunAzimuthKey, sun_azimuth_deg_);
   any_loaded |= load_float(kSunElevationKey, sun_elevation_deg_);
@@ -1905,6 +2333,7 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   any_loaded |= load_bool(kSunUseTemperatureKey, sun_use_temperature_);
   any_loaded |= load_float(kSunTemperatureKey, sun_temperature_kelvin_);
   any_loaded |= load_float(kSunDiskRadiusKey, sun_component_disk_radius_deg_);
+  }
 
   if (sun_source_loaded) {
     saved_sun_source_ = sun_source_;
@@ -1915,11 +2344,42 @@ auto EnvironmentSettingsService::LoadSettings() -> void
     }
   }
 
+  if (load_custom_state && loaded_schema_version < 2.0F) {
+    // v1 stored invalid coupled intensity defaults; force safe independent
+    // values on migration.
+    sky_intensity_ = std::clamp(sky_intensity_, 0.0F, 1000.0F);
+    sky_light_intensity_mul_ = std::clamp(sky_light_intensity_mul_, 0.0F, 100.0F);
+    any_loaded = true;
+    settings_persist_dirty_ = true;
+  }
+
+  ValidateAndClampState();
+  settings_loaded_ = true;
+  has_persisted_settings_ = custom_state_loaded;
   if (any_loaded) {
-    settings_loaded_ = true;
-    needs_sync_ = false;
-    pending_changes_ = true;
-    skybox_dirty_ = skybox_settings_loaded;
+    if (preset_index_ == kPresetUseScene) {
+      needs_sync_ = true;
+      pending_changes_ = false;
+      dirty_domains_ = ToMask(DirtyDomain::kNone);
+    } else if (preset_index_ == kPresetCustom) {
+      if (custom_state_loaded) {
+        needs_sync_ = false;
+        pending_changes_ = true;
+        dirty_domains_ = ToMask(DirtyDomain::kAll);
+        skybox_dirty_ = skybox_settings_loaded;
+        settings_revision_++;
+      } else {
+        needs_sync_ = true;
+        pending_changes_ = false;
+        dirty_domains_ = ToMask(DirtyDomain::kNone);
+      }
+    } else {
+      // Built-in preset selection is persisted, but environment field values
+      // are applied by EnvironmentVm and not loaded from disk.
+      needs_sync_ = false;
+      pending_changes_ = false;
+      dirty_domains_ = ToMask(DirtyDomain::kNone);
+    }
   }
 }
 
@@ -1948,6 +2408,15 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
     save_float(key, static_cast<float>(value));
   };
 
+  save_float(kEnvironmentSettingsSchemaVersionKey, kCurrentSettingsSchemaVersion);
+  save_bool(
+    kEnvironmentCustomStatePresentKey, preset_index_ == kPresetCustom);
+  save_int(kEnvironmentPresetKey, preset_index_);
+
+  if (preset_index_ != kPresetCustom) {
+    return;
+  }
+
   save_bool(kSkyAtmoEnabledKey, sky_atmo_enabled_);
   save_float(kPlanetRadiusKey, planet_radius_km_);
   save_float(kAtmosphereHeightKey, atmosphere_height_km_);
@@ -1955,9 +2424,9 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kRayleighScaleHeightKey, rayleigh_scale_height_km_);
   save_float(kMieScaleHeightKey, mie_scale_height_km_);
   save_float(kMieAnisotropyKey, mie_anisotropy_);
+  save_float(kMieAbsorptionScaleKey, mie_absorption_scale_);
   save_float(kMultiScatteringKey, multi_scattering_);
   save_bool(kSunDiskEnabledKey, sun_disk_enabled_);
-  save_float(kAerialPerspectiveScaleKey, aerial_perspective_scale_);
   save_float(kAerialPerspectiveScaleKey, aerial_perspective_scale_);
   save_float(kAerialScatteringStrengthKey, aerial_scattering_strength_);
 
@@ -1972,9 +2441,6 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
     kOzoneProfileLayer1LinearTermKey, ozone_profile_.layers[1].linear_term);
   save_float(
     kOzoneProfileLayer1ConstantTermKey, ozone_profile_.layers[1].constant_term);
-
-  save_int(kSkyViewLutSlicesKey, sky_view_lut_slices_);
-  save_int(kSkyViewAltMappingModeKey, sky_view_alt_mapping_mode_);
 
   save_bool(kSkySphereEnabledKey, sky_sphere_enabled_);
   save_int(kSkySphereSourceKey, sky_sphere_source_);
@@ -2007,7 +2473,6 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kFogStartDistanceKey, fog_start_distance_m_);
   save_float(kFogMaxOpacityKey, fog_max_opacity_);
   save_vec3(kFogSingleScatteringAlbedoKey, fog_single_scattering_albedo_rgb_);
-  save_int(kEnvironmentPresetKey, preset_index_);
 
   save_bool(kSunEnabledKey, sun_enabled_);
   save_int(kSunSourceKey, sun_source_);
@@ -2020,51 +2485,33 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kSunDiskRadiusKey, sun_component_disk_radius_deg_);
 }
 
-auto EnvironmentSettingsService::MarkDirty() -> void
+auto EnvironmentSettingsService::MarkDirty(uint32_t dirty_domains) -> void
 {
-  pending_changes_ = true;
-  if (sky_light_enabled_
-    && sky_light_source_
-      == static_cast<int>(scene::environment::SkyLightSource::kCapturedScene)) {
-    needs_sky_capture_ = true;
+  ValidateAndClampState();
+  uint32_t effective_domains = dirty_domains;
+  if ((dirty_domains & ToMask(DirtyDomain::kSun)) != 0U && sky_atmo_enabled_) {
+    // Sky-atmosphere LUT generation depends on sun state (not just atmosphere
+    // material params), so sun edits must also drive atmosphere apply/invalidate.
+    effective_domains |= ToMask(DirtyDomain::kAtmosphere);
   }
+  if (update_depth_ > 0) {
+    batched_dirty_domains_ |= effective_domains;
+    settings_persist_dirty_ = true;
+    DLOG_F(INFO,
+      "EnvironmentSettingsService: batched dirty domains=0x{:X} pending_batch=0x{:X} depth={}",
+      dirty_domains, batched_dirty_domains_, update_depth_);
+    return;
+  }
+  pending_changes_ = true;
+  dirty_domains_ |= effective_domains;
+  settings_persist_dirty_ = true;
+  settings_revision_++;
+  DLOG_F(INFO,
+    "EnvironmentSettingsService: marked dirty domains=0x{:X} effective=0x{:X} pending_mask=0x{:X} rev={}",
+    dirty_domains, effective_domains, dirty_domains_, settings_revision_);
   if (update_depth_ == 0) {
-    SaveSettings();
     epoch_++;
   }
-}
-
-auto EnvironmentSettingsService::MaybeRequestSkyCapture() -> void
-{
-  if (!needs_sky_capture_ || applied_changes_this_frame_ || pending_changes_) {
-    return;
-  }
-
-  if (!config_.renderer) {
-    return;
-  }
-
-  if (!sky_light_enabled_
-    || sky_light_source_
-      != static_cast<int>(scene::environment::SkyLightSource::kCapturedScene)) {
-    return;
-  }
-
-  if (sky_atmo_enabled_) {
-    if (const auto lut_mgr = config_.renderer->GetSkyAtmosphereLutManager()) {
-      if (!lut_mgr->HasBeenGenerated() || lut_mgr->IsDirty()) {
-        DLOG_F(
-          INFO, "Skipping sky capture because LUT Manager will regenerate");
-        return;
-      }
-    }
-  }
-
-  DLOG_F(INFO,
-    "Requesting sky capture from renderer because user clicked the button or "
-    "changed a setting that requires it");
-  config_.renderer->RequestSkyCapture();
-  needs_sky_capture_ = false;
 }
 
 auto EnvironmentSettingsService::ApplySavedSunSourcePreference() -> void
@@ -2078,14 +2525,14 @@ auto EnvironmentSettingsService::ApplySavedSunSourcePreference() -> void
     sun_source_ = 1;
     sun_present_ = true;
     LoadSunSettingsFromProfile(sun_source_);
-    pending_changes_ = true;
+    MarkDirty(ToMask(DirtyDomain::kSun));
     return;
   }
 
   if (sun_source_ != desired_source) {
     sun_source_ = desired_source;
     LoadSunSettingsFromProfile(sun_source_);
-    pending_changes_ = true;
+    MarkDirty(ToMask(DirtyDomain::kSun));
   }
 }
 

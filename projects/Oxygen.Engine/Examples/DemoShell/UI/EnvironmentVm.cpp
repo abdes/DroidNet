@@ -21,6 +21,8 @@ namespace oxygen::examples::ui {
 
 namespace {
   constexpr float kKmToMeters = 1000.0F;
+  constexpr int kPresetUseScene = -2;
+  constexpr int kPresetCustom = -1;
 
   struct EnvironmentPresetData {
     std::string_view name;
@@ -337,7 +339,24 @@ EnvironmentVm::EnvironmentVm(observer_ptr<EnvironmentSettingsService> service,
 auto EnvironmentVm::SetRuntimeConfig(const EnvironmentRuntimeConfig& config)
   -> void
 {
-  service_->SetRuntimeConfig(config);
+  const auto* scene_ptr = config.scene.get();
+  const auto* skybox_service_ptr = config.skybox_service.get();
+  const auto* renderer_ptr = config.renderer.get();
+  const bool runtime_changed = !runtime_config_initialized_
+    || last_runtime_config_scene_ != scene_ptr
+    || last_runtime_config_skybox_service_ != skybox_service_ptr
+    || last_runtime_config_renderer_ != renderer_ptr;
+
+  if (runtime_changed) {
+    service_->SetRuntimeConfig(config);
+    last_runtime_config_scene_ = const_cast<scene::Scene*>(scene_ptr);
+    last_runtime_config_skybox_service_
+      = const_cast<SkyboxService*>(skybox_service_ptr);
+    last_runtime_config_renderer_
+      = const_cast<engine::Renderer*>(renderer_ptr);
+    runtime_config_initialized_ = true;
+  }
+  MaybeApplyStartupPreset(config);
 }
 
 auto EnvironmentVm::HasScene() const -> bool { return service_->HasScene(); }
@@ -366,34 +385,60 @@ auto EnvironmentVm::GetAtmosphereLutStatus() const -> std::pair<bool, bool>
 
 auto EnvironmentVm::GetPresetCount() const -> int
 {
-  return static_cast<int>(kEnvironmentPresets.size());
+  return static_cast<int>(kEnvironmentPresets.size()) + 2;
 }
 
 auto EnvironmentVm::GetPresetName(int index) const -> std::string_view
 {
-  return GetPreset(index).name;
+  if (index == 0) {
+    return "Use Scene";
+  }
+  if (index == 1) {
+    return "Custom";
+  }
+  return GetPreset(index - 2).name;
 }
 
 auto EnvironmentVm::GetPresetLabel() const -> std::string_view
 {
-  const int index = service_->GetPresetIndex();
-  if (index < 0) {
-    return "Custom";
-  }
-  return GetPreset(index).name;
+  return GetPresetName(GetPresetIndex());
 }
 
 auto EnvironmentVm::GetPresetIndex() const -> int
 {
-  return service_->GetPresetIndex();
+  const int stored = service_->GetPresetIndex();
+  if (stored == kPresetUseScene) {
+    return 0;
+  }
+  if (stored == kPresetCustom) {
+    return 1;
+  }
+  return stored + 2;
 }
 
 auto EnvironmentVm::ApplyPreset(int index) -> void
 {
-  const auto& preset = GetPreset(index);
-  service_->SetPresetIndex(index);
+  LOG_F(INFO, "EnvironmentVm: ApplyPreset(ui_index={})", index);
+  if (index == 0) {
+    LOG_F(INFO, "EnvironmentVm: preset mode -> Use Scene");
+    service_->SetPresetIndex(kPresetUseScene);
+    service_->ActivateUseSceneMode();
+    startup_preset_applied_ = true;
+    return;
+  }
+  if (index == 1) {
+    LOG_F(INFO, "EnvironmentVm: preset mode -> Custom");
+    service_->SetPresetIndex(kPresetCustom);
+    startup_preset_applied_ = true;
+    return;
+  }
 
+  const int preset_index = index - 2;
+  const auto& preset = GetPreset(preset_index);
+  LOG_F(INFO, "EnvironmentVm: applying built-in preset {} ('{}')",
+    preset_index, preset.name.data());
   service_->BeginUpdate();
+  service_->SetPresetIndex(preset_index);
 
   // 1. Disable all systems to prevent intermediate state updates
   SetSunEnabled(false);
@@ -427,9 +472,9 @@ auto EnvironmentVm::ApplyPreset(int index) -> void
   SetAerialPerspectiveScale(preset.aerial_perspective_scale);
   SetAerialScatteringStrength(preset.aerial_scattering_strength);
   SetOzoneRgb(preset.ozone_rgb);
-  SetOzoneDensityProfile(engine::atmos::MakeOzoneTwoLayerLinearDensityProfile(
-    preset.ozone_bottom_km * kKmToMeters, preset.ozone_peak_km * kKmToMeters,
-    preset.ozone_top_km * kKmToMeters));
+  // Presets use the canonical Earth-like ozone profile to stay physically
+  // consistent with renderer assumptions and service validation bounds.
+  SetOzoneDensityProfile(engine::atmos::kDefaultOzoneDensityProfile);
 
   // Sky Sphere
   SetSkySphereSource(preset.sky_sphere_source);
@@ -489,6 +534,50 @@ auto EnvironmentVm::ApplyPreset(int index) -> void
     }
     post_process_service_->SetExposureEnabled(preset.exposure_enabled);
   }
+}
+
+auto EnvironmentVm::MaybeApplyStartupPreset(
+  const EnvironmentRuntimeConfig& config) -> void
+{
+  auto* scene_ptr = config.scene.get();
+  if (scene_ptr != runtime_scene_) {
+    runtime_scene_ = scene_ptr;
+    startup_preset_applied_ = false;
+    LOG_F(INFO, "EnvironmentVm: runtime scene changed -> reset startup preset latch");
+  }
+
+  if (!runtime_scene_ || startup_preset_applied_) {
+    return;
+  }
+
+  const int preset_index = service_->GetPresetIndex();
+  LOG_F(INFO, "EnvironmentVm: startup preset evaluation (stored_index={})",
+    preset_index);
+  if (preset_index == kPresetUseScene) {
+    LOG_F(INFO, "EnvironmentVm: startup action -> Use Scene");
+    service_->ActivateUseSceneMode();
+    startup_preset_applied_ = true;
+    return;
+  }
+  if (preset_index == kPresetCustom) {
+    // Custom startup application is handled by EnvironmentSettingsService
+    // (persisted cache if present, otherwise scene sync).
+    LOG_F(INFO, "EnvironmentVm: startup action -> Custom (service-managed)");
+    startup_preset_applied_ = true;
+    return;
+  }
+
+  const int preset_count = static_cast<int>(kEnvironmentPresets.size());
+  if (preset_index >= 0 && preset_index < preset_count) {
+    LOG_F(INFO, "EnvironmentVm: startup action -> built-in preset {}",
+      preset_index);
+    ApplyPreset(preset_index + 2);
+  } else {
+    LOG_F(ERROR,
+      "EnvironmentVm: invalid persisted preset index {} (valid built-in range: 0..{}); keeping current scene state",
+      preset_index, preset_count - 1);
+  }
+  startup_preset_applied_ = true;
 }
 
 auto EnvironmentVm::GetSkyAtmosphereEnabled() const -> bool

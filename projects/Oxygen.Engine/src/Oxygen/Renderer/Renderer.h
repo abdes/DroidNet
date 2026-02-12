@@ -282,15 +282,8 @@ public:
   OXGN_RNDR_NDAPI auto GetLightManager() const noexcept
     -> observer_ptr<renderer::LightManager>;
 
-  //! Returns the sky atmosphere LUT manager.
-  /*!
-   Provides access to the LUT manager that maintains transmittance and sky-view
-   lookup textures for physically-based atmospheric scattering. The compute
-   pass uses this to dispatch LUT generation when atmosphere parameters change.
-
-   @return Observer pointer to the LUT manager, or nullptr if not initialized.
-  */
-  OXGN_RNDR_NDAPI auto GetSkyAtmosphereLutManager() const noexcept
+  OXGN_RNDR_NDAPI auto GetSkyAtmosphereLutManagerForView(
+    ViewId view_id) const noexcept
     -> observer_ptr<internal::SkyAtmosphereLutManager>;
 
   //! Returns the environment static data manager.
@@ -386,6 +379,10 @@ private:
   auto ExecuteRenderGraphForView(ViewId view_id,
     const RenderGraphFactory& factory, RenderContext& render_context,
     graphics::CommandRecorder& recorder) -> co::Co<bool>;
+  auto GetOrCreateSkyAtmosphereLutManagerForView(ViewId view_id)
+    -> observer_ptr<internal::SkyAtmosphereLutManager>;
+  auto EvictInactivePerViewState(frame::SequenceNumber current_seq,
+    const std::unordered_set<ViewId>& active_views) -> void;
 
   std::weak_ptr<Graphics> gfx_weak_; // New AsyncEngine path
 
@@ -402,8 +399,9 @@ private:
   // Manages pre-integrated BRDF lookup tables for IBL.
   std::unique_ptr<internal::BrdfLutManager> brdf_lut_manager_;
 
-  // Manages sky atmosphere LUT textures (transmittance, sky-view).
-  std::unique_ptr<internal::SkyAtmosphereLutManager> sky_atmo_lut_manager_;
+  // Manages sky atmosphere LUT textures (transmittance, sky-view) per view.
+  std::unordered_map<ViewId, std::unique_ptr<internal::SkyAtmosphereLutManager>>
+    per_view_atmo_luts_;
 
   // Manages Image Based Lighting (Irradiance/Prefilter)
   std::unique_ptr<internal::IblManager> ibl_manager_;
@@ -501,7 +499,8 @@ private:
   // Debug override state for atmosphere.
   uint32_t atmosphere_debug_flags_ { 0 };
 
-  std::uint64_t last_atmo_generation_ { 0 };
+  std::unordered_map<ViewId, std::uint64_t> last_atmo_generation_;
+  std::unordered_map<ViewId, frame::SequenceNumber> last_seen_view_frame_seq_;
   bool sky_capture_requested_ { false };
 };
 

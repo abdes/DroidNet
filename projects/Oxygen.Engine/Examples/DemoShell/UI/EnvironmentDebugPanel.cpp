@@ -351,9 +351,7 @@ void EnvironmentDebugPanel::DrawRendererDebugSection()
   ImGui::SameLine();
   ImGui::Spacing();
   ImGui::SameLine();
-  if (ImGui::Button("Regenerate LUT")) {
-    environment_vm_->RequestRegenerateLut();
-  }
+  ImGui::TextDisabled("Regen is renderer-driven");
 }
 
 void EnvironmentDebugPanel::DrawSunSection()
@@ -686,18 +684,15 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   // Sky-View LUT Slicing
   ImGui::SeparatorText("Sky-View LUT");
 
-  ImGui::TextDisabled("Altitude slices for multi-view sampling");
-
+  ImGui::TextDisabled("Renderer-owned configuration (read-only)");
+  ImGui::BeginDisabled(true);
   int lut_slices = environment_vm_->GetSkyViewLutSlices();
-  if (ImGui::DragInt("Slices", &lut_slices, 1, 4, 32)) {
-    environment_vm_->SetSkyViewLutSlices(lut_slices);
-  }
+  ImGui::DragInt("Slices", &lut_slices, 1, 4, 32);
 
   const char* mapping_modes[] = { "Linear", "Log" };
   int mapping_mode = environment_vm_->GetSkyViewAltMappingMode();
-  if (ImGui::Combo("Alt Mapping", &mapping_mode, mapping_modes, 2)) {
-    environment_vm_->SetSkyViewAltMappingMode(mapping_mode);
-  }
+  ImGui::Combo("Alt Mapping", &mapping_mode, mapping_modes, 2);
+  ImGui::EndDisabled();
 
   ImGui::PopItemWidth();
 }

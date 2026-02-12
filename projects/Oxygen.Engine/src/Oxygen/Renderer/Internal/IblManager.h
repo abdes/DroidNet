@@ -9,11 +9,13 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Renderer/Internal/IIblProvider.h>
 
@@ -54,33 +56,40 @@ public:
   //! Ensures resources (textures, views) are created.
   //! @return True if successful.
   auto EnsureResourcesCreated() -> bool override;
+  auto EnsureResourcesCreatedForView(ViewId view_id) -> bool;
 
   //! Query current outputs and generation for a source slot.
   [[nodiscard]] auto QueryOutputsFor(
-    ShaderVisibleIndex source_slot) const noexcept
+    ViewId view_id, ShaderVisibleIndex source_slot) const noexcept
     -> IIblProvider::OutputMaps override;
 
   // -- Interface reserved for IblComputePass only -----------------------------
 
   //! Returns the UAV index for a specific mip of the prefilter map.
   [[nodiscard]] auto GetPrefilterMapUavSlot(
-    IblPassTag tag, uint32_t mip_level) const noexcept -> ShaderVisibleIndex;
-
-  //! Returns the UAV index for the irradiance map.
-  [[nodiscard]] auto GetIrradianceMapUavSlot(IblPassTag tag) const noexcept
+    IblPassTag tag, ViewId view_id, uint32_t mip_level) const noexcept
     -> ShaderVisibleIndex;
 
+  //! Returns the UAV index for the irradiance map.
+  [[nodiscard]] auto GetIrradianceMapUavSlot(
+    IblPassTag tag, ViewId view_id) const noexcept -> ShaderVisibleIndex;
+
   //! Returns the Irradiance map texture.
-  [[nodiscard]] auto GetIrradianceMap(IblPassTag tag) const noexcept
-    -> observer_ptr<graphics::Texture>;
+  [[nodiscard]] auto GetIrradianceMap(IblPassTag tag, ViewId view_id) const
+    noexcept -> observer_ptr<graphics::Texture>;
 
   //! Returns the Prefilter map texture.
-  [[nodiscard]] auto GetPrefilterMap(IblPassTag tag) const noexcept
+  [[nodiscard]] auto GetPrefilterMap(IblPassTag tag, ViewId view_id) const
+    noexcept
     -> observer_ptr<graphics::Texture>;
 
   //! Marks that generation has completed for the given source slot and
   //! advances the generation token.
-  auto MarkGenerated(IblPassTag tag, ShaderVisibleIndex source_slot) -> void;
+  auto MarkGenerated(IblPassTag tag, ViewId view_id,
+    ShaderVisibleIndex source_slot, std::uint64_t source_content_version)
+    -> void;
+
+  auto EraseViewState(ViewId view_id) -> void;
 
 private:
   struct MapResources {
@@ -95,20 +104,23 @@ private:
   };
 
   auto CleanupResources() -> void;
+  auto CleanupViewResources(ViewId view_id) -> void;
+  auto EnsureViewResourcesCreated(ViewId view_id) -> bool;
   auto CreateMapTexture(uint32_t size, uint32_t mip_levels, const char* name)
     -> std::shared_ptr<graphics::Texture>;
   auto CreateViews(MapResources& map) -> bool;
 
   observer_ptr<Graphics> gfx_;
   Config config_;
-  bool resources_created_ { false };
-
-  ShaderVisibleIndex last_source_cubemap_slot_ { kInvalidShaderVisibleIndex };
-
-  std::atomic<std::uint64_t> generation_ { 1ULL };
-
-  MapResources irradiance_map_;
-  MapResources prefilter_map_;
+  struct ViewState {
+    bool resources_created { false };
+    ShaderVisibleIndex last_source_cubemap_slot { kInvalidShaderVisibleIndex };
+    std::uint64_t last_source_content_version { 0ULL };
+    std::atomic<std::uint64_t> generation { 1ULL };
+    MapResources irradiance_map;
+    MapResources prefilter_map;
+  };
+  std::unordered_map<ViewId, std::unique_ptr<ViewState>> view_states_;
 };
 
 } // namespace oxygen::engine::internal

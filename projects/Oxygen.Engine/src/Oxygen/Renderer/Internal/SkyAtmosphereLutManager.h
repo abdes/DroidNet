@@ -320,6 +320,12 @@ public:
     return generation_;
   }
 
+  //! Returns a monotonic content token that advances after a front-buffer swap.
+  [[nodiscard]] auto GetContentVersion() const noexcept -> std::uint64_t override
+  {
+    return static_cast<std::uint64_t>(GetSwapCount());
+  }
+
   //! Returns the current planet radius in meters.
   /*!
    Used by the compute pass for horizon-aware LUT generation.

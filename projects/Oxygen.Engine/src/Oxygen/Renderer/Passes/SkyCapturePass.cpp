@@ -50,49 +50,30 @@ SkyCapturePass::SkyCapturePass(observer_ptr<oxygen::Graphics> gfx,
   : GraphicsRenderPass(config ? config->debug_name : "SkyCapturePass", true)
   , gfx_(gfx)
   , config_(std::move(config))
-  , captured_cubemap_(nullptr)
-  , captured_cubemap_srv_view_({})
-  , face_rtvs_({})
-  , all_faces_fb_(nullptr)
-  , face_constants_buffer_(nullptr)
-  , face_constants_mapped_(nullptr)
-  , face_constants_cbvs_({})
 {
 }
 
 SkyCapturePass::~SkyCapturePass()
 {
-  if (!gfx_.get()) {
-    return;
+  for (auto& [_, state] : capture_state_by_view_) {
+    ReleaseStateResources(state);
   }
-  auto& registry = gfx_->GetResourceRegistry();
+}
 
-  if (captured_cubemap_) {
-    if (registry.Contains(*captured_cubemap_)) {
-      if (captured_cubemap_srv_view_.get().IsValid()) {
-        registry.UnRegisterView(*captured_cubemap_, captured_cubemap_srv_view_);
-      }
-      for (auto& rtv : face_rtvs_) {
-        if (rtv.get().IsValid()) {
-          registry.UnRegisterView(*captured_cubemap_, rtv);
-        }
-      }
-      registry.UnRegisterResource(*captured_cubemap_);
-    }
+auto SkyCapturePass::MarkDirty(const ViewId view_id) noexcept -> void
+{
+  if (const auto it = capture_state_by_view_.find(view_id);
+    it != capture_state_by_view_.end()) {
+    it->second.is_captured = false;
   }
+}
 
-  if (face_constants_buffer_) {
-    if (registry.Contains(*face_constants_buffer_)) {
-      for (auto& cbv : face_constants_cbvs_) {
-        if (cbv.get().IsValid()) {
-          registry.UnRegisterView(*face_constants_buffer_, cbv);
-        }
-      }
-      registry.UnRegisterResource(*face_constants_buffer_);
-    }
-    if (face_constants_mapped_) {
-      face_constants_buffer_->UnMap();
-    }
+auto SkyCapturePass::EraseViewState(const ViewId view_id) -> void
+{
+  if (const auto it = capture_state_by_view_.find(view_id);
+    it != capture_state_by_view_.end()) {
+    ReleaseStateResources(it->second);
+    capture_state_by_view_.erase(it);
   }
 }
 
@@ -108,34 +89,35 @@ auto SkyCapturePass::ValidateConfig() -> void
 
 auto SkyCapturePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 {
-  EnsureResourcesCreated();
+  const auto view_id = Context().current_view.view_id;
+  auto& state = EnsureResourcesCreated(view_id);
 
   // If already captured and not marked dirty, we can skip.
-  if (is_captured_) {
+  if (state.is_captured) {
     co_return;
   }
 
   // Ensure internal resources are being tracked by this recorder.
   // Use the last known GPU state (not always kCommon) so that recapture after
   // MarkDirty() emits correct barriers.
-  if (!recorder.IsResourceTracked(*captured_cubemap_)) {
+  if (!recorder.IsResourceTracked(*state.captured_cubemap)) {
     recorder.BeginTrackingResourceState(
-      *captured_cubemap_, cubemap_last_state_, false);
+      *state.captured_cubemap, state.cubemap_last_state, false);
   }
 
   // Transition cubemap to RENDER_TARGET state for capture.
   recorder.RequireResourceState(
-    *captured_cubemap_, graphics::ResourceStates::kRenderTarget);
-  cubemap_last_state_ = graphics::ResourceStates::kRenderTarget;
+    *state.captured_cubemap, graphics::ResourceStates::kRenderTarget);
+  state.cubemap_last_state = graphics::ResourceStates::kRenderTarget;
 
-  if (!recorder.IsResourceTracked(*face_constants_buffer_)) {
+  if (!recorder.IsResourceTracked(*state.face_constants_buffer)) {
     recorder.BeginTrackingResourceState(
-      *face_constants_buffer_, face_cb_last_state_, false);
+      *state.face_constants_buffer, state.face_cb_last_state, false);
   }
   // Constant buffers stay in kConstantBuffer.
   recorder.RequireResourceState(
-    *face_constants_buffer_, graphics::ResourceStates::kConstantBuffer);
-  face_cb_last_state_ = graphics::ResourceStates::kConstantBuffer;
+    *state.face_constants_buffer, graphics::ResourceStates::kConstantBuffer);
+  state.face_cb_last_state = graphics::ResourceStates::kConstantBuffer;
 
   recorder.FlushBarriers();
 
@@ -144,47 +126,50 @@ auto SkyCapturePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 
 auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
-  if (is_captured_) {
+  const auto view_id = Context().current_view.view_id;
+  auto& state = EnsureResourcesCreated(view_id);
+
+  if (state.is_captured) {
     // This pass is often invoked by the renderer when upstream state changed
     // (e.g. sky-atmosphere LUT generation). If we are not marked dirty,
     // execution will be a no-op; log once per generation/view to validate.
     static std::unordered_map<std::uint32_t, std::uint64_t>
       last_logged_skip_gen_by_view;
-    const auto view_id = Context().current_view.view_id.get();
-    const auto gen = capture_generation_;
-    const auto it = last_logged_skip_gen_by_view.find(view_id);
+    const auto u_view_id = view_id.get();
+    const auto gen = state.capture_generation;
+    const auto it = last_logged_skip_gen_by_view.find(u_view_id);
     if (it == last_logged_skip_gen_by_view.end() || it->second != gen) {
-      last_logged_skip_gen_by_view[view_id] = gen;
+      last_logged_skip_gen_by_view[u_view_id] = gen;
+      const auto env_manager
+        = Context().GetRenderer().GetEnvironmentStaticDataManager();
       LOG_F(INFO,
-        "SkyCapturePass: skipping (already captured) (view={} frame_slot={} frame_seq={} env_srv={} slot={} gen={})",
-        view_id, Context().frame_slot.get(), Context().frame_sequence.get(),
-        Context().GetRenderer().GetEnvironmentStaticDataManager()
-          ? Context().GetRenderer().GetEnvironmentStaticDataManager()
-              ->GetSrvIndex()
-              .get()
-          : 0U,
-        captured_cubemap_srv_.get(), gen);
+        "SkyCapturePass: skipping (already captured) (view={} frame_slot={} "
+        "frame_seq={} env_srv={} slot={} gen={})",
+        u_view_id, Context().frame_slot.get(), Context().frame_sequence.get(),
+        env_manager ? env_manager->GetSrvIndex(view_id).get() : 0U,
+        state.captured_cubemap_srv.get(), gen);
     }
     co_return;
   }
 
-  const auto view_id = Context().current_view.view_id;
+  const auto env_manager
+    = Context().GetRenderer().GetEnvironmentStaticDataManager();
   LOG_F(INFO,
-    "SkyCapturePass: capture begin (view={} frame_slot={} frame_seq={} env_srv={} res={} slot={})",
+    "SkyCapturePass: capture begin (view={} frame_slot={} frame_seq={} "
+    "env_srv={} res={} slot={})",
     view_id.get(), Context().frame_slot.get(), Context().frame_sequence.get(),
-    Context().GetRenderer().GetEnvironmentStaticDataManager()
-      ? Context().GetRenderer().GetEnvironmentStaticDataManager()->GetSrvIndex()
-          .get()
-      : 0U,
-    config_->resolution, captured_cubemap_srv_.get());
+    env_manager ? env_manager->GetSrvIndex(view_id).get() : 0U,
+    config_->resolution, state.captured_cubemap_srv.get());
 
   // SkyCapture shaders load EnvironmentStaticData using SceneConstants
   // (bindless_env_static_slot + frame_slot). Bind it explicitly to avoid any
   // root-CBV leakage from previous passes.
   if (Context().scene_constants == nullptr) {
     LOG_F(ERROR,
-      "SkyCapturePass: missing SceneConstants (view={} frame_slot={} frame_seq={})",
-      view_id.get(), Context().frame_slot.get(), Context().frame_sequence.get());
+      "SkyCapturePass: missing SceneConstants (view={} frame_slot={} "
+      "frame_seq={})",
+      view_id.get(), Context().frame_slot.get(),
+      Context().frame_sequence.get());
     co_return;
   }
   recorder.SetGraphicsRootConstantBufferView(
@@ -209,15 +194,15 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   // The framebuffer attachment logic might not automatically transition
   // sub-resources correctly if they are used as bindings elsewhere.
   recorder.RequireResourceState(
-    *captured_cubemap_, graphics::ResourceStates::kRenderTarget);
-  cubemap_last_state_ = graphics::ResourceStates::kRenderTarget;
+    *state.captured_cubemap, graphics::ResourceStates::kRenderTarget);
+  state.cubemap_last_state = graphics::ResourceStates::kRenderTarget;
   recorder.FlushBarriers();
 
   // Clear the whole cubemap once using the single multi-face FB.
   // Use the clear value defined in the texture descriptor to avoid D3D12
   // warnings.
   const graphics::Color clear_color { 0.0F, 0.0F, 0.0F, 1.0F };
-  recorder.ClearFramebuffer(*all_faces_fb_,
+  recorder.ClearFramebuffer(*state.all_faces_fb,
     std::vector<std::optional<graphics::Color>> { clear_color }, std::nullopt,
     std::nullopt);
 
@@ -251,7 +236,7 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   for (uint32_t i = 0; i < 6; ++i) {
     // Set render target for this face directly via RTV
-    recorder.SetRenderTargets(std::span(&face_rtvs_[i], 1), std::nullopt);
+    recorder.SetRenderTargets(std::span(&state.face_rtvs[i], 1), std::nullopt);
 
     // Update face constants at the specific offset for this face
     const glm::vec3 right = glm::normalize(face_basis[i].right);
@@ -269,31 +254,30 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     face_const.view_matrix = view;
     face_const.projection_matrix = proj;
 
-    auto* dest
-      = static_cast<uint8_t*>(face_constants_mapped_) + (i * kFaceConstantSize);
+    auto* dest = static_cast<uint8_t*>(state.face_constants_mapped)
+      + (i * kFaceConstantSize);
     std::memcpy(dest, &face_const, sizeof(face_const));
 
     // Bind the specific face constants index via root constants.
     // GPU will see the correct descriptor pointing to the correct buffer slice.
     recorder.SetGraphicsRoot32BitConstant(
       static_cast<uint32_t>(binding::RootParam::kRootConstants),
-      face_constants_indices_[i].get(), 1);
+      state.face_constants_indices[i].get(), 1);
 
     recorder.Draw(3, 1, 0, 0);
   }
 
   // Transition cubemap to SHADER_RESOURCE state so it can be used for IBL.
   recorder.RequireResourceState(
-    *captured_cubemap_, graphics::ResourceStates::kShaderResource);
-  cubemap_last_state_ = graphics::ResourceStates::kShaderResource;
+    *state.captured_cubemap, graphics::ResourceStates::kShaderResource);
+  state.cubemap_last_state = graphics::ResourceStates::kShaderResource;
   recorder.FlushBarriers();
 
-  is_captured_ = true;
-  ++capture_generation_;
+  state.is_captured = true;
+  ++state.capture_generation;
 
-  LOG_F(INFO,
-    "SkyCapturePass: capture done (view={}, slot={} gen={})",
-    view_id.get(), captured_cubemap_srv_.get(), capture_generation_);
+  LOG_F(INFO, "SkyCapturePass: capture done (view={}, slot={} gen={})",
+    view_id.get(), state.captured_cubemap_srv.get(), state.capture_generation);
   co_return;
 }
 
@@ -360,17 +344,66 @@ auto SkyCapturePass::NeedRebuildPipelineState() const -> bool
   return !LastBuiltPsoDesc().has_value();
 }
 
-auto SkyCapturePass::EnsureResourcesCreated() -> void
+auto SkyCapturePass::ReleaseStateResources(CaptureState& state) -> void
 {
-  if (captured_cubemap_) {
+  if (!gfx_.get()) {
     return;
+  }
+  auto& registry = gfx_->GetResourceRegistry();
+
+  if (state.captured_cubemap) {
+    if (registry.Contains(*state.captured_cubemap)) {
+      if (state.captured_cubemap_srv_view.get().IsValid()) {
+        registry.UnRegisterView(
+          *state.captured_cubemap, state.captured_cubemap_srv_view);
+      }
+      for (auto& rtv : state.face_rtvs) {
+        if (rtv.get().IsValid()) {
+          registry.UnRegisterView(*state.captured_cubemap, rtv);
+        }
+      }
+      registry.UnRegisterResource(*state.captured_cubemap);
+    }
+    state.captured_cubemap.reset();
+  }
+
+  if (state.face_constants_buffer) {
+    if (registry.Contains(*state.face_constants_buffer)) {
+      for (auto& cbv : state.face_constants_cbvs) {
+        if (cbv.get().IsValid()) {
+          registry.UnRegisterView(*state.face_constants_buffer, cbv);
+        }
+      }
+      registry.UnRegisterResource(*state.face_constants_buffer);
+    }
+    if (state.face_constants_mapped != nullptr) {
+      state.face_constants_buffer->UnMap();
+      state.face_constants_mapped = nullptr;
+    }
+    state.face_constants_buffer.reset();
+  }
+
+  state.captured_cubemap_srv = kInvalidShaderVisibleIndex;
+  state.captured_cubemap_srv_view = {};
+  state.face_rtvs.clear();
+  state.all_faces_fb.reset();
+  state.face_constants_cbvs.clear();
+  state.face_constants_indices.clear();
+}
+
+auto SkyCapturePass::EnsureResourcesCreated(const ViewId view_id)
+  -> CaptureState&
+{
+  auto [it, inserted] = capture_state_by_view_.try_emplace(view_id);
+  auto& state = it->second;
+  if (!inserted && state.captured_cubemap) {
+    return state;
   }
 
   auto& graphics = Context().GetGraphics();
   auto& allocator = graphics.GetDescriptorAllocator();
   auto& registry = graphics.GetResourceRegistry();
 
-  // 1. Create captured cubemap
   TextureDesc desc;
   desc.width = config_->resolution;
   desc.height = config_->resolution;
@@ -387,21 +420,16 @@ auto SkyCapturePass::EnsureResourcesCreated() -> void
   desc.use_clear_value = true;
   desc.clear_value = { 0.0F, 0.0F, 0.0F, 1.0F };
 
-  captured_cubemap_ = graphics.CreateTexture(desc);
+  state.captured_cubemap = graphics.CreateTexture(desc);
 
-  // 2. Create ONE Framebuffer for the whole cubemap.
-  // THIS WILL REGISTER THE TEXTURE with the registry.
   graphics::FramebufferDesc all_faces_fb_desc;
-  all_faces_fb_desc.AddColorAttachment(captured_cubemap_,
+  all_faces_fb_desc.AddColorAttachment(state.captured_cubemap,
     { .base_mip_level = 0,
       .num_mip_levels = 1,
       .base_array_slice = 0,
       .num_array_slices = 6 });
-  all_faces_fb_ = graphics.CreateFramebuffer(all_faces_fb_desc);
+  state.all_faces_fb = graphics.CreateFramebuffer(all_faces_fb_desc);
 
-  // 3. Now that the texture is registered, create the remaining views.
-
-  // SRV for the cubemap
   auto srv_handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
     graphics::DescriptorVisibility::kShaderVisible);
   graphics::TextureViewDescription srv_desc;
@@ -414,12 +442,11 @@ auto SkyCapturePass::EnsureResourcesCreated() -> void
   srv_desc.sub_resources.base_array_slice = 0;
   srv_desc.sub_resources.num_array_slices = 6;
 
-  captured_cubemap_srv_ = allocator.GetShaderVisibleIndex(srv_handle);
-  captured_cubemap_srv_view_ = registry.RegisterView(
-    *captured_cubemap_, std::move(srv_handle), srv_desc);
+  state.captured_cubemap_srv = allocator.GetShaderVisibleIndex(srv_handle);
+  state.captured_cubemap_srv_view = registry.RegisterView(
+    *state.captured_cubemap, std::move(srv_handle), srv_desc);
 
-  // RTVs for each face
-  face_rtvs_.resize(6);
+  state.face_rtvs.resize(6);
   for (uint32_t i = 0; i < 6; ++i) {
     auto rtv_handle
       = allocator.Allocate(graphics::ResourceViewType::kTexture_RTV,
@@ -434,26 +461,23 @@ auto SkyCapturePass::EnsureResourcesCreated() -> void
     rtv_desc.sub_resources.base_array_slice = i;
     rtv_desc.sub_resources.num_array_slices = 1;
 
-    face_rtvs_[i] = registry.RegisterView(
-      *captured_cubemap_, std::move(rtv_handle), rtv_desc);
+    state.face_rtvs[i] = registry.RegisterView(
+      *state.captured_cubemap, std::move(rtv_handle), rtv_desc);
   }
 
-  // 4. Create and register the face constants buffer.
-  // We need 6 slots, aligned to 256 bytes each.
-  const uint32_t kFaceConstantSize = 256;
+  constexpr uint32_t kFaceConstantSize = 256;
   BufferDesc cb_desc {
-    .size_bytes = kFaceConstantSize * 6, // 6 faces
+    .size_bytes = kFaceConstantSize * 6,
     .usage = BufferUsage::kConstant,
     .memory = BufferMemory::kUpload,
     .debug_name = "SkyCapture_FaceConstants",
   };
-  face_constants_buffer_ = graphics.CreateBuffer(cb_desc);
-  registry.Register(face_constants_buffer_);
-  face_constants_mapped_ = face_constants_buffer_->Map();
+  state.face_constants_buffer = graphics.CreateBuffer(cb_desc);
+  registry.Register(state.face_constants_buffer);
+  state.face_constants_mapped = state.face_constants_buffer->Map();
 
-  face_constants_cbvs_.reserve(6);
-  face_constants_indices_.reserve(6);
-
+  state.face_constants_cbvs.reserve(6);
+  state.face_constants_indices.reserve(6);
   for (uint32_t i = 0; i < 6; ++i) {
     auto cbv_handle
       = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
@@ -461,16 +485,15 @@ auto SkyCapturePass::EnsureResourcesCreated() -> void
     graphics::BufferViewDescription cbv_view_desc;
     cbv_view_desc.view_type = graphics::ResourceViewType::kConstantBuffer;
     cbv_view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-    // Each view points to a unique 256-byte slice of the buffer
     cbv_view_desc.range = { i * kFaceConstantSize, kFaceConstantSize };
 
-    auto index = allocator.GetShaderVisibleIndex(cbv_handle);
-    face_constants_indices_.push_back(index);
-
-    auto view = registry.RegisterView(
-      *face_constants_buffer_, std::move(cbv_handle), cbv_view_desc);
-    face_constants_cbvs_.push_back(std::move(view));
+    state.face_constants_indices.push_back(
+      allocator.GetShaderVisibleIndex(cbv_handle));
+    state.face_constants_cbvs.push_back(registry.RegisterView(
+      *state.face_constants_buffer, std::move(cbv_handle), cbv_view_desc));
   }
+
+  return state;
 }
 
 auto SkyCapturePass::SetupViewPortAndScissors(CommandRecorder& recorder) const

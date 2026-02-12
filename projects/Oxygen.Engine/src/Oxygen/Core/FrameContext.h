@@ -192,6 +192,7 @@ using SurfaceId = oxygen::NamedType<uint64_t, SurfaceIdTag, oxygen::Comparable,
 struct ViewMetadata {
   std::string name;
   std::string purpose; // e.g. "primary", "shadow", "reflection"
+  bool with_atmosphere { false };
 };
 
 // Complete context for a view, including its output
