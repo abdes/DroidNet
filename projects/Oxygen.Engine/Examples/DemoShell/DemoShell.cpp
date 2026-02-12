@@ -73,6 +73,8 @@ struct DemoShell::Impl {
   observer_ptr<RenderingPipeline> bound_pipeline;
 
   bool pending_init { false };
+  bool logged_missing_env_vm_runtime_route { false };
+  bool logged_missing_ui_runtime_route { false };
 
   mutable std::once_flag input_system_flag;
   mutable observer_ptr<engine::InputSystem> input_system;
@@ -479,13 +481,19 @@ auto DemoShell::UpdatePanels() -> void
     } else {
       // Fallback for configurations without the environment panel/VM.
       impl_->environment_settings_service.SetRuntimeConfig(runtime_config);
-      DLOG_F(WARNING,
-        "DemoShell: EnvironmentVm unavailable; routed runtime config directly to EnvironmentSettingsService");
+      if (!impl_->logged_missing_env_vm_runtime_route) {
+        LOG_F(INFO,
+          "DemoShell: EnvironmentVm unavailable; routing runtime config directly to EnvironmentSettingsService (subsequent frames suppressed)");
+        impl_->logged_missing_env_vm_runtime_route = true;
+      }
     }
   } else {
     impl_->environment_settings_service.SetRuntimeConfig(runtime_config);
-    DLOG_F(WARNING,
-      "DemoShell: DemoShellUi unavailable; routed runtime config directly to EnvironmentSettingsService");
+    if (!impl_->logged_missing_ui_runtime_route) {
+      LOG_F(INFO,
+        "DemoShell: DemoShellUi unavailable; routing runtime config directly to EnvironmentSettingsService (subsequent frames suppressed)");
+      impl_->logged_missing_ui_runtime_route = true;
+    }
   }
 }
 
