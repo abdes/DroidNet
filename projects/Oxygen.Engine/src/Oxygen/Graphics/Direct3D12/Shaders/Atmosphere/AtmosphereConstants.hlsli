@@ -53,8 +53,9 @@ static const float kAtmosphereEpsilon = EPSILON;
 //! Below this angle, azimuth averaging is applied to reduce artifacts.
 static const float kZenithFilterThreshold = 0.05;
 
-//! Sun disk edge softness for anti-aliasing (radians).
-static const float kSunDiskEdgeSoftness = 0.002;
+//! Sun disk edge softness for anti-aliasing in ANGLE space (radians).
+//! Keep this small; larger values turn the solar disk into a visible blob.
+static const float kSunDiskEdgeSoftness = 0.0005;
 
 // =============================================================================
 // Physical Defaults (Artist Overridable via GpuSkyAtmosphereParams)
