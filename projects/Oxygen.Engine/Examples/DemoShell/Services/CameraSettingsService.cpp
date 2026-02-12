@@ -608,8 +608,10 @@ void CameraSettingsService::SetActiveCamera(scene::SceneNode camera)
     SetActiveCameraId(camera_id);
   }
 
-  const bool restored_transform = RestoreActiveCameraSettings();
+  // Capture scene-authored/default camera pose before any persisted overrides.
+  // Reset should always have a safe baseline even when persisted state is bad.
   CaptureInitialPose();
+  const bool restored_transform = RestoreActiveCameraSettings();
   if (!restored_transform) {
     EnsureFlyCameraFacingScene();
   }
@@ -699,8 +701,35 @@ void CameraSettingsService::ApplyPendingReset()
   }
 
   auto transform = active_camera_.GetTransform();
-  transform.SetLocalPosition(initial_camera_position_);
-  transform.SetLocalRotation(initial_camera_rotation_);
+  glm::vec3 reset_position = initial_camera_position_;
+  glm::quat reset_rotation = initial_camera_rotation_;
+
+  const bool orbit_mode = camera_rig_
+    && camera_rig_->GetMode() == ui::CameraControlMode::kOrbit;
+  if (orbit_mode) {
+    constexpr glm::vec3 orbit_target(0.0F, 0.0F, 0.0F);
+    float orbit_distance = glm::length(initial_camera_position_ - orbit_target);
+    if (!std::isfinite(orbit_distance) || orbit_distance < 1.0F) {
+      orbit_distance = 15.0F;
+      reset_position = orbit_target - space::look::Forward * orbit_distance;
+    } else {
+      // Keep the baseline direction, but enforce a valid orbit radius.
+      const glm::vec3 baseline_dir = glm::normalize(
+        initial_camera_position_ - orbit_target);
+      reset_position = orbit_target + baseline_dir * orbit_distance;
+    }
+    reset_rotation = MakeLookRotationFromPosition(reset_position, orbit_target);
+
+    if (camera_rig_) {
+      if (const auto orbit = camera_rig_->GetOrbitController(); orbit) {
+        orbit->SetTarget(orbit_target);
+        orbit->SetDistance(orbit_distance);
+      }
+    }
+  }
+
+  transform.SetLocalPosition(reset_position);
+  transform.SetLocalRotation(reset_rotation);
 
   if (camera_rig_) {
     camera_rig_->SyncFromActiveCamera();
@@ -985,9 +1014,6 @@ auto CameraSettingsService::RestoreActiveCameraSettings() -> bool
 
   tf.SetLocalPosition(pos);
   tf.SetLocalRotation(rot);
-
-  initial_camera_position_ = pos;
-  initial_camera_rotation_ = rot;
 
   if (const auto has_persp
     = settings->GetBool(prefix + ".camera.has_perspective");
