@@ -47,6 +47,7 @@ struct AutoExposurePassConfig {
   static constexpr float kDefaultAdaptationSpeedUp = 3.0F;
   static constexpr float kDefaultAdaptationSpeedDown = 3.0F;
   static constexpr float kDefaultTargetLuminance = 0.18F;
+  static constexpr float kDefaultSpotMeterRadius = 0.2F;
   static constexpr MeteringMode kDefaultMeteringMode = MeteringMode::kAverage;
 
   //! HDR source texture to analyze.
@@ -75,6 +76,9 @@ struct AutoExposurePassConfig {
 
   //! Target luminance (middle gray).
   float target_luminance { kDefaultTargetLuminance };
+
+  //! Spot-metering radius in normalized screen-space distance [0, 1].
+  float spot_meter_radius { kDefaultSpotMeterRadius };
 
   //! Metering mode.
   MeteringMode metering_mode { kDefaultMeteringMode };

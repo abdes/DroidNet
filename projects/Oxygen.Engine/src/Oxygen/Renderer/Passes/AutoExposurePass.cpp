@@ -7,6 +7,7 @@
 #include <Oxygen/Renderer/Passes/AutoExposurePass.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <span>
 #include <stdexcept>
@@ -51,10 +52,14 @@ namespace {
     uint32_t screen_height;
     uint32_t metering_mode;
     uint32_t _pad;
+    float spot_meter_radius;
+    float _pad1;
+    float _pad2;
+    float _pad3;
   };
 
-  static_assert(sizeof(AutoExposureHistogramConstants) == 32,
-    "AutoExposureHistogramConstants must be 32 bytes");
+  static_assert(sizeof(AutoExposureHistogramConstants) == 48,
+    "AutoExposureHistogramConstants must be 48 bytes");
 
   // Must match HLSL `AutoExposureAverageConstants` in
   // Shaders/Compositing/AutoExposure_Average_CS.hlsl.
@@ -114,6 +119,74 @@ auto AutoExposurePass::ValidateConfig() -> void
   if (!config_->source_texture) {
     throw std::runtime_error("AutoExposurePass requires source_texture");
   }
+
+  if (!std::isfinite(config_->min_log_luminance)) {
+    LOG_F(WARNING,
+      "AutoExposurePass: invalid min_log_luminance={}, resetting to default {}",
+      config_->min_log_luminance, Config::kDefaultMinLogLuminance);
+    config_->min_log_luminance = Config::kDefaultMinLogLuminance;
+  }
+
+  if (!std::isfinite(config_->log_luminance_range)
+    || config_->log_luminance_range <= 1.0e-4F) {
+    LOG_F(WARNING,
+      "AutoExposurePass: invalid log_luminance_range={}, clamping to 0.0001",
+      config_->log_luminance_range);
+    config_->log_luminance_range = 1.0e-4F;
+  }
+
+  if (!std::isfinite(config_->low_percentile)) {
+    LOG_F(WARNING,
+      "AutoExposurePass: invalid low_percentile={}, resetting to default {}",
+      config_->low_percentile, Config::kDefaultLowPercentile);
+    config_->low_percentile = Config::kDefaultLowPercentile;
+  }
+  config_->low_percentile = std::clamp(config_->low_percentile, 0.0F, 1.0F);
+
+  if (!std::isfinite(config_->high_percentile)) {
+    LOG_F(WARNING,
+      "AutoExposurePass: invalid high_percentile={}, resetting to default {}",
+      config_->high_percentile, Config::kDefaultHighPercentile);
+    config_->high_percentile = Config::kDefaultHighPercentile;
+  }
+  config_->high_percentile = std::clamp(config_->high_percentile, 0.0F, 1.0F);
+  if (config_->high_percentile < config_->low_percentile) {
+    config_->high_percentile = config_->low_percentile;
+  }
+
+  if (!std::isfinite(config_->adaptation_speed_up)
+    || config_->adaptation_speed_up < 0.0F) {
+    LOG_F(WARNING,
+      "AutoExposurePass: invalid adaptation_speed_up={}, clamping to 0",
+      config_->adaptation_speed_up);
+    config_->adaptation_speed_up = 0.0F;
+  }
+
+  if (!std::isfinite(config_->adaptation_speed_down)
+    || config_->adaptation_speed_down < 0.0F) {
+    LOG_F(WARNING,
+      "AutoExposurePass: invalid adaptation_speed_down={}, clamping to 0",
+      config_->adaptation_speed_down);
+    config_->adaptation_speed_down = 0.0F;
+  }
+
+  if (!std::isfinite(config_->target_luminance)
+    || config_->target_luminance <= 1.0e-6F) {
+    LOG_F(WARNING,
+      "AutoExposurePass: invalid target_luminance={}, clamping to 0.000001",
+      config_->target_luminance);
+    config_->target_luminance = 1.0e-6F;
+  }
+
+  if (!std::isfinite(config_->spot_meter_radius)
+    || config_->spot_meter_radius <= 0.0F) {
+    LOG_F(WARNING,
+      "AutoExposurePass: invalid spot_meter_radius={}, resetting to default {}",
+      config_->spot_meter_radius, Config::kDefaultSpotMeterRadius);
+    config_->spot_meter_radius = Config::kDefaultSpotMeterRadius;
+  }
+  config_->spot_meter_radius
+    = std::clamp(config_->spot_meter_radius, 0.01F, 1.0F);
 }
 
 auto AutoExposurePass::NeedRebuildPipelineState() const -> bool
@@ -442,7 +515,11 @@ auto AutoExposurePass::UpdateHistogramConstants(
     .screen_width = tex_desc.width,
     .screen_height = tex_desc.height,
     .metering_mode = static_cast<uint32_t>(config_->metering_mode),
-    ._pad = 0 };
+    ._pad = 0,
+    .spot_meter_radius = config_->spot_meter_radius,
+    ._pad1 = 0.0F,
+    ._pad2 = 0.0F,
+    ._pad3 = 0.0F };
 
   const auto slot = pass_constants_slot_ % kPassConstantsSlots;
   pass_constants_slot_++;

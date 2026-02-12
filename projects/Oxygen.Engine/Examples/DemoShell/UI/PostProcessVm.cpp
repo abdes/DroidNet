@@ -40,6 +40,7 @@ auto PostProcessVm::Refresh() -> void
   auto_exposure_min_log_lum_ = service_->GetAutoExposureMinLogLuminance();
   auto_exposure_log_lum_range_ = service_->GetAutoExposureLogLuminanceRange();
   auto_exposure_target_lum_ = service_->GetAutoExposureTargetLuminance();
+  auto_exposure_spot_radius_ = service_->GetAutoExposureSpotMeterRadius();
   auto_exposure_metering_mode_ = service_->GetAutoExposureMeteringMode();
 
   tonemapping_enabled_ = service_->GetTonemappingEnabled();
@@ -333,6 +334,24 @@ auto PostProcessVm::SetAutoExposureTargetLuminance(float target_lum) -> void
   std::lock_guard lock(mutex_);
   if (service_) {
     service_->SetAutoExposureTargetLuminance(target_lum);
+    Refresh();
+  }
+}
+
+auto PostProcessVm::GetAutoExposureSpotMeterRadius() -> float
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale()) {
+    Refresh();
+  }
+  return auto_exposure_spot_radius_;
+}
+
+auto PostProcessVm::SetAutoExposureSpotMeterRadius(float radius) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->SetAutoExposureSpotMeterRadius(radius);
     Refresh();
   }
 }

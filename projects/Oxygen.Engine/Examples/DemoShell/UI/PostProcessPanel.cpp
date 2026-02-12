@@ -159,7 +159,7 @@ void PostProcessPanel::DrawExposureSection()
   }
   if (ImGui::IsItemHovered()) {
     ImGui::SetTooltip(
-      "Calibration constant (K). Scales global brightness. Default: 10.0.");
+      "Calibration constant (K). Scales global brightness. Default: 12.5.");
   }
 
   if (current_mode == ExposureMode::kAuto) {
@@ -235,6 +235,15 @@ void PostProcessPanel::DrawExposureSection()
     }
     if (ImGui::IsItemHovered()) {
       ImGui::SetTooltip("Target average luminance (middle gray) to aim for.");
+    }
+
+    float spot_radius = vm_->GetAutoExposureSpotMeterRadius();
+    if (ImGui::DragFloat("Spot Radius", &spot_radius, 0.005F, 0.01F, 1.0F)) {
+      vm_->SetAutoExposureSpotMeterRadius(spot_radius);
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+        "Spot metering radius in normalized screen-space distance.");
     }
 
     engine::MeteringMode metering = vm_->GetAutoExposureMeteringMode();

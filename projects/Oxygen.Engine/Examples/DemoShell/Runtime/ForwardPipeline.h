@@ -96,6 +96,7 @@ public:
   auto SetAutoExposureMinLogLuminance(float luminance) -> void override;
   auto SetAutoExposureLogLuminanceRange(float range) -> void override;
   auto SetAutoExposureTargetLuminance(float luminance) -> void override;
+  auto SetAutoExposureSpotMeterRadius(float radius) -> void override;
   auto SetAutoExposureMeteringMode(engine::MeteringMode mode) -> void override;
   auto ResetAutoExposure(float initial_ev) -> void override;
 

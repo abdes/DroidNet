@@ -187,6 +187,7 @@ auto PostProcessSettingsService::Initialize(
       GetAutoExposureLogLuminanceRange());
     // Target luminance is set via helper to account for compensation
     UpdateAutoExposureTarget();
+    pipeline_->SetAutoExposureSpotMeterRadius(GetAutoExposureSpotMeterRadius());
     pipeline_->SetAutoExposureMeteringMode(GetAutoExposureMeteringMode());
   }
 
@@ -473,7 +474,7 @@ auto PostProcessSettingsService::GetExposureKey() const -> float
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  return settings->GetFloat(kExposureKeyKey).value_or(10.0F);
+  return settings->GetFloat(kExposureKeyKey).value_or(12.5F);
 }
 
 auto PostProcessSettingsService::SetExposureKey(float exposure_key) -> void
@@ -656,6 +657,26 @@ auto PostProcessSettingsService::SetAutoExposureTargetLuminance(float luminance)
   UpdateAutoExposureTarget();
 }
 
+auto PostProcessSettingsService::GetAutoExposureSpotMeterRadius() const -> float
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  return settings->GetFloat(kAutoExposureSpotRadiusKey)
+    .value_or(engine::AutoExposurePassConfig::kDefaultSpotMeterRadius);
+}
+
+auto PostProcessSettingsService::SetAutoExposureSpotMeterRadius(float radius)
+  -> void
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  settings->SetFloat(kAutoExposureSpotRadiusKey, radius);
+  epoch_++;
+  if (pipeline_) {
+    pipeline_->SetAutoExposureSpotMeterRadius(radius);
+  }
+}
+
 auto PostProcessSettingsService::GetAutoExposureMeteringMode() const
   -> engine::MeteringMode
 {
@@ -799,7 +820,7 @@ auto PostProcessSettingsService::ResetToDefaults() -> void
   settings->SetBool(kExposureEnabledKey, true);
   settings->SetFloat(kExposureManualEVKey, 9.7F);
   settings->SetFloat(kExposureCompensationKey, 0.0F);
-  settings->SetFloat(kExposureKeyKey, 10.0F);
+  settings->SetFloat(kExposureKeyKey, 12.5F);
 
   settings->SetBool(kTonemappingEnabledKey, true);
   settings->SetString(kToneMapperKey, "aces");
@@ -818,6 +839,8 @@ auto PostProcessSettingsService::ResetToDefaults() -> void
     engine::AutoExposurePassConfig::kDefaultLogLuminanceRange);
   settings->SetFloat(kAutoExposureTargetLumKey,
     engine::AutoExposurePassConfig::kDefaultTargetLuminance);
+  settings->SetFloat(kAutoExposureSpotRadiusKey,
+    engine::AutoExposurePassConfig::kDefaultSpotMeterRadius);
   settings->SetString(kAutoExposureMeteringKey,
     std::string(
       engine::to_string(engine::AutoExposurePassConfig::kDefaultMeteringMode)));
@@ -850,6 +873,8 @@ auto PostProcessSettingsService::ResetAutoExposureDefaults() -> void
     engine::AutoExposurePassConfig::kDefaultLogLuminanceRange);
   settings->SetFloat(kAutoExposureTargetLumKey,
     engine::AutoExposurePassConfig::kDefaultTargetLuminance);
+  settings->SetFloat(kAutoExposureSpotRadiusKey,
+    engine::AutoExposurePassConfig::kDefaultSpotMeterRadius);
   settings->SetString(kAutoExposureMeteringKey,
     std::string(
       engine::to_string(engine::AutoExposurePassConfig::kDefaultMeteringMode)));

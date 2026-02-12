@@ -132,6 +132,7 @@ public:
   virtual auto SetAutoExposureMinLogLuminance(float /*luminance*/) -> void { }
   virtual auto SetAutoExposureLogLuminanceRange(float /*range*/) -> void { }
   virtual auto SetAutoExposureTargetLuminance(float /*luminance*/) -> void { }
+  virtual auto SetAutoExposureSpotMeterRadius(float /*radius*/) -> void { }
   virtual auto SetAutoExposureMeteringMode(engine::MeteringMode /*mode*/)
     -> void
   {
