@@ -110,6 +110,35 @@ set(
   "ImGui/ImGuiBackend.cpp"
 )
 
+# Find all HLSL entrypoints under the shader layout.
+# Note: some entrypoints (e.g. IBL filtering) live outside Passes/.
+file(GLOB_RECURSE HLSL_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsl")
+
+# Shared include files (HLSL headers)
+file(GLOB_RECURSE HLSLI_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsli")
+
+# Ensure shader sources appear in IDE project trees (Visual Studio filters)
+# without becoming standalone compilation units.
+set(OXYGEN_D3D12_SHADER_SOURCE_FILES
+  ${HLSL_FILES}
+  ${HLSLI_FILES}
+)
+target_sources(
+  ${META_MODULE_TARGET}
+  PRIVATE
+    ${OXYGEN_D3D12_SHADER_SOURCE_FILES}
+)
+set_source_files_properties(
+  ${OXYGEN_D3D12_SHADER_SOURCE_FILES}
+  PROPERTIES
+    HEADER_FILE_ONLY TRUE
+    VS_SETTINGS "ExcludedFromBuild=true"
+)
+source_group(
+  TREE "${CMAKE_CURRENT_SOURCE_DIR}"
+  FILES ${OXYGEN_D3D12_SHADER_SOURCE_FILES}
+)
+
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
