@@ -120,6 +120,12 @@ public:
   //! Clears the IBL regeneration request flag.
   auto MarkIblRegenerationClean(ViewId view_id) noexcept -> void;
 
+  //! Enables/disables atmosphere blue-noise slot publication.
+  auto SetBlueNoiseEnabled(bool enabled) noexcept -> void
+  {
+    blue_noise_enabled_ = enabled;
+  }
+
   //! Shader-visible SRV index for the environment static data.
   [[nodiscard]] auto GetSrvIndex(ViewId view_id) const noexcept
     -> ShaderVisibleIndex;
@@ -255,6 +261,7 @@ private:
   bool coherence_threshold_crossed_ { false };
   bool current_snapshot_coherent_ { true };
   bool ibl_regeneration_requested_ { false };
+  bool blue_noise_enabled_ { true };
 
   std::shared_ptr<graphics::Buffer> buffer_;
   std::shared_ptr<graphics::Texture> brdf_lut_texture_;

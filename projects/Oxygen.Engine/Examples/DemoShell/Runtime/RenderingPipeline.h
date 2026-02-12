@@ -105,6 +105,9 @@ public:
   //! Enables or disables GPU debug passes attached to the pipeline.
   virtual auto SetGpuDebugPassEnabled(bool /*enabled*/) -> void { }
 
+  //! Enables/disables blue-noise jitter in atmosphere LUT generation.
+  virtual auto SetAtmosphereBlueNoiseEnabled(bool /*enabled*/) -> void { }
+
   //! Sets the wireframe color used by dedicated wireframe passes.
   virtual auto SetWireframeColor(const graphics::Color& /*color*/) -> void { }
 

@@ -44,6 +44,8 @@ public:
 
   //! Returns whether the GPU debug pass is currently enabled.
   [[nodiscard]] auto GetGpuDebugPassEnabled() -> bool;
+  //! Returns whether atmosphere blue-noise jitter is currently enabled.
+  [[nodiscard]] auto GetAtmosphereBlueNoiseEnabled() -> bool;
 
   //! Sets view mode and forwards changes to the service.
   auto SetRenderMode(RenderMode mode) -> void;
@@ -53,6 +55,8 @@ public:
 
   //! Toggles the GPU debug pass and persists the change.
   auto SetGpuDebugPassEnabled(bool enabled) -> void;
+  //! Toggles atmosphere blue-noise jitter and persists the change.
+  auto SetAtmosphereBlueNoiseEnabled(bool enabled) -> void;
 
   [[nodiscard]] auto GetWireframeColor() -> graphics::Color;
   auto SetWireframeColor(const graphics::Color& color) -> void;
@@ -68,6 +72,7 @@ private:
   engine::ShaderDebugMode debug_mode_ { engine::ShaderDebugMode::kDisabled };
   graphics::Color wire_color_ { 1.0F, 1.0F, 1.0F, 1.0F };
   bool gpu_debug_pass_enabled_ { true };
+  bool atmosphere_blue_noise_enabled_ { true };
 };
 
 } // namespace oxygen::examples::ui

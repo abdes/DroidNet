@@ -52,13 +52,13 @@ struct SkyAtmosphereLutConfig {
   uint32_t transmittance_height { 96U };
 
   //! Sky-view LUT width (azimuth parameterization).
-  uint32_t sky_view_width { 384U };
+  uint32_t sky_view_width { 512U };
 
   //! Sky-view LUT height (zenith parameterization).
-  uint32_t sky_view_height { 216U };
+  uint32_t sky_view_height { 288U };
 
   //! Number of altitude slices in the sky-view LUT array (UI range: 4..32).
-  uint32_t sky_view_slices { 16U };
+  uint32_t sky_view_slices { 24U };
 
   //! Altitude mapping mode for sky-view LUT slices (0 = linear, 1 = log).
   uint32_t sky_view_alt_mapping_mode { 1U };

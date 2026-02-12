@@ -44,6 +44,15 @@ auto RenderingVm::GetGpuDebugPassEnabled() -> bool
   return gpu_debug_pass_enabled_;
 }
 
+auto RenderingVm::GetAtmosphereBlueNoiseEnabled() -> bool
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale()) {
+    Refresh();
+  }
+  return atmosphere_blue_noise_enabled_;
+}
+
 auto RenderingVm::SetRenderMode(RenderMode mode) -> void
 {
   std::lock_guard lock(mutex_);
@@ -80,6 +89,18 @@ auto RenderingVm::SetGpuDebugPassEnabled(bool enabled) -> void
   epoch_ = service_->GetEpoch();
 }
 
+auto RenderingVm::SetAtmosphereBlueNoiseEnabled(bool enabled) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (atmosphere_blue_noise_enabled_ == enabled) {
+    return;
+  }
+
+  atmosphere_blue_noise_enabled_ = enabled;
+  service_->SetAtmosphereBlueNoiseEnabled(enabled);
+  epoch_ = service_->GetEpoch();
+}
+
 auto RenderingVm::GetWireframeColor() -> graphics::Color
 {
   std::lock_guard lock(mutex_);
@@ -112,6 +133,7 @@ auto RenderingVm::Refresh() -> void
   debug_mode_ = service_->GetDebugMode();
   wire_color_ = service_->GetWireframeColor();
   gpu_debug_pass_enabled_ = service_->GetGpuDebugPassEnabled();
+  atmosphere_blue_noise_enabled_ = service_->GetAtmosphereBlueNoiseEnabled();
   epoch_ = service_->GetEpoch();
 }
 

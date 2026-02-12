@@ -174,6 +174,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Atmosphere/TransmittanceLut_CS.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
+  // Sky-view LUT compute uses runtime blue-noise slot toggling (no permutation).
   ShaderFileSpec {
     .path="Atmosphere/SkyViewLut_CS.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }

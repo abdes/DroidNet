@@ -540,6 +540,15 @@ auto Renderer::RequestSkyCapture() noexcept -> void
   }
 }
 
+auto Renderer::SetAtmosphereBlueNoiseEnabled(const bool enabled) noexcept
+  -> void
+{
+  atmosphere_blue_noise_enabled_ = enabled;
+  if (env_static_manager_) {
+    env_static_manager_->SetBlueNoiseEnabled(enabled);
+  }
+}
+
 /*!
  Returns the active render context for the current frame.
 
@@ -1956,6 +1965,7 @@ auto Renderer::OnFrameStart(observer_ptr<FrameContext> context) -> void
   env_dynamic_manager_->OnFrameStart(frame_slot);
   if (env_static_manager_) {
     env_static_manager_->OnFrameStart(tag, frame_slot);
+    env_static_manager_->SetBlueNoiseEnabled(atmosphere_blue_noise_enabled_);
   }
   scene_prep_state_->GetTransformUploader()->OnFrameStart(
     tag, frame_sequence, frame_slot);
