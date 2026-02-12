@@ -78,6 +78,7 @@ set(
   "Types/Format.h"
   "Types/Frame.h"
   "Types/Frustum.h"
+  "Types/PostProcess.h"
   "Types/ResolvedView.h"
   "Types/Scissors.h"
   "Types/ShaderType.h"
