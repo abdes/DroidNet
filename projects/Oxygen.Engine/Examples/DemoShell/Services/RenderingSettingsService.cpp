@@ -96,6 +96,22 @@ auto RenderingSettingsService::SetGpuDebugPassEnabled(bool enabled) -> void
   settings->SetBool(kGpuDebugPassEnabledKey, enabled);
   epoch_++;
 }
+
+auto RenderingSettingsService::GetAtmosphereBlueNoiseEnabled() const -> bool
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  return settings->GetBool(kAtmosphereBlueNoiseEnabledKey).value_or(true);
+}
+
+auto RenderingSettingsService::SetAtmosphereBlueNoiseEnabled(bool enabled)
+  -> void
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  settings->SetBool(kAtmosphereBlueNoiseEnabledKey, enabled);
+  epoch_++;
+}
 auto RenderingSettingsService::GetEpoch() const noexcept -> std::uint64_t
 {
   return epoch_.load(std::memory_order_acquire);
@@ -122,6 +138,7 @@ auto RenderingSettingsService::OnMainViewReady(
   pipeline_->SetWireframeColor(GetWireframeColor());
   pipeline_->SetShaderDebugMode(GetDebugMode());
   pipeline_->SetGpuDebugPassEnabled(GetGpuDebugPassEnabled());
+  pipeline_->SetAtmosphereBlueNoiseEnabled(GetAtmosphereBlueNoiseEnabled());
 }
 
 } // namespace oxygen::examples

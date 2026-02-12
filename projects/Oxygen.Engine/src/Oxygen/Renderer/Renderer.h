@@ -314,6 +314,10 @@ public:
   //! Force a sky capture refresh on the next frame.
   OXGN_RNDR_API auto RequestSkyCapture() noexcept -> void;
 
+  //! Enables/disables blue-noise jitter for atmosphere LUT generation.
+  OXGN_RNDR_API auto SetAtmosphereBlueNoiseEnabled(bool enabled) noexcept
+    -> void;
+
   //! Override a material's UV transform used by the shader.
   /*!
    This is intended for editor and runtime authoring workflows. It updates the
@@ -498,6 +502,7 @@ private:
 
   // Debug override state for atmosphere.
   uint32_t atmosphere_debug_flags_ { 0 };
+  bool atmosphere_blue_noise_enabled_ { true };
 
   std::unordered_map<ViewId, std::uint64_t> last_atmo_generation_;
   std::unordered_map<ViewId, frame::SequenceNumber> last_seen_view_frame_seq_;

@@ -70,6 +70,12 @@ public:
   //! Sets whether the GPU debug pass is enabled.
   virtual auto SetGpuDebugPassEnabled(bool enabled) -> void;
 
+  //! Returns whether atmosphere blue-noise jitter is enabled.
+  [[nodiscard]] virtual auto GetAtmosphereBlueNoiseEnabled() const -> bool;
+
+  //! Sets whether atmosphere blue-noise jitter is enabled.
+  virtual auto SetAtmosphereBlueNoiseEnabled(bool enabled) -> void;
+
   //! Returns the current settings epoch.
   [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t override;
 
@@ -85,6 +91,8 @@ private:
   static constexpr auto kWireColorBKey = "rendering.wire_color.b";
   static constexpr auto kDebugModeKey = "rendering.debug_mode";
   static constexpr auto kGpuDebugPassEnabledKey = "rendering.debug_gpu_pass";
+  static constexpr auto kAtmosphereBlueNoiseEnabledKey
+    = "rendering.atmosphere_blue_noise";
 
   observer_ptr<RenderingPipeline> pipeline_;
   mutable std::atomic_uint64_t epoch_ { 0 };

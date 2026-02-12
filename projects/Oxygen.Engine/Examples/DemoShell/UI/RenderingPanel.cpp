@@ -185,6 +185,13 @@ void RenderingPanel::DrawDebugModes()
       vm_->SetGpuDebugPassEnabled(gpu_debug_enabled);
     }
   }
+
+  {
+    auto atmo_blue_noise = vm_->GetAtmosphereBlueNoiseEnabled();
+    if (ImGui::Checkbox("Atmosphere Blue Noise", &atmo_blue_noise)) {
+      vm_->SetAtmosphereBlueNoiseEnabled(atmo_blue_noise);
+    }
+  }
 }
 
 } // namespace oxygen::examples::ui

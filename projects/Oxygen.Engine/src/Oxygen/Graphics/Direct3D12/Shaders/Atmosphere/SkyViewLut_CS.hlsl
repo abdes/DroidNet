@@ -137,12 +137,13 @@ float4 ComputeSingleScattering(
     uint2 sky_irradiance_extent,
     Texture2D<float4> multi_scat_lut,
     SamplerState linear_sampler,
-    float3 sun_illuminance)
+    float3 sun_illuminance,
+    float segment_sample_offset)
 {
     // Adaptive step count: more steps for long paths (horizon/sunset) to reduce banding.
     // Reference suggests 32, but for high quality we can go higher.
     const float min_steps = 32.0;
-    const float max_steps = 64.0;
+    const float max_steps = 96.0;
     float step_factor = saturate(ray_length / 200000.0);
     const uint num_steps = (uint)lerp(min_steps, max_steps, step_factor);
 
@@ -152,7 +153,7 @@ float4 ComputeSingleScattering(
         origin, view_dir, ray_length, num_steps, atmo,
         sun_dir, sun_illuminance,
         transmittance_srv_index, float(transmittance_extent.x), float(transmittance_extent.y),
-        multi_scat_lut, linear_sampler,
+        multi_scat_lut, linear_sampler, segment_sample_offset,
         throughput);
 
     // Ground albedo contribution: if the ray hits the ground, add reflected light
@@ -332,6 +333,39 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         // Physical sun illuminance (linear RGB).
         float3 sun_illuminance = GetSunLuminanceRGB();
 
+        float segment_sample_offset = kSegmentSampleOffset;
+        if (atmo.blue_noise_slot != K_INVALID_BINDLESS_INDEX)
+        {
+            Texture3D<float> blue_noise_lut = ResourceDescriptorHeap[atmo.blue_noise_slot];
+            uint bn_w = 0, bn_h = 0, bn_d = 0;
+            blue_noise_lut.GetDimensions(bn_w, bn_h, bn_d);
+            if (bn_w > 0 && bn_h > 0 && bn_d > 0)
+            {
+                // Important: SkyView LUT is a precomputed texture. If jitter is too strong
+                // (or spatially coherent), it bakes visible spokes/bands into the sky.
+                // Keep jitter subtle and centered around the deterministic base offset.
+                const uint sx = dispatch_thread_id.x;
+                const uint sy = dispatch_thread_id.y;
+                const uint sz = dispatch_thread_id.z;
+                const uint frame = uint(frame_seq_num);
+
+                // Scramble coordinates to avoid direct grid alignment with LUT texels.
+                const uint bn_x = (sx * 1664525u + sy * 1013904223u + sz * 2246822519u) % bn_w;
+                const uint bn_y = (sx * 747796405u + sy * 2891336453u + sz * 1597334677u) % bn_h;
+                const uint bn_z = (frame + sx * 334214467u + sy * 1402946737u + sz * 2654435761u) % bn_d;
+
+                const float jitter01 = blue_noise_lut.Load(int4(int(bn_x), int(bn_y), int(bn_z), 0));
+                const float jitter_centered = jitter01 - 0.5;
+
+                // Small perturbation only; avoids precomputed radial artifacts.
+                const float jitter_amplitude = 0.08;
+                segment_sample_offset = clamp(
+                    kSegmentSampleOffset + jitter_centered * jitter_amplitude,
+                    0.35,
+                    0.65);
+            }
+        }
+
         result = ComputeSingleScattering(
             origin, view_dir, sun_dir, ray_length, hits_ground, atmo,
             pass_constants.transmittance_srv_index,
@@ -339,7 +373,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             pass_constants.sky_irradiance_srv_index,
             pass_constants.sky_irradiance_extent,
             multi_scat_lut, linear_sampler,
-            sun_illuminance);
+            sun_illuminance,
+            segment_sample_offset);
     }
 
     // Safety: prevent NaNs/Infs from polluting the Sky View LUT.
@@ -347,10 +382,44 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     // We try to recover by clamping to max-value if Inf, or fallback to simple scattering if NaN.
     if (any(isnan(result)) || any(isinf(result)))
     {
-        // Now that we clamped the accumulation loop, we shouldn't hit this often.
-        // But if we do (NaN), return Black (0.0) which is safer than White for standard compositing.
-        // (White creates a flat disk, Black usually blends better with surrounding sky if it's just a pixel).
-        result = float4(0.0, 0.0, 0.0, 1.0);
+        const bool r_ok = !isnan(result.r) && !isinf(result.r);
+        const bool g_ok = !isnan(result.g) && !isinf(result.g);
+        const bool b_ok = !isnan(result.b) && !isinf(result.b);
+        const bool a_ok = !isnan(result.a) && !isinf(result.a);
+
+        float3 safe_rgb = float3(
+            r_ok ? max(result.r, 0.0) : 0.0,
+            g_ok ? max(result.g, 0.0) : 0.0,
+            b_ok ? max(result.b, 0.0) : 0.0);
+        float safe_a = a_ok ? saturate(result.a) : 1.0;
+
+        // Use a physically grounded fallback instead of forcing black.
+        if (all(safe_rgb <= 0.0))
+        {
+            SamplerState linear_sampler = SamplerDescriptorHeap[0];
+            float3 E_sky = SampleSkyIrradianceLut(
+                pass_constants.sky_irradiance_srv_index,
+                pass_constants.sky_irradiance_extent,
+                sun_cos_zenith,
+                altitude_m,
+                atmo,
+                linear_sampler);
+
+            float3 sun_od = SampleTransmittanceOpticalDepthLut(
+                pass_constants.transmittance_srv_index,
+                float(pass_constants.transmittance_extent.x),
+                float(pass_constants.transmittance_extent.y),
+                sun_cos_zenith,
+                altitude_m,
+                atmo.planet_radius_m,
+                atmo.atmosphere_height_m);
+            float3 sun_transmittance = TransmittanceFromOpticalDepth(sun_od, atmo);
+            float3 sun_fallback = GetSunLuminanceRGB() * sun_transmittance * 1e-6;
+
+            safe_rgb = max(E_sky * (0.25 * INV_PI), sun_fallback);
+        }
+
+        result = float4(safe_rgb, safe_a);
     }
 
     // Write result to the correct array slice [P4].

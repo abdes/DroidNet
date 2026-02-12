@@ -76,6 +76,8 @@ public:
   auto SetRenderMode(RenderMode mode) -> void override;
   //! Stage whether GPU debug passes should run.
   auto SetGpuDebugPassEnabled(bool enabled) -> void override;
+  //! Stage atmosphere blue-noise jitter enable.
+  auto SetAtmosphereBlueNoiseEnabled(bool enabled) -> void override;
   //! Stage the last mouse-down position for GPU debug overlays.
   auto SetGpuDebugMouseDownPosition(std::optional<SubPixelPosition> position)
     -> void override;

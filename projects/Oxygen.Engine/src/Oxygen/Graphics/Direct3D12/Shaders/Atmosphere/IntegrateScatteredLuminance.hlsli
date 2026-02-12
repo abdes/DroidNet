@@ -218,6 +218,7 @@ float3 IntegrateScatteredLuminanceQuadratic(
     float transmittance_h,
     Texture2D<float4> multi_scat_lut,
     SamplerState linear_sampler,
+    float segment_sample_offset,
     out float3 out_throughput)
 {
     float3 inscatter = float3(0.0, 0.0, 0.0);
@@ -238,7 +239,7 @@ float3 IntegrateScatteredLuminanceQuadratic(
         t1 = t1 * ray_length;
 
         float dt = t1 - t0;
-        float t = t0 + dt * kSegmentSampleOffset;
+        float t = t0 + dt * segment_sample_offset;
 
         float3 sample_pos = origin + view_dir * t;
 

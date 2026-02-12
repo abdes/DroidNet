@@ -372,6 +372,7 @@ struct ForwardPipeline::Impl {
     float auto_exposure_reset_ev { 0.0F };
 
     bool gpu_debug_pass_enabled { true };
+    bool atmosphere_blue_noise_enabled { true };
     std::optional<SubPixelPosition> gpu_debug_mouse_down_position;
     bool dirty { true };
   } staged;
@@ -976,10 +977,12 @@ auto ForwardPipeline::GetSupportedFeatures() const -> PipelineFeature
 }
 
 auto ForwardPipeline::OnFrameStart(
-  observer_ptr<engine::FrameContext> /*context*/,
-  engine::Renderer& /*renderer*/) -> void
+  observer_ptr<engine::FrameContext> /*context*/, engine::Renderer& renderer)
+  -> void
 {
   impl_->ApplySettings();
+  renderer.SetAtmosphereBlueNoiseEnabled(
+    impl_->staged.atmosphere_blue_noise_enabled);
 }
 
 auto ForwardPipeline::OnSceneMutation(
@@ -1274,6 +1277,15 @@ auto ForwardPipeline::SetRenderMode(RenderMode mode) -> void
 auto ForwardPipeline::SetGpuDebugPassEnabled(bool enabled) -> void
 {
   impl_->staged.gpu_debug_pass_enabled = enabled;
+  impl_->staged.dirty = true;
+}
+
+auto ForwardPipeline::SetAtmosphereBlueNoiseEnabled(bool enabled) -> void
+{
+  if (impl_->staged.atmosphere_blue_noise_enabled == enabled) {
+    return;
+  }
+  impl_->staged.atmosphere_blue_noise_enabled = enabled;
   impl_->staged.dirty = true;
 }
 

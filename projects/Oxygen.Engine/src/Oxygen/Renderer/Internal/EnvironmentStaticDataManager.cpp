@@ -651,8 +651,9 @@ auto EnvironmentStaticDataManager::PopulateAtmosphere(
           = cpu_snapshot_.atmosphere.sky_irradiance_lut_slot;
         next.atmosphere.camera_volume_lut_slot
           = cpu_snapshot_.atmosphere.camera_volume_lut_slot;
-        next.atmosphere.blue_noise_slot
-          = cpu_snapshot_.atmosphere.blue_noise_slot;
+        next.atmosphere.blue_noise_slot = blue_noise_enabled_
+          ? cpu_snapshot_.atmosphere.blue_noise_slot
+          : BlueNoiseSlot { kInvalidShaderVisibleIndex };
       };
 
       const bool has_latched_slots
@@ -684,7 +685,9 @@ auto EnvironmentStaticDataManager::PopulateAtmosphere(
           = SkyIrradianceLutSlot { irr_slot };
         next.atmosphere.camera_volume_lut_slot
           = CameraVolumeLutSlot { cv_slot };
-        next.atmosphere.blue_noise_slot = BlueNoiseSlot { bn_slot };
+        next.atmosphere.blue_noise_slot = blue_noise_enabled_
+          ? BlueNoiseSlot { bn_slot }
+          : BlueNoiseSlot { kInvalidShaderVisibleIndex };
         last_published_atmo_content_version_ = content_version;
       } else if (has_latched_slots) {
         copy_latched_slots();
