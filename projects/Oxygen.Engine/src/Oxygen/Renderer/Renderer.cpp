@@ -1782,8 +1782,34 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
       const oxygen::observer_ptr<renderer::LightManager> light_mgr
         = scene_prep_state_->GetLightManager();
       if (light_mgr) {
-        const SyntheticSunData scene_sun = internal::ResolveSunForView(
-          scene, light_mgr->GetDirectionalLights());
+        const auto dir_lights = light_mgr->GetDirectionalLights();
+        const SyntheticSunData scene_sun
+          = internal::ResolveSunForView(scene, dir_lights);
+
+        std::size_t sun_tagged_count = 0;
+        std::size_t env_contrib_count = 0;
+        for (const auto& dl : dir_lights) {
+          const auto flags = static_cast<DirectionalLightFlags>(dl.flags);
+          if ((flags & DirectionalLightFlags::kSunLight)
+              != DirectionalLightFlags::kNone) {
+            ++sun_tagged_count;
+          }
+          if ((flags & DirectionalLightFlags::kEnvironmentContribution)
+              != DirectionalLightFlags::kNone) {
+            ++env_contrib_count;
+          }
+        }
+
+        if (scene_sun.enabled == 0U
+            && (sun_tagged_count > 0 || env_contrib_count > 0)) {
+          LOG_F(WARNING,
+            "Renderer: resolved sun is disabled but directional light set "
+            "contains sun/environment contributors "
+            "(view={} total={} sun_tagged={} env_contrib={})",
+            nostd::to_string(view_id), dir_lights.size(), sun_tagged_count,
+            env_contrib_count);
+        }
+
         env_dynamic_manager_->SetSunState(view_id, scene_sun);
         prepared_frame.exposure = UpdateViewExposure(view_id, scene, scene_sun);
 

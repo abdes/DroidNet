@@ -39,8 +39,8 @@ float3 ComputeSunTransmittance(
     GpuSkyAtmosphereParams atmo,
     float3 sun_dir)
 {
-    // No atmosphere = no attenuation
-    if (!atmo.enabled || atmo.transmittance_lut_slot == K_INVALID_BINDLESS_INDEX) {
+    // No atmosphere = no attenuation.
+    if (!atmo.enabled) {
         return float3(1.0, 1.0, 1.0);
     }
 
@@ -66,6 +66,19 @@ float3 ComputeSunTransmittance(
 
     // Compute cosine of sun zenith from the local up direction
     float cos_sun_zenith = dot(local_up, sun_dir);
+
+    // Hard geometric horizon guard: when sun is below the local horizon, direct
+    // illumination must be zero, regardless of LUT readiness.
+    const float cos_horizon = HorizonCosineFromAltitude(atmo.planet_radius_m, altitude);
+    if (cos_sun_zenith < cos_horizon) {
+        return float3(0.0, 0.0, 0.0);
+    }
+
+    // LUT missing/not ready: keep conservative passthrough only for above-horizon
+    // sun to avoid blackouts during startup, while still honoring horizon occlusion.
+    if (atmo.transmittance_lut_slot == K_INVALID_BINDLESS_INDEX) {
+        return float3(1.0, 1.0, 1.0);
+    }
 
     // Sample transmittance LUT
     // The LUT returns high optical depth (zero transmittance) when sun is below horizon
@@ -171,11 +184,15 @@ float3 AccumulateDirectionalLights(
                 continue;
             }
 
-            // Non-sun directional lights generally don't get atmospheric transmittance
-            // unless we want them to. Standard path assumes they are "local" or extra/rim/studio lights.
-            // If they are strictly extraterrestrial, they should have transmittance too,
-            // but usually only the main sun does.
             float3 transmittance = float3(1.0, 1.0, 1.0);
+            const bool env_contribution
+                = (dl.flags & DIRECTIONAL_LIGHT_FLAG_ENV_CONTRIBUTION) != 0u;
+            // Critical for night correctness:
+            // Any directional light that contributes to the environment (or is tagged as sun)
+            // should be horizon/atmosphere attenuated. Otherwise lights can leak below horizon.
+            if (is_sun || env_contribution) {
+                transmittance = ComputeSunTransmittance(world_pos, atmo, L);
+            }
 
             const float3 H = SafeNormalize(V + L);
             const float  NdotH = saturate(dot(N, H));
