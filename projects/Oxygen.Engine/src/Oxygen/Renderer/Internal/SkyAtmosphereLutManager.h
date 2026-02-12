@@ -250,9 +250,6 @@ public:
   //! Returns true if LUTs need regeneration.
   OXGN_RNDR_NDAPI auto IsDirty() const noexcept -> bool;
 
-  //! Clears the dirty flag after LUT regeneration.
-  OXGN_RNDR_API auto MarkClean() noexcept -> void;
-
   //! Forces LUTs to regenerate on next frame.
   /*!
    Use when external state affecting LUT generation changes (e.g., debug flags).

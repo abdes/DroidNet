@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/Types/Geometry.h"
 #include <algorithm>
 
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -86,8 +86,6 @@ auto SkyAtmosphereLutManager::IsDirty() const noexcept -> bool
 {
   return dirty_;
 }
-
-auto SkyAtmosphereLutManager::MarkClean() noexcept -> void { dirty_ = false; }
 
 auto SkyAtmosphereLutManager::MarkDirty() noexcept -> void
 {
