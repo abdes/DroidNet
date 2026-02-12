@@ -69,7 +69,7 @@ void CS(uint3 dispatchThreadId : SV_DispatchThreadID)
         float highBound = highP * float(count);
 
         uint cumulativeCount = 0;
-        uint validPixels = 0;
+        float validWeight = 0.0;
         float weightedSum = 0.0;
 
         for (uint j = 0; j < HISTOGRAM_BINS; ++j) {
@@ -88,12 +88,12 @@ void CS(uint3 dispatchThreadId : SV_DispatchThreadID)
             if (overlapCount > 0.0) {
                 float logLum = pass.min_log_luminance + (float(j) / float(HISTOGRAM_BINS - 1)) * pass.log_luminance_range;
                 weightedSum += logLum * overlapCount;
-                validPixels += uint(overlapCount);
+                validWeight += overlapCount;
             }
         }
 
-        if (validPixels > 0) {
-            targetLogLum = weightedSum / float(validPixels);
+        if (validWeight > 0.0) {
+            targetLogLum = weightedSum / validWeight;
         }
     }
 

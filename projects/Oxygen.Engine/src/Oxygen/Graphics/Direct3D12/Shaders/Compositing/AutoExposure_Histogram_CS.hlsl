@@ -26,6 +26,9 @@ struct AutoExposureHistogramConstants {
     uint screen_width;
     uint screen_height;
     uint metering_mode; // 0=Average, 1=Center-Weighted, 2=Spot
+    uint _pad0;
+    float spot_meter_radius;
+    float3 _pad1;
 };
 
 groupshared uint s_Histogram[HISTOGRAM_BINS];
@@ -55,28 +58,26 @@ void CS(uint3 dispatchThreadId : SV_DispatchThreadID, uint groupIndex : SV_Group
     if (dispatchThreadId.x < pass.screen_width && dispatchThreadId.y < pass.screen_height) {
         Texture2D<float4> src_tex = ResourceDescriptorHeap[pass.source_texture_index];
         float3 color = src_tex[dispatchThreadId.xy].rgb;
-        float lum = Luminance(color);
+        float lum = max(Luminance(color), 1.0e-6);
+        float logLum = saturate((log2(lum) - pass.min_log_luminance) * pass.inv_log_luminance_range);
+        uint bin = uint(logLum * (HISTOGRAM_BINS - 1.0));
 
-        if (lum > 0.0001) {
-            float logLum = saturate((log2(lum) - pass.min_log_luminance) * pass.inv_log_luminance_range);
-            uint bin = uint(logLum * (HISTOGRAM_BINS - 1.0));
+        // Metering weights
+        float weight = 1.0;
+        if (pass.metering_mode == 1) { // Center-Weighted
+            float2 uv = (float2(dispatchThreadId.xy) + 0.5) / float2(pass.screen_width, pass.screen_height);
+            float2 dist = (uv - 0.5) * 2.0;
+            weight = saturate(1.0 - length(dist));
+        } else if (pass.metering_mode == 2) { // Spot
+            float2 uv = (float2(dispatchThreadId.xy) + 0.5) / float2(pass.screen_width, pass.screen_height);
+            float2 dist = (uv - 0.5) * 2.0;
+            float radius = max(pass.spot_meter_radius, 1.0e-4);
+            weight = saturate(1.0 - length(dist) / radius);
+            weight = weight * weight;
+        }
 
-            // Metering weights
-            float weight = 1.0;
-            if (pass.metering_mode == 1) { // Center-Weighted
-                float2 uv = (float2(dispatchThreadId.xy) + 0.5) / float2(pass.screen_width, pass.screen_height);
-                float2 dist = (uv - 0.5) * 2.0;
-                weight = saturate(1.0 - length(dist));
-            } else if (pass.metering_mode == 2) { // Spot
-                float2 uv = (float2(dispatchThreadId.xy) + 0.5) / float2(pass.screen_width, pass.screen_height);
-                float2 dist = (uv - 0.5) * 2.0;
-                weight = saturate(1.0 - length(dist) / 0.2);
-                weight = weight * weight;
-            }
-
-            if (weight > 0.01) {
-                InterlockedAdd(s_Histogram[bin], uint(weight * 255.0));
-            }
+        if (weight > 0.0) {
+            InterlockedAdd(s_Histogram[bin], uint(weight * 255.0 + 0.5));
         }
     }
 

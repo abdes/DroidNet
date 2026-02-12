@@ -365,6 +365,9 @@ struct ForwardPipeline::Impl {
     float auto_exposure_target_luminance {
       engine::AutoExposurePassConfig::kDefaultTargetLuminance
     };
+    float auto_exposure_spot_meter_radius {
+      engine::AutoExposurePassConfig::kDefaultSpotMeterRadius
+    };
     engine::MeteringMode auto_exposure_metering {
       engine::AutoExposurePassConfig::kDefaultMeteringMode
     };
@@ -883,6 +886,8 @@ struct ForwardPipeline::Impl {
         = staged.auto_exposure_log_luminance_range;
       auto_exposure_config->target_luminance
         = staged.auto_exposure_target_luminance;
+      auto_exposure_config->spot_meter_radius
+        = staged.auto_exposure_spot_meter_radius;
       auto_exposure_config->metering_mode = staged.auto_exposure_metering;
     }
 
@@ -1358,6 +1363,11 @@ auto ForwardPipeline::SetAutoExposureLogLuminanceRange(float range) -> void
 auto ForwardPipeline::SetAutoExposureTargetLuminance(float luminance) -> void
 {
   impl_->staged.auto_exposure_target_luminance = luminance;
+  impl_->staged.dirty = true;
+}
+auto ForwardPipeline::SetAutoExposureSpotMeterRadius(float radius) -> void
+{
+  impl_->staged.auto_exposure_spot_meter_radius = radius;
   impl_->staged.dirty = true;
 }
 auto ForwardPipeline::SetAutoExposureMeteringMode(engine::MeteringMode mode)

@@ -70,6 +70,8 @@ public:
 
   [[nodiscard]] auto GetAutoExposureTargetLuminance() -> float;
   auto SetAutoExposureTargetLuminance(float target_lum) -> void;
+  [[nodiscard]] auto GetAutoExposureSpotMeterRadius() -> float;
+  auto SetAutoExposureSpotMeterRadius(float radius) -> void;
 
   [[nodiscard]] auto GetAutoExposureMeteringMode() -> engine::MeteringMode;
   auto SetAutoExposureMeteringMode(engine::MeteringMode mode) -> void;
@@ -100,7 +102,7 @@ private:
   float manual_camera_shutter_rate_ { 125.0F };
   float manual_camera_iso_ { 100.0F };
   float exposure_compensation_ { 0.0F };
-  float exposure_key_ { 10.0F };
+  float exposure_key_ { 12.5F };
 
   float auto_exposure_speed_up_ {
     engine::AutoExposurePassConfig::kDefaultAdaptationSpeedUp
@@ -122,6 +124,9 @@ private:
   };
   float auto_exposure_target_lum_ {
     engine::AutoExposurePassConfig::kDefaultTargetLuminance
+  };
+  float auto_exposure_spot_radius_ {
+    engine::AutoExposurePassConfig::kDefaultSpotMeterRadius
   };
   engine::MeteringMode auto_exposure_metering_mode_ {
     engine::AutoExposurePassConfig::kDefaultMeteringMode

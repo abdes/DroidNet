@@ -112,6 +112,9 @@ namespace examples {
       [[nodiscard]] virtual auto GetAutoExposureTargetLuminance() const
         -> float;
       virtual auto SetAutoExposureTargetLuminance(float luminance) -> void;
+      [[nodiscard]] virtual auto GetAutoExposureSpotMeterRadius() const
+        -> float;
+      virtual auto SetAutoExposureSpotMeterRadius(float radius) -> void;
 
       [[nodiscard]] virtual auto GetAutoExposureMeteringMode() const
         -> engine::MeteringMode;
@@ -162,6 +165,8 @@ namespace examples {
         = "post_process.auto_exposure.log_lum_range";
       static constexpr auto kAutoExposureTargetLumKey
         = "post_process.auto_exposure.target_lum";
+      static constexpr auto kAutoExposureSpotRadiusKey
+        = "post_process.auto_exposure.spot_radius";
       static constexpr auto kAutoExposureMeteringKey
         = "post_process.auto_exposure.metering";
 
