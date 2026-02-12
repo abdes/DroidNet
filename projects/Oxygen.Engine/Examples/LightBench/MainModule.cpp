@@ -163,7 +163,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
-  auto& shell = GetShell();
   DCHECK_F(active_scene_.IsValid());
 
   if (!app_window_->GetWindow()) {
