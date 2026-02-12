@@ -108,6 +108,11 @@ public:
   //! change.
   [[nodiscard]] virtual auto GetGeneration() const noexcept -> std::uint64_t
     = 0;
+
+  //! Returns a monotonic content token that increases when front LUT content
+  //! is swapped/published and safe for sampling.
+  [[nodiscard]] virtual auto GetContentVersion() const noexcept -> std::uint64_t
+    = 0;
 };
 
 } // namespace oxygen::engine::internal

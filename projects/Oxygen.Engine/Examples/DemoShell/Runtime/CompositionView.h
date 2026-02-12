@@ -96,6 +96,10 @@ struct CompositionView {
   //! - false: Standard precision intermediate (Fast 2D/UI, Overlays).
   bool enable_hdr { true };
 
+  //! Explicitly enable atmosphere environment processing for this view.
+  //! Default is false; apps must opt in per view.
+  bool with_atmosphere { false };
+
   //! Override to force wireframe rendering for this specific view.
   bool force_wireframe { false };
 

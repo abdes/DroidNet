@@ -9,12 +9,15 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Renderer/Internal/ISkyCaptureProvider.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Resources/IResourceBinder.h>
 #include <Oxygen/Renderer/Types/EnvironmentStaticData.h>
@@ -78,7 +81,6 @@ public:
     observer_ptr<renderer::resources::IResourceBinder> texture_binder,
     observer_ptr<IBrdfLutProvider> brdf_lut_provider,
     observer_ptr<IIblProvider> ibl_manager,
-    observer_ptr<ISkyAtmosphereLutProvider> sky_atmo_lut_provider = nullptr,
     observer_ptr<ISkyCaptureProvider> sky_capture_provider = nullptr);
 
   OXGN_RNDR_API ~EnvironmentStaticDataManager();
@@ -97,8 +99,8 @@ public:
 
    @param context Render context for the current frame.
   */
-  OXGN_RNDR_API auto UpdateIfNeeded(
-    renderer::RendererTag tag, const RenderContext& context) -> void;
+  OXGN_RNDR_API auto UpdateIfNeeded(renderer::RendererTag tag,
+    const RenderContext& context, ViewId view_id) -> void;
 
   //! Enforce resource state barriers for owned textures (e.g. BRDF LUT).
   /*!
@@ -109,25 +111,18 @@ public:
     -> void;
 
   //! Request an IBL regeneration on the next frame.
-  OXGN_RNDR_API auto RequestIblRegeneration() noexcept -> void;
+  OXGN_RNDR_API auto RequestIblRegeneration(ViewId view_id) noexcept -> void;
 
   //! Returns true if an IBL regeneration has been requested.
-  [[nodiscard]] auto IsIblRegenerationRequested() const noexcept -> bool
-  {
-    return ibl_regeneration_requested_;
-  }
+  [[nodiscard]] auto IsIblRegenerationRequested(ViewId view_id) const noexcept
+    -> bool;
 
   //! Clears the IBL regeneration request flag.
-  auto MarkIblRegenerationClean() noexcept -> void
-  {
-    ibl_regeneration_requested_ = false;
-  }
+  auto MarkIblRegenerationClean(ViewId view_id) noexcept -> void;
 
   //! Shader-visible SRV index for the environment static data.
-  [[nodiscard]] auto GetSrvIndex() const noexcept -> ShaderVisibleIndex
-  {
-    return srv_index_;
-  }
+  [[nodiscard]] auto GetSrvIndex(ViewId view_id) const noexcept
+    -> ShaderVisibleIndex;
 
   //! Returns the BRDF LUT texture if available.
   [[nodiscard]] auto GetBrdfLutTexture() const noexcept
@@ -146,15 +141,11 @@ public:
   }
 
   //! Returns the current SkyLight cubemap slot.
+  [[nodiscard]] auto GetSkyLightCubemapSlot(ViewId view_id) const noexcept
+    -> ShaderVisibleIndex;
+  //! Returns the current SkyLight cubemap slot for the active view.
   [[nodiscard]] auto GetSkyLightCubemapSlot() const noexcept
-    -> ShaderVisibleIndex
-  {
-    if ((cpu_snapshot_.sky_light.enabled != 0U)
-      && cpu_snapshot_.sky_light.cubemap_slot.IsValid()) {
-      return ShaderVisibleIndex { cpu_snapshot_.sky_light.cubemap_slot.value };
-    }
-    return kInvalidShaderVisibleIndex;
-  }
+    -> ShaderVisibleIndex;
 
   //! Returns the sky light IBL radiance scale.
   [[nodiscard]] auto GetSkyLightRadianceScale() const noexcept -> float
@@ -164,16 +155,17 @@ public:
       : 1.0F;
   }
 
+  [[nodiscard]] auto IsSkyLightCapturedSceneSource(ViewId view_id) const noexcept
+    -> bool;
+  [[nodiscard]] auto IsSkyLightCapturedSceneSource() const noexcept -> bool
+  ;
+
   //! Returns the current SkySphere cubemap slot.
+  [[nodiscard]] auto GetSkySphereCubemapSlot(ViewId view_id) const noexcept
+    -> ShaderVisibleIndex;
+  //! Returns the current SkySphere cubemap slot for the active view.
   [[nodiscard]] auto GetSkySphereCubemapSlot() const noexcept
-    -> ShaderVisibleIndex
-  {
-    if ((cpu_snapshot_.sky_sphere.enabled != 0U)
-      && cpu_snapshot_.sky_sphere.cubemap_slot.IsValid()) {
-      return ShaderVisibleIndex { cpu_snapshot_.sky_sphere.cubemap_slot.value };
-    }
-    return kInvalidShaderVisibleIndex;
-  }
+    -> ShaderVisibleIndex;
 
   //! Returns the sky sphere intensity multiplier.
   [[nodiscard]] auto GetSkySphereIntensity() const noexcept -> float
@@ -183,6 +175,17 @@ public:
       : 1.0F;
   }
 
+  //! Returns current sky-capture generation for a view.
+  [[nodiscard]] auto GetSkyCaptureGeneration(ViewId view_id) const noexcept
+    -> std::uint64_t
+  {
+    return sky_capture_provider_
+      ? sky_capture_provider_->GetCaptureGeneration(view_id)
+      : 0ULL;
+  }
+
+  auto EraseViewState(ViewId view_id) -> void;
+
 private:
   static constexpr std::uint32_t kStrideBytes
     = static_cast<std::uint32_t>(sizeof(EnvironmentStaticData));
@@ -191,16 +194,45 @@ private:
   observer_ptr<renderer::resources::IResourceBinder> texture_binder_;
   observer_ptr<IBrdfLutProvider> brdf_lut_provider_;
   observer_ptr<IIblProvider> ibl_provider_;
-  observer_ptr<ISkyAtmosphereLutProvider> sky_lut_provider_;
   observer_ptr<ISkyCaptureProvider> sky_capture_provider_;
   frame::Slot current_slot_ { frame::kInvalidSlot };
+  ViewId active_view_id_ {};
 
   // Last frame identity observed by UpdateIfNeeded(). Used only for logging to
   // correlate uploads and publication with the renderer's frame lifecycle.
   frame::Slot last_update_frame_slot_ { frame::kInvalidSlot };
   frame::SequenceNumber last_update_frame_sequence_ { 0 };
 
+  struct ViewState {
+    EnvironmentStaticData cpu_snapshot {};
+    EnvironmentStaticData published_snapshot {};
+    bool has_published_snapshot { false };
+    std::uint64_t snapshot_id { 1 };
+    std::array<std::uint64_t, frame::kFramesInFlight.get()> slot_uploaded_id {};
+    std::uint64_t last_capture_generation { 0 };
+    std::uint64_t last_published_atmo_content_version { 0 };
+    std::uint64_t last_warned_capture_missing_source_generation { 0 };
+    std::uint64_t last_warned_capture_outputs_not_ready_generation { 0 };
+    std::uint64_t last_warned_capture_stale_ibl_generation { 0 };
+    std::uint64_t last_observed_ibl_source_content_version { 0 };
+    EnvironmentStaticData last_coherent_snapshot {};
+    bool has_last_coherent_snapshot { false };
+    uint32_t incoherent_frame_count { 0 };
+    frame::SequenceNumber last_incoherent_logged_sequence { 0 };
+    bool ibl_matches_capture_content { true };
+    bool use_last_coherent_fallback { false };
+    bool coherence_threshold_crossed { false };
+    bool ibl_regeneration_requested { false };
+    std::shared_ptr<graphics::Buffer> buffer;
+    void* mapped_ptr { nullptr };
+    graphics::NativeView srv_view;
+    ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
+  };
+  std::unordered_map<ViewId, ViewState> view_states_;
+
   EnvironmentStaticData cpu_snapshot_ {};
+  EnvironmentStaticData published_snapshot_ {};
+  bool has_published_snapshot_ { false };
   // Monotonic snapshot id and per-slot uploaded snapshot ids.
   // When the CPU snapshot changes, increment `snapshot_id_` so every slot
   // becomes implicitly dirty. Each slot records the snapshot id it last
@@ -209,6 +241,19 @@ private:
   std::array<std::uint64_t, frame::kFramesInFlight.get()> slot_uploaded_id_ {};
 
   std::uint64_t last_capture_generation_ { 0 };
+  std::uint64_t last_published_atmo_content_version_ { 0 };
+  std::uint64_t last_warned_capture_missing_source_generation_ { 0 };
+  std::uint64_t last_warned_capture_outputs_not_ready_generation_ { 0 };
+  std::uint64_t last_warned_capture_stale_ibl_generation_ { 0 };
+  std::uint64_t last_observed_ibl_source_content_version_ { 0 };
+  EnvironmentStaticData last_coherent_snapshot_ {};
+  bool has_last_coherent_snapshot_ { false };
+  uint32_t incoherent_frame_count_ { 0 };
+  frame::SequenceNumber last_incoherent_logged_sequence_ { 0 };
+  bool ibl_matches_capture_content_ { true };
+  bool use_last_coherent_fallback_ { false };
+  bool coherence_threshold_crossed_ { false };
+  bool current_snapshot_coherent_ { true };
   bool ibl_regeneration_requested_ { false };
 
   std::shared_ptr<graphics::Buffer> buffer_;
@@ -222,13 +267,15 @@ private:
 
   // Build helpers split out of the original monolithic method.
   auto BuildFromSceneEnvironment(
-    observer_ptr<const scene::SceneEnvironment> env) -> void;
+    observer_ptr<const scene::SceneEnvironment> env,
+    observer_ptr<ISkyAtmosphereLutProvider> sky_lut_provider) -> void;
 
   auto ProcessBrdfLut() -> void;
   auto PopulateFog(observer_ptr<const scene::SceneEnvironment> env,
     EnvironmentStaticData& next) -> void;
   auto PopulateAtmosphere(observer_ptr<const scene::SceneEnvironment> env,
-    EnvironmentStaticData& next) -> void;
+    EnvironmentStaticData& next,
+    observer_ptr<ISkyAtmosphereLutProvider> sky_lut_provider) -> void;
   auto PopulateSkyLight(observer_ptr<const scene::SceneEnvironment> env,
     EnvironmentStaticData& next) -> void;
   auto PopulateSkySphere(observer_ptr<const scene::SceneEnvironment> env,
@@ -240,9 +287,13 @@ private:
   auto PopulatePostProcess(observer_ptr<const scene::SceneEnvironment> env,
     EnvironmentStaticData& next) -> void;
   auto UploadIfNeeded() -> void;
+  auto RefreshCoherentSnapshotState() -> void;
 
   auto EnsureResourcesCreated() -> void;
   auto MarkAllSlotsDirty() -> void;
+  auto LoadViewState(ViewId view_id) -> void;
+  auto StoreViewState(ViewId view_id) -> void;
+  auto GetOrCreateViewState(ViewId view_id) -> ViewState&;
 
   [[nodiscard]] auto CurrentSlotIndex() const noexcept -> std::uint32_t
   {

@@ -116,46 +116,30 @@ static_assert(std::is_standard_layout_v<DensityProfile>);
 static_assert(sizeof(DensityLayer) == 16); // NOLINT(*-magic-numbers)
 static_assert(sizeof(DensityProfile) == 32); // NOLINT(*-magic-numbers)
 
-//! Creates a 2-layer linear ozone density profile.
-/*!
- The profile follows the piecewise linear distribution commonly used in
- real-time sky models:
-
- - `bottom_m` to `peak_m`: linear increase (0.0 -> 1.0)
- - `peak_m` to `top_m`: linear decrease (1.0 -> 0.0)
- - below `bottom_m` and above `top_m`: density clamps to 0.0
-*/
-[[nodiscard]] constexpr auto MakeOzoneTwoLayerLinearDensityProfile(
-  const float bottom_m, const float peak_m, const float top_m) noexcept
-  -> DensityProfile
-{
-  const float denom_below = peak_m - bottom_m;
-  const float denom_above = top_m - peak_m;
-
-  const float slope_below = (denom_below > 0.0F) ? (1.0F / denom_below) : 0.0F;
-  const float slope_above = (denom_above > 0.0F) ? (-1.0F / denom_above) : 0.0F;
-
-  return DensityProfile {
-    .layers = {
-      DensityLayer {
-        .width_m = peak_m,
-        .exp_term = 0.0F,
-        .linear_term = slope_below,
-        .constant_term = -bottom_m * slope_below,
-      },
-      DensityLayer {
-        .width_m = 0.0F,
-        .exp_term = 0.0F,
-        .linear_term = slope_above,
-        .constant_term = (denom_above > 0.0F) ? (top_m / denom_above) : 0.0F,
-      },
-    },
-  };
-}
-
 //! Default ozone density profile (2-layer tent).
-inline constexpr DensityProfile kDefaultOzoneDensityProfile
-  = MakeOzoneTwoLayerLinearDensityProfile(
-    kDefaultOzoneBottomM, kDefaultOzonePeakM, kDefaultOzoneTopM);
+/*!
+ Ozone tent profile used by the renderer:
+ - [10km, 25km]:   d(h) =  (1/15000) * h - 2/3
+ - [25km, 40km]:   d(h) = -(1/15000) * h + 8/3
+ Density is saturated in shader to [0, 1].
+*/
+inline constexpr DensityProfile kDefaultOzoneDensityProfile {
+  .layers = {
+    DensityLayer {
+      .width_m = kDefaultOzonePeakM,
+      .exp_term = 0.0F,
+      .linear_term = 1.0F / (kDefaultOzonePeakM - kDefaultOzoneBottomM),
+      .constant_term = -kDefaultOzoneBottomM
+        / (kDefaultOzonePeakM - kDefaultOzoneBottomM),
+    },
+    DensityLayer {
+      .width_m = 0.0F,
+      .exp_term = 0.0F,
+      .linear_term = -1.0F / (kDefaultOzoneTopM - kDefaultOzonePeakM),
+      .constant_term = kDefaultOzoneTopM
+        / (kDefaultOzoneTopM - kDefaultOzonePeakM),
+    },
+  },
+};
 
 } // namespace oxygen::engine::atmos

@@ -942,6 +942,7 @@ auto MainModule::UpdateComposition(
 
   // Create the main scene view intent
   auto main_comp = CompositionView::ForScene(main_view_id_, view, main_camera_);
+  main_comp.with_atmosphere = true;
   shell.OnMainViewReady(context, main_comp);
   views.push_back(std::move(main_comp));
 

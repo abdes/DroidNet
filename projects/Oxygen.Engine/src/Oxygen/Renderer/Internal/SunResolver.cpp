@@ -11,6 +11,7 @@
 #include <glm/common.hpp>
 #include <glm/geometric.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Renderer/Internal/SunResolver.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -125,16 +126,18 @@ auto ResolveSunForView(scene::Scene& scene,
           auto light_opt = node.GetLightAs<scene::DirectionalLight>();
           if (!light_opt) {
             sun->ClearLightReference();
-            return SyntheticSunData::FromDirectionAndLight(
-              sun->GetDirectionWs(), sun->GetColorRgb(),
-              sun->GetIlluminanceLx(), true);
+            LOG_F(ERROR,
+              "SunResolver: SunSource::kFromScene has invalid light reference "
+              "(node has no DirectionalLight); reference cleared");
+            return kNoSun;
           }
 
           const auto direction_opt = ComputeDirectionToSun(node);
           if (!direction_opt) {
-            return SyntheticSunData::FromDirectionAndLight(
-              sun->GetDirectionWs(), sun->GetColorRgb(),
-              sun->GetIlluminanceLx(), true);
+            LOG_F(ERROR,
+              "SunResolver: SunSource::kFromScene has invalid light direction "
+              "(node transform produced zero-length direction)");
+            return kNoSun;
           }
 
           const auto& light = light_opt->get();
@@ -144,12 +147,17 @@ auto ResolveSunForView(scene::Scene& scene,
           return SyntheticSunData::FromDirectionAndLight(
             *direction_opt, color, light.GetIntensityLux(), true);
         }
+
+        LOG_F(ERROR,
+          "SunResolver: SunSource::kFromScene has stale light reference "
+          "(node is not alive)");
+        return kNoSun;
       }
 
-      const glm::vec3* color_override
-        = sun->HasLightTemperature() ? &sun->GetColorRgb() : nullptr;
-      return ResolveSunFromSelection(
-        SelectSunLight(directional_lights), color_override);
+      LOG_F(ERROR,
+        "SunResolver: SunSource::kFromScene has no bound scene light "
+        "(missing Sun light reference)");
+      return kNoSun;
     }
   }
 

@@ -41,6 +41,7 @@ class RenderPass;
 namespace internal {
   class EnvironmentDynamicDataManager;
   class GpuDebugManager;
+  class SkyAtmosphereLutManager;
 }
 
 //=== Pass Type List and Compile-Time Indexing ===----------------------------//
@@ -156,6 +157,7 @@ struct RenderContext {
     oxygen::ViewId view_id {};
     observer_ptr<const oxygen::ResolvedView> resolved_view;
     observer_ptr<const struct PreparedSceneFrame> prepared_frame;
+    observer_ptr<internal::SkyAtmosphereLutManager> atmo_lut_manager;
   };
 
   //! Active view iteration state for the currently-executing view.

@@ -473,7 +473,20 @@ auto DemoShell::UpdatePanels() -> void
   runtime_config.on_atmosphere_params_changed = nullptr;
   runtime_config.on_exposure_changed
     = [] { LOG_F(INFO, "Exposure settings changed"); };
-  impl_->environment_settings_service.SetRuntimeConfig(runtime_config);
+  if (impl_->demo_shell_ui) {
+    if (const auto env_vm = impl_->demo_shell_ui->GetEnvironmentVm()) {
+      env_vm->SetRuntimeConfig(runtime_config);
+    } else {
+      // Fallback for configurations without the environment panel/VM.
+      impl_->environment_settings_service.SetRuntimeConfig(runtime_config);
+      DLOG_F(WARNING,
+        "DemoShell: EnvironmentVm unavailable; routed runtime config directly to EnvironmentSettingsService");
+    }
+  } else {
+    impl_->environment_settings_service.SetRuntimeConfig(runtime_config);
+    DLOG_F(WARNING,
+      "DemoShell: DemoShellUi unavailable; routed runtime config directly to EnvironmentSettingsService");
+  }
 }
 
 auto DemoShell::OnSceneActivated(scene::Scene& scene) -> void

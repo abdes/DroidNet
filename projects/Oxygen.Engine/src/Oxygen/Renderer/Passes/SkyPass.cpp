@@ -271,7 +271,8 @@ auto SkyPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
   LOG_SCOPE_FUNCTION(2);
 
-  // Bind SceneConstants (b1) so shader can load EnvironmentStaticData correctly.
+  // Bind SceneConstants (b1) so shader can load EnvironmentStaticData
+  // correctly.
   if (Context().scene_constants == nullptr) {
     LOG_F(ERROR, "SkyPass: SceneConstants not bound; skipping draw");
     co_return;

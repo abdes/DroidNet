@@ -33,9 +33,6 @@ namespace oxygen::engine {
 
 //! Configuration for the sky atmosphere LUT compute pass.
 struct SkyAtmosphereLutComputePassConfig {
-  //! Manager that owns the LUT textures and tracks dirty state.
-  observer_ptr<internal::SkyAtmosphereLutManager> lut_manager { nullptr };
-
   //! Optional name for debugging purposes.
   std::string debug_name { "SkyAtmosphereLutComputePass" };
 };

@@ -74,6 +74,7 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
 
   const auto env_manager
     = Context().GetRenderer().GetEnvironmentStaticDataManager();
+  const auto view_id = Context().current_view.view_id;
   if (!env_manager) {
     if (!logged_missing_env_manager_) {
       LOG_F(WARNING,
@@ -97,11 +98,13 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
   const auto source_slot = ResolveSourceCubemapSlot();
   if (source_slot == kInvalidShaderVisibleIndex) {
     if (!logged_missing_source_slot_) {
-      const auto sky_light_slot = env_manager->GetSkyLightCubemapSlot();
-      const auto sky_sphere_slot = env_manager->GetSkySphereCubemapSlot();
-      const auto env_static_srv = env_manager->GetSrvIndex();
+      const auto sky_light_slot = env_manager->GetSkyLightCubemapSlot(view_id);
+      const auto sky_sphere_slot = env_manager->GetSkySphereCubemapSlot(view_id);
+      const auto env_static_srv
+        = env_manager->GetSrvIndex(Context().current_view.view_id);
       LOG_F(WARNING,
-        "IblComputePass: No environment cubemap source slot (frame_slot={} frame_seq={} "
+        "IblComputePass: No environment cubemap source slot (frame_slot={} "
+        "frame_seq={} "
         "SkyLight={} SkySphere={} EnvStaticSRV={} ExplicitSourceValid={} "
         "ExplicitSource={}); IBL will be black",
         Context().frame_slot.get(), Context().frame_sequence.get(),
@@ -113,7 +116,7 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
   }
   logged_missing_source_slot_ = false;
 
-  if (!ibl_manager->EnsureResourcesCreated()) {
+  if (!ibl_manager->EnsureResourcesCreatedForView(view_id)) {
     LOG_F(WARNING, "IblComputePass: Failed to ensure IBL resources");
     co_return;
   }
@@ -121,16 +124,18 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
   const bool regeneration_requested
     = regeneration_requested_.load(std::memory_order_acquire);
 
-  const auto current_outputs = ibl_manager->QueryOutputsFor(source_slot);
+  const auto current_outputs
+    = ibl_manager->QueryOutputsFor(view_id, source_slot);
   if (current_outputs.irradiance.IsValid()
     && current_outputs.prefilter.IsValid() && !regeneration_requested) {
     co_return;
   }
 
   LOG_F(INFO,
-    "IblComputePass: Regenerating IBL (frame_slot={} frame_seq={} env_srv={} source={})",
+    "IblComputePass: Regenerating IBL (frame_slot={} frame_seq={} env_srv={} "
+    "source={})",
     Context().frame_slot.get(), Context().frame_sequence.get(),
-    env_manager->GetSrvIndex().get(), source_slot.get());
+    env_manager->GetSrvIndex(view_id).get(), source_slot.get());
 
   LOG_F(2, "IblComputePass: targets (irr_srv={}, pref_srv={})",
     current_outputs.irradiance.get(), current_outputs.prefilter.get());
@@ -157,18 +162,34 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
   // artists tweak intensity.
   constexpr float source_intensity = 1.0F;
 
-  DispatchIrradiance(recorder, *ibl_manager, source_slot, source_intensity);
-  DispatchPrefilter(recorder, *ibl_manager, source_slot, source_intensity);
+  DispatchIrradiance(
+    recorder, *ibl_manager, view_id, source_slot, source_intensity);
+  DispatchPrefilter(
+    recorder, *ibl_manager, view_id, source_slot, source_intensity);
 
   recorder.FlushBarriers();
+  std::uint64_t source_content_version = 0ULL;
+  const auto view_sky_light_slot = env_manager->GetSkyLightCubemapSlot(view_id);
+  if (env_manager->IsSkyLightCapturedSceneSource(view_id)
+    && source_slot == view_sky_light_slot) {
+    source_content_version = env_manager->GetSkyCaptureGeneration(view_id);
+    if (source_content_version == 0ULL) {
+      LOG_F(ERROR,
+        "IblComputePass: captured-scene IBL regeneration has zero source content "
+        "version (view={} source={})",
+        view_id.get(), source_slot.get());
+    }
+  }
+
   auto tag = oxygen::engine::internal::IblPassTagFactory::Get();
-  ibl_manager->MarkGenerated(tag, source_slot);
+  ibl_manager->MarkGenerated(
+    tag, view_id, source_slot, source_content_version);
 
   if (regeneration_requested) {
     regeneration_requested_.store(false, std::memory_order_release);
   }
 
-  const auto final_outputs = ibl_manager->QueryOutputsFor(source_slot);
+  const auto final_outputs = ibl_manager->QueryOutputsFor(view_id, source_slot);
   LOG_F(INFO,
     "IblComputePass: IBL generated (source={}, irr_srv={}, pref_srv={})",
     source_slot.get(), final_outputs.irradiance.get(),
@@ -276,12 +297,14 @@ auto IblComputePass::ResolveSourceCubemapSlot() const noexcept
     return kInvalidShaderVisibleIndex;
   }
 
-  const auto sky_light_slot = env_manager->GetSkyLightCubemapSlot();
+  const auto sky_light_slot
+    = env_manager->GetSkyLightCubemapSlot(Context().current_view.view_id);
   if (sky_light_slot.IsValid()) {
     return sky_light_slot;
   }
 
-  const auto sky_sphere_slot = env_manager->GetSkySphereCubemapSlot();
+  const auto sky_sphere_slot
+    = env_manager->GetSkySphereCubemapSlot(Context().current_view.view_id);
   if (sky_sphere_slot.IsValid()) {
     return sky_sphere_slot;
   }
@@ -290,18 +313,18 @@ auto IblComputePass::ResolveSourceCubemapSlot() const noexcept
 }
 
 auto IblComputePass::DispatchIrradiance(graphics::CommandRecorder& recorder,
-  internal::IblManager& ibl, const ShaderVisibleIndex source_slot,
-  const float source_intensity) -> void
+  internal::IblManager& ibl, const ViewId view_id,
+  const ShaderVisibleIndex source_slot, const float source_intensity) -> void
 {
   auto tag = oxygen::engine::internal::IblPassTagFactory::Get();
 
-  auto target = ibl.GetIrradianceMap(tag);
+  auto target = ibl.GetIrradianceMap(tag, view_id);
   if (!target) {
     LOG_F(WARNING, "IblComputePass: irradiance target texture missing");
     return;
   }
 
-  const auto uav_slot = ibl.GetIrradianceMapUavSlot(tag);
+  const auto uav_slot = ibl.GetIrradianceMapUavSlot(tag, view_id);
   if (uav_slot == kInvalidShaderVisibleIndex) {
     LOG_F(WARNING, "IblComputePass: irradiance UAV slot missing");
     return;
@@ -365,12 +388,12 @@ auto IblComputePass::DispatchIrradiance(graphics::CommandRecorder& recorder,
 }
 
 auto IblComputePass::DispatchPrefilter(graphics::CommandRecorder& recorder,
-  internal::IblManager& ibl, const ShaderVisibleIndex source_slot,
-  const float source_intensity) -> void
+  internal::IblManager& ibl, const ViewId view_id,
+  const ShaderVisibleIndex source_slot, const float source_intensity) -> void
 {
   auto tag = oxygen::engine::internal::IblPassTagFactory::Get();
 
-  auto target = ibl.GetPrefilterMap(tag);
+  auto target = ibl.GetPrefilterMap(tag, view_id);
   if (!target) {
     LOG_F(WARNING, "IblComputePass: prefilter target texture missing");
     return;
@@ -423,7 +446,7 @@ auto IblComputePass::DispatchPrefilter(graphics::CommandRecorder& recorder,
       ? static_cast<float>(mip) / static_cast<float>(mips - 1U)
       : 0.0F;
 
-    const auto uav_slot = ibl.GetPrefilterMapUavSlot(tag, mip);
+    const auto uav_slot = ibl.GetPrefilterMapUavSlot(tag, view_id, mip);
     if (uav_slot == kInvalidShaderVisibleIndex) {
       LOG_F(
         WARNING, "IblComputePass: prefilter UAV slot missing for mip {}", mip);

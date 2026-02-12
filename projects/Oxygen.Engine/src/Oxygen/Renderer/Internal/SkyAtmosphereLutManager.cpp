@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cmath>
 
 #include <fmt/format.h>
 
@@ -50,11 +51,61 @@ auto SkyAtmosphereLutManager::UpdateParameters(
 {
   const auto new_params = ExtractCachedParams(params);
 
-  if (new_params == cached_params_) {
+  const auto almost_equal = [](const float a, const float b) -> bool {
+    constexpr float kEpsilon = 1e-4F;
+    const float scale = std::max(1.0F, std::max(std::abs(a), std::abs(b)));
+    return std::abs(a - b) <= (kEpsilon * scale);
+  };
+  const auto density_equal = [&](const auto& a, const auto& b) -> bool {
+    for (size_t i = 0; i < a.layers.size(); ++i) {
+      if (!almost_equal(a.layers[i].width_m, b.layers[i].width_m)
+        || !almost_equal(a.layers[i].exp_term, b.layers[i].exp_term)
+        || !almost_equal(a.layers[i].linear_term, b.layers[i].linear_term)
+        || !almost_equal(a.layers[i].constant_term, b.layers[i].constant_term)) {
+        return false;
+      }
+    }
+    return true;
+  };
+  const auto params_equivalent = [&](const auto& a, const auto& b) -> bool {
+    return almost_equal(a.planet_radius_m, b.planet_radius_m)
+      && almost_equal(a.atmosphere_height_m, b.atmosphere_height_m)
+      && almost_equal(a.rayleigh_scale_height_m, b.rayleigh_scale_height_m)
+      && almost_equal(a.mie_scale_height_m, b.mie_scale_height_m)
+      && almost_equal(a.mie_g, b.mie_g)
+      && almost_equal(a.multi_scattering_factor, b.multi_scattering_factor)
+      && almost_equal(a.rayleigh_r, b.rayleigh_r)
+      && almost_equal(a.rayleigh_g, b.rayleigh_g)
+      && almost_equal(a.rayleigh_b, b.rayleigh_b)
+      && almost_equal(a.mie_r, b.mie_r)
+      && almost_equal(a.mie_g_val, b.mie_g_val)
+      && almost_equal(a.mie_b, b.mie_b)
+      && almost_equal(a.absorption_r, b.absorption_r)
+      && almost_equal(a.absorption_g, b.absorption_g)
+      && almost_equal(a.absorption_b, b.absorption_b)
+      && almost_equal(a.ground_albedo_r, b.ground_albedo_r)
+      && almost_equal(a.ground_albedo_g, b.ground_albedo_g)
+      && almost_equal(a.ground_albedo_b, b.ground_albedo_b)
+      && density_equal(a.absorption_density, b.absorption_density)
+      && a.sky_view_slices == b.sky_view_slices
+      && a.sky_view_alt_mapping_mode == b.sky_view_alt_mapping_mode
+      && a.sun_disk_enabled == b.sun_disk_enabled
+      && almost_equal(
+        a.sun_disk_angular_radius_radians, b.sun_disk_angular_radius_radians)
+      && almost_equal(a.aerial_perspective_distance_scale,
+        b.aerial_perspective_distance_scale)
+      && a.enabled == b.enabled;
+  };
+
+  if (params_equivalent(new_params, cached_params_)) {
     return;
   }
 
   cached_params_ = new_params;
+  if (dirty_) {
+    // A regen is already pending; coalesce this change into the pending request.
+    return;
+  }
   dirty_ = true;
   ++generation_;
 
@@ -68,15 +119,15 @@ auto SkyAtmosphereLutManager::UpdateParameters(
 auto SkyAtmosphereLutManager::UpdateSunState(
   const SyntheticSunData& sun) noexcept -> void
 {
-  constexpr auto kEpsilon = 0.001F;
-  const bool elevation_changed = sun_state_.ElevationDiffers(sun, kEpsilon);
-  const bool enabled_changed = sun_state_.enabled != sun.enabled;
-  const bool illuminance_changed
-    = std::abs(sun_state_.GetIlluminance() - sun.GetIlluminance()) > kEpsilon;
-
-  if (elevation_changed || enabled_changed || illuminance_changed) {
+  // Sun-driven LUT invalidation must react to the full resolved sun state
+  // (direction, color, intensity, enabled), not just selected fields.
+  constexpr float kSunStateEpsilon = 1e-5F;
+  const bool sun_state_changed = !sun_state_.ApproxEquals(sun, kSunStateEpsilon);
+  if (sun_state_changed) {
+    if (!dirty_) {
+      ++generation_;
+    }
     dirty_ = true;
-    ++generation_;
   }
 
   sun_state_ = sun;
@@ -784,8 +835,10 @@ auto SkyAtmosphereLutManager::SetSkyViewLutSlices(uint32_t slices) -> void
     luts_generated_ = false;
   }
 
+  if (!dirty_) {
+    ++generation_;
+  }
   dirty_ = true;
-  ++generation_;
   LOG_F(INFO, "SkyAtmosphereLutManager: sky_view_slices changed to {}", slices);
 }
 
@@ -796,8 +849,10 @@ auto SkyAtmosphereLutManager::SetAltMappingMode(uint32_t mode) -> void
   }
 
   config_.sky_view_alt_mapping_mode = mode;
+  if (!dirty_) {
+    ++generation_;
+  }
   dirty_ = true;
-  ++generation_;
   LOG_F(INFO, "SkyAtmosphereLutManager: alt_mapping_mode changed to {}", mode);
 }
 

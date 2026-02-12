@@ -197,10 +197,18 @@ public:
   auto SetUseLut(bool enabled) -> void;
 
 private:
+  auto MaybeApplyStartupPreset(const EnvironmentRuntimeConfig& config) -> void;
+
   observer_ptr<EnvironmentSettingsService> service_;
   observer_ptr<PostProcessSettingsService> post_process_service_;
   observer_ptr<FileBrowserService> file_browser_ { nullptr };
   FileBrowserService::RequestId skybox_browse_request_id_ { 0 };
+  scene::Scene* runtime_scene_ { nullptr };
+  scene::Scene* last_runtime_config_scene_ { nullptr };
+  SkyboxService* last_runtime_config_skybox_service_ { nullptr };
+  engine::Renderer* last_runtime_config_renderer_ { nullptr };
+  bool runtime_config_initialized_ { false };
+  bool startup_preset_applied_ { false };
 };
 
 } // namespace oxygen::examples::ui
