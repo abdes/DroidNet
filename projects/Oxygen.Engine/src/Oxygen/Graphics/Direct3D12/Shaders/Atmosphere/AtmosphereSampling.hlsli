@@ -459,22 +459,28 @@ float3 ComputeSunDisk(
         return float3(0.0, 0.0, 0.0);
     }
 
-    // Cosine of angle between view and sun direction.
-    float cos_angle = dot(view_dir, sun_dir);
+    // Angle between view and sun direction.
+    float cos_angle = clamp(dot(view_dir, sun_dir), -1.0, 1.0);
+    float sun_angle = acos(cos_angle);
     float cos_sun_radius = cos(angular_radius_radians);
 
-    // Early out if not looking at sun disk
-    if (cos_angle < cos_sun_radius - 0.01)
+    // Sun disk edge in angle space. The previous implementation applied
+    // an angular softness directly in cosine space, which excessively
+    // widened the penumbra and produced a blurry "blob" sun disk.
+    float edge_softness = max(kSunDiskEdgeSoftness, kAtmosphereEpsilon);
+    float max_visible_angle = angular_radius_radians + edge_softness;
+
+    // Early out when fully outside the softened disk.
+    if (sun_angle >= max_visible_angle)
     {
         return float3(0.0, 0.0, 0.0);
     }
 
-    // Sun disk with soft edge (anti-aliasing).
-    float edge_softness = kSunDiskEdgeSoftness;
-    float disk_factor = smoothstep(
-        cos_sun_radius - edge_softness,
-        cos_sun_radius + edge_softness,
-        cos_angle);
+    // Disk factor: 1 inside geometric radius, smoothly fades over edge band.
+    float disk_factor = 1.0 - smoothstep(
+        angular_radius_radians,
+        max_visible_angle,
+        sun_angle);
 
     // The sun_illuminance parameter is the sun's illuminance (Lux). To get the
     // radiance (Nits) for the sun disk, we must divide by the solid angle of
