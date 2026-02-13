@@ -3,10 +3,11 @@
   "content_loader": 57345,
   "demo_panel": 57346,
   "environment": 57347,
-  "hdr_tonemap": 57348,
-  "lighting": 57349,
-  "render_solid": 57350,
-  "render_wireframe": 57351,
-  "rendering": 57352,
-  "settings": 57353
+  "grid_2x2": 57348,
+  "hdr_tonemap": 57349,
+  "lighting": 57350,
+  "render_solid": 57351,
+  "render_wireframe": 57352,
+  "rendering": 57353,
+  "settings": 57354
 }
