@@ -2,7 +2,7 @@
 # The cube's vertex/index data is embedded inline (data_hex) and matches
 # oxygen::data::MakeCubeMeshAsset() (see src/Oxygen/Data/Procedural/Cube.cpp).
 
-version: 3
+version: 4
 content_version: 1
 
 buffers:

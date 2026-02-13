@@ -34,6 +34,7 @@ enum class TextureIndexMode : std::uint8_t {
   kFallback = 0,
   kForcedError = 1,
   kCustom = 2,
+  kProceduralGrid = 3,
 };
 
 //! Texture state for a single sample object.

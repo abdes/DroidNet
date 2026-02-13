@@ -301,6 +301,9 @@ auto MaterialsSandboxPanel::DrawMaterialsSection() -> void
     case oxygen::examples::textured_cube::TextureIndexMode::kCustom:
       current_mode = 3;
       break;
+    case oxygen::examples::textured_cube::TextureIndexMode::kProceduralGrid:
+      current_mode = 4;
+      break;
     case oxygen::examples::textured_cube::TextureIndexMode::kFallback:
     default:
       current_mode = 0;
@@ -343,6 +346,13 @@ auto MaterialsSandboxPanel::DrawMaterialsSection() -> void
         = oxygen::examples::textured_cube::TextureIndexMode::kCustom;
       vm_->GetSurfaceState().use_constant_base_color = false;
       break;
+    case 4: // Grid Material
+      vm_->GetSphereTextureState().mode
+        = oxygen::examples::textured_cube::TextureIndexMode::kProceduralGrid;
+      vm_->GetCubeTextureState().mode
+        = oxygen::examples::textured_cube::TextureIndexMode::kProceduralGrid;
+      vm_->GetSurfaceState().use_constant_base_color = false;
+      break;
     default:
       break;
     }
@@ -361,6 +371,9 @@ auto MaterialsSandboxPanel::DrawMaterialsSection() -> void
   }
   if (ImGui::RadioButton("Custom Texture", &current_mode, 3)) {
     apply_mode(3);
+  }
+  if (ImGui::RadioButton("Grid Material", &current_mode, 4)) {
+    apply_mode(4);
   }
 
   // Solid Color exposes the color picker

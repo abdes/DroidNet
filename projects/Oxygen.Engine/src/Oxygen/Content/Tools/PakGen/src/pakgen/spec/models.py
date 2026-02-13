@@ -157,7 +157,7 @@ class GeometryAsset:
 
 @dataclass(slots=True)
 class PakSpec:
-    version: int = 1
+    version: int = 4
     content_version: int = 0
     buffers: List[BufferResource] = field(default_factory=list)
     textures: List[TextureResource] = field(default_factory=list)
