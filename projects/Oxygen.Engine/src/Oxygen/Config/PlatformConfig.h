@@ -11,8 +11,15 @@
 namespace oxygen {
 
 struct PlatformConfig {
-  bool headless { false }; //!< Run without any windows.
-  uint32_t thread_pool_size { 0 }; //!< 0 = no thread pool.
+
+  //! When `true`, run the engine without any windows.
+  bool headless { false };
+
+  //! Number of threads to use for the thread pool. `0` means no thread pool.
+  uint32_t thread_pool_size { kDefaultThreadPoolSize };
+
+private:
+  static constexpr uint32_t kDefaultThreadPoolSize = 4;
 };
 
-} // namespace platform
+} // namespace oxygen

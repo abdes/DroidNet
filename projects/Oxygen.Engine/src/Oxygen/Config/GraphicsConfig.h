@@ -8,7 +8,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <optional>
 #include <string>
 
@@ -43,8 +42,8 @@ struct GraphicsConfig {
     mutually exclusive.
   */
   //! @{
-  std::optional<std::string> preferred_card_name {};
-  std::optional<DeviceId> preferred_card_device_id {};
+  std::optional<std::string> preferred_card_name;
+  std::optional<DeviceId> preferred_card_device_id;
   //! @}
 
   bool headless { false }; //!< Run the engine without a window.
@@ -53,7 +52,6 @@ struct GraphicsConfig {
 
   //! Backend-specific configuration as a JSON string.
   std::string extra = "{}";
-
 };
 
 //! Configuration structure passed to backends during creation. A C-compatible
