@@ -88,7 +88,7 @@ NOLINT_TEST_F(InputMappingContextTest, SimilarSlots_RoutesMouseXYToXorY)
   // Act: MouseXY dx only
   const auto ev_dx = MakeMouseMotion(6.0F, 0.0F);
   ctx.HandleInput(InputSlots::MouseXY, ev_dx);
-  ctx.Update(CanonicalDuration {});
+  [[maybe_unused]] const auto update_dx = ctx.Update(CanonicalDuration {});
 
   // Assert: only X mapping updated; Y remained untouched
   EXPECT_EQ(act_x->GetValue().GetAs<Axis1D>().x, 6.0F);
@@ -97,7 +97,7 @@ NOLINT_TEST_F(InputMappingContextTest, SimilarSlots_RoutesMouseXYToXorY)
   // Act: MouseXY dy only
   const auto ev_dy = MakeMouseMotion(0.0F, -3.0F);
   ctx.HandleInput(InputSlots::MouseXY, ev_dy);
-  ctx.Update(CanonicalDuration {});
+  [[maybe_unused]] const auto update_dy = ctx.Update(CanonicalDuration {});
   EXPECT_EQ(act_y->GetValue().GetAs<Axis1D>().x, -3.0F);
 }
 
@@ -136,7 +136,7 @@ NOLINT_TEST_F(InputMappingContextTest, SimilarSlots_RoutesMouseWheelVariants)
   // Act: dx<0, dy>0
   const auto ev = MakeMouseWheel(-2.0F, 1.0F);
   ctx.HandleInput(InputSlots::MouseWheelXY, ev);
-  ctx.Update(CanonicalDuration {});
+  [[maybe_unused]] const auto update_wheel = ctx.Update(CanonicalDuration {});
 
   // Assert: X updated (-2), Left fired, Y updated (1), Down not since dy>0
   EXPECT_EQ(ax->GetValue().GetAs<Axis1D>().x, -2.0F);
@@ -219,7 +219,7 @@ NOLINT_TEST_F(
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kPressed);
   ctx.HandleInput(InputSlots::Space, key_down);
-  ctx.Update(CanonicalDuration {});
+  [[maybe_unused]] const auto update_press = ctx.Update(CanonicalDuration {});
 
   EXPECT_TRUE(early->IsOngoing());
   EXPECT_TRUE(later->IsOngoing());
@@ -275,7 +275,8 @@ NOLINT_TEST_F(InputMappingContextTest,
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kPressed);
   ctx.HandleInput(InputSlots::Space, key_down);
-  ctx.Update(CanonicalDuration {});
+  [[maybe_unused]] const auto update_first_press
+    = ctx.Update(CanonicalDuration {});
 
   const KeyEvent key_up(Now(), kInvalidWindowId,
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
@@ -292,7 +293,8 @@ NOLINT_TEST_F(InputMappingContextTest,
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kPressed);
   ctx.HandleInput(InputSlots::Space, key2_down);
-  ctx.Update(CanonicalDuration {});
+  [[maybe_unused]] const auto update_second_press
+    = ctx.Update(CanonicalDuration {});
 
   const KeyEvent key2_up(Now(), kInvalidWindowId,
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
@@ -338,7 +340,7 @@ NOLINT_TEST_F(InputMappingContextTest,
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kPressed);
   ctx.HandleInput(InputSlots::Space, down1);
-  ctx.Update(CanonicalDuration {});
+  [[maybe_unused]] const auto update_down1 = ctx.Update(CanonicalDuration {});
 
   const KeyEvent up1(Now(), kInvalidWindowId,
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
@@ -358,7 +360,7 @@ NOLINT_TEST_F(InputMappingContextTest,
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kPressed);
   ctx.HandleInput(InputSlots::Space, down2);
-  ctx.Update(CanonicalDuration {});
+  [[maybe_unused]] const auto update_down2 = ctx.Update(CanonicalDuration {});
 
   const KeyEvent up2(Now(), kInvalidWindowId,
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
@@ -511,29 +513,33 @@ NOLINT_TEST_F(
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kPressed);
   ctxB.HandleInput(InputSlots::Space, space_down);
-  ctxB.Update(CanonicalDuration {});
+  [[maybe_unused]] const auto update_space_down
+    = ctxB.Update(CanonicalDuration {});
   EXPECT_FALSE(act_combo->IsTriggered());
   // Release to reset 'Pressed' trigger depletion
   const KeyEvent space_up(Now(), kInvalidWindowId,
     oxygen::platform::input::KeyInfo(Key::kSpace, false),
     ButtonState::kReleased);
   ctxB.HandleInput(InputSlots::Space, space_up);
-  ctxB.Update(CanonicalDuration {});
+  [[maybe_unused]] const auto update_space_up
+    = ctxB.Update(CanonicalDuration {});
 
   // Act 2: Press Shift to arm chain
   const KeyEvent shift_down(Now(), kInvalidWindowId,
     oxygen::platform::input::KeyInfo(Key::kLeftShift, false),
     ButtonState::kPressed);
   ctxA.HandleInput(InputSlots::LeftShift, shift_down);
-  ctxA.Update(CanonicalDuration {});
+  [[maybe_unused]] const auto update_shift = ctxA.Update(CanonicalDuration {});
   EXPECT_TRUE(act_shift->IsTriggered());
 
   // Give chain a chance to arm on ctxB without local press first
-  ctxB.Update(CanonicalDuration {});
+  [[maybe_unused]] const auto update_chain_arm
+    = ctxB.Update(CanonicalDuration {});
 
   // Act 3: Press Space after Shift -> combo should trigger on this update
   ctxB.HandleInput(InputSlots::Space, space_down);
-  ctxB.Update(CanonicalDuration {});
+  [[maybe_unused]] const auto update_space_again
+    = ctxB.Update(CanonicalDuration {});
   EXPECT_TRUE(act_combo->IsTriggered());
 }
 
