@@ -125,6 +125,12 @@ public:
     return desc_.flags;
   }
 
+  //! Returns whether this material uses the procedural grid feature.
+  [[nodiscard]] auto HasProceduralGrid() const noexcept -> bool
+  {
+    return (GetFlags() & pak::kMaterialFlag_ProceduralGrid) != 0u;
+  }
+
   //! Returns whether this material is double-sided.
   /*!
    Double-sided is an explicit material property (encoded in the PAK material
@@ -312,6 +318,76 @@ public:
       return texture_resource_keys_[5];
     }
     return oxygen::content::ResourceKey { 0 };
+  }
+
+  [[nodiscard]] auto GetGridSpacing() const noexcept -> std::array<float, 2>
+  {
+    return { desc_.grid_spacing[0], desc_.grid_spacing[1] };
+  }
+
+  [[nodiscard]] auto GetGridMajorEvery() const noexcept -> uint32_t
+  {
+    return desc_.grid_major_every;
+  }
+
+  [[nodiscard]] auto GetGridLineThickness() const noexcept -> float
+  {
+    return desc_.grid_line_thickness;
+  }
+
+  [[nodiscard]] auto GetGridMajorThickness() const noexcept -> float
+  {
+    return desc_.grid_major_thickness;
+  }
+
+  [[nodiscard]] auto GetGridAxisThickness() const noexcept -> float
+  {
+    return desc_.grid_axis_thickness;
+  }
+
+  [[nodiscard]] auto GetGridFadeStart() const noexcept -> float
+  {
+    return desc_.grid_fade_start;
+  }
+
+  [[nodiscard]] auto GetGridFadeEnd() const noexcept -> float
+  {
+    return desc_.grid_fade_end;
+  }
+
+  [[nodiscard]] auto GetGridMinorColor() const noexcept
+    -> std::array<float, 4>
+  {
+    return { desc_.grid_minor_color[0], desc_.grid_minor_color[1],
+      desc_.grid_minor_color[2], desc_.grid_minor_color[3] };
+  }
+
+  [[nodiscard]] auto GetGridMajorColor() const noexcept
+    -> std::array<float, 4>
+  {
+    return { desc_.grid_major_color[0], desc_.grid_major_color[1],
+      desc_.grid_major_color[2], desc_.grid_major_color[3] };
+  }
+
+  [[nodiscard]] auto GetGridAxisColorX() const noexcept
+    -> std::array<float, 4>
+  {
+    return { desc_.grid_axis_color_x[0], desc_.grid_axis_color_x[1],
+      desc_.grid_axis_color_x[2], desc_.grid_axis_color_x[3] };
+  }
+
+  [[nodiscard]] auto GetGridAxisColorY() const noexcept
+    -> std::array<float, 4>
+  {
+    return { desc_.grid_axis_color_y[0], desc_.grid_axis_color_y[1],
+      desc_.grid_axis_color_y[2], desc_.grid_axis_color_y[3] };
+  }
+
+  [[nodiscard]] auto GetGridOriginColor() const noexcept
+    -> std::array<float, 4>
+  {
+    return { desc_.grid_origin_color[0], desc_.grid_origin_color[1],
+      desc_.grid_origin_color[2], desc_.grid_origin_color[3] };
   }
 };
 

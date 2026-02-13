@@ -79,6 +79,16 @@ namespace {
     return false;
   }
 
+  if (material.HasProceduralGrid()) {
+    const auto grid_spacing = material.GetGridSpacing();
+    if (!std::isfinite(grid_spacing[0]) || !std::isfinite(grid_spacing[1])
+      || std::abs(grid_spacing[0]) <= 1e-6F
+      || std::abs(grid_spacing[1]) <= 1e-6F) {
+      error_msg = "Material grid_spacing must be finite and non-zero";
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -127,8 +137,57 @@ auto MakeMaterialKey(
   oxygen::HashCombine(
     seed, material.resolved_asset->GetAmbientOcclusionTextureKey());
 
-  oxygen::HashCombine(seed, material.resolved_asset->GetMaterialDomain());
-  oxygen::HashCombine(seed, material.resolved_asset->GetFlags());
+  const auto material_domain = material.resolved_asset->GetMaterialDomain();
+  const auto material_flags = material.resolved_asset->GetFlags();
+  oxygen::HashCombine(seed, material_domain);
+  oxygen::HashCombine(seed, material_flags);
+  if (material.resolved_asset->HasProceduralGrid()) {
+    const auto grid_spacing = material.resolved_asset->GetGridSpacing();
+    oxygen::HashCombine(seed, grid_spacing[0]);
+    oxygen::HashCombine(seed, grid_spacing[1]);
+    oxygen::HashCombine(seed, material.resolved_asset->GetGridMajorEvery());
+    oxygen::HashCombine(seed, material.resolved_asset->GetGridLineThickness());
+    oxygen::HashCombine(
+      seed, material.resolved_asset->GetGridMajorThickness());
+    oxygen::HashCombine(seed, material.resolved_asset->GetGridAxisThickness());
+    oxygen::HashCombine(seed, material.resolved_asset->GetGridFadeStart());
+    oxygen::HashCombine(seed, material.resolved_asset->GetGridFadeEnd());
+    {
+      const auto grid_minor = material.resolved_asset->GetGridMinorColor();
+      oxygen::HashCombine(seed, grid_minor[0]);
+      oxygen::HashCombine(seed, grid_minor[1]);
+      oxygen::HashCombine(seed, grid_minor[2]);
+      oxygen::HashCombine(seed, grid_minor[3]);
+    }
+    {
+      const auto grid_major = material.resolved_asset->GetGridMajorColor();
+      oxygen::HashCombine(seed, grid_major[0]);
+      oxygen::HashCombine(seed, grid_major[1]);
+      oxygen::HashCombine(seed, grid_major[2]);
+      oxygen::HashCombine(seed, grid_major[3]);
+    }
+    {
+      const auto grid_axis_x = material.resolved_asset->GetGridAxisColorX();
+      oxygen::HashCombine(seed, grid_axis_x[0]);
+      oxygen::HashCombine(seed, grid_axis_x[1]);
+      oxygen::HashCombine(seed, grid_axis_x[2]);
+      oxygen::HashCombine(seed, grid_axis_x[3]);
+    }
+    {
+      const auto grid_axis_y = material.resolved_asset->GetGridAxisColorY();
+      oxygen::HashCombine(seed, grid_axis_y[0]);
+      oxygen::HashCombine(seed, grid_axis_y[1]);
+      oxygen::HashCombine(seed, grid_axis_y[2]);
+      oxygen::HashCombine(seed, grid_axis_y[3]);
+    }
+    {
+      const auto grid_origin = material.resolved_asset->GetGridOriginColor();
+      oxygen::HashCombine(seed, grid_origin[0]);
+      oxygen::HashCombine(seed, grid_origin[1]);
+      oxygen::HashCombine(seed, grid_origin[2]);
+      oxygen::HashCombine(seed, grid_origin[3]);
+    }
+  }
 
   return static_cast<std::uint64_t>(seed);
 }
@@ -250,6 +309,43 @@ auto SerializeMaterialConstants(
   constants.uv_rotation_radians
     = material.resolved_asset->GetUvRotationRadians();
   constants.uv_set = material.resolved_asset->GetUvSet();
+
+  if (material.resolved_asset->HasProceduralGrid()) {
+    const auto grid_spacing = material.resolved_asset->GetGridSpacing();
+    constants.grid_spacing = { grid_spacing[0], grid_spacing[1] };
+    constants.grid_major_every = material.resolved_asset->GetGridMajorEvery();
+    constants.grid_line_thickness
+      = material.resolved_asset->GetGridLineThickness();
+    constants.grid_major_thickness
+      = material.resolved_asset->GetGridMajorThickness();
+    constants.grid_axis_thickness
+      = material.resolved_asset->GetGridAxisThickness();
+    constants.grid_fade_start = material.resolved_asset->GetGridFadeStart();
+    constants.grid_fade_end = material.resolved_asset->GetGridFadeEnd();
+
+    const auto grid_minor_color = material.resolved_asset->GetGridMinorColor();
+    constants.grid_minor_color = { grid_minor_color[0], grid_minor_color[1],
+      grid_minor_color[2], grid_minor_color[3] };
+
+    const auto grid_major_color = material.resolved_asset->GetGridMajorColor();
+    constants.grid_major_color = { grid_major_color[0], grid_major_color[1],
+      grid_major_color[2], grid_major_color[3] };
+
+    const auto grid_axis_color_x
+      = material.resolved_asset->GetGridAxisColorX();
+    constants.grid_axis_color_x = { grid_axis_color_x[0],
+      grid_axis_color_x[1], grid_axis_color_x[2], grid_axis_color_x[3] };
+
+    const auto grid_axis_color_y
+      = material.resolved_asset->GetGridAxisColorY();
+    constants.grid_axis_color_y = { grid_axis_color_y[0],
+      grid_axis_color_y[1], grid_axis_color_y[2], grid_axis_color_y[3] };
+
+    const auto grid_origin_color
+      = material.resolved_asset->GetGridOriginColor();
+    constants.grid_origin_color = { grid_origin_color[0],
+      grid_origin_color[1], grid_origin_color[2], grid_origin_color[3] };
+  }
 
   // Emissive: factor and texture for self-illumination / glow.
   const auto emissive_factor = material.resolved_asset->GetEmissiveFactor();

@@ -7,7 +7,7 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_MATERIALCONSTANTS_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_MATERIALCONSTANTS_HLSLI
 
-// ABI: must match sizeof(oxygen::engine::MaterialConstants) == 112
+// ABI: must match sizeof(oxygen::engine::MaterialConstants) == 224
 struct MaterialConstants
 {
     // Register 0
@@ -44,6 +44,32 @@ struct MaterialConstants
     uint uv_set;
     uint _pad0;
     uint _pad1;
+
+    // Register 7
+    float2 grid_spacing;
+    uint grid_major_every;
+    float grid_line_thickness;
+
+    // Register 8
+    float grid_major_thickness;
+    float grid_axis_thickness;
+    float grid_fade_start;
+    float grid_fade_end;
+
+    // Register 9
+    float4 grid_minor_color;
+
+    // Register 10
+    float4 grid_major_color;
+
+    // Register 11
+    float4 grid_axis_color_x;
+
+    // Register 12
+    float4 grid_axis_color_y;
+
+    // Register 13
+    float4 grid_origin_color;
 };
 
 // UV convention:
