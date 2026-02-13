@@ -130,6 +130,9 @@ constexpr uint32_t kMaterialFlag_Unlit = (1u << 3);
 //! texture.
 constexpr uint32_t kMaterialFlag_GltfOrmPacked = (1u << 4);
 
+//! Material flag indicating procedural grid shading.
+constexpr uint32_t kMaterialFlag_ProceduralGrid = (1u << 5);
+
 //! Maximum size for data blobs in bytes
 constexpr DataBlobSizeT kDataBlobMaxSize
   = (std::numeric_limits<uint32_t>::max)();
@@ -1428,11 +1431,13 @@ using namespace v3;
 constexpr uint8_t kSceneAssetVersion = v3::kSceneAssetVersion;
 
 //! Material asset descriptor version for PAK v4.
-constexpr uint8_t kMaterialAssetVersion = v3::kMaterialAssetVersion;
+constexpr uint8_t kMaterialAssetVersion = 2;
 
-//! Material asset descriptor (256 bytes) with explicit UV transform extension.
+//! Material asset descriptor (384 bytes) with explicit UV transform and
+//! procedural grid extensions.
 /*!
-  v4 replaces the trailing reserved bytes with named UV transform fields.
+  v4 replaces the trailing reserved bytes with named UV transform fields and
+  appends a procedural grid block.
 
   @see v3::MaterialAssetDesc
 */
@@ -1498,14 +1503,29 @@ struct MaterialAssetDesc {
   float uv_rotation_radians = 0.0f;
   uint8_t uv_set = 0;
 
-  uint8_t reserved[19] = {};
+  // --- Procedural grid extension (v4) ---
+  float grid_spacing[2] = { 1.0f, 1.0f };
+  uint32_t grid_major_every = 10;
+  float grid_line_thickness = 1.0f;
+  float grid_major_thickness = 2.0f;
+  float grid_axis_thickness = 2.0f;
+  float grid_fade_start = 0.0f;
+  float grid_fade_end = 0.0f;
+
+  float grid_minor_color[4] = { 0.35f, 0.35f, 0.35f, 1.0f };
+  float grid_major_color[4] = { 0.55f, 0.55f, 0.55f, 1.0f };
+  float grid_axis_color_x[4] = { 0.90f, 0.20f, 0.20f, 1.0f };
+  float grid_axis_color_y[4] = { 0.20f, 0.60f, 0.90f, 1.0f };
+  float grid_origin_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+  uint8_t reserved[35] = {};
 };
 // Followed by:
 // - Array of ShaderReferenceDesc entries in ascending set-bit order of
 //   `shader_stages` (least-significant set bit first). Count is population
 //   count of `shader_stages`.
 #pragma pack(pop)
-static_assert(sizeof(MaterialAssetDesc) == 256);
+static_assert(sizeof(MaterialAssetDesc) == 384);
 
 //! Geometry asset descriptor version for PAK v4.
 constexpr uint8_t kGeometryAssetVersion = v3::kGeometryAssetVersion;

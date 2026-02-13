@@ -69,6 +69,28 @@ class MaterialAsset:
     uv_offset: List[float] = field(default_factory=lambda: [0.0, 0.0])
     uv_rotation_radians: float = 0.0
     uv_set: int = 0
+    grid_spacing: List[float] = field(default_factory=lambda: [1.0, 1.0])
+    grid_major_every: int = 10
+    grid_line_thickness: float = 1.0
+    grid_major_thickness: float = 2.0
+    grid_axis_thickness: float = 2.0
+    grid_fade_start: float = 0.0
+    grid_fade_end: float = 0.0
+    grid_minor_color: List[float] = field(
+        default_factory=lambda: [0.35, 0.35, 0.35, 1.0]
+    )
+    grid_major_color: List[float] = field(
+        default_factory=lambda: [0.55, 0.55, 0.55, 1.0]
+    )
+    grid_axis_color_x: List[float] = field(
+        default_factory=lambda: [0.9, 0.2, 0.2, 1.0]
+    )
+    grid_axis_color_y: List[float] = field(
+        default_factory=lambda: [0.2, 0.6, 0.9, 1.0]
+    )
+    grid_origin_color: List[float] = field(
+        default_factory=lambda: [1.0, 1.0, 1.0, 1.0]
+    )
 
 
 @dataclass(slots=True)

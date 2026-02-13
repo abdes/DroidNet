@@ -3,7 +3,7 @@
     {
       "alignment": 16,
       "descriptor_offset": 2816,
-      "descriptor_size": 256,
+      "descriptor_size": 384,
       "key": "00000000000000000000000000000000",
       "name": "mat0",
       "type": "material",
@@ -12,7 +12,7 @@
     },
     {
       "alignment": 1,
-      "descriptor_offset": 3072,
+      "descriptor_offset": 3200,
       "descriptor_size": 256,
       "key": "00000000000000000000000000000000",
       "name": "geo0",
@@ -23,7 +23,7 @@
   ],
   "browse_index": {
     "entry_count": 2,
-    "offset": 3728,
+    "offset": 3856,
     "padding_before": 0,
     "size": 82,
     "string_table_size": 10
@@ -32,13 +32,13 @@
   "deterministic": true,
   "directory": {
     "asset_count": 2,
-    "offset": 3600,
+    "offset": 3728,
     "padding_before": 3,
     "size": 128
   },
-  "file_size": 4066,
+  "file_size": 4194,
   "footer": {
-    "offset": 3810,
+    "offset": 3938,
     "size": 256
   },
   "padding": {

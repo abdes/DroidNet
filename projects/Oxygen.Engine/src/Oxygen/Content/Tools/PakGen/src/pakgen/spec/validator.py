@@ -245,6 +245,54 @@ def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                     "uv_set must be in [0, 255]",
                     path + ".uv_set",
                 )
+        grid_spacing = m.get("grid_spacing")
+        if grid_spacing is not None:
+            if not isinstance(grid_spacing, list) or len(grid_spacing) != 2:
+                _err(
+                    errors,
+                    "E_TYPE",
+                    "grid_spacing must be a list of 2 floats",
+                    path + ".grid_spacing",
+                )
+        grid_major_every = m.get("grid_major_every")
+        if grid_major_every is not None and not isinstance(grid_major_every, int):
+            _err(
+                errors,
+                "E_TYPE",
+                "grid_major_every must be an int",
+                path + ".grid_major_every",
+            )
+        for field in [
+            "grid_line_thickness",
+            "grid_major_thickness",
+            "grid_axis_thickness",
+            "grid_fade_start",
+            "grid_fade_end",
+        ]:
+            val = m.get(field)
+            if val is not None and not isinstance(val, (int, float)):
+                _err(
+                    errors,
+                    "E_TYPE",
+                    f"{field} must be a number",
+                    f"{path}.{field}",
+                )
+        for field in [
+            "grid_minor_color",
+            "grid_major_color",
+            "grid_axis_color_x",
+            "grid_axis_color_y",
+            "grid_origin_color",
+        ]:
+            val = m.get(field)
+            if val is not None:
+                if not isinstance(val, list) or len(val) != 4:
+                    _err(
+                        errors,
+                        "E_TYPE",
+                        f"{field} must be a list of 4 floats",
+                        f"{path}.{field}",
+                    )
     for i, g in enumerate(geos):
         path = f"assets[{i}]"  # geometry
         if not isinstance(g, dict):

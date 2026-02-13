@@ -119,6 +119,41 @@ public:
       fmt::format("[{:.3f}, {:.3f}]", mat.uv_offset[0], mat.uv_offset[1]), 8);
     PrintUtils::Field("UV Rotation", mat.uv_rotation_radians, 8);
     PrintUtils::Field("UV Set", static_cast<int>(mat.uv_set), 8);
+    PrintUtils::Field("Grid Spacing",
+      fmt::format("[{:.3f}, {:.3f}]", mat.grid_spacing[0], mat.grid_spacing[1]),
+      8);
+    PrintUtils::Field(
+      "Grid Major Every", static_cast<int>(mat.grid_major_every), 8);
+    PrintUtils::Field("Grid Line Thickness", mat.grid_line_thickness, 8);
+    PrintUtils::Field("Grid Major Thickness", mat.grid_major_thickness, 8);
+    PrintUtils::Field("Grid Axis Thickness", mat.grid_axis_thickness, 8);
+    PrintUtils::Field("Grid Fade Start", mat.grid_fade_start, 8);
+    PrintUtils::Field("Grid Fade End", mat.grid_fade_end, 8);
+    PrintUtils::Field("Grid Minor Color",
+      fmt::format("[{:.3f}, {:.3f}, {:.3f}, {:.3f}]", mat.grid_minor_color[0],
+        mat.grid_minor_color[1], mat.grid_minor_color[2],
+        mat.grid_minor_color[3]),
+      8);
+    PrintUtils::Field("Grid Major Color",
+      fmt::format("[{:.3f}, {:.3f}, {:.3f}, {:.3f}]", mat.grid_major_color[0],
+        mat.grid_major_color[1], mat.grid_major_color[2],
+        mat.grid_major_color[3]),
+      8);
+    PrintUtils::Field("Grid Axis Color X",
+      fmt::format("[{:.3f}, {:.3f}, {:.3f}, {:.3f}]", mat.grid_axis_color_x[0],
+        mat.grid_axis_color_x[1], mat.grid_axis_color_x[2],
+        mat.grid_axis_color_x[3]),
+      8);
+    PrintUtils::Field("Grid Axis Color Y",
+      fmt::format("[{:.3f}, {:.3f}, {:.3f}, {:.3f}]", mat.grid_axis_color_y[0],
+        mat.grid_axis_color_y[1], mat.grid_axis_color_y[2],
+        mat.grid_axis_color_y[3]),
+      8);
+    PrintUtils::Field("Grid Origin Color",
+      fmt::format("[{:.3f}, {:.3f}, {:.3f}, {:.3f}]",
+        mat.grid_origin_color[0], mat.grid_origin_color[1],
+        mat.grid_origin_color[2], mat.grid_origin_color[3]),
+      8);
     std::cout << "\n";
 
     const size_t num_refs = std::popcount(mat.shader_stages);
