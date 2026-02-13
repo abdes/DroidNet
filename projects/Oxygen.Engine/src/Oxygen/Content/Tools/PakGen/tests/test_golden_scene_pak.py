@@ -22,7 +22,7 @@ def test_golden_scene_pak_inspects_cleanly():  # noqa: N802
     assert len(entries) == 5
     assert [e["asset_type"] for e in entries] == [1, 2, 2, 2, 3]
     # Material stays fixed-size; geometry and scene include variable payload.
-    assert entries[0]["desc_size"] == 256
+    assert entries[0]["desc_size"] == 384
     assert entries[1]["desc_size"] > 256
     assert entries[2]["desc_size"] > 256
     assert entries[3]["desc_size"] > 256

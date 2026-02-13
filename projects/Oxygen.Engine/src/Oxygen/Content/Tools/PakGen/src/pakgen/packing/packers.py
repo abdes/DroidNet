@@ -996,7 +996,7 @@ def pack_material_asset_descriptor(
     header_builder,
     shader_refs_builder=None,
 ) -> bytes:
-    """Pack fixed 256-byte MaterialAssetDesc (no trailing shader refs).
+    """Pack fixed 384-byte MaterialAssetDesc (no trailing shader refs).
 
     Shader reference entries (ShaderReferenceDesc) are emitted separately as a
     variable-length blob immediately following the fixed descriptor. The
@@ -1077,6 +1077,28 @@ def pack_material_asset_descriptor(
     uv_offset = asset.get("uv_offset", [0.0, 0.0])
     uv_rotation_radians = float(asset.get("uv_rotation_radians", 0.0))
     uv_set = int(asset.get("uv_set", 0))
+    grid_spacing = asset.get("grid_spacing", [1.0, 1.0])
+    grid_major_every = int(asset.get("grid_major_every", 10))
+    grid_line_thickness = float(asset.get("grid_line_thickness", 1.0))
+    grid_major_thickness = float(asset.get("grid_major_thickness", 2.0))
+    grid_axis_thickness = float(asset.get("grid_axis_thickness", 2.0))
+    grid_fade_start = float(asset.get("grid_fade_start", 0.0))
+    grid_fade_end = float(asset.get("grid_fade_end", 0.0))
+    grid_minor_color = asset.get(
+        "grid_minor_color", [0.35, 0.35, 0.35, 1.0]
+    )
+    grid_major_color = asset.get(
+        "grid_major_color", [0.55, 0.55, 0.55, 1.0]
+    )
+    grid_axis_color_x = asset.get(
+        "grid_axis_color_x", [0.9, 0.2, 0.2, 1.0]
+    )
+    grid_axis_color_y = asset.get(
+        "grid_axis_color_y", [0.2, 0.6, 0.9, 1.0]
+    )
+    grid_origin_color = asset.get(
+        "grid_origin_color", [1.0, 1.0, 1.0, 1.0]
+    )
     header = header_builder(asset)
     if len(header) != ASSET_HEADER_SIZE:
         raise PakError(
@@ -1085,7 +1107,7 @@ def pack_material_asset_descriptor(
         )
 
     # Match oxygen::data::pak::MaterialAssetDesc exactly (see PakFormat.h).
-    reserved = b"\x00" * 19
+    reserved = b"\x00" * 35
     desc = (
         header
         + struct.pack("<B", material_domain)
@@ -1148,6 +1170,36 @@ def pack_material_asset_descriptor(
     desc += struct.pack("<2f", float(uv_offset[0]), float(uv_offset[1]))
     desc += struct.pack("<f", uv_rotation_radians)
     desc += struct.pack("<B", uv_set)
+
+    if not isinstance(grid_spacing, list) or len(grid_spacing) != 2:
+        raise PakError("E_SPEC", "grid_spacing must be a list of 2 floats")
+    for field_name, field_val in [
+        ("grid_minor_color", grid_minor_color),
+        ("grid_major_color", grid_major_color),
+        ("grid_axis_color_x", grid_axis_color_x),
+        ("grid_axis_color_y", grid_axis_color_y),
+        ("grid_origin_color", grid_origin_color),
+    ]:
+        if not isinstance(field_val, list) or len(field_val) != 4:
+            raise PakError(
+                "E_SPEC", f"{field_name} must be a list of 4 floats"
+            )
+
+    desc += struct.pack("<2f", float(grid_spacing[0]), float(grid_spacing[1]))
+    desc += struct.pack(
+        "<Ifffff",
+        grid_major_every,
+        grid_line_thickness,
+        grid_major_thickness,
+        grid_axis_thickness,
+        grid_fade_start,
+        grid_fade_end,
+    )
+    desc += struct.pack("<4f", *[float(x) for x in grid_minor_color])
+    desc += struct.pack("<4f", *[float(x) for x in grid_major_color])
+    desc += struct.pack("<4f", *[float(x) for x in grid_axis_color_x])
+    desc += struct.pack("<4f", *[float(x) for x in grid_axis_color_y])
+    desc += struct.pack("<4f", *[float(x) for x in grid_origin_color])
     desc += reserved
     if len(desc) != MATERIAL_DESC_SIZE:
         raise PakError(

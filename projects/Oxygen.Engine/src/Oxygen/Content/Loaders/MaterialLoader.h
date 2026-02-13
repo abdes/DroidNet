@@ -209,6 +209,63 @@ inline auto LoadMaterialAsset(LoaderContext context)
   auto uv_set_result = reader.ReadInto<uint8_t>(desc.uv_set);
   check_result(uv_set_result, "MaterialAssetDesc.uv_set");
 
+  for (auto& i : desc.grid_spacing) {
+    auto grid_spacing_result = reader.ReadInto<float>(i);
+    check_result(grid_spacing_result, "MaterialAssetDesc.grid_spacing");
+  }
+
+  auto grid_major_every_result = reader.ReadInto<uint32_t>(desc.grid_major_every);
+  check_result(grid_major_every_result, "MaterialAssetDesc.grid_major_every");
+
+  auto grid_line_thickness_result
+    = reader.ReadInto<float>(desc.grid_line_thickness);
+  check_result(
+    grid_line_thickness_result, "MaterialAssetDesc.grid_line_thickness");
+
+  auto grid_major_thickness_result
+    = reader.ReadInto<float>(desc.grid_major_thickness);
+  check_result(
+    grid_major_thickness_result, "MaterialAssetDesc.grid_major_thickness");
+
+  auto grid_axis_thickness_result
+    = reader.ReadInto<float>(desc.grid_axis_thickness);
+  check_result(
+    grid_axis_thickness_result, "MaterialAssetDesc.grid_axis_thickness");
+
+  auto grid_fade_start_result = reader.ReadInto<float>(desc.grid_fade_start);
+  check_result(grid_fade_start_result, "MaterialAssetDesc.grid_fade_start");
+
+  auto grid_fade_end_result = reader.ReadInto<float>(desc.grid_fade_end);
+  check_result(grid_fade_end_result, "MaterialAssetDesc.grid_fade_end");
+
+  for (auto& i : desc.grid_minor_color) {
+    auto grid_minor_color_result = reader.ReadInto<float>(i);
+    check_result(grid_minor_color_result, "MaterialAssetDesc.grid_minor_color");
+  }
+
+  for (auto& i : desc.grid_major_color) {
+    auto grid_major_color_result = reader.ReadInto<float>(i);
+    check_result(grid_major_color_result, "MaterialAssetDesc.grid_major_color");
+  }
+
+  for (auto& i : desc.grid_axis_color_x) {
+    auto grid_axis_color_x_result = reader.ReadInto<float>(i);
+    check_result(
+      grid_axis_color_x_result, "MaterialAssetDesc.grid_axis_color_x");
+  }
+
+  for (auto& i : desc.grid_axis_color_y) {
+    auto grid_axis_color_y_result = reader.ReadInto<float>(i);
+    check_result(
+      grid_axis_color_y_result, "MaterialAssetDesc.grid_axis_color_y");
+  }
+
+  for (auto& i : desc.grid_origin_color) {
+    auto grid_origin_color_result = reader.ReadInto<float>(i);
+    check_result(
+      grid_origin_color_result, "MaterialAssetDesc.grid_origin_color");
+  }
+
   for (auto& i : desc.reserved) {
     auto reserved_result = reader.ReadInto<uint8_t>(i);
     check_result(reserved_result, "MaterialAssetDesc.reserved");
