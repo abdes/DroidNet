@@ -25,6 +25,53 @@ struct MaterialSurface
     float3 V;
 };
 
+static inline float GridLineMask(float2 world_xz, float2 spacing, float thickness)
+{
+    spacing = max(spacing, float2(1e-4, 1e-4));
+    const float2 coord = world_xz / spacing;
+    const float2 dist_to_line = min(frac(coord), 1.0 - frac(coord));
+    const float2 thickness_coord = max(thickness, 0.0) / spacing;
+    const float2 aa = fwidth(coord);
+    const float2 line_mask = smoothstep(thickness_coord + aa, thickness_coord - aa, dist_to_line);
+    return saturate(max(line_mask.x, line_mask.y));
+}
+
+static inline float AxisLineMask(float value, float thickness)
+{
+    const float aa = fwidth(value);
+    return saturate(smoothstep(thickness + aa, thickness - aa, abs(value)));
+}
+
+static inline float4 EvaluateProceduralGrid(MaterialConstants mat, float3 world_pos)
+{
+    const float2 world_xz = float2(world_pos.x, world_pos.z);
+
+    const float2 spacing = mat.grid_spacing;
+    const float major_every = max(1.0, (float)mat.grid_major_every);
+
+    const float minor_mask = GridLineMask(world_xz, spacing, mat.grid_line_thickness);
+    const float major_mask = GridLineMask(world_xz, spacing * major_every, mat.grid_major_thickness);
+
+    const float axis_x_mask = AxisLineMask(world_xz.x, mat.grid_axis_thickness);
+    const float axis_y_mask = AxisLineMask(world_xz.y, mat.grid_axis_thickness);
+    const float origin_mask = axis_x_mask * axis_y_mask;
+
+    float4 color = mat.grid_minor_color * minor_mask;
+    color = lerp(color, mat.grid_major_color, major_mask);
+    color = lerp(color, mat.grid_axis_color_x, axis_x_mask);
+    color = lerp(color, mat.grid_axis_color_y, axis_y_mask);
+    color = lerp(color, mat.grid_origin_color, origin_mask);
+
+    const float dist = length(world_xz - float2(camera_position.x, camera_position.z));
+    if (mat.grid_fade_end > mat.grid_fade_start) {
+        const float fade = saturate((mat.grid_fade_end - dist)
+            / max(mat.grid_fade_end - mat.grid_fade_start, 1e-4));
+        color *= fade;
+    }
+
+    return color;
+}
+
 MaterialSurface EvaluateMaterialSurface(
     float3 world_pos,
     float3 world_normal,
@@ -210,6 +257,12 @@ MaterialSurface EvaluateMaterialSurface(
             // Emissive textures are typically sRGB-encoded.
             float3 emissive_sample = SrgbToLinear(emissive_tex.Sample(samp, uv).rgb);
             s.emissive *= emissive_sample;
+        }
+
+        if ((mat.flags & MATERIAL_FLAG_PROCEDURAL_GRID) != 0u) {
+            const float4 grid_color = EvaluateProceduralGrid(mat, world_pos);
+            s.base_rgb = lerp(s.base_rgb, grid_color.rgb, grid_color.a);
+            s.base_a = max(s.base_a, grid_color.a);
         }
 
         // Double-sided lighting: keep the surface visible (cull mode) and

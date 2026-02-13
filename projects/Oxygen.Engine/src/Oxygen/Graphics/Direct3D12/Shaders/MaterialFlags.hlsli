@@ -24,3 +24,6 @@ static const uint MATERIAL_FLAG_UNLIT = (1u << 3);
 
 // glTF ORM channel packing semantics.
 static const uint MATERIAL_FLAG_GLTF_ORM_PACKED = (1u << 4);
+
+// Material uses procedural grid shading.
+static const uint MATERIAL_FLAG_PROCEDURAL_GRID = (1u << 5);
