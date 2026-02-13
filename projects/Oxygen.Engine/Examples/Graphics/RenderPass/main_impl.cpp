@@ -14,6 +14,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -184,16 +185,17 @@ extern "C" void MainImpl(std::span<const char*> /*args*/)
         .parent_path();
 
   // Load the graphics backend
+  const auto path_finder_config
+    = PathFinderConfig::Create().WithWorkspaceRoot(workspace_root).Build();
   GraphicsConfig gfx_config {
     .enable_debug = true,
     .enable_validation = false,
     .headless = false,
     .extra = {},
-    .path_finder_config
-    = PathFinderConfig::Create().WithWorkspaceRoot(workspace_root).Build(),
   };
   auto& loader = oxygen::GraphicsBackendLoader::GetInstance();
-  auto gfx_weak = loader.LoadBackend(BackendType::kDirect3D12, gfx_config);
+  auto gfx_weak
+    = loader.LoadBackend(BackendType::kDirect3D12, gfx_config, path_finder_config);
   CHECK_F(!gfx_weak.expired()); // Expect a valid graphics backend, or abort
 
   // Transfer control to the asynchronous main loop

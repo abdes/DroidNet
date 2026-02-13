@@ -285,6 +285,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
           .parent_path();
 
     // Load the graphics backend
+    const auto path_finder_config
+      = PathFinderConfig::Create().WithWorkspaceRoot(workspace_root).Build();
     const GraphicsConfig gfx_config {
       .enable_debug = true,
       .enable_validation = false,
@@ -292,12 +294,11 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .headless = headless,
       .enable_vsync = enable_vsync,
       .extra = {},
-      .path_finder_config
-      = PathFinderConfig::Create().WithWorkspaceRoot(workspace_root).Build(),
     };
     const auto& loader = GraphicsBackendLoader::GetInstance();
     app.gfx_weak = loader.LoadBackend(
-      headless ? BackendType::kHeadless : BackendType::kDirect3D12, gfx_config);
+      headless ? BackendType::kHeadless : BackendType::kDirect3D12, gfx_config,
+      path_finder_config);
     CHECK_F(
       !app.gfx_weak.expired()); // Expect a valid graphics backend, or abort
     app.gfx_weak.lock()->CreateCommandQueues(app.queue_strategy);
@@ -310,6 +311,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .target_fps = target_fps,
         .frame_count = frames,
         .enable_asset_loader = true,
+        .path_finder_config = path_finder_config,
         .timing = {
           .pacing_safety_margin = 250us,
         }

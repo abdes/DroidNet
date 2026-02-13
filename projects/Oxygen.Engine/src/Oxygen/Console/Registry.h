@@ -53,6 +53,11 @@ public:
     bool denied_by_policy { false };
   };
 
+  struct ExecutionRecord {
+    std::string line;
+    ExecutionResult result;
+  };
+
   using AuditHook = std::function<void(const AuditEvent&)>;
 
   OXGN_CONS_API explicit Registry(
@@ -87,6 +92,12 @@ public:
       .source = CommandSource::kAutomation,
       .shipping_build = false,
     }) -> ExecutionResult;
+  OXGN_CONS_NDAPI auto SaveHistory(
+    const oxygen::PathFinder& path_finder) const -> ExecutionResult;
+  OXGN_CONS_NDAPI auto LoadHistory(
+    const oxygen::PathFinder& path_finder) -> ExecutionResult;
+  OXGN_CONS_NDAPI auto ListSymbols(bool include_hidden = false) const
+    -> std::vector<ConsoleSymbol>;
 
   OXGN_CONS_API auto SetSourcePolicy(
     CommandSource source, const SourcePolicy& policy) -> void;
@@ -109,6 +120,9 @@ public:
     -> observer_ptr<const CompletionCandidate>;
 
   OXGN_CONS_NDAPI auto GetHistory() const -> const History&;
+  OXGN_CONS_NDAPI auto GetExecutionRecords() const
+    -> const std::vector<ExecutionRecord>&;
+  OXGN_CONS_API auto ClearExecutionRecords() -> void;
 
 private:
   struct CompletionUsage {
@@ -173,6 +187,8 @@ private:
 
   std::unordered_map<std::string, CVarEntry> cvars_;
   std::unordered_map<std::string, CommandDefinition> commands_;
+  size_t execution_record_capacity_ { kDefaultExecutionRecordCapacity };
+  std::vector<ExecutionRecord> execution_records_;
 };
 
 } // namespace oxygen::console

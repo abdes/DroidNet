@@ -7,6 +7,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <array>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <span>
@@ -711,6 +712,83 @@ NOLINT_TEST(ConsolePolicy, AppliesSourcePolicyMatrixToCommands)
       .shipping_build = false,
     });
   EXPECT_EQ(result.status, ExecutionStatus::kDenied);
+}
+
+NOLINT_TEST(ConsoleHistory, PersistsAcrossSessions)
+{
+  Console writer {};
+  EXPECT_EQ(writer.Execute("help").status, ExecutionStatus::kOk);
+  EXPECT_EQ(writer.Execute("list commands").status, ExecutionStatus::kOk);
+
+  const auto temp_root
+    = std::filesystem::temp_directory_path() / "oxygen_console_history_test";
+  std::error_code ec;
+  std::filesystem::remove_all(temp_root, ec);
+  std::filesystem::create_directories(temp_root, ec);
+  ASSERT_FALSE(ec);
+
+  auto config = oxygen::PathFinderConfig::Create()
+                  .WithWorkspaceRoot(temp_root)
+                  .WithCVarsArchivePath("console/cvars.json")
+                  .Build();
+  oxygen::PathFinder path_finder {
+    std::make_shared<const oxygen::PathFinderConfig>(std::move(config)),
+    temp_root,
+  };
+
+  const auto save = writer.SaveHistory(path_finder);
+  EXPECT_EQ(save.status, ExecutionStatus::kOk);
+
+  Console reader {};
+  const auto load = reader.LoadHistory(path_finder);
+  EXPECT_EQ(load.status, ExecutionStatus::kOk);
+  const auto& entries = reader.GetHistory().Entries();
+  ASSERT_EQ(entries.size(), 2);
+  EXPECT_EQ(entries[0], "help");
+  EXPECT_EQ(entries[1], "list commands");
+}
+
+NOLINT_TEST(ConsoleCapture, ExposesDeterministicExecutionRecordsAndSymbolCatalog)
+{
+  Console console {};
+  ASSERT_TRUE(console
+      .RegisterCommand(CommandDefinition {
+        .name = "sys.echo",
+        .help = "Echo test",
+        .flags = CommandFlags::kNone,
+        .handler = [](const std::vector<std::string>&,
+                     const CommandContext&) -> ExecutionResult {
+          return {
+            .status = ExecutionStatus::kOk,
+            .exit_code = 0,
+            .output = "echo",
+            .error = {},
+          };
+        },
+      })
+      .IsValid());
+
+  EXPECT_EQ(console.Execute("sys.echo").status, ExecutionStatus::kOk);
+  EXPECT_EQ(console.Execute("missing.symbol").status, ExecutionStatus::kNotFound);
+
+  const auto& records = console.GetExecutionRecords();
+  ASSERT_GE(records.size(), 2);
+  EXPECT_EQ(records[records.size() - 2].line, "sys.echo");
+  EXPECT_EQ(
+    records[records.size() - 2].result.status, ExecutionStatus::kOk);
+  EXPECT_EQ(records.back().line, "missing.symbol");
+  EXPECT_EQ(records.back().result.status, ExecutionStatus::kNotFound);
+
+  const auto symbols = console.ListSymbols(false);
+  const auto it = std::find_if(symbols.begin(), symbols.end(),
+    [](const oxygen::console::ConsoleSymbol& symbol) {
+      return symbol.token == "sys.echo"
+        && symbol.kind == oxygen::console::CompletionKind::kCommand;
+    });
+  EXPECT_NE(it, symbols.end());
+
+  console.ClearExecutionRecords();
+  EXPECT_TRUE(console.GetExecutionRecords().empty());
 }
 
 } // namespace

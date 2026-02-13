@@ -10,6 +10,7 @@
 #include <stdexcept>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 
 namespace oxygen {
@@ -74,7 +75,9 @@ public:
 
   //! Loads the specified graphics backend from a dynamically loadable module.
   [[nodiscard]] auto LoadBackend(graphics::BackendType backend,
-    const GraphicsConfig& config) const -> std::weak_ptr<Graphics>;
+    const GraphicsConfig& config,
+    const PathFinderConfig& path_finder_config) const
+    -> std::weak_ptr<Graphics>;
 
   //! Unloads the currently loaded graphics backend, destroying its instance
   //! and as a result, rendering all weak pointers to it unusable. The

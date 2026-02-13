@@ -38,12 +38,14 @@ auto GetBackendInternal() -> std::shared_ptr<oxygen::graphics::d3d12::Graphics>&
   return graphics;
 }
 
-auto CreateBackend(const oxygen::SerializedBackendConfig& config) -> void*
+auto CreateBackend(const oxygen::SerializedBackendConfig& config,
+  const oxygen::SerializedPathFinderConfig& path_finder_config) -> void*
 {
   auto& backend = GetBackendInternal();
   if (!backend) {
     try {
-      backend = std::make_shared<oxygen::graphics::d3d12::Graphics>(config);
+      backend = std::make_shared<oxygen::graphics::d3d12::Graphics>(
+        config, path_finder_config);
     } catch (const std::exception& ex) {
       LOG_F(ERROR, "Failed to create D3D12 backend: {}", ex.what());
       backend.reset();
@@ -212,7 +214,8 @@ auto Graphics::GetAllocator() const -> D3D12MA::Allocator*
   return allocator;
 }
 
-Graphics::Graphics(const SerializedBackendConfig& config)
+Graphics::Graphics(const SerializedBackendConfig& config,
+  const SerializedPathFinderConfig& path_finder_config)
   : Base("D3D12 Backend")
 {
   LOG_SCOPE_FUNCTION(INFO);
@@ -221,20 +224,26 @@ Graphics::Graphics(const SerializedBackendConfig& config)
   nlohmann::json jsonConfig
     = nlohmann::json::parse(config.json_data, config.json_data + config.size);
 
-  oxygen::PathFinderConfig path_finder_config {};
-  if (jsonConfig.contains("path_finder")) {
-    const auto& pf = jsonConfig["path_finder"];
+  oxygen::PathFinderConfig parsed_path_finder_config {};
+  if (path_finder_config.json_data != nullptr && path_finder_config.size > 0U) {
+    const auto path_finder_json
+      = nlohmann::json::parse(path_finder_config.json_data,
+        path_finder_config.json_data + path_finder_config.size);
     std::filesystem::path workspace_root;
     std::filesystem::path shader_library;
+    std::filesystem::path cvars_archive;
 
-    if (pf.contains("workspace_root_path")) {
-      workspace_root = pf["workspace_root_path"].get<std::string>();
+    if (path_finder_json.contains("workspace_root_path")) {
+      workspace_root
+        = path_finder_json["workspace_root_path"].get<std::string>();
     }
-    if (pf.contains("shader_library_path")) {
-      shader_library = pf["shader_library_path"].get<std::string>();
+    if (path_finder_json.contains("shader_library_path")) {
+      shader_library
+        = path_finder_json["shader_library_path"].get<std::string>();
     }
 
-    if (!workspace_root.empty() || !shader_library.empty()) {
+    if (!workspace_root.empty() || !shader_library.empty()
+      || !cvars_archive.empty()) {
       auto builder = oxygen::PathFinderConfig::Create();
       if (!workspace_root.empty()) {
         builder
@@ -244,7 +253,7 @@ Graphics::Graphics(const SerializedBackendConfig& config)
         builder
           = std::move(builder).WithShaderLibraryPath(std::move(shader_library));
       }
-      path_finder_config = std::move(builder).Build();
+      parsed_path_finder_config = std::move(builder).Build();
     }
   }
 
@@ -256,7 +265,7 @@ Graphics::Graphics(const SerializedBackendConfig& config)
     enable_vsync_ = jsonConfig["enable_vsync"].get<bool>();
   }
   AddComponent<DeviceManager>(desc);
-  AddComponent<EngineShaders>(std::move(path_finder_config));
+  AddComponent<EngineShaders>(std::move(parsed_path_finder_config));
   AddComponent<DescriptorAllocatorComponent>();
   AddComponent<detail::PipelineStateCache>(this);
 }

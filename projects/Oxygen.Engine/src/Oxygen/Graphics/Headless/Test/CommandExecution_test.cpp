@@ -38,7 +38,8 @@ NOLINT_TEST(ResourceBarrierExecution, AppliesObservedState)
   ASSERT_NE(module_ptr, nullptr);
 
   oxygen::SerializedBackendConfig cfg { .json_data = "{}", .size = 2 };
-  void* backend = module_ptr->CreateBackend(cfg);
+  oxygen::SerializedPathFinderConfig path_cfg { .json_data = "{}", .size = 2 };
+  void* backend = module_ptr->CreateBackend(cfg, path_cfg);
   ASSERT_NE(backend, nullptr);
 
   auto* headless = static_cast<oxygen::graphics::headless::Graphics*>(backend);

@@ -228,6 +228,9 @@ AssetLoader::AssetLoader(
 auto AssetLoader::SetVerifyContentHashes(const bool enable) -> void
 {
   AssertOwningThread();
+  if (verify_content_hashes_ == enable) {
+    return;
+  }
   verify_content_hashes_ = enable;
   LOG_F(INFO, "AssetLoader: verify_content_hashes={}",
     verify_content_hashes_ ? "enabled" : "disabled");
@@ -506,7 +509,8 @@ auto AssetLoader::RegisterConsoleBindings(
 auto AssetLoader::ApplyConsoleCVars(const console::Console& console) -> void
 {
   bool verify_hashes = verify_content_hashes_;
-  if (console.TryGetCVarValue<bool>(kCVarVerifyContentHashes, verify_hashes)) {
+  if (console.TryGetCVarValue<bool>(kCVarVerifyContentHashes, verify_hashes)
+    && verify_hashes != verify_content_hashes_) {
     SetVerifyContentHashes(verify_hashes);
   }
 }

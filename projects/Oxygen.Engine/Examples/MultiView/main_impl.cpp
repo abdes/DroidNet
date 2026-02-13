@@ -28,6 +28,7 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
@@ -291,6 +292,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
           .parent_path()
           .parent_path();
 
+    const auto path_finder_config
+      = o::PathFinderConfig::Create().WithWorkspaceRoot(workspace_root).Build();
     const o::GraphicsConfig gfx_config {
       .enable_debug = true,
       .enable_validation = false,
@@ -298,13 +301,11 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .headless = headless,
       .enable_vsync = enable_vsync,
       .extra = {},
-      .path_finder_config
-      = o::PathFinderConfig::Create().WithWorkspaceRoot(workspace_root).Build(),
     };
     const auto& loader = o::GraphicsBackendLoader::GetInstance();
     app.gfx_weak = loader.LoadBackend(
       headless ? g::BackendType::kHeadless : g::BackendType::kDirect3D12,
-      gfx_config);
+      gfx_config, path_finder_config);
     CHECK_F(!app.gfx_weak.expired());
     app.gfx_weak.lock()->CreateCommandQueues(app.queue_strategy);
 
@@ -316,6 +317,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .target_fps = target_fps,
         .frame_count = frames,
         .enable_asset_loader = true,
+        .path_finder_config = path_finder_config,
         .timing = {
           .pacing_safety_margin = 250us,
         }

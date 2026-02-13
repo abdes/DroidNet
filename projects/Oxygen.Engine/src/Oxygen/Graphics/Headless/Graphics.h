@@ -18,7 +18,8 @@
 namespace oxygen::graphics::headless {
 class Graphics final : public oxygen::Graphics {
 public:
-  explicit Graphics(const SerializedBackendConfig& config);
+  explicit Graphics(const SerializedBackendConfig& config,
+    const SerializedPathFinderConfig& path_finder_config);
 
   OXYGEN_MAKE_NON_COPYABLE(Graphics)
   OXYGEN_MAKE_NON_MOVABLE(Graphics)

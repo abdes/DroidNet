@@ -52,6 +52,9 @@ set(
   "ImGuiModule.h"
   "ImGuiGraphicsBackend.h"
   "ImGuiPass.h"
+  "Console/ConsoleUiState.h"
+  "Console/ConsolePanel.h"
+  "Console/CommandPalette.h"
   "Icons/IconsOxygenIcons.h"
   "Icons/OxygenIcons.h"
   "Styles/FontAwesome-400.h"
@@ -62,6 +65,9 @@ set(
   OXYGEN_IMGUI_PRIVATE_SOURCES
   "ImGuiPass.cpp"
   "ImGuiModule.cpp"
+  "Console/ConsoleUiState.cpp"
+  "Console/ConsolePanel.cpp"
+  "Console/CommandPalette.cpp"
   "Icons/OxygenIcons.cpp"
   "Styles/Spectrum.cpp"
   "Styles/SourceSansProRegular.cpp"
@@ -95,6 +101,7 @@ target_link_libraries(
     oxygen::base
     oxygen::core
     oxygen::renderer
+    oxygen::console
     oxygen::graphics-common
     oxygen::engine
     oxygen::platform

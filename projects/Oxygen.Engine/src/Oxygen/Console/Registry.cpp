@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -15,6 +16,7 @@
 #include <string>
 #include <utility>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Console/Parser.h>
 #include <Oxygen/Console/Registry.h>
@@ -146,6 +148,12 @@ namespace {
       return true;
     }
     return false;
+  }
+
+  auto HistoryPathFor(const oxygen::PathFinder& path_finder)
+    -> std::filesystem::path
+  {
+    return path_finder.CVarsArchivePath().parent_path() / kHistoryFileName;
   }
 
 } // namespace
@@ -327,6 +335,9 @@ auto Registry::SaveArchiveCVars(const oxygen::PathFinder& path_finder) const
   std::error_code ec;
   std::filesystem::create_directories(archive_dir, ec);
   if (ec) {
+    LOG_F(ERROR,
+      "Console CVar persistence save failed: unable to create directory '{}': {}",
+      archive_dir.generic_string(), ec.message());
     return {
       .status = ExecutionStatus::kError,
       .exit_code = kExitCodeGenericError,
@@ -337,6 +348,9 @@ auto Registry::SaveArchiveCVars(const oxygen::PathFinder& path_finder) const
 
   std::ofstream stream(archive_path);
   if (!stream.is_open()) {
+    LOG_F(ERROR,
+      "Console CVar persistence save failed: unable to open '{}' for write",
+      archive_path.generic_string());
     return {
       .status = ExecutionStatus::kError,
       .exit_code = kExitCodeGenericError,
@@ -346,6 +360,8 @@ auto Registry::SaveArchiveCVars(const oxygen::PathFinder& path_finder) const
   }
   stream << payload.dump(kJsonIndentSpaces);
   if (!stream.good()) {
+    LOG_F(ERROR, "Console CVar persistence save failed: write error for '{}'",
+      archive_path.generic_string());
     return {
       .status = ExecutionStatus::kError,
       .exit_code = kExitCodeGenericError,
@@ -354,6 +370,7 @@ auto Registry::SaveArchiveCVars(const oxygen::PathFinder& path_finder) const
     };
   }
 
+  LOG_F(INFO, "Console CVars saved to '{}'", archive_path.generic_string());
   return {
     .status = ExecutionStatus::kOk,
     .exit_code = 0,
@@ -368,6 +385,9 @@ auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
   const auto archive_path = path_finder.CVarsArchivePath();
   std::ifstream stream(archive_path);
   if (!stream.is_open()) {
+    LOG_F(WARNING,
+      "Console CVar persistence load skipped: archive file not found '{}'",
+      archive_path.generic_string());
     return {
       .status = ExecutionStatus::kNotFound,
       .exit_code = kExitCodeNotFound,
@@ -379,7 +399,20 @@ auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
   json payload;
   try {
     stream >> payload;
+  } catch (const std::exception& e) {
+    LOG_F(ERROR,
+      "Console CVar persistence load failed: json parse error in '{}': {}",
+      archive_path.generic_string(), e.what());
+    return {
+      .status = ExecutionStatus::kError,
+      .exit_code = kExitCodeGenericError,
+      .output = {},
+      .error = "cvar archive json parse failed",
+    };
   } catch (...) {
+    LOG_F(ERROR,
+      "Console CVar persistence load failed: unknown json parse error in '{}'",
+      archive_path.generic_string());
     return {
       .status = ExecutionStatus::kError,
       .exit_code = kExitCodeGenericError,
@@ -391,6 +424,9 @@ auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
   if (!payload.is_object()
     || !payload.contains(std::string(kArchiveJsonEntriesKey))
     || !payload[std::string(kArchiveJsonEntriesKey)].is_array()) {
+    LOG_F(ERROR,
+      "Console CVar persistence load failed: invalid schema in '{}'",
+      archive_path.generic_string());
     return {
       .status = ExecutionStatus::kInvalidArguments,
       .exit_code = kExitCodeInvalidArguments,
@@ -434,11 +470,148 @@ auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
     }
   }
 
+  LOG_F(INFO, "Console CVars loaded from '{}': {} override(s) applied",
+    archive_path.generic_string(), applied);
   return {
     .status = ExecutionStatus::kOk,
     .exit_code = 0,
     .output = "loaded " + std::to_string(applied) + " cvar override(s) from "
       + archive_path.generic_string(),
+    .error = {},
+  };
+}
+
+auto Registry::SaveHistory(const oxygen::PathFinder& path_finder) const
+  -> ExecutionResult
+{
+  json payload = json::object();
+  payload[std::string(kHistoryJsonVersionKey)] = kHistoryJsonVersion1;
+  payload[std::string(kHistoryJsonEntriesKey)] = history_.Entries();
+
+  const auto history_path = HistoryPathFor(path_finder);
+  const auto history_dir = history_path.parent_path();
+  std::error_code ec;
+  std::filesystem::create_directories(history_dir, ec);
+  if (ec) {
+    LOG_F(ERROR,
+      "Console history persistence save failed: unable to create directory '{}': {}",
+      history_dir.generic_string(), ec.message());
+    return {
+      .status = ExecutionStatus::kError,
+      .exit_code = kExitCodeGenericError,
+      .output = {},
+      .error = "unable to create history directory",
+    };
+  }
+
+  std::ofstream stream(history_path);
+  if (!stream.is_open()) {
+    LOG_F(ERROR,
+      "Console history persistence save failed: unable to open '{}' for write",
+      history_path.generic_string());
+    return {
+      .status = ExecutionStatus::kError,
+      .exit_code = kExitCodeGenericError,
+      .output = {},
+      .error = "unable to open history file for write",
+    };
+  }
+  stream << payload.dump(kJsonIndentSpaces);
+  if (!stream.good()) {
+    LOG_F(ERROR,
+      "Console history persistence save failed: write error for '{}'",
+      history_path.generic_string());
+    return {
+      .status = ExecutionStatus::kError,
+      .exit_code = kExitCodeGenericError,
+      .output = {},
+      .error = "failed to write history file",
+    };
+  }
+
+  LOG_F(INFO, "Console history saved to '{}' ({} entries)",
+    history_path.generic_string(), history_.Entries().size());
+  return {
+    .status = ExecutionStatus::kOk,
+    .exit_code = 0,
+    .output = "saved console history to " + history_path.generic_string(),
+    .error = {},
+  };
+}
+
+auto Registry::LoadHistory(const oxygen::PathFinder& path_finder)
+  -> ExecutionResult
+{
+  const auto history_path = HistoryPathFor(path_finder);
+  std::ifstream stream(history_path);
+  if (!stream.is_open()) {
+    LOG_F(WARNING,
+      "Console history persistence load skipped: history file not found '{}'",
+      history_path.generic_string());
+    return {
+      .status = ExecutionStatus::kNotFound,
+      .exit_code = kExitCodeNotFound,
+      .output = {},
+      .error = "console history file not found",
+    };
+  }
+
+  json payload;
+  try {
+    stream >> payload;
+  } catch (const std::exception& e) {
+    LOG_F(ERROR,
+      "Console history persistence load failed: json parse error in '{}': {}",
+      history_path.generic_string(), e.what());
+    return {
+      .status = ExecutionStatus::kError,
+      .exit_code = kExitCodeGenericError,
+      .output = {},
+      .error = "console history json parse failed",
+    };
+  } catch (...) {
+    LOG_F(ERROR,
+      "Console history persistence load failed: unknown json parse error in '{}'",
+      history_path.generic_string());
+    return {
+      .status = ExecutionStatus::kError,
+      .exit_code = kExitCodeGenericError,
+      .output = {},
+      .error = "console history json parse failed",
+    };
+  }
+
+  if (!payload.is_object()
+    || !payload.contains(std::string(kHistoryJsonEntriesKey))
+    || !payload[std::string(kHistoryJsonEntriesKey)].is_array()) {
+    LOG_F(ERROR,
+      "Console history persistence load failed: invalid schema in '{}'",
+      history_path.generic_string());
+    return {
+      .status = ExecutionStatus::kInvalidArguments,
+      .exit_code = kExitCodeInvalidArguments,
+      .output = {},
+      .error = "invalid console history schema",
+    };
+  }
+
+  history_.Clear();
+  size_t loaded = 0;
+  for (const auto& entry : payload[std::string(kHistoryJsonEntriesKey)]) {
+    if (!entry.is_string()) {
+      continue;
+    }
+    history_.Push(entry.get<std::string>());
+    ++loaded;
+  }
+
+  LOG_F(INFO, "Console history loaded from '{}': {} entr{}",
+    history_path.generic_string(), loaded, loaded == 1 ? "y" : "ies");
+  return {
+    .status = ExecutionStatus::kOk,
+    .exit_code = 0,
+    .output = "loaded " + std::to_string(loaded)
+      + " history entries from " + history_path.generic_string(),
     .error = {},
   };
 }
@@ -555,8 +728,30 @@ auto Registry::Execute(
   for (const auto& command_line : commands) {
     last = ExecuteSingle(command_line, context);
     if (last.status != ExecutionStatus::kOk) {
+      if (execution_record_capacity_ > 0
+        && execution_records_.size() >= execution_record_capacity_
+        && !execution_records_.empty()) {
+        execution_records_.erase(execution_records_.begin());
+      }
+      if (execution_record_capacity_ > 0) {
+        execution_records_.push_back(ExecutionRecord {
+          .line = text,
+          .result = last,
+        });
+      }
       return last;
     }
+  }
+  if (execution_record_capacity_ > 0
+    && execution_records_.size() >= execution_record_capacity_
+    && !execution_records_.empty()) {
+    execution_records_.erase(execution_records_.begin());
+  }
+  if (execution_record_capacity_ > 0) {
+    execution_records_.push_back(ExecutionRecord {
+      .line = text,
+      .result = last,
+    });
   }
   return last;
 }
@@ -714,6 +909,56 @@ auto Registry::Complete(const std::string_view prefix) const
   return out;
 }
 
+auto Registry::ListSymbols(const bool include_hidden) const
+  -> std::vector<ConsoleSymbol>
+{
+  std::vector<ConsoleSymbol> out;
+  out.reserve(commands_.size() + cvars_.size());
+
+  for (const auto& [name, command] : commands_) {
+    const auto usage_it = completion_usage_.find(name);
+    const auto usage_frequency
+      = usage_it != completion_usage_.end() ? usage_it->second.frequency : 0;
+    const auto usage_last_tick = usage_it != completion_usage_.end()
+      ? usage_it->second.last_used_tick
+      : 0;
+    out.push_back(ConsoleSymbol {
+      .kind = CompletionKind::kCommand,
+      .token = name,
+      .help = command.help,
+      .usage_frequency = usage_frequency,
+      .usage_last_tick = usage_last_tick,
+    });
+  }
+  for (const auto& [name, cvar] : cvars_) {
+    if (!include_hidden && IsHidden(cvar.snapshot.definition)) {
+      continue;
+    }
+    const auto usage_it = completion_usage_.find(name);
+    const auto usage_frequency
+      = usage_it != completion_usage_.end() ? usage_it->second.frequency : 0;
+    const auto usage_last_tick = usage_it != completion_usage_.end()
+      ? usage_it->second.last_used_tick
+      : 0;
+    out.push_back(ConsoleSymbol {
+      .kind = CompletionKind::kCVar,
+      .token = name,
+      .help = cvar.snapshot.definition.help,
+      .usage_frequency = usage_frequency,
+      .usage_last_tick = usage_last_tick,
+    });
+  }
+
+  std::sort(out.begin(), out.end(), [](const ConsoleSymbol& lhs,
+                                 const ConsoleSymbol& rhs) {
+    if (lhs.token != rhs.token) {
+      return lhs.token < rhs.token;
+    }
+    return static_cast<uint8_t>(lhs.kind) < static_cast<uint8_t>(rhs.kind);
+  });
+  return out;
+}
+
 auto Registry::BeginCompletionCycle(const std::string_view prefix)
   -> observer_ptr<const CompletionCandidate>
 {
@@ -739,6 +984,17 @@ auto Registry::CurrentCompletion() const
 
 auto Registry::GetHistory() const -> const History& { return history_; }
 
+auto Registry::GetExecutionRecords() const
+  -> const std::vector<ExecutionRecord>&
+{
+  return execution_records_;
+}
+
+auto Registry::ClearExecutionRecords() -> void
+{
+  execution_records_.clear();
+}
+
 void Registry::RegisterBuiltinCommands()
 {
   (void)RegisterCommand(CommandDefinition {
@@ -748,10 +1004,17 @@ void Registry::RegisterBuiltinCommands()
     .handler = [this](const std::vector<std::string>& args,
                  const CommandContext&) -> ExecutionResult {
       if (args.empty()) {
+        const std::string help_text
+          = "usage:\n"
+            "  help [name]                     show help for a command or cvar\n"
+            "  list [all|commands|cvars]      list registered symbols\n"
+            "  find <pattern>                 search commands and cvars\n"
+            "  exec <path>                    execute script file line by line\n"
+            "tip: run `help <name>` for detailed flags/default/current value";
         return {
           .status = ExecutionStatus::kOk,
           .exit_code = 0,
-          .output = "builtins: help, find, list, exec",
+          .output = help_text,
           .error = {},
         };
       }

@@ -26,6 +26,7 @@
 using oxygen::GraphicsBackendLoader;
 using oxygen::GraphicsConfig;
 using oxygen::SerializedBackendConfig;
+using oxygen::SerializedPathFinderConfig;
 using oxygen::graphics::BackendType;
 using oxygen::graphics::GetGraphicsModuleApiFunc;
 using oxygen::graphics::GraphicsModuleApi;
@@ -155,17 +156,6 @@ auto SerializeConfigToJson(
       + std::to_string(config.preferred_card_device_id.value()) + ",\n";
   }
 
-  // Add path finder configuration (serializable, used by the backend for
-  // deterministic path resolution).
-  json += "  \"path_finder\": {\n";
-  json += R"(    "workspace_root_path": ")"
-    + EscapeJsonString(config.path_finder_config.WorkspaceRootPath().string())
-    + "\",\n";
-  json += R"(    "shader_library_path": ")"
-    + EscapeJsonString(config.path_finder_config.ShaderLibraryPath().string())
-    + "\"\n";
-  json += "  },\n";
-
   // Add extra configuration (removing the enclosing braces)
   std::string extra = config.extra;
   if (extra == "{}" || extra.empty()) {
@@ -197,6 +187,20 @@ auto SerializeConfigToJson(
   return json;
 }
 
+auto SerializePathFinderConfigToJson(const oxygen::PathFinderConfig& config)
+  -> std::string
+{
+  std::string json = "{\n";
+  json += R"(  "workspace_root_path": ")"
+    + EscapeJsonString(config.WorkspaceRootPath().string()) + "\",\n";
+  json += R"(  "shader_library_path": ")"
+    + EscapeJsonString(config.ShaderLibraryPath().string()) + "\",\n";
+  json += R"(  "cvars_archive_path": ")"
+    + EscapeJsonString(config.CVarsArchivePath().string()) + "\"\n";
+  json += "}";
+  return json;
+}
+
 } // namespace
 
 // Implementation class that handles all the details
@@ -215,8 +219,8 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(Impl)
   OXYGEN_MAKE_NON_MOVABLE(Impl)
 
-  auto LoadBackend(const BackendType backend, const GraphicsConfig& config)
-    -> GraphicsPtr
+  auto LoadBackend(const BackendType backend, const GraphicsConfig& config,
+    const oxygen::PathFinderConfig& path_finder_config) -> GraphicsPtr
   {
     if (backend_instance) {
       LOG_F(WARNING,
@@ -252,7 +256,7 @@ public:
       auto* const backend_api = static_cast<GraphicsModuleApi*>(get_api());
 
       // Create the backend instance
-      CreateBackendInstance(backend_api, backend, config);
+      CreateBackendInstance(backend_api, backend, config, path_finder_config);
       return backend_instance;
     } catch (const std::exception& ex) {
       LOG_F(ERROR, "Failed to load graphics backend: {}", ex.what());
@@ -300,20 +304,27 @@ public:
 
 private:
   auto CreateBackendInstance(GraphicsModuleApi* backend_api,
-    const BackendType backend_type, const GraphicsConfig& config) -> void
+    const BackendType backend_type, const GraphicsConfig& config,
+    const oxygen::PathFinderConfig& path_finder_config) -> void
   {
     if (!backend_instance) {
       // Create the JSON configuration
       const std::string config_json
         = SerializeConfigToJson(config, backend_type);
+      const std::string path_finder_json
+        = SerializePathFinderConfigToJson(path_finder_config);
 
       // Create the configuration struct
       SerializedBackendConfig serialized_config;
       serialized_config.json_data = config_json.c_str();
       serialized_config.size = config_json.length();
+      SerializedPathFinderConfig serialized_path_finder_config;
+      serialized_path_finder_config.json_data = path_finder_json.c_str();
+      serialized_path_finder_config.size = path_finder_json.length();
 
       // Call the backend create function with the configuration
-      void* instance = backend_api->CreateBackend(serialized_config);
+      void* instance = backend_api->CreateBackend(
+        serialized_config, serialized_path_finder_config);
 
       if (instance == nullptr) {
         throw std::runtime_error("Failed to create backend instance");
@@ -656,8 +667,10 @@ GraphicsBackendLoader::~GraphicsBackendLoader() = default;
  auto& loader = GraphicsBackendLoader::GetInstance();
  GraphicsConfig config{};
  config.enable_debug = true;
+ PathFinderConfig path_finder_config{};
 
- auto backend = loader.LoadBackend(BackendType::kDirect3D12, config);
+ auto backend = loader.LoadBackend(
+   BackendType::kDirect3D12, config, path_finder_config);
  if (auto graphics = backend.lock()) {
      // Use the graphics backend
  }
@@ -667,13 +680,14 @@ GraphicsBackendLoader::~GraphicsBackendLoader() = default;
        return the existing instance if already loaded.
 */
 auto GraphicsBackendLoader::LoadBackend(const BackendType backend,
-  const GraphicsConfig& config) const -> std::weak_ptr<Graphics>
+  const GraphicsConfig& config,
+  const PathFinderConfig& path_finder_config) const -> std::weak_ptr<Graphics>
 {
   if (g_loader_init_mode == LoaderInitMode::kStrict) {
     EnforceMainModuleRestriction(
       pimpl_->GetPlatformServices(), "LoadBackend", oxygen::ReturnAddress<>());
   }
-  return pimpl_->LoadBackend(backend, config);
+  return pimpl_->LoadBackend(backend, config, path_finder_config);
 }
 
 /*!

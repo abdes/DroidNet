@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <cmath>
+#include <optional>
 #include <string_view>
 
 #include <imgui.h>
@@ -11,6 +14,9 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/ImGui/Console/CommandPalette.h>
+#include <Oxygen/ImGui/Console/ConsolePanel.h>
+#include <Oxygen/ImGui/Console/ConsoleUiState.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 
 #include "DemoShell/DemoShell.h"
@@ -23,6 +29,7 @@
 #include "DemoShell/Services/LightCullingSettingsService.h"
 #include "DemoShell/Services/PostProcessSettingsService.h"
 #include "DemoShell/Services/RenderingSettingsService.h"
+#include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/Services/UiSettingsService.h"
 #include "DemoShell/UI/AxesWidget.h"
 #include "DemoShell/UI/CameraControlPanel.h"
@@ -46,6 +53,104 @@
 
 namespace oxygen::examples::ui {
 
+namespace {
+
+constexpr float kGeometryEpsilon = 0.5F;
+constexpr std::string_view kConsoleXKey = "demo_shell.console.window.x";
+constexpr std::string_view kConsoleYKey = "demo_shell.console.window.y";
+constexpr std::string_view kConsoleWidthKey = "demo_shell.console.window.width";
+constexpr std::string_view kConsoleHeightKey = "demo_shell.console.window.height";
+constexpr std::string_view kPaletteXKey = "demo_shell.palette.window.x";
+constexpr std::string_view kPaletteYKey = "demo_shell.palette.window.y";
+constexpr std::string_view kPaletteWidthKey = "demo_shell.palette.window.width";
+constexpr std::string_view kPaletteHeightKey = "demo_shell.palette.window.height";
+constexpr std::string_view kConsoleAutoScrollKey = "demo_shell.console.auto_scroll";
+constexpr std::string_view kConsoleFilterOkKey = "demo_shell.console.filter.ok";
+constexpr std::string_view kConsoleFilterWarningKey
+  = "demo_shell.console.filter.warning";
+constexpr std::string_view kConsoleFilterErrorKey = "demo_shell.console.filter.error";
+
+struct WindowSettingKeys final {
+  std::string_view x;
+  std::string_view y;
+  std::string_view width;
+  std::string_view height;
+};
+
+constexpr WindowSettingKeys kConsoleWindowKeys {
+  .x = kConsoleXKey,
+  .y = kConsoleYKey,
+  .width = kConsoleWidthKey,
+  .height = kConsoleHeightKey,
+};
+
+constexpr WindowSettingKeys kPaletteWindowKeys {
+  .x = kPaletteXKey,
+  .y = kPaletteYKey,
+  .width = kPaletteWidthKey,
+  .height = kPaletteHeightKey,
+};
+
+auto IsApproximatelyEqual(const float lhs, const float rhs) noexcept -> bool
+{
+  return std::abs(lhs - rhs) <= kGeometryEpsilon;
+}
+
+auto IsPlacementDifferent(const imgui::consoleui::WindowPlacement& lhs,
+  const imgui::consoleui::WindowPlacement& rhs) noexcept -> bool
+{
+  return !IsApproximatelyEqual(lhs.x, rhs.x)
+    || !IsApproximatelyEqual(lhs.y, rhs.y)
+    || !IsApproximatelyEqual(lhs.width, rhs.width)
+    || !IsApproximatelyEqual(lhs.height, rhs.height);
+}
+
+auto TryLoadPlacement(observer_ptr<SettingsService> settings,
+  const WindowSettingKeys& keys)
+  -> std::optional<imgui::consoleui::WindowPlacement>
+{
+  if (!settings) {
+    return std::nullopt;
+  }
+
+  const auto x = settings->GetFloat(keys.x);
+  const auto y = settings->GetFloat(keys.y);
+  const auto width = settings->GetFloat(keys.width);
+  const auto height = settings->GetFloat(keys.height);
+  if (!x.has_value() || !y.has_value() || !width.has_value()
+    || !height.has_value()) {
+    return std::nullopt;
+  }
+
+  return imgui::consoleui::WindowPlacement {
+    .x = *x,
+    .y = *y,
+    .width = *width,
+    .height = *height,
+  };
+}
+
+auto HandleGlobalConsoleAccelerators(
+  imgui::consoleui::ConsoleUiState& console_ui_state) -> void
+{
+  // "Hard" global accelerators: process regardless of ImGui capture flags.
+  if (ImGui::IsKeyPressed(ImGuiKey_GraveAccent, false)) {
+    if (!console_ui_state.IsConsoleVisible()) {
+      console_ui_state.SetConsoleVisible(true);
+    } else if (console_ui_state.ConsoleInput().empty()) {
+      console_ui_state.SetConsoleVisible(false);
+    } else {
+      console_ui_state.RequestConsoleFocus();
+    }
+  }
+  if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift
+    && ImGui::IsKeyPressed(ImGuiKey_P, false)) {
+    console_ui_state.TogglePalette();
+  }
+}
+
+} // namespace
+
 struct DemoShellUi::Impl {
   observer_ptr<AsyncEngine> engine;
   observer_ptr<PanelRegistry> panel_registry;
@@ -62,11 +167,18 @@ struct DemoShellUi::Impl {
   observer_ptr<UiSettingsVm> ui_settings_vm_ptr { &ui_settings_vm };
 
   // Core UI components
+  imgui::consoleui::ConsoleUiState console_ui_state;
+  imgui::consoleui::ConsolePanel console_panel;
+  imgui::consoleui::CommandPalette command_palette;
   PanelSideBar side_bar;
   SidePanel side_panel;
   AxesWidget axes_widget;
   StatsOverlay stats_overlay;
   std::shared_ptr<UiSettingsPanel> settings_panel;
+  std::optional<imgui::consoleui::WindowPlacement> last_saved_console_window;
+  std::optional<imgui::consoleui::WindowPlacement> last_saved_palette_window;
+  bool last_saved_auto_scroll { true };
+  std::array<bool, 3> last_saved_severity_filters { true, true, true };
 
   // Rendering panel (created lazily when pass config is available)
   std::unique_ptr<RenderingVm> rendering_vm;
@@ -171,6 +283,107 @@ struct DemoShellUi::Impl {
     if (!result) {
       LOG_F(WARNING, "Failed to register Settings panel");
     }
+
+    LoadConsoleUiSettingsFromStorage();
+  }
+
+  auto LoadConsoleUiSettingsFromStorage() -> void
+  {
+    const auto settings = SettingsService::ForDemoApp();
+    if (!settings) {
+      return;
+    }
+
+    if (const auto console_window
+      = TryLoadPlacement(settings, kConsoleWindowKeys);
+      console_window.has_value()) {
+      console_ui_state.SetConsoleWindowPlacement(*console_window);
+      last_saved_console_window = console_window;
+    }
+    if (const auto palette_window
+      = TryLoadPlacement(settings, kPaletteWindowKeys);
+      palette_window.has_value()) {
+      console_ui_state.SetPaletteWindowPlacement(*palette_window);
+      last_saved_palette_window = palette_window;
+    }
+
+    last_saved_auto_scroll
+      = settings->GetBool(kConsoleAutoScrollKey).value_or(true);
+    console_ui_state.SetAutoScrollEnabled(last_saved_auto_scroll);
+
+    const std::array<imgui::consoleui::LogSeverity, 3> severities {
+      imgui::consoleui::LogSeverity::kSuccess,
+      imgui::consoleui::LogSeverity::kWarning,
+      imgui::consoleui::LogSeverity::kError,
+    };
+    const std::array<std::string_view, 3> keys {
+      kConsoleFilterOkKey,
+      kConsoleFilterWarningKey,
+      kConsoleFilterErrorKey,
+    };
+    for (size_t i = 0; i < severities.size(); ++i) {
+      const bool value = settings->GetBool(keys[i]).value_or(true);
+      console_ui_state.SetSeverityEnabled(severities[i], value);
+      last_saved_severity_filters[i] = value;
+    }
+  }
+
+  auto PersistConsoleUiSettingsToStorage() -> void
+  {
+    const auto settings = SettingsService::ForDemoApp();
+    if (!settings) {
+      return;
+    }
+
+    if (const auto& current = console_ui_state.ConsoleWindowPlacement();
+      current.has_value()) {
+      const bool save_geometry = !last_saved_console_window.has_value()
+        || IsPlacementDifferent(*current, *last_saved_console_window);
+      if (save_geometry && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        settings->SetFloat(kConsoleXKey, current->x);
+        settings->SetFloat(kConsoleYKey, current->y);
+        settings->SetFloat(kConsoleWidthKey, current->width);
+        settings->SetFloat(kConsoleHeightKey, current->height);
+        last_saved_console_window = current;
+      }
+    }
+
+    if (const auto& current = console_ui_state.PaletteWindowPlacement();
+      current.has_value()) {
+      const bool save_geometry = !last_saved_palette_window.has_value()
+        || IsPlacementDifferent(*current, *last_saved_palette_window);
+      if (save_geometry && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        settings->SetFloat(kPaletteXKey, current->x);
+        settings->SetFloat(kPaletteYKey, current->y);
+        settings->SetFloat(kPaletteWidthKey, current->width);
+        settings->SetFloat(kPaletteHeightKey, current->height);
+        last_saved_palette_window = current;
+      }
+    }
+
+    const bool auto_scroll = console_ui_state.IsAutoScrollEnabled();
+    if (auto_scroll != last_saved_auto_scroll) {
+      settings->SetBool(kConsoleAutoScrollKey, auto_scroll);
+      last_saved_auto_scroll = auto_scroll;
+    }
+
+    const std::array<imgui::consoleui::LogSeverity, 3> severities {
+      imgui::consoleui::LogSeverity::kSuccess,
+      imgui::consoleui::LogSeverity::kWarning,
+      imgui::consoleui::LogSeverity::kError,
+    };
+    const std::array<std::string_view, 3> keys {
+      kConsoleFilterOkKey,
+      kConsoleFilterWarningKey,
+      kConsoleFilterErrorKey,
+    };
+    for (size_t i = 0; i < severities.size(); ++i) {
+      const bool enabled = console_ui_state.IsSeverityEnabled(severities[i]);
+      if (enabled != last_saved_severity_filters[i]) {
+        settings->SetBool(keys[i], enabled);
+        last_saved_severity_filters[i] = enabled;
+      }
+    }
   }
 };
 
@@ -220,6 +433,13 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
   ImGui::SetCurrentContext(imgui_context);
 
   const auto& io = ImGui::GetIO();
+  HandleGlobalConsoleAccelerators(impl_->console_ui_state);
+
+  auto& console = impl_->engine->GetConsole();
+  impl_->console_panel.Draw(console, impl_->console_ui_state);
+  impl_->command_palette.Draw(console, impl_->console_ui_state);
+  impl_->PersistConsoleUiSettingsToStorage();
+
   if (!io.WantCaptureMouse && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
     last_mouse_down_position_ = SubPixelPosition {
       .x = io.MousePos.x,

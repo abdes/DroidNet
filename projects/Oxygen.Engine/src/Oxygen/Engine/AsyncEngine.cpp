@@ -105,7 +105,7 @@ AsyncEngine::AsyncEngine(std::shared_ptr<Platform> platform,
   , platform_(std::move(platform))
   , gfx_weak_(std::move(graphics))
   , path_finder_config_(std::make_shared<const PathFinderConfig>(
-      config_.graphics.path_finder_config))
+      config_.path_finder_config))
   , path_finder_(path_finder_config_, std::filesystem::current_path())
   , module_manager_(std::make_unique<ModuleManager>(observer_ptr { this }))
 {
@@ -225,6 +225,7 @@ auto AsyncEngine::Shutdown() -> co::Co<>
   // Now shutdown the platform event pump so modules are able to perform
   // any required cleanup while platform objects are still alive.
   SavePersistedConsoleCVars();
+  SavePersistedConsoleHistory();
   co_await platform_->Shutdown();
 }
 
@@ -276,6 +277,9 @@ auto AsyncEngine::SetTargetFps(uint32_t fps) noexcept -> void
 {
   if (fps > EngineConfig::kMaxTargetFps) {
     fps = EngineConfig::kMaxTargetFps;
+  }
+  if (config_.target_fps == fps) {
+    return;
   }
   config_.target_fps = fps;
   LOG_F(INFO, "AsyncEngine target_fps set to {}", config_.target_fps);
@@ -601,6 +605,7 @@ auto AsyncEngine::InitializeConsoleRuntime() -> void
   RegisterEngineConsoleBindings();
   RegisterServiceConsoleBindings();
   LoadPersistedConsoleCVars();
+  LoadPersistedConsoleHistory();
   ApplyAllConsoleCVars();
 }
 
@@ -639,6 +644,26 @@ auto AsyncEngine::RegisterEngineConsoleBindings() -> void
       return result;
     },
   });
+
+  (void)console_.RegisterCommand(CommandDefinition {
+    .name = "ngin.console.history.save",
+    .help = "Save console command history",
+    .flags = CommandFlags::kNone,
+    .handler = [this](const std::vector<std::string>&,
+                 const CommandContext&) -> ExecutionResult {
+      return console_.SaveHistory(path_finder_);
+    },
+  });
+
+  (void)console_.RegisterCommand(CommandDefinition {
+    .name = "ngin.console.history.load",
+    .help = "Load console command history",
+    .flags = CommandFlags::kNone,
+    .handler = [this](const std::vector<std::string>&,
+                 const CommandContext&) -> ExecutionResult {
+      return console_.LoadHistory(path_finder_);
+    },
+  });
 }
 
 auto AsyncEngine::RegisterServiceConsoleBindings() -> void
@@ -672,13 +697,36 @@ auto AsyncEngine::SavePersistedConsoleCVars() const -> void
   }
 }
 
+auto AsyncEngine::LoadPersistedConsoleHistory() -> void
+{
+  const auto result = console_.LoadHistory(path_finder_);
+  if (result.status == ExecutionStatus::kOk) {
+    LOG_F(INFO, "{}", result.output);
+  } else if (result.status != ExecutionStatus::kNotFound) {
+    LOG_F(WARNING, "{}", result.error);
+  }
+}
+
+auto AsyncEngine::SavePersistedConsoleHistory() const -> void
+{
+  const auto result = console_.SaveHistory(path_finder_);
+  if (result.status == ExecutionStatus::kOk) {
+    LOG_F(INFO, "{}", result.output);
+  } else {
+    LOG_F(WARNING, "{}", result.error);
+  }
+}
+
 auto AsyncEngine::ApplyEngineOwnedConsoleCVars() -> void
 {
   int64_t target_fps = 0;
   if (console_.TryGetCVarValue<int64_t>(kCVarEngineTargetFps, target_fps)) {
     const auto clamped = std::clamp<int64_t>(
       target_fps, 0, static_cast<int64_t>(EngineConfig::kMaxTargetFps));
-    SetTargetFps(static_cast<uint32_t>(clamped));
+    const auto new_target_fps = static_cast<uint32_t>(clamped);
+    if (config_.target_fps != new_target_fps) {
+      SetTargetFps(new_target_fps);
+    }
   }
 }
 

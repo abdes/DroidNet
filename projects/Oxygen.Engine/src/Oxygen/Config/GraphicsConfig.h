@@ -6,12 +6,11 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
-
-#include <Oxygen/Config/PathFinderConfig.h>
 
 namespace oxygen {
 
@@ -55,10 +54,6 @@ struct GraphicsConfig {
   //! Backend-specific configuration as a JSON string.
   std::string extra = "{}";
 
-  //! Serializable path resolution configuration.
-  //!
-  //! @note This must remain 100% serializable across DLL boundaries.
-  PathFinderConfig path_finder_config {};
 };
 
 //! Configuration structure passed to backends during creation. A C-compatible
@@ -67,6 +62,13 @@ struct GraphicsConfig {
 //! last only for the duration of the call.
 struct SerializedBackendConfig {
   const char* json_data; //!< UTF-8 encoded JSON string with configuration
+  size_t size; //!< Length of the JSON data in bytes
+};
+
+//! Configuration structure for path resolution passed to backends during
+//! creation. C-compatible and valid only for the duration of the call.
+struct SerializedPathFinderConfig {
+  const char* json_data; //!< UTF-8 encoded JSON string with path configuration
   size_t size; //!< Length of the JSON data in bytes
 };
 

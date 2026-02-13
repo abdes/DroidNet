@@ -51,7 +51,7 @@ auto main(int argc, char** argv) -> int
     .extra = {},
   };
   auto& loader = oxygen::GraphicsBackendLoader::GetInstance();
-  auto gfx_weak = loader.LoadBackend(BackendType::kHeadless, gfx_config);
+  auto gfx_weak = loader.LoadBackend(BackendType::kHeadless, gfx_config, {});
 
   {
     const EngineConfig props {};

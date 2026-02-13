@@ -31,12 +31,18 @@ void History::Push(std::string entry)
   if (entry.empty()) {
     return;
   }
+  if (max_entries_ == 0) {
+    return;
+  }
   if (!entries_.empty() && entries_.back() == entry) {
     return;
   }
 
   if (entries_.size() >= max_entries_) {
-    entries_.erase(entries_.begin());
+    if (entries_.empty()) {
+      return;
+    }
+    entries_.erase(entries_.cbegin());
   }
   entries_.push_back(std::move(entry));
 }

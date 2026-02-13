@@ -206,7 +206,8 @@ auto CreateEngine(const EngineConfig& config) -> std::unique_ptr<EngineContext>
     };
     const auto& loader = GraphicsBackendLoader::GetInstanceRelaxed();
     ctx->gfx_weak
-      = loader.LoadBackend(graphics::BackendType::kDirect3D12, gfx_config);
+      = loader.LoadBackend(graphics::BackendType::kDirect3D12, gfx_config,
+        config.path_finder_config);
     CHECK_F(
       !ctx->gfx_weak.expired()); // Expect a valid graphics backend, or abort
     ctx->gfx_weak.lock()->CreateCommandQueues(ctx->queue_strategy);
