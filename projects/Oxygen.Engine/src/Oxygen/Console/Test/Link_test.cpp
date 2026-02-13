@@ -10,25 +10,25 @@
 
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
-  using namespace oxygen::console;
+  namespace c = oxygen::console;
 
-  Console console {};
+  c::Console console {};
 
-  const auto cvar_ok = console.RegisterCVar(CVarDefinition {
+  const auto cvar_ok = console.RegisterCVar(c::CVarDefinition {
     .name = "r.vsync",
     .help = "Enable vsync",
     .default_value = int64_t { 1 },
-    .flags = CVarFlags::kArchive,
+    .flags = c::CVarFlags::kArchive,
     .min_value = 0.0,
     .max_value = 1.0,
   });
 
-  const auto command_ok = console.RegisterCommand(CommandDefinition {
+  const auto command_ok = console.RegisterCommand(c::CommandDefinition {
     .name = "echo",
     .help = "Echo args",
-    .flags = CommandFlags::kNone,
+    .flags = c::CommandFlags::kNone,
     .handler = [](const std::vector<std::string>& args,
-                 const CommandContext&) -> ExecutionResult {
+                 const c::CommandContext&) -> c::ExecutionResult {
       std::string text;
       for (size_t i = 0; i < args.size(); ++i) {
         if (i != 0) {
@@ -37,7 +37,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int
         text += args[i];
       }
       return {
-        .status = ExecutionStatus::kOk,
+        .status = c::ExecutionStatus::kOk,
         .exit_code = 0,
         .output = text,
         .error = {},
@@ -50,12 +50,12 @@ auto main(int /*argc*/, char** /*argv*/) -> int
   }
 
   const auto set_result = console.Execute("r.vsync 0");
-  if (set_result.status != ExecutionStatus::kOk) {
+  if (set_result.status != c::ExecutionStatus::kOk) {
     return EXIT_FAILURE;
   }
 
   const auto command_result = console.Execute("echo hello oxygen");
-  if (command_result.status != ExecutionStatus::kOk
+  if (command_result.status != c::ExecutionStatus::kOk
     || command_result.output != "hello oxygen") {
     return EXIT_FAILURE;
   }

@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Console/Parser.h>
 #include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Console/Parser.h>
 
 namespace {
 
@@ -16,7 +17,8 @@ NOLINT_TEST(ConsoleParser, HandlesQuotesEscapesAndWhitespace)
   const auto tokens = Parser::Tokenize(
     R"(cmd  "arg with space"  'single quoted' escaped\ value "a\"b"  )");
 
-  ASSERT_EQ(tokens.size(), 5);
+  constexpr size_t kExpectedTokens = 5;
+  ASSERT_EQ(tokens.size(), kExpectedTokens);
   EXPECT_EQ(tokens[0], "cmd");
   EXPECT_EQ(tokens[1], "arg with space");
   EXPECT_EQ(tokens[2], "single quoted");

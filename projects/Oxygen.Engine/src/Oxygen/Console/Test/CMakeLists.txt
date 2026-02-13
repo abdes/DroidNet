@@ -27,7 +27,16 @@ add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 include(GTestHelpers)
 
 m_gtest_program(
-  ConsoleBehavior
+  Console
   SOURCES
-    "ConsoleBehavior_test.cpp"
+    "CVar_test.cpp"
+    "Command_test.cpp"
+    "Completion_test.cpp"
+    "Execution_test.cpp"
+    "History_test.cpp"
+    "Parser_test.cpp"
+    "Persistence_test.cpp"
+    "Policy_test.cpp"
+    "Registry_test.cpp"
+    "Visibility_test.cpp"
 )
