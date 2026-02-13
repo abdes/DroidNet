@@ -54,6 +54,8 @@ public:
     return enable_vsync_;
   }
 
+  OXGN_D3D12_API auto SetVSyncEnabled(bool enabled) -> void override;
+
   //=== D3D12 specific factories ===----------------------------------------//
 
   OXGN_D3D12_NDAPI auto CreateSurface(

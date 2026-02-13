@@ -218,6 +218,7 @@ target_link_libraries(
     glm::glm
     oxygen::base
     oxygen::config
+    oxygen::console
     oxygen::oxco
     oxygen::data
     oxygen::scene

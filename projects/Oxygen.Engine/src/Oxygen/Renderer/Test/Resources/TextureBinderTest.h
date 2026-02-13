@@ -184,6 +184,15 @@ public:
 
   auto TrimCache() -> void override { textures_.clear(); }
 
+  auto RegisterConsoleBindings(
+    observer_ptr<console::Console> /*console*/) noexcept -> void override
+  {
+  }
+
+  auto ApplyConsoleCVars(const console::Console& /*console*/) -> void override
+  {
+  }
+
   auto SubscribeResourceEvictions(TypeId resource_type, EvictionHandler handler)
     -> EvictionSubscription override
   {

@@ -65,6 +65,10 @@ public:
 
   OXGN_NPUT_NDAPI auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept
     -> bool override;
+  OXGN_NPUT_API auto RegisterConsoleBindings(
+    observer_ptr<console::Console> console) noexcept -> void override;
+  OXGN_NPUT_API auto ApplyConsoleCVars(
+    observer_ptr<const console::Console> console) noexcept -> void override;
 
   // Frame phase handlers
   OXGN_NPUT_API auto OnFrameStart(observer_ptr<FrameContext> context)
@@ -99,6 +103,7 @@ public:
   // update_context);
 
 private:
+  auto DrainPendingInputEvents() -> void;
   void ProcessInputEvent(std::shared_ptr<platform::InputEvent> event);
   void HandleInput(
     const platform::InputSlot& slot, const platform::InputEvent& event);
@@ -109,6 +114,8 @@ private:
   // Frame processing
   co::ReaderContext<platform::InputEvent> input_reader_;
   std::vector<std::shared_ptr<platform::InputEvent>> frame_events_;
+  bool input_enabled_ { true };
+  bool log_events_ { false };
   // Frozen per-frame snapshot at end of kInput; shared so the engine can
   // publish it into FrameContext for early access and later freezing.
   std::shared_ptr<const input::InputSnapshot> current_snapshot_;

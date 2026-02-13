@@ -29,6 +29,9 @@
 
 namespace oxygen {
 class AsyncEngine;
+namespace console {
+  class Console;
+} // namespace console
 } // namespace oxygen
 
 namespace oxygen::engine {
@@ -88,6 +91,9 @@ public:
 
   OXGN_NGIN_API auto ExecuteParallelTasks(observer_ptr<FrameContext> ctx,
     const UnifiedSnapshot& snapshot) -> co::Co<>;
+
+  OXGN_NGIN_API auto ApplyConsoleCVars(
+    observer_ptr<const console::Console> console) noexcept -> void;
 
   [[nodiscard]] auto GetModules() const -> decltype(auto)
   {

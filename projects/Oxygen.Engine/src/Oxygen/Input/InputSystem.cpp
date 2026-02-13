@@ -16,6 +16,8 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
+#include <Oxygen/Console/Console.h>
+#include <Oxygen/Console/CVar.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/Action.h>
@@ -35,6 +37,9 @@ using namespace oxygen::input;
 using oxygen::engine::InputSystem;
 
 namespace {
+constexpr std::string_view kCVarInputEnabled = "nput.enabled";
+constexpr std::string_view kCVarInputLogEvents = "nput.log_events";
+
 [[nodiscard]] auto FindInputMappingContextEntry(
   std::list<InputSystem::InputMappingContextEntry>& list,
   const InputMappingContext& context)
@@ -59,6 +64,46 @@ auto InputSystem::OnAttached(observer_ptr<AsyncEngine> /*engine*/) noexcept
 {
   // InputSystem is now ready for frame-based processing
   return true;
+}
+
+auto InputSystem::RegisterConsoleBindings(
+  const observer_ptr<console::Console> console) noexcept -> void
+{
+  if (console == nullptr) {
+    return;
+  }
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarInputEnabled),
+    .help = "Enable input processing for InputSystem",
+    .default_value = input_enabled_,
+    .flags = console::CVarFlags::kArchive,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarInputLogEvents),
+    .help = "Enable verbose InputSystem per-event logging",
+    .default_value = log_events_,
+    .flags = console::CVarFlags::kDevOnly,
+  });
+}
+
+auto InputSystem::ApplyConsoleCVars(
+  const observer_ptr<const console::Console> console) noexcept -> void
+{
+  if (console == nullptr) {
+    return;
+  }
+
+  bool input_enabled = input_enabled_;
+  if (console->TryGetCVarValue<bool>(kCVarInputEnabled, input_enabled)) {
+    input_enabled_ = input_enabled;
+  }
+
+  bool log_events_enabled = log_events_;
+  if (console->TryGetCVarValue<bool>(kCVarInputLogEvents, log_events_enabled)) {
+    log_events_ = log_events_enabled;
+  }
 }
 
 auto InputSystem::GetName() const noexcept -> std::string_view
@@ -114,6 +159,15 @@ auto InputSystem::OnInput(observer_ptr<FrameContext> context) -> co::Co<>
 
   // Drain all events from BroadcastChannel for this frame
   frame_events_.clear();
+  if (!input_enabled_) {
+    DrainPendingInputEvents();
+    current_snapshot_ = std::make_shared<input::InputSnapshot>(actions_);
+    for (auto& action : actions_) {
+      action->EndFrameTracking();
+    }
+    co_return;
+  }
+
   while (auto event = input_reader_.TryReceive()) {
     frame_events_.push_back(event);
     ProcessInputEvent(event); // Use existing ProcessInputEvent method
@@ -180,6 +234,12 @@ auto InputSystem::OnFrameEnd(observer_ptr<FrameContext> /*context*/) -> void
   current_snapshot_.reset();
 }
 
+auto InputSystem::DrainPendingInputEvents() -> void
+{
+  while (input_reader_.TryReceive()) {
+  }
+}
+
 void InputSystem::ProcessInputEvent(std::shared_ptr<InputEvent> event)
 {
   using platform::KeyEvent;
@@ -191,7 +251,9 @@ void InputSystem::ProcessInputEvent(std::shared_ptr<InputEvent> event)
   using platform::input::MouseMotionComponent;
   using platform::input::MouseWheelComponent;
 
-  DLOG_F(2, "Processing input event of type {}", event->GetTypeNamePretty());
+  if (log_events_) {
+    DLOG_F(2, "Processing input event of type {}", event->GetTypeNamePretty());
+  }
 
   // Keyboard events
   if (const auto event_type = event->GetTypeId();

@@ -103,11 +103,29 @@ Future target:
 
 - Engine lifetime:
   - Construct `console::Console` early.
-  - Register module bindings after module init.
-  - Apply latched CVars at deterministic phase boundary.
+  - Register engine-owned bindings during `AsyncEngine` construction.
+  - Register module bindings in `ModuleManager::RegisterModule` via
+    `EngineModule::RegisterConsoleBindings`.
+  - Apply latched CVars at deterministic `kFrameStart` boundary.
 - UI:
   - ImGui panel should call `Execute`, `Complete`, and history navigation APIs.
   - UI must not directly mutate CVar internals.
+
+### Startup/Frame Order (Implemented)
+
+1. `AsyncEngine` constructs `console::Console`.
+2. `AsyncEngine::RegisterConsoleBindings` registers engine-owned namespaces:
+   - `ngin.*` (engine runtime)
+   - `gfx.*` (graphics runtime)
+   - `rndr.*` (renderer runtime)
+   - `nput.*` (input runtime)
+   - `cntt.*` (content/AssetLoader runtime)
+3. `AsyncEngine::LoadPersistedConsoleCVars` loads persisted archive CVars.
+4. `AsyncEngine::ApplyAllConsoleCVars` applies engine-owned and service/module
+   owned CVars through inversion of control.
+5. At each frame `kFrameStart`:
+   - `ApplyConsoleStateAtFrameStart` runs `ApplyLatchedCVars` then
+     `ApplyAllConsoleCVars`.
 
 ## Industry Patterns Captured
 

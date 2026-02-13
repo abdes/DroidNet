@@ -13,6 +13,8 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/Component.h>
+#include <Oxygen/Console/Console.h>
+#include <Oxygen/Console/CVar.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -35,6 +37,7 @@ using oxygen::graphics::internal::DeferredReclaimerComponent;
 using oxygen::graphics::internal::QueueManager;
 
 namespace {
+constexpr std::string_view kCVarGraphicsVsync = "gfx.vsync";
 
 class ResourceRegistryComponent : public oxygen::Component {
   OXYGEN_COMPONENT(ResourceRegistryComponent)
@@ -145,6 +148,31 @@ auto Graphics::PresentSurfaces(
       LOG_F(WARNING, "Present on surface `{}` failed; frame discarded: {}",
         surface->GetName(), e.what());
     }
+  }
+}
+
+auto Graphics::SetVSyncEnabled([[maybe_unused]] const bool enabled) -> void { }
+
+auto Graphics::RegisterConsoleBindings(
+  const observer_ptr<console::Console> console) noexcept -> void
+{
+  if (console == nullptr) {
+    return;
+  }
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarGraphicsVsync),
+    .help = "Enable graphics VSync",
+    .default_value = true,
+    .flags = console::CVarFlags::kArchive,
+  });
+}
+
+auto Graphics::ApplyConsoleCVars(const console::Console& console) -> void
+{
+  bool vsync_enabled = true;
+  if (console.TryGetCVarValue<bool>(kCVarGraphicsVsync, vsync_enabled)) {
+    SetVSyncEnabled(vsync_enabled);
   }
 }
 

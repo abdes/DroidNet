@@ -160,6 +160,10 @@ public:
 
   OXGN_RNDR_NDAPI auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept
     -> bool override;
+  OXGN_RNDR_API auto RegisterConsoleBindings(
+    observer_ptr<console::Console> console) noexcept -> void override;
+  OXGN_RNDR_API auto ApplyConsoleCVars(
+    observer_ptr<const console::Console> console) noexcept -> void override;
 
   OXGN_RNDR_API auto OnShutdown() noexcept -> void override;
 

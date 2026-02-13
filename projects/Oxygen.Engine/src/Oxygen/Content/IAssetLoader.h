@@ -23,6 +23,10 @@
 #include <Oxygen/data/MaterialAsset.h>
 #include <Oxygen/data/SceneAsset.h>
 
+namespace oxygen::console {
+class Console;
+} // namespace oxygen::console
+
 namespace oxygen::content {
 
 //! Cooked bytes input for decoding a resource from an in-memory buffer.
@@ -172,6 +176,14 @@ public:
 
   //! Clear cached assets/resources without unmounting sources.
   virtual auto TrimCache() -> void = 0;
+
+  //! Register content-owned commands/CVars (`cntt.*`).
+  virtual auto RegisterConsoleBindings(
+    observer_ptr<console::Console> console) noexcept -> void
+    = 0;
+
+  //! Apply content runtime CVar values at the engine-defined sync point.
+  virtual auto ApplyConsoleCVars(const console::Console& console) -> void = 0;
 
   //! Get cached resource without triggering a load.
   [[nodiscard]] virtual auto GetTexture(ResourceKey key) const noexcept

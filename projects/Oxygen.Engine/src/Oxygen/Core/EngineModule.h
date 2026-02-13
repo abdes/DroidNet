@@ -20,6 +20,9 @@
 
 namespace oxygen {
 class AsyncEngine;
+namespace console {
+  class Console;
+} // namespace console
 } // namespace oxygen
 
 namespace oxygen::engine {
@@ -92,6 +95,20 @@ public:
   virtual auto OnShutdown() noexcept -> void { }
 
   virtual auto OnUnload() noexcept -> void { }
+
+  //! Called once when the module is attached so it can register console
+  //! commands/CVars using its own namespace (for example `rndr.*`).
+  virtual auto RegisterConsoleBindings(
+    observer_ptr<console::Console> /*console*/) noexcept -> void
+  {
+  }
+
+  //! Called at a deterministic engine sync point to apply module-owned CVar
+  //! values to runtime state.
+  virtual auto ApplyConsoleCVars(
+    observer_ptr<const console::Console> /*console*/) noexcept -> void
+  {
+  }
 
   // === Module-facing phase handlers ===
   // Expose handlers for all phases except the explicitly engine-only ones:

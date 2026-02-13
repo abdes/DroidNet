@@ -76,6 +76,22 @@ public:
   OXGN_CONS_NDAPI auto FindCVar(std::string_view name) const
     -> observer_ptr<const CVarSnapshot>;
 
+  template <typename TValue>
+  [[nodiscard]] auto TryGetCVarValue(
+    std::string_view name, TValue& out_value) const noexcept -> bool
+  {
+    const auto snapshot = FindCVar(name);
+    if (snapshot == nullptr) {
+      return false;
+    }
+    const auto* value = std::get_if<TValue>(&snapshot->current_value);
+    if (value == nullptr) {
+      return false;
+    }
+    out_value = *value;
+    return true;
+  }
+
 private:
   Registry registry_;
 };

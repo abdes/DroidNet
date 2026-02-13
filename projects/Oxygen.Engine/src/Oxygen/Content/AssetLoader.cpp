@@ -15,6 +15,9 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Composition/Typed.h>
+#include <Oxygen/Console/Command.h>
+#include <Oxygen/Console/Console.h>
+#include <Oxygen/Console/CVar.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Constants.h>
 #include <Oxygen/Content/Internal/ContentSource.h>
@@ -45,6 +48,10 @@ namespace pak = oxygen::data::pak;
 namespace internal = oxygen::content::internal;
 
 namespace {
+constexpr std::string_view kCVarVerifyContentHashes
+  = "cntt.verify_content_hashes";
+constexpr std::string_view kCommandTrimCache = "cntt.trim_cache";
+
 // Debug-only hash collision tracking for AssetKey hashes.
 #if !defined(NDEBUG)
 std::mutex g_asset_hash_mutex;
@@ -462,6 +469,45 @@ auto AssetLoader::TrimCache() -> void
     if (content_cache_.GetValueUseCount(key) <= 1U) {
       (void)content_cache_.Remove(key);
     }
+  }
+}
+
+auto AssetLoader::RegisterConsoleBindings(
+  const observer_ptr<console::Console> console) noexcept -> void
+{
+  if (console == nullptr) {
+    return;
+  }
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVerifyContentHashes),
+    .help = "Enable content hash verification for AssetLoader mounts",
+    .default_value = verify_content_hashes_,
+    .flags = console::CVarFlags::kArchive,
+  });
+
+  (void)console->RegisterCommand(console::CommandDefinition {
+    .name = std::string(kCommandTrimCache),
+    .help = "Trim AssetLoader in-memory cache",
+    .flags = console::CommandFlags::kDevOnly,
+    .handler = [this](const std::vector<std::string>&,
+                 const console::CommandContext&) -> console::ExecutionResult {
+      TrimCache();
+      return console::ExecutionResult {
+        .status = console::ExecutionStatus::kOk,
+        .exit_code = 0,
+        .output = "AssetLoader cache trimmed",
+        .error = {},
+      };
+    },
+  });
+}
+
+auto AssetLoader::ApplyConsoleCVars(const console::Console& console) -> void
+{
+  bool verify_hashes = verify_content_hashes_;
+  if (console.TryGetCVarValue<bool>(kCVarVerifyContentHashes, verify_hashes)) {
+    SetVerifyContentHashes(verify_hashes);
   }
 }
 

@@ -266,6 +266,7 @@ target_link_libraries(
   PUBLIC
     oxygen::base
     oxygen::composition
+    oxygen::console
     oxygen::data
   PRIVATE
     glm::glm
