@@ -34,6 +34,7 @@
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/Services/SkyboxService.h"
 #include "DemoShell/Services/UiSettingsService.h"
+#include "DemoShell/Services/GridSettingsService.h"
 #include "DemoShell/UI/CameraRigController.h"
 #include "DemoShell/UI/ContentVm.h"
 #include "DemoShell/UI/DemoShellUi.h"
@@ -59,6 +60,7 @@ struct DemoShell::Impl {
   ContentSettingsService content_settings_service;
   EnvironmentSettingsService environment_settings_service;
   ui::PostProcessSettingsService post_process_settings_service;
+  GridSettingsService grid_settings_service;
 
   // Panels still managed by DemoShell (non-MVVM panels)
   std::unique_ptr<SkyboxService> skybox_service;
@@ -191,6 +193,8 @@ auto DemoShell::CompleteInitialization() -> bool
     impl_->camera_settings_service.BindCameraRig(
       observer_ptr { impl_->camera_rig.get() });
   }
+  impl_->grid_settings_service.BindCameraRig(
+    observer_ptr { impl_->camera_rig.get() });
   impl_->post_process_settings_service.BindCameraSettings(
     observer_ptr { &impl_->camera_settings_service });
 
@@ -204,6 +208,7 @@ auto DemoShell::CompleteInitialization() -> bool
     observer_ptr { &impl_->content_settings_service },
     observer_ptr { &impl_->environment_settings_service },
     observer_ptr { &impl_->post_process_settings_service },
+    observer_ptr { &impl_->grid_settings_service },
     observer_ptr { impl_->camera_rig.get() },
     observer_ptr { &impl_->file_browser_service }, impl_->config.panel_config);
 
@@ -282,6 +287,9 @@ auto DemoShell::OnFrameStart(const engine::FrameContext& context) -> void
   impl_->rendering_settings_service.OnFrameStart(context);
   impl_->light_culling_settings_service.OnFrameStart(context);
   impl_->environment_settings_service.OnFrameStart(context);
+  if (impl_->config.panel_config.ground_grid) {
+    impl_->grid_settings_service.OnFrameStart(context);
+  }
 }
 
 auto DemoShell::OnMainViewReady(
@@ -297,6 +305,9 @@ auto DemoShell::OnMainViewReady(
   impl_->rendering_settings_service.OnMainViewReady(context, view);
   impl_->light_culling_settings_service.OnMainViewReady(context, view);
   impl_->environment_settings_service.OnMainViewReady(context, view);
+  if (impl_->config.panel_config.ground_grid) {
+    impl_->grid_settings_service.OnMainViewReady(context, view);
+  }
 }
 
 auto DemoShell::RegisterPanel(std::shared_ptr<DemoPanel> panel) -> bool
@@ -456,6 +467,9 @@ auto DemoShell::UpdatePanels() -> void
       impl_->rendering_settings_service.Initialize(pipeline);
       impl_->light_culling_settings_service.Initialize(pipeline);
       impl_->post_process_settings_service.Initialize(pipeline);
+      if (impl_->config.panel_config.ground_grid) {
+        impl_->grid_settings_service.Initialize(pipeline);
+      }
       impl_->bound_pipeline = pipeline;
     }
 
@@ -504,6 +518,9 @@ auto DemoShell::OnSceneActivated(scene::Scene& scene) -> void
   impl_->light_culling_settings_service.OnSceneActivated(scene);
   impl_->environment_settings_service.OnSceneActivated(scene);
   impl_->post_process_settings_service.BindScene(observer_ptr { &scene });
+  if (impl_->config.panel_config.ground_grid) {
+    impl_->grid_settings_service.OnSceneActivated(scene);
+  }
 }
 
 } // namespace oxygen::examples

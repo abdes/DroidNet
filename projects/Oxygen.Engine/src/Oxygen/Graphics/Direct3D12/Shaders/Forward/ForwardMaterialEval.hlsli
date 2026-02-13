@@ -30,30 +30,45 @@ static inline float GridLineMask(float2 world_xz, float2 spacing, float thicknes
     spacing = max(spacing, float2(1e-4, 1e-4));
     const float2 coord = world_xz / spacing;
     const float2 dist_to_line = min(frac(coord), 1.0 - frac(coord));
-    const float2 thickness_coord = max(thickness, 0.0) / spacing;
     const float2 aa = fwidth(coord);
-    const float2 line_mask = smoothstep(thickness_coord + aa, thickness_coord - aa, dist_to_line);
+    float2 thickness_coord = max(thickness, 0.0) / spacing;
+    // Ensure at least one-pixel coverage at grazing angles.
+    thickness_coord = max(thickness_coord, aa);
+    const float2 half_width = thickness_coord * 0.5;
+    const float2 line_mask = 1.0 - smoothstep(half_width, half_width + aa, dist_to_line);
     return saturate(max(line_mask.x, line_mask.y));
 }
 
 static inline float AxisLineMask(float value, float thickness)
 {
     const float aa = fwidth(value);
-    return saturate(smoothstep(thickness + aa, thickness - aa, abs(value)));
+    const float width = max(thickness, aa);
+    const float half_width = width * 0.5;
+    return saturate(1.0 - smoothstep(half_width, half_width + aa, abs(value)));
 }
 
-static inline float4 EvaluateProceduralGrid(MaterialConstants mat, float3 world_pos)
+static inline float4 EvaluateProceduralGrid(MaterialConstants mat,
+    float3 world_pos,
+    float3 world_normal,
+    float3 view_dir)
 {
-    const float2 world_xz = float2(world_pos.x, world_pos.z);
+    const float2 world_xy = float2(world_pos.x, world_pos.y);
+    const float ndotv = abs(dot(SafeNormalize(world_normal), SafeNormalize(view_dir)));
+    // Keep grid visible at grazing angles; only collapse at true edge-on.
+    const float thickness_scale = 1.0 / max(ndotv, 1e-4);
 
     const float2 spacing = mat.grid_spacing;
     const float major_every = max(1.0, (float)mat.grid_major_every);
 
-    const float minor_mask = GridLineMask(world_xz, spacing, mat.grid_line_thickness);
-    const float major_mask = GridLineMask(world_xz, spacing * major_every, mat.grid_major_thickness);
+    const float minor_mask = GridLineMask(
+        world_xy, spacing, mat.grid_line_thickness * thickness_scale);
+    const float major_mask = GridLineMask(
+        world_xy, spacing * major_every, mat.grid_major_thickness * thickness_scale);
 
-    const float axis_x_mask = AxisLineMask(world_xz.x, mat.grid_axis_thickness);
-    const float axis_y_mask = AxisLineMask(world_xz.y, mat.grid_axis_thickness);
+    const float axis_x_mask = AxisLineMask(
+        world_xy.x, mat.grid_axis_thickness * thickness_scale);
+    const float axis_y_mask = AxisLineMask(
+        world_xy.y, mat.grid_axis_thickness * thickness_scale);
     const float origin_mask = axis_x_mask * axis_y_mask;
 
     float4 color = mat.grid_minor_color * minor_mask;
@@ -62,7 +77,7 @@ static inline float4 EvaluateProceduralGrid(MaterialConstants mat, float3 world_
     color = lerp(color, mat.grid_axis_color_y, axis_y_mask);
     color = lerp(color, mat.grid_origin_color, origin_mask);
 
-    const float dist = length(world_xz - float2(camera_position.x, camera_position.z));
+    const float dist = length(world_xy - float2(camera_position.x, camera_position.y));
     if (mat.grid_fade_end > mat.grid_fade_start) {
         const float fade = saturate((mat.grid_fade_end - dist)
             / max(mat.grid_fade_end - mat.grid_fade_start, 1e-4));
@@ -260,9 +275,12 @@ MaterialSurface EvaluateMaterialSurface(
         }
 
         if ((mat.flags & MATERIAL_FLAG_PROCEDURAL_GRID) != 0u) {
-            const float4 grid_color = EvaluateProceduralGrid(mat, world_pos);
+            const float4 grid_color = EvaluateProceduralGrid(
+                mat, world_pos, world_normal, s.V);
             s.base_rgb = lerp(s.base_rgb, grid_color.rgb, grid_color.a);
             s.base_a = max(s.base_a, grid_color.a);
+            // Keep grid visible regardless of lighting/shadowing.
+            s.emissive += grid_color.rgb * grid_color.a;
         }
 
         // Double-sided lighting: keep the surface visible (cull mode) and

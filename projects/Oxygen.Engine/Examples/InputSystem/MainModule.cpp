@@ -37,6 +37,8 @@
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
 
+#include <glm/gtc/quaternion.hpp>
+
 #include "DemoShell/Runtime/CompositionView.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/ForwardPipeline.h"
@@ -150,6 +152,7 @@ auto MainModule::OnAttachedImpl(
       .lighting = false,
       .rendering = false,
       .post_process = true,
+      .ground_grid = true,
     },
     .get_active_pipeline = [this]() -> observer_ptr<RenderingPipeline> {
       return observer_ptr { pipeline_.get() };
@@ -212,6 +215,9 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
       auto camera = std::make_unique<scene::PerspectiveCamera>();
       const bool attached = main_camera_.AttachCamera(std::move(camera));
       CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
+      auto tf = main_camera_.GetTransform();
+      tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
+      tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
     }
   }
 

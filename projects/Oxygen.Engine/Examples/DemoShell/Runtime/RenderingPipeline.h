@@ -16,6 +16,7 @@
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/Passes/AutoExposurePass.h>
+#include <Oxygen/Renderer/Passes/GroundGridPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
 
@@ -148,6 +149,12 @@ public:
   //! Provide last mouse-down position for GPU debug overlays.
   virtual auto SetGpuDebugMouseDownPosition(
     std::optional<SubPixelPosition> /*position*/) -> void
+  {
+  }
+
+  //! Updates the ground grid configuration (if supported by the pipeline).
+  virtual auto SetGroundGridConfig(
+    const engine::GroundGridPassConfig& /*config*/) -> void
   {
   }
 

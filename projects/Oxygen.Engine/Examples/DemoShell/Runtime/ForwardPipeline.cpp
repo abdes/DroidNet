@@ -31,6 +31,7 @@
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/GpuDebugClearPass.h>
 #include <Oxygen/Renderer/Passes/GpuDebugDrawPass.h>
+#include <Oxygen/Renderer/Passes/GroundGridPass.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Passes/SkyPass.h>
@@ -306,6 +307,7 @@ struct ForwardPipeline::Impl {
   std::shared_ptr<engine::ShaderPassConfig> shader_pass_config;
   std::shared_ptr<engine::WireframePassConfig> wireframe_pass_config;
   std::shared_ptr<engine::SkyPassConfig> sky_pass_config;
+  std::shared_ptr<engine::GroundGridPassConfig> ground_grid_pass_config;
   std::shared_ptr<engine::TransparentPassConfig> transparent_pass_config;
   std::shared_ptr<engine::LightCullingPassConfig> light_culling_pass_config;
   std::shared_ptr<engine::ToneMapPassConfig> tone_map_pass_config;
@@ -316,6 +318,7 @@ struct ForwardPipeline::Impl {
   std::shared_ptr<engine::ShaderPass> shader_pass;
   std::shared_ptr<engine::WireframePass> wireframe_pass;
   std::shared_ptr<engine::SkyPass> sky_pass;
+  std::shared_ptr<engine::GroundGridPass> ground_grid_pass;
   std::shared_ptr<engine::TransparentPass> transparent_pass;
   std::shared_ptr<engine::LightCullingPass> light_culling_pass;
   std::shared_ptr<engine::ToneMapPass> tone_map_pass;
@@ -342,6 +345,7 @@ struct ForwardPipeline::Impl {
     engine::ExposureMode exposure_mode { engine::ExposureMode::kManual };
     float exposure_value { 1.0F };
     engine::ToneMapper tonemapping_mode { engine::ToneMapper::kAcesFitted };
+    engine::GroundGridPassConfig ground_grid_config {};
 
     // Auto Exposure Staged Config
     float auto_exposure_adaptation_speed_up {
@@ -617,6 +621,12 @@ struct ForwardPipeline::Impl {
       co_await sky_pass->Execute(rc, rec);
     }
 
+    if (ground_grid_pass && ground_grid_pass_config
+      && ground_grid_pass_config->enabled) {
+      co_await ground_grid_pass->PrepareResources(rc, rec);
+      co_await ground_grid_pass->Execute(rc, rec);
+    }
+
     if (light_culling_pass) {
       co_await light_culling_pass->PrepareResources(rc, rec);
       co_await light_culling_pass->Execute(rc, rec);
@@ -763,6 +773,8 @@ struct ForwardPipeline::Impl {
     shader_pass_config = std::make_shared<engine::ShaderPassConfig>();
     wireframe_pass_config = std::make_shared<engine::WireframePassConfig>();
     sky_pass_config = std::make_shared<engine::SkyPassConfig>();
+    ground_grid_pass_config
+      = std::make_shared<engine::GroundGridPassConfig>();
     transparent_pass_config = std::make_shared<engine::TransparentPassConfig>();
     light_culling_pass_config
       = std::make_shared<engine::LightCullingPassConfig>();
@@ -775,6 +787,8 @@ struct ForwardPipeline::Impl {
     wireframe_pass
       = std::make_shared<engine::WireframePass>(wireframe_pass_config);
     sky_pass = std::make_shared<engine::SkyPass>(sky_pass_config);
+    ground_grid_pass
+      = std::make_shared<engine::GroundGridPass>(ground_grid_pass_config);
     transparent_pass
       = std::make_shared<engine::TransparentPass>(transparent_pass_config);
 
@@ -789,6 +803,8 @@ struct ForwardPipeline::Impl {
       observer_ptr { graphics.get() });
     gpu_debug_draw_pass = std::make_shared<engine::GpuDebugDrawPass>(
       observer_ptr { graphics.get() });
+
+    staged.ground_grid_config.enabled = false;
   }
 
   void ApplySettings()
@@ -825,6 +841,29 @@ struct ForwardPipeline::Impl {
       wireframe_pass->SetWireColor(staged.wire_color);
     } else if (wireframe_pass_config) {
       wireframe_pass_config->wire_color = staged.wire_color;
+    }
+
+    if (ground_grid_pass_config) {
+      static std::atomic<bool> logged_once { false };
+      if (!logged_once.exchange(true)) {
+        LOG_F(INFO,
+          "ForwardPipeline: ApplySettings grid spacing={} major_every={} "
+          "line_thickness={} major_thickness={} minor_color=({}, {}, {}, {}) "
+          "major_color=({}, {}, {}, {})",
+          staged.ground_grid_config.spacing,
+          staged.ground_grid_config.major_every,
+          staged.ground_grid_config.line_thickness,
+          staged.ground_grid_config.major_thickness,
+          staged.ground_grid_config.minor_color.r,
+          staged.ground_grid_config.minor_color.g,
+          staged.ground_grid_config.minor_color.b,
+          staged.ground_grid_config.minor_color.a,
+          staged.ground_grid_config.major_color.r,
+          staged.ground_grid_config.major_color.g,
+          staged.ground_grid_config.major_color.b,
+          staged.ground_grid_config.major_color.a);
+      }
+      *ground_grid_pass_config = staged.ground_grid_config;
     }
 
     if (tone_map_pass_config) {
@@ -1323,6 +1362,17 @@ auto ForwardPipeline::SetToneMapper(engine::ToneMapper mode) -> void
 {
   LOG_F(INFO, "ForwardPipeline: SetToneMapper {}", engine::to_string(mode));
   impl_->staged.tonemapping_mode = mode;
+  impl_->staged.dirty = true;
+}
+
+auto ForwardPipeline::SetGroundGridConfig(
+  const engine::GroundGridPassConfig& config) -> void
+{
+  static std::atomic<bool> logged_once { false };
+  if (!logged_once.exchange(true)) {
+    LOG_F(INFO, "ForwardPipeline: SetGroundGridConfig");
+  }
+  impl_->staged.ground_grid_config = config;
   impl_->staged.dirty = true;
 }
 

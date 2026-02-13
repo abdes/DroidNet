@@ -26,6 +26,7 @@
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/FileBrowserService.h"
+#include "DemoShell/Services/GridSettingsService.h"
 #include "DemoShell/Services/LightCullingSettingsService.h"
 #include "DemoShell/Services/PostProcessSettingsService.h"
 #include "DemoShell/Services/RenderingSettingsService.h"
@@ -39,6 +40,8 @@
 #include "DemoShell/UI/DemoShellUi.h"
 #include "DemoShell/UI/EnvironmentDebugPanel.h"
 #include "DemoShell/UI/EnvironmentVm.h"
+#include "DemoShell/UI/GridPanel.h"
+#include "DemoShell/UI/GridVm.h"
 #include "DemoShell/UI/LightCullingDebugPanel.h"
 #include "DemoShell/UI/LightCullingVm.h"
 #include "DemoShell/UI/PanelSideBar.h"
@@ -159,6 +162,7 @@ struct DemoShellUi::Impl {
   observer_ptr<CameraSettingsService> camera_settings_service;
   observer_ptr<EnvironmentSettingsService> environment_settings_service;
   observer_ptr<PostProcessSettingsService> post_process_settings_service;
+  observer_ptr<GridSettingsService> grid_settings_service;
   observer_ptr<FileBrowserService> file_browser_service;
   DemoShellPanelConfig panel_config;
 
@@ -204,6 +208,10 @@ struct DemoShellUi::Impl {
   std::unique_ptr<PostProcessVm> post_process_vm;
   std::shared_ptr<PostProcessPanel> post_process_panel;
 
+  // Ground grid panel
+  std::unique_ptr<GridVm> grid_vm;
+  std::shared_ptr<GridPanel> grid_panel;
+
   Impl(observer_ptr<AsyncEngine> engine_ptr,
     observer_ptr<PanelRegistry> registry,
     observer_ptr<UiSettingsService> ui_settings_service,
@@ -213,6 +221,7 @@ struct DemoShellUi::Impl {
     observer_ptr<ContentSettingsService> content_settings,
     observer_ptr<EnvironmentSettingsService> environment_settings,
     observer_ptr<PostProcessSettingsService> post_process_settings,
+    observer_ptr<GridSettingsService> grid_settings,
     observer_ptr<CameraRigController> camera_rig,
     observer_ptr<FileBrowserService> file_browser,
     const DemoShellPanelConfig& panel_config_in)
@@ -223,6 +232,7 @@ struct DemoShellUi::Impl {
     , camera_settings_service(camera_settings)
     , environment_settings_service(environment_settings)
     , post_process_settings_service(post_process_settings)
+    , grid_settings_service(grid_settings)
     , file_browser_service(file_browser)
     , panel_config(panel_config_in)
     , ui_settings_vm(ui_settings_service, camera_settings)
@@ -275,6 +285,15 @@ struct DemoShellUi::Impl {
         observer_ptr { post_process_vm.get() });
       if (panel_registry->RegisterPanel(post_process_panel)) {
         LOG_F(INFO, "Registered PostProcess panel");
+      }
+    }
+
+    // Create Ground Grid VM and Panel
+    if (panel_config.ground_grid && grid_settings) {
+      grid_vm = std::make_unique<GridVm>(grid_settings);
+      grid_panel = std::make_shared<GridPanel>(observer_ptr { grid_vm.get() });
+      if (panel_registry->RegisterPanel(grid_panel)) {
+        LOG_F(INFO, "Registered Ground Grid panel");
       }
     }
 
@@ -396,14 +415,15 @@ DemoShellUi::DemoShellUi(observer_ptr<AsyncEngine> engine,
   observer_ptr<ContentSettingsService> content_settings_service,
   observer_ptr<EnvironmentSettingsService> environment_settings_service,
   observer_ptr<PostProcessSettingsService> post_process_settings_service,
+  observer_ptr<GridSettingsService> grid_settings_service,
   observer_ptr<CameraRigController> camera_rig,
   observer_ptr<FileBrowserService> file_browser_service,
   const DemoShellPanelConfig& panel_config)
   : impl_(std::make_unique<Impl>(engine, panel_registry, ui_settings_service,
       rendering_settings_service, light_culling_settings_service,
       camera_settings_service, content_settings_service,
-      environment_settings_service, post_process_settings_service, camera_rig,
-      file_browser_service, panel_config))
+      environment_settings_service, post_process_settings_service,
+      grid_settings_service, camera_rig, file_browser_service, panel_config))
 {
 }
 

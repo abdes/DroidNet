@@ -225,6 +225,16 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Renderer/GpuDebugDraw.hlsl",
     .entries=std::array { EntryPoint { .type=kVertex, .name="VS" }, EntryPoint { .type=kPixel, .name="PS" } }
   },
+  // Ground grid shaders (no permutations)
+  ShaderFileSpec {
+    .path="Renderer/GroundGrid_VS.hlsl",
+    .entries=std::array { EntryPoint { .type=kVertex, .name="VS" } }
+  },
+  ShaderFileSpec {
+    .path="Renderer/GroundGrid_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .permutations=std::array<std::string_view, 1> { "OXYGEN_HDR_OUTPUT" }
+  },
   // ImGui UI shaders (no permutations)
   ShaderFileSpec {
     .path="Ui/ImGui.hlsl",
