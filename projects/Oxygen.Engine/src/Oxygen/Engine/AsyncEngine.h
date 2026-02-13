@@ -234,6 +234,8 @@ private:
   auto RegisterServiceConsoleBindings() -> void;
   auto LoadPersistedConsoleCVars() -> void;
   auto SavePersistedConsoleCVars() const -> void;
+  auto LoadPersistedConsoleHistory() -> void;
+  auto SavePersistedConsoleHistory() const -> void;
   auto ApplyEngineOwnedConsoleCVars() -> void;
   auto ApplyAllConsoleCVars() -> void;
   auto ApplyConsoleStateAtFrameStart(

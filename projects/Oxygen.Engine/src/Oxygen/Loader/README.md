@@ -109,13 +109,14 @@ config.extra = R"({"custom_option": 42, "shader_cache": true})"; // Backend-spec
 
 // Strict mode (engine runtime)
 auto& loader_strict = oxygen::GraphicsBackendLoader::GetInstance();
+oxygen::PathFinderConfig path_finder_config {};
 auto graphics_strict = loader_strict.LoadBackend(
-  oxygen::graphics::BackendType::kDirect3D12, config);
+  oxygen::graphics::BackendType::kDirect3D12, config, path_finder_config);
 
 // Relaxed mode (e.g., editor plugin) – call only if strict not already used
 // auto& loader_relaxed = oxygen::GraphicsBackendLoader::GetInstanceRelaxed();
 // auto graphics_relaxed = loader_relaxed.LoadBackend(
-//   oxygen::graphics::BackendType::kDirect3D12, config);
+//   oxygen::graphics::BackendType::kDirect3D12, config, path_finder_config);
 ```
 
 When this data is passed to the Loader, it gets serialized into a JSON format,
@@ -142,15 +143,21 @@ that entry point should parse the serialized string and use it as appropriate to
 setup the graphics backend:
 
 ```cpp
-void* CreateBackend(const SerializedBackendConfig& config)
+void* CreateBackend(const SerializedBackendConfig& config,
+                    const SerializedPathFinderConfig& path_finder_config)
 {
   std::string json(config.json_data, config.size);
   auto parsed = nlohmann::json::parse(json);
+  std::string paths_json(path_finder_config.json_data, path_finder_config.size);
+  auto parsed_paths = nlohmann::json::parse(paths_json);
   // Example: read settings
   const bool enable_debug = parsed.value("enable_debug", false);
   const std::string backend = parsed.value("backend_type", "");
+  const std::string workspace_root
+    = parsed_paths.value("workspace_root_path", "");
   // ... construct and return backend implementation instance ...
 }
+```
 
 ---
 
@@ -180,4 +187,3 @@ loaded backend instance.
 * Cross-platform implementations of `GetModuleDirectory`.
 * Optional query API to introspect current loader mode.
 * More granular diagnostics / tracing hooks.
-```

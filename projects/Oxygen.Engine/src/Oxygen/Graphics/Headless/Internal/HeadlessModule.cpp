@@ -18,12 +18,14 @@ std::shared_ptr<oxygen::graphics::headless::Graphics> g_headless_instance;
 extern "C" {
 
 OXGN_HDLS_API auto CreateBackendImpl(
-  const oxygen::SerializedBackendConfig& config) -> void*
+  const oxygen::SerializedBackendConfig& config,
+  const oxygen::SerializedPathFinderConfig& path_finder_config) -> void*
 {
   LOG_F(INFO, "Headless backend CreateBackend called");
   // Create and store the shared instance. For phase 1 we ignore config.
   g_headless_instance
-    = std::make_shared<oxygen::graphics::headless::Graphics>(config);
+    = std::make_shared<oxygen::graphics::headless::Graphics>(
+      config, path_finder_config);
   return g_headless_instance.get();
 }
 

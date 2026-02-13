@@ -42,6 +42,11 @@ inline constexpr std::string_view kArchiveJsonNameKey = "name";
 inline constexpr std::string_view kArchiveJsonTypeKey = "type";
 inline constexpr std::string_view kArchiveJsonValueKey = "value";
 inline constexpr int kArchiveJsonVersion1 = 1;
+inline constexpr std::string_view kHistoryFileName = "console_history.json";
+inline constexpr std::string_view kHistoryJsonVersionKey = "version";
+inline constexpr std::string_view kHistoryJsonEntriesKey = "history";
+inline constexpr int kHistoryJsonVersion1 = 1;
+inline constexpr size_t kDefaultExecutionRecordCapacity = 2048;
 inline constexpr std::string_view kCommandLineSetPrefix = "+";
 inline constexpr char kCommandLineAssignSeparator = '=';
 

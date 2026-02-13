@@ -55,7 +55,8 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
   ASSERT_NE(module_ptr, nullptr);
 
   oxygen::SerializedBackendConfig cfg { .json_data = "{}", .size = 2 };
-  void* backend = module_ptr->CreateBackend(cfg);
+  oxygen::SerializedPathFinderConfig path_cfg { .json_data = "{}", .size = 2 };
+  void* backend = module_ptr->CreateBackend(cfg, path_cfg);
   ASSERT_NE(backend, nullptr);
 
   // Cast to the headless concrete type so we can use its public helpers.

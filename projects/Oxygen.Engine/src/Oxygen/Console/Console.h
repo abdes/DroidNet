@@ -64,6 +64,12 @@ public:
       .source = CommandSource::kAutomation,
       .shipping_build = false,
     }) -> ExecutionResult;
+  OXGN_CONS_NDAPI auto SaveHistory(
+    const oxygen::PathFinder& path_finder) const -> ExecutionResult;
+  OXGN_CONS_NDAPI auto LoadHistory(const oxygen::PathFinder& path_finder)
+    -> ExecutionResult;
+  OXGN_CONS_NDAPI auto ListSymbols(bool include_hidden = false) const
+    -> std::vector<ConsoleSymbol>;
 
   OXGN_CONS_API auto SetSourcePolicy(
     CommandSource source, const Registry::SourcePolicy& policy) -> void;
@@ -73,6 +79,9 @@ public:
   OXGN_CONS_API auto SetAuditHook(Registry::AuditHook hook) -> void;
 
   OXGN_CONS_NDAPI auto GetHistory() const -> const History&;
+  OXGN_CONS_NDAPI auto GetExecutionRecords() const
+    -> const std::vector<Registry::ExecutionRecord>&;
+  OXGN_CONS_API auto ClearExecutionRecords() -> void;
   OXGN_CONS_NDAPI auto FindCVar(std::string_view name) const
     -> observer_ptr<const CVarSnapshot>;
 

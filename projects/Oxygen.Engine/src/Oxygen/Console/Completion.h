@@ -30,6 +30,14 @@ struct CompletionCandidate {
   std::string help;
 };
 
+struct ConsoleSymbol {
+  CompletionKind kind { CompletionKind::kCommand };
+  std::string token;
+  std::string help;
+  uint64_t usage_frequency { 0 };
+  uint64_t usage_last_tick { 0 };
+};
+
 OXGN_CONS_NDAPI auto to_string(CompletionKind value) -> const char*;
 
 class CompletionCycle final {

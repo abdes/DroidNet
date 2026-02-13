@@ -38,7 +38,8 @@ class Graphics : public oxygen::Graphics {
   using Base = oxygen::Graphics;
 
 public:
-  OXGN_D3D12_API explicit Graphics(const SerializedBackendConfig& config);
+  OXGN_D3D12_API explicit Graphics(const SerializedBackendConfig& config,
+    const SerializedPathFinderConfig& path_finder_config);
 
   OXGN_D3D12_API ~Graphics() override = default;
 

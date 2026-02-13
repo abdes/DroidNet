@@ -11,6 +11,7 @@
 #include <string>
 
 #include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Core/Time/Types.h>
 
 namespace oxygen {
@@ -75,6 +76,9 @@ struct EngineConfig {
     //! Enable hash-based content integrity verification during mounts.
     bool verify_content_hashes { false };
   } asset_loader;
+
+  //! Global engine path resolution config (workspace-root aware).
+  PathFinderConfig path_finder_config {};
 
   GraphicsConfig graphics; //!< Graphics configuration.
   TimingConfig timing; //!< Frame timing and fixed timestep configuration.

@@ -19,7 +19,8 @@ auto main(int /*argc*/, char** /*argv*/) noexcept -> int
 
     // Load the backend using the singleton
     auto backend
-      = loader.LoadBackend(oxygen::graphics::BackendType::kDirect3D12, {});
+      = loader.LoadBackend(
+        oxygen::graphics::BackendType::kDirect3D12, {}, {});
 
     if (!backend.expired()) {
       std::cout << "Successfully loaded the graphics backend\n";

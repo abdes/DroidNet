@@ -830,7 +830,7 @@ auto MainModule::EnsureExampleScene() -> void
 auto MainModule::EnsureMainCamera(const int width, const int height) -> void
 {
   // NOLINTBEGIN(*-magic-numbers)
-  LOG_SCOPE_FUNCTION(INFO);
+  LOG_SCOPE_FUNCTION(2);
   using scene::PerspectiveCamera;
 
   auto& shell = GetShell();
@@ -1034,7 +1034,7 @@ auto MainModule::UpdateSceneMutations(const float delta_time) -> void
       } else {
         r.ClearMaterialOverride(lod, 1);
       }
-      LOG_F(INFO, "[MultiSubmesh] Submesh 1 override -> {}",
+      LOG_F(2, "[MultiSubmesh] Submesh 1 override -> {}",
         apply_override ? "blue" : "clear");
     }
   }

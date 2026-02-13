@@ -31,7 +31,8 @@ extern "C" {
 using GetGraphicsModuleApiFunc = void* (*)();
 
 using CreateBackendFunc
-  = void* (*)(const oxygen::SerializedBackendConfig& config);
+  = void* (*)(const oxygen::SerializedBackendConfig& config,
+    const oxygen::SerializedPathFinderConfig& path_finder_config);
 using DestroyBackendFunc = void (*)();
 
 //! Interface for the renderer module.

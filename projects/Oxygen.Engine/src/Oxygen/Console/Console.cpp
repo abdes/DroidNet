@@ -83,6 +83,24 @@ auto Console::ApplyCommandLineOverrides(
   return registry_.ApplyCommandLineOverrides(arguments, context);
 }
 
+auto Console::SaveHistory(const oxygen::PathFinder& path_finder) const
+  -> ExecutionResult
+{
+  return registry_.SaveHistory(path_finder);
+}
+
+auto Console::LoadHistory(const oxygen::PathFinder& path_finder)
+  -> ExecutionResult
+{
+  return registry_.LoadHistory(path_finder);
+}
+
+auto Console::ListSymbols(const bool include_hidden) const
+  -> std::vector<ConsoleSymbol>
+{
+  return registry_.ListSymbols(include_hidden);
+}
+
 auto Console::SetSourcePolicy(
   const CommandSource source, const Registry::SourcePolicy& policy) -> void
 {
@@ -107,6 +125,17 @@ auto Console::SetAuditHook(Registry::AuditHook hook) -> void
 auto Console::GetHistory() const -> const History&
 {
   return registry_.GetHistory();
+}
+
+auto Console::GetExecutionRecords() const
+  -> const std::vector<Registry::ExecutionRecord>&
+{
+  return registry_.GetExecutionRecords();
+}
+
+auto Console::ClearExecutionRecords() -> void
+{
+  registry_.ClearExecutionRecords();
 }
 
 auto Console::FindCVar(const std::string_view name) const

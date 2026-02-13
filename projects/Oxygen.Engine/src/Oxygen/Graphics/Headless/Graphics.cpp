@@ -55,7 +55,8 @@ private:
 
 namespace oxygen::graphics::headless {
 
-Graphics::Graphics(const SerializedBackendConfig& /*config*/)
+Graphics::Graphics(const SerializedBackendConfig& /*config*/,
+  const SerializedPathFinderConfig& /*path_finder_config*/)
   : oxygen::Graphics("HeadlessGraphics")
 {
   AddComponent<internal::EngineShaders>();
