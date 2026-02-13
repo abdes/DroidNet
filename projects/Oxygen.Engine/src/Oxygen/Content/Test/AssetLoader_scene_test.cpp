@@ -558,19 +558,39 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
       const auto* env_header = scene->GetEnvironmentBlockHeader();
       EXPECT_NE(env_header, nullptr);
       EXPECT_EQ(env_header->systems_count, 2U);
-      EXPECT_EQ(env_header->byte_size,
-        sizeof(oxygen::data::pak::SceneEnvironmentBlockHeader)
-          + sizeof(oxygen::data::pak::SkyAtmosphereEnvironmentRecord)
-          + sizeof(oxygen::data::pak::PostProcessVolumeEnvironmentRecord));
 
       const auto env_records = scene->GetEnvironmentSystemRecords();
       EXPECT_EQ(env_records.size(), 2U);
-      EXPECT_EQ(env_records[0].header.system_type,
-        static_cast<uint32_t>(
-          oxygen::data::pak::EnvironmentComponentType::kSkyAtmosphere));
-      EXPECT_EQ(env_records[1].header.system_type,
-        static_cast<uint32_t>(
-          oxygen::data::pak::EnvironmentComponentType::kPostProcessVolume));
+
+      uint32_t expected_byte_size = static_cast<uint32_t>(
+        sizeof(oxygen::data::pak::SceneEnvironmentBlockHeader));
+      for (const auto& record : env_records) {
+        EXPECT_GE(record.header.record_size,
+          sizeof(oxygen::data::pak::SceneEnvironmentSystemRecordHeader));
+        EXPECT_EQ(record.bytes.size(), record.header.record_size);
+        expected_byte_size += record.header.record_size;
+      }
+      EXPECT_EQ(env_header->byte_size, expected_byte_size);
+
+      const auto sky = scene->TryGetSkyAtmosphereEnvironment();
+      EXPECT_TRUE(sky.has_value());
+      if (sky) {
+        EXPECT_EQ(sky->header.system_type,
+          static_cast<uint32_t>(
+            oxygen::data::pak::EnvironmentComponentType::kSkyAtmosphere));
+        EXPECT_EQ(sky->header.record_size,
+          sizeof(oxygen::data::pak::SkyAtmosphereEnvironmentRecord));
+      }
+
+      const auto ppv = scene->TryGetPostProcessVolumeEnvironment();
+      EXPECT_TRUE(ppv.has_value());
+      if (ppv) {
+        EXPECT_EQ(ppv->header.system_type,
+          static_cast<uint32_t>(
+            oxygen::data::pak::EnvironmentComponentType::kPostProcessVolume));
+        EXPECT_EQ(ppv->header.record_size,
+          sizeof(oxygen::data::pak::PostProcessVolumeEnvironmentRecord));
+      }
 
       loader.Stop();
       co_return oxygen::co::kJoin;
