@@ -23,6 +23,9 @@
 #include <Oxygen/OxCo/Nursery.h>
 
 namespace oxygen {
+namespace console {
+  class Console;
+} // namespace console
 
 class Platform;
 namespace platform {
@@ -124,6 +127,16 @@ public:
 
   OXGN_GFX_API auto PresentSurfaces(
     const std::vector<observer_ptr<graphics::Surface>>& surfaces) -> void;
+
+  //! Apply runtime VSync mode for the active backend.
+  /*!
+   Default implementation is a no-op for backends that do not expose runtime
+   VSync toggling.
+  */
+  OXGN_GFX_API virtual auto SetVSyncEnabled(bool enabled) -> void;
+  OXGN_GFX_API auto RegisterConsoleBindings(
+    observer_ptr<console::Console> console) noexcept -> void;
+  OXGN_GFX_API auto ApplyConsoleCVars(const console::Console& console) -> void;
 
   //=== Global & pooled objects ===-----------------------------------------//
 

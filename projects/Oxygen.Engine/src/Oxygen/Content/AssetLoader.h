@@ -137,6 +137,10 @@ public:
   OXGN_CNTT_API auto ClearMounts() -> void;
   //! Clear cached assets/resources without unmounting sources.
   OXGN_CNTT_API auto TrimCache() -> void override;
+  OXGN_CNTT_API auto RegisterConsoleBindings(
+    observer_ptr<console::Console> console) noexcept -> void override;
+  OXGN_CNTT_API auto ApplyConsoleCVars(
+    const console::Console& console) -> void override;
 
   //=== Dependency Management ===---------------------------------------------//
 

@@ -40,6 +40,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
@@ -231,6 +232,10 @@ auto ModuleManager::RegisterModule(
     return false;
   }
 
+  if (engine_ != nullptr) {
+    module->RegisterConsoleBindings(observer_ptr { &engine_->GetConsole() });
+  }
+
   // Insert module and rebuild caches before notifying subscribers
   modules_.push_back(std::move(module));
 
@@ -324,6 +329,39 @@ auto ModuleManager::GetModule(std::string_view name) const noexcept
   EngineModule* ptr = it->get();
   DCHECK_NOTNULL_F(ptr);
   return std::ref(*ptr);
+}
+
+auto ModuleManager::ApplyConsoleCVars(
+  const observer_ptr<const oxygen::console::Console> console) noexcept -> void
+{
+  if (console == nullptr) {
+    return;
+  }
+
+  // Deterministic order: ascending priority, stable for equal priorities.
+  std::vector<EngineModule*> ordered_modules;
+  ordered_modules.reserve(modules_.size());
+  for (const auto& module : modules_) {
+    ordered_modules.push_back(module.get());
+  }
+
+  std::ranges::stable_sort(ordered_modules,
+    [](const EngineModule* lhs, const EngineModule* rhs) {
+      return lhs->GetPriority().get() < rhs->GetPriority().get();
+    });
+
+  for (auto* module : ordered_modules) {
+    DCHECK_NOTNULL_F(module);
+    try {
+      module->ApplyConsoleCVars(console);
+    } catch (const std::exception& e) {
+      LOG_F(ERROR, "Module '{}' ApplyConsoleCVars threw: {}", module->GetName(),
+        e.what());
+    } catch (...) {
+      LOG_F(ERROR, "Module '{}' ApplyConsoleCVars threw unknown exception",
+        module->GetName());
+    }
+  }
 }
 
 auto ModuleManager::RebuildPhaseCache() noexcept -> void

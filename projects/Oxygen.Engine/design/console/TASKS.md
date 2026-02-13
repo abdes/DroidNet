@@ -44,14 +44,13 @@ This checklist is the tracking source for `Oxygen.Console`.
 ## Phase 4: Engine Integration
 
 - [ ] Create `RegisterConsoleBindings` entry point per major module:
-- [ ] `Renderer` (`rndr.*`)
-- [ ] `Graphics` (`gfx.*`)
-- [ ] `Engine` (`ngin.*`)
-- [ ] `Input` (`nput.*`)
-- [ ] `Scene` (`scn.*`)
-- [ ] `Content` (`cntt.*`)
-- [ ] Add deterministic `ApplyLatchedCVars` call at a known frame phase.
-- [ ] Add startup registration order documentation.
+- [x] `Renderer` (`rndr.*`)
+- [x] `Graphics` (`gfx.*`)
+- [x] `Engine` (`ngin.*`)
+- [x] `Input` (`nput.*`)
+- [x] `Content` (`cntt.*`)
+- [x] Add deterministic `ApplyLatchedCVars` call at a known frame phase.
+- [x] Add startup registration order documentation.
 
 ## Phase 5: UI and Tooling
 
@@ -59,8 +58,6 @@ This checklist is the tracking source for `Oxygen.Console`.
 - [ ] command line input
 - [ ] history navigation
 - [ ] completion popup
-- [ ] output log view with severity coloring
-- [ ] Add editor bridge API (if needed by `EditorInterface`).
 - [ ] Add automation hooks for script-driven command execution.
 
 ## Definition of Done

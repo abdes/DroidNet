@@ -102,6 +102,7 @@ target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
     oxygen::base
+    oxygen::console
     oxygen::platform
     oxygen::core
 )

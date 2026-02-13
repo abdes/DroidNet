@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <ranges>
 #include <thread>
 #include <utility>
@@ -13,9 +14,11 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
+#include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/TimeManager.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -52,6 +55,25 @@ using namespace oxygen::engine;
 using TimingConfig = TimingConfig;
 
 namespace {
+  using oxygen::console::CommandContext;
+  using oxygen::console::CommandDefinition;
+  using oxygen::console::CommandFlags;
+  using oxygen::console::CommandSource;
+  using oxygen::console::CVarDefinition;
+  using oxygen::console::CVarFlags;
+  using oxygen::console::ExecutionResult;
+  using oxygen::console::ExecutionStatus;
+
+  constexpr std::string_view kCVarEngineTargetFps = "ngin.target_fps";
+
+  auto MakeConfigFileContext() -> CommandContext
+  {
+    return CommandContext {
+      .source = CommandSource::kConfigFile,
+      .shipping_build = false,
+    };
+  }
+
   struct PhaseTimer {
     PhaseTimer(FrameContext& context, core::PhaseId phase,
       const time::PhysicalClock& clock)
@@ -82,6 +104,9 @@ AsyncEngine::AsyncEngine(std::shared_ptr<Platform> platform,
   : config_(std::move(config))
   , platform_(std::move(platform))
   , gfx_weak_(std::move(graphics))
+  , path_finder_config_(std::make_shared<const PathFinderConfig>(
+      config_.graphics.path_finder_config))
+  , path_finder_(path_finder_config_, std::filesystem::current_path())
   , module_manager_(std::make_unique<ModuleManager>(observer_ptr { this }))
 {
   CHECK_F(platform_ != nullptr);
@@ -103,6 +128,7 @@ AsyncEngine::AsyncEngine(std::shared_ptr<Platform> platform,
 
   // Initialize detached services (Category D)
   InitializeDetachedServices();
+  InitializeConsoleRuntime();
 
   LOG_F(INFO, "AsyncEngine created");
 }
@@ -198,6 +224,7 @@ auto AsyncEngine::Shutdown() -> co::Co<>
 
   // Now shutdown the platform event pump so modules are able to perform
   // any required cleanup while platform objects are still alive.
+  SavePersistedConsoleCVars();
   co_await platform_->Shutdown();
 }
 
@@ -252,6 +279,13 @@ auto AsyncEngine::SetTargetFps(uint32_t fps) noexcept -> void
   }
   config_.target_fps = fps;
   LOG_F(INFO, "AsyncEngine target_fps set to {}", config_.target_fps);
+}
+
+auto AsyncEngine::GetConsole() noexcept -> console::Console& { return console_; }
+
+auto AsyncEngine::GetConsole() const noexcept -> const console::Console&
+{
+  return console_;
 }
 
 auto AsyncEngine::NextFrame() -> bool
@@ -539,7 +573,10 @@ auto AsyncEngine::PhaseFrameStart(observer_ptr<FrameContext> context)
     context->SetModuleTimingData(module_timing, tag);
   }
 
-  // Initialize graphics layer for this frame
+  // Apply runtime console-driven settings at a deterministic frame boundary.
+  ApplyConsoleStateAtFrameStart(context);
+
+  // Initialize graphics layer for this frame.
   auto gfx = gfx_weak_.lock();
   if (!gfx) {
     // TODO: Handle graphics backend invalidation
@@ -557,6 +594,116 @@ auto AsyncEngine::PhaseFrameStart(observer_ptr<FrameContext> context)
   // Advance frame epoch counter for generation-based validation
 
   LOG_F(2, "Frame {} start (epoch advance)", frame_number_);
+}
+
+auto AsyncEngine::InitializeConsoleRuntime() -> void
+{
+  RegisterEngineConsoleBindings();
+  RegisterServiceConsoleBindings();
+  LoadPersistedConsoleCVars();
+  ApplyAllConsoleCVars();
+}
+
+auto AsyncEngine::RegisterEngineConsoleBindings() -> void
+{
+  (void)console_.RegisterCVar(CVarDefinition {
+    .name = std::string(kCVarEngineTargetFps),
+    .help = "Target frames per second (0 = uncapped)",
+    .default_value = int64_t { static_cast<int64_t>(config_.target_fps) },
+    .flags = CVarFlags::kArchive,
+    .min_value = 0.0,
+    .max_value = static_cast<double>(EngineConfig::kMaxTargetFps),
+  });
+
+  (void)console_.RegisterCommand(CommandDefinition {
+    .name = "ngin.cvars.save",
+    .help = "Save archived CVars to the configured cvars archive path",
+    .flags = CommandFlags::kNone,
+    .handler = [this](const std::vector<std::string>&,
+                 const CommandContext&) -> ExecutionResult {
+      return console_.SaveArchiveCVars(path_finder_);
+    },
+  });
+
+  (void)console_.RegisterCommand(CommandDefinition {
+    .name = "ngin.cvars.load",
+    .help = "Load archived CVars from the configured cvars archive path",
+    .flags = CommandFlags::kNone,
+    .handler = [this](const std::vector<std::string>&,
+                 const CommandContext&) -> ExecutionResult {
+      const auto result
+        = console_.LoadArchiveCVars(path_finder_, MakeConfigFileContext());
+      if (result.status == ExecutionStatus::kOk) {
+        ApplyAllConsoleCVars();
+      }
+      return result;
+    },
+  });
+}
+
+auto AsyncEngine::RegisterServiceConsoleBindings() -> void
+{
+  if (auto gfx = gfx_weak_.lock()) {
+    gfx->RegisterConsoleBindings(observer_ptr { &console_ });
+  }
+  if (asset_loader_) {
+    asset_loader_->RegisterConsoleBindings(observer_ptr { &console_ });
+  }
+}
+
+auto AsyncEngine::LoadPersistedConsoleCVars() -> void
+{
+  const auto result
+    = console_.LoadArchiveCVars(path_finder_, MakeConfigFileContext());
+  if (result.status == ExecutionStatus::kOk) {
+    LOG_F(INFO, "{}", result.output);
+  } else if (result.status != ExecutionStatus::kNotFound) {
+    LOG_F(WARNING, "{}", result.error);
+  }
+}
+
+auto AsyncEngine::SavePersistedConsoleCVars() const -> void
+{
+  const auto result = console_.SaveArchiveCVars(path_finder_);
+  if (result.status == ExecutionStatus::kOk) {
+    LOG_F(INFO, "{}", result.output);
+  } else {
+    LOG_F(WARNING, "{}", result.error);
+  }
+}
+
+auto AsyncEngine::ApplyEngineOwnedConsoleCVars() -> void
+{
+  int64_t target_fps = 0;
+  if (console_.TryGetCVarValue<int64_t>(kCVarEngineTargetFps, target_fps)) {
+    const auto clamped = std::clamp<int64_t>(
+      target_fps, 0, static_cast<int64_t>(EngineConfig::kMaxTargetFps));
+    SetTargetFps(static_cast<uint32_t>(clamped));
+  }
+}
+
+auto AsyncEngine::ApplyAllConsoleCVars() -> void
+{
+  ApplyEngineOwnedConsoleCVars();
+  if (auto gfx = gfx_weak_.lock()) {
+    gfx->ApplyConsoleCVars(console_);
+  }
+  if (asset_loader_) {
+    asset_loader_->ApplyConsoleCVars(console_);
+  }
+  if (module_manager_) {
+    module_manager_->ApplyConsoleCVars(observer_ptr { &console_ });
+  }
+}
+
+auto AsyncEngine::ApplyConsoleStateAtFrameStart(
+  [[maybe_unused]] observer_ptr<FrameContext> context) -> void
+{
+  const auto applied = console_.ApplyLatchedCVars();
+  if (applied > 0U) {
+    DLOG_F(2, "Applied {} latched CVars at frame start", applied);
+  }
+  ApplyAllConsoleCVars();
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst

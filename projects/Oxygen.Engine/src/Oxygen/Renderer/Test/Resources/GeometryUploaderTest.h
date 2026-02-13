@@ -94,6 +94,15 @@ public:
 
   auto TrimCache() -> void override { }
 
+  auto RegisterConsoleBindings(
+    observer_ptr<console::Console> /*console*/) noexcept -> void override
+  {
+  }
+
+  auto ApplyConsoleCVars(const console::Console& /*console*/) -> void override
+  {
+  }
+
   [[nodiscard]] auto GetTexture(content::ResourceKey /*key*/) const noexcept
     -> std::shared_ptr<data::TextureResource> override
   {

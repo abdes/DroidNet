@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -29,6 +30,9 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Console/Command.h>
+#include <Oxygen/Console/Console.h>
+#include <Oxygen/Console/CVar.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -94,6 +98,25 @@
 
 namespace {
 constexpr bool kDisablePostProcessVolumeForTesting = true;
+constexpr std::string_view kCVarRendererTextureDumpTopN
+  = "rndr.texture_dump_top_n";
+constexpr std::string_view kCommandRendererDumpTextureMemory
+  = "rndr.dump_texture_memory";
+constexpr int64_t kDefaultTextureDumpTopN = 20;
+constexpr int64_t kMinTextureDumpTopN = 1;
+constexpr int64_t kMaxTextureDumpTopN = 500;
+
+auto ParseTextureDumpTopN(std::string_view value) -> std::optional<int64_t>
+{
+  int64_t parsed = 0;
+  const auto* begin = value.data();
+  const auto* end = begin + value.size();
+  const auto [ptr, ec] = std::from_chars(begin, end, parsed);
+  if (ec != std::errc() || ptr != end) {
+    return std::nullopt;
+  }
+  return parsed;
+}
 
 auto ResolveViewOutputTexture(const oxygen::engine::FrameContext& context,
   const oxygen::ViewId view_id) -> std::shared_ptr<oxygen::graphics::Texture>
@@ -432,6 +455,60 @@ auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
       = std::make_unique<internal::GpuDebugManager>(observer_ptr { gfx.get() });
   }
   return true;
+}
+
+auto Renderer::RegisterConsoleBindings(
+  const observer_ptr<console::Console> console) noexcept -> void
+{
+  if (console == nullptr) {
+    return;
+  }
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererTextureDumpTopN),
+    .help = "Default top-N count for rndr.dump_texture_memory",
+    .default_value = kDefaultTextureDumpTopN,
+    .flags = console::CVarFlags::kDevOnly,
+    .min_value = static_cast<double>(kMinTextureDumpTopN),
+    .max_value = static_cast<double>(kMaxTextureDumpTopN),
+  });
+
+  (void)console->RegisterCommand(console::CommandDefinition {
+    .name = std::string(kCommandRendererDumpTextureMemory),
+    .help = "Dump renderer texture memory usage [top_n]",
+    .flags = console::CommandFlags::kDevOnly,
+    .handler = [this](const std::vector<std::string>& args,
+                 const console::CommandContext&) -> console::ExecutionResult {
+      int64_t top_n = kDefaultTextureDumpTopN;
+      if (!args.empty()) {
+        const auto parsed_top_n = ParseTextureDumpTopN(args.front());
+        if (!parsed_top_n.has_value()) {
+          return console::ExecutionResult {
+            .status = console::ExecutionStatus::kInvalidArguments,
+            .exit_code = 2,
+            .output = {},
+            .error = "top_n must be an integer",
+          };
+        }
+        top_n = std::clamp(
+          *parsed_top_n, kMinTextureDumpTopN, kMaxTextureDumpTopN);
+      }
+
+      DumpEstimatedTextureMemory(static_cast<std::size_t>(top_n));
+      return console::ExecutionResult {
+        .status = console::ExecutionStatus::kOk,
+        .exit_code = 0,
+        .output = "renderer texture memory dump emitted",
+        .error = {},
+      };
+    },
+  });
+}
+
+auto Renderer::ApplyConsoleCVars(
+  const observer_ptr<const console::Console> console) noexcept -> void
+{
+  (void)console;
 }
 
 auto Renderer::OnShutdown() noexcept -> void

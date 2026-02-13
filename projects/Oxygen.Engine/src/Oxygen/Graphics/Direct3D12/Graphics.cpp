@@ -32,7 +32,6 @@
 //===----------------------------------------------------------------------===//
 
 namespace {
-
 auto GetBackendInternal() -> std::shared_ptr<oxygen::graphics::d3d12::Graphics>&
 {
   static std::shared_ptr<oxygen::graphics::d3d12::Graphics> graphics;
@@ -260,6 +259,15 @@ Graphics::Graphics(const SerializedBackendConfig& config)
   AddComponent<EngineShaders>(std::move(path_finder_config));
   AddComponent<DescriptorAllocatorComponent>();
   AddComponent<detail::PipelineStateCache>(this);
+}
+
+auto Graphics::SetVSyncEnabled(const bool enabled) -> void
+{
+  if (enable_vsync_ == enabled) {
+    return;
+  }
+  enable_vsync_ = enabled;
+  LOG_F(INFO, "D3D12 Graphics: enable_vsync={}", enable_vsync_);
 }
 
 auto Graphics::CreateCommandQueue(const QueueKey& queue_key, QueueRole role)

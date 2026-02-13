@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -15,8 +16,10 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Config/EngineConfig.h>
+#include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Console/Console.h>
 #include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/Engine/api_export.h>
 #include <Oxygen/OxCo/Co.h>
@@ -170,6 +173,8 @@ public:
   OXGN_NGIN_NDAPI auto GetAuditClock() const noexcept
     -> const time::AuditClock&;
   OXGN_NGIN_NDAPI auto GetAuditClock() noexcept -> time::AuditClock&;
+  OXGN_NGIN_NDAPI auto GetConsole() noexcept -> console::Console&;
+  OXGN_NGIN_NDAPI auto GetConsole() const noexcept -> const console::Console&;
 
 private:
   auto Shutdown() -> co::Co<>;
@@ -224,6 +229,15 @@ private:
 
   // Detached services (Category D)
   auto InitializeDetachedServices() -> void;
+  auto InitializeConsoleRuntime() -> void;
+  auto RegisterEngineConsoleBindings() -> void;
+  auto RegisterServiceConsoleBindings() -> void;
+  auto LoadPersistedConsoleCVars() -> void;
+  auto SavePersistedConsoleCVars() const -> void;
+  auto ApplyEngineOwnedConsoleCVars() -> void;
+  auto ApplyAllConsoleCVars() -> void;
+  auto ApplyConsoleStateAtFrameStart(
+    observer_ptr<engine::FrameContext> context) -> void;
 
   // auto SimulateWork(std::chrono::microseconds cost) const
   //   -> co::Co<>; // yields via thread pool
@@ -263,6 +277,12 @@ private:
 
   std::shared_ptr<Platform> platform_;
   std::weak_ptr<Graphics> gfx_weak_;
+  console::Console console_ {};
+  std::shared_ptr<const PathFinderConfig> path_finder_config_ {};
+  PathFinder path_finder_ {
+    std::make_shared<const PathFinderConfig>(),
+    std::filesystem::current_path(),
+  };
 
   // Module management system
   std::unique_ptr<engine::ModuleManager> module_manager_;
