@@ -15,7 +15,7 @@ namespace oxygen {
 
 struct RendererConfig {
   //! Immutable configuration for path resolution.
-  PathFinderConfig path_finder_config {};
+  PathFinderConfig path_finder_config;
 
   //! Upload queue key to use for staging/upload recording. Renderer will set
   //! this into the UploadPolicy passed to the UploadCoordinator. This field
@@ -24,7 +24,10 @@ struct RendererConfig {
 
   //! Maximum number of simultaneously prepared views the renderer keeps alive
   //! before evicting the least-recently-used entry. Default keeps legacy 8.
-  std::size_t max_active_views { 8 };
+  std::size_t max_active_views { kDefaultMaxActiveViews };
+
+private:
+  static constexpr std::size_t kDefaultMaxActiveViews = 8;
 };
 
 } // namespace oxygen

@@ -24,7 +24,7 @@ struct TimingConfig {
    Used for physics simulation, networking, and other systems requiring
    deterministic behavior regardless of frame rate.
   */
-  time::CanonicalDuration fixed_delta { // 60Hz default}
+  time::CanonicalDuration fixed_delta { // NOLINTNEXTLINE(*-magic-numbers)
     time::CanonicalDuration::UnderlyingType(16'666'667)
   };
 
@@ -34,7 +34,7 @@ struct TimingConfig {
    to catch up with too many fixed timestep iterations, which would make
    the problem worse. Typically 2-3x the fixed_delta.
   */
-  time::CanonicalDuration max_accumulator { // ~3 frames worth
+  time::CanonicalDuration max_accumulator { // NOLINTNEXTLINE(*-magic-numbers)
     time::CanonicalDuration::UnderlyingType(50'000)
   };
 
@@ -44,7 +44,7 @@ struct TimingConfig {
    drops. When this limit is reached, simulation time will run slower
    than real time rather than locking up the engine.
   */
-  uint32_t max_substeps { 4 };
+  uint32_t max_substeps { 4 }; // NOLINT(*-magic-numbers)
 
   //! Safety margin before frame pacing deadline
   /*!
@@ -52,6 +52,7 @@ struct TimingConfig {
    yielding to finish. This compensates for OS sleep jitter/overshoot.
    Tune per platform; typical values 150–300 microseconds.
   */
+  // NOLINTNEXTLINE(*-magic-numbers)
   std::chrono::microseconds pacing_safety_margin { 200 }; // use chrono here
 };
 
@@ -59,7 +60,8 @@ struct EngineConfig {
   // Maximum allowed target FPS for runtime configuration.
   // Use 0 for uncapped frame rate. Values above this will be clamped by
   // AsyncEngine::SetTargetFps.
-  static constexpr uint32_t kMaxTargetFps = 240u;
+  static constexpr uint32_t kMaxTargetFps = 240U;
+
   struct {
     std::string name;
     uint32_t version;
@@ -78,7 +80,7 @@ struct EngineConfig {
   } asset_loader;
 
   //! Global engine path resolution config (workspace-root aware).
-  PathFinderConfig path_finder_config {};
+  PathFinderConfig path_finder_config;
 
   GraphicsConfig graphics; //!< Graphics configuration.
   TimingConfig timing; //!< Frame timing and fixed timestep configuration.

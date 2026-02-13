@@ -9,7 +9,6 @@
 #include <array>
 #include <filesystem>
 #include <memory>
-#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/PathFinderConfig.h>
