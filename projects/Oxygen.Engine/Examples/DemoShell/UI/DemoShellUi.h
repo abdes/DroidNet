@@ -35,6 +35,7 @@ class LightCullingSettingsService;
 class CameraSettingsService;
 class ContentSettingsService;
 class EnvironmentSettingsService;
+class GridSettingsService;
 class FileBrowserService;
 class RenderingPipeline;
 struct DemoShellPanelConfig;
@@ -48,6 +49,7 @@ namespace ui {
   class EnvironmentVm;
   class PostProcessSettingsService;
   class CameraRigController;
+  class GridVm;
 
   //! UI shell hosting the side bar and side panel.
   /*!
@@ -68,6 +70,7 @@ namespace ui {
       observer_ptr<ContentSettingsService> content_settings_service,
       observer_ptr<EnvironmentSettingsService> environment_settings_service,
       observer_ptr<PostProcessSettingsService> post_process_settings_service,
+      observer_ptr<GridSettingsService> grid_settings_service,
       observer_ptr<CameraRigController> camera_rig,
       observer_ptr<FileBrowserService> file_browser_service,
       const DemoShellPanelConfig& panel_config);

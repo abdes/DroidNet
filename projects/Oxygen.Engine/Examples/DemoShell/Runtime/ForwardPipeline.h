@@ -101,6 +101,8 @@ public:
   auto ResetAutoExposure(float initial_ev) -> void override;
 
   auto SetToneMapper(engine::ToneMapper mode) -> void override;
+  auto SetGroundGridConfig(const engine::GroundGridPassConfig& config)
+    -> void override;
 
   auto UpdateShaderPassConfig(const engine::ShaderPassConfig& config)
     -> void override;
