@@ -144,17 +144,14 @@ NOLINT_TEST_F(SunResolverTest, FromSceneUsesReferencedDirectionalLight)
   EXPECT_NEAR(resolved.GetIlluminance(), 4.0F, kEpsilon);
 }
 
-//! Clears invalid references and falls back to synthetic sun values.
-NOLINT_TEST_F(SunResolverTest, InvalidReferenceFallsBackToSynthetic)
+//! Clears invalid references and resolves to no sun.
+NOLINT_TEST_F(SunResolverTest, InvalidReferenceResolvesToNoSun)
 {
   // Arrange
   auto scene = std::make_shared<scene::Scene>("SunResolver.InvalidReference");
   auto environment = std::make_unique<scene::SceneEnvironment>();
   auto& sun = environment->AddSystem<scene::environment::Sun>();
   sun.SetSunSource(scene::environment::SunSource::kFromScene);
-  sun.SetDirectionWs({ 0.0F, 0.0F, 1.0F });
-  sun.SetColorRgb({ 0.25F, 0.5F, 0.75F });
-  sun.SetIlluminanceLx(8.0F);
   scene->SetEnvironment(std::move(environment));
 
   auto node = scene->CreateNode("MissingLight");
@@ -171,17 +168,12 @@ NOLINT_TEST_F(SunResolverTest, InvalidReferenceFallsBackToSynthetic)
     = ResolveSunForView(*scene, std::span<const DirectionalLightBasic>(lights));
 
   // Assert
-  EXPECT_TRUE(resolved.enabled);
-  EXPECT_NEAR(resolved.GetDirection().z, 1.0F, kEpsilon);
-  EXPECT_NEAR(resolved.GetColor().x, 0.25F, kEpsilon);
-  EXPECT_NEAR(resolved.GetColor().y, 0.5F, kEpsilon);
-  EXPECT_NEAR(resolved.GetColor().z, 0.75F, kEpsilon);
-  EXPECT_NEAR(resolved.GetIlluminance(), 8.0F, kEpsilon);
+  EXPECT_FALSE(resolved.enabled);
   EXPECT_FALSE(sun.GetLightReference().has_value());
 }
 
-//! Falls back to tagged directional light when no reference is set.
-NOLINT_TEST_F(SunResolverTest, FromSceneWithoutReferenceUsesSelectionRule)
+//! Resolves to no sun when no reference is set.
+NOLINT_TEST_F(SunResolverTest, FromSceneWithoutReferenceResolvesToNoSun)
 {
   // Arrange
   auto scene = std::make_shared<scene::Scene>("SunResolver.NoReference");
@@ -200,16 +192,11 @@ NOLINT_TEST_F(SunResolverTest, FromSceneWithoutReferenceUsesSelectionRule)
     = ResolveSunForView(*scene, std::span<const DirectionalLightBasic>(lights));
 
   // Assert
-  EXPECT_TRUE(resolved.enabled);
-  EXPECT_NEAR(resolved.GetDirection().y, 1.0F, kEpsilon);
-  EXPECT_NEAR(resolved.GetColor().x, 0.2F, kEpsilon);
-  EXPECT_NEAR(resolved.GetColor().y, 0.4F, kEpsilon);
-  EXPECT_NEAR(resolved.GetColor().z, 0.6F, kEpsilon);
-  EXPECT_NEAR(resolved.GetIlluminance(), 2.5F, kEpsilon);
+  EXPECT_FALSE(resolved.enabled);
 }
 
-//! Uses selection rule when a referenced node is no longer alive.
-NOLINT_TEST_F(SunResolverTest, DeadReferenceFallsBackToSelectionRule)
+//! Resolves to no sun when a referenced node is no longer alive.
+NOLINT_TEST_F(SunResolverTest, DeadReferenceResolvesToNoSun)
 {
   // Arrange
   auto scene = std::make_shared<scene::Scene>("SunResolver.DeadReference");
@@ -234,12 +221,7 @@ NOLINT_TEST_F(SunResolverTest, DeadReferenceFallsBackToSelectionRule)
     = ResolveSunForView(*scene, std::span<const DirectionalLightBasic>(lights));
 
   // Assert
-  EXPECT_TRUE(resolved.enabled);
-  EXPECT_NEAR(resolved.GetDirection().y, 1.0F, kEpsilon);
-  EXPECT_NEAR(resolved.GetColor().x, 0.7F, kEpsilon);
-  EXPECT_NEAR(resolved.GetColor().y, 0.8F, kEpsilon);
-  EXPECT_NEAR(resolved.GetColor().z, 0.9F, kEpsilon);
-  EXPECT_NEAR(resolved.GetIlluminance(), 3.0F, kEpsilon);
+  EXPECT_FALSE(resolved.enabled);
 }
 
 } // namespace oxygen::engine::internal::testing
