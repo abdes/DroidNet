@@ -59,6 +59,11 @@ public:
     return ResolvePath(config_->ShaderLibraryPath());
   }
 
+  [[nodiscard]] auto CVarsArchivePath() const -> std::filesystem::path
+  {
+    return ResolvePath(config_->CVarsArchivePath());
+  }
+
   [[nodiscard]] auto ShaderIncludeRoots() const
     -> std::array<std::filesystem::path, 2>
   {
