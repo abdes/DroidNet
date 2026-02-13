@@ -82,6 +82,10 @@ auto Parser::Tokenize(const std::string_view line) -> std::vector<std::string>
       continue;
     }
 
+    if (c == '#') {
+      break;
+    }
+
     if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
       if (!current.empty()) {
         tokens.push_back(current);
