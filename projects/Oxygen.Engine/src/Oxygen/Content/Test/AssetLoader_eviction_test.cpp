@@ -397,10 +397,16 @@ NOLINT_TEST_F(
 
       loader.ReleaseAsset(material_key);
 
+      // Eviction is no longer guaranteed to happen immediately on release.
+      // Force a trim so any entries that are only held by the cache are
+      // evicted now, producing eviction notifications synchronously.
+      loader.TrimCache();
+
       EXPECT_EQ(events.size(), 3u);
       for (const auto& event : events) {
         EXPECT_EQ(event.type_id, TextureResource::ClassTypeId());
-        EXPECT_EQ(event.reason, EvictionReason::kRefCountZero);
+        // We force eviction via TrimCache(), which reports kClear.
+        EXPECT_EQ(event.reason, EvictionReason::kClear);
       }
 
       std::unordered_set<std::size_t> unique_keys;

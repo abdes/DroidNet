@@ -35,7 +35,7 @@ assets:
       - node_index: 1
         affects_world: true
         color_rgb: [1.0, 0.98, 0.92]
-        intensity: 2.0
+        intensity_lux: 2.0
         mobility: 0
         casts_shadows: 1
         shadow:
@@ -53,7 +53,7 @@ assets:
       - node_index: 2
         affects_world: true
         color_rgb: [1.0, 0.7, 0.4]
-        intensity: 8.0
+        luminous_flux_lm: 8.0
         mobility: 0
         casts_shadows: 0
         range: 15.0
