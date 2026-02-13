@@ -25,10 +25,10 @@ struct MaterialSurface
     float3 V;
 };
 
-static inline float GridLineMask(float2 world_xz, float2 spacing, float thickness)
+static inline float GridLineMask(float2 grid_pos, float2 spacing, float thickness)
 {
     spacing = max(spacing, float2(1e-4, 1e-4));
-    const float2 coord = world_xz / spacing;
+    const float2 coord = grid_pos / spacing;
     const float2 dist_to_line = min(frac(coord), 1.0 - frac(coord));
     const float2 aa = fwidth(coord);
     float2 thickness_coord = max(thickness, 0.0) / spacing;
@@ -49,42 +49,55 @@ static inline float AxisLineMask(float value, float thickness)
 
 static inline float4 EvaluateProceduralGrid(MaterialConstants mat,
     float3 world_pos,
-    float3 world_normal,
-    float3 view_dir)
+    float3 world_normal)
 {
-    const float2 world_xy = float2(world_pos.x, world_pos.y);
-    const float ndotv = abs(dot(SafeNormalize(world_normal), SafeNormalize(view_dir)));
-    // Keep grid visible at grazing angles; only collapse at true edge-on.
-    const float thickness_scale = 1.0 / max(ndotv, 1e-4);
-
     const float2 spacing = mat.grid_spacing;
     const float major_every = max(1.0, (float)mat.grid_major_every);
 
-    const float minor_mask = GridLineMask(
-        world_xy, spacing, mat.grid_line_thickness * thickness_scale);
-    const float major_mask = GridLineMask(
-        world_xy, spacing * major_every, mat.grid_major_thickness * thickness_scale);
+    const float3 n = abs(SafeNormalize(world_normal));
+    const float weight_sum = n.x + n.y + n.z + 1e-5;
+    const float3 w = n / weight_sum;
 
-    const float axis_x_mask = AxisLineMask(
-        world_xy.x, mat.grid_axis_thickness * thickness_scale);
-    const float axis_y_mask = AxisLineMask(
-        world_xy.y, mat.grid_axis_thickness * thickness_scale);
-    const float origin_mask = axis_x_mask * axis_y_mask;
+    const float2 grid_xy = world_pos.xy;
+    const float2 grid_xz = float2(world_pos.x, world_pos.z);
+    const float2 grid_yz = float2(world_pos.y, world_pos.z);
 
-    float4 color = mat.grid_minor_color * minor_mask;
-    color = lerp(color, mat.grid_major_color, major_mask);
-    color = lerp(color, mat.grid_axis_color_x, axis_x_mask);
-    color = lerp(color, mat.grid_axis_color_y, axis_y_mask);
-    color = lerp(color, mat.grid_origin_color, origin_mask);
+    const float minor_xy = GridLineMask(grid_xy, spacing, mat.grid_line_thickness);
+    const float major_xy = GridLineMask(grid_xy, spacing * major_every, mat.grid_major_thickness);
+    const float axis_x_xy = AxisLineMask(grid_xy.x, mat.grid_axis_thickness);
+    const float axis_y_xy = AxisLineMask(grid_xy.y, mat.grid_axis_thickness);
+    const float origin_xy = axis_x_xy * axis_y_xy;
+    float4 color_xy = mat.grid_minor_color * minor_xy;
+    color_xy = lerp(color_xy, mat.grid_major_color, major_xy);
+    color_xy = lerp(color_xy, mat.grid_axis_color_x, axis_x_xy);
+    color_xy = lerp(color_xy, mat.grid_axis_color_y, axis_y_xy);
+    color_xy = lerp(color_xy, mat.grid_origin_color, origin_xy);
 
-    const float dist = length(world_xy - float2(camera_position.x, camera_position.y));
-    if (mat.grid_fade_end > mat.grid_fade_start) {
-        const float fade = saturate((mat.grid_fade_end - dist)
-            / max(mat.grid_fade_end - mat.grid_fade_start, 1e-4));
-        color *= fade;
-    }
+    const float minor_xz = GridLineMask(grid_xz, spacing, mat.grid_line_thickness);
+    const float major_xz = GridLineMask(grid_xz, spacing * major_every, mat.grid_major_thickness);
+    const float axis_x_xz = AxisLineMask(grid_xz.x, mat.grid_axis_thickness);
+    const float axis_z_xz = AxisLineMask(grid_xz.y, mat.grid_axis_thickness);
+    const float origin_xz = axis_x_xz * axis_z_xz;
+    float4 color_xz = mat.grid_minor_color * minor_xz;
+    color_xz = lerp(color_xz, mat.grid_major_color, major_xz);
+    color_xz = lerp(color_xz, mat.grid_axis_color_x, axis_x_xz);
+    color_xz = lerp(color_xz, mat.grid_axis_color_y, axis_z_xz);
+    color_xz = lerp(color_xz, mat.grid_origin_color, origin_xz);
 
-    return color;
+    const float minor_yz = GridLineMask(grid_yz, spacing, mat.grid_line_thickness);
+    const float major_yz = GridLineMask(grid_yz, spacing * major_every, mat.grid_major_thickness);
+    const float axis_y_yz = AxisLineMask(grid_yz.x, mat.grid_axis_thickness);
+    const float axis_z_yz = AxisLineMask(grid_yz.y, mat.grid_axis_thickness);
+    const float origin_yz = axis_y_yz * axis_z_yz;
+    float4 color_yz = mat.grid_minor_color * minor_yz;
+    color_yz = lerp(color_yz, mat.grid_major_color, major_yz);
+    color_yz = lerp(color_yz, mat.grid_axis_color_x, axis_y_yz);
+    color_yz = lerp(color_yz, mat.grid_axis_color_y, axis_z_yz);
+    color_yz = lerp(color_yz, mat.grid_origin_color, origin_yz);
+
+    // Z-up: XY plane dominates when normal points +/-Z.
+    // Blend planes by normal magnitude (no camera dependency).
+    return color_xy * w.z + color_xz * w.y + color_yz * w.x;
 }
 
 MaterialSurface EvaluateMaterialSurface(
@@ -276,7 +289,7 @@ MaterialSurface EvaluateMaterialSurface(
 
         if ((mat.flags & MATERIAL_FLAG_PROCEDURAL_GRID) != 0u) {
             const float4 grid_color = EvaluateProceduralGrid(
-                mat, world_pos, world_normal, s.V);
+                mat, world_pos, world_normal);
             s.base_rgb = lerp(s.base_rgb, grid_color.rgb, grid_color.a);
             s.base_a = max(s.base_a, grid_color.a);
             // Keep grid visible regardless of lighting/shadowing.

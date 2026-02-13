@@ -450,7 +450,7 @@ auto TextureLoadingService::RefreshCookedTextureEntries(
 
       // Read header to get content hash
       std::filesystem::path desc_path = cooked_root_ / asset.descriptor_relpath;
-      oxygen::data::pak::v2::AssetHeader header;
+      oxygen::data::pak::AssetHeader header;
       bool header_read = false;
 
       std::ifstream file(desc_path, std::ios::binary);

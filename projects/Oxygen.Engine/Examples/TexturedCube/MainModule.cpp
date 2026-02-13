@@ -285,8 +285,14 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       surface_params.metalness = surface_vm.metalness;
       surface_params.roughness = surface_vm.roughness;
       surface_params.base_color = surface_base_color;
+      const bool grid_selected
+        = (sphere_slot.mode == TextureIndexMode::kProceduralGrid
+          || cube_slot.mode == TextureIndexMode::kProceduralGrid);
+      if (grid_selected) {
+        surface_base_color = { 0.72F, 0.70F, 0.68F, 1.0F };
+      }
       surface_params.disable_texture_sampling
-        = surface_vm.use_constant_base_color;
+        = surface_vm.use_constant_base_color || grid_selected;
 
       // Update each object independently so callers can later update only one
       scene_setup_->UpdateSphere(

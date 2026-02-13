@@ -33,7 +33,7 @@ def load_spec(path: str | Path) -> PakSpec:
 def _parse_spec_dict(data: dict[str, Any]) -> PakSpec:
     # Minimal direct mapping; detailed validation to be implemented later.
     spec = PakSpec(
-        version=int(data.get("version", 1)),
+        version=int(data.get("version", 4)),
         content_version=int(data.get("content_version", 0)),
     )
     # Transitional: direct shallow assignment of raw dict lists so planning can proceed.
