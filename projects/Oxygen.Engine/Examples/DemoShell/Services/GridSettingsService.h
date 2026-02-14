@@ -8,8 +8,6 @@
 
 #include <atomic>
 #include <cstdint>
-#include <memory>
-#include <string_view>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -82,7 +80,6 @@ public:
   [[nodiscard]] auto GetOriginColor() const -> graphics::Color;
   auto SetOriginColor(const graphics::Color& color) -> void;
 
-
   [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t override;
 
   // DomainService
@@ -92,22 +89,7 @@ public:
     const CompositionView& view) -> void override;
 
 private:
-  struct GridConfig {
-    bool enabled { true };
-    float spacing { 1.0F };
-    int major_every { 10 };
-    float line_thickness { 0.02F };
-    float major_thickness { 0.04F };
-    float axis_thickness { 0.06F };
-    float fade_start { 0.0F };
-    float fade_power { 1.0F };
-    float horizon_boost { 0.0F };
-    graphics::Color minor_color { 10000.0F, 10000.0F, 10000.0F, 1.0F };
-    graphics::Color major_color { 20000.0F, 20000.0F, 20000.0F, 1.0F };
-    graphics::Color axis_color_x { 40000.0F, 8000.0F, 8000.0F, 1.0F };
-    graphics::Color axis_color_y { 8000.0F, 40000.0F, 8000.0F, 1.0F };
-    graphics::Color origin_color { 50000.0F, 50000.0F, 50000.0F, 1.0F };
-  };
+  struct GridConfig;
 
   auto ReadConfig() const -> GridConfig;
   auto UpdateGridOrigin(const GridConfig& config) -> void;
