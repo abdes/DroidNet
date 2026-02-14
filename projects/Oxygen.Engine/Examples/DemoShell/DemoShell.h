@@ -209,6 +209,9 @@ public:
   //! Returns the content loader view model (may be null).
   [[nodiscard]] auto GetContentVm() const -> observer_ptr<ui::ContentVm>;
 
+  //! Re-apply post-process settings to the active scene after hydration.
+  auto ReapplyPostProcessSettingsToScene() -> void;
+
 private:
   //! Completes initialization once required modules are available.
   auto CompleteInitialization() -> bool;
