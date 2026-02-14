@@ -208,14 +208,12 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
           });
 
         if (already_mounted) {
-          LOG_F(INFO,
-            "RenderScene: Loose cooked root already mounted; skipping "
-            "refresh for '{}'",
+          LOG_F(INFO, "RenderScene: Refreshing loose cooked root '{}'",
             normalized.string());
         } else {
-          asset_loader->AddLooseCookedRoot(root);
           mounted_loose_roots_.push_back(std::move(normalized));
         }
+        asset_loader->AddLooseCookedRoot(root);
       }
     }
 
@@ -263,14 +261,12 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
             });
 
           if (already_mounted) {
-            LOG_F(INFO,
-              "RenderScene: Loose cooked root already mounted; skipping "
-              "refresh for '{}'",
+            LOG_F(INFO, "RenderScene: Refreshing loose cooked root '{}'",
               normalized.string());
           } else {
-            asset_loader->AddLooseCookedRoot(root);
             mounted_loose_roots_.push_back(std::move(normalized));
           }
+          asset_loader->AddLooseCookedRoot(root);
           LOG_F(INFO,
             "RenderScene: Ensured loose cooked root '{}' for scene load '{}'",
             root.string(), request.scene_name);
