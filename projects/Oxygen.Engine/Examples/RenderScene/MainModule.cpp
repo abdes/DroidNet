@@ -315,6 +315,7 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
         if (scene_ptr && swap.asset && loader) {
           auto active_camera = loader->BuildScene(*scene_ptr, *swap.asset);
           main_camera_ = std::move(active_camera);
+          shell.ReapplyPostProcessSettingsToScene();
         } else {
           LOG_F(ERROR, "RenderScene: Scene swap missing asset or scene");
         }

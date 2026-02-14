@@ -28,13 +28,13 @@
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/EnvironmentSettingsService.h"
+#include "DemoShell/Services/GridSettingsService.h"
 #include "DemoShell/Services/LightCullingSettingsService.h"
 #include "DemoShell/Services/PostProcessSettingsService.h"
 #include "DemoShell/Services/RenderingSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/Services/SkyboxService.h"
 #include "DemoShell/Services/UiSettingsService.h"
-#include "DemoShell/Services/GridSettingsService.h"
 #include "DemoShell/UI/CameraRigController.h"
 #include "DemoShell/UI/ContentVm.h"
 #include "DemoShell/UI/DemoShellUi.h"
@@ -403,6 +403,27 @@ auto DemoShell::GetContentVm() const -> observer_ptr<ui::ContentVm>
   return impl_->content_vm;
 }
 
+auto DemoShell::ReapplyPostProcessSettingsToScene() -> void
+{
+  if (!impl_ || !impl_->initialized) {
+    return;
+  }
+
+  const auto scene = TryGetScene();
+  if (!scene) {
+    return;
+  }
+
+  impl_->post_process_settings_service.BindScene(scene);
+  auto& pp = impl_->post_process_settings_service;
+  pp.SetManualExposureEv(pp.GetManualExposureEv());
+  pp.SetExposureKey(pp.GetExposureKey());
+  pp.SetExposureCompensation(pp.GetExposureCompensation());
+  pp.SetExposureEnabled(pp.GetExposureEnabled());
+  pp.SetAutoExposureMeteringMode(pp.GetAutoExposureMeteringMode());
+  pp.SetExposureMode(pp.GetExposureMode());
+}
+
 auto DemoShell::SetActivePanel(std::string_view panel_name) -> void
 {
   if (!impl_->initialized) {
@@ -497,7 +518,9 @@ auto DemoShell::UpdatePanels() -> void
       impl_->environment_settings_service.SetRuntimeConfig(runtime_config);
       if (!impl_->logged_missing_env_vm_runtime_route) {
         LOG_F(INFO,
-          "DemoShell: EnvironmentVm unavailable; routing runtime config directly to EnvironmentSettingsService (subsequent frames suppressed)");
+          "DemoShell: EnvironmentVm unavailable; routing runtime config "
+          "directly to EnvironmentSettingsService (subsequent frames "
+          "suppressed)");
         impl_->logged_missing_env_vm_runtime_route = true;
       }
     }
@@ -505,7 +528,8 @@ auto DemoShell::UpdatePanels() -> void
     impl_->environment_settings_service.SetRuntimeConfig(runtime_config);
     if (!impl_->logged_missing_ui_runtime_route) {
       LOG_F(INFO,
-        "DemoShell: DemoShellUi unavailable; routing runtime config directly to EnvironmentSettingsService (subsequent frames suppressed)");
+        "DemoShell: DemoShellUi unavailable; routing runtime config directly "
+        "to EnvironmentSettingsService (subsequent frames suppressed)");
       impl_->logged_missing_ui_runtime_route = true;
     }
   }
@@ -518,6 +542,17 @@ auto DemoShell::OnSceneActivated(scene::Scene& scene) -> void
   impl_->light_culling_settings_service.OnSceneActivated(scene);
   impl_->environment_settings_service.OnSceneActivated(scene);
   impl_->post_process_settings_service.BindScene(observer_ptr { &scene });
+  // Re-apply post-process exposure settings after scene hydration so the
+  // freshly-built PostProcessVolume reflects persisted UI values.
+  {
+    auto& pp = impl_->post_process_settings_service;
+    pp.SetManualExposureEv(pp.GetManualExposureEv());
+    pp.SetExposureKey(pp.GetExposureKey());
+    pp.SetExposureCompensation(pp.GetExposureCompensation());
+    pp.SetExposureEnabled(pp.GetExposureEnabled());
+    pp.SetAutoExposureMeteringMode(pp.GetAutoExposureMeteringMode());
+    pp.SetExposureMode(pp.GetExposureMode());
+  }
   if (impl_->config.panel_config.ground_grid) {
     impl_->grid_settings_service.OnSceneActivated(scene);
   }
