@@ -180,7 +180,6 @@ translation in the D3D12 (and future Vulkan) layers.
 | `fill_mode` | `FillMode` | `kSolid` | Solid or wireframe rendering |
 | `cull_mode` | `CullMode` | `kBack` | Face culling (none/front/back/both) |
 | `front_counter_clockwise` | `bool` | `true` | Winding order for front faces |
-| `depth_bias` | `float` | `0.0` | Constant depth offset |
 | `depth_clip_enable` | `bool` | `true` | Depth clipping |
 | `multisample_enable` | `bool` | `false` | MSAA enable |
 

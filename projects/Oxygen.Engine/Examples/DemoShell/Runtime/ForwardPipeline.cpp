@@ -621,16 +621,10 @@ struct ForwardPipeline::Impl {
       co_await sky_pass->Execute(rc, rec);
     }
 
-    if (ground_grid_pass && ground_grid_pass_config
-      && ground_grid_pass_config->enabled) {
-      co_await ground_grid_pass->PrepareResources(rc, rec);
-      co_await ground_grid_pass->Execute(rc, rec);
-    }
-
-    if (light_culling_pass) {
-      co_await light_culling_pass->PrepareResources(rc, rec);
-      co_await light_culling_pass->Execute(rc, rec);
-      rc.RegisterPass<engine::LightCullingPass>(light_culling_pass.get());
+      if (light_culling_pass) {
+        co_await light_culling_pass->PrepareResources(rc, rec);
+        co_await light_culling_pass->Execute(rc, rec);
+        rc.RegisterPass<engine::LightCullingPass>(light_culling_pass.get());
     }
 
     if (shader_pass) {
@@ -1168,8 +1162,8 @@ auto ForwardPipeline::OnSceneMutation(
               const bool want_auto_exposure = self->tone_map_pass_config
                 && self->tone_map_pass_config->exposure_mode
                   == engine::ExposureMode::kAuto;
-              if (want_auto_exposure && self->auto_exposure_pass) {
-                if (self->pending_auto_exposure_reset.has_value()) {
+                if (want_auto_exposure && self->auto_exposure_pass) {
+                  if (self->pending_auto_exposure_reset.has_value()) {
                   // Convert EV (EV100, ISO 100) to Average Luminance,
                   // K=12.5) L = 2^EV * K / 100
                   const float k = 12.5F;
@@ -1183,14 +1177,20 @@ auto ForwardPipeline::OnSceneMutation(
 
                 self->auto_exposure_config->source_texture = view->hdr_texture;
                 co_await self->auto_exposure_pass->PrepareResources(rc, rec);
-                co_await self->auto_exposure_pass->Execute(rc, rec);
-                rc.RegisterPass<engine::AutoExposurePass>(
-                  self->auto_exposure_pass.get());
-              }
-            }
+                  co_await self->auto_exposure_pass->Execute(rc, rec);
+                  rc.RegisterPass<engine::AutoExposurePass>(
+                    self->auto_exposure_pass.get());
+                }
 
-            co_await self->ToneMapToSdr(ctx, rc, rec);
-          } else {
+                if (self->ground_grid_pass && self->ground_grid_pass_config
+                  && self->ground_grid_pass_config->enabled) {
+                  co_await self->ground_grid_pass->PrepareResources(rc, rec);
+                  co_await self->ground_grid_pass->Execute(rc, rec);
+                }
+              }
+
+              co_await self->ToneMapToSdr(ctx, rc, rec);
+            } else {
             // Phase: SDR-only output for non-HDR views.
             self->BindSdrAndMaybeClear(ctx, rec);
           }
