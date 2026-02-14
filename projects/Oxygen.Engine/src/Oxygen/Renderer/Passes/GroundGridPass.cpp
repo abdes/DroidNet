@@ -28,6 +28,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Renderer/Passes/AutoExposurePass.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/GroundGridPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
@@ -47,26 +48,58 @@ using oxygen::graphics::Texture;
 
 namespace {
 struct alignas(16) GroundGridPassConstants {
+  // Registers 0-3 (inv view-projection matrix with NO translation)
   glm::mat4 inv_view_proj { 1.0F };
-  glm::vec4 grid_params0 { 0.0F, 1.0F, 10.0F, 0.02F };
-  glm::vec4 grid_params1 { 0.04F, 0.06F, 0.0F, 0.0F };
-  glm::vec4 grid_params2 { 1000.0F, 0.0F, 0.0F, 0.0F };
-  glm::vec4 grid_params3 { 1.0F, 32.0F, 1e-4F, 0.0F };
+
+  // Register 4 (grid layout)
+  float plane_height { 0.0F };
+  float spacing { 1.0F };
+  float major_every { 10.0F };
+  float fade_start { 0.0F };
+
+  // Register 5 (line widths + fade)
+  float line_thickness { 0.02F };
+  float major_thickness { 0.04F };
+  float axis_thickness { 0.06F };
+  float fade_power { 1.0F };
+
+  // Register 6 (origin + horizon)
+  float origin_x { 0.0F };
+  float origin_y { 0.0F };
+  float horizon_boost { 0.0F };
+  float pad_params2_0 { 0.0F };
+
+  // Register 7 (grid offset + SRVs)
+  float grid_offset_x { 0.0F };
+  float grid_offset_y { 0.0F };
   uint32_t depth_srv_index { oxygen::kInvalidShaderVisibleIndex.get() };
-  uint32_t flags { 0U };
-  glm::vec2 pad0 { 0.0F, 0.0F };
+  uint32_t exposure_srv_index { oxygen::kInvalidShaderVisibleIndex.get() };
+
+  // Register 8 (minor color)
   glm::vec4 minor_color { 0.35F, 0.35F, 0.35F, 1.0F };
+  // Register 9 (major color)
   glm::vec4 major_color { 0.55F, 0.55F, 0.55F, 1.0F };
+  // Register 10 (axis X color)
   glm::vec4 axis_color_x { 0.90F, 0.20F, 0.20F, 1.0F };
+  // Register 11 (axis Y color)
   glm::vec4 axis_color_y { 0.20F, 0.90F, 0.20F, 1.0F };
+  // Register 12 (origin color)
   glm::vec4 origin_color { 1.0F, 1.0F, 1.0F, 1.0F };
 };
 
-constexpr uint32_t kGroundGridConstantsSize = 224U;
+constexpr uint32_t kGroundGridConstantsSize = 208U;
 static_assert(sizeof(GroundGridPassConstants) == kGroundGridConstantsSize,
-  "GroundGridPassConstants must be 224 bytes");
+  "GroundGridPassConstants must be 208 bytes");
 
 constexpr uint32_t kConstantsBufferMinSize = 256U;
+
+constexpr double kMinSpacing = 1e-4;
+constexpr double kMinSmoothTime = 0.001;
+constexpr double kTeleportThreshold = 1000.0;
+
+// Coefficients for Critical Spring Smoothing (Taylor expansion)
+constexpr double kCritDampCoeff1 = 0.48;
+constexpr double kCritDampCoeff2 = 0.235;
 
 auto PrepareRenderTargetView(Texture& color_texture, ResourceRegistry& registry,
   DescriptorAllocator& allocator) -> oxygen::graphics::NativeView
@@ -137,6 +170,11 @@ auto PrepareDepthShaderResourceView(Texture& depth_texture,
 
   if (const auto srv = registry.Find(depth_texture, srv_view_desc);
     srv->IsValid()) {
+    if (const auto existing_index
+      = registry.FindShaderVisibleIndex(depth_texture, srv_view_desc);
+      existing_index.has_value()) {
+      return { srv, existing_index->get() };
+    }
     return { srv, oxygen::kInvalidShaderVisibleIndex.get() };
   }
   auto srv_desc_handle = allocator.Allocate(
@@ -282,8 +320,19 @@ auto GroundGridPass::UpdatePassConstants() -> void
   GroundGridPassConstants constants {};
 
   if (Context().current_view.resolved_view != nullptr) {
-    constants.inv_view_proj
-      = Context().current_view.resolved_view->InverseViewProjection();
+    // Construct Grid-Relative View-Projection-Inverse.
+    // We remove the translation from the view matrix to operate in relative
+    // space, preventing floating point erosion at large world coordinates.
+    //
+    // Relative World Pos = CameraPos + (RayDir * t)
+    // We only need (RayDir * t) for the grid pattern UVs.
+    const auto& view = Context().current_view.resolved_view->ViewMatrix();
+    auto view_no_trans = view;
+    // Set translation column to (0,0,0,1)
+    view_no_trans[3] = glm::vec4(0.0F, 0.0F, 0.0F, 1.0F);
+
+    const auto& proj = Context().current_view.resolved_view->ProjectionMatrix();
+    constants.inv_view_proj = glm::inverse(proj * view_no_trans);
   }
 
   if (const Texture* depth_texture = GetDepthTexture();
@@ -310,48 +359,127 @@ auto GroundGridPass::UpdatePassConstants() -> void
     last_depth_texture_ = nullptr;
   }
   constants.depth_srv_index = depth_srv_index_.get();
+  constants.exposure_srv_index = oxygen::kInvalidShaderVisibleIndex.get();
+  if (const auto* ae = Context().GetPass<engine::AutoExposurePass>();
+    ae != nullptr) {
+    const auto view_id = Context().current_view.view_id;
+    const auto exposure_output = ae->GetExposureOutput(view_id);
+    if (exposure_output.exposure_state_srv_index.IsValid()) {
+      constants.exposure_srv_index
+        = exposure_output.exposure_state_srv_index.get();
+    }
+  }
 
   if (config_) {
-    const float major_every = std::max(1.0F, static_cast<float>(
-      config_->major_every == 0U ? 1U : config_->major_every));
+    const float major_every = std::max(1.0F,
+      static_cast<float>(
+        config_->major_every == 0U ? 1U : config_->major_every));
 
-    float fade_start = config_->fade_start;
-    float fade_end = config_->fade_end;
-    if (fade_end <= 0.0F && config_->plane_size > 0.0F) {
-      fade_end = config_->plane_size;
-      if (fade_start <= 0.0F) {
-        fade_start = fade_end * 0.7F;
+    const float fade_start = config_->fade_start;
+
+    constants.plane_height = 0.0F;
+    constants.spacing = config_->spacing;
+    constants.major_every = major_every;
+    constants.fade_start = fade_start;
+
+    constants.line_thickness = config_->line_thickness;
+    constants.major_thickness = config_->major_thickness;
+    constants.axis_thickness = config_->axis_thickness;
+    constants.fade_power = std::max(config_->fade_power, 0.0F);
+
+    constants.origin_x = config_->origin.x;
+    constants.origin_y = config_->origin.y;
+    constants.horizon_boost = std::max(config_->horizon_boost, 0.0F);
+    constants.pad_params2_0 = 0.0F;
+
+    if (Context().current_view.resolved_view != nullptr) {
+      const auto camera_pos_f
+        = Context().current_view.resolved_view->CameraPosition();
+      const glm::dvec3 camera_pos = camera_pos_f; // Promote to double
+      const double spacing = std::max<double>(config_->spacing, kMinSpacing);
+
+      glm::dvec3 effective_cam_pos = camera_pos;
+
+      if (config_->smooth_motion) {
+        if (first_frame_) {
+          smooth_pos_ = camera_pos;
+          smooth_vel_ = glm::dvec3(0.0);
+          first_frame_ = false;
+        } else {
+          // Critical Spring Smoothing (Critically Damped Spring)
+          // Using double precision to prevent jitter at large coordinates.
+
+          const double dt = static_cast<double>(Context().delta_time);
+          const double smooth_time
+            = std::max<double>(config_->smooth_time, kMinSmoothTime);
+          const double omega = 2.0 / smooth_time;
+          const double x = omega * dt;
+          const double exp = 1.0
+            / (1.0 + x + kCritDampCoeff1 * x * x + kCritDampCoeff2 * x * x * x);
+
+          const glm::dvec3 change = smooth_pos_ - camera_pos;
+          const glm::dvec3 temp = (smooth_vel_ + omega * change) * dt;
+
+          smooth_vel_ = (smooth_vel_ - omega * temp) * exp;
+          smooth_pos_ = (camera_pos + (change + temp) * exp);
+
+          // Snap if very far (e.g. teleport) to prevent wild grid movement
+          if (glm::distance(smooth_pos_, camera_pos) > kTeleportThreshold) {
+            smooth_pos_ = camera_pos;
+            smooth_vel_ = glm::dvec3(0.0);
+          }
+        }
+        effective_cam_pos = smooth_pos_;
+      } else {
+        // Reset state if smoothing is disabled
+        smooth_pos_ = camera_pos;
+        smooth_vel_ = glm::dvec3(0.0);
+        first_frame_ = true;
       }
+
+      // Calculate the camera's offset within the current grid cell.
+      // We want offset in [0, period).
+      // period must be spacing * major_every so that both minor and major lines
+      // wrap seamlessly without visual jumping.
+      // Using std::fmod with doubles preserves precision even if cam_pos is
+      // large.
+
+      const double major_every = std::max<double>(
+        static_cast<double>(
+          config_->major_every == 0U ? 1U : config_->major_every),
+        1.0);
+      const double period = spacing * major_every;
+
+      glm::vec2 grid_offset;
+      grid_offset.x
+        = static_cast<float>(std::fmod(effective_cam_pos.x, period));
+      if (grid_offset.x < 0.0F) {
+        grid_offset.x += static_cast<float>(period);
+      }
+
+      grid_offset.y
+        = static_cast<float>(std::fmod(effective_cam_pos.y, period));
+      if (grid_offset.y < 0.0F) {
+        grid_offset.y += static_cast<float>(period);
+      }
+
+      constants.grid_offset_x = grid_offset.x;
+      constants.grid_offset_y = grid_offset.y;
     }
 
-    constants.grid_params0 = glm::vec4(
-      0.0F, config_->spacing, major_every, config_->line_thickness);
-    constants.grid_params1
-      = glm::vec4(config_->major_thickness, config_->axis_thickness, fade_start,
-        fade_end);
-    constants.grid_params2
-      = glm::vec4(config_->plane_size, config_->origin.x, config_->origin.y,
-        0.0F);
-    constants.grid_params3 = glm::vec4(config_->fade_power,
-      std::max(config_->thickness_max_scale, 1.0F),
-      std::max(config_->depth_bias, 0.0F),
-      std::max(config_->horizon_boost, 0.0F));
-
     constants.minor_color = glm::vec4(config_->minor_color.r,
-      config_->minor_color.g, config_->minor_color.b,
-      config_->minor_color.a);
+      config_->minor_color.g, config_->minor_color.b, config_->minor_color.a);
     constants.major_color = glm::vec4(config_->major_color.r,
-      config_->major_color.g, config_->major_color.b,
-      config_->major_color.a);
-    constants.axis_color_x = glm::vec4(config_->axis_color_x.r,
-      config_->axis_color_x.g, config_->axis_color_x.b,
-      config_->axis_color_x.a);
-    constants.axis_color_y = glm::vec4(config_->axis_color_y.r,
-      config_->axis_color_y.g, config_->axis_color_y.b,
-      config_->axis_color_y.a);
-    constants.origin_color = glm::vec4(config_->origin_color.r,
-      config_->origin_color.g, config_->origin_color.b,
-      config_->origin_color.a);
+      config_->major_color.g, config_->major_color.b, config_->major_color.a);
+    constants.axis_color_x
+      = glm::vec4(config_->axis_color_x.r, config_->axis_color_x.g,
+        config_->axis_color_x.b, config_->axis_color_x.a);
+    constants.axis_color_y
+      = glm::vec4(config_->axis_color_y.r, config_->axis_color_y.g,
+        config_->axis_color_y.b, config_->axis_color_y.a);
+    constants.origin_color
+      = glm::vec4(config_->origin_color.r, config_->origin_color.g,
+        config_->origin_color.b, config_->origin_color.a);
 
     static std::atomic<bool> logged_once { false };
     if (!logged_once.exchange(true)) {
@@ -359,9 +487,8 @@ auto GroundGridPass::UpdatePassConstants() -> void
         "GroundGridPass: UpdatePassConstants spacing={} major_every={} "
         "line_thickness={} major_thickness={} minor_color=({}, {}, {}, {}) "
         "major_color=({}, {}, {}, {})",
-        constants.grid_params0.y,
-        static_cast<uint32_t>(constants.grid_params0.z),
-        constants.grid_params0.w, constants.grid_params1.x,
+        constants.spacing, static_cast<uint32_t>(constants.major_every),
+        constants.line_thickness, constants.major_thickness,
         constants.minor_color.r, constants.minor_color.g,
         constants.minor_color.b, constants.minor_color.a,
         constants.major_color.r, constants.major_color.g,

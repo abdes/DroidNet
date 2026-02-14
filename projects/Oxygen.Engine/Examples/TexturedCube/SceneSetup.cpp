@@ -241,15 +241,15 @@ auto SceneSetup::EnsureNodes() -> void
   }
 
   // Place the sphere above the cube (Z-up world).
-  sphere_node_.GetTransform().SetLocalPosition({ 0.0F, 0.0F, 3.0F });
+  sphere_node_.GetTransform().SetLocalPosition({ 0.0F, 0.0F, 6.5F });
   sphere_node_.GetTransform().SetLocalScale({ 1.0F, 1.0F, 1.0F });
 
   if (!cube_node_.IsAlive()) {
     cube_node_ = scene_->CreateNode("Cube");
   }
 
-  // Make the cube the scene center and scale it up for easier inspection.
-  cube_node_.GetTransform().SetLocalPosition({ 0.0F, 0.0F, 0.0F });
+  // Make the cube sit above Z=0 and scale it up for easier inspection.
+  cube_node_.GetTransform().SetLocalPosition({ 0.0F, 0.0F, 2.5F });
   cube_node_.GetTransform().SetLocalScale({ 5.0F, 5.0F, 5.0F });
 }
 

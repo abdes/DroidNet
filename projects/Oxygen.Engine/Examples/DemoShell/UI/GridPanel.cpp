@@ -26,7 +26,6 @@ auto GridPanel::DrawContents() -> void
   DrawFadeSection();
   DrawColorSection();
   DrawRenderSection();
-  DrawPlacementSection();
 }
 
 auto GridPanel::GetName() const noexcept -> std::string_view
@@ -52,12 +51,6 @@ void GridPanel::DrawGridSection()
     vm_->SetEnabled(enabled);
   }
 
-  float plane_size = vm_->GetPlaneSize();
-  if (ImGui::DragFloat(
-        "Plane Size", &plane_size, 1.0F, 1.0F, 10000.0F, "%.1f")) {
-    vm_->SetPlaneSize(plane_size);
-  }
-
   float spacing = vm_->GetGridSpacing();
   if (ImGui::DragFloat("Spacing", &spacing, 0.1F, 0.01F, 100.0F, "%.2f")) {
     vm_->SetGridSpacing(spacing);
@@ -70,19 +63,19 @@ void GridPanel::DrawGridSection()
 
   float line_thickness = vm_->GetLineThickness();
   if (ImGui::DragFloat(
-        "Line Thickness", &line_thickness, 0.001F, 0.0F, 0.25F, "%.3f")) {
+        "Line Thickness", &line_thickness, 0.01F, 0.0F, 0.10F, "%.2f")) {
     vm_->SetLineThickness(line_thickness);
   }
 
   float major_thickness = vm_->GetMajorThickness();
   if (ImGui::DragFloat(
-        "Major Thickness", &major_thickness, 0.001F, 0.0F, 0.5F, "%.3f")) {
+        "Major Thickness", &major_thickness, 0.01F, 0.0F, 0.10F, "%.2f")) {
     vm_->SetMajorThickness(major_thickness);
   }
 
   float axis_thickness = vm_->GetAxisThickness();
   if (ImGui::DragFloat(
-        "Axis Thickness", &axis_thickness, 0.001F, 0.0F, 1.0F, "%.3f")) {
+        "Axis Thickness", &axis_thickness, 0.01F, 0.0F, 0.10F, "%.2f")) {
     vm_->SetAxisThickness(axis_thickness);
   }
 }
@@ -94,13 +87,9 @@ void GridPanel::DrawFadeSection()
   }
 
   float fade_start = vm_->GetFadeStart();
-  float fade_end = vm_->GetFadeEnd();
   if (ImGui::DragFloat(
         "Fade Start", &fade_start, 1.0F, 0.0F, 10000.0F, "%.1f")) {
     vm_->SetFadeStart(fade_start);
-  }
-  if (ImGui::DragFloat("Fade End", &fade_end, 1.0F, 0.0F, 10000.0F, "%.1f")) {
-    vm_->SetFadeEnd(fade_end);
   }
 
   float fade_power = vm_->GetFadePower();
@@ -116,9 +105,12 @@ void GridPanel::DrawColorSection()
     return;
   }
 
+  const ImGuiColorEditFlags color_flags
+    = ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float;
+
   auto minor = vm_->GetMinorColor();
   float minor_rgba[4] { minor.r, minor.g, minor.b, minor.a };
-  if (ImGui::ColorEdit4("Minor Color", minor_rgba)) {
+  if (ImGui::ColorEdit4("Minor Color", minor_rgba, color_flags)) {
     vm_->SetMinorColor(
       graphics::Color { minor_rgba[0], minor_rgba[1], minor_rgba[2],
         minor_rgba[3] });
@@ -126,10 +118,34 @@ void GridPanel::DrawColorSection()
 
   auto major = vm_->GetMajorColor();
   float major_rgba[4] { major.r, major.g, major.b, major.a };
-  if (ImGui::ColorEdit4("Major Color", major_rgba)) {
+  if (ImGui::ColorEdit4("Major Color", major_rgba, color_flags)) {
     vm_->SetMajorColor(
       graphics::Color { major_rgba[0], major_rgba[1], major_rgba[2],
         major_rgba[3] });
+  }
+
+  auto axis_x = vm_->GetAxisColorX();
+  float axis_x_rgba[4] { axis_x.r, axis_x.g, axis_x.b, axis_x.a };
+  if (ImGui::ColorEdit4("Axis X Color", axis_x_rgba, color_flags)) {
+    vm_->SetAxisColorX(
+      graphics::Color { axis_x_rgba[0], axis_x_rgba[1], axis_x_rgba[2],
+        axis_x_rgba[3] });
+  }
+
+  auto axis_y = vm_->GetAxisColorY();
+  float axis_y_rgba[4] { axis_y.r, axis_y.g, axis_y.b, axis_y.a };
+  if (ImGui::ColorEdit4("Axis Y Color", axis_y_rgba, color_flags)) {
+    vm_->SetAxisColorY(
+      graphics::Color { axis_y_rgba[0], axis_y_rgba[1], axis_y_rgba[2],
+        axis_y_rgba[3] });
+  }
+
+  auto origin = vm_->GetOriginColor();
+  float origin_rgba[4] { origin.r, origin.g, origin.b, origin.a };
+  if (ImGui::ColorEdit4("Origin Color", origin_rgba, color_flags)) {
+    vm_->SetOriginColor(
+      graphics::Color { origin_rgba[0], origin_rgba[1], origin_rgba[2],
+        origin_rgba[3] });
   }
 }
 
@@ -139,35 +155,10 @@ void GridPanel::DrawRenderSection()
     return;
   }
 
-  float max_scale = vm_->GetThicknessMaxScale();
-  if (ImGui::DragFloat(
-        "Max Angle Scale", &max_scale, 0.5F, 1.0F, 256.0F, "%.2f")) {
-    vm_->SetThicknessMaxScale(max_scale);
-  }
-
-  float depth_bias = vm_->GetDepthBias();
-  if (ImGui::DragFloat(
-        "Depth Bias", &depth_bias, 1e-5F, 0.0F, 0.01F, "%.6f")) {
-    vm_->SetDepthBias(depth_bias);
-  }
-
   float horizon_boost = vm_->GetHorizonBoost();
   if (ImGui::DragFloat(
         "Horizon Boost", &horizon_boost, 0.05F, 0.0F, 4.0F, "%.2f")) {
     vm_->SetHorizonBoost(horizon_boost);
-  }
-}
-
-void GridPanel::DrawPlacementSection()
-{
-  if (!ImGui::CollapsingHeader("Placement", ImGuiTreeNodeFlags_DefaultOpen)) {
-    return;
-  }
-
-  float threshold = vm_->GetRecenterThreshold();
-  if (ImGui::DragFloat(
-        "Recenter Threshold", &threshold, 1.0F, 0.0F, 1000.0F, "%.1f")) {
-    vm_->SetRecenterThreshold(threshold);
   }
 }
 

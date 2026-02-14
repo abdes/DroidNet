@@ -32,7 +32,6 @@ private:
   void DrawFadeSection();
   void DrawColorSection();
   void DrawRenderSection();
-  void DrawPlacementSection();
 
   observer_ptr<GridVm> vm_;
 };

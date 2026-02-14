@@ -33,25 +33,26 @@ struct GroundGridPassConfig {
   std::shared_ptr<const graphics::Texture> color_texture = nullptr;
 
   bool enabled { true };
-  float plane_size { 1000.0F };
   float spacing { 1.0F };
   uint32_t major_every { 10U };
   float line_thickness { 0.02F };
   float major_thickness { 0.04F };
   float axis_thickness { 0.06F };
   float fade_start { 0.0F };
-  float fade_end { 0.0F };
   float fade_power { 2.0F };
-  float thickness_max_scale { 64.0F };
-  float depth_bias { 1e-4F };
   float horizon_boost { 0.35F };
   Vec2 origin { 0.0F, 0.0F };
 
-  graphics::Color minor_color { 0.30F, 0.30F, 0.30F, 1.0F };
-  graphics::Color major_color { 0.50F, 0.50F, 0.50F, 1.0F };
-  graphics::Color axis_color_x { 0.90F, 0.20F, 0.20F, 1.0F };
-  graphics::Color axis_color_y { 0.20F, 0.90F, 0.20F, 1.0F };
-  graphics::Color origin_color { 1.0F, 1.0F, 1.0F, 1.0F };
+  graphics::Color minor_color { 10000.0F, 10000.0F, 10000.0F, 1.0F };
+  graphics::Color major_color { 20000.0F, 20000.0F, 20000.0F, 1.0F };
+  graphics::Color axis_color_x { 40000.0F, 8000.0F, 8000.0F, 1.0F };
+  graphics::Color axis_color_y { 8000.0F, 40000.0F, 8000.0F, 1.0F };
+  graphics::Color origin_color { 50000.0F, 50000.0F, 50000.0F, 1.0F };
+
+  //! Controls whether the grid lags behind the camera for a fluid feel.
+  bool smooth_motion { true };
+  //! Time in seconds to reach the target position (approximate).
+  float smooth_time { 1.0F };
 
   //! Debug name for diagnostics.
   std::string debug_name { "GroundGridPass" };
@@ -65,6 +66,11 @@ public:
   OXGN_RNDR_API explicit GroundGridPass(
     std::shared_ptr<GroundGridPassConfig> config);
   OXGN_RNDR_API ~GroundGridPass() override;
+
+  GroundGridPass(const GroundGridPass&) = delete;
+  GroundGridPass(GroundGridPass&&) = delete;
+  auto operator=(const GroundGridPass&) -> GroundGridPass& = delete;
+  auto operator=(GroundGridPass&&) -> GroundGridPass& = delete;
 
 protected:
   auto DoPrepareResources(graphics::CommandRecorder& recorder)
@@ -93,6 +99,11 @@ private:
   ShaderVisibleIndex pass_constants_index_ { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex depth_srv_index_ { kInvalidShaderVisibleIndex };
   const graphics::Texture* last_depth_texture_ { nullptr };
+
+  // Smoothing state for "fluid" grid movement
+  glm::dvec3 smooth_pos_ { 0.0 };
+  glm::dvec3 smooth_vel_ { 0.0 };
+  bool first_frame_ { true };
 };
 
 } // namespace oxygen::engine

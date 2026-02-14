@@ -30,17 +30,6 @@ auto GridVm::SetEnabled(const bool enabled) -> void
   enabled_ = enabled;
 }
 
-auto GridVm::GetPlaneSize() -> float
-{
-  Refresh();
-  return plane_size_;
-}
-
-auto GridVm::SetPlaneSize(const float size) -> void
-{
-  service_->SetPlaneSize(size);
-  plane_size_ = size;
-}
 
 auto GridVm::GetGridSpacing() -> float
 {
@@ -114,17 +103,6 @@ auto GridVm::SetFadeStart(const float distance) -> void
   fade_start_ = distance;
 }
 
-auto GridVm::GetFadeEnd() -> float
-{
-  Refresh();
-  return fade_end_;
-}
-
-auto GridVm::SetFadeEnd(const float distance) -> void
-{
-  service_->SetFadeEnd(distance);
-  fade_end_ = distance;
-}
 
 auto GridVm::GetFadePower() -> float
 {
@@ -138,29 +116,7 @@ auto GridVm::SetFadePower(const float power) -> void
   fade_power_ = power;
 }
 
-auto GridVm::GetThicknessMaxScale() -> float
-{
-  Refresh();
-  return thickness_max_scale_;
-}
 
-auto GridVm::SetThicknessMaxScale(const float scale) -> void
-{
-  service_->SetThicknessMaxScale(scale);
-  thickness_max_scale_ = scale;
-}
-
-auto GridVm::GetDepthBias() -> float
-{
-  Refresh();
-  return depth_bias_;
-}
-
-auto GridVm::SetDepthBias(const float bias) -> void
-{
-  service_->SetDepthBias(bias);
-  depth_bias_ = bias;
-}
 
 auto GridVm::GetHorizonBoost() -> float
 {
@@ -198,16 +154,40 @@ auto GridVm::SetMajorColor(const graphics::Color& color) -> void
   major_color_ = color;
 }
 
-auto GridVm::GetRecenterThreshold() -> float
+auto GridVm::GetAxisColorX() -> graphics::Color
 {
   Refresh();
-  return recenter_threshold_;
+  return axis_color_x_;
 }
 
-auto GridVm::SetRecenterThreshold(const float threshold) -> void
+auto GridVm::SetAxisColorX(const graphics::Color& color) -> void
 {
-  service_->SetRecenterThreshold(threshold);
-  recenter_threshold_ = threshold;
+  service_->SetAxisColorX(color);
+  axis_color_x_ = color;
+}
+
+auto GridVm::GetAxisColorY() -> graphics::Color
+{
+  Refresh();
+  return axis_color_y_;
+}
+
+auto GridVm::SetAxisColorY(const graphics::Color& color) -> void
+{
+  service_->SetAxisColorY(color);
+  axis_color_y_ = color;
+}
+
+auto GridVm::GetOriginColor() -> graphics::Color
+{
+  Refresh();
+  return origin_color_;
+}
+
+auto GridVm::SetOriginColor(const graphics::Color& color) -> void
+{
+  service_->SetOriginColor(color);
+  origin_color_ = color;
 }
 
 auto GridVm::Refresh() -> void
@@ -219,21 +199,19 @@ auto GridVm::Refresh() -> void
 
   epoch_ = service_->GetEpoch();
   enabled_ = service_->GetEnabled();
-  plane_size_ = service_->GetPlaneSize();
   spacing_ = service_->GetGridSpacing();
   major_every_ = service_->GetMajorEvery();
   line_thickness_ = service_->GetLineThickness();
   major_thickness_ = service_->GetMajorThickness();
   axis_thickness_ = service_->GetAxisThickness();
   fade_start_ = service_->GetFadeStart();
-  fade_end_ = service_->GetFadeEnd();
   fade_power_ = service_->GetFadePower();
-  thickness_max_scale_ = service_->GetThicknessMaxScale();
-  depth_bias_ = service_->GetDepthBias();
   horizon_boost_ = service_->GetHorizonBoost();
   minor_color_ = service_->GetMinorColor();
   major_color_ = service_->GetMajorColor();
-  recenter_threshold_ = service_->GetRecenterThreshold();
+  axis_color_x_ = service_->GetAxisColorX();
+  axis_color_y_ = service_->GetAxisColorY();
+  origin_color_ = service_->GetOriginColor();
 }
 
 auto GridVm::IsStale() const -> bool

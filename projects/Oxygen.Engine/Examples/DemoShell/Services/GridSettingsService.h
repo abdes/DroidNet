@@ -43,9 +43,6 @@ public:
   [[nodiscard]] auto GetEnabled() const -> bool;
   auto SetEnabled(bool enabled) -> void;
 
-  [[nodiscard]] auto GetPlaneSize() const -> float;
-  auto SetPlaneSize(float size) -> void;
-
   [[nodiscard]] auto GetGridSpacing() const -> float;
   auto SetGridSpacing(float spacing) -> void;
 
@@ -64,17 +61,8 @@ public:
   [[nodiscard]] auto GetFadeStart() const -> float;
   auto SetFadeStart(float distance) -> void;
 
-  [[nodiscard]] auto GetFadeEnd() const -> float;
-  auto SetFadeEnd(float distance) -> void;
-
   [[nodiscard]] auto GetFadePower() const -> float;
   auto SetFadePower(float power) -> void;
-
-  [[nodiscard]] auto GetThicknessMaxScale() const -> float;
-  auto SetThicknessMaxScale(float scale) -> void;
-
-  [[nodiscard]] auto GetDepthBias() const -> float;
-  auto SetDepthBias(float bias) -> void;
 
   [[nodiscard]] auto GetHorizonBoost() const -> float;
   auto SetHorizonBoost(float boost) -> void;
@@ -85,8 +73,15 @@ public:
   [[nodiscard]] auto GetMajorColor() const -> graphics::Color;
   auto SetMajorColor(const graphics::Color& color) -> void;
 
-  [[nodiscard]] auto GetRecenterThreshold() const -> float;
-  auto SetRecenterThreshold(float threshold) -> void;
+  [[nodiscard]] auto GetAxisColorX() const -> graphics::Color;
+  auto SetAxisColorX(const graphics::Color& color) -> void;
+
+  [[nodiscard]] auto GetAxisColorY() const -> graphics::Color;
+  auto SetAxisColorY(const graphics::Color& color) -> void;
+
+  [[nodiscard]] auto GetOriginColor() const -> graphics::Color;
+  auto SetOriginColor(const graphics::Color& color) -> void;
+
 
   [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t override;
 
@@ -99,21 +94,19 @@ public:
 private:
   struct GridConfig {
     bool enabled { true };
-    float plane_size { 1000.0F };
     float spacing { 1.0F };
     int major_every { 10 };
     float line_thickness { 0.02F };
     float major_thickness { 0.04F };
     float axis_thickness { 0.06F };
     float fade_start { 0.0F };
-    float fade_end { 0.0F };
     float fade_power { 1.0F };
-    float thickness_max_scale { 32.0F };
-    float depth_bias { 1e-4F };
     float horizon_boost { 0.0F };
-    float recenter_threshold { 0.0F };
-    graphics::Color minor_color { 0.35F, 0.35F, 0.35F, 1.0F };
-    graphics::Color major_color { 0.55F, 0.55F, 0.55F, 1.0F };
+    graphics::Color minor_color { 10000.0F, 10000.0F, 10000.0F, 1.0F };
+    graphics::Color major_color { 20000.0F, 20000.0F, 20000.0F, 1.0F };
+    graphics::Color axis_color_x { 40000.0F, 8000.0F, 8000.0F, 1.0F };
+    graphics::Color axis_color_y { 8000.0F, 40000.0F, 8000.0F, 1.0F };
+    graphics::Color origin_color { 50000.0F, 50000.0F, 50000.0F, 1.0F };
   };
 
   auto ReadConfig() const -> GridConfig;
