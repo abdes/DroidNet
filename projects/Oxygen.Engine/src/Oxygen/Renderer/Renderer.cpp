@@ -30,10 +30,10 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
-#include <Oxygen/Console/CVar.h>
-#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
@@ -97,7 +97,6 @@
 #include <Oxygen/Scene/Scene.h>
 
 namespace {
-constexpr bool kDisablePostProcessVolumeForTesting = true;
 constexpr std::string_view kCVarRendererTextureDumpTopN
   = "rndr.texture_dump_top_n";
 constexpr std::string_view kCommandRendererDumpTextureMemory
@@ -490,8 +489,8 @@ auto Renderer::RegisterConsoleBindings(
             .error = "top_n must be an integer",
           };
         }
-        top_n = std::clamp(
-          *parsed_top_n, kMinTextureDumpTopN, kMaxTextureDumpTopN);
+        top_n
+          = std::clamp(*parsed_top_n, kMinTextureDumpTopN, kMaxTextureDumpTopN);
       }
 
       DumpEstimatedTextureMemory(static_cast<std::size_t>(top_n));
@@ -1560,13 +1559,6 @@ auto Renderer::UpdateViewExposure(ViewId view_id, const scene::Scene& scene,
 {
   namespace env = scene::environment;
 
-  if (kDisablePostProcessVolumeForTesting) {
-    (void)view_id;
-    (void)scene;
-    (void)sun_state;
-    return 1.0F;
-  }
-
   static std::unordered_map<std::uint32_t, float> last_logged_exposure_by_view;
   static std::unordered_set<std::uint32_t> logged_suspicious_exposure_views;
   struct ExposureInputs {
@@ -1868,17 +1860,17 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
         for (const auto& dl : dir_lights) {
           const auto flags = static_cast<DirectionalLightFlags>(dl.flags);
           if ((flags & DirectionalLightFlags::kSunLight)
-              != DirectionalLightFlags::kNone) {
+            != DirectionalLightFlags::kNone) {
             ++sun_tagged_count;
           }
           if ((flags & DirectionalLightFlags::kEnvironmentContribution)
-              != DirectionalLightFlags::kNone) {
+            != DirectionalLightFlags::kNone) {
             ++env_contrib_count;
           }
         }
 
         if (scene_sun.enabled == 0U
-            && (sun_tagged_count > 0 || env_contrib_count > 0)) {
+          && (sun_tagged_count > 0 || env_contrib_count > 0)) {
           LOG_F(WARNING,
             "Renderer: resolved sun is disabled but directional light set "
             "contains sun/environment contributors "
