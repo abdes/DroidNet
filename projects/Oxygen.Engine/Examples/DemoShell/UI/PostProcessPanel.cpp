@@ -331,6 +331,11 @@ void PostProcessPanel::DrawTonemappingSection()
     ImGui::EndCombo();
   }
 
+  float gamma = vm_->GetGamma();
+  if (ImGui::DragFloat("Gamma", &gamma, 0.05F, 1.0F, 3.0F, "%.2f")) {
+    vm_->SetGamma(gamma);
+  }
+
   if (!enabled) {
     ImGui::EndDisabled();
   }

@@ -88,6 +88,7 @@ public:
   auto SetClusterDepthSlices(uint32_t slices) -> void override;
   auto SetExposureMode(engine::ExposureMode mode) -> void override;
   auto SetExposureValue(float value) -> void override;
+  auto SetGamma(float gamma) -> void override;
 
   auto SetAutoExposureAdaptationSpeedUp(float speed) -> void override;
   auto SetAutoExposureAdaptationSpeedDown(float speed) -> void override;

@@ -45,6 +45,7 @@ auto PostProcessVm::Refresh() -> void
 
   tonemapping_enabled_ = service_->GetTonemappingEnabled();
   tonemapping_mode_ = service_->GetToneMapper();
+  gamma_ = service_->GetGamma();
 }
 
 auto PostProcessVm::IsStale() const -> bool
@@ -409,6 +410,24 @@ auto PostProcessVm::SetToneMapper(engine::ToneMapper mode) -> void
   std::lock_guard lock(mutex_);
   if (service_) {
     service_->SetToneMapper(mode);
+    Refresh();
+  }
+}
+
+auto PostProcessVm::GetGamma() -> float
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale()) {
+    Refresh();
+  }
+  return gamma_;
+}
+
+auto PostProcessVm::SetGamma(float gamma) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->SetGamma(gamma);
     Refresh();
   }
 }

@@ -123,6 +123,7 @@ public:
 
   virtual auto SetExposureMode(engine::ExposureMode /*mode*/) -> void { }
   virtual auto SetExposureValue(float /*value*/) -> void { }
+  virtual auto SetGamma(float /*gamma*/) -> void { }
   virtual auto SetToneMapper(engine::ToneMapper /*mode*/) -> void { }
 
   // Auto Exposure settings

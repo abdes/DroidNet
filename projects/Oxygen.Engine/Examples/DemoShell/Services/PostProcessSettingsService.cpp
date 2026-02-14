@@ -175,6 +175,7 @@ auto PostProcessSettingsService::Initialize(
       GetExposureKey(), GetExposureEnabled());
     pipeline_->SetToneMapper(
       GetTonemappingEnabled() ? GetToneMapper() : engine::ToneMapper::kNone);
+    pipeline_->SetGamma(GetGamma());
 
     pipeline_->SetAutoExposureAdaptationSpeedUp(
       GetAutoExposureAdaptationSpeedUp());
@@ -808,6 +809,25 @@ auto PostProcessSettingsService::SetToneMapper(engine::ToneMapper mode) -> void
   }
 }
 
+auto PostProcessSettingsService::GetGamma() const -> float
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  return settings->GetFloat(kGammaKey).value_or(2.2F);
+}
+
+auto PostProcessSettingsService::SetGamma(float gamma) -> void
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  settings->SetFloat(kGammaKey, gamma);
+  epoch_++;
+
+  if (pipeline_) {
+    pipeline_->SetGamma(gamma);
+  }
+}
+
 auto PostProcessSettingsService::ResetToDefaults() -> void
 {
   const auto settings = SettingsService::ForDemoApp();
@@ -824,6 +844,7 @@ auto PostProcessSettingsService::ResetToDefaults() -> void
 
   settings->SetBool(kTonemappingEnabledKey, true);
   settings->SetString(kToneMapperKey, "aces");
+  settings->SetFloat(kGammaKey, 2.2F);
 
   settings->SetFloat(kAutoExposureSpeedUpKey,
     engine::AutoExposurePassConfig::kDefaultAdaptationSpeedUp);

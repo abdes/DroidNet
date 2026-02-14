@@ -41,9 +41,9 @@ namespace {
     uint32_t exposure_buffer_index;
     uint32_t tone_mapper;
     float exposure;
+    float gamma;
     uint32_t debug_flags;
     float _pad0;
-    float _pad1;
   };
 
   static_assert(sizeof(ToneMapPassConstants) == 32,
@@ -434,9 +434,9 @@ auto ToneMapPass::UpdatePassConstants(ShaderVisibleIndex source_texture_index)
     .exposure_buffer_index = exposure_buffer_index.get(),
     .tone_mapper = static_cast<uint32_t>(config_->tone_mapper),
     .exposure = exposure,
+    .gamma = config_->gamma,
     .debug_flags = debug_flags,
     ._pad0 = 0.0F,
-    ._pad1 = 0.0F,
   };
 
   const auto slot = pass_constants_slot_ % kPassConstantsSlots;

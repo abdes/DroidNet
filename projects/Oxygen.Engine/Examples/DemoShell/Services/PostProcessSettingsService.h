@@ -86,6 +86,9 @@ namespace examples {
       [[nodiscard]] virtual auto GetToneMapper() const -> engine::ToneMapper;
       virtual auto SetToneMapper(engine::ToneMapper mode) -> void;
 
+      [[nodiscard]] virtual auto GetGamma() const -> float;
+      virtual auto SetGamma(float gamma) -> void;
+
       // Auto Exposure
       [[nodiscard]] virtual auto GetAutoExposureAdaptationSpeedUp() const
         -> float;
@@ -150,6 +153,7 @@ namespace examples {
       static constexpr auto kTonemappingEnabledKey
         = "post_process.tonemapping.enabled";
       static constexpr auto kToneMapperKey = "post_process.tonemapping.mode";
+      static constexpr auto kGammaKey = "post_process.tonemapping.gamma";
 
       static constexpr auto kAutoExposureSpeedUpKey
         = "post_process.auto_exposure.speed_up";
