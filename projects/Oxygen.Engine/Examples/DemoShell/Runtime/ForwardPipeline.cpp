@@ -345,6 +345,7 @@ struct ForwardPipeline::Impl {
     engine::ExposureMode exposure_mode { engine::ExposureMode::kManual };
     float exposure_value { 1.0F };
     engine::ToneMapper tonemapping_mode { engine::ToneMapper::kAcesFitted };
+    float gamma { 2.2F };
     engine::GroundGridPassConfig ground_grid_config {};
 
     // Auto Exposure Staged Config
@@ -621,10 +622,10 @@ struct ForwardPipeline::Impl {
       co_await sky_pass->Execute(rc, rec);
     }
 
-      if (light_culling_pass) {
-        co_await light_culling_pass->PrepareResources(rc, rec);
-        co_await light_culling_pass->Execute(rc, rec);
-        rc.RegisterPass<engine::LightCullingPass>(light_culling_pass.get());
+    if (light_culling_pass) {
+      co_await light_culling_pass->PrepareResources(rc, rec);
+      co_await light_culling_pass->Execute(rc, rec);
+      rc.RegisterPass<engine::LightCullingPass>(light_culling_pass.get());
     }
 
     if (shader_pass) {
@@ -767,8 +768,7 @@ struct ForwardPipeline::Impl {
     shader_pass_config = std::make_shared<engine::ShaderPassConfig>();
     wireframe_pass_config = std::make_shared<engine::WireframePassConfig>();
     sky_pass_config = std::make_shared<engine::SkyPassConfig>();
-    ground_grid_pass_config
-      = std::make_shared<engine::GroundGridPassConfig>();
+    ground_grid_pass_config = std::make_shared<engine::GroundGridPassConfig>();
     transparent_pass_config = std::make_shared<engine::TransparentPassConfig>();
     light_culling_pass_config
       = std::make_shared<engine::LightCullingPassConfig>();
@@ -872,6 +872,7 @@ struct ForwardPipeline::Impl {
         ? 1.0F
         : (debug_intent.force_manual_exposure ? 1.0F : staged.exposure_value);
       tone_map_pass_config->tone_mapper = staged.tonemapping_mode;
+      tone_map_pass_config->gamma = staged.gamma;
 
       const bool config_changed = last_applied_tonemap_config.exposure_mode
           != tone_map_pass_config->exposure_mode
@@ -1162,8 +1163,8 @@ auto ForwardPipeline::OnSceneMutation(
               const bool want_auto_exposure = self->tone_map_pass_config
                 && self->tone_map_pass_config->exposure_mode
                   == engine::ExposureMode::kAuto;
-                if (want_auto_exposure && self->auto_exposure_pass) {
-                  if (self->pending_auto_exposure_reset.has_value()) {
+              if (want_auto_exposure && self->auto_exposure_pass) {
+                if (self->pending_auto_exposure_reset.has_value()) {
                   // Convert EV (EV100, ISO 100) to Average Luminance,
                   // K=12.5) L = 2^EV * K / 100
                   const float k = 12.5F;
@@ -1177,20 +1178,20 @@ auto ForwardPipeline::OnSceneMutation(
 
                 self->auto_exposure_config->source_texture = view->hdr_texture;
                 co_await self->auto_exposure_pass->PrepareResources(rc, rec);
-                  co_await self->auto_exposure_pass->Execute(rc, rec);
-                  rc.RegisterPass<engine::AutoExposurePass>(
-                    self->auto_exposure_pass.get());
-                }
-
-                if (self->ground_grid_pass && self->ground_grid_pass_config
-                  && self->ground_grid_pass_config->enabled) {
-                  co_await self->ground_grid_pass->PrepareResources(rc, rec);
-                  co_await self->ground_grid_pass->Execute(rc, rec);
-                }
+                co_await self->auto_exposure_pass->Execute(rc, rec);
+                rc.RegisterPass<engine::AutoExposurePass>(
+                  self->auto_exposure_pass.get());
               }
 
-              co_await self->ToneMapToSdr(ctx, rc, rec);
-            } else {
+              if (self->ground_grid_pass && self->ground_grid_pass_config
+                && self->ground_grid_pass_config->enabled) {
+                co_await self->ground_grid_pass->PrepareResources(rc, rec);
+                co_await self->ground_grid_pass->Execute(rc, rec);
+              }
+            }
+
+            co_await self->ToneMapToSdr(ctx, rc, rec);
+          } else {
             // Phase: SDR-only output for non-HDR views.
             self->BindSdrAndMaybeClear(ctx, rec);
           }
@@ -1440,6 +1441,12 @@ auto ForwardPipeline::UpdateShaderPassConfig(
   if (impl_->shader_pass_config) {
     *impl_->shader_pass_config = config;
   }
+}
+
+auto ForwardPipeline::SetGamma(float gamma) -> void
+{
+  impl_->staged.gamma = gamma;
+  impl_->staged.dirty = true;
 }
 
 auto ForwardPipeline::UpdateTransparentPassConfig(

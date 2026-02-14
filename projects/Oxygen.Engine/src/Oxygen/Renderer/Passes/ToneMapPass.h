@@ -59,6 +59,9 @@ struct ToneMapPassConfig {
   //! Manual exposure multiplier (linear scale, 1.0 = no change).
   float manual_exposure { 1.0F };
 
+  //! Gamma correction factor (default 2.2).
+  float gamma { 2.2F };
+
   //! Tonemapping operator to apply.
   ToneMapper tone_mapper { ToneMapper::kNone };
 

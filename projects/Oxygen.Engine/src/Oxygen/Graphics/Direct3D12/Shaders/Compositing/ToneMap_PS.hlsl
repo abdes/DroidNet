@@ -28,8 +28,9 @@ struct ToneMapPassConstants {
     uint exposure_buffer_index;
     uint tone_mapper;  // One of TONEMAPPER_* constants.
     float exposure;
+    float gamma;
     uint debug_flags;
-    float2 _pad;
+    float _pad;
 };
 
 //-----------------------------------------------------------------------------
@@ -242,6 +243,7 @@ float4 PS(ToneMapVSOutput input) : SV_TARGET
     color *= exposure;
 
     // Apply tonemapping based on mode
+    // Apply tonemapping based on mode
     switch (pass.tone_mapper) {
         case TONEMAPPER_ACES_FITTED:
             color = ACESFitted(color);
@@ -261,10 +263,15 @@ float4 PS(ToneMapVSOutput input) : SV_TARGET
             break;
     }
 
-    // TEMPORARY WORKAROUND: Dither just before output quantization
-    // (e.g. RGBA8_UNORM swapchain) to reduce visible sky/ground banding.
-    // TODO(#taa): Remove once we have a higher quality TAA/temporal resolve
-    // that provides stable banding suppression.
+    // Gamma Correction (Linear -> sRGB)
+    // Necessary because the swapchain is typically UNORM (linear encoding),
+    // but monitors expect sRGB signal.
+    // Gamma Correction (Linear -> Gamma)
+    // Precise sRGB can be too "punchy" or wash out shadows differently than expected.
+    // A simple Gamma curve is often smoother and preferred for game-like look.
+    color = pow(max(color, 0.0), 1.0 / max(pass.gamma, 0.0001));
+
+    // Dither in Gamma space (target domain) to prevent banding
     const uint2 pixel_pos = uint2(input.position.xy);
     color = saturate(color + (DitherBayer4x4(pixel_pos) / 255.0));
 

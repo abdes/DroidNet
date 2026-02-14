@@ -83,6 +83,9 @@ public:
   [[nodiscard]] auto GetToneMapper() -> engine::ToneMapper;
   auto SetToneMapper(engine::ToneMapper mode) -> void;
 
+  [[nodiscard]] auto GetGamma() -> float;
+  auto SetGamma(float gamma) -> void;
+
   auto ResetToDefaults() -> void;
   auto ResetAutoExposureDefaults() -> void;
 
@@ -134,6 +137,7 @@ private:
 
   bool tonemapping_enabled_ { true };
   engine::ToneMapper tonemapping_mode_ { engine::ToneMapper::kAcesFitted };
+  float gamma_ { 2.2F };
 };
 
 } // namespace oxygen::examples::ui

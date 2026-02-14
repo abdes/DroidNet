@@ -40,10 +40,10 @@ struct RenderContext;
 
 //! Configuration for the auto exposure compute pass.
 struct AutoExposurePassConfig {
-  static constexpr float kDefaultMinLogLuminance = -8.0F;
-  static constexpr float kDefaultLogLuminanceRange = 20.0F;
-  static constexpr float kDefaultLowPercentile = 0.4F;
-  static constexpr float kDefaultHighPercentile = 0.95F;
+  static constexpr float kDefaultMinLogLuminance = -12.0F; // Approx 0.0002 nits
+  static constexpr float kDefaultLogLuminanceRange = 25.0F; // up to ~8192 nits
+  static constexpr float kDefaultLowPercentile = 0.1F; // Include more shadows
+  static constexpr float kDefaultHighPercentile = 0.9F; // Clip top 10%
   static constexpr float kDefaultAdaptationSpeedUp = 3.0F;
   static constexpr float kDefaultAdaptationSpeedDown = 3.0F;
   static constexpr float kDefaultTargetLuminance = 0.18F;
