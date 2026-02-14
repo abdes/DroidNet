@@ -895,6 +895,12 @@ namespace {
     kMetallicRoughness,
     kOcclusion,
     kEmissive,
+    kSpecular,
+    kSheenColor,
+    kClearcoat,
+    kClearcoatNormal,
+    kTransmission,
+    kThickness,
   };
 
   [[nodiscard]] auto UsageLabel(const TextureUsage usage) -> std::string_view
@@ -914,6 +920,18 @@ namespace {
       return "occlusion";
     case TextureUsage::kEmissive:
       return "emissive";
+    case TextureUsage::kSpecular:
+      return "specular";
+    case TextureUsage::kSheenColor:
+      return "sheen_color";
+    case TextureUsage::kClearcoat:
+      return "clearcoat";
+    case TextureUsage::kClearcoatNormal:
+      return "clearcoat_normal";
+    case TextureUsage::kTransmission:
+      return "transmission";
+    case TextureUsage::kThickness:
+      return "thickness";
     }
     return "texture";
   }
@@ -935,6 +953,18 @@ namespace {
       return TexturePreset::kAO;
     case TextureUsage::kEmissive:
       return TexturePreset::kEmissive;
+    case TextureUsage::kSpecular:
+      return TexturePreset::kRoughness;
+    case TextureUsage::kSheenColor:
+      return TexturePreset::kAlbedo;
+    case TextureUsage::kClearcoat:
+      return TexturePreset::kRoughness;
+    case TextureUsage::kClearcoatNormal:
+      return TexturePreset::kNormal;
+    case TextureUsage::kTransmission:
+      return TexturePreset::kRoughness;
+    case TextureUsage::kThickness:
+      return TexturePreset::kRoughness;
     }
     return TexturePreset::kData;
   }
@@ -1926,6 +1956,101 @@ auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
       apply_binding(item.textures.emissive,
         resolve_texture_id(emissive_tex, item.source_id),
         TextureUsage::kEmissive);
+
+      if (material->features.specular.enabled) {
+        if (material->pbr.specular_factor.has_value) {
+          item.inputs.specular_factor
+            = static_cast<float>(material->pbr.specular_factor.value_real);
+        }
+        if (material->pbr.specular_color.texture_enabled) {
+          apply_binding(item.textures.specular,
+            resolve_texture_id(
+              material->pbr.specular_color.texture, item.source_id),
+            TextureUsage::kSpecular);
+        }
+      }
+
+      if (material->features.sheen.enabled) {
+        if (material->pbr.sheen_color.has_value) {
+          const auto sc = material->pbr.sheen_color.value_vec3;
+          item.inputs.sheen_color_factor[0] = static_cast<float>(sc.x);
+          item.inputs.sheen_color_factor[1] = static_cast<float>(sc.y);
+          item.inputs.sheen_color_factor[2] = static_cast<float>(sc.z);
+        }
+        if (material->pbr.sheen_roughness.has_value) {
+          // We don't have sheen roughness in MaterialInputs yet?
+          // Wait, MaterialInputs has sheen_color_factor, but maybe not
+          // roughness? Checking MaterialPipeline.h Step 102 lines 95: float
+          // sheen_color_factor[3]. It does NOT have sheen_roughness. But
+          // GltfAdapter set it... NO, GltfAdapter set sheen_color_factor.
+          // cgltf_sheen has sheen_roughness_factor.
+          // I missed `sheen_roughness` in MaterialInputs check.
+        }
+        if (material->pbr.sheen_color.texture_enabled) {
+          apply_binding(item.textures.sheen_color,
+            resolve_texture_id(
+              material->pbr.sheen_color.texture, item.source_id),
+            TextureUsage::kSheenColor);
+        }
+      }
+
+      if (material->features.coat.enabled) {
+        if (material->pbr.coat_factor.has_value) {
+          item.inputs.clearcoat_factor
+            = static_cast<float>(material->pbr.coat_factor.value_real);
+        }
+        if (material->pbr.coat_roughness.has_value) {
+          item.inputs.clearcoat_roughness
+            = static_cast<float>(material->pbr.coat_roughness.value_real);
+        }
+        if (material->pbr.coat_color
+              .texture_enabled) { // coat_color is often used for weight/factor
+                                  // map
+          apply_binding(item.textures.clearcoat,
+            resolve_texture_id(
+              material->pbr.coat_factor.texture, item.source_id),
+            TextureUsage::kClearcoat);
+        }
+        if (material->pbr.coat_normal.texture_enabled) {
+          apply_binding(item.textures.clearcoat_normal,
+            resolve_texture_id(
+              material->pbr.coat_normal.texture, item.source_id),
+            TextureUsage::kClearcoatNormal);
+        }
+      }
+
+      if (material->features.transmission.enabled) {
+        if (material->pbr.transmission_factor.has_value) {
+          item.inputs.transmission_factor
+            = static_cast<float>(material->pbr.transmission_factor.value_real);
+        }
+        if (material->pbr.transmission_color.texture_enabled) {
+          const auto* tex = material->pbr.transmission_color.texture;
+          if (tex == nullptr)
+            tex = material->pbr.transmission_factor.texture;
+          apply_binding(item.textures.transmission,
+            resolve_texture_id(tex, item.source_id),
+            TextureUsage::kTransmission);
+        }
+
+        if (material->pbr.transmission_scatter.has_value) {
+          const auto sc = material->pbr.transmission_scatter.value_vec3;
+          item.inputs.attenuation_color[0] = static_cast<float>(sc.x);
+          item.inputs.attenuation_color[1] = static_cast<float>(sc.y);
+          item.inputs.attenuation_color[2] = static_cast<float>(sc.z);
+        }
+        if (material->pbr.transmission_depth.has_value) {
+          item.inputs.attenuation_distance
+            = static_cast<float>(material->pbr.transmission_depth.value_real);
+        }
+      }
+
+      if (material->features.ior.enabled) {
+        if (material->pbr.specular_ior.has_value) {
+          item.inputs.ior
+            = static_cast<float>(material->pbr.specular_ior.value_real);
+        }
+      }
     }
 
     item.request = input.request;

@@ -24,7 +24,6 @@
 #include <utility>
 #include <vector>
 
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Content/Import/Internal/Utils/AssetKeyUtils.h>
@@ -495,6 +494,12 @@ namespace {
     kMetallicRoughness,
     kOcclusion,
     kEmissive,
+    kSpecular,
+    kSheenColor,
+    kClearcoat,
+    kClearcoatNormal,
+    kTransmission,
+    kThickness,
   };
 
   [[nodiscard]] auto UsageLabel(const TextureUsage usage) -> std::string_view
@@ -510,6 +515,18 @@ namespace {
       return "occlusion";
     case TextureUsage::kEmissive:
       return "emissive";
+    case TextureUsage::kSpecular:
+      return "specular";
+    case TextureUsage::kSheenColor:
+      return "sheen_color";
+    case TextureUsage::kClearcoat:
+      return "clearcoat";
+    case TextureUsage::kClearcoatNormal:
+      return "clearcoat_normal";
+    case TextureUsage::kTransmission:
+      return "transmission";
+    case TextureUsage::kThickness:
+      return "thickness";
     }
     return "texture";
   }
@@ -527,6 +544,18 @@ namespace {
       return TexturePreset::kAO;
     case TextureUsage::kEmissive:
       return TexturePreset::kEmissive;
+    case TextureUsage::kSpecular:
+      return TexturePreset::kRoughness; // Best approximation (single channel)
+    case TextureUsage::kSheenColor:
+      return TexturePreset::kAlbedo;
+    case TextureUsage::kClearcoat:
+      return TexturePreset::kRoughness; // Best approximation (single channel)
+    case TextureUsage::kClearcoatNormal:
+      return TexturePreset::kNormal;
+    case TextureUsage::kTransmission:
+      return TexturePreset::kRoughness; // Best approximation (single channel)
+    case TextureUsage::kThickness:
+      return TexturePreset::kRoughness; // Best approximation (single channel)
     }
     return TexturePreset::kData;
   }
@@ -1795,6 +1824,87 @@ auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
       ApplyTextureBinding(item.textures.emissive, material.emissive_texture,
         BuildTextureSourceId(input.source_id_prefix, data,
           *material.emissive_texture.texture, TextureUsage::kEmissive));
+    }
+
+    if (material.has_ior) {
+      item.inputs.ior = material.ior.ior;
+    }
+
+    if (material.has_specular) {
+      item.inputs.specular_factor = material.specular.specular_factor;
+      if (material.specular.specular_texture.texture != nullptr) {
+        ApplyTextureBinding(item.textures.specular,
+          material.specular.specular_texture,
+          BuildTextureSourceId(input.source_id_prefix, data,
+            *material.specular.specular_texture.texture,
+            TextureUsage::kSpecular));
+      }
+    }
+
+    if (material.has_sheen) {
+      item.inputs.sheen_color_factor[0]
+        = static_cast<float>(material.sheen.sheen_color_factor[0]);
+      item.inputs.sheen_color_factor[1]
+        = static_cast<float>(material.sheen.sheen_color_factor[1]);
+      item.inputs.sheen_color_factor[2]
+        = static_cast<float>(material.sheen.sheen_color_factor[2]);
+      if (material.sheen.sheen_color_texture.texture != nullptr) {
+        ApplyTextureBinding(item.textures.sheen_color,
+          material.sheen.sheen_color_texture,
+          BuildTextureSourceId(input.source_id_prefix, data,
+            *material.sheen.sheen_color_texture.texture,
+            TextureUsage::kSheenColor));
+      }
+    }
+
+    if (material.has_clearcoat) {
+      item.inputs.clearcoat_factor = material.clearcoat.clearcoat_factor;
+      item.inputs.clearcoat_roughness
+        = material.clearcoat.clearcoat_roughness_factor;
+      if (material.clearcoat.clearcoat_texture.texture != nullptr) {
+        ApplyTextureBinding(item.textures.clearcoat,
+          material.clearcoat.clearcoat_texture,
+          BuildTextureSourceId(input.source_id_prefix, data,
+            *material.clearcoat.clearcoat_texture.texture,
+            TextureUsage::kClearcoat));
+      }
+      if (material.clearcoat.clearcoat_normal_texture.texture != nullptr) {
+        ApplyTextureBinding(item.textures.clearcoat_normal,
+          material.clearcoat.clearcoat_normal_texture,
+          BuildTextureSourceId(input.source_id_prefix, data,
+            *material.clearcoat.clearcoat_normal_texture.texture,
+            TextureUsage::kClearcoatNormal));
+      }
+    }
+
+    if (material.has_transmission) {
+      item.inputs.transmission_factor
+        = material.transmission.transmission_factor;
+      if (material.transmission.transmission_texture.texture != nullptr) {
+        ApplyTextureBinding(item.textures.transmission,
+          material.transmission.transmission_texture,
+          BuildTextureSourceId(input.source_id_prefix, data,
+            *material.transmission.transmission_texture.texture,
+            TextureUsage::kTransmission));
+      }
+    }
+
+    if (material.has_volume) {
+      item.inputs.thickness_factor = material.volume.thickness_factor;
+      item.inputs.attenuation_distance = material.volume.attenuation_distance;
+      item.inputs.attenuation_color[0]
+        = static_cast<float>(material.volume.attenuation_color[0]);
+      item.inputs.attenuation_color[1]
+        = static_cast<float>(material.volume.attenuation_color[1]);
+      item.inputs.attenuation_color[2]
+        = static_cast<float>(material.volume.attenuation_color[2]);
+      if (material.volume.thickness_texture.texture != nullptr) {
+        ApplyTextureBinding(item.textures.thickness,
+          material.volume.thickness_texture,
+          BuildTextureSourceId(input.source_id_prefix, data,
+            *material.volume.thickness_texture.texture,
+            TextureUsage::kThickness));
+      }
     }
 
     if (material.has_pbr_metallic_roughness) {
