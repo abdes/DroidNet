@@ -14,6 +14,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
 
 namespace oxygen::engine {
@@ -281,8 +282,8 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuPostProcessParams {
   uint32_t enabled { 0U };
   uint32_t _pad0 { 0U };
 
-  ToneMapper tone_mapper { ToneMapper::kAcesFitted };
-  ExposureMode exposure_mode { ExposureMode::kManual };
+  engine::ToneMapper tone_mapper { engine::ToneMapper::kAcesFitted };
+  engine::ExposureMode exposure_mode { engine::ExposureMode::kManual };
   uint32_t _pad1 { 0U };
   uint32_t _pad2 { 0U };
 };

@@ -25,17 +25,17 @@ namespace oxygen::examples::ui {
 
 namespace {
   auto ToSceneExposureMode(const engine::ExposureMode mode)
-    -> scene::environment::ExposureMode
+    -> engine::ExposureMode
   {
     switch (mode) {
     case engine::ExposureMode::kManual:
-      return scene::environment::ExposureMode::kManual;
+      return engine::ExposureMode::kManual;
     case engine::ExposureMode::kAuto:
-      return scene::environment::ExposureMode::kAuto;
+      return engine::ExposureMode::kAuto;
     case engine::ExposureMode::kManualCamera:
-      return scene::environment::ExposureMode::kManualCamera;
+      return engine::ExposureMode::kManualCamera;
     }
-    return scene::environment::ExposureMode::kManual;
+    return engine::ExposureMode::kManual;
   }
 
   auto EnsurePostProcessVolume(observer_ptr<scene::Scene> scene)
@@ -232,14 +232,16 @@ auto PostProcessSettingsService::GetExposureMode() const -> engine::ExposureMode
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  auto val = settings->GetString(kExposureModeKey).value_or("manual");
-  if (val == "auto") {
+  const auto raw = settings->GetFloat(kExposureModeKey).value_or(0.0F);
+  switch (static_cast<int>(std::round(raw))) {
+  case 2:
     return engine::ExposureMode::kAuto;
-  }
-  if (val == "manual_camera") {
+  case 1:
     return engine::ExposureMode::kManualCamera;
+  case 0:
+  default:
+    return engine::ExposureMode::kManual;
   }
-  return engine::ExposureMode::kManual;
 }
 
 auto PostProcessSettingsService::GetExposureEnabled() const -> bool
@@ -291,7 +293,7 @@ auto PostProcessSettingsService::SetExposureMode(engine::ExposureMode mode)
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  settings->SetString(kExposureModeKey, engine::to_string(mode));
+  settings->SetFloat(kExposureModeKey, static_cast<float>(mode));
   epoch_++;
 
   {
@@ -683,19 +685,16 @@ auto PostProcessSettingsService::GetAutoExposureMeteringMode() const
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  auto val = settings->GetString(kAutoExposureMeteringKey)
-               .value_or(std::string(engine::to_string(
-                 engine::AutoExposurePassConfig::kDefaultMeteringMode)));
-  if (val == "average") {
+  const auto raw = settings->GetFloat(kAutoExposureMeteringKey).value_or(0.0F);
+  switch (static_cast<int>(std::round(raw))) {
+  case 2:
+    return engine::MeteringMode::kSpot;
+  case 1:
+    return engine::MeteringMode::kCenterWeighted;
+  case 0:
+  default:
     return engine::MeteringMode::kAverage;
   }
-  if (val == "center_weighted") {
-    return engine::MeteringMode::kCenterWeighted;
-  }
-  if (val == "spot") {
-    return engine::MeteringMode::kSpot;
-  }
-  return engine::MeteringMode::kAverage;
 }
 
 auto PostProcessSettingsService::SetAutoExposureMeteringMode(
@@ -703,8 +702,7 @@ auto PostProcessSettingsService::SetAutoExposureMeteringMode(
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  settings->SetString(
-    kAutoExposureMeteringKey, std::string(engine::to_string(mode)));
+  settings->SetFloat(kAutoExposureMeteringKey, static_cast<float>(mode));
   epoch_++;
   if (pipeline_) {
     pipeline_->SetAutoExposureMeteringMode(mode);
@@ -730,28 +728,6 @@ auto PostProcessSettingsService::SetTonemappingEnabled(bool enabled) -> void
   settings->SetBool(kTonemappingEnabledKey, enabled);
   epoch_++;
 
-  scene::environment::ToneMapper scene_mapper
-    = scene::environment::ToneMapper::kAcesFitted;
-  bool has_scene_ppv = false;
-  if (scene_) {
-    if (const auto env = scene_->GetEnvironment()) {
-      if (const auto pp
-        = env->TryGetSystem<scene::environment::PostProcessVolume>()) {
-        has_scene_ppv = true;
-        scene_mapper = pp->GetToneMapper();
-      }
-    }
-  }
-
-  LOG_F(INFO,
-    "PostProcessSettings: tonemapping enabled set {} (pipeline={}, "
-    "will_set_mapper={}, stored_mapper={}, scene_ppv={}, scene_mapper={})",
-    enabled, pipeline_ != nullptr,
-    enabled ? engine::to_string(GetToneMapper())
-            : engine::to_string(engine::ToneMapper::kNone),
-    engine::to_string(GetToneMapper()), has_scene_ppv,
-    static_cast<uint32_t>(scene_mapper));
-
   if (pipeline_) {
     pipeline_->SetToneMapper(
       enabled ? GetToneMapper() : engine::ToneMapper::kNone);
@@ -762,47 +738,27 @@ auto PostProcessSettingsService::GetToneMapper() const -> engine::ToneMapper
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  auto val = settings->GetString(kToneMapperKey).value_or("aces");
-  if (val == "reinhard") {
+  const auto raw = settings->GetFloat(kToneMapperKey)
+                     .value_or(static_cast<float>(engine::ToneMapper::kAcesFitted));
+  switch (static_cast<int>(std::round(raw))) {
+  case 0:
+    return engine::ToneMapper::kNone;
+  case 2:
+    return engine::ToneMapper::kFilmic;
+  case 3:
     return engine::ToneMapper::kReinhard;
-  }
-  if (val == "aces") {
+  case 1:
+  default:
     return engine::ToneMapper::kAcesFitted;
   }
-  if (val == "filmic") {
-    return engine::ToneMapper::kFilmic;
-  }
-  if (val == "none") {
-    return engine::ToneMapper::kNone;
-  }
-  return engine::ToneMapper::kAcesFitted;
 }
 
 auto PostProcessSettingsService::SetToneMapper(engine::ToneMapper mode) -> void
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  settings->SetString(kToneMapperKey, engine::to_string(mode));
+  settings->SetFloat(kToneMapperKey, static_cast<float>(mode));
   epoch_++;
-
-  scene::environment::ToneMapper scene_mapper
-    = scene::environment::ToneMapper::kAcesFitted;
-  bool has_scene_ppv = false;
-  if (scene_) {
-    if (const auto env = scene_->GetEnvironment()) {
-      if (const auto pp
-        = env->TryGetSystem<scene::environment::PostProcessVolume>()) {
-        has_scene_ppv = true;
-        scene_mapper = pp->GetToneMapper();
-      }
-    }
-  }
-
-  LOG_F(INFO,
-    "PostProcessSettings: tone mapper set {} (enabled={}, pipeline={}, "
-    "scene_ppv={}, scene_mapper={})",
-    engine::to_string(mode), GetTonemappingEnabled(), pipeline_ != nullptr,
-    has_scene_ppv, static_cast<uint32_t>(scene_mapper));
 
   if (pipeline_ && GetTonemappingEnabled()) {
     pipeline_->SetToneMapper(mode);
@@ -836,14 +792,15 @@ auto PostProcessSettingsService::ResetToDefaults() -> void
   }
 
   // Reset to defaults by explicitly setting values
-  settings->SetString(kExposureModeKey, "manual");
+  settings->SetFloat(kExposureModeKey, 0.0F);
   settings->SetBool(kExposureEnabledKey, true);
   settings->SetFloat(kExposureManualEVKey, 9.7F);
   settings->SetFloat(kExposureCompensationKey, 0.0F);
   settings->SetFloat(kExposureKeyKey, 12.5F);
 
   settings->SetBool(kTonemappingEnabledKey, true);
-  settings->SetString(kToneMapperKey, "aces");
+  settings->SetFloat(
+    kToneMapperKey, static_cast<float>(engine::ToneMapper::kAcesFitted));
   settings->SetFloat(kGammaKey, 2.2F);
 
   settings->SetFloat(kAutoExposureSpeedUpKey,
@@ -862,9 +819,7 @@ auto PostProcessSettingsService::ResetToDefaults() -> void
     engine::AutoExposurePassConfig::kDefaultTargetLuminance);
   settings->SetFloat(kAutoExposureSpotRadiusKey,
     engine::AutoExposurePassConfig::kDefaultSpotMeterRadius);
-  settings->SetString(kAutoExposureMeteringKey,
-    std::string(
-      engine::to_string(engine::AutoExposurePassConfig::kDefaultMeteringMode)));
+  settings->SetFloat(kAutoExposureMeteringKey, static_cast<float>(engine::AutoExposurePassConfig::kDefaultMeteringMode));
 
   epoch_++;
 
@@ -896,9 +851,7 @@ auto PostProcessSettingsService::ResetAutoExposureDefaults() -> void
     engine::AutoExposurePassConfig::kDefaultTargetLuminance);
   settings->SetFloat(kAutoExposureSpotRadiusKey,
     engine::AutoExposurePassConfig::kDefaultSpotMeterRadius);
-  settings->SetString(kAutoExposureMeteringKey,
-    std::string(
-      engine::to_string(engine::AutoExposurePassConfig::kDefaultMeteringMode)));
+  settings->SetFloat(kAutoExposureMeteringKey, static_cast<float>(engine::AutoExposurePassConfig::kDefaultMeteringMode));
 
   epoch_++;
   Initialize(pipeline_);

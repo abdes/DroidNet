@@ -9,6 +9,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -74,36 +75,6 @@ namespace {
       return SkyLightSource::kSpecifiedCubemap;
     }
     return SkyLightSource::kCapturedScene;
-  }
-
-  auto ToGpuToneMapper(const scene::environment::ToneMapper mapper) noexcept
-    -> ToneMapper
-  {
-    switch (mapper) {
-    case scene::environment::ToneMapper::kAcesFitted:
-      return ToneMapper::kAcesFitted;
-    case scene::environment::ToneMapper::kReinhard:
-      return ToneMapper::kReinhard;
-    case scene::environment::ToneMapper::kFilmic:
-      return ToneMapper::kFilmic;
-    case scene::environment::ToneMapper::kNone:
-      return ToneMapper::kNone;
-    }
-    return ToneMapper::kAcesFitted;
-  }
-
-  auto ToGpuExposureMode(const scene::environment::ExposureMode mode) noexcept
-    -> ExposureMode
-  {
-    switch (mode) {
-    case scene::environment::ExposureMode::kManual:
-      return ExposureMode::kManual;
-    case scene::environment::ExposureMode::kAuto:
-      return ExposureMode::kAuto;
-    case scene::environment::ExposureMode::kManualCamera:
-      return ExposureMode::kManualCamera;
-    }
-    return ExposureMode::kManual;
   }
 
 } // namespace
@@ -365,8 +336,8 @@ auto EnvironmentStaticDataManager::IsSkyLightCapturedSceneSource(
   return false;
 }
 
-auto EnvironmentStaticDataManager::IsSkyLightCapturedSceneSource() const noexcept
-  -> bool
+auto EnvironmentStaticDataManager::IsSkyLightCapturedSceneSource()
+  const noexcept -> bool
 {
   if (active_view_id_ == kInvalidViewId) {
     return false;
@@ -379,8 +350,7 @@ auto EnvironmentStaticDataManager::GetSkySphereCubemapSlot(
 {
   if (const auto it = view_states_.find(view_id); it != view_states_.end()) {
     const auto& snapshot = it->second.published_snapshot;
-    if (it->second.has_published_snapshot
-      && (snapshot.sky_sphere.enabled != 0U)
+    if (it->second.has_published_snapshot && (snapshot.sky_sphere.enabled != 0U)
       && snapshot.sky_sphere.cubemap_slot.IsValid()) {
       return ShaderVisibleIndex { snapshot.sky_sphere.cubemap_slot.value };
     }
@@ -506,13 +476,14 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
       if (next_sl.enabled != 0U
         && next_sl.source == SkyLightSource::kCapturedScene
         && old_sl.ibl_generation == next_sl.ibl_generation) {
-        const auto content_lag = last_capture_generation_
-          > last_observed_ibl_source_content_version_
+        const auto content_lag
+          = last_capture_generation_ > last_observed_ibl_source_content_version_
           ? last_capture_generation_ - last_observed_ibl_source_content_version_
           : 0ULL;
         if (content_lag > 1ULL) {
           LOG_F(WARNING,
-            "EnvStatic: Atmosphere LUTs changed but SkyLight IBL content is stale "
+            "EnvStatic: Atmosphere LUTs changed but SkyLight IBL content is "
+            "stale "
             "(ibl_gen={} capture_gen={} ibl_src_ver={} lag={} view={})",
             next_sl.ibl_generation, last_capture_generation_,
             last_observed_ibl_source_content_version_, content_lag,
@@ -840,8 +811,7 @@ auto EnvironmentStaticDataManager::PopulateIbl(EnvironmentStaticData& next)
 
   const bool captured_scene_source
     = next.sky_light.source == SkyLightSource::kCapturedScene;
-  const std::uint64_t capture_gen
-    = sky_capture_provider_
+  const std::uint64_t capture_gen = sky_capture_provider_
     ? sky_capture_provider_->GetCaptureGeneration(active_view_id_)
     : 0U;
 
@@ -858,7 +828,8 @@ auto EnvironmentStaticDataManager::PopulateIbl(EnvironmentStaticData& next)
       LOG_F(WARNING,
         "EnvStatic: captured-scene SkyLight has no valid source cubemap "
         "(view={} capture_gen={} ibl_gen={} atmo_T={} atmo_V={})",
-        active_view_id_.get(), capture_gen, cpu_snapshot_.sky_light.ibl_generation,
+        active_view_id_.get(), capture_gen,
+        cpu_snapshot_.sky_light.ibl_generation,
         cpu_snapshot_.atmosphere.transmittance_lut_slot.value.get(),
         cpu_snapshot_.atmosphere.sky_view_lut_slot.value.get());
       last_warned_capture_missing_source_generation_ = capture_gen;
@@ -929,15 +900,16 @@ auto EnvironmentStaticDataManager::PopulateIbl(EnvironmentStaticData& next)
   next.sky_light.prefilter_map_slot = PrefilterMapSlot { outputs.prefilter };
   next.sky_light.ibl_generation = static_cast<uint32_t>(outputs.generation);
 
-  const auto capture_to_ibl_content_lag = capture_gen > outputs.source_content_version
+  const auto capture_to_ibl_content_lag
+    = capture_gen > outputs.source_content_version
     ? capture_gen - outputs.source_content_version
     : 0ULL;
-  if (captured_scene_source
-    && capture_to_ibl_content_lag > 1ULL
+  if (captured_scene_source && capture_to_ibl_content_lag > 1ULL
     && capture_gen != last_warned_capture_stale_ibl_generation_) {
     LOG_F(ERROR,
       "EnvStatic: captured-scene SkyLight using stale IBL generation "
-      "(view={} capture_gen={} ibl_gen={} ibl_src_ver={} lag={} source_slot={})",
+      "(view={} capture_gen={} ibl_gen={} ibl_src_ver={} lag={} "
+      "source_slot={})",
       active_view_id_.get(), capture_gen, outputs.generation,
       outputs.source_content_version, capture_to_ibl_content_lag,
       source_slot.get());
@@ -1001,8 +973,8 @@ auto EnvironmentStaticDataManager::PopulatePostProcess(
     const auto prev = cpu_snapshot_.post_process;
 
     next.post_process.enabled = 1U;
-    next.post_process.tone_mapper = ToGpuToneMapper(pp->GetToneMapper());
-    next.post_process.exposure_mode = ToGpuExposureMode(pp->GetExposureMode());
+    next.post_process.tone_mapper = pp->GetToneMapper();
+    next.post_process.exposure_mode = pp->GetExposureMode();
 
     next.post_process.exposure_compensation
       = std::exp2(pp->GetExposureCompensationEv());
@@ -1042,15 +1014,15 @@ auto EnvironmentStaticDataManager::RefreshCoherentSnapshotState() -> void
     = sl.enabled != 0U && sl.source == SkyLightSource::kCapturedScene;
 
   if (captured_scene_source) {
-    const bool captured_ready
-      = sky_capture_provider_ != nullptr
+    const bool captured_ready = sky_capture_provider_ != nullptr
       && sky_capture_provider_->IsCaptured(active_view_id_);
     if (!captured_ready || !sl.cubemap_slot.IsValid()) {
       coherent = false;
     }
     if (atmo.enabled != 0U) {
       const bool atmo_slots_valid = atmo.transmittance_lut_slot.IsValid()
-        && atmo.sky_view_lut_slot.IsValid() && atmo.multi_scat_lut_slot.IsValid()
+        && atmo.sky_view_lut_slot.IsValid()
+        && atmo.multi_scat_lut_slot.IsValid()
         && atmo.sky_irradiance_lut_slot.IsValid()
         && atmo.camera_volume_lut_slot.IsValid();
       if (!atmo_slots_valid) {
@@ -1077,8 +1049,10 @@ auto EnvironmentStaticDataManager::RefreshCoherentSnapshotState() -> void
   }
 
   use_last_coherent_fallback_ = has_last_coherent_snapshot_
-    && last_coherent_snapshot_.sky_light.enabled == cpu_snapshot_.sky_light.enabled
-    && last_coherent_snapshot_.sky_light.source == cpu_snapshot_.sky_light.source
+    && last_coherent_snapshot_.sky_light.enabled
+      == cpu_snapshot_.sky_light.enabled
+    && last_coherent_snapshot_.sky_light.source
+      == cpu_snapshot_.sky_light.source
     && last_coherent_snapshot_.atmosphere.enabled
       == cpu_snapshot_.atmosphere.enabled
     && incoherent_frame_count_ <= kFallbackWindowFrames;
@@ -1086,24 +1060,27 @@ auto EnvironmentStaticDataManager::RefreshCoherentSnapshotState() -> void
   ++incoherent_frame_count_;
   const bool should_warn = incoherent_frame_count_ == 1
     || (incoherent_frame_count_ % kPeriodicBlockedLogFrames) == 0;
-  if (should_warn && last_incoherent_logged_sequence_ != last_update_frame_sequence_) {
+  if (should_warn
+    && last_incoherent_logged_sequence_ != last_update_frame_sequence_) {
     LOG_F(WARNING,
       "EnvStatic: coherence gate blocking publication "
-      "(view={} frame_seq={} blocked_frames={} capture_gen={} ibl_gen={} ibl_src_ver={} fallback={} atmo_T={} atmo_V={} "
+      "(view={} frame_seq={} blocked_frames={} capture_gen={} ibl_gen={} "
+      "ibl_src_ver={} fallback={} atmo_T={} atmo_V={} "
       "sl_cube={} ibl_irr={} ibl_pref={})",
       active_view_id_.get(), last_update_frame_sequence_.get(),
       incoherent_frame_count_, last_capture_generation_, sl.ibl_generation,
       last_observed_ibl_source_content_version_, use_last_coherent_fallback_,
-      atmo.transmittance_lut_slot.value.get(), atmo.sky_view_lut_slot.value.get(),
-      sl.cubemap_slot.value.get(), sl.irradiance_map_slot.value.get(),
-      sl.prefilter_map_slot.value.get());
+      atmo.transmittance_lut_slot.value.get(),
+      atmo.sky_view_lut_slot.value.get(), sl.cubemap_slot.value.get(),
+      sl.irradiance_map_slot.value.get(), sl.prefilter_map_slot.value.get());
     if (incoherent_frame_count_ >= 8 && !coherence_threshold_crossed_) {
       LOG_F(ERROR,
         "EnvStatic: coherence gate threshold crossed; publishing current "
         "snapshot despite incoherence (blocked_frames={} view={} "
         "capture_gen={} ibl_gen={} ibl_src_ver={})",
-        incoherent_frame_count_, active_view_id_.get(), last_capture_generation_,
-        sl.ibl_generation, last_observed_ibl_source_content_version_);
+        incoherent_frame_count_, active_view_id_.get(),
+        last_capture_generation_, sl.ibl_generation,
+        last_observed_ibl_source_content_version_);
       coherence_threshold_crossed_ = true;
     }
     last_incoherent_logged_sequence_ = last_update_frame_sequence_;

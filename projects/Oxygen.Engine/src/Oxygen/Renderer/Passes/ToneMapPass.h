@@ -13,6 +13,7 @@
 #include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Renderer/Passes/GraphicsRenderPass.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -22,28 +23,6 @@ class Texture;
 } // namespace oxygen::graphics
 
 namespace oxygen::engine {
-
-// FIXME: DUPLICATED IN SEVERAL PLACES - CENTRALIZE
-//! Standardized exposure modes for rendering.
-enum class ExposureMode : std::uint32_t {
-  kManual = 0u,
-  kAuto = 1u,
-  kManualCamera = 2u,
-};
-
-//! Returns a string representation of the exposure mode.
-OXGN_RNDR_API auto to_string(ExposureMode mode) -> std::string;
-
-//! Standardized tonemapper selection.
-enum class ToneMapper : std::uint32_t {
-  kAcesFitted = 0U,
-  kReinhard = 1U,
-  kNone = 2U,
-  kFilmic = 3U,
-};
-
-//! Returns a string representation of the tonemapper.
-OXGN_RNDR_API auto to_string(ToneMapper mapper) -> std::string;
 
 //! Configuration for tone mapping and exposure.
 struct ToneMapPassConfig {

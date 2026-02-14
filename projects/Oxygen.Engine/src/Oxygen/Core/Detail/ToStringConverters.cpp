@@ -12,6 +12,7 @@
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -116,9 +117,9 @@ auto oxygen::to_string(BindlessHeapIndex h) -> std::string
   return fmt::format("BindlessHeapIndex(i:{})", h.get());
 }
 
-auto oxygen::to_string(ShaderVisibleIndex idx) -> std::string
+auto oxygen::to_string(ShaderVisibleIndex h) -> std::string
 {
-  return fmt::format("ShaderVisibleIndex(i:{})", idx.get());
+  return fmt::format("ShaderVisibleIndex(i:{})", h.get());
 }
 
 auto oxygen::to_string(const VersionedBindlessHandle& h) -> std::string
@@ -129,14 +130,12 @@ auto oxygen::to_string(const VersionedBindlessHandle& h) -> std::string
 
 auto oxygen::to_string(FrameSlotNumber s) -> std::string
 {
-  using namespace oxygen::frame;
-
-  if (s == kInvalidSlot) {
+  if (s == frame::kInvalidSlot) {
     return fmt::format("Frame(slot:__Invalid__)");
   }
 #if !defined(NDEBUG)
   // Validate slot range: valid slots are [0, kFramesInFlight)
-  if (s.get() >= kFramesInFlight.get()) {
+  if (s.get() >= frame::kFramesInFlight.get()) {
     return fmt::format("Frame(slot:{}-OOB)", s.get());
   }
 #endif
@@ -145,10 +144,8 @@ auto oxygen::to_string(FrameSlotNumber s) -> std::string
 
 auto oxygen::to_string(FrameSequenceNumber seq) -> std::string
 {
-  using namespace oxygen::frame;
-
   // Validate sequence number: valid sequences are [0, kMaxSequenceNumber)
-  if (seq == kInvalidSequenceNumber) {
+  if (seq == frame::kInvalidSequenceNumber) {
     return fmt::format("Frame(seq:__Invalid__)");
   }
   return fmt::format("Frame(seq:{})", seq.get());
@@ -237,4 +234,41 @@ auto oxygen::to_string(const Scissors& scissors) -> std::string
 auto oxygen::to_string(const ViewId& v) -> std::string
 {
   return fmt::format("ViewId({})", v.get());
+}
+
+auto oxygen::engine::to_string(MeteringMode mode) -> std::string_view
+{
+  switch (mode) {
+    // clang-format off
+  case MeteringMode::kAverage: return "Average";
+  case MeteringMode::kCenterWeighted: return "Center-Weighted";
+  case MeteringMode::kSpot: return "Spot";
+    // clang-format on
+  }
+  return "__NotSupported__";
+}
+
+auto oxygen::engine::to_string(ExposureMode mode) -> std::string_view
+{
+  switch (mode) {
+    // clang-format off
+  case ExposureMode::kManual: return "Manual";
+  case ExposureMode::kAuto: return "Auto";
+  case ExposureMode::kManualCamera: return "Manual Camera";
+    // clang-format on
+  }
+  return "__NotSupported__";
+}
+
+auto oxygen::engine::to_string(ToneMapper mapper) -> std::string_view
+{
+  switch (mapper) {
+    // clang-format off
+  case ToneMapper::kNone: return "None";
+  case ToneMapper::kAcesFitted: return "ACES Fitted";
+  case ToneMapper::kReinhard: return "Reinhard";
+  case ToneMapper::kFilmic: return "Filmic";
+    // clang-format on
+  }
+  return "__NotSupported__";
 }

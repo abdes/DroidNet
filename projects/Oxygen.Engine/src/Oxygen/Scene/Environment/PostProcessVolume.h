@@ -12,21 +12,6 @@
 
 namespace oxygen::scene::environment {
 
-//! Tonemapper selection.
-enum class ToneMapper {
-  kAcesFitted,
-  kReinhard,
-  kFilmic,
-  kNone,
-};
-
-//! Exposure behavior.
-enum class ExposureMode {
-  kManual,
-  kAuto,
-  kManualCamera,
-};
-
 //! Scene-global post processing parameters.
 /*!
  This is a minimal, renderer-agnostic post process parameter set inspired by
@@ -57,25 +42,25 @@ public:
   OXYGEN_DEFAULT_MOVABLE(PostProcessVolume)
 
   //! Sets the tone mapper.
-  auto SetToneMapper(const ToneMapper mapper) noexcept -> void
+  auto SetToneMapper(const engine::ToneMapper mapper) noexcept -> void
   {
     tone_mapper_ = mapper;
   }
 
   //! Gets the tone mapper.
-  [[nodiscard]] auto GetToneMapper() const noexcept -> ToneMapper
+  [[nodiscard]] auto GetToneMapper() const noexcept -> engine::ToneMapper
   {
     return tone_mapper_;
   }
 
   //! Sets exposure mode (manual, auto, or manual camera EV).
-  auto SetExposureMode(const ExposureMode mode) noexcept -> void
+  auto SetExposureMode(const engine::ExposureMode mode) noexcept -> void
   {
     exposure_mode_ = mode;
   }
 
   //! Gets exposure mode.
-  [[nodiscard]] auto GetExposureMode() const noexcept -> ExposureMode
+  [[nodiscard]] auto GetExposureMode() const noexcept -> engine::ExposureMode
   {
     return exposure_mode_;
   }
@@ -240,9 +225,8 @@ public:
   }
 
 private:
-  ToneMapper tone_mapper_ = ToneMapper::kAcesFitted;
-
-  ExposureMode exposure_mode_ = ExposureMode::kAuto;
+  engine::ToneMapper tone_mapper_ = engine::ToneMapper::kAcesFitted;
+  engine::ExposureMode exposure_mode_ = engine::ExposureMode::kAuto;
   bool exposure_enabled_ = true;
 
   //! Exposure compensation in stops (EV).

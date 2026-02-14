@@ -7,6 +7,9 @@
 #pragma once
 
 #include <cstdint>
+#include <string_view>
+
+#include <Oxygen/Core/api_export.h>
 
 namespace oxygen::engine {
 
@@ -17,5 +20,29 @@ enum class MeteringMode : std::uint32_t {
   kCenterWeighted = 1U,
   kSpot = 2U,
 };
+
+//! Returns a string representation of the metering mode.
+OXGN_CORE_NDAPI auto to_string(MeteringMode mode) -> std::string_view;
+
+//! Standardized exposure modes for rendering.
+enum class ExposureMode : std::uint32_t { // NOLINT(*-enum-size)
+  kManual = 0,
+  kManualCamera = 1,
+  kAuto = 2,
+};
+
+//! Returns a string representation of the exposure mode.
+OXGN_CORE_NDAPI auto to_string(ExposureMode mode) -> std::string_view;
+
+//! Standardized tonemapper selection.
+enum class ToneMapper : std::uint32_t { // NOLINT(*-enum-size)
+  kNone = 0,
+  kAcesFitted = 1,
+  kFilmic = 2,
+  kReinhard = 3,
+};
+
+//! Returns a string representation of the tonemapper.
+OXGN_CORE_NDAPI auto to_string(ToneMapper mapper) -> std::string_view;
 
 } // namespace oxygen::engine
