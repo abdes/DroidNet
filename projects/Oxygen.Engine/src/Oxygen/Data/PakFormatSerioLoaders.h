@@ -7,11 +7,28 @@
 #pragma once
 
 #include <span>
+#include <type_traits>
 
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/Reader.h>
 
 namespace oxygen::serio {
+
+inline auto Load(AnyReader& reader, engine::ToneMapper& value) -> Result<void>
+{
+  std::underlying_type_t<engine::ToneMapper> raw_value = 0;
+  CHECK_RESULT(reader.ReadInto(raw_value));
+  value = static_cast<engine::ToneMapper>(raw_value);
+  return {};
+}
+
+inline auto Load(AnyReader& reader, engine::ExposureMode& value) -> Result<void>
+{
+  std::underlying_type_t<engine::ExposureMode> raw_value = 0;
+  CHECK_RESULT(reader.ReadInto(raw_value));
+  value = static_cast<engine::ExposureMode>(raw_value);
+  return {};
+}
 
 //=== Scene: Nodes & Components (v2/v3) ===----------------------------------//
 

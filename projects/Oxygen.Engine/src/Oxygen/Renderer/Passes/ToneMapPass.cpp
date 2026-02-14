@@ -86,34 +86,6 @@ namespace {
   }
 } // namespace
 
-auto to_string(ExposureMode mode) -> std::string
-{
-  switch (mode) {
-  case ExposureMode::kManual:
-    return "manual";
-  case ExposureMode::kAuto:
-    return "auto";
-  case ExposureMode::kManualCamera:
-    return "manual_camera";
-  }
-  return "unknown";
-}
-
-auto to_string(ToneMapper mapper) -> std::string
-{
-  switch (mapper) {
-  case ToneMapper::kAcesFitted:
-    return "aces";
-  case ToneMapper::kReinhard:
-    return "reinhard";
-  case ToneMapper::kFilmic:
-    return "filmic";
-  case ToneMapper::kNone:
-    return "none";
-  }
-  return "unknown";
-}
-
 ToneMapPass::ToneMapPass(std::shared_ptr<ToneMapPassConfig> config)
   : GraphicsRenderPass(config ? config->debug_name : "ToneMapPass", true)
   , config_(std::move(config))

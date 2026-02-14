@@ -6,12 +6,12 @@
 
 #pragma once
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 
 #include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/HalfFloat.h>
@@ -1281,8 +1281,8 @@ struct PostProcessVolumeEnvironmentRecord {
 
   uint32_t enabled = 1; //!< Whether this system is enabled (boolean).
 
-  uint32_t tone_mapper = 0; // ToneMapper
-  uint32_t exposure_mode = 1; // ExposureMode
+  engine::ToneMapper tone_mapper = engine::ToneMapper::kAcesFitted;
+  engine::ExposureMode exposure_mode = engine::ExposureMode::kAuto;
   float exposure_compensation_ev = 0.0F;
 
   float auto_exposure_min_ev = -6.0F;

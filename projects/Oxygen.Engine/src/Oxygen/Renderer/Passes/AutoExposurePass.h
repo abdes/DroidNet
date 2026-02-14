@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
@@ -34,9 +33,6 @@ class Graphics;
 namespace oxygen::engine {
 
 struct RenderContext;
-
-[[nodiscard]] OXGN_RNDR_API auto to_string(MeteringMode mode)
-  -> std::string_view;
 
 //! Configuration for the auto exposure compute pass.
 struct AutoExposurePassConfig {

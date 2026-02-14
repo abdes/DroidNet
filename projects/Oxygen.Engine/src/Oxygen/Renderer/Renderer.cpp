@@ -1563,7 +1563,7 @@ auto Renderer::UpdateViewExposure(ViewId view_id, const scene::Scene& scene,
   static std::unordered_set<std::uint32_t> logged_suspicious_exposure_views;
   struct ExposureInputs {
     bool enabled { true };
-    env::ExposureMode mode { env::ExposureMode::kManual };
+    engine::ExposureMode mode { engine::ExposureMode::kManual };
     float manual_ev { 0.0F };
     float compensation_ev { 0.0F };
     float exposure_key_raw { 1.0F };
@@ -1576,7 +1576,7 @@ auto Renderer::UpdateViewExposure(ViewId view_id, const scene::Scene& scene,
   float raw_exposure_key = 1.0F;
   float compensation_ev = 0.0F;
   std::optional<float> used_ev {};
-  env::ExposureMode exposure_mode = env::ExposureMode::kManual;
+  engine::ExposureMode exposure_mode = engine::ExposureMode::kManual;
   std::optional<float> camera_ev {};
   bool exposure_enabled = true;
   std::optional<float> manual_ev_read {};
@@ -1604,14 +1604,14 @@ auto Renderer::UpdateViewExposure(ViewId view_id, const scene::Scene& scene,
       exposure_mode = mode;
       manual_ev_read = pp->GetManualExposureEv();
 
-      if (mode == env::ExposureMode::kManual
-        || mode == env::ExposureMode::kManualCamera
-        || mode == env::ExposureMode::kAuto) {
+      if (mode == engine::ExposureMode::kManual
+        || mode == engine::ExposureMode::kManualCamera
+        || mode == engine::ExposureMode::kAuto) {
         // Auto mode must not derive baseline EV from camera/sun model every
         // frame. That path can pin twilight to daylight-like EV values and
         // fight histogram adaptation. Use the authored manual EV as seed;
         // AutoExposurePass performs runtime adaptation.
-        const float ev = (mode == env::ExposureMode::kManualCamera)
+        const float ev = (mode == engine::ExposureMode::kManualCamera)
           ? camera_ev.value_or(*manual_ev_read)
           : *manual_ev_read;
         used_ev = ev;
@@ -1622,7 +1622,7 @@ auto Renderer::UpdateViewExposure(ViewId view_id, const scene::Scene& scene,
         // baseline/seed before the histogram-based adaptation pass takes over.
         exposure = (1.0F / 12.5F) * std::exp2(compensation_ev - ev);
 
-        if (mode == env::ExposureMode::kAuto) {
+        if (mode == engine::ExposureMode::kAuto) {
           DLOG_F(3,
             "View {} in auto exposure mode, will use baseline exposure={:.4f}",
             view_id, exposure);
@@ -1632,90 +1632,6 @@ auto Renderer::UpdateViewExposure(ViewId view_id, const scene::Scene& scene,
   }
 
   exposure *= exposure_key;
-
-  // Validate PPV settings seen by the renderer (change-detected).
-  {
-    const auto u_view_id = view_id.get();
-    ExposureInputs now {};
-    now.enabled = exposure_enabled;
-    now.mode = exposure_mode;
-    now.manual_ev = manual_ev_read.value_or(0.0F);
-    now.compensation_ev = compensation_ev;
-    now.exposure_key_raw = raw_exposure_key;
-
-    const auto it_inputs = last_logged_inputs_by_view.find(u_view_id);
-    const bool changed = (it_inputs == last_logged_inputs_by_view.end())
-      || std::memcmp(&it_inputs->second, &now, sizeof(ExposureInputs)) != 0;
-    if (changed) {
-      last_logged_inputs_by_view[u_view_id] = now;
-      const auto ModeToString = [](env::ExposureMode m) -> const char* {
-        switch (m) {
-        case env::ExposureMode::kManual:
-          return "manual";
-        case env::ExposureMode::kAuto:
-          return "auto";
-        case env::ExposureMode::kManualCamera:
-          return "manual_camera";
-        }
-        return "unknown";
-      };
-      const auto camera_ev_str
-        = camera_ev.has_value() ? fmt::format("{:.3f}", *camera_ev) : "<none>";
-      const auto used_ev_str
-        = used_ev.has_value() ? fmt::format("{:.3f}", *used_ev) : "<none>";
-      LOG_F(INFO,
-        "Renderer: PPV exposure inputs (view={}, enabled={}, mode={}, "
-        "manual_ev={:.3f}, camera_ev={}, used_ev={}, comp_ev={:.3f}, "
-        "key_raw={:.6f}, key_used={:.6f})",
-        u_view_id, exposure_enabled, ModeToString(exposure_mode), now.manual_ev,
-        camera_ev_str, used_ev_str, compensation_ev, raw_exposure_key,
-        exposure_key);
-    }
-  }
-
-  const auto u_view_id = view_id.get();
-  const auto it = last_logged_exposure_by_view.find(u_view_id);
-  if (it == last_logged_exposure_by_view.end()) {
-    last_logged_exposure_by_view.emplace(u_view_id, exposure);
-  } else {
-    const float previous = it->second;
-    it->second = exposure;
-    if (std::abs(exposure - previous) > 1e-4F) {
-      LOG_F(INFO, "Renderer: exposure changed (view={}, {:.4f} -> {:.4f})",
-        u_view_id, previous, exposure);
-    }
-  }
-
-  if (exposure <= 1e-3F
-    && logged_suspicious_exposure_views.insert(u_view_id).second) {
-    const auto ModeToString = [](env::ExposureMode m) -> const char* {
-      switch (m) {
-      case env::ExposureMode::kManual:
-        return "manual";
-      case env::ExposureMode::kAuto:
-        return "auto";
-      case env::ExposureMode::kManualCamera:
-        return "manual_camera";
-      }
-      return "unknown";
-    };
-    const auto camera_ev_str
-      = camera_ev.has_value() ? fmt::format("{:.3f}", *camera_ev) : "<none>";
-    const auto used_ev_str
-      = used_ev.has_value() ? fmt::format("{:.3f}", *used_ev) : "<none>";
-    const float base_exposure = used_ev.has_value()
-      ? (1.0F / 12.5F) * std::exp2(compensation_ev - *used_ev)
-      : exposure;
-    LOG_F(WARNING,
-      "Renderer: low exposure (view={}, mode={}, exposure={:.6f}, base={:.6f}, "
-      "key_raw={:.6f}, key_used={:.6f}, used_ev={}, camera_ev={}, "
-      "comp_ev={:.3f}, "
-      "sun_enabled={}, sun_lx={:.3f})",
-      u_view_id, ModeToString(exposure_mode), exposure, base_exposure,
-      raw_exposure_key, exposure_key, used_ev_str, camera_ev_str,
-      compensation_ev, sun_state.enabled, sun_state.GetIlluminance());
-  }
-
   return exposure;
 }
 

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <span>
 #include <stdexcept>
@@ -28,19 +29,6 @@
 #include <Oxygen/Renderer/RenderContext.h>
 
 namespace oxygen::engine {
-
-auto to_string(MeteringMode mode) -> std::string_view
-{
-  switch (mode) {
-  case MeteringMode::kAverage:
-    return "average";
-  case MeteringMode::kCenterWeighted:
-    return "center_weighted";
-  case MeteringMode::kSpot:
-    return "spot";
-  }
-  return "average";
-}
 
 namespace {
   struct alignas(16) AutoExposureHistogramConstants {

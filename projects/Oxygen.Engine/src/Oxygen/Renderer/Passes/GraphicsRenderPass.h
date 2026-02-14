@@ -6,10 +6,10 @@
 
 #pragma once
 
-#include "Oxygen/Base/Macros.h"
 #include <optional>
 #include <string_view>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Renderer/Passes/RenderPass.h>
 #include <Oxygen/Renderer/api_export.h>
