@@ -39,7 +39,20 @@ auto RenderingSettingsService::SetRenderMode(RenderMode mode) -> void
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  settings->SetString(kViewModeKey, std::string(to_string(mode)));
+  const char* value = "solid";
+  switch (mode) {
+  case RenderMode::kWireframe:
+    value = "wireframe";
+    break;
+  case RenderMode::kOverlayWireframe:
+    value = "overlay_wireframe";
+    break;
+  case RenderMode::kSolid:
+  default:
+    value = "solid";
+    break;
+  }
+  settings->SetString(kViewModeKey, value);
   epoch_++;
 }
 
