@@ -1108,6 +1108,24 @@ auto ForwardPipeline::OnSceneMutation(
       ? observer_ptr { view->sdr_framebuffer.get() }
       : view_ctx.render_target;
 
+    // Contract enforcement:
+    // - Scene views are authored for HDR path (render target = HDR, composite
+    //   source = SDR post-tonemap).
+    // - Overlay/tool views must still provide valid render and composition
+    //   targets.
+    CHECK_F(!has_scene || view->intent.enable_hdr,
+      "Scene view '{}' must enable HDR rendering", view->intent.name);
+    CHECK_NOTNULL_F(view_ctx.render_target.get(),
+      "View '{}' missing render_target framebuffer", view->intent.name);
+    CHECK_NOTNULL_F(view_ctx.composite_source.get(),
+      "View '{}' missing composite_source framebuffer", view->intent.name);
+    if (has_scene) {
+      CHECK_NOTNULL_F(view->hdr_framebuffer.get(),
+        "Scene view '{}' missing HDR framebuffer", view->intent.name);
+      CHECK_NOTNULL_F(view->sdr_framebuffer.get(),
+        "Scene view '{}' missing SDR framebuffer", view->intent.name);
+    }
+
     // Maintain stable link to engine's internal view registry
     if (view->engine_vid == kInvalidViewId) {
       view->engine_vid = context->RegisterView(std::move(view_ctx));

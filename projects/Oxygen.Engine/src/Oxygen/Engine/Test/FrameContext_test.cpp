@@ -255,6 +255,29 @@ NOLINT_TEST(FrameContext_basic_test, ViewsBlockedInNonGameStateMutationPhases)
   EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1u);
 }
 
+NOLINT_TEST(FrameContext_basic_test, SetViewRenderTargetUpdatesOnlyRenderTarget)
+{
+  using oxygen::observer_ptr;
+  using oxygen::graphics::Framebuffer;
+
+  FrameContext ctx;
+  auto tag = EngineTagFactory::Get();
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+
+  auto view_ctx = MakeDummyViewContext();
+  auto* const composite_fb = reinterpret_cast<Framebuffer*>(0x2);
+  view_ctx.composite_source = observer_ptr { composite_fb };
+
+  const auto view_id = ctx.RegisterView(view_ctx);
+
+  auto* const render_fb = reinterpret_cast<Framebuffer*>(0x1);
+  ctx.SetViewRenderTarget(view_id, observer_ptr { render_fb });
+
+  const auto& stored = ctx.GetViewContext(view_id);
+  EXPECT_EQ(stored.render_target.get(), render_fb);
+  EXPECT_EQ(stored.composite_source.get(), composite_fb);
+}
+
 //! Ensure surface, presentable flag and view mutations die when attempted
 //! outside their allowed phases.
 // Views: adding/clearing in Snapshot phase should die
