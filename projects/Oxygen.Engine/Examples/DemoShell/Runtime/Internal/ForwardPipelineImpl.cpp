@@ -69,10 +69,10 @@ namespace {
     const bool wireframe_in_sdr
       = plan.RunOverlayWireframe() || !plan.HasSceneLinearPath();
     if (wireframe_in_sdr) {
-      DCHECK_NOTNULL_F(view.sdr_texture.get());
-      return view.sdr_texture;
+      DCHECK_NOTNULL_F(view.GetSdrTexture().get());
+      return view.GetSdrTexture();
     }
-    return view.hdr_texture;
+    return view.GetHdrTexture();
   }
 
   class ToneMapOverrideGuard {
@@ -146,23 +146,25 @@ void ForwardPipelineImpl::TrackViewResources(
     return;
   }
 
-  const auto fb = ctx.view->hdr_framebuffer;
+  const auto fb = ctx.view->GetHdrFramebuffer();
   const auto& fb_desc = fb->GetDescriptor();
   if (fb_desc.depth_attachment.IsValid()) {
     ctx.depth_texture = fb_desc.depth_attachment.texture;
   }
 
-  if (ctx.view->hdr_texture && !rec.IsResourceTracked(*ctx.view->hdr_texture)) {
+  if (ctx.view->GetHdrTexture()
+    && !rec.IsResourceTracked(*ctx.view->GetHdrTexture())) {
     rec.BeginTrackingResourceState(
-      *ctx.view->hdr_texture, graphics::ResourceStates::kCommon, true);
+      *ctx.view->GetHdrTexture(), graphics::ResourceStates::kCommon, true);
   }
   if (ctx.depth_texture && !rec.IsResourceTracked(*ctx.depth_texture)) {
     rec.BeginTrackingResourceState(
       *ctx.depth_texture, graphics::ResourceStates::kCommon, true);
   }
-  if (ctx.view->sdr_texture && !rec.IsResourceTracked(*ctx.view->sdr_texture)) {
+  if (ctx.view->GetSdrTexture()
+    && !rec.IsResourceTracked(*ctx.view->GetSdrTexture())) {
     rec.BeginTrackingResourceState(
-      *ctx.view->sdr_texture, graphics::ResourceStates::kCommon, true);
+      *ctx.view->GetSdrTexture(), graphics::ResourceStates::kCommon, true);
   }
 }
 
@@ -177,25 +179,25 @@ void ForwardPipelineImpl::ConfigurePassTargets(
     depth_pass_config->depth_texture = ctx.depth_texture;
   }
   if (shader_pass_config) {
-    shader_pass_config->color_texture = ctx.view->hdr_texture;
+    shader_pass_config->color_texture = ctx.view->GetHdrTexture();
   }
   if (wireframe_pass_config) {
-    wireframe_pass_config->color_texture = ctx.view->hdr_texture;
+    wireframe_pass_config->color_texture = ctx.view->GetHdrTexture();
   }
   if (sky_pass_config) {
-    sky_pass_config->color_texture = ctx.view->hdr_texture;
+    sky_pass_config->color_texture = ctx.view->GetHdrTexture();
     sky_pass_config->debug_mouse_down_position
       = frame_plan_builder->GpuDebugMouseDownPosition();
     sky_pass_config->debug_viewport_extent = SubPixelExtent {
-      .width = ctx.view->intent.view.viewport.width,
-      .height = ctx.view->intent.view.viewport.height,
+      .width = ctx.view->GetDescriptor().view.viewport.width,
+      .height = ctx.view->GetDescriptor().view.viewport.height,
     };
   }
   if (ground_grid_pass_config) {
-    ground_grid_pass_config->color_texture = ctx.view->hdr_texture;
+    ground_grid_pass_config->color_texture = ctx.view->GetHdrTexture();
   }
   if (transparent_pass_config) {
-    transparent_pass_config->color_texture = ctx.view->hdr_texture;
+    transparent_pass_config->color_texture = ctx.view->GetHdrTexture();
     transparent_pass_config->depth_texture = ctx.depth_texture;
   }
 }
@@ -208,18 +210,19 @@ void ForwardPipelineImpl::BindHdrAndClear(
   }
 
   rec.RequireResourceState(
-    *ctx.view->hdr_texture, graphics::ResourceStates::kRenderTarget);
+    *ctx.view->GetHdrTexture(), graphics::ResourceStates::kRenderTarget);
   if (ctx.depth_texture) {
     rec.RequireResourceState(
       *ctx.depth_texture, graphics::ResourceStates::kDepthWrite);
   }
   rec.FlushBarriers();
 
-  rec.BindFrameBuffer(*ctx.view->hdr_framebuffer);
-  const auto hdr_clear = ctx.view->hdr_framebuffer->GetDescriptor()
+  rec.BindFrameBuffer(*ctx.view->GetHdrFramebuffer());
+  const auto hdr_clear = ctx.view->GetHdrFramebuffer()
+                           ->GetDescriptor()
                            .color_attachments[0]
                            .ResolveClearColor(std::nullopt);
-  rec.ClearFramebuffer(*ctx.view->hdr_framebuffer,
+  rec.ClearFramebuffer(*ctx.view->GetHdrFramebuffer(),
     std::vector<std::optional<graphics::Color>> { hdr_clear }, 1.0F);
 }
 
@@ -231,15 +234,16 @@ void ForwardPipelineImpl::BindSdrAndMaybeClear(
   }
 
   rec.RequireResourceState(
-    *ctx.view->sdr_texture, graphics::ResourceStates::kRenderTarget);
+    *ctx.view->GetSdrTexture(), graphics::ResourceStates::kRenderTarget);
   rec.FlushBarriers();
   ctx.sdr_in_render_target = true;
-  rec.BindFrameBuffer(*ctx.view->sdr_framebuffer);
-  if (ctx.view->intent.should_clear) {
-    const auto sdr_clear = ctx.view->sdr_framebuffer->GetDescriptor()
+  rec.BindFrameBuffer(*ctx.view->GetSdrFramebuffer());
+  if (ctx.view->GetDescriptor().should_clear) {
+    const auto sdr_clear = ctx.view->GetSdrFramebuffer()
+                             ->GetDescriptor()
                              .color_attachments[0]
                              .ResolveClearColor(std::nullopt);
-    rec.ClearFramebuffer(*ctx.view->sdr_framebuffer,
+    rec.ClearFramebuffer(*ctx.view->GetSdrFramebuffer(),
       std::vector<std::optional<graphics::Color>> { sdr_clear });
   }
 }
@@ -252,7 +256,7 @@ auto ForwardPipelineImpl::RenderWireframeScene(const ViewRenderContext& ctx,
     co_return;
   }
 
-  const bool is_forced = ctx.view->intent.force_wireframe;
+  const bool is_forced = ctx.view->GetDescriptor().force_wireframe;
   ConfigureWireframePass(ctx.plan, *ctx.view, !is_forced, true, true);
   co_await wireframe_pass->PrepareResources(rc, rec);
   co_await wireframe_pass->Execute(rc, rec);
@@ -307,13 +311,13 @@ auto ForwardPipelineImpl::RenderGpuDebugOverlay(ViewRenderContext& ctx,
   if (!ctx.plan.HasCompositePath()) {
     co_return;
   }
-  if (ctx.view->intent.z_order != CompositionView::kZOrderScene
-    || !ctx.view->intent.camera.has_value()) {
+  if (ctx.view->GetDescriptor().z_order != CompositionView::kZOrderScene
+    || !ctx.view->GetDescriptor().camera.has_value()) {
     co_return;
   }
 
   EnsureSdrBoundForOverlays(ctx, rec);
-  gpu_debug_draw_pass->SetColorTexture(ctx.view->sdr_texture);
+  gpu_debug_draw_pass->SetColorTexture(ctx.view->GetSdrTexture());
   co_await gpu_debug_draw_pass->PrepareResources(rc, rec);
   co_await gpu_debug_draw_pass->Execute(rc, rec);
   rc.RegisterPass<engine::GpuDebugDrawPass>(gpu_debug_draw_pass.get());
@@ -328,15 +332,15 @@ auto ForwardPipelineImpl::ToneMapToSdr(ViewRenderContext& ctx,
     co_return;
   }
 
-  tone_map_pass_config->source_texture = ctx.view->hdr_texture;
-  tone_map_pass_config->output_texture = ctx.view->sdr_texture;
+  tone_map_pass_config->source_texture = ctx.view->GetHdrTexture();
+  tone_map_pass_config->output_texture = ctx.view->GetSdrTexture();
   ToneMapOverrideGuard override_guard(*tone_map_pass_config,
     ctx.plan.GetToneMapPolicy() == ToneMapPolicy::kNeutral);
 
   rec.RequireResourceState(
-    *ctx.view->hdr_texture, graphics::ResourceStates::kShaderResource);
+    *ctx.view->GetHdrTexture(), graphics::ResourceStates::kShaderResource);
   rec.RequireResourceState(
-    *ctx.view->sdr_texture, graphics::ResourceStates::kRenderTarget);
+    *ctx.view->GetSdrTexture(), graphics::ResourceStates::kRenderTarget);
   rec.FlushBarriers();
   ctx.sdr_in_render_target = true;
 
@@ -352,7 +356,7 @@ void ForwardPipelineImpl::EnsureSdrBoundForOverlays(
   }
 
   rec.RequireResourceState(
-    *ctx.view->sdr_texture, graphics::ResourceStates::kRenderTarget);
+    *ctx.view->GetSdrTexture(), graphics::ResourceStates::kRenderTarget);
   rec.FlushBarriers();
   ctx.sdr_in_render_target = true;
 }
@@ -368,9 +372,9 @@ auto ForwardPipelineImpl::RenderOverlayWireframe(const ViewRenderContext& ctx,
 
   const auto scene = rc.GetScene();
   DCHECK_NOTNULL_F(scene, "Overlay wireframe requires an active scene");
-  DCHECK_F(ctx.view->intent.camera.has_value(),
+  DCHECK_F(ctx.view->GetDescriptor().camera.has_value(),
     "Overlay wireframe requires a camera node");
-  auto camera_node = *ctx.view->intent.camera;
+  auto camera_node = *ctx.view->GetDescriptor().camera;
   DCHECK_F(camera_node.IsAlive(), "Overlay wireframe requires a live camera");
   DCHECK_F(
     camera_node.HasCamera(), "Overlay wireframe requires a camera component");
@@ -385,16 +389,16 @@ auto ForwardPipelineImpl::RenderOverlayWireframe(const ViewRenderContext& ctx,
 void ForwardPipelineImpl::RenderViewOverlay(
   const ViewRenderContext& ctx, graphics::CommandRecorder& rec) const
 {
-  rec.BindFrameBuffer(*ctx.view->sdr_framebuffer);
-  if (ctx.view->intent.on_overlay) {
-    ctx.view->intent.on_overlay(rec);
+  rec.BindFrameBuffer(*ctx.view->GetSdrFramebuffer());
+  if (ctx.view->GetDescriptor().on_overlay) {
+    ctx.view->GetDescriptor().on_overlay(rec);
   }
 }
 
 auto ForwardPipelineImpl::RenderToolsImGui(const ViewRenderContext& ctx,
   graphics::CommandRecorder& rec) const -> co::Co<>
 {
-  if (ctx.view->intent.z_order != CompositionView::kZOrderTools) {
+  if (ctx.view->GetDescriptor().z_order != CompositionView::kZOrderTools) {
     co_return;
   }
 
@@ -411,7 +415,7 @@ void ForwardPipelineImpl::TransitionSdrToShaderRead(
   }
 
   rec.RequireResourceState(
-    *ctx.view->sdr_texture, graphics::ResourceStates::kShaderResource);
+    *ctx.view->GetSdrTexture(), graphics::ResourceStates::kShaderResource);
   rec.FlushBarriers();
   ctx.sdr_in_render_target = false;
 }
@@ -459,13 +463,13 @@ auto ForwardPipelineImpl::ExecuteRegisteredView(ViewId id,
           const float k = 12.5F;
           const float ev = *frame_plan_builder->AutoExposureReset();
           const float lum = std::pow(2.0F, ev) * k / 100.0F;
-          const auto vid = ctx.view->registered_view_id;
+          const auto vid = ctx.view->GetPublishedViewId();
           if (vid != kInvalidViewId) {
             auto_exposure_pass->ResetExposure(rec, vid, lum);
           }
         }
 
-        auto_exposure_config->source_texture = effective_view.hdr_texture;
+        auto_exposure_config->source_texture = effective_view.GetHdrTexture();
         co_await auto_exposure_pass->PrepareResources(rc, rec);
         co_await auto_exposure_pass->Execute(rc, rec);
         rc.RegisterPass<engine::AutoExposurePass>(auto_exposure_pass.get());

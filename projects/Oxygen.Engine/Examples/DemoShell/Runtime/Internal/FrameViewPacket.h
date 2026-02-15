@@ -21,7 +21,7 @@ class Texture;
 
 namespace oxygen::examples::internal {
 
-struct CompositionViewImpl;
+class CompositionViewImpl;
 
 // Immutable frame snapshot item built by FramePlanBuilder and consumed by
 // ForwardPipelineImpl during render callback resolution/execution.

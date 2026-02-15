@@ -33,7 +33,7 @@ namespace graphics {
 
 namespace oxygen::examples::internal {
 
-struct CompositionViewImpl;
+class CompositionViewImpl;
 
 //! Keeps view runtime state coherent between DemoShell, FrameContext, and
 //! Renderer.

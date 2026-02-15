@@ -6,29 +6,29 @@
 
 #include "DemoShell/Runtime/Internal/FrameViewPacket.h"
 
-#include "DemoShell/Runtime/Internal/ForwardPipelineImpl.h"
+#include "DemoShell/Runtime/Internal/CompositionViewImpl.h"
 
 namespace oxygen::examples::internal {
 
 auto FrameViewPacket::HasCompositeTexture() const noexcept -> bool
 {
-  return View().sdr_texture != nullptr;
+  return View().GetSdrTexture() != nullptr;
 }
 
 auto FrameViewPacket::GetCompositeTexture() const
   -> std::shared_ptr<graphics::Texture>
 {
-  return View().sdr_texture;
+  return View().GetSdrTexture();
 }
 
 auto FrameViewPacket::GetCompositeViewport() const noexcept -> ViewPort
 {
-  return View().intent.view.viewport;
+  return View().GetDescriptor().view.viewport;
 }
 
 auto FrameViewPacket::GetCompositeOpacity() const noexcept -> float
 {
-  return View().intent.opacity;
+  return View().GetDescriptor().opacity;
 }
 
 } // namespace oxygen::examples::internal

@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cstdint>
 #include <mutex>
 #include <optional>
@@ -48,6 +47,7 @@
 
 #include "DemoShell/Runtime/ForwardPipeline.h"
 #include "DemoShell/Runtime/Internal/CompositionPlanner.h"
+#include "DemoShell/Runtime/Internal/CompositionViewImpl.h"
 #include "DemoShell/Runtime/Internal/FramePlanBuilder.h"
 #include "DemoShell/Runtime/Internal/FrameViewPacket.h"
 #include "DemoShell/Runtime/Internal/PipelineSettings.h"
@@ -56,119 +56,6 @@
 namespace oxygen::examples::internal {
 
 class FramePlanBuilder;
-
-//! Internal state for a single active composition view.
-struct CompositionViewImpl {
-  CompositionView intent;
-  uint32_t submission_index { 0 };
-  frame::SequenceNumber last_seen_frame;
-
-  // GPU Resources
-  std::shared_ptr<graphics::Texture> hdr_texture;
-  std::shared_ptr<graphics::Framebuffer> hdr_framebuffer;
-  std::shared_ptr<graphics::Texture> sdr_texture;
-  std::shared_ptr<graphics::Framebuffer> sdr_framebuffer;
-
-  uint32_t width { 0 };
-  uint32_t height { 0 };
-  bool has_hdr { false };
-  graphics::Color clear_color { 0.0F, 0.0F, 0.0F, 1.0F };
-
-  // Engine Link
-  ViewId registered_view_id { kInvalidViewId };
-  bool registered_with_renderer { false };
-
-  void Sync(const CompositionView& desc, uint32_t index,
-    frame::SequenceNumber frame_seq)
-  {
-    intent = desc;
-    submission_index = index;
-    last_seen_frame = frame_seq;
-  }
-
-  void EnsureResources(Graphics& graphics)
-  {
-    const uint32_t target_w
-      = std::max(1U, static_cast<uint32_t>(intent.view.viewport.width));
-    const uint32_t target_h
-      = std::max(1U, static_cast<uint32_t>(intent.view.viewport.height));
-    const bool needs_hdr = intent.enable_hdr;
-    const graphics::Color& target_clear = intent.clear_color;
-
-    if (width == target_w && height == target_h && has_hdr == needs_hdr
-      && clear_color == target_clear) {
-      if (needs_hdr && hdr_texture) {
-        return;
-      }
-      if (!needs_hdr && sdr_texture) {
-        return;
-      }
-    }
-
-    LOG_F(INFO,
-      "Configuring View '{}' (ID: {}) -> {}x{}, HDR: {}, "
-      "Clear: ({}, {}, {}, {})",
-      intent.name, intent.id, target_w, target_h, needs_hdr, target_clear.r,
-      target_clear.g, target_clear.b, target_clear.a);
-
-    width = target_w;
-    height = target_h;
-    has_hdr = needs_hdr;
-    clear_color = target_clear;
-
-    if (needs_hdr) {
-      graphics::TextureDesc hdr_desc;
-      hdr_desc.width = target_w;
-      hdr_desc.height = target_h;
-      hdr_desc.format = oxygen::Format::kRGBA16Float;
-      hdr_desc.texture_type = oxygen::TextureType::kTexture2D;
-      hdr_desc.is_render_target = true;
-      hdr_desc.is_shader_resource = true;
-      hdr_desc.use_clear_value = true;
-      hdr_desc.clear_value = target_clear;
-      hdr_desc.initial_state = graphics::ResourceStates::kCommon;
-      hdr_desc.debug_name = "Forward_HDR_Intermediate";
-      hdr_texture = graphics.CreateTexture(hdr_desc);
-
-      graphics::FramebufferDesc hdr_fb_desc;
-      hdr_fb_desc.AddColorAttachment({ .texture = hdr_texture });
-
-      graphics::TextureDesc depth_desc;
-      depth_desc.width = target_w;
-      depth_desc.height = target_h;
-      depth_desc.format = oxygen::Format::kDepth32;
-      depth_desc.texture_type = oxygen::TextureType::kTexture2D;
-      depth_desc.is_render_target = true;
-      depth_desc.is_shader_resource = true;
-      depth_desc.use_clear_value = true;
-      depth_desc.clear_value = { 1.0F, 0.0F, 0.0F, 0.0F };
-      depth_desc.initial_state = graphics::ResourceStates::kCommon;
-      depth_desc.debug_name = "Forward_HDR_Depth";
-      hdr_fb_desc.SetDepthAttachment(graphics.CreateTexture(depth_desc));
-      hdr_framebuffer = graphics.CreateFramebuffer(hdr_fb_desc);
-    } else {
-      hdr_texture = nullptr;
-      hdr_framebuffer = nullptr;
-    }
-
-    graphics::TextureDesc sdr_desc;
-    sdr_desc.width = target_w;
-    sdr_desc.height = target_h;
-    sdr_desc.format = oxygen::Format::kRGBA8UNorm;
-    sdr_desc.texture_type = oxygen::TextureType::kTexture2D;
-    sdr_desc.is_render_target = true;
-    sdr_desc.is_shader_resource = true;
-    sdr_desc.use_clear_value = true;
-    sdr_desc.clear_value = target_clear;
-    sdr_desc.initial_state = graphics::ResourceStates::kCommon;
-    sdr_desc.debug_name = "Forward_SDR_Intermediate";
-    sdr_texture = graphics.CreateTexture(sdr_desc);
-
-    graphics::FramebufferDesc sdr_fb_desc;
-    sdr_fb_desc.AddColorAttachment({ .texture = sdr_texture });
-    sdr_framebuffer = graphics.CreateFramebuffer(sdr_fb_desc);
-  }
-};
 
 class ForwardPipelineImpl {
 public:
