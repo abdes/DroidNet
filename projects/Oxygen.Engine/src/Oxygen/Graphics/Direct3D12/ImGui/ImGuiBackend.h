@@ -17,7 +17,7 @@
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/imgui_impl_dx12.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
-#include <Oxygen/Imgui/ImGuiGraphicsBackend.h>
+#include <Oxygen/ImGui/ImGuiGraphicsBackend.h>
 
 struct ImDrawData;
 struct ImGuiContext;
