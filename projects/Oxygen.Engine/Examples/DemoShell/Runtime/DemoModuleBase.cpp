@@ -181,7 +181,7 @@ auto DemoModuleBase::OnCompositing(observer_ptr<engine::FrameContext> context)
       }
       auto submission
         = co_await pipeline_->OnCompositing(context, *renderer, target_fb);
-      if (!submission.tasks.empty() && submission.target_framebuffer) {
+      if (!submission.tasks.empty() && submission.composite_target) {
         std::shared_ptr<graphics::Surface> surface;
         if (app_window_) {
           surface = app_window_->GetSurface().lock();

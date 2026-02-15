@@ -69,7 +69,7 @@ struct CompositionViewImpl {
   graphics::Color clear_color { 0.0F, 0.0F, 0.0F, 1.0F };
 
   // Engine Link
-  ViewId engine_vid { kInvalidViewId };
+  ViewId registered_view_id { kInvalidViewId };
   bool registered_with_renderer { false };
 
   void Sync(const CompositionView& desc, uint32_t index,
@@ -992,12 +992,13 @@ struct ForwardPipeline::Impl {
       if (current_frame - it->second.last_seen_frame > kMaxIdleFrames) {
         LOG_F(INFO, "Reaping View resources for ID {}", it->first);
 
-        if (it->second.engine_vid != kInvalidViewId) {
+        if (it->second.registered_view_id != kInvalidViewId) {
           LOG_F(INFO,
-            "Unregistering View '{}' (EngineVID: {}) from Engine and Renderer",
-            it->second.intent.name, it->second.engine_vid.get());
-          context->RemoveView(it->second.engine_vid);
-          renderer.UnregisterView(it->second.engine_vid);
+            "Unregistering View '{}' (RegisteredViewId: {}) from Engine and "
+            "Renderer",
+            it->second.intent.name, it->second.registered_view_id.get());
+          context->RemoveView(it->second.registered_view_id);
+          renderer.UnregisterView(it->second.registered_view_id);
         }
 
         it = view_pool.erase(it);
@@ -1033,7 +1034,7 @@ auto ForwardPipeline::OnFrameStart(
 auto ForwardPipeline::OnSceneMutation(
   observer_ptr<engine::FrameContext> context, engine::Renderer& renderer,
   scene::Scene& scene, std::span<const CompositionView> view_descs,
-  graphics::Framebuffer* target_framebuffer) -> co::Co<>
+  graphics::Framebuffer* composite_target) -> co::Co<>
 {
   impl_->sorted_views.clear();
   impl_->sorted_views.reserve(view_descs.size());
@@ -1054,11 +1055,11 @@ auto ForwardPipeline::OnSceneMutation(
 
   uint32_t index = 0;
   for (auto desc : view_descs) { // Copy so we can modify viewport
-    // Resolution: if viewport is empty, try to derive from target_framebuffer
+    // Resolution: if viewport is empty, try to derive from composite_target
     // or default to 1280x720
     if (desc.view.viewport.width <= 0 || desc.view.viewport.height <= 0) {
-      if (target_framebuffer != nullptr) {
-        const auto& fb_desc = target_framebuffer->GetDescriptor();
+      if (composite_target != nullptr) {
+        const auto& fb_desc = composite_target->GetDescriptor();
         if (!fb_desc.color_attachments.empty()
           && fb_desc.color_attachments[0].texture) {
           desc.view.viewport.width = static_cast<float>(
@@ -1127,25 +1128,28 @@ auto ForwardPipeline::OnSceneMutation(
     }
 
     // Maintain stable link to engine's internal view registry
-    if (view->engine_vid == kInvalidViewId) {
-      view->engine_vid = context->RegisterView(std::move(view_ctx));
+    if (view->registered_view_id == kInvalidViewId) {
+      view->registered_view_id = context->RegisterView(std::move(view_ctx));
       LOG_F(INFO,
-        "Registered View '{}' (IntentID: {}) with Engine (EngineVID: {})",
-        view->intent.name, view->intent.id.get(), view->engine_vid.get());
+        "Registered View '{}' (IntentID: {}) with Engine (RegisteredViewId: "
+        "{})",
+        view->intent.name, view->intent.id.get(),
+        view->registered_view_id.get());
     } else {
-      context->UpdateView(view->engine_vid, std::move(view_ctx));
-      DLOG_F(1, "Updated View '{}' (EngineVID: {})", view->intent.name,
-        view->engine_vid.get());
+      context->UpdateView(view->registered_view_id, std::move(view_ctx));
+      DLOG_F(1, "Updated View '{}' (RegisteredViewId: {})", view->intent.name,
+        view->registered_view_id.get());
     }
 
-    const auto engine_vid = view->engine_vid;
+    const auto registered_view_id = view->registered_view_id;
 
     if (!view->registered_with_renderer) {
       LOG_F(INFO,
-        "Registering RenderGraph for View '{}' (EngineVID: {}) with Renderer",
-        view->intent.name, engine_vid.get());
+        "Registering RenderGraph for View '{}' (RegisteredViewId: {}) with "
+        "Renderer",
+        view->intent.name, registered_view_id.get());
       renderer.RegisterView(
-        engine_vid,
+        registered_view_id,
         [view](const engine::ViewContext& vc) -> ResolvedView {
           renderer::SceneCameraViewResolver resolver(
             [view](const ViewId&) -> scene::SceneNode {
@@ -1198,7 +1202,7 @@ auto ForwardPipeline::OnSceneMutation(
                   const float k = 12.5F;
                   const float ev = *self->pending_auto_exposure_reset;
                   const float lum = std::pow(2.0F, ev) * k / 100.0F;
-                  const auto vid = ctx.view.engine_vid;
+                  const auto vid = ctx.view.registered_view_id;
                   if (vid != kInvalidViewId) {
                     self->auto_exposure_pass->ResetExposure(rec, vid, lum);
                   }
@@ -1279,18 +1283,18 @@ auto ForwardPipeline::OnCompositing(
   engine::CompositingTaskList tasks;
   tasks.reserve(impl_->sorted_views.size());
   for (auto* view : impl_->sorted_views) {
-    if (!view->sdr_texture || view->engine_vid == kInvalidViewId) {
+    if (!view->sdr_texture) {
       continue;
     }
     const auto& viewport = view->intent.view.viewport.IsValid()
       ? view->intent.view.viewport
       : fullscreen_viewport;
-    tasks.push_back(engine::CompositingTask::MakeBlend(
-      view->engine_vid, viewport, view->intent.opacity));
+    tasks.push_back(engine::CompositingTask::MakeTextureBlend(
+      view->sdr_texture, viewport, view->intent.opacity));
   }
 
   engine::CompositionSubmission submission;
-  submission.target_framebuffer = std::shared_ptr<graphics::Framebuffer>(
+  submission.composite_target = std::shared_ptr<graphics::Framebuffer>(
     final_output, [](graphics::Framebuffer*) { });
   submission.tasks = std::move(tasks);
 
