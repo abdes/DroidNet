@@ -289,6 +289,10 @@ namespace {
 
 struct ForwardPipeline::Impl {
   observer_ptr<AsyncEngine> engine;
+  struct FrameViewPacket {
+    CompositionViewImpl view;
+    ViewRenderPlan plan;
+  };
 
   struct {
     std::optional<engine::ExposureMode> exposure_mode;
@@ -301,6 +305,19 @@ struct ForwardPipeline::Impl {
   std::map<ViewId, CompositionViewImpl> view_pool;
   // Frame active views (sorted)
   std::vector<CompositionViewImpl*> sorted_views;
+  // Frozen per-frame view packets built in OnPreRender.
+  std::vector<FrameViewPacket> frame_view_packets;
+  std::map<ViewId, size_t> frame_view_packet_index;
+  std::optional<float> frame_auto_exposure_reset;
+  bool frame_gpu_debug_pass_enabled { true };
+  bool frame_want_auto_exposure { false };
+  RenderMode frame_render_mode { RenderMode::kSolid };
+  engine::ShaderDebugMode frame_shader_debug_mode {
+    engine::ShaderDebugMode::kDisabled
+  };
+  graphics::Color frame_wire_color { 1.0F, 1.0F, 1.0F, 1.0F };
+  std::optional<SubPixelPosition> frame_gpu_debug_mouse_down_position;
+  engine::CompositingTaskList planned_composition_tasks;
 
   // Pass Configs
   std::shared_ptr<engine::DepthPrePassConfig> depth_pass_config;
@@ -387,7 +404,7 @@ struct ForwardPipeline::Impl {
   bool gpu_debug_pass_enabled { true };
 
   struct ViewRenderContext {
-    CompositionViewImpl& view;
+    const CompositionViewImpl& view;
     ViewRenderPlan plan;
     std::shared_ptr<const graphics::Texture> depth_texture;
     bool sdr_in_render_target { false };
@@ -398,10 +415,10 @@ struct ForwardPipeline::Impl {
     bool sky_sphere_enabled { false };
   };
 
-  auto EvaluateSkyState(const engine::RenderContext& rc) const -> SkyState
+  auto EvaluateSkyState(observer_ptr<scene::Scene> scene) const -> SkyState
   {
     SkyState state {};
-    if (const auto scene = rc.GetScene()) {
+    if (scene) {
       if (const auto env = scene->GetEnvironment()) {
         if (const auto atmo
           = env->TryGetSystem<scene::environment::SkyAtmosphere>();
@@ -418,11 +435,12 @@ struct ForwardPipeline::Impl {
     return state;
   }
 
-  auto EvaluateViewRenderPlan(const CompositionViewImpl& view,
-    const engine::RenderContext& rc) const -> ViewRenderPlan
+  auto EvaluateViewRenderPlan(
+    const CompositionViewImpl& view, const SkyState& sky_state) const
+    -> ViewRenderPlan
   {
     ViewRenderPlan plan {};
-    plan.effective_render_mode = staged.render_mode;
+    plan.effective_render_mode = frame_render_mode;
     if (view.intent.force_wireframe) {
       plan.effective_render_mode = RenderMode::kWireframe;
     }
@@ -434,7 +452,7 @@ struct ForwardPipeline::Impl {
     plan.require_neutral_tonemap = plan.has_scene
       && (plan.effective_render_mode == RenderMode::kWireframe);
     plan.allow_overlay_wireframe = plan.has_scene
-      && (staged.render_mode == RenderMode::kOverlayWireframe)
+      && (frame_render_mode == RenderMode::kOverlayWireframe)
       && (plan.effective_render_mode != RenderMode::kWireframe);
     plan.wireframe_apply_exposure_compensation = false;
 
@@ -443,11 +461,7 @@ struct ForwardPipeline::Impl {
       ? WireframeTarget::kSdr
       : WireframeTarget::kHdr;
 
-    const auto debug_mode = shader_pass_config
-      ? shader_pass_config->debug_mode
-      : engine::ShaderDebugMode::kDisabled;
-    const auto debug_intent = EvaluateDebugModeIntent(debug_mode);
-    const auto sky_state = EvaluateSkyState(rc);
+    const auto debug_intent = EvaluateDebugModeIntent(frame_shader_debug_mode);
     const bool run_scene_passes = plan.has_scene && plan.hdr_path_enabled
       && (plan.effective_render_mode != RenderMode::kWireframe);
     const bool allow_sky_visuals = run_scene_passes
@@ -459,7 +473,7 @@ struct ForwardPipeline::Impl {
     DLOG_F(2,
       "ViewRenderPlan view='{}' mode={} scene={} hdr={} "
       "sdr={} overlay={} neutral={} sky={} lut={}",
-      view.intent.name, to_string(plan.effective_render_mode), plan.has_scene,
+      view.intent.name, plan.effective_render_mode, plan.has_scene,
       plan.hdr_path_enabled, plan.sdr_path_enabled,
       plan.allow_overlay_wireframe, plan.require_neutral_tonemap,
       plan.allow_sky_visuals, plan.allow_sky_lut);
@@ -484,9 +498,9 @@ struct ForwardPipeline::Impl {
       = GetWireframeTargetTexture(plan, view);
 
     if (wireframe_pass) {
-      wireframe_pass->SetWireColor(staged.wire_color);
+      wireframe_pass->SetWireColor(frame_wire_color);
     } else {
-      wireframe_pass_config->wire_color = staged.wire_color;
+      wireframe_pass_config->wire_color = frame_wire_color;
     }
   }
 
@@ -535,7 +549,7 @@ struct ForwardPipeline::Impl {
     if (sky_pass_config) {
       sky_pass_config->color_texture = ctx.view.hdr_texture;
       sky_pass_config->debug_mouse_down_position
-        = staged.gpu_debug_mouse_down_position;
+        = frame_gpu_debug_mouse_down_position;
       sky_pass_config->debug_viewport_extent = SubPixelExtent {
         .width = ctx.view.intent.view.viewport.width,
         .height = ctx.view.intent.view.viewport.height,
@@ -843,22 +857,13 @@ struct ForwardPipeline::Impl {
     if (ground_grid_pass_config) {
       static std::atomic<bool> logged_once { false };
       if (!logged_once.exchange(true)) {
-        LOG_F(INFO,
-          "ForwardPipeline: ApplySettings grid spacing={} major_every={} "
-          "line_thickness={} major_thickness={} minor_color=({}, {}, {}, {}) "
-          "major_color=({}, {}, {}, {})",
+        DLOG_F(1,
+          "ForwardPipeline: Ground grid config initialized "
+          "(spacing={}, major_every={}, line_thickness={}, major_thickness={})",
           staged.ground_grid_config.spacing,
           staged.ground_grid_config.major_every,
           staged.ground_grid_config.line_thickness,
-          staged.ground_grid_config.major_thickness,
-          staged.ground_grid_config.minor_color.r,
-          staged.ground_grid_config.minor_color.g,
-          staged.ground_grid_config.minor_color.b,
-          staged.ground_grid_config.minor_color.a,
-          staged.ground_grid_config.major_color.r,
-          staged.ground_grid_config.major_color.g,
-          staged.ground_grid_config.major_color.b,
-          staged.ground_grid_config.major_color.a);
+          staged.ground_grid_config.major_thickness);
       }
       *ground_grid_pass_config = staged.ground_grid_config;
     }
@@ -885,18 +890,13 @@ struct ForwardPipeline::Impl {
           != tone_map_pass_config->tone_mapper
         || last_applied_tonemap_config.debug_mode != debug_mode;
       if (config_changed) {
-        LOG_F(INFO,
-          "ForwardPipeline: ToneMap config applied (debug_mode={}, "
-          "force_manual={}, force_one={}, "
-          "exp_mode={}, manual_exp={}, tone_mapper={}, staged_exp_mode={}, "
-          "staged_exp={}, staged_mapper={})",
-          static_cast<uint32_t>(debug_mode), debug_intent.force_manual_exposure,
-          debug_intent.force_exposure_one,
-          engine::to_string(tone_map_pass_config->exposure_mode),
+        DLOG_F(1,
+          "ForwardPipeline: ToneMap config applied "
+          "(debug_mode={}, exp_mode={}, manual_exp={}, tone_mapper={})",
+          static_cast<uint32_t>(debug_mode),
+          tone_map_pass_config->exposure_mode,
           tone_map_pass_config->manual_exposure,
-          engine::to_string(tone_map_pass_config->tone_mapper),
-          engine::to_string(staged.exposure_mode), staged.exposure_value,
-          engine::to_string(staged.tonemapping_mode));
+          tone_map_pass_config->tone_mapper);
 
         last_applied_tonemap_config.exposure_mode
           = tone_map_pass_config->exposure_mode;
@@ -984,6 +984,285 @@ struct ForwardPipeline::Impl {
     return imgui_pass;
   }
 
+  void SyncActiveViews(std::span<const CompositionView> view_descs,
+    graphics::Framebuffer* composite_target, frame::SequenceNumber frame_seq,
+    Graphics& graphics)
+  {
+    sorted_views.clear();
+    sorted_views.reserve(view_descs.size());
+
+    uint32_t index = 0;
+    for (auto desc : view_descs) { // Copy so we can normalize viewport.
+      if (desc.view.viewport.width <= 0 || desc.view.viewport.height <= 0) {
+        if (composite_target != nullptr) {
+          const auto& fb_desc = composite_target->GetDescriptor();
+          if (!fb_desc.color_attachments.empty()
+            && fb_desc.color_attachments[0].texture) {
+            desc.view.viewport.width = static_cast<float>(
+              fb_desc.color_attachments[0].texture->GetDescriptor().width);
+            desc.view.viewport.height = static_cast<float>(
+              fb_desc.color_attachments[0].texture->GetDescriptor().height);
+          }
+        } else {
+          desc.view.viewport.width = 1280.0f;
+          desc.view.viewport.height = 720.0f;
+        }
+      }
+
+      auto& view_impl = view_pool[desc.id];
+      view_impl.Sync(desc, index++, frame_seq);
+      view_impl.EnsureResources(graphics);
+      sorted_views.push_back(&view_impl);
+    }
+
+    std::stable_sort(sorted_views.begin(), sorted_views.end(),
+      [](const CompositionViewImpl* a, const CompositionViewImpl* b) {
+        if (a->intent.z_order != b->intent.z_order) {
+          return a->intent.z_order < b->intent.z_order;
+        }
+        return a->submission_index < b->submission_index;
+      });
+  }
+
+  void SyncViewRegistration(observer_ptr<engine::FrameContext> context,
+    engine::Renderer& renderer)
+  {
+    for (auto* view : sorted_views) {
+      engine::ViewContext view_ctx;
+      view_ctx.view = view->intent.view;
+      const bool has_scene = view->intent.camera.has_value();
+      view_ctx.metadata = { .name = std::string(view->intent.name),
+        .purpose = has_scene ? "scene" : "overlay",
+        .with_atmosphere = view->intent.with_atmosphere };
+      view_ctx.render_target = view->hdr_framebuffer
+        ? observer_ptr { view->hdr_framebuffer.get() }
+        : observer_ptr { view->sdr_framebuffer.get() };
+      view_ctx.composite_source = view->sdr_framebuffer
+        ? observer_ptr { view->sdr_framebuffer.get() }
+        : view_ctx.render_target;
+
+      CHECK_F(!has_scene || view->intent.enable_hdr,
+        "Scene view '{}' must enable HDR rendering", view->intent.name);
+      CHECK_NOTNULL_F(view_ctx.render_target.get(),
+        "View '{}' missing render_target framebuffer", view->intent.name);
+      CHECK_NOTNULL_F(view_ctx.composite_source.get(),
+        "View '{}' missing composite_source framebuffer", view->intent.name);
+      if (has_scene) {
+        CHECK_NOTNULL_F(view->hdr_framebuffer.get(),
+          "Scene view '{}' missing HDR framebuffer", view->intent.name);
+        CHECK_NOTNULL_F(view->sdr_framebuffer.get(),
+          "Scene view '{}' missing SDR framebuffer", view->intent.name);
+      }
+
+      if (view->registered_view_id == kInvalidViewId) {
+        view->registered_view_id = context->RegisterView(std::move(view_ctx));
+        LOG_F(INFO,
+          "Registered View '{}' (IntentID: {}) with Engine "
+          "(RegisteredViewId: {})",
+          view->intent.name, view->intent.id.get(),
+          view->registered_view_id.get());
+      } else {
+        context->UpdateView(view->registered_view_id, std::move(view_ctx));
+        DLOG_F(1, "Updated View '{}' (RegisteredViewId: {})", view->intent.name,
+          view->registered_view_id.get());
+      }
+
+      RegisterViewGraph(renderer, *view);
+    }
+  }
+
+  void RegisterViewGraph(engine::Renderer& renderer, CompositionViewImpl& view)
+  {
+    const auto registered_view_id = view.registered_view_id;
+    if (view.registered_with_renderer) {
+      return;
+    }
+
+    LOG_F(INFO,
+      "Registering RenderGraph for View '{}' (RegisteredViewId: {}) with "
+      "Renderer",
+      view.intent.name, registered_view_id.get());
+
+    renderer.RegisterView(
+      registered_view_id,
+      [this](const engine::ViewContext& vc) -> ResolvedView {
+        const auto* frame_packet = FindFrameViewPacket(vc.id);
+        if (frame_packet == nullptr) {
+          LOG_F(ERROR,
+            "ForwardPipeline: missing frame packet in resolver for view {}",
+            vc.id.get());
+          renderer::SceneCameraViewResolver fallback_resolver(
+            [](const ViewId&) -> scene::SceneNode { return {}; });
+          return fallback_resolver(vc.id);
+        }
+        const auto camera
+          = frame_packet->view.intent.camera.value_or(scene::SceneNode {});
+        renderer::SceneCameraViewResolver resolver(
+          [camera](const ViewId&) -> scene::SceneNode {
+            return camera;
+          });
+        return resolver(vc.id);
+      },
+      [this](ViewId id, const engine::RenderContext& rc,
+        graphics::CommandRecorder& rec) -> co::Co<> {
+        const auto* frame_packet = FindFrameViewPacket(id);
+        if (frame_packet == nullptr) {
+          LOG_F(ERROR,
+            "ForwardPipeline: missing frame packet in render callback for view {}",
+            id.get());
+          co_return;
+        }
+        const auto& effective_view = frame_packet->view;
+
+        ViewRenderContext ctx {
+          .view = effective_view,
+          .plan = frame_packet->plan,
+          .depth_texture = nullptr,
+          .sdr_in_render_target = false,
+        };
+        const bool run_scene_passes = ctx.plan.has_scene && ctx.plan.hdr_path_enabled
+          && (ctx.plan.effective_render_mode != RenderMode::kWireframe);
+        DCHECK_F(!ctx.plan.allow_overlay_wireframe
+          || ctx.plan.wireframe_target == WireframeTarget::kSdr);
+
+        if (ctx.plan.hdr_path_enabled) {
+          TrackViewResources(ctx, rec);
+          ConfigurePassTargets(ctx);
+          BindHdrAndClear(ctx, rec);
+
+          if (!run_scene_passes) {
+            co_await RenderWireframeScene(ctx, rc, rec);
+          } else {
+            if (frame_gpu_debug_pass_enabled && gpu_debug_clear_pass) {
+              co_await gpu_debug_clear_pass->PrepareResources(rc, rec);
+              co_await gpu_debug_clear_pass->Execute(rc, rec);
+              rc.RegisterPass<engine::GpuDebugClearPass>(
+                gpu_debug_clear_pass.get());
+            }
+            co_await RunScenePasses(ctx, rc, rec);
+
+            if (frame_want_auto_exposure && auto_exposure_pass) {
+              if (frame_auto_exposure_reset.has_value()) {
+                const float k = 12.5F;
+                const float ev = *frame_auto_exposure_reset;
+                const float lum = std::pow(2.0F, ev) * k / 100.0F;
+                const auto vid = ctx.view.registered_view_id;
+                if (vid != kInvalidViewId) {
+                  auto_exposure_pass->ResetExposure(rec, vid, lum);
+                }
+              }
+
+              auto_exposure_config->source_texture = effective_view.hdr_texture;
+              co_await auto_exposure_pass->PrepareResources(rc, rec);
+              co_await auto_exposure_pass->Execute(rc, rec);
+              rc.RegisterPass<engine::AutoExposurePass>(auto_exposure_pass.get());
+            }
+
+            if (ground_grid_pass && ground_grid_pass_config
+              && ground_grid_pass_config->enabled) {
+              co_await ground_grid_pass->PrepareResources(rc, rec);
+              co_await ground_grid_pass->Execute(rc, rec);
+            }
+          }
+
+          co_await ToneMapToSdr(ctx, rc, rec);
+        } else {
+          BindSdrAndMaybeClear(ctx, rec);
+        }
+
+        if (ctx.plan.sdr_path_enabled) {
+          EnsureSdrBoundForOverlays(ctx, rec);
+          co_await RenderOverlayWireframe(ctx, rc, rec);
+          RenderViewOverlay(ctx, rec);
+          co_await RenderToolsImGui(ctx, rec);
+          co_await RenderGpuDebugOverlay(ctx, rc, rec);
+          TransitionSdrToShaderRead(ctx, rec);
+        }
+        co_return;
+      });
+
+    view.registered_with_renderer = true;
+  }
+
+  void BuildFrameViewPackets(observer_ptr<scene::Scene> scene)
+  {
+    frame_view_packets.clear();
+    frame_view_packet_index.clear();
+    frame_auto_exposure_reset = pending_auto_exposure_reset;
+    frame_gpu_debug_pass_enabled = gpu_debug_pass_enabled;
+    frame_want_auto_exposure = tone_map_pass_config
+      && tone_map_pass_config->exposure_mode == engine::ExposureMode::kAuto;
+    frame_render_mode = staged.render_mode;
+    frame_wire_color = staged.wire_color;
+    frame_shader_debug_mode = shader_pass_config
+      ? shader_pass_config->debug_mode
+      : engine::ShaderDebugMode::kDisabled;
+    frame_gpu_debug_mouse_down_position = staged.gpu_debug_mouse_down_position;
+    const auto sky_state = EvaluateSkyState(scene);
+    frame_view_packets.reserve(sorted_views.size());
+    for (auto* view : sorted_views) {
+      if (view->registered_view_id == kInvalidViewId) {
+        continue;
+      }
+      frame_view_packet_index.emplace(view->registered_view_id,
+        frame_view_packets.size());
+      frame_view_packets.push_back(
+        FrameViewPacket { .view = *view,
+          .plan = EvaluateViewRenderPlan(*view, sky_state) });
+    }
+  }
+
+  [[nodiscard]] auto FindFrameViewPacket(ViewId id) const
+    -> const FrameViewPacket*
+  {
+    const auto it = frame_view_packet_index.find(id);
+    if (it == frame_view_packet_index.end()) {
+      return nullptr;
+    }
+    const auto index = it->second;
+    if (index >= frame_view_packets.size()) {
+      return nullptr;
+    }
+    return &frame_view_packets[index];
+  }
+
+  void PlanCompositingTasks()
+  {
+    planned_composition_tasks.clear();
+    planned_composition_tasks.reserve(frame_view_packets.size());
+    for (const auto& packet : frame_view_packets) {
+      const auto& view = packet.view;
+      if (!view.sdr_texture) {
+        continue;
+      }
+      planned_composition_tasks.push_back(engine::CompositingTask::MakeTextureBlend(
+        view.sdr_texture, view.intent.view.viewport, view.intent.opacity));
+    }
+  }
+
+  auto BuildCompositionSubmission(graphics::Framebuffer* final_output)
+    -> engine::CompositionSubmission
+  {
+    if (final_output == nullptr) {
+      LOG_F(WARNING,
+        "ForwardPipeline: skipping compositing because composite_target is null");
+      return {};
+    }
+    const auto& target_desc = final_output->GetDescriptor();
+    if (target_desc.color_attachments.empty()
+      || !target_desc.color_attachments[0].texture) {
+      LOG_F(WARNING,
+        "ForwardPipeline: skipping compositing because composite_target has no color attachment texture");
+      return {};
+    }
+
+    engine::CompositionSubmission submission;
+    submission.composite_target = std::shared_ptr<graphics::Framebuffer>(
+      final_output, [](graphics::Framebuffer*) { });
+    submission.tasks = planned_composition_tasks;
+    return submission;
+  }
+
   void ReapResources(frame::SequenceNumber current_frame,
     observer_ptr<engine::FrameContext> context, engine::Renderer& renderer)
   {
@@ -1036,9 +1315,6 @@ auto ForwardPipeline::OnSceneMutation(
   scene::Scene& scene, std::span<const CompositionView> view_descs,
   graphics::Framebuffer* composite_target) -> co::Co<>
 {
-  impl_->sorted_views.clear();
-  impl_->sorted_views.reserve(view_descs.size());
-
   if (impl_->auto_exposure_config) {
     if (const auto env = scene.GetEnvironment()) {
       if (const auto pp
@@ -1052,206 +1328,23 @@ auto ForwardPipeline::OnSceneMutation(
 
   auto graphics = impl_->engine->GetGraphics().lock();
   const auto frame_seq = context->GetFrameSequenceNumber();
-
-  uint32_t index = 0;
-  for (auto desc : view_descs) { // Copy so we can modify viewport
-    // Resolution: if viewport is empty, try to derive from composite_target
-    // or default to 1280x720
-    if (desc.view.viewport.width <= 0 || desc.view.viewport.height <= 0) {
-      if (composite_target != nullptr) {
-        const auto& fb_desc = composite_target->GetDescriptor();
-        if (!fb_desc.color_attachments.empty()
-          && fb_desc.color_attachments[0].texture) {
-          desc.view.viewport.width = static_cast<float>(
-            fb_desc.color_attachments[0].texture->GetDescriptor().width);
-          desc.view.viewport.height = static_cast<float>(
-            fb_desc.color_attachments[0].texture->GetDescriptor().height);
-        }
-      } else {
-        // Fallback to 720p if absolutely nothing else
-        desc.view.viewport.width = 1280.0f;
-        desc.view.viewport.height = 720.0f;
-      }
-    }
-
-    auto& view_impl = impl_->view_pool[desc.id];
-    view_impl.Sync(desc, index++, frame_seq);
-    view_impl.EnsureResources(*graphics);
-
-    impl_->sorted_views.push_back(&view_impl);
-  }
-
-  // Stable sort: Z-Order first, then Submission Index
-  std::stable_sort(impl_->sorted_views.begin(), impl_->sorted_views.end(),
-    [](const CompositionViewImpl* a, const CompositionViewImpl* b) {
-      if (a->intent.z_order != b->intent.z_order) {
-        return a->intent.z_order < b->intent.z_order;
-      }
-      return a->submission_index < b->submission_index;
-    });
-
-  // Register with engine renderer
-  for (auto* view : impl_->sorted_views) {
-    // Register View Metadata with FrameContext
-    engine::ViewContext view_ctx;
-    view_ctx.view = view->intent.view;
-    const bool has_scene = view->intent.camera.has_value();
-    view_ctx.metadata = { .name = std::string(view->intent.name),
-      .purpose = has_scene ? "scene" : "overlay",
-      .with_atmosphere = view->intent.with_atmosphere };
-    // Render passes execute against HDR when available, otherwise SDR.
-    view_ctx.render_target = view->hdr_framebuffer
-      ? observer_ptr { view->hdr_framebuffer.get() }
-      : observer_ptr { view->sdr_framebuffer.get() };
-    // Compositing samples SDR when available (post-tonemap/overlay), else
-    // falls back to the render target.
-    view_ctx.composite_source = view->sdr_framebuffer
-      ? observer_ptr { view->sdr_framebuffer.get() }
-      : view_ctx.render_target;
-
-    // Contract enforcement:
-    // - Scene views are authored for HDR path (render target = HDR, composite
-    //   source = SDR post-tonemap).
-    // - Overlay/tool views must still provide valid render and composition
-    //   targets.
-    CHECK_F(!has_scene || view->intent.enable_hdr,
-      "Scene view '{}' must enable HDR rendering", view->intent.name);
-    CHECK_NOTNULL_F(view_ctx.render_target.get(),
-      "View '{}' missing render_target framebuffer", view->intent.name);
-    CHECK_NOTNULL_F(view_ctx.composite_source.get(),
-      "View '{}' missing composite_source framebuffer", view->intent.name);
-    if (has_scene) {
-      CHECK_NOTNULL_F(view->hdr_framebuffer.get(),
-        "Scene view '{}' missing HDR framebuffer", view->intent.name);
-      CHECK_NOTNULL_F(view->sdr_framebuffer.get(),
-        "Scene view '{}' missing SDR framebuffer", view->intent.name);
-    }
-
-    // Maintain stable link to engine's internal view registry
-    if (view->registered_view_id == kInvalidViewId) {
-      view->registered_view_id = context->RegisterView(std::move(view_ctx));
-      LOG_F(INFO,
-        "Registered View '{}' (IntentID: {}) with Engine (RegisteredViewId: "
-        "{})",
-        view->intent.name, view->intent.id.get(),
-        view->registered_view_id.get());
-    } else {
-      context->UpdateView(view->registered_view_id, std::move(view_ctx));
-      DLOG_F(1, "Updated View '{}' (RegisteredViewId: {})", view->intent.name,
-        view->registered_view_id.get());
-    }
-
-    const auto registered_view_id = view->registered_view_id;
-
-    if (!view->registered_with_renderer) {
-      LOG_F(INFO,
-        "Registering RenderGraph for View '{}' (RegisteredViewId: {}) with "
-        "Renderer",
-        view->intent.name, registered_view_id.get());
-      renderer.RegisterView(
-        registered_view_id,
-        [view](const engine::ViewContext& vc) -> ResolvedView {
-          renderer::SceneCameraViewResolver resolver(
-            [view](const ViewId&) -> scene::SceneNode {
-              return view->intent.camera.value_or(scene::SceneNode {});
-            });
-          return resolver(vc.id);
-        },
-        [self = impl_.get(), view](ViewId /*id*/,
-          const engine::RenderContext& rc,
-          graphics::CommandRecorder& rec) -> co::Co<> {
-          [[maybe_unused]] auto& renderer = rc.GetRenderer();
-
-          Impl::ViewRenderContext ctx {
-            .view = *view,
-            .plan = self->EvaluateViewRenderPlan(*view, rc),
-            .depth_texture = nullptr,
-            .sdr_in_render_target = false,
-          };
-          const bool run_scene_passes = ctx.plan.has_scene
-            && ctx.plan.hdr_path_enabled
-            && (ctx.plan.effective_render_mode != RenderMode::kWireframe);
-          DCHECK_F(!ctx.plan.allow_overlay_wireframe
-            || ctx.plan.wireframe_target == WireframeTarget::kSdr);
-
-          if (ctx.plan.hdr_path_enabled) {
-            // Phase: scene production into HDR (or wireframe-only).
-            self->TrackViewResources(ctx, rec);
-            self->ConfigurePassTargets(ctx);
-            self->BindHdrAndClear(ctx, rec);
-
-            if (!run_scene_passes) {
-              co_await self->RenderWireframeScene(ctx, rc, rec);
-            } else {
-              if (self->gpu_debug_pass_enabled && self->gpu_debug_clear_pass) {
-                co_await self->gpu_debug_clear_pass->PrepareResources(rc, rec);
-                co_await self->gpu_debug_clear_pass->Execute(rc, rec);
-                rc.RegisterPass<engine::GpuDebugClearPass>(
-                  self->gpu_debug_clear_pass.get());
-              }
-              co_await self->RunScenePasses(ctx, rc, rec);
-
-              // Auto Exposure (Histogram & Average dispatches)
-              const bool want_auto_exposure = self->tone_map_pass_config
-                && self->tone_map_pass_config->exposure_mode
-                  == engine::ExposureMode::kAuto;
-              if (want_auto_exposure && self->auto_exposure_pass) {
-                if (self->pending_auto_exposure_reset.has_value()) {
-                  // Convert EV (EV100, ISO 100) to Average Luminance,
-                  // K=12.5) L = 2^EV * K / 100
-                  const float k = 12.5F;
-                  const float ev = *self->pending_auto_exposure_reset;
-                  const float lum = std::pow(2.0F, ev) * k / 100.0F;
-                  const auto vid = ctx.view.registered_view_id;
-                  if (vid != kInvalidViewId) {
-                    self->auto_exposure_pass->ResetExposure(rec, vid, lum);
-                  }
-                }
-
-                self->auto_exposure_config->source_texture = view->hdr_texture;
-                co_await self->auto_exposure_pass->PrepareResources(rc, rec);
-                co_await self->auto_exposure_pass->Execute(rc, rec);
-                rc.RegisterPass<engine::AutoExposurePass>(
-                  self->auto_exposure_pass.get());
-              }
-
-              if (self->ground_grid_pass && self->ground_grid_pass_config
-                && self->ground_grid_pass_config->enabled) {
-                co_await self->ground_grid_pass->PrepareResources(rc, rec);
-                co_await self->ground_grid_pass->Execute(rc, rec);
-              }
-            }
-
-            co_await self->ToneMapToSdr(ctx, rc, rec);
-          } else {
-            // Phase: SDR-only output for non-HDR views.
-            self->BindSdrAndMaybeClear(ctx, rec);
-          }
-
-          if (ctx.plan.sdr_path_enabled) {
-            // Phase: overlays and compositing preparation.
-            self->EnsureSdrBoundForOverlays(ctx, rec);
-            co_await self->RenderOverlayWireframe(ctx, rc, rec);
-            self->RenderViewOverlay(ctx, rec);
-            co_await self->RenderToolsImGui(ctx, rec);
-            co_await self->RenderGpuDebugOverlay(ctx, rc, rec);
-            self->TransitionSdrToShaderRead(ctx, rec);
-          }
-          co_return;
-        });
-      view->registered_with_renderer = true;
-    }
-  }
-
+  CHECK_NOTNULL_F(graphics.get(), "Graphics backend is not available");
+  impl_->SyncActiveViews(view_descs, composite_target, frame_seq, *graphics);
+  impl_->SyncViewRegistration(context, renderer);
+  // Seed frame packets during mutation so resolver callbacks can safely run
+  // before OnPreRender in the same frame.
+  impl_->BuildFrameViewPackets(observer_ptr { &scene });
   impl_->ReapResources(frame_seq, context, renderer);
   co_return;
 }
 
 auto ForwardPipeline::OnPreRender(
-  observer_ptr<engine::FrameContext> /*context*/,
-  engine::Renderer& /*renderer*/,
+  observer_ptr<engine::FrameContext> context, engine::Renderer& /*renderer*/,
   std::span<const CompositionView> /*view_descs*/) -> co::Co<>
 {
+  impl_->BuildFrameViewPackets(context->GetScene());
+  impl_->PlanCompositingTasks();
+
   co_return;
 }
 
@@ -1260,45 +1353,7 @@ auto ForwardPipeline::OnCompositing(
   engine::Renderer& /*renderer*/, graphics::Framebuffer* final_output)
   -> co::Co<engine::CompositionSubmission>
 {
-  if (final_output == nullptr) {
-    co_return {};
-  }
-  const auto& target_desc = final_output->GetDescriptor();
-  if (target_desc.color_attachments.empty()
-    || !target_desc.color_attachments[0].texture) {
-    co_return {};
-  }
-
-  const auto& back_desc
-    = target_desc.color_attachments[0].texture->GetDescriptor();
-  const ViewPort fullscreen_viewport {
-    .top_left_x = 0.0F,
-    .top_left_y = 0.0F,
-    .width = static_cast<float>(back_desc.width),
-    .height = static_cast<float>(back_desc.height),
-    .min_depth = 0.0F,
-    .max_depth = 1.0F,
-  };
-
-  engine::CompositingTaskList tasks;
-  tasks.reserve(impl_->sorted_views.size());
-  for (auto* view : impl_->sorted_views) {
-    if (!view->sdr_texture) {
-      continue;
-    }
-    const auto& viewport = view->intent.view.viewport.IsValid()
-      ? view->intent.view.viewport
-      : fullscreen_viewport;
-    tasks.push_back(engine::CompositingTask::MakeTextureBlend(
-      view->sdr_texture, viewport, view->intent.opacity));
-  }
-
-  engine::CompositionSubmission submission;
-  submission.composite_target = std::shared_ptr<graphics::Framebuffer>(
-    final_output, [](graphics::Framebuffer*) { });
-  submission.tasks = std::move(tasks);
-
-  co_return submission;
+  co_return impl_->BuildCompositionSubmission(final_output);
 }
 
 auto ForwardPipeline::ClearBackbufferReferences() -> void
@@ -1379,21 +1434,21 @@ auto ForwardPipeline::SetExposureMode(engine::ExposureMode mode) -> void
   if (mode == impl_->staged.exposure_mode) {
     return;
   }
-  DLOG_F(INFO, "SetExposureMode {}", mode);
+  DLOG_F(1, "SetExposureMode {}", mode);
   impl_->staged.exposure_mode = mode;
   impl_->staged.dirty = true;
 }
 
 auto ForwardPipeline::SetExposureValue(float value) -> void
 {
-  DLOG_F(INFO, "SetExposureValue {}", value);
+  DLOG_F(1, "SetExposureValue {}", value);
   impl_->staged.exposure_value = value;
   impl_->staged.dirty = true;
 }
 
 auto ForwardPipeline::SetToneMapper(engine::ToneMapper mode) -> void
 {
-  LOG_F(INFO, "ForwardPipeline: SetToneMapper {}", engine::to_string(mode));
+  LOG_F(INFO, "ForwardPipeline: SetToneMapper {}", mode);
   impl_->staged.tonemapping_mode = mode;
   impl_->staged.dirty = true;
 }
