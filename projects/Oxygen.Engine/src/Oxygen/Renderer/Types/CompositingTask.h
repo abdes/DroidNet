@@ -29,13 +29,13 @@ enum class CompositingTaskType {
 
 //! Copy a view output into the target framebuffer.
 struct CopyTask {
-  ViewId source_view {};
+  ViewId source_view_id {};
   ViewPort viewport {};
 };
 
 //! Alpha-blended composition of a view output into the target framebuffer.
 struct BlendTask {
-  ViewId source_view {};
+  ViewId source_view_id {};
   ViewPort viewport {};
   float alpha { 1.0F };
 };
@@ -65,7 +65,7 @@ struct CompositingTask {
   {
     return CompositingTask {
       .type = CompositingTaskType::kCopy,
-      .copy = { .source_view = view_id, .viewport = viewport },
+      .copy = { .source_view_id = view_id, .viewport = viewport },
     };
   }
 
@@ -75,7 +75,7 @@ struct CompositingTask {
     return CompositingTask {
       .type = CompositingTaskType::kBlend,
       .blend = {
-        .source_view = view_id,
+        .source_view_id = view_id,
         .viewport = viewport,
         .alpha = alpha,
       },
@@ -101,7 +101,7 @@ using CompositingTaskList = std::vector<CompositingTask>;
 
 //! Composition submission for the kCompositing phase.
 struct CompositionSubmission {
-  std::shared_ptr<graphics::Framebuffer> target_framebuffer {};
+  std::shared_ptr<graphics::Framebuffer> composite_target {};
   CompositingTaskList tasks {};
 };
 

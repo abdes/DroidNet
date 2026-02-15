@@ -55,14 +55,14 @@ public:
   auto OnSceneMutation(observer_ptr<engine::FrameContext> context,
     engine::Renderer& renderer, scene::Scene& scene,
     std::span<const CompositionView> view_descs,
-    graphics::Framebuffer* target_framebuffer) -> co::Co<> override;
+    graphics::Framebuffer* composite_target) -> co::Co<> override;
 
   auto OnPreRender(observer_ptr<engine::FrameContext> context,
     engine::Renderer& renderer, std::span<const CompositionView> view_descs)
     -> co::Co<> override;
 
   auto OnCompositing(observer_ptr<engine::FrameContext> context,
-    engine::Renderer& renderer, graphics::Framebuffer* target_framebuffer)
+    engine::Renderer& renderer, graphics::Framebuffer* composite_target)
     -> co::Co<engine::CompositionSubmission> override;
 
   auto ClearBackbufferReferences() -> void override;

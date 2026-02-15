@@ -189,7 +189,7 @@ public:
   virtual auto OnSceneMutation(observer_ptr<engine::FrameContext> frame_ctx,
     engine::Renderer& renderer, scene::Scene& scene,
     std::span<const CompositionView> view_descs,
-    graphics::Framebuffer* final_output) -> co::Co<>
+    graphics::Framebuffer* composite_target) -> co::Co<>
     = 0;
 
   // [Phase: kPreRender]
@@ -204,7 +204,7 @@ public:
   // [Phase: kCompositing]
   // Submit final composition/post-process tasks.
   virtual auto OnCompositing(observer_ptr<engine::FrameContext> frame_ctx,
-    engine::Renderer& renderer, graphics::Framebuffer* final_output)
+    engine::Renderer& renderer, graphics::Framebuffer* composite_target)
     -> co::Co<engine::CompositionSubmission>
     = 0;
 

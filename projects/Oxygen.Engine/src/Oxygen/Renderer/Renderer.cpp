@@ -1126,7 +1126,7 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
     co_return;
   }
 
-  CHECK_F(static_cast<bool>(payload.target_framebuffer),
+  CHECK_F(static_cast<bool>(payload.composite_target),
     "Compositing requires a target framebuffer");
 
   auto gfx = GetGraphics();
@@ -1138,7 +1138,7 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
   CHECK_F(
     static_cast<bool>(recorder_ptr), "Compositing recorder acquisition failed");
   auto& recorder = *recorder_ptr;
-  auto& target_fb = *payload.target_framebuffer;
+  auto& target_fb = *payload.composite_target;
   TrackCompositionFramebuffer(recorder, target_fb);
 
   const auto& fb_desc = target_fb.GetDescriptor();
@@ -1155,7 +1155,7 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
 
   RenderContext comp_context {};
   comp_context.SetRenderer(this, gfx.get());
-  comp_context.pass_target = observer_ptr { payload.target_framebuffer.get() };
+  comp_context.pass_target = observer_ptr { payload.composite_target.get() };
   comp_context.frame_slot = frame_slot_;
   comp_context.frame_sequence = frame_seq_num;
 
@@ -1169,26 +1169,28 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
   for (const auto& task : payload.tasks) {
     switch (task.type) {
     case CompositingTaskType::kCopy: {
-      if (!IsViewReady(task.copy.source_view)) {
-        DLOG_F(1, "Skip copy: view {} not ready", task.copy.source_view.get());
+      if (!IsViewReady(task.copy.source_view_id)) {
+        DLOG_F(
+          1, "Skip copy: view {} not ready", task.copy.source_view_id.get());
         continue;
       }
-      auto source = ResolveViewOutputTexture(*context, task.copy.source_view);
+      auto source
+        = ResolveViewOutputTexture(*context, task.copy.source_view_id);
       if (!source) {
         DLOG_F(1, "Skip copy: missing source texture for view {}",
-          task.copy.source_view.get());
+          task.copy.source_view_id.get());
         continue;
       }
       const auto& src_desc = source->GetDescriptor();
       DLOG_F(2, "Log copy: view={} ptr={} size={}x{} fmt={} samples={}",
-        task.copy.source_view.get(), fmt::ptr(source.get()), src_desc.width,
+        task.copy.source_view_id.get(), fmt::ptr(source.get()), src_desc.width,
         src_desc.height, src_desc.format, src_desc.sample_count);
       DLOG_F(2, "Log copy viewport: ({}, {}) {}x{}",
         task.copy.viewport.top_left_x, task.copy.viewport.top_left_y,
         task.copy.viewport.width, task.copy.viewport.height);
       if (source->GetDescriptor().format != backbuffer.GetDescriptor().format) {
         DLOG_F(1, "Fallback to blend: format mismatch for view {}",
-          task.copy.source_view.get());
+          task.copy.source_view_id.get());
         CHECK_NOTNULL_F(
           compositing_pass_config_.get(), "CompositingPass config missing");
         compositing_pass_config_->source_texture = source;
@@ -1203,20 +1205,21 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
       break;
     }
     case CompositingTaskType::kBlend: {
-      if (!IsViewReady(task.blend.source_view)) {
+      if (!IsViewReady(task.blend.source_view_id)) {
         DLOG_F(
-          1, "Skip blend: view {} not ready", task.blend.source_view.get());
+          1, "Skip blend: view {} not ready", task.blend.source_view_id.get());
         continue;
       }
-      auto source = ResolveViewOutputTexture(*context, task.blend.source_view);
+      auto source
+        = ResolveViewOutputTexture(*context, task.blend.source_view_id);
       if (!source) {
         DLOG_F(1, "Skip blend: missing source texture for view {}",
-          task.blend.source_view.get());
+          task.blend.source_view_id.get());
         continue;
       }
       const auto& src_desc = source->GetDescriptor();
       DLOG_F(2, "Blend view={} ptr={} size={}x{} fmt={} samples={}",
-        task.blend.source_view.get(), fmt::ptr(source.get()), src_desc.width,
+        task.blend.source_view_id.get(), fmt::ptr(source.get()), src_desc.width,
         src_desc.height, src_desc.format, src_desc.sample_count);
       DLOG_F(2, "Blend viewport=({}, {}) {}x{} alpha={}",
         task.blend.viewport.top_left_x, task.blend.viewport.top_left_y,
