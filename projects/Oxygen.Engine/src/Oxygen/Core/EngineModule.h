@@ -150,6 +150,11 @@ public:
   {
     co_return;
   }
+  virtual auto OnPublishViews(observer_ptr<FrameContext> /*context*/)
+    -> co::Co<>
+  {
+    co_return;
+  }
 
   virtual auto OnPostParallel(observer_ptr<FrameContext> /*context*/)
     -> co::Co<>

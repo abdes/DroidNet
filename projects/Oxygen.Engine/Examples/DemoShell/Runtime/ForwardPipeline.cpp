@@ -30,9 +30,9 @@ auto ForwardPipeline::OnFrameStart(
     impl_->frame_settings.atmosphere_blue_noise_enabled);
 }
 
-auto ForwardPipeline::OnSceneMutation(
-  observer_ptr<engine::FrameContext> context, engine::Renderer& renderer,
-  scene::Scene& scene, std::span<const CompositionView> view_descs,
+auto ForwardPipeline::OnPublishViews(observer_ptr<engine::FrameContext> context,
+  engine::Renderer& renderer, scene::Scene& scene,
+  std::span<const CompositionView> view_descs,
   graphics::Framebuffer* composite_target) -> co::Co<>
 {
   if (impl_->auto_exposure_config) {

@@ -82,8 +82,9 @@ public:
   {
     return engine::MakeModuleMask<core::PhaseId::kFrameStart,
       core::PhaseId::kSceneMutation, core::PhaseId::kGameplay,
-      core::PhaseId::kGuiUpdate, core::PhaseId::kPreRender,
-      core::PhaseId::kCompositing, core::PhaseId::kFrameEnd>();
+      core::PhaseId::kPublishViews, core::PhaseId::kGuiUpdate,
+      core::PhaseId::kPreRender, core::PhaseId::kCompositing,
+      core::PhaseId::kFrameEnd>();
   }
 
   [[nodiscard]] auto IsCritical() const noexcept -> bool override

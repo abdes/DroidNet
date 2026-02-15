@@ -17,9 +17,9 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Config/PathFinder.h>
+#include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Console/Console.h>
 #include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/Engine/api_export.h>
 #include <Oxygen/OxCo/Co.h>
@@ -195,6 +195,8 @@ private:
     -> co::Co<>; // async (simulated work) - B2 barrier
   auto PhaseTransforms(observer_ptr<engine::FrameContext> context)
     -> co::Co<>; // async (simulated work)
+  auto PhasePublishViews(observer_ptr<engine::FrameContext> context)
+    -> co::Co<>;
 
   // Synchronous snapshot: modules run OnSnapshot first; engine publishes last
   auto PhaseSnapshot(observer_ptr<engine::FrameContext> context)
@@ -238,8 +240,8 @@ private:
   auto SavePersistedConsoleHistory() const -> void;
   auto ApplyEngineOwnedConsoleCVars() -> void;
   auto ApplyAllConsoleCVars() -> void;
-  auto ApplyConsoleStateAtFrameStart(
-    observer_ptr<engine::FrameContext> context) -> void;
+  auto ApplyConsoleStateAtFrameStart(observer_ptr<engine::FrameContext> context)
+    -> void;
 
   // auto SimulateWork(std::chrono::microseconds cost) const
   //   -> co::Co<>; // yields via thread pool
