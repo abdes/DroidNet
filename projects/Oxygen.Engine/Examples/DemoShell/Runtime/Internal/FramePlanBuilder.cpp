@@ -12,7 +12,7 @@
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "DemoShell/Runtime/Internal/ForwardPipelineImpl.h"
+#include "DemoShell/Runtime/Internal/CompositionViewImpl.h"
 
 namespace oxygen::examples::internal {
 
@@ -76,11 +76,11 @@ void FramePlanBuilder::BuildFrameViewPackets(observer_ptr<scene::Scene> scene,
   const auto sky_state = EvaluateSkyState(scene);
   frame_view_packets_.reserve(ordered_active_views.size());
   for (auto* view : ordered_active_views) {
-    if (view->registered_view_id == kInvalidViewId) {
+    if (view->GetPublishedViewId() == kInvalidViewId) {
       continue;
     }
     frame_view_packet_index_.emplace(
-      view->registered_view_id, frame_view_packets_.size());
+      view->GetPublishedViewId(), frame_view_packets_.size());
     frame_view_packets_.emplace_back(
       observer_ptr { view }, EvaluateViewRenderPlan(*view, sky_state, inputs));
   }
@@ -115,22 +115,23 @@ auto FramePlanBuilder::EvaluateViewRenderPlan(const CompositionViewImpl& view,
 {
   ViewRenderPlan::Spec plan_spec {};
   plan_spec.effective_render_mode = frame_render_mode_;
-  const bool is_scene_view = view.intent.camera.has_value();
+  const bool is_scene_view = view.GetDescriptor().camera.has_value();
   plan_spec.intent = is_scene_view ? ViewRenderIntent::kSceneAndComposite
                                    : ViewRenderIntent::kCompositeOnly;
 
-  if (view.intent.force_wireframe) {
+  if (view.GetDescriptor().force_wireframe) {
     plan_spec.effective_render_mode = RenderMode::kWireframe;
   }
 
-  const bool has_hdr_resources
-    = view.has_hdr && view.hdr_texture && view.hdr_framebuffer;
-  const bool has_sdr_resources = view.sdr_texture && view.sdr_framebuffer;
-  CHECK_F(
-    has_sdr_resources, "View '{}' missing SDR resources", view.intent.name);
+  const bool has_hdr_resources = view.UsesHdrRenderTargets()
+    && view.GetHdrTexture() && view.GetHdrFramebuffer();
+  const bool has_sdr_resources
+    = view.GetSdrTexture() && view.GetSdrFramebuffer();
+  CHECK_F(has_sdr_resources, "View '{}' missing SDR resources",
+    view.GetDescriptor().name);
   if (plan_spec.intent == ViewRenderIntent::kSceneAndComposite) {
     CHECK_F(has_hdr_resources, "Scene view '{}' missing HDR resources",
-      view.intent.name);
+      view.GetDescriptor().name);
   }
 
   plan_spec.tone_map_policy
@@ -157,7 +158,7 @@ auto FramePlanBuilder::EvaluateViewRenderPlan(const CompositionViewImpl& view,
   DLOG_F(2,
     "ViewRenderPlan view='{}' mode={} intent={} tone_map={} overlay={} sky={} "
     "lut={}",
-    view.intent.name, plan.EffectiveRenderMode(), plan.Intent(),
+    view.GetDescriptor().name, plan.EffectiveRenderMode(), plan.Intent(),
     plan.GetToneMapPolicy(), plan.RunOverlayWireframe(), plan.RunSkyPass(),
     plan.RunSkyLutUpdate());
 

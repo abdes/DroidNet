@@ -13,10 +13,17 @@
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/SceneCameraViewResolver.h>
 
-#include "DemoShell/Runtime/Internal/ForwardPipelineImpl.h"
+#include "DemoShell/Runtime/Internal/CompositionViewImpl.h"
 #include "DemoShell/Runtime/Internal/ViewLifecycleService.h"
 
 namespace oxygen::examples::internal {
+
+#if !defined(OXYGEN_ENGINE_TESTING)
+auto access::ViewLifecycleTagFactory::Get() noexcept -> ViewLifecycleAccessTag
+{
+  return ViewLifecycleAccessTag {};
+}
+#endif // !defined(OXYGEN_ENGINE_TESTING)
 
 struct ViewLifecycleService::State {
   std::map<ViewId, CompositionViewImpl> view_pool;
@@ -53,39 +60,44 @@ void ViewLifecycleService::SyncActiveViews(engine::FrameContext& context,
             fb_desc.color_attachments[0].texture->GetDescriptor().width);
           desc.view.viewport.height = static_cast<float>(
             fb_desc.color_attachments[0].texture->GetDescriptor().height);
+        } else {
+          CHECK_F(false,
+            "View '{}' has invalid viewport and composite target has no "
+            "resolvable color attachment extent",
+            desc.name);
         }
       } else {
-        desc.view.viewport.width = 1280.0f;
-        desc.view.viewport.height = 720.0f;
+        CHECK_F(false,
+          "View '{}' has invalid viewport and no composite target was "
+          "provided to resolve extent",
+          desc.name);
       }
     }
 
     auto& view_impl = state_->view_pool[desc.id];
-    view_impl.Sync(desc, index++, frame_seq);
-    view_impl.EnsureResources(graphics);
+    view_impl.PrepareForRender(desc, index++, frame_seq, graphics,
+      access::ViewLifecycleTagFactory::Get());
     state_->sorted_views.push_back(&view_impl);
   }
 
   std::stable_sort(state_->sorted_views.begin(), state_->sorted_views.end(),
     [](const CompositionViewImpl* a, const CompositionViewImpl* b) {
-      if (a->intent.z_order != b->intent.z_order) {
-        return a->intent.z_order < b->intent.z_order;
+      if (a->GetDescriptor().z_order != b->GetDescriptor().z_order) {
+        return a->GetDescriptor().z_order < b->GetDescriptor().z_order;
       }
-      return a->submission_index < b->submission_index;
+      return a->GetSubmissionOrder() < b->GetSubmissionOrder();
     });
 }
 
 void ViewLifecycleService::RegisterViewRenderGraph(CompositionViewImpl& view)
 {
   DCHECK_NOTNULL_F(renderer_.get());
-  const auto registered_view_id = view.registered_view_id;
-  auto camera = view.intent.camera.value_or(scene::SceneNode {});
+  const auto published_view_id = view.GetPublishedViewId();
+  auto camera = view.GetDescriptor().camera.value_or(scene::SceneNode {});
   renderer::SceneCameraViewResolver resolver(
     [camera](const ViewId&) -> scene::SceneNode { return camera; });
   renderer_->RegisterViewRenderGraph(
-    registered_view_id, render_view_coroutine_, resolver(registered_view_id));
-
-  view.registered_with_renderer = true;
+    published_view_id, render_view_coroutine_, resolver(published_view_id));
 }
 
 void ViewLifecycleService::PublishViews(engine::FrameContext& context)
@@ -93,42 +105,45 @@ void ViewLifecycleService::PublishViews(engine::FrameContext& context)
   DCHECK_NOTNULL_F(renderer_.get());
   for (auto* view : state_->sorted_views) {
     engine::ViewContext view_ctx;
-    view_ctx.view = view->intent.view;
-    const bool has_scene = view->intent.camera.has_value();
-    view_ctx.metadata = { .name = std::string(view->intent.name),
+    view_ctx.view = view->GetDescriptor().view;
+    const bool has_scene = view->GetDescriptor().camera.has_value();
+    view_ctx.metadata = { .name = std::string(view->GetDescriptor().name),
       .purpose = has_scene ? "scene" : "overlay",
-      .with_atmosphere = view->intent.with_atmosphere };
-    view_ctx.render_target = view->hdr_framebuffer
-      ? observer_ptr { view->hdr_framebuffer.get() }
-      : observer_ptr { view->sdr_framebuffer.get() };
-    view_ctx.composite_source = view->sdr_framebuffer
-      ? observer_ptr { view->sdr_framebuffer.get() }
+      .with_atmosphere = view->GetDescriptor().with_atmosphere };
+    view_ctx.render_target = view->GetHdrFramebuffer()
+      ? observer_ptr { view->GetHdrFramebuffer().get() }
+      : observer_ptr { view->GetSdrFramebuffer().get() };
+    view_ctx.composite_source = view->GetSdrFramebuffer()
+      ? observer_ptr { view->GetSdrFramebuffer().get() }
       : view_ctx.render_target;
 
-    CHECK_F(!has_scene || view->intent.enable_hdr,
-      "Scene view '{}' must enable HDR rendering", view->intent.name);
+    CHECK_F(!has_scene || view->GetDescriptor().enable_hdr,
+      "Scene view '{}' must enable HDR rendering", view->GetDescriptor().name);
     CHECK_NOTNULL_F(view_ctx.render_target.get(),
-      "View '{}' missing render_target framebuffer", view->intent.name);
+      "View '{}' missing render_target framebuffer",
+      view->GetDescriptor().name);
     CHECK_NOTNULL_F(view_ctx.composite_source.get(),
-      "View '{}' missing composite_source framebuffer", view->intent.name);
+      "View '{}' missing composite_source framebuffer",
+      view->GetDescriptor().name);
     if (has_scene) {
-      CHECK_NOTNULL_F(view->hdr_framebuffer.get(),
-        "Scene view '{}' missing HDR framebuffer", view->intent.name);
-      CHECK_NOTNULL_F(view->sdr_framebuffer.get(),
-        "Scene view '{}' missing SDR framebuffer", view->intent.name);
+      CHECK_NOTNULL_F(view->GetHdrFramebuffer().get(),
+        "Scene view '{}' missing HDR framebuffer", view->GetDescriptor().name);
+      CHECK_NOTNULL_F(view->GetSdrFramebuffer().get(),
+        "Scene view '{}' missing SDR framebuffer", view->GetDescriptor().name);
     }
 
-    if (view->registered_view_id == kInvalidViewId) {
-      view->registered_view_id = context.RegisterView(std::move(view_ctx));
+    if (view->GetPublishedViewId() == kInvalidViewId) {
+      view->SetPublishedViewId(context.RegisterView(std::move(view_ctx)),
+        access::ViewLifecycleTagFactory::Get());
       LOG_F(INFO,
         "Registered View '{}' (IntentID: {}) with Engine "
-        "(RegisteredViewId: {})",
-        view->intent.name, view->intent.id.get(),
-        view->registered_view_id.get());
+        "(PublishedViewId: {})",
+        view->GetDescriptor().name, view->GetDescriptor().id.get(),
+        view->GetPublishedViewId().get());
     } else {
-      context.UpdateView(view->registered_view_id, std::move(view_ctx));
-      DLOG_F(1, "Updated View '{}' (RegisteredViewId: {})", view->intent.name,
-        view->registered_view_id.get());
+      context.UpdateView(view->GetPublishedViewId(), std::move(view_ctx));
+      DLOG_F(1, "Updated View '{}' (PublishedViewId: {})",
+        view->GetDescriptor().name, view->GetPublishedViewId().get());
     }
   }
 }
@@ -147,16 +162,17 @@ void ViewLifecycleService::UnpublishStaleViews(engine::FrameContext& context)
   const auto current_frame = context.GetFrameSequenceNumber();
   static constexpr frame::SequenceNumber kMaxIdleFrames { 60 };
   for (auto it = state_->view_pool.begin(); it != state_->view_pool.end();) {
-    if (current_frame - it->second.last_seen_frame > kMaxIdleFrames) {
+    if (current_frame - it->second.GetLastSeenFrame() > kMaxIdleFrames) {
       LOG_F(INFO, "Reaping View resources for ID {}", it->first);
 
-      if (it->second.registered_view_id != kInvalidViewId) {
+      if (it->second.GetPublishedViewId() != kInvalidViewId) {
         LOG_F(INFO,
-          "Unpublishing View '{}' (RegisteredViewId: {}) from Engine and "
+          "Unpublishing View '{}' (PublishedViewId: {}) from Engine and "
           "Renderer",
-          it->second.intent.name, it->second.registered_view_id.get());
-        context.RemoveView(it->second.registered_view_id);
-        renderer_->UnregisterViewRenderGraph(it->second.registered_view_id);
+          it->second.GetDescriptor().name,
+          it->second.GetPublishedViewId().get());
+        context.RemoveView(it->second.GetPublishedViewId());
+        renderer_->UnregisterViewRenderGraph(it->second.GetPublishedViewId());
       }
 
       it = state_->view_pool.erase(it);

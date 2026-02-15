@@ -22,7 +22,7 @@
 
 namespace oxygen::examples::internal {
 
-struct CompositionViewImpl;
+class CompositionViewImpl;
 
 class FramePlanBuilder {
 public:
