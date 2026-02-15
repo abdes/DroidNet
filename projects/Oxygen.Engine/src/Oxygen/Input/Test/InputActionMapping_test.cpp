@@ -115,21 +115,22 @@ NOLINT_TEST_F(InputActionMappingTest, KeyDown_OngoingWhileHeld)
 
   // Act: press -> update
   mapping.HandleInput(MakeMouseBtn(MouseButton::kLeft, ButtonState::kPressed));
-  mapping.Update(CanonicalDuration {});
+  EXPECT_EQ(mapping.Update(CanonicalDuration {}), action->ConsumesInput());
 
   // Assert
   EXPECT_TRUE(action->IsTriggered());
   EXPECT_TRUE(action->IsOngoing());
 
   // Act: no new events, continue holding; update with dt
-  mapping.Update(CanonicalDuration { 16ms });
+  EXPECT_EQ(
+    mapping.Update(CanonicalDuration { 16ms }), action->ConsumesInput());
 
   // Assert: still ongoing; trigger is per-update based on trigger behavior
   EXPECT_TRUE(action->IsOngoing());
 
   // Release and update
   mapping.HandleInput(MakeMouseBtn(MouseButton::kLeft, ButtonState::kReleased));
-  mapping.Update(CanonicalDuration {});
+  EXPECT_EQ(mapping.Update(CanonicalDuration {}), action->ConsumesInput());
 
   // Assert: evaluation ended (mapping stops ongoing)
   EXPECT_FALSE(action->IsOngoing());
@@ -148,7 +149,7 @@ NOLINT_TEST_F(InputActionMappingTest, MouseMotion_UsesMappedAxis)
 
   // Act: motion dx=5, dy=0
   map_x.HandleInput(MakeMouseMotion(5.0F, 0.0F));
-  map_x.Update(CanonicalDuration {});
+  EXPECT_EQ(map_x.Update(CanonicalDuration {}), ax->ConsumesInput());
 
   // Assert: axis1D should be 5
   EXPECT_EQ(ax->GetValue().GetAs<Axis1D>().x, 5.0F);
@@ -161,7 +162,7 @@ NOLINT_TEST_F(InputActionMappingTest, MouseMotion_UsesMappedAxis)
 
   // Act: motion dx=0, dy=-3
   map_y.HandleInput(MakeMouseMotion(0.0F, -3.0F));
-  map_y.Update(CanonicalDuration {});
+  EXPECT_EQ(map_y.Update(CanonicalDuration {}), ay->ConsumesInput());
   EXPECT_EQ(ay->GetValue().GetAs<Axis1D>().x, -3.0F);
 
   // Arrange XY
@@ -171,7 +172,7 @@ NOLINT_TEST_F(InputActionMappingTest, MouseMotion_UsesMappedAxis)
   map_xy.AddTrigger(std::make_shared<ActionTriggerDown>());
 
   map_xy.HandleInput(MakeMouseMotion(2.0F, 4.0F));
-  map_xy.Update(CanonicalDuration {});
+  EXPECT_EQ(map_xy.Update(CanonicalDuration {}), axy->ConsumesInput());
   EXPECT_EQ(axy->GetValue().GetAs<Axis2D>().x, 2.0F);
   EXPECT_EQ(axy->GetValue().GetAs<Axis2D>().y, 4.0F);
 }
@@ -185,7 +186,7 @@ NOLINT_TEST_F(InputActionMappingTest, MouseWheel_RespectsSlot)
   InputActionMapping map_x(ax, InputSlots::MouseWheelX);
   map_x.AddTrigger(std::make_shared<ActionTriggerDown>());
   map_x.HandleInput(MakeMouseWheel(-1.0F, 0.0F));
-  map_x.Update(CanonicalDuration {});
+  EXPECT_EQ(map_x.Update(CanonicalDuration {}), ax->ConsumesInput());
   EXPECT_EQ(ax->GetValue().GetAs<Axis1D>().x, -1.0F);
 
   // Y (positive up)
@@ -194,7 +195,7 @@ NOLINT_TEST_F(InputActionMappingTest, MouseWheel_RespectsSlot)
   InputActionMapping map_y(ay, InputSlots::MouseWheelY);
   map_y.AddTrigger(std::make_shared<ActionTriggerDown>());
   map_y.HandleInput(MakeMouseWheel(0.0F, 2.0F));
-  map_y.Update(CanonicalDuration {});
+  EXPECT_EQ(map_y.Update(CanonicalDuration {}), ay->ConsumesInput());
   EXPECT_EQ(ay->GetValue().GetAs<Axis1D>().x, 2.0F);
 
   // XY
@@ -203,7 +204,7 @@ NOLINT_TEST_F(InputActionMappingTest, MouseWheel_RespectsSlot)
   InputActionMapping map_xy(axy, InputSlots::MouseWheelXY);
   map_xy.AddTrigger(std::make_shared<ActionTriggerDown>());
   map_xy.HandleInput(MakeMouseWheel(3.0F, -4.0F));
-  map_xy.Update(CanonicalDuration {});
+  EXPECT_EQ(map_xy.Update(CanonicalDuration {}), axy->ConsumesInput());
   EXPECT_EQ(axy->GetValue().GetAs<Axis2D>().x, 3.0F);
   EXPECT_EQ(axy->GetValue().GetAs<Axis2D>().y, -4.0F);
 }
@@ -242,7 +243,7 @@ NOLINT_TEST_F(InputActionMappingTest, CancelInput_SetsCanceled)
 
   // Start with a press
   mapping.HandleInput(MakeKey(ButtonState::kPressed));
-  mapping.Update(CanonicalDuration {});
+  EXPECT_EQ(mapping.Update(CanonicalDuration {}), action->ConsumesInput());
   EXPECT_TRUE(action->IsTriggered());
 
   // Now simulate higher-priority consumption: cancel this mapping
@@ -319,12 +320,12 @@ NOLINT_TEST_F(InputActionMappingTest, MouseMotion_ValueClearsNextUpdate)
 
   // Act: feed a motion and update
   map_xy.HandleInput(MakeMouseMotion(1.0F, -2.0F));
-  map_xy.Update(CanonicalDuration {});
+  EXPECT_EQ(map_xy.Update(CanonicalDuration {}), axy->ConsumesInput());
   EXPECT_EQ(axy->GetValue().GetAs<Axis2D>().x, 1.0F);
   EXPECT_EQ(axy->GetValue().GetAs<Axis2D>().y, -2.0F);
 
   // Next update with no motion should clear to zero
-  map_xy.Update(CanonicalDuration {});
+  EXPECT_EQ(map_xy.Update(CanonicalDuration {}), axy->ConsumesInput());
   EXPECT_EQ(axy->GetValue().GetAs<Axis2D>().x, 0.0F);
   EXPECT_EQ(axy->GetValue().GetAs<Axis2D>().y, 0.0F);
 }
@@ -342,7 +343,7 @@ NOLINT_TEST_F(InputActionMappingTest, Pressed_NoRepeatWithoutEvent)
 
   // Act: initial press -> triggers
   mapping.HandleInput(MakeKey(ButtonState::kPressed));
-  mapping.Update(CanonicalDuration {});
+  EXPECT_EQ(mapping.Update(CanonicalDuration {}), action->ConsumesInput());
   EXPECT_TRUE(action->IsTriggered());
 
   // Next update with no new event -> must not trigger again
@@ -361,7 +362,7 @@ NOLINT_TEST_F(InputActionMappingTest, WheelDirectional_SpecificSlots)
   InputActionMapping mleft(aleft, InputSlots::MouseWheelLeft);
   mleft.AddTrigger(std::make_shared<ActionTriggerDown>());
   mleft.HandleInput(MakeMouseWheel(-2.0F, 0.0F));
-  mleft.Update(CanonicalDuration {});
+  EXPECT_EQ(mleft.Update(CanonicalDuration {}), aleft->ConsumesInput());
   EXPECT_LT(aleft->GetValue().GetAs<Axis1D>().x, 0.0F);
 
   // Up (dy > 0)
@@ -370,7 +371,7 @@ NOLINT_TEST_F(InputActionMappingTest, WheelDirectional_SpecificSlots)
   InputActionMapping mup(aup, InputSlots::MouseWheelUp);
   mup.AddTrigger(std::make_shared<ActionTriggerDown>());
   mup.HandleInput(MakeMouseWheel(0.0F, 3.0F));
-  mup.Update(CanonicalDuration {});
+  EXPECT_EQ(mup.Update(CanonicalDuration {}), aup->ConsumesInput());
   EXPECT_GT(aup->GetValue().GetAs<Axis1D>().x, 0.0F);
 }
 
