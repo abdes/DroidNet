@@ -30,7 +30,7 @@ namespace {
 
 namespace o = oxygen;
 
-void MaybeUnhookImgui(o::observer_ptr<o::AsyncEngine> engine) noexcept
+void MaybeUnhookImGui(o::observer_ptr<o::AsyncEngine> engine) noexcept
 {
   auto imgui_module_ref = engine->GetModule<o::imgui::ImGuiModule>();
   if (!imgui_module_ref) {
@@ -45,7 +45,7 @@ void MaybeUnhookImgui(o::observer_ptr<o::AsyncEngine> engine) noexcept
   }
 }
 
-bool MaybeHookImgui(
+bool MaybeHookImGui(
   o::observer_ptr<o::AsyncEngine> engine, o::platform::WindowIdType window_id)
 {
   auto imgui_module_ref = engine->GetModule<o::imgui::ImGuiModule>();
@@ -171,7 +171,7 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
     auto sub = engine_->SubscribeModuleAttached(
       [this](engine::ModuleEvent const& ev) {
         if (ev.type_id == imgui::ImGuiModule::ClassTypeId()) {
-          MaybeHookImgui(engine_, GetWindowId());
+          MaybeHookImGui(engine_, GetWindowId());
         }
       },
       /*replay_existing=*/true);
@@ -457,7 +457,7 @@ auto AppWindow::Cleanup() -> void
   LOG_F(INFO, "Cleanup and release resources (window_id={})", GetWindowId());
 
   // Release resources and clear the state.
-  MaybeUnhookImgui(engine_);
+  MaybeUnhookImGui(engine_);
   ClearFramebuffers();
 
   if (!gfx_weak_.expired()) {

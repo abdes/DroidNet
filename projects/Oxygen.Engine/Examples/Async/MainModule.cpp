@@ -34,7 +34,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/ImGui/ImguiModule.h>
+#include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
@@ -851,8 +851,7 @@ auto MainModule::EnsureMainCamera(const int width, const int height) -> void
     CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
     auto tf = main_camera_.GetTransform();
     tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
-    tf.SetLocalRotation(
-      glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
+    tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
   }
 
   // Configure camera params
