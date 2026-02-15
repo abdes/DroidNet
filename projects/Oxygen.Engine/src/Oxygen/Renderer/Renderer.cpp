@@ -122,11 +122,17 @@ auto ResolveViewOutputTexture(const oxygen::engine::FrameContext& context,
 {
   const auto& view_ctx = context.GetViewContext(view_id);
   if (!view_ctx.composite_source) {
+    LOG_F(ERROR,
+      "View {} ('{}'/{}) missing composite_source framebuffer for compositing",
+      view_id.get(), view_ctx.metadata.name, view_ctx.metadata.purpose);
     return {};
   }
   const auto& fb_desc = view_ctx.composite_source->GetDescriptor();
   if (fb_desc.color_attachments.empty()
     || !fb_desc.color_attachments[0].texture) {
+    LOG_F(ERROR,
+      "View {} ('{}'/{}) composite_source has no color attachment texture",
+      view_id.get(), view_ctx.metadata.name, view_ctx.metadata.purpose);
     return {};
   }
   return fb_desc.color_attachments[0].texture;
@@ -921,12 +927,9 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
       // Get the ViewContext for this view to access render target framebuffer
       const auto& view_ctx = context->GetViewContext(view_id);
 
-      // Skip if no render target framebuffer assigned
-      if (!view_ctx.render_target) {
-        LOG_F(WARNING, "View {} has no render target framebuffer; skipping",
-          view_id.get());
-        continue;
-      }
+      CHECK_NOTNULL_F(view_ctx.render_target.get(),
+        "View {} ('{}'/{}) has no render_target framebuffer", view_id.get(),
+        view_ctx.metadata.name, view_ctx.metadata.purpose);
 
       // Acquire command recorder for this view
       auto recorder_ptr = AcquireRecorderForView(view_id, graphics);
