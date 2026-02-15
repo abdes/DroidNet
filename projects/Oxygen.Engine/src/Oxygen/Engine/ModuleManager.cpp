@@ -44,6 +44,7 @@
 #include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Renderer/Renderer.h>
 
 using oxygen::observer_ptr;
 using oxygen::core::ExecutionModel;
@@ -585,6 +586,60 @@ auto ExecuteSynchronousPhase(const std::vector<EngineModule*>& list,
 auto ExecuteBarrieredConcurrencyPhase(const std::vector<EngineModule*>& list,
   PhaseId phase, observer_ptr<FrameContext> ctx) -> oxygen::co::Co<>
 {
+  // Special ordering contract for PreRender:
+  // run all non-renderer modules first (in parallel), then run Renderer last.
+  // This guarantees renderer pre-render consumes fully published per-frame
+  // view/graph state from other modules.
+  //
+  // Why this exists:
+  // - kPreRender is a barriered-concurrency phase, so priority sorting alone
+  //   does not guarantee the Renderer coroutine starts after other modules.
+  // - Pipelines publish/register per-view render graph state during
+  //   OnPreRender.
+  // - Renderer::OnPreRender requires that state to be ready before it builds
+  //   render contexts and scene prep.
+  //
+  // Therefore we enforce a two-step execution order in this phase:
+  // 1) all non-renderer modules complete, 2) renderer runs.
+  if (phase == PhaseId::kPreRender) {
+    EngineModule* renderer_module = nullptr;
+    std::vector<EngineModule*> non_renderer_modules;
+    non_renderer_modules.reserve(list.size());
+
+    for (auto* m : list) {
+      if (m == nullptr) {
+        continue;
+      }
+      // Typed lookup only (no string matching) to keep this robust across
+      // module name changes.
+      if (m->GetTypeId() == oxygen::engine::Renderer::ClassTypeId()) {
+        renderer_module = m;
+        continue;
+      }
+      non_renderer_modules.push_back(m);
+    }
+
+    if (renderer_module == nullptr) {
+      LOG_F(ERROR,
+        "ExecutePhase(kPreRender): RendererModule not found; skipping "
+        "PreRender phase");
+      co_return;
+    }
+
+    std::vector<oxygen::co::Co<>> tasks;
+    tasks.reserve(non_renderer_modules.size());
+    for (auto* m : non_renderer_modules) {
+      tasks.emplace_back(RunHandlerImpl(m->OnPreRender(ctx), m, ctx));
+    }
+
+    if (!tasks.empty()) {
+      co_await oxygen::co::AllOf(std::move(tasks));
+    }
+
+    co_await RunHandlerImpl(renderer_module->OnPreRender(ctx), renderer_module, ctx);
+    co_return;
+  }
+
   DLOG_F(2, "ExecutePhase (barriered): phase={} list.size()={}",
     static_cast<int>(phase), list.size());
   for (size_t i = 0; i < list.size(); ++i) {
