@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -26,7 +28,8 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(CompositionPlanner)
 
   void PlanCompositingTasks();
-  auto BuildCompositionSubmission(graphics::Framebuffer* final_output)
+  auto BuildCompositionSubmission(
+    std::shared_ptr<graphics::Framebuffer> final_output)
     -> oxygen::engine::CompositionSubmission;
 
 private:

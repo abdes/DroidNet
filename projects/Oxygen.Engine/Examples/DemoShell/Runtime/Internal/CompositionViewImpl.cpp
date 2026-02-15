@@ -38,10 +38,11 @@ void CompositionViewImpl::EnsureResources(
 
   if (render_target_width_ == target_w && render_target_height_ == target_h
     && uses_hdr_render_targets_ == needs_hdr && clear_color_ == target_clear) {
-    if (needs_hdr && hdr_texture_) {
+    if (needs_hdr && hdr_texture_ && hdr_framebuffer_ && sdr_texture_
+      && sdr_framebuffer_) {
       return;
     }
-    if (!needs_hdr && sdr_texture_) {
+    if (!needs_hdr && sdr_texture_ && sdr_framebuffer_) {
       return;
     }
   }

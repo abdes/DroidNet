@@ -93,6 +93,9 @@ void ViewLifecycleService::RegisterViewRenderGraph(CompositionViewImpl& view)
 {
   DCHECK_NOTNULL_F(renderer_.get());
   const auto published_view_id = view.GetPublishedViewId();
+  CHECK_F(published_view_id != kInvalidViewId,
+    "RegisterViewRenderGraph called for unpublished view '{}'",
+    view.GetDescriptor().name);
   auto camera = view.GetDescriptor().camera.value_or(scene::SceneNode {});
   renderer::SceneCameraViewResolver resolver(
     [camera](const ViewId&) -> scene::SceneNode { return camera; });

@@ -19,10 +19,6 @@ class AsyncEngine;
 } // namespace oxygen
 
 namespace oxygen::examples {
-namespace internal {
-  class ForwardPipelineImpl;
-} // namespace internal
-
 //! Implements a standard forward rendering pipeline.
 /*!
  Manages the configuration and execution of a forward rendering pass sequence
@@ -60,12 +56,12 @@ public:
     std::span<const CompositionView> view_descs,
     graphics::Framebuffer* composite_target) -> co::Co<> override;
 
-  auto OnPreRender(observer_ptr<engine::FrameContext> context,
+  auto OnPreRender(observer_ptr<engine::FrameContext> frame_ctx,
     engine::Renderer& renderer, std::span<const CompositionView> view_descs)
     -> co::Co<> override;
 
-  auto OnCompositing(observer_ptr<engine::FrameContext> context,
-    engine::Renderer& renderer, graphics::Framebuffer* composite_target)
+  auto OnCompositing(observer_ptr<engine::FrameContext> frame_ctx,
+    std::shared_ptr<graphics::Framebuffer> composite_target)
     -> co::Co<engine::CompositionSubmission> override;
 
   auto ClearBackbufferReferences() -> void override;
@@ -116,7 +112,8 @@ public:
     const engine::LightCullingPassConfig& config) -> void override;
 
 private:
-  std::unique_ptr<internal::ForwardPipelineImpl> impl_;
+  class Impl;
+  std::unique_ptr<Impl> impl_;
 };
 
 } // namespace oxygen::examples
