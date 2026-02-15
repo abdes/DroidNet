@@ -195,14 +195,17 @@ struct ViewMetadata {
   bool with_atmosphere { false };
 };
 
-// Complete context for a view, including its output
+// Complete context for a view, including its render output target.
 struct ViewContext {
   ViewId id {}; // Unique identifier assigned by FrameContext::AddView
   View view;
   ViewMetadata metadata;
 
-  // Render target (set by Renderer/Compositor)
-  observer_ptr<graphics::Framebuffer> output {};
+  // Per-view render target framebuffer used while executing render passes.
+  observer_ptr<graphics::Framebuffer> render_target {};
+
+  // Per-view compositing source framebuffer sampled during composition.
+  observer_ptr<graphics::Framebuffer> composite_source {};
 };
 
 //=== ModuleData Facade Architecture ===--------------------------------------//
@@ -691,9 +694,10 @@ public:
   // Phase: Must be called before kSnapshot
   OXGN_CORE_API auto RemoveView(ViewId id) noexcept -> void;
 
-  // Set the output framebuffer for a view (Renderer/Compositor only)
-  OXGN_CORE_API auto SetViewOutput(
-    ViewId id, observer_ptr<graphics::Framebuffer> output) noexcept -> void;
+  // Set the render target framebuffer for a view (Renderer/pipeline only)
+  OXGN_CORE_API auto SetViewRenderTarget(
+    ViewId id, observer_ptr<graphics::Framebuffer> render_target) noexcept
+    -> void;
 
   // Get the full context for a view
   OXGN_CORE_API auto GetViewContext(ViewId id) const -> const ViewContext&;

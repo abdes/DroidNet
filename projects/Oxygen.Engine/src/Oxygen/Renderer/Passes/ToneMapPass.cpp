@@ -203,7 +203,7 @@ auto ToneMapPass::GetOutputTexture() const -> const graphics::Texture&
   }
 
   // Otherwise, use framebuffer color attachment
-  const auto* fb = Context().framebuffer.get();
+  const auto* fb = Context().pass_target.get();
   if (!fb) {
     throw std::runtime_error("ToneMapPass: framebuffer is null");
   }

@@ -121,10 +121,10 @@ auto ResolveViewOutputTexture(const oxygen::engine::FrameContext& context,
   const oxygen::ViewId view_id) -> std::shared_ptr<oxygen::graphics::Texture>
 {
   const auto& view_ctx = context.GetViewContext(view_id);
-  if (!view_ctx.output) {
+  if (!view_ctx.composite_source) {
     return {};
   }
-  const auto& fb_desc = view_ctx.output->GetDescriptor();
+  const auto& fb_desc = view_ctx.composite_source->GetDescriptor();
   if (fb_desc.color_attachments.empty()
     || !fb_desc.color_attachments[0].texture) {
     return {};
@@ -918,12 +918,12 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
     }
 
     try {
-      // Get the ViewContext for this view to access output framebuffer
+      // Get the ViewContext for this view to access render target framebuffer
       const auto& view_ctx = context->GetViewContext(view_id);
 
-      // Skip if no output framebuffer assigned
-      if (!view_ctx.output) {
-        LOG_F(WARNING, "View {} has no output framebuffer; skipping",
+      // Skip if no render target framebuffer assigned
+      if (!view_ctx.render_target) {
+        LOG_F(WARNING, "View {} has no render target framebuffer; skipping",
           view_id.get());
         continue;
       }
@@ -1152,7 +1152,7 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
 
   RenderContext comp_context {};
   comp_context.SetRenderer(this, gfx.get());
-  comp_context.framebuffer = observer_ptr { payload.target_framebuffer.get() };
+  comp_context.pass_target = observer_ptr { payload.target_framebuffer.get() };
   comp_context.frame_slot = frame_slot_;
   comp_context.frame_sequence = frame_seq_num;
 
@@ -1360,12 +1360,12 @@ auto Renderer::SetupFramebufferForView(const FrameContext& frame_context,
 
   const auto& view_ctx = frame_context.GetViewContext(view_id);
 
-  if (!view_ctx.output) {
-    LOG_F(WARNING, "View {} has no output", view_id.get());
+  if (!view_ctx.render_target) {
+    LOG_F(WARNING, "View {} has no render target", view_id.get());
     return false;
   }
 
-  const auto& fb_desc = view_ctx.output->GetDescriptor();
+  const auto& fb_desc = view_ctx.render_target->GetDescriptor();
   for (const auto& attachment : fb_desc.color_attachments) {
     if (attachment.texture) {
       // Use the texture's own descriptor initial_state when available.
@@ -1399,8 +1399,8 @@ auto Renderer::SetupFramebufferForView(const FrameContext& frame_context,
     recorder.FlushBarriers();
   }
 
-  recorder.BindFrameBuffer(*view_ctx.output);
-  render_context.framebuffer = view_ctx.output;
+  recorder.BindFrameBuffer(*view_ctx.render_target);
+  render_context.pass_target = view_ctx.render_target;
   return true;
 }
 

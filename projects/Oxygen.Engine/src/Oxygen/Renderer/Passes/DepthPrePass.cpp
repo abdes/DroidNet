@@ -129,7 +129,7 @@ auto DepthPrePass::SetClearColor(const Color& color) -> void
 
 auto DepthPrePass::GetFramebuffer() const -> const Framebuffer*
 {
-  return Context().framebuffer.get();
+  return Context().pass_target.get();
 }
 
 /*!

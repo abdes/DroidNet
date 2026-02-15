@@ -110,8 +110,8 @@ struct RenderContext {
   // Pass enable/disable flags (by pass index in the KnownKnownPassTypes)
   std::unordered_map<size_t, bool> pass_enable_flags;
 
-  //! Framebuffer object for broader rendering context.
-  observer_ptr<const graphics::Framebuffer> framebuffer;
+  //! Framebuffer bound as the current pass render target.
+  observer_ptr<const graphics::Framebuffer> pass_target;
 
   //! The constant buffer containing scene-wide constants.
   /*!
@@ -288,6 +288,7 @@ private:
     graphics_.reset(nullptr);
     scene_constants.reset();
     material_constants.reset();
+    pass_target.reset(nullptr);
     // Reset per-view transient state and clear cached per-view outputs
     current_view = ViewSpecific {};
     view_outputs.clear();

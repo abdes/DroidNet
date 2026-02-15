@@ -296,8 +296,8 @@ auto GpuDebugDrawPass::CreatePipelineStateDesc()
     const auto& desc = color_texture_->GetDescriptor();
     color_format = desc.format;
     sample_count = desc.sample_count;
-  } else if (Context().framebuffer) {
-    const auto& fb_desc = Context().framebuffer->GetDescriptor();
+  } else if (Context().pass_target) {
+    const auto& fb_desc = Context().pass_target->GetDescriptor();
     if (!fb_desc.color_attachments.empty()
       && fb_desc.color_attachments[0].texture) {
       const auto& desc = fb_desc.color_attachments[0].texture->GetDescriptor();
@@ -350,8 +350,8 @@ auto GpuDebugDrawPass::NeedRebuildPipelineState() const -> bool
     const auto& desc = color_texture_->GetDescriptor();
     color_format = desc.format;
     sample_count = desc.sample_count;
-  } else if (Context().framebuffer) {
-    const auto& fb_desc = Context().framebuffer->GetDescriptor();
+  } else if (Context().pass_target) {
+    const auto& fb_desc = Context().pass_target->GetDescriptor();
     if (!fb_desc.color_attachments.empty()
       && fb_desc.color_attachments[0].texture) {
       const auto& desc = fb_desc.color_attachments[0].texture->GetDescriptor();
