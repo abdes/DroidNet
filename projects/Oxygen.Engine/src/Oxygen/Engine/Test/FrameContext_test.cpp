@@ -278,6 +278,58 @@ NOLINT_TEST(FrameContext_basic_test, SetViewRenderTargetUpdatesOnlyRenderTarget)
   EXPECT_EQ(stored.composite_source.get(), composite_fb);
 }
 
+NOLINT_TEST(FrameContext_basic_test, ViewTargetsArePublishedInSnapshot)
+{
+  using oxygen::observer_ptr;
+  using oxygen::graphics::Framebuffer;
+
+  FrameContext ctx;
+  auto tag = EngineTagFactory::Get();
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+
+  auto view_ctx = MakeDummyViewContext();
+  auto* const render_fb = reinterpret_cast<Framebuffer*>(0x10);
+  auto* const composite_fb = reinterpret_cast<Framebuffer*>(0x20);
+  view_ctx.render_target = observer_ptr { render_fb };
+  view_ctx.composite_source = observer_ptr { composite_fb };
+
+  const auto view_id = ctx.RegisterView(view_ctx);
+
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
+  auto& snap = ctx.PublishSnapshots(tag);
+  ASSERT_EQ(snap.gameSnapshot.views.size(), 1u);
+  EXPECT_EQ(snap.gameSnapshot.views[0].id, view_id);
+  EXPECT_EQ(snap.gameSnapshot.views[0].render_target.get(), render_fb);
+  EXPECT_EQ(snap.gameSnapshot.views[0].composite_source.get(), composite_fb);
+}
+
+NOLINT_TEST(FrameContext_basic_test, UpdateViewReplacesRenderAndCompositeTargets)
+{
+  using oxygen::observer_ptr;
+  using oxygen::graphics::Framebuffer;
+
+  FrameContext ctx;
+  auto tag = EngineTagFactory::Get();
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+
+  auto initial = MakeDummyViewContext();
+  initial.render_target = observer_ptr { reinterpret_cast<Framebuffer*>(0x30) };
+  initial.composite_source
+    = observer_ptr { reinterpret_cast<Framebuffer*>(0x31) };
+  const auto view_id = ctx.RegisterView(initial);
+
+  auto updated = MakeDummyViewContext();
+  auto* const new_render_fb = reinterpret_cast<Framebuffer*>(0x40);
+  auto* const new_composite_fb = reinterpret_cast<Framebuffer*>(0x41);
+  updated.render_target = observer_ptr { new_render_fb };
+  updated.composite_source = observer_ptr { new_composite_fb };
+  ctx.UpdateView(view_id, updated);
+
+  const auto& stored = ctx.GetViewContext(view_id);
+  EXPECT_EQ(stored.render_target.get(), new_render_fb);
+  EXPECT_EQ(stored.composite_source.get(), new_composite_fb);
+}
+
 //! Ensure surface, presentable flag and view mutations die when attempted
 //! outside their allowed phases.
 // Views: adding/clearing in Snapshot phase should die
