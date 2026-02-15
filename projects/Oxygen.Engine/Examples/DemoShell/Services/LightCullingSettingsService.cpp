@@ -7,15 +7,16 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
+#include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
 
-#include "DemoShell/Runtime/RenderingPipeline.h"
 #include "DemoShell/Services/LightCullingSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 
 namespace oxygen::examples {
 
 auto LightCullingSettingsService::Initialize(
-  observer_ptr<RenderingPipeline> pipeline) -> void
+  observer_ptr<renderer::RenderingPipeline> pipeline) -> void
 {
   DCHECK_NOTNULL_F(pipeline);
   pipeline_ = pipeline;
@@ -118,8 +119,8 @@ auto LightCullingSettingsService::OnSceneActivated(scene::Scene& /*scene*/)
 }
 
 auto LightCullingSettingsService::OnMainViewReady(
-  const engine::FrameContext& /*context*/, const CompositionView& /*view*/)
-  -> void
+  const engine::FrameContext& /*context*/,
+  const renderer::CompositionView& /*view*/) -> void
 {
   ApplyPipelineSettings();
 }

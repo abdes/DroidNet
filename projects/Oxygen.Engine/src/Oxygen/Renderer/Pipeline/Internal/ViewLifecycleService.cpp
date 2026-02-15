@@ -10,13 +10,12 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Renderer/Pipeline/Internal/CompositionViewImpl.h>
+#include <Oxygen/Renderer/Pipeline/Internal/ViewLifecycleService.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/SceneCameraViewResolver.h>
 
-#include "DemoShell/Runtime/Internal/CompositionViewImpl.h"
-#include "DemoShell/Runtime/Internal/ViewLifecycleService.h"
-
-namespace oxygen::examples::internal {
+namespace oxygen::renderer::internal {
 
 #if !defined(OXYGEN_ENGINE_TESTING)
 auto access::ViewLifecycleTagFactory::Get() noexcept -> ViewLifecycleAccessTag
@@ -191,4 +190,4 @@ auto ViewLifecycleService::GetOrderedActiveViews() const
   return state_->sorted_views;
 }
 
-} // namespace oxygen::examples::internal
+} // namespace oxygen::renderer::internal

@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace oxygen::examples {
+namespace oxygen::renderer {
 
 //! Render mode selection for pipelines.
 enum class RenderMode : std::uint8_t {
@@ -31,4 +31,4 @@ enum class RenderMode : std::uint8_t {
   }
 }
 
-} // namespace oxygen::examples
+} // namespace oxygen::renderer

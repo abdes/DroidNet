@@ -11,14 +11,12 @@ namespace oxygen::imgui::consoleui {
 auto to_string(const LogSeverity severity) -> const char*
 {
   switch (severity) {
-  case LogSeverity::kInfo:
-    return "info";
-  case LogSeverity::kSuccess:
-    return "success";
-  case LogSeverity::kWarning:
-    return "warning";
-  case LogSeverity::kError:
-    return "error";
+    // clang-format off
+  case LogSeverity::kInfo: return "info";
+  case LogSeverity::kSuccess: return "success";
+  case LogSeverity::kWarning: return "warning";
+  case LogSeverity::kError: return "error";
+    // clang-format on
   }
   return "unknown";
 }
@@ -93,10 +91,7 @@ auto ConsoleUiState::CompletionPrefix() const -> const std::string&
   return completion_prefix_;
 }
 
-auto ConsoleUiState::ClearCompletion() -> void
-{
-  completion_prefix_.clear();
-}
+auto ConsoleUiState::ClearCompletion() -> void { completion_prefix_.clear(); }
 
 auto ConsoleUiState::ResetHistoryNavigation() -> void
 {
@@ -188,16 +183,16 @@ auto ConsoleUiState::SetAutoScrollEnabled(const bool enabled) noexcept -> void
   auto_scroll_ = enabled;
 }
 
-auto ConsoleUiState::IsSeverityEnabled(const LogSeverity severity) const noexcept
-  -> bool
+auto ConsoleUiState::IsSeverityEnabled(
+  const LogSeverity severity) const noexcept -> bool
 {
-  return severity_enabled_[SeverityIndex(severity)];
+  return severity_enabled_.at(SeverityIndex(severity));
 }
 
 auto ConsoleUiState::SetSeverityEnabled(
   const LogSeverity severity, const bool enabled) noexcept -> void
 {
-  severity_enabled_[SeverityIndex(severity)] = enabled;
+  severity_enabled_.at(SeverityIndex(severity)) = enabled;
 }
 
 auto ConsoleUiState::AppendLogEntry(
@@ -219,10 +214,7 @@ auto ConsoleUiState::LogEntries() const -> const std::vector<ConsoleLogEntry>&
   return log_entries_;
 }
 
-auto ConsoleUiState::ClearLogEntries() -> void
-{
-  log_entries_.clear();
-}
+auto ConsoleUiState::ClearLogEntries() -> void { log_entries_.clear(); }
 
 auto ConsoleUiState::SeverityFromResult(
   const oxygen::console::ExecutionResult& result) noexcept -> LogSeverity
@@ -241,7 +233,8 @@ auto ConsoleUiState::SeverityFromResult(
   return LogSeverity::kInfo;
 }
 
-auto ConsoleUiState::SeverityIndex(const LogSeverity severity) noexcept -> size_t
+auto ConsoleUiState::SeverityIndex(const LogSeverity severity) noexcept
+  -> size_t
 {
   switch (severity) {
   case LogSeverity::kInfo:

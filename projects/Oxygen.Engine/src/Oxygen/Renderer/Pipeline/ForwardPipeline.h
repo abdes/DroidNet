@@ -10,15 +10,15 @@
 #include <span>
 
 #include <Oxygen/Base/Macros.h>
-
-#include "DemoShell/Runtime/CompositionView.h"
-#include "DemoShell/Runtime/RenderingPipeline.h"
+#include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
+#include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen {
 class AsyncEngine;
 } // namespace oxygen
 
-namespace oxygen::examples {
+namespace oxygen::renderer {
 //! Implements a standard forward rendering pipeline.
 /*!
  Manages the configuration and execution of a forward rendering pass sequence
@@ -40,8 +40,9 @@ namespace oxygen::examples {
 class ForwardPipeline : public RenderingPipeline {
   OXYGEN_TYPED(ForwardPipeline)
 public:
-  explicit ForwardPipeline(observer_ptr<AsyncEngine> engine) noexcept;
-  ~ForwardPipeline() override;
+  OXGN_RNDR_API explicit ForwardPipeline(
+    observer_ptr<AsyncEngine> engine) noexcept;
+  OXGN_RNDR_API ~ForwardPipeline() override;
 
   OXYGEN_MAKE_NON_COPYABLE(ForwardPipeline)
   OXYGEN_MAKE_NON_MOVABLE(ForwardPipeline)
@@ -50,6 +51,7 @@ public:
   //! Apply staged settings before render graph execution.
   auto OnFrameStart(observer_ptr<engine::FrameContext> context,
     engine::Renderer& renderer) -> void override;
+
   //! Register views and bind per-view render coroutines.
   auto OnPublishViews(observer_ptr<engine::FrameContext> context,
     engine::Renderer& renderer, scene::Scene& scene,
@@ -116,4 +118,4 @@ private:
   std::unique_ptr<Impl> impl_;
 };
 
-} // namespace oxygen::examples
+} // namespace oxygen::renderer

@@ -13,7 +13,7 @@
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
 
-namespace oxygen::examples::internal {
+namespace oxygen::renderer::internal {
 
 class FramePlanBuilder;
 
@@ -37,4 +37,4 @@ private:
   engine::CompositingTaskList planned_composition_tasks;
 };
 
-} // namespace oxygen::examples::internal
+} // namespace oxygen::renderer::internal

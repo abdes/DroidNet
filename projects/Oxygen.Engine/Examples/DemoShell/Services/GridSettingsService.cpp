@@ -8,8 +8,9 @@
 #include <cmath>
 
 #include <Oxygen/Renderer/Passes/GroundGridPass.h>
+#include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
 
-#include "DemoShell/Runtime/RenderingPipeline.h"
 #include "DemoShell/Services/GridSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/CameraRigController.h"
@@ -87,8 +88,8 @@ auto GridSettingsService::BindCameraRig(
   camera_rig_ = camera_rig;
 }
 
-auto GridSettingsService::Initialize(observer_ptr<RenderingPipeline> pipeline)
-  -> void
+auto GridSettingsService::Initialize(
+  observer_ptr<renderer::RenderingPipeline> pipeline) -> void
 {
   DCHECK_NOTNULL_F(pipeline);
   pipeline_ = pipeline;
@@ -402,8 +403,8 @@ auto GridSettingsService::OnSceneActivated(scene::Scene& /*scene*/) -> void
 }
 
 auto GridSettingsService::OnMainViewReady(
-  const engine::FrameContext& /*context*/, const CompositionView& /*view*/)
-  -> void
+  const engine::FrameContext& /*context*/,
+  const renderer::CompositionView& /*view*/) -> void
 {
   if (!pipeline_) {
     return;

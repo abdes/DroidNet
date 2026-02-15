@@ -6,22 +6,23 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
+#include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
 
-#include "DemoShell/Runtime/RenderingPipeline.h"
 #include "DemoShell/Services/RenderingSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 
 namespace oxygen::examples {
 
 auto RenderingSettingsService::Initialize(
-  observer_ptr<RenderingPipeline> pipeline) -> void
+  observer_ptr<renderer::RenderingPipeline> pipeline) -> void
 {
   DCHECK_NOTNULL_F(pipeline);
   pipeline_ = pipeline;
 }
 
-auto RenderingSettingsService::GetRenderMode() const -> RenderMode
+auto RenderingSettingsService::GetRenderMode() const -> renderer::RenderMode
 {
+  using renderer::RenderMode;
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
 
@@ -35,8 +36,9 @@ auto RenderingSettingsService::GetRenderMode() const -> RenderMode
   return RenderMode::kSolid;
 }
 
-auto RenderingSettingsService::SetRenderMode(RenderMode mode) -> void
+auto RenderingSettingsService::SetRenderMode(renderer::RenderMode mode) -> void
 {
+  using renderer::RenderMode;
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   const char* value = "solid";
@@ -140,8 +142,8 @@ auto RenderingSettingsService::OnSceneActivated(scene::Scene& /*scene*/) -> void
 }
 
 auto RenderingSettingsService::OnMainViewReady(
-  const engine::FrameContext& /*context*/, const CompositionView& /*view*/)
-  -> void
+  const engine::FrameContext& /*context*/,
+  const renderer::CompositionView& /*view*/) -> void
 {
   if (!pipeline_) {
     return;

@@ -19,10 +19,9 @@
 #include <Oxygen/Renderer/Passes/GroundGridPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
-
-#include "DemoShell/Runtime/CompositionView.h"
-#include "DemoShell/Runtime/PipelineFeature.h"
-#include "DemoShell/Runtime/RenderMode.h"
+#include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Renderer/Pipeline/PipelineFeature.h>
+#include <Oxygen/Renderer/Pipeline/RenderMode.h>
 
 namespace oxygen {
 namespace engine {
@@ -41,7 +40,7 @@ namespace graphics {
 }
 } // namespace oxygen
 
-namespace oxygen::examples {
+namespace oxygen::renderer {
 
 class RenderingPipeline : public Object {
 public:
@@ -172,4 +171,4 @@ public:
   virtual auto ClearBackbufferReferences() -> void { }
 };
 
-} // namespace oxygen::examples
+} // namespace oxygen::renderer

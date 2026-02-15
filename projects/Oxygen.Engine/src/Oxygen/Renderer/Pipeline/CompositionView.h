@@ -23,7 +23,7 @@ namespace oxygen::graphics {
 class CommandRecorder;
 } // namespace oxygen::graphics
 
-namespace oxygen::examples {
+namespace oxygen::renderer {
 
 //! Defines the rendering and composition intent for a single display layer.
 /*!
@@ -246,4 +246,4 @@ inline auto to_string(const CompositionView::ZOrder& v) -> std::string
   }
 }
 
-} // namespace oxygen::examples
+} // namespace oxygen::renderer

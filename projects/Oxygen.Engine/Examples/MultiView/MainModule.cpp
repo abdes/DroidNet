@@ -17,15 +17,15 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/ImGui/ImGuiModule.h>
+#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
+#include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 
-#include "DemoShell/Runtime/CompositionView.h"
-#include "DemoShell/Runtime/ForwardPipeline.h"
 #include "DemoShell/UI/CameraRigController.h"
 #include "MultiView/MainModule.h"
 
@@ -35,8 +35,9 @@ MainModule::MainModule(
   const DemoAppContext& app, CompositingMode compositing_mode) noexcept
   : Base(app)
   , app_(app)
+  , compositing_mode_(compositing_mode)
 {
-  compositing_mode_ = compositing_mode;
+
   main_view_id_ = this->GetOrCreateViewId("MainView");
   pip_view_id_ = this->GetOrCreateViewId("PipView");
 }
@@ -48,7 +49,7 @@ auto MainModule::OnAttachedImpl(
   CHECK_F(static_cast<bool>(engine), "MultiView requires a valid engine");
 
   // Initialize the pipeline if it hasn't been already.
-  pipeline_ = std::make_unique<ForwardPipeline>(engine);
+  pipeline_ = std::make_unique<renderer::ForwardPipeline>(engine);
   CHECK_NOTNULL_F(pipeline_, "Failed to create ForwardPipeline");
   // Boost exposure to compensate for lower light intensity
   pipeline_->SetExposureValue(2.5F);
@@ -66,8 +67,9 @@ auto MainModule::OnAttachedImpl(
     .post_process = true,
   };
   shell_config.enable_camera_rig = true;
-  shell_config.get_active_pipeline
-    = [this]() { return observer_ptr<RenderingPipeline> { pipeline_.get() }; };
+  shell_config.get_active_pipeline = [this]() {
+    return observer_ptr<renderer::RenderingPipeline> { pipeline_.get() };
+  };
 
   CHECK_F(shell->Initialize(shell_config),
     "MultiView: DemoShell initialization failed");
@@ -240,7 +242,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
   -> oxygen::co::Co<>
 {
-  auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
+  auto imgui_module_ref = app_.engine->GetModule<engine::imgui::ImGuiModule>();
   if (imgui_module_ref) {
     auto& imgui_module = imgui_module_ref->get();
     if (auto* imgui_context = imgui_module.GetImGuiContext()) {
@@ -253,7 +255,7 @@ auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
 }
 
 auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
-  std::vector<CompositionView>& views) -> void
+  std::vector<renderer::CompositionView>& views) -> void
 {
   auto& shell = GetShell();
   if (!main_camera_node_.IsAlive()) {
@@ -274,8 +276,8 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
     .min_depth = 0.0F,
     .max_depth = 1.0F,
   };
-  auto main_comp
-    = CompositionView::ForScene(main_view_id_, main_view, main_camera_node_);
+  auto main_comp = renderer::CompositionView::ForScene(
+    main_view_id_, main_view, main_camera_node_);
   main_comp.with_atmosphere = true;
   shell.OnMainViewReady(context, main_comp);
   const graphics::Color kMainClearColor { 0.1F, 0.2F, 0.38F, 1.0F };
@@ -311,8 +313,9 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       .bottom = static_cast<int32_t>(offset_y + pip_h),
     };
 
-    auto pip_comp = CompositionView::ForPip(pip_view_id_,
-      CompositionView::ZOrder { CompositionView::kZOrderScene.get() + 1 },
+    auto pip_comp = renderer::CompositionView::ForPip(pip_view_id_,
+      renderer::CompositionView::ZOrder {
+        renderer::CompositionView::kZOrderScene.get() + 1 },
       pip_view, pip_camera_node_);
 
     // Match legacy PiP clear color (dark gray, half transparent)
@@ -326,7 +329,7 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
 
   // 3. ImGui
   const auto imgui_view_id = this->GetOrCreateViewId("ImGuiView");
-  views.push_back(CompositionView::ForImGui(
+  views.push_back(renderer::CompositionView::ForImGui(
     imgui_view_id, main_view, [](graphics::CommandRecorder&) { }));
 }
 

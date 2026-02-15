@@ -6,9 +6,11 @@
 
 #pragma once
 
+#include <Oxygen/ImGui/api_export.h>
+
 namespace oxygen::imgui::icons {
 
-extern const unsigned int OxygenIcons_compressed_size;
-extern const unsigned char OxygenIcons_compressed_data[];
+OXGN_IMGUI_API extern const unsigned int OxygenIcons_compressed_size;
+OXGN_IMGUI_API extern const unsigned char OxygenIcons_compressed_data[];
 
 } // namespace oxygen::imgui::icons

@@ -12,8 +12,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
-
-#include "DemoShell/Runtime/CompositionView.h"
+#include <Oxygen/Renderer/Pipeline/CompositionView.h>
 
 namespace oxygen {
 class Graphics;
@@ -23,7 +22,7 @@ namespace graphics {
 } // namespace graphics
 } // namespace oxygen
 
-namespace oxygen::examples::internal {
+namespace oxygen::renderer::internal {
 
 class ViewLifecycleAccessTag;
 
@@ -120,4 +119,4 @@ private:
   ViewId published_view_id_ { kInvalidViewId };
 };
 
-} // namespace oxygen::examples::internal
+} // namespace oxygen::renderer::internal

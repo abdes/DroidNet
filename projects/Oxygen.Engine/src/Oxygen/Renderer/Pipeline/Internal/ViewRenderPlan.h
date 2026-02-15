@@ -11,10 +11,9 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Renderer/Pipeline/RenderMode.h>
 
-#include "DemoShell/Runtime/RenderMode.h"
-
-namespace oxygen::examples::internal {
+namespace oxygen::renderer::internal {
 
 //! Declares which pipeline domains a view is allowed to execute for this frame.
 /*!
@@ -181,4 +180,4 @@ private:
   bool run_sky_lut_update_ { false };
 };
 
-} // namespace oxygen::examples::internal
+} // namespace oxygen::renderer::internal

@@ -19,6 +19,7 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
+#include <Oxygen/Renderer/Pipeline/CompositionView.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
@@ -31,7 +32,6 @@
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "DemoShell/Runtime/CompositionView.h"
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/Services/SkyboxService.h"
@@ -518,7 +518,8 @@ auto EnvironmentSettingsService::OnSceneActivated(scene::Scene& /*scene*/)
 }
 
 auto EnvironmentSettingsService::OnMainViewReady(
-  const engine::FrameContext& /*context*/, const CompositionView& view) -> void
+  const engine::FrameContext& /*context*/,
+  const renderer::CompositionView& view) -> void
 {
   main_view_id_ = view.id;
 }

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string_view>
 
 #include <Oxygen/Base/Macros.h>
@@ -20,7 +21,7 @@ namespace graphics {
 } // namespace graphics
 } // namespace oxygen
 
-namespace oxygen::imgui {
+namespace oxygen::graphics::imgui {
 
 //! Minimal abstract interface that graphics backends should implement to
 //! render ImGui draw data.
@@ -72,4 +73,4 @@ public:
   virtual auto RecreateDeviceObjects() -> void { /* no-op */ };
 };
 
-} // namespace oxygen::imgui
+} // namespace oxygen::graphics::imgui

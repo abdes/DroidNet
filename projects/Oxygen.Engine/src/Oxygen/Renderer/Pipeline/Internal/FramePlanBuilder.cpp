@@ -4,17 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "DemoShell/Runtime/Internal/FramePlanBuilder.h"
-
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Renderer/Pipeline/Internal/CompositionViewImpl.h>
+#include <Oxygen/Renderer/Pipeline/Internal/FramePlanBuilder.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "DemoShell/Runtime/Internal/CompositionViewImpl.h"
-
-namespace oxygen::examples::internal {
+namespace oxygen::renderer::internal {
 
 namespace {
 
@@ -179,4 +177,4 @@ auto FramePlanBuilder::FindFrameViewPacket(ViewId id) const
   return &frame_view_packets_[index];
 }
 
-} // namespace oxygen::examples::internal
+} // namespace oxygen::renderer::internal

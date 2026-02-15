@@ -26,6 +26,9 @@
 namespace oxygen {
 class AsyncEngine;
 class Graphics;
+namespace renderer {
+  struct CompositionView;
+}
 } // namespace oxygen
 
 namespace graphics {
@@ -105,7 +108,7 @@ protected:
     -> platform::window::Properties override;
   auto ClearBackbufferReferences() -> void override;
   auto UpdateComposition(engine::FrameContext& context,
-    std::vector<examples::CompositionView>& views) -> void override;
+    std::vector<renderer::CompositionView>& views) -> void override;
 
   // EngineModule phase handlers
   auto OnFrameStart(observer_ptr<engine::FrameContext> context)
@@ -142,4 +145,4 @@ private:
   platform::window::ExtentT last_viewport_ { 0, 0 };
 };
 
-} // oxygen::namespace examples::multiview
+} // namespace oxygen::examples::multiview

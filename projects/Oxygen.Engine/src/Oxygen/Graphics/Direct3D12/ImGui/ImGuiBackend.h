@@ -15,9 +15,9 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Forward.h>
+#include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/imgui_impl_dx12.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
-#include <Oxygen/ImGui/ImGuiGraphicsBackend.h>
 
 struct ImDrawData;
 struct ImGuiContext;
@@ -70,11 +70,11 @@ private:
   ImGuiContext* imgui_context_ { nullptr };
 
   // ImGui D3D12 backend state
-  std::unique_ptr<ImGui_ImplDX12_InitInfo> init_info_ {};
+  std::unique_ptr<ImGui_ImplDX12_InitInfo> init_info_;
   bool initialized_ { false };
 
   // Descriptor heap for ImGui (managed by engine)
-  Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> imgui_srv_heap_ {};
+  Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> imgui_srv_heap_;
   UINT imgui_descriptor_increment_ { 0 };
   UINT next_descriptor_index_ { 0 };
 

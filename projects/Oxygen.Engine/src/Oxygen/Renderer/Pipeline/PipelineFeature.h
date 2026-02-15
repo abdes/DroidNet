@@ -12,7 +12,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 
-namespace oxygen::examples {
+namespace oxygen::renderer {
 
 //! Bitmask of supported rendering features for pipeline discovery.
 enum class PipelineFeature : std::uint32_t {
@@ -62,4 +62,4 @@ OXYGEN_DEFINE_FLAGS_OPERATORS(PipelineFeature)
   return result;
 }
 
-} // namespace oxygen::examples
+} // namespace oxygen::renderer

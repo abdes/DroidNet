@@ -9,6 +9,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
+#include <Oxygen/Renderer/Pipeline/RenderMode.h>
 
 #include "DemoShell/UI/RenderingPanel.h"
 #include "DemoShell/UI/RenderingVm.h"
@@ -57,24 +58,25 @@ auto RenderingPanel::OnUnloaded() -> void
   // Persistence is handled by RenderingSettingsService via the ViewModel.
 }
 
-auto RenderingPanel::GetRenderMode() const -> RenderMode
+auto RenderingPanel::GetRenderMode() const -> renderer::RenderMode
 {
   return vm_->GetRenderMode();
 }
 
 void RenderingPanel::DrawViewModeControls()
 {
+  using r = renderer::RenderMode;
+
   auto mode = vm_->GetRenderMode();
 
-  if (ImGui::RadioButton("Solid", mode == RenderMode::kSolid)) {
-    vm_->SetRenderMode(RenderMode::kSolid);
+  if (ImGui::RadioButton("Solid", mode == r::kSolid)) {
+    vm_->SetRenderMode(r::kSolid);
   }
-  if (ImGui::RadioButton("Wireframe", mode == RenderMode::kWireframe)) {
-    vm_->SetRenderMode(RenderMode::kWireframe);
+  if (ImGui::RadioButton("Wireframe", mode == r::kWireframe)) {
+    vm_->SetRenderMode(r::kWireframe);
   }
-  if (ImGui::RadioButton(
-        "Overlay Wireframe", mode == RenderMode::kOverlayWireframe)) {
-    vm_->SetRenderMode(RenderMode::kOverlayWireframe);
+  if (ImGui::RadioButton("Overlay Wireframe", mode == r::kOverlayWireframe)) {
+    vm_->SetRenderMode(r::kOverlayWireframe);
   }
 }
 
@@ -94,6 +96,7 @@ void RenderingPanel::DrawWireframeColor()
 void RenderingPanel::DrawDebugModes()
 {
   using engine::ShaderDebugMode;
+  using RenderMode = renderer::RenderMode;
 
   const bool disable_debug_modes = GetRenderMode() == RenderMode::kWireframe;
   if (disable_debug_modes) {

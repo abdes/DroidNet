@@ -4,25 +4,27 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstdio>
+#include <algorithm>
+#include <string_view>
 
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/ImGui/Icons/OxygenIcons.h>
-#include <Oxygen/ImGui/ImGuiGraphicsBackend.h>
-#include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/ImGui/Styles/FontAwesome-400.h>
 #include <Oxygen/ImGui/Styles/IconsFontAwesome.h>
 #include <Oxygen/ImGui/Styles/Spectrum.h>
 #include <Oxygen/Platform/ImGui/ImGuiSdl3Backend.h>
 #include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
+#include <Oxygen/Renderer/Imgui/ImGuiPass.h>
 
-namespace oxygen::imgui {
+namespace oxygen::engine::imgui {
 
 ImGuiModule::ImGuiModule(std::shared_ptr<Platform> platform,
-  std::unique_ptr<ImGuiGraphicsBackend> graphics_backend)
+  std::unique_ptr<graphics::imgui::ImGuiGraphicsBackend> graphics_backend)
   : platform_(std::move(platform))
   , graphics_backend_(std::move(graphics_backend))
 {
@@ -49,20 +51,31 @@ auto ImGuiModule::OnAttached(const observer_ptr<AsyncEngine> engine) noexcept
 
   // Create ImGuiPass with the graphics backend
   try {
-    render_pass_ = std::make_unique<ImGuiPass>(graphics_backend_);
+    render_pass_
+      = std::make_unique<renderer::imgui::ImGuiPass>(graphics_backend_);
   } catch (const std::exception& e) {
     LOG_F(ERROR, "ImGuiModule: failed to create ImGuiPass: {}", e.what());
     return false;
   }
 
+  namespace sp = oxygen::imgui::spectrum;
+  namespace icons = oxygen::imgui::icons;
+  namespace styles = oxygen::imgui::styles;
+
   if (auto* ctx = graphics_backend_->GetImGuiContext()) {
     ImGui::SetCurrentContext(ctx);
-    spectrum::StyleColorsSpectrum();
-    spectrum::LoadFont(); // This adds the default font at 16.0f
 
-    ImGuiIO& io = ImGui::GetIO();
     constexpr float kDefaultFontSize = 16.0F;
     constexpr float kToolbarIconFontSize = 24.0F;
+    ImGuiStyle& style = ImGui::GetStyle();
+    sp::StyleColorsSpectrum(style);
+
+    ImGuiIO& io = ImGui::GetIO();
+    ImFont* default_font = sp::LoadFont(*io.Fonts, kDefaultFontSize);
+    IM_ASSERT(default_font != nullptr);
+    io.FontDefault = default_font;
+
+    // NOLINTBEGIN(*-avoid-c-arrays,*-array-to-pointer-decay,*-magic-numbers)
 
     // 1. Merge FontAwesome Icons into the default font for easy use everywhere
     constexpr ImWchar fa_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
@@ -85,14 +98,20 @@ auto ImGuiModule::OnAttached(const observer_ptr<AsyncEngine> engine) noexcept
     oxygen_config.MergeMode = false;
     oxygen_config.PixelSnapH = true;
     oxygen_config.GlyphMinAdvanceX = kToolbarIconFontSize;
-    std::snprintf(
-      oxygen_config.Name, IM_ARRAYSIZE(oxygen_config.Name), "oxygen-icons");
+    using namespace std::string_view_literals;
+    constexpr auto kOxygenIconsName = "oxygen-icons"sv;
+    auto [_, out] = std::ranges::copy_n(kOxygenIconsName.data(),
+      std::min(kOxygenIconsName.size(), std::size(oxygen_config.Name) - 1),
+      oxygen_config.Name);
+    *out = '\0';
 
     ImFont* oxygen_icon_font = io.Fonts->AddFontFromMemoryCompressedTTF(
       icons::OxygenIcons_compressed_data,
       static_cast<int>(icons::OxygenIcons_compressed_size),
       kToolbarIconFontSize, &oxygen_config, oxygen_icon_ranges);
     IM_ASSERT(oxygen_icon_font != nullptr);
+
+    // NOLINTEND(*-avoid-c-arrays,*-array-to-pointer-decay,*-magic-numbers)
   }
 
   return true;
@@ -162,9 +181,9 @@ auto ImGuiModule::OnFrameStart(
   if (auto* ctx = GetImGuiContext()) {
     ImGui::SetCurrentContext(ctx);
     const auto& io = ImGui::GetIO();
-    if (io.DisplaySize.x > 0.0f && io.DisplaySize.y > 0.0f
-      && io.DisplayFramebufferScale.x > 0.0f
-      && io.DisplayFramebufferScale.y > 0.0f) {
+    if (io.DisplaySize.x > 0.0F && io.DisplaySize.y > 0.0F
+      && io.DisplayFramebufferScale.x > 0.0F
+      && io.DisplayFramebufferScale.y > 0.0F) {
       graphics_backend_->NewFrame();
       // Mark that we actually started an ImGui frame so we can EndFrame later
       frame_started_ = true;
@@ -189,7 +208,8 @@ auto ImGuiModule::OnFrameStart(
   // framebuffers), so ensure we end the frame on FrameEnd if needed.
 }
 
-auto ImGuiModule::GetRenderPass() const noexcept -> observer_ptr<ImGuiPass>
+auto ImGuiModule::GetRenderPass() const noexcept
+  -> observer_ptr<renderer::imgui::ImGuiPass>
 {
   if (!platform_backend_ || !graphics_backend_) {
     return {};
@@ -307,4 +327,4 @@ auto ImGuiModule::OnFrameEnd(observer_ptr<engine::FrameContext> /*context*/)
   frame_started_ = false;
 }
 
-} // namespace oxygen::imgui
+} // namespace oxygen::engine::imgui

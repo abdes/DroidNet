@@ -18,12 +18,12 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Engine/AsyncEngine.h>
-#include <Oxygen/ImGui/ImGuiModule.h>
+#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
+#include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
 #include <Oxygen/Renderer/Renderer.h>
 
-#include "DemoShell/Runtime/CompositionView.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Runtime/ForwardPipeline.h"
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/Services/SkyboxService.h"
@@ -84,8 +84,8 @@ auto MainModule::OnAttachedImpl(observer_ptr<AsyncEngine> engine) noexcept
   }
 
   // Create Pipeline
-  auto fw_pipeline
-    = std::make_unique<ForwardPipeline>(observer_ptr { app_.engine.get() });
+  auto fw_pipeline = std::make_unique<renderer::ForwardPipeline>(
+    observer_ptr { app_.engine.get() });
 
   pipeline_ = std::move(fw_pipeline);
 
@@ -107,9 +107,8 @@ auto MainModule::OnAttachedImpl(observer_ptr<AsyncEngine> engine) noexcept
   shell_config.panel_config.ground_grid = true;
   shell_config.enable_camera_rig = true;
 
-  shell_config.get_active_pipeline
-    = [this]() -> observer_ptr<RenderingPipeline> {
-    return observer_ptr { pipeline_.get() };
+  shell_config.get_active_pipeline = [this]() {
+    return observer_ptr<renderer::RenderingPipeline> { pipeline_.get() };
   };
 
   if (!shell->Initialize(shell_config)) {
@@ -346,8 +345,8 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
   co_return;
 }
 
-auto MainModule::UpdateComposition(
-  engine::FrameContext& context, std::vector<CompositionView>& views) -> void
+auto MainModule::UpdateComposition(engine::FrameContext& context,
+  std::vector<renderer::CompositionView>& views) -> void
 {
   auto& shell = GetShell();
   if (!main_camera_.IsAlive()) {
@@ -368,14 +367,15 @@ auto MainModule::UpdateComposition(
   }
 
   // Create the main scene view intent
-  auto main_comp = CompositionView::ForScene(main_view_id_, view, main_camera_);
+  auto main_comp
+    = renderer::CompositionView::ForScene(main_view_id_, view, main_camera_);
   main_comp.with_atmosphere = true;
   shell.OnMainViewReady(context, main_comp);
   views.push_back(std::move(main_comp));
 
   // Also render our tools layer
   const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
-  views.push_back(CompositionView::ForImGui(
+  views.push_back(renderer::CompositionView::ForImGui(
     imgui_view_id, view, [](graphics::CommandRecorder&) { }));
 }
 

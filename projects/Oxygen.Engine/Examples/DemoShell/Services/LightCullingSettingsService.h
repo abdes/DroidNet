@@ -15,8 +15,12 @@
 
 #include "DemoShell/Services/DomainService.h"
 
-namespace oxygen::examples {
+namespace oxygen::renderer {
+struct CompositionView;
 class RenderingPipeline;
+} // namespace oxygen::renderer
+
+namespace oxygen::examples {
 class SettingsService;
 
 //! Settings persistence for light culling panel options.
@@ -43,7 +47,8 @@ public:
 
   //! Associates the service with a rendering pipeline and synchronizes
   //! initial state.
-  virtual auto Initialize(observer_ptr<RenderingPipeline> pipeline) -> void;
+  virtual auto Initialize(observer_ptr<renderer::RenderingPipeline> pipeline)
+    -> void;
 
   //! Returns the number of depth slices for clustered culling.
   [[nodiscard]] virtual auto GetDepthSlices() const -> int;
@@ -82,7 +87,7 @@ public:
   auto OnFrameStart(const engine::FrameContext& context) -> void override;
   auto OnSceneActivated(scene::Scene& scene) -> void override;
   auto OnMainViewReady(const engine::FrameContext& context,
-    const CompositionView& view) -> void override;
+    const renderer::CompositionView& view) -> void override;
 
 private:
   auto ApplyPipelineSettings() -> void;
@@ -98,7 +103,7 @@ private:
   static constexpr float kDefaultZNear = 0.1F;
   static constexpr float kDefaultZFar = 1000.0F;
 
-  observer_ptr<RenderingPipeline> pipeline_;
+  observer_ptr<renderer::RenderingPipeline> pipeline_;
   mutable std::atomic_uint64_t epoch_ { 0 };
 };
 

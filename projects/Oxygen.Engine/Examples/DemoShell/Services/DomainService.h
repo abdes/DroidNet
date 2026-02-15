@@ -14,14 +14,15 @@ namespace oxygen {
 namespace engine {
   class FrameContext;
 }
+namespace renderer {
+  struct CompositionView;
+}
 namespace scene {
   class Scene;
 }
 } // namespace oxygen
 
 namespace oxygen::examples {
-
-struct CompositionView;
 
 //! Lifecycle interface for demo shell domain services.
 /*!
@@ -46,7 +47,7 @@ public:
 
   //! Invoked when the main view is ready in the frame context.
   virtual void OnMainViewReady(
-    const engine::FrameContext& context, const CompositionView& view)
+    const engine::FrameContext& context, const renderer::CompositionView& view)
     = 0;
 
   //! Returns a monotonically increasing change epoch.

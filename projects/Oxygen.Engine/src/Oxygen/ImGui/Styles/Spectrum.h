@@ -6,6 +6,11 @@
 
 #pragma once
 
+#include <cstdint>
+#include <imgui.h>
+
+#include <Oxygen/ImGui/api_export.h>
+
 // This style is inspired/originally by Adobe ImGui Spectrum style.
 // https://github.com/adobe/imgui
 
@@ -31,36 +36,33 @@ at here at compile time.
 
 namespace oxygen::imgui::spectrum {
 
-// a list of changes introduced to change the look of the widgets.
-// Collected here as const rather than being magic numbers spread
-// around imgui.cpp and imgui_widgets.cpp.
-constexpr float kCheckBoxBorderSize = 2.0F;
-constexpr float kCheckBoxRounding = 2.0F;
+constexpr float kDefaultFontSize = 16.0F;
 
-// Load SourceSansProRegular and sets it as a default font.
-// You may want to call ImGui::GetIO().Fonts->Clear() before this
-void LoadFont(float size = 16.0F);
+// Add SourceSansProRegular to the provided font atlas.
+// Caller is responsible for assigning ImGuiIO::FontDefault if desired.
+OXGN_IMGUI_API auto LoadFont(
+  ImFontAtlas& font_atlas, float size = kDefaultFontSize) -> ImFont*;
 
 // Sets the ImGui style to Spectrum
-void StyleColorsSpectrum();
+OXGN_IMGUI_API void StyleColorsSpectrum(ImGuiStyle& style);
 
-namespace { // Unnamed namespace, since we only use this here.
-  constexpr unsigned int Color(unsigned int c)
-  {
-    // add alpha.
-    // also swap red and blue channel for some reason.
-    // todo: figure out why, and fix it.
-    const short a = 0xFF;
-    const short r = (c >> 16) & 0xFF;
-    const short g = (c >> 8) & 0xFF;
-    const short b = (c >> 0) & 0xFF;
-    return (a << 24) | (r << 0) | (g << 8) | (b << 16);
-  }
+constexpr auto Color(unsigned int c) -> unsigned int
+{
+  // add alpha.
+  // also swap red and blue channel for some reason.
+  // todo: figure out why, and fix it.
+  const uint16_t a = 0xFF;
+  const uint16_t r = (c >> 16) & 0xFF;
+  const uint16_t g = (c >> 8) & 0xFF;
+  const uint16_t b = (c >> 0) & 0xFF;
+  // NOLINTNEXTLINE(*-magic-numbers)
+  return (a << 24) | (r << 0) | (g << 8) | (b << 16);
 }
 // all colors are from http://spectrum.corp.adobe.com/color.html
 
-constexpr unsigned int color_alpha(unsigned int alpha, unsigned int c)
+constexpr auto color_alpha(unsigned int alpha, unsigned int c) -> unsigned int
 {
+  // NOLINTNEXTLINE(*-magic-numbers)
   return ((alpha & 0xFF) << 24) | (c & 0x00FFFFFF);
 }
 
@@ -92,13 +94,13 @@ namespace Static { // static colors
   constexpr unsigned int kGreen500 = Color(0x2D9D78);
   constexpr unsigned int kGreen600 = Color(0x268E6C);
   constexpr unsigned int kGreen700 = Color(0x12805C);
-}
+} // namespace Static
 
 #ifdef OXYGEN_IMGUI_USE_LIGHT_THEME
-constexpr unsigned int kGray50 = Color(0xFFFFFF);
+constexpr unsigned int kGray50 = Static::kWhite;
 constexpr unsigned int kGray75 = Color(0xFAFAFA);
 constexpr unsigned int kGray100 = Color(0xF5F5F5);
-constexpr unsigned int kGray200 = Color(0xEAEAEA);
+constexpr unsigned int kGray200 = Static::kGray300;
 constexpr unsigned int kGray300 = Color(0xE1E1E1);
 constexpr unsigned int kGray400 = Color(0xCACACA);
 constexpr unsigned int kGray500 = Color(0xB3B3B3);
@@ -106,21 +108,21 @@ constexpr unsigned int kGray600 = Color(0x8E8E8E);
 constexpr unsigned int kGray700 = Color(0x707070);
 constexpr unsigned int kGray800 = Color(0x4B4B4B);
 constexpr unsigned int kGray900 = Color(0x2C2C2C);
-constexpr unsigned int kBlue400 = Color(0x2680EB);
-constexpr unsigned int kBlue500 = Color(0x1473E6);
-constexpr unsigned int kBlue600 = Color(0x0D66D0);
+constexpr unsigned int kBlue400 = Static::kBlue500;
+constexpr unsigned int kBlue500 = Static::kBlue600;
+constexpr unsigned int kBlue600 = Static::kBlue700;
 constexpr unsigned int kBlue700 = Color(0x095ABA);
-constexpr unsigned int kRed400 = Color(0xE34850);
-constexpr unsigned int kRed500 = Color(0xD7373F);
-constexpr unsigned int kRed600 = Color(0xC9252D);
+constexpr unsigned int kRed400 = Static::kRed500;
+constexpr unsigned int kRed500 = Static::kRed600;
+constexpr unsigned int kRed600 = Static::kRed700;
 constexpr unsigned int kRed700 = Color(0xBB121A);
-constexpr unsigned int kOrange400 = Color(0xE68619);
-constexpr unsigned int kOrange500 = Color(0xDA7B11);
-constexpr unsigned int kOrange600 = Color(0xCB6F10);
+constexpr unsigned int kOrange400 = Static::kOrange500;
+constexpr unsigned int kOrange500 = Static::kOrange600;
+constexpr unsigned int kOrange600 = Static::kOrange700;
 constexpr unsigned int kOrange700 = Color(0xBD640D);
-constexpr unsigned int kGreen400 = Color(0x2D9D78);
-constexpr unsigned int kGreen500 = Color(0x268E6C);
-constexpr unsigned int kGreen600 = Color(0x12805C);
+constexpr unsigned int kGreen400 = Static::kGreen500;
+constexpr unsigned int kGreen500 = Static::kGreen600;
+constexpr unsigned int kGreen600 = Static::kGreen700;
 constexpr unsigned int kGreen700 = Color(0x107154);
 constexpr unsigned int kIndigo400 = Color(0x6767EC);
 constexpr unsigned int kIndigo500 = Color(0x5C5CE0);
@@ -158,7 +160,7 @@ constexpr unsigned int kPurple700 = Color(0x6F38B1);
 #ifdef OXYGEN_IMGUI_USE_DARK_THEME
 constexpr unsigned int kGray50 = Color(0x252525);
 constexpr unsigned int kGray75 = Color(0x2F2F2F);
-constexpr unsigned int kGray100 = Color(0x323232);
+constexpr unsigned int kGray100 = Static::kGray900;
 constexpr unsigned int kGray200 = Color(0x393939);
 constexpr unsigned int kGray300 = Color(0x3E3E3E);
 constexpr unsigned int kGray400 = Color(0x4D4D4D);
@@ -166,21 +168,21 @@ constexpr unsigned int kGray500 = Color(0x5C5C5C);
 constexpr unsigned int kGray600 = Color(0x7B7B7B);
 constexpr unsigned int kGray700 = Color(0x999999);
 constexpr unsigned int kGray800 = Color(0xCDCDCD);
-constexpr unsigned int kGray900 = Color(0xFFFFFF);
-constexpr unsigned int kBlue400 = Color(0x2680EB);
-constexpr unsigned int kBlue500 = Color(0x378EF0);
+constexpr unsigned int kGray900 = Static::kWhite;
+constexpr unsigned int kBlue400 = Static::kBlue500;
+constexpr unsigned int kBlue500 = Static::kBlue400;
 constexpr unsigned int kBlue600 = Color(0x4B9CF5);
 constexpr unsigned int kBlue700 = Color(0x5AA9FA);
-constexpr unsigned int kRed400 = Color(0xE34850);
-constexpr unsigned int kRed500 = Color(0xEC5B62);
+constexpr unsigned int kRed400 = Static::kRed500;
+constexpr unsigned int kRed500 = Static::kRed400;
 constexpr unsigned int kRed600 = Color(0xF76D74);
 constexpr unsigned int kRed700 = Color(0xFF7B82);
-constexpr unsigned int kOrange400 = Color(0xE68619);
-constexpr unsigned int kOrange500 = Color(0xF29423);
+constexpr unsigned int kOrange400 = Static::kOrange500;
+constexpr unsigned int kOrange500 = Static::kOrange400;
 constexpr unsigned int kOrange600 = Color(0xF9A43F);
 constexpr unsigned int kOrange700 = Color(0xFFB55B);
-constexpr unsigned int kGreen400 = Color(0x2D9D78);
-constexpr unsigned int kGreen500 = Color(0x33AB84);
+constexpr unsigned int kGreen400 = Static::kGreen500;
+constexpr unsigned int kGreen500 = Static::kGreen400;
 constexpr unsigned int kGreen600 = Color(0x39B990);
 constexpr unsigned int kGreen700 = Color(0x3FC89C);
 constexpr unsigned int kIndigo400 = Color(0x6767EC);

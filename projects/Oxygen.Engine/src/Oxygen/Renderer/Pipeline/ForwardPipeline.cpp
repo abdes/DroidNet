@@ -21,9 +21,9 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/ImGui/ImGuiModule.h>
-#include <Oxygen/ImGui/ImGuiPass.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
+#include <Oxygen/Renderer/ImGui/ImGuiPass.h>
 #include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Passes/AutoExposurePass.h>
@@ -37,6 +37,13 @@
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
 #include <Oxygen/Renderer/Passes/WireframePass.h>
+#include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
+#include <Oxygen/Renderer/Pipeline/Internal/CompositionPlanner.h>
+#include <Oxygen/Renderer/Pipeline/Internal/CompositionViewImpl.h>
+#include <Oxygen/Renderer/Pipeline/Internal/FramePlanBuilder.h>
+#include <Oxygen/Renderer/Pipeline/Internal/FrameViewPacket.h>
+#include <Oxygen/Renderer/Pipeline/Internal/PipelineSettings.h>
+#include <Oxygen/Renderer/Pipeline/Internal/ViewLifecycleService.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
@@ -45,15 +52,7 @@
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "DemoShell/Runtime/ForwardPipeline.h"
-#include "DemoShell/Runtime/Internal/CompositionPlanner.h"
-#include "DemoShell/Runtime/Internal/CompositionViewImpl.h"
-#include "DemoShell/Runtime/Internal/FramePlanBuilder.h"
-#include "DemoShell/Runtime/Internal/FrameViewPacket.h"
-#include "DemoShell/Runtime/Internal/PipelineSettings.h"
-#include "DemoShell/Runtime/Internal/ViewLifecycleService.h"
-
-namespace oxygen::examples {
+namespace oxygen::renderer {
 
 using internal::CompositionPlanner;
 using internal::CompositionViewImpl;
@@ -212,7 +211,7 @@ private:
 
   // ImGui lazy loading
   mutable std::once_flag imgui_flag;
-  mutable observer_ptr<imgui::ImGuiPass> imgui_pass;
+  mutable observer_ptr<renderer::imgui::ImGuiPass> imgui_pass;
 };
 
 namespace {
@@ -1125,10 +1124,10 @@ void ForwardPipeline::Impl::ClearBackbufferReferences() const
 }
 
 auto ForwardPipeline::Impl::GetImGuiPass() const
-  -> observer_ptr<imgui::ImGuiPass>
+  -> observer_ptr<renderer::imgui::ImGuiPass>
 {
   std::call_once(imgui_flag, [&] {
-    if (auto mod = engine->GetModule<imgui::ImGuiModule>()) {
+    if (auto mod = engine->GetModule<engine::imgui::ImGuiModule>()) {
       imgui_pass = mod->get().GetRenderPass();
     }
   });
@@ -1335,4 +1334,4 @@ auto ForwardPipeline::UpdateLightCullingPassConfig(
   impl_->UpdateLightCullingPassConfig(config);
 }
 
-} // namespace oxygen::examples
+} // namespace oxygen::renderer

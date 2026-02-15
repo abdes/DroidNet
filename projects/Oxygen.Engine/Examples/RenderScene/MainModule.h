@@ -29,6 +29,9 @@ class AsyncEngine;
 namespace engine {
   class FrameContext;
 }
+namespace renderer {
+  struct CompositionView;
+}
 } // namespace oxygen
 
 namespace oxygen::examples {
@@ -74,7 +77,7 @@ public:
 
   auto ClearBackbufferReferences() -> void override;
   auto UpdateComposition(engine::FrameContext& context,
-    std::vector<CompositionView>& views) -> void override;
+    std::vector<renderer::CompositionView>& views) -> void override;
 
   auto OnAttachedImpl(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
     -> std::unique_ptr<DemoShell> override;

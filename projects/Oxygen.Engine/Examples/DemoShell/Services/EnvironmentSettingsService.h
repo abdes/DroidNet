@@ -31,6 +31,9 @@ namespace oxygen {
 namespace engine {
   class Renderer;
 }
+namespace renderer {
+  struct CompositionView;
+}
 namespace data {
   class SceneAsset;
 }
@@ -119,7 +122,7 @@ public:
   auto OnFrameStart(const engine::FrameContext& context) -> void override;
   auto OnSceneActivated(scene::Scene& scene) -> void override;
   auto OnMainViewReady(const engine::FrameContext& context,
-    const CompositionView& view) -> void override;
+    const renderer::CompositionView& view) -> void override;
 
   // SkyAtmosphere
   [[nodiscard]] virtual auto GetSkyAtmosphereEnabled() const -> bool;

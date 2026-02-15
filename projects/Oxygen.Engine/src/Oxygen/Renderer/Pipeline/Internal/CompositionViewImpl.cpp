@@ -11,10 +11,9 @@
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Renderer/Pipeline/Internal/CompositionViewImpl.h>
 
-#include "DemoShell/Runtime/Internal/CompositionViewImpl.h"
-
-namespace oxygen::examples::internal {
+namespace oxygen::renderer::internal {
 
 void CompositionViewImpl::PrepareForRender(const CompositionView& descriptor,
   uint32_t submission_order, frame::SequenceNumber frame_seq,
@@ -111,4 +110,4 @@ void CompositionViewImpl::EnsureResources(
   sdr_framebuffer_ = graphics.CreateFramebuffer(sdr_fb_desc);
 }
 
-} // namespace oxygen::examples::internal
+} // namespace oxygen::renderer::internal

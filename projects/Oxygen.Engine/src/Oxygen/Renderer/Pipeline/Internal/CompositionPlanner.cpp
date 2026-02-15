@@ -5,11 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Renderer/Pipeline/Internal/CompositionPlanner.h>
+#include <Oxygen/Renderer/Pipeline/Internal/FramePlanBuilder.h>
 
-#include "DemoShell/Runtime/Internal/CompositionPlanner.h"
-#include "DemoShell/Runtime/Internal/FramePlanBuilder.h"
-
-namespace oxygen::examples::internal {
+namespace oxygen::renderer::internal {
 
 CompositionPlanner::~CompositionPlanner() = default;
 
@@ -55,4 +54,4 @@ auto CompositionPlanner::BuildCompositionSubmission(
   return submission;
 }
 
-} // namespace oxygen::examples::internal
+} // namespace oxygen::renderer::internal

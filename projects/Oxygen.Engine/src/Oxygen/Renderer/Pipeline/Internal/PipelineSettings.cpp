@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "DemoShell/Runtime/Internal/PipelineSettings.h"
+#include <Oxygen/Renderer/Pipeline/Internal/PipelineSettings.h>
 
-namespace oxygen::examples::internal {
+namespace oxygen::renderer::internal {
 
 auto PipelineSettingsDraft::Commit() -> CommitResult
 {
@@ -21,4 +21,4 @@ auto PipelineSettingsDraft::Commit() -> CommitResult
   return result;
 }
 
-} // namespace oxygen::examples::internal
+} // namespace oxygen::renderer::internal

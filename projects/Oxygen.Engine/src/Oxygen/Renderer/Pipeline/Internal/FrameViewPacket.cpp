@@ -4,11 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "DemoShell/Runtime/Internal/FrameViewPacket.h"
+#include <Oxygen/Renderer/Pipeline/Internal/CompositionViewImpl.h>
+#include <Oxygen/Renderer/Pipeline/Internal/FrameViewPacket.h>
 
-#include "DemoShell/Runtime/Internal/CompositionViewImpl.h"
-
-namespace oxygen::examples::internal {
+namespace oxygen::renderer::internal {
 
 auto FrameViewPacket::HasCompositeTexture() const noexcept -> bool
 {
@@ -31,4 +30,4 @@ auto FrameViewPacket::GetCompositeOpacity() const noexcept -> float
   return View().GetDescriptor().opacity;
 }
 
-} // namespace oxygen::examples::internal
+} // namespace oxygen::renderer::internal
