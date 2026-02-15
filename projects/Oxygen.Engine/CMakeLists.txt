@@ -224,7 +224,12 @@ endif()
 # different for every preset and can be different as well when the user decides
 # to build somewhere else. Currently we cannot configure this properly in vscode
 # settings. See https://github.com/clangd/vscode-clangd/issues/48
-configure_file(.clangd.in ${CMAKE_SOURCE_DIR}/.clangd @ONLY)
+#
+# NOTE: We don't want this to be running when building under Visual Studio. It
+# will create issues with clangd which is only used when we generate for Ninja.
+if(CMAKE_GENERATOR MATCHES "^Ninja")
+  configure_file(.clangd.in ${CMAKE_SOURCE_DIR}/.clangd @ONLY)
+endif()
 
 # ------------------------------------------------------------------------------
 # Testing
