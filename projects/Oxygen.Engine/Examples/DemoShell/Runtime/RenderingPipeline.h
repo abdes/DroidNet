@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <span>
 
@@ -163,7 +164,7 @@ public:
   // [Phase: kCompositing]
   // Submit final composition/post-process tasks.
   virtual auto OnCompositing(observer_ptr<engine::FrameContext> frame_ctx,
-    engine::Renderer& renderer, graphics::Framebuffer* composite_target)
+    std::shared_ptr<graphics::Framebuffer> composite_target)
     -> co::Co<engine::CompositionSubmission>
     = 0;
 

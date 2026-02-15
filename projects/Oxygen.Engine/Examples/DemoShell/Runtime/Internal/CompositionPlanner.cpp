@@ -31,13 +31,15 @@ void CompositionPlanner::PlanCompositingTasks()
 }
 
 auto CompositionPlanner::BuildCompositionSubmission(
-  graphics::Framebuffer* final_output) -> oxygen::engine::CompositionSubmission
+  std::shared_ptr<graphics::Framebuffer> final_output)
+  -> oxygen::engine::CompositionSubmission
 {
-  if (final_output == nullptr) {
-    LOG_F(WARNING,
-      "ForwardPipeline: skipping compositing because composite_target is null");
+  if (!final_output) {
+    LOG_F(
+      WARNING, "ForwardPipeline: skipping compositing because target is null");
     return {};
   }
+
   const auto& target_desc = final_output->GetDescriptor();
   if (target_desc.color_attachments.empty()
     || !target_desc.color_attachments[0].texture) {
@@ -48,8 +50,7 @@ auto CompositionPlanner::BuildCompositionSubmission(
   }
 
   oxygen::engine::CompositionSubmission submission;
-  submission.composite_target = std::shared_ptr<graphics::Framebuffer>(
-    final_output, [](graphics::Framebuffer*) { });
+  submission.composite_target = std::move(final_output);
   submission.tasks = planned_composition_tasks;
   return submission;
 }

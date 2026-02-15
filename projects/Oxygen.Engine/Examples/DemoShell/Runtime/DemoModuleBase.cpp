@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <atomic>
+#include <memory>
 #include <string_view>
 
 #include <Oxygen/Base/Logging.h>
@@ -176,15 +177,15 @@ auto DemoModuleBase::OnCompositing(observer_ptr<engine::FrameContext> context)
   if (pipeline_) {
     if (auto* renderer = GetRendererFromEngine(app_.engine.get())) {
       // Get the current framebuffer from our window for final composite
-      graphics::Framebuffer* target_fb = nullptr;
+      std::shared_ptr<graphics::Framebuffer> target_fb;
       if (app_window_) {
-        if (auto fb_weak = app_window_->GetCurrentFrameBuffer();
-          !fb_weak.expired()) {
-          target_fb = fb_weak.lock().get();
-        }
+        target_fb = app_window_->GetCurrentFrameBuffer().lock();
       }
-      auto submission
-        = co_await pipeline_->OnCompositing(context, *renderer, target_fb);
+      if (!target_fb) {
+        LOG_F(WARNING, "Skip compositing: no valid framebuffer target");
+        co_return;
+      }
+      auto submission = co_await pipeline_->OnCompositing(context, target_fb);
       if (!submission.tasks.empty() && submission.composite_target) {
         std::shared_ptr<graphics::Surface> surface;
         if (app_window_) {

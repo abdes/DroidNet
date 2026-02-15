@@ -62,21 +62,9 @@ public:
   {
     return last_seen_frame_;
   }
-  [[nodiscard]] auto GetRenderTargetWidth() const noexcept -> uint32_t
-  {
-    return render_target_width_;
-  }
-  [[nodiscard]] auto GetRenderTargetHeight() const noexcept -> uint32_t
-  {
-    return render_target_height_;
-  }
   [[nodiscard]] auto UsesHdrRenderTargets() const noexcept -> bool
   {
     return uses_hdr_render_targets_;
-  }
-  [[nodiscard]] auto GetClearColor() const noexcept -> const graphics::Color&
-  {
-    return clear_color_;
   }
 
   [[nodiscard]] auto GetHdrTexture() const noexcept
