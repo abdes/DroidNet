@@ -222,7 +222,7 @@ auto CompositingPass::SetupViewPortAndScissors(
 
 auto CompositingPass::GetFramebuffer() const -> const graphics::Framebuffer*
 {
-  return Context().framebuffer.get();
+  return Context().pass_target.get();
 }
 
 auto CompositingPass::GetOutputTexture() const -> const graphics::Texture&

@@ -559,7 +559,7 @@ auto GroundGridPass::GetColorTexture() const -> const Texture&
 
 auto GroundGridPass::GetFramebuffer() const -> const Framebuffer*
 {
-  return Context().framebuffer.get();
+  return Context().pass_target.get();
 }
 
 auto GroundGridPass::SetupRenderTargets(CommandRecorder& recorder) const -> void

@@ -370,7 +370,7 @@ auto WireframePass::GetColorTexture() const -> const Texture&
 
 auto WireframePass::GetFramebuffer() const -> const Framebuffer*
 {
-  return Context().framebuffer.get();
+  return Context().pass_target.get();
 }
 
 auto WireframePass::GetClearColor() const -> const Color&

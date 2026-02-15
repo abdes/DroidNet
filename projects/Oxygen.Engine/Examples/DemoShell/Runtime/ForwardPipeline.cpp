@@ -1098,9 +1098,15 @@ auto ForwardPipeline::OnSceneMutation(
     view_ctx.metadata = { .name = std::string(view->intent.name),
       .purpose = has_scene ? "scene" : "overlay",
       .with_atmosphere = view->intent.with_atmosphere };
-    // Publish SDR as the view output so renderer-level compositing (kBlend)
-    // always samples the post-tonemap result.
-    view_ctx.output = observer_ptr { view->sdr_framebuffer.get() };
+    // Render passes execute against HDR when available, otherwise SDR.
+    view_ctx.render_target = view->hdr_framebuffer
+      ? observer_ptr { view->hdr_framebuffer.get() }
+      : observer_ptr { view->sdr_framebuffer.get() };
+    // Compositing samples SDR when available (post-tonemap/overlay), else
+    // falls back to the render target.
+    view_ctx.composite_source = view->sdr_framebuffer
+      ? observer_ptr { view->sdr_framebuffer.get() }
+      : view_ctx.render_target;
 
     // Maintain stable link to engine's internal view registry
     if (view->engine_vid == kInvalidViewId) {

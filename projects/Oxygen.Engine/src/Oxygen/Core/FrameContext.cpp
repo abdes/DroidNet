@@ -130,8 +130,9 @@ auto FrameContext::RemoveView(ViewId id) noexcept -> void
   }
 }
 
-auto FrameContext::SetViewOutput(
-  ViewId id, observer_ptr<graphics::Framebuffer> output) noexcept -> void
+auto FrameContext::SetViewRenderTarget(
+  ViewId id, observer_ptr<graphics::Framebuffer> render_target) noexcept
+  -> void
 {
   // Output setting is allowed during rendering phases (FrameGraph,
   // CommandRecord) and Compositing. CHECK_F(engine_state_.current_phase >=
@@ -140,9 +141,9 @@ auto FrameContext::SetViewOutput(
 
   std::unique_lock lock(views_mutex_);
   if (auto it = views_.find(id); it != views_.end()) {
-    it->second.output = std::move(output);
+    it->second.render_target = std::move(render_target);
   } else {
-    LOG_F(WARNING, "SetViewOutput: ViewId {} not found", id.get());
+    LOG_F(WARNING, "SetViewRenderTarget: ViewId {} not found", id.get());
   }
 }
 

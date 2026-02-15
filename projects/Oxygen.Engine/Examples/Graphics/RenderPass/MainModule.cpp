@@ -288,7 +288,7 @@ auto MainModule::RenderScene() -> co::Co<>
   RenderContext context {};
   context.opaque_draw_list
     = std::span<const RenderItem>(render_items_.data(), render_items_.size());
-  context.framebuffer = fb;
+  context.pass_target = fb;
 
   co_await depth_pre_pass_->PrepareResources(context, *recorder);
   co_await depth_pre_pass_->Execute(context, *recorder);

@@ -320,7 +320,7 @@ auto ShaderPass::GetColorTexture() const -> const Texture&
 
 auto ShaderPass::GetFramebuffer() const -> const Framebuffer*
 {
-  return Context().framebuffer.get();
+  return Context().pass_target.get();
 }
 
 auto ShaderPass::GetClearColor() const -> const graphics::Color&

@@ -445,7 +445,7 @@ auto SkyPass::GetColorTexture() const -> const Texture&
 
 auto SkyPass::GetFramebuffer() const -> const Framebuffer*
 {
-  return Context().framebuffer.get();
+  return Context().pass_target.get();
 }
 
 auto SkyPass::SetupViewPortAndScissors(CommandRecorder& recorder) const -> void
