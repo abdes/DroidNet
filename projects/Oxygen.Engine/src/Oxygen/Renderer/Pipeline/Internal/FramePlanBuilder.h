@@ -15,12 +15,11 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
+#include <Oxygen/Renderer/Pipeline/Internal/FrameViewPacket.h>
+#include <Oxygen/Renderer/Pipeline/Internal/PipelineSettings.h>
+#include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
 
-#include "DemoShell/Runtime/Internal/FrameViewPacket.h"
-#include "DemoShell/Runtime/Internal/PipelineSettings.h"
-#include "DemoShell/Runtime/RenderingPipeline.h"
-
-namespace oxygen::examples::internal {
+namespace oxygen::renderer::internal {
 
 class CompositionViewImpl;
 
@@ -60,7 +59,7 @@ public:
   {
     return frame_want_auto_exposure_;
   }
-  [[nodiscard]] auto GetRenderMode() const -> examples::RenderMode
+  [[nodiscard]] auto GetRenderMode() const -> RenderMode
   {
     return frame_render_mode_;
   }
@@ -98,7 +97,7 @@ private:
   std::optional<float> frame_auto_exposure_reset_;
   bool frame_gpu_debug_pass_enabled_ { true };
   bool frame_want_auto_exposure_ { false };
-  examples::RenderMode frame_render_mode_ { examples::RenderMode::kSolid };
+  RenderMode frame_render_mode_ { RenderMode::kSolid };
   engine::ShaderDebugMode frame_shader_debug_mode_ {
     engine::ShaderDebugMode::kDisabled
   };
@@ -106,4 +105,4 @@ private:
   std::optional<SubPixelPosition> frame_gpu_debug_mouse_down_position_;
 };
 
-} // namespace oxygen::examples::internal
+} // namespace oxygen::renderer::internal

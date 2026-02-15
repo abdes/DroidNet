@@ -11,14 +11,17 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Renderer/Pipeline/RenderMode.h>
 #include <Oxygen/Renderer/Types/ShaderDebugMode.h>
 
-#include "DemoShell/Runtime/RenderingPipeline.h"
 #include "DemoShell/Services/DomainService.h"
+
+namespace oxygen::renderer {
+class RenderingPipeline;
+} // namespace oxygen::renderer
 
 namespace oxygen::examples {
 
-class RenderingPipeline;
 class SettingsService;
 
 //! Settings persistence for rendering panel options.
@@ -44,13 +47,14 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(RenderingSettingsService)
 
   //! Associates the service with a rendering pipeline.
-  virtual auto Initialize(observer_ptr<RenderingPipeline> pipeline) -> void;
+  virtual auto Initialize(observer_ptr<renderer::RenderingPipeline> pipeline)
+    -> void;
 
   //! Returns the persisted render mode.
-  [[nodiscard]] virtual auto GetRenderMode() const -> RenderMode;
+  [[nodiscard]] virtual auto GetRenderMode() const -> renderer::RenderMode;
 
   //! Sets the render mode.
-  virtual auto SetRenderMode(RenderMode mode) -> void;
+  virtual auto SetRenderMode(renderer::RenderMode mode) -> void;
 
   //! Returns the persisted wireframe color.
   [[nodiscard]] virtual auto GetWireframeColor() const -> graphics::Color;
@@ -82,7 +86,7 @@ public:
   auto OnFrameStart(const engine::FrameContext& context) -> void override;
   auto OnSceneActivated(scene::Scene& scene) -> void override;
   auto OnMainViewReady(const engine::FrameContext& context,
-    const CompositionView& view) -> void override;
+    const renderer::CompositionView& view) -> void override;
 
 private:
   static constexpr auto kViewModeKey = "rendering.view_mode";
@@ -94,7 +98,7 @@ private:
   static constexpr auto kAtmosphereBlueNoiseEnabledKey
     = "rendering.atmosphere_blue_noise";
 
-  observer_ptr<RenderingPipeline> pipeline_;
+  observer_ptr<renderer::RenderingPipeline> pipeline_;
   mutable std::atomic_uint64_t epoch_ { 0 };
 };
 

@@ -12,6 +12,7 @@
 #include <Oxygen/ImGui/api_export.h>
 
 struct ImGuiInputTextCallbackData;
+struct ImGuiContext;
 
 namespace oxygen::imgui::consoleui {
 
@@ -23,8 +24,8 @@ public:
   OXYGEN_DEFAULT_COPYABLE(ConsolePanel)
   OXYGEN_DEFAULT_MOVABLE(ConsolePanel)
 
-  OXGN_IMGUI_API auto Draw(
-    oxygen::console::Console& console, ConsoleUiState& state) -> void;
+  OXGN_IMGUI_API auto Draw(oxygen::console::Console& console,
+    ConsoleUiState& state, ImGuiContext* imgui_context) -> void;
 
 private:
   OXGN_IMGUI_API static auto ConsoleInputCallback(

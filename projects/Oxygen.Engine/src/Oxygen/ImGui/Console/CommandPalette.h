@@ -11,6 +11,8 @@
 #include <Oxygen/ImGui/Console/ConsoleUiState.h>
 #include <Oxygen/ImGui/api_export.h>
 
+struct ImGuiContext;
+
 namespace oxygen::imgui::consoleui {
 
 class CommandPalette final {
@@ -21,8 +23,8 @@ public:
   OXYGEN_DEFAULT_COPYABLE(CommandPalette)
   OXYGEN_DEFAULT_MOVABLE(CommandPalette)
 
-  OXGN_IMGUI_API auto Draw(
-    oxygen::console::Console& console, ConsoleUiState& state) -> void;
+  OXGN_IMGUI_API auto Draw(oxygen::console::Console& console,
+    ConsoleUiState& state, ImGuiContext* imgui_context) -> void;
 };
 
 } // namespace oxygen::imgui::consoleui

@@ -25,6 +25,10 @@
 #include "TexturedCube/UI/MaterialsSandboxPanel.h"
 #include "TexturedCube/UI/MaterialsSandboxVm.h"
 
+namespace oxygen::renderer {
+struct CompositionView;
+} // namespace oxygen::renderer
+
 namespace oxygen::examples::textured_cube {
 
 //! Main module for the TexturedCube demo.
@@ -100,7 +104,7 @@ protected:
 
   auto ClearBackbufferReferences() -> void override;
   auto UpdateComposition(engine::FrameContext& context,
-    std::vector<CompositionView>& views) -> void override;
+    std::vector<renderer::CompositionView>& views) -> void override;
 
 private:
   // Scene is owned by DemoShell, we keep a value object for safe access

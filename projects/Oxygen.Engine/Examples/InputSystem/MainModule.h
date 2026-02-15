@@ -25,6 +25,10 @@
 #include "DemoShell/Runtime/DemoModuleBase.h"
 #include "InputSystem/InputDebugPanel.h"
 
+namespace oxygen::renderer {
+struct CompositionView;
+} // namespace oxygen::renderer
+
 namespace oxygen::examples::ui {
 class CameraRigController;
 }
@@ -89,7 +93,7 @@ protected:
     -> platform::window::Properties override;
   auto ClearBackbufferReferences() -> void override;
   auto UpdateComposition(engine::FrameContext& context,
-    std::vector<CompositionView>& views) -> void override;
+    std::vector<renderer::CompositionView>& views) -> void override;
 
   // EngineModule phase handlers
   auto OnFrameStart(observer_ptr<engine::FrameContext> context)

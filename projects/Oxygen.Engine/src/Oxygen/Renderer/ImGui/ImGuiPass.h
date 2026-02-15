@@ -9,19 +9,23 @@
 #include <memory>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/ImGui/ImGuiGraphicsBackend.h>
-#include <Oxygen/ImGui/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 
 struct ImDrawData;
 
-namespace oxygen::graphics {
-class CommandRecorder;
-} // namespace oxygen::graphics
+namespace oxygen {
+namespace graphics {
+  class CommandRecorder;
+  namespace imgui {
+    class ImGuiGraphicsBackend;
+  }
+}
+namespace engine::imgui {
+  class ImGuiModule;
+}
+} // namespace oxygen
 
-namespace oxygen::imgui {
-
-class ImGuiModule;
+namespace oxygen::renderer::imgui {
 
 //! Simple ImGui renderer that just calls the backend.
 /*!
@@ -31,8 +35,8 @@ class ImGuiModule;
 */
 class ImGuiPass final {
 public:
-  OXGN_IMGUI_API explicit ImGuiPass(
-    std::shared_ptr<ImGuiGraphicsBackend> backend);
+  explicit ImGuiPass(
+    std::shared_ptr<graphics::imgui::ImGuiGraphicsBackend> backend);
 
   OXYGEN_MAKE_NON_COPYABLE(ImGuiPass)
   OXYGEN_MAKE_NON_MOVABLE(ImGuiPass)
@@ -40,11 +44,10 @@ public:
   ~ImGuiPass() = default;
 
   //! Render ImGui using the provided command recorder.
-  OXGN_IMGUI_API auto Render(graphics::CommandRecorder& recorder) const
-    -> co::Co<>;
+  auto Render(graphics::CommandRecorder& recorder) const -> co::Co<>;
 
 private:
-  friend class ImGuiModule;
+  friend class engine::imgui::ImGuiModule;
   auto Disable() -> void { disabled_ = true; }
   auto Enable() -> void { disabled_ = false; }
   // ImGui pass is disabled by default until the ImGuiModule has all valid
@@ -52,7 +55,7 @@ private:
   // anytime such prerequisites are lost.
   bool disabled_ { true };
 
-  std::shared_ptr<ImGuiGraphicsBackend> backend_;
+  std::shared_ptr<graphics::imgui::ImGuiGraphicsBackend> backend_;
 };
 
-} // namespace oxygen::imgui
+} // namespace oxygen::renderer::imgui

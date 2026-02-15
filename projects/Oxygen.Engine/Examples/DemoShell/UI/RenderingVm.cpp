@@ -4,10 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "DemoShell/UI/RenderingVm.h"
-#include "DemoShell/Services/RenderingSettingsService.h"
-
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Renderer/Pipeline/RenderMode.h>
+
+#include "DemoShell/Services/RenderingSettingsService.h"
+#include "DemoShell/UI/RenderingVm.h"
 
 namespace oxygen::examples::ui {
 
@@ -17,7 +18,7 @@ RenderingVm::RenderingVm(observer_ptr<RenderingSettingsService> service)
   Refresh();
 }
 
-auto RenderingVm::GetRenderMode() -> RenderMode
+auto RenderingVm::GetRenderMode() -> renderer::RenderMode
 {
   std::lock_guard lock(mutex_);
   if (IsStale()) {
@@ -53,7 +54,7 @@ auto RenderingVm::GetAtmosphereBlueNoiseEnabled() -> bool
   return atmosphere_blue_noise_enabled_;
 }
 
-auto RenderingVm::SetRenderMode(RenderMode mode) -> void
+auto RenderingVm::SetRenderMode(renderer::RenderMode mode) -> void
 {
   std::lock_guard lock(mutex_);
   if (render_mode_ == mode) {

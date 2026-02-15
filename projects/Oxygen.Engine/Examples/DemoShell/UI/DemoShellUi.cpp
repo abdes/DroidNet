@@ -17,11 +17,12 @@
 #include <Oxygen/ImGui/Console/CommandPalette.h>
 #include <Oxygen/ImGui/Console/ConsolePanel.h>
 #include <Oxygen/ImGui/Console/ConsoleUiState.h>
-#include <Oxygen/ImGui/ImGuiModule.h>
+#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
+#include <Oxygen/Renderer/Pipeline/PipelineFeature.h>
+#include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/PanelRegistry.h"
-#include "DemoShell/Runtime/RenderingPipeline.h"
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/EnvironmentSettingsService.h"
@@ -58,99 +59,106 @@ namespace oxygen::examples::ui {
 
 namespace {
 
-constexpr float kGeometryEpsilon = 0.5F;
-constexpr std::string_view kConsoleXKey = "demo_shell.console.window.x";
-constexpr std::string_view kConsoleYKey = "demo_shell.console.window.y";
-constexpr std::string_view kConsoleWidthKey = "demo_shell.console.window.width";
-constexpr std::string_view kConsoleHeightKey = "demo_shell.console.window.height";
-constexpr std::string_view kPaletteXKey = "demo_shell.palette.window.x";
-constexpr std::string_view kPaletteYKey = "demo_shell.palette.window.y";
-constexpr std::string_view kPaletteWidthKey = "demo_shell.palette.window.width";
-constexpr std::string_view kPaletteHeightKey = "demo_shell.palette.window.height";
-constexpr std::string_view kConsoleAutoScrollKey = "demo_shell.console.auto_scroll";
-constexpr std::string_view kConsoleFilterOkKey = "demo_shell.console.filter.ok";
-constexpr std::string_view kConsoleFilterWarningKey
-  = "demo_shell.console.filter.warning";
-constexpr std::string_view kConsoleFilterErrorKey = "demo_shell.console.filter.error";
+  constexpr float kGeometryEpsilon = 0.5F;
+  constexpr std::string_view kConsoleXKey = "demo_shell.console.window.x";
+  constexpr std::string_view kConsoleYKey = "demo_shell.console.window.y";
+  constexpr std::string_view kConsoleWidthKey
+    = "demo_shell.console.window.width";
+  constexpr std::string_view kConsoleHeightKey
+    = "demo_shell.console.window.height";
+  constexpr std::string_view kPaletteXKey = "demo_shell.palette.window.x";
+  constexpr std::string_view kPaletteYKey = "demo_shell.palette.window.y";
+  constexpr std::string_view kPaletteWidthKey
+    = "demo_shell.palette.window.width";
+  constexpr std::string_view kPaletteHeightKey
+    = "demo_shell.palette.window.height";
+  constexpr std::string_view kConsoleAutoScrollKey
+    = "demo_shell.console.auto_scroll";
+  constexpr std::string_view kConsoleFilterOkKey
+    = "demo_shell.console.filter.ok";
+  constexpr std::string_view kConsoleFilterWarningKey
+    = "demo_shell.console.filter.warning";
+  constexpr std::string_view kConsoleFilterErrorKey
+    = "demo_shell.console.filter.error";
 
-struct WindowSettingKeys final {
-  std::string_view x;
-  std::string_view y;
-  std::string_view width;
-  std::string_view height;
-};
-
-constexpr WindowSettingKeys kConsoleWindowKeys {
-  .x = kConsoleXKey,
-  .y = kConsoleYKey,
-  .width = kConsoleWidthKey,
-  .height = kConsoleHeightKey,
-};
-
-constexpr WindowSettingKeys kPaletteWindowKeys {
-  .x = kPaletteXKey,
-  .y = kPaletteYKey,
-  .width = kPaletteWidthKey,
-  .height = kPaletteHeightKey,
-};
-
-auto IsApproximatelyEqual(const float lhs, const float rhs) noexcept -> bool
-{
-  return std::abs(lhs - rhs) <= kGeometryEpsilon;
-}
-
-auto IsPlacementDifferent(const imgui::consoleui::WindowPlacement& lhs,
-  const imgui::consoleui::WindowPlacement& rhs) noexcept -> bool
-{
-  return !IsApproximatelyEqual(lhs.x, rhs.x)
-    || !IsApproximatelyEqual(lhs.y, rhs.y)
-    || !IsApproximatelyEqual(lhs.width, rhs.width)
-    || !IsApproximatelyEqual(lhs.height, rhs.height);
-}
-
-auto TryLoadPlacement(observer_ptr<SettingsService> settings,
-  const WindowSettingKeys& keys)
-  -> std::optional<imgui::consoleui::WindowPlacement>
-{
-  if (!settings) {
-    return std::nullopt;
-  }
-
-  const auto x = settings->GetFloat(keys.x);
-  const auto y = settings->GetFloat(keys.y);
-  const auto width = settings->GetFloat(keys.width);
-  const auto height = settings->GetFloat(keys.height);
-  if (!x.has_value() || !y.has_value() || !width.has_value()
-    || !height.has_value()) {
-    return std::nullopt;
-  }
-
-  return imgui::consoleui::WindowPlacement {
-    .x = *x,
-    .y = *y,
-    .width = *width,
-    .height = *height,
+  struct WindowSettingKeys final {
+    std::string_view x;
+    std::string_view y;
+    std::string_view width;
+    std::string_view height;
   };
-}
 
-auto HandleGlobalConsoleAccelerators(
-  imgui::consoleui::ConsoleUiState& console_ui_state) -> void
-{
-  // "Hard" global accelerators: process regardless of ImGui capture flags.
-  if (ImGui::IsKeyPressed(ImGuiKey_GraveAccent, false)) {
-    if (!console_ui_state.IsConsoleVisible()) {
-      console_ui_state.SetConsoleVisible(true);
-    } else if (console_ui_state.ConsoleInput().empty()) {
-      console_ui_state.SetConsoleVisible(false);
-    } else {
-      console_ui_state.RequestConsoleFocus();
+  constexpr WindowSettingKeys kConsoleWindowKeys {
+    .x = kConsoleXKey,
+    .y = kConsoleYKey,
+    .width = kConsoleWidthKey,
+    .height = kConsoleHeightKey,
+  };
+
+  constexpr WindowSettingKeys kPaletteWindowKeys {
+    .x = kPaletteXKey,
+    .y = kPaletteYKey,
+    .width = kPaletteWidthKey,
+    .height = kPaletteHeightKey,
+  };
+
+  auto IsApproximatelyEqual(const float lhs, const float rhs) noexcept -> bool
+  {
+    return std::abs(lhs - rhs) <= kGeometryEpsilon;
+  }
+
+  auto IsPlacementDifferent(const imgui::consoleui::WindowPlacement& lhs,
+    const imgui::consoleui::WindowPlacement& rhs) noexcept -> bool
+  {
+    return !IsApproximatelyEqual(lhs.x, rhs.x)
+      || !IsApproximatelyEqual(lhs.y, rhs.y)
+      || !IsApproximatelyEqual(lhs.width, rhs.width)
+      || !IsApproximatelyEqual(lhs.height, rhs.height);
+  }
+
+  auto TryLoadPlacement(
+    observer_ptr<SettingsService> settings, const WindowSettingKeys& keys)
+    -> std::optional<imgui::consoleui::WindowPlacement>
+  {
+    if (!settings) {
+      return std::nullopt;
+    }
+
+    const auto x = settings->GetFloat(keys.x);
+    const auto y = settings->GetFloat(keys.y);
+    const auto width = settings->GetFloat(keys.width);
+    const auto height = settings->GetFloat(keys.height);
+    if (!x.has_value() || !y.has_value() || !width.has_value()
+      || !height.has_value()) {
+      return std::nullopt;
+    }
+
+    return imgui::consoleui::WindowPlacement {
+      .x = *x,
+      .y = *y,
+      .width = *width,
+      .height = *height,
+    };
+  }
+
+  auto HandleGlobalConsoleAccelerators(
+    imgui::consoleui::ConsoleUiState& console_ui_state) -> void
+  {
+    // "Hard" global accelerators: process regardless of ImGui capture flags.
+    if (ImGui::IsKeyPressed(ImGuiKey_GraveAccent, false)) {
+      if (!console_ui_state.IsConsoleVisible()) {
+        console_ui_state.SetConsoleVisible(true);
+      } else if (console_ui_state.ConsoleInput().empty()) {
+        console_ui_state.SetConsoleVisible(false);
+      } else {
+        console_ui_state.RequestConsoleFocus();
+      }
+    }
+    if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift
+      && ImGui::IsKeyPressed(ImGuiKey_P, false)) {
+      console_ui_state.TogglePalette();
     }
   }
-  if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift
-    && ImGui::IsKeyPressed(ImGuiKey_P, false)) {
-    console_ui_state.TogglePalette();
-  }
-}
 
 } // namespace
 
@@ -435,7 +443,8 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
     return;
   }
 
-  auto imgui_module_ref = impl_->engine->GetModule<imgui::ImGuiModule>();
+  auto imgui_module_ref
+    = impl_->engine->GetModule<engine::imgui::ImGuiModule>();
   if (!imgui_module_ref) {
     return;
   }
@@ -456,8 +465,8 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
   HandleGlobalConsoleAccelerators(impl_->console_ui_state);
 
   auto& console = impl_->engine->GetConsole();
-  impl_->console_panel.Draw(console, impl_->console_ui_state);
-  impl_->command_palette.Draw(console, impl_->console_ui_state);
+  impl_->console_panel.Draw(console, impl_->console_ui_state, imgui_context);
+  impl_->command_palette.Draw(console, impl_->console_ui_state, imgui_context);
   impl_->PersistConsoleUiSettingsToStorage();
 
   if (!io.WantCaptureMouse && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
@@ -479,7 +488,8 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
   }
 }
 
-auto DemoShellUi::EnsureRenderingPanelReady(RenderingPipeline& pipeline) -> void
+auto DemoShellUi::EnsureRenderingPanelReady(
+  renderer::RenderingPipeline& pipeline) -> void
 {
   if (!impl_->panel_config.rendering) {
     return;
@@ -489,7 +499,8 @@ auto DemoShellUi::EnsureRenderingPanelReady(RenderingPipeline& pipeline) -> void
   }
 
   const auto features = pipeline.GetSupportedFeatures();
-  if ((features & PipelineFeature::kOpaqueShading) == PipelineFeature::kNone) {
+  if ((features & renderer::PipelineFeature::kOpaqueShading)
+    == renderer::PipelineFeature::kNone) {
     return;
   }
 
@@ -515,7 +526,8 @@ auto DemoShellUi::EnsureRenderingPanelReady(RenderingPipeline& pipeline) -> void
   }
 }
 
-auto DemoShellUi::EnsureLightingPanelReady(RenderingPipeline& pipeline) -> void
+auto DemoShellUi::EnsureLightingPanelReady(
+  renderer::RenderingPipeline& pipeline) -> void
 {
   if (!impl_->panel_config.lighting) {
     return;
@@ -525,7 +537,8 @@ auto DemoShellUi::EnsureLightingPanelReady(RenderingPipeline& pipeline) -> void
   }
 
   const auto features = pipeline.GetSupportedFeatures();
-  if ((features & PipelineFeature::kLightCulling) == PipelineFeature::kNone) {
+  if ((features & renderer::PipelineFeature::kLightCulling)
+    == renderer::PipelineFeature::kNone) {
     return;
   }
 

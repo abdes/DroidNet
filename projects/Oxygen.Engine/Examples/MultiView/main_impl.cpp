@@ -34,7 +34,6 @@
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h>
-#include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 #include <Oxygen/OxCo/Algorithms.h>
@@ -44,6 +43,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/asio.h>
 #include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Renderer.h>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
@@ -128,7 +128,7 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
   if (!app.headless) {
     auto imgui_backend
       = std::make_unique<oxygen::graphics::d3d12::D3D12ImGuiGraphicsBackend>();
-    auto imgui_module = std::make_unique<oxygen::imgui::ImGuiModule>(
+    auto imgui_module = std::make_unique<engine::imgui::ImGuiModule>(
       app.platform, std::move(imgui_backend));
     register_module(std::move(imgui_module));
   }

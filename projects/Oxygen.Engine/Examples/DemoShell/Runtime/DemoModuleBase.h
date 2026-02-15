@@ -16,15 +16,18 @@
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
+#include <Oxygen/Renderer/Pipeline/CompositionView.h>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/AppWindow.h"
-#include "DemoShell/Runtime/CompositionView.h"
 
 namespace oxygen {
 class AsyncEngine;
 namespace engine {
   class FrameContext;
+}
+namespace renderer {
+  class RenderingPipeline;
 }
 namespace graphics {
   class Surface;
@@ -83,7 +86,7 @@ protected:
   //! Hook: derived classes fill this with the views they want to render this
   //! frame.
   virtual auto UpdateComposition(engine::FrameContext& /*context*/,
-    std::vector<CompositionView>& /*views*/) -> void
+    std::vector<renderer::CompositionView>& /*views*/) -> void
   {
   }
 
@@ -94,12 +97,12 @@ protected:
   // State
   const DemoAppContext& app_;
   observer_ptr<AppWindow> app_window_ { nullptr };
-  std::unique_ptr<RenderingPipeline> pipeline_;
+  std::unique_ptr<renderer::RenderingPipeline> pipeline_;
 
   //! Map of logical view names to persistent ViewIds for resource tracking.
   std::map<std::string, ViewId> view_registry_;
   //! The active descriptors for the current frame.
-  std::vector<CompositionView> active_views_;
+  std::vector<renderer::CompositionView> active_views_;
 
 private:
   std::unique_ptr<DemoShell> shell_;

@@ -17,11 +17,11 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
+#include <Oxygen/Renderer/Pipeline/RenderMode.h>
+#include <Oxygen/Renderer/Types/ShaderDebugMode.h>
 #include <Oxygen/Scene/Scene.h>
 
 #include "DemoShell/ActiveScene.h"
-#include "DemoShell/Runtime/CompositionView.h"
-#include "DemoShell/Runtime/RenderingPipeline.h"
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/UI/DemoPanel.h"
@@ -34,8 +34,12 @@ namespace engine {
   class Renderer;
   struct ShaderPassConfig;
   struct LightCullingPassConfig;
-} // namespace oxygen::engine
 }
+namespace renderer {
+  class RenderingPipeline;
+  struct CompositionView;
+}
+} // namespace oxygen
 
 namespace oxygen::examples {
 class SkyboxService;
@@ -103,7 +107,8 @@ struct DemoShellConfig {
   std::function<void(const std::filesystem::path&)> on_pak_mounted;
   std::function<void(const std::filesystem::path&)> on_loose_index_loaded;
 
-  std::function<observer_ptr<RenderingPipeline>()> get_active_pipeline;
+  std::function<observer_ptr<renderer::RenderingPipeline>()>
+    get_active_pipeline;
 };
 
 //! Orchestrates the demo shell UI, panels, and camera helpers.
@@ -152,8 +157,8 @@ public:
   auto OnFrameStart(const engine::FrameContext& context) -> void;
 
   //! Notify services once the main view is ready in the frame context.
-  auto OnMainViewReady(
-    const engine::FrameContext& context, const CompositionView& view) -> void;
+  auto OnMainViewReady(const engine::FrameContext& context,
+    const renderer::CompositionView& view) -> void;
 
   //! Register a demo-specific panel with the shell.
   //!
@@ -188,7 +193,7 @@ public:
     -> observer_ptr<ui::CameraRigController>;
 
   //! Get the current rendering view mode selection.
-  [[nodiscard]] auto GetRenderingViewMode() const -> RenderMode;
+  [[nodiscard]] auto GetRenderingViewMode() const -> renderer::RenderMode;
 
   //! Force an active panel by name (no-op if not registered).
   auto SetActivePanel(std::string_view panel_name) -> void;

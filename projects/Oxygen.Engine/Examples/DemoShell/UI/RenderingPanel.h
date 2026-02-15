@@ -7,6 +7,7 @@
 #pragma once
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Renderer/Pipeline/RenderMode.h>
 
 #include "DemoShell/UI/DemoPanel.h"
 #include "DemoShell/UI/RenderingVm.h"
@@ -40,14 +41,14 @@ public:
   auto OnUnloaded() -> void override;
 
   //! Get the current render mode from the view model.
-  [[nodiscard]] auto GetRenderMode() const -> RenderMode;
+  [[nodiscard]] auto GetRenderMode() const -> renderer::RenderMode;
 
 private:
   void DrawViewModeControls();
   void DrawWireframeColor();
   void DrawDebugModes();
 
-  observer_ptr<RenderingVm> vm_ {};
+  observer_ptr<RenderingVm> vm_;
 };
 
 } // namespace oxygen::examples::ui

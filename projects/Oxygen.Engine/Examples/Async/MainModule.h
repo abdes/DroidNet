@@ -113,7 +113,7 @@ protected:
   //! Clear backbuffer references (required by DemoModuleBase).
   auto ClearBackbufferReferences() -> void override;
   auto UpdateComposition(engine::FrameContext& context,
-    std::vector<CompositionView>& views) -> void override;
+    std::vector<renderer::CompositionView>& views) -> void override;
 
   //! Execute phase-specific work.
   auto OnFrameStart(observer_ptr<engine::FrameContext> context)

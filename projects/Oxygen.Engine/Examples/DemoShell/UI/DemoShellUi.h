@@ -23,6 +23,9 @@ namespace engine {
 namespace imgui {
   class ImGuiModule;
 }
+namespace renderer {
+  class RenderingPipeline;
+}
 } // namespace oxygen
 
 namespace oxygen::examples {
@@ -83,10 +86,12 @@ namespace ui {
     auto Draw(observer_ptr<engine::FrameContext> fc) -> void;
 
     //! Ensures rendering panel is created when pass config is available.
-    auto EnsureRenderingPanelReady(RenderingPipeline& pipeline) -> void;
+    auto EnsureRenderingPanelReady(renderer::RenderingPipeline& pipeline)
+      -> void;
 
     //! Ensures lighting panel is created when pass configs are available.
-    auto EnsureLightingPanelReady(RenderingPipeline& pipeline) -> void;
+    auto EnsureLightingPanelReady(renderer::RenderingPipeline& pipeline)
+      -> void;
 
     //! Registers a custom panel with the shared panel registry.
     auto RegisterCustomPanel(std::shared_ptr<DemoPanel> panel) -> bool;
@@ -113,8 +118,8 @@ namespace ui {
 
   private:
     struct Impl;
-    std::unique_ptr<Impl> impl_ {};
-    std::optional<SubPixelPosition> last_mouse_down_position_ {};
+    std::unique_ptr<Impl> impl_;
+    std::optional<SubPixelPosition> last_mouse_down_position_;
   };
 
 } // namespace ui

@@ -16,12 +16,13 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
+#include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
-#include "DemoShell/Runtime/RenderingPipeline.h"
 
 namespace oxygen::examples {
 

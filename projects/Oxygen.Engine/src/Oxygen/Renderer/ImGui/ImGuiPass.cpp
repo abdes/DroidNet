@@ -5,12 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/ImGui/ImGuiGraphicsBackend.h>
-#include <Oxygen/ImGui/ImGuiPass.h>
+#include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
+#include <Oxygen/Renderer/ImGui/ImGuiPass.h>
 
-using oxygen::imgui::ImGuiPass;
+namespace oxygen::renderer::imgui {
 
-ImGuiPass::ImGuiPass(std::shared_ptr<ImGuiGraphicsBackend> backend)
+ImGuiPass::ImGuiPass(
+  std::shared_ptr<graphics::imgui::ImGuiGraphicsBackend> backend)
   : backend_(std::move(backend))
 {
   DCHECK_NOTNULL_F(backend_);
@@ -25,3 +26,5 @@ auto ImGuiPass::Render(graphics::CommandRecorder& recorder) const -> co::Co<>
   backend_->Render(recorder);
   co_return;
 }
+
+} // namespace oxygen::renderer::imgui

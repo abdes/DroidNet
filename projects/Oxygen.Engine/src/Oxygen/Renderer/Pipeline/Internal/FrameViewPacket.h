@@ -12,14 +12,13 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/ViewPort.h>
-
-#include "DemoShell/Runtime/Internal/ViewRenderPlan.h"
+#include <Oxygen/Renderer/Pipeline/Internal/ViewRenderPlan.h>
 
 namespace oxygen::graphics {
 class Texture;
 } // namespace oxygen::graphics
 
-namespace oxygen::examples::internal {
+namespace oxygen::renderer::internal {
 
 class CompositionViewImpl;
 
@@ -61,4 +60,4 @@ private:
   ViewRenderPlan plan_;
 };
 
-} // namespace oxygen::examples::internal
+} // namespace oxygen::renderer::internal

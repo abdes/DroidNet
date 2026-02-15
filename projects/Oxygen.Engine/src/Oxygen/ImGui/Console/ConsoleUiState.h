@@ -92,9 +92,8 @@ public:
   OXGN_IMGUI_API auto SetSeverityEnabled(
     LogSeverity severity, bool enabled) noexcept -> void;
 
-  OXGN_IMGUI_API auto AppendLogEntry(
-    std::string command, const oxygen::console::ExecutionResult& result)
-    -> void;
+  OXGN_IMGUI_API auto AppendLogEntry(std::string command,
+    const oxygen::console::ExecutionResult& result) -> void;
   OXGN_IMGUI_NDAPI auto LogEntries() const
     -> const std::vector<ConsoleLogEntry>&;
   OXGN_IMGUI_API auto ClearLogEntries() -> void;
@@ -121,16 +120,16 @@ private:
     true,
   };
   uint64_t next_sequence_ { 1 };
-  std::vector<ConsoleLogEntry> log_entries_ {};
+  std::vector<ConsoleLogEntry> log_entries_;
 
-  std::string completion_prefix_ {};
-  std::string history_restore_line_ {};
+  std::string completion_prefix_;
+  std::string history_restore_line_;
   int history_cursor_ { kNoHistoryCursor };
-  std::string console_input_ {};
-  std::string palette_query_ {};
+  std::string console_input_;
+  std::string palette_query_;
   int palette_cursor_ { 0 };
-  std::optional<WindowPlacement> console_window_ {};
-  std::optional<WindowPlacement> palette_window_ {};
+  std::optional<WindowPlacement> console_window_;
+  std::optional<WindowPlacement> palette_window_;
 };
 
 } // namespace oxygen::imgui::consoleui

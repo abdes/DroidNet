@@ -180,7 +180,7 @@ public:
   auto OnFrameStart(const engine::FrameContext& context) -> void override;
   auto OnSceneActivated(scene::Scene& scene) -> void override;
   auto OnMainViewReady(const engine::FrameContext& context,
-    const CompositionView& view) -> void override;
+    const renderer::CompositionView& view) -> void override;
 
 private:
   // NOLINTBEGIN(*-magic-numbers)

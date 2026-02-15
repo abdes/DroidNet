@@ -14,11 +14,10 @@
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Renderer/Passes/AutoExposurePass.h>
 #include <Oxygen/Renderer/Passes/GroundGridPass.h>
+#include <Oxygen/Renderer/Pipeline/RenderMode.h>
 #include <Oxygen/Renderer/Types/ShaderDebugMode.h>
 
-#include "DemoShell/Runtime/RenderMode.h"
-
-namespace oxygen::examples::internal {
+namespace oxygen::renderer::internal {
 
 struct PipelineSettings {
   engine::ShaderDebugMode shader_debug_mode {
@@ -80,4 +79,4 @@ struct PipelineSettingsDraft : PipelineSettings {
   auto Commit() -> CommitResult;
 };
 
-} // namespace oxygen::examples::internal
+} // namespace oxygen::renderer::internal

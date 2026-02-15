@@ -10,8 +10,8 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
+#include <Oxygen/Renderer/Pipeline/RenderMode.h>
 
-#include "DemoShell/Runtime/RenderingPipeline.h"
 #include "DemoShell/Services/RenderingSettingsService.h"
 
 namespace oxygen::examples::ui {
@@ -37,7 +37,7 @@ public:
   explicit RenderingVm(observer_ptr<RenderingSettingsService> service);
 
   //! Returns the cached view mode.
-  [[nodiscard]] auto GetRenderMode() -> RenderMode;
+  [[nodiscard]] auto GetRenderMode() -> renderer::RenderMode;
 
   //! Returns the cached debug mode.
   [[nodiscard]] auto GetDebugMode() -> engine::ShaderDebugMode;
@@ -48,7 +48,7 @@ public:
   [[nodiscard]] auto GetAtmosphereBlueNoiseEnabled() -> bool;
 
   //! Sets view mode and forwards changes to the service.
-  auto SetRenderMode(RenderMode mode) -> void;
+  auto SetRenderMode(renderer::RenderMode mode) -> void;
 
   //! Sets debug mode and forwards changes to the service.
   auto SetDebugMode(engine::ShaderDebugMode mode) -> void;
@@ -68,7 +68,7 @@ private:
   mutable std::mutex mutex_ {};
   observer_ptr<RenderingSettingsService> service_;
   std::uint64_t epoch_ { 0 };
-  RenderMode render_mode_ { RenderMode::kSolid };
+  renderer::RenderMode render_mode_ { renderer::RenderMode::kSolid };
   engine::ShaderDebugMode debug_mode_ { engine::ShaderDebugMode::kDisabled };
   graphics::Color wire_color_ { 1.0F, 1.0F, 1.0F, 1.0F };
   bool gpu_debug_pass_enabled_ { true };

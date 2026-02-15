@@ -17,12 +17,16 @@
 
 #include "DemoShell/Services/DomainService.h"
 
+namespace oxygen::renderer {
+struct CompositionView;
+class RenderingPipeline;
+} // namespace oxygen::renderer
+
 namespace oxygen::examples::ui {
 class CameraRigController;
 } // namespace oxygen::examples::ui
 
 namespace oxygen::examples {
-class RenderingPipeline;
 
 //! Settings persistence and runtime wiring for the demo ground grid.
 class GridSettingsService final : public DomainService {
@@ -35,7 +39,7 @@ public:
 
   //! Bind the demo camera rig used to position the grid.
   auto BindCameraRig(observer_ptr<ui::CameraRigController> camera_rig) -> void;
-  auto Initialize(observer_ptr<RenderingPipeline> pipeline) -> void;
+  auto Initialize(observer_ptr<renderer::RenderingPipeline> pipeline) -> void;
 
   // Settings accessors
   [[nodiscard]] auto GetEnabled() const -> bool;
@@ -86,7 +90,7 @@ public:
   auto OnFrameStart(const engine::FrameContext& context) -> void override;
   auto OnSceneActivated(scene::Scene& scene) -> void override;
   auto OnMainViewReady(const engine::FrameContext& context,
-    const CompositionView& view) -> void override;
+    const renderer::CompositionView& view) -> void override;
 
 private:
   struct GridConfig;
@@ -95,7 +99,7 @@ private:
   auto UpdateGridOrigin(const GridConfig& config) -> void;
   auto ApplyGridConfig(const GridConfig& config) -> void;
 
-  observer_ptr<RenderingPipeline> pipeline_ { nullptr };
+  observer_ptr<renderer::RenderingPipeline> pipeline_ { nullptr };
   observer_ptr<ui::CameraRigController> camera_rig_ { nullptr };
   Vec2 grid_origin_ { 0.0F, 0.0F };
   bool has_origin_ { false };

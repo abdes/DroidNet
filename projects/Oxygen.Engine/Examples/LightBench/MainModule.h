@@ -22,9 +22,12 @@
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
-#include "DemoShell/Services/SkyboxService.h"
 #include "LightBench/LightBenchPanel.h"
 #include "LightBench/LightScene.h"
+
+namespace oxygen::renderer {
+struct CompositionView;
+} // namespace oxygen::renderer
 
 namespace oxygen::examples::light_bench {
 
@@ -91,7 +94,7 @@ protected:
   auto ClearBackbufferReferences() -> void override;
 
   auto UpdateComposition(engine::FrameContext& context,
-    std::vector<CompositionView>& views) -> void override;
+    std::vector<renderer::CompositionView>& views) -> void override;
 
 private:
   ActiveScene active_scene_ {};

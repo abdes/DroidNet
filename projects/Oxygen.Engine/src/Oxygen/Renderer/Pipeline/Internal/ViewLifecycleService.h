@@ -16,9 +16,8 @@
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Renderer/Pipeline/CompositionView.h>
 #include <Oxygen/Renderer/Renderer.h>
-
-#include "DemoShell/Runtime/CompositionView.h"
 
 namespace oxygen {
 class Graphics;
@@ -31,7 +30,7 @@ namespace graphics {
 } // namespace graphics
 } // namespace oxygen
 
-namespace oxygen::examples::internal {
+namespace oxygen::renderer::internal {
 
 class CompositionViewImpl;
 
@@ -92,4 +91,4 @@ private:
   std::unique_ptr<State> state_;
 };
 
-} // namespace oxygen::examples::internal
+} // namespace oxygen::renderer::internal

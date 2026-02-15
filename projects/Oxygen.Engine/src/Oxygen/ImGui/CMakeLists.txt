@@ -49,9 +49,6 @@ set_target_properties(
 set(
   OXYGEN_IMGUI_HEADERS
   "api_export.h"
-  "ImGuiModule.h"
-  "ImGuiGraphicsBackend.h"
-  "ImGuiPass.h"
   "Console/ConsoleUiState.h"
   "Console/ConsolePanel.h"
   "Console/CommandPalette.h"
@@ -63,8 +60,6 @@ set(
 )
 set(
   OXYGEN_IMGUI_PRIVATE_SOURCES
-  "ImGuiPass.cpp"
-  "ImGuiModule.cpp"
   "Console/ConsoleUiState.cpp"
   "Console/ConsolePanel.cpp"
   "Console/CommandPalette.cpp"
@@ -100,12 +95,10 @@ target_link_libraries(
   PUBLIC
     oxygen::base
     oxygen::core
-    oxygen::renderer
     oxygen::console
     oxygen::graphics-common
     oxygen::engine
     oxygen::platform
-    oxygen::renderer
     imgui::imgui
 )
 

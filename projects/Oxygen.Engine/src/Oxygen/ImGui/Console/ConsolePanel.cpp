@@ -65,9 +65,14 @@ namespace {
 
 } // namespace
 
-auto ConsolePanel::Draw(
-  oxygen::console::Console& console, ConsoleUiState& state) -> void
+auto ConsolePanel::Draw(oxygen::console::Console& console,
+  ConsoleUiState& state, ImGuiContext* imgui_context) -> void
 {
+  if (imgui_context == nullptr) {
+    return;
+  }
+  ImGui::SetCurrentContext(imgui_context);
+
   if (!state.IsConsoleVisible()) {
     return;
   }
@@ -75,9 +80,9 @@ auto ConsolePanel::Draw(
   if (const auto& placement = state.ConsoleWindowPlacement();
     placement.has_value()) {
     ImGui::SetNextWindowPos(
-      ImVec2(placement->x, placement->y), ImGuiCond_Always);
+      ImVec2(placement->x, placement->y), ImGuiCond_Appearing);
     ImGui::SetNextWindowSize(
-      ImVec2(placement->width, placement->height), ImGuiCond_Always);
+      ImVec2(placement->width, placement->height), ImGuiCond_Appearing);
   } else {
     ImGui::SetNextWindowSize(
       ImVec2(kPanelDefaultWidth, kPanelDefaultHeight), ImGuiCond_FirstUseEver);
@@ -127,7 +132,8 @@ auto ConsolePanel::Draw(
       }
 
       const auto command_label = "> " + entry.command;
-      const auto command_id = command_label + "##cmd" + std::to_string(entry.sequence);
+      const auto command_id
+        = command_label + "##cmd" + std::to_string(entry.sequence);
       const auto popup_id = "cmd_ctx##" + std::to_string(entry.sequence);
       const bool selected = ImGui::Selectable(command_id.c_str(), false);
       if (selected && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
@@ -158,11 +164,12 @@ auto ConsolePanel::Draw(
       ImGui::Spacing();
     }
 
-    if (state.IsAutoScrollEnabled() && ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
+    if (state.IsAutoScrollEnabled()
+      && ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
       ImGui::SetScrollHereY(1.0F);
     }
-    ImGui::EndChild();
   }
+  ImGui::EndChild();
 
   if (state.ConsumeConsoleFocusRequest()) {
     ImGui::SetKeyboardFocusHere();
@@ -205,9 +212,9 @@ auto ConsolePanel::Draw(
 
 auto ConsolePanel::ConsoleInputCallback(ImGuiInputTextCallbackData* data) -> int
 {
-  auto* context
-    = static_cast<ConsoleInputCallbackContext*>(data->UserData);
-  if (context == nullptr || context->console == nullptr || context->state == nullptr) {
+  auto* context = static_cast<ConsoleInputCallbackContext*>(data->UserData);
+  if (context == nullptr || context->console == nullptr
+    || context->state == nullptr) {
     return 0;
   }
 
@@ -223,7 +230,7 @@ auto ConsolePanel::ConsoleInputCallback(ImGuiInputTextCallbackData* data) -> int
       if (state.CompletionPrefix() == input) {
         should_cycle = true;
       } else if (const auto current = console.CurrentCompletion();
-                 current != nullptr) {
+        current != nullptr) {
         auto expanded = current->token;
         expanded.push_back(' ');
         should_cycle = expanded == input;

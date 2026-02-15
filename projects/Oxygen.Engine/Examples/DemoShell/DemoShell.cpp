@@ -18,13 +18,13 @@
 #include <Oxygen/Engine/ModuleEvent.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
+#include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
 #include <Oxygen/Renderer/Renderer.h>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Internal/SceneControlBlock.h"
 #include "DemoShell/PanelRegistry.h"
-#include "DemoShell/Runtime/CompositionView.h"
-#include "DemoShell/Runtime/RenderingPipeline.h"
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/EnvironmentSettingsService.h"
@@ -40,7 +40,6 @@
 #include "DemoShell/UI/DemoShellUi.h"
 #include "DemoShell/UI/EnvironmentVm.h"
 #include "DemoShell/UI/LightCullingVm.h"
-#include "DemoShell/UI/RenderingVm.h"
 
 namespace oxygen::examples {
 
@@ -72,7 +71,7 @@ struct DemoShell::Impl {
   internal::SceneControlBlock scene_control;
 
   // Track the pipeline we've initialized the services with
-  observer_ptr<RenderingPipeline> bound_pipeline;
+  observer_ptr<renderer::RenderingPipeline> bound_pipeline;
 
   bool pending_init { false };
   bool logged_missing_env_vm_runtime_route { false };
@@ -292,8 +291,8 @@ auto DemoShell::OnFrameStart(const engine::FrameContext& context) -> void
   }
 }
 
-auto DemoShell::OnMainViewReady(
-  const engine::FrameContext& context, const CompositionView& view) -> void
+auto DemoShell::OnMainViewReady(const engine::FrameContext& context,
+  const renderer::CompositionView& view) -> void
 {
   if (!impl_->initialized) {
     return;
@@ -390,7 +389,7 @@ auto DemoShell::GetCameraRig() const -> observer_ptr<ui::CameraRigController>
   return observer_ptr { impl_->camera_rig.get() };
 }
 
-auto DemoShell::GetRenderingViewMode() const -> RenderMode
+auto DemoShell::GetRenderingViewMode() const -> renderer::RenderMode
 {
   return impl_->rendering_settings_service.GetRenderMode();
 }
@@ -477,7 +476,7 @@ auto DemoShell::UpdatePanels() -> void
 {
   auto pipeline = impl_->config.get_active_pipeline
     ? impl_->config.get_active_pipeline()
-    : observer_ptr<RenderingPipeline> { nullptr };
+    : observer_ptr<renderer::RenderingPipeline> { nullptr };
 
   if (pipeline && impl_->demo_shell_ui) {
     pipeline->SetGpuDebugMouseDownPosition(

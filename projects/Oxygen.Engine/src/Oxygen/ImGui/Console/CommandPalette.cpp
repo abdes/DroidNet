@@ -14,6 +14,8 @@
 
 #include <Oxygen/ImGui/Console/CommandPalette.h>
 
+// NOLINTBEGIN(cppcoreguidelines-pro-type-vararg) - ImGui
+
 namespace oxygen::imgui::consoleui {
 
 namespace {
@@ -31,6 +33,7 @@ namespace {
   constexpr int kFuzzyRank = 1;
   constexpr int kNoSelection = -1;
   constexpr size_t kQueryBufferSize = 256;
+  constexpr ImVec2 kCenterPivot = ImVec2(0.5F, 0.5F);
 
   struct ScoredSymbol final {
     oxygen::console::ConsoleSymbol symbol;
@@ -39,27 +42,31 @@ namespace {
 
   auto ToLower(std::string value) -> std::string
   {
-    std::transform(value.begin(), value.end(), value.begin(),
+    std::ranges::transform(value, value.begin(),
       [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return value;
   }
 
-  auto IsSubsequenceMatch(
-    const std::string_view query, const std::string_view target) -> bool
+  struct MatchQuery {
+    std::string_view query;
+    std::string_view target;
+  };
+
+  auto IsSubsequenceMatch(const MatchQuery& match) -> bool
   {
-    if (query.empty()) {
+    if (match.query.empty()) {
       return true;
     }
     size_t query_index = 0;
-    for (const char c : target) {
-      if (query_index >= query.size()) {
+    for (const char c : match.target) {
+      if (query_index >= match.query.size()) {
         break;
       }
-      if (query[query_index] == c) {
+      if (match.query[query_index] == c) {
         ++query_index;
       }
     }
-    return query_index == query.size();
+    return query_index == match.query.size();
   }
 
   auto KindLabel(const oxygen::console::CompletionKind kind) -> const char*
@@ -75,9 +82,14 @@ namespace {
 
 } // namespace
 
-auto CommandPalette::Draw(
-  oxygen::console::Console& console, ConsoleUiState& state) -> void
+auto CommandPalette::Draw(oxygen::console::Console& console,
+  ConsoleUiState& state, ImGuiContext* imgui_context) -> void
 {
+  if (imgui_context == nullptr) {
+    return;
+  }
+  ImGui::SetCurrentContext(imgui_context);
+
   if (!state.IsPaletteVisible()) {
     return;
   }
@@ -85,15 +97,14 @@ auto CommandPalette::Draw(
   if (const auto& placement = state.PaletteWindowPlacement();
     placement.has_value()) {
     ImGui::SetNextWindowPos(
-      ImVec2(placement->x, placement->y), ImGuiCond_Always);
+      ImVec2(placement->x, placement->y), ImGuiCond_Appearing);
     ImGui::SetNextWindowSize(
-      ImVec2(placement->width, placement->height), ImGuiCond_Always);
+      ImVec2(placement->width, placement->height), ImGuiCond_Appearing);
   } else {
     ImGui::SetNextWindowSize(
       ImVec2(kPaletteWidth, kPaletteHeight), ImGuiCond_Appearing);
     ImGui::SetNextWindowPos(
-      ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing,
-      ImVec2(0.5F, 0.5F));
+      ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, kCenterPivot);
   }
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, kWindowPadding);
   if (!ImGui::Begin("Command Palette", nullptr, kWindowFlags)) {
@@ -121,7 +132,7 @@ auto CommandPalette::Draw(
   const auto& query_text = state.PaletteQuery();
   const auto query_length = std::min(query_text.size(), kQueryBufferSize - 1);
   std::copy_n(query_text.data(), query_length, query_buffer.data());
-  query_buffer[query_length] = '\0';
+  query_buffer.at(query_length) = '\0';
 
   std::string query(query_buffer.data());
   if (state.ConsumePaletteFocusRequest()) {
@@ -142,16 +153,17 @@ auto CommandPalette::Draw(
   for (auto& symbol : symbols) {
     const auto lowered_token = ToLower(symbol.token);
     if (lowered_query.empty()) {
-      results.push_back(
-        ScoredSymbol { .symbol = std::move(symbol), .match_rank = kPrefixRank });
+      results.push_back(ScoredSymbol {
+        .symbol = std::move(symbol), .match_rank = kPrefixRank });
       continue;
     }
     if (lowered_token.starts_with(lowered_query)) {
-      results.push_back(
-        ScoredSymbol { .symbol = std::move(symbol), .match_rank = kPrefixRank });
+      results.push_back(ScoredSymbol {
+        .symbol = std::move(symbol), .match_rank = kPrefixRank });
       continue;
     }
-    if (IsSubsequenceMatch(lowered_query, lowered_token)) {
+    if (IsSubsequenceMatch(
+          { .query = lowered_query, .target = lowered_token })) {
       results.push_back(
         ScoredSymbol { .symbol = std::move(symbol), .match_rank = kFuzzyRank });
     }
@@ -204,8 +216,8 @@ auto CommandPalette::Draw(
   ImGui::Dummy(ImVec2(0.0F, kResultsTopSpacing));
   const auto results_height
     = std::max(0.0F, ImGui::GetContentRegionAvail().y - kResultsBottomReserve);
-  if (ImGui::BeginChild("PaletteResults", ImVec2(0.0F, results_height), true,
-        ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
+  if (ImGui::BeginChild("PaletteResults", ImVec2(0.0F, results_height),
+        ImGuiChildFlags_Borders, ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
     for (size_t i = 0; i < results.size(); ++i) {
       const bool selected = static_cast<int>(i) == cursor;
       const auto& symbol = results[i].symbol;
@@ -223,8 +235,8 @@ auto CommandPalette::Draw(
         ImGui::TextDisabled("    %s", symbol.help.c_str());
       }
     }
-    ImGui::EndChild();
   }
+  ImGui::EndChild();
 
   if (execute_selected) {
     const auto& current
@@ -240,3 +252,5 @@ auto CommandPalette::Draw(
 }
 
 } // namespace oxygen::imgui::consoleui
+
+// NOLINTEND(cppcoreguidelines-pro-type-vararg)

@@ -10,13 +10,14 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Renderer/Passes/AutoExposurePass.h>
+#include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Scene.h>
 
-#include "DemoShell/Runtime/RenderingPipeline.h"
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/PostProcessSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
@@ -63,7 +64,8 @@ namespace {
     return observer_ptr { &pp };
   }
 
-  auto ApplyExposureToPipeline(observer_ptr<RenderingPipeline> pipeline,
+  auto ApplyExposureToPipeline(
+    observer_ptr<renderer::RenderingPipeline> pipeline,
     const engine::ExposureMode mode, const float manual_ev,
     const float manual_camera_ev, const float compensation_ev,
     const float exposure_key, const bool enabled) -> void
@@ -163,7 +165,7 @@ namespace {
 } // namespace
 
 auto PostProcessSettingsService::Initialize(
-  observer_ptr<RenderingPipeline> pipeline) -> void
+  observer_ptr<renderer::RenderingPipeline> pipeline) -> void
 {
   DCHECK_NOTNULL_F(pipeline);
   pipeline_ = pipeline;
@@ -738,8 +740,9 @@ auto PostProcessSettingsService::GetToneMapper() const -> engine::ToneMapper
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const auto raw = settings->GetFloat(kToneMapperKey)
-                     .value_or(static_cast<float>(engine::ToneMapper::kAcesFitted));
+  const auto raw
+    = settings->GetFloat(kToneMapperKey)
+        .value_or(static_cast<float>(engine::ToneMapper::kAcesFitted));
   switch (static_cast<int>(std::round(raw))) {
   case 0:
     return engine::ToneMapper::kNone;
@@ -819,7 +822,8 @@ auto PostProcessSettingsService::ResetToDefaults() -> void
     engine::AutoExposurePassConfig::kDefaultTargetLuminance);
   settings->SetFloat(kAutoExposureSpotRadiusKey,
     engine::AutoExposurePassConfig::kDefaultSpotMeterRadius);
-  settings->SetFloat(kAutoExposureMeteringKey, static_cast<float>(engine::AutoExposurePassConfig::kDefaultMeteringMode));
+  settings->SetFloat(kAutoExposureMeteringKey,
+    static_cast<float>(engine::AutoExposurePassConfig::kDefaultMeteringMode));
 
   epoch_++;
 
@@ -851,7 +855,8 @@ auto PostProcessSettingsService::ResetAutoExposureDefaults() -> void
     engine::AutoExposurePassConfig::kDefaultTargetLuminance);
   settings->SetFloat(kAutoExposureSpotRadiusKey,
     engine::AutoExposurePassConfig::kDefaultSpotMeterRadius);
-  settings->SetFloat(kAutoExposureMeteringKey, static_cast<float>(engine::AutoExposurePassConfig::kDefaultMeteringMode));
+  settings->SetFloat(kAutoExposureMeteringKey,
+    static_cast<float>(engine::AutoExposurePassConfig::kDefaultMeteringMode));
 
   epoch_++;
   Initialize(pipeline_);

@@ -8,35 +8,38 @@
 // https://github.com/adobe/imgui
 
 #include <imgui.h>
+#include <span>
 
 #include <Oxygen/ImGui/Styles/Spectrum.h>
+
+// NOLINTBEGIN(*-avoid-c-arrays,*-array-to-pointer-decay,*-magic-numbers)
 
 namespace oxygen::imgui::spectrum {
 
 extern const unsigned int SourceSansProRegular_compressed_size = 149392;
 extern const unsigned int SourceSansProRegular_compressed_data[];
 
-void LoadFont(float size)
+auto LoadFont(ImFontAtlas& font_atlas, float size) -> ImFont*
 {
-  ImGuiIO& io = ImGui::GetIO();
-  ImFont* font = io.Fonts->AddFontFromMemoryCompressedTTF(
+  ImFont* font = font_atlas.AddFontFromMemoryCompressedTTF(
     SourceSansProRegular_compressed_data, SourceSansProRegular_compressed_size,
     size);
   IM_ASSERT(font != nullptr);
-  io.FontDefault = font;
+  return font;
 }
 
-void StyleColorsSpectrum()
+void StyleColorsSpectrum(ImGuiStyle& style)
 {
-  ImGuiStyle* style = &ImGui::GetStyle();
-  style->GrabRounding = 4.0f;
+  style.FrameRounding = 2.0F;
+  style.FrameBorderSize = 2.0F;
+  style.GrabRounding = 4.0F;
 
-  ImVec4* colors = style->Colors;
+  std::span colors { style.Colors };
   // clang-format off
   colors[ImGuiCol_Text] = ImGui::ColorConvertU32ToFloat4(kGray800); // text on hovered controls is gray900
   colors[ImGuiCol_TextDisabled] = ImGui::ColorConvertU32ToFloat4(kGray500);
   colors[ImGuiCol_WindowBg] = ImGui::ColorConvertU32ToFloat4(kGray100);
-  colors[ImGuiCol_ChildBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+  colors[ImGuiCol_ChildBg] = ImVec4(0.00F, 0.00F, 0.00F, 0.00F);
   colors[ImGuiCol_PopupBg] = ImGui::ColorConvertU32ToFloat4(kGray50); // not sure about this. Note: applies to tooltips too.
   colors[ImGuiCol_Border] = ImGui::ColorConvertU32ToFloat4(kGray300);
   colors[ImGuiCol_BorderShadow] = ImGui::ColorConvertU32ToFloat4(Static::kNone); // We don't want shadows. Ever.
@@ -71,11 +74,11 @@ void StyleColorsSpectrum()
   colors[ImGuiCol_PlotHistogram] = ImGui::ColorConvertU32ToFloat4(kBlue400);
   colors[ImGuiCol_PlotHistogramHovered] = ImGui::ColorConvertU32ToFloat4(kBlue600);
   colors[ImGuiCol_TextSelectedBg] = ImGui::ColorConvertU32ToFloat4((kBlue400 & 0x00FFFFFF) | 0x33000000);
-  colors[ImGuiCol_DragDropTarget] = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
+  colors[ImGuiCol_DragDropTarget] = ImVec4(1.00F, 1.00F, 0.00F, 0.90F);
   colors[ImGuiCol_NavCursor] = ImGui::ColorConvertU32ToFloat4((kGray900 & 0x00FFFFFF) | 0x0A000000);
-  colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
-  colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
-  colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.20f, 0.20f, 0.20f, 0.35f);
+  colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00F, 1.00F, 1.00F, 0.70F);
+  colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80F, 0.80F, 0.80F, 0.20F);
+  colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.20F, 0.20F, 0.20F, 0.35F);
   colors[ImGuiCol_CheckMark] = ImGui::ColorConvertU32ToFloat4(kGray400);
   colors[ImGuiCol_Tab] = ImGui::ColorConvertU32ToFloat4(kGray300);
   colors[ImGuiCol_TabSelected] = ImGui::ColorConvertU32ToFloat4(kBlue500);
@@ -86,3 +89,5 @@ void StyleColorsSpectrum()
 }
 
 } // namespace oxygen::imgui::spectrum
+
+// NOLINTEND(*-avoid-c-arrays,*-array-to-pointer-decay,*-magic-numbers)

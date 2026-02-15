@@ -16,10 +16,11 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 
-#include "DemoShell/Runtime/CompositionView.h"
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/CameraRigController.h"
@@ -218,7 +219,8 @@ auto CameraSettingsService::OnSceneActivated(scene::Scene& /*scene*/) -> void
 }
 
 auto CameraSettingsService::OnMainViewReady(
-  const engine::FrameContext& /*context*/, const CompositionView& view) -> void
+  const engine::FrameContext& /*context*/,
+  const renderer::CompositionView& view) -> void
 {
   if (!view.camera.has_value()) {
     DCHECK_F(false, "Main view must provide a camera");
@@ -704,8 +706,8 @@ void CameraSettingsService::ApplyPendingReset()
   glm::vec3 reset_position = initial_camera_position_;
   glm::quat reset_rotation = initial_camera_rotation_;
 
-  const bool orbit_mode = camera_rig_
-    && camera_rig_->GetMode() == ui::CameraControlMode::kOrbit;
+  const bool orbit_mode
+    = camera_rig_ && camera_rig_->GetMode() == ui::CameraControlMode::kOrbit;
   if (orbit_mode) {
     constexpr glm::vec3 orbit_target(0.0F, 0.0F, 0.0F);
     float orbit_distance = glm::length(initial_camera_position_ - orbit_target);
@@ -714,8 +716,8 @@ void CameraSettingsService::ApplyPendingReset()
       reset_position = orbit_target - space::look::Forward * orbit_distance;
     } else {
       // Keep the baseline direction, but enforce a valid orbit radius.
-      const glm::vec3 baseline_dir = glm::normalize(
-        initial_camera_position_ - orbit_target);
+      const glm::vec3 baseline_dir
+        = glm::normalize(initial_camera_position_ - orbit_target);
       reset_position = orbit_target + baseline_dir * orbit_distance;
     }
     reset_rotation = MakeLookRotationFromPosition(reset_position, orbit_target);

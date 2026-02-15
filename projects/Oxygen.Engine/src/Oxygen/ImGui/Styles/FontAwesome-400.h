@@ -6,9 +6,13 @@
 
 #pragma once
 
+#include <array>
+
+#include <Oxygen/ImGui/api_export.h>
+
 namespace oxygen::imgui::styles {
 
-extern const unsigned int FontAwesome_compressed_size;
-extern const unsigned char FontAwesome_compressed_data[];
+OXGN_IMGUI_API extern const unsigned int FontAwesome_compressed_size;
+OXGN_IMGUI_API extern const unsigned char FontAwesome_compressed_data[];
 
 } // namespace oxygen::imgui::styles

@@ -15,54 +15,52 @@
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
-#include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
+#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 
 #include "DemoShell/Runtime/AppWindow.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 
+namespace oxygen::examples {
+
 namespace {
 
-namespace o = oxygen;
+  void MaybeUnhookImGui(observer_ptr<AsyncEngine> engine) noexcept
+  {
+    auto imgui_module_ref = engine->GetModule<engine::imgui::ImGuiModule>();
+    if (!imgui_module_ref) {
+      DLOG_F(INFO, "ImGui module not available; skipping window detach");
+      return;
+    }
 
-void MaybeUnhookImGui(o::observer_ptr<o::AsyncEngine> engine) noexcept
-{
-  auto imgui_module_ref = engine->GetModule<o::imgui::ImGuiModule>();
-  if (!imgui_module_ref) {
-    DLOG_F(INFO, "ImGui module not available; skipping window detach");
-    return;
+    try {
+      imgui_module_ref->get().SetWindowId(platform::kInvalidWindowId);
+    } catch (const std::exception& e) {
+      LOG_F(ERROR, "Failed to unhook ImGui from window: {}", e.what());
+    }
   }
 
-  try {
-    imgui_module_ref->get().SetWindowId(o::platform::kInvalidWindowId);
-  } catch (const std::exception& e) {
-    LOG_F(ERROR, "Failed to unhook ImGui from window: {}", e.what());
+  bool MaybeHookImGui(
+    observer_ptr<AsyncEngine> engine, platform::WindowIdType window_id)
+  {
+    auto imgui_module_ref = engine->GetModule<engine::imgui::ImGuiModule>();
+    if (!imgui_module_ref) {
+      LOG_F(INFO, "ImGui module not available; cannot bind to window {}",
+        window_id);
+      return false;
+    }
+
+    imgui_module_ref->get().SetWindowId(window_id);
+
+    return true;
   }
-}
-
-bool MaybeHookImGui(
-  o::observer_ptr<o::AsyncEngine> engine, o::platform::WindowIdType window_id)
-{
-  auto imgui_module_ref = engine->GetModule<o::imgui::ImGuiModule>();
-  if (!imgui_module_ref) {
-    LOG_F(
-      INFO, "ImGui module not available; cannot bind to window {}", window_id);
-    return false;
-  }
-
-  imgui_module_ref->get().SetWindowId(window_id);
-
-  return true;
-}
 
 } // namespace
-
-namespace oxygen::examples {
 
 // Map holding per-AppWindow subscriptions. Kept in translation unit so the
 // public header doesn't need to include heavy engine headers.
@@ -170,7 +168,7 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
   if (CreateSurface() && EnsureFramebuffers()) {
     auto sub = engine_->SubscribeModuleAttached(
       [this](engine::ModuleEvent const& ev) {
-        if (ev.type_id == imgui::ImGuiModule::ClassTypeId()) {
+        if (ev.type_id == engine::imgui::ImGuiModule::ClassTypeId()) {
           MaybeHookImGui(engine_, GetWindowId());
         }
       },

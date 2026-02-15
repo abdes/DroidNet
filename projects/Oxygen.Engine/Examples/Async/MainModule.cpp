@@ -34,10 +34,12 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Platform/Window.h>
+#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
+#include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
 #include <Oxygen/Renderer/SceneCameraViewResolver.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
@@ -50,9 +52,7 @@
 #include "Async/AsyncDemoVm.h"
 #include "Async/MainModule.h"
 #include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/CompositionView.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Runtime/ForwardPipeline.h"
 #include "DemoShell/UI/CameraRigController.h"
 #include "DemoShell/UI/DroneCameraController.h"
 
@@ -343,7 +343,7 @@ auto MainModule::OnAttachedImpl(
   DCHECK_NOTNULL_F(engine);
 
   // Create Pipeline
-  pipeline_ = std::make_unique<oxygen::examples::ForwardPipeline>(
+  pipeline_ = std::make_unique<renderer::ForwardPipeline>(
     observer_ptr { app_.engine.get() });
 
   auto shell = std::make_unique<DemoShell>();
@@ -368,9 +368,7 @@ auto MainModule::OnAttachedImpl(
   };
   shell_config.enable_camera_rig = true;
   shell_config.get_active_pipeline
-    = [this]() -> observer_ptr<oxygen::examples::RenderingPipeline> {
-    return observer_ptr { pipeline_.get() };
-  };
+    = [this]() { return observer_ptr { pipeline_.get() }; };
 
   if (!shell->Initialize(shell_config)) {
     LOG_F(WARNING, "Async: DemoShell initialization failed");
@@ -385,7 +383,7 @@ auto MainModule::OnAttachedImpl(
   main_view_id_ = GetOrCreateViewId("MainView");
 
   // --- ImGuiPass configuration ---
-  auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
+  auto imgui_module_ref = app_.engine->GetModule<engine::imgui::ImGuiModule>();
   if (imgui_module_ref) {
     auto& imgui_module = imgui_module_ref->get();
     if (app_window_) {
@@ -639,7 +637,7 @@ auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
 
   LOG_SCOPE_F(3, "MainModule::OnPreRender");
 
-  auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
+  auto imgui_module_ref = app_.engine->GetModule<engine::imgui::ImGuiModule>();
   if (imgui_module_ref) {
     auto& imgui_module = imgui_module_ref->get();
     if (auto* imgui_context = imgui_module.GetImGuiContext()) {
@@ -923,8 +921,8 @@ auto MainModule::ConfigureDrone() -> void
   // NOLINTEND(*-magic-numbers)
 }
 
-auto MainModule::UpdateComposition(
-  engine::FrameContext& context, std::vector<CompositionView>& views) -> void
+auto MainModule::UpdateComposition(engine::FrameContext& context,
+  std::vector<renderer::CompositionView>& views) -> void
 {
   auto& shell = GetShell();
   if (!main_camera_.IsAlive()) {
@@ -945,13 +943,14 @@ auto MainModule::UpdateComposition(
   }
 
   // Create the main scene view intent
-  auto main_comp = CompositionView::ForScene(main_view_id_, view, main_camera_);
+  auto main_comp
+    = renderer::CompositionView::ForScene(main_view_id_, view, main_camera_);
   main_comp.with_atmosphere = true;
   shell.OnMainViewReady(context, main_comp);
   views.push_back(std::move(main_comp));
 
   const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
-  views.push_back(CompositionView::ForImGui(
+  views.push_back(renderer::CompositionView::ForImGui(
     imgui_view_id, view, [](graphics::CommandRecorder&) { }));
 }
 
