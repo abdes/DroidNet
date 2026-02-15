@@ -346,8 +346,8 @@ auto ModuleManager::ApplyConsoleCVars(
     ordered_modules.push_back(module.get());
   }
 
-  std::ranges::stable_sort(ordered_modules,
-    [](const EngineModule* lhs, const EngineModule* rhs) {
+  std::ranges::stable_sort(
+    ordered_modules, [](const EngineModule* lhs, const EngineModule* rhs) {
       return lhs->GetPriority().get() < rhs->GetPriority().get();
     });
 
@@ -565,6 +565,9 @@ auto ExecuteSynchronousPhase(const std::vector<EngineModule*>& list,
           EngineModule& mm, observer_ptr<FrameContext> c) { mm.OnSnapshot(c); },
         m, ctx, std::ref(*m), std::ref(ctx));
       break;
+    case PhaseId::kPublishViews:
+      co_await RunHandlerImpl(m->OnPublishViews(ctx), m, ctx);
+      break;
     case PhaseId::kCompositing:
       co_await RunHandlerImpl(m->OnCompositing(ctx), m, ctx);
       break;
@@ -636,7 +639,8 @@ auto ExecuteBarrieredConcurrencyPhase(const std::vector<EngineModule*>& list,
       co_await oxygen::co::AllOf(std::move(tasks));
     }
 
-    co_await RunHandlerImpl(renderer_module->OnPreRender(ctx), renderer_module, ctx);
+    co_await RunHandlerImpl(
+      renderer_module->OnPreRender(ctx), renderer_module, ctx);
     co_return;
   }
 
@@ -734,6 +738,7 @@ auto ModuleManager::ExecutePhase(
   // dispatch to a helper based on its execution model.
   switch (phase) {
   case PhaseId::kFrameStart:
+  case PhaseId::kPublishViews:
   case PhaseId::kSnapshot:
   case PhaseId::kCompositing:
   case PhaseId::kFrameEnd: {

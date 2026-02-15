@@ -75,20 +75,21 @@ enum class PhaseId : std::uint32_t {
   kGameplay = 5,
   kSceneMutation = 6,
   kTransformPropagation = 7,
-  kSnapshot = 8,
-  kParallelTasks = 9,
-  kPostParallel = 10,
-  kGuiUpdate = 11,
-  kPreRender = 12,
-  kRender = 13,
-  kCompositing = 14,
-  kPresent = 15,
-  kAsyncPoll = 16,
-  kBudgetAdapt = 17,
-  kFrameEnd = 18,
-  kDetachedServices = 19,
+  kPublishViews = 8,
+  kSnapshot = 9,
+  kParallelTasks = 10,
+  kPostParallel = 11,
+  kGuiUpdate = 12,
+  kPreRender = 13,
+  kRender = 14,
+  kCompositing = 15,
+  kPresent = 16,
+  kAsyncPoll = 17,
+  kBudgetAdapt = 18,
+  kFrameEnd = 19,
+  kDetachedServices = 20,
 
-  kCount = 20, // Must be last
+  kCount = 21, // Must be last
 };
 using PhaseIndex = EnumAsIndex<PhaseId>;
 
@@ -293,11 +294,18 @@ required to be visible before transform propagation.)",
       },
       DocStrings {
         .name = R"(TransformPropagation)",
-        .description
-        = R"(Propagate hierarchical transforms and finalize spatial
+        .description = R"(Propagate hierarchical transforms and finalize spatial
 relationships. After this phase the engine will publish an immutable
 FrameSnapshot that parallel readers may consume; the snapshot reflects the
 current GameState.)",
+      },
+      DocStrings {
+        .name = R"(PublishViews)",
+        .description
+        = R"(Publish and update per-frame view registrations in FrameContext
+after transforms are finalized and before snapshot publication. This phase is
+coordinator-ordered and intended to stay short: view publication only, with no
+heavy rendering preparation work.)",
       },
       DocStrings {
         .name = R"(Snapshot)",
@@ -437,10 +445,10 @@ propagation and snapshot publication.)",
       DocStrings {
         .name = R"(B4_SnapshotReady)",
         .description
-        = R"(Frame snapshot published. Indicates transforms are finalized and
-an immutable FrameSnapshot (read-only view over GameState) is available
-for parallel Category C tasks. Downstream tasks produce FrameState outputs
-based on this snapshot.)",
+        = R"(Frame snapshot published. Indicates transforms are finalized,
+view publication completed, and an immutable FrameSnapshot (read-only view
+over GameState) is available for parallel Category C tasks. Downstream tasks
+produce FrameState outputs based on this snapshot.)",
       },
       DocStrings {
         .name = R"(B5_ParallelComplete)",
@@ -561,6 +569,13 @@ constexpr EnumIndexedArray<PhaseId, PhaseDesc> kPhaseRegistry = {
     .id = PhaseId::kTransformPropagation,
     .category = ExecutionModel::kBarrieredConcurrency,
     .allowed_mutations = AllowMutation::kGameState,
+    .thread_safe = false,
+  },
+  PhaseDesc {
+    .id = PhaseId::kPublishViews,
+    .category = ExecutionModel::kSynchronousOrdered,
+    .allowed_mutations
+    = AllowMutation::kFrameState | AllowMutation::kEngineState,
     .thread_safe = false,
   },
   PhaseDesc {
@@ -688,7 +703,7 @@ constexpr EnumIndexedArray<BarrierId, BarrierDesc> kBarrierRegistry = {
   },
   BarrierDesc {
     .id = BarrierId::kSnapshotReady,
-    .after_phase = PhaseId::kTransformPropagation,
+    .after_phase = PhaseId::kPublishViews,
   },
   BarrierDesc {
     .id = BarrierId::kParallelComplete,

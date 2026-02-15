@@ -57,6 +57,8 @@ public:
     -> void override;
   auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
+  auto OnPublishViews(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
   auto OnPreRender(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
   auto OnCompositing(observer_ptr<engine::FrameContext> context)

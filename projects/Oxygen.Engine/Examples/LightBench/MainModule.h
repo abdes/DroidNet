@@ -59,8 +59,8 @@ public:
   {
     using namespace core;
     return engine::MakeModuleMask<PhaseId::kFrameStart, PhaseId::kSceneMutation,
-      PhaseId::kGameplay, PhaseId::kGuiUpdate, PhaseId::kPreRender,
-      PhaseId::kCompositing, PhaseId::kFrameEnd>();
+      PhaseId::kGameplay, PhaseId::kPublishViews, PhaseId::kGuiUpdate,
+      PhaseId::kPreRender, PhaseId::kCompositing, PhaseId::kFrameEnd>();
   }
 
   ~MainModule() override = default;

@@ -142,10 +142,10 @@ public:
   {
   }
 
-  // [Phase: kSceneMutation]
+  // [Phase: kPublishViews]
   // Register active views for the frame.
   // The pipeline iterates 'view_descs' and registers them with the renderer.
-  virtual auto OnSceneMutation(observer_ptr<engine::FrameContext> frame_ctx,
+  virtual auto OnPublishViews(observer_ptr<engine::FrameContext> frame_ctx,
     engine::Renderer& renderer, scene::Scene& scene,
     std::span<const CompositionView> view_descs,
     graphics::Framebuffer* composite_target) -> co::Co<>

@@ -119,6 +119,20 @@ auto DemoModuleBase::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   if (!pipeline_) {
     co_return;
   }
+
+  // Gather composition intent during SceneMutation so any camera/view-node
+  // edits happen before TransformPropagation.
+  active_views_.clear();
+  UpdateComposition(*context, active_views_);
+  co_return;
+}
+
+auto DemoModuleBase::OnPublishViews(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
+{
+  if (!pipeline_) {
+    co_return;
+  }
   auto* renderer = GetRendererFromEngine(app_.engine.get());
   if (renderer == nullptr) {
     co_return;
@@ -127,16 +141,6 @@ auto DemoModuleBase::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   if (!scene) {
     co_return;
   }
-
-  // 1. Gather composition intent from the demo
-  active_views_.clear();
-  UpdateComposition(*context, active_views_);
-
-  // 2. Perform any per-frame scene updates or logic before pipeline execution
-  // (Registration is now handled by the pipeline mapping layer)
-
-  // 3. Let pipeline handle the rendering logic (synchronization of resources,
-  // mapping, etc.)
   graphics::Framebuffer* target_fb = nullptr;
   if (app_window_) {
     if (auto fb_weak = app_window_->GetCurrentFrameBuffer();
@@ -144,7 +148,7 @@ auto DemoModuleBase::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       target_fb = fb_weak.lock().get();
     }
   }
-  co_await pipeline_->OnSceneMutation(
+  co_await pipeline_->OnPublishViews(
     context, *renderer, *scene, active_views_, target_fb);
 }
 

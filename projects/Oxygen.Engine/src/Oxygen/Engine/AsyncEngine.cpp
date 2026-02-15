@@ -13,12 +13,12 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
-#include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/TimeManager.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -104,8 +104,8 @@ AsyncEngine::AsyncEngine(std::shared_ptr<Platform> platform,
   : config_(std::move(config))
   , platform_(std::move(platform))
   , gfx_weak_(std::move(graphics))
-  , path_finder_config_(std::make_shared<const PathFinderConfig>(
-      config_.path_finder_config))
+  , path_finder_config_(
+      std::make_shared<const PathFinderConfig>(config_.path_finder_config))
   , path_finder_(path_finder_config_, std::filesystem::current_path())
   , module_manager_(std::make_unique<ModuleManager>(observer_ptr { this }))
 {
@@ -285,7 +285,10 @@ auto AsyncEngine::SetTargetFps(uint32_t fps) noexcept -> void
   LOG_F(INFO, "AsyncEngine target_fps set to {}", config_.target_fps);
 }
 
-auto AsyncEngine::GetConsole() noexcept -> console::Console& { return console_; }
+auto AsyncEngine::GetConsole() noexcept -> console::Console&
+{
+  return console_;
+}
 
 auto AsyncEngine::GetConsole() const noexcept -> const console::Console&
 {
@@ -403,8 +406,14 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
         GetPhysicalClock());
       co_await PhaseTransforms(context);
     }
+    // Publish view registrations after transforms and before snapshot.
+    {
+      PhaseTimer timer(
+        frame_context_, core::PhaseId::kPublishViews, GetPhysicalClock());
+      co_await PhasePublishViews(context);
+    }
 
-    // Immutable snapshot build (B3)
+    // Immutable snapshot build (B4)
     const UnifiedSnapshot* snapshot_ptr = nullptr;
     {
       PhaseTimer timer(
@@ -624,10 +633,8 @@ auto AsyncEngine::RegisterEngineConsoleBindings() -> void
     .name = "ngin.cvars.save",
     .help = "Save archived CVars to the configured cvars archive path",
     .flags = CommandFlags::kNone,
-    .handler = [this](const std::vector<std::string>&,
-                 const CommandContext&) -> ExecutionResult {
-      return console_.SaveArchiveCVars(path_finder_);
-    },
+    .handler = [this](const std::vector<std::string>&, const CommandContext&)
+      -> ExecutionResult { return console_.SaveArchiveCVars(path_finder_); },
   });
 
   (void)console_.RegisterCommand(CommandDefinition {
@@ -649,20 +656,16 @@ auto AsyncEngine::RegisterEngineConsoleBindings() -> void
     .name = "ngin.console.history.save",
     .help = "Save console command history",
     .flags = CommandFlags::kNone,
-    .handler = [this](const std::vector<std::string>&,
-                 const CommandContext&) -> ExecutionResult {
-      return console_.SaveHistory(path_finder_);
-    },
+    .handler = [this](const std::vector<std::string>&, const CommandContext&)
+      -> ExecutionResult { return console_.SaveHistory(path_finder_); },
   });
 
   (void)console_.RegisterCommand(CommandDefinition {
     .name = "ngin.console.history.load",
     .help = "Load console command history",
     .flags = CommandFlags::kNone,
-    .handler = [this](const std::vector<std::string>&,
-                 const CommandContext&) -> ExecutionResult {
-      return console_.LoadHistory(path_finder_);
-    },
+    .handler = [this](const std::vector<std::string>&, const CommandContext&)
+      -> ExecutionResult { return console_.LoadHistory(path_finder_); },
   });
 }
 
@@ -927,6 +930,18 @@ auto AsyncEngine::PhaseTransforms(observer_ptr<FrameContext> context)
   // Execute module transform propagation first
   co_await module_manager_->ExecutePhase(
     PhaseId::kTransformPropagation, context);
+}
+
+// ReSharper disable once CppMemberFunctionMayBeConst
+auto AsyncEngine::PhasePublishViews(observer_ptr<FrameContext> context)
+  -> co::Co<>
+{
+  const auto tag = internal::EngineTagFactory::Get();
+  context->SetCurrentPhase(PhaseId::kPublishViews, tag);
+
+  LOG_F(2, "[F{}][A] PhasePublishViews", frame_number_);
+
+  co_await module_manager_->ExecutePhase(PhaseId::kPublishViews, context);
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst

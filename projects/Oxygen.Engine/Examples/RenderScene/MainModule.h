@@ -61,7 +61,7 @@ public:
   {
     using enum core::PhaseId;
     return engine::MakeModuleMask<kFrameStart, kSceneMutation, kGameplay,
-      kGuiUpdate, kPreRender, kCompositing, kFrameEnd>();
+      kPublishViews, kGuiUpdate, kPreRender, kCompositing, kFrameEnd>();
   }
 
   ~MainModule() override;
