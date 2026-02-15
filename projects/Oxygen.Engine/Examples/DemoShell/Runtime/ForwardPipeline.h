@@ -19,6 +19,9 @@ class AsyncEngine;
 } // namespace oxygen
 
 namespace oxygen::examples {
+namespace internal {
+  class ForwardPipelineImpl;
+} // namespace internal
 
 //! Implements a standard forward rendering pipeline.
 /*!
@@ -113,8 +116,7 @@ public:
     const engine::LightCullingPassConfig& config) -> void override;
 
 private:
-  struct Impl;
-  std::unique_ptr<Impl> impl_;
+  std::unique_ptr<internal::ForwardPipelineImpl> impl_;
 };
 
 } // namespace oxygen::examples
