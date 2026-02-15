@@ -125,6 +125,10 @@ auto DemoModuleBase::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   // Gather composition intent during SceneMutation so any camera/view-node
   // edits happen before TransformPropagation.
   active_views_.clear();
+  if (!app_.headless && app_window_ && !app_window_->GetWindow()) {
+    LOG_F(INFO, "Skipping UpdateComposition: app window is no longer valid");
+    co_return;
+  }
   UpdateComposition(*context, active_views_);
   co_return;
 }
