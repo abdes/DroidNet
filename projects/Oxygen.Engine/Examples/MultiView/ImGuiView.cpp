@@ -51,13 +51,20 @@ void ImGuiView::OnSceneMutation()
   UpdateViewForCurrentSurface();
 }
 
-auto ImGuiView::OnPreRender(engine::Renderer& /*renderer*/) -> co::Co<>
+auto ImGuiView::OnPreRender(engine::Renderer& renderer) -> co::Co<>
 {
   if (!FramebufferRef() || !ColorTextureRef()) {
     SetViewReady(false);
     co_return;
   }
   SetViewReady(true);
+  renderer.RegisterViewRenderGraph(
+    GetViewId(),
+    [this](ViewId /*id*/, const engine::RenderContext& ctx,
+      graphics::CommandRecorder& recorder) -> co::Co<> {
+      co_await RenderFrame(ctx, recorder);
+    },
+    ResolvedView { ResolvedView::Params {} });
 
   co_return;
 }
@@ -69,16 +76,13 @@ void ImGuiView::RegisterViewForRendering(engine::Renderer& renderer)
     return;
   }
 
-  // We provide a dummy resolver since ImGui doesn't render scene objects.
-  renderer.RegisterView(
+  renderer.RegisterViewRenderGraph(
     GetViewId(),
-    [](const engine::ViewContext&) {
-      return ResolvedView { ResolvedView::Params {} };
-    },
     [this](ViewId /*id*/, const engine::RenderContext& ctx,
       graphics::CommandRecorder& recorder) -> co::Co<> {
       co_await RenderFrame(ctx, recorder);
-    });
+    },
+    ResolvedView { ResolvedView::Params {} });
 }
 
 //! Updates the view context to the current surface size.

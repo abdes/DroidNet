@@ -8,7 +8,6 @@
 
 #include <optional>
 #include <span>
-#include <string_view>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Types/Geometry.h>
@@ -21,6 +20,8 @@
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
 
 #include "DemoShell/Runtime/CompositionView.h"
+#include "DemoShell/Runtime/PipelineFeature.h"
+#include "DemoShell/Runtime/RenderMode.h"
 
 namespace oxygen {
 namespace engine {
@@ -40,48 +41,6 @@ namespace graphics {
 } // namespace oxygen
 
 namespace oxygen::examples {
-
-//! Bitmask of supported rendering features for pipeline discovery.
-enum class PipelineFeature : std::uint32_t {
-  kNone = 0,
-  kOpaqueShading = 1 << 0,
-  kTransparentShading = 1 << 1,
-  kLightCulling = 1 << 2,
-  kPostProcess = 1 << 3,
-  kAll = 0xFFFFFFFF
-};
-
-//! Render mode selection for pipelines.
-enum class RenderMode : uint8_t {
-  kSolid,
-  kWireframe,
-  kOverlayWireframe,
-};
-
-[[nodiscard]] inline auto to_string(RenderMode mode) -> std::string_view
-{
-  switch (mode) {
-  case RenderMode::kWireframe:
-    return "wireframe";
-  case RenderMode::kOverlayWireframe:
-    return "overlay_wireframe";
-  case RenderMode::kSolid:
-  default:
-    return "solid";
-  }
-}
-
-inline auto operator|(PipelineFeature a, PipelineFeature b) -> PipelineFeature
-{
-  return static_cast<PipelineFeature>(
-    static_cast<std::uint32_t>(a) | static_cast<std::uint32_t>(b));
-}
-
-inline auto operator&(PipelineFeature a, PipelineFeature b) -> PipelineFeature
-{
-  return static_cast<PipelineFeature>(
-    static_cast<std::uint32_t>(a) & static_cast<std::uint32_t>(b));
-}
 
 class RenderingPipeline : public Object {
 public:

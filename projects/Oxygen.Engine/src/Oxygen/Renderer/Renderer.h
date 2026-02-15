@@ -30,7 +30,6 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Core/Types/ViewResolver.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
@@ -189,30 +188,26 @@ public:
   OXGN_RNDR_API auto OnFrameEnd(observer_ptr<FrameContext> context)
     -> void override;
 
-  //! Register a view for rendering (resolver + render-graph factory).
+  //! Register a view render graph for this frame.
   /*!
-    A convenience API to register both the ViewResolver and the RenderGraph
-    factory for a particular view id in one call. This simplifies resource
-    lifetime management since the renderer can now match resolvers with
-    render graphs on a per-view basis and later remove them with
-    UnregisterView().
+    Publishes both the render graph factory and resolved view snapshot.
+    Call this during frame preparation for each view that should render.
 
     @param view_id The unique identifier for the view
-    @param resolver Callable that resolves the view using its ViewContext
     @param factory Callable that performs rendering work for this view
+    @param view Resolved per-frame camera/view snapshot
   */
-  OXGN_RNDR_API auto RegisterView(
-    ViewId view_id, ViewResolver resolver, RenderGraphFactory factory) -> void;
+  OXGN_RNDR_API auto RegisterViewRenderGraph(
+    ViewId view_id, RenderGraphFactory factory, ResolvedView view) -> void;
 
-  //! Unregister a previously registered view.
+  //! Unregister a previously published view render graph.
   /*!
-    Removes resolver and render graph entries and clears any cached per-view
-    prepared state in the renderer. Safe to call even when the view is not
-    registered.
+    Removes render graph entries and clears any cached per-view prepared state
+    in the renderer. Safe to call even when the view is not registered.
 
     @param view_id The unique identifier for the view to remove
   */
-  OXGN_RNDR_API auto UnregisterView(ViewId view_id) -> void;
+  OXGN_RNDR_API auto UnregisterViewRenderGraph(ViewId view_id) -> void;
 
   //! Submit compositing tasks for the current frame.
   OXGN_RNDR_API auto RegisterComposition(CompositionSubmission submission,
@@ -453,18 +448,18 @@ private:
   std::unique_ptr<renderer::resources::TextureBinder> texture_binder_;
   observer_ptr<content::IAssetLoader> asset_loader_;
 
-  // View resolver and render graph registration (per-view API). Access is
+  // Render graph registration (per-view API). Access is
   // coordinated through a shared mutex so registration can occur from UI or
   // background threads while render phases take consistent snapshots.
   mutable std::shared_mutex view_registration_mutex_;
-  std::unordered_map<ViewId, ViewResolver> view_resolvers_;
   std::unordered_map<ViewId, RenderGraphFactory> render_graphs_;
 
   mutable std::shared_mutex view_state_mutex_;
   std::unordered_map<ViewId, bool> view_ready_states_;
 
-  // Cache of resolved views from OnPreRender, used in OnRender to ensure
-  // scene preparation and rendering use the same view state
+  // Cache of resolved views published for the current frame before OnPreRender.
+  // Used by OnPreRender/OnRender to ensure scene prep and rendering use the
+  // same per-view snapshot.
   std::unordered_map<ViewId, ResolvedView> resolved_views_;
 
   std::unique_ptr<RenderContextPool> render_context_pool_;

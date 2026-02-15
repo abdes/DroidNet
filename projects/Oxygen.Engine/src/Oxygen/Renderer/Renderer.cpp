@@ -38,7 +38,6 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Core/Types/ViewResolver.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Engine/AsyncEngine.h>
@@ -658,29 +657,27 @@ auto Renderer::OverrideMaterialUvTransform(const data::MaterialAsset& material,
   return materials->OverrideUvTransform(material, uv_scale, uv_offset);
 }
 
-auto Renderer::RegisterView(
-  ViewId view_id, ViewResolver resolver, RenderGraphFactory factory) -> void
+auto Renderer::RegisterViewRenderGraph(
+  ViewId view_id, RenderGraphFactory factory, ResolvedView view) -> void
 {
   std::unique_lock lock(view_registration_mutex_);
-  view_resolvers_.insert_or_assign(view_id, std::move(resolver));
   render_graphs_.insert_or_assign(view_id, std::move(factory));
-  DLOG_F(1, "RegisterView: view_id={}, total_views={}", view_id.get(),
-    render_graphs_.size());
+  resolved_views_.insert_or_assign(view_id, std::move(view));
+  DLOG_F(1, "RegisterViewRenderGraph: view_id={}, total_views={}",
+    view_id.get(), render_graphs_.size());
 }
 
-auto Renderer::UnregisterView(ViewId view_id) -> void
+auto Renderer::UnregisterViewRenderGraph(ViewId view_id) -> void
 {
-  std::size_t removed_resolver = 0;
   std::size_t removed_graph = 0;
   {
     std::unique_lock lock(view_registration_mutex_);
-    removed_resolver = view_resolvers_.erase(view_id);
     removed_graph = render_graphs_.erase(view_id);
+    resolved_views_.erase(view_id);
   }
 
-  DLOG_F(1,
-    "UnregisterView: view_id={}, removed_resolver={}, removed_factory={}",
-    view_id.get(), removed_resolver, removed_graph);
+  DLOG_F(1, "UnregisterViewRenderGraph: view_id={}, removed_factory={}",
+    view_id.get(), removed_graph);
 
   std::size_t pending_size = 0;
   {
@@ -689,7 +686,8 @@ auto Renderer::UnregisterView(ViewId view_id) -> void
     pending_size = pending_cleanup_.size();
   }
 
-  DLOG_F(1, "UnregisterView: pending_cleanup_count={}", pending_size);
+  DLOG_F(
+    1, "UnregisterViewRenderGraph: pending_cleanup_count={}", pending_size);
 
   {
     std::unique_lock state_lock(view_state_mutex_);
@@ -734,11 +732,6 @@ auto Renderer::OnPreRender(observer_ptr<FrameContext> context) -> co::Co<>
       DLOG_F(WARNING, "no render graphs registered; skipping");
       co_return;
     }
-
-    if (view_resolvers_.empty()) {
-      DLOG_F(WARNING, "no view resolvers registered; skipping");
-      co_return;
-    }
   }
 
   // Failing to acquire a slot will throw, and drop the frame.
@@ -766,15 +759,15 @@ auto Renderer::OnPreRender(observer_ptr<FrameContext> context) -> co::Co<>
   render_context_->frame_sequence = context->GetFrameSequenceNumber();
   render_context_->delta_time = last_frame_dt_seconds_;
 
-  // Clear the per-frame and per-view state (per-frame caches are refreshed
-  // at the start of PreRender). Deferred cleanup of unregistered views is
-  // performed at frame end (OnFrameEnd) to avoid destroying entries while
-  // other modules may add registrations during the frame start.
+  // Clear per-frame prepared state. Resolved views are published externally
+  // before OnPreRender and are reset in OnFrameStart.
+  // Deferred cleanup of unregistered views is performed at frame end
+  // (OnFrameEnd) to avoid destroying entries while other modules may add
+  // registrations during the frame start.
   {
     std::unique_lock state_lock(view_state_mutex_);
     view_ready_states_.clear();
   }
-  resolved_views_.clear();
   prepared_frames_.clear();
   per_view_storage_.clear();
 
@@ -791,23 +784,12 @@ auto Renderer::OnPreRender(observer_ptr<FrameContext> context) -> co::Co<>
         "View {} ({})", nostd::to_string(view_ctx.id), view_ctx.metadata.name)
         .c_str());
     try {
-      ViewResolver resolver_copy;
-      {
-        std::shared_lock lock(view_registration_mutex_);
-        const auto resolver_it = view_resolvers_.find(view_ctx.id);
-        if (resolver_it == view_resolvers_.end()) {
-          LOG_F(2, "View {} has no resolver; skipping", view_ctx.id.get());
-          continue;
-        }
-        resolver_copy = resolver_it->second; // copy function
+      const auto resolved_it = resolved_views_.find(view_ctx.id);
+      if (resolved_it == resolved_views_.end()) {
+        LOG_F(2, "View {} has no resolved view; skipping", view_ctx.id.get());
+        continue;
       }
-
-      // Invoke resolver outside of the registration lock to avoid locking
-      // user-provided code paths.
-      const auto resolved = resolver_copy(view_ctx);
-
-      // Cache the resolved view for use in OnRender
-      resolved_views_.insert_or_assign(view_ctx.id, resolved);
+      const auto& resolved = resolved_it->second;
 
       // Build frame data for this view (scene prep, culling, draw list)
       [[maybe_unused]] const auto draw_count
@@ -898,7 +880,7 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
 
   // Iterate all views and execute their registered render graphs.
   // Take a snapshot of the registered factories under lock so
-  // UnregisterView() can safely mutate the underlying containers
+  // UnregisterViewRenderGraph() can safely mutate the underlying containers
   // without invalidating our iteration.
   std::vector<std::pair<ViewId, RenderGraphFactory>> graphs_snapshot;
   {
@@ -1951,6 +1933,8 @@ auto Renderer::UpdateSceneConstantsFromView(const ResolvedView& view) -> void
 auto Renderer::OnFrameStart(observer_ptr<FrameContext> context) -> void
 {
   DLOG_SCOPE_FUNCTION(2);
+
+  resolved_views_.clear();
 
   {
     std::lock_guard lock(composition_mutex_);
