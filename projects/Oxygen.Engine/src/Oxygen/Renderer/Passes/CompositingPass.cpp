@@ -340,6 +340,15 @@ auto CompositingPass::EnsureSourceTextureSrv(const graphics::Texture& texture)
     .is_read_only_dsv = false,
   };
 
+  // Recover and reuse any existing SRV index already registered for this
+  // texture/description pair (e.g. after pass recreation).
+  if (const auto existing_index
+    = registry.FindShaderVisibleIndex(texture, srv_desc);
+    existing_index.has_value()) {
+    source_texture_srvs_[&texture] = *existing_index;
+    return *existing_index;
+  }
+
   if (auto it = source_texture_srvs_.find(&texture);
     it != source_texture_srvs_.end()) {
     if (registry.Contains(texture, srv_desc)) {

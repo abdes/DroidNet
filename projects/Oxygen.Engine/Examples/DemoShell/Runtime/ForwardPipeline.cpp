@@ -541,6 +541,9 @@ struct ForwardPipeline::Impl {
         .height = ctx.view.intent.view.viewport.height,
       };
     }
+    if (ground_grid_pass_config) {
+      ground_grid_pass_config->color_texture = ctx.view.hdr_texture;
+    }
     if (transparent_pass_config) {
       transparent_pass_config->color_texture = ctx.view.hdr_texture;
       transparent_pass_config->depth_texture = ctx.depth_texture;
@@ -955,6 +958,9 @@ struct ForwardPipeline::Impl {
     if (sky_pass_config) {
       sky_pass_config->color_texture.reset();
     }
+    if (ground_grid_pass_config) {
+      ground_grid_pass_config->color_texture.reset();
+    }
     if (transparent_pass_config) {
       transparent_pass_config->color_texture.reset();
       transparent_pass_config->depth_texture.reset();
@@ -1092,11 +1098,9 @@ auto ForwardPipeline::OnSceneMutation(
     view_ctx.metadata = { .name = std::string(view->intent.name),
       .purpose = has_scene ? "scene" : "overlay",
       .with_atmosphere = view->intent.with_atmosphere };
-    if (view->has_hdr && view->hdr_framebuffer) {
-      view_ctx.output = observer_ptr { view->hdr_framebuffer.get() };
-    } else {
-      view_ctx.output = observer_ptr { view->sdr_framebuffer.get() };
-    }
+    // Publish SDR as the view output so renderer-level compositing (kBlend)
+    // always samples the post-tonemap result.
+    view_ctx.output = observer_ptr { view->sdr_framebuffer.get() };
 
     // Maintain stable link to engine's internal view registry
     if (view->engine_vid == kInvalidViewId) {
@@ -1251,14 +1255,14 @@ auto ForwardPipeline::OnCompositing(
   engine::CompositingTaskList tasks;
   tasks.reserve(impl_->sorted_views.size());
   for (auto* view : impl_->sorted_views) {
-    if (!view->sdr_texture) {
+    if (!view->sdr_texture || view->engine_vid == kInvalidViewId) {
       continue;
     }
     const auto& viewport = view->intent.view.viewport.IsValid()
       ? view->intent.view.viewport
       : fullscreen_viewport;
-    tasks.push_back(engine::CompositingTask::MakeTextureBlend(
-      view->sdr_texture, viewport, view->intent.opacity));
+    tasks.push_back(engine::CompositingTask::MakeBlend(
+      view->engine_vid, viewport, view->intent.opacity));
   }
 
   engine::CompositionSubmission submission;
