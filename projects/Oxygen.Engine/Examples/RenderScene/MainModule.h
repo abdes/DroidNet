@@ -29,6 +29,9 @@ class AsyncEngine;
 namespace engine {
   class FrameContext;
 }
+namespace data {
+  class SceneAsset;
+}
 namespace renderer {
   struct CompositionView;
 }
@@ -114,6 +117,7 @@ private:
 
   // Content and scene state
   std::optional<data::AssetKey> current_scene_key_;
+  std::shared_ptr<data::SceneAsset> active_scene_asset_pin_;
   std::optional<data::AssetKey> last_released_scene_key_;
   std::optional<data::AssetKey> active_scene_load_key_;
   Extent<uint32_t> last_viewport_;

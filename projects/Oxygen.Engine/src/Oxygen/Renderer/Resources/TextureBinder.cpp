@@ -1534,11 +1534,12 @@ auto TextureBinder::Impl::ProcessEvictions() -> void
 
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   auto& registry = gfx_->GetResourceRegistry();
+  std::size_t evictions_without_entry = 0U;
 
   for (const auto& eviction : evictions) {
     auto it = texture_map_.find(eviction.key);
     if (it == texture_map_.end()) {
-      DLOG_F(4, "TextureBinder eviction: entry missing for {}", eviction.key);
+      ++evictions_without_entry;
       continue;
     }
 
@@ -1593,6 +1594,11 @@ auto TextureBinder::Impl::ProcessEvictions() -> void
 
     LOG_F(INFO, "TextureBinder: eviction processed for {} (reason={})",
       eviction.key, eviction.reason);
+  }
+
+  if (evictions_without_entry != 0U) {
+    LOG_F(INFO, "TextureBinder: {} eviction(s) had no resident texture entry",
+      evictions_without_entry);
   }
 }
 

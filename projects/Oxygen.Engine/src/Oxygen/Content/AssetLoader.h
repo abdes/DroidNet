@@ -9,6 +9,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <thread>
@@ -139,8 +140,8 @@ public:
   OXGN_CNTT_API auto TrimCache() -> void override;
   OXGN_CNTT_API auto RegisterConsoleBindings(
     observer_ptr<console::Console> console) noexcept -> void override;
-  OXGN_CNTT_API auto ApplyConsoleCVars(
-    const console::Console& console) -> void override;
+  OXGN_CNTT_API auto ApplyConsoleCVars(const console::Console& console)
+    -> void override;
 
   //=== Dependency Management ===---------------------------------------------//
 
@@ -255,7 +256,14 @@ public:
   template <IsTyped T>
   auto GetAsset(const data::AssetKey& key) const -> std::shared_ptr<T>
   {
-    return content_cache_.Peek<T>(HashAssetKey(key));
+    for (const auto& [hash_key, asset_key] : asset_key_by_hash_) {
+      if (asset_key == key) {
+        if (auto cached = content_cache_.Peek<T>(hash_key)) {
+          return cached;
+        }
+      }
+    }
+    return nullptr;
   }
 
   //! Check if asset is loaded in cache
@@ -271,7 +279,12 @@ public:
   */
   template <IsTyped T> auto HasAsset(const data::AssetKey& key) const -> bool
   {
-    return content_cache_.Contains(HashAssetKey(key));
+    for (const auto& [hash_key, asset_key] : asset_key_by_hash_) {
+      if (asset_key == key && content_cache_.Contains(hash_key)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   //! Release an asset, indicating it is no longer in use by the caller.
@@ -716,15 +729,20 @@ private:
   };
 
   OXGN_CNTT_API auto DecodeAssetAsyncErasedImpl(TypeId type_id,
-    const data::AssetKey& key) -> co::Co<DecodedAssetAsyncResult>;
+    const data::AssetKey& key,
+    std::optional<uint16_t> preferred_source_id = std::nullopt)
+    -> co::Co<DecodedAssetAsyncResult>;
 
-  OXGN_CNTT_API auto LoadMaterialAssetAsyncImpl(const data::AssetKey& key)
+  OXGN_CNTT_API auto LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
+    std::optional<uint16_t> preferred_source_id = std::nullopt)
     -> co::Co<std::shared_ptr<data::MaterialAsset>>;
 
-  OXGN_CNTT_API auto LoadGeometryAssetAsyncImpl(const data::AssetKey& key)
+  OXGN_CNTT_API auto LoadGeometryAssetAsyncImpl(const data::AssetKey& key,
+    std::optional<uint16_t> preferred_source_id = std::nullopt)
     -> co::Co<std::shared_ptr<data::GeometryAsset>>;
 
-  OXGN_CNTT_API auto LoadSceneAssetAsyncImpl(const data::AssetKey& key)
+  OXGN_CNTT_API auto LoadSceneAssetAsyncImpl(const data::AssetKey& key,
+    std::optional<uint16_t> preferred_source_id = std::nullopt)
     -> co::Co<std::shared_ptr<data::SceneAsset>>;
 
   OXGN_CNTT_API auto LoadResourceAsyncFromCookedErased(
@@ -764,6 +782,8 @@ private:
 
   //! Hash an AssetKey for cache storage
   OXGN_CNTT_API static auto HashAssetKey(const data::AssetKey& key) -> uint64_t;
+  OXGN_CNTT_API auto HashAssetKey(
+    const data::AssetKey& key, uint16_t source_id) const -> uint64_t;
 
   //! Hash a ResourceKey for cache storage (requires instance for SourceKey
   //! lookup)
@@ -782,6 +802,8 @@ private:
 
   void UnloadObject(
     uint64_t cache_key, const oxygen::TypeId& type_id, EvictionReason reason);
+  auto FlushResourceEvictionsForUncachedMappings(
+    EvictionReason reason, bool force_emit_all) -> void;
 
   OXGN_CNTT_API auto AddTypeErasedAssetLoader(
     TypeId type_id, std::string_view type_name, LoadFnErased&& loader) -> void;
@@ -828,17 +850,18 @@ private:
     -> co::Co<LoadedGeometryBuffersByIndex>;
 
   auto LoadGeometryMaterialDependenciesAsync(
-    const internal::DependencyCollector& collector)
+    const internal::DependencyCollector& collector,
+    std::optional<uint16_t> preferred_source_id = std::nullopt)
     -> co::Co<LoadedGeometryMaterialsByKey>;
 
   auto BindGeometryRuntimePointers(data::GeometryAsset& asset,
     const LoadedGeometryBuffersByIndex& buffers_by_index,
     const LoadedGeometryMaterialsByKey& materials_by_key) -> void;
 
-  auto PublishGeometryDependencyEdges(
-    const data::AssetKey& dependent_asset_key,
+  auto PublishGeometryDependencyEdges(const data::AssetKey& dependent_asset_key,
     const LoadedGeometryBuffersByIndex& buffers_by_index,
-    const LoadedGeometryMaterialsByKey& materials_by_key) -> void;
+    const LoadedGeometryMaterialsByKey& materials_by_key,
+    std::optional<uint16_t> preferred_source_id = std::nullopt) -> void;
 
   // Private helper to pack resource key without exposing internal type in the
   // public header. Implemented in the .cpp which includes InternalResourceKey.
