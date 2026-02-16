@@ -16,12 +16,13 @@
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/ResourceTypeList.h>
 #include <Oxygen/Content/api_export.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/TextureResource.h>
-#include <Oxygen/data/AssetKey.h>
-#include <Oxygen/data/GeometryAsset.h>
-#include <Oxygen/data/MaterialAsset.h>
-#include <Oxygen/data/SceneAsset.h>
+
 
 namespace oxygen::console {
 class Console;

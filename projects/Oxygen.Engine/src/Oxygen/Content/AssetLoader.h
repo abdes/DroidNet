@@ -26,8 +26,12 @@
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Core/AnyCache.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/LiveObject.h>
@@ -37,10 +41,7 @@
 #include <Oxygen/Renderer/api_export.h>
 #include <Oxygen/content/EngineTag.h>
 #include <Oxygen/content/ResourceKey.h>
-#include <Oxygen/data/AssetKey.h>
-#include <Oxygen/data/GeometryAsset.h>
-#include <Oxygen/data/MaterialAsset.h>
-#include <Oxygen/data/SceneAsset.h>
+
 
 namespace oxygen::content {
 
