@@ -59,3 +59,9 @@ auto FrameDrivenSlotReuse::OnBeginFrame(frame::Slot fi) -> void
 {
   impl_.OnBeginFrame(fi);
 }
+
+auto FrameDrivenSlotReuse::GetTelemetrySnapshot() const noexcept
+  -> TelemetrySnapshot
+{
+  return impl_.GetTelemetrySnapshot();
+}
