@@ -97,6 +97,7 @@ NOLINT_TEST_F(RingBufferStagingEdgeTest, EnsureCapacity_GrowsBuffer)
   auto& uploader = Uploader();
   auto provider = uploader.CreateRingBufferStaging(SlotCount { 1 }, 64u, 0.5f);
   ASSERT_NE(provider, nullptr);
+  SetStagingProvider(provider);
 
   // Arrange: small allocation to initialize
   auto a1 = provider->Allocate(SizeBytes { 32 }, "init");
@@ -109,6 +110,10 @@ NOLINT_TEST_F(RingBufferStagingEdgeTest, EnsureCapacity_GrowsBuffer)
   // Assert
   ASSERT_TRUE(a2.has_value());
   EXPECT_GT(provider->GetStats().current_buffer_size, before_size);
+
+  // Drain deferred buffer-release callbacks deterministically to avoid
+  // teardown-time lifetime coupling between UploadCoordinator and Graphics.
+  Gfx().Flush();
 }
 
 } // namespace

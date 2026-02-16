@@ -11,7 +11,6 @@
 #include <string>
 #include <string_view>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -101,34 +100,7 @@ private:
     std::string_view debug_name) -> std::expected<void, UploadError>;
 
   // Select active partition (frame slot) and reset its bump pointer.
-  auto SetActivePartition(frame::Slot slot) noexcept -> void
-  {
-    if (slot >= partitions_count_) {
-      return;
-    }
-    active_partition_ = slot;
-
-    // Optional guard: if we are cycling back to this partition and have not
-    // observed any retirement since it was last used, log a warning. We still
-    // overwrite as designed; this is a diagnostic only.
-    static constexpr bool kWarnOnPartitionReuseWithoutRetire = true;
-    if (kWarnOnPartitionReuseWithoutRetire) {
-      const auto last_seen = partition_last_seen_retire_count_.empty()
-        ? 0ULL
-        : partition_last_seen_retire_count_[active_partition_];
-      if (last_seen == retire_count_) {
-        LOG_F(WARNING,
-          "RingBufferStaging: Reusing partition {} without observed retirement;"
-          " overwriting staging data. head={} cap_per_partition={}",
-          active_partition_, heads_.empty() ? 0ULL : heads_[active_partition_],
-          capacity_per_partition_);
-      }
-    }
-
-    // When we cycle back to this partition, all GPU work for it has completed
-    // so we can safely reclaim the space by resetting the head
-    heads_[active_partition_] = 0ULL;
-  }
+  auto SetActivePartition(frame::Slot slot) noexcept -> void;
 
   auto EnsureCapacity(std::uint64_t required, std::string_view debug_name)
     -> std::expected<void, UploadError>;
