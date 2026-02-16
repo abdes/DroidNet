@@ -55,6 +55,20 @@ namespace oxygen::nexus {
 */
 class TimelineGatedSlotReuse {
 public:
+  struct TelemetrySnapshot {
+    uint64_t allocate_calls { 0 };
+    uint64_t release_calls { 0 };
+    uint64_t batch_release_calls { 0 };
+    uint64_t stale_reject_count { 0 };
+    uint64_t duplicate_reject_count { 0 };
+    uint64_t reclaimed_count { 0 };
+    uint64_t pending_count { 0 };
+    uint64_t peak_pending_count { 0 };
+    uint64_t process_calls { 0 };
+    uint64_t process_for_calls { 0 };
+    uint64_t peak_queue_count { 0 };
+  };
+
   //! Function signature for backend slot allocation
   using AllocateFn = std::function<bindless::HeapIndex(DomainKey)>;
 
@@ -92,6 +106,10 @@ public:
   //! Check if a versioned handle matches the current generation
   OXGN_NXS_API auto IsHandleCurrent(VersionedBindlessHandle h) const noexcept
     -> bool;
+
+  //! Snapshot of strategy telemetry counters.
+  OXGN_NXS_NDAPI auto GetTelemetrySnapshot() const noexcept
+    -> TelemetrySnapshot;
 
 #if !defined(NDEBUG)
   //! Configure debug stall warning parameters (debug builds only)
@@ -159,8 +177,10 @@ private:
 
   //! Pending flag per index to prevent double-release races
   /*!
-   * Each flag indicates whether a handle is pending reclamation. Uses atomic
-   * compare-and-swap for race-free double-release detection. Protected by
+   * Each flag indicates whether a handle is pending reclamation. Uses
+   * atomic
+   * compare-and-swap for race-free double-release detection.
+   * Protected by
    * resize_mutex_ during growth and flag updates.
    */
   std::vector<AtomicPendingFlag> pending_flags_;
@@ -207,6 +227,21 @@ private:
   std::map<std::weak_ptr<graphics::CommandQueue>, std::shared_ptr<QueueData>,
     std::owner_less<std::weak_ptr<graphics::CommandQueue>>>
     pending_per_queue_;
+
+  struct TelemetryData {
+    std::atomic<uint64_t> allocate_calls { 0 };
+    std::atomic<uint64_t> release_calls { 0 };
+    std::atomic<uint64_t> batch_release_calls { 0 };
+    std::atomic<uint64_t> stale_reject_count { 0 };
+    std::atomic<uint64_t> duplicate_reject_count { 0 };
+    std::atomic<uint64_t> reclaimed_count { 0 };
+    std::atomic<uint64_t> pending_count { 0 };
+    std::atomic<uint64_t> peak_pending_count { 0 };
+    std::atomic<uint64_t> process_calls { 0 };
+    std::atomic<uint64_t> process_for_calls { 0 };
+    std::atomic<uint64_t> peak_queue_count { 0 };
+  };
+  TelemetryData telemetry_ {};
 
   //! Ensure generation tracker and pending flags cover the given index
   void EnsureCapacity(bindless::HeapIndex index);
