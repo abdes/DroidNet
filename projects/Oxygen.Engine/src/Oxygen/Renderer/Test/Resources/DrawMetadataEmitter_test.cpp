@@ -26,6 +26,7 @@
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
 #include <Oxygen/Renderer/Test/Fakes/Graphics.h>
 #include <Oxygen/Renderer/Test/Resources/GeometryUploaderTest.h>
+#include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
@@ -85,6 +86,44 @@ using oxygen::renderer::testing::FakeGraphics;
                 .WithMeshView({ .first_index = 0U,
                   .index_count = 3U,
                   .first_vertex = 0U,
+                  .vertex_count = 3U })
+                .EndSubMesh()
+                .Build();
+
+  return oxygen::engine::sceneprep::GeometryRef {
+    .asset_key = oxygen::data::AssetKey {},
+    .lod_index = 0U,
+    .mesh = std::shared_ptr<const oxygen::data::Mesh>(std::move(mesh)),
+  };
+}
+
+[[nodiscard]] auto MakeTwoViewGeometryRef(std::string_view mesh_name)
+  -> oxygen::engine::sceneprep::GeometryRef
+{
+  namespace d = oxygen::data;
+
+  std::vector<d::Vertex> vertices(6);
+  vertices[0].position = { -1.0F, 0.0F, 0.0F };
+  vertices[1].position = { 0.0F, 1.0F, 0.0F };
+  vertices[2].position = { 1.0F, 0.0F, 0.0F };
+  vertices[3].position = { -1.0F, -1.0F, 0.0F };
+  vertices[4].position = { 0.0F, 0.0F, 0.0F };
+  vertices[5].position = { 1.0F, -1.0F, 0.0F };
+
+  const std::vector<std::uint32_t> indices { 0U, 1U, 2U, 3U, 4U, 5U };
+  const auto material = d::MaterialAsset::CreateDefault();
+
+  auto mesh = d::MeshBuilder(0U, mesh_name)
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("two-views", material)
+                .WithMeshView({ .first_index = 0U,
+                  .index_count = 3U,
+                  .first_vertex = 0U,
+                  .vertex_count = 3U })
+                .WithMeshView({ .first_index = 3U,
+                  .index_count = 3U,
+                  .first_vertex = 3U,
                   .vertex_count = 3U })
                 .EndSubMesh()
                 .Build();
@@ -181,6 +220,46 @@ NOLINT_TEST_F(
 
   EXPECT_NE(srv0, oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(srv0, srv1);
+}
+
+NOLINT_TEST_F(DrawMetadataEmitterTest,
+  SortAndPartition_EqualSortingKeysRemainDeterministicByEmitOrder)
+{
+  const auto geometry
+    = MakeTwoViewGeometryRef("DrawMetadataEmitter.DeterministicOrdering");
+
+  // Prime geometry residency so emitter does not skip draws.
+  BeginFrame(SequenceNumber { 1U }, Slot { 0U });
+  const auto geo_handle = GeoUploader().GetOrAllocate(geometry);
+  GeoUploader().EnsureFrameResources();
+
+  BeginFrame(SequenceNumber { 2U }, Slot { 1U });
+  const auto indices = GeoUploader().GetShaderVisibleIndices(geo_handle);
+  ASSERT_NE(indices.vertex_srv_index, oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_NE(indices.index_srv_index, oxygen::kInvalidShaderVisibleIndex);
+
+  oxygen::engine::sceneprep::RenderItemData item {};
+  item.geometry = geometry;
+  item.submesh_index = 0U;
+  item.transform_handle = oxygen::engine::sceneprep::TransformHandle {
+    oxygen::engine::sceneprep::TransformHandle::Index { 7U },
+    oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+  };
+  item.sort_distance2 = 10.0F;
+
+  Emitter().EmitDrawMetadata(item);
+  Emitter().SortAndPartition();
+
+  const auto bytes = Emitter().GetDrawMetadataBytes();
+  ASSERT_EQ(bytes.size(), 2U * sizeof(oxygen::engine::DrawMetadata));
+
+  const auto* draws
+    = reinterpret_cast<const oxygen::engine::DrawMetadata*>(bytes.data());
+  ASSERT_NE(draws, nullptr);
+
+  // Sorting keys are equal for both draws; order should remain the emit order.
+  EXPECT_EQ(draws[0].first_index, 0U);
+  EXPECT_EQ(draws[1].first_index, 3U);
 }
 
 } // namespace

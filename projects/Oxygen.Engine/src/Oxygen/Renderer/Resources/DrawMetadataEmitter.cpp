@@ -499,12 +499,17 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
   }
   const auto initial_draw_count = Cpu().size();
 
-  // Build map from batching key to list of draw indices
-  std::unordered_map<BatchingKey, std::vector<std::uint32_t>, BatchingKeyHash>
-    batch_map;
-  batch_map.reserve(Cpu().size());
+  // Build deterministic groups in first-seen draw order.
+  // Using unordered_map iteration directly would make batch emission order
+  // dependent on hash-bucket layout.
+  std::unordered_map<BatchingKey, std::uint32_t, BatchingKeyHash>
+    key_to_group_index;
+  key_to_group_index.reserve(Cpu().size());
+  std::vector<std::vector<std::uint32_t>> groups;
+  groups.reserve(Cpu().size());
 
-  for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(Cpu().size()); ++i) {
+  for (std::uint32_t i = 0U; i < static_cast<std::uint32_t>(Cpu().size());
+    ++i) {
     const auto& dm = Cpu()[i];
     const BatchingKey key {
       .vertex_buffer_index = dm.vertex_buffer_index,
@@ -517,13 +522,21 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
       .is_indexed = dm.is_indexed,
       .flags = dm.flags,
     };
-    batch_map[key].push_back(i);
+    if (const auto it = key_to_group_index.find(key);
+      it != key_to_group_index.end()) {
+      groups[it->second].push_back(i);
+    } else {
+      const auto new_group_index = static_cast<std::uint32_t>(groups.size());
+      key_to_group_index.emplace(key, new_group_index);
+      groups.emplace_back();
+      groups.back().push_back(i);
+    }
   }
 
   // Check if any batching is possible
   bool has_batches = false;
-  for (const auto& [key, indices] : batch_map) {
-    if (indices.size() > 1) {
+  for (const auto& indices : groups) {
+    if (indices.size() > 1U) {
       has_batches = true;
       break;
     }
@@ -542,7 +555,7 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
   instance_transform_indices_.clear();
   instance_transform_indices_.reserve(Cpu().size());
 
-  for (const auto& [key, indices] : batch_map) {
+  for (const auto& indices : groups) {
     const auto instance_count = static_cast<std::uint32_t>(indices.size());
 
     // Use first draw as representative
