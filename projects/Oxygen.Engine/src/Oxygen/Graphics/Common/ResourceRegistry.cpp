@@ -69,7 +69,7 @@ ResourceRegistry::~ResourceRegistry() noexcept
 auto ResourceRegistry::Register(std::shared_ptr<void> resource, TypeId type_id)
   -> void
 {
-  DCHECK_NOTNULL_F(resource, "Resource must not be null");
+  CHECK_NOTNULL_F(resource, "Resource must not be null");
 
   std::lock_guard lock(registry_mutex_);
 
