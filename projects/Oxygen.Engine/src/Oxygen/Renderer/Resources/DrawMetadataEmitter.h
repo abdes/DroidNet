@@ -66,7 +66,12 @@ namespace oxygen::renderer::resources {
    slack; content is fully rewritten each frame. UploadPlanner performs
    packing/coalescing; the emitter need not batch adjacent writes.
  - **Frame-driven slot indexing**: Per-frame draw slot indices are assigned by
-   Nexus Strategy A (`FrameDrivenSlotReuse`) using deterministic emit order.
+
+ Nexus Strategy A (`FrameDrivenSlotReuse`) using deterministic emit order.
+ This
+ emitter intentionally uses allocation-only semantics (no per-draw
+
+ release/reclaim) because slots are rewritten densely every frame.
 
  ### When to use ElementRef instead
 
