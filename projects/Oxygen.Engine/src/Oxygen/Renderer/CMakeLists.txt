@@ -250,6 +250,7 @@ target_link_libraries(
     oxygen::engine
     oxygen::imgui
     oxygen::graphics-common
+    oxygen::nexus
 )
 
 # ------------------------------------------------------------------------------
