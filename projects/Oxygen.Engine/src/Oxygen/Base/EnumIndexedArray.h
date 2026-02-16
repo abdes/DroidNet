@@ -7,6 +7,7 @@
 #pragma once
 
 #include <array>
+#include <cstdlib>
 #include <concepts>
 #include <ranges>
 #include <type_traits>
@@ -557,11 +558,19 @@ template <EnumWithCount Enum, typename T> struct EnumIndexedArray {
   // array's Enum template parameter.
   constexpr T& operator[](EnumAsIndex<Enum> idx) noexcept
   {
-    return data[idx.get()];
+    const auto i = idx.get();
+    if (i >= data.size()) {
+      std::abort();
+    }
+    return data[i];
   }
   constexpr T const& operator[](EnumAsIndex<Enum> idx) const noexcept
   {
-    return data[idx.get()];
+    const auto i = idx.get();
+    if (i >= data.size()) {
+      std::abort();
+    }
+    return data[i];
   }
 
   constexpr auto size() const noexcept { return data.size(); }
