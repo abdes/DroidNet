@@ -64,6 +64,7 @@ TransformUploader::~TransformUploader()
   };
 
   LOG_SCOPE_F(INFO, "TransformUploader Statistics");
+  LOG_F(INFO, "frames started            : {}", frames_started_count_);
   LOG_F(INFO, "nexus.allocate_calls      : {}", telemetry.allocate_calls);
   LOG_F(INFO, "nexus.release_calls       : {}{}", telemetry.release_calls,
     expected_zero_marker(telemetry.release_calls));
@@ -83,6 +84,7 @@ auto TransformUploader::OnFrameStart(RendererTag /*tag*/,
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
   slot_reuse_.OnBeginFrame(slot);
+  ++frames_started_count_;
   frame_write_count_ = 0U;
 
   worlds_buffer_.OnFrameStart(sequence, slot);
