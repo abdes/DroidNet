@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <functional>
 
+#include <memory>
 #include <mutex>
 #include <shared_mutex>
 #include <type_traits>
@@ -82,6 +83,14 @@ template <IndexLike IndexType, typename ContextType = std::monostate>
 class FrameDrivenIndexReuse {
 public:
   using RecycleFn = std::function<void(IndexType, ContextType)>;
+  struct TelemetrySnapshot {
+    uint64_t allocate_calls { 0 };
+    uint64_t release_calls { 0 };
+    uint64_t stale_reject_count { 0 };
+    uint64_t duplicate_reject_count { 0 };
+    uint64_t reclaimed_count { 0 };
+    uint64_t pending_count { 0 };
+  };
 
   //! Construct with reclaimer and recycle callback.
   /*!
@@ -109,6 +118,8 @@ public:
   */
   auto ActivateSlot(IndexType index) -> VersionedIndex<IndexType>
   {
+    telemetry_->allocate_calls.fetch_add(1, std::memory_order_relaxed);
+
     const auto raw_index = detail::GetIndexValue(index);
     EnsureCapacity_(raw_index);
 
@@ -130,8 +141,11 @@ public:
   */
   auto Release(VersionedIndex<IndexType> handle, ContextType context) -> void
   {
+    telemetry_->release_calls.fetch_add(1, std::memory_order_relaxed);
+
     if (!IsHandleCurrent(handle)) {
       // Stale handle or double release - ignore.
+      telemetry_->stale_reject_count.fetch_add(1, std::memory_order_relaxed);
       return;
     }
 
@@ -151,9 +165,12 @@ public:
       if (!pending_flags_[raw_index].value.compare_exchange_strong(
             expected, 1, std::memory_order_acq_rel)) {
         // Already pending release.
+        telemetry_->duplicate_reject_count.fetch_add(
+          1, std::memory_order_relaxed);
         return;
       }
     }
+    telemetry_->pending_count.fetch_add(1, std::memory_order_relaxed);
 
     // Bump generation immediately to invalidate outstanding handles.
     // Keep shared lock while bumping to avoid races with resize.
@@ -185,6 +202,9 @@ public:
             pending_flags_[raw].value.store(0, std::memory_order_release);
           }
         }
+
+        telemetry_->reclaimed_count.fetch_add(1, std::memory_order_relaxed);
+        telemetry_->pending_count.fetch_sub(1, std::memory_order_relaxed);
       });
   }
 
@@ -218,7 +238,34 @@ public:
     reclaimer_->OnBeginFrame(slot);
   }
 
+  [[nodiscard]] auto GetTelemetrySnapshot() const noexcept -> TelemetrySnapshot
+  {
+    return {
+      .allocate_calls
+      = telemetry_->allocate_calls.load(std::memory_order_relaxed),
+      .release_calls
+      = telemetry_->release_calls.load(std::memory_order_relaxed),
+      .stale_reject_count
+      = telemetry_->stale_reject_count.load(std::memory_order_relaxed),
+      .duplicate_reject_count
+      = telemetry_->duplicate_reject_count.load(std::memory_order_relaxed),
+      .reclaimed_count
+      = telemetry_->reclaimed_count.load(std::memory_order_relaxed),
+      .pending_count
+      = telemetry_->pending_count.load(std::memory_order_relaxed),
+    };
+  }
+
 private:
+  struct TelemetryData {
+    std::atomic<uint64_t> allocate_calls { 0 };
+    std::atomic<uint64_t> release_calls { 0 };
+    std::atomic<uint64_t> stale_reject_count { 0 };
+    std::atomic<uint64_t> duplicate_reject_count { 0 };
+    std::atomic<uint64_t> reclaimed_count { 0 };
+    std::atomic<uint64_t> pending_count { 0 };
+  };
+
   // Wrapper for atomic<uint8_t> to make it copyable/movable for vector.
   // The copy/move operations are NOT atomic, but this is safe because
   // we only resize (copy/move) under an exclusive writer lock.
@@ -291,6 +338,9 @@ private:
   RecycleFn on_recycle_;
 
   GenerationTracker generations_;
+  std::shared_ptr<TelemetryData> telemetry_ {
+    std::make_shared<TelemetryData>()
+  };
 
   mutable std::shared_mutex storage_mutex_;
   std::vector<AtomicFlag> pending_flags_;

@@ -52,6 +52,8 @@ public:
 
   //! Type-erased backend free function.
   using FreeFn = std::function<void(DomainKey, bindless::HeapIndex)>;
+  using TelemetrySnapshot
+    = FrameDrivenIndexReuse<bindless::HeapIndex, DomainKey>::TelemetrySnapshot;
 
   //! Construct the strategy with backend hooks and per-frame infrastructure.
   OXGN_NXS_API explicit FrameDrivenSlotReuse(AllocateFn allocate, FreeFn free,
@@ -70,6 +72,10 @@ public:
 
   //! Forward the frame-begin event to the per-frame buckets.
   OXGN_NXS_API auto OnBeginFrame(frame::Slot fi) -> void;
+
+  //! Returns a point-in-time snapshot of strategy telemetry counters.
+  OXGN_NXS_NDAPI auto GetTelemetrySnapshot() const noexcept
+    -> TelemetrySnapshot;
 
 private:
   AllocateFn allocate_;

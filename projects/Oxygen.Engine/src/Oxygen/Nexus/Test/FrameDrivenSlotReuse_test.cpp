@@ -134,6 +134,43 @@ NOLINT_TEST(
   EXPECT_FALSE(reuse.IsHandleCurrent(h));
 }
 
+//! Tests telemetry counters for allocate/release/reclaim and stale rejection.
+NOLINT_TEST(FrameDrivenSlotReuse, TelemetrySnapshot_TracksLifecycleCounters)
+{
+  oxygen::graphics::detail::DeferredReclaimer per_frame;
+  AllocateBackend do_alloc;
+  FreeBackend do_free;
+
+  oxygen::nexus::FrameDrivenSlotReuse reuse(
+    [&do_alloc](const DomainKey d) { return do_alloc(d); },
+    [&do_alloc, &do_free](const DomainKey d, const b::HeapIndex h) {
+      do_free(d, h);
+      do_alloc.free_list.push_back(h.get());
+    },
+    per_frame);
+
+  constexpr DomainKey domain { .view_type
+    = oxygen::graphics::ResourceViewType::kTexture_SRV,
+    .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible };
+
+  const auto h = reuse.Allocate(domain);
+  reuse.Release(domain, h);
+  reuse.Release(domain, h); // stale on second call
+
+  const auto before_frame = reuse.GetTelemetrySnapshot();
+  EXPECT_EQ(before_frame.allocate_calls, 1U);
+  EXPECT_EQ(before_frame.release_calls, 2U);
+  EXPECT_EQ(before_frame.stale_reject_count, 1U);
+  EXPECT_EQ(before_frame.duplicate_reject_count, 0U);
+  EXPECT_EQ(before_frame.reclaimed_count, 0U);
+  EXPECT_EQ(before_frame.pending_count, 1U);
+
+  per_frame.OnBeginFrame(kFrameSlot0);
+  const auto after_frame = reuse.GetTelemetrySnapshot();
+  EXPECT_EQ(after_frame.reclaimed_count, 1U);
+  EXPECT_EQ(after_frame.pending_count, 0U);
+}
+
 //===----------------------------------------------------------------------===//
 // Multithreaded Tests thread safety and concurrent access patterns
 //===----------------------------------------------------------------------===//
@@ -201,7 +238,8 @@ NOLINT_TEST(
   // Assert - Every released handle was reclaimed exactly once
   ASSERT_EQ(do_free.freed.size(), static_cast<size_t>(kTotalHandles));
   std::sort(do_free.freed.begin(), do_free.freed.end());
-  const auto unique_end = std::unique(do_free.freed.begin(), do_free.freed.end());
+  const auto unique_end
+    = std::unique(do_free.freed.begin(), do_free.freed.end());
   EXPECT_EQ(std::distance(do_free.freed.begin(), unique_end), kTotalHandles);
 }
 
