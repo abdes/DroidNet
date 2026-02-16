@@ -11,18 +11,18 @@
 
 namespace oxygen::transforms {
 
-inline [[nodiscard]] auto IsFinite(const glm::vec3& v) noexcept -> bool
+[[nodiscard]] inline auto IsFinite(const glm::vec3& v) noexcept -> bool
 {
   return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
 }
 
-inline [[nodiscard]] auto IsFinite(const glm::quat& q) noexcept -> bool
+[[nodiscard]] inline auto IsFinite(const glm::quat& q) noexcept -> bool
 {
   return std::isfinite(q.x) && std::isfinite(q.y) && std::isfinite(q.z)
     && std::isfinite(q.w);
 }
 
-inline [[nodiscard]] auto IsFinite(const glm::mat4& m) noexcept -> bool
+[[nodiscard]] inline auto IsFinite(const glm::mat4& m) noexcept -> bool
 {
   for (int c = 0; c < 4; ++c) {
     for (int r = 0; r < 4; ++r) {
