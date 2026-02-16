@@ -44,8 +44,8 @@ constexpr uint32_t kThreadGroupSize = 8;
 
 namespace oxygen::engine {
 
-IblComputePass::IblComputePass(std::string name)
-  : RenderPass(std::move(name))
+IblComputePass::IblComputePass(const std::string& name)
+  : RenderPass(name)
 {
 }
 
@@ -54,9 +54,9 @@ IblComputePass::~IblComputePass()
   if (pass_constants_buffer_) {
     // Ensure the buffer is unmapped before destruction to avoid backend
     // validation errors.
-    // TODO: Consider wrapping mapped buffers in an RAII helper (e.g.
+    // TODO(abdes): Consider wrapping mapped buffers in an RAII helper (e.g.
     // ScopedBufferType).
-    if (pass_constants_mapped_) {
+    if (pass_constants_mapped_ != nullptr) {
       pass_constants_buffer_->UnMap();
       pass_constants_mapped_ = nullptr;
     }
@@ -99,7 +99,8 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
   if (source_slot == kInvalidShaderVisibleIndex) {
     if (!logged_missing_source_slot_) {
       const auto sky_light_slot = env_manager->GetSkyLightCubemapSlot(view_id);
-      const auto sky_sphere_slot = env_manager->GetSkySphereCubemapSlot(view_id);
+      const auto sky_sphere_slot
+        = env_manager->GetSkySphereCubemapSlot(view_id);
       const auto env_static_srv
         = env_manager->GetSrvIndex(Context().current_view.view_id);
       LOG_F(WARNING,
@@ -148,7 +149,7 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
     LOG_F(WARNING, "IblComputePass: missing PSO desc(s); skipping");
     co_return;
   }
-  if (!pass_constants_buffer_ || !pass_constants_mapped_
+  if (!pass_constants_buffer_ || (pass_constants_mapped_ == nullptr)
     || pass_constants_srv_index_ == kInvalidShaderVisibleIndex) {
     LOG_F(WARNING, "IblComputePass: missing pass constants; skipping");
     co_return;
@@ -175,15 +176,15 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
     source_content_version = env_manager->GetSkyCaptureGeneration(view_id);
     if (source_content_version == 0ULL) {
       LOG_F(ERROR,
-        "IblComputePass: captured-scene IBL regeneration has zero source content "
+        "IblComputePass: captured-scene IBL regeneration has zero source "
+        "content "
         "version (view={} source={})",
         view_id.get(), source_slot.get());
     }
   }
 
   auto tag = oxygen::engine::internal::IblPassTagFactory::Get();
-  ibl_manager->MarkGenerated(
-    tag, view_id, source_slot, source_content_version);
+  ibl_manager->MarkGenerated(tag, view_id, source_slot, source_content_version);
 
   if (regeneration_requested) {
     regeneration_requested_.store(false, std::memory_order_release);
@@ -208,7 +209,7 @@ auto IblComputePass::EnsurePassConstantsBuffer() -> void
   auto& registry = gfx.GetResourceRegistry();
   auto& allocator = gfx.GetDescriptorAllocator();
 
-  constexpr uint32_t kStrideBytes
+  constexpr auto kStrideBytes
     = static_cast<uint32_t>(sizeof(IblFilteringPassConstants));
   static_assert(kStrideBytes % 16U == 0U, "Stride must be 16-byte aligned");
 
@@ -226,14 +227,14 @@ auto IblComputePass::EnsurePassConstantsBuffer() -> void
   pass_constants_buffer_->SetName(desc.debug_name);
 
   pass_constants_mapped_ = pass_constants_buffer_->Map(0, desc.size_bytes);
-  if (!pass_constants_mapped_) {
+  if (pass_constants_mapped_ == nullptr) {
     throw std::runtime_error("IblComputePass: failed to map constants");
   }
 
   graphics::BufferViewDescription srv_view_desc;
   srv_view_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
   srv_view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-  srv_view_desc.range = { 0u, desc.size_bytes };
+  srv_view_desc.range = { 0U, desc.size_bytes };
   srv_view_desc.stride = kStrideBytes;
 
   auto srv_handle
