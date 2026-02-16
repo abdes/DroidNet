@@ -410,6 +410,7 @@ private:
   bool applied_changes_this_frame_ { false };
   bool needs_sky_capture_ { false };
   bool needs_sync_ { true };
+  bool force_scene_rebind_ { false };
   uint32_t dirty_domains_ { ToMask(DirtyDomain::kAll) };
   uint32_t batched_dirty_domains_ { ToMask(DirtyDomain::kNone) };
   std::uint64_t settings_revision_ { 0 };
