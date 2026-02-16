@@ -37,7 +37,7 @@ struct RenderItemData {
   float sort_distance2 = 0.0F;
 
   // Stable reference into TransformUploader
-  TransformHandle transform_handle { 0U };
+  TransformHandle transform_handle { kInvalidTransformHandle };
 
   // Rendering flags
   bool cast_shadows = true;

@@ -106,8 +106,8 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
 
   // Strategy A remains deterministic here because allocation order is driven by
   // frame_write_count_ and reset at each OnFrameStart.
-  const auto index
-    = slot_reuse_.Allocate(kTransformDomain).ToBindlessHandle().get();
+  const auto versioned_handle = slot_reuse_.Allocate(kTransformDomain);
+  const auto index = versioned_handle.ToBindlessHandle().get();
 
   if (index >= transforms_.size()) {
     transforms_.push_back(transform);
@@ -120,15 +120,29 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
   }
 
   ++frame_write_count_;
-  const auto handle = engine::sceneprep::TransformHandle { index };
+  const auto handle = engine::sceneprep::TransformHandle {
+    engine::sceneprep::TransformHandle::Index { index },
+    engine::sceneprep::TransformHandle::Generation {
+      versioned_handle.GenerationValue() },
+  };
   return handle;
 }
 
 auto TransformUploader::IsHandleValid(
   engine::sceneprep::TransformHandle handle) const -> bool
 {
+  if (!handle.IsValid()) {
+    return false;
+  }
   const auto idx = handle.get();
-  return idx < transforms_.size();
+  if (idx >= transforms_.size()) {
+    return false;
+  }
+
+  return slot_reuse_.IsHandleCurrent(oxygen::VersionedBindlessHandle {
+    bindless::HeapIndex { handle.get() },
+    handle.GenerationValue(),
+  });
 }
 
 auto TransformUploader::EnsureFrameResources() -> void

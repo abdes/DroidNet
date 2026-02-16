@@ -167,7 +167,10 @@ NOLINT_TEST_F(
   oxygen::engine::sceneprep::RenderItemData item {};
   item.geometry = geometry;
   item.submesh_index = 0U;
-  item.transform_handle = oxygen::engine::sceneprep::TransformHandle { 1U };
+  item.transform_handle = oxygen::engine::sceneprep::TransformHandle {
+    oxygen::engine::sceneprep::TransformHandle::Index { 1U },
+    oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+  };
   item.sort_distance2 = 42.0F; // NOLINT
 
   Emitter().EmitDrawMetadata(item);

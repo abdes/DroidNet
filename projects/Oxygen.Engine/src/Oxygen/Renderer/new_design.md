@@ -354,7 +354,7 @@ struct RenderItemData {
 
   // Cached scene state - Set by VisibilityTester
   glm::vec4 world_bounding_sphere;
-  TransformHandle transform_handle { 0U };        // Set by TransformUploader
+  TransformHandle transform_handle { kInvalidTransformHandle }; // Set by TransformUploader
 
   // Rendering flags - Set by MaterialFilter
   bool cast_shadows = true;

@@ -43,14 +43,13 @@ namespace oxygen::renderer::resources {
 
  - Collect world-space transform matrices (`glm::mat4`) and compute their normal
    matrices (inverse-transpose of the upper 3x3) for use in shading.
- - Maintain stable, integer `TransformHandle` indices for sceneprep callers by
-   reusing storage slots in frame-order. Handles are simply indices into the
-   internal arrays and remain valid while less than the current
-   `GetWorldMatrices().size()`.
- - Allocate per-frame transient GPU buffers via `TransientStructuredBuffer` and
-   publish shader-visible indices (`GetWorldsSrvIndex()` /
-   `GetNormalsSrvIndex()`) once `EnsureFrameResources()` runs (or lazily on
-   first const access).
+ - Maintain stable, versioned `TransformHandle` values for sceneprep callers by
+
+ reusing storage slots in frame-order.
+ - Allocate per-frame transient GPU
+ buffers via `TransientStructuredBuffer` and publish shader-visible indices
+ (`GetWorldsSrvIndex()` / `GetNormalsSrvIndex()`) once `EnsureFrameResources()`
+ runs (or lazily on first const access).
 
  ### Frame lifecycle and usage contract
 
@@ -69,14 +68,18 @@ namespace oxygen::renderer::resources {
 
  ### Semantics and guarantees
 
- - Handle stability: A `TransformHandle` is valid iff its underlying index is
-   less than `GetWorldMatrices().size()`. Handles are stable across frames when
-   the allocation pattern reuses slots in the same order.
- - Slot reuse: The uploader reuses existing slots in the order transforms are
-   requested within a frame. This is intentional and allows handles to be
-   deterministic across frames for common allocation patterns. If a frame writes
-   fewer items than the stored size, existing slots are updated rather than
-   appended.
+ - Handle stability: A `TransformHandle` is valid iff the index+generation pair
+
+ matches the current Nexus slot state and its index is less than
+
+ `GetWorldMatrices().size()`. Handles are stable across frames when the
+
+ allocation pattern reuses slots in the same order.
+ - Slot reuse: The uploader
+ reuses existing slots in the order transforms are requested within a frame.
+ This is intentional and allows handles to be deterministic across frames for
+ common allocation patterns. If a frame writes fewer items than the stored size,
+ existing slots are updated rather than appended.
  - Threading: Not thread-safe. All calls must be made from the thread that owns
    the `Graphics` and command queue used by `InlineTransfersCoordinator`.
 
