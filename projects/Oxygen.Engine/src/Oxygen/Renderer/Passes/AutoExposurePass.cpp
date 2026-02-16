@@ -7,6 +7,7 @@
 #include <Oxygen/Renderer/Passes/AutoExposurePass.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -15,6 +16,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -31,7 +33,20 @@
 namespace oxygen::engine {
 
 namespace {
-  struct alignas(16) AutoExposureHistogramConstants {
+  constexpr float kMinLogLuminanceRange = 1.0e-4F;
+  constexpr float kMinTargetLuminance = 1.0e-6F;
+  constexpr float kMinSpotMeterRadius = 0.01F;
+  constexpr uint32_t kHistogramBinCount = 256U;
+  constexpr uint32_t kHistogramDispatchGroupSize = 16U;
+  constexpr uint32_t kExposureStateElementCount = 4U;
+  constexpr uint32_t kExposureStateBufferSizeBytes
+    = kExposureStateElementCount * sizeof(float);
+  constexpr float kDefaultExposureLuminance = 0.18F;
+  constexpr float kEv100Scale = 100.0F;
+  constexpr float kEv100CalibrationConstant = 12.5F;
+
+  struct alignas(packing::kShaderDataFieldAlignment)
+    AutoExposureHistogramConstants {
     uint32_t source_texture_index;
     uint32_t histogram_buffer_index;
     float min_log_luminance;
@@ -46,12 +61,12 @@ namespace {
     float _pad3;
   };
 
-  static_assert(sizeof(AutoExposureHistogramConstants) == 48,
-    "AutoExposureHistogramConstants must be 48 bytes");
+  static_assert(sizeof(AutoExposureHistogramConstants) == 48); // NOLINT
 
   // Must match HLSL `AutoExposureAverageConstants` in
   // Shaders/Compositing/AutoExposure_Average_CS.hlsl.
-  struct alignas(16) AutoExposureAverageConstants {
+  struct alignas(packing::kShaderDataFieldAlignment)
+    AutoExposureAverageConstants {
     uint32_t histogram_buffer_index;
     uint32_t exposure_buffer_index;
     float min_log_luminance;
@@ -64,8 +79,7 @@ namespace {
     float target_luminance;
   };
 
-  static_assert(sizeof(AutoExposureAverageConstants) == 48,
-    "AutoExposureAverageConstants must be 48 bytes");
+  static_assert(sizeof(AutoExposureAverageConstants) == 48); // NOLINT
 } // namespace
 
 AutoExposurePass::AutoExposurePass(
@@ -73,15 +87,32 @@ AutoExposurePass::AutoExposurePass(
   : ComputeRenderPass(config ? config->debug_name : "AutoExposurePass")
   , config_(std::move(config))
   , graphics_(gfx)
+  , pass_constants_indices_ { kInvalidShaderVisibleIndex,
+    kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex,
+    kInvalidShaderVisibleIndex }
 {
   DCHECK_NOTNULL_F(graphics_);
   DCHECK_NOTNULL_F(config_);
-  pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
 }
 
 AutoExposurePass::~AutoExposurePass()
 {
   ReleasePassConstantsBuffer();
+
+  if (graphics_ != nullptr) {
+    auto& registry = graphics_->GetResourceRegistry();
+    for (auto& [view_id, state] : exposure_states_) {
+      (void)view_id;
+      if (state.buffer && registry.Contains(*state.buffer)) {
+        registry.UnRegisterResource(*state.buffer);
+      }
+      state.buffer.reset();
+      state.uav_index = kInvalidShaderVisibleIndex;
+      state.srv_index = kInvalidShaderVisibleIndex;
+    }
+  }
+  exposure_states_.clear();
+  active_exposure_state_ = nullptr;
 
   if (init_upload_buffer_ && init_upload_buffer_->IsMapped()) {
     init_upload_buffer_->UnMap();
@@ -116,11 +147,11 @@ auto AutoExposurePass::ValidateConfig() -> void
   }
 
   if (!std::isfinite(config_->log_luminance_range)
-    || config_->log_luminance_range <= 1.0e-4F) {
+    || config_->log_luminance_range <= kMinLogLuminanceRange) {
     LOG_F(WARNING,
       "AutoExposurePass: invalid log_luminance_range={}, clamping to 0.0001",
       config_->log_luminance_range);
-    config_->log_luminance_range = 1.0e-4F;
+    config_->log_luminance_range = kMinLogLuminanceRange;
   }
 
   if (!std::isfinite(config_->low_percentile)) {
@@ -138,9 +169,8 @@ auto AutoExposurePass::ValidateConfig() -> void
     config_->high_percentile = Config::kDefaultHighPercentile;
   }
   config_->high_percentile = std::clamp(config_->high_percentile, 0.0F, 1.0F);
-  if (config_->high_percentile < config_->low_percentile) {
-    config_->high_percentile = config_->low_percentile;
-  }
+  config_->high_percentile
+    = (std::max)(config_->high_percentile, config_->low_percentile);
 
   if (!std::isfinite(config_->adaptation_speed_up)
     || config_->adaptation_speed_up < 0.0F) {
@@ -159,11 +189,11 @@ auto AutoExposurePass::ValidateConfig() -> void
   }
 
   if (!std::isfinite(config_->target_luminance)
-    || config_->target_luminance <= 1.0e-6F) {
+    || config_->target_luminance <= kMinTargetLuminance) {
     LOG_F(WARNING,
       "AutoExposurePass: invalid target_luminance={}, clamping to 0.000001",
       config_->target_luminance);
-    config_->target_luminance = 1.0e-6F;
+    config_->target_luminance = kMinTargetLuminance;
   }
 
   if (!std::isfinite(config_->spot_meter_radius)
@@ -174,7 +204,7 @@ auto AutoExposurePass::ValidateConfig() -> void
     config_->spot_meter_radius = Config::kDefaultSpotMeterRadius;
   }
   config_->spot_meter_radius
-    = std::clamp(config_->spot_meter_radius, 0.01F, 1.0F);
+    = std::clamp(config_->spot_meter_radius, kMinSpotMeterRadius, 1.0F);
 }
 
 auto AutoExposurePass::NeedRebuildPipelineState() const -> bool
@@ -246,6 +276,7 @@ auto AutoExposurePass::DoPrepareResources(graphics::CommandRecorder& recorder)
       "AutoExposurePass: current_view.view_id is invalid; exposure output "
       "will be unavailable");
   }
+  PruneStaleExposureStates(view_id);
   EnsureExposureStateForView(recorder, view_id);
 
   if (active_exposure_state_ == nullptr
@@ -299,7 +330,7 @@ auto AutoExposurePass::DoPrepareResources(graphics::CommandRecorder& recorder)
     graphics::BufferViewDescription desc {
       .view_type = graphics::ResourceViewType::kRawBuffer_UAV,
       .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .range = graphics::BufferRange(0, 256 * sizeof(uint32_t)),
+      .range = graphics::BufferRange(0, kHistogramBinCount * sizeof(uint32_t)),
       .stride = 0,
     };
     const auto view = registry.RegisterView(
@@ -331,7 +362,7 @@ auto AutoExposurePass::DoPrepareResources(graphics::CommandRecorder& recorder)
 
     pass_constants_mapped_ptr_
       = pass_constants_buffer_->Map(0, cb_desc.size_bytes);
-    if (!pass_constants_mapped_ptr_) {
+    if (pass_constants_mapped_ptr_ == nullptr) {
       throw std::runtime_error(
         "AutoExposurePass: failed to map pass constants buffer");
     }
@@ -347,7 +378,8 @@ auto AutoExposurePass::DoPrepareResources(graphics::CommandRecorder& recorder)
         throw std::runtime_error(
           "AutoExposurePass: failed to allocate pass constants CBV descriptor");
       }
-      pass_constants_indices_[slot] = allocator.GetShaderVisibleIndex(handle);
+      pass_constants_indices_.at(slot)
+        = allocator.GetShaderVisibleIndex(handle);
 
       const uint32_t offset
         = static_cast<uint32_t>(slot * kPassConstantsStride);
@@ -365,12 +397,55 @@ auto AutoExposurePass::DoPrepareResources(graphics::CommandRecorder& recorder)
     }
   }
 
-  if (!pass_constants_indices_[0].IsValid()) {
+  if (!pass_constants_indices_.at(0).IsValid()) {
     throw std::runtime_error("AutoExposurePass: invalid pass constants index");
   }
-  SetPassConstantsIndex(pass_constants_indices_[0]);
+  SetPassConstantsIndex(pass_constants_indices_.at(0));
 
   co_return;
+}
+
+auto AutoExposurePass::PruneStaleExposureStates(
+  const oxygen::ViewId current_view_id) -> void
+{
+  if (config_ == nullptr || config_->max_unseen_frames == 0U
+    || exposure_states_.empty()) {
+    return;
+  }
+
+  auto& registry = Context().GetGraphics().GetResourceRegistry();
+  const auto current_sequence = Context().frame_sequence.get();
+  const auto max_unseen_frames
+    = static_cast<uint64_t>(config_->max_unseen_frames);
+
+  for (auto it = exposure_states_.begin(); it != exposure_states_.end();) {
+    if (it->first == current_view_id) {
+      ++it;
+      continue;
+    }
+
+    const auto last_seen_sequence = it->second.last_seen_sequence.get();
+    const auto age = current_sequence > last_seen_sequence
+      ? current_sequence - last_seen_sequence
+      : 0ULL;
+    if (age <= max_unseen_frames) {
+      ++it;
+      continue;
+    }
+
+    if (active_exposure_state_ == &it->second) {
+      active_exposure_state_ = nullptr;
+    }
+
+    if (it->second.buffer && registry.Contains(*it->second.buffer)) {
+      registry.UnRegisterResource(*it->second.buffer);
+    }
+    it->second.buffer.reset();
+    it->second.uav_index = kInvalidShaderVisibleIndex;
+    it->second.srv_index = kInvalidShaderVisibleIndex;
+
+    it = exposure_states_.erase(it);
+  }
 }
 
 auto AutoExposurePass::DoExecute(graphics::CommandRecorder& recorder)
@@ -381,7 +456,8 @@ auto AutoExposurePass::DoExecute(graphics::CommandRecorder& recorder)
     co_return;
   }
 
-  if (!pass_constants_mapped_ptr_ || !pass_constants_indices_[0].IsValid()) {
+  if (pass_constants_mapped_ptr_ == nullptr
+    || !pass_constants_indices_.at(0).IsValid()) {
     co_return;
   }
 
@@ -413,7 +489,11 @@ auto AutoExposurePass::DoExecute(graphics::CommandRecorder& recorder)
   UpdateHistogramConstants(recorder);
 
   const auto& tex_desc = config_->source_texture->GetDescriptor();
-  recorder.Dispatch((tex_desc.width + 15) / 16, (tex_desc.height + 15) / 16, 1);
+  recorder.Dispatch((tex_desc.width + (kHistogramDispatchGroupSize - 1U))
+      / kHistogramDispatchGroupSize,
+    (tex_desc.height + (kHistogramDispatchGroupSize - 1U))
+      / kHistogramDispatchGroupSize,
+    1);
 
   // UAV-to-UAV sync between histogram build and average.
   recorder.RequireResourceState(
@@ -511,13 +591,14 @@ auto AutoExposurePass::UpdateHistogramConstants(
 
   const auto slot = pass_constants_slot_ % kPassConstantsSlots;
   pass_constants_slot_++;
+  auto mapped_bytes
+    = std::span { static_cast<std::byte*>(pass_constants_mapped_ptr_),
+        kPassConstantsSlots * kPassConstantsStride };
+  auto slot_bytes
+    = mapped_bytes.subspan(slot * kPassConstantsStride, sizeof(constants));
+  std::memcpy(slot_bytes.data(), &constants, sizeof(constants));
 
-  auto* slot_ptr = static_cast<std::byte*>(pass_constants_mapped_ptr_)
-    + (slot * kPassConstantsStride);
-
-  std::memcpy(slot_ptr, &constants, sizeof(constants));
-
-  const auto& index = pass_constants_indices_[slot];
+  const auto& index = pass_constants_indices_.at(slot);
   SetPassConstantsIndex(index);
 
   recorder.SetComputeRoot32BitConstant(
@@ -548,13 +629,14 @@ auto AutoExposurePass::UpdateAverageConstants(
 
   const auto slot = pass_constants_slot_ % kPassConstantsSlots;
   pass_constants_slot_++;
+  auto mapped_bytes
+    = std::span { static_cast<std::byte*>(pass_constants_mapped_ptr_),
+        kPassConstantsSlots * kPassConstantsStride };
+  auto slot_bytes
+    = mapped_bytes.subspan(slot * kPassConstantsStride, sizeof(constants));
+  std::memcpy(slot_bytes.data(), &constants, sizeof(constants));
 
-  auto* slot_ptr = static_cast<std::byte*>(pass_constants_mapped_ptr_)
-    + (slot * kPassConstantsStride);
-
-  std::memcpy(slot_ptr, &constants, sizeof(constants));
-
-  const auto& index = pass_constants_indices_[slot];
+  const auto& index = pass_constants_indices_.at(slot);
   SetPassConstantsIndex(index);
 
   recorder.SetComputeRoot32BitConstant(
@@ -573,7 +655,7 @@ auto AutoExposurePass::EnsureExposureInitUploadBuffer(
   auto& gfx = Context().GetGraphics();
 
   graphics::BufferDesc desc {};
-  desc.size_bytes = 16u;
+  desc.size_bytes = kExposureStateBufferSizeBytes;
   desc.usage = graphics::BufferUsage::kNone;
   desc.memory = graphics::BufferMemory::kUpload;
   desc.debug_name = std::string(GetName()) + "_ExposureInit";
@@ -586,20 +668,25 @@ auto AutoExposurePass::EnsureExposureInitUploadBuffer(
 
   exposure_init_upload_mapped_ptr_
     = init_upload_buffer_->Map(0, desc.size_bytes);
-  if (!exposure_init_upload_mapped_ptr_) {
+  if (exposure_init_upload_mapped_ptr_ == nullptr) {
     throw std::runtime_error(
       "AutoExposurePass: failed to map exposure init upload buffer");
   }
 
-  const float init_values[4]
-    = { std::max(config_ ? config_->target_luminance : 0.18F, 0.0001F), 1.0F,
-        // EV100 derived from avg luminance using ISO 2720 K=12.5.
-        std::log2(std::max(1.0e-4F,
-          std::max(config_ ? config_->target_luminance : 0.18F, 0.0001F)
-            * 100.0F / 12.5F)),
-        0.0F };
+  const float base_luminance = (std::max)(config_ ? config_->target_luminance
+                                                  : kDefaultExposureLuminance,
+    kMinLogLuminanceRange);
+  const float ev100 = std::log2((std::max)(kMinLogLuminanceRange,
+    base_luminance * kEv100Scale / kEv100CalibrationConstant));
+  const std::array<float, kExposureStateElementCount> init_values {
+    base_luminance,
+    1.0F,
+    ev100,
+    0.0F,
+  };
+  const auto init_bytes = std::as_bytes(std::span { init_values });
   std::memcpy(
-    exposure_init_upload_mapped_ptr_, init_values, sizeof(init_values));
+    exposure_init_upload_mapped_ptr_, init_bytes.data(), init_bytes.size());
 
   if (!recorder.IsResourceTracked(*init_upload_buffer_)) {
     recorder.BeginTrackingResourceState(
@@ -615,10 +702,11 @@ auto AutoExposurePass::EnsureExposureStateForView(
   auto& registry = gfx.GetResourceRegistry();
 
   auto& state = exposure_states_[view_id];
+  state.last_seen_sequence = Context().frame_sequence;
 
   if (!state.buffer) {
     graphics::BufferDesc exp_desc {};
-    exp_desc.size_bytes = 16u;
+    exp_desc.size_bytes = kExposureStateBufferSizeBytes;
     exp_desc.usage = graphics::BufferUsage::kStorage;
     exp_desc.memory = graphics::BufferMemory::kDeviceLocal;
     exp_desc.debug_name = std::string(GetName()) + "_ExposureState_"
@@ -638,7 +726,8 @@ auto AutoExposurePass::EnsureExposureStateForView(
 
     EnsureExposureInitUploadBuffer(recorder);
 
-    recorder.CopyBuffer(*state.buffer, 0, *init_upload_buffer_, 0, 16u);
+    recorder.CopyBuffer(
+      *state.buffer, 0, *init_upload_buffer_, 0, kExposureStateBufferSizeBytes);
     recorder.RequireResourceState(
       *state.buffer, graphics::ResourceStates::kUnorderedAccess);
     recorder.FlushBarriers();
@@ -666,7 +755,7 @@ auto AutoExposurePass::EnsureExposureStateForView(
     graphics::BufferViewDescription uav_desc {
       .view_type = graphics::ResourceViewType::kRawBuffer_UAV,
       .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .range = graphics::BufferRange(0, 16),
+      .range = graphics::BufferRange(0, kExposureStateBufferSizeBytes),
       .stride = 0,
     };
     const auto view
@@ -690,7 +779,7 @@ auto AutoExposurePass::EnsureExposureStateForView(
     graphics::BufferViewDescription srv_desc {
       .view_type = graphics::ResourceViewType::kRawBuffer_SRV,
       .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .range = graphics::BufferRange(0, 16),
+      .range = graphics::BufferRange(0, kExposureStateBufferSizeBytes),
       .stride = 0,
     };
     const auto view
@@ -707,7 +796,8 @@ auto AutoExposurePass::EnsureExposureStateForView(
 auto AutoExposurePass::EnsureHistogramBuffer() -> void
 {
   if (!config_->histogram_buffer) {
-    graphics::BufferDesc desc { .size_bytes = 256 * sizeof(uint32_t),
+    graphics::BufferDesc desc { .size_bytes
+      = kHistogramBinCount * sizeof(uint32_t),
       .usage = graphics::BufferUsage::kStorage,
       .memory = graphics::BufferMemory::kDeviceLocal,
       .debug_name = "AutoExposure_Histogram" };
@@ -723,7 +813,7 @@ auto AutoExposurePass::ReleasePassConstantsBuffer() noexcept -> void
   if (!pass_constants_buffer_) {
     pass_constants_mapped_ptr_ = nullptr;
     pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
-    pass_constants_slot_ = 0u;
+    pass_constants_slot_ = 0U;
     return;
   }
 
@@ -734,7 +824,7 @@ auto AutoExposurePass::ReleasePassConstantsBuffer() noexcept -> void
   pass_constants_mapped_ptr_ = nullptr;
   pass_constants_buffer_.reset();
   pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
-  pass_constants_slot_ = 0u;
+  pass_constants_slot_ = 0U;
 }
 
 auto AutoExposurePass::ResetExposure(graphics::CommandRecorder& recorder,
@@ -756,15 +846,20 @@ auto AutoExposurePass::ResetExposure(graphics::CommandRecorder& recorder,
   EnsureExposureInitUploadBuffer(recorder);
 
   float ev = 0.0F;
-  if (initial_avg_luminance > 0.0001F) {
-    ev = std::log2(initial_avg_luminance * 100.0F / 12.5F);
+  if (initial_avg_luminance > kMinLogLuminanceRange) {
+    ev = std::log2(
+      initial_avg_luminance * kEv100Scale / kEv100CalibrationConstant);
   }
 
-  const float init_values[4]
-    = { std::max(initial_avg_luminance, 0.0001F), 1.0F, ev, 0.0F };
-
+  const std::array<float, kExposureStateElementCount> init_values {
+    (std::max)(initial_avg_luminance, kMinLogLuminanceRange),
+    1.0F,
+    ev,
+    0.0F,
+  };
+  const auto init_bytes = std::as_bytes(std::span { init_values });
   std::memcpy(
-    exposure_init_upload_mapped_ptr_, init_values, sizeof(init_values));
+    exposure_init_upload_mapped_ptr_, init_bytes.data(), init_bytes.size());
 
   using enum oxygen::graphics::ResourceStates;
 
@@ -784,7 +879,8 @@ auto AutoExposurePass::ResetExposure(graphics::CommandRecorder& recorder,
   recorder.RequireResourceState(*state.buffer, kCopyDest);
   recorder.FlushBarriers();
 
-  recorder.CopyBuffer(*state.buffer, 0, *init_upload_buffer_, 0, 16u);
+  recorder.CopyBuffer(
+    *state.buffer, 0, *init_upload_buffer_, 0, kExposureStateBufferSizeBytes);
 }
 
 } // namespace oxygen::engine
