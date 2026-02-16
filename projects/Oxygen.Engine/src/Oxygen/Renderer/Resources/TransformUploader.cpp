@@ -7,7 +7,6 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <span>
 
 #include <fmt/format.h>
 
@@ -24,6 +23,14 @@
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::renderer::resources {
+namespace {
+
+  constexpr oxygen::nexus::DomainKey kTransformDomain {
+    .view_type = oxygen::graphics::ResourceViewType::kStructuredBuffer_SRV,
+    .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible,
+  };
+
+} // namespace
 
 TransformUploader::TransformUploader(const observer_ptr<Graphics> gfx,
   const observer_ptr<ProviderT> provider,
@@ -31,6 +38,12 @@ TransformUploader::TransformUploader(const observer_ptr<Graphics> gfx,
   : gfx_(gfx)
   , staging_provider_(provider)
   , inline_transfers_(inline_transfers)
+  , slot_reuse_(
+      [this](oxygen::nexus::DomainKey /*domain*/) -> bindless::HeapIndex {
+        return bindless::HeapIndex { frame_write_count_ };
+      },
+      [](oxygen::nexus::DomainKey /*domain*/, bindless::HeapIndex /*index*/) {},
+      slot_reclaimer_)
   , worlds_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(glm::mat4)), inline_transfers_,
       "TransformUploader.Worlds")
@@ -45,19 +58,31 @@ TransformUploader::TransformUploader(const observer_ptr<Graphics> gfx,
 
 TransformUploader::~TransformUploader()
 {
+  const auto telemetry = slot_reuse_.GetTelemetrySnapshot();
+  const auto expected_zero_marker = [](const uint64_t value) -> const char* {
+    return value == 0U ? " ✓" : " (expected 0) !";
+  };
+
   LOG_SCOPE_F(INFO, "TransformUploader Statistics");
-  LOG_F(INFO, "total calls       : {}", total_calls_);
-  LOG_F(INFO, "total allocations : {}", total_allocations_);
-  LOG_F(INFO, "transforms stored : {}", transforms_.size());
+  LOG_F(INFO, "nexus.allocate_calls      : {}", telemetry.allocate_calls);
+  LOG_F(INFO, "nexus.release_calls       : {}{}", telemetry.release_calls,
+    expected_zero_marker(telemetry.release_calls));
+  LOG_F(INFO, "nexus.stale_reject_count  : {}{}", telemetry.stale_reject_count,
+    expected_zero_marker(telemetry.stale_reject_count));
+  LOG_F(INFO, "nexus.duplicate_rejects   : {}{}",
+    telemetry.duplicate_reject_count,
+    expected_zero_marker(telemetry.duplicate_reject_count));
+  LOG_F(INFO, "nexus.reclaimed_count     : {}{}", telemetry.reclaimed_count,
+    expected_zero_marker(telemetry.reclaimed_count));
+  LOG_F(INFO, "nexus.pending_count       : {}{}", telemetry.pending_count,
+    expected_zero_marker(telemetry.pending_count));
+  LOG_F(INFO, "peak transform slots      : {}", transforms_.size());
 }
 
 auto TransformUploader::OnFrameStart(RendererTag /*tag*/,
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
-  ++current_epoch_;
-  if (current_epoch_ == 0U) {
-    current_epoch_ = 1U;
-  }
+  slot_reuse_.OnBeginFrame(slot);
   frame_write_count_ = 0U;
 
   worlds_buffer_.OnFrameStart(sequence, slot);
@@ -74,23 +99,18 @@ auto TransformUploader::OnFrameStart(RendererTag /*tag*/,
 auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
   -> engine::sceneprep::TransformHandle
 {
-  ++total_calls_;
-
   DCHECK_F(transforms::IsFinite(transform),
     "GetOrAllocate received non-finite matrix");
 
-  // Reuse slots by frame order to maintain stable indices across frames
-  const bool is_new_logical = frame_write_count_ >= transforms_.size();
-  std::uint32_t index = 0;
-  if (is_new_logical) {
-    // Append new entries
+  // Strategy A remains deterministic here because allocation order is driven by
+  // frame_write_count_ and reset at each OnFrameStart.
+  const auto index
+    = slot_reuse_.Allocate(kTransformDomain).ToBindlessHandle().get();
+
+  if (index >= transforms_.size()) {
     transforms_.push_back(transform);
     normal_matrices_.push_back(ComputeNormalMatrix(transform));
-    index = static_cast<std::uint32_t>(transforms_.size() - 1);
-    ++total_allocations_;
   } else {
-    // Reuse existing slot in this frame by order; update.
-    index = frame_write_count_;
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     transforms_[index] = transform;
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)

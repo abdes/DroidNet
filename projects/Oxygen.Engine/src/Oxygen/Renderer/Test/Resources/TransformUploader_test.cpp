@@ -356,6 +356,28 @@ NOLINT_TEST_F(TransformUploaderFrameLifecycleTest,
   EXPECT_EQ(size_frame1, 3);
 }
 
+//! Slot reuse stays deterministic even when frame slots rotate.
+NOLINT_TEST_F(TransformUploaderFrameLifecycleTest,
+  RotatingFrameSlotsKeepsSameHandleForSameAllocationPattern)
+{
+  auto& uploader = TransformUploaderRef();
+
+  uploader.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
+  const auto h0 = uploader.GetOrAllocate(glm::mat4 { 1.0F });
+
+  uploader.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 1 });
+  const auto h1 = uploader.GetOrAllocate(glm::mat4 { 1.0F });
+
+  uploader.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 2 }, Slot { 2 });
+  const auto h2 = uploader.GetOrAllocate(glm::mat4 { 1.0F });
+
+  EXPECT_EQ(h0, h1);
+  EXPECT_EQ(h1, h2);
+}
+
 // -- Edge cases and boundary conditions ---------------------------------------
 
 class TransformUploaderEdgeCaseTest : public TransformUploaderTest { };

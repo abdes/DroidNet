@@ -15,7 +15,9 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Nexus/FrameDrivenSlotReuse.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/ScenePrep/Handles.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
@@ -138,6 +140,8 @@ private:
   observer_ptr<Graphics> gfx_;
   observer_ptr<ProviderT> staging_provider_;
   observer_ptr<CoordinatorT> inline_transfers_;
+  graphics::detail::DeferredReclaimer slot_reclaimer_;
+  nexus::FrameDrivenSlotReuse slot_reuse_;
 
   // Transient per-frame GPU buffers for transforms (direct-write strategy)
   using StagingBufferT = engine::upload::TransientStructuredBuffer;
@@ -152,17 +156,10 @@ private:
   std::vector<glm::mat4> transforms_;
   std::vector<glm::mat4> normal_matrices_;
 
-  std::uint32_t current_epoch_ { 1U };
   bool uploaded_this_frame_ { false };
   // Per-frame write cursor to reuse existing slots in call order and maintain
   // stable indices across frames. Reset at OnFrameStart.
   std::uint32_t frame_write_count_ { 0U };
-
-  // Statistics
-  //! Total number of allocations (grows monotonically)
-  std::uint64_t total_allocations_ { 0U };
-  //! Total number of GetOrAllocate() calls made (usage metric)
-  std::uint64_t total_calls_ { 0U };
 };
 
 } // namespace oxygen::renderer::resources
