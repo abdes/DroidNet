@@ -26,7 +26,8 @@ via TextureBinder, and uploads only the changes each frame.
 
 ### 1) Handle and identity
 
-- `engine::sceneprep::MaterialHandle` is a stable index into internal state.
+- `engine::sceneprep::MaterialHandle` is a stable versioned handle
+  (index+generation) into internal state.
 - Identity is derived from a content hash of authored material parameters and
  texture identities (ResourceKey), not from SRV indices.
 - Handles are stable for the renderer lifetime; explicit recycling is a future
@@ -101,5 +102,4 @@ via TextureBinder, and uploads only the changes each frame.
 ## Future Work (Keep)
 
 - Per-material eviction policies and cache budgets.
-- Generation-gated slot reuse for material entries.
 - Debug-only validation for bindless index bounds and residency state.

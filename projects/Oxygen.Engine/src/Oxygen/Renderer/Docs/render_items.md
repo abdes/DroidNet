@@ -195,8 +195,8 @@ Lifecycle: Build → (sort / filter) → Submit → Discard.
 | Rendering View | `ViewId` (64-bit) | `core::ViewId` (NamedType) | Unique per frame; allocated by FrameContext |
 | Scene Node | `NodeHandle` (ResourceHandle) | `scene::NodeHandle` (extends ResourceHandle) | Zero-overhead wrapper; stores index + scene_id |
 | Transform Entry | `TransformHandle` (uint32 index) | `sceneprep::TransformHandle` (NamedType) | Stable deduplicated transform index; recycled over time |
-| Material Registry Entry | `MaterialHandle` (uint32 index) | `sceneprep::MaterialHandle` (NamedType) | Stable material registry entry; recycled over time |
-| Geometry Resource | `GeometryHandle` (uint32 index) | `sceneprep::GeometryHandle` (NamedType) | Stable mesh/geometry entry; recycled over time |
+| Material Registry Entry | `MaterialHandle` (index + generation) | `sceneprep::MaterialHandle` (value type) | Stable material registry entry with stale-handle rejection |
+| Geometry Resource | `GeometryHandle` (index + generation) | `sceneprep::GeometryHandle` (value type) | Stable mesh/geometry entry with stale-handle rejection |
 | Submesh Descriptor | Implicit uint32 index | Index field in geometry asset | Per-mesh; from submesh table in GeometryAsset |
 | Material Override Slot | Index into override table | `RenderItem.material` pointer + asset key | Per-item material reference; resolved at render time |
 
@@ -204,7 +204,7 @@ Lifecycle: Build → (sort / filter) → Submit → Discard.
 
 * **AssetKey** (128-bit GUID): Stable identifier across all systems; never changes for an asset
 * **ResourceKey** (64-bit encoded): Runtime-only identifier for cached resources; opaque to renderer
-* **Handles** (TransformHandle, MaterialHandle, GeometryHandle): Frame-local deduplication indices; recycled/reused
+* **Handles** (`TransformHandle`, `MaterialHandle`, `GeometryHandle`): stable renderer-facing references; material/geometry are versioned and validated on use
 * **ViewId** (64-bit): Per-frame unique identifier for rendering views allocated by engine
 * **NodeHandle** (from scene::NodeHandle): Zero-cost wrapper for scene graph navigation
 

@@ -15,12 +15,15 @@
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Nexus/FrameDrivenIndexReuse.h>
 #include <Oxygen/Renderer/Resources/IResourceBinder.h>
 #include <Oxygen/Renderer/Resources/MaterialBinder.h>
 #include <Oxygen/Renderer/ScenePrep/MaterialRef.h>
@@ -82,8 +85,8 @@ namespace {
   if (material.HasProceduralGrid()) {
     const auto grid_spacing = material.GetGridSpacing();
     if (!std::isfinite(grid_spacing[0]) || !std::isfinite(grid_spacing[1])
-      || std::abs(grid_spacing[0]) <= 1e-6F
-      || std::abs(grid_spacing[1]) <= 1e-6F) {
+      || std::abs(grid_spacing[0]) <= oxygen::math::Epsilon
+      || std::abs(grid_spacing[1]) <= oxygen::math::Epsilon) {
       error_msg = "Material grid_spacing must be finite and non-zero";
       return false;
     }
@@ -399,6 +402,15 @@ public:
   [[nodiscard]] auto GetMaterialsSrvIndex() const -> ShaderVisibleIndex;
 
 private:
+  using ReuseStrategy = nexus::FrameDrivenIndexReuse<bindless::HeapIndex>;
+  using VersionedIndex = nexus::VersionedIndex<bindless::HeapIndex>;
+
+  [[nodiscard]] static auto ToVersionedIndex_(
+    engine::sceneprep::MaterialHandle handle) -> VersionedIndex;
+  [[nodiscard]] auto TryGetCurrentIndex_(
+    engine::sceneprep::MaterialHandle handle) const
+    -> std::optional<std::uint32_t>;
+
   struct MaterialCacheEntry {
     engine::sceneprep::MaterialHandle handle;
     std::uint32_t index;
@@ -422,11 +434,14 @@ private:
   std::vector<std::shared_ptr<const data::MaterialAsset>> materials_;
   std::vector<engine::MaterialConstants> material_constants_;
   std::vector<std::uint64_t> material_keys_;
+  std::vector<std::uint32_t> material_handle_generations_;
   std::vector<std::uint32_t> dirty_epoch_;
   std::vector<std::uint32_t> dirty_indices_;
   std::uint32_t current_epoch_ { 1U }; // 0 reserved for 'never'
+  std::uint32_t next_handle_index_ { 0U };
 
   // Statistics tracking
+  std::uint64_t frames_started_count_ { 0U };
   std::uint64_t total_calls_ { 0U };
   std::uint64_t cache_hits_ { 0U };
   std::uint64_t total_allocations_ { 0U };
@@ -445,6 +460,8 @@ private:
 
   // Current frame slot for atlas element retirement
   frame::Slot current_frame_slot_ { frame::kInvalidSlot };
+  graphics::detail::DeferredReclaimer slot_reclaimer_;
+  ReuseStrategy slot_reuse_;
 
   // Frame resource tracking
   bool uploaded_this_frame_ { false };
@@ -517,6 +534,8 @@ MaterialBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
   , uploader_(uploader)
   , staging_provider_(provider)
   , texture_binder_(texture_binder)
+  , slot_reuse_(slot_reclaimer_,
+      [](bindless::HeapIndex /*index*/, std::monostate /*unused*/) { })
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DCHECK_NOTNULL_F(uploader_, "UploadCoordinator cannot be null");
@@ -531,7 +550,27 @@ MaterialBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
 
 MaterialBinder::Impl::~Impl()
 {
+  slot_reclaimer_.ProcessAllDeferredReleases();
+
+  const auto telemetry = slot_reuse_.GetTelemetrySnapshot();
+  const auto expected_zero_marker = [](const uint64_t value) -> const char* {
+    return value == 0U ? " ✓" : " (expected 0) !";
+  };
+
   LOG_SCOPE_F(INFO, "MaterialBinder Statistics");
+  LOG_F(INFO, "frames started            : {}", frames_started_count_);
+  LOG_F(INFO, "nexus.allocate_calls      : {}", telemetry.allocate_calls);
+  LOG_F(INFO, "nexus.release_calls       : {}{}", telemetry.release_calls,
+    expected_zero_marker(telemetry.release_calls));
+  LOG_F(INFO, "nexus.stale_reject_count  : {}{}", telemetry.stale_reject_count,
+    expected_zero_marker(telemetry.stale_reject_count));
+  LOG_F(INFO, "nexus.duplicate_rejects   : {}{}",
+    telemetry.duplicate_reject_count,
+    expected_zero_marker(telemetry.duplicate_reject_count));
+  LOG_F(INFO, "nexus.reclaimed_count     : {}{}", telemetry.reclaimed_count,
+    expected_zero_marker(telemetry.reclaimed_count));
+  LOG_F(INFO, "nexus.pending_count       : {}{}", telemetry.pending_count,
+    expected_zero_marker(telemetry.pending_count));
   LOG_F(INFO, "total calls       : {}", total_calls_);
   LOG_F(INFO, "cache hits        : {}", cache_hits_);
   LOG_F(INFO, "total allocations : {}", total_allocations_);
@@ -554,6 +593,9 @@ MaterialBinder::Impl::~Impl()
 auto MaterialBinder::Impl::OnFrameStart(
   RendererTag /*tag*/, const frame::Slot slot) -> void
 {
+  slot_reuse_.OnBeginFrame(slot);
+  ++frames_started_count_;
+
   ++current_epoch_;
   if (current_epoch_ == 0U) {
     LOG_F(WARNING,
@@ -572,11 +614,45 @@ auto MaterialBinder::Impl::OnFrameStart(
   uploaded_this_frame_ = false;
 }
 
+auto MaterialBinder::Impl::ToVersionedIndex_(
+  const engine::sceneprep::MaterialHandle handle) -> VersionedIndex
+{
+  return {
+    .index = bindless::HeapIndex { handle.get() },
+    .generation = handle.GenerationValue(),
+  };
+}
+
+auto MaterialBinder::Impl::TryGetCurrentIndex_(
+  const engine::sceneprep::MaterialHandle handle) const
+  -> std::optional<std::uint32_t>
+{
+  if (!handle.IsValid()) {
+    return std::nullopt;
+  }
+  if (!slot_reuse_.IsHandleCurrent(ToVersionedIndex_(handle))) {
+    return std::nullopt;
+  }
+  const auto u_index = handle.get();
+  if (u_index >= material_handle_generations_.size()) {
+    return std::nullopt;
+  }
+  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+  if (material_handle_generations_[u_index] != handle.GenerationValue().get()) {
+    return std::nullopt;
+  }
+  return u_index;
+}
+
 auto MaterialBinder::Impl::FindIndexByHandle(
   const engine::sceneprep::MaterialHandle handle) const
   -> std::optional<std::uint32_t>
 {
-  const auto u_index = static_cast<std::uint32_t>(handle.get());
+  const auto maybe_index = TryGetCurrentIndex_(handle);
+  if (!maybe_index.has_value()) {
+    return std::nullopt;
+  }
+  const auto u_index = *maybe_index;
   if (u_index >= materials_.size()) {
     return std::nullopt;
   }
@@ -667,7 +743,16 @@ auto MaterialBinder::Impl::UpdateKeyMappingForIndex(
   // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
   material_keys_[index] = new_key;
 
-  const auto handle = engine::sceneprep::MaterialHandle { index };
+  if (index >= material_handle_generations_.size()) {
+    material_handle_generations_.resize(
+      static_cast<std::size_t>(index) + 1U, 0U);
+  }
+  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+  const auto handle_generation = material_handle_generations_[index];
+  const auto handle = engine::sceneprep::MaterialHandle {
+    engine::sceneprep::MaterialHandle::Index { index },
+    engine::sceneprep::MaterialHandle::Generation { handle_generation },
+  };
 
   // Canonical-first: if the key already exists, do not remap it. This ensures
   // GetOrAllocate(key) keeps returning the original handle.
@@ -708,61 +793,65 @@ auto MaterialBinder::Impl::GetOrAllocate(
   const auto key = MakeMaterialKey(material);
   if (const auto it = material_key_to_handle_.find(key);
     it != material_key_to_handle_.end()) {
-    const auto idx = it->second.index;
-    if (idx >= materials_.size()) {
-      LOG_F(ERROR,
-        "MaterialBinder: cached index out of range for key {} "
-        "(source_key={}, resolved_key={})",
-        key, oxygen::data::to_string(material.source_asset_key),
-        oxygen::data::to_string(material.resolved_asset_key));
-      return engine::sceneprep::kInvalidMaterialHandle;
-    }
-
-    ++cache_hits_;
-
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-    const auto* old_ptr = materials_[idx].get();
-    if ((old_ptr != nullptr) && old_ptr != material.resolved_asset.get()) {
-      material_ptr_to_index_.erase(old_ptr);
-    }
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-    materials_[idx] = material.resolved_asset;
-    material_ptr_to_index_[material.resolved_asset.get()] = idx;
-
-    const auto& cached_asset = *material.resolved_asset;
-    const bool no_texture_sampling
-      = (cached_asset.GetFlags()
-          & oxygen::data::pak::kMaterialFlag_NoTextureSampling)
-      != 0U;
-    if (!no_texture_sampling) {
-      const auto needs_refresh
-        = [this](const content::ResourceKey key) -> bool {
-        return key.get() != 0U && !texture_binder_->IsResourceReady(key);
-      };
-
-      if (needs_refresh(cached_asset.GetBaseColorTextureKey())
-        || needs_refresh(cached_asset.GetNormalTextureKey())
-        || needs_refresh(cached_asset.GetMetallicTextureKey())
-        || needs_refresh(cached_asset.GetRoughnessTextureKey())
-        || needs_refresh(cached_asset.GetAmbientOcclusionTextureKey())
-        || needs_refresh(cached_asset.GetEmissiveTextureKey())
-        || needs_refresh(cached_asset.GetSpecularTextureKey())
-        || needs_refresh(cached_asset.GetSheenColorTextureKey())
-        || needs_refresh(cached_asset.GetClearcoatTextureKey())
-        || needs_refresh(cached_asset.GetClearcoatNormalTextureKey())
-        || needs_refresh(cached_asset.GetTransmissionTextureKey())
-        || needs_refresh(cached_asset.GetThicknessTextureKey())) {
-        material_constants_[idx]
-          = SerializeMaterialConstants(material, *texture_binder_);
-        MarkDirty(idx);
+    const auto maybe_cached_index = FindIndexByHandle(it->second.handle);
+    if (!maybe_cached_index.has_value()) {
+      material_key_to_handle_.erase(it);
+    } else {
+      const auto idx = *maybe_cached_index;
+      if (idx >= materials_.size()) {
+        LOG_F(ERROR,
+          "MaterialBinder: cached index out of range for key {} "
+          "(source_key={}, resolved_key={})",
+          key, oxygen::data::to_string(material.source_asset_key),
+          oxygen::data::to_string(material.resolved_asset_key));
+        return engine::sceneprep::kInvalidMaterialHandle;
       }
-    }
 
-    return it->second.handle;
+      ++cache_hits_;
+
+      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+      const auto* old_ptr = materials_[idx].get();
+      if ((old_ptr != nullptr) && old_ptr != material.resolved_asset.get()) {
+        material_ptr_to_index_.erase(old_ptr);
+      }
+      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+      materials_[idx] = material.resolved_asset;
+      material_ptr_to_index_[material.resolved_asset.get()] = idx;
+
+      const auto& cached_asset = *material.resolved_asset;
+      const bool no_texture_sampling
+        = (cached_asset.GetFlags()
+            & oxygen::data::pak::kMaterialFlag_NoTextureSampling)
+        != 0U;
+      if (!no_texture_sampling) {
+        const auto needs_refresh
+          = [this](const content::ResourceKey key) -> bool {
+          return key.get() != 0U && !texture_binder_->IsResourceReady(key);
+        };
+
+        if (needs_refresh(cached_asset.GetBaseColorTextureKey())
+          || needs_refresh(cached_asset.GetNormalTextureKey())
+          || needs_refresh(cached_asset.GetMetallicTextureKey())
+          || needs_refresh(cached_asset.GetRoughnessTextureKey())
+          || needs_refresh(cached_asset.GetAmbientOcclusionTextureKey())
+          || needs_refresh(cached_asset.GetEmissiveTextureKey())
+          || needs_refresh(cached_asset.GetSpecularTextureKey())
+          || needs_refresh(cached_asset.GetSheenColorTextureKey())
+          || needs_refresh(cached_asset.GetClearcoatTextureKey())
+          || needs_refresh(cached_asset.GetClearcoatNormalTextureKey())
+          || needs_refresh(cached_asset.GetTransmissionTextureKey())
+          || needs_refresh(cached_asset.GetThicknessTextureKey())) {
+          material_constants_[idx]
+            = SerializeMaterialConstants(material, *texture_binder_);
+          MarkDirty(idx);
+        }
+      }
+
+      return it->second.handle;
+    }
   }
 
-  const auto index = static_cast<std::uint32_t>(materials_.size());
-
+  const auto index = next_handle_index_++;
   const auto constants = SerializeMaterialConstants(material, *texture_binder_);
 
   // Ensure atlas has capacity before allocating the element ref.
@@ -776,9 +865,30 @@ auto MaterialBinder::Impl::GetOrAllocate(
     return engine::sceneprep::kInvalidMaterialHandle;
   }
 
-  materials_.push_back(material.resolved_asset);
-  material_constants_.push_back(constants);
-  material_refs_.push_back(*ref);
+  const auto versioned_handle
+    = slot_reuse_.ActivateSlot(bindless::HeapIndex { index });
+  const auto handle = engine::sceneprep::MaterialHandle {
+    engine::sceneprep::MaterialHandle::Index { versioned_handle.index.get() },
+    engine::sceneprep::MaterialHandle::Generation {
+      versioned_handle.generation.get() },
+  };
+
+  if (materials_.size() <= index) {
+    materials_.resize(static_cast<std::size_t>(index) + 1U);
+    material_constants_.resize(static_cast<std::size_t>(index) + 1U);
+    material_refs_.resize(static_cast<std::size_t>(index) + 1U);
+  }
+  if (material_handle_generations_.size() <= index) {
+    material_handle_generations_.resize(
+      static_cast<std::size_t>(index) + 1U, 0U);
+  }
+
+  // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
+  materials_[index] = material.resolved_asset;
+  material_constants_[index] = constants;
+  material_refs_[index] = *ref;
+  material_handle_generations_[index] = handle.GenerationValue().get();
+  // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
   material_ptr_to_index_[material.resolved_asset.get()] = index;
   ++total_allocations_;
   ++atlas_allocations_;
@@ -786,7 +896,7 @@ auto MaterialBinder::Impl::GetOrAllocate(
   UpdateKeyMappingForIndex(index, key);
   MarkDirty(index);
 
-  return engine::sceneprep::MaterialHandle { index };
+  return handle;
 }
 
 auto MaterialBinder::Impl::Update(
@@ -797,12 +907,13 @@ auto MaterialBinder::Impl::Update(
 
   const auto maybe_index = FindIndexByHandle(handle);
   if (!maybe_index.has_value()) {
-    LOG_F(WARNING, "Update received invalid handle {}", handle.get());
+    LOG_F(WARNING, "Update received invalid handle {}", to_string(handle));
     return;
   }
 
   if (!material) {
-    LOG_F(WARNING, "Update received null material for handle {}", handle.get());
+    LOG_F(WARNING, "Update received null material for handle {}",
+      to_string(handle));
     return;
   }
 

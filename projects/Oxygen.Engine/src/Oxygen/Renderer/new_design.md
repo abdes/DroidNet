@@ -350,7 +350,7 @@ struct RenderItemData {
   // Asset references - Set by RenderItemEmitter from scene nodes
   std::shared_ptr<const oxygen::data::GeometryAsset> geometry;
   std::shared_ptr<const oxygen::data::MaterialAsset> material;
-  MaterialHandle material_handle { 0U };          // Populated by Resources module
+  MaterialHandle material_handle { kInvalidMaterialHandle }; // Populated by Resources module
 
   // Cached scene state - Set by VisibilityTester
   glm::vec4 world_bounding_sphere;
