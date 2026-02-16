@@ -309,7 +309,7 @@ private:
   bool receive_shadows = true;
 
   // Geometry asset seeded during collection phase
-  std::shared_ptr<const oxygen::data::GeometryAsset> geometry_ {};
+  std::shared_ptr<const oxygen::data::GeometryAsset> geometry_;
 
   // -- Mesh data (resolved LOD)
 
@@ -321,8 +321,8 @@ private:
   std::shared_ptr<const oxygen::data::Mesh> mesh_;
 
   // Transform and bounds
-  glm::mat4 world_transform { 1.0f };
-  TransformHandle transform_handle_ { 0U };
+  glm::mat4 world_transform { 1.0F };
+  TransformHandle transform_handle_ { kInvalidTransformHandle };
 
   // Dense list of indices of visible submeshes in the resolved parent mesh.
   std::vector<uint32_t> visible_submeshes_;

@@ -431,12 +431,22 @@ NOLINT_TEST_F(
   uploader.GetOrAllocate(glm::mat4 { 1.0F });
 
   // Act & Assert
-  constexpr auto valid_handle
-    = oxygen::engine::sceneprep::TransformHandle { 0 };
-  constexpr auto invalid_handle
-    = oxygen::engine::sceneprep::TransformHandle { 999 };
+  constexpr auto valid_handle = oxygen::engine::sceneprep::TransformHandle {
+    oxygen::engine::sceneprep::TransformHandle::Index { 0U },
+    oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+  };
+  constexpr auto invalid_handle = oxygen::engine::sceneprep::TransformHandle {
+    oxygen::engine::sceneprep::TransformHandle::Index { 999U },
+    oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+  };
+  constexpr auto stale_generation_handle
+    = oxygen::engine::sceneprep::TransformHandle {
+        oxygen::engine::sceneprep::TransformHandle::Index { 0U },
+        oxygen::engine::sceneprep::TransformHandle::Generation { 99U },
+      };
   EXPECT_TRUE(uploader.IsHandleValid(valid_handle));
   EXPECT_FALSE(uploader.IsHandleValid(invalid_handle));
+  EXPECT_FALSE(uploader.IsHandleValid(stale_generation_handle));
 }
 
 // -- Buffer state and lazy loading tests --------------------------------------

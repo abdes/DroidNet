@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -84,7 +85,7 @@ inline auto TransformResolveStage(const ScenePrepContext& /*ctx*/,
     const auto handle = uploader->GetOrAllocate(item.GetWorldTransform());
     item.SetTransformHandle(handle);
   } else {
-    item.SetTransformHandle(TransformHandle { 0 });
+    item.SetTransformHandle(kInvalidTransformHandle);
   }
 }
 static_assert(RenderItemDataExtractor<decltype(TransformResolveStage)>);
@@ -130,15 +131,16 @@ inline auto MeshResolver(const ScenePrepContext& ctx,
 
   if (item.Renderable().UsesDistancePolicy()) {
     const float dist = glm::length(cam_pos - center);
-    const float radius = std::max(sphere.w, 1e-6f);
+    const float radius = (std::max)(sphere.w, oxygen::math::Epsilon);
     const float normalized_distance = dist / radius;
     item.Renderable().SelectActiveMesh(
       scn::NormalizedDistance { normalized_distance });
   } else if (item.Renderable().UsesScreenSpaceErrorPolicy()) {
-    const float z = std::max(glm::length(center - cam_pos), 1e-6f);
-    const float r_world = std::max(sphere.w, 1e-6f);
+    const float z
+      = (std::max)(glm::length(center - cam_pos), oxygen::math::Epsilon);
+    const float r_world = (std::max)(sphere.w, oxygen::math::Epsilon);
     const float f = ctx.GetView().FocalLengthPixels();
-    if (f > 0.0f) {
+    if (f > 0.0F) {
       const float sse = f * r_world / z;
       item.Renderable().SelectActiveMesh(scn::ScreenSpaceError { sse });
     }
@@ -199,8 +201,8 @@ inline auto SubMeshVisibilityFilter(const ScenePrepContext& ctx,
   // Absolute inflation in world units (meters) and relative inflation factor
   // (percentage of AABB diagonal or sphere radius). Final inflation is
   // max(abs, rel).
-  static constexpr float kBoundsInflationAbs = 0.0f;
-  static constexpr float kBoundsInflationRel = 0.01f; // 1% guard band
+  static constexpr float kBoundsInflationAbs = 0.0F;
+  static constexpr float kBoundsInflationRel = 0.01F; // 1% guard band
   const auto submesh_count = submeshes.size();
   CHECK_LE_F(submesh_count, (std::numeric_limits<std::uint32_t>::max)());
   for (std::uint32_t i = 0, n = static_cast<std::uint32_t>(submesh_count);
@@ -220,9 +222,9 @@ inline auto SubMeshVisibilityFilter(const ScenePrepContext& ctx,
         auto max = aabb->second;
         const float diag = glm::length(max - min);
         const float rel
-          = kBoundsInflationRel > 0.0f ? (diag * kBoundsInflationRel) : 0.0f;
+          = kBoundsInflationRel > 0.0F ? (diag * kBoundsInflationRel) : 0.0F;
         const float infl = (std::max)(kBoundsInflationAbs, rel);
-        if (infl > 0.0f) {
+        if (infl > 0.0F) {
           min -= glm::vec3(infl);
           max += glm::vec3(infl);
         }
@@ -232,9 +234,9 @@ inline auto SubMeshVisibilityFilter(const ScenePrepContext& ctx,
         const auto c = glm::vec3(sphere);
         float r = sphere.w;
         const float rel
-          = kBoundsInflationRel > 0.0f ? (r * kBoundsInflationRel) : 0.0f;
+          = kBoundsInflationRel > 0.0F ? (r * kBoundsInflationRel) : 0.0F;
         const float infl = (std::max)(kBoundsInflationAbs, rel);
-        if (infl > 0.0f) {
+        if (infl > 0.0F) {
           r += infl;
         }
         in_frustum = frustum.IntersectsSphere(c, r);

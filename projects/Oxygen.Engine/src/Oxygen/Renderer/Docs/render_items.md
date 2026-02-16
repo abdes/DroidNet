@@ -194,7 +194,7 @@ Lifecycle: Build → (sort / filter) → Submit → Discard.
 | Cached Resource (Texture/Buffer) | `ResourceKey` (64-bit encoded) | `content::ResourceKey` (NamedType) | Packs (pak_index, resource_type, resource_index); opaque at runtime |
 | Rendering View | `ViewId` (64-bit) | `core::ViewId` (NamedType) | Unique per frame; allocated by FrameContext |
 | Scene Node | `NodeHandle` (ResourceHandle) | `scene::NodeHandle` (extends ResourceHandle) | Zero-overhead wrapper; stores index + scene_id |
-| Transform Entry | `TransformHandle` (uint32 index) | `sceneprep::TransformHandle` (NamedType) | Stable deduplicated transform index; recycled over time |
+| Transform Entry | `TransformHandle` (index + generation) | `sceneprep::TransformHandle` (value type) | Stable deduplicated transform entry with stale-handle rejection |
 | Material Registry Entry | `MaterialHandle` (index + generation) | `sceneprep::MaterialHandle` (value type) | Stable material registry entry with stale-handle rejection |
 | Geometry Resource | `GeometryHandle` (index + generation) | `sceneprep::GeometryHandle` (value type) | Stable mesh/geometry entry with stale-handle rejection |
 | Submesh Descriptor | Implicit uint32 index | Index field in geometry asset | Per-mesh; from submesh table in GeometryAsset |
@@ -204,7 +204,7 @@ Lifecycle: Build → (sort / filter) → Submit → Discard.
 
 * **AssetKey** (128-bit GUID): Stable identifier across all systems; never changes for an asset
 * **ResourceKey** (64-bit encoded): Runtime-only identifier for cached resources; opaque to renderer
-* **Handles** (`TransformHandle`, `MaterialHandle`, `GeometryHandle`): stable renderer-facing references; material/geometry are versioned and validated on use
+* **Handles** (`TransformHandle`, `MaterialHandle`, `GeometryHandle`): stable renderer-facing references; all three are versioned and validated on use
 * **ViewId** (64-bit): Per-frame unique identifier for rendering views allocated by engine
 * **NodeHandle** (from scene::NodeHandle): Zero-cost wrapper for scene graph navigation
 
