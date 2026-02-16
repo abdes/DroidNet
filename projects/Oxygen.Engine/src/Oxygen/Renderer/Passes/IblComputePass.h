@@ -10,7 +10,9 @@
 #include <memory>
 #include <optional>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
@@ -35,8 +37,11 @@ namespace oxygen::engine {
 */
 class IblComputePass final : public RenderPass {
 public:
-  explicit IblComputePass(std::string name);
+  explicit IblComputePass(const std::string& name);
   ~IblComputePass() override;
+
+  OXYGEN_MAKE_NON_COPYABLE(IblComputePass)
+  OXYGEN_MAKE_NON_MOVABLE(IblComputePass)
 
   auto ValidateConfig() -> void override { }
   auto DoPrepareResources([[maybe_unused]] graphics::CommandRecorder& recorder)
@@ -67,7 +72,7 @@ public:
 
 private:
   //! Must match HLSL `IblFilteringPassConstants` in Lighting/IblFiltering.hlsl.
-  struct alignas(16) IblFilteringPassConstants {
+  struct alignas(packing::kShaderDataFieldAlignment) IblFilteringPassConstants {
     ShaderVisibleIndex source_cubemap_slot { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex target_uav_slot { kInvalidShaderVisibleIndex };
     float roughness { 0.0F };
@@ -77,10 +82,9 @@ private:
     float _pad1 { 0.0F };
     float _pad2 { 0.0F };
   };
-  static_assert(sizeof(IblFilteringPassConstants) == 32,
-    "IblFilteringPassConstants must be 32 bytes");
+  static_assert(sizeof(IblFilteringPassConstants) == 32); // NOLINT
 
-  // TODO: Move this to a shared config or dynamic resizing buffer strategy.
+  // TODO(abdes): Move this to a shared config.
   static constexpr uint32_t kMaxDispatches = 16U;
 
   auto EnsurePassConstantsBuffer() -> void;
