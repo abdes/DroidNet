@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <cstddef>
 #include <memory>
 #include <span>
 
@@ -61,10 +60,16 @@ namespace oxygen::renderer::resources {
 
  - **Stable identity**: requests are keyed by `(AssetKey, lod_index)` provided
    by `engine::sceneprep::GeometryRef`.
- - **Stable handles**: `engine::sceneprep::GeometryHandle` remains stable for
-   a given identity for the renderer lifetime.
- - **Bindless safety**: invalid or non-resident geometry yields invalid SRV
-   indices; callers must render nothing in that case.
+- **Versioned handles**: `engine::sceneprep::GeometryHandle` carries index and
+
+generation; stale handles are rejected after residency invalidation.
+-
+**Nexus-backed lifecycle**: geometry slot indices are managed by Nexus
+
+`FrameDrivenIndexReuse` (allocate/release/reclaim + telemetry).
+ - **Bindless
+safety**: invalid or non-resident geometry yields invalid SRV indices; callers
+must render nothing in that case.
  - **Frame-aware work**: `EnsureFrameResources()` is idempotent within a frame.
  - **Upload coordination**: asynchronous uploads are scheduled through
    `engine::upload::UploadCoordinator`.
@@ -128,7 +133,7 @@ public:
 
   OXGN_RNDR_API ~GeometryUploader();
 
-  //! Called once per frame to reset dirty tracking and advance epoch
+  //! Called once per frame to advance uploader frame lifecycle state.
   OXGN_RNDR_API auto OnFrameStart(
     renderer::RendererTag, oxygen::frame::Slot slot) -> void;
 

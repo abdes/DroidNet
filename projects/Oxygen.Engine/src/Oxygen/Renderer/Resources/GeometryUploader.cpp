@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <cmath>
 #include <deque>
 #include <expected>
@@ -15,25 +14,26 @@
 #include <span>
 #include <string>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/IAssetLoader.h>
-#include <Oxygen/Core/Bindless/Generated.Constants.h>
-#include <Oxygen/Core/Types/Epoch.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Nexus/FrameDrivenIndexReuse.h>
 #include <Oxygen/Renderer/Resources/GeometryUploader.h>
 #include <Oxygen/Renderer/ScenePrep/GeometryRef.h>
 #include <Oxygen/Renderer/ScenePrep/Handles.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
-#include <Oxygen/Renderer/Upload/UploadHelpers.h>
+#include <Oxygen/Renderer/Upload/UploadHelpers.h> // For EnsureBufferAndSrv
 
 namespace {
 
@@ -140,6 +140,9 @@ public:
 
   ~Impl();
 
+  OXYGEN_MAKE_NON_COPYABLE(Impl)
+  OXYGEN_MAKE_NON_MOVABLE(Impl)
+
   auto OnFrameStart(frame::Slot slot) -> void;
 
   auto GetOrAllocate(const engine::sceneprep::GeometryRef& geometry)
@@ -164,6 +167,17 @@ public:
     -> std::span<const engine::upload::UploadTicket>;
 
 private:
+  using ReuseStrategy = nexus::FrameDrivenIndexReuse<bindless::HeapIndex>;
+  using VersionedIndex = nexus::VersionedIndex<bindless::HeapIndex>;
+  struct GeometryEntry;
+
+  [[nodiscard]] static auto ToVersionedIndex_(
+    engine::sceneprep::GeometryHandle handle) -> VersionedIndex;
+  [[nodiscard]] auto TryGetCurrentEntry_(
+    engine::sceneprep::GeometryHandle handle) -> GeometryEntry*;
+  [[nodiscard]] auto TryGetCurrentEntry_(
+    engine::sceneprep::GeometryHandle handle) const -> const GeometryEntry*;
+
   struct CallbackGate {
     std::mutex mutex;
     bool alive { true };
@@ -203,9 +217,8 @@ private:
     bool is_dirty { true };
     bool is_critical { false };
     bool evicted { false };
+    std::uint32_t handle_generation { 0U };
     std::uint64_t generation { 0U };
-
-    Epoch last_touched_epoch { epoch::kNever };
 
     std::shared_ptr<graphics::Buffer> vertex_buffer;
     std::shared_ptr<graphics::Buffer> index_buffer;
@@ -243,19 +256,21 @@ private:
   std::shared_ptr<CallbackGate> callback_gate_;
   std::mutex eviction_mutex_;
   std::deque<PendingAssetEviction> pending_evictions_;
-  content::IAssetLoader::EvictionSubscription eviction_subscription_ {};
+  content::IAssetLoader::EvictionSubscription eviction_subscription_;
 
-  engine::sceneprep::GeometryHandle next_handle_ { 0U };
-  // Start at 1 so a brand-new uploader can safely answer queries (e.g. for
-  // invalid handles) even before the first OnFrameStart() call.
-  Epoch current_epoch_ { Epoch { 1 } };
+  std::uint32_t next_handle_index_ { 0U };
+  std::shared_ptr<std::vector<bindless::HeapIndex>> free_indices_;
+  graphics::detail::DeferredReclaimer slot_reclaimer_;
+  ReuseStrategy slot_reuse_;
+  std::uint64_t frames_started_count_ { 0U };
+  bool has_started_frame_ { false };
   bool frame_resources_ensured_ { false };
 
-  std::vector<GeometryEntry> geometry_entries_ {};
+  std::vector<GeometryEntry> geometry_entries_;
   std::unordered_map<GeometryIdentityKey, engine::sceneprep::GeometryHandle,
     GeometryIdentityKeyHash>
-    mesh_identity_to_handle_ {};
-  std::vector<engine::upload::UploadTicket> pending_upload_tickets_ {};
+    mesh_identity_to_handle_;
+  std::vector<engine::upload::UploadTicket> pending_upload_tickets_;
 };
 
 GeometryUploader::GeometryUploader(observer_ptr<Graphics> gfx,
@@ -276,6 +291,14 @@ GeometryUploader::Impl::Impl(observer_ptr<Graphics> gfx,
   , uploader_(uploader)
   , staging_provider_(provider)
   , asset_loader_(asset_loader)
+  , free_indices_(std::make_shared<std::vector<bindless::HeapIndex>>())
+  , slot_reuse_(slot_reclaimer_,
+      [free_indices = free_indices_](
+        bindless::HeapIndex index, std::monostate /*unused*/) {
+        if (free_indices) {
+          free_indices->push_back(index);
+        }
+      })
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DCHECK_NOTNULL_F(uploader_, "UploadCoordinator cannot be null");
@@ -317,6 +340,27 @@ GeometryUploader::Impl::Impl(observer_ptr<Graphics> gfx,
 
 GeometryUploader::Impl::~Impl()
 {
+  // Drain Nexus deferred recycle callbacks before final telemetry snapshot.
+  slot_reclaimer_.ProcessAllDeferredReleases();
+
+  const auto telemetry = slot_reuse_.GetTelemetrySnapshot();
+  const auto expected_zero_marker = [](const uint64_t value) -> const char* {
+    return value == 0U ? " \u2713" : " (expected 0) !";
+  };
+  LOG_SCOPE_F(INFO, "GeometryUploader Statistics");
+  LOG_F(INFO, "frames started            : {}", frames_started_count_);
+  LOG_F(INFO, "nexus.allocate_calls      : {}", telemetry.allocate_calls);
+  LOG_F(INFO, "nexus.release_calls       : {}", telemetry.release_calls);
+  LOG_F(INFO, "nexus.stale_reject_count  : {}{}", telemetry.stale_reject_count,
+    expected_zero_marker(telemetry.stale_reject_count));
+  LOG_F(INFO, "nexus.duplicate_rejects   : {}{}",
+    telemetry.duplicate_reject_count,
+    expected_zero_marker(telemetry.duplicate_reject_count));
+  LOG_F(INFO, "nexus.reclaimed_count     : {}", telemetry.reclaimed_count);
+  LOG_F(INFO, "nexus.pending_count       : {}{}", telemetry.pending_count,
+    expected_zero_marker(telemetry.pending_count));
+  LOG_F(INFO, "peak geometry slots       : {}", geometry_entries_.size());
+
   if (callback_gate_) {
     std::scoped_lock lock(callback_gate_->mutex);
     callback_gate_->alive = false;
@@ -364,6 +408,61 @@ auto GeometryUploader::GetOrAllocate(
   return impl_->GetOrAllocate(geometry, is_critical);
 }
 
+auto GeometryUploader::Impl::ToVersionedIndex_(
+  engine::sceneprep::GeometryHandle handle) -> VersionedIndex
+{
+  return {
+    .index = bindless::HeapIndex { handle.get() },
+    .generation = handle.GenerationValue(),
+  };
+}
+
+auto GeometryUploader::Impl::TryGetCurrentEntry_(
+  engine::sceneprep::GeometryHandle handle) -> GeometryEntry*
+{
+  if (!handle.IsValid()) {
+    return nullptr;
+  }
+  if (!slot_reuse_.IsHandleCurrent(ToVersionedIndex_(handle))) {
+    return nullptr;
+  }
+  const auto idx = static_cast<std::size_t>(handle.get());
+  if (idx >= geometry_entries_.size()) {
+    return nullptr;
+  }
+  auto& entry = geometry_entries_[idx];
+  if (entry.mesh == nullptr || entry.evicted) {
+    return nullptr;
+  }
+  if (entry.handle_generation != handle.GenerationValue().get()) {
+    return nullptr;
+  }
+  return &entry;
+}
+
+auto GeometryUploader::Impl::TryGetCurrentEntry_(
+  engine::sceneprep::GeometryHandle handle) const -> const GeometryEntry*
+{
+  if (!handle.IsValid()) {
+    return nullptr;
+  }
+  if (!slot_reuse_.IsHandleCurrent(ToVersionedIndex_(handle))) {
+    return nullptr;
+  }
+  const auto idx = static_cast<std::size_t>(handle.get());
+  if (idx >= geometry_entries_.size()) {
+    return nullptr;
+  }
+  const auto& entry = geometry_entries_[idx];
+  if (entry.mesh == nullptr || entry.evicted) {
+    return nullptr;
+  }
+  if (entry.handle_generation != handle.GenerationValue().get()) {
+    return nullptr;
+  }
+  return &entry;
+}
+
 auto GeometryUploader::Impl::GetOrAllocate(
   const engine::sceneprep::GeometryRef& geometry)
   -> engine::sceneprep::GeometryHandle
@@ -390,68 +489,55 @@ auto GeometryUploader::Impl::GetOrAllocate(
     .lod_index = geometry.lod_index,
   };
   DLOG_F(3, "lod index    = {}", key.lod_index);
-  if (const auto it = mesh_identity_to_handle_.find(key);
+  if (auto it = mesh_identity_to_handle_.find(key);
     it != mesh_identity_to_handle_.end()) {
     const auto h = it->second;
-    const auto u_h = h.get();
-    DCHECK_LT_F(u_h, geometry_entries_.size()); // valid index
-    auto& entry = geometry_entries_[u_h];
-    // Found identity - update criticality only if stronger than before.
-    entry.is_critical |= is_critical;
-    entry.last_touched_epoch = current_epoch_;
+    auto* entry = TryGetCurrentEntry_(h);
+    if (entry == nullptr) {
+      mesh_identity_to_handle_.erase(it);
+    } else {
+      // Found identity - update criticality only if stronger than before.
+      entry->is_critical |= is_critical;
 
-    if (entry.evicted) {
-      entry.evicted = false;
-      entry.is_dirty = true;
-      entry.vertex_srv_index = kInvalidShaderVisibleIndex;
-      entry.index_srv_index = kInvalidShaderVisibleIndex;
-      entry.pending_vertex_srv_index = kInvalidShaderVisibleIndex;
-      entry.pending_index_srv_index = kInvalidShaderVisibleIndex;
-      entry.pending_vertex_ticket.reset();
-      entry.pending_index_ticket.reset();
-      entry.pending_vertex_generation = 0U;
-      entry.pending_index_generation = 0U;
-      entry.pending_widened_indices.reset();
-      entry.vertex_buffer.reset();
-      entry.index_buffer.reset();
+      // If the mesh instance changed for the same stable identity
+      // (hot-reload), update and mark dirty to ensure data is reuploaded.
+      if (entry->mesh != geometry.mesh) {
+        // Validate only when we see a new mesh instance. This avoids repeated
+        // O(N) scans on cache hits.
+        DLOG_F(3, "mesh name     = {}", mesh.GetName());
+        DLOG_F(3, "mesh vertices = {}", mesh.Vertices().size());
+        DLOG_F(3, "mesh indices  = {}", mesh.IndexBuffer().Count());
+
+        std::string error_msg;
+        if (!ValidateMesh(mesh, error_msg)) {
+          LOG_F(ERROR, "GeometryUploader::GetOrAllocate hot-reload ignored: {}",
+            error_msg);
+          DCHECK_F(false, "GetOrAllocate received invalid mesh: {}", error_msg);
+          return h;
+        }
+
+        entry->mesh = geometry.mesh;
+        entry->is_dirty = true;
+
+        // Do not render with stale SRVs; publish only after new upload
+        // completes.
+        if (entry->pending_vertex_srv_index == kInvalidShaderVisibleIndex
+          && entry->vertex_srv_index.IsValid()) {
+          entry->pending_vertex_srv_index = entry->vertex_srv_index;
+        }
+        if (entry->pending_index_srv_index == kInvalidShaderVisibleIndex
+          && entry->index_srv_index.IsValid()) {
+          entry->pending_index_srv_index = entry->index_srv_index;
+        }
+        entry->vertex_srv_index = kInvalidShaderVisibleIndex;
+        entry->index_srv_index = kInvalidShaderVisibleIndex;
+        entry->pending_vertex_ticket.reset();
+        entry->pending_index_ticket.reset();
+      }
+
+      entry->handle_generation = h.GenerationValue().get();
+      return h;
     }
-
-    // If the mesh instance changed for the same stable identity (hot-reload),
-    // update and mark dirty to ensure data is reuploaded.
-    if (entry.mesh != geometry.mesh) {
-      // Validate only when we see a new mesh instance. This avoids repeated
-      // O(N) scans on cache hits.
-      DLOG_F(3, "mesh name     = {}", mesh.GetName());
-      DLOG_F(3, "mesh vertices = {}", mesh.Vertices().size());
-      DLOG_F(3, "mesh indices  = {}", mesh.IndexBuffer().Count());
-
-      std::string error_msg;
-      if (!ValidateMesh(mesh, error_msg)) {
-        LOG_F(ERROR, "GeometryUploader::GetOrAllocate hot-reload ignored: {}",
-          error_msg);
-        DCHECK_F(false, "GetOrAllocate received invalid mesh: {}", error_msg);
-        return h;
-      }
-
-      entry.mesh = geometry.mesh;
-      entry.is_dirty = true;
-
-      // Do not render with stale SRVs; publish only after new upload completes.
-      if (entry.pending_vertex_srv_index == kInvalidShaderVisibleIndex
-        && entry.vertex_srv_index.IsValid()) {
-        entry.pending_vertex_srv_index = entry.vertex_srv_index;
-      }
-      if (entry.pending_index_srv_index == kInvalidShaderVisibleIndex
-        && entry.index_srv_index.IsValid()) {
-        entry.pending_index_srv_index = entry.index_srv_index;
-      }
-      entry.vertex_srv_index = kInvalidShaderVisibleIndex;
-      entry.index_srv_index = kInvalidShaderVisibleIndex;
-      entry.pending_vertex_ticket.reset();
-      entry.pending_index_ticket.reset();
-    }
-
-    return h;
   }
 
   // New identity: validate once before allocating resources.
@@ -466,8 +552,19 @@ auto GeometryUploader::Impl::GetOrAllocate(
     return engine::sceneprep::kInvalidGeometryHandle;
   }
 
-  // Not found or collision mismatch: allocate new handle
-  const auto handle = next_handle_;
+  bindless::HeapIndex handle_index {};
+  if (free_indices_->empty()) {
+    handle_index = bindless::HeapIndex { next_handle_index_++ };
+  } else {
+    handle_index = free_indices_->back();
+    free_indices_->pop_back();
+  }
+  const auto versioned_handle = slot_reuse_.ActivateSlot(handle_index);
+  const auto handle = engine::sceneprep::GeometryHandle {
+    engine::sceneprep::GeometryHandle::Index { versioned_handle.index.get() },
+    engine::sceneprep::GeometryHandle::Generation {
+      versioned_handle.generation.get() },
+  };
   DLOG_F(3, "new handle : {}", handle);
   const auto u_handle = handle.get();
 
@@ -482,19 +579,25 @@ auto GeometryUploader::Impl::GetOrAllocate(
   entry.asset_key = geometry.asset_key;
   entry.lod_index = geometry.lod_index;
   entry.mesh = geometry.mesh;
+  entry.is_dirty = true;
+  entry.handle_generation = handle.GenerationValue().get();
   entry.is_critical = is_critical;
-
-  // Mark as touched this frame. Do not mark dirty purely because this mesh was
-  // referenced; uploads are scheduled only when content/residency requires it.
-  entry.last_touched_epoch = current_epoch_;
+  entry.evicted = false;
+  entry.vertex_srv_index = kInvalidShaderVisibleIndex;
+  entry.index_srv_index = kInvalidShaderVisibleIndex;
+  entry.pending_vertex_srv_index = kInvalidShaderVisibleIndex;
+  entry.pending_index_srv_index = kInvalidShaderVisibleIndex;
+  entry.pending_vertex_ticket.reset();
+  entry.pending_index_ticket.reset();
+  entry.pending_vertex_generation = 0U;
+  entry.pending_index_generation = 0U;
+  entry.pending_widened_indices.reset();
 
   DLOG_F(3, "asset key   : {}", oxygen::data::to_string(entry.asset_key));
-  DLOG_F(3, "epoch       : {}", current_epoch_);
   DLOG_F(3, "is dirty    : {}", entry.is_dirty);
   DLOG_F(3, "is critical : {}", is_critical);
 
   mesh_identity_to_handle_[key] = handle;
-  ++next_handle_;
 
   return handle;
 }
@@ -508,11 +611,12 @@ auto GeometryUploader::Update(engine::sceneprep::GeometryHandle handle,
 auto GeometryUploader::Impl::Update(engine::sceneprep::GeometryHandle handle,
   const engine::sceneprep::GeometryRef& geometry) -> void
 {
-  const auto u_handle = handle.get();
-  const auto idx = static_cast<std::size_t>(u_handle);
-  DCHECK_F(idx < geometry_entries_.size(),
-    "Update received invalid handle index {} (size={})", idx,
-    geometry_entries_.size());
+  auto* entry = TryGetCurrentEntry_(handle);
+  if (entry == nullptr) {
+    LOG_F(WARNING, "GeometryUploader::Update ignored stale/invalid handle {}",
+      to_string(handle));
+    return;
+  }
 
   if (!geometry.IsValid()) {
     LOG_F(ERROR, "GeometryUploader::Update failed: GeometryRef has null mesh");
@@ -530,18 +634,12 @@ auto GeometryUploader::Impl::Update(engine::sceneprep::GeometryHandle handle,
     return; // Don't update with invalid data
   }
 
-  auto& entry = geometry_entries_[idx];
-
-  if (entry.evicted) {
-    entry.evicted = false;
-  }
-
-  if (entry.mesh != nullptr) {
-    const bool same_identity = entry.asset_key == geometry.asset_key
-      && entry.lod_index == geometry.lod_index;
+  if (entry->mesh != nullptr) {
+    const bool same_identity = entry->asset_key == geometry.asset_key
+      && entry->lod_index == geometry.lod_index;
     DCHECK_F(same_identity,
       "Update attempted to rebind handle {} from ({}, lod={}) to ({}, lod={})",
-      handle.get(), oxygen::data::to_string(entry.asset_key), entry.lod_index,
+      handle.get(), oxygen::data::to_string(entry->asset_key), entry->lod_index,
       oxygen::data::to_string(geometry.asset_key), geometry.lod_index);
     if (!same_identity) {
       return;
@@ -554,45 +652,39 @@ auto GeometryUploader::Impl::Update(engine::sceneprep::GeometryHandle handle,
   };
   mesh_identity_to_handle_[key] = handle;
 
-  entry.asset_key = geometry.asset_key;
-  entry.lod_index = geometry.lod_index;
-  entry.mesh = geometry.mesh;
-  entry.last_touched_epoch = current_epoch_;
-  entry.is_dirty = true;
+  entry->asset_key = geometry.asset_key;
+  entry->lod_index = geometry.lod_index;
+  entry->mesh = geometry.mesh;
+  entry->handle_generation = handle.GenerationValue().get();
+  entry->is_dirty = true;
 
   // Hot-reload semantics: invalidate published SRVs and only republish once the
   // new data upload completes.
-  if (entry.pending_vertex_srv_index == kInvalidShaderVisibleIndex
-    && entry.vertex_srv_index.IsValid()) {
-    entry.pending_vertex_srv_index = entry.vertex_srv_index;
+  if (entry->pending_vertex_srv_index == kInvalidShaderVisibleIndex
+    && entry->vertex_srv_index.IsValid()) {
+    entry->pending_vertex_srv_index = entry->vertex_srv_index;
   }
-  if (entry.pending_index_srv_index == kInvalidShaderVisibleIndex
-    && entry.index_srv_index.IsValid()) {
-    entry.pending_index_srv_index = entry.index_srv_index;
+  if (entry->pending_index_srv_index == kInvalidShaderVisibleIndex
+    && entry->index_srv_index.IsValid()) {
+    entry->pending_index_srv_index = entry->index_srv_index;
   }
-  entry.vertex_srv_index = kInvalidShaderVisibleIndex;
-  entry.index_srv_index = kInvalidShaderVisibleIndex;
-  entry.pending_vertex_ticket.reset();
-  entry.pending_index_ticket.reset();
+  entry->vertex_srv_index = kInvalidShaderVisibleIndex;
+  entry->index_srv_index = kInvalidShaderVisibleIndex;
+  entry->pending_vertex_ticket.reset();
+  entry->pending_index_ticket.reset();
 }
 
-auto GeometryUploader::OnFrameStart(renderer::RendererTag, frame::Slot slot)
-  -> void
+auto GeometryUploader::OnFrameStart(
+  renderer::RendererTag /*tag*/, frame::Slot slot) -> void
 {
   impl_->OnFrameStart(slot);
 }
 
-auto GeometryUploader::Impl::OnFrameStart(frame::Slot /*slot*/) -> void
+auto GeometryUploader::Impl::OnFrameStart(frame::Slot slot) -> void
 {
-  ++current_epoch_;
-  if (current_epoch_ == Epoch { 0 }) { // wrapped
-    DLOG_F(INFO, "Epoch counter wrapped, resetting all entry epochs");
-    current_epoch_ = Epoch { 1 };
-    // Reset all per-entry epoch markers when wrap occurs
-    for (auto& e : geometry_entries_) {
-      e.last_touched_epoch = epoch::kNever;
-    }
-  }
+  slot_reuse_.OnBeginFrame(slot);
+  ++frames_started_count_;
+  has_started_frame_ = true;
 
   // Reset frame resource tracking
   frame_resources_ensured_ = false;
@@ -611,11 +703,7 @@ auto GeometryUploader::IsHandleValid(
 auto GeometryUploader::Impl::IsHandleValid(
   engine::sceneprep::GeometryHandle handle) const -> bool
 {
-  const auto u_handle = handle.get();
-  const auto idx = static_cast<std::size_t>(u_handle);
-  return idx < geometry_entries_.size()
-    && geometry_entries_[idx].mesh != nullptr
-    && !geometry_entries_[idx].evicted;
+  return TryGetCurrentEntry_(handle) != nullptr;
 }
 
 auto GeometryUploader::EnsureFrameResources() -> void
@@ -630,7 +718,7 @@ auto GeometryUploader::Impl::EnsureFrameResources() -> void
   }
 
   // Contract: OnFrameStart() must have been called this frame
-  DCHECK_F(current_epoch_ > Epoch { 0 },
+  DCHECK_F(has_started_frame_,
     "EnsureFrameResources() called before OnFrameStart() - frame lifecycle "
     "violation");
 
@@ -666,7 +754,9 @@ auto GeometryUploader::Impl::ProcessEvictions() -> void
 
   for (const auto& eviction : evictions) {
     std::size_t matched_entries = 0U;
-    for (auto& entry : geometry_entries_) {
+    for (std::size_t entry_index = 0; entry_index < geometry_entries_.size();
+      ++entry_index) {
+      auto& entry = geometry_entries_[entry_index];
       if (entry.asset_key != eviction.asset_key) {
         continue;
       }
@@ -676,7 +766,26 @@ auto GeometryUploader::Impl::ProcessEvictions() -> void
         continue;
       }
 
+      const GeometryIdentityKey key {
+        .asset_key = entry.asset_key,
+        .lod_index = entry.lod_index,
+      };
+      mesh_identity_to_handle_.erase(key);
+
+      if (entry.handle_generation != 0U) {
+        const auto handle = engine::sceneprep::GeometryHandle {
+          engine::sceneprep::GeometryHandle::Index {
+            static_cast<std::uint32_t>(entry_index) },
+          engine::sceneprep::GeometryHandle::Generation {
+            entry.handle_generation },
+        };
+        if (handle.IsValid()) {
+          slot_reuse_.Release(ToVersionedIndex_(handle));
+        }
+      }
+
       entry.evicted = true;
+      entry.handle_generation = 0U;
       ++entry.generation;
 
       entry.pending_vertex_ticket.reset();
@@ -767,7 +876,7 @@ auto GeometryUploader::Impl::UploadBuffers() -> void
 
     DLOG_F(3, "mesh : {}", entry.mesh->GetName());
     const auto scope_name = fmt::format("Mesh '{}'", entry.mesh->GetName());
-    DLOG_SCOPE_F(3, scope_name.c_str());
+    DLOG_SCOPE_F(3, scope_name.c_str()); // NOLINT
 
     // Vertex upload ------------------------------------------------------
     if (entry.vertex_srv_index == kInvalidShaderVisibleIndex
@@ -939,26 +1048,23 @@ auto GeometryUploader::GetShaderVisibleIndices(
 auto GeometryUploader::Impl::GetShaderVisibleIndices(
   engine::sceneprep::GeometryHandle handle) -> MeshShaderVisibleIndices
 {
+  // Invalid/stale handles should safely return invalid indices even if caller
+  // has not started a frame yet.
+  const auto* entry = TryGetCurrentEntry_(handle);
+  if (entry == nullptr) {
+    return {};
+  }
+
   EnsureFrameResources();
 
-  if (handle == engine::sceneprep::kInvalidGeometryHandle) {
-    return {};
-  }
-
-  const auto u_handle = handle.get();
-  const auto idx = static_cast<std::size_t>(u_handle);
-  if (idx >= geometry_entries_.size()) {
-    DCHECK_F(false, "Invalid geometry handle {} (out of range, max={})",
-      u_handle, geometry_entries_.size());
-    return {};
-  }
-  const auto& entry = geometry_entries_[idx];
-  if (entry.mesh == nullptr || entry.evicted) {
+  // Re-validate after uploads/retirement work; handle may become stale.
+  entry = TryGetCurrentEntry_(handle);
+  if (entry == nullptr) {
     return {};
   }
   return {
-    .vertex_srv_index = entry.vertex_srv_index,
-    .index_srv_index = entry.index_srv_index,
+    .vertex_srv_index = entry->vertex_srv_index,
+    .index_srv_index = entry->index_srv_index,
   };
 }
 

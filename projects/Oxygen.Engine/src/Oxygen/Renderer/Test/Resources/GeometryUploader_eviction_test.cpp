@@ -4,12 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Renderer/RendererTag.h>
-
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/ScenePrep/GeometryRef.h>
-
 #include <Oxygen/Renderer/Test/Resources/GeometryUploaderTest.h>
 
 namespace {
@@ -170,7 +168,8 @@ NOLINT_TEST_F(GeometryUploaderEvictionTest, EvictionThenReloadPublishes)
   BeginFrame(Slot { 2 });
 
   // Assert
-  EXPECT_EQ(handle_reloaded.get(), handle.get());
+  EXPECT_NE(handle_reloaded, handle);
+  EXPECT_FALSE(geo_uploader.IsHandleValid(handle));
   EXPECT_TRUE(geo_uploader.IsHandleValid(handle_reloaded));
 
   const auto indices = geo_uploader.GetShaderVisibleIndices(handle_reloaded);
