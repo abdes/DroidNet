@@ -132,7 +132,7 @@ public:
     std::string implementation_info;
   };
 
-  StagingProvider(UploaderTag) { }
+  explicit StagingProvider(UploaderTag /*tag*/) { }
 
   OXYGEN_MAKE_NON_COPYABLE(StagingProvider)
   OXYGEN_DEFAULT_MOVABLE(StagingProvider)
@@ -149,8 +149,13 @@ public:
 
   //! Optional lifecycle notification for frame slot changes. Default no-op
   //! allows non-partitioned providers to ignore it.
-  virtual auto OnFrameStart(UploaderTag, frame::Slot) -> void { }
-  virtual auto OnFrameStart(InlineCoordinatorTag, frame::Slot) -> void { }
+  virtual auto OnFrameStart(UploaderTag /*tag*/, frame::Slot /*slot*/) -> void
+  {
+  }
+  virtual auto OnFrameStart(InlineCoordinatorTag /*tag*/, frame::Slot /*slot*/)
+    -> void
+  {
+  }
 
   //! Optional telemetry; providers may override to expose stats.
   [[nodiscard]] auto GetStats() const -> const StagingStats& { return stats_; }

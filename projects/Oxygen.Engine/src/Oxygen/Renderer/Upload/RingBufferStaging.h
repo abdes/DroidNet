@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -49,8 +50,8 @@ public:
     , partitions_count_(partitions)
     , alignment_(alignment)
     , slack_(slack)
+    , debug_name_("RingBufferStaging")
   {
-    debug_name_ = "RingBufferStaging";
     DCHECK_F(alignment_ > 0, "RingBufferStaging requires non-zero alignment");
     DCHECK_F((alignment_ & (alignment_ - 1)) == 0,
       "RingBufferStaging alignment must be power-of-two, got %u", alignment_);
@@ -75,18 +76,22 @@ public:
   }
   ~RingBufferStaging() override;
 
+  OXYGEN_MAKE_NON_COPYABLE(RingBufferStaging)
+  OXYGEN_MAKE_NON_MOVABLE(RingBufferStaging)
+
   auto Allocate(SizeBytes size, std::string_view debug_name)
     -> std::expected<Allocation, UploadError> override;
 
-  auto RetireCompleted(UploaderTag, FenceValue completed) -> void override;
-
-  // Notify of frame slot change without RTTI
-  OXGN_RNDR_API auto OnFrameStart(UploaderTag, frame::Slot slot)
+  auto RetireCompleted(UploaderTag /*tag*/, FenceValue completed)
     -> void override;
 
   // Notify of frame slot change without RTTI
-  OXGN_RNDR_API auto OnFrameStart(InlineCoordinatorTag, frame::Slot slot)
+  OXGN_RNDR_API auto OnFrameStart(UploaderTag /*tag*/, frame::Slot slot)
     -> void override;
+
+  // Notify of frame slot change without RTTI
+  OXGN_RNDR_API auto OnFrameStart(
+    InlineCoordinatorTag /*tag*/, frame::Slot slot) -> void override;
 
 protected:
   auto FinalizeStats() -> void override;
@@ -114,16 +119,16 @@ private:
   frame::SlotCount partitions_count_ { 1 };
   frame::Slot active_partition_ { 0 };
   std::uint64_t capacity_per_partition_ { 0 }; // bytes per partition
-  std::vector<std::uint64_t> heads_ {}; // bump per partition
+  std::vector<std::uint64_t> heads_; // bump per partition
   std::uint64_t capacity_ { 0 }; // total bytes
   std::uint32_t alignment_;
-  float slack_ { 0.0f };
+  float slack_ { 0.0 };
 
   // Retirement observation: incremented on RetireCompleted(); at Allocate()
   // we record the current value per active partition. On reuse, if no new
   // retirement was observed, we log a warning before overwriting.
   std::uint64_t retire_count_ { 0ULL };
-  std::vector<std::uint64_t> partition_last_seen_retire_count_ {};
+  std::vector<std::uint64_t> partition_last_seen_retire_count_;
   FenceValue last_completed_fence_ { 0 };
 
   // Idle trimming: if no allocations happen for a while, shrink back toward the
@@ -133,7 +138,7 @@ private:
   // Stable scenario-based name used for the underlying upload buffer resource
   // (e.g. for PIX). Per-allocation debug labels are still accepted by
   // Allocate() for logging and telemetry.
-  std::string debug_name_ {};
+  std::string debug_name_;
 };
 
 } // namespace oxygen::engine::upload

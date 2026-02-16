@@ -17,6 +17,13 @@ using oxygen::frame::SlotCount;
 
 namespace {
 
+constexpr uint32_t kTestAlignment = 256U;
+constexpr float kTestSlack = 0.5F;
+constexpr SizeBytes kTestAllocationSize { 64 };
+constexpr SizeBytes kSmallAllocationSize { 32 };
+constexpr uint32_t kSmallTestAlignment = 64U;
+constexpr SizeBytes kGrowthPadding { 128 };
+
 // Error and death fixture
 class RingBufferStagingErrorTest
   : public oxygen::engine::upload::testing::UploadCoordinatorTest { };
@@ -31,12 +38,13 @@ NOLINT_TEST_F(RingBufferStagingErrorTest, CreateBuffer_Throws_ReturnsError)
 
   // Recreate uploader/provider after changing gfx behaviour
   auto& uploader = Uploader();
-  auto provider = uploader.CreateRingBufferStaging(SlotCount { 1 }, 256u, 0.5f);
+  auto provider = uploader.CreateRingBufferStaging(
+    SlotCount { 1 }, kTestAlignment, kTestSlack);
   SetStagingProvider(provider);
   ASSERT_NE(provider, nullptr);
 
   // Act
-  auto alloc = provider->Allocate(SizeBytes { 64 }, "throw-test");
+  auto alloc = provider->Allocate(kTestAllocationSize, "throw-test");
 
   // Assert
   ASSERT_FALSE(alloc.has_value());
@@ -53,12 +61,13 @@ NOLINT_TEST_F(RingBufferStagingErrorTest, Map_ReturnsNull_ReturnsError)
 
   // Recreate uploader/provider after changing gfx behaviour
   auto& uploader = Uploader();
-  auto provider = uploader.CreateRingBufferStaging(SlotCount { 1 }, 256u, 0.5f);
+  auto provider = uploader.CreateRingBufferStaging(
+    SlotCount { 1 }, kTestAlignment, kTestSlack);
   SetStagingProvider(provider);
   ASSERT_NE(provider, nullptr);
 
   // Act
-  auto alloc = provider->Allocate(SizeBytes { 64 }, "map-null-test");
+  auto alloc = provider->Allocate(kTestAllocationSize, "map-null-test");
 
   // Assert
   ASSERT_FALSE(alloc.has_value());
@@ -95,21 +104,22 @@ class RingBufferStagingEdgeTest
 NOLINT_TEST_F(RingBufferStagingEdgeTest, EnsureCapacity_GrowsBuffer)
 {
   auto& uploader = Uploader();
-  auto provider = uploader.CreateRingBufferStaging(SlotCount { 1 }, 64u, 0.5f);
+  auto provider = uploader.CreateRingBufferStaging(
+    SlotCount { 1 }, kSmallTestAlignment, kTestSlack);
   ASSERT_NE(provider, nullptr);
   SetStagingProvider(provider);
 
   // Arrange: small allocation to initialize
-  auto a1 = provider->Allocate(SizeBytes { 32 }, "init");
+  auto a1 = provider->Allocate(kSmallAllocationSize, "init");
   ASSERT_TRUE(a1.has_value());
-  const auto before_size = provider->GetStats().current_buffer_size;
+  const SizeBytes before_size { provider->GetStats().current_buffer_size };
 
   // Act: allocate a larger size to force growth
-  auto a2 = provider->Allocate(SizeBytes { before_size + 128 }, "grow");
+  auto a2 = provider->Allocate(before_size + kGrowthPadding, "grow");
 
   // Assert
   ASSERT_TRUE(a2.has_value());
-  EXPECT_GT(provider->GetStats().current_buffer_size, before_size);
+  EXPECT_GT(provider->GetStats().current_buffer_size, before_size.get());
 
   // Drain deferred buffer-release callbacks deterministically to avoid
   // teardown-time lifetime coupling between UploadCoordinator and Graphics.

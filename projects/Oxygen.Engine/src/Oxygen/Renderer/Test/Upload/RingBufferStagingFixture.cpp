@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <memory>
-
 #include <Oxygen/Renderer/Test/Upload/RingBufferStagingFixture.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
 
