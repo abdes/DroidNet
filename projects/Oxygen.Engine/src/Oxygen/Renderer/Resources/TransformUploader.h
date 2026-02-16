@@ -157,6 +157,7 @@ private:
   std::vector<glm::mat4> normal_matrices_;
 
   bool uploaded_this_frame_ { false };
+  std::uint64_t frames_started_count_ { 0U };
   // Per-frame write cursor to reuse existing slots in call order and maintain
   // stable indices across frames. Reset at OnFrameStart.
   std::uint32_t frame_write_count_ { 0U };
