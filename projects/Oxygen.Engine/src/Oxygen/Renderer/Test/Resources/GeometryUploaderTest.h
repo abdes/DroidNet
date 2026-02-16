@@ -11,7 +11,6 @@
 #include <string_view>
 #include <unordered_map>
 #include <utility>
-#include <vector>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -225,6 +224,7 @@ private:
 class GeometryUploaderTest : public ::testing::Test {
 protected:
   auto SetUp() -> void override;
+  auto TearDown() -> void override;
 
   [[nodiscard]] auto GfxPtr() const -> observer_ptr<Graphics>;
 

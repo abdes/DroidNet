@@ -8,11 +8,11 @@
 
 #include <glm/glm.hpp>
 
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Renderer/RendererTag.h>
+#include <Oxygen/Renderer/Test/Resources/GeometryUploaderTest.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
-
-#include <Oxygen/Renderer/Test/Resources/GeometryUploaderTest.h>
 
 #ifdef OXYGEN_ENGINE_TESTING
 
@@ -55,6 +55,23 @@ auto GeometryUploaderTest::SetUp() -> void
     observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
     observer_ptr { staging_provider_.get() },
     observer_ptr { asset_loader_.get() });
+}
+
+auto GeometryUploaderTest::TearDown() -> void
+{
+  // Destroy producer-side owners first so any deferred release registrations
+  // they perform happen while Graphics is still alive.
+  geo_uploader_.reset();
+  staging_provider_.reset();
+  uploader_.reset();
+  asset_loader_.reset();
+
+  if (gfx_) {
+    gfx_->Flush();
+    gfx_->GetDeferredReclaimer().OnRendererShutdown();
+  }
+
+  gfx_.reset();
 }
 
 auto GeometryUploaderTest::GfxPtr() const -> observer_ptr<Graphics>

@@ -5,10 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
-
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Renderer/ScenePrep/GeometryRef.h>
-
 #include <Oxygen/Renderer/Test/Resources/GeometryUploaderTest.h>
 
 namespace {
@@ -101,6 +99,48 @@ NOLINT_TEST_F(
 #else
   uploader.Update(handle, geometry_b);
 #endif
+}
+
+//! Stale handles must be rejected by Update after eviction/reload generation
+//! changes.
+NOLINT_TEST_F(GeometryUploaderUpdateTest, UpdateStaleHandleIsRejected)
+{
+  // Arrange
+  auto& uploader = GeoUploader();
+
+  BeginFrame(Slot { 0 });
+  const auto mesh_v1 = MakeValidTriangleMesh("TriV1", true);
+  const oxygen::data::AssetKey asset_key {
+    .guid = oxygen::data::GenerateAssetGuid(),
+  };
+  const oxygen::engine::sceneprep::GeometryRef geometry_v1 {
+    .asset_key = asset_key,
+    .lod_index = 0U,
+    .mesh = mesh_v1,
+  };
+  const auto stale_handle = uploader.GetOrAllocate(geometry_v1);
+  uploader.EnsureFrameResources();
+
+  Loader().EmitGeometryAssetEviction(
+    asset_key, oxygen::content::EvictionReason::kRefCountZero);
+  BeginFrame(Slot { 1 });
+
+  const auto mesh_v2 = MakeValidTriangleMesh("TriV2", true);
+  const oxygen::engine::sceneprep::GeometryRef geometry_v2 {
+    .asset_key = asset_key,
+    .lod_index = 0U,
+    .mesh = mesh_v2,
+  };
+  const auto current_handle = uploader.GetOrAllocate(geometry_v2);
+  ASSERT_NE(current_handle, stale_handle);
+
+  // Act: stale handle update should be ignored; current handle remains valid.
+  uploader.Update(stale_handle, geometry_v2);
+  uploader.EnsureFrameResources();
+
+  // Assert
+  EXPECT_FALSE(uploader.IsHandleValid(stale_handle));
+  EXPECT_TRUE(uploader.IsHandleValid(current_handle));
 }
 
 } // namespace

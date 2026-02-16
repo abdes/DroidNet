@@ -10,7 +10,6 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Renderer/ScenePrep/GeometryRef.h>
 #include <Oxygen/Renderer/ScenePrep/Handles.h>
-
 #include <Oxygen/Renderer/Test/Resources/GeometryUploaderTest.h>
 
 namespace {
@@ -38,8 +37,10 @@ NOLINT_TEST_F(
   // Act
   for (std::size_t i = 0; i < kCount; ++i) {
     oxygen::data::AssetKey key {};
+    // NOLINTBEGIN(*-magic-numbers)
     key.guid[0] = static_cast<std::uint8_t>(i & 0xFFU);
     key.guid[1] = static_cast<std::uint8_t>((i >> 8) & 0xFFU);
+    // NOLINTEND(*-magic-numbers)
 
     const oxygen::engine::sceneprep::GeometryRef geometry {
       .asset_key = key,
@@ -57,7 +58,7 @@ NOLINT_TEST_F(
   for (const auto h : handles) {
     EXPECT_NE(h, oxygen::engine::sceneprep::kInvalidGeometryHandle);
     EXPECT_TRUE(uploader.IsHandleValid(h));
-    unique.insert(h.get());
+    unique.insert(h.ToPacked().get());
   }
 
   EXPECT_EQ(unique.size(), kCount);
