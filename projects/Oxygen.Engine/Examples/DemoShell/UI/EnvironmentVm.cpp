@@ -347,8 +347,11 @@ auto EnvironmentVm::SetRuntimeConfig(const EnvironmentRuntimeConfig& config)
     || last_runtime_config_skybox_service_ != skybox_service_ptr
     || last_runtime_config_renderer_ != renderer_ptr;
 
+  // Always forward runtime config so the service can consume scene-activation
+  // transitions even when pointer values are reused.
+  service_->SetRuntimeConfig(config);
+
   if (runtime_changed) {
-    service_->SetRuntimeConfig(config);
     last_runtime_config_scene_ = const_cast<scene::Scene*>(scene_ptr);
     last_runtime_config_skybox_service_
       = const_cast<SkyboxService*>(skybox_service_ptr);

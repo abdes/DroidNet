@@ -324,6 +324,9 @@ namespace {
   constexpr float kCurrentSettingsSchemaVersion = 2.0F;
   constexpr int kPresetUseScene = -2;
   constexpr int kPresetCustom = -1;
+  // Demo policy: UI environment settings are authoritative and always
+  // override scene environment data.
+  constexpr bool kForceEnvironmentOverride = true;
 
   auto ClampVec3(const glm::vec3& value, float min_value, float max_value)
     -> glm::vec3
@@ -433,8 +436,10 @@ auto EnvironmentSettingsService::HydrateEnvironment(
 auto EnvironmentSettingsService::SetRuntimeConfig(
   const EnvironmentRuntimeConfig& config) -> void
 {
-  const bool scene_changed = config_.scene.get() != config.scene.get();
+  const bool scene_changed
+    = force_scene_rebind_ || (config_.scene.get() != config.scene.get());
   config_ = config;
+  force_scene_rebind_ = false;
 
   if (!settings_loaded_) {
     LoadSettings();
@@ -449,6 +454,16 @@ auto EnvironmentSettingsService::SetRuntimeConfig(
       dirty_domains_ = ToMask(DirtyDomain::kNone);
       batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
       needs_sync_ = true;
+      return;
+    }
+
+    if (kForceEnvironmentOverride) {
+      pending_changes_ = true;
+      dirty_domains_ = ToMask(DirtyDomain::kAll);
+      batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
+      needs_sync_ = false;
+      skybox_dirty_ = true;
+      sun_present_ = true;
       return;
     }
 
@@ -498,11 +513,14 @@ auto EnvironmentSettingsService::OnFrameStart(
   PersistSettingsIfDirty();
 }
 
-auto EnvironmentSettingsService::OnSceneActivated(scene::Scene& /*scene*/)
+auto EnvironmentSettingsService::OnSceneActivated(scene::Scene& scene)
   -> void
 {
   PersistSettingsIfDirty();
-  config_.scene = nullptr;
+  config_.scene = observer_ptr { &scene };
+  // Ensure the next runtime config update runs scene-transition logic even
+  // though config_.scene is pre-bound here for immediate HasScene() correctness.
+  force_scene_rebind_ = true;
   config_.skybox_service = nullptr;
   main_view_id_.reset();
   needs_sync_ = true;
@@ -567,6 +585,15 @@ auto EnvironmentSettingsService::SetPresetIndex(int index) -> void
 
 auto EnvironmentSettingsService::ActivateUseSceneMode() -> void
 {
+  if (kForceEnvironmentOverride) {
+    pending_changes_ = true;
+    dirty_domains_ = ToMask(DirtyDomain::kAll);
+    batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
+    needs_sync_ = false;
+    skybox_dirty_ = true;
+    return;
+  }
+
   pending_changes_ = false;
   dirty_domains_ = ToMask(DirtyDomain::kNone);
   batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
@@ -577,6 +604,11 @@ auto EnvironmentSettingsService::ActivateUseSceneMode() -> void
 
 auto EnvironmentSettingsService::SyncFromSceneIfNeeded() -> void
 {
+  if (kForceEnvironmentOverride) {
+    needs_sync_ = false;
+    return;
+  }
+
   if (!needs_sync_) {
     return;
   }
@@ -2373,9 +2405,21 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   }
 
   ValidateAndClampState();
+  if (kForceEnvironmentOverride) {
+    sun_present_ = true;
+  }
   settings_loaded_ = true;
   has_persisted_settings_ = custom_state_loaded;
   if (any_loaded) {
+    if (kForceEnvironmentOverride) {
+      needs_sync_ = false;
+      pending_changes_ = true;
+      dirty_domains_ = ToMask(DirtyDomain::kAll);
+      skybox_dirty_ = skybox_settings_loaded;
+      settings_revision_++;
+      return;
+    }
+
     if (preset_index_ == kPresetUseScene) {
       needs_sync_ = true;
       pending_changes_ = false;
