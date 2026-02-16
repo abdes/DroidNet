@@ -186,6 +186,20 @@ target_compile_definitions(
     OXYGEN_ENGINE_TESTING
 )
 
+# DrawMetadataEmitter unit tests
+m_gtest_program(
+  DrawMetadataEmitter
+  SOURCES
+    "Fakes/Graphics.h"
+    "Resources/GeometryUploaderTest.h"
+    "Resources/DrawMetadataEmitter_test.cpp"
+)
+target_compile_definitions(
+  Oxygen.Renderer.DrawMetadataEmitter.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
+)
+
 # LightManager unit tests
 m_gtest_program(
   LightManager
