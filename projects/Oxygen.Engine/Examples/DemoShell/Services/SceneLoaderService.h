@@ -81,9 +81,9 @@ private:
   //! Handle completion of the async scene load.
   void OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset);
 
-  //! Begin loading geometry dependencies and block readiness until loaded.
+  //! Legacy hook for geometry dependency readiness (currently no-op).
   void QueueGeometryDependencies(const data::SceneAsset& asset);
-  //! Release pinned geometry assets after scene instantiation.
+  //! Clear local pin bookkeeping (non-destructive).
   void ReleasePinnedGeometryAssets();
 
   //! Build environment systems from the scene asset.

@@ -206,13 +206,21 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
             return existing == normalized;
           });
 
+        // IMPORTANT:
+        // Re-adding an already-mounted loose root triggers the refresh path in
+        // AssetLoader::AddLooseCookedRoot(), which clears the content cache and
+        // emits EvictionReason::kClear for resident resources.
+        // That causes unnecessary GPU unload/reload churn during scene swaps.
+        // Keep the existing mount to preserve cached residency.
         if (already_mounted) {
-          LOG_F(INFO, "RenderScene: Refreshing loose cooked root '{}'",
+          LOG_F(INFO,
+            "RenderScene: Loose cooked root '{}' already mounted; skipping "
+            "remount to preserve cache",
             normalized.string());
         } else {
           mounted_loose_roots_.push_back(std::move(normalized));
+          asset_loader->AddLooseCookedRoot(root);
         }
-        asset_loader->AddLooseCookedRoot(root);
       }
     }
 
@@ -259,16 +267,22 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
               return existing == normalized;
             });
 
+          // IMPORTANT:
+          // Scene reload/swap can pass through this path often. Do not remount
+          // an already-mounted loose root here, or AddLooseCookedRoot() will
+          // refresh and clear caches, defeating cross-scene reuse.
           if (already_mounted) {
-            LOG_F(INFO, "RenderScene: Refreshing loose cooked root '{}'",
+            LOG_F(INFO,
+              "RenderScene: Loose cooked root '{}' already mounted for scene "
+              "load; preserving cache",
               normalized.string());
           } else {
             mounted_loose_roots_.push_back(std::move(normalized));
+            asset_loader->AddLooseCookedRoot(root);
+            LOG_F(INFO,
+              "RenderScene: Mounted loose cooked root '{}' for scene load '{}'",
+              root.string(), request.scene_name);
           }
-          asset_loader->AddLooseCookedRoot(root);
-          LOG_F(INFO,
-            "RenderScene: Ensured loose cooked root '{}' for scene load '{}'",
-            root.string(), request.scene_name);
         }
       } catch (const std::exception& ex) {
         LOG_F(ERROR,
@@ -319,6 +333,10 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
           LOG_F(ERROR, "RenderScene: Scene swap missing asset or scene");
         }
       }
+      // Keep an explicit pin on the active SceneAsset while it is displayed.
+      // This prevents TrimCache from treating the active scene dependency tree
+      // as cold/unused and evicting in-use textures mid-frame.
+      active_scene_asset_pin_ = swap.asset;
       if (const auto vm = shell.GetContentVm()) {
         vm->NotifySceneLoadCompleted(swap.scene_key, true);
       }
@@ -369,6 +387,9 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 
 auto MainModule::ReleaseCurrentSceneAsset(const char* reason) -> void
 {
+  // Drop active scene pin before releasing cache ownership for this scene key.
+  active_scene_asset_pin_.reset();
+
   if (!current_scene_key_.has_value()) {
     return;
   }

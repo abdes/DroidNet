@@ -662,12 +662,16 @@ auto GeometryUploader::Impl::ProcessEvictions() -> void
 
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
 
+  std::size_t evictions_without_resident_geometry = 0U;
+
   for (const auto& eviction : evictions) {
+    std::size_t matched_entries = 0U;
     for (auto& entry : geometry_entries_) {
       if (entry.asset_key != eviction.asset_key) {
         continue;
       }
 
+      ++matched_entries;
       if (entry.evicted) {
         continue;
       }
@@ -695,6 +699,19 @@ auto GeometryUploader::Impl::ProcessEvictions() -> void
         "(reason={})",
         data::to_string(eviction.asset_key), eviction.reason);
     }
+    if (matched_entries == 0U) {
+      ++evictions_without_resident_geometry;
+      LOG_F(2,
+        "GeometryUploader: eviction for asset {} (reason={}) had no resident "
+        "geometry entries (likely never uploaded this run or already released)",
+        data::to_string(eviction.asset_key), eviction.reason);
+    }
+  }
+
+  if (evictions_without_resident_geometry != 0U) {
+    LOG_F(INFO,
+      "GeometryUploader: {} eviction(s) had no resident geometry entries",
+      evictions_without_resident_geometry);
   }
 }
 
@@ -707,15 +724,27 @@ auto GeometryUploader::Impl::ReleaseEntryBuffers(GeometryEntry& entry) -> void
 
   auto& registry = gfx_->GetResourceRegistry();
   auto& reclaimer = gfx_->GetDeferredReclaimer();
+  std::uint64_t released_vertex_bytes = 0U;
+  std::uint64_t released_index_bytes = 0U;
 
   if (entry.vertex_buffer) {
+    released_vertex_bytes = entry.vertex_buffer->GetDescriptor().size_bytes;
     registry.UnRegisterResource<graphics::Buffer>(*entry.vertex_buffer);
     reclaimer.RegisterDeferredRelease(std::move(entry.vertex_buffer));
   }
 
   if (entry.index_buffer) {
+    released_index_bytes = entry.index_buffer->GetDescriptor().size_bytes;
     registry.UnRegisterResource<graphics::Buffer>(*entry.index_buffer);
     reclaimer.RegisterDeferredRelease(std::move(entry.index_buffer));
+  }
+
+  if (released_vertex_bytes != 0U || released_index_bytes != 0U) {
+    LOG_F(INFO,
+      "GeometryUploader: released GPU buffers for asset {} lod={} "
+      "(vertex_bytes={}, index_bytes={}, total={})",
+      data::to_string(entry.asset_key), entry.lod_index, released_vertex_bytes,
+      released_index_bytes, released_vertex_bytes + released_index_bytes);
   }
 }
 

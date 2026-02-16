@@ -136,6 +136,15 @@ auto MakeMaterialKey(
   oxygen::HashCombine(seed, material.resolved_asset->GetRoughnessTextureKey());
   oxygen::HashCombine(
     seed, material.resolved_asset->GetAmbientOcclusionTextureKey());
+  oxygen::HashCombine(seed, material.resolved_asset->GetEmissiveTextureKey());
+  oxygen::HashCombine(seed, material.resolved_asset->GetSpecularTextureKey());
+  oxygen::HashCombine(seed, material.resolved_asset->GetSheenColorTextureKey());
+  oxygen::HashCombine(seed, material.resolved_asset->GetClearcoatTextureKey());
+  oxygen::HashCombine(
+    seed, material.resolved_asset->GetClearcoatNormalTextureKey());
+  oxygen::HashCombine(
+    seed, material.resolved_asset->GetTransmissionTextureKey());
+  oxygen::HashCombine(seed, material.resolved_asset->GetThicknessTextureKey());
 
   const auto material_domain = material.resolved_asset->GetMaterialDomain();
   const auto material_flags = material.resolved_asset->GetFlags();
@@ -147,8 +156,7 @@ auto MakeMaterialKey(
     oxygen::HashCombine(seed, grid_spacing[1]);
     oxygen::HashCombine(seed, material.resolved_asset->GetGridMajorEvery());
     oxygen::HashCombine(seed, material.resolved_asset->GetGridLineThickness());
-    oxygen::HashCombine(
-      seed, material.resolved_asset->GetGridMajorThickness());
+    oxygen::HashCombine(seed, material.resolved_asset->GetGridMajorThickness());
     oxygen::HashCombine(seed, material.resolved_asset->GetGridAxisThickness());
     oxygen::HashCombine(seed, material.resolved_asset->GetGridFadeStart());
     oxygen::HashCombine(seed, material.resolved_asset->GetGridFadeEnd());
@@ -331,20 +339,18 @@ auto SerializeMaterialConstants(
     constants.grid_major_color = { grid_major_color[0], grid_major_color[1],
       grid_major_color[2], grid_major_color[3] };
 
-    const auto grid_axis_color_x
-      = material.resolved_asset->GetGridAxisColorX();
-    constants.grid_axis_color_x = { grid_axis_color_x[0],
-      grid_axis_color_x[1], grid_axis_color_x[2], grid_axis_color_x[3] };
+    const auto grid_axis_color_x = material.resolved_asset->GetGridAxisColorX();
+    constants.grid_axis_color_x = { grid_axis_color_x[0], grid_axis_color_x[1],
+      grid_axis_color_x[2], grid_axis_color_x[3] };
 
-    const auto grid_axis_color_y
-      = material.resolved_asset->GetGridAxisColorY();
-    constants.grid_axis_color_y = { grid_axis_color_y[0],
-      grid_axis_color_y[1], grid_axis_color_y[2], grid_axis_color_y[3] };
+    const auto grid_axis_color_y = material.resolved_asset->GetGridAxisColorY();
+    constants.grid_axis_color_y = { grid_axis_color_y[0], grid_axis_color_y[1],
+      grid_axis_color_y[2], grid_axis_color_y[3] };
 
     const auto grid_origin_color
       = material.resolved_asset->GetGridOriginColor();
-    constants.grid_origin_color = { grid_origin_color[0],
-      grid_origin_color[1], grid_origin_color[2], grid_origin_color[3] };
+    constants.grid_origin_color = { grid_origin_color[0], grid_origin_color[1],
+      grid_origin_color[2], grid_origin_color[3] };
   }
 
   // Emissive: factor and texture for self-illumination / glow.
@@ -739,7 +745,13 @@ auto MaterialBinder::Impl::GetOrAllocate(
         || needs_refresh(cached_asset.GetMetallicTextureKey())
         || needs_refresh(cached_asset.GetRoughnessTextureKey())
         || needs_refresh(cached_asset.GetAmbientOcclusionTextureKey())
-        || needs_refresh(cached_asset.GetEmissiveTextureKey())) {
+        || needs_refresh(cached_asset.GetEmissiveTextureKey())
+        || needs_refresh(cached_asset.GetSpecularTextureKey())
+        || needs_refresh(cached_asset.GetSheenColorTextureKey())
+        || needs_refresh(cached_asset.GetClearcoatTextureKey())
+        || needs_refresh(cached_asset.GetClearcoatNormalTextureKey())
+        || needs_refresh(cached_asset.GetTransmissionTextureKey())
+        || needs_refresh(cached_asset.GetThicknessTextureKey())) {
         material_constants_[idx]
           = SerializeMaterialConstants(material, *texture_binder_);
         MarkDirty(idx);

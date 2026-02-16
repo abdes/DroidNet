@@ -7,7 +7,7 @@
 #include <algorithm>
 
 #include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/Upload/RingBufferStaging.h>
@@ -31,6 +31,29 @@ constexpr std::uint32_t kIdleFramesBeforeShrink = 120U;
 } // namespace
 
 namespace oxygen::engine::upload {
+
+namespace {
+
+  auto DeferUnregisterAndReleaseBuffer(const observer_ptr<Graphics> gfx,
+    std::shared_ptr<graphics::Buffer>& buffer) -> void
+  {
+    if (gfx == nullptr || buffer == nullptr) {
+      buffer.reset();
+      return;
+    }
+
+    auto old_buffer = std::move(buffer);
+    auto& reclaimer = gfx->GetDeferredReclaimer();
+    reclaimer.RegisterDeferredAction(
+      [gfx, old_buffer = std::move(old_buffer)]() mutable {
+        if (gfx != nullptr && old_buffer != nullptr) {
+          gfx->GetResourceRegistry().UnRegisterResource(*old_buffer);
+        }
+        old_buffer.reset();
+      });
+  }
+
+} // namespace
 
 auto RingBufferStaging::Allocate(SizeBytes size, std::string_view debug_name)
   -> std::expected<Allocation, UploadError>
@@ -169,7 +192,7 @@ auto RingBufferStaging::RecreateBuffer(
   desc.debug_name = debug_name_;
 
   UnMap();
-  graphics::DeferredObjectRelease(buffer_, gfx_->GetDeferredReclaimer());
+  DeferUnregisterAndReleaseBuffer(gfx_, buffer_);
 
   UploadError error_code;
   try {
@@ -242,9 +265,9 @@ auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
   // We can UnMap the buffer immediately, but it cannot be released now.
   // Release must be deferred until frames are no longer using it.
   UnMap();
-  // This will keep the buffer shared_ptr alive until it is time for it to be
-  // destroyed.
-  graphics::DeferredObjectRelease(buffer_, gfx_->GetDeferredReclaimer());
+  // Keep the previous buffer alive until it is safe, then unregister it from
+  // the registry before dropping the final reference.
+  DeferUnregisterAndReleaseBuffer(gfx_, buffer_);
   // Now, safe to re-assign
   UploadError error_code;
   try {

@@ -244,12 +244,18 @@ public:
 
   //! Set runtime-only per-slot texture resource keys.
   /*!
-   This is used by async publish code to fill the source-aware `ResourceKey`
+   This is used by async publish code to fill the source-aware
+   * `ResourceKey`
    values after worker-thread decode.
 
-   @param texture_resource_keys Per-slot texture keys in the order:
-     base_color, normal, metallic, roughness, ambient_occlusion.
-  */
+   @param
+   * texture_resource_keys Per-slot texture keys in the order:
+     base_color,
+   * normal, metallic, roughness, ambient_occlusion, emissive,
+     specular,
+   * sheen_color, clearcoat, clearcoat_normal, transmission,
+     thickness.
+ */
   auto SetTextureResourceKeys(
     std::vector<oxygen::content::ResourceKey> texture_resource_keys) -> void
   {
@@ -261,7 +267,8 @@ private:
   std::vector<ShaderReference> shader_refs_ {};
   // Runtime-only: per-slot source-aware resource keys produced by loader.
   // Order matches getters: base_color, normal, metallic, roughness,
-  // ambient_occlusion
+  // ambient_occlusion, emissive, specular, sheen_color, clearcoat,
+  // clearcoat_normal, transmission, thickness.
   std::vector<oxygen::content::ResourceKey> texture_resource_keys_ {};
 
 public:
@@ -320,6 +327,93 @@ public:
     return oxygen::content::ResourceKey { 0 };
   }
 
+  [[nodiscard]] auto GetSpecularTexture() const noexcept -> pak::ResourceIndexT
+  {
+    return desc_.specular_texture;
+  }
+
+  [[nodiscard]] auto GetSpecularTextureKey() const noexcept
+    -> oxygen::content::ResourceKey
+  {
+    if (texture_resource_keys_.size() > 6) {
+      return texture_resource_keys_[6];
+    }
+    return oxygen::content::ResourceKey { 0 };
+  }
+
+  [[nodiscard]] auto GetSheenColorTexture() const noexcept
+    -> pak::ResourceIndexT
+  {
+    return desc_.sheen_color_texture;
+  }
+
+  [[nodiscard]] auto GetSheenColorTextureKey() const noexcept
+    -> oxygen::content::ResourceKey
+  {
+    if (texture_resource_keys_.size() > 7) {
+      return texture_resource_keys_[7];
+    }
+    return oxygen::content::ResourceKey { 0 };
+  }
+
+  [[nodiscard]] auto GetClearcoatTexture() const noexcept -> pak::ResourceIndexT
+  {
+    return desc_.clearcoat_texture;
+  }
+
+  [[nodiscard]] auto GetClearcoatTextureKey() const noexcept
+    -> oxygen::content::ResourceKey
+  {
+    if (texture_resource_keys_.size() > 8) {
+      return texture_resource_keys_[8];
+    }
+    return oxygen::content::ResourceKey { 0 };
+  }
+
+  [[nodiscard]] auto GetClearcoatNormalTexture() const noexcept
+    -> pak::ResourceIndexT
+  {
+    return desc_.clearcoat_normal_texture;
+  }
+
+  [[nodiscard]] auto GetClearcoatNormalTextureKey() const noexcept
+    -> oxygen::content::ResourceKey
+  {
+    if (texture_resource_keys_.size() > 9) {
+      return texture_resource_keys_[9];
+    }
+    return oxygen::content::ResourceKey { 0 };
+  }
+
+  [[nodiscard]] auto GetTransmissionTexture() const noexcept
+    -> pak::ResourceIndexT
+  {
+    return desc_.transmission_texture;
+  }
+
+  [[nodiscard]] auto GetTransmissionTextureKey() const noexcept
+    -> oxygen::content::ResourceKey
+  {
+    if (texture_resource_keys_.size() > 10) {
+      return texture_resource_keys_[10];
+    }
+    return oxygen::content::ResourceKey { 0 };
+  }
+
+  [[nodiscard]] auto GetThicknessTexture() const noexcept -> pak::ResourceIndexT
+  {
+    return desc_.thickness_texture;
+  }
+
+  [[nodiscard]] auto GetThicknessTextureKey() const noexcept
+    -> oxygen::content::ResourceKey
+  {
+    if (texture_resource_keys_.size() > 11) {
+      return texture_resource_keys_[11];
+    }
+    return oxygen::content::ResourceKey { 0 };
+  }
+
   [[nodiscard]] auto GetGridSpacing() const noexcept -> std::array<float, 2>
   {
     return { desc_.grid_spacing[0], desc_.grid_spacing[1] };
@@ -355,36 +449,31 @@ public:
     return desc_.grid_fade_end;
   }
 
-  [[nodiscard]] auto GetGridMinorColor() const noexcept
-    -> std::array<float, 4>
+  [[nodiscard]] auto GetGridMinorColor() const noexcept -> std::array<float, 4>
   {
     return { desc_.grid_minor_color[0], desc_.grid_minor_color[1],
       desc_.grid_minor_color[2], desc_.grid_minor_color[3] };
   }
 
-  [[nodiscard]] auto GetGridMajorColor() const noexcept
-    -> std::array<float, 4>
+  [[nodiscard]] auto GetGridMajorColor() const noexcept -> std::array<float, 4>
   {
     return { desc_.grid_major_color[0], desc_.grid_major_color[1],
       desc_.grid_major_color[2], desc_.grid_major_color[3] };
   }
 
-  [[nodiscard]] auto GetGridAxisColorX() const noexcept
-    -> std::array<float, 4>
+  [[nodiscard]] auto GetGridAxisColorX() const noexcept -> std::array<float, 4>
   {
     return { desc_.grid_axis_color_x[0], desc_.grid_axis_color_x[1],
       desc_.grid_axis_color_x[2], desc_.grid_axis_color_x[3] };
   }
 
-  [[nodiscard]] auto GetGridAxisColorY() const noexcept
-    -> std::array<float, 4>
+  [[nodiscard]] auto GetGridAxisColorY() const noexcept -> std::array<float, 4>
   {
     return { desc_.grid_axis_color_y[0], desc_.grid_axis_color_y[1],
       desc_.grid_axis_color_y[2], desc_.grid_axis_color_y[3] };
   }
 
-  [[nodiscard]] auto GetGridOriginColor() const noexcept
-    -> std::array<float, 4>
+  [[nodiscard]] auto GetGridOriginColor() const noexcept -> std::array<float, 4>
   {
     return { desc_.grid_origin_color[0], desc_.grid_origin_color[1],
       desc_.grid_origin_color[2], desc_.grid_origin_color[3] };

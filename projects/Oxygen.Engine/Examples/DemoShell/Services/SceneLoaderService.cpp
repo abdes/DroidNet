@@ -156,11 +156,14 @@ void SceneLoaderService::OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset)
     runtime_nodes_.clear();
     active_camera_ = {};
     swap_.asset = std::move(asset);
-    // Block readiness until geometry dependencies are pinned to avoid
-    // evictions during rapid scene swaps.
-    ready_ = false;
+    // Scene dependencies are published by AssetLoader during scene decode.
+    // Do not acquire/release additional geometry "pins" here, because using
+    // ReleaseAsset() for temporary pins would recursively release dependency
+    // edges and can unpin live texture resources.
+    ready_ = true;
     failed_ = false;
-    QueueGeometryDependencies(*swap_.asset);
+    pending_geometry_keys_.clear();
+    pinned_geometry_keys_.clear();
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "SceneLoader: Exception while building scene: {}", ex.what());
     swap_ = {};
@@ -200,44 +203,10 @@ void SceneLoaderService::OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset)
 void SceneLoaderService::QueueGeometryDependencies(
   const data::SceneAsset& asset)
 {
-  ReleasePinnedGeometryAssets();
-
+  (void)asset;
+  ready_ = true;
   pending_geometry_keys_.clear();
-
-  for (const auto& renderable :
-    asset.GetComponents<data::pak::RenderableRecord>()) {
-    pending_geometry_keys_.insert(renderable.geometry_key);
-  }
-
-  if (pending_geometry_keys_.empty()) {
-    ready_ = true;
-    return;
-  }
-
-  for (const auto& geom_key : pending_geometry_keys_) {
-    loader_.StartLoadGeometryAsset(geom_key,
-      [weak_self = weak_from_this(), geom_key](
-        std::shared_ptr<data::GeometryAsset> geom) {
-        if (auto self = weak_self.lock()) {
-          const auto it = self->pending_geometry_keys_.find(geom_key);
-          if (it == self->pending_geometry_keys_.end()) {
-            return;
-          }
-
-          self->pending_geometry_keys_.erase(it);
-          if (geom) {
-            self->pinned_geometry_keys_.push_back(geom_key);
-          } else {
-            LOG_F(WARNING, "SceneLoader: Failed to load geometry dependency {}",
-              oxygen::data::to_string(geom_key));
-          }
-
-          if (self->pending_geometry_keys_.empty()) {
-            self->ready_ = true;
-          }
-        }
-      });
-  }
+  pinned_geometry_keys_.clear();
 }
 
 /*!
@@ -256,14 +225,9 @@ void SceneLoaderService::QueueGeometryDependencies(
 */
 void SceneLoaderService::ReleasePinnedGeometryAssets()
 {
-  if (pinned_geometry_keys_.empty()) {
-    pending_geometry_keys_.clear();
-    return;
-  }
-
-  for (const auto& key : pinned_geometry_keys_) {
-    (void)loader_.ReleaseAsset(key);
-  }
+  // Intentionally non-destructive: geometry dependency ownership is tracked by
+  // AssetLoader's scene/material dependency graph, and explicit ReleaseAsset()
+  // here can tear down live dependency edges.
   pinned_geometry_keys_.clear();
   pending_geometry_keys_.clear();
 }
