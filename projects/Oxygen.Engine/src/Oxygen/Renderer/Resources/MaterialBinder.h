@@ -55,10 +55,12 @@ class IResourceBinder;
 
  ### Primary behaviors
 
- - **Stable handles**: `GetOrAllocate()` returns a stable handle for a given
-   material content key for the lifetime of the binder.
- - **Dirty tracking**: material constants are tracked as dirty per-frame and
-   only dirty elements are uploaded during `EnsureFrameResources()`.
+ - **Versioned stable handles**: `GetOrAllocate()` returns a handle with
+
+ index+generation identity for a material content key.
+ - **Dirty tracking**:
+ material constants are tracked as dirty per-frame and only dirty elements are
+ uploaded during `EnsureFrameResources()`.
  - **Bindless SRV**: `GetMaterialsSrvIndex()` returns the SRV index for the
    material constants buffer once frame resources are ensured.
 
@@ -112,8 +114,9 @@ public:
    Updates the material constants for an existing handle. If the material
    data hasn't changed, this is a no-op.
 
-   @param handle Previously allocated material handle
-   @param material New material asset data
+   @param handle Previously allocated material handle (index+generation)
+ @param
+  material New material asset data
 
   ### Performance Characteristics
 
@@ -126,7 +129,7 @@ public:
   OXGN_RNDR_API auto Update(oxygen::engine::sceneprep::MaterialHandle handle,
     std::shared_ptr<const data::MaterialAsset> material) -> void;
 
-  //! Check if a handle is valid.
+  //! Check if a handle is valid and current.
   OXGN_RNDR_NDAPI auto IsHandleValid(
     oxygen::engine::sceneprep::MaterialHandle handle) const -> bool;
 
