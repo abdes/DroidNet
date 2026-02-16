@@ -15,7 +15,9 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Nexus/FrameDrivenSlotReuse.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
@@ -63,6 +65,8 @@ namespace oxygen::renderer::resources {
  - **Stable SRV, per-frame content**: Capacity is ensured with minimal
    slack; content is fully rewritten each frame. UploadPlanner performs
    packing/coalescing; the emitter need not batch adjacent writes.
+ - **Frame-driven slot indexing**: Per-frame draw slot indices are assigned by
+   Nexus Strategy A (`FrameDrivenSlotReuse`) using deterministic emit order.
 
  ### When to use ElementRef instead
 
@@ -100,7 +104,7 @@ public:
   OXGN_RNDR_API auto EnsureFrameResources() -> void;
 
   //! Shader-visible SRV index for the draw metadata SRV.
-  OXGN_RNDR_NDAPI auto GetDrawMetadataSrvIndex() const -> ShaderVisibleIndex;
+  OXGN_RNDR_NDAPI auto GetDrawMetadataSrvIndex() -> ShaderVisibleIndex;
 
   //! Returns draw metadata as byte span for PreparedSceneFrame integration.
   OXGN_RNDR_NDAPI auto GetDrawMetadataBytes() const noexcept
@@ -134,7 +138,7 @@ private:
     std::uint32_t index_count { 0 };
     std::uint32_t vertex_count { 0 };
     std::uint32_t is_indexed { 0 };
-    oxygen::engine::PassMask flags {};
+    oxygen::engine::PassMask flags;
 
     [[nodiscard]] constexpr auto operator==(const BatchingKey&) const noexcept
       -> bool
@@ -148,7 +152,7 @@ private:
   };
 
   struct SortingKey {
-    oxygen::engine::PassMask pass_mask {};
+    oxygen::engine::PassMask pass_mask;
     std::uint8_t bucket_order { 0 };
     std::uint8_t _pad0 { 0 };
     std::uint16_t _pad1 { 0 };
@@ -174,13 +178,15 @@ private:
   */
   auto ApplyInstancingBatches() -> void;
 
-private:
   // Core state
   observer_ptr<Graphics> gfx_;
   observer_ptr<renderer::resources::GeometryUploader> geometry_uploader_;
   observer_ptr<renderer::resources::MaterialBinder> material_binder_;
   observer_ptr<engine::upload::StagingProvider> staging_provider_;
   observer_ptr<engine::upload::InlineTransfersCoordinator> inline_transfers_;
+  graphics::detail::DeferredReclaimer slot_reclaimer_;
+  nexus::FrameDrivenSlotReuse slot_reuse_;
+  std::uint32_t frame_write_count_ { 0U };
 
   // CPU shadow storage and transient GPU buffer for DrawMetadata
   std::vector<engine::DrawMetadata> cpu_;
@@ -204,7 +210,6 @@ private:
   // Frame lifecycle
   // Runtime statistics (telemetry)
   std::uint64_t frames_started_count_ { 0 };
-  std::uint64_t total_emits_ { 0 };
   std::uint64_t sort_calls_count_ { 0 };
   std::uint32_t peak_draws_ { 0 };
   std::uint32_t peak_partitions_ { 0 };

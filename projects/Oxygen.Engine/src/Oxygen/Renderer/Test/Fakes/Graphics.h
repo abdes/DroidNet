@@ -581,21 +581,21 @@ public:
         const graphics::BufferRange& /*range*/) const
         -> graphics::NativeView override
       {
-        return {};
+        return { this, Buffer::ClassTypeId() };
       }
       [[nodiscard]] auto CreateShaderResourceView(
         const graphics::DescriptorHandle& /*view_handle*/, Format /*format*/,
         graphics::BufferRange /*range*/, uint32_t /*stride*/) const
         -> graphics::NativeView override
       {
-        return {};
+        return { this, Buffer::ClassTypeId() };
       }
       [[nodiscard]] auto CreateUnorderedAccessView(
         const graphics::DescriptorHandle& /*view_handle*/, Format /*format*/,
         graphics::BufferRange /*range*/, uint32_t /*stride*/) const
         -> graphics::NativeView override
       {
-        return {};
+        return { this, Buffer::ClassTypeId() };
       }
 
     private:

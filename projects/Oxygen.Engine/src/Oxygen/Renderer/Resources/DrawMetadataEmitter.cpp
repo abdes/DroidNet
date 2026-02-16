@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <limits>
 #include <span>
@@ -18,6 +19,8 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/Resources/DrawMetadataEmitter.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
@@ -26,53 +29,74 @@
 
 namespace {
 
+constexpr oxygen::nexus::DomainKey kDrawMetadataDomain {
+  .view_type = oxygen::graphics::ResourceViewType::kStructuredBuffer_SRV,
+  .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible,
+};
+
+constexpr std::uint8_t kOpaqueBucketOrder = 0U;
+constexpr std::uint8_t kMaskedBucketOrder = 1U;
+constexpr std::uint8_t kTransparentBucketOrder = 2U;
+
+auto ResolveBucketOrder(const oxygen::engine::PassMask flags) -> std::uint8_t
+{
+  if (flags.IsSet(oxygen::engine::PassMaskBit::kOpaque)) {
+    return kOpaqueBucketOrder;
+  }
+  if (flags.IsSet(oxygen::engine::PassMaskBit::kMasked)) {
+    return kMaskedBucketOrder;
+  }
+  return kTransparentBucketOrder;
+}
+
 auto ClassifyMaterialPassMask(const oxygen::data::MaterialAsset* mat)
   -> oxygen::engine::PassMask
 {
-  if (!mat) {
+  if (mat == nullptr) {
     return oxygen::engine::PassMask { oxygen::engine::PassMaskBit::kOpaque };
   }
   const auto domain = mat->GetMaterialDomain();
 
+  namespace d = oxygen::data;
+  namespace e = oxygen::engine;
   oxygen::engine::PassMask mask {};
   switch (domain) {
-  case oxygen::data::MaterialDomain::kUnknown:
-  case oxygen::data::MaterialDomain::kOpaque:
-    mask.Set(oxygen::engine::PassMaskBit::kOpaque);
+  case d::MaterialDomain::kUnknown:
+  case d::MaterialDomain::kOpaque:
+    mask.Set(e::PassMaskBit::kOpaque);
     break;
-  case oxygen::data::MaterialDomain::kAlphaBlended:
-    mask.Set(oxygen::engine::PassMaskBit::kTransparent);
+  case d::MaterialDomain::kAlphaBlended:
+    mask.Set(e::PassMaskBit::kTransparent);
     break;
-  case oxygen::data::MaterialDomain::kMasked:
-    mask.Set(oxygen::engine::PassMaskBit::kMasked);
+  case d::MaterialDomain::kMasked:
+    mask.Set(e::PassMaskBit::kMasked);
     break;
-  case oxygen::data::MaterialDomain::kDecal:
-  case oxygen::data::MaterialDomain::kUserInterface:
-  case oxygen::data::MaterialDomain::kPostProcess:
+  case d::MaterialDomain::kDecal:
+  case d::MaterialDomain::kUserInterface:
+  case d::MaterialDomain::kPostProcess:
     // These material domains do not have dedicated rendering paths yet in the
     // example render-graph. Classify them as transparent to avoid writing depth
     // for alpha-blended style content and to keep them out of the opaque depth
     // pre-pass.
-    mask.Set(oxygen::engine::PassMaskBit::kTransparent);
+    mask.Set(e::PassMaskBit::kTransparent);
     break;
   default:
     LOG_F(WARNING,
       "Material '{}' has unsupported domain {} (flags=0x{:08X}); "
       "classifying as Opaque",
       mat->GetAssetName(), static_cast<int>(domain), mat->GetFlags());
-    mask.Set(oxygen::engine::PassMaskBit::kOpaque);
+    mask.Set(e::PassMaskBit::kOpaque);
     break;
   }
 
   // Double-sided is explicit and data-driven via the PAK material flag.
   // Render passes use it to pick appropriate cull mode.
   if (mat->IsDoubleSided()) {
-    mask.Set(oxygen::engine::PassMaskBit::kDoubleSided);
+    mask.Set(e::PassMaskBit::kDoubleSided);
   }
 
   DLOG_F(2, "Material classify: name='{}' domain={} flags=0x{:08X} -> {}",
-    mat->GetAssetName(), static_cast<int>(domain), mat->GetFlags(),
-    oxygen::engine::to_string(mask));
+    mat->GetAssetName(), static_cast<int>(domain), mat->GetFlags(), mask);
   return mask;
 }
 
@@ -91,6 +115,12 @@ DrawMetadataEmitter::DrawMetadataEmitter(observer_ptr<Graphics> gfx,
   , material_binder_(materials)
   , staging_provider_(provider)
   , inline_transfers_(inline_transfers)
+  , slot_reuse_(
+      [this](oxygen::nexus::DomainKey /*domain*/) -> bindless::HeapIndex {
+        return bindless::HeapIndex { frame_write_count_ };
+      },
+      [](oxygen::nexus::DomainKey /*domain*/, bindless::HeapIndex /*index*/) {},
+      slot_reclaimer_)
   , draw_metadata_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(oxygen::engine::DrawMetadata)),
       inline_transfers_, "DrawMetadataEmitter.Draws")
@@ -106,17 +136,36 @@ DrawMetadataEmitter::DrawMetadataEmitter(observer_ptr<Graphics> gfx,
 
 DrawMetadataEmitter::~DrawMetadataEmitter()
 {
+  const auto telemetry = slot_reuse_.GetTelemetrySnapshot();
+  const auto expected_zero_marker = [](const uint64_t value) -> const char* {
+    return value == 0U ? " \u2713" : " (expected 0) !";
+  };
+
   LOG_SCOPE_F(INFO, "DrawMetadataEmitter Statistics");
   LOG_F(INFO, "frames started    : {}", frames_started_count_);
-  LOG_F(INFO, "total emits       : {}", total_emits_);
+  LOG_F(INFO, "nexus.allocate_calls      : {}", telemetry.allocate_calls);
+  LOG_F(INFO, "nexus.release_calls       : {}{}", telemetry.release_calls,
+    expected_zero_marker(telemetry.release_calls));
+  LOG_F(INFO, "nexus.stale_reject_count  : {}{}", telemetry.stale_reject_count,
+    expected_zero_marker(telemetry.stale_reject_count));
+  LOG_F(INFO, "nexus.duplicate_rejects   : {}{}",
+    telemetry.duplicate_reject_count,
+    expected_zero_marker(telemetry.duplicate_reject_count));
+  LOG_F(INFO, "nexus.reclaimed_count     : {}{}", telemetry.reclaimed_count,
+    expected_zero_marker(telemetry.reclaimed_count));
+  LOG_F(INFO, "nexus.pending_count       : {}{}", telemetry.pending_count,
+    expected_zero_marker(telemetry.pending_count));
   LOG_F(INFO, "sort calls        : {}", sort_calls_count_);
   LOG_F(INFO, "peak draws        : {}", peak_draws_);
   LOG_F(INFO, "peak partitions   : {}", peak_partitions_);
 }
 
-auto DrawMetadataEmitter::OnFrameStart(renderer::RendererTag,
+auto DrawMetadataEmitter::OnFrameStart(renderer::RendererTag /*tag*/,
   oxygen::frame::SequenceNumber sequence, oxygen::frame::Slot slot) -> void
 {
+  slot_reuse_.OnBeginFrame(slot);
+  frame_write_count_ = 0U;
+
   // Reset per-frame CPU state; keep GPU resources
   Cpu().clear();
   keys_.clear();
@@ -209,24 +258,25 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
       "Invalid transform handle while emitting");
     DCHECK_F(!dm.flags.IsEmpty(), "flags cannot be empty after assignment");
 
-    this->Cpu().push_back(dm);
-
-    const std::uint8_t bucket_order
-      = dm.flags.IsSet(oxygen::engine::PassMaskBit::kOpaque)
-      ? static_cast<std::uint8_t>(0)
-      : (dm.flags.IsSet(oxygen::engine::PassMaskBit::kMasked)
-            ? static_cast<std::uint8_t>(1)
-            : static_cast<std::uint8_t>(2));
-    keys_.push_back(SortingKey {
+    const std::uint8_t bucket_order = ResolveBucketOrder(dm.flags);
+    const auto index
+      = slot_reuse_.Allocate(kDrawMetadataDomain).ToBindlessHandle().get();
+    if (index >= Cpu().size()) {
+      Cpu().resize(static_cast<size_t>(index) + 1U);
+      keys_.resize(static_cast<size_t>(index) + 1U);
+    }
+    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+    Cpu()[index] = dm;
+    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+    keys_[index] = SortingKey {
       .pass_mask = dm.flags,
       .bucket_order = bucket_order,
       .sort_distance2 = item.sort_distance2,
       .material_index = dm.material_handle,
       .vb_srv = dm.vertex_buffer_index,
       .ib_srv = dm.index_buffer_index,
-    });
-
-    ++total_emits_;
+    };
+    ++frame_write_count_;
   }
 }
 
@@ -245,12 +295,7 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
     keys_.clear();
     keys_.reserve(Cpu().size());
     for (const auto& d : Cpu()) {
-      const std::uint8_t bucket_order
-        = d.flags.IsSet(oxygen::engine::PassMaskBit::kOpaque)
-        ? static_cast<std::uint8_t>(0)
-        : (d.flags.IsSet(oxygen::engine::PassMaskBit::kMasked)
-              ? static_cast<std::uint8_t>(1)
-              : static_cast<std::uint8_t>(2));
+      const std::uint8_t bucket_order = ResolveBucketOrder(d.flags);
       keys_.push_back(SortingKey {
         .pass_mask = d.flags,
         .bucket_order = bucket_order,
@@ -273,35 +318,34 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
   for (std::size_t i = 0; i < n; ++i) {
     perm[i] = static_cast<std::uint32_t>(i);
   }
-  std::stable_sort(
-    perm.begin(), perm.end(), [&](std::uint32_t a, std::uint32_t b) {
-      const auto& ka = keys_[a];
-      const auto& kb = keys_[b];
-      if (ka.bucket_order != kb.bucket_order) {
-        return ka.bucket_order < kb.bucket_order;
-      }
+  std::ranges::stable_sort(perm, [&](std::uint32_t a, std::uint32_t b) {
+    const auto& ka = keys_[a];
+    const auto& kb = keys_[b];
+    if (ka.bucket_order != kb.bucket_order) {
+      return ka.bucket_order < kb.bucket_order;
+    }
 
-      // Transparent: strict back-to-front ordering by distance first.
-      if (ka.bucket_order == 2) {
-        if (ka.sort_distance2 != kb.sort_distance2) {
-          return ka.sort_distance2 > kb.sort_distance2;
-        }
+    // Transparent: strict back-to-front ordering by distance first.
+    if (ka.bucket_order == 2) {
+      if (ka.sort_distance2 != kb.sort_distance2) {
+        return ka.sort_distance2 > kb.sort_distance2;
       }
+    }
 
-      if (ka.pass_mask != kb.pass_mask) {
-        return ka.pass_mask < kb.pass_mask;
-      }
-      if (ka.material_index != kb.material_index) {
-        return ka.material_index < kb.material_index;
-      }
-      if (ka.vb_srv != kb.vb_srv) {
-        return ka.vb_srv < kb.vb_srv;
-      }
-      if (ka.ib_srv != kb.ib_srv) {
-        return ka.ib_srv < kb.ib_srv;
-      }
-      return a < b;
-    });
+    if (ka.pass_mask != kb.pass_mask) {
+      return ka.pass_mask < kb.pass_mask;
+    }
+    if (ka.material_index != kb.material_index) {
+      return ka.material_index < kb.material_index;
+    }
+    if (ka.vb_srv != kb.vb_srv) {
+      return ka.vb_srv < kb.vb_srv;
+    }
+    if (ka.ib_srv != kb.ib_srv) {
+      return ka.ib_srv < kb.ib_srv;
+    }
+    return a < b;
+  });
 
   std::vector<oxygen::engine::DrawMetadata> reordered;
   reordered.reserve(n);
@@ -320,7 +364,7 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
   partitions_.clear();
   if (!Cpu().empty()) {
     auto current_mask = Cpu().front().flags;
-    std::uint32_t range_begin = 0u;
+    std::uint32_t range_begin = 0U;
     for (std::uint32_t i = 1; i < u_draw_count; ++i) {
       const auto mask = Cpu()[i].flags;
       if (mask != current_mask) {
@@ -345,8 +389,8 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
   last_sort_time_ = std::chrono::duration_cast<std::chrono::microseconds>(
     t_sort_end - t_sort_begin);
   DLOG_F(2,
-    "DrawMetadataEmitter: pre=0x{:016X} post=0x{:016X} draws={} partitions={} "
-    "keys_bytes={} sort_time_us={}",
+    "BuildSortingAndPartitions: pre=0x{:016X} post=0x{:016X} draws={} "
+    "partitions={} keys_bytes={} sort_time_us={}",
     last_pre_sort_hash_, last_order_hash_, Cpu().size(), partitions_.size(),
     keys_.size() * sizeof(SortingKey), last_sort_time_.count());
   ++sort_calls_count_;
@@ -365,19 +409,17 @@ auto DrawMetadataEmitter::EnsureFrameResources() -> void
   const auto count = static_cast<std::uint32_t>(Cpu().size());
   auto result = draw_metadata_buffer_.Allocate(count);
   if (!result) {
-    LOG_F(ERROR, "DrawMetadataEmitter: transient allocation failed: {}",
-      result.error().message());
+    LOG_F(ERROR, "Transient allocation failed: {}", result.error().message());
     return;
   }
   const auto alloc = *result;
   auto* ptr = alloc.mapped_ptr;
-  if (!ptr) {
-    LOG_F(ERROR, "DrawMetadataEmitter: mapped pointer is null after allocate");
+  if (ptr == nullptr) {
+    LOG_F(ERROR, "Mapped pointer is null after allocate");
     return;
   }
 
-  DLOG_F(1, "DrawMetadataEmitter writing {} draw metadata to {}", count,
-    fmt::ptr(ptr));
+  DLOG_F(1, "Writing {} draw metadata to {}", count, fmt::ptr(ptr));
 
   std::memcpy(
     ptr, Cpu().data(), Cpu().size() * sizeof(oxygen::engine::DrawMetadata));
@@ -393,26 +435,25 @@ auto DrawMetadataEmitter::EnsureFrameResources() -> void
       = static_cast<std::uint32_t>(instance_transform_indices_.size());
     auto instance_result = instance_data_buffer_.Allocate(instance_count);
     if (!instance_result) {
-      LOG_F(ERROR, "DrawMetadataEmitter: instance data allocation failed: {}",
+      LOG_F(ERROR, "Instance data allocation failed: {}",
         instance_result.error().message());
       return;
     }
     const auto instance_alloc = *instance_result;
     auto* instance_ptr = instance_alloc.mapped_ptr;
-    if (instance_ptr) {
+    if (instance_ptr != nullptr) {
       std::memcpy(instance_ptr, instance_transform_indices_.data(),
         instance_transform_indices_.size() * sizeof(std::uint32_t));
       instance_data_srv_index_ = instance_alloc.srv;
-      DLOG_F(1, "DrawMetadataEmitter: uploaded {} instance transform indices",
-        instance_count);
+      DLOG_F(1, "Uploaded {} instance transform indices", instance_count);
     }
   }
 }
 
-auto DrawMetadataEmitter::GetDrawMetadataSrvIndex() const -> ShaderVisibleIndex
+auto DrawMetadataEmitter::GetDrawMetadataSrvIndex() -> ShaderVisibleIndex
 {
   if (draw_metadata_srv_index_ == kInvalidShaderVisibleIndex) {
-    const_cast<DrawMetadataEmitter*>(this)->EnsureFrameResources();
+    EnsureFrameResources();
   }
   return draw_metadata_srv_index_;
 }
@@ -456,6 +497,7 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
   if (Cpu().empty()) {
     return;
   }
+  const auto initial_draw_count = Cpu().size();
 
   // Build map from batching key to list of draw indices
   std::unordered_map<BatchingKey, std::vector<std::uint32_t>, BatchingKeyHash>
@@ -495,8 +537,8 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
   // Rebuild cpu_ with batched draws and populate instance data
   std::vector<oxygen::engine::DrawMetadata> batched_cpu;
   std::vector<SortingKey> batched_keys;
-  batched_cpu.reserve(batch_map.size());
-  batched_keys.reserve(batch_map.size());
+  batched_cpu.reserve(initial_draw_count);
+  batched_keys.reserve(initial_draw_count);
   instance_transform_indices_.clear();
   instance_transform_indices_.reserve(Cpu().size());
 
@@ -527,12 +569,7 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
     batched_cpu.push_back(dm);
 
     // Build sorting key for this batched draw
-    const std::uint8_t bucket_order
-      = dm.flags.IsSet(oxygen::engine::PassMaskBit::kOpaque)
-      ? static_cast<std::uint8_t>(0)
-      : (dm.flags.IsSet(oxygen::engine::PassMaskBit::kMasked)
-            ? static_cast<std::uint8_t>(1)
-            : static_cast<std::uint8_t>(2));
+    const std::uint8_t bucket_order = ResolveBucketOrder(dm.flags);
 
     // For batched draws, use the average sort distance (or first item's)
     float batch_sort_distance2 = 0.0F;
@@ -553,10 +590,8 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
   Cpu().swap(batched_cpu);
   keys_.swap(batched_keys);
 
-  DLOG_F(1,
-    "DrawMetadataEmitter: batched {} draws into {} batches, {} instance "
-    "indices",
-    total_emits_, Cpu().size(), instance_transform_indices_.size());
+  DLOG_F(1, "Batched {} draws into {} batches, {} instance indices",
+    initial_draw_count, Cpu().size(), instance_transform_indices_.size());
 }
 
 } // namespace oxygen::renderer::resources
