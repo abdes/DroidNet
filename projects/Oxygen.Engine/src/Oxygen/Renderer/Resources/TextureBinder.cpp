@@ -565,10 +565,10 @@ private:
     bool is_placeholder { true };
     bool load_failed { false };
     bool evicted { false };
-    bindless::Generation pending_generation { 0U };
 
     std::optional<engine::upload::UploadTicket> pending_ticket;
     std::optional<graphics::TextureViewDescription> pending_view_desc;
+    VersionedBindlessHandle pending_handle;
 
     std::shared_ptr<graphics::Texture> texture;
     std::shared_ptr<graphics::Texture> placeholder_texture;
@@ -578,7 +578,7 @@ private:
     };
 
     ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
-    bindless::HeapIndex descriptor_index { kInvalidBindlessHeapIndex };
+    VersionedBindlessHandle descriptor_handle;
   };
 
   struct CallbackGate {
@@ -589,7 +589,7 @@ private:
   struct PendingUpload {
     content::ResourceKey key;
     std::shared_ptr<data::TextureResource> resource;
-    bindless::Generation generation { 0U };
+    VersionedBindlessHandle handle;
   };
 
   struct PendingEviction {
@@ -604,7 +604,7 @@ private:
     const char* reason) -> void;
 
   auto OnTextureResourceLoaded(content::ResourceKey resource_key,
-    bindless::Generation generation,
+    VersionedBindlessHandle handle,
     std::shared_ptr<data::TextureResource> tex_res) -> void;
 
   auto SubmitQueuedTextureUploads(std::size_t max_bytes) -> void;
@@ -632,6 +632,8 @@ private:
   auto EnsureGenerationCapacity_(bindless::HeapIndex descriptor_index) -> void;
   [[nodiscard]] auto CurrentGeneration_(const TextureEntry& entry) const
     -> bindless::Generation;
+  [[nodiscard]] auto CurrentDescriptorHandle_(const TextureEntry& entry) const
+    -> VersionedBindlessHandle;
 
   auto SubmitTextureData(const std::shared_ptr<graphics::Texture>& texture,
     std::span<const std::byte> data, const char* debug_name) -> void;
@@ -666,6 +668,9 @@ private:
   std::uint64_t total_upload_submissions_ { 0U };
   std::uint64_t cache_hits_ { 0U };
   std::uint64_t load_failures_ { 0U };
+  std::uint64_t lifecycle_generation_bumps_ { 0U };
+  std::uint64_t lifecycle_stale_discard_count_ { 0U };
+  std::uint64_t lifecycle_async_enqueued_ { 0U };
 };
 
 TextureBinder::TextureBinder(observer_ptr<Graphics> gfx,
@@ -778,7 +783,7 @@ auto TextureBinder::Impl::GetOrAllocate(
   if (resource_key.IsFallback()) {
     // This is an extremely hot path in typical renderer usage.
     // Keep the trace available, but only at very high verbosity.
-    DLOG_F(6, "TextureBinder GetOrAllocate: fallback sentinel -> placeholder");
+    DLOG_F(6, "GetOrAllocate: fallback sentinel -> placeholder");
     return placeholder_tex_svi_;
   }
 
@@ -786,15 +791,12 @@ auto TextureBinder::Impl::GetOrAllocate(
   if (it != texture_map_.end()) {
     ++cache_hits_;
     // Cache hits can be extremely frequent (per-frame, per-material).
-    DLOG_F(6, "TextureBinder GetOrAllocate: cache hit -> srv_index {}",
-      it->second.srv_index);
+    DLOG_F(6, "GetOrAllocate: cache hit -> srv_index {}", it->second.srv_index);
     if (it->second.evicted) {
       auto& entry = it->second;
-      DLOG_F(4,
-        "TextureBinder GetOrAllocate: evicted entry -> reloading resource {}",
+      DLOG_F(4, "GetOrAllocate: evicted entry -> reloading resource {}",
         resource_key);
-      LOG_F(INFO,
-        "TextureBinder: reloading evicted resource {} (reason={}, gen={})",
+      LOG_F(INFO, "Reloading evicted resource {} (reason={}, gen={})",
         resource_key, entry.last_eviction_reason,
         CurrentGeneration_(entry).get());
       entry.evicted = false;
@@ -802,7 +804,7 @@ auto TextureBinder::Impl::GetOrAllocate(
       entry.is_placeholder = true;
       entry.pending_ticket.reset();
       entry.pending_view_desc.reset();
-      entry.pending_generation = bindless::Generation { 0U };
+      entry.pending_handle = VersionedBindlessHandle {};
       entry.texture = placeholder_texture_;
       entry.placeholder_texture = placeholder_texture_;
       InitiateAsyncLoad(resource_key, entry, "evicted_entry");
@@ -813,7 +815,7 @@ auto TextureBinder::Impl::GetOrAllocate(
     return it->second.srv_index;
   }
 
-  DLOG_SCOPE_F(4, "TextureBinder GetOrAllocate (allocate)");
+  DLOG_SCOPE_F(4, "GetOrAllocate (allocate)");
   DLOG_F(4, "resource: {}", resource_key);
 
   TextureEntry entry;
@@ -854,7 +856,7 @@ auto TextureBinder::Impl::GetOrAllocate(
     entry.is_placeholder = false;
     entry.texture = error_texture_;
     entry.srv_index = error_text_svi_;
-    entry.descriptor_index = kInvalidBindlessHeapIndex;
+    entry.descriptor_handle = VersionedBindlessHandle {};
 
     texture_map_.emplace(resource_key, std::move(entry));
     DLOG_F(
@@ -862,10 +864,12 @@ auto TextureBinder::Impl::GetOrAllocate(
     return error_text_svi_;
   }
 
-  entry.descriptor_index = handle.GetBindlessHandle();
-  EnsureGenerationCapacity_(entry.descriptor_index);
-  (void)slot_generations_.Load(entry.descriptor_index);
-  DLOG_F(4, "descriptor_index: {}", entry.descriptor_index);
+  const auto descriptor_index = handle.GetBindlessHandle();
+  EnsureGenerationCapacity_(descriptor_index);
+  const auto generation = slot_generations_.Load(descriptor_index);
+  entry.descriptor_handle
+    = VersionedBindlessHandle { descriptor_index, generation };
+  DLOG_F(4, "descriptor_index: {}", descriptor_index);
 
   entry.srv_index
     = ShaderVisibleIndex(allocator.GetShaderVisibleIndex(handle).get());
@@ -921,8 +925,7 @@ TextureBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
         return;
       }
 
-      LOG_F(2, "TextureBinder: eviction notification for {} (reason={})",
-        event.key, event.reason);
+      LOG_F(2, "Eviction for {} (reason={})", event.key, event.reason);
 
       std::scoped_lock eviction_lock(eviction_mutex_);
       pending_evictions_.push_back(PendingEviction {
@@ -989,6 +992,10 @@ TextureBinder::Impl::~Impl()
   }
 
   LOG_SCOPE_F(INFO, "TextureBinder Statistics");
+  LOG_F(INFO, "lifecycle.generation_bumps : {}", lifecycle_generation_bumps_);
+  LOG_F(
+    INFO, "lifecycle.stale_discards   : {}", lifecycle_stale_discard_count_);
+  LOG_F(INFO, "lifecycle.async_enqueued   : {}", lifecycle_async_enqueued_);
   LOG_F(INFO, "GetOrAllocate calls  : {}", total_get_or_allocate_calls_);
   LOG_F(INFO, "upload submissions   : {}", total_upload_submissions_);
   LOG_F(INFO, "cache hits     : {}", cache_hits_);
@@ -1019,7 +1026,8 @@ auto TextureBinder::Impl::OnFrameStart() -> void
     }
 
     if (entry.evicted
-      || entry.pending_generation != CurrentGeneration_(entry)) {
+      || entry.pending_handle != CurrentDescriptorHandle_(entry)) {
+      ++lifecycle_stale_discard_count_;
       DLOG_F(4,
         "Discarding upload completion for {} due to eviction/generation",
         resource_key);
@@ -1030,7 +1038,7 @@ auto TextureBinder::Impl::OnFrameStart() -> void
       entry.texture = placeholder_texture_;
       entry.pending_ticket.reset();
       entry.pending_view_desc.reset();
-      entry.pending_generation = bindless::Generation { 0U };
+      entry.pending_handle = VersionedBindlessHandle {};
       continue;
     }
 
@@ -1044,7 +1052,8 @@ auto TextureBinder::Impl::OnFrameStart() -> void
     DLOG_SCOPE_F(4, "Upload completion");
     DLOG_F(4, "resource: {}", resource_key);
     DLOG_F(4, "ticket: {}", ticket.id);
-    DLOG_F(4, "descriptor_index: {}", entry.descriptor_index);
+    DLOG_F(
+      4, "descriptor_index: {}", entry.descriptor_handle.ToBindlessHandle());
     DLOG_F(4, "is_placeholder: {}", entry.is_placeholder);
     DLOG_F(4, "load_failed: {}", entry.load_failed);
 
@@ -1080,15 +1089,15 @@ auto TextureBinder::Impl::OnFrameStart() -> void
       entry.is_placeholder = false;
       entry.load_failed = false;
 
-      if (entry.descriptor_index == kInvalidBindlessHeapIndex
+      if (!entry.descriptor_handle.IsValid()
         || !entry.pending_view_desc.has_value()) {
         entry.pending_ticket.reset();
         entry.pending_view_desc.reset();
         continue;
       }
 
-      const bool updated = registry.UpdateView(
-        *entry.texture, entry.descriptor_index, *entry.pending_view_desc);
+      const bool updated = registry.UpdateView(*entry.texture,
+        entry.descriptor_handle.ToBindlessHandle(), *entry.pending_view_desc);
       if (!updated) {
         LOG_F(ERROR,
           "Failed to update SRV view after upload completion (ticket={})",
@@ -1100,7 +1109,7 @@ auto TextureBinder::Impl::OnFrameStart() -> void
 
       LOG_F(INFO,
         "Repointed descriptor {} to final texture for resource {} (ticket={})",
-        entry.descriptor_index, resource_key, ticket.id);
+        entry.descriptor_handle.ToBindlessHandle(), resource_key, ticket.id);
 
       if (entry.placeholder_texture
         && entry.placeholder_texture != entry.texture
@@ -1115,7 +1124,7 @@ auto TextureBinder::Impl::OnFrameStart() -> void
     // Clear pending ticket and view desc after handling
     entry.pending_ticket.reset();
     entry.pending_view_desc.reset();
-    entry.pending_generation = bindless::Generation { 0U };
+    entry.pending_handle = VersionedBindlessHandle {};
   }
 
   SubmitQueuedTextureUploads(kMaxTextureUploadBytesPerFrame);
@@ -1180,8 +1189,7 @@ auto TextureBinder::Impl::DumpEstimatedTextureMemory(
   const auto emit_count = (std::min)(records.size(), top_n);
 
   LOG_F(INFO,
-    "TextureBinder: estimated GPU texture memory: total={} across {} textures "
-    "(top {} shown)",
+    "Estimated GPU texture memory: total={} across {} textures (top {} shown)",
     PrettyBytes(total_bytes).c_str(), count, emit_count);
 
   for (std::size_t i = 0U; i < emit_count; ++i) {
@@ -1301,14 +1309,15 @@ auto TextureBinder::Impl::InitiateAsyncLoad(content::ResourceKey resource_key,
   LOG_F(INFO,
     "Initiating async load for resource key: {} (reason={}, gen={}, "
     "pending={}, placeholder={}, evicted={}, last_eviction_reason={})",
-    resource_key, reason, CurrentGeneration_(entry).get(),
+    resource_key, reason,
+    CurrentDescriptorHandle_(entry).GenerationValue().get(),
     entry.pending_ticket.has_value(), entry.is_placeholder, entry.evicted,
     entry.last_eviction_reason);
 
-  const auto generation = CurrentGeneration_(entry);
+  const auto handle = CurrentDescriptorHandle_(entry);
 
   texture_loader_->StartLoadTexture(resource_key,
-    [gate = callback_gate_, this, resource_key, generation](
+    [gate = callback_gate_, this, resource_key, handle](
       // NOLINTNEXTLINE(*-unnecessary-value-param)
       std::shared_ptr<data::TextureResource> tex_res) -> void {
       if (!gate) {
@@ -1322,8 +1331,7 @@ auto TextureBinder::Impl::InitiateAsyncLoad(content::ResourceKey resource_key,
         }
       }
 
-      this->OnTextureResourceLoaded(
-        resource_key, generation, std::move(tex_res));
+      this->OnTextureResourceLoaded(resource_key, handle, std::move(tex_res));
     });
 }
 
@@ -1344,12 +1352,12 @@ auto TextureBinder::Impl::InitiateAsyncLoad(content::ResourceKey resource_key,
    "upload pending" state by setting `pending_ticket` and `pending_view_desc`.
 
  @param resource_key Opaque key for the entry being updated.
- @param generation Generation captured when the load request was issued.
+ @param handle Versioned descriptor handle captured when the load request was
+   issued.
  @param tex_res Loaded texture resource, or `nullptr` on load failure.
 */
 auto TextureBinder::Impl::OnTextureResourceLoaded(
-  const content::ResourceKey resource_key,
-  const bindless::Generation generation,
+  const content::ResourceKey resource_key, const VersionedBindlessHandle handle,
   // NOLINTNEXTLINE(*-unnecessary-value-param) - moved from a lambda capture
   std::shared_ptr<data::TextureResource> tex_res) -> void
 {
@@ -1360,9 +1368,10 @@ auto TextureBinder::Impl::OnTextureResourceLoaded(
     pending_uploads_.push_back(PendingUpload {
       .key = resource_key,
       .resource = std::move(tex_res),
-      .generation = generation,
+      .handle = handle,
     });
   }
+  ++lifecycle_async_enqueued_;
 
   if (texture_loader_) {
     (void)texture_loader_->ReleaseResource(resource_key);
@@ -1399,7 +1408,20 @@ auto TextureBinder::Impl::EnsureGenerationCapacity_(
 auto TextureBinder::Impl::CurrentGeneration_(const TextureEntry& entry) const
   -> bindless::Generation
 {
-  return slot_generations_.Load(entry.descriptor_index);
+  if (!entry.descriptor_handle.IsValid()) {
+    return bindless::Generation { 0U };
+  }
+  return slot_generations_.Load(entry.descriptor_handle.ToBindlessHandle());
+}
+
+auto TextureBinder::Impl::CurrentDescriptorHandle_(
+  const TextureEntry& entry) const -> VersionedBindlessHandle
+{
+  if (!entry.descriptor_handle.IsValid()) {
+    return VersionedBindlessHandle {};
+  }
+  return VersionedBindlessHandle { entry.descriptor_handle.ToBindlessHandle(),
+    CurrentGeneration_(entry) };
 }
 
 auto TextureBinder::Impl::SubmitQueuedTextureUploads(
@@ -1432,7 +1454,8 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
     }
     auto& entry = *entry_ptr;
 
-    if (entry.evicted || pending.generation != CurrentGeneration_(entry)) {
+    if (entry.evicted || pending.handle != CurrentDescriptorHandle_(entry)) {
+      ++lifecycle_stale_discard_count_;
       DLOG_F(4,
         "Discarding pending upload for {} due to eviction/generation mismatch",
         pending.key);
@@ -1450,8 +1473,8 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
     const auto data_bytes = pending.resource->GetDataSize();
     if (data_bytes > max_bytes && submitted_bytes == 0U) {
       LOG_F(WARNING,
-        "TextureBinder: texture {} requires {} bytes; exceeds per-frame "
-        "budget {}. Submitting anyway.",
+        "Texture {} requires {} bytes; exceeds per-frame budget {}. Submitting "
+        "anyway.",
         pending.key, data_bytes, max_bytes);
     } else if (submitted_bytes + data_bytes > max_bytes) {
       {
@@ -1478,15 +1501,15 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
       switch (failure.reason) {
       case PrepareTexture2DUploadFailure::Reason::kUnsupportedTextureType:
         LOG_F(ERROR,
-          "TextureBinder async upload only supports 2D textures, 2D arrays, "
-          "and cubemaps");
+          "Texture async upload only supports 2D textures, 2D arrays, and "
+          "cubemaps");
         break;
       case PrepareTexture2DUploadFailure::Reason::kUnsupportedFormat:
-        LOG_F(ERROR,
-          "TextureBinder upload only supports uncompressed and BC7 formats");
+        LOG_F(
+          ERROR, "Texture upload only supports uncompressed and BC7 formats");
         break;
       case PrepareTexture2DUploadFailure::Reason::kUnsupportedDepth:
-        LOG_F(ERROR, "TextureBinder async upload only supports 2D textures");
+        LOG_F(ERROR, "Texture async upload only supports 2D textures");
         break;
       case PrepareTexture2DUploadFailure::Reason::kCreateTextureException:
         LOG_F(ERROR, "CreateTexture threw during async load");
@@ -1592,24 +1615,29 @@ auto TextureBinder::Impl::ProcessEvictions() -> void
 
     entry.evicted = true;
     entry.last_eviction_reason = eviction.reason;
-    slot_generations_.Bump(entry.descriptor_index);
-    entry.pending_generation = bindless::Generation { 0U };
+    if (entry.descriptor_handle.IsValid()) {
+      const auto descriptor_index = entry.descriptor_handle.ToBindlessHandle();
+      slot_generations_.Bump(descriptor_index);
+      ++lifecycle_generation_bumps_;
+      entry.descriptor_handle = VersionedBindlessHandle { descriptor_index,
+        slot_generations_.Load(descriptor_index) };
+    }
+    entry.pending_handle = VersionedBindlessHandle {};
     entry.pending_ticket.reset();
     entry.pending_view_desc.reset();
 
     auto old_texture = entry.texture;
     auto old_placeholder = entry.placeholder_texture;
 
-    if (entry.descriptor_index != kInvalidBindlessHeapIndex
-      && placeholder_texture_) {
+    if (entry.descriptor_handle.IsValid() && placeholder_texture_) {
       const auto view_desc
         = MakeTextureSrvViewDesc(Format::kRGBA8UNorm, {}, {});
-      const bool updated = registry.UpdateView(
-        *placeholder_texture_, entry.descriptor_index, view_desc);
+      const bool updated = registry.UpdateView(*placeholder_texture_,
+        entry.descriptor_handle.ToBindlessHandle(), view_desc);
       if (!updated) {
         LOG_F(ERROR,
           "TextureBinder eviction failed to repoint descriptor {} for {}",
-          entry.descriptor_index, eviction.key);
+          entry.descriptor_handle.ToBindlessHandle(), eviction.key);
       }
     }
 
@@ -1634,12 +1662,12 @@ auto TextureBinder::Impl::ProcessEvictions() -> void
       }
     }
 
-    LOG_F(INFO, "TextureBinder: eviction processed for {} (reason={})",
-      eviction.key, eviction.reason);
+    LOG_F(INFO, "Eviction processed for {} (reason={})", eviction.key,
+      eviction.reason);
   }
 
   if (evictions_without_entry != 0U) {
-    LOG_F(INFO, "TextureBinder: {} eviction(s) had no resident texture entry",
+    LOG_F(INFO, "{} eviction(s) had no resident texture entry",
       evictions_without_entry);
   }
 }
@@ -1724,7 +1752,7 @@ auto TextureBinder::Impl::SubmitTextureUpload(
   if (!upload_result) {
     const auto error_code
       = oxygen::engine::upload::make_error_code(upload_result.error());
-    LOG_F(ERROR, "TextureBinder upload failed ({}): {}", desc.debug_name,
+    LOG_F(ERROR, "Texture upload failed ({}): {}", desc.debug_name,
       error_code.message());
 
     // Upload submission failure: keep the placeholder bound.
@@ -1749,7 +1777,7 @@ auto TextureBinder::Impl::SubmitTextureUpload(
   // Store pending ticket + view desc for OnFrameStart() to observe; also
   // set the entry.texture now so UpdateView can target it when complete.
   entry.pending_ticket = *upload_result;
-  entry.pending_generation = CurrentGeneration_(entry);
+  entry.pending_handle = CurrentDescriptorHandle_(entry);
   entry.pending_view_desc = view_desc;
   entry.texture = std::move(new_texture);
   entry.is_placeholder = true;
@@ -1786,13 +1814,16 @@ auto TextureBinder::Impl::HandleLoadFailure(
   DLOG_F(3, "policy: {}",
     (policy == FailurePolicy::kBindErrorTexture) ? "BindErrorTexture"
                                                  : "KeepPlaceholderBound");
-  DLOG_F(3, "descriptor_index: {}", entry.descriptor_index);
+  DLOG_F(3, "descriptor_index: {}", entry.descriptor_handle.ToBindlessHandle());
   DLOG_F(3, "is_placeholder: {}", entry.is_placeholder);
   DLOG_F(3, "load_failed: {}", entry.load_failed);
   DLOG_F(3, "releasing_new_texture: {}", static_cast<bool>(texture_to_release));
 
   ++load_failures_;
   entry.load_failed = true;
+  entry.pending_ticket.reset();
+  entry.pending_view_desc.reset();
+  entry.pending_handle = VersionedBindlessHandle {};
 
   if (texture_to_release) {
     auto& registry = gfx_->GetResourceRegistry();
@@ -1817,7 +1848,7 @@ auto TextureBinder::Impl::HandleLoadFailure(
   // If we already own a descriptor index, repoint it immediately to the error
   // texture so the shader sees the error indicator without requiring further
   // UI interaction.
-  if (entry.descriptor_index == kInvalidBindlessHeapIndex) {
+  if (!entry.descriptor_handle.IsValid()) {
     return;
   }
 
@@ -1844,12 +1875,12 @@ auto TextureBinder::Impl::TryRepointEntryToErrorTexture(
 
   DLOG_SCOPE_F(3, "TextureBinder RepointEntryToErrorTexture");
   DLOG_F(3, "resource: {}", resource_key);
-  DLOG_F(3, "descriptor_index: {}", entry.descriptor_index);
+  DLOG_F(3, "descriptor_index: {}", entry.descriptor_handle.ToBindlessHandle());
 
   auto& registry = gfx_->GetResourceRegistry();
   const auto view_desc = MakeTextureSrvViewDesc(Format::kRGBA8UNorm, {}, {});
-  const bool updated
-    = registry.UpdateView(*error_texture_, entry.descriptor_index, view_desc);
+  const bool updated = registry.UpdateView(
+    *error_texture_, entry.descriptor_handle.ToBindlessHandle(), view_desc);
   if (!updated) {
     LOG_F(ERROR, "Failed to repoint descriptor to error texture for {}",
       resource_key);
@@ -1857,7 +1888,7 @@ auto TextureBinder::Impl::TryRepointEntryToErrorTexture(
   }
 
   LOG_F(INFO, "Repointed descriptor {} to error texture for resource {}",
-    entry.descriptor_index, resource_key);
+    entry.descriptor_handle.ToBindlessHandle(), resource_key);
   return true;
 }
 
@@ -1902,12 +1933,12 @@ auto TextureBinder::Impl::SubmitTextureData(
   const auto& desc = texture->GetDescriptor();
   const auto& format_info = graphics::detail::GetFormatInfo(desc.format);
   if (format_info.block_size != 1U || format_info.bytes_per_block == 0U) {
-    LOG_F(ERROR, "TextureBinder upload only supports non-BC formats");
+    LOG_F(ERROR, "Texture upload only supports non-BC formats");
     return;
   }
 
   if (desc.depth != 1U) {
-    LOG_F(ERROR, "TextureBinder upload only supports Texture2D");
+    LOG_F(ERROR, "Texture upload only supports Texture2D");
     return;
   }
 
@@ -1916,7 +1947,7 @@ auto TextureBinder::Impl::SubmitTextureData(
   const auto expected_bytes = static_cast<std::size_t>(bytes_per_row)
     * static_cast<std::size_t>(desc.height);
   if (data.size() != expected_bytes) {
-    LOG_F(ERROR, "TextureBinder upload expected {} bytes for {}x{}, got {}",
+    LOG_F(ERROR, "Texture upload expected {} bytes for {}x{}, got {}",
       expected_bytes, desc.width, desc.height, data.size());
     return;
   }
@@ -1946,7 +1977,7 @@ auto TextureBinder::Impl::SubmitTextureData(
   if (!result) {
     const auto error_code
       = oxygen::engine::upload::make_error_code(result.error());
-    LOG_F(ERROR, "TextureBinder upload failed ({}): {}", debug_name,
+    LOG_F(ERROR, "Texture upload failed ({}): {}", debug_name,
       error_code.message());
   }
 }

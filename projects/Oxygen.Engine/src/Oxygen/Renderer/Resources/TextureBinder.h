@@ -57,10 +57,20 @@ namespace oxygen::renderer::resources {
    index immediately. The SRV index is the value materials use in shaders and
    must remain stable for the lifetime of the entry.
  - **Descriptor repointing model**: The implementation separates the shader
-   visible SRV index from the descriptor backing that index. When a per-entry
-   descriptor exists, the binder may `UpdateView` on that descriptor to point it
-   at a new `Texture` while keeping the same SRV index. This enables transparent
-   replacement of placeholder textures with final textures.
+
+ visible SRV index from the descriptor backing that index. When a per-entry
+
+ descriptor exists, the binder may `UpdateView` on that descriptor to point it
+
+ at a new `Texture` while keeping the same SRV index. This enables transparent
+
+ replacement of placeholder textures with final textures.
+ - **Versioned
+ descriptor identity**: Each per-entry descriptor is tracked as a
+   Nexus-style
+ versioned handle (index + generation). Async completions and
+   queued uploads
+ are accepted only if their captured generation still matches.
 
  ### Placeholder / error strategy
 
