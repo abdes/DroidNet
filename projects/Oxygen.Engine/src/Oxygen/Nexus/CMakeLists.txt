@@ -56,6 +56,7 @@ set(
   "api_export.h"
   "DomainIndexMapper.h"
   "FrameDrivenSlotReuse.h"
+  "FrameDrivenIndexReuse.h"
   "GenerationTracker.h"
   "TimelineGatedSlotReuse.h"
   "Types/Domain.h"

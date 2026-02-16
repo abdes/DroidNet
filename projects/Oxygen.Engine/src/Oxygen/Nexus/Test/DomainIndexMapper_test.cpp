@@ -2,114 +2,19 @@
 // Tests for DomainIndexMapper
 //===----------------------------------------------------------------------===//
 
-#include <atomic>
-#include <chrono>
-#include <functional>
+#include <limits>
 #include <thread>
 #include <vector>
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Nexus/DomainIndexMapper.h>
+#include <Oxygen/Nexus/Test/NexusMocks.h>
 
 using oxygen::graphics::DescriptorHandle;
+using oxygen::nexus::testing::FakeAllocator;
 
 namespace {
-
-//! Fake DescriptorAllocator used to drive DomainIndexMapper tests.
-class FakeAllocator : public oxygen::graphics::DescriptorAllocator {
-public:
-  FakeAllocator()
-  {
-    // provide small domain capacities via internal map
-    bases_[{
-      oxygen::graphics::ResourceViewType::kTexture_SRV,
-      oxygen::graphics::DescriptorVisibility::kShaderVisible,
-    }] = oxygen::bindless::HeapIndex { 10u };
-  }
-
-  auto SetBase(oxygen::graphics::ResourceViewType vt,
-    oxygen::graphics::DescriptorVisibility vis,
-    oxygen::bindless::HeapIndex base) -> void
-  {
-    bases_[{ vt, vis }] = base;
-  }
-
-  auto Allocate(oxygen::graphics::ResourceViewType,
-    oxygen::graphics::DescriptorVisibility) -> DescriptorHandle override
-  {
-    return DescriptorHandle {};
-  }
-
-  auto Release(DescriptorHandle&) -> void override { }
-
-  auto CopyDescriptor(const DescriptorHandle&, const DescriptorHandle&)
-    -> void override
-  {
-  }
-
-  [[nodiscard]] auto GetRemainingDescriptorsCount(
-    oxygen::graphics::ResourceViewType,
-    oxygen::graphics::DescriptorVisibility) const
-    -> oxygen::bindless::Count override
-  {
-    return oxygen::bindless::Count { 5u };
-  }
-
-  [[nodiscard]] auto GetDomainBaseIndex(
-    oxygen::graphics::ResourceViewType view_type,
-    oxygen::graphics::DescriptorVisibility vis) const
-    -> oxygen::bindless::HeapIndex override
-  {
-    auto it = bases_.find({ view_type, vis });
-    if (it != bases_.end()) {
-      return it->second;
-    }
-    return oxygen::bindless::HeapIndex { 0u };
-  }
-
-  [[nodiscard]] auto Reserve(oxygen::graphics::ResourceViewType,
-    oxygen::graphics::DescriptorVisibility, oxygen::bindless::Count)
-    -> std::optional<oxygen::bindless::HeapIndex> override
-  {
-    return std::nullopt;
-  }
-
-  [[nodiscard]] auto Contains(const DescriptorHandle&) const -> bool override
-  {
-    return false;
-  }
-
-  [[nodiscard]] auto GetAllocatedDescriptorsCount(
-    oxygen::graphics::ResourceViewType,
-    oxygen::graphics::DescriptorVisibility) const
-    -> oxygen::bindless::Count override
-  {
-    return oxygen::bindless::Count { 0u };
-  }
-
-  [[nodiscard]] auto GetShaderVisibleIndex(
-    const DescriptorHandle& /*handle*/) const noexcept
-    -> oxygen::bindless::ShaderVisibleIndex override
-  {
-    return oxygen::kInvalidShaderVisibleIndex;
-  }
-
-private:
-  struct KeyHash {
-    auto operator()(const std::pair<oxygen::graphics::ResourceViewType,
-      oxygen::graphics::DescriptorVisibility>& k) const noexcept -> std::size_t
-    {
-      return (static_cast<std::size_t>(k.first) << 16)
-        ^ static_cast<std::size_t>(k.second);
-    }
-  };
-  std::unordered_map<std::pair<oxygen::graphics::ResourceViewType,
-                       oxygen::graphics::DescriptorVisibility>,
-    oxygen::bindless::HeapIndex, KeyHash>
-    bases_;
-};
 
 //! Ensure that a known domain key maps to the expected absolute range and
 //! that a sample index resolves back to the same domain key.
@@ -131,12 +36,14 @@ NOLINT_TEST(DomainIndexMapperTest,
   oxygen::nexus::DomainIndexMapper mapper(alloc, { dk });
 
   // Act
+  constexpr b::HeapIndex kTestIndex { 12U };
   const auto range = mapper.GetDomainRange(dk);
-  const auto res = mapper.ResolveDomain(b::HeapIndex { 12u });
+  const auto res = mapper.ResolveDomain(kTestIndex);
 
   // Assert
   ASSERT_TRUE(range.has_value());
-  EXPECT_EQ(range->start.get(), 10u);
+  EXPECT_EQ(
+    range->start.get(), oxygen::nexus::testing::kDefaultBaseIndex.get());
   EXPECT_TRUE(res.has_value());
   EXPECT_EQ(res->view_type, dk.view_type);
   EXPECT_EQ(res->visibility, dk.visibility);
@@ -153,7 +60,6 @@ NOLINT_TEST(
   using ResourceViewType = oxygen::graphics::ResourceViewType;
   using DescriptorVisibility = oxygen::graphics::DescriptorVisibility;
   namespace b = oxygen::bindless;
-  using BindlessHeapIndex = b::HeapIndex;
 
   constexpr DomainKey dk {
     ResourceViewType::kTexture_SRV,
@@ -163,7 +69,8 @@ NOLINT_TEST(
 
   // Act
   // index well outside domain
-  const auto res = mapper.ResolveDomain(b::HeapIndex { 1000u });
+  constexpr b::HeapIndex kOutOfRangeIndex { 1000U };
+  const auto res = mapper.ResolveDomain(kOutOfRangeIndex);
 
   // Assert
   EXPECT_FALSE(res.has_value());
@@ -193,14 +100,17 @@ NOLINT_TEST(DomainIndexMapperTest,
   // tweak fake allocator so d1 base is immediately after d0 (10+5)
   alloc = FakeAllocator();
   // insert second base at 15
-  alloc.SetBase(d1.view_type, d1.visibility, b::HeapIndex { 15u });
+  constexpr b::HeapIndex kSecondBase { 15U };
+  alloc.SetBase(d1.view_type, d1.visibility, kSecondBase);
 
   oxygen::nexus::DomainIndexMapper mapper(alloc, { d0, d1 });
 
   // Act
   // index at the boundary between d0 and d1
-  const auto r0 = mapper.ResolveDomain(b::HeapIndex { 14u });
-  const auto r1 = mapper.ResolveDomain(b::HeapIndex { 15u });
+  constexpr b::HeapIndex kBoundaryIndex0 { 14U };
+  constexpr b::HeapIndex kBoundaryIndex1 { 15U };
+  const auto r0 = mapper.ResolveDomain(kBoundaryIndex0);
+  const auto r1 = mapper.ResolveDomain(kBoundaryIndex1);
 
   // Assert
   ASSERT_TRUE(r0.has_value());
@@ -215,16 +125,18 @@ NOLINT_TEST(DomainIndexMapperTest, EmptyDomainList_NoRanges_AllResolutionsFail)
 {
   // Arrange
   FakeAllocator alloc;
-  using DomainKey = oxygen::nexus::DomainKey;
   namespace b = oxygen::bindless;
 
   // Empty domain list
   oxygen::nexus::DomainIndexMapper mapper(alloc, {});
 
   // Act & Assert
-  const auto res_zero = mapper.ResolveDomain(b::HeapIndex { 0u });
-  const auto res_mid = mapper.ResolveDomain(b::HeapIndex { 100u });
-  const auto res_large = mapper.ResolveDomain(b::HeapIndex { 1000u });
+  constexpr b::HeapIndex kZeroIndex { 0U };
+  constexpr b::HeapIndex kMidIndex { 100U };
+  constexpr b::HeapIndex kLargeIndex { 1000U };
+  const auto res_zero = mapper.ResolveDomain(kZeroIndex);
+  const auto res_mid = mapper.ResolveDomain(kMidIndex);
+  const auto res_large = mapper.ResolveDomain(kLargeIndex);
 
   EXPECT_FALSE(res_zero.has_value());
   EXPECT_FALSE(res_mid.has_value());
@@ -247,11 +159,11 @@ NOLINT_TEST(
   class ZeroCapacityAllocator : public FakeAllocator {
   public:
     [[nodiscard]] auto GetRemainingDescriptorsCount(
-      oxygen::graphics::ResourceViewType,
-      oxygen::graphics::DescriptorVisibility) const
+      oxygen::graphics::ResourceViewType /*view_type*/,
+      oxygen::graphics::DescriptorVisibility /*vis*/) const
       -> oxygen::bindless::Count override
     {
-      return oxygen::bindless::Count { 0u };
+      return oxygen::bindless::Count { 0U };
     }
   };
 
@@ -264,14 +176,15 @@ NOLINT_TEST(
 
   // Act
   const auto range = mapper.GetDomainRange(dk);
-  const auto res_base
-    = mapper.ResolveDomain(b::HeapIndex { 10u }); // base index
-  const auto res_any = mapper.ResolveDomain(b::HeapIndex { 15u }); // any index
+  constexpr b::HeapIndex kBaseIndex { 10U };
+  constexpr b::HeapIndex kAnyIndex { 15U };
+  const auto res_base = mapper.ResolveDomain(kBaseIndex); // base index
+  const auto res_any = mapper.ResolveDomain(kAnyIndex); // any index
 
   // Assert
   ASSERT_TRUE(range.has_value());
-  EXPECT_EQ(range->start.get(), 10u);
-  EXPECT_EQ(range->capacity.get(), 0u); // zero capacity
+  EXPECT_EQ(range->start.get(), kBaseIndex.get());
+  EXPECT_EQ(range->capacity.get(), 0U); // zero capacity
   // With zero capacity, no indices should resolve to this domain
   EXPECT_FALSE(res_base.has_value());
   EXPECT_FALSE(res_any.has_value());
@@ -302,14 +215,14 @@ NOLINT_TEST(
   const auto start_idx = range->start.get();
   // Only test boundaries if capacity > 0
   if (range->capacity.get() > 0) {
-    const auto end_idx = start_idx + range->capacity.get() - 1u;
+    const auto end_idx = start_idx + range->capacity.get() - 1U;
 
     const auto res_start = mapper.ResolveDomain(b::HeapIndex { start_idx });
     const auto res_end = mapper.ResolveDomain(b::HeapIndex { end_idx });
     const auto res_before_start
-      = mapper.ResolveDomain(b::HeapIndex { start_idx - 1u });
+      = mapper.ResolveDomain(b::HeapIndex { start_idx - 1U });
     const auto res_after_end
-      = mapper.ResolveDomain(b::HeapIndex { end_idx + 1u });
+      = mapper.ResolveDomain(b::HeapIndex { end_idx + 1U });
 
     // Assert
     ASSERT_TRUE(res_start.has_value());
@@ -321,11 +234,40 @@ NOLINT_TEST(
     EXPECT_FALSE(res_before_start.has_value());
     EXPECT_FALSE(res_after_end.has_value());
   } else {
-    // For zero capacity, only the start index should resolve
+    // For zero capacity, no index should resolve.
     const auto res_start = mapper.ResolveDomain(b::HeapIndex { start_idx });
-    ASSERT_TRUE(res_start.has_value());
-    EXPECT_EQ(res_start->view_type, dk.view_type);
+    EXPECT_FALSE(res_start.has_value());
   }
+}
+
+//! Verify range resolution does not overflow near uint32_t max index.
+NOLINT_TEST(DomainIndexMapperTest, ResolveDomain_HighBaseIndex_NoWraparound)
+{
+  // Arrange
+  FakeAllocator alloc;
+  using DomainKey = oxygen::nexus::DomainKey;
+  using ResourceViewType = oxygen::graphics::ResourceViewType;
+  using DescriptorVisibility = oxygen::graphics::DescriptorVisibility;
+  namespace b = oxygen::bindless;
+
+  constexpr DomainKey dk {
+    ResourceViewType::kTexture_SRV,
+    DescriptorVisibility::kShaderVisible,
+  };
+
+  constexpr auto kHighBase = b::HeapIndex {
+    (std::numeric_limits<uint32_t>::max)() - 2U,
+  };
+  alloc.SetBase(dk.view_type, dk.visibility, kHighBase);
+
+  oxygen::nexus::DomainIndexMapper mapper(alloc, { dk });
+
+  // Act
+  constexpr auto kWrappedLowIndex = b::HeapIndex { 1U };
+  const auto wrapped_result = mapper.ResolveDomain(kWrappedLowIndex);
+
+  // Assert
+  EXPECT_FALSE(wrapped_result.has_value());
 }
 
 //! Verify resolution behavior with multiple domains that have gaps between
@@ -351,14 +293,18 @@ NOLINT_TEST(DomainIndexMapperTest,
 
   // Set up domains with a gap: d0 at 10-14, d1 at 20-24 (gap at 15-19)
   alloc = FakeAllocator();
-  alloc.SetBase(d1.view_type, d1.visibility, b::HeapIndex { 20u });
+  constexpr b::HeapIndex kGapBase { 20U };
+  alloc.SetBase(d1.view_type, d1.visibility, kGapBase);
 
   oxygen::nexus::DomainIndexMapper mapper(alloc, { d0, d1 });
 
   // Act
-  const auto res_d0 = mapper.ResolveDomain(b::HeapIndex { 12u });
-  const auto res_gap = mapper.ResolveDomain(b::HeapIndex { 17u });
-  const auto res_d1 = mapper.ResolveDomain(b::HeapIndex { 22u });
+  constexpr b::HeapIndex kD0Index { 12U };
+  constexpr b::HeapIndex kGapIndex { 17U };
+  constexpr b::HeapIndex kD1Index { 22U };
+  const auto res_d0 = mapper.ResolveDomain(kD0Index);
+  const auto res_gap = mapper.ResolveDomain(kGapIndex);
+  const auto res_d1 = mapper.ResolveDomain(kD1Index);
 
   // Assert
   ASSERT_TRUE(res_d0.has_value());
@@ -432,15 +378,16 @@ NOLINT_TEST_F(DomainIndexMapperThreadSafetyTest,
   constexpr int queries_per_thread = 1000;
 
   std::vector<std::thread> threads;
+  threads.reserve(num_threads);
   std::vector<std::vector<std::optional<oxygen::nexus::DomainRange>>> results(
-    num_threads);
+    static_cast<size_t>(num_threads));
 
   // Act: Multiple threads concurrently querying the same domain
   for (int t = 0; t < num_threads; ++t) {
-    threads.emplace_back([&mapper, dk, t, &results, queries_per_thread]() {
-      results[t].reserve(queries_per_thread);
+    threads.emplace_back([&mapper, dk, t, &results]() {
+      results[static_cast<size_t>(t)].reserve(queries_per_thread);
       for (int i = 0; i < queries_per_thread; ++i) {
-        results[t].push_back(mapper.GetDomainRange(dk));
+        results[static_cast<size_t>(t)].push_back(mapper.GetDomainRange(dk));
       }
     });
   }
@@ -486,24 +433,26 @@ NOLINT_TEST_F(DomainIndexMapperThreadSafetyTest,
   constexpr int num_threads = 15;
   constexpr int queries_per_thread = 800;
   const auto test_indices = std::vector<b::HeapIndex> {
-    b::HeapIndex { 12u }, // valid index within domain
-    b::HeapIndex { 5u }, // valid index within domain
-    b::HeapIndex { 500u } // invalid index outside domain
+    b::HeapIndex { 12U }, // valid index within domain
+    b::HeapIndex { 5U }, // valid index within domain
+    b::HeapIndex { 500U } // invalid index outside domain
   };
 
   std::vector<std::thread> threads;
-  std::vector<std::vector<std::optional<DomainKey>>> results(num_threads);
+  threads.reserve(num_threads);
+  std::vector<std::vector<std::optional<DomainKey>>> results(
+    static_cast<size_t>(num_threads));
 
   // Act: Multiple threads concurrently resolving various indices
   for (int t = 0; t < num_threads; ++t) {
-    threads.emplace_back(
-      [&mapper, &test_indices, t, &results, queries_per_thread]() {
-        results[t].reserve(queries_per_thread);
-        for (int i = 0; i < queries_per_thread; ++i) {
-          const auto idx = test_indices[i % test_indices.size()];
-          results[t].push_back(mapper.ResolveDomain(idx));
-        }
-      });
+    threads.emplace_back([&mapper, &test_indices, t, &results]() {
+      results[static_cast<size_t>(t)].reserve(queries_per_thread);
+      for (int i = 0; i < queries_per_thread; ++i) {
+        const auto idx
+          = test_indices[static_cast<size_t>(i) % test_indices.size()];
+        results[static_cast<size_t>(t)].push_back(mapper.ResolveDomain(idx));
+      }
+    });
   }
 
   // Wait for all threads to complete
@@ -551,7 +500,8 @@ NOLINT_TEST_F(DomainIndexMapperThreadSafetyTest,
   };
 
   // Configure allocator with multiple domains
-  alloc.SetBase(d1.view_type, d1.visibility, b::HeapIndex { 20u });
+  constexpr b::HeapIndex kD1Base { 20U };
+  alloc.SetBase(d1.view_type, d1.visibility, kD1Base);
 
   oxygen::nexus::DomainIndexMapper mapper(alloc, { d0, d1 });
 
@@ -560,14 +510,15 @@ NOLINT_TEST_F(DomainIndexMapperThreadSafetyTest,
   constexpr int operations_per_thread = 600;
 
   std::vector<std::thread> threads;
+  threads.reserve(static_cast<std::size_t>(num_range_threads)
+    + static_cast<size_t>(num_resolve_threads));
   std::atomic<bool> start_flag { false };
   std::atomic<uint32_t> total_successful_operations { 0 };
 
   // Range query threads
   for (int t = 0; t < num_range_threads; ++t) {
     threads.emplace_back(
-      [&mapper, d0, d1, &start_flag, &total_successful_operations,
-        operations_per_thread]() {
+      [&mapper, d0, d1, &start_flag, &total_successful_operations]() {
         while (!start_flag.load()) {
           std::this_thread::yield();
         }
@@ -588,22 +539,22 @@ NOLINT_TEST_F(DomainIndexMapperThreadSafetyTest,
 
   // Resolve query threads
   const auto test_indices = std::vector<b::HeapIndex> {
-    b::HeapIndex { 12u }, // d0 range
-    b::HeapIndex { 22u }, // d1 range
-    b::HeapIndex { 500u } // no domain
+    b::HeapIndex { 12U }, // d0 range
+    b::HeapIndex { 22U }, // d1 range
+    b::HeapIndex { 500U } // no domain
   };
 
   for (int t = 0; t < num_resolve_threads; ++t) {
     threads.emplace_back(
-      [&mapper, &test_indices, &start_flag, &total_successful_operations,
-        operations_per_thread]() {
+      [&mapper, &test_indices, &start_flag, &total_successful_operations]() {
         while (!start_flag.load()) {
           std::this_thread::yield();
         }
 
         uint32_t local_success = 0;
         for (int i = 0; i < operations_per_thread; ++i) {
-          const auto idx = test_indices[i % test_indices.size()];
+          const auto idx
+            = test_indices[static_cast<size_t>(i) % test_indices.size()];
           const auto result = mapper.ResolveDomain(idx);
           if (result.has_value()) {
             local_success++;
@@ -627,12 +578,15 @@ NOLINT_TEST_F(DomainIndexMapperThreadSafetyTest,
   // Each range thread should succeed on all operations (2 domains)
   // Each resolve thread should succeed on 2/3 operations (2 valid indices)
   constexpr auto expected_range_successes
-    = num_range_threads * operations_per_thread;
-  constexpr auto expected_resolve_successes
-    = num_resolve_threads * operations_per_thread * 2 / 3; // 2/3 success rate
+    = static_cast<size_t>(num_range_threads)
+    * static_cast<size_t>(operations_per_thread);
+  constexpr double kSuccessRate = 2.0 / 3.0;
+  const auto expected_resolve_successes = static_cast<size_t>(
+    static_cast<double>(num_resolve_threads * operations_per_thread)
+    * kSuccessRate);
 
-  constexpr auto total_expected
-    = expected_range_successes + expected_resolve_successes;
+  const auto total_expected = static_cast<uint32_t>(expected_range_successes)
+    + static_cast<uint32_t>(expected_resolve_successes);
   EXPECT_GE(total_successful_operations.load(), total_expected);
 }
 
@@ -648,19 +602,32 @@ NOLINT_TEST_F(DomainIndexMapperThreadSafetyTest,
   namespace b = oxygen::bindless;
 
   const std::vector<DomainKey> domains = {
-    { ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible },
-    { ResourceViewType::kTexture_UAV, DescriptorVisibility::kShaderVisible },
-    { ResourceViewType::kRawBuffer_SRV, DescriptorVisibility::kShaderVisible },
-    { ResourceViewType::kRawBuffer_UAV, DescriptorVisibility::kShaderVisible }
+    {
+      .view_type = ResourceViewType::kTexture_SRV,
+      .visibility = DescriptorVisibility::kShaderVisible,
+    },
+    {
+      .view_type = ResourceViewType::kTexture_UAV,
+      .visibility = DescriptorVisibility::kShaderVisible,
+    },
+    {
+      .view_type = ResourceViewType::kRawBuffer_SRV,
+      .visibility = DescriptorVisibility::kShaderVisible,
+    },
+    {
+      .view_type = ResourceViewType::kRawBuffer_UAV,
+      .visibility = DescriptorVisibility::kShaderVisible,
+    },
   };
 
   // Configure allocator with multiple domains at different bases
-  alloc.SetBase(
-    domains[1].view_type, domains[1].visibility, b::HeapIndex { 30u });
-  alloc.SetBase(
-    domains[2].view_type, domains[2].visibility, b::HeapIndex { 60u });
-  alloc.SetBase(
-    domains[3].view_type, domains[3].visibility, b::HeapIndex { 90u });
+  constexpr b::HeapIndex kD1Base { 30U };
+  constexpr b::HeapIndex kD2Base { 60U };
+  constexpr b::HeapIndex kD3Base { 90U };
+
+  alloc.SetBase(domains[1].view_type, domains[1].visibility, kD1Base);
+  alloc.SetBase(domains[2].view_type, domains[2].visibility, kD2Base);
+  alloc.SetBase(domains[3].view_type, domains[3].visibility, kD3Base);
 
   oxygen::nexus::DomainIndexMapper mapper(
     alloc, { domains[0], domains[1], domains[2], domains[3] });
@@ -669,16 +636,16 @@ NOLINT_TEST_F(DomainIndexMapperThreadSafetyTest,
   constexpr int operations_per_thread = 400;
 
   std::vector<std::thread> threads;
-  std::atomic<uint32_t> consistency_check_passed { 0 };
+  threads.reserve(num_threads);
+  std::atomic<uint32_t> consistency_check_passed { 0U };
 
   // Act: High contention scenario with all operations mixed
   for (int t = 0; t < num_threads; ++t) {
-    threads.emplace_back([&mapper, &domains, t, &consistency_check_passed,
-                           operations_per_thread]() {
+    threads.emplace_back([&mapper, &domains, &consistency_check_passed]() {
       bool all_consistent = true;
 
       for (int i = 0; i < operations_per_thread; ++i) {
-        const auto& domain = domains[i % domains.size()];
+        const auto& domain = domains[static_cast<size_t>(i) % domains.size()];
 
         // Get domain range
         const auto range = mapper.GetDomainRange(domain);
@@ -689,7 +656,8 @@ NOLINT_TEST_F(DomainIndexMapperThreadSafetyTest,
 
         // Test resolve in the range
         const auto test_idx
-          = b::HeapIndex { range->start.get() + (i % range->capacity.get()) };
+          = b::HeapIndex { static_cast<uint32_t>(range->start.get()
+            + (static_cast<size_t>(i) % range->capacity.get())) };
         const auto resolved = mapper.ResolveDomain(test_idx);
 
         // Should resolve back to the same domain
@@ -714,7 +682,8 @@ NOLINT_TEST_F(DomainIndexMapperThreadSafetyTest,
   }
 
   // Assert: All threads should pass consistency checks
-  EXPECT_EQ(consistency_check_passed.load(), num_threads);
+  EXPECT_EQ(
+    consistency_check_passed.load(), static_cast<uint32_t>(num_threads));
 }
 
 } // namespace

@@ -138,13 +138,14 @@ auto DomainIndexMapper::GetDomainRange(DomainKey const& k) const noexcept
 auto DomainIndexMapper::ResolveDomain(
   oxygen::bindless::HeapIndex index) const noexcept -> std::optional<DomainKey>
 {
-  const auto u_index = index.get();
+  const uint64_t u_index = index.get();
   for (auto const& entry : pimpl_->map) {
     const auto& k = entry.first;
     const auto& r = entry.second;
-    const auto u_start = r.start.get();
-    const auto u_capacity = r.capacity.get();
-    if (u_index >= u_start && u_index < u_start + u_capacity) {
+    const uint64_t u_start = r.start.get();
+    const uint64_t u_capacity = r.capacity.get();
+    const uint64_t u_end = u_start + u_capacity;
+    if (u_index >= u_start && u_index < u_end) {
       return k;
     }
   }

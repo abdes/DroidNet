@@ -106,7 +106,7 @@ private:
     //! Domain context for the handle
     DomainKey domain;
     //! Bindless index to reclaim
-    bindless::HeapIndex index;
+    bindless::HeapIndex index {};
   };
 
   //! Backend allocation function
@@ -124,17 +124,52 @@ private:
    */
   std::size_t gen_capacity_ { 0 };
 
+  //! Copyable wrapper over atomic byte for vector storage.
+  struct AtomicPendingFlag {
+    std::atomic<uint8_t> value { 0U };
+
+    AtomicPendingFlag() = default;
+    AtomicPendingFlag(const AtomicPendingFlag& other)
+      : value(other.value.load(std::memory_order_relaxed))
+    {
+    }
+    AtomicPendingFlag(AtomicPendingFlag&& other) noexcept
+      : value(other.value.load(std::memory_order_relaxed))
+    {
+    }
+    auto operator=(const AtomicPendingFlag& other) -> AtomicPendingFlag&
+    {
+      if (this != &other) {
+        value.store(other.value.load(std::memory_order_relaxed),
+          std::memory_order_relaxed);
+      }
+      return *this;
+    }
+    auto operator=(AtomicPendingFlag&& other) noexcept -> AtomicPendingFlag&
+    {
+      if (this != &other) {
+        value.store(other.value.load(std::memory_order_relaxed),
+          std::memory_order_relaxed);
+      }
+      return *this;
+    }
+
+    ~AtomicPendingFlag() = default;
+  };
+
   //! Pending flag per index to prevent double-release races
   /*!
-   * Contiguous atomic array with pointer stability guaranteed by resize_mutex_.
    * Each flag indicates whether a handle is pending reclamation. Uses atomic
-   * compare-and-swap for race-free double-release detection.
+   * compare-and-swap for race-free double-release detection. Protected by
+   * resize_mutex_ during growth and flag updates.
    */
-  std::unique_ptr<std::atomic<uint8_t>[]> pending_flags_;
+  std::vector<AtomicPendingFlag> pending_flags_;
   //! Current pending flags array size
   std::size_t pending_size_ { 0 };
   //! Protects pending array resize operations
   mutable std::mutex resize_mutex_;
+  //! Protects generation tracker resize/load/bump coordination
+  mutable std::mutex generation_mutex_;
 
   //! Per-queue pending frees organized by fence value
   /*!
@@ -150,11 +185,11 @@ private:
 #if !defined(NDEBUG)
     //! Debug-only stall detection state
     //! Last observed completed fence
-    graphics::FenceValue last_completed {};
+    graphics::FenceValue last_completed;
     //! Time of last fence progress
-    std::chrono::steady_clock::time_point last_progress_time {};
+    std::chrono::steady_clock::time_point last_progress_time;
     //! Time of last warning
-    std::chrono::steady_clock::time_point last_warn_time {};
+    std::chrono::steady_clock::time_point last_warn_time;
     //! Current warning interval with backoff
     std::chrono::steady_clock::duration current_warn_interval {};
 #endif // !NDEBUG
@@ -175,6 +210,15 @@ private:
 
   //! Ensure generation tracker and pending flags cover the given index
   void EnsureCapacity(bindless::HeapIndex index);
+  //! Get existing queue data or create it when missing.
+  auto GetOrCreateQueueData(
+    const std::shared_ptr<graphics::CommandQueue>& queue)
+    -> std::shared_ptr<QueueData>;
+  //! Find existing queue data for a queue.
+  auto FindQueueData(const std::shared_ptr<graphics::CommandQueue>& queue)
+    -> std::shared_ptr<QueueData>;
+  //! Atomically mark an index as pending release.
+  auto TrySetPending(bindless::HeapIndex index) -> bool;
 };
 
 } // namespace oxygen::nexus

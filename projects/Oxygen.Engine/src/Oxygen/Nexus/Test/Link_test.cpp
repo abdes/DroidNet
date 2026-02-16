@@ -24,20 +24,39 @@
 */
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
-  using namespace oxygen;
+  using oxygen::VersionedBindlessHandle;
+  using oxygen::bindless::Capacity;
+  using oxygen::bindless::HeapIndex;
+  using oxygen::graphics::DescriptorVisibility;
+  using oxygen::graphics::ResourceViewType;
+  using oxygen::nexus::DomainKey;
+
+  // Constants for test values to avoid magic numbers
+  constexpr Capacity kTrackerCapacity { 16U };
+  constexpr HeapIndex kSampleIndex { 5U };
+  constexpr HeapIndex kOutOfRangeIndex { 100U };
+  constexpr HeapIndex kVersionedHandleIndex { 42U };
+  constexpr VersionedBindlessHandle::Generation kSampleGeneration { 5U };
+  constexpr VersionedBindlessHandle::Generation kGen1 { 1U };
 
   // Test 1: Verify DomainKey construction and comparison
   {
     std::cout << "Testing DomainKey construction and equality...\n";
 
-    nexus::DomainKey domain1 { graphics::ResourceViewType::kTexture_SRV,
-      graphics::DescriptorVisibility::kShaderVisible };
+    const DomainKey domain1 {
+      .view_type = ResourceViewType::kTexture_SRV,
+      .visibility = DescriptorVisibility::kShaderVisible,
+    };
 
-    nexus::DomainKey domain2 { graphics::ResourceViewType::kTexture_SRV,
-      graphics::DescriptorVisibility::kShaderVisible };
+    const DomainKey domain2 {
+      .view_type = ResourceViewType::kTexture_SRV,
+      .visibility = DescriptorVisibility::kShaderVisible,
+    };
 
-    nexus::DomainKey domain3 { graphics::ResourceViewType::kTypedBuffer_SRV,
-      graphics::DescriptorVisibility::kShaderVisible };
+    const DomainKey domain3 {
+      .view_type = ResourceViewType::kTypedBuffer_SRV,
+      .visibility = DescriptorVisibility::kShaderVisible,
+    };
 
     if (domain1 == domain2 && !(domain1 == domain3)) {
       std::cout << "✓ DomainKey equality works correctly\n";
@@ -52,14 +71,14 @@ auto main(int /*argc*/, char** /*argv*/) -> int
   {
     std::cout << "Testing GenerationTracker basic operations...\n";
 
-    nexus::GenerationTracker tracker(bindless::Capacity { 16 });
-    const auto handle = bindless::HeapIndex { 5 };
+    oxygen::nexus::GenerationTracker tracker(kTrackerCapacity);
+    const auto handle = kSampleIndex;
 
     // Test lazy initialization
     const auto gen1 = tracker.Load(handle);
-    if (gen1.get() >= 1) {
-      std::cout << "✓ GenerationTracker lazy initialization works (gen=" << gen1
-                << ")\n";
+    if (gen1.get() >= kGen1.get()) {
+      std::cout << "✓ GenerationTracker lazy initialization works (gen="
+                << gen1.get() << ")\n";
     } else {
       std::cout << "✗ GenerationTracker lazy initialization failed\n";
       return 1;
@@ -69,17 +88,17 @@ auto main(int /*argc*/, char** /*argv*/) -> int
     // Test generation bump
     tracker.Bump(handle);
     const auto gen2 = tracker.Load(handle);
-    if (gen2.get() == gen1.get() + 1) {
-      std::cout << "✓ GenerationTracker bump increments correctly (gen=" << gen2
-                << ")\n";
+    if (gen2.get() == gen1.get() + kGen1.get()) {
+      std::cout << "✓ GenerationTracker bump increments correctly (gen="
+                << gen2.get() << ")\n";
     } else {
       std::cout << "✗ GenerationTracker bump failed\n";
       return 1;
     }
 
     // Test out-of-bounds safety
-    const auto gen_oob = tracker.Load(bindless::HeapIndex { 100 });
-    if (gen_oob.get() == 0) {
+    const auto gen_oob = tracker.Load(kOutOfRangeIndex);
+    if (gen_oob.get() == 0U) {
       std::cout << "✓ GenerationTracker out-of-bounds returns 0\n";
     } else {
       std::cout << "✗ GenerationTracker out-of-bounds check failed\n";
@@ -93,10 +112,10 @@ auto main(int /*argc*/, char** /*argv*/) -> int
     std::cout
       << "Testing VersionedBindlessHandle construction and validation...\n";
 
-    const auto handle = bindless::HeapIndex { 42 };
-    const auto generation = VersionedBindlessHandle::Generation { 5 };
+    const auto handle = kVersionedHandleIndex;
+    const auto generation = kSampleGeneration;
 
-    VersionedBindlessHandle versioned_handle { handle, generation };
+    const VersionedBindlessHandle versioned_handle { handle, generation };
 
     if (versioned_handle.IsValid()
       && versioned_handle.ToBindlessHandle() == handle
@@ -109,7 +128,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int
     }
 
     // Test invalid handle
-    VersionedBindlessHandle invalid_handle {};
+    const VersionedBindlessHandle invalid_handle {};
     if (!invalid_handle.IsValid()) {
       std::cout << "✓ Default VersionedBindlessHandle is invalid as expected\n";
     } else {
