@@ -24,7 +24,7 @@
 
 namespace {
 
-constexpr std::uint32_t kInvalidShadowIndex = 0xFFFFFFFFu;
+constexpr std::uint32_t kInvalidShadowIndex = 0xFFFFFFFF;
 
 [[nodiscard]] auto IsNodeVisible(const oxygen::scene::SceneNodeImpl& node)
   -> bool

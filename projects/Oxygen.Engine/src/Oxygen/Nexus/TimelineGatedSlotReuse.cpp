@@ -20,6 +20,17 @@ using VHandle = oxygen::VersionedBindlessHandle;
 using CommandQueue = oxygen::graphics::CommandQueue;
 using FenceValue = oxygen::graphics::FenceValue;
 
+namespace {
+auto UpdatePeak(std::atomic<uint64_t>& peak_target, const uint64_t candidate)
+  -> void
+{
+  auto observed = peak_target.load(std::memory_order_relaxed);
+  while (observed < candidate
+    && !peak_target.compare_exchange_weak(observed, candidate,
+      std::memory_order_relaxed, std::memory_order_relaxed)) { }
+}
+} // namespace
+
 /*!
  Initialize the timeline-gated slot reuse system with backend hooks.
 
@@ -190,6 +201,8 @@ auto TimelineGatedSlotReuse::GetOrCreateQueueData(
   if (it == pending_per_queue_.end()) {
     auto created = std::make_shared<QueueData>();
     pending_per_queue_.emplace(key, created);
+    UpdatePeak(telemetry_.peak_queue_count,
+      static_cast<uint64_t>(pending_per_queue_.size()));
     return created;
   }
   return it->second;
@@ -232,6 +245,7 @@ auto TimelineGatedSlotReuse::FindQueueData(
 */
 auto TimelineGatedSlotReuse::Allocate(DomainKey const& domain) -> VHandle
 {
+  telemetry_.allocate_calls.fetch_add(1, std::memory_order_relaxed);
   const bindless::HeapIndex handle = allocate_(domain);
 
   // Ensure generation tracker and pending flags cover index
@@ -275,15 +289,22 @@ auto TimelineGatedSlotReuse::Allocate(DomainKey const& domain) -> VHandle
 auto TimelineGatedSlotReuse::Release(DomainKey const& domain, VHandle const h,
   const std::shared_ptr<CommandQueue>& queue, FenceValue fence_value) -> void
 {
+  telemetry_.release_calls.fetch_add(1, std::memory_order_relaxed);
+
   // Early return for invalid handles - prevent massive memory allocation
   if (!h.IsValid() || !queue || !IsHandleCurrent(h)) {
+    telemetry_.stale_reject_count.fetch_add(1, std::memory_order_relaxed);
     return;
   }
 
   const bindless::HeapIndex idx = h.ToBindlessHandle();
   if (!TrySetPending(idx)) {
+    telemetry_.duplicate_reject_count.fetch_add(1, std::memory_order_relaxed);
     return;
   }
+  const uint64_t pending_after
+    = telemetry_.pending_count.fetch_add(1, std::memory_order_relaxed) + 1U;
+  UpdatePeak(telemetry_.peak_pending_count, pending_after);
 
   PendingFree pending_free { domain, idx };
 
@@ -325,7 +346,10 @@ auto TimelineGatedSlotReuse::ReleaseBatch(
   const std::shared_ptr<CommandQueue>& queue, FenceValue fence_value,
   std::span<const std::pair<DomainKey, VHandle>> items) -> void
 {
+  telemetry_.batch_release_calls.fetch_add(1, std::memory_order_relaxed);
   if (!queue) {
+    telemetry_.stale_reject_count.fetch_add(
+      static_cast<uint64_t>(items.size()), std::memory_order_relaxed);
     return;
   }
 
@@ -339,12 +363,18 @@ auto TimelineGatedSlotReuse::ReleaseBatch(
 
     // Skip invalid handles - prevent massive memory allocation
     if (!vh.IsValid() || !IsHandleCurrent(vh)) {
+      telemetry_.stale_reject_count.fetch_add(1, std::memory_order_relaxed);
       continue;
     }
 
     const bindless::HeapIndex idx = vh.ToBindlessHandle();
     if (TrySetPending(idx)) {
+      const uint64_t pending_after
+        = telemetry_.pending_count.fetch_add(1, std::memory_order_relaxed) + 1U;
+      UpdatePeak(telemetry_.peak_pending_count, pending_after);
       local.push_back(PendingFree { domain, idx });
+    } else {
+      telemetry_.duplicate_reject_count.fetch_add(1, std::memory_order_relaxed);
     }
   }
 
@@ -387,14 +417,12 @@ auto TimelineGatedSlotReuse::ReleaseBatch(
 auto TimelineGatedSlotReuse::ProcessFor(
   const std::shared_ptr<CommandQueue>& queue) noexcept -> void
 {
-  // find per-queue data
+  telemetry_.process_for_calls.fetch_add(1, std::memory_order_relaxed);
+  // Ensure queue is reflected in telemetry even when no releases were queued.
   if (!queue) {
     return;
   }
-  auto qdptr = FindQueueData(queue);
-  if (!qdptr) {
-    return;
-  }
+  auto qdptr = GetOrCreateQueueData(queue);
 
   const FenceValue completed { queue->GetCompletedValue() };
 
@@ -475,6 +503,8 @@ auto TimelineGatedSlotReuse::ProcessFor(
       }
       // Call backend free function to actually reclaim the slot
       free_(pending_free.domain, pending_free.index);
+      telemetry_.reclaimed_count.fetch_add(1, std::memory_order_relaxed);
+      telemetry_.pending_count.fetch_sub(1, std::memory_order_relaxed);
     }
   }
 }
@@ -505,6 +535,7 @@ auto TimelineGatedSlotReuse::ProcessFor(
 */
 auto TimelineGatedSlotReuse::Process() noexcept -> void
 {
+  telemetry_.process_calls.fetch_add(1, std::memory_order_relaxed);
   // snapshot keys to process to avoid holding the queues_lock_ while iterating
   std::vector<std::shared_ptr<CommandQueue>> keys;
   {
@@ -564,4 +595,29 @@ auto TimelineGatedSlotReuse::IsHandleCurrent(
     cur = generation_tracker_.Load(idx);
   }
   return cur.get() == h.GenerationValue().get();
+}
+
+auto TimelineGatedSlotReuse::GetTelemetrySnapshot() const noexcept
+  -> TelemetrySnapshot
+{
+  return {
+    .allocate_calls = telemetry_.allocate_calls.load(std::memory_order_relaxed),
+    .release_calls = telemetry_.release_calls.load(std::memory_order_relaxed),
+    .batch_release_calls
+    = telemetry_.batch_release_calls.load(std::memory_order_relaxed),
+    .stale_reject_count
+    = telemetry_.stale_reject_count.load(std::memory_order_relaxed),
+    .duplicate_reject_count
+    = telemetry_.duplicate_reject_count.load(std::memory_order_relaxed),
+    .reclaimed_count
+    = telemetry_.reclaimed_count.load(std::memory_order_relaxed),
+    .pending_count = telemetry_.pending_count.load(std::memory_order_relaxed),
+    .peak_pending_count
+    = telemetry_.peak_pending_count.load(std::memory_order_relaxed),
+    .process_calls = telemetry_.process_calls.load(std::memory_order_relaxed),
+    .process_for_calls
+    = telemetry_.process_for_calls.load(std::memory_order_relaxed),
+    .peak_queue_count
+    = telemetry_.peak_queue_count.load(std::memory_order_relaxed),
+  };
 }
