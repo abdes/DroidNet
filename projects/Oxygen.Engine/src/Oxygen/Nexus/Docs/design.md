@@ -94,6 +94,13 @@ descriptor allocator.
 - Strategy B (timeline‑based): independent subsystems (upload/copy, background
   work with separate timelines). Lifecycle: allocate → use across frames →
   release when the subsystem’s GPU timeline completes.
+- Intentional non-strategy cases:
+  - Full-frame rewritten buffers (for example draw metadata streams) where
+    indices are rewritten densely each frame and no slot release/reuse occurs.
+  - Stable-descriptor repointing systems (for example texture placeholder ->
+    final/error repointing) where descriptor index stability is a hard
+    contract; use Nexus generation/version primitives for stale async rejection,
+    but do not force slot reuse strategies.
 
 #### Tracking scope
 
@@ -493,6 +500,16 @@ Thread-safety:
 - `Process()` / `ProcessFor()` are typically called from the owner’s controlling
   thread.
 
+Renderer adoption snapshot (current):
+
+- `TransformUploader`: Strategy A lifecycle with release/reclaim and telemetry.
+- `GeometryUploader`: Strategy A lifecycle with release/reclaim and telemetry.
+- `MaterialBinder`: Strategy A lifecycle with release/reclaim and telemetry.
+- `DrawMetadataEmitter`: Strategy A allocate-only usage by design (full-frame
+  dense rewrite; no per-entry release/reclaim).
+- `TextureBinder`: Nexus generation/version usage by design (stable descriptor
+  index + descriptor repointing contract); not a slot-reuse strategy owner.
+
 Operational Strategy B flow:
 
 ```mermaid
@@ -544,20 +561,15 @@ Edge cases handled
 
 ## TODO and Missing Integrations (GitHub checklist)
 
-- [ ] Route renderer bindless admission/release call sites through the selected
-      reuse strategy APIs rather than direct allocator free-list manipulation.
-- [ ] Define explicit policy table for Strategy A vs Strategy B by resource
-      class and lifecycle.
-- [ ] Ensure every owner using Strategy A calls `OnBeginFrame(frame::Slot)` at
-      the appropriate frame-slot boundary for that owner's lifecycle model.
-- [ ] Ensure every owner using Strategy B calls `Process()` (or `ProcessFor`)
-      at appropriate points after queue work submission so completed fences are
-      drained.
-- [ ] Add optional `ProcessFor(queue)` hooks for heavy transfer/upload pipelines
-      to reduce pending-bucket latency.
-- [ ] Add telemetry counters:
-      pending_count, reclaimed_count, stale_reject_count, duplicate_reject_count,
-      null_queue_reject_count.
-- [ ] Add debug dump/inspection endpoint for timeline buckets by queue/fence.
-- [ ] Add integration smoke in example runtime covering both strategies in one
-      run.
+- [ ] Define and maintain a single engine policy matrix (resource class ->
+      Strategy A / Strategy B / generation-only / allocate-only) and keep it
+      synchronized with implementation owners.
+- [ ] Audit non-renderer subsystems that currently do ad-hoc deferred release
+      or fence-driven retire logic and either adopt Strategy B directly or
+      document explicit reasons not to.
+- [ ] Add a shared debug dump endpoint for strategy state
+      (pending_count, reclaimed_count, stale_reject_count,
+      duplicate_reject_count, null_queue_reject_count) so owners can query
+      live lifecycle state without per-module custom logging.
+- [ ] Add one cross-subsystem integration smoke that exercises both Strategy A
+      and Strategy B ownership paths in the same run.
