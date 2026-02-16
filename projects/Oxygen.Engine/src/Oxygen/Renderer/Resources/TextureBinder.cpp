@@ -41,6 +41,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Nexus/GenerationTracker.h>
 #include <Oxygen/Renderer/Resources/TextureBinder.h>
 #include <Oxygen/Renderer/Upload/Errors.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
@@ -158,18 +159,20 @@ namespace {
 
   [[nodiscard]] auto PrettyBytes(const std::size_t bytes) -> std::string
   {
+    constexpr double kBinaryUnitScale = 1024.0;
     static constexpr std::array<const char*, 5> kUnits
       = { "B", "KiB", "MiB", "GiB", "TiB" };
 
-    double value = static_cast<double>(bytes);
+    auto value = static_cast<double>(bytes);
     std::size_t unit = 0U;
-    while (value >= 1024.0 && unit + 1U < kUnits.size()) {
-      value /= 1024.0;
+    while (value >= kBinaryUnitScale && unit + 1U < kUnits.size()) {
+      value /= kBinaryUnitScale;
       ++unit;
     }
 
     std::ostringstream oss;
-    oss << std::fixed << std::setprecision(2) << value << ' ' << kUnits[unit];
+    oss << std::fixed << std::setprecision(2) << value << ' '
+        << kUnits.at(unit);
     return oss.str();
   }
 
@@ -221,7 +224,7 @@ namespace {
     for (std::uint32_t layer = 0; layer < array_layers; ++layer) {
       for (std::uint32_t mip = 0; mip < mip_count; ++mip) {
         const std::size_t idx
-          = static_cast<std::size_t>(layer) * mip_count + mip;
+          = (static_cast<std::size_t>(layer) * mip_count) + mip;
         const auto& sr_layout = layouts[idx];
 
         const auto mip_w = (std::max)(desc.width >> mip, 1U);
@@ -364,6 +367,8 @@ namespace {
     const data::TextureResource& tex_res, const content::ResourceKey key)
     -> std::variant<PreparedTexture2DUpload, PrepareTexture2DUploadFailure>
   {
+    constexpr std::uint32_t kCubeFaceCount = 6U;
+
     // Build GPU texture description.
     graphics::TextureDesc desc;
     desc.texture_type = tex_res.GetTextureType();
@@ -376,6 +381,7 @@ namespace {
       return PrepareTexture2DUploadFailure {
         .reason
         = PrepareTexture2DUploadFailure::Reason::kUnsupportedTextureType,
+        .layout_failure = std::nullopt,
       };
     }
     desc.format = tex_res.GetFormat();
@@ -391,20 +397,23 @@ namespace {
     if (!IsSupportedTextureFormat(desc.format, format_info)) {
       return PrepareTexture2DUploadFailure {
         .reason = PrepareTexture2DUploadFailure::Reason::kUnsupportedFormat,
+        .layout_failure = std::nullopt,
       };
     }
 
     if (desc.depth != 1U) {
       return PrepareTexture2DUploadFailure {
         .reason = PrepareTexture2DUploadFailure::Reason::kUnsupportedDepth,
+        .layout_failure = std::nullopt,
       };
     }
 
     if (desc.texture_type == TextureType::kTextureCube
-      && desc.array_size != 6U) {
+      && desc.array_size != kCubeFaceCount) {
       return PrepareTexture2DUploadFailure {
         .reason
         = PrepareTexture2DUploadFailure::Reason::kUnsupportedTextureType,
+        .layout_failure = std::nullopt,
       };
     }
 
@@ -417,6 +426,7 @@ namespace {
       return PrepareTexture2DUploadFailure {
         .reason
         = PrepareTexture2DUploadFailure::Reason::kCreateTextureException,
+        .layout_failure = std::nullopt,
       };
     }
 
@@ -425,6 +435,7 @@ namespace {
       return PrepareTexture2DUploadFailure {
         .reason
         = PrepareTexture2DUploadFailure::Reason::kCreateTextureReturnedNull,
+        .layout_failure = std::nullopt,
       };
     }
 
@@ -554,8 +565,7 @@ private:
     bool is_placeholder { true };
     bool load_failed { false };
     bool evicted { false };
-    std::uint64_t generation { 0U };
-    std::uint64_t pending_generation { 0U };
+    bindless::Generation pending_generation { 0U };
 
     std::optional<engine::upload::UploadTicket> pending_ticket;
     std::optional<graphics::TextureViewDescription> pending_view_desc;
@@ -579,7 +589,7 @@ private:
   struct PendingUpload {
     content::ResourceKey key;
     std::shared_ptr<data::TextureResource> resource;
-    std::uint64_t generation { 0U };
+    bindless::Generation generation { 0U };
   };
 
   struct PendingEviction {
@@ -594,8 +604,8 @@ private:
     const char* reason) -> void;
 
   auto OnTextureResourceLoaded(content::ResourceKey resource_key,
-    std::uint64_t generation, std::shared_ptr<data::TextureResource> tex_res)
-    -> void;
+    bindless::Generation generation,
+    std::shared_ptr<data::TextureResource> tex_res) -> void;
 
   auto SubmitQueuedTextureUploads(std::size_t max_bytes) -> void;
 
@@ -619,6 +629,9 @@ private:
     std::vector<engine::upload::UploadSubresource>&& dst_subresources,
     engine::upload::UploadTextureSourceView&& src_view,
     std::size_t trailing_bytes) -> void;
+  auto EnsureGenerationCapacity_(bindless::HeapIndex descriptor_index) -> void;
+  [[nodiscard]] auto CurrentGeneration_(const TextureEntry& entry) const
+    -> bindless::Generation;
 
   auto SubmitTextureData(const std::shared_ptr<graphics::Texture>& texture,
     std::span<const std::byte> data, const char* debug_name) -> void;
@@ -631,6 +644,8 @@ private:
   std::shared_ptr<CallbackGate> callback_gate_;
 
   std::unordered_map<content::ResourceKey, TextureEntry> texture_map_;
+  nexus::GenerationTracker slot_generations_;
+  std::uint32_t slot_generation_capacity_ { 0U };
 
   std::mutex pending_uploads_mutex_;
   std::deque<PendingUpload> pending_uploads_;
@@ -638,7 +653,7 @@ private:
   std::mutex eviction_mutex_;
   std::deque<PendingEviction> pending_evictions_;
 
-  content::IAssetLoader::EvictionSubscription eviction_subscription_ {};
+  content::IAssetLoader::EvictionSubscription eviction_subscription_;
 
   // The singleton global placeholder and error textures.
   std::shared_ptr<graphics::Texture> placeholder_texture_;
@@ -780,13 +795,14 @@ auto TextureBinder::Impl::GetOrAllocate(
         resource_key);
       LOG_F(INFO,
         "TextureBinder: reloading evicted resource {} (reason={}, gen={})",
-        resource_key, entry.last_eviction_reason, entry.generation);
+        resource_key, entry.last_eviction_reason,
+        CurrentGeneration_(entry).get());
       entry.evicted = false;
       entry.load_failed = false;
       entry.is_placeholder = true;
       entry.pending_ticket.reset();
       entry.pending_view_desc.reset();
-      entry.pending_generation = 0U;
+      entry.pending_generation = bindless::Generation { 0U };
       entry.texture = placeholder_texture_;
       entry.placeholder_texture = placeholder_texture_;
       InitiateAsyncLoad(resource_key, entry, "evicted_entry");
@@ -847,6 +863,8 @@ auto TextureBinder::Impl::GetOrAllocate(
   }
 
   entry.descriptor_index = handle.GetBindlessHandle();
+  EnsureGenerationCapacity_(entry.descriptor_index);
+  (void)slot_generations_.Load(entry.descriptor_index);
   DLOG_F(4, "descriptor_index: {}", entry.descriptor_index);
 
   entry.srv_index
@@ -1000,7 +1018,8 @@ auto TextureBinder::Impl::OnFrameStart() -> void
       continue;
     }
 
-    if (entry.evicted || entry.pending_generation != entry.generation) {
+    if (entry.evicted
+      || entry.pending_generation != CurrentGeneration_(entry)) {
       DLOG_F(4,
         "Discarding upload completion for {} due to eviction/generation",
         resource_key);
@@ -1011,7 +1030,7 @@ auto TextureBinder::Impl::OnFrameStart() -> void
       entry.texture = placeholder_texture_;
       entry.pending_ticket.reset();
       entry.pending_view_desc.reset();
-      entry.pending_generation = 0U;
+      entry.pending_generation = bindless::Generation { 0U };
       continue;
     }
 
@@ -1096,7 +1115,7 @@ auto TextureBinder::Impl::OnFrameStart() -> void
     // Clear pending ticket and view desc after handling
     entry.pending_ticket.reset();
     entry.pending_view_desc.reset();
-    entry.pending_generation = 0U;
+    entry.pending_generation = bindless::Generation { 0U };
   }
 
   SubmitQueuedTextureUploads(kMaxTextureUploadBytesPerFrame);
@@ -1282,10 +1301,11 @@ auto TextureBinder::Impl::InitiateAsyncLoad(content::ResourceKey resource_key,
   LOG_F(INFO,
     "Initiating async load for resource key: {} (reason={}, gen={}, "
     "pending={}, placeholder={}, evicted={}, last_eviction_reason={})",
-    resource_key, reason, entry.generation, entry.pending_ticket.has_value(),
-    entry.is_placeholder, entry.evicted, entry.last_eviction_reason);
+    resource_key, reason, CurrentGeneration_(entry).get(),
+    entry.pending_ticket.has_value(), entry.is_placeholder, entry.evicted,
+    entry.last_eviction_reason);
 
-  const auto generation = entry.generation;
+  const auto generation = CurrentGeneration_(entry);
 
   texture_loader_->StartLoadTexture(resource_key,
     [gate = callback_gate_, this, resource_key, generation](
@@ -1328,7 +1348,8 @@ auto TextureBinder::Impl::InitiateAsyncLoad(content::ResourceKey resource_key,
  @param tex_res Loaded texture resource, or `nullptr` on load failure.
 */
 auto TextureBinder::Impl::OnTextureResourceLoaded(
-  const content::ResourceKey resource_key, const std::uint64_t generation,
+  const content::ResourceKey resource_key,
+  const bindless::Generation generation,
   // NOLINTNEXTLINE(*-unnecessary-value-param) - moved from a lambda capture
   std::shared_ptr<data::TextureResource> tex_res) -> void
 {
@@ -1358,6 +1379,27 @@ auto TextureBinder::Impl::FindEntryOrLog(
     return nullptr;
   }
   return &it->second;
+}
+
+auto TextureBinder::Impl::EnsureGenerationCapacity_(
+  const bindless::HeapIndex descriptor_index) -> void
+{
+  const auto raw_index = descriptor_index.get();
+  if (raw_index == kInvalidBindlessHeapIndex.get()) {
+    return;
+  }
+  const auto needed_capacity = raw_index + 1U;
+  if (needed_capacity <= slot_generation_capacity_) {
+    return;
+  }
+  slot_generations_.Resize(bindless::Capacity { needed_capacity });
+  slot_generation_capacity_ = needed_capacity;
+}
+
+auto TextureBinder::Impl::CurrentGeneration_(const TextureEntry& entry) const
+  -> bindless::Generation
+{
+  return slot_generations_.Load(entry.descriptor_index);
 }
 
 auto TextureBinder::Impl::SubmitQueuedTextureUploads(
@@ -1390,7 +1432,7 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
     }
     auto& entry = *entry_ptr;
 
-    if (entry.evicted || pending.generation != entry.generation) {
+    if (entry.evicted || pending.generation != CurrentGeneration_(entry)) {
       DLOG_F(4,
         "Discarding pending upload for {} due to eviction/generation mismatch",
         pending.key);
@@ -1550,8 +1592,8 @@ auto TextureBinder::Impl::ProcessEvictions() -> void
 
     entry.evicted = true;
     entry.last_eviction_reason = eviction.reason;
-    ++entry.generation;
-    entry.pending_generation = 0U;
+    slot_generations_.Bump(entry.descriptor_index);
+    entry.pending_generation = bindless::Generation { 0U };
     entry.pending_ticket.reset();
     entry.pending_view_desc.reset();
 
@@ -1707,7 +1749,7 @@ auto TextureBinder::Impl::SubmitTextureUpload(
   // Store pending ticket + view desc for OnFrameStart() to observe; also
   // set the entry.texture now so UpdateView can target it when complete.
   entry.pending_ticket = *upload_result;
-  entry.pending_generation = entry.generation;
+  entry.pending_generation = CurrentGeneration_(entry);
   entry.pending_view_desc = view_desc;
   entry.texture = std::move(new_texture);
   entry.is_placeholder = true;

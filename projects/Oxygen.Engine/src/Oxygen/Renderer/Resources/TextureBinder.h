@@ -92,7 +92,8 @@ namespace oxygen::renderer::resources {
  On Content eviction, TextureBinder keeps the stable SRV index but repoints the
  descriptor to the global placeholder texture. Evicted entries are marked and
  will reload on the next `GetOrAllocate()` call. Late upload completions are
- discarded when the entry generation no longer matches.
+
+ discarded when the Nexus-tracked descriptor generation no longer matches.
 
  ### Lifecycle (concise)
 
