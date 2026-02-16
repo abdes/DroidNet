@@ -75,11 +75,11 @@ auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
   return bytes;
 }
 
-//! Test: Resource remains cached until explicit release.
+//! Test: Resource remains cached until explicit release and trim.
 /*!
  Scenario: Load a BufferResource from cooked bytes, drop the returned
  shared_ptr, and verify the resource is still cached. Only after calling
- ReleaseResource should the cache entry be evicted.
+ ReleaseResource and TrimCache should the cache entry be evicted.
 */
 NOLINT_TEST_F(
   AssetLoaderLifetimeAsyncTest, ResourceUnload_RequiresExplicitRelease)
@@ -133,6 +133,8 @@ NOLINT_TEST_F(
       cached.reset();
 
       loader.ReleaseResource(key);
+      EXPECT_TRUE(loader.HasBuffer(key));
+      loader.TrimCache();
       EXPECT_FALSE(loader.HasBuffer(key));
 
       loader.Stop();
@@ -141,11 +143,11 @@ NOLINT_TEST_F(
   });
 }
 
-//! Test: Refcounted checkouts require matching releases.
+//! Test: Refcounted checkouts require matching releases and trim.
 /*!
  Scenario: Load a BufferResource, check it out once more using GetBuffer,
  and verify that a single ReleaseResource does not evict the entry. A second
- ReleaseResource is required to evict the cache entry.
+ ReleaseResource still leaves the cache baseline; TrimCache evicts it.
 */
 NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceUnload_RefcountedCheckouts)
 {
@@ -198,6 +200,8 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceUnload_RefcountedCheckouts)
       EXPECT_TRUE(loader.HasBuffer(key));
 
       loader.ReleaseResource(key);
+      EXPECT_TRUE(loader.HasBuffer(key));
+      loader.TrimCache();
       EXPECT_FALSE(loader.HasBuffer(key));
 
       loader.Stop();
@@ -206,11 +210,11 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceUnload_RefcountedCheckouts)
   });
 }
 
-//! Test: Asset remains cached and is reused until explicit release.
+//! Test: Asset remains cached and is reused until explicit release and trim.
 /*!
  Scenario: Load a MaterialAsset, drop the returned shared_ptr without calling
  ReleaseAsset, then load again and expect the same cached instance. After
- ReleaseAsset, the cache entry should be removed.
+ ReleaseAsset, the entry remains as cache baseline; TrimCache removes it.
 */
 NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, AssetUnload_RequiresExplicitRelease)
 {
@@ -253,7 +257,9 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, AssetUnload_RequiresExplicitRelease)
       EXPECT_EQ(cached.get(), first_ptr);
       cached.reset();
 
-      loader.ReleaseAsset(material_key);
+      (void)loader.ReleaseAsset(material_key);
+      EXPECT_TRUE(loader.HasMaterialAsset(material_key));
+      loader.TrimCache();
       EXPECT_FALSE(loader.HasMaterialAsset(material_key));
 
       loader.Stop();
@@ -322,10 +328,11 @@ NOLINT_TEST_F(
 }
 #endif // !NDEBUG
 
-//! Test: async geometry load binds dependencies and unloads on release.
+//! Test: async geometry load binds dependencies and unloads after trim.
 /*!
  Scenario: Load a geometry asset that references buffers and material assets.
- Verify the geometry is returned and releasing the asset evicts it from cache.
+ Verify the geometry is returned and releasing the asset drops usage; TrimCache
+ performs deterministic eviction.
 */
 NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
   LoadAssetAsync_GeometryWithBuffers_BindsDependenciesAndUnloadsInOrder)
@@ -379,7 +386,9 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
       }
 
       geometry.reset();
-      loader.ReleaseAsset(geometry_key);
+      (void)loader.ReleaseAsset(geometry_key);
+      EXPECT_TRUE(loader.HasGeometryAsset(geometry_key));
+      loader.TrimCache();
       EXPECT_FALSE(loader.HasGeometryAsset(geometry_key));
 
       loader.Stop();

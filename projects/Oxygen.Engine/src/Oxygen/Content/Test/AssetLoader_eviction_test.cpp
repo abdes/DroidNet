@@ -78,7 +78,8 @@ protected:
 //! Test: Buffer eviction notifies subscribers on release.
 /*!
  Scenario: Load a buffer resource from cooked bytes, drop the returned pointer,
- and release the resource. Expect a single eviction event with refcount reason.
+ and release the resource. Then force TrimCache so cache-retained entries are
+ evicted deterministically. Expect a single eviction event.
 */
 NOLINT_TEST_F(
   AssetLoaderEvictionAsyncTest, ResourceEviction_NotifiesSubscriberOnRelease)
@@ -131,13 +132,14 @@ NOLINT_TEST_F(
       EXPECT_THAT(resource, NotNull());
       resource.reset();
 
-      loader.ReleaseResource(key);
+      (void)loader.ReleaseResource(key);
+      loader.TrimCache();
 
       EXPECT_EQ(events.size(), 1u);
       if (!events.empty()) {
         EXPECT_EQ(events.front().key, key);
         EXPECT_EQ(events.front().type_id, BufferResource::ClassTypeId());
-        EXPECT_EQ(events.front().reason, EvictionReason::kRefCountZero);
+        EXPECT_EQ(events.front().reason, EvictionReason::kClear);
       }
 
       loader.Stop();
@@ -414,6 +416,94 @@ NOLINT_TEST_F(
         unique_keys.insert(std::hash<ResourceKey> {}(event.key));
       }
       EXPECT_EQ(unique_keys.size(), events.size());
+
+      loader.Stop();
+      (void)subscription;
+      co_return oxygen::co::kJoin;
+    };
+  });
+}
+
+//! Regression: repeated TrimCache passes must remain stable after evictions.
+/*!
+ Scenario: repeatedly load/release a textured material and force TrimCache.
+ This stresses resource-map traversal while eviction callbacks mutate mappings.
+ The test verifies each cycle evicts exactly the expected texture set and that
+ additional no-op trims do not emit extra events.
+*/
+NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, TrimCache_RepeatedCyclesStable)
+{
+  using namespace std::chrono_literals;
+
+  constexpr std::size_t kCycles = 6U;
+  constexpr std::size_t kTexturesPerMaterial = 3U;
+  constexpr std::size_t kNoOpTrimPasses = 3U;
+
+  const auto pak_path = GeneratePakFile("material_with_textures");
+  const auto material_key = CreateTestAssetKey("textured_material");
+
+  TestEventLoop el;
+
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+
+    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+      loader.AddPakFile(pak_path);
+
+      std::vector<EvictionEvent> events;
+      auto subscription
+        = loader.SubscribeResourceEvictions(TextureResource::ClassTypeId(),
+          [&](const EvictionEvent& event) { events.push_back(event); });
+
+      for (std::size_t cycle = 0; cycle < kCycles; ++cycle) {
+        auto material
+          = co_await loader.LoadAssetAsync<MaterialAsset>(material_key);
+        EXPECT_THAT(material, NotNull());
+        if (!material) {
+          loader.Stop();
+          (void)subscription;
+          co_return oxygen::co::kJoin;
+        }
+        material.reset();
+
+        EXPECT_TRUE(loader.HasAsset<MaterialAsset>(material_key));
+        (void)loader.ReleaseAsset(material_key);
+
+        const auto before_trim = events.size();
+        loader.TrimCache();
+        EXPECT_FALSE(loader.HasAsset<MaterialAsset>(material_key));
+
+        const auto after_trim = events.size();
+        EXPECT_EQ(after_trim - before_trim, kTexturesPerMaterial);
+
+        std::unordered_set<std::size_t> unique_cycle_keys;
+        for (std::size_t i = before_trim; i < after_trim; ++i) {
+          const auto& event = events[i];
+          EXPECT_EQ(event.type_id, TextureResource::ClassTypeId());
+          EXPECT_EQ(event.reason, EvictionReason::kClear);
+          unique_cycle_keys.insert(std::hash<ResourceKey> {}(event.key));
+        }
+        EXPECT_EQ(unique_cycle_keys.size(), kTexturesPerMaterial);
+
+        const auto before_noop_trims = events.size();
+        for (std::size_t i = 0; i < kNoOpTrimPasses; ++i) {
+          loader.TrimCache();
+        }
+        EXPECT_EQ(events.size(), before_noop_trims);
+      }
+
+      EXPECT_EQ(events.size(), kCycles * kTexturesPerMaterial);
 
       loader.Stop();
       (void)subscription;

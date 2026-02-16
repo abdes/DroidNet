@@ -175,7 +175,10 @@ NOLINT_TEST_F(AssetLoaderAsyncTest, StartLoadAsset_Material_InvokesCallback)
       EXPECT_THAT(loaded_material, NotNull());
 
       loaded_material.reset();
-      EXPECT_TRUE(loader.ReleaseAsset(material_key));
+      (void)loader.ReleaseAsset(material_key);
+      EXPECT_TRUE(loader.HasMaterialAsset(material_key));
+      loader.TrimCache();
+      EXPECT_FALSE(loader.HasMaterialAsset(material_key));
 
       loader.Stop();
       co_return oxygen::co::kJoin;
