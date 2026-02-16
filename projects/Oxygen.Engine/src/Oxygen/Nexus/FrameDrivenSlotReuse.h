@@ -6,19 +6,12 @@
 
 #pragma once
 
-#include <atomic>
-#include <cstdint>
 #include <functional>
-#include <memory>
-#include <mutex>
-#include <vector>
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
-#include <Oxygen/Nexus/DomainIndexMapper.h>
-#include <Oxygen/Nexus/GenerationTracker.h>
+#include <Oxygen/Nexus/FrameDrivenIndexReuse.h>
 #include <Oxygen/Nexus/Types/Domain.h>
 #include <Oxygen/Nexus/api_export.h>
 
@@ -79,28 +72,12 @@ public:
   OXGN_NXS_API auto OnBeginFrame(frame::Slot fi) -> void;
 
 private:
-  //! Ensure internal buffers have capacity for the provided bindless index.
-  auto EnsureCapacity_(bindless::HeapIndex idx) -> void;
-
   AllocateFn allocate_;
   FreeFn free_;
-  graphics::detail::DeferredReclaimer& per_frame_;
 
-  // Generation tracking for stale-handle detection.
-  mutable GenerationTracker generations_;
-
-  // Double-release guard: 0 = not pending, 1 = pending free.
-  //
-  // Use a contiguous `std::atomic<uint8_t>[]` (owned by a unique_ptr) instead
-  // of `std::vector<std::atomic<uint8_t>>` to ensure a predictable contiguous
-  // layout and explicit pointer-stability during resizes. Some standard-library
-  // implementations do not treat `std::atomic` as trivially relocatable, which
-  // makes vector reallocation semantics platform-dependent. The code relies on
-  // holding `resize_mutex_` briefly to protect pointer stability for deferred
-  // reclamation lambdas that access these flags.
-  std::unique_ptr<std::atomic<uint8_t>[]> pending_flags_;
-  std::size_t pending_size_ { 0 };
-  mutable std::mutex resize_mutex_;
+  // Implementation delegate handling generation tracking and deferred
+  // reclamation
+  FrameDrivenIndexReuse<bindless::HeapIndex, DomainKey> impl_;
 };
 
 } // namespace oxygen::nexus

@@ -2,12 +2,10 @@
 // Tests for GenerationTracker
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
-#include <atomic>
-#include <chrono>
 #include <thread>
 #include <vector>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Nexus/GenerationTracker.h>
 
@@ -22,10 +20,10 @@ protected:
 
 using Generation = oxygen::VersionedBindlessHandle::Generation;
 // Strong-typed generation constants for readability and reuse
-inline constexpr Generation kGen0 { 0u };
-inline constexpr Generation kGen1 { 1u };
-inline constexpr Generation kGen2 { 2u };
-inline constexpr Generation kGen3 { 3u };
+inline constexpr Generation kGen0 { 0U };
+inline constexpr Generation kGen1 { 1U };
+inline constexpr Generation kGen2 { 2U };
+inline constexpr Generation kGen3 { 3U };
 
 //! Ensure that loading an uninitialized slot returns at least 1 after first
 //! access and Bump increments the generation counter.
@@ -33,12 +31,12 @@ NOLINT_TEST_F(
   GenerationTrackerTest, LoadAndBump_UninitializedSlot_InitializesAndIncrements)
 {
   // Arrange
-  const auto capacity = oxygen::bindless::Capacity { 4u };
+  const auto capacity = oxygen::bindless::Capacity { 4U };
   namespace b = oxygen::bindless;
   using GenTracker = oxygen::nexus::GenerationTracker;
 
   GenTracker tracker(capacity);
-  const auto idx = b::HeapIndex { 2u };
+  const auto idx = b::HeapIndex { 2U };
 
   // Act
   const auto gen_before = tracker.Load(idx);
@@ -60,9 +58,9 @@ NOLINT_TEST_F(GenerationTrackerTest,
   namespace b = oxygen::bindless;
   using GenTracker = oxygen::nexus::GenerationTracker;
 
-  GenTracker t(b::Capacity { 2u });
-  const auto idx0 = b::HeapIndex { 0u };
-  const auto idx1 = b::HeapIndex { 1u };
+  GenTracker t(b::Capacity { 2U });
+  const auto idx0 = b::HeapIndex { 0U };
+  const auto idx1 = b::HeapIndex { 1U };
 
   // Act + Assert: initialize and bump
   const auto g0 = t.Load(idx0);
@@ -70,7 +68,7 @@ NOLINT_TEST_F(GenerationTrackerTest,
   EXPECT_EQ(t.Load(idx0), g0 + kGen1);
 
   // Resize larger
-  t.Resize(b::Capacity { 4u });
+  t.Resize(b::Capacity { 4U });
 
   // Assert: previously initialized slot still has value
   EXPECT_GT(t.Load(idx0), kGen0);
@@ -78,7 +76,7 @@ NOLINT_TEST_F(GenerationTrackerTest,
     t.Load(idx1), kGen0); // idx1 should have been lazily initialized to 1
 
   // Assert: new slots after expansion are lazily initialized to 1
-  const auto new_slot_gen = t.Load(b::HeapIndex { 3u }); // new slot
+  const auto new_slot_gen = t.Load(b::HeapIndex { 3U }); // new slot
   EXPECT_EQ(new_slot_gen, kGen1);
 }
 
@@ -90,8 +88,8 @@ NOLINT_TEST_F(
   namespace b = oxygen::bindless;
   using GenTracker = oxygen::nexus::GenerationTracker;
 
-  GenTracker t(b::Capacity { 2u });
-  const auto out = b::HeapIndex { 10u };
+  GenTracker t(b::Capacity { 2U });
+  const auto out = b::HeapIndex { 10U };
 
   // Act Out-of-range load returns 0 and bump is a no-op
   const auto before = t.Load(out);
@@ -111,8 +109,8 @@ NOLINT_TEST_F(
   namespace b = oxygen::bindless;
   using GenTracker = oxygen::nexus::GenerationTracker;
 
-  GenTracker t(b::Capacity { 4u });
-  const auto idx3 = b::HeapIndex { 3u };
+  GenTracker t(b::Capacity { 4U });
+  const auto idx3 = b::HeapIndex { 3U };
 
   // Act: initialize and bump the last slot
   t.Bump(idx3);
@@ -121,7 +119,7 @@ NOLINT_TEST_F(
   EXPECT_GT(t.Load(idx3), kGen0);
 
   // Act: shrink to smaller capacity
-  t.Resize(b::Capacity { 2u });
+  t.Resize(b::Capacity { 2U });
 
   // Assert previously initialized slot should be dropped
   EXPECT_EQ(t.Load(idx3), kGen0);
@@ -136,8 +134,8 @@ NOLINT_TEST_F(GenerationTrackerTest, Bump_GenerationsNeverReset_OnlyIncrement)
   namespace b = oxygen::bindless;
   using GenTracker = oxygen::nexus::GenerationTracker;
 
-  GenTracker t(b::Capacity { 4u });
-  const auto idx = b::HeapIndex { 2u };
+  GenTracker t(b::Capacity { 4U });
+  const auto idx = b::HeapIndex { 2U };
 
   // Act & Assert: Test multiple consecutive bumps increment correctly
   const auto initial = t.Load(idx);
@@ -177,12 +175,12 @@ NOLINT_TEST_F(
   // Arrange
   namespace b = oxygen::bindless;
   using GenTracker = oxygen::nexus::GenerationTracker;
-  constexpr auto capacity = b::Capacity { 3u };
+  constexpr auto capacity = b::Capacity { 3U };
 
   GenTracker t(capacity);
-  const auto idx0 = b::HeapIndex { 0u };
-  const auto idx1 = b::HeapIndex { 1u };
-  const auto idx2 = b::HeapIndex { 2u };
+  const auto idx0 = b::HeapIndex { 0U };
+  const auto idx1 = b::HeapIndex { 1U };
+  const auto idx2 = b::HeapIndex { 2U };
 
   // Initialize all slots with different generation values
   t.Bump(idx0); // gen will be 2
@@ -211,20 +209,20 @@ NOLINT_TEST_F(GenerationTrackerTest, Resize_ZeroCapacity_AllAccessesReturnZero)
   namespace b = oxygen::bindless;
   using GenTracker = oxygen::nexus::GenerationTracker;
 
-  GenTracker t(b::Capacity { 4u });
-  const auto idx = b::HeapIndex { 1u };
+  GenTracker t(b::Capacity { 4U });
+  const auto idx = b::HeapIndex { 1U };
 
   // Initialize a slot
   t.Bump(idx);
   EXPECT_GT(t.Load(idx), kGen0);
 
   // Act: resize to zero capacity
-  t.Resize(b::Capacity { 0u });
+  t.Resize(b::Capacity { 0U });
 
   // Assert: all accesses should return zero
-  EXPECT_EQ(t.Load(b::HeapIndex { 0u }), kGen0);
+  EXPECT_EQ(t.Load(b::HeapIndex { 0U }), kGen0);
   EXPECT_EQ(t.Load(idx), kGen0);
-  EXPECT_EQ(t.Load(b::HeapIndex { 10u }), kGen0);
+  EXPECT_EQ(t.Load(b::HeapIndex { 10U }), kGen0);
 
   // Bump should be no-op
   t.Bump(idx);
@@ -240,9 +238,9 @@ NOLINT_TEST_F(GenerationTrackerTest,
   namespace b = oxygen::bindless;
   using GenTracker = oxygen::nexus::GenerationTracker;
 
-  GenTracker t(b::Capacity { 4u });
-  const auto idx0 = b::HeapIndex { 0u };
-  const auto idx1 = b::HeapIndex { 1u };
+  GenTracker t(b::Capacity { 4U });
+  const auto idx0 = b::HeapIndex { 0U };
+  const auto idx1 = b::HeapIndex { 1U };
 
   // Initialize slots with known generations
   t.Bump(idx0); // gen = 2
@@ -253,11 +251,12 @@ NOLINT_TEST_F(GenerationTrackerTest,
   const auto gen1_initial = t.Load(idx1);
 
   // Act: multiple resize operations
-  t.Resize(b::Capacity { 2u }); // shrink, should preserve idx0 and idx1
+  t.Resize(b::Capacity { 2U }); // shrink, should preserve idx0 and idx1
   const auto gen0_after_shrink = t.Load(idx0);
   const auto gen1_after_shrink = t.Load(idx1);
 
-  t.Resize(b::Capacity { 6u }); // expand again
+  constexpr auto expanded_capacity = b::Capacity { 6U };
+  t.Resize(expanded_capacity); // expand again
   const auto gen0_after_expand = t.Load(idx0);
   const auto gen1_after_expand = t.Load(idx1);
 
@@ -277,8 +276,8 @@ NOLINT_TEST_F(
   namespace b = oxygen::bindless;
   using GenTracker = oxygen::nexus::GenerationTracker;
 
-  GenTracker t(b::Capacity { 1u });
-  const auto idx = b::HeapIndex { 0u };
+  GenTracker t(b::Capacity { 1U });
+  const auto idx = b::HeapIndex { 0U };
 
   // Act: Get initial generation (lazy initialization to 1), then simulate many
   // bumps
@@ -286,7 +285,7 @@ NOLINT_TEST_F(
   EXPECT_EQ(initial_gen, kGen1);
 
   // Note: In real implementation, this would be atomic operations
-  constexpr uint32_t num_bumps = 1000000u;
+  constexpr uint32_t num_bumps = 1000000U;
   for (uint32_t i = 0; i < num_bumps; ++i) {
     t.Bump(idx);
   }
@@ -312,10 +311,10 @@ NOLINT_TEST_F(
   namespace b = oxygen::bindless;
   using GenTracker = oxygen::nexus::GenerationTracker;
 
-  GenTracker t(b::Capacity { 4u });
-  const auto idx0 = b::HeapIndex { 0u };
-  const auto idx1 = b::HeapIndex { 1u };
-  const auto idx2 = b::HeapIndex { 2u };
+  GenTracker t(b::Capacity { 4U });
+  const auto idx0 = b::HeapIndex { 0U };
+  const auto idx1 = b::HeapIndex { 1U };
+  const auto idx2 = b::HeapIndex { 2U };
 
   // Act & Assert: First load of any uninitialized slot should return 1
   const auto gen0_first = t.Load(idx0);
@@ -357,8 +356,8 @@ NOLINT_TEST_F(
   namespace b = oxygen::bindless;
   using GenTracker = oxygen::nexus::GenerationTracker;
 
-  GenTracker t(b::Capacity { 2u });
-  const auto idx = b::HeapIndex { 0u };
+  GenTracker t(b::Capacity { 2U });
+  const auto idx = b::HeapIndex { 0U };
 
   // Act: Bump without ever calling Load() first
   t.Bump(idx);
@@ -396,20 +395,22 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   namespace b = oxygen::bindless;
   using GenTracker = oxygen::nexus::GenerationTracker;
 
-  GenTracker tracker(b::Capacity { 100u });
-  const auto idx = b::HeapIndex { 42u };
+  constexpr auto kTestCapacity = b::Capacity { 100U };
+  GenTracker tracker(kTestCapacity);
+  const auto idx = b::HeapIndex { 42U };
   constexpr int num_threads = 10;
-  constexpr int loads_per_thread = 1000;
+  constexpr int kNumOperations = 1000;
 
   std::vector<std::thread> threads;
   std::vector<std::vector<uint32_t>> results(num_threads);
 
   // Act: Multiple threads concurrently loading the same uninitialized slot
+  threads.reserve(num_threads);
   for (int t = 0; t < num_threads; ++t) {
-    threads.emplace_back([&tracker, idx, t, &results, loads_per_thread]() {
-      results[t].reserve(loads_per_thread);
-      for (int i = 0; i < loads_per_thread; ++i) {
-        results[t].push_back(tracker.Load(idx).get());
+    threads.emplace_back([&tracker, idx, t, &results]() {
+      results[static_cast<std::size_t>(t)].reserve(kNumOperations);
+      for (int i = 0; i < kNumOperations; ++i) {
+        results[static_cast<std::size_t>(t)].push_back(tracker.Load(idx).get());
       }
     });
   }
@@ -423,7 +424,7 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   // init)
   for (const auto& thread_results : results) {
     for (const auto generation : thread_results) {
-      EXPECT_EQ(generation, 1u);
+      EXPECT_EQ(generation, 1U);
     }
   }
 }
@@ -437,11 +438,12 @@ NOLINT_TEST_F(
   namespace b = oxygen::bindless;
   using GenTracker = oxygen::nexus::GenerationTracker;
 
-  GenTracker tracker(b::Capacity { 100u });
-  const auto idx = b::HeapIndex { 42u };
+  constexpr auto kTestCapacity = b::Capacity { 100U };
+  GenTracker tracker(kTestCapacity);
+  const auto idx = b::HeapIndex { 42U };
   constexpr int num_threads = 10;
-  constexpr int bumps_per_thread = 100;
-  constexpr int expected_total_bumps = num_threads * bumps_per_thread;
+  constexpr int kNumBumpsPerThread = 100;
+  constexpr int expected_total_bumps = num_threads * kNumBumpsPerThread;
 
   std::vector<std::thread> threads;
 
@@ -449,9 +451,10 @@ NOLINT_TEST_F(
   const auto initial_gen = tracker.Load(idx); // Lazy init to 1
 
   // Act: Multiple threads concurrently bumping the same slot
+  threads.reserve(num_threads);
   for (int t = 0; t < num_threads; ++t) {
-    threads.emplace_back([&tracker, idx, bumps_per_thread]() {
-      for (int i = 0; i < bumps_per_thread; ++i) {
+    threads.emplace_back([&tracker, idx]() {
+      for (int i = 0; i < kNumBumpsPerThread; ++i) {
         tracker.Bump(idx);
       }
     });
@@ -476,11 +479,12 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   namespace b = oxygen::bindless;
   using GenTracker = oxygen::nexus::GenerationTracker;
 
-  GenTracker tracker(b::Capacity { 100u });
-  const auto idx = b::HeapIndex { 42u };
+  constexpr auto kTestCapacity = b::Capacity { 100U };
+  GenTracker tracker(kTestCapacity);
+  const auto idx = b::HeapIndex { 42U };
   constexpr int num_reader_threads = 4;
   constexpr int num_writer_threads = 2;
-  constexpr int operations_per_thread = 500;
+  constexpr int kNumMixedOperations = 500;
 
   std::vector<std::thread> threads;
   std::atomic<bool> start_flag { false };
@@ -488,38 +492,39 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   std::atomic<uint32_t> max_observed_gen { 0 };
 
   // Act: Reader threads continuously observe generation values
+  threads.reserve(num_reader_threads + num_writer_threads);
   for (int t = 0; t < num_reader_threads; ++t) {
-    threads.emplace_back([&tracker, idx, &start_flag, &min_observed_gen,
-                           &max_observed_gen, operations_per_thread]() {
-      while (!start_flag.load()) {
-        std::this_thread::yield();
-      }
+    threads.emplace_back(
+      [&tracker, idx, &start_flag, &min_observed_gen, &max_observed_gen]() {
+        while (!start_flag.load()) {
+          std::this_thread::yield();
+        }
 
-      for (int i = 0; i < operations_per_thread; ++i) {
-        const auto gen = tracker.Load(idx).get();
+        for (int i = 0; i < kNumMixedOperations; ++i) {
+          const auto gen = tracker.Load(idx).get();
 
-        // Update observed range atomically
-        uint32_t current_min = min_observed_gen.load();
-        while (gen < current_min
-          && !min_observed_gen.compare_exchange_weak(current_min, gen)) { }
+          // Update observed range atomically
+          uint32_t current_min = min_observed_gen.load();
+          while (gen < current_min
+            && !min_observed_gen.compare_exchange_weak(current_min, gen)) { }
 
-        uint32_t current_max = max_observed_gen.load();
-        while (gen > current_max
-          && !max_observed_gen.compare_exchange_weak(current_max, gen)) { }
+          uint32_t current_max = max_observed_gen.load();
+          while (gen > current_max
+            && !max_observed_gen.compare_exchange_weak(current_max, gen)) { }
 
-        std::this_thread::yield();
-      }
-    });
+          std::this_thread::yield();
+        }
+      });
   }
 
   // Writer threads continuously increment generation
   for (int t = 0; t < num_writer_threads; ++t) {
-    threads.emplace_back([&tracker, idx, &start_flag, operations_per_thread]() {
+    threads.emplace_back([&tracker, idx, &start_flag]() {
       while (!start_flag.load()) {
         std::this_thread::yield();
       }
 
-      for (int i = 0; i < operations_per_thread; ++i) {
+      for (int i = 0; i < kNumMixedOperations; ++i) {
         tracker.Bump(idx);
         std::this_thread::yield();
       }
@@ -543,12 +548,12 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   EXPECT_LE(observed_max, final_gen.get());
 
   // Minimum observed should be at least 1 (lazy initialization)
-  EXPECT_GE(observed_min, 1u);
+  EXPECT_GE(observed_min, 1U);
 
   // Final generation should reflect the expected number of bumps
-  const auto expected_bumps = num_writer_threads * operations_per_thread;
-  EXPECT_EQ(
-    final_gen.get(), 1u + expected_bumps); // 1 from lazy init + all bumps
+  const auto expected_bumps = num_writer_threads * kNumMixedOperations;
+  EXPECT_EQ(final_gen.get(),
+    1U + static_cast<uint32_t>(expected_bumps)); // 1 from lazy init + all bumps
 }
 
 //! Verify concurrent access to different slots is independent and doesn't
@@ -560,32 +565,35 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   namespace b = oxygen::bindless;
   using GenTracker = oxygen::nexus::GenerationTracker;
 
-  GenTracker tracker(b::Capacity { 100u });
+  constexpr auto kTestCapacity = b::Capacity { 100U };
+  GenTracker tracker(kTestCapacity);
   constexpr int num_slots = 10;
   constexpr int threads_per_slot = 5;
-  constexpr int operations_per_thread = 200;
+  constexpr int kNumIndependentOperations = 200;
 
   std::vector<std::thread> threads;
   std::vector<std::atomic<uint32_t>> final_generations(num_slots);
 
   // Act: Each slot gets its own set of threads performing operations
+  threads.reserve(
+    static_cast<size_t>(num_slots) * static_cast<size_t>(threads_per_slot));
   for (int slot = 0; slot < num_slots; ++slot) {
     const auto idx = b::HeapIndex { static_cast<uint32_t>(slot) };
 
     for (int t = 0; t < threads_per_slot; ++t) {
-      threads.emplace_back(
-        [&tracker, idx, slot, &final_generations, operations_per_thread]() {
-          // Initialize the slot (lazy)
-          [[maybe_unused]] const auto init_gen = tracker.Load(idx);
+      threads.emplace_back([&tracker, idx, slot, &final_generations]() {
+        // Initialize the slot (lazy)
+        [[maybe_unused]] const auto init_gen = tracker.Load(idx);
 
-          // Perform bump operations
-          for (int i = 0; i < operations_per_thread; ++i) {
-            tracker.Bump(idx);
-          }
+        // Perform bump operations
+        for (int i = 0; i < kNumIndependentOperations; ++i) {
+          tracker.Bump(idx);
+        }
 
-          // Store final generation for this slot
-          final_generations[slot].store(tracker.Load(idx).get());
-        });
+        // Store final generation for this slot
+        final_generations[static_cast<std::size_t>(slot)].store(
+          tracker.Load(idx).get());
+      });
     }
   }
 
@@ -597,7 +605,8 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   // Assert: Each slot should have the expected number of increments
   for (int slot = 0; slot < num_slots; ++slot) {
     const auto idx = b::HeapIndex { static_cast<uint32_t>(slot) };
-    const auto expected_gen = 1u + (threads_per_slot * operations_per_thread);
+    const auto expected_gen = 1U
+      + static_cast<uint32_t>(threads_per_slot * kNumIndependentOperations);
     EXPECT_EQ(tracker.Load(idx), Generation { expected_gen });
   }
 }
@@ -616,8 +625,9 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   // This design choice preserves the lock-free performance of Load() and Bump()
   // operations while requiring callers to coordinate Resize() externally.
 
-  GenTracker tracker(b::Capacity { 50u });
-  const auto idx = b::HeapIndex { 10u };
+  constexpr auto initial_capacity = b::Capacity { 50U };
+  GenTracker tracker(initial_capacity);
+  const auto idx = b::HeapIndex { 10U };
 
   // Initialize slot
   [[maybe_unused]] const auto first_load = tracker.Load(idx);
@@ -626,13 +636,14 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
 
   // Act: Resize while ensuring no concurrent access (This is the CORRECT way to
   // use Resize - no concurrent access)
-  tracker.Resize(b::Capacity { 100u });
+  constexpr auto expanded_capacity = b::Capacity { 100U };
+  tracker.Resize(expanded_capacity);
 
   // Assert: Generation should be preserved after resize
   EXPECT_EQ(tracker.Load(idx), initial_gen);
 
   // Assert: Can access new slots
-  const auto new_slot = b::HeapIndex { 75u };
+  const auto new_slot = b::HeapIndex { 75U };
   EXPECT_EQ(tracker.Load(new_slot), kGen1); // Lazy init
 }
 
@@ -645,10 +656,12 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
 NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   Load_ConcurrentReaderWriterAccess_MaintainsMonotonicity)
 {
-  using namespace oxygen::nexus;
+  using oxygen::bindless::Capacity;
+  using oxygen::bindless::HeapIndex;
+  using oxygen::nexus::GenerationTracker;
 
   // Arrange
-  GenerationTracker tracker(oxygen::bindless::Capacity { 1 });
+  GenerationTracker tracker(Capacity { 1U });
   constexpr int kWriterThreads = 4;
   constexpr int kReaderThreads = 4;
   constexpr int kIters = 10000;
@@ -658,24 +671,25 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
 
   // Act - Create writer threads that bump generation
   std::vector<std::thread> writers;
+  writers.reserve(kWriterThreads);
   for (int t = 0; t < kWriterThreads; ++t) {
     writers.emplace_back([&tracker, &start]() {
       while (!start.load(std::memory_order_acquire)) { }
       for (int i = 0; i < kIters; ++i) {
-        tracker.Bump(oxygen::bindless::HeapIndex { 0 });
+        tracker.Bump(HeapIndex { 0U });
       }
     });
   }
 
   // Act - Create reader threads that verify monotonicity
   std::vector<std::thread> readers;
+  readers.reserve(kReaderThreads);
   for (int t = 0; t < kReaderThreads; ++t) {
     readers.emplace_back([&tracker, &start, &max_seen]() {
       while (!start.load(std::memory_order_acquire)) { }
       uint32_t last = 0;
       for (int i = 0; i < kIters; ++i) {
-        const uint32_t v
-          = tracker.Load(oxygen::bindless::HeapIndex { 0 }).get();
+        const uint32_t v = tracker.Load(HeapIndex { 0U }).get();
 
         // Assert - Must be non-decreasing per reader
         EXPECT_GE(v, last);
@@ -690,13 +704,15 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
 
   // Act - Start all threads simultaneously
   start.store(true, std::memory_order_release);
-  for (auto& w : writers)
+  for (auto& w : writers) {
     w.join();
-  for (auto& r : readers)
+  }
+  for (auto& r : readers) {
     r.join();
+  }
 
   // Assert - Final value should reflect some bumps occurred
-  EXPECT_GT(max_seen.load(), 0u);
+  EXPECT_GT(max_seen.load(), 0U);
 }
 
 } // namespace

@@ -8,7 +8,7 @@
 
 #include <atomic>
 #include <cstdint>
-#include <memory>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Bindless/Types.h>
@@ -87,10 +87,10 @@ public:
   {
     const auto u_capacity = capacity.get();
     size_ = u_capacity;
-    table_ = std::make_unique<std::atomic<uint32_t>[]>(u_capacity);
+    table_.resize(u_capacity);
     // zero means "never initialized"; lazy init to 1 on first load
     for (std::size_t i = 0; i < size_; ++i) {
-      table_[i].store(0u, std::memory_order_relaxed);
+      table_[i].value.store(0U, std::memory_order_relaxed);
     }
   }
 
@@ -99,6 +99,7 @@ public:
 
   OXYGEN_MAKE_NON_COPYABLE(GenerationTracker)
   OXYGEN_DEFAULT_MOVABLE(GenerationTracker)
+  ~GenerationTracker() = default;
 
   //! Load current generation value for the specified slot.
   /*!
@@ -135,18 +136,18 @@ public:
   {
     const auto u_index = index.get();
     if (u_index >= size_) {
-      return bindless::Generation { 0u };
+      return bindless::Generation { 0U };
     }
-    uint32_t v = table_[u_index].load(std::memory_order_acquire);
-    if (v == 0u) {
+    uint32_t v = table_[u_index].value.load(std::memory_order_acquire);
+    if (v == 0U) {
       // Lazily initialize to 1 only if the slot is still zero. Use
       // compare_exchange to avoid overwriting concurrent bumps which could
       // otherwise increase the generation (e.g., Bump() racing with Load()).
-      uint32_t expected = 0u;
-      table_[u_index].compare_exchange_strong(
-        expected, 1u, std::memory_order_acq_rel, std::memory_order_acquire);
+      uint32_t expected = 0U;
+      table_[u_index].value.compare_exchange_strong(
+        expected, 1U, std::memory_order_acq_rel, std::memory_order_acquire);
       // Return the up-to-date value (either observed bumped value or 1).
-      return bindless::Generation { table_[u_index].load(
+      return bindless::Generation { table_[u_index].value.load(
         std::memory_order_acquire) };
     }
     return bindless::Generation { v };
@@ -187,7 +188,7 @@ public:
     if (u_index >= size_) {
       return;
     }
-    table_[u_index].fetch_add(1u, std::memory_order_release);
+    table_[u_index].value.fetch_add(1U, std::memory_order_release);
   }
 
   //! Resize generation table while preserving existing values.
@@ -225,23 +226,55 @@ public:
     if (u_capacity == size_) {
       return;
     }
-    auto new_table = std::make_unique<std::atomic<uint32_t>[]>(u_capacity);
+    std::vector<AtomicGeneration> new_table;
+    new_table.resize(u_capacity);
     // copy existing values (by load/store) and initialize new slots to 0
     const auto old_size = size_;
     for (std::size_t i = 0; i < u_capacity; ++i) {
       if (i < old_size) {
-        const uint32_t val = table_[i].load(std::memory_order_relaxed);
-        new_table[i].store(val, std::memory_order_relaxed);
+        const uint32_t val = table_[i].value.load(std::memory_order_relaxed);
+        new_table[i].value.store(val, std::memory_order_relaxed);
       } else {
-        new_table[i].store(0u, std::memory_order_relaxed);
+        new_table[i].value.store(0U, std::memory_order_relaxed);
       }
     }
-    table_.swap(new_table);
+    table_ = std::move(new_table);
     size_ = u_capacity;
   }
 
 private:
-  std::unique_ptr<std::atomic<uint32_t>[]> table_;
+  struct AtomicGeneration {
+    mutable std::atomic<uint32_t> value { 0U };
+
+    AtomicGeneration() = default;
+    AtomicGeneration(const AtomicGeneration& other)
+      : value(other.value.load(std::memory_order_relaxed))
+    {
+    }
+    AtomicGeneration(AtomicGeneration&& other) noexcept
+      : value(other.value.load(std::memory_order_relaxed))
+    {
+    }
+    auto operator=(const AtomicGeneration& other) -> AtomicGeneration&
+    {
+      if (this != &other) {
+        value.store(other.value.load(std::memory_order_relaxed),
+          std::memory_order_relaxed);
+      }
+      return *this;
+    }
+    auto operator=(AtomicGeneration&& other) noexcept -> AtomicGeneration&
+    {
+      if (this != &other) {
+        value.store(other.value.load(std::memory_order_relaxed),
+          std::memory_order_relaxed);
+      }
+      return *this;
+    }
+    ~AtomicGeneration() = default;
+  };
+
+  std::vector<AtomicGeneration> table_;
   std::size_t size_ { 0 };
 };
 

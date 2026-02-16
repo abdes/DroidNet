@@ -7,8 +7,8 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Nexus/TimelineGatedSlotReuse.h>
 
 using oxygen::nexus::TimelineGatedSlotReuse;
@@ -42,16 +42,27 @@ using FenceValue = oxygen::graphics::FenceValue;
 TimelineGatedSlotReuse::TimelineGatedSlotReuse(AllocateFn allocate, FreeFn free)
   : allocate_(std::move(allocate))
   , free_(std::move(free))
-  , generation_tracker_()
 {
 }
 
 #if !defined(NDEBUG)
 namespace {
 // Debug-only global config for stall warnings
-std::atomic<long long> g_warn_base_ms { 2000 }; // 2s
-std::atomic<long long> g_warn_max_ms { 5000 }; // 5s
-std::atomic<double> g_warn_multiplier { 2.0 }; // x2 backoff
+constexpr int64_t kDefaultWarnBaseMs = 2000; // 2s
+constexpr int64_t kDefaultWarnMaxMs = 5000; // 5s
+constexpr double kDefaultWarnMultiplier = 2.0; // x2 backoff
+
+struct StallWarningConfig {
+  std::atomic<int64_t> base_ms { kDefaultWarnBaseMs };
+  std::atomic<int64_t> max_ms { kDefaultWarnMaxMs };
+  std::atomic<double> multiplier { kDefaultWarnMultiplier };
+};
+
+auto GetStallWarningConfig() -> StallWarningConfig&
+{
+  static StallWarningConfig config {};
+  return config;
+}
 } // namespace
 
 /*!
@@ -80,15 +91,17 @@ void TimelineGatedSlotReuse::SetDebugStallWarningConfig(
   std::chrono::milliseconds base, double multiplier,
   std::chrono::milliseconds max)
 {
-  if (base.count() <= 0)
+  auto& config = GetStallWarningConfig();
+  if (base.count() <= 0) {
     base = std::chrono::milliseconds(1);
-  if (max.count() < base.count())
-    max = base;
-  if (multiplier < 1.0)
-    multiplier = 1.0;
-  g_warn_base_ms.store(base.count(), std::memory_order_relaxed);
-  g_warn_max_ms.store(max.count(), std::memory_order_relaxed);
-  g_warn_multiplier.store(multiplier, std::memory_order_relaxed);
+  }
+  max = (std::max)(max, base);
+  multiplier = (std::max)(multiplier, 1.0);
+  config.base_ms.store(
+    static_cast<int64_t>(base.count()), std::memory_order_relaxed);
+  config.max_ms.store(
+    static_cast<int64_t>(max.count()), std::memory_order_relaxed);
+  config.multiplier.store(multiplier, std::memory_order_relaxed);
 }
 #endif // !NDEBUG
 
@@ -120,13 +133,16 @@ void TimelineGatedSlotReuse::SetDebugStallWarningConfig(
 void TimelineGatedSlotReuse::EnsureCapacity(bindless::HeapIndex index)
 {
   // Ensure generation tracker covers index. Resize to at least index+1.
-  const std::size_t needed = static_cast<std::size_t>(index.get()) + 1u;
+  const std::size_t needed = static_cast<std::size_t>(index.get()) + 1U;
 
   // First, ensure generations are large enough (only grow, never shrink)
-  if (gen_capacity_ < needed) {
-    gen_capacity_ = needed;
-    generation_tracker_.Resize(
-      bindless::Capacity { static_cast<uint32_t>(gen_capacity_) });
+  {
+    std::lock_guard<std::mutex> generation_lock(generation_mutex_);
+    if (gen_capacity_ < needed) {
+      gen_capacity_ = needed;
+      generation_tracker_.Resize(
+        bindless::Capacity { static_cast<uint32_t>(gen_capacity_) });
+    }
   }
 
   // Early return if pending flags already cover the needed capacity
@@ -137,25 +153,57 @@ void TimelineGatedSlotReuse::EnsureCapacity(bindless::HeapIndex index)
   // Thread-safe resize of pending flags array with pointer stability
   std::lock_guard<std::mutex> lg(resize_mutex_);
   if (pending_size_ < needed) {
+    constexpr std::size_t kMinPendingSize = 1U;
+    constexpr std::size_t kGrowthFactor = 2U;
     const auto old_size = pending_size_;
     // Exponential growth with immediate satisfaction of needed capacity
-    auto new_size
-      = std::max<std::size_t>(std::max<std::size_t>(1u, old_size * 2u), needed);
-    auto new_buffer = std::make_unique<std::atomic<uint8_t>[]>(new_size);
-
-    // Copy existing values and initialize new ones Use relaxed ordering since
-    // we hold the resize mutex
-    for (std::size_t i = 0; i < new_size; ++i) {
-      if (i < old_size && pending_flags_) {
-        new_buffer[i].store(pending_flags_[i].load(std::memory_order_relaxed),
-          std::memory_order_relaxed);
-      } else {
-        new_buffer[i].store(0u, std::memory_order_relaxed);
-      }
-    }
-    pending_flags_.swap(new_buffer);
+    const auto new_size
+      = (std::max)((std::max)(kMinPendingSize, old_size * kGrowthFactor),
+        needed);
+    pending_flags_.resize(new_size);
     pending_size_ = new_size;
   }
+}
+
+auto TimelineGatedSlotReuse::TrySetPending(bindless::HeapIndex index) -> bool
+{
+  const std::size_t idx = index.get();
+
+  std::unique_lock<std::mutex> lock(resize_mutex_);
+  if (idx >= pending_size_) {
+    lock.unlock();
+    EnsureCapacity(index);
+    lock.lock();
+  }
+
+  uint8_t expected = 0U;
+  return pending_flags_[idx].value.compare_exchange_strong(
+    expected, 1U, std::memory_order_acq_rel);
+}
+
+auto TimelineGatedSlotReuse::GetOrCreateQueueData(
+  const std::shared_ptr<CommandQueue>& queue) -> std::shared_ptr<QueueData>
+{
+  std::lock_guard<std::mutex> lock(queues_lock_);
+  const auto key = std::weak_ptr<CommandQueue>(queue);
+  auto it = pending_per_queue_.find(key);
+  if (it == pending_per_queue_.end()) {
+    auto created = std::make_shared<QueueData>();
+    pending_per_queue_.emplace(key, created);
+    return created;
+  }
+  return it->second;
+}
+
+auto TimelineGatedSlotReuse::FindQueueData(
+  const std::shared_ptr<CommandQueue>& queue) -> std::shared_ptr<QueueData>
+{
+  std::lock_guard<std::mutex> lock(queues_lock_);
+  const auto it = pending_per_queue_.find(std::weak_ptr<CommandQueue>(queue));
+  if (it == pending_per_queue_.end()) {
+    return {};
+  }
+  return it->second;
 }
 
 /*!
@@ -189,7 +237,11 @@ auto TimelineGatedSlotReuse::Allocate(DomainKey const& domain) -> VHandle
   // Ensure generation tracker and pending flags cover index
   EnsureCapacity(handle);
 
-  const auto generation = generation_tracker_.Load(handle);
+  bindless::Generation generation {};
+  {
+    std::lock_guard<std::mutex> generation_lock(generation_mutex_);
+    generation = generation_tracker_.Load(handle);
+  }
   return VHandle(handle, generation);
 }
 
@@ -224,52 +276,20 @@ auto TimelineGatedSlotReuse::Release(DomainKey const& domain, VHandle const h,
   const std::shared_ptr<CommandQueue>& queue, FenceValue fence_value) -> void
 {
   // Early return for invalid handles - prevent massive memory allocation
-  if (!h.IsValid()) {
+  if (!h.IsValid() || !queue || !IsHandleCurrent(h)) {
     return;
   }
 
   const bindless::HeapIndex idx = h.ToBindlessHandle();
-  const auto u_idx = idx.get();
-
-  // Prevent double-release via atomic pending flags with pointer stability Use
-  // the same resize mutex pattern as FrameDrivenSlotReuse to protect against
-  // concurrent resizes during the compare-exchange operation
-  {
-    std::unique_lock<std::mutex> ul(resize_mutex_);
-    if (static_cast<std::size_t>(u_idx) >= pending_size_) {
-      // Grow if still needed: release the lock, resize, then re-acquire
-      ul.unlock();
-      EnsureCapacity(idx);
-      ul.lock();
-    }
-
-    // Atomic test-and-set: 0 -> 1 means we own this release
-    uint8_t expected = 0;
-    if (!pending_flags_[u_idx].compare_exchange_strong(
-          expected, 1, std::memory_order_acq_rel)) {
-      // Already pending release by another thread, ignore this request
-      return;
-    }
+  if (!TrySetPending(idx)) {
+    return;
   }
 
   PendingFree pending_free { domain, idx };
 
   // Insert into per-queue buckets with thread-safe queue management
   {
-    if (!queue) {
-      return;
-    }
-    std::shared_ptr<QueueData> qd;
-    {
-      std::lock_guard<std::mutex> qlk(queues_lock_);
-      auto it = pending_per_queue_.find(std::weak_ptr(queue));
-      if (it == pending_per_queue_.end()) {
-        qd = std::make_shared<QueueData>();
-        pending_per_queue_.emplace(std::weak_ptr(queue), qd);
-      } else {
-        qd = it->second;
-      }
-    }
+    auto qd = GetOrCreateQueueData(queue);
     std::lock_guard<std::mutex> lk(qd->lock);
     qd->buckets[fence_value].push_back(pending_free);
   }
@@ -305,6 +325,10 @@ auto TimelineGatedSlotReuse::ReleaseBatch(
   const std::shared_ptr<CommandQueue>& queue, FenceValue fence_value,
   std::span<const std::pair<DomainKey, VHandle>> items) -> void
 {
+  if (!queue) {
+    return;
+  }
+
   // Reserve vector of pending frees
   std::vector<PendingFree> local;
   local.reserve(items.size());
@@ -314,30 +338,12 @@ auto TimelineGatedSlotReuse::ReleaseBatch(
     const auto& vh = it.second;
 
     // Skip invalid handles - prevent massive memory allocation
-    if (!vh.IsValid()) {
+    if (!vh.IsValid() || !IsHandleCurrent(vh)) {
       continue;
     }
 
     const bindless::HeapIndex idx = vh.ToBindlessHandle();
-    const auto u_idx = idx.get();
-
-    bool should_enqueue = false;
-    {
-      // Same resize mutex pattern as single Release
-      std::unique_lock<std::mutex> ul(resize_mutex_);
-      if (static_cast<std::size_t>(u_idx) >= pending_size_) {
-        ul.unlock();
-        EnsureCapacity(idx);
-        ul.lock();
-      }
-      uint8_t expected = 0;
-      if (pending_flags_[u_idx].compare_exchange_strong(
-            expected, 1, std::memory_order_acq_rel)) {
-        should_enqueue = true;
-      }
-    }
-
-    if (should_enqueue) {
+    if (TrySetPending(idx)) {
       local.push_back(PendingFree { domain, idx });
     }
   }
@@ -347,20 +353,7 @@ auto TimelineGatedSlotReuse::ReleaseBatch(
   }
 
   {
-    if (!queue) {
-      return;
-    }
-    std::shared_ptr<QueueData> qd;
-    {
-      std::lock_guard<std::mutex> qlk(queues_lock_);
-      auto it = pending_per_queue_.find(std::weak_ptr(queue));
-      if (it == pending_per_queue_.end()) {
-        qd = std::make_shared<QueueData>();
-        pending_per_queue_.emplace(std::weak_ptr(queue), qd);
-      } else {
-        qd = it->second;
-      }
-    }
+    auto qd = GetOrCreateQueueData(queue);
     std::lock_guard<std::mutex> lk(qd->lock);
     auto& bucket = qd->buckets[fence_value];
     bucket.insert(bucket.end(), local.begin(), local.end());
@@ -395,18 +388,10 @@ auto TimelineGatedSlotReuse::ProcessFor(
   const std::shared_ptr<CommandQueue>& queue) noexcept -> void
 {
   // find per-queue data
-  std::shared_ptr<QueueData> qdptr;
-  {
-    std::lock_guard<std::mutex> qlk(queues_lock_);
-    if (!queue) {
-      return;
-    }
-    auto it = pending_per_queue_.find(std::weak_ptr(queue));
-    if (it == pending_per_queue_.end()) {
-      return;
-    }
-    qdptr = it->second;
+  if (!queue) {
+    return;
   }
+  auto qdptr = FindQueueData(queue);
   if (!qdptr) {
     return;
   }
@@ -417,45 +402,45 @@ auto TimelineGatedSlotReuse::ProcessFor(
   {
     std::lock_guard<std::mutex> lk(qdptr->lock);
 #if !defined(NDEBUG)
+    auto& config = GetStallWarningConfig();
     // Progress tracking for throttled stuck-fence warnings (debug-only)
     const auto now = std::chrono::steady_clock::now();
     if (qdptr->last_progress_time == std::chrono::steady_clock::time_point {}) {
       qdptr->last_progress_time = now;
+      qdptr->last_warn_time = now;
+      // Initialize interval if unset
+      qdptr->current_warn_interval = std::chrono::milliseconds(
+        config.base_ms.load(std::memory_order_relaxed));
     }
 
     if (completed.get() > qdptr->last_completed.get()) {
       // Fence advanced – record progress
       qdptr->last_completed = completed;
       qdptr->last_progress_time = now;
+      qdptr->last_warn_time = now;
       // Reset backoff on progress
       qdptr->current_warn_interval = std::chrono::milliseconds(
-        g_warn_base_ms.load(std::memory_order_relaxed));
+        config.base_ms.load(std::memory_order_relaxed));
     } else {
       // No progress: if there are pending frees, consider warning
       const bool has_pending = !qdptr->buckets.empty();
       if (has_pending) {
-        // Initialize interval if unset
-        if (qdptr->current_warn_interval.count() == 0) {
-          qdptr->current_warn_interval = std::chrono::milliseconds(
-            g_warn_base_ms.load(std::memory_order_relaxed));
-        }
         const auto interval = qdptr->current_warn_interval;
-        if (qdptr->last_warn_time == std::chrono::steady_clock::time_point {}
-          || now - qdptr->last_warn_time >= interval) {
+        if (now - qdptr->last_warn_time >= interval) {
           DLOG_F(WARNING,
             "TimelineGatedSlotReuse: queue '{}' appears stalled: completed={} "
             "(pending buckets={})",
             queue->GetName(), completed.get(), qdptr->buckets.size());
           qdptr->last_warn_time = now;
           // Backoff interval: interval = min(interval * multiplier, max)
-          const auto max_ms = g_warn_max_ms.load(std::memory_order_relaxed);
-          const auto mult = g_warn_multiplier.load(std::memory_order_relaxed);
-          const auto cur_ms
-            = std::chrono::duration_cast<std::chrono::milliseconds>(interval)
-                .count();
-          const auto next_ms = static_cast<long long>(cur_ms * mult);
+          const auto max_ms = config.max_ms.load(std::memory_order_relaxed);
+          const auto mult = config.multiplier.load(std::memory_order_relaxed);
+          const auto cur_ms = static_cast<double>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(interval)
+              .count());
+          const auto next_ms = static_cast<int64_t>(cur_ms * mult);
           const auto clamped
-            = std::min(next_ms, std::max<long long>(max_ms, 1));
+            = (std::min)(next_ms, (std::max<int64_t>)(max_ms, 1));
           qdptr->current_warn_interval = std::chrono::milliseconds(clamped);
         }
       }
@@ -475,14 +460,17 @@ auto TimelineGatedSlotReuse::ProcessFor(
       // Bump generation to invalidate existing handles, then free backend slot
       {
         EnsureCapacity(pending_free.index);
-        generation_tracker_.Bump(pending_free.index);
+        {
+          std::lock_guard<std::mutex> generation_lock(generation_mutex_);
+          generation_tracker_.Bump(pending_free.index);
+        }
 
         // Clear pending flag using release ordering for proper synchronization.
         // Protect pointer stability during flag clear using resize_mutex_.
         const auto j = static_cast<std::size_t>(pending_free.index.get());
         std::lock_guard<std::mutex> lg(resize_mutex_);
-        if (j < pending_size_ && pending_flags_) {
-          pending_flags_[j].store(0u, std::memory_order_release);
+        if (j < pending_size_) {
+          pending_flags_[j].value.store(0U, std::memory_order_release);
         }
       }
       // Call backend free function to actually reclaim the slot
@@ -566,7 +554,14 @@ auto TimelineGatedSlotReuse::Process() noexcept -> void
 auto TimelineGatedSlotReuse::IsHandleCurrent(
   oxygen::VersionedBindlessHandle h) const noexcept -> bool
 {
+  if (!h.IsValid()) {
+    return false;
+  }
   const bindless::HeapIndex idx = h.ToBindlessHandle();
-  const auto cur = generation_tracker_.Load(idx);
+  bindless::Generation cur {};
+  {
+    std::lock_guard<std::mutex> generation_lock(generation_mutex_);
+    cur = generation_tracker_.Load(idx);
+  }
   return cur.get() == h.GenerationValue().get();
 }
