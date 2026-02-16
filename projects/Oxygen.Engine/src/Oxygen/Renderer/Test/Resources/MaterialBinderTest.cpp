@@ -55,11 +55,13 @@ auto MaterialBinderTest::SetUp() -> void
   // backend allocator (material atlas SRV creation etc.).
   texture_descriptor_allocator_ = std::make_unique<MiniDescriptorAllocator>();
   texture_binder_->SetDescriptorAllocator(texture_descriptor_allocator_.get());
+  asset_loader_ = std::make_unique<FakeAssetLoader>();
 
   material_binder_ = std::make_unique<resources::MaterialBinder>(
     observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
     observer_ptr { staging_provider_.get() },
-    observer_ptr { texture_binder_.get() });
+    observer_ptr { texture_binder_.get() },
+    observer_ptr { asset_loader_.get() });
 }
 
 auto MaterialBinderTest::GfxPtr() const -> observer_ptr<Graphics>
@@ -70,6 +72,13 @@ auto MaterialBinderTest::GfxPtr() const -> observer_ptr<Graphics>
 auto MaterialBinderTest::Uploader() const -> engine::upload::UploadCoordinator&
 {
   return *uploader_;
+}
+
+void MaterialBinderTest::EmitMaterialAssetEviction(
+  const data::AssetKey& key, const content::EvictionReason reason) const
+{
+  ASSERT_NE(asset_loader_, nullptr);
+  asset_loader_->EmitMaterialAssetEviction(key, reason);
 }
 
 auto MaterialBinderTest::TexBinder() const -> resources::IResourceBinder&

@@ -36,6 +36,10 @@ namespace oxygen {
 class Graphics;
 } // namespace oxygen
 
+namespace oxygen::content {
+class IAssetLoader;
+} // namespace oxygen::content
+
 namespace oxygen::data {
 class MaterialAsset;
 } // namespace oxygen::data
@@ -58,15 +62,17 @@ class IResourceBinder;
  - **Versioned stable handles**: `GetOrAllocate()` returns a handle with
 
  index+generation identity for a material content key.
- - **Dirty tracking**:
- material constants are tracked as dirty per-frame and only dirty elements are
- uploaded during `EnsureFrameResources()`.
+ - **Eviction-aware lifecycle**: material asset evictions invalidate handles and
+   schedule Nexus slot release/reclaim.
+ - **Dirty tracking**: material constants are tracked as dirty per-frame and
+   only dirty elements are uploaded during `EnsureFrameResources()`.
  - **Bindless SRV**: `GetMaterialsSrvIndex()` returns the SRV index for the
    material constants buffer once frame resources are ensured.
 
  ### Lifecycle (concise)
 
- 1. `OnFrameStart(tag, slot)` resets per-frame dirty tracking.
+ 1. `OnFrameStart(tag, slot)` advances frame state, resets dirty tracking, and
+    processes queued material eviction events.
  2. `GetOrAllocate()` / `Update()` mutate CPU-side constants and mark dirty.
  3. `EnsureFrameResources()` schedules uploads for dirty elements.
  4. `GetMaterialsSrvIndex()` returns the bindless SRV for rendering.
@@ -89,7 +95,9 @@ public:
   OXGN_RNDR_API MaterialBinder(observer_ptr<Graphics> gfx,
     observer_ptr<oxygen::engine::upload::UploadCoordinator> uploader,
     observer_ptr<oxygen::engine::upload::StagingProvider> provider,
-    observer_ptr<IResourceBinder> texture_binder);
+    observer_ptr<IResourceBinder> texture_binder, // texture SRV resolution
+    observer_ptr<oxygen::content::IAssetLoader> asset_loader // eviction feed
+  );
 
   OXYGEN_MAKE_NON_COPYABLE(MaterialBinder)
   OXYGEN_MAKE_NON_MOVABLE(MaterialBinder)
@@ -134,7 +142,9 @@ public:
     oxygen::engine::sceneprep::MaterialHandle handle) const -> bool;
 
   //! Returns the bindless descriptor heap index for the materials SRV.
-  //! REQUIRES: EnsureFrameResources() must have been called this frame.
+  //! Safe to call before `EnsureFrameResources()`; SRV capacity is ensured
+  //! lazily, while material payload uploads still happen via
+  //! `EnsureFrameResources()`.
   OXGN_RNDR_NDAPI auto GetMaterialsSrvIndex() const -> ShaderVisibleIndex;
 
   //! Get read-only access to all material constants.

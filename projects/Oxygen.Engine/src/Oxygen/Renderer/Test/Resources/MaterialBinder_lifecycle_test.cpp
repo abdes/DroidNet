@@ -257,6 +257,81 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateMaterialInPlace)
   EXPECT_NE(before.normal_texture_index, after.normal_texture_index);
 }
 
+//! Evicting a material invalidates its existing handle on the next frame.
+NOLINT_TEST_F(MaterialBinderLifecycleTest, EvictionInvalidatesHandle)
+{
+  const ResourceKey base_color_key { 70001U };
+  const ResourceKey normal_key { 70002U };
+
+  Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+  MatBinder().OnFrameStart(
+    oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+
+  oxygen::engine::sceneprep::MaterialRef ref;
+  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 31U, 32U);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
+
+  const auto old_handle = MatBinder().GetOrAllocate(ref);
+  ASSERT_TRUE(MatBinder().IsHandleValid(old_handle));
+
+  EmitMaterialAssetEviction(
+    ref.resolved_asset->GetAssetKey(), oxygen::content::EvictionReason::kClear);
+
+  Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 2 });
+  MatBinder().OnFrameStart(
+    oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 2 });
+
+  EXPECT_FALSE(MatBinder().IsHandleValid(old_handle));
+}
+
+//! Evicted material slots are reclaimed and reused with bumped generation.
+NOLINT_TEST_F(MaterialBinderLifecycleTest, EvictedSlotReuseBumpsGeneration)
+{
+  const ResourceKey base_color_key { 71001U };
+  const ResourceKey normal_key { 71002U };
+
+  Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+  MatBinder().OnFrameStart(
+    oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+
+  oxygen::engine::sceneprep::MaterialRef ref;
+  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 41U, 42U);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
+
+  const auto old_handle = MatBinder().GetOrAllocate(ref);
+  ASSERT_TRUE(MatBinder().IsHandleValid(old_handle));
+
+  EmitMaterialAssetEviction(
+    ref.resolved_asset->GetAssetKey(), oxygen::content::EvictionReason::kClear);
+
+  Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 2 });
+  MatBinder().OnFrameStart(
+    oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 2 });
+  EXPECT_FALSE(MatBinder().IsHandleValid(old_handle));
+
+  // Reclaim deferred releases (same slot cycle) before allocating again.
+  Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 2 });
+  MatBinder().OnFrameStart(
+    oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 2 });
+
+  const auto new_handle = MatBinder().GetOrAllocate(ref);
+  EXPECT_TRUE(MatBinder().IsHandleValid(new_handle));
+  EXPECT_EQ(new_handle.get(), old_handle.get());
+  EXPECT_NE(new_handle.GenerationValue(), old_handle.GenerationValue());
+}
+
 //! Updating a handle to an existing key does not steal canonical mapping.
 NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateDoesNotChangeCanonicalHandle)
 {

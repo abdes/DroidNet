@@ -6,7 +6,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <string>
@@ -15,7 +17,7 @@
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -378,7 +380,8 @@ public:
   Impl(observer_ptr<Graphics> gfx,
     observer_ptr<engine::upload::UploadCoordinator> uploader,
     observer_ptr<engine::upload::StagingProvider> provider,
-    observer_ptr<IResourceBinder> texture_binder);
+    observer_ptr<IResourceBinder> texture_binder,
+    observer_ptr<content::IAssetLoader> asset_loader);
 
   ~Impl();
 
@@ -415,6 +418,14 @@ private:
     engine::sceneprep::MaterialHandle handle;
     std::uint32_t index;
   };
+  struct CallbackGate {
+    std::mutex mutex;
+    bool alive { true };
+  };
+  struct PendingMaterialEviction {
+    data::AssetKey asset_key {};
+    content::EvictionReason reason { content::EvictionReason::kRefCountZero };
+  };
 
   auto MarkDirty(std::uint32_t index) -> void;
   auto MarkAllDirty() -> void;
@@ -426,6 +437,7 @@ private:
 
   auto UpdateKeyMappingForIndex(std::uint32_t index, std::uint64_t new_key)
     -> void;
+  auto ProcessEvictions() -> void;
 
   // Deduplication and state
   std::unordered_map<std::uint64_t, MaterialCacheEntry> material_key_to_handle_;
@@ -439,6 +451,7 @@ private:
   std::vector<std::uint32_t> dirty_indices_;
   std::uint32_t current_epoch_ { 1U }; // 0 reserved for 'never'
   std::uint32_t next_handle_index_ { 0U };
+  std::shared_ptr<std::vector<bindless::HeapIndex>> free_indices_;
 
   // Statistics tracking
   std::uint64_t frames_started_count_ { 0U };
@@ -453,6 +466,11 @@ private:
   observer_ptr<engine::upload::UploadCoordinator> uploader_;
   observer_ptr<engine::upload::StagingProvider> staging_provider_;
   observer_ptr<IResourceBinder> texture_binder_;
+  observer_ptr<content::IAssetLoader> asset_loader_;
+  std::shared_ptr<CallbackGate> callback_gate_;
+  std::mutex eviction_mutex_;
+  std::deque<PendingMaterialEviction> pending_evictions_;
+  content::IAssetLoader::EvictionSubscription eviction_subscription_;
 
   // Atlas-based material storage
   std::unique_ptr<AtlasBuffer> materials_atlas_;
@@ -470,8 +488,10 @@ private:
 MaterialBinder::MaterialBinder(observer_ptr<Graphics> gfx,
   observer_ptr<engine::upload::UploadCoordinator> uploader,
   observer_ptr<engine::upload::StagingProvider> provider,
-  observer_ptr<IResourceBinder> texture_binder)
-  : impl_(std::make_unique<Impl>(gfx, uploader, provider, texture_binder))
+  observer_ptr<IResourceBinder> texture_binder,
+  observer_ptr<content::IAssetLoader> asset_loader)
+  : impl_(std::make_unique<Impl>(
+      gfx, uploader, provider, texture_binder, asset_loader))
 {
 }
 
@@ -529,27 +549,66 @@ auto MaterialBinder::GetMaterialsSrvIndex() const -> ShaderVisibleIndex
 MaterialBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
   const observer_ptr<engine::upload::UploadCoordinator> uploader,
   const observer_ptr<engine::upload::StagingProvider> provider,
-  const observer_ptr<IResourceBinder> texture_binder)
-  : gfx_(gfx)
+  const observer_ptr<IResourceBinder> texture_binder,
+  const observer_ptr<content::IAssetLoader> asset_loader)
+  : free_indices_(std::make_shared<std::vector<bindless::HeapIndex>>())
+  , gfx_(gfx)
   , uploader_(uploader)
   , staging_provider_(provider)
   , texture_binder_(texture_binder)
+  , asset_loader_(asset_loader)
   , slot_reuse_(slot_reclaimer_,
-      [](bindless::HeapIndex /*index*/, std::monostate /*unused*/) { })
+      [free_indices = free_indices_](
+        bindless::HeapIndex index, std::monostate /*unused*/) {
+        if (free_indices) {
+          free_indices->push_back(index);
+        }
+      })
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DCHECK_NOTNULL_F(uploader_, "UploadCoordinator cannot be null");
   DCHECK_NOTNULL_F(staging_provider_, "StagingProvider cannot be null");
   DCHECK_NOTNULL_F(texture_binder_, "TextureBinder cannot be null");
+  CHECK_NOTNULL_F(asset_loader_, "IAssetLoader cannot be null");
 
   materials_atlas_ = std::make_unique<AtlasBuffer>(gfx_,
     static_cast<std::uint32_t>(sizeof(engine::MaterialConstants)),
     "MaterialConstantsAtlas");
   CHECK_NOTNULL_F(materials_atlas_, "Failed to create material atlas buffer");
+
+  callback_gate_ = std::make_shared<CallbackGate>();
+  CHECK_NOTNULL_F(callback_gate_, "Failed to create callback gate");
+
+  eviction_subscription_ = asset_loader_->SubscribeResourceEvictions(
+    data::MaterialAsset::ClassTypeId(),
+    [gate = callback_gate_, this](const content::EvictionEvent& event) -> void {
+      if (!gate) {
+        return;
+      }
+
+      std::scoped_lock lock(gate->mutex);
+      if (!gate->alive) {
+        return;
+      }
+      if (!event.asset_key.has_value()) {
+        return;
+      }
+
+      std::scoped_lock eviction_lock(eviction_mutex_);
+      pending_evictions_.push_back(PendingMaterialEviction {
+        .asset_key = *event.asset_key,
+        .reason = event.reason,
+      });
+    });
 }
 
 MaterialBinder::Impl::~Impl()
 {
+  if (callback_gate_) {
+    std::scoped_lock lock(callback_gate_->mutex);
+    callback_gate_->alive = false;
+  }
+
   slot_reclaimer_.ProcessAllDeferredReleases();
 
   const auto telemetry = slot_reuse_.GetTelemetrySnapshot();
@@ -560,15 +619,13 @@ MaterialBinder::Impl::~Impl()
   LOG_SCOPE_F(INFO, "MaterialBinder Statistics");
   LOG_F(INFO, "frames started            : {}", frames_started_count_);
   LOG_F(INFO, "nexus.allocate_calls      : {}", telemetry.allocate_calls);
-  LOG_F(INFO, "nexus.release_calls       : {}{}", telemetry.release_calls,
-    expected_zero_marker(telemetry.release_calls));
+  LOG_F(INFO, "nexus.release_calls       : {}", telemetry.release_calls);
   LOG_F(INFO, "nexus.stale_reject_count  : {}{}", telemetry.stale_reject_count,
     expected_zero_marker(telemetry.stale_reject_count));
   LOG_F(INFO, "nexus.duplicate_rejects   : {}{}",
     telemetry.duplicate_reject_count,
     expected_zero_marker(telemetry.duplicate_reject_count));
-  LOG_F(INFO, "nexus.reclaimed_count     : {}{}", telemetry.reclaimed_count,
-    expected_zero_marker(telemetry.reclaimed_count));
+  LOG_F(INFO, "nexus.reclaimed_count     : {}", telemetry.reclaimed_count);
   LOG_F(INFO, "nexus.pending_count       : {}{}", telemetry.pending_count,
     expected_zero_marker(telemetry.pending_count));
   LOG_F(INFO, "total calls       : {}", total_calls_);
@@ -610,6 +667,7 @@ auto MaterialBinder::Impl::OnFrameStart(
   if (materials_atlas_) {
     materials_atlas_->OnFrameStart(slot);
   }
+  ProcessEvictions();
 
   uploaded_this_frame_ = false;
 }
@@ -851,7 +909,13 @@ auto MaterialBinder::Impl::GetOrAllocate(
     }
   }
 
-  const auto index = next_handle_index_++;
+  std::uint32_t index = 0U;
+  if (free_indices_->empty()) {
+    index = next_handle_index_++;
+  } else {
+    index = free_indices_->back().get();
+    free_indices_->pop_back();
+  }
   const auto constants = SerializeMaterialConstants(material, *texture_binder_);
 
   // Ensure atlas has capacity before allocating the element ref.
@@ -946,6 +1010,106 @@ auto MaterialBinder::Impl::Update(
   UpdateKeyMappingForIndex(index, new_key);
   MarkDirty(index);
   // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
+}
+
+auto MaterialBinder::Impl::ProcessEvictions() -> void
+{
+  std::deque<PendingMaterialEviction> evictions;
+  {
+    std::scoped_lock lock(eviction_mutex_);
+    if (pending_evictions_.empty()) {
+      return;
+    }
+    evictions.swap(pending_evictions_);
+  }
+
+  if (current_frame_slot_ == frame::kInvalidSlot) {
+    std::scoped_lock lock(eviction_mutex_);
+    pending_evictions_.insert(
+      pending_evictions_.end(), evictions.begin(), evictions.end());
+    return;
+  }
+
+  std::size_t evictions_without_entry = 0U;
+
+  for (const auto& eviction : evictions) {
+    bool found_match = false;
+    for (std::size_t entry_index = 0U; entry_index < materials_.size();
+      ++entry_index) {
+      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+      const auto& material = materials_[entry_index];
+      if (!material || material->GetAssetKey() != eviction.asset_key) {
+        continue;
+      }
+      found_match = true;
+
+      if (entry_index < material_keys_.size()) {
+        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+        const auto key = material_keys_[entry_index];
+        if (key != 0U) {
+          const auto it = material_key_to_handle_.find(key);
+          if (it != material_key_to_handle_.end()
+            && it->second.index == static_cast<std::uint32_t>(entry_index)) {
+            material_key_to_handle_.erase(it);
+          }
+          // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+          material_keys_[entry_index] = 0U;
+        }
+      }
+
+      material_ptr_to_index_.erase(material.get());
+
+      if (entry_index < material_refs_.size()) {
+        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+        materials_atlas_->Release(
+          material_refs_[entry_index], current_frame_slot_);
+        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+        material_refs_[entry_index] = AtlasBuffer::ElementRef {};
+      }
+
+      if (entry_index < material_handle_generations_.size()) {
+        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+        const auto generation = material_handle_generations_[entry_index];
+        if (generation != 0U) {
+          const auto handle = engine::sceneprep::MaterialHandle {
+            engine::sceneprep::MaterialHandle::Index {
+              static_cast<std::uint32_t>(entry_index) },
+            engine::sceneprep::MaterialHandle::Generation { generation },
+          };
+          slot_reuse_.Release(ToVersionedIndex_(handle));
+        }
+        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+        material_handle_generations_[entry_index] = 0U;
+      }
+
+      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+      materials_[entry_index].reset();
+      if (entry_index < material_constants_.size()) {
+        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+        material_constants_[entry_index] = engine::MaterialConstants {};
+      }
+      if (entry_index < dirty_epoch_.size()) {
+        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+        dirty_epoch_[entry_index] = 0U;
+      }
+      dirty_indices_.erase(
+        std::remove(dirty_indices_.begin(), dirty_indices_.end(),
+          static_cast<std::uint32_t>(entry_index)),
+        dirty_indices_.end());
+
+      LOG_F(2, "MaterialBinder: eviction processed for {} (reason={})",
+        data::to_string(eviction.asset_key), eviction.reason);
+    }
+
+    if (!found_match) {
+      ++evictions_without_entry;
+    }
+  }
+
+  if (evictions_without_entry != 0U) {
+    LOG_F(INFO, "MaterialBinder: {} eviction(s) had no resident material entry",
+      evictions_without_entry);
+  }
 }
 
 auto MaterialBinder::Impl::OverrideUvTransform(

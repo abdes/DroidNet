@@ -121,7 +121,8 @@ protected:
       = std::make_unique<oxygen::renderer::resources::MaterialBinder>(
         observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
         observer_ptr { staging_provider_.get() },
-        observer_ptr { texture_binder_.get() });
+        observer_ptr { texture_binder_.get() },
+        observer_ptr { texture_loader_.get() });
 
     return std::make_unique<ScenePrepState>(std::move(geom_uploader),
       std::move(transform_uploader), std::move(material_binder));

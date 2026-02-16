@@ -390,7 +390,8 @@ auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
     auto mat_binder = std::make_unique<renderer::resources::MaterialBinder>(
       observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
       observer_ptr { upload_staging_provider_.get() },
-      observer_ptr { texture_binder.get() });
+      observer_ptr { texture_binder.get() },
+      observer_ptr { asset_loader_.get() });
 
     auto emitter = std::make_unique<renderer::resources::DrawMetadataEmitter>(
       observer_ptr { gfx.get() },
@@ -1282,7 +1283,8 @@ auto Renderer::OnFrameEnd(observer_ptr<FrameContext> /*context*/) -> void
 
 auto Renderer::DrainPendingViewCleanup(std::string_view reason) -> void
 {
-  CHECK_F(!reason.empty(), "DrainPendingViewCleanup requires a non-empty reason");
+  CHECK_F(
+    !reason.empty(), "DrainPendingViewCleanup requires a non-empty reason");
 
   std::unordered_set<ViewId> pending;
   {
