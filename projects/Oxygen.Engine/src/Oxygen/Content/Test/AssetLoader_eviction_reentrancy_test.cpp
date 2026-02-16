@@ -6,6 +6,8 @@
 
 #include "./AssetLoader_test.h"
 
+#include <atomic>
+
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
@@ -86,14 +88,20 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, ResourceEviction_ReentrantHandler)
         = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
       std::span<const uint8_t> span(bytes.data(), bytes.size());
 
-      // Subscribe and in the handler schedule ReleaseResource(key) on the
-      // TestEventLoop so the callback executes on the loader's owning thread.
+      // Subscribe and request a re-entrant release from the event loop.
+      // Direct re-entry from the handler would recurse into AnyCache while it
+      // holds its internal lock; deferring preserves re-entry intent without
+      // deadlocking on the same mutex.
       std::atomic<int> call_count { 0 };
+      std::atomic<int> nested_release_calls { 0 };
       auto subscription = loader.SubscribeResourceEvictions(
         BufferResource::ClassTypeId(), [&](const EvictionEvent& /*ev*/) {
           call_count.fetch_add(1, std::memory_order_relaxed);
-          el.Schedule(milliseconds { 0 },
-            [&loader, key] { (void)loader.ReleaseResource(key); });
+          el.Schedule(
+            milliseconds { 0 }, [&loader, key, &nested_release_calls] {
+              (void)loader.ReleaseResource(key);
+              nested_release_calls.fetch_add(1, std::memory_order_relaxed);
+            });
         });
 
       auto resource = co_await loader.LoadResourceAsync<BufferResource>(
@@ -102,15 +110,13 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, ResourceEviction_ReentrantHandler)
 
       // Drop local ref and release
       resource.reset();
-      loader.ReleaseResource(key);
-
-      // Allow scheduled event loop callbacks to run and perform the nested
-      // ReleaseResource scheduled by the handler. Use a short sleep to yield
-      // control back to the TestEventLoop.
+      (void)loader.ReleaseResource(key);
+      loader.TrimCache();
       co_await el.Sleep(milliseconds { 0 });
 
       // Handler must have been called once.
       EXPECT_EQ(call_count.load(std::memory_order_relaxed), 1);
+      EXPECT_EQ(nested_release_calls.load(std::memory_order_relaxed), 1);
 
       loader.Stop();
       (void)subscription;

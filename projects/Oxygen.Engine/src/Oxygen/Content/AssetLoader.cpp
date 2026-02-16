@@ -608,9 +608,14 @@ auto AssetLoader::TrimCache() -> void
 
   // Trim standalone resources that are at baseline checkout count and are not
   // owned by any remaining asset dependency edge.
+  std::vector<uint64_t> resource_hash_snapshot;
+  resource_hash_snapshot.reserve(resource_key_by_hash_.size());
+  for (const auto& entry : resource_key_by_hash_) {
+    resource_hash_snapshot.push_back(entry.first);
+  }
+
   std::size_t standalone_resource_candidates = 0U;
-  for (const auto& [resource_hash, resource_key] : resource_key_by_hash_) {
-    static_cast<void>(resource_key);
+  for (const auto resource_hash : resource_hash_snapshot) {
     if (!content_cache_.Contains(resource_hash)) {
       continue;
     }
