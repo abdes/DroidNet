@@ -1129,11 +1129,12 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
   CHECK_F(static_cast<bool>(fb_desc.color_attachments[0].texture),
     "Compositing target missing color texture");
   auto& backbuffer = *fb_desc.color_attachments[0].texture;
-  const auto& back_desc = backbuffer.GetDescriptor();
   DLOG_F(1,
     "Log compositing target ptr={} size={}x{} fmt={} samples={} name={}",
-    fmt::ptr(&backbuffer), back_desc.width, back_desc.height, back_desc.format,
-    back_desc.sample_count, back_desc.debug_name);
+    fmt::ptr(&backbuffer), backbuffer.GetDescriptor().width,
+    backbuffer.GetDescriptor().height, backbuffer.GetDescriptor().format,
+    backbuffer.GetDescriptor().sample_count,
+    backbuffer.GetDescriptor().debug_name);
 
   RenderContext comp_context {};
   comp_context.SetRenderer(this, gfx.get());
@@ -1163,10 +1164,10 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
           task.copy.source_view_id.get());
         continue;
       }
-      const auto& src_desc = source->GetDescriptor();
       DLOG_F(2, "Log copy: view={} ptr={} size={}x{} fmt={} samples={}",
-        task.copy.source_view_id.get(), fmt::ptr(source.get()), src_desc.width,
-        src_desc.height, src_desc.format, src_desc.sample_count);
+        task.copy.source_view_id.get(), fmt::ptr(source.get()),
+        source->GetDescriptor().width, source->GetDescriptor().height,
+        source->GetDescriptor().format, source->GetDescriptor().sample_count);
       DLOG_F(2, "Log copy viewport: ({}, {}) {}x{}",
         task.copy.viewport.top_left_x, task.copy.viewport.top_left_y,
         task.copy.viewport.width, task.copy.viewport.height);
@@ -1199,10 +1200,10 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
           task.blend.source_view_id.get());
         continue;
       }
-      const auto& src_desc = source->GetDescriptor();
       DLOG_F(2, "Blend view={} ptr={} size={}x{} fmt={} samples={}",
-        task.blend.source_view_id.get(), fmt::ptr(source.get()), src_desc.width,
-        src_desc.height, src_desc.format, src_desc.sample_count);
+        task.blend.source_view_id.get(), fmt::ptr(source.get()),
+        source->GetDescriptor().width, source->GetDescriptor().height,
+        source->GetDescriptor().format, source->GetDescriptor().sample_count);
       DLOG_F(2, "Blend viewport=({}, {}) {}x{} alpha={}",
         task.blend.viewport.top_left_x, task.blend.viewport.top_left_y,
         task.blend.viewport.width, task.blend.viewport.height,
@@ -1223,11 +1224,13 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
         DLOG_F(1, "Skip blend texture: missing source texture");
         continue;
       }
-      const auto& src_desc = task.texture_blend.source_texture->GetDescriptor();
       DLOG_F(2, "Blend texture ptr={} size={}x{} fmt={} samples={} name={}",
-        fmt::ptr(task.texture_blend.source_texture.get()), src_desc.width,
-        src_desc.height, src_desc.format, src_desc.sample_count,
-        src_desc.debug_name);
+        fmt::ptr(task.texture_blend.source_texture.get()),
+        task.texture_blend.source_texture->GetDescriptor().width,
+        task.texture_blend.source_texture->GetDescriptor().height,
+        task.texture_blend.source_texture->GetDescriptor().format,
+        task.texture_blend.source_texture->GetDescriptor().sample_count,
+        task.texture_blend.source_texture->GetDescriptor().debug_name);
       DLOG_F(2, "Blend texture viewport=({}, {}) {}x{} alpha={}",
         task.texture_blend.viewport.top_left_x,
         task.texture_blend.viewport.top_left_y,
@@ -1279,6 +1282,8 @@ auto Renderer::OnFrameEnd(observer_ptr<FrameContext> /*context*/) -> void
 
 auto Renderer::DrainPendingViewCleanup(std::string_view reason) -> void
 {
+  CHECK_F(!reason.empty(), "DrainPendingViewCleanup requires a non-empty reason");
+
   std::unordered_set<ViewId> pending;
   {
     std::lock_guard lock(pending_cleanup_mutex_);
@@ -1545,6 +1550,10 @@ auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
 auto Renderer::UpdateViewExposure(ViewId view_id, const scene::Scene& scene,
   const SyntheticSunData& sun_state) -> float
 {
+  CHECK_F(sun_state.enabled == 0U || std::isfinite(sun_state.cos_zenith),
+    "Renderer::UpdateViewExposure invalid sun_state.cos_zenith for view {}",
+    view_id.get());
+
   namespace env = scene::environment;
 
   static std::unordered_map<std::uint32_t, float> last_logged_exposure_by_view;
