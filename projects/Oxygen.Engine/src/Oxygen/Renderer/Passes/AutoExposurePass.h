@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -14,6 +15,8 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Renderer/Passes/ComputeRenderPass.h>
@@ -45,6 +48,7 @@ struct AutoExposurePassConfig {
   static constexpr float kDefaultTargetLuminance = 0.18F;
   static constexpr float kDefaultSpotMeterRadius = 0.2F;
   static constexpr MeteringMode kDefaultMeteringMode = MeteringMode::kAverage;
+  static constexpr uint32_t kDefaultMaxUnseenFrames = 1200U;
 
   //! HDR source texture to analyze.
   std::shared_ptr<graphics::Texture> source_texture;
@@ -81,6 +85,10 @@ struct AutoExposurePassConfig {
 
   //! Debug label for diagnostics.
   std::string debug_name { "AutoExposurePass" };
+
+  //! Prune per-view exposure states not seen for this many frames.
+  //! A value of 0 disables pruning.
+  uint32_t max_unseen_frames { kDefaultMaxUnseenFrames };
 };
 
 //! Compute pass that generates luminance histogram and calculates exposure.
@@ -140,6 +148,7 @@ protected:
   auto NeedRebuildPipelineState() const -> bool override;
 
 private:
+  auto PruneStaleExposureStates(oxygen::ViewId current_view_id) -> void;
   auto EnsureHistogramBuffer() -> void;
   auto EnsureExposureStateForView(
     graphics::CommandRecorder& recorder, oxygen::ViewId view_id) -> void;
@@ -162,7 +171,8 @@ private:
   std::shared_ptr<graphics::Buffer> pass_constants_buffer_;
   void* pass_constants_mapped_ptr_ { nullptr };
 
-  static constexpr uint32_t kPassConstantsStride = 256U;
+  static constexpr uint32_t kPassConstantsStride
+    = packing::kConstantBufferAlignment;
   static constexpr size_t kPassConstantsSlots = 4U;
 
   std::array<bindless::ShaderVisibleIndex, kPassConstantsSlots>
@@ -178,6 +188,7 @@ private:
     std::shared_ptr<graphics::Buffer> buffer;
     bindless::ShaderVisibleIndex uav_index { kInvalidShaderVisibleIndex };
     bindless::ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
+    frame::SequenceNumber last_seen_sequence { frame::SequenceNumber { 0 } };
   };
 
   std::unordered_map<oxygen::ViewId, PerViewExposureState> exposure_states_;
