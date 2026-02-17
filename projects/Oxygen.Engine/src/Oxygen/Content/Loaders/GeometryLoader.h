@@ -111,6 +111,9 @@ namespace detail {
     }
 
     auto collect_buffer_ref = [&](const ResourceIndexT resource_index) {
+      if (resource_index == data::pak::kNoResourceIndex) {
+        return; // sentinel / absent – nothing to collect
+      }
       internal::ResourceRef ref {
         .source = context.source_token,
         .resource_type_id = BufferResource::ClassTypeId(),
@@ -244,6 +247,9 @@ namespace detail {
     }
 
     auto collect_buffer_ref = [&](const ResourceIndexT resource_index) {
+      if (resource_index == data::pak::kNoResourceIndex) {
+        return; // sentinel / absent – nothing to collect
+      }
       internal::ResourceRef ref {
         .source = context.source_token,
         .resource_type_id = BufferResource::ClassTypeId(),

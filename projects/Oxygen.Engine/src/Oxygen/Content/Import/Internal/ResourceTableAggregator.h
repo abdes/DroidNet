@@ -38,6 +38,10 @@ struct TextureTableTraits {
   using Descriptor = data::pak::TextureResourceDesc;
   using Reservation = WriteReservation;
 
+  //! Textures use index 0 for the engine fallback texture (1x1 white
+  //! texel), inserted by packing tooling.  No generic sentinel needed.
+  static constexpr bool kReserveSentinelAtZero = false;
+
   [[nodiscard]] static auto TablePath(const LooseCookedLayout& layout)
     -> std::filesystem::path
   {
@@ -80,6 +84,11 @@ struct TextureTableTraits {
 struct BufferTableTraits {
   using Descriptor = data::pak::BufferResourceDesc;
   using Reservation = WriteReservation;
+
+  //! Buffer tables reserve index 0 as a zeroed sentinel meaning
+  //! "absent / not assigned" (kNoResourceIndex).  Real buffers
+  //! start at index 1.
+  static constexpr bool kReserveSentinelAtZero = true;
 
   [[nodiscard]] static auto TablePath(const LooseCookedLayout& layout)
     -> std::filesystem::path
@@ -136,6 +145,7 @@ public:
     data_file_size_.store(
       GetExistingDataSize(data_path_), std::memory_order_release);
     LoadExistingTable();
+    EnsureSentinelAtZero();
   }
 
   OXYGEN_MAKE_NON_COPYABLE(ResourceTableAggregator)
@@ -258,6 +268,31 @@ public:
   }
 
 private:
+  //! Reserve index 0 as an all-zero sentinel descriptor when the
+  //! traits opt in via `kReserveSentinelAtZero`.
+  //!
+  //! For resource types without a meaningful fallback (e.g. buffers),
+  //! index 0 means "absent / not assigned" (kNoResourceIndex).  The
+  //! sentinel must occupy slot 0 in the table so that valid resources
+  //! start at index 1.  Resource types that give index 0 a dedicated
+  //! meaning (e.g. textures → fallback texture) must set the flag to
+  //! `false` and manage index 0 externally.
+  auto EnsureSentinelAtZero() -> void
+  {
+    if constexpr (!Traits::kReserveSentinelAtZero) {
+      return; // This resource type manages index 0 externally.
+    }
+
+    std::scoped_lock lock(mutex_);
+    if (!table_.empty()) {
+      return; // Already loaded from disk.
+    }
+    table_.push_back(Descriptor {}); // all-zero sentinel
+    next_index_.store(1, std::memory_order_release);
+    DLOG_F(INFO, "ResourceTableAggregator: reserved index-0 sentinel for '{}'",
+      table_path_.string());
+  }
+
   auto EnsureTableFileExists() -> void
   {
     if (std::filesystem::exists(table_path_)) {

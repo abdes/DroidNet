@@ -516,6 +516,44 @@ def collect_resources(
                     for k, v in old_map.items():
                         new_map[k] = int(v) + 1
                     index_map[rtype] = new_map
+
+            # Buffer resource indices: reserve index 0 as sentinel (absent).
+            # Runtime loaders treat index 0 as kNoResourceIndex and will skip
+            # loading for it.  Therefore, we must never assign a real,
+            # user-provided buffer to index 0.
+            if rtype == "buffer":
+                sentinel_name = "__sentinel_buffer"
+                if sentinel_name not in index_map[rtype]:
+                    if len(desc_fields[rtype]) >= MAX_RESOURCES_PER_TYPE:
+                        rep.error(
+                            f"Too many {rtype} resources (needs room for sentinel): "
+                            f"{len(desc_fields[rtype])}/{MAX_RESOURCES_PER_TYPE}"
+                        )
+                        raise ValueError(
+                            f"Too many {rtype} resources (needs room for sentinel): {len(desc_fields[rtype])}"
+                        )
+
+                    # All-zero sentinel descriptor; no data payload.
+                    sentinel_spec: Dict[str, Any] = {
+                        "name": sentinel_name,
+                        "usage": 0,
+                        "stride": 0,
+                        "format": 0,
+                        "content_hash": 0,
+                    }
+                    sentinel_data = b""
+
+                    # Insert at the front and shift all existing indices by +1.
+                    data_blobs[rtype].insert(0, sentinel_data)
+                    desc_fields[rtype].insert(0, sentinel_spec)
+                    # No total_bytes increment: sentinel has no data.
+
+                    old_map = index_map[rtype]
+                    new_map_buf: Dict[str, int] = {sentinel_name: 0}
+                    for k, v in old_map.items():
+                        new_map_buf[k] = int(v) + 1
+                    index_map[rtype] = new_map_buf
+
         # Summary after all resource types processed
         counts = {rt: len(desc_fields[rt]) for rt in resource_types}
         if any(counts.values()):

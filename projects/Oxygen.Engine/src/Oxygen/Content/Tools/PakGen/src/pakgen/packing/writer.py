@@ -142,6 +142,10 @@ def _write_resource_tables_from_plan(
                 data_offsets[rtype][i] if i < len(data_offsets[rtype]) else 0
             )
             size = len(blobs[i]) if i < len(blobs) else 0
+            # Force all-zero descriptor for the buffer sentinel
+            if rtype == "buffer" and spec.get("name") == "__sentinel_buffer":
+                data_off = 0
+                size = 0
             if rtype == "buffer":
                 desc = pack_buffer_resource_descriptor(spec, data_off, size)
             elif rtype == "texture":

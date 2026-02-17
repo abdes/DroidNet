@@ -314,13 +314,14 @@ auto RunDumpBuffers(const DumpResourceOptions& opts) -> int
     auto entries
       = LoadPackedTable<oxygen::data::pak::BufferResourceDesc>(table_path);
 
-    std::cout << "Dumping " << entries.size() << " buffers in: '"
-              << table_path.string() << "'\n\n";
-
     if (entries.empty()) {
-      std::cout << "(none)\n";
+      std::cout << "No buffers found in: '" << table_path.string() << "'\n";
       return 0;
     }
+
+    std::cout << "Dumping " << entries.size() - 1 << " user buffers ("
+              << entries.size() << " total entries including sentinel) in: '"
+              << table_path.string() << "'\n\n";
 
     // clang-format off
     std::cout << "Idx  Offset              Size       Stride  Format          Usage Flags                      Hash\n";
@@ -334,7 +335,8 @@ auto RunDumpBuffers(const DumpResourceOptions& opts) -> int
       const auto usage_name = nostd::to_string(
         static_cast<oxygen::data::BufferResource::UsageFlags>(e.usage_flags));
 
-      std::cout << std::right << std::setw(3) << i << "  ";
+      std::cout << std::right << std::setw(3) << i << (i == 0 ? "*" : " ")
+                << " ";
       std::cout << std::left << std::setw(19) << ToHex64(e.data_offset) << " ";
       std::cout << std::right << std::setw(10) << e.size_bytes << " ";
       std::cout << std::right << std::setw(6) << e.element_stride << " ";
@@ -343,6 +345,8 @@ auto RunDumpBuffers(const DumpResourceOptions& opts) -> int
       std::cout << std::left << std::setw(16) << ToHex64(e.content_hash)
                 << "\n";
     }
+
+    std::cout << "\n  (* = sentinel/reserved index)\n";
 
     return 0;
   } catch (const std::exception& ex) {
