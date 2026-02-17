@@ -352,6 +352,45 @@ auto DemoShell::SetScene(std::unique_ptr<scene::Scene> scene) -> ActiveScene
   return ActiveScene { observer_ptr { &impl_->scene_control } };
 }
 
+auto DemoShell::StageScene(std::unique_ptr<scene::Scene> scene) -> void
+{
+  impl_->scene_control.StageScene(std::move(scene));
+}
+
+auto DemoShell::HasStagedScene() const noexcept -> bool
+{
+  return impl_->scene_control.HasStagedScene();
+}
+
+auto DemoShell::GetStagedScene() const -> observer_ptr<scene::Scene>
+{
+  return impl_->scene_control.GetStagedScene();
+}
+
+auto DemoShell::SetStagedMainCamera(scene::SceneNode camera) -> void
+{
+  impl_->scene_control.SetStagedMainCamera(std::move(camera));
+}
+
+auto DemoShell::PublishStagedScene() -> bool
+{
+  const auto previous_scene = impl_->scene_control.TryGetScene();
+  const bool published = impl_->scene_control.PublishStagedScene();
+  if (!published) {
+    return false;
+  }
+  const auto new_scene = impl_->scene_control.TryGetScene();
+  if (new_scene && new_scene != previous_scene) {
+    OnSceneActivated(*new_scene);
+  }
+  return true;
+}
+
+auto DemoShell::TakePublishedMainCamera() -> scene::SceneNode
+{
+  return impl_->scene_control.TakePublishedMainCamera();
+}
+
 auto DemoShell::GetActiveScene() const -> ActiveScene
 {
   return ActiveScene { observer_ptr { &impl_->scene_control } };

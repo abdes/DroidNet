@@ -159,9 +159,25 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 {
   DCHECK_NOTNULL_F(context);
   auto& shell = GetShell();
+  auto& frame_context = *context;
+
+  if (shell.HasStagedScene()) {
+    CHECK_F(shell.PublishStagedScene(),
+      "expected a staged scene before frame-start publish");
+    active_scene_ = shell.GetActiveScene();
+    main_camera_ = shell.TakePublishedMainCamera();
+
+    if (active_scene_load_key_) {
+      if (const auto vm = shell.GetContentVm()) {
+        vm->NotifySceneLoadCompleted(*active_scene_load_key_, true);
+      }
+      shell.ReapplyPostProcessSettingsToScene();
+      active_scene_load_key_.reset();
+    }
+  }
+
   shell.OnFrameStart(*context);
   Base::OnFrameStart(context);
-  auto& frame_context = *context;
 
   if (!app_.headless && app_window_ && app_window_->GetWindow()) {
     last_viewport_ = app_window_->GetWindow()->Size();
@@ -309,39 +325,50 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 
   // 3. Process async scene loading results
   if (scene_loader_) {
+    if (scene_loader_->IsConsumed()) {
+      if (scene_loader_->Tick()) {
+        scene_loader_.reset();
+      }
+    }
+  }
+
+  const auto scene_ptr = shell.TryGetScene();
+  frame_context.SetScene(observer_ptr { scene_ptr.get() });
+}
+
+auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
+{
+  DCHECK_NOTNULL_F(context);
+  auto& shell = GetShell();
+
+  if (scene_loader_ && !shell.HasStagedScene()) {
     if (scene_loader_->IsReady()) {
       auto loader = scene_loader_;
-      auto swap = scene_loader_->GetResult();
-      LOG_F(INFO, "RenderScene: Applying staged scene swap (scene_key={})",
+      auto swap = loader->GetResult();
+      LOG_F(INFO, "RenderScene: Building staged scene (scene_key={})",
         data::to_string(swap.scene_key));
+
       const bool same_scene_key = current_scene_key_.has_value()
         && swap.scene_key == *current_scene_key_;
       if (!same_scene_key) {
         ReleaseCurrentSceneAsset("scene swap");
       }
-      ClearSceneRuntime("scene swap");
 
-      {
-        auto scene = std::make_unique<scene::Scene>("RenderScene");
-        active_scene_ = shell.SetScene(std::move(scene));
-        const auto scene_ptr = shell.TryGetScene();
-        if (scene_ptr && swap.asset && loader) {
-          auto active_camera = loader->BuildScene(*scene_ptr, *swap.asset);
-          main_camera_ = std::move(active_camera);
-          shell.ReapplyPostProcessSettingsToScene();
-        } else {
-          LOG_F(ERROR, "RenderScene: Scene swap missing asset or scene");
+      if (swap.asset && loader) {
+        shell.StageScene(std::make_unique<scene::Scene>("RenderScene"));
+        auto staged_scene = shell.GetStagedScene();
+        shell.SetStagedMainCamera(
+          co_await loader->BuildSceneAsync(*staged_scene, *swap.asset));
+        active_scene_asset_pin_ = swap.asset;
+        current_scene_key_ = swap.scene_key;
+      } else {
+        LOG_F(ERROR, "RenderScene: Scene build missing asset or loader");
+        if (const auto vm = shell.GetContentVm()) {
+          vm->NotifySceneLoadCompleted(swap.scene_key, false);
         }
+        active_scene_load_key_.reset();
       }
-      // Keep an explicit pin on the active SceneAsset while it is displayed.
-      // This prevents TrimCache from treating the active scene dependency tree
-      // as cold/unused and evicting in-use textures mid-frame.
-      active_scene_asset_pin_ = swap.asset;
-      if (const auto vm = shell.GetContentVm()) {
-        vm->NotifySceneLoadCompleted(swap.scene_key, true);
-      }
-      active_scene_load_key_.reset();
-      current_scene_key_ = swap.scene_key;
 
       scene_loader_ = std::move(loader);
       if (scene_loader_) {
@@ -349,8 +376,8 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
       }
     } else if (scene_loader_->IsFailed()) {
       LOG_F(ERROR, "RenderScene: Scene loading failed");
-      if (const auto vm = shell.GetContentVm()) {
-        if (active_scene_load_key_.has_value()) {
+      if (active_scene_load_key_.has_value()) {
+        if (const auto vm = shell.GetContentVm()) {
           vm->NotifySceneLoadCompleted(*active_scene_load_key_, false);
         }
       }
@@ -363,26 +390,21 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
     }
   }
 
-  if (!active_scene_.IsValid()) {
-    auto scene = std::make_unique<scene::Scene>("RenderScene");
-    active_scene_ = shell.SetScene(std::move(scene));
+  if (!active_scene_.IsValid() && !shell.HasStagedScene()) {
+    shell.StageScene(std::make_unique<scene::Scene>("RenderScene"));
+    auto staged_scene = shell.GetStagedScene();
+    auto camera_node = staged_scene->CreateNode("MainCamera");
+    auto camera = std::make_unique<scene::PerspectiveCamera>();
+    const bool attached = camera_node.AttachCamera(std::move(camera));
+    CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
+    auto tf = camera_node.GetTransform();
+    tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
+    tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
+    shell.SetStagedMainCamera(std::move(camera_node));
   }
 
-  if (!main_camera_.IsAlive()) {
-    if (const auto scene_ptr = shell.TryGetScene()) {
-      main_camera_ = scene_ptr->CreateNode("MainCamera");
-      auto camera = std::make_unique<scene::PerspectiveCamera>();
-      const bool attached = main_camera_.AttachCamera(std::move(camera));
-      CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
-      auto tf = main_camera_.GetTransform();
-      tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
-      tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
-    }
-  }
-
-  const auto scene_ptr = shell.TryGetScene();
-
-  frame_context.SetScene(observer_ptr { scene_ptr.get() });
+  co_await Base::OnSceneMutation(context);
+  co_return;
 }
 
 auto MainModule::ReleaseCurrentSceneAsset(const char* reason) -> void
@@ -448,6 +470,7 @@ auto MainModule::ClearSceneRuntime(const char* /*reason*/) -> void
   active_scene_ = {};
   main_camera_ = {};
   scene_loader_.reset();
+  active_scene_load_key_.reset();
   shell.SetScene(nullptr);
 }
 

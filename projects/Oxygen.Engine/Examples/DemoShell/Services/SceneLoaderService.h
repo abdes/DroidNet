@@ -13,6 +13,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen::content {
@@ -69,8 +70,8 @@ public:
   auto GetResult() -> PendingSceneSwap { return std::move(swap_); }
 
   //! Build the runtime scene from a loaded asset.
-  auto BuildScene(scene::Scene& scene, const data::SceneAsset& asset)
-    -> scene::SceneNode;
+  auto BuildSceneAsync(scene::Scene& scene, const data::SceneAsset& asset)
+    -> co::Co<scene::SceneNode>;
 
   //! Mark the result as consumed and begin cleanup.
   void MarkConsumed();
