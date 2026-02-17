@@ -22,7 +22,6 @@ m_gtest_program(ParkingLot SOURCES ParkingLot_test.cpp)
 m_gtest_program(PointerBits SOURCES PointerBits_test.cpp)
 m_gtest_program(Queue SOURCES Queue_test.cpp)
 m_gtest_program(Result SOURCES Result_test.cpp)
-m_gtest_program(ScopeGuard SOURCES ScopeGuard_test.cpp)
 m_gtest_program(
   Mux
   SOURCES

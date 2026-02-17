@@ -11,6 +11,7 @@
 #include <Oxygen/Testing/GTest.h>
 #include <gmock/gmock.h>
 
+#include "Oxygen/Base/ScopeGuard.h"
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
 #include <Oxygen/OxCo/Algorithms.h>
@@ -21,6 +22,7 @@
 using std::chrono::milliseconds;
 using namespace std::chrono_literals;
 
+using oxygen::ScopeGuard;
 using oxygen::co::AnyOf;
 using oxygen::co::Co;
 using oxygen::co::Event;

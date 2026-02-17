@@ -34,6 +34,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
@@ -49,7 +50,6 @@
 #include <Oxygen/Content/Tools/ImportTool/ReportJson.h>
 #include <Oxygen/Content/Tools/ImportTool/UI/BatchViewModel.h>
 #include <Oxygen/Content/Tools/ImportTool/UI/Screens/BatchImportScreen.h>
-#include <Oxygen/OxCo/Detail/ScopeGuard.h>
 
 #ifndef OXYGEN_IMPORT_TOOL_VERSION
 #  error OXYGEN_IMPORT_TOOL_VERSION must be defined for ImportTool reports.
@@ -60,9 +60,9 @@ namespace oxygen::content::import::tool {
 namespace {
 
   using nlohmann::ordered_json;
+  using oxygen::ScopeGuard;
   using oxygen::clap::CommandBuilder;
   using oxygen::clap::Option;
-  using oxygen::co::detail::ScopeGuard;
 
   // Helper structs for logic (kept for now, or moved to ViewModel later)
   struct PreparedJob {

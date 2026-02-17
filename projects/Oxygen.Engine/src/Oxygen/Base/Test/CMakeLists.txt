@@ -38,6 +38,7 @@ m_gtest_program(Config SOURCES "Platform_test.cpp")
 m_gtest_program(Types SOURCES "Types_test.cpp")
 m_gtest_program(StringUtils SOURCES "StringUtils_test.cpp")
 m_gtest_program(Finally SOURCES "Finally_test.cpp")
+m_gtest_program(ScopeGuard SOURCES "ScopeGuard_test.cpp")
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
   m_gtest_program(

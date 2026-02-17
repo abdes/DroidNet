@@ -94,15 +94,15 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, ResourceEviction_ReentrantHandler)
       // deadlocking on the same mutex.
       std::atomic<int> call_count { 0 };
       std::atomic<int> nested_release_calls { 0 };
-      auto subscription = loader.SubscribeResourceEvictions(
-        BufferResource::ClassTypeId(), [&](const EvictionEvent& /*ev*/) {
-          call_count.fetch_add(1, std::memory_order_relaxed);
-          el.Schedule(
-            milliseconds { 0 }, [&loader, key, &nested_release_calls] {
+      auto subscription
+        = loader.SubscribeResourceEvictions(BufferResource::ClassTypeId(),
+          [&](const EvictionEvent& /*ev*/) -> void {
+            call_count.fetch_add(1, std::memory_order_relaxed);
+            el.Schedule(0ms, [&loader, key, &nested_release_calls] {
               (void)loader.ReleaseResource(key);
               nested_release_calls.fetch_add(1, std::memory_order_relaxed);
             });
-        });
+          });
 
       auto resource = co_await loader.LoadResourceAsync<BufferResource>(
         CookedResourceData<BufferResource> { .key = key, .bytes = span });
@@ -112,7 +112,7 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, ResourceEviction_ReentrantHandler)
       resource.reset();
       (void)loader.ReleaseResource(key);
       loader.TrimCache();
-      co_await el.Sleep(milliseconds { 0 });
+      co_await el.Sleep(0ms);
 
       // Handler must have been called once.
       EXPECT_EQ(call_count.load(std::memory_order_relaxed), 1);

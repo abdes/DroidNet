@@ -20,6 +20,7 @@
 #include <variant>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Content/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Content/Import/Internal/Emitters/BufferEmitter.h>
 #include <Oxygen/Content/Import/Internal/Emitters/TextureEmitter.h>
@@ -28,7 +29,6 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Channel.h>
-#include <Oxygen/OxCo/Detail/ScopeGuard.h>
 
 namespace oxygen::content::import::detail {
 
@@ -588,7 +588,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     [[maybe_unused]] const bool sent = collector_kick.TrySend(uint8_t { 1 });
   };
 
-  co::detail::ScopeGuard close_guard([&]() noexcept { ClosePipelines(); });
+  ScopeGuard close_guard([&]() noexcept { ClosePipelines(); });
 
   auto resolve_texture_item =
     [&](

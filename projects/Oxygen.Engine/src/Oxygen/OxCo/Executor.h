@@ -11,9 +11,9 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/OxCo/Coroutine.h>
 #include <Oxygen/OxCo/Detail/Queue.h>
-#include <Oxygen/OxCo/Detail/ScopeGuard.h>
 #include <Oxygen/OxCo/EventLoop.h>
 
 namespace oxygen::co {
@@ -190,13 +190,12 @@ public:
   void Capture(Fn fn, const size_t capacity = Capacity::Small)
   {
     Tasks tmp { capacity };
-    detail::ScopeGuard guard([&]() noexcept { Drain(tmp); });
+    ScopeGuard guard([&]() noexcept { Drain(tmp); });
 
     Tasks* old_ready = ready_;
     // ReSharper disable once CppDFALocalValueEscapesFunction
     ready_ = &tmp;
-    detail::ScopeGuard guard2(
-      [&old_ready, this]() noexcept { ready_ = old_ready; });
+    ScopeGuard guard2([&old_ready, this]() noexcept { ready_ = old_ready; });
 
     fn();
   }
@@ -218,7 +217,7 @@ private:
   {
     Executor* prev = Current();
     Current() = this;
-    detail::ScopeGuard guard([&]() noexcept { Current() = prev; });
+    ScopeGuard guard([&]() noexcept { Current() = prev; });
 
     bool b = true;
     if (running_ == nullptr) {
@@ -228,7 +227,7 @@ private:
       running_ = &b;
     }
     const bool* running = running_;
-    detail::ScopeGuard guard2([&]() noexcept {
+    ScopeGuard guard2([&]() noexcept {
       if (*running && running_ == &b) {
         running_ = nullptr;
       }
