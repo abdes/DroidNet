@@ -27,10 +27,10 @@ namespace {
 
 class RepeatableSharedTest : public OxCoTestFixture {
 protected:
-  using UseFunction = std::function<Co<int>(milliseconds)>;
+  using UseFunction = std::function<Co<int>(std::chrono::milliseconds)>;
 
-  std::unique_ptr<RepeatableShared<int>> shared_ {};
-  std::unique_ptr<UseFunction> use_ {};
+  std::unique_ptr<RepeatableShared<int>> shared_;
+  std::unique_ptr<UseFunction> use_;
 
   void SetUp() override
   {
@@ -42,7 +42,7 @@ protected:
     });
 
     use_ = std::make_unique<UseFunction>(
-      [&](const milliseconds delay = 0ms) -> Co<int> {
+      [&](const std::chrono::milliseconds delay = 0ms) -> Co<int> {
         if (delay != 0ms) {
           co_await el_->Sleep(delay);
         }
@@ -53,7 +53,8 @@ protected:
       });
   }
 
-  [[nodiscard]] auto Use(const milliseconds delay = 0ms) const -> Co<int>
+  [[nodiscard]] auto Use(const std::chrono::milliseconds delay = 0ms) const
+    -> Co<int>
   {
     return (*use_)(delay);
   }

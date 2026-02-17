@@ -16,6 +16,7 @@ using namespace oxygen::core;
 using namespace oxygen::engine;
 using oxygen::co::testing::TestEventLoop;
 using namespace oxygen::co;
+using namespace std::chrono_literals;
 
 //! Basic dummy module for registration and ordering tests
 class DummyModule : public EngineModule {
@@ -113,7 +114,7 @@ public:
     calls.push_back("OnInput-start");
     // Await a zero-duration sleep on the provided test loop so the handler
     // actually suspends and resumes on the event loop.
-    co_await _dummy_loop->Sleep(milliseconds(0));
+    co_await _dummy_loop->Sleep(0ms);
     calls.push_back("OnInput-end");
     co_return;
   }
@@ -236,14 +237,14 @@ public:
   auto OnInput(observer_ptr<FrameContext>) -> Co<> override
   {
     calls.push_back("OnInput-before-throw");
-    co_await dummy_loop_->Sleep(milliseconds(0));
+    co_await dummy_loop_->Sleep(0ms);
     throw std::runtime_error("Test exception from OnInput");
   }
 
   auto OnGameplay(observer_ptr<FrameContext>) -> Co<> override
   {
     calls.push_back("OnGameplay-before-throw");
-    co_await dummy_loop_->Sleep(milliseconds(0));
+    co_await dummy_loop_->Sleep(0ms);
     throw std::invalid_argument("Test exception from OnGameplay");
   }
 
@@ -296,7 +297,7 @@ public:
   {
     calls.push_back("OnInput-start");
     if (dummy_loop_) {
-      co_await dummy_loop_->Sleep(milliseconds(0));
+      co_await dummy_loop_->Sleep(0ms);
     }
     if (should_throw_async) {
       throw std::runtime_error("Conditional async exception");

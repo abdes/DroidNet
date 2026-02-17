@@ -73,6 +73,7 @@ set(
   "ResourceTable.h"
   "Result.h"
   "ReturnAddress.h"
+  "ScopeGuard.h"
   "Signals.h"
   "Sha256.h"
   "StateMachine.h"

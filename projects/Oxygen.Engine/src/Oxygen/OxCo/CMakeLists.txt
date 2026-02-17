@@ -81,7 +81,6 @@ set(
   "Detail/ReadyAwaiter.h"
   "Detail/Result.h"
   "Detail/RunOnCancel.h"
-  "Detail/ScopeGuard.h"
   "Detail/TaskAwaiter.h"
   "Detail/TaskFrame.h"
   "Detail/TaskParent.h"

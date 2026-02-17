@@ -8,18 +8,18 @@
 
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Detail/ScopeGuard.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Shared.h>
 
 using namespace std::chrono_literals;
+using oxygen::ScopeGuard;
 using oxygen::co::Co;
 using oxygen::co::Shared;
 using oxygen::co::detail::ReadyAwaiter;
-using oxygen::co::detail::ScopeGuard;
 using oxygen::co::testing::kNonCancellable;
 using oxygen::co::testing::OxCoTestFixture;
 
@@ -27,11 +27,11 @@ namespace {
 
 class SharedTest : public OxCoTestFixture {
 protected:
-  using UseFunction = std::function<Co<int>(milliseconds)>;
+  using UseFunction = std::function<Co<int>(std::chrono::milliseconds)>;
   using SharedProducer = std::function<Co<int>()>;
 
-  Shared<SharedProducer> shared_ {};
-  std::unique_ptr<UseFunction> use_ {};
+  Shared<SharedProducer> shared_;
+  std::unique_ptr<UseFunction> use_;
 
   void SetUp() override
   {
@@ -43,7 +43,7 @@ protected:
     });
 
     use_ = std::make_unique<UseFunction>(
-      [&](const milliseconds delay = 0ms) -> Co<int> {
+      [&](const std::chrono::milliseconds delay = 0ms) -> Co<int> {
         if (delay != 0ms) {
           co_await el_->Sleep(delay);
         }
@@ -54,7 +54,8 @@ protected:
       });
   }
 
-  [[nodiscard]] auto Use(const milliseconds delay = 0ms) const -> Co<int>
+  [[nodiscard]] auto Use(const std::chrono::milliseconds delay = 0ms) const
+    -> Co<int>
   {
     return (*use_)(delay);
   }

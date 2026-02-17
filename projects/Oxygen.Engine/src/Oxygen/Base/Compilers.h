@@ -709,4 +709,42 @@
  * ```
  */
 
+// -----------------------------------------------------------------------------
+// no unique address
+// -----------------------------------------------------------------------------
+
+#if defined(OXYGEN_NO_UNIQUE_ADDRESS)
+#  undef OXYGEN_NO_UNIQUE_ADDRESS
+#endif
+#if defined(_MSC_VER)
+#  define OXYGEN_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
+#else
+#  define OXYGEN_NO_UNIQUE_ADDRESS [[no_unique_address]]
+#endif
+
+/*!
+ * \def OXYGEN_NO_UNIQUE_ADDRESS
+ *
+ * \brief Attaches to a non-static data member to indicate that the member
+ * should not have a separate address from other members of the class.
+ *
+ * This allows the compiler to optimize the layout of classes that contain
+ * empty members (like empty lambdas or stateless objects) by overlapping
+ * their storage.
+ *
+ * \note MSVC and Clang on Windows require `[[msvc::no_unique_address]]` to
+ * enable this optimization, as they ignore the standard C++20 attribute for ABI
+ * compatibility reasons.
+ *
+ * Example
+ * ```
+ * struct Empty {};
+ * struct Foo {
+ *   OXYGEN_NO_UNIQUE_ADDRESS Empty e;
+ *   int i;
+ * };
+ * static_assert(sizeof(Foo) == sizeof(int));
+ * ```
+ */
+
 // NOLINTEND(cppcoreguidelines-macro-usage)

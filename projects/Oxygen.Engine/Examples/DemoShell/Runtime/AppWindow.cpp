@@ -309,8 +309,6 @@ auto AppWindow::ClearFramebuffers() -> void
 {
   DLOG_SCOPE_FUNCTION(1);
 
-  // co::detail::ScopeGuard guard([&]() noexcept { framebuffers_.fill(nullptr);
-  // });
   try {
     if (gfx_weak_.expired()) {
       LOG_F(WARNING, "gfx expired, cannot properly release framebuffers");

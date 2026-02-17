@@ -8,9 +8,10 @@
 
 #include <utility>
 
+#include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Macros.h>
 
-namespace oxygen::co::detail {
+namespace oxygen {
 
 template <typename Fn>
 concept NoExceptCallable = requires(Fn fn) {
@@ -24,12 +25,14 @@ public:
     : fn_(std::move(fn))
   {
   }
+
   ~ScopeGuard() noexcept { fn_(); }
+
   OXYGEN_MAKE_NON_COPYABLE(ScopeGuard)
   OXYGEN_MAKE_NON_MOVABLE(ScopeGuard)
 
 private:
-  [[no_unique_address]] Fn fn_;
+  OXYGEN_NO_UNIQUE_ADDRESS Fn fn_;
 };
 
-} // namespace oxygen::co::detail
+} // namespace oxygen
