@@ -1,0 +1,73 @@
+content_version: 5
+
+scripts:
+  - name: move_bc
+    language: luau
+    encoding: bytecode
+    compression: none
+    data_hex: "4D4F56454243A1A2A3A4A5A6A7A8A9AA"
+  - name: shared_src
+    language: luau
+    encoding: source
+    compression: none
+    data: |
+      local M = {}
+      function M.tick(dt)
+        return dt * 2.0
+      end
+      return M
+
+assets:
+  - type: script
+    name: MoveScript
+    asset_key: "11111111111111111111111111111111"
+    bytecode_resource: move_bc
+    source_resource: shared_src
+
+  - type: script
+    name: AiScript
+    asset_key: "33333333333333333333333333333333"
+    external_source_path: "scripts/game/ai.luau"
+
+  - type: scene
+    name: ScriptScene
+    asset_key: "22222222222222222222222222222222"
+    nodes:
+      - name: Root
+      - name: Enemy
+        parent: 0
+    scripting:
+      - node_index: 0
+        slots:
+          - script_asset: MoveScript
+            execution_order: -10
+            params:
+              - key: speed
+                type: float
+                value: 2.5
+              - key: enabled
+                type: bool
+                value: true
+              - key: offset
+                type: vec3
+                value: [1.0, 2.0, 3.0]
+          - script_asset: AiScript
+            execution_order: 0
+            params:
+              - key: mode
+                type: int32
+                value: 7
+              - key: state
+                type: string
+                value: patrol
+              - key: dir2
+                type: vec2
+                value: [0.0, -1.0]
+              - key: color4
+                type: vec4
+                value: [1.0, 0.5, 0.25, 1.0]
+      - node_index: 1
+        slots:
+          - script_asset_key: "11111111111111111111111111111111"
+            execution_order: 20
+            params: []

@@ -32,6 +32,8 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/ScriptAsset.h>
+#include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/LiveObject.h>
@@ -41,7 +43,6 @@
 #include <Oxygen/Renderer/api_export.h>
 #include <Oxygen/content/EngineTag.h>
 #include <Oxygen/content/ResourceKey.h>
-
 
 namespace oxygen::content {
 
@@ -200,6 +201,8 @@ public:
       co_return co_await LoadGeometryAssetAsyncImpl(key);
     } else if constexpr (std::is_same_v<T, data::SceneAsset>) {
       co_return co_await LoadSceneAssetAsyncImpl(key);
+    } else if constexpr (std::is_same_v<T, data::ScriptAsset>) {
+      co_return co_await LoadScriptAssetAsyncImpl(key);
     } else {
       throw std::runtime_error(
         "LoadAssetAsync<T> is not implemented for this asset type yet");
@@ -746,6 +749,10 @@ private:
     std::optional<uint16_t> preferred_source_id = std::nullopt)
     -> co::Co<std::shared_ptr<data::SceneAsset>>;
 
+  OXGN_CNTT_API auto LoadScriptAssetAsyncImpl(const data::AssetKey& key,
+    std::optional<uint16_t> preferred_source_id = std::nullopt)
+    -> co::Co<std::shared_ptr<data::ScriptAsset>>;
+
   OXGN_CNTT_API auto LoadResourceAsyncFromCookedErased(
     TypeId type_id, ResourceKey key, std::span<const uint8_t> bytes)
     -> co::Co<std::shared_ptr<void>>;
@@ -914,12 +921,20 @@ private:
     in_flight_scene_assets_;
 
   std::unordered_map<uint64_t,
+    co::Shared<co::Co<std::shared_ptr<data::ScriptAsset>>>>
+    in_flight_script_assets_;
+
+  std::unordered_map<uint64_t,
     co::Shared<co::Co<std::shared_ptr<data::TextureResource>>>>
     in_flight_textures_;
 
   std::unordered_map<uint64_t,
     co::Shared<co::Co<std::shared_ptr<data::BufferResource>>>>
     in_flight_buffers_;
+
+  std::unordered_map<uint64_t,
+    co::Shared<co::Co<std::shared_ptr<data::ScriptResource>>>>
+    in_flight_script_resources_;
 
   std::atomic<uint32_t> next_synthetic_texture_index_ { 1 };
   std::atomic<uint32_t> next_synthetic_buffer_index_ { 1 };
@@ -959,14 +974,21 @@ template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::GeometryAsset>(
 template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::SceneAsset>(
   const data::AssetKey& key) -> co::Co<std::shared_ptr<data::SceneAsset>>;
 
+template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::ScriptAsset>(
+  const data::AssetKey& key) -> co::Co<std::shared_ptr<data::ScriptAsset>>;
+
 //-- Known Resource Types --
 
-template OXGN_CNTT_API auto
+extern template OXGN_CNTT_API auto
   AssetLoader::LoadResourceAsync<data::BufferResource>(ResourceKey)
     -> co::Co<std::shared_ptr<data::BufferResource>>;
 
-template OXGN_CNTT_API auto
+extern template OXGN_CNTT_API auto
   AssetLoader::LoadResourceAsync<data::TextureResource>(ResourceKey)
     -> co::Co<std::shared_ptr<data::TextureResource>>;
+
+extern template OXGN_CNTT_API auto
+  AssetLoader::LoadResourceAsync<data::ScriptResource>(ResourceKey)
+    -> co::Co<std::shared_ptr<data::ScriptResource>>;
 
 } // namespace oxygen::content

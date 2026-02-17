@@ -26,6 +26,7 @@
 #include "GeometryAssetDumper.h"
 #include "MaterialAssetDumper.h"
 #include "SceneAssetDumper.h"
+#include "ScriptAssetDumper.h"
 
 namespace oxygen::content {
 class PakFile;
@@ -45,6 +46,8 @@ public:
       std::make_unique<GeometryAssetDumper>());
     Register(static_cast<uint8_t>(oxygen::data::AssetType::kScene),
       std::make_unique<SceneAssetDumper>());
+    Register(static_cast<uint8_t>(oxygen::data::AssetType::kScript),
+      std::make_unique<ScriptAssetDumper>());
   }
 
   [[nodiscard]] auto Get(const uint8_t asset_type) const -> const AssetDumper&

@@ -28,11 +28,14 @@
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
+#include <Oxygen/Content/Loaders/ScriptLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/ScriptAsset.h>
+#include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Serio/MemoryStream.h>
@@ -219,9 +222,11 @@ AssetLoader::AssetLoader(
   RegisterLoader(loaders::LoadGeometryAsset);
   RegisterLoader(loaders::LoadMaterialAsset);
   RegisterLoader(loaders::LoadSceneAsset);
+  RegisterLoader(loaders::LoadScriptAsset);
 
   // Register resource loaders
   RegisterLoader(loaders::LoadBufferResource);
+  RegisterLoader(loaders::LoadScriptResource);
   RegisterLoader(loaders::LoadTextureResource);
 }
 
@@ -276,8 +281,10 @@ void AssetLoader::Stop()
   in_flight_material_assets_.clear();
   in_flight_geometry_assets_.clear();
   in_flight_scene_assets_.clear();
+  in_flight_script_assets_.clear();
   in_flight_textures_.clear();
   in_flight_buffers_.clear();
+  in_flight_script_resources_.clear();
 
   {
     auto eviction_guard = content_cache_.OnEviction(
@@ -822,6 +829,11 @@ auto AssetLoader::LoadResourceAsyncFromCookedErased(
       resource_key_by_hash_.insert_or_assign(key_hash, key);
       co_return cached;
     }
+  } else if (type_id == data::ScriptResource::ClassTypeId()) {
+    if (auto cached = content_cache_.CheckOut<data::ScriptResource>(key_hash)) {
+      resource_key_by_hash_.insert_or_assign(key_hash, key);
+      co_return cached;
+    }
   } else {
     throw std::runtime_error(
       "LoadResourceAsync(cooked) is not implemented for this resource type");
@@ -847,7 +859,7 @@ auto AssetLoader::LoadResourceAsyncFromCookedErased(
     LoaderContext context {
       .current_asset_key = {},
       .desc_reader = reader.get(),
-      .data_readers = std::make_tuple(reader.get(), reader.get()),
+      .data_readers = std::make_tuple(reader.get(), reader.get(), reader.get()),
       .work_offline = work_offline_,
       .source_pak = nullptr,
     };
@@ -891,6 +903,23 @@ auto AssetLoader::LoadResourceAsyncFromCookedErased(
       if (!typed || typed->GetTypeId() != data::BufferResource::ClassTypeId()) {
         LOG_F(ERROR, "Loaded resource type mismatch (cooked): expected {}",
           data::BufferResource::ClassTypeNamePretty());
+        co_return nullptr;
+      }
+      if (content_cache_.Store(key_hash, typed)) {
+        resource_key_by_hash_.insert_or_assign(key_hash, key);
+        // Keep one loader-owned cache retain; load caller gets its own retain.
+        content_cache_.Touch(key_hash);
+      }
+    } else if (type_id == data::ScriptResource::ClassTypeId()) {
+      if (auto cached
+        = content_cache_.CheckOut<data::ScriptResource>(key_hash)) {
+        resource_key_by_hash_.insert_or_assign(key_hash, key);
+        co_return cached;
+      }
+      auto typed = std::static_pointer_cast<data::ScriptResource>(decoded);
+      if (!typed || typed->GetTypeId() != data::ScriptResource::ClassTypeId()) {
+        LOG_F(ERROR, "Loaded resource type mismatch (cooked): expected {}",
+          data::ScriptResource::ClassTypeNamePretty());
         co_return nullptr;
       }
       if (content_cache_.Store(key_hash, typed)) {
@@ -1288,6 +1317,7 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
   std::unique_ptr<serio::AnyReader> desc_reader;
   std::unique_ptr<serio::AnyReader> buf_reader;
   std::unique_ptr<serio::AnyReader> tex_reader;
+  std::unique_ptr<serio::AnyReader> script_reader;
   const PakFile* source_pak = nullptr;
 
   auto try_prepare_from_source_index = [&](const size_t source_index) -> bool {
@@ -1306,6 +1336,7 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
 
     buf_reader = source.CreateBufferDataReader();
     tex_reader = source.CreateTextureDataReader();
+    script_reader = source.CreateScriptDataReader();
 
     if (source.GetTypeId() == internal::PakFileSource::ClassTypeId()) {
       const auto* pak_source
@@ -1347,6 +1378,7 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
     [this, key, type_id, source_id, source_pak, collector,
       desc_reader = std::move(desc_reader), buf_reader = std::move(buf_reader),
       tex_reader = std::move(tex_reader),
+      script_reader = std::move(script_reader),
       source_token]() mutable -> std::shared_ptr<void> {
       ScopedCurrentSourceId source_guard(source_id);
 
@@ -1354,7 +1386,8 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
         .current_asset_key = key,
         .source_token = source_token,
         .desc_reader = desc_reader.get(),
-        .data_readers = std::make_tuple(buf_reader.get(), tex_reader.get()),
+        .data_readers = std::make_tuple(
+          buf_reader.get(), tex_reader.get(), script_reader.get()),
         .work_offline = work_offline_,
         .dependency_collector = collector,
         .source_pak = source_pak,
@@ -2137,6 +2170,134 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(
   co_return co_await shared;
 }
 
+auto AssetLoader::LoadScriptAssetAsyncImpl(
+  const data::AssetKey& key, std::optional<uint16_t> preferred_source_id)
+  -> co::Co<std::shared_ptr<data::ScriptAsset>>
+{
+  DLOG_SCOPE_F(2, "AssetLoader LoadScriptAssetAsync");
+  DLOG_F(2, "key     : {}", nostd::to_string(key).c_str());
+  DLOG_F(2, "offline : {}", work_offline_);
+
+  AssertOwningThread();
+
+  auto resolve_source_id = [&]() -> std::optional<uint16_t> {
+    if (preferred_source_id.has_value()) {
+      const auto source_it
+        = impl_->source_id_to_index.find(*preferred_source_id);
+      if (source_it != impl_->source_id_to_index.end()
+        && impl_->sources.at(source_it->second)->FindAsset(key).has_value()) {
+        return *preferred_source_id;
+      }
+    }
+    for (size_t source_index = impl_->sources.size(); source_index-- > 0;) {
+      if (impl_->sources[source_index]->FindAsset(key).has_value()) {
+        return impl_->source_ids[source_index];
+      }
+    }
+    return std::nullopt;
+  };
+
+  const auto source_id_opt = resolve_source_id();
+  if (!source_id_opt.has_value()) {
+    co_return nullptr;
+  }
+  const auto source_id = *source_id_opt;
+  const auto hash_key = HashAssetKey(key, source_id);
+  const auto publish_script_resource_dependency
+    = [this, key, source_id](
+        const std::shared_ptr<data::ScriptAsset>& script_asset) -> co::Co<> {
+    if (!script_asset) {
+      co_return;
+    }
+    const auto script_type_index = static_cast<uint16_t>(
+      IndexOf<data::ScriptResource, ResourceTypeList>::value);
+    const auto indices = std::array { script_asset->GetBytecodeResourceIndex(),
+      script_asset->GetSourceResourceIndex() };
+
+    for (size_t i = 0; i < indices.size(); ++i) {
+      const auto resource_index = indices[i];
+      if (resource_index == data::pak::kNoResourceIndex) {
+        continue;
+      }
+      if (i == 1 && resource_index == indices[0]) {
+        continue;
+      }
+      const auto script_resource_key
+        = PackResourceKey(source_id, script_type_index, resource_index);
+      auto script_resource
+        = co_await LoadResourceAsync<data::ScriptResource>(script_resource_key);
+      if (!script_resource) {
+        continue;
+      }
+
+      AddResourceDependency(key, script_resource_key);
+      (void)ReleaseResource(script_resource_key);
+    }
+  };
+
+  if (auto cached = content_cache_.CheckOut<data::ScriptAsset>(hash_key)) {
+    co_await publish_script_resource_dependency(cached);
+    co_return cached;
+  }
+
+  if (auto it = in_flight_script_assets_.find(hash_key);
+    it != in_flight_script_assets_.end()) {
+    co_return co_await it->second;
+  }
+
+  auto op
+    = [this, key, source_id, hash_key, publish_script_resource_dependency]()
+    -> co::Co<std::shared_ptr<data::ScriptAsset>> {
+    struct EraseOnExit final {
+      AssetLoader* loader;
+      uint64_t key_hash;
+      ~EraseOnExit() noexcept
+      {
+        loader->in_flight_script_assets_.erase(key_hash);
+      }
+    } erase { this, hash_key };
+
+    try {
+      if (auto cached = content_cache_.CheckOut<data::ScriptAsset>(hash_key)) {
+        co_await publish_script_resource_dependency(cached);
+        co_return cached;
+      }
+
+      auto decoded_result = co_await DecodeAssetAsyncErasedImpl(
+        data::ScriptAsset::ClassTypeId(), key, source_id);
+      auto decoded
+        = std::static_pointer_cast<data::ScriptAsset>(decoded_result.asset);
+      if (!decoded
+        || decoded->GetTypeId() != data::ScriptAsset::ClassTypeId()) {
+        LOG_F(ERROR, "Loaded asset type mismatch (async): expected {}, got {}",
+          data::ScriptAsset::ClassTypeNamePretty(),
+          decoded ? decoded->GetTypeName() : "nullptr");
+        co_return nullptr;
+      }
+      if (!decoded_result.dependency_collector) {
+        LOG_F(ERROR, "Missing dependency collector for decoded script asset");
+        co_return nullptr;
+      }
+
+      if (content_cache_.Store(hash_key, decoded)) {
+        asset_key_by_hash_.insert_or_assign(hash_key, key);
+        // Baseline pinning: retain one loader-owned checkout.
+        content_cache_.Touch(hash_key);
+      }
+
+      co_await PublishResourceDependenciesAsync<data::ScriptResource>(
+        key, *decoded_result.dependency_collector);
+      co_return decoded;
+    } catch (const co::TaskCancelledException& e) {
+      throw OperationCancelledException(e.what());
+    }
+  }();
+
+  co::Shared shared(std::move(op));
+  in_flight_script_assets_.insert_or_assign(hash_key, shared);
+  co_return co_await shared;
+}
+
 template <PakResource T>
 auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
   -> co::Co<std::shared_ptr<T>>
@@ -2208,6 +2369,7 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
           std::unique_ptr<serio::AnyReader> desc_reader;
           std::unique_ptr<serio::AnyReader> buf_reader;
           std::unique_ptr<serio::AnyReader> tex_reader;
+          std::unique_ptr<serio::AnyReader> script_reader;
           const PakFile* source_pak = nullptr;
         } prepared;
 
@@ -2242,6 +2404,7 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
 
           prepared.buf_reader = source.CreateBufferDataReader();
           prepared.tex_reader = source.CreateTextureDataReader();
+          prepared.script_reader = source.CreateScriptDataReader();
 
           auto loader_it
             = resource_loaders_.find(data::TextureResource::ClassTypeId());
@@ -2263,8 +2426,8 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
             LoaderContext context {
               .current_asset_key = {},
               .desc_reader = prepared.desc_reader.get(),
-              .data_readers = std::make_tuple(
-                prepared.buf_reader.get(), prepared.tex_reader.get()),
+              .data_readers = std::make_tuple(prepared.buf_reader.get(),
+                prepared.tex_reader.get(), prepared.script_reader.get()),
               .work_offline = work_offline_,
               .source_pak = prepared.source_pak,
             };
@@ -2337,6 +2500,7 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
           std::unique_ptr<serio::AnyReader> desc_reader;
           std::unique_ptr<serio::AnyReader> buf_reader;
           std::unique_ptr<serio::AnyReader> tex_reader;
+          std::unique_ptr<serio::AnyReader> script_reader;
           const PakFile* source_pak = nullptr;
         } prepared;
 
@@ -2371,6 +2535,7 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
 
           prepared.buf_reader = source.CreateBufferDataReader();
           prepared.tex_reader = source.CreateTextureDataReader();
+          prepared.script_reader = source.CreateScriptDataReader();
 
           auto loader_it
             = resource_loaders_.find(data::BufferResource::ClassTypeId());
@@ -2390,8 +2555,8 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
             LoaderContext context {
               .current_asset_key = {},
               .desc_reader = prepared.desc_reader.get(),
-              .data_readers = std::make_tuple(
-                prepared.buf_reader.get(), prepared.tex_reader.get()),
+              .data_readers = std::make_tuple(prepared.buf_reader.get(),
+                prepared.tex_reader.get(), prepared.script_reader.get()),
               .work_offline = work_offline_,
               .source_pak = prepared.source_pak,
             };
@@ -2426,9 +2591,134 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
     co::Shared shared(std::move(op));
     in_flight_buffers_.insert_or_assign(key_hash, shared);
     co_return co_await shared;
+  } else if constexpr (std::same_as<T, data::ScriptResource>) {
+    if (auto it = in_flight_script_resources_.find(key_hash);
+      it != in_flight_script_resources_.end()) {
+      co_return co_await it->second;
+    }
+
+    auto op = [this, key,
+                key_hash]() -> co::Co<std::shared_ptr<data::ScriptResource>> {
+      struct EraseOnExit final {
+        AssetLoader* loader;
+        uint64_t key_hash;
+        ~EraseOnExit() noexcept
+        {
+          loader->in_flight_script_resources_.erase(key_hash);
+        }
+      } erase { this, key_hash };
+
+      try {
+        if (auto cached
+          = content_cache_.CheckOut<data::ScriptResource>(key_hash)) {
+          resource_key_by_hash_.insert_or_assign(key_hash, key);
+          co_return cached;
+        }
+
+        const internal::InternalResourceKey internal_key(key);
+        const uint16_t source_id = internal_key.GetPakIndex();
+        const auto resource_index = internal_key.GetResourceIndex();
+
+        struct PreparedDecode final {
+          LoadFnErased loader;
+          std::unique_ptr<serio::AnyReader> desc_reader;
+          std::unique_ptr<serio::AnyReader> buf_reader;
+          std::unique_ptr<serio::AnyReader> tex_reader;
+          std::unique_ptr<serio::AnyReader> script_reader;
+          const PakFile* source_pak = nullptr;
+        } prepared;
+
+        {
+          const auto source_it = impl_->source_id_to_index.find(source_id);
+          if (source_it == impl_->source_id_to_index.end()) {
+            co_return nullptr;
+          }
+          const auto& source = *impl_->sources.at(source_it->second);
+
+          if (source.GetTypeId() == internal::PakFileSource::ClassTypeId()) {
+            const auto* pak_source
+              = static_cast<const internal::PakFileSource*>(&source);
+            prepared.source_pak = &pak_source->Pak();
+          }
+
+          const auto* resource_table = source.GetScriptTable();
+          prepared.desc_reader = source.CreateScriptTableReader();
+          if (!resource_table || !prepared.desc_reader) {
+            co_return nullptr;
+          }
+
+          const auto offset = resource_table->GetResourceOffset(resource_index);
+          if (!offset) {
+            co_return nullptr;
+          }
+          if (auto seek_res
+            = prepared.desc_reader->Seek(static_cast<size_t>(*offset));
+            !seek_res) {
+            co_return nullptr;
+          }
+
+          prepared.buf_reader = source.CreateBufferDataReader();
+          prepared.tex_reader = source.CreateTextureDataReader();
+          prepared.script_reader = source.CreateScriptDataReader();
+
+          auto loader_it
+            = resource_loaders_.find(data::ScriptResource::ClassTypeId());
+          if (loader_it == resource_loaders_.end()) {
+            LOG_F(ERROR, "No loader registered for resource type id: {}",
+              data::ScriptResource::ClassTypeId());
+            co_return nullptr;
+          }
+          prepared.loader = loader_it->second;
+        }
+
+        LOG_F(2, "scheduling script decode on thread pool");
+        auto decoded = co_await thread_pool_->Run(
+          [this, source_id, prepared = std::move(prepared)]() mutable {
+            ScopedCurrentSourceId source_guard(source_id);
+
+            LoaderContext context {
+              .current_asset_key = {},
+              .desc_reader = prepared.desc_reader.get(),
+              .data_readers = std::make_tuple(prepared.buf_reader.get(),
+                prepared.tex_reader.get(), prepared.script_reader.get()),
+              .work_offline = work_offline_,
+              .source_pak = prepared.source_pak,
+            };
+
+            auto void_ptr = prepared.loader(context);
+            auto typed
+              = std::static_pointer_cast<data::ScriptResource>(void_ptr);
+            if (!typed
+              || typed->GetTypeId() != data::ScriptResource::ClassTypeId()) {
+              return std::shared_ptr<data::ScriptResource> {};
+            }
+            return typed;
+          });
+
+        AssertOwningThread();
+        if (!decoded) {
+          co_return nullptr;
+        }
+
+        if (content_cache_.Store(key_hash, decoded)) {
+          resource_key_by_hash_.insert_or_assign(key_hash, key);
+          // Keep one loader-owned cache retain; load caller gets its own
+          // retain.
+          content_cache_.Touch(key_hash);
+        }
+        co_return decoded;
+      } catch (const co::TaskCancelledException& e) {
+        throw OperationCancelledException(e.what());
+      }
+    }();
+
+    co::Shared shared(std::move(op));
+    in_flight_script_resources_.insert_or_assign(key_hash, shared);
+    co_return co_await shared;
   } else {
     static_assert(std::same_as<T, data::TextureResource>
-        || std::same_as<T, data::BufferResource>,
+        || std::same_as<T, data::BufferResource>
+        || std::same_as<T, data::ScriptResource>,
       "Unsupported resource type for LoadResourceAsync");
     co_return nullptr;
   }
@@ -2669,6 +2959,11 @@ template OXGN_CNTT_API auto
   AssetLoader::LoadResourceAsync<oxygen::data::TextureResource>(
     oxygen::content::ResourceKey)
     -> oxygen::co::Co<std::shared_ptr<oxygen::data::TextureResource>>;
+
+template OXGN_CNTT_API auto
+  AssetLoader::LoadResourceAsync<oxygen::data::ScriptResource>(
+    oxygen::content::ResourceKey)
+    -> oxygen::co::Co<std::shared_ptr<oxygen::data::ScriptResource>>;
 
 //=== Hash Key Generation ====================================================//
 

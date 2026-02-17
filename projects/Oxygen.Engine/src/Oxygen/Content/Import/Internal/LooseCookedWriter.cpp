@@ -574,6 +574,13 @@ private:
       throw std::runtime_error("Loose cooked index must provide both "
                                "textures.table and textures.data");
     }
+
+    const auto has_scripts_table = files_.contains(FileKind::kScriptsTable);
+    const auto has_scripts_data = files_.contains(FileKind::kScriptsData);
+    if (has_scripts_table != has_scripts_data) {
+      throw std::runtime_error(
+        "Loose cooked index must provide both scripts.table and scripts.data");
+    }
   }
 
   [[nodiscard]] auto ResolveSourceKey_() const -> data::SourceKey

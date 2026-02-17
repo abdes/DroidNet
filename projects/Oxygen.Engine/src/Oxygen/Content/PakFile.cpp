@@ -31,14 +31,15 @@ auto ComputeCrc32Ieee(std::span<const std::byte> bytes, uint32_t state) noexcept
 {
   // Standard IEEE CRC32 (poly 0x04C11DB7 reflected => 0xEDB88320), reflected
   // in/out, init 0xFFFFFFFF, final XOR 0xFFFFFFFF.
-  static constexpr auto kPoly = 0xEDB88320u;
+  static constexpr auto kPoly = 0xEDB88320U;
 
+  // NOLINTBEGIN(*-magic-numbers)
   auto table = []() consteval {
     std::array<uint32_t, 256> t {};
     for (uint32_t i = 0; i < 256; ++i) {
       uint32_t c = i;
       for (int j = 0; j < 8; ++j) {
-        c = (c & 1u) ? (kPoly ^ (c >> 1u)) : (c >> 1u);
+        c = (c & 1U) ? (kPoly ^ (c >> 1U)) : (c >> 1U);
       }
       t[i] = c;
     }
@@ -48,8 +49,9 @@ auto ComputeCrc32Ieee(std::span<const std::byte> bytes, uint32_t state) noexcept
   uint32_t crc = state;
   for (const auto b : bytes) {
     const auto u_b = static_cast<uint8_t>(b);
-    crc = table[(crc ^ u_b) & 0xFFu] ^ (crc >> 8u);
+    crc = table[(crc ^ u_b) & 0xFF] ^ (crc >> 8U);
   }
+  // NOLINTEND(*-magic-numbers)
   return crc;
 }
 
@@ -62,7 +64,7 @@ auto ComputePakCrc32(const std::filesystem::path& pak_path,
   constexpr size_t kChunkSize = 256 * 1024;
   std::array<std::byte, kChunkSize> buffer {};
 
-  uint32_t crc = 0xFFFFFFFFu;
+  uint32_t crc = 0xFFFFFFFF; // NOLINT(*-magic-numbers)
   size_t offset = 0;
 
   while (offset < file_size) {
@@ -108,7 +110,7 @@ auto ComputePakCrc32(const std::filesystem::path& pak_path,
     offset += to_read;
   }
 
-  return crc ^ 0xFFFFFFFFu;
+  return crc ^ 0xFFFFFFFFU; // NOLINT(*-magic-numbers)
 }
 // Helper to open a FileStream and throw with logging on error
 auto OpenFileStream(const std::filesystem::path& path)
@@ -146,6 +148,17 @@ auto PakFile::InitTexturesTable() const -> void
   }
 }
 
+auto PakFile::InitScriptsTable() const -> void
+{
+  DCHECK_F(!scripts_table_);
+
+  if (footer_.script_resource_table.count > 0) {
+    DCHECK_GT_F(footer_.script_resource_table.entry_size, 0U,
+      "resource table entry size must be greater than 0");
+    scripts_table_.emplace(footer_.script_resource_table);
+  }
+}
+
 auto PakFile::ReadHeader(serio::FileStream<>* stream) -> void
 {
   LOG_SCOPE_FUNCTION(INFO);
@@ -174,10 +187,9 @@ auto PakFile::ReadHeader(serio::FileStream<>* stream) -> void
     throw std::runtime_error("Invalid pak file header magic");
   }
 
-  if (header_.version != 4) {
+  if (header_.version != 4 && header_.version != 5) {
     const auto msg = std::string("Unsupported PAK format version: ")
-      + std::to_string(header_.version)
-      + " (this build loads v4 only). Please upgrade/regenerate the PAK as v4.";
+      + std::to_string(header_.version) + " (this build loads v4/v5 only).";
     LOG_F(ERROR, "{}", msg);
     throw std::runtime_error(msg);
   }
@@ -211,6 +223,7 @@ auto PakFile::ReadFooter(serio::FileStream<>* stream) -> void
   // Initialize resource tables if present
   InitBuffersTable();
   InitTexturesTable();
+  InitScriptsTable();
 
   LOG_F(INFO, "pak crc32        : {}", footer_.pak_crc32);
   LOG_F(INFO, "directory offset : {}", footer_.directory_offset);
@@ -229,7 +242,7 @@ auto PakFile::ValidateCrc32Integrity() const -> void
 {
   // Footer declares that CRC32 validation should be skipped.
   if (footer_.pak_crc32 == 0) {
-    LOG_F(INFO, "PakFile: CRC32 validation skipped (pak_crc32=0) path={}",
+    LOG_F(INFO, "CRC32 validation skipped (pak_crc32=0) path={}",
       file_path_.string());
     return;
   }
@@ -252,14 +265,12 @@ auto PakFile::ValidateCrc32Integrity() const -> void
     = ComputePakCrc32(file_path_, file_size, crc_field_absolute_offset);
 
   if (computed != footer_.pak_crc32) {
-    LOG_F(ERROR,
-      "PakFile: CRC32 mismatch path={} expected=0x{:08x} actual=0x{:08x}",
+    LOG_F(ERROR, "CRC32 mismatch path={} expected=0x{:08x} actual=0x{:08x}",
       file_path_.string(), footer_.pak_crc32, computed);
     throw std::runtime_error("Pak CRC32 mismatch");
   }
 
-  LOG_F(INFO, "PakFile: CRC32 OK path={} crc32=0x{:08x}", file_path_.string(),
-    computed);
+  LOG_F(INFO, "CRC32 OK path={} crc32=0x{:08x}", file_path_.string(), computed);
 }
 
 auto PakFile::ReadBrowseIndex(
@@ -424,6 +435,7 @@ PakFile::PakFile(const std::filesystem::path& path)
   , meta_stream_(OpenFileStream(path))
   , buffer_data_stream_(OpenFileStream(path))
   , texture_data_stream_(OpenFileStream(path))
+  , script_data_stream_(OpenFileStream(path))
 {
   LOG_SCOPE_FUNCTION(INFO);
   LOG_F(INFO, "file : {}", path.string());
@@ -590,6 +602,21 @@ auto PakFile::CreateTextureDataReader() const -> Reader
   return Reader(*texture_data_stream_);
 }
 
+auto PakFile::CreateScriptDataReader() const -> Reader
+{
+  std::scoped_lock lock(mutex_);
+  if (!script_data_stream_) {
+    throw std::runtime_error("PakFile script data stream is not open");
+  }
+  if (const auto res = script_data_stream_->Seek(footer_.script_region.offset);
+    !res) {
+    LOG_F(ERROR, "Failed to seek to script data region offset {}: {}",
+      footer_.script_region.offset, res.error().message());
+    throw std::runtime_error("Failed to seek to script data region offset");
+  }
+  return Reader(*script_data_stream_);
+}
+
 /*!
   Returns a reference to the ResourceTable for buffer resources.
 
@@ -601,8 +628,7 @@ auto PakFile::CreateTextureDataReader() const -> Reader
 auto PakFile::BuffersTable() const -> BuffersTableT&
 {
   if (!buffers_table_) {
-    throw std::runtime_error(
-      "PakFile: No buffer resource table present in this file");
+    throw std::runtime_error("No buffer resource table present in this file");
   }
   return *buffers_table_;
 }
@@ -618,8 +644,67 @@ auto PakFile::BuffersTable() const -> BuffersTableT&
 auto PakFile::TexturesTable() const -> TexturesTableT&
 {
   if (!textures_table_) {
-    throw std::runtime_error(
-      "PakFile: No texture resource table present in this file");
+    throw std::runtime_error("No texture resource table present in this file");
   }
   return *textures_table_;
+}
+
+auto PakFile::ScriptsTable() const -> ScriptsTableT&
+{
+  if (!scripts_table_) {
+    throw std::runtime_error("No script resource table present in this file");
+  }
+  return *scripts_table_;
+}
+
+auto PakFile::ReadScriptSlotRecord(const uint32_t index) const
+  -> data::pak::ScriptSlotRecord
+{
+  std::scoped_lock lock(mutex_);
+
+  if (index >= footer_.script_slot_table.count) {
+    throw std::out_of_range("Script slot index out of bounds");
+  }
+  if (footer_.script_slot_table.entry_size
+    != sizeof(data::pak::ScriptSlotRecord)) {
+    throw std::runtime_error("Script slot table entry size mismatch");
+  }
+
+  const auto byte_offset = footer_.script_slot_table.offset
+    + (static_cast<uint64_t>(index) * footer_.script_slot_table.entry_size);
+  if (const auto seek_res
+    = meta_stream_->Seek(static_cast<size_t>(byte_offset));
+    !seek_res) {
+    throw std::runtime_error("Failed to seek script slot table");
+  }
+
+  Reader reader(*meta_stream_);
+  auto blob_res = reader.ReadBlob(sizeof(data::pak::ScriptSlotRecord));
+  if (!blob_res) {
+    throw std::runtime_error("Failed to read script slot record");
+  }
+
+  data::pak::ScriptSlotRecord record {};
+  std::memcpy(&record, blob_res->data(), sizeof(record));
+  return record;
+}
+
+auto PakFile::ReadScriptSlotRecords(const uint32_t start_index,
+  const uint32_t count) const -> std::vector<data::pak::ScriptSlotRecord>
+{
+  std::vector<data::pak::ScriptSlotRecord> result;
+  result.reserve(count);
+
+  if (count == 0) {
+    return result;
+  }
+  if (start_index > footer_.script_slot_table.count
+    || count > footer_.script_slot_table.count - start_index) {
+    throw std::out_of_range("Script slot range out of bounds");
+  }
+
+  for (uint32_t i = 0; i < count; ++i) {
+    result.push_back(ReadScriptSlotRecord(start_index + i));
+  }
+  return result;
 }

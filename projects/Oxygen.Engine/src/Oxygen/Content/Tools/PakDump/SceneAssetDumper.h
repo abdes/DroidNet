@@ -47,6 +47,7 @@ public:
     using oxygen::data::pak::RenderableRecord;
     using oxygen::data::pak::SceneEnvironmentBlockHeader;
     using oxygen::data::pak::SceneEnvironmentSystemRecordHeader;
+    using oxygen::data::pak::ScriptingComponentRecord;
     using oxygen::data::pak::SkyAtmosphereEnvironmentRecord;
     using oxygen::data::pak::SkyLightEnvironmentRecord;
     using oxygen::data::pak::SkySphereEnvironmentRecord;
@@ -194,6 +195,8 @@ public:
       scene->GetComponents<PointLightRecord>().size());
     DumpComponentTableHeader(ComponentType::kSpotLight,
       scene->GetComponents<SpotLightRecord>().size());
+    DumpComponentTableHeader(ComponentType::kScripting,
+      scene->GetComponents<ScriptingComponentRecord>().size());
     std::cout << "\n";
 
     const auto DumpDirectionalLights = [&]() -> void {

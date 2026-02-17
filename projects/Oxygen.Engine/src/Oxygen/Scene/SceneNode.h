@@ -20,6 +20,7 @@
 #include <Oxygen/Core/Resources.h>
 #include <Oxygen/Core/SafeCall.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
+#include <Oxygen/Scene/Scripting/ScriptingComponent.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 #include <Oxygen/Scene/Types/Strong.h>
@@ -89,6 +90,9 @@ public:
   //! Forward declaration for Renderable interface.
   //! @see SceneNode::Renderable for full documentation.
   class Renderable;
+  //! Forward declaration for Scripting interface.
+  //! @see SceneNode::Scripting for full documentation.
+  class Scripting;
 
   // We make the Scene a friend, so it can invalidate a SceneNode when its
   // data is erased.
@@ -159,6 +163,12 @@ public:
   OXGN_SCN_NDAPI auto GetRenderable() noexcept -> Renderable;
   OXGN_SCN_NDAPI auto GetRenderable() const noexcept -> Renderable;
 
+  //=== Scripting Access ===--------------------------------------------------//
+
+  //! Gets a Scripting interface for safe script operations.
+  OXGN_SCN_NDAPI auto GetScripting() noexcept -> Scripting;
+  OXGN_SCN_NDAPI auto GetScripting() const noexcept -> Scripting;
+
   //=== Camera Attachment ===-------------------------------------------------//
 
   //! Attaches a camera component to this SceneNode. If a camera already exists,
@@ -176,6 +186,18 @@ public:
 
   //! Checks if this SceneNode has an attached camera component.
   OXGN_SCN_NDAPI auto HasCamera() noexcept -> bool;
+
+  //=== Scripting Attachment ===----------------------------------------------//
+
+  //! Attaches a scripting component to this SceneNode. If one already exists,
+  //! this will fail.
+  OXGN_SCN_API auto AttachScripting() noexcept -> bool;
+
+  //! Detaches the scripting component from this SceneNode, if present.
+  OXGN_SCN_API auto DetachScripting() noexcept -> bool;
+
+  //! Checks if this SceneNode has an attached scripting component.
+  OXGN_SCN_NDAPI auto HasScripting() const noexcept -> bool;
 
   //! Gets the attached camera as the specified type T (PerspectiveCamera or
   //! OrthographicCamera).
@@ -361,8 +383,9 @@ private:
   class NodeIsValidValidator;
   class NodeIsValidAndInSceneValidator;
 
-  [[nodiscard]] auto NodeIsValid() -> NodeIsValidValidator;
-  [[nodiscard]] auto NodeIsValidAndInScene() -> NodeIsValidAndInSceneValidator;
+  [[nodiscard]] auto NodeIsValid() const -> NodeIsValidValidator;
+  [[nodiscard]] auto NodeIsValidAndInScene() const
+    -> NodeIsValidAndInSceneValidator;
 };
 
 OXGN_SCN_NDAPI auto to_string(const SceneNode& node) noexcept -> std::string;
@@ -372,14 +395,15 @@ OXGN_SCN_NDAPI auto to_string(const SceneNode& node) noexcept -> std::string;
 //==============================================================================
 
 template <typename Derived> class SubInterfaceBase {
-protected:
+private:
   explicit SubInterfaceBase(SceneNode& node) noexcept
     : node_(&node)
   {
   }
 
+protected:
   // Access to owning node for derived classes
-  SceneNode* node_ { nullptr };
+  SceneNode* node_ { nullptr }; // NOLINT(*-non-private-member-*)
 
   // Void-return overload
   template <typename Self, typename Validator, typename Func>
@@ -441,6 +465,7 @@ protected:
     return SafeCall(
       static_cast<Derived*>(this), validator, std::forward<Func>(func));
   }
+  friend Derived;
 };
 
 //==============================================================================
@@ -702,6 +727,7 @@ public:
 
   struct SafeCallState {
     SceneNode* node = nullptr;
+    const Scene* scene = nullptr;
     SceneNodeImpl* node_impl = nullptr;
     detail::RenderableComponent* renderable = nullptr;
   };
@@ -716,6 +742,89 @@ public:
 
   [[nodiscard]] auto NodeInScene() const -> NodeInSceneValidator;
   [[nodiscard]] auto RequiresRenderable() const -> RequiresRenderableValidator;
+};
+
+//==============================================================================
+// SceneNode::Scripting Declaration
+//==============================================================================
+
+/*!
+  Scene-aware Scripting interface providing safe access to script slots and
+  runtime parameter overrides.
+
+  SceneNode::Scripting is a lightweight wrapper that gives convenient,
+  type-safe access to a node's ScriptingComponent. It leverages C++20
+  features like std::span and range-based iteration for efficient access.
+*/
+class SceneNode::Scripting : public SubInterfaceBase<SceneNode::Scripting> {
+public:
+  // Bring SafeCall from base into scope
+  using SubInterfaceBase<SceneNode::Scripting>::SafeCall;
+
+  // Use the Slot structure from ScriptingComponent for consistency
+  using Slot = ScriptingComponent::Slot;
+  using EffectiveParametersView
+    = ScriptingComponent::Slot::EffectiveParametersView;
+
+  //! Constructs a Scripting interface for the given SceneNode.
+  explicit Scripting(SceneNode& node) noexcept
+    : SubInterfaceBase(node)
+  {
+  }
+
+  //=== Slot API ===----------------------------------------------------------//
+
+  //! Adds a new script slot to this node.
+  //! Invalidates previously obtained slot references and spans.
+  OXGN_SCN_API auto AddSlot(
+    std::shared_ptr<const data::ScriptAsset> asset) noexcept -> bool;
+
+  //! Removes a script slot.
+  //! Invalidates previously obtained slot references and spans.
+  OXGN_SCN_API auto RemoveSlot(const Slot& slot) noexcept -> bool;
+
+  //! Returns a read-only span of all active script slots.
+  //! Returns an empty span if the node is invalid or has no scripting.
+  OXGN_SCN_NDAPI auto Slots() const noexcept -> std::span<const Slot>;
+
+  //=== Parameter API ===-----------------------------------------------------//
+
+  //! Sets a runtime parameter override for a specific script slot.
+  //! The slot reference must come from this object's current Slots() view.
+  OXGN_SCN_API auto SetParameter(const Slot& slot, std::string_view name,
+    data::ScriptParam value) noexcept -> bool;
+
+  //! Tries to get a parameter value, checking overrides first then falling
+  //! back to defaults.
+  //! The slot reference must come from this object's current Slots() view.
+  [[nodiscard]] OXGN_SCN_NDAPI auto TryGetParameter(
+    const Slot& slot, std::string_view name) const noexcept
+    -> std::optional<std::reference_wrapper<const data::ScriptParam>>;
+
+  //! Gets a parameter value, checking overrides first then falling back to
+  //! defaults.
+  //! Throws std::out_of_range when not found.
+  [[nodiscard]] OXGN_SCN_NDAPI auto GetParameter(
+    const Slot& slot, std::string_view name) const -> const data::ScriptParam&;
+
+  //! Returns effective parameters for the given slot.
+  [[nodiscard]] OXGN_SCN_NDAPI auto Parameters(const Slot& slot) const noexcept
+    -> EffectiveParametersView;
+
+  struct SafeCallState {
+    SceneNode* node = nullptr;
+    const Scene* scene = nullptr;
+    SceneNodeImpl* node_impl = nullptr;
+    ScriptingComponent* scripting = nullptr;
+  };
+
+private:
+  // Logging for SafeCall errors
+  OXGN_SCN_API auto LogSafeCallError(const char* reason) const noexcept -> void;
+
+  // Validators for SafeCall operations
+  class RequiresScriptingValidator;
+  [[nodiscard]] auto RequiresScripting() const -> RequiresScriptingValidator;
 };
 
 } // namespace oxygen::scene

@@ -49,7 +49,13 @@ def test_binary_diff_regression(tmp_path: Path):  # noqa: N802
     golden_info = inspect_pak(golden_pak)
     new_info = inspect_pak(out_pak)
 
-    assert golden_info["header"] == new_info["header"]
+    assert golden_info["header"]["magic_ok"] == new_info["header"]["magic_ok"]
+    assert (
+        golden_info["header"]["content_version"]
+        == new_info["header"]["content_version"]
+    )
+    # Container version intentionally bumped to v5.
+    assert new_info["header"]["version"] == 5
     assert golden_info["footer"]["directory"] == new_info["footer"]["directory"]
     assert golden_info.get("directory_entries", []) == new_info.get(
         "directory_entries", []

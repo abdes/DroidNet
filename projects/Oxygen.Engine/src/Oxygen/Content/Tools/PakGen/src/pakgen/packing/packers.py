@@ -29,11 +29,15 @@ from .errors import PakError
 __all__ = [
     "pack_header",
     "pack_footer",
+    "pack_script_param_record",
     "pack_directory_entry",
     "pack_material_asset_descriptor",
     "pack_buffer_resource_descriptor",
     "pack_texture_resource_descriptor",
     "pack_audio_resource_descriptor",
+    "pack_script_resource_descriptor",
+    "pack_script_asset_descriptor",
+    "pack_script_slot_record",
     "pack_geometry_asset_descriptor",
     "pack_scene_asset_descriptor_and_payload",
     "pack_mesh_descriptor",
@@ -48,6 +52,7 @@ _COMPONENT_TYPE_ORTHOGRAPHIC_CAMERA = 0x4D41434F  # 'OCAM'
 _COMPONENT_TYPE_DIRECTIONAL_LIGHT = 0x54494C44  # 'DLIT'
 _COMPONENT_TYPE_POINT_LIGHT = 0x54494C50  # 'PLIT'
 _COMPONENT_TYPE_SPOT_LIGHT = 0x54494C53  # 'SLIT'
+_COMPONENT_TYPE_SCRIPTING = 0x50524353  # 'SCRP'
 
 _ENV_SYSTEM_SKY_ATMOSPHERE = 0
 _ENV_SYSTEM_VOLUMETRIC_CLOUDS = 1
@@ -55,6 +60,147 @@ _ENV_SYSTEM_FOG = 2
 _ENV_SYSTEM_SKY_LIGHT = 3
 _ENV_SYSTEM_SKY_SPHERE = 4
 _ENV_SYSTEM_POST_PROCESS_VOLUME = 5
+
+_SCRIPT_PARAM_BOOL = 1
+_SCRIPT_PARAM_INT32 = 2
+_SCRIPT_PARAM_FLOAT = 3
+_SCRIPT_PARAM_STRING = 4
+_SCRIPT_PARAM_VEC2 = 5
+_SCRIPT_PARAM_VEC3 = 6
+_SCRIPT_PARAM_VEC4 = 7
+
+
+def _c_string_bytes(value: str, max_bytes_without_nul: int, field: str) -> bytes:
+    encoded = value.encode("utf-8")
+    if len(encoded) > max_bytes_without_nul:
+        raise PakError(
+            "E_RANGE",
+            f"{field} exceeds {max_bytes_without_nul} UTF-8 bytes",
+        )
+    return encoded + b"\x00" + (b"\x00" * (max_bytes_without_nul - len(encoded)))
+
+
+def _pack_script_param_payload(param_type: int, value: Any) -> bytes:
+    if param_type == _SCRIPT_PARAM_BOOL:
+        payload = struct.pack("<?", bool(value))
+        return payload + (b"\x00" * (60 - len(payload)))
+    if param_type == _SCRIPT_PARAM_INT32:
+        payload = struct.pack("<i", int(value))
+        return payload + (b"\x00" * (60 - len(payload)))
+    if param_type == _SCRIPT_PARAM_FLOAT:
+        payload = struct.pack("<f", float(value))
+        return payload + (b"\x00" * (60 - len(payload)))
+    if param_type == _SCRIPT_PARAM_STRING:
+        if not isinstance(value, str):
+            raise PakError("E_TYPE", "script param string value must be a string")
+        return _c_string_bytes(value, 59, "script param string value")
+    if param_type in (_SCRIPT_PARAM_VEC2, _SCRIPT_PARAM_VEC3, _SCRIPT_PARAM_VEC4):
+        count = {
+            _SCRIPT_PARAM_VEC2: 2,
+            _SCRIPT_PARAM_VEC3: 3,
+            _SCRIPT_PARAM_VEC4: 4,
+        }[param_type]
+        if not isinstance(value, (list, tuple)) or len(value) != count:
+            raise PakError(
+                "E_TYPE",
+                f"script param vector must have {count} numeric elements",
+            )
+        payload = struct.pack(f"<{count}f", *[float(v) for v in value])
+        return payload + (b"\x00" * (60 - len(payload)))
+    raise PakError("E_RANGE", f"unsupported script param type: {param_type}")
+
+
+def pack_script_param_record(param: Dict[str, Any]) -> bytes:
+    """Pack ScriptParamRecord (128 bytes) using v5 fixed-size C union layout."""
+    if not isinstance(param, dict):
+        raise PakError("E_TYPE", "script param entry must be an object")
+
+    key = param.get("key", param.get("name", ""))
+    if not isinstance(key, str):
+        raise PakError("E_TYPE", "script param key must be a string")
+    key_bytes = _c_string_bytes(key, 63, "script param key")
+
+    explicit_type = param.get("type")
+    value = param.get("value")
+    if isinstance(explicit_type, str):
+        t = explicit_type.strip().lower()
+        type_map = {
+            "bool": _SCRIPT_PARAM_BOOL,
+            "int": _SCRIPT_PARAM_INT32,
+            "int32": _SCRIPT_PARAM_INT32,
+            "float": _SCRIPT_PARAM_FLOAT,
+            "string": _SCRIPT_PARAM_STRING,
+            "vec2": _SCRIPT_PARAM_VEC2,
+            "vec3": _SCRIPT_PARAM_VEC3,
+            "vec4": _SCRIPT_PARAM_VEC4,
+        }
+        if t not in type_map:
+            raise PakError("E_RANGE", f"unsupported script param type: {explicit_type}")
+        param_type = type_map[t]
+    else:
+        if isinstance(value, bool):
+            param_type = _SCRIPT_PARAM_BOOL
+        elif isinstance(value, int):
+            param_type = _SCRIPT_PARAM_INT32
+        elif isinstance(value, float):
+            param_type = _SCRIPT_PARAM_FLOAT
+        elif isinstance(value, str):
+            param_type = _SCRIPT_PARAM_STRING
+        elif isinstance(value, (list, tuple)) and len(value) in (2, 3, 4):
+            param_type = {
+                2: _SCRIPT_PARAM_VEC2,
+                3: _SCRIPT_PARAM_VEC3,
+                4: _SCRIPT_PARAM_VEC4,
+            }[len(value)]
+        else:
+            raise PakError(
+                "E_TYPE",
+                "cannot infer script param type from value; set explicit 'type'",
+            )
+
+    payload = _pack_script_param_payload(param_type, value)
+    # Fixed layout in v5: key[64], type(u32), union payload[60].
+    record = struct.pack("<64sI60s", key_bytes, int(param_type), payload)
+    if len(record) != 128:
+        raise PakError("E_SIZE", f"ScriptParamRecord size mismatch: {len(record)}")
+    return record
+
+
+def _pack_asset_key_bytes(value: Any, field: str) -> bytes:
+    if isinstance(value, (bytes, bytearray)):
+        data = bytes(value)
+        if len(data) != 16:
+            raise PakError("E_SIZE", f"{field} must be 16 bytes")
+        return data
+    if isinstance(value, str):
+        cleaned = value.replace("-", "").strip()
+        if len(cleaned) != 32:
+            raise PakError("E_SIZE", f"{field} must be 32 hex chars")
+        try:
+            return bytes.fromhex(cleaned)
+        except ValueError as exc:
+            raise PakError("E_TYPE", f"{field} is not valid hex") from exc
+    raise PakError("E_TYPE", f"{field} must be bytes or hex string")
+
+
+def pack_script_slot_record(
+    *,
+    script_asset_key: bytes,
+    params_array_offset: int = 0,
+    params_count: int = 0,
+    execution_order: int = 0,
+    flags: int = 0,
+) -> bytes:
+    if len(script_asset_key) != 16:
+        raise PakError("E_SIZE", "script_asset_key must be 16 bytes")
+    out = (
+        script_asset_key
+        + struct.pack("<QIiI", int(params_array_offset), int(params_count), int(execution_order), int(flags))
+        + b"\x00" * 92
+    )
+    if len(out) != 128:
+        raise PakError("E_SIZE", f"ScriptSlotRecord size mismatch: {len(out)}")
+    return out
 
 
 def _vec3(vals: Any, default: list[float]) -> tuple[float, float, float]:
@@ -690,7 +836,9 @@ def pack_scene_asset_descriptor_and_payload(
     *,
     header_builder,
     geometry_name_to_key: Dict[str, bytes],
-) -> Tuple[bytes, bytes]:
+    script_name_to_key: Dict[str, bytes] | None = None,
+    scripting_slot_base_index: int = 0,
+) -> Tuple[bytes, bytes, List[Dict[str, Any]]]:
     """Pack SceneAssetDesc (256 bytes) plus trailing payload.
 
     Payload layout (offsets are relative to descriptor start):
@@ -848,6 +996,74 @@ def pack_scene_asset_descriptor_and_payload(
             )
         )
 
+    script_name_to_key = script_name_to_key or {}
+    scripting = scene.get("scripting", []) or []
+    if not isinstance(scripting, list):
+        raise PakError("E_TYPE", "scene.scripting must be a list")
+    scripting = [c for c in scripting if isinstance(c, dict)]
+    scripting.sort(key=lambda c: int(c.get("node_index", 0) or 0))
+
+    slot_temps: List[Dict[str, Any]] = []
+    scripting_records = bytearray()
+    local_slot_cursor = 0
+    for comp in scripting:
+        node_index = int(comp.get("node_index", 0) or 0)
+        if node_index < 0 or node_index >= node_count:
+            raise PakError(
+                "E_REF", f"Scripting component node_index out of range: {node_index}"
+            )
+        comp_flags = int(comp.get("flags", 0) or 0)
+        slots = comp.get("slots", []) or []
+        if not isinstance(slots, list):
+            raise PakError("E_TYPE", "scripting.slots must be a list")
+        slots = [s for s in slots if isinstance(s, dict)]
+        slots.sort(key=lambda s: int(s.get("execution_order", 0) or 0))
+        local_start = local_slot_cursor
+        for slot in slots:
+            key_value = slot.get("script_asset_key")
+            if key_value is None:
+                key_value = slot.get("script_asset")
+            if key_value is None:
+                key_value = slot.get("script")
+            if isinstance(key_value, str) and key_value in script_name_to_key:
+                key_bytes = script_name_to_key[key_value]
+            else:
+                key_bytes = _pack_asset_key_bytes(key_value, "script_asset_key")
+            params = slot.get("params", []) or []
+            if not isinstance(params, list):
+                raise PakError("E_TYPE", "script slot params must be a list")
+            params = [p for p in params if isinstance(p, dict)]
+            params_blob = b"".join(pack_script_param_record(p) for p in params)
+            slot_temps.append(
+                {
+                    "script_asset_key": key_bytes,
+                    "params_blob": params_blob,
+                    "params_count": len(params),
+                    "execution_order": int(slot.get("execution_order", 0) or 0),
+                    "flags": int(slot.get("flags", 0) or 0),
+                }
+            )
+            local_slot_cursor += 1
+        scripting_records.extend(
+            struct.pack(
+                "<IIII",
+                int(node_index),
+                int(comp_flags),
+                int(scripting_slot_base_index + local_start),
+                int(len(slots)),
+            )
+        )
+
+    if scripting_records:
+        component_tables.append(
+            (
+                _COMPONENT_TYPE_SCRIPTING,
+                int(len(scripting_records) // 16),
+                16,
+                bytes(scripting_records),
+            )
+        )
+
     component_tables.sort(key=lambda t: t[0])
 
     component_entries: List[bytes] = []
@@ -898,15 +1114,38 @@ def pack_scene_asset_descriptor_and_payload(
             f"Scene descriptor size mismatch: expected {SCENE_DESC_SIZE}, got {len(desc)}",
         )
 
-    payload = (
+    payload_core = (
         node_records
         + string_table
         + b"".join(component_entries)
         + b"".join(component_data)
     )
 
-    payload += _pack_scene_environment_block(scene)
-    return desc, payload
+    payload_core += _pack_scene_environment_block(scene)
+
+    params_payload = bytearray()
+    params_base = SCENE_DESC_SIZE + len(payload_core)
+    slot_infos: List[Dict[str, Any]] = []
+    for temp in slot_temps:
+        params_blob = temp["params_blob"]
+        params_count = int(temp["params_count"])
+        if params_count > 0:
+            params_rel_off = int(params_base + len(params_payload))
+            params_payload.extend(params_blob)
+        else:
+            params_rel_off = 0
+        slot_infos.append(
+            {
+                "script_asset_key": temp["script_asset_key"],
+                "params_relative_offset": params_rel_off,
+                "params_count": params_count,
+                "execution_order": int(temp["execution_order"]),
+                "flags": int(temp["flags"]),
+            }
+        )
+
+    payload = payload_core + bytes(params_payload)
+    return desc, payload, slot_infos
 
 
 def pack_header(version: int, content_version: int, guid: bytes) -> bytes:
@@ -914,11 +1153,11 @@ def pack_header(version: int, content_version: int, guid: bytes) -> bytes:
         raise PakError("E_SIZE", f"GUID size mismatch: {len(guid)}")
     if guid == b"\x00" * 16:
         raise PakError("E_GUID", "PAK header GUID must be non-zero")
-    reserved = b"\x00" * 36
+    reserved = b"\x00" * 228
     data = struct.pack(
-        "<8sHH16s36s", MAGIC, version, content_version, guid, reserved
+        "<8sHH16s228s", MAGIC, version, content_version, guid, reserved
     )
-    if len(data) != 64:
+    if len(data) != 256:
         raise PakError("E_SIZE", f"Header size mismatch: {len(data)}")
     return data
 
@@ -934,6 +1173,9 @@ def pack_footer(
     texture_table: Sequence[int],
     buffer_table: Sequence[int],
     audio_table: Sequence[int],
+    script_region: Sequence[int] = (0, 0),
+    script_resource_table: Sequence[int] = (0, 0, 0),
+    script_slot_table: Sequence[int] = (0, 0, 0),
     browse_index_offset: int = 0,
     browse_index_size: int = 0,
     pak_crc32: int = 0,
@@ -946,15 +1188,18 @@ def pack_footer(
         off, count, entry_size = table
         return struct.pack("<QII", off, count, entry_size)
 
-    reserved = b"\x00" * 108
+    reserved = b"\x00" * 60
     footer = (
         struct.pack("<QQQ", directory_offset, directory_size, asset_count)
         + pack_region(texture_region)
         + pack_region(buffer_region)
         + pack_region(audio_region)
+        + pack_region(script_region)
         + pack_table(texture_table)
         + pack_table(buffer_table)
         + pack_table(audio_table)
+        + pack_table(script_resource_table)
+        + pack_table(script_slot_table)
         + struct.pack("<QQ", browse_index_offset, browse_index_size)
         + reserved
         + struct.pack("<I", pak_crc32)
@@ -1349,6 +1594,97 @@ def pack_audio_resource_descriptor(
         raise PakError(
             "E_SIZE", f"Audio descriptor size mismatch: {len(desc)} != 32"
         )
+    return desc
+
+
+def pack_script_resource_descriptor(
+    resource_spec: Dict[str, Any], data_offset: int, data_size: int
+) -> bytes:
+    def _enum_u8(value: Any, mapping: Dict[str, int], field_name: str) -> int:
+        if isinstance(value, str):
+            key = value.strip().lower()
+            if key not in mapping:
+                raise PakError("E_RANGE", f"unsupported {field_name}: {value}")
+            return mapping[key]
+        return int(value) & 0xFF
+
+    language = _enum_u8(
+        resource_spec.get("language", 0),
+        {"luau": 0},
+        "script language",
+    )
+    encoding = _enum_u8(
+        resource_spec.get("encoding", 0),
+        {"bytecode": 0, "source": 1},
+        "script encoding",
+    )
+    compression = _enum_u8(
+        resource_spec.get("compression", 0),
+        {"none": 0, "zstd": 1},
+        "script compression",
+    )
+    content_hash = int(resource_spec.get("content_hash", 0)) & 0xFFFFFFFFFFFFFFFF
+    desc = (
+        struct.pack("<Q", data_offset)
+        + struct.pack("<I", data_size)
+        + struct.pack("<B", language)
+        + struct.pack("<B", encoding)
+        + struct.pack("<B", compression)
+        + struct.pack("<Q", content_hash)
+        + b"\x00" * 9
+    )
+    if len(desc) != 32:
+        raise PakError(
+            "E_SIZE", f"Script descriptor size mismatch: {len(desc)} != 32"
+        )
+    return desc
+
+
+def pack_script_asset_descriptor(
+    asset: Dict[str, Any],
+    resource_index_map: Dict[str, Dict[str, int]],
+    *,
+    header_builder,
+) -> bytes:
+    asset = asset if isinstance(asset, dict) else {}
+
+    def _resolve_resource_index(field_name: str, fallback_name: str | None = None) -> int:
+        value = asset.get(field_name)
+        if value is None and fallback_name is not None:
+            value = asset.get(fallback_name)
+        if isinstance(value, str):
+            return int(resource_index_map.get("script", {}).get(value, 0))
+        if isinstance(value, int):
+            return int(value)
+        return 0
+
+    bytecode_resource_index = _resolve_resource_index(
+        "bytecode_resource", fallback_name="script_resource"
+    )
+    source_resource_index = _resolve_resource_index(
+        "source_resource", fallback_name="script"
+    )
+    external_source_path = asset.get("external_source_path", "")
+    if not isinstance(external_source_path, str):
+        raise PakError("E_TYPE", "external_source_path must be a string")
+    external_source_path_bytes = _c_string_bytes(
+        external_source_path, 119, "external_source_path"
+    )
+    flags = int(asset.get("flags", 0))
+    if external_source_path:
+        flags |= 0x1  # ScriptAssetFlags::kAllowExternalSource
+    asset.setdefault("type", "script")
+    header = header_builder(asset)
+    desc = (
+        header
+        + struct.pack(
+            "<III", bytecode_resource_index, source_resource_index, flags
+        )
+        + external_source_path_bytes
+        + b"\x00" * 29
+    )
+    if len(desc) != 256:
+        raise PakError("E_SIZE", f"Script asset descriptor size mismatch: {len(desc)}")
     return desc
 
 

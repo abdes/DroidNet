@@ -23,6 +23,7 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Serio/FileStream.h>
@@ -88,17 +89,28 @@ public:
     -> std::unique_ptr<serio::AnyReader>
     = 0;
 
+  [[nodiscard]] virtual auto CreateScriptTableReader() const
+    -> std::unique_ptr<serio::AnyReader>
+    = 0;
+
   [[nodiscard]] virtual auto GetBufferTable() const noexcept
     -> const ResourceTable<data::BufferResource>* = 0;
 
   [[nodiscard]] virtual auto GetTextureTable() const noexcept
     -> const ResourceTable<data::TextureResource>* = 0;
 
+  [[nodiscard]] virtual auto GetScriptTable() const noexcept
+    -> const ResourceTable<data::ScriptResource>* = 0;
+
   [[nodiscard]] virtual auto CreateBufferDataReader() const
     -> std::unique_ptr<serio::AnyReader>
     = 0;
 
   [[nodiscard]] virtual auto CreateTextureDataReader() const
+    -> std::unique_ptr<serio::AnyReader>
+    = 0;
+
+  [[nodiscard]] virtual auto CreateScriptDataReader() const
     -> std::unique_ptr<serio::AnyReader>
     = 0;
 };
@@ -168,6 +180,12 @@ public:
     return std::make_unique<OwningPakSectionReader>(pak_.FilePath(), 0);
   }
 
+  [[nodiscard]] auto CreateScriptTableReader() const
+    -> std::unique_ptr<serio::AnyReader> override
+  {
+    return std::make_unique<OwningPakSectionReader>(pak_.FilePath(), 0);
+  }
+
   [[nodiscard]] auto GetBufferTable() const noexcept
     -> const ResourceTable<data::BufferResource>* override
   {
@@ -178,6 +196,12 @@ public:
     -> const ResourceTable<data::TextureResource>* override
   {
     return pak_.GetResourceTable<data::TextureResource>();
+  }
+
+  [[nodiscard]] auto GetScriptTable() const noexcept
+    -> const ResourceTable<data::ScriptResource>* override
+  {
+    return pak_.GetResourceTable<data::ScriptResource>();
   }
 
   [[nodiscard]] auto CreateBufferDataReader() const
@@ -198,6 +222,16 @@ public:
     }
     return std::make_unique<OwningPakSectionReader>(
       pak_.FilePath(), static_cast<size_t>(footer_->texture_region.offset));
+  }
+
+  [[nodiscard]] auto CreateScriptDataReader() const
+    -> std::unique_ptr<serio::AnyReader> override
+  {
+    if (!footer_) {
+      return nullptr;
+    }
+    return std::make_unique<OwningPakSectionReader>(
+      pak_.FilePath(), static_cast<size_t>(footer_->script_region.offset));
   }
 
   [[nodiscard]] auto Pak() const noexcept -> const PakFile& { return pak_; }
@@ -402,6 +436,12 @@ public:
     return std::make_unique<OwningFileReader>(*textures_table_path_);
   }
 
+  [[nodiscard]] auto CreateScriptTableReader() const
+    -> std::unique_ptr<serio::AnyReader> override
+  {
+    return nullptr;
+  }
+
   [[nodiscard]] auto GetBufferTable() const noexcept
     -> const ResourceTable<data::BufferResource>* override
   {
@@ -412,6 +452,12 @@ public:
     -> const ResourceTable<data::TextureResource>* override
   {
     return textures_table_ ? &(*textures_table_) : nullptr;
+  }
+
+  [[nodiscard]] auto GetScriptTable() const noexcept
+    -> const ResourceTable<data::ScriptResource>* override
+  {
+    return nullptr;
   }
 
   [[nodiscard]] auto CreateBufferDataReader() const
@@ -430,6 +476,12 @@ public:
       return nullptr;
     }
     return std::make_unique<OwningFileReader>(*textures_data_path_);
+  }
+
+  [[nodiscard]] auto CreateScriptDataReader() const
+    -> std::unique_ptr<serio::AnyReader> override
+  {
+    return nullptr;
   }
 
 private:

@@ -18,14 +18,25 @@ from bindless_codegen.generator import generate
 THIS_DIR = Path(__file__).resolve().parent
 
 
+def _resolve_spec_yaml() -> Path:
+    core_dir = THIS_DIR.parents[2]
+    candidates = (
+        core_dir / "Meta" / "Bindless.yaml",
+        core_dir / "Bindless" / "Spec.yaml",
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError("Bindless spec yaml not found in known locations")
+
+
 def run_gen_inprocess(tmp_path, strategy):
     out_base = tmp_path / "Generated"
     out_base.parent.mkdir(parents=True, exist_ok=True)
     out_base_str = str(out_base) + "."
     # Call generate() directly in-process which is faster and avoids
     # environment-dependent subprocess machinery.
-    # Spec.yaml lives under src/Oxygen/Core/Bindless/Spec.yaml
-    src = str((THIS_DIR.parent.parent.parent / "Bindless" / "Spec.yaml"))
+    src = str(_resolve_spec_yaml())
     # generate returns True when files changed; we want the JSON path
     generate(
         src,

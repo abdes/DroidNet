@@ -125,7 +125,7 @@ def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
     if not isinstance(assets_list, list):
         _err(errors, "E_TYPE", "'assets' must be a list", "assets")
     # Resource entries basic checks
-    for rtype in ["buffer", "texture", "audio"]:
+    for rtype in ["buffer", "texture", "audio", "script"]:
         plural = rtype + "s"
         entries = spec.get(plural, []) or []
         if len(entries) > MAX_RESOURCES_PER_TYPE:
@@ -179,6 +179,16 @@ def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                         "stride out of range",
                         path + ".stride",
                     )
+            if rtype == "script":
+                for field in ("language", "encoding", "compression"):
+                    val = e.get(field)
+                    if val is not None and not isinstance(val, (int, str)):
+                        _err(
+                            errors,
+                            "E_TYPE",
+                            f"{field} must be an int or string enum",
+                            f"{path}.{field}",
+                        )
     # Assets partition & limits
     mats = [
         a
@@ -190,12 +200,17 @@ def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
         for a in assets_list
         if isinstance(a, dict) and a.get("type") == "geometry"
     ]
+    scripts = [
+        a
+        for a in assets_list
+        if isinstance(a, dict) and a.get("type") == "script"
+    ]
     scenes = [
         a
         for a in assets_list
         if isinstance(a, dict) and a.get("type") == "scene"
     ]
-    if len(mats) + len(geos) + len(scenes) > MAX_ASSETS_TOTAL:
+    if len(mats) + len(geos) + len(scripts) + len(scenes) > MAX_ASSETS_TOTAL:
         _err(errors, "E_COUNT", "Total assets exceed limit", "assets")
     for i, m in enumerate(mats):
         path = f"assets[{i}]"  # material
@@ -330,102 +345,217 @@ def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                         spath + ".mesh_views",
                     )
 
-        for i, s in enumerate(scenes):
-            path = f"assets[{i}]"  # scene
-            if not isinstance(s, dict):
-                _err(errors, "E_TYPE", "Asset must be object", path)
-                continue
-            name = s.get("name")
-            if not isinstance(name, str):
-                _err(errors, "E_FIELD", "Missing name", path)
-            elif len(name.encode("utf-8")) > ASSET_NAME_MAX_LENGTH:
-                _err(errors, "E_NAME_LEN", "Name too long", path + ".name")
+    for i, s in enumerate(scripts):
+        path = f"assets[{i}]"
+        if not isinstance(s, dict):
+            _err(errors, "E_TYPE", "Asset must be object", path)
+            continue
+        name = s.get("name")
+        if not isinstance(name, str):
+            _err(errors, "E_FIELD", "Missing name", path)
+        elif len(name.encode("utf-8")) > ASSET_NAME_MAX_LENGTH:
+            _err(errors, "E_NAME_LEN", "Name too long", path + ".name")
+        external = s.get("external_source_path")
+        if external is not None:
+            if not isinstance(external, str):
+                _err(
+                    errors,
+                    "E_TYPE",
+                    "external_source_path must be a string",
+                    path + ".external_source_path",
+                )
+            elif len(external.encode("utf-8")) > 119:
+                _err(
+                    errors,
+                    "E_RANGE",
+                    "external_source_path exceeds 119 UTF-8 bytes",
+                    path + ".external_source_path",
+                )
 
-            nodes = s.get("nodes")
-            if nodes is None:
-                _err(errors, "E_FIELD", "Scene missing nodes", path + ".nodes")
-            elif not isinstance(nodes, list):
-                _err(errors, "E_TYPE", "nodes must be a list", path + ".nodes")
-            else:
-                if len(nodes) == 0:
+    for i, s in enumerate(scenes):
+        path = f"assets[{i}]"  # scene
+        if not isinstance(s, dict):
+            _err(errors, "E_TYPE", "Asset must be object", path)
+            continue
+        name = s.get("name")
+        if not isinstance(name, str):
+            _err(errors, "E_FIELD", "Missing name", path)
+        elif len(name.encode("utf-8")) > ASSET_NAME_MAX_LENGTH:
+            _err(errors, "E_NAME_LEN", "Name too long", path + ".name")
+
+        nodes = s.get("nodes")
+        if nodes is None:
+            _err(errors, "E_FIELD", "Scene missing nodes", path + ".nodes")
+        elif not isinstance(nodes, list):
+            _err(errors, "E_TYPE", "nodes must be a list", path + ".nodes")
+        else:
+            if len(nodes) == 0:
+                _err(
+                    errors,
+                    "E_COUNT",
+                    "Scene must contain at least one node",
+                    path + ".nodes",
+                )
+            for ni, node in enumerate(nodes):
+                npath = f"{path}.nodes[{ni}]"
+                if not isinstance(node, dict):
+                    _err(errors, "E_TYPE", "Node must be object", npath)
+                    continue
+                nname = node.get("name")
+                if not isinstance(nname, str):
                     _err(
                         errors,
-                        "E_COUNT",
-                        "Scene must contain at least one node",
-                        path + ".nodes",
+                        "E_FIELD",
+                        "Node missing name",
+                        npath + ".name",
                     )
-                for ni, node in enumerate(nodes):
-                    npath = f"{path}.nodes[{ni}]"
-                    if not isinstance(node, dict):
-                        _err(errors, "E_TYPE", "Node must be object", npath)
-                        continue
-                    nname = node.get("name")
-                    if not isinstance(nname, str):
-                        _err(
-                            errors,
-                            "E_FIELD",
-                            "Node missing name",
-                            npath + ".name",
-                        )
-                    elif len(nname.encode("utf-8")) > ASSET_NAME_MAX_LENGTH:
-                        _err(
-                            errors,
-                            "E_NAME_LEN",
-                            "Name too long",
-                            npath + ".name",
-                        )
-                    parent = node.get("parent")
-                    if parent is not None and not isinstance(parent, int):
-                        _err(
-                            errors,
-                            "E_TYPE",
-                            "parent must be int or null",
-                            npath + ".parent",
-                        )
-                    node_id = node.get("node_id")
-                    if node_id is not None and not isinstance(node_id, str):
-                        _err(
-                            errors,
-                            "E_TYPE",
-                            "node_id must be hex string",
-                            npath + ".node_id",
-                        )
+                elif len(nname.encode("utf-8")) > ASSET_NAME_MAX_LENGTH:
+                    _err(
+                        errors,
+                        "E_NAME_LEN",
+                        "Name too long",
+                        npath + ".name",
+                    )
+                parent = node.get("parent")
+                if parent is not None and not isinstance(parent, int):
+                    _err(
+                        errors,
+                        "E_TYPE",
+                        "parent must be int or null",
+                        npath + ".parent",
+                    )
+                node_id = node.get("node_id")
+                if node_id is not None and not isinstance(node_id, str):
+                    _err(
+                        errors,
+                        "E_TYPE",
+                        "node_id must be hex string",
+                        npath + ".node_id",
+                    )
 
-            renderables = s.get("renderables")
-            if renderables is not None and not isinstance(renderables, list):
-                _err(
-                    errors,
-                    "E_TYPE",
-                    "renderables must be a list",
-                    path + ".renderables",
-                )
+        renderables = s.get("renderables")
+        if renderables is not None and not isinstance(renderables, list):
+            _err(
+                errors,
+                "E_TYPE",
+                "renderables must be a list",
+                path + ".renderables",
+            )
 
-            perspective_cameras = s.get("perspective_cameras")
-            if perspective_cameras is not None and not isinstance(
-                perspective_cameras, list
-            ):
-                _err(
-                    errors,
-                    "E_TYPE",
-                    "perspective_cameras must be a list",
-                    path + ".perspective_cameras",
-                )
+        perspective_cameras = s.get("perspective_cameras")
+        if perspective_cameras is not None and not isinstance(
+            perspective_cameras, list
+        ):
+            _err(
+                errors,
+                "E_TYPE",
+                "perspective_cameras must be a list",
+                path + ".perspective_cameras",
+            )
 
-            orthographic_cameras = s.get("orthographic_cameras")
-            if orthographic_cameras is not None and not isinstance(
-                orthographic_cameras, list
-            ):
-                _err(
-                    errors,
-                    "E_TYPE",
-                    "orthographic_cameras must be a list",
-                    path + ".orthographic_cameras",
-                )
+        orthographic_cameras = s.get("orthographic_cameras")
+        if orthographic_cameras is not None and not isinstance(
+            orthographic_cameras, list
+        ):
+            _err(
+                errors,
+                "E_TYPE",
+                "orthographic_cameras must be a list",
+                path + ".orthographic_cameras",
+            )
     return errors
 
 
 def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
     errors: List[ValidationErrorRecord] = []
+
+    def _validate_script_param_entry(param: Any, path: str) -> None:
+        if not isinstance(param, dict):
+            _err(errors, "E_TYPE", "script param entry must be an object", path)
+            return
+
+        key = param.get("key", param.get("name"))
+        if not isinstance(key, str):
+            _err(errors, "E_TYPE", "script param key must be a string", path + ".key")
+        else:
+            key_len = len(key.encode("utf-8"))
+            if key_len > 63:
+                _err(
+                    errors,
+                    "E_RANGE",
+                    "script param key exceeds 63 UTF-8 bytes",
+                    path + ".key",
+                )
+
+        param_type = param.get("type")
+        if isinstance(param_type, str) and param_type.strip().lower() == "string":
+            value = param.get("value")
+            if not isinstance(value, str):
+                _err(
+                    errors,
+                    "E_TYPE",
+                    "script string param value must be a string",
+                    path + ".value",
+                )
+            elif len(value.encode("utf-8")) > 59:
+                _err(
+                    errors,
+                    "E_RANGE",
+                    "script string param value exceeds 59 UTF-8 bytes",
+                    path + ".value",
+                )
+            return
+
+        value = param.get("value")
+        if isinstance(value, str) and len(value.encode("utf-8")) > 59:
+            _err(
+                errors,
+                "E_RANGE",
+                "script string param value exceeds 59 UTF-8 bytes",
+                path + ".value",
+            )
+
+    def _validate_script_params_container(
+        params: Any, container_path: str, key_name: str
+    ) -> None:
+        if params is None:
+            return
+        if not isinstance(params, list):
+            _err(
+                errors,
+                "E_TYPE",
+                f"{key_name} must be a list of script param entries",
+                f"{container_path}.{key_name}",
+            )
+            return
+        for pi, param in enumerate(params):
+            _validate_script_param_entry(
+                param, f"{container_path}.{key_name}[{pi}]"
+            )
+
+    def _walk_script_param_semantics(node: Any, path: str) -> None:
+        if isinstance(node, dict):
+            keys = set(node.keys())
+            script_context = bool(
+                {"script", "scripts", "scripting", "script_asset", "script_asset_key"}
+                & keys
+            )
+            for key_name in ("params", "parameters", "default_params"):
+                if key_name in node and (
+                    script_context
+                    or "script" in key_name
+                    or "slot" in path
+                    or "script" in path
+                ):
+                    _validate_script_params_container(node.get(key_name), path, key_name)
+            for k, v in node.items():
+                _walk_script_param_semantics(v, f"{path}.{k}" if path else k)
+        elif isinstance(node, list):
+            for i, item in enumerate(node):
+                _walk_script_param_semantics(item, f"{path}[{i}]")
+
+    _walk_script_param_semantics(spec, "")
+
     # Buffer stride/data size coherence (only when inline hex provided).
     # Enforce: if stride > 0 then total data bytes must be an exact multiple of stride.
     # This catches manual hex edits that drift from declared element layout.
@@ -757,6 +887,30 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                     f"{field} out of range",
                     f"{path}.{field}",
                 )
+
+    # Script assets: require at least one executable source.
+    for si, s in enumerate(
+        [
+            a
+            for a in (spec.get("assets", []) or [])
+            if isinstance(a, dict) and a.get("type") == "script"
+        ]
+    ):
+        if not isinstance(s, dict):
+            continue
+        bytecode_ref = s.get("bytecode_resource", s.get("script_resource"))
+        source_ref = s.get("source_resource", s.get("script"))
+        external = s.get("external_source_path")
+        has_bytecode = isinstance(bytecode_ref, (str, int)) and bytecode_ref not in ("", 0)
+        has_source = isinstance(source_ref, (str, int)) and source_ref not in ("", 0)
+        has_external = isinstance(external, str) and len(external) > 0
+        if not (has_bytecode or has_source or has_external):
+            _err(
+                errors,
+                "E_REQUIRED",
+                "Script asset must reference bytecode_resource, source_resource, or external_source_path",
+                f"scripts[{si}]",
+            )
     # Texture mip sanity: mips <= floor(log2(max(w,h)))+1 if dimensions provided
     import math
 
@@ -1050,7 +1204,7 @@ def run_binary_validation(
             a
             for a in (spec.get("assets", []) or [])
             if isinstance(a, dict)
-            and a.get("type") in ("material", "geometry", "scene")
+            and a.get("type") in ("material", "geometry", "script", "scene")
         ]
     )
     if spec_asset_count != asset_count:

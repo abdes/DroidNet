@@ -23,6 +23,7 @@
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/EngineTag.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
+#include <Oxygen/Content/Loaders/ScriptLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -100,7 +101,7 @@ auto BuildCli(PakDumpOptions& opts) -> std::unique_ptr<Cli>
             .StoreTo(&opts.no_resources)
             .Build())
         .WithOption(Option::WithKey("show-data")
-            .About("Show hex dump of resource data (buffers/textures)")
+            .About("Show hex dump of resource data (buffers/textures/scripts)")
             .Long("show-data")
             .WithValue<bool>()
             .StoreTo(&opts.show_data)
@@ -200,6 +201,7 @@ auto main(int argc, char** argv) -> int
 
       AssetLoader asset_loader(EngineTagFactory::Get(), loader_config);
       asset_loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
+      asset_loader.RegisterLoader(oxygen::content::loaders::LoadScriptResource);
       asset_loader.RegisterLoader(
         oxygen::content::loaders::LoadTextureResource);
 

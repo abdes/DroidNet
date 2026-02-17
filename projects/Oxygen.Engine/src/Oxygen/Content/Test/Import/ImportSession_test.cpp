@@ -610,7 +610,7 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_WithEmitters_RegistersInIndex)
     // Assert
     EXPECT_TRUE(report.success);
     EXPECT_EQ(tex_idx, 1);
-    EXPECT_EQ(buf_idx, 0);
+    EXPECT_EQ(buf_idx, 1);
 
     const auto index_path = request.cooked_root.value() / "container.index.bin";
     const bool index_exists = std::filesystem::exists(index_path);

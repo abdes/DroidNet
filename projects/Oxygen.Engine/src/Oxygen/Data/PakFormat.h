@@ -1648,7 +1648,222 @@ static_assert(sizeof(TexturePayloadHeader) == 28);
 
 } // namespace oxygen::data::pak::v4
 
+namespace oxygen::data::pak::v5 {
+
+using namespace v4;
+
+//=== Scripting Enums ===-----------------------------------------------------//
+
+enum class ScriptParamType : uint32_t {
+  kNone = 0,
+  kBool = 1,
+  kInt32 = 2,
+  kFloat = 3,
+  kString = 4,
+  kVec2 = 5,
+  kVec3 = 6,
+  kVec4 = 7
+};
+
+enum class ScriptLanguage : uint8_t { kLuau = 0 };
+
+enum class ScriptEncoding : uint8_t { kBytecode = 0, kSource = 1 };
+
+enum class ScriptCompression : uint8_t { kNone = 0, kZstd = 1 };
+
+enum class ScriptAssetFlags : uint32_t {
+  kNone = 0,
+  kAllowExternalSource = (1u << 0),
+};
+
+enum class ScriptingComponentFlags : uint32_t { kNone = 0 };
+
+enum class ScriptSlotFlags : uint32_t { kNone = 0 };
+
+//=== Scripting Structures (v5) ===-------------------------------------------//
+
+#pragma pack(push, 1)
+
+//! Fixed-size script parameter record (128 bytes).
+struct ScriptParamRecord {
+  char key[64]; // Parameter name (null-terminated)
+  ScriptParamType type = ScriptParamType::kNone;
+  union {
+    bool as_bool;
+    int32_t as_int32;
+    float as_float;
+    float as_vec[4]; // Used for Vec2, Vec3, Vec4
+    char as_string[60]; // Maximum 59 chars + null terminator
+  } value;
+};
+static_assert(sizeof(ScriptParamRecord) == 128);
+
+//! Scripting component slot in a scene (128 bytes).
+struct ScriptSlotRecord {
+  AssetKey script_asset_key; // 0  (16 bytes) - References a ScriptAssetDesc
+  OffsetT params_array_offset = 0; // 16 (8 bytes) - Absolute offset in PAK
+  uint32_t params_count = 0; // 24 (4 bytes) - Number of ScriptParamRecords
+  int32_t execution_order = 0; // 28 (4 bytes) - Lower = earlier.
+  ScriptSlotFlags flags = ScriptSlotFlags::kNone; // 32 (4 bytes)
+  uint8_t reserved[92] = {}; // 36 (92 bytes) - Padded to 128 bytes
+};
+static_assert(sizeof(ScriptSlotRecord) == 128);
+
+//! Scripting component record for scene component tables (16 bytes).
+struct ScriptingComponentRecord {
+  SceneNodeIndexT node_index = 0;
+  ScriptingComponentFlags flags = ScriptingComponentFlags::kNone;
+  uint32_t slot_start_index = 0;
+  uint32_t slot_count = 0;
+};
+static_assert(sizeof(ScriptingComponentRecord) == 16);
+
+//! Script Resource Descriptor (32 bytes).
+struct ScriptResourceDesc {
+  OffsetT data_offset = 0; // Absolute offset to script payload
+  DataBlobSizeT size_bytes = 0; // Size of script payload
+  ScriptLanguage language = ScriptLanguage::kLuau;
+  ScriptEncoding encoding = ScriptEncoding::kBytecode;
+  ScriptCompression compression = ScriptCompression::kNone;
+  uint64_t content_hash = 0; // First 8 bytes of SHA256 of payload
+  uint8_t reserved[9] = {}; // Padded to 32 bytes
+};
+static_assert(sizeof(ScriptResourceDesc) == 32);
+
+//! Script Asset Descriptor (256 bytes).
+struct ScriptAssetDesc {
+  AssetHeader header;
+  uint32_t bytecode_resource_index = 0;
+  uint32_t source_resource_index = 0;
+  ScriptAssetFlags flags = ScriptAssetFlags::kNone;
+  char external_source_path[120] = {}; // Null-terminated, null-padded
+  uint8_t reserved[29] = {}; // Padded to 256 bytes
+};
+static_assert(sizeof(ScriptAssetDesc) == 256);
+
+//=== Updated Container Structures (v5) ===-----------------------------------//
+
+//! Fixed-size header at the start of the PAK file (256 bytes)
+struct PakHeader {
+  char magic[8] = { 'O', 'X', 'P', 'A', 'K', 0, 0, 0 };
+  uint16_t version = 5; //!< Format version (5 for this version)
+  uint16_t content_version = 0; //!< Content version
+  uint8_t guid[16] = {}; //!< Unique identifier for this PAK
+  uint8_t reserved[228] = {}; //!< Reserved for future use
+};
+static_assert(sizeof(PakHeader) == 256);
+
+//! Fixed-size footer at the end of the PAK file (256 bytes).
+struct PakFooter {
+  uint64_t directory_offset = 0; // Absolute offset to asset directory
+  uint64_t directory_size = 0; // Size of asset directory in bytes
+  uint64_t asset_count = 0; // Number of entries in the directory
+
+  // -- Resource data regions --
+  ResourceRegion texture_region = {};
+  ResourceRegion buffer_region = {};
+  ResourceRegion audio_region = {};
+  ResourceRegion script_region = {}; // New in v5
+
+  // -- Resource tables --
+  ResourceTable texture_table = {};
+  ResourceTable buffer_table = {};
+  ResourceTable audio_table = {};
+  ResourceTable script_resource_table = {}; // New in v5
+  ResourceTable script_slot_table = {}; // New in v5
+
+  // -- Embedded Browse Index (Optional) --
+  OffsetT browse_index_offset = 0;
+  uint64_t browse_index_size = 0;
+
+  // Reserved for future use
+  uint8_t reserved[60] = {}; // 108 - (16 + 16 + 16) = 60
+
+  uint32_t pak_crc32 = 0; // CRC32 integrity hash
+  char footer_magic[8] = { 'O', 'X', 'P', 'A', 'K', 'E', 'N', 'D' };
+};
+static_assert(sizeof(PakFooter) == 256);
+
+#pragma pack(pop)
+
+} // namespace oxygen::data::pak::v5
+
 namespace oxygen::data::pak {
 //! Default namespace alias for latest version of the PAK format
-using namespace v4;
+using v5::AssetDirectoryEntry;
+using v5::AssetHeader;
+using v5::BufferResourceDesc;
+using v5::DataBlobSizeT;
+using v5::DirectionalLightRecord;
+using v5::EnvironmentComponentType;
+using v5::FogEnvironmentRecord;
+using v5::GeometryAssetDesc;
+using v5::kDataBlobMaxSize;
+using v5::kFallbackResourceIndex;
+using v5::kGeometryAssetVersion;
+using v5::kMaterialAssetVersion;
+using v5::kMaterialFlag_AlphaTest;
+using v5::kMaterialFlag_DoubleSided;
+using v5::kMaterialFlag_GltfOrmPacked;
+using v5::kMaterialFlag_NoTextureSampling;
+using v5::kMaterialFlag_ProceduralGrid;
+using v5::kMaterialFlag_Unlit;
+using v5::kMaxNameSize;
+using v5::kNoResourceIndex;
+using v5::kSceneAssetVersion;
+using v5::kSceneNodeFlag_Visible;
+using v5::kTexturePayloadMagic;
+using v5::LightCommonRecord;
+using v5::LightShadowSettingsRecord;
+using v5::MaterialAssetDesc;
+using v5::MeshDesc;
+using v5::MeshViewDesc;
+using v5::NodeRecord;
+using v5::OffsetT;
+using v5::OrthographicCameraRecord;
+using v5::PakBrowseIndexEntry;
+using v5::PakBrowseIndexHeader;
+using v5::PakFooter;
+using v5::PakHeader;
+using v5::PerspectiveCameraRecord;
+using v5::PointLightRecord;
+using v5::PostProcessVolumeEnvironmentRecord;
+using v5::ProceduralMeshInfo;
+using v5::RenderableRecord;
+using v5::ResourceIndexT;
+using v5::ResourceRegion;
+using v5::ResourceTable;
+using v5::SceneAssetDesc;
+using v5::SceneComponentTableDesc;
+using v5::SceneEnvironmentBlockHeader;
+using v5::SceneEnvironmentSystemRecordHeader;
+using v5::SceneNodeIndexT;
+using v5::ScriptAssetDesc;
+using v5::ScriptAssetFlags;
+using v5::ScriptCompression;
+using v5::ScriptEncoding;
+using v5::ScriptingComponentFlags;
+using v5::ScriptingComponentRecord;
+using v5::ScriptLanguage;
+using v5::ScriptParamRecord;
+using v5::ScriptParamType;
+using v5::ScriptResourceDesc;
+using v5::ScriptSlotFlags;
+using v5::ScriptSlotRecord;
+using v5::ShaderReferenceDesc;
+using v5::SkinnedMeshInfo;
+using v5::SkyAtmosphereEnvironmentRecord;
+using v5::SkyLightEnvironmentRecord;
+using v5::SkySphereEnvironmentRecord;
+using v5::SpotLightRecord;
+using v5::StandardMeshInfo;
+using v5::StringTableOffsetT;
+using v5::StringTableSizeT;
+using v5::SubMeshDesc;
+using v5::SubresourceLayout;
+using v5::TexturePackingPolicyId;
+using v5::TexturePayloadFlags;
+using v5::TexturePayloadHeader;
+using v5::TextureResourceDesc;
+using v5::VolumetricCloudsEnvironmentRecord;
 } // namespace oxygen::data::pak

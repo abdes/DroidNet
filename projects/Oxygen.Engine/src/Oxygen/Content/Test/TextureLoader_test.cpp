@@ -53,7 +53,8 @@ protected:
     return oxygen::content::LoaderContext {
       .current_asset_key = oxygen::data::AssetKey {},
       .desc_reader = &desc_reader_,
-      .data_readers = std::make_tuple(&data_reader_, &data_reader_),
+      .data_readers
+      = std::make_tuple(&data_reader_, &data_reader_, &data_reader_),
       .work_offline = false,
     };
   }

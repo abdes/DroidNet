@@ -105,6 +105,19 @@ inline auto Load(AnyReader& reader, data::pak::OrthographicCameraRecord& record)
   return {};
 }
 
+inline auto Load(AnyReader& reader, data::pak::ScriptingComponentRecord& record)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+
+  CHECK_RESULT(reader.ReadInto(record.node_index));
+  CHECK_RESULT(reader.ReadInto(record.flags));
+  CHECK_RESULT(reader.ReadInto(record.slot_start_index));
+  CHECK_RESULT(reader.ReadInto(record.slot_count));
+
+  return {};
+}
+
 //=== Scene: Environment (v3+) ===------------------------------------------//
 
 inline auto Load(AnyReader& reader, data::pak::SceneEnvironmentBlockHeader& hdr)

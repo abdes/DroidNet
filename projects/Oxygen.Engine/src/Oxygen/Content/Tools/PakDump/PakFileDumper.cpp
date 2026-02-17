@@ -33,6 +33,7 @@
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -251,7 +252,7 @@ public:
     } else {
       Field("Buffer Count", 0);
     }
-    if (ctx.verbose && buffer_count > 0) {
+    if ((ctx.verbose || ctx.show_resource_data) && buffer_count > 0) {
       std::cout << "    Buffer entries:\n";
       for (size_t i = 0; i < (std::min)(buffer_count, static_cast<size_t>(20));
         ++i) {
@@ -324,7 +325,7 @@ public:
     auto& textures_table = pak.TexturesTable();
     size_t texture_count = textures_table.Size();
     Field("Texture Count", texture_count);
-    if (ctx.verbose && texture_count > 0) {
+    if ((ctx.verbose || ctx.show_resource_data) && texture_count > 0) {
       std::cout << "    Texture entries:\n";
       for (size_t i = 0; i < (std::min)(texture_count, static_cast<size_t>(20));
         ++i) {
@@ -377,13 +378,86 @@ public:
   }
 };
 
+class ScriptResourceTableDumper : public ResourceTableDumper {
+public:
+  auto DumpAsync(const PakFile& pak, DumpContext& ctx,
+    AssetLoader& asset_loader) const -> oxygen::co::Co<> override
+  {
+    if (!ctx.show_resources) {
+      co_return;
+    }
+    if (!pak.HasTableOf<ScriptResource>()) {
+      std::cout << "    No script resource table present\n\n";
+      co_return;
+    }
+
+    using namespace PrintUtils;
+    SubSeparator("SCRIPT RESOURCES");
+    auto& scripts_table = pak.ScriptsTable();
+    const size_t script_count = scripts_table.Size();
+    if (script_count > 0) {
+      Field("Script Resource Count", script_count - 1);
+      Field("Total Table Entries (inc. sentinel)", script_count);
+    } else {
+      Field("Script Resource Count", 0);
+    }
+
+    if ((ctx.verbose || ctx.show_resource_data) && script_count > 0) {
+      std::cout << "    Script resource entries:\n";
+      for (size_t i = 0; i < (std::min)(script_count, static_cast<size_t>(20));
+        ++i) {
+        try {
+          const auto key = asset_loader.MakeResourceKey<ScriptResource>(
+            pak, static_cast<uint32_t>(i));
+          auto script_resource
+            = co_await asset_loader.LoadResourceAsync<ScriptResource>(key);
+          if (script_resource) {
+            std::cout << "      [" << i << "] Script Resource"
+                      << (i == 0 ? " (sentinel/reserved)" : "") << ":\n";
+            Field(
+              "Data Offset", ToHexString(script_resource->GetDataOffset()), 8);
+            Field("Data Size",
+              std::to_string(script_resource->GetDataSize()) + " bytes", 8);
+            Field("Language",
+              std::to_string(
+                static_cast<uint32_t>(script_resource->GetLanguage())),
+              8);
+            Field("Encoding",
+              std::to_string(
+                static_cast<uint32_t>(script_resource->GetEncoding())),
+              8);
+            Field("Compression",
+              std::to_string(
+                static_cast<uint32_t>(script_resource->GetCompression())),
+              8);
+            if (ctx.show_resource_data) {
+              PrintResourceData(
+                script_resource->GetData(), "Script", ctx.max_data_bytes);
+            }
+          } else {
+            std::cout << "      [" << i << "] Failed to load script resource\n";
+          }
+        } catch (const std::exception& ex) {
+          std::cout << "      [" << i << "] Error loading script: " << ex.what()
+                    << "\n";
+        }
+      }
+      if (script_count > 20) {
+        std::cout << "      ... (" << (script_count - 20) << " more scripts)\n";
+      }
+    }
+    std::cout << "\n";
+    co_return;
+  }
+};
+
 class ResourceTableDumperRegistry {
 public:
   ResourceTableDumperRegistry()
   {
     Register("buffer", std::make_unique<BufferResourceTableDumper>());
     Register("texture", std::make_unique<TextureResourceTableDumper>());
-    // TODO: Register other resource table dumpers as needed
+    Register("script", std::make_unique<ScriptResourceTableDumper>());
   }
 
   const ResourceTableDumper& Get(const std::string& type) const
@@ -431,7 +505,7 @@ public:
     Separator("RESOURCE TABLES");
     co_await registry_.Get("buffer").DumpAsync(pak, ctx, asset_loader);
     co_await registry_.Get("texture").DumpAsync(pak, ctx, asset_loader);
-    // TODO: Add more resource types as needed
+    co_await registry_.Get("script").DumpAsync(pak, ctx, asset_loader);
     co_return;
   }
 
@@ -445,9 +519,10 @@ auto PakFileDumper::DumpAsync(const PakFile& pak, AssetLoader& asset_loader)
   -> oxygen::co::Co<>
 {
   try {
-    if (pak.FormatVersion() != 4) {
-      throw std::runtime_error(fmt::format(
-        "PakDump supports PAK v4 only; found version {}", pak.FormatVersion()));
+    if (pak.FormatVersion() != 4 && pak.FormatVersion() != 5) {
+      throw std::runtime_error(
+        fmt::format("PakDump supports PAK v4/v5 only; found version {}",
+          pak.FormatVersion()));
     }
     using namespace PrintUtils;
     Separator("PAK FILE ANALYSIS: " + ctx_.pak_path.filename().string());
@@ -485,7 +560,7 @@ void PakFileDumper::PrintPakHeader(const PakFile& pak)
   Field("Format Version", pak.FormatVersion());
   Field("Content Version", pak.ContentVersion());
   Field("GUID", oxygen::data::to_string(pak.Guid()));
-  Field("Header Size", std::to_string(sizeof(v4::PakHeader)) + " bytes");
+  Field("Header Size", std::to_string(sizeof(PakHeader)) + " bytes");
   std::cout << "\n";
 }
 
@@ -511,6 +586,30 @@ void PakFileDumper::PrintPakFooter(const PakFile& pak)
   Field("Directory Offset", ToHexString(f.directory_offset));
   Field("Directory Size", std::to_string(f.directory_size));
   Field("Asset Count (footer)", std::to_string(f.asset_count));
+  std::cout << "\n";
+  SubSeparator("RESOURCE REGIONS");
+  PrintResourceRegion(
+    "Texture Region", f.texture_region.offset, f.texture_region.size);
+  PrintResourceRegion(
+    "Buffer Region", f.buffer_region.offset, f.buffer_region.size);
+  PrintResourceRegion(
+    "Audio Region", f.audio_region.offset, f.audio_region.size);
+  PrintResourceRegion(
+    "Script Region", f.script_region.offset, f.script_region.size);
+  std::cout << "\n";
+  SubSeparator("RESOURCE TABLES");
+  PrintResourceTable("Texture Table", f.texture_table.offset,
+    f.texture_table.count, f.texture_table.entry_size);
+  PrintResourceTable("Buffer Table", f.buffer_table.offset,
+    f.buffer_table.count, f.buffer_table.entry_size);
+  PrintResourceTable("Audio Table", f.audio_table.offset, f.audio_table.count,
+    f.audio_table.entry_size);
+  PrintResourceTable("Script Resource Table", f.script_resource_table.offset,
+    f.script_resource_table.count, f.script_resource_table.entry_size);
+  PrintResourceTable("Script Slot Table", f.script_slot_table.offset,
+    f.script_slot_table.count, f.script_slot_table.entry_size);
+  Field("Index-0 Sentinel",
+    "buffer/scripts tables reserve index 0 as sentinel when present");
 
   Field("Browse Index Offset", ToHexString(f.browse_index_offset));
   Field("Browse Index Size", std::to_string(f.browse_index_size));

@@ -24,10 +24,16 @@ def test_buffer_sentinel_descriptor_is_zeroed(tmp_path: Path):
     data = out_pak.read_bytes()
     footer = data[-256:]
 
-    # Extract buffer table info from footer
-    # Offset 24 (headers) + 16 (tex region) + 16 (buf region) + 16 (audio region) + 16 (tex table) = 88
-    # Each table record is (offset: Q, count: I, entry_size: I) = 16 bytes
-    (buffer_table_offset, buffer_table_count, buffer_entry_size) = struct.unpack_from("<QII", footer, 88)
+    # Extract buffer table info from footer (v5 layout):
+    # directory header (24)
+    # + 4 resource regions (texture, buffer, audio, script) => 4 * 16 = 64
+    # + texture table (16)
+    # => buffer table starts at 24 + 64 + 16 = 104
+    # Each table record is (offset: Q, count: I, entry_size: I) = 16 bytes.
+    footer_buffer_table_offset = 24 + (4 * 16) + 16
+    (buffer_table_offset, buffer_table_count, buffer_entry_size) = struct.unpack_from(
+        "<QII", footer, footer_buffer_table_offset
+    )
 
     assert buffer_table_count == 2, "Should have 2 entries (sentinel + user buffer)"
     assert buffer_entry_size == 32

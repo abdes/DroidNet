@@ -38,10 +38,14 @@ def find_schema(explicit_path: str | None, script_path: str) -> Path | None:
     candidate = sdir / "Bindless.schema.json"
     if candidate.exists():
         return candidate
-    # repository layout fallback: src/.../Bindless/Bindless.schema.json
-    fallback = sdir.parents[1] / "Bindless" / "Bindless.schema.json"
-    if fallback.exists():
-        return fallback
+    # repository layout fallbacks
+    fallback_candidates = (
+        sdir.parents[1] / "Meta" / "Bindless.schema.json",
+        sdir.parents[1] / "Bindless" / "Bindless.schema.json",
+    )
+    for fallback in fallback_candidates:
+        if fallback.exists():
+            return fallback
     return None
 
 

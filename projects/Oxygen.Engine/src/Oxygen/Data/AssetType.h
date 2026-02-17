@@ -21,9 +21,10 @@ enum class AssetType : uint8_t {
   kMaterial     = 1,
   kGeometry     = 2,
   kScene        = 3,
+  kScript       = 4,
 
   //!< Maximum value sentinel
-  kMaxAssetType = kScene
+  kMaxAssetType = kScript
   // clang-format on
 };
 

@@ -74,6 +74,17 @@ target_compile_definitions(
     OXYGEN_ENGINE_TESTING
 )
 
+m_gtest_program(
+  LoadersScripting
+  SOURCES
+    "SceneScriptingLoader_test.cpp"
+)
+target_compile_definitions(
+  Oxygen.Content.LoadersScripting.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
+)
+
 # Ensure the Loaders tests run only after PakGen editable install so the
 # pakgen CLI is available for any dynamic pack builds performed by tests.
 add_dependencies("${META_MODULE_NAME}.Loaders.Tests" pakgen_editable_install)
