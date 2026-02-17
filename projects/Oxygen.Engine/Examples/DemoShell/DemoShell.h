@@ -170,6 +170,24 @@ public:
   //! Set the active scene (ownership transferred to the shell).
   auto SetScene(std::unique_ptr<scene::Scene> scene) -> ActiveScene;
 
+  //! Stage a scene for publication on frame start.
+  auto StageScene(std::unique_ptr<scene::Scene> scene) -> void;
+
+  //! Return true if a scene is currently staged for publish.
+  [[nodiscard]] auto HasStagedScene() const noexcept -> bool;
+
+  //! Get the staged scene for mutation-time build/hydration.
+  [[nodiscard]] auto GetStagedScene() const -> observer_ptr<scene::Scene>;
+
+  //! Set the staged scene's main camera (selected during hydration).
+  auto SetStagedMainCamera(scene::SceneNode camera) -> void;
+
+  //! Publish staged scene as active scene.
+  auto PublishStagedScene() -> bool;
+
+  //! Consume the most recently published main camera.
+  auto TakePublishedMainCamera() -> scene::SceneNode;
+
   //! Returns a value object for accessing the current active scene.
   [[nodiscard]] auto GetActiveScene() const -> ActiveScene;
 

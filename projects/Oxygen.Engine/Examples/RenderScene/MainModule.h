@@ -88,6 +88,8 @@ public:
 
   auto OnFrameStart(observer_ptr<oxygen::engine::FrameContext> context)
     -> void override;
+  auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
   auto OnGameplay(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
   auto OnGuiUpdate(observer_ptr<engine::FrameContext> context)

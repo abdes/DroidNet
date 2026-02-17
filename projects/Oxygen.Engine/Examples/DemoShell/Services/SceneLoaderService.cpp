@@ -185,9 +185,9 @@ void SceneLoaderService::OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset)
  Prime geometry dependencies while the scene asset is pending instantiation.
 
  This pins geometry assets by issuing load requests and keeping the
- loader references alive until `BuildScene()` completes. It prevents
- rapid swaps from evicting geometry between dependency resolution and
- attachment.
+ loader references alive until `BuildSceneAsync()` completes. It prevents
+ rapid
+ swaps from evicting geometry between dependency resolution and attachment.
 
  @param asset Scene asset providing renderable records.
 
@@ -232,8 +232,8 @@ void SceneLoaderService::ReleasePinnedGeometryAssets()
   pending_geometry_keys_.clear();
 }
 
-auto SceneLoaderService::BuildScene(
-  scene::Scene& scene, const data::SceneAsset& asset) -> scene::SceneNode
+auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
+  const data::SceneAsset& asset) -> co::Co<scene::SceneNode>
 {
   LOG_F(INFO, "SceneLoader: Instantiating runtime scene '{}'", kSceneName);
 
@@ -253,7 +253,7 @@ auto SceneLoaderService::BuildScene(
   LogSceneHierarchy(scene);
 
   LOG_F(INFO, "SceneLoader: Runtime scene instantiation complete.");
-  return std::move(active_camera_);
+  co_return std::move(active_camera_);
 }
 
 auto SceneLoaderService::BuildEnvironment(const data::SceneAsset& asset)
