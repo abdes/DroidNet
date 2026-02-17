@@ -93,12 +93,21 @@
       "padding_after": 0,
       "padding_before": 0,
       "size": 0
+    },
+    {
+      "alignment": 256,
+      "name": "script",
+      "offset": 0,
+      "padding_after": 0,
+      "padding_before": 0,
+      "size": 0
     }
   ],
   "statistics": {
     "asset_counts": {
       "geometries": 2,
       "materials": 2,
+      "scripts": 0,
       "total": 4
     },
     "variable_extra_total": 538
@@ -124,7 +133,21 @@
       "name": "audio",
       "offset": 0,
       "padding_before": 0
+    },
+    {
+      "count": 0,
+      "entry_size": 0,
+      "name": "script",
+      "offset": 0,
+      "padding_before": 0
+    },
+    {
+      "count": 0,
+      "entry_size": 0,
+      "name": "script_slot",
+      "offset": 0,
+      "padding_before": 0
     }
   ],
-  "version": 4
+  "version": 5
 }

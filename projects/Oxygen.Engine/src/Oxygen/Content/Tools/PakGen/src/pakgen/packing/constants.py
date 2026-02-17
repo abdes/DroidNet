@@ -56,6 +56,7 @@ RESOURCE_ENTRY_SIZES: Final = {
     "texture": 40,
     "buffer": 32,
     "audio": 32,
+    "script": 32,
 }
 
 ASSET_NAME_MAX_LENGTH: Final = 63
@@ -67,6 +68,7 @@ ASSET_TYPE_MAP: Final = {
     "material": 1,
     "geometry": 2,
     "scene": 3,
+    "script": 4,
 }
 
 MAX_RESOURCE_SIZES: Final = {

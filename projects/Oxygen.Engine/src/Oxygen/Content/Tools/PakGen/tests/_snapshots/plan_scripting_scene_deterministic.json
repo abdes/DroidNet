@@ -1,0 +1,143 @@
+{
+  "assets": [
+    {
+      "alignment": 1,
+      "descriptor_offset": 1280,
+      "descriptor_size": 256,
+      "key": "33333333333333333333333333333333",
+      "name": "AiScript",
+      "type": "script",
+      "variable_extra_size": 0,
+      "warnings": []
+    },
+    {
+      "alignment": 1,
+      "descriptor_offset": 1536,
+      "descriptor_size": 256,
+      "key": "11111111111111111111111111111111",
+      "name": "MoveScript",
+      "type": "script",
+      "variable_extra_size": 0,
+      "warnings": []
+    },
+    {
+      "alignment": 1,
+      "descriptor_offset": 1792,
+      "descriptor_size": 256,
+      "key": "22222222222222222222222222222222",
+      "name": "ScriptScene",
+      "type": "scene",
+      "variable_extra_size": 1112,
+      "warnings": []
+    }
+  ],
+  "browse_index": {
+    "entry_count": 3,
+    "offset": 3360,
+    "padding_before": 0,
+    "size": 128,
+    "string_table_size": 32
+  },
+  "content_version": 5,
+  "deterministic": true,
+  "directory": {
+    "asset_count": 3,
+    "offset": 3168,
+    "padding_before": 8,
+    "size": 192
+  },
+  "file_size": 3744,
+  "footer": {
+    "offset": 3488,
+    "size": 256
+  },
+  "padding": {
+    "by_section": {
+      "assets_region": 224,
+      "directory": 8
+    },
+    "total": 232
+  },
+  "regions": [
+    {
+      "alignment": 256,
+      "name": "texture",
+      "offset": 0,
+      "padding_after": 0,
+      "padding_before": 0,
+      "size": 0
+    },
+    {
+      "alignment": 256,
+      "name": "buffer",
+      "offset": 0,
+      "padding_after": 0,
+      "padding_before": 0,
+      "size": 0
+    },
+    {
+      "alignment": 256,
+      "name": "audio",
+      "offset": 0,
+      "padding_after": 0,
+      "padding_before": 0,
+      "size": 0
+    },
+    {
+      "alignment": 256,
+      "name": "script",
+      "offset": 256,
+      "padding_after": 0,
+      "padding_before": 0,
+      "size": 320
+    }
+  ],
+  "statistics": {
+    "asset_counts": {
+      "geometries": 0,
+      "materials": 0,
+      "scenes": 1,
+      "scripts": 2,
+      "total": 3
+    },
+    "variable_extra_total": 1112
+  },
+  "tables": [
+    {
+      "count": 0,
+      "entry_size": 0,
+      "name": "texture",
+      "offset": 0,
+      "padding_before": 0
+    },
+    {
+      "count": 0,
+      "entry_size": 0,
+      "name": "buffer",
+      "offset": 0,
+      "padding_before": 0
+    },
+    {
+      "count": 0,
+      "entry_size": 0,
+      "name": "audio",
+      "offset": 0,
+      "padding_before": 0
+    },
+    {
+      "count": 3,
+      "entry_size": 32,
+      "name": "script",
+      "offset": 576,
+      "padding_before": 0
+    },
+    {
+      "count": 3,
+      "entry_size": 128,
+      "name": "script_slot",
+      "offset": 672,
+      "padding_before": 0
+    }
+  ],
+  "version": 5
+}

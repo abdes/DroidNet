@@ -21,6 +21,7 @@
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
+#include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -121,6 +122,52 @@ namespace detail {
       }
       prev = record.node_index;
       have_prev = true;
+    }
+  }
+
+  inline auto ValidateScriptingSlotRanges(
+    const std::span<const std::byte> table_bytes, const uint32_t count,
+    const uint32_t global_slot_count) -> void
+  {
+    using RecordT = oxygen::data::pak::ScriptingComponentRecord;
+
+    if (count == 0) {
+      return;
+    }
+    if (table_bytes.size() < static_cast<size_t>(count) * sizeof(RecordT)) {
+      throw std::runtime_error("scene asset scripting table out of bounds");
+    }
+
+    std::vector<std::pair<uint32_t, uint32_t>> ranges;
+    ranges.reserve(count);
+
+    for (uint32_t i = 0; i < count; ++i) {
+      RecordT record {};
+      std::memcpy(&record,
+        table_bytes
+          .subspan(static_cast<size_t>(i) * sizeof(RecordT), sizeof(RecordT))
+          .data(),
+        sizeof(RecordT));
+
+      if (record.slot_start_index > global_slot_count
+        || record.slot_count > (global_slot_count - record.slot_start_index)) {
+        throw std::runtime_error(
+          "scene asset scripting slot range out of bounds");
+      }
+
+      const auto range_begin = record.slot_start_index;
+      const auto range_end = record.slot_start_index + record.slot_count;
+
+      for (const auto [other_begin, other_end] : ranges) {
+        if (range_begin < other_end && other_begin < range_end) {
+          LOG_F(WARNING,
+            "scene asset scripting slot ranges overlap: [{}, {}) with [{}, {})",
+            range_begin, range_end, other_begin, other_end);
+          break;
+        }
+      }
+
+      ranges.emplace_back(range_begin, range_end);
     }
   }
 
@@ -379,6 +426,8 @@ inline auto LoadSceneAsset(LoaderContext context)
   // Validate known component tables and (optionally) collect dependencies.
   const uint32_t node_count = desc.nodes.count;
   std::unordered_set<oxygen::data::AssetKey> geometry_deps;
+  std::unordered_set<oxygen::data::AssetKey> script_deps;
+  bool has_scripting_table = false;
 
   for (const auto& entry : tables) {
     if (entry.table.count == 0) {
@@ -424,6 +473,39 @@ inline auto LoadSceneAsset(LoaderContext context)
     } else if (type == oxygen::data::ComponentType::kSpotLight) {
       detail::ValidateComponentTable<oxygen::data::pak::SpotLightRecord>(
         table_bytes, entry.table.count, entry.table.entry_size, node_count);
+    } else if (type == oxygen::data::ComponentType::kScripting) {
+      detail::ValidateComponentTable<
+        oxygen::data::pak::ScriptingComponentRecord>(
+        table_bytes, entry.table.count, entry.table.entry_size, node_count);
+      has_scripting_table = true;
+
+      if (!context.parse_only) {
+        if (!context.source_pak) {
+          throw std::runtime_error(
+            "scene scripting dependencies require source_pak");
+        }
+
+        detail::ValidateScriptingSlotRanges(table_bytes, entry.table.count,
+          context.source_pak->ScriptSlotCount());
+
+        for (uint32_t i = 0; i < entry.table.count; ++i) {
+          oxygen::data::pak::ScriptingComponentRecord record {};
+          std::memcpy(&record,
+            table_bytes
+              .subspan(static_cast<size_t>(i) * sizeof(record), sizeof(record))
+              .data(),
+            sizeof(record));
+
+          auto slot_records = context.source_pak->ReadScriptSlotRecords(
+            record.slot_start_index, record.slot_count);
+          for (const auto& slot : slot_records) {
+            if (slot.script_asset_key == oxygen::data::AssetKey {}) {
+              continue;
+            }
+            script_deps.insert(slot.script_asset_key);
+          }
+        }
+      }
     }
   }
 
@@ -439,6 +521,11 @@ inline auto LoadSceneAsset(LoaderContext context)
 
     for (const auto& dep : geometry_deps) {
       context.dependency_collector->AddAssetDependency(dep);
+    }
+    if (has_scripting_table) {
+      for (const auto& dep : script_deps) {
+        context.dependency_collector->AddAssetDependency(dep);
+      }
     }
   }
 

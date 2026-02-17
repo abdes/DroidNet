@@ -16,6 +16,7 @@
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/Types/Flags.h>
+#include <stdexcept>
 
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
@@ -71,7 +72,7 @@ protected:
     return std::move(result_);
   }
 
-  auto CheckSceneNotExpired(SafeCallState& state) -> bool
+  template <typename State> auto CheckSceneNotExpired(State& state) -> bool
   {
     if (node_->scene_weak_.expired()) [[unlikely]] {
       result_ = fmt::format(
@@ -83,29 +84,25 @@ protected:
     return true;
   }
 
-  auto CheckNodeIsValid() -> bool
+  template <typename State> auto CheckNodeIsValid(State& state) -> bool
   {
-    // In debug mode, we can also explicitly check if the node is valid.
-    // This is not strictly needed, as nodes_ table will check if the handle
-    // is within bounds (i.e. valid), but it can help troubleshoot exactly
-    // the reason why validation failed.
     if (!GetNode().IsValid()) [[unlikely]] {
       result_ = fmt::format(
         "node({}) is invalid", nostd::to_string(GetNode().GetHandle()));
       return false;
     }
+    state.node = node_;
     result_.reset();
     return true;
   }
 
-  auto PopulateStateWithNodeImpl(SafeCallState& state) -> bool
+  template <typename State> auto PopulateStateWithNodeImpl(State& state) -> bool
   {
     // Then check if the node is still in the scene node table, and retrieve
     // its implementation object.
     try {
       state.scene = GetScene();
-      const auto* impl_ref
-        = &state.scene->GetNodeImplRefUnsafe(node_->GetHandle());
+      auto* impl_ref = &state.scene->GetNodeImplRefUnsafe(node_->GetHandle());
       // Cast away const to allow modifying the SceneNodeImpl. All validators
       // for SceneNode are non-cost anyway due to lazy invalidation.
       state.node_impl = const_cast<SceneNodeImpl*>(impl_ref);
@@ -120,7 +117,7 @@ protected:
   }
 
 private:
-  std::optional<std::string> result_ {};
+  std::optional<std::string> result_;
   SceneNode* node_;
 };
 
@@ -133,10 +130,10 @@ public:
   {
   }
 
-  auto operator()(SafeCallState& state) -> std::optional<std::string>
+  template <typename State>
+  auto operator()(State& state) -> std::optional<std::string>
   {
-    state.node = const_cast<SceneNode*>(&GetNode());
-    if (CheckSceneNotExpired(state) && CheckNodeIsValid()) [[likely]] {
+    if (CheckSceneNotExpired(state) && CheckNodeIsValid(state)) [[likely]] {
       return std::nullopt;
     }
     return GetResult();
@@ -144,32 +141,34 @@ public:
 };
 
 //! A validator that checks if a SceneNode is valid and belongs to the \p scene.
-class SceneNode::NodeIsValidAndInSceneValidator : public BaseNodeValidator {
+class SceneNode::NodeIsValidAndInSceneValidator : public NodeIsValidValidator {
 public:
-  explicit NodeIsValidAndInSceneValidator(SceneNode& node) noexcept
-    : BaseNodeValidator(node)
-  {
-  }
+  using NodeIsValidValidator::NodeIsValidValidator;
 
-  auto operator()(SafeCallState& state) -> std::optional<std::string>
+  template <typename State>
+  auto operator()(State& state) -> std::optional<std::string>
   {
-    state.node = const_cast<SceneNode*>(&GetNode());
-    if (CheckSceneNotExpired(state) && CheckNodeIsValid()
-      && PopulateStateWithNodeImpl(state)) [[likely]] {
-      return std::nullopt;
+    if (auto result = NodeIsValidValidator::operator()(state)) {
+      return result;
     }
-    return GetResult();
+    return PopulateStateWithNodeImpl(state) ? std::nullopt : GetResult();
   }
 };
 
-auto SceneNode::NodeIsValid() -> NodeIsValidValidator
+auto SceneNode::NodeIsValid() const -> NodeIsValidValidator
 {
-  return NodeIsValidValidator { *this };
+  // Cast away const to handle lazy invalidation (an internal detail).
+  return NodeIsValidValidator {
+    const_cast<SceneNode&>(*this) // NOLINT(*-const-cast)
+  };
 }
 
-auto SceneNode::NodeIsValidAndInScene() -> NodeIsValidAndInSceneValidator
+auto SceneNode::NodeIsValidAndInScene() const -> NodeIsValidAndInSceneValidator
 {
-  return NodeIsValidAndInSceneValidator { *this };
+  // Cast away const to handle lazy invalidation (an internal detail).
+  return NodeIsValidAndInSceneValidator {
+    const_cast<SceneNode&>(*this) // NOLINT(*-const-cast)
+  };
 }
 
 // =============================================================================
@@ -248,8 +247,11 @@ auto SceneNode::GetImpl() noexcept -> OptionalRefToImpl
       DCHECK_NOTNULL_F(state.node_impl);
 
       const auto& impl_ref = state.scene->GetNodeImplRefUnsafe(GetHandle());
-      return { std::reference_wrapper(const_cast<SceneNodeImpl&>(
-        impl_ref)) }; // NOLINT(*-pro-type-const-cast)
+      return {
+        // Cast away const to handle lazy invalidation (an internal detail).
+        // NOLINTNEXTLINE(*-const-cast)
+        std::reference_wrapper(const_cast<SceneNodeImpl&>(impl_ref))
+      };
     });
 }
 
@@ -456,7 +458,7 @@ auto SceneNode::AttachCamera(std::unique_ptr<Component> camera) noexcept -> bool
       DCHECK_NOTNULL_F(state.node_impl);
 
       const auto type_id = camera->GetTypeId();
-      bool already_exists;
+      bool already_exists = false;
       if (type_id == PerspectiveCamera::ClassTypeId()) {
         already_exists = state.node_impl->HasComponent<PerspectiveCamera>();
       } else if (type_id == OrthographicCamera::ClassTypeId()) {
@@ -855,3 +857,135 @@ auto SceneNode::HasLight() noexcept -> bool
 }
 
 //=== Renderable Component ===------------------------------------------------//
+//=== Scripting Access ===--------------------------------------------------//
+
+auto SceneNode::GetScripting() noexcept -> Scripting
+{
+  return Scripting(*this);
+}
+
+auto SceneNode::GetScripting() const noexcept -> Scripting
+{
+  // NOLINTNEXTLINE(*-pro-type-const-cast)
+  return Scripting(const_cast<SceneNode&>(*this));
+}
+
+//=== Scripting Attachment ===----------------------------------------------//
+
+auto SceneNode::AttachScripting() noexcept -> bool
+{
+  return SafeCall(NodeIsValidAndInScene(), [&](SafeCallState& state) {
+    if (state.node_impl->HasComponent<ScriptingComponent>()) {
+      return false;
+    }
+    state.node_impl->AddComponent<ScriptingComponent>();
+    return true;
+  });
+}
+
+auto SceneNode::DetachScripting() noexcept -> bool
+{
+  return SafeCall(NodeIsValidAndInScene(), [&](SafeCallState& state) {
+    if (!state.node_impl->HasComponent<ScriptingComponent>()) {
+      return false;
+    }
+    state.node_impl->RemoveComponent<ScriptingComponent>();
+    return true;
+  });
+}
+
+auto SceneNode::HasScripting() const noexcept -> bool
+{
+  return SafeCall(NodeIsValidAndInScene(), [&](SafeCallState& state) {
+    return state.node_impl->HasComponent<ScriptingComponent>();
+  });
+}
+
+//==============================================================================
+// SceneNode::Scripting Implementation
+//==============================================================================
+
+class SceneNode::Scripting::RequiresScriptingValidator
+  : public SceneNode::BaseNodeValidator {
+public:
+  using BaseNodeValidator::BaseNodeValidator;
+  auto operator()(SafeCallState& state) -> std::optional<std::string>
+  {
+    if (CheckSceneNotExpired(state) && CheckNodeIsValid(state)
+      && PopulateStateWithNodeImpl(state)) [[likely]] {
+      if (!state.node_impl->HasComponent<ScriptingComponent>()) {
+        return "node has no scripting component";
+      }
+      state.scripting = &state.node_impl->GetComponent<ScriptingComponent>();
+      return std::nullopt;
+    }
+    return GetResult();
+  }
+};
+
+auto SceneNode::Scripting::RequiresScripting() const
+  -> RequiresScriptingValidator
+{
+  return RequiresScriptingValidator { *node_ };
+}
+
+auto SceneNode::Scripting::AddSlot(
+  std::shared_ptr<const data::ScriptAsset> asset) noexcept -> bool
+{
+  return SafeCall(RequiresScripting(), [&](SafeCallState& state) {
+    state.scripting->AddSlot(std::move(asset));
+    return true;
+  });
+}
+
+auto SceneNode::Scripting::RemoveSlot(const Slot& slot) noexcept -> bool
+{
+  return SafeCall(RequiresScripting(),
+    [&](SafeCallState& state) { return state.scripting->RemoveSlot(slot); });
+}
+
+auto SceneNode::Scripting::Slots() const noexcept -> std::span<const Slot>
+{
+  return SafeCall(RequiresScripting(),
+    [&](SafeCallState& state) { return state.scripting->Slots(); });
+}
+
+auto SceneNode::Scripting::SetParameter(const Slot& slot, std::string_view name,
+  data::ScriptParam value) noexcept -> bool
+{
+  return SafeCall(RequiresScripting(), [&](SafeCallState& state) {
+    return state.scripting->SetParameter(slot, name, std::move(value));
+  });
+}
+
+auto SceneNode::Scripting::TryGetParameter(
+  const Slot& slot, std::string_view name) const noexcept
+  -> std::optional<std::reference_wrapper<const data::ScriptParam>>
+{
+  return SafeCall(RequiresScripting(), [&](SafeCallState& state) {
+    return state.scripting->TryGetParameter(slot, name);
+  });
+}
+
+auto SceneNode::Scripting::GetParameter(
+  const Slot& slot, std::string_view name) const -> const data::ScriptParam&
+{
+  if (const auto value = TryGetParameter(slot, name)) {
+    return value->get();
+  }
+  throw std::out_of_range(
+    "Scripting parameter '" + std::string(name) + "' was not found");
+}
+
+auto SceneNode::Scripting::Parameters(const Slot& slot) const noexcept
+  -> EffectiveParametersView
+{
+  return SafeCall(RequiresScripting(),
+    [&](SafeCallState& state) { return state.scripting->Parameters(slot); });
+}
+
+auto SceneNode::Scripting::LogSafeCallError(const char* reason) const noexcept
+  -> void
+{
+  node_->LogSafeCallError(reason);
+}

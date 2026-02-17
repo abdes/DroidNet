@@ -59,6 +59,10 @@ template <> struct ComponentTraits<pak::SpotLightRecord> {
   static constexpr ComponentType kType = ComponentType::kSpotLight;
 };
 
+template <> struct ComponentTraits<pak::ScriptingComponentRecord> {
+  static constexpr ComponentType kType = ComponentType::kScripting;
+};
+
 //! Represents a loaded Scene asset.
 /*!
   SceneAsset provides a high-level, read-only view over the raw binary data of a

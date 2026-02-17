@@ -75,12 +75,13 @@ def build_pak(options: BuildOptions) -> BuildResult:  # implemented stub
     spec_model = load_models(options.input_spec)
     assets_list = list(spec_model.assets)
     spec_dict = {
-        # PakGen emits PAK format v4 only.
+        # YAML spec schema version (not PAK container version).
         "version": 4,
         "content_version": getattr(spec_model, "content_version", 0),
         "buffers": spec_model.buffers,
         "textures": spec_model.textures,
         "audios": spec_model.audios,
+        "scripts": spec_model.scripts,
         "assets": assets_list,
     }
     val_errors = run_validation_pipeline(spec_dict)
@@ -91,7 +92,7 @@ def build_pak(options: BuildOptions) -> BuildResult:  # implemented stub
         )
     rep.status(
         "Spec summary: buffers="
-        + f"{len(spec_model.buffers)} textures={len(spec_model.textures)} audios={len(spec_model.audios)} assets={len(assets_list)} validation=ok"
+        + f"{len(spec_model.buffers)} textures={len(spec_model.textures)} audios={len(spec_model.audios)} scripts={len(spec_model.scripts)} assets={len(assets_list)} validation=ok"
     )
     build = build_plan(
         spec_dict,
@@ -123,7 +124,7 @@ def build_pak(options: BuildOptions) -> BuildResult:  # implemented stub
             # Derive zero-length resource info & warnings (non-first zero length)
             zero_length: list[dict[str, Any]] = []
             warnings: list[str] = []
-            for rtype in ["texture", "buffer", "audio"]:
+            for rtype in ["texture", "buffer", "audio", "script"]:
                 descs = build.resources.desc_fields.get(rtype, [])
                 blobs = build.resources.data_blobs.get(rtype, [])
                 # blobs length matches non-empty data blobs only; need to infer zero-length entries by descriptor fields
@@ -160,7 +161,7 @@ def build_pak(options: BuildOptions) -> BuildResult:  # implemented stub
                             )
             # Build resource_index_map capturing final post-plan ordering
             resource_index_map: dict[str, list[dict[str, Any]]] = {}
-            for rtype in ["texture", "buffer", "audio"]:
+            for rtype in ["texture", "buffer", "audio", "script"]:
                 descs = build.resources.desc_fields.get(rtype, [])
                 if descs:
                     resource_index_map[rtype] = [
@@ -199,7 +200,7 @@ def build_pak(options: BuildOptions) -> BuildResult:  # implemented stub
     )
     rep.status(
         "Build summary: file="
-        + f"{options.output_path.name} bytes={bytes_written} assets={build.assets.total_assets} materials={build.assets.total_materials} geometries={build.assets.total_geometries}"
+        + f"{options.output_path.name} bytes={bytes_written} assets={build.assets.total_assets} materials={build.assets.total_materials} geometries={build.assets.total_geometries} scripts={build.assets.total_scripts}"
     )
     return BuildResult(
         output_file=options.output_path, bytes_written=bytes_written
@@ -219,12 +220,13 @@ def plan_dry_run(
     assets_list = list(spec_model.assets)
     spec_dict = {
         "name": Path(spec_path).stem,
-        # PakGen emits PAK format v4 only.
+        # YAML spec schema version (not PAK container version).
         "version": 4,
         "content_version": getattr(spec_model, "content_version", 0),
         "buffers": spec_model.buffers,
         "textures": spec_model.textures,
         "audios": spec_model.audios,
+        "scripts": spec_model.scripts,
         "assets": assets_list,
     }
     val_errors = run_validation_pipeline(spec_dict)

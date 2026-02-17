@@ -22,6 +22,7 @@
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Serio/FileStream.h>
@@ -68,6 +69,7 @@ class PakFile {
   // Internal: initialize resource tables if present in the footer
   auto InitBuffersTable() const -> void;
   auto InitTexturesTable() const -> void;
+  auto InitScriptsTable() const -> void;
 
 public:
   using Reader = serio::Reader<serio::FileStream<>>;
@@ -77,6 +79,8 @@ public:
 
   //! Type alias for the texture resource table.
   using TexturesTableT = ResourceTable<data::TextureResource>;
+  //! Type alias for the script resource table.
+  using ScriptsTableT = ResourceTable<data::ScriptResource>;
 
   //! 8-byte header magic: {'O','X','P','A','K',0,0,0}
   static constexpr std::array<uint8_t, 8> kHeaderMagic
@@ -160,6 +164,8 @@ public:
 
   //! Get the resource table for textures.
   OXGN_CNTT_NDAPI auto TexturesTable() const -> TexturesTableT&;
+  //! Get the resource table for script resources.
+  OXGN_CNTT_NDAPI auto ScriptsTable() const -> ScriptsTableT&;
 
   //! Check if a resource table of the given type exists in the PAK file.
   template <PakResource T> auto HasTableOf() const -> bool
@@ -168,6 +174,8 @@ public:
       return static_cast<bool>(buffers_table_);
     } else if constexpr (std::is_same_v<T, data::TextureResource>) {
       return static_cast<bool>(textures_table_);
+    } else if constexpr (std::is_same_v<T, data::ScriptResource>) {
+      return static_cast<bool>(scripts_table_);
     } else {
       return false;
     }
@@ -189,6 +197,8 @@ public:
       return buffers_table_ ? &(*buffers_table_) : nullptr;
     } else if constexpr (std::is_same_v<T, data::TextureResource>) {
       return textures_table_ ? &(*textures_table_) : nullptr;
+    } else if constexpr (std::is_same_v<T, data::ScriptResource>) {
+      return scripts_table_ ? &(*scripts_table_) : nullptr;
     } else {
       return nullptr;
     }
@@ -201,6 +211,22 @@ public:
 
   //! Create a Reader for the texture data region.
   auto CreateTextureDataReader() const -> Reader;
+  //! Create a Reader for the script data region.
+  auto CreateScriptDataReader() const -> Reader;
+
+  //! Read one ScriptSlotRecord from the global slot table.
+  OXGN_CNTT_NDAPI auto ReadScriptSlotRecord(uint32_t index) const
+    -> data::pak::ScriptSlotRecord;
+
+  //! Read a contiguous ScriptSlotRecord range from the global slot table.
+  OXGN_CNTT_NDAPI auto ReadScriptSlotRecords(uint32_t start_index,
+    uint32_t count) const -> std::vector<data::pak::ScriptSlotRecord>;
+
+  //! Number of entries in the global script slot table.
+  OXGN_CNTT_NDAPI auto ScriptSlotCount() const noexcept -> uint32_t
+  {
+    return footer_.script_slot_table.count;
+  }
 
   //! Create a Reader for the data region of the specified resource type.
   /*!
@@ -219,6 +245,8 @@ public:
       return CreateBufferDataReader();
     } else if constexpr (std::is_same_v<T, data::TextureResource>) {
       return CreateTextureDataReader();
+    } else if constexpr (std::is_same_v<T, data::ScriptResource>) {
+      return CreateScriptDataReader();
     } else {
       throw std::invalid_argument(
         "Unsupported resource type for CreateBufferDataReader");
@@ -244,6 +272,7 @@ private:
   //! Streams for reading the data from data regions (aligned)
   std::unique_ptr<serio::FileStream<>> buffer_data_stream_;
   std::unique_ptr<serio::FileStream<>> texture_data_stream_;
+  std::unique_ptr<serio::FileStream<>> script_data_stream_;
 
   std::vector<data::pak::AssetDirectoryEntry> directory_;
   mutable std::mutex mutex_;
@@ -255,6 +284,7 @@ private:
   // Resource table members (optional, only if present in the PAK file)
   mutable std::optional<BuffersTableT> buffers_table_;
   mutable std::optional<TexturesTableT> textures_table_;
+  mutable std::optional<ScriptsTableT> scripts_table_;
 };
 
 } // namespace oxygen::content

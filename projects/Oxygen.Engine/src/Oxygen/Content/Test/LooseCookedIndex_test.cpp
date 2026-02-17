@@ -950,6 +950,128 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DataWithoutTable_Throws)
     { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
 }
 
+//! Test: Script table/data file kinds are accepted when provided as a pair
+NOLINT_TEST_F(
+  LooseCookedIndexTest, AddLooseCookedRoot_ScriptTableAndDataPair_Succeeds)
+{
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileKind;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
+
+  const auto cooked_root = temp_dir_ / "loose_cooked_root";
+  std::filesystem::create_directories(cooked_root / "Resources");
+  const auto index_path = cooked_root / "container.index.bin";
+
+  {
+    std::ofstream out(cooked_root / "Resources" / "scripts.table",
+      std::ios::binary | std::ios::trunc);
+  }
+  {
+    std::ofstream out(cooked_root / "Resources" / "scripts.data",
+      std::ios::binary | std::ios::trunc);
+  }
+
+  std::string strings;
+  strings.push_back('\0');
+  const auto off_scripts_table = static_cast<uint32_t>(strings.size());
+  strings += "Resources/scripts.table";
+  strings.push_back('\0');
+  const auto off_scripts_data = static_cast<uint32_t>(strings.size());
+  strings += "Resources/scripts.data";
+  strings.push_back('\0');
+
+  IndexHeader header {};
+  FillTestGuid(header);
+  header.version = 1;
+  header.content_version = 0;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
+  header.string_table_offset = sizeof(IndexHeader);
+  header.string_table_size = static_cast<uint64_t>(strings.size());
+  header.asset_entries_offset
+    = header.string_table_offset + header.string_table_size;
+  header.asset_count = 0;
+  header.asset_entry_size = sizeof(AssetEntry);
+  header.file_records_offset = header.asset_entries_offset;
+  header.file_record_count = 2;
+  header.file_record_size = sizeof(FileRecord);
+
+  FileRecord scripts_table_record {};
+  scripts_table_record.kind = FileKind::kScriptsTable;
+  scripts_table_record.relpath_offset = off_scripts_table;
+  scripts_table_record.size = 0;
+
+  FileRecord scripts_data_record {};
+  scripts_data_record.kind = FileKind::kScriptsData;
+  scripts_data_record.relpath_offset = off_scripts_data;
+  scripts_data_record.size = 0;
+
+  {
+    std::ofstream out(index_path, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
+    out.write(reinterpret_cast<const char*>(&scripts_table_record),
+      sizeof(scripts_table_record));
+    out.write(reinterpret_cast<const char*>(&scripts_data_record),
+      sizeof(scripts_data_record));
+  }
+
+  EXPECT_NO_THROW({ asset_loader_->AddLooseCookedRoot(cooked_root); });
+}
+
+//! Test: Script table/data must be provided as a complete pair
+NOLINT_TEST_F(
+  LooseCookedIndexTest, AddLooseCookedRoot_ScriptDataWithoutTable_Throws)
+{
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileKind;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
+
+  const auto cooked_root = temp_dir_ / "loose_cooked_root";
+  std::filesystem::create_directories(cooked_root);
+  const auto index_path = cooked_root / "container.index.bin";
+
+  std::string strings;
+  strings.push_back('\0');
+  const auto off_scripts_data = static_cast<uint32_t>(strings.size());
+  strings += "Resources/scripts.data";
+  strings.push_back('\0');
+
+  IndexHeader header {};
+  FillTestGuid(header);
+  header.version = 1;
+  header.content_version = 0;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
+  header.string_table_offset = sizeof(IndexHeader);
+  header.string_table_size = static_cast<uint64_t>(strings.size());
+  header.asset_entries_offset
+    = header.string_table_offset + header.string_table_size;
+  header.asset_count = 0;
+  header.asset_entry_size = sizeof(AssetEntry);
+  header.file_records_offset = header.asset_entries_offset;
+  header.file_record_count = 1;
+  header.file_record_size = sizeof(FileRecord);
+
+  FileRecord scripts_data_record {};
+  scripts_data_record.kind = FileKind::kScriptsData;
+  scripts_data_record.relpath_offset = off_scripts_data;
+  scripts_data_record.size = 0;
+
+  {
+    std::ofstream out(index_path, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
+    out.write(reinterpret_cast<const char*>(&scripts_data_record),
+      sizeof(scripts_data_record));
+  }
+
+  EXPECT_THROW(
+    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
+}
+
 //! Test: File-record legacy SHA bytes are ignored
 /*!
  Scenario: The loose cooked index v1 used to store file-level SHA-256 digests

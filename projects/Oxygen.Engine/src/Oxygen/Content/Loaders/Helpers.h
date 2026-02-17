@@ -150,9 +150,12 @@ inline auto Load(AnyReader& reader, data::pak::PakFooter& footer)
   CHECK_RESULT(reader.ReadInto(footer.texture_region));
   CHECK_RESULT(reader.ReadInto(footer.buffer_region));
   CHECK_RESULT(reader.ReadInto(footer.audio_region));
+  CHECK_RESULT(reader.ReadInto(footer.script_region));
   CHECK_RESULT(reader.ReadInto(footer.texture_table));
   CHECK_RESULT(reader.ReadInto(footer.buffer_table));
   CHECK_RESULT(reader.ReadInto(footer.audio_table));
+  CHECK_RESULT(reader.ReadInto(footer.script_resource_table));
+  CHECK_RESULT(reader.ReadInto(footer.script_slot_table));
   CHECK_RESULT(reader.ReadInto(footer.browse_index_offset));
   CHECK_RESULT(reader.ReadInto(footer.browse_index_size));
   CHECK_RESULT(

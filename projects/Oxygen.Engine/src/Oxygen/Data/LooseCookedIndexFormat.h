@@ -127,6 +127,8 @@ enum class FileKind : uint16_t {
   kBuffersData = 2,
   kTexturesTable = 3,
   kTexturesData = 4,
+  kScriptsTable = 5,
+  kScriptsData = 6,
 };
 
 //! File record for resources and other cooked artifacts.

@@ -36,6 +36,9 @@ from .packers import (
     pack_buffer_resource_descriptor,
     pack_texture_resource_descriptor,
     pack_audio_resource_descriptor,
+    pack_script_resource_descriptor,
+    pack_script_asset_descriptor,
+    pack_script_slot_record,
     pack_directory_entry,
     pack_material_asset_descriptor,
     pack_shader_reference_entries,
@@ -49,7 +52,7 @@ from .packers import (
 
 __all__ = ["write_pak"]
 
-RESOURCE_TYPES = ["texture", "buffer", "audio"]
+RESOURCE_TYPES = ["texture", "buffer", "audio", "script"]
 
 
 def _pad_to(f, target_offset: int):
@@ -146,12 +149,17 @@ def _write_resource_tables_from_plan(
             if rtype == "buffer" and spec.get("name") == "__sentinel_buffer":
                 data_off = 0
                 size = 0
+            if rtype == "script" and spec.get("name") == "__sentinel_script":
+                data_off = 0
+                size = 0
             if rtype == "buffer":
                 desc = pack_buffer_resource_descriptor(spec, data_off, size)
             elif rtype == "texture":
                 desc = pack_texture_resource_descriptor(spec, data_off, size)
             elif rtype == "audio":
                 desc = pack_audio_resource_descriptor(spec, data_off, size)
+            elif rtype == "script":
+                desc = pack_script_resource_descriptor(spec, data_off, size)
             else:  # pragma: no cover
                 raise RuntimeError(f"Unknown resource type {rtype}")
             f.write(desc)
@@ -185,8 +193,85 @@ def _patch_crc(path: Path):
     return crc
 
 
+def _prepare_scene_script_slots(
+    build: BuildPlan,
+    pak_plan: PakPlan,
+    header_builder,
+    geometry_name_to_key: dict[str, bytes],
+    script_name_to_key: dict[str, bytes],
+):
+    material_count = len(build.assets.material_assets)
+    geometry_count = len(build.assets.geometry_assets)
+    script_count = len(build.assets.script_assets)
+    scenes = build.assets.scene_assets
+    cache: dict[int, tuple[bytes, bytes, list[dict[str, int | bytes]]]] = {}
+    all_slots: list[bytes] = []
+    global_slot_base = 0
+    for idx, asset_plan in enumerate(pak_plan.assets):
+        if asset_plan.asset_type != "scene":
+            continue
+        s_idx = idx - material_count - geometry_count - script_count
+        scene_spec, _scene_key, _atype, _align = scenes[s_idx]
+        if not isinstance(scene_spec, dict):
+            scene_spec = {}
+        scene_spec = dict(scene_spec)
+        scene_spec.setdefault("type", "scene")
+        base_desc, payload, slot_infos = pack_scene_asset_descriptor_and_payload(
+            scene_spec,
+            header_builder=header_builder,
+            geometry_name_to_key=geometry_name_to_key,
+            script_name_to_key=script_name_to_key,
+            scripting_slot_base_index=global_slot_base,
+        )
+        cache[idx] = (base_desc, payload, slot_infos)
+        for slot_info in slot_infos:
+            params_rel = int(slot_info.get("params_relative_offset", 0) or 0)
+            params_abs = (
+                int(asset_plan.descriptor_offset) + params_rel if params_rel > 0 else 0
+            )
+            all_slots.append(
+                pack_script_slot_record(
+                    script_asset_key=bytes(slot_info["script_asset_key"]),
+                    params_array_offset=params_abs,
+                    params_count=int(slot_info.get("params_count", 0) or 0),
+                    execution_order=int(slot_info.get("execution_order", 0) or 0),
+                    flags=int(slot_info.get("flags", 0) or 0),
+                )
+            )
+        global_slot_base += len(slot_infos)
+    return cache, all_slots
+
+
+def _write_script_slot_table_from_plan(
+    f,
+    pak_plan: PakPlan,
+    slot_records: list[bytes],
+):
+    table_map = {t.name: t for t in pak_plan.tables if t.count > 0}
+    tplan = table_map.get("script_slot")
+    if not tplan:
+        if slot_records:
+            raise RuntimeError("Plan missing script_slot table but slots were generated")
+        return (0, 0, 0)
+    _pad_to(f, tplan.offset)
+    if len(slot_records) != tplan.count:
+        raise RuntimeError(
+            f"Script slot count mismatch: plan={tplan.count} actual={len(slot_records)}"
+        )
+    for rec in slot_records:
+        if len(rec) != tplan.entry_size:
+            raise RuntimeError(
+                f"Script slot entry size mismatch: plan={tplan.entry_size} actual={len(rec)}"
+            )
+        f.write(rec)
+    return (tplan.offset, tplan.count, tplan.entry_size)
+
+
 def _write_assets_and_directory_from_plan(
-    f, build: BuildPlan, pak_plan: PakPlan
+    f,
+    build: BuildPlan,
+    pak_plan: PakPlan,
+    scene_cache: dict[int, tuple[bytes, bytes, list[dict[str, int | bytes]]]],
 ):
     """Emit asset descriptors (materials, geometries, scenes) and directory per plan.
 
@@ -262,9 +347,11 @@ def _write_assets_and_directory_from_plan(
     # Material / geometry / scene sources from build plan (original specs)
     materials = build.assets.material_assets
     geometries = build.assets.geometry_assets
+    scripts = build.assets.script_assets
     scenes = build.assets.scene_assets
     material_count = len(materials)
     geometry_count = len(geometries)
+    script_count = len(scripts)
 
     geometry_name_to_key: dict[str, bytes] = {}
     for geom_spec, asset_key, _atype, _align in geometries:
@@ -339,17 +426,29 @@ def _write_assets_and_directory_from_plan(
                 raise RuntimeError(
                     f"Geometry size mismatch plan_total={expected_total} actual={written}"
                 )
-        elif asset_plan.asset_type == "scene":
+        elif asset_plan.asset_type == "script":
             s_idx = idx - material_count - geometry_count
-            scene_spec, _scene_key, _atype, _align = scenes[s_idx]
-            if not isinstance(scene_spec, dict):
-                scene_spec = {}
-            scene_spec.setdefault("type", "scene")
-            base_desc, payload = pack_scene_asset_descriptor_and_payload(
-                scene_spec,
+            script_spec, _script_key, _atype, _align = scripts[s_idx]
+            if not isinstance(script_spec, dict):
+                script_spec = {}
+            script_spec = dict(script_spec)
+            script_spec.setdefault("type", "script")
+            base_desc = pack_script_asset_descriptor(
+                script_spec,
+                build.resources.index_map,
                 header_builder=header_builder,
-                geometry_name_to_key=geometry_name_to_key,
             )
+            f.write(base_desc)
+            expected_total = asset_plan.descriptor_size
+            if len(base_desc) != expected_total:
+                raise RuntimeError(
+                    f"Script size mismatch plan_total={expected_total} actual={len(base_desc)}"
+                )
+        elif asset_plan.asset_type == "scene":
+            cached = scene_cache.get(idx)
+            if cached is None:
+                raise RuntimeError(f"Missing scene cache for asset index {idx}")
+            base_desc, payload, _slots = cached
             f.write(base_desc)
             if payload:
                 f.write(payload)
@@ -389,8 +488,11 @@ def _write_assets_and_directory_from_plan(
         elif asset_plan.asset_type == "geometry":
             g_idx = idx - material_count
             _geom_spec, key, _atype, _align = geometries[g_idx]
-        elif asset_plan.asset_type == "scene":
+        elif asset_plan.asset_type == "script":
             s_idx = idx - material_count - geometry_count
+            _script_spec, key, _atype, _align = scripts[s_idx]
+        elif asset_plan.asset_type == "scene":
+            s_idx = idx - material_count - geometry_count - script_count
             _scene_spec, key, _atype, _align = scenes[s_idx]
         else:  # pragma: no cover
             raise RuntimeError(f"Unknown asset type {asset_plan.asset_type}")
@@ -455,9 +557,62 @@ def write_pak(
             table_info = _write_resource_tables_from_plan(
                 f, build_plan, pak_plan, data_offsets
             )
+
+            from .constants import ASSET_TYPE_MAP  # local import
+
+            def header_builder(asset_dict):
+                name = asset_dict.get("name", "")
+                type_name = asset_dict.get("type")
+                asset_type = ASSET_TYPE_MAP.get(type_name, 0)
+                version = asset_dict.get("version", 1)
+                streaming_priority = asset_dict.get("streaming_priority", 0)
+                content_hash = asset_dict.get("content_hash", 0)
+                variant_flags = asset_dict.get("variant_flags", 0)
+                name_bytes = pack_name_string(name, 64)
+                header = (
+                    struct.pack("<B", asset_type)
+                    + name_bytes
+                    + struct.pack("<B", version)
+                    + struct.pack("<B", streaming_priority)
+                    + struct.pack("<Q", content_hash)
+                    + struct.pack("<I", variant_flags)
+                    + b"\x00" * 16
+                )
+                if len(header) != 95:
+                    raise RuntimeError("Asset header size mismatch")
+                return header
+
+            geometry_name_to_key: dict[str, bytes] = {}
+            for geom_spec, asset_key, _atype, _align in build_plan.assets.geometry_assets:
+                if not isinstance(geom_spec, dict):
+                    continue
+                name = geom_spec.get("name")
+                if isinstance(name, str) and isinstance(asset_key, (bytes, bytearray)):
+                    geometry_name_to_key[name] = bytes(asset_key)
+
+            script_name_to_key: dict[str, bytes] = {}
+            for script_spec, asset_key, _atype, _align in build_plan.assets.script_assets:
+                if not isinstance(script_spec, dict):
+                    continue
+                name = script_spec.get("name")
+                if isinstance(name, str) and isinstance(asset_key, (bytes, bytearray)):
+                    script_name_to_key[name] = bytes(asset_key)
+
+            scene_cache, slot_records = _prepare_scene_script_slots(
+                build_plan,
+                pak_plan,
+                header_builder=header_builder,
+                geometry_name_to_key=geometry_name_to_key,
+                script_name_to_key=script_name_to_key,
+            )
+            table_info["script_slot"] = _write_script_slot_table_from_plan(
+                f, pak_plan, slot_records
+            )
             # Assets + directory
             directory_offset, directory_size, asset_count = (
-                _write_assets_and_directory_from_plan(f, build_plan, pak_plan)
+                _write_assets_and_directory_from_plan(
+                    f, build_plan, pak_plan, scene_cache
+                )
             )
 
             # Embedded browse index (after directory, before footer)
@@ -520,6 +675,9 @@ def write_pak(
                     texture_table=table_lookup.get("texture", (0, 0, 0)),
                     buffer_table=table_lookup.get("buffer", (0, 0, 0)),
                     audio_table=table_lookup.get("audio", (0, 0, 0)),
+                    script_region=region_lookup.get("script", (0, 0)),
+                    script_resource_table=table_lookup.get("script", (0, 0, 0)),
+                    script_slot_table=table_lookup.get("script_slot", (0, 0, 0)),
                     browse_index_offset=browse_index_offset,
                     browse_index_size=browse_index_size,
                     pak_crc32=0,

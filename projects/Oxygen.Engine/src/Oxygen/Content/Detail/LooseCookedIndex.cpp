@@ -234,6 +234,8 @@ auto ValidateFileKind(const FileKind kind) -> void
   case FileKind::kBuffersData:
   case FileKind::kTexturesTable:
   case FileKind::kTexturesData:
+  case FileKind::kScriptsTable:
+  case FileKind::kScriptsData:
     return;
   case FileKind::kUnknown:
   default:
@@ -538,6 +540,15 @@ auto LooseCookedIndex::ValidateFilePairs(const LooseCookedIndex& index) -> void
   if (has_textures_table != has_textures_data) {
     throw std::runtime_error(
       "Loose cooked index must provide both textures.table and textures.data");
+  }
+
+  const auto has_scripts_table
+    = index.kind_to_file_.contains(FileKind::kScriptsTable);
+  const auto has_scripts_data
+    = index.kind_to_file_.contains(FileKind::kScriptsData);
+  if (has_scripts_table != has_scripts_data) {
+    throw std::runtime_error(
+      "Loose cooked index must provide both scripts.table and scripts.data");
   }
 }
 

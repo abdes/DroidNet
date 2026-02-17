@@ -22,6 +22,7 @@ auto oxygen::data::to_string(oxygen::data::AssetType value) noexcept -> const
     case AssetType::kMaterial:     return "Material";
     case AssetType::kGeometry:     return "Geometry";
     case AssetType::kScene:        return "Scene";
+    case AssetType::kScript:       return "Script";
     // clang-format on
   }
 
@@ -61,6 +62,7 @@ auto oxygen::data::to_string(oxygen::data::ComponentType value) noexcept
     case ComponentType::kDirectionalLight:   return "DLIT";
     case ComponentType::kPointLight:         return "PLIT";
     case ComponentType::kSpotLight:          return "SLIT";
+    case ComponentType::kScripting:          return "SCRP";
     // clang-format on
   }
 
@@ -101,8 +103,9 @@ auto oxygen::data::to_string(oxygen::data::BufferResource::UsageFlags value)
 
   auto check_and_append = [&](UsageFlags flag, const char* name) {
     if ((value & flag) == flag) {
-      if (!first)
+      if (!first) {
         result += " | ";
+      }
       result += name;
       first = false;
       checked |= flag;

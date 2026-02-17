@@ -27,7 +27,8 @@ enum class ComponentType : uint32_t {
 
   kDirectionalLight = 0x54494C44, //!< 'DLIT' - Directional light
   kPointLight = 0x54494C50, //!< 'PLIT' - Point light
-  kSpotLight = 0x54494C53 //!< 'SLIT' - Spot light
+  kSpotLight = 0x54494C53, //!< 'SLIT' - Spot light
+  kScripting = 0x50524353 //!< 'SCRP' - Scripting component
 };
 
 static_assert(sizeof(ComponentType) == sizeof(uint32_t),

@@ -21,6 +21,7 @@ import zlib
 from .constants import (
     MAGIC,
     FOOTER_MAGIC,
+    HEADER_SIZE,
     MATERIAL_DESC_SIZE,
     GEOMETRY_DESC_SIZE,
     SCENE_DESC_SIZE,
@@ -79,6 +80,8 @@ def parse_footer(data: bytes) -> Dict[str, Any]:
     off += 16
     audio_region = unpack_region(off)
     off += 16
+    script_region = unpack_region(off)
+    off += 16
 
     def unpack_table(o: int) -> Tuple[int, int, int]:
         return struct.unpack_from("<QII", raw, o)
@@ -89,11 +92,15 @@ def parse_footer(data: bytes) -> Dict[str, Any]:
     off += 16
     audio_table = unpack_table(off)
     off += 16
+    script_resource_table = unpack_table(off)
+    off += 16
+    script_slot_table = unpack_table(off)
+    off += 16
 
     browse_index_offset, browse_index_size = struct.unpack_from("<QQ", raw, off)
     off += 16
-    reserved = raw[off : off + 108]
-    off += 108
+    reserved = raw[off : off + 60]
+    off += 60
     pak_crc32 = struct.unpack_from("<I", raw, off)[0]
     off += 4
     magic = raw[off : off + len(FOOTER_MAGIC)]
@@ -108,11 +115,14 @@ def parse_footer(data: bytes) -> Dict[str, Any]:
             "texture": Region(*texture_region),
             "buffer": Region(*buffer_region),
             "audio": Region(*audio_region),
+            "script": Region(*script_region),
         },
         "tables": {
             "texture": Table(*texture_table),
             "buffer": Table(*buffer_table),
             "audio": Table(*audio_table),
+            "script": Table(*script_resource_table),
+            "script_slot": Table(*script_slot_table),
         },
         "browse_index": {
             "offset": browse_index_offset,
@@ -125,7 +135,7 @@ def parse_footer(data: bytes) -> Dict[str, Any]:
 
 
 def parse_header(data: bytes) -> Dict[str, Any]:
-    raw = _read_exact(data, 0, 64, "header")
+    raw = _read_exact(data, 0, HEADER_SIZE, "header")
     magic, version, content_version = struct.unpack_from("<8sHH", raw, 0)
     return {
         "magic_ok": magic == MAGIC,
@@ -145,9 +155,9 @@ def inspect_pak(path: str | Path) -> Dict[str, Any]:
     p = Path(path)
     data = p.read_bytes()
     header = parse_header(data)
-    if header.get("version") != 4:
+    if header.get("version") not in (4, 5):
         raise ValueError(
-            f"PakGen inspector supports PAK v4 only; found version {header.get('version')}"
+            f"PakGen inspector supports PAK v4/v5 only; found version {header.get('version')}"
         )
     footer = parse_footer(data)
     real_crc_offset = len(data) - 12

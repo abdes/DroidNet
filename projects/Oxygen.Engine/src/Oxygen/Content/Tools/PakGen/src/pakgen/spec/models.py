@@ -37,6 +37,16 @@ class AudioResource:
 
 
 @dataclass(slots=True)
+class ScriptResource:
+    name: str
+    data: bytes = b""
+    language: int = 0
+    encoding: int = 0
+    compression: int = 0
+    content_hash: int = 0
+
+
+@dataclass(slots=True)
 class ShaderReference:
     source_path: str
     entry_point: str
@@ -162,6 +172,7 @@ class PakSpec:
     buffers: List[BufferResource] = field(default_factory=list)
     textures: List[TextureResource] = field(default_factory=list)
     audios: List[AudioResource] = field(default_factory=list)
+    scripts: List[ScriptResource] = field(default_factory=list)
     # Single authoritative list of asset dict objects (each containing a 'type').
     assets: List[Any] = field(default_factory=list)
 
@@ -173,6 +184,7 @@ __all__ = [
     "BufferResource",
     "TextureResource",
     "AudioResource",
+    "ScriptResource",
     "ShaderReference",
     "MaterialAsset",
     "MeshView",

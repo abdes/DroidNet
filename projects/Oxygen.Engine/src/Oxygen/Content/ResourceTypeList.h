@@ -16,6 +16,7 @@
 namespace oxygen::data {
 class BufferResource;
 class TextureResource;
+class ScriptResource;
 } // namespace oxygen::data
 
 namespace oxygen::content {
@@ -24,7 +25,8 @@ namespace oxygen::content {
 using ResourceTypeList = oxygen::TypeList<
   // clang-format off
   data::BufferResource,
-  data::TextureResource
+  data::TextureResource,
+  data::ScriptResource
   // clang-format on
   >;
 

@@ -181,8 +181,8 @@ protected:
 //=== Basic Emission Tests
 //===-------------------------------------------------//
 
-//! Verify emitting a single buffer returns index 0.
-NOLINT_TEST_F(BufferEmitterTest, Emit_SingleBuffer_ReturnsIndexZero)
+//! Verify emitting a single buffer returns index 1 (index 0 is sentinel).
+NOLINT_TEST_F(BufferEmitterTest, Emit_SingleBuffer_ReturnsIndexOne)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
@@ -198,7 +198,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_SingleBuffer_ReturnsIndexZero)
   });
 
   // Assert
-  EXPECT_EQ(index, 0);
+  EXPECT_EQ(index, 1);
   EXPECT_EQ(emitter.Count(), 1);
   EXPECT_TRUE(success);
 }
@@ -225,7 +225,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_MultipleBuffers_ReturnsSequentialIndices)
   // Assert
   EXPECT_EQ(indices.size(), 5);
   for (uint32_t i = 0; i < 5; ++i) {
-    EXPECT_EQ(indices[i], i);
+    EXPECT_EQ(indices[i], i + 1);
   }
   EXPECT_EQ(emitter.Count(), 5);
   EXPECT_TRUE(success);
@@ -259,13 +259,13 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_DuplicateBuffer_ReturnsSameIndex)
   EXPECT_TRUE(tables_ok);
 
   // Assert
-  EXPECT_EQ(idx0, 0);
-  EXPECT_EQ(idx1, 0);
+  EXPECT_EQ(idx0, 1);
+  EXPECT_EQ(idx1, 1);
   EXPECT_EQ(emitter.Count(), 1);
 
   const auto table_path = test_dir_ / Layout().BuffersTableRelPath();
   const auto table = ParseBufferTable(ReadBinaryFile(table_path));
-  ASSERT_EQ(table.size(), 1);
+  ASSERT_EQ(table.size(), 2);
 }
 
 //! Verify index is returned immediately before I/O completes.
@@ -287,7 +287,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_ReturnsImmediately_BeforeIOCompletes)
   });
 
   // Assert
-  EXPECT_EQ(index, 0); // Index assigned immediately
+  EXPECT_EQ(index, 1); // Index assigned immediately (0 is sentinel)
   EXPECT_TRUE(had_pending); // I/O was queued
   EXPECT_TRUE(success);
 }
@@ -324,7 +324,7 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableFileHasCorrectPackedSize)
       auto idx = emitter.Emit(
         MakeTestBuffer(256, 0x01, 16, 32, static_cast<std::byte>(0xA0 + i)),
         "buf" + std::to_string(i));
-      EXPECT_EQ(idx, static_cast<uint32_t>(i));
+      EXPECT_EQ(idx, static_cast<uint32_t>(i + 1));
     }
     co_await emitter.Finalize();
     tables_ok = co_await table_registry_->FinalizeAll();
@@ -338,8 +338,8 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableFileHasCorrectPackedSize)
   EXPECT_TRUE(std::filesystem::exists(table_path));
 
   const auto table_size = std::filesystem::file_size(table_path);
-  EXPECT_EQ(table_size, kBufferCount * sizeof(PakBufferResourceDesc));
-  EXPECT_EQ(table_size, kBufferCount * 32); // Explicit 32-byte check
+  EXPECT_EQ(table_size, (kBufferCount + 1) * sizeof(PakBufferResourceDesc));
+  EXPECT_EQ(table_size, (kBufferCount + 1) * 32); // includes sentinel
 }
 
 //! Verify table entries have correctly aligned offsets based on buffer
@@ -365,9 +365,9 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableEntriesHaveCorrectAlignedOffsets)
     auto idx0 = emitter.Emit(MakeTestBuffer(kSize0, 0x01, kAlign0, 32), "buf0");
     auto idx1 = emitter.Emit(MakeTestBuffer(kSize1, 0x01, kAlign1, 32), "buf1");
     auto idx2 = emitter.Emit(MakeTestBuffer(kSize2, 0x02, kAlign2, 0), "buf2");
-    EXPECT_EQ(idx0, 0);
-    EXPECT_EQ(idx1, 1);
-    EXPECT_EQ(idx2, 2);
+    EXPECT_EQ(idx0, 1);
+    EXPECT_EQ(idx1, 2);
+    EXPECT_EQ(idx2, 3);
     co_await emitter.Finalize();
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
@@ -379,26 +379,26 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableEntriesHaveCorrectAlignedOffsets)
   const auto table_path = test_dir_ / Layout().BuffersTableRelPath();
   const auto table = ParseBufferTable(ReadBinaryFile(table_path));
 
-  ASSERT_EQ(table.size(), 3);
+  ASSERT_EQ(table.size(), 4);
 
   // Verify offsets follow alignment rules
   const auto expected_offset0 = 0ULL;
   const auto expected_offset1 = AlignUp(expected_offset0 + kSize0, kAlign1);
   const auto expected_offset2 = AlignUp(expected_offset1 + kSize1, kAlign2);
 
-  EXPECT_EQ(table[0].data_offset, expected_offset0);
-  EXPECT_EQ(table[0].size_bytes, kSize0);
+  EXPECT_EQ(table[1].data_offset, expected_offset0);
+  EXPECT_EQ(table[1].size_bytes, kSize0);
 
-  EXPECT_EQ(table[1].data_offset, expected_offset1);
-  EXPECT_EQ(table[1].size_bytes, kSize1);
+  EXPECT_EQ(table[2].data_offset, expected_offset1);
+  EXPECT_EQ(table[2].size_bytes, kSize1);
 
-  EXPECT_EQ(table[2].data_offset, expected_offset2);
-  EXPECT_EQ(table[2].size_bytes, kSize2);
+  EXPECT_EQ(table[3].data_offset, expected_offset2);
+  EXPECT_EQ(table[3].size_bytes, kSize2);
 
   // Verify all offsets are properly aligned
-  EXPECT_EQ(table[0].data_offset % kAlign0, 0);
-  EXPECT_EQ(table[1].data_offset % kAlign1, 0);
-  EXPECT_EQ(table[2].data_offset % kAlign2, 0);
+  EXPECT_EQ(table[1].data_offset % kAlign0, 0);
+  EXPECT_EQ(table[2].data_offset % kAlign1, 0);
+  EXPECT_EQ(table[3].data_offset % kAlign2, 0);
 }
 
 //! Verify table entries preserve buffer metadata (usage, stride, format, hash).
@@ -427,8 +427,8 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableEntriesPreserveMetadata)
   co::Run(*loop_, [&]() -> Co<> {
     auto idx0 = emitter.Emit(std::move(vertex_payload), "vb");
     auto idx1 = emitter.Emit(std::move(index_payload), "ib");
-    EXPECT_EQ(idx0, 0);
-    EXPECT_EQ(idx1, 1);
+    EXPECT_EQ(idx0, 1);
+    EXPECT_EQ(idx1, 2);
     co_await emitter.Finalize();
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
@@ -440,21 +440,21 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableEntriesPreserveMetadata)
   const auto table_path = test_dir_ / Layout().BuffersTableRelPath();
   const auto table = ParseBufferTable(ReadBinaryFile(table_path));
 
-  ASSERT_EQ(table.size(), 2);
+  ASSERT_EQ(table.size(), 3);
 
   // Vertex buffer entry
-  EXPECT_EQ(table[0].size_bytes, 512);
-  EXPECT_EQ(table[0].usage_flags, 0x01);
-  EXPECT_EQ(table[0].element_stride, 32);
-  EXPECT_EQ(table[0].element_format, 0);
-  EXPECT_EQ(table[0].content_hash, 0xDEADBEEFCAFEBABE);
+  EXPECT_EQ(table[1].size_bytes, 512);
+  EXPECT_EQ(table[1].usage_flags, 0x01);
+  EXPECT_EQ(table[1].element_stride, 32);
+  EXPECT_EQ(table[1].element_format, 0);
+  EXPECT_EQ(table[1].content_hash, 0xDEADBEEFCAFEBABE);
 
   // Index buffer entry
-  EXPECT_EQ(table[1].size_bytes, 256);
-  EXPECT_EQ(table[1].usage_flags, 0x02);
-  EXPECT_EQ(table[1].element_stride, 0);
-  EXPECT_EQ(table[1].element_format, 0);
-  EXPECT_EQ(table[1].content_hash, 0x1234567890ABCDEF);
+  EXPECT_EQ(table[2].size_bytes, 256);
+  EXPECT_EQ(table[2].usage_flags, 0x02);
+  EXPECT_EQ(table[2].element_stride, 0);
+  EXPECT_EQ(table[2].element_format, 0);
+  EXPECT_EQ(table[2].content_hash, 0x1234567890ABCDEF);
 }
 
 //! Verify data file contains correct content at aligned offsets.
@@ -479,8 +479,8 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_DataFileContainsCorrectContent)
   co::Run(*loop_, [&]() -> Co<> {
     auto idx0 = emitter.Emit(std::move(buf0), "buf0");
     auto idx1 = emitter.Emit(std::move(buf1), "buf1");
-    EXPECT_EQ(idx0, 0);
-    EXPECT_EQ(idx1, 1);
+    EXPECT_EQ(idx0, 1);
+    EXPECT_EQ(idx1, 2);
     co_await emitter.Finalize();
   });
 
@@ -523,8 +523,8 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_DataFileSizeIncludesPadding)
   co::Run(*loop_, [&]() -> Co<> {
     auto idx0 = emitter.Emit(MakeTestBuffer(kSize0, 0x01, kAlign, 32), "buf0");
     auto idx1 = emitter.Emit(MakeTestBuffer(kSize1, 0x01, kAlign, 32), "buf1");
-    EXPECT_EQ(idx0, 0);
-    EXPECT_EQ(idx1, 1);
+    EXPECT_EQ(idx0, 1);
+    EXPECT_EQ(idx1, 2);
     co_await emitter.Finalize();
   });
 
@@ -548,8 +548,8 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_WaitsForPendingIO)
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
   auto idx0 = emitter.Emit(MakeTestBuffer(2048, 0x01, 16, 32), "buf0");
   auto idx1 = emitter.Emit(MakeTestBuffer(1024, 0x02, 4, 0), "buf1");
-  EXPECT_EQ(idx0, 0);
-  EXPECT_EQ(idx1, 1);
+  EXPECT_EQ(idx0, 1);
+  EXPECT_EQ(idx1, 2);
 
   // Act
   bool success = false;
@@ -597,12 +597,12 @@ NOLINT_TEST_F(BufferEmitterTest, DataFileSize_TracksAccumulatedSize)
     EXPECT_EQ(emitter.DataFileSize(), 0);
 
     auto idx0 = emitter.Emit(MakeTestBuffer(kSize0, 0x01, kAlign, 32), "buf0");
-    EXPECT_EQ(idx0, 0);
+    EXPECT_EQ(idx0, 1);
     // First buffer: offset 0, size 100 -> file size 100
     EXPECT_EQ(emitter.DataFileSize(), kSize0);
 
     auto idx1 = emitter.Emit(MakeTestBuffer(kSize1, 0x01, kAlign, 32), "buf1");
-    EXPECT_EQ(idx1, 1);
+    EXPECT_EQ(idx1, 2);
     // Second buffer: offset = AlignUp(100, 16) = 112, size 200 -> file size 312
     EXPECT_EQ(emitter.DataFileSize(), AlignUp(kSize0, kAlign) + kSize1);
 
@@ -629,7 +629,7 @@ NOLINT_TEST_F(BufferEmitterTest, Count_TracksEmittedBuffers)
       auto idx = emitter.Emit(
         MakeTestBuffer(64, 0x01, 16, 32, static_cast<std::byte>(0xC0 + i)),
         "buf" + std::to_string(i));
-      EXPECT_EQ(idx, i);
+      EXPECT_EQ(idx, i + 1);
       EXPECT_EQ(emitter.Count(), i + 1);
     }
 
@@ -654,7 +654,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_ZeroAlignment_UsesDefaultAlignment)
   bool tables_ok = false;
   co::Run(*loop_, [&]() -> Co<> {
     auto idx = emitter.Emit(std::move(payload), "buf0");
-    EXPECT_EQ(idx, 0);
+    EXPECT_EQ(idx, 1);
     co_await emitter.Finalize();
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
@@ -666,8 +666,8 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_ZeroAlignment_UsesDefaultAlignment)
   const auto table_path = test_dir_ / Layout().BuffersTableRelPath();
   const auto table = ParseBufferTable(ReadBinaryFile(table_path));
 
-  ASSERT_EQ(table.size(), 1);
-  EXPECT_EQ(table[0].size_bytes, 100);
+  ASSERT_EQ(table.size(), 2);
+  EXPECT_EQ(table[1].size_bytes, 100);
 }
 
 //! Verify large buffer emission.
@@ -683,7 +683,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_LargeBuffer_SucceedsWithCorrectSize)
   bool tables_ok = false;
   co::Run(*loop_, [&]() -> Co<> {
     auto idx = emitter.Emit(std::move(payload), "buf0");
-    EXPECT_EQ(idx, 0);
+    EXPECT_EQ(idx, 1);
     co_await emitter.Finalize();
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
@@ -699,8 +699,8 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_LargeBuffer_SucceedsWithCorrectSize)
   const auto table_path = test_dir_ / Layout().BuffersTableRelPath();
   const auto table = ParseBufferTable(ReadBinaryFile(table_path));
 
-  ASSERT_EQ(table.size(), 1);
-  EXPECT_EQ(table[0].size_bytes, kLargeSize);
+  ASSERT_EQ(table.size(), 2);
+  EXPECT_EQ(table[1].size_bytes, kLargeSize);
 }
 
 //! Verify many small buffers with alignment padding.
@@ -719,7 +719,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_ManySmallBuffers_AllAlignedCorrectly)
       auto idx = emitter.Emit(MakeTestBuffer(kBufferSize, 0x01, kAlignment, 32,
                                 static_cast<std::byte>(0x10 + (i & 0x7F))),
         "buf" + std::to_string(i));
-      EXPECT_EQ(idx, static_cast<uint32_t>(i));
+      EXPECT_EQ(idx, static_cast<uint32_t>(i + 1));
     }
     co_await emitter.Finalize();
     tables_ok = co_await table_registry_->FinalizeAll();
@@ -732,15 +732,15 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_ManySmallBuffers_AllAlignedCorrectly)
   const auto table_path = test_dir_ / Layout().BuffersTableRelPath();
   const auto table = ParseBufferTable(ReadBinaryFile(table_path));
 
-  ASSERT_EQ(table.size(), kBufferCount);
+  ASSERT_EQ(table.size(), kBufferCount + 1);
 
   uint64_t expected_offset = 0;
   for (int i = 0; i < kBufferCount; ++i) {
-    EXPECT_EQ(table[i].data_offset, expected_offset)
+    EXPECT_EQ(table[i + 1].data_offset, expected_offset)
       << "Buffer " << i << " has wrong offset";
-    EXPECT_EQ(table[i].data_offset % kAlignment, 0)
+    EXPECT_EQ(table[i + 1].data_offset % kAlignment, 0)
       << "Buffer " << i << " offset not aligned";
-    EXPECT_EQ(table[i].size_bytes, kBufferSize)
+    EXPECT_EQ(table[i + 1].size_bytes, kBufferSize)
       << "Buffer " << i << " has wrong size";
 
     // Calculate next expected offset

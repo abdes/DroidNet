@@ -17,6 +17,9 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <vector>
+
+#include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
@@ -73,6 +76,10 @@ struct DumpOptions {
 };
 
 struct DumpResourceOptions {
+  std::string cooked_root;
+};
+
+struct DumpScriptOptions {
   std::string cooked_root;
 };
 
@@ -139,6 +146,21 @@ auto FindFileRelPath(const oxygen::content::LooseCookedInspection& inspection,
 {
   for (const auto& entry : inspection.Files()) {
     if (entry.kind == kind) {
+      return entry.relpath;
+    }
+  }
+  return std::nullopt;
+}
+
+auto FindFileRelPathBySuffix(
+  const oxygen::content::LooseCookedInspection& inspection,
+  const std::string_view suffix) -> std::optional<std::string>
+{
+  for (const auto& entry : inspection.Files()) {
+    if (entry.relpath.size() >= suffix.size()
+      && entry.relpath.compare(
+           entry.relpath.size() - suffix.size(), suffix.size(), suffix)
+        == 0) {
       return entry.relpath;
     }
   }
@@ -242,9 +264,43 @@ auto DumpAssets(
 auto ValidateRootOrThrow(const std::filesystem::path& cooked_root) -> void
 {
   using oxygen::content::internal::EngineTagFactory;
+  using oxygen::serio::FileStream;
+  using oxygen::serio::Reader;
 
   oxygen::content::AssetLoader loader(EngineTagFactory::Get());
   loader.AddLooseCookedRoot(cooked_root);
+
+  oxygen::content::LooseCookedInspection inspection;
+  inspection.LoadFromRoot(cooked_root);
+
+  for (const auto& asset : inspection.Assets()) {
+    if (asset.asset_type
+      != static_cast<uint8_t>(oxygen::data::AssetType::kScript)) {
+      continue;
+    }
+    if (asset.descriptor_relpath.empty()) {
+      throw std::runtime_error("script asset descriptor path is missing");
+    }
+    if (!asset.descriptor_relpath.ends_with(".oxscript")) {
+      throw std::runtime_error(
+        "script asset descriptor must use .oxscript extension");
+    }
+
+    const auto descriptor_path = cooked_root / asset.descriptor_relpath;
+    FileStream<> stream(descriptor_path, std::ios::in);
+    Reader<FileStream<>> reader(stream);
+    auto pack = reader.ScopedAlignment(1);
+    auto blob = reader.ReadBlob(sizeof(oxygen::data::pak::ScriptAssetDesc));
+    if (!blob) {
+      throw std::runtime_error("failed to read .oxscript descriptor");
+    }
+    oxygen::data::pak::ScriptAssetDesc desc {};
+    std::memcpy(&desc, blob->data(), sizeof(desc));
+    if (static_cast<oxygen::data::AssetType>(desc.header.asset_type)
+      != oxygen::data::AssetType::kScript) {
+      throw std::runtime_error("invalid .oxscript descriptor asset type");
+    }
+  }
 }
 
 auto RunValidate(const ValidateOptions& opts) -> int
@@ -414,8 +470,172 @@ auto RunDumpTextures(const DumpResourceOptions& opts) -> int
   }
 }
 
+auto ReadFixedString(const char* bytes, size_t max_len) -> std::string
+{
+  size_t len = 0;
+  for (; len < max_len; ++len) {
+    if (bytes[len] == '\0') {
+      break;
+    }
+  }
+  return std::string(bytes, len);
+}
+
+auto FormatScriptParamValue(const oxygen::data::pak::ScriptParamRecord& record)
+  -> std::string
+{
+  using oxygen::data::pak::ScriptParamType;
+  switch (record.type) {
+  case ScriptParamType::kBool:
+    return record.value.as_bool ? "true" : "false";
+  case ScriptParamType::kInt32:
+    return std::to_string(record.value.as_int32);
+  case ScriptParamType::kFloat:
+    return std::to_string(record.value.as_float);
+  case ScriptParamType::kString:
+    return "\"" + ReadFixedString(record.value.as_string, 60) + "\"";
+  case ScriptParamType::kVec2:
+    return fmt::format(
+      "({}, {})", record.value.as_vec[0], record.value.as_vec[1]);
+  case ScriptParamType::kVec3:
+    return fmt::format("({}, {}, {})", record.value.as_vec[0],
+      record.value.as_vec[1], record.value.as_vec[2]);
+  case ScriptParamType::kVec4:
+    return fmt::format("({}, {}, {}, {})", record.value.as_vec[0],
+      record.value.as_vec[1], record.value.as_vec[2], record.value.as_vec[3]);
+  case ScriptParamType::kNone:
+  default:
+    return "<none>";
+  }
+}
+
+auto RunDumpScriptSlots(const DumpScriptOptions& opts) -> int
+{
+  const std::filesystem::path cooked_root(opts.cooked_root);
+  try {
+    oxygen::content::LooseCookedInspection inspection;
+    inspection.LoadFromRoot(cooked_root);
+
+    auto relpath = FindFileRelPathBySuffix(inspection, "scripts.table");
+    if (!relpath) {
+      std::cerr << "ERROR: scripts.table not found in index\n";
+      return 2;
+    }
+
+    const auto table_path = cooked_root / *relpath;
+    auto entries
+      = LoadPackedTable<oxygen::data::pak::ScriptSlotRecord>(table_path);
+    if (entries.empty()) {
+      std::cout << "No script slots found in: '" << table_path.string()
+                << "'\n";
+      return 0;
+    }
+
+    std::cout << "Dumping " << entries.size() << " script slots in: '"
+              << table_path.string() << "'\n\n";
+    std::cout << "Idx  Script Asset Key                        ParamOffset     "
+                 "     Count  ExecOrder  Flags\n";
+    std::cout << "---- -------------------------------------- "
+                 "------------------- ------ ---------- ----------\n";
+    for (size_t i = 0; i < entries.size(); ++i) {
+      const auto& e = entries[i];
+      std::cout << std::right << std::setw(3) << i << "  " << std::left
+                << std::setw(38) << oxygen::data::to_string(e.script_asset_key)
+                << " " << std::left << std::setw(19)
+                << ToHex64(e.params_array_offset) << " " << std::right
+                << std::setw(6) << e.params_count << " " << std::right
+                << std::setw(10) << e.execution_order << " " << std::left
+                << std::setw(10) << static_cast<uint32_t>(e.flags) << "\n";
+    }
+    return 0;
+  } catch (const std::exception& ex) {
+    std::cerr << "ERROR: " << ex.what() << "\n";
+    return 2;
+  }
+}
+
+auto RunDumpScriptParams(const DumpScriptOptions& opts) -> int
+{
+  using oxygen::serio::FileStream;
+  using oxygen::serio::Reader;
+
+  const std::filesystem::path cooked_root(opts.cooked_root);
+  try {
+    oxygen::content::LooseCookedInspection inspection;
+    inspection.LoadFromRoot(cooked_root);
+
+    auto slots_relpath = FindFileRelPathBySuffix(inspection, "scripts.table");
+    auto data_relpath = FindFileRelPathBySuffix(inspection, "scripts.data");
+    if (!slots_relpath) {
+      std::cerr << "ERROR: scripts.table not found in index\n";
+      return 2;
+    }
+    if (!data_relpath) {
+      std::cerr << "ERROR: scripts.data not found in index\n";
+      return 2;
+    }
+
+    const auto slots_path = cooked_root / *slots_relpath;
+    const auto data_path = cooked_root / *data_relpath;
+    auto slots
+      = LoadPackedTable<oxygen::data::pak::ScriptSlotRecord>(slots_path);
+    if (slots.empty()) {
+      std::cout << "(no script slots)\n";
+      return 0;
+    }
+
+    FileStream<> data_stream(data_path, std::ios::in);
+    Reader<FileStream<>> reader(data_stream);
+    auto pack = reader.ScopedAlignment(1);
+
+    for (size_t i = 0; i < slots.size(); ++i) {
+      const auto& slot = slots[i];
+      std::cout << "Slot[" << i
+                << "] key=" << oxygen::data::to_string(slot.script_asset_key)
+                << " params_count=" << slot.params_count
+                << " params_offset=" << ToHex64(slot.params_array_offset)
+                << "\n";
+      if (slot.params_count == 0) {
+        continue;
+      }
+
+      auto seek_result
+        = reader.Seek(static_cast<size_t>(slot.params_array_offset));
+      if (!seek_result) {
+        std::cout << "  ! cannot seek to params offset (skipping)\n";
+        continue;
+      }
+
+      const size_t bytes_to_read = static_cast<size_t>(slot.params_count)
+        * sizeof(oxygen::data::pak::ScriptParamRecord);
+      auto blob = reader.ReadBlob(bytes_to_read);
+      if (!blob) {
+        std::cout << "  ! failed to read params blob (skipping)\n";
+        continue;
+      }
+
+      for (uint32_t pi = 0; pi < slot.params_count; ++pi) {
+        oxygen::data::pak::ScriptParamRecord record {};
+        std::memcpy(&record,
+          blob->data() + static_cast<size_t>(pi) * sizeof(record),
+          sizeof(record));
+        const auto key = ReadFixedString(record.key, 64);
+        std::cout << "    [" << pi << "] "
+                  << "key='" << key << "' "
+                  << "type=" << static_cast<uint32_t>(record.type)
+                  << " value=" << FormatScriptParamValue(record) << "\n";
+      }
+    }
+    return 0;
+  } catch (const std::exception& ex) {
+    std::cerr << "ERROR: " << ex.what() << "\n";
+    return 2;
+  }
+}
+
 auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
-  DumpResourceOptions& buffers_opts, DumpResourceOptions& textures_opts)
+  DumpResourceOptions& buffers_opts, DumpResourceOptions& textures_opts,
+  DumpScriptOptions& script_slots_opts, DumpScriptOptions& script_params_opts)
   -> std::unique_ptr<Cli>
 {
   auto validate_root = Option::Positional("cooked_root")
@@ -499,6 +719,30 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
         .About("Dump textures.table entries.")
         .WithPositionalArguments(textures_root);
 
+  auto script_slots_root = Option::Positional("cooked_root")
+                             .About("Loose cooked root directory")
+                             .Required()
+                             .WithValue<std::string>()
+                             .StoreTo(&script_slots_opts.cooked_root)
+                             .Build();
+
+  const std::shared_ptr<Command> script_slots_cmd
+    = CommandBuilder("script-slots")
+        .About("Dump scripts.table slot entries.")
+        .WithPositionalArguments(script_slots_root);
+
+  auto script_params_root = Option::Positional("cooked_root")
+                              .About("Loose cooked root directory")
+                              .Required()
+                              .WithValue<std::string>()
+                              .StoreTo(&script_params_opts.cooked_root)
+                              .Build();
+
+  const std::shared_ptr<Command> script_params_cmd
+    = CommandBuilder("script-params")
+        .About("Dump script param arrays referenced by scripts.table slots.")
+        .WithPositionalArguments(script_params_root);
+
   return CliBuilder()
     .ProgramName(std::string(kProgramName))
     .Version(std::string(kVersion))
@@ -510,6 +754,8 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
     .WithCommand(dump_cmd)
     .WithCommand(buffers_cmd)
     .WithCommand(textures_cmd)
+    .WithCommand(script_slots_cmd)
+    .WithCommand(script_params_cmd)
     .Build();
 }
 
@@ -535,9 +781,11 @@ auto main(int argc, char** argv) -> int
     DumpOptions dump_opts;
     DumpResourceOptions buffers_opts;
     DumpResourceOptions textures_opts;
+    DumpScriptOptions script_slots_opts;
+    DumpScriptOptions script_params_opts;
 
-    const auto cli
-      = BuildCli(validate_opts, dump_opts, buffers_opts, textures_opts);
+    const auto cli = BuildCli(validate_opts, dump_opts, buffers_opts,
+      textures_opts, script_slots_opts, script_params_opts);
     const auto context = cli->Parse(argc, const_cast<const char**>(argv));
 
     const auto command_path = context.active_command->PathAsString();
@@ -554,6 +802,10 @@ auto main(int argc, char** argv) -> int
       exit_code = RunDumpBuffers(buffers_opts);
     } else if (command_path == "textures") {
       exit_code = RunDumpTextures(textures_opts);
+    } else if (command_path == "script-slots") {
+      exit_code = RunDumpScriptSlots(script_slots_opts);
+    } else if (command_path == "script-params") {
+      exit_code = RunDumpScriptParams(script_params_opts);
     } else {
       std::cerr << "ERROR: Unknown command\n";
       exit_code = 1;
