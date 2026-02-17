@@ -142,13 +142,37 @@ auto ResourceRegistry::RegisterView(NativeResource resource, NativeView view,
   // Store in maps
   auto index = view_handle.GetBindlessHandle();
   auto& descriptors = resource_it->second.descriptors;
-  auto [desc_it, inserted] = descriptors.emplace(index,
-    ResourceEntry::ViewEntry {
-      .view_object = view,
-      .descriptor = std::move(view_handle),
-    });
+  auto desc_it = descriptors.find(index);
+  const bool inserted = (desc_it == descriptors.end());
+  if (inserted) {
+    auto [it, _] = descriptors.emplace(index,
+      ResourceEntry::ViewEntry {
+        .view_object = view,
+        .descriptor = std::move(view_handle),
+      });
+    desc_it = it;
+  } else {
+    // Descriptor index reuse: replace the previous entry and purge any stale
+    // cache keys that still point to the old view object.
+    if (desc_it->second.descriptor.IsValid()) {
+      desc_it->second.descriptor.Release();
+    }
+    const auto old_view = desc_it->second.view_object;
+    desc_it->second.view_object = view;
+    desc_it->second.descriptor = std::move(view_handle);
+
+    [[maybe_unused]] const auto stale_count
+      = std::erase_if(view_cache_, [&](const auto& cache_pair) {
+          return cache_pair.first.resource == resource
+            && cache_pair.second.view_object == old_view;
+        });
+    DLOG_F(3,
+      "RegisterView replaced existing descriptor index {} (purged {} "
+      "stale cache entr{})",
+      index, stale_count, stale_count == 1 ? "y" : "ies");
+  }
   DLOG_F(4, "updated descriptors map with index {} ({})", index,
-    inserted ? "inserted" : "reused");
+    inserted ? "inserted" : "replaced");
   descriptor_to_resource_[index] = resource;
 
   // Store in view cache
@@ -249,27 +273,35 @@ auto ResourceRegistry::UnRegisterViewNoLock(
   }
 
   auto& descriptors = it->second.descriptors;
-  // Remove the descriptor with the matching view_object (only one possible)
-  const auto desc_it = std::ranges::find_if(descriptors,
-    [&](const auto& pair) { return pair.second.view_object == view; });
-  if (desc_it == descriptors.end()) {
+  // Remove all descriptors with the matching view_object.
+  size_t removed_descriptor_count = 0;
+  for (auto desc_it = descriptors.begin(); desc_it != descriptors.end();) {
+    if (desc_it->second.view_object != view) {
+      ++desc_it;
+      continue;
+    }
+
+    DLOG_F(4, "release view descriptor handle ({})", desc_it->first);
+    descriptor_to_resource_.erase(desc_it->first);
+    desc_it->second.descriptor.Release();
+    desc_it = descriptors.erase(desc_it);
+    ++removed_descriptor_count;
+  }
+
+  if (removed_descriptor_count == 0) {
     DLOG_F(3, "view not found, already unregistered?");
     return; // Nothing to do
   }
 
-  DLOG_F(4, "release view descriptor handle ({})", desc_it->first);
-  descriptor_to_resource_.erase(desc_it->first);
-  desc_it->second.descriptor.Release();
-  descriptors.erase(desc_it);
-
   DLOG_F(4, "remove cache entry");
-  // Use std::erase_if to efficiently find and remove the matching cache entry
+  // Remove all matching cache entries; duplicates may exist after descriptor
+  // index reuse with backend view-handle aliasing.
   [[maybe_unused]] const size_t erased_count
     = std::erase_if(view_cache_, [&resource, &view](const auto& cache_pair) {
         return cache_pair.first.resource == resource
           && cache_pair.second.view_object == view;
       });
-  DCHECK_EQ_F(erased_count, 1,
+  DCHECK_GE_F(erased_count, 1,
     "Cache entry not found for resource {} and view {}", resource, view);
 }
 
