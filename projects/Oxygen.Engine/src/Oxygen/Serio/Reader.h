@@ -295,6 +295,23 @@ auto Load(AnyReader& reader, T& value) -> Result<void>
   return {};
 }
 
+//! Deserializes an enum value from the stream via its underlying type.
+/*!
+ Reads the enum's underlying integral representation and casts it back to
+ * the
+ enum type.
+*/
+template <typename T>
+auto Load(AnyReader& reader, T& value) -> Result<void>
+  requires(std::is_enum_v<T>)
+{
+  using RawType = std::underlying_type_t<T>;
+  RawType raw_value {};
+  CHECK_RESULT(reader.ReadInto(raw_value));
+  value = static_cast<T>(raw_value);
+  return {};
+}
+
 //! Deserializes a std::string from the stream.
 /*!
  Reads a std::string from the stream as a 32-bit length prefix (platform
