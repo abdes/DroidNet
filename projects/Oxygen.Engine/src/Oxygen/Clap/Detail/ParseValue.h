@@ -7,11 +7,14 @@
 #pragma once
 
 #include <algorithm>
+#include <charconv>
 #include <chrono>
+#include <limits>
 #include <locale>
 #include <regex>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
 
 #include <magic_enum/magic_enum.hpp>
@@ -216,6 +219,49 @@ inline auto StringToFlagValue(std::string val) -> std::int64_t
   return std::stoll(val);
 }
 
+inline auto TryParseSignedInt64NoThrow(
+  std::string_view text, std::int64_t& value) -> std::errc
+{
+  if (text.empty()) {
+    return std::errc::invalid_argument;
+  }
+  const auto starts_with_sign = (text.front() == '+' || text.front() == '-');
+  const auto digits = starts_with_sign ? text.substr(1) : text;
+  if (digits.empty()) {
+    return std::errc::invalid_argument;
+  }
+  if (!std::ranges::all_of(
+        digits, [](const char c) { return c >= '0' && c <= '9'; })) {
+    return std::errc::invalid_argument;
+  }
+  if (text.front() == '+') {
+    std::uint64_t unsigned_value = 0;
+    const auto* begin = digits.data();
+    const auto* end = begin + digits.size();
+    const auto [ptr, ec] = std::from_chars(begin, end, unsigned_value, 10);
+    if (ptr != end && ec == std::errc {}) {
+      return std::errc::invalid_argument;
+    }
+    if (ec != std::errc {}) {
+      return ec;
+    }
+    if (unsigned_value
+      > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+      return std::errc::result_out_of_range;
+    }
+    value = static_cast<std::int64_t>(unsigned_value);
+    return std::errc {};
+  }
+
+  const auto* begin = text.data();
+  const auto* end = begin + text.size();
+  const auto [ptr, ec] = std::from_chars(begin, end, value, 10);
+  if (ptr != end && ec == std::errc {}) {
+    return std::errc::invalid_argument;
+  }
+  return ec;
+}
+
 //!  Attempts to parse the input string as a boolean value and assigns the
 //!  result to output.
 /*!
@@ -247,18 +293,51 @@ template <typename AssignTo>
 auto ParseValue(const std::string& input, AssignTo& output) -> bool
   requires(std::is_same_v<AssignTo, bool>)
 {
-  try {
-    const auto flag_value = StringToFlagValue(input);
-    output = (flag_value > 0);
-    return true;
-  } catch (const std::invalid_argument&) {
-    return false;
-  } catch (const std::out_of_range&) {
-    // if the number is out of the range of a 64 bit value then it is still a
-    // number, and all we care about is the sign
-    output = (input[0] != '-');
+  auto val = ToLower(input);
+  if (val.size() == 1) {
+    if (val[0] >= '1' && val[0] <= '9') {
+      output = true;
+      return true;
+    }
+    switch (val[0]) {
+    case '0':
+    case 'f':
+    case 'n':
+    case '-':
+      output = false;
+      return true;
+    case 't':
+    case 'y':
+    case '+':
+      output = true;
+      return true;
+    default:
+      return false;
+    }
+  }
+  if (val == "true" || val == "on" || val == "yes" || val == "enable") {
+    output = true;
     return true;
   }
+  if (val == "false" || val == "off" || val == "no" || val == "disable"
+    || val == "+0" || val == "-0") {
+    output = false;
+    return true;
+  }
+
+  std::int64_t parsed {};
+  const auto ec = TryParseSignedInt64NoThrow(val, parsed);
+  if (ec == std::errc {}) {
+    output = (parsed > 0);
+    return true;
+  }
+  if (ec == std::errc::result_out_of_range) {
+    // Preserve legacy behavior: out-of-range numeric text is still numeric, and
+    // only sign matters for bool conversion.
+    output = (!val.empty() && val.front() != '-');
+    return true;
+  }
+  return false;
 }
 
 //! Attempts to parse the input string as a character value and assigns the
