@@ -245,7 +245,12 @@ public:
     SubSeparator("BUFFER RESOURCES");
     auto& buffers_table = pak.BuffersTable();
     size_t buffer_count = buffers_table.Size();
-    Field("Buffer Count", buffer_count);
+    if (buffer_count > 0) {
+      Field("Buffer Count", buffer_count - 1);
+      Field("Total Table Entries (inc. sentinel)", buffer_count);
+    } else {
+      Field("Buffer Count", 0);
+    }
     if (ctx.verbose && buffer_count > 0) {
       std::cout << "    Buffer entries:\n";
       for (size_t i = 0; i < (std::min)(buffer_count, static_cast<size_t>(20));
@@ -256,7 +261,8 @@ public:
           auto buffer_resource
             = co_await asset_loader.LoadResourceAsync<BufferResource>(key);
           if (buffer_resource) {
-            std::cout << "      [" << i << "] Buffer Resource:\n";
+            std::cout << "      [" << i << "] Buffer Resource"
+                      << (i == 0 ? " (sentinel/reserved)" : "") << ":\n";
             Field(
               "Data Offset", ToHexString(buffer_resource->GetDataOffset()), 8);
             Field("Data Size",

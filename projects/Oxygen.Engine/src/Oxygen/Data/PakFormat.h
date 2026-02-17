@@ -662,8 +662,9 @@ static_assert(sizeof(GeometryAssetDesc) == 256);
   bounds are valid and must not be interpreted as "missing". */
 #pragma pack(push, 1)
 struct StandardMeshInfo {
-  ResourceIndexT vertex_buffer = 0; //!< Reference to vertex buffer
-  ResourceIndexT index_buffer = 0; //!< Reference to index buffer
+  ResourceIndexT vertex_buffer
+    = kNoResourceIndex; //!< Reference to vertex buffer
+  ResourceIndexT index_buffer = kNoResourceIndex; //!< Reference to index buffer
   float bounding_box_min[3] = {}; //!< AABB min coordinates
   float bounding_box_max[3] = {}; //!< AABB max coordinates
 };
@@ -676,12 +677,17 @@ static_assert(sizeof(StandardMeshInfo) == 32);
   valid and must not be interpreted as "missing". */
 #pragma pack(push, 1)
 struct SkinnedMeshInfo {
-  ResourceIndexT vertex_buffer = 0; //!< Reference to vertex buffer
-  ResourceIndexT index_buffer = 0; //!< Reference to index buffer
-  ResourceIndexT joint_index_buffer = 0; //!< Joint indices buffer
-  ResourceIndexT joint_weight_buffer = 0; //!< Joint weights buffer
-  ResourceIndexT inverse_bind_buffer = 0; //!< Inverse bind matrices buffer
-  ResourceIndexT joint_remap_buffer = 0; //!< Mesh-to-skeleton remap buffer
+  ResourceIndexT vertex_buffer
+    = kNoResourceIndex; //!< Reference to vertex buffer
+  ResourceIndexT index_buffer = kNoResourceIndex; //!< Reference to index buffer
+  ResourceIndexT joint_index_buffer
+    = kNoResourceIndex; //!< Joint indices buffer
+  ResourceIndexT joint_weight_buffer
+    = kNoResourceIndex; //!< Joint weights buffer
+  ResourceIndexT inverse_bind_buffer
+    = kNoResourceIndex; //!< Inverse bind matrices buffer
+  ResourceIndexT joint_remap_buffer
+    = kNoResourceIndex; //!< Mesh-to-skeleton remap buffer
   AssetKey skeleton_asset_key = {}; //!< Skeleton asset reference - TODO: future
   uint16_t joint_count = 0; //!< Number of joints referenced by this mesh
   uint16_t influences_per_vertex = 0; //!< Influences per vertex (1..8)

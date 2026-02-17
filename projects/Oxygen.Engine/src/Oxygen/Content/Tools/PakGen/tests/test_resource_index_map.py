@@ -67,7 +67,7 @@ def test_resource_index_map_in_manifest(tmp_path: Path):
     assert rim, "resource_index_map missing"
     # Buffers should preserve spec order (no sorting)
     buf_names = [e["name"] for e in rim["buffer"]]
-    assert buf_names == ["__fallback", "z_buf", "a_buf"], buf_names
+    assert buf_names == ["__sentinel_buffer", "__fallback", "z_buf", "a_buf"], buf_names
     # Textures should be sorted (deterministic) unless design changes; current planner sorts by name
     tex_names = [e["name"] for e in rim["texture"]]
     assert tex_names == sorted(tex_names), tex_names

@@ -63,11 +63,11 @@
   },
   "padding": {
     "by_section": {
-      "assets_region": 48,
+      "assets_region": 16,
       "directory": 6,
       "table_buffer": 8
     },
-    "total": 62
+    "total": 30
   },
   "regions": [
     {
@@ -112,7 +112,7 @@
       "padding_before": 0
     },
     {
-      "count": 2,
+      "count": 3,
       "entry_size": 32,
       "name": "buffer",
       "offset": 5520,
