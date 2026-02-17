@@ -111,6 +111,7 @@ set(
   "Loaders/Helpers.h"
   "Loaders/MaterialLoader.h"
   "Loaders/SceneLoader.h"
+  "Loaders/ScriptLoader.h"
   "Loaders/TextureLoader.h"
   "LooseCookedInspection.cpp"
   "PakFile.cpp"

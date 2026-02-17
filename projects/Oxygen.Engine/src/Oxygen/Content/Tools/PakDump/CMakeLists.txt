@@ -39,6 +39,7 @@ add_executable(
   "GeometryAssetDumper.h"
   "MaterialAssetDumper.h"
   "SceneAssetDumper.h"
+  "ScriptAssetDumper.h"
   "DumpContext.h"
   "PakFileDumper.cpp"
   "PakFileDumper.h"
