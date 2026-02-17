@@ -16,6 +16,9 @@
 #include <type_traits>
 #include <utility>
 
+#include <fmt/format.h>
+#include <fmt/ostream.h>
+
 #include <Oxygen/Base/Crtp.h>
 #include <Oxygen/Base/Detail/NamedType_impl.h>
 
@@ -89,6 +92,9 @@ namespace nt_detail {
   // primary, overridden via partial specialization later
   template <typename NT>
   inline constexpr bool has_default_initialized_v = false;
+
+  template <typename>
+  inline constexpr bool always_false_v = false;
 } // namespace nt_detail
 
 //! Provides prefix increment operator (++x) for NamedType
@@ -515,3 +521,32 @@ struct hash<oxygen::NamedType<T, Parameter, Skills...>> {
   }
 };
 } // namespace std
+
+namespace fmt {
+template <typename T, typename Parameter, template <typename> class... Skills>
+struct formatter<oxygen::NamedType<T, Parameter, Skills...>, char> {
+  using NamedType = oxygen::NamedType<T, Parameter, Skills...>;
+  using UnderlyingType = std::remove_cv_t<std::remove_reference_t<T>>;
+
+  constexpr auto parse(format_parse_context& ctx) -> format_parse_context::iterator
+  {
+    return ctx.begin();
+  }
+
+  template <typename FormatContext>
+  auto format(const NamedType& value, FormatContext& ctx) const
+    -> typename FormatContext::iterator
+  {
+    if constexpr (oxygen::nt_detail::has_skill<oxygen::Printable, NamedType>::value) {
+      return fmt::format_to(ctx.out(), "{}", fmt::streamed(value));
+    } else if constexpr (fmt::is_formattable<UnderlyingType, char>::value) {
+      return fmt::formatter<UnderlyingType, char> {}.format(value.get(), ctx);
+    } else {
+      static_assert(oxygen::nt_detail::always_false_v<NamedType>,
+        "NamedType is not formattable: add oxygen::Printable skill or make the "
+        "underlying type fmt-formattable");
+      return ctx.out();
+    }
+  }
+};
+} // namespace fmt
