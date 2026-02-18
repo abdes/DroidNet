@@ -20,7 +20,6 @@
 namespace oxygen::examples::ui {
 
 namespace {
-  constexpr float kKmToMeters = 1000.0F;
   constexpr int kPresetUseScene = -2;
   constexpr int kPresetCustom = -1;
 
@@ -355,8 +354,7 @@ auto EnvironmentVm::SetRuntimeConfig(const EnvironmentRuntimeConfig& config)
     last_runtime_config_scene_ = const_cast<scene::Scene*>(scene_ptr);
     last_runtime_config_skybox_service_
       = const_cast<SkyboxService*>(skybox_service_ptr);
-    last_runtime_config_renderer_
-      = const_cast<engine::Renderer*>(renderer_ptr);
+    last_runtime_config_renderer_ = const_cast<engine::Renderer*>(renderer_ptr);
     runtime_config_initialized_ = true;
   }
   MaybeApplyStartupPreset(config);
@@ -421,25 +419,19 @@ auto EnvironmentVm::GetPresetIndex() const -> int
 
 auto EnvironmentVm::ApplyPreset(int index) -> void
 {
-  LOG_F(INFO, "EnvironmentVm: ApplyPreset(ui_index={})", index);
+  LOG_F(1, "ApplyPreset(ui_index={})", index);
   if (index == 0) {
-    LOG_F(INFO, "EnvironmentVm: preset mode -> Use Scene");
+    LOG_F(1, "preset mode -> Use Scene");
     service_->SetPresetIndex(kPresetUseScene);
     service_->ActivateUseSceneMode();
-    startup_preset_applied_ = true;
-    return;
-  }
-  if (index == 1) {
-    LOG_F(INFO, "EnvironmentVm: preset mode -> Custom");
-    service_->SetPresetIndex(kPresetCustom);
     startup_preset_applied_ = true;
     return;
   }
 
   const int preset_index = index - 2;
   const auto& preset = GetPreset(preset_index);
-  LOG_F(INFO, "EnvironmentVm: applying built-in preset {} ('{}')",
-    preset_index, preset.name.data());
+  LOG_F(1, "applying built-in preset (index={}, name='{}')", preset_index,
+    preset.name.data());
   service_->BeginUpdate();
   service_->SetPresetIndex(preset_index);
 
@@ -546,18 +538,17 @@ auto EnvironmentVm::MaybeApplyStartupPreset(
   if (scene_ptr != runtime_scene_) {
     runtime_scene_ = scene_ptr;
     startup_preset_applied_ = false;
-    LOG_F(INFO, "EnvironmentVm: runtime scene changed -> reset startup preset latch");
+    LOG_F(1, "runtime scene changed; reset startup preset latch");
   }
 
-  if (!runtime_scene_ || startup_preset_applied_) {
+  if (runtime_scene_ == nullptr || startup_preset_applied_) {
     return;
   }
 
   const int preset_index = service_->GetPresetIndex();
-  LOG_F(INFO, "EnvironmentVm: startup preset evaluation (stored_index={})",
-    preset_index);
+  LOG_F(1, "startup preset evaluation (stored_index={})", preset_index);
   if (preset_index == kPresetUseScene) {
-    LOG_F(INFO, "EnvironmentVm: startup action -> Use Scene");
+    LOG_F(1, "startup action -> Use Scene");
     service_->ActivateUseSceneMode();
     startup_preset_applied_ = true;
     return;
@@ -565,19 +556,19 @@ auto EnvironmentVm::MaybeApplyStartupPreset(
   if (preset_index == kPresetCustom) {
     // Custom startup application is handled by EnvironmentSettingsService
     // (persisted cache if present, otherwise scene sync).
-    LOG_F(INFO, "EnvironmentVm: startup action -> Custom (service-managed)");
+    LOG_F(1, "startup action -> Custom (service-managed)");
     startup_preset_applied_ = true;
     return;
   }
 
   const int preset_count = static_cast<int>(kEnvironmentPresets.size());
   if (preset_index >= 0 && preset_index < preset_count) {
-    LOG_F(INFO, "EnvironmentVm: startup action -> built-in preset {}",
-      preset_index);
+    LOG_F(1, "startup action -> built-in preset (index={})", preset_index);
     ApplyPreset(preset_index + 2);
   } else {
     LOG_F(ERROR,
-      "EnvironmentVm: invalid persisted preset index {} (valid built-in range: 0..{}); keeping current scene state",
+      "invalid persisted preset (index={}, valid_range=[0, {}]); keeping "
+      "current scene state",
       preset_index, preset_count - 1);
   }
   startup_preset_applied_ = true;

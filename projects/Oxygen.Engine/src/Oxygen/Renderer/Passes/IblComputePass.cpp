@@ -77,8 +77,7 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
   const auto view_id = Context().current_view.view_id;
   if (!env_manager) {
     if (!logged_missing_env_manager_) {
-      LOG_F(WARNING,
-        "IblComputePass: EnvironmentStaticDataManager unavailable; skipping");
+      LOG_F(WARNING, "environment static data manager unavailable; skipping");
       logged_missing_env_manager_ = true;
     }
     co_return;
@@ -88,7 +87,7 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
   auto ibl_manager = Context().GetRenderer().GetIblManager();
   if (!ibl_manager) {
     if (!logged_missing_ibl_manager_) {
-      LOG_F(WARNING, "IblComputePass: IblManager unavailable; skipping");
+      LOG_F(WARNING, "IBL manager unavailable; skipping");
       logged_missing_ibl_manager_ = true;
     }
     co_return;
@@ -104,10 +103,9 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
       const auto env_static_srv
         = env_manager->GetSrvIndex(Context().current_view.view_id);
       LOG_F(WARNING,
-        "IblComputePass: No environment cubemap source slot (frame_slot={} "
-        "frame_seq={} "
-        "SkyLight={} SkySphere={} EnvStaticSRV={} ExplicitSourceValid={} "
-        "ExplicitSource={}); IBL will be black",
+        "no environment cubemap source slot (frame_slot={}, frame_seq={}, "
+        "sky_light={}, sky_sphere={}, env_srv={}, explicit_source_valid={}, "
+        "explicit_source={}); IBL output will be black",
         Context().frame_slot.get(), Context().frame_sequence.get(),
         sky_light_slot.get(), sky_sphere_slot.get(), env_static_srv.get(),
         explicit_source_slot_.IsValid(), explicit_source_slot_.get());
@@ -118,7 +116,7 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
   logged_missing_source_slot_ = false;
 
   if (!ibl_manager->EnsureResourcesCreatedForView(view_id)) {
-    LOG_F(WARNING, "IblComputePass: Failed to ensure IBL resources");
+    LOG_F(WARNING, "failed to ensure IBL resources");
     co_return;
   }
 
@@ -133,12 +131,11 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
   }
 
   LOG_F(INFO,
-    "IblComputePass: Regenerating IBL (frame_slot={} frame_seq={} env_srv={} "
-    "source={})",
+    "regenerating IBL (frame_slot={}, frame_seq={}, env_srv={}, source={})",
     Context().frame_slot.get(), Context().frame_sequence.get(),
     env_manager->GetSrvIndex(view_id).get(), source_slot.get());
 
-  LOG_F(2, "IblComputePass: targets (irr_srv={}, pref_srv={})",
+  DLOG_F(2, "IBL targets (irr_srv={}, pref_srv={})",
     current_outputs.irradiance.get(), current_outputs.prefilter.get());
 
   EnsurePassConstantsBuffer();
@@ -146,12 +143,12 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
   EnsurePipelineStateDescs();
 
   if (!irradiance_pso_desc_ || !prefilter_pso_desc_) {
-    LOG_F(WARNING, "IblComputePass: missing PSO desc(s); skipping");
+    LOG_F(WARNING, "missing PSO descriptors; skipping");
     co_return;
   }
   if (!pass_constants_buffer_ || (pass_constants_mapped_ == nullptr)
     || pass_constants_srv_index_ == kInvalidShaderVisibleIndex) {
-    LOG_F(WARNING, "IblComputePass: missing pass constants; skipping");
+    LOG_F(WARNING, "pass constants unavailable; skipping");
     co_return;
   }
 
@@ -176,9 +173,8 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
     source_content_version = env_manager->GetSkyCaptureGeneration(view_id);
     if (source_content_version == 0ULL) {
       LOG_F(ERROR,
-        "IblComputePass: captured-scene IBL regeneration has zero source "
-        "content "
-        "version (view={} source={})",
+        "captured-scene IBL regeneration has zero source content version "
+        "(view={}, source={})",
         view_id.get(), source_slot.get());
     }
   }
@@ -191,8 +187,7 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
   }
 
   const auto final_outputs = ibl_manager->QueryOutputsFor(view_id, source_slot);
-  LOG_F(INFO,
-    "IblComputePass: IBL generated (source={}, irr_srv={}, pref_srv={})",
+  LOG_F(INFO, "IBL generated (source={}, irr_srv={}, pref_srv={})",
     source_slot.get(), final_outputs.irradiance.get(),
     final_outputs.prefilter.get());
 
@@ -321,13 +316,13 @@ auto IblComputePass::DispatchIrradiance(graphics::CommandRecorder& recorder,
 
   auto target = ibl.GetIrradianceMap(tag, view_id);
   if (!target) {
-    LOG_F(WARNING, "IblComputePass: irradiance target texture missing");
+    LOG_F(WARNING, "irradiance target texture missing");
     return;
   }
 
   const auto uav_slot = ibl.GetIrradianceMapUavSlot(tag, view_id);
   if (uav_slot == kInvalidShaderVisibleIndex) {
-    LOG_F(WARNING, "IblComputePass: irradiance UAV slot missing");
+    LOG_F(WARNING, "irradiance UAV slot missing");
     return;
   }
 
@@ -360,8 +355,8 @@ auto IblComputePass::DispatchIrradiance(graphics::CommandRecorder& recorder,
     + (static_cast<std::size_t>(constants_index) * sizeof(constants));
   std::memcpy(constants_dst, &constants, sizeof(constants));
 
-  LOG_F(2,
-    "IblComputePass: irradiance dispatch src={}, uav={}, face_size={}, "
+  DLOG_F(2,
+    "irradiance dispatch (src={}, uav={}, face_size={}, "
     "groups={}",
     constants.source_cubemap_slot, constants.target_uav_slot,
     constants.face_size,
@@ -396,7 +391,7 @@ auto IblComputePass::DispatchPrefilter(graphics::CommandRecorder& recorder,
 
   auto target = ibl.GetPrefilterMap(tag, view_id);
   if (!target) {
-    LOG_F(WARNING, "IblComputePass: prefilter target texture missing");
+    LOG_F(WARNING, "prefilter target texture missing");
     return;
   }
 
@@ -430,7 +425,7 @@ auto IblComputePass::DispatchPrefilter(graphics::CommandRecorder& recorder,
   const uint32_t mips = target->GetDescriptor().mip_levels;
   const uint32_t base_size = target->GetDescriptor().width;
 
-  LOG_F(2, "IblComputePass: prefilter dispatch src={}, mips={}, base_size={}",
+  DLOG_F(2, "prefilter dispatch (src={}, mips={}, base_size={})",
     source_slot.get(), mips, base_size);
 
   const uint32_t constants_base = 1U;
@@ -449,8 +444,7 @@ auto IblComputePass::DispatchPrefilter(graphics::CommandRecorder& recorder,
 
     const auto uav_slot = ibl.GetPrefilterMapUavSlot(tag, view_id, mip);
     if (uav_slot == kInvalidShaderVisibleIndex) {
-      LOG_F(
-        WARNING, "IblComputePass: prefilter UAV slot missing for mip {}", mip);
+      LOG_F(WARNING, "prefilter UAV slot missing for mip {}", mip);
       continue;
     }
 
@@ -476,8 +470,7 @@ auto IblComputePass::DispatchPrefilter(graphics::CommandRecorder& recorder,
   }
 
   if (safe_mips != mips) {
-    LOG_F(WARNING,
-      "IblComputePass: prefilter mip dispatch clamped (mips={}, dispatched={})",
+    LOG_F(WARNING, "prefilter mip dispatch clamped (mips={}, dispatched={})",
       mips, safe_mips);
   }
 

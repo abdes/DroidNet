@@ -152,10 +152,10 @@ namespace {
       target.SetSource(scene::environment::SkySphereSource::kSolidColor);
     } else {
       LOG_F(WARNING,
-        "EnvironmentSettingsService: SkySphere cubemap source requested, "
-        "but scene-authored cubemap AssetKey resolution is not implemented "
-        "in this example. Keeping solid color; use the Environment panel "
-        "Skybox Loader to bind a cubemap at runtime.");
+        "SkySphere cubemap source requested, but scene-authored cubemap "
+        "AssetKey resolution is not implemented in this example. Keeping "
+        "solid color; use the Environment panel Skybox Loader to bind a "
+        "cubemap at runtime.");
       target.SetSource(scene::environment::SkySphereSource::kSolidColor);
     }
 
@@ -190,10 +190,10 @@ namespace {
       static_cast<scene::environment::SkyLightSource>(source.source));
     if (target.GetSource()
       == scene::environment::SkyLightSource::kSpecifiedCubemap) {
-      LOG_F(INFO,
-        "EnvironmentSettingsService: SkyLight specifies a cubemap AssetKey, "
-        "but this example does not yet resolve it to a ResourceKey. Use "
-        "the Environment panel Skybox Loader to bind a cubemap at runtime.");
+      LOG_F(1,
+        "SkyLight specifies a cubemap AssetKey, but this example does not yet "
+        "resolve it to a ResourceKey. Use the Environment panel Skybox Loader "
+        "to bind a cubemap at runtime.");
     }
     target.SetIntensityMul(source.intensity);
     target.SetTintRgb(
@@ -383,36 +383,32 @@ auto EnvironmentSettingsService::HydrateEnvironment(
 
   if (sky_atmo_enabled && sky_sphere_enabled) {
     LOG_F(WARNING,
-      "EnvironmentSettingsService: Both SkyAtmosphere and SkySphere are "
-      "enabled in the scene. They are mutually exclusive; SkyAtmosphere "
-      "will be used.");
+      "Both SkyAtmosphere and SkySphere are enabled in the scene. They are "
+      "mutually exclusive; SkyAtmosphere will be used.");
   }
 
   if (sky_atmo_enabled) {
     auto& atmo = target.AddSystem<scene::environment::SkyAtmosphere>();
     HydrateSkyAtmosphere(atmo, *sky_atmo_record);
-    LOG_F(
-      INFO, "EnvironmentSettingsService: Applied SkyAtmosphere environment");
+    LOG_F(1, "Applied SkyAtmosphere environment");
   } else if (sky_sphere_enabled) {
     auto& sky_sphere = target.AddSystem<scene::environment::SkySphere>();
     HydrateSkySphere(sky_sphere, *sky_sphere_record);
-    LOG_F(INFO,
-      "EnvironmentSettingsService: Applied SkySphere environment (solid "
-      "color source)");
+    LOG_F(1, "Applied SkySphere environment (solid color source)");
   }
 
   if (const auto fog_record = source_asset.TryGetFogEnvironment();
     IsEnabled(fog_record)) {
     auto& fog = target.AddSystem<scene::environment::Fog>();
     HydrateFog(fog, *fog_record);
-    LOG_F(INFO, "EnvironmentSettingsService: Applied Fog environment");
+    LOG_F(1, "Applied Fog environment");
   }
 
   if (const auto sky_light_record = source_asset.TryGetSkyLightEnvironment();
     IsEnabled(sky_light_record)) {
     auto& sky_light = target.AddSystem<scene::environment::SkyLight>();
     HydrateSkyLight(sky_light, *sky_light_record);
-    LOG_F(INFO, "EnvironmentSettingsService: Applied SkyLight environment");
+    LOG_F(1, "Applied SkyLight environment");
   }
 
   if (const auto clouds_record
@@ -420,16 +416,14 @@ auto EnvironmentSettingsService::HydrateEnvironment(
     IsEnabled(clouds_record)) {
     auto& clouds = target.AddSystem<scene::environment::VolumetricClouds>();
     HydrateVolumetricClouds(clouds, *clouds_record);
-    LOG_F(
-      INFO, "EnvironmentSettingsService: Applied VolumetricClouds environment");
+    LOG_F(1, "Applied VolumetricClouds environment");
   }
 
   if (const auto pp_record = source_asset.TryGetPostProcessVolumeEnvironment();
     IsEnabled(pp_record)) {
     auto& pp = target.AddSystem<scene::environment::PostProcessVolume>();
     HydratePostProcessVolume(pp, *pp_record);
-    LOG_F(INFO,
-      "EnvironmentSettingsService: Applied PostProcessVolume environment");
+    LOG_F(1, "Applied PostProcessVolume environment");
   }
 }
 
@@ -513,13 +507,13 @@ auto EnvironmentSettingsService::OnFrameStart(
   PersistSettingsIfDirty();
 }
 
-auto EnvironmentSettingsService::OnSceneActivated(scene::Scene& scene)
-  -> void
+auto EnvironmentSettingsService::OnSceneActivated(scene::Scene& scene) -> void
 {
   PersistSettingsIfDirty();
   config_.scene = observer_ptr { &scene };
   // Ensure the next runtime config update runs scene-transition logic even
-  // though config_.scene is pre-bound here for immediate HasScene() correctness.
+  // though config_.scene is pre-bound here for immediate HasScene()
+  // correctness.
   force_scene_rebind_ = true;
   config_.skybox_service = nullptr;
   main_view_id_.reset();
@@ -578,9 +572,8 @@ auto EnvironmentSettingsService::SetPresetIndex(int index) -> void
   preset_index_ = index;
   settings_persist_dirty_ = true;
   settings_revision_++;
-  DLOG_F(INFO,
-    "EnvironmentSettingsService: preset index changed to {} (rev={})",
-    preset_index_, settings_revision_);
+  DLOG_F(1, "preset index changed to {} (revision={})", preset_index_,
+    settings_revision_);
 }
 
 auto EnvironmentSettingsService::ActivateUseSceneMode() -> void
@@ -614,15 +607,14 @@ auto EnvironmentSettingsService::SyncFromSceneIfNeeded() -> void
   }
   if (pending_changes_) {
     DLOG_F(WARNING,
-      "EnvironmentSettingsService: deferring scene sync while pending UI "
-      "changes exist (mask=0x{:X} rev={})",
+      "deferring scene sync while pending UI changes exist (mask=0x{:X}, "
+      "revision={})",
       dirty_domains_, settings_revision_);
     return;
   }
   if (update_depth_ > 0) {
     DLOG_F(WARNING,
-      "EnvironmentSettingsService: deferring scene sync while update "
-      "transaction is active (depth={})",
+      "deferring scene sync while update transaction is active (depth={})",
       update_depth_);
     return;
   }
@@ -863,9 +855,9 @@ auto EnvironmentSettingsService::SetSkyViewLutSlices(int value) -> void
   if (sky_view_lut_slices_ == value) {
     return;
   }
-  DLOG_F(INFO,
-    "EnvironmentSettingsService: SkyView LUT slices are renderer-owned; "
-    "ignoring UI write {} (current={})",
+  DLOG_F(1,
+    "SkyView LUT slices are renderer-owned; ignoring UI write {} "
+    "(current={})",
     value, sky_view_lut_slices_);
 }
 
@@ -880,17 +872,15 @@ auto EnvironmentSettingsService::SetSkyViewAltMappingMode(int value) -> void
   if (sky_view_alt_mapping_mode_ == value) {
     return;
   }
-  DLOG_F(INFO,
-    "EnvironmentSettingsService: SkyView mapping mode is renderer-owned; "
-    "ignoring UI write {} (current={})",
+  DLOG_F(1,
+    "SkyView mapping mode is renderer-owned; ignoring UI write {} "
+    "(current={})",
     value, sky_view_alt_mapping_mode_);
 }
 
 auto EnvironmentSettingsService::RequestRegenerateLut() -> void
 {
-  DLOG_F(INFO,
-    "EnvironmentSettingsService: RequestRegenerateLut ignored; renderer owns "
-    "LUT regeneration");
+  DLOG_F(1, "RequestRegenerateLut ignored; renderer owns LUT regeneration");
 }
 
 auto EnvironmentSettingsService::GetSkySphereEnabled() const -> bool
@@ -1526,8 +1516,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     return;
   }
 
-  DLOG_F(INFO,
-    "EnvironmentSettingsService: applying pending changes mask=0x{:X} rev={}",
+  DLOG_F(1, "applying pending changes (mask=0x{:X}, revision={})",
     dirty_domains_, settings_revision_);
   ValidateAndClampState();
   NormalizeSkySystems();
@@ -1543,9 +1532,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   const auto cache_atmo_before = CaptureAtmosphereCanonicalState();
   const auto scene_atmo_before = CaptureSceneAtmosphereCanonicalState();
   if (apply_atmosphere) {
-    DLOG_F(INFO,
-      "EnvironmentSettingsService: atmosphere hash before apply cache=0x{:X} "
-      "scene=0x{:X}",
+    DLOG_F(2, "atmosphere hash before apply: cache=0x{:X}, scene=0x{:X}",
       HashAtmosphereState(cache_atmo_before),
       scene_atmo_before.has_value() ? HashAtmosphereState(*scene_atmo_before)
                                     : 0ULL);
@@ -1702,9 +1689,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
 
     if (config_.on_atmosphere_params_changed) {
       config_.on_atmosphere_params_changed();
-      LOG_F(INFO,
-        "EnvironmentSettingsService: atmosphere parameters changed "
-        "(SunDiskEnabled={})",
+      LOG_F(1, "atmosphere parameters changed (SunDiskEnabled={})",
         sun_disk_enabled_);
     }
   }
@@ -1764,16 +1749,13 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   if (apply_atmosphere) {
     const auto cache_atmo_after = CaptureAtmosphereCanonicalState();
     const auto scene_atmo_after = CaptureSceneAtmosphereCanonicalState();
-    DLOG_F(INFO,
-      "EnvironmentSettingsService: atmosphere hash after apply cache=0x{:X} "
-      "scene=0x{:X}",
+    DLOG_F(2, "atmosphere hash after apply: cache=0x{:X}, scene=0x{:X}",
       HashAtmosphereState(cache_atmo_after),
       scene_atmo_after.has_value() ? HashAtmosphereState(*scene_atmo_after)
                                    : 0ULL);
     if (scene_atmo_before.has_value() && scene_atmo_after.has_value()) {
       LogAtmosphereStateDiff(
-        "EnvironmentSettingsService: scene atmosphere diff", *scene_atmo_before,
-        *scene_atmo_after);
+        "scene atmosphere diff", *scene_atmo_before, *scene_atmo_after);
     }
   }
 
@@ -1910,8 +1892,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
   if (HashAtmosphereState(cache_atmo_before)
     != HashAtmosphereState(cache_atmo_after)) {
     LogAtmosphereStateDiff(
-      "EnvironmentSettingsService: scene sync overwrote UI cache",
-      cache_atmo_before, cache_atmo_after);
+      "scene sync overwrote UI cache", cache_atmo_before, cache_atmo_after);
   }
 
   ValidateAndClampState();
@@ -2063,70 +2044,71 @@ auto EnvironmentSettingsService::LogAtmosphereStateDiff(std::string_view prefix,
   -> void
 {
   if (before.enabled != after.enabled) {
-    DLOG_F(INFO, "{} atmosphere.enabled: {} -> {}", prefix, before.enabled,
+    DLOG_F(1, "{} atmosphere.enabled: {} -> {}", prefix, before.enabled,
       after.enabled);
   }
   if (before.planet_radius_km != after.planet_radius_km) {
-    DLOG_F(INFO, "{} atmosphere.planet_radius_km: {} -> {}", prefix,
+    DLOG_F(1, "{} atmosphere.planet_radius_km: {} -> {}", prefix,
       before.planet_radius_km, after.planet_radius_km);
   }
   if (before.atmosphere_height_km != after.atmosphere_height_km) {
-    DLOG_F(INFO, "{} atmosphere.atmosphere_height_km: {} -> {}", prefix,
+    DLOG_F(1, "{} atmosphere.atmosphere_height_km: {} -> {}", prefix,
       before.atmosphere_height_km, after.atmosphere_height_km);
   }
   if (before.mie_absorption_scale != after.mie_absorption_scale) {
-    DLOG_F(INFO, "{} atmosphere.mie_absorption_scale: {} -> {}", prefix,
+    DLOG_F(1, "{} atmosphere.mie_absorption_scale: {} -> {}", prefix,
       before.mie_absorption_scale, after.mie_absorption_scale);
   }
   if (before.multi_scattering != after.multi_scattering) {
-    DLOG_F(INFO, "{} atmosphere.multi_scattering: {} -> {}", prefix,
+    DLOG_F(1, "{} atmosphere.multi_scattering: {} -> {}", prefix,
       before.multi_scattering, after.multi_scattering);
   }
   if (before.sun_disk_enabled != after.sun_disk_enabled) {
-    DLOG_F(INFO, "{} atmosphere.sun_disk_enabled: {} -> {}", prefix,
+    DLOG_F(1, "{} atmosphere.sun_disk_enabled: {} -> {}", prefix,
       before.sun_disk_enabled, after.sun_disk_enabled);
   }
 }
 
 auto EnvironmentSettingsService::ValidateAndClampState() -> void
 {
-  auto clamp_float
-    = [](std::string_view key, float& value, float min_v, float max_v) {
-        const float before = value;
-        value = std::clamp(value, min_v, max_v);
-        if (before != value) {
-          DLOG_F(WARNING, "EnvironmentSettingsService: clamped {}: {} -> {}",
-            key, before, value);
-        }
-      };
+  auto clamp_float = [](std::string_view key, float& value, float min_v,
+                       float max_v) {
+    const float before = value;
+    value = std::clamp(value, min_v, max_v);
+    if (before != value) {
+      DLOG_F(2, "clamped (key={}, before={}, after={})", key, before, value);
+    }
+  };
   auto clamp_int = [](std::string_view key, int& value, int min_v, int max_v) {
     const int before = value;
     value = std::clamp(value, min_v, max_v);
     if (before != value) {
-      DLOG_F(WARNING, "EnvironmentSettingsService: clamped {}: {} -> {}", key,
-        before, value);
+      DLOG_F(
+        WARNING, "clamped (key={}, before={}, after={})", key, before, value);
     }
   };
-  auto clamp_vec3 = [](std::string_view key, glm::vec3& value, float min_v,
-                      float max_v) {
-    const glm::vec3 before = value;
-    value = ClampVec3(value, min_v, max_v);
-    if (before != value) {
-      DLOG_F(WARNING,
-        "EnvironmentSettingsService: clamped {}: ({}, {}, {}) -> ({}, {}, {})",
-        key, before.x, before.y, before.z, value.x, value.y, value.z);
-    }
-  };
-  auto clamp_vec3_min = [](
-                          std::string_view key, glm::vec3& value, float min_v) {
-    const glm::vec3 before = value;
-    value = glm::max(value, glm::vec3(min_v));
-    if (before != value) {
-      DLOG_F(WARNING,
-        "EnvironmentSettingsService: clamped {}: ({}, {}, {}) -> ({}, {}, {})",
-        key, before.x, before.y, before.z, value.x, value.y, value.z);
-    }
-  };
+  auto clamp_vec3
+    = [](std::string_view key, glm::vec3& value, float min_v, float max_v) {
+        const glm::vec3 before = value;
+        value = ClampVec3(value, min_v, max_v);
+        if (before != value) {
+          DLOG_F(WARNING,
+            "clamped (key={}, before=({:.2f}, {:.2f}, {:.2f}), after=({:.2f}, "
+            "{:.2f}, {:.2f}))",
+            key, before.x, before.y, before.z, value.x, value.y, value.z);
+        }
+      };
+  auto clamp_vec3_min
+    = [](std::string_view key, glm::vec3& value, float min_v) {
+        const glm::vec3 before = value;
+        value = glm::max(value, glm::vec3(min_v));
+        if (before != value) {
+          DLOG_F(WARNING,
+            "clamped (key={}, before=({:.2f}, {:.2f}, {:.2f}), after=({:.2f}, "
+            "{:.2f}, {:.2f}))",
+            key, before.x, before.y, before.z, value.x, value.y, value.z);
+        }
+      };
 
   clamp_float("env.atmo.planet_radius_km", planet_radius_km_, 1.0F, 100000.0F);
   clamp_float(
@@ -2561,9 +2543,8 @@ auto EnvironmentSettingsService::MarkDirty(uint32_t dirty_domains) -> void
   if (update_depth_ > 0) {
     batched_dirty_domains_ |= effective_domains;
     settings_persist_dirty_ = true;
-    DLOG_F(INFO,
-      "EnvironmentSettingsService: batched dirty domains=0x{:X} "
-      "pending_batch=0x{:X} depth={}",
+    DLOG_F(2,
+      "batched dirty domains (domains=0x{:X}, pending=0x{:X}, depth={})",
       dirty_domains, batched_dirty_domains_, update_depth_);
     return;
   }
@@ -2571,9 +2552,9 @@ auto EnvironmentSettingsService::MarkDirty(uint32_t dirty_domains) -> void
   dirty_domains_ |= effective_domains;
   settings_persist_dirty_ = true;
   settings_revision_++;
-  DLOG_F(INFO,
-    "EnvironmentSettingsService: marked dirty domains=0x{:X} effective=0x{:X} "
-    "pending_mask=0x{:X} rev={}",
+  DLOG_F(1,
+    "marked dirty (domains=0x{:X}, effective=0x{:X}, current_mask=0x{:X}, "
+    "revision={})",
     dirty_domains, effective_domains, dirty_domains_, settings_revision_);
   if (update_depth_ == 0) {
     epoch_++;
