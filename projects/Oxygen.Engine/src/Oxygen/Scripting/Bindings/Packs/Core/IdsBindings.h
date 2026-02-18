@@ -6,10 +6,11 @@
 
 #pragma once
 
-#include <Oxygen/Scripting/Bindings/Contracts/IScriptBindingPack.h>
+struct lua_State;
 
 namespace oxygen::scripting::bindings {
 
-auto CreateCoreBindingPack() -> contracts::ScriptBindingPackPtr;
+auto RegisterUuidBindings(lua_State* state, int oxygen_table_index) -> void;
+auto RegisterHashBindings(lua_State* state, int oxygen_table_index) -> void;
 
 } // namespace oxygen::scripting::bindings
