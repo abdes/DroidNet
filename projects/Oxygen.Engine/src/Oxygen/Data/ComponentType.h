@@ -19,16 +19,10 @@ namespace oxygen::data {
   and avoids collisions between component types without a central registry.
 */
 enum class ComponentType : uint32_t {
-  kUnknown = 0,
-
-  kRenderable = 0x4853454D, //!< 'MESH' - Renderable component
-  kPerspectiveCamera = 0x4D414350, //!< 'PCAM' - Perspective camera
-  kOrthographicCamera = 0x4D41434F, //!< 'OCAM' - Orthographic camera
-
-  kDirectionalLight = 0x54494C44, //!< 'DLIT' - Directional light
-  kPointLight = 0x54494C50, //!< 'PLIT' - Point light
-  kSpotLight = 0x54494C53, //!< 'SLIT' - Spot light
-  kScripting = 0x50524353 //!< 'SCRP' - Scripting component
+// NOLINTNEXTLINE(*-macro-*)
+#define OXDAT_COMPONENT_TYPE(name, value) name = value,
+#include <Oxygen/Core/Meta/Data/ComponentType.inc>
+#undef OXDAT_COMPONENT_TYPE
 };
 
 static_assert(sizeof(ComponentType) == sizeof(uint32_t),

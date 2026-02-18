@@ -15,17 +15,10 @@ namespace oxygen::data {
 
 //! Asset types
 enum class AssetType : uint8_t {
-  // clang-format off
-  kUnknown      = 0,
-
-  kMaterial     = 1,
-  kGeometry     = 2,
-  kScene        = 3,
-  kScript       = 4,
-
-  //!< Maximum value sentinel
-  kMaxAssetType = kScript
-  // clang-format on
+// NOLINTNEXTLINE(*-macro-*)
+#define OXDAT_ASSET_TYPE(name, value) name = value,
+#include <Oxygen/Core/Meta/Data/AssetType.inc>
+#undef OXDAT_ASSET_TYPE
 };
 
 static_assert(sizeof(std::underlying_type_t<AssetType>) <= sizeof(uint8_t),
