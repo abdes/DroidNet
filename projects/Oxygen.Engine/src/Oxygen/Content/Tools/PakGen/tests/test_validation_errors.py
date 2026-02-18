@@ -30,7 +30,7 @@ def _codes(errors):
 
 def test_validation_duplicate_buffer_name():  # noqa: N802
     spec = {
-        "version": 1,
+        "version": 6,
         "buffers": [{"name": "bufA"}, {"name": "bufA"}],
         "textures": [],
         "audios": [],
@@ -42,7 +42,7 @@ def test_validation_duplicate_buffer_name():  # noqa: N802
 
 def test_validation_missing_texture_reference():  # noqa: N802
     spec = {
-        "version": 1,
+        "version": 6,
         "textures": [],
         "buffers": [],
         "audios": [],
@@ -60,7 +60,7 @@ def test_validation_missing_texture_reference():  # noqa: N802
 
 def test_validation_missing_geometry_buffer():  # noqa: N802
     spec = {
-        "version": 1,
+        "version": 6,
         "buffers": [],
         "textures": [],
         "audios": [],

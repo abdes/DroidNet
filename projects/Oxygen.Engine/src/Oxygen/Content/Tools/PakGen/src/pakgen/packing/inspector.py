@@ -21,6 +21,7 @@ import zlib
 from .constants import (
     MAGIC,
     FOOTER_MAGIC,
+    PAK_FORMAT_VERSION_CURRENT,
     HEADER_SIZE,
     MATERIAL_DESC_SIZE,
     GEOMETRY_DESC_SIZE,
@@ -155,9 +156,10 @@ def inspect_pak(path: str | Path) -> Dict[str, Any]:
     p = Path(path)
     data = p.read_bytes()
     header = parse_header(data)
-    if header.get("version") not in (4, 5):
+    if header.get("version") != PAK_FORMAT_VERSION_CURRENT:
         raise ValueError(
-            f"PakGen inspector supports PAK v4/v5 only; found version {header.get('version')}"
+            "PakGen inspector supports PAK v"
+            f"{PAK_FORMAT_VERSION_CURRENT} only; found version {header.get('version')}"
         )
     footer = parse_footer(data)
     real_crc_offset = len(data) - 12

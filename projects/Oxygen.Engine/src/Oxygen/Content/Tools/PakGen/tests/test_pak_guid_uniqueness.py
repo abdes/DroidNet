@@ -21,7 +21,7 @@ def test_deterministic_pak_guid_unique_and_nonzero(
     # Minimal valid specs (same version/content_version, different buffer name).
     spec_a.write_text(
         "{"
-        '"version":1,'
+        '"version":6,'
         '"content_version":1,'
         '"buffers":[{"name":"buf_a","usage":0,"stride":0,"format":0,"data_hex":""}],'
         '"textures":[],"audios":[],"assets":[]'
@@ -30,7 +30,7 @@ def test_deterministic_pak_guid_unique_and_nonzero(
     )
     spec_b.write_text(
         "{"
-        '"version":1,'
+        '"version":6,'
         '"content_version":1,'
         '"buffers":[{"name":"buf_b","usage":0,"stride":0,"format":0,"data_hex":""}],'
         '"textures":[],"audios":[],"assets":[]'

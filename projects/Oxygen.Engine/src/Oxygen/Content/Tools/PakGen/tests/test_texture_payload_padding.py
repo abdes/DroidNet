@@ -6,7 +6,7 @@ from pakgen.packing.planner import build_plan
 
 def test_rgba8_1x1_payload_padded_to_256(tmp_path: Path):
     spec = {
-        "version": 1,
+        "version": 6,
         "content_version": 0,
         "buffers": [],
         "textures": [
@@ -59,7 +59,7 @@ def test_rgba8_1x1_payload_padded_to_256(tmp_path: Path):
 
 def test_rgba8_2x2_payload_padded_to_512(tmp_path: Path):
     spec = {
-        "version": 1,
+        "version": 6,
         "content_version": 0,
         "buffers": [],
         "textures": [

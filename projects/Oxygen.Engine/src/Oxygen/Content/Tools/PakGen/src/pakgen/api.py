@@ -27,6 +27,7 @@ from .packing.writer import write_pak as _write_pak
 from .spec.validator import run_validation_pipeline, run_binary_validation
 from .manifest import build_manifest
 from .packing.inspector import compute_crc32
+from .packing.constants import YAML_SCHEMA_VERSION_CURRENT
 import hashlib, json
 
 __all__ = [
@@ -76,7 +77,7 @@ def build_pak(options: BuildOptions) -> BuildResult:  # implemented stub
     assets_list = list(spec_model.assets)
     spec_dict = {
         # YAML spec schema version (not PAK container version).
-        "version": 4,
+        "version": YAML_SCHEMA_VERSION_CURRENT,
         "content_version": getattr(spec_model, "content_version", 0),
         "buffers": spec_model.buffers,
         "textures": spec_model.textures,
@@ -221,7 +222,7 @@ def plan_dry_run(
     spec_dict = {
         "name": Path(spec_path).stem,
         # YAML spec schema version (not PAK container version).
-        "version": 4,
+        "version": YAML_SCHEMA_VERSION_CURRENT,
         "content_version": getattr(spec_model, "content_version", 0),
         "buffers": spec_model.buffers,
         "textures": spec_model.textures,

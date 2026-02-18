@@ -37,6 +37,9 @@ __all__ = [
     "pack_audio_resource_descriptor",
     "pack_script_resource_descriptor",
     "pack_script_asset_descriptor",
+    "pack_input_action_asset_descriptor",
+    "pack_input_mapping_context_asset_descriptor_and_payload",
+    "pack_input_context_binding_record",
     "pack_script_slot_record",
     "pack_geometry_asset_descriptor",
     "pack_scene_asset_descriptor_and_payload",
@@ -53,6 +56,7 @@ _COMPONENT_TYPE_DIRECTIONAL_LIGHT = 0x54494C44  # 'DLIT'
 _COMPONENT_TYPE_POINT_LIGHT = 0x54494C50  # 'PLIT'
 _COMPONENT_TYPE_SPOT_LIGHT = 0x54494C53  # 'SLIT'
 _COMPONENT_TYPE_SCRIPTING = 0x50524353  # 'SCRP'
+_COMPONENT_TYPE_INPUT_CONTEXT_BINDING = 0x54504E49  # 'INPT'
 
 _ENV_SYSTEM_SKY_ATMOSPHERE = 0
 _ENV_SYSTEM_VOLUMETRIC_CLOUDS = 1
@@ -837,6 +841,7 @@ def pack_scene_asset_descriptor_and_payload(
     header_builder,
     geometry_name_to_key: Dict[str, bytes],
     script_name_to_key: Dict[str, bytes] | None = None,
+    input_mapping_context_name_to_key: Dict[str, bytes] | None = None,
     scripting_slot_base_index: int = 0,
 ) -> Tuple[bytes, bytes, List[Dict[str, Any]]]:
     """Pack SceneAssetDesc (256 bytes) plus trailing payload.
@@ -854,6 +859,7 @@ def pack_scene_asset_descriptor_and_payload(
     - DirectionalLightRecord table (component_type 'DLIT')
     - PointLightRecord table (component_type 'PLIT')
     - SpotLightRecord table (component_type 'SLIT')
+    - InputContextBindingRecord table (component_type 'INPT')
 
     The payload always includes a trailing SceneEnvironment block (empty allowed).
     """
@@ -997,6 +1003,7 @@ def pack_scene_asset_descriptor_and_payload(
         )
 
     script_name_to_key = script_name_to_key or {}
+    input_mapping_context_name_to_key = input_mapping_context_name_to_key or {}
     scripting = scene.get("scripting", []) or []
     if not isinstance(scripting, list):
         raise PakError("E_TYPE", "scene.scripting must be a list")
@@ -1061,6 +1068,33 @@ def pack_scene_asset_descriptor_and_payload(
                 int(len(scripting_records) // 16),
                 16,
                 bytes(scripting_records),
+            )
+        )
+
+    input_context_bindings = scene.get("input_context_bindings", []) or []
+    if not isinstance(input_context_bindings, list):
+        raise PakError("E_TYPE", "scene.input_context_bindings must be a list")
+    input_context_bindings = [
+        b for b in input_context_bindings if isinstance(b, dict)
+    ]
+    input_context_bindings.sort(
+        key=lambda b: (int(b.get("node_index", 0) or 0), int(b.get("priority", 0) or 0))
+    )
+    input_context_binding_records = b"".join(
+        pack_input_context_binding_record(
+            b,
+            input_mapping_context_name_to_key=input_mapping_context_name_to_key,
+            node_count=node_count,
+        )
+        for b in input_context_bindings
+    )
+    if input_context_binding_records:
+        component_tables.append(
+            (
+                _COMPONENT_TYPE_INPUT_CONTEXT_BINDING,
+                len(input_context_bindings),
+                32,
+                input_context_binding_records,
             )
         )
 
@@ -1686,6 +1720,344 @@ def pack_script_asset_descriptor(
     if len(desc) != 256:
         raise PakError("E_SIZE", f"Script asset descriptor size mismatch: {len(desc)}")
     return desc
+
+
+def pack_input_action_asset_descriptor(
+    asset: Dict[str, Any], *, header_builder
+) -> bytes:
+    asset = asset if isinstance(asset, dict) else {}
+    asset.setdefault("type", "input_action")
+    header = header_builder(asset)
+    if len(header) != ASSET_HEADER_SIZE:
+        raise PakError("E_SIZE", f"Asset header size mismatch: {len(header)}")
+
+    value_type_raw = asset.get("value_type", 0)
+    if isinstance(value_type_raw, str):
+        value_type_key = value_type_raw.strip().lower()
+        value_type = {
+            "bool": 0,
+            "axis1d": 1,
+            "axis_1d": 1,
+            "axis2d": 2,
+            "axis_2d": 2,
+        }.get(value_type_key)
+        if value_type is None:
+            raise PakError("E_RANGE", f"Unsupported input action value_type: {value_type_raw}")
+    else:
+        value_type = int(value_type_raw)
+    if value_type < 0 or value_type > 2:
+        raise PakError("E_RANGE", f"input_action value_type out of range: {value_type}")
+
+    flags = int(asset.get("flags", 0) or 0)
+    if bool(asset.get("consumes_input", False)):
+        flags |= 0x1
+
+    desc = (
+        header
+        + struct.pack("<B", int(value_type))
+        + b"\x00" * 3
+        + struct.pack("<I", flags & 0xFFFFFFFF)
+        + b"\x00" * 153
+    )
+    if len(desc) != 256:
+        raise PakError("E_SIZE", f"InputActionAssetDesc size mismatch: {len(desc)}")
+    return desc
+
+
+def _resolve_asset_key(
+    value: Any,
+    *,
+    name_to_key: Dict[str, bytes] | None = None,
+    field_name: str = "asset_key",
+) -> bytes:
+    if isinstance(value, str) and name_to_key and value in name_to_key:
+        return name_to_key[value]
+    try:
+        return _pack_asset_key_bytes(value, field_name)
+    except PakError:
+        return b"\x00" * ASSET_KEY_SIZE
+
+
+def _parse_trigger_type(value: Any) -> int:
+    if isinstance(value, str):
+        key = value.strip().lower()
+        mapping = {
+            "pressed": 0,
+            "released": 1,
+            "down": 2,
+            "hold": 3,
+            "holdandrelease": 4,
+            "hold_and_release": 4,
+            "pulse": 5,
+            "tap": 6,
+            "chord": 7,
+            "actionchain": 8,
+            "action_chain": 8,
+            "combo": 9,
+        }
+        if key not in mapping:
+            raise PakError("E_RANGE", f"Unsupported trigger type: {value}")
+        return mapping[key]
+    value_i = int(value)
+    if value_i < 0 or value_i > 9:
+        raise PakError("E_RANGE", f"Trigger type out of range: {value_i}")
+    return value_i
+
+
+def _parse_trigger_behavior(value: Any) -> int:
+    if isinstance(value, str):
+        key = value.strip().lower()
+        mapping = {
+            "explicit": 0,
+            "implicit": 1,
+            "blocker": 2,
+        }
+        if key not in mapping:
+            raise PakError("E_RANGE", f"Unsupported trigger behavior: {value}")
+        return mapping[key]
+    value_i = int(value)
+    if value_i < 0 or value_i > 2:
+        raise PakError("E_RANGE", f"Trigger behavior out of range: {value_i}")
+    return value_i
+
+
+def pack_input_mapping_context_asset_descriptor_and_payload(
+    asset: Dict[str, Any], *, header_builder, action_name_to_key: Dict[str, bytes]
+) -> tuple[bytes, bytes]:
+    asset = asset if isinstance(asset, dict) else {}
+    asset.setdefault("type", "input_mapping_context")
+    header = header_builder(asset)
+    if len(header) != ASSET_HEADER_SIZE:
+        raise PakError("E_SIZE", f"Asset header size mismatch: {len(header)}")
+
+    strings = bytearray(b"\x00")
+    string_offsets: Dict[str, int] = {"": 0}
+
+    def intern_slot_name(name: str) -> int:
+        if name in string_offsets:
+            return string_offsets[name]
+        off = len(strings)
+        strings.extend(name.encode("utf-8"))
+        strings.append(0)
+        string_offsets[name] = off
+        return off
+
+    mappings_spec = asset.get("mappings", []) or []
+    if not isinstance(mappings_spec, list):
+        raise PakError("E_TYPE", "input_mapping_context.mappings must be a list")
+
+    mapping_records: list[bytes] = []
+    trigger_records: list[bytes] = []
+    aux_records: list[bytes] = []
+
+    for mapping in mappings_spec:
+        if not isinstance(mapping, dict):
+            continue
+        action_value = mapping.get("action_asset_key")
+        if action_value is None:
+            action_value = mapping.get("action_asset")
+        if action_value is None:
+            action_value = mapping.get("action")
+        action_key = _resolve_asset_key(
+            action_value, name_to_key=action_name_to_key, field_name="action_asset_key"
+        )
+
+        slot_name = mapping.get("slot_name", mapping.get("slot", ""))
+        if not isinstance(slot_name, str):
+            raise PakError("E_TYPE", "input mapping slot name must be a string")
+        slot_name_offset = intern_slot_name(slot_name)
+
+        map_flags = int(mapping.get("flags", 0) or 0) & 0xFFFFFFFF
+        scale = mapping.get("scale", [1.0, 1.0])
+        bias = mapping.get("bias", [0.0, 0.0])
+        if not isinstance(scale, list) or len(scale) != 2:
+            raise PakError("E_TYPE", "input mapping scale must be a [x, y] list")
+        if not isinstance(bias, list) or len(bias) != 2:
+            raise PakError("E_TYPE", "input mapping bias must be a [x, y] list")
+
+        triggers_spec = mapping.get("triggers", []) or []
+        if not isinstance(triggers_spec, list):
+            raise PakError("E_TYPE", "input mapping triggers must be a list")
+        trigger_start_index = len(trigger_records)
+        trigger_count = 0
+
+        for trigger in triggers_spec:
+            if not isinstance(trigger, dict):
+                continue
+            trigger_type = _parse_trigger_type(trigger.get("type", 0))
+            trigger_behavior = _parse_trigger_behavior(trigger.get("behavior", 1))
+            trigger_flags = int(trigger.get("flags", 0) or 0) & 0xFFFFFFFF
+            threshold = float(trigger.get("actuation_threshold", 0.5))
+
+            linked_action_value = trigger.get("linked_action_asset_key")
+            if linked_action_value is None:
+                linked_action_value = trigger.get("linked_action_asset")
+            if linked_action_value is None:
+                linked_action_value = trigger.get("linked_action")
+            linked_action_key = _resolve_asset_key(
+                linked_action_value,
+                name_to_key=action_name_to_key,
+                field_name="linked_action_asset_key",
+            )
+
+            fparams = trigger.get("fparams", []) or []
+            uparams = trigger.get("uparams", []) or []
+            if not isinstance(fparams, list) or not isinstance(uparams, list):
+                raise PakError("E_TYPE", "trigger fparams/uparams must be lists")
+            if len(fparams) > 5 or len(uparams) > 5:
+                raise PakError("E_RANGE", "trigger fparams/uparams max length is 5")
+            fparams5 = [0.0] * 5
+            uparams5 = [0] * 5
+            for i, val in enumerate(fparams):
+                fparams5[i] = float(val)
+            for i, val in enumerate(uparams):
+                uparams5[i] = int(val) & 0xFFFFFFFF
+
+            aux_spec = trigger.get("aux", trigger.get("aux_actions", [])) or []
+            if not isinstance(aux_spec, list):
+                raise PakError("E_TYPE", "trigger aux must be a list")
+            aux_start_index = len(aux_records)
+            aux_count = 0
+            for aux in aux_spec:
+                if isinstance(aux, dict):
+                    aux_action_value = aux.get("action_asset_key")
+                    if aux_action_value is None:
+                        aux_action_value = aux.get("action_asset")
+                    if aux_action_value is None:
+                        aux_action_value = aux.get("action")
+                    completion_states = int(aux.get("completion_states", 0) or 0)
+                    time_ns = int(aux.get("time_to_complete_ns", 0) or 0)
+                    aux_flags = int(aux.get("flags", 0) or 0)
+                else:
+                    aux_action_value = aux
+                    completion_states = 0
+                    time_ns = 0
+                    aux_flags = 0
+
+                aux_action_key = _resolve_asset_key(
+                    aux_action_value,
+                    name_to_key=action_name_to_key,
+                    field_name="aux.action_asset_key",
+                )
+                aux_records.append(
+                    aux_action_key
+                    + struct.pack("<I", completion_states & 0xFFFFFFFF)
+                    + struct.pack("<Q", time_ns & 0xFFFFFFFFFFFFFFFF)
+                    + struct.pack("<I", aux_flags & 0xFFFFFFFF)
+                )
+                aux_count += 1
+
+            trigger_records.append(
+                struct.pack("<B", trigger_type)
+                + struct.pack("<B", trigger_behavior)
+                + struct.pack("<H", 0)
+                + struct.pack("<I", trigger_flags)
+                + struct.pack("<f", threshold)
+                + linked_action_key
+                + struct.pack("<I", aux_start_index)
+                + struct.pack("<I", aux_count)
+                + struct.pack("<5f", *fparams5)
+                + struct.pack("<5I", *uparams5)
+                + b"\x00" * 20
+            )
+            trigger_count += 1
+
+        mapping_records.append(
+            action_key
+            + struct.pack("<I", slot_name_offset)
+            + struct.pack("<I", trigger_start_index)
+            + struct.pack("<I", trigger_count)
+            + struct.pack("<I", map_flags)
+            + struct.pack("<2f", float(scale[0]), float(scale[1]))
+            + struct.pack("<2f", float(bias[0]), float(bias[1]))
+            + b"\x00" * 16
+        )
+
+    mappings_blob = b"".join(mapping_records)
+    triggers_blob = b"".join(trigger_records)
+    aux_blob = b"".join(aux_records)
+    strings_blob = bytes(strings)
+
+    for rec in mapping_records:
+        if len(rec) != 64:
+            raise PakError("E_SIZE", f"InputActionMappingRecord size mismatch: {len(rec)}")
+    for rec in trigger_records:
+        if len(rec) != 96:
+            raise PakError("E_SIZE", f"InputTriggerRecord size mismatch: {len(rec)}")
+    for rec in aux_records:
+        if len(rec) != 32:
+            raise PakError("E_SIZE", f"InputTriggerAuxRecord size mismatch: {len(rec)}")
+
+    mappings_offset = 256
+    triggers_offset = mappings_offset + len(mappings_blob)
+    aux_offset = triggers_offset + len(triggers_blob)
+    strings_offset = aux_offset + len(aux_blob)
+    payload = mappings_blob + triggers_blob + aux_blob + strings_blob
+
+    context_flags = int(asset.get("flags", 0) or 0) & 0xFFFFFFFF
+    desc = (
+        header
+        + struct.pack("<I", context_flags)
+        + struct.pack("<QII", mappings_offset, len(mapping_records), 64)
+        + struct.pack("<QII", triggers_offset, len(trigger_records), 96)
+        + struct.pack("<QII", aux_offset, len(aux_records), 32)
+        + struct.pack("<QII", strings_offset, len(strings_blob), 1)
+        + b"\x00" * 93
+    )
+    if len(desc) != 256:
+        raise PakError(
+            "E_SIZE",
+            f"InputMappingContextAssetDesc size mismatch: {len(desc)}",
+        )
+    return desc, payload
+
+
+def pack_input_context_binding_record(
+    binding: Dict[str, Any],
+    *,
+    input_mapping_context_name_to_key: Dict[str, bytes],
+    node_count: int,
+) -> bytes:
+    node_index = binding.get("node_index", 0)
+    if (
+        not isinstance(node_index, int)
+        or node_index < 0
+        or node_index >= node_count
+    ):
+        raise PakError(
+            "E_REF", f"InputContextBinding node_index out of range: {node_index}"
+        )
+
+    context_value = binding.get("context_asset_key")
+    if context_value is None:
+        context_value = binding.get("context_asset")
+    if context_value is None:
+        context_value = binding.get("context")
+    context_key = _resolve_asset_key(
+        context_value,
+        name_to_key=input_mapping_context_name_to_key,
+        field_name="context_asset_key",
+    )
+    if context_key == b"\x00" * ASSET_KEY_SIZE:
+        raise PakError("E_REF", "InputContextBinding missing context reference")
+
+    priority = int(binding.get("priority", 0) or 0)
+    flags = int(binding.get("flags", 0) or 0)
+    if bool(binding.get("activate_on_load", False)):
+        flags |= 0x1
+
+    out = (
+        struct.pack("<I", int(node_index))
+        + context_key
+        + struct.pack("<i", int(priority))
+        + struct.pack("<I", flags & 0xFFFFFFFF)
+        + struct.pack("<I", 0)
+    )
+    if len(out) != 32:
+        raise PakError(
+            "E_SIZE", f"InputContextBindingRecord size mismatch: {len(out)}"
+        )
+    return out
 
 
 def pack_name_string(name: str, size: int) -> bytes:

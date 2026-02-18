@@ -11,7 +11,7 @@ def _write_spec(path: Path, spec: dict):
 def test_diff_material_base_color_change(tmp_path: Path):
     # Arrange: build pak with one material
     spec = {
-        "version": 1,
+        "version": 6,
         "content_version": 1,
         "buffers": [],
         "textures": [],
@@ -50,7 +50,7 @@ def test_diff_material_base_color_change(tmp_path: Path):
 def test_diff_geometry_removed_submesh(tmp_path: Path):
     # Arrange: geometry with one LOD two submeshes
     spec = {
-        "version": 1,
+        "version": 6,
         "content_version": 1,
         "buffers": [],
         "textures": [],
@@ -140,7 +140,7 @@ def test_diff_geometry_removed_submesh(tmp_path: Path):
 def test_diff_geometry_lod_count(tmp_path: Path):
     # Arrange: geometry with one LOD
     spec = {
-        "version": 1,
+        "version": 6,
         "content_version": 1,
         "buffers": [],
         "textures": [],

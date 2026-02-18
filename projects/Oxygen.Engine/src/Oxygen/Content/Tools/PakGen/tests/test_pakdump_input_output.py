@@ -21,13 +21,13 @@ def _find_pakdump_exe() -> Path | None:
     return None
 
 
-def test_pakdump_scripting_output_matches_expected(tmp_path: Path):  # noqa: N802
+def test_pakdump_input_output_matches_expected(tmp_path: Path):  # noqa: N802
     pakdump_exe = _find_pakdump_exe()
     if pakdump_exe is None:
         pytest.skip("PakDump executable is not available")
 
-    spec = Path(__file__).parent / "_golden" / "scripting_scene_spec.yaml"
-    out_pak = tmp_path / "scripting_scene.pak"
+    spec = Path(__file__).parent / "_golden" / "input_scene_spec.yaml"
+    out_pak = tmp_path / "input_scene.pak"
     build_pak(
         BuildOptions(
             input_spec=spec,
@@ -40,9 +40,7 @@ def test_pakdump_scripting_output_matches_expected(tmp_path: Path):  # noqa: N80
         [
             str(pakdump_exe),
             str(out_pak),
-            "--show-data",
-            "--max-data",
-            "64",
+            "--verbose",
         ],
         capture_output=True,
         text=True,
@@ -51,7 +49,7 @@ def test_pakdump_scripting_output_matches_expected(tmp_path: Path):  # noqa: N80
     assert proc.returncode == 0, "\n".join(
         [
             f"PakDump exited with code {proc.returncode}.",
-            "PakDump is likely stale/incompatible with current v6 scripting layout.",
+            "PakDump is likely stale/incompatible with current v6 input layout.",
             "Rebuild Oxygen.Content.PakDump and rerun tests.",
             f"stdout:\n{proc.stdout}",
             f"stderr:\n{proc.stderr}",
@@ -59,13 +57,13 @@ def test_pakdump_scripting_output_matches_expected(tmp_path: Path):  # noqa: N80
     )
     out = proc.stdout
 
-    assert "Script Resource Count" in out
-    assert "Script resource entries:" in out
-    assert "Total Table Entries (inc. sentinel)" in out
-    assert "Bytecode Resource Index" in out
-    assert "Source Resource Index" in out
-    assert "External Source Path" in out
-    assert "scripts/game/ai.luau" in out
-    assert "<none>" in out
-    assert "Content Hash" in out
-    assert "Script Data Preview" in out
+    assert "Input Action Descriptor Fields" in out
+    assert "Input Mapping Context Descriptor Fields" in out
+    assert "Mappings Count" in out
+    assert "Triggers Count" in out
+    assert "Trigger Aux Count" in out
+    assert "Input Context Bindings" in out
+    assert "GameplayInputContext" in out
+    assert "Keyboard.PgUp" in out
+    assert "Keyboard.PgDn" in out
+    assert "Keyboard.End" in out

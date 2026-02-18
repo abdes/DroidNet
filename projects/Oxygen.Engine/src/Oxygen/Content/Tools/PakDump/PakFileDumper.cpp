@@ -519,10 +519,11 @@ auto PakFileDumper::DumpAsync(const PakFile& pak, AssetLoader& asset_loader)
   -> oxygen::co::Co<>
 {
   try {
-    if (pak.FormatVersion() != 4 && pak.FormatVersion() != 5) {
+    constexpr auto kSupportedPakVersion = PakHeader {}.version;
+    if (pak.FormatVersion() != kSupportedPakVersion) {
       throw std::runtime_error(
-        fmt::format("PakDump supports PAK v4/v5 only; found version {}",
-          pak.FormatVersion()));
+        fmt::format("PakDump supports PAK v{} only; found version {}",
+          kSupportedPakVersion, pak.FormatVersion()));
     }
     using namespace PrintUtils;
     Separator("PAK FILE ANALYSIS: " + ctx_.pak_path.filename().string());

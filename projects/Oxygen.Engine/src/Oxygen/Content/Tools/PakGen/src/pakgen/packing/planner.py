@@ -203,11 +203,15 @@ class AssetCollectionResult:
     material_assets: List[Dict[str, Any]]
     geometry_assets: List[Tuple[Dict[str, Any], bytes, int, int]]
     script_assets: List[Tuple[Dict[str, Any], bytes, int, int]]
+    input_action_assets: List[Tuple[Dict[str, Any], bytes, int, int]]
+    input_mapping_context_assets: List[Tuple[Dict[str, Any], bytes, int, int]]
     scene_assets: List[Tuple[Dict[str, Any], bytes, int, int]]
     total_assets: int = 0
     total_materials: int = 0
     total_geometries: int = 0
     total_scripts: int = 0
+    total_input_actions: int = 0
+    total_input_mapping_contexts: int = 0
     total_scenes: int = 0
 
 
@@ -387,6 +391,16 @@ def to_plan_dict(plan: PakPlan) -> Dict[str, Any]:  # lightweight serializer
             },
         },
     }
+    input_action_count = sum(
+        1 for a in plan.assets if a.asset_type == "input_action"
+    )
+    input_mapping_context_count = sum(
+        1 for a in plan.assets if a.asset_type == "input_mapping_context"
+    )
+    if input_action_count > 0:
+        out["statistics"]["asset_counts"]["input_actions"] = input_action_count  # type: ignore[index]
+    if input_mapping_context_count > 0:
+        out["statistics"]["asset_counts"]["input_mapping_contexts"] = input_mapping_context_count  # type: ignore[index]
     scenes = sum(1 for a in plan.assets if a.asset_type == "scene")
     if scenes:
         out["statistics"]["asset_counts"]["scenes"] = scenes  # type: ignore[index]
@@ -629,6 +643,8 @@ def collect_assets(
     materials: List[Dict[str, Any]] = []
     geometries: List[Tuple[Dict[str, Any], bytes, int, int]] = []
     scripts: List[Tuple[Dict[str, Any], bytes, int, int]] = []
+    input_actions: List[Tuple[Dict[str, Any], bytes, int, int]] = []
+    input_mapping_contexts: List[Tuple[Dict[str, Any], bytes, int, int]] = []
     scenes: List[Tuple[Dict[str, Any], bytes, int, int]] = []
     if not isinstance(assets_list, list):
         rep.error("Spec 'assets' must be a list")
@@ -643,6 +659,12 @@ def collect_assets(
     material_entries = [a for a in assets_list if a.get("type") == "material"]
     geometry_entries = [a for a in assets_list if a.get("type") == "geometry"]
     script_entries = [a for a in assets_list if a.get("type") == "script"]
+    input_action_entries = [
+        a for a in assets_list if a.get("type") == "input_action"
+    ]
+    input_mapping_context_entries = [
+        a for a in assets_list if a.get("type") == "input_mapping_context"
+    ]
     scene_entries = [a for a in assets_list if a.get("type") == "scene"]
     if material_entries:
         rep.start_task(
@@ -654,6 +676,18 @@ def collect_assets(
         )
     if script_entries:
         rep.start_task("assets.script", "Script assets", total=len(script_entries))
+    if input_action_entries:
+        rep.start_task(
+            "assets.input_action",
+            "Input action assets",
+            total=len(input_action_entries),
+        )
+    if input_mapping_context_entries:
+        rep.start_task(
+            "assets.input_mapping_context",
+            "Input mapping context assets",
+            total=len(input_mapping_context_entries),
+        )
     if scene_entries:
         rep.start_task("assets.scene", "Scene assets", total=len(scene_entries))
     for entry in assets_list:
@@ -661,6 +695,8 @@ def collect_assets(
             "material",
             "geometry",
             "script",
+            "input_action",
+            "input_mapping_context",
             "scene",
         ):
             # Skip unsupported types silently for now (future: error)
@@ -710,6 +746,24 @@ def collect_assets(
                 delay = simulate_material_delay
             if delay and delay > 0:
                 time.sleep(delay)
+        elif entry.get("type") == "input_action":
+            input_actions.append((entry, key_bytes, 0, entry.get("alignment", 1)))
+            rep.advance("assets.input_action", current_item=entry["name"])
+            delay = simulate_delay
+            if delay is None:
+                delay = simulate_material_delay
+            if delay and delay > 0:
+                time.sleep(delay)
+        elif entry.get("type") == "input_mapping_context":
+            input_mapping_contexts.append(
+                (entry, key_bytes, 0, entry.get("alignment", 1))
+            )
+            rep.advance("assets.input_mapping_context", current_item=entry["name"])
+            delay = simulate_delay
+            if delay is None:
+                delay = simulate_material_delay
+            if delay and delay > 0:
+                time.sleep(delay)
         elif entry.get("type") == "scene":
             scenes.append((entry, key_bytes, 0, entry.get("alignment", 1)))
             rep.advance("assets.scene", current_item=entry["name"])
@@ -724,6 +778,10 @@ def collect_assets(
         rep.end_task("assets.geometry")
     if script_entries:
         rep.end_task("assets.script")
+    if input_action_entries:
+        rep.end_task("assets.input_action")
+    if input_mapping_context_entries:
+        rep.end_task("assets.input_mapping_context")
     if scene_entries:
         rep.end_task("assets.scene")
     # Assets summary
@@ -731,12 +789,17 @@ def collect_assets(
         len(material_entries)
         + len(geometry_entries)
         + len(script_entries)
+        + len(input_action_entries)
+        + len(input_mapping_context_entries)
         + len(scene_entries)
     )
     if total_assets:
         rep.status(
             "Assets summary: materials="
-            + f"{len(material_entries)} geometries={len(geometry_entries)} scripts={len(script_entries)} scenes={len(scene_entries)} total={total_assets}"
+            + f"{len(material_entries)} geometries={len(geometry_entries)} "
+            + f"scripts={len(script_entries)} input_actions={len(input_action_entries)} "
+            + f"input_mapping_contexts={len(input_mapping_context_entries)} "
+            + f"scenes={len(scene_entries)} total={total_assets}"
         )
     max_assets_total = (
         MAX_RESOURCES_PER_TYPE * 2
@@ -749,11 +812,15 @@ def collect_assets(
         materials,
         geometries,
         scripts,
+        input_actions,
+        input_mapping_contexts,
         scenes,
         total_assets=total_assets,
         total_materials=len(material_entries),
         total_geometries=len(geometry_entries),
         total_scripts=len(script_entries),
+        total_input_actions=len(input_action_entries),
+        total_input_mapping_contexts=len(input_mapping_context_entries),
         total_scenes=len(scene_entries),
     )
 
@@ -806,11 +873,15 @@ def compute_pak_plan(
     from .constants import (
         HEADER_SIZE,
         FOOTER_SIZE,
+        PAK_FORMAT_VERSION_CURRENT,
         DATA_ALIGNMENT,
         TABLE_ALIGNMENT,
         RESOURCE_ENTRY_SIZES,
         MATERIAL_DESC_SIZE,
         GEOMETRY_DESC_SIZE,
+        SCRIPT_DESC_SIZE,
+        INPUT_ACTION_DESC_SIZE,
+        INPUT_MAPPING_CONTEXT_DESC_SIZE,
         SCENE_DESC_SIZE,
         DIRECTORY_ENTRY_SIZE,
         MESH_DESC_SIZE,
@@ -908,6 +979,33 @@ def compute_pak_plan(
             key_bytes = bytes(key)
             if not _is_zero_guid(key_bytes):
                 seen_keys.setdefault(key_bytes, []).append(f"script:{name}")
+    for action_spec, key, _atype, _align in build_plan.assets.input_action_assets:
+        name = (
+            action_spec.get("name")
+            if isinstance(action_spec.get("name"), str)
+            else ""
+        )
+        if isinstance(key, (bytes, bytearray)):
+            key_bytes = bytes(key)
+            if not _is_zero_guid(key_bytes):
+                seen_keys.setdefault(key_bytes, []).append(f"input_action:{name}")
+    for (
+        ctx_spec,
+        key,
+        _atype,
+        _align,
+    ) in build_plan.assets.input_mapping_context_assets:
+        name = (
+            ctx_spec.get("name")
+            if isinstance(ctx_spec.get("name"), str)
+            else ""
+        )
+        if isinstance(key, (bytes, bytearray)):
+            key_bytes = bytes(key)
+            if not _is_zero_guid(key_bytes):
+                seen_keys.setdefault(key_bytes, []).append(
+                    f"input_mapping_context:{name}"
+                )
     for scene_spec, key, _atype, _align in build_plan.assets.scene_assets:
         name = (
             scene_spec.get("name")
@@ -1051,6 +1149,8 @@ def compute_pak_plan(
     materials = build_plan.assets.material_assets
     geometries = build_plan.assets.geometry_assets
     scripts = build_plan.assets.script_assets
+    input_actions = build_plan.assets.input_action_assets
+    input_mapping_contexts = build_plan.assets.input_mapping_context_assets
     scenes = build_plan.assets.scene_assets
     if materials or geometries or scripts or scenes:
         cursor_aligned, pad_before_assets = align(
@@ -1086,12 +1186,29 @@ def compute_pak_plan(
             return name if isinstance(name, str) else ""
 
         scripts = sorted(scripts, key=_script_name)
+
+        def _input_action_name(entry):
+            spec = entry[0] if entry and isinstance(entry[0], dict) else {}
+            name = spec.get("name")
+            return name if isinstance(name, str) else ""
+
+        def _input_mapping_context_name(entry):
+            spec = entry[0] if entry and isinstance(entry[0], dict) else {}
+            name = spec.get("name")
+            return name if isinstance(name, str) else ""
+
+        input_actions = sorted(input_actions, key=_input_action_name)
+        input_mapping_contexts = sorted(
+            input_mapping_contexts, key=_input_mapping_context_name
+        )
         scenes = sorted(scenes, key=_scene_name)
 
         # Keep build_plan asset lists in the same order the plan assumes.
         build_plan.assets.material_assets = materials
         build_plan.assets.geometry_assets = geometries
         build_plan.assets.script_assets = scripts
+        build_plan.assets.input_action_assets = input_actions
+        build_plan.assets.input_mapping_context_assets = input_mapping_contexts
         build_plan.assets.scene_assets = scenes
 
     # Material descriptors
@@ -1190,13 +1307,84 @@ def compute_pak_plan(
                 asset_type="script",
                 key_hex=key_hex,
                 descriptor_offset=cursor,
-                descriptor_size=256,
+                descriptor_size=SCRIPT_DESC_SIZE,
                 alignment=alignment or 1,
                 variable_extra_size=0,
                 name=sname,
             )
         )
-        cursor += 256
+        cursor += SCRIPT_DESC_SIZE
+
+    for action_spec, asset_key, _asset_type, alignment in input_actions:
+        cursor_aligned, _pad_action = align(
+            cursor, alignment or 1, "asset_input_action"
+        )
+        cursor = cursor_aligned
+        key_hex = (
+            asset_key.hex() if isinstance(asset_key, (bytes, bytearray)) else ""
+        )
+        aname = ""
+        if isinstance(action_spec, dict):
+            nm = action_spec.get("name")
+            if isinstance(nm, str):
+                aname = nm
+        assets.append(
+            AssetPlan(
+                asset_type="input_action",
+                key_hex=key_hex,
+                descriptor_offset=cursor,
+                descriptor_size=INPUT_ACTION_DESC_SIZE,
+                alignment=alignment or 1,
+                variable_extra_size=0,
+                name=aname,
+            )
+        )
+        cursor += INPUT_ACTION_DESC_SIZE
+
+    from .packers import pack_input_mapping_context_asset_descriptor_and_payload
+
+    action_name_to_key: Dict[str, bytes] = {}
+    for action_spec, action_key, _asset_type, _alignment in input_actions:
+        if not isinstance(action_spec, dict):
+            continue
+        name = action_spec.get("name")
+        if isinstance(name, str) and isinstance(action_key, (bytes, bytearray)):
+            action_name_to_key[name] = bytes(action_key)
+
+    for ctx_spec, asset_key, _asset_type, alignment in input_mapping_contexts:
+        cursor_aligned, _pad_ctx = align(
+            cursor, alignment or 1, "asset_input_mapping_context"
+        )
+        cursor = cursor_aligned
+        key_hex = (
+            asset_key.hex() if isinstance(asset_key, (bytes, bytearray)) else ""
+        )
+        if not isinstance(ctx_spec, dict):
+            ctx_spec = {}
+        ctx_for_pack = dict(ctx_spec)
+        ctx_for_pack.setdefault("type", "input_mapping_context")
+        _, payload = pack_input_mapping_context_asset_descriptor_and_payload(
+            ctx_for_pack,
+            header_builder=lambda _a: b"\x00" * 95,
+            action_name_to_key=action_name_to_key,
+        )
+
+        cname = ""
+        nm = ctx_spec.get("name")
+        if isinstance(nm, str):
+            cname = nm
+        assets.append(
+            AssetPlan(
+                asset_type="input_mapping_context",
+                key_hex=key_hex,
+                descriptor_offset=cursor,
+                descriptor_size=INPUT_MAPPING_CONTEXT_DESC_SIZE,
+                alignment=alignment or 1,
+                variable_extra_size=len(payload),
+                name=cname,
+            )
+        )
+        cursor += INPUT_MAPPING_CONTEXT_DESC_SIZE + len(payload)
 
     # Scene descriptors + payload
     from .packers import pack_scene_asset_descriptor_and_payload
@@ -1217,6 +1405,14 @@ def compute_pak_plan(
         if isinstance(name, str) and isinstance(asset_key, (bytes, bytearray)):
             script_name_to_key[name] = bytes(asset_key)
 
+    input_mapping_context_name_to_key: Dict[str, bytes] = {}
+    for ctx_spec, ctx_key, _asset_type, _alignment in input_mapping_contexts:
+        if not isinstance(ctx_spec, dict):
+            continue
+        name = ctx_spec.get("name")
+        if isinstance(name, str) and isinstance(ctx_key, (bytes, bytearray)):
+            input_mapping_context_name_to_key[name] = bytes(ctx_key)
+
     for scene_spec, asset_key, _asset_type, alignment in scenes:
         cursor_aligned, _pad_scene = align(
             cursor, alignment or 1, "asset_scene"
@@ -1235,6 +1431,7 @@ def compute_pak_plan(
             header_builder=lambda _a: b"\x00" * 95,
             geometry_name_to_key=geometry_name_to_key,
             script_name_to_key=script_name_to_key,
+            input_mapping_context_name_to_key=input_mapping_context_name_to_key,
             scripting_slot_base_index=0,
         )
 
@@ -1331,7 +1528,7 @@ def compute_pak_plan(
         footer=footer_plan,
         padding=padding_stats,
         file_size=cursor,
-        version=5,
+        version=PAK_FORMAT_VERSION_CURRENT,
         content_version=int(build_plan.spec.get("content_version", 0)),
         guid=pak_guid,
         deterministic=deterministic,

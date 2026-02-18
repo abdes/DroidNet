@@ -24,7 +24,7 @@ def _build(tmp: Path, spec_name: str, spec: dict) -> Path:
 
 
 EMPTY_SPEC = {
-    "version": 1,
+    "version": 6,
     "content_version": 0,
     "buffers": [],
     "textures": [],
@@ -33,7 +33,7 @@ EMPTY_SPEC = {
 }
 
 SIMPLE_SPEC = {
-    "version": 1,
+    "version": 6,
     "content_version": 2,
     "buffers": [
         {"name": "vb0", "stride": 4, "data": "BBBB"},

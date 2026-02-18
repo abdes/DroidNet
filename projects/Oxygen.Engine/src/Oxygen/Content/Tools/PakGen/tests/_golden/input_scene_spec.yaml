@@ -1,0 +1,58 @@
+# Golden spec used to generate tests/_golden/input_scene_ref.pak
+version: 6
+
+assets:
+  - type: input_action
+    name: AccelerateAction
+    asset_key: "55555555555555555555555555555555"
+    value_type: axis1d
+    consumes_input: true
+
+  - type: input_action
+    name: DecelerateAction
+    asset_key: "66666666666666666666666666666666"
+    value_type: axis1d
+    consumes_input: true
+
+  - type: input_action
+    name: StopAction
+    asset_key: "99999999999999999999999999999999"
+    value_type: bool
+    consumes_input: true
+
+  - type: input_mapping_context
+    name: GameplayInputContext
+    asset_key: "77777777777777777777777777777777"
+    mappings:
+      - action_asset: AccelerateAction
+        slot_name: "Keyboard.PgUp"
+        scale: [1.0, 0.0]
+        bias: [0.0, 0.0]
+        triggers:
+          - type: pressed
+            behavior: implicit
+      - action_asset: DecelerateAction
+        slot_name: "Keyboard.PgDn"
+        scale: [1.0, 0.0]
+        bias: [0.0, 0.0]
+        triggers:
+          - type: pressed
+            behavior: implicit
+      - action_asset: StopAction
+        slot_name: "Keyboard.End"
+        scale: [1.0, 0.0]
+        bias: [0.0, 0.0]
+        triggers:
+          - type: pressed
+            behavior: explicit
+
+  - type: scene
+    name: InputScene
+    asset_key: "88888888888888888888888888888888"
+    nodes:
+      - name: Root
+    input_context_bindings:
+      - node_index: 0
+        context_asset: GameplayInputContext
+        priority: 100
+        activate_on_load: true

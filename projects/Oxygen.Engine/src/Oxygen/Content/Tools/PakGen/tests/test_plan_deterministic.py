@@ -14,7 +14,7 @@ from pakgen.api import plan_dry_run
 
 def _spec_unsorted() -> dict:
     return {
-        "version": 1,
+        "version": 6,
         "content_version": 1,
         "textures": [
             {

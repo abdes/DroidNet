@@ -5,7 +5,7 @@ from pakgen.api import build_pak, BuildOptions
 
 def test_resource_index_map_in_manifest(tmp_path: Path):
     spec = {
-        "version": 1,
+        "version": 6,
         "content_version": 1,
         # Intentional non-alpha order and duplicate-like prefixes
         "buffers": [

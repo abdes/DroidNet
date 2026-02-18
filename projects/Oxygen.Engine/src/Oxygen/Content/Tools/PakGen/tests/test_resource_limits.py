@@ -10,7 +10,7 @@ from pakgen.spec.validator import run_validation_pipeline
 
 def _make_spec(n_buf: int, n_tex: int, n_aud: int):
     return {
-        "version": 1,
+        "version": 6,
         "buffers": [{"name": f"b{i}"} for i in range(n_buf)],
         "textures": [{"name": f"t{i}"} for i in range(n_tex)],
         "audios": [{"name": f"a{i}"} for i in range(n_aud)],

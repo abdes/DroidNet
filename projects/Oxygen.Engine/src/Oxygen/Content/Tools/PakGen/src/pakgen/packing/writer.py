@@ -38,6 +38,8 @@ from .packers import (
     pack_audio_resource_descriptor,
     pack_script_resource_descriptor,
     pack_script_asset_descriptor,
+    pack_input_action_asset_descriptor,
+    pack_input_mapping_context_asset_descriptor_and_payload,
     pack_script_slot_record,
     pack_directory_entry,
     pack_material_asset_descriptor,
@@ -199,10 +201,13 @@ def _prepare_scene_script_slots(
     header_builder,
     geometry_name_to_key: dict[str, bytes],
     script_name_to_key: dict[str, bytes],
+    input_mapping_context_name_to_key: dict[str, bytes],
 ):
     material_count = len(build.assets.material_assets)
     geometry_count = len(build.assets.geometry_assets)
     script_count = len(build.assets.script_assets)
+    input_action_count = len(build.assets.input_action_assets)
+    input_mapping_context_count = len(build.assets.input_mapping_context_assets)
     scenes = build.assets.scene_assets
     cache: dict[int, tuple[bytes, bytes, list[dict[str, int | bytes]]]] = {}
     all_slots: list[bytes] = []
@@ -210,7 +215,14 @@ def _prepare_scene_script_slots(
     for idx, asset_plan in enumerate(pak_plan.assets):
         if asset_plan.asset_type != "scene":
             continue
-        s_idx = idx - material_count - geometry_count - script_count
+        s_idx = (
+            idx
+            - material_count
+            - geometry_count
+            - script_count
+            - input_action_count
+            - input_mapping_context_count
+        )
         scene_spec, _scene_key, _atype, _align = scenes[s_idx]
         if not isinstance(scene_spec, dict):
             scene_spec = {}
@@ -221,6 +233,7 @@ def _prepare_scene_script_slots(
             header_builder=header_builder,
             geometry_name_to_key=geometry_name_to_key,
             script_name_to_key=script_name_to_key,
+            input_mapping_context_name_to_key=input_mapping_context_name_to_key,
             scripting_slot_base_index=global_slot_base,
         )
         cache[idx] = (base_desc, payload, slot_infos)
@@ -348,10 +361,14 @@ def _write_assets_and_directory_from_plan(
     materials = build.assets.material_assets
     geometries = build.assets.geometry_assets
     scripts = build.assets.script_assets
+    input_actions = build.assets.input_action_assets
+    input_mapping_contexts = build.assets.input_mapping_context_assets
     scenes = build.assets.scene_assets
     material_count = len(materials)
     geometry_count = len(geometries)
     script_count = len(scripts)
+    input_action_count = len(input_actions)
+    input_mapping_context_count = len(input_mapping_contexts)
 
     geometry_name_to_key: dict[str, bytes] = {}
     for geom_spec, asset_key, _atype, _align in geometries:
@@ -361,6 +378,13 @@ def _write_assets_and_directory_from_plan(
                 asset_key, (bytes, bytearray)
             ):
                 geometry_name_to_key[nm] = bytes(asset_key)
+
+    input_action_name_to_key: dict[str, bytes] = {}
+    for input_action_spec, asset_key, _atype, _align in input_actions:
+        if isinstance(input_action_spec, dict):
+            nm = input_action_spec.get("name")
+            if isinstance(nm, str) and isinstance(asset_key, (bytes, bytearray)):
+                input_action_name_to_key[nm] = bytes(asset_key)
 
     # Emit descriptors following plan order
     rep = get_reporter()
@@ -444,6 +468,50 @@ def _write_assets_and_directory_from_plan(
                 raise RuntimeError(
                     f"Script size mismatch plan_total={expected_total} actual={len(base_desc)}"
                 )
+        elif asset_plan.asset_type == "input_action":
+            ia_idx = idx - material_count - geometry_count - script_count
+            input_action_spec, _input_action_key, _atype, _align = input_actions[
+                ia_idx
+            ]
+            if not isinstance(input_action_spec, dict):
+                input_action_spec = {}
+            input_action_spec = dict(input_action_spec)
+            input_action_spec.setdefault("type", "input_action")
+            base_desc = pack_input_action_asset_descriptor(
+                input_action_spec,
+                header_builder=header_builder,
+            )
+            f.write(base_desc)
+            expected_total = asset_plan.descriptor_size
+            if len(base_desc) != expected_total:
+                raise RuntimeError(
+                    f"InputAction size mismatch plan_total={expected_total} actual={len(base_desc)}"
+                )
+        elif asset_plan.asset_type == "input_mapping_context":
+            imc_idx = (
+                idx - material_count - geometry_count - script_count - input_action_count
+            )
+            imc_spec, _imc_key, _atype, _align = input_mapping_contexts[imc_idx]
+            if not isinstance(imc_spec, dict):
+                imc_spec = {}
+            imc_spec = dict(imc_spec)
+            imc_spec.setdefault("type", "input_mapping_context")
+            base_desc, payload = pack_input_mapping_context_asset_descriptor_and_payload(
+                imc_spec,
+                header_builder=header_builder,
+                action_name_to_key=input_action_name_to_key,
+            )
+            f.write(base_desc)
+            if payload:
+                f.write(payload)
+            expected_total = (
+                asset_plan.descriptor_size + asset_plan.variable_extra_size
+            )
+            written = len(base_desc) + len(payload)
+            if written != expected_total:
+                raise RuntimeError(
+                    f"InputMappingContext size mismatch plan_total={expected_total} actual={written}"
+                )
         elif asset_plan.asset_type == "scene":
             cached = scene_cache.get(idx)
             if cached is None:
@@ -491,8 +559,23 @@ def _write_assets_and_directory_from_plan(
         elif asset_plan.asset_type == "script":
             s_idx = idx - material_count - geometry_count
             _script_spec, key, _atype, _align = scripts[s_idx]
+        elif asset_plan.asset_type == "input_action":
+            ia_idx = idx - material_count - geometry_count - script_count
+            _input_action_spec, key, _atype, _align = input_actions[ia_idx]
+        elif asset_plan.asset_type == "input_mapping_context":
+            imc_idx = (
+                idx - material_count - geometry_count - script_count - input_action_count
+            )
+            _imc_spec, key, _atype, _align = input_mapping_contexts[imc_idx]
         elif asset_plan.asset_type == "scene":
-            s_idx = idx - material_count - geometry_count - script_count
+            s_idx = (
+                idx
+                - material_count
+                - geometry_count
+                - script_count
+                - input_action_count
+                - input_mapping_context_count
+            )
             _scene_spec, key, _atype, _align = scenes[s_idx]
         else:  # pragma: no cover
             raise RuntimeError(f"Unknown asset type {asset_plan.asset_type}")
@@ -598,12 +681,28 @@ def write_pak(
                 if isinstance(name, str) and isinstance(asset_key, (bytes, bytearray)):
                     script_name_to_key[name] = bytes(asset_key)
 
+            input_mapping_context_name_to_key: dict[str, bytes] = {}
+            for (
+                input_mapping_context_spec,
+                asset_key,
+                _atype,
+                _align,
+            ) in build_plan.assets.input_mapping_context_assets:
+                if not isinstance(input_mapping_context_spec, dict):
+                    continue
+                name = input_mapping_context_spec.get("name")
+                if isinstance(name, str) and isinstance(
+                    asset_key, (bytes, bytearray)
+                ):
+                    input_mapping_context_name_to_key[name] = bytes(asset_key)
+
             scene_cache, slot_records = _prepare_scene_script_slots(
                 build_plan,
                 pak_plan,
                 header_builder=header_builder,
                 geometry_name_to_key=geometry_name_to_key,
                 script_name_to_key=script_name_to_key,
+                input_mapping_context_name_to_key=input_mapping_context_name_to_key,
             )
             table_info["script_slot"] = _write_script_slot_table_from_plan(
                 f, pak_plan, slot_records

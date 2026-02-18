@@ -7,7 +7,7 @@ from pakgen.api import build_pak, BuildOptions
 def write_bad_spec(tmp_path: Path) -> Path:
     # stride=8 but provide 12 bytes (not multiple of 8)
     spec = {
-        "version": 1,
+        "version": 6,
         "buffers": [
             {
                 "name": "bad",
@@ -27,7 +27,7 @@ def write_bad_spec(tmp_path: Path) -> Path:
 def write_good_spec(tmp_path: Path) -> Path:
     # stride=8 with 16 bytes OK
     spec = {
-        "version": 1,
+        "version": 6,
         "buffers": [
             {
                 "name": "good",

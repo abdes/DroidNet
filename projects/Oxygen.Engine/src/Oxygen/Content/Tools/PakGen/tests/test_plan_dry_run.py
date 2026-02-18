@@ -16,7 +16,7 @@ from pakgen.packing.constants import FOOTER_SIZE, DIRECTORY_ENTRY_SIZE
 
 def _basic_spec_dict() -> dict:
     return {
-        "version": 1,
+        "version": 6,
         "content_version": 1,
         "textures": [
             {
@@ -98,7 +98,7 @@ def test_plan_offsets_match_written(tmp_path: Path):  # noqa: N802
 
 def test_plan_empty_spec(tmp_path: Path):  # noqa: N802
     empty = {
-        "version": 1,
+        "version": 6,
         "content_version": 0,
         "textures": [],
         "buffers": [],
