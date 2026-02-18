@@ -13,7 +13,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Core/EngineModule.h>
-#include <Oxygen/Scripting/ScriptSourceBlob.h>
+#include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/Scripting/api_export.h>
 
 struct lua_State;

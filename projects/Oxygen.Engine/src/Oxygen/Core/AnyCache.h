@@ -21,6 +21,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Typed.h>
 
 namespace oxygen {
@@ -641,8 +642,8 @@ public:
 
     ~EvictionNotificationScope() { cache_.on_eviction_ = std::move(prev_); }
 
-    OXYGEN_MAKE_NON_COPYABLE(EvictionNotificationScope);
-    OXYGEN_DEFAULT_MOVABLE(EvictionNotificationScope);
+    OXYGEN_MAKE_NON_COPYABLE(EvictionNotificationScope)
+    OXYGEN_DEFAULT_MOVABLE(EvictionNotificationScope)
 
   private:
     AnyCache& cache_;

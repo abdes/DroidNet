@@ -10,13 +10,17 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
-#include <Oxygen/Scripting/ScriptSourceBlob.h>
+#include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
+#include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 
 namespace oxygen::scripting {
+
+using ResolvedScriptBlob = std::variant<ScriptSourceBlob, ScriptBytecodeBlob>;
 
 class IScriptSourceResolver {
 public:

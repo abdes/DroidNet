@@ -380,17 +380,22 @@ E2 remaining work summary:
 
 #### E3. L1 executable cache (in-process)
 
-1. Add Scripting L1 cache for compiled/runtime executable artifacts keyed by compile key.
+Status: DONE.
+
+1. Add Scripting L1 cache for compiled bytecode blobs keyed by compile key.
 2. Integrate with existing in-flight dedupe.
-3. Reuse immutable executable/program artifacts across slots/scenes when key matches.
+3. Reuse immutable bytecode artifacts across slots/scenes when key matches.
+4. Keep per-slot executable handles as runtime wrappers; do not cache slot-scoped executable instances in L1.
 
 Checkpoint E3:
 
 1. L1 hit avoids recompilation in-process.
 2. Concurrent same-key requests compile once.
-3. Reuse path is deterministic across multiple slots.
+3. Reuse path is deterministic across multiple slots via shared bytecode.
 
 #### E4. L2 persistent cache (`scripts.bin`)
+
+Status: DONE.
 
 1. Implement single-file, versioned cache format.
 2. Layout: header + index + payload blocks (bytecode only; no runtime execution state).
@@ -400,10 +405,15 @@ Checkpoint E3:
 Checkpoint E4:
 
 1. Roundtrip persistence test passes across restart.
+   Status: DONE.
 2. Version mismatch invalidation works.
+   Status: DONE.
 3. Corruption recovery falls back cleanly to compile path.
+   Status: DONE.
 
 #### E5. End-to-end cache pipeline wiring
+
+Status: DONE.
 
 1. Wire lookup order:
 2. AssetLoader payload -> Scripting L1 -> Scripting L2 -> async compile -> L2 store -> L1 publish.
@@ -414,11 +424,17 @@ Checkpoint E4:
 Checkpoint E5:
 
 1. Embedded bytecode path bypasses source compilation.
+   Status: DONE.
 2. Warm L2 path avoids compilation.
+   Status: DONE.
 3. Cold path compiles once and warms both caches.
+   Status: DONE.
 4. Scene loading remains non-blocking.
+   Status: DONE.
 
 #### E6. Observability and guardrails
+
+Status: DONE.
 
 1. Add logs for hit/miss/compile/store/publish transitions.
 2. Add counters for L1 hit, L2 hit, compile count, failure count.
@@ -427,7 +443,9 @@ Checkpoint E5:
 Checkpoint E6:
 
 1. Diagnostics/counters validated in focused tests.
+   Status: DONE.
 2. Manual end-to-end run confirms expected state transitions and logs.
+   Status: DONE.
 
 ### Phase F: Content/AssetLoader integration
 
@@ -454,6 +472,8 @@ Checkpoint F:
    Status: DONE.
 
 ### Phase G: diagnostics and telemetry
+
+Status: DONE (completed as part of E6).
 
 1. Integrate scripting diagnostics channel output for compile failures.
 2. Add compile counters and latency metrics.

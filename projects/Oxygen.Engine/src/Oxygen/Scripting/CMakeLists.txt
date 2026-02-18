@@ -57,7 +57,6 @@ set(
   "Resolver/EmbeddedSourceResolver.h"
   "Resolver/ExternalFileResolver.h"
   "Resolver/ScriptSourceResolver.h"
-  "ScriptSourceBlob.h"
 )
 set(
   OXYGEN_SCRIPTING_PRIVATE_SOURCES

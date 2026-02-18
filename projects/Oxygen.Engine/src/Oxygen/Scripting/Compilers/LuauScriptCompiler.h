@@ -6,9 +6,6 @@
 
 #pragma once
 
-#include <cstdint>
-#include <span>
-
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Engine/Scripting/IScriptCompiler.h>
 #include <Oxygen/Scripting/api_export.h>
@@ -20,8 +17,8 @@ public:
   OXGN_SCRP_NDAPI auto Language() const noexcept
     -> data::pak::ScriptLanguage override;
 
-  OXGN_SCRP_NDAPI auto Compile(std::span<const uint8_t> source,
-    CompileMode mode) const -> ScriptCompileResult override;
+  OXGN_SCRP_NDAPI auto Compile(ScriptSourceBlob source, CompileMode mode) const
+    -> ScriptCompileResult override;
 };
 
 } // namespace oxygen::scripting
