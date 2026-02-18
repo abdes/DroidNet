@@ -108,6 +108,7 @@ auto ConsolePanel::Draw(oxygen::console::Console& console,
   if (ImGui::Button("Clear")) {
     state.ClearLogEntries();
     console.ClearExecutionRecords();
+    state.SetProcessedExecutionRecordCount(0);
   }
   ImGui::SameLine();
   ImGui::TextUnformatted("Filters:");
@@ -124,6 +125,18 @@ auto ConsolePanel::Draw(oxygen::console::Console& console,
       state.SetSeverityEnabled(severity, enabled);
     }
   }
+
+  const auto& execution_records = console.GetExecutionRecords();
+  auto processed_count = state.ProcessedExecutionRecordCount();
+  if (processed_count > execution_records.size()) {
+    processed_count = 0;
+    state.SetProcessedExecutionRecordCount(0);
+  }
+  for (size_t i = processed_count; i < execution_records.size(); ++i) {
+    const auto& record = execution_records[i];
+    state.AppendLogEntry(record.line, record.result);
+  }
+  state.SetProcessedExecutionRecordCount(execution_records.size());
 
   if (ImGui::BeginChild("ConsoleLog", ImVec2(0.0F, -kLogHeightReserve), true)) {
     for (const auto& entry : state.LogEntries()) {
@@ -306,7 +319,7 @@ auto ConsolePanel::RunCommand(oxygen::console::Console& console,
   }
 
   const auto result = console.Execute(line);
-  state.AppendLogEntry(line, result);
+  (void)result;
   state.SetConsoleInput({});
   state.ClearCompletion();
   state.ResetHistoryNavigation();
