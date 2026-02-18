@@ -118,10 +118,15 @@ scripts:
       -- - Preferred API surface: `oxygen.scene`, `oxygen.time`, `oxygen.transform`.
       local script = {}
       local angle_radians = 10.0
+      local speed_logged = false
 
       function script.tick(ctx, dt_seconds)
         local speed = oxygen.scene.get_param(ctx, "speed") or 1.0
-        local dt = oxygen.time.delta_seconds(ctx)
+        if not speed_logged then
+          oxygen.log.info(string.format("RotateCubeScript speed=%.3f", speed))
+          speed_logged = true
+        end
+        local dt = oxygen.time.delta_seconds()
 
         angle_radians = angle_radians + (dt * speed)
 

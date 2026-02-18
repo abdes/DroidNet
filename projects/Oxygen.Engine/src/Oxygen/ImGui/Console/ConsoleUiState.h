@@ -7,6 +7,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -97,6 +98,10 @@ public:
   OXGN_IMGUI_NDAPI auto LogEntries() const
     -> const std::vector<ConsoleLogEntry>&;
   OXGN_IMGUI_API auto ClearLogEntries() -> void;
+  OXGN_IMGUI_NDAPI auto ProcessedExecutionRecordCount() const noexcept
+    -> size_t;
+  OXGN_IMGUI_API auto SetProcessedExecutionRecordCount(size_t count) noexcept
+    -> void;
 
 private:
   OXGN_IMGUI_NDAPI static auto SeverityFromResult(
@@ -121,6 +126,7 @@ private:
   };
   uint64_t next_sequence_ { 1 };
   std::vector<ConsoleLogEntry> log_entries_;
+  size_t processed_execution_record_count_ { 0 };
 
   std::string completion_prefix_;
   std::string history_restore_line_;

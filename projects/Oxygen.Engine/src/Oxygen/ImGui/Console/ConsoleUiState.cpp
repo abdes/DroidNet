@@ -216,6 +216,17 @@ auto ConsoleUiState::LogEntries() const -> const std::vector<ConsoleLogEntry>&
 
 auto ConsoleUiState::ClearLogEntries() -> void { log_entries_.clear(); }
 
+auto ConsoleUiState::ProcessedExecutionRecordCount() const noexcept -> size_t
+{
+  return processed_execution_record_count_;
+}
+
+auto ConsoleUiState::SetProcessedExecutionRecordCount(
+  const size_t count) noexcept -> void
+{
+  processed_execution_record_count_ = count;
+}
+
 auto ConsoleUiState::SeverityFromResult(
   const oxygen::console::ExecutionResult& result) noexcept -> LogSeverity
 {

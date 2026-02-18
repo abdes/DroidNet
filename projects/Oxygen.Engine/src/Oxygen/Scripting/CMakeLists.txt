@@ -66,6 +66,7 @@ set(
   "Bindings/LuaBindingCommon.cpp"
   "Bindings/Packs/Core/AppBindings.cpp"
   "Bindings/Packs/Core/CoreBindingPack.cpp"
+  "Bindings/Packs/Core/LogBindings.cpp"
   "Bindings/Packs/Core/TimeBindings.cpp"
   "Bindings/Packs/Scene/SceneBindingPack.cpp"
   "Bindings/Packs/Scene/SceneBindings.cpp"
