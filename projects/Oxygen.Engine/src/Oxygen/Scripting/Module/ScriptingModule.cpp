@@ -44,20 +44,27 @@ namespace {
 
   class ScopedActiveFrameContext final {
   public:
-    explicit ScopedActiveFrameContext(
+    ScopedActiveFrameContext(lua_State* state,
       const observer_ptr<engine::FrameContext> frame_context) noexcept
-      : previous_(bindings::GetActiveFrameContext())
+      : state_(state)
+      , previous_(bindings::GetActiveFrameContext(state))
     {
-      bindings::SetActiveFrameContext(frame_context);
+      bindings::SetActiveFrameContext(state_, frame_context);
     }
 
-    ~ScopedActiveFrameContext() { bindings::SetActiveFrameContext(previous_); }
+    ~ScopedActiveFrameContext()
+    {
+      if (state_ != nullptr) {
+        bindings::SetActiveFrameContext(state_, previous_);
+      }
+    }
 
     ScopedActiveFrameContext(const ScopedActiveFrameContext&) = delete;
     auto operator=(const ScopedActiveFrameContext&)
       -> ScopedActiveFrameContext& = delete;
 
   private:
+    lua_State* state_ { nullptr };
     observer_ptr<engine::FrameContext> previous_ {};
   };
 
@@ -214,6 +221,7 @@ auto ScriptingModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept
   if (lua_state_ == nullptr) {
     return false;
   }
+  bindings::SetActiveEngine(lua_state_, engine_);
 
   if (binding_packs_.empty()) {
     if (!RegisterDefaultBindingPacks()) {
@@ -241,6 +249,9 @@ auto ScriptingModule::OnShutdown() noexcept -> void
   }
 
   if (lua_state_ != nullptr) {
+    bindings::SetActiveFrameContext(lua_state_, {});
+    bindings::SetActiveEngine(lua_state_, {});
+
     for (auto& [_, runtime] : slot_runtimes_) {
       DestroySlotRuntime(runtime);
     }
@@ -466,7 +477,7 @@ auto ScriptingModule::InvokePhaseHook(const std::string_view hook_name,
     && !TryGetHookFunction(lua_state_, hook_name)) {
     return OkResult();
   }
-  const ScopedActiveFrameContext active_context(context);
+  const ScopedActiveFrameContext active_context(lua_state_, context);
 
   int arg_count = 0;
   if (context != nullptr) {
@@ -595,7 +606,7 @@ auto ScriptingModule::ExecuteSlotTick(const SlotRuntimeKey& key,
   const observer_ptr<engine::FrameContext> context, const float dt_seconds)
   -> ScriptExecutionResult
 {
-  const ScopedActiveFrameContext active_context(context);
+  const ScopedActiveFrameContext active_context(lua_state_, context);
 
   if (runtime_state.failed_initialization) {
     return ErrorResult("slot_binding", runtime_state.initialization_error);

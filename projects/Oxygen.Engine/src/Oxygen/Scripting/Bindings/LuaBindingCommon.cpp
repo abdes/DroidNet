@@ -16,8 +16,50 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
+  constexpr int kLuaArg1 = 1;
+  constexpr int kLuaArg2 = 2;
+  constexpr int kLuaArg3 = 3;
+  constexpr int kLuaArg4 = 4;
+  constexpr int kLuaArg5 = 5;
+
   constexpr const char* kBindingContextFieldName = "__oxgn_binding_context";
-  thread_local observer_ptr<engine::FrameContext> g_active_frame_context {};
+  constexpr const char* kRuntimeContextFieldName = "__oxgn_runtime_context";
+
+  struct LuaRuntimeContext {
+    observer_ptr<engine::FrameContext> frame_context;
+    observer_ptr<AsyncEngine> engine;
+  };
+
+  auto FindRuntimeContext(lua_State* state) noexcept -> LuaRuntimeContext*
+  {
+    if (state == nullptr) {
+      return nullptr;
+    }
+
+    lua_getfield(state, LUA_REGISTRYINDEX, kRuntimeContextFieldName);
+    auto* runtime_context
+      = static_cast<LuaRuntimeContext*>(lua_touserdata(state, -1));
+    lua_pop(state, 1);
+    return runtime_context;
+  }
+
+  auto EnsureRuntimeContext(lua_State* state) -> LuaRuntimeContext*
+  {
+    if (state == nullptr) {
+      return nullptr;
+    }
+
+    if (auto* existing = FindRuntimeContext(state); existing != nullptr) {
+      return existing;
+    }
+
+    auto* runtime_context = static_cast<LuaRuntimeContext*>(
+      lua_newuserdata(state, sizeof(LuaRuntimeContext)));
+    runtime_context->frame_context = {};
+    runtime_context->engine = {};
+    lua_setfield(state, LUA_REGISTRYINDEX, kRuntimeContextFieldName);
+    return runtime_context;
+  }
 
   auto NormalizeStackIndex(lua_State* state, const int index) -> int
   {
@@ -35,26 +77,29 @@ namespace {
 
   auto LuaScriptContextSetLocalRotationEuler(lua_State* state) -> int
   {
-    if (!lua_isnumber(state, 2) || !lua_isnumber(state, 3)
-      || !lua_isnumber(state, 4)) {
+    if ((lua_isnumber(state, kLuaArg2) == 0)
+      || (lua_isnumber(state, kLuaArg3) == 0)
+      || (lua_isnumber(state, kLuaArg4) == 0)) {
       return 0;
     }
-    const float x = static_cast<float>(lua_tonumber(state, 2));
-    const float y = static_cast<float>(lua_tonumber(state, 3));
-    const float z = static_cast<float>(lua_tonumber(state, 4));
+    const auto x = static_cast<float>(lua_tonumber(state, kLuaArg2));
+    const auto y = static_cast<float>(lua_tonumber(state, kLuaArg3));
+    const auto z = static_cast<float>(lua_tonumber(state, kLuaArg4));
     return SetLocalRotationEuler(state, x, y, z);
   }
 
   auto LuaScriptContextSetLocalRotationQuat(lua_State* state) -> int
   {
-    if (!lua_isnumber(state, 2) || !lua_isnumber(state, 3)
-      || !lua_isnumber(state, 4) || !lua_isnumber(state, 5)) {
+    if ((lua_isnumber(state, kLuaArg2) == 0)
+      || (lua_isnumber(state, kLuaArg3) == 0)
+      || (lua_isnumber(state, kLuaArg4) == 0)
+      || (lua_isnumber(state, kLuaArg5) == 0)) {
       return 0;
     }
-    const float x = static_cast<float>(lua_tonumber(state, 2));
-    const float y = static_cast<float>(lua_tonumber(state, 3));
-    const float z = static_cast<float>(lua_tonumber(state, 4));
-    const float w = static_cast<float>(lua_tonumber(state, 5));
+    const auto x = static_cast<float>(lua_tonumber(state, kLuaArg2));
+    const auto y = static_cast<float>(lua_tonumber(state, kLuaArg3));
+    const auto z = static_cast<float>(lua_tonumber(state, kLuaArg4));
+    const auto w = static_cast<float>(lua_tonumber(state, kLuaArg5));
     return SetLocalRotationQuat(state, x, y, z, w);
   }
 
@@ -96,15 +141,41 @@ auto PushScriptContext(lua_State* state, LuaSlotExecutionContext* slot_context,
   lua_setfield(state, -2, "GetDeltaSeconds");
 }
 
-auto SetActiveFrameContext(
+auto SetActiveFrameContext(lua_State* state,
   const observer_ptr<engine::FrameContext> frame_context) noexcept -> void
 {
-  g_active_frame_context = frame_context;
+  if (auto* runtime_context = EnsureRuntimeContext(state);
+    runtime_context != nullptr) {
+    runtime_context->frame_context = frame_context;
+  }
 }
 
-auto GetActiveFrameContext() noexcept -> observer_ptr<engine::FrameContext>
+auto GetActiveFrameContext(lua_State* state) noexcept
+  -> observer_ptr<engine::FrameContext>
 {
-  return g_active_frame_context;
+  const auto* runtime_context = FindRuntimeContext(state);
+  if (runtime_context == nullptr) {
+    return {};
+  }
+  return runtime_context->frame_context;
+}
+
+auto SetActiveEngine(
+  lua_State* state, const observer_ptr<AsyncEngine> engine) noexcept -> void
+{
+  if (auto* runtime_context = EnsureRuntimeContext(state);
+    runtime_context != nullptr) {
+    runtime_context->engine = engine;
+  }
+}
+
+auto GetActiveEngine(lua_State* state) noexcept -> observer_ptr<AsyncEngine>
+{
+  const auto* runtime_context = FindRuntimeContext(state);
+  if (runtime_context == nullptr) {
+    return {};
+  }
+  return runtime_context->engine;
 }
 
 auto GetBindingContextFromScriptArg(
@@ -168,14 +239,14 @@ auto PushScriptParam(lua_State* state, const data::ScriptParam& param) -> int
 
 auto GetParamValue(lua_State* state) -> int
 {
-  const auto* const context = GetBindingContextFromScriptArg(state);
+  const auto* const context = GetBindingContextFromScriptArg(state, kLuaArg1);
   if (context == nullptr || context->slot_context == nullptr
     || context->slot_context->slot == nullptr) {
     lua_pushnil(state);
     return 1;
   }
 
-  const auto* const key = lua_tostring(state, 2);
+  const auto* const key = lua_tostring(state, kLuaArg2);
   if (key == nullptr) {
     lua_pushnil(state);
     return 1;

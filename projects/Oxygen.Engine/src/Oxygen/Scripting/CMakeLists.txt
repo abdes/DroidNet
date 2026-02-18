@@ -64,6 +64,7 @@ set(
   OXYGEN_SCRIPTING_PRIVATE_SOURCES
   "Bindings/BindingRegistry.cpp"
   "Bindings/LuaBindingCommon.cpp"
+  "Bindings/Packs/Core/AppBindings.cpp"
   "Bindings/Packs/Core/CoreBindingPack.cpp"
   "Bindings/Packs/Core/TimeBindings.cpp"
   "Bindings/Packs/Scene/SceneBindingPack.cpp"

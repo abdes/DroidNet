@@ -196,6 +196,23 @@ local _ = oxygen.time.delta_seconds()
     result.message.find("requires active FrameContext"), std::string::npos);
 }
 
+NOLINT_TEST_F(ScriptingModuleTest, ExecuteScriptAppBindingRequiresAsyncEngine)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+
+  const auto result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+local _ = oxygen.app.name()
+)lua" },
+    .chunk_name = ScriptChunkName { "app_no_engine" },
+  });
+  EXPECT_FALSE(result.ok);
+  EXPECT_EQ(result.stage, "runtime");
+  EXPECT_NE(
+    result.message.find("requires active AsyncEngine"), std::string::npos);
+}
+
 NOLINT_TEST_F(
   ScriptingModuleTest, OnFrameStartTimeBindingUsesFrameContextValues)
 {
