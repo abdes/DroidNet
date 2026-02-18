@@ -309,7 +309,21 @@ auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
 {
   AssertOwningThread();
   // Normalize the path to ensure consistent handling
-  std::filesystem::path normalized = std::filesystem::weakly_canonical(path);
+  std::error_code ec {};
+  auto normalized = std::filesystem::weakly_canonical(path, ec);
+  if (ec) {
+    normalized = path.lexically_normal();
+  }
+
+  if (const auto it = std::ranges::find(impl_->pak_paths, normalized);
+    it != impl_->pak_paths.end()) {
+    const auto existing_id
+      = static_cast<uint16_t>(std::distance(impl_->pak_paths.begin(), it));
+    LOG_F(INFO, "PAK already mounted: id={} path={}", existing_id,
+      normalized.string());
+    return;
+  }
+
   const auto pak_index = static_cast<uint16_t>(impl_->pak_paths.size());
 
   auto new_source = std::make_unique<internal::PakFileSource>(
