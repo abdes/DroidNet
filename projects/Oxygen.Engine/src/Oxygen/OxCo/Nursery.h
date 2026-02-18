@@ -888,7 +888,7 @@ public:
     : callable_(std::move(c))
   {
   }
-  virtual ~Scope() = default;
+  ~Scope() = default;
   OXYGEN_DEFAULT_MOVABLE(Scope)
   OXYGEN_DEFAULT_COPYABLE(Scope)
 
