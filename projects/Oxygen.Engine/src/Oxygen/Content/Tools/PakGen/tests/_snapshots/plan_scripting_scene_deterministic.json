@@ -38,7 +38,7 @@
     "size": 128,
     "string_table_size": 32
   },
-  "content_version": 5,
+  "content_version": 0,
   "deterministic": true,
   "directory": {
     "asset_count": 3,
@@ -139,5 +139,5 @@
       "padding_before": 0
     }
   ],
-  "version": 5
+  "version": 6
 }

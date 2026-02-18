@@ -39,7 +39,7 @@ def _aligned(value: int, alignment: int) -> bool:
 def _build_basic_spec(tmp_path: Path) -> Path:
     # Build an in-memory spec (mirror legacy test_planner_basic_layout scenario)
     spec = {
-        "version": 1,
+        "version": 6,
         "content_version": 7,
         "textures": [
             {
@@ -151,7 +151,7 @@ def test_planner_basic_layout(tmp_path: Path):  # noqa: N802
 
 def test_planner_empty_spec(tmp_path: Path):  # noqa: N802
     spec = {
-        "version": 1,
+        "version": 6,
         "content_version": 0,
         "buffers": [],
         "textures": [],

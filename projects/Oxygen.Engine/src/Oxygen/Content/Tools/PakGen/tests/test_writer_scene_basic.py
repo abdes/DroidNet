@@ -7,7 +7,7 @@ from pakgen.api import BuildOptions, build_pak
 
 def test_build_pak_with_scene_asset(tmp_path: Path):
     spec = {
-        "version": 1,
+        "version": 6,
         "content_version": 7,
         "buffers": [],
         "textures": [],

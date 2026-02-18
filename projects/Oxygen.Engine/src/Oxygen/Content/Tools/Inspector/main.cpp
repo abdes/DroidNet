@@ -83,6 +83,10 @@ struct DumpScriptOptions {
   std::string cooked_root;
 };
 
+struct DumpInputOptions {
+  std::string cooked_root;
+};
+
 auto AssetTypeToString(const uint8_t asset_type) -> std::string_view
 {
   using oxygen::data::AssetType;
@@ -263,42 +267,89 @@ auto DumpAssets(
 
 auto ValidateRootOrThrow(const std::filesystem::path& cooked_root) -> void
 {
-  using oxygen::content::internal::EngineTagFactory;
+  using oxygen::data::AssetType;
+  using oxygen::data::pak::AssetHeader;
+  using oxygen::data::pak::GeometryAssetDesc;
+  using oxygen::data::pak::InputMappingContextAssetDesc;
+  using oxygen::data::pak::MaterialAssetDesc;
+  using oxygen::data::pak::SceneAssetDesc;
+  using oxygen::data::pak::ScriptAssetDesc;
   using oxygen::serio::FileStream;
   using oxygen::serio::Reader;
-
-  oxygen::content::AssetLoader loader(EngineTagFactory::Get());
-  loader.AddLooseCookedRoot(cooked_root);
 
   oxygen::content::LooseCookedInspection inspection;
   inspection.LoadFromRoot(cooked_root);
 
   for (const auto& asset : inspection.Assets()) {
-    if (asset.asset_type
-      != static_cast<uint8_t>(oxygen::data::AssetType::kScript)) {
-      continue;
-    }
     if (asset.descriptor_relpath.empty()) {
-      throw std::runtime_error("script asset descriptor path is missing");
-    }
-    if (!asset.descriptor_relpath.ends_with(".oxscript")) {
-      throw std::runtime_error(
-        "script asset descriptor must use .oxscript extension");
+      throw std::runtime_error("asset descriptor path is missing");
     }
 
     const auto descriptor_path = cooked_root / asset.descriptor_relpath;
+    if (!std::filesystem::exists(descriptor_path)) {
+      throw std::runtime_error(
+        "descriptor file does not exist: " + descriptor_path.generic_string());
+    }
+
     FileStream<> stream(descriptor_path, std::ios::in);
+    const auto descriptor_size_result = stream.Size();
+    if (!descriptor_size_result) {
+      throw std::runtime_error("failed to query descriptor file size");
+    }
+    const auto descriptor_size = descriptor_size_result.value();
+    if (descriptor_size != asset.descriptor_size) {
+      throw std::runtime_error(
+        "descriptor size mismatch for " + descriptor_path.generic_string());
+    }
+
+    if (descriptor_size < sizeof(AssetHeader)) {
+      throw std::runtime_error("descriptor is smaller than AssetHeader: "
+        + descriptor_path.generic_string());
+    }
+
     Reader<FileStream<>> reader(stream);
     auto pack = reader.ScopedAlignment(1);
-    auto blob = reader.ReadBlob(sizeof(oxygen::data::pak::ScriptAssetDesc));
+    auto blob = reader.ReadBlob(sizeof(AssetHeader));
     if (!blob) {
-      throw std::runtime_error("failed to read .oxscript descriptor");
+      throw std::runtime_error("failed to read descriptor header");
     }
-    oxygen::data::pak::ScriptAssetDesc desc {};
-    std::memcpy(&desc, blob->data(), sizeof(desc));
-    if (static_cast<oxygen::data::AssetType>(desc.header.asset_type)
-      != oxygen::data::AssetType::kScript) {
-      throw std::runtime_error("invalid .oxscript descriptor asset type");
+
+    AssetHeader header {};
+    std::memcpy(&header, blob->data(), sizeof(header));
+
+    if (header.asset_type != asset.asset_type) {
+      throw std::runtime_error("descriptor header asset_type mismatch for "
+        + descriptor_path.generic_string());
+    }
+
+    const auto asset_type = static_cast<AssetType>(asset.asset_type);
+    size_t min_size = sizeof(AssetHeader);
+    switch (asset_type) {
+    case AssetType::kMaterial:
+      min_size = sizeof(MaterialAssetDesc);
+      break;
+    case AssetType::kGeometry:
+      min_size = sizeof(GeometryAssetDesc);
+      break;
+    case AssetType::kScene:
+      min_size = sizeof(SceneAssetDesc);
+      break;
+    case AssetType::kScript:
+      min_size = sizeof(ScriptAssetDesc);
+      break;
+    case AssetType::kInputAction:
+      min_size = sizeof(oxygen::data::pak::InputActionAssetDesc);
+      break;
+    case AssetType::kInputMappingContext:
+      min_size = sizeof(InputMappingContextAssetDesc);
+      break;
+    default:
+      break;
+    }
+
+    if (descriptor_size < min_size) {
+      throw std::runtime_error("descriptor smaller than minimum expected size: "
+        + descriptor_path.generic_string());
     }
   }
 }
@@ -509,6 +560,234 @@ auto FormatScriptParamValue(const oxygen::data::pak::ScriptParamRecord& record)
   }
 }
 
+auto ReadDescriptorBytes(const std::filesystem::path& descriptor_path)
+  -> std::vector<std::byte>
+{
+  using oxygen::serio::FileStream;
+  using oxygen::serio::Reader;
+
+  FileStream<> stream(descriptor_path, std::ios::in);
+  const auto size_result = stream.Size();
+  if (!size_result) {
+    throw std::runtime_error("failed to query descriptor size");
+  }
+  const auto size_bytes = size_result.value();
+  if (size_bytes == 0) {
+    return {};
+  }
+
+  Reader<FileStream<>> reader(stream);
+  auto pack = reader.ScopedAlignment(1);
+  auto blob = reader.ReadBlob(size_bytes);
+  if (!blob) {
+    throw std::runtime_error("failed to read descriptor");
+  }
+  return *blob;
+}
+
+template <typename T>
+auto ReadStructAt(const std::vector<std::byte>& bytes, const size_t offset)
+  -> std::optional<T>
+{
+  if (offset > bytes.size() || sizeof(T) > (bytes.size() - offset)) {
+    return std::nullopt;
+  }
+  T value {};
+  std::memcpy(&value, bytes.data() + offset, sizeof(T));
+  return value;
+}
+
+auto ParseStringFromTable(
+  const std::span<const char> table, const uint32_t offset) -> std::string
+{
+  if (offset >= table.size()) {
+    return "<invalid>";
+  }
+
+  const auto* const base = table.data() + offset;
+  const auto max_len = table.size() - offset;
+  size_t len = 0;
+  for (; len < max_len; ++len) {
+    if (base[len] == '\0') {
+      break;
+    }
+  }
+  return std::string(base, len);
+}
+
+auto RunDumpInputActions(const DumpInputOptions& opts) -> int
+{
+  using oxygen::data::AssetType;
+  using oxygen::data::pak::InputActionAssetDesc;
+
+  const std::filesystem::path cooked_root(opts.cooked_root);
+  try {
+    oxygen::content::LooseCookedInspection inspection;
+    inspection.LoadFromRoot(cooked_root);
+
+    size_t count = 0;
+    for (const auto& asset : inspection.Assets()) {
+      if (asset.asset_type != static_cast<uint8_t>(AssetType::kInputAction)) {
+        continue;
+      }
+
+      ++count;
+      std::cout << "InputAction key='" << oxygen::data::to_string(asset.key)
+                << "' desc='" << asset.descriptor_relpath << "'\n";
+
+      const auto descriptor = ReadDescriptorBytes(
+        cooked_root / std::filesystem::path(asset.descriptor_relpath));
+      if (descriptor.size() < sizeof(InputActionAssetDesc)) {
+        std::cout << "  ! descriptor too small\n";
+        continue;
+      }
+
+      const auto desc = ReadStructAt<InputActionAssetDesc>(descriptor, 0);
+      if (!desc) {
+        std::cout << "  ! failed to decode descriptor\n";
+        continue;
+      }
+
+      std::cout << "  name='"
+                << ReadFixedString(desc->header.name, sizeof(desc->header.name))
+                << "' value_type=" << static_cast<uint32_t>(desc->value_type)
+                << " flags=" << oxygen::data::pak::to_string(desc->flags)
+                << "\n";
+    }
+
+    if (count == 0) {
+      std::cout << "(no input actions)\n";
+    }
+    return 0;
+  } catch (const std::exception& ex) {
+    std::cerr << "ERROR: " << ex.what() << "\n";
+    return 2;
+  }
+}
+
+auto RunDumpInputMappings(const DumpInputOptions& opts) -> int
+{
+  using oxygen::data::AssetType;
+  using oxygen::data::pak::InputActionMappingRecord;
+  using oxygen::data::pak::InputMappingContextAssetDesc;
+  using oxygen::data::pak::InputTriggerAuxRecord;
+  using oxygen::data::pak::InputTriggerRecord;
+
+  const std::filesystem::path cooked_root(opts.cooked_root);
+  try {
+    oxygen::content::LooseCookedInspection inspection;
+    inspection.LoadFromRoot(cooked_root);
+
+    size_t count = 0;
+    for (const auto& asset : inspection.Assets()) {
+      if (asset.asset_type
+        != static_cast<uint8_t>(AssetType::kInputMappingContext)) {
+        continue;
+      }
+      ++count;
+
+      std::cout << "InputMappingContext key='"
+                << oxygen::data::to_string(asset.key) << "' desc='"
+                << asset.descriptor_relpath << "'\n";
+
+      const auto descriptor = ReadDescriptorBytes(
+        cooked_root / std::filesystem::path(asset.descriptor_relpath));
+      if (descriptor.size() < sizeof(InputMappingContextAssetDesc)) {
+        std::cout << "  ! descriptor too small\n";
+        continue;
+      }
+
+      const auto desc
+        = ReadStructAt<InputMappingContextAssetDesc>(descriptor, 0);
+      if (!desc) {
+        std::cout << "  ! failed to decode descriptor\n";
+        continue;
+      }
+
+      std::cout << "  name='"
+                << ReadFixedString(desc->header.name, sizeof(desc->header.name))
+                << "' flags=" << oxygen::data::pak::to_string(desc->flags)
+                << " mappings=" << desc->mappings.count
+                << " triggers=" << desc->triggers.count
+                << " aux=" << desc->trigger_aux.count
+                << " strings=" << desc->strings.count << "\n";
+
+      std::span<const char> string_table {};
+      const auto string_off = static_cast<size_t>(desc->strings.offset);
+      const auto string_size = static_cast<size_t>(desc->strings.count);
+      if (string_size > 0 && string_off <= descriptor.size()
+        && string_size <= (descriptor.size() - string_off)) {
+        string_table = std::span<const char>(
+          reinterpret_cast<const char*>(descriptor.data() + string_off),
+          string_size);
+      }
+
+      const auto mapping_count = static_cast<size_t>(desc->mappings.count);
+      const auto mapping_start = static_cast<size_t>(desc->mappings.offset);
+      const auto mapping_size = sizeof(InputActionMappingRecord);
+      for (size_t i = 0; i < mapping_count; ++i) {
+        const auto rec = ReadStructAt<InputActionMappingRecord>(
+          descriptor, mapping_start + i * mapping_size);
+        if (!rec) {
+          std::cout << "    ! mapping[" << i << "] decode failed\n";
+          continue;
+        }
+
+        std::cout << "    mapping[" << i << "] action="
+                  << oxygen::data::to_string(rec->action_asset_key) << " slot='"
+                  << ParseStringFromTable(string_table, rec->slot_name_offset)
+                  << "' triggers=[" << rec->trigger_start_index << ","
+                  << (rec->trigger_start_index + rec->trigger_count)
+                  << ") flags=" << oxygen::data::pak::to_string(rec->flags)
+                  << "\n";
+      }
+
+      const auto trigger_count = static_cast<size_t>(desc->triggers.count);
+      const auto trigger_start = static_cast<size_t>(desc->triggers.offset);
+      const auto trigger_size = sizeof(InputTriggerRecord);
+      for (size_t i = 0; i < trigger_count; ++i) {
+        const auto rec = ReadStructAt<InputTriggerRecord>(
+          descriptor, trigger_start + i * trigger_size);
+        if (!rec) {
+          std::cout << "    ! trigger[" << i << "] decode failed\n";
+          continue;
+        }
+        std::cout << "    trigger[" << i
+                  << "] type=" << oxygen::data::pak::to_string(rec->type)
+                  << " behavior=" << oxygen::data::pak::to_string(rec->behavior)
+                  << " threshold=" << rec->actuation_threshold << " aux=["
+                  << rec->aux_start_index << ","
+                  << (rec->aux_start_index + rec->aux_count) << ")\n";
+      }
+
+      const auto aux_count = static_cast<size_t>(desc->trigger_aux.count);
+      const auto aux_start = static_cast<size_t>(desc->trigger_aux.offset);
+      const auto aux_size = sizeof(InputTriggerAuxRecord);
+      for (size_t i = 0; i < aux_count; ++i) {
+        const auto rec = ReadStructAt<InputTriggerAuxRecord>(
+          descriptor, aux_start + i * aux_size);
+        if (!rec) {
+          std::cout << "    ! trigger_aux[" << i << "] decode failed\n";
+          continue;
+        }
+        std::cout << "    trigger_aux[" << i << "] action="
+                  << oxygen::data::to_string(rec->action_asset_key)
+                  << " completion=0x" << std::hex << rec->completion_states
+                  << std::dec << " time_ns=" << rec->time_to_complete_ns
+                  << "\n";
+      }
+    }
+
+    if (count == 0) {
+      std::cout << "(no input mapping contexts)\n";
+    }
+    return 0;
+  } catch (const std::exception& ex) {
+    std::cerr << "ERROR: " << ex.what() << "\n";
+    return 2;
+  }
+}
+
 auto RunDumpScriptSlots(const DumpScriptOptions& opts) -> int
 {
   const std::filesystem::path cooked_root(opts.cooked_root);
@@ -635,7 +914,8 @@ auto RunDumpScriptParams(const DumpScriptOptions& opts) -> int
 
 auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
   DumpResourceOptions& buffers_opts, DumpResourceOptions& textures_opts,
-  DumpScriptOptions& script_slots_opts, DumpScriptOptions& script_params_opts)
+  DumpScriptOptions& script_slots_opts, DumpScriptOptions& script_params_opts,
+  DumpInputOptions& input_actions_opts, DumpInputOptions& input_mappings_opts)
   -> std::unique_ptr<Cli>
 {
   auto validate_root = Option::Positional("cooked_root")
@@ -743,6 +1023,30 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
         .About("Dump script param arrays referenced by scripts.table slots.")
         .WithPositionalArguments(script_params_root);
 
+  auto input_actions_root = Option::Positional("cooked_root")
+                              .About("Loose cooked root directory")
+                              .Required()
+                              .WithValue<std::string>()
+                              .StoreTo(&input_actions_opts.cooked_root)
+                              .Build();
+
+  const std::shared_ptr<Command> input_actions_cmd
+    = CommandBuilder("input-actions")
+        .About("Dump input action descriptors.")
+        .WithPositionalArguments(input_actions_root);
+
+  auto input_mappings_root = Option::Positional("cooked_root")
+                               .About("Loose cooked root directory")
+                               .Required()
+                               .WithValue<std::string>()
+                               .StoreTo(&input_mappings_opts.cooked_root)
+                               .Build();
+
+  const std::shared_ptr<Command> input_mappings_cmd
+    = CommandBuilder("input-mappings")
+        .About("Dump input mapping context descriptors.")
+        .WithPositionalArguments(input_mappings_root);
+
   return CliBuilder()
     .ProgramName(std::string(kProgramName))
     .Version(std::string(kVersion))
@@ -756,6 +1060,8 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
     .WithCommand(textures_cmd)
     .WithCommand(script_slots_cmd)
     .WithCommand(script_params_cmd)
+    .WithCommand(input_actions_cmd)
+    .WithCommand(input_mappings_cmd)
     .Build();
 }
 
@@ -783,9 +1089,12 @@ auto main(int argc, char** argv) -> int
     DumpResourceOptions textures_opts;
     DumpScriptOptions script_slots_opts;
     DumpScriptOptions script_params_opts;
+    DumpInputOptions input_actions_opts;
+    DumpInputOptions input_mappings_opts;
 
     const auto cli = BuildCli(validate_opts, dump_opts, buffers_opts,
-      textures_opts, script_slots_opts, script_params_opts);
+      textures_opts, script_slots_opts, script_params_opts, input_actions_opts,
+      input_mappings_opts);
     const auto context = cli->Parse(argc, const_cast<const char**>(argv));
 
     const auto command_path = context.active_command->PathAsString();
@@ -806,6 +1115,10 @@ auto main(int argc, char** argv) -> int
       exit_code = RunDumpScriptSlots(script_slots_opts);
     } else if (command_path == "script-params") {
       exit_code = RunDumpScriptParams(script_params_opts);
+    } else if (command_path == "input-actions") {
+      exit_code = RunDumpInputActions(input_actions_opts);
+    } else if (command_path == "input-mappings") {
+      exit_code = RunDumpInputMappings(input_mappings_opts);
     } else {
       std::cerr << "ERROR: Unknown command\n";
       exit_code = 1;

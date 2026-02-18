@@ -18,7 +18,7 @@ from pakgen.packing.constants import FOOTER_SIZE
 def _spec_with_padding() -> dict:
     # Intentionally add two textures to force region + table sizing and an aligned material.
     return {
-        "version": 1,
+        "version": 6,
         "content_version": 2,
         "textures": [
             {

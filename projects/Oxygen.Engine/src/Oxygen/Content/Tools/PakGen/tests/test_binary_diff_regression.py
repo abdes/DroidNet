@@ -2,6 +2,7 @@ from pathlib import Path
 import hashlib
 import json
 from pakgen.api import BuildOptions, build_pak, inspect_pak
+from pakgen.packing.constants import PAK_FORMAT_VERSION_CURRENT
 
 
 def _read_bytes(path: Path) -> bytes:
@@ -54,8 +55,7 @@ def test_binary_diff_regression(tmp_path: Path):  # noqa: N802
         golden_info["header"]["content_version"]
         == new_info["header"]["content_version"]
     )
-    # Container version intentionally bumped to v5.
-    assert new_info["header"]["version"] == 5
+    assert new_info["header"]["version"] == PAK_FORMAT_VERSION_CURRENT
     assert golden_info["footer"]["directory"] == new_info["footer"]["directory"]
     assert golden_info.get("directory_entries", []) == new_info.get(
         "directory_entries", []

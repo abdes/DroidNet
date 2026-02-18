@@ -37,6 +37,8 @@ add_executable(
   "AssetDumpHelpers.h"
   "DefaultAssetDumper.h"
   "GeometryAssetDumper.h"
+  "InputActionAssetDumper.h"
+  "InputMappingContextAssetDumper.h"
   "MaterialAssetDumper.h"
   "SceneAssetDumper.h"
   "ScriptAssetDumper.h"

@@ -83,7 +83,7 @@ def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
     errors: List[ValidationErrorRecord] = []
 
     # Validate schema version first
-    version = spec.get("version", 1)
+    version = spec.get("version", YAML_SCHEMA_VERSION_CURRENT)
     if not isinstance(version, int) or version < YAML_SCHEMA_VERSION_MIN:
         _err(
             errors,
@@ -205,12 +205,30 @@ def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
         for a in assets_list
         if isinstance(a, dict) and a.get("type") == "script"
     ]
+    input_actions = [
+        a
+        for a in assets_list
+        if isinstance(a, dict) and a.get("type") == "input_action"
+    ]
+    input_mapping_contexts = [
+        a
+        for a in assets_list
+        if isinstance(a, dict) and a.get("type") == "input_mapping_context"
+    ]
     scenes = [
         a
         for a in assets_list
         if isinstance(a, dict) and a.get("type") == "scene"
     ]
-    if len(mats) + len(geos) + len(scripts) + len(scenes) > MAX_ASSETS_TOTAL:
+    if (
+        len(mats)
+        + len(geos)
+        + len(scripts)
+        + len(input_actions)
+        + len(input_mapping_contexts)
+        + len(scenes)
+        > MAX_ASSETS_TOTAL
+    ):
         _err(errors, "E_COUNT", "Total assets exceed limit", "assets")
     for i, m in enumerate(mats):
         path = f"assets[{i}]"  # material
@@ -372,6 +390,45 @@ def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                     path + ".external_source_path",
                 )
 
+    for i, action in enumerate(input_actions):
+        path = f"assets[{i}]"
+        if not isinstance(action, dict):
+            _err(errors, "E_TYPE", "Asset must be object", path)
+            continue
+        name = action.get("name")
+        if not isinstance(name, str):
+            _err(errors, "E_FIELD", "Missing name", path)
+        elif len(name.encode("utf-8")) > ASSET_NAME_MAX_LENGTH:
+            _err(errors, "E_NAME_LEN", "Name too long", path + ".name")
+
+        value_type = action.get("value_type")
+        if value_type is not None and not isinstance(value_type, (int, str)):
+            _err(
+                errors,
+                "E_TYPE",
+                "input_action value_type must be int or string",
+                path + ".value_type",
+            )
+
+    for i, context in enumerate(input_mapping_contexts):
+        path = f"assets[{i}]"
+        if not isinstance(context, dict):
+            _err(errors, "E_TYPE", "Asset must be object", path)
+            continue
+        name = context.get("name")
+        if not isinstance(name, str):
+            _err(errors, "E_FIELD", "Missing name", path)
+        elif len(name.encode("utf-8")) > ASSET_NAME_MAX_LENGTH:
+            _err(errors, "E_NAME_LEN", "Name too long", path + ".name")
+        mappings = context.get("mappings", [])
+        if mappings is not None and not isinstance(mappings, list):
+            _err(
+                errors,
+                "E_TYPE",
+                "input_mapping_context mappings must be a list",
+                path + ".mappings",
+            )
+
     for i, s in enumerate(scenes):
         path = f"assets[{i}]"  # scene
         if not isinstance(s, dict):
@@ -462,6 +519,17 @@ def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                 "E_TYPE",
                 "orthographic_cameras must be a list",
                 path + ".orthographic_cameras",
+            )
+
+        input_context_bindings = s.get("input_context_bindings")
+        if input_context_bindings is not None and not isinstance(
+            input_context_bindings, list
+        ):
+            _err(
+                errors,
+                "E_TYPE",
+                "input_context_bindings must be a list",
+                path + ".input_context_bindings",
             )
     return errors
 
@@ -1204,7 +1272,15 @@ def run_binary_validation(
             a
             for a in (spec.get("assets", []) or [])
             if isinstance(a, dict)
-            and a.get("type") in ("material", "geometry", "script", "scene")
+            and a.get("type")
+            in (
+                "material",
+                "geometry",
+                "script",
+                "input_action",
+                "input_mapping_context",
+                "scene",
+            )
         ]
     )
     if spec_asset_count != asset_count:

@@ -24,6 +24,8 @@
 
 #include "DefaultAssetDumper.h"
 #include "GeometryAssetDumper.h"
+#include "InputActionAssetDumper.h"
+#include "InputMappingContextAssetDumper.h"
 #include "MaterialAssetDumper.h"
 #include "SceneAssetDumper.h"
 #include "ScriptAssetDumper.h"
@@ -48,6 +50,11 @@ public:
       std::make_unique<SceneAssetDumper>());
     Register(static_cast<uint8_t>(oxygen::data::AssetType::kScript),
       std::make_unique<ScriptAssetDumper>());
+    Register(static_cast<uint8_t>(oxygen::data::AssetType::kInputAction),
+      std::make_unique<InputActionAssetDumper>());
+    Register(
+      static_cast<uint8_t>(oxygen::data::AssetType::kInputMappingContext),
+      std::make_unique<InputMappingContextAssetDumper>());
   }
 
   [[nodiscard]] auto Get(const uint8_t asset_type) const -> const AssetDumper&

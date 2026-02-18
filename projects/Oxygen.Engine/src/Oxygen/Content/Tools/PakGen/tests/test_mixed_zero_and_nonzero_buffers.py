@@ -5,7 +5,7 @@ from pakgen.api import plan_dry_run, BuildOptions, build_pak
 
 def write_spec(tmp_path: Path) -> Path:
     spec = {
-        "version": 1,
+        "version": 6,
         "buffers": [
             {"name": "empty_a", "path": None, "size": 0},
             {

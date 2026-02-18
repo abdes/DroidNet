@@ -19,3 +19,4 @@ root = pathlib.Path(__file__).parent
 build(root / "minimal_spec.yaml", root / "minimal_ref.pak")
 build(root / "scene_basic_spec.yaml", root / "scene_basic.pak")
 build(root / "scripting_scene_spec.yaml", root / "scripting_scene_ref.pak")
+build(root / "input_scene_spec.yaml", root / "input_scene_ref.pak")

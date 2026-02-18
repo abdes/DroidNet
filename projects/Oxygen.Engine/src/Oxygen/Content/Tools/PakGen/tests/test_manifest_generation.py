@@ -8,7 +8,7 @@ def build_minimal(tmp_path: Path):
     spec.write_text(
         json.dumps(
             {
-                "version": 1,
+                "version": 6,
                 "content_version": 1,
                 "buffers": [],
                 "textures": [],

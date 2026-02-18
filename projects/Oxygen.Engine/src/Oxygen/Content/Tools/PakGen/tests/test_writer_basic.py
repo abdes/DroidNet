@@ -5,7 +5,7 @@ from pakgen.api import build_pak, BuildOptions
 
 def test_build_minimal_pak(tmp_path: Path):
     spec = {
-        "version": 1,
+        "version": 6,
         "content_version": 7,
         "buffers": [],
         "textures": [],

@@ -8,6 +8,7 @@ from typing import Final
 
 MAGIC: Final = b"OXPAK\x00\x00\x00"
 FOOTER_MAGIC: Final = b"OXPAKEND"
+PAK_FORMAT_VERSION_CURRENT: Final = 6
 
 HEADER_SIZE: Final = 256
 FOOTER_SIZE: Final = 256
@@ -16,6 +17,9 @@ DIRECTORY_ENTRY_SIZE: Final = 64
 MATERIAL_DESC_SIZE: Final = 384
 GEOMETRY_DESC_SIZE: Final = 256
 SCENE_DESC_SIZE: Final = 256
+SCRIPT_DESC_SIZE: Final = 256
+INPUT_ACTION_DESC_SIZE: Final = 256
+INPUT_MAPPING_CONTEXT_DESC_SIZE: Final = 256
 MESH_DESC_SIZE: Final = 145
 SUBMESH_DESC_SIZE: Final = 108
 MESH_VIEW_DESC_SIZE: Final = 16
@@ -39,12 +43,9 @@ SCENE_ASSET_VERSION_CURRENT: Final = SCENE_ASSET_VERSION_V4
 
 # YAML Schema version constants (for PakGen tool compatibility).
 # These govern the YAML specification format, not the binary PAK format.
-YAML_SCHEMA_VERSION_V3: Final = 3  # Legacy schema
-YAML_SCHEMA_VERSION_V4: Final = (
-    4  # Adds 'generate' directive for procedural nodes
-)
-YAML_SCHEMA_VERSION_CURRENT: Final = YAML_SCHEMA_VERSION_V4
-YAML_SCHEMA_VERSION_MIN: Final = 1  # Minimum supported version
+YAML_SCHEMA_VERSION_V6: Final = 6
+YAML_SCHEMA_VERSION_CURRENT: Final = YAML_SCHEMA_VERSION_V6
+YAML_SCHEMA_VERSION_MIN: Final = YAML_SCHEMA_VERSION_CURRENT
 
 # Limits for procedural node generation
 MAX_GENERATED_NODES: Final = 100_000  # Safety limit per scene
@@ -69,6 +70,8 @@ ASSET_TYPE_MAP: Final = {
     "geometry": 2,
     "scene": 3,
     "script": 4,
+    "input_action": 5,
+    "input_mapping_context": 6,
 }
 
 MAX_RESOURCE_SIZES: Final = {
@@ -102,12 +105,16 @@ VALID_BUFFER_FORMATS: Final = list(range(0, 256))
 __all__ = [
     "MAGIC",
     "FOOTER_MAGIC",
+    "PAK_FORMAT_VERSION_CURRENT",
     "HEADER_SIZE",
     "FOOTER_SIZE",
     "DIRECTORY_ENTRY_SIZE",
     "MATERIAL_DESC_SIZE",
     "GEOMETRY_DESC_SIZE",
     "SCENE_DESC_SIZE",
+    "SCRIPT_DESC_SIZE",
+    "INPUT_ACTION_DESC_SIZE",
+    "INPUT_MAPPING_CONTEXT_DESC_SIZE",
     "MESH_DESC_SIZE",
     "SUBMESH_DESC_SIZE",
     "MESH_VIEW_DESC_SIZE",
@@ -121,8 +128,7 @@ __all__ = [
     "SCENE_ASSET_VERSION_V2",
     "SCENE_ASSET_VERSION_V3",
     "SCENE_ASSET_VERSION_CURRENT",
-    "YAML_SCHEMA_VERSION_V3",
-    "YAML_SCHEMA_VERSION_V4",
+    "YAML_SCHEMA_VERSION_V6",
     "YAML_SCHEMA_VERSION_CURRENT",
     "YAML_SCHEMA_VERSION_MIN",
     "MAX_GENERATED_NODES",

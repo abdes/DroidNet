@@ -31,7 +31,7 @@ def _tamper_descriptor_size(pak_path: Path):
 
 def test_binary_validation_descriptor(tmp_path: Path):  # noqa: N802
     spec = {
-        "version": 1,
+        "version": 6,
         "assets": [{"type": "material", "name": "m0"}],
         "textures": [],
         "buffers": [],

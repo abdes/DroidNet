@@ -1,4 +1,4 @@
-content_version: 5
+version: 6
 
 scripts:
   - name: move_bc

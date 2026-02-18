@@ -3,6 +3,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any
+from ..packing.constants import YAML_SCHEMA_VERSION_CURRENT
 
 
 @dataclass(slots=True)
@@ -166,8 +167,35 @@ class GeometryAsset:
 
 
 @dataclass(slots=True)
+class InputActionAsset:
+    name: str
+    asset_key: bytes
+    value_type: int = 0
+    flags: int = 0
+    consumes_input: bool = False
+    alignment: int = 1
+    version: int = 1
+    streaming_priority: int = 0
+    content_hash: int = 0
+    variant_flags: int = 0
+
+
+@dataclass(slots=True)
+class InputMappingContextAsset:
+    name: str
+    asset_key: bytes
+    mappings: List[Dict[str, Any]] = field(default_factory=list)
+    flags: int = 0
+    alignment: int = 1
+    version: int = 1
+    streaming_priority: int = 0
+    content_hash: int = 0
+    variant_flags: int = 0
+
+
+@dataclass(slots=True)
 class PakSpec:
-    version: int = 4
+    version: int = YAML_SCHEMA_VERSION_CURRENT
     content_version: int = 0
     buffers: List[BufferResource] = field(default_factory=list)
     textures: List[TextureResource] = field(default_factory=list)
@@ -191,5 +219,7 @@ __all__ = [
     "Submesh",
     "GeometryLod",
     "GeometryAsset",
+    "InputActionAsset",
+    "InputMappingContextAsset",
     "PakSpec",
 ]

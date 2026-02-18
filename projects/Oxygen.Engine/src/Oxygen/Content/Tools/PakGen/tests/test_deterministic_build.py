@@ -3,7 +3,7 @@ from pathlib import Path
 from pakgen.api import BuildOptions, build_pak
 
 SPEC_CONTENT = {
-    "version": 1,
+    "version": 6,
     "content_version": 1,
     "buffers": [],
     "textures": [],
