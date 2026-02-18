@@ -185,7 +185,17 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
     last_viewport_ = app_window_->GetWindow()->Size();
   }
 
-  // 1. Process deferred lifecycle actions before anything else this frame.
+  const auto scene_ptr = shell.TryGetScene();
+  frame_context.SetScene(observer_ptr { scene_ptr.get() });
+}
+
+auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
+{
+  DCHECK_NOTNULL_F(context);
+  auto& shell = GetShell();
+
+  // 1. Process deferred lifecycle actions.
   if (pending_source_action_ != PendingSourceAction::kNone) {
     const char* reason = "source change";
     if (pending_source_action_ == PendingSourceAction::kMountPak) {
@@ -224,12 +234,6 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
             return existing == normalized;
           });
 
-        // IMPORTANT:
-        // Re-adding an already-mounted loose root triggers the refresh path in
-        // AssetLoader::AddLooseCookedRoot(), which clears the content cache and
-        // emits EvictionReason::kClear for resident resources.
-        // That causes unnecessary GPU unload/reload churn during scene swaps.
-        // Keep the existing mount to preserve cached residency.
         if (already_mounted) {
           LOG_F(INFO,
             "RenderScene: Loose cooked root '{}' already mounted; skipping "
@@ -250,7 +254,7 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
     pending_path_.clear();
   }
 
-  // 2. Process pending scene loads
+  // 2. Process pending scene loads.
   if (scene_load_cancel_requested_) {
     LOG_F(INFO, "RenderScene: Scene load cancellation requested");
     scene_load_cancel_requested_ = false;
@@ -285,10 +289,6 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
               return existing == normalized;
             });
 
-          // IMPORTANT:
-          // Scene reload/swap can pass through this path often. Do not remount
-          // an already-mounted loose root here, or AddLooseCookedRoot() will
-          // refresh and clear caches, defeating cross-scene reuse.
           if (already_mounted) {
             LOG_F(INFO,
               "RenderScene: Loose cooked root '{}' already mounted for scene "
@@ -310,7 +310,7 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
         if (const auto vm = shell.GetContentVm()) {
           vm->NotifySceneLoadCompleted(request.key, false);
         }
-        return;
+        co_return;
       }
 
       scene_loader_
@@ -332,24 +332,12 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
     }
   }
 
-  // 3. Process async scene loading results
-  if (scene_loader_) {
-    if (scene_loader_->IsConsumed()) {
-      if (scene_loader_->Tick()) {
-        scene_loader_.reset();
-      }
+  // 3. Process async scene loading service cleanup.
+  if (scene_loader_ && scene_loader_->IsConsumed()) {
+    if (scene_loader_->Tick()) {
+      scene_loader_.reset();
     }
   }
-
-  const auto scene_ptr = shell.TryGetScene();
-  frame_context.SetScene(observer_ptr { scene_ptr.get() });
-}
-
-auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
-{
-  DCHECK_NOTNULL_F(context);
-  auto& shell = GetShell();
 
   if (scene_loader_ && !shell.HasStagedScene()) {
     if (scene_loader_->IsReady()) {
