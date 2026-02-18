@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,7 @@
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Engine/Scripting/IScriptCompiler.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Scripting/ScriptSourceBlob.h>
 
 namespace oxygen::scripting {
 
@@ -40,8 +42,7 @@ public:
 
   struct Request {
     CompileKey compile_key;
-    data::pak::ScriptLanguage language { data::pak::ScriptLanguage::kLuau };
-    std::vector<uint8_t> source;
+    ScriptSourceBlob source;
     CompileMode compile_mode { CompileMode::kDebug };
   };
 
@@ -64,7 +65,7 @@ public:
     // Populated only when the service is not active and kickoff was not
     // started. When active, ownership is transferred to the internal kickoff
     // path and this request may be empty.
-    Request request;
+    std::optional<Request> request;
   };
 
   IScriptCompilationService() = default;

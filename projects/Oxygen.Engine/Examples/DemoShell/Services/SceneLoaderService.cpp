@@ -14,6 +14,7 @@
 #include <string_view>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -134,13 +135,13 @@ namespace {
     const data::AssetKey asset_key, const scripting::ScriptSourceBlob& blob)
     -> scripting::IScriptCompilationService::CompileKey
   {
+    const auto bytes = blob.BytesView();
     uint64_t seed = 0;
     oxygen::HashCombine(seed, asset_key);
-    oxygen::HashCombine(seed, blob.language);
-    oxygen::HashCombine(seed, blob.encoding);
-    oxygen::HashCombine(seed, blob.compression);
-    oxygen::HashCombine(seed, blob.content_hash);
-    for (const auto byte : blob.bytes) {
+    oxygen::HashCombine(seed, blob.Language());
+    oxygen::HashCombine(seed, blob.Compression());
+    oxygen::HashCombine(seed, blob.ContentHash());
+    for (const auto byte : bytes) {
       oxygen::HashCombine(seed, byte);
     }
     return scripting::IScriptCompilationService::CompileKey { seed };
@@ -705,8 +706,9 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
     }
   };
 
-  auto map_origin = [pak = source_pak_.get()](const uint32_t index)
-    -> std::optional<scripting::ScriptSourceBlob::Origin> {
+  auto map_origin
+    = [pak = source_pak_.get()](
+        const uint32_t index) -> std::optional<scripting::ScriptBlobOrigin> {
     if (pak == nullptr) {
       LOG_F(WARNING,
         "script origin mapping requested without source pak (index={})", index);
@@ -719,7 +721,7 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
           "script resource missing while mapping origin (index={})", index);
         return std::nullopt;
       }
-      return scripting::ScriptSourceBlob::Origin::kEmbeddedResource;
+      return scripting::ScriptBlobOrigin::kEmbeddedResource;
     } catch (const std::exception& ex) {
       LOG_F(WARNING, "failed to map script origin from resource (index={}): {}",
         index, ex.what());
@@ -731,7 +733,7 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
     }
   };
 
-  const auto resolve_result = source_resolver_->Resolve(
+  auto resolve_result = source_resolver_->Resolve(
     scripting::IScriptSourceResolver::ResolveRequest {
       .asset = *script_asset,
       .load_script_resource = std::move(load_script_resource),
@@ -742,16 +744,28 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
       resolve_result.error_message);
     return;
   }
+  if (!resolve_result.blob.has_value()) {
+    LOG_F(ERROR, "resolved script blob is missing (asset_key={})",
+      data::to_string(script_asset->GetAssetKey()));
+    return;
+  }
+  auto resolved_blob = std::move(*resolve_result.blob);
+  const auto is_bytecode
+    = std::holds_alternative<scripting::ScriptBytecodeBlob>(resolved_blob);
+  const auto origin = std::visit(
+    [](const auto& blob) { return static_cast<uint32_t>(blob.GetOrigin()); },
+    resolved_blob);
+  const auto size
+    = std::visit([](const auto& blob) { return blob.Size(); }, resolved_blob);
+  const auto bytes = std::visit(
+    [](const auto& blob) { return blob.BytesView(); }, resolved_blob);
   LOG_F(INFO,
     "resolved script source (asset_key={}, origin={}, bytecode={}, size={})",
-    data::to_string(script_asset->GetAssetKey()),
-    static_cast<uint32_t>(resolve_result.blob.origin),
-    resolve_result.blob.IsBytecode() ? "yes" : "no",
-    resolve_result.blob.bytes.size());
+    data::to_string(script_asset->GetAssetKey()), origin,
+    is_bytecode ? "yes" : "no", size);
   LOG_F(INFO, "resolved script source preview (asset_key={}, first_bytes={})",
-    data::to_string(script_asset->GetAssetKey()),
-    HexPreview(resolve_result.blob.bytes, 16));
-  if (resolve_result.blob.bytes.empty()) {
+    data::to_string(script_asset->GetAssetKey()), HexPreview(bytes, 16));
+  if (size == 0) {
     LOG_F(ERROR, "resolved script source is empty (asset_key={})",
       data::to_string(script_asset->GetAssetKey()));
     auto scripting = node.GetScripting();
@@ -760,28 +774,28 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
     return;
   }
 
-  if (resolve_result.blob.IsBytecode()) {
+  if (is_bytecode) {
     auto scripting = node.GetScripting();
     (void)scripting.MarkSlotReady(slot,
       std::make_shared<const scripting::CompiledScriptExecutable>(
-        std::vector<uint8_t>(resolve_result.blob.bytes)));
+        std::vector<uint8_t>(bytes.begin(), bytes.end())));
     LOG_F(INFO, "slot ready from embedded bytecode (asset_key={})",
       data::to_string(script_asset->GetAssetKey()));
     return;
   }
 
+  auto source_blob
+    = std::get<scripting::ScriptSourceBlob>(std::move(resolved_blob));
   const auto compile_key
-    = ComputeCompileKey(script_asset->GetAssetKey(), resolve_result.blob);
-  auto source_bytes = std::move(resolve_result.blob.bytes);
+    = ComputeCompileKey(script_asset->GetAssetKey(), source_blob);
+  const auto source_size = source_blob.Size();
   LOG_F(INFO,
     "submitting compile request (asset_key={}, compile_key={}, source_size={})",
-    data::to_string(script_asset->GetAssetKey()), compile_key,
-    source_bytes.size());
+    data::to_string(script_asset->GetAssetKey()), compile_key, source_size);
   auto acquire = compilation_service_->AcquireForSlot(
     scripting::IScriptCompilationService::Request {
       .compile_key = compile_key,
-      .language = resolve_result.blob.language,
-      .source = std::move(source_bytes),
+      .source = std::move(source_blob),
       .compile_mode = scripting::CompileMode::kDebug,
     },
     scripting::IScriptCompilationService::SlotAcquireCallbacks {

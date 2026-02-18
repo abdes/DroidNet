@@ -42,29 +42,46 @@ namespace {
       };
     }
 
-    auto origin = ScriptSourceBlob::Origin::kEmbeddedResource;
+    auto origin = ScriptBlobOrigin::kEmbeddedResource;
     if (request.map_resource_origin) {
       if (const auto mapped = request.map_resource_origin(index)) {
         origin = *mapped;
       }
     }
 
-    ScriptSourceBlob blob {
-      .bytes = std::vector<uint8_t>(
-        resource->GetData().begin(), resource->GetData().end()),
-      .language = resource->GetLanguage(),
-      .encoding = resource->GetEncoding(),
-      .compression = resource->GetCompression(),
-      .content_hash = resource->GetContentHash(),
-      .origin = origin,
-      .canonical_name = ScriptSourceBlob::CanonicalName { "embedded-resource:"
-        + std::to_string(index) },
-    };
-    return IScriptSourceResolver::ResolveResult {
-      .ok = true,
-      .blob = std::move(blob),
-      .error_message = {},
-    };
+    if (resource->GetEncoding() == data::pak::ScriptEncoding::kSource) {
+      return IScriptSourceResolver::ResolveResult {
+        .ok = true,
+        .blob = std::optional<ResolvedScriptBlob> { ScriptSourceBlob::FromOwned(
+          std::vector<uint8_t>(
+            resource->GetData().begin(), resource->GetData().end()),
+          resource->GetLanguage(), resource->GetCompression(),
+          resource->GetContentHash(), origin,
+          ScriptBlobCanonicalName {
+            "embedded-resource:" + std::to_string(index) }) },
+        .error_message = {},
+      };
+    } else if (resource->GetEncoding()
+      == data::pak::ScriptEncoding::kBytecode) {
+      return IScriptSourceResolver::ResolveResult {
+        .ok = true,
+        .blob
+        = std::optional<ResolvedScriptBlob> { ScriptBytecodeBlob::FromOwned(
+          std::vector<uint8_t>(
+            resource->GetData().begin(), resource->GetData().end()),
+          resource->GetLanguage(), resource->GetCompression(),
+          resource->GetContentHash(), origin,
+          ScriptBlobCanonicalName {
+            "embedded-resource:" + std::to_string(index) }) },
+        .error_message = {},
+      };
+    } else {
+      return IScriptSourceResolver::ResolveResult {
+        .ok = false,
+        .blob = {},
+        .error_message = "embedded script resource encoding is unsupported",
+      };
+    }
   }
 
 } // namespace

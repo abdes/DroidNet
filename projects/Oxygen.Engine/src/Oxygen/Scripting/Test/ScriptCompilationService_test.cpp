@@ -41,6 +41,15 @@ using oxygen::scripting::CompileMode;
 using oxygen::scripting::IScriptCompiler;
 using oxygen::scripting::ScriptCompilationService;
 using oxygen::scripting::ScriptCompileResult;
+using oxygen::scripting::ScriptSourceBlob;
+
+auto MakeSourceBlob(std::vector<uint8_t> bytes) -> ScriptSourceBlob
+{
+  return ScriptSourceBlob::FromOwned(std::move(bytes), ScriptLanguage::kLuau,
+    oxygen::data::pak::ScriptCompression::kNone, 0,
+    oxygen::scripting::ScriptBlobOrigin::kEmbeddedResource,
+    oxygen::scripting::ScriptBlobCanonicalName { "test-script" });
+}
 
 class CountingCompiler final : public IScriptCompiler {
 public:
@@ -61,7 +70,7 @@ public:
     ++compile_calls_;
     ScriptCompileResult result {};
     result.success = true;
-    result.bytecode = { 0xCA, 0xFE, 0xBA, 0xBE };
+    result.bytecode = { 0xCA, 0xFE, 0xBA, 0xBE }; // NOLINT
     std::this_thread::sleep_for(2ms);
     return result;
   }
@@ -86,8 +95,7 @@ NOLINT_TEST(ScriptCompilationServiceTest, MissingCompilerReturnsFailure)
 
       ScriptCompilationService::Request request {
         .compile_key = ScriptCompilationService::CompileKey { 123 },
-        .language = ScriptLanguage::kLuau,
-        .source = { 1, 2, 3, 4 },
+        .source = MakeSourceBlob({ 1, 2, 3, 4 }),
       };
 
       const auto result = co_await service.CompileAsync(std::move(request));
@@ -118,14 +126,17 @@ NOLINT_TEST(
       co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
       service.Run();
 
-      ScriptCompilationService::Request request {
+      ScriptCompilationService::Request request_a {
         .compile_key = ScriptCompilationService::CompileKey { 777 },
-        .language = ScriptLanguage::kLuau,
-        .source = { 10, 11, 12 },
+        .source = MakeSourceBlob({ 10, 11, 12 }),
+      };
+      ScriptCompilationService::Request request_b {
+        .compile_key = ScriptCompilationService::CompileKey { 777 },
+        .source = MakeSourceBlob({ 10, 11, 12 }),
       };
 
-      auto first = service.CompileAsync(request);
-      auto second = service.CompileAsync(request);
+      auto first = service.CompileAsync(std::move(request_a));
+      auto second = service.CompileAsync(std::move(request_b));
       const auto [a, b] = co_await AllOf(std::move(first), std::move(second));
 
       EXPECT_TRUE(a.success);
@@ -168,15 +179,18 @@ NOLINT_TEST(ScriptCompilationServiceTest, CompletionSubscribersArePublishedOnce)
 
       ScriptCompilationService::Request request {
         .compile_key = kCompileKey,
-        .language = ScriptLanguage::kLuau,
-        .source = { 1, 2, 3 },
+        .source = MakeSourceBlob({ 1, 2, 3 }),
       };
 
-      const auto first = co_await service.CompileAsync(request);
+      const auto first
+        = co_await service.CompileAsync(ScriptCompilationService::Request {
+          .compile_key = request.compile_key,
+          .source = MakeSourceBlob({ 1, 2, 3 }),
+        });
       EXPECT_TRUE(first.success);
       service.OnFrameStart(oxygen::engine::internal::EngineTagFactory::Get());
 
-      const auto second = co_await service.CompileAsync(request);
+      const auto second = co_await service.CompileAsync(std::move(request));
       EXPECT_TRUE(second.success);
       service.OnFrameStart(oxygen::engine::internal::EngineTagFactory::Get());
       EXPECT_FALSE(service.Unsubscribe(subscription));
@@ -217,8 +231,7 @@ NOLINT_TEST(ScriptCompilationServiceTest, UnsubscribePreventsCompletionCallback)
 
       ScriptCompilationService::Request request {
         .compile_key = kCompileKey,
-        .language = ScriptLanguage::kLuau,
-        .source = { 9, 9, 9 },
+        .source = MakeSourceBlob({ 9, 9, 9 }),
       };
 
       const auto result = co_await service.CompileAsync(std::move(request));
@@ -257,8 +270,7 @@ NOLINT_TEST(ScriptCompilationServiceTest,
 
       ScriptCompilationService::Request request {
         .compile_key = ScriptCompilationService::CompileKey { 12345 },
-        .language = ScriptLanguage::kLuau,
-        .source = { 7, 8, 9 },
+        .source = MakeSourceBlob({ 7, 8, 9 }),
       };
       oxygen::co::Event completion;
 
@@ -319,8 +331,7 @@ NOLINT_TEST(ScriptCompilationServiceTest, AcquireForSlotPublishesFailure)
 
       ScriptCompilationService::Request request {
         .compile_key = ScriptCompilationService::CompileKey { 54321 },
-        .language = ScriptLanguage::kLuau,
-        .source = { 1, 2, 3 },
+        .source = MakeSourceBlob({ 1, 2, 3 }),
       };
       oxygen::co::Event completion;
 

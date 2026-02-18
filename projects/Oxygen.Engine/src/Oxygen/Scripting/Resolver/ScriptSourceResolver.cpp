@@ -21,19 +21,19 @@ auto ScriptSourceResolver::Resolve(const ResolveRequest& request) const
 {
   auto embedded_result = EmbeddedSourceResolver::Resolve(request);
   if (embedded_result.ok) {
-    return embedded_result;
+    return std::move(embedded_result);
   }
 
   const auto& asset = request.asset.get();
   if (!asset.AllowsExternalSource()) {
-    return embedded_result;
+    return std::move(embedded_result);
   }
 
-  const auto external_result = external_resolver_.Resolve(request);
+  auto external_result = external_resolver_.Resolve(request);
   if (external_result.ok) {
-    return external_result;
+    return std::move(external_result);
   }
-  return external_result;
+  return std::move(external_result);
 }
 
 } // namespace oxygen::scripting
