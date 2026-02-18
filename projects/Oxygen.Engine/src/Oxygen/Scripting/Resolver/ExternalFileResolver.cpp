@@ -90,19 +90,13 @@ auto ExternalFileResolver::Resolve(
     };
   }
 
-  ScriptSourceBlob blob {
-    .bytes = std::move(bytes),
-    .language = data::pak::ScriptLanguage::kLuau,
-    .encoding = data::pak::ScriptEncoding::kSource,
-    .compression = data::pak::ScriptCompression::kNone,
-    .content_hash = 0,
-    .origin = ScriptSourceBlob::Origin::kExternalFile,
-    .canonical_name
-    = ScriptSourceBlob::CanonicalName { full_path.generic_string() },
-  };
+  auto blob = ScriptSourceBlob::FromOwned(std::move(bytes),
+    data::pak::ScriptLanguage::kLuau, data::pak::ScriptCompression::kNone, 0,
+    ScriptBlobOrigin::kExternalFile,
+    ScriptBlobCanonicalName { full_path.generic_string() });
   return IScriptSourceResolver::ResolveResult {
     .ok = true,
-    .blob = std::move(blob),
+    .blob = std::optional<ResolvedScriptBlob> { std::move(blob) },
     .error_message = {},
   };
 }

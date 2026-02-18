@@ -24,7 +24,7 @@ public:
     using LoadScriptResourceFn
       = std::function<std::shared_ptr<const data::ScriptResource>(uint32_t)>;
     using ResourceOriginMapperFn
-      = std::function<std::optional<ScriptSourceBlob::Origin>(uint32_t)>;
+      = std::function<std::optional<ScriptBlobOrigin>(uint32_t)>;
 
     std::reference_wrapper<const data::ScriptAsset> asset;
     LoadScriptResourceFn load_script_resource;
@@ -33,7 +33,7 @@ public:
 
   struct ResolveResult {
     bool ok { false };
-    ScriptSourceBlob blob {};
+    std::optional<ResolvedScriptBlob> blob;
     std::string error_message;
   };
 

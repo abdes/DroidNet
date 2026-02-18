@@ -304,63 +304,20 @@ auto ScriptingModule::ExecuteScript(const ScriptExecutionRequest& request)
 auto ScriptingModule::ExecuteScript(const ScriptSourceBlob& blob)
   -> ScriptExecutionResult
 {
-  if (blob.Empty()) {
+  if (blob.IsEmpty()) {
     return ErrorResult("load", "script source blob is empty");
   }
 
-  if (blob.IsSource()) {
-    std::string source_text;
-    source_text.reserve(blob.bytes.size());
-    for (const auto byte : blob.bytes) {
-      source_text.push_back(static_cast<char>(byte));
-    }
-    return ExecuteScript(ScriptExecutionRequest {
-      .source_text = ScriptSourceText { source_text },
-      .chunk_name = ScriptChunkName { blob.canonical_name.get() },
-    });
+  const auto bytes = blob.BytesView();
+  std::string source_text;
+  source_text.reserve(bytes.size());
+  for (const auto byte : bytes) {
+    source_text.push_back(static_cast<char>(byte));
   }
-
-  if (!blob.IsBytecode()) {
-    return ErrorResult("load", "unsupported script blob encoding");
-  }
-  if (lua_state_ == nullptr) {
-    return ErrorResult(
-      "runtime", "cannot execute script: luau module is not attached");
-  }
-
-  lua_getref(lua_state_, runtime_env_ref_);
-  const auto env_index = lua_gettop(lua_state_);
-  const auto chunk_name = blob.canonical_name.get().empty()
-    ? std::string_view("runtime")
-    : std::string_view(blob.canonical_name.get());
-  const std::string chunk_name_string { chunk_name };
-  std::string bytecode_data;
-  bytecode_data.reserve(blob.bytes.size());
-  for (const auto byte : blob.bytes) {
-    bytecode_data.push_back(static_cast<char>(byte));
-  }
-  const auto load_status = luau_load(lua_state_, chunk_name_string.c_str(),
-    bytecode_data.data(), bytecode_data.size(), env_index);
-  if (load_status != LUA_OK) {
-    const auto error_message = LuaToString(lua_state_, kLuaStackTop);
-    lua_pop(lua_state_, kLuaEnvironmentAndErrorCount); // error + env
-    return ErrorResult("compile_or_load", error_message);
-  }
-  lua_remove(lua_state_, env_index); // keep chunk only
-
-  lua_pushcfunction(lua_state_, LuaTraceback, kLuaTracebackFnName);
-  const auto chunk_index = lua_gettop(lua_state_) - 1;
-  lua_insert(lua_state_, chunk_index); // [ ... traceback, chunk ]
-  const auto call_status
-    = lua_pcall(lua_state_, kLuaNoArgs, kLuaNoResults, chunk_index);
-  if (call_status != LUA_OK) {
-    const auto error_message = LuaToString(lua_state_, kLuaStackTop);
-    lua_pop(lua_state_, kLuaErrorAndTracebackCount); // error + traceback
-    return ErrorResult("runtime", error_message);
-  }
-  lua_pop(lua_state_, kLuaSingleValueCount); // traceback
-
-  return OkResult();
+  return ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { source_text },
+    .chunk_name = ScriptChunkName { blob.GetCanonicalName().get() },
+  });
 }
 
 auto ScriptingModule::InitializeSandbox() -> ScriptExecutionResult

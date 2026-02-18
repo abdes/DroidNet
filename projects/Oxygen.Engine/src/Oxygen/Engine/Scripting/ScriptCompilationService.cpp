@@ -122,15 +122,14 @@ auto ScriptCompilationService::CompileAsync(Request request) -> co::Co<Result>
       shared = it->second;
       DLOG_F(2, "joining in-flight compile request (key={})", compile_key);
     } else {
-      const auto language = request.language;
       const auto compile_mode = request.compile_mode;
       auto source = std::move(request.source);
       LOG_F(INFO,
         "starting compile request (key={}, language={}, mode={}, "
         "source_size={})",
-        compile_key, language, compile_mode, source.size());
-      auto op = ExecuteCompileRequest(
-        compile_key, language, std::move(source), compile_mode);
+        compile_key, source.Language(), compile_mode, source.Size());
+      auto op
+        = ExecuteCompileRequest(compile_key, std::move(source), compile_mode);
 
       shared = co::Shared(std::move(op));
       in_flight_.insert_or_assign(compile_key, shared);
@@ -209,7 +208,7 @@ auto ScriptCompilationService::AcquireForSlot(
   SlotAcquireHandle handle {
     .placeholder = {},
     .subscription = subscription,
-    .request = {},
+    .request = std::nullopt,
   };
 
   if (nursery_ != nullptr) {
@@ -217,7 +216,7 @@ auto ScriptCompilationService::AcquireForSlot(
       std::move(request));
   } else {
     LOG_F(ERROR, "compile request not started because service is not active");
-    handle.request = std::move(request);
+    handle.request = std::optional<Request> { std::move(request) };
   }
 
   return handle;
@@ -232,8 +231,8 @@ auto ScriptCompilationService::OnFrameStart(engine::EngineTag /*tag*/) -> void
 }
 
 auto ScriptCompilationService::ExecuteCompileRequest(
-  const CompileKey compile_key, const data::pak::ScriptLanguage language,
-  std::vector<uint8_t> source, const CompileMode compile_mode) -> co::Co<Result>
+  const CompileKey compile_key, ScriptSourceBlob source,
+  const CompileMode compile_mode) -> co::Co<Result>
 {
   auto erase = ScopeGuard([this, compile_key]() noexcept {
     std::lock_guard lock(in_flight_mutex_);
@@ -241,7 +240,7 @@ auto ScriptCompilationService::ExecuteCompileRequest(
   });
 
   const auto result
-    = co_await CompileOnWorkerThread(language, std::move(source), compile_mode);
+    = co_await CompileOnWorkerThread(std::move(source), compile_mode);
   if (result.success) {
     LOG_F(INFO, "compile succeeded (key={}, bytecode_size={})", compile_key,
       result.bytecode.size());
@@ -260,10 +259,10 @@ auto ScriptCompilationService::KickoffCompileRequest(Request request)
   co_return;
 }
 
-auto ScriptCompilationService::CompileOnWorkerThread(
-  const data::pak::ScriptLanguage language, std::vector<uint8_t> source,
+auto ScriptCompilationService::CompileOnWorkerThread(ScriptSourceBlob source,
   const CompileMode compile_mode) const -> co::Co<Result>
 {
+  const auto language = source.Language();
   std::shared_ptr<const IScriptCompiler> compiler;
   {
     std::lock_guard lock(compilers_mutex_);
@@ -274,20 +273,20 @@ auto ScriptCompilationService::CompileOnWorkerThread(
   if (compiler) {
     if (thread_pool_) {
       LOG_F(INFO, "dispatching compile to worker (language={}, source_size={})",
-        language, source.size());
+        language, source.Size());
       co_return co_await thread_pool_->Run(
-        [compiler, compile_mode](std::vector<uint8_t> source_bytes) -> Result {
+        [compiler, compile_mode](ScriptSourceBlob source_blob) -> Result {
           LOG_F(INFO, "worker invoking compiler (source_size={})",
-            source_bytes.size());
-          return compiler->Compile(source_bytes, compile_mode);
+            source_blob.Size());
+          return compiler->Compile(source_blob.BytesView(), compile_mode);
         },
         std::move(source));
     }
 
     DLOG_F(2, "thread pool unavailable, compiling inline");
     LOG_F(INFO, "invoking compiler inline (language={}, source_size={})",
-      language, source.size());
-    co_return compiler->Compile(source, compile_mode);
+      language, source.Size());
+    co_return compiler->Compile(source.BytesView(), compile_mode);
   }
 
   LOG_F(ERROR, "no compiler registered for language={}", language);

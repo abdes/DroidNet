@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Testing/GTest.h>
@@ -149,10 +150,13 @@ NOLINT_TEST_F(
   });
 
   ASSERT_TRUE(result.ok);
-  EXPECT_TRUE(result.blob.IsBytecode());
-  EXPECT_TRUE(std::equal(result.blob.bytes.begin(), result.blob.bytes.end(),
+  ASSERT_TRUE(result.blob.has_value());
+  ASSERT_TRUE(std::holds_alternative<ScriptBytecodeBlob>(*result.blob));
+  const auto& bytecode_blob = std::get<ScriptBytecodeBlob>(*result.blob);
+  const auto resolved_bytes = bytecode_blob.BytesView();
+  EXPECT_TRUE(std::equal(resolved_bytes.begin(), resolved_bytes.end(),
     bytecode->GetData().begin(), bytecode->GetData().end()));
-  EXPECT_EQ(result.blob.origin, ScriptSourceBlob::Origin::kEmbeddedResource);
+  EXPECT_EQ(bytecode_blob.GetOrigin(), ScriptBlobOrigin::kEmbeddedResource);
 }
 
 NOLINT_TEST_F(
@@ -176,9 +180,12 @@ NOLINT_TEST_F(
   });
 
   ASSERT_TRUE(result.ok);
-  EXPECT_TRUE(result.blob.IsSource());
-  EXPECT_EQ(result.blob.origin, ScriptSourceBlob::Origin::kExternalFile);
-  EXPECT_EQ(std::string(result.blob.bytes.begin(), result.blob.bytes.end()),
+  ASSERT_TRUE(result.blob.has_value());
+  ASSERT_TRUE(std::holds_alternative<ScriptSourceBlob>(*result.blob));
+  const auto& source_blob = std::get<ScriptSourceBlob>(*result.blob);
+  EXPECT_EQ(source_blob.GetOrigin(), ScriptBlobOrigin::kExternalFile);
+  const auto resolved_bytes = source_blob.BytesView();
+  EXPECT_EQ(std::string(resolved_bytes.begin(), resolved_bytes.end()),
     std::string(kScript));
 }
 
@@ -243,16 +250,19 @@ NOLINT_TEST_F(ScriptSourceResolverTest, ResolveUsesMappedLooseCookedOrigin)
         return std::shared_ptr<const data::ScriptResource> {};
       },
     .map_resource_origin
-    = [](const uint32_t index) -> std::optional<ScriptSourceBlob::Origin> {
+    = [](const uint32_t index) -> std::optional<ScriptBlobOrigin> {
       if (index == 3) {
-        return ScriptSourceBlob::Origin::kLooseCookedResource;
+        return ScriptBlobOrigin::kLooseCookedResource;
       }
       return std::nullopt;
     },
   });
 
   ASSERT_TRUE(result.ok);
-  EXPECT_EQ(result.blob.origin, ScriptSourceBlob::Origin::kLooseCookedResource);
+  ASSERT_TRUE(result.blob.has_value());
+  ASSERT_TRUE(std::holds_alternative<ScriptBytecodeBlob>(*result.blob));
+  const auto& bytecode_blob = std::get<ScriptBytecodeBlob>(*result.blob);
+  EXPECT_EQ(bytecode_blob.GetOrigin(), ScriptBlobOrigin::kLooseCookedResource);
 }
 
 NOLINT_TEST_F(
@@ -275,11 +285,13 @@ NOLINT_TEST_F(
     .map_resource_origin = {},
   });
   ASSERT_TRUE(resolved.ok);
-  ASSERT_TRUE(resolved.blob.IsSource());
+  ASSERT_TRUE(resolved.blob.has_value());
+  ASSERT_TRUE(std::holds_alternative<ScriptSourceBlob>(*resolved.blob));
+  const auto& source_blob = std::get<ScriptSourceBlob>(*resolved.blob);
 
   ScriptingModule module { engine::ModulePriority { 100U } }; // NOLINT
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
-  const auto execute_result = module.ExecuteScript(resolved.blob);
+  const auto execute_result = module.ExecuteScript(source_blob);
   EXPECT_TRUE(execute_result.ok);
   EXPECT_EQ(execute_result.stage, "ok");
 }
