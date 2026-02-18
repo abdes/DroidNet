@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Scripting/Module/LuauModule.h>
+#include <Oxygen/Scripting/Module/ScriptingModule.h>
 
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
   constexpr auto kTestPriority = oxygen::engine::ModulePriority { 100U };
-  oxygen::scripting::LuauModule module { kTestPriority };
+  oxygen::scripting::ScriptingModule module { kTestPriority };
   const auto attached
     = module.OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> {});
   if (attached) {

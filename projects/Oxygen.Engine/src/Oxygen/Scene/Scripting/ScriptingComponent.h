@@ -7,17 +7,20 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <iterator>
 #include <memory>
 #include <optional>
 #include <ranges>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Composition/Component.h>
+#include <Oxygen/Core/Scripting/ScriptExecutable.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Scene/api_export.h>
 
@@ -36,6 +39,16 @@ public:
   //! Represents a single script attachment slot.
   class Slot {
   public:
+    enum class CompileState : uint8_t {
+      kPendingCompilation = 0,
+      kReady = 1,
+      kCompilationFailed = 2,
+    };
+
+    struct Diagnostic {
+      std::string message;
+    };
+
     struct ParameterEntry {
       std::string_view key;
       std::reference_wrapper<const data::ScriptParam> value;
@@ -189,6 +202,35 @@ public:
       return asset_;
     }
 
+    [[nodiscard]] auto State() const noexcept -> CompileState
+    {
+      return compile_state_;
+    }
+
+    [[nodiscard]] auto Diagnostics() const noexcept
+      -> std::span<const Diagnostic>
+    {
+      return diagnostics_;
+    }
+
+    [[nodiscard]] auto IsDisabled() const noexcept -> bool
+    {
+      return compile_state_ == CompileState::kCompilationFailed;
+    }
+
+    [[nodiscard]] auto Executable() const noexcept
+      -> const std::shared_ptr<const scripting::ScriptExecutable>&
+    {
+      return executable_;
+    }
+
+    auto Run() const noexcept -> void
+    {
+      if (executable_) {
+        executable_->Run();
+      }
+    }
+
     [[nodiscard]] auto OverrideParameters() const
     {
       return overrides_ | std::views::transform([](const auto& kv) -> auto {
@@ -227,8 +269,12 @@ public:
 
   private:
     friend class ScriptingComponent;
+    uint64_t slot_id_ { 0 };
     std::shared_ptr<const data::ScriptAsset> asset_;
     std::vector<std::pair<std::string, data::ScriptParam>> overrides_;
+    CompileState compile_state_ { CompileState::kPendingCompilation };
+    std::vector<Diagnostic> diagnostics_;
+    std::shared_ptr<const scripting::ScriptExecutable> executable_;
   };
 
   //! Default constructor.
@@ -277,6 +323,15 @@ public:
   OXGN_SCN_NDAPI auto Parameters(const Slot& slot) const
     -> Slot::EffectiveParametersView;
 
+  //! Marks a slot as ready and installs its executable implementation.
+  OXGN_SCN_NDAPI auto MarkSlotReady(const Slot& slot,
+    std::shared_ptr<const scripting::ScriptExecutable> executable) -> bool;
+
+  //! Marks a slot as compilation-failed and disables execution.
+  //! Failure is recorded only once per slot.
+  OXGN_SCN_NDAPI auto MarkSlotCompilationFailed(
+    const Slot& slot, std::string diagnostic_message) -> bool;
+
   //! Indicates that this component supports deep cloning.
   [[nodiscard]] auto IsCloneable() const noexcept -> bool override
   {
@@ -287,7 +342,13 @@ public:
   OXGN_SCN_NDAPI auto Clone() const -> std::unique_ptr<Component> override;
 
 private:
+  [[nodiscard]] auto FindSlotById(uint64_t slot_id) noexcept
+    -> std::vector<Slot>::iterator;
+  [[nodiscard]] auto FindSlotById(uint64_t slot_id) const noexcept
+    -> std::vector<Slot>::const_iterator;
+
   std::vector<Slot> slots_;
+  uint64_t next_slot_id_ { 1 };
 };
 
 } // namespace oxygen::scene

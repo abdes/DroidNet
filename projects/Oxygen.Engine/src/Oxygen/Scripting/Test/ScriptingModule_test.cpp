@@ -10,47 +10,43 @@
 
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
-#include <Oxygen/Scripting/Module/LuauModule.h>
-
-namespace oxygen::engine::internal {
-auto EngineTagFactory::Get() noexcept -> EngineTag { return {}; }
-} // namespace oxygen::engine::internal
+#include <Oxygen/Scripting/Module/ScriptingModule.h>
 
 namespace oxygen::scripting::test {
 
 using oxygen::core::MakePhaseMask;
 using oxygen::core::PhaseId;
 using oxygen::engine::ModuleTimingData;
-using oxygen::engine::internal::EngineTagFactory;
 using namespace std::chrono_literals;
 
-class LuauModuleTest : public ::testing::Test {
+class ScriptingModuleTest : public ::testing::Test {
 protected:
   static constexpr auto kDefaultTestPriority = engine::ModulePriority { 100U };
 
-  static auto MakeModule() -> LuauModule
+  static auto MakeModule() -> ScriptingModule
   {
-    return LuauModule { kDefaultTestPriority };
+    return ScriptingModule { kDefaultTestPriority };
   }
 };
 
-NOLINT_TEST_F(LuauModuleTest, MetadataIsStable)
+NOLINT_TEST_F(ScriptingModuleTest, MetadataIsStable)
 {
   auto module = MakeModule();
 
-  EXPECT_EQ(module.GetName(), "LuauModule");
+  EXPECT_EQ(module.GetName(), "ScriptingModule");
   EXPECT_EQ(module.GetPriority().get(), kDefaultTestPriority.get());
 }
 
-NOLINT_TEST_F(LuauModuleTest, PriorityIsInjectable)
+NOLINT_TEST_F(ScriptingModuleTest, PriorityIsInjectable)
 {
   constexpr auto kCustomPriority = engine::ModulePriority { 120U };
-  LuauModule module { kCustomPriority };
+  ScriptingModule module { kCustomPriority };
 
   EXPECT_EQ(module.GetPriority().get(), kCustomPriority.get());
 }
 
-NOLINT_TEST_F(LuauModuleTest, SupportedPhasesIncludeScriptingRelevantPhases)
+NOLINT_TEST_F(
+  ScriptingModuleTest, SupportedPhasesIncludeScriptingRelevantPhases)
 {
   auto module = MakeModule();
   const auto mask = module.GetSupportedPhases();
@@ -62,7 +58,7 @@ NOLINT_TEST_F(LuauModuleTest, SupportedPhasesIncludeScriptingRelevantPhases)
   EXPECT_NE(mask & MakePhaseMask(PhaseId::kFrameEnd), 0U);
 }
 
-NOLINT_TEST_F(LuauModuleTest, AttachAndShutdownAreCallable)
+NOLINT_TEST_F(ScriptingModuleTest, AttachAndShutdownAreCallable)
 {
   auto module = MakeModule();
 
@@ -71,7 +67,7 @@ NOLINT_TEST_F(LuauModuleTest, AttachAndShutdownAreCallable)
   module.OnShutdown();
 }
 
-NOLINT_TEST_F(LuauModuleTest, PhaseHandlersAreInvocableAfterAttach)
+NOLINT_TEST_F(ScriptingModuleTest, PhaseHandlersAreInvocableAfterAttach)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
@@ -88,7 +84,7 @@ NOLINT_TEST_F(LuauModuleTest, PhaseHandlersAreInvocableAfterAttach)
   EXPECT_TRUE(scene.IsValid());
 }
 
-NOLINT_TEST_F(LuauModuleTest, ExecuteScriptSucceedsForValidScript)
+NOLINT_TEST_F(ScriptingModuleTest, ExecuteScriptSucceedsForValidScript)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
@@ -105,7 +101,7 @@ value = value + 1
   EXPECT_TRUE(result.message.empty());
 }
 
-NOLINT_TEST_F(LuauModuleTest, ExecuteScriptFailsForSyntaxError)
+NOLINT_TEST_F(ScriptingModuleTest, ExecuteScriptFailsForSyntaxError)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
@@ -121,7 +117,8 @@ function bad_syntax(
   EXPECT_FALSE(result.message.empty());
 }
 
-NOLINT_TEST_F(LuauModuleTest, ExecuteScriptRuntimeErrorReturnsStructuredFailure)
+NOLINT_TEST_F(
+  ScriptingModuleTest, ExecuteScriptRuntimeErrorReturnsStructuredFailure)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
@@ -137,7 +134,7 @@ error("boom from script")
   EXPECT_NE(result.message.find("boom from script"), std::string::npos);
 }
 
-NOLINT_TEST_F(LuauModuleTest, SandboxBlocksUnsafeGlobals)
+NOLINT_TEST_F(ScriptingModuleTest, SandboxBlocksUnsafeGlobals)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
@@ -153,7 +150,8 @@ end
   EXPECT_TRUE(result.ok);
 }
 
-NOLINT_TEST_F(LuauModuleTest, OnFrameStartHookErrorIsReportedToFrameContext)
+NOLINT_TEST_F(
+  ScriptingModuleTest, OnFrameStartHookErrorIsReportedToFrameContext)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));

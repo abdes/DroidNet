@@ -21,8 +21,8 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/TextureResource.h>
-
 
 namespace oxygen::console {
 class Console;
@@ -70,6 +70,8 @@ public:
   using GeometryCallback
     = std::function<void(std::shared_ptr<data::GeometryAsset>)>;
   using SceneCallback = std::function<void(std::shared_ptr<data::SceneAsset>)>;
+  using ScriptCallback
+    = std::function<void(std::shared_ptr<data::ScriptAsset>)>;
   using EvictionHandler = std::function<void(const EvictionEvent&)>;
 
   //! RAII handle for resource eviction subscriptions.
@@ -165,6 +167,11 @@ public:
     const data::AssetKey& key, SceneCallback on_complete)
     = 0;
 
+  //! Begin loading a script asset and invoke `on_complete` on completion.
+  virtual void StartLoadScriptAsset(
+    const data::AssetKey& key, ScriptCallback on_complete)
+    = 0;
+
   //! Mount a pak file for asset loading.
   virtual auto AddPakFile(const std::filesystem::path& path) -> void = 0;
 
@@ -208,6 +215,12 @@ public:
     -> std::shared_ptr<data::GeometryAsset>
     = 0;
 
+  //! Get cached asset without triggering a load.
+  [[nodiscard]] virtual auto GetScriptAsset(
+    const data::AssetKey& key) const noexcept
+    -> std::shared_ptr<data::ScriptAsset>
+    = 0;
+
   //! Check whether a texture resource is cached.
   [[nodiscard]] virtual auto HasTexture(ResourceKey key) const noexcept -> bool
     = 0;
@@ -223,6 +236,11 @@ public:
 
   //! Check whether a geometry asset is cached.
   [[nodiscard]] virtual auto HasGeometryAsset(
+    const data::AssetKey& key) const noexcept -> bool
+    = 0;
+
+  //! Check whether a script asset is cached.
+  [[nodiscard]] virtual auto HasScriptAsset(
     const data::AssetKey& key) const noexcept -> bool
     = 0;
 

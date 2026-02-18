@@ -708,3 +708,96 @@ auto PakFile::ReadScriptSlotRecords(const uint32_t start_index,
   }
   return result;
 }
+
+auto PakFile::ReadScriptParamRecords(const data::pak::OffsetT absolute_offset,
+  const uint32_t count) const -> std::vector<data::pak::ScriptParamRecord>
+{
+  std::vector<data::pak::ScriptParamRecord> result;
+  result.reserve(count);
+
+  if (count == 0) {
+    return result;
+  }
+
+  std::scoped_lock lock(mutex_);
+  constexpr auto kRecordSize = sizeof(data::pak::ScriptParamRecord);
+  const auto total_bytes = static_cast<uint64_t>(count) * kRecordSize;
+
+  if (const auto seek_res
+    = meta_stream_->Seek(static_cast<size_t>(absolute_offset));
+    !seek_res) {
+    throw std::runtime_error("Failed to seek script parameter array");
+  }
+
+  Reader reader(*meta_stream_);
+  auto blob_res = reader.ReadBlob(static_cast<size_t>(total_bytes));
+  if (!blob_res) {
+    throw std::runtime_error("Failed to read script parameter array");
+  }
+  if (blob_res->size() != static_cast<size_t>(total_bytes)) {
+    throw std::runtime_error("Script parameter array size mismatch");
+  }
+
+  result.resize(count);
+  std::memcpy(
+    result.data(), blob_res->data(), static_cast<size_t>(total_bytes));
+  return result;
+}
+
+auto PakFile::ReadScriptResource(const uint32_t index) const
+  -> std::shared_ptr<const data::ScriptResource>
+{
+  if (index == data::pak::kNoResourceIndex) {
+    return nullptr;
+  }
+
+  std::scoped_lock lock(mutex_);
+  if (!scripts_table_) {
+    throw std::runtime_error("No script resource table present in this file");
+  }
+  if (!scripts_table_->IsValidKey(index)) {
+    throw std::out_of_range("Script resource index out of bounds");
+  }
+
+  const auto desc_offset = scripts_table_->GetResourceOffset(index);
+  if (!desc_offset) {
+    throw std::runtime_error("Failed to resolve script resource descriptor");
+  }
+
+  if (const auto seek_res
+    = meta_stream_->Seek(static_cast<size_t>(*desc_offset));
+    !seek_res) {
+    throw std::runtime_error("Failed to seek script resource descriptor");
+  }
+
+  Reader meta_reader(*meta_stream_);
+  auto desc_blob = meta_reader.ReadBlob(sizeof(data::pak::ScriptResourceDesc));
+  if (!desc_blob) {
+    throw std::runtime_error("Failed to read script resource descriptor");
+  }
+
+  data::pak::ScriptResourceDesc desc {};
+  std::memcpy(&desc, desc_blob->data(), sizeof(desc));
+
+  std::vector<uint8_t> payload;
+  if (desc.size_bytes > 0) {
+    if (!script_data_stream_) {
+      throw std::runtime_error("PakFile script data stream is not open");
+    }
+    if (const auto seek_res
+      = script_data_stream_->Seek(static_cast<size_t>(desc.data_offset));
+      !seek_res) {
+      throw std::runtime_error("Failed to seek script resource payload");
+    }
+
+    Reader script_reader(*script_data_stream_);
+    auto payload_blob = script_reader.ReadBlob(desc.size_bytes);
+    if (!payload_blob) {
+      throw std::runtime_error("Failed to read script resource payload");
+    }
+    payload.resize(payload_blob->size());
+    std::memcpy(payload.data(), payload_blob->data(), payload.size());
+  }
+
+  return std::make_shared<const data::ScriptResource>(desc, std::move(payload));
+}

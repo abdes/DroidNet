@@ -72,6 +72,7 @@ set(
   "PhaseRegistry.h"
   "Resources.h"
   "SafeCall.h"
+  "Scripting/ScriptExecutable.h"
   "Types/Atmosphere.h"
   "Types/ColorSpace.h"
   "Types/Epoch.h"

@@ -6,6 +6,7 @@
 
 #include <array>
 #include <chrono>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -15,7 +16,10 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/FrameContext.h>
-#include <Oxygen/Scripting/Module/LuauModule.h>
+#include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
+#include <Oxygen/Scripting/Compilers/LuauScriptCompiler.h>
+#include <Oxygen/Scripting/Module/ScriptingModule.h>
 
 namespace oxygen::scripting {
 
@@ -160,17 +164,23 @@ namespace {
 
 } // namespace
 
-LuauModule::LuauModule(const engine::ModulePriority priority)
+ScriptingModule::ScriptingModule(const engine::ModulePriority priority)
   : runtime_env_ref_(LUA_NOREF)
   , priority_(priority)
 {
 }
 
-LuauModule::~LuauModule() { OnShutdown(); }
+ScriptingModule::~ScriptingModule() { OnShutdown(); }
 
-auto LuauModule::OnAttached(observer_ptr<AsyncEngine> /*engine*/) noexcept
+auto ScriptingModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept
   -> bool
 {
+  engine_ = engine;
+  if (engine_ != nullptr) {
+    (void)engine_->GetScriptCompilationService().RegisterCompiler(
+      std::make_shared<LuauScriptCompiler>());
+  }
+
   lua_state_ = luaL_newstate();
   if (lua_state_ == nullptr) {
     return false;
@@ -178,7 +188,7 @@ auto LuauModule::OnAttached(observer_ptr<AsyncEngine> /*engine*/) noexcept
 
   const auto sandbox_result = InitializeSandbox();
   if (!sandbox_result.ok) {
-    DLOG_F(ERROR, "LuauModule bootstrap failed: {}", sandbox_result.message);
+    DLOG_F(ERROR, "scripting bootstrap failed: {}", sandbox_result.message);
     OnShutdown();
     return false;
   }
@@ -186,8 +196,14 @@ auto LuauModule::OnAttached(observer_ptr<AsyncEngine> /*engine*/) noexcept
   return true;
 }
 
-auto LuauModule::OnShutdown() noexcept -> void
+auto ScriptingModule::OnShutdown() noexcept -> void
 {
+  if (engine_ != nullptr) {
+    (void)engine_->GetScriptCompilationService().UnregisterCompiler(
+      data::pak::ScriptLanguage::kLuau);
+    engine_ = nullptr;
+  }
+
   if (lua_state_ != nullptr) {
     if (runtime_env_ref_ != LUA_NOREF) {
       lua_unref(lua_state_, runtime_env_ref_);
@@ -198,7 +214,7 @@ auto LuauModule::OnShutdown() noexcept -> void
   }
 }
 
-auto LuauModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
+auto ScriptingModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   -> void
 {
   const auto result = InvokePhaseHook("on_frame_start", context);
@@ -207,8 +223,8 @@ auto LuauModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   }
 }
 
-auto LuauModule::OnFixedSimulation(observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
+auto ScriptingModule::OnFixedSimulation(
+  observer_ptr<engine::FrameContext> context) -> co::Co<>
 {
   const auto result = InvokePhaseHook("on_fixed_simulation", context);
   if (!result.ok) {
@@ -217,7 +233,7 @@ auto LuauModule::OnFixedSimulation(observer_ptr<engine::FrameContext> context)
   co_return;
 }
 
-auto LuauModule::OnGameplay(observer_ptr<engine::FrameContext> context)
+auto ScriptingModule::OnGameplay(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
   const auto result = InvokePhaseHook("on_gameplay", context);
@@ -227,8 +243,8 @@ auto LuauModule::OnGameplay(observer_ptr<engine::FrameContext> context)
   co_return;
 }
 
-auto LuauModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
+auto ScriptingModule::OnSceneMutation(
+  observer_ptr<engine::FrameContext> context) -> co::Co<>
 {
   const auto result = InvokePhaseHook("on_scene_mutation", context);
   if (!result.ok) {
@@ -237,7 +253,8 @@ auto LuauModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   co_return;
 }
 
-auto LuauModule::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
+auto ScriptingModule::OnFrameEnd(observer_ptr<engine::FrameContext> context)
+  -> void
 {
   const auto result = InvokePhaseHook("on_frame_end", context);
   if (!result.ok) {
@@ -245,7 +262,7 @@ auto LuauModule::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
   }
 }
 
-auto LuauModule::ExecuteScript(const ScriptExecutionRequest& request)
+auto ScriptingModule::ExecuteScript(const ScriptExecutionRequest& request)
   -> ScriptExecutionResult
 {
   if (lua_state_ == nullptr) {
@@ -253,9 +270,7 @@ auto LuauModule::ExecuteScript(const ScriptExecutionRequest& request)
       "runtime", "cannot execute script: luau module is not attached");
   }
 
-  Luau::CompileOptions options;
-  options.optimizationLevel = 1;
-  options.debugLevel = 1;
+  const Luau::CompileOptions options {};
   const std::string bytecode
     = Luau::compile(std::string(request.source_text.get()), options);
 
@@ -286,21 +301,69 @@ auto LuauModule::ExecuteScript(const ScriptExecutionRequest& request)
   return OkResult();
 }
 
-auto LuauModule::ExecuteScript(const ::oxygen::scripting::IScriptLoader& loader,
-  const std::string_view script_id) -> ScriptExecutionResult
+auto ScriptingModule::ExecuteScript(const ScriptSourceBlob& blob)
+  -> ScriptExecutionResult
 {
-  const auto loaded = loader.LoadScript(script_id);
-  if (!loaded.ok) {
-    return ErrorResult("load", loaded.error_message);
+  if (blob.Empty()) {
+    return ErrorResult("load", "script source blob is empty");
   }
 
-  return ExecuteScript(ScriptExecutionRequest {
-    .source_text = ScriptSourceText { loaded.source_text },
-    .chunk_name = ScriptChunkName { loaded.chunk_name },
-  });
+  if (blob.IsSource()) {
+    std::string source_text;
+    source_text.reserve(blob.bytes.size());
+    for (const auto byte : blob.bytes) {
+      source_text.push_back(static_cast<char>(byte));
+    }
+    return ExecuteScript(ScriptExecutionRequest {
+      .source_text = ScriptSourceText { source_text },
+      .chunk_name = ScriptChunkName { blob.canonical_name.get() },
+    });
+  }
+
+  if (!blob.IsBytecode()) {
+    return ErrorResult("load", "unsupported script blob encoding");
+  }
+  if (lua_state_ == nullptr) {
+    return ErrorResult(
+      "runtime", "cannot execute script: luau module is not attached");
+  }
+
+  lua_getref(lua_state_, runtime_env_ref_);
+  const auto env_index = lua_gettop(lua_state_);
+  const auto chunk_name = blob.canonical_name.get().empty()
+    ? std::string_view("runtime")
+    : std::string_view(blob.canonical_name.get());
+  const std::string chunk_name_string { chunk_name };
+  std::string bytecode_data;
+  bytecode_data.reserve(blob.bytes.size());
+  for (const auto byte : blob.bytes) {
+    bytecode_data.push_back(static_cast<char>(byte));
+  }
+  const auto load_status = luau_load(lua_state_, chunk_name_string.c_str(),
+    bytecode_data.data(), bytecode_data.size(), env_index);
+  if (load_status != LUA_OK) {
+    const auto error_message = LuaToString(lua_state_, kLuaStackTop);
+    lua_pop(lua_state_, kLuaEnvironmentAndErrorCount); // error + env
+    return ErrorResult("compile_or_load", error_message);
+  }
+  lua_remove(lua_state_, env_index); // keep chunk only
+
+  lua_pushcfunction(lua_state_, LuaTraceback, kLuaTracebackFnName);
+  const auto chunk_index = lua_gettop(lua_state_) - 1;
+  lua_insert(lua_state_, chunk_index); // [ ... traceback, chunk ]
+  const auto call_status
+    = lua_pcall(lua_state_, kLuaNoArgs, kLuaNoResults, chunk_index);
+  if (call_status != LUA_OK) {
+    const auto error_message = LuaToString(lua_state_, kLuaStackTop);
+    lua_pop(lua_state_, kLuaErrorAndTracebackCount); // error + traceback
+    return ErrorResult("runtime", error_message);
+  }
+  lua_pop(lua_state_, kLuaSingleValueCount); // traceback
+
+  return OkResult();
 }
 
-auto LuauModule::InitializeSandbox() -> ScriptExecutionResult
+auto ScriptingModule::InitializeSandbox() -> ScriptExecutionResult
 {
   if (lua_state_ == nullptr) {
     return ErrorResult("bootstrap", "lua state is null");
@@ -312,7 +375,7 @@ auto LuauModule::InitializeSandbox() -> ScriptExecutionResult
   return OkResult();
 }
 
-auto LuauModule::InvokePhaseHook(const std::string_view hook_name,
+auto ScriptingModule::InvokePhaseHook(const std::string_view hook_name,
   observer_ptr<engine::FrameContext> context) -> ScriptExecutionResult
 {
   if (lua_state_ == nullptr) {
@@ -357,16 +420,16 @@ auto LuauModule::InvokePhaseHook(const std::string_view hook_name,
   return OkResult();
 }
 
-auto LuauModule::ReportHookError(observer_ptr<engine::FrameContext> context,
-  const std::string_view hook_name, const ScriptExecutionResult& result) const
-  -> void
+auto ScriptingModule::ReportHookError(
+  observer_ptr<engine::FrameContext> context, const std::string_view hook_name,
+  const ScriptExecutionResult& result) const -> void
 {
   if (context == nullptr) {
     return;
   }
 
   ReportError(context,
-    std::string("Luau phase hook '")
+    std::string("script phase hook '")
       .append(hook_name)
       .append("' failed [")
       .append(result.stage)

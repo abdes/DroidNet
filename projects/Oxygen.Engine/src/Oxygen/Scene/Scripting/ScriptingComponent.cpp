@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <stdexcept>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
 
 namespace oxygen::scene {
@@ -16,13 +17,16 @@ auto ScriptingComponent::AddSlot(std::shared_ptr<const data::ScriptAsset> asset)
 {
   slots_.emplace_back();
   auto& slot = slots_.back();
+  slot.slot_id_ = next_slot_id_++;
   slot.asset_ = std::move(asset);
+  slot.compile_state_ = Slot::CompileState::kPendingCompilation;
+  slot.diagnostics_.clear();
+  slot.executable_.reset();
 }
 
 auto ScriptingComponent::RemoveSlot(const Slot& slot) -> bool
 {
-  auto it = std::ranges::find_if(
-    slots_, [&slot](const Slot& candidate) { return &candidate == &slot; });
+  auto it = FindSlotById(slot.slot_id_);
   if (it == slots_.end()) {
     return false;
   }
@@ -33,8 +37,7 @@ auto ScriptingComponent::RemoveSlot(const Slot& slot) -> bool
 auto ScriptingComponent::SetParameter(
   const Slot& slot, std::string_view name, data::ScriptParam value) -> bool
 {
-  auto slot_it = std::ranges::find_if(
-    slots_, [&slot](const Slot& candidate) { return &candidate == &slot; });
+  auto slot_it = FindSlotById(slot.slot_id_);
   if (slot_it == slots_.end()) {
     return false;
   }
@@ -55,8 +58,7 @@ auto ScriptingComponent::TryGetParameter(
   const Slot& slot, std::string_view name) const
   -> std::optional<std::reference_wrapper<const data::ScriptParam>>
 {
-  auto slot_it = std::ranges::find_if(
-    slots_, [&slot](const Slot& candidate) { return &candidate == &slot; });
+  auto slot_it = FindSlotById(slot.slot_id_);
   if (slot_it == slots_.end()) {
     return std::nullopt;
   }
@@ -92,8 +94,7 @@ auto ScriptingComponent::GetParameter(
 auto ScriptingComponent::Parameters(const Slot& slot) const
   -> Slot::EffectiveParametersView
 {
-  auto slot_it = std::ranges::find_if(
-    slots_, [&slot](const Slot& candidate) { return &candidate == &slot; });
+  auto slot_it = FindSlotById(slot.slot_id_);
   if (slot_it == slots_.end()) {
     return {};
   }
@@ -110,11 +111,64 @@ auto ScriptingComponent::Slot::GetOverrideParameter(std::string_view key) const
     "Override parameter '" + std::string(key) + "' was not found");
 }
 
+auto ScriptingComponent::MarkSlotReady(const Slot& slot,
+  std::shared_ptr<const scripting::ScriptExecutable> executable) -> bool
+{
+  if (!executable) {
+    return false;
+  }
+
+  auto slot_it = FindSlotById(slot.slot_id_);
+  if (slot_it == slots_.end()) {
+    return false;
+  }
+
+  slot_it->compile_state_ = Slot::CompileState::kReady;
+  slot_it->executable_ = std::move(executable);
+  DLOG_F(2, "slot state set to ready");
+  return true;
+}
+
+auto ScriptingComponent::MarkSlotCompilationFailed(
+  const Slot& slot, std::string diagnostic_message) -> bool
+{
+  auto slot_it = FindSlotById(slot.slot_id_);
+  if (slot_it == slots_.end()) {
+    return false;
+  }
+
+  if (slot_it->compile_state_ == Slot::CompileState::kCompilationFailed) {
+    return true;
+  }
+
+  slot_it->compile_state_ = Slot::CompileState::kCompilationFailed;
+  slot_it->executable_.reset();
+  slot_it->diagnostics_.push_back(
+    Slot::Diagnostic { .message = std::move(diagnostic_message) });
+  LOG_F(WARNING, "slot state set to compilation failed");
+  return true;
+}
+
 auto ScriptingComponent::Clone() const -> std::unique_ptr<Component>
 {
   auto clone = std::make_unique<ScriptingComponent>();
   clone->slots_ = this->slots_;
+  clone->next_slot_id_ = this->next_slot_id_;
   return clone;
+}
+
+auto ScriptingComponent::FindSlotById(const uint64_t slot_id) noexcept
+  -> std::vector<Slot>::iterator
+{
+  return std::ranges::find_if(slots_,
+    [slot_id](const Slot& candidate) { return candidate.slot_id_ == slot_id; });
+}
+
+auto ScriptingComponent::FindSlotById(const uint64_t slot_id) const noexcept
+  -> std::vector<Slot>::const_iterator
+{
+  return std::ranges::find_if(slots_,
+    [slot_id](const Slot& candidate) { return candidate.slot_id_ == slot_id; });
 }
 
 } // namespace oxygen::scene

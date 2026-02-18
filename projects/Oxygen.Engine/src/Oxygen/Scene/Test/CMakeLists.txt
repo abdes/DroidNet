@@ -49,6 +49,7 @@ m_gtest_program(
     "SceneFlag_test.cpp"
 )
 m_gtest_program(NodeData SOURCES "NodeData_test.cpp")
+m_gtest_program(ScriptingComponent SOURCES "ScriptingComponent_test.cpp")
 m_gtest_program(SceneNodeImpl SOURCES "SceneNodeImpl_test.cpp")
 m_gtest_program(
   SceneNode

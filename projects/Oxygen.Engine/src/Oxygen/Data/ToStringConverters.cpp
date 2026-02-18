@@ -12,6 +12,7 @@
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/MeshType.h>
+#include <Oxygen/Data/PakFormat.h>
 
 auto oxygen::data::to_string(oxygen::data::AssetType value) noexcept -> const
   char*
@@ -129,6 +130,163 @@ auto oxygen::data::to_string(oxygen::data::BufferResource::UsageFlags value)
   check_and_append(UsageFlags::kImmutable, "Immutable");
 
   DCHECK_EQ_F(checked, value, "to_string: Unchecked UsageFlags value detected");
+
+  return result;
+}
+
+auto oxygen::data::pak::v5::to_string(
+  const oxygen::data::pak::v5::ScriptParamType value) noexcept
+  -> std::string_view
+{
+  switch (value) {
+    // clang-format off
+    case ScriptParamType::kNone:   return "None";
+    case ScriptParamType::kBool:   return "Bool";
+    case ScriptParamType::kInt32:  return "Int32";
+    case ScriptParamType::kFloat:  return "Float";
+    case ScriptParamType::kString: return "String";
+    case ScriptParamType::kVec2:   return "Vec2";
+    case ScriptParamType::kVec3:   return "Vec3";
+    case ScriptParamType::kVec4:   return "Vec4";
+    // clang-format on
+  }
+  return "__NotSupported__";
+}
+
+auto oxygen::data::pak::v5::to_string(
+  const oxygen::data::pak::v5::ScriptLanguage value) noexcept
+  -> std::string_view
+{
+  switch (value) {
+    // clang-format off
+    case ScriptLanguage::kLuau: return "Luau";
+    // clang-format on
+  }
+  return "__NotSupported__";
+}
+
+auto oxygen::data::pak::v5::to_string(
+  const oxygen::data::pak::v5::ScriptEncoding value) noexcept
+  -> std::string_view
+{
+  switch (value) {
+    // clang-format off
+    case ScriptEncoding::kBytecode: return "Bytecode";
+    case ScriptEncoding::kSource:   return "Source";
+    // clang-format on
+  }
+  return "__NotSupported__";
+}
+
+auto oxygen::data::pak::v5::to_string(
+  const oxygen::data::pak::v5::ScriptCompression value) noexcept
+  -> std::string_view
+{
+  switch (value) {
+    // clang-format off
+    case ScriptCompression::kNone: return "None";
+    case ScriptCompression::kZstd: return "Zstd";
+    // clang-format on
+  }
+  return "__NotSupported__";
+}
+
+auto oxygen::data::pak::v5::to_string(
+  const oxygen::data::pak::v5::ScriptAssetFlags value) -> std::string
+{
+  using Flags = oxygen::data::pak::v5::ScriptAssetFlags;
+
+  if (value == Flags::kNone) {
+    return "None";
+  }
+
+  std::string result;
+  [[maybe_unused]] bool first = true;
+  auto checked = Flags::kNone;
+
+  [[maybe_unused]]
+  auto check_and_append
+    = [&](const Flags flag, const char* name) {
+        if ((value & flag) == flag) {
+          if (!first) {
+            result += " | ";
+          }
+          result += name;
+          first = false;
+          checked |= flag;
+        }
+      };
+
+  check_and_append(Flags::kAllowExternalSource, "AllowExternalSource");
+  DCHECK_EQ_F(
+    checked, value, "to_string: Unchecked ScriptAssetFlags value detected");
+
+  return result;
+}
+
+auto oxygen::data::pak::v5::to_string(
+  const oxygen::data::pak::v5::ScriptingComponentFlags value) noexcept
+  -> std::string
+{
+  using Flags = oxygen::data::pak::v5::ScriptingComponentFlags;
+
+  if (value == Flags::kNone) {
+    return "None";
+  }
+
+  std::string result;
+  [[maybe_unused]] bool first = true;
+  auto checked = Flags::kNone;
+
+  [[maybe_unused]]
+  auto check_and_append
+    = [&](const Flags flag, const char* name) {
+        if ((value & flag) == flag) {
+          if (!first) {
+            result += " | ";
+          }
+          result += name;
+          first = false;
+          checked |= flag;
+        }
+      };
+
+  // Add new flag names here when ScriptingComponentFlags grows.
+  DCHECK_EQ_F(checked, value,
+    "to_string: Unchecked ScriptingComponentFlags value detected");
+
+  return result;
+}
+
+auto oxygen::data::pak::v5::to_string(
+  const oxygen::data::pak::v5::ScriptSlotFlags value) noexcept -> std::string
+{
+  using Flags = oxygen::data::pak::v5::ScriptSlotFlags;
+
+  if (value == Flags::kNone) {
+    return "None";
+  }
+
+  std::string result;
+  bool first = true;
+  auto checked = Flags::kNone;
+
+  [[maybe_unused]]
+  auto check_and_append
+    = [&](const Flags flag, const char* name) {
+        if ((value & flag) == flag) {
+          if (!first) {
+            result += " | ";
+          }
+          result += name;
+          first = false;
+          checked |= flag;
+        }
+      };
+
+  // Add new flag names here when ScriptSlotFlags grows.
+  DCHECK_EQ_F(
+    checked, value, "to_string: Unchecked ScriptSlotFlags value detected");
 
   return result;
 }

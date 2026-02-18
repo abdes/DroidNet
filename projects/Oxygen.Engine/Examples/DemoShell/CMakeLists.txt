@@ -207,6 +207,7 @@ target_link_libraries(
     oxygen::platform
     oxygen::renderer
     oxygen::scene
+    oxygen::scripting
     fmt::fmt-header-only
     nlohmann_json::nlohmann_json
 )

@@ -20,6 +20,7 @@
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/Scripting/ScriptCompilationService.h>
 #include <Oxygen/Engine/TimeManager.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Input/InputSystem.h>
@@ -153,6 +154,10 @@ auto AsyncEngine::Run() -> void
       co_await nursery_->Start(
         &oxygen::content::AssetLoader::ActivateAsync, asset_loader_.get());
     }
+    co_await nursery_->Start(
+      &scripting::ScriptCompilationService::ActivateAsync,
+      script_compilation_service_.get());
+    script_compilation_service_->Run();
 
     co_await FrameLoop();
     co_await Shutdown();
@@ -222,6 +227,9 @@ auto AsyncEngine::Shutdown() -> co::Co<>
     }
   }
 
+  script_compilation_service_->Stop();
+  script_compilation_service_.reset();
+
   // Now shutdown the platform event pump so modules are able to perform
   // any required cleanup while platform objects are still alive.
   SavePersistedConsoleCVars();
@@ -273,6 +281,18 @@ auto AsyncEngine::GetAssetLoader() const noexcept
   return observer_ptr { asset_loader_.get() };
 }
 
+auto AsyncEngine::GetScriptCompilationService() noexcept
+  -> scripting::IScriptCompilationService&
+{
+  return *script_compilation_service_;
+}
+
+auto AsyncEngine::GetScriptCompilationService() const noexcept
+  -> const scripting::IScriptCompilationService&
+{
+  return *script_compilation_service_;
+}
+
 auto AsyncEngine::SetTargetFps(uint32_t fps) noexcept -> void
 {
   if (fps > EngineConfig::kMaxTargetFps) {
@@ -320,7 +340,6 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
   while (true) {
     if (shutdown_requested_) {
       LOG_F(INFO, "Shutdown requested, stopping frame loop...");
-      co_await Shutdown();
       break;
     }
     // Check for termination requests
@@ -601,6 +620,8 @@ auto AsyncEngine::PhaseFrameStart(observer_ptr<FrameContext> context)
   platform_->OnFrameStart();
 
   // Execute module frame start work
+  script_compilation_service_->OnFrameStart(
+    engine::internal::EngineTagFactory::Get());
   co_await module_manager_->ExecutePhase(PhaseId::kFrameStart, context);
 
   // TODO: Implement epoch advance for resource lifetime management
@@ -1269,6 +1290,11 @@ auto AsyncEngine::InitializeDetachedServices() -> void
   } else {
     LOG_F(INFO, "[D] AssetLoader disabled by config");
   }
+
+  script_compilation_service_
+    = std::make_shared<scripting::ScriptCompilationService>(
+      observer_ptr<co::ThreadPool> { &platform_->Threads() });
+  LOG_F(INFO, "[D] ScriptCompilationService initialized");
 
   // TODO: Initialize crash dump detection service
   // Set up crash dump monitoring and symbolication service

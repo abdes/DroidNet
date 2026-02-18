@@ -100,6 +100,11 @@ private:
     {
       on_complete(nullptr);
     }
+    void StartLoadScriptAsset(
+      const data::AssetKey& /*key*/, ScriptCallback on_complete) override
+    {
+      on_complete(nullptr);
+    }
     auto AddPakFile(const std::filesystem::path& /*path*/) -> void override { }
     auto AddLooseCookedRoot(const std::filesystem::path& /*path*/)
       -> void override
@@ -136,6 +141,12 @@ private:
     {
       return nullptr;
     }
+    [[nodiscard]] auto GetScriptAsset(
+      const data::AssetKey& /*key*/) const noexcept
+      -> std::shared_ptr<data::ScriptAsset> override
+    {
+      return nullptr;
+    }
     [[nodiscard]] auto HasTexture(content::ResourceKey /*key*/) const noexcept
       -> bool override
     {
@@ -152,6 +163,11 @@ private:
       return false;
     }
     [[nodiscard]] auto HasGeometryAsset(
+      const data::AssetKey& /*key*/) const noexcept -> bool override
+    {
+      return false;
+    }
+    [[nodiscard]] auto HasScriptAsset(
       const data::AssetKey& /*key*/) const noexcept -> bool override
     {
       return false;
