@@ -649,7 +649,7 @@ void SceneLoaderService::AttachScripting(const data::SceneAsset& asset)
       }
     }
     auto scripting = runtime_nodes_[node_index].GetScripting();
-    const auto slot_records = loader_.GetHydratedScriptSlots(asset, component);
+    auto slot_records = loader_.GetHydratedScriptSlots(asset, component);
     LOG_F(INFO, "hydrated script slots (node_index={}, slots={})", node_index,
       slot_records.size());
 

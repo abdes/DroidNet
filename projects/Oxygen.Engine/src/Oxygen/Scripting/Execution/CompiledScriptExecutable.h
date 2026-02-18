@@ -26,6 +26,12 @@ public:
 
   auto Run() const noexcept -> void override { }
 
+  [[nodiscard]] auto BytecodeView() const noexcept
+    -> std::span<const uint8_t> override
+  {
+    return Bytecode();
+  }
+
   [[nodiscard]] auto Bytecode() const noexcept -> std::span<const uint8_t>
   {
     return bytecode_ != nullptr ? bytecode_->BytesView()
