@@ -7,7 +7,6 @@
 #include <cstdlib>
 #include <memory>
 #include <string>
-#include <type_traits>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>

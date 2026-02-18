@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+
 #include <Oxygen/Input/Action.h>
 
 using oxygen::input::Action;
@@ -20,10 +22,10 @@ Action::Action(std::string name, const ActionValueType value_type)
     value_.Set(false);
     break;
   case ActionValueType::kAxis1D:
-    value_.Set(Axis1D { 0.0f });
+    value_.Set(Axis1D { 0.0F });
     break;
   case ActionValueType::kAxis2D:
-    value_.Set(Axis2D { 0.0f, 0.0f });
+    value_.Set(Axis2D { .x = 0.0F, .y = 0.0F });
     break;
   default:
     value_.Set(false);
@@ -122,28 +124,22 @@ void Action::RecordTransition(
 auto Action::WasStartedThisFrame() const -> bool
 {
   // kStarted removed; retain behavior by deriving from Ongoing edge.
-  for (const auto& t : frame_transitions_) {
+  return std::ranges::any_of(frame_transitions_, [](const auto& t) {
     const bool from_ongoing
       = static_cast<bool>(t.from_state & ActionState::kOngoing);
     const bool to_ongoing
       = static_cast<bool>(t.to_state & ActionState::kOngoing);
-    if (!from_ongoing && to_ongoing) {
-      return true;
-    }
-  }
-  return false;
+    return !from_ongoing && to_ongoing;
+  });
 }
 
 auto Action::WasTriggeredThisFrame() const -> bool
 {
-  for (const auto& t : frame_transitions_) {
-    const bool to_trig
+  return std::ranges::any_of(frame_transitions_, [](const auto& t) {
+    const bool to_triggered
       = static_cast<bool>(t.to_state & ActionState::kTriggered);
-    if (to_trig) {
-      return true;
-    }
-  }
-  return false;
+    return to_triggered;
+  });
 }
 
 auto Action::WasValueUpdatedThisFrame() const -> bool
@@ -153,40 +149,31 @@ auto Action::WasValueUpdatedThisFrame() const -> bool
 
 auto Action::WasCompletedThisFrame() const -> bool
 {
-  for (const auto& t : frame_transitions_) {
+  return std::ranges::any_of(frame_transitions_, [](const auto& t) {
     const bool to_completed
       = static_cast<bool>(t.to_state & ActionState::kCompleted);
-    if (to_completed) {
-      return true;
-    }
-  }
-  return false;
+    return to_completed;
+  });
 }
 
 auto Action::WasCanceledThisFrame() const -> bool
 {
-  for (const auto& t : frame_transitions_) {
+  return std::ranges::any_of(frame_transitions_, [](const auto& t) {
     const bool to_canceled
       = static_cast<bool>(t.to_state & ActionState::kCanceled);
-    if (to_canceled) {
-      return true;
-    }
-  }
-  return false;
+    return to_canceled;
+  });
 }
 
 auto Action::WasReleasedThisFrame() const -> bool
 {
   // Released is an Ongoing->Idle edge; infer by transitions where Ongoing bit
   // changes from 1 to 0.
-  for (const auto& t : frame_transitions_) {
+  return std::ranges::any_of(frame_transitions_, [](const auto& t) {
     const bool from_ongoing
       = static_cast<bool>(t.from_state & ActionState::kOngoing);
     const bool to_ongoing
       = static_cast<bool>(t.to_state & ActionState::kOngoing);
-    if (from_ongoing && !to_ongoing) {
-      return true;
-    }
-  }
-  return false;
+    return from_ongoing && !to_ongoing;
+  });
 }

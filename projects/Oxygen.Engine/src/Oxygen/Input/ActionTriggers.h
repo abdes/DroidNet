@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -23,26 +24,26 @@ namespace oxygen::input {
 //-- ActionTrigger -------------------------------------------------------------
 
 enum class ActionTriggerType : uint8_t {
-  kPressed,
-  kReleased,
-  kDown,
-  kHold,
-  kHoldAndRelease,
-  kPulse,
-  kTap,
-  kChord,
-  kActionChain,
-  kCombo,
+// NOLINTNEXTLINE(*-macro-*)
+#define OXNPUT_ACTION_TRIGGER_TYPE(name, value) name = value,
+#define OXNPUT_ACTION_TRIGGER_BEHAVIOR(name, value)
+#include <Oxygen/Core/Meta/Input/ActionTriggers.inc>
+#undef OXNPUT_ACTION_TRIGGER_BEHAVIOR
+#undef OXNPUT_ACTION_TRIGGER_TYPE
 };
+
+OXGN_NPUT_NDAPI auto to_string(ActionTriggerType value) noexcept
+  -> std::string_view;
 
 class ActionTrigger {
 public:
   enum class Behavior : uint8_t {
-    kExplicit, // Input may trigger if any explicit trigger is triggered.
-    kImplicit, // Input may trigger only if all implicit triggers are
-    // triggered.
-    kBlocker, // Inverted trigger that will block all other triggers if it
-    // is triggered.
+#define OXNPUT_ACTION_TRIGGER_TYPE(name, value)
+// NOLINTNEXTLINE(*-macro-*)
+#define OXNPUT_ACTION_TRIGGER_BEHAVIOR(name, value) name = value,
+#include <Oxygen/Core/Meta/Input/ActionTriggers.inc>
+#undef OXNPUT_ACTION_TRIGGER_BEHAVIOR
+#undef OXNPUT_ACTION_TRIGGER_TYPE
   };
 
   explicit ActionTrigger() = default;
@@ -134,11 +135,14 @@ protected:
 
 private:
   Behavior behavior_ { Behavior::kImplicit };
-  float actuation_threshold_ { 0.5F };
+  float actuation_threshold_ { 0.5F }; // NOLINT(*magic-numbers)
   State state_ { State::kIdle };
   State previous_state_ { State::kIdle };
   bool triggered_ { false };
 };
+
+OXGN_NPUT_NDAPI auto to_string(ActionTrigger::Behavior value) noexcept
+  -> std::string_view;
 
 //-- ActionTriggerPressed ------------------------------------------------------
 
@@ -264,7 +268,7 @@ protected:
   }
 
 private:
-  oxygen::time::CanonicalDuration held_duration_ {};
+  oxygen::time::CanonicalDuration held_duration_;
 };
 
 //-- ActionTriggerHold ---------------------------------------------------------
@@ -316,7 +320,7 @@ protected:
     oxygen::time::CanonicalDuration delta_time) -> bool override;
 
 private:
-  oxygen::time::CanonicalDuration hold_duration_threshold_ {};
+  oxygen::time::CanonicalDuration hold_duration_threshold_;
   bool one_shot_ { true };
   bool triggered_once_ { false };
 };
@@ -356,7 +360,7 @@ protected:
     oxygen::time::CanonicalDuration delta_time) -> bool override;
 
 private:
-  oxygen::time::CanonicalDuration hold_duration_threshold_ {};
+  oxygen::time::CanonicalDuration hold_duration_threshold_;
 };
 
 //-- ActionTriggerPulse --------------------------------------------------------
@@ -497,7 +501,7 @@ protected:
     oxygen::time::CanonicalDuration delta_time) -> bool override;
 
 private:
-  oxygen::time::CanonicalDuration threshold_ {};
+  oxygen::time::CanonicalDuration threshold_;
 };
 
 //-- ActionTriggerChain --------------------------------------------------------
@@ -593,7 +597,7 @@ public:
 
   OXGN_NPUT_API void AddComboStep(std::shared_ptr<Action> action,
     ActionState completion_states = ActionState::kTriggered,
-    float time_to_complete_seconds = 0.5F);
+    float time_to_complete_seconds = 0.5F); // NOLINT(*magic-numbers)
   OXGN_NPUT_API void RemoveComboStep(uint32_t index);
   OXGN_NPUT_API void ClearComboSteps();
   [[nodiscard]] auto GetComboSteps() const { return combo_steps_; }
@@ -619,7 +623,7 @@ private:
   std::vector<InputComboStep> combo_steps_;
   std::vector<InputComboBreaker> combo_breakers_;
 
-  oxygen::time::CanonicalDuration waited_time_ {};
+  oxygen::time::CanonicalDuration waited_time_;
   size_t current_step_index_ { 0 };
 };
 

@@ -72,7 +72,7 @@ namespace input {
     bool clear_value_after_update_ { false };
   };
 
-}
+} // namespace input
 } // namespace oxygen
 
 // TODO(abdes) addShouldBeIgnored flag

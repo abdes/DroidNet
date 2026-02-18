@@ -16,8 +16,8 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
-#include <Oxygen/Console/Console.h>
 #include <Oxygen/Console/CVar.h>
+#include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/Action.h>
@@ -28,12 +28,12 @@
 #include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Platform/Platform.h>
 
+using oxygen::input::Action;
 using oxygen::input::InputMappingContext;
 using oxygen::platform::InputEvent;
 using oxygen::platform::InputSlot;
 using oxygen::platform::InputSlots;
 
-using namespace oxygen::input;
 using oxygen::engine::InputSystem;
 
 namespace {
@@ -78,6 +78,8 @@ auto InputSystem::RegisterConsoleBindings(
     .help = "Enable input processing for InputSystem",
     .default_value = input_enabled_,
     .flags = console::CVarFlags::kArchive,
+    .min_value = {},
+    .max_value = {},
   });
 
   (void)console->RegisterCVar(console::CVarDefinition {
@@ -85,6 +87,8 @@ auto InputSystem::RegisterConsoleBindings(
     .help = "Enable verbose InputSystem per-event logging",
     .default_value = log_events_,
     .flags = console::CVarFlags::kDevOnly,
+    .min_value = {},
+    .max_value = {},
   });
 }
 
@@ -219,12 +223,10 @@ auto InputSystem::OnInput(observer_ptr<FrameContext> context) -> co::Co<>
   co_return;
 }
 
-auto InputSystem::OnSnapshot(observer_ptr<FrameContext> context) -> void
+auto InputSystem::OnSnapshot(observer_ptr<FrameContext> /*context*/) -> void
 {
-  // Input snapshot is frozen at the end of kInput. Here, we could publish it
-  // into the FrameContext unified snapshot once the context supports our
-  // snapshot type.
-  // TODO: Integrate with FrameContext::SetInputSnapshot when types align.
+  // Input snapshot is frozen at the end of kInput, and is automatically
+  // published by the engine in kSnapshot.
 }
 
 auto InputSystem::OnFrameEnd(observer_ptr<FrameContext> /*context*/) -> void
@@ -236,11 +238,10 @@ auto InputSystem::OnFrameEnd(observer_ptr<FrameContext> /*context*/) -> void
 
 auto InputSystem::DrainPendingInputEvents() -> void
 {
-  while (input_reader_.TryReceive()) {
-  }
+  while (input_reader_.TryReceive()) { }
 }
 
-void InputSystem::ProcessInputEvent(std::shared_ptr<InputEvent> event)
+void InputSystem::ProcessInputEvent(std::shared_ptr<InputEvent>& event)
 {
   using platform::KeyEvent;
   using platform::MouseButtonEvent;

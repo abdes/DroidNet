@@ -188,7 +188,7 @@ auto ActionTriggerPulse::DoUpdateState(const ActionValue& action_value,
       static_cast<std::chrono::nanoseconds>(ramp_start_).count());
     const auto end_ns = static_cast<float>(
       static_cast<std::chrono::nanoseconds>(ramp_end_).count());
-    const auto lerp_ns = start_ns + (end_ns - start_ns) * t;
+    const auto lerp_ns = start_ns + ((end_ns - start_ns) * t);
     effective_interval = oxygen::time::CanonicalDuration {
       std::chrono::nanoseconds { static_cast<long long>(lerp_ns) }
     };
@@ -455,12 +455,10 @@ auto ActionTriggerCombo::DoUpdateState(const ActionValue& /*action_value*/,
   // new input events to advance.
   const auto occurred_this_frame = [](const std::shared_ptr<Action>& action,
                                      const ActionState mask) -> bool {
-    for (const auto& tr : action->GetFrameTransitions()) {
-      if ((tr.to_state & mask) != ActionState::kNone) {
-        return true;
-      }
-    }
-    return false;
+    return std::ranges::any_of(
+      action->GetFrameTransitions(), [mask](const auto& tr) {
+        return (tr.to_state & mask) != ActionState::kNone;
+      });
   };
 
   // Check for any combo breaker that fired
