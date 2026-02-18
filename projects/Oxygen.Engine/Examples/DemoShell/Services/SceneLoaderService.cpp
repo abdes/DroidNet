@@ -146,6 +146,28 @@ namespace {
     return scripting::IScriptCompilationService::CompileKey { seed };
   }
 
+  auto HexPreview(std::span<const uint8_t> bytes, const size_t max_bytes)
+    -> std::string
+  {
+    static constexpr char kHex[] = "0123456789abcdef";
+    const auto count = std::min(bytes.size(), max_bytes);
+    if (count == 0) {
+      return "<empty>";
+    }
+
+    std::string out;
+    out.reserve(count * 3);
+    for (size_t i = 0; i < count; ++i) {
+      const auto value = bytes[i];
+      out.push_back(kHex[(value >> 4U) & 0x0FU]);
+      out.push_back(kHex[value & 0x0FU]);
+      if (i + 1 < count) {
+        out.push_back(' ');
+      }
+    }
+    return out;
+  }
+
 } // namespace
 
 SceneLoaderService::SceneLoaderService(content::IAssetLoader& loader,
@@ -564,11 +586,8 @@ void SceneLoaderService::AttachScripting(const data::SceneAsset& asset)
   if (scripting_components.empty()) {
     return;
   }
-  if (!source_pak_) {
-    LOG_F(
-      WARNING, "scripting components present, but no source pak is available");
-    return;
-  }
+  LOG_F(INFO, "hydrating scripting components (count={})",
+    scripting_components.size());
 
   for (const ScriptingComponentRecord& component : scripting_components) {
     const auto node_index = static_cast<size_t>(component.node_index);
@@ -577,15 +596,18 @@ void SceneLoaderService::AttachScripting(const data::SceneAsset& asset)
       continue;
     }
 
-    auto scripting = runtime_nodes_[node_index].GetScripting();
-    std::vector<data::pak::ScriptSlotRecord> slot_records;
-    try {
-      slot_records = source_pak_->ReadScriptSlotRecords(
-        component.slot_start_index, component.slot_count);
-    } catch (const std::exception& ex) {
-      LOG_F(ERROR, "failed to read script slots: {}", ex.what());
-      continue;
+    if (!runtime_nodes_[node_index].HasScripting()) {
+      const bool attached = runtime_nodes_[node_index].AttachScripting();
+      if (!attached && !runtime_nodes_[node_index].HasScripting()) {
+        LOG_F(
+          ERROR, "failed to attach scripting component to node {}", node_index);
+        continue;
+      }
     }
+    auto scripting = runtime_nodes_[node_index].GetScripting();
+    const auto slot_records = loader_.GetHydratedScriptSlots(asset, component);
+    LOG_F(INFO, "hydrated script slots (node_index={}, slots={})", node_index,
+      slot_records.size());
 
     for (const auto& slot_record : slot_records) {
       if (slot_record.script_asset_key == data::AssetKey {}) {
@@ -594,15 +616,17 @@ void SceneLoaderService::AttachScripting(const data::SceneAsset& asset)
 
       auto script_asset = loader_.GetScriptAsset(slot_record.script_asset_key);
       if (!script_asset) {
-        LOG_F(WARNING, "missing script asset {}",
+        LOG_F(ERROR, "missing script asset {}",
           data::to_string(slot_record.script_asset_key));
         continue;
       }
 
       if (!scripting.AddSlot(script_asset)) {
-        LOG_F(WARNING, "failed to attach script slot to node {}", node_index);
+        LOG_F(ERROR, "failed to attach script slot to node {}", node_index);
         continue;
       }
+      LOG_F(INFO, "attached script slot (node_index={}, script_asset={})",
+        node_index, data::to_string(slot_record.script_asset_key));
 
       const auto slots = scripting.Slots();
       if (slots.empty()) {
@@ -610,15 +634,10 @@ void SceneLoaderService::AttachScripting(const data::SceneAsset& asset)
       }
       const auto slot = slots.back();
 
-      if (slot_record.params_count > 0) {
-        try {
-          const auto params = source_pak_->ReadScriptParamRecords(
-            slot_record.params_array_offset, slot_record.params_count);
-          ApplySlotParameters(scripting, slot, params);
-        } catch (const std::exception& ex) {
-          LOG_F(
-            ERROR, "failed to hydrate script slot parameters: {}", ex.what());
-        }
+      if (!slot_record.params.empty()) {
+        ApplySlotParameters(scripting, slot, slot_record.params);
+        LOG_F(INFO, "applied slot parameters (node_index={}, count={})",
+          node_index, slot_record.params.size());
       }
 
       QueueSlotCompilation(
@@ -643,6 +662,7 @@ void SceneLoaderService::ApplySlotParameters(
       key_begin, static_cast<size_t>(key_end - key_begin));
     const auto value = ScriptParamFromRecord(param);
     if (!value.has_value()) {
+      LOG_F(WARNING, "skipping unsupported script parameter type");
       continue;
     }
     if (!scripting.SetParameter(slot, key, *value)) {
@@ -656,9 +676,12 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
   std::shared_ptr<const data::ScriptAsset> script_asset)
 {
   if (!script_asset) {
+    LOG_F(ERROR, "script compilation skipped because script asset is null");
     return;
   }
   if (!compilation_service_) {
+    LOG_F(ERROR,
+      "script compilation skipped because compilation service is unavailable");
     return;
   }
 
@@ -666,11 +689,18 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
     = [pak = source_pak_.get()](
         const uint32_t index) -> std::shared_ptr<const data::ScriptResource> {
     if (pak == nullptr) {
+      LOG_F(WARNING,
+        "script resource load requested without source pak (index={})", index);
       return nullptr;
     }
     try {
       return pak->ReadScriptResource(index);
+    } catch (const std::exception& ex) {
+      LOG_F(WARNING, "failed to read script resource (index={}): {}", index,
+        ex.what());
+      return nullptr;
     } catch (...) {
+      LOG_F(WARNING, "failed to read script resource (index={})", index);
       return nullptr;
     }
   };
@@ -678,15 +708,25 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
   auto map_origin = [pak = source_pak_.get()](const uint32_t index)
     -> std::optional<scripting::ScriptSourceBlob::Origin> {
     if (pak == nullptr) {
+      LOG_F(WARNING,
+        "script origin mapping requested without source pak (index={})", index);
       return std::nullopt;
     }
     try {
       const auto resource = pak->ReadScriptResource(index);
       if (!resource) {
+        LOG_F(WARNING,
+          "script resource missing while mapping origin (index={})", index);
         return std::nullopt;
       }
       return scripting::ScriptSourceBlob::Origin::kEmbeddedResource;
+    } catch (const std::exception& ex) {
+      LOG_F(WARNING, "failed to map script origin from resource (index={}): {}",
+        index, ex.what());
+      return std::nullopt;
     } catch (...) {
+      LOG_F(
+        WARNING, "failed to map script origin from resource (index={})", index);
       return std::nullopt;
     }
   };
@@ -698,8 +738,25 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
       .map_resource_origin = std::move(map_origin),
     });
   if (!resolve_result.ok) {
-    LOG_F(WARNING, "failed to resolve script source: {}",
+    LOG_F(ERROR, "failed to resolve script source: {}",
       resolve_result.error_message);
+    return;
+  }
+  LOG_F(INFO,
+    "resolved script source (asset_key={}, origin={}, bytecode={}, size={})",
+    data::to_string(script_asset->GetAssetKey()),
+    static_cast<uint32_t>(resolve_result.blob.origin),
+    resolve_result.blob.IsBytecode() ? "yes" : "no",
+    resolve_result.blob.bytes.size());
+  LOG_F(INFO, "resolved script source preview (asset_key={}, first_bytes={})",
+    data::to_string(script_asset->GetAssetKey()),
+    HexPreview(resolve_result.blob.bytes, 16));
+  if (resolve_result.blob.bytes.empty()) {
+    LOG_F(ERROR, "resolved script source is empty (asset_key={})",
+      data::to_string(script_asset->GetAssetKey()));
+    auto scripting = node.GetScripting();
+    (void)scripting.MarkSlotCompilationFailed(
+      slot, "resolved script source is empty");
     return;
   }
 
@@ -708,16 +765,23 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
     (void)scripting.MarkSlotReady(slot,
       std::make_shared<const scripting::CompiledScriptExecutable>(
         std::vector<uint8_t>(resolve_result.blob.bytes)));
+    LOG_F(INFO, "slot ready from embedded bytecode (asset_key={})",
+      data::to_string(script_asset->GetAssetKey()));
     return;
   }
 
   const auto compile_key
     = ComputeCompileKey(script_asset->GetAssetKey(), resolve_result.blob);
+  auto source_bytes = std::move(resolve_result.blob.bytes);
+  LOG_F(INFO,
+    "submitting compile request (asset_key={}, compile_key={}, source_size={})",
+    data::to_string(script_asset->GetAssetKey()), compile_key,
+    source_bytes.size());
   auto acquire = compilation_service_->AcquireForSlot(
     scripting::IScriptCompilationService::Request {
       .compile_key = compile_key,
       .language = resolve_result.blob.language,
-      .source = resolve_result.blob.bytes,
+      .source = std::move(source_bytes),
       .compile_mode = scripting::CompileMode::kDebug,
     },
     scripting::IScriptCompilationService::SlotAcquireCallbacks {
@@ -728,18 +792,22 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
             (void)scripting.MarkSlotReady(slot,
               std::make_shared<const scripting::CompiledScriptExecutable>(
                 std::move(bytecode)));
+            LOG_F(INFO, "slot ready from compilation");
           }
         },
       .on_failed =
         [node, slot](std::string diagnostic) mutable {
           if (node.IsAlive()) {
             auto scripting = node.GetScripting();
+            LOG_F(ERROR, "script compilation failed: {}", diagnostic);
             (void)scripting.MarkSlotCompilationFailed(
               slot, std::move(diagnostic));
           }
         },
     });
   (void)acquire;
+  LOG_F(INFO, "queued script compilation (asset_key={}, compile_key={})",
+    data::to_string(script_asset->GetAssetKey()), compile_key);
 }
 
 void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)

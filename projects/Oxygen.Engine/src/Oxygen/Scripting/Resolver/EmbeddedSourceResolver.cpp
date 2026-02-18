@@ -33,6 +33,14 @@ namespace {
           + std::to_string(index),
       };
     }
+    if (resource->GetData().empty()) {
+      return IScriptSourceResolver::ResolveResult {
+        .ok = false,
+        .blob = {},
+        .error_message = "embedded script resource is empty for index "
+          + std::to_string(index),
+      };
+    }
 
     auto origin = ScriptSourceBlob::Origin::kEmbeddedResource;
     if (request.map_resource_origin) {

@@ -145,7 +145,8 @@ auto ScriptingComponent::MarkSlotCompilationFailed(
   slot_it->executable_.reset();
   slot_it->diagnostics_.push_back(
     Slot::Diagnostic { .message = std::move(diagnostic_message) });
-  LOG_F(WARNING, "slot state set to compilation failed");
+  LOG_F(WARNING, "slot state set to compilation failed: {}",
+    slot_it->diagnostics_.back().message);
   return true;
 }
 
