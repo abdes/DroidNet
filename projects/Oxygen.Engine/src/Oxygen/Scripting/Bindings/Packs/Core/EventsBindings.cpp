@@ -43,12 +43,20 @@ namespace {
   struct EventListener {
     std::uint64_t id { 0 };
     std::uint64_t sequence { 0 };
-    std::string event_name;
-    std::string phase_name;
+    // Event/Phase are implicitly handled by the bucket
     int priority { 0 };
     int callback_ref { kLuaNoRef };
     bool once { false };
     bool connected { true };
+  };
+
+  struct EventBucket {
+    std::vector<EventListener> listeners;
+  };
+
+  struct ListenerLocation {
+    std::string event_name;
+    std::string phase_name;
   };
 
   struct QueuedEvent {
@@ -67,7 +75,15 @@ namespace {
     std::uint64_t next_listener_id { 1 };
     std::uint64_t next_sequence { 1 };
     std::string current_phase { kDefaultPhaseName };
-    std::vector<EventListener> listeners;
+
+    // Primary Storage: EventName -> PhaseName -> Bucket (Sorted Listeners)
+    std::unordered_map<std::string,
+      std::unordered_map<std::string, EventBucket>>
+      buckets;
+
+    // Fast Lookup: ListenerID -> Location
+    std::unordered_map<std::uint64_t, ListenerLocation> id_map;
+
     std::vector<QueuedEvent> queue;
     std::unordered_map<std::string, EventStats> stats_by_event;
   };
@@ -186,44 +202,45 @@ namespace {
     return priority;
   }
 
-  auto FindListenerById(EventRuntime& runtime, std::uint64_t listener_id)
-    -> EventListener*
+  auto FindListenerLocation(const EventRuntime& runtime,
+    std::uint64_t listener_id) -> const ListenerLocation*
   {
-    const auto it = std::ranges::find_if(
-      runtime.listeners, [listener_id](const EventListener& listener) {
-        return listener.id == listener_id;
-      });
-    return it == runtime.listeners.end() ? nullptr : &(*it);
+    const auto it = runtime.id_map.find(listener_id);
+    return it == runtime.id_map.end() ? nullptr : &it->second;
   }
 
-  auto FindListenerById(const EventRuntime& runtime, std::uint64_t listener_id)
-    -> const EventListener*
+  auto UnbindListenerById(
+    lua_State* state, EventRuntime& runtime, std::uint64_t listener_id) -> void
   {
-    const auto it = std::ranges::find_if(
-      runtime.listeners, [listener_id](const EventListener& listener) {
-        return listener.id == listener_id;
-      });
-    return it == runtime.listeners.end() ? nullptr : &(*it);
-  }
+    const auto* loc = FindListenerLocation(runtime, listener_id);
+    if (loc == nullptr) {
+      return;
+    }
 
-  auto UnbindListener(lua_State* state, EventListener& listener) -> void
-  {
-    if (listener.connected) {
-      listener.connected = false;
-      if (IsValidLuaRef(listener.callback_ref)) {
-        lua_unref(state, listener.callback_ref);
-        listener.callback_ref = kLuaNoRef;
+    auto& phase_map = runtime.buckets[loc->event_name];
+    auto& bucket = phase_map[loc->phase_name];
+
+    for (auto& listener : bucket.listeners) {
+      if (listener.id == listener_id) {
+        if (listener.connected) {
+          listener.connected = false;
+          if (IsValidLuaRef(listener.callback_ref)) {
+            lua_unref(state, listener.callback_ref);
+            listener.callback_ref = kLuaNoRef;
+          }
+        }
+        break;
       }
     }
+
+    runtime.id_map.erase(listener_id);
   }
 
-  auto CompactDisconnectedListeners(EventRuntime& runtime) -> void
+  auto CompactBucket(EventBucket& bucket) -> void
   {
-    std::erase_if(runtime.listeners,
+    std::erase_if(bucket.listeners,
       [](const EventListener& listener) { return !listener.connected; });
   }
-
-  auto PushConnectionObject(lua_State* state, std::uint64_t listener_id) -> int;
 
   auto LuaConnectionDisconnect(lua_State* state) -> int
   {
@@ -241,11 +258,7 @@ namespace {
       return 0;
     }
 
-    if (auto* listener = FindListenerById(*runtime, listener_id);
-      listener != nullptr) {
-      UnbindListener(state, *listener);
-      CompactDisconnectedListeners(*runtime);
-    }
+    UnbindListenerById(state, *runtime, listener_id);
     return 0;
   }
 
@@ -262,9 +275,11 @@ namespace {
     lua_pop(state, 1);
 
     const auto* runtime = FindRuntime(state);
-    const auto* listener
-      = runtime == nullptr ? nullptr : FindListenerById(*runtime, listener_id);
-    lua_pushboolean(state, listener != nullptr && listener->connected ? 1 : 0);
+    bool is_connected = false;
+    if (runtime != nullptr) {
+      is_connected = runtime->id_map.contains(listener_id);
+    }
+    lua_pushboolean(state, is_connected ? 1 : 0);
     return 1;
   }
 
@@ -293,6 +308,21 @@ namespace {
       .payload_ref = payload_ref,
     });
     return 0;
+  }
+
+  auto InsertListenerSorted(std::vector<EventListener>& listeners,
+    const EventListener& new_listener) -> void
+  {
+    const auto compare = [](const EventListener& a, const EventListener& b) {
+      if (a.priority != b.priority) {
+        return a.priority > b.priority;
+      }
+      return a.sequence < b.sequence;
+    };
+
+    auto it = std::upper_bound(
+      listeners.begin(), listeners.end(), new_listener, compare);
+    listeners.insert(it, new_listener);
   }
 
   auto LuaEventsOnImpl(lua_State* state, const bool once) -> int
@@ -324,16 +354,23 @@ namespace {
     const int callback_ref = lua_ref(state, -1);
 
     const std::uint64_t listener_id = runtime->next_listener_id++;
-    runtime->listeners.push_back(EventListener {
+    const std::uint64_t seq = runtime->next_sequence++;
+
+    EventListener listener {
       .id = listener_id,
-      .sequence = runtime->next_sequence++,
-      .event_name = std::string(event_name_sv),
-      .phase_name = phase_name,
+      .sequence = seq,
       .priority = priority,
       .callback_ref = callback_ref,
       .once = once,
       .connected = true,
-    });
+    };
+
+    auto& bucket = runtime->buckets[std::string(event_name_sv)][phase_name];
+    InsertListenerSorted(bucket.listeners, listener);
+
+    runtime->id_map[listener_id]
+      = ListenerLocation { .event_name = std::string(event_name_sv),
+          .phase_name = phase_name };
 
     return PushConnectionObject(state, listener_id);
   }
@@ -404,10 +441,17 @@ namespace {
     if (runtime == nullptr) {
       return 0;
     }
-    const auto count = static_cast<lua_Integer>(std::ranges::count_if(
-      runtime->listeners, [event_name_sv](const EventListener& listener) {
-        return listener.connected && listener.event_name == event_name_sv;
-      }));
+
+    lua_Integer count = 0;
+    const auto ev_it = runtime->buckets.find(std::string(event_name_sv));
+    if (ev_it != runtime->buckets.end()) {
+      for (const auto& [phase, bucket] : ev_it->second) {
+        count
+          += static_cast<lua_Integer>(std::ranges::count_if(bucket.listeners,
+            [](const EventListener& l) { return l.connected; }));
+      }
+    }
+
     lua_pushinteger(state, count);
     return 1;
   }
@@ -432,10 +476,15 @@ namespace {
     const EventStats stats
       = it == runtime->stats_by_event.end() ? EventStats {} : it->second;
 
-    const auto listeners = static_cast<lua_Integer>(std::ranges::count_if(
-      runtime->listeners, [event_name_sv](const EventListener& listener) {
-        return listener.connected && listener.event_name == event_name_sv;
-      }));
+    lua_Integer listeners = 0;
+    const auto ev_it = runtime->buckets.find(std::string(event_name_sv));
+    if (ev_it != runtime->buckets.end()) {
+      for (const auto& [phase, bucket] : ev_it->second) {
+        listeners
+          += static_cast<lua_Integer>(std::ranges::count_if(bucket.listeners,
+            [](const EventListener& l) { return l.connected; }));
+      }
+    }
 
     lua_newtable(state);
     lua_pushinteger(state, static_cast<lua_Integer>(stats.fired));
@@ -476,31 +525,6 @@ namespace {
 
     lua_pop(state, kLuaSingleValueCount); // traceback
     return true;
-  }
-
-  auto CollectDispatchOrder(const EventRuntime& runtime,
-    const std::string_view event_name, const std::string_view phase_name)
-    -> std::vector<size_t>
-  {
-    std::vector<size_t> indices;
-    for (size_t i = 0; i < runtime.listeners.size(); ++i) {
-      const auto& listener = runtime.listeners[i];
-      if (!listener.connected || listener.event_name != event_name
-        || listener.phase_name != phase_name) {
-        continue;
-      }
-      indices.push_back(i);
-    }
-
-    std::ranges::sort(indices, [&runtime](const size_t a, const size_t b) {
-      const auto& lhs = runtime.listeners[a];
-      const auto& rhs = runtime.listeners[b];
-      if (lhs.priority != rhs.priority) {
-        return lhs.priority > rhs.priority;
-      }
-      return lhs.sequence < rhs.sequence;
-    });
-    return indices;
   }
 } // namespace
 
@@ -565,6 +589,7 @@ auto DispatchEventsForPhase(lua_State* state, const std::string_view phase_name)
 
   runtime->current_phase = std::string(phase_name);
 
+  // Extract dispatch list locally
   const size_t initial_queue_size = runtime->queue.size();
   std::vector<size_t> dispatch_indices;
   dispatch_indices.reserve(initial_queue_size);
@@ -579,10 +604,13 @@ auto DispatchEventsForPhase(lua_State* state, const std::string_view phase_name)
   for (const size_t queue_index : dispatch_indices) {
     auto& queued = runtime->queue[queue_index];
     auto& stats = runtime->stats_by_event[queued.event_name];
-    const auto listener_indices
-      = CollectDispatchOrder(*runtime, queued.event_name, phase_name);
-    for (const size_t listener_index : listener_indices) {
-      auto& listener = runtime->listeners[listener_index];
+
+    auto& phase_map = runtime->buckets[queued.event_name];
+    auto& bucket = phase_map[std::string(phase_name)];
+
+    size_t count = bucket.listeners.size();
+    for (size_t i = 0; i < count; ++i) {
+      auto& listener = bucket.listeners[i];
       if (!listener.connected) {
         continue;
       }
@@ -605,7 +633,7 @@ auto DispatchEventsForPhase(lua_State* state, const std::string_view phase_name)
       }
 
       if (listener.once) {
-        UnbindListener(state, listener);
+        UnbindListenerById(state, *runtime, listener.id);
       }
     }
 
@@ -613,12 +641,14 @@ auto DispatchEventsForPhase(lua_State* state, const std::string_view phase_name)
       lua_unref(state, queued.payload_ref);
       queued.payload_ref = kLuaNoRef;
     }
+
+    CompactBucket(bucket);
   }
 
   std::erase_if(runtime->queue, [phase_name](const QueuedEvent& event) {
     return event.phase_name == phase_name;
   });
-  CompactDisconnectedListeners(*runtime);
+
   return status;
 }
 

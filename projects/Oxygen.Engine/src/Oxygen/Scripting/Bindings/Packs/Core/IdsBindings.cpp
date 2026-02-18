@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <string>
@@ -23,191 +22,308 @@ namespace oxygen::scripting::bindings {
 
 namespace {
   constexpr int kLuaArg1 = 1;
-  constexpr int kLuaArg2 = 2;
+
+  constexpr const char* kUuidMetatableName = "oxygen.uuid";
+  constexpr const char* kHashMetatableName = "oxygen.hash";
+
   using UuidBytes = decltype(data::GenerateAssetGuid());
   constexpr size_t kUuidByteCount = std::tuple_size_v<UuidBytes>;
-  constexpr size_t kUuidDashCount = 4;
-  constexpr size_t kUuidStringLength = (kUuidByteCount * 2) + kUuidDashCount;
-  constexpr uint8_t kHexNibbleShift = 4;
-  constexpr uint8_t kHexNibbleMask
-    = static_cast<uint8_t>((1U << kHexNibbleShift) - 1U);
-  constexpr auto kHexDigits = std::to_array<char>({
-    '0',
-    '1',
-    '2',
-    '3',
-    '4',
-    '5',
-    '6',
-    '7',
-    '8',
-    '9',
-    'a',
-    'b',
-    'c',
-    'd',
-    'e',
-    'f',
-  });
+  constexpr size_t kUuidStringLength = 36;
+  constexpr unsigned kHexMask = 0xF;
+  constexpr size_t kDashPosA = 4;
+  constexpr size_t kDashPosB = 6;
+  constexpr size_t kDashPosC = 8;
+  constexpr size_t kDashPosD = 10;
+  constexpr size_t kDashIndex0 = 8;
+  constexpr size_t kDashIndex1 = 13;
+  constexpr size_t kDashIndex2 = 18;
+  constexpr size_t kDashIndex3 = 23;
 
-  auto IsHexChar(const char c) -> bool
+  // Hex lookup optimization could go here, but std::from_chars is C++17.
+  // We'll stick to a robust manual parser or optimized version.
+
+  struct UuidUserdata {
+    UuidBytes bytes;
+  };
+
+  struct HashUserdata {
+    std::uint64_t value;
+  };
+
+  // --- Helper Functions ---
+
+  auto ToUuid(lua_State* state, int index) -> UuidUserdata*
   {
-    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
-      || (c >= 'A' && c <= 'F');
-  }
-
-  auto HexValue(const char c) -> uint8_t
-  {
-    constexpr uint8_t kHexAlphabetOffset = 10;
-    if (c >= '0' && c <= '9') {
-      return static_cast<uint8_t>(c - '0');
-    }
-    if (c >= 'a' && c <= 'f') {
-      return static_cast<uint8_t>(kHexAlphabetOffset + (c - 'a'));
-    }
-    return static_cast<uint8_t>(kHexAlphabetOffset + (c - 'A'));
-  }
-
-  auto ParseUuidString(std::string_view text, UuidBytes& out) -> bool
-  {
-    constexpr size_t kDashPos1 = 8;
-    constexpr size_t kDashPos2 = 13;
-    constexpr size_t kDashPos3 = 18;
-    constexpr size_t kDashPos4 = 23;
-    constexpr auto kUuidDashPositions
-      = std::to_array<size_t>({ kDashPos1, kDashPos2, kDashPos3, kDashPos4 });
-    if (text.size() != kUuidStringLength) {
-      return false;
-    }
-
-    for (const auto pos : kUuidDashPositions) {
-      if (text.at(pos) != '-') {
-        return false;
+    void* data = lua_touserdata(state, index);
+    if (data != nullptr) {
+      if (lua_getmetatable(state, index) != 0) {
+        lua_getfield(state, LUA_REGISTRYINDEX, kUuidMetatableName);
+        if (lua_rawequal(state, -1, -2) != 0) {
+          lua_pop(state, 2);
+          return static_cast<UuidUserdata*>(data);
+        }
+        lua_pop(state, 2);
       }
     }
-
-    size_t src = 0;
-    size_t dst = 0;
-    while (src < text.size() && dst < out.size()) {
-      if (text.at(src) == '-') {
-        ++src;
-        continue;
-      }
-      if (src + 1 >= text.size()) {
-        return false;
-      }
-      const char hi = text.at(src);
-      const char lo = text.at(src + 1);
-      if (!IsHexChar(hi) || !IsHexChar(lo)) {
-        return false;
-      }
-      out.at(dst++) = static_cast<uint8_t>(
-        (HexValue(hi) << kHexNibbleShift) | HexValue(lo));
-      src += 2;
-    }
-    return dst == out.size();
+    return nullptr;
   }
 
   auto BytesToUuidString(const UuidBytes& bytes) -> std::string
   {
-    constexpr size_t kDashAfterByte1 = 4;
-    constexpr size_t kDashAfterByte2 = 6;
-    constexpr size_t kDashAfterByte3 = 8;
-    constexpr size_t kDashAfterByte4 = 10;
-    constexpr auto kUuidDashByteIndices = std::to_array<size_t>(
-      { kDashAfterByte1, kDashAfterByte2, kDashAfterByte3, kDashAfterByte4 });
+    // Optimized string formatting
+    // Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    static constexpr std::string_view kHexChars { "0123456789abcdef" };
     std::string out;
-    out.reserve(kUuidStringLength);
+    out.resize(kUuidStringLength);
+
+    size_t out_idx = 0;
     for (size_t i = 0; i < bytes.size(); ++i) {
-      if (std::find(kUuidDashByteIndices.begin(), kUuidDashByteIndices.end(), i)
-        != kUuidDashByteIndices.end()) {
-        out.push_back('-');
+      if (i == kDashPosA || i == kDashPosB || i == kDashPosC
+        || i == kDashPosD) {
+        out[out_idx++] = '-';
       }
-      const auto b = bytes.at(i);
-      out.push_back(kHexDigits.at(
-        static_cast<size_t>((b >> kHexNibbleShift) & kHexNibbleMask)));
-      out.push_back(kHexDigits.at(static_cast<size_t>(b & kHexNibbleMask)));
+      uint8_t b = bytes.at(i);
+      out[out_idx++] = kHexChars[static_cast<size_t>((b >> 4) & kHexMask)];
+      out[out_idx++] = kHexChars[static_cast<size_t>(b & kHexMask)];
     }
     return out;
   }
 
-  auto LuaUuidNew(lua_State* state) -> int
+  auto ParseUuidString(std::string_view text, UuidBytes& out) -> bool
   {
-    const auto bytes = data::GenerateAssetGuid();
-    const auto text = BytesToUuidString(bytes);
-    lua_pushlstring(state, text.c_str(), text.size());
-    return 1;
+    if (text.size() != kUuidStringLength) {
+      return false;
+    }
+
+    // Validate dashes
+    if (text[kDashIndex0] != '-' || text[kDashIndex1] != '-'
+      || text[kDashIndex2] != '-' || text[kDashIndex3] != '-') {
+      return false;
+    }
+
+    auto hex_val = [](char c) -> int {
+      constexpr int kBaseTen = 10;
+      if (c >= '0' && c <= '9') {
+        return c - '0';
+      }
+      if (c >= 'a' && c <= 'f') {
+        return kBaseTen + (c - 'a');
+      }
+      if (c >= 'A' && c <= 'F') {
+        return kBaseTen + (c - 'A');
+      }
+      return -1;
+    };
+
+    size_t byte_idx = 0;
+    for (size_t i = 0; i < text.size(); ++i) {
+      if (text[i] == '-') {
+        continue;
+      }
+
+      int hi = hex_val(text[i]);
+      int lo = hex_val(text[++i]);
+
+      if (hi < 0 || lo < 0) {
+        return false;
+      }
+
+      out.at(byte_idx++) = static_cast<uint8_t>((hi << 4) | lo);
+    }
+    return byte_idx == kUuidByteCount;
   }
 
-  auto LuaUuidIsValid(lua_State* state) -> int
+  auto PushUuid(lua_State* state, const UuidBytes& bytes) -> void
   {
-    size_t text_size = 0;
-    const auto* text_ptr = lua_tolstring(state, kLuaArg1, &text_size);
-    if (text_ptr == nullptr) {
-      lua_pushboolean(state, 0);
-      return 1;
-    }
-    UuidBytes bytes {};
-    lua_pushboolean(
-      state, ParseUuidString({ text_ptr, text_size }, bytes) ? 1 : 0);
+    auto* data = static_cast<UuidUserdata*>(
+      lua_newuserdata(state, sizeof(UuidUserdata)));
+    data->bytes = bytes;
+    luaL_getmetatable(state, kUuidMetatableName);
+    lua_setmetatable(state, -2);
+  }
+
+  auto PushHash(lua_State* state, std::uint64_t value) -> void
+  {
+    auto* data = static_cast<HashUserdata*>(
+      lua_newuserdata(state, sizeof(HashUserdata)));
+    data->value = value;
+    luaL_getmetatable(state, kHashMetatableName);
+    lua_setmetatable(state, -2);
+  }
+
+  // --- UUID Bindings ---
+
+  auto LuaUuidNew(lua_State* state) -> int
+  {
+    PushUuid(state, data::GenerateAssetGuid());
     return 1;
   }
 
   auto LuaUuidToString(lua_State* state) -> int
   {
-    size_t text_size = 0;
-    const auto* text_ptr = lua_tolstring(state, kLuaArg1, &text_size);
-    if (text_ptr == nullptr) {
-      return 0;
+    // ARG 1 can be Userdata OR String (for compatibility/validation helper)
+    if (auto* u = ToUuid(state, kLuaArg1); u != nullptr) {
+      std::string s = BytesToUuidString(u->bytes);
+      lua_pushlstring(state, s.c_str(), s.size());
+      return 1;
     }
 
-    UuidBytes bytes {};
-    if (!ParseUuidString({ text_ptr, text_size }, bytes)) {
-      luaL_error(state, "invalid uuid format");
-      return 0;
+    // Check if it's already a string, validate it
+    size_t len = 0;
+    const char* str = lua_tolstring(state, kLuaArg1, &len);
+    if (str != nullptr) {
+      UuidBytes bytes;
+      if (ParseUuidString(std::string_view(str, len), bytes)) {
+        // Normalize it
+        std::string s = BytesToUuidString(bytes);
+        lua_pushlstring(state, s.c_str(), s.size());
+        return 1;
+      }
     }
 
-    const auto normalized = BytesToUuidString(bytes);
-    lua_pushlstring(state, normalized.c_str(), normalized.size());
-    return 1;
+    luaL_error(
+      state, "uuid.to_string expects uuid userdata or valid uuid string");
+    return 0;
   }
 
   auto LuaUuidFromString(lua_State* state) -> int
   {
-    return LuaUuidToString(state);
+    size_t len = 0;
+    const char* str = lua_tolstring(state, kLuaArg1, &len);
+    if (str == nullptr) {
+      return 0; // or error
+    }
+
+    UuidBytes bytes;
+    if (ParseUuidString(std::string_view(str, len), bytes)) {
+      PushUuid(state, bytes);
+      return 1;
+    }
+
+    // Return nil on failure?
+    return 0;
+  }
+
+  auto LuaUuidIsValid(lua_State* state) -> int
+  {
+    if (ToUuid(state, kLuaArg1) != nullptr) {
+      lua_pushboolean(state, 1);
+      return 1;
+    }
+    size_t len = 0;
+    const char* str = lua_tolstring(state, kLuaArg1, &len);
+    if (str != nullptr) {
+      UuidBytes bytes;
+      lua_pushboolean(
+        state, ParseUuidString(std::string_view(str, len), bytes) ? 1 : 0);
+      return 1;
+    }
+    lua_pushboolean(state, 0);
+    return 1;
+  }
+
+  auto LuaUuidEq(lua_State* state) -> int
+  {
+    auto* a = ToUuid(state, 1);
+    auto* b = ToUuid(state, 2);
+    if (a != nullptr && b != nullptr) {
+      lua_pushboolean(state, (a->bytes == b->bytes) ? 1 : 0);
+    } else {
+      lua_pushboolean(state, 0);
+    }
+    return 1;
+  }
+
+  // --- Hash Bindings ---
+
+  auto CheckHash(lua_State* state, int index) -> std::uint64_t
+  {
+    void* data = lua_touserdata(state, index);
+    if (data != nullptr) {
+      if (lua_getmetatable(state, index) != 0) {
+        lua_getfield(state, LUA_REGISTRYINDEX, kHashMetatableName);
+        if (lua_rawequal(state, -1, -2) != 0) {
+          lua_pop(state, 2);
+          return static_cast<HashUserdata*>(data)->value;
+        }
+        lua_pop(state, 2);
+      }
+    }
+    if (lua_isnumber(state, index) != 0) {
+      return static_cast<std::uint64_t>(
+        lua_tonumber(state, index)); // Precision loss warning?
+    }
+    if (lua_isstring(state, index) != 0) {
+      // Auto-hash string?
+      size_t len = 0;
+      const char* s = lua_tolstring(state, index, &len);
+      if (s != nullptr) {
+        return ComputeFNV1a64(s, len);
+      }
+    }
+    luaL_argerror(state, index, "hash, number, or string expected");
+    return 0;
   }
 
   auto LuaHash64(lua_State* state) -> int
   {
-    size_t text_size = 0;
-    const auto* text_ptr = lua_tolstring(state, kLuaArg1, &text_size);
-    if (text_ptr == nullptr) {
-      return 0;
+    // Args: string -> hash userdata
+    size_t len = 0;
+    const char* s = lua_tolstring(state, kLuaArg1, &len);
+    if (s != nullptr) {
+      PushHash(state, ComputeFNV1a64(s, len));
+      return 1;
     }
-    const auto h = ComputeFNV1a64(text_ptr, text_size);
-    lua_pushinteger(state, static_cast<lua_Integer>(h));
-    return 1;
+    return 0;
   }
 
   auto LuaHashCombine64(lua_State* state) -> int
   {
-    if ((lua_isnumber(state, kLuaArg1) == 0)
-      || (lua_isnumber(state, kLuaArg2) == 0)) {
-      return 0;
-    }
-    size_t seed = static_cast<size_t>(
-      static_cast<std::uint64_t>(lua_tointeger(state, kLuaArg1)));
-    const auto value
-      = static_cast<std::uint64_t>(lua_tointeger(state, kLuaArg2));
+    // Args: seed (hash/int), value (hash/int) -> hash userdata
+    std::uint64_t seed = CheckHash(state, 1);
+    std::uint64_t value = CheckHash(state, 2);
+
+    // HashCombine modifies seed
+    // Using Oxygen/Base/Hash.h implementation pattern?
+    // HashCombine(seed, value) usually: seed ^= value + 0x9e3779b9 + (seed<<6)
+    // + (seed>>2); Assuming HashCombine matches strictly.
     HashCombine(seed, value);
-    lua_pushinteger(state, static_cast<lua_Integer>(seed));
+
+    PushHash(state, seed);
     return 1;
   }
+
+  auto LuaHashToString(lua_State* state) -> int
+  {
+    // For debugging
+    uint64_t val = CheckHash(state, 1);
+    std::string s = std::to_string(val);
+    lua_pushlstring(state, s.c_str(), s.size());
+    return 1;
+  }
+
+  auto LuaHashEq(lua_State* state) -> int
+  {
+    uint64_t a = CheckHash(state, 1);
+    uint64_t b = CheckHash(state, 2);
+    lua_pushboolean(state, (a == b) ? 1 : 0);
+    return 1;
+  }
+
 } // namespace
 
 auto RegisterUuidBindings(lua_State* state, const int oxygen_table_index)
   -> void
 {
+  // Register Metatable
+  if (luaL_newmetatable(state, kUuidMetatableName) != 0) {
+    lua_pushcfunction(state, LuaUuidToString, "__tostring");
+    lua_setfield(state, -2, "__tostring");
+    lua_pushcfunction(state, LuaUuidEq, "__eq");
+    lua_setfield(state, -2, "__eq");
+  }
+  lua_pop(state, 1);
+
   const int module_index
     = PushOxygenSubtable(state, oxygen_table_index, "uuid");
 
@@ -226,6 +342,14 @@ auto RegisterUuidBindings(lua_State* state, const int oxygen_table_index)
 auto RegisterHashBindings(lua_State* state, const int oxygen_table_index)
   -> void
 {
+  if (luaL_newmetatable(state, kHashMetatableName) != 0) {
+    lua_pushcfunction(state, LuaHashToString, "__tostring");
+    lua_setfield(state, -2, "__tostring");
+    lua_pushcfunction(state, LuaHashEq, "__eq");
+    lua_setfield(state, -2, "__eq");
+  }
+  lua_pop(state, 1);
+
   const int module_index
     = PushOxygenSubtable(state, oxygen_table_index, "hash");
 

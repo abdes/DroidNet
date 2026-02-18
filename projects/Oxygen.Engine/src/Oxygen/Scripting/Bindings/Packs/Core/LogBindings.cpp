@@ -20,7 +20,6 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
-  constexpr int kLuaArgMessage = 1;
   constexpr std::string_view kConsoleLuaLogCommand = "__oxgn_lua_log";
   constexpr size_t kConsoleLogCommandOverheadBytes = 6;
   constexpr console::CommandContext kLuaConsoleContext {
@@ -35,25 +34,6 @@ namespace {
     kWarn,
     kError,
   };
-
-  struct ConsoleLogAccess {
-    observer_ptr<AsyncEngine> engine;
-    observer_ptr<console::Console> console;
-  };
-
-  auto RequireConsoleLogAccess(lua_State* state) -> ConsoleLogAccess
-  {
-    const auto engine = GetActiveEngine(state);
-    if (engine == nullptr) {
-      (void)luaL_error(state, "oxygen.log requires active AsyncEngine");
-      return {};
-    }
-
-    return ConsoleLogAccess {
-      .engine = engine,
-      .console = observer_ptr<console::Console> { &engine->GetConsole() },
-    };
-  }
 
   auto EscapeConsoleQuotedArg(std::string_view text) -> std::string
   {
@@ -70,6 +50,11 @@ namespace {
 
   auto EnsureLuaLogCommandRegistered(console::Console& console_service) -> void
   {
+    // Fast check if already registered?
+    // Console service usually handles re-registration or deduplication.
+    // For performance, we might want to do this once, but this function is
+    // stateless. Rely on Console::RegisterCommand to be efficient or
+    // idempotent.
     (void)console_service.RegisterCommand(console::CommandDefinition {
       .name = std::string(kConsoleLuaLogCommand),
       .help = "internal lua log sink",
@@ -101,9 +86,13 @@ namespace {
     });
   }
 
-  auto DispatchToConsole(console::Console& console_service,
+  auto DispatchToConsole(const observer_ptr<AsyncEngine> engine,
     std::string_view level, std::string_view message) -> void
   {
+    if (engine == nullptr) {
+      return;
+    }
+    auto& console_service = engine->GetConsole();
     EnsureLuaLogCommandRegistered(console_service);
 
     std::string line;
@@ -140,53 +129,62 @@ namespace {
     }
   }
 
-  auto LogThroughEngine(
-    lua_State* state, LuaLogLevel level, std::string_view level_name) -> int
+  auto LogImpl(lua_State* state, LuaLogLevel level, const char* level_name)
+    -> int
   {
-    size_t message_size = 0;
-    const auto* message_text
-      = lua_tolstring(state, kLuaArgMessage, &message_size);
-    if (message_text == nullptr) {
-      luaL_error(state, "oxygen.log.%s expects a message string",
-        std::string(level_name).c_str());
-      return 0;
-    }
+    int n = lua_gettop(state); // Number of arguments
+    std::string buffer;
 
-    const std::string_view message { message_text, message_size };
-    const auto access = RequireConsoleLogAccess(state);
-    if (access.engine == nullptr || access.console == nullptr) {
-      luaL_error(state, "oxygen.log requires active AsyncEngine");
-      return 0;
+    // Variadic concatenation
+    lua_getglobal(state, "tostring");
+    for (int i = 1; i <= n; ++i) {
+      lua_pushvalue(state, -1); // function to be called
+      lua_pushvalue(state, i); // value to print
+      lua_call(state, 1, 1);
+      size_t len = 0;
+      const char* s = lua_tolstring(state, -1, &len);
+      if (s != nullptr) {
+        if (i > 1) {
+          buffer.push_back(' ');
+        }
+        buffer.append(s, len);
+      }
+      lua_pop(state, 1); // pop result
     }
+    lua_pop(state, 1); // pop tostring
 
-    EmitEngineLog(level, message, level_name);
-    DispatchToConsole(*access.console, level_name, message);
+    EmitEngineLog(level, buffer, level_name);
+
+    // Graceful fallback for Console Access
+    const auto engine = GetActiveEngine(state); // May be null
+    DispatchToConsole(engine, level_name, buffer);
+
     return 0;
   }
 
   auto LuaLogTrace(lua_State* state) -> int
   {
-    return LogThroughEngine(state, LuaLogLevel::kTrace, "trace");
+    return LogImpl(state, LuaLogLevel::kTrace, "trace");
   }
 
   auto LuaLogDebug(lua_State* state) -> int
   {
-    return LogThroughEngine(state, LuaLogLevel::kDebug, "debug");
+    return LogImpl(state, LuaLogLevel::kDebug, "debug");
   }
 
   auto LuaLogInfo(lua_State* state) -> int
   {
-    return LogThroughEngine(state, LuaLogLevel::kInfo, "info");
+    return LogImpl(state, LuaLogLevel::kInfo, "info");
   }
 
   auto LuaLogWarn(lua_State* state) -> int
   {
-    return LogThroughEngine(state, LuaLogLevel::kWarn, "warn");
+    return LogImpl(state, LuaLogLevel::kWarn, "warn");
   }
 
   auto LuaLogError(lua_State* state) -> int
   {
-    return LogThroughEngine(state, LuaLogLevel::kError, "error");
+    return LogImpl(state, LuaLogLevel::kError, "error");
   }
 } // namespace
 
