@@ -7,12 +7,14 @@
 #pragma once
 
 #include <chrono>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <variant>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Sha256.h>
@@ -378,6 +380,18 @@ public:
         FileKind::kTexturesData, *textures_data_path_);
     }
 
+    if (const auto rel = index_.FindFileRelPath(FileKind::kScriptsTable); rel) {
+      scripts_table_path_ = cooked_root_ / std::filesystem::path(*rel);
+      ValidateFileRecordExistsAndMatchesSize(
+        FileKind::kScriptsTable, *scripts_table_path_);
+    }
+
+    if (const auto rel = index_.FindFileRelPath(FileKind::kScriptsData); rel) {
+      scripts_data_path_ = cooked_root_ / std::filesystem::path(*rel);
+      ValidateFileRecordExistsAndMatchesSize(
+        FileKind::kScriptsData, *scripts_data_path_);
+    }
+
     ValidateTableDataPairs();
   }
 
@@ -484,6 +498,84 @@ public:
     return nullptr;
   }
 
+  [[nodiscard]] auto ReadScriptSlotRecords(const uint32_t start_index,
+    const uint32_t count) const -> std::vector<data::pak::ScriptSlotRecord>
+  {
+    std::vector<data::pak::ScriptSlotRecord> records;
+    if (count == 0) {
+      return records;
+    }
+    CHECK_F(scripts_table_path_.has_value(),
+      "scripts.table is required to read script slot records");
+
+    constexpr size_t kRecordSize = sizeof(data::pak::ScriptSlotRecord);
+    const size_t start_offset = static_cast<size_t>(start_index) * kRecordSize;
+    const size_t bytes_to_read = static_cast<size_t>(count) * kRecordSize;
+
+    serio::FileStream<> stream(*scripts_table_path_, std::ios::in);
+    serio::Reader<serio::FileStream<>> reader(stream);
+    auto align_guard = reader.ScopedAlignment(1);
+    (void)align_guard;
+
+    auto seek_res = reader.Seek(start_offset);
+    if (!seek_res) {
+      throw std::runtime_error("Failed to seek scripts.table slot range");
+    }
+    auto blob = reader.ReadBlob(bytes_to_read);
+    if (!blob) {
+      throw std::runtime_error("Failed to read scripts.table slot range");
+    }
+
+    records.resize(count);
+    for (uint32_t i = 0; i < count; ++i) {
+      const size_t offset = static_cast<size_t>(i) * kRecordSize;
+      const auto src
+        = std::span<const std::byte>(*blob).subspan(offset, kRecordSize);
+      std::memcpy(std::addressof(records[static_cast<size_t>(i)]), src.data(),
+        kRecordSize);
+    }
+    return records;
+  }
+
+  [[nodiscard]] auto ReadScriptParamRecords(
+    const data::pak::OffsetT absolute_offset, const uint32_t count) const
+    -> std::vector<data::pak::ScriptParamRecord>
+  {
+    std::vector<data::pak::ScriptParamRecord> records;
+    if (count == 0) {
+      return records;
+    }
+    CHECK_F(scripts_data_path_.has_value(),
+      "scripts.data is required to read script parameter records");
+
+    constexpr size_t kRecordSize = sizeof(data::pak::ScriptParamRecord);
+    const size_t bytes_to_read = static_cast<size_t>(count) * kRecordSize;
+
+    serio::FileStream<> stream(*scripts_data_path_, std::ios::in);
+    serio::Reader<serio::FileStream<>> reader(stream);
+    auto align_guard = reader.ScopedAlignment(1);
+    (void)align_guard;
+
+    auto seek_res = reader.Seek(static_cast<size_t>(absolute_offset));
+    if (!seek_res) {
+      throw std::runtime_error("Failed to seek scripts.data parameter range");
+    }
+    auto blob = reader.ReadBlob(bytes_to_read);
+    if (!blob) {
+      throw std::runtime_error("Failed to read scripts.data parameter range");
+    }
+
+    records.resize(count);
+    for (uint32_t i = 0; i < count; ++i) {
+      const size_t offset = static_cast<size_t>(i) * kRecordSize;
+      const auto src
+        = std::span<const std::byte>(*blob).subspan(offset, kRecordSize);
+      std::memcpy(std::addressof(records[static_cast<size_t>(i)]), src.data(),
+        kRecordSize);
+    }
+    return records;
+  }
+
 private:
   auto ValidateTableDataPairs() const -> void
   {
@@ -499,6 +591,13 @@ private:
     if (textures_table != textures_data) {
       throw std::runtime_error(
         "Loose cooked root must provide both textures.table and textures.data");
+    }
+
+    const auto scripts_table = scripts_table_path_.has_value();
+    const auto scripts_data = scripts_data_path_.has_value();
+    if (scripts_table != scripts_data) {
+      throw std::runtime_error(
+        "Loose cooked root must provide both scripts.table and scripts.data");
     }
   }
 
@@ -759,6 +858,8 @@ private:
   std::optional<std::filesystem::path> textures_table_path_;
   std::optional<std::filesystem::path> buffers_data_path_;
   std::optional<std::filesystem::path> textures_data_path_;
+  std::optional<std::filesystem::path> scripts_table_path_;
+  std::optional<std::filesystem::path> scripts_data_path_;
 
   std::optional<ResourceTable<data::BufferResource>> buffers_table_;
   std::optional<ResourceTable<data::TextureResource>> textures_table_;

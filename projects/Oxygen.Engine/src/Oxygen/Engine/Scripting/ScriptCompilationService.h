@@ -55,7 +55,12 @@ public:
   OXGN_NGIN_API auto OnFrameStart(engine::EngineTag) -> void override;
 
 private:
-  OXGN_NGIN_NDAPI auto CompileOnWorkerThread(Request request) const
+  OXGN_NGIN_NDAPI auto ExecuteCompileRequest(CompileKey compile_key,
+    data::pak::ScriptLanguage language, std::vector<uint8_t> source,
+    CompileMode compile_mode) -> co::Co<Result>;
+  OXGN_NGIN_NDAPI auto KickoffCompileRequest(Request request) -> co::Co<>;
+  OXGN_NGIN_NDAPI auto CompileOnWorkerThread(data::pak::ScriptLanguage language,
+    std::vector<uint8_t> source, CompileMode compile_mode) const
     -> co::Co<Result>;
   OXGN_NGIN_API auto EnqueueCompletion(
     CompileKey compile_key, const Result& result) -> void;

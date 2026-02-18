@@ -52,7 +52,9 @@ auto LuauScriptCompiler::Language() const noexcept -> data::pak::ScriptLanguage
 auto LuauScriptCompiler::Compile(std::span<const uint8_t> source,
   const CompileMode mode) const -> ScriptCompileResult
 {
+  LOG_F(INFO, "luau compile begin (source_size={})", source.size());
   if (source.empty()) {
+    LOG_F(ERROR, "luau compile rejected empty source");
     return ScriptCompileResult {
       .success = false,
       .bytecode = {},

@@ -563,6 +563,11 @@ public:
     return GetAsset<data::ScriptAsset>(key);
   }
 
+  [[nodiscard]] OXGN_CNTT_API auto GetHydratedScriptSlots(
+    const data::SceneAsset& scene_asset,
+    const data::pak::ScriptingComponentRecord& component) const
+    -> std::vector<IAssetLoader::HydratedScriptSlot> override;
+
   [[nodiscard]] auto HasTexture(ResourceKey key) const noexcept -> bool override
   {
     return HasResource<data::TextureResource>(key);

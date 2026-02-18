@@ -702,6 +702,120 @@ auto AssetLoader::BindResourceRefToKey(const internal::ResourceRef& ref)
   return PackResourceKey(source_id, resource_type_index, ref.resource_index);
 }
 
+auto AssetLoader::GetHydratedScriptSlots(const data::SceneAsset& scene_asset,
+  const data::pak::ScriptingComponentRecord& component) const
+  -> std::vector<IAssetLoader::HydratedScriptSlot>
+{
+  AssertOwningThread();
+
+  std::vector<IAssetLoader::HydratedScriptSlot> hydrated_slots;
+  const auto scene_key = scene_asset.GetAssetKey();
+
+  std::optional<uint64_t> scene_hash_key;
+  for (const auto& [candidate_hash, candidate_key] : asset_key_by_hash_) {
+    if (candidate_key != scene_key) {
+      continue;
+    }
+    const auto cached_scene
+      = content_cache_.Peek<data::SceneAsset>(candidate_hash);
+    if (cached_scene && cached_scene.get() == &scene_asset) {
+      scene_hash_key = candidate_hash;
+      break;
+    }
+  }
+
+  if (!scene_hash_key.has_value()) {
+    LOG_F(ERROR, "script slot hydration skipped: scene asset not cached");
+    return hydrated_slots;
+  }
+
+  std::optional<uint16_t> source_id;
+  for (const auto candidate_source_id : impl_->source_ids) {
+    if (HashAssetKey(scene_key, candidate_source_id) == *scene_hash_key) {
+      source_id = candidate_source_id;
+      break;
+    }
+  }
+  if (!source_id.has_value()) {
+    LOG_F(ERROR, "script slot hydration skipped: source id not resolved");
+    return hydrated_slots;
+  }
+
+  const auto source_it = impl_->source_id_to_index.find(*source_id);
+  if (source_it == impl_->source_id_to_index.end()) {
+    LOG_F(ERROR, "script slot hydration skipped: source index not found");
+    return hydrated_slots;
+  }
+
+  const auto& source = *impl_->sources.at(source_it->second);
+  std::vector<data::pak::ScriptSlotRecord> slot_records;
+  auto read_params = [&](const data::pak::ScriptSlotRecord& slot_record)
+    -> std::vector<data::pak::ScriptParamRecord> {
+    if (slot_record.params_count == 0) {
+      return {};
+    }
+
+    if (source.GetTypeId() == internal::PakFileSource::ClassTypeId()) {
+      DCHECK_F(source.GetTypeId() == internal::PakFileSource::ClassTypeId());
+      const auto& pak
+        = static_cast<const internal::PakFileSource&>(source).Pak();
+      return pak.ReadScriptParamRecords(
+        slot_record.params_array_offset, slot_record.params_count);
+    }
+    if (source.GetTypeId() == internal::LooseCookedSource::ClassTypeId()) {
+      DCHECK_F(
+        source.GetTypeId() == internal::LooseCookedSource::ClassTypeId());
+      const auto& loose
+        = static_cast<const internal::LooseCookedSource&>(source);
+      return loose.ReadScriptParamRecords(
+        slot_record.params_array_offset, slot_record.params_count);
+    }
+
+    LOG_F(ERROR, "unsupported source type for script parameter hydration");
+    return {};
+  };
+
+  try {
+    if (source.GetTypeId() == internal::PakFileSource::ClassTypeId()) {
+      DCHECK_F(source.GetTypeId() == internal::PakFileSource::ClassTypeId());
+      const auto& pak
+        = static_cast<const internal::PakFileSource&>(source).Pak();
+      slot_records = pak.ReadScriptSlotRecords(
+        component.slot_start_index, component.slot_count);
+    } else if (source.GetTypeId()
+      == internal::LooseCookedSource::ClassTypeId()) {
+      DCHECK_F(
+        source.GetTypeId() == internal::LooseCookedSource::ClassTypeId());
+      const auto& loose
+        = static_cast<const internal::LooseCookedSource&>(source);
+      slot_records = loose.ReadScriptSlotRecords(
+        component.slot_start_index, component.slot_count);
+    } else {
+      LOG_F(ERROR, "unsupported source type for script slot hydration");
+      return hydrated_slots;
+    }
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "failed to read script slots: {}", ex.what());
+    return hydrated_slots;
+  }
+
+  hydrated_slots.reserve(slot_records.size());
+  for (const auto& slot_record : slot_records) {
+    IAssetLoader::HydratedScriptSlot hydrated {
+      .script_asset_key = slot_record.script_asset_key,
+      .flags = slot_record.flags,
+    };
+    try {
+      hydrated.params = read_params(slot_record);
+    } catch (const std::exception& ex) {
+      LOG_F(ERROR, "failed to read script parameters: {}", ex.what());
+    }
+    hydrated_slots.push_back(std::move(hydrated));
+  }
+
+  return hydrated_slots;
+}
+
 auto AssetLoader::LoadTextureAsync(ResourceKey key)
   -> co::Co<std::shared_ptr<data::TextureResource>>
 {
@@ -2089,10 +2203,43 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(
     }
   };
 
+  const auto publish_scene_script_dependencies
+    = [this, key, source_id](
+        const std::shared_ptr<data::SceneAsset>& scene_asset) -> co::Co<> {
+    if (!scene_asset) {
+      co_return;
+    }
+
+    std::unordered_set<data::AssetKey> seen_script_keys;
+    for (const auto& scripting_component :
+      scene_asset->GetComponents<pak::ScriptingComponentRecord>()) {
+      const auto hydrated_slots
+        = GetHydratedScriptSlots(*scene_asset, scripting_component);
+      for (const auto& slot : hydrated_slots) {
+        if (slot.script_asset_key == data::AssetKey {}) {
+          continue;
+        }
+        if (!seen_script_keys.insert(slot.script_asset_key).second) {
+          continue;
+        }
+
+        auto script
+          = co_await LoadScriptAssetAsyncImpl(slot.script_asset_key, source_id);
+        if (!script) {
+          continue;
+        }
+
+        AddAssetDependency(key, slot.script_asset_key);
+        content_cache_.CheckIn(HashAssetKey(slot.script_asset_key, source_id));
+      }
+    }
+  };
+
   if (auto cached = content_cache_.CheckOut<data::SceneAsset>(hash_key)) {
     // Cache-hit scene loads must republish scene->geometry edges so live scene
     // content is protected from trim and can be rebuilt deterministically.
     co_await publish_scene_geometry_dependencies(cached);
+    co_await publish_scene_script_dependencies(cached);
     co_return cached;
   }
 
@@ -2102,7 +2249,8 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(
   }
 
   auto op
-    = [this, key, source_id, hash_key, publish_scene_geometry_dependencies]()
+    = [this, key, source_id, hash_key, publish_scene_geometry_dependencies,
+        publish_scene_script_dependencies]()
     -> co::Co<std::shared_ptr<data::SceneAsset>> {
     struct EraseOnExit final {
       AssetLoader* loader;
@@ -2117,6 +2265,7 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(
       if (auto cached = content_cache_.CheckOut<data::SceneAsset>(hash_key)) {
         // Same rationale as the fast-path above.
         co_await publish_scene_geometry_dependencies(cached);
+        co_await publish_scene_script_dependencies(cached);
         co_return cached;
       }
 
@@ -2158,6 +2307,7 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(
         key, *decoded_result.dependency_collector);
 
       co_await publish_scene_geometry_dependencies(decoded);
+      co_await publish_scene_script_dependencies(decoded);
 
       co_return decoded;
     } catch (const co::TaskCancelledException& e) {

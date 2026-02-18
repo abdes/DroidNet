@@ -266,46 +266,77 @@ Checkpoint E1:
 
 ##### E2.1 Scene build phase refactor (DemoShell / RenderScene)
 
+Status: DONE.
+
 1. Move heavy scene construction/hydration out of `OnFrameStart`.
+   Status: DONE.
 2. Keep `OnFrameStart` limited to atomic scene publish only.
+   Status: DONE.
 3. Preserve existing single-ownership model through `DemoShell::SetScene(std::unique_ptr<scene::Scene>)`.
+   Status: DONE.
 4. Build next scene in mutation/coroutine phase, then publish in frame-start (all-or-nothing full-frame visibility).
+   Status: DONE.
 5. Ensure no partial scene state is ever observable by later phases in the same frame.
+   Status: DONE.
 
 Checkpoint E2.1:
 
 1. Scene build/hydration no longer executes in `OnFrameStart`.
+   Status: DONE.
 2. Scene ownership/swap path remains unchanged (`DemoShell::SetScene(...)`).
+   Status: DONE.
 3. Frame-level scene visibility invariant is preserved.
+   Status: DONE.
 
 ##### E2.2 Script hydration + compilation service wiring
 
+Status: DONE.
+
 1. Define and lock the responsibility boundary for runtime script hydration:
 2. `Content` provides loaded `SceneAsset` + `ScriptAsset` availability only.
+   Status: DONE.
 3. `SceneLoaderService` owns runtime node scripting-component hydration only.
+   Status: DONE.
 4. `Scripting` service owns compile orchestration only.
+   Status: DONE.
 5. Explicitly do not introduce a generic "binding layer" abstraction.
+   Status: DONE.
 6. Explicitly do not expose raw PAK slot-table offset/range mechanics to DemoShell-facing hydration code.
+   Status: DONE.
 
 7. Add clean `IAssetLoader` script-asset API parity:
 8. `StartLoadScriptAsset(...)`, `GetScriptAsset(...)`, `HasScriptAsset(...)`.
+   Status: DONE.
 9. In scene hydration, attach scripting slots from scene components + script assets directly (without any intermediate binding subsystem).
-10. Use `ScriptingModule::GetCompilationService()` (weak service handle) to request async slot compilation from hydration.
+   Status: DONE.
+10. Use engine-owned compilation service handle from `AsyncEngine` to request async slot compilation from hydration (replacing old module weak-handle design).
+    Status: DONE.
 11. Keep null-safe slot contract:
 12. Immediate slot remains executable-null (pending/no-op).
+    Status: DONE.
 13. Completion callback updates slot via `MarkSlotReady(...)` or `MarkSlotCompilationFailed(...)`.
+    Status: DONE.
 14. Failure remains once-per-slot and disables slot (no retry).
+    Status: DONE.
 
 Checkpoint E2.2:
 
 1. Scene hydration creates scripting slots with pending state and no-op-safe execution.
+   Status: DONE.
 2. Successful async compilation transitions slots to ready via callback path.
+   Status: DONE.
 3. Failed async compilation transitions slots to disabled/failure once.
+   Status: DONE.
 4. New script-asset loader APIs are used by hydration without layering leaks.
+   Status: DONE.
 5. DemoShell-side hydration code has zero knowledge of raw PAK slot-table offsets/ranges.
+   Status: DONE.
 6. No generic binding abstraction is introduced for scripting hydration.
+   Status: DONE.
 
 ##### E2.3 Engine-owned compile-service boundary and lifecycle
+
+Status: DONE.
 
 1. Define source-agnostic compile-service contracts in an Engine-owned source module (or Engine service layer), not in `src/Oxygen/Scripting/*`.
 2. Move only language-neutral types/contracts out of Scripting:
@@ -333,10 +364,19 @@ Checkpoint E2.2:
 Checkpoint E2.3:
 
 1. Engine compiles with zero dependency from Engine to Scripting source module.
+   Status: DONE.
 2. `ScriptingModule` no longer activates or owns compilation-service runtime lifecycle.
+   Status: DONE.
 3. `ScriptCompilationService` is activated/stopped by `AsyncEngine` as a `co::LiveObject`.
+   Status: DONE.
 4. Compile completion dispatch is driven by engine service frame-start path.
+   Status: DONE.
 5. Scene hydration path uses service callbacks without any loader-side coroutine nursery ownership.
+   Status: DONE.
+
+E2 remaining work summary:
+
+1. None.
 
 #### E3. L1 executable cache (in-process)
 
@@ -391,9 +431,27 @@ Checkpoint E6:
 
 ### Phase F: Content/AssetLoader integration
 
-1. Integrate enqueue from script asset load path without blocking scene load.
+Status: DONE.
+
+1. Keep `AssetLoader` content-only (load/decode/cache/dependency/residency).
+   Script compilation enqueue is triggered from scene hydration via
+   `ScriptCompilationService`, without blocking scene load.
+   Status: DONE.
 2. Re-verify script dependency edges emission from scene scripting slots.
+   Status: DONE.
 3. Re-verify asset/resource residency and eviction behavior.
+   Status: DONE.
+
+Checkpoint F:
+
+1. `AssetLoader` does not compile scripts and does not own compile kickoff.
+   Status: DONE.
+2. Scene scripting slots emit script asset dependencies, and script assets emit
+   script resource dependencies.
+   Status: DONE.
+3. Script assets/resources remain pinned and follow existing deferred eviction
+   behavior through dependency edges.
+   Status: DONE.
 
 ### Phase G: diagnostics and telemetry
 

@@ -147,6 +147,13 @@ private:
     {
       return nullptr;
     }
+    [[nodiscard]] auto GetHydratedScriptSlots(
+      const data::SceneAsset& /*scene_asset*/,
+      const data::pak::ScriptingComponentRecord& /*component*/) const
+      -> std::vector<HydratedScriptSlot> override
+    {
+      return {};
+    }
     [[nodiscard]] auto HasTexture(content::ResourceKey /*key*/) const noexcept
       -> bool override
     {

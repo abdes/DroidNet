@@ -10,6 +10,7 @@
 #include <functional>
 #include <memory>
 #include <span>
+#include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/EvictionEvents.h>
@@ -20,6 +21,7 @@
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/TextureResource.h>
@@ -59,6 +61,12 @@ template <PakResource T> struct CookedResourceData final {
 */
 class IAssetLoader {
 public:
+  struct HydratedScriptSlot final {
+    data::AssetKey script_asset_key {};
+    data::pak::ScriptSlotFlags flags { data::pak::ScriptSlotFlags::kNone };
+    std::vector<data::pak::ScriptParamRecord> params {};
+  };
+
   virtual ~IAssetLoader() = default;
 
   using TextureCallback
@@ -219,6 +227,13 @@ public:
   [[nodiscard]] virtual auto GetScriptAsset(
     const data::AssetKey& key) const noexcept
     -> std::shared_ptr<data::ScriptAsset>
+    = 0;
+
+  //! Hydrate script slots for one scripting component from the scene source.
+  [[nodiscard]] virtual auto GetHydratedScriptSlots(
+    const data::SceneAsset& scene_asset,
+    const data::pak::ScriptingComponentRecord& component) const
+    -> std::vector<HydratedScriptSlot>
     = 0;
 
   //! Check whether a texture resource is cached.

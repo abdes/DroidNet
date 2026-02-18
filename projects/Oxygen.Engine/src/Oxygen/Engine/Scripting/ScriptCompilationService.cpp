@@ -122,30 +122,15 @@ auto ScriptCompilationService::CompileAsync(Request request) -> co::Co<Result>
       shared = it->second;
       DLOG_F(2, "joining in-flight compile request (key={})", compile_key);
     } else {
+      const auto language = request.language;
+      const auto compile_mode = request.compile_mode;
+      auto source = std::move(request.source);
       LOG_F(INFO,
         "starting compile request (key={}, language={}, mode={}, "
         "source_size={})",
-        compile_key, request.language, request.compile_mode,
-        request.source.size());
-      // NOLINTNEXTLINE(*-capturing-lambda-*)
-      auto op = [this, request = std::move(request),
-                  compile_key]() mutable -> co::Co<Result> {
-        auto erase = ScopeGuard([this, compile_key]() noexcept {
-          std::lock_guard lock(in_flight_mutex_);
-          in_flight_.erase(compile_key);
-        });
-
-        const auto result = co_await CompileOnWorkerThread(std::move(request));
-        if (result.success) {
-          LOG_F(INFO, "compile succeeded (key={}, bytecode_size={})",
-            compile_key, result.bytecode.size());
-        } else {
-          LOG_F(WARNING, "compile failed (key={}, diagnostics_size={})",
-            compile_key, result.diagnostics.size());
-        }
-        EnqueueCompletion(compile_key, result);
-        co_return result;
-      }();
+        compile_key, language, compile_mode, source.size());
+      auto op = ExecuteCompileRequest(
+        compile_key, language, std::move(source), compile_mode);
 
       shared = co::Shared(std::move(op));
       in_flight_.insert_or_assign(compile_key, shared);
@@ -228,15 +213,10 @@ auto ScriptCompilationService::AcquireForSlot(
   };
 
   if (nursery_ != nullptr) {
-    auto kickoff_request = std::move(request);
-    nursery_->Start(
-      [this,
-        kickoff_request = std::move(kickoff_request)]() mutable -> co::Co<> {
-        (void)co_await CompileAsync(std::move(kickoff_request));
-        co_return;
-      });
+    nursery_->Start(&ScriptCompilationService::KickoffCompileRequest, this,
+      std::move(request));
   } else {
-    LOG_F(WARNING, "compile request not started because service is not active");
+    LOG_F(ERROR, "compile request not started because service is not active");
     handle.request = std::move(request);
   }
 
@@ -251,32 +231,66 @@ auto ScriptCompilationService::OnFrameStart(engine::EngineTag /*tag*/) -> void
   DrainCompletions();
 }
 
-auto ScriptCompilationService::CompileOnWorkerThread(Request request) const
-  -> co::Co<Result>
+auto ScriptCompilationService::ExecuteCompileRequest(
+  const CompileKey compile_key, const data::pak::ScriptLanguage language,
+  std::vector<uint8_t> source, const CompileMode compile_mode) -> co::Co<Result>
+{
+  auto erase = ScopeGuard([this, compile_key]() noexcept {
+    std::lock_guard lock(in_flight_mutex_);
+    in_flight_.erase(compile_key);
+  });
+
+  const auto result
+    = co_await CompileOnWorkerThread(language, std::move(source), compile_mode);
+  if (result.success) {
+    LOG_F(INFO, "compile succeeded (key={}, bytecode_size={})", compile_key,
+      result.bytecode.size());
+  } else {
+    LOG_F(ERROR, "compile failed (key={}, diagnostics_size={}, diagnostics={})",
+      compile_key, result.diagnostics.size(), result.diagnostics);
+  }
+  EnqueueCompletion(compile_key, result);
+  co_return result;
+}
+
+auto ScriptCompilationService::KickoffCompileRequest(Request request)
+  -> co::Co<>
+{
+  (void)co_await CompileAsync(std::move(request));
+  co_return;
+}
+
+auto ScriptCompilationService::CompileOnWorkerThread(
+  const data::pak::ScriptLanguage language, std::vector<uint8_t> source,
+  const CompileMode compile_mode) const -> co::Co<Result>
 {
   std::shared_ptr<const IScriptCompiler> compiler;
   {
     std::lock_guard lock(compilers_mutex_);
-    if (const auto it = compilers_.find(request.language);
-      it != compilers_.end()) {
+    if (const auto it = compilers_.find(language); it != compilers_.end()) {
       compiler = it->second;
     }
   }
   if (compiler) {
     if (thread_pool_) {
-      auto source = std::move(request.source);
-      const auto compile_mode = request.compile_mode;
+      LOG_F(INFO, "dispatching compile to worker (language={}, source_size={})",
+        language, source.size());
       co_return co_await thread_pool_->Run(
-        [compiler, source = std::move(source), compile_mode]() -> Result {
-          return compiler->Compile(source, compile_mode);
-        });
+        [compiler, compile_mode](std::vector<uint8_t> source_bytes) -> Result {
+          LOG_F(INFO, "worker invoking compiler (source_size={})",
+            source_bytes.size());
+          return compiler->Compile(source_bytes, compile_mode);
+        },
+        std::move(source));
     }
 
     DLOG_F(2, "thread pool unavailable, compiling inline");
-    co_return compiler->Compile(request.source, request.compile_mode);
+    LOG_F(INFO, "invoking compiler inline (language={}, source_size={})",
+      language, source.size());
+    co_return compiler->Compile(source, compile_mode);
   }
 
-  LOG_F(ERROR, "no compiler registered for language={}", request.language);
+  LOG_F(ERROR, "no compiler registered for language={}", language);
   Result result {};
   result.success = false;
   result.diagnostics = "No compiler registered for script language";
