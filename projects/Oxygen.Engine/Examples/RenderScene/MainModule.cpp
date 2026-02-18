@@ -219,7 +219,25 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         || pending_source_action_ == PendingSourceAction::kTrimCache) {
         asset_loader->TrimCache();
       } else if (pending_source_action_ == PendingSourceAction::kMountPak) {
-        asset_loader->AddPakFile(pending_path_);
+        std::error_code ec;
+        auto normalized = std::filesystem::weakly_canonical(pending_path_, ec);
+        if (ec) {
+          normalized = pending_path_.lexically_normal();
+        }
+
+        const auto already_mounted = std::ranges::any_of(mounted_pak_paths_,
+          [&normalized](const std::filesystem::path& existing) {
+            return existing == normalized;
+          });
+
+        if (already_mounted) {
+          LOG_F(INFO,
+            "RenderScene: PAK source '{}' already mounted; preserving cache",
+            normalized.string());
+        } else {
+          mounted_pak_paths_.push_back(normalized);
+          asset_loader->AddPakFile(normalized);
+        }
       } else if (pending_source_action_ == PendingSourceAction::kMountIndex) {
         std::error_code ec;
         auto root = pending_path_.parent_path();
@@ -271,10 +289,30 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     if (asset_loader) {
       try {
         if (request.source_kind == ui::SceneSourceKind::kPak) {
-          asset_loader->AddPakFile(request.source_path);
-          LOG_F(INFO,
-            "RenderScene: Ensured PAK source '{}' for scene load '{}'",
-            request.source_path.string(), request.scene_name);
+          std::error_code ec;
+          auto normalized
+            = std::filesystem::weakly_canonical(request.source_path, ec);
+          if (ec) {
+            normalized = request.source_path.lexically_normal();
+          }
+
+          const auto already_mounted
+            = std::ranges::any_of(mounted_pak_paths_,
+              [&normalized](const std::filesystem::path& existing) {
+                return existing == normalized;
+              });
+
+          if (already_mounted) {
+            LOG_F(INFO,
+              "RenderScene: PAK source '{}' already mounted for scene load; "
+              "preserving cache",
+              normalized.string());
+          } else {
+            mounted_pak_paths_.push_back(normalized);
+            asset_loader->AddPakFile(normalized);
+            LOG_F(INFO, "RenderScene: Mounted PAK source '{}' for scene load '{}'",
+              normalized.string(), request.scene_name);
+          }
         } else if (request.source_kind == ui::SceneSourceKind::kLooseIndex) {
           const auto root = request.source_path.parent_path();
           std::error_code ec;

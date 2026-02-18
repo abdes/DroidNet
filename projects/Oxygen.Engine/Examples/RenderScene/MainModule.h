@@ -139,6 +139,7 @@ private:
   PendingSourceAction pending_source_action_ { PendingSourceAction::kNone };
   std::filesystem::path pending_path_;
   std::optional<SceneLoadRequest> pending_scene_load_;
+  std::vector<std::filesystem::path> mounted_pak_paths_;
   std::vector<std::filesystem::path> mounted_loose_roots_;
 };
 
