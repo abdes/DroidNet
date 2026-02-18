@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
+
 #include <Oxygen/Input/Action.h>
 
 using oxygen::input::Action;

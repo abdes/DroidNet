@@ -7,38 +7,24 @@
 #pragma once
 
 #include <cstdint>
-#include <type_traits>
+#include <string>
+#include <type_traits> // IWYU pragma: keep
+
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Input/api_export.h>
 
 namespace oxygen::input {
 
 enum class ActionState : uint8_t {
-  kNone = 0,
-  kOngoing = 1 << 1,
-  kCanceled = 1 << 2,
-  kCompleted = 1 << 3,
-  kTriggered = 1 << 4,
+// NOLINTNEXTLINE(*-macro-*)
+#define OXNPUT_ACTION_STATE(name, value)                                       \
+  name = ((value) == 0 ? 0 : OXYGEN_FLAG(value)),
+#include <Oxygen/Core/Meta/Input/ActionState.inc>
+#undef OXNPUT_ACTION_STATE
 };
 
-constexpr auto operator|=(ActionState& states, const ActionState other) -> auto&
-{
-  states = static_cast<ActionState>(
-    static_cast<std::underlying_type_t<ActionState>>(states)
-    | static_cast<std::underlying_type_t<ActionState>>(other));
-  return states;
-}
-constexpr auto operator|(const ActionState left, const ActionState right)
-{
-  const auto mods = static_cast<ActionState>(
-    static_cast<std::underlying_type_t<ActionState>>(left)
-    | static_cast<std::underlying_type_t<ActionState>>(right));
-  return mods;
-}
-constexpr auto operator&(const ActionState left, const ActionState right)
-{
-  const auto mods = static_cast<ActionState>(
-    static_cast<std::underlying_type_t<ActionState>>(left)
-    & static_cast<std::underlying_type_t<ActionState>>(right));
-  return mods;
-}
+OXYGEN_DEFINE_FLAGS_OPERATORS(ActionState)
+
+OXGN_NPUT_NDAPI auto to_string(ActionState value) -> std::string;
 
 } // namespace oxygen::input

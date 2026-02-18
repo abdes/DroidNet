@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <memory>
-#include <type_traits>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Types/Geometry.h>

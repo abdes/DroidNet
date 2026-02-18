@@ -136,11 +136,27 @@ set(
   "Types/ResolvedView.cpp"
   "Version.cpp"
 )
+set(
+  OXYGEN_CORE_META_DEFS
+  "Meta/Input/ActionState.inc"
+  "Meta/Input/ActionTriggers.inc"
+  "Meta/Input/ActionValue.inc"
+  "Meta/Input/PakFormat.inc"
+)
+# Keep .def catalogs visible to IDE/target dependency graph without letting
+# MSVC treat them as linker module-definition files.
+set_source_files_properties(
+  ${OXYGEN_CORE_META_DEFS}
+  PROPERTIES
+    HEADER_FILE_ONLY
+      ON
+)
 
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
     ${OXYGEN_CORE_PRIVATE_SOURCES}
+    ${OXYGEN_CORE_META_DEFS}
     ${OXYGEN_CORE_HEADERS}
   PUBLIC
     FILE_SET HEADERS

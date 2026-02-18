@@ -56,12 +56,12 @@ public:
       core::PhaseId::kFrameStart, core::PhaseId::kFrameEnd>();
   }
 
-  [[nodiscard]] virtual auto IsCritical() const noexcept -> bool
+  [[nodiscard]] auto IsCritical() const noexcept -> bool override
   {
     return true;
   }
 
-  void SetName(std::string_view name) noexcept;
+  void SetName(std::string_view name) noexcept override;
 
   OXGN_NPUT_NDAPI auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept
     -> bool override;
@@ -99,12 +99,17 @@ public:
   OXGN_NPUT_API void DeactivateMappingContext(
     const std::shared_ptr<input::InputMappingContext>& context);
 
-  // OXGN_NPUT_API void Update(const engine::SystemUpdateContext&
-  // update_context);
+  // Accessor used by the engine coordinator after kInput to publish the
+  // snapshot into FrameContext. Returns nullptr if no snapshot is available.
+  [[nodiscard]] auto GetCurrentSnapshot() const
+    -> std::shared_ptr<const input::InputSnapshot>
+  {
+    return current_snapshot_;
+  }
 
 private:
   auto DrainPendingInputEvents() -> void;
-  void ProcessInputEvent(std::shared_ptr<platform::InputEvent> event);
+  void ProcessInputEvent(std::shared_ptr<platform::InputEvent>& event);
   void HandleInput(
     const platform::InputSlot& slot, const platform::InputEvent& event);
 
@@ -119,15 +124,6 @@ private:
   // Frozen per-frame snapshot at end of kInput; shared so the engine can
   // publish it into FrameContext for early access and later freezing.
   std::shared_ptr<const input::InputSnapshot> current_snapshot_;
-
-public:
-  // Accessor used by the engine coordinator after kInput to publish the
-  // snapshot into FrameContext. Returns nullptr if no snapshot is available.
-  [[nodiscard]] auto GetCurrentSnapshot() const
-    -> std::shared_ptr<const input::InputSnapshot>
-  {
-    return current_snapshot_;
-  }
 };
 
 } // namespace oxygen::engine

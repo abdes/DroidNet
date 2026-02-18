@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include <chrono>
-#include <memory>
 #include <span>
 #include <string>
 #include <vector>
@@ -90,8 +88,8 @@ public:
 
   //! Represents a single action state transition within a frame
   struct FrameTransition {
-    ActionState from_state;
-    ActionState to_state;
+    ActionState from_state { ActionState::kNone };
+    ActionState to_state { ActionState::kNone };
     ActionValue value_at_transition;
   };
 

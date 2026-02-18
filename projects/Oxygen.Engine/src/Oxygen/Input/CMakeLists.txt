@@ -73,6 +73,7 @@ set(
   "InputActionMapping.cpp"
   "InputMappingContext.cpp"
   "InputSystem.cpp"
+  "ToStringConverters.cpp"
 )
 
 target_sources(

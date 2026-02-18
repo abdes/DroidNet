@@ -7,18 +7,24 @@
 #pragma once
 
 #include <cmath>
+#include <string_view>
 #include <type_traits>
 #include <variant>
 
 #include <Oxygen/Base/Types/Geometry.h>
+#include <Oxygen/Input/api_export.h>
 
 namespace oxygen::input {
 
 enum class ActionValueType : uint8_t {
-  kBool = 0,
-  kAxis1D = 1,
-  kAxis2D = 2,
+// NOLINTNEXTLINE(*-macro-*)
+#define OXNPUT_ACTION_VALUE_TYPE(name, value) name = value,
+#include <Oxygen/Core/Meta/Input/ActionValue.inc>
+#undef OXNPUT_ACTION_VALUE_TYPE
 };
+
+OXGN_NPUT_NDAPI auto to_string(ActionValueType value) noexcept
+  -> std::string_view;
 
 class ActionValue {
 public:
@@ -49,9 +55,8 @@ public:
         using T = std::remove_cvref_t<decltype(cur)>;
         if constexpr (std::is_same_v<T, bool>) {
           cur = update;
-        } else if constexpr (std::is_same_v<T, Axis1D>) {
-          cur.x = update ? 1.0F : 0.0F;
-        } else if constexpr (std::is_same_v<T, Axis2D>) {
+        } else if constexpr (std::is_same_v<T, Axis1D>
+          || std::is_same_v<T, Axis2D>) {
           cur.x = update ? 1.0F : 0.0F;
         }
       },
@@ -66,9 +71,8 @@ public:
         using T = std::remove_cvref_t<decltype(cur)>;
         if constexpr (std::is_same_v<T, bool>) {
           cur = (std::abs(update.x) > 0.0F);
-        } else if constexpr (std::is_same_v<T, Axis1D>) {
-          cur.x = update.x;
-        } else if constexpr (std::is_same_v<T, Axis2D>) {
+        } else if constexpr (std::is_same_v<T, Axis1D>
+          || std::is_same_v<T, Axis2D>) {
           cur.x = update.x;
         }
       },
