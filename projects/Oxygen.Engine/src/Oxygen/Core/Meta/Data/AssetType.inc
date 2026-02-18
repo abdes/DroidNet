@@ -20,6 +20,8 @@ OXDAT_ASSET_TYPE(kMaterial, 1)
 OXDAT_ASSET_TYPE(kGeometry, 2)
 OXDAT_ASSET_TYPE(kScene, 3)
 OXDAT_ASSET_TYPE(kScript, 4)
-OXDAT_ASSET_TYPE(kMaxAssetType, kScript)
+OXDAT_ASSET_TYPE(kInputAction, 5)
+OXDAT_ASSET_TYPE(kInputMappingContext, 6)
+OXDAT_ASSET_TYPE(kMaxAssetType, kInputMappingContext)
 
 #undef OXDAT_ASSET_TYPE

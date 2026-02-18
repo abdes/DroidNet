@@ -56,6 +56,8 @@
 
 // TODO: Define constants for hash algorithm enumeration
 
+// NOLINTBEGIN(*-avoid-c-arrays,*-magic-numbers)
+
 namespace oxygen::data::pak::v2 {
 
 //=== Type Aliases ===--------------------------------------------------------//
@@ -105,25 +107,25 @@ constexpr ResourceIndexT kNoResourceIndex = 0;
 //! This flag exists because texture resource index `0` is reserved for the
 //! fallback texture when a fallback exists (textures do). Therefore, a texture
 //! index of `0` cannot unambiguously mean "no texture" for materials.
-constexpr uint32_t kMaterialFlag_NoTextureSampling = (1u << 0);
+constexpr uint32_t kMaterialFlag_NoTextureSampling = (1U << 0);
 
 //! Material flag indicating that the material should be treated as
 //! double-sided.
 //!
 //! When set, the renderer should disable backface culling for this material.
-constexpr uint32_t kMaterialFlag_DoubleSided = (1u << 1);
+constexpr uint32_t kMaterialFlag_DoubleSided = (1U << 1);
 
 //! Material flag indicating that the material uses alpha testing (cutout).
 //!
 //! When set, the renderer/shaders should apply alpha cutoff testing using the
 //! material's `alpha_cutoff` parameter.
-constexpr uint32_t kMaterialFlag_AlphaTest = (1u << 2);
+constexpr uint32_t kMaterialFlag_AlphaTest = (1U << 2);
 
 //! Material flag indicating that the material is unlit.
 //!
 //! When set, shading should not apply lighting and should render using
 //! base color + emissive only.
-constexpr uint32_t kMaterialFlag_Unlit = (1u << 3);
+constexpr uint32_t kMaterialFlag_Unlit = (1U << 3);
 
 //! Material flag indicating glTF ORM channel packing semantics.
 //!
@@ -132,10 +134,10 @@ constexpr uint32_t kMaterialFlag_Unlit = (1u << 3);
 //! - Metalness is sampled from the B channel
 //! Ambient occlusion is typically sampled from the R channel of the AO/ORM
 //! texture.
-constexpr uint32_t kMaterialFlag_GltfOrmPacked = (1u << 4);
+constexpr uint32_t kMaterialFlag_GltfOrmPacked = (1U << 4);
 
 //! Material flag indicating procedural grid shading.
-constexpr uint32_t kMaterialFlag_ProceduralGrid = (1u << 5);
+constexpr uint32_t kMaterialFlag_ProceduralGrid = (1U << 5);
 
 //! Maximum size for data blobs in bytes
 constexpr DataBlobSizeT kDataBlobMaxSize
@@ -561,11 +563,11 @@ struct MaterialAssetDesc {
                           // are in ascending bit index order (LSB->MSB)
 
   // --- Scalar factors (PBR) ---
-  float base_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f }; // RGBA fallback
-  float normal_scale = 1.0f;
-  Unorm16 metalness = Unorm16 { 0.0f };
-  Unorm16 roughness = Unorm16 { 1.0f };
-  Unorm16 ambient_occlusion = Unorm16 { 1.0f };
+  float base_color[4] = { 1.0F, 1.0F, 1.0F, 1.0F }; // RGBA fallback
+  float normal_scale = 1.0F;
+  Unorm16 metalness = Unorm16 { 0.0F };
+  Unorm16 roughness = Unorm16 { 1.0F };
+  Unorm16 ambient_occlusion = Unorm16 { 1.0F };
 
   // --- Core texture references (Index into TextureResourceTable,
   // kNoResourceIndex = invalid/none) ---
@@ -589,24 +591,24 @@ struct MaterialAssetDesc {
   // --- Additional scalar parameters (Tier 1/2) ---
   // Emissive
   HalfFloat emissive_factor[3]
-    = { HalfFloat { 0.0f }, HalfFloat { 0.0f }, HalfFloat { 0.0f } };
+    = { HalfFloat { 0.0F }, HalfFloat { 0.0F }, HalfFloat { 0.0F } };
   // Alpha
-  Unorm16 alpha_cutoff = Unorm16 { 0.5f };
+  Unorm16 alpha_cutoff = Unorm16 { 0.5F };
   // Dielectric response
-  float ior = 1.5f;
-  Unorm16 specular_factor = Unorm16 { 1.0f };
+  float ior = 1.5F;
+  Unorm16 specular_factor = Unorm16 { 1.0F };
   // Sheen (KHR_materials_sheen)
   HalfFloat sheen_color_factor[3]
-    = { HalfFloat { 0.0f }, HalfFloat { 0.0f }, HalfFloat { 0.0f } };
+    = { HalfFloat { 0.0F }, HalfFloat { 0.0F }, HalfFloat { 0.0F } };
   // Clearcoat (KHR_materials_clearcoat)
-  Unorm16 clearcoat_factor = Unorm16 { 0.0f };
-  Unorm16 clearcoat_roughness = Unorm16 { 0.0f };
+  Unorm16 clearcoat_factor = Unorm16 { 0.0F };
+  Unorm16 clearcoat_roughness = Unorm16 { 0.0F };
   // Transmission / Volume (KHR_materials_transmission + KHR_materials_volume)
-  Unorm16 transmission_factor = Unorm16 { 0.0f };
-  Unorm16 thickness_factor = Unorm16 { 0.0f };
+  Unorm16 transmission_factor = Unorm16 { 0.0F };
+  Unorm16 thickness_factor = Unorm16 { 0.0F };
   HalfFloat attenuation_color[3]
-    = { HalfFloat { 1.0f }, HalfFloat { 1.0f }, HalfFloat { 1.0f } };
-  float attenuation_distance = 0.0f;
+    = { HalfFloat { 1.0F }, HalfFloat { 1.0F }, HalfFloat { 1.0F } };
+  float attenuation_distance = 0.0F;
 
   uint8_t reserved[40] = {};
 };
@@ -942,12 +944,12 @@ static_assert(sizeof(SceneComponentTableDesc) == 20);
 #pragma pack(push, 1)
 
 //! Scene node flags for `NodeRecord::node_flags`.
-constexpr uint32_t kSceneNodeFlag_Visible = (1u << 0);
-constexpr uint32_t kSceneNodeFlag_Static = (1u << 1);
-constexpr uint32_t kSceneNodeFlag_CastsShadows = (1u << 2);
-constexpr uint32_t kSceneNodeFlag_ReceivesShadows = (1u << 3);
-constexpr uint32_t kSceneNodeFlag_RayCastingSelectable = (1u << 4);
-constexpr uint32_t kSceneNodeFlag_IgnoreParentTransform = (1u << 5);
+constexpr uint32_t kSceneNodeFlag_Visible = (1U << 0);
+constexpr uint32_t kSceneNodeFlag_Static = (1U << 1);
+constexpr uint32_t kSceneNodeFlag_CastsShadows = (1U << 2);
+constexpr uint32_t kSceneNodeFlag_ReceivesShadows = (1U << 3);
+constexpr uint32_t kSceneNodeFlag_RayCastingSelectable = (1U << 4);
+constexpr uint32_t kSceneNodeFlag_IgnoreParentTransform = (1U << 5);
 
 //! Node record used by the cooked scene descriptor (68 bytes).
 /*!
@@ -1017,10 +1019,10 @@ static_assert(sizeof(RenderableRecord) == 36);
 */
 struct PerspectiveCameraRecord {
   SceneNodeIndexT node_index = 0; // Index of the owner node
-  float fov_y = 0.785398f; // Vertical FOV in radians (~45 deg)
-  float aspect_ratio = 1.777778f; // Width / Height (default 16:9)
-  float near_plane = 0.1f; // Distance to near clipping plane
-  float far_plane = 1000.0f; // Distance to far clipping plane
+  float fov_y = 0.785398F; // Vertical FOV in radians (~45 deg)
+  float aspect_ratio = 1.777778F; // Width / Height (default 16:9)
+  float near_plane = 0.1F; // Distance to near clipping plane
+  float far_plane = 1000.0F; // Distance to far clipping plane
   uint8_t reserved[12] = {};
 };
 #pragma pack(pop)
@@ -1037,12 +1039,12 @@ static_assert(sizeof(PerspectiveCameraRecord) == 32);
 */
 struct OrthographicCameraRecord {
   SceneNodeIndexT node_index = 0; // Index of the owner node
-  float left = -10.0f;
-  float right = 10.0f;
-  float bottom = -10.0f;
-  float top = 10.0f;
-  float near_plane = -100.0f;
-  float far_plane = 100.0f;
+  float left = -10.0F;
+  float right = 10.0F;
+  float bottom = -10.0F;
+  float top = 10.0F;
+  float near_plane = -100.0F;
+  float far_plane = 100.0F;
   uint8_t reserved[12] = {};
 };
 #pragma pack(pop)
@@ -1460,11 +1462,11 @@ struct MaterialAssetDesc {
                           // are in ascending bit index order (LSB->MSB)
 
   // --- Scalar factors (PBR) ---
-  float base_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f }; // RGBA fallback
-  float normal_scale = 1.0f;
-  Unorm16 metalness = Unorm16 { 0.0f };
-  Unorm16 roughness = Unorm16 { 1.0f };
-  Unorm16 ambient_occlusion = Unorm16 { 1.0f };
+  float base_color[4] = { 1.0F, 1.0F, 1.0F, 1.0F }; // RGBA fallback
+  float normal_scale = 1.0F;
+  Unorm16 metalness = Unorm16 { 0.0F };
+  Unorm16 roughness = Unorm16 { 1.0F };
+  Unorm16 ambient_occlusion = Unorm16 { 1.0F };
 
   // --- Core texture references (Index into TextureResourceTable,
   // kNoResourceIndex = invalid/none) ---
@@ -1488,45 +1490,45 @@ struct MaterialAssetDesc {
   // --- Additional scalar parameters (Tier 1/2) ---
   // Emissive
   HalfFloat emissive_factor[3]
-    = { HalfFloat { 0.0f }, HalfFloat { 0.0f }, HalfFloat { 0.0f } };
+    = { HalfFloat { 0.0F }, HalfFloat { 0.0F }, HalfFloat { 0.0F } };
   // Alpha
-  Unorm16 alpha_cutoff = Unorm16 { 0.5f };
+  Unorm16 alpha_cutoff = Unorm16 { 0.5F };
   // Dielectric response
-  float ior = 1.5f;
-  Unorm16 specular_factor = Unorm16 { 1.0f };
+  float ior = 1.5F;
+  Unorm16 specular_factor = Unorm16 { 1.0F };
   // Sheen (KHR_materials_sheen)
   HalfFloat sheen_color_factor[3]
-    = { HalfFloat { 0.0f }, HalfFloat { 0.0f }, HalfFloat { 0.0f } };
+    = { HalfFloat { 0.0F }, HalfFloat { 0.0F }, HalfFloat { 0.0F } };
   // Clearcoat (KHR_materials_clearcoat)
-  Unorm16 clearcoat_factor = Unorm16 { 0.0f };
-  Unorm16 clearcoat_roughness = Unorm16 { 0.0f };
+  Unorm16 clearcoat_factor = Unorm16 { 0.0F };
+  Unorm16 clearcoat_roughness = Unorm16 { 0.0F };
   // Transmission / Volume (KHR_materials_transmission + KHR_materials_volume)
-  Unorm16 transmission_factor = Unorm16 { 0.0f };
-  Unorm16 thickness_factor = Unorm16 { 0.0f };
+  Unorm16 transmission_factor = Unorm16 { 0.0F };
+  Unorm16 thickness_factor = Unorm16 { 0.0F };
   HalfFloat attenuation_color[3]
-    = { HalfFloat { 1.0f }, HalfFloat { 1.0f }, HalfFloat { 1.0f } };
-  float attenuation_distance = 0.0f;
+    = { HalfFloat { 1.0F }, HalfFloat { 1.0F }, HalfFloat { 1.0F } };
+  float attenuation_distance = 0.0F;
 
   // --- UV transform extension (v4) ---
-  float uv_scale[2] = { 1.0f, 1.0f };
-  float uv_offset[2] = { 0.0f, 0.0f };
-  float uv_rotation_radians = 0.0f;
+  float uv_scale[2] = { 1.0F, 1.0F };
+  float uv_offset[2] = { 0.0F, 0.0F };
+  float uv_rotation_radians = 0.0F;
   uint8_t uv_set = 0;
 
   // --- Procedural grid extension (v4) ---
-  float grid_spacing[2] = { 1.0f, 1.0f };
+  float grid_spacing[2] = { 1.0F, 1.0F };
   uint32_t grid_major_every = 10;
-  float grid_line_thickness = 1.0f;
-  float grid_major_thickness = 2.0f;
-  float grid_axis_thickness = 2.0f;
-  float grid_fade_start = 0.0f;
-  float grid_fade_end = 0.0f;
+  float grid_line_thickness = 1.0F;
+  float grid_major_thickness = 2.0F;
+  float grid_axis_thickness = 2.0F;
+  float grid_fade_start = 0.0F;
+  float grid_fade_end = 0.0F;
 
-  float grid_minor_color[4] = { 0.35f, 0.35f, 0.35f, 1.0f };
-  float grid_major_color[4] = { 0.55f, 0.55f, 0.55f, 1.0f };
-  float grid_axis_color_x[4] = { 0.90f, 0.20f, 0.20f, 1.0f };
-  float grid_axis_color_y[4] = { 0.20f, 0.60f, 0.90f, 1.0f };
-  float grid_origin_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+  float grid_minor_color[4] = { 0.35F, 0.35F, 0.35F, 1.0F };
+  float grid_major_color[4] = { 0.55F, 0.55F, 0.55F, 1.0F };
+  float grid_axis_color_x[4] = { 0.90F, 0.20F, 0.20F, 1.0F };
+  float grid_axis_color_y[4] = { 0.20F, 0.60F, 0.90F, 1.0F };
+  float grid_origin_color[4] = { 1.0F, 1.0F, 1.0F, 1.0F };
 
   uint8_t reserved[35] = {};
 };
@@ -1658,6 +1660,7 @@ using namespace v4;
 
 //=== Scripting Enums ===-----------------------------------------------------//
 
+// NOLINTNEXTLINE(*-enum-size)
 enum class ScriptParamType : uint32_t {
   kNone = 0,
   kBool = 1,
@@ -1811,6 +1814,26 @@ static_assert(sizeof(PakFooter) == 256);
 
 } // namespace oxygen::data::pak::v5
 
+namespace oxygen::data::pak::v6 {
+
+using namespace v5;
+
+#pragma pack(push, 1)
+
+//! Fixed-size header at the start of the PAK file (256 bytes)
+struct PakHeader {
+  char magic[8] = { 'O', 'X', 'P', 'A', 'K', 0, 0, 0 };
+  uint16_t version = 6; //!< Format version (6 for this version)
+  uint16_t content_version = 0; //!< Content version
+  uint8_t guid[16] = {}; //!< Unique identifier for this PAK
+  uint8_t reserved[228] = {}; //!< Reserved for future use
+};
+static_assert(sizeof(PakHeader) == 256);
+
+#pragma pack(pop)
+
+} // namespace oxygen::data::pak::v6
+
 namespace oxygen::data::pak {
 //! Default namespace alias for latest version of the PAK format
 using v5::AssetDirectoryEntry;
@@ -1891,3 +1914,5 @@ using v5::TextureResourceDesc;
 using v5::to_string;
 using v5::VolumetricCloudsEnvironmentRecord;
 } // namespace oxygen::data::pak
+
+// NOLINTEND(*-avoid-c-arrays,*-magic-numbers)
