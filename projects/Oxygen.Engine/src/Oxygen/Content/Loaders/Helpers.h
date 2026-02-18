@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/AssetLoader.h>
@@ -19,6 +21,8 @@
 #include <Oxygen/Serio/Writer.h>
 
 #include <algorithm>
+#include <cstddef>
+#include <string_view>
 
 namespace oxygen::serio {
 
@@ -220,6 +224,42 @@ inline auto Load(AnyReader& reader, data::pak::AssetDirectoryEntry& entry)
 } // namespace oxygen::serio
 
 namespace oxygen::content::loaders {
+
+inline auto AddRangeEnd(size_t& end, const size_t offset, const size_t size)
+  -> void
+{
+  if (size == 0) {
+    end = std::max(end, offset);
+    return;
+  }
+
+  const size_t candidate = offset + size;
+  if (candidate < offset) {
+    throw std::runtime_error("range overflow");
+  }
+  end = std::max(end, candidate);
+}
+
+inline auto CheckLoaderResult(const oxygen::Result<void>& result,
+  const char* subject, const char* field) -> void
+{
+  if (!result) {
+    LOG_F(ERROR, "-failed- on {}: {}", field, result.error().message().c_str());
+    throw std::runtime_error(fmt::format(
+      "error reading {} ({}): {}", subject, field, result.error().message()));
+  }
+}
+
+template <typename T>
+inline auto CheckLoaderResult(const oxygen::Result<T>& result,
+  const char* subject, const char* field) -> void
+{
+  if (!result) {
+    LOG_F(ERROR, "-failed- on {}: {}", field, result.error().message().c_str());
+    throw std::runtime_error(fmt::format(
+      "error reading {} ({}): {}", subject, field, result.error().message()));
+  }
+}
 
 //=== Cooked IO Helpers ===--------------------------------------------------//
 

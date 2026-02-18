@@ -7,13 +7,13 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
-#include <limits>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Command.h>
@@ -26,6 +26,8 @@
 #include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Content/Loaders/InputActionLoader.h>
+#include <Oxygen/Content/Loaders/InputMappingContextLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
@@ -223,6 +225,8 @@ AssetLoader::AssetLoader(
   RegisterLoader(loaders::LoadMaterialAsset);
   RegisterLoader(loaders::LoadSceneAsset);
   RegisterLoader(loaders::LoadScriptAsset);
+  RegisterLoader(loaders::LoadInputActionAsset);
+  RegisterLoader(loaders::LoadInputMappingContextAsset);
 
   // Register resource loaders
   RegisterLoader(loaders::LoadBufferResource);
@@ -282,6 +286,8 @@ void AssetLoader::Stop()
   in_flight_geometry_assets_.clear();
   in_flight_scene_assets_.clear();
   in_flight_script_assets_.clear();
+  in_flight_input_action_assets_.clear();
+  in_flight_input_mapping_context_assets_.clear();
   in_flight_textures_.clear();
   in_flight_buffers_.clear();
   in_flight_script_resources_.clear();
@@ -1637,14 +1643,9 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(
   auto op
     = [this, key, source_id, hash_key, publish_material_texture_dependencies]()
     -> co::Co<std::shared_ptr<data::MaterialAsset>> {
-    struct EraseOnExit final {
-      AssetLoader* loader;
-      uint64_t key_hash;
-      ~EraseOnExit() noexcept
-      {
-        loader->in_flight_material_assets_.erase(key_hash);
-      }
-    } erase { this, hash_key };
+    ScopeGuard erase_guard([this, hash_key]() noexcept {
+      in_flight_material_assets_.erase(hash_key);
+    });
 
     try {
       if (auto cached
@@ -2090,14 +2091,9 @@ auto AssetLoader::LoadGeometryAssetAsyncImpl(
   auto op
     = [this, key, source_id, hash_key, publish_geometry_material_dependencies]()
     -> co::Co<std::shared_ptr<data::GeometryAsset>> {
-    struct EraseOnExit final {
-      AssetLoader* loader;
-      uint64_t key_hash;
-      ~EraseOnExit() noexcept
-      {
-        loader->in_flight_geometry_assets_.erase(key_hash);
-      }
-    } erase { this, hash_key };
+    ScopeGuard erase_guard([this, hash_key]() noexcept {
+      in_flight_geometry_assets_.erase(hash_key);
+    });
 
     try {
       if (auto cached
@@ -2249,11 +2245,41 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(
     }
   };
 
+  const auto publish_scene_input_mapping_context_dependencies
+    = [this, key, source_id](
+        const std::shared_ptr<data::SceneAsset>& scene_asset) -> co::Co<> {
+    if (!scene_asset) {
+      co_return;
+    }
+
+    std::unordered_set<data::AssetKey> seen_context_keys;
+    for (const auto& binding :
+      scene_asset->GetComponents<pak::InputContextBindingRecord>()) {
+      if (binding.context_asset_key == data::AssetKey {}) {
+        continue;
+      }
+      if (!seen_context_keys.insert(binding.context_asset_key).second) {
+        continue;
+      }
+
+      auto context = co_await LoadInputMappingContextAssetAsyncImpl(
+        binding.context_asset_key, source_id);
+      if (!context) {
+        continue;
+      }
+
+      AddAssetDependency(key, binding.context_asset_key);
+      content_cache_.CheckIn(
+        HashAssetKey(binding.context_asset_key, source_id));
+    }
+  };
+
   if (auto cached = content_cache_.CheckOut<data::SceneAsset>(hash_key)) {
     // Cache-hit scene loads must republish scene->geometry edges so live scene
     // content is protected from trim and can be rebuilt deterministically.
     co_await publish_scene_geometry_dependencies(cached);
     co_await publish_scene_script_dependencies(cached);
+    co_await publish_scene_input_mapping_context_dependencies(cached);
     co_return cached;
   }
 
@@ -2264,22 +2290,18 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(
 
   auto op
     = [this, key, source_id, hash_key, publish_scene_geometry_dependencies,
-        publish_scene_script_dependencies]()
+        publish_scene_script_dependencies,
+        publish_scene_input_mapping_context_dependencies]()
     -> co::Co<std::shared_ptr<data::SceneAsset>> {
-    struct EraseOnExit final {
-      AssetLoader* loader;
-      uint64_t key_hash;
-      ~EraseOnExit() noexcept
-      {
-        loader->in_flight_scene_assets_.erase(key_hash);
-      }
-    } erase { this, hash_key };
+    ScopeGuard erase_guard(
+      [this, hash_key]() noexcept { in_flight_scene_assets_.erase(hash_key); });
 
     try {
       if (auto cached = content_cache_.CheckOut<data::SceneAsset>(hash_key)) {
         // Same rationale as the fast-path above.
         co_await publish_scene_geometry_dependencies(cached);
         co_await publish_scene_script_dependencies(cached);
+        co_await publish_scene_input_mapping_context_dependencies(cached);
         co_return cached;
       }
 
@@ -2322,6 +2344,7 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(
 
       co_await publish_scene_geometry_dependencies(decoded);
       co_await publish_scene_script_dependencies(decoded);
+      co_await publish_scene_input_mapping_context_dependencies(decoded);
 
       co_return decoded;
     } catch (const co::TaskCancelledException& e) {
@@ -2412,14 +2435,9 @@ auto AssetLoader::LoadScriptAssetAsyncImpl(
   auto op
     = [this, key, source_id, hash_key, publish_script_resource_dependency]()
     -> co::Co<std::shared_ptr<data::ScriptAsset>> {
-    struct EraseOnExit final {
-      AssetLoader* loader;
-      uint64_t key_hash;
-      ~EraseOnExit() noexcept
-      {
-        loader->in_flight_script_assets_.erase(key_hash);
-      }
-    } erase { this, hash_key };
+    ScopeGuard erase_guard([this, hash_key]() noexcept {
+      in_flight_script_assets_.erase(hash_key);
+    });
 
     try {
       if (auto cached = content_cache_.CheckOut<data::ScriptAsset>(hash_key)) {
@@ -2459,6 +2477,244 @@ auto AssetLoader::LoadScriptAssetAsyncImpl(
 
   co::Shared shared(std::move(op));
   in_flight_script_assets_.insert_or_assign(hash_key, shared);
+  co_return co_await shared;
+}
+
+auto AssetLoader::LoadInputActionAssetAsyncImpl(
+  const data::AssetKey& key, std::optional<uint16_t> preferred_source_id)
+  -> co::Co<std::shared_ptr<data::InputActionAsset>>
+{
+  DLOG_SCOPE_F(2, "AssetLoader LoadInputActionAssetAsync");
+  DLOG_F(2, "key     : {}", nostd::to_string(key).c_str());
+  DLOG_F(2, "offline : {}", work_offline_);
+
+  AssertOwningThread();
+
+  auto resolve_source_id = [&]() -> std::optional<uint16_t> {
+    if (preferred_source_id.has_value()) {
+      const auto source_it
+        = impl_->source_id_to_index.find(*preferred_source_id);
+      if (source_it != impl_->source_id_to_index.end()
+        && impl_->sources.at(source_it->second)->FindAsset(key).has_value()) {
+        return *preferred_source_id;
+      }
+    }
+    for (size_t source_index = impl_->sources.size(); source_index-- > 0;) {
+      if (impl_->sources[source_index]->FindAsset(key).has_value()) {
+        return impl_->source_ids[source_index];
+      }
+    }
+    return std::nullopt;
+  };
+
+  const auto source_id_opt = resolve_source_id();
+  if (!source_id_opt.has_value()) {
+    co_return nullptr;
+  }
+  const auto source_id = *source_id_opt;
+  const auto hash_key = HashAssetKey(key, source_id);
+
+  if (auto cached = content_cache_.CheckOut<data::InputActionAsset>(hash_key)) {
+    co_return cached;
+  }
+
+  if (auto it = in_flight_input_action_assets_.find(hash_key);
+    it != in_flight_input_action_assets_.end()) {
+    co_return co_await it->second;
+  }
+
+  auto op = [this, key, source_id,
+              hash_key]() -> co::Co<std::shared_ptr<data::InputActionAsset>> {
+    ScopeGuard erase_guard([this, hash_key]() noexcept {
+      in_flight_input_action_assets_.erase(hash_key);
+    });
+
+    try {
+      if (auto cached
+        = content_cache_.CheckOut<data::InputActionAsset>(hash_key)) {
+        co_return cached;
+      }
+
+      auto decoded_result = co_await DecodeAssetAsyncErasedImpl(
+        data::InputActionAsset::ClassTypeId(), key, source_id);
+      auto decoded = std::static_pointer_cast<data::InputActionAsset>(
+        decoded_result.asset);
+      if (!decoded
+        || decoded->GetTypeId() != data::InputActionAsset::ClassTypeId()) {
+        LOG_F(ERROR, "Loaded asset type mismatch (async): expected {}, got {}",
+          data::InputActionAsset::ClassTypeNamePretty(),
+          decoded ? decoded->GetTypeName() : "nullptr");
+        co_return nullptr;
+      }
+
+      if (content_cache_.Store(hash_key, decoded)) {
+        asset_key_by_hash_.insert_or_assign(hash_key, key);
+        // Baseline pinning: retain one loader-owned checkout.
+        content_cache_.Touch(hash_key);
+      }
+
+      co_return decoded;
+    } catch (const co::TaskCancelledException& e) {
+      throw OperationCancelledException(e.what());
+    }
+  }();
+
+  co::Shared shared(std::move(op));
+  in_flight_input_action_assets_.insert_or_assign(hash_key, shared);
+  co_return co_await shared;
+}
+
+auto AssetLoader::LoadInputMappingContextAssetAsyncImpl(
+  const data::AssetKey& key, std::optional<uint16_t> preferred_source_id)
+  -> co::Co<std::shared_ptr<data::InputMappingContextAsset>>
+{
+  DLOG_SCOPE_F(2, "AssetLoader LoadInputMappingContextAssetAsync");
+  DLOG_F(2, "key     : {}", nostd::to_string(key).c_str());
+  DLOG_F(2, "offline : {}", work_offline_);
+
+  AssertOwningThread();
+
+  auto resolve_source_id = [&]() -> std::optional<uint16_t> {
+    if (preferred_source_id.has_value()) {
+      const auto source_it
+        = impl_->source_id_to_index.find(*preferred_source_id);
+      if (source_it != impl_->source_id_to_index.end()
+        && impl_->sources.at(source_it->second)->FindAsset(key).has_value()) {
+        return *preferred_source_id;
+      }
+    }
+    for (size_t source_index = impl_->sources.size(); source_index-- > 0;) {
+      if (impl_->sources[source_index]->FindAsset(key).has_value()) {
+        return impl_->source_ids[source_index];
+      }
+    }
+    return std::nullopt;
+  };
+
+  const auto source_id_opt = resolve_source_id();
+  if (!source_id_opt.has_value()) {
+    co_return nullptr;
+  }
+  const auto source_id = *source_id_opt;
+  const auto hash_key = HashAssetKey(key, source_id);
+  const auto publish_input_action_dependencies
+    = [this, key, source_id](
+        const std::shared_ptr<data::InputMappingContextAsset>& context_asset)
+    -> co::Co<> {
+    if (!context_asset) {
+      co_return;
+    }
+
+    std::unordered_set<data::AssetKey> seen_action_keys;
+    for (const auto& mapping : context_asset->GetMappings()) {
+      if (mapping.action_asset_key == data::AssetKey {}) {
+        continue;
+      }
+      if (!seen_action_keys.insert(mapping.action_asset_key).second) {
+        continue;
+      }
+
+      auto action = co_await LoadInputActionAssetAsyncImpl(
+        mapping.action_asset_key, source_id);
+      if (!action) {
+        continue;
+      }
+
+      AddAssetDependency(key, mapping.action_asset_key);
+      content_cache_.CheckIn(HashAssetKey(mapping.action_asset_key, source_id));
+    }
+
+    for (const auto& trigger : context_asset->GetTriggers()) {
+      if (trigger.linked_action_asset_key == data::AssetKey {}) {
+        continue;
+      }
+      if (!seen_action_keys.insert(trigger.linked_action_asset_key).second) {
+        continue;
+      }
+
+      auto action = co_await LoadInputActionAssetAsyncImpl(
+        trigger.linked_action_asset_key, source_id);
+      if (!action) {
+        continue;
+      }
+
+      AddAssetDependency(key, trigger.linked_action_asset_key);
+      content_cache_.CheckIn(
+        HashAssetKey(trigger.linked_action_asset_key, source_id));
+    }
+
+    for (const auto& aux : context_asset->GetTriggerAuxRecords()) {
+      if (aux.action_asset_key == data::AssetKey {}) {
+        continue;
+      }
+      if (!seen_action_keys.insert(aux.action_asset_key).second) {
+        continue;
+      }
+
+      auto action = co_await LoadInputActionAssetAsyncImpl(
+        aux.action_asset_key, source_id);
+      if (!action) {
+        continue;
+      }
+
+      AddAssetDependency(key, aux.action_asset_key);
+      content_cache_.CheckIn(HashAssetKey(aux.action_asset_key, source_id));
+    }
+  };
+
+  if (auto cached
+    = content_cache_.CheckOut<data::InputMappingContextAsset>(hash_key)) {
+    co_await publish_input_action_dependencies(cached);
+    co_return cached;
+  }
+
+  if (auto it = in_flight_input_mapping_context_assets_.find(hash_key);
+    it != in_flight_input_mapping_context_assets_.end()) {
+    co_return co_await it->second;
+  }
+
+  auto op
+    = [this, key, source_id, hash_key, publish_input_action_dependencies]()
+    -> co::Co<std::shared_ptr<data::InputMappingContextAsset>> {
+    ScopeGuard erase_guard([this, hash_key]() noexcept {
+      in_flight_input_mapping_context_assets_.erase(hash_key);
+    });
+
+    try {
+      if (auto cached
+        = content_cache_.CheckOut<data::InputMappingContextAsset>(hash_key)) {
+        co_await publish_input_action_dependencies(cached);
+        co_return cached;
+      }
+
+      auto decoded_result = co_await DecodeAssetAsyncErasedImpl(
+        data::InputMappingContextAsset::ClassTypeId(), key, source_id);
+      auto decoded = std::static_pointer_cast<data::InputMappingContextAsset>(
+        decoded_result.asset);
+      if (!decoded
+        || decoded->GetTypeId()
+          != data::InputMappingContextAsset::ClassTypeId()) {
+        LOG_F(ERROR, "Loaded asset type mismatch (async): expected {}, got {}",
+          data::InputMappingContextAsset::ClassTypeNamePretty(),
+          decoded ? decoded->GetTypeName() : "nullptr");
+        co_return nullptr;
+      }
+
+      if (content_cache_.Store(hash_key, decoded)) {
+        asset_key_by_hash_.insert_or_assign(hash_key, key);
+        // Baseline pinning: retain one loader-owned checkout.
+        content_cache_.Touch(hash_key);
+      }
+
+      co_await publish_input_action_dependencies(decoded);
+      co_return decoded;
+    } catch (const co::TaskCancelledException& e) {
+      throw OperationCancelledException(e.what());
+    }
+  }();
+
+  co::Shared shared(std::move(op));
+  in_flight_input_mapping_context_assets_.insert_or_assign(hash_key, shared);
   co_return co_await shared;
 }
 
@@ -2507,11 +2763,8 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
 
     auto op = [this, key,
                 key_hash]() -> co::Co<std::shared_ptr<data::TextureResource>> {
-      struct EraseOnExit final {
-        AssetLoader* loader;
-        uint64_t key_hash;
-        ~EraseOnExit() noexcept { loader->in_flight_textures_.erase(key_hash); }
-      } erase { this, key_hash };
+      ScopeGuard erase_guard(
+        [this, key_hash]() noexcept { in_flight_textures_.erase(key_hash); });
 
       try {
         if (auto cached
@@ -2640,11 +2893,8 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
 
     auto op = [this, key,
                 key_hash]() -> co::Co<std::shared_ptr<data::BufferResource>> {
-      struct EraseOnExit final {
-        AssetLoader* loader;
-        uint64_t key_hash;
-        ~EraseOnExit() noexcept { loader->in_flight_buffers_.erase(key_hash); }
-      } erase { this, key_hash };
+      ScopeGuard erase_guard(
+        [this, key_hash]() noexcept { in_flight_buffers_.erase(key_hash); });
 
       try {
         if (auto cached
@@ -2763,14 +3013,9 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
 
     auto op = [this, key,
                 key_hash]() -> co::Co<std::shared_ptr<data::ScriptResource>> {
-      struct EraseOnExit final {
-        AssetLoader* loader;
-        uint64_t key_hash;
-        ~EraseOnExit() noexcept
-        {
-          loader->in_flight_script_resources_.erase(key_hash);
-        }
-      } erase { this, key_hash };
+      ScopeGuard erase_guard([this, key_hash]() noexcept {
+        in_flight_script_resources_.erase(key_hash);
+      });
 
       try {
         if (auto cached
@@ -2943,12 +3188,9 @@ void oxygen::content::AssetLoader::UnloadObject(const uint64_t cache_key,
   }
 
   eviction_in_progress_.insert(cache_key);
-  // Ensure the guard is cleared on all exit paths
-  struct Guard {
-    std::unordered_set<uint64_t>& s;
-    uint64_t key;
-    ~Guard() noexcept { s.erase(key); }
-  } guard { eviction_in_progress_, cache_key };
+  // Ensure the guard is cleared on all exit paths.
+  ScopeGuard clear_eviction_guard(
+    [this, cache_key]() noexcept { eviction_in_progress_.erase(cache_key); });
 
   for (const auto& subscriber : sub_it->second) {
     if (!subscriber.handler) {

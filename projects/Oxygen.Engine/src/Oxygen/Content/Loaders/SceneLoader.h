@@ -14,8 +14,6 @@
 #include <utility>
 #include <vector>
 
-#include <fmt/format.h>
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
@@ -31,44 +29,6 @@
 namespace oxygen::content::loaders {
 
 namespace detail {
-
-  inline auto CheckResult(const oxygen::Result<void>& result, const char* field)
-    -> void
-  {
-    if (!result) {
-      LOG_F(
-        ERROR, "-failed- on {}: {}", field, result.error().message().c_str());
-      throw std::runtime_error(fmt::format(
-        "error reading scene asset ({}): {}", field, result.error().message()));
-    }
-  }
-
-  template <typename T>
-  inline auto CheckResult(const oxygen::Result<T>& result, const char* field)
-    -> void
-  {
-    if (!result) {
-      LOG_F(
-        ERROR, "-failed- on {}: {}", field, result.error().message().c_str());
-      throw std::runtime_error(fmt::format(
-        "error reading scene asset ({}): {}", field, result.error().message()));
-    }
-  }
-
-  inline auto AddRangeEnd(size_t& end, const size_t offset, const size_t size)
-    -> void
-  {
-    if (size == 0) {
-      end = std::max(end, offset);
-      return;
-    }
-
-    const size_t candidate = offset + size;
-    if (candidate < offset) {
-      throw std::runtime_error("scene asset range overflow");
-    }
-    end = std::max(end, candidate);
-  }
 
   inline auto ValidateStringOffset(
     const std::span<const std::byte> string_table,
@@ -282,7 +242,7 @@ namespace detail {
 } // namespace detail
 
 //! Loader for scene assets.
-inline auto LoadSceneAsset(LoaderContext context)
+inline auto LoadSceneAsset(const LoaderContext& context)
   -> std::unique_ptr<data::SceneAsset>
 {
   LOG_SCOPE_FUNCTION(INFO);
@@ -296,14 +256,14 @@ inline auto LoadSceneAsset(LoaderContext context)
   auto packed = reader.ScopedAlignment(1);
 
   const auto base_pos_res = reader.Position();
-  detail::CheckResult(base_pos_res, "Position(base)");
+  CheckLoaderResult(base_pos_res, "scene asset", "Position(base)");
   const size_t base_pos = *base_pos_res;
 
   // Read the fixed header first so we can compute the total descriptor size.
   data::pak::SceneAssetDesc desc {};
   {
     auto blob_res = reader.ReadBlob(sizeof(desc));
-    detail::CheckResult(blob_res, "ReadBlob(SceneAssetDesc)");
+    CheckLoaderResult(blob_res, "scene asset", "ReadBlob(SceneAssetDesc)");
     std::memcpy(&desc, (*blob_res).data(), sizeof(desc));
   }
 
@@ -328,33 +288,35 @@ inline auto LoadSceneAsset(LoaderContext context)
     }
     const size_t bytes
       = static_cast<size_t>(desc.nodes.count) * desc.nodes.entry_size;
-    detail::AddRangeEnd(end, desc.nodes.offset, bytes);
+    AddRangeEnd(end, desc.nodes.offset, bytes);
   }
 
-  detail::AddRangeEnd(end, desc.scene_strings.offset, desc.scene_strings.size);
+  AddRangeEnd(end, desc.scene_strings.offset, desc.scene_strings.size);
 
   // Read the component directory entries (if any) to validate and extend end.
   std::vector<data::pak::SceneComponentTableDesc> tables;
   if (desc.component_table_count > 0) {
     const size_t dir_bytes = static_cast<size_t>(desc.component_table_count)
       * sizeof(data::pak::SceneComponentTableDesc);
-    detail::AddRangeEnd(end, desc.component_table_directory_offset, dir_bytes);
+    AddRangeEnd(end, desc.component_table_directory_offset, dir_bytes);
 
     auto seek_res
       = reader.Seek(base_pos + desc.component_table_directory_offset);
-    detail::CheckResult(seek_res, "Seek(component_table_directory)");
+    CheckLoaderResult(
+      seek_res, "scene asset", "Seek(component_table_directory)");
 
     tables.reserve(desc.component_table_count);
     for (uint32_t i = 0; i < desc.component_table_count; ++i) {
       data::pak::SceneComponentTableDesc entry {};
       auto entry_blob = reader.ReadBlob(sizeof(entry));
-      detail::CheckResult(entry_blob, "ReadBlob(SceneComponentTableDesc)");
+      CheckLoaderResult(
+        entry_blob, "scene asset", "ReadBlob(SceneComponentTableDesc)");
       std::memcpy(&entry, (*entry_blob).data(), sizeof(entry));
 
       if (entry.table.count > 0) {
         const size_t bytes
           = static_cast<size_t>(entry.table.count) * entry.table.entry_size;
-        detail::AddRangeEnd(end, entry.table.offset, bytes);
+        AddRangeEnd(end, entry.table.offset, bytes);
       }
 
       tables.push_back(entry);
@@ -364,18 +326,19 @@ inline auto LoadSceneAsset(LoaderContext context)
   // Load the full descriptor payload as bytes.
   {
     auto seek_res = reader.Seek(base_pos);
-    detail::CheckResult(seek_res, "Seek(base)");
+    CheckLoaderResult(seek_res, "scene asset", "Seek(base)");
   }
 
   auto blob_res = reader.ReadBlob(end);
-  detail::CheckResult(blob_res, "ReadBlob(scene_payload)");
+  CheckLoaderResult(blob_res, "scene asset", "ReadBlob(scene_payload)");
   std::vector<std::byte> bytes = std::move(*blob_res);
 
   const size_t payload_end = end;
   if (expects_environment_block) {
     data::pak::SceneEnvironmentBlockHeader env_header {};
     const auto header_res = reader.ReadBlob(sizeof(env_header));
-    detail::CheckResult(header_res, "ReadBlob(scene_environment_header)");
+    CheckLoaderResult(
+      header_res, "scene asset", "ReadBlob(scene_environment_header)");
     std::memcpy(&env_header, (*header_res).data(), sizeof(env_header));
     if (env_header.byte_size < sizeof(data::pak::SceneEnvironmentBlockHeader)) {
       throw std::runtime_error("scene environment block byte_size too small");
@@ -384,7 +347,8 @@ inline auto LoadSceneAsset(LoaderContext context)
     const size_t tail_size
       = env_header.byte_size - sizeof(data::pak::SceneEnvironmentBlockHeader);
     const auto tail_res = reader.ReadBlob(tail_size);
-    detail::CheckResult(tail_res, "ReadBlob(scene_environment_block)");
+    CheckLoaderResult(
+      tail_res, "scene asset", "ReadBlob(scene_environment_block)");
 
     bytes.reserve(bytes.size() + sizeof(env_header) + tail_size);
     bytes.insert(bytes.end(), (*header_res).begin(), (*header_res).end());
@@ -426,6 +390,7 @@ inline auto LoadSceneAsset(LoaderContext context)
   // Validate known component tables and (optionally) collect dependencies.
   const uint32_t node_count = desc.nodes.count;
   std::unordered_set<oxygen::data::AssetKey> geometry_deps;
+  std::unordered_set<oxygen::data::AssetKey> input_context_deps;
   std::unordered_set<oxygen::data::AssetKey> script_deps;
   bool has_scripting_table = false;
 
@@ -473,6 +438,22 @@ inline auto LoadSceneAsset(LoaderContext context)
     } else if (type == oxygen::data::ComponentType::kSpotLight) {
       detail::ValidateComponentTable<oxygen::data::pak::SpotLightRecord>(
         table_bytes, entry.table.count, entry.table.entry_size, node_count);
+    } else if (type == oxygen::data::ComponentType::kInputContextBinding) {
+      detail::ValidateComponentTable<
+        oxygen::data::pak::InputContextBindingRecord>(
+        table_bytes, entry.table.count, entry.table.entry_size, node_count);
+
+      for (uint32_t i = 0; i < entry.table.count; ++i) {
+        oxygen::data::pak::InputContextBindingRecord record {};
+        std::memcpy(&record,
+          table_bytes
+            .subspan(static_cast<size_t>(i) * sizeof(record), sizeof(record))
+            .data(),
+          sizeof(record));
+        if (record.context_asset_key != oxygen::data::AssetKey {}) {
+          input_context_deps.insert(record.context_asset_key);
+        }
+      }
     } else if (type == oxygen::data::ComponentType::kScripting) {
       detail::ValidateComponentTable<
         oxygen::data::pak::ScriptingComponentRecord>(
@@ -480,7 +461,7 @@ inline auto LoadSceneAsset(LoaderContext context)
       has_scripting_table = true;
 
       if (!context.parse_only) {
-        if (!context.source_pak) {
+        if (context.source_pak == nullptr) {
           throw std::runtime_error(
             "scene scripting dependencies require source_pak");
         }
@@ -520,6 +501,9 @@ inline auto LoadSceneAsset(LoaderContext context)
     }
 
     for (const auto& dep : geometry_deps) {
+      context.dependency_collector->AddAssetDependency(dep);
+    }
+    for (const auto& dep : input_context_deps) {
       context.dependency_collector->AddAssetDependency(dep);
     }
     if (has_scripting_table) {

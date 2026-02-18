@@ -1826,16 +1826,19 @@ enum class InputActionAssetFlags : uint32_t { // NOLINT(*-enum-size)
   kConsumesInput = OXYGEN_FLAG(0),
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(InputActionAssetFlags)
+OXGN_DATA_NDAPI auto to_string(InputActionAssetFlags value) -> std::string;
 
 enum class InputMappingContextFlags : uint32_t { // NOLINT(*-enum-size)
   kNone = 0,
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(InputMappingContextFlags)
+OXGN_DATA_NDAPI auto to_string(InputMappingContextFlags value) -> std::string;
 
 enum class InputMappingFlags : uint32_t { // NOLINT(*-enum-size)
   kNone = 0,
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(InputMappingFlags)
+OXGN_DATA_NDAPI auto to_string(InputMappingFlags value) -> std::string;
 
 enum class InputTriggerType : uint8_t {
 // NOLINTNEXTLINE(*-macro-*)
@@ -1845,6 +1848,8 @@ enum class InputTriggerType : uint8_t {
 #undef OXNPUT_ACTION_TRIGGER_BEHAVIOR
 #undef OXNPUT_ACTION_TRIGGER_TYPE
 };
+OXGN_DATA_NDAPI auto to_string(InputTriggerType value) noexcept
+  -> std::string_view;
 
 enum class InputTriggerBehavior : uint8_t {
 #define OXNPUT_ACTION_TRIGGER_TYPE(name, value)
@@ -1854,12 +1859,15 @@ enum class InputTriggerBehavior : uint8_t {
 #undef OXNPUT_ACTION_TRIGGER_BEHAVIOR
 #undef OXNPUT_ACTION_TRIGGER_TYPE
 };
+OXGN_DATA_NDAPI auto to_string(InputTriggerBehavior value) noexcept
+  -> std::string_view;
 
 enum class InputContextBindingFlags : uint32_t { // NOLINT(*-enum-size)
   kNone = 0,
   kActivateOnLoad = OXYGEN_FLAG(0),
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(InputContextBindingFlags)
+OXGN_DATA_NDAPI auto to_string(InputContextBindingFlags value) -> std::string;
 
 #pragma pack(push, 1)
 
@@ -1950,83 +1958,98 @@ static_assert(sizeof(PakHeader) == 256);
 
 namespace oxygen::data::pak {
 //! Default namespace alias for latest version of the PAK format
-using v5::AssetDirectoryEntry;
-using v5::AssetHeader;
-using v5::BufferResourceDesc;
-using v5::DataBlobSizeT;
-using v5::DirectionalLightRecord;
-using v5::EnvironmentComponentType;
-using v5::FogEnvironmentRecord;
-using v5::GeometryAssetDesc;
-using v5::kDataBlobMaxSize;
-using v5::kFallbackResourceIndex;
-using v5::kGeometryAssetVersion;
-using v5::kMaterialAssetVersion;
-using v5::kMaterialFlag_AlphaTest;
-using v5::kMaterialFlag_DoubleSided;
-using v5::kMaterialFlag_GltfOrmPacked;
-using v5::kMaterialFlag_NoTextureSampling;
-using v5::kMaterialFlag_ProceduralGrid;
-using v5::kMaterialFlag_Unlit;
-using v5::kMaxNameSize;
-using v5::kNoResourceIndex;
-using v5::kSceneAssetVersion;
-using v5::kSceneNodeFlag_Visible;
-using v5::kTexturePayloadMagic;
-using v5::LightCommonRecord;
-using v5::LightShadowSettingsRecord;
-using v5::MaterialAssetDesc;
-using v5::MeshDesc;
-using v5::MeshViewDesc;
-using v5::NodeRecord;
-using v5::OffsetT;
-using v5::OrthographicCameraRecord;
-using v5::PakBrowseIndexEntry;
-using v5::PakBrowseIndexHeader;
-using v5::PakFooter;
-using v5::PakHeader;
-using v5::PerspectiveCameraRecord;
-using v5::PointLightRecord;
-using v5::PostProcessVolumeEnvironmentRecord;
-using v5::ProceduralMeshInfo;
-using v5::RenderableRecord;
-using v5::ResourceIndexT;
-using v5::ResourceRegion;
-using v5::ResourceTable;
-using v5::SceneAssetDesc;
-using v5::SceneComponentTableDesc;
-using v5::SceneEnvironmentBlockHeader;
-using v5::SceneEnvironmentSystemRecordHeader;
-using v5::SceneNodeIndexT;
-using v5::ScriptAssetDesc;
-using v5::ScriptAssetFlags;
-using v5::ScriptCompression;
-using v5::ScriptEncoding;
-using v5::ScriptingComponentFlags;
-using v5::ScriptingComponentRecord;
-using v5::ScriptLanguage;
-using v5::ScriptParamRecord;
-using v5::ScriptParamType;
-using v5::ScriptResourceDesc;
-using v5::ScriptSlotFlags;
-using v5::ScriptSlotRecord;
-using v5::ShaderReferenceDesc;
-using v5::SkinnedMeshInfo;
-using v5::SkyAtmosphereEnvironmentRecord;
-using v5::SkyLightEnvironmentRecord;
-using v5::SkySphereEnvironmentRecord;
-using v5::SpotLightRecord;
-using v5::StandardMeshInfo;
-using v5::StringTableOffsetT;
-using v5::StringTableSizeT;
-using v5::SubMeshDesc;
-using v5::SubresourceLayout;
-using v5::TexturePackingPolicyId;
-using v5::TexturePayloadFlags;
-using v5::TexturePayloadHeader;
-using v5::TextureResourceDesc;
-using v5::to_string;
-using v5::VolumetricCloudsEnvironmentRecord;
+using v6::AssetDirectoryEntry;
+using v6::AssetHeader;
+using v6::BufferResourceDesc;
+using v6::DataBlobSizeT;
+using v6::DirectionalLightRecord;
+using v6::EnvironmentComponentType;
+using v6::FogEnvironmentRecord;
+using v6::GeometryAssetDesc;
+using v6::InputActionAssetDesc;
+using v6::InputActionAssetFlags;
+using v6::InputActionMappingRecord;
+using v6::InputContextBindingFlags;
+using v6::InputContextBindingRecord;
+using v6::InputDataTable;
+using v6::InputMappingContextAssetDesc;
+using v6::InputMappingContextFlags;
+using v6::InputMappingFlags;
+using v6::InputTriggerAuxRecord;
+using v6::InputTriggerBehavior;
+using v6::InputTriggerRecord;
+using v6::InputTriggerType;
+using v6::kDataBlobMaxSize;
+using v6::kFallbackResourceIndex;
+using v6::kGeometryAssetVersion;
+using v6::kInputActionAssetVersion;
+using v6::kInputMappingContextAssetVersion;
+using v6::kMaterialAssetVersion;
+using v6::kMaterialFlag_AlphaTest;
+using v6::kMaterialFlag_DoubleSided;
+using v6::kMaterialFlag_GltfOrmPacked;
+using v6::kMaterialFlag_NoTextureSampling;
+using v6::kMaterialFlag_ProceduralGrid;
+using v6::kMaterialFlag_Unlit;
+using v6::kMaxNameSize;
+using v6::kNoResourceIndex;
+using v6::kSceneAssetVersion;
+using v6::kSceneNodeFlag_Visible;
+using v6::kTexturePayloadMagic;
+using v6::LightCommonRecord;
+using v6::LightShadowSettingsRecord;
+using v6::MaterialAssetDesc;
+using v6::MeshDesc;
+using v6::MeshViewDesc;
+using v6::NodeRecord;
+using v6::OffsetT;
+using v6::OrthographicCameraRecord;
+using v6::PakBrowseIndexEntry;
+using v6::PakBrowseIndexHeader;
+using v6::PakFooter;
+using v6::PakHeader;
+using v6::PerspectiveCameraRecord;
+using v6::PointLightRecord;
+using v6::PostProcessVolumeEnvironmentRecord;
+using v6::ProceduralMeshInfo;
+using v6::RenderableRecord;
+using v6::ResourceIndexT;
+using v6::ResourceRegion;
+using v6::ResourceTable;
+using v6::SceneAssetDesc;
+using v6::SceneComponentTableDesc;
+using v6::SceneEnvironmentBlockHeader;
+using v6::SceneEnvironmentSystemRecordHeader;
+using v6::SceneNodeIndexT;
+using v6::ScriptAssetDesc;
+using v6::ScriptAssetFlags;
+using v6::ScriptCompression;
+using v6::ScriptEncoding;
+using v6::ScriptingComponentFlags;
+using v6::ScriptingComponentRecord;
+using v6::ScriptLanguage;
+using v6::ScriptParamRecord;
+using v6::ScriptParamType;
+using v6::ScriptResourceDesc;
+using v6::ScriptSlotFlags;
+using v6::ScriptSlotRecord;
+using v6::ShaderReferenceDesc;
+using v6::SkinnedMeshInfo;
+using v6::SkyAtmosphereEnvironmentRecord;
+using v6::SkyLightEnvironmentRecord;
+using v6::SkySphereEnvironmentRecord;
+using v6::SpotLightRecord;
+using v6::StandardMeshInfo;
+using v6::StringTableOffsetT;
+using v6::StringTableSizeT;
+using v6::SubMeshDesc;
+using v6::SubresourceLayout;
+using v6::TexturePackingPolicyId;
+using v6::TexturePayloadFlags;
+using v6::TexturePayloadHeader;
+using v6::TextureResourceDesc;
+using v6::to_string;
+using v6::VolumetricCloudsEnvironmentRecord;
 } // namespace oxygen::data::pak
 
 // NOLINTEND(*-avoid-c-arrays,*-magic-numbers)

@@ -413,4 +413,96 @@ inline auto Load(AnyReader& reader, data::pak::SpotLightRecord& r)
   return {};
 }
 
+//=== Input (v6) ===---------------------------------------------------------//
+
+inline auto Load(AnyReader& reader, data::pak::InputDataTable& record)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+
+  CHECK_RESULT(reader.ReadInto(record.offset));
+  CHECK_RESULT(reader.ReadInto(record.count));
+  CHECK_RESULT(reader.ReadInto(record.entry_size));
+
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::InputActionMappingRecord& record)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { record.action_asset_key.guid })));
+  CHECK_RESULT(reader.ReadInto(record.slot_name_offset));
+  CHECK_RESULT(reader.ReadInto(record.trigger_start_index));
+  CHECK_RESULT(reader.ReadInto(record.trigger_count));
+  CHECK_RESULT(reader.ReadInto(record.flags));
+  for (auto& v : record.scale) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  for (auto& v : record.bias) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
+
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::InputTriggerRecord& record)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+
+  CHECK_RESULT(reader.ReadInto(record.type));
+  CHECK_RESULT(reader.ReadInto(record.behavior));
+  CHECK_RESULT(reader.ReadInto(record.reserved0));
+  CHECK_RESULT(reader.ReadInto(record.flags));
+  CHECK_RESULT(reader.ReadInto(record.actuation_threshold));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { record.linked_action_asset_key.guid })));
+  CHECK_RESULT(reader.ReadInto(record.aux_start_index));
+  CHECK_RESULT(reader.ReadInto(record.aux_count));
+  for (auto& v : record.fparams) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  for (auto& v : record.uparams) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { record.reserved1 })));
+
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::InputTriggerAuxRecord& record)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { record.action_asset_key.guid })));
+  CHECK_RESULT(reader.ReadInto(record.completion_states));
+  CHECK_RESULT(reader.ReadInto(record.time_to_complete_ns));
+  CHECK_RESULT(reader.ReadInto(record.flags));
+
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::InputContextBindingRecord& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+
+  CHECK_RESULT(reader.ReadInto(record.node_index));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { record.context_asset_key.guid })));
+  CHECK_RESULT(reader.ReadInto(record.priority));
+  CHECK_RESULT(reader.ReadInto(record.flags));
+  CHECK_RESULT(reader.ReadInto(record.reserved));
+
+  return {};
+}
+
 } // namespace oxygen::serio

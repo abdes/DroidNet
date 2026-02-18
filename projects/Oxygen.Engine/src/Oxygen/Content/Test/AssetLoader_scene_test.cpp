@@ -19,11 +19,14 @@
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Content/Loaders/InputActionLoader.h>
+#include <Oxygen/Content/Loaders/InputMappingContextLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -45,6 +48,7 @@ using oxygen::content::AssetLoaderConfig;
 using oxygen::content::testing::AssetLoaderLoadingTest;
 
 using oxygen::data::GeometryAsset;
+using oxygen::data::InputMappingContextAsset;
 using oxygen::data::SceneAsset;
 
 namespace {
@@ -591,6 +595,182 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
         EXPECT_EQ(ppv->header.record_size,
           sizeof(oxygen::data::pak::PostProcessVolumeEnvironmentRecord));
       }
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
+}
+
+//! Test: Scene input-context bindings parse and register dependencies.
+/*!
+ Scenario: Build a PAK with two input actions, one input mapping context, and a
+ scene that references that context through `input_context_bindings`.
+
+ Verify that:
+ - Scene exposes `InputContextBindingRecord` entries.
+ - Scene publishes dependency edge to InputMappingContext asset.
+ - InputMappingContext asset loads and exposes mapping strings.
+ - InputMappingContext publishes dependency edges to referenced input actions.
+*/
+NOLINT_TEST_F(AssetLoaderSceneTest,
+  LoadAsset_SceneWithInputContextBinding_ParsesAndRegistersDependencies)
+{
+  const auto pak_path = GeneratePakFile("scene_with_input_context_binding");
+  const auto scene_key = CreateTestAssetKey("test_scene_with_input_context");
+  const auto context_key = CreateTestAssetKey("test_input_mapping_context");
+  const auto action_accel_key
+    = CreateTestAssetKey("test_input_action_accelerate");
+  const auto action_decel_key
+    = CreateTestAssetKey("test_input_action_decelerate");
+
+  TestEventLoop el;
+
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+
+    loader.RegisterLoader(oxygen::content::loaders::LoadInputActionAsset);
+    loader.RegisterLoader(
+      oxygen::content::loaders::LoadInputMappingContextAsset);
+    loader.RegisterLoader(oxygen::content::loaders::LoadSceneAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      loader.AddPakFile(pak_path);
+
+      const auto scene = co_await loader.LoadAssetAsync<SceneAsset>(scene_key);
+      EXPECT_THAT(scene, NotNull());
+      if (!scene) {
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      }
+
+      const auto bindings
+        = scene->GetComponents<oxygen::data::pak::InputContextBindingRecord>();
+      EXPECT_EQ(bindings.size(), 1U);
+      EXPECT_EQ(bindings[0].node_index, 1U);
+      EXPECT_EQ(bindings[0].context_asset_key, context_key);
+      EXPECT_EQ(bindings[0].priority, 10);
+      EXPECT_EQ(
+        (bindings[0].flags
+          & oxygen::data::pak::InputContextBindingFlags::kActivateOnLoad),
+        oxygen::data::pak::InputContextBindingFlags::kActivateOnLoad);
+
+#if !defined(NDEBUG)
+      bool has_scene_as_dependent = false;
+      loader.ForEachDependent(
+        context_key, [&](const oxygen::data::AssetKey& dependent) {
+          if (dependent == scene_key) {
+            has_scene_as_dependent = true;
+          }
+        });
+      EXPECT_TRUE(has_scene_as_dependent);
+#endif
+
+      const auto context
+        = co_await loader.LoadAssetAsync<InputMappingContextAsset>(context_key);
+      EXPECT_THAT(context, NotNull());
+      if (!context) {
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      }
+
+      EXPECT_EQ(context->GetMappings().size(), 2U);
+      const auto slot0
+        = context->TryGetString(context->GetMappings()[0].slot_name_offset);
+      const auto slot1
+        = context->TryGetString(context->GetMappings()[1].slot_name_offset);
+      EXPECT_TRUE(slot0.has_value());
+      EXPECT_TRUE(slot1.has_value());
+      EXPECT_EQ(*slot0, "Keyboard.PageUp");
+      EXPECT_EQ(*slot1, "Keyboard.PageDown");
+
+#if !defined(NDEBUG)
+      bool accel_has_context = false;
+      loader.ForEachDependent(
+        action_accel_key, [&](const oxygen::data::AssetKey& dependent) {
+          if (dependent == context_key) {
+            accel_has_context = true;
+          }
+        });
+      EXPECT_TRUE(accel_has_context);
+
+      bool decel_has_context = false;
+      loader.ForEachDependent(
+        action_decel_key, [&](const oxygen::data::AssetKey& dependent) {
+          if (dependent == context_key) {
+            decel_has_context = true;
+          }
+        });
+      EXPECT_TRUE(decel_has_context);
+#endif
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
+}
+
+//! Test: scene input-context dependency edges are republished on cache hit.
+NOLINT_TEST_F(AssetLoaderSceneTest,
+  LoadAsset_SceneWithInputContextBinding_CacheHitRepublishesDependencies)
+{
+  const auto pak_path = GeneratePakFile("scene_with_input_context_binding");
+  const auto scene_key = CreateTestAssetKey("test_scene_with_input_context");
+  const auto context_key = CreateTestAssetKey("test_input_mapping_context");
+
+  TestEventLoop el;
+
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+
+    loader.RegisterLoader(oxygen::content::loaders::LoadInputActionAsset);
+    loader.RegisterLoader(
+      oxygen::content::loaders::LoadInputMappingContextAsset);
+    loader.RegisterLoader(oxygen::content::loaders::LoadSceneAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      loader.AddPakFile(pak_path);
+
+      const auto first = co_await loader.LoadAssetAsync<SceneAsset>(scene_key);
+      EXPECT_THAT(first, NotNull());
+      if (!first) {
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      }
+      const auto second = co_await loader.LoadAssetAsync<SceneAsset>(scene_key);
+      EXPECT_THAT(second, NotNull());
+      if (!second) {
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      }
+      EXPECT_EQ(first.get(), second.get());
+
+#if !defined(NDEBUG)
+      size_t dependents = 0;
+      loader.ForEachDependent(
+        context_key, [&](const oxygen::data::AssetKey& dependent) {
+          if (dependent == scene_key) {
+            ++dependents;
+          }
+        });
+      EXPECT_EQ(dependents, 1U);
+#endif
 
       loader.Stop();
       co_return oxygen::co::kJoin;

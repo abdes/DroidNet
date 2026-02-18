@@ -63,6 +63,7 @@ m_gtest_program(
   SOURCES
     "AssetHeaderLoader_test.cpp"
     "BufferLoader_test.cpp"
+    "InputLoaders_test.cpp"
     "MaterialLoader_test.cpp"
     "Mocks/MockStream.h"
     "SceneLoader_test.cpp"

@@ -187,9 +187,9 @@ auto PakFile::ReadHeader(serio::FileStream<>* stream) -> void
     throw std::runtime_error("Invalid pak file header magic");
   }
 
-  if (header_.version != 4 && header_.version != 5) {
+  if (header_.version != 4 && header_.version != 5 && header_.version != 6) {
     const auto msg = std::string("Unsupported PAK format version: ")
-      + std::to_string(header_.version) + " (this build loads v4/v5 only).";
+      + std::to_string(header_.version) + " (this build loads v4/v5/v6 only).";
     LOG_F(ERROR, "{}", msg);
     throw std::runtime_error(msg);
   }

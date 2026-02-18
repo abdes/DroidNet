@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -181,6 +182,203 @@ NOLINT_TEST_F(SceneLoaderTest, LoadScene_Decode_CollectsGeometryDependencies)
 
   ASSERT_THAT(collector->AssetDependencies(), ::testing::SizeIs(1));
   EXPECT_EQ(collector->AssetDependencies().front(), geom);
+}
+
+NOLINT_TEST_F(
+  SceneLoaderTest, LoadScene_InputContextBinding_NodeOutOfRange_Throws)
+{
+  using oxygen::data::AssetKey;
+  using oxygen::data::AssetType;
+  using oxygen::data::pak::InputContextBindingRecord;
+  using oxygen::data::pak::NodeRecord;
+  using oxygen::data::pak::SceneAssetDesc;
+  using oxygen::data::pak::SceneComponentTableDesc;
+
+  SceneAssetDesc desc {};
+  desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
+  desc.header.version = oxygen::data::pak::kSceneAssetVersion;
+
+  const uint32_t offset_nodes = static_cast<uint32_t>(sizeof(SceneAssetDesc));
+  const uint32_t offset_strings = offset_nodes + sizeof(NodeRecord);
+  const uint32_t strings_size = 6; // "\0root\0"
+  const uint32_t offset_directory = offset_strings + strings_size;
+  const uint32_t offset_table
+    = offset_directory + sizeof(SceneComponentTableDesc);
+
+  desc.nodes.offset = offset_nodes;
+  desc.nodes.count = 1;
+  desc.nodes.entry_size = sizeof(NodeRecord);
+  desc.scene_strings.offset = offset_strings;
+  desc.scene_strings.size = strings_size;
+  desc.component_table_directory_offset = offset_directory;
+  desc.component_table_count = 1;
+
+  auto desc_write = writer_.WriteBlob(std::span<const std::byte>(
+    reinterpret_cast<const std::byte*>(&desc), sizeof(desc)));
+  ASSERT_TRUE(desc_write) << desc_write.error().message();
+
+  NodeRecord node {};
+  node.scene_name_offset = 1;
+  node.parent_index = 0;
+  auto node_write = writer_.WriteBlob(std::span<const std::byte>(
+    reinterpret_cast<const std::byte*>(&node), sizeof(node)));
+  ASSERT_TRUE(node_write) << node_write.error().message();
+
+  const std::array<std::byte, 6> strings = { std::byte { 0 }, std::byte { 'r' },
+    std::byte { 'o' }, std::byte { 'o' }, std::byte { 't' }, std::byte { 0 } };
+  ASSERT_TRUE(writer_.WriteBlob(strings));
+
+  SceneComponentTableDesc table_desc {};
+  table_desc.component_type
+    = static_cast<uint32_t>(oxygen::data::ComponentType::kInputContextBinding);
+  table_desc.table.offset = offset_table;
+  table_desc.table.count = 1;
+  table_desc.table.entry_size = sizeof(InputContextBindingRecord);
+  auto dir_write = writer_.WriteBlob(std::span<const std::byte>(
+    reinterpret_cast<const std::byte*>(&table_desc), sizeof(table_desc)));
+  ASSERT_TRUE(dir_write) << dir_write.error().message();
+
+  InputContextBindingRecord binding {};
+  binding.node_index = 2; // out of range (only one node)
+  binding.context_asset_key = AssetKey {};
+  auto table_write = writer_.WriteBlob(std::span<const std::byte>(
+    reinterpret_cast<const std::byte*>(&binding), sizeof(binding)));
+  ASSERT_TRUE(table_write) << table_write.error().message();
+  ASSERT_TRUE(writer_.Flush());
+
+  EXPECT_THROW(
+    { (void)LoadSceneAsset(MakeContextParseOnly()); }, std::runtime_error);
+}
+
+NOLINT_TEST_F(
+  SceneLoaderTest, LoadScene_InputContextBinding_BadEntrySize_Throws)
+{
+  using oxygen::data::AssetType;
+  using oxygen::data::pak::NodeRecord;
+  using oxygen::data::pak::SceneAssetDesc;
+  using oxygen::data::pak::SceneComponentTableDesc;
+
+  SceneAssetDesc desc {};
+  desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
+  desc.header.version = oxygen::data::pak::kSceneAssetVersion;
+
+  const uint32_t offset_nodes = static_cast<uint32_t>(sizeof(SceneAssetDesc));
+  const uint32_t offset_strings = offset_nodes + sizeof(NodeRecord);
+  const uint32_t strings_size = 6;
+  const uint32_t offset_directory = offset_strings + strings_size;
+  const uint32_t offset_table
+    = offset_directory + sizeof(SceneComponentTableDesc);
+
+  desc.nodes.offset = offset_nodes;
+  desc.nodes.count = 1;
+  desc.nodes.entry_size = sizeof(NodeRecord);
+  desc.scene_strings.offset = offset_strings;
+  desc.scene_strings.size = strings_size;
+  desc.component_table_directory_offset = offset_directory;
+  desc.component_table_count = 1;
+
+  ASSERT_TRUE(writer_.WriteBlob(std::span<const std::byte>(
+    reinterpret_cast<const std::byte*>(&desc), sizeof(desc))));
+
+  NodeRecord node {};
+  node.scene_name_offset = 1;
+  node.parent_index = 0;
+  ASSERT_TRUE(writer_.WriteBlob(std::span<const std::byte>(
+    reinterpret_cast<const std::byte*>(&node), sizeof(node))));
+
+  const std::array<std::byte, 6> strings = { std::byte { 0 }, std::byte { 'r' },
+    std::byte { 'o' }, std::byte { 'o' }, std::byte { 't' }, std::byte { 0 } };
+  ASSERT_TRUE(writer_.WriteBlob(strings));
+
+  SceneComponentTableDesc table_desc {};
+  table_desc.component_type
+    = static_cast<uint32_t>(oxygen::data::ComponentType::kInputContextBinding);
+  table_desc.table.offset = offset_table;
+  table_desc.table.count = 1;
+  table_desc.table.entry_size = 16; // invalid
+  ASSERT_TRUE(writer_.WriteBlob(std::span<const std::byte>(
+    reinterpret_cast<const std::byte*>(&table_desc), sizeof(table_desc))));
+
+  const std::array<std::byte, 16> bad_entry {};
+  ASSERT_TRUE(writer_.WriteBlob(bad_entry));
+  ASSERT_TRUE(writer_.Flush());
+
+  EXPECT_THROW(
+    { (void)LoadSceneAsset(MakeContextParseOnly()); }, std::runtime_error);
+}
+
+NOLINT_TEST_F(
+  SceneLoaderTest, LoadScene_InputContextBinding_UnsortedByNode_Throws)
+{
+  using oxygen::data::AssetKey;
+  using oxygen::data::AssetType;
+  using oxygen::data::pak::InputContextBindingRecord;
+  using oxygen::data::pak::NodeRecord;
+  using oxygen::data::pak::SceneAssetDesc;
+  using oxygen::data::pak::SceneComponentTableDesc;
+
+  SceneAssetDesc desc {};
+  desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
+  desc.header.version = oxygen::data::pak::kSceneAssetVersion;
+
+  const uint32_t offset_nodes = static_cast<uint32_t>(sizeof(SceneAssetDesc));
+  const uint32_t nodes_size = 2U * sizeof(NodeRecord);
+  const uint32_t offset_strings = offset_nodes + nodes_size;
+  const uint32_t strings_size = 8; // "\0root\0n1\0"
+  const uint32_t offset_directory = offset_strings + strings_size;
+  const uint32_t offset_table
+    = offset_directory + sizeof(SceneComponentTableDesc);
+
+  desc.nodes.offset = offset_nodes;
+  desc.nodes.count = 2;
+  desc.nodes.entry_size = sizeof(NodeRecord);
+  desc.scene_strings.offset = offset_strings;
+  desc.scene_strings.size = strings_size;
+  desc.component_table_directory_offset = offset_directory;
+  desc.component_table_count = 1;
+
+  ASSERT_TRUE(writer_.WriteBlob(std::span<const std::byte>(
+    reinterpret_cast<const std::byte*>(&desc), sizeof(desc))));
+
+  NodeRecord node0 {};
+  node0.scene_name_offset = 1;
+  node0.parent_index = 0;
+  ASSERT_TRUE(writer_.WriteBlob(std::span<const std::byte>(
+    reinterpret_cast<const std::byte*>(&node0), sizeof(node0))));
+  NodeRecord node1 {};
+  node1.scene_name_offset = 6;
+  node1.parent_index = 0;
+  ASSERT_TRUE(writer_.WriteBlob(std::span<const std::byte>(
+    reinterpret_cast<const std::byte*>(&node1), sizeof(node1))));
+
+  const std::array<std::byte, 8> strings = { std::byte { 0 }, std::byte { 'r' },
+    std::byte { 'o' }, std::byte { 'o' }, std::byte { 't' }, std::byte { 0 },
+    std::byte { 'n' }, std::byte { 0 } };
+  ASSERT_TRUE(writer_.WriteBlob(strings));
+
+  SceneComponentTableDesc table_desc {};
+  table_desc.component_type
+    = static_cast<uint32_t>(oxygen::data::ComponentType::kInputContextBinding);
+  table_desc.table.offset = offset_table;
+  table_desc.table.count = 2;
+  table_desc.table.entry_size = sizeof(InputContextBindingRecord);
+  ASSERT_TRUE(writer_.WriteBlob(std::span<const std::byte>(
+    reinterpret_cast<const std::byte*>(&table_desc), sizeof(table_desc))));
+
+  InputContextBindingRecord a {};
+  a.node_index = 1;
+  a.context_asset_key = AssetKey {};
+  InputContextBindingRecord b {};
+  b.node_index = 0; // unsorted
+  b.context_asset_key = AssetKey {};
+  ASSERT_TRUE(writer_.WriteBlob(std::span<const std::byte>(
+    reinterpret_cast<const std::byte*>(&a), sizeof(a))));
+  ASSERT_TRUE(writer_.WriteBlob(std::span<const std::byte>(
+    reinterpret_cast<const std::byte*>(&b), sizeof(b))));
+  ASSERT_TRUE(writer_.Flush());
+
+  EXPECT_THROW(
+    { (void)LoadSceneAsset(MakeContextParseOnly()); }, std::runtime_error);
 }
 
 } // namespace

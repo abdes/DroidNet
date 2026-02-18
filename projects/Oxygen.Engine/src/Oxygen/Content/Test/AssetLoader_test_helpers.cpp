@@ -140,6 +140,30 @@ auto AssetLoaderLoadingTest::CreateTestAssetKey(const std::string& name)
     const auto bytes = { 0x77, 0x77, 0x77, 0x77, 0x88, 0x88, 0x99, 0x99, 0xaa,
       0xaa, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb };
     std::ranges::copy(bytes, key.guid.begin());
+  } else if (name == "test_input_action_accelerate") {
+    // Matches scene_with_input_context_binding.yaml:
+    // "88888888-1111-2222-3333-444444444444"
+    const auto bytes = { 0x88, 0x88, 0x88, 0x88, 0x11, 0x11, 0x22, 0x22, 0x33,
+      0x33, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44 };
+    std::ranges::copy(bytes, key.guid.begin());
+  } else if (name == "test_input_action_decelerate") {
+    // Matches scene_with_input_context_binding.yaml:
+    // "99999999-1111-2222-3333-444444444444"
+    const auto bytes = { 0x99, 0x99, 0x99, 0x99, 0x11, 0x11, 0x22, 0x22, 0x33,
+      0x33, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44 };
+    std::ranges::copy(bytes, key.guid.begin());
+  } else if (name == "test_input_mapping_context") {
+    // Matches scene_with_input_context_binding.yaml:
+    // "aaaaaaaa-1111-2222-3333-444444444444"
+    const auto bytes = { 0xaa, 0xaa, 0xaa, 0xaa, 0x11, 0x11, 0x22, 0x22, 0x33,
+      0x33, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44 };
+    std::ranges::copy(bytes, key.guid.begin());
+  } else if (name == "test_scene_with_input_context") {
+    // Matches scene_with_input_context_binding.yaml:
+    // "bbbbbbbb-1111-2222-3333-444444444444"
+    const auto bytes = { 0xbb, 0xbb, 0xbb, 0xbb, 0x11, 0x11, 0x22, 0x22, 0x33,
+      0x33, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44 };
+    std::ranges::copy(bytes, key.guid.begin());
   } else if (name == "test_scene_invalid_unknown_geometry") {
     // Matches scene_invalid_unknown_geometry.yaml:
     // "66666666-7777-8888-9999-aaaaaaaaaaaa"
