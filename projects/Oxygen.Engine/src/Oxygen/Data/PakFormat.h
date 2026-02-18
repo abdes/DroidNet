@@ -1818,7 +1818,121 @@ namespace oxygen::data::pak::v6 {
 
 using namespace v5;
 
+constexpr uint8_t kInputActionAssetVersion = 1;
+constexpr uint8_t kInputMappingContextAssetVersion = 1;
+
+enum class InputActionAssetFlags : uint32_t { // NOLINT(*-enum-size)
+  kNone = 0,
+  kConsumesInput = OXYGEN_FLAG(0),
+};
+OXYGEN_DEFINE_FLAGS_OPERATORS(InputActionAssetFlags)
+
+enum class InputMappingContextFlags : uint32_t { // NOLINT(*-enum-size)
+  kNone = 0,
+};
+OXYGEN_DEFINE_FLAGS_OPERATORS(InputMappingContextFlags)
+
+enum class InputMappingFlags : uint32_t { // NOLINT(*-enum-size)
+  kNone = 0,
+};
+OXYGEN_DEFINE_FLAGS_OPERATORS(InputMappingFlags)
+
+enum class InputTriggerType : uint8_t {
+// NOLINTNEXTLINE(*-macro-*)
+#define OXNPUT_ACTION_TRIGGER_TYPE(name, value) name = value,
+#define OXNPUT_ACTION_TRIGGER_BEHAVIOR(name, value)
+#include <Oxygen/Core/Meta/Input/ActionTriggers.inc>
+#undef OXNPUT_ACTION_TRIGGER_BEHAVIOR
+#undef OXNPUT_ACTION_TRIGGER_TYPE
+};
+
+enum class InputTriggerBehavior : uint8_t {
+#define OXNPUT_ACTION_TRIGGER_TYPE(name, value)
+// NOLINTNEXTLINE(*-macro-*)
+#define OXNPUT_ACTION_TRIGGER_BEHAVIOR(name, value) name = value,
+#include <Oxygen/Core/Meta/Input/ActionTriggers.inc>
+#undef OXNPUT_ACTION_TRIGGER_BEHAVIOR
+#undef OXNPUT_ACTION_TRIGGER_TYPE
+};
+
+enum class InputContextBindingFlags : uint32_t { // NOLINT(*-enum-size)
+  kNone = 0,
+  kActivateOnLoad = OXYGEN_FLAG(0),
+};
+OXYGEN_DEFINE_FLAGS_OPERATORS(InputContextBindingFlags)
+
 #pragma pack(push, 1)
+
+struct InputDataTable {
+  uint64_t offset = 0;
+  uint32_t count = 0;
+  uint32_t entry_size = 0;
+};
+static_assert(sizeof(InputDataTable) == 16);
+
+struct InputActionAssetDesc {
+  AssetHeader header;
+  uint8_t value_type = 0;
+  uint8_t reserved0[3] = {};
+  InputActionAssetFlags flags = InputActionAssetFlags::kNone;
+  uint8_t reserved1[153] = {};
+};
+static_assert(sizeof(InputActionAssetDesc) == 256);
+
+struct InputMappingContextAssetDesc {
+  AssetHeader header;
+  InputMappingContextFlags flags = InputMappingContextFlags::kNone;
+  InputDataTable mappings = {};
+  InputDataTable triggers = {};
+  InputDataTable trigger_aux = {};
+  InputDataTable strings = {};
+  uint8_t reserved[93] = {};
+};
+static_assert(sizeof(InputMappingContextAssetDesc) == 256);
+
+struct InputActionMappingRecord {
+  AssetKey action_asset_key = {};
+  uint32_t slot_name_offset = 0;
+  uint32_t trigger_start_index = 0;
+  uint32_t trigger_count = 0;
+  InputMappingFlags flags = InputMappingFlags::kNone;
+  float scale[2] = { 1.0F, 1.0F };
+  float bias[2] = { 0.0F, 0.0F };
+  uint8_t reserved[16] = {};
+};
+static_assert(sizeof(InputActionMappingRecord) == 64);
+
+struct InputTriggerRecord {
+  InputTriggerType type = InputTriggerType::kPressed;
+  InputTriggerBehavior behavior = InputTriggerBehavior::kImplicit;
+  uint16_t reserved0 = 0;
+  uint32_t flags = 0;
+  float actuation_threshold = 0.5F;
+  AssetKey linked_action_asset_key = {};
+  uint32_t aux_start_index = 0;
+  uint32_t aux_count = 0;
+  float fparams[5] = {};
+  uint32_t uparams[5] = {};
+  uint8_t reserved1[20] = {};
+};
+static_assert(sizeof(InputTriggerRecord) == 96);
+
+struct InputTriggerAuxRecord {
+  AssetKey action_asset_key = {};
+  uint32_t completion_states = 0;
+  uint64_t time_to_complete_ns = 0;
+  uint32_t flags = 0;
+};
+static_assert(sizeof(InputTriggerAuxRecord) == 32);
+
+struct InputContextBindingRecord {
+  SceneNodeIndexT node_index = 0;
+  AssetKey context_asset_key = {};
+  int32_t priority = 0;
+  InputContextBindingFlags flags = InputContextBindingFlags::kNone;
+  uint32_t reserved = 0;
+};
+static_assert(sizeof(InputContextBindingRecord) == 32);
 
 //! Fixed-size header at the start of the PAK file (256 bytes)
 struct PakHeader {
