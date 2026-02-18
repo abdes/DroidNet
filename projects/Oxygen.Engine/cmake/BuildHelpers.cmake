@@ -213,6 +213,17 @@ function(asap_generate_export_headers target module)
 endfunction()
 
 function(arrange_target_files_for_ide target)
+  set(options)
+  set(oneValueArgs)
+  set(multiValueArgs EXCLUDE_PATTERNS)
+  cmake_parse_arguments(
+    x
+    "${options}"
+    "${oneValueArgs}"
+    "${multiValueArgs}"
+    ${ARGN}
+  )
+
   get_target_property(_all_sources ${target} SOURCES)
 
   # Normalize generator expressions in target sources so that files guarded by
@@ -257,6 +268,7 @@ function(arrange_target_files_for_ide target)
     # Exclude if path contains Test, Benchmarks, Tools or Examples
     # (case-insensitive)
     string(TOLOWER "${existing_file}" _lower_file)
+    set(_skip_file FALSE)
     if(
       _lower_file
         MATCHES
@@ -276,6 +288,18 @@ function(arrange_target_files_for_ide target)
     )
       continue()
     endif()
+
+    foreach(_pattern IN LISTS x_EXCLUDE_PATTERNS)
+      string(TOLOWER "${_pattern}" _exclude_pattern)
+      if(_exclude_pattern AND _lower_file MATCHES "${_exclude_pattern}")
+        set(_skip_file TRUE)
+        break()
+      endif()
+    endforeach()
+    if(_skip_file)
+      continue()
+    endif()
+
     list(FIND _all_files "${existing_file}" _idx)
     if(_idx EQUAL -1)
       list(APPEND _missing_files "${existing_file}")
