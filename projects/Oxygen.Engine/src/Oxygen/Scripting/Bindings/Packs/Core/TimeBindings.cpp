@@ -19,7 +19,7 @@ namespace {
   auto RequireFrameContext(lua_State* state)
     -> observer_ptr<engine::FrameContext>
   {
-    const auto frame_context = GetActiveFrameContext();
+    const auto frame_context = GetActiveFrameContext(state);
     if (frame_context == nullptr) {
       (void)luaL_error(state, "oxygen.time requires active FrameContext");
       return nullptr;

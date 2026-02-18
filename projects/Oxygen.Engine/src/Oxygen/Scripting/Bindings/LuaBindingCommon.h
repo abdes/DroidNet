@@ -16,6 +16,9 @@ struct lua_State;
 namespace oxygen::engine {
 class FrameContext;
 }
+namespace oxygen {
+class AsyncEngine;
+}
 
 namespace oxygen::scripting::bindings {
 
@@ -32,11 +35,17 @@ struct LuaBindingContext {
 OXGN_SCRP_API auto PushScriptContext(lua_State* state,
   LuaSlotExecutionContext* slot_context, float dt_seconds) -> void;
 
-OXGN_SCRP_API auto SetActiveFrameContext(
+OXGN_SCRP_API auto SetActiveFrameContext(lua_State* state,
   observer_ptr<engine::FrameContext> frame_context) noexcept -> void;
 
-OXGN_SCRP_NDAPI auto GetActiveFrameContext() noexcept
+OXGN_SCRP_NDAPI auto GetActiveFrameContext(lua_State* state) noexcept
   -> observer_ptr<engine::FrameContext>;
+
+OXGN_SCRP_API auto SetActiveEngine(
+  lua_State* state, observer_ptr<AsyncEngine> engine) noexcept -> void;
+
+OXGN_SCRP_NDAPI auto GetActiveEngine(lua_State* state) noexcept
+  -> observer_ptr<AsyncEngine>;
 
 OXGN_SCRP_NDAPI auto GetBindingContextFromScriptArg(
   lua_State* state, int arg_index = 1) noexcept -> LuaBindingContext*;

@@ -8,13 +8,15 @@
 #include <memory>
 
 #include <Oxygen/Scripting/Bindings/BindingRegistry.h>
+#include <Oxygen/Scripting/Bindings/Packs/Core/AppBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/CoreBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/TimeBindings.h>
 
 namespace oxygen::scripting::bindings {
 
 namespace {
-  constexpr std::array<BindingNamespace, 1> kCoreNamespaces = { {
+  constexpr std::array<BindingNamespace, 2> kCoreNamespaces = { {
+    { .name = "app", .register_fn = RegisterAppBindings },
     { .name = "time", .register_fn = RegisterTimeBindings },
   } };
 
