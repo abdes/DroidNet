@@ -49,6 +49,8 @@ set_target_properties(
 set(
   OXYGEN_SCRIPTING_HEADERS
   "api_export.h"
+  "Bindings/BindingRegistry.h"
+  "Bindings/LuaBindingCommon.h"
   "Compilers/LuauScriptCompiler.h"
   "Execution/CompiledScriptExecutable.h"
   "Execution/FailedScriptExecutable.h"
@@ -60,12 +62,21 @@ set(
 )
 set(
   OXYGEN_SCRIPTING_PRIVATE_SOURCES
+  "Bindings/BindingRegistry.cpp"
+  "Bindings/LuaBindingCommon.cpp"
+  "Bindings/Packs/Core/CoreBindingPack.cpp"
+  "Bindings/Packs/Core/TimeBindings.cpp"
+  "Bindings/Packs/Scene/SceneBindingPack.cpp"
+  "Bindings/Packs/Scene/SceneBindings.cpp"
+  "Bindings/Packs/Scene/TransformBindings.cpp"
   "Compilers/LuauScriptCompiler.cpp"
   "Module/ScriptingModule.cpp"
   "Resolver/EmbeddedSourceResolver.cpp"
   "Resolver/ExternalFileResolver.cpp"
   "Resolver/ScriptSourceResolver.cpp"
 )
+
+add_subdirectory("Bindings")
 
 target_sources(
   ${META_MODULE_TARGET}
@@ -78,7 +89,7 @@ target_sources(
     FILES ${OXYGEN_SCRIPTING_HEADERS}
 )
 
-arrange_target_files_for_ide(${META_MODULE_TARGET})
+arrange_target_files_for_ide(${META_MODULE_TARGET} EXCLUDE_PATTERNS "bindings/")
 
 target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_20)
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
@@ -100,6 +111,8 @@ target_link_libraries(
     oxygen::core
     oxygen::data
     oxygen::engine
+    oxygen::scene
+    oxygen::scripting-bindings-contracts
 )
 
 # ------------------------------------------------------------------------------

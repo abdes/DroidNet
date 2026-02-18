@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <cstdint>
+#include <span>
+
 #include <Oxygen/Base/Macros.h>
 
 namespace oxygen::scripting {
@@ -19,6 +22,12 @@ public:
   OXYGEN_DEFAULT_MOVABLE(ScriptExecutable)
 
   virtual auto Run() const noexcept -> void = 0;
+
+  [[nodiscard]] virtual auto BytecodeView() const noexcept
+    -> std::span<const uint8_t>
+  {
+    return {};
+  }
 };
 
 } // namespace oxygen::scripting
