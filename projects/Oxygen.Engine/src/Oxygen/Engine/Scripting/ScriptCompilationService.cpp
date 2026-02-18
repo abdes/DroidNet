@@ -4,6 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <cstring>
+#include <fstream>
+#include <optional>
+#include <system_error>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
@@ -11,11 +18,146 @@
 #include <Oxygen/Engine/Scripting/ScriptCompilationService.h>
 
 namespace oxygen::scripting {
+namespace {
+  constexpr std::array<char, 8> kPersistentCacheMagic {
+    'O',
+    'X',
+    'S',
+    'C',
+    'R',
+    'P',
+    'T',
+    '\0',
+  };
+  constexpr uint32_t kPersistentCacheVersion = 1;
+
+#pragma pack(push, 1)
+  struct PersistentCacheHeader final {
+    std::array<char, 8> magic {};
+    uint32_t version { 0 };
+    uint32_t reserved { 0 };
+    uint64_t index_offset { 0 };
+    uint32_t entry_count { 0 };
+    uint32_t reserved2 { 0 };
+  };
+
+  struct PersistentCacheEntry final {
+    uint64_t key { 0 };
+    uint64_t data_offset { 0 };
+    uint32_t data_size { 0 };
+    uint32_t language { 0 };
+    uint32_t compression { 0 };
+    uint32_t origin { 0 };
+    uint32_t reserved { 0 };
+    uint64_t content_hash { 0 };
+  };
+#pragma pack(pop)
+
+  auto MakePersistentBytecodeBlob(std::vector<uint8_t> payload,
+    const uint32_t language, const uint32_t compression,
+    const uint64_t content_hash, const uint32_t origin)
+    -> std::shared_ptr<const ScriptBytecodeBlob>
+  {
+    return std::make_shared<const ScriptBytecodeBlob>(
+      ScriptBytecodeBlob::FromOwned(std::move(payload),
+        static_cast<data::pak::ScriptLanguage>(language),
+        static_cast<data::pak::ScriptCompression>(compression), content_hash,
+        static_cast<ScriptBlobOrigin>(origin),
+        ScriptBlobCanonicalName { "persistent-cache" }));
+  }
+
+  auto ReadPayload(std::ifstream& input, const uint64_t data_offset,
+    const uint32_t data_size) -> std::optional<std::vector<uint8_t>>
+  {
+    input.clear();
+    input.seekg(static_cast<std::streamoff>(data_offset), std::ios::beg);
+    if (!input) {
+      return std::nullopt;
+    }
+    std::vector<uint8_t> payload(data_size);
+    input.read(reinterpret_cast<char*>(payload.data()),
+      static_cast<std::streamsize>(payload.size()));
+    if (!input) {
+      return std::nullopt;
+    }
+    return payload;
+  }
+} // namespace
 
 ScriptCompilationService::ScriptCompilationService(
-  const observer_ptr<co::ThreadPool> thread_pool) noexcept
+  const observer_ptr<co::ThreadPool> thread_pool,
+  std::filesystem::path persistent_cache_path) noexcept
   : thread_pool_(thread_pool)
+  , l1_cache_(kL1ByteBudget)
+  , persistent_cache_path_(std::move(persistent_cache_path))
 {
+  if (!persistent_cache_path_.empty()) {
+    auto load_failed = false;
+    {
+      std::error_code ec {};
+      if (!std::filesystem::exists(persistent_cache_path_, ec)) {
+        ec.clear();
+      } else if (ec) {
+        load_failed = true;
+      } else {
+        std::ifstream input(persistent_cache_path_, std::ios::binary);
+        if (!input) {
+          load_failed = true;
+        } else {
+          PersistentCacheHeader header {};
+          input.read(
+            reinterpret_cast<char*>(&header), sizeof(PersistentCacheHeader));
+          if (!input || header.magic != kPersistentCacheMagic
+            || header.version != kPersistentCacheVersion) {
+            load_failed = true;
+          } else {
+            input.seekg(0, std::ios::end);
+            const auto file_size = static_cast<uint64_t>(input.tellg());
+            if (header.index_offset > file_size) {
+              load_failed = true;
+            } else {
+              input.seekg(static_cast<std::streamoff>(header.index_offset),
+                std::ios::beg);
+              for (uint32_t i = 0; i < header.entry_count; ++i) {
+                PersistentCacheEntry entry {};
+                input.read(reinterpret_cast<char*>(&entry),
+                  sizeof(PersistentCacheEntry));
+                if (!input) {
+                  load_failed = true;
+                  break;
+                }
+                if ((entry.data_offset + entry.data_size) > file_size) {
+                  load_failed = true;
+                  break;
+                }
+                persistent_index_.insert_or_assign(CompileKey { entry.key },
+                  PersistentIndexEntry {
+                    .data_offset = entry.data_offset,
+                    .data_size = entry.data_size,
+                    .language = entry.language,
+                    .compression = entry.compression,
+                    .origin = entry.origin,
+                    .content_hash = entry.content_hash,
+                  });
+                input.seekg(static_cast<std::streamoff>(header.index_offset
+                              + (static_cast<uint64_t>(i + 1)
+                                * sizeof(PersistentCacheEntry))),
+                  std::ios::beg);
+              }
+            }
+          }
+        }
+      }
+    }
+    if (load_failed) {
+      LOG_F(WARNING, "persistent cache invalid, falling back to empty cache");
+      persistent_index_.clear();
+    } else if (!persistent_index_.empty()) {
+      LOG_F(
+        INFO, "persistent cache loaded (entries={})", persistent_index_.size());
+    }
+  }
+
   LOG_F(INFO, "compilation service initialized (thread_pool={})",
     thread_pool_ ? "yes" : "no");
 }
@@ -55,6 +197,10 @@ auto ScriptCompilationService::Stop() -> void
     in_flight_.clear();
   }
   {
+    std::lock_guard lock(l1_cache_mutex_);
+    l1_cache_.Clear();
+  }
+  {
     std::lock_guard lock(compilers_mutex_);
     compilers_.clear();
   }
@@ -62,9 +208,33 @@ auto ScriptCompilationService::Stop() -> void
     nursery_->Cancel();
   }
 
-  LOG_F(INFO,
-    "shutdown complete (subscribers_cleared={}, completions_cleared={})",
-    subscribers_cleared, completions_cleared);
+  const auto l1_hits = l1_hits_.load(std::memory_order_relaxed);
+  const auto l2_hits = l2_hits_.load(std::memory_order_relaxed);
+  const auto compile_started = compile_started_.load(std::memory_order_relaxed);
+  const auto compile_succeeded
+    = compile_succeeded_.load(std::memory_order_relaxed);
+  const auto compile_failed = compile_failed_.load(std::memory_order_relaxed);
+  const auto latency_samples
+    = compile_latency_samples_.load(std::memory_order_relaxed);
+  const auto latency_total_us
+    = compile_latency_total_us_.load(std::memory_order_relaxed);
+  const auto latency_max_us
+    = compile_latency_max_us_.load(std::memory_order_relaxed);
+  const auto latency_avg_us
+    = latency_samples == 0 ? 0 : (latency_total_us / latency_samples);
+
+  LOG_SCOPE_F(INFO, "Compilation Statistics");
+  LOG_F(INFO, "subscribers cleared       : {}", subscribers_cleared);
+  LOG_F(INFO, "completions cleared       : {}", completions_cleared);
+  LOG_F(INFO, "l1 hits                   : {}", l1_hits);
+  LOG_F(INFO, "l2 hits                   : {}", l2_hits);
+  LOG_F(INFO, "compile started           : {}", compile_started);
+  LOG_F(INFO, "compile succeeded         : {}", compile_succeeded);
+  LOG_F(INFO, "compile failed            : {}", compile_failed);
+  LOG_F(INFO, "compile latency samples   : {}", latency_samples);
+  LOG_F(INFO, "compile latency avg       : {} us", latency_avg_us);
+  LOG_F(INFO, "compile latency max       : {} us", latency_max_us);
+  LOG_F(INFO, "compile latency total     : {} us", latency_total_us);
 }
 
 auto ScriptCompilationService::IsRunning() const -> bool
@@ -109,12 +279,38 @@ auto ScriptCompilationService::CompileAsync(Request request) -> co::Co<Result>
   if (!active_.load(std::memory_order_acquire)) {
     co_return Result {
       .success = false,
-      .bytecode = {},
+      .bytecode = nullptr,
       .diagnostics = "ScriptCompilationService is shut down",
     };
   }
 
   const auto compile_key = request.compile_key;
+  if (auto cached_bytecode = TryGetCachedBytecode(compile_key);
+    cached_bytecode != nullptr) {
+    l1_hits_.fetch_add(1, std::memory_order_relaxed);
+    Result cached_result {};
+    cached_result.success = true;
+    cached_result.bytecode = std::move(cached_bytecode);
+    DLOG_F(2, "compile cache hit (key={}, bytecode_size={})", compile_key,
+      cached_result.bytecode->Size());
+    EnqueueCompletion(compile_key, cached_result);
+    co_return cached_result;
+  }
+
+  if (auto cached_bytecode = TryGetPersistentBytecode(compile_key);
+    cached_bytecode != nullptr) {
+    l2_hits_.fetch_add(1, std::memory_order_relaxed);
+    Result persisted_result {};
+    persisted_result.success = true;
+    persisted_result.bytecode = std::move(cached_bytecode);
+    StoreCachedBytecode(compile_key, persisted_result.bytecode);
+    DLOG_F(2, "persistent cache hit (key={}, bytecode_size={})", compile_key,
+      persisted_result.bytecode->Size());
+    EnqueueCompletion(compile_key, persisted_result);
+    co_return persisted_result;
+  }
+  DLOG_F(3, "compile cache miss (key={})", compile_key);
+
   co::Shared<co::Co<Result>> shared;
   {
     std::lock_guard lock(in_flight_mutex_);
@@ -124,6 +320,7 @@ auto ScriptCompilationService::CompileAsync(Request request) -> co::Co<Result>
     } else {
       const auto compile_mode = request.compile_mode;
       auto source = std::move(request.source);
+      compile_started_.fetch_add(1, std::memory_order_relaxed);
       LOG_F(INFO,
         "starting compile request (key={}, language={}, mode={}, "
         "source_size={})",
@@ -143,6 +340,23 @@ auto ScriptCompilationService::InFlightCount() const -> size_t
 {
   std::lock_guard lock(in_flight_mutex_);
   return in_flight_.size();
+}
+
+auto ScriptCompilationService::GetCounters() const noexcept -> Counters
+{
+  return Counters {
+    .l1_hits = l1_hits_.load(std::memory_order_relaxed),
+    .l2_hits = l2_hits_.load(std::memory_order_relaxed),
+    .compile_started = compile_started_.load(std::memory_order_relaxed),
+    .compile_succeeded = compile_succeeded_.load(std::memory_order_relaxed),
+    .compile_failed = compile_failed_.load(std::memory_order_relaxed),
+    .compile_latency_samples
+    = compile_latency_samples_.load(std::memory_order_relaxed),
+    .compile_latency_total_us
+    = compile_latency_total_us_.load(std::memory_order_relaxed),
+    .compile_latency_max_us
+    = compile_latency_max_us_.load(std::memory_order_relaxed),
+  };
 }
 
 auto ScriptCompilationService::Subscribe(const CompileKey compile_key,
@@ -193,9 +407,9 @@ auto ScriptCompilationService::AcquireForSlot(
   const auto compile_key = request.compile_key;
   auto subscription = Subscribe(
     compile_key, [callbacks = std::move(callbacks)](const Result& result) {
-      if (result.success) {
+      if (result.success && result.bytecode != nullptr) {
         if (callbacks.on_ready) {
-          callbacks.on_ready(std::vector<uint8_t>(result.bytecode));
+          callbacks.on_ready(result.bytecode);
         }
         return;
       }
@@ -239,14 +453,32 @@ auto ScriptCompilationService::ExecuteCompileRequest(
     in_flight_.erase(compile_key);
   });
 
-  const auto result
-    = co_await CompileOnWorkerThread(std::move(source), compile_mode);
-  if (result.success) {
-    LOG_F(INFO, "compile succeeded (key={}, bytecode_size={})", compile_key,
-      result.bytecode.size());
+  const auto started_at = std::chrono::steady_clock::now();
+  auto result = co_await CompileOnWorkerThread(std::move(source), compile_mode);
+  const auto finished_at = std::chrono::steady_clock::now();
+  const auto latency_us = static_cast<uint64_t>(
+    std::chrono::duration_cast<std::chrono::microseconds>(
+      finished_at - started_at)
+      .count());
+  compile_latency_samples_.fetch_add(1, std::memory_order_relaxed);
+  compile_latency_total_us_.fetch_add(latency_us, std::memory_order_relaxed);
+  auto observed_max = compile_latency_max_us_.load(std::memory_order_relaxed);
+  while (latency_us > observed_max
+    && !compile_latency_max_us_.compare_exchange_weak(
+      observed_max, latency_us, std::memory_order_relaxed)) { }
+
+  if (result.success && result.bytecode != nullptr) {
+    compile_succeeded_.fetch_add(1, std::memory_order_relaxed);
+    StorePersistentBytecode(compile_key, result.bytecode);
+    StoreCachedBytecode(compile_key, result.bytecode);
+    LOG_F(INFO, "compile succeeded (key={}, bytecode_size={}, latency_us={})",
+      compile_key, result.bytecode->Size(), latency_us);
   } else {
-    LOG_F(ERROR, "compile failed (key={}, diagnostics_size={}, diagnostics={})",
-      compile_key, result.diagnostics.size(), result.diagnostics);
+    compile_failed_.fetch_add(1, std::memory_order_relaxed);
+    LOG_F(ERROR,
+      "compile failed (key={}, diagnostics_size={}, latency_us={}, "
+      "diagnostics={})",
+      compile_key, result.diagnostics.size(), latency_us, result.diagnostics);
   }
   EnqueueCompletion(compile_key, result);
   co_return result;
@@ -272,13 +504,13 @@ auto ScriptCompilationService::CompileOnWorkerThread(ScriptSourceBlob source,
   }
   if (compiler) {
     if (thread_pool_) {
-      LOG_F(INFO, "dispatching compile to worker (language={}, source_size={})",
+      DLOG_F(2, "dispatching compile to worker (language={}, source_size={})",
         language, source.Size());
       co_return co_await thread_pool_->Run(
         [compiler, compile_mode](ScriptSourceBlob source_blob) -> Result {
-          LOG_F(INFO, "worker invoking compiler (source_size={})",
-            source_blob.Size());
-          return compiler->Compile(source_blob.BytesView(), compile_mode);
+          DLOG_F(
+            3, "worker invoking compiler (source_size={})", source_blob.Size());
+          return compiler->Compile(std::move(source_blob), compile_mode);
         },
         std::move(source));
     }
@@ -286,7 +518,7 @@ auto ScriptCompilationService::CompileOnWorkerThread(ScriptSourceBlob source,
     DLOG_F(2, "thread pool unavailable, compiling inline");
     LOG_F(INFO, "invoking compiler inline (language={}, source_size={})",
       language, source.Size());
-    co_return compiler->Compile(source.BytesView(), compile_mode);
+    co_return compiler->Compile(std::move(source), compile_mode);
   }
 
   LOG_F(ERROR, "no compiler registered for language={}", language);
@@ -296,6 +528,202 @@ auto ScriptCompilationService::CompileOnWorkerThread(ScriptSourceBlob source,
   co_return result;
 }
 
+auto ScriptCompilationService::TryGetCachedBytecode(
+  const CompileKey compile_key) -> std::shared_ptr<const ScriptBytecodeBlob>
+{
+  std::lock_guard lock(l1_cache_mutex_);
+  auto cached = l1_cache_.CheckOut<const ScriptBytecodeBlob>(compile_key.get());
+  if (cached == nullptr) {
+    return nullptr;
+  }
+  l1_cache_.CheckIn(compile_key.get());
+  return cached;
+}
+
+auto ScriptCompilationService::StoreCachedBytecode(const CompileKey compile_key,
+  std::shared_ptr<const ScriptBytecodeBlob> bytecode) -> void
+{
+  if (bytecode == nullptr || bytecode->IsEmpty()) {
+    return;
+  }
+
+  auto mutable_view = std::const_pointer_cast<ScriptBytecodeBlob>(bytecode);
+
+  std::lock_guard lock(l1_cache_mutex_);
+  if (!l1_cache_.Store(compile_key.get(), mutable_view)) {
+    if (!l1_cache_.Replace(compile_key.get(), mutable_view)) {
+      LOG_F(WARNING, "cache store skipped (key={})", compile_key);
+      return;
+    }
+  }
+}
+
+auto ScriptCompilationService::TryGetPersistentBytecode(
+  const CompileKey compile_key) -> std::shared_ptr<const ScriptBytecodeBlob>
+{
+  if (persistent_cache_path_.empty()) {
+    return nullptr;
+  }
+
+  PersistentIndexEntry entry {};
+  {
+    std::lock_guard lock(persistent_cache_mutex_);
+    const auto it = persistent_index_.find(compile_key);
+    if (it == persistent_index_.end()) {
+      return nullptr;
+    }
+    entry = it->second;
+  }
+
+  std::ifstream input(persistent_cache_path_, std::ios::binary);
+  if (!input) {
+    LOG_F(WARNING, "persistent cache unavailable on read");
+    return nullptr;
+  }
+  auto payload = ReadPayload(input, entry.data_offset, entry.data_size);
+  if (!payload.has_value()) {
+    LOG_F(WARNING, "persistent cache entry invalidated (key={})", compile_key);
+    std::lock_guard lock(persistent_cache_mutex_);
+    persistent_index_.erase(compile_key);
+    return nullptr;
+  }
+
+  return MakePersistentBytecodeBlob(std::move(*payload), entry.language,
+    entry.compression, entry.content_hash, entry.origin);
+}
+
+auto ScriptCompilationService::StorePersistentBytecode(
+  const CompileKey compile_key,
+  std::shared_ptr<const ScriptBytecodeBlob> bytecode) -> void
+{
+  if (persistent_cache_path_.empty() || bytecode == nullptr
+    || bytecode->IsEmpty()) {
+    return;
+  }
+
+  std::vector<std::pair<CompileKey, std::shared_ptr<const ScriptBytecodeBlob>>>
+    snapshot {};
+  {
+    std::lock_guard lock(persistent_cache_mutex_);
+    snapshot.reserve(persistent_index_.size() + 1);
+    std::ifstream input(persistent_cache_path_, std::ios::binary);
+    for (const auto& [key, entry] : persistent_index_) {
+      if (key == compile_key) {
+        continue;
+      }
+      if (!input) {
+        break;
+      }
+      auto payload = ReadPayload(input, entry.data_offset, entry.data_size);
+      if (!payload.has_value()) {
+        continue;
+      }
+      snapshot.emplace_back(key,
+        MakePersistentBytecodeBlob(std::move(*payload), entry.language,
+          entry.compression, entry.content_hash, entry.origin));
+    }
+  }
+  snapshot.emplace_back(compile_key, std::move(bytecode));
+  PersistCacheSnapshot(snapshot);
+  DLOG_F(2, "persistent cache store (key={}, entries={})", compile_key,
+    snapshot.size());
+}
+
+auto ScriptCompilationService::PersistCacheSnapshot(const std::vector<
+  std::pair<CompileKey, std::shared_ptr<const ScriptBytecodeBlob>>>& snapshot)
+  -> void
+{
+  if (persistent_cache_path_.empty()) {
+    return;
+  }
+
+  const auto temp_path = persistent_cache_path_.string().append(".tmp");
+
+  auto sorted_snapshot = snapshot;
+
+  std::ranges::sort(sorted_snapshot,
+    [](const auto& a, const auto& b) { return a.first.get() < b.first.get(); });
+
+  std::error_code ec {};
+  const auto parent_path = persistent_cache_path_.parent_path();
+  if (!parent_path.empty()) {
+    std::filesystem::create_directories(parent_path, ec);
+    if (ec) {
+      LOG_F(
+        WARNING, "failed to create persistent cache directory: {}", ec.value());
+      return;
+    }
+  }
+
+  std::ofstream output(temp_path, std::ios::binary | std::ios::trunc);
+  if (!output) {
+    LOG_F(WARNING, "failed to open temporary persistent cache file");
+    return;
+  }
+
+  PersistentCacheHeader header {};
+  header.magic = kPersistentCacheMagic;
+  header.version = kPersistentCacheVersion;
+  output.write(reinterpret_cast<const char*>(&header), sizeof(header));
+
+  std::vector<PersistentCacheEntry> index_entries;
+  index_entries.reserve(sorted_snapshot.size());
+  for (const auto& [key, payload] : sorted_snapshot) {
+    if (payload == nullptr) {
+      continue;
+    }
+    const auto payload_bytes = payload->BytesView();
+    const auto data_offset = static_cast<uint64_t>(output.tellp());
+    output.write(reinterpret_cast<const char*>(payload_bytes.data()),
+      static_cast<std::streamsize>(payload_bytes.size()));
+    index_entries.push_back(PersistentCacheEntry {
+      .key = key.get(),
+      .data_offset = data_offset,
+      .data_size = static_cast<uint32_t>(payload_bytes.size()),
+      .language = static_cast<uint32_t>(payload->Language()),
+      .compression = static_cast<uint32_t>(payload->Compression()),
+      .origin = static_cast<uint32_t>(payload->GetOrigin()),
+      .reserved = 0U,
+      .content_hash = payload->ContentHash(),
+    });
+  }
+
+  header.index_offset = static_cast<uint64_t>(output.tellp());
+  header.entry_count = static_cast<uint32_t>(index_entries.size());
+  for (const auto& entry : index_entries) {
+    output.write(
+      reinterpret_cast<const char*>(&entry), sizeof(PersistentCacheEntry));
+  }
+
+  output.seekp(0, std::ios::beg);
+  output.write(reinterpret_cast<const char*>(&header), sizeof(header));
+  output.flush();
+  output.close();
+
+  std::filesystem::remove(persistent_cache_path_, ec);
+  ec.clear();
+  std::filesystem::rename(temp_path, persistent_cache_path_, ec);
+  if (ec) {
+    LOG_F(WARNING, "failed to publish persistent cache file: {}", ec.value());
+    std::filesystem::remove(temp_path, ec);
+    return;
+  }
+
+  std::lock_guard lock(persistent_cache_mutex_);
+  persistent_index_.clear();
+  for (const auto& entry : index_entries) {
+    persistent_index_.insert_or_assign(CompileKey { entry.key },
+      PersistentIndexEntry {
+        .data_offset = entry.data_offset,
+        .data_size = entry.data_size,
+        .language = entry.language,
+        .compression = entry.compression,
+        .origin = entry.origin,
+        .content_hash = entry.content_hash,
+      });
+  }
+}
+
 auto ScriptCompilationService::EnqueueCompletion(
   const CompileKey compile_key, const Result& result) -> void
 {
@@ -303,6 +731,8 @@ auto ScriptCompilationService::EnqueueCompletion(
     return;
   }
   std::lock_guard lock(completions_mutex_);
+  DLOG_F(
+    3, "queue completion (key={}, success={})", compile_key, result.success);
   pending_completions_.emplace_back(compile_key, result);
 }
 

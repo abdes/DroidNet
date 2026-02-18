@@ -7,13 +7,14 @@
 #pragma once
 
 #include <cstdint>
-#include <span>
+#include <memory>
 #include <string>
 #include <string_view>
-#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
+#include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/Engine/api_export.h>
 
 namespace oxygen::scripting {
@@ -37,12 +38,12 @@ enum class CompileMode : uint8_t {
 
 struct ScriptCompileResult {
   bool success { false };
-  std::vector<uint8_t> bytecode;
+  std::shared_ptr<const ScriptBytecodeBlob> bytecode;
   std::string diagnostics;
 
   [[nodiscard]] auto HasBytecode() const noexcept -> bool
   {
-    return !bytecode.empty();
+    return bytecode != nullptr && !bytecode->IsEmpty();
   }
 };
 
@@ -58,8 +59,8 @@ public:
     -> data::pak::ScriptLanguage
     = 0;
 
-  [[nodiscard]] virtual auto Compile(std::span<const uint8_t> source,
-    CompileMode mode) const -> ScriptCompileResult
+  [[nodiscard]] virtual auto Compile(
+    ScriptSourceBlob source, CompileMode mode) const -> ScriptCompileResult
     = 0;
 };
 

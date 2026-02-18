@@ -7,18 +7,19 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <span>
-#include <utility>
-#include <vector>
 
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
+#include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
 #include <Oxygen/Scripting/api_export.h>
 
 namespace oxygen::scripting {
 
 class CompiledScriptExecutable final : public ScriptExecutable {
 public:
-  explicit CompiledScriptExecutable(std::vector<uint8_t> bytecode)
+  explicit CompiledScriptExecutable(
+    std::shared_ptr<const ScriptBytecodeBlob> bytecode)
     : bytecode_(std::move(bytecode))
   {
   }
@@ -27,11 +28,12 @@ public:
 
   [[nodiscard]] auto Bytecode() const noexcept -> std::span<const uint8_t>
   {
-    return bytecode_;
+    return bytecode_ != nullptr ? bytecode_->BytesView()
+                                : std::span<const uint8_t> {};
   }
 
 private:
-  std::vector<uint8_t> bytecode_;
+  std::shared_ptr<const ScriptBytecodeBlob> bytecode_;
 };
 
 } // namespace oxygen::scripting

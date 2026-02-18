@@ -131,16 +131,59 @@ namespace {
     }
   }
 
-  auto ComputeCompileKey(
-    const data::AssetKey asset_key, const scripting::ScriptSourceBlob& blob)
+  constexpr uint64_t kLuauCompilerFingerprint = 0x6C7561755F7631ULL;
+  constexpr uint64_t kLuauVmBytecodeVersion = 1ULL;
+  constexpr uint64_t kUnknownCompilerFingerprint = 0x756E6B6E6F776E31ULL;
+  constexpr uint64_t kUnknownVmBytecodeVersion = 0ULL;
+#if defined(_WIN64)
+  constexpr uint64_t kPlatformAbiSalt = 0x77696E36345F6D73ULL;
+#elif defined(__linux__) && defined(__x86_64__)
+  constexpr uint64_t kPlatformAbiSalt = 0x6C6E7836345F6763ULL;
+#elif defined(__APPLE__) && defined(__aarch64__)
+  constexpr uint64_t kPlatformAbiSalt = 0x6D61635F61726D36ULL;
+#else
+  constexpr uint64_t kPlatformAbiSalt = 0x756E6B6E6F776E5FULL;
+#endif
+
+  auto CompilerFingerprintForLanguage(const data::pak::ScriptLanguage language)
+    -> uint64_t
+  {
+    switch (language) {
+    case data::pak::ScriptLanguage::kLuau:
+      return kLuauCompilerFingerprint;
+    default:
+      return kUnknownCompilerFingerprint;
+    }
+  }
+
+  auto VmBytecodeVersionForLanguage(const data::pak::ScriptLanguage language)
+    -> uint64_t
+  {
+    switch (language) {
+    case data::pak::ScriptLanguage::kLuau:
+      return kLuauVmBytecodeVersion;
+    default:
+      return kUnknownVmBytecodeVersion;
+    }
+  }
+
+  auto ComputeCompileKey(const data::AssetKey asset_key,
+    const scripting::ScriptSourceBlob& blob,
+    const scripting::CompileMode compile_mode)
     -> scripting::IScriptCompilationService::CompileKey
   {
     const auto bytes = blob.BytesView();
     uint64_t seed = 0;
     oxygen::HashCombine(seed, asset_key);
+    oxygen::HashCombine(seed, compile_mode);
     oxygen::HashCombine(seed, blob.Language());
     oxygen::HashCombine(seed, blob.Compression());
+    oxygen::HashCombine(seed, blob.GetOrigin());
+    oxygen::HashCombine(seed, blob.GetCanonicalName().get());
     oxygen::HashCombine(seed, blob.ContentHash());
+    oxygen::HashCombine(seed, CompilerFingerprintForLanguage(blob.Language()));
+    oxygen::HashCombine(seed, VmBytecodeVersionForLanguage(blob.Language()));
+    oxygen::HashCombine(seed, kPlatformAbiSalt);
     for (const auto byte : bytes) {
       oxygen::HashCombine(seed, byte);
     }
@@ -775,10 +818,15 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
   }
 
   if (is_bytecode) {
+    auto bytecode_blob
+      = std::get<scripting::ScriptBytecodeBlob>(std::move(resolved_blob));
+    auto executable_blob
+      = std::make_shared<const scripting::ScriptBytecodeBlob>(
+        std::move(bytecode_blob));
     auto scripting = node.GetScripting();
     (void)scripting.MarkSlotReady(slot,
       std::make_shared<const scripting::CompiledScriptExecutable>(
-        std::vector<uint8_t>(bytes.begin(), bytes.end())));
+        std::move(executable_blob)));
     LOG_F(INFO, "slot ready from embedded bytecode (asset_key={})",
       data::to_string(script_asset->GetAssetKey()));
     return;
@@ -786,8 +834,9 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
 
   auto source_blob
     = std::get<scripting::ScriptSourceBlob>(std::move(resolved_blob));
+  constexpr auto kCompileMode = scripting::CompileMode::kDebug;
   const auto compile_key
-    = ComputeCompileKey(script_asset->GetAssetKey(), source_blob);
+    = ComputeCompileKey(script_asset->GetAssetKey(), source_blob, kCompileMode);
   const auto source_size = source_blob.Size();
   LOG_F(INFO,
     "submitting compile request (asset_key={}, compile_key={}, source_size={})",
@@ -796,11 +845,12 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
     scripting::IScriptCompilationService::Request {
       .compile_key = compile_key,
       .source = std::move(source_blob),
-      .compile_mode = scripting::CompileMode::kDebug,
+      .compile_mode = kCompileMode,
     },
     scripting::IScriptCompilationService::SlotAcquireCallbacks {
       .on_ready =
-        [node, slot](std::vector<uint8_t> bytecode) mutable {
+        [node, slot](std::shared_ptr<const scripting::ScriptBytecodeBlob>
+            bytecode) mutable {
           if (node.IsAlive()) {
             auto scripting = node.GetScripting();
             (void)scripting.MarkSlotReady(slot,

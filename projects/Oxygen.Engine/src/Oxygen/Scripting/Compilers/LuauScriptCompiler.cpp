@@ -49,15 +49,16 @@ auto LuauScriptCompiler::Language() const noexcept -> data::pak::ScriptLanguage
   return data::pak::ScriptLanguage::kLuau;
 }
 
-auto LuauScriptCompiler::Compile(std::span<const uint8_t> source,
-  const CompileMode mode) const -> ScriptCompileResult
+auto LuauScriptCompiler::Compile(
+  ScriptSourceBlob source, const CompileMode mode) const -> ScriptCompileResult
 {
-  LOG_F(INFO, "luau compile begin (source_size={})", source.size());
-  if (source.empty()) {
+  const auto source_view = source.BytesView();
+  LOG_F(INFO, "luau compile begin (source_size={})", source_view.size());
+  if (source_view.empty()) {
     LOG_F(ERROR, "luau compile rejected empty source");
     return ScriptCompileResult {
       .success = false,
-      .bytecode = {},
+      .bytecode = nullptr,
       .diagnostics = "source is empty",
     };
   }
@@ -67,15 +68,15 @@ auto LuauScriptCompiler::Compile(std::span<const uint8_t> source,
     ApplyCompileMode(luau_options, mode);
 
     std::string source_text;
-    source_text.reserve(source.size());
-    for (const auto byte : source) {
+    source_text.reserve(source_view.size());
+    for (const auto byte : source_view) {
       source_text.push_back(static_cast<char>(byte));
     }
     const std::string compiled = Luau::compile(source_text, luau_options);
     if (compiled.empty()) {
       return ScriptCompileResult {
         .success = false,
-        .bytecode = {},
+        .bytecode = nullptr,
         .diagnostics = "compiler returned empty output",
       };
     }
@@ -87,7 +88,7 @@ auto LuauScriptCompiler::Compile(std::span<const uint8_t> source,
       DLOG_F(2, "compile failed");
       return ScriptCompileResult {
         .success = false,
-        .bytecode = {},
+        .bytecode = nullptr,
         .diagnostics = diagnostics,
       };
     }
@@ -99,16 +100,21 @@ auto LuauScriptCompiler::Compile(std::span<const uint8_t> source,
     }
 
     DLOG_F(3, "compile succeeded ({} bytes)", bytecode.size());
+    auto bytecode_blob = std::make_shared<const ScriptBytecodeBlob>(
+      ScriptBytecodeBlob::FromOwned(std::move(bytecode), Language(),
+        data::pak::ScriptCompression::kNone, 0,
+        ScriptBlobOrigin::kEmbeddedResource,
+        ScriptBlobCanonicalName { "compiled:luau" }));
     return ScriptCompileResult {
       .success = true,
-      .bytecode = std::move(bytecode),
+      .bytecode = std::move(bytecode_blob),
       .diagnostics = {},
     };
   } catch (const std::exception& ex) {
     LOG_F(WARNING, "compile threw: {}", ex.what());
     return ScriptCompileResult {
       .success = false,
-      .bytecode = {},
+      .bytecode = nullptr,
       .diagnostics = ex.what(),
     };
   }

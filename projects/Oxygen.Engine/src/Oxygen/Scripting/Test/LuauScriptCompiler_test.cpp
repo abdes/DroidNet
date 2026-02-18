@@ -15,6 +15,9 @@ namespace {
 
 using oxygen::scripting::CompileMode;
 using oxygen::scripting::LuauScriptCompiler;
+using oxygen::scripting::ScriptBlobCanonicalName;
+using oxygen::scripting::ScriptBlobOrigin;
+using oxygen::scripting::ScriptSourceBlob;
 
 auto ToBytes(const std::string_view text) -> std::vector<uint8_t>
 {
@@ -31,7 +34,12 @@ NOLINT_TEST(LuauScriptCompilerTest, CompileValidSourceProducesBytecode)
   LuauScriptCompiler compiler;
   const auto source = ToBytes("local x = 1\nreturn x\n");
 
-  const auto result = compiler.Compile(source, CompileMode::kDebug);
+  const auto result = compiler.Compile(
+    ScriptSourceBlob::FromOwned(std::move(source),
+      oxygen::data::pak::ScriptLanguage::kLuau,
+      oxygen::data::pak::ScriptCompression::kNone, 0,
+      ScriptBlobOrigin::kEmbeddedResource, ScriptBlobCanonicalName { "test" }),
+    CompileMode::kDebug);
 
   EXPECT_TRUE(result.success);
   EXPECT_TRUE(result.HasBytecode());
@@ -43,7 +51,12 @@ NOLINT_TEST(LuauScriptCompilerTest, CompileInvalidSourceReturnsDiagnostics)
   LuauScriptCompiler compiler;
   const auto source = ToBytes("local x =\n");
 
-  const auto result = compiler.Compile(source, CompileMode::kDebug);
+  const auto result = compiler.Compile(
+    ScriptSourceBlob::FromOwned(std::move(source),
+      oxygen::data::pak::ScriptLanguage::kLuau,
+      oxygen::data::pak::ScriptCompression::kNone, 0,
+      ScriptBlobOrigin::kEmbeddedResource, ScriptBlobCanonicalName { "test" }),
+    CompileMode::kDebug);
 
   EXPECT_FALSE(result.success);
   EXPECT_FALSE(result.HasBytecode());

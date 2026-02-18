@@ -1293,7 +1293,8 @@ auto AsyncEngine::InitializeDetachedServices() -> void
 
   script_compilation_service_
     = std::make_shared<scripting::ScriptCompilationService>(
-      observer_ptr<co::ThreadPool> { &platform_->Threads() });
+      observer_ptr<co::ThreadPool> { &platform_->Threads() },
+      path_finder_.ScriptsRootPath() / "scripts.bin");
   LOG_F(INFO, "[D] ScriptCompilationService initialized");
 
   // TODO: Initialize crash dump detection service
