@@ -11,6 +11,7 @@
 #include <Oxygen/Scripting/Bindings/Packs/Core/AppBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/ConventionsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/CoreBindingPack.h>
+#include <Oxygen/Scripting/Bindings/Packs/Core/IdsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/LogBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/MathBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/TimeBindings.h>
@@ -18,12 +19,14 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
-  constexpr std::array<BindingNamespace, 5> kCoreNamespaces = { {
+  constexpr std::array<BindingNamespace, 7> kCoreNamespaces = { {
     { .name = "app", .register_fn = RegisterAppBindings },
     { .name = "conventions", .register_fn = RegisterConventionsBindings },
+    { .name = "hash", .register_fn = RegisterHashBindings },
     { .name = "log", .register_fn = RegisterLogBindings },
     { .name = "math", .register_fn = RegisterMathBindings },
     { .name = "time", .register_fn = RegisterTimeBindings },
+    { .name = "uuid", .register_fn = RegisterUuidBindings },
   } };
 
   class CoreBindingPack final : public contracts::IScriptBindingPack {

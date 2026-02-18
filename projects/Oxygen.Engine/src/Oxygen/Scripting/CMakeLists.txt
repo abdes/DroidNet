@@ -67,6 +67,7 @@ set(
   "Bindings/Packs/Core/AppBindings.cpp"
   "Bindings/Packs/Core/ConventionsBindings.cpp"
   "Bindings/Packs/Core/CoreBindingPack.cpp"
+  "Bindings/Packs/Core/IdsBindings.cpp"
   "Bindings/Packs/Core/LogBindings.cpp"
   "Bindings/Packs/Core/MathBindings.cpp"
   "Bindings/Packs/Core/TimeBindings.cpp"
